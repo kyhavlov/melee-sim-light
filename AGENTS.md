@@ -101,7 +101,11 @@ Current guardrails:
 - `make test`: build extension then run `pytest`
 - `make preprocess`: build/update cached `datasets/` for a suite
 - `make validate`: run one-step suite eval (assumes datasets exist)
+- `make validate OUT=reports/validation/one_step_suite_eval.txt`: write the report to a file (commit this)
 - `make build_data`: extract ISO-derived `data/` artifacts
+
+Validation output snapshots:
+- Commit the latest suite report under `reports/validation/` whenever you change core sim logic.
 
 Variables:
 - `SUITE=replays/suites/fox_falco_fd_ucf084_recent.json`
