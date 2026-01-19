@@ -22,6 +22,13 @@ Initial target domain:
 - Character animation/move/hitbox/hurtbox data are extracted from game files (Fox/Falco first).
 - Manual overrides are allowed only as explicit, small overlays (audited and tracked separately).
 
+### No “magic numbers” in gameplay logic
+- Do not introduce unexplained constants in C gameplay code (collision extents, gravity, thresholds, timings, etc.).
+- Constants must be sourced from **ISO-extracted `data/` artifacts** and/or **decomp**, even if the full system isn’t implemented yet.
+  - Acceptable: “temporary hardcode” *only* if accompanied by an inline source pointer, e.g. `data/stages/final_destination.json` segment indices, or `data/characters/fox.json` keys.
+  - Not acceptable: choosing constants from replay distributions/heuristics as a convenience.
+- Replay-derived heuristics are an absolute last resort; if used, label them explicitly as such and justify why game data/decomp couldn’t be used.
+
 ### C core + dumb Python wrapper
 - All gameplay/physics/combat logic lives in **C** under `src/`.
 - Python under `python/` is a **thin wrapper only**:

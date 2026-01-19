@@ -1,13 +1,11 @@
 #include "physics.h"
 
+#include "char_params.h"
+
 void physics_integrate(MslBatch* batch) {
   if (batch == NULL) {
     return;
   }
-
-  // v1: simple constant gravity, applied only while airborne.
-  // Note: Melee gravity is character-specific; we keep this deterministic skeleton minimal for now.
-  const float gravity = 0.20f;
 
   const int num_players = (int)batch->config.num_players;
   for (int bi = 0; bi < batch->batch_size; bi++) {
@@ -22,7 +20,12 @@ void physics_integrate(MslBatch* batch) {
       batch->state.pos_y[idx] += vy;
 
       if (!on_ground) {
-        batch->state.speed_y_self[idx] = vy - gravity;
+        const MslCharPhysicsParams phys = msl_char_physics_params(batch->state.char_id[idx]);
+        float next_vy = vy - phys.grav;
+        if (next_vy < -phys.terminal_vel) {
+          next_vy = -phys.terminal_vel;
+        }
+        batch->state.speed_y_self[idx] = next_vy;
       }
     }
   }
