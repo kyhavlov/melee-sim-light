@@ -18,6 +18,13 @@ void physics_integrate(MslBatch* batch) {
       batch->state.prev_pos_x[idx] = batch->state.pos_x[idx];
       batch->state.prev_pos_y[idx] = batch->state.pos_y[idx];
 
+      // Hitlag freezes motion/physics advancement:
+      // - refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate runs its main integration block only
+      //   under `if (!fp->x2219_b5)`.
+      if (batch->state.hitlag[idx] != 0) {
+        continue;
+      }
+
       const uint8_t on_ground = batch->state.on_ground[idx] ? 1 : 0;
       const float vx =
           on_ground ? batch->state.speed_ground_x_self[idx] : batch->state.speed_air_x_self[idx];

@@ -58,7 +58,7 @@ int state_alloc(MslStateSoA* state, int batch_size) {
   state->last_attack_landed = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->combo_count = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->last_hit_by = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
-  state->state_flags = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp * 5);
+  state->state_flags = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp * MSL_STATE_FLAGS_BYTES);
 
   state->input_buttons = (uint16_t*)alloc_aligned_64(sizeof(uint16_t) * bp);
   state->prev_input_buttons = (uint16_t*)alloc_aligned_64(sizeof(uint16_t) * bp);

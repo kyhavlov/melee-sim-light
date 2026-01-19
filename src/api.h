@@ -9,6 +9,7 @@ extern "C" {
 
 enum { MSL_MAX_PLAYERS = 4 };
 enum { MSL_MAX_ITEMS = 15 };
+enum { MSL_STATE_FLAGS_BYTES = 5 };
 
 // -----------------------------
 // Packed on-disk / wire formats

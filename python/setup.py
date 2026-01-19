@@ -25,6 +25,7 @@ ext = Extension(
         str((ROOT / "src" / "input.c").resolve()),
         str((ROOT / "src" / "ucf.c").resolve()),
         str((ROOT / "src" / "action.c").resolve()),
+        str((ROOT / "src" / "timers.c").resolve()),
         str((ROOT / "src" / "physics.c").resolve()),
         str((ROOT / "src" / "stage_collision.c").resolve()),
         str((ROOT / "src" / "hurtboxes.c").resolve()),
