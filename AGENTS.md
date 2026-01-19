@@ -62,6 +62,7 @@ Instead compare simulator state fields directly (and later optionally compare em
 - `replays/suites/`: suite definitions (committed).
 - `refs/`, `SSBM.iso`, `_iso/`, Dolphin binaries/user dirs: local-only (gitignored).
 - `docs/legacy_melee_sim/`: reference docs copied from the old project (do not treat as the lite sim’s contract).
+- `docs/DATA_CONTRACT.md`: what we extract from ISO and where it lives.
 
 ## Python Dependencies (use `uv`, not `pip`)
 
@@ -72,6 +73,7 @@ Use `uv` for Python dependencies and editable installs:
 - Build a dataset from a replay: `uv run python -m tools.slippi.make_dataset_from_slp --slp <path.slp> --out <out.msl> --ports 1,2`
 - Preprocess a suite (cached, gitignored): `uv run python -m tools.slippi.preprocess_suite --suite replays/suites/<suite>.json --datasets-dir datasets`
 - Validate a preprocessed suite: `uv run python -m tools.eval.run_one_step_suite_eval --suite replays/suites/<suite>.json --datasets-dir datasets`
+- Build ISO-derived data artifacts (gitignored): `uv run python -m tools.extraction.build_data --iso-dir _iso --stage grnba --chars fox,falco`
 
 Note: `uv sync` only manages declared dependencies; re-run `uv pip install -e python` after syncing if the extension is missing.
 Note: pass `--force` to `preprocess_suite` after any dataset schema changes (the cache is just for convenience).

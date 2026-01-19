@@ -3,7 +3,8 @@ SSBM.iso
 _iso/
 
 # Heavy reference repos / binaries (keep locally; document setup)
-refs/
+refs/**
+!refs/README.md
 
 # Dolphin artifacts / user dirs
 .local_dolphin/
@@ -18,6 +19,9 @@ replays/**/*.slp
 
 # Preprocessed datasets (local-only)
 datasets/
+
+# Extracted game data (generated; keep local)
+data/
 
 # Build outputs / caches (future-proof)
 build/

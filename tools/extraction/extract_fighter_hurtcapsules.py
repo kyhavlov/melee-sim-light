@@ -193,7 +193,7 @@ def extract_character(character: str, *, iso_dir: Path) -> dict:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Extract fighter hurt capsule init data (ftHurtboxInit) from ISO-extracted Pl??.dat.")
-    parser.add_argument("--iso_dir", type=Path, default=Path("iso"))
+    parser.add_argument("--iso_dir", type=Path, default=Path("_iso"))
     parser.add_argument("--out_dir", type=Path, default=Path("data/hurtcaps"))
     parser.add_argument("--character", type=str, default=None)
     args = parser.parse_args()
@@ -213,4 +213,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

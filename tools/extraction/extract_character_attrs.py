@@ -7,7 +7,7 @@ from pathlib import Path
 
 from melee_sim.hsd_archive import parse_hsd_archive
 from melee_sim.iso import extract_file, find_files, list_files
-from scripts.extraction.extract_fighter_moves import _parse_subaction_events
+from tools.extraction.extract_fighter_moves import _parse_subaction_events
 
 
 def _u32_be(buf: bytes, off: int) -> int:
@@ -319,9 +319,15 @@ def main() -> None:
         description="Extract per-character ftCo_DatAttrs from Pl*.dat (decomp-first) and update melee_sim character JSONs."
     )
     ap.add_argument("--iso", type=Path, default=None, help="optional path to SSBM.iso (used to extract missing Pl*.dat)")
-    ap.add_argument("--pl-dir", type=Path, default=Path("iso"), help="directory containing extracted Pl*.dat")
+    ap.add_argument("--pl-dir", type=Path, default=Path("_iso"), help="directory containing extracted Pl*.dat")
     ap.add_argument(
         "--out-dir", type=Path, default=Path("data/characters"), help="directory for character JSON outputs"
+    )
+    ap.add_argument(
+        "--chars",
+        type=str,
+        default="fox,falco,sheik,peach,marth,puff,falcon",
+        help="comma-separated character set to extract",
     )
     args = ap.parse_args()
 
@@ -334,6 +340,11 @@ def main() -> None:
         "puff": ("PlPr.dat", "ftDataPurin", False),
         "falcon": ("PlCa.dat", "ftDataCaptain", False),
     }
+    want = [c.strip() for c in args.chars.split(",") if c.strip()]
+    for c in want:
+        if c not in mapping:
+            raise SystemExit(f"unknown character {c!r} (available: {sorted(mapping)})")
+    mapping = {k: mapping[k] for k in want}
 
     if args.iso is not None:
         files = list_files(args.iso)

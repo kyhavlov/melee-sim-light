@@ -522,7 +522,7 @@ def _load_special_msids(special_msids_dir: Path, character: str) -> list[int]:
 
 def main() -> None:
     ap = argparse.ArgumentParser(description="Extract fighter hitbox command timelines from Pl*.dat")
-    ap.add_argument("--iso_dir", type=Path, default=Path("iso"))
+    ap.add_argument("--iso_dir", type=Path, default=Path("_iso"))
     ap.add_argument("--melee_decomp", type=Path, default=Path("refs/melee"))
     ap.add_argument("--out_dir", type=Path, default=Path("data/moves"))
     ap.add_argument(

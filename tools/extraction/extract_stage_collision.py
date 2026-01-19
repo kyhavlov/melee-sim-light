@@ -149,7 +149,7 @@ def main() -> None:
         if args.stage is None or args.iso is None:
             raise SystemExit("provide either --dat, or (--stage and --iso)")
         stage_dat_name = args.stage
-        local = Path("iso") / stage_dat_name
+        local = Path("_iso") / stage_dat_name
         _maybe_extract_from_iso(args.iso, stage_dat_name, local)
         args.dat = local
 

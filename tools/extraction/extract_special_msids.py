@@ -5,7 +5,8 @@ import json
 from dataclasses import dataclass, asdict
 from pathlib import Path
 
-from scripts.extract_fighter_anims import _msid_anim_entry
+from tools.extraction import extract_fighter_anims
+from tools.extraction.extract_fighter_anims import _msid_anim_entry
 
 
 @dataclass(frozen=True)
@@ -278,16 +279,34 @@ def extract_special_msids(*, character: str) -> SpecialMsids:
 
 def main() -> None:
     ap = argparse.ArgumentParser(description="Extract per-character special submotion (msid) mappings from ftData tables (ISO-derived).")
-    ap.add_argument("--character", type=str, default=None, help="one of: fox,falco,sheik,peach,marth,puff,falcon (default: all)")
+    ap.add_argument(
+        "--iso-dir",
+        "--iso_dir",
+        dest="iso_dir",
+        type=Path,
+        default=Path("_iso"),
+        help="directory containing extracted *.dat files (default: _iso)",
+    )
+    ap.add_argument("--chars", type=str, default=None, help="comma-separated characters (fox,falco,...)")
+    ap.add_argument("--character", type=str, default=None, help="single character (overridden by --chars)")
     ap.add_argument(
         "--out-dir",
+        "--out_dir",
+        dest="out_dir",
         type=Path,
         default=Path("data/special_msids"),
         help="output directory for JSON mappings",
     )
     args = ap.parse_args()
 
-    chars = [args.character] if args.character else ["fox", "falco", "sheik", "peach", "marth", "puff", "falcon"]
+    if args.chars:
+        chars = [c.strip() for c in args.chars.split(",") if c.strip()]
+    elif args.character:
+        chars = [args.character]
+    else:
+        chars = ["fox", "falco", "sheik", "peach", "marth", "puff", "falcon"]
+
+    extract_fighter_anims.ISO_DIR = Path(args.iso_dir)
     args.out_dir.mkdir(parents=True, exist_ok=True)
 
     for ch in chars:
