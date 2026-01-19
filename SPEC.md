@@ -319,6 +319,7 @@ Add newly discovered mechanics here immediately (even if we’re not ready to im
 
 Highest priority (policy-critical / always exercised):
 - Input sampling + **UCF** (baseline) + optional “UCF 1.0 cardinals”
+- UCF 0.84 pad-buffer emulation (stateful): per-port ring buffer/hold timers + dashback/shielddrop fixes; wire into locomotion/action transition gating (depends on dash/run/turn + shield/drop logic)
 - Suite-driven action coverage: auto-extract GALE01 `action_id`s present in the suite and implement those first (keep the extracted set checked-in and updated)
 - Match start + respawn/death: initial timers/flags, stocks decrement rules, blast zones, respawn platform + invulnerability windows (for stable reseeding + policy hidden-state warmup)
 - Timer semantics: hitlag/hitstun/action_frame increment/skip rules; landing lag + IASA/interrupt gating; “frozen” vs “advancing” phases
