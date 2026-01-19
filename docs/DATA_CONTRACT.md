@@ -66,3 +66,10 @@ This project avoids explicit “versioning” in naming. Instead:
 - Generated files should include enough **self-checks** (magic strings, record sizes, offsets) to fail loudly when incompatible.
 - Contract changes should be reflected here immediately, and extraction scripts updated accordingly.
 
+## Fast consistency check (no rebuild)
+
+If you already have local `data/` artifacts, you can validate basic consistency without re-extracting:
+
+```bash
+uv run pytest -m integration
+```

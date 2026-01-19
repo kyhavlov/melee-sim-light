@@ -9,6 +9,7 @@ import pyarrow as pa
 from peppi_py import _read_slippi
 
 from tools.eval.dataset import SAMPLE_DTYPE, write_dataset
+from tools.slippi.rollback import finalized_frame_indices
 
 
 @dataclass(frozen=True)
@@ -72,25 +73,6 @@ def _i16_from_state_age(state_age: np.ndarray | None, n: int) -> np.ndarray:
     # Keep it simple: floor the float (can be fractional in some actions).
     x = np.clip(state_age, -32768.0, 32767.0)
     return np.floor(x).astype(np.int16)
-
-
-def _finalized_frame_indices(frame_ids: np.ndarray) -> np.ndarray:
-    """
-    Slippi rollback can include multiple snapshots for the same frame number.
-    For lite-sim evaluation we want the finalized frame sequence: keep the
-    *last* occurrence of each frame id.
-    """
-    frame_ids = np.asarray(frame_ids)
-    seen: set[int] = set()
-    keep_rev: list[int] = []
-    for i in range(len(frame_ids) - 1, -1, -1):
-        fid = int(frame_ids[i])
-        if fid in seen:
-            continue
-        seen.add(fid)
-        keep_rev.append(i)
-    keep_rev.reverse()
-    return np.asarray(keep_rev, dtype=np.int32)
 
 
 def _port_name(port_1based: int) -> str:
@@ -232,7 +214,7 @@ def _main_impl(args) -> None:
         )
 
     frame_ids_all = _to_numpy(frames_all.field("id"))
-    keep = _finalized_frame_indices(frame_ids_all)
+    keep = finalized_frame_indices(frame_ids_all)
     frames = frames_all.take(pa.array(keep))
     frame_ids = _to_numpy(frames.field("id")).astype(np.int32)
     n_frames = int(len(frames))

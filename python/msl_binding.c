@@ -3,6 +3,7 @@
 
 #include <numpy/arrayobject.h>
 
+#include "../src/alloc.h"
 #include "../src/api.h"
 
 typedef struct {
@@ -195,12 +196,25 @@ static PyObject* msl_sizes(PyObject* self, PyObject* args) {
       "sample", (int)sizeof(MslSample));
 }
 
+static PyObject* msl_alloc_reset(PyObject* self, PyObject* args) {
+  msl_alloc_reset_counters();
+  Py_RETURN_NONE;
+}
+
+static PyObject* msl_alloc_stats(PyObject* self, PyObject* args) {
+  const unsigned long long calls = (unsigned long long)msl_alloc_total_calls();
+  const unsigned long long bytes = (unsigned long long)msl_alloc_total_bytes();
+  return Py_BuildValue("{s:K,s:K}", "calls", calls, "bytes", bytes);
+}
+
 static PyMethodDef methods[] = {
     {"init", (PyCFunction)msl_init, METH_VARARGS | METH_KEYWORDS, "init(batch_size, num_players) -> handle"},
     {"reseed_seed", msl_reseed_seed, METH_VARARGS, "reseed_seed(handle, seed_bytes[batch, seed_stride])"},
     {"step_input", msl_step_input, METH_VARARGS, "step_input(handle, prev_input_bytes, input_bytes)"},
     {"write_compare", msl_write_compare, METH_VARARGS, "write_compare(handle, out_bytes)"},
     {"sizes", msl_sizes, METH_NOARGS, "sizes() -> dict of struct sizes"},
+    {"alloc_reset", msl_alloc_reset, METH_NOARGS, "Reset C allocation counters (debug/perf guardrail)."},
+    {"alloc_stats", msl_alloc_stats, METH_NOARGS, "Get C allocation counters (debug/perf guardrail)."},
     {NULL, NULL, 0, NULL},
 };
 

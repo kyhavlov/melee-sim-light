@@ -1,9 +1,9 @@
 #include "api.h"
 
 #include <errno.h>
-#include <stdlib.h>
 #include <string.h>
 
+#include "alloc.h"
 #include "batch_internal.h"
 #include "config.h"
 #include "state.h"
@@ -17,7 +17,7 @@ MslBatch* msl_batch_create(int batch_size, int num_players) {
     return NULL;
   }
 
-  MslBatch* batch = (MslBatch*)calloc(1, sizeof(MslBatch));
+  MslBatch* batch = (MslBatch*)alloc_calloc(1, sizeof(MslBatch));
   if (batch == NULL) {
     return NULL;
   }
@@ -38,7 +38,7 @@ void msl_batch_destroy(MslBatch* batch) {
     return;
   }
   state_free(&batch->state);
-  free(batch);
+  alloc_free(batch);
 }
 
 int msl_batch_batch_size(const MslBatch* batch) {

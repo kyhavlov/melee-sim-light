@@ -81,6 +81,33 @@ Note: `--chunk` in evaluators is the in-memory batch size for processing; it doe
 
 Avoid invoking `pip` directly unless it is being run through `uv` (e.g. `uv pip ...`).
 
+## Tests (fast guardrails)
+
+Default tests are intended to be **very fast** and should not rebuild ISO data or reprocess replays.
+
+- Run unit tests: `uv run pytest`
+- Run integration checks (validate existing local `data/` artifacts): `uv run pytest -m integration`
+- Convenience: `make test`
+
+Current guardrails:
+- `.msl` dataset format roundtrip / corruption detection
+- rollback dedupe policy (“keep last snapshot per frame id”)
+- C-core “no allocations after init” enforced across `reseed_seed` / `step_input` / `write_compare`
+- data contract consistency (moves reference msids that exist in extracted anim tracks)
+
+## Make targets (optional convenience)
+
+- `make build`: build the C extension (`python/setup.py build_ext --inplace`)
+- `make test`: build extension then run `pytest`
+- `make preprocess`: build/update cached `datasets/` for a suite
+- `make validate`: run one-step suite eval (assumes datasets exist)
+- `make build_data`: extract ISO-derived `data/` artifacts
+
+Variables:
+- `SUITE=replays/suites/fox_falco_fd_ucf084_recent.json`
+- `DATASETS_DIR=datasets`
+- `CHUNK=4096`
+
 ## Working Conventions
 
 - Prefer adding new “mechanics we learned about” into `SPEC.md` (Mechanics Inventory) immediately, even if not implemented yet.

@@ -82,6 +82,13 @@ Notes:
 
 Validation is “teacher-forced reseeded one-step” (see `AGENTS.md`), so the seed+step+compare pipeline is the main correctness surface for early development.
 
+## Tests (guardrails)
+
+Fast tests live under `tests/` and are intended to run in <1s.
+
+- Unit tests (default): dataset format, rollback dedupe, and “no allocations after init”.
+- Integration (`-m integration`): validate **existing** local `data/` artifacts for self-consistency (does not rebuild ISO data).
+
 ## Adding a new gameplay system (workflow)
 
 1. Decide which pass owns it (or whether a new pass is needed).

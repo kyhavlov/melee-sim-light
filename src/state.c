@@ -1,6 +1,5 @@
 #include "state.h"
 
-#include <stdlib.h>
 #include <string.h>
 
 #include "alloc.h"
@@ -101,60 +100,60 @@ void state_free(MslStateSoA* state) {
   if (state == NULL) {
     return;
   }
-  free(state->frame_id);
-  free(state->frame_pre_random_seed);
-  free(state->stage_id);
-  free(state->is_teams);
-  free(state->team_id);
-  free(state->char_id);
+  alloc_free(state->frame_id);
+  alloc_free(state->frame_pre_random_seed);
+  alloc_free(state->stage_id);
+  alloc_free(state->is_teams);
+  alloc_free(state->team_id);
+  alloc_free(state->char_id);
 
-  free(state->pos_x);
-  free(state->pos_y);
-  free(state->speed_air_x_self);
-  free(state->speed_ground_x_self);
-  free(state->speed_y_self);
-  free(state->speed_x_attack);
-  free(state->speed_y_attack);
-  free(state->facing);
-  free(state->on_ground);
+  alloc_free(state->pos_x);
+  alloc_free(state->pos_y);
+  alloc_free(state->speed_air_x_self);
+  alloc_free(state->speed_ground_x_self);
+  alloc_free(state->speed_y_self);
+  alloc_free(state->speed_x_attack);
+  alloc_free(state->speed_y_attack);
+  alloc_free(state->facing);
+  alloc_free(state->on_ground);
 
-  free(state->action_id);
-  free(state->action_frame);
-  free(state->jumps_left);
-  free(state->stocks);
+  alloc_free(state->action_id);
+  alloc_free(state->action_frame);
+  alloc_free(state->jumps_left);
+  alloc_free(state->stocks);
 
-  free(state->percent);
-  free(state->shield_hp);
-  free(state->hitlag);
-  free(state->hitstun);
-  free(state->l_cancel);
-  free(state->hurtbox_state);
-  free(state->ground_id);
-  free(state->animation_index);
-  free(state->instance_hit_by);
-  free(state->instance_id);
-  free(state->last_attack_landed);
-  free(state->combo_count);
-  free(state->last_hit_by);
-  free(state->state_flags);
+  alloc_free(state->percent);
+  alloc_free(state->shield_hp);
+  alloc_free(state->hitlag);
+  alloc_free(state->hitstun);
+  alloc_free(state->l_cancel);
+  alloc_free(state->hurtbox_state);
+  alloc_free(state->ground_id);
+  alloc_free(state->animation_index);
+  alloc_free(state->instance_hit_by);
+  alloc_free(state->instance_id);
+  alloc_free(state->last_attack_landed);
+  alloc_free(state->combo_count);
+  alloc_free(state->last_hit_by);
+  alloc_free(state->state_flags);
 
-  free(state->item_exists);
-  free(state->item_state);
-  free(state->item_type);
-  free(state->item_owner);
-  free(state->item_instance_id);
-  free(state->item_direction);
-  free(state->item_vel_x);
-  free(state->item_vel_y);
-  free(state->item_pos_x);
-  free(state->item_pos_y);
-  free(state->item_damage);
-  free(state->item_timer);
-  free(state->item_spawn_id);
-  free(state->item_misc0);
-  free(state->item_misc1);
-  free(state->item_misc2);
-  free(state->item_misc3);
+  alloc_free(state->item_exists);
+  alloc_free(state->item_state);
+  alloc_free(state->item_type);
+  alloc_free(state->item_owner);
+  alloc_free(state->item_instance_id);
+  alloc_free(state->item_direction);
+  alloc_free(state->item_vel_x);
+  alloc_free(state->item_vel_y);
+  alloc_free(state->item_pos_x);
+  alloc_free(state->item_pos_y);
+  alloc_free(state->item_damage);
+  alloc_free(state->item_timer);
+  alloc_free(state->item_spawn_id);
+  alloc_free(state->item_misc0);
+  alloc_free(state->item_misc1);
+  alloc_free(state->item_misc2);
+  alloc_free(state->item_misc3);
 
   state_zero_ptrs(state);
 }
