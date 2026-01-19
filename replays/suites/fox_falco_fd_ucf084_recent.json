@@ -1,0 +1,31 @@
+{
+  "name": "fox_falco_fd_ucf084_recent",
+  "notes": "Fox/Falco Final Destination replays with metadata.startAt present (post Slippi Ishiiruka v3.4.0 / UCF 0.84 pad buffer + 1.0 cardinals).",
+  "replays": [
+    {
+      "replay": "replays/debug/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slp",
+      "ports": [1, 2],
+      "stage_id": 32,
+      "characters": { "1": "Falco", "2": "Fox" }
+    },
+    {
+      "replay": "replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.slp",
+      "ports": [1, 2],
+      "stage_id": 32,
+      "characters": { "1": "Fox", "2": "Falco" }
+    },
+    {
+      "replay": "replays/debug/cardinal_1.0_recent/QuerulousGrandDinosaur.slp",
+      "ports": [1, 2],
+      "stage_id": 32,
+      "characters": { "1": "Falco", "2": "Fox" }
+    },
+    {
+      "replay": "replays/debug/cardinal_1.0_recent/TreasuredBackKangaroo.slp",
+      "ports": [1, 2],
+      "stage_id": 32,
+      "characters": { "1": "Fox", "2": "Falco" }
+    }
+  ]
+}
+

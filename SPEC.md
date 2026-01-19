@@ -1,0 +1,342 @@
+# Melee Sim Light — Specification (v0)
+
+## Purpose
+
+Build a high-performance, deterministic, batched simulator for **SSBM-like** gameplay suitable for RL, starting with **Fox vs Falco on Final Destination**, while being designed so it is trivial to enable **4 players (2v2)** later.
+
+The simulator is explicitly **not** attempting 1:1 float/ordering parity with GALE01; instead it targets **behavioral fidelity** high enough that an existing policy (e.g. from `slippi-ai`) does not obviously “break” when driven by simulator observations and when its actions are applied in the simulator.
+
+## Non-Negotiables
+
+- **Data-driven from game files**:
+  - Stage collision/models/coordinates are extracted from the game’s stage files.
+  - Character animation/move/hitbox/hurtbox data are extracted from the game’s character files.
+  - No hand-entered frame data tables as the primary source (small compatibility overrides are allowed but must be explicitly tracked).
+- **Deterministic**: same inputs → same outputs for a given build/config.
+- **Performance-critical, batched, vectorized**:
+  - **No allocations after initialization** (including “hidden” allocations in logging, formatting, container growth, etc.).
+  - Built as a **vectorized/batched env** with cache-local hot loops (SoA/AoSoA layouts, fixed-capacity pools).
+- **2-player first, 4-player trivial**: all core systems operate on `N ∈ {2,4}` players with the same code paths; only config limits differ.
+
+## Target Interfaces
+
+### Step API (core engine)
+
+- `init(config, batch_size, num_players)` → immutable layout + mutable state buffers
+- `reset(batch_mask, initial_state_spec)` → deterministic spawn/reset
+- `step(inputs[batch][num_players])` → advance exactly one 60 Hz frame
+- `get_observations(obs_out[batch][viewpoint])` → packed observations for policy
+
+Notes:
+- “viewpoint” means observation may be emitted from P1/P2 perspective (and later 4 viewpoints for doubles).
+- `num_players` is runtime-configurable but storage is sized for `MAX_PLAYERS=4`.
+
+### Observation Compatibility (initial goal)
+
+The initial observation schema should be compatible with `slippi-ai`’s `Game` embedding defaults:
+
+- Per-player (minimum):
+  - `percent`, `facing`, `x`, `y`, `action` (GALE01 action id), `character`, `invulnerable`,
+    `jumps_left`, `shield_strength`, `on_ground`, `is_dead`, `stocks_left`
+- Game (minimum):
+  - `stage`, `is_teams`, and optional `randall_phase` (can be constant on FD), optional items.
+
+Important implication: because `slippi-ai` consumes a **one-hot action id** (size `0x18F`), this sim must maintain an **action/state machine with GALE01 action ids** (at least for the states reachable by Fox/Falco on FD), not just “coarse locomotion.”
+
+## Scope (v1)
+
+### Domain
+
+- Stage: **Final Destination**
+- Characters: **Fox, Falco**
+- Players: **2** (design supports **4**)
+- Items/projectiles: **lasers** (as a minimal projectile system)
+- Camera, rendering, audio: none
+
+### Required Gameplay Systems
+
+To reach “90–95% like real Melee” for the target domain, v1 must include:
+
+1) **Input processing**
+- Digital buttons and analog sticks sampled at frame boundaries.
+- Configurable “legalization”/clamping consistent with controller conventions.
+- **UCF is enabled by default** (because it applies to essentially all modern replay data we will validate against).
+  - Include a feature flag for **“UCF 1.0 cardinals”** (more recent/niche) since suites may differ.
+
+2) **Action/state machine (GALE01 action ids)**
+- Action ids are stored per player and updated each frame.
+- Transitions are defined by:
+  - current action id
+  - input-derived intents (stick, buttons)
+  - timers (anim frame, hitlag, hitstun, IASA-like windows)
+  - environment contacts (grounded, ledge, wall)
+  - combat events (was_hit, shield_hit, grabbed)
+- Action logic is predominantly table/data-driven:
+  - per-action flags and timers
+  - per-action movement modifiers (where appropriate)
+  - per-action hitbox/hurtbox enable windows (from extracted animation data)
+
+3) **Kinematics**
+- Ground motion: acceleration, traction/friction, turnaround, dash/run, slope ignored (FD is flat).
+- Air motion: gravity, terminal velocity, drift, fastfall, jump physics (including double jumps).
+- Landing: landing lag and state transitions.
+- Ledge interactions: grab, hang, climb/roll/jump options (needed for FD edge behavior).
+
+4) **Stage collision**
+- Collision queries against extracted FD collision geometry:
+  - ground intersection, ledge detection, blast zones
+  - basic wall/ceiling can be supported but FD mainly requires ground + ledge + blast zones
+- Character-body collision proxy (ECB-like) should aim to be **very close to the real game**:
+  - stable grounded detection
+  - ledge grab gating
+  - consistent resolution that does not jitter
+  - only “simplified” as an absolute last resort when the remaining gaps are tiny float/ordering mismatches
+
+5) **Combat**
+- Hurtboxes/hitboxes extracted from character animation/move files:
+  - hitbox positions tied to animation bones/transforms
+  - hitbox active windows per action/anim frame
+  - hurtbox set per anim frame (goal: extremely close to real; simplification is last resort)
+- Hit resolution:
+  - hitlag, hitstun, knockback, tumble
+  - DI (goal: close to real; only simplify once extremely close)
+  - shield interaction (see next section)
+
+6) **Shield**
+- Shield health/decay/regeneration (approx ok).
+- Shieldstun + basic pushback.
+- Roll/spotdodge out of shield.
+
+7) **Projectiles (lasers)**
+- Spawn and integrate laser entities.
+- Laser collision/hit application.
+
+## What “Approximate” Means Here
+
+Allowed approximations (v1):
+- Do not match 1-ULP float results; use stable FP but prioritize consistent ordering.
+- Very fine-grained mechanics (SDI/ASDI nuances, shield angle/pokes, etc.) may be deferred **only after** core behavior is already extremely close and the remaining work is dominated by tiny float/ordering details.
+
+Disallowed approximations (v1):
+- Replacing GALE01 action ids with coarse categories in the observation.
+- Omitting ledge interaction entirely on FD.
+- Omitting shield, hitlag, or hitstun (policies strongly depend on these).
+
+## Data Extraction Requirements
+
+### Inputs
+
+- `SSBM.iso` (or extracted `_iso/` directory).
+
+### Outputs (checked-in small JSON/binary; large assets ignored)
+
+- `data/stages/final_destination.*`:
+  - collision geometry (polylines/segments) + ledge metadata + blast zones
+  - coordinate system definition (origin, units, axes) consistent across engine
+- `data/characters/fox.*`, `data/characters/falco.*`:
+  - per-action animation metadata (duration, keyframes, bones)
+  - per-action hurtbox sets and hitbox sets per frame (or per keyframe interval)
+  - movement parameters used by actions (where encoded in files)
+- `data/common/*`:
+  - physics constants and shared parameters
+
+Extraction scripts must be deterministic and versioned:
+- Same ISO → same extracted outputs (byte-for-byte) for a given extractor version.
+- Any manual overrides go into a clearly separated overlay file (e.g. `data/overrides/*.json`).
+
+## Simulation Model
+
+### Coordinate system and units
+
+- Adopt the game’s coordinate system (right-handed/left-handed as extracted).
+- Store positions/velocities in `float32` or `float64` (configurable):
+  - Default `float32` for throughput.
+  - Enable `float64` for debugging/comparison if needed.
+- All geometry extracted is expressed in this same coordinate space.
+
+### Per-frame update order (must be fixed)
+
+One frame of `step()` should be ordered deterministically. Proposed order:
+
+1. Sample inputs → compute per-player intents (buttons edges, stick direction, triggers).
+2. Resolve global timers (match timer not needed, but per-entity timers are).
+3. Apply state machine transitions that happen “at frame start” (e.g. exit hitlag).
+4. Movement integration:
+   - apply action-specific movement modifiers
+   - apply gravity/traction/friction
+   - integrate velocity → tentative position
+5. Stage collision resolution:
+   - resolve ground collision and grounded state
+   - resolve ledge-grab attempts and ledge state
+6. Update animation frame counters and bone transforms.
+7. Spawn/update hitboxes/hurtboxes for the new animation frame.
+8. Combat resolution:
+   - detect overlaps
+   - apply hitlag/hitstun/knockback/shield effects
+   - spawn projectiles/hit effects as needed
+9. Projectile integration and collision.
+10. Apply end-of-frame transitions (landing state, IASA-like exits if modeled here).
+11. Emit observations (or leave in buffers for `get_observations`).
+
+If ordering differs from Melee internally, that is acceptable only if it improves stability and doesn’t degrade behavior; however ordering must be fixed and documented because it affects determinism.
+
+## Architecture & Performance
+
+### Core representation
+
+- `MAX_PLAYERS = 4`.
+- State stored as SoA arrays sized `[batch_size][MAX_PLAYERS]` for per-player fields.
+- Entity pools for projectiles/items sized for worst-case per batch; free lists with no allocations.
+
+### What should be SoA (hot path)
+
+In practice, **everything that is read/written every frame** should be SoA (or AoSoA with a small lane width).
+
+Minimum SoA sets:
+- Per-player kinematics: `pos_x/y`, `vel_x/y`, `facing`, `on_ground`, `ground_normal`, `airborne_timer`
+- Per-player high-frequency state: `action_id`, `action_frame`, `iasa_frame`, `flags`, `invuln_timer`
+- Per-player combat: `percent`, `hitlag`, `hitstun`, `tumble`, `shield_hp`, `stocks`, `jumps_left`
+- Input history: current + previous button bitmasks, stick values, trigger values (for edges/“pressed this frame”)
+
+Combat geometry SoA (recommended):
+- Active hitboxes per player: fixed `MAX_HITBOXES_PER_PLAYER`, SoA fields like `center_x/y`, `radius`, `damage`, `angle`, `kbg`, `bkb`, `hitlag_mult`, `shieldstun_mult`, `owner`, `enabled`
+- Active hurtboxes per player: fixed `MAX_HURTBOXES_PER_PLAYER`, SoA fields like `center_x/y`, `radius`, `bone_id`, `enabled`, `state`
+
+### Additional performance callouts
+
+- **Fixed-capacity everything**: no `realloc`/growth paths; all pools pre-sized (players, projectiles, transient contacts, hit events).
+- **Stable memory layout**:
+  - align hot arrays to cache lines (e.g. 64B),
+  - keep frequently co-accessed fields adjacent,
+  - prefer compact integer types for timers/ids where possible (`u16/u8`) to reduce bandwidth.
+- **Avoid per-entity indirection** in hot loops:
+  - store extracted action/move tables in contiguous arrays with direct indexing (no hash maps),
+  - precompute per-action pointers/offsets into frame data so stepping is O(1).
+- **AoSoA lane option**: consider processing batch in fixed lanes (e.g. 8/16 envs) for SIMD-friendly loops while keeping determinism and simplicity.
+- **Explicit “no hidden alloc” policy** in debug tooling (e.g., disable per-frame formatting/logging; accumulate counters in fixed buffers).
+
+### Determinism guidelines
+
+- No data-dependent iteration ordering (e.g. unordered maps) in the step path.
+- Stable tie-breaking rules for collision/hit resolution.
+- No parallel floating-point reductions that reorder operations unless explicitly deterministic.
+
+### Extensibility to doubles
+
+Design choices to keep “2→4 players” trivial:
+- All loops iterate `p in 0..num_players`.
+- Collision/combat works for all pairwise interactions `p != q` and supports team filtering.
+- Observation emitter supports multiple viewpoints:
+  - singles: 2 viewpoints (P1, P2)
+  - doubles: 4 viewpoints (one per port) with a stable port mapping policy
+- Config includes `is_teams` and team ids per player, even if singles uses trivial teams.
+
+## Validation & Evaluation (no RL training runs)
+
+### A) Replay-driven observation parity (teacher-forced / reseeded)
+
+Goal: measure per-frame correctness/coverage without requiring long-horizon rollout parity (which is expected to diverge early in a “lite” sim).
+
+Process:
+1. Extract controller inputs per frame from Slippi replays (for Fox/Falco on FD).
+2. For each frame `t`:
+   - **Reseed** the simulator state from the replay-derived reference state at frame `t` (as close as possible to the real engine state representation we model).
+   - Apply the replay’s recorded inputs for frame `t` and run exactly one `step()` to predict frame `t+1`.
+   - Compare simulator outputs for `t+1` against the replay-derived reference at `t+1`.
+3. Build the **same embedded observation vector** used by `slippi-ai` for both:
+   - reference: from replay states (`slippi-ai` parsing/embedding)
+   - sim: from simulator state mapped to the same schema
+4. Compute metrics and regressions over the suite.
+
+Notes:
+- This is “teacher-forced” evaluation: it answers “is our one-step transition function correct on the support of real gameplay states?”
+- Reseeding must be deterministic and should avoid “cheating” by copying fields that the simulator is supposed to derive (e.g., if we track derived timers, we should seed only what is observable/authoritative for that frame).
+
+Metrics (initial):
+- `action_id` match rate (and optional ±N frame window around transitions).
+- Position error (x/y): mean, 95p, max.
+- Boolean exactness: `on_ground`, `facing`, `invulnerable`, `is_dead`.
+- Discrete exactness: `jumps_left`, `stocks_left` (or tolerate rare off-by-1 early).
+- Event alignment: stock loss within ±N frames; hit events within ±N frames (if detectable from replay).
+
+Acceptance for “v1 usable” should be expressed as thresholds on these metrics over a fixed suite.
+
+### A2) Short-horizon rollout windows (stretch goal)
+
+After one-step metrics are strong, add a harder but still bounded test:
+- Reseed at frame `t`, then roll out `K` steps (e.g. `K ∈ {5, 15, 60}`) using replay inputs, and compare against reference across the window.
+- This catches multi-step timer drift and ordering issues without requiring full replay-length parity.
+
+### B) Offline policy-consistency (teacher-forced, no rollout)
+
+Goal: an existing `slippi-ai` policy reacts similarly to simulator observations as it does to real observations.
+
+Process:
+1. For a dataset of real frames, compute:
+   - `obs_real[t]` from replay state
+   - `obs_sim[t]` from simulator state produced by the reseeded one-step (or short-horizon window) procedure above
+2. Feed both through the same frozen policy network.
+3. Compare outputs:
+   - KL divergence on action logits (or on per-control distributions)
+   - Button probability L1/L2 diffs
+   - Stick mean/variance diffs (if policy is continuous)
+
+This provides a fast, automatable “will it break the model?” signal without long closed-loop runs.
+
+### C) Short closed-loop smoke test (optional, not a proof)
+
+Run policy in the simulator for ~5–20 seconds and assert:
+- no NaNs / infinities
+- no stuck states (e.g., action id frozen forever)
+- action distribution not degenerate (e.g., always “do nothing”)
+
+## Milestones
+
+1. **Scaffold**
+   - Extract FD collision + Fox/Falco move/anim/hitbox data from ISO into stable files.
+   - Implement batched core state + deterministic step loop skeleton.
+2. **Locomotion parity (behavioral)**
+   - Idle/walk/dash/run/turn, jump/fall/landing, fastfall, ledge grab/hang/getup.
+3. **Combat core**
+   - Hitboxes/hurtboxes from extracted data, hitlag/hitstun/knockback/DI, shield.
+4. **Lasers**
+   - Spawn/integrate/collide and apply damage/knockback.
+5. **Evaluation harness**
+   - Replay-driven observation parity + policy-consistency scoring with a fixed suite.
+6. **Doubles enablement**
+   - Turn on `num_players=4` with teams; verify invariants and performance.
+
+## Coverage & Initialization Targets
+
+- **Action coverage (v1)**: include every GALE01 action state that appears in the Fox/Falco FD validation suite (and keep this list current as the suite evolves).
+- **Start state**: match the real match start state as closely as possible so we can seed a recurrent policy’s hidden state by replaying the exact match-start prefix it expects.
+
+## Mechanics Inventory (prioritized backlog)
+
+Maintain a running prioritized list of mechanics (the intent is to eventually support everything; ordering is for execution planning).
+Add newly discovered mechanics here immediately (even if we’re not ready to implement them yet), and keep priorities updated as we learn what matters for suites/models.
+
+Highest priority (policy-critical / always exercised):
+- Input sampling + **UCF** (baseline) + optional “UCF 1.0 cardinals”
+- Full action-id state machine coverage for suite (Fox/Falco)
+- FD collision + ledges + blast zones (from stage files)
+- ECB-like collision proxy and grounded/ledge gating (aim very close to real)
+- Hurtbox/hitbox attachment to extracted animation/bone transforms
+- Hitlag, hitstun, knockback, tumble, DI
+- Shield core (hp/decay, shieldstun, pushback) + out-of-shield options
+- Lasers (projectile core)
+- Grabs: grab boxes, hold, pummel, throws, throw trajectories/DI, mash-out rules
+- Specials (Fox/Falco): shine, lasers, side-B, up-B (including key edge cases like shorten/firefox angles)
+
+Medium priority (important but can follow once core is stable):
+- SDI / ASDI / smash DI nuances
+- Techs (in-place/roll), missed-tech bounces, jab resets, **Amsah tech** behavior near ledge
+- Shield angling / poke behavior
+- Edge cases around ledge intangibility windows and ledge regrab rules
+- Exact invulnerability sources (respawn, ledge, moves)
+
+Lower priority / domain expansion:
+- Items beyond lasers
+- More stages (platforms, slopes, Randall, moving collisions)
+- More characters
+- Doubles-specific mechanics (team hit rules, teammate collision nuances)

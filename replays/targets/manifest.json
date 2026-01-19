@@ -1,0 +1,29 @@
+{
+  "source_zip": "/mnt/nvme0/projects/slippi-data/Raw/ranked-anonymized-4-148358.zip",
+  "entries": [
+    {
+      "inner": "platinum-platinum-70e158b619403eb0e8e42d9d.slp.gz",
+      "path": "ssbm_env/replays/targets/platinum-platinum-70e158b619403eb0e8e42d9d.slp"
+    },
+    {
+      "inner": "diamond-platinum-3858e22ef62b50dbd2996bff.slp.gz",
+      "path": "ssbm_env/replays/targets/diamond-platinum-3858e22ef62b50dbd2996bff.slp"
+    },
+    {
+      "inner": "platinum-platinum-ab70c0d2dc57db833d3ece1b.slp.gz",
+      "path": "ssbm_env/replays/targets/platinum-platinum-ab70c0d2dc57db833d3ece1b.slp"
+    },
+    {
+      "inner": "master-master-2b3bfaabe0920b1ee411ea10.slp.gz",
+      "path": "ssbm_env/replays/targets/master-master-2b3bfaabe0920b1ee411ea10.slp"
+    },
+    {
+      "inner": "master-master-53e4a9fd3d7da7df32e4ee65.slp.gz",
+      "path": "ssbm_env/replays/targets/master-master-53e4a9fd3d7da7df32e4ee65.slp"
+    },
+    {
+      "inner": "platinum-platinum-b0cb9ac8b105d4d52c99f968.slp.gz",
+      "path": "ssbm_env/replays/targets/platinum-platinum-b0cb9ac8b105d4d52c99f968.slp"
+    }
+  ]
+}

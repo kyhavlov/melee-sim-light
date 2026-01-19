@@ -1,0 +1,30 @@
+# Local-only large assets
+SSBM.iso
+_iso/
+
+# Heavy reference repos / binaries (keep locally; document setup)
+refs/
+
+# Dolphin artifacts / user dirs
+.local_dolphin/
+.local_ExiAI/
+Slippi_Online-x86_64-ExiAI.AppImage
+squashfs-root/
+dolphin-emu-ExiAI
+
+# Replay corpora (keep suite definitions committed)
+replays/*.slp
+replays/**/*.slp
+
+# Build outputs / caches (future-proof)
+build/
+dist/
+target/
+__pycache__/
+*.pyc
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+.env
+

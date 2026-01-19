@@ -1,0 +1,42 @@
+{
+  "name": "fox_falco_fd_v0",
+  "notes": "Local replay suite for early match-start parity (Entry/EntryStart/EntryEnd) on Final Destination (stage_id=32).",
+  "replays": [
+    {
+      "replay": "replays/targets/platinum-platinum-70e158b619403eb0e8e42d9d.slp",
+      "ports": [1, 2],
+      "stage_id": 32,
+      "characters": { "1": "Fox", "2": "Falco" }
+    },
+    {
+      "replay": "replays/targets/platinum-platinum-ab70c0d2dc57db833d3ece1b.slp",
+      "ports": [1, 2],
+      "stage_id": 32,
+      "characters": { "1": "Fox", "2": "Falco" }
+    },
+    {
+      "replay": "replays/targets/diamond-platinum-3858e22ef62b50dbd2996bff.slp",
+      "ports": [1, 2],
+      "stage_id": 32,
+      "characters": { "1": "Fox", "2": "Falco" }
+    },
+    {
+      "replay": "replays/targets/platinum-platinum-54a1fe54eab513bf6a856803.slp",
+      "ports": [1, 2],
+      "stage_id": 32,
+      "characters": { "1": "Fox", "2": "Falco" }
+    },
+    {
+      "replay": "replays/targets/diamond-platinum-c9e0dc3579b090cce3489d82.slp",
+      "ports": [1, 2],
+      "stage_id": 32,
+      "characters": { "1": "Fox", "2": "Falco" }
+    },
+    {
+      "replay": "replays/targets/master-platinum-cd8166f43f943b114dcb0cf4.slp",
+      "ports": [1, 2],
+      "stage_id": 32,
+      "characters": { "1": "Fox", "2": "Falco" }
+    }
+  ]
+}
