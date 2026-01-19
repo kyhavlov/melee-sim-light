@@ -63,8 +63,23 @@ Instead compare simulator state fields directly (and later optionally compare em
 - `refs/`, `SSBM.iso`, `_iso/`, Dolphin binaries/user dirs: local-only (gitignored).
 - `docs/legacy_melee_sim/`: reference docs copied from the old project (do not treat as the lite sim’s contract).
 
+## Python Dependencies (use `uv`, not `pip`)
+
+Use `uv` for Python dependencies and editable installs:
+- Install deps: `uv sync`
+- Install the C extension (editable): `uv pip install -e python`
+- Run tools: `uv run python -m tools.eval.run_one_step_eval --help`
+- Build a dataset from a replay: `uv run python -m tools.slippi.make_dataset_from_slp --slp <path.slp> --out <out.msl> --ports 1,2`
+- Preprocess a suite (cached, gitignored): `uv run python -m tools.slippi.preprocess_suite --suite replays/suites/<suite>.json --datasets-dir datasets`
+- Validate a preprocessed suite: `uv run python -m tools.eval.run_one_step_suite_eval --suite replays/suites/<suite>.json --datasets-dir datasets`
+
+Note: `uv sync` only manages declared dependencies; re-run `uv pip install -e python` after syncing if the extension is missing.
+Note: pass `--force` to `preprocess_suite` after any dataset schema changes (the cache is just for convenience).
+Note: `--chunk` in evaluators is the in-memory batch size for processing; it does **not** limit how many frames/records get evaluated.
+
+Avoid invoking `pip` directly unless it is being run through `uv` (e.g. `uv pip ...`).
+
 ## Working Conventions
 
 - Prefer adding new “mechanics we learned about” into `SPEC.md` (Mechanics Inventory) immediately, even if not implemented yet.
 - Avoid symlinks for tooling/binaries; prefer explicit paths in config.
-

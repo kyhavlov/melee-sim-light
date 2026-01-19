@@ -1,4 +1,4 @@
-# Melee Sim Light — Specification (v0)
+# Melee Sim Light — Specification
 
 ## Purpose
 
@@ -36,7 +36,7 @@ Notes:
 The initial observation schema should be compatible with `slippi-ai`’s `Game` embedding defaults:
 
 - Per-player (minimum):
-  - `percent`, `facing`, `x`, `y`, `action` (GALE01 action id), `character`, `invulnerable`,
+  - `percent`, `facing`, `x`, `y`, `action` (GALE01 action id), `character`, `hurtbox_state` (0/1/2),
     `jumps_left`, `shield_strength`, `on_ground`, `is_dead`, `stocks_left`
 - Game (minimum):
   - `stage`, `is_teams`, and optional `randall_phase` (can be constant on FD), optional items.
@@ -255,9 +255,10 @@ Notes:
 Metrics (initial):
 - `action_id` match rate (and optional ±N frame window around transitions).
 - Position error (x/y): mean, 95p, max.
-- Boolean exactness: `on_ground`, `facing`, `invulnerable`, `is_dead`.
+- Boolean exactness: `on_ground`, `facing`, `is_dead` (and optionally derived flags like `hurtbox_state != 0`).
 - Discrete exactness: `jumps_left`, `stocks_left` (or tolerate rare off-by-1 early).
 - Event alignment: stock loss within ±N frames; hit events within ±N frames (if detectable from replay).
+- Items/projectiles (optional early): presence + kinematics on a fixed-capacity set of slots (stable ordering by instance id).
 
 Acceptance for “v1 usable” should be expressed as thresholds on these metrics over a fixed suite.
 

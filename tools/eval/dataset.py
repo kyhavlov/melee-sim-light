@@ -1,0 +1,217 @@
+from __future__ import annotations
+
+# Dataset file format + NumPy dtypes.
+
+import dataclasses
+import struct
+from typing import Final
+
+import numpy as np
+
+
+MAGIC: Final[bytes] = b"MSLDSLT "
+
+
+HEADER_DTYPE = np.dtype(
+    [
+        ("magic", "S8"),
+        ("record_size", "<u4"),
+        ("num_records", "<u4"),
+        ("num_players", "<u1"),
+        ("_pad0", "V3"),
+    ],
+    align=False,
+)
+
+
+def _arr(dtype: str, n: int):
+    return (dtype, (n,))
+
+
+MAX_PLAYERS: Final[int] = 4
+MAX_ITEMS: Final[int] = 15
+
+INPUT_PLAYER_V0_DTYPE = np.dtype(
+    [
+        ("buttons", "<u2"),
+        ("main_x", "i1"),
+        ("main_y", "i1"),
+        ("c_x", "i1"),
+        ("c_y", "i1"),
+        ("l", "u1"),
+        ("r", "u1"),
+    ],
+    align=False,
+)
+
+INPUT_V0_DTYPE = np.dtype([("p", INPUT_PLAYER_V0_DTYPE, (MAX_PLAYERS,))], align=False)
+
+ITEM_V0_DTYPE = np.dtype(
+    [
+        ("exists", "u1"),
+        ("state", "u1"),
+        ("type", "<u2"),
+        ("owner", "i1"),
+        ("_pad0", "V1"),
+        ("instance_id", "<u2"),
+        ("direction", "<f4"),
+        ("vel_x", "<f4"),
+        ("vel_y", "<f4"),
+        ("pos_x", "<f4"),
+        ("pos_y", "<f4"),
+        ("damage", "<u2"),
+        ("_pad1", "V2"),
+        ("timer", "<f4"),
+        ("spawn_id", "<u4"),
+        ("misc0", "u1"),
+        ("misc1", "u1"),
+        ("misc2", "u1"),
+        ("misc3", "u1"),
+    ],
+    align=False,
+)
+
+SEED_V0_DTYPE = np.dtype(
+    [
+        ("frame_id", "<i4"),
+        ("frame_pre_random_seed", "<u4"),
+        ("stage_id", "<u4"),
+        ("num_players", "u1"),
+        ("is_teams", "u1"),
+        ("_pad0", "V2"),
+        ("team_id", _arr("u1", MAX_PLAYERS)),
+        ("char_id", _arr("u1", MAX_PLAYERS)),
+        ("pos_x", _arr("<f4", MAX_PLAYERS)),
+        ("pos_y", _arr("<f4", MAX_PLAYERS)),
+        ("speed_air_x_self", _arr("<f4", MAX_PLAYERS)),
+        ("speed_ground_x_self", _arr("<f4", MAX_PLAYERS)),
+        ("speed_y_self", _arr("<f4", MAX_PLAYERS)),
+        ("speed_x_attack", _arr("<f4", MAX_PLAYERS)),
+        ("speed_y_attack", _arr("<f4", MAX_PLAYERS)),
+        ("facing", _arr("u1", MAX_PLAYERS)),
+        ("on_ground", _arr("u1", MAX_PLAYERS)),
+        ("_pad1", "V2"),
+        ("action_id", _arr("<u2", MAX_PLAYERS)),
+        ("action_frame", _arr("<i2", MAX_PLAYERS)),
+        ("jumps_left", _arr("u1", MAX_PLAYERS)),
+        ("stocks", _arr("u1", MAX_PLAYERS)),
+        ("percent", _arr("<f4", MAX_PLAYERS)),
+        ("shield_hp", _arr("<f4", MAX_PLAYERS)),
+        ("hitlag", _arr("<u2", MAX_PLAYERS)),
+        ("hitstun", _arr("<u2", MAX_PLAYERS)),
+        ("l_cancel", _arr("u1", MAX_PLAYERS)),
+        ("hurtbox_state", _arr("u1", MAX_PLAYERS)),
+        ("ground_id", _arr("<u2", MAX_PLAYERS)),
+        ("animation_index", _arr("<u4", MAX_PLAYERS)),
+        ("instance_hit_by", _arr("<u2", MAX_PLAYERS)),
+        ("instance_id", _arr("<u2", MAX_PLAYERS)),
+        ("last_attack_landed", _arr("u1", MAX_PLAYERS)),
+        ("combo_count", _arr("u1", MAX_PLAYERS)),
+        ("last_hit_by", _arr("u1", MAX_PLAYERS)),
+        ("_pad2", "V1"),
+        ("state_flags", ("u1", (MAX_PLAYERS, 5))),
+        ("items", ITEM_V0_DTYPE, (MAX_ITEMS,)),
+    ],
+    align=False,
+)
+
+COMPARE_V0_DTYPE = np.dtype(
+    [
+        ("frame_id", "<i4"),
+        ("frame_pre_random_seed", "<u4"),
+        ("stage_id", "<u4"),
+        ("num_players", "u1"),
+        ("is_teams", "u1"),
+        ("_pad0", "V2"),
+        ("team_id", _arr("u1", MAX_PLAYERS)),
+        ("char_id", _arr("u1", MAX_PLAYERS)),
+        ("pos_x", _arr("<f4", MAX_PLAYERS)),
+        ("pos_y", _arr("<f4", MAX_PLAYERS)),
+        ("speed_air_x_self", _arr("<f4", MAX_PLAYERS)),
+        ("speed_ground_x_self", _arr("<f4", MAX_PLAYERS)),
+        ("speed_y_self", _arr("<f4", MAX_PLAYERS)),
+        ("speed_x_attack", _arr("<f4", MAX_PLAYERS)),
+        ("speed_y_attack", _arr("<f4", MAX_PLAYERS)),
+        ("facing", _arr("u1", MAX_PLAYERS)),
+        ("on_ground", _arr("u1", MAX_PLAYERS)),
+        ("is_dead", _arr("u1", MAX_PLAYERS)),
+        ("_pad1", "V1"),
+        ("action_id", _arr("<u2", MAX_PLAYERS)),
+        ("action_frame", _arr("<i2", MAX_PLAYERS)),
+        ("jumps_left", _arr("u1", MAX_PLAYERS)),
+        ("stocks", _arr("u1", MAX_PLAYERS)),
+        ("percent", _arr("<f4", MAX_PLAYERS)),
+        ("shield_hp", _arr("<f4", MAX_PLAYERS)),
+        ("hitlag", _arr("<u2", MAX_PLAYERS)),
+        ("hitstun", _arr("<u2", MAX_PLAYERS)),
+        ("l_cancel", _arr("u1", MAX_PLAYERS)),
+        ("hurtbox_state", _arr("u1", MAX_PLAYERS)),
+        ("ground_id", _arr("<u2", MAX_PLAYERS)),
+        ("animation_index", _arr("<u4", MAX_PLAYERS)),
+        ("instance_hit_by", _arr("<u2", MAX_PLAYERS)),
+        ("instance_id", _arr("<u2", MAX_PLAYERS)),
+        ("last_attack_landed", _arr("u1", MAX_PLAYERS)),
+        ("combo_count", _arr("u1", MAX_PLAYERS)),
+        ("last_hit_by", _arr("u1", MAX_PLAYERS)),
+        ("_pad2", "V1"),
+        ("state_flags", ("u1", (MAX_PLAYERS, 5))),
+        ("items", ITEM_V0_DTYPE, (MAX_ITEMS,)),
+    ],
+    align=False,
+)
+
+SAMPLE_V0_DTYPE = np.dtype(
+    [
+        ("seed_t", SEED_V0_DTYPE),
+        ("prev_input_t", INPUT_V0_DTYPE),
+        ("input_t", INPUT_V0_DTYPE),
+        ("ref_t1", COMPARE_V0_DTYPE),
+    ],
+    align=False,
+)
+
+
+@dataclasses.dataclass(frozen=True)
+class DatasetV0:
+    header: np.ndarray
+    samples: np.ndarray
+
+
+def write_dataset_v0(path: str, num_players: int, samples: np.ndarray) -> None:
+    if num_players not in (2, 4):
+        raise ValueError(f"num_players must be 2 or 4, got {num_players}")
+    if samples.dtype != SAMPLE_V0_DTYPE:
+        raise ValueError(f"samples dtype mismatch: got {samples.dtype}, want {SAMPLE_V0_DTYPE}")
+
+    header = np.zeros((), dtype=HEADER_DTYPE)
+    header["magic"] = MAGIC
+    header["record_size"] = samples.dtype.itemsize
+    header["num_records"] = samples.shape[0]
+    header["num_players"] = num_players
+
+    with open(path, "wb") as f:
+        f.write(header.tobytes(order="C"))
+        f.write(samples.tobytes(order="C"))
+
+
+def read_dataset_v0(path: str) -> DatasetV0:
+    with open(path, "rb") as f:
+        header_bytes = f.read(HEADER_DTYPE.itemsize)
+        if len(header_bytes) != HEADER_DTYPE.itemsize:
+            raise ValueError("file too small for header")
+        header = np.frombuffer(header_bytes, dtype=HEADER_DTYPE, count=1)[0]
+        if bytes(header["magic"]) != MAGIC:
+            raise ValueError(f"bad magic: {header['magic']!r}")
+
+        record_size = int(header["record_size"])
+        if record_size != SAMPLE_V0_DTYPE.itemsize:
+            raise ValueError(
+                f"record_size mismatch: file={record_size} dtype={SAMPLE_V0_DTYPE.itemsize}"
+            )
+        num_records = int(header["num_records"])
+        samples_bytes = f.read(record_size * num_records)
+        if len(samples_bytes) != record_size * num_records:
+            raise ValueError("file truncated")
+        samples = np.frombuffer(samples_bytes, dtype=SAMPLE_V0_DTYPE, count=num_records)
+
+    return DatasetV0(header=header, samples=samples)

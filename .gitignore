@@ -16,15 +16,21 @@ dolphin-emu-ExiAI
 replays/*.slp
 replays/**/*.slp
 
+# Preprocessed datasets (local-only)
+datasets/
+
 # Build outputs / caches (future-proof)
 build/
 dist/
 target/
 __pycache__/
 *.pyc
+*.so
+*.dylib
+*.pyd
+*.egg-info/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
 .venv/
 .env
-
