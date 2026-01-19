@@ -1,6 +1,8 @@
 {
   "name": "fox_falco_fd_ucf084_recent",
   "notes": "Fox/Falco Final Destination replays with metadata.startAt present (post Slippi Ishiiruka v3.4.0 / UCF 0.84 pad buffer + 1.0 cardinals).",
+  "ucf_enabled": true,
+  "ucf_cardinals_1_0_enabled": true,
   "replays": [
     {
       "replay": "replays/debug/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slp",
@@ -28,4 +30,3 @@
     }
   ]
 }
-

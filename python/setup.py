@@ -23,6 +23,7 @@ ext = Extension(
         str((ROOT / "src" / "state.c").resolve()),
         str((ROOT / "src" / "step.c").resolve()),
         str((ROOT / "src" / "input.c").resolve()),
+        str((ROOT / "src" / "ucf.c").resolve()),
         str((ROOT / "src" / "action.c").resolve()),
         str((ROOT / "src" / "physics.c").resolve()),
         str((ROOT / "src" / "stage_collision.c").resolve()),
@@ -31,6 +32,7 @@ ext = Extension(
         str((ROOT / "src" / "items.c").resolve()),
     ],
     include_dirs=[get_numpy_include(), str((ROOT / "src").resolve())],
+    libraries=["m"],
     extra_compile_args=["-O3", "-Wall", "-Wextra", "-std=c11"],
 )
 

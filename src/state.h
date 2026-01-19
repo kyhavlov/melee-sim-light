@@ -48,6 +48,18 @@ typedef struct MslStateSoA {
   uint8_t* last_hit_by;
   uint8_t* state_flags; // [batch * players * 5]
 
+  // Inputs (processed, per-frame) written by input_apply.
+  uint16_t* input_buttons;        // [batch * players]
+  uint16_t* prev_input_buttons;   // [batch * players]
+  uint16_t* input_buttons_pressed;  // [batch * players] (rising edge)
+  uint16_t* input_buttons_released; // [batch * players] (falling edge)
+  int8_t* input_main_x; // [batch * players] (legalized/clamped; -80..80)
+  int8_t* input_main_y; // [batch * players] (legalized/clamped; -80..80)
+  int8_t* input_c_x;    // [batch * players] (legalized/clamped; -80..80)
+  int8_t* input_c_y;    // [batch * players] (legalized/clamped; -80..80)
+  uint8_t* input_l;     // [batch * players] (0..255)
+  uint8_t* input_r;     // [batch * players] (0..255)
+
   // Items (fixed-capacity, per-batch)
   uint8_t* item_exists;       // [batch * MSL_MAX_ITEMS]
   uint8_t* item_state;        // [batch * MSL_MAX_ITEMS]

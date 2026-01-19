@@ -49,6 +49,22 @@ int msl_batch_num_players(const MslBatch* batch) {
   return batch ? (int)batch->config.num_players : 0;
 }
 
+int msl_batch_set_ucf_enabled(MslBatch* batch, int enabled) {
+  if (batch == NULL) {
+    return EINVAL;
+  }
+  batch->config.ucf_enabled = enabled ? 1 : 0;
+  return 0;
+}
+
+int msl_batch_set_ucf_cardinals_1_0_enabled(MslBatch* batch, int enabled) {
+  if (batch == NULL) {
+    return EINVAL;
+  }
+  batch->config.ucf_cardinals_1_0_enabled = enabled ? 1 : 0;
+  return 0;
+}
+
 int msl_batch_reseed_seed(
     MslBatch* batch,
     const uint8_t* seed_bytes,
@@ -234,6 +250,37 @@ int msl_batch_write_compare(
       item->misc1 = batch->state.item_misc1[ii];
       item->misc2 = batch->state.item_misc2[ii];
       item->misc3 = batch->state.item_misc3[ii];
+    }
+  }
+
+  return 0;
+}
+
+int msl_batch_debug_write_processed_input(
+    const MslBatch* batch,
+    uint8_t* out_bytes,
+    size_t out_stride_bytes) {
+  if (batch == NULL || out_bytes == NULL) {
+    return EINVAL;
+  }
+  if (out_stride_bytes < sizeof(MslProcessedInput)) {
+    return EINVAL;
+  }
+
+  for (int bi = 0; bi < batch->batch_size; bi++) {
+    uint8_t* ptr = out_bytes + (size_t)bi * out_stride_bytes;
+    MslProcessedInput* out = (MslProcessedInput*)ptr;
+    memset(out, 0, sizeof(*out));
+
+    for (int p = 0; p < MSL_MAX_PLAYERS; p++) {
+      const size_t idx = msl_idx_player(bi, p);
+      out->p[p].buttons = batch->state.input_buttons[idx];
+      out->p[p].main_x = batch->state.input_main_x[idx];
+      out->p[p].main_y = batch->state.input_main_y[idx];
+      out->p[p].c_x = batch->state.input_c_x[idx];
+      out->p[p].c_y = batch->state.input_c_y[idx];
+      out->p[p].l = batch->state.input_l[idx];
+      out->p[p].r = batch->state.input_r[idx];
     }
   }
 

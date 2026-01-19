@@ -44,10 +44,26 @@ static PyArrayObject* require_contiguous_array(PyObject* obj, int typenum, int m
 }
 
 static PyObject* msl_init(PyObject* self, PyObject* args, PyObject* kwargs) {
-  static const char* kwlist[] = {"batch_size", "num_players", NULL};
+  static const char* kwlist[] = {
+      "batch_size",
+      "num_players",
+      "ucf_enabled",
+      "ucf_cardinals_1_0_enabled",
+      NULL,
+  };
   int batch_size = 0;
   int num_players = 0;
-  if (!PyArg_ParseTupleAndKeywords(args, kwargs, "ii", (char**)kwlist, &batch_size, &num_players)) {
+  int ucf_enabled = -1;
+  int ucf_cardinals_1_0_enabled = -1;
+  if (!PyArg_ParseTupleAndKeywords(
+          args,
+          kwargs,
+          "ii|ii",
+          (char**)kwlist,
+          &batch_size,
+          &num_players,
+          &ucf_enabled,
+          &ucf_cardinals_1_0_enabled)) {
     return NULL;
   }
 
@@ -55,6 +71,22 @@ static PyObject* msl_init(PyObject* self, PyObject* args, PyObject* kwargs) {
   if (batch == NULL) {
     PyErr_SetString(PyExc_MemoryError, "msl_batch_create failed");
     return NULL;
+  }
+  if (ucf_enabled != -1) {
+    const int err = msl_batch_set_ucf_enabled(batch, ucf_enabled != 0);
+    if (err != 0) {
+      msl_batch_destroy(batch);
+      PyErr_Format(PyExc_RuntimeError, "msl_batch_set_ucf_enabled failed: %d", err);
+      return NULL;
+    }
+  }
+  if (ucf_cardinals_1_0_enabled != -1) {
+    const int err = msl_batch_set_ucf_cardinals_1_0_enabled(batch, ucf_cardinals_1_0_enabled != 0);
+    if (err != 0) {
+      msl_batch_destroy(batch);
+      PyErr_Format(PyExc_RuntimeError, "msl_batch_set_ucf_cardinals_1_0_enabled failed: %d", err);
+      return NULL;
+    }
   }
 
   PyMslHandle* h = (PyMslHandle*)PyMem_Malloc(sizeof(PyMslHandle));
@@ -187,13 +219,46 @@ static PyObject* msl_write_compare(PyObject* self, PyObject* args) {
   Py_RETURN_NONE;
 }
 
+static PyObject* msl_debug_write_processed_input(PyObject* self, PyObject* args) {
+  PyObject* handle_obj = NULL;
+  PyObject* out_obj = NULL;
+  if (!PyArg_ParseTuple(args, "OO", &handle_obj, &out_obj)) {
+    return NULL;
+  }
+  PyMslHandle* h = unpack_handle(handle_obj);
+  if (h == NULL) {
+    return NULL;
+  }
+
+  PyArrayObject* out = require_contiguous_array(out_obj, NPY_UINT8, 2, "out");
+  if (out == NULL) {
+    return NULL;
+  }
+  if (PyArray_DIM(out, 1) < (npy_intp)sizeof(MslProcessedInput)) {
+    PyErr_SetString(PyExc_ValueError, "out second dim too small for MslProcessedInput");
+    return NULL;
+  }
+
+  uint8_t* out_bytes = (uint8_t*)PyArray_DATA(out);
+  const size_t stride = (size_t)PyArray_STRIDE(out, 0);
+
+  const int err = msl_batch_debug_write_processed_input(h->batch, out_bytes, stride);
+  if (err != 0) {
+    PyErr_Format(PyExc_RuntimeError, "msl_batch_debug_write_processed_input failed: %d", err);
+    return NULL;
+  }
+
+  Py_RETURN_NONE;
+}
+
 static PyObject* msl_sizes(PyObject* self, PyObject* args) {
   return Py_BuildValue(
-      "{s:i,s:i,s:i,s:i}",
+      "{s:i,s:i,s:i,s:i,s:i}",
       "seed", (int)sizeof(MslSeed),
       "input", (int)sizeof(MslInput),
       "compare", (int)sizeof(MslCompare),
-      "sample", (int)sizeof(MslSample));
+      "sample", (int)sizeof(MslSample),
+      "processed_input", (int)sizeof(MslProcessedInput));
 }
 
 static PyObject* msl_alloc_reset(PyObject* self, PyObject* args) {
@@ -208,10 +273,17 @@ static PyObject* msl_alloc_stats(PyObject* self, PyObject* args) {
 }
 
 static PyMethodDef methods[] = {
-    {"init", (PyCFunction)msl_init, METH_VARARGS | METH_KEYWORDS, "init(batch_size, num_players) -> handle"},
+    {"init",
+     (PyCFunction)msl_init,
+     METH_VARARGS | METH_KEYWORDS,
+     "init(batch_size, num_players, ucf_enabled=?, ucf_cardinals_1_0_enabled=?) -> handle"},
     {"reseed_seed", msl_reseed_seed, METH_VARARGS, "reseed_seed(handle, seed_bytes[batch, seed_stride])"},
     {"step_input", msl_step_input, METH_VARARGS, "step_input(handle, prev_input_bytes, input_bytes)"},
     {"write_compare", msl_write_compare, METH_VARARGS, "write_compare(handle, out_bytes)"},
+    {"debug_write_processed_input",
+     msl_debug_write_processed_input,
+     METH_VARARGS,
+     "debug_write_processed_input(handle, out_bytes)"},
     {"sizes", msl_sizes, METH_NOARGS, "sizes() -> dict of struct sizes"},
     {"alloc_reset", msl_alloc_reset, METH_NOARGS, "Reset C allocation counters (debug/perf guardrail)."},
     {"alloc_stats", msl_alloc_stats, METH_NOARGS, "Get C allocation counters (debug/perf guardrail)."},

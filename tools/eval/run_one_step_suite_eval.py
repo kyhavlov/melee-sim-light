@@ -46,7 +46,10 @@ def main() -> None:
 
     reporter = Reporter(args.out)
     try:
-        reporter.print(f"suite: {suite.name}  datasets: {len(dataset_paths)}")
+        reporter.print(
+            f"suite: {suite.name}  datasets: {len(dataset_paths)}  "
+            f"ucf_enabled: {suite.ucf_enabled}  ucf_cardinals_1_0_enabled: {suite.ucf_cardinals_1_0_enabled}"
+        )
         suite_mismatches: dict[str, int] | None = None
         suite_totals = {
             "total_records": 0,
@@ -60,7 +63,13 @@ def main() -> None:
         for ds in dataset_paths:
             reporter.print()
             reporter.print(f"== {ds.relative_to(root)} ==")
-            summary = evaluate_dataset(dataset_path=ds, chunk=args.chunk, reporter=reporter)
+            summary = evaluate_dataset(
+                dataset_path=ds,
+                chunk=args.chunk,
+                ucf_enabled=suite.ucf_enabled,
+                ucf_cardinals_1_0_enabled=suite.ucf_cardinals_1_0_enabled,
+                reporter=reporter,
+            )
 
             if suite_mismatches is None:
                 suite_mismatches = {k: 0 for k in summary.mismatches.keys()}

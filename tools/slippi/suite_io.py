@@ -19,6 +19,8 @@ class ReplaySuite:
     name: str
     notes: str | None
     replays: tuple[SuiteReplay, ...]
+    ucf_enabled: bool | None = None
+    ucf_cardinals_1_0_enabled: bool | None = None
 
 
 def load_suite(path: str | Path) -> ReplaySuite:
@@ -26,6 +28,8 @@ def load_suite(path: str | Path) -> ReplaySuite:
     data = json.loads(p.read_text())
     name = str(data["name"])
     notes = data.get("notes")
+    ucf_enabled = data.get("ucf_enabled")
+    ucf_cardinals_1_0_enabled = data.get("ucf_cardinals_1_0_enabled")
     replays = []
     for r in data["replays"]:
         replay = str(r["replay"])
@@ -40,7 +44,15 @@ def load_suite(path: str | Path) -> ReplaySuite:
                 characters=r.get("characters"),
             )
         )
-    return ReplaySuite(name=name, notes=notes, replays=tuple(replays))
+    return ReplaySuite(
+        name=name,
+        notes=notes,
+        ucf_enabled=bool(ucf_enabled) if ucf_enabled is not None else None,
+        ucf_cardinals_1_0_enabled=bool(ucf_cardinals_1_0_enabled)
+        if ucf_cardinals_1_0_enabled is not None
+        else None,
+        replays=tuple(replays),
+    )
 
 
 def repo_root() -> Path:

@@ -134,6 +134,8 @@ def evaluate_dataset(
     *,
     dataset_path: Path,
     chunk: int,
+    ucf_enabled: bool | None = None,
+    ucf_cardinals_1_0_enabled: bool | None = None,
     reporter: Reporter | None = None,
 ) -> EvalSummary:
     if reporter is None:
@@ -152,7 +154,13 @@ def evaluate_dataset(
     input_stride = int(sizes["input"])
     compare_stride = int(sizes["compare"])
 
-    handle = binding.init(batch_size=min(chunk, num_records), num_players=num_players)
+    init_kwargs = {"batch_size": min(chunk, num_records), "num_players": num_players}
+    if ucf_enabled is not None:
+        init_kwargs["ucf_enabled"] = int(bool(ucf_enabled))
+    if ucf_cardinals_1_0_enabled is not None:
+        init_kwargs["ucf_cardinals_1_0_enabled"] = int(bool(ucf_cardinals_1_0_enabled))
+
+    handle = binding.init(**init_kwargs)
 
     total_records = 0
     total_player_frames = 0
@@ -217,7 +225,12 @@ def evaluate_dataset(
         chunk_n = min(chunk, num_records - offset)
         if chunk_n != seed_bytes.shape[0]:
             # Re-init for the last partial chunk (keeps binding simple).
-            handle = binding.init(batch_size=chunk_n, num_players=num_players)
+            init_kwargs = {"batch_size": chunk_n, "num_players": num_players}
+            if ucf_enabled is not None:
+                init_kwargs["ucf_enabled"] = int(bool(ucf_enabled))
+            if ucf_cardinals_1_0_enabled is not None:
+                init_kwargs["ucf_cardinals_1_0_enabled"] = int(bool(ucf_cardinals_1_0_enabled))
+            handle = binding.init(**init_kwargs)
             seed_bytes = np.empty((chunk_n, seed_stride), dtype=np.uint8)
             prev_input_bytes = np.empty((chunk_n, input_stride), dtype=np.uint8)
             input_bytes = np.empty((chunk_n, input_stride), dtype=np.uint8)

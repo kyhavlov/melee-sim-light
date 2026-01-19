@@ -58,6 +58,17 @@ int state_alloc(MslStateSoA* state, int batch_size) {
   state->last_hit_by = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->state_flags = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp * 5);
 
+  state->input_buttons = (uint16_t*)alloc_aligned_64(sizeof(uint16_t) * bp);
+  state->prev_input_buttons = (uint16_t*)alloc_aligned_64(sizeof(uint16_t) * bp);
+  state->input_buttons_pressed = (uint16_t*)alloc_aligned_64(sizeof(uint16_t) * bp);
+  state->input_buttons_released = (uint16_t*)alloc_aligned_64(sizeof(uint16_t) * bp);
+  state->input_main_x = (int8_t*)alloc_aligned_64(sizeof(int8_t) * bp);
+  state->input_main_y = (int8_t*)alloc_aligned_64(sizeof(int8_t) * bp);
+  state->input_c_x = (int8_t*)alloc_aligned_64(sizeof(int8_t) * bp);
+  state->input_c_y = (int8_t*)alloc_aligned_64(sizeof(int8_t) * bp);
+  state->input_l = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
+  state->input_r = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
+
   state->item_exists = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bi);
   state->item_state = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bi);
   state->item_type = (uint16_t*)alloc_aligned_64(sizeof(uint16_t) * bi);
@@ -85,6 +96,9 @@ int state_alloc(MslStateSoA* state, int batch_size) {
       !state->hitlag || !state->hitstun || !state->l_cancel || !state->hurtbox_state ||
       !state->ground_id || !state->animation_index || !state->instance_hit_by || !state->instance_id ||
       !state->last_attack_landed || !state->combo_count || !state->last_hit_by || !state->state_flags ||
+      !state->input_buttons || !state->prev_input_buttons || !state->input_buttons_pressed ||
+      !state->input_buttons_released || !state->input_main_x || !state->input_main_y || !state->input_c_x ||
+      !state->input_c_y || !state->input_l || !state->input_r ||
       !state->item_exists || !state->item_state || !state->item_type || !state->item_owner ||
       !state->item_instance_id || !state->item_direction || !state->item_vel_x || !state->item_vel_y ||
       !state->item_pos_x || !state->item_pos_y || !state->item_damage || !state->item_timer ||
@@ -136,6 +150,17 @@ void state_free(MslStateSoA* state) {
   alloc_free(state->combo_count);
   alloc_free(state->last_hit_by);
   alloc_free(state->state_flags);
+
+  alloc_free(state->input_buttons);
+  alloc_free(state->prev_input_buttons);
+  alloc_free(state->input_buttons_pressed);
+  alloc_free(state->input_buttons_released);
+  alloc_free(state->input_main_x);
+  alloc_free(state->input_main_y);
+  alloc_free(state->input_c_x);
+  alloc_free(state->input_c_y);
+  alloc_free(state->input_l);
+  alloc_free(state->input_r);
 
   alloc_free(state->item_exists);
   alloc_free(state->item_state);

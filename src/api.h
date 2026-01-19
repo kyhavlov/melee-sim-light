@@ -34,6 +34,21 @@ typedef struct MslInput {
   MslInputPlayer p[MSL_MAX_PLAYERS];
 } MslInput;
 
+typedef struct MslProcessedInputPlayer {
+  // Same layout as MslInputPlayer, but stick axes are post-processed (clamped/UCF snapped).
+  uint16_t buttons;
+  int8_t main_x;
+  int8_t main_y;
+  int8_t c_x;
+  int8_t c_y;
+  uint8_t l;
+  uint8_t r;
+} MslProcessedInputPlayer;
+
+typedef struct MslProcessedInput {
+  MslProcessedInputPlayer p[MSL_MAX_PLAYERS];
+} MslProcessedInput;
+
 typedef struct MslItem {
   uint8_t exists; // 0/1
   uint8_t state;  // item state
@@ -191,6 +206,10 @@ void msl_batch_destroy(MslBatch* batch);
 int msl_batch_batch_size(const MslBatch* batch);
 int msl_batch_num_players(const MslBatch* batch);
 
+// Mutate small runtime toggles. Safe to call after create; does not allocate.
+int msl_batch_set_ucf_enabled(MslBatch* batch, int enabled);
+int msl_batch_set_ucf_cardinals_1_0_enabled(MslBatch* batch, int enabled);
+
 // Reseed from packed MslSeed array of length batch_size.
 // seed_stride_bytes must be >= sizeof(MslSeed).
 int msl_batch_reseed_seed(
@@ -210,6 +229,13 @@ int msl_batch_step_input(
 // Write packed compare outputs (length batch_size).
 // out_stride_bytes must be >= sizeof(MslCompare).
 int msl_batch_write_compare(
+    const MslBatch* batch,
+    uint8_t* out_bytes,
+    size_t out_stride_bytes);
+
+// Debug/validation helper: write current processed input values.
+// out_stride_bytes must be >= sizeof(MslProcessedInput).
+int msl_batch_debug_write_processed_input(
     const MslBatch* batch,
     uint8_t* out_bytes,
     size_t out_stride_bytes);
