@@ -3,7 +3,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from tools.slippi.make_dataset_from_slp import write_dataset_v0_from_slp
+from tools.slippi.make_dataset_from_slp import write_dataset_from_slp
 from tools.slippi.suite_io import dataset_path_for_suite_replay, load_suite, repo_root
 
 
@@ -46,7 +46,7 @@ def main() -> None:
                 continue
 
         ports = list(entry.ports)
-        write_dataset_v0_from_slp(slp_path=str(slp_path), out_path=str(out_path), ports=ports)
+        write_dataset_from_slp(slp_path=str(slp_path), out_path=str(out_path), ports=ports)
         built += 1
 
     print(f"suite: {suite.name}")

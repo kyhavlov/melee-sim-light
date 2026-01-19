@@ -3,7 +3,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include "msl_api.h"
+#include "api.h"
 
 // Hot SoA state owned by a batch. All arrays are sized for MAX_PLAYERS/ITEMS.
 typedef struct MslStateSoA {
@@ -68,6 +68,5 @@ typedef struct MslStateSoA {
   uint8_t* item_misc3;
 } MslStateSoA;
 
-int msl_state_alloc(MslStateSoA* state, int batch_size);
-void msl_state_free(MslStateSoA* state);
-
+int state_alloc(MslStateSoA* state, int batch_size);
+void state_free(MslStateSoA* state);

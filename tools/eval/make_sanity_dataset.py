@@ -4,11 +4,11 @@ import argparse
 
 import numpy as np
 
-from tools.eval.dataset import SAMPLE_V0_DTYPE, write_dataset_v0
+from tools.eval.dataset import SAMPLE_DTYPE, write_dataset
 
 
 def _rand_inputs(rng: np.random.Generator, n: int) -> np.ndarray:
-    x = np.zeros(n, dtype=SAMPLE_V0_DTYPE)
+    x = np.zeros(n, dtype=SAMPLE_DTYPE)
     # Some plausible-ish metadata defaults
     x["seed_t"]["stage_id"] = 0  # FD placeholder
     x["seed_t"]["num_players"] = 2
@@ -136,7 +136,7 @@ def main() -> None:
 
     rng = np.random.default_rng(args.seed)
     samples = _rand_inputs(rng, args.records)
-    write_dataset_v0(args.out, num_players=2, samples=samples)
+    write_dataset(args.out, num_players=2, samples=samples)
     print(f"Wrote {args.records} records to {args.out}")
 
 

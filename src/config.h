@@ -14,5 +14,4 @@ typedef struct MslConfig {
   uint8_t _pad0[1];
 } MslConfig;
 
-void msl_config_default(MslConfig* out, int num_players);
-
+void config_default(MslConfig* out, int num_players);

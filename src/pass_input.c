@@ -1,10 +1,10 @@
-#include "msl_pass_input.h"
+#include "pass_input.h"
 
 #include <errno.h>
 
-#include "msl_api.h"
+#include "api.h"
 
-int msl_pass_input_apply_v0(
+int pass_input_apply(
     MslBatch* batch,
     const uint8_t* prev_input_bytes,
     size_t prev_input_stride_bytes,
@@ -17,9 +17,8 @@ int msl_pass_input_apply_v0(
   if (prev_input_bytes == NULL || input_bytes == NULL) {
     return EINVAL;
   }
-  if (prev_input_stride_bytes < sizeof(MslInputV0) || input_stride_bytes < sizeof(MslInputV0)) {
+  if (prev_input_stride_bytes < sizeof(MslInput) || input_stride_bytes < sizeof(MslInput)) {
     return EINVAL;
   }
   return 0;
 }
-

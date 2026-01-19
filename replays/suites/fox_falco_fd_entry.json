@@ -1,5 +1,5 @@
 {
-  "name": "fox_falco_fd_v0",
+  "name": "fox_falco_fd_entry",
   "notes": "Local replay suite for early match-start parity (Entry/EntryStart/EntryEnd) on Final Destination (stage_id=32).",
   "replays": [
     {

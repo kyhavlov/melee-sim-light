@@ -1,13 +1,13 @@
-#include "msl_api.h"
+#include "api.h"
 
 #include <errno.h>
 #include <stdlib.h>
 #include <string.h>
 
-#include "msl_batch_internal.h"
-#include "msl_config.h"
-#include "msl_state.h"
-#include "msl_step.h"
+#include "batch_internal.h"
+#include "config.h"
+#include "state.h"
+#include "step.h"
 
 MslBatch* msl_batch_create(int batch_size, int num_players) {
   if (batch_size <= 0) {
@@ -23,9 +23,9 @@ MslBatch* msl_batch_create(int batch_size, int num_players) {
   }
 
   batch->batch_size = batch_size;
-  msl_config_default(&batch->config, num_players);
+  config_default(&batch->config, num_players);
 
-  if (msl_state_alloc(&batch->state, batch_size) != 0) {
+  if (state_alloc(&batch->state, batch_size) != 0) {
     msl_batch_destroy(batch);
     return NULL;
   }
@@ -37,7 +37,7 @@ void msl_batch_destroy(MslBatch* batch) {
   if (batch == NULL) {
     return;
   }
-  msl_state_free(&batch->state);
+  state_free(&batch->state);
   free(batch);
 }
 
@@ -49,20 +49,20 @@ int msl_batch_num_players(const MslBatch* batch) {
   return batch ? (int)batch->config.num_players : 0;
 }
 
-int msl_batch_reseed_seed_v0(
+int msl_batch_reseed_seed(
     MslBatch* batch,
     const uint8_t* seed_bytes,
     size_t seed_stride_bytes) {
   if (batch == NULL || seed_bytes == NULL) {
     return EINVAL;
   }
-  if (seed_stride_bytes < sizeof(MslSeedV0)) {
+  if (seed_stride_bytes < sizeof(MslSeed)) {
     return EINVAL;
   }
 
   for (int bi = 0; bi < batch->batch_size; bi++) {
     const uint8_t* ptr = seed_bytes + (size_t)bi * seed_stride_bytes;
-    const MslSeedV0* seed = (const MslSeedV0*)ptr;
+    const MslSeed* seed = (const MslSeed*)ptr;
 
     batch->state.frame_id[bi] = seed->frame_id;
     batch->state.frame_pre_random_seed[bi] = seed->frame_pre_random_seed;
@@ -110,7 +110,7 @@ int msl_batch_reseed_seed_v0(
 
     for (int it = 0; it < MSL_MAX_ITEMS; it++) {
       const size_t ii = msl_idx_item(bi, it);
-      const MslItemV0* item = &seed->items[it];
+      const MslItem* item = &seed->items[it];
       batch->state.item_exists[ii] = item->exists;
       batch->state.item_state[ii] = item->state;
       batch->state.item_type[ii] = item->type;
@@ -134,13 +134,13 @@ int msl_batch_reseed_seed_v0(
   return 0;
 }
 
-int msl_batch_step_input_v0(
+int msl_batch_step_input(
     MslBatch* batch,
     const uint8_t* prev_input_bytes,
     size_t prev_input_stride_bytes,
     const uint8_t* input_bytes,
     size_t input_stride_bytes) {
-  return msl_step_one_frame_v0(
+  return step_one_frame(
       batch,
       prev_input_bytes,
       prev_input_stride_bytes,
@@ -152,20 +152,20 @@ static uint8_t msl_is_dead_from_stocks(uint8_t stocks) {
   return stocks == 0 ? 1 : 0;
 }
 
-int msl_batch_write_compare_v0(
+int msl_batch_write_compare(
     const MslBatch* batch,
     uint8_t* out_bytes,
     size_t out_stride_bytes) {
   if (batch == NULL || out_bytes == NULL) {
     return EINVAL;
   }
-  if (out_stride_bytes < sizeof(MslCompareV0)) {
+  if (out_stride_bytes < sizeof(MslCompare)) {
     return EINVAL;
   }
 
   for (int bi = 0; bi < batch->batch_size; bi++) {
     uint8_t* ptr = out_bytes + (size_t)bi * out_stride_bytes;
-    MslCompareV0* out = (MslCompareV0*)ptr;
+    MslCompare* out = (MslCompare*)ptr;
     memset(out, 0, sizeof(*out));
 
     out->frame_id = batch->state.frame_id[bi];
@@ -216,7 +216,7 @@ int msl_batch_write_compare_v0(
 
     for (int it = 0; it < MSL_MAX_ITEMS; it++) {
       const size_t ii = msl_idx_item(bi, it);
-      MslItemV0* item = &out->items[it];
+      MslItem* item = &out->items[it];
       item->exists = batch->state.item_exists[ii];
       item->state = batch->state.item_state[ii];
       item->type = batch->state.item_type[ii];
@@ -239,4 +239,3 @@ int msl_batch_write_compare_v0(
 
   return 0;
 }
-

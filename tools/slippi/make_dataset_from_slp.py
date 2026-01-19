@@ -8,7 +8,7 @@ import numpy as np
 import pyarrow as pa
 from peppi_py import _read_slippi
 
-from tools.eval.dataset import SAMPLE_V0_DTYPE, write_dataset_v0
+from tools.eval.dataset import SAMPLE_DTYPE, write_dataset
 
 
 @dataclass(frozen=True)
@@ -69,7 +69,7 @@ def _u16_from_hitstun_misc(misc_as: np.ndarray | None, n: int) -> np.ndarray:
 def _i16_from_state_age(state_age: np.ndarray | None, n: int) -> np.ndarray:
     if state_age is None:
         return np.zeros(n, dtype=np.int16)
-    # Keep it simple for v0: floor the float (can be fractional in some actions).
+    # Keep it simple: floor the float (can be fractional in some actions).
     x = np.clip(state_age, -32768.0, 32767.0)
     return np.floor(x).astype(np.int16)
 
@@ -111,11 +111,11 @@ def _team_id_from_start_player(p: dict) -> int:
 def _fill_items_fixed(frames: pa.StructArray, n_frames: int) -> np.ndarray:
     """
     Convert Slippi frame items (list<struct<...>>) into a fixed-length [n_frames, 15]
-    array matching ITEM_V0_DTYPE, with a stable ordering.
+    array matching the dataset's ITEM dtype, with a stable ordering.
 
     Ordering: sort by (instance_id, spawn_id/id, type).
     """
-    out = np.zeros((n_frames, 15), dtype=SAMPLE_V0_DTYPE["seed_t"]["items"].base)
+    out = np.zeros((n_frames, 15), dtype=SAMPLE_DTYPE["seed_t"]["items"].base)
     out["owner"] = np.int8(-1)
 
     if "item" not in {f.name for f in frames.type}:
@@ -152,14 +152,14 @@ def _fill_items_fixed(frames: pa.StructArray, n_frames: int) -> np.ndarray:
     return out
 
 
-def write_dataset_v0_from_slp(
+def write_dataset_from_slp(
     *,
     slp_path: str,
     out_path: str,
     ports: list[int] | None = None,
 ) -> None:
     """
-    Build a DatasetV0 from a single .slp by reseeding with post(i-1),
+    Build a dataset from a single .slp by reseeding with post(i-1),
     applying inputs from pre(i), and comparing to post(i).
 
     ports: optional list of 1-based ports to include (e.g. [1,2]).
@@ -248,7 +248,7 @@ def _main_impl(args) -> None:
     # prev_input_t := pre(i-1)
     # ref_t1  := post(i)
     n_samples = n_frames - 1
-    samples = np.zeros(n_samples, dtype=SAMPLE_V0_DTYPE)
+    samples = np.zeros(n_samples, dtype=SAMPLE_DTYPE)
 
     stage_id = int(game.start.get("stage", 0))
     is_teams = int(bool(game.start.get("is_teams", False)))
@@ -425,7 +425,7 @@ def _main_impl(args) -> None:
     # is_dead in compare is derived from stocks in the evaluator too, but fill it here for completeness.
     samples["ref_t1"]["is_dead"] = (samples["ref_t1"]["stocks"] == 0).astype(np.uint8)
 
-    write_dataset_v0(args.out, num_players=num_players, samples=samples)
+    write_dataset(args.out, num_players=num_players, samples=samples)
     print(f"Wrote {n_samples} samples to {args.out} from {args.slp}")
 
 

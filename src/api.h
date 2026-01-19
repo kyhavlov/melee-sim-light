@@ -18,7 +18,7 @@ enum { MSL_MAX_ITEMS = 15 };
 
 #pragma pack(push, 1)
 
-typedef struct MslInputPlayerV0 {
+typedef struct MslInputPlayer {
   // Bitmask of digital buttons. (Mapping is defined in tooling; keep stable.)
   uint16_t buttons;
   // Raw stick values (e.g., -128..127). Tooling defines exact conventions.
@@ -28,13 +28,13 @@ typedef struct MslInputPlayerV0 {
   int8_t c_y;
   uint8_t l;
   uint8_t r;
-} MslInputPlayerV0;
+} MslInputPlayer;
 
-typedef struct MslInputV0 {
-  MslInputPlayerV0 p[MSL_MAX_PLAYERS];
-} MslInputV0;
+typedef struct MslInput {
+  MslInputPlayer p[MSL_MAX_PLAYERS];
+} MslInput;
 
-typedef struct MslItemV0 {
+typedef struct MslItem {
   uint8_t exists; // 0/1
   uint8_t state;  // item state
   uint16_t type;  // item kind/type id
@@ -56,9 +56,9 @@ typedef struct MslItemV0 {
   uint8_t misc1;
   uint8_t misc2;
   uint8_t misc3;
-} MslItemV0;
+} MslItem;
 
-typedef struct MslSeedV0 {
+typedef struct MslSeed {
   int32_t frame_id;
   uint32_t frame_pre_random_seed; // pre-frame RNG seed (per-player seeds also exist; this is frame-level)
 
@@ -107,10 +107,10 @@ typedef struct MslSeedV0 {
   uint8_t _pad2[1];
   uint8_t state_flags[MSL_MAX_PLAYERS][5];
 
-  MslItemV0 items[MSL_MAX_ITEMS];
-} MslSeedV0;
+  MslItem items[MSL_MAX_ITEMS];
+} MslSeed;
 
-typedef struct MslCompareV0 {
+typedef struct MslCompare {
   int32_t frame_id;
   uint32_t frame_pre_random_seed;
 
@@ -156,23 +156,23 @@ typedef struct MslCompareV0 {
   uint8_t _pad2[1];
   uint8_t state_flags[MSL_MAX_PLAYERS][5];
 
-  MslItemV0 items[MSL_MAX_ITEMS];
-} MslCompareV0;
+  MslItem items[MSL_MAX_ITEMS];
+} MslCompare;
 
-typedef struct MslDatasetHeaderV0 {
+typedef struct MslDatasetHeader {
   char magic[8]; // "MSLDSLT "
   uint32_t record_size;
   uint32_t num_records;
   uint8_t num_players; // 2 or 4
   uint8_t _pad0[3];
-} MslDatasetHeaderV0;
+} MslDatasetHeader;
 
-typedef struct MslSampleV0 {
-  MslSeedV0 seed_t;
-  MslInputV0 prev_input_t;
-  MslInputV0 input_t;
-  MslCompareV0 ref_t1;
-} MslSampleV0;
+typedef struct MslSample {
+  MslSeed seed_t;
+  MslInput prev_input_t;
+  MslInput input_t;
+  MslCompare ref_t1;
+} MslSample;
 
 #pragma pack(pop)
 
@@ -191,16 +191,16 @@ void msl_batch_destroy(MslBatch* batch);
 int msl_batch_batch_size(const MslBatch* batch);
 int msl_batch_num_players(const MslBatch* batch);
 
-// Reseed from packed MslSeedV0 array of length batch_size.
-// seed_stride_bytes must be >= sizeof(MslSeedV0).
-int msl_batch_reseed_seed_v0(
+// Reseed from packed MslSeed array of length batch_size.
+// seed_stride_bytes must be >= sizeof(MslSeed).
+int msl_batch_reseed_seed(
     MslBatch* batch,
     const uint8_t* seed_bytes,
     size_t seed_stride_bytes);
 
 // Step one frame using packed inputs. The current "empty sim" stub ignores inputs.
-// input_stride_bytes must be >= sizeof(MslInputV0).
-int msl_batch_step_input_v0(
+// input_stride_bytes must be >= sizeof(MslInput).
+int msl_batch_step_input(
     MslBatch* batch,
     const uint8_t* prev_input_bytes,
     size_t prev_input_stride_bytes,
@@ -208,8 +208,8 @@ int msl_batch_step_input_v0(
     size_t input_stride_bytes);
 
 // Write packed compare outputs (length batch_size).
-// out_stride_bytes must be >= sizeof(MslCompareV0).
-int msl_batch_write_compare_v0(
+// out_stride_bytes must be >= sizeof(MslCompare).
+int msl_batch_write_compare(
     const MslBatch* batch,
     uint8_t* out_bytes,
     size_t out_stride_bytes);

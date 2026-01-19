@@ -1,6 +1,6 @@
-#include "msl_config.h"
+#include "config.h"
 
-void msl_config_default(MslConfig* out, int num_players) {
+void config_default(MslConfig* out, int num_players) {
   if (out == 0) {
     return;
   }
@@ -9,4 +9,3 @@ void msl_config_default(MslConfig* out, int num_players) {
   out->ucf_cardinals_1_0_enabled = 0;
   out->_pad0[0] = 0;
 }
-

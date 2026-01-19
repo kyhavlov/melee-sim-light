@@ -1,7 +1,7 @@
 #pragma once
 
-#include "msl_config.h"
-#include "msl_state.h"
+#include "config.h"
+#include "state.h"
 
 struct MslBatch {
   int batch_size;

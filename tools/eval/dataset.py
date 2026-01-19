@@ -31,7 +31,7 @@ def _arr(dtype: str, n: int):
 MAX_PLAYERS: Final[int] = 4
 MAX_ITEMS: Final[int] = 15
 
-INPUT_PLAYER_V0_DTYPE = np.dtype(
+INPUT_PLAYER_DTYPE = np.dtype(
     [
         ("buttons", "<u2"),
         ("main_x", "i1"),
@@ -44,9 +44,9 @@ INPUT_PLAYER_V0_DTYPE = np.dtype(
     align=False,
 )
 
-INPUT_V0_DTYPE = np.dtype([("p", INPUT_PLAYER_V0_DTYPE, (MAX_PLAYERS,))], align=False)
+INPUT_DTYPE = np.dtype([("p", INPUT_PLAYER_DTYPE, (MAX_PLAYERS,))], align=False)
 
-ITEM_V0_DTYPE = np.dtype(
+ITEM_DTYPE = np.dtype(
     [
         ("exists", "u1"),
         ("state", "u1"),
@@ -71,7 +71,7 @@ ITEM_V0_DTYPE = np.dtype(
     align=False,
 )
 
-SEED_V0_DTYPE = np.dtype(
+SEED_DTYPE = np.dtype(
     [
         ("frame_id", "<i4"),
         ("frame_pre_random_seed", "<u4"),
@@ -110,12 +110,12 @@ SEED_V0_DTYPE = np.dtype(
         ("last_hit_by", _arr("u1", MAX_PLAYERS)),
         ("_pad2", "V1"),
         ("state_flags", ("u1", (MAX_PLAYERS, 5))),
-        ("items", ITEM_V0_DTYPE, (MAX_ITEMS,)),
+        ("items", ITEM_DTYPE, (MAX_ITEMS,)),
     ],
     align=False,
 )
 
-COMPARE_V0_DTYPE = np.dtype(
+COMPARE_DTYPE = np.dtype(
     [
         ("frame_id", "<i4"),
         ("frame_pre_random_seed", "<u4"),
@@ -155,33 +155,33 @@ COMPARE_V0_DTYPE = np.dtype(
         ("last_hit_by", _arr("u1", MAX_PLAYERS)),
         ("_pad2", "V1"),
         ("state_flags", ("u1", (MAX_PLAYERS, 5))),
-        ("items", ITEM_V0_DTYPE, (MAX_ITEMS,)),
+        ("items", ITEM_DTYPE, (MAX_ITEMS,)),
     ],
     align=False,
 )
 
-SAMPLE_V0_DTYPE = np.dtype(
+SAMPLE_DTYPE = np.dtype(
     [
-        ("seed_t", SEED_V0_DTYPE),
-        ("prev_input_t", INPUT_V0_DTYPE),
-        ("input_t", INPUT_V0_DTYPE),
-        ("ref_t1", COMPARE_V0_DTYPE),
+        ("seed_t", SEED_DTYPE),
+        ("prev_input_t", INPUT_DTYPE),
+        ("input_t", INPUT_DTYPE),
+        ("ref_t1", COMPARE_DTYPE),
     ],
     align=False,
 )
 
 
 @dataclasses.dataclass(frozen=True)
-class DatasetV0:
+class Dataset:
     header: np.ndarray
     samples: np.ndarray
 
 
-def write_dataset_v0(path: str, num_players: int, samples: np.ndarray) -> None:
+def write_dataset(path: str, num_players: int, samples: np.ndarray) -> None:
     if num_players not in (2, 4):
         raise ValueError(f"num_players must be 2 or 4, got {num_players}")
-    if samples.dtype != SAMPLE_V0_DTYPE:
-        raise ValueError(f"samples dtype mismatch: got {samples.dtype}, want {SAMPLE_V0_DTYPE}")
+    if samples.dtype != SAMPLE_DTYPE:
+        raise ValueError(f"samples dtype mismatch: got {samples.dtype}, want {SAMPLE_DTYPE}")
 
     header = np.zeros((), dtype=HEADER_DTYPE)
     header["magic"] = MAGIC
@@ -194,7 +194,7 @@ def write_dataset_v0(path: str, num_players: int, samples: np.ndarray) -> None:
         f.write(samples.tobytes(order="C"))
 
 
-def read_dataset_v0(path: str) -> DatasetV0:
+def read_dataset(path: str) -> Dataset:
     with open(path, "rb") as f:
         header_bytes = f.read(HEADER_DTYPE.itemsize)
         if len(header_bytes) != HEADER_DTYPE.itemsize:
@@ -204,14 +204,14 @@ def read_dataset_v0(path: str) -> DatasetV0:
             raise ValueError(f"bad magic: {header['magic']!r}")
 
         record_size = int(header["record_size"])
-        if record_size != SAMPLE_V0_DTYPE.itemsize:
+        if record_size != SAMPLE_DTYPE.itemsize:
             raise ValueError(
-                f"record_size mismatch: file={record_size} dtype={SAMPLE_V0_DTYPE.itemsize}"
+                f"record_size mismatch: file={record_size} dtype={SAMPLE_DTYPE.itemsize}"
             )
         num_records = int(header["num_records"])
         samples_bytes = f.read(record_size * num_records)
         if len(samples_bytes) != record_size * num_records:
             raise ValueError("file truncated")
-        samples = np.frombuffer(samples_bytes, dtype=SAMPLE_V0_DTYPE, count=num_records)
+        samples = np.frombuffer(samples_bytes, dtype=SAMPLE_DTYPE, count=num_records)
 
-    return DatasetV0(header=header, samples=samples)
+    return Dataset(header=header, samples=samples)

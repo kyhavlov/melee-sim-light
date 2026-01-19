@@ -6,7 +6,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from tools.eval.dataset import COMPARE_V0_DTYPE, SEED_V0_DTYPE, INPUT_V0_DTYPE, read_dataset_v0
+from tools.eval.dataset import COMPARE_DTYPE, INPUT_DTYPE, SEED_DTYPE, read_dataset
 
 
 @dataclass
@@ -39,7 +39,7 @@ def main() -> None:
     ap.add_argument("--chunk", type=int, default=4096)
     args = ap.parse_args()
 
-    ds = read_dataset_v0(args.dataset)
+    ds = read_dataset(args.dataset)
     samples = ds.samples
     num_records = samples.shape[0]
     num_players = int(ds.header["num_players"])
@@ -48,9 +48,9 @@ def main() -> None:
     binding = _load_binding()
     sizes = binding.sizes()
 
-    seed_stride = int(sizes["seed_v0"])
-    input_stride = int(sizes["input_v0"])
-    compare_stride = int(sizes["compare_v0"])
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    compare_stride = int(sizes["compare"])
 
     handle = binding.init(batch_size=min(args.chunk, num_records), num_players=num_players)
 
@@ -108,7 +108,7 @@ def main() -> None:
     out_compare_bytes = np.empty((min(args.chunk, num_records), compare_stride), dtype=np.uint8)
 
     # Views for vectorized comparisons.
-    out_compare_view = out_compare_bytes.view(COMPARE_V0_DTYPE).reshape(-1)
+    out_compare_view = out_compare_bytes.view(COMPARE_DTYPE).reshape(-1)
 
     # Iterate in chunks, resizing the handle buffers as needed by re-init.
     offset = 0
@@ -121,7 +121,7 @@ def main() -> None:
             prev_input_bytes = np.empty((chunk_n, input_stride), dtype=np.uint8)
             input_bytes = np.empty((chunk_n, input_stride), dtype=np.uint8)
             out_compare_bytes = np.empty((chunk_n, compare_stride), dtype=np.uint8)
-            out_compare_view = out_compare_bytes.view(COMPARE_V0_DTYPE).reshape(-1)
+            out_compare_view = out_compare_bytes.view(COMPARE_DTYPE).reshape(-1)
 
         chunk = samples[offset : offset + chunk_n]
 
@@ -138,9 +138,9 @@ def main() -> None:
             chunk_n, input_stride
         )
 
-        binding.reseed_seed_v0(handle, seed_bytes)
-        binding.step_input_v0(handle, prev_input_bytes, input_bytes)
-        binding.write_compare_v0(handle, out_compare_bytes)
+        binding.reseed_seed(handle, seed_bytes)
+        binding.step_input(handle, prev_input_bytes, input_bytes)
+        binding.write_compare(handle, out_compare_bytes)
 
         ref = chunk["ref_t1"]
 

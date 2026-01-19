@@ -3,7 +3,7 @@
 
 #include <numpy/arrayobject.h>
 
-#include "../src/msl_api.h"
+#include "../src/api.h"
 
 typedef struct {
   MslBatch* batch;
@@ -81,7 +81,7 @@ static PyMslHandle* unpack_handle(PyObject* handle_obj) {
   return h;
 }
 
-static PyObject* msl_reseed_seed_v0(PyObject* self, PyObject* args) {
+static PyObject* msl_reseed_seed(PyObject* self, PyObject* args) {
   PyObject* handle_obj = NULL;
   PyObject* seed_obj = NULL;
   if (!PyArg_ParseTuple(args, "OO", &handle_obj, &seed_obj)) {
@@ -96,24 +96,24 @@ static PyObject* msl_reseed_seed_v0(PyObject* self, PyObject* args) {
   if (seed == NULL) {
     return NULL;
   }
-  if (PyArray_DIM(seed, 1) < (npy_intp)sizeof(MslSeedV0)) {
-    PyErr_SetString(PyExc_ValueError, "seed second dim too small for MslSeedV0");
+  if (PyArray_DIM(seed, 1) < (npy_intp)sizeof(MslSeed)) {
+    PyErr_SetString(PyExc_ValueError, "seed second dim too small for MslSeed");
     return NULL;
   }
 
   const uint8_t* seed_bytes = (const uint8_t*)PyArray_DATA(seed);
   const size_t stride = (size_t)PyArray_STRIDE(seed, 0);
 
-  const int err = msl_batch_reseed_seed_v0(h->batch, seed_bytes, stride);
+  const int err = msl_batch_reseed_seed(h->batch, seed_bytes, stride);
   if (err != 0) {
-    PyErr_Format(PyExc_RuntimeError, "msl_batch_reseed_seed_v0 failed: %d", err);
+    PyErr_Format(PyExc_RuntimeError, "msl_batch_reseed_seed failed: %d", err);
     return NULL;
   }
 
   Py_RETURN_NONE;
 }
 
-static PyObject* msl_step_input_v0(PyObject* self, PyObject* args) {
+static PyObject* msl_step_input(PyObject* self, PyObject* args) {
   PyObject* handle_obj = NULL;
   PyObject* prev_input_obj = NULL;
   PyObject* input_obj = NULL;
@@ -134,9 +134,9 @@ static PyObject* msl_step_input_v0(PyObject* self, PyObject* args) {
     return NULL;
   }
 
-  if (PyArray_DIM(prev_input, 1) < (npy_intp)sizeof(MslInputV0) ||
-      PyArray_DIM(input, 1) < (npy_intp)sizeof(MslInputV0)) {
-    PyErr_SetString(PyExc_ValueError, "input second dim too small for MslInputV0");
+  if (PyArray_DIM(prev_input, 1) < (npy_intp)sizeof(MslInput) ||
+      PyArray_DIM(input, 1) < (npy_intp)sizeof(MslInput)) {
+    PyErr_SetString(PyExc_ValueError, "input second dim too small for MslInput");
     return NULL;
   }
 
@@ -145,16 +145,16 @@ static PyObject* msl_step_input_v0(PyObject* self, PyObject* args) {
   const size_t prev_stride = (size_t)PyArray_STRIDE(prev_input, 0);
   const size_t in_stride = (size_t)PyArray_STRIDE(input, 0);
 
-  const int err = msl_batch_step_input_v0(h->batch, prev_bytes, prev_stride, in_bytes, in_stride);
+  const int err = msl_batch_step_input(h->batch, prev_bytes, prev_stride, in_bytes, in_stride);
   if (err != 0) {
-    PyErr_Format(PyExc_RuntimeError, "msl_batch_step_input_v0 failed: %d", err);
+    PyErr_Format(PyExc_RuntimeError, "msl_batch_step_input failed: %d", err);
     return NULL;
   }
 
   Py_RETURN_NONE;
 }
 
-static PyObject* msl_write_compare_v0(PyObject* self, PyObject* args) {
+static PyObject* msl_write_compare(PyObject* self, PyObject* args) {
   PyObject* handle_obj = NULL;
   PyObject* out_obj = NULL;
   if (!PyArg_ParseTuple(args, "OO", &handle_obj, &out_obj)) {
@@ -169,17 +169,17 @@ static PyObject* msl_write_compare_v0(PyObject* self, PyObject* args) {
   if (out == NULL) {
     return NULL;
   }
-  if (PyArray_DIM(out, 1) < (npy_intp)sizeof(MslCompareV0)) {
-    PyErr_SetString(PyExc_ValueError, "out second dim too small for MslCompareV0");
+  if (PyArray_DIM(out, 1) < (npy_intp)sizeof(MslCompare)) {
+    PyErr_SetString(PyExc_ValueError, "out second dim too small for MslCompare");
     return NULL;
   }
 
   uint8_t* out_bytes = (uint8_t*)PyArray_DATA(out);
   const size_t stride = (size_t)PyArray_STRIDE(out, 0);
 
-  const int err = msl_batch_write_compare_v0(h->batch, out_bytes, stride);
+  const int err = msl_batch_write_compare(h->batch, out_bytes, stride);
   if (err != 0) {
-    PyErr_Format(PyExc_RuntimeError, "msl_batch_write_compare_v0 failed: %d", err);
+    PyErr_Format(PyExc_RuntimeError, "msl_batch_write_compare failed: %d", err);
     return NULL;
   }
 
@@ -189,17 +189,17 @@ static PyObject* msl_write_compare_v0(PyObject* self, PyObject* args) {
 static PyObject* msl_sizes(PyObject* self, PyObject* args) {
   return Py_BuildValue(
       "{s:i,s:i,s:i,s:i}",
-      "seed_v0", (int)sizeof(MslSeedV0),
-      "input_v0", (int)sizeof(MslInputV0),
-      "compare_v0", (int)sizeof(MslCompareV0),
-      "sample_v0", (int)sizeof(MslSampleV0));
+      "seed", (int)sizeof(MslSeed),
+      "input", (int)sizeof(MslInput),
+      "compare", (int)sizeof(MslCompare),
+      "sample", (int)sizeof(MslSample));
 }
 
 static PyMethodDef methods[] = {
     {"init", (PyCFunction)msl_init, METH_VARARGS | METH_KEYWORDS, "init(batch_size, num_players) -> handle"},
-    {"reseed_seed_v0", msl_reseed_seed_v0, METH_VARARGS, "reseed_seed_v0(handle, seed_bytes[batch, seed_stride])"},
-    {"step_input_v0", msl_step_input_v0, METH_VARARGS, "step_input_v0(handle, prev_input_bytes, input_bytes)"},
-    {"write_compare_v0", msl_write_compare_v0, METH_VARARGS, "write_compare_v0(handle, out_bytes)"},
+    {"reseed_seed", msl_reseed_seed, METH_VARARGS, "reseed_seed(handle, seed_bytes[batch, seed_stride])"},
+    {"step_input", msl_step_input, METH_VARARGS, "step_input(handle, prev_input_bytes, input_bytes)"},
+    {"write_compare", msl_write_compare, METH_VARARGS, "write_compare(handle, out_bytes)"},
     {"sizes", msl_sizes, METH_NOARGS, "sizes() -> dict of struct sizes"},
     {NULL, NULL, 0, NULL},
 };
@@ -220,4 +220,3 @@ PyMODINIT_FUNC PyInit_msl_binding(void) {
   import_array();
   return PyModule_Create(&moduledef);
 }
-
