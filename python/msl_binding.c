@@ -22,7 +22,8 @@ static void pymsl_capsule_destructor(PyObject* capsule) {
   PyMem_Free(h);
 }
 
-static PyArrayObject* require_contiguous_array(PyObject* obj, int typenum, int min_ndim, const char* name) {
+static PyArrayObject* require_contiguous_array(PyObject* obj, int typenum, int min_ndim,
+                                               const char* name) {
   if (!PyObject_TypeCheck(obj, &PyArray_Type)) {
     PyErr_Format(PyExc_TypeError, "%s must be a NumPy array", name);
     return NULL;
@@ -45,25 +46,14 @@ static PyArrayObject* require_contiguous_array(PyObject* obj, int typenum, int m
 
 static PyObject* msl_init(PyObject* self, PyObject* args, PyObject* kwargs) {
   static const char* kwlist[] = {
-      "batch_size",
-      "num_players",
-      "ucf_enabled",
-      "ucf_cardinals_1_0_enabled",
-      NULL,
+      "batch_size", "num_players", "ucf_enabled", "ucf_cardinals_1_0_enabled", NULL,
   };
   int batch_size = 0;
   int num_players = 0;
   int ucf_enabled = -1;
   int ucf_cardinals_1_0_enabled = -1;
-  if (!PyArg_ParseTupleAndKeywords(
-          args,
-          kwargs,
-          "ii|ii",
-          (char**)kwlist,
-          &batch_size,
-          &num_players,
-          &ucf_enabled,
-          &ucf_cardinals_1_0_enabled)) {
+  if (!PyArg_ParseTupleAndKeywords(args, kwargs, "ii|ii", (char**)kwlist, &batch_size, &num_players,
+                                   &ucf_enabled, &ucf_cardinals_1_0_enabled)) {
     return NULL;
   }
 
@@ -256,13 +246,9 @@ static PyObject* msl_debug_write_processed_input(PyObject* self, PyObject* args)
 }
 
 static PyObject* msl_sizes(PyObject* self, PyObject* args) {
-  return Py_BuildValue(
-      "{s:i,s:i,s:i,s:i,s:i}",
-      "seed", (int)sizeof(MslSeed),
-      "input", (int)sizeof(MslInput),
-      "compare", (int)sizeof(MslCompare),
-      "sample", (int)sizeof(MslSample),
-      "processed_input", (int)sizeof(MslProcessedInput));
+  return Py_BuildValue("{s:i,s:i,s:i,s:i,s:i}", "seed", (int)sizeof(MslSeed), "input",
+                       (int)sizeof(MslInput), "compare", (int)sizeof(MslCompare), "sample",
+                       (int)sizeof(MslSample), "processed_input", (int)sizeof(MslProcessedInput));
 }
 
 static PyObject* msl_alloc_reset(PyObject* self, PyObject* args) {
@@ -293,34 +279,27 @@ static PyObject* msl_destroy(PyObject* self, PyObject* args) {
 }
 
 static PyMethodDef methods[] = {
-    {"init",
-     (PyCFunction)msl_init,
-     METH_VARARGS | METH_KEYWORDS,
+    {"init", (PyCFunction)msl_init, METH_VARARGS | METH_KEYWORDS,
      "init(batch_size, num_players, ucf_enabled=?, ucf_cardinals_1_0_enabled=?) -> handle"},
-    {"destroy", msl_destroy, METH_VARARGS, "destroy(handle) -> None (free underlying C batch immediately)"},
-    {"reseed_seed", msl_reseed_seed, METH_VARARGS, "reseed_seed(handle, seed_bytes[batch, seed_stride])"},
-    {"step_input", msl_step_input, METH_VARARGS, "step_input(handle, prev_input_bytes, input_bytes)"},
+    {"destroy", msl_destroy, METH_VARARGS,
+     "destroy(handle) -> None (free underlying C batch immediately)"},
+    {"reseed_seed", msl_reseed_seed, METH_VARARGS,
+     "reseed_seed(handle, seed_bytes[batch, seed_stride])"},
+    {"step_input", msl_step_input, METH_VARARGS,
+     "step_input(handle, prev_input_bytes, input_bytes)"},
     {"write_compare", msl_write_compare, METH_VARARGS, "write_compare(handle, out_bytes)"},
-    {"debug_write_processed_input",
-     msl_debug_write_processed_input,
-     METH_VARARGS,
+    {"debug_write_processed_input", msl_debug_write_processed_input, METH_VARARGS,
      "debug_write_processed_input(handle, out_bytes)"},
     {"sizes", msl_sizes, METH_NOARGS, "sizes() -> dict of struct sizes"},
-    {"alloc_reset", msl_alloc_reset, METH_NOARGS, "Reset C allocation counters (debug/perf guardrail)."},
-    {"alloc_stats", msl_alloc_stats, METH_NOARGS, "Get C allocation counters (debug/perf guardrail)."},
+    {"alloc_reset", msl_alloc_reset, METH_NOARGS,
+     "Reset C allocation counters (debug/perf guardrail)."},
+    {"alloc_stats", msl_alloc_stats, METH_NOARGS,
+     "Get C allocation counters (debug/perf guardrail)."},
     {NULL, NULL, 0, NULL},
 };
 
 static struct PyModuleDef moduledef = {
-    PyModuleDef_HEAD_INIT,
-    "msl_binding",
-    NULL,
-    -1,
-    methods,
-    NULL,
-    NULL,
-    NULL,
-    NULL,
+    PyModuleDef_HEAD_INIT, "msl_binding", NULL, -1, methods, NULL, NULL, NULL, NULL,
 };
 
 PyMODINIT_FUNC PyInit_msl_binding(void) {

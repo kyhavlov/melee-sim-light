@@ -14,8 +14,8 @@ typedef struct {
   float x1;
   float y0;
   float y1;
-  uint16_t segment_i;  // Stable `ground_id` mapping (ISO-derived segment index).
-  uint8_t include_max; // Deterministic endpoint policy for shared vertices.
+  uint16_t segment_i;   // Stable `ground_id` mapping (ISO-derived segment index).
+  uint8_t include_max;  // Deterministic endpoint policy for shared vertices.
 } MslStageFloorSegment;
 
 static inline uint8_t stage_seg_x_contains(const MslStageFloorSegment* seg, float x) {
@@ -214,7 +214,8 @@ static int fd_load_floor_segments_from_json(const char* json) {
     uint8_t kind_is_floor = 0;
     int32_t seg_i = -1;
     double x0 = 0.0, x1 = 0.0, y0 = 0.0, y1 = 0.0;
-    uint8_t have_i = 0, have_x0 = 0, have_x1 = 0, have_y0 = 0, have_y1 = 0, have_platform = 0, have_kind = 0;
+    uint8_t have_i = 0, have_x0 = 0, have_x1 = 0, have_y0 = 0, have_y1 = 0, have_platform = 0,
+            have_kind = 0;
 
     for (;;) {
       p = json_skip_ws(p);
@@ -305,7 +306,7 @@ static int fd_load_floor_segments_from_json(const char* json) {
         }
         int depth = 0;
         for (; *p; p++) {
-          if (*p == '"' ) {
+          if (*p == '"') {
             // skip string
             const char* dummy = NULL;
             size_t dummy_len = 0;
@@ -331,8 +332,8 @@ static int fd_load_floor_segments_from_json(const char* json) {
       }
     }
 
-    if (have_kind && kind_is_floor && have_platform && !platform &&
-        have_i && have_x0 && have_x1 && have_y0 && have_y1) {
+    if (have_kind && kind_is_floor && have_platform && !platform && have_i && have_x0 && have_x1 &&
+        have_y0 && have_y1) {
       if (out_n < (size_t)line_count) {
         tmp[out_n] = (MslStageFloorSegment){
             .x0 = (float)x0,
@@ -395,11 +396,7 @@ int stage_collision_init(void) {
   }
 
   char path[512];
-  const int n = snprintf(
-      path,
-      sizeof(path),
-      "%s/stages/final_destination.json",
-      data_dir);
+  const int n = snprintf(path, sizeof(path), "%s/stages/final_destination.json", data_dir);
   if (n <= 0 || (size_t)n >= sizeof(path)) {
     return -1;
   }
@@ -504,7 +501,7 @@ void stage_collision_apply(MslBatch* batch) {
           if (!(y <= (y_at_x + ground_epsilon) && y_prev >= (y_at_x - ground_epsilon))) {
             continue;
           }
-        } else { // dy == 0
+        } else {  // dy == 0
           if (!(y <= (y_at_x + ground_epsilon) && y >= (y_at_x - ground_epsilon))) {
             continue;
           }

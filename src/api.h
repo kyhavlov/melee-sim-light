@@ -50,11 +50,11 @@ typedef struct MslProcessedInput {
 } MslProcessedInput;
 
 typedef struct MslItem {
-  uint8_t exists; // 0/1
-  uint8_t state;  // item state
-  uint16_t type;  // item kind/type id
+  uint8_t exists;  // 0/1
+  uint8_t state;   // item state
+  uint16_t type;   // item kind/type id
 
-  int8_t owner; // -1 if none/unknown
+  int8_t owner;  // -1 if none/unknown
   uint8_t _pad0;
   uint16_t instance_id;
 
@@ -75,11 +75,12 @@ typedef struct MslItem {
 
 typedef struct MslSeed {
   int32_t frame_id;
-  uint32_t frame_pre_random_seed; // pre-frame RNG seed (per-player seeds also exist; this is frame-level)
+  uint32_t
+      frame_pre_random_seed;  // pre-frame RNG seed (per-player seeds also exist; this is frame-level)
 
   uint32_t stage_id;
-  uint8_t num_players; // 2 or 4 (<= MSL_MAX_PLAYERS)
-  uint8_t is_teams;    // 0/1
+  uint8_t num_players;  // 2 or 4 (<= MSL_MAX_PLAYERS)
+  uint8_t is_teams;     // 0/1
   uint8_t _pad0[2];
 
   uint8_t team_id[MSL_MAX_PLAYERS];
@@ -95,8 +96,8 @@ typedef struct MslSeed {
   float speed_x_attack[MSL_MAX_PLAYERS];
   float speed_y_attack[MSL_MAX_PLAYERS];
 
-  uint8_t facing[MSL_MAX_PLAYERS];    // 0/1
-  uint8_t on_ground[MSL_MAX_PLAYERS]; // 0/1
+  uint8_t facing[MSL_MAX_PLAYERS];     // 0/1
+  uint8_t on_ground[MSL_MAX_PLAYERS];  // 0/1
   uint8_t _pad1[2];
 
   // State machine
@@ -111,7 +112,7 @@ typedef struct MslSeed {
   uint16_t hitlag[MSL_MAX_PLAYERS];
   uint16_t hitstun[MSL_MAX_PLAYERS];
   uint8_t l_cancel[MSL_MAX_PLAYERS];
-  uint8_t hurtbox_state[MSL_MAX_PLAYERS]; // 0 vuln, 1 invuln, 2 intangible
+  uint8_t hurtbox_state[MSL_MAX_PLAYERS];  // 0 vuln, 1 invuln, 2 intangible
   uint16_t ground_id[MSL_MAX_PLAYERS];
   uint32_t animation_index[MSL_MAX_PLAYERS];
   uint16_t instance_hit_by[MSL_MAX_PLAYERS];
@@ -147,7 +148,7 @@ typedef struct MslCompare {
 
   uint8_t facing[MSL_MAX_PLAYERS];
   uint8_t on_ground[MSL_MAX_PLAYERS];
-  uint8_t is_dead[MSL_MAX_PLAYERS]; // 0/1 (derived or explicit)
+  uint8_t is_dead[MSL_MAX_PLAYERS];  // 0/1 (derived or explicit)
   uint8_t _pad1[1];
 
   uint16_t action_id[MSL_MAX_PLAYERS];
@@ -175,10 +176,10 @@ typedef struct MslCompare {
 } MslCompare;
 
 typedef struct MslDatasetHeader {
-  char magic[8]; // "MSLDSLT "
+  char magic[8];  // "MSLDSLT "
   uint32_t record_size;
   uint32_t num_records;
-  uint8_t num_players; // 2 or 4
+  uint8_t num_players;  // 2 or 4
   uint8_t _pad0[3];
 } MslDatasetHeader;
 
@@ -212,33 +213,22 @@ int msl_batch_set_ucf_cardinals_1_0_enabled(MslBatch* batch, int enabled);
 
 // Reseed from packed MslSeed array of length batch_size.
 // seed_stride_bytes must be >= sizeof(MslSeed).
-int msl_batch_reseed_seed(
-    MslBatch* batch,
-    const uint8_t* seed_bytes,
-    size_t seed_stride_bytes);
+int msl_batch_reseed_seed(MslBatch* batch, const uint8_t* seed_bytes, size_t seed_stride_bytes);
 
 // Step one frame using packed inputs. The current "empty sim" stub ignores inputs.
 // input_stride_bytes must be >= sizeof(MslInput).
-int msl_batch_step_input(
-    MslBatch* batch,
-    const uint8_t* prev_input_bytes,
-    size_t prev_input_stride_bytes,
-    const uint8_t* input_bytes,
-    size_t input_stride_bytes);
+int msl_batch_step_input(MslBatch* batch, const uint8_t* prev_input_bytes,
+                         size_t prev_input_stride_bytes, const uint8_t* input_bytes,
+                         size_t input_stride_bytes);
 
 // Write packed compare outputs (length batch_size).
 // out_stride_bytes must be >= sizeof(MslCompare).
-int msl_batch_write_compare(
-    const MslBatch* batch,
-    uint8_t* out_bytes,
-    size_t out_stride_bytes);
+int msl_batch_write_compare(const MslBatch* batch, uint8_t* out_bytes, size_t out_stride_bytes);
 
 // Debug/validation helper: write current processed input values.
 // out_stride_bytes must be >= sizeof(MslProcessedInput).
-int msl_batch_debug_write_processed_input(
-    const MslBatch* batch,
-    uint8_t* out_bytes,
-    size_t out_stride_bytes);
+int msl_batch_debug_write_processed_input(const MslBatch* batch, uint8_t* out_bytes,
+                                          size_t out_stride_bytes);
 
 #ifdef __cplusplus
 }

@@ -2,9 +2,7 @@
 
 #include <math.h>
 
-static inline int8_t msl_sign_s8(int8_t x) {
-  return (x < 0) ? (int8_t)-1 : (int8_t)1;
-}
+static inline int8_t msl_sign_s8(int8_t x) { return (x < 0) ? (int8_t)-1 : (int8_t)1; }
 
 MslStickI8 ucf_clamp_stick_i8(int8_t raw_x, int8_t raw_y) {
   // Mirrors HSD_PadClampCheck3 used by Melee (see refs/melee/.../baselib/controller.c).
@@ -31,12 +29,14 @@ MslStickI8 ucf_apply_cardinals_1_0_i8(MslStickI8 clamped) {
   const int8_t x = clamped.x;
   const int8_t y = clamped.y;
 
-  if ((x <= (int8_t)-80 || x >= (int8_t)80) && y >= (int8_t)-SNAP_RANGE && y <= (int8_t)SNAP_RANGE) {
+  if ((x <= (int8_t)-80 || x >= (int8_t)80) && y >= (int8_t)-SNAP_RANGE &&
+      y <= (int8_t)SNAP_RANGE) {
     clamped.x = (int8_t)(msl_sign_s8(x) * (int8_t)80);
     clamped.y = 0;
     return clamped;
   }
-  if ((y <= (int8_t)-80 || y >= (int8_t)80) && x >= (int8_t)-SNAP_RANGE && x <= (int8_t)SNAP_RANGE) {
+  if ((y <= (int8_t)-80 || y >= (int8_t)80) && x >= (int8_t)-SNAP_RANGE &&
+      x <= (int8_t)SNAP_RANGE) {
     clamped.x = 0;
     clamped.y = (int8_t)(msl_sign_s8(y) * (int8_t)80);
     return clamped;
@@ -44,11 +44,8 @@ MslStickI8 ucf_apply_cardinals_1_0_i8(MslStickI8 clamped) {
   return clamped;
 }
 
-MslStickI8 ucf_process_stick_i8(
-    int8_t raw_x,
-    int8_t raw_y,
-    uint8_t ucf_enabled,
-    uint8_t ucf_cardinals_1_0_enabled) {
+MslStickI8 ucf_process_stick_i8(int8_t raw_x, int8_t raw_y, uint8_t ucf_enabled,
+                                uint8_t ucf_cardinals_1_0_enabled) {
   MslStickI8 v = {raw_x, raw_y};
   if (ucf_enabled && ucf_cardinals_1_0_enabled) {
     // Apply to raw axes; this matches how UCF uses raw PAD bytes to decide snapping,

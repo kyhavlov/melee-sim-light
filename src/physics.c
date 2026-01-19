@@ -19,7 +19,8 @@ void physics_integrate(MslBatch* batch) {
       batch->state.prev_pos_y[idx] = batch->state.pos_y[idx];
 
       const uint8_t on_ground = batch->state.on_ground[idx] ? 1 : 0;
-      const float vx = on_ground ? batch->state.speed_ground_x_self[idx] : batch->state.speed_air_x_self[idx];
+      const float vx =
+          on_ground ? batch->state.speed_ground_x_self[idx] : batch->state.speed_air_x_self[idx];
       const float vy = batch->state.speed_y_self[idx];
 
       batch->state.pos_x[idx] += vx;

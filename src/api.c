@@ -47,9 +47,7 @@ void msl_batch_destroy(MslBatch* batch) {
   alloc_free(batch);
 }
 
-int msl_batch_batch_size(const MslBatch* batch) {
-  return batch ? batch->batch_size : 0;
-}
+int msl_batch_batch_size(const MslBatch* batch) { return batch ? batch->batch_size : 0; }
 
 int msl_batch_num_players(const MslBatch* batch) {
   return batch ? (int)batch->config.num_players : 0;
@@ -71,10 +69,7 @@ int msl_batch_set_ucf_cardinals_1_0_enabled(MslBatch* batch, int enabled) {
   return 0;
 }
 
-int msl_batch_reseed_seed(
-    MslBatch* batch,
-    const uint8_t* seed_bytes,
-    size_t seed_stride_bytes) {
+int msl_batch_reseed_seed(MslBatch* batch, const uint8_t* seed_bytes, size_t seed_stride_bytes) {
   if (batch == NULL || seed_bytes == NULL) {
     return EINVAL;
   }
@@ -156,28 +151,16 @@ int msl_batch_reseed_seed(
   return 0;
 }
 
-int msl_batch_step_input(
-    MslBatch* batch,
-    const uint8_t* prev_input_bytes,
-    size_t prev_input_stride_bytes,
-    const uint8_t* input_bytes,
-    size_t input_stride_bytes) {
-  return step_one_frame(
-      batch,
-      prev_input_bytes,
-      prev_input_stride_bytes,
-      input_bytes,
-      input_stride_bytes);
+int msl_batch_step_input(MslBatch* batch, const uint8_t* prev_input_bytes,
+                         size_t prev_input_stride_bytes, const uint8_t* input_bytes,
+                         size_t input_stride_bytes) {
+  return step_one_frame(batch, prev_input_bytes, prev_input_stride_bytes, input_bytes,
+                        input_stride_bytes);
 }
 
-static uint8_t msl_is_dead_from_stocks(uint8_t stocks) {
-  return stocks == 0 ? 1 : 0;
-}
+static uint8_t msl_is_dead_from_stocks(uint8_t stocks) { return stocks == 0 ? 1 : 0; }
 
-int msl_batch_write_compare(
-    const MslBatch* batch,
-    uint8_t* out_bytes,
-    size_t out_stride_bytes) {
+int msl_batch_write_compare(const MslBatch* batch, uint8_t* out_bytes, size_t out_stride_bytes) {
   if (batch == NULL || out_bytes == NULL) {
     return EINVAL;
   }
@@ -262,10 +245,8 @@ int msl_batch_write_compare(
   return 0;
 }
 
-int msl_batch_debug_write_processed_input(
-    const MslBatch* batch,
-    uint8_t* out_bytes,
-    size_t out_stride_bytes) {
+int msl_batch_debug_write_processed_input(const MslBatch* batch, uint8_t* out_bytes,
+                                          size_t out_stride_bytes) {
   if (batch == NULL || out_bytes == NULL) {
     return EINVAL;
   }

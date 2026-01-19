@@ -95,6 +95,12 @@ Default tests are intended to be **very fast** and should not rebuild ISO data o
 - Run unit tests: `uv run pytest`
 - Run integration checks (validate existing local `data/` artifacts): `uv run pytest -m integration`
 - Convenience: `make test`
+- Final validation before committing: `make check` (runs `fmt-check` + `test`)
+
+## Formatting (C)
+
+- Apply formatting: `make fmt`
+- Verify formatting (CI-friendly): `make fmt-check`
 
 Current guardrails:
 - `.msl` dataset format roundtrip / corruption detection

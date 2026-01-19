@@ -67,6 +67,4 @@ void* alloc_calloc(size_t nmemb, size_t size) {
   return ptr;
 }
 
-void alloc_free(void* ptr) {
-  free(ptr);
-}
+void alloc_free(void* ptr) { free(ptr); }

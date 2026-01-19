@@ -21,13 +21,12 @@ static inline MslCharPhysicsParams msl_char_physics_params(uint8_t char_id) {
   // - Fox   = 1
   // - Falco = 22
   switch (char_id) {
-    case 1: // Fox
+    case 1:  // Fox
       return (MslCharPhysicsParams){.grav = 0.23f, .terminal_vel = 2.80f};
-    case 22: // Falco
+    case 22:  // Falco
       return (MslCharPhysicsParams){.grav = 0.17f, .terminal_vel = 3.10f};
     default:
       // Fallback for unsupported characters; keep deterministic.
       return (MslCharPhysicsParams){.grav = 0.20f, .terminal_vel = 3.00f};
   }
 }
-

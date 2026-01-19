@@ -22,5 +22,5 @@ void* alloc_calloc(size_t nmemb, size_t size);
 void alloc_free(void* ptr);
 
 #ifdef __cplusplus
-} // extern "C"
+}  // extern "C"
 #endif

@@ -1,10 +1,11 @@
-.PHONY: build test preprocess validate build_data
+.PHONY: build test preprocess validate build_data fmt fmt-check check
 
 PY := uv run python
 DATASETS_DIR ?= datasets
 SUITE ?= replays/suites/fox_falco_fd_ucf084_recent.json
 CHUNK ?= 4096
 OUT ?=
+CLANG_FORMAT ?= clang-format
 
 ifneq ($(strip $(OUT)),)
 VALIDATE_OUT := --out $(OUT)
@@ -24,3 +25,13 @@ validate:
 
 build_data:
 	@$(PY) -m tools.extraction.build_data --iso-dir _iso --stage grnba --chars fox,falco
+
+fmt:
+	@command -v "$(CLANG_FORMAT)" >/dev/null 2>&1 || (echo "Missing clang-format (set CLANG_FORMAT=... or install it)."; exit 1)
+	@find src python -type f '(' -name '*.c' -o -name '*.h' ')' -print0 | xargs -0 "$(CLANG_FORMAT)" -i
+
+fmt-check:
+	@command -v "$(CLANG_FORMAT)" >/dev/null 2>&1 || (echo "Missing clang-format (set CLANG_FORMAT=... or install it)."; exit 1)
+	@find src python -type f '(' -name '*.c' -o -name '*.h' ')' -print0 | xargs -0 "$(CLANG_FORMAT)" --dry-run --Werror
+
+check: fmt-check test

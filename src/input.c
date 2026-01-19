@@ -5,12 +5,8 @@
 #include "api.h"
 #include "ucf.h"
 
-int input_apply(
-    MslBatch* batch,
-    const uint8_t* prev_input_bytes,
-    size_t prev_input_stride_bytes,
-    const uint8_t* input_bytes,
-    size_t input_stride_bytes) {
+int input_apply(MslBatch* batch, const uint8_t* prev_input_bytes, size_t prev_input_stride_bytes,
+                const uint8_t* input_bytes, size_t input_stride_bytes) {
   if (batch == NULL) {
     return EINVAL;
   }
@@ -40,16 +36,10 @@ int input_apply(
       batch->state.input_buttons_pressed[idx] = (uint16_t)(cur_buttons & (uint16_t)~prev_buttons);
       batch->state.input_buttons_released[idx] = (uint16_t)(prev_buttons & (uint16_t)~cur_buttons);
 
-      const MslStickI8 main = ucf_process_stick_i8(
-          cur->p[p].main_x,
-          cur->p[p].main_y,
-          ucf_enabled,
-          cardinals);
-      const MslStickI8 c = ucf_process_stick_i8(
-          cur->p[p].c_x,
-          cur->p[p].c_y,
-          ucf_enabled,
-          cardinals);
+      const MslStickI8 main =
+          ucf_process_stick_i8(cur->p[p].main_x, cur->p[p].main_y, ucf_enabled, cardinals);
+      const MslStickI8 c =
+          ucf_process_stick_i8(cur->p[p].c_x, cur->p[p].c_y, ucf_enabled, cardinals);
       batch->state.input_main_x[idx] = main.x;
       batch->state.input_main_y[idx] = main.y;
       batch->state.input_c_x[idx] = c.x;

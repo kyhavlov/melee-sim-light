@@ -10,24 +10,16 @@
 #include "physics.h"
 #include "stage_collision.h"
 
-int step_one_frame(
-    MslBatch* batch,
-    const uint8_t* prev_input_bytes,
-    size_t prev_input_stride_bytes,
-    const uint8_t* input_bytes,
-    size_t input_stride_bytes) {
+int step_one_frame(MslBatch* batch, const uint8_t* prev_input_bytes, size_t prev_input_stride_bytes,
+                   const uint8_t* input_bytes, size_t input_stride_bytes) {
   if (batch == NULL) {
     return EINVAL;
   }
 
   // The exact ordering here is a major correctness lever. Keep it explicit and easy to reorder.
   int err = 0;
-  err = input_apply(
-      batch,
-      prev_input_bytes,
-      prev_input_stride_bytes,
-      input_bytes,
-      input_stride_bytes);
+  err = input_apply(batch, prev_input_bytes, prev_input_stride_bytes, input_bytes,
+                    input_stride_bytes);
   if (err != 0) {
     return err;
   }
