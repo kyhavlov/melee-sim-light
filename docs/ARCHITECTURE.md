@@ -17,7 +17,7 @@ Keep it updated as we add systems.
   - `config.h` / `config.c`: immutable runtime config (`MslConfig`)
   - `state.h` / `state.c`: hot SoA allocation/ownership (`MslStateSoA`)
   - `step.h` / `step.c`: **frame scheduler** (ordered list of passes)
-  - `pass_*.{h,c}`: individual “phase” implementations (currently stubs)
+  - `*.{h,c}` phases: `input`, `action`, `physics`, `stage_collision`, `hurtboxes`, `combat`, `items` (currently stubs)
 - `python/`: CPython+NumPy extension (`msl_binding.c`) + build config
 - `tools/`: dataset generation and one-step suite validation
 
@@ -61,13 +61,13 @@ The “step” is structured as an explicit list of phases so we can:
 
 Current scheduler lives in `src/step.c` and calls passes in-order:
 
-1. `pass_input_apply` (input sampling / UCF legalization / edge detection)
-2. `pass_action_update` (action/state transitions + per-action callbacks)
-3. `pass_physics_integrate` (kinematics integration; gravity/traction/etc)
-4. `pass_stage_collision` (FD collision + ECB/grounding/ledge gating)
-5. `pass_hurtboxes_refresh` (hurtboxes/hitboxes attached to bones/ECB)
-6. `pass_combat_resolve` (hit resolution: hitlag/hitstun/KB/shield, etc)
-7. `pass_items_update` (projectiles/items update/collision)
+1. `input_apply` (input sampling / UCF legalization / edge detection)
+2. `action_update` (action/state transitions + per-action callbacks)
+3. `physics_integrate` (kinematics integration; gravity/traction/etc)
+4. `stage_collision_apply` (FD collision + ECB/grounding/ledge gating)
+5. `hurtboxes_refresh` (hurtboxes/hitboxes attached to bones/ECB)
+6. `combat_resolve` (hit resolution: hitlag/hitstun/KB/shield, etc)
+7. `items_update` (projectiles/items update/collision)
 
 Notes:
 - These functions are stubs today (the “empty sim”), but the structure is the contract.

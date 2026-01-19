@@ -2,13 +2,13 @@
 
 #include <errno.h>
 
-#include "pass_action.h"
-#include "pass_combat.h"
-#include "pass_hurtboxes.h"
-#include "pass_input.h"
-#include "pass_items.h"
-#include "pass_physics.h"
-#include "pass_stage_collision.h"
+#include "action.h"
+#include "combat.h"
+#include "hurtboxes.h"
+#include "input.h"
+#include "items.h"
+#include "physics.h"
+#include "stage_collision.h"
 
 int step_one_frame(
     MslBatch* batch,
@@ -22,7 +22,7 @@ int step_one_frame(
 
   // The exact ordering here is a major correctness lever. Keep it explicit and easy to reorder.
   int err = 0;
-  err = pass_input_apply(
+  err = input_apply(
       batch,
       prev_input_bytes,
       prev_input_stride_bytes,
@@ -32,12 +32,12 @@ int step_one_frame(
     return err;
   }
 
-  pass_action_update(batch);
-  pass_physics_integrate(batch);
-  pass_stage_collision(batch);
-  pass_hurtboxes_refresh(batch);
-  pass_combat_resolve(batch);
-  pass_items_update(batch);
+  action_update(batch);
+  physics_integrate(batch);
+  stage_collision_apply(batch);
+  hurtboxes_refresh(batch);
+  combat_resolve(batch);
+  items_update(batch);
 
   return 0;
 }

@@ -1,10 +1,10 @@
-#include "pass_input.h"
+#include "input.h"
 
 #include <errno.h>
 
 #include "api.h"
 
-int pass_input_apply(
+int input_apply(
     MslBatch* batch,
     const uint8_t* prev_input_bytes,
     size_t prev_input_stride_bytes,

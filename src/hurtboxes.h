@@ -2,4 +2,4 @@
 
 #include "batch_internal.h"
 
-void pass_items_update(MslBatch* batch);
+void hurtboxes_refresh(MslBatch* batch);
