@@ -6,6 +6,7 @@
 #include "alloc.h"
 #include "batch_internal.h"
 #include "config.h"
+#include "stage_collision.h"
 #include "state.h"
 #include "step.h"
 
@@ -26,6 +27,11 @@ MslBatch* msl_batch_create(int batch_size, int num_players) {
   config_default(&batch->config, num_players);
 
   if (state_alloc(&batch->state, batch_size) != 0) {
+    msl_batch_destroy(batch);
+    return NULL;
+  }
+
+  if (stage_collision_init() != 0) {
     msl_batch_destroy(batch);
     return NULL;
   }

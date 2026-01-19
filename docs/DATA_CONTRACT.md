@@ -12,6 +12,9 @@ Policy:
 Stage (Final Destination):
 - `_iso/GrNBa.dat` (source)
 - `data/stages/final_destination.json` (extracted collision segments; decomp-first)
+  - Note: the C core currently parses this JSON **once at init** (temporary). We will move to a compact
+    binary artifact for stage collision later to avoid JSON parsing overhead/complexity.
+  - Safety guard: the loader caps `line_count` at 4096 to prevent unbounded allocations on malformed files.
 
 Common constants:
 - `_iso/PlCo.dat` (source)
@@ -39,6 +42,12 @@ To avoid “mystery drift”, prefer loading the following early:
   - Either (A) full per-bone matrices per frame for the bones we need, or
   - (B) precomputed per-frame attachment transforms for hitboxes/hurtboxes/ECB sources.
   - The extractor currently outputs (A)-style matrices in `data/anims/*.bin` for Fox/Falco.
+
+`ground_id` semantics (current assumption):
+- Our datasets store `ground_id` directly from Slippi post-frame `ground` (see `tools/slippi/make_dataset_from_slp.py`).
+- The simulator treats `ground_id` as the **stage collision segment/line index** from the stage’s collision table.
+  - For Final Destination this matches the ISO-extracted indices in `data/stages/final_destination.json` (`segments[].i`), e.g. the main floor uses segment indices `0`, `1`, and `5`.
+  - If we discover a stage-specific remapping (decomp / Slippi schema clarification), update this note and the stage loader accordingly.
 
 ## Build the data (one-shot / cached)
 

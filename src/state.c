@@ -30,6 +30,8 @@ int state_alloc(MslStateSoA* state, int batch_size) {
 
   state->pos_x = (float*)alloc_aligned_64(sizeof(float) * bp);
   state->pos_y = (float*)alloc_aligned_64(sizeof(float) * bp);
+  state->prev_pos_x = (float*)alloc_aligned_64(sizeof(float) * bp);
+  state->prev_pos_y = (float*)alloc_aligned_64(sizeof(float) * bp);
   state->speed_air_x_self = (float*)alloc_aligned_64(sizeof(float) * bp);
   state->speed_ground_x_self = (float*)alloc_aligned_64(sizeof(float) * bp);
   state->speed_y_self = (float*)alloc_aligned_64(sizeof(float) * bp);
@@ -89,7 +91,8 @@ int state_alloc(MslStateSoA* state, int batch_size) {
 
   if (!state->frame_id || !state->frame_pre_random_seed || !state->stage_id || !state->is_teams ||
       !state->team_id || !state->char_id ||
-      !state->pos_x || !state->pos_y || !state->speed_air_x_self || !state->speed_ground_x_self ||
+      !state->pos_x || !state->pos_y || !state->prev_pos_x || !state->prev_pos_y ||
+      !state->speed_air_x_self || !state->speed_ground_x_self ||
       !state->speed_y_self || !state->speed_x_attack || !state->speed_y_attack ||
       !state->facing || !state->on_ground || !state->action_id || !state->action_frame ||
       !state->jumps_left || !state->stocks || !state->percent || !state->shield_hp ||
@@ -123,6 +126,8 @@ void state_free(MslStateSoA* state) {
 
   alloc_free(state->pos_x);
   alloc_free(state->pos_y);
+  alloc_free(state->prev_pos_x);
+  alloc_free(state->prev_pos_y);
   alloc_free(state->speed_air_x_self);
   alloc_free(state->speed_ground_x_self);
   alloc_free(state->speed_y_self);

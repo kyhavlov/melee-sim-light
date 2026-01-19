@@ -99,7 +99,11 @@ static PyObject* msl_init(PyObject* self, PyObject* args, PyObject* kwargs) {
 
   PyObject* capsule = PyCapsule_New(h, "msl.Handle", pymsl_capsule_destructor);
   if (capsule == NULL) {
-    pymsl_capsule_destructor(capsule);
+    // PyCapsule_New sets an exception on failure. We must clean up manually here because the capsule
+    // was never created (calling the capsule destructor with NULL would be a bug).
+    msl_batch_destroy(h->batch);
+    h->batch = NULL;
+    PyMem_Free(h);
     return NULL;
   }
   return capsule;
@@ -272,11 +276,28 @@ static PyObject* msl_alloc_stats(PyObject* self, PyObject* args) {
   return Py_BuildValue("{s:K,s:K}", "calls", calls, "bytes", bytes);
 }
 
+static PyObject* msl_destroy(PyObject* self, PyObject* args) {
+  PyObject* capsule = NULL;
+  if (!PyArg_ParseTuple(args, "O", &capsule)) {
+    return NULL;
+  }
+  PyMslHandle* h = (PyMslHandle*)PyCapsule_GetPointer(capsule, "msl.Handle");
+  if (h == NULL) {
+    return NULL;
+  }
+  if (h->batch) {
+    msl_batch_destroy(h->batch);
+    h->batch = NULL;
+  }
+  Py_RETURN_NONE;
+}
+
 static PyMethodDef methods[] = {
     {"init",
      (PyCFunction)msl_init,
      METH_VARARGS | METH_KEYWORDS,
      "init(batch_size, num_players, ucf_enabled=?, ucf_cardinals_1_0_enabled=?) -> handle"},
+    {"destroy", msl_destroy, METH_VARARGS, "destroy(handle) -> None (free underlying C batch immediately)"},
     {"reseed_seed", msl_reseed_seed, METH_VARARGS, "reseed_seed(handle, seed_bytes[batch, seed_stride])"},
     {"step_input", msl_step_input, METH_VARARGS, "step_input(handle, prev_input_bytes, input_bytes)"},
     {"write_compare", msl_write_compare, METH_VARARGS, "write_compare(handle, out_bytes)"},

@@ -12,6 +12,12 @@ void physics_integrate(MslBatch* batch) {
     for (int p = 0; p < num_players; p++) {
       const size_t idx = msl_idx_player(bi, p);
 
+      // Record pre-integration position for collision tests.
+      // Ordering contract: stage_collision_apply() uses prev_pos_* captured here to perform
+      // real "crossing" checks (pre vs post integration) without inferring prior position.
+      batch->state.prev_pos_x[idx] = batch->state.pos_x[idx];
+      batch->state.prev_pos_y[idx] = batch->state.pos_y[idx];
+
       const uint8_t on_ground = batch->state.on_ground[idx] ? 1 : 0;
       const float vx = on_ground ? batch->state.speed_ground_x_self[idx] : batch->state.speed_air_x_self[idx];
       const float vy = batch->state.speed_y_self[idx];
