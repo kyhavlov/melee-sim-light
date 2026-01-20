@@ -210,27 +210,6 @@ static inline uint8_t did_tap_jump(const MslCommonParams* c, float stick_y, uint
   return (stick_y >= c->tap_jump_threshold && tilt_timer_y < c->tap_jump_tilt_max_frames) ? 1 : 0;
 }
 
-static inline uint8_t kneebend_infer_jump_input_best_effort(const MslCommonParams* c,
-                                                            uint16_t prev_buttons, uint16_t buttons,
-                                                            float stick_y, uint8_t tilt_timer_y) {
-  // Teacher-forcing reseed exception:
-  // If we are reseeded mid-KneeBend (jump squat), we do not have the entry-frame history needed to know
-  // the original JumpInput source (XY vs tap-jump vs C-stick). We infer it to approximate
-  // `ftCo_KneeBend_Check_ShortHop` behavior. This is not a decomp-backed engine state; it is a known
-  // limitation of one-step teacher forcing and should be removed once the dataset seeds the missing
-  // KneeBend entry history.
-  if (prev_buttons & (uint16_t)MSL_BUTTON_XY) {
-    return (uint8_t)MSL_JUMP_INPUT_XY;
-  }
-  if (did_tap_jump(c, stick_y, tilt_timer_y)) {
-    return (uint8_t)MSL_JUMP_INPUT_LSTICK;
-  }
-  if (buttons & (uint16_t)MSL_BUTTON_XY) {
-    return (uint8_t)MSL_JUMP_INPUT_XY;
-  }
-  return (uint8_t)MSL_JUMP_INPUT_LSTICK;
-}
-
 static inline MslJumpInput jump_input_from_edges(const MslCommonParams* c, uint16_t buttons_pressed,
                                                  float stick_y, uint8_t tilt_timer_y) {
   if (buttons_pressed & (uint16_t)MSL_BUTTON_XY) {
@@ -564,10 +543,6 @@ void locomotion_update_pre(MslBatch* batch) {
         if (action_id == MSL_ACT_KNEE_BEND) {
           // Latch short hop state (ftCo_KneeBend_Check_ShortHop).
           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_KneeBend.c:46
-          if (!batch->state.kneebend_jump_input[idx]) {
-            batch->state.kneebend_jump_input[idx] = kneebend_infer_jump_input_best_effort(
-                c, batch->state.prev_input_buttons[idx], buttons, stick_y, tilt_timer_y);
-          }
           if (!batch->state.kneebend_is_short_hop[idx]) {
             const uint8_t j_in = batch->state.kneebend_jump_input[idx];
             if (j_in == (uint8_t)MSL_JUMP_INPUT_XY) {

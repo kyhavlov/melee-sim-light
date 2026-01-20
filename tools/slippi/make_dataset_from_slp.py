@@ -187,6 +187,7 @@ def _main_impl(args) -> None:
     from tools.slippi.seed_history import (
         apply_deadzone,
         compute_tilt_timer_axis_pre_post,
+        derive_kneebend_internals,
         derive_turn_internals,
         stick_i8_to_unit,
         ucf_process_stick_i8,
@@ -266,15 +267,20 @@ def _main_impl(args) -> None:
     lstick_tilt_y_thresh = float(common["lstick_tilt_y_thresh"])
     dash_flick_abs = float(common["dash_flick_abs"])
     dash_flick_tilt_max_frames = int(common["dash_flick_tilt_max_frames"])
+    tap_jump_threshold = float(common["tap_jump_threshold"])
+    tap_jump_release_threshold = float(common["tap_jump_release_threshold"])
+    tap_jump_tilt_max_frames = int(common["tap_jump_tilt_max_frames"])
 
     # Action ids (GALE01): refs/melee/src/melee/ft/chara/ftCommon/forward.h
     act_turn = 0x0012
     act_turn_run = 0x0013
     act_dash = 0x0014
+    act_kneebend = 0x0018
     act_jump_f = 0x0019
     act_jump_b = 0x001A
     act_jump_aerial_f = 0x001B
     act_jump_aerial_b = 0x001C
+    button_mask_xy = 0x0400 | 0x0800  # HSD_PAD_XY / src/buttons.h::MSL_BUTTON_XY
 
     # Character id mapping follows Slippi post-frame `character` (GALE01):
     # - Fox   = 1
@@ -462,8 +468,18 @@ def _main_impl(args) -> None:
             ucf_enabled=ucf_enabled,
             ucf_cardinals_1_0_enabled=ucf_cardinals_1_0_enabled,
         )
+        c_x_proc, c_y_proc = ucf_process_stick_i8(
+            pre_c_x,
+            pre_c_y,
+            ucf_enabled=ucf_enabled,
+            ucf_cardinals_1_0_enabled=ucf_cardinals_1_0_enabled,
+        )
         stick_x = apply_deadzone(stick_i8_to_unit(main_x_proc), lstick_deadzone_x)
         stick_y = apply_deadzone(stick_i8_to_unit(main_y_proc), lstick_deadzone_y)
+        cstick_y = apply_deadzone(stick_i8_to_unit(c_y_proc), lstick_deadzone_y)
+
+        prev_buttons = np.concatenate(([np.uint16(0)], pre_buttons_physical[:-1]))
+        buttons_pressed = pre_buttons_physical & ~prev_buttons
 
         # Action-entry overrides (decomp):
         # - Dash: refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c:55-71
@@ -487,6 +503,25 @@ def _main_impl(args) -> None:
 
         samples["seed_t"]["tilt_timer_x"][:, slot] = tilt_timer_x_post[:-1]
         samples["seed_t"]["tilt_timer_y"][:, slot] = tilt_timer_y_post[:-1]
+
+        # KneeBend internals (jump_input source + short-hop latch) must be seeded to avoid
+        # mid-KneeBend reseed guessing in the simulator.
+        # Decomp: refs/melee/src/melee/ft/chara/ftCommon/ftCo_KneeBend.c:16-28 and :44-56.
+        kb_jump_in, kb_short = derive_kneebend_internals(
+            action_id=post_state,
+            buttons=pre_buttons_physical,
+            buttons_pressed=buttons_pressed,
+            stick_y_unit=stick_y,
+            cstick_y_unit=cstick_y,
+            tilt_timer_y=tilt_timer_y_pre,
+            tap_jump_threshold=tap_jump_threshold,
+            tap_jump_tilt_max_frames=tap_jump_tilt_max_frames,
+            tap_jump_release_threshold=tap_jump_release_threshold,
+            act_kneebend=act_kneebend,
+            button_mask_xy=button_mask_xy,
+        )
+        samples["seed_t"]["kneebend_jump_input"][:, slot] = kb_jump_in[:-1]
+        samples["seed_t"]["kneebend_is_short_hop"][:, slot] = kb_short[:-1]
 
         # TURN internals are only meaningful in TURN/TURN_RUN frames; otherwise seed 0.
         turn_frames = turn_frames_lut[post_char]

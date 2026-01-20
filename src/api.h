@@ -108,6 +108,9 @@ typedef struct MslSeed {
   uint8_t stocks[MSL_MAX_PLAYERS];
 
   // Input-history / locomotion internals (seeded from replay history)
+  // Decomp: refs/melee/src/melee/ft/chara/ftCommon/ftCo_KneeBend.c:16-28 and :44-56
+  uint8_t kneebend_jump_input[MSL_MAX_PLAYERS];   // fp->mv.co.kneebend.jump_input (ftCo_JumpInput)
+  uint8_t kneebend_is_short_hop[MSL_MAX_PLAYERS]; // fp->mv.co.kneebend.is_short_hop (bool)
   // Decomp: refs/melee/src/melee/ft/fighter.c:1908-2008 (x670/x671 updates each frame)
   uint8_t tilt_timer_x[MSL_MAX_PLAYERS];  // fp->x670_timer_lstick_tilt_x
   uint8_t tilt_timer_y[MSL_MAX_PLAYERS];  // fp->x671_timer_lstick_tilt_y

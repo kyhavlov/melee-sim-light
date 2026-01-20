@@ -253,10 +253,9 @@ Notes:
 - Reseeding must be deterministic and should avoid “cheating” by copying fields that the simulator is supposed to derive (e.g., if we track derived timers, we should seed only what is observable/authoritative for that frame).
 
 Known teacher-forcing limitations (must be tracked and eventually removed, not treated as “engine truth”):
-- **KneeBend reseed lacks entry history**: when reseeded mid-`KneeBend` (jump squat), we do not know which jump input source triggered the state (`XY` vs tap-jump vs C-stick). Current sim may infer a best-effort source for short-hop detection; the correct fix is to extend the seed schema (or allow short rollout windows through `KneeBend`).
 Notes:
-- Input-history tilt timers (`x670`/`x671`) and TURN internals (`frames_to_turn`/`has_turned`) are derived during preprocessing and are now part of the seed schema, so the sim no longer relies on one-step “mapping contract” inference for those fields.
-- TURN seeding uses a causal derivation that does not look ahead to future facing flips; it includes a **deterministic assumption** that `ftCo_Turn_Anim_Inner` applies once on the entry frame (matching the sim’s update ordering). Do **not** tune this assumption via one-step mismatch metrics; revisit it once richer entry-history seeding lands (especially KneeBend/jump-squat entry history).
+- Input-history tilt timers (`x670`/`x671`), TURN internals (`frames_to_turn`/`has_turned`), and KneeBend internals (`jump_input`/`is_short_hop`) are derived during preprocessing and are part of the seed schema.
+- TURN seeding uses a causal derivation that does not look ahead to future facing flips; it includes a **deterministic assumption** that `ftCo_Turn_Anim_Inner` applies once on the entry frame (matching the sim’s update ordering). Do **not** tune this assumption via one-step mismatch metrics; revisit it once richer entry-history seeding lands.
 
 Metrics (initial):
 - `action_id` match rate (and optional ±N frame window around transitions).

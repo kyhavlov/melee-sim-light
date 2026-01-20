@@ -124,8 +124,8 @@ int msl_batch_reseed_seed(MslBatch* batch, const uint8_t* seed_bytes, size_t see
       batch->state.action_frame[idx] = seed->action_frame[p];
       batch->state.jumps_left[idx] = seed->jumps_left[p];
       batch->state.stocks[idx] = seed->stocks[p];
-      batch->state.kneebend_jump_input[idx] = 0;
-      batch->state.kneebend_is_short_hop[idx] = 0;
+      batch->state.kneebend_jump_input[idx] = seed->kneebend_jump_input[p];
+      batch->state.kneebend_is_short_hop[idx] = seed->kneebend_is_short_hop[p];
       batch->state.tilt_timer_x[idx] = seed->tilt_timer_x[p];
       batch->state.tilt_timer_y[idx] = seed->tilt_timer_y[p];
       batch->state.turn_frames_to_turn[idx] = seed->turn_frames_to_turn[p];

@@ -35,8 +35,7 @@ typedef struct MslStateSoA {
   uint8_t* jumps_left;
   uint8_t* stocks;
   // Locomotion/input-history internals.
-  // - `tilt_timer_*` and `turn_*` are seeded from replay history (MslSeed).
-  // - KneeBend internals are not seeded yet and must be cleared on reseed.
+  // - `tilt_timer_*`, `turn_*`, and KneeBend internals are seeded from replay history (MslSeed).
   uint8_t*
       kneebend_jump_input;  // ftCo_JumpInput (refs/melee/src/melee/ft/chara/ftCommon/forward.h)
   uint8_t* kneebend_is_short_hop;  // latched during KneeBend IASA (ftCo_KneeBend_Check_ShortHop)

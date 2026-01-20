@@ -118,6 +118,7 @@ def test_kneebend_takeoff_enters_jumpf_and_consumes_jump() -> None:
     seed["action_frame"][0, 0] = np.int16(2)  # Fox jump_startup_frames=3, so +1 triggers takeoff.
     seed["animation_index"][0, 0] = np.uint32(SM_KNEEBEND)
     seed["jumps_left"][0, 0] = np.uint8(2)
+    seed["kneebend_jump_input"][0, 0] = np.uint8(3)  # JumpInput_XY (refs/melee/.../ftCommon/forward.h)
 
     prev_inp = _mk_input_bytes(1, input_stride)
     inp = _mk_input_bytes(1, input_stride)
@@ -177,6 +178,7 @@ def test_kneebend_release_jump_short_hops() -> None:
     seed["action_frame"][0, 0] = np.int16(2)  # Fox jump_startup_frames=3, so +1 triggers takeoff.
     seed["animation_index"][0, 0] = np.uint32(SM_KNEEBEND)
     seed["jumps_left"][0, 0] = np.uint8(2)
+    seed["kneebend_jump_input"][0, 0] = np.uint8(3)  # JumpInput_XY
 
     prev_inp = _mk_input_bytes(1, input_stride)
     inp = _mk_input_bytes(1, input_stride)
@@ -189,6 +191,64 @@ def test_kneebend_release_jump_short_hops() -> None:
     out = _step_once(seed, prev_inp, inp)
     assert int(out["action_id"][0]) == ACT_JUMPF
     assert int(out["action_frame"][0]) == 0
+    expected_vy = np.float32(_fox_attr("hop_v_initial_velocity") - _fox_attr("grav"))
+    assert np.isclose(out["speed_y_self"][0], expected_vy)
+
+
+def test_kneebend_seeded_jump_input_lstick_short_hops_even_if_xy_held() -> None:
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    input_stride = int(sizes["input"])
+
+    seed = _seed_base()
+    seed["on_ground"][0, 0] = np.uint8(1)
+    seed["action_id"][0, 0] = np.uint16(ACT_KNEEBEND)
+    seed["action_frame"][0, 0] = np.int16(2)  # Fox jump_startup_frames=3, so +1 triggers takeoff.
+    seed["animation_index"][0, 0] = np.uint32(SM_KNEEBEND)
+    seed["jumps_left"][0, 0] = np.uint8(2)
+    seed["kneebend_jump_input"][0, 0] = np.uint8(1)  # JumpInput_LStick
+
+    prev_inp = _mk_input_bytes(1, input_stride)
+    inp = _mk_input_bytes(1, input_stride)
+    prev_view = prev_inp.view(INPUT_DTYPE).reshape((1,))
+    cur_view = inp.view(INPUT_DTYPE).reshape((1,))
+    # Hold X, but keep stick released below tap_jump_release_threshold.
+    prev_view["p"]["buttons"][0, 0] = np.uint16(BUTTON_X)
+    cur_view["p"]["buttons"][0, 0] = np.uint16(BUTTON_X)
+    cur_view["p"]["main_y"][0, 0] = np.int8(0)
+
+    out = _step_once(seed, prev_inp, inp)
+    assert int(out["action_id"][0]) == ACT_JUMPF
+    expected_vy = np.float32(_fox_attr("hop_v_initial_velocity") - _fox_attr("grav"))
+    assert np.isclose(out["speed_y_self"][0], expected_vy)
+
+
+def test_kneebend_seeded_short_hop_latch_is_respected() -> None:
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    input_stride = int(sizes["input"])
+
+    seed = _seed_base()
+    seed["on_ground"][0, 0] = np.uint8(1)
+    seed["action_id"][0, 0] = np.uint16(ACT_KNEEBEND)
+    seed["action_frame"][0, 0] = np.int16(2)  # Fox jump_startup_frames=3, so +1 triggers takeoff.
+    seed["animation_index"][0, 0] = np.uint32(SM_KNEEBEND)
+    seed["jumps_left"][0, 0] = np.uint8(2)
+    seed["kneebend_jump_input"][0, 0] = np.uint8(3)  # JumpInput_XY
+    seed["kneebend_is_short_hop"][0, 0] = np.uint8(1)
+
+    prev_inp = _mk_input_bytes(1, input_stride)
+    inp = _mk_input_bytes(1, input_stride)
+    prev_view = prev_inp.view(INPUT_DTYPE).reshape((1,))
+    cur_view = inp.view(INPUT_DTYPE).reshape((1,))
+    # Even if X is held, a pre-latched short hop must remain short.
+    prev_view["p"]["buttons"][0, 0] = np.uint16(BUTTON_X)
+    cur_view["p"]["buttons"][0, 0] = np.uint16(BUTTON_X)
+
+    out = _step_once(seed, prev_inp, inp)
+    assert int(out["action_id"][0]) == ACT_JUMPF
     expected_vy = np.float32(_fox_attr("hop_v_initial_velocity") - _fox_attr("grav"))
     assert np.isclose(out["speed_y_self"][0], expected_vy)
 

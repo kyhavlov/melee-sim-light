@@ -262,3 +262,91 @@ def derive_turn_internals(
         prev_in_turn = True
 
     return out_frames, out_has
+
+
+def derive_kneebend_internals(
+    *,
+    action_id: np.ndarray,
+    buttons: np.ndarray,
+    buttons_pressed: np.ndarray,
+    stick_y_unit: np.ndarray,
+    cstick_y_unit: np.ndarray,
+    tilt_timer_y: np.ndarray,
+    tap_jump_threshold: float,
+    tap_jump_tilt_max_frames: int,
+    tap_jump_release_threshold: float,
+    act_kneebend: int,
+    button_mask_xy: int,
+) -> tuple[np.ndarray, np.ndarray]:
+    """
+    Derive KneeBend internals (`jump_input`, `is_short_hop`) per frame from replay history.
+
+    Decomp references:
+    - Jump input selection (L-stick vs XY): refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c:34-63
+    - C-stick "jump input" path:
+      - refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c:90-104 (ftCo_800CB024)
+      - refs/melee/src/melee/ft/ft_0DF1.c:239-249 (ftCo_800DF910)
+      - refs/melee/src/melee/ft/chara/ftCommon/ftCo_KneeBend.c:16-28 (ftCo_KneeBend_Enter)
+    - KneeBend storage + short-hop latch: refs/melee/src/melee/ft/chara/ftCommon/ftCo_KneeBend.c:16-28
+      and :44-56
+
+    Causality: strictly causal; uses only current and past frames to detect KneeBend entry and to
+    latch the short-hop flag while remaining in KneeBend.
+    """
+    a = np.asarray(action_id, dtype=np.uint16).reshape(-1)
+    b = np.asarray(buttons, dtype=np.uint16).reshape(-1)
+    bp = np.asarray(buttons_pressed, dtype=np.uint16).reshape(-1)
+    sy = np.asarray(stick_y_unit, dtype=np.float32).reshape(-1)
+    cy = np.asarray(cstick_y_unit, dtype=np.float32).reshape(-1)
+    tty = np.asarray(tilt_timer_y, dtype=np.uint8).reshape(-1)
+
+    n = int(a.size)
+    out_jump = np.zeros(n, dtype=np.uint8)
+    out_short = np.zeros(n, dtype=np.uint8)
+
+    jump_input = 0  # ftCo_JumpInput enum: 0 None, 1 LStick, 2 CStick, 3 XY.
+    is_short_hop = 0
+    prev_in_kneebend = False
+
+    thr = np.float32(tap_jump_threshold)
+    rel = np.float32(tap_jump_release_threshold)
+    tilt_max = int(tap_jump_tilt_max_frames)
+    xy = int(button_mask_xy) & 0xFFFF
+
+    for i in range(n):
+        cur_in_kneebend = int(a[i]) == int(act_kneebend)
+        if not cur_in_kneebend:
+            jump_input = 0
+            is_short_hop = 0
+            prev_in_kneebend = False
+            continue
+
+        if not prev_in_kneebend:
+            # Entry into KneeBend: pick jump_input causally using current inputs.
+            # ftCo_Jump_GetInput checks L-stick before XY; C-stick is a separate fallback check.
+            jump_input = 0
+            if sy[i] >= thr and int(tty[i]) < tilt_max:
+                jump_input = 1  # JumpInput_LStick
+            elif (int(bp[i]) & xy) != 0:
+                jump_input = 3  # JumpInput_XY
+            elif cy[i] >= thr:
+                jump_input = 2  # JumpInput_CStick
+            is_short_hop = 0
+
+        if not is_short_hop:
+            # ftCo_KneeBend_Check_ShortHop: latch when the original jump input is released.
+            if jump_input == 3:
+                if (int(b[i]) & xy) == 0:
+                    is_short_hop = 1
+            elif jump_input == 1:
+                if sy[i] < rel:
+                    is_short_hop = 1
+            elif jump_input == 2:
+                if cy[i] < rel:
+                    is_short_hop = 1
+
+        out_jump[i] = np.uint8(jump_input)
+        out_short[i] = np.uint8(is_short_hop)
+        prev_in_kneebend = True
+
+    return out_jump, out_short
