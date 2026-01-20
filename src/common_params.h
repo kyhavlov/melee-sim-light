@@ -46,6 +46,18 @@ typedef struct MslCommonParams {
 
   // Run friction multiplier (used in dash/run ground acceleration; refs/melee/src/melee/ft/chara/ftCommon/ftCo_Run.c)
   float run_friction_mul;  // p_ftCommonData->run_friction_mul (0x60)
+
+  // Powershield / GuardReflect (refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c and fighter.c)
+  float powershield_reflect_trigger_min;  // p_ftCommonData->x18
+  uint8_t powershield_reflect_window_frames;  // p_ftCommonData->x2A0
+  uint8_t powershield_reflect_frames;         // p_ftCommonData->x2A4 (rounded)
+  uint8_t powershield_reflect_total_frames;   // p_ftCommonData->x2B4 (rounded)
+  uint8_t _pad_u8_2[1];
+
+  // L-cancel window / lag divisor (refs/melee/src/melee/ft/chara/ftCommon/ftCo_LandingAir.c)
+  uint8_t lcancel_window_frames;  // p_ftCommonData->xE4
+  uint8_t _pad_u8_3[3];
+  float lcancel_lag_div;  // p_ftCommonData->xE8
 } MslCommonParams;
 
 int common_params_init(void);

@@ -52,6 +52,8 @@ int state_alloc(MslStateSoA* state, int batch_size) {
   state->fall_fast = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->turn_has_turned = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->turn_frames_to_turn = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
+  state->lr_press_timer = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
+  state->x672_input_timer = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
 
   state->percent = (float*)alloc_aligned_64(sizeof(float) * bp);
   state->shield_hp = (float*)alloc_aligned_64(sizeof(float) * bp);
@@ -106,9 +108,10 @@ int state_alloc(MslStateSoA* state, int batch_size) {
       !state->on_ground || !state->prev_on_ground || !state->action_id || !state->action_frame ||
       !state->jumps_left || !state->stocks || !state->kneebend_jump_input ||
       !state->kneebend_is_short_hop || !state->tilt_timer_x || !state->tilt_timer_y ||
-      !state->fall_fast || !state->turn_has_turned || !state->turn_frames_to_turn || !state->percent ||
-      !state->shield_hp || !state->hitlag || !state->hitstun || !state->l_cancel ||
-      !state->hurtbox_state || !state->ground_id || !state->animation_index ||
+      !state->fall_fast || !state->turn_has_turned || !state->turn_frames_to_turn ||
+      !state->lr_press_timer || !state->x672_input_timer || !state->percent || !state->shield_hp ||
+      !state->hitlag || !state->hitstun || !state->l_cancel || !state->hurtbox_state ||
+      !state->ground_id || !state->animation_index ||
       !state->instance_hit_by || !state->instance_id || !state->last_attack_landed ||
       !state->combo_count || !state->last_hit_by || !state->state_flags || !state->input_buttons ||
       !state->prev_input_buttons || !state->input_buttons_pressed ||
@@ -160,6 +163,8 @@ void state_free(MslStateSoA* state) {
   alloc_free(state->fall_fast);
   alloc_free(state->turn_has_turned);
   alloc_free(state->turn_frames_to_turn);
+  alloc_free(state->lr_press_timer);
+  alloc_free(state->x672_input_timer);
 
   alloc_free(state->percent);
   alloc_free(state->shield_hp);

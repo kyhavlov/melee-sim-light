@@ -131,6 +131,8 @@ int msl_batch_reseed_seed(MslBatch* batch, const uint8_t* seed_bytes, size_t see
       batch->state.fall_fast[idx] = seed->fall_fast[p] ? 1 : 0;
       batch->state.turn_frames_to_turn[idx] = seed->turn_frames_to_turn[p];
       batch->state.turn_has_turned[idx] = seed->turn_has_turned[p];
+      batch->state.lr_press_timer[idx] = seed->lr_press_timer[p];
+      batch->state.x672_input_timer[idx] = seed->x672_input_timer[p];
 
       batch->state.percent[idx] = seed->percent[p];
       batch->state.shield_hp[idx] = seed->shield_hp[p];

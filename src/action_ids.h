@@ -32,7 +32,21 @@ typedef enum MslActionId {
   MSL_ACT_FALL_SPECIAL_B = 0x0025,       // ftCo_MS_FallSpecialB
   MSL_ACT_DAMAGE_FALL = 0x0026,          // ftCo_MS_DamageFall
   MSL_ACT_LANDING = 0x002A,              // ftCo_MS_Landing
-  MSL_ACT_LANDING_FALL_SPECIAL = 0x002B  // ftCo_MS_LandingFallSpecial
+  MSL_ACT_LANDING_FALL_SPECIAL = 0x002B, // ftCo_MS_LandingFallSpecial
+
+  // Aerial attack landing lag states (ftCo_LandingAir_*).
+  MSL_ACT_LANDING_AIR_N = 0x0046,  // ftCo_MS_LandingAirN
+  MSL_ACT_LANDING_AIR_F = 0x0047,  // ftCo_MS_LandingAirF
+  MSL_ACT_LANDING_AIR_B = 0x0048,  // ftCo_MS_LandingAirB
+  MSL_ACT_LANDING_AIR_HI = 0x0049, // ftCo_MS_LandingAirHi
+  MSL_ACT_LANDING_AIR_LW = 0x004A, // ftCo_MS_LandingAirLw
+
+  // Shield / Guard (subset).
+  MSL_ACT_GUARD_ON = 0x00B2,       // ftCo_MS_GuardOn
+  MSL_ACT_GUARD = 0x00B3,          // ftCo_MS_Guard
+  MSL_ACT_GUARD_OFF = 0x00B4,      // ftCo_MS_GuardOff
+  MSL_ACT_GUARD_SET_OFF = 0x00B5,  // ftCo_MS_GuardSetOff
+  MSL_ACT_GUARD_REFLECT = 0x00B6,  // ftCo_MS_GuardReflect
 } MslActionId;
 
 // Additional GALE01 common action ids needed for fastfall gating.
@@ -77,6 +91,16 @@ typedef enum MslSubmotionId {
   MSL_SM_DAMAGE_FALL = 29,           // ftCo_SM_DamageFall
   MSL_SM_LANDING = 35,               // ftCo_SM_Landing
   MSL_SM_LANDING_FALL_SPECIAL = 36,  // ftCo_SM_LandingFallSpecial
+
+  MSL_SM_GUARD_ON = 37,   // ftCo_SM_GuardOn
+  MSL_SM_GUARD = 38,      // ftCo_SM_Guard
+  MSL_SM_GUARD_OFF = 39,  // ftCo_SM_GuardOff
+
+  MSL_SM_LANDING_AIR_N = 73,  // ftCo_SM_LandingAirN
+  MSL_SM_LANDING_AIR_F = 74,  // ftCo_SM_LandingAirF
+  MSL_SM_LANDING_AIR_B = 75,  // ftCo_SM_LandingAirB
+  MSL_SM_LANDING_AIR_HI = 76, // ftCo_SM_LandingAirHi
+  MSL_SM_LANDING_AIR_LW = 77, // ftCo_SM_LandingAirLw
 } MslSubmotionId;
 
 static inline uint8_t msl_action_is_ground_locomotion(uint16_t action_id) {
@@ -94,6 +118,16 @@ static inline uint8_t msl_action_is_ground_locomotion(uint16_t action_id) {
     case MSL_ACT_KNEE_BEND:
     case MSL_ACT_LANDING:
     case MSL_ACT_LANDING_FALL_SPECIAL:
+    case MSL_ACT_LANDING_AIR_N:
+    case MSL_ACT_LANDING_AIR_F:
+    case MSL_ACT_LANDING_AIR_B:
+    case MSL_ACT_LANDING_AIR_HI:
+    case MSL_ACT_LANDING_AIR_LW:
+    case MSL_ACT_GUARD_ON:
+    case MSL_ACT_GUARD:
+    case MSL_ACT_GUARD_OFF:
+    case MSL_ACT_GUARD_SET_OFF:
+    case MSL_ACT_GUARD_REFLECT:
       return 1;
     default:
       return 0;

@@ -102,6 +102,8 @@ SEED_DTYPE = np.dtype(
         ("fall_fast", _arr("u1", MAX_PLAYERS)),
         ("turn_frames_to_turn", _arr("u1", MAX_PLAYERS)),
         ("turn_has_turned", _arr("u1", MAX_PLAYERS)),
+        ("lr_press_timer", _arr("u1", MAX_PLAYERS)),
+        ("x672_input_timer", _arr("u1", MAX_PLAYERS)),
         ("percent", _arr("<f4", MAX_PLAYERS)),
         ("shield_hp", _arr("<f4", MAX_PLAYERS)),
         ("hitlag", _arr("<u2", MAX_PLAYERS)),

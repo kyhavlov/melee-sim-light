@@ -119,6 +119,10 @@ typedef struct MslSeed {
   // Decomp: refs/melee/src/melee/ft/chara/ftCommon/ftCo_Turn.c:56-88 (ftCo_Turn_Anim_Inner)
   uint8_t turn_frames_to_turn[MSL_MAX_PLAYERS];  // fp->mv.co.turn.frames_to_turn
   uint8_t turn_has_turned[MSL_MAX_PLAYERS];      // fp->mv.co.turn.has_turned
+  // Decomp: refs/melee/src/melee/ft/fighter.c:2078-2086 (x67F updates each frame).
+  uint8_t lr_press_timer[MSL_MAX_PLAYERS];  // fp->x67F (frames since L/R press; saturates at 0xFF)
+  // Decomp: refs/melee/src/melee/ft/fighter.c:2020-2050 (x672 updates each frame).
+  uint8_t x672_input_timer[MSL_MAX_PLAYERS];  // fp->x672_input_timer_counter (saturates at 0xFE)
 
   // Combat / timers
   float percent[MSL_MAX_PLAYERS];

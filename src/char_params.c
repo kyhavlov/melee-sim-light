@@ -139,6 +139,12 @@ static int load_one(const char* data_dir, const char* rel_path, uint8_t char_id)
                    &out.ground_to_air_jump_momentum_multiplier) != 0 ||
       json_get_f32(buf, "jump_h_max_velocity", &out.jump_h_max_velocity) != 0 ||
       json_get_u8(buf, "max_jumps", &out.max_jumps) != 0 ||
+      json_get_u8(buf, "landing_lag_frames", &out.landing_lag_frames) != 0 ||
+      json_get_u8(buf, "landing_airn_lag_frames", &out.landing_airn_lag_frames) != 0 ||
+      json_get_u8(buf, "landing_airf_lag_frames", &out.landing_airf_lag_frames) != 0 ||
+      json_get_u8(buf, "landing_airb_lag_frames", &out.landing_airb_lag_frames) != 0 ||
+      json_get_u8(buf, "landing_airhi_lag_frames", &out.landing_airhi_lag_frames) != 0 ||
+      json_get_u8(buf, "landing_airlw_lag_frames", &out.landing_airlw_lag_frames) != 0 ||
       json_get_f32(buf, "grav", &out.grav) != 0 ||
       json_get_f32(buf, "terminal_vel", &out.terminal_vel) != 0 ||
       json_get_f32(buf, "fast_fall_velocity", &out.fast_fall_velocity) != 0 ||

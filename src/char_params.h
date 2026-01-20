@@ -29,6 +29,13 @@ typedef struct MslCharParams {
   uint8_t turn_frames;
   uint8_t jump_startup_frames;
   uint8_t max_jumps;
+  uint8_t landing_lag_frames;
+  uint8_t landing_airn_lag_frames;
+  uint8_t landing_airf_lag_frames;
+  uint8_t landing_airb_lag_frames;
+  uint8_t landing_airhi_lag_frames;
+  uint8_t landing_airlw_lag_frames;
+  uint8_t _pad_u8_0[1];
 
   float jump_h_initial_velocity;
   float jump_v_initial_velocity;

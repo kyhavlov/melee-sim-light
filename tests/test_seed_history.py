@@ -3,8 +3,10 @@ from __future__ import annotations
 import numpy as np
 
 from tools.slippi.seed_history import (
+    compute_press_timer_u8,
     compute_tilt_timer_axis,
     compute_tilt_timer_y_pre_post_with_fall_fast,
+    compute_x672_trigger_timer_pre_post,
     derive_kneebend_internals,
     derive_turn_internals,
 )
@@ -188,6 +190,55 @@ def test_fall_fast_and_x671_override_is_causal_wrt_future_frames() -> None:
     assert np.array_equal(t_pre0, t_pre1[: t_pre0.size])
     assert np.array_equal(t_post0, t_post1[: t_post0.size])
     assert np.array_equal(ff0, ff1[: ff0.size])
+
+
+def test_press_timer_u8_is_causal_wrt_future_frames() -> None:
+    # Models fp->x67F update style: reset to 0 on L/R press; else increment and clamp at 0xFF.
+    mask_lr = 0x0040 | 0x0020
+
+    bp_prefix = np.array([0, 0, mask_lr, 0, 0, 0], dtype=np.uint16)
+    t0 = compute_press_timer_u8(buttons_pressed=bp_prefix, press_mask=mask_lr, start_timer=0xFF)
+    assert t0.tolist() == [0xFF, 0xFF, 0, 1, 2, 3]
+
+    bp_ext = np.concatenate([bp_prefix, np.array([0, 0, mask_lr, 0], dtype=np.uint16)])
+    t1 = compute_press_timer_u8(buttons_pressed=bp_ext, press_mask=mask_lr, start_timer=0xFF)
+    assert np.array_equal(t0, t1[: t0.size])
+
+
+def test_x672_trigger_timer_is_causal_wrt_future_frames() -> None:
+    import json
+    from pathlib import Path
+
+    common = json.loads(Path("data/common/ft_common_data.json").read_text())
+    trigger_min = float(common["powershield_reflect_trigger_min"])
+
+    # Prefix: new trigger press at frame 1 yields timer_pre=0 and timer_post=0; GuardReflect entry at frame 2
+    # overrides timer_post=0xFE (decomp: ftCo_Guard.c sets x672=0xFE on GuardReflect).
+    trig_prefix = np.array([0.0, 1.0, 1.0, 1.0], dtype=np.float32)
+    guard_entry_prefix = np.array([False, False, True, False])
+
+    pre0, post0 = compute_x672_trigger_timer_pre_post(
+        trigger_unit=trig_prefix,
+        trigger_min=trigger_min,
+        guard_reflect_entry=guard_entry_prefix,
+        start_timer_post=0xFE,
+    )
+
+    assert int(pre0[1]) == 0
+    assert int(post0[2]) == 0xFE
+
+    # Append arbitrary future frames; prefix outputs must not change.
+    trig_ext = np.concatenate([trig_prefix, np.array([1.0, 0.0, 1.0], dtype=np.float32)])
+    guard_entry_ext = np.concatenate([guard_entry_prefix, np.array([False, False, True])])
+    pre1, post1 = compute_x672_trigger_timer_pre_post(
+        trigger_unit=trig_ext,
+        trigger_min=trigger_min,
+        guard_reflect_entry=guard_entry_ext,
+        start_timer_post=0xFE,
+    )
+
+    assert np.array_equal(pre0, pre1[: pre0.size])
+    assert np.array_equal(post0, post1[: post0.size])
 
 
 def test_jump_to_jump_aerial_entry_clears_fall_fast_and_overrides_x671() -> None:

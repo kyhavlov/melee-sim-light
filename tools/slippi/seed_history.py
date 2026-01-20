@@ -470,3 +470,117 @@ def derive_kneebend_internals(
         prev_in_kneebend = True
 
     return out_jump, out_short
+
+
+def compute_press_timer_u8(
+    *,
+    buttons_pressed: np.ndarray,
+    press_mask: int,
+    start_timer: int = 0xFF,
+) -> np.ndarray:
+    """
+    Compute a generic "frames since last press" timer (u8, saturating at 0xFF).
+
+    This matches the pattern used by several `fp->x67*` counters in fighter input history.
+
+    Decomp references:
+    - init/reset to 0xFF: refs/melee/src/melee/ft/fighter.c:650-707
+    - per-frame update example (x67F): refs/melee/src/melee/ft/fighter.c:2078-2086
+      (`if (fp->input.x668 & HSD_PAD_LR) fp->x67F = 0; else if (fp->x67F < 0xFF) fp->x67F++;`)
+    """
+    bp = np.asarray(buttons_pressed, dtype=np.uint16).reshape(-1)
+    n = int(bp.size)
+    out = np.empty(n, dtype=np.uint8)
+
+    mask = int(press_mask) & 0xFFFF
+    timer = int(start_timer) & 0xFF
+
+    for i in range(n):
+        if (int(bp[i]) & mask) != 0:
+            timer = 0
+        elif timer < 0xFF:
+            timer += 1
+        out[i] = np.uint8(timer)
+
+    return out
+
+
+def compute_x672_trigger_timer_pre_post(
+    *,
+    trigger_unit: np.ndarray,
+    prev_trigger_unit: np.ndarray | None = None,
+    trigger_min: float,
+    guard_reflect_entry: np.ndarray | None = None,
+    start_timer_post: int = 0xFE,
+) -> tuple[np.ndarray, np.ndarray]:
+    """
+    Compute fp->x672_input_timer_counter per frame (pre/post), causally.
+
+    - timer_pre: value after Fighter input update (used for powershield/GuardReflect gate that frame)
+    - timer_post: value after action-entry overrides later in the frame
+
+    Decomp references:
+    - per-frame update from analog triggers (x650/x654):
+      refs/melee/src/melee/ft/fighter.c:2020-2050
+    - action-entry override on GuardReflect entry:
+      refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c:746-804
+      (sets `fp->x672_input_timer_counter = 0xFE;`)
+
+    Notes:
+    - `trigger_unit` corresponds to `fp->input.x650` (max of analog L/R, with digital L/R treated as 1.0).
+    - If `prev_trigger_unit` is omitted, we model `fp->input.x654` as the previous frame's `trigger_unit`.
+    """
+    trig = np.asarray(trigger_unit, dtype=np.float32).reshape(-1)
+    n = int(trig.size)
+
+    if prev_trigger_unit is None:
+        prev_trig = None
+    else:
+        prev_trig = np.asarray(prev_trigger_unit, dtype=np.float32).reshape(-1)
+        if int(prev_trig.size) != n:
+            raise ValueError("prev_trigger_unit must match trigger_unit length")
+
+    if guard_reflect_entry is None:
+        guard_entry = None
+    else:
+        guard_entry = np.asarray(guard_reflect_entry, dtype=bool).reshape(-1)
+        if int(guard_entry.size) != n:
+            raise ValueError("guard_reflect_entry must match trigger_unit length")
+
+    out_pre = np.empty(n, dtype=np.uint8)
+    out_post = np.empty(n, dtype=np.uint8)
+
+    thr = np.float32(trigger_min)
+    timer_post = int(start_timer_post) & 0xFF
+    prev_t = np.float32(0.0)
+
+    for i in range(n):
+        cur = np.float32(trig[i])
+        if prev_trig is None:
+            prev = prev_t
+        else:
+            prev = np.float32(prev_trig[i])
+
+        # Fighter input update (timer_pre).
+        t_pre = int(timer_post) & 0xFF
+        if cur >= thr:
+            if prev >= thr:
+                t_pre += 1
+                if t_pre > 0xFE:
+                    t_pre = 0xFE
+            else:
+                t_pre = 0
+        else:
+            t_pre = 0xFE
+
+        t_post = t_pre
+        if guard_entry is not None and bool(guard_entry[i]):
+            t_post = 0xFE
+
+        out_pre[i] = np.uint8(t_pre)
+        out_post[i] = np.uint8(t_post)
+
+        timer_post = t_post
+        prev_t = cur
+
+    return out_pre, out_post

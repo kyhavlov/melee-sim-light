@@ -3,6 +3,7 @@
 #include <errno.h>
 
 #include "api.h"
+#include "buttons.h"
 #include "common_params.h"
 #include "ucf.h"
 
@@ -36,6 +37,52 @@ static inline uint8_t tilt_timer_update(uint8_t prev_timer, float axis, float pr
     }
   } else if (axis <= -tilt_thresh) {
     if (prev_axis <= -tilt_thresh) {
+      t++;
+      if (t > 0xFEu) {
+        t = 0xFEu;
+      }
+    } else {
+      t = 0;
+    }
+  } else {
+    t = 0xFEu;
+  }
+  return (uint8_t)t;
+}
+
+static inline uint8_t press_timer_u8_update(uint8_t prev_timer, uint16_t buttons_pressed,
+                                            uint16_t press_mask) {
+  // Decomp example (x67F): refs/melee/src/melee/ft/fighter.c:2078-2086.
+  uint16_t t = (uint16_t)prev_timer;
+  if ((buttons_pressed & press_mask) != 0) {
+    t = 0;
+  } else if (t < 0xFFu) {
+    t++;
+  }
+  return (uint8_t)t;
+}
+
+static inline float trigger_u8_to_unit(uint8_t v) { return (float)v * (1.0f / 255.0f); }
+
+static inline float trigger_unit_from_input(uint16_t buttons, uint8_t l, uint8_t r) {
+  // Decomp reference: refs/melee/src/melee/ft/fighter.c:1868-1890 and :2019-2050.
+  // - If digital L/R is held, Melee treats shield trigger as fully pressed (`x650 = 1.0f`).
+  // - Otherwise use the analog max of L/R.
+  enum { LR = (uint16_t)MSL_BUTTON_L | (uint16_t)MSL_BUTTON_R };
+  if ((buttons & LR) != 0) {
+    return 1.0f;
+  }
+  const uint8_t m = l > r ? l : r;
+  return trigger_u8_to_unit(m);
+}
+
+static inline uint8_t x672_trigger_timer_update(uint8_t prev_timer, float trig, float prev_trig,
+                                                float trigger_min) {
+  // fp->x672_input_timer_counter (saturating at 0xFE).
+  // Decomp reference: refs/melee/src/melee/ft/fighter.c:2020-2050.
+  uint16_t t = (uint16_t)prev_timer;
+  if (trig >= trigger_min) {
+    if (prev_trig >= trigger_min) {
       t++;
       if (t > 0xFEu) {
         t = 0xFEu;
@@ -113,6 +160,16 @@ int input_apply(MslBatch* batch, const uint8_t* prev_input_bytes, size_t prev_in
 
       batch->state.input_l[idx] = cur->p[p].l;
       batch->state.input_r[idx] = cur->p[p].r;
+
+      // Update additional input-history timers (single-writer invariant: input.c).
+      enum { LR = (uint16_t)MSL_BUTTON_L | (uint16_t)MSL_BUTTON_R };
+      batch->state.lr_press_timer[idx] =
+          press_timer_u8_update(batch->state.lr_press_timer[idx], batch->state.input_buttons_pressed[idx], LR);
+
+      const float trig = trigger_unit_from_input(cur_buttons, cur->p[p].l, cur->p[p].r);
+      const float prev_trig = trigger_unit_from_input(prev_buttons, prev->p[p].l, prev->p[p].r);
+      batch->state.x672_input_timer[idx] = x672_trigger_timer_update(
+          batch->state.x672_input_timer[idx], trig, prev_trig, com->powershield_reflect_trigger_min);
     }
   }
 

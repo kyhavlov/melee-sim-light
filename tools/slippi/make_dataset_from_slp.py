@@ -186,8 +186,10 @@ def _main_impl(args) -> None:
 
     from tools.slippi.seed_history import (
         apply_deadzone,
+        compute_press_timer_u8,
         compute_tilt_timer_axis_pre_post,
         compute_tilt_timer_y_pre_post_with_fall_fast,
+        compute_x672_trigger_timer_pre_post,
         derive_kneebend_internals,
         derive_turn_internals,
         stick_i8_to_unit,
@@ -298,8 +300,10 @@ def _main_impl(args) -> None:
     act_attack_air_b = 0x0043
     act_attack_air_hi = 0x0044
     act_attack_air_lw = 0x0045
+    act_guard_reflect = 0x00B6
     act_escape_air = 0x00EC
     button_mask_xy = 0x0400 | 0x0800  # HSD_PAD_XY / src/buttons.h::MSL_BUTTON_XY
+    button_mask_lr = 0x0040 | 0x0020  # HSD_PAD_L|HSD_PAD_R / src/buttons.h::MSL_BUTTON_{L,R}
 
     # Character id mapping follows Slippi post-frame `character` (GALE01):
     # - Fox   = 1
@@ -499,6 +503,13 @@ def _main_impl(args) -> None:
         prev_buttons = np.concatenate(([np.uint16(0)], pre_buttons_physical[:-1]))
         buttons_pressed = pre_buttons_physical & ~prev_buttons
 
+        # x67F input-history timer ("frames since last L/R press"). Decomp: refs/melee/src/melee/ft/fighter.c:2078-2086.
+        lr_press_timer = compute_press_timer_u8(
+            buttons_pressed=buttons_pressed,
+            press_mask=button_mask_lr,
+            start_timer=0xFF,
+        )
+
         # Action-entry overrides (decomp):
         # - Dash: refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c:55-71
         # - Jump: refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c:101-150
@@ -552,6 +563,24 @@ def _main_impl(args) -> None:
         samples["seed_t"]["tilt_timer_x"][:, slot] = tilt_timer_x_post[:-1]
         samples["seed_t"]["tilt_timer_y"][:, slot] = tilt_timer_y_post[:-1]
         samples["seed_t"]["fall_fast"][:, slot] = fall_fast_post[:-1]
+        samples["seed_t"]["lr_press_timer"][:, slot] = lr_press_timer[:-1]
+
+        # x672 input-history timer (analog trigger hold timer) is seeded to support GuardReflect/powershield logic.
+        # Decomp update: refs/melee/src/melee/ft/fighter.c:2020-2050.
+        # Decomp override on GuardReflect entry: refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c:746-804.
+        trigger_unit = np.maximum(pre_l, pre_r).astype(np.float32) / np.float32(255.0)
+        trigger_unit = np.where(
+            (pre_buttons_physical & np.uint16(button_mask_lr)) != 0, np.float32(1.0), trigger_unit
+        )
+        is_guard_reflect = post_state == np.uint16(act_guard_reflect)
+        guard_reflect_entry = is_guard_reflect & ~np.concatenate(([False], is_guard_reflect[:-1]))
+        _, x672_post = compute_x672_trigger_timer_pre_post(
+            trigger_unit=trigger_unit,
+            trigger_min=float(common["powershield_reflect_trigger_min"]),
+            guard_reflect_entry=guard_reflect_entry,
+            start_timer_post=0xFE,
+        )
+        samples["seed_t"]["x672_input_timer"][:, slot] = x672_post[:-1]
 
         # KneeBend internals (jump_input source + short-hop latch) must be seeded to avoid
         # mid-KneeBend reseed guessing in the simulator.

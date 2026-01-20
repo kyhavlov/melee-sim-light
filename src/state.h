@@ -44,6 +44,8 @@ typedef struct MslStateSoA {
   uint8_t* fall_fast;              // fp->fall_fast (refs/melee/src/melee/ft/ftcommon.c:505-520)
   uint8_t* turn_has_turned;        // fp->mv.co.turn.has_turned (refs/melee/.../ftCo_Turn.c:39-44)
   uint8_t* turn_frames_to_turn;  // fp->mv.co.turn.frames_to_turn (refs/melee/.../ftCo_Turn.c:39-44)
+  uint8_t* lr_press_timer;       // fp->x67F (refs/melee/src/melee/ft/fighter.c:2078-2086)
+  uint8_t* x672_input_timer;     // fp->x672_input_timer_counter (refs/melee/src/melee/ft/fighter.c:2020-2050)
 
   // Combat/timers
   float* percent;
