@@ -652,10 +652,17 @@ void locomotion_update_pre(MslBatch* batch) {
             batch->state.tilt_timer_y[idx] = 0xFEu;
             tilt_timer_y = 0xFEu;
 
-            // Consume ground jump.
-            if (batch->state.jumps_left[idx] > 0) {
-              batch->state.jumps_left[idx]--;
-            }
+            // Consume ground jump by setting jumps_used = 1 on takeoff.
+            //
+            // Decomp:
+            // - ftCo_KneeBend_Anim -> ftCo_Jump_Enter
+            //   refs/melee/src/melee/ft/chara/ftCommon/ftCo_KneeBend.c:22-38
+            // - ftCo_Jump_Enter calls ftCommon_8007D5D4, which sets `fp->x1968_jumpsUsed = 1`
+            //   refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c:158-170
+            //   refs/melee/src/melee/ft/ftcommon.c:525-535
+            //
+            // Slippi post-frame `jumps` is "jumps left", so: jumps_left = max_jumps - jumps_used.
+            batch->state.jumps_left[idx] = ch->max_jumps > 0 ? (uint8_t)(ch->max_jumps - 1) : 0;
             action_id = jump_act;
           }
         }
@@ -793,7 +800,11 @@ void locomotion_update_post_collision(MslBatch* batch) {
         batch->state.speed_ground_x_self[idx] = batch->state.speed_air_x_self[idx];
         batch->state.speed_air_x_self[idx] = 0.0f;
 
-        // Reset jumps on landing (common case for Fox/Falco).
+        // Reset jumps on landing/ground transition.
+        //
+        // Decomp: ftCommon_8007D6A4 sets `fp->x1968_jumpsUsed = 0` when grounding, which refreshes
+        // jumps_left back to max_jumps.
+        // refs/melee/src/melee/ft/ftcommon.c:556-573
         batch->state.jumps_left[idx] = ch->max_jumps;
 
         // Enter landing action based on current fall type.
@@ -815,6 +826,15 @@ void locomotion_update_post_collision(MslBatch* batch) {
         if (!action_is_ground_locomotion(a)) {
           continue;
         }
+
+        // Ground -> Air (walk off / lose ground) consumes the ground jump (jumps_used = 1).
+        //
+        // Decomp:
+        // - Common path for "walk off ledge" transitions: ftCo_Fall_Enter calls ftCommon_8007D5D4 if
+        //   starting from GA_Ground.
+        //   refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c:51-74
+        //   refs/melee/src/melee/ft/ftcommon.c:525-535
+        batch->state.jumps_left[idx] = ch->max_jumps > 0 ? (uint8_t)(ch->max_jumps - 1) : 0;
 
         // Walked/ran off the ground: carry grounded X velocity into air.
         batch->state.speed_air_x_self[idx] = batch->state.speed_ground_x_self[idx];

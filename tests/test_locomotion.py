@@ -430,6 +430,30 @@ def test_landing_resets_jumps_and_enters_landing() -> None:
     assert int(out["jumps_left"][0]) == 2
 
 
+def test_walk_off_consumes_ground_jump() -> None:
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    input_stride = int(sizes["input"])
+
+    seed = _seed_base()
+    seed["on_ground"][0, 0] = np.uint8(1)
+    seed["pos_x"][0, 0] = np.float32(85.4)  # FD floor edge is at ~85.5657 (data/stages/final_destination.json)
+    seed["pos_y"][0, 0] = np.float32(0.0)
+    seed["speed_ground_x_self"][0, 0] = np.float32(1.0)  # crosses offstage in one frame
+    seed["action_id"][0, 0] = np.uint16(ACT_WAIT)
+    seed["action_frame"][0, 0] = np.int16(0)
+    seed["animation_index"][0, 0] = np.uint32(SM_WAIT1_0)
+    seed["jumps_left"][0, 0] = np.uint8(2)
+
+    prev_inp = _mk_input_bytes(1, input_stride)
+    inp = _mk_input_bytes(1, input_stride)
+    out = _step_once(seed, prev_inp, inp)
+    assert int(out["on_ground"][0]) == 0
+    assert int(out["action_id"][0]) == ACT_FALL
+    assert int(out["jumps_left"][0]) == 1
+
+
 def test_jump_end_enters_fall() -> None:
     import msl_binding
 
