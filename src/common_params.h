@@ -32,6 +32,12 @@ typedef struct MslCommonParams {
   uint8_t dash_flick_tilt_max_frames;  // p_ftCommonData->x40 (dash_flick_tilt_max_frames)
   uint8_t _pad_u8_0[3];
 
+  // Dash IASA windows (refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c::ftCo_Dash_IASA)
+  float dash_iasa_vel_mul;  // p_ftCommonData->dash_iasa_vel_mul (0x54)
+  float dash_iasa_x44;      // p_ftCommonData->x44
+  float dash_iasa_x48;      // p_ftCommonData->x48
+  float dash_iasa_x4c;      // p_ftCommonData->x4C
+
   // Jump / fastfall thresholds (refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c / ftcommon.c)
   float tap_jump_threshold;          // p_ftCommonData->tap_jump_threshold (0x70)
   float tap_jump_release_threshold;  // p_ftCommonData->tap_jump_release_threshold (0x7C)

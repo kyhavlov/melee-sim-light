@@ -364,6 +364,7 @@ void locomotion_update_pre(MslBatch* batch) {
       facing_dir = batch->state.facing[idx] ? 1.0f : -1.0f;
 
       action_id = batch->state.action_id[idx];
+      const uint16_t action_id_start = action_id;
 
       // -------------------------
       // Ground locomotion updates
@@ -450,14 +451,60 @@ void locomotion_update_pre(MslBatch* batch) {
           }
         }
 
+        // Dash IASA (dash-dance / dashback start): allow smash-turn from Dash on a flick opposite-facing.
+        // Decomp:
+        // - refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c::ftCo_Dash_IASA
+        // - refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c::ftCo_Dash_CheckInput
+        if (action_id == MSL_ACT_DASH) {
+          if ((float)batch->state.action_frame[idx] <= c->dash_iasa_x4c) {
+            if ((stick_x * facing_dir) < 0.0f && is_dash_flick(c, stick_x, tilt_timer_x)) {
+              // Dash flick opposite-facing triggers Turn (smash-turn path in vanilla).
+              // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c:41-43 (ftCo_Turn_Enter_Smash)
+              batch->state.turn_has_turned[idx] = 0;
+              batch->state.turn_frames_to_turn[idx] = 0;
+              batch->state.action_id[idx] = (uint16_t)MSL_ACT_TURN;
+              batch->state.animation_index[idx] = (uint32_t)MSL_SM_TURN;
+              batch->state.action_frame[idx] = 0;
+              action_id = (uint16_t)MSL_ACT_TURN;
+            }
+          }
+        }
+
         // Turn: decomp `frames_to_turn` countdown + flip on 0.
-        if (action_id == MSL_ACT_TURN || action_id == MSL_ACT_TURN_RUN) {
+        // Only tick if Turn was already active at frame start (avoid flip on same-frame entry).
+        if (action_id_start == MSL_ACT_TURN || action_id_start == MSL_ACT_TURN_RUN) {
           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Turn.c:56-88 (ftCo_Turn_Anim_Inner)
           if (batch->state.turn_frames_to_turn[idx] > 0) {
             batch->state.turn_frames_to_turn[idx]--;
           } else if (!batch->state.turn_has_turned[idx]) {
             batch->state.turn_has_turned[idx] = 1;
             batch->state.facing[idx] = batch->state.facing[idx] ? 0 : 1;
+            facing_dir = batch->state.facing[idx] ? 1.0f : -1.0f;
+          }
+        }
+
+        // UCF Dashback: allow Dash from Turn at a specific anim frame gate.
+        // The Slippi UCF 0.84 patch checks `stick_x_hold_time < 2` on AS_Turn frame 2,
+        // after verifying vanilla x-smash conditions. We model the hold-time part using the
+        // decomp x670 tilt timer (seeded as `tilt_timer_x`).
+        //
+        // References:
+        // - refs/slippi-ssbm-asm/External/UCF 0.84/UCF/UCF Dashback.asm (reads u8 at +0x670; compares against 1/2)
+        // - refs/ucf/src/dashback/dashback.cpp (player->input.stick_x_hold_time >= 2 returns)
+        if (action_id == MSL_ACT_TURN) {
+          if (batch->state.turn_has_turned[idx] &&
+              (batch->state.action_frame[idx] == (int16_t)2) &&
+              ((stick_x * facing_dir) >= c->dash_flick_abs) && (tilt_timer_x < 2)) {
+            // Enter Dash (arg1=0 in decomp Turn_IASA->Dash_Enter path).
+            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c::ftCo_Dash_Enter
+            batch->state.action_id[idx] = (uint16_t)MSL_ACT_DASH;
+            batch->state.animation_index[idx] = (uint32_t)MSL_SM_DASH;
+            batch->state.action_frame[idx] = 0;
+            batch->state.speed_ground_x_self[idx] = facing_dir * ch->dash_initial_velocity;
+            // Decomp: fp->x670_timer_lstick_tilt_x = 0xFE;
+            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c:62
+            batch->state.tilt_timer_x[idx] = 0xFEu;
+            action_id = (uint16_t)MSL_ACT_DASH;
           }
         }
 

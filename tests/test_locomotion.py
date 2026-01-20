@@ -10,6 +10,7 @@ BUTTON_X = 0x0400
 # Action ids (GALE01): refs/melee/src/melee/ft/chara/ftCommon/forward.h
 ACT_WAIT = 0x000E
 ACT_TURN = 0x0012
+ACT_DASH = 0x0014
 ACT_KNEEBEND = 0x0018
 ACT_JUMPF = 0x0019
 ACT_FALL = 0x001D
@@ -19,12 +20,23 @@ ACT_LANDING = 0x002A
 # Submotion ids (GALE01): refs/melee/src/melee/ft/chara/ftCommon/forward.h
 SM_WAIT1_0 = 2
 SM_TURN = 10
+SM_DASH = 12
 SM_KNEEBEND = 15
 SM_JUMPF = 16
 SM_FALL = 20
 
 CHAR_FOX = 1
 STAGE_FD = 32
+MAX_PLAYERS = 4
+
+INTERNALS_DTYPE = np.dtype(
+    [
+        ("tilt_timer_x", ("u1", (MAX_PLAYERS,))),
+        ("turn_frames_to_turn", ("u1", (MAX_PLAYERS,))),
+        ("turn_has_turned", ("u1", (MAX_PLAYERS,))),
+    ],
+    align=False,
+)
 
 
 def _fox_attr(name: str) -> float:
@@ -114,6 +126,108 @@ def _seed_base() -> np.ndarray:
     seed["ground_id"][0, 0] = np.uint16(0)
     return seed
 
+
+def _step_once_with_internals(seed: np.ndarray, prev_inp: np.ndarray, inp: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    compare_stride = int(sizes["compare"])
+    internals_stride = int(sizes["internals"])
+
+    assert seed.dtype == SEED_DTYPE
+    assert seed_stride == SEED_DTYPE.itemsize
+    assert input_stride == INPUT_DTYPE.itemsize
+    assert compare_stride == COMPARE_DTYPE.itemsize
+    assert internals_stride == INTERNALS_DTYPE.itemsize
+
+    handle = msl_binding.init(batch_size=1, num_players=2)
+    try:
+        seed_bytes = seed.view(np.uint8).reshape((1, seed_stride))
+        out_cmp = np.zeros((1, compare_stride), dtype=np.uint8)
+        out_int = np.zeros((1, internals_stride), dtype=np.uint8)
+
+        msl_binding.reseed_seed(handle, seed_bytes)
+        msl_binding.step_input(handle, prev_inp, inp)
+        msl_binding.write_compare(handle, out_cmp)
+        msl_binding.debug_write_internals(handle, out_int)
+
+        cmp0 = out_cmp.view(COMPARE_DTYPE).reshape((1,))[0].copy()
+        int0 = out_int.view(INTERNALS_DTYPE).reshape((1,))[0].copy()
+        return cmp0, int0
+    finally:
+        msl_binding.destroy(handle)
+
+
+def test_dash_iasa_opposite_flick_enters_turn_without_same_frame_flip() -> None:
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    input_stride = int(sizes["input"])
+
+    seed = _seed_base()
+    seed["on_ground"][0, 0] = np.uint8(1)
+    seed["action_id"][0, 0] = np.uint16(ACT_DASH)
+    seed["action_frame"][0, 0] = np.int16(0)
+    seed["animation_index"][0, 0] = np.uint32(SM_DASH)
+    seed["facing"][0, 0] = np.uint8(1)  # right
+
+    prev_inp = _mk_input_bytes(1, input_stride)
+    inp = _mk_input_bytes(1, input_stride)
+    prev_view = prev_inp.view(INPUT_DTYPE).reshape((1,))
+    cur_view = inp.view(INPUT_DTYPE).reshape((1,))
+    # Opposite-facing fresh flick (prev neutral -> cur full left).
+    prev_view["p"]["main_x"][0, 0] = np.int8(0)
+    cur_view["p"]["main_x"][0, 0] = np.int8(-80)
+
+    out0, out1 = _step_many(seed, prev_inp, inp, 2)
+    assert int(out0["action_id"][0]) == ACT_TURN
+    # No same-frame flip on Dash->Turn entry.
+    assert int(out0["facing"][0]) == 1
+    # Turn anim tick flips on the next frame (frames_to_turn=0 path).
+    assert int(out1["action_id"][0]) == ACT_TURN
+    assert int(out1["facing"][0]) == 0
+
+
+def test_ucf_dashback_turn_frame2_enters_dash_and_sets_x670_to_fe() -> None:
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    input_stride = int(sizes["input"])
+
+    dash_flick_abs = float(_common_attr("dash_flick_abs"))
+    assert dash_flick_abs > 0.0
+
+    seed = _seed_base()
+    seed["on_ground"][0, 0] = np.uint8(1)
+    seed["action_id"][0, 0] = np.uint16(ACT_TURN)
+    # locomotion_update_pre advances action_frame by +1 before gates, so seed 1 -> check 2.
+    seed["action_frame"][0, 0] = np.int16(1)
+    seed["animation_index"][0, 0] = np.uint32(SM_TURN)
+    seed["turn_frames_to_turn"][0, 0] = np.uint8(0)
+    seed["turn_has_turned"][0, 0] = np.uint8(1)
+    seed["facing"][0, 0] = np.uint8(1)  # right
+
+    prev_inp = _mk_input_bytes(1, input_stride)
+    inp = _mk_input_bytes(1, input_stride)
+    prev_view = prev_inp.view(INPUT_DTYPE).reshape((1,))
+    cur_view = inp.view(INPUT_DTYPE).reshape((1,))
+    # Fresh right flick so x670_pre < 2 for the UCF dashback hold-time gate.
+    prev_view["p"]["main_x"][0, 0] = np.int8(0)
+    cur_view["p"]["main_x"][0, 0] = np.int8(80)
+
+    out, internals = _step_once_with_internals(seed, prev_inp, inp)
+    assert int(out["action_id"][0]) == ACT_DASH
+    assert int(out["action_frame"][0]) == 0
+    assert int(out["animation_index"][0]) == SM_DASH
+
+    dash_init = np.float32(_fox_attr("dash_initial_velocity"))
+    # Later ground accel runs in the same step, so gr_vel may exceed the initial dash velocity.
+    assert out["speed_ground_x_self"][0] >= dash_init
+
+    # Dash entry override: fp->x670_timer_lstick_tilt_x = 0xFE (ftCo_Dash.c:62).
+    assert int(internals["tilt_timer_x"][0]) == 0xFE
 
 def test_kneebend_takeoff_enters_jumpf_and_consumes_jump() -> None:
     import msl_binding

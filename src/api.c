@@ -301,3 +301,28 @@ int msl_batch_debug_write_processed_input(const MslBatch* batch, uint8_t* out_by
 
   return 0;
 }
+
+int msl_batch_debug_write_internals(const MslBatch* batch, uint8_t* out_bytes,
+                                    size_t out_stride_bytes) {
+  if (batch == NULL || out_bytes == NULL) {
+    return EINVAL;
+  }
+  if (out_stride_bytes < sizeof(MslDebugInternals)) {
+    return EINVAL;
+  }
+
+  for (int bi = 0; bi < batch->batch_size; bi++) {
+    uint8_t* ptr = out_bytes + (size_t)bi * out_stride_bytes;
+    MslDebugInternals* out = (MslDebugInternals*)ptr;
+    memset(out, 0, sizeof(*out));
+
+    for (int p = 0; p < MSL_MAX_PLAYERS; p++) {
+      const size_t idx = msl_idx_player(bi, p);
+      out->tilt_timer_x[p] = batch->state.tilt_timer_x[idx];
+      out->turn_frames_to_turn[p] = batch->state.turn_frames_to_turn[idx];
+      out->turn_has_turned[p] = batch->state.turn_has_turned[idx];
+    }
+  }
+
+  return 0;
+}

@@ -208,6 +208,14 @@ typedef struct MslSample {
   MslCompare ref_t1;
 } MslSample;
 
+// Debug/validation helper: read a small set of internal locomotion/input-history fields.
+// This struct is packed for stable C<->Python inspection in tests.
+typedef struct MslDebugInternals {
+  uint8_t tilt_timer_x[MSL_MAX_PLAYERS];        // fp->x670_timer_lstick_tilt_x
+  uint8_t turn_frames_to_turn[MSL_MAX_PLAYERS]; // fp->mv.co.turn.frames_to_turn
+  uint8_t turn_has_turned[MSL_MAX_PLAYERS];     // fp->mv.co.turn.has_turned
+} MslDebugInternals;
+
 #pragma pack(pop)
 
 // -------------
@@ -247,6 +255,11 @@ int msl_batch_write_compare(const MslBatch* batch, uint8_t* out_bytes, size_t ou
 // out_stride_bytes must be >= sizeof(MslProcessedInput).
 int msl_batch_debug_write_processed_input(const MslBatch* batch, uint8_t* out_bytes,
                                           size_t out_stride_bytes);
+
+// Debug/validation helper: write selected internal fields.
+// out_stride_bytes must be >= sizeof(MslDebugInternals).
+int msl_batch_debug_write_internals(const MslBatch* batch, uint8_t* out_bytes,
+                                    size_t out_stride_bytes);
 
 #ifdef __cplusplus
 }
