@@ -750,6 +750,7 @@ def _extra_anim_msids() -> list[int]:
         195,  # ftCo_SM_DownAttackD
         37,  # ftCo_SM_GuardOn (needed for GuardOn blend timeline length / x2E8)
         38,  # ftCo_SM_Guard
+        39,  # ftCo_SM_GuardOff
         40,  # ftCo_SM_GuardDamage (shieldstun / GuardSetOff)
         41,  # ftCo_SM_EscapeN
         42,  # ftCo_SM_EscapeF

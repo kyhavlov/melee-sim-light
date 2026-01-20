@@ -16,6 +16,7 @@ typedef struct MslCommonParams {
   float lstick_deadzone_y;
   float lstick_tilt_x_thresh;  // p_ftCommonData->x8_someStickThreshold
   float lstick_tilt_y_thresh;  // p_ftCommonData->xC
+  float trigger_deadzone;      // p_ftCommonData->x10 (trigger deadzone used for held_inputs L/R)
 
   // Walk gating / walk-type thresholds (see refs/melee/src/melee/ft/ftwalkcommon.c)
   float walk_stick_threshold;  // p_ftCommonData->x24
@@ -59,6 +60,14 @@ typedef struct MslCommonParams {
   uint8_t powershield_reflect_frames;         // p_ftCommonData->x2A4 (rounded)
   uint8_t powershield_reflect_total_frames;   // p_ftCommonData->x2B4 (rounded)
   uint8_t _pad_u8_2[1];
+
+  // Shield / guard constants (ftCo_Guard.c and fighter.c).
+  // Source of truth: `data/common/ft_common_data.json` extractor comments map these to ftCommonData.
+  float start_shield_health;         // p_ftCommonData->x260 (start_shield_health)
+  float shield_recharge_per_frame;   // p_ftCommonData->x27C (shield_recharge_per_frame)
+  float shield_hold_drain_mul;       // p_ftCommonData->x278 (shield_hold_drain_mul)
+  float shield_hold_drain_base;      // p_ftCommonData->x2EC (shield_hold_drain_base)
+  float shield_hold_drain_max;       // p_ftCommonData->x2F0 (shield_hold_drain_max)
 
   // L-cancel window / lag divisor (refs/melee/src/melee/ft/chara/ftCommon/ftCo_LandingAir.c)
   uint8_t lcancel_window_frames;  // p_ftCommonData->xE4

@@ -8,6 +8,7 @@
 #include "buttons.h"
 #include "char_params.h"
 #include "common_params.h"
+#include "guard.h"
 
 // Input axes in MslStateSoA are Melee-legalized via ucf_clamp_stick_i8:
 // ucf.h: clamp_stickMax = 80 (HSD_PadClampCheck3).
@@ -384,6 +385,22 @@ void locomotion_update_pre(MslBatch* batch) {
           batch->state.turn_frames_to_turn[idx] = 0;
         }
 
+        // Guard core loop (entry/hold/exit). Keep this before locomotion IASA (e.g. Wait->Jump/Dash).
+        // Decomp call site example: refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c:43-66.
+        uint8_t allow_guard_entry = 0;
+        if (action_id == MSL_ACT_WAIT || action_is_walk(action_id) || action_id == MSL_ACT_TURN ||
+            action_id == MSL_ACT_TURN_RUN || action_id == MSL_ACT_DASH || action_id == MSL_ACT_RUN ||
+            action_id == MSL_ACT_RUN_BRAKE || action_id == MSL_ACT_RUN_DIRECT) {
+          allow_guard_entry = 1;
+        }
+        guard_update_grounded(batch, c, idx, allow_guard_entry);
+        action_id = batch->state.action_id[idx];
+
+        // Shield recharge after guard state updates/entry so we don't recharge on the same frame
+        // we begin shielding (decomp gates on `!fp->x221A_b7`, not on pre-entry action_id).
+        // refs/melee/src/melee/ft/fighter.c:2803-2812.
+        guard_update_shield_recharge(batch, c, idx);
+
         // WAIT entry transitions (minimal locomotion-only IASA chain):
         // - refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
         //   - ftCo_Jump_CheckInput
@@ -511,7 +528,9 @@ void locomotion_update_pre(MslBatch* batch) {
         // Ground movement physics for specific states.
         if (action_id == MSL_ACT_WAIT || action_id == MSL_ACT_TURN ||
             action_id == MSL_ACT_TURN_RUN || action_id == MSL_ACT_KNEE_BEND ||
-            action_id == MSL_ACT_LANDING || action_id == MSL_ACT_LANDING_FALL_SPECIAL) {
+            action_id == MSL_ACT_LANDING || action_id == MSL_ACT_LANDING_FALL_SPECIAL ||
+            action_id == MSL_ACT_GUARD_ON || action_id == MSL_ACT_GUARD ||
+            action_id == MSL_ACT_GUARD_OFF || action_id == MSL_ACT_GUARD_REFLECT) {
           float friction = ch->gr_friction;
           if (msl_absf(batch->state.speed_ground_x_self[idx]) > ch->walk_max_vel) {
             friction *= c->high_speed_friction_mul;
@@ -671,6 +690,9 @@ void locomotion_update_pre(MslBatch* batch) {
 
         continue;
       }
+
+      // Air / non-ground: shield recharge can still occur (decomp checks shield-active flag, not ground/air).
+      guard_update_shield_recharge(batch, c, idx);
 
       // ----------------------
       // Air locomotion updates

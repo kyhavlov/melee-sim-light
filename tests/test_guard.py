@@ -1,0 +1,122 @@
+from __future__ import annotations
+
+import numpy as np
+
+from tools.eval.dataset import COMPARE_DTYPE, INPUT_DTYPE, SEED_DTYPE
+
+
+# Button masks: src/buttons.h (Melee/HSD PAD bits)
+BUTTON_L = 0x0040
+
+# Action ids (GALE01): refs/melee/src/melee/ft/chara/ftCommon/forward.h
+ACT_WAIT = 0x000E
+ACT_GUARD_ON = 0x00B2
+ACT_GUARD = 0x00B3
+ACT_GUARD_OFF = 0x00B4
+ACT_GUARD_REFLECT = 0x00B6
+
+# Submotion ids (GALE01): refs/melee/src/melee/ft/chara/ftCommon/forward.h
+SM_WAIT1_0 = 2
+SM_GUARD_ON = 37
+SM_GUARD = 38
+SM_GUARD_OFF = 39
+
+CHAR_FOX = 1
+STAGE_FD = 32
+MAX_PLAYERS = 4
+
+
+def _common_attr(name: str) -> float:
+    import json
+    from pathlib import Path
+
+    common = json.loads(Path("data/common/ft_common_data.json").read_text())
+    return float(common[name])
+
+
+def _mk_input_bytes(batch: int, input_stride: int) -> np.ndarray:
+    return np.zeros((batch, input_stride), dtype=np.uint8)
+
+
+def _seed_base() -> np.ndarray:
+    seed = np.zeros((1,), dtype=SEED_DTYPE)
+    seed["stage_id"][0] = np.uint32(STAGE_FD)
+    seed["num_players"][0] = np.uint8(2)
+    seed["stocks"][0, :2] = np.uint8(4)
+    seed["char_id"][0, 0] = np.uint8(CHAR_FOX)
+    seed["facing"][0, 0] = np.uint8(1)  # right
+    seed["on_ground"][0, 0] = np.uint8(1)
+    seed["ground_id"][0, 0] = np.uint16(0)
+    seed["action_id"][0, 0] = np.uint16(ACT_WAIT)
+    seed["action_frame"][0, 0] = np.int16(0)
+    seed["animation_index"][0, 0] = np.uint32(SM_WAIT1_0)
+    seed["shield_hp"][0, 0] = np.float32(_common_attr("start_shield_health"))
+    return seed
+
+
+def test_grounded_guard_entry_hold_exit_changes_action_and_drains_shield() -> None:
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    compare_stride = int(sizes["compare"])
+
+    assert seed_stride == SEED_DTYPE.itemsize
+    assert input_stride == INPUT_DTYPE.itemsize
+    assert compare_stride == COMPARE_DTYPE.itemsize
+
+    seed = _seed_base()
+
+    handle = msl_binding.init(batch_size=1, num_players=2)
+    try:
+        seed_bytes = seed.view(np.uint8).reshape((1, seed_stride))
+        out = np.zeros((1, compare_stride), dtype=np.uint8)
+
+        neutral = _mk_input_bytes(1, input_stride)
+        shield = _mk_input_bytes(1, input_stride)
+        shield_view = shield.view(INPUT_DTYPE).reshape((1,))
+        shield_view["p"]["buttons"][0, 0] = np.uint16(BUTTON_L)
+
+        msl_binding.reseed_seed(handle, seed_bytes)
+
+        # Entry: neutral -> shield.
+        msl_binding.step_input(handle, neutral, shield)
+        msl_binding.write_compare(handle, out)
+        out0 = out.view(COMPARE_DTYPE).reshape((1,))[0].copy()
+
+        assert int(out0["action_id"][0]) in (ACT_GUARD_REFLECT, ACT_GUARD_ON, ACT_GUARD)
+        # In our replay-derived datasets, shield states often have `animation_index == -1`.
+        if int(out0["action_id"][0]) in (ACT_GUARD_REFLECT, ACT_GUARD_ON, ACT_GUARD):
+            assert int(out0["animation_index"][0]) == 0xFFFFFFFF
+
+        # Hold: shield -> shield for a few frames; shield_hp should drain below start.
+        start_hp = float(_common_attr("start_shield_health"))
+        hp = float(out0["shield_hp"][0])
+        for _ in range(10):
+            msl_binding.step_input(handle, shield, shield)
+            msl_binding.write_compare(handle, out)
+            outn = out.view(COMPARE_DTYPE).reshape((1,))[0].copy()
+            hp = float(outn["shield_hp"][0])
+            assert int(outn["action_id"][0]) in (ACT_GUARD_REFLECT, ACT_GUARD_ON, ACT_GUARD)
+        assert hp < start_hp
+
+        # Exit: shield -> neutral should enter GuardOff.
+        msl_binding.step_input(handle, shield, neutral)
+        msl_binding.write_compare(handle, out)
+        out_exit = out.view(COMPARE_DTYPE).reshape((1,))[0].copy()
+        assert int(out_exit["action_id"][0]) == ACT_GUARD_OFF
+        assert int(out_exit["animation_index"][0]) == SM_GUARD_OFF
+
+        # GuardOff anim eventually returns to Wait.
+        out_last = out_exit
+        for _ in range(120):
+            msl_binding.step_input(handle, neutral, neutral)
+            msl_binding.write_compare(handle, out)
+            out_last = out.view(COMPARE_DTYPE).reshape((1,))[0].copy()
+            if int(out_last["action_id"][0]) == ACT_WAIT:
+                break
+        assert int(out_last["action_id"][0]) == ACT_WAIT
+        assert int(out_last["animation_index"][0]) == SM_WAIT1_0
+    finally:
+        msl_binding.destroy(handle)

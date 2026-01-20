@@ -130,7 +130,8 @@ int common_params_init(void) {
   if (json_get_f32(buf, "lstick_deadzone_x", &g_params.lstick_deadzone_x) != 0 ||
       json_get_f32(buf, "lstick_deadzone_y", &g_params.lstick_deadzone_y) != 0 ||
       json_get_f32(buf, "lstick_tilt_x_thresh", &g_params.lstick_tilt_x_thresh) != 0 ||
-      json_get_f32(buf, "lstick_tilt_y_thresh", &g_params.lstick_tilt_y_thresh) != 0) {
+      json_get_f32(buf, "lstick_tilt_y_thresh", &g_params.lstick_tilt_y_thresh) != 0 ||
+      json_get_f32(buf, "trigger_deadzone", &g_params.trigger_deadzone) != 0) {
     alloc_free(buf);
     return -1;
   }
@@ -172,6 +173,11 @@ int common_params_init(void) {
       json_get_u8(buf, "powershield_reflect_window_frames", &g_params.powershield_reflect_window_frames) != 0 ||
       json_get_u8(buf, "powershield_reflect_frames", &g_params.powershield_reflect_frames) != 0 ||
       json_get_u8(buf, "powershield_reflect_total_frames", &g_params.powershield_reflect_total_frames) != 0 ||
+      json_get_f32(buf, "start_shield_health", &g_params.start_shield_health) != 0 ||
+      json_get_f32(buf, "shield_recharge_per_frame", &g_params.shield_recharge_per_frame) != 0 ||
+      json_get_f32(buf, "shield_hold_drain_mul", &g_params.shield_hold_drain_mul) != 0 ||
+      json_get_f32(buf, "shield_hold_drain_base", &g_params.shield_hold_drain_base) != 0 ||
+      json_get_f32(buf, "shield_hold_drain_max", &g_params.shield_hold_drain_max) != 0 ||
       json_get_u8(buf, "lcancel_window_frames", &g_params.lcancel_window_frames) != 0 ||
       json_get_f32(buf, "lcancel_lag_div", &g_params.lcancel_lag_div) != 0) {
     alloc_free(buf);
