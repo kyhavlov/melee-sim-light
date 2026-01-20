@@ -65,6 +65,17 @@ typedef struct MslStateSoA {
   uint8_t* x683;    // fp->x683
   uint8_t* x684;    // fp->x684
 
+  // UCF pad buffer (seeded, multi-frame).
+  // refs/ucf/include/ucf/pad_buffer.h
+  //
+  // `ucf_padbuf_stick_{x,y}` store the raw PAD bytes written by UCF's pad-buffer hook
+  // (PADStatus.stick.{x,y}), with a fixed 4-entry ring buffer per player:
+  // refs/ucf/src/pad_buffer/pad_buffer.cpp (buffer->index = (index+1)&3; entries[index] = status.stick)
+  uint8_t* ucf_padbuf_index;            // [batch * players]
+  uint8_t* ucf_padbuf_sdrop_up_frames;  // [batch * players]
+  int8_t* ucf_padbuf_stick_x;           // [batch * players * 4]
+  int8_t* ucf_padbuf_stick_y;           // [batch * players * 4]
+
   // Combat/timers
   float* percent;
   float* shield_hp;

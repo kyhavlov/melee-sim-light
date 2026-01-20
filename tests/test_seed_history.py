@@ -10,6 +10,7 @@ from tools.slippi.seed_history import (
     compute_tilt_timer_axis,
     compute_tilt_timer_y_pre_post_with_fall_fast,
     compute_x672_trigger_timer_pre_post,
+    derive_ucf_pad_buffer_state,
     derive_kneebend_internals,
     derive_turn_internals,
 )
@@ -398,3 +399,60 @@ def test_jump_to_jump_aerial_entry_clears_fall_fast_and_overrides_x671() -> None
     assert int(ff_post[1]) == 1
     assert int(t_post[2]) == 0xFE
     assert int(ff_post[2]) == 0
+
+
+def test_derive_ucf_pad_buffer_state_is_causal_wrt_future_frames() -> None:
+    raw_x_prefix = np.zeros(6, dtype=np.int8)
+    raw_y_prefix = np.array([0, 0, -127, -127, -127, 0], dtype=np.int8)
+    hold_y_prefix = np.array([0xFE, 0xFE, 0, 1, 2, 0xFE], dtype=np.uint8)
+
+    i0, s0, x0, y0 = derive_ucf_pad_buffer_state(
+        raw_x_prefix,
+        raw_y_prefix,
+        stick_y_hold_time=hold_y_prefix,
+        ucf_enabled=True,
+        ucf_cardinals_1_0_enabled=False,
+        lstick_deadzone_x=0.0,
+        lstick_deadzone_y=0.0,
+    )
+
+    raw_x_ext = np.concatenate([raw_x_prefix, np.array([0, 0, 0, 0], dtype=np.int8)])
+    raw_y_ext = np.concatenate([raw_y_prefix, np.array([0, -127, -127, 0], dtype=np.int8)])
+    hold_y_ext = np.concatenate([hold_y_prefix, np.array([0xFE, 0, 1, 0xFE], dtype=np.uint8)])
+    i1, s1, x1, y1 = derive_ucf_pad_buffer_state(
+        raw_x_ext,
+        raw_y_ext,
+        stick_y_hold_time=hold_y_ext,
+        ucf_enabled=True,
+        ucf_cardinals_1_0_enabled=False,
+        lstick_deadzone_x=0.0,
+        lstick_deadzone_y=0.0,
+    )
+
+    assert np.array_equal(i0, i1[: i0.size])
+    assert np.array_equal(s0, s1[: s0.size])
+    assert np.array_equal(x0, x1[: x0.shape[0], :])
+    assert np.array_equal(y0, y1[: y0.shape[0], :])
+
+
+def test_derive_ucf_pad_buffer_state_basic_sequence() -> None:
+    raw_x = np.zeros(6, dtype=np.int8)
+    raw_y = np.array([0, 0, -127, -127, -127, 0], dtype=np.int8)
+    hold_y = np.array([0xFE, 0xFE, 0, 1, 2, 0xFE], dtype=np.uint8)
+
+    index, sdrop, entries_x, entries_y = derive_ucf_pad_buffer_state(
+        raw_x,
+        raw_y,
+        stick_y_hold_time=hold_y,
+        ucf_enabled=True,
+        ucf_cardinals_1_0_enabled=False,
+        lstick_deadzone_x=0.0,
+        lstick_deadzone_y=0.0,
+    )
+
+    assert index.tolist() == [1, 2, 3, 0, 1, 2]
+    assert sdrop.tolist() == [0, 0, 1, 2, 3, 0]
+
+    # Spot-check ring content after the first sdrop-up trigger frame (frame 2).
+    assert entries_x[2].tolist() == [0, 0, 0, 0]
+    assert entries_y[2].tolist() == [0, 0, 0, -127]

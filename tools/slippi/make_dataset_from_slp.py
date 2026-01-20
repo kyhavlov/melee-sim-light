@@ -193,6 +193,7 @@ def _main_impl(args) -> None:
         compute_tilt_timer_axis_pre_post,
         compute_tilt_timer_y_pre_post_with_fall_fast,
         compute_x672_trigger_timer_pre_post,
+        derive_ucf_pad_buffer_state,
         derive_kneebend_internals,
         derive_turn_internals,
         stick_i8_to_unit,
@@ -566,6 +567,33 @@ def _main_impl(args) -> None:
             fastfall_stick_threshold=fastfall_stick_threshold,
             fastfall_tilt_max_frames=fastfall_tilt_max_frames,
         )
+
+        # UCF 0.84 pad buffer state (strictly causal).
+        #
+        # Source tie-down + ordering note:
+        # - UCF gates sdrop-up on `player->input.stick_y_hold_time < 2` (offset 0x671):
+        #   refs/ucf/include/melee/asm/player.h
+        # - The decomp per-frame update for fp->x671_timer_lstick_tilt_y is:
+        #   refs/melee/src/melee/ft/fighter.c:1963-2008
+        # - UCF's injection applies cardinals before check_sdrop_up (refs/ucf/src/pad_buffer/pad_buffer.cpp),
+        #   but we haven't proven whether Melee updates stick_y_hold_time using pre/post-injection stick.
+        #   If shielddrop behavior is off later, revisit this ordering first.
+        #
+        # We model stick_y_hold_time with the x671-style timer after the per-frame input update,
+        # before action-entry overrides (`tilt_timer_y_pre`).
+        padbuf_index, padbuf_sdrop_up, padbuf_x, padbuf_y = derive_ucf_pad_buffer_state(
+            pre_main_x,
+            pre_main_y,
+            stick_y_hold_time=tilt_timer_y_pre,
+            ucf_enabled=ucf_enabled,
+            ucf_cardinals_1_0_enabled=ucf_cardinals_1_0_enabled,
+            lstick_deadzone_x=float(lstick_deadzone_x),
+            lstick_deadzone_y=float(lstick_deadzone_y),
+        )
+        samples["seed_t"]["ucf_padbuf_index"][:, slot] = padbuf_index[:-1]
+        samples["seed_t"]["ucf_padbuf_sdrop_up_frames"][:, slot] = padbuf_sdrop_up[:-1]
+        samples["seed_t"]["ucf_padbuf_stick_x"][:, slot, :] = padbuf_x[:-1, :]
+        samples["seed_t"]["ucf_padbuf_stick_y"][:, slot, :] = padbuf_y[:-1, :]
 
         samples["seed_t"]["tilt_timer_x"][:, slot] = tilt_timer_x_post[:-1]
         samples["seed_t"]["tilt_timer_y"][:, slot] = tilt_timer_y_post[:-1]

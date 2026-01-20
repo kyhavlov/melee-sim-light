@@ -109,6 +109,122 @@ def compute_tilt_timer_axis(
     return out
 
 
+def _ucf_popo_to_nana(x: float) -> float:
+    # refs/ucf/include/util/melee/pad.h::popo_to_nana
+    if x >= 0:
+        return float(np.int8(np.float32(x) * np.float32(127.0))) / 127.0
+    return float(np.int8(np.float32(x) * np.float32(128.0))) / 128.0
+
+
+def derive_ucf_pad_buffer_state(
+    raw_x: np.ndarray,
+    raw_y: np.ndarray,
+    *,
+    stick_y_hold_time: np.ndarray,
+    ucf_enabled: bool,
+    ucf_cardinals_1_0_enabled: bool,
+    lstick_deadzone_x: float,
+    lstick_deadzone_y: float,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """
+    Derive the UCF 0.84 pad-buffer internal state strictly causally.
+
+    State matches refs/ucf/include/ucf/pad_buffer.h:
+    - entries[4].stick (raw PADStatus stick bytes)
+    - index (u8 ring index)
+    - sdrop_up_frames (u8)
+
+    Ordering matches refs/ucf/src/pad_buffer/pad_buffer.cpp:
+    - index = (index + 1) & 3
+    - entries[index] = get_input<0>(port).stick  (raw bytes)
+    - sdrop_up_frames update uses player->input.stick (post-UCF cardinals + Melee clamp, then deadzone)
+
+    Notes:
+    - Source tie-down:
+      - UCF's `player->input.stick_y_hold_time` is a u8 at offset 0x671:
+        refs/ucf/include/melee/asm/player.h
+      - In decomp, the per-frame update for fp->x671_timer_lstick_tilt_y is:
+        refs/melee/src/melee/ft/fighter.c:1963-2008
+    - Assumption: the dataset's `stick_y_hold_time` input here is the x671-style timer computed
+      from the post-processed stick y (UCF cardinals snap + Melee clamp, then deadzone), and
+      corresponds closely enough to UCF's hold timer for gating `check_sdrop_up`.
+    - Ordering assumption to revisit if shielddrop behavior is off later:
+      UCF's pad-buffer injection applies 1.0 cardinals before `check_sdrop_up`
+      (refs/ucf/src/pad_buffer/pad_buffer.cpp), but we haven't proven whether Melee updates
+      `stick_y_hold_time` using pre- or post-injection stick values.
+    """
+    rx = np.asarray(raw_x, dtype=np.int8).reshape(-1)
+    ry = np.asarray(raw_y, dtype=np.int8).reshape(-1)
+    hold_y = np.asarray(stick_y_hold_time, dtype=np.uint8).reshape(-1)
+    if rx.shape != ry.shape:
+        raise ValueError("raw_x and raw_y must have the same shape")
+    n = int(rx.size)
+    if int(hold_y.size) != n:
+        raise ValueError("stick_y_hold_time must match raw_x/raw_y length")
+
+    # Precompute the Melee-legalized stick used by UCF's sdrop-up gate.
+    proc_x_i8, proc_y_i8 = ucf_process_stick_i8(
+        rx,
+        ry,
+        ucf_enabled=ucf_enabled,
+        ucf_cardinals_1_0_enabled=ucf_cardinals_1_0_enabled,
+    )
+    stick_x_unit = apply_deadzone(stick_i8_to_unit(proc_x_i8), float(lstick_deadzone_x))
+    stick_y_unit = apply_deadzone(stick_i8_to_unit(proc_y_i8), float(lstick_deadzone_y))
+
+    # Vectorized rim test for each frame.
+    # refs/ucf/include/util/melee/pad.h::is_rim_coord
+    bias = np.float32(0.0001)  # abs_coord_to_int
+    ix = np.trunc(np.abs(stick_x_unit) * np.float32(80.0) - bias).astype(np.int32) + 2
+    iy = np.trunc(np.abs(stick_y_unit) * np.float32(80.0) - bias).astype(np.int32) + 2
+    is_rim = (ix * ix + iy * iy) > (80 * 80)
+
+    # UCF check_ucf_sdrop uses delta between current and -2 raw y.
+    dy = ry.astype(np.int16) - np.concatenate((np.int16([0, 0]), ry[:-2].astype(np.int16)))
+    dy_sq = (dy * dy).astype(np.int32)
+
+    index_post = np.empty(n, dtype=np.uint8)
+    sdrop_up_frames_post = np.empty(n, dtype=np.uint8)
+    stick_x_post = np.empty((n, 4), dtype=np.int8)
+    stick_y_post = np.empty((n, 4), dtype=np.int8)
+
+    # Local ring buffer state (packed like UCF's shared struct).
+    entries_x = np.zeros(4, dtype=np.int8)
+    entries_y = np.zeros(4, dtype=np.int8)
+    index = np.uint8(0)
+    sdrop = np.uint8(0)
+
+    # Constants from UCF pad-buffer implementation.
+    sdrop_y_thresh = _ucf_popo_to_nana(-0.6125)  # refs/ucf/src/pad_buffer/pad_buffer.cpp::check_sdrop_up
+    sdrop_delta_sq_thresh = 44 * 44  # refs/ucf/src/pad_buffer/pad_buffer.cpp::check_ucf_sdrop
+
+    for i in range(n):
+        index = np.uint8((int(index) + 1) & 3)  # UCF_PAD_BUFFER_MASK
+        entries_x[int(index)] = rx[i]
+        entries_y[int(index)] = ry[i]
+
+        # UCF check_sdrop_up.
+        if float(stick_y_unit[i]) > float(sdrop_y_thresh):
+            sdrop = np.uint8(0)
+        elif not bool(is_rim[i]):
+            sdrop = np.uint8(0)
+        else:
+            if int(sdrop) != 0:
+                sdrop = np.uint8((int(sdrop) + 1) & 0xFF)
+            else:
+                if int(hold_y[i]) < 2 and int(dy_sq[i]) > sdrop_delta_sq_thresh:
+                    sdrop = np.uint8(1)
+                else:
+                    sdrop = np.uint8(0)
+
+        index_post[i] = index
+        sdrop_up_frames_post[i] = sdrop
+        stick_x_post[i, :] = entries_x
+        stick_y_post[i, :] = entries_y
+
+    return index_post, sdrop_up_frames_post, stick_x_post, stick_y_post
+
+
 def compute_tilt_timer_axis_pre_post(
     axis_unit: np.ndarray,
     *,

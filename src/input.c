@@ -12,6 +12,9 @@
 // ucf.h: clamp_stickMax = 80 (HSD_PadClampCheck3).
 enum { MSL_STICK_MAX_I8 = 80 };
 
+// UCF pad buffer: refs/ucf/include/ucf/pad_buffer.h
+enum { MSL_UCF_PADBUF_SIZE = 4, MSL_UCF_PADBUF_MASK = MSL_UCF_PADBUF_SIZE - 1 };
+
 static inline float msl_absf(float x) { return x < 0.0f ? -x : x; }
 
 static inline float stick_i8_to_unit(int8_t v) { return (float)v / (float)MSL_STICK_MAX_I8; }
@@ -75,6 +78,43 @@ static inline float trigger_unit_from_input(uint16_t buttons, uint8_t l, uint8_t
   }
   const uint8_t m = l > r ? l : r;
   return trigger_u8_to_unit(m);
+}
+
+static inline float msl_ucf_popo_to_nana(float x) {
+  // refs/ucf/include/util/melee/pad.h::popo_to_nana
+  if (x >= 0.0f) {
+    const int8_t q = (int8_t)(x * 127.0f);
+    return (float)q * (1.0f / 127.0f);
+  }
+  const int8_t q = (int8_t)(x * 128.0f);
+  return (float)q * (1.0f / 128.0f);
+}
+
+static inline uint8_t msl_ucf_is_rim_coord(float stick_x_unit, float stick_y_unit) {
+  // refs/ucf/include/util/melee/pad.h::is_rim_coord
+  // - abs_coord_to_int(x) = (int)(abs(x)*80 - 0.0001f) + 1
+  // - is_rim_coord adds +1 again per axis and compares length^2 > 80^2
+  const float bias = 0.0001f;
+
+  const float ax = msl_absf(stick_x_unit) * 80.0f - bias;
+  const float ay = msl_absf(stick_y_unit) * 80.0f - bias;
+
+  const int ix = (int)ax + 2;
+  const int iy = (int)ay + 2;
+  const int lsq = ix * ix + iy * iy;
+  return lsq > (80 * 80) ? 1 : 0;
+}
+
+static inline int8_t msl_ucf_padbuf_get_raw_x(const MslStateSoA* s, size_t idx, uint8_t offset) {
+  const uint8_t base = s->ucf_padbuf_index[idx];
+  const uint8_t slot = (uint8_t)((base + offset) & (uint8_t)MSL_UCF_PADBUF_MASK);
+  return s->ucf_padbuf_stick_x[idx * MSL_UCF_PADBUF_SIZE + (size_t)slot];
+}
+
+static inline int8_t msl_ucf_padbuf_get_raw_y(const MslStateSoA* s, size_t idx, uint8_t offset) {
+  const uint8_t base = s->ucf_padbuf_index[idx];
+  const uint8_t slot = (uint8_t)((base + offset) & (uint8_t)MSL_UCF_PADBUF_MASK);
+  return s->ucf_padbuf_stick_y[idx * MSL_UCF_PADBUF_SIZE + (size_t)slot];
 }
 
 static inline uint8_t x672_trigger_timer_update(uint8_t prev_timer, float trig, float prev_trig,
@@ -148,8 +188,28 @@ int input_apply(MslBatch* batch, const uint8_t* prev_input_bytes, size_t prev_in
       batch->state.input_buttons_pressed[idx] = (uint16_t)(cur_buttons & (uint16_t)~prev_buttons);
       batch->state.input_buttons_released[idx] = (uint16_t)(prev_buttons & (uint16_t)~cur_buttons);
 
-      const MslStickI8 main =
-          ucf_process_stick_i8(cur->p[p].main_x, cur->p[p].main_y, ucf_enabled, cardinals);
+      // -------------------------------
+      // UCF pad buffer + "effective" stick
+      // -------------------------------
+      // Match UCF pad buffer write ordering:
+      // refs/ucf/src/pad_buffer/pad_buffer.cpp
+      // - buffer->index = (buffer->index + 1) & 3
+      // - buffer->entries[buffer->index].stick = status.stick (raw PAD bytes)
+      //
+      // The simulator's gameplay logic should consume the resulting "effective stick",
+      // i.e. Melee-legalized axes after any UCF preprocessing (cardinals snap + clamp).
+      {
+        uint8_t pb = batch->state.ucf_padbuf_index[idx];
+        pb = (uint8_t)((pb + 1u) & (uint8_t)MSL_UCF_PADBUF_MASK);
+        batch->state.ucf_padbuf_index[idx] = pb;
+        batch->state.ucf_padbuf_stick_x[idx * MSL_UCF_PADBUF_SIZE + (size_t)pb] = cur->p[p].main_x;
+        batch->state.ucf_padbuf_stick_y[idx * MSL_UCF_PADBUF_SIZE + (size_t)pb] = cur->p[p].main_y;
+      }
+
+      const int8_t raw_main_x = msl_ucf_padbuf_get_raw_x(&batch->state, idx, 0);
+      const int8_t raw_main_y = msl_ucf_padbuf_get_raw_y(&batch->state, idx, 0);
+
+      const MslStickI8 main = ucf_process_stick_i8(raw_main_x, raw_main_y, ucf_enabled, cardinals);
       const MslStickI8 cstick =
           ucf_process_stick_i8(cur->p[p].c_x, cur->p[p].c_y, ucf_enabled, cardinals);
       const MslStickI8 prev_main =
@@ -168,12 +228,66 @@ int input_apply(MslBatch* batch, const uint8_t* prev_input_bytes, size_t prev_in
           apply_deadzone(stick_i8_to_unit(prev_main.x), com->lstick_deadzone_x);
       const float prev_stick_y =
           apply_deadzone(stick_i8_to_unit(prev_main.y), com->lstick_deadzone_y);
-      batch->state.tilt_timer_x[idx] =
+
+      const uint8_t tilt_timer_x_next =
           tilt_timer_update(batch->state.tilt_timer_x[idx], stick_x, prev_stick_x,
                             com->lstick_tilt_x_thresh);
-      batch->state.tilt_timer_y[idx] =
+      const uint8_t tilt_timer_y_next =
           tilt_timer_update(batch->state.tilt_timer_y[idx], stick_y, prev_stick_y,
                             com->lstick_tilt_y_thresh);
+
+      batch->state.tilt_timer_x[idx] = tilt_timer_x_next;
+      batch->state.tilt_timer_y[idx] = tilt_timer_y_next;
+
+      // UCF sdrop-up helper counter (`sdrop_up_frames`) lives in the pad buffer shared state.
+      // refs/ucf/src/pad_buffer/pad_buffer.cpp::{check_ucf_sdrop, check_sdrop_up}
+      //
+      // This is not used by the sim gameplay logic yet; we update it here to keep the
+      // pad buffer state self-contained, seedable, and strictly causal.
+      {
+        // Must be -0.6125 or below along the rim, adjusted to prevent an ICs desync.
+        // refs/ucf/src/pad_buffer/pad_buffer.cpp::check_sdrop_up
+        const float sdrop_y_thresh = msl_ucf_popo_to_nana(-0.6125f);
+        uint8_t sdrop = batch->state.ucf_padbuf_sdrop_up_frames[idx];
+
+        if (stick_y > sdrop_y_thresh || !msl_ucf_is_rim_coord(stick_x, stick_y)) {
+          sdrop = 0;
+        } else if (sdrop != 0) {
+          sdrop = (uint8_t)(sdrop + 1u);
+        } else {
+          // UCF gate: only check speed on first frame.
+          //
+          // Source tie-down:
+          // - UCF reads `player->input.stick_y_hold_time` (u8) at offset 0x671:
+          //   refs/ucf/include/melee/asm/player.h
+          // - In decomp, the per-frame update for fp->x671_timer_lstick_tilt_y is:
+          //   refs/melee/src/melee/ft/fighter.c:1963-2008
+          //
+          // Assumption: this sim's `tilt_timer_y` (x671-style timer) corresponds to UCF's
+          // `stick_y_hold_time` closely enough for gating the sdrop-up helper.
+          //
+          // Ordering assumption to revisit if shielddrop behavior is off later:
+          // UCF's pad-buffer injection applies 1.0 cardinals before check_sdrop_up
+          // (refs/ucf/src/pad_buffer/pad_buffer.cpp), but we haven't proven whether Melee updates
+          // `stick_y_hold_time` using pre- or post-injection stick values. We currently treat it
+          // as a function of the post-UCF-processed stick (ucf_process_stick_i8 + deadzone),
+          // consistent with the x671 input-history timer logic in fighter.c.
+          //
+          // This matches Melee's x671 input-history timer update (tilt_timer_update),
+          // which counts consecutive frames beyond the tilt threshold.
+          if (tilt_timer_y_next < 2) {
+            const int8_t raw_prev2_y = msl_ucf_padbuf_get_raw_y(&batch->state, idx, (uint8_t)-2);
+            const int dy = (int)raw_main_y - (int)raw_prev2_y;
+            // refs/ucf/src/pad_buffer/pad_buffer.cpp::check_ucf_sdrop (44*44).
+            const int dy_sq = dy * dy;
+            if (dy_sq > (44 * 44)) {
+              sdrop = 1;
+            }
+          }
+        }
+
+        batch->state.ucf_padbuf_sdrop_up_frames[idx] = sdrop;
+      }
 
       batch->state.input_l[idx] = cur->p[p].l;
       batch->state.input_r[idx] = cur->p[p].r;

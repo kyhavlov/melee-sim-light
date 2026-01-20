@@ -145,6 +145,16 @@ typedef struct MslSeed {
   uint8_t x683[MSL_MAX_PLAYERS];  // fp->x683 (captures prev x67C on A press)
   uint8_t x684[MSL_MAX_PLAYERS];  // fp->x684 (captures prev x680 on L/R press)
 
+  // UCF pad buffer (seeded, multi-frame).
+  //
+  // References:
+  // - refs/ucf/include/ucf/pad_buffer.h (UCF_PAD_BUFFER_SIZE=4, index, sdrop_up_frames)
+  // - refs/ucf/src/pad_buffer/pad_buffer.cpp (ring-buffer write ordering)
+  uint8_t ucf_padbuf_index[MSL_MAX_PLAYERS];
+  uint8_t ucf_padbuf_sdrop_up_frames[MSL_MAX_PLAYERS];
+  int8_t ucf_padbuf_stick_x[MSL_MAX_PLAYERS][4];
+  int8_t ucf_padbuf_stick_y[MSL_MAX_PLAYERS][4];
+
   // Combat / timers
   float percent[MSL_MAX_PLAYERS];
   float shield_hp[MSL_MAX_PLAYERS];

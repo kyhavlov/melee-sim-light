@@ -20,6 +20,7 @@ int state_alloc(MslStateSoA* state, int batch_size) {
   const size_t b = (size_t)batch_size;
   const size_t bp = b * (size_t)MSL_MAX_PLAYERS;
   const size_t bi = b * (size_t)MSL_MAX_ITEMS;
+  const size_t bp4 = bp * 4u;
 
   state->frame_id = (int32_t*)alloc_aligned_64(sizeof(int32_t) * b);
   state->frame_pre_random_seed = (uint32_t*)alloc_aligned_64(sizeof(uint32_t) * b);
@@ -71,6 +72,11 @@ int state_alloc(MslStateSoA* state, int batch_size) {
   state->x682 = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->x683 = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->x684 = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
+
+  state->ucf_padbuf_index = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
+  state->ucf_padbuf_sdrop_up_frames = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
+  state->ucf_padbuf_stick_x = (int8_t*)alloc_aligned_64(sizeof(int8_t) * bp4);
+  state->ucf_padbuf_stick_y = (int8_t*)alloc_aligned_64(sizeof(int8_t) * bp4);
 
   state->percent = (float*)alloc_aligned_64(sizeof(float) * bp);
   state->shield_hp = (float*)alloc_aligned_64(sizeof(float) * bp);
@@ -130,6 +136,8 @@ int state_alloc(MslStateSoA* state, int batch_size) {
       !state->x675 || !state->x676_x || !state->x677_y || !state->x678 || !state->x679_x ||
       !state->x67A_y || !state->x67B || !state->x67C || !state->x67D || !state->x67E ||
       !state->x680 || !state->x681 || !state->x682 || !state->x683 || !state->x684 ||
+      !state->ucf_padbuf_index || !state->ucf_padbuf_sdrop_up_frames || !state->ucf_padbuf_stick_x ||
+      !state->ucf_padbuf_stick_y ||
       !state->percent || !state->shield_hp || !state->hitlag || !state->hitstun || !state->l_cancel ||
       !state->hurtbox_state || !state->ground_id || !state->animation_index ||
       !state->instance_hit_by || !state->instance_id || !state->last_attack_landed ||
@@ -202,6 +210,11 @@ void state_free(MslStateSoA* state) {
   alloc_free(state->x682);
   alloc_free(state->x683);
   alloc_free(state->x684);
+
+  alloc_free(state->ucf_padbuf_index);
+  alloc_free(state->ucf_padbuf_sdrop_up_frames);
+  alloc_free(state->ucf_padbuf_stick_x);
+  alloc_free(state->ucf_padbuf_stick_y);
 
   alloc_free(state->percent);
   alloc_free(state->shield_hp);

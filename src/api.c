@@ -151,6 +151,13 @@ int msl_batch_reseed_seed(MslBatch* batch, const uint8_t* seed_bytes, size_t see
       batch->state.x683[idx] = seed->x683[p];
       batch->state.x684[idx] = seed->x684[p];
 
+      batch->state.ucf_padbuf_index[idx] = seed->ucf_padbuf_index[p];
+      batch->state.ucf_padbuf_sdrop_up_frames[idx] = seed->ucf_padbuf_sdrop_up_frames[p];
+      for (int k = 0; k < 4; k++) {
+        batch->state.ucf_padbuf_stick_x[idx * 4 + (size_t)k] = seed->ucf_padbuf_stick_x[p][k];
+        batch->state.ucf_padbuf_stick_y[idx * 4 + (size_t)k] = seed->ucf_padbuf_stick_y[p][k];
+      }
+
       batch->state.percent[idx] = seed->percent[p];
       batch->state.shield_hp[idx] = seed->shield_hp[p];
       batch->state.hitlag[idx] = seed->hitlag[p];
