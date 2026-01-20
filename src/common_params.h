@@ -37,8 +37,9 @@ typedef struct MslCommonParams {
   float tap_jump_release_threshold;  // p_ftCommonData->tap_jump_release_threshold (0x7C)
   float jump_back_x_threshold;       // p_ftCommonData->x78
   float fastfall_stick_threshold;    // p_ftCommonData->x88
+  uint8_t fastfall_tilt_max_frames;  // p_ftCommonData->x8C (fastfall_tilt_max_frames)
   uint8_t tap_jump_tilt_max_frames;  // p_ftCommonData->x74 (tap_jump_tilt_max_frames)
-  uint8_t _pad_u8_1[3];
+  uint8_t _pad_u8_1[2];
 
   // Ground friction multiplier when |gr_vel| > walk_max_vel (refs/melee/src/melee/ft/ft_081B.c::ft_80084F3C)
   float high_speed_friction_mul;  // p_ftCommonData->x6C

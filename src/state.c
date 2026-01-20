@@ -49,6 +49,7 @@ int state_alloc(MslStateSoA* state, int batch_size) {
   state->kneebend_is_short_hop = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->tilt_timer_x = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->tilt_timer_y = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
+  state->fall_fast = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->turn_has_turned = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->turn_frames_to_turn = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
 
@@ -105,7 +106,7 @@ int state_alloc(MslStateSoA* state, int batch_size) {
       !state->on_ground || !state->prev_on_ground || !state->action_id || !state->action_frame ||
       !state->jumps_left || !state->stocks || !state->kneebend_jump_input ||
       !state->kneebend_is_short_hop || !state->tilt_timer_x || !state->tilt_timer_y ||
-      !state->turn_has_turned || !state->turn_frames_to_turn || !state->percent ||
+      !state->fall_fast || !state->turn_has_turned || !state->turn_frames_to_turn || !state->percent ||
       !state->shield_hp || !state->hitlag || !state->hitstun || !state->l_cancel ||
       !state->hurtbox_state || !state->ground_id || !state->animation_index ||
       !state->instance_hit_by || !state->instance_id || !state->last_attack_landed ||
@@ -156,6 +157,7 @@ void state_free(MslStateSoA* state) {
   alloc_free(state->kneebend_is_short_hop);
   alloc_free(state->tilt_timer_x);
   alloc_free(state->tilt_timer_y);
+  alloc_free(state->fall_fast);
   alloc_free(state->turn_has_turned);
   alloc_free(state->turn_frames_to_turn);
 

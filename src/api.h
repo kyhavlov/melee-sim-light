@@ -114,6 +114,8 @@ typedef struct MslSeed {
   // Decomp: refs/melee/src/melee/ft/fighter.c:1908-2008 (x670/x671 updates each frame)
   uint8_t tilt_timer_x[MSL_MAX_PLAYERS];  // fp->x670_timer_lstick_tilt_x
   uint8_t tilt_timer_y[MSL_MAX_PLAYERS];  // fp->x671_timer_lstick_tilt_y
+  // Decomp: refs/melee/src/melee/ft/ftcommon.c:505-520 (ftCommon_CheckFallFast)
+  uint8_t fall_fast[MSL_MAX_PLAYERS];  // fp->fall_fast (bool)
   // Decomp: refs/melee/src/melee/ft/chara/ftCommon/ftCo_Turn.c:56-88 (ftCo_Turn_Anim_Inner)
   uint8_t turn_frames_to_turn[MSL_MAX_PLAYERS];  // fp->mv.co.turn.frames_to_turn
   uint8_t turn_has_turned[MSL_MAX_PLAYERS];      // fp->mv.co.turn.has_turned

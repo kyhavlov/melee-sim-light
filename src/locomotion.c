@@ -292,18 +292,6 @@ static inline void apply_air_drift(const MslCharParams* ch, float stick_x, float
                               ch->air_max_horizontal_velocity);
 }
 
-static inline uint8_t should_fastfall(const MslCommonParams* c, float stick_y, float prev_stick_y,
-                                      float vy) {
-  // refs/melee/src/melee/ft/ftcommon.c::ftCommon_CheckFallFast (tilt timer omitted; edge only)
-  if (!(vy < 0.0f)) {
-    return 0;
-  }
-  if (!(stick_y <= -c->fastfall_stick_threshold && prev_stick_y > -c->fastfall_stick_threshold)) {
-    return 0;
-  }
-  return 1;
-}
-
 void locomotion_update_pre(MslBatch* batch) {
   if (batch == NULL) {
     return;
@@ -349,8 +337,6 @@ void locomotion_update_pre(MslBatch* batch) {
 
       float stick_x;
       float stick_y;
-      float prev_stick_x;
-      float prev_stick_y;
       float cstick_y;
       uint16_t buttons;
       uint16_t buttons_pressed;
@@ -364,15 +350,13 @@ void locomotion_update_pre(MslBatch* batch) {
           apply_deadzone(stick_i8_to_unit(batch->state.input_main_x[idx]), c->lstick_deadzone_x);
       stick_y =
           apply_deadzone(stick_i8_to_unit(batch->state.input_main_y[idx]), c->lstick_deadzone_y);
-      prev_stick_x = apply_deadzone(stick_i8_to_unit(batch->state.prev_input_main_x[idx]),
-                                    c->lstick_deadzone_x);
-      prev_stick_y = apply_deadzone(stick_i8_to_unit(batch->state.prev_input_main_y[idx]),
-                                    c->lstick_deadzone_y);
       cstick_y =
           apply_deadzone(stick_i8_to_unit(batch->state.input_c_y[idx]), c->lstick_deadzone_y);
 
       buttons = batch->state.input_buttons[idx];
       buttons_pressed = batch->state.input_buttons_pressed[idx];
+      // x670/x671 are updated in src/input.c::input_apply (single source of truth). Locomotion only
+      // applies per-action overrides (0xFE) later in the frame.
       tilt_timer_x = batch->state.tilt_timer_x[idx];
       tilt_timer_y = batch->state.tilt_timer_y[idx];
 
@@ -385,6 +369,10 @@ void locomotion_update_pre(MslBatch* batch) {
       // Ground locomotion updates
       // -------------------------
       if (on_ground) {
+        // Decomp: fall_fast is typically cleared on ground motion state changes unless KeepFastFall
+        // is requested. Our locomotion model doesn't keep it across grounded frames.
+        batch->state.fall_fast[idx] = 0;
+
         // Clear KneeBend-only internals when not in KneeBend.
         if (action_id != MSL_ACT_KNEE_BEND) {
           batch->state.kneebend_jump_input[idx] = 0;
@@ -585,6 +573,7 @@ void locomotion_update_pre(MslBatch* batch) {
             // Decomp: fp->x671_timer_lstick_tilt_y = 0xFE;
             // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c:148
             batch->state.tilt_timer_y[idx] = 0xFEu;
+            tilt_timer_y = 0xFEu;
 
             // Consume ground jump.
             if (batch->state.jumps_left[idx] > 0) {
@@ -657,6 +646,8 @@ void locomotion_update_pre(MslBatch* batch) {
           // Decomp: fp->x671_timer_lstick_tilt_y = 0xFE;
           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c:152-156
           batch->state.tilt_timer_y[idx] = 0xFEu;
+          batch->state.fall_fast[idx] = 0;
+          tilt_timer_y = 0xFEu;
           batch->state.jumps_left[idx]--;
           action_id = act;
         }
@@ -664,11 +655,6 @@ void locomotion_update_pre(MslBatch* batch) {
 
       // Air drift.
       apply_air_drift(ch, stick_x, &batch->state.speed_air_x_self[idx]);
-
-      // Fastfall edge.
-      if (should_fastfall(c, stick_y, prev_stick_y, batch->state.speed_y_self[idx])) {
-        batch->state.speed_y_self[idx] = -ch->fast_fall_velocity;
-      }
 
       // Jump -> Fall when animation ends (and for aerial jumps too).
       if (action_id == MSL_ACT_JUMP_F || action_id == MSL_ACT_JUMP_B ||
@@ -713,6 +699,8 @@ void locomotion_update_post_collision(MslBatch* batch) {
       const uint16_t a = batch->state.action_id[idx];
 
       if (!was_ground && now_ground) {
+        batch->state.fall_fast[idx] = 0;
+
         // Only implement landing state selection for locomotion air states for now.
         // For aerial attacks/specials/etc, the correct landing lag state depends on motion state tables
         // and additional internal flags we don't yet seed.
@@ -739,6 +727,8 @@ void locomotion_update_post_collision(MslBatch* batch) {
         batch->state.animation_index[idx] = submotion_for_action(land);
         batch->state.action_frame[idx] = 0;
       } else if (was_ground && !now_ground) {
+        batch->state.fall_fast[idx] = 0;
+
         // Only force Ground->Air transitions for ground locomotion states for now.
         // Many non-locomotion ground states transition into specific aerial variants (e.g. FallSpecial),
         // which we do not model yet; forcing Fall here causes large action_id regressions.

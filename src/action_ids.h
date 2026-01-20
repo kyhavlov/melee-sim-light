@@ -35,6 +35,18 @@ typedef enum MslActionId {
   MSL_ACT_LANDING_FALL_SPECIAL = 0x002B  // ftCo_MS_LandingFallSpecial
 } MslActionId;
 
+// Additional GALE01 common action ids needed for fastfall gating.
+//
+// Source of truth: refs/melee/src/melee/ft/chara/ftCommon/forward.h `ftCommon_MotionState`.
+enum {
+  MSL_ACT_ATTACK_AIR_N = 0x0041,  // ftCo_MS_AttackAirN
+  MSL_ACT_ATTACK_AIR_F = 0x0042,  // ftCo_MS_AttackAirF
+  MSL_ACT_ATTACK_AIR_B = 0x0043,  // ftCo_MS_AttackAirB
+  MSL_ACT_ATTACK_AIR_HI = 0x0044, // ftCo_MS_AttackAirHi
+  MSL_ACT_ATTACK_AIR_LW = 0x0045, // ftCo_MS_AttackAirLw
+  MSL_ACT_ESCAPE_AIR = 0x00EC,    // ftCo_MS_EscapeAir
+};
+
 // GALE01 "submotion" ids (aka `anim_id` / `ftCo_Submotion`) for common locomotion.
 //
 // Source of truth: refs/melee/src/melee/ft/chara/ftCommon/forward.h `ftCo_Submotion`.
@@ -104,6 +116,31 @@ static inline uint8_t msl_action_is_air_locomotion(uint16_t action_id) {
     case MSL_ACT_FALL_SPECIAL_F:
     case MSL_ACT_FALL_SPECIAL_B:
     case MSL_ACT_DAMAGE_FALL:
+      return 1;
+    default:
+      return 0;
+  }
+}
+
+static inline uint8_t msl_action_allows_fastfall(uint16_t action_id) {
+  // The ftCommon_CheckFallFast + ftCommon_Fall/FallFast helper (`ft_80084DB0`) is used by many
+  // common airborne action states, not just the basic Fall motions.
+  //
+  // Decomp refs:
+  // - Check: refs/melee/src/melee/ft/ftcommon.c:505-520 (ftCommon_CheckFallFast)
+  // - Common helper: refs/melee/src/melee/ft/ft_081B.c:1347-1359 (ft_80084DB0)
+  // - Example callers: refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c and
+  //   refs/melee/src/melee/ft/chara/ftCommon/ftCo_DamageFall.c
+  if (msl_action_is_air_locomotion(action_id)) {
+    return 1;
+  }
+  switch (action_id) {
+    case MSL_ACT_ATTACK_AIR_N:
+    case MSL_ACT_ATTACK_AIR_F:
+    case MSL_ACT_ATTACK_AIR_B:
+    case MSL_ACT_ATTACK_AIR_HI:
+    case MSL_ACT_ATTACK_AIR_LW:
+    case MSL_ACT_ESCAPE_AIR:
       return 1;
     default:
       return 0;

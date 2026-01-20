@@ -175,6 +175,126 @@ def compute_tilt_timer_axis_pre_post(
     return out_pre, out_post
 
 
+def compute_tilt_timer_y_pre_post_with_fall_fast(
+    stick_y_unit: np.ndarray,
+    *,
+    tilt_thresh: float,
+    jump_entry: np.ndarray,
+    fastfall_ok: np.ndarray,
+    speed_y_self_post: np.ndarray,
+    on_ground_post: np.ndarray,
+    fastfall_stick_threshold: float,
+    fastfall_tilt_max_frames: int,
+    start_timer_post: int = 0xFE,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """
+    Compute (tilt_timer_y_pre, tilt_timer_y_post, fall_fast_post) per frame, causally.
+
+    Modeled decomp behaviors:
+    - x671 per-frame update from inputs: refs/melee/src/melee/ft/fighter.c:1908-2008
+    - Jump entry override: refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump*.c (sets x671=0xFE)
+    - Fastfall latch + x671 override: refs/melee/src/melee/ft/ftcommon.c:505-520 (ftCommon_CheckFallFast)
+
+    Notes:
+    - `speed_y_self_post` is Slippi post-frame self velocity.
+    - ftCommon_CheckFallFast uses start-of-frame `self_vel.y`, which we model as `speed_y_self_post[i-1]`.
+    - `on_ground_post` is Slippi post-frame grounding; we clear fall_fast in the post snapshot when grounded.
+    """
+    axis = np.asarray(stick_y_unit, dtype=np.float32).reshape(-1)
+    n = int(axis.size)
+
+    jump_entry_b = np.asarray(jump_entry, dtype=bool).reshape(-1)
+    if int(jump_entry_b.size) != n:
+        raise ValueError("jump_entry must match stick_y_unit length")
+
+    fastfall_ok_b = np.asarray(fastfall_ok, dtype=bool).reshape(-1)
+    if int(fastfall_ok_b.size) != n:
+        raise ValueError("fastfall_ok must match stick_y_unit length")
+
+    vy_post = np.asarray(speed_y_self_post, dtype=np.float32).reshape(-1)
+    if int(vy_post.size) != n:
+        raise ValueError("speed_y_self_post must match stick_y_unit length")
+
+    on_ground_post_b = np.asarray(on_ground_post, dtype=bool).reshape(-1)
+    if int(on_ground_post_b.size) != n:
+        raise ValueError("on_ground_post must match stick_y_unit length")
+
+    out_pre = np.empty(n, dtype=np.uint8)
+    out_post = np.empty(n, dtype=np.uint8)
+    fall_fast_post = np.empty(n, dtype=np.uint8)
+
+    thresh = np.float32(tilt_thresh)
+    stick_thresh = np.float32(fastfall_stick_threshold)
+    tilt_max = int(fastfall_tilt_max_frames)
+
+    prev_axis = np.float32(0.0)
+    timer_post = int(start_timer_post) & 0xFF
+    fall_fast_prev_post = np.uint8(0)
+    vy_prev_post = np.float32(0.0)
+    on_ground_prev_post = bool(on_ground_post_b[0]) if n > 0 else False
+
+    for i in range(n):
+        a = np.float32(axis[i])
+
+        # Start-of-frame values for ftCommon_CheckFallFast for this frame i.
+        on_ground_start = on_ground_prev_post
+        vy_start = vy_prev_post
+        fall_fast_start = fall_fast_prev_post
+
+        # x671 input update (timer_pre) from the previous post value.
+        t_pre = int(timer_post) & 0xFF
+        if a >= thresh:
+            if prev_axis >= thresh:
+                t_pre += 1
+                if t_pre > 0xFE:
+                    t_pre = 0xFE
+            else:
+                t_pre = 0
+        elif a <= -thresh:
+            if prev_axis <= -thresh:
+                t_pre += 1
+                if t_pre > 0xFE:
+                    t_pre = 0xFE
+            else:
+                t_pre = 0
+        else:
+            t_pre = 0xFE
+
+        # Start with post==pre, then apply per-action overrides.
+        t_post = t_pre
+        if bool(jump_entry_b[i]):
+            t_post = 0xFE
+            # Jump entry clears fall_fast in our core model (motion state transition does not keep it).
+            # This matches the intent of keeping upward motion from being overridden by FallFast.
+            fall_fast_start = np.uint8(0)
+
+        # ftCommon_CheckFallFast (causal gate).
+        # refs/melee/src/melee/ft/ftcommon.c:505-520
+        ff_after = fall_fast_start
+        if (not on_ground_start) and bool(fastfall_ok_b[i]):
+            if (not fall_fast_start) and (vy_start < np.float32(0.0)) and (a <= -stick_thresh) and (
+                t_post < tilt_max
+            ):
+                ff_after = np.uint8(1)
+                t_post = 0xFE
+
+        # Clear fall_fast when grounded in the post snapshot.
+        ff_post = np.uint8(0) if bool(on_ground_post_b[i]) else ff_after
+
+        out_pre[i] = np.uint8(t_pre)
+        out_post[i] = np.uint8(t_post)
+        fall_fast_post[i] = ff_post
+
+        # Next frame.
+        prev_axis = a
+        timer_post = t_post
+        fall_fast_prev_post = ff_post
+        vy_prev_post = np.float32(vy_post[i])
+        on_ground_prev_post = bool(on_ground_post_b[i])
+
+    return out_pre, out_post, fall_fast_post
+
+
 def derive_turn_internals(
     *,
     action_id: np.ndarray,

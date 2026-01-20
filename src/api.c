@@ -128,6 +128,7 @@ int msl_batch_reseed_seed(MslBatch* batch, const uint8_t* seed_bytes, size_t see
       batch->state.kneebend_is_short_hop[idx] = seed->kneebend_is_short_hop[p];
       batch->state.tilt_timer_x[idx] = seed->tilt_timer_x[p];
       batch->state.tilt_timer_y[idx] = seed->tilt_timer_y[p];
+      batch->state.fall_fast[idx] = seed->fall_fast[p] ? 1 : 0;
       batch->state.turn_frames_to_turn[idx] = seed->turn_frames_to_turn[p];
       batch->state.turn_has_turned[idx] = seed->turn_has_turned[p];
 

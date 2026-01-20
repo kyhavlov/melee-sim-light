@@ -13,6 +13,7 @@ ACT_TURN = 0x0012
 ACT_KNEEBEND = 0x0018
 ACT_JUMPF = 0x0019
 ACT_FALL = 0x001D
+ACT_DAMAGEFALL = 0x0026
 ACT_LANDING = 0x002A
 
 # Submotion ids (GALE01): refs/melee/src/melee/ft/chara/ftCommon/forward.h
@@ -32,6 +33,14 @@ def _fox_attr(name: str) -> float:
 
     fox = json.loads(Path("data/characters/fox.json").read_text())
     return float(fox[name])
+
+
+def _common_attr(name: str) -> float:
+    import json
+    from pathlib import Path
+
+    common = json.loads(Path("data/common/ft_common_data.json").read_text())
+    return float(common[name])
 
 
 def _mk_input_bytes(batch: int, input_stride: int) -> np.ndarray:
@@ -381,3 +390,205 @@ def test_turn_seeded_has_turned_prevents_double_flip() -> None:
     assert int(out0["facing"][0]) == 0
     assert int(out1["action_id"][0]) == ACT_TURN
     assert int(out1["facing"][0]) == 0
+
+
+def test_fastfall_requires_vy_negative_stick_down_and_x671_lt_x8c() -> None:
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    input_stride = int(sizes["input"])
+
+    fast_fall_v = np.float32(_fox_attr("fast_fall_velocity"))
+    grav = np.float32(_fox_attr("grav"))
+    stick_thresh = float(_common_attr("fastfall_stick_threshold"))
+    tilt_max = int(_common_attr("fastfall_tilt_max_frames"))
+
+    assert tilt_max >= 1
+    assert stick_thresh > 0.0
+
+    seed = _seed_base()
+    seed["on_ground"][0, 0] = np.uint8(0)
+    seed["action_id"][0, 0] = np.uint16(ACT_FALL)
+    seed["action_frame"][0, 0] = np.int16(0)
+    seed["animation_index"][0, 0] = np.uint32(SM_FALL)
+    seed["pos_y"][0, 0] = np.float32(10.0)
+    seed["jumps_left"][0, 0] = np.uint8(2)
+
+    # Trigger: vy<0, stick_y <= -x88, x671 < x8C (via a fresh down flick).
+    seed_a = seed.copy()
+    seed_a["speed_y_self"][0, 0] = np.float32(-1.0)
+    prev_inp = _mk_input_bytes(1, input_stride)
+    inp = _mk_input_bytes(1, input_stride)
+    prev_view = prev_inp.view(INPUT_DTYPE).reshape((1,))
+    cur_view = inp.view(INPUT_DTYPE).reshape((1,))
+    prev_view["p"]["main_y"][0, 0] = np.int8(0)
+    cur_view["p"]["main_y"][0, 0] = np.int8(-80)
+    out_a = _step_once(seed_a, prev_inp, inp)
+    assert np.isclose(out_a["speed_y_self"][0], np.float32(-fast_fall_v))
+
+    # No trigger if vy >= 0 (even with stick held down).
+    seed_b = seed.copy()
+    seed_b["speed_y_self"][0, 0] = np.float32(1.0)
+    out_b = _step_once(seed_b, prev_inp, inp)
+    assert np.isclose(out_b["speed_y_self"][0], np.float32(1.0 - grav))
+
+    # No trigger if x671 >= x8C (held down too long).
+    # Make x671_pre == tilt_max by seeding x671_post=tilt_max-1 and holding down on both prev+cur.
+    seed_c = seed.copy()
+    seed_c["speed_y_self"][0, 0] = np.float32(-1.0)
+    seed_c["tilt_timer_y"][0, 0] = np.uint8(max(tilt_max - 1, 0))
+    prev_inp_c = _mk_input_bytes(1, input_stride)
+    inp_c = _mk_input_bytes(1, input_stride)
+    prev_view_c = prev_inp_c.view(INPUT_DTYPE).reshape((1,))
+    cur_view_c = inp_c.view(INPUT_DTYPE).reshape((1,))
+    prev_view_c["p"]["main_y"][0, 0] = np.int8(-80)
+    cur_view_c["p"]["main_y"][0, 0] = np.int8(-80)
+    out_c = _step_once(seed_c, prev_inp_c, inp_c)
+    assert np.isclose(out_c["speed_y_self"][0], np.float32(-1.0 - grav))
+
+
+def test_fastfall_latched_sets_vy_to_minus_fast_fall_velocity_each_frame() -> None:
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    input_stride = int(sizes["input"])
+
+    fast_fall_v = np.float32(_fox_attr("fast_fall_velocity"))
+
+    seed = _seed_base()
+    seed["on_ground"][0, 0] = np.uint8(0)
+    seed["action_id"][0, 0] = np.uint16(ACT_FALL)
+    seed["action_frame"][0, 0] = np.int16(0)
+    seed["animation_index"][0, 0] = np.uint32(SM_FALL)
+    seed["pos_y"][0, 0] = np.float32(10.0)
+    seed["speed_y_self"][0, 0] = np.float32(-fast_fall_v)
+    seed["fall_fast"][0, 0] = np.uint8(1)
+
+    prev_inp = _mk_input_bytes(1, input_stride)
+    inp = _mk_input_bytes(1, input_stride)
+    out = _step_once(seed, prev_inp, inp)
+    assert np.isclose(out["speed_y_self"][0], np.float32(-fast_fall_v))
+
+
+def test_fall_fast_clears_on_landing_and_does_not_persist_off_stage() -> None:
+    import json
+    from pathlib import Path
+
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    compare_stride = int(sizes["compare"])
+
+    right_edge = -1.0
+    fd = json.loads(Path("data/stages/final_destination.json").read_text())
+    unit_scale = float(fd.get("unit_scale", 1.0))
+    for s in fd["segments"]:
+        if s["kind"] != "floor" or bool(s["platform"]):
+            continue
+        right_edge = max(right_edge, unit_scale * float(max(s["x0"], s["x1"])))
+    assert right_edge > 0.0
+
+    vx = np.float32(5.0)
+    grav = np.float32(_fox_attr("grav"))
+
+    seed = _seed_base()
+    seed["on_ground"][0, 0] = np.uint8(0)
+    seed["action_id"][0, 0] = np.uint16(ACT_FALL)
+    seed["action_frame"][0, 0] = np.int16(0)
+    seed["animation_index"][0, 0] = np.uint32(SM_FALL)
+    seed["pos_x"][0, 0] = np.float32(right_edge) - vx - np.float32(0.1)
+    seed["pos_y"][0, 0] = np.float32(0.1)
+    seed["speed_air_x_self"][0, 0] = vx
+    seed["speed_y_self"][0, 0] = np.float32(-0.2)
+    seed["jumps_left"][0, 0] = np.uint8(2)
+
+    handle = msl_binding.init(batch_size=1, num_players=2)
+    try:
+        seed_bytes = seed.view(np.uint8).reshape((1, seed_stride))
+        out = np.zeros((1, compare_stride), dtype=np.uint8)
+
+        # Step 1: flick down to fastfall, and land this frame.
+        prev0 = np.zeros((1, input_stride), dtype=np.uint8)
+        cur0 = np.zeros((1, input_stride), dtype=np.uint8)
+        prev0_v = prev0.view(INPUT_DTYPE).reshape((1,))
+        cur0_v = cur0.view(INPUT_DTYPE).reshape((1,))
+        prev0_v["p"]["main_y"][0, 0] = np.int8(0)
+        cur0_v["p"]["main_y"][0, 0] = np.int8(-80)
+
+        msl_binding.reseed_seed(handle, seed_bytes)
+        msl_binding.step_input(handle, prev0, cur0)
+        msl_binding.write_compare(handle, out)
+        out1 = out.view(COMPARE_DTYPE).reshape((1,))[0].copy()
+        assert int(out1["on_ground"][0]) == 1
+
+        # Step 2: grounded movement carries us off the right edge.
+        prev1 = cur0
+        cur1 = np.zeros((1, input_stride), dtype=np.uint8)
+        msl_binding.step_input(handle, prev1, cur1)
+        msl_binding.write_compare(handle, out)
+        out2 = out.view(COMPARE_DTYPE).reshape((1,))[0].copy()
+        assert int(out2["on_ground"][0]) == 0
+
+        # Step 3: first airborne frame after leaving ground should apply gravity (not fall-fast).
+        prev2 = cur1
+        cur2 = np.zeros((1, input_stride), dtype=np.uint8)
+        msl_binding.step_input(handle, prev2, cur2)
+        msl_binding.write_compare(handle, out)
+        out3 = out.view(COMPARE_DTYPE).reshape((1,))[0].copy()
+        assert int(out3["on_ground"][0]) == 0
+        assert np.isclose(out3["speed_y_self"][0], np.float32(-grav))
+    finally:
+        msl_binding.destroy(handle)
+
+
+def test_damage_fall_can_trigger_fastfall() -> None:
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    input_stride = int(sizes["input"])
+
+    fast_fall_v = np.float32(_fox_attr("fast_fall_velocity"))
+
+    seed = _seed_base()
+    seed["on_ground"][0, 0] = np.uint8(0)
+    seed["action_id"][0, 0] = np.uint16(ACT_DAMAGEFALL)
+    seed["action_frame"][0, 0] = np.int16(0)
+    seed["animation_index"][0, 0] = np.uint32(0)
+    seed["pos_y"][0, 0] = np.float32(10.0)
+    seed["speed_y_self"][0, 0] = np.float32(-1.0)
+
+    prev_inp = _mk_input_bytes(1, input_stride)
+    inp = _mk_input_bytes(1, input_stride)
+    prev_view = prev_inp.view(INPUT_DTYPE).reshape((1,))
+    cur_view = inp.view(INPUT_DTYPE).reshape((1,))
+    prev_view["p"]["main_y"][0, 0] = np.int8(0)
+    cur_view["p"]["main_y"][0, 0] = np.int8(-80)
+
+    out = _step_once(seed, prev_inp, inp)
+    assert np.isclose(out["speed_y_self"][0], np.float32(-fast_fall_v))
+
+
+def test_damage_fall_does_not_force_fall_fast_from_speed_y_self() -> None:
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    input_stride = int(sizes["input"])
+
+    fast_fall_v = np.float32(_fox_attr("fast_fall_velocity"))
+    terminal_v = np.float32(_fox_attr("terminal_vel"))
+
+    seed = _seed_base()
+    seed["on_ground"][0, 0] = np.uint8(0)
+    seed["action_id"][0, 0] = np.uint16(ACT_DAMAGEFALL)
+    seed["action_frame"][0, 0] = np.int16(0)
+    seed["animation_index"][0, 0] = np.uint32(0)
+    seed["pos_y"][0, 0] = np.float32(10.0)
+    seed["speed_y_self"][0, 0] = np.float32(-fast_fall_v)
+
+    prev_inp = _mk_input_bytes(1, input_stride)
+    inp = _mk_input_bytes(1, input_stride)
+    out = _step_once(seed, prev_inp, inp)
+    # A too-broad fall_fast inference (e.g. from speed_y_self alone) would force vy=-fast_fall_v here.
+    assert np.isclose(out["speed_y_self"][0], np.float32(-terminal_v))

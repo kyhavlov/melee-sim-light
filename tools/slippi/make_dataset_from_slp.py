@@ -187,6 +187,7 @@ def _main_impl(args) -> None:
     from tools.slippi.seed_history import (
         apply_deadzone,
         compute_tilt_timer_axis_pre_post,
+        compute_tilt_timer_y_pre_post_with_fall_fast,
         derive_kneebend_internals,
         derive_turn_internals,
         stick_i8_to_unit,
@@ -270,6 +271,8 @@ def _main_impl(args) -> None:
     tap_jump_threshold = float(common["tap_jump_threshold"])
     tap_jump_release_threshold = float(common["tap_jump_release_threshold"])
     tap_jump_tilt_max_frames = int(common["tap_jump_tilt_max_frames"])
+    fastfall_stick_threshold = float(common["fastfall_stick_threshold"])
+    fastfall_tilt_max_frames = int(common["fastfall_tilt_max_frames"])
 
     # Action ids (GALE01): refs/melee/src/melee/ft/chara/ftCommon/forward.h
     act_turn = 0x0012
@@ -280,6 +283,22 @@ def _main_impl(args) -> None:
     act_jump_b = 0x001A
     act_jump_aerial_f = 0x001B
     act_jump_aerial_b = 0x001C
+    act_fall = 0x001D
+    act_fall_f = 0x001E
+    act_fall_b = 0x001F
+    act_fall_aerial = 0x0020
+    act_fall_aerial_f = 0x0021
+    act_fall_aerial_b = 0x0022
+    act_fall_special = 0x0023
+    act_fall_special_f = 0x0024
+    act_fall_special_b = 0x0025
+    act_damage_fall = 0x0026
+    act_attack_air_n = 0x0041
+    act_attack_air_f = 0x0042
+    act_attack_air_b = 0x0043
+    act_attack_air_hi = 0x0044
+    act_attack_air_lw = 0x0045
+    act_escape_air = 0x00EC
     button_mask_xy = 0x0400 | 0x0800  # HSD_PAD_XY / src/buttons.h::MSL_BUTTON_XY
 
     # Character id mapping follows Slippi post-frame `character` (GALE01):
@@ -292,7 +311,6 @@ def _main_impl(args) -> None:
     turn_frames_lut[np.uint8(22)] = np.uint8(
         json.loads(Path("data/characters/falco.json").read_text())["turn_frames"]
     )
-
     # Frame ids and seeds (seed from frame i-1, ref from frame i).
     samples["seed_t"]["frame_id"] = frame_ids[:-1]
     samples["ref_t1"]["frame_id"] = frame_ids[1:]
@@ -493,16 +511,47 @@ def _main_impl(args) -> None:
             | (post_state == np.uint16(act_jump_aerial_f))
             | (post_state == np.uint16(act_jump_aerial_b))
         )
-        jump_entry = is_jump & ~np.concatenate(([False], is_jump[:-1]))
+        # Jump entry is per-motion-state, not "any jump group":
+        # treat JumpF->JumpB, JumpF->JumpAerialF, etc as fresh entries.
+        # This matches the action-entry override behavior (x671=0xFE) and keeps the derivation causal.
+        prev_state = np.concatenate(([post_state[0]], post_state[:-1]))
+        jump_entry = is_jump & (post_state != prev_state)
+        fastfall_ok = (
+            is_jump
+            | (post_state == np.uint16(act_fall))
+            | (post_state == np.uint16(act_fall_f))
+            | (post_state == np.uint16(act_fall_b))
+            | (post_state == np.uint16(act_fall_aerial))
+            | (post_state == np.uint16(act_fall_aerial_f))
+            | (post_state == np.uint16(act_fall_aerial_b))
+            | (post_state == np.uint16(act_fall_special))
+            | (post_state == np.uint16(act_fall_special_f))
+            | (post_state == np.uint16(act_fall_special_b))
+            | (post_state == np.uint16(act_damage_fall))
+            | (post_state == np.uint16(act_attack_air_n))
+            | (post_state == np.uint16(act_attack_air_f))
+            | (post_state == np.uint16(act_attack_air_b))
+            | (post_state == np.uint16(act_attack_air_hi))
+            | (post_state == np.uint16(act_attack_air_lw))
+            | (post_state == np.uint16(act_escape_air))
+        )
         tilt_timer_x_pre, tilt_timer_x_post = compute_tilt_timer_axis_pre_post(
             stick_x, tilt_thresh=lstick_tilt_x_thresh, override_post_mask=dash_entry, override_post_value=0xFE
         )
-        tilt_timer_y_pre, tilt_timer_y_post = compute_tilt_timer_axis_pre_post(
-            stick_y, tilt_thresh=lstick_tilt_y_thresh, override_post_mask=jump_entry, override_post_value=0xFE
+        tilt_timer_y_pre, tilt_timer_y_post, fall_fast_post = compute_tilt_timer_y_pre_post_with_fall_fast(
+            stick_y,
+            tilt_thresh=lstick_tilt_y_thresh,
+            jump_entry=jump_entry,
+            fastfall_ok=fastfall_ok,
+            speed_y_self_post=speed_y_self,
+            on_ground_post=(post_on_ground != 0),
+            fastfall_stick_threshold=fastfall_stick_threshold,
+            fastfall_tilt_max_frames=fastfall_tilt_max_frames,
         )
 
         samples["seed_t"]["tilt_timer_x"][:, slot] = tilt_timer_x_post[:-1]
         samples["seed_t"]["tilt_timer_y"][:, slot] = tilt_timer_y_post[:-1]
+        samples["seed_t"]["fall_fast"][:, slot] = fall_fast_post[:-1]
 
         # KneeBend internals (jump_input source + short-hop latch) must be seeded to avoid
         # mid-KneeBend reseed guessing in the simulator.

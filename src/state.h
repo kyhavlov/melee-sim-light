@@ -41,6 +41,7 @@ typedef struct MslStateSoA {
   uint8_t* kneebend_is_short_hop;  // latched during KneeBend IASA (ftCo_KneeBend_Check_ShortHop)
   uint8_t* tilt_timer_x;           // fp->x670_timer_lstick_tilt_x (refs/melee/src/melee/ft/fighter.c)
   uint8_t* tilt_timer_y;           // fp->x671_timer_lstick_tilt_y (refs/melee/src/melee/ft/fighter.c)
+  uint8_t* fall_fast;              // fp->fall_fast (refs/melee/src/melee/ft/ftcommon.c:505-520)
   uint8_t* turn_has_turned;        // fp->mv.co.turn.has_turned (refs/melee/.../ftCo_Turn.c:39-44)
   uint8_t* turn_frames_to_turn;  // fp->mv.co.turn.frames_to_turn (refs/melee/.../ftCo_Turn.c:39-44)
 

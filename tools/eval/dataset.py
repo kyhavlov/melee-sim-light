@@ -99,6 +99,7 @@ SEED_DTYPE = np.dtype(
         ("kneebend_is_short_hop", _arr("u1", MAX_PLAYERS)),
         ("tilt_timer_x", _arr("u1", MAX_PLAYERS)),
         ("tilt_timer_y", _arr("u1", MAX_PLAYERS)),
+        ("fall_fast", _arr("u1", MAX_PLAYERS)),
         ("turn_frames_to_turn", _arr("u1", MAX_PLAYERS)),
         ("turn_has_turned", _arr("u1", MAX_PLAYERS)),
         ("percent", _arr("<f4", MAX_PLAYERS)),

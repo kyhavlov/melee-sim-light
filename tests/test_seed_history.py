@@ -4,6 +4,7 @@ import numpy as np
 
 from tools.slippi.seed_history import (
     compute_tilt_timer_axis,
+    compute_tilt_timer_y_pre_post_with_fall_fast,
     derive_kneebend_internals,
     derive_turn_internals,
 )
@@ -144,3 +145,84 @@ def test_derive_kneebend_internals_is_causal_wrt_future_frames() -> None:
 
     assert np.array_equal(j0, j1[: j0.size])
     assert np.array_equal(s0, s1[: s0.size])
+
+
+def test_fall_fast_and_x671_override_is_causal_wrt_future_frames() -> None:
+    # Prefix triggers a fastfall at frame 1 (based on vy_start from frame 0).
+    stick_y_prefix = np.array([0.0, -0.9, -0.9, 0.0], dtype=np.float32)
+    jump_entry_prefix = np.zeros(stick_y_prefix.shape[0], dtype=bool)
+    speed_y_self_prefix = np.array([-1.0, -3.2, -3.2, -3.2], dtype=np.float32)
+    on_ground_prefix = np.zeros(stick_y_prefix.shape[0], dtype=bool)
+
+    t_pre0, t_post0, ff0 = compute_tilt_timer_y_pre_post_with_fall_fast(
+        stick_y_prefix,
+        tilt_thresh=0.25,
+        jump_entry=jump_entry_prefix,
+        fastfall_ok=np.ones(stick_y_prefix.shape[0], dtype=bool),
+        speed_y_self_post=speed_y_self_prefix,
+        on_ground_post=on_ground_prefix,
+        fastfall_stick_threshold=0.6,
+        fastfall_tilt_max_frames=4,
+    )
+
+    assert int(ff0[1]) == 1
+    assert int(t_post0[1]) == 0xFE
+
+    # Append arbitrary future frames; prefix outputs must not change.
+    stick_y_ext = np.concatenate([stick_y_prefix, np.array([-0.9, 0.0, 0.0], dtype=np.float32)])
+    jump_entry_ext = np.concatenate([jump_entry_prefix, np.array([False, False, False])])
+    speed_y_self_ext = np.concatenate([speed_y_self_prefix, np.array([-3.2, -3.2, -3.2], dtype=np.float32)])
+    on_ground_ext = np.concatenate([on_ground_prefix, np.array([False, False, False])])
+
+    t_pre1, t_post1, ff1 = compute_tilt_timer_y_pre_post_with_fall_fast(
+        stick_y_ext,
+        tilt_thresh=0.25,
+        jump_entry=jump_entry_ext,
+        fastfall_ok=np.ones(stick_y_ext.shape[0], dtype=bool),
+        speed_y_self_post=speed_y_self_ext,
+        on_ground_post=on_ground_ext,
+        fastfall_stick_threshold=0.6,
+        fastfall_tilt_max_frames=4,
+    )
+
+    assert np.array_equal(t_pre0, t_pre1[: t_pre0.size])
+    assert np.array_equal(t_post0, t_post1[: t_post0.size])
+    assert np.array_equal(ff0, ff1[: ff0.size])
+
+
+def test_jump_to_jump_aerial_entry_clears_fall_fast_and_overrides_x671() -> None:
+    # When transitioning between Jump* motion states (e.g. JumpF -> JumpAerialF), treat it as a fresh
+    # entry: clear fall_fast and set x671_post=0xFE on that entry frame.
+    #
+    # Decomp refs:
+    # - ftCommon_CheckFallFast: refs/melee/src/melee/ft/ftcommon.c:505-520
+    # - JumpAerial entry override: refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c:152-156
+    act_jump_f = np.uint16(0x0019)
+    act_jump_aerial_f = np.uint16(0x001B)
+
+    post_state = np.array([act_jump_f, act_jump_f, act_jump_aerial_f, act_jump_aerial_f], dtype=np.uint16)
+    is_jump = (post_state == act_jump_f) | (post_state == act_jump_aerial_f)
+    prev_state = np.concatenate(([post_state[0]], post_state[:-1]))
+    jump_entry = is_jump & (post_state != prev_state)
+
+    # Create a fastfall latch at frame 1, then ensure the JumpF->JumpAerialF transition at frame 2
+    # clears it and forces x671_post=0xFE.
+    stick_y = np.array([0.0, -0.9, 0.0, 0.0], dtype=np.float32)
+    speed_y_self_post = np.array([-1.0, -3.2, -2.0, -2.0], dtype=np.float32)
+    on_ground_post = np.zeros(post_state.shape[0], dtype=bool)
+    fastfall_ok = np.ones(post_state.shape[0], dtype=bool)
+
+    _, t_post, ff_post = compute_tilt_timer_y_pre_post_with_fall_fast(
+        stick_y,
+        tilt_thresh=0.25,
+        jump_entry=jump_entry,
+        fastfall_ok=fastfall_ok,
+        speed_y_self_post=speed_y_self_post,
+        on_ground_post=on_ground_post,
+        fastfall_stick_threshold=0.6,
+        fastfall_tilt_max_frames=4,
+    )
+
+    assert int(ff_post[1]) == 1
+    assert int(t_post[2]) == 0xFE
+    assert int(ff_post[2]) == 0
