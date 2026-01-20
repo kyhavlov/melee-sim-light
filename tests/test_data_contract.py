@@ -50,7 +50,7 @@ def test_data_contract_is_self_consistent_if_present() -> None:
         pytest.skip("no local data/ artifacts present")
 
     stage = json.loads(stage_path.read_text())
-    assert stage.get("stage_dat") == "GrNBa.dat"
+    assert stage.get("stage_dat") == "GrNLa.dat"
     assert int(stage.get("line_count", 0)) > 0
     assert isinstance(stage.get("segments"), list) and len(stage["segments"]) > 0
 
@@ -84,4 +84,3 @@ def test_data_contract_is_self_consistent_if_present() -> None:
         tracks_msids = set(_read_tracks_msids(tracks_path))
         missing = sorted(referenced_msids - tracks_msids)
         assert not missing, f"msids referenced by moves missing from tracks.bin: {missing[:20]}"
-

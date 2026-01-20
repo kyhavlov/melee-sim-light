@@ -9,6 +9,7 @@ BUTTON_X = 0x0400
 
 # Action ids (GALE01): refs/melee/src/melee/ft/chara/ftCommon/forward.h
 ACT_WAIT = 0x000E
+ACT_TURN = 0x0012
 ACT_KNEEBEND = 0x0018
 ACT_JUMPF = 0x0019
 ACT_FALL = 0x001D
@@ -16,6 +17,7 @@ ACT_LANDING = 0x002A
 
 # Submotion ids (GALE01): refs/melee/src/melee/ft/chara/ftCommon/forward.h
 SM_WAIT1_0 = 2
+SM_TURN = 10
 SM_KNEEBEND = 15
 SM_JUMPF = 16
 SM_FALL = 20
@@ -157,6 +159,7 @@ def test_kneebend_release_jump_short_hops() -> None:
 
     out = _step_once(seed, prev_inp, inp)
     assert int(out["action_id"][0]) == ACT_JUMPF
+    assert int(out["action_frame"][0]) == 0
     expected_vy = np.float32(_fox_attr("hop_v_initial_velocity") - _fox_attr("grav"))
     assert np.isclose(out["speed_y_self"][0], expected_vy)
 
@@ -238,3 +241,108 @@ def test_jump_end_enters_fall() -> None:
     assert int(out["action_id"][0]) == ACT_FALL
     assert int(out["action_frame"][0]) == 0
     assert int(out["animation_index"][0]) == SM_FALL
+
+
+def test_turn_reseed_does_not_flip_immediately_when_action_frame_is_0() -> None:
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    input_stride = int(sizes["input"])
+
+    seed = _seed_base()
+    seed["on_ground"][0, 0] = np.uint8(1)
+    seed["action_id"][0, 0] = np.uint16(ACT_TURN)
+    seed["action_frame"][0, 0] = np.int16(0)
+    seed["animation_index"][0, 0] = np.uint32(SM_TURN)
+    seed["facing"][0, 0] = np.uint8(1)
+
+    prev_inp = _mk_input_bytes(1, input_stride)
+    inp = _mk_input_bytes(1, input_stride)
+
+    out = _step_once(seed, prev_inp, inp)
+    assert int(out["action_id"][0]) == ACT_TURN
+    assert int(out["action_frame"][0]) == 1
+    assert int(out["facing"][0]) == 1
+
+
+def test_turn_reseed_does_not_flip_early_when_action_frame_equals_turn_frames() -> None:
+    # Teacher-forcing mapping contract:
+    # These TURN reseed tests intentionally lock a deterministic fallback mapping from a single
+    # post-frame `state_age` snapshot to the Turn internals (`frames_to_turn`, `has_turned`).
+    #
+    # This mapping is best-effort (not proven engine truth) and is expected to be replaced once we
+    # seed/derive the missing multi-frame internals (same bucket as x670/x671 timers and KneeBend
+    # entry history). Until then, we keep it deterministic and regression-tested.
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    input_stride = int(sizes["input"])
+
+    turn_frames = int(_fox_attr("turn_frames"))
+
+    seed = _seed_base()
+    seed["on_ground"][0, 0] = np.uint8(1)
+    seed["action_id"][0, 0] = np.uint16(ACT_TURN)
+    seed["action_frame"][0, 0] = np.int16(turn_frames)
+    seed["animation_index"][0, 0] = np.uint32(SM_TURN)
+    seed["facing"][0, 0] = np.uint8(1)
+
+    prev_inp = _mk_input_bytes(1, input_stride)
+    inp = _mk_input_bytes(1, input_stride)
+
+    out = _step_once(seed, prev_inp, inp)
+    assert int(out["action_id"][0]) == ACT_TURN
+    assert int(out["action_frame"][0]) == turn_frames + 1
+    # Teacher-forcing mapping contract: do not flip at `action_frame == turn_frames`.
+    assert int(out["facing"][0]) == 1
+
+
+def test_turn_reseed_flips_once_when_countdown_reaches_0() -> None:
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    input_stride = int(sizes["input"])
+
+    turn_frames = int(_fox_attr("turn_frames"))
+
+    seed = _seed_base()
+    seed["on_ground"][0, 0] = np.uint8(1)
+    seed["action_id"][0, 0] = np.uint16(ACT_TURN)
+    # Teacher-forcing mapping contract: flip becomes pending once action_frame has advanced past
+    # `turn_frames`.
+    seed["action_frame"][0, 0] = np.int16(turn_frames + 1)
+    seed["animation_index"][0, 0] = np.uint32(SM_TURN)
+    seed["facing"][0, 0] = np.uint8(1)
+
+    prev_inp = _mk_input_bytes(1, input_stride)
+    inp = _mk_input_bytes(1, input_stride)
+
+    out = _step_once(seed, prev_inp, inp)
+    assert int(out["action_id"][0]) == ACT_TURN
+    assert int(out["action_frame"][0]) == turn_frames + 2
+    assert int(out["facing"][0]) == 0
+
+
+def test_turn_reseed_does_not_double_flip_after_turning() -> None:
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    input_stride = int(sizes["input"])
+
+    turn_frames = int(_fox_attr("turn_frames"))
+
+    seed = _seed_base()
+    seed["on_ground"][0, 0] = np.uint8(1)
+    seed["action_id"][0, 0] = np.uint16(ACT_TURN)
+    # After the flip frame, facing is already flipped in the snapshot and the internal latch should
+    # be reseeded to prevent an additional flip.
+    seed["action_frame"][0, 0] = np.int16(turn_frames + 2)
+    seed["animation_index"][0, 0] = np.uint32(SM_TURN)
+    seed["facing"][0, 0] = np.uint8(0)
+
+    prev_inp = _mk_input_bytes(1, input_stride)
+    inp = _mk_input_bytes(1, input_stride)
+
+    out = _step_once(seed, prev_inp, inp)
+    assert int(out["action_id"][0]) == ACT_TURN
+    assert int(out["facing"][0]) == 0

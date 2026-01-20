@@ -10,13 +10,14 @@ def _fd_floor_nonplatform_edges_world() -> list[float]:
     from pathlib import Path
 
     fd = json.loads(Path("data/stages/final_destination.json").read_text())
+    unit_scale = float(fd.get("unit_scale", 1.0))
 
     edges: set[float] = set()
     for s in fd["segments"]:
         if s["kind"] != "floor" or bool(s["platform"]):
             continue
-        edges.add(float(s["x0"]))
-        edges.add(float(s["x1"]))
+        edges.add(unit_scale * float(s["x0"]))
+        edges.add(unit_scale * float(s["x1"]))
     return sorted(edges)
 
 
@@ -59,9 +60,8 @@ def _seed_base(*, stage_id: int) -> np.ndarray:
     return seed
 
 
-def test_fd_boundary_x_minus60_picks_mid_segment() -> None:
+def test_fd_floor_boundary_left_picks_mid_segment() -> None:
     # Boundary between left lip and main floor, in world units.
-    # `data/stages/final_destination.json` provides unscaled DAT-space endpoints.
     edges = _fd_floor_nonplatform_edges_world()
     # edges: [-x_max, -x_boundary, +x_boundary, +x_max]
     x_boundary = edges[1]
@@ -76,7 +76,7 @@ def test_fd_boundary_x_minus60_picks_mid_segment() -> None:
     assert int(out["ground_id"][0]) == 1
 
 
-def test_fd_boundary_x_60_picks_right_segment() -> None:
+def test_fd_floor_boundary_right_picks_right_segment() -> None:
     # Boundary between main floor and right lip, in world units.
     edges = _fd_floor_nonplatform_edges_world()
     x_boundary = edges[2]
@@ -88,7 +88,7 @@ def test_fd_boundary_x_60_picks_right_segment() -> None:
 
     out = _step_once(seed)
     assert int(out["on_ground"][0]) == 1
-    assert int(out["ground_id"][0]) == 5
+    assert int(out["ground_id"][0]) == 2
 
 
 def test_vy_positive_never_grounds() -> None:

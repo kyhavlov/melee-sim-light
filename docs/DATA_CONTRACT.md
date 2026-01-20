@@ -10,7 +10,7 @@ Policy:
 ## Canonical paths (current target domain)
 
 Stage (Final Destination):
-- `_iso/GrNBa.dat` (source)
+- `_iso/GrNLa.dat` (source)
 - `data/stages/final_destination.json` (extracted collision segments; decomp-first)
   - Note: the C core currently parses this JSON **once at init** (temporary). We will move to a compact
     binary artifact for stage collision later to avoid JSON parsing overhead/complexity.
@@ -20,6 +20,8 @@ Stage (Final Destination):
     - `unit_scale` is `grGroundParam.x0` (aka `Ground_801C0498()`), which `mpLibLoad()` uses to scale
       collision vertices at runtime (`groundCollVtx[i].pos = unit_scale * coll_data->verts[i]`).
       Decomp refs: `refs/melee/src/melee/gr/ground.c:270` and `refs/melee/src/melee/mp/mplib.c:174,252-263`.
+    - The C core should apply `unit_scale` at init-time when loading the extracted geometry so simulator world
+      coordinates match Slippi post-frame positions.
 
 Common constants:
 - `_iso/PlCo.dat` (source)
@@ -51,7 +53,7 @@ To avoid “mystery drift”, prefer loading the following early:
 `ground_id` semantics (current assumption):
 - Our datasets store `ground_id` directly from Slippi post-frame `ground` (see `tools/slippi/make_dataset_from_slp.py`).
 - The simulator treats `ground_id` as the **stage collision segment/line index** from the stage’s collision table.
-  - For Final Destination this matches the ISO-extracted indices in `data/stages/final_destination.json` (`segments[].i`), e.g. the main floor uses segment indices `0`, `1`, and `5`.
+  - For Final Destination this matches the ISO-extracted indices in `data/stages/final_destination.json` (`segments[].i`), e.g. the main floor uses segment indices `0`, `1`, and `2`.
   - If we discover a stage-specific remapping (decomp / Slippi schema clarification), update this note and the stage loader accordingly.
 
 ## Build the data (one-shot / cached)
@@ -61,14 +63,14 @@ Generate all required artifacts for the current target domain:
 ```bash
 uv run python -m tools.extraction.build_data \
   --iso-dir _iso \
-  --stage grnba \
+  --stage grnla \
   --chars fox,falco
 ```
 
 If `_iso/` is missing required `.dat` files, extract them from `SSBM.iso` first:
 
 ```bash
-uv run python -m tools.extraction.iso_extract --iso SSBM.iso --glob '*GrNBa.dat'
+uv run python -m tools.extraction.iso_extract --iso SSBM.iso --glob '*GrNLa.dat'
 uv run python -m tools.extraction.iso_extract --iso SSBM.iso --glob '*PlCo.dat'
 uv run python -m tools.extraction.iso_extract --iso SSBM.iso --glob '*PlFx.dat'
 uv run python -m tools.extraction.iso_extract --iso SSBM.iso --glob '*PlFc.dat'

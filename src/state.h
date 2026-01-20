@@ -35,9 +35,11 @@ typedef struct MslStateSoA {
   uint8_t* jumps_left;
   uint8_t* stocks;
   // Locomotion internals (not part of the seed/compare schema; must be cleared on reseed)
-  uint8_t* kneebend_jump_input;    // ftCo_JumpInput (refs/melee/src/melee/ft/chara/ftCommon/forward.h)
+  uint8_t*
+      kneebend_jump_input;  // ftCo_JumpInput (refs/melee/src/melee/ft/chara/ftCommon/forward.h)
   uint8_t* kneebend_is_short_hop;  // latched during KneeBend IASA (ftCo_KneeBend_Check_ShortHop)
-  uint8_t* turn_has_turned;        // ftCo_Turn_Anim_Inner (tracks immediate smash-turn)
+  uint8_t* turn_has_turned;        // fp->mv.co.turn.has_turned (refs/melee/.../ftCo_Turn.c:39-44)
+  uint8_t* turn_frames_to_turn;  // fp->mv.co.turn.frames_to_turn (refs/melee/.../ftCo_Turn.c:39-44)
 
   // Combat/timers
   float* percent;

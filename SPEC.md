@@ -252,6 +252,14 @@ Notes:
 - This is “teacher-forced” evaluation: it answers “is our one-step transition function correct on the support of real gameplay states?”
 - Reseeding must be deterministic and should avoid “cheating” by copying fields that the simulator is supposed to derive (e.g., if we track derived timers, we should seed only what is observable/authoritative for that frame).
 
+Known teacher-forcing limitations (must be tracked and eventually removed, not treated as “engine truth”):
+- **KneeBend reseed lacks entry history**: when reseeded mid-`KneeBend` (jump squat), we do not know which jump input source triggered the state (`XY` vs tap-jump vs C-stick). Current sim may infer a best-effort source for short-hop detection; the correct fix is to extend the seed schema (or allow short rollout windows through `KneeBend`).
+- **Tap-jump tilt timer omitted in one-step reseed**: GALE01 gates tap-jump with `x671_timer_lstick_tilt_y < p_ftCommonData->x74` (decomp). In one-step reseed, this timer is not available unless we derive/store it during preprocessing; current sim may approximate with edge checks.
+- **Dash-flick tilt timer omitted in one-step reseed**: GALE01 gates dash-flick with `x670_timer_lstick_tilt_x < p_ftCommonData->x40` (decomp). In one-step reseed, this timer is not available unless we derive/store it during preprocessing; current sim may approximate with edge checks.
+- **Turn reseed cannot reconstruct exact `frames_to_turn`**: Turn has internal state (`fp->mv.co.turn.frames_to_turn`, `has_turned`) that depends on the exact entry path (standing turn vs smash-turn) and intra-frame ordering (some Enter functions call `ftAnim_8006EBA4`). In one-step reseed we currently infer a deterministic best-effort from `(action_id, action_frame, extracted turn_frames)`; the correct fix is to seed/derive the missing internals during preprocessing once we track input-history timers.
+  - The current behavior is locked by a **teacher-forcing mapping contract** (unit tests) to keep it deterministic and prevent accidental regressions.
+  - Do **not** “tune” this mapping based on one-step mismatch metrics; the remaining gap should be closed by upcoming **multi-frame seeding** (same bucket as `x670/x671` tilt timers and KneeBend entry history).
+
 Metrics (initial):
 - `action_id` match rate (and optional ±N frame window around transitions).
 - Position error (x/y): mean, 95p, max.

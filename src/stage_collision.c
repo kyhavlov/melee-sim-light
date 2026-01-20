@@ -168,7 +168,7 @@ static int fd_load_floor_segments_from_json(const char* json) {
     return -1;
   }
   // Safety guard: cap allocations for malformed/untrusted files. Real Melee stages are far below this.
-  // (FD currently reports `line_count`=23 in `data/stages/final_destination.json`.)
+  // (FD currently reports `line_count`=16 in `data/stages/final_destination.json`.)
   if (line_count <= 0 || line_count > 4096) {
     return -1;
   }
@@ -177,8 +177,27 @@ static int fd_load_floor_segments_from_json(const char* json) {
   // (See `tools/extraction/extract_stage_collision.py` and decomp notes there.)
   //
   // Note: `data/stages/*.json` also stores `unit_scale` (aka `grGroundParam.x0` / `Ground_801C0498()`),
-  // which `mpLibLoad()` uses to build the runtime scaled collision vertices, but this lightweight sim
-  // currently operates in the unscaled coordinate system.
+  // which `mpLibLoad()` uses to build the runtime scaled collision vertices:
+  // - `f31 = Ground_801C0498()` reads `stage_info.param->x0` (`grGroundParam.x0`)
+  //   refs/melee/src/melee/gr/ground.c:270
+  // - `groundCollVtx[i].pos = f31 * coll_data->verts[i]`
+  //   refs/melee/src/melee/mp/mplib.c:174,252-263
+  //
+  // Slippi post-frame positions are in the runtime/world coordinate system, so we apply `unit_scale`
+  // to the extracted segment coordinates here at init-time.
+
+  double unit_scale = 1.0;
+  const char* us = strstr(json, "\"unit_scale\"");
+  if (us != NULL) {
+    us = strchr(us, ':');
+    if (us != NULL) {
+      us++;
+      (void)json_parse_double(us, &unit_scale);
+    }
+  }
+  if (!(unit_scale > 0.0)) {
+    unit_scale = 1.0;
+  }
 
   const char* segs = strstr(json, "\"segments\"");
   if (segs == NULL) {
@@ -343,10 +362,10 @@ static int fd_load_floor_segments_from_json(const char* json) {
         have_y0 && have_y1) {
       if (out_n < (size_t)line_count) {
         tmp[out_n] = (MslStageFloorSegment){
-            .x0 = (float)x0,
-            .x1 = (float)x1,
-            .y0 = (float)y0,
-            .y1 = (float)y1,
+            .x0 = (float)(unit_scale * x0),
+            .x1 = (float)(unit_scale * x1),
+            .y0 = (float)(unit_scale * y0),
+            .y1 = (float)(unit_scale * y1),
             .segment_i = (uint16_t)seg_i,
             .include_max = 0,
         };
@@ -362,7 +381,7 @@ static int fd_load_floor_segments_from_json(const char* json) {
 
   // Deterministic endpoint policy: floor segments are treated as [min_x, max_x) except that any segment
   // that touches the global rightmost x gets to include its max endpoint. This disambiguates shared
-  // vertices like x=-60 / x=60 on FD without relying on iteration order.
+  // vertices without relying on iteration order.
   float global_max_x = -FLT_MAX;
   for (size_t i = 0; i < out_n; i++) {
     const float a = tmp[i].x0;
@@ -376,10 +395,9 @@ static int fd_load_floor_segments_from_json(const char* json) {
     const float a = tmp[i].x0;
     const float b = tmp[i].x1;
     const float mx = (a > b) ? a : b;
-    // Note: FD's endpoints are stable float32s when extracted; this exact-equality is fine here
-    // because `global_max_x` is computed from the same parsed floats. If generalized to other stages
-    // (or if extraction changes), consider a more explicit/deterministic policy (e.g., track the argmax
-    // segment by index/bitpattern rather than float equality).
+    // Note: exact float-equality is fine here because `global_max_x` is computed from the same parsed
+    // float32 values. If generalized to other stages (or if extraction changes), consider a more
+    // explicit/deterministic policy (e.g., track the argmax segment by index/bitpattern).
     tmp[i].include_max = (uint8_t)(mx == global_max_x);
   }
 
@@ -467,7 +485,15 @@ void stage_collision_apply(MslBatch* batch) {
 
   const int num_players = (int)batch->config.num_players;
   for (int bi = 0; bi < batch->batch_size; bi++) {
-    // Slippi stage id for Final Destination.
+    // Stage ids in our datasets come from Slippi `game.start.stage` (see tools/slippi/make_dataset_from_slp.py),
+    // which corresponds to the GALE01 "stage kind" / `InternalStageId` (aka `Stage_802251E8(idx, ...)` arg).
+    //
+    // In vanilla, `InternalStageId` is mapped to the StageData index via `unk_arr_803E9960[idx].stage_id`.
+    // For Final Destination, idx=32 maps to stage_id=37 which selects `grNLa_803E7F90` ("/GrNLa.dat").
+    // Decomp refs:
+    // - refs/melee/src/melee/gr/stage.c:341-349 (unk_arr_803E9960)
+    // - refs/melee/src/melee/gr/ground.c:124-139 (Ground_803DFEDC includes grNLa_803E7F90)
+    // - refs/melee/src/melee/gr/grlast.c:151 (grNLa_803E7F90 uses "/GrNLa.dat")
     if (batch->state.stage_id[bi] != 32) {
       continue;
     }

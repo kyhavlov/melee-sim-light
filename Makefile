@@ -20,11 +20,11 @@ test: build
 preprocess:
 	@$(PY) -m tools.slippi.preprocess_suite --suite "$(SUITE)" --datasets-dir "$(DATASETS_DIR)"
 
-validate:
+validate: build
 	@$(PY) -m tools.eval.run_one_step_suite_eval --suite "$(SUITE)" --datasets-dir "$(DATASETS_DIR)" --chunk "$(CHUNK)" $(VALIDATE_OUT)
 
 build_data:
-	@$(PY) -m tools.extraction.build_data --iso-dir _iso --stage grnba --chars fox,falco
+	@$(PY) -m tools.extraction.build_data --iso-dir _iso --stage grnla --chars fox,falco
 
 fmt:
 	@command -v "$(CLANG_FORMAT)" >/dev/null 2>&1 || (echo "Missing clang-format (set CLANG_FORMAT=... or install it)."; exit 1)

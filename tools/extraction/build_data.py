@@ -26,8 +26,8 @@ def main() -> None:
     ap.add_argument(
         "--stage",
         type=str,
-        default="grnba",
-        help="stage key (currently: grnba = Final Destination / GrNBa.dat)",
+        default="grnla",
+        help="stage key (currently: grnla = Final Destination / GrNLa.dat; grnba = Battlefield / GrNBa.dat)",
     )
     ap.add_argument("--melee-decomp", type=Path, default=Path("refs/melee"), help="path to doldecomp/melee checkout")
     args = ap.parse_args()
@@ -49,22 +49,34 @@ def main() -> None:
             f"uv run python -m tools.extraction.iso_extract --iso SSBM.iso --glob '*{dat}' --out-dir _iso",
         )
 
-    if args.stage.lower() == "grnba":
-        _require(
-            iso_dir / "GrNBa.dat",
-            "uv run python -m tools.extraction.iso_extract --iso SSBM.iso --glob '*GrNBa.dat' --out-dir _iso",
-        )
-    else:
+    stage_key = args.stage.lower()
+    stage_dat_by_key = {
+        # Decomp:
+        # - Battlefield: refs/melee/src/melee/gr/grbattle.c:127 uses "/GrNBa.dat"
+        # - Final Destination: refs/melee/src/melee/gr/grlast.c:151 uses "/GrNLa.dat"
+        "grnba": "GrNBa.dat",
+        "grnla": "GrNLa.dat",
+    }
+    stage_dat = stage_dat_by_key.get(stage_key)
+    if stage_dat is None:
         raise SystemExit(f"unsupported stage key: {args.stage!r}")
+    _require(
+        iso_dir / stage_dat,
+        f"uv run python -m tools.extraction.iso_extract --iso SSBM.iso --glob '*{stage_dat}' --out-dir _iso",
+    )
 
     # Outputs.
-    out_stage = Path("data/stages/final_destination.json")
+    out_stage_by_key = {
+        "grnla": Path("data/stages/final_destination.json"),
+        "grnba": Path("data/stages/battlefield.json"),
+    }
+    out_stage = out_stage_by_key[stage_key]
     out_common = Path("data/common/ft_common_data.json")
 
     # Stage collision.
     _run(
         "tools.extraction.extract_stage_collision",
-        ["--dat", str(iso_dir / "GrNBa.dat"), "--out", str(out_stage)],
+        ["--dat", str(iso_dir / stage_dat), "--out", str(out_stage)],
     )
 
     # Common constants.
@@ -124,4 +136,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
