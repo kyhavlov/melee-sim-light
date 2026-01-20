@@ -61,6 +61,13 @@ typedef struct MslCommonParams {
   uint8_t powershield_reflect_total_frames;   // p_ftCommonData->x2B4 (rounded)
   uint8_t _pad_u8_2[1];
 
+  // Shield defensive options (grounded) (refs/melee/src/melee/ft/chara/ftCommon/ftCo_Escape.c)
+  float spotdodge_stick_y_threshold;  // p_ftCommonData->x314
+  float escape_stick_x_threshold;     // p_ftCommonData->x31C
+  uint8_t spotdodge_flick_tilt_max_frames;  // p_ftCommonData->x318
+  uint8_t escape_flick_tilt_max_frames;     // p_ftCommonData->x320
+  uint8_t _pad_u8_2b[2];
+
   // Shield / guard constants (ftCo_Guard.c and fighter.c).
   // Source of truth: `data/common/ft_common_data.json` extractor comments map these to ftCommonData.
   float start_shield_health;         // p_ftCommonData->x260 (start_shield_health)

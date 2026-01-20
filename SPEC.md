@@ -106,6 +106,8 @@ To reach “90–95% like real Melee” for the target domain, v1 must include:
 - Shield health/decay/regeneration (approx ok).
 - Shieldstun + basic pushback.
 - Roll/spotdodge out of shield.
+  - Not modeled yet: EscapeF/EscapeB root-motion (`fp->x6A4_transNOffset`) and mid-roll facing flip (`ftCheckThrowB3`); we currently apply friction-only and use anim-end to return to Wait.
+  - Not modeled yet: escape invincibility / hurtbox state changes during EscapeN/EscapeF/EscapeB.
 
 7) **Projectiles (lasers)**
 - Spawn and integrate laser entities.

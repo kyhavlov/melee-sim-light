@@ -8,6 +8,7 @@
 #include "buttons.h"
 #include "char_params.h"
 #include "common_params.h"
+#include "escape.h"
 #include "guard.h"
 
 // Input axes in MslStateSoA are Melee-legalized via ucf_clamp_stick_i8:
@@ -146,7 +147,8 @@ static inline uint8_t action_is_fall_like(uint16_t a) {
 static inline uint8_t action_is_ground_locomotion(uint16_t a) {
   if (a == MSL_ACT_WAIT || action_is_walk(a) || a == MSL_ACT_TURN || a == MSL_ACT_TURN_RUN ||
       a == MSL_ACT_DASH || a == MSL_ACT_RUN || a == MSL_ACT_RUN_BRAKE || a == MSL_ACT_KNEE_BEND ||
-      a == MSL_ACT_LANDING || a == MSL_ACT_LANDING_FALL_SPECIAL) {
+      a == MSL_ACT_LANDING || a == MSL_ACT_LANDING_FALL_SPECIAL || a == MSL_ACT_ESCAPE_F ||
+      a == MSL_ACT_ESCAPE_B || a == MSL_ACT_ESCAPE_N) {
     return 1;
   }
   return 0;
@@ -400,6 +402,15 @@ void locomotion_update_pre(MslBatch* batch) {
         // we begin shielding (decomp gates on `!fp->x221A_b7`, not on pre-entry action_id).
         // refs/melee/src/melee/ft/fighter.c:2803-2812.
         guard_update_shield_recharge(batch, c, idx);
+
+        // Escape actions (from shield): friction + end->Wait.
+        // Keep this before other grounded IASA so Escape->Wait doesn't chain into Wait IASA
+        // in the same frame.
+        if (action_id == MSL_ACT_ESCAPE_N || action_id == MSL_ACT_ESCAPE_F ||
+            action_id == MSL_ACT_ESCAPE_B) {
+          escape_update_grounded(batch, c, ch, idx);
+          continue;
+        }
 
         // WAIT entry transitions (minimal locomotion-only IASA chain):
         // - refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA

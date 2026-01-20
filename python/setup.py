@@ -34,6 +34,7 @@ ext = Extension(
         str((ROOT / "src" / "stage_collision.c").resolve()),
         str((ROOT / "src" / "locomotion.c").resolve()),
         str((ROOT / "src" / "guard.c").resolve()),
+        str((ROOT / "src" / "escape.c").resolve()),
         str((ROOT / "src" / "hurtboxes.c").resolve()),
         str((ROOT / "src" / "combat.c").resolve()),
         str((ROOT / "src" / "items.c").resolve()),

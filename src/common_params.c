@@ -173,6 +173,10 @@ int common_params_init(void) {
       json_get_u8(buf, "powershield_reflect_window_frames", &g_params.powershield_reflect_window_frames) != 0 ||
       json_get_u8(buf, "powershield_reflect_frames", &g_params.powershield_reflect_frames) != 0 ||
       json_get_u8(buf, "powershield_reflect_total_frames", &g_params.powershield_reflect_total_frames) != 0 ||
+      json_get_f32(buf, "spotdodge_stick_y_threshold", &g_params.spotdodge_stick_y_threshold) != 0 ||
+      json_get_f32(buf, "escape_stick_x_threshold", &g_params.escape_stick_x_threshold) != 0 ||
+      json_get_u8(buf, "spotdodge_flick_tilt_max_frames", &g_params.spotdodge_flick_tilt_max_frames) != 0 ||
+      json_get_u8(buf, "escape_flick_tilt_max_frames", &g_params.escape_flick_tilt_max_frames) != 0 ||
       json_get_f32(buf, "start_shield_health", &g_params.start_shield_health) != 0 ||
       json_get_f32(buf, "shield_recharge_per_frame", &g_params.shield_recharge_per_frame) != 0 ||
       json_get_f32(buf, "shield_hold_drain_mul", &g_params.shield_hold_drain_mul) != 0 ||

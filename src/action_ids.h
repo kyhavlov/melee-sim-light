@@ -47,6 +47,12 @@ typedef enum MslActionId {
   MSL_ACT_GUARD_OFF = 0x00B4,      // ftCo_MS_GuardOff
   MSL_ACT_GUARD_SET_OFF = 0x00B5,  // ftCo_MS_GuardSetOff
   MSL_ACT_GUARD_REFLECT = 0x00B6,  // ftCo_MS_GuardReflect
+
+  // Shield defensive options (grounded).
+  // Source of truth: refs/melee/src/melee/ft/chara/ftCommon/forward.h `ftCommon_MotionState`.
+  MSL_ACT_ESCAPE_F = 0x00E9,  // ftCo_MS_EscapeF (roll forward)
+  MSL_ACT_ESCAPE_B = 0x00EA,  // ftCo_MS_EscapeB (roll backward)
+  MSL_ACT_ESCAPE_N = 0x00EB,  // ftCo_MS_EscapeN (spotdodge)
 } MslActionId;
 
 // Additional GALE01 common action ids needed for fastfall gating.
@@ -95,6 +101,11 @@ typedef enum MslSubmotionId {
   MSL_SM_GUARD_ON = 37,   // ftCo_SM_GuardOn
   MSL_SM_GUARD = 38,      // ftCo_SM_Guard
   MSL_SM_GUARD_OFF = 39,  // ftCo_SM_GuardOff
+  MSL_SM_GUARD_DAMAGE = 40, // ftCo_SM_GuardDamage
+  MSL_SM_ESCAPE_N = 41,     // ftCo_SM_EscapeN
+  MSL_SM_ESCAPE_F = 42,     // ftCo_SM_EscapeF
+  MSL_SM_ESCAPE_B = 43,     // ftCo_SM_EscapeB
+  MSL_SM_ESCAPE_AIR = 44,   // ftCo_SM_EscapeAir
 
   MSL_SM_LANDING_AIR_N = 73,  // ftCo_SM_LandingAirN
   MSL_SM_LANDING_AIR_F = 74,  // ftCo_SM_LandingAirF
@@ -128,6 +139,9 @@ static inline uint8_t msl_action_is_ground_locomotion(uint16_t action_id) {
     case MSL_ACT_GUARD_OFF:
     case MSL_ACT_GUARD_SET_OFF:
     case MSL_ACT_GUARD_REFLECT:
+    case MSL_ACT_ESCAPE_F:
+    case MSL_ACT_ESCAPE_B:
+    case MSL_ACT_ESCAPE_N:
       return 1;
     default:
       return 0;

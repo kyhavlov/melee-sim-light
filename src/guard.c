@@ -3,6 +3,7 @@
 #include "action_ids.h"
 #include "anim_table.h"
 #include "buttons.h"
+#include "escape.h"
 
 static inline float trigger_u8_to_unit(uint8_t v) { return (float)v * (1.0f / 255.0f); }
 
@@ -179,8 +180,14 @@ void guard_update_grounded(MslBatch* batch, const MslCommonParams* c, size_t idx
       const float end_frame = msl_anim_end_frame(batch->state.char_id[idx], (uint16_t)MSL_SM_GUARD_ON);
       if (end_frame > 0.0f && ((float)batch->state.action_frame[idx] >= end_frame)) {
         enter_guard_hold(batch, idx);
-        return;
       }
+    }
+
+    // Shield defensive options (grounded): spotdodge / rolls.
+    // Decomp call site: ftCo_GuardOn_IASA / ftCo_Guard_IASA.
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c:393-409 and :454-469.
+    if (escape_try_enter_from_guard(batch, c, idx)) {
+      return;
     }
     return;
   }
