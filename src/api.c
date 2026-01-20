@@ -4,7 +4,10 @@
 #include <string.h>
 
 #include "alloc.h"
+#include "anim_table.h"
 #include "batch_internal.h"
+#include "char_params.h"
+#include "common_params.h"
 #include "config.h"
 #include "stage_collision.h"
 #include "state.h"
@@ -32,6 +35,21 @@ MslBatch* msl_batch_create(int batch_size, int num_players) {
   }
 
   if (stage_collision_init() != 0) {
+    msl_batch_destroy(batch);
+    return NULL;
+  }
+
+  if (common_params_init() != 0) {
+    msl_batch_destroy(batch);
+    return NULL;
+  }
+
+  if (char_params_init() != 0) {
+    msl_batch_destroy(batch);
+    return NULL;
+  }
+
+  if (anim_table_init() != 0) {
     msl_batch_destroy(batch);
     return NULL;
   }
@@ -105,6 +123,9 @@ int msl_batch_reseed_seed(MslBatch* batch, const uint8_t* seed_bytes, size_t see
       batch->state.action_frame[idx] = seed->action_frame[p];
       batch->state.jumps_left[idx] = seed->jumps_left[p];
       batch->state.stocks[idx] = seed->stocks[p];
+      batch->state.kneebend_jump_input[idx] = 0;
+      batch->state.kneebend_is_short_hop[idx] = 0;
+      batch->state.turn_has_turned[idx] = 0;
 
       batch->state.percent[idx] = seed->percent[p];
       batch->state.shield_hp[idx] = seed->shield_hp[p];

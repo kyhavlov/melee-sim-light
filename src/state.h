@@ -27,12 +27,17 @@ typedef struct MslStateSoA {
   float* speed_y_attack;
   uint8_t* facing;
   uint8_t* on_ground;
+  uint8_t* prev_on_ground;  // on_ground value before stage_collision_apply().
 
   // State machine
   uint16_t* action_id;
   int16_t* action_frame;
   uint8_t* jumps_left;
   uint8_t* stocks;
+  // Locomotion internals (not part of the seed/compare schema; must be cleared on reseed)
+  uint8_t* kneebend_jump_input;    // ftCo_JumpInput (refs/melee/src/melee/ft/chara/ftCommon/forward.h)
+  uint8_t* kneebend_is_short_hop;  // latched during KneeBend IASA (ftCo_KneeBend_Check_ShortHop)
+  uint8_t* turn_has_turned;        // ftCo_Turn_Anim_Inner (tracks immediate smash-turn)
 
   // Combat/timers
   float* percent;
@@ -57,6 +62,8 @@ typedef struct MslStateSoA {
   uint16_t* input_buttons_released;  // [batch * players] (falling edge)
   int8_t* input_main_x;              // [batch * players] (legalized/clamped; -80..80)
   int8_t* input_main_y;              // [batch * players] (legalized/clamped; -80..80)
+  int8_t* prev_input_main_x;         // [batch * players] (processed from prev_input_bytes)
+  int8_t* prev_input_main_y;         // [batch * players] (processed from prev_input_bytes)
   int8_t* input_c_x;                 // [batch * players] (legalized/clamped; -80..80)
   int8_t* input_c_y;                 // [batch * players] (legalized/clamped; -80..80)
   uint8_t* input_l;                  // [batch * players] (0..255)

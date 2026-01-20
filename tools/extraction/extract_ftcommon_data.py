@@ -54,6 +54,13 @@ def main() -> None:
         "lstick_tilt_x_thresh": float(_f32_be(buf, ft_common_abs + 0x08)),
         "lstick_tilt_y_thresh": float(_f32_be(buf, ft_common_abs + 0x0C)),
         "trigger_deadzone": float(_f32_be(buf, ft_common_abs + 0x10)),
+        # Walk / turn / run thresholds (ftwalkcommon.c / ftCo_Turn.c / ftCo_Run.c).
+        # These are `p_ftCommonData->x24`, `x28`, `x2C`, `x34`, `x58` in doldecomp naming.
+        "walk_stick_threshold": float(_f32_be(buf, ft_common_abs + 0x24)),
+        "walk_mid_vel_mul": float(_f32_be(buf, ft_common_abs + 0x28)),
+        "walk_fast_vel_mul": float(_f32_be(buf, ft_common_abs + 0x2C)),
+        "turn_stick_x_threshold": float(_f32_be(buf, ft_common_abs + 0x34)),
+        "run_stick_x_threshold": float(_f32_be(buf, ft_common_abs + 0x58)),
         # C-stick/L-stick thresholds for aerial attack direction (ftCo_AttackAir.c / ft_0DF1.c):
         # - Neutral-air selection: ABS(stick_x) < xDC && ABS(stick_y) < xE0.
         # - C-stick aerial edge: (ABS(cstick1.x) < xDC && ABS(cstick.x) >= xDC) ||
@@ -151,6 +158,9 @@ def main() -> None:
         # Gameplay thresholds
         "tap_jump_threshold": float(_f32_be(buf, ft_common_abs + 0x70)),
         "tap_jump_tilt_max_frames": int(_i32_be(buf, ft_common_abs + 0x74)),
+        # Jump direction (ftCo_Jump_Enter / ftCo_JumpAerial_Enter_Basic):
+        # (lstick.x * facing_dir) > -x78 ? JumpF : JumpB
+        "jump_back_x_threshold": float(_f32_be(buf, ft_common_abs + 0x78)),
         "tap_jump_release_threshold": float(_f32_be(buf, ft_common_abs + 0x7C)),
         "fastfall_stick_threshold": float(_f32_be(buf, ft_common_abs + 0x88)),
         "fastfall_tilt_max_frames": int(_i32_be(buf, ft_common_abs + 0x8C)),

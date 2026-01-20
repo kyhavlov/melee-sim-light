@@ -17,6 +17,7 @@ void physics_integrate(MslBatch* batch) {
       // real "crossing" checks (pre vs post integration) without inferring prior position.
       batch->state.prev_pos_x[idx] = batch->state.pos_x[idx];
       batch->state.prev_pos_y[idx] = batch->state.pos_y[idx];
+      batch->state.prev_on_ground[idx] = batch->state.on_ground[idx] ? 1 : 0;
 
       // Hitlag freezes motion/physics advancement:
       // - refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate runs its main integration block only
@@ -34,10 +35,24 @@ void physics_integrate(MslBatch* batch) {
       batch->state.pos_y[idx] += vy;
 
       if (!on_ground) {
-        const MslCharPhysicsParams phys = msl_char_physics_params(batch->state.char_id[idx]);
-        float next_vy = vy - phys.grav;
-        if (next_vy < -phys.terminal_vel) {
-          next_vy = -phys.terminal_vel;
+        const MslCharParams* phys = msl_char_params(batch->state.char_id[idx]);
+        if (phys == NULL) {
+          continue;
+        }
+
+        // Air gravity / terminal velocity / fastfall.
+        //
+        // Decomp refs:
+        // - Gravity/terminal: refs/melee/src/melee/ft/ftcommon.c::ftCommon_Fall
+        // - Fastfall: refs/melee/src/melee/ft/ftcommon.c::ftCommon_FallFast (called via ft_80084DB0)
+        float next_vy = vy;
+        if (next_vy <= -phys->fast_fall_velocity) {
+          next_vy = -phys->fast_fall_velocity;
+        } else {
+          next_vy -= phys->grav;
+          if (next_vy < -phys->terminal_vel) {
+            next_vy = -phys->terminal_vel;
+          }
         }
         batch->state.speed_y_self[idx] = next_vy;
       }

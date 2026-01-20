@@ -2,31 +2,52 @@
 
 #include <stdint.h>
 
-// Minimal per-character physics parameters (temporary).
+// Init-time loader for a small subset of per-character attributes needed for locomotion/physics.
 //
 // Source of truth: ISO-extracted character attributes under `data/characters/*.json`.
-// - Fox:   `data/characters/fox.json`   keys `grav`, `terminal_vel`
-// - Falco: `data/characters/falco.json` keys `grav`, `terminal_vel`
+// Extractor: `tools/extraction/extract_character_attrs.py` (decomp-first).
 //
-// Note: this is intentionally small; we will replace/expand it when the extracted data
-// is loaded into native tables.
+// IMPORTANT: char_params_init() may do IO/allocations; call only during batch init.
+// The per-frame hot path must remain alloc-free.
 
-typedef struct MslCharPhysicsParams {
+typedef struct MslCharParams {
+  // Ground locomotion
+  float walk_init_vel;
+  float walk_accel;
+  float walk_max_vel;
+  float gr_friction;
+  float ground_max_horizontal_velocity;
+
+  float dash_initial_velocity;
+  float dash_run_acceleration_a;
+  float dash_run_acceleration_b;
+  float dash_run_terminal_velocity;
+
+  float run_animation_scaling;
+
+  // Turn / jump
+  uint8_t turn_frames;
+  uint8_t jump_startup_frames;
+  uint8_t max_jumps;
+
+  float jump_h_initial_velocity;
+  float jump_v_initial_velocity;
+  float hop_v_initial_velocity;
+  float ground_to_air_jump_momentum_multiplier;
+  float jump_h_max_velocity;
+
+  // Air physics
   float grav;
   float terminal_vel;
-} MslCharPhysicsParams;
+  float fast_fall_velocity;
+  float air_max_horizontal_velocity;
+  float air_drift_stick_mul;
+  float aerial_drift_base;
+  float air_drift_max;
+  float aerial_friction;
+  float air_jump_v_multiplier;
+  float air_jump_h_multiplier;
+} MslCharParams;
 
-static inline MslCharPhysicsParams msl_char_physics_params(uint8_t char_id) {
-  // Character id mapping follows Slippi post-frame `character` (GALE01).
-  // - Fox   = 1
-  // - Falco = 22
-  switch (char_id) {
-    case 1:  // Fox
-      return (MslCharPhysicsParams){.grav = 0.23f, .terminal_vel = 2.80f};
-    case 22:  // Falco
-      return (MslCharPhysicsParams){.grav = 0.17f, .terminal_vel = 3.10f};
-    default:
-      // Fallback for unsupported characters; keep deterministic.
-      return (MslCharPhysicsParams){.grav = 0.20f, .terminal_vel = 3.00f};
-  }
-}
+int char_params_init(void);
+const MslCharParams* msl_char_params(uint8_t char_id);

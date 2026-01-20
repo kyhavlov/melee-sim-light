@@ -173,6 +173,13 @@ static int fd_load_floor_segments_from_json(const char* json) {
     return -1;
   }
 
+  // Extracted stage coordinates are unscaled `coll_data->verts` from the stage DAT.
+  // (See `tools/extraction/extract_stage_collision.py` and decomp notes there.)
+  //
+  // Note: `data/stages/*.json` also stores `unit_scale` (aka `grGroundParam.x0` / `Ground_801C0498()`),
+  // which `mpLibLoad()` uses to build the runtime scaled collision vertices, but this lightweight sim
+  // currently operates in the unscaled coordinate system.
+
   const char* segs = strstr(json, "\"segments\"");
   if (segs == NULL) {
     return -1;

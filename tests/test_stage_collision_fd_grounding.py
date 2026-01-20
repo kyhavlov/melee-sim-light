@@ -5,6 +5,21 @@ import numpy as np
 from tools.eval.dataset import COMPARE_DTYPE, INPUT_DTYPE, SEED_DTYPE
 
 
+def _fd_floor_nonplatform_edges_world() -> list[float]:
+    import json
+    from pathlib import Path
+
+    fd = json.loads(Path("data/stages/final_destination.json").read_text())
+
+    edges: set[float] = set()
+    for s in fd["segments"]:
+        if s["kind"] != "floor" or bool(s["platform"]):
+            continue
+        edges.add(float(s["x0"]))
+        edges.add(float(s["x1"]))
+    return sorted(edges)
+
+
 def _step_once(seed: np.ndarray) -> np.ndarray:
     import msl_binding
 
@@ -45,8 +60,13 @@ def _seed_base(*, stage_id: int) -> np.ndarray:
 
 
 def test_fd_boundary_x_minus60_picks_mid_segment() -> None:
+    # Boundary between left lip and main floor, in world units.
+    # `data/stages/final_destination.json` provides unscaled DAT-space endpoints.
+    edges = _fd_floor_nonplatform_edges_world()
+    # edges: [-x_max, -x_boundary, +x_boundary, +x_max]
+    x_boundary = edges[1]
     seed = _seed_base(stage_id=32)
-    seed["pos_x"][0, 0] = np.float32(-60.0)
+    seed["pos_x"][0, 0] = np.float32(x_boundary)
     seed["pos_y"][0, 0] = np.float32(0.0)
     seed["speed_y_self"][0, 0] = np.float32(0.0)
     seed["on_ground"][0, 0] = np.uint8(0)
@@ -57,8 +77,11 @@ def test_fd_boundary_x_minus60_picks_mid_segment() -> None:
 
 
 def test_fd_boundary_x_60_picks_right_segment() -> None:
+    # Boundary between main floor and right lip, in world units.
+    edges = _fd_floor_nonplatform_edges_world()
+    x_boundary = edges[2]
     seed = _seed_base(stage_id=32)
-    seed["pos_x"][0, 0] = np.float32(60.0)
+    seed["pos_x"][0, 0] = np.float32(x_boundary)
     seed["pos_y"][0, 0] = np.float32(0.0)
     seed["speed_y_self"][0, 0] = np.float32(0.0)
     seed["on_ground"][0, 0] = np.uint8(0)

@@ -39,11 +39,15 @@ int state_alloc(MslStateSoA* state, int batch_size) {
   state->speed_y_attack = (float*)alloc_aligned_64(sizeof(float) * bp);
   state->facing = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->on_ground = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
+  state->prev_on_ground = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
 
   state->action_id = (uint16_t*)alloc_aligned_64(sizeof(uint16_t) * bp);
   state->action_frame = (int16_t*)alloc_aligned_64(sizeof(int16_t) * bp);
   state->jumps_left = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->stocks = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
+  state->kneebend_jump_input = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
+  state->kneebend_is_short_hop = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
+  state->turn_has_turned = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
 
   state->percent = (float*)alloc_aligned_64(sizeof(float) * bp);
   state->shield_hp = (float*)alloc_aligned_64(sizeof(float) * bp);
@@ -66,6 +70,8 @@ int state_alloc(MslStateSoA* state, int batch_size) {
   state->input_buttons_released = (uint16_t*)alloc_aligned_64(sizeof(uint16_t) * bp);
   state->input_main_x = (int8_t*)alloc_aligned_64(sizeof(int8_t) * bp);
   state->input_main_y = (int8_t*)alloc_aligned_64(sizeof(int8_t) * bp);
+  state->prev_input_main_x = (int8_t*)alloc_aligned_64(sizeof(int8_t) * bp);
+  state->prev_input_main_y = (int8_t*)alloc_aligned_64(sizeof(int8_t) * bp);
   state->input_c_x = (int8_t*)alloc_aligned_64(sizeof(int8_t) * bp);
   state->input_c_y = (int8_t*)alloc_aligned_64(sizeof(int8_t) * bp);
   state->input_l = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
@@ -93,19 +99,20 @@ int state_alloc(MslStateSoA* state, int batch_size) {
       !state->team_id || !state->char_id || !state->pos_x || !state->pos_y || !state->prev_pos_x ||
       !state->prev_pos_y || !state->speed_air_x_self || !state->speed_ground_x_self ||
       !state->speed_y_self || !state->speed_x_attack || !state->speed_y_attack || !state->facing ||
-      !state->on_ground || !state->action_id || !state->action_frame || !state->jumps_left ||
-      !state->stocks || !state->percent || !state->shield_hp || !state->hitlag || !state->hitstun ||
-      !state->l_cancel || !state->hurtbox_state || !state->ground_id || !state->animation_index ||
-      !state->instance_hit_by || !state->instance_id || !state->last_attack_landed ||
-      !state->combo_count || !state->last_hit_by || !state->state_flags || !state->input_buttons ||
+      !state->on_ground || !state->prev_on_ground || !state->action_id || !state->action_frame ||
+      !state->jumps_left || !state->stocks || !state->kneebend_jump_input ||
+      !state->kneebend_is_short_hop || !state->turn_has_turned || !state->percent || !state->shield_hp || !state->hitlag ||
+      !state->hitstun || !state->l_cancel || !state->hurtbox_state || !state->ground_id ||
+      !state->animation_index || !state->instance_hit_by || !state->instance_id ||
+      !state->last_attack_landed || !state->combo_count || !state->last_hit_by || !state->state_flags || !state->input_buttons ||
       !state->prev_input_buttons || !state->input_buttons_pressed ||
       !state->input_buttons_released || !state->input_main_x || !state->input_main_y ||
-      !state->input_c_x || !state->input_c_y || !state->input_l || !state->input_r ||
-      !state->item_exists || !state->item_state || !state->item_type || !state->item_owner ||
-      !state->item_instance_id || !state->item_direction || !state->item_vel_x ||
-      !state->item_vel_y || !state->item_pos_x || !state->item_pos_y || !state->item_damage ||
-      !state->item_timer || !state->item_spawn_id || !state->item_misc0 || !state->item_misc1 ||
-      !state->item_misc2 || !state->item_misc3) {
+      !state->prev_input_main_x || !state->prev_input_main_y || !state->input_c_x ||
+      !state->input_c_y || !state->input_l || !state->input_r || !state->item_exists ||
+      !state->item_state || !state->item_type || !state->item_owner || !state->item_instance_id ||
+      !state->item_direction || !state->item_vel_x || !state->item_vel_y || !state->item_pos_x ||
+      !state->item_pos_y || !state->item_damage || !state->item_timer || !state->item_spawn_id ||
+      !state->item_misc0 || !state->item_misc1 || !state->item_misc2 || !state->item_misc3) {
     return -1;
   }
 
@@ -134,11 +141,15 @@ void state_free(MslStateSoA* state) {
   alloc_free(state->speed_y_attack);
   alloc_free(state->facing);
   alloc_free(state->on_ground);
+  alloc_free(state->prev_on_ground);
 
   alloc_free(state->action_id);
   alloc_free(state->action_frame);
   alloc_free(state->jumps_left);
   alloc_free(state->stocks);
+  alloc_free(state->kneebend_jump_input);
+  alloc_free(state->kneebend_is_short_hop);
+  alloc_free(state->turn_has_turned);
 
   alloc_free(state->percent);
   alloc_free(state->shield_hp);
@@ -161,6 +172,8 @@ void state_free(MslStateSoA* state) {
   alloc_free(state->input_buttons_released);
   alloc_free(state->input_main_x);
   alloc_free(state->input_main_y);
+  alloc_free(state->prev_input_main_x);
+  alloc_free(state->prev_input_main_y);
   alloc_free(state->input_c_x);
   alloc_free(state->input_c_y);
   alloc_free(state->input_l);

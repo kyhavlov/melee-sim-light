@@ -7,6 +7,7 @@
 #include "hurtboxes.h"
 #include "input.h"
 #include "items.h"
+#include "locomotion.h"
 #include "physics.h"
 #include "stage_collision.h"
 #include "timers.h"
@@ -35,6 +36,7 @@ int step_one_frame(MslBatch* batch, const uint8_t* prev_input_bytes, size_t prev
   action_update(batch);
   physics_integrate(batch);
   stage_collision_apply(batch);
+  locomotion_update_post_collision(batch);
   hurtboxes_refresh(batch);
   combat_resolve(batch);
   items_update(batch);

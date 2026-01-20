@@ -60,6 +60,17 @@ def _extract_segments(stage_dat: Path) -> dict:
         raise ValueError(f"{stage_dat.name}: missing public symbol 'coll_data'")
 
     gp_abs = arc.get_public_offset("grGroundParam")
+    # Stage collision scale factor.
+    #
+    # Decomp:
+    # - `Ground_801C0498()` returns `stage_info.param->x0` (loaded from public symbol `grGroundParam`).
+    # - `mpLibLoad()` uses `f31 = Ground_801C0498()` and sets `groundCollVtx[i].pos = f31 * coll_data->verts[i]`.
+    #   refs/melee/src/melee/gr/ground.c:270 (Ground_801C0498)
+    #   refs/melee/src/melee/mp/mplib.c:174,252-263 (mpLibLoad)
+    #
+    # Convention for extracted `data/stages/*.json`:
+    # - We store *unscaled* `coll_data->verts` coordinates (as they appear in the stage DAT).
+    # - We also emit `unit_scale` so consumers can reproduce `mpLibLoad`'s scaled coordinates if needed.
     scale = float(_f32_be(buf, gp_abs + 0x00)) if gp_abs is not None else 1.0
 
     verts_abs = arc.ptr32(coll_abs + 0x00)
@@ -69,8 +80,8 @@ def _extract_segments(stage_dat: Path) -> dict:
 
     verts: list[tuple[float, float]] = []
     for i in range(vert_count):
-        x = float(_f32_be(buf, verts_abs + i * 8 + 0x00)) * scale
-        y = float(_f32_be(buf, verts_abs + i * 8 + 0x04)) * scale
+        x = float(_f32_be(buf, verts_abs + i * 8 + 0x00))
+        y = float(_f32_be(buf, verts_abs + i * 8 + 0x04))
         verts.append((x, y))
 
     kind_for_line: dict[int, str] = {}

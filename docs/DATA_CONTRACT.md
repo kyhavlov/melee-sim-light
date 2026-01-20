@@ -15,6 +15,11 @@ Stage (Final Destination):
   - Note: the C core currently parses this JSON **once at init** (temporary). We will move to a compact
     binary artifact for stage collision later to avoid JSON parsing overhead/complexity.
   - Safety guard: the loader caps `line_count` at 4096 to prevent unbounded allocations on malformed files.
+  - Coordinate convention:
+    - `segments[].x0/y0/x1/y1` are **unscaled** `coll_data->verts` coordinates as stored in the stage DAT.
+    - `unit_scale` is `grGroundParam.x0` (aka `Ground_801C0498()`), which `mpLibLoad()` uses to scale
+      collision vertices at runtime (`groundCollVtx[i].pos = unit_scale * coll_data->verts[i]`).
+      Decomp refs: `refs/melee/src/melee/gr/ground.c:270` and `refs/melee/src/melee/mp/mplib.c:174,252-263`.
 
 Common constants:
 - `_iso/PlCo.dat` (source)

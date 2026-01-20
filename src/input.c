@@ -40,8 +40,12 @@ int input_apply(MslBatch* batch, const uint8_t* prev_input_bytes, size_t prev_in
           ucf_process_stick_i8(cur->p[p].main_x, cur->p[p].main_y, ucf_enabled, cardinals);
       const MslStickI8 c =
           ucf_process_stick_i8(cur->p[p].c_x, cur->p[p].c_y, ucf_enabled, cardinals);
+      const MslStickI8 prev_main =
+          ucf_process_stick_i8(prev->p[p].main_x, prev->p[p].main_y, ucf_enabled, cardinals);
       batch->state.input_main_x[idx] = main.x;
       batch->state.input_main_y[idx] = main.y;
+      batch->state.prev_input_main_x[idx] = prev_main.x;
+      batch->state.prev_input_main_y[idx] = prev_main.y;
       batch->state.input_c_x[idx] = c.x;
       batch->state.input_c_y[idx] = c.y;
 
