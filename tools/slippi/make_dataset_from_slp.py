@@ -139,6 +139,8 @@ def write_dataset_from_slp(
     slp_path: str,
     out_path: str,
     ports: list[int] | None = None,
+    ucf_enabled: bool = True,
+    ucf_cardinals_1_0_enabled: bool = False,
 ) -> None:
     """
     Build a dataset from a single .slp by reseeding with post(i-1),
@@ -153,6 +155,8 @@ def write_dataset_from_slp(
     a.slp = slp_path
     a.out = out_path
     a.ports = None if ports is None else ",".join(str(p) for p in ports)
+    a.ucf_enabled = bool(ucf_enabled)
+    a.ucf_cardinals_1_0_enabled = bool(ucf_cardinals_1_0_enabled)
 
     _main_impl(a)
 
@@ -167,14 +171,34 @@ def main() -> None:
         help="Comma-separated 1-based ports to include (e.g. '1,2' for singles). "
         "If omitted, uses all HUMAN ports from game start.",
     )
+    ap.add_argument("--ucf-enabled", action="store_true", default=True)
+    ap.add_argument("--no-ucf-enabled", dest="ucf_enabled", action="store_false")
+    ap.add_argument("--ucf-cardinals-1-0-enabled", action="store_true", default=False)
+    ap.add_argument(
+        "--no-ucf-cardinals-1-0-enabled", dest="ucf_cardinals_1_0_enabled", action="store_false"
+    )
     args = ap.parse_args()
     _main_impl(args)
 
 def _main_impl(args) -> None:
+    import json
+    from pathlib import Path
+
+    from tools.slippi.seed_history import (
+        apply_deadzone,
+        compute_tilt_timer_axis_pre_post,
+        derive_turn_internals,
+        stick_i8_to_unit,
+        ucf_process_stick_i8,
+    )
+
     game = _read_slippi(args.slp, False)
     frames_all = game.frames
     if frames_all is None or len(frames_all) == 0:
         raise ValueError("Replay has no frames")
+
+    ucf_enabled = bool(getattr(args, "ucf_enabled", True))
+    ucf_cardinals_1_0_enabled = bool(getattr(args, "ucf_cardinals_1_0_enabled", False))
 
     # Decide which source ports to include.
     if args.ports is not None:
@@ -234,6 +258,34 @@ def _main_impl(args) -> None:
 
     stage_id = int(game.start.get("stage", 0))
     is_teams = int(bool(game.start.get("is_teams", False)))
+
+    common = json.loads(Path("data/common/ft_common_data.json").read_text())
+    lstick_deadzone_x = float(common["lstick_deadzone_x"])
+    lstick_deadzone_y = float(common["lstick_deadzone_y"])
+    lstick_tilt_x_thresh = float(common["lstick_tilt_x_thresh"])
+    lstick_tilt_y_thresh = float(common["lstick_tilt_y_thresh"])
+    dash_flick_abs = float(common["dash_flick_abs"])
+    dash_flick_tilt_max_frames = int(common["dash_flick_tilt_max_frames"])
+
+    # Action ids (GALE01): refs/melee/src/melee/ft/chara/ftCommon/forward.h
+    act_turn = 0x0012
+    act_turn_run = 0x0013
+    act_dash = 0x0014
+    act_jump_f = 0x0019
+    act_jump_b = 0x001A
+    act_jump_aerial_f = 0x001B
+    act_jump_aerial_b = 0x001C
+
+    # Character id mapping follows Slippi post-frame `character` (GALE01):
+    # - Fox   = 1
+    # - Falco = 22
+    turn_frames_lut = np.zeros(256, dtype=np.uint8)
+    turn_frames_lut[np.uint8(1)] = np.uint8(
+        json.loads(Path("data/characters/fox.json").read_text())["turn_frames"]
+    )
+    turn_frames_lut[np.uint8(22)] = np.uint8(
+        json.loads(Path("data/characters/falco.json").read_text())["turn_frames"]
+    )
 
     # Frame ids and seeds (seed from frame i-1, ref from frame i).
     samples["seed_t"]["frame_id"] = frame_ids[:-1]
@@ -398,6 +450,60 @@ def _main_impl(args) -> None:
 
         samples["seed_t"]["state_flags"][:, slot, :] = state_flags[:-1, :]
         samples["ref_t1"]["state_flags"][:, slot, :] = state_flags[1:, :]
+
+        # -----------------------------
+        # Multi-frame seeded internals:
+        # - x670/x671 tilt timers (dash flick / tap jump gates)
+        # - TURN countdown + flip latch
+        # -----------------------------
+        main_x_proc, main_y_proc = ucf_process_stick_i8(
+            pre_main_x,
+            pre_main_y,
+            ucf_enabled=ucf_enabled,
+            ucf_cardinals_1_0_enabled=ucf_cardinals_1_0_enabled,
+        )
+        stick_x = apply_deadzone(stick_i8_to_unit(main_x_proc), lstick_deadzone_x)
+        stick_y = apply_deadzone(stick_i8_to_unit(main_y_proc), lstick_deadzone_y)
+
+        # Action-entry overrides (decomp):
+        # - Dash: refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c:55-71
+        # - Jump: refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c:101-150
+        # - JumpAerial: refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c:140-180
+        is_dash = post_state == np.uint16(act_dash)
+        dash_entry = is_dash & ~np.concatenate(([False], is_dash[:-1]))
+        is_jump = (
+            (post_state == np.uint16(act_jump_f))
+            | (post_state == np.uint16(act_jump_b))
+            | (post_state == np.uint16(act_jump_aerial_f))
+            | (post_state == np.uint16(act_jump_aerial_b))
+        )
+        jump_entry = is_jump & ~np.concatenate(([False], is_jump[:-1]))
+        tilt_timer_x_pre, tilt_timer_x_post = compute_tilt_timer_axis_pre_post(
+            stick_x, tilt_thresh=lstick_tilt_x_thresh, override_post_mask=dash_entry, override_post_value=0xFE
+        )
+        tilt_timer_y_pre, tilt_timer_y_post = compute_tilt_timer_axis_pre_post(
+            stick_y, tilt_thresh=lstick_tilt_y_thresh, override_post_mask=jump_entry, override_post_value=0xFE
+        )
+
+        samples["seed_t"]["tilt_timer_x"][:, slot] = tilt_timer_x_post[:-1]
+        samples["seed_t"]["tilt_timer_y"][:, slot] = tilt_timer_y_post[:-1]
+
+        # TURN internals are only meaningful in TURN/TURN_RUN frames; otherwise seed 0.
+        turn_frames = turn_frames_lut[post_char]
+        turn_frames_to_turn, turn_has_turned = derive_turn_internals(
+            action_id=post_state,
+            facing=post_dir,
+            stick_x_unit=stick_x,
+            tilt_timer_x=tilt_timer_x_pre,
+            dash_flick_abs=dash_flick_abs,
+            dash_flick_tilt_max_frames=dash_flick_tilt_max_frames,
+            turn_frames=turn_frames,
+            act_turn=act_turn,
+            act_turn_run=act_turn_run,
+        )
+
+        samples["seed_t"]["turn_frames_to_turn"][:, slot] = turn_frames_to_turn[:-1]
+        samples["seed_t"]["turn_has_turned"][:, slot] = turn_has_turned[:-1]
 
     # Items are global per frame.
     items_fixed = _fill_items_fixed(frames, n_frames)

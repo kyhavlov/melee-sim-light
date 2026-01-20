@@ -64,6 +64,35 @@ def _step_once(seed: np.ndarray, prev_inp: np.ndarray, inp: np.ndarray) -> np.nd
         msl_binding.destroy(handle)
 
 
+def _step_many(seed: np.ndarray, prev_inp: np.ndarray, inp: np.ndarray, n: int) -> list[np.ndarray]:
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    compare_stride = int(sizes["compare"])
+
+    assert seed.dtype == SEED_DTYPE
+    assert seed_stride == SEED_DTYPE.itemsize
+    assert input_stride == INPUT_DTYPE.itemsize
+    assert compare_stride == COMPARE_DTYPE.itemsize
+
+    handle = msl_binding.init(batch_size=1, num_players=2)
+    try:
+        seed_bytes = seed.view(np.uint8).reshape((1, seed_stride))
+        out = np.zeros((1, compare_stride), dtype=np.uint8)
+        outs: list[np.ndarray] = []
+
+        msl_binding.reseed_seed(handle, seed_bytes)
+        for _ in range(n):
+            msl_binding.step_input(handle, prev_inp, inp)
+            msl_binding.write_compare(handle, out)
+            outs.append(out.view(COMPARE_DTYPE).reshape((1,))[0].copy())
+        return outs
+    finally:
+        msl_binding.destroy(handle)
+
+
 def _seed_base() -> np.ndarray:
     seed = np.zeros((1,), dtype=SEED_DTYPE)
     seed["stage_id"][0] = np.uint32(STAGE_FD)
@@ -244,105 +273,51 @@ def test_jump_end_enters_fall() -> None:
 
 
 def test_turn_reseed_does_not_flip_immediately_when_action_frame_is_0() -> None:
-    import msl_binding
-
-    sizes = msl_binding.sizes()
-    input_stride = int(sizes["input"])
-
     seed = _seed_base()
     seed["on_ground"][0, 0] = np.uint8(1)
     seed["action_id"][0, 0] = np.uint16(ACT_TURN)
     seed["action_frame"][0, 0] = np.int16(0)
     seed["animation_index"][0, 0] = np.uint32(SM_TURN)
     seed["facing"][0, 0] = np.uint8(1)
+    seed["turn_frames_to_turn"][0, 0] = np.uint8(1)
+    seed["turn_has_turned"][0, 0] = np.uint8(0)
 
-    prev_inp = _mk_input_bytes(1, input_stride)
-    inp = _mk_input_bytes(1, input_stride)
-
-    out = _step_once(seed, prev_inp, inp)
-    assert int(out["action_id"][0]) == ACT_TURN
-    assert int(out["action_frame"][0]) == 1
-    assert int(out["facing"][0]) == 1
-
-
-def test_turn_reseed_does_not_flip_early_when_action_frame_equals_turn_frames() -> None:
-    # Teacher-forcing mapping contract:
-    # These TURN reseed tests intentionally lock a deterministic fallback mapping from a single
-    # post-frame `state_age` snapshot to the Turn internals (`frames_to_turn`, `has_turned`).
-    #
-    # This mapping is best-effort (not proven engine truth) and is expected to be replaced once we
-    # seed/derive the missing multi-frame internals (same bucket as x670/x671 timers and KneeBend
-    # entry history). Until then, we keep it deterministic and regression-tested.
     import msl_binding
 
     sizes = msl_binding.sizes()
     input_stride = int(sizes["input"])
-
-    turn_frames = int(_fox_attr("turn_frames"))
-
-    seed = _seed_base()
-    seed["on_ground"][0, 0] = np.uint8(1)
-    seed["action_id"][0, 0] = np.uint16(ACT_TURN)
-    seed["action_frame"][0, 0] = np.int16(turn_frames)
-    seed["animation_index"][0, 0] = np.uint32(SM_TURN)
-    seed["facing"][0, 0] = np.uint8(1)
-
     prev_inp = _mk_input_bytes(1, input_stride)
     inp = _mk_input_bytes(1, input_stride)
 
-    out = _step_once(seed, prev_inp, inp)
-    assert int(out["action_id"][0]) == ACT_TURN
-    assert int(out["action_frame"][0]) == turn_frames + 1
-    # Teacher-forcing mapping contract: do not flip at `action_frame == turn_frames`.
-    assert int(out["facing"][0]) == 1
+    out0, out1, out2 = _step_many(seed, prev_inp, inp, 3)
+    assert int(out0["action_id"][0]) == ACT_TURN
+    assert int(out0["facing"][0]) == 1
+    assert int(out1["action_id"][0]) == ACT_TURN
+    assert int(out1["facing"][0]) == 0
+    assert int(out2["action_id"][0]) == ACT_TURN
+    assert int(out2["facing"][0]) == 0
 
 
-def test_turn_reseed_flips_once_when_countdown_reaches_0() -> None:
-    import msl_binding
-
-    sizes = msl_binding.sizes()
-    input_stride = int(sizes["input"])
-
-    turn_frames = int(_fox_attr("turn_frames"))
-
+def test_turn_seeded_has_turned_prevents_double_flip() -> None:
     seed = _seed_base()
     seed["on_ground"][0, 0] = np.uint8(1)
     seed["action_id"][0, 0] = np.uint16(ACT_TURN)
-    # Teacher-forcing mapping contract: flip becomes pending once action_frame has advanced past
-    # `turn_frames`.
-    seed["action_frame"][0, 0] = np.int16(turn_frames + 1)
-    seed["animation_index"][0, 0] = np.uint32(SM_TURN)
-    seed["facing"][0, 0] = np.uint8(1)
-
-    prev_inp = _mk_input_bytes(1, input_stride)
-    inp = _mk_input_bytes(1, input_stride)
-
-    out = _step_once(seed, prev_inp, inp)
-    assert int(out["action_id"][0]) == ACT_TURN
-    assert int(out["action_frame"][0]) == turn_frames + 2
-    assert int(out["facing"][0]) == 0
-
-
-def test_turn_reseed_does_not_double_flip_after_turning() -> None:
-    import msl_binding
-
-    sizes = msl_binding.sizes()
-    input_stride = int(sizes["input"])
-
-    turn_frames = int(_fox_attr("turn_frames"))
-
-    seed = _seed_base()
-    seed["on_ground"][0, 0] = np.uint8(1)
-    seed["action_id"][0, 0] = np.uint16(ACT_TURN)
-    # After the flip frame, facing is already flipped in the snapshot and the internal latch should
-    # be reseeded to prevent an additional flip.
-    seed["action_frame"][0, 0] = np.int16(turn_frames + 2)
+    seed["action_frame"][0, 0] = np.int16(0)
     seed["animation_index"][0, 0] = np.uint32(SM_TURN)
     seed["facing"][0, 0] = np.uint8(0)
+    seed["turn_frames_to_turn"][0, 0] = np.uint8(0)
+    seed["turn_has_turned"][0, 0] = np.uint8(1)
+
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    input_stride = int(sizes["input"])
 
     prev_inp = _mk_input_bytes(1, input_stride)
     inp = _mk_input_bytes(1, input_stride)
 
-    out = _step_once(seed, prev_inp, inp)
-    assert int(out["action_id"][0]) == ACT_TURN
-    assert int(out["facing"][0]) == 0
+    out0, out1 = _step_many(seed, prev_inp, inp, 2)
+    assert int(out0["action_id"][0]) == ACT_TURN
+    assert int(out0["facing"][0]) == 0
+    assert int(out1["action_id"][0]) == ACT_TURN
+    assert int(out1["facing"][0]) == 0

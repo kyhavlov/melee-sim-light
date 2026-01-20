@@ -46,7 +46,13 @@ def main() -> None:
                 continue
 
         ports = list(entry.ports)
-        write_dataset_from_slp(slp_path=str(slp_path), out_path=str(out_path), ports=ports)
+        write_dataset_from_slp(
+            slp_path=str(slp_path),
+            out_path=str(out_path),
+            ports=ports,
+            ucf_enabled=bool(suite.ucf_enabled),
+            ucf_cardinals_1_0_enabled=bool(suite.ucf_cardinals_1_0_enabled),
+        )
         built += 1
 
     print(f"suite: {suite.name}")

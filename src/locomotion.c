@@ -199,35 +199,30 @@ static inline uint16_t jump_aerial_action_from_stick(const MslCommonParams* c, f
                                                             : MSL_ACT_JUMP_AERIAL_B;
 }
 
-static inline uint8_t is_dash_flick(const MslCommonParams* c, float stick_x, float prev_stick_x) {
+static inline uint8_t is_dash_flick(const MslCommonParams* c, float stick_x, uint8_t tilt_timer_x) {
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c::ftCo_Dash_CheckInput
-  // Note: vanilla also gates this via `x670_timer_lstick_tilt_x < p_ftCommonData->x40`.
   const float ax = msl_absf(stick_x);
-  const float ap = msl_absf(prev_stick_x);
-  return (ax >= c->dash_flick_abs && ap < c->dash_flick_abs) ? 1 : 0;
+  return (ax >= c->dash_flick_abs && tilt_timer_x < c->dash_flick_tilt_max_frames) ? 1 : 0;
 }
 
-static inline uint8_t did_tap_jump(const MslCommonParams* c, float stick_y, float prev_stick_y) {
+static inline uint8_t did_tap_jump(const MslCommonParams* c, float stick_y, uint8_t tilt_timer_y) {
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c::ftCo_Jump_GetInput
-  // Note: vanilla gates this via `x671_timer_lstick_tilt_y < p_ftCommonData->x74`.
-  // In teacher-forced one-step eval we do not seed `x671_timer_lstick_tilt_y`, so we approximate that
-  // timer with a simple edge check.
-  return (stick_y >= c->tap_jump_threshold && prev_stick_y < c->tap_jump_threshold) ? 1 : 0;
+  return (stick_y >= c->tap_jump_threshold && tilt_timer_y < c->tap_jump_tilt_max_frames) ? 1 : 0;
 }
 
 static inline uint8_t kneebend_infer_jump_input_best_effort(const MslCommonParams* c,
                                                             uint16_t prev_buttons, uint16_t buttons,
-                                                            float stick_y, float prev_stick_y) {
+                                                            float stick_y, uint8_t tilt_timer_y) {
   // Teacher-forcing reseed exception:
   // If we are reseeded mid-KneeBend (jump squat), we do not have the entry-frame history needed to know
   // the original JumpInput source (XY vs tap-jump vs C-stick). We infer it to approximate
   // `ftCo_KneeBend_Check_ShortHop` behavior. This is not a decomp-backed engine state; it is a known
-  // limitation of one-step teacher forcing and should be removed once the dataset seeds the needed
-  // internal history/timers.
+  // limitation of one-step teacher forcing and should be removed once the dataset seeds the missing
+  // KneeBend entry history.
   if (prev_buttons & (uint16_t)MSL_BUTTON_XY) {
     return (uint8_t)MSL_JUMP_INPUT_XY;
   }
-  if (did_tap_jump(c, stick_y, prev_stick_y)) {
+  if (did_tap_jump(c, stick_y, tilt_timer_y)) {
     return (uint8_t)MSL_JUMP_INPUT_LSTICK;
   }
   if (buttons & (uint16_t)MSL_BUTTON_XY) {
@@ -237,11 +232,11 @@ static inline uint8_t kneebend_infer_jump_input_best_effort(const MslCommonParam
 }
 
 static inline MslJumpInput jump_input_from_edges(const MslCommonParams* c, uint16_t buttons_pressed,
-                                                 float stick_y, float prev_stick_y) {
+                                                 float stick_y, uint8_t tilt_timer_y) {
   if (buttons_pressed & (uint16_t)MSL_BUTTON_XY) {
     return MSL_JUMP_INPUT_XY;
   }
-  if (did_tap_jump(c, stick_y, prev_stick_y)) {
+  if (did_tap_jump(c, stick_y, tilt_timer_y)) {
     return MSL_JUMP_INPUT_LSTICK;
   }
   return MSL_JUMP_INPUT_NONE;
@@ -380,6 +375,8 @@ void locomotion_update_pre(MslBatch* batch) {
       float cstick_y;
       uint16_t buttons;
       uint16_t buttons_pressed;
+      uint8_t tilt_timer_x;
+      uint8_t tilt_timer_y;
       uint8_t on_ground;
       float facing_dir;
       uint16_t action_id;
@@ -397,6 +394,8 @@ void locomotion_update_pre(MslBatch* batch) {
 
       buttons = batch->state.input_buttons[idx];
       buttons_pressed = batch->state.input_buttons_pressed[idx];
+      tilt_timer_x = batch->state.tilt_timer_x[idx];
+      tilt_timer_y = batch->state.tilt_timer_y[idx];
 
       on_ground = batch->state.on_ground[idx] ? 1 : 0;
       facing_dir = batch->state.facing[idx] ? 1.0f : -1.0f;
@@ -427,7 +426,7 @@ void locomotion_update_pre(MslBatch* batch) {
           // Jump -> KneeBend.
           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c::ftCo_Jump_CheckInput
           const MslJumpInput j_in =
-              jump_input_from_edges(c, buttons_pressed, stick_y, prev_stick_y);
+              jump_input_from_edges(c, buttons_pressed, stick_y, tilt_timer_y);
           if (j_in != MSL_JUMP_INPUT_NONE && batch->state.jumps_left[idx] > 0) {
             batch->state.action_id[idx] = (uint16_t)MSL_ACT_KNEE_BEND;
             batch->state.animation_index[idx] = (uint32_t)MSL_SM_KNEE_BEND;
@@ -435,7 +434,7 @@ void locomotion_update_pre(MslBatch* batch) {
             batch->state.kneebend_jump_input[idx] = (uint8_t)j_in;
             batch->state.kneebend_is_short_hop[idx] = 0;
             action_id = (uint16_t)MSL_ACT_KNEE_BEND;
-          } else if (is_dash_flick(c, stick_x, prev_stick_x)) {
+          } else if (is_dash_flick(c, stick_x, tilt_timer_x)) {
             // Dash flick.
             // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c::ftCo_Dash_CheckInput
             if ((stick_x * facing_dir) < 0.0f) {
@@ -458,6 +457,9 @@ void locomotion_update_pre(MslBatch* batch) {
               batch->state.animation_index[idx] = (uint32_t)MSL_SM_DASH;
               batch->state.action_frame[idx] = 0;
               batch->state.speed_ground_x_self[idx] = facing_dir * ch->dash_initial_velocity;
+              // Decomp: fp->x670_timer_lstick_tilt_x = 0xFE;
+              // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c:62
+              batch->state.tilt_timer_x[idx] = 0xFEu;
               action_id = (uint16_t)MSL_ACT_DASH;
             }
           } else if ((stick_x * facing_dir) <= c->turn_stick_x_threshold) {
@@ -564,7 +566,7 @@ void locomotion_update_pre(MslBatch* batch) {
           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_KneeBend.c:46
           if (!batch->state.kneebend_jump_input[idx]) {
             batch->state.kneebend_jump_input[idx] = kneebend_infer_jump_input_best_effort(
-                c, batch->state.prev_input_buttons[idx], buttons, stick_y, prev_stick_y);
+                c, batch->state.prev_input_buttons[idx], buttons, stick_y, tilt_timer_y);
           }
           if (!batch->state.kneebend_is_short_hop[idx]) {
             const uint8_t j_in = batch->state.kneebend_jump_input[idx];
@@ -605,6 +607,9 @@ void locomotion_update_pre(MslBatch* batch) {
             batch->state.speed_ground_x_self[idx] = 0.0f;
             batch->state.speed_y_self[idx] =
                 full ? ch->jump_v_initial_velocity : ch->hop_v_initial_velocity;
+            // Decomp: fp->x671_timer_lstick_tilt_y = 0xFE;
+            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c:148
+            batch->state.tilt_timer_y[idx] = 0xFEu;
 
             // Consume ground jump.
             if (batch->state.jumps_left[idx] > 0) {
@@ -665,7 +670,7 @@ void locomotion_update_pre(MslBatch* batch) {
 
       // Aerial jump (double jump) entry.
       // refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::ftCo_JumpAerial_Enter_Basic
-      if ((buttons_pressed & (uint16_t)MSL_BUTTON_XY) || did_tap_jump(c, stick_y, prev_stick_y)) {
+      if ((buttons_pressed & (uint16_t)MSL_BUTTON_XY) || did_tap_jump(c, stick_y, tilt_timer_y)) {
         if (batch->state.jumps_left[idx] > 0 && action_id != MSL_ACT_JUMP_AERIAL_F &&
             action_id != MSL_ACT_JUMP_AERIAL_B) {
           const uint16_t act = jump_aerial_action_from_stick(c, stick_x, facing_dir);
@@ -674,6 +679,9 @@ void locomotion_update_pre(MslBatch* batch) {
           batch->state.action_frame[idx] = 0;
           batch->state.speed_air_x_self[idx] = stick_x * ch->air_jump_h_multiplier;
           batch->state.speed_y_self[idx] = ch->jump_v_initial_velocity * ch->air_jump_v_multiplier;
+          // Decomp: fp->x671_timer_lstick_tilt_y = 0xFE;
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c:152-156
+          batch->state.tilt_timer_y[idx] = 0xFEu;
           batch->state.jumps_left[idx]--;
           action_id = act;
         }

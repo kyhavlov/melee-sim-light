@@ -61,6 +61,24 @@ static int json_get_f32(const char* json, const char* key, float* out) {
   return 0;
 }
 
+static int json_get_u8(const char* json, const char* key, uint8_t* out) {
+  if (json == NULL || key == NULL || out == NULL) {
+    return -1;
+  }
+  float f = 0.0f;
+  if (json_get_f32(json, key, &f) != 0) {
+    return -1;
+  }
+  if (f < 0.0f) {
+    f = 0.0f;
+  }
+  if (f > 255.0f) {
+    f = 255.0f;
+  }
+  *out = (uint8_t)(int)(f + 0.5f);
+  return 0;
+}
+
 int common_params_init(void) {
   if (g_loaded) {
     return 0;
@@ -111,7 +129,8 @@ int common_params_init(void) {
   // Input thresholds
   if (json_get_f32(buf, "lstick_deadzone_x", &g_params.lstick_deadzone_x) != 0 ||
       json_get_f32(buf, "lstick_deadzone_y", &g_params.lstick_deadzone_y) != 0 ||
-      json_get_f32(buf, "lstick_tilt_x_thresh", &g_params.lstick_tilt_x_thresh) != 0) {
+      json_get_f32(buf, "lstick_tilt_x_thresh", &g_params.lstick_tilt_x_thresh) != 0 ||
+      json_get_f32(buf, "lstick_tilt_y_thresh", &g_params.lstick_tilt_y_thresh) != 0) {
     alloc_free(buf);
     return -1;
   }
@@ -123,7 +142,8 @@ int common_params_init(void) {
       json_get_f32(buf, "walk_accel_scale_mul", &g_params.walk_accel_scale_mul) != 0 ||
       json_get_f32(buf, "turn_stick_x_threshold", &g_params.turn_stick_x_threshold) != 0 ||
       json_get_f32(buf, "run_stick_x_threshold", &g_params.run_stick_x_threshold) != 0 ||
-      json_get_f32(buf, "dash_flick_abs", &g_params.dash_flick_abs) != 0) {
+      json_get_f32(buf, "dash_flick_abs", &g_params.dash_flick_abs) != 0 ||
+      json_get_u8(buf, "dash_flick_tilt_max_frames", &g_params.dash_flick_tilt_max_frames) != 0) {
     alloc_free(buf);
     return -1;
   }
@@ -131,7 +151,8 @@ int common_params_init(void) {
   if (json_get_f32(buf, "tap_jump_threshold", &g_params.tap_jump_threshold) != 0 ||
       json_get_f32(buf, "tap_jump_release_threshold", &g_params.tap_jump_release_threshold) != 0 ||
       json_get_f32(buf, "jump_back_x_threshold", &g_params.jump_back_x_threshold) != 0 ||
-      json_get_f32(buf, "fastfall_stick_threshold", &g_params.fastfall_stick_threshold) != 0) {
+      json_get_f32(buf, "fastfall_stick_threshold", &g_params.fastfall_stick_threshold) != 0 ||
+      json_get_u8(buf, "tap_jump_tilt_max_frames", &g_params.tap_jump_tilt_max_frames) != 0) {
     alloc_free(buf);
     return -1;
   }

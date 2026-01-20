@@ -126,70 +126,10 @@ int msl_batch_reseed_seed(MslBatch* batch, const uint8_t* seed_bytes, size_t see
       batch->state.stocks[idx] = seed->stocks[p];
       batch->state.kneebend_jump_input[idx] = 0;
       batch->state.kneebend_is_short_hop[idx] = 0;
-      batch->state.turn_has_turned[idx] = 0;
-      batch->state.turn_frames_to_turn[idx] = 0;
-      if (seed->action_id[p] == (uint16_t)MSL_ACT_TURN ||
-          seed->action_id[p] == (uint16_t)MSL_ACT_TURN_RUN) {
-        const MslCharParams* ch = msl_char_params(seed->char_id[p]);
-        if (ch != NULL) {
-          // Reseed mapping for Turn internals from a teacher-forced `action_frame` snapshot.
-          //
-          // Decomp:
-          // - `ftCo_Turn_Enter_*` initializes `fp->mv.co.turn.frames_to_turn` and `has_turned=false`.
-          // - `ftCo_Turn_Enter` calls `ftAnim_8006EBA4(gobj)` immediately after `Fighter_ChangeMotionState`,
-          //   advancing `fp->cur_anim_frame` during the entry frame.
-          //   refs/melee/src/melee/ft/chara/ftCommon/ftCo_Turn.c:46-64
-          // - `ftCo_Turn_Anim_Inner` decrements `frames_to_turn` once per frame while it is > 0,
-          //   then performs a one-time flip when it reaches 0 and `!has_turned`.
-          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Turn.c:39-44 and :56-88
-          //
-          // Snapshot/phase note:
-          // - `ftAnim_8006EBA4` runs before `fp->anim_cb` in `Fighter_procUpdate`.
-          // refs/melee/src/melee/ft/fighter.c:1690-1700
-          // - `ftCo_Turn_Enter_*` may call `ftAnim_8006EBA4` immediately on entry (after
-          //   `Fighter_ChangeMotionState`), which can advance `state_age` within the entry frame.
-          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Turn.c:46-64
-          //
-          // In teacher-forced one-step eval, the only Turn internals we reseed are:
-          // - `frames_to_turn` (countdown)
-          // - `has_turned` (one-time flip latch)
-          //
-          // We interpret a post-frame `state_age` snapshot as having already applied the per-frame
-          // animation advance (`ftAnim_8006EBA4`), but not necessarily having advanced the Turn
-          // countdown via `ftCo_Turn_Anim_Inner` yet. This means the observed `action_frame` is
-          // effectively 1 ahead of the countdown progress (vs a naive `frames_to_turn = tf - af`).
-          //
-          // Teacher-forcing mapping contract (best-effort):
-          // - we must NOT flip early when seeded at `action_frame == turn_frames`.
-          // - the earliest allowed flip from this mapping is at `action_frame == turn_frames + 1`,
-          //   by reseeding `frames_to_turn` such that the next `ftCo_Turn_Anim_Inner` step performs
-          //   the one-time flip when the countdown is at 0 and `!has_turned`.
-          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Turn.c:74-88
-          //
-          // Note: some Enter functions call `ftAnim_8006EBA4` immediately (e.g. Turn/Dash), which can
-          // shift the relationship between post-frame `state_age` and internal countdowns. Without the
-          // full internal history (and without modeling intra-frame callbacks), this mapping is an
-          // approximation but remains deterministic.
-          const int32_t af = (seed->action_frame[p] < 0) ? 0 : (int32_t)seed->action_frame[p];
-          const int32_t tf = (int32_t)ch->turn_frames;
-
-          // Interpret countdown progress as `max(action_frame - 1, 0)`, so:
-          // - af=0/1 -> progress=0 (no countdown decrements applied yet)
-          // - af=tf+1 -> progress=tf (countdown at 0; flip pending)
-          const int32_t progress = (af > 0) ? (af - 1) : 0;
-
-          // Once `action_frame` has advanced beyond the flip-pending point, we assume the flip has
-          // already happened and latch `has_turned` to prevent an extra flip.
-          if (af > (tf + 1)) {
-            batch->state.turn_frames_to_turn[idx] = 0;
-            batch->state.turn_has_turned[idx] = 1;
-          } else {
-            const int32_t rem = tf - progress;
-            batch->state.turn_frames_to_turn[idx] = (rem > 0) ? (uint8_t)rem : 0;
-            batch->state.turn_has_turned[idx] = 0;
-          }
-        }
-      }
+      batch->state.tilt_timer_x[idx] = seed->tilt_timer_x[p];
+      batch->state.tilt_timer_y[idx] = seed->tilt_timer_y[p];
+      batch->state.turn_frames_to_turn[idx] = seed->turn_frames_to_turn[p];
+      batch->state.turn_has_turned[idx] = seed->turn_has_turned[p];
 
       batch->state.percent[idx] = seed->percent[p];
       batch->state.shield_hp[idx] = seed->shield_hp[p];

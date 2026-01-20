@@ -107,6 +107,14 @@ typedef struct MslSeed {
   uint8_t jumps_left[MSL_MAX_PLAYERS];
   uint8_t stocks[MSL_MAX_PLAYERS];
 
+  // Input-history / locomotion internals (seeded from replay history)
+  // Decomp: refs/melee/src/melee/ft/fighter.c:1908-2008 (x670/x671 updates each frame)
+  uint8_t tilt_timer_x[MSL_MAX_PLAYERS];  // fp->x670_timer_lstick_tilt_x
+  uint8_t tilt_timer_y[MSL_MAX_PLAYERS];  // fp->x671_timer_lstick_tilt_y
+  // Decomp: refs/melee/src/melee/ft/chara/ftCommon/ftCo_Turn.c:56-88 (ftCo_Turn_Anim_Inner)
+  uint8_t turn_frames_to_turn[MSL_MAX_PLAYERS];  // fp->mv.co.turn.frames_to_turn
+  uint8_t turn_has_turned[MSL_MAX_PLAYERS];      // fp->mv.co.turn.has_turned
+
   // Combat / timers
   float percent[MSL_MAX_PLAYERS];
   float shield_hp[MSL_MAX_PLAYERS];
