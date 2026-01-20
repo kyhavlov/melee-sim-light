@@ -5,6 +5,7 @@
 #include "api.h"
 #include "buttons.h"
 #include "common_params.h"
+#include "decomp/lb/lb_00ce.h"
 #include "ucf.h"
 
 // Input axes in MslStateSoA are Melee-legalized via ucf_clamp_stick_i8:
@@ -96,6 +97,22 @@ static inline uint8_t x672_trigger_timer_update(uint8_t prev_timer, float trig, 
   return (uint8_t)t;
 }
 
+static inline uint8_t clamp_inc_u8_fe(uint8_t prev) {
+  uint16_t t = (uint16_t)prev + 1u;
+  if (t > 0xFEu) {
+    t = 0xFEu;
+  }
+  return (uint8_t)t;
+}
+
+static inline uint8_t clamp_inc_u8_ff(uint8_t prev) {
+  uint16_t t = (uint16_t)prev;
+  if (t < 0xFFu) {
+    t++;
+  }
+  return (uint8_t)t;
+}
+
 int input_apply(MslBatch* batch, const uint8_t* prev_input_bytes, size_t prev_input_stride_bytes,
                 const uint8_t* input_bytes, size_t input_stride_bytes) {
   if (batch == NULL) {
@@ -161,8 +178,18 @@ int input_apply(MslBatch* batch, const uint8_t* prev_input_bytes, size_t prev_in
       batch->state.input_l[idx] = cur->p[p].l;
       batch->state.input_r[idx] = cur->p[p].r;
 
-      // Update additional input-history timers (single-writer invariant: input.c).
-      enum { LR = (uint16_t)MSL_BUTTON_L | (uint16_t)MSL_BUTTON_R };
+      // Update fighter input counters / input-history timers (single-writer invariant: input.c).
+      // Decomp reference for the full block:
+      // refs/melee/src/melee/ft/fighter.c:1897-2094 (and lb_8000D148 in refs/melee/src/melee/lb/lb_00CE.c:163-225).
+      enum {
+        A = (uint16_t)MSL_BUTTON_A,
+        B = (uint16_t)MSL_BUTTON_B,
+        XY = (uint16_t)MSL_BUTTON_XY,
+        DPAD_UP = (uint16_t)MSL_BUTTON_D_UP,
+        DPAD_DOWN = (uint16_t)MSL_BUTTON_D_DOWN,
+        LR = (uint16_t)MSL_BUTTON_L | (uint16_t)MSL_BUTTON_R,
+      };
+
       batch->state.lr_press_timer[idx] =
           press_timer_u8_update(batch->state.lr_press_timer[idx], batch->state.input_buttons_pressed[idx], LR);
 
@@ -170,6 +197,116 @@ int input_apply(MslBatch* batch, const uint8_t* prev_input_bytes, size_t prev_in
       const float prev_trig = trigger_unit_from_input(prev_buttons, prev->p[p].l, prev->p[p].r);
       batch->state.x672_input_timer[idx] = x672_trigger_timer_update(
           batch->state.x672_input_timer[idx], trig, prev_trig, com->powershield_reflect_trigger_min);
+
+      // x676_x: increment (clamp to 0xFE) then reset on fresh directional entry.
+      batch->state.x676_x[idx] = clamp_inc_u8_fe(batch->state.x676_x[idx]);
+      if (stick_x >= com->lstick_tilt_x_thresh) {
+        if (prev_stick_x >= com->lstick_tilt_x_thresh) {
+          batch->state.x673[idx] = clamp_inc_u8_fe(batch->state.x673[idx]);
+          batch->state.x679_x[idx] = clamp_inc_u8_fe(batch->state.x679_x[idx]);
+        } else {
+          batch->state.x676_x[idx] = 0;
+          batch->state.x673[idx] = 0;
+        }
+      } else if (stick_x <= -com->lstick_tilt_x_thresh) {
+        if (prev_stick_x <= -com->lstick_tilt_x_thresh) {
+          batch->state.x673[idx] = clamp_inc_u8_fe(batch->state.x673[idx]);
+          batch->state.x679_x[idx] = clamp_inc_u8_fe(batch->state.x679_x[idx]);
+        } else {
+          batch->state.x676_x[idx] = 0;
+          batch->state.x673[idx] = 0;
+        }
+      } else {
+        batch->state.x679_x[idx] = 0xFEu;
+        batch->state.x673[idx] = 0xFEu;
+      }
+
+      // x677_y: increment (clamp to 0xFE) then reset on fresh directional entry.
+      batch->state.x677_y[idx] = clamp_inc_u8_fe(batch->state.x677_y[idx]);
+      if (stick_y >= com->lstick_tilt_y_thresh) {
+        if (prev_stick_y >= com->lstick_tilt_y_thresh) {
+          batch->state.x674[idx] = clamp_inc_u8_fe(batch->state.x674[idx]);
+          batch->state.x67A_y[idx] = clamp_inc_u8_fe(batch->state.x67A_y[idx]);
+        } else {
+          batch->state.x677_y[idx] = 0;
+          batch->state.x674[idx] = 0;
+        }
+      } else if (stick_y <= -com->lstick_tilt_y_thresh) {
+        if (prev_stick_y <= -com->lstick_tilt_y_thresh) {
+          batch->state.x674[idx] = clamp_inc_u8_fe(batch->state.x674[idx]);
+          batch->state.x67A_y[idx] = clamp_inc_u8_fe(batch->state.x67A_y[idx]);
+        } else {
+          batch->state.x677_y[idx] = 0;
+          batch->state.x674[idx] = 0;
+        }
+      } else {
+        batch->state.x67A_y[idx] = 0xFEu;
+        batch->state.x674[idx] = 0xFEu;
+      }
+
+      // lb_8000D148 zeroing for certain stick transitions.
+      if (lb_8000D148(prev_stick_x, prev_stick_y, stick_x, stick_y, 0.0f, 0.0f,
+                      com->lstick_tilt_x_thresh)) {
+        batch->state.x67A_y[idx] = 0;
+        batch->state.x679_x[idx] = 0;
+      }
+
+      // x678: increment (clamp to 0xFE) then reset on fresh trigger press.
+      batch->state.x678[idx] = clamp_inc_u8_fe(batch->state.x678[idx]);
+      if (trig >= com->powershield_reflect_trigger_min) {
+        if (prev_trig >= com->powershield_reflect_trigger_min) {
+          batch->state.x675[idx] = clamp_inc_u8_fe(batch->state.x675[idx]);
+          batch->state.x67B[idx] = clamp_inc_u8_fe(batch->state.x67B[idx]);
+        } else {
+          batch->state.x67B[idx] = 0;
+          batch->state.x678[idx] = 0;
+          batch->state.x675[idx] = 0;
+        }
+      } else {
+        batch->state.x67B[idx] = 0xFEu;
+        batch->state.x675[idx] = 0xFEu;
+      }
+
+      // Button timers (saturating at 0xFF, reset to 0 on press).
+      // Note: `input_buttons_pressed` is the per-frame rising-edge mask (decomp: fp->input.x668).
+      const uint16_t pressed = batch->state.input_buttons_pressed[idx];
+      if ((pressed & A) != 0) {
+        batch->state.x683[idx] = batch->state.x67C[idx];
+        batch->state.x67C[idx] = 0;
+      } else {
+        batch->state.x67C[idx] = clamp_inc_u8_ff(batch->state.x67C[idx]);
+      }
+
+      if ((pressed & B) != 0) {
+        batch->state.x67D[idx] = 0;
+      } else {
+        batch->state.x67D[idx] = clamp_inc_u8_ff(batch->state.x67D[idx]);
+      }
+
+      if ((pressed & XY) != 0) {
+        batch->state.x67E[idx] = 0;
+      } else {
+        batch->state.x67E[idx] = clamp_inc_u8_ff(batch->state.x67E[idx]);
+      }
+
+      if ((pressed & DPAD_UP) != 0) {
+        batch->state.x681[idx] = 0;
+      } else {
+        batch->state.x681[idx] = clamp_inc_u8_ff(batch->state.x681[idx]);
+      }
+
+      if ((pressed & DPAD_DOWN) != 0) {
+        batch->state.x682[idx] = 0;
+      } else {
+        batch->state.x682[idx] = clamp_inc_u8_ff(batch->state.x682[idx]);
+      }
+
+      if ((pressed & LR) != 0) {
+        batch->state.x684[idx] = batch->state.x680[idx];
+        batch->state.x680[idx] = 0;
+      } else {
+        batch->state.x680[idx] = clamp_inc_u8_ff(batch->state.x680[idx]);
+      }
     }
   }
 

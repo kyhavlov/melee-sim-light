@@ -584,3 +584,350 @@ def compute_x672_trigger_timer_pre_post(
         prev_t = cur
 
     return out_pre, out_post
+
+
+def lb_8000D148(
+    point0_x: float,
+    point0_y: float,
+    point1_x: float,
+    point1_y: float,
+    point2_x: float,
+    point2_y: float,
+    threshold: float,
+) -> bool:
+    """
+    Port of lb_8000D148 (segment/threshold helper used by fighter input counters).
+
+    Source: refs/melee/src/melee/lb/lb_00CE.c:163-225
+    """
+    # Keep float math and branching structure close to decomp for easier auditing.
+    diff_01_y = np.float32(point0_y) - np.float32(point1_y)
+    diff_01_x = np.float32(point1_x) - np.float32(point0_x)
+    dist_squared_01 = (diff_01_x * diff_01_x) + (diff_01_y * diff_01_y)
+    if dist_squared_01 < np.float32(0.00001):
+        return False
+    dist_01 = np.sqrt(dist_squared_01)
+
+    var_f0 = ((np.float32(point0_x) * np.float32(point1_y)) - (np.float32(point0_y) * np.float32(point1_x))) + (
+        (diff_01_x * np.float32(point2_x)) + (diff_01_y * np.float32(point2_y))
+    )
+    if var_f0 < np.float32(0.0):
+        var_f0 = -var_f0
+
+    thr = np.float32(threshold)
+    if (var_f0 / dist_01) <= thr:
+        diff_02_x = np.float32(point0_x) - np.float32(point2_x)
+        diff_02_y = np.float32(point0_y) - np.float32(point2_y)
+        diff_12_x = np.float32(point1_x) - np.float32(point2_x)
+        diff_12_y = np.float32(point1_y) - np.float32(point2_y)
+        threshold_squared = thr * thr
+        dist_squared_02 = (diff_02_x * diff_02_x) + (diff_02_y * diff_02_y)
+        dist_squared_12 = (diff_12_x * diff_12_x) + (diff_12_y * diff_12_y)
+        if dist_squared_02 < threshold_squared:
+            if dist_squared_12 > threshold_squared:
+                return True
+            if dist_squared_12 < threshold_squared:
+                return False
+            return True
+        if dist_squared_02 > threshold_squared:
+            if dist_squared_12 > threshold_squared:
+                if (
+                    ((point0_x > point2_x) and (point1_x < point2_x))
+                    or ((point0_x < point2_x) and (point1_x > point2_x))
+                    or ((point0_y > point2_y) and (point1_y < point2_y))
+                    or ((point0_y < point2_y) and (point1_y > point2_y))
+                ):
+                    return True
+                return False
+            if dist_squared_12 < threshold_squared:
+                return True
+            return True
+        return True
+    return False
+
+
+def compute_fighter_stick_input_counters(
+    *,
+    stick_x_unit: np.ndarray,
+    stick_y_unit: np.ndarray,
+    tilt_thresh_x: float,
+    tilt_thresh_y: float,
+    start_timer: int = 0xFE,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """
+    Compute the stick-driven fighter input counters block (u8, saturating at 0xFE), causally.
+
+    Outputs are per-frame post-update values for:
+    - x673, x679_x, x676_x (lstick x companions + age counter)
+    - x674, x67A_y, x677_y (lstick y companions + age counter)
+
+    Decomp reference: refs/melee/src/melee/ft/fighter.c:1897-2019
+      (including lb_8000D148 zeroing at :2011-2017).
+    """
+    sx = np.asarray(stick_x_unit, dtype=np.float32).reshape(-1)
+    sy = np.asarray(stick_y_unit, dtype=np.float32).reshape(-1)
+    if int(sy.size) != int(sx.size):
+        raise ValueError("stick_y_unit must match stick_x_unit length")
+    n = int(sx.size)
+
+    out_x673 = np.empty(n, dtype=np.uint8)
+    out_x676_x = np.empty(n, dtype=np.uint8)
+    out_x679_x = np.empty(n, dtype=np.uint8)
+    out_x674 = np.empty(n, dtype=np.uint8)
+    out_x677_y = np.empty(n, dtype=np.uint8)
+    out_x67A_y = np.empty(n, dtype=np.uint8)
+
+    thr_x = np.float32(tilt_thresh_x)
+    thr_y = np.float32(tilt_thresh_y)
+
+    x673 = int(start_timer) & 0xFF
+    x676_x = int(start_timer) & 0xFF
+    x679_x = int(start_timer) & 0xFF
+    x674 = int(start_timer) & 0xFF
+    x677_y = int(start_timer) & 0xFF
+    x67A_y = int(start_timer) & 0xFF
+
+    prev_x = np.float32(0.0)
+    prev_y = np.float32(0.0)
+
+    for i in range(n):
+        cur_x = np.float32(sx[i])
+        cur_y = np.float32(sy[i])
+
+        # x676_x++
+        x676_x += 1
+        if x676_x > 0xFE:
+            x676_x = 0xFE
+
+        # lstick x block (x670 + x673 + x679_x) with x676_x reset on fresh entry.
+        if cur_x >= thr_x:
+            if prev_x >= thr_x:
+                x673 += 1
+                if x673 > 0xFE:
+                    x673 = 0xFE
+                x679_x += 1
+                if x679_x > 0xFE:
+                    x679_x = 0xFE
+            else:
+                x676_x = 0
+                x673 = 0
+        elif cur_x <= -thr_x:
+            if prev_x <= -thr_x:
+                x673 += 1
+                if x673 > 0xFE:
+                    x673 = 0xFE
+                x679_x += 1
+                if x679_x > 0xFE:
+                    x679_x = 0xFE
+            else:
+                x676_x = 0
+                x673 = 0
+        else:
+            x679_x = 0xFE
+            x673 = 0xFE
+
+        # x677_y++
+        x677_y += 1
+        if x677_y > 0xFE:
+            x677_y = 0xFE
+
+        # lstick y block (x671 + x674 + x67A_y) with x677_y reset on fresh entry.
+        if cur_y >= thr_y:
+            if prev_y >= thr_y:
+                x674 += 1
+                if x674 > 0xFE:
+                    x674 = 0xFE
+                x67A_y += 1
+                if x67A_y > 0xFE:
+                    x67A_y = 0xFE
+            else:
+                x677_y = 0
+                x674 = 0
+        elif cur_y <= -thr_y:
+            if prev_y <= -thr_y:
+                x674 += 1
+                if x674 > 0xFE:
+                    x674 = 0xFE
+                x67A_y += 1
+                if x67A_y > 0xFE:
+                    x67A_y = 0xFE
+            else:
+                x677_y = 0
+                x674 = 0
+        else:
+            x67A_y = 0xFE
+            x674 = 0xFE
+
+        if lb_8000D148(float(prev_x), float(prev_y), float(cur_x), float(cur_y), 0.0, 0.0, float(thr_x)):
+            x67A_y = 0
+            x679_x = 0
+
+        out_x673[i] = np.uint8(x673)
+        out_x676_x[i] = np.uint8(x676_x)
+        out_x679_x[i] = np.uint8(x679_x)
+        out_x674[i] = np.uint8(x674)
+        out_x677_y[i] = np.uint8(x677_y)
+        out_x67A_y[i] = np.uint8(x67A_y)
+
+        prev_x = cur_x
+        prev_y = cur_y
+
+    return out_x673, out_x674, out_x676_x, out_x677_y, out_x679_x, out_x67A_y
+
+
+def compute_fighter_trigger_input_counters(
+    *,
+    trigger_unit: np.ndarray,
+    trigger_min: float,
+    start_timer: int = 0xFE,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """
+    Compute the trigger-driven fighter input counters block (u8, saturating at 0xFE), causally.
+
+    Outputs are per-frame post-update values for:
+    - x675, x67B (companion timers)
+    - x678 ("age since last change" counter)
+
+    Decomp reference: refs/melee/src/melee/ft/fighter.c:2020-2050.
+    """
+    trig = np.asarray(trigger_unit, dtype=np.float32).reshape(-1)
+    n = int(trig.size)
+    out_x675 = np.empty(n, dtype=np.uint8)
+    out_x67B = np.empty(n, dtype=np.uint8)
+    out_x678 = np.empty(n, dtype=np.uint8)
+
+    thr = np.float32(trigger_min)
+    x675 = int(start_timer) & 0xFF
+    x67B = int(start_timer) & 0xFF
+    x678 = int(start_timer) & 0xFF
+    prev = np.float32(0.0)
+
+    for i in range(n):
+        cur = np.float32(trig[i])
+
+        x678 += 1
+        if x678 > 0xFE:
+            x678 = 0xFE
+
+        if cur >= thr:
+            if prev >= thr:
+                x675 += 1
+                if x675 > 0xFE:
+                    x675 = 0xFE
+                x67B += 1
+                if x67B > 0xFE:
+                    x67B = 0xFE
+            else:
+                x67B = 0
+                x678 = 0
+                x675 = 0
+        else:
+            x67B = 0xFE
+            x675 = 0xFE
+
+        out_x675[i] = np.uint8(x675)
+        out_x67B[i] = np.uint8(x67B)
+        out_x678[i] = np.uint8(x678)
+        prev = cur
+
+    return out_x675, out_x67B, out_x678
+
+
+def compute_fighter_button_timers(
+    *,
+    buttons_pressed: np.ndarray,
+    mask_a: int,
+    mask_b: int,
+    mask_xy: int,
+    mask_dpad_up: int,
+    mask_dpad_down: int,
+    mask_lr: int,
+    start_timer: int = 0xFF,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """
+    Compute fighter button timers (u8, saturating at 0xFF), causally.
+
+    Outputs are per-frame post-update values for:
+    - x67C (A) and x683 (capture previous x67C on A press)
+    - x67D (B)
+    - x67E (X/Y)
+    - x681 (DPad Up)
+    - x682 (DPad Down)
+    - x680 (L/R) and x684 (capture previous x680 on L/R press)
+
+    Decomp reference: refs/melee/src/melee/ft/fighter.c:2052-2094
+    Init values: refs/melee/src/melee/ft/fighter.c:608-691 (reset/init to 0xFF).
+    """
+    bp = np.asarray(buttons_pressed, dtype=np.uint16).reshape(-1)
+    n = int(bp.size)
+
+    out_x67C = np.empty(n, dtype=np.uint8)
+    out_x67D = np.empty(n, dtype=np.uint8)
+    out_x67E = np.empty(n, dtype=np.uint8)
+    out_x680 = np.empty(n, dtype=np.uint8)
+    out_x681 = np.empty(n, dtype=np.uint8)
+    out_x682 = np.empty(n, dtype=np.uint8)
+    out_x683 = np.empty(n, dtype=np.uint8)
+    out_x684 = np.empty(n, dtype=np.uint8)
+
+    m_a = int(mask_a) & 0xFFFF
+    m_b = int(mask_b) & 0xFFFF
+    m_xy = int(mask_xy) & 0xFFFF
+    m_du = int(mask_dpad_up) & 0xFFFF
+    m_dd = int(mask_dpad_down) & 0xFFFF
+    m_lr = int(mask_lr) & 0xFFFF
+
+    x67C = int(start_timer) & 0xFF
+    x67D = int(start_timer) & 0xFF
+    x67E = int(start_timer) & 0xFF
+    x680 = int(start_timer) & 0xFF
+    x681 = int(start_timer) & 0xFF
+    x682 = int(start_timer) & 0xFF
+    x683 = int(start_timer) & 0xFF
+    x684 = int(start_timer) & 0xFF
+
+    for i in range(n):
+        bpi = int(bp[i])
+
+        if (bpi & m_a) != 0:
+            x683 = x67C
+            x67C = 0
+        elif x67C < 0xFF:
+            x67C += 1
+
+        if (bpi & m_b) != 0:
+            x67D = 0
+        elif x67D < 0xFF:
+            x67D += 1
+
+        if (bpi & m_xy) != 0:
+            x67E = 0
+        elif x67E < 0xFF:
+            x67E += 1
+
+        if (bpi & m_du) != 0:
+            x681 = 0
+        elif x681 < 0xFF:
+            x681 += 1
+
+        if (bpi & m_dd) != 0:
+            x682 = 0
+        elif x682 < 0xFF:
+            x682 += 1
+
+        if (bpi & m_lr) != 0:
+            x684 = x680
+            x680 = 0
+        elif x680 < 0xFF:
+            x680 += 1
+
+        out_x67C[i] = np.uint8(x67C)
+        out_x67D[i] = np.uint8(x67D)
+        out_x67E[i] = np.uint8(x67E)
+        out_x680[i] = np.uint8(x680)
+        out_x681[i] = np.uint8(x681)
+        out_x682[i] = np.uint8(x682)
+        out_x683[i] = np.uint8(x683)
+        out_x684[i] = np.uint8(x684)
+
+    return out_x67C, out_x67D, out_x67E, out_x680, out_x681, out_x682, out_x683, out_x684

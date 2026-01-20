@@ -54,6 +54,23 @@ int state_alloc(MslStateSoA* state, int batch_size) {
   state->turn_frames_to_turn = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->lr_press_timer = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->x672_input_timer = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
+  state->x673 = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
+  state->x674 = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
+  state->x675 = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
+  state->x676_x = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
+  state->x677_y = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
+  state->x678 = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
+  state->x679_x = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
+  state->x67A_y = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
+  state->x67B = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
+  state->x67C = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
+  state->x67D = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
+  state->x67E = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
+  state->x680 = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
+  state->x681 = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
+  state->x682 = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
+  state->x683 = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
+  state->x684 = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
 
   state->percent = (float*)alloc_aligned_64(sizeof(float) * bp);
   state->shield_hp = (float*)alloc_aligned_64(sizeof(float) * bp);
@@ -109,9 +126,12 @@ int state_alloc(MslStateSoA* state, int batch_size) {
       !state->jumps_left || !state->stocks || !state->kneebend_jump_input ||
       !state->kneebend_is_short_hop || !state->tilt_timer_x || !state->tilt_timer_y ||
       !state->fall_fast || !state->turn_has_turned || !state->turn_frames_to_turn ||
-      !state->lr_press_timer || !state->x672_input_timer || !state->percent || !state->shield_hp ||
-      !state->hitlag || !state->hitstun || !state->l_cancel || !state->hurtbox_state ||
-      !state->ground_id || !state->animation_index ||
+      !state->lr_press_timer || !state->x672_input_timer || !state->x673 || !state->x674 ||
+      !state->x675 || !state->x676_x || !state->x677_y || !state->x678 || !state->x679_x ||
+      !state->x67A_y || !state->x67B || !state->x67C || !state->x67D || !state->x67E ||
+      !state->x680 || !state->x681 || !state->x682 || !state->x683 || !state->x684 ||
+      !state->percent || !state->shield_hp || !state->hitlag || !state->hitstun || !state->l_cancel ||
+      !state->hurtbox_state || !state->ground_id || !state->animation_index ||
       !state->instance_hit_by || !state->instance_id || !state->last_attack_landed ||
       !state->combo_count || !state->last_hit_by || !state->state_flags || !state->input_buttons ||
       !state->prev_input_buttons || !state->input_buttons_pressed ||
@@ -165,6 +185,23 @@ void state_free(MslStateSoA* state) {
   alloc_free(state->turn_frames_to_turn);
   alloc_free(state->lr_press_timer);
   alloc_free(state->x672_input_timer);
+  alloc_free(state->x673);
+  alloc_free(state->x674);
+  alloc_free(state->x675);
+  alloc_free(state->x676_x);
+  alloc_free(state->x677_y);
+  alloc_free(state->x678);
+  alloc_free(state->x679_x);
+  alloc_free(state->x67A_y);
+  alloc_free(state->x67B);
+  alloc_free(state->x67C);
+  alloc_free(state->x67D);
+  alloc_free(state->x67E);
+  alloc_free(state->x680);
+  alloc_free(state->x681);
+  alloc_free(state->x682);
+  alloc_free(state->x683);
+  alloc_free(state->x684);
 
   alloc_free(state->percent);
   alloc_free(state->shield_hp);

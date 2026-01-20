@@ -46,6 +46,24 @@ typedef struct MslStateSoA {
   uint8_t* turn_frames_to_turn;  // fp->mv.co.turn.frames_to_turn (refs/melee/.../ftCo_Turn.c:39-44)
   uint8_t* lr_press_timer;       // fp->x67F (refs/melee/src/melee/ft/fighter.c:2078-2086)
   uint8_t* x672_input_timer;     // fp->x672_input_timer_counter (refs/melee/src/melee/ft/fighter.c:2020-2050)
+  // Fighter input counters block: refs/melee/src/melee/ft/fighter.c:1897-2094.
+  uint8_t* x673;    // fp->x673
+  uint8_t* x674;    // fp->x674
+  uint8_t* x675;    // fp->x675
+  uint8_t* x676_x;  // fp->x676_x
+  uint8_t* x677_y;  // fp->x677_y
+  uint8_t* x678;    // fp->x678
+  uint8_t* x679_x;  // fp->x679_x
+  uint8_t* x67A_y;  // fp->x67A_y
+  uint8_t* x67B;    // fp->x67B
+  uint8_t* x67C;    // fp->x67C
+  uint8_t* x67D;    // fp->x67D
+  uint8_t* x67E;    // fp->x67E
+  uint8_t* x680;    // fp->x680
+  uint8_t* x681;    // fp->x681
+  uint8_t* x682;    // fp->x682
+  uint8_t* x683;    // fp->x683
+  uint8_t* x684;    // fp->x684
 
   // Combat/timers
   float* percent;

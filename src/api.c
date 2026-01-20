@@ -133,6 +133,23 @@ int msl_batch_reseed_seed(MslBatch* batch, const uint8_t* seed_bytes, size_t see
       batch->state.turn_has_turned[idx] = seed->turn_has_turned[p];
       batch->state.lr_press_timer[idx] = seed->lr_press_timer[p];
       batch->state.x672_input_timer[idx] = seed->x672_input_timer[p];
+      batch->state.x673[idx] = seed->x673[p];
+      batch->state.x674[idx] = seed->x674[p];
+      batch->state.x675[idx] = seed->x675[p];
+      batch->state.x676_x[idx] = seed->x676_x[p];
+      batch->state.x677_y[idx] = seed->x677_y[p];
+      batch->state.x678[idx] = seed->x678[p];
+      batch->state.x679_x[idx] = seed->x679_x[p];
+      batch->state.x67A_y[idx] = seed->x67A_y[p];
+      batch->state.x67B[idx] = seed->x67B[p];
+      batch->state.x67C[idx] = seed->x67C[p];
+      batch->state.x67D[idx] = seed->x67D[p];
+      batch->state.x67E[idx] = seed->x67E[p];
+      batch->state.x680[idx] = seed->x680[p];
+      batch->state.x681[idx] = seed->x681[p];
+      batch->state.x682[idx] = seed->x682[p];
+      batch->state.x683[idx] = seed->x683[p];
+      batch->state.x684[idx] = seed->x684[p];
 
       batch->state.percent[idx] = seed->percent[p];
       batch->state.shield_hp[idx] = seed->shield_hp[p];

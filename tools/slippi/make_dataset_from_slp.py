@@ -186,6 +186,9 @@ def _main_impl(args) -> None:
 
     from tools.slippi.seed_history import (
         apply_deadzone,
+        compute_fighter_button_timers,
+        compute_fighter_stick_input_counters,
+        compute_fighter_trigger_input_counters,
         compute_press_timer_u8,
         compute_tilt_timer_axis_pre_post,
         compute_tilt_timer_y_pre_post_with_fall_fast,
@@ -304,6 +307,10 @@ def _main_impl(args) -> None:
     act_escape_air = 0x00EC
     button_mask_xy = 0x0400 | 0x0800  # HSD_PAD_XY / src/buttons.h::MSL_BUTTON_XY
     button_mask_lr = 0x0040 | 0x0020  # HSD_PAD_L|HSD_PAD_R / src/buttons.h::MSL_BUTTON_{L,R}
+    button_mask_a = 0x0100  # HSD_PAD_A / src/buttons.h::MSL_BUTTON_A
+    button_mask_b = 0x0200  # HSD_PAD_B / src/buttons.h::MSL_BUTTON_B
+    button_mask_dpad_up = 0x0008  # HSD_PAD_DPADUP / refs/melee/src/common_structs.h
+    button_mask_dpad_down = 0x0004  # HSD_PAD_DPADDOWN / refs/melee/src/common_structs.h
 
     # Character id mapping follows Slippi post-frame `character` (GALE01):
     # - Fox   = 1
@@ -581,6 +588,50 @@ def _main_impl(args) -> None:
             start_timer_post=0xFE,
         )
         samples["seed_t"]["x672_input_timer"][:, slot] = x672_post[:-1]
+
+        # Fighter per-frame input counters block.
+        # Decomp: refs/melee/src/melee/ft/fighter.c:1897-2094 (lb helper: refs/melee/src/melee/lb/lb_00CE.c:163-225).
+        x673, x674, x676_x, x677_y, x679_x, x67A_y = compute_fighter_stick_input_counters(
+            stick_x_unit=stick_x,
+            stick_y_unit=stick_y,
+            tilt_thresh_x=lstick_tilt_x_thresh,
+            tilt_thresh_y=lstick_tilt_y_thresh,
+            start_timer=0xFE,
+        )
+        samples["seed_t"]["x673"][:, slot] = x673[:-1]
+        samples["seed_t"]["x674"][:, slot] = x674[:-1]
+        samples["seed_t"]["x676_x"][:, slot] = x676_x[:-1]
+        samples["seed_t"]["x677_y"][:, slot] = x677_y[:-1]
+        samples["seed_t"]["x679_x"][:, slot] = x679_x[:-1]
+        samples["seed_t"]["x67A_y"][:, slot] = x67A_y[:-1]
+
+        x675, x67B, x678 = compute_fighter_trigger_input_counters(
+            trigger_unit=trigger_unit,
+            trigger_min=float(common["powershield_reflect_trigger_min"]),
+            start_timer=0xFE,
+        )
+        samples["seed_t"]["x675"][:, slot] = x675[:-1]
+        samples["seed_t"]["x67B"][:, slot] = x67B[:-1]
+        samples["seed_t"]["x678"][:, slot] = x678[:-1]
+
+        x67C, x67D, x67E, x680, x681, x682, x683, x684 = compute_fighter_button_timers(
+            buttons_pressed=buttons_pressed,
+            mask_a=button_mask_a,
+            mask_b=button_mask_b,
+            mask_xy=button_mask_xy,
+            mask_dpad_up=button_mask_dpad_up,
+            mask_dpad_down=button_mask_dpad_down,
+            mask_lr=button_mask_lr,
+            start_timer=0xFF,
+        )
+        samples["seed_t"]["x67C"][:, slot] = x67C[:-1]
+        samples["seed_t"]["x67D"][:, slot] = x67D[:-1]
+        samples["seed_t"]["x67E"][:, slot] = x67E[:-1]
+        samples["seed_t"]["x680"][:, slot] = x680[:-1]
+        samples["seed_t"]["x681"][:, slot] = x681[:-1]
+        samples["seed_t"]["x682"][:, slot] = x682[:-1]
+        samples["seed_t"]["x683"][:, slot] = x683[:-1]
+        samples["seed_t"]["x684"][:, slot] = x684[:-1]
 
         # KneeBend internals (jump_input source + short-hop latch) must be seeded to avoid
         # mid-KneeBend reseed guessing in the simulator.

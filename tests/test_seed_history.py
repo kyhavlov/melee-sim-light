@@ -3,6 +3,9 @@ from __future__ import annotations
 import numpy as np
 
 from tools.slippi.seed_history import (
+    compute_fighter_button_timers,
+    compute_fighter_stick_input_counters,
+    compute_fighter_trigger_input_counters,
     compute_press_timer_u8,
     compute_tilt_timer_axis,
     compute_tilt_timer_y_pre_post_with_fall_fast,
@@ -239,6 +242,124 @@ def test_x672_trigger_timer_is_causal_wrt_future_frames() -> None:
 
     assert np.array_equal(pre0, pre1[: pre0.size])
     assert np.array_equal(post0, post1[: post0.size])
+
+
+def test_fighter_stick_input_counters_are_causal_wrt_future_frames() -> None:
+    # Prefix includes a neutral->right entry (lb_8000D148 zeroing) and a right->left flip.
+    sx_prefix = np.array([0.0, 0.9, 0.9, -0.9, -0.9], dtype=np.float32)
+    sy_prefix = np.zeros(sx_prefix.shape[0], dtype=np.float32)
+
+    x673_0, x674_0, x676_x_0, x677_y_0, x679_x_0, x67A_y_0 = compute_fighter_stick_input_counters(
+        stick_x_unit=sx_prefix,
+        stick_y_unit=sy_prefix,
+        tilt_thresh_x=0.25,
+        tilt_thresh_y=0.25,
+        start_timer=0xFE,
+    )
+
+    # Spot-check a few reset/hold behaviors (off-by-one guardrails).
+    assert int(x676_x_0[0]) == 0xFE
+    assert int(x676_x_0[1]) == 0  # fresh entry to >= threshold resets x676_x
+    assert int(x679_x_0[1]) == 0  # lb_8000D148 zeroing on neutral->tilt
+    assert int(x673_0[2]) == 1  # second consecutive frame >= threshold increments
+    assert int(x679_x_0[3]) == 0  # right->left flip crosses (0,0) => lb zeroing
+
+    sx_ext = np.concatenate([sx_prefix, np.array([0.0, 0.9, 0.0], dtype=np.float32)])
+    sy_ext = np.zeros(sx_ext.shape[0], dtype=np.float32)
+    x673_1, x674_1, x676_x_1, x677_y_1, x679_x_1, x67A_y_1 = compute_fighter_stick_input_counters(
+        stick_x_unit=sx_ext,
+        stick_y_unit=sy_ext,
+        tilt_thresh_x=0.25,
+        tilt_thresh_y=0.25,
+        start_timer=0xFE,
+    )
+
+    assert np.array_equal(x673_0, x673_1[: x673_0.size])
+    assert np.array_equal(x674_0, x674_1[: x674_0.size])
+    assert np.array_equal(x676_x_0, x676_x_1[: x676_x_0.size])
+    assert np.array_equal(x677_y_0, x677_y_1[: x677_y_0.size])
+    assert np.array_equal(x679_x_0, x679_x_1[: x679_x_0.size])
+    assert np.array_equal(x67A_y_0, x67A_y_1[: x67A_y_0.size])
+
+
+def test_fighter_trigger_input_counters_are_causal_wrt_future_frames() -> None:
+    trig_prefix = np.array([0.0, 1.0, 1.0, 0.0, 1.0], dtype=np.float32)
+    x675_0, x67B_0, x678_0 = compute_fighter_trigger_input_counters(
+        trigger_unit=trig_prefix,
+        trigger_min=0.25,
+        start_timer=0xFE,
+    )
+
+    # Spot-check reset/hold behavior.
+    assert int(x675_0[0]) == 0xFE
+    assert int(x678_0[1]) == 0  # fresh press resets x678 to 0
+    assert int(x675_0[2]) == 1  # second consecutive pressed frame increments
+    assert int(x67B_0[2]) == 1
+
+    trig_ext = np.concatenate([trig_prefix, np.array([1.0, 0.0, 0.0], dtype=np.float32)])
+    x675_1, x67B_1, x678_1 = compute_fighter_trigger_input_counters(
+        trigger_unit=trig_ext,
+        trigger_min=0.25,
+        start_timer=0xFE,
+    )
+
+    assert np.array_equal(x675_0, x675_1[: x675_0.size])
+    assert np.array_equal(x67B_0, x67B_1[: x67B_0.size])
+    assert np.array_equal(x678_0, x678_1[: x678_0.size])
+
+
+def test_fighter_button_timers_are_causal_and_capture_previous_on_press() -> None:
+    A = np.uint16(0x0100)
+    L = np.uint16(0x0040)
+    R = np.uint16(0x0020)
+    XY = np.uint16(0x0C00)
+    D_UP = np.uint16(0x0008)
+    D_DOWN = np.uint16(0x0004)
+    LR = np.uint16(L | R)
+
+    bp_prefix = np.array([0, A, 0, 0, A, LR, 0, XY, D_UP, D_DOWN], dtype=np.uint16)
+    x67C_0, x67D_0, x67E_0, x680_0, x681_0, x682_0, x683_0, x684_0 = compute_fighter_button_timers(
+        buttons_pressed=bp_prefix,
+        mask_a=int(A),
+        mask_b=0x0200,
+        mask_xy=int(XY),
+        mask_dpad_up=int(D_UP),
+        mask_dpad_down=int(D_DOWN),
+        mask_lr=int(LR),
+        start_timer=0xFF,
+    )
+
+    # On the second A press, x683 captures the previous x67C (which should be 2 at that point).
+    assert int(x67C_0[1]) == 0
+    assert int(x67C_0[2]) == 1
+    assert int(x67C_0[3]) == 2
+    assert int(x683_0[4]) == 2
+    assert int(x67C_0[4]) == 0
+
+    # On the first L/R press, x684 captures the previous x680 (which starts at 0xFF).
+    assert int(x684_0[5]) == 0xFF
+    assert int(x680_0[5]) == 0
+
+    bp_ext = np.concatenate([bp_prefix, np.array([0, A, 0], dtype=np.uint16)])
+    x67C_1, x67D_1, x67E_1, x680_1, x681_1, x682_1, x683_1, x684_1 = compute_fighter_button_timers(
+        buttons_pressed=bp_ext,
+        mask_a=int(A),
+        mask_b=0x0200,
+        mask_xy=int(XY),
+        mask_dpad_up=int(D_UP),
+        mask_dpad_down=int(D_DOWN),
+        mask_lr=int(LR),
+        start_timer=0xFF,
+    )
+
+    assert np.array_equal(x67C_0, x67C_1[: x67C_0.size])
+    assert np.array_equal(x67D_0, x67D_1[: x67D_0.size])
+    assert np.array_equal(x67E_0, x67E_1[: x67E_0.size])
+    assert np.array_equal(x680_0, x680_1[: x680_0.size])
+    assert np.array_equal(x681_0, x681_1[: x681_0.size])
+    assert np.array_equal(x682_0, x682_1[: x682_0.size])
+    assert np.array_equal(x683_0, x683_1[: x683_0.size])
+    assert np.array_equal(x684_0, x684_1[: x684_0.size])
 
 
 def test_jump_to_jump_aerial_entry_clears_fall_fast_and_overrides_x671() -> None:

@@ -123,6 +123,27 @@ typedef struct MslSeed {
   uint8_t lr_press_timer[MSL_MAX_PLAYERS];  // fp->x67F (frames since L/R press; saturates at 0xFF)
   // Decomp: refs/melee/src/melee/ft/fighter.c:2020-2050 (x672 updates each frame).
   uint8_t x672_input_timer[MSL_MAX_PLAYERS];  // fp->x672_input_timer_counter (saturates at 0xFE)
+  // Decomp: refs/melee/src/melee/ft/fighter.c:1897-2094 (fighter input counters block).
+  // Stick/trigger companion timers + "age since last change" counters (saturate at 0xFE).
+  uint8_t x673[MSL_MAX_PLAYERS];    // fp->x673 (lstick x companion)
+  uint8_t x674[MSL_MAX_PLAYERS];    // fp->x674 (lstick y companion)
+  uint8_t x675[MSL_MAX_PLAYERS];    // fp->x675 (trigger companion)
+  uint8_t x676_x[MSL_MAX_PLAYERS];  // fp->x676_x ("age since last change", x)
+  uint8_t x677_y[MSL_MAX_PLAYERS];  // fp->x677_y ("age since last change", y)
+  uint8_t x678[MSL_MAX_PLAYERS];    // fp->x678 ("age since last change", trigger)
+  uint8_t x679_x[MSL_MAX_PLAYERS];  // fp->x679_x (lstick x companion)
+  uint8_t x67A_y[MSL_MAX_PLAYERS];  // fp->x67A_y (lstick y companion)
+  uint8_t x67B[MSL_MAX_PLAYERS];    // fp->x67B (trigger companion)
+  // Button timers (saturate at 0xFF, reset to 0 on press).
+  uint8_t x67C[MSL_MAX_PLAYERS];  // fp->x67C (A)
+  uint8_t x67D[MSL_MAX_PLAYERS];  // fp->x67D (B)
+  uint8_t x67E[MSL_MAX_PLAYERS];  // fp->x67E (X/Y)
+  uint8_t x680[MSL_MAX_PLAYERS];  // fp->x680 (L or R)
+  uint8_t x681[MSL_MAX_PLAYERS];  // fp->x681 (DPad Up)
+  uint8_t x682[MSL_MAX_PLAYERS];  // fp->x682 (DPad Down)
+  // Button timer capture on press.
+  uint8_t x683[MSL_MAX_PLAYERS];  // fp->x683 (captures prev x67C on A press)
+  uint8_t x684[MSL_MAX_PLAYERS];  // fp->x684 (captures prev x680 on L/R press)
 
   // Combat / timers
   float percent[MSL_MAX_PLAYERS];
