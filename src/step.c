@@ -10,6 +10,7 @@
 #include "items.h"
 #include "locomotion.h"
 #include "physics.h"
+#include "shields.h"
 #include "stage_collision.h"
 #include "timers.h"
 
@@ -40,6 +41,7 @@ int step_one_frame(MslBatch* batch, const uint8_t* prev_input_bytes, size_t prev
   locomotion_update_post_collision(batch);
   hurtboxes_refresh(batch);
   hitboxes_refresh(batch);
+  shields_refresh(batch);
   combat_resolve(batch);
   items_update(batch);
 

@@ -70,6 +70,7 @@ ext = Extension(
         str((ROOT / "src" / "hurtboxes.c").resolve()),
         str((ROOT / "src" / "hitboxes_tables.c").resolve()),
         str((ROOT / "src" / "hitboxes.c").resolve()),
+        str((ROOT / "src" / "shields.c").resolve()),
         str((ROOT / "src" / "combat.c").resolve()),
         str((ROOT / "src" / "items.c").resolve()),
     ],

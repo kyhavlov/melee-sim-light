@@ -123,6 +123,10 @@ int state_alloc(MslStateSoA* state, int batch_size) {
   state->hitbox_sfx_severity = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bph);
   state->hitbox_sfx_kind = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bph);
   state->hitbox_flags = (uint16_t*)alloc_aligned_64(sizeof(uint16_t) * bph);
+  state->shield_x = (float*)alloc_aligned_64(sizeof(float) * bp);
+  state->shield_y = (float*)alloc_aligned_64(sizeof(float) * bp);
+  state->shield_z = (float*)alloc_aligned_64(sizeof(float) * bp);
+  state->shield_radius = (float*)alloc_aligned_64(sizeof(float) * bp);
   state->ground_id = (uint16_t*)alloc_aligned_64(sizeof(uint16_t) * bp);
   state->animation_index = (uint32_t*)alloc_aligned_64(sizeof(uint32_t) * bp);
   state->instance_hit_by = (uint16_t*)alloc_aligned_64(sizeof(uint16_t) * bp);
@@ -189,7 +193,8 @@ int state_alloc(MslStateSoA* state, int batch_size) {
       !state->hitbox_u16_4 || !state->hitbox_u16_5 || !state->hitbox_u16_6 || !state->hitbox_u16_7 ||
       !state->hitbox_angle || !state->hitbox_kbg || !state->hitbox_wsk || !state->hitbox_bkb ||
       !state->hitbox_element || !state->hitbox_shield_damage || !state->hitbox_sfx_severity ||
-      !state->hitbox_sfx_kind || !state->hitbox_flags ||
+      !state->hitbox_sfx_kind || !state->hitbox_flags || !state->shield_x || !state->shield_y ||
+      !state->shield_z || !state->shield_radius ||
       !state->ground_id || !state->animation_index || !state->instance_hit_by || !state->instance_id ||
       !state->last_attack_landed || !state->combo_count || !state->last_hit_by || !state->state_flags ||
       !state->input_buttons || !state->prev_input_buttons ||
@@ -310,6 +315,10 @@ void state_free(MslStateSoA* state) {
   alloc_free(state->hitbox_sfx_severity);
   alloc_free(state->hitbox_sfx_kind);
   alloc_free(state->hitbox_flags);
+  alloc_free(state->shield_x);
+  alloc_free(state->shield_y);
+  alloc_free(state->shield_z);
+  alloc_free(state->shield_radius);
   alloc_free(state->ground_id);
   alloc_free(state->animation_index);
   alloc_free(state->instance_hit_by);

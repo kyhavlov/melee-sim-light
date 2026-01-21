@@ -129,6 +129,11 @@ typedef struct MslStateSoA {
   uint8_t* hitbox_sfx_severity;
   uint8_t* hitbox_sfx_kind;
   uint16_t* hitbox_flags;  // bitfield (hit_grounded/hit_aerial/clank/rebound/etc.)
+  // Pose/guard-derived world-space shield bubble parameters (computed each frame in shields_refresh).
+  float* shield_x;       // [batch * players]
+  float* shield_y;       // [batch * players]
+  float* shield_z;       // [batch * players]
+  float* shield_radius;  // [batch * players]
   uint16_t* ground_id;
   uint32_t* animation_index;
   uint16_t* instance_hit_by;

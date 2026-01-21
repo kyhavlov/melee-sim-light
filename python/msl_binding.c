@@ -1219,6 +1219,107 @@ static PyObject* msl_debug_combat_contacts_filtered_py(PyObject* self, PyObject*
   return Py_BuildValue("(Oi)", arr, (int)count);
 }
 
+static PyObject* msl_debug_combat_contacts_classified_py(PyObject* self, PyObject* args) {
+  (void)self;
+  PyObject* handle_obj = NULL;
+  int batch_index = 0;
+  int max_contacts = 256;
+  if (!PyArg_ParseTuple(args, "Oi|i", &handle_obj, &batch_index, &max_contacts)) {
+    return NULL;
+  }
+  PyMslHandle* h = unpack_handle(handle_obj);
+  if (h == NULL) {
+    return NULL;
+  }
+  if (max_contacts < 0 || max_contacts > 0xFFFF) {
+    PyErr_SetString(PyExc_ValueError, "max_contacts out of range");
+    return NULL;
+  }
+
+  npy_intp dims[2] = {(npy_intp)max_contacts, (npy_intp)sizeof(MslDebugCombatContactClassified)};
+  PyArrayObject* arr = (PyArrayObject*)PyArray_SimpleNew(2, dims, NPY_UINT8);
+  if (arr == NULL) {
+    return NULL;
+  }
+
+  uint16_t count = 0;
+  MslDebugCombatContactClassified* out = (MslDebugCombatContactClassified*)PyArray_DATA(arr);
+  const int err = msl_batch_debug_combat_contacts_classified(h->batch, batch_index, out,
+                                                             (uint16_t)max_contacts, &count);
+  if (err != 0) {
+    Py_DECREF(arr);
+    PyErr_Format(PyExc_ValueError, "msl_batch_debug_combat_contacts_classified failed: %d", err);
+    return NULL;
+  }
+
+  return Py_BuildValue("(Oi)", arr, (int)count);
+}
+
+static PyObject* msl_debug_combat_contacts_classified_filtered_py(PyObject* self, PyObject* args) {
+  (void)self;
+  PyObject* handle_obj = NULL;
+  int batch_index = 0;
+  int max_contacts = 256;
+  if (!PyArg_ParseTuple(args, "Oi|i", &handle_obj, &batch_index, &max_contacts)) {
+    return NULL;
+  }
+  PyMslHandle* h = unpack_handle(handle_obj);
+  if (h == NULL) {
+    return NULL;
+  }
+  if (max_contacts < 0 || max_contacts > 0xFFFF) {
+    PyErr_SetString(PyExc_ValueError, "max_contacts out of range");
+    return NULL;
+  }
+
+  npy_intp dims[2] = {(npy_intp)max_contacts, (npy_intp)sizeof(MslDebugCombatContactClassified)};
+  PyArrayObject* arr = (PyArrayObject*)PyArray_SimpleNew(2, dims, NPY_UINT8);
+  if (arr == NULL) {
+    return NULL;
+  }
+
+  uint16_t count = 0;
+  MslDebugCombatContactClassified* out = (MslDebugCombatContactClassified*)PyArray_DATA(arr);
+  const int err = msl_batch_debug_combat_contacts_classified_filtered(
+      h->batch, batch_index, out, (uint16_t)max_contacts, &count);
+  if (err != 0) {
+    Py_DECREF(arr);
+    PyErr_Format(PyExc_ValueError,
+                 "msl_batch_debug_combat_contacts_classified_filtered failed: %d", err);
+    return NULL;
+  }
+
+  return Py_BuildValue("(Oi)", arr, (int)count);
+}
+
+static PyObject* msl_debug_shield_bubbles_world_py(PyObject* self, PyObject* args) {
+  (void)self;
+  PyObject* handle_obj = NULL;
+  int batch_index = 0;
+  if (!PyArg_ParseTuple(args, "Oi", &handle_obj, &batch_index)) {
+    return NULL;
+  }
+  PyMslHandle* h = unpack_handle(handle_obj);
+  if (h == NULL) {
+    return NULL;
+  }
+
+  npy_intp dims[2] = {(npy_intp)MSL_MAX_PLAYERS, (npy_intp)4};
+  PyArrayObject* arr = (PyArrayObject*)PyArray_SimpleNew(2, dims, NPY_FLOAT32);
+  if (arr == NULL) {
+    return NULL;
+  }
+  float* out = (float*)PyArray_DATA(arr);
+  const int err = msl_batch_debug_shield_bubbles_world(h->batch, batch_index, out);
+  if (err != 0) {
+    Py_DECREF(arr);
+    PyErr_Format(PyExc_ValueError, "msl_batch_debug_shield_bubbles_world failed: %d", err);
+    return NULL;
+  }
+
+  return (PyObject*)arr;
+}
+
 static PyObject* msl_debug_clear_hitboxes_world_py(PyObject* self, PyObject* args) {
   (void)self;
   PyObject* handle_obj = NULL;
@@ -1820,6 +1921,15 @@ static PyMethodDef methods[] = {
     {"debug_combat_contacts_filtered", msl_debug_combat_contacts_filtered_py, METH_VARARGS,
      "debug_combat_contacts_filtered(handle, batch_index, max_contacts=256) -> (bytes[max, "
      "sizeof(MslDebugCombatContact)], count)"},
+    {"debug_combat_contacts_classified", msl_debug_combat_contacts_classified_py, METH_VARARGS,
+     "debug_combat_contacts_classified(handle, batch_index, max_contacts=256) -> (bytes[max, "
+     "sizeof(MslDebugCombatContactClassified)], count)"},
+    {"debug_combat_contacts_classified_filtered",
+     msl_debug_combat_contacts_classified_filtered_py, METH_VARARGS,
+     "debug_combat_contacts_classified_filtered(handle, batch_index, max_contacts=256) -> "
+     "(bytes[max, sizeof(MslDebugCombatContactClassified)], count)"},
+    {"debug_shield_bubbles_world", msl_debug_shield_bubbles_world_py, METH_VARARGS,
+     "debug_shield_bubbles_world(handle, batch_index) -> np.ndarray[float32] shape=(MSL_MAX_PLAYERS,4)"},
     {"debug_clear_hitboxes_world", msl_debug_clear_hitboxes_world_py, METH_VARARGS,
      "debug_clear_hitboxes_world(handle, batch_index, player_index)"},
     {"debug_set_hitbox_world", msl_debug_set_hitbox_world_py, METH_VARARGS,

@@ -123,6 +123,10 @@ pipeline (including any required prior-frame state) and/or once we validate orde
 - Roll/spotdodge out of shield.
   - Not modeled yet: EscapeF/EscapeB root-motion (`fp->x6A4_transNOffset`) and mid-roll facing flip (`ftCheckThrowB3`); we currently apply friction-only and use anim-end to return to Wait.
   - Not modeled yet: escape invincibility / hurtbox state changes during EscapeN/EscapeF/EscapeB.
+- **Known approximation (current): shield bubble center** is currently approximated at fighter `(pos_x, pos_y, z=0)` and ignores:
+  - shield joint placement / per-character offsets (decomp: `ftColl_8007B1B8` stores `shield_hit.bone` + `shield_hit.offset`; refs/melee/src/melee/ft/ftcoll.c:1370-1383)
+  - shield tilting / TransN-driven orientation (refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c)
+  This will matter once SHIELD contacts gate real combat / shield pokes.
 
 7) **Projectiles (lasers)**
 - Spawn and integrate laser entities.

@@ -54,6 +54,9 @@ typedef struct MslCharParams {
   float aerial_friction;
   float air_jump_v_multiplier;
   float air_jump_h_multiplier;
+
+  // Shield (refs/melee/src/melee/ft/types.h::ftCo_DatAttrs::initial_shield_size)
+  float initial_shield_size;
 } MslCharParams;
 
 int char_params_init(void);

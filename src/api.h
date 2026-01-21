@@ -278,6 +278,48 @@ typedef struct MslDebugCombatContact {
   float hurtcap_radius;
 } MslDebugCombatContact;
 
+// Debug/validation helper: record a single "would-hit" contact candidate, classified as BODY or
+// SHIELD without mutating gameplay state.
+//
+// contact_kind:
+//  0 = BODY   (hitbox intersects any hurtcap, and does NOT intersect shield bubble)
+//  1 = SHIELD (hitbox intersects defender shield bubble)
+typedef struct MslDebugCombatContactClassified {
+  uint8_t attacker;      // player index
+  uint8_t defender;      // player index
+  uint8_t hitbox_id;     // 0..MSL_MAX_HITBOXES-1
+  uint8_t contact_kind;  // 0=BODY, 1=SHIELD
+
+  // BODY: 0..MSL_MAX_HURTCAPS-1 (world array index)
+  // SHIELD: 0xFF
+  uint8_t hurtcap_id;
+  uint8_t _pad0[3];
+
+  uint16_t attacker_msid;  // Slippi post-frame `animation_index` truncated to u16
+  int16_t attacker_action_frame;
+
+  float hitbox_x;
+  float hitbox_y;
+  float hitbox_z;
+  float hitbox_radius;
+  float hitbox_damage;
+
+  // BODY payload (zeroed for SHIELD).
+  float hurtcap_ax;
+  float hurtcap_ay;
+  float hurtcap_az;
+  float hurtcap_bx;
+  float hurtcap_by;
+  float hurtcap_bz;
+  float hurtcap_radius;
+
+  // SHIELD payload (zeroed when defender shield bubble inactive).
+  float shield_x;
+  float shield_y;
+  float shield_z;
+  float shield_radius;
+} MslDebugCombatContactClassified;
+
 #pragma pack(pop)
 
 // -------------
@@ -368,6 +410,26 @@ int msl_batch_debug_combat_contacts(const MslBatch* batch, int batch_index,
 int msl_batch_debug_combat_contacts_filtered(const MslBatch* batch, int batch_index,
                                              MslDebugCombatContact* out_contacts,
                                              uint16_t max_contacts, uint16_t* out_count);
+
+// Debug/validation helper: compute hitbox-vs-shield and hitbox-vs-hurtcap contacts for one batch
+// element, classifying each as BODY or SHIELD.
+//
+// Deterministic ordering:
+// attacker 0..num_players-1, defender 0..num_players-1 (skip attacker==defender),
+// hitbox_id 0..3, and within a hitbox: SHIELD first, then BODY (if applicable).
+int msl_batch_debug_combat_contacts_classified(
+    const MslBatch* batch, int batch_index, MslDebugCombatContactClassified* out_contacts,
+    uint16_t max_contacts, uint16_t* out_count);
+
+// Deterministic ordering matches msl_batch_debug_combat_contacts_classified; filters only skip/keep.
+int msl_batch_debug_combat_contacts_classified_filtered(
+    const MslBatch* batch, int batch_index, MslDebugCombatContactClassified* out_contacts,
+    uint16_t max_contacts, uint16_t* out_count);
+
+// Debug/validation helper: write per-player shield bubble world params for a batch element.
+// Writes `MSL_MAX_PLAYERS * 4` floats into out_xyzw_4p as rows: [x, y, z, radius].
+int msl_batch_debug_shield_bubbles_world(const MslBatch* batch, int batch_index,
+                                        float* out_xyzw_4p);
 
 // Debug/testing helper: allow unit tests to write world-space primitives directly and invoke combat
 // without touching upstream pose systems.

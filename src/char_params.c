@@ -159,7 +159,8 @@ static int load_one(const char* data_dir, const char* rel_path, uint8_t char_id)
       json_get_f32(buf, "dash_run_acceleration_a", &out.dash_run_acceleration_a) != 0 ||
       json_get_f32(buf, "dash_run_acceleration_b", &out.dash_run_acceleration_b) != 0 ||
       json_get_f32(buf, "dash_run_terminal_velocity", &out.dash_run_terminal_velocity) != 0 ||
-      json_get_f32(buf, "run_animation_scaling", &out.run_animation_scaling) != 0) {
+      json_get_f32(buf, "run_animation_scaling", &out.run_animation_scaling) != 0 ||
+      json_get_f32(buf, "initial_shield_size", &out.initial_shield_size) != 0) {
     alloc_free(buf);
     return -1;
   }
