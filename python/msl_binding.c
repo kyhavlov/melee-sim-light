@@ -5,6 +5,7 @@
 
 #include "../src/alloc.h"
 #include "../src/api.h"
+#include "../src/anim_pose.h"
 #include "../src/ecb_tables.h"
 
 typedef struct {
@@ -329,6 +330,40 @@ static PyObject* msl_ecb_extents_rel_py(PyObject* self, PyObject* args) {
   return Py_BuildValue("(ffff)", ex.min_x, ex.max_x, ex.min_y, ex.max_y);
 }
 
+static PyObject* msl_anim_pose_matrix_py(PyObject* self, PyObject* args) {
+  (void)self;
+  unsigned int char_id_u = 0;
+  unsigned int msid_u = 0;
+  unsigned int frame_u = 0;
+  unsigned int part_id_u = 0;
+  if (!PyArg_ParseTuple(args, "IIII", &char_id_u, &msid_u, &frame_u, &part_id_u)) {
+    return NULL;
+  }
+  if (char_id_u > 255u) {
+    PyErr_SetString(PyExc_ValueError, "char_id out of range");
+    return NULL;
+  }
+  if (msid_u > 0xFFFFu || frame_u > 0xFFFFu || part_id_u > 0xFFFFu) {
+    PyErr_SetString(PyExc_ValueError, "msid/frame/part_id out of range");
+    return NULL;
+  }
+
+  npy_intp dims[1] = {(npy_intp)12};
+  PyArrayObject* arr = (PyArrayObject*)PyArray_SimpleNew(1, dims, NPY_FLOAT32);
+  if (arr == NULL) {
+    return NULL;
+  }
+  float* out = (float*)PyArray_DATA(arr);
+  const int err = anim_pose_get_matrix((uint8_t)char_id_u, (uint16_t)msid_u, (uint16_t)frame_u,
+                                       (uint16_t)part_id_u, out);
+  if (err != 0) {
+    Py_DECREF(arr);
+    PyErr_SetString(PyExc_ValueError, "anim_pose_get_matrix failed");
+    return NULL;
+  }
+  return (PyObject*)arr;
+}
+
 static PyObject* msl_destroy(PyObject* self, PyObject* args) {
   PyObject* capsule = NULL;
   if (!PyArg_ParseTuple(args, "O", &capsule)) {
@@ -368,6 +403,8 @@ static PyMethodDef methods[] = {
      "ecb_bottom_rel_y(char_id, animation_index, action_frame) -> float"},
     {"ecb_extents_rel", msl_ecb_extents_rel_py, METH_VARARGS,
      "ecb_extents_rel(char_id, animation_index, action_frame) -> (min_x, max_x, min_y, max_y)"},
+    {"anim_pose_matrix", msl_anim_pose_matrix_py, METH_VARARGS,
+     "anim_pose_matrix(char_id, msid, frame, part_id) -> np.ndarray[float32] shape=(12,)"},
     {NULL, NULL, 0, NULL},
 };
 

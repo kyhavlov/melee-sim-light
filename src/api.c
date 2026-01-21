@@ -5,6 +5,7 @@
 
 #include "alloc.h"
 #include "anim_table.h"
+#include "anim_pose.h"
 #include "action_ids.h"
 #include "batch_internal.h"
 #include "char_params.h"
@@ -58,6 +59,11 @@ MslBatch* msl_batch_create(int batch_size, int num_players) {
   }
 
   if (anim_table_init() != 0) {
+    msl_batch_destroy(batch);
+    return NULL;
+  }
+
+  if (anim_pose_init() != 0) {
     msl_batch_destroy(batch);
     return NULL;
   }
