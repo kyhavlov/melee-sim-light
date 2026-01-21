@@ -153,6 +153,10 @@ def main() -> None:
         "escapeair_timer_frames": int(_i32_be(buf, ft_common_abs + 0x334)),
         "escapeair_force": float(_f32_be(buf, ft_common_abs + 0x338)),
         "escapeair_decay": float(_f32_be(buf, ft_common_abs + 0x33C)),
+        # Landing lag for LandingFallSpecial when landing out of EscapeAir (airdodge).
+        # Decomp: EscapeAir_Coll -> callback -> ftCo_LandingFallSpecial_Enter(..., p_ftCommonData->x344).
+        # refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c:117
+        "landing_fall_special_lag_frames": float(_f32_be(buf, ft_common_abs + 0x344)),
         # Crouch (ftCo_Squat / SquatWait)
         "crouch_stick_threshold": float(_f32_be(buf, ft_common_abs + 0x90)),
         # Gameplay thresholds

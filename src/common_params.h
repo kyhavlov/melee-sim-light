@@ -80,6 +80,13 @@ typedef struct MslCommonParams {
   uint8_t lcancel_window_frames;  // p_ftCommonData->xE4
   uint8_t _pad_u8_3[3];
   float lcancel_lag_div;  // p_ftCommonData->xE8
+
+  // Landing lag for LandingFallSpecial when landing out of EscapeAir (airdodge).
+  // Decomp: EscapeAir_Coll -> callback -> ftCo_LandingFallSpecial_Enter(..., p_ftCommonData->x344).
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c:117
+  //
+  // Note: currently loaded for upcoming LandingFallSpecial timing modeling (not yet consumed in core logic).
+  float landing_fall_special_lag_frames;  // p_ftCommonData->x344
 } MslCommonParams;
 
 int common_params_init(void);

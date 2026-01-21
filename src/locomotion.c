@@ -10,6 +10,7 @@
 #include "common_params.h"
 #include "escape.h"
 #include "guard.h"
+#include "landing.h"
 
 // Input axes in MslStateSoA are Melee-legalized via ucf_clamp_stick_i8:
 // ucf.h: clamp_stickMax = 80 (HSD_PadClampCheck3).
@@ -147,8 +148,10 @@ static inline uint8_t action_is_fall_like(uint16_t a) {
 static inline uint8_t action_is_ground_locomotion(uint16_t a) {
   if (a == MSL_ACT_WAIT || action_is_walk(a) || a == MSL_ACT_TURN || a == MSL_ACT_TURN_RUN ||
       a == MSL_ACT_DASH || a == MSL_ACT_RUN || a == MSL_ACT_RUN_BRAKE || a == MSL_ACT_KNEE_BEND ||
-      a == MSL_ACT_LANDING || a == MSL_ACT_LANDING_FALL_SPECIAL || a == MSL_ACT_ESCAPE_F ||
-      a == MSL_ACT_ESCAPE_B || a == MSL_ACT_ESCAPE_N) {
+      a == MSL_ACT_LANDING || a == MSL_ACT_LANDING_FALL_SPECIAL || a == MSL_ACT_LANDING_AIR_N ||
+      a == MSL_ACT_LANDING_AIR_F || a == MSL_ACT_LANDING_AIR_B || a == MSL_ACT_LANDING_AIR_HI ||
+      a == MSL_ACT_LANDING_AIR_LW || a == MSL_ACT_ESCAPE_F || a == MSL_ACT_ESCAPE_B ||
+      a == MSL_ACT_ESCAPE_N) {
     return 1;
   }
   return 0;
@@ -278,9 +281,48 @@ static inline uint32_t submotion_for_action(uint16_t a) {
       return (uint32_t)MSL_SM_LANDING;
     case MSL_ACT_LANDING_FALL_SPECIAL:
       return (uint32_t)MSL_SM_LANDING_FALL_SPECIAL;
+    case MSL_ACT_LANDING_AIR_N:
+      return (uint32_t)MSL_SM_LANDING_AIR_N;
+    case MSL_ACT_LANDING_AIR_F:
+      return (uint32_t)MSL_SM_LANDING_AIR_F;
+    case MSL_ACT_LANDING_AIR_B:
+      return (uint32_t)MSL_SM_LANDING_AIR_B;
+    case MSL_ACT_LANDING_AIR_HI:
+      return (uint32_t)MSL_SM_LANDING_AIR_HI;
+    case MSL_ACT_LANDING_AIR_LW:
+      return (uint32_t)MSL_SM_LANDING_AIR_LW;
     default:
       return 0xFFFFFFFFu;
   }
+}
+
+static inline void enter_landing_action_from_air(MslBatch* batch, const MslCharParams* ch,
+                                                 size_t idx, uint16_t land_act) {
+  if (batch == NULL || ch == NULL) {
+    return;
+  }
+
+  // Landed this frame.
+  // Transfer air X to ground X so friction/traction apply next frame.
+  batch->state.speed_ground_x_self[idx] = batch->state.speed_air_x_self[idx];
+  batch->state.speed_air_x_self[idx] = 0.0f;
+
+  batch->state.fall_fast[idx] = 0;
+
+  // Jump refresh is tied to explicit landing-enter transitions only (not raw on_ground flips).
+  //
+  // Decomp: ftCommon_8007D6A4 sets `fp->x1968_jumpsUsed = 0` when the fighter becomes grounded,
+  // which refreshes jumps remaining back to max_jumps.
+  // refs/melee/src/melee/ft/ftcommon.c:556-573
+  //
+  // Slippi post-frame `jumps` is "jumps left" (see Recording/SendGamePostFrame.asm), so:
+  // jumps_left = max_jumps - jumps_used.
+  // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
+  batch->state.jumps_left[idx] = ch->max_jumps;
+
+  batch->state.action_id[idx] = land_act;
+  batch->state.animation_index[idx] = submotion_for_action(land_act);
+  batch->state.action_frame[idx] = 0;
 }
 
 static inline void apply_air_drift(const MslCharParams* ch, float stick_x, float* io_air_x) {
@@ -540,8 +582,11 @@ void locomotion_update_pre(MslBatch* batch) {
         if (action_id == MSL_ACT_WAIT || action_id == MSL_ACT_TURN ||
             action_id == MSL_ACT_TURN_RUN || action_id == MSL_ACT_KNEE_BEND ||
             action_id == MSL_ACT_LANDING || action_id == MSL_ACT_LANDING_FALL_SPECIAL ||
-            action_id == MSL_ACT_GUARD_ON || action_id == MSL_ACT_GUARD ||
-            action_id == MSL_ACT_GUARD_OFF || action_id == MSL_ACT_GUARD_REFLECT) {
+            action_id == MSL_ACT_LANDING_AIR_N || action_id == MSL_ACT_LANDING_AIR_F ||
+            action_id == MSL_ACT_LANDING_AIR_B || action_id == MSL_ACT_LANDING_AIR_HI ||
+            action_id == MSL_ACT_LANDING_AIR_LW || action_id == MSL_ACT_GUARD_ON ||
+            action_id == MSL_ACT_GUARD || action_id == MSL_ACT_GUARD_OFF ||
+            action_id == MSL_ACT_GUARD_REFLECT) {
           float friction = ch->gr_friction;
           if (msl_absf(batch->state.speed_ground_x_self[idx]) > ch->walk_max_vel) {
             friction *= c->high_speed_friction_mul;
@@ -786,37 +831,48 @@ void locomotion_update_post_collision(MslBatch* batch) {
       const uint16_t a = batch->state.action_id[idx];
 
       if (!was_ground && now_ground) {
-        batch->state.fall_fast[idx] = 0;
-
-        // Only implement landing state selection for locomotion air states for now.
-        // For aerial attacks/specials/etc, the correct landing lag state depends on motion state tables
-        // and additional internal flags we don't yet seed.
-        if (!action_is_air_locomotion(a)) {
-          continue;
-        }
-
-        // Landed this frame.
-        // Transfer air X to ground X so friction/traction apply next frame.
-        batch->state.speed_ground_x_self[idx] = batch->state.speed_air_x_self[idx];
-        batch->state.speed_air_x_self[idx] = 0.0f;
-
-        // Reset jumps on landing/ground transition.
+        // Grounding transition: enter landing actions for supported airborne motion states.
         //
-        // Decomp: ftCommon_8007D6A4 sets `fp->x1968_jumpsUsed = 0` when grounding, which refreshes
-        // jumps_left back to max_jumps.
-        // refs/melee/src/melee/ft/ftcommon.c:556-573
-        batch->state.jumps_left[idx] = ch->max_jumps;
-
-        // Enter landing action based on current fall type.
-        uint16_t land = (uint16_t)MSL_ACT_LANDING;
-        if (a == MSL_ACT_FALL_SPECIAL || a == MSL_ACT_FALL_SPECIAL_F ||
-            a == MSL_ACT_FALL_SPECIAL_B || a == MSL_ACT_LANDING_FALL_SPECIAL) {
-          land = (uint16_t)MSL_ACT_LANDING_FALL_SPECIAL;
+        // Decomp landing-enter call paths:
+        // - AttackAir*: AttackAir_Coll -> ft_80082C74(..., ftCo_LandingAir_EnterWithLag)
+        //   refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c
+        //   refs/melee/src/melee/ft/chara/ftCommon/ftCo_LandingAir.c
+        //   - ftCo_LandingAir_EnterWithLag checks fp->cmd_vars[0] to decide between LandingAir* (lag)
+        //     vs Landing_Enter_Basic (auto-cancel).
+        //     We derive cmd_vars[0] from extracted command-script timelines:
+        //     data/moves/{fox,falco}.json `ftCo_SM_AttackAir*` set_cmd_var(idx=0) events.
+        // - EscapeAir: EscapeAir_Coll -> ft_80082C74(..., ftCo_80099D70) -> ftCo_LandingFallSpecial_Enter(..., x344)
+        //   refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c
+        uint16_t land = 0;
+        switch (a) {
+          case MSL_ACT_ATTACK_AIR_N:
+          case MSL_ACT_ATTACK_AIR_F:
+          case MSL_ACT_ATTACK_AIR_B:
+          case MSL_ACT_ATTACK_AIR_HI:
+          case MSL_ACT_ATTACK_AIR_LW:
+            land = landing_attackair_land_action(batch->state.char_id[idx], a,
+                                                 batch->state.action_frame[idx]);
+            break;
+          case MSL_ACT_ESCAPE_AIR:
+            land = (uint16_t)MSL_ACT_LANDING_FALL_SPECIAL;
+            break;
+          default:
+            break;
         }
 
-        batch->state.action_id[idx] = land;
-        batch->state.animation_index[idx] = submotion_for_action(land);
-        batch->state.action_frame[idx] = 0;
+        // Locomotion-only fallback: fall states land into Landing/LandingFallSpecial.
+        if (land == 0 && action_is_air_locomotion(a)) {
+          land = (uint16_t)MSL_ACT_LANDING;
+          if (a == MSL_ACT_FALL_SPECIAL || a == MSL_ACT_FALL_SPECIAL_F || a == MSL_ACT_FALL_SPECIAL_B ||
+              a == MSL_ACT_LANDING_FALL_SPECIAL) {
+            land = (uint16_t)MSL_ACT_LANDING_FALL_SPECIAL;
+          }
+        }
+
+        // Only refresh jumps / enter a landing action when we actually take a landing transition.
+        if (land != 0) {
+          enter_landing_action_from_air(batch, ch, idx, land);
+        }
       } else if (was_ground && !now_ground) {
         batch->state.fall_fast[idx] = 0;
 

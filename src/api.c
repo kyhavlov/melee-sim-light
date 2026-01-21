@@ -12,6 +12,7 @@
 #include "config.h"
 #include "ecb_extents_table.h"
 #include "ecb_table.h"
+#include "landing.h"
 #include "stage_collision.h"
 #include "state.h"
 #include "step.h"
@@ -48,6 +49,11 @@ MslBatch* msl_batch_create(int batch_size, int num_players) {
   }
 
   if (char_params_init() != 0) {
+    msl_batch_destroy(batch);
+    return NULL;
+  }
+
+  if (landing_init() != 0) {
     msl_batch_destroy(batch);
     return NULL;
   }

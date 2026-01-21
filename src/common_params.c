@@ -183,7 +183,8 @@ int common_params_init(void) {
       json_get_f32(buf, "shield_hold_drain_base", &g_params.shield_hold_drain_base) != 0 ||
       json_get_f32(buf, "shield_hold_drain_max", &g_params.shield_hold_drain_max) != 0 ||
       json_get_u8(buf, "lcancel_window_frames", &g_params.lcancel_window_frames) != 0 ||
-      json_get_f32(buf, "lcancel_lag_div", &g_params.lcancel_lag_div) != 0) {
+      json_get_f32(buf, "lcancel_lag_div", &g_params.lcancel_lag_div) != 0 ||
+      json_get_f32(buf, "landing_fall_special_lag_frames", &g_params.landing_fall_special_lag_frames) != 0) {
     alloc_free(buf);
     return -1;
   }
