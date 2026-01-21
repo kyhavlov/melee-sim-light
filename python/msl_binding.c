@@ -5,8 +5,7 @@
 
 #include "../src/alloc.h"
 #include "../src/api.h"
-#include "../src/ecb_extents_table.h"
-#include "../src/ecb_table.h"
+#include "../src/ecb_tables.h"
 
 typedef struct {
   MslBatch* batch;

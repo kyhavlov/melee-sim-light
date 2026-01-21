@@ -9,7 +9,7 @@
 #include "buttons.h"
 #include "char_params.h"
 #include "common_params.h"
-#include "data_tables.h"
+#include "move_tables.h"
 #include "input_axis.h"
 
 // ftCo_JumpInput (refs/melee/src/melee/ft/chara/ftCommon/forward.h).
@@ -1058,7 +1058,7 @@ void locomotion_update_post_collision(MslBatch* batch) {
           case MSL_ACT_ATTACK_AIR_B:
           case MSL_ACT_ATTACK_AIR_HI:
           case MSL_ACT_ATTACK_AIR_LW:
-            land = data_tables_attackair_cmd0_active(batch->state.char_id[idx], a,
+            land = move_tables_attackair_cmd0_active(batch->state.char_id[idx], a,
                                                      batch->state.action_frame[idx])
                        ? landing_air_action_from_attackair(a)
                        : (uint16_t)MSL_ACT_LANDING;

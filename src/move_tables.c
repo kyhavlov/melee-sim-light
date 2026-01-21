@@ -1,4 +1,4 @@
-#include "data_tables.h"
+#include "move_tables.h"
 
 #include <ctype.h>
 #include <errno.h>
@@ -351,7 +351,7 @@ static int load_one(const char* data_dir, const char* rel_path, uint8_t char_id)
   return 0;
 }
 
-int data_tables_init(void) {
+int move_tables_init(void) {
   if (g_loaded) {
     return 0;
   }
@@ -391,7 +391,7 @@ static inline int attackair_kind_from_action(uint16_t a) {
   }
 }
 
-uint8_t data_tables_attackair_cmd0_active(uint8_t char_id, uint16_t attackair_action_id,
+uint8_t move_tables_attackair_cmd0_active(uint8_t char_id, uint16_t attackair_action_id,
                                           int16_t action_frame) {
   const int kind = attackair_kind_from_action(attackair_action_id);
   if (kind < 0) {

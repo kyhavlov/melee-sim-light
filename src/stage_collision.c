@@ -8,8 +8,7 @@
 #include <string.h>
 
 #include "alloc.h"
-#include "ecb_extents_table.h"
-#include "ecb_table.h"
+#include "ecb_tables.h"
 
 typedef struct {
   float x0;
