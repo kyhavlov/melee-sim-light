@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import math
 import struct
+import time
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -13,6 +14,45 @@ from melee_sim.hsd_archive import HsdArchive, parse_hsd_archive
 ISO_DIR = Path("_iso")
 
 F32 = np.float32
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Optional wall-clock timings (extractor profiling)
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+@dataclass
+class _Timings:
+    msid_total_s: float = 0.0
+    msid_count: int = 0
+
+    fobj_interpret_s: float = 0.0
+
+    mtx_srt_s: float = 0.0
+    mtx_srt_trig_s: float = 0.0
+    mtx_concat_s: float = 0.0
+
+    native_bake_s: float = 0.0
+
+    file_write_s: float = 0.0
+
+    def report(self, *, character: str, native: bool) -> str:
+        total = max(self.msid_total_s, 1.0e-9)
+        lines = []
+        lines.append(f"[timings] character={character} native={int(native)} msids={self.msid_count} total={total:.3f}s")
+        lines.append(f"[timings] fobj_interpret={self.fobj_interpret_s:.3f}s ({100.0*self.fobj_interpret_s/total:.1f}%)")
+        lines.append(
+            f"[timings] mtx_srt={self.mtx_srt_s:.3f}s ({100.0*self.mtx_srt_s/total:.1f}%) "
+            f"(trig={self.mtx_srt_trig_s:.3f}s)"
+        )
+        lines.append(f"[timings] mtx_concat={self.mtx_concat_s:.3f}s ({100.0*self.mtx_concat_s/total:.1f}%)")
+        if native:
+            lines.append(f"[timings] native_bake={self.native_bake_s:.3f}s ({100.0*self.native_bake_s/total:.1f}%)")
+        lines.append(f"[timings] file_writes={self.file_write_s:.3f}s ({100.0*self.file_write_s/total:.1f}%)")
+        return "\n".join(lines)
+
+
+_TIMINGS: _Timings | None = None
 
 
 # Fast-ish float32 rounding helper (keeps values as Python floats but with f32 rounding).
@@ -233,12 +273,15 @@ def _mtx_srt(
     rx, ry, rz = (float(F32(rot[0])), float(F32(rot[1])), float(F32(rot[2])))
     tx, ty, tz = (float(F32(trans[0])), float(F32(trans[1])), float(F32(trans[2])))
 
+    t_trig0 = time.perf_counter() if _TIMINGS is not None else 0.0
     sin_x = float(_msl_sinf(rx))
     cos_x = float(_msl_cosf(rx))
     sin_y = float(_msl_sinf(ry))
     cos_y = float(_msl_cosf(ry))
     sin_z = float(_msl_sinf(rz))
     cos_z = float(_msl_cosf(rz))
+    if _TIMINGS is not None:
+        _TIMINGS.mtx_srt_trig_s += time.perf_counter() - t_trig0
 
     vec1x_2 = sx
     vec1y_2 = sy
@@ -1231,10 +1274,17 @@ def extract_one_character(
     debug_msid: int | None = None,
     debug_frame: int | None = None,
     debug_part: int | None = None,
+    native: bool = True,
+    timings: bool = False,
+    msids: list[int] | None = None,
 ) -> Path:
     import json
 
+    global _TIMINGS
+    prev_timings = _TIMINGS
+    _TIMINGS = _Timings() if timings else None
     if character not in {"fox", "falco", "sheik", "peach", "marth", "puff", "falcon"}:
+        _TIMINGS = prev_timings
         raise SystemExit(f"unsupported character {character!r}")
 
     needed_parts, max_frame_by_move = _collect_needed_parts_from_moves(character, moves_path)
@@ -1296,11 +1346,15 @@ def extract_one_character(
         if msid is not None and msid >= 0:
             msid_to_mk[int(msid)] = int(mk)
 
-    wanted_msids = sorted(
-        {msid for msid in msid_to_mk.keys()}
-        | set(_extra_anim_msids())
-        | set(_special_anim_msids(character))
-    )
+    if msids is not None:
+        wanted_msids = [int(m) for m in msids if int(m) >= 0]
+        wanted_msids = sorted(set(wanted_msids))
+    else:
+        wanted_msids = sorted(
+            {msid for msid in msid_to_mk.keys()}
+            | set(_extra_anim_msids())
+            | set(_special_anim_msids(character))
+        )
 
     prefix = _fighter_prefix(character)
     aj_path = ISO_DIR / f"{prefix}AJ.dat"
@@ -1312,6 +1366,42 @@ def extract_one_character(
     # Build anim data.
     joint_parts = needed_parts[:]  # store only the joints we directly need at runtime
     local_parts = closure_parts[:]  # store locals for needed parts + ancestors (exact root-chain replay)
+
+    # Precompute order: parents before children within closure_parts.
+    depth_cache: dict[int, int] = {}
+
+    def depth(p: int) -> int:
+        d = depth_cache.get(p)
+        if d is not None:
+            return d
+        pp = parent_part[p]
+        if pp < 0:
+            depth_cache[p] = 0
+            return 0
+        dd = 1 + depth(int(pp))
+        depth_cache[p] = dd
+        return dd
+
+    order = sorted(closure_parts, key=lambda p: (depth(p), p))
+
+    # Native path uses fixed arrays.
+    use_native = bool(native) and debug_msid is None and debug_frame is None and debug_part is None
+    msl = None
+    if use_native:
+        try:
+            import msl_binding as msl  # type: ignore[import-not-found]
+        except Exception:
+            msl = None
+            use_native = False
+
+    rest_rot_np = np.asarray(part_rot, dtype=np.float32)
+    rest_pos_np = np.asarray(part_pos, dtype=np.float32)
+    rest_scl_np = np.asarray(part_scl, dtype=np.float32)
+    parent_np = np.asarray(parent_part, dtype=np.int16)
+    flags_np = np.asarray(part_flags, dtype=np.uint32)
+    order_np = np.asarray(order, dtype=np.int32)
+    local_parts_np = np.asarray(local_parts, dtype=np.int32)
+    joint_parts_np = np.asarray(joint_parts, dtype=np.int32)
 
     # Header: magic + version + joint_count + anim_count + joint_parts bytes.
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -1373,8 +1463,10 @@ def extract_one_character(
             f_tr.write(struct.pack("<I", int(part_flags[p]) & 0xFFFFFFFF))
 
         for msid in wanted_msids:
+            t_msid0 = time.perf_counter() if _TIMINGS is not None else 0.0
             entry = _msid_anim_entry(character, int(msid))
             if entry is None:
+                t_w0 = time.perf_counter() if _TIMINGS is not None else 0.0
                 f.write(struct.pack("<H", int(msid) & 0xFFFF))
                 f.write(struct.pack("<H", 0))
                 f_loc.write(struct.pack("<H", int(msid) & 0xFFFF))
@@ -1383,10 +1475,15 @@ def extract_one_character(
                 f_tr.write(struct.pack("<f", 0.0))
                 for part in local_parts:
                     f_tr.write(struct.pack("<BB", int(part) & 0xFF, 0))
+                if _TIMINGS is not None:
+                    _TIMINGS.file_write_s += time.perf_counter() - t_w0
+                    _TIMINGS.msid_total_s += time.perf_counter() - t_msid0
+                    _TIMINGS.msid_count += 1
                 continue
 
             sym, base_off, _size = entry
             if base_off < 0 or base_off + 0x20 > len(aj_buf):
+                t_w0 = time.perf_counter() if _TIMINGS is not None else 0.0
                 f.write(struct.pack("<H", int(msid) & 0xFFFF))
                 f.write(struct.pack("<H", 0))
                 f_loc.write(struct.pack("<H", int(msid) & 0xFFFF))
@@ -1395,6 +1492,10 @@ def extract_one_character(
                 f_tr.write(struct.pack("<f", 0.0))
                 for part in local_parts:
                     f_tr.write(struct.pack("<BB", int(part) & 0xFF, 0))
+                if _TIMINGS is not None:
+                    _TIMINGS.file_write_s += time.perf_counter() - t_w0
+                    _TIMINGS.msid_total_s += time.perf_counter() - t_msid0
+                    _TIMINGS.msid_count += 1
                 continue
 
             arc = aj_cache.get(base_off)
@@ -1404,6 +1505,7 @@ def extract_one_character(
 
             fig_off = arc.get_public_offset(sym)
             if fig_off is None:
+                t_w0 = time.perf_counter() if _TIMINGS is not None else 0.0
                 f.write(struct.pack("<H", int(msid) & 0xFFFF))
                 f.write(struct.pack("<H", 0))
                 f_loc.write(struct.pack("<H", int(msid) & 0xFFFF))
@@ -1412,6 +1514,10 @@ def extract_one_character(
                 f_tr.write(struct.pack("<f", 0.0))
                 for part in local_parts:
                     f_tr.write(struct.pack("<BB", int(part) & 0xFF, 0))
+                if _TIMINGS is not None:
+                    _TIMINGS.file_write_s += time.perf_counter() - t_w0
+                    _TIMINGS.msid_total_s += time.perf_counter() - t_msid0
+                    _TIMINGS.msid_count += 1
                 continue
 
             fig = _read_figatree(arc, fig_off)
@@ -1431,6 +1537,7 @@ def extract_one_character(
                 if part_tracks:
                     tracks_by_part[int(part)] = part_tracks
 
+            t_w_tr0 = time.perf_counter() if _TIMINGS is not None else 0.0
             f_tr.write(struct.pack("<H", int(msid) & 0xFFFF))
             f_tr.write(struct.pack("<f", float(fig.frames)))
             for part in local_parts:
@@ -1452,37 +1559,10 @@ def extract_one_character(
                         )
                     )
                     f_tr.write(ad_bytes)
+            if _TIMINGS is not None:
+                _TIMINGS.file_write_s += time.perf_counter() - t_w_tr0
 
             # Build fobj lists for active parts (closure), grouped by part.
-            fobjs_by_part: dict[int, list[_FObj]] = {}
-            for part in closure_parts:
-                ni = part_to_node[part]
-                if ni < 0 or ni >= len(fig.nodes):
-                    continue
-                nframes = int(fig.nodes[ni])
-                base = track_base_by_node[ni]
-                tracks = fig.tracks[base : base + nframes]
-                fobjs: list[_FObj] = []
-                for t in tracks:
-                    if t.obj_type < 1 or t.obj_type > 10:
-                        continue
-                    # ad stream is inside arc.buf; pass as memoryview for slicing.
-                    ad_start = t.ad_abs
-                    ad = memoryview(arc.buf)[ad_start : ad_start + t.length]
-                    fobj = _FObj(
-                        ad=ad,
-                        ad_head=0,
-                        length=t.length,
-                        startframe=t.startframe,
-                        obj_type=t.obj_type,
-                        frac_value=t.frac_value,
-                        frac_slope=t.frac_slope,
-                    )
-                    fobj.req_anim(0.0)
-                    fobjs.append(fobj)
-                if fobjs:
-                    fobjs_by_part[part] = fobjs
-
             # Simulate frames.
             if msid in msid_to_mk:
                 mk = msid_to_mk[int(msid)]
@@ -1491,181 +1571,270 @@ def extract_one_character(
             else:
                 frame_count = max(1, min(int(fig.frames) + 1, 120))
 
+            t_w0 = time.perf_counter() if _TIMINGS is not None else 0.0
             f.write(struct.pack("<H", int(msid) & 0xFFFF))
             f.write(struct.pack("<H", frame_count))
             f_loc.write(struct.pack("<H", int(msid) & 0xFFFF))
             f_loc.write(struct.pack("<H", frame_count))
+            if _TIMINGS is not None:
+                _TIMINGS.file_write_s += time.perf_counter() - t_w0
 
-            cur_rot = part_rot[:]
-            cur_scl = part_scl[:]
-            cur_pos = part_pos[:]
-            if 0 <= inv_scale_part < len(cur_scl):
-                cur_scl[inv_scale_part] = (inv_model_scale, inv_model_scale, inv_model_scale)
-
-            # Precompute order: parents before children within closure_parts.
-            depth_cache: dict[int, int] = {}
-
-            def depth(p: int) -> int:
-                d = depth_cache.get(p)
-                if d is not None:
-                    return d
-                pp = parent_part[p]
-                if pp < 0 or pp == p:
-                    depth_cache[p] = 0
-                    return 0
-                dd = depth(pp) + 1
-                depth_cache[p] = dd
-                return dd
-
-            order = sorted(closure_parts, key=lambda p: (depth(p), p))
-            world_mtx: list[tuple[float, ...]] = [(1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0)] * parts_num
-            world_scl: list[tuple[float, float, float] | None] = [None] * parts_num
-
-            transn_xyz: list[tuple[float, float, float]] = []
-
-            for frame in range(frame_count):
-                rate = 0.0 if frame == 0 else 1.0
-
-                # Apply animated updates in-place.
-                for part, fobjs in fobjs_by_part.items():
-                    for fo in fobjs:
-                        vals = fo.interpret(rate)
-                        if not vals:
+            if use_native and msl is not None:
+                update_parts_list: list[int] = []
+                fobj_starts_list: list[int] = [0]
+                fobj_desc_list: list[tuple[int, int, int]] = []
+                for part in closure_parts:
+                    ni = part_to_node[part]
+                    if ni < 0 or ni >= len(fig.nodes):
+                        continue
+                    nframes = int(fig.nodes[ni])
+                    base = track_base_by_node[ni]
+                    tracks = fig.tracks[base : base + nframes]
+                    start_len = len(fobj_desc_list)
+                    for t in tracks:
+                        if t.obj_type < 1 or t.obj_type > 10:
                             continue
-                        # Only last update is visible for the frame.
-                        v = float(vals[-1])
-                        if fo.obj_type == 1:
-                            rx, ry, rz = cur_rot[part]
-                            cur_rot[part] = (v, ry, rz)
-                        elif fo.obj_type == 2:
-                            rx, ry, rz = cur_rot[part]
-                            cur_rot[part] = (rx, v, rz)
-                        elif fo.obj_type == 3:
-                            rx, ry, rz = cur_rot[part]
-                            cur_rot[part] = (rx, ry, v)
-                        elif fo.obj_type == 5:
-                            px, py, pz = cur_pos[part]
-                            cur_pos[part] = (v, py, pz)
-                        elif fo.obj_type == 6:
-                            px, py, pz = cur_pos[part]
-                            cur_pos[part] = (px, v, pz)
-                        elif fo.obj_type == 7:
-                            px, py, pz = cur_pos[part]
-                            cur_pos[part] = (px, py, v)
-                        elif fo.obj_type == 8:
-                            sx, sy, sz = cur_scl[part]
-                            cur_scl[part] = (_f32(max(abs(v), 1.0e-3)), sy, sz)
-                        elif fo.obj_type == 9:
-                            sx, sy, sz = cur_scl[part]
-                            cur_scl[part] = (sx, _f32(max(abs(v), 1.0e-3)), sz)
-                        elif fo.obj_type == 10:
-                            sx, sy, sz = cur_scl[part]
-                            cur_scl[part] = (sx, sy, _f32(max(abs(v), 1.0e-3)))
+                        d0 = (int(t.obj_type) & 0xFF) | ((int(t.frac_value) & 0xFF) << 8) | ((int(t.frac_slope) & 0xFF) << 16)
+                        d1 = (int(t.startframe) & 0xFFFF) | ((int(t.length) & 0xFFFF) << 16)
+                        d2 = int(t.ad_abs) & 0xFFFF_FFFF
+                        fobj_desc_list.append((d0, d1, d2))
+                    if len(fobj_desc_list) != start_len:
+                        update_parts_list.append(int(part))
+                        fobj_starts_list.append(len(fobj_desc_list))
 
-                # Capture TransN translation (FtPart_TransN=1) and then zero it so emitted matrices remain
-                # fighter-local (matches ftAnim_8006E054's HSD_JObjGetTranslation + HSD_JObjSetTranslate(0)).
-                if 1 < len(cur_pos):
-                    tx, ty, tz = cur_pos[1]
-                    transn_xyz.append((float(tx), float(ty), float(tz)))
-                    cur_pos[1] = (0.0, 0.0, 0.0)
+                update_parts_np = np.asarray(update_parts_list, dtype=np.int32)
+                fobj_starts_np = np.asarray(fobj_starts_list, dtype=np.int32)
+                if fobj_desc_list:
+                    fobj_desc_np = np.asarray(fobj_desc_list, dtype=np.uint32)
+                    fobj_desc_np = fobj_desc_np.reshape((-1, 3))
+                else:
+                    fobj_desc_np = np.zeros((0, 3), dtype=np.uint32)
 
-                if (
-                    not debug_done
-                    and debug_msid is not None
-                    and debug_frame is not None
-                    and debug_part is not None
-                    and int(msid) == int(debug_msid)
-                    and frame == int(debug_frame)
-                ):
-                    chain: list[int] = []
-                    p = int(debug_part)
-                    seen = set()
-                    while 0 <= p < parts_num and p not in seen:
-                        chain.append(p)
-                        seen.add(p)
-                        p = parent_part[p]
-                    dbg = []
-                    for part in chain:
-                        dbg.append(
-                            {
-                                "part": part,
-                                "parent": parent_part[part],
-                                "flags": int(part_flags[part]),
-                                "rot": cur_rot[part],
-                                "pos": cur_pos[part],
-                                "scl": cur_scl[part],
-                            }
+                t_native0 = time.perf_counter() if _TIMINGS is not None else 0.0
+                mats_bytes, locals_bytes, transn_bytes = msl.anim_bake_ssanim01(
+                    rest_rot_np,
+                    rest_pos_np,
+                    rest_scl_np,
+                    parent_np,
+                    flags_np,
+                    order_np,
+                    local_parts_np,
+                    joint_parts_np,
+                    update_parts_np,
+                    fobj_starts_np,
+                    fobj_desc_np,
+                    arc.buf,
+                    int(frame_count),
+                    int(inv_scale_part),
+                    float(inv_model_scale),
+                )
+                if _TIMINGS is not None:
+                    _TIMINGS.native_bake_s += time.perf_counter() - t_native0
+                t_w0 = time.perf_counter() if _TIMINGS is not None else 0.0
+                f_loc.write(locals_bytes)
+                f.write(mats_bytes)
+                f.write(transn_bytes)
+                if _TIMINGS is not None:
+                    _TIMINGS.file_write_s += time.perf_counter() - t_w0
+            else:
+                fobjs_by_part: dict[int, list[_FObj]] = {}
+                for part in closure_parts:
+                    ni = part_to_node[part]
+                    if ni < 0 or ni >= len(fig.nodes):
+                        continue
+                    nframes = int(fig.nodes[ni])
+                    base = track_base_by_node[ni]
+                    tracks = fig.tracks[base : base + nframes]
+                    fobjs: list[_FObj] = []
+                    for t in tracks:
+                        if t.obj_type < 1 or t.obj_type > 10:
+                            continue
+                        ad_start = t.ad_abs
+                        ad = memoryview(arc.buf)[ad_start : ad_start + t.length]
+                        fobj = _FObj(
+                            ad=ad,
+                            ad_head=0,
+                            length=t.length,
+                            startframe=t.startframe,
+                            obj_type=t.obj_type,
+                            frac_value=t.frac_value,
+                            frac_slope=t.frac_slope,
                         )
-                    print(
-                        json.dumps(
-                            {
-                                "debug": "locals",
-                                "character": character,
-                                "msid": int(msid),
-                                "frame": int(frame),
-                                "part_chain": dbg,
-                            }
-                        )
-                    )
-                    debug_done = True
+                        fobj.req_anim(0.0)
+                        fobjs.append(fobj)
+                    if fobjs:
+                        fobjs_by_part[part] = fobjs
 
-                # Recompute world matrices for closure parts.
-                for part in order:
-                    p = parent_part[part]
-                    parent_m = world_mtx[p] if p >= 0 else (1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0)
-                    parent_s = world_scl[p] if p >= 0 else None
-                    local = _mtx_srt(cur_scl[part], cur_rot[part], cur_pos[part], parent_s)
-                    world = _mtx_concat(parent_m, local)
-                    world_mtx[part] = world
-                    # Decomp (`HSD_JObjMakeMatrix`): `jobj->scl` propagation depends on the per-joint
-                    # `JOBJ_CLASSICAL_SCALE` flag, not the figatree header.
-                    #
-                    # The resulting `jobj->scl` (if present) is what children see as `parent_scl`.
-                    if (int(part_flags[part]) & 8) != 0:
-                        world_scl[part] = parent_s if p >= 0 and parent_s is not None else None
-                    else:
-                        if p >= 0 and parent_s is not None:
-                            psx, psy, psz = parent_s
-                            sx, sy, sz = cur_scl[part]
-                            world_scl[part] = (
-                                _f32_mul(sx, psx),
-                                _f32_mul(sy, psy),
-                                _f32_mul(sz, psz),
+                cur_rot = part_rot[:]
+                cur_scl = part_scl[:]
+                cur_pos = part_pos[:]
+                if 0 <= inv_scale_part < len(cur_scl):
+                    cur_scl[inv_scale_part] = (inv_model_scale, inv_model_scale, inv_model_scale)
+
+                world_mtx: list[tuple[float, ...]] = [
+                    (1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0)
+                ] * parts_num
+                world_scl: list[tuple[float, float, float] | None] = [None] * parts_num
+                transn_xyz: list[tuple[float, float, float]] = []
+
+                for frame in range(frame_count):
+                    rate = 0.0 if frame == 0 else 1.0
+
+                    t_fobj0 = time.perf_counter() if _TIMINGS is not None else 0.0
+                    for part, fobjs in fobjs_by_part.items():
+                        for fo in fobjs:
+                            vals = fo.interpret(rate)
+                            if not vals:
+                                continue
+                            v = float(vals[-1])
+                            if fo.obj_type == 1:
+                                rx, ry, rz = cur_rot[part]
+                                cur_rot[part] = (v, ry, rz)
+                            elif fo.obj_type == 2:
+                                rx, ry, rz = cur_rot[part]
+                                cur_rot[part] = (rx, v, rz)
+                            elif fo.obj_type == 3:
+                                rx, ry, rz = cur_rot[part]
+                                cur_rot[part] = (rx, ry, v)
+                            elif fo.obj_type == 5:
+                                px, py, pz = cur_pos[part]
+                                cur_pos[part] = (v, py, pz)
+                            elif fo.obj_type == 6:
+                                px, py, pz = cur_pos[part]
+                                cur_pos[part] = (px, v, pz)
+                            elif fo.obj_type == 7:
+                                px, py, pz = cur_pos[part]
+                                cur_pos[part] = (px, py, v)
+                            elif fo.obj_type == 8:
+                                sx, sy, sz = cur_scl[part]
+                                cur_scl[part] = (_f32(max(abs(v), 1.0e-3)), sy, sz)
+                            elif fo.obj_type == 9:
+                                sx, sy, sz = cur_scl[part]
+                                cur_scl[part] = (sx, _f32(max(abs(v), 1.0e-3)), sz)
+                            elif fo.obj_type == 10:
+                                sx, sy, sz = cur_scl[part]
+                                cur_scl[part] = (sx, sy, _f32(max(abs(v), 1.0e-3)))
+                    if _TIMINGS is not None:
+                        _TIMINGS.fobj_interpret_s += time.perf_counter() - t_fobj0
+
+                    if 1 < len(cur_pos):
+                        tx, ty, tz = cur_pos[1]
+                        transn_xyz.append((float(tx), float(ty), float(tz)))
+                        cur_pos[1] = (0.0, 0.0, 0.0)
+
+                    if (
+                        not debug_done
+                        and debug_msid is not None
+                        and debug_frame is not None
+                        and debug_part is not None
+                        and int(msid) == int(debug_msid)
+                        and frame == int(debug_frame)
+                    ):
+                        chain: list[int] = []
+                        p = int(debug_part)
+                        seen = set()
+                        while 0 <= p < parts_num and p not in seen:
+                            chain.append(p)
+                            seen.add(p)
+                            p = parent_part[p]
+                        dbg = []
+                        for part in chain:
+                            dbg.append(
+                                {
+                                    "part": part,
+                                    "parent": parent_part[part],
+                                    "flags": int(part_flags[part]),
+                                    "rot": cur_rot[part],
+                                    "pos": cur_pos[part],
+                                    "scl": cur_scl[part],
+                                }
                             )
-                        else:
-                            world_scl[part] = cur_scl[part]
-
-                # Emit local SRTs (closure parts) for this frame.
-                for part in local_parts:
-                    rx, ry, rz = cur_rot[part]
-                    px, py, pz = cur_pos[part]
-                    sx, sy, sz = cur_scl[part]
-                    f_loc.write(
-                        struct.pack(
-                            "<9f",
-                            float(rx),
-                            float(ry),
-                            float(rz),
-                            float(px),
-                            float(py),
-                            float(pz),
-                            float(sx),
-                            float(sy),
-                            float(sz),
+                        print(
+                            json.dumps(
+                                {
+                                    "debug": "locals",
+                                    "character": character,
+                                    "msid": int(msid),
+                                    "frame": int(frame),
+                                    "part_chain": dbg,
+                                }
+                            )
                         )
+                        debug_done = True
+
+                    for part in order:
+                        p = parent_part[part]
+                        parent_m = (
+                            world_mtx[p]
+                            if p >= 0
+                            else (1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0)
+                        )
+                        parent_s = world_scl[p] if p >= 0 else None
+                        t_srt0 = time.perf_counter() if _TIMINGS is not None else 0.0
+                        local = _mtx_srt(cur_scl[part], cur_rot[part], cur_pos[part], parent_s)
+                        if _TIMINGS is not None:
+                            _TIMINGS.mtx_srt_s += time.perf_counter() - t_srt0
+                        t_cat0 = time.perf_counter() if _TIMINGS is not None else 0.0
+                        world = _mtx_concat(parent_m, local)
+                        if _TIMINGS is not None:
+                            _TIMINGS.mtx_concat_s += time.perf_counter() - t_cat0
+                        world_mtx[part] = world
+                        if (int(part_flags[part]) & 8) != 0:
+                            world_scl[part] = parent_s if p >= 0 and parent_s is not None else None
+                        else:
+                            if p >= 0 and parent_s is not None:
+                                psx, psy, psz = parent_s
+                                sx, sy, sz = cur_scl[part]
+                                world_scl[part] = (
+                                    _f32_mul(sx, psx),
+                                    _f32_mul(sy, psy),
+                                    _f32_mul(sz, psz),
+                                )
+                            else:
+                                world_scl[part] = cur_scl[part]
+
+                    t_w0 = time.perf_counter() if _TIMINGS is not None else 0.0
+                    for part in local_parts:
+                        rx, ry, rz = cur_rot[part]
+                        px, py, pz = cur_pos[part]
+                        sx, sy, sz = cur_scl[part]
+                        f_loc.write(
+                            struct.pack(
+                                "<9f",
+                                float(rx),
+                                float(ry),
+                                float(rz),
+                                float(px),
+                                float(py),
+                                float(pz),
+                                float(sx),
+                                float(sy),
+                                float(sz),
+                            )
+                        )
+                    for part in joint_parts:
+                        m = world_mtx[part]
+                        f.write(struct.pack("<12f", *m))
+                    if _TIMINGS is not None:
+                        _TIMINGS.file_write_s += time.perf_counter() - t_w0
+
+                if len(transn_xyz) != frame_count:
+                    transn_xyz = transn_xyz[:frame_count] + [(0.0, 0.0, 0.0)] * max(
+                        0, frame_count - len(transn_xyz)
                     )
+                t_w0 = time.perf_counter() if _TIMINGS is not None else 0.0
+                for (tx, ty, tz) in transn_xyz:
+                    f.write(struct.pack("<3f", float(tx), float(ty), float(tz)))
+                if _TIMINGS is not None:
+                    _TIMINGS.file_write_s += time.perf_counter() - t_w0
 
-                # Emit stored joint matrices for this frame.
-                for part in joint_parts:
-                    m = world_mtx[part]
-                    f.write(struct.pack("<12f", *m))
+            if _TIMINGS is not None:
+                _TIMINGS.msid_total_s += time.perf_counter() - t_msid0
+                _TIMINGS.msid_count += 1
 
-            # Emit TransN translation after all matrices for this msid (v3).
-            if len(transn_xyz) != frame_count:
-                transn_xyz = transn_xyz[:frame_count] + [(0.0, 0.0, 0.0)] * max(0, frame_count - len(transn_xyz))
-            for (tx, ty, tz) in transn_xyz:
-                f.write(struct.pack("<3f", float(tx), float(ty), float(tz)))
-
+    if _TIMINGS is not None:
+        print(_TIMINGS.report(character=character, native=use_native))
+    _TIMINGS = prev_timings
     return out_path
 
 
@@ -1682,6 +1851,9 @@ def main() -> None:
     ap.add_argument("--debug-msid", type=int, default=None, help="dump locals for this msid")
     ap.add_argument("--debug-frame", type=int, default=None, help="dump locals for this frame")
     ap.add_argument("--debug-part", type=int, default=None, help="dump locals for this part id and its ancestors")
+    ap.add_argument("--timings", action="store_true", help="print wall-clock breakdown of extractor hot paths")
+    ap.add_argument("--no-native", action="store_true", help="force pure-Python bake (ignore native helper)")
+    ap.add_argument("--msid", type=int, action="append", default=None, help="only extract these submotion ids (repeatable)")
     args = ap.parse_args()
 
     moves = args.moves
@@ -1702,6 +1874,9 @@ def main() -> None:
         debug_msid=args.debug_msid,
         debug_frame=args.debug_frame,
         debug_part=args.debug_part,
+        native=not bool(args.no_native),
+        timings=bool(args.timings),
+        msids=args.msid,
     )
     _write_anim_blend_data(args.character, args.out_dir)
     print(f"wrote {out}")

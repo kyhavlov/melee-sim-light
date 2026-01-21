@@ -3,12 +3,42 @@ from __future__ import annotations
 from pathlib import Path
 
 from setuptools import Extension, setup
+from setuptools.command.build_ext import build_ext
 
 
 def get_numpy_include():
     import numpy
 
     return numpy.get_include()
+
+
+def _compiler_supports_flag(compiler, flag: str) -> bool:
+    import tempfile
+
+    if getattr(compiler, "compiler_type", "") == "msvc":
+        return False
+    try:
+        with tempfile.TemporaryDirectory() as td:
+            p = Path(td)
+            src = p / "flagcheck.c"
+            src.write_text("int main(void){return 0;}\n")
+            compiler.compile([str(src)], output_dir=str(p), extra_postargs=[flag])
+        return True
+    except Exception:
+        return False
+
+
+class _BuildExt(build_ext):
+    def build_extensions(self) -> None:
+        # Prevent implicit FMA contraction (cross-machine bitwise risk).
+        # GCC defaults `-ffp-contract=fast`; Clang generally supports this flag too.
+        flag = "-ffp-contract=off"
+        if _compiler_supports_flag(self.compiler, flag):
+            for ext in self.extensions:
+                ext.extra_compile_args = list(ext.extra_compile_args or [])
+                if flag not in ext.extra_compile_args:
+                    ext.extra_compile_args.append(flag)
+        super().build_extensions()
 
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -51,4 +81,5 @@ setup(
     version="0.0.0",
     py_modules=[],
     ext_modules=[ext],
+    cmdclass={"build_ext": _BuildExt},
 )
