@@ -153,6 +153,13 @@ def main() -> None:
         "escapeair_timer_frames": int(_i32_be(buf, ft_common_abs + 0x334)),
         "escapeair_force": float(_f32_be(buf, ft_common_abs + 0x338)),
         "escapeair_decay": float(_f32_be(buf, ft_common_abs + 0x33C)),
+        # FallSpecial mobility scalar (ftCo_FallSpecial / EscapeAir -> FallSpecial).
+        # Decomp:
+        # - EscapeAir_Anim calls ftCo_80096900(..., p_ftCommonData->x340, p_ftCommonData->x344).
+        #   refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c
+        # - ftCo_80096900 stores `mv.co.fallspecial.mobility = ca->air_drift_max * mobility`.
+        #   refs/melee/src/melee/ft/chara/ftCommon/ftCo_FallSpecial.c
+        "fall_special_mobility_scalar": float(_f32_be(buf, ft_common_abs + 0x340)),
         # Landing lag for LandingFallSpecial when landing out of EscapeAir (airdodge).
         # Decomp: EscapeAir_Coll -> callback -> ftCo_LandingFallSpecial_Enter(..., p_ftCommonData->x344).
         # refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c:117

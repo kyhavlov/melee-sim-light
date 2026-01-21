@@ -38,6 +38,7 @@ ext = Extension(
         str((ROOT / "src" / "landing.c").resolve()),
         str((ROOT / "src" / "guard.c").resolve()),
         str((ROOT / "src" / "escape.c").resolve()),
+        str((ROOT / "src" / "escape_air.c").resolve()),
         str((ROOT / "src" / "hurtboxes.c").resolve()),
         str((ROOT / "src" / "combat.c").resolve()),
         str((ROOT / "src" / "items.c").resolve()),

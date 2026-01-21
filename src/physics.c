@@ -3,21 +3,7 @@
 #include "action_ids.h"
 #include "char_params.h"
 #include "common_params.h"
-
-// Input axes in MslStateSoA are Melee-legalized via ucf_clamp_stick_i8:
-// ucf.h: clamp_stickMax = 80 (HSD_PadClampCheck3).
-enum { MSL_STICK_MAX_I8 = 80 };
-
-static inline float msl_absf(float x) { return x < 0.0f ? -x : x; }
-
-static inline float stick_i8_to_unit(int8_t v) { return (float)v / (float)MSL_STICK_MAX_I8; }
-
-static inline float apply_deadzone(float v, float dz) {
-  if (msl_absf(v) < dz) {
-    return 0.0f;
-  }
-  return v;
-}
+#include "input_axis.h"
 
 static inline uint8_t ftCommon_CheckFallFast(const MslCommonParams* c, float stick_y, float vy,
                                              uint8_t* io_fall_fast,
@@ -82,6 +68,18 @@ void physics_integrate(MslBatch* batch) {
       batch->state.pos_y[idx] += vy;
 
       if (!on_ground) {
+        // EscapeAir is a self-velocity-controlled state with its own decay; do not apply gravity or
+        // fastfall here unless we later model cmd_skip_decay.
+        //
+        // Decomp: ftCo_EscapeAir_Phys scales `self_vel` by `escapeair_decay` when cmd_skip_decay is false,
+        // and otherwise calls the common fall helper (`ft_80084DB0`).
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Phys
+        if (action_id == (uint16_t)MSL_ACT_ESCAPE_AIR) {
+          batch->state.speed_air_x_self[idx] *= c->escapeair_decay;
+          batch->state.speed_y_self[idx] *= c->escapeair_decay;
+          continue;
+        }
+
         const MslCharParams* phys = msl_char_params(batch->state.char_id[idx]);
         if (phys == NULL) {
           continue;

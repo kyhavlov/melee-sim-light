@@ -273,6 +273,7 @@ Known teacher-forcing limitations (must be tracked and eventually removed, not t
 Notes:
 - Input-history tilt timers (`x670`/`x671`), TURN internals (`frames_to_turn`/`has_turned`), and KneeBend internals (`jump_input`/`is_short_hop`) are derived during preprocessing and are part of the seed schema.
 - TURN seeding uses a causal derivation that does not look ahead to future facing flips; it includes a **deterministic assumption** that `ftCo_Turn_Anim_Inner` applies once on the entry frame (matching the sim’s update ordering). Do **not** tune this assumption via one-step mismatch metrics; revisit it once richer entry-history seeding lands.
+- FallSpecial mode `mv.co.fallspecial.xC` is not present in Slippi post-frame data. We currently seed it with a **best-effort inference** from the reseeded state (default `xC=1`; set `xC=0` when `fall_fast==0` and reseeded `speed_y_self < -terminal_vel`). This is decomp-motivated (see `ftCo_FallSpecial_Phys` branch structure), but still an inference; do **not** tune it against one-step metrics.
 
 Metrics (initial):
 - `action_id` match rate (and optional ±N frame window around transitions).

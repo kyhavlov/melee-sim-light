@@ -146,6 +146,33 @@ int msl_batch_reseed_seed(MslBatch* batch, const uint8_t* seed_bytes, size_t see
       batch->state.tilt_timer_x[idx] = seed->tilt_timer_x[p];
       batch->state.tilt_timer_y[idx] = seed->tilt_timer_y[p];
       batch->state.fall_fast[idx] = seed->fall_fast[p] ? 1 : 0;
+      // FallSpecial xC mode is not exposed by Slippi directly; derive it deterministically from
+      // seeded post-frame velocities when possible.
+      //
+      // Decomp: ftCo_80096900 stores `mv.co.fallspecial.xC = arg1`, and ftCo_FallSpecial_Phys applies
+      // the mobility cap only on the xC==0 branch.
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_FallSpecial.c
+      //
+      // Derivation (best-effort, reseed-friendly):
+      // - If we are in FallSpecial, fall_fast is 0, and vy is more negative than the character's
+      //   normal terminal velocity, then we must be on the xC==0 branch (since that branch passes
+      //   `fast_fall_velocity` as the terminal clamp while fall_fast remains 0).
+      // Otherwise default to xC=1 (covers EscapeAir->FallSpecial path: arg1=1).
+      batch->state.fallspecial_xc[idx] = 1;
+      {
+        const uint16_t a = seed->action_id[p];
+        if (a == (uint16_t)MSL_ACT_FALL_SPECIAL || a == (uint16_t)MSL_ACT_FALL_SPECIAL_F ||
+            a == (uint16_t)MSL_ACT_FALL_SPECIAL_B) {
+          if (!batch->state.fall_fast[idx]) {
+            const MslCharParams* phys = msl_char_params(seed->char_id[p]);
+            if (phys != NULL) {
+              if (seed->speed_y_self[p] < -phys->terminal_vel) {
+                batch->state.fallspecial_xc[idx] = 0;
+              }
+            }
+          }
+        }
+      }
       batch->state.turn_frames_to_turn[idx] = seed->turn_frames_to_turn[p];
       batch->state.turn_has_turned[idx] = seed->turn_has_turned[p];
       batch->state.lr_press_timer[idx] = seed->lr_press_timer[p];

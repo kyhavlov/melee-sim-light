@@ -9,12 +9,10 @@
 #include "char_params.h"
 #include "common_params.h"
 #include "escape.h"
+#include "escape_air.h"
 #include "guard.h"
+#include "input_axis.h"
 #include "landing.h"
-
-// Input axes in MslStateSoA are Melee-legalized via ucf_clamp_stick_i8:
-// ucf.h: clamp_stickMax = 80 (HSD_PadClampCheck3).
-enum { MSL_STICK_MAX_I8 = 80 };
 
 // ftCo_JumpInput (refs/melee/src/melee/ft/chara/ftCommon/forward.h).
 typedef enum MslJumpInput {
@@ -24,18 +22,7 @@ typedef enum MslJumpInput {
   MSL_JUMP_INPUT_XY = 3,
 } MslJumpInput;
 
-static inline float msl_absf(float x) { return x < 0.0f ? -x : x; }
-
 static inline float msl_signf(float x) { return x < 0.0f ? -1.0f : 1.0f; }
-
-static inline float stick_i8_to_unit(int8_t v) { return (float)v / (float)MSL_STICK_MAX_I8; }
-
-static inline float apply_deadzone(float v, float dz) {
-  if (msl_absf(v) < dz) {
-    return 0.0f;
-  }
-  return v;
-}
 
 static float apply_friction_ground(float gr_vel, float friction) {
   // refs/melee/src/melee/ft/ftcommon.c::ftCommon_ApplyFrictionGround + ApplyGroundMovement
@@ -143,6 +130,11 @@ static inline uint8_t action_is_fall_like(uint16_t a) {
     default:
       return 0;
   }
+}
+
+static inline uint8_t action_is_fall_special_like(uint16_t a) {
+  return (a == MSL_ACT_FALL_SPECIAL || a == MSL_ACT_FALL_SPECIAL_F || a == MSL_ACT_FALL_SPECIAL_B) ? 1
+                                                                                                  : 0;
 }
 
 static inline uint8_t action_is_ground_locomotion(uint16_t a) {
@@ -325,14 +317,32 @@ static inline void enter_landing_action_from_air(MslBatch* batch, const MslCharP
   batch->state.action_frame[idx] = 0;
 }
 
-static inline void apply_air_drift(const MslCharParams* ch, float stick_x, float* io_air_x) {
+static inline void apply_air_drift(const MslCharParams* ch, const MslCommonParams* c, uint16_t action_id,
+                                   uint8_t fallspecial_xc, float stick_x, float* io_air_x) {
   // refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007D28C + ApplyAirMovement
   if (io_air_x == NULL) {
     return;
   }
   float accel_scaling = stick_x * ch->air_drift_stick_mul;
   float accel_flat = stick_x > 0.0f ? +ch->aerial_drift_base : -ch->aerial_drift_base;
-  const float target = stick_x * ch->air_drift_max;
+  float target = stick_x * ch->air_drift_max;
+
+  // FallSpecial drift cap ("mobility").
+  //
+  // Decomp: ftCo_80096900 stores `mv.co.fallspecial.mobility = ca->air_drift_max * mobility_scalar`, and
+  // ftCo_FallSpecial_Phys clamps |target_vel| to that mobility.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_FallSpecial.c
+  //
+  // Important: the clamp is only applied on the `xC == 0` branch in ftCo_FallSpecial_Phys.
+  // EscapeAir's ftCo_80096900(..., arg1=1, ...) path sets xC=1, so no cap there.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_FallSpecial.c:97
+  if (action_is_fall_special_like(action_id) && c != NULL && fallspecial_xc == 0) {
+    const float mobility = ch->air_drift_max * c->fall_special_mobility_scalar;
+    if (msl_absf(target) > mobility) {
+      target = msl_signf(target) * mobility;
+    }
+  }
+
   *io_air_x = apply_air_accel(*io_air_x, accel_scaling + accel_flat, target, ch->aerial_friction,
                               ch->air_max_horizontal_velocity);
 }
@@ -914,33 +924,60 @@ void locomotion_update_pre(MslBatch* batch) {
       // ----------------------
       // Air locomotion updates
       // ----------------------
-      if (!msl_action_is_air_locomotion(action_id)) {
+      const uint8_t is_air_loco = msl_action_is_air_locomotion(action_id) ? 1 : 0;
+      if (!is_air_loco && action_id != (uint16_t)MSL_ACT_ESCAPE_AIR) {
         continue;
       }
 
-      // Aerial jump (double jump) entry.
-      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::ftCo_JumpAerial_Enter_Basic
-      if ((buttons_pressed & (uint16_t)MSL_BUTTON_XY) || did_tap_jump(c, stick_y, tilt_timer_y)) {
-        if (batch->state.jumps_left[idx] > 0 && action_id != MSL_ACT_JUMP_AERIAL_F &&
-            action_id != MSL_ACT_JUMP_AERIAL_B) {
-          const uint16_t act = jump_aerial_action_from_stick(c, stick_x, facing_dir);
-          batch->state.action_id[idx] = act;
-          batch->state.animation_index[idx] = submotion_for_action(act);
-          batch->state.action_frame[idx] = 0;
-          batch->state.speed_air_x_self[idx] = stick_x * ch->air_jump_h_multiplier;
-          batch->state.speed_y_self[idx] = ch->jump_v_initial_velocity * ch->air_jump_v_multiplier;
-          // Decomp: fp->x671_timer_lstick_tilt_y = 0xFE;
-          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c:152-156
-          batch->state.tilt_timer_y[idx] = 0xFEu;
-          batch->state.fall_fast[idx] = 0;
-          tilt_timer_y = 0xFEu;
-          batch->state.jumps_left[idx]--;
-          action_id = act;
+      // EscapeAir per-frame update (decay + anim-end -> FallSpecial).
+      if (action_id == (uint16_t)MSL_ACT_ESCAPE_AIR) {
+        escape_air_update(batch, c, idx);
+        action_id = batch->state.action_id[idx];
+        if (action_id == (uint16_t)MSL_ACT_ESCAPE_AIR) {
+          continue;
+        }
+        // Transitioned into an air locomotion state (FallSpecial). Continue with drift below.
+      } else {
+        // Air dodge (EscapeAir) entry from eligible airborne locomotion states.
+        //
+        // Decomp entry check: ftCo_80099A58 (L/R press) is called from IASA in many aerial states,
+        // but EscapeAir is not allowed from FallSpecial.
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_80099A58
+        const uint8_t allow_escape_air =
+            (action_id == MSL_ACT_JUMP_F || action_id == MSL_ACT_JUMP_B ||
+             action_id == MSL_ACT_JUMP_AERIAL_F || action_id == MSL_ACT_JUMP_AERIAL_B ||
+             action_id == MSL_ACT_DAMAGE_FALL || action_is_fall_like(action_id))
+                ? 1
+                : 0;
+        if (allow_escape_air && escape_air_try_enter_from_air_locomotion(batch, c, idx)) {
+          continue;
+        }
+
+        // Aerial jump (double jump) entry.
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::ftCo_JumpAerial_Enter_Basic
+        if ((buttons_pressed & (uint16_t)MSL_BUTTON_XY) || did_tap_jump(c, stick_y, tilt_timer_y)) {
+          if (batch->state.jumps_left[idx] > 0 && action_id != MSL_ACT_JUMP_AERIAL_F &&
+              action_id != MSL_ACT_JUMP_AERIAL_B) {
+            const uint16_t act = jump_aerial_action_from_stick(c, stick_x, facing_dir);
+            batch->state.action_id[idx] = act;
+            batch->state.animation_index[idx] = submotion_for_action(act);
+            batch->state.action_frame[idx] = 0;
+            batch->state.speed_air_x_self[idx] = stick_x * ch->air_jump_h_multiplier;
+            batch->state.speed_y_self[idx] = ch->jump_v_initial_velocity * ch->air_jump_v_multiplier;
+            // Decomp: fp->x671_timer_lstick_tilt_y = 0xFE;
+            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c:152-156
+            batch->state.tilt_timer_y[idx] = 0xFEu;
+            batch->state.fall_fast[idx] = 0;
+            tilt_timer_y = 0xFEu;
+            batch->state.jumps_left[idx]--;
+            action_id = act;
+          }
         }
       }
 
       // Air drift.
-      apply_air_drift(ch, stick_x, &batch->state.speed_air_x_self[idx]);
+      apply_air_drift(ch, c, action_id, batch->state.fallspecial_xc[idx], stick_x,
+                      &batch->state.speed_air_x_self[idx]);
 
       // Jump -> Fall when animation ends (and for aerial jumps too).
       if (action_id == MSL_ACT_JUMP_F || action_id == MSL_ACT_JUMP_B ||

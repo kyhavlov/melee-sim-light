@@ -6,25 +6,11 @@
 #include "buttons.h"
 #include "common_params.h"
 #include "decomp/lb/lb_00ce.h"
+#include "input_axis.h"
 #include "ucf.h"
-
-// Input axes in MslStateSoA are Melee-legalized via ucf_clamp_stick_i8:
-// ucf.h: clamp_stickMax = 80 (HSD_PadClampCheck3).
-enum { MSL_STICK_MAX_I8 = 80 };
 
 // UCF pad buffer: refs/ucf/include/ucf/pad_buffer.h
 enum { MSL_UCF_PADBUF_SIZE = 4, MSL_UCF_PADBUF_MASK = MSL_UCF_PADBUF_SIZE - 1 };
-
-static inline float msl_absf(float x) { return x < 0.0f ? -x : x; }
-
-static inline float stick_i8_to_unit(int8_t v) { return (float)v / (float)MSL_STICK_MAX_I8; }
-
-static inline float apply_deadzone(float v, float dz) {
-  if (msl_absf(v) < dz) {
-    return 0.0f;
-  }
-  return v;
-}
 
 static inline uint8_t tilt_timer_update(uint8_t prev_timer, float axis, float prev_axis,
                                         float tilt_thresh) {
@@ -96,13 +82,13 @@ static inline uint8_t msl_ucf_is_rim_coord(float stick_x_unit, float stick_y_uni
   // - is_rim_coord adds +1 again per axis and compares length^2 > 80^2
   const float bias = 0.0001f;
 
-  const float ax = msl_absf(stick_x_unit) * 80.0f - bias;
-  const float ay = msl_absf(stick_y_unit) * 80.0f - bias;
+  const float ax = msl_absf(stick_x_unit) * (float)MSL_STICK_MAX_I8 - bias;
+  const float ay = msl_absf(stick_y_unit) * (float)MSL_STICK_MAX_I8 - bias;
 
   const int ix = (int)ax + 2;
   const int iy = (int)ay + 2;
   const int lsq = ix * ix + iy * iy;
-  return lsq > (80 * 80) ? 1 : 0;
+  return lsq > (MSL_STICK_MAX_I8 * MSL_STICK_MAX_I8) ? 1 : 0;
 }
 
 static inline int8_t msl_ucf_padbuf_get_raw_x(const MslStateSoA* s, size_t idx, uint8_t offset) {

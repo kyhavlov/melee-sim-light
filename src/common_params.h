@@ -87,6 +87,25 @@ typedef struct MslCommonParams {
   //
   // Note: currently loaded for upcoming LandingFallSpecial timing modeling (not yet consumed in core logic).
   float landing_fall_special_lag_frames;  // p_ftCommonData->x344
+
+  // Air dodge (EscapeAir) constants.
+  // Decomp: ftCo_80099A9C / ftCo_EscapeAir_Phys.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c
+  float escapeair_deadzone_x;  // p_ftCommonData->escapeair_deadzone.x (x32C)
+  float escapeair_deadzone_y;  // p_ftCommonData->escapeair_deadzone.y (x330)
+  uint8_t escapeair_timer_frames;  // p_ftCommonData->x334 (escapeair timer frames)
+  uint8_t _pad_u8_4[3];
+  float escapeair_force;  // p_ftCommonData->escapeair_force (x338)
+  float escapeair_decay;  // p_ftCommonData->escapeair_decay (x33C)
+
+  // FallSpecial mobility scalar (used to cap drift).
+  // Decomp:
+  // - EscapeAir_Anim -> ftCo_80096900(..., p_ftCommonData->x340, p_ftCommonData->x344)
+  //   refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c
+  // - FallSpecial phys clamps |target_vel| to `mv.co.fallspecial.mobility` which is
+  //   `ca->air_drift_max * mobility_scalar`.
+  //   refs/melee/src/melee/ft/chara/ftCommon/ftCo_FallSpecial.c
+  float fall_special_mobility_scalar;  // p_ftCommonData->x340
 } MslCommonParams;
 
 int common_params_init(void);
