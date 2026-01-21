@@ -116,6 +116,16 @@ typedef struct MslStateSoA {
   uint16_t* hitbox_u16_5;
   uint16_t* hitbox_u16_6;
   uint16_t* hitbox_u16_7;
+  // Decoded per-hitbox attributes (from MSLHITB1 u16 tail; see docs/DATA_CONTRACT.md).
+  uint16_t* hitbox_angle;  // degrees; 361 used as Sakurai angle sentinel
+  uint16_t* hitbox_kbg;    // knockback growth
+  uint16_t* hitbox_wsk;    // weight set knockback
+  uint16_t* hitbox_bkb;    // base knockback
+  uint8_t* hitbox_element;
+  int8_t* hitbox_shield_damage;  // signed 8-bit
+  uint8_t* hitbox_sfx_severity;
+  uint8_t* hitbox_sfx_kind;
+  uint16_t* hitbox_flags;  // bitfield (hit_grounded/hit_aerial/clank/rebound/etc.)
   uint16_t* ground_id;
   uint32_t* animation_index;
   uint16_t* instance_hit_by;

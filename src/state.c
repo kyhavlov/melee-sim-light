@@ -113,6 +113,15 @@ int state_alloc(MslStateSoA* state, int batch_size) {
   state->hitbox_u16_5 = (uint16_t*)alloc_aligned_64(sizeof(uint16_t) * bph);
   state->hitbox_u16_6 = (uint16_t*)alloc_aligned_64(sizeof(uint16_t) * bph);
   state->hitbox_u16_7 = (uint16_t*)alloc_aligned_64(sizeof(uint16_t) * bph);
+  state->hitbox_angle = (uint16_t*)alloc_aligned_64(sizeof(uint16_t) * bph);
+  state->hitbox_kbg = (uint16_t*)alloc_aligned_64(sizeof(uint16_t) * bph);
+  state->hitbox_wsk = (uint16_t*)alloc_aligned_64(sizeof(uint16_t) * bph);
+  state->hitbox_bkb = (uint16_t*)alloc_aligned_64(sizeof(uint16_t) * bph);
+  state->hitbox_element = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bph);
+  state->hitbox_shield_damage = (int8_t*)alloc_aligned_64(sizeof(int8_t) * bph);
+  state->hitbox_sfx_severity = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bph);
+  state->hitbox_sfx_kind = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bph);
+  state->hitbox_flags = (uint16_t*)alloc_aligned_64(sizeof(uint16_t) * bph);
   state->ground_id = (uint16_t*)alloc_aligned_64(sizeof(uint16_t) * bp);
   state->animation_index = (uint32_t*)alloc_aligned_64(sizeof(uint32_t) * bp);
   state->instance_hit_by = (uint16_t*)alloc_aligned_64(sizeof(uint16_t) * bp);
@@ -176,6 +185,9 @@ int state_alloc(MslStateSoA* state, int batch_size) {
       !state->hitbox_radius || !state->hitbox_damage || !state->hitbox_bone_part_id ||
       !state->hitbox_u16_0 || !state->hitbox_u16_1 || !state->hitbox_u16_2 || !state->hitbox_u16_3 ||
       !state->hitbox_u16_4 || !state->hitbox_u16_5 || !state->hitbox_u16_6 || !state->hitbox_u16_7 ||
+      !state->hitbox_angle || !state->hitbox_kbg || !state->hitbox_wsk || !state->hitbox_bkb ||
+      !state->hitbox_element || !state->hitbox_shield_damage || !state->hitbox_sfx_severity ||
+      !state->hitbox_sfx_kind || !state->hitbox_flags ||
       !state->ground_id || !state->animation_index || !state->instance_hit_by || !state->instance_id ||
       !state->last_attack_landed || !state->combo_count || !state->last_hit_by || !state->state_flags ||
       !state->input_buttons || !state->prev_input_buttons ||
@@ -286,6 +298,15 @@ void state_free(MslStateSoA* state) {
   alloc_free(state->hitbox_u16_5);
   alloc_free(state->hitbox_u16_6);
   alloc_free(state->hitbox_u16_7);
+  alloc_free(state->hitbox_angle);
+  alloc_free(state->hitbox_kbg);
+  alloc_free(state->hitbox_wsk);
+  alloc_free(state->hitbox_bkb);
+  alloc_free(state->hitbox_element);
+  alloc_free(state->hitbox_shield_damage);
+  alloc_free(state->hitbox_sfx_severity);
+  alloc_free(state->hitbox_sfx_kind);
+  alloc_free(state->hitbox_flags);
   alloc_free(state->ground_id);
   alloc_free(state->animation_index);
   alloc_free(state->instance_hit_by);

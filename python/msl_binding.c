@@ -1116,6 +1116,37 @@ static PyObject* msl_hitboxes_world_py(PyObject* self, PyObject* args) {
   return Py_BuildValue("(Oi)", arr, (int)count);
 }
 
+static PyObject* msl_hitboxes_world_full_py(PyObject* self, PyObject* args) {
+  (void)self;
+  PyObject* handle_obj = NULL;
+  int batch_index = 0;
+  int player_index = 0;
+  if (!PyArg_ParseTuple(args, "Oii", &handle_obj, &batch_index, &player_index)) {
+    return NULL;
+  }
+  PyMslHandle* h = unpack_handle(handle_obj);
+  if (h == NULL) {
+    return NULL;
+  }
+
+  npy_intp dims[2] = {(npy_intp)MSL_MAX_HITBOXES, (npy_intp)16};
+  PyArrayObject* arr = (PyArrayObject*)PyArray_SimpleNew(2, dims, NPY_FLOAT32);
+  if (arr == NULL) {
+    return NULL;
+  }
+  float* out = (float*)PyArray_DATA(arr);
+  uint8_t count = 0;
+  const int err =
+      msl_batch_debug_hitboxes_world_full(h->batch, batch_index, player_index, out, &count);
+  if (err != 0) {
+    Py_DECREF(arr);
+    PyErr_Format(PyExc_ValueError, "msl_batch_debug_hitboxes_world_full failed: %d", err);
+    return NULL;
+  }
+
+  return Py_BuildValue("(Oi)", arr, (int)count);
+}
+
 static PyObject* msl_debug_combat_contacts_py(PyObject* self, PyObject* args) {
   (void)self;
   PyObject* handle_obj = NULL;
@@ -1717,6 +1748,8 @@ static PyMethodDef methods[] = {
      "hurtcaps_world(handle, batch_index, player_index) -> (caps[MSL_MAX_HURTCAPS,7], count)"},
     {"hitboxes_world", msl_hitboxes_world_py, METH_VARARGS,
      "hitboxes_world(handle, batch_index, player_index) -> (hitboxes[MSL_MAX_HITBOXES,10], count)"},
+    {"hitboxes_world_full", msl_hitboxes_world_full_py, METH_VARARGS,
+     "hitboxes_world_full(handle, batch_index, player_index) -> (hitboxes[MSL_MAX_HITBOXES,16], count)"},
     {"debug_combat_contacts", msl_debug_combat_contacts_py, METH_VARARGS,
      "debug_combat_contacts(handle, batch_index, max_contacts=256) -> (bytes[max, "
      "sizeof(MslDebugCombatContact)], count)"},

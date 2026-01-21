@@ -129,7 +129,22 @@ Binary layout (little-endian):
   - `x: f32`, `y: f32`, `z: f32` bone-local hitbox center offset
   - `radius: f32`
   - `damage: f32` (stored but not yet used for resolution)
-  - `u16_tail[8]: 8 * u16` additional extracted fields (stored verbatim for future mechanics)
+  - `u16_tail[8]: 8 * u16` additional extracted fields (decomp-shaped):
+    - `u16_tail[0]`: `angle` (0..361; 361 is Sakurai angle sentinel)
+    - `u16_tail[1]`: `kbg` (knockback growth)
+    - `u16_tail[2]`: `wsk` (weight set knockback)
+    - `u16_tail[3]`: `bkb` (base knockback)
+    - `u16_tail[4]`: `element` (low 8 bits) and `shield_damage` (high 8 bits, 2's complement `s8`)
+    - `u16_tail[5]`: `sfx_severity` (low 8 bits) and `sfx_kind` (high 8 bits)
+    - `u16_tail[6]`: bitfield of boolean flags:
+      - bit 15: `rebound`
+      - bit 14: `clank`
+      - bit 13: `ignore_fighter_scale`
+      - bit 12: `ignore_thrown_fighters`
+      - bit 11: `item_hit_interaction`
+      - bit 10: `hit_aerial`
+      - bit 9: `hit_grounded`
+    - `u16_tail[7]`: reserved (currently 0)
 
 Runtime semantics (current C-core policy):
 - Events are applied in file order up to `frame` to derive the current active hitbox definition per `hitbox_id`.

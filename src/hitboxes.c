@@ -60,6 +60,15 @@ void hitboxes_refresh(MslBatch* batch) {
         batch->state.hitbox_u16_5[oi] = 0;
         batch->state.hitbox_u16_6[oi] = 0;
         batch->state.hitbox_u16_7[oi] = 0;
+        batch->state.hitbox_angle[oi] = 0;
+        batch->state.hitbox_kbg[oi] = 0;
+        batch->state.hitbox_wsk[oi] = 0;
+        batch->state.hitbox_bkb[oi] = 0;
+        batch->state.hitbox_element[oi] = 0;
+        batch->state.hitbox_shield_damage[oi] = 0;
+        batch->state.hitbox_sfx_severity[oi] = 0;
+        batch->state.hitbox_sfx_kind[oi] = 0;
+        batch->state.hitbox_flags[oi] = 0;
       }
 
       if (p >= num_players) {
@@ -93,7 +102,7 @@ void hitboxes_refresh(MslBatch* batch) {
       for (uint16_t ei = 0; ei < event_count; ei++) {
         const MslHitboxEvent* ev = &events[ei];
         if (ev->frame > frame) {
-          break;
+          continue;
         }
 
         if (ev->kind == 1) {
@@ -152,6 +161,15 @@ void hitboxes_refresh(MslBatch* batch) {
         batch->state.hitbox_u16_5[oi] = def[hi].u16_5;
         batch->state.hitbox_u16_6[oi] = def[hi].u16_6;
         batch->state.hitbox_u16_7[oi] = def[hi].u16_7;
+        batch->state.hitbox_angle[oi] = def[hi].u16_0;
+        batch->state.hitbox_kbg[oi] = def[hi].u16_1;
+        batch->state.hitbox_wsk[oi] = def[hi].u16_2;
+        batch->state.hitbox_bkb[oi] = def[hi].u16_3;
+        batch->state.hitbox_element[oi] = (uint8_t)(def[hi].u16_4 & 0xFFu);
+        batch->state.hitbox_shield_damage[oi] = (int8_t)((def[hi].u16_4 >> 8) & 0xFFu);
+        batch->state.hitbox_sfx_severity[oi] = (uint8_t)(def[hi].u16_5 & 0xFFu);
+        batch->state.hitbox_sfx_kind[oi] = (uint8_t)((def[hi].u16_5 >> 8) & 0xFFu);
+        batch->state.hitbox_flags[oi] = def[hi].u16_6;
         out_count++;
       }
 

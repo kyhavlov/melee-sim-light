@@ -334,6 +334,14 @@ int msl_batch_debug_hurtcaps_world(const MslBatch* batch, int batch_index, int p
 int msl_batch_debug_hitboxes_world(const MslBatch* batch, int batch_index, int player_index,
                                    float* out_hitboxes_10, uint8_t* out_count);
 
+// Debug/validation helper: read pose-driven world-space hitboxes with full decoded attributes.
+// Writes `MSL_MAX_HITBOXES * 16` floats into out_hitboxes_16 as rows:
+//   [x, y, z, radius, damage, angle, kbg, wsk, bkb, element, shield_damage, sfx_severity, sfx_kind,
+//    flags, bone_part_id, enabled]
+// and returns the active hitbox count in out_count.
+int msl_batch_debug_hitboxes_world_full(const MslBatch* batch, int batch_index, int player_index,
+                                        float* out_hitboxes_16, uint8_t* out_count);
+
 // Debug/validation helper: compute and dump hitbox-vs-hurtcap contacts for one batch element.
 // Writes up to max_contacts entries into out_contacts and returns the number written in out_count.
 //
