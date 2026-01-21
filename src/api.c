@@ -153,6 +153,13 @@ int msl_batch_reseed_seed(MslBatch* batch, const uint8_t* seed_bytes, size_t see
       batch->state.speed_y_self[idx] = seed->speed_y_self[p];
       batch->state.speed_x_attack[idx] = seed->speed_x_attack[p];
       batch->state.speed_y_attack[idx] = seed->speed_y_attack[p];
+      // Decomp: fp->x34_scale is initialized from Player_GetModelScale and copied into y
+      // (refs/melee/src/melee/ft/fighter.c). Many collision/bounds computations use fp->x34_scale.y.
+      float scale_y = seed->fighter_scale_y[p];
+      if (!(scale_y > 0.0f)) {
+        scale_y = 1.0f;
+      }
+      batch->state.fighter_scale_y[idx] = scale_y;
       batch->state.facing[idx] = seed->facing[p] ? 1 : 0;
       batch->state.on_ground[idx] = seed->on_ground[p] ? 1 : 0;
 

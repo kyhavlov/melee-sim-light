@@ -40,6 +40,7 @@ int state_alloc(MslStateSoA* state, int batch_size) {
   state->speed_y_self = (float*)alloc_aligned_64(sizeof(float) * bp);
   state->speed_x_attack = (float*)alloc_aligned_64(sizeof(float) * bp);
   state->speed_y_attack = (float*)alloc_aligned_64(sizeof(float) * bp);
+  state->fighter_scale_y = (float*)alloc_aligned_64(sizeof(float) * bp);
   state->facing = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->on_ground = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->prev_on_ground = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
@@ -165,8 +166,9 @@ int state_alloc(MslStateSoA* state, int batch_size) {
   if (!state->frame_id || !state->frame_pre_random_seed || !state->stage_id || !state->is_teams ||
       !state->team_id || !state->char_id || !state->pos_x || !state->pos_y || !state->prev_pos_x ||
       !state->prev_pos_y || !state->speed_air_x_self || !state->speed_ground_x_self ||
-      !state->speed_y_self || !state->speed_x_attack || !state->speed_y_attack || !state->facing ||
-      !state->on_ground || !state->prev_on_ground || !state->action_id || !state->action_frame ||
+      !state->speed_y_self || !state->speed_x_attack || !state->speed_y_attack ||
+      !state->fighter_scale_y || !state->facing || !state->on_ground || !state->prev_on_ground ||
+      !state->action_id || !state->action_frame ||
       !state->jumps_left || !state->stocks || !state->kneebend_jump_input ||
       !state->kneebend_is_short_hop || !state->tilt_timer_x || !state->tilt_timer_y ||
       !state->fall_fast || !state->fallspecial_xc || !state->turn_has_turned ||
@@ -225,6 +227,7 @@ void state_free(MslStateSoA* state) {
   alloc_free(state->speed_y_self);
   alloc_free(state->speed_x_attack);
   alloc_free(state->speed_y_attack);
+  alloc_free(state->fighter_scale_y);
   alloc_free(state->facing);
   alloc_free(state->on_ground);
   alloc_free(state->prev_on_ground);

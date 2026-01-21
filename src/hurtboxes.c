@@ -72,12 +72,21 @@ void hurtboxes_refresh(MslBatch* batch) {
       const float pos_x = batch->state.pos_x[idx];
       const float pos_y = batch->state.pos_y[idx];
 
-      // NOTE (scaling): vanilla uses an additional per-fighter scale factor in some hurtbox-derived
-      // calculations, e.g. ftCo_800A0DA4 multiplies `hurt->capsule.scale` by `fp->x34_scale.y`.
-      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_0A01.c: scale = hurt->capsule.scale * fp->x34_scale.y;
+      // NOTE (scaling): Vanilla applies a per-fighter model scale factor (fp->x34_scale.y) to
+      // hurt capsule derived quantities.
       //
-      // Our current sim does not model `fp->x34_scale` yet (Fox/Falco default to 1.0), so capsule
-      // radius is currently `init.scale` only.
+      // - Radius: ftCo_800A0DA4 uses `scale = hurt->capsule.scale * fp->x34_scale.y`.
+      //   refs/melee/src/melee/ft/chara/ftCommon/ftCo_0A01.c::ftCo_800A0DA4
+      //
+      // - Endpoints: In-engine capsule endpoints are computed via lb_8000B1CC against the bone's
+      //   joint matrix. Since fp->x34_scale is applied at the model level, this scaling is baked
+      //   into the runtime joint matrices. Our SSANIM01 pose matrices are extracted without that
+      //   runtime fighter-scale, so we apply the same scalar uniformly to the pose-space endpoints
+      //   before adding world translation.
+      //
+      // We intentionally use only the y component (as decomp does for collision/bounds), treating
+      // it as a uniform scalar for x/y/z here.
+      const float scale_y = batch->state.fighter_scale_y[idx];
 
       // Fallback policy: missing pose data for a specific capsule only drops that capsule, keeping
       // the rest usable under partial animation coverage.
@@ -94,6 +103,13 @@ void hurtboxes_refresh(MslBatch* batch) {
         mtx34_mul_point(m, caps[ci].a_offset, &ax, &ay, &az);
         mtx34_mul_point(m, caps[ci].b_offset, &bx, &by, &bz);
 
+        ax *= scale_y;
+        ay *= scale_y;
+        az *= scale_y;
+        bx *= scale_y;
+        by *= scale_y;
+        bz *= scale_y;
+
         ax += pos_x;
         ay += pos_y;
         bx += pos_x;
@@ -106,7 +122,7 @@ void hurtboxes_refresh(MslBatch* batch) {
         batch->state.hurtcap_b_x[hi] = bx;
         batch->state.hurtcap_b_y[hi] = by;
         batch->state.hurtcap_b_z[hi] = bz;
-        batch->state.hurtcap_radius[hi] = caps[ci].scale;
+        batch->state.hurtcap_radius[hi] = caps[ci].scale * scale_y;
         batch->state.hurtcap_is_grabbable[hi] = caps[ci].is_grabbable ? 1 : 0;
         batch->state.hurtcap_height[hi] = caps[ci].height;
         out_count++;

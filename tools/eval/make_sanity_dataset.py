@@ -27,6 +27,7 @@ def _rand_inputs(rng: np.random.Generator, n: int) -> np.ndarray:
     x["seed_t"]["speed_y_self"][:, :2] = rng.normal(0.0, 1.0, size=(n, 2)).astype(np.float32)
     x["seed_t"]["speed_x_attack"][:, :2] = rng.normal(0.0, 1.0, size=(n, 2)).astype(np.float32)
     x["seed_t"]["speed_y_attack"][:, :2] = rng.normal(0.0, 1.0, size=(n, 2)).astype(np.float32)
+    x["seed_t"]["fighter_scale_y"][:, :2] = np.float32(1.0)
 
     x["seed_t"]["facing"][:, :2] = rng.integers(0, 2, size=(n, 2), dtype=np.uint8)
     x["seed_t"]["on_ground"][:, :2] = rng.integers(0, 2, size=(n, 2), dtype=np.uint8)

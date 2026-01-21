@@ -195,3 +195,87 @@ def test_hurtboxes_refresh_falls_back_on_missing_msid() -> None:
 
     assert int(count) == 0
     assert np.all(caps_world == np.float32(0.0))
+
+
+def test_hurtboxes_refresh_applies_fighter_scale_y() -> None:
+    import msl_binding
+
+    anim_buf = Path("data/anims/fox.bin").read_bytes()
+    joint_count, anim_count, joint_parts = _read_header(anim_buf)
+    part_to_joint_index = {int(p): i for i, p in enumerate(joint_parts)}
+
+    hurtcaps = _read_hurtcaps(Path("data/hurtcaps/fox.bin"))
+    assert hurtcaps
+
+    # Choose a stable target capsule whose bone exists in SSANIM joint_parts.
+    cap_i = -1
+    for i, cap in enumerate(hurtcaps):
+        if cap["bone_part_id"] in part_to_joint_index:
+            cap_i = i
+            break
+    assert cap_i >= 0, "no hurt capsule bone ids are present in SSANIM joint_parts"
+    cap = hurtcaps[cap_i]
+    out_row_i = sum(1 for c in hurtcaps[:cap_i] if c["bone_part_id"] in part_to_joint_index)
+
+    msid, frame_count, base = _pick_first_nonempty_anim(buf=anim_buf, joint_count=joint_count, anim_count=anim_count)
+    assert frame_count > 0
+    frame = 0
+
+    joint_index = part_to_joint_index[int(cap["bone_part_id"])]
+    off = base + frame * joint_count * _MAT_BYTES + joint_index * _MAT_BYTES
+    py_m = np.frombuffer(anim_buf, dtype="<f4", count=12, offset=off)
+
+    pos_x = np.float32(123.25)
+    pos_y = np.float32(-45.5)
+    scale_y = np.float32(2.0)
+
+    a_local = _mtx34_mul_point(py_m, cap["a_offset"])
+    b_local = _mtx34_mul_point(py_m, cap["b_offset"])
+
+    a = np.array([np.float32(a_local[0] * scale_y), np.float32(a_local[1] * scale_y), np.float32(a_local[2] * scale_y)], dtype=np.float32)
+    b = np.array([np.float32(b_local[0] * scale_y), np.float32(b_local[1] * scale_y), np.float32(b_local[2] * scale_y)], dtype=np.float32)
+    a[0] = np.float32(a[0] + pos_x)
+    a[1] = np.float32(a[1] + pos_y)
+    b[0] = np.float32(b[0] + pos_x)
+    b[1] = np.float32(b[1] + pos_y)
+
+    ref_row = np.array(
+        [a[0], a[1], a[2], b[0], b[1], b[2], np.float32(cap["scale"] * scale_y)], dtype=np.float32
+    )
+
+    sizes = msl_binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    assert input_stride == INPUT_DTYPE.itemsize
+
+    seed = np.zeros((1,), dtype=SEED_DTYPE)
+    seed["stage_id"][0] = np.uint32(0)
+    seed["num_players"][0] = np.uint8(2)
+    seed["stocks"][0, :2] = np.uint8(4)
+    seed["char_id"][0, 0] = np.uint8(1)  # Fox
+    seed["char_id"][0, 1] = np.uint8(1)
+    seed["pos_x"][0, 0] = pos_x
+    seed["pos_y"][0, 0] = pos_y
+    seed["fighter_scale_y"][0, 0] = scale_y
+    seed["fighter_scale_y"][0, 1] = np.float32(1.0)
+    seed["action_frame"][0, 0] = np.int16(frame)
+    seed["animation_index"][0, 0] = np.uint32(msid)
+    seed["hitlag"][0, 0] = np.uint16(2)
+    seed["hitlag"][0, 1] = np.uint16(2)
+
+    prev_inp = np.zeros((1, input_stride), dtype=np.uint8)
+    inp = np.zeros((1, input_stride), dtype=np.uint8)
+
+    handle = msl_binding.init(batch_size=1, num_players=2)
+    try:
+        seed_bytes = seed.view(np.uint8).reshape((1, seed_stride))
+        msl_binding.reseed_seed(handle, seed_bytes)
+        msl_binding.step_input(handle, prev_inp, inp)
+        caps_world, count = msl_binding.hurtcaps_world(handle, 0, 0)
+    finally:
+        msl_binding.destroy(handle)
+
+    assert 0 <= int(count) <= 32
+    assert int(count) > out_row_i
+    got = caps_world[out_row_i]
+    assert np.array_equal(got.view(np.uint32), ref_row.view(np.uint32))

@@ -88,6 +88,7 @@ SEED_DTYPE = np.dtype(
         ("speed_y_self", _arr("<f4", MAX_PLAYERS)),
         ("speed_x_attack", _arr("<f4", MAX_PLAYERS)),
         ("speed_y_attack", _arr("<f4", MAX_PLAYERS)),
+        ("fighter_scale_y", _arr("<f4", MAX_PLAYERS)),
         ("facing", _arr("u1", MAX_PLAYERS)),
         ("on_ground", _arr("u1", MAX_PLAYERS)),
         ("_pad1", "V2"),

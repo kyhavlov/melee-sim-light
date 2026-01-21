@@ -98,6 +98,9 @@ typedef struct MslSeed {
   float speed_y_self[MSL_MAX_PLAYERS];
   float speed_x_attack[MSL_MAX_PLAYERS];
   float speed_y_attack[MSL_MAX_PLAYERS];
+  // Fighter model scale (decomp: fp->x34_scale.y). Slippi does not currently expose this, so
+  // tooling defaults it to 1.0 for normal matches; tests may override.
+  float fighter_scale_y[MSL_MAX_PLAYERS];
 
   uint8_t facing[MSL_MAX_PLAYERS];     // 0/1
   uint8_t on_ground[MSL_MAX_PLAYERS];  // 0/1

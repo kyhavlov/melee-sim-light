@@ -25,6 +25,9 @@ typedef struct MslStateSoA {
   float* speed_y_self;
   float* speed_x_attack;
   float* speed_y_attack;
+  // Fighter model scale (decomp: fp->x34_scale.y). This is an external multiplier applied to
+  // various collision/visual calculations; default is 1.0 in normal matches.
+  float* fighter_scale_y;
   uint8_t* facing;
   uint8_t* on_ground;
   uint8_t* prev_on_ground;  // on_ground value before stage_collision_apply().

@@ -99,7 +99,8 @@ Field semantics:
 - `scale` is copied into `HurtCapsule.scale` (treated as capsule radius in collision code).
   Note: vanilla sometimes applies additional per-fighter scale factors (e.g. `fp->x34_scale.y`)
   when deriving bounds from hurt capsules (`refs/melee/src/melee/ft/chara/ftCommon/ftCo_0A01.c::ftCo_800A0DA4`).
-  The sim currently does **not** model those fighter-scale fields yet, so world radius is `scale` only.
+  The sim models this as `MslSeed.fighter_scale_y` / `MslStateSoA.fighter_scale_y` and applies it
+  to pose-derived world endpoints and radius.
 
 ## `data/hitboxes/<char>.bin` (MSLHITB1 v1)
 

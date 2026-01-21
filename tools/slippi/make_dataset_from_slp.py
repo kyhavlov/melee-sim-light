@@ -446,6 +446,10 @@ def _main_impl(args) -> None:
         samples["seed_t"]["speed_y_attack"][:, slot] = speed_y_attack[:-1]
         samples["ref_t1"]["speed_y_attack"][:, slot] = speed_y_attack[1:]
 
+        # Fighter model scale (decomp: fp->x34_scale.y) is not exposed by Slippi post-frames today.
+        # Default to 1.0 for normal matches; targeted tests may override the seed field.
+        samples["seed_t"]["fighter_scale_y"][:, slot] = np.float32(1.0)
+
         samples["seed_t"]["facing"][:, slot] = post_dir[:-1]
         samples["ref_t1"]["facing"][:, slot] = post_dir[1:]
         samples["seed_t"]["on_ground"][:, slot] = post_on_ground[:-1]
