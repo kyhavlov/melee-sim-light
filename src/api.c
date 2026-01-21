@@ -13,6 +13,7 @@
 #include "config.h"
 #include "move_tables.h"
 #include "ecb_tables.h"
+#include "hurtcaps_tables.h"
 #include "stage_collision.h"
 #include "state.h"
 #include "step.h"
@@ -64,6 +65,11 @@ MslBatch* msl_batch_create(int batch_size, int num_players) {
   }
 
   if (anim_pose_init() != 0) {
+    msl_batch_destroy(batch);
+    return NULL;
+  }
+
+  if (hurtcaps_tables_init() != 0) {
     msl_batch_destroy(batch);
     return NULL;
   }
@@ -395,6 +401,45 @@ int msl_batch_debug_write_internals(const MslBatch* batch, uint8_t* out_bytes,
       out->turn_frames_to_turn[p] = batch->state.turn_frames_to_turn[idx];
       out->turn_has_turned[p] = batch->state.turn_has_turned[idx];
     }
+  }
+
+  return 0;
+}
+
+int msl_batch_debug_hurtcaps_world(const MslBatch* batch, int batch_index, int player_index,
+                                  float* out_caps_7, uint8_t* out_count) {
+  if (batch == NULL || out_caps_7 == NULL || out_count == NULL) {
+    return EINVAL;
+  }
+  if (batch_index < 0 || batch_index >= batch->batch_size) {
+    return EINVAL;
+  }
+  if (player_index < 0 || player_index >= MSL_MAX_PLAYERS) {
+    return EINVAL;
+  }
+
+  // Zero-fill the full fixed-size output for stable test snapshots.
+  memset(out_caps_7, 0, sizeof(float) * (size_t)MSL_MAX_HURTCAPS * 7u);
+
+  const size_t idx = msl_idx_player(batch_index, player_index);
+  uint8_t count = batch->state.hurtcap_count[idx];
+  if (count > (uint8_t)MSL_MAX_HURTCAPS) {
+    count = (uint8_t)MSL_MAX_HURTCAPS;
+  }
+  *out_count = count;
+
+  const size_t base = ((size_t)batch_index * (size_t)MSL_MAX_PLAYERS + (size_t)player_index) *
+                      (size_t)MSL_MAX_HURTCAPS;
+  for (uint8_t i = 0; i < count; i++) {
+    const size_t hi = base + (size_t)i;
+    const size_t o = (size_t)i * 7u;
+    out_caps_7[o + 0] = batch->state.hurtcap_a_x[hi];
+    out_caps_7[o + 1] = batch->state.hurtcap_a_y[hi];
+    out_caps_7[o + 2] = batch->state.hurtcap_a_z[hi];
+    out_caps_7[o + 3] = batch->state.hurtcap_b_x[hi];
+    out_caps_7[o + 4] = batch->state.hurtcap_b_y[hi];
+    out_caps_7[o + 5] = batch->state.hurtcap_b_z[hi];
+    out_caps_7[o + 6] = batch->state.hurtcap_radius[hi];
   }
 
   return 0;

@@ -21,6 +21,7 @@ int state_alloc(MslStateSoA* state, int batch_size) {
   const size_t bp = b * (size_t)MSL_MAX_PLAYERS;
   const size_t bi = b * (size_t)MSL_MAX_ITEMS;
   const size_t bp4 = bp * 4u;
+  const size_t bpc = bp * (size_t)MSL_MAX_HURTCAPS;
 
   state->frame_id = (int32_t*)alloc_aligned_64(sizeof(int32_t) * b);
   state->frame_pre_random_seed = (uint32_t*)alloc_aligned_64(sizeof(uint32_t) * b);
@@ -85,6 +86,16 @@ int state_alloc(MslStateSoA* state, int batch_size) {
   state->hitstun = (uint16_t*)alloc_aligned_64(sizeof(uint16_t) * bp);
   state->l_cancel = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->hurtbox_state = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
+  state->hurtcap_count = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
+  state->hurtcap_a_x = (float*)alloc_aligned_64(sizeof(float) * bpc);
+  state->hurtcap_a_y = (float*)alloc_aligned_64(sizeof(float) * bpc);
+  state->hurtcap_a_z = (float*)alloc_aligned_64(sizeof(float) * bpc);
+  state->hurtcap_b_x = (float*)alloc_aligned_64(sizeof(float) * bpc);
+  state->hurtcap_b_y = (float*)alloc_aligned_64(sizeof(float) * bpc);
+  state->hurtcap_b_z = (float*)alloc_aligned_64(sizeof(float) * bpc);
+  state->hurtcap_radius = (float*)alloc_aligned_64(sizeof(float) * bpc);
+  state->hurtcap_is_grabbable = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bpc);
+  state->hurtcap_height = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bpc);
   state->ground_id = (uint16_t*)alloc_aligned_64(sizeof(uint16_t) * bp);
   state->animation_index = (uint32_t*)alloc_aligned_64(sizeof(uint32_t) * bp);
   state->instance_hit_by = (uint16_t*)alloc_aligned_64(sizeof(uint16_t) * bp);
@@ -140,7 +151,10 @@ int state_alloc(MslStateSoA* state, int batch_size) {
       !state->x683 || !state->x684 || !state->ucf_padbuf_index ||
       !state->ucf_padbuf_sdrop_up_frames || !state->ucf_padbuf_stick_x ||
       !state->ucf_padbuf_stick_y || !state->percent || !state->shield_hp || !state->hitlag ||
-      !state->hitstun || !state->l_cancel || !state->hurtbox_state || !state->ground_id ||
+      !state->hitstun || !state->l_cancel || !state->hurtbox_state || !state->hurtcap_count ||
+      !state->hurtcap_a_x || !state->hurtcap_a_y || !state->hurtcap_a_z || !state->hurtcap_b_x ||
+      !state->hurtcap_b_y || !state->hurtcap_b_z || !state->hurtcap_radius ||
+      !state->hurtcap_is_grabbable || !state->hurtcap_height || !state->ground_id ||
       !state->animation_index || !state->instance_hit_by || !state->instance_id ||
       !state->last_attack_landed || !state->combo_count || !state->last_hit_by ||
       !state->state_flags || !state->input_buttons || !state->prev_input_buttons ||
@@ -225,6 +239,16 @@ void state_free(MslStateSoA* state) {
   alloc_free(state->hitstun);
   alloc_free(state->l_cancel);
   alloc_free(state->hurtbox_state);
+  alloc_free(state->hurtcap_count);
+  alloc_free(state->hurtcap_a_x);
+  alloc_free(state->hurtcap_a_y);
+  alloc_free(state->hurtcap_a_z);
+  alloc_free(state->hurtcap_b_x);
+  alloc_free(state->hurtcap_b_y);
+  alloc_free(state->hurtcap_b_z);
+  alloc_free(state->hurtcap_radius);
+  alloc_free(state->hurtcap_is_grabbable);
+  alloc_free(state->hurtcap_height);
   alloc_free(state->ground_id);
   alloc_free(state->animation_index);
   alloc_free(state->instance_hit_by);

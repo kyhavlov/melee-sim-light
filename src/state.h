@@ -87,6 +87,17 @@ typedef struct MslStateSoA {
   uint16_t* hitstun;
   uint8_t* l_cancel;
   uint8_t* hurtbox_state;
+  // Pose-driven world-space hurt capsule endpoints (computed each frame in hurtboxes_refresh).
+  uint8_t* hurtcap_count; // [batch * players]
+  float* hurtcap_a_x;     // [batch * players * caps]
+  float* hurtcap_a_y;
+  float* hurtcap_a_z;
+  float* hurtcap_b_x;
+  float* hurtcap_b_y;
+  float* hurtcap_b_z;
+  float* hurtcap_radius;
+  uint8_t* hurtcap_is_grabbable;
+  uint8_t* hurtcap_height;
   uint16_t* ground_id;
   uint32_t* animation_index;
   uint16_t* instance_hit_by;

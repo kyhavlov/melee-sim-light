@@ -8,6 +8,9 @@ from pathlib import Path
 
 from melee_sim.hsd_archive import _u32_be, parse_hsd_archive
 
+HURTCAPS_BIN_MAGIC = b"MSLHURT1"
+HURTCAPS_BIN_VERSION = 1
+
 
 def _f32_be(buf: bytes, off: int) -> float:
     return struct.unpack(">f", buf[off : off + 4])[0]
@@ -67,6 +70,13 @@ def _load_parts_num(character: str, iso_dir: Path) -> int:
 
 @dataclass(frozen=True)
 class HurtCapsuleInit:
+    # `ftHurtboxInit.bone_idx` is a Fighter_Part id (refs/melee/src/melee/ft/forward.h `enum Fighter_Part`).
+    # Decomp usage: ftColl_HurtboxInit uses it as `fp->parts[hurt->capsule.bone_idx].joint`.
+    # refs/melee/src/melee/ft/ftcoll.c::ftColl_HurtboxInit
+    #
+    # IMPORTANT: This is the same part_id domain used by our SSANIM pose sampler
+    # (src/anim_pose.c: header joint_parts bytes -> part_id -> joint_index),
+    # so the exported .bin also stores this value as `bone_part_id`.
     bone_idx: int
     height: int
     is_grabbable: int
@@ -190,11 +200,51 @@ def extract_character(character: str, *, iso_dir: Path) -> dict:
         },
     }
 
+def _write_hurtcaps_bin(out_path: Path, *, capsules: list[HurtCapsuleInit]) -> None:
+    # Binary format v1 (little-endian):
+    # - magic: 8 bytes  "MSLHURT1"
+    # - version: u32
+    # - capsule_count: u16
+    # - reserved: u16 (0)
+    # - records[capsule_count]:
+    #     - bone_part_id: u16 (Fighter_Part id; see HurtCapsuleInit.bone_idx)
+    #     - height: u8 (HurtHeight; 0=low,1=mid,2=high in decomp: refs/melee/src/melee/lb/types.h)
+    #     - is_grabbable: u8 (bool; decomp stores u32/bool; refs/melee/src/melee/ft/chara/ftCommon/types.h)
+    #     - pad: u16 (0)
+    #     - a_offset: 3*f32
+    #     - b_offset: 3*f32
+    #     - scale: f32
+    if len(capsules) > 0xFFFF:
+        raise ValueError(f"too many hurt capsules for v1: {len(capsules)}")
+
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    with out_path.open("wb") as f:
+        f.write(HURTCAPS_BIN_MAGIC)
+        f.write(struct.pack("<IHH", int(HURTCAPS_BIN_VERSION), int(len(capsules)), 0))
+        for cap in capsules:
+            bone_part_id = int(cap.bone_idx)
+            if not (0 <= bone_part_id <= 0xFFFF):
+                raise ValueError(f"bone_idx out of range for u16: {bone_part_id}")
+            height = int(cap.height)
+            is_grab = int(cap.is_grabbable)
+            if not (0 <= height <= 0xFF and 0 <= is_grab <= 0xFF):
+                raise ValueError(f"bad height/is_grabbable: height={height} is_grabbable={is_grab}")
+            f.write(struct.pack("<HBBH", bone_part_id, height, is_grab, 0))
+            f.write(struct.pack("<fff", *cap.a_offset))
+            f.write(struct.pack("<fff", *cap.b_offset))
+            f.write(struct.pack("<f", float(cap.scale)))
+
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Extract fighter hurt capsule init data (ftHurtboxInit) from ISO-extracted Pl??.dat.")
     parser.add_argument("--iso_dir", type=Path, default=Path("_iso"))
     parser.add_argument("--out_dir", type=Path, default=Path("data/hurtcaps"))
+    parser.add_argument(
+        "--out_bin_dir",
+        type=Path,
+        default=None,
+        help="optional output dir for compact .bin tables (data/hurtcaps/<character>.bin)",
+    )
     parser.add_argument("--character", type=str, default=None)
     args = parser.parse_args()
 
@@ -209,6 +259,23 @@ def main() -> None:
         out = extract_character(ch, iso_dir=args.iso_dir)
         (args.out_dir / f"{ch}.json").write_text(json.dumps(out, indent=2) + "\n", encoding="utf-8")
         print(f"wrote {args.out_dir / (ch + '.json')} ({len(out['capsules'])} capsules)")
+        if args.out_bin_dir is not None:
+            # Re-parse into typed records so we can validate and write a stable binary table.
+            caps: list[HurtCapsuleInit] = []
+            for cap in out.get("capsules", []) or []:
+                caps.append(
+                    HurtCapsuleInit(
+                        bone_idx=int(cap["bone_idx"]),
+                        height=int(cap["height"]),
+                        is_grabbable=1 if bool(cap["is_grabbable"]) else 0,
+                        a_offset=(float(cap["a_offset"][0]), float(cap["a_offset"][1]), float(cap["a_offset"][2])),
+                        b_offset=(float(cap["b_offset"][0]), float(cap["b_offset"][1]), float(cap["b_offset"][2])),
+                        scale=float(cap["scale"]),
+                    )
+                )
+            out_bin = args.out_bin_dir / f"{ch}.bin"
+            _write_hurtcaps_bin(out_bin, capsules=caps)
+            print(f"wrote {out_bin} ({len(caps)} capsules)")
 
 
 if __name__ == "__main__":

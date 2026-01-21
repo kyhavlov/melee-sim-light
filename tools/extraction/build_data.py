@@ -95,7 +95,16 @@ def main() -> None:
     for ch in chars:
         _run(
             "tools.extraction.extract_fighter_hurtcapsules",
-            ["--iso_dir", str(iso_dir), "--out_dir", "data/hurtcaps", "--character", ch],
+            [
+                "--iso_dir",
+                str(iso_dir),
+                "--out_dir",
+                "data/hurtcaps",
+                "--out_bin_dir",
+                "data/hurtcaps",
+                "--character",
+                ch,
+            ],
         )
 
     # Subaction/move timelines.

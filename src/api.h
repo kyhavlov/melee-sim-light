@@ -9,6 +9,7 @@ extern "C" {
 
 enum { MSL_MAX_PLAYERS = 4 };
 enum { MSL_MAX_ITEMS = 15 };
+enum { MSL_MAX_HURTCAPS = 32 };
 enum { MSL_STATE_FLAGS_BYTES = 5 };
 
 // -----------------------------
@@ -291,6 +292,13 @@ int msl_batch_debug_write_processed_input(const MslBatch* batch, uint8_t* out_by
 // out_stride_bytes must be >= sizeof(MslDebugInternals).
 int msl_batch_debug_write_internals(const MslBatch* batch, uint8_t* out_bytes,
                                     size_t out_stride_bytes);
+
+// Debug/validation helper: read pose-driven world-space hurt capsules for a single fighter.
+// Writes `MSL_MAX_HURTCAPS * 7` floats into out_caps_7 as rows:
+//   [ax, ay, az, bx, by, bz, radius]
+// and returns the active capsule count in out_count.
+int msl_batch_debug_hurtcaps_world(const MslBatch* batch, int batch_index, int player_index,
+                                  float* out_caps_7, uint8_t* out_count);
 
 #ifdef __cplusplus
 }

@@ -364,6 +364,36 @@ static PyObject* msl_anim_pose_matrix_py(PyObject* self, PyObject* args) {
   return (PyObject*)arr;
 }
 
+static PyObject* msl_hurtcaps_world_py(PyObject* self, PyObject* args) {
+  (void)self;
+  PyObject* handle_obj = NULL;
+  int batch_index = 0;
+  int player_index = 0;
+  if (!PyArg_ParseTuple(args, "Oii", &handle_obj, &batch_index, &player_index)) {
+    return NULL;
+  }
+  PyMslHandle* h = unpack_handle(handle_obj);
+  if (h == NULL) {
+    return NULL;
+  }
+
+  npy_intp dims[2] = {(npy_intp)MSL_MAX_HURTCAPS, (npy_intp)7};
+  PyArrayObject* arr = (PyArrayObject*)PyArray_SimpleNew(2, dims, NPY_FLOAT32);
+  if (arr == NULL) {
+    return NULL;
+  }
+  float* out = (float*)PyArray_DATA(arr);
+  uint8_t count = 0;
+  const int err = msl_batch_debug_hurtcaps_world(h->batch, batch_index, player_index, out, &count);
+  if (err != 0) {
+    Py_DECREF(arr);
+    PyErr_Format(PyExc_ValueError, "msl_batch_debug_hurtcaps_world failed: %d", err);
+    return NULL;
+  }
+
+  return Py_BuildValue("(Oi)", arr, (int)count);
+}
+
 static PyObject* msl_destroy(PyObject* self, PyObject* args) {
   PyObject* capsule = NULL;
   if (!PyArg_ParseTuple(args, "O", &capsule)) {
@@ -405,6 +435,8 @@ static PyMethodDef methods[] = {
      "ecb_extents_rel(char_id, animation_index, action_frame) -> (min_x, max_x, min_y, max_y)"},
     {"anim_pose_matrix", msl_anim_pose_matrix_py, METH_VARARGS,
      "anim_pose_matrix(char_id, msid, frame, part_id) -> np.ndarray[float32] shape=(12,)"},
+    {"hurtcaps_world", msl_hurtcaps_world_py, METH_VARARGS,
+     "hurtcaps_world(handle, batch_index, player_index) -> (caps[MSL_MAX_HURTCAPS,7], count)"},
     {NULL, NULL, 0, NULL},
 };
 

@@ -32,7 +32,8 @@ Characters (Fox/Falco):
 - `data/characters/fox.json`, `data/characters/falco.json` (movement/ecb/laser/reflector attrs; decomp-first)
   - `ecb_joints`: 6 `s16` indices into `fp->parts[]` (as stored in `ftData_x44_t`).
     Decomp: `ft_80081B38` calls `mpColl_SetECBSource_JObj(..., bones[temp_r29->unk*].joint, ...)`.
-- `data/hurtcaps/fox.json`, `data/hurtcaps/falco.json` (hurt capsule init tables; decomp-first)
+- `data/hurtcaps/fox.bin`, `data/hurtcaps/falco.bin` (hurt capsule init tables; decomp-first, compact binary)
+- `data/hurtcaps/fox.json`, `data/hurtcaps/falco.json` (hurt capsule init tables; debug-friendly mirror; C loads `.bin` only)
 - `data/moves/fox.json`, `data/moves/falco.json` (subaction timelines for key motions + specials; decomp-first)
 - `data/anims/fox.bin`, `data/anims/falco.bin` (per-msid bone matrices + TransN; decomp-first)
 - `data/anims/fox.blend.bin`, `data/anims/falco.blend.bin` (blend/dynamics bytes; decomp-first)
@@ -61,6 +62,43 @@ Characters (Fox/Falco):
 Notes:
 - `animation_index` in Slippi post-frames includes `0xFFFFFFFF` as a sentinel; treat that as “no animation”.
 - Item reference ordering in `.msl` datasets is **sorted by item `instance_id`**, then `id`, then `type`. The sim should follow the same stable ordering for its fixed 15 slots.
+
+## `data/hurtcaps/<char>.bin` (MSLHURT1 v1)
+
+Purpose: compact, init-time-loadable tables for fighter hurt capsule init records (`ftHurtboxInit`).
+
+Decomp semantics:
+- Init struct: `struct ftHurtboxInit` in `refs/melee/src/melee/ft/chara/ftCommon/types.h`.
+- Application: `ftColl_HurtboxInit` in `refs/melee/src/melee/ft/ftcoll.c` copies the record into a
+  `FighterHurtCapsule` / `HurtCapsule` and binds the capsule to a bone via:
+  `hurt->capsule.bone = fp->parts[hurt->capsule.bone_idx].joint`.
+- Endpoint positions are later computed from the bone transform + offsets (see `lb_8000B1CC` usage in
+  `refs/melee/src/melee/lb/lbcollision.c` around `checkPos` / `lbColl_80008248`).
+
+Binary layout (little-endian):
+- Header:
+  - `magic[8] = "MSLHURT1"`
+  - `version: u32 = 1`
+  - `capsule_count: u16`
+  - `reserved: u16 = 0`
+- Records (`capsule_count` entries), each:
+  - `bone_part_id: u16`
+  - `height: u8`
+  - `is_grabbable: u8`
+  - `pad: u16 = 0`
+  - `a_offset: 3 * f32`
+  - `b_offset: 3 * f32`
+  - `scale: f32`
+
+Field semantics:
+- `bone_part_id` is `ftHurtboxInit.bone_idx` (decomp type `Fighter_Part`; `refs/melee/src/melee/ft/forward.h`).
+  This is the same id domain as SSANIM `joint_parts` entries and must be passed as `part_id` to
+  `anim_pose_get_matrix(...)` in the sim.
+- `a_offset` / `b_offset` are the local-space offsets copied into `HurtCapsule.a_offset` / `b_offset`.
+- `scale` is copied into `HurtCapsule.scale` (treated as capsule radius in collision code).
+  Note: vanilla sometimes applies additional per-fighter scale factors (e.g. `fp->x34_scale.y`)
+  when deriving bounds from hurt capsules (`refs/melee/src/melee/ft/chara/ftCommon/ftCo_0A01.c::ftCo_800A0DA4`).
+  The sim currently does **not** model those fighter-scale fields yet, so world radius is `scale` only.
 
 ## What the C core should load (minimum)
 
