@@ -3,33 +3,21 @@ from __future__ import annotations
 import math
 from pathlib import Path
 
-from tools.eval.dataset import read_dataset
+from tests.test_anim_pose import _pick_first_nonempty_anim, _read_header
 
 
-def _pick_char_anim_from_cached_dataset() -> tuple[int, int, int]:
-    # Use an already-preprocessed local dataset (no ISO extraction).
-    root = Path("datasets/fox_falco_fd_ucf084_recent/replays")
-    paths = sorted(root.glob("**/*.msl"))
-    assert paths, f"no cached .msl datasets found under {root}"
-
-    ds = read_dataset(str(paths[0]))
-    samples = ds.samples
-    n = min(int(samples.shape[0]), 4096)
-    for i in range(n):
-        seed = samples[i]["seed_t"]
-        for p in range(2):
-            ch = int(seed["char_id"][p])
-            anim = int(seed["animation_index"][p])
-            af = int(seed["action_frame"][p])
-            if ch in (1, 22) and anim != 0xFFFFFFFF:
-                return ch, anim, af
-    raise AssertionError("failed to find a (char_id, animation_index) pair in cached dataset samples")
+def _pick_char_anim_from_local_anims() -> tuple[int, int, int]:
+    # Use local ISO-derived anim artifacts (no replay/dataset dependency).
+    buf = Path("data/anims/fox.bin").read_bytes()
+    joint_count, anim_count, _joint_parts = _read_header(buf)
+    msid, _frame_count, _base = _pick_first_nonempty_anim(buf=buf, joint_count=joint_count, anim_count=anim_count)
+    return 1, int(msid), 0
 
 
 def test_ecb_table_loads_and_returns_finite_values() -> None:
     import msl_binding
 
-    ch, anim, af = _pick_char_anim_from_cached_dataset()
+    ch, anim, af = _pick_char_anim_from_local_anims()
 
     handle = msl_binding.init(batch_size=1, num_players=2)
     try:
@@ -42,7 +30,7 @@ def test_ecb_table_loads_and_returns_finite_values() -> None:
 def test_ecb_extents_table_loads_and_returns_finite_values() -> None:
     import msl_binding
 
-    ch, anim, af = _pick_char_anim_from_cached_dataset()
+    ch, anim, af = _pick_char_anim_from_local_anims()
 
     handle = msl_binding.init(batch_size=1, num_players=2)
     try:

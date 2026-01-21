@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 import numpy as np
 
+from tools.slippi.combat_history import derive_combat_rehit_seed_fields
 from tools.slippi.seed_history import (
     compute_fighter_button_timers,
     compute_fighter_stick_input_counters,
@@ -243,6 +246,239 @@ def test_x672_trigger_timer_is_causal_wrt_future_frames() -> None:
 
     assert np.array_equal(pre0, pre1[: pre0.size])
     assert np.array_equal(post0, post1[: post0.size])
+
+
+def _read_hitbox_msid_frames(path: str, *, limit: int = 512) -> list[tuple[int, int]]:
+    import struct
+
+    buf = Path(path).read_bytes()
+    if len(buf) < 16 or buf[:8] != b"MSLHITB1":
+        raise ValueError("bad MSLHITB1")
+    ver = int.from_bytes(buf[8:12], "little", signed=False)
+    if ver != 1:
+        raise ValueError("unsupported MSLHITB1 version")
+    entry_count = int.from_bytes(buf[12:16], "little", signed=False)
+    index_base = 16
+    idx_bytes = 12
+    rec_bytes = 44
+    index_end = index_base + entry_count * idx_bytes
+    out: list[tuple[int, int]] = []
+
+    for i in range(entry_count):
+        off = index_base + i * idx_bytes
+        msid, rec_count, rec_len, payload_off = struct.unpack_from("<HHII", buf, off)
+        # Collect candidate frames from set events only (kind=0).
+        for ri in range(int(rec_count)):
+            roff = int(payload_off) + ri * rec_bytes
+            frame = int.from_bytes(buf[roff + 0 : roff + 2], "little", signed=False)
+            kind = int(buf[roff + 2])
+            hb_id = int(buf[roff + 3])
+            if kind != 0:
+                continue
+            if 0 <= hb_id < 4:
+                out.append((int(msid), int(frame)))
+                if len(out) >= int(limit):
+                    return out
+    return out
+
+
+def test_derive_combat_rehit_seed_fields_is_causal_wrt_future_frames() -> None:
+    import pytest
+
+    if not Path("data/hitboxes/fox.bin").exists():
+        pytest.skip("missing local artifact: data/hitboxes/fox.bin")
+    if not Path("data/hurtcaps/fox.bin").exists():
+        pytest.skip("missing local artifact: data/hurtcaps/fox.bin")
+    if not Path("data/anims/fox.bin").exists():
+        pytest.skip("missing local artifact: data/anims/fox.bin")
+
+    # Find a (msid, frame) that produces at least one BODY hit under our extracted pose/hitbox/hurtcap data
+    # when both fighters share the same position.
+    #
+    # Keep this tiny (few frames) so it stays unit-test fast.
+    candidates = _read_hitbox_msid_frames("data/hitboxes/fox.bin", limit=512)
+    assert candidates
+
+    picked: tuple[int, int] | None = None
+    for msid, af in candidates:
+        n = 1
+        z_u8 = np.zeros((n, 4), dtype=np.uint8)
+        z_u16 = np.zeros((n, 4), dtype=np.uint16)
+        z_u32 = np.zeros((n, 4), dtype=np.uint32)
+        z_i16 = np.zeros((n, 4), dtype=np.int16)
+        z_f32 = np.zeros((n, 4), dtype=np.float32)
+
+        char_id = z_u8.copy()
+        char_id[:, 0] = np.uint8(1)
+        char_id[:, 1] = np.uint8(1)
+        action_id = z_u16.copy()
+        action_frame = z_i16.copy()
+        action_frame[:, 0] = np.int16(af)
+        action_frame[:, 1] = np.int16(af)
+        animation_index = z_u32.copy()
+        animation_index[:, 0] = np.uint32(msid)
+        animation_index[:, 1] = np.uint32(msid)
+        on_ground = z_u8.copy()
+        on_ground[:, 0] = np.uint8(1)
+        on_ground[:, 1] = np.uint8(1)
+        pos_x = z_f32.copy()
+        pos_y = z_f32.copy()
+        scale_y = np.ones((n, 4), dtype=np.float32)
+        stocks = z_u8.copy()
+        stocks[:, 0] = np.uint8(4)
+        stocks[:, 1] = np.uint8(4)
+        shield_hp = z_f32.copy()
+        instance_id = z_u16.copy()
+        instance_id[:, 0] = np.uint16(111)
+        instance_id[:, 1] = np.uint16(222)
+
+        input_buttons = z_u16.copy()
+        input_l = z_u8.copy()
+        input_r = z_u8.copy()
+
+        rehit_active, _hb_id, _att_msid, _def_iid = derive_combat_rehit_seed_fields(
+            num_players=2,
+            is_teams=False,
+            team_id=z_u8,
+            char_id=char_id,
+            action_id=action_id,
+            action_frame=action_frame,
+            animation_index=animation_index,
+            on_ground=on_ground,
+            pos_x=pos_x,
+            pos_y=pos_y,
+            fighter_scale_y=scale_y,
+            stocks=stocks,
+            shield_hp=shield_hp,
+            hurtbox_state=z_u8,
+            instance_id=instance_id,
+            input_buttons=input_buttons,
+            input_l=input_l,
+            input_r=input_r,
+            data_root="data",
+        )
+        if int(rehit_active[0, 0, 1]) == 1:
+            picked = (msid, af)
+            break
+
+    assert picked is not None, "failed to find any (msid, frame) that produces a BODY hit"
+    msid, af = picked
+
+    # Prefix: stable overlap.
+    n0 = 6
+    base_u8 = np.zeros((n0, 4), dtype=np.uint8)
+    base_u16 = np.zeros((n0, 4), dtype=np.uint16)
+    base_u32 = np.zeros((n0, 4), dtype=np.uint32)
+    base_i16 = np.zeros((n0, 4), dtype=np.int16)
+    base_f32 = np.zeros((n0, 4), dtype=np.float32)
+
+    char0 = base_u8.copy()
+    char0[:, 0] = np.uint8(1)
+    char0[:, 1] = np.uint8(1)
+    action0 = base_u16.copy()
+    af0 = base_i16.copy()
+    af0[:, 0] = np.int16(af)
+    af0[:, 1] = np.int16(af)
+    anim0 = base_u32.copy()
+    anim0[:, 0] = np.uint32(msid)
+    anim0[:, 1] = np.uint32(msid)
+    on_ground0 = base_u8.copy()
+    on_ground0[:, 0] = np.uint8(1)
+    on_ground0[:, 1] = np.uint8(1)
+    pos_x0 = base_f32.copy()
+    pos_y0 = base_f32.copy()
+    scale0 = np.ones((n0, 4), dtype=np.float32)
+    stocks0 = base_u8.copy()
+    stocks0[:, 0] = np.uint8(4)
+    stocks0[:, 1] = np.uint8(4)
+    shield0 = base_f32.copy()
+    iid0 = base_u16.copy()
+    iid0[:, 0] = np.uint16(111)
+    iid0[:, 1] = np.uint16(222)
+    buttons0 = base_u16.copy()
+    l0 = base_u8.copy()
+    r0 = base_u8.copy()
+
+    a0, hb0, ms0, di0 = derive_combat_rehit_seed_fields(
+        num_players=2,
+        is_teams=False,
+        team_id=base_u8,
+        char_id=char0,
+        action_id=action0,
+        action_frame=af0,
+        animation_index=anim0,
+        on_ground=on_ground0,
+        pos_x=pos_x0,
+        pos_y=pos_y0,
+        fighter_scale_y=scale0,
+        stocks=stocks0,
+        shield_hp=shield0,
+        hurtbox_state=base_u8,
+        instance_id=iid0,
+        input_buttons=buttons0,
+        input_l=l0,
+        input_r=r0,
+        data_root="data",
+    )
+
+    assert int(a0[0, 0, 1]) == 1
+
+    # Append arbitrary future frames (no hitboxes via action_frame=-1): prefix outputs must not change.
+    n1 = n0 + 5
+    char1 = np.zeros((n1, 4), dtype=np.uint8)
+    char1[:n0] = char0
+    char1[n0:, 0] = np.uint8(1)
+    char1[n0:, 1] = np.uint8(1)
+    action1 = np.zeros((n1, 4), dtype=np.uint16)
+    action1[:n0] = action0
+    af1 = np.zeros((n1, 4), dtype=np.int16)
+    af1[:n0] = af0
+    af1[n0:, 0] = np.int16(-1)
+    af1[n0:, 1] = np.int16(-1)
+    anim1 = np.zeros((n1, 4), dtype=np.uint32)
+    anim1[:n0] = anim0
+    on_ground1 = np.zeros((n1, 4), dtype=np.uint8)
+    on_ground1[:n0] = on_ground0
+    pos_x1 = np.zeros((n1, 4), dtype=np.float32)
+    pos_x1[:n0] = pos_x0
+    pos_y1 = np.zeros((n1, 4), dtype=np.float32)
+    pos_y1[:n0] = pos_y0
+    scale1 = np.ones((n1, 4), dtype=np.float32)
+    stocks1 = np.zeros((n1, 4), dtype=np.uint8)
+    stocks1[:n0] = stocks0
+    shield1 = np.zeros((n1, 4), dtype=np.float32)
+    iid1 = np.zeros((n1, 4), dtype=np.uint16)
+    iid1[:n0] = iid0
+    buttons1 = np.zeros((n1, 4), dtype=np.uint16)
+    l1 = np.zeros((n1, 4), dtype=np.uint8)
+    r1 = np.zeros((n1, 4), dtype=np.uint8)
+
+    a1, hb1, ms1, di1 = derive_combat_rehit_seed_fields(
+        num_players=2,
+        is_teams=False,
+        team_id=np.zeros((n1, 4), dtype=np.uint8),
+        char_id=char1,
+        action_id=action1,
+        action_frame=af1,
+        animation_index=anim1,
+        on_ground=on_ground1,
+        pos_x=pos_x1,
+        pos_y=pos_y1,
+        fighter_scale_y=scale1,
+        stocks=stocks1,
+        shield_hp=shield1,
+        hurtbox_state=np.zeros((n1, 4), dtype=np.uint8),
+        instance_id=iid1,
+        input_buttons=buttons1,
+        input_l=l1,
+        input_r=r1,
+        data_root="data",
+    )
+
+    assert np.array_equal(a0, a1[: a0.shape[0]])
+    assert np.array_equal(hb0, hb1[: hb0.shape[0]])
+    assert np.array_equal(ms0, ms1[: ms0.shape[0]])
+    assert np.array_equal(di0, di1[: di0.shape[0]])
 
 
 def test_fighter_stick_input_counters_are_causal_wrt_future_frames() -> None:

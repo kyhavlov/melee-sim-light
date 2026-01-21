@@ -71,9 +71,13 @@ static void combat_select_body_hits_one(MslBatch* batch, int bi, MslDebugCombatC
   const int num_players = (int)batch->config.num_players;
   uint16_t written = inout_written ? *inout_written : 0;
   const uint8_t write_out = (out_contacts != NULL && inout_written != NULL && max_contacts > 0);
+  const MslCommonParams* c = msl_common_params();
 
   for (int attacker = 0; attacker < num_players; attacker++) {
     const size_t a_idx = msl_idx_player(bi, attacker);
+    if (batch->state.stocks[a_idx] == 0) {
+      continue;
+    }
     if (batch->state.hitbox_count[a_idx] == 0) {
       // Approximate decomp ClearHitboxes: if there are no active hitboxes, clear rehit latches for
       // this attacker.
@@ -93,6 +97,9 @@ static void combat_select_body_hits_one(MslBatch* batch, int bi, MslDebugCombatC
         continue;
       }
       const size_t d_idx = msl_idx_player(bi, defender);
+      if (batch->state.stocks[d_idx] == 0) {
+        continue;
+      }
 
       if (batch->state.is_teams[bi]) {
         if (batch->state.team_id[a_idx] == batch->state.team_id[d_idx]) {
@@ -102,6 +109,19 @@ static void combat_select_body_hits_one(MslBatch* batch, int bi, MslDebugCombatC
 
       const uint8_t hurtcap_count = batch->state.hurtcap_count[d_idx];
       if (hurtcap_count == 0) {
+        continue;
+      }
+
+      // Hurtbox state eligibility gate.
+      //
+      // Decomp pointers:
+      // - refs/melee/src/melee/ft/ftcoll.c::ftColl_8007B868 returns a composite "hurt state" based on
+      //   fp->x221D_b6 and fp->x1988/x198C.
+      // - refs/melee/src/melee/ft/ftcoll.c (main collision loop) gates hurtbox checks on
+      //   this_fp->x1988/x198C (e.g. `!= 2` branch around hitbox-vs-hurtcapsule checks).
+      //
+      // We treat nonzero seeded `hurtbox_state` as not eligible for BODY hits for now.
+      if (batch->state.hurtbox_state[d_idx] != 0) {
         continue;
       }
 
@@ -194,9 +214,8 @@ static void combat_select_body_hits_one(MslBatch* batch, int bi, MslDebugCombatC
             continue;
           }
 
-          // NOTE: combat_resolve is non-mutating again (suite stability).
-          // We keep deterministic selection + latch scaffolding, but do not write percent/hitlag/
-          // hitstun/attribution yet.
+          // Combat Mutations Pass 1 is temporarily disabled (teacher-forced suite stability).
+          // Keep BODY selection + shield precedence + rehit latch bookkeeping only.
 
           if (write_out && written < max_contacts) {
             MslDebugCombatContact* out = &out_contacts[written];

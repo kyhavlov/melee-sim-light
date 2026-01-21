@@ -27,7 +27,6 @@ def _common_attr(name: str) -> float:
     common = json.loads(Path("data/common/ft_common_data.json").read_text())
     return float(common[name])
 
-
 def _seed_base() -> np.ndarray:
     seed = np.zeros((1,), dtype=SEED_DTYPE)
     seed["stage_id"][0] = np.uint32(STAGE_FD)

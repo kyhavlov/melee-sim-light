@@ -269,16 +269,19 @@ int msl_batch_reseed_seed(MslBatch* batch, const uint8_t* seed_bytes, size_t see
       batch->state.item_misc3[ii] = item->misc3;
     }
 
-    // Combat rehit suppression latch is not part of MslSeed yet; clear on reseed for determinism.
-    // (Pass 1 uses this state only for within-rollout rehit suppression.)
+    // Combat rehit suppression latch is part of the reseed schema (teacher-forced one-step eval).
     const size_t pair_base =
         (size_t)bi * (size_t)MSL_MAX_PLAYERS * (size_t)MSL_MAX_PLAYERS;
-    const size_t pair_n = (size_t)MSL_MAX_PLAYERS * (size_t)MSL_MAX_PLAYERS;
-    memset(batch->state.combat_rehit_active + pair_base, 0, sizeof(uint8_t) * pair_n);
-    memset(batch->state.combat_rehit_hitbox_id + pair_base, 0, sizeof(uint8_t) * pair_n);
-    memset(batch->state.combat_rehit_attacker_msid + pair_base, 0, sizeof(uint16_t) * pair_n);
-    memset(batch->state.combat_rehit_defender_instance_id + pair_base, 0,
-           sizeof(uint16_t) * pair_n);
+    for (int attacker = 0; attacker < MSL_MAX_PLAYERS; attacker++) {
+      for (int defender = 0; defender < MSL_MAX_PLAYERS; defender++) {
+        const size_t pair = pair_base + (size_t)attacker * (size_t)MSL_MAX_PLAYERS + (size_t)defender;
+        batch->state.combat_rehit_active[pair] = seed->combat_rehit_active[attacker][defender] ? 1 : 0;
+        batch->state.combat_rehit_hitbox_id[pair] = seed->combat_rehit_hitbox_id[attacker][defender];
+        batch->state.combat_rehit_attacker_msid[pair] = seed->combat_rehit_attacker_msid[attacker][defender];
+        batch->state.combat_rehit_defender_instance_id[pair] =
+            seed->combat_rehit_defender_instance_id[attacker][defender];
+      }
+    }
   }
 
   return 0;

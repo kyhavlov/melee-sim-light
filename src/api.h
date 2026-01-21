@@ -177,6 +177,17 @@ typedef struct MslSeed {
   uint8_t _pad2[1];
   uint8_t state_flags[MSL_MAX_PLAYERS][5];
 
+  // Combat rehit/hitlist internals (seeded; strictly causal from history in preprocessing).
+  //
+  // These fields are required for teacher-forced one-step eval: reseeding wipes rollout history,
+  // so combat must carry its rehit suppression state through the seed schema.
+  //
+  // Shape: [attacker][defender] in player-slot order.
+  uint8_t combat_rehit_active[MSL_MAX_PLAYERS][MSL_MAX_PLAYERS];     // 0/1
+  uint8_t combat_rehit_hitbox_id[MSL_MAX_PLAYERS][MSL_MAX_PLAYERS];  // 0..3 or 0xFF
+  uint16_t combat_rehit_attacker_msid[MSL_MAX_PLAYERS][MSL_MAX_PLAYERS];
+  uint16_t combat_rehit_defender_instance_id[MSL_MAX_PLAYERS][MSL_MAX_PLAYERS];
+
   MslItem items[MSL_MAX_ITEMS];
 } MslSeed;
 

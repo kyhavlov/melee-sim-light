@@ -184,6 +184,7 @@ def _main_impl(args) -> None:
     import json
     from pathlib import Path
 
+    from tools.slippi.combat_history import derive_combat_rehit_seed_fields
     from tools.slippi.seed_history import (
         apply_deadzone,
         compute_fighter_button_timers,
@@ -708,6 +709,96 @@ def _main_impl(args) -> None:
 
     # is_dead in compare is derived from stocks in the evaluator too, but fill it here for completeness.
     samples["ref_t1"]["is_dead"] = (samples["ref_t1"]["stocks"] == 0).astype(np.uint8)
+
+    # -----------------------------
+    # Combat rehit latch internals (strictly causal)
+    # -----------------------------
+    #
+    # Teacher-forced one-step eval reseeds from replay post-frames, which wipes rollout history.
+    # Seed the combat rehit suppression state so BODY-only hitlag+attribution mutations don't
+    # turn into "hit every frame" artifacts.
+    #
+    # IMPORTANT: Derivation is strictly causal and does not use replay outcomes like hitlag/hitstun
+    # to infer hits; it uses extracted hitbox/hurtcap data + current-frame inputs.
+    #
+    # Build full-frame per-slot arrays (n_frames, MAX_PLAYERS) from the already-populated sample
+    # arrays and the original per-frame pre/post buffers.
+    #
+    # NOTE: we keep unused slots (p>=num_players) zeroed.
+    post_team_id = np.zeros((n_frames, 4), dtype=np.uint8)
+    post_char_id = np.zeros((n_frames, 4), dtype=np.uint8)
+    post_action_id = np.zeros((n_frames, 4), dtype=np.uint16)
+    post_action_frame = np.zeros((n_frames, 4), dtype=np.int16)
+    post_animation_index = np.zeros((n_frames, 4), dtype=np.uint32)
+    post_on_ground = np.zeros((n_frames, 4), dtype=np.uint8)
+    post_pos_x = np.zeros((n_frames, 4), dtype=np.float32)
+    post_pos_y = np.zeros((n_frames, 4), dtype=np.float32)
+    post_scale_y = np.ones((n_frames, 4), dtype=np.float32)
+    post_stocks = np.zeros((n_frames, 4), dtype=np.uint8)
+    post_shield_hp = np.zeros((n_frames, 4), dtype=np.float32)
+    post_hurtbox_state = np.zeros((n_frames, 4), dtype=np.uint8)
+    post_instance_id = np.zeros((n_frames, 4), dtype=np.uint16)
+    pre_buttons = np.zeros((n_frames, 4), dtype=np.uint16)
+    pre_l = np.zeros((n_frames, 4), dtype=np.uint8)
+    pre_r = np.zeros((n_frames, 4), dtype=np.uint8)
+
+    # Re-read the per-slot per-frame buffers from the Slippi payload again, but only for the
+    # fields needed by the strictly-causal combat history derivation. This keeps the logic local
+    # and avoids reverse-mapping from the (n_samples) packed sample arrays.
+    ports_struct = frames.field("ports")
+    for slot, port_name in enumerate(src_port_names):
+        leader = ports_struct.field(port_name).field("leader")
+        pre = leader.field("pre")
+        post = leader.field("post")
+
+        pre_buttons[:, slot] = _to_numpy(pre.field("buttons_physical")).astype(np.uint16)
+        pre_l[:, slot] = _u8_from_float01(_to_numpy(pre.field("triggers_physical").field("l")).astype(np.float32))
+        pre_r[:, slot] = _u8_from_float01(_to_numpy(pre.field("triggers_physical").field("r")).astype(np.float32))
+
+        post_team_id[:, slot] = samples["seed_t"]["team_id"][0, slot]
+        post_char_id[:, slot] = _to_numpy(post.field("character")).astype(np.uint8)
+        post_action_id[:, slot] = _to_numpy(post.field("state")).astype(np.uint16)
+        post_action_frame[:, slot] = _i16_from_state_age(_to_numpy(post.field("state_age")).astype(np.float32), n_frames)
+        post_animation_index[:, slot] = _to_numpy(post.field("animation_index")).astype(np.uint32)
+        post_on_ground[:, slot] = _airborne_to_on_ground(_to_numpy(post.field("airborne")).astype(np.uint8), n_frames)
+        post_pos_x[:, slot] = _to_numpy(post.field("position").field("x")).astype(np.float32)
+        post_pos_y[:, slot] = _to_numpy(post.field("position").field("y")).astype(np.float32)
+        post_stocks[:, slot] = _to_numpy(post.field("stocks")).astype(np.uint8)
+        post_shield_hp[:, slot] = _to_numpy(post.field("shield")).astype(np.float32)
+        post_hurtbox_state[:, slot] = _to_numpy(post.field("hurtbox_state")).astype(np.uint8)
+        post_instance_id[:, slot] = _to_numpy(post.field("instance_id")).astype(np.uint16)
+
+    (
+        rehit_active,
+        rehit_hb_id,
+        rehit_att_msid,
+        rehit_def_iid,
+    ) = derive_combat_rehit_seed_fields(
+        num_players=num_players,
+        is_teams=bool(is_teams),
+        team_id=post_team_id,
+        char_id=post_char_id,
+        action_id=post_action_id,
+        action_frame=post_action_frame,
+        animation_index=post_animation_index,
+        on_ground=post_on_ground,
+        pos_x=post_pos_x,
+        pos_y=post_pos_y,
+        fighter_scale_y=post_scale_y,
+        stocks=post_stocks,
+        shield_hp=post_shield_hp,
+        hurtbox_state=post_hurtbox_state,
+        instance_id=post_instance_id,
+        input_buttons=pre_buttons,
+        input_l=pre_l,
+        input_r=pre_r,
+        data_root="data",
+    )
+
+    samples["seed_t"]["combat_rehit_active"] = rehit_active[:-1]
+    samples["seed_t"]["combat_rehit_hitbox_id"] = rehit_hb_id[:-1]
+    samples["seed_t"]["combat_rehit_attacker_msid"] = rehit_att_msid[:-1]
+    samples["seed_t"]["combat_rehit_defender_instance_id"] = rehit_def_iid[:-1]
 
     write_dataset(args.out, num_players=num_players, samples=samples)
     print(f"Wrote {n_samples} samples to {args.out} from {args.slp}")
