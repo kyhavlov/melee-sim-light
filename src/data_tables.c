@@ -1,4 +1,4 @@
-#include "landing.h"
+#include "data_tables.h"
 
 #include <ctype.h>
 #include <errno.h>
@@ -351,7 +351,7 @@ static int load_one(const char* data_dir, const char* rel_path, uint8_t char_id)
   return 0;
 }
 
-int landing_init(void) {
+int data_tables_init(void) {
   if (g_loaded) {
     return 0;
   }
@@ -391,39 +391,21 @@ static inline int attackair_kind_from_action(uint16_t a) {
   }
 }
 
-static inline uint16_t landing_air_action_from_attackair(uint16_t a) {
-  switch (a) {
-    case MSL_ACT_ATTACK_AIR_N:
-      return (uint16_t)MSL_ACT_LANDING_AIR_N;
-    case MSL_ACT_ATTACK_AIR_F:
-      return (uint16_t)MSL_ACT_LANDING_AIR_F;
-    case MSL_ACT_ATTACK_AIR_B:
-      return (uint16_t)MSL_ACT_LANDING_AIR_B;
-    case MSL_ACT_ATTACK_AIR_HI:
-      return (uint16_t)MSL_ACT_LANDING_AIR_HI;
-    case MSL_ACT_ATTACK_AIR_LW:
-      return (uint16_t)MSL_ACT_LANDING_AIR_LW;
-    default:
-      return (uint16_t)MSL_ACT_LANDING;
-  }
-}
-
-uint16_t landing_attackair_land_action(uint8_t char_id, uint16_t attackair_action_id,
-                                       int16_t action_frame) {
+uint8_t data_tables_attackair_cmd0_active(uint8_t char_id, uint16_t attackair_action_id,
+                                          int16_t action_frame) {
   const int kind = attackair_kind_from_action(attackair_action_id);
   if (kind < 0) {
-    return (uint16_t)MSL_ACT_LANDING;
+    return 0;
   }
 
   const MslCmdVar0Window win = g_cmd0_by_char_attackair[char_id][(size_t)kind];
   if (!win.loaded) {
     // Conservative fallback: treat as auto-cancel (no landing lag).
-    return (uint16_t)MSL_ACT_LANDING;
+    return 0;
   }
 
   // Decomp: ftCo_LandingAir_EnterWithLag uses fp->cmd_vars[0] to pick between LandingAir* (lag)
   // and Landing_Enter_Basic (auto-cancel).
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_LandingAir.c
-  const uint8_t cmd0 = (action_frame >= win.start_af && action_frame < win.end_af) ? 1 : 0;
-  return cmd0 ? landing_air_action_from_attackair(attackair_action_id) : (uint16_t)MSL_ACT_LANDING;
+  return (action_frame >= win.start_af && action_frame < win.end_af) ? 1 : 0;
 }

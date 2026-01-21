@@ -4,15 +4,13 @@
 #include <stdint.h>
 
 #include "action_ids.h"
+#include "action.h"
 #include "anim_table.h"
 #include "buttons.h"
 #include "char_params.h"
 #include "common_params.h"
-#include "escape.h"
-#include "escape_air.h"
-#include "guard.h"
+#include "data_tables.h"
 #include "input_axis.h"
-#include "landing.h"
 
 // ftCo_JumpInput (refs/melee/src/melee/ft/chara/ftCommon/forward.h).
 typedef enum MslJumpInput {
@@ -23,6 +21,23 @@ typedef enum MslJumpInput {
 } MslJumpInput;
 
 static inline float msl_signf(float x) { return x < 0.0f ? -1.0f : 1.0f; }
+
+static inline uint16_t landing_air_action_from_attackair(uint16_t a) {
+  switch (a) {
+    case MSL_ACT_ATTACK_AIR_N:
+      return (uint16_t)MSL_ACT_LANDING_AIR_N;
+    case MSL_ACT_ATTACK_AIR_F:
+      return (uint16_t)MSL_ACT_LANDING_AIR_F;
+    case MSL_ACT_ATTACK_AIR_B:
+      return (uint16_t)MSL_ACT_LANDING_AIR_B;
+    case MSL_ACT_ATTACK_AIR_HI:
+      return (uint16_t)MSL_ACT_LANDING_AIR_HI;
+    case MSL_ACT_ATTACK_AIR_LW:
+      return (uint16_t)MSL_ACT_LANDING_AIR_LW;
+    default:
+      return (uint16_t)MSL_ACT_LANDING;
+  }
+}
 
 static float apply_friction_ground(float gr_vel, float friction) {
   // refs/melee/src/melee/ft/ftcommon.c::ftCommon_ApplyFrictionGround + ApplyGroundMovement
@@ -1041,8 +1056,10 @@ void locomotion_update_post_collision(MslBatch* batch) {
           case MSL_ACT_ATTACK_AIR_B:
           case MSL_ACT_ATTACK_AIR_HI:
           case MSL_ACT_ATTACK_AIR_LW:
-            land = landing_attackair_land_action(batch->state.char_id[idx], a,
-                                                 batch->state.action_frame[idx]);
+            land = data_tables_attackair_cmd0_active(batch->state.char_id[idx], a,
+                                                     batch->state.action_frame[idx])
+                       ? landing_air_action_from_attackair(a)
+                       : (uint16_t)MSL_ACT_LANDING;
             break;
           case MSL_ACT_ESCAPE_AIR:
             land = (uint16_t)MSL_ACT_LANDING_FALL_SPECIAL;
