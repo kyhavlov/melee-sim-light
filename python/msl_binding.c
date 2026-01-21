@@ -5,6 +5,7 @@
 
 #include "../src/alloc.h"
 #include "../src/api.h"
+#include "../src/ecb_table.h"
 
 typedef struct {
   MslBatch* batch;
@@ -295,6 +296,22 @@ static PyObject* msl_alloc_stats(PyObject* self, PyObject* args) {
   return Py_BuildValue("{s:K,s:K}", "calls", calls, "bytes", bytes);
 }
 
+static PyObject* msl_ecb_bottom_rel_y_py(PyObject* self, PyObject* args) {
+  (void)self;
+  unsigned int char_id_u = 0;
+  unsigned long anim_u = 0;
+  int action_frame = 0;
+  if (!PyArg_ParseTuple(args, "Iki", &char_id_u, &anim_u, &action_frame)) {
+    return NULL;
+  }
+  if (char_id_u > 255u) {
+    PyErr_SetString(PyExc_ValueError, "char_id out of range");
+    return NULL;
+  }
+  const float y = msl_ecb_bottom_rel_y((uint8_t)char_id_u, (uint32_t)anim_u, action_frame);
+  return PyFloat_FromDouble((double)y);
+}
+
 static PyObject* msl_destroy(PyObject* self, PyObject* args) {
   PyObject* capsule = NULL;
   if (!PyArg_ParseTuple(args, "O", &capsule)) {
@@ -330,6 +347,8 @@ static PyMethodDef methods[] = {
      "Reset C allocation counters (debug/perf guardrail)."},
     {"alloc_stats", msl_alloc_stats, METH_NOARGS,
      "Get C allocation counters (debug/perf guardrail)."},
+    {"ecb_bottom_rel_y", msl_ecb_bottom_rel_y_py, METH_VARARGS,
+     "ecb_bottom_rel_y(char_id, animation_index, action_frame) -> float"},
     {NULL, NULL, 0, NULL},
 };
 

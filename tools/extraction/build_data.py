@@ -125,6 +125,19 @@ def main() -> None:
             "tools.extraction.extract_fighter_anims",
             ["--character", ch, "--out-dir", "data/anims"],
         )
+        _run(
+            "tools.extraction.extract_ecb_bottom",
+            [
+                "--character",
+                ch,
+                "--anims",
+                f"data/anims/{ch}.bin",
+                "--attrs",
+                f"data/characters/{ch}.json",
+                "--out",
+                f"data/ecb/{ch}_bottom.bin",
+            ],
+        )
 
     summary = {
         "stage": str(out_stage),

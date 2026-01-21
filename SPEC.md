@@ -92,6 +92,21 @@ To reach “90–95% like real Melee” for the target domain, v1 must include:
   - consistent resolution that does not jitter
   - only “simplified” as an absolute last resort when the remaining gaps are tiny float/ordering mismatches
 
+### FD Grounding Notes (ECB-bottom)
+
+Current FD grounding uses an ECB-bottom proxy derived from extracted animation matrices. This improves false `on_ground`
+vs using root `pos_y`, but there are two **explicit teacher-forcing compatibility hacks** in the current implementation
+to avoid expanding the reseed schema while we are still in one-step eval mode:
+
+- **dy==0 + prev_on_ground: skip y constraint**: if the fighter had `prev_on_ground=1` and root `dy==0`, we do not require
+  `y_bot` to be within epsilon of the surface for a segment to be considered. This prevents spurious de-grounding when the
+  ECB offset changes due to pose/animation but we do not track `prev_ecb_off` in the seed state.
+- **Landing-frame vel_y preservation**: on the air→ground transition frame, we preserve the pre-collision `speed_y_self`
+  (which can remain negative in Slippi post-frames) and only zero `speed_y_self` on the subsequent grounded frame.
+
+These are not intended to be relied on as “mechanics”; they should be revisited once we model a more faithful ECB/collision
+pipeline (including any required prior-frame state) and/or once we validate ordering against decomp more directly.
+
 5) **Combat**
 - Hurtboxes/hitboxes extracted from character animation/move files:
   - hitbox positions tied to animation bones/transforms

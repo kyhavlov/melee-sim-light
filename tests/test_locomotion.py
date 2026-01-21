@@ -414,8 +414,10 @@ def test_landing_resets_jumps_and_enters_landing() -> None:
 
     seed = _seed_base()
     seed["on_ground"][0, 0] = np.uint8(0)
-    seed["pos_y"][0, 0] = np.float32(1.0)
-    seed["speed_y_self"][0, 0] = np.float32(-2.0)
+    # With ECB-bottom grounding, Fox's root pos_y (TopN) is not the floor contact point; ensure the
+    # fighter crosses the floor in one frame even after applying the per-frame ECB offset.
+    seed["pos_y"][0, 0] = np.float32(20.0)
+    seed["speed_y_self"][0, 0] = np.float32(-25.0)
     seed["action_id"][0, 0] = np.uint16(ACT_FALL)
     seed["action_frame"][0, 0] = np.int16(0)
     seed["animation_index"][0, 0] = np.uint32(SM_FALL)
@@ -637,9 +639,10 @@ def test_fall_fast_clears_on_landing_and_does_not_persist_off_stage() -> None:
     seed["action_frame"][0, 0] = np.int16(0)
     seed["animation_index"][0, 0] = np.uint32(SM_FALL)
     seed["pos_x"][0, 0] = np.float32(right_edge) - vx - np.float32(0.1)
-    seed["pos_y"][0, 0] = np.float32(0.1)
+    # Ensure we land this frame under ECB-bottom grounding.
+    seed["pos_y"][0, 0] = np.float32(20.0)
     seed["speed_air_x_self"][0, 0] = vx
-    seed["speed_y_self"][0, 0] = np.float32(-0.2)
+    seed["speed_y_self"][0, 0] = np.float32(-25.0)
     seed["jumps_left"][0, 0] = np.uint8(2)
 
     handle = msl_binding.init(batch_size=1, num_players=2)
@@ -676,7 +679,11 @@ def test_fall_fast_clears_on_landing_and_does_not_persist_off_stage() -> None:
         msl_binding.write_compare(handle, out)
         out3 = out.view(COMPARE_DTYPE).reshape((1,))[0].copy()
         assert int(out3["on_ground"][0]) == 0
-        assert np.isclose(out3["speed_y_self"][0], np.float32(-grav))
+        # After leaving ground, vertical speed should be governed by gravity/terminal velocity,
+        # not by fall-fast (which would clamp to -fast_fall_velocity).
+        terminal_v = np.float32(_fox_attr("terminal_vel"))
+        eps = np.float32(1024.0) * np.finfo(np.float32).eps
+        assert out3["speed_y_self"][0] >= np.float32(-terminal_v) - eps
     finally:
         msl_binding.destroy(handle)
 

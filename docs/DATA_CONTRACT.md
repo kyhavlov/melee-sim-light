@@ -30,10 +30,22 @@ Common constants:
 Characters (Fox/Falco):
 - `_iso/PlFx.dat`, `_iso/PlFc.dat` (source)
 - `data/characters/fox.json`, `data/characters/falco.json` (movement/ecb/laser/reflector attrs; decomp-first)
+  - `ecb_joints`: 6 `s16` indices into `fp->parts[]` (as stored in `ftData_x44_t`).
+    Decomp: `ft_80081B38` calls `mpColl_SetECBSource_JObj(..., bones[temp_r29->unk*].joint, ...)`.
 - `data/hurtcaps/fox.json`, `data/hurtcaps/falco.json` (hurt capsule init tables; decomp-first)
 - `data/moves/fox.json`, `data/moves/falco.json` (subaction timelines for key motions + specials; decomp-first)
 - `data/anims/fox.bin`, `data/anims/falco.bin` (per-msid bone matrices + TransN; decomp-first)
 - `data/anims/fox.blend.bin`, `data/anims/falco.blend.bin` (blend/dynamics bytes; decomp-first)
+- `data/ecb/fox_bottom.bin`, `data/ecb/falco_bottom.bin` (per-msid per-frame ECB bottom Y; decomp-shaped)
+  - Source: `data/anims/<char>.bin` (SSANIM01 v3 matrices) + `data/characters/<char>.json` `ecb_joints`.
+  - Per msid + integer frame `f`, we compute:
+    - `min_joint_y[f] = min( joint_y(part) for part in ecb_joints )` using the translation `ty` from
+      the fighter-local world matrices.
+    - `ecb_bottom_rel_y[f] = min_joint_y[f]`.
+  - Coordinate convention:
+    - `ecb_bottom_rel_y` is in the same **fighter-local** coordinate system as `data/anims/<char>.bin`
+      matrices (TransN translation removed).
+    - To get world-space ECB bottom Y, add it to the fighter's world `pos_y` (Slippi post-frame position).
 
 Notes:
 - `animation_index` in Slippi post-frames includes `0xFFFFFFFF` as a sentinel; treat that as “no animation”.

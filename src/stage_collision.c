@@ -8,6 +8,7 @@
 #include <string.h>
 
 #include "alloc.h"
+#include "ecb_table.h"
 
 typedef struct {
   float x0;
@@ -516,6 +517,17 @@ void stage_collision_apply(MslBatch* batch) {
         continue;
       }
 
+      // Grounding uses ECB bottom (decomp-shaped): compare/snap based on the per-frame minimum Y of
+      // the 6 ECB source joints (mpColl_LoadECB_JObj expands the ECB to contain those joints).
+      //
+      // Source of truth: `data/ecb/<char>_bottom.bin` (derived from SSANIM01 v3 matrices and
+      // `data/characters/<char>.json` ecb_joints).
+      const float ecb_off = msl_ecb_bottom_rel_y(batch->state.char_id[idx],
+                                                batch->state.animation_index[idx],
+                                                (int)batch->state.action_frame[idx]);
+      const float y_bot = y + ecb_off;
+      const float y_prev_bot = y_prev + ecb_off;
+
       uint8_t found = 0;
       float best_y_at_x = -FLT_MAX;
       uint16_t best_segment_i = 0;
@@ -531,12 +543,22 @@ void stage_collision_apply(MslBatch* batch) {
         // Only ground if we are at/below the segment surface (with epsilon), and we crossed it this
         // frame (based on pre/post integration positions). This prevents snapping up from far below.
         if (dy < 0.0f) {
-          if (!(y <= (y_at_x + ground_epsilon) && y_prev >= (y_at_x - ground_epsilon))) {
+          if (!(y_bot <= (y_at_x + ground_epsilon) && y_prev_bot >= (y_at_x - ground_epsilon))) {
             continue;
           }
         } else {  // dy == 0
-          if (!(y <= (y_at_x + ground_epsilon) && y >= (y_at_x - ground_epsilon))) {
-            continue;
+          // If we were grounded entering the frame, allow snapping up from penetration when the
+          // action/pose (and thus ECB offset) changes without any vertical root motion. This keeps
+          // grounded actions stable without inferring a prior `ecb_off` state.
+          if (batch->state.prev_on_ground[idx]) {
+            // TEMP (teacher-forcing compatibility): No additional y check when dy==0 and we were
+            // grounded entering the frame. This avoids spurious de-grounding when ECB bottom
+            // shifts above/below the surface due to pose, without adding a new "prev_ecb_off"
+            // state to the seed schema.
+          } else {
+            if (!(y_bot <= (y_at_x + ground_epsilon) && y_bot >= (y_at_x - ground_epsilon))) {
+              continue;
+            }
           }
         }
 
@@ -549,9 +571,26 @@ void stage_collision_apply(MslBatch* batch) {
       }
 
       if (found) {
-        batch->state.pos_y[idx] = best_y_at_x;
+        // Snap the fighter root so ECB bottom rests on the segment surface.
+        //
+        // For dy==0 when we were grounded entering the frame, avoid snapping *down* from above the
+        // surface (pose can lift ECB bottom slightly while still grounded). Still snap up to
+        // resolve penetration deterministically.
+        const float snap_y = best_y_at_x - ecb_off;
+        if (dy == 0.0f && batch->state.prev_on_ground[idx]) {
+          if (y_bot <= (best_y_at_x + ground_epsilon)) {
+            batch->state.pos_y[idx] = snap_y;
+          }
+        } else {
+          batch->state.pos_y[idx] = snap_y;
+        }
         batch->state.on_ground[idx] = 1;
-        batch->state.speed_y_self[idx] = 0.0f;
+        // Preserve pre-collision vertical velocity on the *landing* frame (air -> ground) to match
+        // Slippi post-frames: on_ground can become true while `velocities.self_y` remains negative
+        // for exactly one frame, then resets to 0 on the next grounded frame.
+        if (batch->state.prev_on_ground[idx]) {
+          batch->state.speed_y_self[idx] = 0.0f;
+        }
         batch->state.ground_id[idx] = best_segment_i;
       } else {
         batch->state.on_ground[idx] = 0;

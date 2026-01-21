@@ -182,7 +182,9 @@ def _extract_ftco_dattrs(pl_dat: Path, *, ftdata_symbol: str, extract_fox_blaste
         "ledge_snap_x": float(_f32_be(buf, x44_abs + 0x10)),
         "ledge_snap_y": float(_f32_be(buf, x44_abs + 0x14)),
         "ledge_snap_height": float(_f32_be(buf, x44_abs + 0x18)),
-        # ECB (environment collision box) joints: ftData_x44_t. These are indices into fp->parts[].
+        # ECB (environment collision box) joints: ftData_x44_t.
+        #
+        # These are indices into `fp->parts[]` (the "bones" array in decomp).
         # Decomp: ft_80081B38 -> mpColl_SetECBSource_JObj(..., bones[temp_r29->unk*].joint, ..., temp_r29->unkC * scale_y)
         "ecb_joints": [
             int(_s16_be(buf, x44_abs + 0x00)),
@@ -230,6 +232,11 @@ def _extract_ftco_dattrs(pl_dat: Path, *, ftdata_symbol: str, extract_fox_blaste
 
 def _stable_update(existing: dict, extracted: dict) -> dict:
     out: dict = {}
+    # Deprecated keys from previous extractor iterations; drop them on rewrite so downstream
+    # consumers don't accidentally treat them as part of the contract.
+    drop_keys = {
+        "ecb_bone_indices",
+    }
     ordered_keys = [
         "walk_init_vel",
         "walk_accel",
@@ -309,6 +316,8 @@ def _stable_update(existing: dict, extracted: dict) -> dict:
         elif k in existing:
             out[k] = existing[k]
     for k, v in existing.items():
+        if k in drop_keys:
+            continue
         if k not in out:
             out[k] = v
     return out
