@@ -15,3 +15,12 @@ int move_tables_init(void);
 // refs/melee/src/melee/ft/chara/ftCommon/ftCo_LandingAir.c
 uint8_t move_tables_attackair_cmd0_active(uint8_t char_id, uint16_t attackair_action_id,
                                           int16_t action_frame);
+
+// Returns whether AttackAir* can be interrupted (IASA) at the given action_frame.
+//
+// Decomp: AttackAir IASA is gated by fp->allow_interrupt (DO_IASA macro).
+// refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c
+//
+// Source of truth: data/moves/{fox,falco}.json moves["ftCo_SM_AttackAir*"]["events"] allow_interrupt.
+uint8_t move_tables_attackair_allow_interrupt(uint8_t char_id, uint16_t attackair_action_id,
+                                              int16_t action_frame);

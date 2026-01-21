@@ -2,6 +2,7 @@
 
 #include <ctype.h>
 #include <errno.h>
+#include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -14,11 +15,11 @@
 // - Falco = 22
 enum { MSL_CHAR_FOX = 1, MSL_CHAR_FALCO = 22 };
 
-typedef struct MslCmdVar0Window {
+typedef struct MslFrameWindow {
   int16_t start_af;  // inclusive (0-based action_frame)
   int16_t end_af;    // exclusive (0-based action_frame)
   uint8_t loaded;
-} MslCmdVar0Window;
+} MslFrameWindow;
 
 enum { MSL_ATTACKAIR_KIND_COUNT = 5 };
 enum {
@@ -29,7 +30,8 @@ enum {
   MSL_ATTACKAIR_KIND_LW = 4,
 };
 
-static MslCmdVar0Window g_cmd0_by_char_attackair[256][MSL_ATTACKAIR_KIND_COUNT];
+static MslFrameWindow g_cmd0_by_char_attackair[256][MSL_ATTACKAIR_KIND_COUNT];
+static MslFrameWindow g_allow_interrupt_by_char_attackair[256][MSL_ATTACKAIR_KIND_COUNT];
 static int g_loaded = 0;
 
 static const char* json_skip_ws(const char* s) {
@@ -181,7 +183,7 @@ static int json_get_str_eq_in_range(const char* start, const char* end, const ch
 }
 
 static int parse_attackair_cmd0_window(const char* buf, const char* buf_end, const char* move_key,
-                                       MslCmdVar0Window* out) {
+                                       MslFrameWindow* out) {
   if (buf == NULL || buf_end == NULL || move_key == NULL || out == NULL) {
     return -1;
   }
@@ -268,6 +270,88 @@ static int parse_attackair_cmd0_window(const char* buf, const char* buf_end, con
   return 0;
 }
 
+static int parse_attackair_allow_interrupt_window(const char* buf, const char* buf_end,
+                                                  const char* move_key, MslFrameWindow* out) {
+  if (buf == NULL || buf_end == NULL || move_key == NULL || out == NULL) {
+    return -1;
+  }
+
+  char pat[128];
+  const int pn = snprintf(pat, sizeof(pat), "\"%s\"", move_key);
+  if (pn <= 0 || (size_t)pn >= sizeof(pat)) {
+    return -1;
+  }
+
+  const char* key_pos = strstr_range(buf, buf_end, pat);
+  if (key_pos == NULL) {
+    return -1;
+  }
+  const char* obj_start = (const char*)memchr(key_pos, '{', (size_t)(buf_end - key_pos));
+  if (obj_start == NULL) {
+    return -1;
+  }
+  const char* obj_end = json_find_matching_delim(obj_start, buf_end, '{', '}');
+  if (obj_end == NULL) {
+    return -1;
+  }
+
+  const char* events_key = strstr_range(obj_start, obj_end, "\"events\"");
+  if (events_key == NULL) {
+    return -1;
+  }
+  const char* arr_start = (const char*)memchr(events_key, '[', (size_t)(obj_end - events_key));
+  if (arr_start == NULL) {
+    return -1;
+  }
+  const char* arr_end = json_find_matching_delim(arr_start, obj_end, '[', ']');
+  if (arr_end == NULL) {
+    return -1;
+  }
+
+  int on_frame = -1;
+
+  // Iterate event objects in the events array.
+  const char* p = arr_start;
+  while (p && p < arr_end) {
+    const char* ev_start = (const char*)memchr(p, '{', (size_t)(arr_end - p));
+    if (ev_start == NULL) {
+      break;
+    }
+    const char* ev_end = json_find_matching_delim(ev_start, arr_end, '{', '}');
+    if (ev_end == NULL) {
+      break;
+    }
+
+    // `allow_interrupt` events are extracted from command scripts and correspond to
+    // `fp->allow_interrupt = true` in the runtime.
+    // Source: data/moves/{fox,falco}.json moves["ftCo_SM_AttackAir*"]["events"].
+    if (json_get_str_eq_in_range(ev_start, ev_end, "kind", "allow_interrupt")) {
+      int frame = 0;
+      if (json_get_i32_in_range(ev_start, ev_end, "frame", &frame) == 0) {
+        on_frame = frame;
+        break;
+      }
+    }
+
+    p = ev_end + 1;
+  }
+
+  if (on_frame < 0) {
+    return -1;
+  }
+
+  // Treat allow_interrupt as enabled for action_frame in [on, +inf).
+  //
+  // Decomp:
+  // - AttackAir enter clears fp->allow_interrupt to false.
+  // - DO_IASA gates on fp->allow_interrupt for all aerials (we only model a subset).
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c
+  out->start_af = (int16_t)on_frame;
+  out->end_af = (int16_t)INT16_MAX;
+  out->loaded = 1;
+  return 0;
+}
+
 static int load_one(const char* data_dir, const char* rel_path, uint8_t char_id) {
   if (data_dir == NULL || rel_path == NULL) {
     return -1;
@@ -312,40 +396,65 @@ static int load_one(const char* data_dir, const char* rel_path, uint8_t char_id)
 
   const char* buf_end = buf + (size_t)sz;
 
-  MslCmdVar0Window win = {0};
+  MslFrameWindow win = {0};
   if (parse_attackair_cmd0_window(buf, buf_end, "ftCo_SM_AttackAirN", &win) != 0) {
     alloc_free(buf);
     return -1;
   }
   g_cmd0_by_char_attackair[char_id][MSL_ATTACKAIR_KIND_N] = win;
 
-  win = (MslCmdVar0Window){0};
+  win = (MslFrameWindow){0};
   if (parse_attackair_cmd0_window(buf, buf_end, "ftCo_SM_AttackAirF", &win) != 0) {
     alloc_free(buf);
     return -1;
   }
   g_cmd0_by_char_attackair[char_id][MSL_ATTACKAIR_KIND_F] = win;
 
-  win = (MslCmdVar0Window){0};
+  win = (MslFrameWindow){0};
   if (parse_attackair_cmd0_window(buf, buf_end, "ftCo_SM_AttackAirB", &win) != 0) {
     alloc_free(buf);
     return -1;
   }
   g_cmd0_by_char_attackair[char_id][MSL_ATTACKAIR_KIND_B] = win;
 
-  win = (MslCmdVar0Window){0};
+  win = (MslFrameWindow){0};
   if (parse_attackair_cmd0_window(buf, buf_end, "ftCo_SM_AttackAirHi", &win) != 0) {
     alloc_free(buf);
     return -1;
   }
   g_cmd0_by_char_attackair[char_id][MSL_ATTACKAIR_KIND_HI] = win;
 
-  win = (MslCmdVar0Window){0};
+  win = (MslFrameWindow){0};
   if (parse_attackair_cmd0_window(buf, buf_end, "ftCo_SM_AttackAirLw", &win) != 0) {
     alloc_free(buf);
     return -1;
   }
   g_cmd0_by_char_attackair[char_id][MSL_ATTACKAIR_KIND_LW] = win;
+
+  // `allow_interrupt` windows (IASA gating) for AttackAir*.
+  //
+  // Source: data/moves/{fox,falco}.json moves["ftCo_SM_AttackAir*"]["events"] allow_interrupt events.
+  // Decomp: refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c (DO_IASA).
+  win = (MslFrameWindow){0};
+  if (parse_attackair_allow_interrupt_window(buf, buf_end, "ftCo_SM_AttackAirN", &win) == 0) {
+    g_allow_interrupt_by_char_attackair[char_id][MSL_ATTACKAIR_KIND_N] = win;
+  }
+  win = (MslFrameWindow){0};
+  if (parse_attackair_allow_interrupt_window(buf, buf_end, "ftCo_SM_AttackAirF", &win) == 0) {
+    g_allow_interrupt_by_char_attackair[char_id][MSL_ATTACKAIR_KIND_F] = win;
+  }
+  win = (MslFrameWindow){0};
+  if (parse_attackair_allow_interrupt_window(buf, buf_end, "ftCo_SM_AttackAirB", &win) == 0) {
+    g_allow_interrupt_by_char_attackair[char_id][MSL_ATTACKAIR_KIND_B] = win;
+  }
+  win = (MslFrameWindow){0};
+  if (parse_attackair_allow_interrupt_window(buf, buf_end, "ftCo_SM_AttackAirHi", &win) == 0) {
+    g_allow_interrupt_by_char_attackair[char_id][MSL_ATTACKAIR_KIND_HI] = win;
+  }
+  win = (MslFrameWindow){0};
+  if (parse_attackair_allow_interrupt_window(buf, buf_end, "ftCo_SM_AttackAirLw", &win) == 0) {
+    g_allow_interrupt_by_char_attackair[char_id][MSL_ATTACKAIR_KIND_LW] = win;
+  }
 
   alloc_free(buf);
   return 0;
@@ -398,7 +507,7 @@ uint8_t move_tables_attackair_cmd0_active(uint8_t char_id, uint16_t attackair_ac
     return 0;
   }
 
-  const MslCmdVar0Window win = g_cmd0_by_char_attackair[char_id][(size_t)kind];
+  const MslFrameWindow win = g_cmd0_by_char_attackair[char_id][(size_t)kind];
   if (!win.loaded) {
     // Conservative fallback: treat as auto-cancel (no landing lag).
     return 0;
@@ -407,5 +516,23 @@ uint8_t move_tables_attackair_cmd0_active(uint8_t char_id, uint16_t attackair_ac
   // Decomp: ftCo_LandingAir_EnterWithLag uses fp->cmd_vars[0] to pick between LandingAir* (lag)
   // and Landing_Enter_Basic (auto-cancel).
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_LandingAir.c
+  return (action_frame >= win.start_af && action_frame < win.end_af) ? 1 : 0;
+}
+
+uint8_t move_tables_attackair_allow_interrupt(uint8_t char_id, uint16_t attackair_action_id,
+                                              int16_t action_frame) {
+  const int kind = attackair_kind_from_action(attackair_action_id);
+  if (kind < 0) {
+    return 0;
+  }
+
+  const MslFrameWindow win = g_allow_interrupt_by_char_attackair[char_id][(size_t)kind];
+  if (!win.loaded) {
+    // Conservative fallback: treat as never-interruptible.
+    return 0;
+  }
+
+  // Decomp: DO_IASA gates on fp->allow_interrupt (set by the move script).
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c
   return (action_frame >= win.start_af && action_frame < win.end_af) ? 1 : 0;
 }
