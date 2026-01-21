@@ -1219,6 +1219,42 @@ static PyObject* msl_debug_combat_contacts_filtered_py(PyObject* self, PyObject*
   return Py_BuildValue("(Oi)", arr, (int)count);
 }
 
+static PyObject* msl_debug_combat_select_body_hits_py(PyObject* self, PyObject* args) {
+  (void)self;
+  PyObject* handle_obj = NULL;
+  int batch_index = 0;
+  int max_contacts = 256;
+  if (!PyArg_ParseTuple(args, "Oi|i", &handle_obj, &batch_index, &max_contacts)) {
+    return NULL;
+  }
+  PyMslHandle* h = unpack_handle(handle_obj);
+  if (h == NULL) {
+    return NULL;
+  }
+  if (max_contacts < 0 || max_contacts > 0xFFFF) {
+    PyErr_SetString(PyExc_ValueError, "max_contacts out of range");
+    return NULL;
+  }
+
+  npy_intp dims[2] = {(npy_intp)max_contacts, (npy_intp)sizeof(MslDebugCombatContact)};
+  PyArrayObject* arr = (PyArrayObject*)PyArray_SimpleNew(2, dims, NPY_UINT8);
+  if (arr == NULL) {
+    return NULL;
+  }
+
+  uint16_t count = 0;
+  MslDebugCombatContact* out = (MslDebugCombatContact*)PyArray_DATA(arr);
+  const int err = msl_batch_debug_combat_select_body_hits(h->batch, batch_index, out,
+                                                          (uint16_t)max_contacts, &count);
+  if (err != 0) {
+    Py_DECREF(arr);
+    PyErr_Format(PyExc_ValueError, "msl_batch_debug_combat_select_body_hits failed: %d", err);
+    return NULL;
+  }
+
+  return Py_BuildValue("(Oi)", arr, (int)count);
+}
+
 static PyObject* msl_debug_combat_contacts_classified_py(PyObject* self, PyObject* args) {
   (void)self;
   PyObject* handle_obj = NULL;
@@ -1450,6 +1486,32 @@ static PyObject* msl_debug_combat_resolve_py(PyObject* self, PyObject* args) {
   const int err = msl_batch_debug_combat_resolve(h->batch);
   if (err != 0) {
     PyErr_Format(PyExc_RuntimeError, "msl_batch_debug_combat_resolve failed: %d", err);
+    return NULL;
+  }
+  Py_RETURN_NONE;
+}
+
+static PyObject* msl_debug_set_hitlag_py(PyObject* self, PyObject* args) {
+  (void)self;
+  PyObject* handle_obj = NULL;
+  int batch_index = 0;
+  int player_index = 0;
+  unsigned int hitlag_frames = 0;
+  if (!PyArg_ParseTuple(args, "OiiI", &handle_obj, &batch_index, &player_index, &hitlag_frames)) {
+    return NULL;
+  }
+  PyMslHandle* h = unpack_handle(handle_obj);
+  if (h == NULL) {
+    return NULL;
+  }
+  if (hitlag_frames > 0xFFFFu) {
+    PyErr_SetString(PyExc_ValueError, "hitlag_frames out of range");
+    return NULL;
+  }
+  const int err =
+      msl_batch_debug_set_hitlag(h->batch, batch_index, player_index, (uint16_t)hitlag_frames);
+  if (err != 0) {
+    PyErr_Format(PyExc_ValueError, "msl_batch_debug_set_hitlag failed: %d", err);
     return NULL;
   }
   Py_RETURN_NONE;
@@ -1921,6 +1983,9 @@ static PyMethodDef methods[] = {
     {"debug_combat_contacts_filtered", msl_debug_combat_contacts_filtered_py, METH_VARARGS,
      "debug_combat_contacts_filtered(handle, batch_index, max_contacts=256) -> (bytes[max, "
      "sizeof(MslDebugCombatContact)], count)"},
+    {"debug_combat_select_body_hits", msl_debug_combat_select_body_hits_py, METH_VARARGS,
+     "debug_combat_select_body_hits(handle, batch_index, max_contacts=256) -> (bytes[max, "
+     "sizeof(MslDebugCombatContact)], count)"},
     {"debug_combat_contacts_classified", msl_debug_combat_contacts_classified_py, METH_VARARGS,
      "debug_combat_contacts_classified(handle, batch_index, max_contacts=256) -> (bytes[max, "
      "sizeof(MslDebugCombatContactClassified)], count)"},
@@ -1944,6 +2009,8 @@ static PyMethodDef methods[] = {
      "ax,ay,az,bx,by,bz,radius)"},
     {"debug_combat_resolve", msl_debug_combat_resolve_py, METH_VARARGS,
      "debug_combat_resolve(handle) -> run combat_resolve() only"},
+    {"debug_set_hitlag", msl_debug_set_hitlag_py, METH_VARARGS,
+     "debug_set_hitlag(handle, batch_index, player_index, hitlag_frames_u16)"},
     {"debug_point_segment_dist2", msl_debug_point_segment_dist2_py, METH_VARARGS,
      "debug_point_segment_dist2(px,py,pz, ax,ay,az, bx,by,bz) -> (dist2, t)"},
     {"anim_bake_ssanim01", msl_anim_bake_ssanim01_py, METH_VARARGS,

@@ -143,6 +143,24 @@ typedef struct MslStateSoA {
   uint8_t* last_hit_by;
   uint8_t* state_flags;  // [batch * players * 5]
 
+  // Combat rehit suppression latch (Pass 1).
+  //
+  // Decomp shape: Melee tracks a per-hitbox hitlist / rehit latch to prevent repeated hits while a
+  // hitbox remains active, clearing on ClearHitboxes / hitbox changes.
+  //
+  // This simplified latch is stored per (attacker, defender) pair and is consumed by
+  // combat_resolve() to suppress "hit every frame" artifacts in rollouts.
+  //
+  // Layout: [batch * MSL_MAX_PLAYERS * MSL_MAX_PLAYERS]
+  // - active: 0/1
+  // - hitbox_id: 0..MSL_MAX_HITBOXES-1, or 0xFF for "unknown / suppress any hitbox"
+  // - attacker_msid: truncated from state.animation_index (see debug contact dumps)
+  // - defender_instance_id: state.instance_id for the defender when latched
+  uint8_t* combat_rehit_active;
+  uint8_t* combat_rehit_hitbox_id;
+  uint16_t* combat_rehit_attacker_msid;
+  uint16_t* combat_rehit_defender_instance_id;
+
   // Inputs (processed, per-frame) written by input_apply.
   uint16_t* input_buttons;           // [batch * players]
   uint16_t* prev_input_buttons;      // [batch * players]

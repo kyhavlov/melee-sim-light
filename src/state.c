@@ -21,6 +21,7 @@ int state_alloc(MslStateSoA* state, int batch_size) {
   const size_t bp = b * (size_t)MSL_MAX_PLAYERS;
   const size_t bi = b * (size_t)MSL_MAX_ITEMS;
   const size_t bp4 = bp * 4u;
+  const size_t bpp = bp * (size_t)MSL_MAX_PLAYERS;
   const size_t bpc = bp * (size_t)MSL_MAX_HURTCAPS;
   const size_t bph = bp * (size_t)MSL_MAX_HITBOXES;
 
@@ -135,6 +136,10 @@ int state_alloc(MslStateSoA* state, int batch_size) {
   state->combo_count = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->last_hit_by = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->state_flags = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp * MSL_STATE_FLAGS_BYTES);
+  state->combat_rehit_active = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bpp);
+  state->combat_rehit_hitbox_id = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bpp);
+  state->combat_rehit_attacker_msid = (uint16_t*)alloc_aligned_64(sizeof(uint16_t) * bpp);
+  state->combat_rehit_defender_instance_id = (uint16_t*)alloc_aligned_64(sizeof(uint16_t) * bpp);
 
   state->input_buttons = (uint16_t*)alloc_aligned_64(sizeof(uint16_t) * bp);
   state->prev_input_buttons = (uint16_t*)alloc_aligned_64(sizeof(uint16_t) * bp);
@@ -197,6 +202,8 @@ int state_alloc(MslStateSoA* state, int batch_size) {
       !state->shield_z || !state->shield_radius ||
       !state->ground_id || !state->animation_index || !state->instance_hit_by || !state->instance_id ||
       !state->last_attack_landed || !state->combo_count || !state->last_hit_by || !state->state_flags ||
+      !state->combat_rehit_active || !state->combat_rehit_hitbox_id || !state->combat_rehit_attacker_msid ||
+      !state->combat_rehit_defender_instance_id ||
       !state->input_buttons || !state->prev_input_buttons ||
       !state->input_buttons_pressed || !state->input_buttons_released || !state->input_main_x ||
       !state->input_main_y || !state->prev_input_main_x || !state->prev_input_main_y ||
@@ -327,6 +334,10 @@ void state_free(MslStateSoA* state) {
   alloc_free(state->combo_count);
   alloc_free(state->last_hit_by);
   alloc_free(state->state_flags);
+  alloc_free(state->combat_rehit_active);
+  alloc_free(state->combat_rehit_hitbox_id);
+  alloc_free(state->combat_rehit_attacker_msid);
+  alloc_free(state->combat_rehit_defender_instance_id);
 
   alloc_free(state->input_buttons);
   alloc_free(state->prev_input_buttons);

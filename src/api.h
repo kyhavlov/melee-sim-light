@@ -443,7 +443,15 @@ int msl_batch_debug_clear_hurtcaps_world(MslBatch* batch, int batch_index, int p
 int msl_batch_debug_set_hurtcap_world(MslBatch* batch, int batch_index, int player_index,
                                       int hurtcap_id, float ax, float ay, float az, float bx,
                                       float by, float bz, float radius);
+int msl_batch_debug_set_hitlag(MslBatch* batch, int batch_index, int player_index,
+                               uint16_t hitlag_frames);
 int msl_batch_debug_combat_resolve(MslBatch* batch);
+
+// Debug/testing only: run combat pass-1 BODY-hit selection (non-mutating) and return the chosen
+// contacts in deterministic order (at most 1 per attacker→defender per call).
+int msl_batch_debug_combat_select_body_hits(MslBatch* batch, int batch_index,
+                                            MslDebugCombatContact* out_contacts,
+                                            uint16_t max_contacts, uint16_t* out_count);
 
 // Debug/testing helper: pure geometry routine for unit tests.
 int msl_debug_point_segment_dist2(float px, float py, float pz, float ax, float ay, float az,

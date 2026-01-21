@@ -117,6 +117,18 @@ pipeline (including any required prior-frame state) and/or once we validate orde
   - DI (goal: close to real; only simplify once extremely close)
   - shield interaction (see next section)
 
+**Combat Mutations (Pass 1, current)**
+- **BODY-only**: world-space hitbox spheres vs world-space hurtcap capsules, with existing grounded/airborne gating.
+- **Shield-safe**: if a hitbox overlaps the defender shield bubble, that (attacker, defender, hitbox_id) is treated as SHIELD
+  and does not apply BODY mutations (no shield damage/stun yet).
+- **Deterministic selection**: at most 1 BODY hit per attacker→defender per frame; prefer lowest `hitbox_id`, then lowest
+  `hurtcap_id` (matches debug contact ordering).
+- **Rehit suppression (simplified)**: a per-(attacker, defender) latch suppresses repeated hits from the same active hitbox
+  until hitboxes clear or the attacker msid changes.
+  - Missing decomp pieces: per-hitbox hitlist entries, rehit-rate timers, hitbox refresh ordering vs collision, clanks/trades,
+    and full hurtbox eligibility (intangibility, thrown-fighter rules, etc.). These need to be added before enabling percent /
+    knockback / hitstun mutations.
+
 6) **Shield**
 - Shield health/decay/regeneration (approx ok).
 - Shieldstun + basic pushback.

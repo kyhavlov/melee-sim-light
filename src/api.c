@@ -268,6 +268,17 @@ int msl_batch_reseed_seed(MslBatch* batch, const uint8_t* seed_bytes, size_t see
       batch->state.item_misc2[ii] = item->misc2;
       batch->state.item_misc3[ii] = item->misc3;
     }
+
+    // Combat rehit suppression latch is not part of MslSeed yet; clear on reseed for determinism.
+    // (Pass 1 uses this state only for within-rollout rehit suppression.)
+    const size_t pair_base =
+        (size_t)bi * (size_t)MSL_MAX_PLAYERS * (size_t)MSL_MAX_PLAYERS;
+    const size_t pair_n = (size_t)MSL_MAX_PLAYERS * (size_t)MSL_MAX_PLAYERS;
+    memset(batch->state.combat_rehit_active + pair_base, 0, sizeof(uint8_t) * pair_n);
+    memset(batch->state.combat_rehit_hitbox_id + pair_base, 0, sizeof(uint8_t) * pair_n);
+    memset(batch->state.combat_rehit_attacker_msid + pair_base, 0, sizeof(uint16_t) * pair_n);
+    memset(batch->state.combat_rehit_defender_instance_id + pair_base, 0,
+           sizeof(uint16_t) * pair_n);
   }
 
   return 0;
@@ -1062,12 +1073,35 @@ int msl_batch_debug_set_hurtcap_world(MslBatch* batch, int batch_index, int play
   return 0;
 }
 
+int msl_batch_debug_set_hitlag(MslBatch* batch, int batch_index, int player_index,
+                               uint16_t hitlag_frames) {
+  if (batch == NULL) {
+    return EINVAL;
+  }
+  if (batch_index < 0 || batch_index >= batch->batch_size) {
+    return EINVAL;
+  }
+  if (player_index < 0 || player_index >= MSL_MAX_PLAYERS) {
+    return EINVAL;
+  }
+
+  const size_t idx = msl_idx_player(batch_index, player_index);
+  batch->state.hitlag[idx] = hitlag_frames;
+  return 0;
+}
+
 int msl_batch_debug_combat_resolve(MslBatch* batch) {
   if (batch == NULL) {
     return EINVAL;
   }
   combat_resolve(batch);
   return 0;
+}
+
+int msl_batch_debug_combat_select_body_hits(MslBatch* batch, int batch_index,
+                                            MslDebugCombatContact* out_contacts,
+                                            uint16_t max_contacts, uint16_t* out_count) {
+  return combat_debug_select_body_hits(batch, batch_index, out_contacts, max_contacts, out_count);
 }
 
 int msl_debug_point_segment_dist2(float px, float py, float pz, float ax, float ay, float az,
