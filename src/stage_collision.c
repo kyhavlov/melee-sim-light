@@ -582,7 +582,8 @@ void stage_collision_apply(MslBatch* batch) {
             //
             // Important for teacher-forcing/reseeds: do not require the seeded root Y to already be
             // perfectly aligned with ECB bottom; allow snapping up from penetration deterministically.
-            if (!((y_bot <= (y_at_x + ground_epsilon)) || (y_prev_bot >= (y_at_x - ground_epsilon)))) {
+            if (!((y_bot <= (y_at_x + ground_epsilon)) ||
+                  (y_prev_bot >= (y_at_x - ground_epsilon)))) {
               continue;
             }
           } else if (!(y_bot <= (y_at_x + ground_epsilon) && y_bot >= (y_at_x - ground_epsilon))) {
@@ -590,13 +591,13 @@ void stage_collision_apply(MslBatch* batch) {
           }
         }
 
-        const uint8_t foot_score =
-            (uint8_t)(stage_seg_x_contains(seg, ecb_left_world_x) ? 1 : 0) +
-            (uint8_t)(stage_seg_x_contains(seg, ecb_right_world_x) ? 1 : 0);
+        const uint8_t foot_score = (uint8_t)(stage_seg_x_contains(seg, ecb_left_world_x) ? 1 : 0) +
+                                   (uint8_t)(stage_seg_x_contains(seg, ecb_right_world_x) ? 1 : 0);
 
         if (!found || (y_at_x > best_y_at_x) ||
             (y_at_x == best_y_at_x && foot_score > best_foot_score) ||
-            (y_at_x == best_y_at_x && foot_score == best_foot_score && seg->segment_i < best_segment_i)) {
+            (y_at_x == best_y_at_x && foot_score == best_foot_score &&
+             seg->segment_i < best_segment_i)) {
           found = 1;
           best_y_at_x = y_at_x;
           best_segment_i = seg->segment_i;

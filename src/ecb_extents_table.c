@@ -309,4 +309,3 @@ float msl_ecb_bottom_rel_y_ext(uint8_t char_id, uint32_t animation_index, int ac
 float msl_ecb_top_rel_y(uint8_t char_id, uint32_t animation_index, int action_frame) {
   return msl_ecb_extents_rel(char_id, animation_index, action_frame).max_y;
 }
-

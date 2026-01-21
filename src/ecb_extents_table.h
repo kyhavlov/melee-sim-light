@@ -31,4 +31,3 @@ float msl_ecb_left_rel_x(uint8_t char_id, uint32_t animation_index, int action_f
 float msl_ecb_right_rel_x(uint8_t char_id, uint32_t animation_index, int action_frame);
 float msl_ecb_bottom_rel_y_ext(uint8_t char_id, uint32_t animation_index, int action_frame);
 float msl_ecb_top_rel_y(uint8_t char_id, uint32_t animation_index, int action_frame);
-

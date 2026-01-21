@@ -148,8 +148,9 @@ static inline uint8_t action_is_fall_like(uint16_t a) {
 }
 
 static inline uint8_t action_is_fall_special_like(uint16_t a) {
-  return (a == MSL_ACT_FALL_SPECIAL || a == MSL_ACT_FALL_SPECIAL_F || a == MSL_ACT_FALL_SPECIAL_B) ? 1
-                                                                                                  : 0;
+  return (a == MSL_ACT_FALL_SPECIAL || a == MSL_ACT_FALL_SPECIAL_F || a == MSL_ACT_FALL_SPECIAL_B)
+             ? 1
+             : 0;
 }
 
 static inline uint8_t action_is_ground_locomotion(uint16_t a) {
@@ -332,8 +333,9 @@ static inline void enter_landing_action_from_air(MslBatch* batch, const MslCharP
   batch->state.action_frame[idx] = 0;
 }
 
-static inline void apply_air_drift(const MslCharParams* ch, const MslCommonParams* c, uint16_t action_id,
-                                   uint8_t fallspecial_xc, float stick_x, float* io_air_x) {
+static inline void apply_air_drift(const MslCharParams* ch, const MslCommonParams* c,
+                                   uint16_t action_id, uint8_t fallspecial_xc, float stick_x,
+                                   float* io_air_x) {
   // refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007D28C + ApplyAirMovement
   if (io_air_x == NULL) {
     return;
@@ -413,8 +415,7 @@ void locomotion_update_pre(MslBatch* batch) {
       const uint8_t cid = batch->state.char_id[idx];
       if (a_for_af == (uint16_t)MSL_ACT_LANDING_FALL_SPECIAL) {
         const float lag = c->landing_fall_special_lag_frames;
-        const float end_frame =
-            msl_anim_end_frame(cid, (uint16_t)MSL_SM_LANDING_FALL_SPECIAL);
+        const float end_frame = msl_anim_end_frame(cid, (uint16_t)MSL_SM_LANDING_FALL_SPECIAL);
         if (lag > 0.0f && end_frame > 0.0f) {
           const float rate = (end_frame + 0.1f) / lag;
           // NOTE: This truncates fractional rates. Some fighters/actions have non-integer rates
@@ -543,8 +544,9 @@ void locomotion_update_pre(MslBatch* batch) {
         // Decomp call site example: refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c:43-66.
         uint8_t allow_guard_entry = 0;
         if (action_id == MSL_ACT_WAIT || action_is_walk(action_id) || action_id == MSL_ACT_TURN ||
-            action_id == MSL_ACT_TURN_RUN || action_id == MSL_ACT_DASH || action_id == MSL_ACT_RUN ||
-            action_id == MSL_ACT_RUN_BRAKE || action_id == MSL_ACT_RUN_DIRECT) {
+            action_id == MSL_ACT_TURN_RUN || action_id == MSL_ACT_DASH ||
+            action_id == MSL_ACT_RUN || action_id == MSL_ACT_RUN_BRAKE ||
+            action_id == MSL_ACT_RUN_DIRECT) {
           allow_guard_entry = 1;
         }
         // Landing IASA: allow guard only after the landing lag gate.
@@ -741,8 +743,7 @@ void locomotion_update_pre(MslBatch* batch) {
         // - refs/slippi-ssbm-asm/External/UCF 0.84/UCF/UCF Dashback.asm (reads u8 at +0x670; compares against 1/2)
         // - refs/ucf/src/dashback/dashback.cpp (player->input.stick_x_hold_time >= 2 returns)
         if (action_id == MSL_ACT_TURN) {
-          if (batch->state.turn_has_turned[idx] &&
-              (batch->state.action_frame[idx] == (int16_t)2) &&
+          if (batch->state.turn_has_turned[idx] && (batch->state.action_frame[idx] == (int16_t)2) &&
               ((stick_x * facing_dir) >= c->dash_flick_abs) && (tilt_timer_x < 2)) {
             // Enter Dash (arg1=0 in decomp Turn_IASA->Dash_Enter path).
             // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c::ftCo_Dash_Enter
@@ -978,7 +979,8 @@ void locomotion_update_pre(MslBatch* batch) {
             batch->state.animation_index[idx] = submotion_for_action(act);
             batch->state.action_frame[idx] = 0;
             batch->state.speed_air_x_self[idx] = stick_x * ch->air_jump_h_multiplier;
-            batch->state.speed_y_self[idx] = ch->jump_v_initial_velocity * ch->air_jump_v_multiplier;
+            batch->state.speed_y_self[idx] =
+                ch->jump_v_initial_velocity * ch->air_jump_v_multiplier;
             // Decomp: fp->x671_timer_lstick_tilt_y = 0xFE;
             // refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c:152-156
             batch->state.tilt_timer_y[idx] = 0xFEu;
@@ -1071,8 +1073,8 @@ void locomotion_update_post_collision(MslBatch* batch) {
         // Locomotion-only fallback: fall states land into Landing/LandingFallSpecial.
         if (land == 0 && action_is_air_locomotion(a)) {
           land = (uint16_t)MSL_ACT_LANDING;
-          if (a == MSL_ACT_FALL_SPECIAL || a == MSL_ACT_FALL_SPECIAL_F || a == MSL_ACT_FALL_SPECIAL_B ||
-              a == MSL_ACT_LANDING_FALL_SPECIAL) {
+          if (a == MSL_ACT_FALL_SPECIAL || a == MSL_ACT_FALL_SPECIAL_F ||
+              a == MSL_ACT_FALL_SPECIAL_B || a == MSL_ACT_LANDING_FALL_SPECIAL) {
             land = (uint16_t)MSL_ACT_LANDING_FALL_SPECIAL;
           }
         }

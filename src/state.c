@@ -133,25 +133,25 @@ int state_alloc(MslStateSoA* state, int batch_size) {
       !state->jumps_left || !state->stocks || !state->kneebend_jump_input ||
       !state->kneebend_is_short_hop || !state->tilt_timer_x || !state->tilt_timer_y ||
       !state->fall_fast || !state->fallspecial_xc || !state->turn_has_turned ||
-      !state->turn_frames_to_turn ||
-      !state->lr_press_timer || !state->x672_input_timer || !state->x673 || !state->x674 ||
-      !state->x675 || !state->x676_x || !state->x677_y || !state->x678 || !state->x679_x ||
-      !state->x67A_y || !state->x67B || !state->x67C || !state->x67D || !state->x67E ||
-      !state->x680 || !state->x681 || !state->x682 || !state->x683 || !state->x684 ||
-      !state->ucf_padbuf_index || !state->ucf_padbuf_sdrop_up_frames || !state->ucf_padbuf_stick_x ||
-      !state->ucf_padbuf_stick_y ||
-      !state->percent || !state->shield_hp || !state->hitlag || !state->hitstun || !state->l_cancel ||
-      !state->hurtbox_state || !state->ground_id || !state->animation_index ||
-      !state->instance_hit_by || !state->instance_id || !state->last_attack_landed ||
-      !state->combo_count || !state->last_hit_by || !state->state_flags || !state->input_buttons ||
-      !state->prev_input_buttons || !state->input_buttons_pressed ||
-      !state->input_buttons_released || !state->input_main_x || !state->input_main_y ||
-      !state->prev_input_main_x || !state->prev_input_main_y || !state->input_c_x ||
-      !state->input_c_y || !state->input_l || !state->input_r || !state->item_exists ||
-      !state->item_state || !state->item_type || !state->item_owner || !state->item_instance_id ||
-      !state->item_direction || !state->item_vel_x || !state->item_vel_y || !state->item_pos_x ||
-      !state->item_pos_y || !state->item_damage || !state->item_timer || !state->item_spawn_id ||
-      !state->item_misc0 || !state->item_misc1 || !state->item_misc2 || !state->item_misc3) {
+      !state->turn_frames_to_turn || !state->lr_press_timer || !state->x672_input_timer ||
+      !state->x673 || !state->x674 || !state->x675 || !state->x676_x || !state->x677_y ||
+      !state->x678 || !state->x679_x || !state->x67A_y || !state->x67B || !state->x67C ||
+      !state->x67D || !state->x67E || !state->x680 || !state->x681 || !state->x682 ||
+      !state->x683 || !state->x684 || !state->ucf_padbuf_index ||
+      !state->ucf_padbuf_sdrop_up_frames || !state->ucf_padbuf_stick_x ||
+      !state->ucf_padbuf_stick_y || !state->percent || !state->shield_hp || !state->hitlag ||
+      !state->hitstun || !state->l_cancel || !state->hurtbox_state || !state->ground_id ||
+      !state->animation_index || !state->instance_hit_by || !state->instance_id ||
+      !state->last_attack_landed || !state->combo_count || !state->last_hit_by ||
+      !state->state_flags || !state->input_buttons || !state->prev_input_buttons ||
+      !state->input_buttons_pressed || !state->input_buttons_released || !state->input_main_x ||
+      !state->input_main_y || !state->prev_input_main_x || !state->prev_input_main_y ||
+      !state->input_c_x || !state->input_c_y || !state->input_l || !state->input_r ||
+      !state->item_exists || !state->item_state || !state->item_type || !state->item_owner ||
+      !state->item_instance_id || !state->item_direction || !state->item_vel_x ||
+      !state->item_vel_y || !state->item_pos_x || !state->item_pos_y || !state->item_damage ||
+      !state->item_timer || !state->item_spawn_id || !state->item_misc0 || !state->item_misc1 ||
+      !state->item_misc2 || !state->item_misc3) {
     return -1;
   }
 

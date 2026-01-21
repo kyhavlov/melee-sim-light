@@ -16,4 +16,3 @@ static inline float apply_deadzone(float v, float dz) {
   }
   return v;
 }
-

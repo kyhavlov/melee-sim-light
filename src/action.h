@@ -35,7 +35,8 @@ void action_update(MslBatch* batch);
 void guard_update_shield_recharge(MslBatch* batch, const MslCommonParams* c, size_t idx);
 
 // Per-frame grounded guard update. If allow_entry is non-zero, guard entry checks are allowed.
-void guard_update_grounded(MslBatch* batch, const MslCommonParams* c, size_t idx, uint8_t allow_entry);
+void guard_update_grounded(MslBatch* batch, const MslCommonParams* c, size_t idx,
+                           uint8_t allow_entry);
 
 // ---------------------------
 // Shield defensive options
@@ -84,7 +85,8 @@ void escape_update_grounded(MslBatch* batch, const MslCommonParams* c, const Msl
 // Attempt to enter EscapeAir (airdodge). Returns 1 if entered.
 //
 // Contract: only call from eligible airborne locomotion states; this helper only checks L/R press.
-uint8_t escape_air_try_enter_from_air_locomotion(MslBatch* batch, const MslCommonParams* c, size_t idx);
+uint8_t escape_air_try_enter_from_air_locomotion(MslBatch* batch, const MslCommonParams* c,
+                                                 size_t idx);
 
 // Per-frame EscapeAir update: apply velocity decay and handle anim-end -> FallSpecial transition.
 void escape_air_update(MslBatch* batch, const MslCommonParams* c, size_t idx);

@@ -16,4 +16,3 @@ int ecb_table_init(void);
 // - If animation_index == 0xFFFFFFFF or missing entry: returns 0.0f.
 // - Clamps action_frame to [0, frame_count-1].
 float msl_ecb_bottom_rel_y(uint8_t char_id, uint32_t animation_index, int action_frame);
-

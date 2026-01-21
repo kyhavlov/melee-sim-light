@@ -169,14 +169,20 @@ int common_params_init(void) {
     return -1;
   }
 
-  if (json_get_f32(buf, "powershield_reflect_trigger_min", &g_params.powershield_reflect_trigger_min) != 0 ||
-      json_get_u8(buf, "powershield_reflect_window_frames", &g_params.powershield_reflect_window_frames) != 0 ||
+  if (json_get_f32(buf, "powershield_reflect_trigger_min",
+                   &g_params.powershield_reflect_trigger_min) != 0 ||
+      json_get_u8(buf, "powershield_reflect_window_frames",
+                  &g_params.powershield_reflect_window_frames) != 0 ||
       json_get_u8(buf, "powershield_reflect_frames", &g_params.powershield_reflect_frames) != 0 ||
-      json_get_u8(buf, "powershield_reflect_total_frames", &g_params.powershield_reflect_total_frames) != 0 ||
-      json_get_f32(buf, "spotdodge_stick_y_threshold", &g_params.spotdodge_stick_y_threshold) != 0 ||
+      json_get_u8(buf, "powershield_reflect_total_frames",
+                  &g_params.powershield_reflect_total_frames) != 0 ||
+      json_get_f32(buf, "spotdodge_stick_y_threshold", &g_params.spotdodge_stick_y_threshold) !=
+          0 ||
       json_get_f32(buf, "escape_stick_x_threshold", &g_params.escape_stick_x_threshold) != 0 ||
-      json_get_u8(buf, "spotdodge_flick_tilt_max_frames", &g_params.spotdodge_flick_tilt_max_frames) != 0 ||
-      json_get_u8(buf, "escape_flick_tilt_max_frames", &g_params.escape_flick_tilt_max_frames) != 0 ||
+      json_get_u8(buf, "spotdodge_flick_tilt_max_frames",
+                  &g_params.spotdodge_flick_tilt_max_frames) != 0 ||
+      json_get_u8(buf, "escape_flick_tilt_max_frames", &g_params.escape_flick_tilt_max_frames) !=
+          0 ||
       json_get_f32(buf, "start_shield_health", &g_params.start_shield_health) != 0 ||
       json_get_f32(buf, "shield_recharge_per_frame", &g_params.shield_recharge_per_frame) != 0 ||
       json_get_f32(buf, "shield_hold_drain_mul", &g_params.shield_hold_drain_mul) != 0 ||
@@ -184,13 +190,15 @@ int common_params_init(void) {
       json_get_f32(buf, "shield_hold_drain_max", &g_params.shield_hold_drain_max) != 0 ||
       json_get_u8(buf, "lcancel_window_frames", &g_params.lcancel_window_frames) != 0 ||
       json_get_f32(buf, "lcancel_lag_div", &g_params.lcancel_lag_div) != 0 ||
-      json_get_f32(buf, "landing_fall_special_lag_frames", &g_params.landing_fall_special_lag_frames) != 0 ||
+      json_get_f32(buf, "landing_fall_special_lag_frames",
+                   &g_params.landing_fall_special_lag_frames) != 0 ||
       json_get_f32(buf, "escapeair_deadzone_x", &g_params.escapeair_deadzone_x) != 0 ||
       json_get_f32(buf, "escapeair_deadzone_y", &g_params.escapeair_deadzone_y) != 0 ||
       json_get_u8(buf, "escapeair_timer_frames", &g_params.escapeair_timer_frames) != 0 ||
       json_get_f32(buf, "escapeair_force", &g_params.escapeair_force) != 0 ||
       json_get_f32(buf, "escapeair_decay", &g_params.escapeair_decay) != 0 ||
-      json_get_f32(buf, "fall_special_mobility_scalar", &g_params.fall_special_mobility_scalar) != 0) {
+      json_get_f32(buf, "fall_special_mobility_scalar", &g_params.fall_special_mobility_scalar) !=
+          0) {
     alloc_free(buf);
     return -1;
   }

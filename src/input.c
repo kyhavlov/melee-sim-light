@@ -215,12 +215,10 @@ int input_apply(MslBatch* batch, const uint8_t* prev_input_bytes, size_t prev_in
       const float prev_stick_y =
           apply_deadzone(stick_i8_to_unit(prev_main.y), com->lstick_deadzone_y);
 
-      const uint8_t tilt_timer_x_next =
-          tilt_timer_update(batch->state.tilt_timer_x[idx], stick_x, prev_stick_x,
-                            com->lstick_tilt_x_thresh);
-      const uint8_t tilt_timer_y_next =
-          tilt_timer_update(batch->state.tilt_timer_y[idx], stick_y, prev_stick_y,
-                            com->lstick_tilt_y_thresh);
+      const uint8_t tilt_timer_x_next = tilt_timer_update(batch->state.tilt_timer_x[idx], stick_x,
+                                                          prev_stick_x, com->lstick_tilt_x_thresh);
+      const uint8_t tilt_timer_y_next = tilt_timer_update(batch->state.tilt_timer_y[idx], stick_y,
+                                                          prev_stick_y, com->lstick_tilt_y_thresh);
 
       batch->state.tilt_timer_x[idx] = tilt_timer_x_next;
       batch->state.tilt_timer_y[idx] = tilt_timer_y_next;
@@ -290,13 +288,14 @@ int input_apply(MslBatch* batch, const uint8_t* prev_input_bytes, size_t prev_in
         LR = (uint16_t)MSL_BUTTON_L | (uint16_t)MSL_BUTTON_R,
       };
 
-      batch->state.lr_press_timer[idx] =
-          press_timer_u8_update(batch->state.lr_press_timer[idx], batch->state.input_buttons_pressed[idx], LR);
+      batch->state.lr_press_timer[idx] = press_timer_u8_update(
+          batch->state.lr_press_timer[idx], batch->state.input_buttons_pressed[idx], LR);
 
       const float trig = trigger_unit_from_input(cur_buttons, cur->p[p].l, cur->p[p].r);
       const float prev_trig = trigger_unit_from_input(prev_buttons, prev->p[p].l, prev->p[p].r);
-      batch->state.x672_input_timer[idx] = x672_trigger_timer_update(
-          batch->state.x672_input_timer[idx], trig, prev_trig, com->powershield_reflect_trigger_min);
+      batch->state.x672_input_timer[idx] =
+          x672_trigger_timer_update(batch->state.x672_input_timer[idx], trig, prev_trig,
+                                    com->powershield_reflect_trigger_min);
 
       // x676_x: increment (clamp to 0xFE) then reset on fresh directional entry.
       batch->state.x676_x[idx] = clamp_inc_u8_fe(batch->state.x676_x[idx]);

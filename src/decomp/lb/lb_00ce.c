@@ -60,4 +60,3 @@ int lb_8000D148(float point0_x, float point0_y, float point1_x, float point1_y, 
   }
   return 0;
 }
-

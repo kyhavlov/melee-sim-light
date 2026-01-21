@@ -6,40 +6,40 @@
 //
 // Source of truth: refs/melee/src/melee/ft/chara/ftCommon/forward.h `ftCommon_MotionState`.
 typedef enum MslActionId {
-  MSL_ACT_WAIT = 0x000E,                 // ftCo_MS_Wait
-  MSL_ACT_WALK_SLOW = 0x000F,            // ftCo_MS_WalkSlow
-  MSL_ACT_WALK_MIDDLE = 0x0010,          // ftCo_MS_WalkMiddle
-  MSL_ACT_WALK_FAST = 0x0011,            // ftCo_MS_WalkFast
-  MSL_ACT_TURN = 0x0012,                 // ftCo_MS_Turn
-  MSL_ACT_TURN_RUN = 0x0013,             // ftCo_MS_TurnRun
-  MSL_ACT_DASH = 0x0014,                 // ftCo_MS_Dash
-  MSL_ACT_RUN = 0x0015,                  // ftCo_MS_Run
-  MSL_ACT_RUN_DIRECT = 0x0016,           // ftCo_MS_RunDirect
-  MSL_ACT_RUN_BRAKE = 0x0017,            // ftCo_MS_RunBrake
-  MSL_ACT_KNEE_BEND = 0x0018,            // ftCo_MS_KneeBend
-  MSL_ACT_JUMP_F = 0x0019,               // ftCo_MS_JumpF
-  MSL_ACT_JUMP_B = 0x001A,               // ftCo_MS_JumpB
-  MSL_ACT_JUMP_AERIAL_F = 0x001B,        // ftCo_MS_JumpAerialF
-  MSL_ACT_JUMP_AERIAL_B = 0x001C,        // ftCo_MS_JumpAerialB
-  MSL_ACT_FALL = 0x001D,                 // ftCo_MS_Fall
-  MSL_ACT_FALL_F = 0x001E,               // ftCo_MS_FallF
-  MSL_ACT_FALL_B = 0x001F,               // ftCo_MS_FallB
-  MSL_ACT_FALL_AERIAL = 0x0020,          // ftCo_MS_FallAerial
-  MSL_ACT_FALL_AERIAL_F = 0x0021,        // ftCo_MS_FallAerialF
-  MSL_ACT_FALL_AERIAL_B = 0x0022,        // ftCo_MS_FallAerialB
-  MSL_ACT_FALL_SPECIAL = 0x0023,         // ftCo_MS_FallSpecial
-  MSL_ACT_FALL_SPECIAL_F = 0x0024,       // ftCo_MS_FallSpecialF
-  MSL_ACT_FALL_SPECIAL_B = 0x0025,       // ftCo_MS_FallSpecialB
-  MSL_ACT_DAMAGE_FALL = 0x0026,          // ftCo_MS_DamageFall
-  MSL_ACT_LANDING = 0x002A,              // ftCo_MS_Landing
-  MSL_ACT_LANDING_FALL_SPECIAL = 0x002B, // ftCo_MS_LandingFallSpecial
+  MSL_ACT_WAIT = 0x000E,                  // ftCo_MS_Wait
+  MSL_ACT_WALK_SLOW = 0x000F,             // ftCo_MS_WalkSlow
+  MSL_ACT_WALK_MIDDLE = 0x0010,           // ftCo_MS_WalkMiddle
+  MSL_ACT_WALK_FAST = 0x0011,             // ftCo_MS_WalkFast
+  MSL_ACT_TURN = 0x0012,                  // ftCo_MS_Turn
+  MSL_ACT_TURN_RUN = 0x0013,              // ftCo_MS_TurnRun
+  MSL_ACT_DASH = 0x0014,                  // ftCo_MS_Dash
+  MSL_ACT_RUN = 0x0015,                   // ftCo_MS_Run
+  MSL_ACT_RUN_DIRECT = 0x0016,            // ftCo_MS_RunDirect
+  MSL_ACT_RUN_BRAKE = 0x0017,             // ftCo_MS_RunBrake
+  MSL_ACT_KNEE_BEND = 0x0018,             // ftCo_MS_KneeBend
+  MSL_ACT_JUMP_F = 0x0019,                // ftCo_MS_JumpF
+  MSL_ACT_JUMP_B = 0x001A,                // ftCo_MS_JumpB
+  MSL_ACT_JUMP_AERIAL_F = 0x001B,         // ftCo_MS_JumpAerialF
+  MSL_ACT_JUMP_AERIAL_B = 0x001C,         // ftCo_MS_JumpAerialB
+  MSL_ACT_FALL = 0x001D,                  // ftCo_MS_Fall
+  MSL_ACT_FALL_F = 0x001E,                // ftCo_MS_FallF
+  MSL_ACT_FALL_B = 0x001F,                // ftCo_MS_FallB
+  MSL_ACT_FALL_AERIAL = 0x0020,           // ftCo_MS_FallAerial
+  MSL_ACT_FALL_AERIAL_F = 0x0021,         // ftCo_MS_FallAerialF
+  MSL_ACT_FALL_AERIAL_B = 0x0022,         // ftCo_MS_FallAerialB
+  MSL_ACT_FALL_SPECIAL = 0x0023,          // ftCo_MS_FallSpecial
+  MSL_ACT_FALL_SPECIAL_F = 0x0024,        // ftCo_MS_FallSpecialF
+  MSL_ACT_FALL_SPECIAL_B = 0x0025,        // ftCo_MS_FallSpecialB
+  MSL_ACT_DAMAGE_FALL = 0x0026,           // ftCo_MS_DamageFall
+  MSL_ACT_LANDING = 0x002A,               // ftCo_MS_Landing
+  MSL_ACT_LANDING_FALL_SPECIAL = 0x002B,  // ftCo_MS_LandingFallSpecial
 
   // Aerial attack landing lag states (ftCo_LandingAir_*).
-  MSL_ACT_LANDING_AIR_N = 0x0046,  // ftCo_MS_LandingAirN
-  MSL_ACT_LANDING_AIR_F = 0x0047,  // ftCo_MS_LandingAirF
-  MSL_ACT_LANDING_AIR_B = 0x0048,  // ftCo_MS_LandingAirB
-  MSL_ACT_LANDING_AIR_HI = 0x0049, // ftCo_MS_LandingAirHi
-  MSL_ACT_LANDING_AIR_LW = 0x004A, // ftCo_MS_LandingAirLw
+  MSL_ACT_LANDING_AIR_N = 0x0046,   // ftCo_MS_LandingAirN
+  MSL_ACT_LANDING_AIR_F = 0x0047,   // ftCo_MS_LandingAirF
+  MSL_ACT_LANDING_AIR_B = 0x0048,   // ftCo_MS_LandingAirB
+  MSL_ACT_LANDING_AIR_HI = 0x0049,  // ftCo_MS_LandingAirHi
+  MSL_ACT_LANDING_AIR_LW = 0x004A,  // ftCo_MS_LandingAirLw
 
   // Shield / Guard (subset).
   MSL_ACT_GUARD_ON = 0x00B2,       // ftCo_MS_GuardOn
@@ -59,12 +59,12 @@ typedef enum MslActionId {
 //
 // Source of truth: refs/melee/src/melee/ft/chara/ftCommon/forward.h `ftCommon_MotionState`.
 enum {
-  MSL_ACT_ATTACK_AIR_N = 0x0041,  // ftCo_MS_AttackAirN
-  MSL_ACT_ATTACK_AIR_F = 0x0042,  // ftCo_MS_AttackAirF
-  MSL_ACT_ATTACK_AIR_B = 0x0043,  // ftCo_MS_AttackAirB
-  MSL_ACT_ATTACK_AIR_HI = 0x0044, // ftCo_MS_AttackAirHi
-  MSL_ACT_ATTACK_AIR_LW = 0x0045, // ftCo_MS_AttackAirLw
-  MSL_ACT_ESCAPE_AIR = 0x00EC,    // ftCo_MS_EscapeAir
+  MSL_ACT_ATTACK_AIR_N = 0x0041,   // ftCo_MS_AttackAirN
+  MSL_ACT_ATTACK_AIR_F = 0x0042,   // ftCo_MS_AttackAirF
+  MSL_ACT_ATTACK_AIR_B = 0x0043,   // ftCo_MS_AttackAirB
+  MSL_ACT_ATTACK_AIR_HI = 0x0044,  // ftCo_MS_AttackAirHi
+  MSL_ACT_ATTACK_AIR_LW = 0x0045,  // ftCo_MS_AttackAirLw
+  MSL_ACT_ESCAPE_AIR = 0x00EC,     // ftCo_MS_EscapeAir
 };
 
 // GALE01 "submotion" ids (aka `anim_id` / `ftCo_Submotion`) for common locomotion.
@@ -98,20 +98,20 @@ typedef enum MslSubmotionId {
   MSL_SM_LANDING = 35,               // ftCo_SM_Landing
   MSL_SM_LANDING_FALL_SPECIAL = 36,  // ftCo_SM_LandingFallSpecial
 
-  MSL_SM_GUARD_ON = 37,   // ftCo_SM_GuardOn
-  MSL_SM_GUARD = 38,      // ftCo_SM_Guard
-  MSL_SM_GUARD_OFF = 39,  // ftCo_SM_GuardOff
-  MSL_SM_GUARD_DAMAGE = 40, // ftCo_SM_GuardDamage
-  MSL_SM_ESCAPE_N = 41,     // ftCo_SM_EscapeN
-  MSL_SM_ESCAPE_F = 42,     // ftCo_SM_EscapeF
-  MSL_SM_ESCAPE_B = 43,     // ftCo_SM_EscapeB
-  MSL_SM_ESCAPE_AIR = 44,   // ftCo_SM_EscapeAir
+  MSL_SM_GUARD_ON = 37,      // ftCo_SM_GuardOn
+  MSL_SM_GUARD = 38,         // ftCo_SM_Guard
+  MSL_SM_GUARD_OFF = 39,     // ftCo_SM_GuardOff
+  MSL_SM_GUARD_DAMAGE = 40,  // ftCo_SM_GuardDamage
+  MSL_SM_ESCAPE_N = 41,      // ftCo_SM_EscapeN
+  MSL_SM_ESCAPE_F = 42,      // ftCo_SM_EscapeF
+  MSL_SM_ESCAPE_B = 43,      // ftCo_SM_EscapeB
+  MSL_SM_ESCAPE_AIR = 44,    // ftCo_SM_EscapeAir
 
-  MSL_SM_LANDING_AIR_N = 73,  // ftCo_SM_LandingAirN
-  MSL_SM_LANDING_AIR_F = 74,  // ftCo_SM_LandingAirF
-  MSL_SM_LANDING_AIR_B = 75,  // ftCo_SM_LandingAirB
-  MSL_SM_LANDING_AIR_HI = 76, // ftCo_SM_LandingAirHi
-  MSL_SM_LANDING_AIR_LW = 77, // ftCo_SM_LandingAirLw
+  MSL_SM_LANDING_AIR_N = 73,   // ftCo_SM_LandingAirN
+  MSL_SM_LANDING_AIR_F = 74,   // ftCo_SM_LandingAirF
+  MSL_SM_LANDING_AIR_B = 75,   // ftCo_SM_LandingAirB
+  MSL_SM_LANDING_AIR_HI = 76,  // ftCo_SM_LandingAirHi
+  MSL_SM_LANDING_AIR_LW = 77,  // ftCo_SM_LandingAirLw
 } MslSubmotionId;
 
 static inline uint8_t msl_action_is_ground_locomotion(uint16_t action_id) {

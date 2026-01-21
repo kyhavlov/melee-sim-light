@@ -280,10 +280,10 @@ static PyObject* msl_debug_write_internals(PyObject* self, PyObject* args) {
 }
 
 static PyObject* msl_sizes(PyObject* self, PyObject* args) {
-  return Py_BuildValue(
-      "{s:i,s:i,s:i,s:i,s:i,s:i}", "seed", (int)sizeof(MslSeed), "input", (int)sizeof(MslInput),
-      "compare", (int)sizeof(MslCompare), "sample", (int)sizeof(MslSample), "processed_input",
-      (int)sizeof(MslProcessedInput), "internals", (int)sizeof(MslDebugInternals));
+  return Py_BuildValue("{s:i,s:i,s:i,s:i,s:i,s:i}", "seed", (int)sizeof(MslSeed), "input",
+                       (int)sizeof(MslInput), "compare", (int)sizeof(MslCompare), "sample",
+                       (int)sizeof(MslSample), "processed_input", (int)sizeof(MslProcessedInput),
+                       "internals", (int)sizeof(MslDebugInternals));
 }
 
 static PyObject* msl_alloc_reset(PyObject* self, PyObject* args) {

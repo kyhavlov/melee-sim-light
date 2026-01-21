@@ -109,8 +109,8 @@ typedef struct MslSeed {
 
   // Input-history / locomotion internals (seeded from replay history)
   // Decomp: refs/melee/src/melee/ft/chara/ftCommon/ftCo_KneeBend.c:16-28 and :44-56
-  uint8_t kneebend_jump_input[MSL_MAX_PLAYERS];   // fp->mv.co.kneebend.jump_input (ftCo_JumpInput)
-  uint8_t kneebend_is_short_hop[MSL_MAX_PLAYERS]; // fp->mv.co.kneebend.is_short_hop (bool)
+  uint8_t kneebend_jump_input[MSL_MAX_PLAYERS];    // fp->mv.co.kneebend.jump_input (ftCo_JumpInput)
+  uint8_t kneebend_is_short_hop[MSL_MAX_PLAYERS];  // fp->mv.co.kneebend.is_short_hop (bool)
   // Decomp: refs/melee/src/melee/ft/fighter.c:1908-2008 (x670/x671 updates each frame)
   uint8_t tilt_timer_x[MSL_MAX_PLAYERS];  // fp->x670_timer_lstick_tilt_x
   uint8_t tilt_timer_y[MSL_MAX_PLAYERS];  // fp->x671_timer_lstick_tilt_y
@@ -242,9 +242,9 @@ typedef struct MslSample {
 // Debug/validation helper: read a small set of internal locomotion/input-history fields.
 // This struct is packed for stable C<->Python inspection in tests.
 typedef struct MslDebugInternals {
-  uint8_t tilt_timer_x[MSL_MAX_PLAYERS];        // fp->x670_timer_lstick_tilt_x
-  uint8_t turn_frames_to_turn[MSL_MAX_PLAYERS]; // fp->mv.co.turn.frames_to_turn
-  uint8_t turn_has_turned[MSL_MAX_PLAYERS];     // fp->mv.co.turn.has_turned
+  uint8_t tilt_timer_x[MSL_MAX_PLAYERS];         // fp->x670_timer_lstick_tilt_x
+  uint8_t turn_frames_to_turn[MSL_MAX_PLAYERS];  // fp->mv.co.turn.frames_to_turn
+  uint8_t turn_has_turned[MSL_MAX_PLAYERS];      // fp->mv.co.turn.has_turned
 } MslDebugInternals;
 
 #pragma pack(pop)

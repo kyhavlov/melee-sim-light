@@ -29,7 +29,7 @@ typedef struct MslCommonParams {
   float run_stick_x_threshold;   // p_ftCommonData->x58
 
   // Dash flick threshold (refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c)
-  float dash_flick_abs;  // p_ftCommonData->x3C
+  float dash_flick_abs;                // p_ftCommonData->x3C
   uint8_t dash_flick_tilt_max_frames;  // p_ftCommonData->x40 (dash_flick_tilt_max_frames)
   uint8_t _pad_u8_0[3];
 
@@ -55,26 +55,26 @@ typedef struct MslCommonParams {
   float run_friction_mul;  // p_ftCommonData->run_friction_mul (0x60)
 
   // Powershield / GuardReflect (refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c and fighter.c)
-  float powershield_reflect_trigger_min;  // p_ftCommonData->x18
+  float powershield_reflect_trigger_min;      // p_ftCommonData->x18
   uint8_t powershield_reflect_window_frames;  // p_ftCommonData->x2A0
   uint8_t powershield_reflect_frames;         // p_ftCommonData->x2A4 (rounded)
   uint8_t powershield_reflect_total_frames;   // p_ftCommonData->x2B4 (rounded)
   uint8_t _pad_u8_2[1];
 
   // Shield defensive options (grounded) (refs/melee/src/melee/ft/chara/ftCommon/ftCo_Escape.c)
-  float spotdodge_stick_y_threshold;  // p_ftCommonData->x314
-  float escape_stick_x_threshold;     // p_ftCommonData->x31C
+  float spotdodge_stick_y_threshold;        // p_ftCommonData->x314
+  float escape_stick_x_threshold;           // p_ftCommonData->x31C
   uint8_t spotdodge_flick_tilt_max_frames;  // p_ftCommonData->x318
   uint8_t escape_flick_tilt_max_frames;     // p_ftCommonData->x320
   uint8_t _pad_u8_2b[2];
 
   // Shield / guard constants (ftCo_Guard.c and fighter.c).
   // Source of truth: `data/common/ft_common_data.json` extractor comments map these to ftCommonData.
-  float start_shield_health;         // p_ftCommonData->x260 (start_shield_health)
-  float shield_recharge_per_frame;   // p_ftCommonData->x27C (shield_recharge_per_frame)
-  float shield_hold_drain_mul;       // p_ftCommonData->x278 (shield_hold_drain_mul)
-  float shield_hold_drain_base;      // p_ftCommonData->x2EC (shield_hold_drain_base)
-  float shield_hold_drain_max;       // p_ftCommonData->x2F0 (shield_hold_drain_max)
+  float start_shield_health;        // p_ftCommonData->x260 (start_shield_health)
+  float shield_recharge_per_frame;  // p_ftCommonData->x27C (shield_recharge_per_frame)
+  float shield_hold_drain_mul;      // p_ftCommonData->x278 (shield_hold_drain_mul)
+  float shield_hold_drain_base;     // p_ftCommonData->x2EC (shield_hold_drain_base)
+  float shield_hold_drain_max;      // p_ftCommonData->x2F0 (shield_hold_drain_max)
 
   // L-cancel window / lag divisor (refs/melee/src/melee/ft/chara/ftCommon/ftCo_LandingAir.c)
   uint8_t lcancel_window_frames;  // p_ftCommonData->xE4
@@ -91,8 +91,8 @@ typedef struct MslCommonParams {
   // Air dodge (EscapeAir) constants.
   // Decomp: ftCo_80099A9C / ftCo_EscapeAir_Phys.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c
-  float escapeair_deadzone_x;  // p_ftCommonData->escapeair_deadzone.x (x32C)
-  float escapeair_deadzone_y;  // p_ftCommonData->escapeair_deadzone.y (x330)
+  float escapeair_deadzone_x;      // p_ftCommonData->escapeair_deadzone.x (x32C)
+  float escapeair_deadzone_y;      // p_ftCommonData->escapeair_deadzone.y (x330)
   uint8_t escapeair_timer_frames;  // p_ftCommonData->x334 (escapeair timer frames)
   uint8_t _pad_u8_4[3];
   float escapeair_force;  // p_ftCommonData->escapeair_force (x338)

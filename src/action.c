@@ -24,7 +24,8 @@ static inline void enter_fall_special(MslBatch* batch, size_t idx) {
   batch->state.fallspecial_xc[idx] = 1;
 }
 
-uint8_t escape_air_try_enter_from_air_locomotion(MslBatch* batch, const MslCommonParams* c, size_t idx) {
+uint8_t escape_air_try_enter_from_air_locomotion(MslBatch* batch, const MslCommonParams* c,
+                                                 size_t idx) {
   if (batch == NULL || c == NULL) {
     return 0;
   }
@@ -51,7 +52,8 @@ uint8_t escape_air_try_enter_from_air_locomotion(MslBatch* batch, const MslCommo
   const float stick_y = apply_deadzone(raw_y, c->lstick_deadzone_y);
   float vx = 0.0f;
   float vy = 0.0f;
-  if (!(msl_absf(stick_x) < c->escapeair_deadzone_x && msl_absf(stick_y) < c->escapeair_deadzone_y)) {
+  if (!(msl_absf(stick_x) < c->escapeair_deadzone_x &&
+        msl_absf(stick_y) < c->escapeair_deadzone_y)) {
     // Decomp angle helper: ftCommon_8007D9D4 is atan2f(y, x).
     // refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007D9D4
     const float ang = atan2f(stick_y, stick_x);
@@ -81,7 +83,8 @@ void escape_air_update(MslBatch* batch, const MslCommonParams* c, size_t idx) {
   // Anim end -> FallSpecial.
   // Decomp: ftCo_EscapeAir_Anim checks ftAnim_IsFramesRemaining.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Anim
-  const float end_frame = msl_anim_end_frame(batch->state.char_id[idx], (uint16_t)MSL_SM_ESCAPE_AIR);
+  const float end_frame =
+      msl_anim_end_frame(batch->state.char_id[idx], (uint16_t)MSL_SM_ESCAPE_AIR);
   if (end_frame > 0.0f && ((float)batch->state.action_frame[idx] >= end_frame)) {
     enter_fall_special(batch, idx);
   }
@@ -122,8 +125,9 @@ static inline void enter_escape_roll(MslBatch* batch, size_t idx, uint16_t actio
   // Decomp: ftCo_8009917C -> ftCo_800992A8 -> ftCo_80099314 (default fighters).
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Escape.c:58-88 and :104-120.
   batch->state.action_id[idx] = action_id;
-  batch->state.animation_index[idx] =
-      (action_id == (uint16_t)MSL_ACT_ESCAPE_F) ? (uint32_t)MSL_SM_ESCAPE_F : (uint32_t)MSL_SM_ESCAPE_B;
+  batch->state.animation_index[idx] = (action_id == (uint16_t)MSL_ACT_ESCAPE_F)
+                                          ? (uint32_t)MSL_SM_ESCAPE_F
+                                          : (uint32_t)MSL_SM_ESCAPE_B;
   batch->state.action_frame[idx] = 0;
 }
 
@@ -146,11 +150,11 @@ uint8_t escape_try_enter_from_guard(MslBatch* batch, const MslCommonParams* c, s
 
   // Spotdodge (EscapeN) has priority over roll checks in Guard IASA.
   // Decomp: refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_Guard_IASA
-  const uint8_t want_spotdodge =
-      ((stick_y <= c->spotdodge_stick_y_threshold && tilt_timer_y < c->spotdodge_flick_tilt_max_frames) ||
-       (cstick_y <= c->spotdodge_stick_y_threshold))
-          ? 1
-          : 0;
+  const uint8_t want_spotdodge = ((stick_y <= c->spotdodge_stick_y_threshold &&
+                                   tilt_timer_y < c->spotdodge_flick_tilt_max_frames) ||
+                                  (cstick_y <= c->spotdodge_stick_y_threshold))
+                                     ? 1
+                                     : 0;
   if (want_spotdodge) {
     enter_escape_n(batch, idx);
     return 1;
@@ -315,7 +319,7 @@ static inline float clamp01(float x) {
 }
 
 static inline void apply_shield_hold_drain(MslBatch* batch, const MslCommonParams* c, size_t idx,
-                                          float trig_unit) {
+                                           float trig_unit) {
   // Decomp:
   // - fp->lightshield_amount = (x650 - x10)/(1-x10) with a negative check.
   // - fp->shield_health -= x278 * (light*(x2F0-x2EC) + x2EC); clamp at 0.
@@ -375,14 +379,15 @@ void guard_update_shield_recharge(MslBatch* batch, const MslCommonParams* c, siz
   }
 }
 
-void guard_update_grounded(MslBatch* batch, const MslCommonParams* c, size_t idx, uint8_t allow_entry) {
+void guard_update_grounded(MslBatch* batch, const MslCommonParams* c, size_t idx,
+                           uint8_t allow_entry) {
   if (batch == NULL || c == NULL) {
     return;
   }
 
   const uint16_t a0 = batch->state.action_id[idx];
-  const float trig = trigger_unit_from_input(batch->state.input_buttons[idx], batch->state.input_l[idx],
-                                             batch->state.input_r[idx]);
+  const float trig = trigger_unit_from_input(batch->state.input_buttons[idx],
+                                             batch->state.input_l[idx], batch->state.input_r[idx]);
 
   // `held_inputs & HSD_PAD_LR` behavior for shielding uses the trigger deadzone (x10).
   // Decomp usage: refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c:46-55.
@@ -408,7 +413,8 @@ void guard_update_grounded(MslBatch* batch, const MslCommonParams* c, size_t idx
     // - Treat `action_frame` as `mv.co.guard.x0` (both tick once per frame outside hitlag).
     // - Treat `msl_anim_end_frame(char, ftCo_SM_GuardOn)` as `fp->x2E8` (ISO-derived anim timeline length).
     if (a0 == MSL_ACT_GUARD_ON || a0 == MSL_ACT_GUARD_REFLECT) {
-      const float end_frame = msl_anim_end_frame(batch->state.char_id[idx], (uint16_t)MSL_SM_GUARD_ON);
+      const float end_frame =
+          msl_anim_end_frame(batch->state.char_id[idx], (uint16_t)MSL_SM_GUARD_ON);
       if (end_frame > 0.0f && ((float)batch->state.action_frame[idx] >= end_frame)) {
         enter_guard_hold(batch, idx);
       }
@@ -425,7 +431,8 @@ void guard_update_grounded(MslBatch* batch, const MslCommonParams* c, size_t idx
 
   // GuardOff: wait for animation end then go back to Wait.
   if (a0 == MSL_ACT_GUARD_OFF) {
-    const float end_frame = msl_anim_end_frame(batch->state.char_id[idx], (uint16_t)MSL_SM_GUARD_OFF);
+    const float end_frame =
+        msl_anim_end_frame(batch->state.char_id[idx], (uint16_t)MSL_SM_GUARD_OFF);
     if (end_frame > 0.0f && ((float)batch->state.action_frame[idx] >= end_frame)) {
       guard_enter_wait(batch, idx);
       return;
