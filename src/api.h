@@ -355,12 +355,28 @@ int msl_batch_debug_combat_contacts(const MslBatch* batch, int batch_index,
                                     MslDebugCombatContact* out_contacts, uint16_t max_contacts,
                                     uint16_t* out_count);
 
+// Debug/validation helper: compute hitbox-vs-hurtcap contacts with decomp-shaped gating.
+//
+// This is a debug-only filter pass: it does not mutate validated gameplay state. The intent is to
+// keep the overlap diagnostics closer to "real combat" without enabling percent/hitlag/hitstun.
+//
+// Current filters:
+// - Victim ground/air eligibility: HIT_GROUNDED / HIT_AERIAL from extracted hitbox flags
+//   (MSLHITB1 u16_6; decoded as state.hitbox_flags).
+//
+// Deterministic ordering matches msl_batch_debug_combat_contacts; filters only skip/keep.
+int msl_batch_debug_combat_contacts_filtered(const MslBatch* batch, int batch_index,
+                                             MslDebugCombatContact* out_contacts,
+                                             uint16_t max_contacts, uint16_t* out_count);
+
 // Debug/testing helper: allow unit tests to write world-space primitives directly and invoke combat
 // without touching upstream pose systems.
 int msl_batch_debug_clear_hitboxes_world(MslBatch* batch, int batch_index, int player_index);
 int msl_batch_debug_set_hitbox_world(MslBatch* batch, int batch_index, int player_index,
                                      int hitbox_id, float x, float y, float z, float radius,
                                      float damage, int enabled);
+int msl_batch_debug_set_hitbox_flags(MslBatch* batch, int batch_index, int player_index,
+                                     int hitbox_id, uint16_t hitbox_flags);
 int msl_batch_debug_clear_hurtcaps_world(MslBatch* batch, int batch_index, int player_index);
 int msl_batch_debug_set_hurtcap_world(MslBatch* batch, int batch_index, int player_index,
                                       int hurtcap_id, float ax, float ay, float az, float bx,

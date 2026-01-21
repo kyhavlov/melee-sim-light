@@ -560,9 +560,9 @@ static inline size_t debug_idx_hurtcap(int bi, int p, int cap_i) {
          (size_t)cap_i;
 }
 
-int msl_batch_debug_combat_contacts(const MslBatch* batch, int batch_index,
-                                    MslDebugCombatContact* out_contacts, uint16_t max_contacts,
-                                    uint16_t* out_count) {
+static int debug_combat_contacts_impl(const MslBatch* batch, int batch_index,
+                                      MslDebugCombatContact* out_contacts, uint16_t max_contacts,
+                                      uint16_t* out_count, int filtered) {
   if (batch == NULL || out_contacts == NULL || out_count == NULL) {
     return EINVAL;
   }
@@ -608,6 +608,27 @@ int msl_batch_debug_combat_contacts(const MslBatch* batch, int batch_index,
         const size_t hb_i = debug_idx_hitbox(batch_index, attacker, hb_id);
         if (!batch->state.hitbox_enabled[hb_i]) {
           continue;
+        }
+
+        if (filtered) {
+          // Decomp victim ground/air gate: this_hit->x40_b2 (hit_aerial) / x40_b3 (hit_grounded)
+          // against victim_fp->ground_or_air.
+          // refs/melee/src/melee/ft/ftcoll.c (HitCapsule eligibility checks).
+          const uint16_t hb_flags = batch->state.hitbox_flags[hb_i];
+          const uint8_t defender_on_ground = batch->state.on_ground[d_idx] ? 1 : 0;
+          if (defender_on_ground) {
+            if ((hb_flags & MSL_HITBOX_FLAG_HIT_GROUNDED) == 0) {
+              continue;
+            }
+          } else {
+            if ((hb_flags & MSL_HITBOX_FLAG_HIT_AERIAL) == 0) {
+              continue;
+            }
+          }
+
+          // TODO(decomp): extend debug filtering to match ftColl hitcapsule eligibility once the
+          // required state is modeled (intangibility, element catch/inert, thrown-fighter rules,
+          // grabbed-victim-only, lbColl_8000ACFC, etc.).
         }
 
         const float hx = batch->state.hitbox_x[hb_i];
@@ -665,6 +686,18 @@ int msl_batch_debug_combat_contacts(const MslBatch* batch, int batch_index,
   return 0;
 }
 
+int msl_batch_debug_combat_contacts(const MslBatch* batch, int batch_index,
+                                    MslDebugCombatContact* out_contacts, uint16_t max_contacts,
+                                    uint16_t* out_count) {
+  return debug_combat_contacts_impl(batch, batch_index, out_contacts, max_contacts, out_count, 0);
+}
+
+int msl_batch_debug_combat_contacts_filtered(const MslBatch* batch, int batch_index,
+                                             MslDebugCombatContact* out_contacts,
+                                             uint16_t max_contacts, uint16_t* out_count) {
+  return debug_combat_contacts_impl(batch, batch_index, out_contacts, max_contacts, out_count, 1);
+}
+
 int msl_batch_debug_clear_hitboxes_world(MslBatch* batch, int batch_index, int player_index) {
   if (batch == NULL) {
     return EINVAL;
@@ -686,6 +719,8 @@ int msl_batch_debug_clear_hitboxes_world(MslBatch* batch, int batch_index, int p
     batch->state.hitbox_z[hb_i] = 0.0f;
     batch->state.hitbox_radius[hb_i] = 0.0f;
     batch->state.hitbox_damage[hb_i] = 0.0f;
+    batch->state.hitbox_u16_6[hb_i] = 0;
+    batch->state.hitbox_flags[hb_i] = 0;
   }
 
   return 0;
@@ -726,6 +761,28 @@ int msl_batch_debug_set_hitbox_world(MslBatch* batch, int batch_index, int playe
   }
   batch->state.hitbox_count[idx] = count;
 
+  return 0;
+}
+
+int msl_batch_debug_set_hitbox_flags(MslBatch* batch, int batch_index, int player_index,
+                                     int hitbox_id, uint16_t hitbox_flags) {
+  if (batch == NULL) {
+    return EINVAL;
+  }
+  if (batch_index < 0 || batch_index >= batch->batch_size) {
+    return EINVAL;
+  }
+  if (player_index < 0 || player_index >= MSL_MAX_PLAYERS) {
+    return EINVAL;
+  }
+  if (hitbox_id < 0 || hitbox_id >= MSL_MAX_HITBOXES) {
+    return EINVAL;
+  }
+
+  const size_t hb_i = debug_idx_hitbox(batch_index, player_index, hitbox_id);
+  // Keep both the raw extracted field and decoded mirror consistent for debug-set primitives.
+  batch->state.hitbox_u16_6[hb_i] = hitbox_flags;
+  batch->state.hitbox_flags[hb_i] = hitbox_flags;
   return 0;
 }
 
