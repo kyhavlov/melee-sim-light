@@ -68,6 +68,8 @@ ext = Extension(
         str((ROOT / "src" / "move_tables.c").resolve()),
         str((ROOT / "src" / "hurtcaps_tables.c").resolve()),
         str((ROOT / "src" / "hurtboxes.c").resolve()),
+        str((ROOT / "src" / "hitboxes_tables.c").resolve()),
+        str((ROOT / "src" / "hitboxes.c").resolve()),
         str((ROOT / "src" / "combat.c").resolve()),
         str((ROOT / "src" / "items.c").resolve()),
     ],

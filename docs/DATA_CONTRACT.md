@@ -34,6 +34,7 @@ Characters (Fox/Falco):
     Decomp: `ft_80081B38` calls `mpColl_SetECBSource_JObj(..., bones[temp_r29->unk*].joint, ...)`.
 - `data/hurtcaps/fox.bin`, `data/hurtcaps/falco.bin` (hurt capsule init tables; decomp-first, compact binary)
 - `data/hurtcaps/fox.json`, `data/hurtcaps/falco.json` (hurt capsule init tables; debug-friendly mirror; C loads `.bin` only)
+- `data/hitboxes/fox.bin`, `data/hitboxes/falco.bin` (hitbox event tables; decomp-first, compact binary)
 - `data/moves/fox.json`, `data/moves/falco.json` (subaction timelines for key motions + specials; decomp-first)
 - `data/anims/fox.bin`, `data/anims/falco.bin` (per-msid bone matrices + TransN; decomp-first)
 - `data/anims/fox.blend.bin`, `data/anims/falco.blend.bin` (blend/dynamics bytes; decomp-first)
@@ -99,6 +100,41 @@ Field semantics:
   Note: vanilla sometimes applies additional per-fighter scale factors (e.g. `fp->x34_scale.y`)
   when deriving bounds from hurt capsules (`refs/melee/src/melee/ft/chara/ftCommon/ftCo_0A01.c::ftCo_800A0DA4`).
   The sim currently does **not** model those fighter-scale fields yet, so world radius is `scale` only.
+
+## `data/hitboxes/<char>.bin` (MSLHITB1 v1)
+
+Purpose: compact, init-time-loadable hitbox event tables (movescript-derived) keyed by submotion id.
+
+Current simulator usage:
+- Loaded at init only (no parsing/allocations on the per-frame hot path).
+- Used to compute pose-driven **world-space hitbox centers** for debug readback.
+- **No combat resolution yet**: these hitboxes must not affect state transitions/physics/collision/timers.
+
+Binary layout (little-endian):
+- Header:
+  - `magic[8] = "MSLHITB1"`
+  - `version: u32 = 1`
+  - `entry_count: u32` number of index entries
+- Index (`entry_count` entries), each:
+  - `msid: u16` submotion id / Slippi post-frame `animation_index` (lower 16 bits)
+  - `rec_count: u16` number of event records for this msid
+  - `rec_bytes: u32 = rec_count * 44`
+  - `payload_off: u32` absolute byte offset to this msid's first event record
+- Records (`rec_count` entries), each 44 bytes:
+  - `frame: u16` integer timeline key (interpreted against seeded `action_frame`)
+  - `kind: u8` (`0` = set/enable, `1` = clear)
+  - `hitbox_id: u8` slot id (0..3 typical). If `kind==1` and `hitbox_id==0xFF`, this is a clear-all record.
+  - `bone_part_id: u32` fighter part id (same domain as SSANIM `joint_parts`; pass as `part_id` to
+    `anim_pose_get_matrix(...)`).
+  - `x: f32`, `y: f32`, `z: f32` bone-local hitbox center offset
+  - `radius: f32`
+  - `damage: f32` (stored but not yet used for resolution)
+  - `u16_tail[8]: 8 * u16` additional extracted fields (stored verbatim for future mechanics)
+
+Runtime semantics (current C-core policy):
+- Events are applied in file order up to `frame` to derive the current active hitbox definition per `hitbox_id`.
+- Pose lookup failures for a specific hitbox skip that hitbox only (do not affect anything else).
+- World-space center is `anim_pose_get_matrix(...) * (x,y,z) + (pos_x,pos_y)` (Z is not translated).
 
 ## What the C core should load (minimum)
 

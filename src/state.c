@@ -22,6 +22,7 @@ int state_alloc(MslStateSoA* state, int batch_size) {
   const size_t bi = b * (size_t)MSL_MAX_ITEMS;
   const size_t bp4 = bp * 4u;
   const size_t bpc = bp * (size_t)MSL_MAX_HURTCAPS;
+  const size_t bph = bp * (size_t)MSL_MAX_HITBOXES;
 
   state->frame_id = (int32_t*)alloc_aligned_64(sizeof(int32_t) * b);
   state->frame_pre_random_seed = (uint32_t*)alloc_aligned_64(sizeof(uint32_t) * b);
@@ -96,6 +97,22 @@ int state_alloc(MslStateSoA* state, int batch_size) {
   state->hurtcap_radius = (float*)alloc_aligned_64(sizeof(float) * bpc);
   state->hurtcap_is_grabbable = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bpc);
   state->hurtcap_height = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bpc);
+  state->hitbox_count = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
+  state->hitbox_enabled = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bph);
+  state->hitbox_x = (float*)alloc_aligned_64(sizeof(float) * bph);
+  state->hitbox_y = (float*)alloc_aligned_64(sizeof(float) * bph);
+  state->hitbox_z = (float*)alloc_aligned_64(sizeof(float) * bph);
+  state->hitbox_radius = (float*)alloc_aligned_64(sizeof(float) * bph);
+  state->hitbox_damage = (float*)alloc_aligned_64(sizeof(float) * bph);
+  state->hitbox_bone_part_id = (uint16_t*)alloc_aligned_64(sizeof(uint16_t) * bph);
+  state->hitbox_u16_0 = (uint16_t*)alloc_aligned_64(sizeof(uint16_t) * bph);
+  state->hitbox_u16_1 = (uint16_t*)alloc_aligned_64(sizeof(uint16_t) * bph);
+  state->hitbox_u16_2 = (uint16_t*)alloc_aligned_64(sizeof(uint16_t) * bph);
+  state->hitbox_u16_3 = (uint16_t*)alloc_aligned_64(sizeof(uint16_t) * bph);
+  state->hitbox_u16_4 = (uint16_t*)alloc_aligned_64(sizeof(uint16_t) * bph);
+  state->hitbox_u16_5 = (uint16_t*)alloc_aligned_64(sizeof(uint16_t) * bph);
+  state->hitbox_u16_6 = (uint16_t*)alloc_aligned_64(sizeof(uint16_t) * bph);
+  state->hitbox_u16_7 = (uint16_t*)alloc_aligned_64(sizeof(uint16_t) * bph);
   state->ground_id = (uint16_t*)alloc_aligned_64(sizeof(uint16_t) * bp);
   state->animation_index = (uint32_t*)alloc_aligned_64(sizeof(uint32_t) * bp);
   state->instance_hit_by = (uint16_t*)alloc_aligned_64(sizeof(uint16_t) * bp);
@@ -154,10 +171,14 @@ int state_alloc(MslStateSoA* state, int batch_size) {
       !state->hitstun || !state->l_cancel || !state->hurtbox_state || !state->hurtcap_count ||
       !state->hurtcap_a_x || !state->hurtcap_a_y || !state->hurtcap_a_z || !state->hurtcap_b_x ||
       !state->hurtcap_b_y || !state->hurtcap_b_z || !state->hurtcap_radius ||
-      !state->hurtcap_is_grabbable || !state->hurtcap_height || !state->ground_id ||
-      !state->animation_index || !state->instance_hit_by || !state->instance_id ||
-      !state->last_attack_landed || !state->combo_count || !state->last_hit_by ||
-      !state->state_flags || !state->input_buttons || !state->prev_input_buttons ||
+      !state->hurtcap_is_grabbable || !state->hurtcap_height || !state->hitbox_count ||
+      !state->hitbox_enabled || !state->hitbox_x || !state->hitbox_y || !state->hitbox_z ||
+      !state->hitbox_radius || !state->hitbox_damage || !state->hitbox_bone_part_id ||
+      !state->hitbox_u16_0 || !state->hitbox_u16_1 || !state->hitbox_u16_2 || !state->hitbox_u16_3 ||
+      !state->hitbox_u16_4 || !state->hitbox_u16_5 || !state->hitbox_u16_6 || !state->hitbox_u16_7 ||
+      !state->ground_id || !state->animation_index || !state->instance_hit_by || !state->instance_id ||
+      !state->last_attack_landed || !state->combo_count || !state->last_hit_by || !state->state_flags ||
+      !state->input_buttons || !state->prev_input_buttons ||
       !state->input_buttons_pressed || !state->input_buttons_released || !state->input_main_x ||
       !state->input_main_y || !state->prev_input_main_x || !state->prev_input_main_y ||
       !state->input_c_x || !state->input_c_y || !state->input_l || !state->input_r ||
@@ -249,6 +270,22 @@ void state_free(MslStateSoA* state) {
   alloc_free(state->hurtcap_radius);
   alloc_free(state->hurtcap_is_grabbable);
   alloc_free(state->hurtcap_height);
+  alloc_free(state->hitbox_count);
+  alloc_free(state->hitbox_enabled);
+  alloc_free(state->hitbox_x);
+  alloc_free(state->hitbox_y);
+  alloc_free(state->hitbox_z);
+  alloc_free(state->hitbox_radius);
+  alloc_free(state->hitbox_damage);
+  alloc_free(state->hitbox_bone_part_id);
+  alloc_free(state->hitbox_u16_0);
+  alloc_free(state->hitbox_u16_1);
+  alloc_free(state->hitbox_u16_2);
+  alloc_free(state->hitbox_u16_3);
+  alloc_free(state->hitbox_u16_4);
+  alloc_free(state->hitbox_u16_5);
+  alloc_free(state->hitbox_u16_6);
+  alloc_free(state->hitbox_u16_7);
   alloc_free(state->ground_id);
   alloc_free(state->animation_index);
   alloc_free(state->instance_hit_by);

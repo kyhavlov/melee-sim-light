@@ -98,6 +98,24 @@ typedef struct MslStateSoA {
   float* hurtcap_radius;
   uint8_t* hurtcap_is_grabbable;
   uint8_t* hurtcap_height;
+  // Pose-driven world-space hitbox centers (computed each frame in hitboxes_refresh).
+  // Debug readback only for now; not used for combat resolution yet.
+  uint8_t* hitbox_count; // [batch * players]
+  uint8_t* hitbox_enabled; // [batch * players * MSL_MAX_HITBOXES]
+  float* hitbox_x;
+  float* hitbox_y;
+  float* hitbox_z;
+  float* hitbox_radius;
+  float* hitbox_damage;
+  uint16_t* hitbox_bone_part_id;
+  uint16_t* hitbox_u16_0;
+  uint16_t* hitbox_u16_1;
+  uint16_t* hitbox_u16_2;
+  uint16_t* hitbox_u16_3;
+  uint16_t* hitbox_u16_4;
+  uint16_t* hitbox_u16_5;
+  uint16_t* hitbox_u16_6;
+  uint16_t* hitbox_u16_7;
   uint16_t* ground_id;
   uint32_t* animation_index;
   uint16_t* instance_hit_by;

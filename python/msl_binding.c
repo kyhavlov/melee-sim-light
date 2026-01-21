@@ -1055,6 +1055,36 @@ static PyObject* msl_hurtcaps_world_py(PyObject* self, PyObject* args) {
   return Py_BuildValue("(Oi)", arr, (int)count);
 }
 
+static PyObject* msl_hitboxes_world_py(PyObject* self, PyObject* args) {
+  (void)self;
+  PyObject* handle_obj = NULL;
+  int batch_index = 0;
+  int player_index = 0;
+  if (!PyArg_ParseTuple(args, "Oii", &handle_obj, &batch_index, &player_index)) {
+    return NULL;
+  }
+  PyMslHandle* h = unpack_handle(handle_obj);
+  if (h == NULL) {
+    return NULL;
+  }
+
+  npy_intp dims[2] = {(npy_intp)MSL_MAX_HITBOXES, (npy_intp)10};
+  PyArrayObject* arr = (PyArrayObject*)PyArray_SimpleNew(2, dims, NPY_FLOAT32);
+  if (arr == NULL) {
+    return NULL;
+  }
+  float* out = (float*)PyArray_DATA(arr);
+  uint8_t count = 0;
+  const int err = msl_batch_debug_hitboxes_world(h->batch, batch_index, player_index, out, &count);
+  if (err != 0) {
+    Py_DECREF(arr);
+    PyErr_Format(PyExc_ValueError, "msl_batch_debug_hitboxes_world failed: %d", err);
+    return NULL;
+  }
+
+  return Py_BuildValue("(Oi)", arr, (int)count);
+}
+
 static PyObject* msl_anim_bake_ssanim01_py(PyObject* self, PyObject* args) {
   (void)self;
   PyObject* rest_rot_obj = NULL;
@@ -1487,6 +1517,8 @@ static PyMethodDef methods[] = {
      "anim_pose_matrix(char_id, msid, frame, part_id) -> np.ndarray[float32] shape=(12,)"},
     {"hurtcaps_world", msl_hurtcaps_world_py, METH_VARARGS,
      "hurtcaps_world(handle, batch_index, player_index) -> (caps[MSL_MAX_HURTCAPS,7], count)"},
+    {"hitboxes_world", msl_hitboxes_world_py, METH_VARARGS,
+     "hitboxes_world(handle, batch_index, player_index) -> (hitboxes[MSL_MAX_HITBOXES,10], count)"},
     {"anim_bake_ssanim01", msl_anim_bake_ssanim01_py, METH_VARARGS,
      "anim_bake_ssanim01(rest_rot, rest_pos, rest_scl, parent_part, part_flags, order, local_parts, joint_parts, "
      "update_parts, fobj_starts, fobj_desc, ad_source, frame_count, inv_scale_part, inv_model_scale) -> "

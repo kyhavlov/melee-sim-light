@@ -10,6 +10,7 @@ extern "C" {
 enum { MSL_MAX_PLAYERS = 4 };
 enum { MSL_MAX_ITEMS = 15 };
 enum { MSL_MAX_HURTCAPS = 32 };
+enum { MSL_MAX_HITBOXES = 4 };
 enum { MSL_STATE_FLAGS_BYTES = 5 };
 
 // -----------------------------
@@ -299,6 +300,15 @@ int msl_batch_debug_write_internals(const MslBatch* batch, uint8_t* out_bytes,
 // and returns the active capsule count in out_count.
 int msl_batch_debug_hurtcaps_world(const MslBatch* batch, int batch_index, int player_index,
                                   float* out_caps_7, uint8_t* out_count);
+
+// Debug/validation helper: read pose-driven world-space hitbox centers for a single fighter.
+// Writes `MSL_MAX_HITBOXES * 10` floats into out_hitboxes_10 as rows:
+//   [x, y, z, radius, damage, u16_0, u16_1, u16_3, bone_part_id, enabled]
+// and returns the active hitbox count in out_count.
+//
+// NOTE: This is debug readback only; hitboxes do not affect gameplay yet.
+int msl_batch_debug_hitboxes_world(const MslBatch* batch, int batch_index, int player_index,
+                                  float* out_hitboxes_10, uint8_t* out_count);
 
 #ifdef __cplusplus
 }

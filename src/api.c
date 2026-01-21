@@ -13,6 +13,7 @@
 #include "config.h"
 #include "move_tables.h"
 #include "ecb_tables.h"
+#include "hitboxes_tables.h"
 #include "hurtcaps_tables.h"
 #include "stage_collision.h"
 #include "state.h"
@@ -70,6 +71,11 @@ MslBatch* msl_batch_create(int batch_size, int num_players) {
   }
 
   if (hurtcaps_tables_init() != 0) {
+    msl_batch_destroy(batch);
+    return NULL;
+  }
+
+  if (hitboxes_tables_init() != 0) {
     msl_batch_destroy(batch);
     return NULL;
   }
@@ -440,6 +446,48 @@ int msl_batch_debug_hurtcaps_world(const MslBatch* batch, int batch_index, int p
     out_caps_7[o + 4] = batch->state.hurtcap_b_y[hi];
     out_caps_7[o + 5] = batch->state.hurtcap_b_z[hi];
     out_caps_7[o + 6] = batch->state.hurtcap_radius[hi];
+  }
+
+  return 0;
+}
+
+int msl_batch_debug_hitboxes_world(const MslBatch* batch, int batch_index, int player_index,
+                                  float* out_hitboxes_10, uint8_t* out_count) {
+  if (batch == NULL || out_hitboxes_10 == NULL || out_count == NULL) {
+    return EINVAL;
+  }
+  if (batch_index < 0 || batch_index >= batch->batch_size) {
+    return EINVAL;
+  }
+  if (player_index < 0 || player_index >= MSL_MAX_PLAYERS) {
+    return EINVAL;
+  }
+
+  // Zero-fill the full fixed-size output for stable test snapshots.
+  memset(out_hitboxes_10, 0, sizeof(float) * (size_t)MSL_MAX_HITBOXES * 10u);
+
+  const size_t idx = msl_idx_player(batch_index, player_index);
+  uint8_t count = batch->state.hitbox_count[idx];
+  if (count > (uint8_t)MSL_MAX_HITBOXES) {
+    count = (uint8_t)MSL_MAX_HITBOXES;
+  }
+  *out_count = count;
+
+  const size_t base = ((size_t)batch_index * (size_t)MSL_MAX_PLAYERS + (size_t)player_index) *
+                      (size_t)MSL_MAX_HITBOXES;
+  for (int i = 0; i < MSL_MAX_HITBOXES; i++) {
+    const size_t hi = base + (size_t)i;
+    const size_t o = (size_t)i * 10u;
+    out_hitboxes_10[o + 0] = batch->state.hitbox_x[hi];
+    out_hitboxes_10[o + 1] = batch->state.hitbox_y[hi];
+    out_hitboxes_10[o + 2] = batch->state.hitbox_z[hi];
+    out_hitboxes_10[o + 3] = batch->state.hitbox_radius[hi];
+    out_hitboxes_10[o + 4] = batch->state.hitbox_damage[hi];
+    out_hitboxes_10[o + 5] = (float)batch->state.hitbox_u16_0[hi];
+    out_hitboxes_10[o + 6] = (float)batch->state.hitbox_u16_1[hi];
+    out_hitboxes_10[o + 7] = (float)batch->state.hitbox_u16_3[hi];
+    out_hitboxes_10[o + 8] = (float)batch->state.hitbox_bone_part_id[hi];
+    out_hitboxes_10[o + 9] = (float)batch->state.hitbox_enabled[hi];
   }
 
   return 0;
