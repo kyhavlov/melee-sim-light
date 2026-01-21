@@ -216,8 +216,60 @@ def _ensure_hurtcaps_bins() -> None:
         if not out.exists():
             raise RuntimeError(f"failed to generate required hurtcaps bin for tests: {out}")
 
+def _ensure_shield_tilt_bins() -> None:
+    for ch, prefix in (("fox", "PlFx"), ("falco", "PlFc")):
+        out = ROOT / "data" / "shields" / f"{ch}.bin"
+        if out.exists():
+            try:
+                with out.open("rb") as f:
+                    magic = f.read(8)
+                    ver = int.from_bytes(f.read(4), "little", signed=False)
+                if magic == b"MSLSHLD1" and ver == 1:
+                    continue
+            except OSError:
+                pass
+
+        # Rebuild from local `_iso/` extracts (fast; no full ISO rebuild).
+        # Transitive ISO deps for tools.extraction.extract_shield_tilt_table:
+        # - It imports extract_fighter_anims and uses:
+        #   - _load_parts_table -> reads _iso/PlCo.dat
+        #   - _read_rest_srt_and_parents -> reads costume skeleton _iso/Pl*Nr.dat
+        #   - _msid_anim_entry / _read_model_scale_and_inv_part -> reads _iso/Pl*.dat
+        #   - figatree payload -> reads _iso/Pl*AJ.dat
+        required = [
+            ROOT / "_iso" / "PlCo.dat",
+            ROOT / "_iso" / f"{prefix}.dat",
+            ROOT / "_iso" / f"{prefix}Nr.dat",
+            ROOT / "_iso" / f"{prefix}AJ.dat",
+        ]
+        missing_iso = [p for p in required if not p.exists()]
+        if missing_iso:
+            raise RuntimeError(
+                f"missing required shield tilt bin for tests: {out} (and cannot rebuild due to missing _iso/ files: {missing_iso}). "
+                f"Run: `uv run python -m tools.extraction.build_data --iso-dir _iso --stage grnla --chars fox,falco`"
+            )
+
+        subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "tools.extraction.extract_shield_tilt_table",
+                "--iso-dir",
+                str(ROOT / "_iso"),
+                "--character",
+                ch,
+                "--out",
+                str(out),
+            ],
+            check=True,
+        )
+
+        if not out.exists():
+            raise RuntimeError(f"failed to generate required shield tilt bin for tests: {out}")
+
 def pytest_sessionstart(session) -> None:  # type: ignore[no-untyped-def]
     _ensure_tracks_bins()
     _ensure_ecb_bottom_tables()
     _ensure_ecb_extents_tables()
     _ensure_hurtcaps_bins()
+    _ensure_shield_tilt_bins()

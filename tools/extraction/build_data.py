@@ -91,6 +91,13 @@ def main() -> None:
         ["--pl-dir", str(iso_dir), "--out-dir", "data/characters", "--chars", ",".join(chars)],
     )
 
+    # Guard-tilt shield bubble placement tables (used by shields_refresh for debug geometry).
+    for ch in chars:
+        _run(
+            "tools.extraction.extract_shield_tilt_table",
+            ["--iso-dir", str(iso_dir), "--character", ch, "--out", f"data/shields/{ch}.bin"],
+        )
+
     # Hurt capsule init tables.
     for ch in chars:
         _run(

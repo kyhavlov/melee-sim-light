@@ -32,6 +32,7 @@ Characters (Fox/Falco):
 - `data/characters/fox.json`, `data/characters/falco.json` (movement/ecb/laser/reflector attrs; decomp-first)
   - `ecb_joints`: 6 `s16` indices into `fp->parts[]` (as stored in `ftData_x44_t`).
     Decomp: `ft_80081B38` calls `mpColl_SetECBSource_JObj(..., bones[temp_r29->unk*].joint, ...)`.
+- `data/shields/fox.bin`, `data/shields/falco.bin` (guard-tilt shield bubble centers; decomp-first, compact binary)
 - `data/hurtcaps/fox.bin`, `data/hurtcaps/falco.bin` (hurt capsule init tables; decomp-first, compact binary)
 - `data/hurtcaps/fox.json`, `data/hurtcaps/falco.json` (hurt capsule init tables; debug-friendly mirror; C loads `.bin` only)
 - `data/hitboxes/fox.bin`, `data/hitboxes/falco.bin` (hitbox event tables; decomp-first, compact binary)
@@ -63,6 +64,55 @@ Characters (Fox/Falco):
 Notes:
 - `animation_index` in Slippi post-frames includes `0xFFFFFFFF` as a sentinel; treat that as “no animation”.
 - Item reference ordering in `.msl` datasets is **sorted by item `instance_id`**, then `id`, then `type`. The sim should follow the same stable ordering for its fixed 15 slots.
+
+## `data/shields/<char>.bin` (MSLSHLD1 v1)
+
+Purpose: compact, init-time-loadable table for guard-tilt shield bubble center offsets.
+
+Decomp semantics:
+- Shield collision uses a dedicated `HitResult` (`fp->shield_hit`) bound to a "shield" joint:
+  - Binding: `ftColl_8007B1B8` assigns `fp->shield_hit.bone` + `size` + `offset`.
+    Decomp: `refs/melee/src/melee/ft/ftcoll.c:1371-1383`.
+  - Checks: hitbox-vs-shield uses `lbColl_80007BCC(..., &this_fp->shield_hit, ...)`.
+    Decomp: `refs/melee/src/melee/ft/ftcoll.c:1098` and `refs/melee/src/melee/lb/lbcollision.c:1510-1569`.
+- While guarding, Melee applies a guard-tilt animation timeline (submotion id `ftCo_SM_Guard = 38`) to
+  the fighter model (including the shield joint). The guard tilt "frame" is tracked in
+  `fp->mv.co.guard.x8`:
+  - Initialization: `ftCo_800921DC` sets `mv.co.guard.x8 = 10`.
+    Decomp: `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c:246-265`.
+  - Update from stick direction: `ftCo_80091BC4` computes a polar angle from `(lstick.y, lstick.x * facing_dir)`
+    and updates `mv.co.guard.x8` (with smoothing/inertia via `mv.co.guard.x4`).
+    Decomp: `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c:131-171`.
+  - Application to pose: `ftCo_80091E78` drives `FtPart_TransN` animation and calls `ftAnim_80070710(jobj, fp->mv.co.guard.x8)`
+    to set the guard tilt frame.
+    Decomp: `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c:211-239`.
+
+Simulator usage:
+- `shields_refresh()` uses this table to compute a **world-space** shield bubble center `(x,y,z)` for debug geometry
+  and shield-vs-body precedence in debug combat contact classification.
+- This is **suite-neutral**: it does not mutate fighter state, and it does not affect validated compare outputs.
+
+Binary layout (little-endian):
+- Header:
+  - `magic[8] = "MSLSHLD1"`
+  - `version: u32 = 1`
+  - `frame_count: u16` number of timeline frames stored (typically `round(fig.frames)+1` for msid 38; Fox/Falco is 371)
+  - `neutral_frame: u16` guard tilt neutral frame (decomp: `mv.co.guard.x8` initial value; typically 10)
+- Payload:
+  - `xyz: frame_count * 3 * f32` (packed as `[x0,y0,z0, x1,y1,z1, ...]`)
+
+Coordinate semantics:
+- Each `(x,y,z)` is the translation component (`tx,ty,tz`) of the shield joint's **fighter-local** transform under
+  the `ftCo_SM_Guard` (msid 38) tilt timeline, evaluated at integer frame `f`.
+- These coordinates share the same fighter-local convention as `data/anims/<char>.bin` matrices (TransN/root translation removed).
+- `shields_refresh()` consumes them as follows:
+  - Compute a target tilt frame from stick direction:
+    - `rad = atan2(stick_y, stick_x * facing_dir)` in `[0, 2π)`, then `deg = clamp(rad * 180/π, 0..359)`.
+    - `tilt_frame = clamp(neutral_frame + deg, 0..frame_count-1)`.
+  - Blend between neutral and angled offsets by stick magnitude `mag = clamp(sqrt(x^2+y^2), 0..1)`:
+    - `d = neutral_xyz + mag * (tilt_xyz - neutral_xyz)`.
+  - Apply per-fighter runtime scale: `d *= fighter_scale_y` (uniform scalar).
+  - Convert to world space: `world = (pos_x, pos_y, 0) + (d.x * facing_dir, d.y, d.z)`.
 
 ## `data/hurtcaps/<char>.bin` (MSLHURT1 v1)
 

@@ -17,6 +17,7 @@
 #include "ecb_tables.h"
 #include "hitboxes_tables.h"
 #include "hurtcaps_tables.h"
+#include "shield_tilt_table.h"
 #include "stage_collision.h"
 #include "state.h"
 #include "step.h"
@@ -71,6 +72,9 @@ MslBatch* msl_batch_create(int batch_size, int num_players) {
     msl_batch_destroy(batch);
     return NULL;
   }
+
+  // Shield tilt tables are debug-geometry only; treat as optional for now.
+  (void)shield_tilt_table_init();
 
   if (hurtcaps_tables_init() != 0) {
     msl_batch_destroy(batch);
