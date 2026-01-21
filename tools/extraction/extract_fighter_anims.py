@@ -733,6 +733,12 @@ def _extra_anim_msids() -> list[int]:
         30,  # ftCo_SM_Squat
         31,  # ftCo_SM_SquatWait
         35,  # ftCo_SM_Landing
+        36,  # ftCo_SM_LandingFallSpecial
+        73,  # ftCo_SM_LandingAirN
+        74,  # ftCo_SM_LandingAirF
+        75,  # ftCo_SM_LandingAirB
+        76,  # ftCo_SM_LandingAirHi
+        77,  # ftCo_SM_LandingAirLw
         # Damage / hitstun (needed so hurtcaps/hitboxes follow pose immediately after being hit).
         165,  # ftCo_SM_DamageHi1
         168,  # ftCo_SM_DamageN1

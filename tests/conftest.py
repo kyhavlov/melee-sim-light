@@ -88,6 +88,91 @@ def _ensure_ecb_extents_tables() -> None:
         )
 
 
+def _tracks_missing_msids(path: Path, want: set[int]) -> set[int]:
+    import struct
+
+    with path.open("rb") as f:
+        magic = f.read(8)
+        if magic != b"SSANIMT1":
+            raise ValueError(f"bad tracks magic: {magic!r}")
+        (version,) = struct.unpack("<I", f.read(4))
+        if version != 1:
+            raise ValueError(f"unsupported tracks version: {version}")
+        local_count, anim_count = struct.unpack("<HH", f.read(4))
+        f.read(local_count)  # local_parts
+        f.read(2 * local_count)  # local_parent
+        f.read(4 * local_count)  # local_flags
+
+        missing = set(want)
+        for _ in range(anim_count):
+            (msid,) = struct.unpack("<H", f.read(2))
+            f.read(4)  # end_frame
+            missing.discard(int(msid))
+            for _lp in range(local_count):
+                part_u8 = f.read(1)
+                if not part_u8:
+                    raise ValueError("unexpected EOF in tracks parts")
+                (n_tracks,) = struct.unpack("<B", f.read(1))
+                for _t in range(n_tracks):
+                    hdr = f.read(8)
+                    if len(hdr) != 8:
+                        raise ValueError("unexpected EOF in tracks header")
+                    (_obj_type, _frac_value, _frac_slope, _pad, _startframe, length) = struct.unpack(
+                        "<BBBBHH", hdr
+                    )
+                    f.read(int(length))
+            if not missing:
+                return set()
+        return missing
+
+
+def _ensure_tracks_bins() -> None:
+    # Some tests depend on SSANIMT1 end_frame values (e.g. landing anim-rate scaling). These
+    # artifacts are generated from local `_iso/` extracts and may be gitignored.
+    need_msids = {36, 73, 74, 75, 76, 77}  # LandingFallSpecial + LandingAir*
+    for ch, prefix in (("fox", "PlFx"), ("falco", "PlFc")):
+        tracks = ROOT / "data" / "anims" / f"{ch}.tracks.bin"
+        if tracks.exists():
+            try:
+                if not _tracks_missing_msids(tracks, need_msids):
+                    continue
+            except OSError:
+                pass
+
+        required = [
+            ROOT / "_iso" / "PlCo.dat",
+            ROOT / "_iso" / f"{prefix}.dat",
+            ROOT / "_iso" / f"{prefix}Nr.dat",
+            ROOT / "_iso" / f"{prefix}AJ.dat",
+        ]
+        missing_iso = [p for p in required if not p.exists()]
+        if missing_iso:
+            raise RuntimeError(
+                f"missing required tracks file for tests: {tracks} (and cannot rebuild due to missing _iso/ files: {missing_iso}). "
+                f"Run: `uv run python -m tools.extraction.build_data --iso-dir _iso --stage grnla --chars fox,falco`"
+            )
+
+        subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "tools.extraction.extract_fighter_anims",
+                "--character",
+                ch,
+                "--out-dir",
+                "data/anims",
+            ],
+            check=True,
+        )
+
+        if not tracks.exists():
+            raise RuntimeError(f"failed to generate required tracks file for tests: {tracks}")
+        missing = sorted(_tracks_missing_msids(tracks, need_msids))
+        if missing:
+            raise RuntimeError(f"tracks file missing required msids for tests: {tracks} missing={missing}")
+
+
 def pytest_sessionstart(session) -> None:  # type: ignore[no-untyped-def]
+    _ensure_tracks_bins()
     _ensure_ecb_bottom_tables()
     _ensure_ecb_extents_tables()

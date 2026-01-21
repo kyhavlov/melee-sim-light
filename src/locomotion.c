@@ -365,19 +365,81 @@ void locomotion_update_pre(MslBatch* batch) {
         continue;
       }
 
-      // Advance anim frame (simple +1; Slippi `state_age` is floored in dataset generation).
+      const MslCharParams* ch = msl_char_params(batch->state.char_id[idx]);
+      if (ch == NULL) {
+        continue;
+      }
+
+      // Advance anim frame (`fp->cur_anim_frame` / Slippi `state_age`, floored in dataset generation).
       //
       // Decomp ordering note (approximation):
       // - `Fighter_procUpdate` calls `ftAnim_8006EBA4(gobj)` once per frame under `if (!fp->x2219_b5)`.
       // refs/melee/src/melee/ft/fighter.c:1690-1700
-      const int16_t af0 = batch->state.action_frame[idx];
-      if (af0 < max_af) {
-        batch->state.action_frame[idx] = (int16_t)(af0 + 1);
+      //
+      // Some actions adjust animation rate on enter (e.g. LandingAir*, LandingFallSpecial); model
+      // that by advancing `action_frame` by an integer per-frame increment derived from the same
+      // decomp formula:
+      // - LandingAir: ftAnim_SetAnimRate(gobj, (ftAnim_8006F484(gobj) + 0.1f) / lag)
+      //   refs/melee/src/melee/ft/chara/ftCommon/ftCo_LandingAir.c
+      // - LandingFallSpecial: ftCo_Landing_Enter(..., (0.1f + fp->x2EC) / landing_lag)
+      //   refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c and ftCo_EscapeAir.c
+      int16_t af_inc = 1;
+      const uint16_t a_for_af = batch->state.action_id[idx];
+      const uint8_t cid = batch->state.char_id[idx];
+      if (a_for_af == (uint16_t)MSL_ACT_LANDING_FALL_SPECIAL) {
+        const float lag = c->landing_fall_special_lag_frames;
+        const float end_frame =
+            msl_anim_end_frame(cid, (uint16_t)MSL_SM_LANDING_FALL_SPECIAL);
+        if (lag > 0.0f && end_frame > 0.0f) {
+          const float rate = (end_frame + 0.1f) / lag;
+          // NOTE: This truncates fractional rates. Some fighters/actions have non-integer rates
+          // (e.g. LandingAirF), which can produce occasional state_age "skips" when modeled as a
+          // float accumulator. Next correctness upgrade: fixed-point cur_anim_frame internal with
+          // deterministic fractional carry and reseedable reconstruction.
+          const int16_t inc = (int16_t)rate;
+          af_inc = inc > 0 ? inc : 1;
+        }
+      } else if (a_for_af == (uint16_t)MSL_ACT_LANDING_AIR_N ||
+                 a_for_af == (uint16_t)MSL_ACT_LANDING_AIR_F ||
+                 a_for_af == (uint16_t)MSL_ACT_LANDING_AIR_B ||
+                 a_for_af == (uint16_t)MSL_ACT_LANDING_AIR_HI ||
+                 a_for_af == (uint16_t)MSL_ACT_LANDING_AIR_LW) {
+        uint8_t lag_frames = 0;
+        switch (a_for_af) {
+          case (uint16_t)MSL_ACT_LANDING_AIR_N:
+            lag_frames = ch->landing_airn_lag_frames;
+            break;
+          case (uint16_t)MSL_ACT_LANDING_AIR_F:
+            lag_frames = ch->landing_airf_lag_frames;
+            break;
+          case (uint16_t)MSL_ACT_LANDING_AIR_B:
+            lag_frames = ch->landing_airb_lag_frames;
+            break;
+          case (uint16_t)MSL_ACT_LANDING_AIR_HI:
+            lag_frames = ch->landing_airhi_lag_frames;
+            break;
+          case (uint16_t)MSL_ACT_LANDING_AIR_LW:
+            lag_frames = ch->landing_airlw_lag_frames;
+            break;
+          default:
+            lag_frames = 0;
+            break;
+        }
+        const uint32_t sm = submotion_for_action(a_for_af);
+        const float end_frame = (sm <= 0xFFFFu) ? msl_anim_end_frame(cid, (uint16_t)sm) : 0.0f;
+        if (lag_frames > 0 && end_frame > 0.0f) {
+          const float rate = (end_frame + 0.1f) / (float)lag_frames;
+          // NOTE: This truncates fractional rates. See comment in LandingFallSpecial path for the
+          // planned fixed-point fractional-carry upgrade.
+          const int16_t inc = (int16_t)rate;
+          af_inc = inc > 0 ? inc : 1;
+        }
       }
 
-      const MslCharParams* ch = msl_char_params(batch->state.char_id[idx]);
-      if (ch == NULL) {
-        continue;
+      const int16_t af0 = batch->state.action_frame[idx];
+      if (af0 < max_af) {
+        const int32_t af1 = (int32_t)af0 + (int32_t)af_inc;
+        batch->state.action_frame[idx] = (af1 > (int32_t)max_af) ? max_af : (int16_t)af1;
       }
 
       float stick_x;
@@ -429,12 +491,43 @@ void locomotion_update_pre(MslBatch* batch) {
           batch->state.turn_frames_to_turn[idx] = 0;
         }
 
+        // Landing states -> Wait on completion (Anim step).
+        //
+        // Decomp references:
+        // - LandingAir uses a scaled animation rate but shares the same anim-end gate:
+        //   refs/melee/src/melee/ft/chara/ftCommon/ftCo_LandingAir.c (ftCo_LandingAir_Anim -> ftCo_Landing_Anim)
+        // - LandingFallSpecial uses a scaled animation rate (p_ftCommonData->x344) and the same
+        //   anim-end gate:
+        //   refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c and ftCo_EscapeAir.c
+        if (action_id == MSL_ACT_LANDING || action_id == MSL_ACT_LANDING_FALL_SPECIAL ||
+            action_id == MSL_ACT_LANDING_AIR_N || action_id == MSL_ACT_LANDING_AIR_F ||
+            action_id == MSL_ACT_LANDING_AIR_B || action_id == MSL_ACT_LANDING_AIR_HI ||
+            action_id == MSL_ACT_LANDING_AIR_LW) {
+          const uint32_t sm = submotion_for_action(action_id);
+          const float end_frame =
+              (sm <= 0xFFFFu) ? msl_anim_end_frame(batch->state.char_id[idx], (uint16_t)sm) : 0.0f;
+          if (end_frame > 0.0f && ((float)batch->state.action_frame[idx] >= end_frame)) {
+            batch->state.action_id[idx] = (uint16_t)MSL_ACT_WAIT;
+            batch->state.animation_index[idx] = (uint32_t)MSL_SM_WAIT1_0;
+            batch->state.action_frame[idx] = 0;
+            action_id = (uint16_t)MSL_ACT_WAIT;
+          }
+        }
+
         // Guard core loop (entry/hold/exit). Keep this before locomotion IASA (e.g. Wait->Jump/Dash).
         // Decomp call site example: refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c:43-66.
         uint8_t allow_guard_entry = 0;
         if (action_id == MSL_ACT_WAIT || action_is_walk(action_id) || action_id == MSL_ACT_TURN ||
             action_id == MSL_ACT_TURN_RUN || action_id == MSL_ACT_DASH || action_id == MSL_ACT_RUN ||
             action_id == MSL_ACT_RUN_BRAKE || action_id == MSL_ACT_RUN_DIRECT) {
+          allow_guard_entry = 1;
+        }
+        // Landing IASA: allow guard only after the landing lag gate.
+        // Decomp: ftCo_Landing_IASA gates interrupts on landing lag frames, then runs the common
+        // grounded interrupt checks (including shield via ftCo_80091A4C).
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c
+        if (action_id == MSL_ACT_LANDING &&
+            batch->state.action_frame[idx] >= (int16_t)ch->landing_lag_frames) {
           allow_guard_entry = 1;
         }
         guard_update_grounded(batch, c, idx, allow_guard_entry);
@@ -482,6 +575,67 @@ void locomotion_update_pre(MslBatch* batch) {
               // - ftCo_Turn_Enter_Smash sets `frames_to_turn = 0.0f`.
               // - ftCo_Turn_Anim_Inner handles the actual flip based on that countdown.
               // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Turn.c:56-88 and :170-190
+              batch->state.turn_has_turned[idx] = 0;
+              batch->state.turn_frames_to_turn[idx] = 0;
+              batch->state.action_id[idx] = (uint16_t)MSL_ACT_TURN;
+              batch->state.animation_index[idx] = (uint32_t)MSL_SM_TURN;
+              batch->state.action_frame[idx] = 0;
+              action_id = (uint16_t)MSL_ACT_TURN;
+            } else {
+              // Enter Dash.
+              // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c::ftCo_Dash_Enter (init_vel)
+              batch->state.action_id[idx] = (uint16_t)MSL_ACT_DASH;
+              batch->state.animation_index[idx] = (uint32_t)MSL_SM_DASH;
+              batch->state.action_frame[idx] = 0;
+              batch->state.speed_ground_x_self[idx] = facing_dir * ch->dash_initial_velocity;
+              // Decomp: fp->x670_timer_lstick_tilt_x = 0xFE;
+              // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c:62
+              batch->state.tilt_timer_x[idx] = 0xFEu;
+              action_id = (uint16_t)MSL_ACT_DASH;
+            }
+          } else if ((stick_x * facing_dir) <= c->turn_stick_x_threshold) {
+            // Turn.
+            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Turn.c::ftCo_Turn_CheckInput
+            batch->state.action_id[idx] = (uint16_t)MSL_ACT_TURN;
+            batch->state.animation_index[idx] = (uint32_t)MSL_SM_TURN;
+            batch->state.turn_has_turned[idx] = 0;
+            batch->state.turn_frames_to_turn[idx] = ch->turn_frames;
+            batch->state.action_frame[idx] = 0;
+            action_id = (uint16_t)MSL_ACT_TURN;
+          } else if (msl_absf(stick_x) >= c->walk_stick_threshold) {
+            // Walk.
+            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Walk.c::ftCo_Walk_CheckInput
+            const uint16_t want =
+                walk_action_from_speed(c, ch, batch->state.speed_ground_x_self[idx]);
+            batch->state.action_id[idx] = want;
+            batch->state.animation_index[idx] = anim_for_walk_action(want);
+            batch->state.action_frame[idx] = 0;
+            action_id = want;
+          }
+        }
+
+        // Landing IASA (minimal): after the landing lag gate, allow the same grounded locomotion
+        // options we support from Wait (jump/dash/turn/walk), in the same relative order.
+        //
+        // Decomp: ftCo_Landing_IASA calls the common grounded interrupt checks after the lag gate.
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c
+        if (action_id == MSL_ACT_LANDING &&
+            batch->state.action_frame[idx] >= (int16_t)ch->landing_lag_frames) {
+          const MslJumpInput j_in =
+              jump_input_from_edges(c, buttons_pressed, stick_y, tilt_timer_y);
+          if (j_in != MSL_JUMP_INPUT_NONE && batch->state.jumps_left[idx] > 0) {
+            batch->state.action_id[idx] = (uint16_t)MSL_ACT_KNEE_BEND;
+            batch->state.animation_index[idx] = (uint32_t)MSL_SM_KNEE_BEND;
+            batch->state.action_frame[idx] = 0;
+            batch->state.kneebend_jump_input[idx] = (uint8_t)j_in;
+            batch->state.kneebend_is_short_hop[idx] = 0;
+            action_id = (uint16_t)MSL_ACT_KNEE_BEND;
+          } else if (is_dash_flick(c, stick_x, tilt_timer_x)) {
+            // Dash flick.
+            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c::ftCo_Dash_CheckInput
+            if ((stick_x * facing_dir) < 0.0f) {
+              // Dash flick opposite-facing triggers Turn (smash-turn path in vanilla).
+              // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c:41-43 (ftCo_Turn_Enter_Smash)
               batch->state.turn_has_turned[idx] = 0;
               batch->state.turn_frames_to_turn[idx] = 0;
               batch->state.action_id[idx] = (uint16_t)MSL_ACT_TURN;
