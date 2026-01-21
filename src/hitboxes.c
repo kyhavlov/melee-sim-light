@@ -32,7 +32,9 @@ void hitboxes_refresh(MslBatch* batch) {
   // - For each active hitbox, we sample the 3x4 bone matrix via anim_pose_get_matrix(...) and apply
   //   it to the bone-local offset (x,y,z), then translate by fighter (pos_x,pos_y) to get world space.
   //
-  // IMPORTANT: This refresh is debug-only for now; it must not affect gameplay logic.
+  // Combat note:
+  // - combat_resolve() consumes these pose-driven world-space hitbox centers for hitbox-vs-hurtcap
+  //   intersection (Pass 1).
 
   const int num_players = (int)batch->config.num_players;
   for (int bi = 0; bi < batch->batch_size; bi++) {
@@ -157,4 +159,3 @@ void hitboxes_refresh(MslBatch* batch) {
     }
   }
 }
-

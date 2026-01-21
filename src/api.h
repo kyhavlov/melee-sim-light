@@ -249,6 +249,32 @@ typedef struct MslDebugInternals {
   uint8_t turn_has_turned[MSL_MAX_PLAYERS];      // fp->mv.co.turn.has_turned
 } MslDebugInternals;
 
+// Debug/validation helper: record a single hitbox-vs-hurtcap contact candidate.
+// This is a compact snapshot of the world-space primitives used in combat pass 1.
+typedef struct MslDebugCombatContact {
+  uint8_t attacker;    // player index
+  uint8_t defender;    // player index
+  uint8_t hitbox_id;   // 0..MSL_MAX_HITBOXES-1
+  uint8_t hurtcap_id;  // 0..MSL_MAX_HURTCAPS-1 (world array index)
+
+  uint16_t attacker_msid;  // Slippi post-frame `animation_index` truncated to u16
+  int16_t attacker_action_frame;
+
+  float hitbox_x;
+  float hitbox_y;
+  float hitbox_z;
+  float hitbox_radius;
+  float hitbox_damage;
+
+  float hurtcap_ax;
+  float hurtcap_ay;
+  float hurtcap_az;
+  float hurtcap_bx;
+  float hurtcap_by;
+  float hurtcap_bz;
+  float hurtcap_radius;
+} MslDebugCombatContact;
+
 #pragma pack(pop)
 
 // -------------
@@ -299,16 +325,40 @@ int msl_batch_debug_write_internals(const MslBatch* batch, uint8_t* out_bytes,
 //   [ax, ay, az, bx, by, bz, radius]
 // and returns the active capsule count in out_count.
 int msl_batch_debug_hurtcaps_world(const MslBatch* batch, int batch_index, int player_index,
-                                  float* out_caps_7, uint8_t* out_count);
+                                   float* out_caps_7, uint8_t* out_count);
 
 // Debug/validation helper: read pose-driven world-space hitbox centers for a single fighter.
 // Writes `MSL_MAX_HITBOXES * 10` floats into out_hitboxes_10 as rows:
 //   [x, y, z, radius, damage, u16_0, u16_1, u16_3, bone_part_id, enabled]
 // and returns the active hitbox count in out_count.
-//
-// NOTE: This is debug readback only; hitboxes do not affect gameplay yet.
 int msl_batch_debug_hitboxes_world(const MslBatch* batch, int batch_index, int player_index,
-                                  float* out_hitboxes_10, uint8_t* out_count);
+                                   float* out_hitboxes_10, uint8_t* out_count);
+
+// Debug/validation helper: compute and dump hitbox-vs-hurtcap contacts for one batch element.
+// Writes up to max_contacts entries into out_contacts and returns the number written in out_count.
+//
+// Deterministic ordering:
+// attacker 0..num_players-1, defender 0..num_players-1 (skip attacker==defender),
+// hitbox_id 0..3, hurtcap_id 0..count-1.
+int msl_batch_debug_combat_contacts(const MslBatch* batch, int batch_index,
+                                    MslDebugCombatContact* out_contacts, uint16_t max_contacts,
+                                    uint16_t* out_count);
+
+// Debug/testing helper: allow unit tests to write world-space primitives directly and invoke combat
+// without touching upstream pose systems.
+int msl_batch_debug_clear_hitboxes_world(MslBatch* batch, int batch_index, int player_index);
+int msl_batch_debug_set_hitbox_world(MslBatch* batch, int batch_index, int player_index,
+                                     int hitbox_id, float x, float y, float z, float radius,
+                                     float damage, int enabled);
+int msl_batch_debug_clear_hurtcaps_world(MslBatch* batch, int batch_index, int player_index);
+int msl_batch_debug_set_hurtcap_world(MslBatch* batch, int batch_index, int player_index,
+                                      int hurtcap_id, float ax, float ay, float az, float bx,
+                                      float by, float bz, float radius);
+int msl_batch_debug_combat_resolve(MslBatch* batch);
+
+// Debug/testing helper: pure geometry routine for unit tests.
+int msl_debug_point_segment_dist2(float px, float py, float pz, float ax, float ay, float az,
+                                  float bx, float by, float bz, float* out_d2, float* out_t);
 
 #ifdef __cplusplus
 }

@@ -78,8 +78,10 @@ static inline uint32_t f32_hi_u32(float x) {
 static const float MSL_EPSILON = 3.45266983e-4f;
 static const float MSL_SINCOS_ON_QUADRANT[8] = {0.0f, 1.0f, 1.0f, 0.0f, 0.0f, -1.0f, -1.0f, 0.0f};
 static const float MSL_SINCOS_POLY[10] = {
-    0.0000035287617f, 0.0000003089747f, -0.0003259365f,  -0.00003657235f, 0.015854323f,
-    0.0024903931f,    -0.30842513f,    -0.08074551f,     1.0f,             0.7853982f,
+    0.0000035287617f, 0.0000003089747f, -0.0003259365f,
+    -0.00003657235f,  0.015854323f,     0.0024903931f,
+    -0.30842513f,     -0.08074551f,     1.0f,
+    0.7853982f,
 };
 static const float MSL_FOUR_OVER_PI_M1[4] = {
     // Exact float32 literals from `refs/melee/build/GALE01/asm/MSL/trigf.s` `tmp_float`.
@@ -93,7 +95,7 @@ static inline float msl_sinf(float x) {
   const float xf = x;
   const float z = f32_mul_d(0.63661975, (double)xf);  // trigf.s: 2/pi as float32
   int n = (f32_hi_u32(xf) & 0x80000000u) ? (int)f32_from_double((double)z - 0.5)
-                                        : (int)f32_from_double((double)z + 0.5);
+                                         : (int)f32_from_double((double)z + 0.5);
 
   float y = f32_from_double((double)xf - (double)n * 2.0);
   y = f32_madd_d(MSL_FOUR_OVER_PI_M1[0], xf, y);
@@ -131,7 +133,7 @@ static inline float msl_cosf(float x) {
   const float xf = x;
   const float z = f32_mul_d(0.63661975, (double)xf);  // trigf.s: 2/pi as float32
   int n = (f32_hi_u32(xf) & 0x80000000u) ? (int)f32_from_double((double)z - 0.5)
-                                        : (int)f32_from_double((double)z + 0.5);
+                                         : (int)f32_from_double((double)z + 0.5);
 
   float y = f32_from_double((double)xf - (double)n * 2.0);
   y = f32_madd_d(MSL_FOUR_OVER_PI_M1[0], xf, y);
@@ -142,7 +144,8 @@ static inline float msl_cosf(float x) {
 
   if (f32_from_double(fabs((double)y)) < MSL_EPSILON) {
     const int n2 = n << 1;
-    return f32_fnms_d((double)y, (double)MSL_SINCOS_ON_QUADRANT[n2], (double)MSL_SINCOS_ON_QUADRANT[n2 + 1]);
+    return f32_fnms_d((double)y, (double)MSL_SINCOS_ON_QUADRANT[n2],
+                      (double)MSL_SINCOS_ON_QUADRANT[n2 + 1]);
   }
 
   const double ysq = (double)y * (double)y;
@@ -165,7 +168,8 @@ static inline float msl_cosf(float x) {
   return f32_mul_d((double)z2, (double)MSL_SINCOS_ON_QUADRANT[n2 + 1]);
 }
 
-static inline float spl_get_helmite(float fterm, float time, float p0, float p1, float d0, float d1) {
+static inline float spl_get_helmite(float fterm, float time, float p0, float p1, float d0,
+                                    float d1) {
   // Exact instruction order from `refs/melee/build/GALE01/asm/sysdolphin/baselib/spline.s`
   // `splGetHelmite` (mirrors tools/extraction/extract_fighter_anims.py).
   float f1 = f32_from_double(fterm);
@@ -198,8 +202,8 @@ static inline float spl_get_helmite(float fterm, float time, float p0, float p1,
   return f32_from_double((double)f1);
 }
 
-static inline void mtx_srt(float out[12], const float scl[3], const float rot[3], const float trans[3],
-                           const float* parent_scl) {
+static inline void mtx_srt(float out[12], const float scl[3], const float rot[3],
+                           const float trans[3], const float* parent_scl) {
   // Decomp/ASM source: `refs/melee/build/GALE01/asm/sysdolphin/baselib/mtx.s` `HSD_MtxSRT`.
   const float sx = f32_from_double((double)scl[0]);
   const float sy = f32_from_double((double)scl[1]);
@@ -300,24 +304,48 @@ static inline void mtx_concat(float out[12], const float a[12], const float b[12
   const float b20 = b[8], b21 = b[9], b22 = b[10], b23 = b[11];
 
   // Row 0
-  float o00 = f32_madd_d((double)b20, (double)a02, (double)f32_madd_d((double)b10, (double)a01, (double)f32_mul_d((double)b00, (double)a00)));
-  float o01 = f32_madd_d((double)b21, (double)a02, (double)f32_madd_d((double)b11, (double)a01, (double)f32_mul_d((double)b01, (double)a00)));
-  float o02 = f32_madd_d((double)b22, (double)a02, (double)f32_madd_d((double)b12, (double)a01, (double)f32_mul_d((double)b02, (double)a00)));
-  float o03 = f32_madd_d((double)b23, (double)a02, (double)f32_madd_d((double)b13, (double)a01, (double)f32_mul_d((double)b03, (double)a00)));
+  float o00 = f32_madd_d(
+      (double)b20, (double)a02,
+      (double)f32_madd_d((double)b10, (double)a01, (double)f32_mul_d((double)b00, (double)a00)));
+  float o01 = f32_madd_d(
+      (double)b21, (double)a02,
+      (double)f32_madd_d((double)b11, (double)a01, (double)f32_mul_d((double)b01, (double)a00)));
+  float o02 = f32_madd_d(
+      (double)b22, (double)a02,
+      (double)f32_madd_d((double)b12, (double)a01, (double)f32_mul_d((double)b02, (double)a00)));
+  float o03 = f32_madd_d(
+      (double)b23, (double)a02,
+      (double)f32_madd_d((double)b13, (double)a01, (double)f32_mul_d((double)b03, (double)a00)));
   o03 = f32_madd_d(1.0, (double)a03, (double)o03);
 
   // Row 1
-  float o10 = f32_madd_d((double)b20, (double)a12, (double)f32_madd_d((double)b10, (double)a11, (double)f32_mul_d((double)b00, (double)a10)));
-  float o11 = f32_madd_d((double)b21, (double)a12, (double)f32_madd_d((double)b11, (double)a11, (double)f32_mul_d((double)b01, (double)a10)));
-  float o12 = f32_madd_d((double)b22, (double)a12, (double)f32_madd_d((double)b12, (double)a11, (double)f32_mul_d((double)b02, (double)a10)));
-  float o13 = f32_madd_d((double)b23, (double)a12, (double)f32_madd_d((double)b13, (double)a11, (double)f32_mul_d((double)b03, (double)a10)));
+  float o10 = f32_madd_d(
+      (double)b20, (double)a12,
+      (double)f32_madd_d((double)b10, (double)a11, (double)f32_mul_d((double)b00, (double)a10)));
+  float o11 = f32_madd_d(
+      (double)b21, (double)a12,
+      (double)f32_madd_d((double)b11, (double)a11, (double)f32_mul_d((double)b01, (double)a10)));
+  float o12 = f32_madd_d(
+      (double)b22, (double)a12,
+      (double)f32_madd_d((double)b12, (double)a11, (double)f32_mul_d((double)b02, (double)a10)));
+  float o13 = f32_madd_d(
+      (double)b23, (double)a12,
+      (double)f32_madd_d((double)b13, (double)a11, (double)f32_mul_d((double)b03, (double)a10)));
   o13 = f32_madd_d(1.0, (double)a13, (double)o13);
 
   // Row 2
-  float o20 = f32_madd_d((double)b20, (double)a22, (double)f32_madd_d((double)b10, (double)a21, (double)f32_mul_d((double)b00, (double)a20)));
-  float o21 = f32_madd_d((double)b21, (double)a22, (double)f32_madd_d((double)b11, (double)a21, (double)f32_mul_d((double)b01, (double)a20)));
-  float o22 = f32_madd_d((double)b22, (double)a22, (double)f32_madd_d((double)b12, (double)a21, (double)f32_mul_d((double)b02, (double)a20)));
-  float o23 = f32_madd_d((double)b23, (double)a22, (double)f32_madd_d((double)b13, (double)a21, (double)f32_mul_d((double)b03, (double)a20)));
+  float o20 = f32_madd_d(
+      (double)b20, (double)a22,
+      (double)f32_madd_d((double)b10, (double)a21, (double)f32_mul_d((double)b00, (double)a20)));
+  float o21 = f32_madd_d(
+      (double)b21, (double)a22,
+      (double)f32_madd_d((double)b11, (double)a21, (double)f32_mul_d((double)b01, (double)a20)));
+  float o22 = f32_madd_d(
+      (double)b22, (double)a22,
+      (double)f32_madd_d((double)b12, (double)a21, (double)f32_mul_d((double)b02, (double)a20)));
+  float o23 = f32_madd_d(
+      (double)b23, (double)a22,
+      (double)f32_madd_d((double)b13, (double)a21, (double)f32_mul_d((double)b03, (double)a20)));
   o23 = f32_madd_d(1.0, (double)a23, (double)o23);
 
   out[0] = o00;
@@ -440,7 +468,9 @@ static inline float fobj_parse_float(const uint8_t* ad, int len, int* pos, uint8
   return 0.0f;
 }
 
-static inline uint8_t fobj_parse_opcode(const uint8_t* ad, int pos) { return (uint8_t)(ad[pos] & 0xF); }
+static inline uint8_t fobj_parse_opcode(const uint8_t* ad, int pos) {
+  return (uint8_t)(ad[pos] & 0xF);
+}
 
 static inline int fobj_parse_pack_info(const uint8_t* ad, int len, int* pos) {
   (void)len;
@@ -620,7 +650,8 @@ static inline bool fobj_update_anim(FObj* fo, float* out_value) {
     return true;
   }
 
-  if (fo->op_intrp == HSD_A_OP_SPL0 || fo->op_intrp == HSD_A_OP_SPL || fo->op_intrp == HSD_A_OP_SLP) {
+  if (fo->op_intrp == HSD_A_OP_SPL0 || fo->op_intrp == HSD_A_OP_SPL ||
+      fo->op_intrp == HSD_A_OP_SLP) {
     if (fo->fterm == 0) {
       *out_value = fo->p1;
       return true;
@@ -1085,6 +1116,167 @@ static PyObject* msl_hitboxes_world_py(PyObject* self, PyObject* args) {
   return Py_BuildValue("(Oi)", arr, (int)count);
 }
 
+static PyObject* msl_debug_combat_contacts_py(PyObject* self, PyObject* args) {
+  (void)self;
+  PyObject* handle_obj = NULL;
+  int batch_index = 0;
+  int max_contacts = 256;
+  if (!PyArg_ParseTuple(args, "Oi|i", &handle_obj, &batch_index, &max_contacts)) {
+    return NULL;
+  }
+  PyMslHandle* h = unpack_handle(handle_obj);
+  if (h == NULL) {
+    return NULL;
+  }
+  if (max_contacts < 0 || max_contacts > 0xFFFF) {
+    PyErr_SetString(PyExc_ValueError, "max_contacts out of range");
+    return NULL;
+  }
+
+  npy_intp dims[2] = {(npy_intp)max_contacts, (npy_intp)sizeof(MslDebugCombatContact)};
+  PyArrayObject* arr = (PyArrayObject*)PyArray_SimpleNew(2, dims, NPY_UINT8);
+  if (arr == NULL) {
+    return NULL;
+  }
+
+  uint16_t count = 0;
+  MslDebugCombatContact* out = (MslDebugCombatContact*)PyArray_DATA(arr);
+  const int err =
+      msl_batch_debug_combat_contacts(h->batch, batch_index, out, (uint16_t)max_contacts, &count);
+  if (err != 0) {
+    Py_DECREF(arr);
+    PyErr_Format(PyExc_ValueError, "msl_batch_debug_combat_contacts failed: %d", err);
+    return NULL;
+  }
+
+  return Py_BuildValue("(Oi)", arr, (int)count);
+}
+
+static PyObject* msl_debug_clear_hitboxes_world_py(PyObject* self, PyObject* args) {
+  (void)self;
+  PyObject* handle_obj = NULL;
+  int batch_index = 0;
+  int player_index = 0;
+  if (!PyArg_ParseTuple(args, "Oii", &handle_obj, &batch_index, &player_index)) {
+    return NULL;
+  }
+  PyMslHandle* h = unpack_handle(handle_obj);
+  if (h == NULL) {
+    return NULL;
+  }
+  const int err = msl_batch_debug_clear_hitboxes_world(h->batch, batch_index, player_index);
+  if (err != 0) {
+    PyErr_Format(PyExc_ValueError, "msl_batch_debug_clear_hitboxes_world failed: %d", err);
+    return NULL;
+  }
+  Py_RETURN_NONE;
+}
+
+static PyObject* msl_debug_set_hitbox_world_py(PyObject* self, PyObject* args) {
+  (void)self;
+  PyObject* handle_obj = NULL;
+  int batch_index = 0;
+  int player_index = 0;
+  int hitbox_id = 0;
+  float x = 0.0f, y = 0.0f, z = 0.0f, radius = 0.0f, damage = 0.0f;
+  int enabled = 1;
+  if (!PyArg_ParseTuple(args, "Oiiifffff|i", &handle_obj, &batch_index, &player_index, &hitbox_id,
+                        &x, &y, &z, &radius, &damage, &enabled)) {
+    return NULL;
+  }
+  PyMslHandle* h = unpack_handle(handle_obj);
+  if (h == NULL) {
+    return NULL;
+  }
+  const int err = msl_batch_debug_set_hitbox_world(h->batch, batch_index, player_index, hitbox_id,
+                                                   x, y, z, radius, damage, enabled);
+  if (err != 0) {
+    PyErr_Format(PyExc_ValueError, "msl_batch_debug_set_hitbox_world failed: %d", err);
+    return NULL;
+  }
+  Py_RETURN_NONE;
+}
+
+static PyObject* msl_debug_clear_hurtcaps_world_py(PyObject* self, PyObject* args) {
+  (void)self;
+  PyObject* handle_obj = NULL;
+  int batch_index = 0;
+  int player_index = 0;
+  if (!PyArg_ParseTuple(args, "Oii", &handle_obj, &batch_index, &player_index)) {
+    return NULL;
+  }
+  PyMslHandle* h = unpack_handle(handle_obj);
+  if (h == NULL) {
+    return NULL;
+  }
+  const int err = msl_batch_debug_clear_hurtcaps_world(h->batch, batch_index, player_index);
+  if (err != 0) {
+    PyErr_Format(PyExc_ValueError, "msl_batch_debug_clear_hurtcaps_world failed: %d", err);
+    return NULL;
+  }
+  Py_RETURN_NONE;
+}
+
+static PyObject* msl_debug_set_hurtcap_world_py(PyObject* self, PyObject* args) {
+  (void)self;
+  PyObject* handle_obj = NULL;
+  int batch_index = 0;
+  int player_index = 0;
+  int hurtcap_id = 0;
+  float ax = 0.0f, ay = 0.0f, az = 0.0f, bx = 0.0f, by = 0.0f, bz = 0.0f, radius = 0.0f;
+  if (!PyArg_ParseTuple(args, "Oiiifffffff", &handle_obj, &batch_index, &player_index, &hurtcap_id,
+                        &ax, &ay, &az, &bx, &by, &bz, &radius)) {
+    return NULL;
+  }
+  PyMslHandle* h = unpack_handle(handle_obj);
+  if (h == NULL) {
+    return NULL;
+  }
+  const int err = msl_batch_debug_set_hurtcap_world(h->batch, batch_index, player_index, hurtcap_id,
+                                                    ax, ay, az, bx, by, bz, radius);
+  if (err != 0) {
+    PyErr_Format(PyExc_ValueError, "msl_batch_debug_set_hurtcap_world failed: %d", err);
+    return NULL;
+  }
+  Py_RETURN_NONE;
+}
+
+static PyObject* msl_debug_combat_resolve_py(PyObject* self, PyObject* args) {
+  (void)self;
+  PyObject* handle_obj = NULL;
+  if (!PyArg_ParseTuple(args, "O", &handle_obj)) {
+    return NULL;
+  }
+  PyMslHandle* h = unpack_handle(handle_obj);
+  if (h == NULL) {
+    return NULL;
+  }
+  const int err = msl_batch_debug_combat_resolve(h->batch);
+  if (err != 0) {
+    PyErr_Format(PyExc_RuntimeError, "msl_batch_debug_combat_resolve failed: %d", err);
+    return NULL;
+  }
+  Py_RETURN_NONE;
+}
+
+static PyObject* msl_debug_point_segment_dist2_py(PyObject* self, PyObject* args) {
+  (void)self;
+  float px = 0.0f, py = 0.0f, pz = 0.0f;
+  float ax = 0.0f, ay = 0.0f, az = 0.0f;
+  float bx = 0.0f, by = 0.0f, bz = 0.0f;
+  if (!PyArg_ParseTuple(args, "fffffffff", &px, &py, &pz, &ax, &ay, &az, &bx, &by, &bz)) {
+    return NULL;
+  }
+  float d2 = 0.0f;
+  float t = 0.0f;
+  const int err = msl_debug_point_segment_dist2(px, py, pz, ax, ay, az, bx, by, bz, &d2, &t);
+  if (err != 0) {
+    PyErr_Format(PyExc_RuntimeError, "msl_debug_point_segment_dist2 failed: %d", err);
+    return NULL;
+  }
+  return Py_BuildValue("(ff)", d2, t);
+}
+
 static PyObject* msl_anim_bake_ssanim01_py(PyObject* self, PyObject* args) {
   (void)self;
   PyObject* rest_rot_obj = NULL;
@@ -1122,7 +1314,8 @@ static PyObject* msl_anim_bake_ssanim01_py(PyObject* self, PyObject* args) {
   if (rest_scl == NULL) {
     return NULL;
   }
-  PyArrayObject* parent_part = require_contiguous_array(parent_part_obj, NPY_INT16, 1, "parent_part");
+  PyArrayObject* parent_part =
+      require_contiguous_array(parent_part_obj, NPY_INT16, 1, "parent_part");
   if (parent_part == NULL) {
     return NULL;
   }
@@ -1134,19 +1327,23 @@ static PyObject* msl_anim_bake_ssanim01_py(PyObject* self, PyObject* args) {
   if (order == NULL) {
     return NULL;
   }
-  PyArrayObject* local_parts = require_contiguous_array(local_parts_obj, NPY_INT32, 1, "local_parts");
+  PyArrayObject* local_parts =
+      require_contiguous_array(local_parts_obj, NPY_INT32, 1, "local_parts");
   if (local_parts == NULL) {
     return NULL;
   }
-  PyArrayObject* joint_parts = require_contiguous_array(joint_parts_obj, NPY_INT32, 1, "joint_parts");
+  PyArrayObject* joint_parts =
+      require_contiguous_array(joint_parts_obj, NPY_INT32, 1, "joint_parts");
   if (joint_parts == NULL) {
     return NULL;
   }
-  PyArrayObject* update_parts = require_contiguous_array(update_parts_obj, NPY_INT32, 1, "update_parts");
+  PyArrayObject* update_parts =
+      require_contiguous_array(update_parts_obj, NPY_INT32, 1, "update_parts");
   if (update_parts == NULL) {
     return NULL;
   }
-  PyArrayObject* fobj_starts = require_contiguous_array(fobj_starts_obj, NPY_INT32, 1, "fobj_starts");
+  PyArrayObject* fobj_starts =
+      require_contiguous_array(fobj_starts_obj, NPY_INT32, 1, "fobj_starts");
   if (fobj_starts == NULL) {
     return NULL;
   }
@@ -1165,15 +1362,16 @@ static PyObject* msl_anim_bake_ssanim01_py(PyObject* self, PyObject* args) {
   }
 
   const npy_intp parts_num = PyArray_DIM(rest_rot, 0);
-  if (PyArray_NDIM(rest_rot) != 2 || PyArray_DIM(rest_rot, 1) != 3 ||
-      PyArray_NDIM(rest_pos) != 2 || PyArray_DIM(rest_pos, 1) != 3 ||
-      PyArray_NDIM(rest_scl) != 2 || PyArray_DIM(rest_scl, 1) != 3) {
+  if (PyArray_NDIM(rest_rot) != 2 || PyArray_DIM(rest_rot, 1) != 3 || PyArray_NDIM(rest_pos) != 2 ||
+      PyArray_DIM(rest_pos, 1) != 3 || PyArray_NDIM(rest_scl) != 2 ||
+      PyArray_DIM(rest_scl, 1) != 3) {
     PyErr_SetString(PyExc_ValueError, "rest_rot/rest_pos/rest_scl must have shape (parts, 3)");
     return NULL;
   }
   if (PyArray_DIM(rest_pos, 0) != parts_num || PyArray_DIM(rest_scl, 0) != parts_num ||
       PyArray_DIM(parent_part, 0) != parts_num || PyArray_DIM(part_flags, 0) != parts_num) {
-    PyErr_SetString(PyExc_ValueError, "rest arrays and parent_part/part_flags must share parts dim");
+    PyErr_SetString(PyExc_ValueError,
+                    "rest arrays and parent_part/part_flags must share parts dim");
     return NULL;
   }
   if (parts_num <= 0) {
@@ -1240,8 +1438,8 @@ static PyObject* msl_anim_bake_ssanim01_py(PyObject* self, PyObject* args) {
   world_mtx = (float*)PyMem_Malloc((size_t)parts_num * 12 * sizeof(float));
   world_scl = (float*)PyMem_Malloc((size_t)parts_num * 3 * sizeof(float));
   world_scl_valid = (bool*)PyMem_Malloc((size_t)parts_num * sizeof(bool));
-  if (cur_rot == NULL || cur_pos == NULL || cur_scl == NULL || world_mtx == NULL || world_scl == NULL ||
-      world_scl_valid == NULL) {
+  if (cur_rot == NULL || cur_pos == NULL || cur_scl == NULL || world_mtx == NULL ||
+      world_scl == NULL || world_scl_valid == NULL) {
     PyErr_NoMemory();
     goto cleanup;
   }
@@ -1310,8 +1508,8 @@ static PyObject* msl_anim_bake_ssanim01_py(PyObject* self, PyObject* args) {
     fobj_req_anim(fo, 0.0f);
   }
 
-  static const float IDENTITY[12] = {1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f,
-                                     0.0f, 0.0f, 1.0f, 0.0f};
+  static const float IDENTITY[12] = {1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f,
+                                     0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f};
 
   const int16_t* parent_ptr = (const int16_t*)PyArray_DATA(parent_part);
   const uint32_t* flags_ptr = (const uint32_t*)PyArray_DATA(part_flags);
@@ -1519,9 +1717,28 @@ static PyMethodDef methods[] = {
      "hurtcaps_world(handle, batch_index, player_index) -> (caps[MSL_MAX_HURTCAPS,7], count)"},
     {"hitboxes_world", msl_hitboxes_world_py, METH_VARARGS,
      "hitboxes_world(handle, batch_index, player_index) -> (hitboxes[MSL_MAX_HITBOXES,10], count)"},
+    {"debug_combat_contacts", msl_debug_combat_contacts_py, METH_VARARGS,
+     "debug_combat_contacts(handle, batch_index, max_contacts=256) -> (bytes[max, "
+     "sizeof(MslDebugCombatContact)], count)"},
+    {"debug_clear_hitboxes_world", msl_debug_clear_hitboxes_world_py, METH_VARARGS,
+     "debug_clear_hitboxes_world(handle, batch_index, player_index)"},
+    {"debug_set_hitbox_world", msl_debug_set_hitbox_world_py, METH_VARARGS,
+     "debug_set_hitbox_world(handle, batch_index, player_index, hitbox_id, x,y,z,radius,damage, "
+     "enabled=1)"},
+    {"debug_clear_hurtcaps_world", msl_debug_clear_hurtcaps_world_py, METH_VARARGS,
+     "debug_clear_hurtcaps_world(handle, batch_index, player_index)"},
+    {"debug_set_hurtcap_world", msl_debug_set_hurtcap_world_py, METH_VARARGS,
+     "debug_set_hurtcap_world(handle, batch_index, player_index, hurtcap_id, "
+     "ax,ay,az,bx,by,bz,radius)"},
+    {"debug_combat_resolve", msl_debug_combat_resolve_py, METH_VARARGS,
+     "debug_combat_resolve(handle) -> run combat_resolve() only"},
+    {"debug_point_segment_dist2", msl_debug_point_segment_dist2_py, METH_VARARGS,
+     "debug_point_segment_dist2(px,py,pz, ax,ay,az, bx,by,bz) -> (dist2, t)"},
     {"anim_bake_ssanim01", msl_anim_bake_ssanim01_py, METH_VARARGS,
-     "anim_bake_ssanim01(rest_rot, rest_pos, rest_scl, parent_part, part_flags, order, local_parts, joint_parts, "
-     "update_parts, fobj_starts, fobj_desc, ad_source, frame_count, inv_scale_part, inv_model_scale) -> "
+     "anim_bake_ssanim01(rest_rot, rest_pos, rest_scl, parent_part, part_flags, order, "
+     "local_parts, joint_parts, "
+     "update_parts, fobj_starts, fobj_desc, ad_source, frame_count, inv_scale_part, "
+     "inv_model_scale) -> "
      "(mats_bytes, locals_bytes, transn_bytes)"},
     {NULL, NULL, 0, NULL},
 };

@@ -106,6 +106,12 @@ typedef struct MslCommonParams {
   //   `ca->air_drift_max * mobility_scalar`.
   //   refs/melee/src/melee/ft/chara/ftCommon/ftCo_FallSpecial.c
   float fall_special_mobility_scalar;  // p_ftCommonData->x340
+
+  // Hitlag constants (ftCommon_CalcHitlag).
+  // Decomp: refs/melee/src/melee/ft/ftcommon.c::ftCommon_CalcHitlag
+  float hitlag_dmg_mul;    // p_ftCommonData->x198
+  float hitlag_base;       // p_ftCommonData->x19C
+  float hitlag_squat_mul;  // p_ftCommonData->x1A0
 } MslCommonParams;
 
 int common_params_init(void);

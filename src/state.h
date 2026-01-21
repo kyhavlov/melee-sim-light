@@ -88,8 +88,8 @@ typedef struct MslStateSoA {
   uint8_t* l_cancel;
   uint8_t* hurtbox_state;
   // Pose-driven world-space hurt capsule endpoints (computed each frame in hurtboxes_refresh).
-  uint8_t* hurtcap_count; // [batch * players]
-  float* hurtcap_a_x;     // [batch * players * caps]
+  uint8_t* hurtcap_count;  // [batch * players]
+  float* hurtcap_a_x;      // [batch * players * caps]
   float* hurtcap_a_y;
   float* hurtcap_a_z;
   float* hurtcap_b_x;
@@ -99,9 +99,9 @@ typedef struct MslStateSoA {
   uint8_t* hurtcap_is_grabbable;
   uint8_t* hurtcap_height;
   // Pose-driven world-space hitbox centers (computed each frame in hitboxes_refresh).
-  // Debug readback only for now; not used for combat resolution yet.
-  uint8_t* hitbox_count; // [batch * players]
-  uint8_t* hitbox_enabled; // [batch * players * MSL_MAX_HITBOXES]
+  // Used by combat_resolve() (Pass 1) for hitbox-vs-hurtcap intersection.
+  uint8_t* hitbox_count;    // [batch * players]
+  uint8_t* hitbox_enabled;  // [batch * players * MSL_MAX_HITBOXES]
   float* hitbox_x;
   float* hitbox_y;
   float* hitbox_z;

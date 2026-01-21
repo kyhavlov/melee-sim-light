@@ -198,7 +198,10 @@ int common_params_init(void) {
       json_get_f32(buf, "escapeair_force", &g_params.escapeair_force) != 0 ||
       json_get_f32(buf, "escapeair_decay", &g_params.escapeair_decay) != 0 ||
       json_get_f32(buf, "fall_special_mobility_scalar", &g_params.fall_special_mobility_scalar) !=
-          0) {
+          0 ||
+      json_get_f32(buf, "hitlag_dmg_mul", &g_params.hitlag_dmg_mul) != 0 ||
+      json_get_f32(buf, "hitlag_base", &g_params.hitlag_base) != 0 ||
+      json_get_f32(buf, "hitlag_squat_mul", &g_params.hitlag_squat_mul) != 0) {
     alloc_free(buf);
     return -1;
   }

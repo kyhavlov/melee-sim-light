@@ -8,6 +8,8 @@
 #include "anim_pose.h"
 #include "action_ids.h"
 #include "batch_internal.h"
+#include "combat.h"
+#include "combat_geom.h"
 #include "char_params.h"
 #include "common_params.h"
 #include "config.h"
@@ -413,7 +415,7 @@ int msl_batch_debug_write_internals(const MslBatch* batch, uint8_t* out_bytes,
 }
 
 int msl_batch_debug_hurtcaps_world(const MslBatch* batch, int batch_index, int player_index,
-                                  float* out_caps_7, uint8_t* out_count) {
+                                   float* out_caps_7, uint8_t* out_count) {
   if (batch == NULL || out_caps_7 == NULL || out_count == NULL) {
     return EINVAL;
   }
@@ -452,7 +454,7 @@ int msl_batch_debug_hurtcaps_world(const MslBatch* batch, int batch_index, int p
 }
 
 int msl_batch_debug_hitboxes_world(const MslBatch* batch, int batch_index, int player_index,
-                                  float* out_hitboxes_10, uint8_t* out_count) {
+                                   float* out_hitboxes_10, uint8_t* out_count) {
   if (batch == NULL || out_hitboxes_10 == NULL || out_count == NULL) {
     return EINVAL;
   }
@@ -490,5 +492,264 @@ int msl_batch_debug_hitboxes_world(const MslBatch* batch, int batch_index, int p
     out_hitboxes_10[o + 9] = (float)batch->state.hitbox_enabled[hi];
   }
 
+  return 0;
+}
+
+static inline size_t debug_idx_hitbox(int bi, int p, int hb_i) {
+  return ((size_t)bi * (size_t)MSL_MAX_PLAYERS + (size_t)p) * (size_t)MSL_MAX_HITBOXES +
+         (size_t)hb_i;
+}
+
+static inline size_t debug_idx_hurtcap(int bi, int p, int cap_i) {
+  return ((size_t)bi * (size_t)MSL_MAX_PLAYERS + (size_t)p) * (size_t)MSL_MAX_HURTCAPS +
+         (size_t)cap_i;
+}
+
+int msl_batch_debug_combat_contacts(const MslBatch* batch, int batch_index,
+                                    MslDebugCombatContact* out_contacts, uint16_t max_contacts,
+                                    uint16_t* out_count) {
+  if (batch == NULL || out_contacts == NULL || out_count == NULL) {
+    return EINVAL;
+  }
+  if (batch_index < 0 || batch_index >= batch->batch_size) {
+    return EINVAL;
+  }
+
+  uint16_t written = 0;
+  if (max_contacts == 0) {
+    *out_count = 0;
+    return 0;
+  }
+
+  const int num_players = (int)batch->config.num_players;
+  for (int attacker = 0; attacker < num_players; attacker++) {
+    const size_t a_idx = msl_idx_player(batch_index, attacker);
+    if (batch->state.hitbox_count[a_idx] == 0) {
+      continue;
+    }
+
+    const uint32_t msid_u32 = batch->state.animation_index[a_idx];
+    const uint16_t msid = (msid_u32 <= 0xFFFFu) ? (uint16_t)msid_u32 : 0u;
+    const int16_t action_frame = batch->state.action_frame[a_idx];
+
+    for (int defender = 0; defender < num_players; defender++) {
+      if (defender == attacker) {
+        continue;
+      }
+      const size_t d_idx = msl_idx_player(batch_index, defender);
+
+      if (batch->state.is_teams[batch_index]) {
+        if (batch->state.team_id[a_idx] == batch->state.team_id[d_idx]) {
+          continue;
+        }
+      }
+
+      const uint8_t hurtcap_count = batch->state.hurtcap_count[d_idx];
+      if (hurtcap_count == 0) {
+        continue;
+      }
+
+      for (int hb_id = 0; hb_id < MSL_MAX_HITBOXES; hb_id++) {
+        const size_t hb_i = debug_idx_hitbox(batch_index, attacker, hb_id);
+        if (!batch->state.hitbox_enabled[hb_i]) {
+          continue;
+        }
+
+        const float hx = batch->state.hitbox_x[hb_i];
+        const float hy = batch->state.hitbox_y[hb_i];
+        const float hz = batch->state.hitbox_z[hb_i];
+        const float hr = batch->state.hitbox_radius[hb_i];
+        const float hdmg = batch->state.hitbox_damage[hb_i];
+
+        for (uint8_t cap_id = 0; cap_id < hurtcap_count; cap_id++) {
+          const size_t cap_i = debug_idx_hurtcap(batch_index, defender, (int)cap_id);
+          const float ax = batch->state.hurtcap_a_x[cap_i];
+          const float ay = batch->state.hurtcap_a_y[cap_i];
+          const float az = batch->state.hurtcap_a_z[cap_i];
+          const float bx = batch->state.hurtcap_b_x[cap_i];
+          const float by = batch->state.hurtcap_b_y[cap_i];
+          const float bz = batch->state.hurtcap_b_z[cap_i];
+          const float cr = batch->state.hurtcap_radius[cap_i];
+
+          if (!combat_sphere_capsule_intersects(hx, hy, hz, hr, ax, ay, az, bx, by, bz, cr, NULL)) {
+            continue;
+          }
+
+          MslDebugCombatContact* out = &out_contacts[written];
+          memset(out, 0, sizeof(*out));
+          out->attacker = (uint8_t)attacker;
+          out->defender = (uint8_t)defender;
+          out->hitbox_id = (uint8_t)hb_id;
+          out->hurtcap_id = cap_id;
+          out->attacker_msid = msid;
+          out->attacker_action_frame = action_frame;
+          out->hitbox_x = hx;
+          out->hitbox_y = hy;
+          out->hitbox_z = hz;
+          out->hitbox_radius = hr;
+          out->hitbox_damage = hdmg;
+          out->hurtcap_ax = ax;
+          out->hurtcap_ay = ay;
+          out->hurtcap_az = az;
+          out->hurtcap_bx = bx;
+          out->hurtcap_by = by;
+          out->hurtcap_bz = bz;
+          out->hurtcap_radius = cr;
+          written++;
+
+          if (written >= max_contacts) {
+            *out_count = written;
+            return 0;
+          }
+        }
+      }
+    }
+  }
+
+  *out_count = written;
+  return 0;
+}
+
+int msl_batch_debug_clear_hitboxes_world(MslBatch* batch, int batch_index, int player_index) {
+  if (batch == NULL) {
+    return EINVAL;
+  }
+  if (batch_index < 0 || batch_index >= batch->batch_size) {
+    return EINVAL;
+  }
+  if (player_index < 0 || player_index >= MSL_MAX_PLAYERS) {
+    return EINVAL;
+  }
+
+  const size_t idx = msl_idx_player(batch_index, player_index);
+  batch->state.hitbox_count[idx] = 0;
+  for (int hb_id = 0; hb_id < MSL_MAX_HITBOXES; hb_id++) {
+    const size_t hb_i = debug_idx_hitbox(batch_index, player_index, hb_id);
+    batch->state.hitbox_enabled[hb_i] = 0;
+    batch->state.hitbox_x[hb_i] = 0.0f;
+    batch->state.hitbox_y[hb_i] = 0.0f;
+    batch->state.hitbox_z[hb_i] = 0.0f;
+    batch->state.hitbox_radius[hb_i] = 0.0f;
+    batch->state.hitbox_damage[hb_i] = 0.0f;
+  }
+
+  return 0;
+}
+
+int msl_batch_debug_set_hitbox_world(MslBatch* batch, int batch_index, int player_index,
+                                     int hitbox_id, float x, float y, float z, float radius,
+                                     float damage, int enabled) {
+  if (batch == NULL) {
+    return EINVAL;
+  }
+  if (batch_index < 0 || batch_index >= batch->batch_size) {
+    return EINVAL;
+  }
+  if (player_index < 0 || player_index >= MSL_MAX_PLAYERS) {
+    return EINVAL;
+  }
+  if (hitbox_id < 0 || hitbox_id >= MSL_MAX_HITBOXES) {
+    return EINVAL;
+  }
+
+  const size_t hb_i = debug_idx_hitbox(batch_index, player_index, hitbox_id);
+  batch->state.hitbox_enabled[hb_i] = enabled ? 1 : 0;
+  batch->state.hitbox_x[hb_i] = x;
+  batch->state.hitbox_y[hb_i] = y;
+  batch->state.hitbox_z[hb_i] = z;
+  batch->state.hitbox_radius[hb_i] = radius;
+  batch->state.hitbox_damage[hb_i] = damage;
+
+  // Keep hitbox_count consistent with enabled slots.
+  const size_t idx = msl_idx_player(batch_index, player_index);
+  uint8_t count = 0;
+  for (int hb = 0; hb < MSL_MAX_HITBOXES; hb++) {
+    const size_t i = debug_idx_hitbox(batch_index, player_index, hb);
+    if (batch->state.hitbox_enabled[i]) {
+      count++;
+    }
+  }
+  batch->state.hitbox_count[idx] = count;
+
+  return 0;
+}
+
+int msl_batch_debug_clear_hurtcaps_world(MslBatch* batch, int batch_index, int player_index) {
+  if (batch == NULL) {
+    return EINVAL;
+  }
+  if (batch_index < 0 || batch_index >= batch->batch_size) {
+    return EINVAL;
+  }
+  if (player_index < 0 || player_index >= MSL_MAX_PLAYERS) {
+    return EINVAL;
+  }
+
+  const size_t idx = msl_idx_player(batch_index, player_index);
+  batch->state.hurtcap_count[idx] = 0;
+  for (int cap_id = 0; cap_id < MSL_MAX_HURTCAPS; cap_id++) {
+    const size_t cap_i = debug_idx_hurtcap(batch_index, player_index, cap_id);
+    batch->state.hurtcap_a_x[cap_i] = 0.0f;
+    batch->state.hurtcap_a_y[cap_i] = 0.0f;
+    batch->state.hurtcap_a_z[cap_i] = 0.0f;
+    batch->state.hurtcap_b_x[cap_i] = 0.0f;
+    batch->state.hurtcap_b_y[cap_i] = 0.0f;
+    batch->state.hurtcap_b_z[cap_i] = 0.0f;
+    batch->state.hurtcap_radius[cap_i] = 0.0f;
+  }
+
+  return 0;
+}
+
+int msl_batch_debug_set_hurtcap_world(MslBatch* batch, int batch_index, int player_index,
+                                      int hurtcap_id, float ax, float ay, float az, float bx,
+                                      float by, float bz, float radius) {
+  if (batch == NULL) {
+    return EINVAL;
+  }
+  if (batch_index < 0 || batch_index >= batch->batch_size) {
+    return EINVAL;
+  }
+  if (player_index < 0 || player_index >= MSL_MAX_PLAYERS) {
+    return EINVAL;
+  }
+  if (hurtcap_id < 0 || hurtcap_id >= MSL_MAX_HURTCAPS) {
+    return EINVAL;
+  }
+
+  const size_t cap_i = debug_idx_hurtcap(batch_index, player_index, hurtcap_id);
+  batch->state.hurtcap_a_x[cap_i] = ax;
+  batch->state.hurtcap_a_y[cap_i] = ay;
+  batch->state.hurtcap_a_z[cap_i] = az;
+  batch->state.hurtcap_b_x[cap_i] = bx;
+  batch->state.hurtcap_b_y[cap_i] = by;
+  batch->state.hurtcap_b_z[cap_i] = bz;
+  batch->state.hurtcap_radius[cap_i] = radius;
+
+  const size_t idx = msl_idx_player(batch_index, player_index);
+  uint8_t count = batch->state.hurtcap_count[idx];
+  const uint8_t want = (uint8_t)(hurtcap_id + 1);
+  if (want > count) {
+    count = want;
+  }
+  batch->state.hurtcap_count[idx] = count;
+
+  return 0;
+}
+
+int msl_batch_debug_combat_resolve(MslBatch* batch) {
+  if (batch == NULL) {
+    return EINVAL;
+  }
+  combat_resolve(batch);
+  return 0;
+}
+
+int msl_debug_point_segment_dist2(float px, float py, float pz, float ax, float ay, float az,
+                                  float bx, float by, float bz, float* out_d2, float* out_t) {
+  if (out_d2 == NULL || out_t == NULL) {
+    return EINVAL;
+  }
+  combat_point_segment_dist2(px, py, pz, ax, ay, az, bx, by, bz, out_d2, out_t);
   return 0;
 }
