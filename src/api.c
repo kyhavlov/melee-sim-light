@@ -10,6 +10,7 @@
 #include "char_params.h"
 #include "common_params.h"
 #include "config.h"
+#include "ecb_extents_table.h"
 #include "ecb_table.h"
 #include "stage_collision.h"
 #include "state.h"
@@ -57,6 +58,10 @@ MslBatch* msl_batch_create(int batch_size, int num_players) {
   }
 
   if (ecb_table_init() != 0) {
+    msl_batch_destroy(batch);
+    return NULL;
+  }
+  if (ecb_extents_table_init() != 0) {
     msl_batch_destroy(batch);
     return NULL;
   }

@@ -24,6 +24,7 @@ ext = Extension(
         str((ROOT / "src" / "char_params.c").resolve()),
         str((ROOT / "src" / "anim_table.c").resolve()),
         str((ROOT / "src" / "ecb_table.c").resolve()),
+        str((ROOT / "src" / "ecb_extents_table.c").resolve()),
         str((ROOT / "src" / "state.c").resolve()),
         str((ROOT / "src" / "step.c").resolve()),
         str((ROOT / "src" / "input.c").resolve()),

@@ -8,6 +8,7 @@
 #include <string.h>
 
 #include "alloc.h"
+#include "ecb_extents_table.h"
 #include "ecb_table.h"
 
 typedef struct {
@@ -522,15 +523,41 @@ void stage_collision_apply(MslBatch* batch) {
       //
       // Source of truth: `data/ecb/<char>_bottom.bin` (derived from SSANIM01 v3 matrices and
       // `data/characters/<char>.json` ecb_joints).
-      const float ecb_off = msl_ecb_bottom_rel_y(batch->state.char_id[idx],
-                                                batch->state.animation_index[idx],
-                                                (int)batch->state.action_frame[idx]);
+      const uint32_t anim = batch->state.animation_index[idx];
+      const int af = (int)batch->state.action_frame[idx];
+      const int af_prev = (af > 0) ? (af - 1) : 0;
+
+      // Decomp-first: use previous ECB when comparing pre/post positions (mpColl uses prev_ecb vs ecb).
+      // This removes the dy==0 teacher-forcing shortcut and makes grounding stable under pose-driven
+      // ECB changes even when root dy==0.
+      //
+      // Source pointers:
+      // - ECB extrema from joints: refs/melee/src/melee/mp/mpcoll.c:328 (mpColl_LoadECB_JObj joint loop)
+      // - prev_ecb usage examples: refs/melee/src/melee/mp/mpcoll.c:1377-1381 (prev_bottom vs bottom)
+      const float ecb_off = msl_ecb_bottom_rel_y(batch->state.char_id[idx], anim, af);
+      const float prev_ecb_off = msl_ecb_bottom_rel_y(batch->state.char_id[idx], anim, af_prev);
       const float y_bot = y + ecb_off;
-      const float y_prev_bot = y_prev + ecb_off;
+      const float y_prev_bot = y_prev + prev_ecb_off;
+
+      // Optional (helps ground_id at boundaries): use ECB footprint to break ties between same-height
+      // floor segments. Note that extracted matrices are fighter-local with TransN removed; mirror X
+      // based on facing like mpColl_LoadECB_Fixed does for (front,back).
+      MslEcbExtentsRel ex = msl_ecb_extents_rel(batch->state.char_id[idx], anim, af);
+      float ecb_left_rel_x = ex.min_x;
+      float ecb_right_rel_x = ex.max_x;
+      if (!batch->state.facing[idx]) {
+        const float l = -ex.max_x;
+        const float r = -ex.min_x;
+        ecb_left_rel_x = l;
+        ecb_right_rel_x = r;
+      }
+      const float ecb_left_world_x = x + ecb_left_rel_x;
+      const float ecb_right_world_x = x + ecb_right_rel_x;
 
       uint8_t found = 0;
       float best_y_at_x = -FLT_MAX;
       uint16_t best_segment_i = 0;
+      uint8_t best_foot_score = 0;
 
       for (size_t si = 0; si < fd_floor_segment_count; si++) {
         const MslStageFloorSegment* seg = &fd_floor_segments[si];
@@ -547,26 +574,33 @@ void stage_collision_apply(MslBatch* batch) {
             continue;
           }
         } else {  // dy == 0
-          // If we were grounded entering the frame, allow snapping up from penetration when the
-          // action/pose (and thus ECB offset) changes without any vertical root motion. This keeps
-          // grounded actions stable without inferring a prior `ecb_off` state.
+          // If we were grounded entering the frame, gate stability on the previous-frame ECB bottom
+          // instead of skipping the constraint entirely.
           if (batch->state.prev_on_ground[idx]) {
-            // TEMP (teacher-forcing compatibility): No additional y check when dy==0 and we were
-            // grounded entering the frame. This avoids spurious de-grounding when ECB bottom
-            // shifts above/below the surface due to pose, without adding a new "prev_ecb_off"
-            // state to the seed schema.
-          } else {
-            if (!(y_bot <= (y_at_x + ground_epsilon) && y_bot >= (y_at_x - ground_epsilon))) {
+            // If we were grounded entering the frame, use prev ECB to keep grounded actions stable
+            // when pose changes move ECB bottom without any vertical root motion.
+            //
+            // Important for teacher-forcing/reseeds: do not require the seeded root Y to already be
+            // perfectly aligned with ECB bottom; allow snapping up from penetration deterministically.
+            if (!((y_bot <= (y_at_x + ground_epsilon)) || (y_prev_bot >= (y_at_x - ground_epsilon)))) {
               continue;
             }
+          } else if (!(y_bot <= (y_at_x + ground_epsilon) && y_bot >= (y_at_x - ground_epsilon))) {
+            continue;
           }
         }
 
+        const uint8_t foot_score =
+            (uint8_t)(stage_seg_x_contains(seg, ecb_left_world_x) ? 1 : 0) +
+            (uint8_t)(stage_seg_x_contains(seg, ecb_right_world_x) ? 1 : 0);
+
         if (!found || (y_at_x > best_y_at_x) ||
-            (y_at_x == best_y_at_x && seg->segment_i < best_segment_i)) {
+            (y_at_x == best_y_at_x && foot_score > best_foot_score) ||
+            (y_at_x == best_y_at_x && foot_score == best_foot_score && seg->segment_i < best_segment_i)) {
           found = 1;
           best_y_at_x = y_at_x;
           best_segment_i = seg->segment_i;
+          best_foot_score = foot_score;
         }
       }
 

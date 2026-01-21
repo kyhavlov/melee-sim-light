@@ -46,6 +46,17 @@ Characters (Fox/Falco):
     - `ecb_bottom_rel_y` is in the same **fighter-local** coordinate system as `data/anims/<char>.bin`
       matrices (TransN translation removed).
     - To get world-space ECB bottom Y, add it to the fighter's world `pos_y` (Slippi post-frame position).
+- `data/ecb/fox_extents.bin`, `data/ecb/falco_extents.bin` (per-msid per-frame ECB extrema; decomp-shaped)
+  - Source: `data/anims/<char>.bin` (SSANIM01 v3 matrices) + `data/characters/<char>.json` `ecb_joints`.
+  - Per msid + integer frame `f`, we compute fighter-local joint extrema over the 6 ECB source joints:
+    - `min_x[f] = min( joint_x(part) for part in ecb_joints )`
+    - `max_x[f] = max( joint_x(part) for part in ecb_joints )`
+    - `min_y[f] = min( joint_y(part) for part in ecb_joints )`
+    - `max_y[f] = max( joint_y(part) for part in ecb_joints )`
+  - These correspond to the `left_x/right_x/bottom_y/top_y` extrema computed in the joint loop of
+    `mpColl_LoadECB_JObj` before runtime expansion/clamping.
+    Source pointer: `refs/melee/src/melee/mp/mpcoll.c:328` (ECB source joint loop).
+  - Coordinate convention matches `data/anims/<char>.bin` fighter-local matrices (TransN translation removed).
 
 Notes:
 - `animation_index` in Slippi post-frames includes `0xFFFFFFFF` as a sentinel; treat that as “no animation”.

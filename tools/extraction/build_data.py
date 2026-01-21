@@ -138,6 +138,19 @@ def main() -> None:
                 f"data/ecb/{ch}_bottom.bin",
             ],
         )
+        _run(
+            "tools.extraction.extract_ecb_extents",
+            [
+                "--character",
+                ch,
+                "--anims",
+                f"data/anims/{ch}.bin",
+                "--attrs",
+                f"data/characters/{ch}.json",
+                "--out",
+                f"data/ecb/{ch}_extents.bin",
+            ],
+        )
 
     summary = {
         "stage": str(out_stage),

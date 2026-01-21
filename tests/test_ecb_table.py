@@ -38,3 +38,20 @@ def test_ecb_table_loads_and_returns_finite_values() -> None:
     finally:
         msl_binding.destroy(handle)
 
+
+def test_ecb_extents_table_loads_and_returns_finite_values() -> None:
+    import msl_binding
+
+    ch, anim, af = _pick_char_anim_from_cached_dataset()
+
+    handle = msl_binding.init(batch_size=1, num_players=2)
+    try:
+        min_x, max_x, min_y, max_y = msl_binding.ecb_extents_rel(ch, anim, af)
+        assert math.isfinite(float(min_x))
+        assert math.isfinite(float(max_x))
+        assert math.isfinite(float(min_y))
+        assert math.isfinite(float(max_y))
+        assert float(min_x) <= float(max_x)
+        assert float(min_y) <= float(max_y)
+    finally:
+        msl_binding.destroy(handle)
