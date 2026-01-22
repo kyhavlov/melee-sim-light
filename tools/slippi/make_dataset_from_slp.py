@@ -191,6 +191,8 @@ def _main_impl(args) -> None:
         compute_fighter_stick_input_counters,
         compute_fighter_trigger_input_counters,
         compute_press_timer_u8,
+        derive_guard_tilt_state,
+        load_shield_tilt_table_meta,
         compute_tilt_timer_axis_pre_post,
         compute_tilt_timer_y_pre_post_with_fall_fast,
         compute_x672_trigger_timer_pre_post,
@@ -280,6 +282,15 @@ def _main_impl(args) -> None:
     tap_jump_tilt_max_frames = int(common["tap_jump_tilt_max_frames"])
     fastfall_stick_threshold = float(common["fastfall_stick_threshold"])
     fastfall_tilt_max_frames = int(common["fastfall_tilt_max_frames"])
+    guard_stick_lerp_x44c = float(common["guard_stick_lerp_x44c"])
+
+    # Guard-tilt table metadata (neutral frame + max frame) for decomp-shaped mv.co.guard.x8.
+    shield_meta = load_shield_tilt_table_meta()
+    neutral_lut = np.zeros(256, dtype=np.uint16)
+    frame_max_lut = np.zeros(256, dtype=np.uint16)
+    for cid, (neutral, frame_max) in shield_meta.items():
+        neutral_lut[np.uint8(cid)] = np.uint16(int(neutral) & 0xFFFF)
+        frame_max_lut[np.uint8(cid)] = np.uint16(int(frame_max) & 0xFFFF)
 
     # Action ids (GALE01): refs/melee/src/melee/ft/chara/ftCommon/forward.h
     act_turn = 0x0012
@@ -305,6 +316,8 @@ def _main_impl(args) -> None:
     act_attack_air_b = 0x0043
     act_attack_air_hi = 0x0044
     act_attack_air_lw = 0x0045
+    act_guard_on = 0x00B2
+    act_guard = 0x00B3
     act_guard_reflect = 0x00B6
     act_escape_air = 0x00EC
     button_mask_xy = 0x0400 | 0x0800  # HSD_PAD_XY / src/buttons.h::MSL_BUTTON_XY
@@ -512,6 +525,26 @@ def _main_impl(args) -> None:
         stick_x = apply_deadzone(stick_i8_to_unit(main_x_proc), lstick_deadzone_x)
         stick_y = apply_deadzone(stick_i8_to_unit(main_y_proc), lstick_deadzone_y)
         cstick_y = apply_deadzone(stick_i8_to_unit(c_y_proc), lstick_deadzone_y)
+
+        # Guard (shield) tilt state (mv.co.guard.x8 + mv.co.guard.x4) is seeded so shield bubble
+        # placement becomes stateful (tilt smoothing/inertia) under teacher-forced one-step eval.
+        neutral_frame = neutral_lut[post_char]
+        frame_max = frame_max_lut[post_char]
+        guard_tilt_x8_post, guard_tilt_x4_post = derive_guard_tilt_state(
+            stick_x,
+            stick_y,
+            facing=post_dir,
+            action_id=post_state,
+            action_frame=post_state_age,
+            neutral_frame=neutral_frame,
+            frame_max=frame_max,
+            guard_stick_lerp_x44c=guard_stick_lerp_x44c,
+            act_guard_on=act_guard_on,
+            act_guard=act_guard,
+            act_guard_reflect=act_guard_reflect,
+        )
+        samples["seed_t"]["guard_tilt_x8"][:, slot] = guard_tilt_x8_post[:-1]
+        samples["seed_t"]["guard_tilt_x4"][:, slot] = guard_tilt_x4_post[:-1]
 
         prev_buttons = np.concatenate(([np.uint16(0)], pre_buttons_physical[:-1]))
         buttons_pressed = pre_buttons_physical & ~prev_buttons

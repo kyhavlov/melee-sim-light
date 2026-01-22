@@ -3,6 +3,7 @@ from __future__ import annotations
 import numpy as np
 
 from tools.eval.dataset import COMPARE_DTYPE, INPUT_DTYPE, SEED_DTYPE
+from tools.slippi.seed_history import load_shield_tilt_table_meta
 
 
 # Button masks: src/buttons.h (Melee/HSD PAD bits)
@@ -52,6 +53,10 @@ def _seed_guard_base() -> np.ndarray:
     # In our replay-derived datasets, shield states often have `animation_index == -1`.
     seed["animation_index"][0, 0] = np.uint32(0xFFFFFFFF)
     seed["shield_hp"][0, 0] = np.float32(_common_attr("start_shield_health"))
+
+    neutral, _frame_max = load_shield_tilt_table_meta()[CHAR_FOX]
+    seed["guard_tilt_x8"][0, 0] = np.uint16(neutral)
+    seed["guard_tilt_x4"][0, 0] = np.float32(0.0)
     return seed
 
 

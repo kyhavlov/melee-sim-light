@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import struct
+from pathlib import Path
+
 import numpy as np
 
 
@@ -289,6 +292,161 @@ def compute_tilt_timer_axis_pre_post(
         prev_axis = a
 
     return out_pre, out_post
+
+
+def load_shield_tilt_table_meta(*, data_dir: str = "data") -> dict[int, tuple[int, int]]:
+    """
+    Load (neutral_frame, frame_max) for extracted MSLSHLD1 guard tilt tables.
+
+    Source of truth: `data/shields/<character>.bin` (ISO-derived via tools/extraction/extract_shield_tilt_table.py).
+    Binary format: tools/extraction/extract_shield_tilt_table.py::_write_table.
+    """
+    # Character ids (GALE01): Fox=1, Falco=22.
+    char_files = {
+        1: "fox.bin",
+        22: "falco.bin",
+    }
+    out: dict[int, tuple[int, int]] = {}
+    base = Path(str(data_dir)) / "shields"
+    for char_id, fname in char_files.items():
+        p = base / fname
+        if not p.exists():
+            raise FileNotFoundError(
+                f"missing shield tilt table {p} (run tools.extraction.build_data to generate data/ artifacts)"
+            )
+        buf = p.read_bytes()
+        if len(buf) < 8 + 4 + 2 + 2:
+            raise ValueError(f"{p}: too small for MSLSHLD1 header (size={len(buf)})")
+        if buf[:8] != b"MSLSHLD1":
+            raise ValueError(f"{p}: bad magic (want MSLSHLD1)")
+
+        ver = struct.unpack_from("<I", buf, 8)[0]
+        if ver != 1:
+            raise ValueError(f"{p}: unsupported MSLSHLD1 version={ver} (want 1)")
+
+        frame_count, neutral_frame = struct.unpack_from("<HH", buf, 12)
+        if frame_count == 0:
+            raise ValueError(f"{p}: frame_count is 0")
+        if neutral_frame >= frame_count:
+            raise ValueError(
+                f"{p}: neutral_frame out of range (neutral_frame={neutral_frame}, frame_count={frame_count})"
+            )
+
+        want = 8 + 4 + 2 + 2 + int(frame_count) * 3 * 4
+        if len(buf) != want:
+            raise ValueError(f"{p}: size mismatch (got {len(buf)}, want {want})")
+
+        out[int(char_id)] = (int(neutral_frame), int(frame_count - 1))
+    return out
+
+
+def derive_guard_tilt_state(
+    stick_x_unit: np.ndarray,
+    stick_y_unit: np.ndarray,
+    *,
+    facing: np.ndarray,
+    action_id: np.ndarray,
+    action_frame: np.ndarray,
+    neutral_frame: np.ndarray,
+    frame_max: np.ndarray,
+    guard_stick_lerp_x44c: float,
+    act_guard_on: int,
+    act_guard: int,
+    act_guard_reflect: int,
+) -> tuple[np.ndarray, np.ndarray]:
+    """
+    Derive decomp-shaped guard tilt pose state (mv.co.guard.x8 + mv.co.guard.x4) strictly causally.
+
+    Mirrors refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c:
+    - ftCo_800921DC initializes x8=neutral (10 in GALE01) and x4=0 on GuardOn entry.
+    - ftCo_80091BC4 updates:
+        x8 = neutral + normalizeAngle0(normalizeAngle180(deg - (x8-neutral)) * x44C + (x8-neutral))
+        x4 = x44C * (mag - x4) + x4
+
+    Returns arrays (x8_post_u16, x4_post_f32) with length N, where "post" means after the per-frame update.
+    """
+    sx = np.asarray(stick_x_unit, dtype=np.float32).reshape(-1)
+    sy = np.asarray(stick_y_unit, dtype=np.float32).reshape(-1)
+    fac = np.asarray(facing, dtype=np.uint8).reshape(-1)
+    aid = np.asarray(action_id, dtype=np.uint16).reshape(-1)
+    afr = np.asarray(action_frame, dtype=np.int16).reshape(-1)
+    neu = np.asarray(neutral_frame, dtype=np.uint16).reshape(-1)
+    fmax = np.asarray(frame_max, dtype=np.uint16).reshape(-1)
+
+    n = int(sx.size)
+    if int(sy.size) != n or int(fac.size) != n or int(aid.size) != n or int(afr.size) != n:
+        raise ValueError("input arrays must have the same length")
+    if int(neu.size) != n or int(fmax.size) != n:
+        raise ValueError("neutral_frame/frame_max must have the same length as stick arrays")
+
+    out_x8 = np.empty(n, dtype=np.uint16)
+    out_x4 = np.empty(n, dtype=np.float32)
+
+    # Persistent state (seeded across frames).
+    x8 = np.uint16(0)
+    x4 = np.float32(0.0)
+
+    lerp = np.float32(float(guard_stick_lerp_x44c))
+    pi = np.float32(3.14159265358979323846)
+    rad_to_deg = np.float32(180.0) / pi
+
+    for i in range(n):
+        a = int(aid[i])
+        neutral_i = np.uint16(neu[i])
+        frame_max_i = np.uint16(fmax[i])
+
+        # Decomp init on GuardOn entry.
+        if a == int(act_guard_on) and int(afr[i]) == 0:
+            x8 = neutral_i
+            x4 = np.float32(0.0)
+
+        if a == int(act_guard_on) or a == int(act_guard) or a == int(act_guard_reflect):
+            facing_dir = np.float32(1.0) if int(fac[i]) != 0 else np.float32(-1.0)
+            x = np.float32(sx[i]) * facing_dir
+            y = np.float32(sy[i])
+
+            rad = np.float32(np.arctan2(y, x))
+            if rad < np.float32(0.0):
+                rad = rad + np.float32(2.0) * pi
+
+            deg = np.float32(rad * rad_to_deg)
+            if deg < np.float32(0.0):
+                deg = np.float32(0.0)
+            if deg > np.float32(359.0):
+                deg = np.float32(359.0)
+
+            offset = np.float32(np.float32(x8) - np.float32(neutral_i))
+            delta = np.float32(deg - offset)
+            if delta > np.float32(180.0):
+                delta = delta - np.float32(360.0)
+            elif delta < np.float32(-180.0):
+                delta = delta + np.float32(360.0)
+
+            next_offset = np.float32(delta * lerp + offset)
+            if next_offset > np.float32(360.0):
+                next_offset = next_offset - np.float32(360.0)
+            elif next_offset < np.float32(0.0):
+                next_offset = next_offset + np.float32(360.0)
+
+            next_x8_f = np.float32(np.float32(neutral_i) + next_offset)
+            next_x8 = int(next_x8_f)  # truncation toward 0 (matches C cast for nonnegative values)
+            if next_x8 < 0:
+                next_x8 = 0
+            if next_x8 > int(frame_max_i):
+                next_x8 = int(frame_max_i)
+            x8 = np.uint16(next_x8)
+
+            mag = np.sqrt(np.float32(sx[i] * sx[i] + sy[i] * sy[i])).astype(np.float32)
+            if mag > np.float32(1.0):
+                mag = np.float32(1.0)
+            if mag < np.float32(0.0):
+                mag = np.float32(0.0)
+            x4 = np.float32(lerp * (mag - x4) + x4)
+
+        out_x8[i] = x8
+        out_x4[i] = x4
+
+    return out_x8, out_x4
 
 
 def compute_tilt_timer_y_pre_post_with_fall_fast(

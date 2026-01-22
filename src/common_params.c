@@ -183,6 +183,7 @@ int common_params_init(void) {
                   &g_params.spotdodge_flick_tilt_max_frames) != 0 ||
       json_get_u8(buf, "escape_flick_tilt_max_frames", &g_params.escape_flick_tilt_max_frames) !=
           0 ||
+      json_get_f32(buf, "guard_stick_lerp_x44c", &g_params.guard_stick_lerp_x44c) != 0 ||
       json_get_f32(buf, "start_shield_health", &g_params.start_shield_health) != 0 ||
       json_get_f32(buf, "shield_size_lightshield_min", &g_params.shield_size_lightshield_min) !=
           0 ||

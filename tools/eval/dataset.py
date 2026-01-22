@@ -94,6 +94,8 @@ SEED_DTYPE = np.dtype(
         ("_pad1", "V2"),
         ("action_id", _arr("<u2", MAX_PLAYERS)),
         ("action_frame", _arr("<i2", MAX_PLAYERS)),
+        ("guard_tilt_x8", _arr("<u2", MAX_PLAYERS)),
+        ("guard_tilt_x4", _arr("<f4", MAX_PLAYERS)),
         ("jumps_left", _arr("u1", MAX_PLAYERS)),
         ("stocks", _arr("u1", MAX_PLAYERS)),
         ("kneebend_jump_input", _arr("u1", MAX_PLAYERS)),

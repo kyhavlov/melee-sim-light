@@ -19,6 +19,12 @@ static inline float clamp01(float x) {
   return x;
 }
 
+static inline float apply_deadzone_f32(float v, float dz) {
+  // Match tools/slippi/seed_history.py::apply_deadzone and common stick handling across the sim:
+  // per-axis deadzone in unit space.
+  return (fabsf(v) < dz) ? 0.0f : v;
+}
+
 static inline float trigger_u8_to_unit(uint8_t v) { return (float)v * (1.0f / 255.0f); }
 
 static inline float trigger_unit_from_input(uint16_t buttons, uint8_t l, uint8_t r) {
@@ -55,54 +61,35 @@ static inline uint16_t clamp_u16(uint16_t x, uint16_t lo, uint16_t hi) {
   return x;
 }
 
-static inline uint16_t guard_tilt_frame_from_stick(float stick_x_unit, float stick_y_unit,
-                                                   float facing_dir, uint16_t neutral_frame,
-                                                   uint16_t frame_max) {
-  // Decomp (GALE01): ftCo_80091BC4 computes an angle in degrees from the L-stick direction, after
-  // folding X by facing_dir:
-  //   lstick_x = fp->input.lstick.x * fp->facing_dir;
-  //   rad = lb_8000D008(fp->input.lstick.y, lstick_x); // atan2-like
-  //   if (rad < 0) rad += 2*pi;
-  //   deg = rad_to_deg * rad; clamp to [0, 359]
-  //   fp->mv.co.guard.x8 is centered around +10 (ftCo_800921DC sets x8=10).
-  //
-  // We intentionally do not model the guard.x8 smoothing/inertia state here to keep shield bubble
-  // placement suite-neutral (debug-only) and non-mutating.
-  const float x = stick_x_unit * facing_dir;
-  const float y = stick_y_unit;
-
-  // Keep π as an explicit constant to avoid relying on nonstandard libm macros.
-  const float k_pi = 3.14159265358979323846f;
-  float rad = atan2f(y, x);
-  if (rad < 0.0f) {
-    rad += 2.0f * k_pi;
+static inline float normalize_angle_180(float deg) {
+  // Decomp: ftCo_Guard.c::normalizeAngle180 (single wrap into [-180, 180]).
+  if (deg > 180.0f) {
+    deg -= 360.0f;
+  } else if (deg < -180.0f) {
+    deg += 360.0f;
   }
-  float deg_f = rad * (180.0f / k_pi);
-  if (deg_f < 0.0f) {
-    deg_f = 0.0f;
-  }
-  if (deg_f > 359.0f) {
-    deg_f = 359.0f;
-  }
-  const uint16_t deg = (uint16_t)deg_f;
-
-  // The Melee guard tilt timeline uses frames in [0..370], with neutral at 10.
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_800921DC (x8=10).
-  uint16_t f = (uint16_t)(neutral_frame + deg);
-  f = clamp_u16(f, 0, frame_max);
-  return f;
+  return deg;
 }
 
-static inline float stick_mag_unit(float stick_x_unit, float stick_y_unit) {
-  // Decomp: ftCo_80091BC4 uses sqrt(x^2 + y^2) and clamps to 1.
-  float m = sqrtf(stick_x_unit * stick_x_unit + stick_y_unit * stick_y_unit);
-  if (m > 1.0f) {
-    m = 1.0f;
+static inline float normalize_angle_0(float deg) {
+  // Decomp: ftCo_Guard.c::normalizeAngle0 (single wrap into [0, 360]).
+  if (deg > 360.0f) {
+    deg -= 360.0f;
+  } else if (deg < 0.0f) {
+    deg += 360.0f;
   }
-  if (m < 0.0f) {
-    m = 0.0f;
+  return deg;
+}
+
+static inline uint8_t is_guard_tilt_action(uint16_t a) {
+  switch (a) {
+    case MSL_ACT_GUARD_ON:
+    case MSL_ACT_GUARD:
+    case MSL_ACT_GUARD_REFLECT:
+      return 1;
+    default:
+      return 0;
   }
-  return m;
 }
 
 void shields_refresh(MslBatch* batch) {
@@ -153,19 +140,79 @@ void shields_refresh(MslBatch* batch) {
             // Guard-tilt shield bubble center (decomp-shaped):
             // - Sample the ISO-derived msid=38 ("Guard") tilt timeline in data/shields/<char>.bin.
             // - Use stick direction (main stick) and facing to choose an angle frame.
-            // - Blend towards that angled center based on stick magnitude (0..1).
+            // - Blend towards that angled center based on inertial stick magnitude state (x4; 0..1).
             MslShieldTiltTableView tv;
-            if (msl_shield_tilt_table_view(batch->state.char_id[idx], &tv) == 0 &&
-                tv.xyz != NULL && tv.frame_count > 0) {
-              const float facing_dir = batch->state.facing[idx] ? 1.0f : -1.0f;
-              const float stick_x_unit = (float)batch->state.input_main_x[idx] * (1.0f / 80.0f);
-              const float stick_y_unit = (float)batch->state.input_main_y[idx] * (1.0f / 80.0f);
-              const float mag = stick_mag_unit(stick_x_unit, stick_y_unit);
+            const uint8_t has_tv = (msl_shield_tilt_table_view(batch->state.char_id[idx], &tv) == 0 &&
+                                    tv.xyz != NULL && tv.frame_count > 0)
+                                       ? 1
+                                       : 0;
 
-              const uint16_t frame_max = (uint16_t)(tv.frame_count - 1);
-              const uint16_t neutral = tv.neutral_frame;
-              const uint16_t f =
-                  guard_tilt_frame_from_stick(stick_x_unit, stick_y_unit, facing_dir, neutral, frame_max);
+            // Guard tilt state update (independent of whether a shield table exists for this character).
+            const float facing_dir = batch->state.facing[idx] ? 1.0f : -1.0f;
+            // Decomp uses fp->input.lstick.{x,y} which are post-UCF and deadzoned floats.
+            // Match preprocessing derivation (tools/slippi/seed_history.py) by applying the ftCommonData
+            // per-axis deadzones here before ftCo_80091BC4 math.
+            float stick_x_unit = (float)batch->state.input_main_x[idx] * (1.0f / 80.0f);
+            float stick_y_unit = (float)batch->state.input_main_y[idx] * (1.0f / 80.0f);
+            stick_x_unit = apply_deadzone_f32(stick_x_unit, c->lstick_deadzone_x);
+            stick_y_unit = apply_deadzone_f32(stick_y_unit, c->lstick_deadzone_y);
+
+            // Decomp: ftCo_800921DC initializes mv.co.guard.x8 = 10 and x4 = 0 on GuardOn entry.
+            // Our shield tables expose the neutral frame explicitly; fall back to GALE01's 10 if missing.
+            uint16_t neutral = 10;
+            uint16_t frame_max = (uint16_t)(neutral + 360u);  // decomp: x8 is neutral + [0..360]
+            if (has_tv) {
+              neutral = tv.neutral_frame;
+              frame_max = (uint16_t)(tv.frame_count - 1);
+            }
+
+            // Decomp init on GuardOn entry.
+            if (batch->state.action_id[idx] == (uint16_t)MSL_ACT_GUARD_ON &&
+                batch->state.action_frame[idx] == 0) {
+              batch->state.guard_tilt_x8[idx] = neutral;
+              batch->state.guard_tilt_x4[idx] = 0.0f;
+            }
+
+            if (is_guard_tilt_action(batch->state.action_id[idx])) {
+              const float x = stick_x_unit * facing_dir;
+              const float y = stick_y_unit;
+
+              // Keep π as an explicit constant to avoid relying on nonstandard libm macros.
+              const float k_pi = 3.14159265358979323846f;
+              float rad = atan2f(y, x);
+              if (rad < 0.0f) {
+                rad += 2.0f * k_pi;
+              }
+              float deg = rad * (180.0f / k_pi);
+              // Decomp: ftCo_80091BC4 clamps lstick_deg to [0, 359].
+              if (deg < 0.0f) {
+                deg = 0.0f;
+              }
+              if (deg > 359.0f) {
+                deg = 359.0f;
+              }
+
+              const float offset = (float)batch->state.guard_tilt_x8[idx] - (float)neutral;
+              const float delta = normalize_angle_180(deg - offset);
+              const float lerp = c->guard_stick_lerp_x44c;
+              const float next_offset = normalize_angle_0(delta * lerp + offset);
+              const float next_x8_f = (float)neutral + next_offset;
+              batch->state.guard_tilt_x8[idx] = clamp_u16((uint16_t)next_x8_f, 0, frame_max);
+
+              float mag = sqrtf(stick_x_unit * stick_x_unit + stick_y_unit * stick_y_unit);
+              if (mag > 1.0f) {
+                mag = 1.0f;
+              }
+              if (mag < 0.0f) {
+                mag = 0.0f;
+              }
+              const float x4 = batch->state.guard_tilt_x4[idx];
+              batch->state.guard_tilt_x4[idx] = (lerp * (mag - x4)) + x4;
+            }
+
+            if (has_tv) {
+              const uint16_t f = clamp_u16(batch->state.guard_tilt_x8[idx], 0, frame_max);
+              const float mag = clamp01(batch->state.guard_tilt_x4[idx]);
 
               const size_t n_i = (size_t)neutral * 3u;
               const size_t f_i = (size_t)f * 3u;

@@ -3,6 +3,7 @@ from __future__ import annotations
 import numpy as np
 
 from tools.eval.dataset import INPUT_DTYPE, SEED_DTYPE
+from tools.slippi.seed_history import load_shield_tilt_table_meta
 
 # Button masks: src/buttons.h (Melee/HSD PAD bits)
 BUTTON_L = 0x0040
@@ -48,6 +49,10 @@ def _seed_guard(*, facing_p1: int) -> np.ndarray:
     seed["animation_index"][0, 1] = np.uint32(0xFFFF_FFFF)
     seed["shield_hp"][0, :2] = np.float32(_common_attr("start_shield_health"))
     seed["fighter_scale_y"][0, :2] = np.float32(1.0)
+
+    neutral, _frame_max = load_shield_tilt_table_meta()[CHAR_FOX]
+    seed["guard_tilt_x8"][0, :2] = np.uint16(neutral)
+    seed["guard_tilt_x4"][0, :2] = np.float32(0.0)
     return seed
 
 
@@ -123,5 +128,54 @@ def test_shield_bubble_center_moves_with_guard_tilt_and_mirrors_with_facing() ->
 
         assert abs(dx_r + dx_l) < 1.0e-4
         assert abs(dy_r - dy_l) < 1.0e-4
+    finally:
+        msl_binding.destroy(handle)
+
+
+def test_guard_tilt_has_inertia_and_converges_over_multiple_frames() -> None:
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+
+    handle = msl_binding.init(batch_size=1, num_players=2)
+    try:
+        seed = _seed_guard(facing_p1=1)
+        msl_binding.reseed_seed(handle, seed.view(np.uint8).reshape((1, seed_stride)))
+
+        neutral = _mk_input_bytes(1, input_stride)
+        neutral_view = neutral.view(INPUT_DTYPE).reshape((1,))
+        neutral_view["p"]["buttons"][0, 1] = np.uint16(BUTTON_L)
+
+        up = _mk_input_bytes(1, input_stride)
+        up_view = up.view(INPUT_DTYPE).reshape((1,))
+        up_view["p"]["buttons"][0, 1] = np.uint16(BUTTON_L)
+        up_view["p"]["main_x"][0, 1] = np.int8(0)
+        up_view["p"]["main_y"][0, 1] = np.int8(80)
+
+        # Baseline (neutral): bubble at neutral.
+        msl_binding.step_input(handle, neutral, neutral)
+        b0 = msl_binding.debug_shield_bubbles_world(handle, 0)
+        p0 = np.array([float(b0[1, 0]), float(b0[1, 1]), float(b0[1, 2])], dtype=np.float64)
+
+        # Sudden change: 1 frame of up tilt.
+        msl_binding.step_input(handle, neutral, up)
+        b1 = msl_binding.debug_shield_bubbles_world(handle, 0)
+        p1 = np.array([float(b1[1, 0]), float(b1[1, 1]), float(b1[1, 2])], dtype=np.float64)
+
+        # Hold: converge towards the final up-tilt pose.
+        for _ in range(24):
+            msl_binding.step_input(handle, up, up)
+        bN = msl_binding.debug_shield_bubbles_world(handle, 0)
+        pN = np.array([float(bN[1, 0]), float(bN[1, 1]), float(bN[1, 2])], dtype=np.float64)
+
+        d01 = float(np.linalg.norm(p1 - p0))
+        d0N = float(np.linalg.norm(pN - p0))
+        d1N = float(np.linalg.norm(pN - p1))
+
+        assert d01 > 1.0e-7
+        assert d0N > d01
+        assert d1N < d0N
     finally:
         msl_binding.destroy(handle)

@@ -109,6 +109,12 @@ typedef struct MslSeed {
   // State machine
   uint16_t action_id[MSL_MAX_PLAYERS];    // GALE01 action id
   int16_t action_frame[MSL_MAX_PLAYERS];  // action frame (can be negative in pre-start)
+  // Guard (shield) tilt pose state (seeded; decomp-shaped).
+  // Decomp: refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c
+  // - mv.co.guard.x8: "frame-ish" index into the Guard tilt timeline (neutral is 10 in GALE01)
+  // - mv.co.guard.x4: stick magnitude smoothing used to blend the pose
+  uint16_t guard_tilt_x8[MSL_MAX_PLAYERS];
+  float guard_tilt_x4[MSL_MAX_PLAYERS];
   uint8_t jumps_left[MSL_MAX_PLAYERS];
   uint8_t stocks[MSL_MAX_PLAYERS];
 

@@ -37,6 +37,12 @@ typedef struct MslStateSoA {
   int16_t* action_frame;
   uint8_t* jumps_left;
   uint8_t* stocks;
+  // Guard (shield) tilt pose state (seeded; decomp-shaped).
+  // Decomp: refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c
+  // - ftCo_800921DC: mv.co.guard.x8 init (neutral frame, e.g. 10) and x4=0
+  // - ftCo_80091BC4: per-frame update from L-stick direction/magnitude
+  uint16_t* guard_tilt_x8;  // mv.co.guard.x8 (frame-ish index; neutral is shield table neutral_frame)
+  float* guard_tilt_x4;     // mv.co.guard.x4 (stick magnitude smoothing; 0..1)
   // Locomotion/input-history internals.
   // - `tilt_timer_*`, `turn_*`, and KneeBend internals are seeded from replay history (MslSeed).
   uint8_t*
