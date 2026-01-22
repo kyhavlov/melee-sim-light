@@ -113,7 +113,8 @@ def test_combat_resolve_body_overlap_is_non_mutating() -> None:
         msl_binding.debug_clear_hurtcaps_world(handle, 0, 1)
         msl_binding.debug_set_hurtcap_world(handle, 0, 1, 0, -0.5, 0.0, 0.0, 0.5, 0.0, 0.0, 0.5)
 
-        # Selection should exist (debug), but core combat_resolve remains non-mutating for one-step suite stability.
+        # Selection should exist (debug). combat_resolve remains non-mutating while the selection
+        # scaffolding is iterated against the teacher-forced one-step suite.
         contacts, count = _read_selected_body_hits(handle)
         assert count == 1
         assert int(contacts["attacker"][0]) == 0

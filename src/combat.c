@@ -66,12 +66,52 @@ static inline uint16_t combat_calc_hitlag_frames(const MslCommonParams* c, int d
   return (uint16_t)result_i;
 }
 
+// Future: Combat Mutations Pass 1 (BODY-only).
+//
+// Not called today (teacher-forced one-step suite stability). Keep the write logic and decomp
+// citations here so the selection path can be re-enabled without re-plumbing call sites.
+static inline void combat_mutations_pass1_future_apply_body_hit(MslBatch* batch, size_t a_idx,
+                                                                size_t d_idx, int attacker,
+                                                                float hitbox_damage_f32,
+                                                                uint16_t attacker_msid) {
+  if (batch == NULL) {
+    return;
+  }
+
+  // - Set hitlag for both attacker and defender using decomp ftCommon_CalcHitlag.
+  // - Update seeded/compared attribution fields that are decomp-backed:
+  //   - instance_hit_by: fighter.dmg.x18ec_instancehitby (Slippi post offset 0x51)
+  //     refs/melee/src/melee/ft/types.h
+  //     refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
+  //     refs/slippi-wiki/SPEC.md ("Instance Hit By")
+  //   - last_hit_by: fighter.dmg.x18c4_source_ply (Slippi post offset 0x20)
+  //     refs/melee/src/melee/ft/types.h
+  //     refs/slippi-wiki/SPEC.md ("Last Hit By")
+  //
+  // Intentionally NOT set in this pass:
+  // - last_attack_landed (Slippi "Last Hitting Attack ID") requires attack-id extraction.
+  // - combo_count requires combo tracking logic beyond strict one-step mutation.
+
+  const MslCommonParams* c = msl_common_params();
+
+  const int dmg_i = (hitbox_damage_f32 > 0.0f) ? (int)hitbox_damage_f32 : 0;
+  const uint32_t d_msid_u32 = batch->state.animation_index[d_idx];
+  const uint16_t d_msid = (d_msid_u32 <= 0xFFFFu) ? (uint16_t)d_msid_u32 : 0u;
+
+  const uint16_t a_hl = combat_calc_hitlag_frames(c, dmg_i, attacker_msid);
+  const uint16_t d_hl = combat_calc_hitlag_frames(c, dmg_i, d_msid);
+  batch->state.hitlag[a_idx] = a_hl;
+  batch->state.hitlag[d_idx] = d_hl;
+
+  batch->state.instance_hit_by[d_idx] = batch->state.instance_id[a_idx];
+  batch->state.last_hit_by[d_idx] = (uint8_t)attacker;
+}
+
 static void combat_select_body_hits_one(MslBatch* batch, int bi, MslDebugCombatContact* out_contacts,
                                         uint16_t max_contacts, uint16_t* inout_written) {
   const int num_players = (int)batch->config.num_players;
   uint16_t written = inout_written ? *inout_written : 0;
   const uint8_t write_out = (out_contacts != NULL && inout_written != NULL && max_contacts > 0);
-  const MslCommonParams* c = msl_common_params();
 
   for (int attacker = 0; attacker < num_players; attacker++) {
     const size_t a_idx = msl_idx_player(bi, attacker);
@@ -214,8 +254,9 @@ static void combat_select_body_hits_one(MslBatch* batch, int bi, MslDebugCombatC
             continue;
           }
 
-          // Combat Mutations Pass 1 is temporarily disabled (teacher-forced suite stability).
-          // Keep BODY selection + shield precedence + rehit latch bookkeeping only.
+          // Combat Mutations Pass 1 (BODY-only) is currently disabled after regressing the
+          // teacher-forced one-step suite (mismatch.hitlag increased). Keep BODY selection + shield
+          // precedence + rehit latch bookkeeping only.
 
           if (write_out && written < max_contacts) {
             MslDebugCombatContact* out = &out_contacts[written];
