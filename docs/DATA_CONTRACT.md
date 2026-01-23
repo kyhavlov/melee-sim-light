@@ -202,6 +202,42 @@ Runtime semantics (current C-core policy):
 - Pose lookup failures for a specific hitbox skip that hitbox only (do not affect anything else).
 - World-space center is `anim_pose_get_matrix(...) * (x,y,z) + (pos_x,pos_y)` (Z is not translated).
 
+## `data/hurtbox_states/<char>.bin` (MSLHURM1 v1)
+
+Purpose: compact, init-time-loadable movescript-derived hurt capsule state timelines keyed by submotion id.
+
+Current simulator usage:
+- Loaded at init only (no parsing/allocations on the per-frame hot path).
+- Used by `hurtboxes_refresh()` to skip/disable capsules that are not "can be hit" (disabled/intangible).
+- Used by `combat_select_body_hits_one()` to gate BODY selection via `state.hurtcap_enabled`.
+
+Binary layout (little-endian):
+- Header:
+  - `magic[8] = "MSLHURM1"`
+  - `version: u32 = 1`
+  - `frame_count: u16` fixed length for each msid payload (default extractor uses 240)
+  - `capsule_count: u16` lane count (<=32; should match `data/hurtcaps/<char>.bin` capsule_count)
+  - `entry_count: u32` number of index entries
+- Index (`entry_count` entries), each:
+  - `msid: u16` submotion id / Slippi post-frame `animation_index` (lower 16 bits)
+  - `reserved: u16 = 0`
+  - `payload_bytes: u32 = frame_count * 8`
+  - `payload_off: u32` absolute byte offset to this msid's payload
+- Payload for each msid:
+  - `states_u64[frame_count]: frame_count * u64`
+    - Each u64 is a packed array of **2-bit lanes**: lane `i` is the `HurtCapsuleState` for capsule `i`.
+    - Lane `i` corresponds to capsule `i` in `data/hurtcaps/<char>.bin` order.
+
+State lane semantics:
+- Decomp enum: `HurtCapsuleState` in `refs/melee/src/melee/lb/forward.h`:
+  - `0 = HurtCapsule_Enabled`   (can be hit; eligible for BODY)
+  - `1 = HurtCapsule_Disabled`  (not eligible)
+  - `2 = Intangible`            (not eligible)
+
+Runtime semantics (current C-core policy):
+- If there is no table entry for a given msid, the simulator treats all capsules as enabled.
+- For a given frame, only capsules with lane state == `HurtCapsule_Enabled` are eligible for BODY contacts.
+
 ## What the C core should load (minimum)
 
 To avoid “mystery drift”, prefer loading the following early:

@@ -105,6 +105,7 @@ typedef struct MslStateSoA {
   float* hurtcap_b_y;
   float* hurtcap_b_z;
   float* hurtcap_radius;
+  uint8_t* hurtcap_enabled;  // 0/1 per capsule slot (world array); used by combat eligibility
   uint8_t* hurtcap_is_grabbable;
   uint8_t* hurtcap_height;
   // Pose-driven world-space hitbox centers (computed each frame in hitboxes_refresh).

@@ -242,6 +242,9 @@ static void combat_select_body_hits_one(MslBatch* batch, int bi, MslDebugCombatC
 
         for (uint8_t cap_id = 0; cap_id < hurtcap_count; cap_id++) {
           const size_t cap_i = idx_hurtcap(bi, defender, (int)cap_id);
+          if (!batch->state.hurtcap_enabled[cap_i]) {
+            continue;
+          }
           const float ax = batch->state.hurtcap_a_x[cap_i];
           const float ay = batch->state.hurtcap_a_y[cap_i];
           const float az = batch->state.hurtcap_a_z[cap_i];

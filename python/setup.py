@@ -68,6 +68,7 @@ ext = Extension(
         str((ROOT / "src" / "locomotion.c").resolve()),
         str((ROOT / "src" / "move_tables.c").resolve()),
         str((ROOT / "src" / "hurtcaps_tables.c").resolve()),
+        str((ROOT / "src" / "hurtbox_modes_tables.c").resolve()),
         str((ROOT / "src" / "hurtboxes.c").resolve()),
         str((ROOT / "src" / "hitboxes_tables.c").resolve()),
         str((ROOT / "src" / "hitboxes.c").resolve()),

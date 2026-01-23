@@ -3,6 +3,7 @@
 #include <stdint.h>
 
 #include "anim_pose.h"
+#include "hurtbox_modes_tables.h"
 #include "hurtcaps_tables.h"
 
 static inline size_t idx_hurtcap(int bi, int p, int cap_i) {
@@ -42,6 +43,21 @@ void hurtboxes_refresh(MslBatch* batch) {
     for (int p = 0; p < MSL_MAX_PLAYERS; p++) {
       const size_t idx = msl_idx_player(bi, p);
       batch->state.hurtcap_count[idx] = 0;
+      // Clear fixed slots for stable debug readback (and to avoid stale values when pose lookups
+      // or script masks disable/skip specific capsules).
+      for (int ci = 0; ci < MSL_MAX_HURTCAPS; ci++) {
+        const size_t hi = idx_hurtcap(bi, p, ci);
+        batch->state.hurtcap_enabled[hi] = 0;
+        batch->state.hurtcap_a_x[hi] = 0.0f;
+        batch->state.hurtcap_a_y[hi] = 0.0f;
+        batch->state.hurtcap_a_z[hi] = 0.0f;
+        batch->state.hurtcap_b_x[hi] = 0.0f;
+        batch->state.hurtcap_b_y[hi] = 0.0f;
+        batch->state.hurtcap_b_z[hi] = 0.0f;
+        batch->state.hurtcap_radius[hi] = 0.0f;
+        batch->state.hurtcap_is_grabbable[hi] = 0;
+        batch->state.hurtcap_height[hi] = 0;
+      }
       if (p >= num_players) {
         continue;
       }
@@ -90,9 +106,21 @@ void hurtboxes_refresh(MslBatch* batch) {
 
       // Fallback policy: missing pose data for a specific capsule only drops that capsule, keeping
       // the rest usable under partial animation coverage.
-      // Output order is compacted by available pose matrices (indices do not necessarily match init order).
-      uint16_t out_count = 0;
+      //
+      // Ordering policy:
+      // - Preserve init-table capsule ordering/identity (slot i corresponds to `caps[i]`).
+      // - Disabled/intangible capsules (movescript) and capsules with missing pose data are kept in
+      //   their original slot but marked `hurtcap_enabled=0` and given radius=0.
+      uint32_t can_hit_mask = 0xFFFFFFFFu;
+      (void)hurtbox_modes_can_hit_mask(char_id, msid, frame, cap_count, &can_hit_mask);
       for (uint16_t ci = 0; ci < cap_count; ci++) {
+        const size_t hi = idx_hurtcap(bi, p, (int)ci);
+        batch->state.hurtcap_is_grabbable[hi] = caps[ci].is_grabbable ? 1 : 0;
+        batch->state.hurtcap_height[hi] = caps[ci].height;
+
+        if (((can_hit_mask >> ci) & 0x1u) == 0u) {
+          continue;
+        }
         float m[12];
         if (anim_pose_get_matrix(char_id, msid, frame, caps[ci].bone_part_id, m) != 0) {
           continue;
@@ -115,7 +143,7 @@ void hurtboxes_refresh(MslBatch* batch) {
         bx += pos_x;
         by += pos_y;
 
-        const size_t hi = idx_hurtcap(bi, p, (int)out_count);
+        batch->state.hurtcap_enabled[hi] = 1;
         batch->state.hurtcap_a_x[hi] = ax;
         batch->state.hurtcap_a_y[hi] = ay;
         batch->state.hurtcap_a_z[hi] = az;
@@ -123,12 +151,9 @@ void hurtboxes_refresh(MslBatch* batch) {
         batch->state.hurtcap_b_y[hi] = by;
         batch->state.hurtcap_b_z[hi] = bz;
         batch->state.hurtcap_radius[hi] = caps[ci].scale * scale_y;
-        batch->state.hurtcap_is_grabbable[hi] = caps[ci].is_grabbable ? 1 : 0;
-        batch->state.hurtcap_height[hi] = caps[ci].height;
-        out_count++;
       }
 
-      batch->state.hurtcap_count[idx] = (uint8_t)out_count;
+      batch->state.hurtcap_count[idx] = (uint8_t)cap_count;
     }
   }
 }

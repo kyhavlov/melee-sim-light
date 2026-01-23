@@ -194,6 +194,40 @@ def test_debug_select_body_hits_shield_precedence_blocks_body_selection() -> Non
         del handle
 
 
+def test_debug_select_body_hits_disabled_hurtcap_does_not_select_body() -> None:
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    seed_stride = int(sizes["seed"])
+    assert seed_stride == SEED_DTYPE.itemsize
+
+    handle = msl_binding.init(batch_size=1, num_players=2)
+    try:
+        seed = _seed_base()
+        seed_bytes = seed.view(np.uint8).reshape((1, seed_stride))
+        msl_binding.reseed_seed(handle, seed_bytes)
+
+        # Force overlapping primitives (BODY-only).
+        msl_binding.debug_clear_hitboxes_world(handle, 0, 0)
+        msl_binding.debug_set_hitbox_world(handle, 0, 0, 0, 0.0, 0.0, 0.0, 1.0, 5.0, 1)
+        msl_binding.debug_set_hitbox_flags(handle, 0, 0, 0, int(HIT_GROUNDED))
+
+        msl_binding.debug_clear_hurtcaps_world(handle, 0, 1)
+        msl_binding.debug_set_hurtcap_world(handle, 0, 1, 0, -0.5, 0.0, 0.0, 0.5, 0.0, 0.0, 0.5)
+
+        contacts, count = _read_selected_body_hits(handle)
+        assert count == 1
+
+        # Disable the only overlapping capsule: contact must no longer be selected.
+        msl_binding.debug_set_hurtcap_enabled(handle, 0, 1, 0, 0)
+        contacts, count = _read_selected_body_hits(handle)
+        assert count == 0
+        assert contacts.size == 0
+    finally:
+        msl_binding.destroy(handle)
+        del handle
+
+
 def test_debug_select_body_hits_rehit_suppression_blocks_repeat_until_clear() -> None:
     import msl_binding
 

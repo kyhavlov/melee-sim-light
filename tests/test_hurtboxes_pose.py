@@ -89,9 +89,6 @@ def test_hurtboxes_refresh_matches_pose_bytes() -> None:
             break
     assert cap_i >= 0, "no hurt capsule bone ids are present in SSANIM joint_parts"
     cap = hurtcaps[cap_i]
-    # Under the runtime fallback policy, capsules whose bones are not present in SSANIM joint_parts
-    # would be skipped. Compute the expected output row index accordingly.
-    out_row_i = sum(1 for c in hurtcaps[:cap_i] if c["bone_part_id"] in part_to_joint_index)
 
     # Choose a stable, data-driven (msid, frame) from the anim file itself.
     msid, frame_count, base = _pick_first_nonempty_anim(buf=anim_buf, joint_count=joint_count, anim_count=anim_count)
@@ -151,9 +148,9 @@ def test_hurtboxes_refresh_matches_pose_bytes() -> None:
     assert caps_world.dtype == np.float32
     assert caps_world.shape == (32, 7)
     assert 0 <= int(count) <= 32
-    assert int(count) > out_row_i
+    assert int(count) >= len(hurtcaps)
 
-    got = caps_world[out_row_i]
+    got = caps_world[cap_i]
     assert np.array_equal(got.view(np.uint32), ref_row.view(np.uint32))
 
 
@@ -193,7 +190,10 @@ def test_hurtboxes_refresh_falls_back_on_missing_msid() -> None:
     finally:
         msl_binding.destroy(handle)
 
-    assert int(count) == 0
+    # Slot identity is preserved: count stays equal to init capsule_count, but all missing-pose
+    # capsules are disabled and their world rows remain zero.
+    hurtcaps = _read_hurtcaps(Path("data/hurtcaps/fox.bin"))
+    assert int(count) >= len(hurtcaps)
     assert np.all(caps_world == np.float32(0.0))
 
 
@@ -215,7 +215,7 @@ def test_hurtboxes_refresh_applies_fighter_scale_y() -> None:
             break
     assert cap_i >= 0, "no hurt capsule bone ids are present in SSANIM joint_parts"
     cap = hurtcaps[cap_i]
-    out_row_i = sum(1 for c in hurtcaps[:cap_i] if c["bone_part_id"] in part_to_joint_index)
+    out_row_i = cap_i
 
     msid, frame_count, base = _pick_first_nonempty_anim(buf=anim_buf, joint_count=joint_count, anim_count=anim_count)
     assert frame_count > 0
@@ -276,6 +276,6 @@ def test_hurtboxes_refresh_applies_fighter_scale_y() -> None:
         msl_binding.destroy(handle)
 
     assert 0 <= int(count) <= 32
-    assert int(count) > out_row_i
+    assert int(count) >= len(hurtcaps)
     got = caps_world[out_row_i]
     assert np.array_equal(got.view(np.uint32), ref_row.view(np.uint32))

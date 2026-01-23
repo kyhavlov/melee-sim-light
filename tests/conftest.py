@@ -216,6 +216,79 @@ def _ensure_hurtcaps_bins() -> None:
         if not out.exists():
             raise RuntimeError(f"failed to generate required hurtcaps bin for tests: {out}")
 
+def _ensure_hurtbox_states_bins() -> None:
+    for ch in ("fox", "falco"):
+        out = ROOT / "data" / "hurtbox_states" / f"{ch}.bin"
+        if out.exists():
+            try:
+                with out.open("rb") as f:
+                    magic = f.read(8)
+                    ver = int.from_bytes(f.read(4), "little", signed=False)
+                if magic == b"MSLHURM1" and ver == 1:
+                    continue
+            except OSError:
+                pass
+
+        # Rebuild from local `_iso/` extracts (fast; no full ISO rebuild).
+        required = [
+            ROOT / "_iso" / "PlCo.dat",
+            ROOT / "_iso" / ("PlFx.dat" if ch == "fox" else "PlFc.dat"),
+        ]
+        missing_iso = [p for p in required if not p.exists()]
+        if missing_iso:
+            raise RuntimeError(
+                f"missing required hurtbox states bin for tests: {out} (and cannot rebuild due to missing _iso/ files: {missing_iso}). "
+                f"Run: `uv run python -m tools.extraction.build_data --iso-dir _iso --stage grnla --chars fox,falco`"
+            )
+
+        # `extract_fighter_hurtbox_modes` depends on existing ISO-derived hurtcaps and special_msids.
+        hurtcaps = ROOT / "data" / "hurtcaps" / f"{ch}.bin"
+        msids = ROOT / "data" / "special_msids" / f"{ch}.json"
+        if not hurtcaps.exists():
+            raise RuntimeError(f"missing required hurtcaps bin for hurtbox states rebuild: {hurtcaps}")
+        if not msids.exists():
+            # Build from local `_iso/` extracts (fast; no full ISO rebuild).
+            subprocess.run(
+                [
+                    sys.executable,
+                    "-m",
+                    "tools.extraction.extract_special_msids",
+                    "--iso_dir",
+                    str(ROOT / "_iso"),
+                    "--out_dir",
+                    str(ROOT / "data" / "special_msids"),
+                    "--chars",
+                    ch,
+                ],
+                check=True,
+            )
+        if not msids.exists():
+            raise RuntimeError(f"failed to generate required special_msids json for hurtbox states rebuild: {msids}")
+
+        subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "tools.extraction.extract_fighter_hurtbox_modes",
+                "--iso_dir",
+                str(ROOT / "_iso"),
+                "--melee_decomp",
+                str(ROOT / "refs" / "melee"),
+                "--hurtcaps_dir",
+                str(ROOT / "data" / "hurtcaps"),
+                "--special_msids_dir",
+                str(ROOT / "data" / "special_msids"),
+                "--out_dir",
+                str(ROOT / "data" / "hurtbox_states"),
+                "--chars",
+                ch,
+            ],
+            check=True,
+        )
+
+        if not out.exists():
+            raise RuntimeError(f"failed to generate required hurtbox states bin for tests: {out}")
+
 def _ensure_shield_tilt_bins() -> None:
     for ch, prefix in (("fox", "PlFx"), ("falco", "PlFc")):
         out = ROOT / "data" / "shields" / f"{ch}.bin"
@@ -272,4 +345,5 @@ def pytest_sessionstart(session) -> None:  # type: ignore[no-untyped-def]
     _ensure_ecb_bottom_tables()
     _ensure_ecb_extents_tables()
     _ensure_hurtcaps_bins()
+    _ensure_hurtbox_states_bins()
     _ensure_shield_tilt_bins()

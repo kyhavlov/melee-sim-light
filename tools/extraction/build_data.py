@@ -135,6 +135,25 @@ def main() -> None:
         ],
     )
 
+    # Movescript-derived hurt capsule state timelines.
+    _run(
+        "tools.extraction.extract_fighter_hurtbox_modes",
+        [
+            "--iso_dir",
+            str(iso_dir),
+            "--melee_decomp",
+            str(args.melee_decomp),
+            "--hurtcaps_dir",
+            "data/hurtcaps",
+            "--special_msids_dir",
+            "data/special_msids",
+            "--out_dir",
+            "data/hurtbox_states",
+            "--chars",
+            ",".join(chars),
+        ],
+    )
+
     # Anim matrices per needed msid (depends on data/moves + data/hurtcaps + data/characters).
     for ch in chars:
         _run(

@@ -1473,6 +1473,30 @@ static PyObject* msl_debug_set_hurtcap_world_py(PyObject* self, PyObject* args) 
   Py_RETURN_NONE;
 }
 
+static PyObject* msl_debug_set_hurtcap_enabled_py(PyObject* self, PyObject* args) {
+  (void)self;
+  PyObject* handle_obj = NULL;
+  int batch_index = 0;
+  int player_index = 0;
+  int hurtcap_id = 0;
+  int enabled = 0;
+  if (!PyArg_ParseTuple(args, "Oiiii", &handle_obj, &batch_index, &player_index, &hurtcap_id,
+                        &enabled)) {
+    return NULL;
+  }
+  PyMslHandle* h = unpack_handle(handle_obj);
+  if (h == NULL) {
+    return NULL;
+  }
+  const int err =
+      msl_batch_debug_set_hurtcap_enabled(h->batch, batch_index, player_index, hurtcap_id, enabled);
+  if (err != 0) {
+    PyErr_Format(PyExc_ValueError, "msl_batch_debug_set_hurtcap_enabled failed: %d", err);
+    return NULL;
+  }
+  Py_RETURN_NONE;
+}
+
 static PyObject* msl_debug_combat_resolve_py(PyObject* self, PyObject* args) {
   (void)self;
   PyObject* handle_obj = NULL;
@@ -2007,6 +2031,8 @@ static PyMethodDef methods[] = {
     {"debug_set_hurtcap_world", msl_debug_set_hurtcap_world_py, METH_VARARGS,
      "debug_set_hurtcap_world(handle, batch_index, player_index, hurtcap_id, "
      "ax,ay,az,bx,by,bz,radius)"},
+    {"debug_set_hurtcap_enabled", msl_debug_set_hurtcap_enabled_py, METH_VARARGS,
+     "debug_set_hurtcap_enabled(handle, batch_index, player_index, hurtcap_id, enabled=0/1)"},
     {"debug_combat_resolve", msl_debug_combat_resolve_py, METH_VARARGS,
      "debug_combat_resolve(handle) -> run combat_resolve() only"},
     {"debug_set_hitlag", msl_debug_set_hitlag_py, METH_VARARGS,

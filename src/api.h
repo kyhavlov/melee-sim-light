@@ -460,6 +460,8 @@ int msl_batch_debug_clear_hurtcaps_world(MslBatch* batch, int batch_index, int p
 int msl_batch_debug_set_hurtcap_world(MslBatch* batch, int batch_index, int player_index,
                                       int hurtcap_id, float ax, float ay, float az, float bx,
                                       float by, float bz, float radius);
+int msl_batch_debug_set_hurtcap_enabled(MslBatch* batch, int batch_index, int player_index,
+                                       int hurtcap_id, int enabled);
 int msl_batch_debug_set_hitlag(MslBatch* batch, int batch_index, int player_index,
                                uint16_t hitlag_frames);
 int msl_batch_debug_combat_resolve(MslBatch* batch);

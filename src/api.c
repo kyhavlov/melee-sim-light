@@ -16,6 +16,7 @@
 #include "move_tables.h"
 #include "ecb_tables.h"
 #include "hitboxes_tables.h"
+#include "hurtbox_modes_tables.h"
 #include "hurtcaps_tables.h"
 #include "shield_tilt_table.h"
 #include "stage_collision.h"
@@ -77,6 +78,11 @@ MslBatch* msl_batch_create(int batch_size, int num_players) {
   (void)shield_tilt_table_init();
 
   if (hurtcaps_tables_init() != 0) {
+    msl_batch_destroy(batch);
+    return NULL;
+  }
+
+  if (hurtbox_modes_tables_init() != 0) {
     msl_batch_destroy(batch);
     return NULL;
   }
@@ -1034,6 +1040,7 @@ int msl_batch_debug_clear_hurtcaps_world(MslBatch* batch, int batch_index, int p
   batch->state.hurtcap_count[idx] = 0;
   for (int cap_id = 0; cap_id < MSL_MAX_HURTCAPS; cap_id++) {
     const size_t cap_i = debug_idx_hurtcap(batch_index, player_index, cap_id);
+    batch->state.hurtcap_enabled[cap_i] = 0;
     batch->state.hurtcap_a_x[cap_i] = 0.0f;
     batch->state.hurtcap_a_y[cap_i] = 0.0f;
     batch->state.hurtcap_a_z[cap_i] = 0.0f;
@@ -1041,6 +1048,8 @@ int msl_batch_debug_clear_hurtcaps_world(MslBatch* batch, int batch_index, int p
     batch->state.hurtcap_b_y[cap_i] = 0.0f;
     batch->state.hurtcap_b_z[cap_i] = 0.0f;
     batch->state.hurtcap_radius[cap_i] = 0.0f;
+    batch->state.hurtcap_is_grabbable[cap_i] = 0;
+    batch->state.hurtcap_height[cap_i] = 0;
   }
 
   return 0;
@@ -1063,6 +1072,7 @@ int msl_batch_debug_set_hurtcap_world(MslBatch* batch, int batch_index, int play
   }
 
   const size_t cap_i = debug_idx_hurtcap(batch_index, player_index, hurtcap_id);
+  batch->state.hurtcap_enabled[cap_i] = 1;
   batch->state.hurtcap_a_x[cap_i] = ax;
   batch->state.hurtcap_a_y[cap_i] = ay;
   batch->state.hurtcap_a_z[cap_i] = az;
@@ -1079,6 +1089,25 @@ int msl_batch_debug_set_hurtcap_world(MslBatch* batch, int batch_index, int play
   }
   batch->state.hurtcap_count[idx] = count;
 
+  return 0;
+}
+
+int msl_batch_debug_set_hurtcap_enabled(MslBatch* batch, int batch_index, int player_index,
+                                       int hurtcap_id, int enabled) {
+  if (batch == NULL) {
+    return EINVAL;
+  }
+  if (batch_index < 0 || batch_index >= batch->batch_size) {
+    return EINVAL;
+  }
+  if (player_index < 0 || player_index >= MSL_MAX_PLAYERS) {
+    return EINVAL;
+  }
+  if (hurtcap_id < 0 || hurtcap_id >= MSL_MAX_HURTCAPS) {
+    return EINVAL;
+  }
+  const size_t cap_i = debug_idx_hurtcap(batch_index, player_index, hurtcap_id);
+  batch->state.hurtcap_enabled[cap_i] = enabled ? 1 : 0;
   return 0;
 }
 
