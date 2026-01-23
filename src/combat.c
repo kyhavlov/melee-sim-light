@@ -300,9 +300,8 @@ static void combat_select_body_hits_one(MslBatch* batch, int bi, MslDebugCombatC
             continue;
           }
 
-          // Combat Mutations Pass 1 (BODY-only) is currently disabled after regressing the
-          // teacher-forced one-step suite (mismatch.hitlag increased). Keep BODY selection + shield
-          // precedence + rehit latch bookkeeping only.
+          // Combat Mutations Pass 1 (BODY-only) is intentionally non-mutating for now (teacher-forced
+          // one-step suite stability): keep selection/gating + rehit latch only.
 
           if (write_out && written < max_contacts) {
             MslDebugCombatContact* out = &out_contacts[written];
