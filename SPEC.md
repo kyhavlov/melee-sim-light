@@ -121,10 +121,22 @@ pipeline (including any required prior-frame state) and/or once we validate orde
 - **BODY-only**: world-space hitbox spheres vs world-space hurtcap capsules, with existing grounded/airborne gating.
 - **Shield-safe**: if a hitbox overlaps the defender shield bubble, that (attacker, defender, hitbox_id) is treated as SHIELD
   and does not apply BODY mutations (no shield damage/stun yet).
+- **Ordering workaround (current step order)**: combat overlap tests apply a *pre-phys translation shift* to the already-computed
+  world primitives (hitboxes/hurtcaps/shield bubble) using `(prev_pos_x/y - pos_x/y)` so collisions are tested against the
+  "pose at this frame, translation before phys" approximation.
+  - This is not a decomp-proven rule; it is a workaround for our current `step()` order where `physics_integrate()` runs before
+    `hitboxes_refresh()`/`hurtboxes_refresh()`/`combat_resolve()`.
+  - Decomp call-order relied on (GALE01):
+    - `ftAnim_8006EBA4` (anim advance / pose timebase) runs before `phys_cb`:
+      `refs/melee/src/melee/ft/fighter.c` lines 1669–1705 vs `Fighter_procUpdate` lines 2141–2159.
 - **Deterministic selection**: at most 1 BODY hit per attacker→defender per frame; prefer lowest `hitbox_id`, then lowest
   `hurtcap_id` (matches debug contact ordering).
-- **Rehit suppression (simplified)**: a per-(attacker, defender) latch suppresses repeated hits from the same active hitbox
-  until hitboxes clear or the attacker msid changes.
+- **Rehit suppression (simplified, conservative)**: a per-(attacker, defender) latch suppresses repeated hits for that pair
+  (ignoring `hitbox_id`) until hitboxes clear or the attacker msid changes.
+  - Rationale: we do not have per-hitbox hitlists/timers yet; this conservative policy reduces one-step false positives where
+    multiple active hitboxes would otherwise re-hit immediately after hitlag ends.
+  - Latch clear rules (current): clears on full hitbox clear (`hitbox_count==0`), attacker msid change, or defender instance_id
+    change; it does not clear when a specific hitbox_id is disabled.
   - Missing decomp pieces: per-hitbox hitlist entries, rehit-rate timers, hitbox refresh ordering vs collision, clanks/trades,
     and full hurtbox eligibility (intangibility, thrown-fighter rules, etc.). These need to be added before enabling percent /
     knockback / hitstun mutations.

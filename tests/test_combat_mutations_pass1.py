@@ -90,8 +90,41 @@ def _read_selected_body_hits(handle, *, batch_index: int = 0, max_contacts: int 
     contacts = raw.reshape(-1).view(contact_dtype)[:count]
     return contacts, int(count)
 
+def _read_contacts_filtered(handle, *, batch_index: int = 0, max_contacts: int = 256):
+    import msl_binding
 
-def test_combat_resolve_body_overlap_is_non_mutating() -> None:
+    raw, count = msl_binding.debug_combat_contacts_filtered(handle, batch_index, max_contacts)
+    assert raw.shape[1] > 0
+
+    contact_dtype = np.dtype(
+        [
+            ("attacker", "u1"),
+            ("defender", "u1"),
+            ("hitbox_id", "u1"),
+            ("hurtcap_id", "u1"),
+            ("attacker_msid", "<u2"),
+            ("attacker_action_frame", "<i2"),
+            ("hitbox_x", "<f4"),
+            ("hitbox_y", "<f4"),
+            ("hitbox_z", "<f4"),
+            ("hitbox_radius", "<f4"),
+            ("hitbox_damage", "<f4"),
+            ("hurtcap_ax", "<f4"),
+            ("hurtcap_ay", "<f4"),
+            ("hurtcap_az", "<f4"),
+            ("hurtcap_bx", "<f4"),
+            ("hurtcap_by", "<f4"),
+            ("hurtcap_bz", "<f4"),
+            ("hurtcap_radius", "<f4"),
+        ],
+        align=False,
+    )
+    assert raw.shape[1] == contact_dtype.itemsize
+    contacts = raw.reshape(-1).view(contact_dtype)[:count]
+    return contacts, int(count)
+
+
+def test_combat_resolve_body_overlap_sets_hitlag_and_attribution() -> None:
     import msl_binding
 
     sizes = msl_binding.sizes()
@@ -103,6 +136,7 @@ def test_combat_resolve_body_overlap_is_non_mutating() -> None:
     handle = msl_binding.init(batch_size=1, num_players=2)
     try:
         seed = _seed_base()
+        seed["last_hit_by"][0, 1] = np.uint8(1)
         seed_bytes = seed.view(np.uint8).reshape((1, seed_stride))
         msl_binding.reseed_seed(handle, seed_bytes)
 
@@ -114,20 +148,23 @@ def test_combat_resolve_body_overlap_is_non_mutating() -> None:
         msl_binding.debug_clear_hurtcaps_world(handle, 0, 1)
         msl_binding.debug_set_hurtcap_world(handle, 0, 1, 0, -0.5, 0.0, 0.0, 0.5, 0.0, 0.0, 0.5)
 
-        contacts, count = _read_selected_body_hits(handle)
+        contacts, count = _read_contacts_filtered(handle)
         assert count == 1
         assert int(contacts["attacker"][0]) == 0
         assert int(contacts["defender"][0]) == 1
         assert int(contacts["hitbox_id"][0]) == 0
         assert int(contacts["hurtcap_id"][0]) == 0
 
-        # Combat Mutations Pass 1 is intentionally non-mutating (suite stability): selection only.
         msl_binding.debug_combat_resolve(handle)
         out = _read_compare(handle)
 
-        assert int(out["hitlag"][0]) == 0
-        assert int(out["hitlag"][1]) == 0
-        assert int(out["instance_hit_by"][1]) == 0
+        hitlag_dmg_mul = _common_attr("hitlag_dmg_mul")
+        hitlag_base = _common_attr("hitlag_base")
+        exp_hl = int(int(5) * hitlag_dmg_mul + hitlag_base)
+
+        assert int(out["hitlag"][0]) == exp_hl
+        assert int(out["hitlag"][1]) == exp_hl
+        assert int(out["instance_hit_by"][1]) == 111
         assert int(out["last_hit_by"][1]) == 0
         assert int(out["last_attack_landed"][0]) == 0
     finally:
@@ -234,7 +271,7 @@ def test_debug_select_body_hits_uses_pos_z_in_world_geometry() -> None:
         _, cap_count = msl_binding.hurtcaps_world(handle, 0, 1)
         assert int(cap_count) > 0
 
-        _, count = _read_selected_body_hits(handle)
+        _, count = _read_contacts_filtered(handle)
         assert count > 0
     finally:
         msl_binding.destroy(handle)
@@ -248,7 +285,7 @@ def test_debug_select_body_hits_uses_pos_z_in_world_geometry() -> None:
         msl_binding.reseed_seed(handle, seed_bytes)
         msl_binding.step_input(handle, neutral, neutral)
 
-        _, count = _read_selected_body_hits(handle)
+        _, count = _read_contacts_filtered(handle)
         assert count == 0
     finally:
         msl_binding.destroy(handle)
@@ -343,22 +380,35 @@ def test_debug_select_body_hits_rehit_suppression_blocks_repeat_until_clear() ->
         msl_binding.debug_clear_hurtcaps_world(handle, 0, 1)
         msl_binding.debug_set_hurtcap_world(handle, 0, 1, 0, -0.5, 0.0, 0.0, 0.5, 0.0, 0.0, 0.5)
 
-        # First call selects a hit.
-        _, c1 = _read_selected_body_hits(handle)
-        assert c1 == 1
+        # First resolve applies hitlag and latches rehit.
+        msl_binding.debug_combat_resolve(handle)
+        out1 = _read_compare(handle)
+        hitlag_dmg_mul = _common_attr("hitlag_dmg_mul")
+        hitlag_base = _common_attr("hitlag_base")
+        exp_hl = int(int(5) * hitlag_dmg_mul + hitlag_base)
+        assert int(out1["hitlag"][0]) == exp_hl
+        assert int(out1["hitlag"][1]) == exp_hl
 
-        # Second call (no clear/change): suppressed by rehit latch.
-        _, c2 = _read_selected_body_hits(handle)
-        assert c2 == 0
+        # Clear hitlag (so hitlag gating doesn't mask the rehit latch), then resolve again:
+        # latch should suppress the repeat hit and leave hitlag at 0.
+        msl_binding.debug_set_hitlag(handle, 0, 0, 0)
+        msl_binding.debug_set_hitlag(handle, 0, 1, 0)
+        msl_binding.debug_combat_resolve(handle)
+        out2 = _read_compare(handle)
+        assert int(out2["hitlag"][0]) == 0
+        assert int(out2["hitlag"][1]) == 0
 
         # Clear hitboxes (approximates ClearHitboxes), then re-enable: hit can apply again.
         msl_binding.debug_clear_hitboxes_world(handle, 0, 0)
-        _, c3 = _read_selected_body_hits(handle)
-        assert c3 == 0
+        msl_binding.debug_combat_resolve(handle)
         msl_binding.debug_set_hitbox_world(handle, 0, 0, 0, 0.0, 0.0, 0.0, 1.0, 5.0, 1)
         msl_binding.debug_set_hitbox_flags(handle, 0, 0, 0, int(HIT_GROUNDED))
-        _, c4 = _read_selected_body_hits(handle)
-        assert c4 == 1
+        msl_binding.debug_set_hitlag(handle, 0, 0, 0)
+        msl_binding.debug_set_hitlag(handle, 0, 1, 0)
+        msl_binding.debug_combat_resolve(handle)
+        out3 = _read_compare(handle)
+        assert int(out3["hitlag"][0]) == exp_hl
+        assert int(out3["hitlag"][1]) == exp_hl
     finally:
         msl_binding.destroy(handle)
         del handle
