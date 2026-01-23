@@ -75,6 +75,16 @@ def _i16_from_state_age(state_age: np.ndarray | None, n: int) -> np.ndarray:
     return np.floor(x).astype(np.int16)
 
 
+def _f32_from_state_age(state_age: np.ndarray | None, n: int) -> np.ndarray:
+    if state_age is None:
+        return np.zeros(n, dtype=np.float32)
+    # Slippi post-frame "state_age" is fp->cur_anim_frame (float). Keep the fractional component.
+    # Source pointers:
+    # - refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm ("send AS frame", loads from 0x894)
+    # - refs/melee/src/melee/ft/types.h (Fighter::cur_anim_frame at fp+894)
+    return state_age.astype(np.float32)
+
+
 def _port_name(port_1based: int) -> str:
     if port_1based < 1 or port_1based > 4:
         raise ValueError(f"port must be in 1..4, got {port_1based}")
@@ -415,7 +425,9 @@ def _main_impl(args) -> None:
         post_on_ground = _airborne_to_on_ground(post_airborne, n_frames)
         post_hitlag = _u16_from_float_frames(_to_numpy(post.field("hitlag")).astype(np.float32), n_frames)
         post_hitstun = _u16_from_hitstun_misc(_to_numpy(post.field("misc_as")).astype(np.float32), n_frames)
-        post_state_age = _i16_from_state_age(_to_numpy(post.field("state_age")).astype(np.float32), n_frames)
+        post_state_age_f32 = _to_numpy(post.field("state_age")).astype(np.float32)
+        post_state_age = _i16_from_state_age(post_state_age_f32, n_frames)
+        post_anim_frame_f32 = _f32_from_state_age(post_state_age_f32, n_frames)
 
         hurtbox_state = _to_numpy(post.field("hurtbox_state")).astype(np.uint8)
         l_cancel = _to_numpy(post.field("l_cancel")).astype(np.uint8)
@@ -454,6 +466,7 @@ def _main_impl(args) -> None:
         samples["ref_t1"]["action_id"][:, slot] = post_state[1:]
         samples["seed_t"]["action_frame"][:, slot] = post_state_age[:-1]
         samples["ref_t1"]["action_frame"][:, slot] = post_state_age[1:]
+        samples["seed_t"]["anim_frame_f32"][:, slot] = post_anim_frame_f32[:-1]
 
         samples["seed_t"]["pos_x"][:, slot] = post_pos_x[:-1]
         samples["ref_t1"]["pos_x"][:, slot] = post_pos_x[1:]

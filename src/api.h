@@ -110,6 +110,14 @@ typedef struct MslSeed {
   // State machine
   uint16_t action_id[MSL_MAX_PLAYERS];    // GALE01 action id
   int16_t action_frame[MSL_MAX_PLAYERS];  // action frame (can be negative in pre-start)
+  // Decomp-shaped animation/script timebase: fp->cur_anim_frame (float).
+  // Slippi post-frame exposes this as `state_age` (float, can be fractional).
+  //
+  // Source pointers:
+  // - refs/melee/src/melee/ft/types.h (Fighter::cur_anim_frame at fp+894)
+  // - refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm ("send AS frame", loads from 0x894)
+  // - refs/melee/src/melee/ft/ftaction.c::ftAction_80073240 (movescript timers use fp->cur_anim_frame)
+  float anim_frame_f32[MSL_MAX_PLAYERS];
   // Guard (shield) tilt pose state (seeded; decomp-shaped).
   // Decomp: refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c
   // - mv.co.guard.x8: "frame-ish" index into the Guard tilt timeline (neutral is 10 in GALE01)

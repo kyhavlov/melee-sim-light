@@ -68,6 +68,7 @@ def test_hitboxes_refresh_full_attrs_match_table() -> None:
     seed["pos_x"][0, 0] = np.float32(123.25)
     seed["pos_y"][0, 0] = np.float32(-45.5)
     seed["action_frame"][0, 0] = np.int16(frame)
+    seed["anim_frame_f32"][0, 0] = np.float32(frame)
     seed["animation_index"][0, 0] = np.uint32(msid)
     seed["hitlag"][0, 0] = np.uint16(2)
     seed["hitlag"][0, 1] = np.uint16(2)
@@ -114,4 +115,3 @@ def test_hitboxes_refresh_full_attrs_match_table() -> None:
     assert int(row[13]) == int(ev["u16_6"])  # flags
 
     assert int(row[14]) == int(ev["bone_part_id"])
-

@@ -2,6 +2,7 @@
 
 #include <stdint.h>
 
+#include "anim_frame.h"
 #include "anim_pose.h"
 #include "hitboxes_tables.h"
 
@@ -28,7 +29,9 @@ void hitboxes_refresh(MslBatch* batch) {
 
   // World-space hitbox centers are pose-driven:
   // - We interpret hitbox attachment records against the fighter's current submotion id
-  //   (Slippi post-frame `animation_index`) and integer `action_frame`.
+  //   (Slippi post-frame `animation_index`) and decomp-shaped anim/script time:
+  //   fp->cur_anim_frame (Slippi post-frame `state_age`, float).
+  //   refs/melee/src/melee/ft/ftaction.c::ftAction_80073240 (movescript timers use fp->cur_anim_frame)
   // - For each active hitbox, we sample the 3x4 bone matrix via anim_pose_get_matrix(...) and apply
   //   it to the bone-local offset (x,y,z), then translate by fighter (pos_x,pos_y,pos_z) to get world
   //   space.
@@ -80,14 +83,11 @@ void hitboxes_refresh(MslBatch* batch) {
       if (anim_u32 > 0xFFFFu) {
         continue;
       }
-      const int16_t af_i16 = batch->state.action_frame[idx];
-      if (af_i16 < 0) {
-        continue;
-      }
+      const float anim_frame_f32 = msl_anim_frame_sanitize_f32(batch->state.anim_frame_f32[idx]);
 
       const uint8_t char_id = batch->state.char_id[idx];
       const uint16_t msid = (uint16_t)anim_u32;
-      const uint16_t frame = (uint16_t)af_i16;
+      const uint16_t pose_frame = msl_anim_frame_floor_u16(anim_frame_f32);
 
       const MslHitboxEvent* events = NULL;
       uint16_t event_count = 0;
@@ -102,7 +102,10 @@ void hitboxes_refresh(MslBatch* batch) {
 
       for (uint16_t ei = 0; ei < event_count; ei++) {
         const MslHitboxEvent* ev = &events[ei];
-        if (ev->frame > frame) {
+        // Decomp shape: movescript event timers are float-driven (fp->cur_anim_frame and
+        // fp->frame_speed_mul) rather than an integer action_frame counter.
+        // refs/melee/src/melee/ft/ftaction.c::ftAction_80073240
+        if ((float)ev->frame > anim_frame_f32) {
           continue;
         }
 
@@ -136,7 +139,7 @@ void hitboxes_refresh(MslBatch* batch) {
         }
 
         float m[12];
-        if (anim_pose_get_matrix(char_id, msid, frame, def[hi].bone_part_id, m) != 0) {
+        if (anim_pose_get_matrix(char_id, msid, pose_frame, def[hi].bone_part_id, m) != 0) {
           // Fallback policy: drop only this hitbox if its pose lookup fails.
           continue;
         }

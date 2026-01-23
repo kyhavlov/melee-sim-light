@@ -365,6 +365,7 @@ Highest priority (policy-critical / always exercised):
 - FD collision + ledges + blast zones (from stage files)
 - ECB-like collision proxy and grounded/ledge gating (aim very close to real; only simplify as a last resort)
 - Animation/subaction driving: per-action timeline + animation frame progression aligned to timers/interrupt rules
+- Anim/script timebase (`anim_frame_f32`): seeded from Slippi post-frame `state_age` (fp->cur_anim_frame float). Today we maintain it approximately by applying integer `action_frame` deltas during `step()` and resetting to `0.0f` on action enters (does **not** yet model decomp `fp->frame_speed_mul` fractional carry / hitlag coupling). Negative/NaN is treated as `0.0f` for move-script sampling and pose indexing.
 - Hurtbox/hitbox attachment to extracted animation/bone transforms (including TransN/root motion when applicable)
 - Hitlag, hitstun, knockback, tumble, DI (and damage/percent application)
 - Shield core (hp/decay, shieldstun, pushback) + out-of-shield options

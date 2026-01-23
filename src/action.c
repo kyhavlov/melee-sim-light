@@ -19,6 +19,8 @@ static inline void enter_fall_special(MslBatch* batch, size_t idx) {
   batch->state.action_id[idx] = (uint16_t)MSL_ACT_FALL_SPECIAL;
   batch->state.animation_index[idx] = (uint32_t)MSL_SM_FALL_SPECIAL;
   batch->state.action_frame[idx] = 0;
+  // Keep anim_frame_f32 coherent with action_frame on action enters (approx policy; see SPEC.md).
+  batch->state.anim_frame_f32[idx] = 0.0f;
   // Decomp: EscapeAir enters FallSpecial via ftCo_80096900(..., arg1=1, ...), which sets xC=1.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c and ftCo_FallSpecial.c
   batch->state.fallspecial_xc[idx] = 1;
@@ -64,6 +66,7 @@ uint8_t escape_air_try_enter_from_air_locomotion(MslBatch* batch, const MslCommo
   batch->state.action_id[idx] = (uint16_t)MSL_ACT_ESCAPE_AIR;
   batch->state.animation_index[idx] = (uint32_t)MSL_SM_ESCAPE_AIR;
   batch->state.action_frame[idx] = 0;
+  batch->state.anim_frame_f32[idx] = 0.0f;
   batch->state.speed_air_x_self[idx] = vx;
   batch->state.speed_y_self[idx] = vy;
   // Decomp: EscapeAir enters without KeepFastFall; treat EscapeAir as a self-velocity-controlled
@@ -111,6 +114,7 @@ static inline void escape_enter_wait(MslBatch* batch, size_t idx) {
   batch->state.action_id[idx] = (uint16_t)MSL_ACT_WAIT;
   batch->state.animation_index[idx] = (uint32_t)MSL_SM_WAIT1_0;
   batch->state.action_frame[idx] = 0;
+  batch->state.anim_frame_f32[idx] = 0.0f;
 }
 
 static inline void enter_escape_n(MslBatch* batch, size_t idx) {
@@ -119,6 +123,7 @@ static inline void enter_escape_n(MslBatch* batch, size_t idx) {
   batch->state.action_id[idx] = (uint16_t)MSL_ACT_ESCAPE_N;
   batch->state.animation_index[idx] = (uint32_t)MSL_SM_ESCAPE_N;
   batch->state.action_frame[idx] = 0;
+  batch->state.anim_frame_f32[idx] = 0.0f;
 }
 
 static inline void enter_escape_roll(MslBatch* batch, size_t idx, uint16_t action_id) {
@@ -129,6 +134,7 @@ static inline void enter_escape_roll(MslBatch* batch, size_t idx, uint16_t actio
                                           ? (uint32_t)MSL_SM_ESCAPE_F
                                           : (uint32_t)MSL_SM_ESCAPE_B;
   batch->state.action_frame[idx] = 0;
+  batch->state.anim_frame_f32[idx] = 0.0f;
 }
 
 uint8_t escape_try_enter_from_guard(MslBatch* batch, const MslCommonParams* c, size_t idx) {
@@ -274,6 +280,7 @@ static inline void enter_guard_reflect(MslBatch* batch, size_t idx) {
   // Keep this consistent with replay seeds/refs so validation compares cleanly.
   batch->state.animation_index[idx] = 0xFFFFFFFFu;
   batch->state.action_frame[idx] = 0;
+  batch->state.anim_frame_f32[idx] = 0.0f;
 }
 
 static inline void enter_guard_on(MslBatch* batch, size_t idx) {
@@ -282,6 +289,7 @@ static inline void enter_guard_on(MslBatch* batch, size_t idx) {
   batch->state.action_id[idx] = (uint16_t)MSL_ACT_GUARD_ON;
   batch->state.animation_index[idx] = 0xFFFFFFFFu;
   batch->state.action_frame[idx] = 0;
+  batch->state.anim_frame_f32[idx] = 0.0f;
 }
 
 static inline void enter_guard_hold(MslBatch* batch, size_t idx) {
@@ -290,6 +298,7 @@ static inline void enter_guard_hold(MslBatch* batch, size_t idx) {
   batch->state.action_id[idx] = (uint16_t)MSL_ACT_GUARD;
   batch->state.animation_index[idx] = 0xFFFFFFFFu;
   batch->state.action_frame[idx] = 0;
+  batch->state.anim_frame_f32[idx] = 0.0f;
 }
 
 static inline void enter_guard_off(MslBatch* batch, size_t idx) {
@@ -298,6 +307,7 @@ static inline void enter_guard_off(MslBatch* batch, size_t idx) {
   batch->state.action_id[idx] = (uint16_t)MSL_ACT_GUARD_OFF;
   batch->state.animation_index[idx] = (uint32_t)MSL_SM_GUARD_OFF;
   batch->state.action_frame[idx] = 0;
+  batch->state.anim_frame_f32[idx] = 0.0f;
 }
 
 static inline void guard_enter_wait(MslBatch* batch, size_t idx) {
@@ -306,6 +316,7 @@ static inline void guard_enter_wait(MslBatch* batch, size_t idx) {
   batch->state.action_id[idx] = (uint16_t)MSL_ACT_WAIT;
   batch->state.animation_index[idx] = (uint32_t)MSL_SM_WAIT1_0;
   batch->state.action_frame[idx] = 0;
+  batch->state.anim_frame_f32[idx] = 0.0f;
 }
 
 static inline float clamp01(float x) {

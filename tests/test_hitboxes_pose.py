@@ -174,6 +174,7 @@ def test_hitboxes_refresh_matches_pose_bytes() -> None:
     seed["pos_x"][0, 0] = pos_x
     seed["pos_y"][0, 0] = pos_y
     seed["action_frame"][0, 0] = np.int16(frame)
+    seed["anim_frame_f32"][0, 0] = np.float32(frame)
     seed["animation_index"][0, 0] = np.uint32(msid)
     seed["hitlag"][0, 0] = np.uint16(2)
     seed["hitlag"][0, 1] = np.uint16(2)

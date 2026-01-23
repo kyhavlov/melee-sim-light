@@ -39,6 +39,7 @@ def _seed_base() -> np.ndarray:
     seed["ground_id"][0, :2] = np.uint16(0)
     seed["action_id"][0, :2] = np.uint16(ACT_WAIT)
     seed["action_frame"][0, :2] = np.int16(0)
+    seed["anim_frame_f32"][0, :2] = np.float32(0.0)
     seed["animation_index"][0, :2] = np.uint32(SM_WAIT1_0)
     seed["shield_hp"][0, :2] = np.float32(_common_attr("start_shield_health"))
     seed["instance_id"][0, 0] = np.uint16(111)
@@ -208,6 +209,7 @@ def test_debug_select_body_hits_uses_pos_z_in_world_geometry() -> None:
         seed["action_id"][0, :2] = np.uint16(0xFFFF)
         # step_input advances action_frame by +1 before hitbox/hurtcap refresh.
         seed["action_frame"][0, :2] = np.int16(1)
+        seed["anim_frame_f32"][0, :2] = np.float32(1.0)
         # ftCo_SM_Attack11 (Fox jab1): data/moves/fox.json -> submotion_id 46 (hitbox spawn at frame 2).
         seed["animation_index"][0, :2] = np.uint32(46)
         seed["pos_x"][0, :2] = np.float32(0.0)

@@ -4,6 +4,7 @@
 #include <stdint.h>
 #include <string.h>
 
+#include "anim_frame.h"
 #include "combat_geom.h"
 #include "common_params.h"
 #include "hitboxes_tables.h"
@@ -84,13 +85,10 @@ static inline uint8_t combat_defender_hit_status_u8(const MslBatch* batch, size_
     d_msid = (uint16_t)d_msid_u32;
   }
 
-  // Current policy (suite-neutral): negative action_frame consults frame 0.
-  // If we later want "negative action_frame => don't consult tables", gate that here.
-  uint16_t d_frame = 0;
-  const int16_t d_af_i16 = batch->state.action_frame[d_idx];
-  if (d_af_i16 > 0) {
-    d_frame = (uint16_t)d_af_i16;
-  }
+  // Current policy (suite-neutral): negative/NaN anim_frame consults frame 0.
+  // If we later want "negative anim_frame => don't consult tables", gate that here.
+  const float d_anim_frame_f32 = msl_anim_frame_sanitize_f32(batch->state.anim_frame_f32[d_idx]);
+  const uint16_t d_frame = msl_anim_frame_floor_u16(d_anim_frame_f32);
 
   uint8_t hit_status = 0;
   (void)hit_status_get(d_char, d_msid, d_frame, &hit_status);

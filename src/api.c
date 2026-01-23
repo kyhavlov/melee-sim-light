@@ -193,6 +193,7 @@ int msl_batch_reseed_seed(MslBatch* batch, const uint8_t* seed_bytes, size_t see
 
       batch->state.action_id[idx] = seed->action_id[p];
       batch->state.action_frame[idx] = seed->action_frame[p];
+      batch->state.anim_frame_f32[idx] = seed->anim_frame_f32[p];
       batch->state.guard_tilt_x8[idx] = seed->guard_tilt_x8[p];
       batch->state.guard_tilt_x4[idx] = seed->guard_tilt_x4[p];
       batch->state.jumps_left[idx] = seed->jumps_left[p];

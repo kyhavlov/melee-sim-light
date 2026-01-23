@@ -125,6 +125,7 @@ def test_hurtboxes_refresh_matches_pose_bytes() -> None:
     seed["pos_x"][0, 0] = pos_x
     seed["pos_y"][0, 0] = pos_y
     seed["action_frame"][0, 0] = np.int16(frame)
+    seed["anim_frame_f32"][0, 0] = np.float32(frame)
     seed["animation_index"][0, 0] = np.uint32(msid)
     seed["hitlag"][0, 0] = np.uint16(2)  # timers_update decrements first; keep hitlag > 0 this frame
 
@@ -173,6 +174,7 @@ def test_hurtboxes_refresh_falls_back_on_missing_msid() -> None:
     seed["char_id"][0, 0] = np.uint8(1)
     seed["char_id"][0, 1] = np.uint8(1)
     seed["action_frame"][0, 0] = np.int16(0)
+    seed["anim_frame_f32"][0, 0] = np.float32(0)
     seed["animation_index"][0, 0] = np.uint32(missing_msid)
     seed["hitlag"][0, 0] = np.uint16(2)
     seed["hitlag"][0, 1] = np.uint16(2)
@@ -259,6 +261,7 @@ def test_hurtboxes_refresh_applies_fighter_scale_y() -> None:
     seed["fighter_scale_y"][0, 0] = scale_y
     seed["fighter_scale_y"][0, 1] = np.float32(1.0)
     seed["action_frame"][0, 0] = np.int16(frame)
+    seed["anim_frame_f32"][0, 0] = np.float32(frame)
     seed["animation_index"][0, 0] = np.uint32(msid)
     seed["hitlag"][0, 0] = np.uint16(2)
     seed["hitlag"][0, 1] = np.uint16(2)

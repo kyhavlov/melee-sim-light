@@ -36,6 +36,7 @@ typedef struct MslStateSoA {
   // State machine
   uint16_t* action_id;
   int16_t* action_frame;
+  float* anim_frame_f32;  // decomp fp->cur_anim_frame (float; Slippi `state_age`)
   uint8_t* jumps_left;
   uint8_t* stocks;
   // Guard (shield) tilt pose state (seeded; decomp-shaped).

@@ -15,7 +15,9 @@ extern "C" {
 int hitboxes_tables_init(void);
 
 typedef struct MslHitboxEvent {
-  // Frame timeline key. Interpreted against seeded `action_frame` (integer frame).
+  // Frame timeline key. Interpreted against decomp-shaped anim/script time:
+  // fp->cur_anim_frame (Slippi post-frame `state_age`, float).
+  // refs/melee/src/melee/ft/ftaction.c::ftAction_80073240
   uint16_t frame;
   uint8_t kind;      // 0 = set/enable, 1 = clear
   uint8_t hitbox_id; // 0..3 typical; 0xFF used by clear-all records.

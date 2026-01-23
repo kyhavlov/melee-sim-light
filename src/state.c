@@ -49,6 +49,7 @@ int state_alloc(MslStateSoA* state, int batch_size) {
 
   state->action_id = (uint16_t*)alloc_aligned_64(sizeof(uint16_t) * bp);
   state->action_frame = (int16_t*)alloc_aligned_64(sizeof(int16_t) * bp);
+  state->anim_frame_f32 = (float*)alloc_aligned_64(sizeof(float) * bp);
   state->jumps_left = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->stocks = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->guard_tilt_x8 = (uint16_t*)alloc_aligned_64(sizeof(uint16_t) * bp);
@@ -182,7 +183,7 @@ int state_alloc(MslStateSoA* state, int batch_size) {
       !state->speed_ground_x_self ||
       !state->speed_y_self || !state->speed_x_attack || !state->speed_y_attack ||
       !state->fighter_scale_y || !state->facing || !state->on_ground || !state->prev_on_ground ||
-      !state->action_id || !state->action_frame ||
+      !state->action_id || !state->action_frame || !state->anim_frame_f32 ||
       !state->jumps_left || !state->stocks || !state->guard_tilt_x8 || !state->guard_tilt_x4 ||
       !state->kneebend_jump_input ||
       !state->kneebend_is_short_hop || !state->tilt_timer_x || !state->tilt_timer_y ||
@@ -254,6 +255,7 @@ void state_free(MslStateSoA* state) {
 
   alloc_free(state->action_id);
   alloc_free(state->action_frame);
+  alloc_free(state->anim_frame_f32);
   alloc_free(state->jumps_left);
   alloc_free(state->stocks);
   alloc_free(state->guard_tilt_x8);

@@ -2,6 +2,7 @@
 
 #include <stdint.h>
 
+#include "anim_frame.h"
 #include "anim_pose.h"
 #include "hurtbox_modes_tables.h"
 #include "hurtcaps_tables.h"
@@ -73,13 +74,10 @@ void hurtboxes_refresh(MslBatch* batch) {
       if (anim_u32 > 0xFFFFu) {
         continue;
       }
-      const int16_t af_i16 = batch->state.action_frame[idx];
-      if (af_i16 < 0) {
-        continue;
-      }
+      const float anim_frame_f32 = msl_anim_frame_sanitize_f32(batch->state.anim_frame_f32[idx]);
 
       const uint16_t msid = (uint16_t)anim_u32;
-      const uint16_t frame = (uint16_t)af_i16;
+      const uint16_t frame = msl_anim_frame_floor_u16(anim_frame_f32);
       uint16_t cap_count = cap_count_u16;
       if (cap_count > (uint16_t)MSL_MAX_HURTCAPS) {
         cap_count = (uint16_t)MSL_MAX_HURTCAPS;
