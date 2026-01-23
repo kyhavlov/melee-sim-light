@@ -24,7 +24,7 @@ typedef struct MslHitboxEvent {
   uint16_t bone_part_id;
 
   // Bone-local offsets and hitbox params. World-space center is computed via anim_pose_get_matrix(...)
-  // and then translated by fighter (pos_x, pos_y).
+  // and then translated by fighter (pos_x, pos_y, pos_z).
   float x;
   float y;
   float z;

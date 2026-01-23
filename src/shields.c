@@ -128,9 +128,10 @@ void shields_refresh(MslBatch* batch) {
         // If guard tilt data is available and the shield is active, we override this below.
         const float pos_x = batch->state.pos_x[idx];
         const float pos_y = batch->state.pos_y[idx];
+        const float pos_z = batch->state.pos_z[idx];
         sx = pos_x;
         sy = pos_y;
-        sz = 0.0f;
+        sz = pos_z;
 
         const uint8_t stocks = batch->state.stocks[idx];
         if (stocks != 0 && is_shield_active_action(batch->state.action_id[idx]) &&
@@ -232,7 +233,7 @@ void shields_refresh(MslBatch* batch) {
               const float scale_y = batch->state.fighter_scale_y[idx];
               sx = pos_x + (dx * scale_y * facing_dir);
               sy = pos_y + (dy * scale_y);
-              sz = dz * scale_y;
+              sz = pos_z + (dz * scale_y);
             }
 
             const float trig = trigger_unit_from_input(batch->state.input_buttons[idx],

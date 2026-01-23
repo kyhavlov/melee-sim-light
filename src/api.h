@@ -92,6 +92,7 @@ typedef struct MslSeed {
   // Kinematics
   float pos_x[MSL_MAX_PLAYERS];
   float pos_y[MSL_MAX_PLAYERS];
+  float pos_z[MSL_MAX_PLAYERS];
   // Velocities as recorded by Slippi post-frame (when available).
   float speed_air_x_self[MSL_MAX_PLAYERS];
   float speed_ground_x_self[MSL_MAX_PLAYERS];

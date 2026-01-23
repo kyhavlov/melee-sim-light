@@ -394,8 +394,18 @@ def _main_impl(args) -> None:
         # --- Post-frame state (seed/ref)
         post_char = _to_numpy(post.field("character")).astype(np.uint8)
         post_state = _to_numpy(post.field("state")).astype(np.uint16)
-        post_pos_x = _to_numpy(post.field("position").field("x")).astype(np.float32)
-        post_pos_y = _to_numpy(post.field("position").field("y")).astype(np.float32)
+        post_pos = post.field("position")
+        post_pos_x = _to_numpy(post_pos.field("x")).astype(np.float32)
+        post_pos_y = _to_numpy(post_pos.field("y")).astype(np.float32)
+        # Slippi Z: prefer position.z when present, otherwise fall back to 0 (older schemas are 2D-only).
+        if post_pos.type.get_field_index("z") != -1:
+            post_pos_z = _to_numpy(post_pos.field("z")).astype(np.float32)
+        elif post.type.get_field_index("position_z") != -1:
+            post_pos_z = _to_numpy(post.field("position_z")).astype(np.float32)
+        elif post.type.get_field_index("pos_z") != -1:
+            post_pos_z = _to_numpy(post.field("pos_z")).astype(np.float32)
+        else:
+            post_pos_z = np.zeros(n_frames, dtype=np.float32)
         post_dir = _dir_to_facing(_to_numpy(post.field("direction")).astype(np.float32))
         post_percent = _to_numpy(post.field("percent")).astype(np.float32)
         post_shield = _to_numpy(post.field("shield")).astype(np.float32)
@@ -449,6 +459,7 @@ def _main_impl(args) -> None:
         samples["ref_t1"]["pos_x"][:, slot] = post_pos_x[1:]
         samples["seed_t"]["pos_y"][:, slot] = post_pos_y[:-1]
         samples["ref_t1"]["pos_y"][:, slot] = post_pos_y[1:]
+        samples["seed_t"]["pos_z"][:, slot] = post_pos_z[:-1]
         samples["seed_t"]["speed_air_x_self"][:, slot] = speed_air_x_self[:-1]
         samples["ref_t1"]["speed_air_x_self"][:, slot] = speed_air_x_self[1:]
         samples["seed_t"]["speed_ground_x_self"][:, slot] = speed_ground_x_self[:-1]

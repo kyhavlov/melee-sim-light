@@ -175,6 +175,7 @@ int msl_batch_reseed_seed(MslBatch* batch, const uint8_t* seed_bytes, size_t see
 
       batch->state.pos_x[idx] = seed->pos_x[p];
       batch->state.pos_y[idx] = seed->pos_y[p];
+      batch->state.pos_z[idx] = seed->pos_z[p];
       batch->state.speed_air_x_self[idx] = seed->speed_air_x_self[p];
       batch->state.speed_ground_x_self[idx] = seed->speed_ground_x_self[p];
       batch->state.speed_y_self[idx] = seed->speed_y_self[p];

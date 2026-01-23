@@ -30,7 +30,8 @@ void hitboxes_refresh(MslBatch* batch) {
   // - We interpret hitbox attachment records against the fighter's current submotion id
   //   (Slippi post-frame `animation_index`) and integer `action_frame`.
   // - For each active hitbox, we sample the 3x4 bone matrix via anim_pose_get_matrix(...) and apply
-  //   it to the bone-local offset (x,y,z), then translate by fighter (pos_x,pos_y) to get world space.
+  //   it to the bone-local offset (x,y,z), then translate by fighter (pos_x,pos_y,pos_z) to get world
+  //   space.
   //
   // Combat note:
   // - combat_resolve() consumes these pose-driven world-space hitbox centers for hitbox-vs-hurtcap
@@ -126,6 +127,7 @@ void hitboxes_refresh(MslBatch* batch) {
 
       const float pos_x = batch->state.pos_x[idx];
       const float pos_y = batch->state.pos_y[idx];
+      const float pos_z = batch->state.pos_z[idx];
 
       uint8_t out_count = 0;
       for (int hi = 0; hi < MSL_MAX_HITBOXES; hi++) {
@@ -144,6 +146,7 @@ void hitboxes_refresh(MslBatch* batch) {
         mtx34_mul_point(m, off, &cx, &cy, &cz);
         cx += pos_x;
         cy += pos_y;
+        cz += pos_z;
 
         const size_t oi = idx_hitbox(bi, p, hi);
         batch->state.hitbox_enabled[oi] = 1;

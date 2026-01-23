@@ -18,6 +18,7 @@ typedef struct MslStateSoA {
   // Kinematics
   float* pos_x;
   float* pos_y;
+  float* pos_z;
   float* prev_pos_x;  // Position at start of current frame (pre-integration).
   float* prev_pos_y;  // Position at start of current frame (pre-integration).
   float* speed_air_x_self;

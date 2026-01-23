@@ -193,6 +193,66 @@ def test_debug_select_body_hits_shield_precedence_blocks_body_selection() -> Non
         del handle
 
 
+def test_debug_select_body_hits_uses_pos_z_in_world_geometry() -> None:
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    assert seed_stride == SEED_DTYPE.itemsize
+    assert input_stride == INPUT_DTYPE.itemsize
+
+    def _seed_attack11_overlap(*, p0_z: float, p1_z: float) -> np.ndarray:
+        seed = _seed_base()
+        # Keep action_id out of locomotion codepaths so animation_index remains seeded.
+        seed["action_id"][0, :2] = np.uint16(0xFFFF)
+        # step_input advances action_frame by +1 before hitbox/hurtcap refresh.
+        seed["action_frame"][0, :2] = np.int16(1)
+        # ftCo_SM_Attack11 (Fox jab1): data/moves/fox.json -> submotion_id 46 (hitbox spawn at frame 2).
+        seed["animation_index"][0, :2] = np.uint32(46)
+        seed["pos_x"][0, :2] = np.float32(0.0)
+        seed["pos_y"][0, :2] = np.float32(0.0)
+        seed["pos_z"][0, 0] = np.float32(p0_z)
+        seed["pos_z"][0, 1] = np.float32(p1_z)
+        return seed
+
+    neutral = np.zeros((1, input_stride), dtype=np.uint8)
+
+    # Sanity: overlap in BODY when both players share the same z plane.
+    handle = msl_binding.init(batch_size=1, num_players=2)
+    try:
+        seed = _seed_attack11_overlap(p0_z=0.0, p1_z=0.0)
+        seed_bytes = seed.view(np.uint8).reshape((1, seed_stride))
+        msl_binding.reseed_seed(handle, seed_bytes)
+        msl_binding.step_input(handle, neutral, neutral)
+
+        _, hb_count = msl_binding.hitboxes_world(handle, 0, 0)
+        assert int(hb_count) > 0
+
+        _, cap_count = msl_binding.hurtcaps_world(handle, 0, 1)
+        assert int(cap_count) > 0
+
+        _, count = _read_selected_body_hits(handle)
+        assert count > 0
+    finally:
+        msl_binding.destroy(handle)
+        del handle
+
+    # With large z separation, BODY selection should find no overlaps.
+    handle = msl_binding.init(batch_size=1, num_players=2)
+    try:
+        seed = _seed_attack11_overlap(p0_z=0.0, p1_z=100.0)
+        seed_bytes = seed.view(np.uint8).reshape((1, seed_stride))
+        msl_binding.reseed_seed(handle, seed_bytes)
+        msl_binding.step_input(handle, neutral, neutral)
+
+        _, count = _read_selected_body_hits(handle)
+        assert count == 0
+    finally:
+        msl_binding.destroy(handle)
+        del handle
+
+
 def test_debug_select_body_hits_disabled_hurtcap_does_not_select_body() -> None:
     import msl_binding
 

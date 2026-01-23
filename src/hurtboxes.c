@@ -36,7 +36,7 @@ void hurtboxes_refresh(MslBatch* batch) {
   //
   // We approximate that pipeline using our SSANIM01 pose sampler:
   // - anim_pose_get_matrix(char_id, msid, frame, part_id=Fighter_Part, out_3x4)
-  // and then applying fighter translation (pos_x/pos_y) in world space.
+  // and then applying fighter translation (pos_x/pos_y/pos_z) in world space.
 
   const int num_players = (int)batch->config.num_players;
   for (int bi = 0; bi < batch->batch_size; bi++) {
@@ -87,6 +87,7 @@ void hurtboxes_refresh(MslBatch* batch) {
 
       const float pos_x = batch->state.pos_x[idx];
       const float pos_y = batch->state.pos_y[idx];
+      const float pos_z = batch->state.pos_z[idx];
 
       // NOTE (scaling): Vanilla applies a per-fighter model scale factor (fp->x34_scale.y) to
       // hurt capsule derived quantities.
@@ -140,8 +141,10 @@ void hurtboxes_refresh(MslBatch* batch) {
 
         ax += pos_x;
         ay += pos_y;
+        az += pos_z;
         bx += pos_x;
         by += pos_y;
+        bz += pos_z;
 
         batch->state.hurtcap_enabled[hi] = 1;
         batch->state.hurtcap_a_x[hi] = ax;
