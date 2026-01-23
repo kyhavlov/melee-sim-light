@@ -15,6 +15,7 @@ BUTTON_L = 0x0040
 
 # Action ids (GALE01): refs/melee/src/melee/ft/chara/ftCommon/forward.h
 ACT_WAIT = 0x000E
+ACT_GUARD_SET_OFF = 0x00B5
 
 # Submotion ids (GALE01): refs/melee/src/melee/ft/chara/ftCommon/forward.h
 SM_WAIT1_0 = 2
@@ -26,6 +27,7 @@ STAGE_FD = 32
 def _common_attr(name: str) -> float:
     common = json.loads(Path("data/common/ft_common_data.json").read_text())
     return float(common[name])
+
 
 def _seed_base() -> np.ndarray:
     seed = np.zeros((1,), dtype=SEED_DTYPE)
@@ -89,6 +91,7 @@ def _read_selected_body_hits(handle, *, batch_index: int = 0, max_contacts: int 
     assert raw.shape[1] == contact_dtype.itemsize
     contacts = raw.reshape(-1).view(contact_dtype)[:count]
     return contacts, int(count)
+
 
 def _read_contacts_filtered(handle, *, batch_index: int = 0, max_contacts: int = 256):
     import msl_binding
@@ -219,17 +222,141 @@ def test_debug_select_body_hits_shield_precedence_blocks_body_selection() -> Non
         _, count = _read_selected_body_hits(handle)
         assert count == 0
 
+        # Baseline (after shield bubble exists, before combat resolve).
+        out0 = _read_compare(handle)
+        hp0 = float(out0["shield_hp"][1])
+
         msl_binding.debug_combat_resolve(handle)
         out = _read_compare(handle)
 
-        assert int(out["hitlag"][0]) == 0
-        assert int(out["hitlag"][1]) == 0
+        # Combat now resolves shield hits (mutating shield_hp / hitlag), while still preventing BODY
+        # selection for the overlapping hitbox.
+        assert float(out["shield_hp"][1]) < hp0
+        assert int(out["hitlag"][0]) > 0
+        assert int(out["hitlag"][1]) > 0
+        assert int(out["action_id"][1]) == ACT_GUARD_SET_OFF
         assert int(out["last_attack_landed"][0]) == 0
         assert int(out["instance_hit_by"][1]) == 0
     finally:
         msl_binding.destroy(handle)
         del handle
 
+
+def test_combat_resolve_shield_overlap_reduces_shield_hp_by_decomp_formula() -> None:
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    assert seed_stride == SEED_DTYPE.itemsize
+    assert input_stride == INPUT_DTYPE.itemsize
+
+    handle = msl_binding.init(batch_size=1, num_players=2)
+    try:
+        seed = _seed_base()
+        seed_bytes = seed.view(np.uint8).reshape((1, seed_stride))
+        msl_binding.reseed_seed(handle, seed_bytes)
+
+        neutral = np.zeros((1, input_stride), dtype=np.uint8)
+        shield = np.zeros((1, input_stride), dtype=np.uint8)
+        shield_view = shield.view(INPUT_DTYPE).reshape((1,))
+        shield_view["p"]["buttons"][0, 1] = np.uint16(BUTTON_L)
+
+        # Step once to compute shield bubble world geometry for defender P1.
+        msl_binding.step_input(handle, neutral, shield)
+        bubbles = msl_binding.debug_shield_bubbles_world(handle, 0)
+        shx, shy, shz, shr = (
+            float(bubbles[1, 0]),
+            float(bubbles[1, 1]),
+            float(bubbles[1, 2]),
+            float(bubbles[1, 3]),
+        )
+        assert shr > 0.0
+
+        out0 = _read_compare(handle)
+        hp0 = float(out0["shield_hp"][1])
+
+        # Force a shield overlap.
+        msl_binding.debug_clear_hitboxes_world(handle, 0, 0)
+        msl_binding.debug_set_hitbox_world(handle, 0, 0, 0, shx, shy, shz, 1.0, 5.0, 1)
+        msl_binding.debug_set_hitbox_flags(handle, 0, 0, 0, int(HIT_GROUNDED))
+
+        msl_binding.debug_combat_resolve(handle)
+        out = _read_compare(handle)
+        hp1 = float(out["shield_hp"][1])
+
+        # Decomp (GALE01):
+        # shield_health -= x284 * (shieldDamageTaken*(1 - (lightshield_amount*(x2E0-x2DC)+x2DC))) + x288
+        # refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
+        trig_deadzone = _common_attr("trigger_deadzone")
+        shield_hit_damage_mul = _common_attr("shield_hit_damage_mul")
+        shield_hit_damage_base = _common_attr("shield_hit_damage_base")
+        shield_hit_ls_min = _common_attr("shield_hit_lightshield_min")
+        shield_hit_ls_max = _common_attr("shield_hit_lightshield_max")
+
+        # Digital L is treated as fully pressed (trig=1.0), so lightshield_amount==1.0.
+        # refs/melee/src/melee/ft/fighter.c and :2019-2050 (x650 update)
+        assert trig_deadzone < 1.0
+        light = 1.0
+        ls = light * (shield_hit_ls_max - shield_hit_ls_min) + shield_hit_ls_min
+        exp_depletion = shield_hit_damage_mul * (float(int(5)) * (1.0 - ls)) + shield_hit_damage_base
+
+        assert np.isclose(hp1, hp0 - exp_depletion, atol=1e-5)
+    finally:
+        msl_binding.destroy(handle)
+        del handle
+
+
+def test_combat_resolve_shield_hitlag_gating_prevents_multiple_shield_hits() -> None:
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    assert seed_stride == SEED_DTYPE.itemsize
+    assert input_stride == INPUT_DTYPE.itemsize
+
+    handle = msl_binding.init(batch_size=1, num_players=2)
+    try:
+        seed = _seed_base()
+        seed_bytes = seed.view(np.uint8).reshape((1, seed_stride))
+        msl_binding.reseed_seed(handle, seed_bytes)
+
+        neutral = np.zeros((1, input_stride), dtype=np.uint8)
+        shield = np.zeros((1, input_stride), dtype=np.uint8)
+        shield_view = shield.view(INPUT_DTYPE).reshape((1,))
+        shield_view["p"]["buttons"][0, 1] = np.uint16(BUTTON_L)
+
+        # Step once to compute shield bubble world geometry for defender P1.
+        msl_binding.step_input(handle, neutral, shield)
+        bubbles = msl_binding.debug_shield_bubbles_world(handle, 0)
+        shx, shy, shz, shr = (
+            float(bubbles[1, 0]),
+            float(bubbles[1, 1]),
+            float(bubbles[1, 2]),
+            float(bubbles[1, 3]),
+        )
+        assert shr > 0.0
+
+        # Force a shield overlap.
+        msl_binding.debug_clear_hitboxes_world(handle, 0, 0)
+        msl_binding.debug_set_hitbox_world(handle, 0, 0, 0, shx, shy, shz, 1.0, 5.0, 1)
+        msl_binding.debug_set_hitbox_flags(handle, 0, 0, 0, int(HIT_GROUNDED))
+
+        msl_binding.debug_combat_resolve(handle)
+        out1 = _read_compare(handle)
+        hp1 = float(out1["shield_hp"][1])
+        assert int(out1["hitlag"][0]) > 0
+        assert int(out1["hitlag"][1]) > 0
+
+        # Resolve again without decrementing hitlag: hitlag gating should prevent a second shield HP drain.
+        msl_binding.debug_combat_resolve(handle)
+        out2 = _read_compare(handle)
+        hp2 = float(out2["shield_hp"][1])
+        assert np.isclose(hp2, hp1, atol=1e-6)
+    finally:
+        msl_binding.destroy(handle)
+        del handle
 
 def test_debug_select_body_hits_uses_pos_z_in_world_geometry() -> None:
     import msl_binding

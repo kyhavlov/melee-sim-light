@@ -120,7 +120,11 @@ pipeline (including any required prior-frame state) and/or once we validate orde
 **Combat Mutations (Pass 1, current)**
 - **BODY-only**: world-space hitbox spheres vs world-space hurtcap capsules, with existing grounded/airborne gating.
 - **Shield-safe**: if a hitbox overlaps the defender shield bubble, that (attacker, defender, hitbox_id) is treated as SHIELD
-  and does not apply BODY mutations (no shield damage/stun yet).
+  and does not apply BODY mutations.
+- **SHIELD minimal mutations** (current):
+  - Resolve at most 1 shield hit per attacker→defender per frame (deterministic `hitbox_id` order).
+  - Apply decomp-backed shield HP depletion and enter `GuardSetOff` (shieldstun) on the defender.
+  - Apply hitlag (same decomp `ftCommon_CalcHitlag` path as BODY; no SFX, no KB/percent, no clanks/trades).
 - **Ordering workaround (current step order)**: combat overlap tests apply a *pre-phys translation shift* to the already-computed
   world primitives (hitboxes/hurtcaps/shield bubble) using `(prev_pos_x/y - pos_x/y)` so collisions are tested against the
   "pose at this frame, translation before phys" approximation.
@@ -140,6 +144,23 @@ pipeline (including any required prior-frame state) and/or once we validate orde
   - Missing decomp pieces: per-hitbox hitlist entries, rehit-rate timers, hitbox refresh ordering vs collision, clanks/trades,
     and full hurtbox eligibility (intangibility, thrown-fighter rules, etc.). These need to be added before enabling percent /
     knockback / hitstun mutations.
+
+### `state_flags` Ownership (seed vs derived)
+
+The dataset exposes 5 raw bytes of `state_flags` captured from fighter offsets `(0x2218, 0x221A, 0x221B, 0x221C, 0x221F)`
+in that order (see `refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm`). The sim treats `state_flags` as **partially
+sim-owned**:
+
+**Sim-owned derived outputs (overwritten by the sim each step)**
+- `0x221A` bit `0x20` (`isHitlag`): derived from `hitlag > 0` (kept consistent when combat applies hitlag and as timers decrement).
+- `0x221B` bit `0x80` (`isShieldActive`): derived from whether the shield bubble is active (`shield_radius > 0`).
+- `0x221C` bit `0x04` (“owner’s detection hitbox touching shield bubble”): cleared at frame start; set when we resolve a shield contact.
+
+**Seed-only passthrough (currently)**
+- All other `state_flags` bits are passed through from the seed to output unchanged (even if the sim consults them as gates).
+  Examples:
+  - `0x221C` bit `0x02` (`isHitstun`) is used as a gate for hitstun decrement timing, but is not mutated by the sim yet.
+  - `0x221C` bit `0x20` (powershield active) is consulted for shield-damage gating, but is not mutated by the sim yet.
 
 6) **Shield**
 - Shield health/decay/regeneration (approx ok).

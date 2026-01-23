@@ -101,6 +101,13 @@ void shields_refresh(MslBatch* batch) {
     return;
   }
 
+  // State flags (5 bytes) are captured from fighter offsets:
+  // (0x2218, 0x221A, 0x221B, 0x221C, 0x221F) in that order.
+  // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
+  enum { MSL_STATE_FLAGS_STRIDE = MSL_STATE_FLAGS_BYTES };
+  enum { MSL_STATE_FLAGS_221B_INDEX = 2 };
+  enum { MSL_STATE_FLAG_221B_IS_SHIELD_ACTIVE = 0x80 };
+
   // Shield bubble size follows ftCo_Guard.c's inlineB0:
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c:172-190.
   //
@@ -257,6 +264,27 @@ void shields_refresh(MslBatch* batch) {
       batch->state.shield_y[idx] = sy;
       batch->state.shield_z[idx] = sz;
       batch->state.shield_radius[idx] = sr;
+
+      // Keep `state_flags` "isShieldActive" in sync with the derived shield bubble.
+      //
+      // Decomp-first references (GALE01):
+      // - Shield activation is represented by `fp->x221B_b0`:
+      //   - set to true in ftColl_8007B1B8 (shield desc init),
+      //     refs/melee/src/melee/ft/ftcoll.c::ftColl_8007B1B8.
+      //   - consulted by the main fighter-vs-fighter collision loop to gate shield collision checks,
+      //     refs/melee/src/melee/ft/ftcoll.c (see `if (this_fp->x221B_b0) { ... lbColl_80007BCC(...shield...) ... }`).
+      // - Bitfield layout at fp+0x221B is documented in refs/melee/src/melee/ft/types.h.
+      //
+      // Slippi post-frame: `lbz r3,0x221B(REG_PlayerData)  #0x80 = isShieldActive`.
+      // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
+      const size_t flags_i = idx * MSL_STATE_FLAGS_STRIDE + (size_t)MSL_STATE_FLAGS_221B_INDEX;
+      uint8_t f = batch->state.state_flags[flags_i];
+      if (sr > 0.0f) {
+        f |= (uint8_t)MSL_STATE_FLAG_221B_IS_SHIELD_ACTIVE;
+      } else {
+        f &= (uint8_t)~(uint8_t)MSL_STATE_FLAG_221B_IS_SHIELD_ACTIVE;
+      }
+      batch->state.state_flags[flags_i] = f;
     }
   }
 }

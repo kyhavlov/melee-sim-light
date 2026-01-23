@@ -10,18 +10,26 @@ void timers_update(MslBatch* batch) {
 
   enum { MSL_STATE_FLAGS_STRIDE = MSL_STATE_FLAGS_BYTES };
   enum { MSL_STATE_FLAGS_221C_INDEX = 3 };
+  enum { MSL_STATE_FLAGS_221A_INDEX = 1 };
   // State flags (5 bytes) are captured from fighter offsets:
   // (0x2218, 0x221A, 0x221B, 0x221C, 0x221F) in that order.
   // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
   // Dataset packing/layout reference:
   // tools/slippi/make_dataset_from_slp.py (stack order 0..4 into `state_flags[..., 5]`)
   enum { MSL_STATE_FLAG_221C_IS_HITSTUN = 0x02 };
+  enum { MSL_STATE_FLAG_221A_IS_HITLAG = 0x20 };
 
   // Decomp-first references (GALE01):
   //
   // Hitlag:
   // - refs/melee/src/melee/ft/fighter.c::Fighter_8006A1BC
   //   decrements `fp->dmg.x195c_hitlag_frames` by 1.0f each frame and clamps at 0.0f.
+  // - refs/melee/src/melee/ft/fighter.c::Fighter_8006A1BC
+  //   clears the per-fighter hitlag flag `fp->x221A_b2 = 0` when hitlag reaches 0.
+  // - refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
+  //   sets `fp->x221A_b2 = 1` when `fp->dmg.x195c_hitlag_frames > 0.0f`.
+  // - refs/melee/src/melee/ft/types.h
+  //   declares `x221A_b2` as a 1-bit field at fp+0x221A (the byte Slippi records into `state_flags[...,1]`).
   // - refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
   //   records hitlag frames left from offset 0x195c (`lwz r3,0x195c(REG_PlayerData)`).
   //
@@ -52,6 +60,24 @@ void timers_update(MslBatch* batch) {
         hl--;
         batch->state.hitlag[idx] = hl;
       }
+
+      // Keep the Slippi `state_flags` "isHitlag" bit consistent with `hitlag` frames left.
+      //
+      // Decomp: `fp->x221A_b2` is toggled by the engine with hitlag start/end:
+      // - set to 1 when hitlag is active (Fighter_ProcessHit_8006D1EC),
+      // - cleared to 0 when hitlag reaches 0 (Fighter_8006A1BC).
+      // refs/melee/src/melee/ft/fighter.c
+      //
+      // Slippi post-frame: `lbz r3,0x221A(REG_PlayerData)  #0x20 = isHitlag`.
+      // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
+      const size_t flags_221a_i = idx * MSL_STATE_FLAGS_STRIDE + (size_t)MSL_STATE_FLAGS_221A_INDEX;
+      uint8_t flags_221a = batch->state.state_flags[flags_221a_i];
+      if (hl > 0) {
+        flags_221a |= (uint8_t)MSL_STATE_FLAG_221A_IS_HITLAG;
+      } else {
+        flags_221a &= (uint8_t)~(uint8_t)MSL_STATE_FLAG_221A_IS_HITLAG;
+      }
+      batch->state.state_flags[flags_221a_i] = flags_221a;
 
       const uint8_t flags_221c =
           batch->state.state_flags[idx * MSL_STATE_FLAGS_STRIDE + MSL_STATE_FLAGS_221C_INDEX];

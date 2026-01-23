@@ -4,7 +4,9 @@
 #include <stdint.h>
 #include <string.h>
 
+#include "action_ids.h"
 #include "anim_frame.h"
+#include "buttons.h"
 #include "combat_geom.h"
 #include "common_params.h"
 #include "hitboxes_tables.h"
@@ -32,6 +34,74 @@ static inline uint8_t sphere_sphere_intersects(float ax, float ay, float az, flo
   const float dz = az - bz;
   const float rr = ar + br;
   return (dx * dx + dy * dy + dz * dz) <= (rr * rr);
+}
+
+static inline float combat_clamp01(float x) {
+  if (x < 0.0f) {
+    return 0.0f;
+  }
+  if (x > 1.0f) {
+    return 1.0f;
+  }
+  return x;
+}
+
+static inline float combat_trigger_u8_to_unit(uint8_t v) { return (float)v * (1.0f / 255.0f); }
+
+static inline float combat_trigger_unit_from_input(uint16_t buttons, uint8_t l, uint8_t r) {
+  // Decomp reference: refs/melee/src/melee/ft/fighter.c:1868-1890 and :2019-2050.
+  // - If digital L/R is held, Melee treats shield trigger as fully pressed (`x650 = 1.0f`).
+  // - Otherwise use the analog max of L/R.
+  enum { LR = (uint16_t)MSL_BUTTON_L | (uint16_t)MSL_BUTTON_R };
+  if ((buttons & LR) != 0) {
+    return 1.0f;
+  }
+  const uint8_t m = l > r ? l : r;
+  return combat_trigger_u8_to_unit(m);
+}
+
+static inline float combat_lightshield_amount(const MslCommonParams* c, uint16_t buttons, uint8_t l,
+                                              uint8_t r) {
+  if (c == NULL) {
+    return 0.0f;
+  }
+
+  // Decomp: fp->lightshield_amount = (x650 - x10)/(1-x10) (clamped) under trigger deadzone.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c:333-350.
+  const float denom = 1.0f - c->trigger_deadzone;
+  if (denom <= 0.0f) {
+    return 0.0f;
+  }
+  const float trig = combat_trigger_unit_from_input(buttons, l, r);
+  const float light = (trig - c->trigger_deadzone) / denom;
+  return combat_clamp01(light);
+}
+
+static inline void combat_state_flags_set_is_hitlag(MslBatch* batch, size_t idx, uint16_t hitlag) {
+  if (batch == NULL) {
+    return;
+  }
+  enum { MSL_STATE_FLAGS_STRIDE = MSL_STATE_FLAGS_BYTES };
+  enum { MSL_STATE_FLAGS_221A_INDEX = 1 };
+  // Slippi post-frame: `lbz r3,0x221A(REG_PlayerData)  #0x20 = isHitlag`.
+  //
+  // Decomp-first references (GALE01):
+  // - `fp->x221A_b2` is toggled with hitlag start/end:
+  //   - set when hitlag is applied (Fighter_ProcessHit_8006D1EC),
+  //   - cleared when hitlag reaches 0 (Fighter_8006A1BC).
+  // refs/melee/src/melee/ft/fighter.c
+  // - Bitfield layout at fp+0x221A is documented in refs/melee/src/melee/ft/types.h.
+  // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
+  enum { MSL_STATE_FLAG_221A_IS_HITLAG = 0x20 };
+
+  const size_t flags_i = idx * MSL_STATE_FLAGS_STRIDE + (size_t)MSL_STATE_FLAGS_221A_INDEX;
+  uint8_t f = batch->state.state_flags[flags_i];
+  if (hitlag > 0) {
+    f |= (uint8_t)MSL_STATE_FLAG_221A_IS_HITLAG;
+  } else {
+    f &= (uint8_t)~(uint8_t)MSL_STATE_FLAG_221A_IS_HITLAG;
+  }
+  batch->state.state_flags[flags_i] = f;
 }
 
 static inline uint16_t combat_calc_hitlag_frames(const MslCommonParams* c, int dmg, uint16_t msid) {
@@ -132,9 +202,92 @@ static inline void combat_mutations_pass1_future_apply_body_hit(MslBatch* batch,
   const uint16_t d_hl = combat_calc_hitlag_frames(c, dmg_i, d_msid);
   batch->state.hitlag[a_idx] = a_hl;
   batch->state.hitlag[d_idx] = d_hl;
+  combat_state_flags_set_is_hitlag(batch, a_idx, a_hl);
+  combat_state_flags_set_is_hitlag(batch, d_idx, d_hl);
 
   batch->state.instance_hit_by[d_idx] = batch->state.instance_id[a_idx];
   batch->state.last_hit_by[d_idx] = (uint8_t)attacker;
+}
+
+static inline void combat_mutations_pass1_future_apply_shield_hit(MslBatch* batch, size_t a_idx,
+                                                                  size_t d_idx, float hitbox_damage_f32,
+                                                                  size_t hb_i, uint16_t attacker_msid) {
+  if (batch == NULL) {
+    return;
+  }
+
+  const MslCommonParams* c = msl_common_params();
+  if (c == NULL) {
+    return;
+  }
+
+  // Capture the defender's current anim/submotion id before we transition the defender into a
+  // guard-damage state (which uses animation_index == -1 in our datasets).
+  const uint32_t d_anim_u32_pre = batch->state.animation_index[d_idx];
+  const uint16_t d_msid_pre = (d_anim_u32_pre <= 0xFFFFu) ? (uint16_t)d_anim_u32_pre : 0u;
+
+  // Shield HP depletion:
+  //
+  // Collision accumulates `shieldDamageTaken` as (int_dmg + hitbox_shield_damage), clamped at 0:
+  // refs/melee/src/melee/ft/ftcoll.c::ftColl_80076CBC
+  //
+  // Fighter_ProcessHit applies the per-frame shield health reduction:
+  // shield_health -= x284 * (shieldDamageTaken*(1 - (lightshield_amount*(x2E0-x2DC)+x2DC))) + x288
+  // refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
+  const int int_dmg = (hitbox_damage_f32 > 0.0f) ? (int)hitbox_damage_f32 : 0;
+  const int8_t shield_dmg_s8 = batch->state.hitbox_shield_damage[hb_i];
+  int shield_damage_taken = int_dmg + (int)shield_dmg_s8;
+  if (shield_damage_taken < 0) {
+    shield_damage_taken = 0;
+  }
+
+  // Powershield gating: collision does not accumulate shieldDamageTaken when the "powershield
+  // active" flag is set (x221C_b2).
+  // refs/melee/src/melee/ft/ftcoll.c::ftColl_80076CBC (`if (!fp1->x221C_b2) { ...shieldDamageTaken... }`)
+  // Slippi post-frame: `lbz r3,0x221C(REG_PlayerData)  #0x20 = Powershield Active Bool`.
+  // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
+  enum { MSL_STATE_FLAGS_STRIDE = MSL_STATE_FLAGS_BYTES };
+  enum { MSL_STATE_FLAGS_221C_INDEX = 3 };
+  enum { MSL_STATE_FLAG_221C_POWERSHIELD_ACTIVE = 0x20 };
+  const uint8_t flags_221c =
+      batch->state.state_flags[d_idx * MSL_STATE_FLAGS_STRIDE + (size_t)MSL_STATE_FLAGS_221C_INDEX];
+  if (flags_221c & (uint8_t)MSL_STATE_FLAG_221C_POWERSHIELD_ACTIVE) {
+    shield_damage_taken = 0;
+  }
+
+  const float light = combat_lightshield_amount(c, batch->state.input_buttons[d_idx],
+                                                batch->state.input_l[d_idx],
+                                                batch->state.input_r[d_idx]);
+  const float ls =
+      (light * (c->shield_hit_lightshield_max - c->shield_hit_lightshield_min)) +
+      c->shield_hit_lightshield_min;
+  const float depletion =
+      c->shield_hit_damage_mul * ((float)shield_damage_taken * (1.0f - ls)) +
+      c->shield_hit_damage_base;
+
+  float hp = batch->state.shield_hp[d_idx];
+  hp -= depletion;
+  if (hp < 0.0f) {
+    hp = 0.0f;
+  }
+  batch->state.shield_hp[d_idx] = hp;
+
+  // Shieldstun (GuardSetOff) entry.
+  // Decomp entry: refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80092F2C
+  batch->state.action_id[d_idx] = (uint16_t)MSL_ACT_GUARD_SET_OFF;
+  // In our replay-derived datasets, shield states frequently have `animation_index == -1`.
+  batch->state.animation_index[d_idx] = 0xFFFFFFFFu;
+  batch->state.action_frame[d_idx] = 0;
+  batch->state.anim_frame_f32[d_idx] = 0.0f;
+
+  // Hitlag on shield contact: use the same decomp ftCommon_CalcHitlag path as BODY.
+  // refs/melee/src/melee/ft/ftcommon.c::ftCommon_CalcHitlag and fighter.c::Fighter_ProcessHit_8006D1EC
+  const uint16_t a_hl = combat_calc_hitlag_frames(c, int_dmg, attacker_msid);
+  const uint16_t d_hl = combat_calc_hitlag_frames(c, int_dmg, d_msid_pre);
+  batch->state.hitlag[a_idx] = a_hl;
+  batch->state.hitlag[d_idx] = d_hl;
+  combat_state_flags_set_is_hitlag(batch, a_idx, a_hl);
+  combat_state_flags_set_is_hitlag(batch, d_idx, d_hl);
 }
 
 static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
@@ -142,6 +295,29 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
     return;
   }
   const int num_players = (int)batch->config.num_players;
+
+  // Clear the Slippi `state_flags` bit for "detection hitbox touching shield bubble" at the start
+  // of the frame. Set when we resolve a shield contact below.
+  //
+  // Decomp-first references (GALE01):
+  // - The collision loop sets the hitbox-owner flag `victim_fp->x221C_b5 = true` when a detection
+  //   (inert) hitbox intersects a shield bubble:
+  //   refs/melee/src/melee/ft/ftcoll.c (main fighter-vs-fighter loop).
+  // - Fighter_ProcessHit clears `fp->x221C_b5 = 0` as part of per-frame damage/collision cleanup:
+  //   refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC.
+  // - Bitfield layout at fp+0x221C is documented in refs/melee/src/melee/ft/types.h.
+  //
+  // Slippi post-frame: `lbz r3,0x221C(REG_PlayerData)  #0x4 = owners detection hitbox touching shield bubble`.
+  // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
+  enum { MSL_STATE_FLAGS_STRIDE = MSL_STATE_FLAGS_BYTES };
+  enum { MSL_STATE_FLAGS_221C_INDEX = 3 };
+  enum { MSL_STATE_FLAG_221C_DETECT_HITBOX_TOUCHING_SHIELD = 0x04 };
+  for (int p = 0; p < num_players; p++) {
+    const size_t idx = msl_idx_player(bi, p);
+    const size_t flags_i = idx * MSL_STATE_FLAGS_STRIDE + (size_t)MSL_STATE_FLAGS_221C_INDEX;
+    batch->state.state_flags[flags_i] &=
+        (uint8_t)~(uint8_t)MSL_STATE_FLAG_221C_DETECT_HITBOX_TOUCHING_SHIELD;
+  }
 
   for (int attacker = 0; attacker < num_players; attacker++) {
     const size_t a_idx = msl_idx_player(bi, attacker);
@@ -174,36 +350,6 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
         if (batch->state.team_id[a_idx] == batch->state.team_id[d_idx]) {
           continue;
         }
-      }
-
-      const uint8_t hurtcap_count = batch->state.hurtcap_count[d_idx];
-      if (hurtcap_count == 0) {
-        continue;
-      }
-
-      // Hit status eligibility gate (movescript-derived; opcode 26).
-      //
-      // Decomp pointers:
-      // - refs/melee/src/melee/ft/ftaction.c:539 (ftAction_80071A14)
-      // - refs/melee/src/melee/ft/ftcoll.c (hit status affects collision eligibility)
-      //
-      // Current policy: only treat hit_status==0 as eligible for BODY contacts.
-      const uint8_t hit_status = combat_defender_hit_status_u8(batch, d_idx);
-      if (hit_status != 0) {
-        continue;
-      }
-
-      // Hurtbox state eligibility gate.
-      //
-      // Decomp pointers:
-      // - refs/melee/src/melee/ft/ftcoll.c::ftColl_8007B868 returns a composite "hurt state" based on
-      //   fp->x221D_b6 and fp->x1988/x198C.
-      // - refs/melee/src/melee/ft/ftcoll.c (main collision loop) gates hurtbox checks on
-      //   this_fp->x1988/x198C (e.g. `!= 2` branch around hitbox-vs-hurtcapsule checks).
-      //
-      // We treat nonzero seeded `hurtbox_state` as not eligible for BODY hits for now.
-      if (batch->state.hurtbox_state[d_idx] != 0) {
-        continue;
       }
 
       // Hitlag gating: when either fighter is in hitlag, do not generate new BODY hits.
@@ -256,8 +402,105 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
       const float d_shift_x = batch->state.prev_pos_x[d_idx] - batch->state.pos_x[d_idx];
       const float d_shift_y = batch->state.prev_pos_y[d_idx] - batch->state.pos_y[d_idx];
 
-      // Deterministic selection: pick the first BODY overlap in (hitbox_id, hurtcap_id) order.
+      // Deterministic selection: pick the first eligible overlap in (hitbox_id, hurtcap_id) order.
+      //
+      // Shield precedence: if a hitbox intersects the defender shield bubble, resolve the shield hit
+      // and do not apply BODY selection for this attacker→defender pair this frame.
       uint8_t did_hit = 0;
+      if (shield_active) {
+        for (int hb_id = 0; hb_id < MSL_MAX_HITBOXES && !did_hit; hb_id++) {
+          const size_t hb_i = idx_hitbox(bi, attacker, hb_id);
+          if (!batch->state.hitbox_enabled[hb_i]) {
+            continue;
+          }
+
+          const uint16_t hb_flags = batch->state.hitbox_flags[hb_i];
+          const uint8_t defender_on_ground = batch->state.on_ground[d_idx] ? 1 : 0;
+          if (defender_on_ground) {
+            if ((hb_flags & MSL_HITBOX_FLAG_HIT_GROUNDED) == 0) {
+              continue;
+            }
+          } else {
+            if ((hb_flags & MSL_HITBOX_FLAG_HIT_AERIAL) == 0) {
+              continue;
+            }
+          }
+
+          const float hx = batch->state.hitbox_x[hb_i] + a_shift_x;
+          const float hy = batch->state.hitbox_y[hb_i] + a_shift_y;
+          const float hz = batch->state.hitbox_z[hb_i];
+          const float hr = batch->state.hitbox_radius[hb_i];
+          const float hdmg = batch->state.hitbox_damage[hb_i];
+          if (!(hdmg > 0.0f)) {
+            continue;
+          }
+
+          // Rehit suppression: if we latched a hit for this (attacker, defender) with this msid,
+          // suppress repeats for this attacker→defender pair until hitboxes clear or msid changes.
+          if (rehit_active &&
+              batch->state.combat_rehit_attacker_msid[pair] == msid &&
+              batch->state.combat_rehit_defender_instance_id[pair] ==
+                  batch->state.instance_id[d_idx]) {
+            continue;
+          }
+
+          if (!sphere_sphere_intersects(hx, hy, hz, hr, shx + d_shift_x, shy + d_shift_y, shz, shr)) {
+            continue;
+          }
+
+          // Combat Mutations Pass 1 (SHIELD-only).
+          combat_mutations_pass1_future_apply_shield_hit(batch, a_idx, d_idx, hdmg, hb_i, msid);
+
+          // `state_flags` bit: owners detection hitbox touching shield bubble (attacker side).
+          const size_t a_flags_i =
+              a_idx * MSL_STATE_FLAGS_STRIDE + (size_t)MSL_STATE_FLAGS_221C_INDEX;
+          batch->state.state_flags[a_flags_i] |=
+              (uint8_t)MSL_STATE_FLAG_221C_DETECT_HITBOX_TOUCHING_SHIELD;
+
+          batch->state.combat_rehit_active[pair] = 1;
+          batch->state.combat_rehit_hitbox_id[pair] = (uint8_t)hb_id;
+          batch->state.combat_rehit_attacker_msid[pair] = msid;
+          batch->state.combat_rehit_defender_instance_id[pair] = batch->state.instance_id[d_idx];
+
+          did_hit = 1;
+          break;
+        }
+      }
+
+      if (did_hit) {
+        continue;
+      }
+
+      const uint8_t hurtcap_count = batch->state.hurtcap_count[d_idx];
+      if (hurtcap_count == 0) {
+        continue;
+      }
+
+      // Hit status eligibility gate (movescript-derived; opcode 26).
+      //
+      // Decomp pointers:
+      // - refs/melee/src/melee/ft/ftaction.c:539 (ftAction_80071A14)
+      // - refs/melee/src/melee/ft/ftcoll.c (hit status affects collision eligibility)
+      //
+      // Current policy: only treat hit_status==0 as eligible for BODY contacts.
+      const uint8_t hit_status = combat_defender_hit_status_u8(batch, d_idx);
+      if (hit_status != 0) {
+        continue;
+      }
+
+      // Hurtbox state eligibility gate.
+      //
+      // Decomp pointers:
+      // - refs/melee/src/melee/ft/ftcoll.c::ftColl_8007B868 returns a composite "hurt state" based on
+      //   fp->x221D_b6 and fp->x1988/x198C.
+      // - refs/melee/src/melee/ft/ftcoll.c (main collision loop) gates hurtbox checks on
+      //   this_fp->x1988/x198C (e.g. `!= 2` branch around hitbox-vs-hurtcapsule checks).
+      //
+      // We treat nonzero seeded `hurtbox_state` as not eligible for BODY hits for now.
+      if (batch->state.hurtbox_state[d_idx] != 0) {
+        continue;
+      }
+
       for (int hb_id = 0; hb_id < MSL_MAX_HITBOXES && !did_hit; hb_id++) {
         const size_t hb_i = idx_hitbox(bi, attacker, hb_id);
         if (!batch->state.hitbox_enabled[hb_i]) {
@@ -295,8 +538,9 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
           continue;
         }
 
-        // SHIELD precedence: if the hitbox intersects the defender shield bubble, treat as shielded
-        // and do not apply BODY selection for this hitbox.
+        // Shield precedence (BODY path): if the hitbox intersects the defender shield bubble, do
+        // not apply BODY selection for this hitbox. The shield-hit selection above handles
+        // (hitbox_id)-order shield resolution; this check is a conservative fallback.
         if (shield_active &&
             sphere_sphere_intersects(hx, hy, hz, hr, shx + d_shift_x, shy + d_shift_y, shz, shr)) {
           continue;

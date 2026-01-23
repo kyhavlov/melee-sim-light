@@ -82,6 +82,14 @@ typedef struct MslCommonParams {
   float shield_hold_drain_base;     // p_ftCommonData->x2EC (shield_hold_drain_base)
   float shield_hold_drain_max;      // p_ftCommonData->x2F0 (shield_hold_drain_max)
 
+  // Shield HP depletion on hit (blocking).
+  // Decomp: refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
+  // - shield_health -= x284 * (shieldDamageTaken*(1 - (lightshield_amount*(x2E0-x2DC)+x2DC))) + x288
+  float shield_hit_damage_mul;  // p_ftCommonData->x284
+  float shield_hit_damage_base; // p_ftCommonData->x288
+  float shield_hit_lightshield_min;  // p_ftCommonData->x2DC
+  float shield_hit_lightshield_max;  // p_ftCommonData->x2E0
+
   // L-cancel window / lag divisor (refs/melee/src/melee/ft/chara/ftCommon/ftCo_LandingAir.c)
   uint8_t lcancel_window_frames;  // p_ftCommonData->xE4
   uint8_t _pad_u8_3[3];
