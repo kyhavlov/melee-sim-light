@@ -16,6 +16,7 @@
 #include "move_tables.h"
 #include "ecb_tables.h"
 #include "hitboxes_tables.h"
+#include "hit_status_tables.h"
 #include "hurtbox_modes_tables.h"
 #include "hurtcaps_tables.h"
 #include "shield_tilt_table.h"
@@ -43,6 +44,16 @@ MslBatch* msl_batch_create(int batch_size, int num_players) {
     msl_batch_destroy(batch);
     return NULL;
   }
+
+  // Debug-only per-fighter hit status override table (0xFF = none).
+  batch->debug_hit_status_override =
+      (uint8_t*)alloc_malloc((size_t)batch_size * (size_t)MSL_MAX_PLAYERS * sizeof(uint8_t));
+  if (batch->debug_hit_status_override == NULL) {
+    msl_batch_destroy(batch);
+    return NULL;
+  }
+  memset(batch->debug_hit_status_override, 0xFF,
+         (size_t)batch_size * (size_t)MSL_MAX_PLAYERS * sizeof(uint8_t));
 
   if (stage_collision_init() != 0) {
     msl_batch_destroy(batch);
@@ -87,6 +98,11 @@ MslBatch* msl_batch_create(int batch_size, int num_players) {
     return NULL;
   }
 
+  if (hit_status_tables_init() != 0) {
+    msl_batch_destroy(batch);
+    return NULL;
+  }
+
   if (hitboxes_tables_init() != 0) {
     msl_batch_destroy(batch);
     return NULL;
@@ -108,6 +124,7 @@ void msl_batch_destroy(MslBatch* batch) {
   if (batch == NULL) {
     return;
   }
+  alloc_free(batch->debug_hit_status_override);
   state_free(&batch->state);
   alloc_free(batch);
 }
@@ -1125,6 +1142,34 @@ int msl_batch_debug_set_hitlag(MslBatch* batch, int batch_index, int player_inde
 
   const size_t idx = msl_idx_player(batch_index, player_index);
   batch->state.hitlag[idx] = hitlag_frames;
+  return 0;
+}
+
+int msl_batch_debug_set_hit_status_override(MslBatch* batch, int batch_index, int player_index,
+                                           int status) {
+  if (batch == NULL) {
+    return EINVAL;
+  }
+  if (batch_index < 0 || batch_index >= batch->batch_size) {
+    return EINVAL;
+  }
+  if (player_index < 0 || player_index >= MSL_MAX_PLAYERS) {
+    return EINVAL;
+  }
+
+  if (batch->debug_hit_status_override == NULL) {
+    return EINVAL;
+  }
+
+  const size_t idx = msl_idx_player(batch_index, player_index);
+  if (status < 0) {
+    batch->debug_hit_status_override[idx] = 0xFFu;
+    return 0;
+  }
+  if (status > 0xFF) {
+    return EINVAL;
+  }
+  batch->debug_hit_status_override[idx] = (uint8_t)status;
   return 0;
 }
 

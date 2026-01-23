@@ -7,6 +7,7 @@
 #include "combat_geom.h"
 #include "common_params.h"
 #include "hitboxes_tables.h"
+#include "hit_status_tables.h"
 
 static inline size_t idx_hitbox(int bi, int p, int hb_i) {
   return ((size_t)bi * (size_t)MSL_MAX_PLAYERS + (size_t)p) * (size_t)MSL_MAX_HITBOXES +
@@ -64,6 +65,36 @@ static inline uint16_t combat_calc_hitlag_frames(const MslCommonParams* c, int d
     result_i = 0xFFFF;
   }
   return (uint16_t)result_i;
+}
+
+static inline uint8_t combat_defender_hit_status_u8(const MslBatch* batch, size_t d_idx) {
+  // Debug override (test-only): 0xFF means "use tables".
+  if (batch->debug_hit_status_override != NULL) {
+    const uint8_t ov = batch->debug_hit_status_override[d_idx];
+    if (ov != 0xFFu) {
+      return ov;
+    }
+  }
+
+  const uint8_t d_char = batch->state.char_id[d_idx];
+
+  uint16_t d_msid = 0;
+  const uint32_t d_msid_u32 = batch->state.animation_index[d_idx];
+  if (d_msid_u32 <= 0xFFFFu) {
+    d_msid = (uint16_t)d_msid_u32;
+  }
+
+  // Current policy (suite-neutral): negative action_frame consults frame 0.
+  // If we later want "negative action_frame => don't consult tables", gate that here.
+  uint16_t d_frame = 0;
+  const int16_t d_af_i16 = batch->state.action_frame[d_idx];
+  if (d_af_i16 > 0) {
+    d_frame = (uint16_t)d_af_i16;
+  }
+
+  uint8_t hit_status = 0;
+  (void)hit_status_get(d_char, d_msid, d_frame, &hit_status);
+  return hit_status;
 }
 
 // Future: Combat Mutations Pass 1 (BODY-only).
@@ -149,6 +180,18 @@ static void combat_select_body_hits_one(MslBatch* batch, int bi, MslDebugCombatC
 
       const uint8_t hurtcap_count = batch->state.hurtcap_count[d_idx];
       if (hurtcap_count == 0) {
+        continue;
+      }
+
+      // Hit status eligibility gate (movescript-derived; opcode 26).
+      //
+      // Decomp pointers:
+      // - refs/melee/src/melee/ft/ftaction.c:539 (ftAction_80071A14)
+      // - refs/melee/src/melee/ft/ftcoll.c (hit status affects collision eligibility)
+      //
+      // Current policy: only treat hit_status==0 as eligible for BODY contacts.
+      const uint8_t hit_status = combat_defender_hit_status_u8(batch, d_idx);
+      if (hit_status != 0) {
         continue;
       }
 

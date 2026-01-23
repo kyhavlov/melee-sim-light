@@ -1,0 +1,221 @@
+from __future__ import annotations
+
+import argparse
+import struct
+from pathlib import Path
+
+from tools.extraction.extract_fighter_moves import (
+    _load_fighter_dat,
+    _load_special_msids,
+    _parse_ftco_submotion_enum,
+    _parse_subaction_events,
+    _read_s_temp4_subaction_ptr,
+)
+
+_MAGIC = b"MSLHSTA1"
+_VERSION = 1
+
+# Decomp: ftAction_80071A14 -> ftColl_8007B62C(gobj, state).
+# refs/melee/src/melee/ft/ftaction.c:539
+# refs/melee/src/melee/ft/ftcoll.c (hit status affects collision eligibility)
+_HIT_STATUS_NORMAL = 0
+
+
+def _build_status_by_frame(events: list[object], *, max_frames: int) -> list[int]:
+    # Default: normal/vulnerable.
+    cur = _HIT_STATUS_NORMAL
+    out: list[int] = []
+
+    # Events are already in deterministic movescript execution order within a frame.
+    events_by_frame: list[list[object]] = [[] for _ in range(max_frames)]
+    for ev in events:
+        try:
+            frame = int(getattr(ev, "frame"))
+        except Exception:
+            continue
+        if 0 <= frame < max_frames:
+            events_by_frame[frame].append(ev)
+
+    for frame in range(max_frames):
+        for ev in events_by_frame[frame]:
+            if getattr(ev, "kind", None) != "set_hit_status":
+                continue
+            data = getattr(ev, "data", None)
+            try:
+                st = int((data or {}).get("state", _HIT_STATUS_NORMAL))
+            except Exception:
+                st = _HIT_STATUS_NORMAL
+            # Decomp domain: payload enum is small; store as u8 with a conservative clamp.
+            if st < 0:
+                st = 0
+            if st > 0xFF:
+                st = 0xFF
+            cur = st
+        out.append(int(cur))
+
+    return out
+
+
+def _write_bin(out_path: Path, *, msids: list[int], payloads_by_msid: dict[int, list[int]], max_frames: int) -> None:
+    # Layout (little-endian):
+    # - magic[8] = "MSLHSTA1"
+    # - version: u32 = 1
+    # - frame_count: u16
+    # - reserved: u16 = 0
+    # - entry_count: u32
+    # - index[entry_count] entries, each:
+    #     - msid: u16
+    #     - reserved: u16 = 0
+    #     - payload_bytes: u32 = frame_count * 1
+    #     - payload_off: u32 (absolute)
+    # - payload: concatenated u8[frame_count] for each msid
+    if not (0 <= max_frames <= 0xFFFF):
+        raise ValueError(f"max_frames out of range for u16: {max_frames}")
+    if len(msids) > 0xFFFF_FFFF:
+        raise ValueError("too many entries")
+
+    entry_count = len(msids)
+    index_rec_bytes = 12
+    hdr_bytes = 20
+    payload_bytes = int(max_frames)
+    index_bytes = entry_count * index_rec_bytes
+    payload_base = hdr_bytes + index_bytes
+
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    with out_path.open("wb") as f:
+        f.write(_MAGIC)
+        f.write(struct.pack("<IHHI", int(_VERSION), int(max_frames), 0, int(entry_count)))
+        # Index.
+        off = payload_base
+        for msid in msids:
+            f.write(struct.pack("<HHII", int(msid) & 0xFFFF, 0, int(payload_bytes), int(off)))
+            off += payload_bytes
+        # Payload.
+        for msid in msids:
+            frames = payloads_by_msid.get(msid)
+            if frames is None:
+                frames = [_HIT_STATUS_NORMAL for _ in range(max_frames)]
+            if len(frames) != max_frames:
+                raise ValueError(f"bad frame count for msid={msid}: {len(frames)} want={max_frames}")
+            for st in frames:
+                f.write(struct.pack("<B", int(st) & 0xFF))
+
+
+def main() -> None:
+    ap = argparse.ArgumentParser(
+        description="Extract fighter movescript-derived hit status timelines (opcode 26) into compact .bin tables."
+    )
+    ap.add_argument("--iso_dir", type=Path, default=Path("_iso"))
+    ap.add_argument("--melee_decomp", type=Path, default=Path("refs/melee"))
+    ap.add_argument("--special_msids_dir", type=Path, default=Path("data/special_msids"))
+    ap.add_argument("--out_dir", type=Path, default=Path("data/hit_status"))
+    ap.add_argument("--chars", type=str, default="fox,falco", help="comma-separated characters (fox,falco,...)")
+    ap.add_argument("--max_frames", type=int, default=240)
+    ap.add_argument("--max_steps_per_frame", type=int, default=10000)
+    args = ap.parse_args()
+
+    char_to_dat = {
+        "fox": ("PlFx.dat", "ftDataFox"),
+        "falco": ("PlFc.dat", "ftDataFalco"),
+    }
+
+    enum_map = _parse_ftco_submotion_enum(args.melee_decomp)
+    # Keep the extraction domain conservative: some DAT tables contain entries that are not valid
+    # subaction scripts (or have unusual control-flow), which can trip the lightweight script
+    # interpreter step budget. Prefer coverage of combat-relevant / invincibility-relevant moves
+    # first, and rely on special_msids for character specials.
+    want = [
+        # Attacks / throws (parity with hitbox and hurtbox-mode extraction).
+        "ftCo_SM_Attack11",
+        "ftCo_SM_AttackDash",
+        "ftCo_SM_AttackS3",
+        "ftCo_SM_AttackHi3",
+        "ftCo_SM_AttackLw3",
+        "ftCo_SM_AttackS4",
+        "ftCo_SM_AttackHi4",
+        "ftCo_SM_AttackLw4",
+        "ftCo_SM_AttackAirN",
+        "ftCo_SM_AttackAirF",
+        "ftCo_SM_AttackAirB",
+        "ftCo_SM_AttackAirHi",
+        "ftCo_SM_AttackAirLw",
+        "ftCo_SM_DownAttackU",
+        "ftCo_SM_DownAttackD",
+        "ftCo_SM_Catch",
+        "ftCo_SM_CatchDash",
+        "ftCo_SM_CatchWait",
+        "ftCo_SM_ThrowF",
+        "ftCo_SM_ThrowB",
+        "ftCo_SM_ThrowHi",
+        "ftCo_SM_ThrowLw",
+        "ftCo_SM_ThrownF",
+        "ftCo_SM_ThrownB",
+        "ftCo_SM_ThrownHi",
+        "ftCo_SM_ThrownLw",
+        # Invincibility / intangibility-relevant common actions (dodges / ledge options).
+        "ftCo_SM_EscapeN",
+        "ftCo_SM_EscapeF",
+        "ftCo_SM_EscapeB",
+        "ftCo_SM_EscapeAir",
+        "ftCo_SM_CliffEscapeSlow",
+        "ftCo_SM_CliffEscapeQuick",
+        "ftCo_SM_DamageFlyRoll",
+        # Stage entry / spawn sequences.
+        "ftCo_SM_EntryStart",
+    ]
+    msid_candidates: set[int] = set()
+    for name in want:
+        v = enum_map.get(name)
+        if v is None:
+            continue
+        vv = int(v)
+        if 0 <= vv <= 0xFFFF:
+            msid_candidates.add(vv)
+
+    out_dir: Path = args.out_dir
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    for ch in [c.strip() for c in args.chars.split(",") if c.strip()]:
+        if ch not in char_to_dat:
+            raise RuntimeError(f"unknown character {ch!r}")
+        dat_name, sym = char_to_dat[ch]
+
+        arc = _load_fighter_dat(args.iso_dir, dat_name)
+        ft_off = arc.get_public_offset(sym)
+        if ft_off is None:
+            raise RuntimeError(f"{dat_name}: missing public symbol {sym!r}")
+        s_temp4_list = arc.ptr32(ft_off + 0x0C)
+
+        payloads_by_msid: dict[int, list[int]] = {}
+        msids_present: set[int] = set()
+
+        for msid in sorted(set(msid_candidates) | set(_load_special_msids(args.special_msids_dir, ch))):
+            sub_ptr = _read_s_temp4_subaction_ptr(arc, s_temp4_list, int(msid))
+            if sub_ptr is None:
+                continue
+            try:
+                events = _parse_subaction_events(
+                    arc,
+                    sub_ptr,
+                    max_frames=int(args.max_frames),
+                    max_steps_per_frame=int(args.max_steps_per_frame),
+                )
+            except RuntimeError:
+                # Deterministic best-effort: skip scripts that exceed the interpreter step budget.
+                continue
+            timeline = _build_status_by_frame(events, max_frames=int(args.max_frames))
+            # Keep tables compact: only emit entries that ever leave "normal".
+            if any(int(x) != _HIT_STATUS_NORMAL for x in timeline):
+                payloads_by_msid[int(msid)] = timeline
+                msids_present.add(int(msid))
+
+        _write_bin(
+            out_dir / f"{ch}.bin",
+            msids=sorted(msids_present),
+            payloads_by_msid=payloads_by_msid,
+            max_frames=int(args.max_frames),
+        )
+
+
+if __name__ == "__main__":
+    main()

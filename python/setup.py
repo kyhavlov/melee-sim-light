@@ -70,6 +70,7 @@ ext = Extension(
         str((ROOT / "src" / "hurtcaps_tables.c").resolve()),
         str((ROOT / "src" / "hurtbox_modes_tables.c").resolve()),
         str((ROOT / "src" / "hurtboxes.c").resolve()),
+        str((ROOT / "src" / "hit_status_tables.c").resolve()),
         str((ROOT / "src" / "hitboxes_tables.c").resolve()),
         str((ROOT / "src" / "hitboxes.c").resolve()),
         str((ROOT / "src" / "shields.c").resolve()),

@@ -464,6 +464,11 @@ int msl_batch_debug_set_hurtcap_enabled(MslBatch* batch, int batch_index, int pl
                                        int hurtcap_id, int enabled);
 int msl_batch_debug_set_hitlag(MslBatch* batch, int batch_index, int player_index,
                                uint16_t hitlag_frames);
+// Debug/testing helper: override movescript-derived hit status (opcode 26) eligibility.
+// - Pass status=-1 to clear the override (use extracted tables).
+// - Otherwise status must fit in u8 (0=normal, 1=invincible, 2=intangible in current decomp domain).
+int msl_batch_debug_set_hit_status_override(MslBatch* batch, int batch_index, int player_index,
+                                           int status);
 int msl_batch_debug_combat_resolve(MslBatch* batch);
 
 // Debug/testing only: run combat pass-1 BODY-hit selection (non-mutating) and return the chosen

@@ -154,6 +154,23 @@ def main() -> None:
         ],
     )
 
+    # Movescript-derived hit status timelines (opcode 26).
+    _run(
+        "tools.extraction.extract_fighter_hit_status",
+        [
+            "--iso_dir",
+            str(iso_dir),
+            "--melee_decomp",
+            str(args.melee_decomp),
+            "--special_msids_dir",
+            "data/special_msids",
+            "--out_dir",
+            "data/hit_status",
+            "--chars",
+            ",".join(chars),
+        ],
+    )
+
     # Anim matrices per needed msid (depends on data/moves + data/hurtcaps + data/characters).
     for ch in chars:
         _run(

@@ -488,6 +488,10 @@ def _load_fighter_dat(iso_dir: Path, dat_name: str) -> HsdArchive:
 def _read_s_temp4_subaction_ptr(archive: HsdArchive, s_temp4_list_abs: int, submotion_id: int) -> int | None:
     # struct S_TEMP4 is 0x18 bytes; ftSubactionList* at +0x0C.
     entry_abs = s_temp4_list_abs + submotion_id * 0x18
+    # Defensive: some decomp enum entries may not exist in a given DAT's table.
+    # Avoid out-of-bounds reads when iterating msid domains beyond extracted coverage.
+    if entry_abs < 0 or entry_abs + 0x0C + 4 > len(archive.buf):
+        return None
     ptr = archive.ptr32(entry_abs + 0x0C)
     # Many entries are NULL (stored as 0) => ptr==data_base; treat as absent.
     if ptr == archive.data_base:

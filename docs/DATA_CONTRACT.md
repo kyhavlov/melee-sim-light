@@ -238,6 +238,37 @@ Runtime semantics (current C-core policy):
 - If there is no table entry for a given msid, the simulator treats all capsules as enabled.
 - For a given frame, only capsules with lane state == `HurtCapsule_Enabled` are eligible for BODY contacts.
 
+## `data/hit_status/<char>.bin` (MSLHSTA1 v1)
+
+Purpose: compact, init-time-loadable movescript-derived **hit status** timelines keyed by submotion id (opcode 26).
+
+Current simulator usage:
+- Loaded at init only (no parsing/allocations on the per-frame hot path).
+- Used by `combat_select_body_hits_one()` to skip BODY selection when the defender is not in "normal" hit status.
+
+Binary layout (little-endian):
+- Header:
+  - `magic[8] = "MSLHSTA1"`
+  - `version: u32 = 1`
+  - `frame_count: u16` fixed length for each msid payload (default extractor uses 240)
+  - `reserved: u16 = 0`
+  - `entry_count: u32` number of index entries
+- Index (`entry_count` entries), each:
+  - `msid: u16` submotion id / Slippi post-frame `animation_index` (lower 16 bits)
+  - `reserved: u16 = 0`
+  - `payload_bytes: u32 = frame_count * 1`
+  - `payload_off: u32` absolute byte offset to this msid's payload
+- Payload for each msid:
+  - `hit_status_u8[frame_count]: frame_count * u8`
+
+Decomp pointers:
+- `ftAction_80071A14` (opcode 26 handler) → `ftColl_8007B62C(gobj, state)`.
+  - `refs/melee/src/melee/ft/ftaction.c:539`
+  - `refs/melee/src/melee/ft/ftcoll.c`
+
+Runtime semantics (current C-core policy):
+- If there is no table entry for a given msid, the simulator treats hit status as "normal" (eligible for BODY).
+
 ## What the C core should load (minimum)
 
 To avoid “mystery drift”, prefer loading the following early:
