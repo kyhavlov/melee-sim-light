@@ -492,6 +492,11 @@ int msl_batch_debug_combat_select_body_hits(MslBatch* batch, int batch_index,
 int msl_debug_point_segment_dist2(float px, float py, float pz, float ax, float ay, float az,
                                   float bx, float by, float bz, float* out_d2, float* out_t);
 
+// Test/debug helper: reset selected global init-time tables that depend on MSL_DATA_DIR so they can
+// be reloaded within the same process. This exists for synthetic tests; do not call while any live
+// batches exist.
+int msl_debug_reset_pose_and_hitboxes_tables(void);
+
 #ifdef __cplusplus
 }
 #endif

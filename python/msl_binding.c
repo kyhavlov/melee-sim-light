@@ -989,6 +989,17 @@ static PyObject* msl_alloc_stats(PyObject* self, PyObject* args) {
   return Py_BuildValue("{s:K,s:K}", "calls", calls, "bytes", bytes);
 }
 
+static PyObject* msl_debug_reset_pose_and_hitboxes_tables_py(PyObject* self, PyObject* args) {
+  (void)self;
+  (void)args;
+  const int err = msl_debug_reset_pose_and_hitboxes_tables();
+  if (err != 0) {
+    PyErr_Format(PyExc_RuntimeError, "msl_debug_reset_pose_and_hitboxes_tables failed: %d", err);
+    return NULL;
+  }
+  Py_RETURN_NONE;
+}
+
 static PyObject* msl_ecb_bottom_rel_y_py(PyObject* self, PyObject* args) {
   (void)self;
   unsigned int char_id_u = 0;
@@ -2042,6 +2053,8 @@ static PyMethodDef methods[] = {
      "Reset C allocation counters (debug/perf guardrail)."},
     {"alloc_stats", msl_alloc_stats, METH_NOARGS,
      "Get C allocation counters (debug/perf guardrail)."},
+    {"debug_reset_pose_and_hitboxes_tables", msl_debug_reset_pose_and_hitboxes_tables_py,
+     METH_NOARGS, "Reset pose+hitbox global tables (test-only)."},
     {"ecb_bottom_rel_y", msl_ecb_bottom_rel_y_py, METH_VARARGS,
      "ecb_bottom_rel_y(char_id, animation_index, action_frame) -> float"},
     {"ecb_extents_rel", msl_ecb_extents_rel_py, METH_VARARGS,

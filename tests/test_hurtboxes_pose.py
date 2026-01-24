@@ -122,6 +122,7 @@ def test_hurtboxes_refresh_matches_pose_bytes() -> None:
     seed["stocks"][0, :2] = np.uint8(4)
     seed["char_id"][0, 0] = np.uint8(1)  # Fox
     seed["char_id"][0, 1] = np.uint8(1)
+    seed["facing"][0, :2] = np.uint8(1)  # right (pose-space X mirror parity)
     seed["pos_x"][0, 0] = pos_x
     seed["pos_y"][0, 0] = pos_y
     seed["action_frame"][0, 0] = np.int16(frame)
@@ -173,6 +174,7 @@ def test_hurtboxes_refresh_falls_back_on_missing_msid() -> None:
     seed["stocks"][0, :2] = np.uint8(4)
     seed["char_id"][0, 0] = np.uint8(1)
     seed["char_id"][0, 1] = np.uint8(1)
+    seed["facing"][0, :2] = np.uint8(1)  # right (pose-space X mirror parity)
     seed["action_frame"][0, 0] = np.int16(0)
     seed["anim_frame_f32"][0, 0] = np.float32(0)
     seed["animation_index"][0, 0] = np.uint32(missing_msid)
@@ -256,6 +258,7 @@ def test_hurtboxes_refresh_applies_fighter_scale_y() -> None:
     seed["stocks"][0, :2] = np.uint8(4)
     seed["char_id"][0, 0] = np.uint8(1)  # Fox
     seed["char_id"][0, 1] = np.uint8(1)
+    seed["facing"][0, :2] = np.uint8(1)  # right (pose-space X mirror parity)
     seed["pos_x"][0, 0] = pos_x
     seed["pos_y"][0, 0] = pos_y
     seed["fighter_scale_y"][0, 0] = scale_y

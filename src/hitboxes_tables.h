@@ -14,6 +14,11 @@ extern "C" {
 // hitbox centers for debug readback, but does not perform combat resolution yet.
 int hitboxes_tables_init(void);
 
+// Test/debug helper: reset global hitbox tables so a subsequent hitboxes_tables_init() reloads from
+// the current MSL_DATA_DIR. This exists only for fast synthetic tests; it must not be used while
+// any live batches are depending on hitbox tables.
+void hitboxes_tables_reset_for_tests(void);
+
 typedef struct MslHitboxEvent {
   // Frame timeline key. Interpreted against decomp-shaped anim/script time:
   // fp->cur_anim_frame (Slippi post-frame `state_age`, float).
@@ -68,6 +73,10 @@ enum {
   MSL_HITBOX_FLAG_CLANK = 1u << 14,
   MSL_HITBOX_FLAG_REBOUND = 1u << 15,
 };
+
+static inline uint8_t msl_hitbox_ignore_fighter_scale(uint16_t flags) {
+  return (flags & (uint16_t)MSL_HITBOX_FLAG_IGNORE_FIGHTER_SCALE) != 0 ? 1u : 0u;
+}
 
 // Gets the move's hitbox event list for (char_id, msid).
 // Returns 0 on success with (out_events, out_count) set, or nonzero on failure/missing.

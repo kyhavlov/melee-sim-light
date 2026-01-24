@@ -200,7 +200,12 @@ Binary layout (little-endian):
 Runtime semantics (current C-core policy):
 - Events are applied in file order up to `frame` to derive the current active hitbox definition per `hitbox_id`.
 - Pose lookup failures for a specific hitbox skip that hitbox only (do not affect anything else).
-- World-space center is `anim_pose_get_matrix(...) * (x,y,z) + (pos_x,pos_y)` (Z is not translated).
+- World-space center is pose-driven and uses the same conventions as hurtcaps/shields:
+  - `local = (pose_mtx * (x,y,z)) * fighter_scale_y`
+  - `local.x *= facing_dir` (approximation: mirror X when facing left; we do not apply a true facing
+    Y-rotation here, so Z is not rotated)
+  - `world = (pos_x,pos_y,pos_z) + local`
+  - `radius *= fighter_scale_y` unless `ignore_fighter_scale` is set (hitbox flags bit 13).
 
 ## `data/hurtbox_states/<char>.bin` (MSLHURM1 v1)
 

@@ -64,6 +64,13 @@ static void free_table(MslHitboxesTable* t) {
   *t = (MslHitboxesTable){0};
 }
 
+void hitboxes_tables_reset_for_tests(void) {
+  for (int i = 0; i < 256; i++) {
+    free_table(&g_table_by_char[i]);
+  }
+  g_loaded = 0;
+}
+
 static int load_for_char(const char* data_dir, const char* rel_path, uint8_t char_id) {
   char path[512];
   const int n = snprintf(path, sizeof(path), "%s/%s", data_dir, rel_path);
@@ -323,4 +330,3 @@ int hitboxes_get_events(uint8_t char_id, uint16_t msid, const MslHitboxEvent** o
   *out_count = count;
   return 0;
 }
-

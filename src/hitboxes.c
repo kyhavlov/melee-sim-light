@@ -5,21 +5,11 @@
 #include "anim_frame.h"
 #include "anim_pose.h"
 #include "hitboxes_tables.h"
+#include "mtx34.h"
 
 static inline size_t idx_hitbox(int bi, int p, int hb_i) {
   return ((size_t)bi * (size_t)MSL_MAX_PLAYERS + (size_t)p) * (size_t)MSL_MAX_HITBOXES +
          (size_t)hb_i;
-}
-
-static inline void mtx34_mul_point(const float m[12], const float v[3], float* out_x, float* out_y,
-                                   float* out_z) {
-  const float x = v[0];
-  const float y = v[1];
-  const float z = v[2];
-  // m is row-major 3x4: (m00 m01 m02 tx, m10 m11 m12 ty, m20 m21 m22 tz)
-  *out_x = m[0] * x + m[1] * y + m[2] * z + m[3];
-  *out_y = m[4] * x + m[5] * y + m[6] * z + m[7];
-  *out_z = m[8] * x + m[9] * y + m[10] * z + m[11];
 }
 
 void hitboxes_refresh(MslBatch* batch) {
@@ -131,6 +121,8 @@ void hitboxes_refresh(MslBatch* batch) {
       const float pos_x = batch->state.pos_x[idx];
       const float pos_y = batch->state.pos_y[idx];
       const float pos_z = batch->state.pos_z[idx];
+      const float scale_y = batch->state.fighter_scale_y[idx];
+      const float facing_dir = batch->state.facing[idx] ? 1.0f : -1.0f;
 
       uint8_t out_count = 0;
       for (int hi = 0; hi < MSL_MAX_HITBOXES; hi++) {
@@ -144,19 +136,50 @@ void hitboxes_refresh(MslBatch* batch) {
           continue;
         }
 
+        // NOTE (scaling + facing): In-engine attachment points come from `lb_8000B1CC` against the
+        // bound joint's runtime HSD_JObj matrix (refs/melee/src/melee/lb/lb_00B0.c::lb_8000B1CC).
+        //
+        // That runtime joint matrix already includes:
+        // - per-fighter model scale (`fp->x34_scale.y`) via Fighter_UpdateModelScale ->
+        //   HSD_JObjSetScale (refs/melee/src/melee/ft/fighter.c::Fighter_UpdateModelScale),
+        // - per-fighter facing via a root-part Y rotation set from `fp->facing_dir`
+        //   (ftPartSetRotY(fp, 0, (M_PI_2 * fp->facing_dir)),
+        //    refs/melee/src/melee/ft/fighter.c:1180-1182).
+        //
+        // Our SSANIM01 v3 pose matrices are extracted in a single canonical orientation and do
+        // not include the runtime facing rotation or fp->x34_scale. We apply scale in pose space
+        // and *approximate* facing by mirroring only pose-space X (`x *= facing_dir`).
+        //
+        // Approximation note:
+        // - A true facing transform is a Y-axis rotation, which mixes X/Z. We do *not* rotate Z
+        //   here; we only reflect X. This matches the sim's current 2.5D convention (stage/ground
+        //   collision is X/Y, and other pose-derived offsets like shields/ECB already apply facing
+        //   as an X sign). If we later need depth-accurate X/Z facing, replace this with a proper
+        //   pose-space (x,z) rotation once the SSANIM axis mapping is fully nailed down.
+        //
+        // Current policy:
+        //   local = (pose_mtx * offset) * scale_y; local.x *= facing_dir; world = pos + local.
         const float off[3] = {def[hi].x, def[hi].y, def[hi].z};
         float cx = 0.0f, cy = 0.0f, cz = 0.0f;
-        mtx34_mul_point(m, off, &cx, &cy, &cz);
+        msl_mtx34_mul_point(m, off, &cx, &cy, &cz);
+        cx *= (scale_y * facing_dir);
+        cy *= scale_y;
+        cz *= scale_y;
         cx += pos_x;
         cy += pos_y;
         cz += pos_z;
+
+        float radius = def[hi].radius;
+        if (!msl_hitbox_ignore_fighter_scale(def[hi].u16_6)) {
+          radius *= scale_y;
+        }
 
         const size_t oi = idx_hitbox(bi, p, hi);
         batch->state.hitbox_enabled[oi] = 1;
         batch->state.hitbox_x[oi] = cx;
         batch->state.hitbox_y[oi] = cy;
         batch->state.hitbox_z[oi] = cz;
-        batch->state.hitbox_radius[oi] = def[hi].radius;
+        batch->state.hitbox_radius[oi] = radius;
         batch->state.hitbox_damage[oi] = def[hi].damage;
         batch->state.hitbox_bone_part_id[oi] = def[hi].bone_part_id;
         batch->state.hitbox_u16_0[oi] = def[hi].u16_0;

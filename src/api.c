@@ -1223,3 +1223,11 @@ int msl_debug_point_segment_dist2(float px, float py, float pz, float ax, float 
   combat_point_segment_dist2(px, py, pz, ax, ay, az, bx, by, bz, out_d2, out_t);
   return 0;
 }
+
+int msl_debug_reset_pose_and_hitboxes_tables(void) {
+  // Intended only for synthetic unit tests that need to swap MSL_DATA_DIR within a single process.
+  // Do not call this while any batches exist; they may depend on cached table pointers.
+  anim_pose_reset_for_tests();
+  hitboxes_tables_reset_for_tests();
+  return 0;
+}

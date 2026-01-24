@@ -7,21 +7,11 @@
 #include "hit_status_tables.h"
 #include "hurtbox_modes_tables.h"
 #include "hurtcaps_tables.h"
+#include "mtx34.h"
 
 static inline size_t idx_hurtcap(int bi, int p, int cap_i) {
   return ((size_t)bi * (size_t)MSL_MAX_PLAYERS + (size_t)p) * (size_t)MSL_MAX_HURTCAPS +
          (size_t)cap_i;
-}
-
-static inline void mtx34_mul_point(const float m[12], const float v[3], float* out_x, float* out_y,
-                                   float* out_z) {
-  const float x = v[0];
-  const float y = v[1];
-  const float z = v[2];
-  // m is row-major 3x4: (m00 m01 m02 tx, m10 m11 m12 ty, m20 m21 m22 tz)
-  *out_x = m[0] * x + m[1] * y + m[2] * z + m[3];
-  *out_y = m[4] * x + m[5] * y + m[6] * z + m[7];
-  *out_z = m[8] * x + m[9] * y + m[10] * z + m[11];
 }
 
 void hurtboxes_refresh(MslBatch* batch) {
@@ -125,9 +115,19 @@ void hurtboxes_refresh(MslBatch* batch) {
       //   runtime fighter-scale, so we apply the same scalar uniformly to the pose-space endpoints
       //   before adding world translation.
       //
+      // Facing parity: In-engine joint matrices are also fighter-facing dependent: the fighter's
+      // root part is rotated about Y based on `fp->facing_dir` (see ftPartSetRotY(fp, 0, ...),
+      // refs/melee/src/melee/ft/fighter.c:1180-1182), and lb_8000B1CC uses that runtime joint matrix when
+      // producing world endpoints (refs/melee/src/melee/lb/lb_00B0.c::lb_8000B1CC).
+      //
+      // Our SSANIM pose matrices are extracted in a single canonical orientation, so we
+      // *approximate* facing by mirroring pose-space X only. We do not apply a true facing
+      // rotation here (which would mix X/Z); this matches the sim's current 2.5D convention.
+      //
       // We intentionally use only the y component (as decomp does for collision/bounds), treating
       // it as a uniform scalar for x/y/z here.
       const float scale_y = batch->state.fighter_scale_y[idx];
+      const float facing_dir = batch->state.facing[idx] ? 1.0f : -1.0f;
 
       // Fallback policy: missing pose data for a specific capsule only drops that capsule, keeping
       // the rest usable under partial animation coverage.
@@ -153,13 +153,13 @@ void hurtboxes_refresh(MslBatch* batch) {
 
         float ax = 0.0f, ay = 0.0f, az = 0.0f;
         float bx = 0.0f, by = 0.0f, bz = 0.0f;
-        mtx34_mul_point(m, caps[ci].a_offset, &ax, &ay, &az);
-        mtx34_mul_point(m, caps[ci].b_offset, &bx, &by, &bz);
+        msl_mtx34_mul_point(m, caps[ci].a_offset, &ax, &ay, &az);
+        msl_mtx34_mul_point(m, caps[ci].b_offset, &bx, &by, &bz);
 
-        ax *= scale_y;
+        ax *= (scale_y * facing_dir);
         ay *= scale_y;
         az *= scale_y;
-        bx *= scale_y;
+        bx *= (scale_y * facing_dir);
         by *= scale_y;
         bz *= scale_y;
 

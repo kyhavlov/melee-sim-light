@@ -266,6 +266,13 @@ static const MslAnimPoseTable* table_for_char(uint8_t char_id) {
   return t;
 }
 
+void anim_pose_reset_for_tests(void) {
+  for (int i = 0; i < 256; i++) {
+    free_table(&g_table_by_char[i]);
+  }
+  g_loaded = 0;
+}
+
 int anim_pose_get_matrix(uint8_t char_id, uint16_t msid, uint16_t frame, uint16_t part_id,
                          float out_3x4[12]) {
   if (out_3x4 == NULL) {
