@@ -31,6 +31,10 @@ typedef enum MslActionId {
   MSL_ACT_FALL_SPECIAL_F = 0x0024,        // ftCo_MS_FallSpecialF
   MSL_ACT_FALL_SPECIAL_B = 0x0025,        // ftCo_MS_FallSpecialB
   MSL_ACT_DAMAGE_FALL = 0x0026,           // ftCo_MS_DamageFall
+  // Squat states are consecutive after DamageFall in GALE01.
+  // refs/melee/src/melee/ft/chara/ftCommon/forward.h:300-330 (ftCommon_MotionState enum).
+  MSL_ACT_SQUAT = 0x0027,       // ftCo_MS_Squat
+  MSL_ACT_SQUAT_WAIT = 0x0028,  // ftCo_MS_SquatWait
   MSL_ACT_LANDING = 0x002A,               // ftCo_MS_Landing
   MSL_ACT_LANDING_FALL_SPECIAL = 0x002B,  // ftCo_MS_LandingFallSpecial
 

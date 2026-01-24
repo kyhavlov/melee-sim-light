@@ -105,7 +105,8 @@ static inline void combat_state_flags_set_is_hitlag(MslBatch* batch, size_t idx,
   batch->state.state_flags[flags_i] = f;
 }
 
-static inline uint16_t combat_calc_hitlag_frames(const MslCommonParams* c, int dmg, uint16_t msid) {
+static inline uint16_t combat_calc_hitlag_frames(const MslCommonParams* c, int dmg,
+                                                 uint16_t motion_id) {
   if (c == NULL) {
     return 0;
   }
@@ -122,12 +123,13 @@ static inline uint16_t combat_calc_hitlag_frames(const MslCommonParams* c, int d
   // refs/melee/src/melee/ft/fighter.c (init sets fp->x1960_vibrateMult = 1).
   const float mul = 1.0f;
 
-  float result_f = (float)tmp * mul;
-  // TODO(decomp): apply squat scaling for msid in [ftCo_MS_Squat, ftCo_MS_SquatWait] using
-  // p_ftCommonData->x1A0 (extracted as hitlag_squat_mul) once FtMotionId constants are modeled.
-  (void)msid;
-
-  int result_i = (int)result_f;
+  // Decomp truncates before applying squat scaling:
+  // `result = (int)(tmp * mul); if ((unsigned)msid - ftCo_MS_Squat <= 1) result = (int)(result * x1A0);`
+  // refs/melee/src/melee/ft/ftcommon.c:653-655 (ftCommon_CalcHitlag)
+  int result_i = (int)((float)tmp * mul);
+  if (motion_id == (uint16_t)MSL_ACT_SQUAT || motion_id == (uint16_t)MSL_ACT_SQUAT_WAIT) {
+    result_i = (int)((float)result_i * c->hitlag_squat_mul);
+  }
   if (result_i < 0) {
     result_i = 0;
   }
@@ -189,8 +191,8 @@ static inline uint8_t combat_defender_hit_status_u8(const MslBatch* batch, size_
 // - attribution fields compared in-suite (instance_hit_by, last_hit_by)
 static inline void combat_mutations_pass1_future_apply_body_hit(MslBatch* batch, size_t a_idx,
                                                                 size_t d_idx, int attacker,
-                                                                float hitbox_damage_f32,
-                                                                uint16_t attacker_msid) {
+                                                                int int_dmg,
+                                                                uint16_t attacker_motion_id) {
   if (batch == NULL) {
     return;
   }
@@ -211,12 +213,21 @@ static inline void combat_mutations_pass1_future_apply_body_hit(MslBatch* batch,
 
   const MslCommonParams* c = msl_common_params();
 
-  const int dmg_i = (hitbox_damage_f32 > 0.0f) ? (int)hitbox_damage_f32 : 0;
-  const uint32_t d_msid_u32 = batch->state.animation_index[d_idx];
-  const uint16_t d_msid = (d_msid_u32 <= 0xFFFFu) ? (uint16_t)d_msid_u32 : 0u;
+  // Decomp (GALE01): collision converts hitbox float damage -> int via getEnvDmg, and
+  // Fighter_ProcessHit uses a nonzero int damage (`bool1`) as the dmg input to ftCommon_CalcHitlag.
+  // refs/melee/src/melee/ft/ftcoll.c::inlineA0/inlineA1 (getEnvDmg pattern)
+  // refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC (hitlag calc under `if (bool1)`)
+  //
+  // Note (approximation): GALE01 also maintains `fp->dmg.int_value` as a max across contacts during
+  // collision. In pass 1 we instead pass the selected contact's `getEnvDmg(damage)` here.
+  const int dmg_i = (int_dmg > 0) ? int_dmg : 0;
+  if (dmg_i == 0) {
+    return;
+  }
+  const uint16_t d_motion_id = batch->state.action_id[d_idx];
 
-  const uint16_t a_hl = combat_calc_hitlag_frames(c, dmg_i, attacker_msid);
-  const uint16_t d_hl = combat_calc_hitlag_frames(c, dmg_i, d_msid);
+  const uint16_t a_hl = combat_calc_hitlag_frames(c, dmg_i, attacker_motion_id);
+  const uint16_t d_hl = combat_calc_hitlag_frames(c, dmg_i, d_motion_id);
   batch->state.hitlag[a_idx] = a_hl;
   batch->state.hitlag[d_idx] = d_hl;
   combat_state_flags_set_is_hitlag(batch, a_idx, a_hl);
@@ -229,7 +240,7 @@ static inline void combat_mutations_pass1_future_apply_body_hit(MslBatch* batch,
 static inline void combat_mutations_pass1_future_apply_shield_hit(MslBatch* batch, size_t a_idx,
                                                                   size_t d_idx, int int_dmg,
                                                                   int shield_damage_taken,
-                                                                  uint16_t attacker_msid) {
+                                                                  uint16_t attacker_motion_id) {
   if (batch == NULL) {
     return;
   }
@@ -239,10 +250,8 @@ static inline void combat_mutations_pass1_future_apply_shield_hit(MslBatch* batc
     return;
   }
 
-  // Capture the defender's current anim/submotion id before we transition the defender into a
-  // guard-damage state (which uses animation_index == -1 in our datasets).
-  const uint32_t d_anim_u32_pre = batch->state.animation_index[d_idx];
-  const uint16_t d_msid_pre = (d_anim_u32_pre <= 0xFFFFu) ? (uint16_t)d_anim_u32_pre : 0u;
+  // Capture defender motion id before we transition into GuardSetOff.
+  const uint16_t d_motion_id_pre = batch->state.action_id[d_idx];
 
   // Shield HP depletion:
   //
@@ -308,8 +317,8 @@ static inline void combat_mutations_pass1_future_apply_shield_hit(MslBatch* batc
   // - defender uses fp->x19A4 (max int_dmg over shield contacts this frame),
   // both computed from hit0->damage via getEnvDmg.
   // refs/melee/src/melee/ft/ftcoll.c::ftColl_80076CBC and fighter.c::Fighter_ProcessHit_8006D1EC
-  const uint16_t a_hl = combat_calc_hitlag_frames(c, int_dmg, attacker_msid);
-  const uint16_t d_hl = combat_calc_hitlag_frames(c, int_dmg, d_msid_pre);
+  const uint16_t a_hl = combat_calc_hitlag_frames(c, int_dmg, attacker_motion_id);
+  const uint16_t d_hl = combat_calc_hitlag_frames(c, int_dmg, d_motion_id_pre);
   batch->state.hitlag[a_idx] = a_hl;
   batch->state.hitlag[d_idx] = d_hl;
   combat_state_flags_set_is_hitlag(batch, a_idx, a_hl);
@@ -344,6 +353,7 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
 
     const uint32_t msid_u32 = batch->state.animation_index[a_idx];
     const uint16_t msid = (msid_u32 <= 0xFFFFu) ? (uint16_t)msid_u32 : 0u;
+    const uint16_t a_motion_id = batch->state.action_id[a_idx];
 
     for (int defender = 0; defender < num_players; defender++) {
       if (defender == attacker) {
@@ -410,8 +420,6 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
       const float d_shift_x = batch->state.prev_pos_x[d_idx] - batch->state.pos_x[d_idx];
       const float d_shift_y = batch->state.prev_pos_y[d_idx] - batch->state.pos_y[d_idx];
 
-      // Deterministic selection: pick the first eligible overlap in (hitbox_id, hurtcap_id) order.
-      //
       // Shield precedence (non-inert): if a hitbox intersects the defender shield bubble and
       // `element != HitElement_Inert`, resolve the shield hit (HP depletion, GuardSetOff, hitlag)
       // and do not apply BODY selection for this attacker→defender pair this frame.
@@ -424,7 +432,27 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
       //   does NOT enter the normal shield-hit effects path.
       uint8_t did_hit = 0;
       if (shield_active) {
-        for (int hb_id = 0; hb_id < MSL_MAX_HITBOXES && !did_hit; hb_id++) {
+        // Decomp (GALE01): shield collision accumulates max int damage for hitlag as:
+        // - attacker: `fp0->dmg.x1924 = max(fp0->dmg.x1924, getEnvDmg(hit0->damage))`
+        // - defender: `fp1->x19A4 = max(fp1->x19A4, getEnvDmg(hit0->damage))`
+        // refs/melee/src/melee/ft/ftcoll.c::ftColl_80076CBC
+        //
+        // Fighter_ProcessHit then computes hitlag from these max int damage values.
+        // refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
+        //
+        // Our shield pass is simplified (one GuardSetOff entry per pair per frame), but we still
+        // match the decomp "hitlag uses max int damage over shield overlaps" rule by:
+        // - selecting the first eligible shield overlap for shield HP / GuardSetOff, and
+        // - computing hitlag using the max int damage over all eligible shield overlaps.
+        int max_int_dmg = 0;
+        int sel_int_dmg = 0;
+        int8_t sel_shield_dmg_s8 = 0;
+        uint8_t sel_hb_id = 0;
+
+        // Capture defender motion id for hitlag inputs before any shield-state mutations.
+        const uint16_t d_motion_id_pre = batch->state.action_id[d_idx];
+
+        for (int hb_id = 0; hb_id < MSL_MAX_HITBOXES; hb_id++) {
           const size_t hb_i = idx_hitbox(bi, attacker, hb_id);
           if (!batch->state.hitbox_enabled[hb_i]) {
             continue;
@@ -495,23 +523,43 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
           // interactions and hitlag inputs.
           // refs/melee/src/melee/ft/ftcoll.c::getEnvDmg and ftColl_80076CBC
           const int int_dmg = combat_get_env_dmg(hdmg);
-          const int8_t shield_dmg_s8 = batch->state.hitbox_shield_damage[hb_i];
-          int tmp_dmg = int_dmg + (int)shield_dmg_s8;
+          if (int_dmg > max_int_dmg) {
+            max_int_dmg = int_dmg;
+          }
+
+          if (sel_int_dmg == 0) {
+            sel_int_dmg = int_dmg;
+            sel_shield_dmg_s8 = batch->state.hitbox_shield_damage[hb_i];
+            sel_hb_id = (uint8_t)hb_id;
+          }
+        }
+
+        if (sel_int_dmg > 0) {
+          int tmp_dmg = sel_int_dmg + (int)sel_shield_dmg_s8;
           if (tmp_dmg < 0) {
             tmp_dmg = 0;
           }
 
           // Combat Mutations Pass 1 (SHIELD-only).
           combat_mutations_pass1_future_apply_shield_hit(
-              batch, a_idx, d_idx, int_dmg, tmp_dmg, msid);
+              batch, a_idx, d_idx, sel_int_dmg, tmp_dmg, a_motion_id);
 
           batch->state.combat_rehit_active[pair] = 1;
-          batch->state.combat_rehit_hitbox_id[pair] = (uint8_t)hb_id;
+          batch->state.combat_rehit_hitbox_id[pair] = sel_hb_id;
           batch->state.combat_rehit_attacker_msid[pair] = msid;
           batch->state.combat_rehit_defender_instance_id[pair] = batch->state.instance_id[d_idx];
 
           did_hit = 1;
-          break;
+
+          if (max_int_dmg > sel_int_dmg) {
+            const MslCommonParams* c = msl_common_params();
+            const uint16_t a_hl = combat_calc_hitlag_frames(c, max_int_dmg, a_motion_id);
+            const uint16_t d_hl = combat_calc_hitlag_frames(c, max_int_dmg, d_motion_id_pre);
+            batch->state.hitlag[a_idx] = a_hl;
+            batch->state.hitlag[d_idx] = d_hl;
+            combat_state_flags_set_is_hitlag(batch, a_idx, a_hl);
+            combat_state_flags_set_is_hitlag(batch, d_idx, d_hl);
+          }
         }
       }
 
@@ -549,6 +597,15 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
         continue;
       }
 
+      // BODY contacts (pass 1): deterministic "first overlap wins" selection in (hitbox_id,
+      // hurtcap_id) order.
+      //
+      // Note (approximation): GALE01 maintains additional per-hitbox bookkeeping and also tracks
+      // `fp->dmg.int_value` as a max of getEnvDmg(damage) across eligible contacts during the
+      // collision pass. We intentionally do NOT attempt to mirror the max-accumulation behavior
+      // until we model more of collision ordering/priority/clank semantics, because max-accumulation
+      // in this simplified pass can bias one-step timing when multiple hitboxes overlap.
+      // refs/melee/src/melee/ft/ftcoll.c::inlineA0/inlineA1
       for (int hb_id = 0; hb_id < MSL_MAX_HITBOXES && !did_hit; hb_id++) {
         const size_t hb_i = idx_hitbox(bi, attacker, hb_id);
         if (!batch->state.hitbox_enabled[hb_i]) {
@@ -583,6 +640,11 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
         // In our BODY-only pass (no percent/KB yet), treat hitboxes with nonpositive extracted
         // damage as non-damaging contacts and do not select them for hitlag/attribution writes.
         if (!(hdmg > 0.0f)) {
+          continue;
+        }
+
+        const int int_dmg = combat_get_env_dmg(hdmg);
+        if (int_dmg <= 0) {
           continue;
         }
 
@@ -623,9 +685,9 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
           if (!combat_sphere_capsule_intersects(hx, hy, hz, hr, ax, ay, az, bx, by, bz, cr, NULL)) {
             continue;
           }
-
           // Combat Mutations Pass 1 (BODY-only).
-          combat_mutations_pass1_future_apply_body_hit(batch, a_idx, d_idx, attacker, hdmg, msid);
+          combat_mutations_pass1_future_apply_body_hit(batch, a_idx, d_idx, attacker, int_dmg,
+                                                       a_motion_id);
 
           batch->state.combat_rehit_active[pair] = 1;
           batch->state.combat_rehit_hitbox_id[pair] = (uint8_t)hb_id;

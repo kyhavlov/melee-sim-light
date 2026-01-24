@@ -22,6 +22,8 @@ BUTTON_L = 0x0040
 
 # Action ids (GALE01): refs/melee/src/melee/ft/chara/ftCommon/forward.h
 ACT_WAIT = 0x000E
+ACT_SQUAT = 0x0027
+ACT_SQUAT_WAIT = 0x0028
 ACT_GUARD_SET_OFF = 0x00B5
 
 # Submotion ids (GALE01): refs/melee/src/melee/ft/chara/ftCommon/forward.h
@@ -177,6 +179,89 @@ def test_combat_resolve_body_overlap_sets_hitlag_and_attribution() -> None:
         assert int(out["instance_hit_by"][1]) == 111
         assert int(out["last_hit_by"][1]) == 0
         assert int(out["last_attack_landed"][0]) == 0
+    finally:
+        msl_binding.destroy(handle)
+        del handle
+
+
+def test_combat_resolve_body_overlap_applies_squat_hitlag_mul() -> None:
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    seed_stride = int(sizes["seed"])
+    compare_stride = int(sizes["compare"])
+    assert seed_stride == SEED_DTYPE.itemsize
+    assert compare_stride == COMPARE_DTYPE.itemsize
+
+    handle = msl_binding.init(batch_size=1, num_players=2)
+    try:
+        seed = _seed_base()
+        # Defender is in squat; decomp ftCommon_CalcHitlag applies hitlag_squat_mul when
+        # motion_id in [ftCo_MS_Squat, ftCo_MS_SquatWait].
+        # refs/melee/src/melee/ft/ftcommon.c::ftCommon_CalcHitlag
+        seed["action_id"][0, 1] = np.uint16(ACT_SQUAT)
+        seed_bytes = seed.view(np.uint8).reshape((1, seed_stride))
+        msl_binding.reseed_seed(handle, seed_bytes)
+
+        msl_binding.debug_clear_hitboxes_world(handle, 0, 0)
+        msl_binding.debug_set_hitbox_world(handle, 0, 0, 0, 0.0, 0.0, 0.0, 1.0, 6.0, 1)
+        msl_binding.debug_set_hitbox_flags(handle, 0, 0, 0, int(HIT_GROUNDED))
+
+        msl_binding.debug_clear_hurtcaps_world(handle, 0, 1)
+        msl_binding.debug_set_hurtcap_world(handle, 0, 1, 0, -0.5, 0.0, 0.0, 0.5, 0.0, 0.0, 0.5)
+
+        msl_binding.debug_combat_resolve(handle)
+        out = _read_compare(handle)
+
+        hitlag_dmg_mul = _common_attr("hitlag_dmg_mul")
+        hitlag_base = _common_attr("hitlag_base")
+        hitlag_squat_mul = _common_attr("hitlag_squat_mul")
+
+        base = int(int(6) * hitlag_dmg_mul + hitlag_base)
+        exp_attacker = base
+        exp_defender = int(float(base) * hitlag_squat_mul)
+
+        assert int(out["hitlag"][0]) == exp_attacker
+        assert int(out["hitlag"][1]) == exp_defender
+    finally:
+        msl_binding.destroy(handle)
+        del handle
+
+
+def test_combat_resolve_body_overlap_uses_get_env_dmg_for_low_damage() -> None:
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    seed_stride = int(sizes["seed"])
+    compare_stride = int(sizes["compare"])
+    assert seed_stride == SEED_DTYPE.itemsize
+    assert compare_stride == COMPARE_DTYPE.itemsize
+
+    handle = msl_binding.init(batch_size=1, num_players=2)
+    try:
+        seed = _seed_base()
+        seed_bytes = seed.view(np.uint8).reshape((1, seed_stride))
+        msl_binding.reseed_seed(handle, seed_bytes)
+
+        # Overlap with a hitbox whose float damage would truncate to 0 if we used (int)damage.
+        # Decomp converts float->int via getEnvDmg, which yields 1 for nonzero float with (int)==0.
+        # refs/melee/src/melee/ft/ftcoll.c::inlineA0/inlineA1
+        msl_binding.debug_clear_hitboxes_world(handle, 0, 0)
+        msl_binding.debug_set_hitbox_world(handle, 0, 0, 0, 0.0, 0.0, 0.0, 1.0, 0.5, 1)
+        msl_binding.debug_set_hitbox_flags(handle, 0, 0, 0, int(HIT_GROUNDED))
+
+        msl_binding.debug_clear_hurtcaps_world(handle, 0, 1)
+        msl_binding.debug_set_hurtcap_world(handle, 0, 1, 0, -0.5, 0.0, 0.0, 0.5, 0.0, 0.0, 0.5)
+
+        msl_binding.debug_combat_resolve(handle)
+        out = _read_compare(handle)
+
+        hitlag_dmg_mul = _common_attr("hitlag_dmg_mul")
+        hitlag_base = _common_attr("hitlag_base")
+        exp_hl = int(int(1) * hitlag_dmg_mul + hitlag_base)
+
+        assert int(out["hitlag"][0]) == exp_hl
+        assert int(out["hitlag"][1]) == exp_hl
     finally:
         msl_binding.destroy(handle)
         del handle
@@ -366,7 +451,7 @@ def test_combat_resolve_shield_hitlag_uses_get_env_dmg_semantics() -> None:
         del handle
 
 
-def test_combat_resolve_shield_hit_uses_first_overlap_only_in_pass1() -> None:
+def test_combat_resolve_shield_hit_uses_max_damage_for_hitlag_but_first_for_hp_in_pass1() -> None:
     import msl_binding
 
     sizes = msl_binding.sizes()
@@ -400,8 +485,10 @@ def test_combat_resolve_shield_hit_uses_first_overlap_only_in_pass1() -> None:
         out0 = _read_compare(handle)
         hp0 = float(out0["shield_hp"][1])
 
-        # Force a shield overlap for two hitboxes this frame. Pass 1 resolves only the first eligible
-        # overlap in hitbox_id order (matching the simplified deterministic policy in src/combat.c).
+        # Force a shield overlap for two hitboxes this frame.
+        #
+        # Pass 1 is simplified: it applies shield HP / GuardSetOff from the first eligible overlap,
+        # but hitlag uses the max int damage over all eligible shield overlaps (decomp-shaped).
         msl_binding.debug_clear_hitboxes_world(handle, 0, 0)
         msl_binding.debug_set_hitbox_world(handle, 0, 0, 0, shx, shy, shz, 1.0, 3.0, 1)
         msl_binding.debug_set_hitbox_flags(handle, 0, 0, 0, int(HIT_GROUNDED))
@@ -412,10 +499,10 @@ def test_combat_resolve_shield_hit_uses_first_overlap_only_in_pass1() -> None:
         out = _read_compare(handle)
         hp1 = float(out["shield_hp"][1])
 
-        # Hitlag uses decomp getEnvDmg semantics (int damage) and pass-1 picks hb_id=0 here.
+        # Hitlag uses decomp getEnvDmg semantics (int damage) and uses the max over shield overlaps.
         hitlag_dmg_mul = _common_attr("hitlag_dmg_mul")
         hitlag_base = _common_attr("hitlag_base")
-        exp_hl = int(int(3) * hitlag_dmg_mul + hitlag_base)
+        exp_hl = int(int(7) * hitlag_dmg_mul + hitlag_base)
         assert int(out["hitlag"][0]) == exp_hl
         assert int(out["hitlag"][1]) == exp_hl
 
