@@ -438,8 +438,16 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
 
       // Deterministic selection: pick the first eligible overlap in (hitbox_id, hurtcap_id) order.
       //
-      // Shield precedence: if a hitbox intersects the defender shield bubble, resolve the shield hit
+      // Shield precedence (non-inert): if a hitbox intersects the defender shield bubble and
+      // `element != HitElement_Inert`, resolve the shield hit (HP depletion, GuardSetOff, hitlag)
       // and do not apply BODY selection for this attacker→defender pair this frame.
+      //
+      // Decomp pointer (GALE01): refs/melee/src/melee/ft/ftcoll.c::ftColl_80078C70 uses
+      // `lbColl_80007BCC(..., &this_fp->shield_hit, ...)` as the overlap test and splits on
+      // `hit->element`:
+      // - non-inert calls `ftColl_80076CBC(...)` (shield hit handling),
+      // - inert sets `victim_fp->x221C_b5 = true` (detection hitbox touching shield bubble) and
+      //   does NOT enter the normal shield-hit effects path.
       uint8_t did_hit = 0;
       if (shield_active) {
         for (int hb_id = 0; hb_id < MSL_MAX_HITBOXES && !did_hit; hb_id++) {
@@ -490,11 +498,14 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
             batch->state.state_flags[a_flags_i] |=
                 (uint8_t)MSL_STATE_FLAG_221C_DETECT_HITBOX_TOUCHING_SHIELD;
 
-            // Decomp does not take the normal shield-hit path for inert hitboxes
-            // (`if (element != HitElement_Inert) ftColl_80076CBC(...); else x221C_b5=true`).
+            // Decomp does not take the normal shield-hit path for inert hitboxes:
+            // `if (hit->element != HitElement_Inert) ftColl_80076CBC(...); else victim_fp->x221C_b5=true`.
             // refs/melee/src/melee/ft/ftcoll.c::ftColl_80078C70
             //
-            // Keep shield HP depletion / GuardSetOff / hitlag logic unchanged for non-inert hits.
+            // So this overlap should NOT apply the normal "damaging block" mutations:
+            // - no shield HP depletion (Fighter_ProcessHit_8006D1EC),
+            // - no GuardSetOff entry,
+            // - no hitlag application.
             continue;
           }
 

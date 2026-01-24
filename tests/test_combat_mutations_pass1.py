@@ -585,6 +585,71 @@ def test_combat_resolve_inert_shield_overlap_sets_detect_hitbox_flag() -> None:
         del handle
 
 
+def test_combat_resolve_inert_shield_overlap_does_not_apply_shield_hit_mutations() -> None:
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    assert seed_stride == SEED_DTYPE.itemsize
+    assert input_stride == INPUT_DTYPE.itemsize
+
+    handle = msl_binding.init(batch_size=1, num_players=2)
+    try:
+        seed = _seed_base()
+        seed_bytes = seed.view(np.uint8).reshape((1, seed_stride))
+        msl_binding.reseed_seed(handle, seed_bytes)
+
+        neutral = np.zeros((1, input_stride), dtype=np.uint8)
+        shield = np.zeros((1, input_stride), dtype=np.uint8)
+        shield_view = shield.view(INPUT_DTYPE).reshape((1,))
+        shield_view["p"]["buttons"][0, 1] = np.uint16(BUTTON_L)
+
+        # Step once to compute shield bubble world geometry for defender P1.
+        msl_binding.step_input(handle, neutral, shield)
+        bubbles = msl_binding.debug_shield_bubbles_world(handle, 0)
+        shx, shy, shz, shr = (
+            float(bubbles[1, 0]),
+            float(bubbles[1, 1]),
+            float(bubbles[1, 2]),
+            float(bubbles[1, 3]),
+        )
+        assert shr > 0.0
+
+        out0 = _read_compare(handle)
+        hp0 = float(out0["shield_hp"][1])
+        a0 = int(out0["action_id"][1])
+        hl0_a = int(out0["hitlag"][0])
+        hl0_d = int(out0["hitlag"][1])
+
+        # Force a shield overlap using an inert hitbox, but give it positive damage to ensure the
+        # shield branch split is keyed on HitElement, not damage.
+        msl_binding.debug_clear_hitboxes_world(handle, 0, 0)
+        msl_binding.debug_set_hitbox_world(handle, 0, 0, 0, shx, shy, shz, 1.0, 5.0, 1)
+        msl_binding.debug_set_hitbox_flags(handle, 0, 0, 0, int(HIT_GROUNDED))
+        msl_binding.debug_set_hitbox_element(handle, 0, 0, 0, int(HIT_ELEMENT_INERT))
+
+        msl_binding.debug_combat_resolve(handle)
+        out1 = _read_compare(handle)
+
+        # Inert overlap sets only the Slippi post-frame flag (x221C_b5 / 0x04).
+        flags_221c_p0 = int(out1["state_flags"][0, 3])
+        assert (flags_221c_p0 & STATE_FLAG_221C_DETECT_HITBOX_TOUCHING_SHIELD) != 0
+
+        # ...and does not apply normal shield-hit mutations (HP depletion, GuardSetOff, hitlag).
+        hp1 = float(out1["shield_hp"][1])
+        assert np.isclose(hp1, hp0, atol=1e-6)
+        assert int(out1["action_id"][1]) == a0
+        assert int(out1["action_id"][1]) != ACT_GUARD_SET_OFF
+        assert int(out1["hitlag"][0]) == hl0_a
+        assert int(out1["hitlag"][1]) == hl0_d
+        assert int(out1["hitlag"][0]) == 0
+        assert int(out1["hitlag"][1]) == 0
+    finally:
+        msl_binding.destroy(handle)
+        del handle
+
+
 def test_combat_resolve_detect_hitbox_flag_is_cleared_on_next_combat_pass() -> None:
     import msl_binding
 
