@@ -125,14 +125,17 @@ pipeline (including any required prior-frame state) and/or once we validate orde
   - Resolve at most 1 shield hit per attacker→defender per frame (deterministic `hitbox_id` order).
   - Apply decomp-backed shield HP depletion and enter `GuardSetOff` (shieldstun) on the defender.
   - Apply hitlag (same decomp `ftCommon_CalcHitlag` path as BODY; no SFX, no KB/percent, no clanks/trades).
-- **Ordering workaround (current step order)**: combat overlap tests apply a *pre-phys translation shift* to the already-computed
-  world primitives (hitboxes/hurtcaps/shield bubble) using `(prev_pos_x/y - pos_x/y)` so collisions are tested against the
-  "pose at this frame, translation before phys" approximation.
-  - This is not a decomp-proven rule; it is a workaround for our current `step()` order where `physics_integrate()` runs before
-    `hitboxes_refresh()`/`hurtboxes_refresh()`/`combat_resolve()`.
-  - Decomp call-order relied on (GALE01):
-    - `ftAnim_8006EBA4` (anim advance / pose timebase) runs before `phys_cb`:
-      `refs/melee/src/melee/ft/fighter.c` lines 1669–1705 vs `Fighter_procUpdate` lines 2141–2159.
+- **Collision timing / translation ordering (decomp-backed, GALE01 “normal match” procs)**:
+  - pri `1`: anim advance / pose timebase (`refs/melee/src/melee/ft/fighter.c::Fighter_8006A360` → `ftAnim_8006EBA4`)
+  - pri `3`: per-action `input_cb` (`refs/melee/src/melee/ft/fighter.c::Fighter_Spaghetti_8006AD10`)
+  - pri `4`: per-action `phys_cb` + integration mutating `fp->cur_pos` (`refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate`)
+  - pri `6` / `9`: model translate + collision primitive refresh
+    (`refs/melee/src/melee/ft/fighter.c::Fighter_procMap` and `refs/melee/src/melee/ft/fighter.c::Fighter_8006C80C` / `ftColl_8007AE80`)
+  - pri `13`: fighter-vs-fighter collision (incl. shield overlap) (`refs/melee/src/melee/ft/fighter.c::Fighter_8006CB94` → `refs/melee/src/melee/ft/ftcoll.c::ftColl_80078C70`)
+  - See also `docs/DECOMP_PROC_ORDER.md` (proc priorities, plus the exact referenced call sites).
+  - Implication: fighter-vs-fighter collision uses the **post-integration** `fp->cur_pos` translation (i.e. no “pre-physics translate” frame).
+    Any sim-side compensation that effectively shifts already-computed world primitives to a different translation frame is a **current approximation**
+    for an ordering mismatch, not a decomp-backed rule.
 - **Deterministic selection**: at most 1 BODY hit per attacker→defender per frame; prefer lowest `hitbox_id`, then lowest
   `hurtcap_id` (matches debug contact ordering).
 - **Rehit suppression (simplified, conservative)**: a per-(attacker, defender) latch suppresses repeated hits for that pair
@@ -154,7 +157,12 @@ sim-owned**:
 **Sim-owned derived outputs (overwritten by the sim each step)**
 - `0x221A` bit `0x20` (`isHitlag`): derived from `hitlag > 0` (kept consistent when combat applies hitlag and as timers decrement).
 - `0x221B` bit `0x80` (`isShieldActive`): derived from whether the shield bubble is active (`shield_radius > 0`).
-- `0x221C` bit `0x04` (“owner’s detection hitbox touching shield bubble”): cleared at frame start; set when we resolve a shield contact.
+- `0x221C` bit `0x04` (`x221C_b5`, “detection/inert hitbox touching shield bubble”): decomp sets
+  `victim_fp->x221C_b5 = true` during the fighter-vs-fighter collision pass only on the shield-overlap branch for `HitElement_Inert`
+  (`refs/melee/src/melee/ft/ftcoll.c::ftColl_80078C70`), and clears it in the post-collision consumer
+  (`refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC`). See `docs/DECOMP_PROC_ORDER.md`.
+  - **Current sim approximation**: we set this bit on any shield-overlap contact we resolve (not just `HitElement_Inert`) until we model the
+    full decomp collision bookkeeping paths.
 
 **Seed-only passthrough (currently)**
 - All other `state_flags` bits are passed through from the seed to output unchanged (even if the sim consults them as gates).
