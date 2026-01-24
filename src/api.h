@@ -465,6 +465,8 @@ int msl_batch_debug_set_hitbox_world(MslBatch* batch, int batch_index, int playe
                                      float damage, int enabled);
 int msl_batch_debug_set_hitbox_flags(MslBatch* batch, int batch_index, int player_index,
                                      int hitbox_id, uint16_t hitbox_flags);
+int msl_batch_debug_set_hitbox_element(MslBatch* batch, int batch_index, int player_index,
+                                       int hitbox_id, uint8_t element);
 int msl_batch_debug_clear_hurtcaps_world(MslBatch* batch, int batch_index, int player_index);
 int msl_batch_debug_set_hurtcap_world(MslBatch* batch, int batch_index, int player_index,
                                       int hurtcap_id, float ax, float ay, float az, float bx,

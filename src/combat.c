@@ -9,6 +9,7 @@
 #include "buttons.h"
 #include "combat_geom.h"
 #include "common_params.h"
+#include "hit_elements.h"
 #include "hitboxes_tables.h"
 #include "hit_status_tables.h"
 
@@ -322,12 +323,20 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
   const int num_players = (int)batch->config.num_players;
 
   // Clear the Slippi `state_flags` bit for "detection hitbox touching shield bubble" at the start
-  // of the frame. Set when we resolve a shield contact below.
+  // of this combat pass. Set only when we observe an inert (HitElement_Inert) hitbox overlapping a
+  // shield bubble below.
+  //
+  // Note (approximation): GALE01 clears `fp->x221C_b5` from Fighter_ProcessHit_8006D1EC, but this
+  // simulator does not currently model a separate "ProcessHit" stage after combat_resolve(). We
+  // clear here so the bit represents overlaps observed in the most recent combat_resolve() call.
   //
   // Decomp-first references (GALE01):
-  // - The collision loop sets the hitbox-owner flag `victim_fp->x221C_b5 = true` when a detection
-  //   (inert) hitbox intersects a shield bubble:
-  //   refs/melee/src/melee/ft/ftcoll.c (main fighter-vs-fighter loop).
+  // - Set site (inert shield-overlap branch):
+  //   refs/melee/src/melee/ft/ftcoll.c::ftColl_80078C70
+  //     `victim_fp->x221C_b5 = true;` under `temp_r23->element == HitElement_Inert` and
+  //     `lbColl_80007BCC(..., &this_fp->shield_hit, ...) != false`.
+  // - HitElement enum:
+  //   refs/melee/src/melee/lb/forward.h::HitElement (HitElement_Inert)
   // - Fighter_ProcessHit clears `fp->x221C_b5 = 0` as part of per-frame damage/collision cleanup:
   //   refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC.
   // - Bitfield layout at fp+0x221C is documented in refs/melee/src/melee/ft/types.h.
@@ -455,10 +464,6 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
           const float hy = batch->state.hitbox_y[hb_i] + a_shift_y;
           const float hz = batch->state.hitbox_z[hb_i];
           const float hr = batch->state.hitbox_radius[hb_i];
-          const float hdmg = batch->state.hitbox_damage[hb_i];
-          if (!(hdmg > 0.0f)) {
-            continue;
-          }
 
           // Rehit suppression: if we latched a hit for this (attacker, defender) with this msid,
           // suppress repeats for this attacker→defender pair until hitboxes clear or msid changes.
@@ -470,6 +475,31 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
           }
 
           if (!sphere_sphere_intersects(hx, hy, hz, hr, shx + d_shift_x, shy + d_shift_y, shz, shr)) {
+            continue;
+          }
+
+          const uint8_t element = batch->state.hitbox_element[hb_i];
+          if (element == (uint8_t)MSL_HIT_ELEMENT_INERT) {
+            // Slippi post-frame bit 0x221C:0x04 (GALE01): owner's detection hitbox touching shield.
+            // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
+            //
+            // Decomp (GALE01) sets this on inert (HitElement_Inert) shield overlaps only:
+            // refs/melee/src/melee/ft/ftcoll.c::ftColl_80078C70
+            const size_t a_flags_i =
+                a_idx * MSL_STATE_FLAGS_STRIDE + (size_t)MSL_STATE_FLAGS_221C_INDEX;
+            batch->state.state_flags[a_flags_i] |=
+                (uint8_t)MSL_STATE_FLAG_221C_DETECT_HITBOX_TOUCHING_SHIELD;
+
+            // Decomp does not take the normal shield-hit path for inert hitboxes
+            // (`if (element != HitElement_Inert) ftColl_80076CBC(...); else x221C_b5=true`).
+            // refs/melee/src/melee/ft/ftcoll.c::ftColl_80078C70
+            //
+            // Keep shield HP depletion / GuardSetOff / hitlag logic unchanged for non-inert hits.
+            continue;
+          }
+
+          const float hdmg = batch->state.hitbox_damage[hb_i];
+          if (!(hdmg > 0.0f)) {
             continue;
           }
 
@@ -486,12 +516,6 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
           // Combat Mutations Pass 1 (SHIELD-only).
           combat_mutations_pass1_future_apply_shield_hit(
               batch, a_idx, d_idx, int_dmg, tmp_dmg, msid);
-
-          // `state_flags` bit: owners detection hitbox touching shield bubble (attacker side).
-          const size_t a_flags_i =
-              a_idx * MSL_STATE_FLAGS_STRIDE + (size_t)MSL_STATE_FLAGS_221C_INDEX;
-          batch->state.state_flags[a_flags_i] |=
-              (uint8_t)MSL_STATE_FLAG_221C_DETECT_HITBOX_TOUCHING_SHIELD;
 
           batch->state.combat_rehit_active[pair] = 1;
           batch->state.combat_rehit_hitbox_id[pair] = (uint8_t)hb_id;

@@ -1429,6 +1429,34 @@ static PyObject* msl_debug_set_hitbox_flags_py(PyObject* self, PyObject* args) {
   Py_RETURN_NONE;
 }
 
+static PyObject* msl_debug_set_hitbox_element_py(PyObject* self, PyObject* args) {
+  (void)self;
+  PyObject* handle_obj = NULL;
+  int batch_index = 0;
+  int player_index = 0;
+  int hitbox_id = 0;
+  unsigned int element = 0;
+  if (!PyArg_ParseTuple(args, "OiiiI", &handle_obj, &batch_index, &player_index, &hitbox_id,
+                        &element)) {
+    return NULL;
+  }
+  PyMslHandle* h = unpack_handle(handle_obj);
+  if (h == NULL) {
+    return NULL;
+  }
+  if (element > 0xFFu) {
+    PyErr_SetString(PyExc_ValueError, "element out of range");
+    return NULL;
+  }
+  const int err = msl_batch_debug_set_hitbox_element(h->batch, batch_index, player_index, hitbox_id,
+                                                     (uint8_t)element);
+  if (err != 0) {
+    PyErr_Format(PyExc_ValueError, "msl_batch_debug_set_hitbox_element failed: %d", err);
+    return NULL;
+  }
+  Py_RETURN_NONE;
+}
+
 static PyObject* msl_debug_clear_hurtcaps_world_py(PyObject* self, PyObject* args) {
   (void)self;
   PyObject* handle_obj = NULL;
@@ -2051,6 +2079,8 @@ static PyMethodDef methods[] = {
      "enabled=1)"},
     {"debug_set_hitbox_flags", msl_debug_set_hitbox_flags_py, METH_VARARGS,
      "debug_set_hitbox_flags(handle, batch_index, player_index, hitbox_id, hitbox_flags_u16)"},
+    {"debug_set_hitbox_element", msl_debug_set_hitbox_element_py, METH_VARARGS,
+     "debug_set_hitbox_element(handle, batch_index, player_index, hitbox_id, element_u8)"},
     {"debug_clear_hurtcaps_world", msl_debug_clear_hurtcaps_world_py, METH_VARARGS,
      "debug_clear_hurtcaps_world(handle, batch_index, player_index)"},
     {"debug_set_hurtcap_world", msl_debug_set_hurtcap_world_py, METH_VARARGS,

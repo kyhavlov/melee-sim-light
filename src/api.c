@@ -1044,6 +1044,31 @@ int msl_batch_debug_set_hitbox_flags(MslBatch* batch, int batch_index, int playe
   return 0;
 }
 
+int msl_batch_debug_set_hitbox_element(MslBatch* batch, int batch_index, int player_index,
+                                       int hitbox_id, uint8_t element) {
+  if (batch == NULL) {
+    return EINVAL;
+  }
+  if (batch_index < 0 || batch_index >= batch->batch_size) {
+    return EINVAL;
+  }
+  if (player_index < 0 || player_index >= MSL_MAX_PLAYERS) {
+    return EINVAL;
+  }
+  if (hitbox_id < 0 || hitbox_id >= MSL_MAX_HITBOXES) {
+    return EINVAL;
+  }
+
+  const size_t hb_i = debug_idx_hitbox(batch_index, player_index, hitbox_id);
+  // Keep both the raw extracted field and decoded mirror consistent for debug-set primitives.
+  //
+  // src/hitboxes_tables.h: MSLHITB1 u16_4 packs (element low 8 | shield_damage high 8).
+  const uint16_t u16_4 = batch->state.hitbox_u16_4[hb_i];
+  batch->state.hitbox_u16_4[hb_i] = (uint16_t)((u16_4 & 0xFF00u) | (uint16_t)element);
+  batch->state.hitbox_element[hb_i] = element;
+  return 0;
+}
+
 int msl_batch_debug_clear_hurtcaps_world(MslBatch* batch, int batch_index, int player_index) {
   if (batch == NULL) {
     return EINVAL;
