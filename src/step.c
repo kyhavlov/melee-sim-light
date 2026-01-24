@@ -28,6 +28,9 @@ int step_one_frame(MslBatch* batch, const uint8_t* prev_input_bytes, size_t prev
   // We follow that by updating timers before applying inputs/advancing state.
   timers_update(batch);
 
+  // Decomp-shaped "ProcessHit" consume / cleanup (see combat_processhit_consume for references).
+  combat_processhit_consume(batch);
+
   int err = 0;
   err = input_apply(batch, prev_input_bytes, prev_input_stride_bytes, input_bytes,
                     input_stride_bytes);

@@ -322,36 +322,10 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
   }
   const int num_players = (int)batch->config.num_players;
 
-  // Clear the Slippi `state_flags` bit for "detection hitbox touching shield bubble" at the start
-  // of this combat pass. Set only when we observe an inert (HitElement_Inert) hitbox overlapping a
-  // shield bubble below.
-  //
-  // Note (approximation): GALE01 clears `fp->x221C_b5` from Fighter_ProcessHit_8006D1EC, but this
-  // simulator does not currently model a separate "ProcessHit" stage after combat_resolve(). We
-  // clear here so the bit represents overlaps observed in the most recent combat_resolve() call.
-  //
-  // Decomp-first references (GALE01):
-  // - Set site (inert shield-overlap branch):
-  //   refs/melee/src/melee/ft/ftcoll.c::ftColl_80078C70
-  //     `victim_fp->x221C_b5 = true;` under `temp_r23->element == HitElement_Inert` and
-  //     `lbColl_80007BCC(..., &this_fp->shield_hit, ...) != false`.
-  // - HitElement enum:
-  //   refs/melee/src/melee/lb/forward.h::HitElement (HitElement_Inert)
-  // - Fighter_ProcessHit clears `fp->x221C_b5 = 0` as part of per-frame damage/collision cleanup:
-  //   refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC.
-  // - Bitfield layout at fp+0x221C is documented in refs/melee/src/melee/ft/types.h.
-  //
-  // Slippi post-frame: `lbz r3,0x221C(REG_PlayerData)  #0x4 = owners detection hitbox touching shield bubble`.
-  // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
+  // Slippi post-frame `state_flags` includes fp+0x221C bits at byte index 3.
   enum { MSL_STATE_FLAGS_STRIDE = MSL_STATE_FLAGS_BYTES };
   enum { MSL_STATE_FLAGS_221C_INDEX = 3 };
   enum { MSL_STATE_FLAG_221C_DETECT_HITBOX_TOUCHING_SHIELD = 0x04 };
-  for (int p = 0; p < num_players; p++) {
-    const size_t idx = msl_idx_player(bi, p);
-    const size_t flags_i = idx * MSL_STATE_FLAGS_STRIDE + (size_t)MSL_STATE_FLAGS_221C_INDEX;
-    batch->state.state_flags[flags_i] &=
-        (uint8_t)~(uint8_t)MSL_STATE_FLAG_221C_DETECT_HITBOX_TOUCHING_SHIELD;
-  }
 
   for (int attacker = 0; attacker < num_players; attacker++) {
     const size_t a_idx = msl_idx_player(bi, attacker);
@@ -488,14 +462,17 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
 
           const uint8_t element = batch->state.hitbox_element[hb_i];
           if (element == (uint8_t)MSL_HIT_ELEMENT_INERT) {
-            // Slippi post-frame bit 0x221C:0x04 (GALE01): owner's detection hitbox touching shield.
+            // Slippi post-frame bit 0x221C:0x04 (GALE01): detection hitbox touching shield bubble.
             // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
             //
             // Decomp (GALE01) sets this on inert (HitElement_Inert) shield overlaps only:
             // refs/melee/src/melee/ft/ftcoll.c::ftColl_80078C70
-            const size_t a_flags_i =
-                a_idx * MSL_STATE_FLAGS_STRIDE + (size_t)MSL_STATE_FLAGS_221C_INDEX;
-            batch->state.state_flags[a_flags_i] |=
+            //   `victim_fp->x221C_b5 = true;`
+            //
+            // Set on the victim/defender (the fighter whose shield bubble was overlapped).
+            const size_t d_flags_i =
+                d_idx * MSL_STATE_FLAGS_STRIDE + (size_t)MSL_STATE_FLAGS_221C_INDEX;
+            batch->state.state_flags[d_flags_i] |=
                 (uint8_t)MSL_STATE_FLAG_221C_DETECT_HITBOX_TOUCHING_SHIELD;
 
             // Decomp does not take the normal shield-hit path for inert hitboxes:
@@ -855,6 +832,40 @@ static void combat_select_body_hits_one_debug(const MslBatch* batch, int bi,
   }
 
   *inout_written = written;
+}
+
+void combat_processhit_consume(MslBatch* batch) {
+  if (batch == NULL) {
+    return;
+  }
+
+  // Clear the Slippi `state_flags` bit for "detection hitbox touching shield bubble" once per
+  // fighter at a decomp-shaped "ProcessHit" consume point.
+  //
+  // Decomp-first references (GALE01):
+  // - Set site (inert shield-overlap branch): refs/melee/src/melee/ft/ftcoll.c::ftColl_80078C70
+  //     `victim_fp->x221C_b5 = true;` under `temp_r23->element == HitElement_Inert` and
+  //     `lbColl_80007BCC(..., &this_fp->shield_hit, ...) != false`.
+  // - Clear site: refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
+  //     clears `fp->x221C_b5 = 0`.
+  // - Bitfield layout at fp+0x221C is documented in refs/melee/src/melee/ft/types.h.
+  //
+  // In this simulator, collision detection (combat_resolve) can set this bit on inert shield
+  // overlaps; this consume stage clears it on the next frame, matching the intent that the bit
+  // represents overlaps observed in the most recent collision pass.
+  enum { MSL_STATE_FLAGS_STRIDE = MSL_STATE_FLAGS_BYTES };
+  enum { MSL_STATE_FLAGS_221C_INDEX = 3 };
+  enum { MSL_STATE_FLAG_221C_DETECT_HITBOX_TOUCHING_SHIELD = 0x04 };
+
+  const int num_players = (int)batch->config.num_players;
+  for (int bi = 0; bi < batch->batch_size; bi++) {
+    for (int p = 0; p < num_players; p++) {
+      const size_t idx = msl_idx_player(bi, p);
+      const size_t flags_i = idx * MSL_STATE_FLAGS_STRIDE + (size_t)MSL_STATE_FLAGS_221C_INDEX;
+      batch->state.state_flags[flags_i] &=
+          (uint8_t)~(uint8_t)MSL_STATE_FLAG_221C_DETECT_HITBOX_TOUCHING_SHIELD;
+    }
+  }
 }
 
 void combat_resolve(MslBatch* batch) {

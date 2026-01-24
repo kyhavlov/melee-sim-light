@@ -532,7 +532,9 @@ def test_combat_resolve_non_inert_shield_overlap_does_not_set_detect_hitbox_flag
         out = _read_compare(handle)
 
         flags_221c_p0 = int(out["state_flags"][0, 3])
+        flags_221c_p1 = int(out["state_flags"][1, 3])
         assert (flags_221c_p0 & STATE_FLAG_221C_DETECT_HITBOX_TOUCHING_SHIELD) == 0
+        assert (flags_221c_p1 & STATE_FLAG_221C_DETECT_HITBOX_TOUCHING_SHIELD) == 0
     finally:
         msl_binding.destroy(handle)
         del handle
@@ -579,7 +581,9 @@ def test_combat_resolve_inert_shield_overlap_sets_detect_hitbox_flag() -> None:
         out = _read_compare(handle)
 
         flags_221c_p0 = int(out["state_flags"][0, 3])
-        assert (flags_221c_p0 & STATE_FLAG_221C_DETECT_HITBOX_TOUCHING_SHIELD) != 0
+        flags_221c_p1 = int(out["state_flags"][1, 3])
+        assert (flags_221c_p0 & STATE_FLAG_221C_DETECT_HITBOX_TOUCHING_SHIELD) == 0
+        assert (flags_221c_p1 & STATE_FLAG_221C_DETECT_HITBOX_TOUCHING_SHIELD) != 0
     finally:
         msl_binding.destroy(handle)
         del handle
@@ -634,7 +638,9 @@ def test_combat_resolve_inert_shield_overlap_does_not_apply_shield_hit_mutations
 
         # Inert overlap sets only the Slippi post-frame flag (x221C_b5 / 0x04).
         flags_221c_p0 = int(out1["state_flags"][0, 3])
-        assert (flags_221c_p0 & STATE_FLAG_221C_DETECT_HITBOX_TOUCHING_SHIELD) != 0
+        flags_221c_p1 = int(out1["state_flags"][1, 3])
+        assert (flags_221c_p0 & STATE_FLAG_221C_DETECT_HITBOX_TOUCHING_SHIELD) == 0
+        assert (flags_221c_p1 & STATE_FLAG_221C_DETECT_HITBOX_TOUCHING_SHIELD) != 0
 
         # ...and does not apply normal shield-hit mutations (HP depletion, GuardSetOff, hitlag).
         hp1 = float(out1["shield_hp"][1])
@@ -689,14 +695,54 @@ def test_combat_resolve_detect_hitbox_flag_is_cleared_on_next_combat_pass() -> N
         msl_binding.debug_combat_resolve(handle)
         out1 = _read_compare(handle)
         flags_221c_p0_1 = int(out1["state_flags"][0, 3])
-        assert (flags_221c_p0_1 & STATE_FLAG_221C_DETECT_HITBOX_TOUCHING_SHIELD) != 0
+        flags_221c_p1_1 = int(out1["state_flags"][1, 3])
+        assert (flags_221c_p0_1 & STATE_FLAG_221C_DETECT_HITBOX_TOUCHING_SHIELD) == 0
+        assert (flags_221c_p1_1 & STATE_FLAG_221C_DETECT_HITBOX_TOUCHING_SHIELD) != 0
 
-        # Second combat pass (no overlaps): the per-pass clear should remove it.
+        # Second combat pass (no overlaps): the decomp-shaped ProcessHit consume should clear it.
         msl_binding.debug_clear_hitboxes_world(handle, 0, 0)
         msl_binding.debug_combat_resolve(handle)
         out2 = _read_compare(handle)
         flags_221c_p0_2 = int(out2["state_flags"][0, 3])
+        flags_221c_p1_2 = int(out2["state_flags"][1, 3])
         assert (flags_221c_p0_2 & STATE_FLAG_221C_DETECT_HITBOX_TOUCHING_SHIELD) == 0
+        assert (flags_221c_p1_2 & STATE_FLAG_221C_DETECT_HITBOX_TOUCHING_SHIELD) == 0
+    finally:
+        msl_binding.destroy(handle)
+        del handle
+
+
+def test_step_input_clears_detect_hitbox_flag_next_frame() -> None:
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    assert seed_stride == SEED_DTYPE.itemsize
+    assert input_stride == INPUT_DTYPE.itemsize
+
+    handle = msl_binding.init(batch_size=1, num_players=2)
+    try:
+        # Seed the bit as if it had been set by a previous frame's collision pass.
+        seed = _seed_base()
+        seed["state_flags"][0, 1, 3] = np.uint8(STATE_FLAG_221C_DETECT_HITBOX_TOUCHING_SHIELD)
+        seed_bytes = seed.view(np.uint8).reshape((1, seed_stride))
+        msl_binding.reseed_seed(handle, seed_bytes)
+
+        neutral = np.zeros((1, input_stride), dtype=np.uint8)
+
+        # Frame N: the decomp-shaped "ProcessHit consume" runs at the start of the frame and
+        # clears x221C_b5/0x04 before the post-step state is written.
+        msl_binding.step_input(handle, neutral, neutral)
+        out1 = _read_compare(handle)
+        flags_221c_p1_1 = int(out1["state_flags"][1, 3])
+        assert (flags_221c_p1_1 & STATE_FLAG_221C_DETECT_HITBOX_TOUCHING_SHIELD) == 0
+
+        # Frame N+1: remains clear in the normal step path when there are no new inert overlaps.
+        msl_binding.step_input(handle, neutral, neutral)
+        out2 = _read_compare(handle)
+        flags_221c_p1_2 = int(out2["state_flags"][1, 3])
+        assert (flags_221c_p1_2 & STATE_FLAG_221C_DETECT_HITBOX_TOUCHING_SHIELD) == 0
     finally:
         msl_binding.destroy(handle)
         del handle

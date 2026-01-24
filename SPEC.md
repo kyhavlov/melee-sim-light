@@ -161,8 +161,9 @@ sim-owned**:
   `victim_fp->x221C_b5 = true` during the fighter-vs-fighter collision pass only on the shield-overlap branch for `HitElement_Inert`
   (`refs/melee/src/melee/ft/ftcoll.c::ftColl_80078C70`), and clears it in the post-collision consumer
   (`refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC`). See `docs/DECOMP_PROC_ORDER.md`.
-  - **Current sim approximation**: we set this bit on any shield-overlap contact we resolve (not just `HitElement_Inert`) until we model the
-    full decomp collision bookkeeping paths.
+  - **Sim timing semantics (decomp-shaped)**: this bit is set during `combat_resolve()` when we observe an inert (`HitElement_Inert`) shield
+    overlap, and cleared by `combat_processhit_consume()` at the start of the *next* sim frame (our stand-in for
+    `Fighter_ProcessHit_8006D1EC`). As a result, it is visible in the post-step output for one frame.
 
 **Seed-only passthrough (currently)**
 - All other `state_flags` bits are passed through from the seed to output unchanged (even if the sim consults them as gates).

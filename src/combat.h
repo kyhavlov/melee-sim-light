@@ -3,6 +3,7 @@
 #include "batch_internal.h"
 
 void combat_resolve(MslBatch* batch);
+void combat_processhit_consume(MslBatch* batch);
 
 // Debug/testing helper: run combat pass-1 selection (BODY-only, shield-safe, with rehit
 // suppression) and write selected contacts into `out_contacts`.

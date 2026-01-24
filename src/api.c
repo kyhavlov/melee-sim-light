@@ -1204,6 +1204,7 @@ int msl_batch_debug_combat_resolve(MslBatch* batch) {
   if (batch == NULL) {
     return EINVAL;
   }
+  combat_processhit_consume(batch);
   combat_resolve(batch);
   return 0;
 }
