@@ -4,6 +4,7 @@
 
 #include "anim_frame.h"
 #include "anim_pose.h"
+#include "hit_status_tables.h"
 #include "hurtbox_modes_tables.h"
 #include "hurtcaps_tables.h"
 
@@ -64,20 +65,45 @@ void hurtboxes_refresh(MslBatch* batch) {
       }
 
       const uint8_t char_id = batch->state.char_id[idx];
+
+      const uint32_t anim_u32 = batch->state.animation_index[idx];
+
+      // Partial sim-owned hurtbox_state:
+      // - If movescript-derived hit status (x1988) is nonzero, overwrite hurtbox_state with it.
+      // - Otherwise, preserve passthrough (represents x198C in Slippi's send policy when x1988==0).
+      uint8_t hit_status = 0;
+      uint8_t have_hit_status_override = 0;
+      if (batch->debug_hit_status_override != NULL) {
+        const uint8_t ov = batch->debug_hit_status_override[idx];
+        if (ov != 0xFFu) {
+          hit_status = ov;
+          have_hit_status_override = 1;
+        }
+      }
+
+      if (anim_u32 > 0xFFFFu) {
+        if (hit_status != 0) {
+          batch->state.hurtbox_state[idx] = hit_status;
+        }
+        continue;
+      }
+
+      const uint16_t msid = (uint16_t)anim_u32;
+      const float anim_frame_f32 = msl_anim_frame_sanitize_f32(batch->state.anim_frame_f32[idx]);
+      const uint16_t frame = msl_anim_frame_floor_u16(anim_frame_f32);
+
+      if (!have_hit_status_override) {
+        (void)hit_status_get(char_id, msid, frame, &hit_status);
+      }
+      if (hit_status != 0) {
+        batch->state.hurtbox_state[idx] = hit_status;
+      }
+
       const MslHurtCap* caps = NULL;
       uint16_t cap_count_u16 = 0;
       if (hurtcaps_get(char_id, &caps, &cap_count_u16) != 0 || caps == NULL || cap_count_u16 == 0) {
         continue;
       }
-
-      const uint32_t anim_u32 = batch->state.animation_index[idx];
-      if (anim_u32 > 0xFFFFu) {
-        continue;
-      }
-      const float anim_frame_f32 = msl_anim_frame_sanitize_f32(batch->state.anim_frame_f32[idx]);
-
-      const uint16_t msid = (uint16_t)anim_u32;
-      const uint16_t frame = msl_anim_frame_floor_u16(anim_frame_f32);
       uint16_t cap_count = cap_count_u16;
       if (cap_count > (uint16_t)MSL_MAX_HURTCAPS) {
         cap_count = (uint16_t)MSL_MAX_HURTCAPS;

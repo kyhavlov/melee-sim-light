@@ -544,7 +544,7 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
       // - refs/melee/src/melee/ft/ftcoll.c (main collision loop) gates hurtbox checks on
       //   this_fp->x1988/x198C (e.g. `!= 2` branch around hitbox-vs-hurtcapsule checks).
       //
-      // We treat nonzero seeded `hurtbox_state` as not eligible for BODY hits for now.
+      // We treat nonzero `hurtbox_state` (seeded and/or sim-owned) as not eligible for BODY hits for now.
       if (batch->state.hurtbox_state[d_idx] != 0) {
         continue;
       }
@@ -706,7 +706,7 @@ static void combat_select_body_hits_one_debug(const MslBatch* batch, int bi,
       // - refs/melee/src/melee/ft/ftcoll.c (main collision loop) gates hurtbox checks on
       //   this_fp->x1988/x198C (e.g. `!= 2` branch around hitbox-vs-hurtcapsule checks).
       //
-      // We treat nonzero seeded `hurtbox_state` as not eligible for BODY hits for now.
+      // We treat nonzero `hurtbox_state` (seeded and/or sim-owned) as not eligible for BODY hits for now.
       if (batch->state.hurtbox_state[d_idx] != 0) {
         continue;
       }
