@@ -118,6 +118,16 @@ pipeline (including any required prior-frame state) and/or once we validate orde
   - shield interaction (see next section)
 
 **Combat Mutations (Pass 1, current)**
+
+## Facing Rotation Note (World Primitives)
+
+Decomp applies fighter facing by rotating the root part about Y (e.g. `ftPartSetRotY(fp, 0, (M_PI_2 * fp->facing_dir))`), which would
+mix X/Z for pose-derived world primitives (hurtcaps, hitboxes, shields). However, our current extracted SSANIM matrices and/or extracted
+offset tables appear to already assume a different coordinate basis: naively applying an additional facing Y-rotation worsened one-step
+metrics (notably `mismatch.hitlag`) in our current replay suite.
+
+Current policy remains “mirror X only” for these primitives. Revisit facing Y-rotation only after we prove the SSANIM axis mapping end-to-end
+for matrices + hitbox/hurtcap/shield offsets.
 - **BODY-only**: world-space hitbox spheres vs world-space hurtcap capsules, with existing grounded/airborne gating.
 - **Shield-safe**: if a hitbox overlaps the defender shield bubble, that (attacker, defender, hitbox_id) is treated as SHIELD
   and does not apply BODY mutations.
