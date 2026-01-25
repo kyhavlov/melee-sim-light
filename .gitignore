@@ -21,7 +21,9 @@ replays/**/*.slp
 datasets/
 
 # Extracted game data (generated; keep local)
-data/
+data/**
+!data/common/
+!data/common/ft_common_data.json
 
 # Build outputs / caches (future-proof)
 build/

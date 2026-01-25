@@ -72,21 +72,21 @@ typedef struct MslCommonParams {
   // Source of truth: `data/common/ft_common_data.json` extractor comments map these to ftCommonData.
   // Guard pose update smoothing (ftCo_Guard.c::ftCo_80091BC4).
   float guard_stick_lerp_x44c;  // p_ftCommonData->guard_stick_lerp_x44c (0x44C)
-  float start_shield_health;        // p_ftCommonData->x260 (start_shield_health)
+  float start_shield_health;    // p_ftCommonData->x260 (start_shield_health)
   // Shield size scaling (refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::inlineB0)
   float shield_size_lightshield_min;  // p_ftCommonData->x2D4 (shield_size_lightshield_min)
   float shield_size_lightshield_max;  // p_ftCommonData->x2D8 (shield_size_lightshield_max)
   float shield_size_min_scale;        // p_ftCommonData->x264 (shield_size_min_scale)
-  float shield_recharge_per_frame;  // p_ftCommonData->x27C (shield_recharge_per_frame)
-  float shield_hold_drain_mul;      // p_ftCommonData->x278 (shield_hold_drain_mul)
-  float shield_hold_drain_base;     // p_ftCommonData->x2EC (shield_hold_drain_base)
-  float shield_hold_drain_max;      // p_ftCommonData->x2F0 (shield_hold_drain_max)
+  float shield_recharge_per_frame;    // p_ftCommonData->x27C (shield_recharge_per_frame)
+  float shield_hold_drain_mul;        // p_ftCommonData->x278 (shield_hold_drain_mul)
+  float shield_hold_drain_base;       // p_ftCommonData->x2EC (shield_hold_drain_base)
+  float shield_hold_drain_max;        // p_ftCommonData->x2F0 (shield_hold_drain_max)
 
   // Shield HP depletion on hit (blocking).
   // Decomp: refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
   // - shield_health -= x284 * (shieldDamageTaken*(1 - (lightshield_amount*(x2E0-x2DC)+x2DC))) + x288
-  float shield_hit_damage_mul;  // p_ftCommonData->x284
-  float shield_hit_damage_base; // p_ftCommonData->x288
+  float shield_hit_damage_mul;       // p_ftCommonData->x284
+  float shield_hit_damage_base;      // p_ftCommonData->x288
   float shield_hit_lightshield_min;  // p_ftCommonData->x2DC
   float shield_hit_lightshield_max;  // p_ftCommonData->x2E0
 
@@ -126,6 +126,47 @@ typedef struct MslCommonParams {
   float hitlag_dmg_mul;    // p_ftCommonData->x198
   float hitlag_base;       // p_ftCommonData->x19C
   float hitlag_squat_mul;  // p_ftCommonData->x1A0
+
+  // Knockback + Damage state entry helpers (subset).
+  //
+  // Decomp pointers:
+  // - refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0 (Damage state entry)
+  // - refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_CalcKnockback (kb_squat_mul/kb_min)
+  // - refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_CheckAirMotion (air motion KB mul)
+  // - refs/melee/build/GALE01/asm/melee/ft/ftcoll.s::ftColl_80079EA8 (kb magnitude)
+  float kb_weight_mul;   // p_ftCommonData->0xF4
+  float kb_weight_mul2;  // p_ftCommonData->0xF8
+  float kb_applied_max;  // p_ftCommonData->0x108
+  float kb_base_term;    // p_ftCommonData->0x110
+  float kb_dmg_mul;      // p_ftCommonData->0x114
+  float kb_wsk_mul;      // p_ftCommonData->0x118
+  float kb_growth_mul;   // p_ftCommonData->0x11C
+  float kb_base_add;     // p_ftCommonData->0x120
+  float kb_vel_mul;    // p_ftCommonData->x100
+  float kb_min;        // p_ftCommonData->x104
+  float kb_squat_mul;  // p_ftCommonData->x124
+
+  // Hitstun scaling + severity thresholds (ftCo_Damage.c).
+  float damage_hitstun_mul;    // p_ftCommonData->0x154
+  float damage_severity_x158;  // p_ftCommonData->0x158
+  float damage_severity_x15c;  // p_ftCommonData->0x15C
+  float damage_severity_x160;  // p_ftCommonData->0x160
+
+  // DamageFlyTop angle window (radians) (ftCo_8008DCE0 block_33).
+  float damagefly_top_angle_min_radians;  // p_ftCommonData->0x234
+  float damagefly_top_angle_max_radians;  // p_ftCommonData->0x238
+
+  // Sakurai angle (hitbox angle 361) constants.
+  float sakurai_air_radians;     // p_ftCommonData->x144_radians
+  float sakurai_ground_deg_max;  // p_ftCommonData->x148 (degrees)
+  float sakurai_kb_threshold;    // p_ftCommonData->x14C
+  float sakurai_kb_max;          // p_ftCommonData->x150
+
+  // "Air motion" KB velocity multiplier gate (ftCo_Damage_CheckAirMotion).
+  float air_motion_kb_mul;          // p_ftCommonData->x190
+  uint8_t air_motion_max_frames;    // p_ftCommonData->x18C
+  uint8_t tech_lr_debounce_frames;  // p_ftCommonData->x1C
+  uint8_t _pad_u8_kb_0[2];
 } MslCommonParams;
 
 int common_params_init(void);

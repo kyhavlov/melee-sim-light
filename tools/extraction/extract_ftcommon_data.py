@@ -21,6 +21,8 @@ def _f32_be(buf: bytes, off: int) -> float:
 
 
 def main() -> None:
+    # Note: `data/common/ft_common_data.json` is tracked. Re-run this extractor after any changes
+    # here (or when switching ISO) so the committed constants stay in sync.
     ap = argparse.ArgumentParser(description="Extract ftCommonData constants from PlCo.dat (decomp-first).")
     ap.add_argument(
         "--plco",
@@ -206,11 +208,30 @@ def main() -> None:
         # - `mv.co.guard.x4 = x44C * (stick_mag - x4) + x4`
         "guard_stick_lerp_x44c": float(_f32_be(buf, ft_common_abs + 0x44C)),
         # Knockback + hitlag constants (ftCo_Damage / fighter.c / ftCommon_CalcHitlag)
+        #
+        # Collision knockback magnitude constants (ftColl_80079EA8):
+        # refs/melee/build/GALE01/asm/melee/ft/ftcoll.s::ftColl_80079EA8
+        # refs/melee/src/melee/ft/ftcoll.h::ftColl_80079EA8
+        "kb_weight_mul": float(_f32_be(buf, ft_common_abs + 0xF4)),
+        "kb_weight_mul2": float(_f32_be(buf, ft_common_abs + 0xF8)),
+        "kb_applied_max": float(_f32_be(buf, ft_common_abs + 0x108)),
+        "kb_base_term": float(_f32_be(buf, ft_common_abs + 0x110)),
+        "kb_dmg_mul": float(_f32_be(buf, ft_common_abs + 0x114)),
+        "kb_wsk_mul": float(_f32_be(buf, ft_common_abs + 0x118)),
+        "kb_growth_mul": float(_f32_be(buf, ft_common_abs + 0x11C)),
+        "kb_base_add": float(_f32_be(buf, ft_common_abs + 0x120)),
         # - ftCo_Damage_CalcVel merges new kb_vel with existing kb_vel when `time_since_hit >= xFC`.
         "kb_vel_merge_since_hit_frames": int(_i32_be(buf, ft_common_abs + 0xFC)),
         "kb_vel_mul": float(_f32_be(buf, ft_common_abs + 0x100)),
         "kb_min": float(_f32_be(buf, ft_common_abs + 0x104)),
         "kb_squat_mul": float(_f32_be(buf, ft_common_abs + 0x124)),
+        # Hitstun scaling + damage severity thresholds (ftCo_Damage.c):
+        # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_ScaleBy154
+        # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008D8E8
+        "damage_hitstun_mul": float(_f32_be(buf, ft_common_abs + 0x154)),
+        "damage_severity_x158": float(_f32_be(buf, ft_common_abs + 0x158)),
+        "damage_severity_x15c": float(_f32_be(buf, ft_common_abs + 0x15C)),
+        "damage_severity_x160": float(_f32_be(buf, ft_common_abs + 0x160)),
         # DamageFly landings (ftCo_DamageFly_Coll): thresholds on |kb_vel| for DownBound vs Landing.
         "damagefly_downbound_kb_vel_threshold": float(_f32_be(buf, ft_common_abs + 0x1E0)),
         "damagefly_landing_kb_vel_threshold": float(_f32_be(buf, ft_common_abs + 0x1E4)),
@@ -218,6 +239,10 @@ def main() -> None:
         # `mv.co.damage.x14` is set to the current timer `x0`, and subsequent IASA frames inject
         # `input.x668 |= HSD_PAD_XY` while `x14 <= x1D0`.
         "damage_jump_buffer_window_frames": int(round(float(_f32_be(buf, ft_common_abs + 0x1D0)))),
+        # DamageFlyTop angle window (radians).
+        # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0 (block_33)
+        "damagefly_top_angle_min_radians": float(_f32_be(buf, ft_common_abs + 0x234)),
+        "damagefly_top_angle_max_radians": float(_f32_be(buf, ft_common_abs + 0x238)),
         # Sakurai angle constants (ftCo_Damage_CalcAngle; for hitbox angle=361)
         "sakurai_air_radians": float(_f32_be(buf, ft_common_abs + 0x144)),
         "sakurai_ground_deg_max": float(_f32_be(buf, ft_common_abs + 0x148)),

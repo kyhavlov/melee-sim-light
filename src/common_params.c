@@ -211,7 +211,33 @@ int common_params_init(void) {
           0 ||
       json_get_f32(buf, "hitlag_dmg_mul", &g_params.hitlag_dmg_mul) != 0 ||
       json_get_f32(buf, "hitlag_base", &g_params.hitlag_base) != 0 ||
-      json_get_f32(buf, "hitlag_squat_mul", &g_params.hitlag_squat_mul) != 0) {
+      json_get_f32(buf, "hitlag_squat_mul", &g_params.hitlag_squat_mul) != 0 ||
+      json_get_f32(buf, "kb_weight_mul", &g_params.kb_weight_mul) != 0 ||
+      json_get_f32(buf, "kb_weight_mul2", &g_params.kb_weight_mul2) != 0 ||
+      json_get_f32(buf, "kb_applied_max", &g_params.kb_applied_max) != 0 ||
+      json_get_f32(buf, "kb_base_term", &g_params.kb_base_term) != 0 ||
+      json_get_f32(buf, "kb_dmg_mul", &g_params.kb_dmg_mul) != 0 ||
+      json_get_f32(buf, "kb_wsk_mul", &g_params.kb_wsk_mul) != 0 ||
+      json_get_f32(buf, "kb_growth_mul", &g_params.kb_growth_mul) != 0 ||
+      json_get_f32(buf, "kb_base_add", &g_params.kb_base_add) != 0 ||
+      json_get_f32(buf, "kb_vel_mul", &g_params.kb_vel_mul) != 0 ||
+      json_get_f32(buf, "kb_min", &g_params.kb_min) != 0 ||
+      json_get_f32(buf, "kb_squat_mul", &g_params.kb_squat_mul) != 0 ||
+      json_get_f32(buf, "damage_hitstun_mul", &g_params.damage_hitstun_mul) != 0 ||
+      json_get_f32(buf, "damage_severity_x158", &g_params.damage_severity_x158) != 0 ||
+      json_get_f32(buf, "damage_severity_x15c", &g_params.damage_severity_x15c) != 0 ||
+      json_get_f32(buf, "damage_severity_x160", &g_params.damage_severity_x160) != 0 ||
+      json_get_f32(buf, "damagefly_top_angle_min_radians",
+                   &g_params.damagefly_top_angle_min_radians) != 0 ||
+      json_get_f32(buf, "damagefly_top_angle_max_radians",
+                   &g_params.damagefly_top_angle_max_radians) != 0 ||
+      json_get_f32(buf, "sakurai_air_radians", &g_params.sakurai_air_radians) != 0 ||
+      json_get_f32(buf, "sakurai_ground_deg_max", &g_params.sakurai_ground_deg_max) != 0 ||
+      json_get_f32(buf, "sakurai_kb_threshold", &g_params.sakurai_kb_threshold) != 0 ||
+      json_get_f32(buf, "sakurai_kb_max", &g_params.sakurai_kb_max) != 0 ||
+      json_get_f32(buf, "air_motion_kb_mul", &g_params.air_motion_kb_mul) != 0 ||
+      json_get_u8(buf, "air_motion_max_frames", &g_params.air_motion_max_frames) != 0 ||
+      json_get_u8(buf, "tech_lr_debounce_frames", &g_params.tech_lr_debounce_frames) != 0) {
     alloc_free(buf);
     return -1;
   }
