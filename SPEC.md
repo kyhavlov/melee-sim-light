@@ -43,7 +43,7 @@ The initial observation schema should be compatible with `slippi-ai`’s `Game` 
 
 Important implication: because `slippi-ai` consumes a **one-hot action id** (size `0x18F`), this sim must maintain an **action/state machine with GALE01 action ids** (at least for the states reachable by Fox/Falco on FD), not just “coarse locomotion.”
 
-## Scope (v1)
+## Scope (Initial Target)
 
 ### Domain
 
@@ -55,13 +55,13 @@ Important implication: because `slippi-ai` consumes a **one-hot action id** (siz
 
 ### Required Gameplay Systems
 
-To reach “90–95% like real Melee” for the target domain, v1 must include:
+To reach “90–95% like real Melee” for the target domain, the initial target must include:
 
 1) **Input processing**
 - Digital buttons and analog sticks sampled at frame boundaries.
 - Configurable “legalization”/clamping consistent with controller conventions.
 - **UCF is enabled by default** (because it applies to essentially all modern replay data we will validate against).
-  - Include a feature flag for **“UCF 1.0 cardinals”** (more recent/niche) since suites may differ.
+  - “UCF 1.0 cardinals” should be treated as suite/dataset configuration (more recent/niche), not an ad-hoc gameplay toggle.
 
 2) **Action/state machine (GALE01 action ids)**
 - Action ids are stored per player and updated each frame.
@@ -95,17 +95,15 @@ To reach “90–95% like real Melee” for the target domain, v1 must include:
 ### FD Grounding Notes (ECB-bottom)
 
 Current FD grounding uses an ECB-bottom proxy derived from extracted animation matrices. This improves false `on_ground`
-vs using root `pos_y`, but there are two **explicit teacher-forcing compatibility hacks** in the current implementation
-to avoid expanding the reseed schema while we are still in one-step eval mode:
+vs using root `pos_y`. The current implementation is decomp-shaped in two important ways:
 
-- **dy==0 + prev_on_ground: skip y constraint**: if the fighter had `prev_on_ground=1` and root `dy==0`, we do not require
-  `y_bot` to be within epsilon of the surface for a segment to be considered. This prevents spurious de-grounding when the
-  ECB offset changes due to pose/animation but we do not track `prev_ecb_off` in the seed state.
-- **Landing-frame vel_y preservation**: on the air→ground transition frame, we preserve the pre-collision `speed_y_self`
-  (which can remain negative in Slippi post-frames) and only zero `speed_y_self` on the subsequent grounded frame.
+- Grounding comparisons use **previous-frame ECB** when comparing pre/post integration positions (similar to how mpColl uses
+  `prev_ecb` vs `ecb`), so pose-driven ECB changes do not spuriously de-ground grounded actions when root `dy==0`.
+- On the *landing* frame (air→ground), we preserve pre-collision `speed_y_self` (which can remain negative in Slippi
+  post-frames) and only zero it on the subsequent grounded frame.
 
-These are not intended to be relied on as “mechanics”; they should be revisited once we model a more faithful ECB/collision
-pipeline (including any required prior-frame state) and/or once we validate ordering against decomp more directly.
+There are still teacher-forcing conveniences (to tolerate minor seed alignment error), but they are intended to be bounded
+and decomp-motivated rather than arbitrary heuristics.
 
 5) **Combat**
 - Hurtboxes/hitboxes extracted from character animation/move files:
@@ -117,17 +115,7 @@ pipeline (including any required prior-frame state) and/or once we validate orde
   - DI (goal: close to real; only simplify once extremely close)
   - shield interaction (see next section)
 
-**Combat Mutations (Pass 1, current)**
-
-## Facing Rotation Note (World Primitives)
-
-Decomp applies fighter facing by rotating the root part about Y (e.g. `ftPartSetRotY(fp, 0, (M_PI_2 * fp->facing_dir))`), which would
-mix X/Z for pose-derived world primitives (hurtcaps, hitboxes, shields). However, our current extracted SSANIM matrices and/or extracted
-offset tables appear to already assume a different coordinate basis: naively applying an additional facing Y-rotation worsened one-step
-metrics (notably `mismatch.hitlag`) in our current replay suite.
-
-Current policy remains “mirror X only” for these primitives. Revisit facing Y-rotation only after we prove the SSANIM axis mapping end-to-end
-for matrices + hitbox/hurtcap/shield offsets.
+### Combat Mutations (current)
 - **BODY-only**: world-space hitbox spheres vs world-space hurtcap capsules, with existing grounded/airborne gating.
 - **Shield-safe**: if a hitbox overlaps the defender shield bubble, that (attacker, defender, hitbox_id) is treated as SHIELD
   and does not apply BODY mutations.
@@ -154,9 +142,19 @@ for matrices + hitbox/hurtcap/shield offsets.
     multiple active hitboxes would otherwise re-hit immediately after hitlag ends.
   - Latch clear rules (current): clears on full hitbox clear (`hitbox_count==0`), attacker msid change, or defender instance_id
     change; it does not clear when a specific hitbox_id is disabled.
-  - Missing decomp pieces: per-hitbox hitlist entries, rehit-rate timers, hitbox refresh ordering vs collision, clanks/trades,
-    and full hurtbox eligibility (intangibility, thrown-fighter rules, etc.). These need to be added before enabling percent /
-    knockback / hitstun mutations.
+- Missing decomp pieces: per-hitbox hitlist entries, rehit-rate timers, hitbox refresh ordering vs collision, clanks/trades,
+    and full hurtbox eligibility (intangibility, thrown-fighter rules, etc.). These are required to make BODY/SHIELD
+    mutations (percent/KB/hitstun/shield HP) consistently correct; we currently accept imperfections here while building out
+    the missing bookkeeping.
+
+#### Facing rotation note (world primitives)
+
+Decomp applies fighter facing by rotating the root part about Y (e.g. `ftPartSetRotY(fp, 0, (M_PI_2 * fp->facing_dir))`),
+which would mix X/Z for pose-derived world primitives (hurtcaps, hitboxes, shields). In this project we currently treat the
+game as effectively 2.5D and apply facing as “mirror X only” for these pose-derived primitives.
+
+Revisit true Y-rotation only after we prove the SSANIM axis mapping end-to-end for matrices + offset tables (see
+`docs/SSANIM_AXIS_BASIS.md`).
 
 ### `state_flags` Ownership (seed vs derived)
 
@@ -167,6 +165,7 @@ sim-owned**:
 **Sim-owned derived outputs (overwritten by the sim each step)**
 - `0x221A` bit `0x20` (`isHitlag`): derived from `hitlag > 0` (kept consistent when combat applies hitlag and as timers decrement).
 - `0x221B` bit `0x80` (`isShieldActive`): derived from whether the shield bubble is active (`shield_radius > 0`).
+- `0x221C` bit `0x02` (`isHitstun`): derived from `hitstun > 0` (kept consistent as combat applies hitstun and as timers decrement).
 - `0x221C` bit `0x04` (`x221C_b5`, “detection/inert hitbox touching shield bubble”): decomp sets
   `victim_fp->x221C_b5 = true` during the fighter-vs-fighter collision pass only on the shield-overlap branch for `HitElement_Inert`
   (`refs/melee/src/melee/ft/ftcoll.c::ftColl_80078C70`), and clears it in the post-collision consumer
@@ -178,7 +177,6 @@ sim-owned**:
 **Seed-only passthrough (currently)**
 - All other `state_flags` bits are passed through from the seed to output unchanged (even if the sim consults them as gates).
   Examples:
-  - `0x221C` bit `0x02` (`isHitstun`) is used as a gate for hitstun decrement timing, but is not mutated by the sim yet.
   - `0x221C` bit `0x20` (powershield active) is consulted for shield-damage gating, but is not mutated by the sim yet.
 
 6) **Shield**
@@ -187,10 +185,10 @@ sim-owned**:
 - Roll/spotdodge out of shield.
   - Not modeled yet: EscapeF/EscapeB root-motion (`fp->x6A4_transNOffset`) and mid-roll facing flip (`ftCheckThrowB3`); we currently apply friction-only and use anim-end to return to Wait.
   - Not modeled yet: escape invincibility / hurtbox state changes during EscapeN/EscapeF/EscapeB.
-- **Known approximation (current): shield bubble center** is currently approximated at fighter `(pos_x, pos_y, z=0)` and ignores:
-  - shield joint placement / per-character offsets (decomp: `ftColl_8007B1B8` stores `shield_hit.bone` + `shield_hit.offset`; refs/melee/src/melee/ft/ftcoll.c:1370-1383)
-  - shield tilting / TransN-driven orientation (refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c)
-  This will matter once SHIELD contacts gate real combat / shield pokes.
+- Shield bubble center is **data-driven** from ISO-derived shield-tilt tables and sim guard-tilt state.
+  Remaining approximations:
+  - We do not yet model the full `shield_hit.bone` + `shield_hit.offset` semantics used in collision (`ftColl_8007B1B8`; refs/melee/src/melee/ft/ftcoll.c:1370-1383).
+  - We do not yet model full 3D rotation/TransN/root-motion for shield placement (see `docs/SSANIM_AXIS_BASIS.md`).
 
 7) **Projectiles (lasers)**
 - Spawn and integrate laser entities.
@@ -198,11 +196,11 @@ sim-owned**:
 
 ## What “Approximate” Means Here
 
-Allowed approximations (v1):
+Allowed approximations (Initial Target / RL 1.0):
 - Do not match 1-ULP float results; use stable FP but prioritize consistent ordering.
 - Very fine-grained mechanics (SDI/ASDI nuances, shield angle/pokes, etc.) may be deferred **only after** core behavior is already extremely close and the remaining work is dominated by tiny float/ordering details.
 
-Disallowed approximations (v1):
+Disallowed approximations (Initial Target / RL 1.0):
 - Replacing GALE01 action ids with coarse categories in the observation.
 - Omitting ledge interaction entirely on FD.
 - Omitting shield, hitlag, or hitstun (policies strongly depend on these).
@@ -213,21 +211,16 @@ Disallowed approximations (v1):
 
 - `SSBM.iso` (or extracted `_iso/` directory).
 
-### Outputs (checked-in small JSON/binary; large assets ignored)
+### Outputs (generated ISO-derived artifacts)
 
-- `data/stages/final_destination.*`:
-  - collision geometry (polylines/segments) + ledge metadata + blast zones
-  - coordinate system definition (origin, units, axes) consistent across engine
-- `data/characters/fox.*`, `data/characters/falco.*`:
-  - per-action animation metadata (duration, keyframes, bones)
-  - per-action hurtbox sets and hitbox sets per frame (or per keyframe interval)
-  - movement parameters used by actions (where encoded in files)
-- `data/common/*`:
-  - physics constants and shared parameters
+- `data/**` is treated as generated and is gitignored by default.
+  - Exception: `data/common/ft_common_data.json` is tracked (small, deterministic, and a canonical constants source).
+- Prefer `.bin` artifacts for new extracted tables (exact bytes; avoids JSON typing issues). JSON is acceptable only when it is
+  small and intentionally human-readable.
 
-Extraction scripts must be deterministic and versioned:
-- Same ISO → same extracted outputs (byte-for-byte) for a given extractor version.
-- Any manual overrides go into a clearly separated overlay file (e.g. `data/overrides/*.json`).
+Extraction scripts must be deterministic and reproducible:
+- Same ISO inputs → same extracted outputs (byte-for-byte) for a given extractor.
+- If an extractor changes, regenerate the corresponding artifacts; avoid mixing gameplay changes and extraction changes in a single review step.
 
 ## Simulation Model
 
@@ -241,7 +234,8 @@ Extraction scripts must be deterministic and versioned:
 
 ### Per-frame update order (must be fixed)
 
-One frame of `step()` should be ordered deterministically. Proposed order:
+One frame of `step()` must be ordered deterministically. The canonical implementation order lives in `src/step.c` (see also
+`docs/DECOMP_PROC_ORDER.md` for decomp context). The list below is a conceptual breakdown of phases:
 
 1. Sample inputs → compute per-player intents (buttons edges, stick direction, triggers).
 2. Resolve global timers (match timer not needed, but per-entity timers are).
@@ -328,17 +322,15 @@ Process:
    - **Reseed** the simulator state from the replay-derived reference state at frame `t` (as close as possible to the real engine state representation we model).
    - Apply the replay’s recorded inputs for frame `t` and run exactly one `step()` to predict frame `t+1`.
    - Compare simulator outputs for `t+1` against the replay-derived reference at `t+1`.
-3. Build the **same embedded observation vector** used by `slippi-ai` for both:
-   - reference: from replay states (`slippi-ai` parsing/embedding)
-   - sim: from simulator state mapped to the same schema
-4. Compute metrics and regressions over the suite.
+3. Compute metrics and regressions over the suite from direct field comparisons.
+4. Optionally, compute the `slippi-ai` embedded observation vectors for both sides as an additional “will the model break?”
+   lens (not the primary correctness target).
 
 Notes:
 - This is “teacher-forced” evaluation: it answers “is our one-step transition function correct on the support of real gameplay states?”
 - Reseeding must be deterministic and should avoid “cheating” by copying fields that the simulator is supposed to derive (e.g., if we track derived timers, we should seed only what is observable/authoritative for that frame).
 
 Known teacher-forcing limitations (must be tracked and eventually removed, not treated as “engine truth”):
-Notes:
 - Input-history tilt timers (`x670`/`x671`), TURN internals (`frames_to_turn`/`has_turned`), and KneeBend internals (`jump_input`/`is_short_hop`) are derived during preprocessing and are part of the seed schema.
 - TURN seeding uses a causal derivation that does not look ahead to future facing flips; it includes a **deterministic assumption** that `ftCo_Turn_Anim_Inner` applies once on the entry frame (matching the sim’s update ordering). Do **not** tune this assumption via one-step mismatch metrics; revisit it once richer entry-history seeding lands.
 - FallSpecial mode `mv.co.fallspecial.xC` is not present in Slippi post-frame data. We currently seed it with a **best-effort inference** from the reseeded state (default `xC=1`; set `xC=0` when `fall_fast==0` and reseeded `speed_y_self < -terminal_vel`). This is decomp-motivated (see `ftCo_FallSpecial_Phys` branch structure), but still an inference; do **not** tune it against one-step metrics.
@@ -351,7 +343,7 @@ Metrics (initial):
 - Event alignment: stock loss within ±N frames; hit events within ±N frames (if detectable from replay).
 - Items/projectiles (optional early): presence + kinematics on a fixed-capacity set of slots (stable ordering by instance id).
 
-Acceptance for “v1 usable” should be expressed as thresholds on these metrics over a fixed suite.
+Acceptance should be expressed as thresholds on these metrics over a fixed suite.
 
 ### A2) Short-horizon rollout windows (stretch goal)
 
@@ -382,58 +374,138 @@ Run policy in the simulator for ~5–20 seconds and assert:
 - no stuck states (e.g., action id frozen forever)
 - action distribution not degenerate (e.g., always “do nothing”)
 
-## Milestones
+## RL 1.0 Roadmap
 
-1. **Scaffold**
-   - Extract FD collision + Fox/Falco move/anim/hitbox data from ISO into stable files.
-   - Implement batched core state + deterministic step loop skeleton.
-2. **Locomotion parity (behavioral)**
-   - Idle/walk/dash/run/turn, jump/fall/landing, fastfall, ledge grab/hang/getup.
-3. **Combat core**
-   - Hitboxes/hurtboxes from extracted data, hitlag/hitstun/knockback/DI, shield.
-4. **Lasers**
-   - Spawn/integrate/collide and apply damage/knockback.
-5. **Evaluation harness**
-   - Replay-driven observation parity + policy-consistency scoring with a fixed suite.
-6. **Doubles enablement**
-   - Turn on `num_players=4` with teams; verify invariants and performance.
+### RL 1.0 Definition (What “Good Enough for RL” Means)
 
-## Coverage & Initialization Targets
+RL 1.0 means this simulator can be used as a primary training environment for Fox/Falco on Final Destination (2 players)
+without the game dynamics becoming obviously “not Melee” for competent policies.
 
-- **Action coverage (v1)**: include every GALE01 action state that appears in the Fox/Falco FD validation suite (and keep this list current as the suite evolves).
-- **Start state**: match the real match start state as closely as possible so we can seed a recurrent policy’s hidden state by replaying the exact match-start prefix it expects.
+RL 1.0 acceptance criteria
 
-## Mechanics Inventory (prioritized backlog)
+- Deterministic: identical input streams produce identical outputs.
+- Performance: no allocations after init; batched/SoA hot path; stable step cost.
+- 4p-ready: all logic works for num_players ∈ {2,4} without rewriting systems; only config limits differ.
+- Data-driven: core physics/constants and all stage/character/movescript-derived geometry/tables come from ISO-derived artifacts.
+- Validation:
+  - One-step suite eval remains the primary gate (teacher-forced).
+  - RL 1.0 does not require full rollout parity, but must avoid obvious “explosions” (e.g., percent/KB/hitstun diverging wildly in normal exchanges).
 
-Maintain a running prioritized list of mechanics (the intent is to eventually support everything; ordering is for execution planning).
-Add newly discovered mechanics here immediately (even if we’re not ready to implement them yet), and keep priorities updated as we learn what matters for suites/models.
+### Workflow Rule (Core for RL 1.0)
 
-Highest priority (policy-critical / always exercised):
-- Input sampling + **UCF** (baseline) + optional “UCF 1.0 cardinals”
-- UCF 0.84 pad-buffer emulation (stateful): per-port ring buffer + `sdrop_up_frames` are seedable (dashback/shielddrop/OoS fixes should consume this later without teacher-forcing hacks)
-- Suite-driven action coverage: auto-extract GALE01 `action_id`s present in the suite and implement those first (keep the extracted set checked-in and updated)
-- Match start + respawn/death: initial timers/flags, stocks decrement rules, blast zones, respawn platform + invulnerability windows (for stable reseeding + policy hidden-state warmup)
-- Timer semantics: hitlag/hitstun/action_frame increment/skip rules; landing lag + IASA/interrupt gating; “frozen” vs “advancing” phases
-- FD collision + ledges + blast zones (from stage files)
-- ECB-like collision proxy and grounded/ledge gating (aim very close to real; only simplify as a last resort)
-- Animation/subaction driving: per-action timeline + animation frame progression aligned to timers/interrupt rules
-- Anim/script timebase (`anim_frame_f32`): seeded from Slippi post-frame `state_age` (fp->cur_anim_frame float). Today we maintain it approximately by applying integer `action_frame` deltas during `step()` and resetting to `0.0f` on action enters (does **not** yet model decomp `fp->frame_speed_mul` fractional carry / hitlag coupling). Negative/NaN is treated as `0.0f` for move-script sampling and pose indexing.
-- Hurtbox/hitbox attachment to extracted animation/bone transforms (including TransN/root motion when applicable)
-- Hitlag, hitstun, knockback, tumble, DI (and damage/percent application)
-- Shield core (hp/decay, shieldstun, pushback) + out-of-shield options
-- Lasers (projectile core)
-- Grabs: grab boxes, hold, pummel, throws, throw trajectories/DI, mash-out rules
-- Specials (Fox/Falco): shine, lasers, side-B, up-B (including key edge cases like shorten/firefox angles)
+Reach RL 1.0 by completing coherent vertical slices (match flow → locomotion → defense → combat/damage → specials/grabs → ledge/tech),
+rather than enabling one-off mutations that depend on missing upstream bookkeeping.
 
-Medium priority (important but can follow once core is stable):
-- SDI / ASDI / smash DI nuances
-- Techs (in-place/roll), missed-tech bounces, jab resets, **Amsah tech** behavior near ledge
-- Shield angling / poke behavior
-- Edge cases around ledge intangibility windows and ledge regrab rules
-- Exact invulnerability sources (respawn, ledge, moves)
+### Planning Gate: “Suite Coverage List”
 
-Lower priority / domain expansion:
-- Items beyond lasers
-- More stages (platforms, slopes, Randall, moving collisions)
-- More characters
-- Doubles-specific mechanics (team hit rules, teammate collision nuances)
+Before claiming RL 1.0, maintain a current list of:
+
+- All unique `action_id` values present in the suite (seed_t and ref_t1).
+- All unique `animation_index` (submotion) values present in the suite.
+- A mapping of those ids → names (from GALE01 `forward.h`) → implementation status in this repo.
+
+(There is already tooling to list suite action_ids: `tools/eval/list_suite_action_ids.py`.)
+
+Coverage & initialization targets:
+- Action coverage: include every GALE01 action state that appears in the Fox/Falco FD validation suite (and keep this list current as the suite evolves).
+- Start state: match the real match start state as closely as possible so we can seed a recurrent policy’s hidden state by replaying the exact match-start prefix it expects.
+
+### Systems Inventory (Running List, Prioritized)
+
+This is a living, comprehensive list of Melee-relevant systems. Any time we become aware of a missing mechanic, add it here and place it at the right priority.
+
+#### P0 — Must-have for RL 1.0 (target domain: Fox/Falco FD)
+
+1) Match flow / state sequencing
+- Match start sequence / Ready-Go timing (for RNN warmup seeding).
+- Stock loss, death, respawn, invulnerability, spawn positioning.
+- Blastzones + KO rules (FD).
+- Rollback handling: we validate on finalized frames only.
+
+2) Input pipeline (UCF-on; suite-configured)
+- Stick/button sampling at frame boundaries; legalization/clamp/deadzone consistent with validation datasets.
+- UCF behavior that affects gameplay in this suite (dashback, shielddrop/pad buffer, and cardinals if the suite uses them).
+- Input-history counters/timers that gate locomotion/defense/cancels (keep these as explicit seeded internals as needed).
+
+3) Action/state machine + timebases
+- Core action-state transitions for all action_ids present in the suite (see Planning Gate above).
+- Animation/script timebase:
+  - `anim_frame_f32` is seeded from Slippi post-frame `state_age` (`fp->cur_anim_frame` float).
+  - Current sim policy: advance it approximately via integer `action_frame` deltas during stepping and reset to `0.0f` on action enters.
+  - Missing: decomp `fp->frame_speed_mul` fractional carry and exact coupling with hitlag; do not “tune” around this with heuristics.
+
+4) Locomotion + physics core
+- Ground/air movement, friction/traction, gravity/terminal velocity, fastfall, jumps (incl. double jump).
+- Landing transitions and landing lag handling.
+
+5) Stage collision + ECB fidelity
+- FD ground/ledge/blastzone geometry from stage files.
+- ECB-like grounding/ledge gating close enough to avoid false landings/false airborne.
+- Stable `ground_id` behavior (segment/line identity).
+
+6) Defense
+- Shield bubble placement/tilt, HP drain/recharge, shieldstun / GuardSetOff.
+- Grounded OoS options used by suite: roll, spotdodge, jump, airdodge, etc.
+- Powershield gating behavior as needed by suite (don’t tune; decomp-first).
+
+7) Combat geometry
+- Hurtcapsules (pose-driven world endpoints, eligibility/modes, hit status).
+- Hitboxes (movescript-driven, pose/world placement, flags/attrs).
+- Shield bubble overlap classification and priority.
+
+8) Damage pipeline (coherent)
+- Body hits: percent accumulation, hitlag, hitstun, knockback velocity, damage state entry.
+- Shield hits: shield HP depletion, GuardSetOff, hitlag inputs, inert/detection hitboxes behavior.
+- Rehit/hitlist semantics closer than the current conservative pair latch (per-hitbox hitlists + timers).
+- Stale-move queue + damage multipliers (decomp-first).
+- “No damage”/armor/metal/other gating required for Fox/Falco suite correctness.
+
+9) Fox/Falco full moveset coverage (suite-first)
+- All moves (A + B) whose action states appear in the suite must be implemented with correct transitions/cancel windows.
+- Special moves (B moves) for Fox/Falco are explicitly in-scope for RL 1.0.
+
+10) Grabs/throws
+- Grab, pummel, throws, release rules (at least what appears in the suite).
+- Grab interactions can dominate policy behavior; missing this makes RL “not Melee” quickly.
+
+11) Projectiles/items needed by suite
+- Fox/Falco lasers at minimum (spawn/update/hit).
+- Other items only if they appear in the suite; expand later.
+
+#### P1 — Strongly preferred for RL 1.0 (often suite-dependent)
+
+- Ledge system completeness: cliff catch, occupancy, cliff options, invuln windows, refresh rules.
+- Knockdown/tumble/tech options (tech in place/roll/miss tech, getups).
+- DI/SDI/ASDI (defer only if everything else is already extremely close; keep decomp-first plan).
+- Tech nuance: Amsah tech near ledge (high policy impact; suite-dependent).
+
+#### P2 — Stretch / post-1.0
+
+- Short-horizon rollout parity (open-loop) on a subset of the suite.
+- 4p doubles-specific interactions (team damage rules, teammate collision nuances, simultaneous collision priority).
+- Broader stage roster and character roster.
+
+### Milestones (Suggested Order)
+
+M0 Foundation (already in progress)
+- One-step suite validation loop, seeded internals, deterministic stepping, no hot-path allocs.
+
+M1 Match flow
+- Match start/respawn/death/invuln/blastzones wired into the state machine.
+
+M2 Locomotion completeness for suite
+- Ensure all suite action_ids can be entered, updated, and exited without “getting stuck”.
+- Ensure `action_frame` / `anim_frame_f32` semantics are consistent enough for movescript sampling.
+
+M3 Defense completeness for suite
+- Shield + OoS + airdodge + core defensive interrupts.
+
+M4 Combat/damage coherence
+- Treat percent/KB/hitstun/action-entry as one coherent pipeline (avoid piecemeal).
+- Replace conservative rehit pair latch with per-hitbox hitlists/timers.
+
+M5 Special moves + grabs
+- Implement all Fox/Falco specials and grab system needed by suite.
+
+M6 Ledge/tech/knockdown
+- Add what the suite exercises; broaden as needed for RL plausibility.
