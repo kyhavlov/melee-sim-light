@@ -224,6 +224,18 @@ static inline void combat_mutations_pass1_future_apply_body_hit(MslBatch* batch,
   if (dmg_i == 0) {
     return;
   }
+
+  // Combat Mutations Pass 2A (BODY damage → percent, future; disabled).
+  //
+  // Keep this decomp pointer handy for when we enable percent mutation:
+  // - refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC applies float percent damage via
+  //     `Fighter_UnkTakeDamage_8006CC30(fp, fp->dmg.x1838_percentTemp);`
+  // - refs/melee/src/melee/ft/fighter.c::Fighter_TakeDamage_8006CC7C does
+  //     `fp->dmg.x1830_percent += damage_amount;` then clamps to `999.0f`.
+  //
+  // Approximation note (future): GALE01 applies stale-move, damage multipliers, armor/metal health,
+  // and various "no damage" flags before the add; we do not model those yet.
+
   const uint16_t d_motion_id = batch->state.action_id[d_idx];
 
   const uint16_t a_hl = combat_calc_hitlag_frames(c, dmg_i, attacker_motion_id);
@@ -686,8 +698,7 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
             continue;
           }
           // Combat Mutations Pass 1 (BODY-only).
-          combat_mutations_pass1_future_apply_body_hit(batch, a_idx, d_idx, attacker, int_dmg,
-                                                       a_motion_id);
+          combat_mutations_pass1_future_apply_body_hit(batch, a_idx, d_idx, attacker, int_dmg, a_motion_id);
 
           batch->state.combat_rehit_active[pair] = 1;
           batch->state.combat_rehit_hitbox_id[pair] = (uint8_t)hb_id;
