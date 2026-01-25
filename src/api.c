@@ -301,14 +301,17 @@ int msl_batch_reseed_seed(MslBatch* batch, const uint8_t* seed_bytes, size_t see
     }
 
     // Combat rehit suppression latch is part of the reseed schema (teacher-forced one-step eval).
-    const size_t pair_base =
-        (size_t)bi * (size_t)MSL_MAX_PLAYERS * (size_t)MSL_MAX_PLAYERS;
+    const size_t pair_base = (size_t)bi * (size_t)MSL_MAX_PLAYERS * (size_t)MSL_MAX_PLAYERS;
     for (int attacker = 0; attacker < MSL_MAX_PLAYERS; attacker++) {
       for (int defender = 0; defender < MSL_MAX_PLAYERS; defender++) {
-        const size_t pair = pair_base + (size_t)attacker * (size_t)MSL_MAX_PLAYERS + (size_t)defender;
-        batch->state.combat_rehit_active[pair] = seed->combat_rehit_active[attacker][defender] ? 1 : 0;
-        batch->state.combat_rehit_hitbox_id[pair] = seed->combat_rehit_hitbox_id[attacker][defender];
-        batch->state.combat_rehit_attacker_msid[pair] = seed->combat_rehit_attacker_msid[attacker][defender];
+        const size_t pair =
+            pair_base + (size_t)attacker * (size_t)MSL_MAX_PLAYERS + (size_t)defender;
+        batch->state.combat_rehit_active[pair] =
+            seed->combat_rehit_active[attacker][defender] ? 1 : 0;
+        batch->state.combat_rehit_hitbox_id[pair] =
+            seed->combat_rehit_hitbox_id[attacker][defender];
+        batch->state.combat_rehit_attacker_msid[pair] =
+            seed->combat_rehit_attacker_msid[attacker][defender];
         batch->state.combat_rehit_defender_instance_id[pair] =
             seed->combat_rehit_defender_instance_id[attacker][defender];
       }
@@ -928,7 +931,7 @@ int msl_batch_debug_combat_contacts_classified_filtered(
 }
 
 int msl_batch_debug_shield_bubbles_world(const MslBatch* batch, int batch_index,
-                                        float* out_xyzw_4p) {
+                                         float* out_xyzw_4p) {
   if (batch == NULL || out_xyzw_4p == NULL) {
     return EINVAL;
   }
@@ -1069,6 +1072,44 @@ int msl_batch_debug_set_hitbox_element(MslBatch* batch, int batch_index, int pla
   return 0;
 }
 
+int msl_batch_debug_set_hitbox_kb_params(MslBatch* batch, int batch_index, int player_index,
+                                         int hitbox_id, uint16_t angle_deg, uint16_t kbg,
+                                         uint16_t wsk, uint16_t bkb) {
+  if (batch == NULL) {
+    return EINVAL;
+  }
+  if (batch_index < 0 || batch_index >= batch->batch_size) {
+    return EINVAL;
+  }
+  if (player_index < 0 || player_index >= MSL_MAX_PLAYERS) {
+    return EINVAL;
+  }
+  if (hitbox_id < 0 || hitbox_id >= MSL_MAX_HITBOXES) {
+    return EINVAL;
+  }
+
+  const size_t hb_i = debug_idx_hitbox(batch_index, player_index, hitbox_id);
+
+  // Keep both the raw extracted u16 tail and the decoded mirrors consistent.
+  //
+  // src/hitboxes_tables.h: MSLHITB1 u16 tail layout:
+  // - u16_0: angle (degrees; 361 == Sakurai angle)
+  // - u16_1: kbg
+  // - u16_2: wsk
+  // - u16_3: bkb
+  batch->state.hitbox_u16_0[hb_i] = angle_deg;
+  batch->state.hitbox_u16_1[hb_i] = kbg;
+  batch->state.hitbox_u16_2[hb_i] = wsk;
+  batch->state.hitbox_u16_3[hb_i] = bkb;
+
+  batch->state.hitbox_angle[hb_i] = angle_deg;
+  batch->state.hitbox_kbg[hb_i] = kbg;
+  batch->state.hitbox_wsk[hb_i] = wsk;
+  batch->state.hitbox_bkb[hb_i] = bkb;
+
+  return 0;
+}
+
 int msl_batch_debug_clear_hurtcaps_world(MslBatch* batch, int batch_index, int player_index) {
   if (batch == NULL) {
     return EINVAL;
@@ -1136,8 +1177,28 @@ int msl_batch_debug_set_hurtcap_world(MslBatch* batch, int batch_index, int play
   return 0;
 }
 
+int msl_batch_debug_set_hurtcap_height(MslBatch* batch, int batch_index, int player_index,
+                                       int hurtcap_id, uint8_t height) {
+  if (batch == NULL) {
+    return EINVAL;
+  }
+  if (batch_index < 0 || batch_index >= batch->batch_size) {
+    return EINVAL;
+  }
+  if (player_index < 0 || player_index >= MSL_MAX_PLAYERS) {
+    return EINVAL;
+  }
+  if (hurtcap_id < 0 || hurtcap_id >= MSL_MAX_HURTCAPS) {
+    return EINVAL;
+  }
+
+  const size_t cap_i = debug_idx_hurtcap(batch_index, player_index, hurtcap_id);
+  batch->state.hurtcap_height[cap_i] = height;
+  return 0;
+}
+
 int msl_batch_debug_set_hurtcap_enabled(MslBatch* batch, int batch_index, int player_index,
-                                       int hurtcap_id, int enabled) {
+                                        int hurtcap_id, int enabled) {
   if (batch == NULL) {
     return EINVAL;
   }
@@ -1173,7 +1234,7 @@ int msl_batch_debug_set_hitlag(MslBatch* batch, int batch_index, int player_inde
 }
 
 int msl_batch_debug_set_hit_status_override(MslBatch* batch, int batch_index, int player_index,
-                                           int status) {
+                                            int status) {
   if (batch == NULL) {
     return EINVAL;
   }

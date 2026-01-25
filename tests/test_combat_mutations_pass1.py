@@ -9,6 +9,7 @@ from tools.eval.dataset import COMPARE_DTYPE, INPUT_DTYPE, SEED_DTYPE
 
 # src/hitboxes_tables.h (MSLHITB1 u16_6 bits)
 HIT_GROUNDED = 1 << 9
+HIT_AERIAL = 1 << 10
 
 # HitElement ids (GALE01): refs/melee/src/melee/lb/forward.h::HitElement
 HIT_ELEMENT_NORMAL = 0
@@ -25,9 +26,13 @@ ACT_WAIT = 0x000E
 ACT_SQUAT = 0x0027
 ACT_SQUAT_WAIT = 0x0028
 ACT_GUARD_SET_OFF = 0x00B5
+ACT_DAMAGE_N1 = 0x004E
+ACT_DAMAGE_AIR1 = 0x0054
 
 # Submotion ids (GALE01): refs/melee/src/melee/ft/chara/ftCommon/forward.h
 SM_WAIT1_0 = 2
+SM_DAMAGE_N1 = 168
+SM_DAMAGE_AIR1 = 174
 
 CHAR_FOX = 1
 STAGE_FD = 32
@@ -223,6 +228,153 @@ def test_combat_resolve_body_overlap_applies_squat_hitlag_mul() -> None:
 
         assert int(out["hitlag"][0]) == exp_attacker
         assert int(out["hitlag"][1]) == exp_defender
+    finally:
+        msl_binding.destroy(handle)
+        del handle
+
+
+def test_combat_resolve_body_overlap_applies_percent_knockback_hitstun_and_enters_damage() -> None:
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    seed_stride = int(sizes["seed"])
+    compare_stride = int(sizes["compare"])
+    assert seed_stride == SEED_DTYPE.itemsize
+    assert compare_stride == COMPARE_DTYPE.itemsize
+
+    handle = msl_binding.init(batch_size=1, num_players=2)
+    try:
+        seed = _seed_base()
+        seed["pos_x"][0, 0] = np.float32(0.0)
+        seed["pos_x"][0, 1] = np.float32(1.0)
+        seed_bytes = seed.view(np.uint8).reshape((1, seed_stride))
+        msl_binding.reseed_seed(handle, seed_bytes)
+
+        # Overlap + grounded eligibility.
+        msl_binding.debug_clear_hitboxes_world(handle, 0, 0)
+        msl_binding.debug_set_hitbox_world(handle, 0, 0, 0, 1.0, 0.0, 0.0, 1.0, 5.0, 1)
+        msl_binding.debug_set_hitbox_flags(handle, 0, 0, 0, int(HIT_GROUNDED))
+        # Low-KB horizontal hit: angle=0, KBG=0 => kb_applied ~= BKB.
+        msl_binding.debug_set_hitbox_kb_params(handle, 0, 0, 0, 0, 0, 0, 20)
+
+        msl_binding.debug_clear_hurtcaps_world(handle, 0, 1)
+        msl_binding.debug_set_hurtcap_world(handle, 0, 1, 0, 0.5, 0.0, 0.0, 1.5, 0.0, 0.0, 0.5)
+        # Mid hurt height => DamageN* group.
+        msl_binding.debug_set_hurtcap_height(handle, 0, 1, 0, 1)
+
+        msl_binding.debug_combat_resolve(handle)
+        out = _read_compare(handle)
+
+        assert float(out["percent"][1]) == 5.0
+        assert float(out["speed_x_attack"][1]) > 0.0
+        assert float(out["speed_y_attack"][1]) == 0.0
+        assert int(out["hitstun"][1]) > 0
+        assert int(out["action_id"][1]) == ACT_DAMAGE_N1
+        assert int(out["animation_index"][1]) == SM_DAMAGE_N1
+        assert int(out["action_frame"][1]) == 0
+    finally:
+        msl_binding.destroy(handle)
+        del handle
+
+
+def test_combat_resolve_body_rehit_suppression_prevents_double_apply() -> None:
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    seed_stride = int(sizes["seed"])
+    compare_stride = int(sizes["compare"])
+    assert seed_stride == SEED_DTYPE.itemsize
+    assert compare_stride == COMPARE_DTYPE.itemsize
+
+    handle = msl_binding.init(batch_size=1, num_players=2)
+    try:
+        seed = _seed_base()
+        seed["pos_x"][0, 0] = np.float32(0.0)
+        seed["pos_x"][0, 1] = np.float32(1.0)
+        seed_bytes = seed.view(np.uint8).reshape((1, seed_stride))
+        msl_binding.reseed_seed(handle, seed_bytes)
+
+        msl_binding.debug_clear_hitboxes_world(handle, 0, 0)
+        msl_binding.debug_set_hitbox_world(handle, 0, 0, 0, 1.0, 0.0, 0.0, 1.0, 5.0, 1)
+        msl_binding.debug_set_hitbox_flags(handle, 0, 0, 0, int(HIT_GROUNDED))
+        msl_binding.debug_set_hitbox_kb_params(handle, 0, 0, 0, 0, 0, 0, 20)
+
+        msl_binding.debug_clear_hurtcaps_world(handle, 0, 1)
+        msl_binding.debug_set_hurtcap_world(handle, 0, 1, 0, 0.5, 0.0, 0.0, 1.5, 0.0, 0.0, 0.5)
+        msl_binding.debug_set_hurtcap_height(handle, 0, 1, 0, 1)
+
+        msl_binding.debug_combat_resolve(handle)
+        out1 = _read_compare(handle)
+
+        msl_binding.debug_combat_resolve(handle)
+        out2 = _read_compare(handle)
+
+        assert float(out1["percent"][1]) == 5.0
+        assert float(out2["percent"][1]) == 5.0
+        assert int(out2["hitstun"][1]) == int(out1["hitstun"][1])
+    finally:
+        msl_binding.destroy(handle)
+        del handle
+
+
+def test_combat_damage_entry_differs_ground_vs_air() -> None:
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    seed_stride = int(sizes["seed"])
+    compare_stride = int(sizes["compare"])
+    assert seed_stride == SEED_DTYPE.itemsize
+    assert compare_stride == COMPARE_DTYPE.itemsize
+
+    # Grounded victim => DamageN1 (mid height).
+    handle = msl_binding.init(batch_size=1, num_players=2)
+    try:
+        seed = _seed_base()
+        seed["pos_x"][0, 0] = np.float32(0.0)
+        seed["pos_x"][0, 1] = np.float32(1.0)
+        seed["on_ground"][0, 1] = np.uint8(1)
+        seed_bytes = seed.view(np.uint8).reshape((1, seed_stride))
+        msl_binding.reseed_seed(handle, seed_bytes)
+
+        msl_binding.debug_clear_hitboxes_world(handle, 0, 0)
+        msl_binding.debug_set_hitbox_world(handle, 0, 0, 0, 1.0, 0.0, 0.0, 1.0, 5.0, 1)
+        msl_binding.debug_set_hitbox_flags(handle, 0, 0, 0, int(HIT_GROUNDED))
+        msl_binding.debug_set_hitbox_kb_params(handle, 0, 0, 0, 0, 0, 0, 20)
+
+        msl_binding.debug_clear_hurtcaps_world(handle, 0, 1)
+        msl_binding.debug_set_hurtcap_world(handle, 0, 1, 0, 0.5, 0.0, 0.0, 1.5, 0.0, 0.0, 0.5)
+        msl_binding.debug_set_hurtcap_height(handle, 0, 1, 0, 1)
+
+        msl_binding.debug_combat_resolve(handle)
+        out = _read_compare(handle)
+        assert int(out["action_id"][1]) == ACT_DAMAGE_N1
+        assert int(out["animation_index"][1]) == SM_DAMAGE_N1
+    finally:
+        msl_binding.destroy(handle)
+        del handle
+
+    # Airborne victim => DamageAir1.
+    handle = msl_binding.init(batch_size=1, num_players=2)
+    try:
+        seed = _seed_base()
+        seed["pos_x"][0, 0] = np.float32(0.0)
+        seed["pos_x"][0, 1] = np.float32(1.0)
+        seed["on_ground"][0, 1] = np.uint8(0)
+        seed_bytes = seed.view(np.uint8).reshape((1, seed_stride))
+        msl_binding.reseed_seed(handle, seed_bytes)
+
+        msl_binding.debug_clear_hitboxes_world(handle, 0, 0)
+        msl_binding.debug_set_hitbox_world(handle, 0, 0, 0, 1.0, 0.0, 0.0, 1.0, 5.0, 1)
+        msl_binding.debug_set_hitbox_flags(handle, 0, 0, 0, int(HIT_AERIAL))
+        msl_binding.debug_set_hitbox_kb_params(handle, 0, 0, 0, 0, 0, 0, 20)
+
+        msl_binding.debug_clear_hurtcaps_world(handle, 0, 1)
+        msl_binding.debug_set_hurtcap_world(handle, 0, 1, 0, 0.5, 0.0, 0.0, 1.5, 0.0, 0.0, 0.5)
+
+        msl_binding.debug_combat_resolve(handle)
+        out = _read_compare(handle)
+        assert int(out["action_id"][1]) == ACT_DAMAGE_AIR1
+        assert int(out["animation_index"][1]) == SM_DAMAGE_AIR1
     finally:
         msl_binding.destroy(handle)
         del handle

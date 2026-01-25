@@ -11,6 +11,11 @@
 // The per-frame hot path must remain alloc-free.
 
 typedef struct MslCharParams {
+  // Combat (subset).
+  // Decomp: ftCo_Damage knockback uses `fp->co_attrs.weight` (ftCo_Damage / ftColl).
+  // Source of truth: ISO-extracted `data/characters/*.json` `weight`.
+  float weight;
+
   // Ground locomotion
   float walk_init_vel;
   float walk_accel;

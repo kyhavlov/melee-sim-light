@@ -45,6 +45,26 @@ typedef enum MslActionId {
   MSL_ACT_LANDING_AIR_HI = 0x0049,  // ftCo_MS_LandingAirHi
   MSL_ACT_LANDING_AIR_LW = 0x004A,  // ftCo_MS_LandingAirLw
 
+  // Damage (subset used by the Fox/Falco FD suite).
+  // Source of truth: refs/melee/src/melee/ft/chara/ftCommon/forward.h `ftCommon_MotionState`.
+  MSL_ACT_DAMAGE_HI_1 = 0x004B,      // ftCo_MS_DamageHi1
+  MSL_ACT_DAMAGE_HI_2 = 0x004C,      // ftCo_MS_DamageHi2
+  MSL_ACT_DAMAGE_HI_3 = 0x004D,      // ftCo_MS_DamageHi3
+  MSL_ACT_DAMAGE_N_1 = 0x004E,       // ftCo_MS_DamageN1
+  MSL_ACT_DAMAGE_N_2 = 0x004F,       // ftCo_MS_DamageN2
+  MSL_ACT_DAMAGE_N_3 = 0x0050,       // ftCo_MS_DamageN3
+  MSL_ACT_DAMAGE_LW_1 = 0x0051,      // ftCo_MS_DamageLw1
+  MSL_ACT_DAMAGE_LW_2 = 0x0052,      // ftCo_MS_DamageLw2
+  MSL_ACT_DAMAGE_LW_3 = 0x0053,      // ftCo_MS_DamageLw3
+  MSL_ACT_DAMAGE_AIR_1 = 0x0054,     // ftCo_MS_DamageAir1
+  MSL_ACT_DAMAGE_AIR_2 = 0x0055,     // ftCo_MS_DamageAir2
+  MSL_ACT_DAMAGE_AIR_3 = 0x0056,     // ftCo_MS_DamageAir3
+  MSL_ACT_DAMAGE_FLY_HI = 0x0057,    // ftCo_MS_DamageFlyHi
+  MSL_ACT_DAMAGE_FLY_N = 0x0058,     // ftCo_MS_DamageFlyN
+  MSL_ACT_DAMAGE_FLY_LW = 0x0059,    // ftCo_MS_DamageFlyLw
+  MSL_ACT_DAMAGE_FLY_TOP = 0x005A,   // ftCo_MS_DamageFlyTop
+  MSL_ACT_DAMAGE_FLY_ROLL = 0x005B,  // ftCo_MS_DamageFlyRoll
+
   // Shield / Guard (subset).
   MSL_ACT_GUARD_ON = 0x00B2,       // ftCo_MS_GuardOn
   MSL_ACT_GUARD = 0x00B3,          // ftCo_MS_Guard
@@ -116,6 +136,26 @@ typedef enum MslSubmotionId {
   MSL_SM_LANDING_AIR_B = 75,   // ftCo_SM_LandingAirB
   MSL_SM_LANDING_AIR_HI = 76,  // ftCo_SM_LandingAirHi
   MSL_SM_LANDING_AIR_LW = 77,  // ftCo_SM_LandingAirLw
+
+  // Damage (subset used by the Fox/Falco FD suite).
+  // Source of truth: refs/melee/src/melee/ft/chara/ftCommon/forward.h `ftCo_Submotion`.
+  MSL_SM_DAMAGE_HI_1 = 165,      // ftCo_SM_DamageHi1
+  MSL_SM_DAMAGE_HI_2 = 166,      // ftCo_SM_DamageHi2
+  MSL_SM_DAMAGE_HI_3 = 167,      // ftCo_SM_DamageHi3
+  MSL_SM_DAMAGE_N_1 = 168,       // ftCo_SM_DamageN1
+  MSL_SM_DAMAGE_N_2 = 169,       // ftCo_SM_DamageN2
+  MSL_SM_DAMAGE_N_3 = 170,       // ftCo_SM_DamageN3
+  MSL_SM_DAMAGE_LW_1 = 171,      // ftCo_SM_DamageLw1
+  MSL_SM_DAMAGE_LW_2 = 172,      // ftCo_SM_DamageLw2
+  MSL_SM_DAMAGE_LW_3 = 173,      // ftCo_SM_DamageLw3
+  MSL_SM_DAMAGE_AIR_1 = 174,     // ftCo_SM_DamageAir1
+  MSL_SM_DAMAGE_AIR_2 = 175,     // ftCo_SM_DamageAir2
+  MSL_SM_DAMAGE_AIR_3 = 176,     // ftCo_SM_DamageAir3
+  MSL_SM_DAMAGE_FLY_HI = 177,    // ftCo_SM_DamageFlyHi
+  MSL_SM_DAMAGE_FLY_N = 178,     // ftCo_SM_DamageFlyN
+  MSL_SM_DAMAGE_FLY_LW = 179,    // ftCo_SM_DamageFlyLw
+  MSL_SM_DAMAGE_FLY_TOP = 180,   // ftCo_SM_DamageFlyTop
+  MSL_SM_DAMAGE_FLY_ROLL = 181,  // ftCo_SM_DamageFlyRoll
 } MslSubmotionId;
 
 static inline uint8_t msl_action_is_ground_locomotion(uint16_t action_id) {

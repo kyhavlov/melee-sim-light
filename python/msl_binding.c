@@ -1331,8 +1331,8 @@ static PyObject* msl_debug_combat_contacts_classified_filtered_py(PyObject* self
       h->batch, batch_index, out, (uint16_t)max_contacts, &count);
   if (err != 0) {
     Py_DECREF(arr);
-    PyErr_Format(PyExc_ValueError,
-                 "msl_batch_debug_combat_contacts_classified_filtered failed: %d", err);
+    PyErr_Format(PyExc_ValueError, "msl_batch_debug_combat_contacts_classified_filtered failed: %d",
+                 err);
     return NULL;
   }
 
@@ -1468,6 +1468,38 @@ static PyObject* msl_debug_set_hitbox_element_py(PyObject* self, PyObject* args)
   Py_RETURN_NONE;
 }
 
+static PyObject* msl_debug_set_hitbox_kb_params_py(PyObject* self, PyObject* args) {
+  (void)self;
+  PyObject* handle_obj = NULL;
+  int batch_index = 0;
+  int player_index = 0;
+  int hitbox_id = 0;
+  unsigned int angle_deg = 0;
+  unsigned int kbg = 0;
+  unsigned int wsk = 0;
+  unsigned int bkb = 0;
+  if (!PyArg_ParseTuple(args, "OiiiIIII", &handle_obj, &batch_index, &player_index, &hitbox_id,
+                        &angle_deg, &kbg, &wsk, &bkb)) {
+    return NULL;
+  }
+  PyMslHandle* h = unpack_handle(handle_obj);
+  if (h == NULL) {
+    return NULL;
+  }
+  if (angle_deg > 0xFFFFu || kbg > 0xFFFFu || wsk > 0xFFFFu || bkb > 0xFFFFu) {
+    PyErr_SetString(PyExc_ValueError, "hitbox kb params out of range (expected u16)");
+    return NULL;
+  }
+  const int err = msl_batch_debug_set_hitbox_kb_params(h->batch, batch_index, player_index,
+                                                       hitbox_id, (uint16_t)angle_deg,
+                                                       (uint16_t)kbg, (uint16_t)wsk, (uint16_t)bkb);
+  if (err != 0) {
+    PyErr_Format(PyExc_ValueError, "msl_batch_debug_set_hitbox_kb_params failed: %d", err);
+    return NULL;
+  }
+  Py_RETURN_NONE;
+}
+
 static PyObject* msl_debug_clear_hurtcaps_world_py(PyObject* self, PyObject* args) {
   (void)self;
   PyObject* handle_obj = NULL;
@@ -1507,6 +1539,34 @@ static PyObject* msl_debug_set_hurtcap_world_py(PyObject* self, PyObject* args) 
                                                     ax, ay, az, bx, by, bz, radius);
   if (err != 0) {
     PyErr_Format(PyExc_ValueError, "msl_batch_debug_set_hurtcap_world failed: %d", err);
+    return NULL;
+  }
+  Py_RETURN_NONE;
+}
+
+static PyObject* msl_debug_set_hurtcap_height_py(PyObject* self, PyObject* args) {
+  (void)self;
+  PyObject* handle_obj = NULL;
+  int batch_index = 0;
+  int player_index = 0;
+  int hurtcap_id = 0;
+  unsigned int height = 0;
+  if (!PyArg_ParseTuple(args, "OiiiI", &handle_obj, &batch_index, &player_index, &hurtcap_id,
+                        &height)) {
+    return NULL;
+  }
+  PyMslHandle* h = unpack_handle(handle_obj);
+  if (h == NULL) {
+    return NULL;
+  }
+  if (height > 0xFFu) {
+    PyErr_SetString(PyExc_ValueError, "height out of range (expected u8)");
+    return NULL;
+  }
+  const int err = msl_batch_debug_set_hurtcap_height(h->batch, batch_index, player_index,
+                                                     hurtcap_id, (uint8_t)height);
+  if (err != 0) {
+    PyErr_Format(PyExc_ValueError, "msl_batch_debug_set_hurtcap_height failed: %d", err);
     return NULL;
   }
   Py_RETURN_NONE;
@@ -1597,7 +1657,8 @@ static PyObject* msl_debug_set_hit_status_override_py(PyObject* self, PyObject* 
     PyErr_SetString(PyExc_ValueError, "status out of range (expected -1..255)");
     return NULL;
   }
-  const int err = msl_batch_debug_set_hit_status_override(h->batch, batch_index, player_index, status);
+  const int err =
+      msl_batch_debug_set_hit_status_override(h->batch, batch_index, player_index, status);
   if (err != 0) {
     PyErr_Format(PyExc_ValueError, "msl_batch_debug_set_hit_status_override failed: %d", err);
     return NULL;
@@ -2066,7 +2127,8 @@ static PyMethodDef methods[] = {
     {"hitboxes_world", msl_hitboxes_world_py, METH_VARARGS,
      "hitboxes_world(handle, batch_index, player_index) -> (hitboxes[MSL_MAX_HITBOXES,10], count)"},
     {"hitboxes_world_full", msl_hitboxes_world_full_py, METH_VARARGS,
-     "hitboxes_world_full(handle, batch_index, player_index) -> (hitboxes[MSL_MAX_HITBOXES,16], count)"},
+     "hitboxes_world_full(handle, batch_index, player_index) -> (hitboxes[MSL_MAX_HITBOXES,16], "
+     "count)"},
     {"debug_combat_contacts", msl_debug_combat_contacts_py, METH_VARARGS,
      "debug_combat_contacts(handle, batch_index, max_contacts=256) -> (bytes[max, "
      "sizeof(MslDebugCombatContact)], count)"},
@@ -2079,12 +2141,13 @@ static PyMethodDef methods[] = {
     {"debug_combat_contacts_classified", msl_debug_combat_contacts_classified_py, METH_VARARGS,
      "debug_combat_contacts_classified(handle, batch_index, max_contacts=256) -> (bytes[max, "
      "sizeof(MslDebugCombatContactClassified)], count)"},
-    {"debug_combat_contacts_classified_filtered",
-     msl_debug_combat_contacts_classified_filtered_py, METH_VARARGS,
+    {"debug_combat_contacts_classified_filtered", msl_debug_combat_contacts_classified_filtered_py,
+     METH_VARARGS,
      "debug_combat_contacts_classified_filtered(handle, batch_index, max_contacts=256) -> "
      "(bytes[max, sizeof(MslDebugCombatContactClassified)], count)"},
     {"debug_shield_bubbles_world", msl_debug_shield_bubbles_world_py, METH_VARARGS,
-     "debug_shield_bubbles_world(handle, batch_index) -> np.ndarray[float32] shape=(MSL_MAX_PLAYERS,4)"},
+     "debug_shield_bubbles_world(handle, batch_index) -> np.ndarray[float32] "
+     "shape=(MSL_MAX_PLAYERS,4)"},
     {"debug_clear_hitboxes_world", msl_debug_clear_hitboxes_world_py, METH_VARARGS,
      "debug_clear_hitboxes_world(handle, batch_index, player_index)"},
     {"debug_set_hitbox_world", msl_debug_set_hitbox_world_py, METH_VARARGS,
@@ -2094,11 +2157,16 @@ static PyMethodDef methods[] = {
      "debug_set_hitbox_flags(handle, batch_index, player_index, hitbox_id, hitbox_flags_u16)"},
     {"debug_set_hitbox_element", msl_debug_set_hitbox_element_py, METH_VARARGS,
      "debug_set_hitbox_element(handle, batch_index, player_index, hitbox_id, element_u8)"},
+    {"debug_set_hitbox_kb_params", msl_debug_set_hitbox_kb_params_py, METH_VARARGS,
+     "debug_set_hitbox_kb_params(handle, batch_index, player_index, hitbox_id, angle_deg_u16, "
+     "kbg_u16, wsk_u16, bkb_u16)"},
     {"debug_clear_hurtcaps_world", msl_debug_clear_hurtcaps_world_py, METH_VARARGS,
      "debug_clear_hurtcaps_world(handle, batch_index, player_index)"},
     {"debug_set_hurtcap_world", msl_debug_set_hurtcap_world_py, METH_VARARGS,
      "debug_set_hurtcap_world(handle, batch_index, player_index, hurtcap_id, "
      "ax,ay,az,bx,by,bz,radius)"},
+    {"debug_set_hurtcap_height", msl_debug_set_hurtcap_height_py, METH_VARARGS,
+     "debug_set_hurtcap_height(handle, batch_index, player_index, hurtcap_id, height_u8)"},
     {"debug_set_hurtcap_enabled", msl_debug_set_hurtcap_enabled_py, METH_VARARGS,
      "debug_set_hurtcap_enabled(handle, batch_index, player_index, hurtcap_id, enabled=0/1)"},
     {"debug_combat_resolve", msl_debug_combat_resolve_py, METH_VARARGS,

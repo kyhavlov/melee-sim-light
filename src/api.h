@@ -443,9 +443,9 @@ int msl_batch_debug_combat_contacts_filtered(const MslBatch* batch, int batch_in
 // Deterministic ordering:
 // attacker 0..num_players-1, defender 0..num_players-1 (skip attacker==defender),
 // hitbox_id 0..3, and within a hitbox: SHIELD first, then BODY (if applicable).
-int msl_batch_debug_combat_contacts_classified(
-    const MslBatch* batch, int batch_index, MslDebugCombatContactClassified* out_contacts,
-    uint16_t max_contacts, uint16_t* out_count);
+int msl_batch_debug_combat_contacts_classified(const MslBatch* batch, int batch_index,
+                                               MslDebugCombatContactClassified* out_contacts,
+                                               uint16_t max_contacts, uint16_t* out_count);
 
 // Deterministic ordering matches msl_batch_debug_combat_contacts_classified; filters only skip/keep.
 int msl_batch_debug_combat_contacts_classified_filtered(
@@ -455,7 +455,7 @@ int msl_batch_debug_combat_contacts_classified_filtered(
 // Debug/validation helper: write per-player shield bubble world params for a batch element.
 // Writes `MSL_MAX_PLAYERS * 4` floats into out_xyzw_4p as rows: [x, y, z, radius].
 int msl_batch_debug_shield_bubbles_world(const MslBatch* batch, int batch_index,
-                                        float* out_xyzw_4p);
+                                         float* out_xyzw_4p);
 
 // Debug/testing helper: allow unit tests to write world-space primitives directly and invoke combat
 // without touching upstream pose systems.
@@ -467,19 +467,24 @@ int msl_batch_debug_set_hitbox_flags(MslBatch* batch, int batch_index, int playe
                                      int hitbox_id, uint16_t hitbox_flags);
 int msl_batch_debug_set_hitbox_element(MslBatch* batch, int batch_index, int player_index,
                                        int hitbox_id, uint8_t element);
+int msl_batch_debug_set_hitbox_kb_params(MslBatch* batch, int batch_index, int player_index,
+                                         int hitbox_id, uint16_t angle_deg, uint16_t kbg,
+                                         uint16_t wsk, uint16_t bkb);
 int msl_batch_debug_clear_hurtcaps_world(MslBatch* batch, int batch_index, int player_index);
 int msl_batch_debug_set_hurtcap_world(MslBatch* batch, int batch_index, int player_index,
                                       int hurtcap_id, float ax, float ay, float az, float bx,
                                       float by, float bz, float radius);
+int msl_batch_debug_set_hurtcap_height(MslBatch* batch, int batch_index, int player_index,
+                                       int hurtcap_id, uint8_t height);
 int msl_batch_debug_set_hurtcap_enabled(MslBatch* batch, int batch_index, int player_index,
-                                       int hurtcap_id, int enabled);
+                                        int hurtcap_id, int enabled);
 int msl_batch_debug_set_hitlag(MslBatch* batch, int batch_index, int player_index,
                                uint16_t hitlag_frames);
 // Debug/testing helper: override movescript-derived hit status (opcode 26) eligibility.
 // - Pass status=-1 to clear the override (use extracted tables).
 // - Otherwise status must fit in u8 (0=normal, 1=invincible, 2=intangible in current decomp domain).
 int msl_batch_debug_set_hit_status_override(MslBatch* batch, int batch_index, int player_index,
-                                           int status);
+                                            int status);
 int msl_batch_debug_combat_resolve(MslBatch* batch);
 
 // Debug/testing only: run combat pass-1 BODY-hit selection (non-mutating) and return the chosen
