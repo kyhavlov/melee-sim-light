@@ -397,6 +397,59 @@ RL 1.0 acceptance criteria
 Reach RL 1.0 by completing coherent vertical slices (match flow → locomotion → defense → combat/damage → specials/grabs → ledge/tech),
 rather than enabling one-off mutations that depend on missing upstream bookkeeping.
 
+### Roadmap Status (as of 2026-01-26)
+
+This section is the “what is actually done” source of truth for agents. If a deeper section below contradicts this, update the deeper
+section or regenerate it; do not rely on stale tables.
+
+Legend:
+- **DONE**: implemented and suite-stable; remaining gaps are low-impact edge cases.
+- **PARTIAL**: implemented enough to reduce suite mismatches, but known missing internals/ordering/gates remain.
+- **TODO**: mostly seed carry-through; not yet implemented in the C core.
+
+| Area | Status | Notes / remaining blockers |
+|---|---|---|
+| Validation harness (one-step eval, seeded internals, prefix-invariance tests) | **DONE** | Primary correctness gate for RL 1.0. |
+| Perf architecture (SoA, no hot-path allocs, deterministic ordering) | **DONE** | Keep it “allocation-free after init”. |
+| Match flow (Entry/Death/Rebirth/Stocks/Blastzones) | **DONE** | Suite-level `mismatch.stocks` and `mismatch.is_dead` brought to 0. |
+| Anim/script timebase (`cur_anim_frame`, `frame_speed_mul`, hitlag freeze) | **DONE** | Q16.16 accumulator + seeded `frame_speed_mul_f32`. |
+| Input pipeline + UCF (legalization, pad buffer, key timers/counters) | **PARTIAL** | Core UCF-on suite behavior is covered; more input-history gates remain as needed. |
+| Locomotion core (walk/dash/run/jumps/landing/fall/airdodge/escapes) | **PARTIAL** | Broad coverage exists; gaps remain in less-common action branches and ordering edge cases. |
+| Stage collision + ECB (FD ground/ledge points, grounding, `ground_id`) | **PARTIAL** | ECB tables are in; we still lack full mpColl-style ground contact state machine. |
+| Ledge system (Cliff* actions, quick options) | **PARTIAL** | Suite coverage improved; remaining parity needs collision-env ledge-grab mask + occupancy/cooldowns. |
+| Knockdown/tech (DownBound/Wait/Stand/Attack + rolls) | **PARTIAL** | Now suite-positive; remaining parity depends on deeper ground-contact semantics. |
+| Combat geometry (hurtcaps/hitboxes/shields pose-driven) | **PARTIAL** | Core data-driven primitives exist; remaining parity depends on exact facing/axis + attachment nuances. |
+| Damage pipeline (BODY + SHIELD, GuardSetOff, hitlag/hitstun/KB states) | **PARTIAL** | Big pieces are in; still missing full rehit/hitlist, stale queue, and many modifiers. |
+| Items/projectiles | **PARTIAL** | Laser/blaster coverage is in and reduces `item_*` mismatches; item system parity is incomplete beyond suite needs. |
+| Grabs/throws | **TODO** | High-impact for RL; implement suite-present actions first. |
+
+### Ordering Rule: “Parity Projects” (finish-once, cross-cutting layers)
+
+To avoid churn, we treat some work as **parity projects**: once done, they become the stable substrate that many systems build on.
+Prefer completing these projects in order rather than “patching symptoms” in higher-level states.
+
+1) **mpColl-style ground contact state machine** (**TODO**, next major substrate)
+   - Goal: stable, decomp-shaped `on_ground` + `ground_id` + “which line” selection with correct prev/current ECB usage.
+   - Why now: it unblocks landing/knockdown/ledge correctness without per-state hacks.
+   - Reads first: `refs/melee/src/melee/mp/mpcoll.c`, `refs/melee/src/melee/ft/ftcoll.c`, `refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate`.
+   - Replaces: FD-specific stickiness/endpoint biases and “force airborne” policy patches.
+
+2) **Collision-env flags + ledge grab mask parity** (**PARTIAL**)
+   - Goal: decomp-shaped `Collide_LedgeGrabMask`-equivalent so ledge catch can be scheduled post-collision without regressions.
+   - Depends on: (1).
+
+3) **Hit/hurt eligibility + rehit semantics (hitlists/timers)** (**PARTIAL**)
+   - Goal: per-hitbox/per-target hitlists + cooldowns (replace conservative pair latch), consistent for fighters and items.
+   - Depends on: (1) for stable contact/landing frames; uses move/hit status artifacts already present.
+
+4) **Damage modifiers parity (stale queue + multipliers + armor/no-damage gates)** (**TODO**)
+   - Goal: make percent/hitlag/hitstun/KB numerically meaningful; stop “percent drift” being dominated by missing modifiers.
+   - Depends on: (3) for correct hit identity + timing.
+
+5) **Action ordering contracts (Anim/IASA/Phys/Coll) per bucket** (**PARTIAL**)
+   - Goal: codify and enforce consistent per-frame ordering for groups of states (not per-state ad hoc).
+   - Depends on: (1) for Coll semantics; also interacts with anim timebase (already DONE).
+
 ### Planning Gate: “Suite Coverage List”
 
 Before claiming RL 1.0, maintain a current list of:
@@ -414,6 +467,7 @@ Coverage & initialization targets:
 ### 1) Suite Coverage List (current suite: `replays/suites/fox_falco_fd_ucf084_recent.json`)
 
 This section is **suite-grounded**: it is intended to be regenerated any time the suite changes, and it should directly drive what we implement next.
+If the status labels in the generated tables conflict with the “Roadmap Status” section above, assume the tables are stale and regenerate/update them.
 
 How to regenerate (no extraction / no preprocess):
 - Action ids: `uv run python -m tools.eval.list_suite_action_ids --suite replays/suites/fox_falco_fd_ucf084_recent.json --datasets-dir datasets`
@@ -747,6 +801,9 @@ For each bucket below:
 - **Data artifacts**: ISO-extracted artifacts/tables we expect to drive the behavior (paths under `data/` and format names when known).
 - **Code owner / gaps**: where the implementation lives today (or where it should live if absent).
 
+Status note: this matrix can go stale as systems land quickly. If a row claims something is “Missing” but the sim already implements it,
+update the row rather than re-deriving the same plan again.
+
 #### Match flow (start, death/respawn/invuln, stocks, blastzones)
 
 | Read first (decomp) | Data artifacts (ISO-derived) | Code owner / gaps |
@@ -819,49 +876,46 @@ For each bucket below:
 | `refs/melee/src/melee/it/items/itfoxblaster.c` (laser lifecycle/collision) | (Need) item/projectile type tables extracted into `data/items/` (new) | Missing: `src/items.c` implementation + deterministic fixed-capacity pool |
 | `refs/melee/src/melee/ft/ft_0BF0.c` (fighter ↔ item hooks for blaster) | (Need) precise spawn offsets (bone + local offset) from extracted pose/movescript | Missing: fighter-to-item spawn hook points |
 
-### 3) Prioritized vertical slices (next 5–10)
+### 3) Prioritized parity projects / slices (next 5–10)
 
-Each slice below is intended to be implementable by a coding agent as a coherent chunk (data + code), and each one should measurably reduce **one-step suite mismatches**.
+Goal of this section: stop hopping between systems by front-loading substrate work, and only then doing vertical slices on top.
 
-1. Action/anim timebase correctness (fixed-point `cur_anim_frame` + `frame_speed_mul` carry)
-   - Dependencies: existing `anim_frame_f32` plumbing; `data/anims/{fox,falco}.bin` end frames.
-   - Acceptance checks: reduce `mismatch.action_frame` and `mismatch.animation_index` in `reports/validation/one_step_suite_eval.txt`; reduce “frame skip” patterns around landings/guard.
-   - Likely reseed/schema additions: a reseeded fixed-point accumulator and `frame_speed_mul` (or a compact rate mode) if not derivable from `(action_id, action_frame, anim_end_frame)`.
+Completed slices (suite-positive, now “owned” by the sim):
+- Anim/script timebase (Q16.16 `cur_anim_frame` + seeded `frame_speed_mul_f32` + hitlag freeze).
+- Match flow (KO/death/respawn/entry) for the suite (stocks/is_dead to 0; KO timing fixed by integrating kb_vel).
+- Shield/GuardSetOff loop and shield placement/tilt.
+- Lasers/blaster + deterministic item pool (suite-needed subset).
+- Ledge states (suite-needed subset) + Cliff* grounding fix.
+- Knockdown cluster (DownBound/Wait/Stand/Attack + rolls) with root-motion sampling for rolls.
 
-2. GuardSetOff (shieldstun) per-frame loop + exit rules (OoS timing correctness)
-   - Dependencies: shield bubble placement; combat shield-hit classification; timers.
-   - Acceptance checks: reduce `mismatch.action_id` around shield hits; reduce `mismatch.hitlag`/`mismatch.hitstun` spillover; improved shield HP trajectories (`err.shield_hp`).
-   - Likely reseed/schema additions: GuardSetOff internal timer vars (if Slippi does not expose them reliably).
+Next slices (in recommended order):
 
-3. AttackAir* “suite-complete” (auto-cancel, IASA, landing variants)
-   - Dependencies: `data/moves/{fox,falco}.json` (cmd0 + allow_interrupt events), `src/move_tables.c`.
-   - Acceptance checks: reduce `mismatch.action_id` and `mismatch.l_cancel` during aerials/landings; reduce landing-state mismatches (`LandingAir*` vs `Landing`).
-   - Likely reseed/schema additions: none if fully derivable from `(action_id, action_frame, msid tables)`; otherwise add an explicit `allow_interrupt` latch mirroring decomp.
+1. mpColl-style ground contact state machine (**parity project**, see Ordering Rule above)
+   - Dependencies: existing ECB tables + stage geometry.
+   - Acceptance checks: materially reduce residual `mismatch.on_ground` and `mismatch.ground_id` without per-action special cases.
+   - Deliverable: one coherent ground-contact module that higher-level states call into.
 
-4. Ledge catch (FD only) + cliff occupancy (single ledge id per side)
-   - Dependencies: `data/stages/final_destination.json` ledge flags; ECB grounding fidelity.
-   - Acceptance checks: reduce action/state mismatches around `CliffCatch/CliffWait` and subsequent cliff options (also reduces large `pos_x/pos_y` errors near edges).
-   - Likely reseed/schema additions: per-player `cliff_id` / occupancy bitset and ledge refresh timer(s).
+2. Collision-env flags + ledge grab mask parity (**parity project**)
+   - Dependencies: (1).
+   - Acceptance checks: schedule post-collision ledge catch in `src/ledge.c` without suite regressions; remove “outside-only grab” approximation.
 
-5. Minimal projectile system: lasers (spawn/update/collision/apply hit)
-   - Dependencies: specials state machine for Blaster; fixed-capacity item pool; combat hit application.
-   - Acceptance checks: reduce item mismatches (`mismatch.item_*`) and percent/hitlag mismatches in laser exchanges.
-   - Likely reseed/schema additions: deterministic projectile instance ids and per-projectile timers/state.
+3. Hitlists/rehit timers parity (**parity project**)
+   - Dependencies: (1) and stable move/hit identity.
+   - Acceptance checks: replace conservative rehit latch; improve hitlag/hitstun/percent timing coherence without regressions.
 
-6. Grab/throw core (Catch/CatchWait/Throw*/Thrown* plus attachment constraints)
-   - Dependencies: collision/contact classification; action change; move tables for grab/throw msids.
-   - Acceptance checks: reduce `mismatch.action_id` for catch/throw states and reduce downstream `instance_id` churn (grab state changes often gate instance id behavior).
-   - Likely reseed/schema additions: grab owner/target ids, grab hold timers, throw release frame.
+4. Damage modifiers parity (stale queue + multipliers + armor/no-damage gates) (**parity project**)
+   - Dependencies: (3).
+   - Acceptance checks: percent/KB/hitstun become numerically meaningful (reduce drift); avoid tuning off suite-only artifacts.
 
-7. Damage state exits / tumble/knockdown basics (suite-driven subset)
-   - Dependencies: damage pipeline entry; stage collision; tech rollups (later).
-   - Acceptance checks: reduce `mismatch.action_id` during/after hitstun; improve `on_ground` and `ground_id` transitions under knockback.
-   - Likely reseed/schema additions: tumble flag / knockdown thresholds if not derivable from hitstun + kb.
+5. Grab/throw core (suite-first)
+   - Dependencies: (1) for stable contact/grounding during throws; (3) for hit identity/timing.
+   - Acceptance checks: reduce `mismatch.action_id` for Catch*/Throw*/Thrown* states and stop downstream state explosions in grab sequences.
 
-8. Match flow minimalism: EntryStart/Rebirth/Dead + blastzone KO
-   - Dependencies: stage blast zones; spawn positions; action/state reset.
-   - Acceptance checks: reduce rare mismatches in `stocks`/`is_dead`; eliminate large max `pos_*` errors due to missing OOB/respawn transitions.
-   - Likely reseed/schema additions: respawn invuln timer and per-stock respawn state.
+6. Remaining Fox/Falco specials (B moves) + any suite-needed projectiles
+   - Dependencies: (3)–(4) for correct damage/rehit semantics; items framework for projectile specials.
+
+7. DI/SDI/ASDI
+   - Only start once (1)–(4) are “close enough” that we would otherwise be chasing small float mismatches.
 
 ### 4) Reseed/schema risk register (known missing internals)
 
@@ -886,18 +940,18 @@ This is a living, comprehensive list of Melee-relevant systems. Any time we beco
 
 #### P0 — Must-have for RL 1.0 (target domain: Fox/Falco FD)
 
-1) Match flow / state sequencing
+1) Match flow / state sequencing (**DONE**)
 - Match start sequence / Ready-Go timing (for RNN warmup seeding).
 - Stock loss, death, respawn, invulnerability, spawn positioning.
 - Blastzones + KO rules (FD).
 - Rollback handling: we validate on finalized frames only.
 
-2) Input pipeline (UCF-on; suite-configured)
+2) Input pipeline (UCF-on; suite-configured) (**PARTIAL**)
 - Stick/button sampling at frame boundaries; legalization/clamp/deadzone consistent with validation datasets.
 - UCF behavior that affects gameplay in this suite (dashback, shielddrop/pad buffer, and cardinals if the suite uses them).
 - Input-history counters/timers that gate locomotion/defense/cancels (keep these as explicit seeded internals as needed).
 
-3) Action/state machine + timebases
+3) Action/state machine + timebases (**DONE** for timebase, **PARTIAL** for full state machine)
 - Core action-state transitions for all action_ids present in the suite (see Planning Gate above).
 - Animation/script timebase:
   - `anim_frame_f32` is seeded from Slippi post-frame `state_age` (`fp->cur_anim_frame` float).
@@ -908,41 +962,41 @@ This is a living, comprehensive list of Melee-relevant systems. Any time we beco
     - On motion-state entry, reset `cur_anim_frame` as `anim_start - frame_speed_mul` (per `Fighter_ChangeMotionState`), so the next
       anim-advance produces `anim_start`.
 
-4) Locomotion + physics core
+4) Locomotion + physics core (**PARTIAL**)
 - Ground/air movement, friction/traction, gravity/terminal velocity, fastfall, jumps (incl. double jump).
 - Landing transitions and landing lag handling.
 
-5) Stage collision + ECB fidelity
+5) Stage collision + ECB fidelity (**PARTIAL**; mpColl parity is still **TODO**)
 - FD ground/ledge/blastzone geometry from stage files.
 - ECB-like grounding/ledge gating close enough to avoid false landings/false airborne.
 - Stable `ground_id` behavior (segment/line identity).
 
-6) Defense
+6) Defense (**PARTIAL**)
 - Shield bubble placement/tilt, HP drain/recharge, shieldstun / GuardSetOff.
 - Grounded OoS options used by suite: roll, spotdodge, jump, airdodge, etc.
 - Powershield gating behavior as needed by suite (don’t tune; decomp-first).
 
-7) Combat geometry
+7) Combat geometry (**PARTIAL**)
 - Hurtcapsules (pose-driven world endpoints, eligibility/modes, hit status).
 - Hitboxes (movescript-driven, pose/world placement, flags/attrs).
 - Shield bubble overlap classification and priority.
 
-8) Damage pipeline (coherent)
+8) Damage pipeline (coherent) (**PARTIAL**)
 - Body hits: percent accumulation, hitlag, hitstun, knockback velocity, damage state entry.
 - Shield hits: shield HP depletion, GuardSetOff, hitlag inputs, inert/detection hitboxes behavior.
 - Rehit/hitlist semantics closer than the current conservative pair latch (per-hitbox hitlists + timers).
 - Stale-move queue + damage multipliers (decomp-first).
 - “No damage”/armor/metal/other gating required for Fox/Falco suite correctness.
 
-9) Fox/Falco full moveset coverage (suite-first)
+9) Fox/Falco full moveset coverage (suite-first) (**PARTIAL**)
 - All moves (A + B) whose action states appear in the suite must be implemented with correct transitions/cancel windows.
 - Special moves (B moves) for Fox/Falco are explicitly in-scope for RL 1.0.
 
-10) Grabs/throws
+10) Grabs/throws (**TODO**)
 - Grab, pummel, throws, release rules (at least what appears in the suite).
 - Grab interactions can dominate policy behavior; missing this makes RL “not Melee” quickly.
 
-11) Projectiles/items needed by suite
+11) Projectiles/items needed by suite (**PARTIAL**)
 - Fox/Falco lasers at minimum (spawn/update/hit).
 - Other items only if they appear in the suite; expand later.
 
@@ -961,25 +1015,28 @@ This is a living, comprehensive list of Melee-relevant systems. Any time we beco
 
 ### Milestones (Suggested Order)
 
-M0 Foundation (already in progress)
+M0 Foundation (**DONE**)
 - One-step suite validation loop, seeded internals, deterministic stepping, no hot-path allocs.
 
-M1 Match flow
-- Match start/respawn/death/invuln/blastzones wired into the state machine.
+M1 Timebase + match flow (**DONE**)
+- Decomp-shaped anim/script timebase and match start/respawn/death/invuln/blastzones wired into the state machine.
 
-M2 Locomotion completeness for suite
+M2 Ground contact substrate (mpColl parity) (**TODO**, next)
+- Build a decomp-shaped ground contact state machine (ECB prev/current, line selection, stable ground ids) and make it the substrate
+  for landing/knockdown/ledge.
+
+M3 Locomotion + defense completeness for suite (**PARTIAL**)
 - Ensure all suite action_ids can be entered, updated, and exited without “getting stuck”.
 - Ensure `action_frame` / `anim_frame_f32` semantics are consistent enough for movescript sampling.
-
-M3 Defense completeness for suite
 - Shield + OoS + airdodge + core defensive interrupts.
 
-M4 Combat/damage coherence
+M4 Combat/damage coherence (**PARTIAL**)
 - Treat percent/KB/hitstun/action-entry as one coherent pipeline (avoid piecemeal).
 - Replace conservative rehit pair latch with per-hitbox hitlists/timers.
+- Add stale queue + damage modifiers after hit identity/timing is correct.
 
-M5 Special moves + grabs
+M5 Special moves + grabs (**TODO/PARTIAL**)
 - Implement all Fox/Falco specials and grab system needed by suite.
 
-M6 Ledge/tech/knockdown
+M6 Ledge/tech/knockdown (**PARTIAL**)
 - Add what the suite exercises; broaden as needed for RL plausibility.
