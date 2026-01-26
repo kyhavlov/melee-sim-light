@@ -202,6 +202,7 @@ int msl_batch_reseed_seed(MslBatch* batch, const uint8_t* seed_bytes, size_t see
 
       batch->state.action_id[idx] = seed->action_id[p];
       batch->state.match_flow_timer[idx] = seed->match_flow_timer[p];
+      batch->state.downwait_timer[idx] = seed->downwait_timer[p];
       // Seed deterministic anim timebase from Slippi post-frame `state_age` (fp->cur_anim_frame)
       // plus a strictly-causal derived fp->frame_speed_mul.
       msl_anim_timebase_seed(batch, idx, seed->anim_frame_f32[p], seed->frame_speed_mul_f32[p]);
@@ -257,6 +258,16 @@ int msl_batch_reseed_seed(MslBatch* batch, const uint8_t* seed_bytes, size_t see
       batch->state.x67B[idx] = seed->x67B[p];
       batch->state.x67C[idx] = seed->x67C[p];
       batch->state.x67D[idx] = seed->x67D[p];
+      // DownBound entry resets A/B press timers to 0xFF after the per-frame input counters update.
+      // Slippi does not expose this override directly; approximate it by detecting action entry
+      // using post-frame `state_age` (seed->action_frame == 0).
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownBound.c::ftCo_8009794C
+      if ((seed->action_id[p] == (uint16_t)MSL_ACT_DOWN_BOUND_U ||
+           seed->action_id[p] == (uint16_t)MSL_ACT_DOWN_BOUND_D) &&
+          seed->action_frame[p] == 0) {
+        batch->state.x67C[idx] = 0xFFu;
+        batch->state.x67D[idx] = 0xFFu;
+      }
       batch->state.x67E[idx] = seed->x67E[p];
       batch->state.x680[idx] = seed->x680[p];
       batch->state.x681[idx] = seed->x681[p];

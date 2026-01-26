@@ -121,6 +121,17 @@ typedef struct MslSeed {
   // exit early via inputs (IASA), and the replay action_id run length may be shorter than the
   // internal timer.
   uint8_t match_flow_timer[MSL_MAX_PLAYERS];
+  // DownWait countdown timer (seeded; decomp-shaped).
+  //
+  // Decomp:
+  // - init on DownBound->DownWait: fp->mv.co.downwait.x0 = p_ftCommonData->x424
+  //   refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownBound.c::ftCo_80097E8C
+  // - decrement + auto-stand in DownWait_Anim:
+  //   refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownBound.c::ftCo_DownWait_Anim
+  //
+  // Slippi post-frame does not expose fp->mv.* unions, so tooling derives this strictly causally
+  // from the post-frame action_id sequence.
+  int16_t downwait_timer[MSL_MAX_PLAYERS];
   // Decomp-shaped animation/script timebase: fp->cur_anim_frame (float).
   // Slippi post-frame exposes this as `state_age` (float, can be fractional).
   //

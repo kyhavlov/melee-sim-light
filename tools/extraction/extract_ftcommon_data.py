@@ -80,10 +80,15 @@ def main() -> None:
         "tech_roll_stick_threshold": float(_f32_be(buf, ft_common_abs + 0x254)),
         # Downed / knockdown input thresholds (ftCo_Down / ft_0DF1.c).
         # - Downed rolls: ABS(stick_x) >= x248 and stick angle < x20_radians.
+        # - DownStand input: stick.y >= x244 and stick angle >= x20_radians.
         # - Buffered getup attack (DownBound/DownWait): x67C/x67D < x24C, or c-stick up edge at x7F4.
+        # - DownWait timer init: mv.co.downwait.x0 = x424.
+        #   refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownBound.c::ftCo_80097E8C
+        "down_stand_stick_y_threshold": float(_f32_be(buf, ft_common_abs + 0x244)),
         "down_stick_x_threshold": float(_f32_be(buf, ft_common_abs + 0x248)),
         "down_attack_button_window_frames": float(_f32_be(buf, ft_common_abs + 0x24C)),
         "down_attack_cstick_up_threshold": float(_f32_be(buf, ft_common_abs + 0x7F4)),
+        "down_wait_frames": float(_f32_be(buf, ft_common_abs + 0x424)),
         # Shield / guard (ftCo_Guard.c, fighter.c).
         # - Guard hold drain: shield_health -= x278 * (lightshield_amount*(x2F0-x2EC)+x2EC)
         # - Shield hit depletion: shield_health -= x284 * (shieldDamageTaken*(1 - (lightshield_amount*(x2E0-x2DC)+x2DC))) + x288

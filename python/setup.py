@@ -63,6 +63,7 @@ ext = Extension(
         str((ROOT / "src" / "input.c").resolve()),
         str((ROOT / "src" / "ucf.c").resolve()),
         str((ROOT / "src" / "action.c").resolve()),
+        str((ROOT / "src" / "knockdown.c").resolve()),
         str((ROOT / "src" / "blaster.c").resolve()),
         str((ROOT / "src" / "ledge.c").resolve()),
         str((ROOT / "src" / "timers.c").resolve()),

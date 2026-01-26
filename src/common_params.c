@@ -297,7 +297,21 @@ int common_params_init(void) {
       json_get_f32(buf, "sakurai_kb_max", &g_params.sakurai_kb_max) != 0 ||
       json_get_f32(buf, "air_motion_kb_mul", &g_params.air_motion_kb_mul) != 0 ||
       json_get_u8(buf, "air_motion_max_frames", &g_params.air_motion_max_frames) != 0 ||
-      json_get_u8(buf, "tech_lr_debounce_frames", &g_params.tech_lr_debounce_frames) != 0) {
+      json_get_u8(buf, "tech_lr_debounce_frames", &g_params.tech_lr_debounce_frames) != 0 ||
+      json_get_f32(buf, "tech_window_frames", &g_params.tech_window_frames) != 0 ||
+      json_get_f32(buf, "tech_roll_stick_threshold", &g_params.tech_roll_stick_threshold) != 0 ||
+      json_get_f32(buf, "damagefly_downbound_kb_vel_threshold",
+                   &g_params.damagefly_downbound_kb_vel_threshold) != 0 ||
+      json_get_f32(buf, "damagefly_landing_kb_vel_threshold",
+                   &g_params.damagefly_landing_kb_vel_threshold) != 0 ||
+      json_get_f32(buf, "down_stand_stick_y_threshold", &g_params.down_stand_stick_y_threshold) !=
+          0 ||
+      json_get_f32(buf, "down_stick_x_threshold", &g_params.down_stick_x_threshold) != 0 ||
+      json_get_f32(buf, "down_attack_button_window_frames",
+                   &g_params.down_attack_button_window_frames) != 0 ||
+      json_get_f32(buf, "down_attack_cstick_up_threshold",
+                   &g_params.down_attack_cstick_up_threshold) != 0 ||
+      json_get_f32(buf, "down_wait_frames", &g_params.down_wait_frames) != 0) {
     alloc_free(buf);
     return -1;
   }

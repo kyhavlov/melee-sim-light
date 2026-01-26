@@ -11,6 +11,7 @@
 #include "items.h"
 #include "locomotion.h"
 #include "match_flow.h"
+#include "knockdown.h"
 #include "physics.h"
 #include "shields.h"
 #include "stage_collision.h"
@@ -77,6 +78,7 @@ int step_one_frame(MslBatch* batch, const uint8_t* prev_input_bytes, size_t prev
   action_update(batch);
   physics_integrate(batch);
   stage_collision_apply(batch);
+  knockdown_update_post_collision(batch);
   match_flow_update_post_physics(batch);
   locomotion_update_post_collision(batch);
   hurtboxes_refresh(batch);

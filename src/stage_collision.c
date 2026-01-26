@@ -971,6 +971,12 @@ void stage_collision_apply(MslBatch* batch) {
         continue;
       }
 
+      // Decomp: Fighter_procUpdate only runs ftColl_800764DC (collision) when not in hitlag.
+      // refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate (the `if (!fp->x2219_b5)` block)
+      if (batch->state.hitlag[idx] != 0) {
+        continue;
+      }
+
       // Cliff / ledge hold actions use their own snap logic and should not be stage-grounded.
       //
       // Decomp:
@@ -999,24 +1005,32 @@ void stage_collision_apply(MslBatch* batch) {
         continue;
       }
 
-      // Grounding uses ECB bottom (decomp-shaped): compare/snap based on the per-frame minimum Y of
-      // the 6 ECB source joints (mpColl_LoadECB_JObj expands the ECB to contain those joints).
+      // Grounding uses the ECB bottom point (decomp-shaped): compare/snap based on the per-frame
+      // minimum Y of the 6 ECB source joints (mpColl_LoadECB_JObj expands the ECB to contain those
+      // joints).
       //
-      // Source of truth: `data/ecb/<char>_bottom.bin` (derived from SSANIM01 v3 matrices and
+      // Source of truth: `data/ecb/<char>_bottom.bin` (ISO-derived from SSANIM01 and
       // `data/characters/<char>.json` ecb_joints).
+      //
+      // Important decomp behavior: grounded collision paths can force ECB bottom to `0.0f` relative
+      // to `cur_pos` via the ECB flags. In mpColl_LoadECB_JObj, `flags & 1` sets bottom_y = 0.0f.
+      // refs/melee/src/melee/mp/mpcoll.c::mpColl_LoadECB_JObj
+      //
+      // Several stage-collision entrypoints load ECB with flags=5 (bit0 set), e.g.
+      // refs/melee/src/melee/mp/mpcoll.c::mpColl_800474E0 and ::mpColl_800478F4.
+      //
+      // Model that in our simplified stage grounding: if we were grounded entering the frame,
+      // treat ECB bottom offset as 0.0 so landing-frame negative self_y snaps do not deground.
       const uint32_t anim = batch->state.animation_index[idx];
       const int af = (int)batch->state.action_frame[idx];
       const int af_prev = (af > 0) ? (af - 1) : 0;
 
-      // Decomp-first: use previous ECB when comparing pre/post positions (mpColl uses prev_ecb vs ecb).
-      // This removes the dy==0 teacher-forcing shortcut and makes grounding stable under pose-driven
-      // ECB changes even when root dy==0.
-      //
-      // Source pointers:
-      // - ECB extrema from joints: refs/melee/src/melee/mp/mpcoll.c:328 (mpColl_LoadECB_JObj joint loop)
-      // - prev_ecb usage examples: refs/melee/src/melee/mp/mpcoll.c:1377-1381 (prev_bottom vs bottom)
-      const float ecb_off = msl_ecb_bottom_rel_y(batch->state.char_id[idx], anim, af);
-      const float prev_ecb_off = msl_ecb_bottom_rel_y(batch->state.char_id[idx], anim, af_prev);
+      float ecb_off = msl_ecb_bottom_rel_y(batch->state.char_id[idx], anim, af);
+      float prev_ecb_off = msl_ecb_bottom_rel_y(batch->state.char_id[idx], anim, af_prev);
+      if (batch->state.prev_on_ground[idx]) {
+        ecb_off = 0.0f;
+        prev_ecb_off = 0.0f;
+      }
       const float y_bot = y + ecb_off;
       const float y_prev_bot = y_prev + prev_ecb_off;
 
@@ -1048,10 +1062,27 @@ void stage_collision_apply(MslBatch* batch) {
 
         const float y_at_x = stage_seg_y_at_x(seg, x);
 
-        // Only ground if we are at/below the segment surface (with epsilon), and we crossed it this
-        // frame (based on pre/post integration positions). This prevents snapping up from far below.
+        // Only ground if we are at/below the segment surface (with epsilon).
+        //
+        // For airborne collision (prev_on_ground==0), also require crossing this frame based on
+        // pre/post integration ECB bottoms. This prevents snapping up from far below.
+        //
+        // For grounded collision (prev_on_ground==1), Melee treats contact as stable even if the
+        // actor is already slightly penetrated when collision runs (e.g. due to pose-driven ECB
+        // changes and teacher-forced reseeds). Model that by allowing grounding without the strict
+        // crossing check when we were grounded entering the frame.
+        //
+        // Decomp pointers:
+        // - Floor collision uses prev_ecb.bottom vs ecb.bottom: refs/melee/src/melee/mp/mpcoll.c::mpColl_8004A908_Floor
+        // - CollData carries current floor.index across frames (example use of floor.index and
+        //   next/prev connectivity): refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007DD7C
         if (dy < 0.0f) {
-          if (!(y_bot <= (y_at_x + ground_epsilon) && y_prev_bot >= (y_at_x - ground_epsilon))) {
+          if (batch->state.prev_on_ground[idx]) {
+            if (!(y_bot <= (y_at_x + ground_epsilon))) {
+              continue;
+            }
+          } else if (!(y_bot <= (y_at_x + ground_epsilon) &&
+                       y_prev_bot >= (y_at_x - ground_epsilon))) {
             continue;
           }
         } else {  // dy == 0

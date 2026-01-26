@@ -299,6 +299,7 @@ def _main_impl(args) -> None:
         compute_fighter_stick_input_counters,
         compute_fighter_trigger_input_counters,
         compute_press_timer_u8,
+        derive_downwait_timer,
         derive_guard_tilt_state,
         load_shield_tilt_table_meta,
         compute_tilt_timer_axis_pre_post,
@@ -444,6 +445,10 @@ def _main_impl(args) -> None:
     act_guard_on = 0x00B2
     act_guard = 0x00B3
     act_guard_reflect = 0x00B6
+    act_down_bound_u = 0x00B7
+    act_down_wait_u = 0x00B8
+    act_down_bound_d = 0x00BF
+    act_down_wait_d = 0x00C0
     act_escape_air = 0x00EC
     button_mask_xy = 0x0400 | 0x0800  # HSD_PAD_XY / src/buttons.h::MSL_BUTTON_XY
     button_mask_lr = 0x0040 | 0x0020  # HSD_PAD_L|HSD_PAD_R / src/buttons.h::MSL_BUTTON_{L,R}
@@ -584,6 +589,12 @@ def _main_impl(args) -> None:
         port0 = int(src_ports[slot]) - 1
         samples["seed_t"]["match_flow_timer"][:, slot] = _derive_match_flow_timer(
             action_id_u16=post_state, port0=port0, common=common
+        )[:-1]
+        samples["seed_t"]["downwait_timer"][:, slot] = derive_downwait_timer(
+            action_id_u16=post_state,
+            down_wait_frames=int(common["down_wait_frames"]),
+            act_down_wait_u=act_down_wait_u,
+            act_down_wait_d=act_down_wait_d,
         )[:-1]
         samples["seed_t"]["anim_frame_f32"][:, slot] = post_anim_frame_f32[:-1]
 

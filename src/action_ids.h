@@ -80,6 +80,27 @@ typedef enum MslActionId {
   MSL_ACT_GUARD_SET_OFF = 0x00B5,  // ftCo_MS_GuardSetOff
   MSL_ACT_GUARD_REFLECT = 0x00B6,  // ftCo_MS_GuardReflect
 
+  // Downed / knockdown (suite-present subset).
+  // Source of truth: refs/melee/src/melee/ft/chara/ftCommon/forward.h `ftCommon_MotionState`.
+  MSL_ACT_DOWN_BOUND_U = 0x00B7,   // ftCo_MS_DownBoundU
+  MSL_ACT_DOWN_WAIT_U = 0x00B8,    // ftCo_MS_DownWaitU
+  MSL_ACT_DOWN_STAND_U = 0x00BA,   // ftCo_MS_DownStandU
+  MSL_ACT_DOWN_ATTACK_U = 0x00BB,  // ftCo_MS_DownAttackU
+  MSL_ACT_DOWN_FOWARD_U = 0x00BC,  // ftCo_MS_DownFowardU
+  MSL_ACT_DOWN_BACK_U = 0x00BD,    // ftCo_MS_DownBackU
+  MSL_ACT_DOWN_BOUND_D = 0x00BF,   // ftCo_MS_DownBoundD
+  MSL_ACT_DOWN_WAIT_D = 0x00C0,    // ftCo_MS_DownWaitD
+  MSL_ACT_DOWN_STAND_D = 0x00C2,   // ftCo_MS_DownStandD
+  MSL_ACT_DOWN_ATTACK_D = 0x00C3,  // ftCo_MS_DownAttackD
+  MSL_ACT_DOWN_FOWARD_D = 0x00C4,  // ftCo_MS_DownFowardD
+  MSL_ACT_DOWN_BACK_D = 0x00C5,    // ftCo_MS_DownBackD
+
+  // Tech / passive (suite-present subset).
+  // Source of truth: refs/melee/src/melee/ft/chara/ftCommon/forward.h `ftCommon_MotionState`.
+  MSL_ACT_PASSIVE = 0x00C7,         // ftCo_MS_Passive
+  MSL_ACT_PASSIVE_STAND_F = 0x00C8,  // ftCo_MS_PassiveStandF
+  MSL_ACT_PASSIVE_STAND_B = 0x00C9,  // ftCo_MS_PassiveStandB
+
   // Shield defensive options (grounded).
   // Source of truth: refs/melee/src/melee/ft/chara/ftCommon/forward.h `ftCommon_MotionState`.
   MSL_ACT_ESCAPE_F = 0x00E9,  // ftCo_MS_EscapeF (roll forward)
@@ -179,6 +200,27 @@ typedef enum MslSubmotionId {
   MSL_SM_DAMAGE_FLY_LW = 179,    // ftCo_SM_DamageFlyLw
   MSL_SM_DAMAGE_FLY_TOP = 180,   // ftCo_SM_DamageFlyTop
   MSL_SM_DAMAGE_FLY_ROLL = 181,  // ftCo_SM_DamageFlyRoll
+
+  // Downed / knockdown (suite-present subset).
+  // Source of truth: refs/melee/src/melee/ft/chara/ftCommon/forward.h `ftCo_Submotion`.
+  MSL_SM_DOWN_BOUND_U = 183,   // ftCo_SM_DownBoundU
+  MSL_SM_DOWN_WAIT_U = 184,    // ftCo_SM_DownWaitU
+  MSL_SM_DOWN_STAND_U = 186,   // ftCo_SM_DownStandU
+  MSL_SM_DOWN_ATTACK_U = 187,  // ftCo_SM_DownAttackU
+  MSL_SM_DOWN_FOWARD_U = 188,  // ftCo_SM_DownFowardU
+  MSL_SM_DOWN_BACK_U = 189,    // ftCo_SM_DownBackU
+  MSL_SM_DOWN_BOUND_D = 191,   // ftCo_SM_DownBoundD
+  MSL_SM_DOWN_WAIT_D = 192,    // ftCo_SM_DownWaitD
+  MSL_SM_DOWN_STAND_D = 194,   // ftCo_SM_DownStandD
+  MSL_SM_DOWN_ATTACK_D = 195,  // ftCo_SM_DownAttackD
+  MSL_SM_DOWN_FOWARD_D = 196,  // ftCo_SM_DownFowardD
+  MSL_SM_DOWN_BACK_D = 197,    // ftCo_SM_DownBackD
+
+  // Tech / passive (suite-present subset).
+  // Source of truth: refs/melee/src/melee/ft/chara/ftCommon/forward.h `ftCo_Submotion`.
+  MSL_SM_PASSIVE = 199,          // ftCo_SM_Passive
+  MSL_SM_PASSIVE_STAND_F = 200,  // ftCo_SM_PassiveStandF
+  MSL_SM_PASSIVE_STAND_B = 201,  // ftCo_SM_PassiveStandB
 
   // Cliff / ledge (subset used by the FD suite).
   // Source of truth: refs/melee/src/melee/ft/chara/ftCommon/forward.h `ftCo_Submotion`.

@@ -9,6 +9,7 @@
 #include "input_axis.h"
 #include "locomotion.h"
 #include "jump_input.h"
+#include "knockdown.h"
 #include "blaster.h"
 #include "ledge.h"
 
@@ -532,6 +533,7 @@ void guard_update_grounded(MslBatch* batch, const MslCommonParams* c, size_t idx
 
 void action_update(MslBatch* batch) {
   locomotion_update_pre(batch);
+  knockdown_update_pre_physics(batch);
   ledge_update_pre_physics(batch);
   blaster_update_pre_physics(batch);
 }

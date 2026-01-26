@@ -37,6 +37,7 @@ typedef struct MslStateSoA {
   uint16_t* action_id;
   int16_t* action_frame;
   uint8_t* match_flow_timer;
+  int16_t* downwait_timer;  // fp->mv.co.downwait.x0 (seeded; decomp: ftCo_DownWait_Anim)
   float* anim_frame_f32;  // decomp fp->cur_anim_frame (float; Slippi `state_age`)
   // Decomp-shaped internal animation/script timebase with deterministic fractional carry.
   // - anim_frame_fp_q16_16 mirrors fp->cur_anim_frame (float) as signed Q16.16 fixed-point.
@@ -196,6 +197,8 @@ typedef struct MslStateSoA {
   int8_t* prev_input_main_y;         // [batch * players] (processed from prev_input_bytes)
   int8_t* input_c_x;                 // [batch * players] (legalized/clamped; -80..80)
   int8_t* input_c_y;                 // [batch * players] (legalized/clamped; -80..80)
+  int8_t* prev_input_c_x;            // [batch * players] (processed from prev_input_bytes)
+  int8_t* prev_input_c_y;            // [batch * players] (processed from prev_input_bytes)
   uint8_t* input_l;                  // [batch * players] (0..255)
   uint8_t* input_r;                  // [batch * players] (0..255)
 

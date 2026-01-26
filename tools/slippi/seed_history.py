@@ -1205,3 +1205,59 @@ def compute_fighter_button_timers(
         out_x684[i] = np.uint8(x684)
 
     return out_x67C, out_x67D, out_x67E, out_x680, out_x681, out_x682, out_x683, out_x684
+
+
+def derive_downwait_timer(
+    *,
+    action_id_u16: np.ndarray,
+    down_wait_frames: int,
+    act_down_wait_u: int,
+    act_down_wait_d: int,
+) -> np.ndarray:
+    """
+    Derive fp->mv.co.downwait.x0 (DownWait timer), strictly causally from action_id.
+
+    Decomp:
+    - init on DownBound->DownWait:
+      refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownBound.c::ftCo_80097E8C
+        fp->mv.co.downwait.x0 = p_ftCommonData->x424;
+    - decrement each DownWait frame unless fp->x2224_b2:
+      refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownBound.c::ftCo_DownWait_Anim
+
+    Slippi post-frame does not expose fp->mv.* union fields, so teacher-forced reseeding requires
+    deriving this internal from replay state history. For v1 suite, fp->x2224_b2 is not exposed by
+    Slippi either, so this derivation assumes the common case (x2224_b2 == 0) and counts down once
+    per contiguous DownWait frame after entry.
+    """
+    aid = np.asarray(action_id_u16, dtype=np.uint16).reshape(-1)
+    n = int(aid.size)
+    out = np.zeros(n, dtype=np.int16)
+
+    dw_u = np.uint16(int(act_down_wait_u) & 0xFFFF)
+    dw_d = np.uint16(int(act_down_wait_d) & 0xFFFF)
+    start = int(down_wait_frames)
+    if start < 0:
+        start = 0
+    if start > 0x7FFF:
+        start = 0x7FFF
+
+    timer = 0
+    prev_is_dw = False
+    for i in range(n):
+        is_dw = bool(aid[i] == dw_u or aid[i] == dw_d)
+        if not is_dw:
+            timer = 0
+            out[i] = np.int16(0)
+            prev_is_dw = False
+            continue
+
+        if not prev_is_dw:
+            timer = start
+        else:
+            if timer > 0:
+                timer -= 1
+
+        out[i] = np.int16(timer)
+        prev_is_dw = True
+
+    return out

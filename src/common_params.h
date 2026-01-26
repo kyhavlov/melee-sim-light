@@ -218,7 +218,28 @@ typedef struct MslCommonParams {
   float air_motion_kb_mul;          // p_ftCommonData->x190
   uint8_t air_motion_max_frames;    // p_ftCommonData->x18C
   uint8_t tech_lr_debounce_frames;  // p_ftCommonData->x1C
-  uint8_t _pad_u8_kb_0[2];
+
+  // Tech / passive windows (ftCo_DownAttack.c / ftCo_PassiveStand.c).
+  // Decomp:
+  // - `fp->x680 < x250` gate (tech window).
+  // - `ABS(lstick.x) >= x254` chooses tech-in-place vs tech-roll.
+  float tech_window_frames;         // p_ftCommonData->x250
+  float tech_roll_stick_threshold;  // p_ftCommonData->x254
+
+  // Damage landing thresholds (ftCo_Damage_Coll).
+  // Decomp: refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_Coll
+  float damagefly_downbound_kb_vel_threshold;  // p_ftCommonData->x1E0
+  float damagefly_landing_kb_vel_threshold;    // p_ftCommonData->x1E4
+
+  // Downed / knockdown thresholds + timers.
+  // Decomp:
+  // - DownStand input: refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownStand.c::ftCo_800980BC
+  // - DownBound->DownWait timer init: refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownBound.c::ftCo_80097E8C
+  float down_stand_stick_y_threshold;      // p_ftCommonData->x244
+  float down_stick_x_threshold;            // p_ftCommonData->x248 (Down/roll stick gate)
+  float down_attack_button_window_frames;  // p_ftCommonData->x24C
+  float down_attack_cstick_up_threshold;   // p_ftCommonData->x7F4
+  float down_wait_frames;                  // p_ftCommonData->x424
 } MslCommonParams;
 
 int common_params_init(void);
