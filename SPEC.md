@@ -382,6 +382,80 @@ Run policy in the simulator for ~5–20 seconds and assert:
 RL 1.0 means this simulator can be used as a primary training environment for Fox/Falco on Final Destination (2 players)
 without the game dynamics becoming obviously “not Melee” for competent policies.
 
+### RL 1.0 Exit Criteria (Scorecard)
+
+**Direction: lower is better** (0 is perfect).
+
+This scorecard is the *hard* RL 1.0 gate. RL 1.0 is achieved when **all** criteria below hold for the canonical validation suite:
+
+- `make test`
+- `make validate OUT=reports/validation/one_step_suite_eval.txt`
+
+(Do not “eyeball” parity. Use the one-step suite eval outputs as the objective signal.)
+
+#### Discrete mismatches (teacher-forced, one-step)
+
+All budgets are per replay **and** must hold in the `== suite summary ==` aggregate.
+
+Primary gate:
+- `overall.discrete_mismatch`: **< 100 per replay** (and `< 100 * num_replays` in suite summary).
+
+Per-field budgets (report keys in `reports/validation/one_step_suite_eval.txt`):
+
+| Report key | Budget (per replay) | Why it matters |
+|---|---:|---|
+| `mismatch.stocks` | 0 | Match flow invariant; mis-seeding here breaks everything. |
+| `mismatch.is_dead` | 0 | Match flow invariant; must be exact. |
+| `mismatch.action_id` | ≤ 15 | Core “what state are we in?”; large error breaks policy learning. |
+| `mismatch.action_frame` | ≤ 20 | Timebase correctness; drives movescript/hurtbox/hitbox sampling. |
+| `mismatch.animation_index` | ≤ 15 | Submotion identity; must agree with extracted msid tracks. |
+| `mismatch.on_ground` | ≤ 10 | Ground/air branching; dominates locomotion/defense correctness. |
+| `mismatch.ground_id` | ≤ 5 | “Which line” identity; required for stable land/ledge/tech behavior. |
+| `mismatch.facing` | ≤ 10 | Drives mirrored geometry + move direction; impacts combat heavily. |
+| `mismatch.jumps_left` | ≤ 5 | Jump gating; needed for RL plausibility and recovery correctness. |
+| `mismatch.l_cancel` | ≤ 2 | High policy impact; timing-sensitive and should be near-exact. |
+| `mismatch.hitlag` | ≤ 5 | Timing substrate; errors desync action_frame + cancel windows. |
+| `mismatch.hitstun` | ≤ 10 | Controls control-lockout; errors desync DI/SDI later. |
+| `mismatch.hurtbox_state` | ≤ 5 | Eligibility state affects whether hits should apply. |
+| `mismatch.state_flags` | ≤ 10 | Output bytes must reflect sim-owned bits (hitlag/hitstun/shield active) and stable passthrough for the rest. |
+| `mismatch.instance_id` | 0 | Identity must be deterministic (respawns/items must not “reshuffle ids”). |
+| `mismatch.instance_hit_by` | ≤ 5 | Combat bookkeeping; improves attribution and follow-on fields. |
+| `mismatch.last_hit_by` | ≤ 5 | Combat bookkeeping; used by combo logic and analysis. |
+| `mismatch.last_attack_landed` | ≤ 5 | Combat bookkeeping; should follow hit identity/timing rules. |
+| `mismatch.combo_count` | ≤ 5 | Combat bookkeeping; depends on hit attribution + hitstun timing. |
+| `mismatch.item_exists` | 0 | Items are compared across **all 15 slots**; slot identity must be deterministic. |
+| `mismatch.item_type` | 0 | Ditto: type must be stable under deterministic slot allocation. |
+| `mismatch.item_state` | 0 | Ditto: item state machine must be deterministic and suite-correct. |
+| `mismatch.item_owner` | 0 | Ditto: ownership attribution must match reference. |
+| `mismatch.item_instance_id` | 0 | Ditto: instance ids must be deterministic and stable. |
+
+Notes:
+- `state_flags` is compared as 5 raw bytes per player-frame (see “`state_flags` Ownership” above).
+- `item_*` fields are compared across all 15 global item slots per record (see `tools/eval/run_one_step_eval.py`); meeting the `< 100` total gate is not possible if slot identity is unstable.
+
+#### Float errors (teacher-forced, one-step)
+
+Primary gate:
+- `overall.float_norm_mae_p95` (suite summary): **≤ 0.0030**
+  - This is the mean absolute error normalized per-float-field by the 0.95-quantile of the reference magnitude (see `tools/eval/run_one_step_eval.py::_float_norm_mae_p95`).
+
+Group budgets (computed with the same normalization rule, but restricted to the listed fields):
+
+| Group | Fields (report keys `err.*`) | Budget (`float_norm_mae_p95`) |
+|---|---|---:|
+| Position / self-velocity | `pos_x`, `pos_y`, `speed_air_x_self`, `speed_ground_x_self`, `speed_y_self` | ≤ 0.0030 |
+| Damage / KB surface | `percent`, `speed_x_attack`, `speed_y_attack` | ≤ 0.0030 |
+| Items / projectiles | `item_pos_x`, `item_pos_y`, `item_vel_x`, `item_vel_y` | ≤ 0.0040 |
+| Defense | `shield_hp` | ≤ 0.0025 |
+
+Evaluator note:
+- The evaluator currently prints `overall.float_norm_mae_p95`, but does not print these group-restricted metrics. RL 1.0 requires
+  either (A) extending the evaluator to print the group metrics, or (B) a documented offline computation step that produces the
+  exact same `float_norm_mae_p95` numbers by restricting the same normalization rule to the listed fields.
+
+Allowed exceptions (ideally empty):
+- If an exception is added, it must state (a) why it cannot be solved from Slippi-only truth, and (b) what Dolphin engine-dump/probe would supply the missing internal.
+
 RL 1.0 acceptance criteria
 
 - Deterministic: identical input streams produce identical outputs.
@@ -423,6 +497,53 @@ Legend:
 | Items/projectiles | **PARTIAL** | Laser/blaster coverage is in and reduces `item_*` mismatches; item system parity is incomplete beyond suite needs. |
 | Grabs/throws | **TODO** | High-impact for RL; implement suite-present actions first. |
 
+### Field-to-System Ownership Map (Validation Outputs)
+
+The one-step eval emits a fixed set of output keys (see `reports/validation/one_step_suite_eval.txt`). Every key must have an owner:
+if it mismatches, file/fix it under the owning system/parity project (do not “patch symptoms” in unrelated modules).
+
+| Report key (as printed) | Owning system / parity project | Notes / typical blockers |
+|---|---|---|
+| `overall.discrete_mismatch` | Validation harness | Aggregate; should be interpreted via the per-field rows below. |
+| `overall.float_norm_mae_p95` | Validation harness | Aggregate; see per-group budgets in the RL 1.0 scorecard. |
+| `mismatch.stocks` | Match flow | Must be exact (stocks/KO/death/respawn). |
+| `mismatch.is_dead` | Match flow | Must be exact (death flags / blastzone checks). |
+| `mismatch.instance_id` | Match flow + deterministic allocation | Must be deterministic across respawns; also impacts “who hit whom” bookkeeping. |
+| `mismatch.action_id` | Action/state machine (vertical slices) | “What state are we in?”; blocked by missing upstream substrates (mpColl, hitlists) if a state depends on them. |
+| `mismatch.action_frame` | Anim/script timebase | Must match Q16.16 accumulator semantics + hitlag freeze. |
+| `mismatch.animation_index` | Anim/submotion identity + extracted anim tracks | Depends on correct msid selection and timebase; often exposed by specials/guard submotions. |
+| `mismatch.facing` | Locomotion + action transitions | Usually a state-machine ordering issue (turn/turnrun/escape/roll flips) rather than physics. |
+| `mismatch.jumps_left` | Locomotion (jump gating) | Depends on correct ground/air transitions + jump consumption rules. |
+| `mismatch.on_ground` | Stage collision/ECB (mpColl parity project) | Requires correct prev/current ECB usage and stable floor selection. |
+| `mismatch.ground_id` | Stage collision/ECB (mpColl parity project) | “Which line” identity; unstable without mpColl-style tie-break + persistence rules. |
+| `mismatch.l_cancel` | Locomotion + aerial attack landing | Needs correct landing frame detection (mpColl), and correct action_frame timing. |
+| `mismatch.hitlag` | Damage pipeline | Depends on hit resolution + hitlag timers + timebase freeze coupling. |
+| `mismatch.hitstun` | Damage pipeline | Depends on hit resolution + KB/percent modifiers + hitlists/rehit timing. |
+| `mismatch.hurtbox_state` | Combat geometry + damage pipeline | State/mode gates (intangible/invuln/throw hurtbox changes). |
+| `mismatch.instance_hit_by` | Hit identity/timing (hitlists parity project) | Needs per-hitbox/per-target hitlists + deterministic tie-breaks. |
+| `mismatch.last_hit_by` | Hit identity/timing (hitlists parity project) | Attribution must follow decomp ordering and hit resolution rules. |
+| `mismatch.last_attack_landed` | Hit identity/timing (hitlists parity project) | Driven by hit identity + whether hit applied BODY/SHIELD. |
+| `mismatch.combo_count` | Hit identity/timing (hitlists parity project) | Depends on hit attribution + hitstun timing coherence. |
+| `mismatch.state_flags` | Mixed: defense + combat + timers | See “`state_flags` Ownership (seed vs derived)”; sim-owned bytes must be kept consistent. |
+| `mismatch.item_exists` | Items/projectiles | Compared across 15 slots; requires deterministic slot identity + lifecycle. |
+| `mismatch.item_type` | Items/projectiles | Deterministic type assignment + spawn plumbing (blaster/laser). |
+| `mismatch.item_state` | Items/projectiles | Item state machine parity (at least for suite-needed items). |
+| `mismatch.item_owner` | Items/projectiles | Owner attribution (fighter ↔ item hooks). |
+| `mismatch.item_instance_id` | Items/projectiles + deterministic allocation | Stable ids; typically breaks when allocation/free ordering differs. |
+| `err.pos_x` | Physics + stage collision | Often blocked by mpColl floor selection/resolution order. |
+| `err.pos_y` | Physics + stage collision | Ditto; landing frame handling is the usual culprit. |
+| `err.speed_air_x_self` | Physics integration | Drift/air accel + timebase ordering; should not be “tuned” off suite artifacts. |
+| `err.speed_ground_x_self` | Physics + ground contact substrate | Traction/friction depends on stable `on_ground` + correct floor-relative speed. |
+| `err.speed_y_self` | Physics + stage collision | Gravity/fastfall/landing frame semantics. |
+| `err.speed_x_attack` | Damage pipeline (KB) | KB velocity + decay; blocked by missing damage modifiers and hitlists timing. |
+| `err.speed_y_attack` | Damage pipeline (KB) | Same as `speed_x_attack`. |
+| `err.percent` | Damage pipeline (damage modifiers parity project) | Percent drift is dominated by missing stale queue/modifiers once hit identity is correct. |
+| `err.shield_hp` | Defense (shield) | HP drain/regen + hit depletion; blocked by missing powershield/angle subrules only if suite exercises them. |
+| `err.item_pos_x` | Items/projectiles | Projectile integration + spawn offsets + collision. |
+| `err.item_pos_y` | Items/projectiles | Ditto. |
+| `err.item_vel_x` | Items/projectiles | Ditto. |
+| `err.item_vel_y` | Items/projectiles | Ditto. |
+
 ### Ordering Rule: “Parity Projects” (finish-once, cross-cutting layers)
 
 To avoid churn, we treat some work as **parity projects**: once done, they become the stable substrate that many systems build on.
@@ -431,8 +552,55 @@ Prefer completing these projects in order rather than “patching symptoms” in
 1) **mpColl-style ground contact state machine** (**TODO**, next major substrate)
    - Goal: stable, decomp-shaped `on_ground` + `ground_id` + “which line” selection with correct prev/current ECB usage.
    - Why now: it unblocks landing/knockdown/ledge correctness without per-state hacks.
-   - Reads first: `refs/melee/src/melee/mp/mpcoll.c`, `refs/melee/src/melee/ft/ftcoll.c`, `refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate`.
-   - Replaces: FD-specific stickiness/endpoint biases and “force airborne” policy patches.
+
+   **Decomp entrypoints (read first; file::function)**
+   - `refs/melee/src/melee/mp/mpcoll.c::mpCollPrev` (prev/current bookkeeping and sanity checks)
+   - `refs/melee/src/melee/mp/mpcoll.c::mpColl_LoadECB` + `mpCollInterpolateECB` (ECB/desired ECB update)
+   - `refs/melee/src/melee/mp/mpcoll.c::mpColl_8004A908_Floor` (floor contact stability; prev_ecb.bottom vs ecb.bottom)
+   - `refs/melee/src/melee/mp/mpcoll.c::mpColl_80044838_Floor` + `mpColl_80044948_Floor` (floor query variants / ignore-bottom gates)
+   - `refs/melee/src/melee/mp/mpcoll.c::mpColl_80044164` + `mpColl_800443C4` (ledge detection helpers)
+   - `refs/melee/src/melee/lb/types.h::CollData` (what state exists and what persists across frames)
+   - `refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate` + `Fighter_procMap` (where collision fits in proc ordering)
+   - `refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007DD7C` (example of floor.index persistence/graph traversal)
+
+   **Inputs/outputs contract (what this system owns)**
+   - Inputs (per fighter, per frame):
+     - `cur_pos` (root translation after integration), and the prior-frame position used for “crossing” tests.
+     - ECB geometry: `ecb` and `prev_ecb` (pose-driven), plus any “desired_ecb” interpolation semantics if needed.
+     - Stage floor segments (FD) + line connectivity/metadata (e.g., endpoint flags, ledge tags).
+     - Any “skip” gates (e.g., `floor_skip`) that intentionally disable floor collision for a window.
+   - Outputs (owned, written by collision):
+     - `on_ground` (binary contact state for state-machine branching).
+     - `ground_id` / line identity: stable id for the contacted floor line (FD segment id first; later general line ids).
+     - Contact metadata needed downstream: floor normal, contact point, “env flags”/ledge-grab masks (even if only partially used on FD today).
+   - Must **not** own:
+     - Action transitions (e.g., entering Landing/CliffCatch) — collision provides facts; the action/state machine consumes them.
+     - Timebase (`action_frame`) — collision must be consistent with it, but does not decide it.
+
+   **Required internal state (and whether it must be seeded)**
+   - Must persist across sim frames (derivable during rollout; may need explicit reseed fields if missing from Slippi):
+     - `prev_pos`/`last_pos` (collision “crossing” frame depends on prior translation; see `CollData.prev_pos`/`last_pos`).
+     - `prev_ecb` and current `ecb` (pose-driven; `prev_ecb` is a one-frame lag).
+     - Current floor contact (`floor.index` / `ground_id`) to support contact stability and line-graph traversal across frames.
+     - `env_flags` + `prev_env_flags` (collision environment flags used by ledge/landing/tech gates).
+     - Skip/override gates: `floor_skip`, `joint_id_skip`, `joint_id_only`, ledge snap params.
+   - Reseed rule: any state above that cannot be deterministically reconstructed from the replay seed for frame `t` must be promoted into the explicit seed schema (don’t add hidden latches).
+
+   **Step ordering contract (where it runs)**
+   - Collision runs on the **post-integration** translation (after `phys_cb` mutates position/vel), and before any action transitions that branch on `on_ground`/`ground_id` for frame `t+1`.
+   - Landing/ledge/tech logic must consult collision outputs from this step; do not special-case individual actions to “fix grounding”.
+
+   **Replaces these current approximations (delete once mpColl parity lands)**
+   - FD “previous-segment stickiness” and deterministic endpoint bias for shared-vertex segments (`src/stage_collision.c:1103`).
+   - Teacher-forcing collision conveniences / penetration snapping rules that are not directly decomp-backed (`src/stage_collision.c` grounding gates around `ground_epsilon` and dy==0 cases).
+   - Any remaining “force airborne” policies added to compensate for unstable floor selection.
+   - Downstream hacks that depend on missing collision-env semantics:
+     - “outside-only grab” ledge catch gate (`src/ledge.c:376` and risk register entry).
+     - CliffWait climb/drop “previous-stick neutral reset” latch (`src/ledge.c:190` and risk register entry).
+
+   **DONE when**
+   - `mismatch.on_ground` and `mismatch.ground_id` become scorecard-compliant **without** any per-action grounding special cases.
+   - The collision module exposes a stable, minimal interface that higher-level systems call (landing, ledge, knockdown/tech), and those systems stop owning ad hoc collision latches.
 
 2) **Collision-env flags + ledge grab mask parity** (**PARTIAL**)
    - Goal: decomp-shaped `Collide_LedgeGrabMask`-equivalent so ledge catch can be scheduled post-collision without regressions.
@@ -492,6 +660,10 @@ Status column meaning (used below):
 - `missing`: the state is currently treated as “carry-through” from seed, without dedicated action logic (high mismatch risk when the state would normally change due to inputs/environment).
 
 #### Unique `action_id` set (seed_t + ref_t1)
+
+Status note:
+- The `status` column below is best-effort and can become stale as systems land quickly. The authoritative high-level status is
+  “Roadmap Status (as of …)” above; regenerate/update the table rather than trusting stale labels.
 
 Counts note:
 - `suite_count` is the total occurrences across **both** `seed_t.action_id` and `ref_t1.action_id`, restricted to the
@@ -810,8 +982,8 @@ update the row rather than re-deriving the same plan again.
 |---|---|---|
 | `refs/melee/src/melee/ft/fighter.c::Fighter_UnkProcessDeath_80068354` | `data/stages/final_destination.json` (collision segments; includes `unit_scale`) | `src/match_flow.c` (new), `src/stage_collision.c` |
 | `refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState` | `data/common/ft_common_data.json` (common timers/constants; see `docs/DATA_CONTRACT.md`) | `src/action.c` (state transitions), `src/timers.c` |
-| `refs/melee/src/melee/ft/chara/ftCommon/ftCo_DemoCallback0.c::ftCo_800C6150` (Rebirth entry) | (Need) spawn/respawn positions extracted from stage DAT (currently not represented explicitly in `data/stages/final_destination.json`) | Missing: respawn/invuln timers + spawn positioning |
-| `refs/melee/src/melee/mp/mplib.c::mpLib_DrawZones` (blast/camera zone sources) | (Need) explicit blast zone rect for FD extracted into `data/stages/final_destination.json` (or a `data/stages/*.bin` v2) | Missing: blastzone OOB checks and KO state machine |
+| `refs/melee/src/melee/ft/chara/ftCommon/ftCo_DemoCallback0.c::ftCo_800C6150` (Rebirth entry) | (Need) spawn/respawn positions extracted from stage DAT (currently not represented explicitly in `data/stages/final_destination.json`) | Implemented for suite; remaining gap is making spawn/respawn positioning fully data-driven from extracted stage artifacts. |
+| `refs/melee/src/melee/mp/mplib.c::mpLib_DrawZones` (blast/camera zone sources) | (Need) explicit blast zone rect for FD extracted into `data/stages/final_destination.json` (or a `data/stages/*.bin` v2) | Implemented for suite; remaining gap is extracting and consuming the canonical blastzone rect(s) from stage data. |
 
 #### Locomotion core (ground/air, jumps, fastfall, landing, airdodge/escapes)
 
@@ -859,8 +1031,8 @@ update the row rather than re-deriving the same plan again.
 
 | Read first (decomp) | Data artifacts (ISO-derived) | Code owner / gaps |
 |---|---|---|
-| `refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_SpecialN_Enter` (Blaster) | `data/special_msids/{fox,falco}.json` (special msid list) + `data/moves/{fox,falco}.json` (script events) | Missing: `src/specials.c` (new) dispatch + `src/items.c` projectile spawn/update |
-| `refs/melee/src/melee/it/items/itfoxblaster.c` (blaster item + laser spawn plumbing) | (Need) projectile param tables (speed, lifetime, damage) extracted per character | Missing: projectile system (lasers minimum) |
+| `refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_SpecialN_Enter` (Blaster) | `data/special_msids/{fox,falco}.json` (special msid list) + `data/moves/{fox,falco}.json` (script events) | Partial today: blaster loop/shot spawning is implemented via `src/action.c` + `src/items.c`; remaining Fox/Falco specials still need a decomp-shaped dispatch/state machine. |
+| `refs/melee/src/melee/it/items/itfoxblaster.c` (blaster item + laser spawn plumbing) | (Need) projectile param tables (speed, lifetime, damage) extracted per character | Partial today: lasers are implemented and data-driven for the suite; remaining gap is generalizing item/projectile param extraction and item types beyond lasers. |
 
 #### Grabs/throws
 
@@ -873,8 +1045,8 @@ update the row rather than re-deriving the same plan again.
 
 | Read first (decomp) | Data artifacts (ISO-derived) | Code owner / gaps |
 |---|---|---|
-| `refs/melee/src/melee/it/items/itfoxblaster.c` (laser lifecycle/collision) | (Need) item/projectile type tables extracted into `data/items/` (new) | Missing: `src/items.c` implementation + deterministic fixed-capacity pool |
-| `refs/melee/src/melee/ft/ft_0BF0.c` (fighter ↔ item hooks for blaster) | (Need) precise spawn offsets (bone + local offset) from extracted pose/movescript | Missing: fighter-to-item spawn hook points |
+| `refs/melee/src/melee/it/items/itfoxblaster.c` (laser lifecycle/collision) | (Need) item/projectile type tables extracted into `data/items/` (new) | Partial today: deterministic fixed-capacity pool + laser lifecycle/collision exist in `src/items.c`; expand to a general item system only as suite demands. |
+| `refs/melee/src/melee/ft/ft_0BF0.c` (fighter ↔ item hooks for blaster) | (Need) precise spawn offsets (bone + local offset) from extracted pose/movescript | Partial today: suite-needed fighter↔laser hooks exist; remaining gap is making spawn offsets fully data-driven and covering non-laser projectile hooks. |
 
 ### 3) Prioritized parity projects / slices (next 5–10)
 
@@ -891,30 +1063,37 @@ Completed slices (suite-positive, now “owned” by the sim):
 Next slices (in recommended order):
 
 1. mpColl-style ground contact state machine (**parity project**, see Ordering Rule above)
+   - Blocked by: nothing upstream (this is the next substrate).
    - Dependencies: existing ECB tables + stage geometry.
    - Acceptance checks: materially reduce residual `mismatch.on_ground` and `mismatch.ground_id` without per-action special cases.
    - Deliverable: one coherent ground-contact module that higher-level states call into.
 
 2. Collision-env flags + ledge grab mask parity (**parity project**)
+   - Blocked by: (1) mpColl parity (needs stable `env_flags`/line identity so ledge gates aren’t action-specific hacks).
    - Dependencies: (1).
    - Acceptance checks: schedule post-collision ledge catch in `src/ledge.c` without suite regressions; remove “outside-only grab” approximation.
 
 3. Hitlists/rehit timers parity (**parity project**)
+   - Blocked by: (1) mpColl parity (stable contact/landing frames; consistent “same-frame” ordering).
    - Dependencies: (1) and stable move/hit identity.
    - Acceptance checks: replace conservative rehit latch; improve hitlag/hitstun/percent timing coherence without regressions.
 
 4. Damage modifiers parity (stale queue + multipliers + armor/no-damage gates) (**parity project**)
+   - Blocked by: (3) hitlists parity (needs correct hit identity + timing before modifiers mean anything).
    - Dependencies: (3).
    - Acceptance checks: percent/KB/hitstun become numerically meaningful (reduce drift); avoid tuning off suite-only artifacts.
 
 5. Grab/throw core (suite-first)
+   - Blocked by: (1) mpColl parity + (3) hitlists parity (throws stress contact timing and hit attribution).
    - Dependencies: (1) for stable contact/grounding during throws; (3) for hit identity/timing.
    - Acceptance checks: reduce `mismatch.action_id` for Catch*/Throw*/Thrown* states and stop downstream state explosions in grab sequences.
 
 6. Remaining Fox/Falco specials (B moves) + any suite-needed projectiles
+   - Blocked by: (3)–(4) if the special applies hits/damage in ways that require correct rehit/modifiers (avoid patching around missing modifiers).
    - Dependencies: (3)–(4) for correct damage/rehit semantics; items framework for projectile specials.
 
 7. DI/SDI/ASDI
+   - Blocked by: (1)–(4); otherwise DI work degenerates into chasing upstream float/ordering mismatches.
    - Only start once (1)–(4) are “close enough” that we would otherwise be chasing small float mismatches.
 
 ### 4) Reseed/schema risk register (known missing internals)
