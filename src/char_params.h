@@ -67,6 +67,10 @@ typedef struct MslCharParams {
   // Shield (refs/melee/src/melee/ft/types.h::ftCo_DatAttrs::initial_shield_size)
   float initial_shield_size;
 
+  // Model scaling (refs/melee/src/melee/ft/types.h::ftCo_DatAttrs::model_scaling).
+  // Source of truth: ISO-extracted `data/characters/*.json` `model_scaling`.
+  float model_scaling;
+
   // Cliff / ledge (ftCo_Cliff*).
   //
   // Source of truth: ISO-extracted `data/characters/*.json` (ftData_x44_t and co attrs).

@@ -29,6 +29,16 @@ void anim_pose_reset_for_tests(void);
 int anim_pose_get_matrix(uint8_t char_id, uint16_t msid, uint16_t frame, uint16_t part_id,
                          float out_3x4[12]);
 
+// Hot-path TransN sampler.
+// Reads the per-frame TransN/root translation tail for (char_id, msid, frame) into out_xyz:
+//   (x, y, z)
+//
+// Decomp consumer example (uses y/z components as offsets/vel targets):
+// - refs/melee/src/melee/ft/ft_081B.c::ft_80085030 (fp->x6A4_transNOffset.{y,z})
+//
+// Returns 0 on success; nonzero on missing/invalid inputs.
+int anim_pose_get_transn(uint8_t char_id, uint16_t msid, uint16_t frame, float out_xyz[3]);
+
 #ifdef __cplusplus
 }  // extern "C"
 #endif

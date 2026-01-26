@@ -794,9 +794,13 @@ def _extra_anim_msids() -> list[int]:
         183,  # ftCo_SM_DownBoundU
         184,  # ftCo_SM_DownWaitU
         187,  # ftCo_SM_DownAttackU
+        188,  # ftCo_SM_DownFowardU (downed roll forward)
+        189,  # ftCo_SM_DownBackU (downed roll back)
         191,  # ftCo_SM_DownBoundD
         192,  # ftCo_SM_DownWaitD
         195,  # ftCo_SM_DownAttackD
+        196,  # ftCo_SM_DownFowardD (downed roll forward)
+        197,  # ftCo_SM_DownBackD (downed roll back)
         37,  # ftCo_SM_GuardOn (needed for GuardOn blend timeline length / x2E8)
         38,  # ftCo_SM_Guard
         39,  # ftCo_SM_GuardOff

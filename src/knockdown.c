@@ -3,6 +3,7 @@
 #include <limits.h>
 #include <math.h>
 
+#include "action.h"
 #include "action_ids.h"
 #include "anim_frame.h"
 #include "anim_pose.h"
@@ -158,6 +159,50 @@ static inline void down_apply_phys_friction(MslBatch* batch, const MslCommonPara
   }
   batch->state.speed_ground_x_self[idx] =
       apply_friction_ground(batch->state.speed_ground_x_self[idx], friction);
+}
+
+static inline uint8_t down_roll_apply_phys_transn(MslBatch* batch, const MslCommonParams* c,
+                                                  const MslCharParams* ch, size_t idx) {
+  if (batch == NULL || c == NULL || ch == NULL) {
+    return 0u;
+  }
+
+  // Decomp: downed roll Phys callback calls ft_80084FA8, which forwards to ft_80085030.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Down.c::ftCo_Down_Phys
+  // refs/melee/src/melee/ft/ft_081B.c::{ft_80084FA8,ft_80085030}
+  //
+  // ft_80085030 uses fp->x6A4_transNOffset.z * facing_dir as the target ground velocity when
+  // fp->x594_b0 indicates TransN motion is active; otherwise it falls back to ground friction.
+  //
+  // Our ISO-derived SSANIM01 v3 artifacts store per-frame TransN translation as a tail (x,y,z);
+  // approximate transNOffset.z as a finite difference between adjacent frames.
+  const uint8_t cid = batch->state.char_id[idx];
+  const uint32_t msid_u32 = batch->state.animation_index[idx];
+  if (!(msid_u32 <= 0xFFFFu)) {
+    return 0u;
+  }
+  const uint16_t msid = (uint16_t)msid_u32;
+  const uint16_t f_cur =
+      msl_anim_frame_floor_u16(msl_anim_frame_sanitize_f32(batch->state.anim_frame_f32[idx]));
+  const uint16_t f_prev = (f_cur > 0u) ? (uint16_t)(f_cur - 1u) : 0u;
+
+  float t_cur[3];
+  float t_prev[3];
+  if (anim_pose_get_transn(cid, msid, f_cur, t_cur) != 0 ||
+      anim_pose_get_transn(cid, msid, f_prev, t_prev) != 0) {
+    return 0u;
+  }
+
+  // Decomp uses transNOffset.z as the target ground velocity (after applying facing_dir).
+  // For DownFoward/DownBack, TransN is active (ft_80085030's fp->x594_b0 branch).
+  // Note: TransNPos is in fighter model space; apply per-character model scaling so the resulting
+  // per-frame transNOffset matches engine/world units.
+  // Source of truth for model scaling: ISO-extracted `data/characters/<char>.json` `model_scaling`.
+  // Decomp: refs/melee/src/melee/ft/types.h::ftCo_DatAttrs::model_scaling
+  const float dz = (t_cur[2] - t_prev[2]) * ch->model_scaling;  // transNOffset.z finite difference
+  const float facing_dir = batch->state.facing[idx] ? 1.0f : -1.0f;
+  batch->state.speed_ground_x_self[idx] = dz * facing_dir;
+  return 1u;
 }
 
 static inline float stick_angle_y_over_abs_x(float stick_x, float stick_y) {
@@ -325,6 +370,34 @@ static inline void enter_down_roll(MslBatch* batch, size_t idx, uint16_t roll_ac
   msl_anim_timebase_recompute_derived(batch, idx);
 }
 
+static inline uint8_t should_enter_squat_from_wait(const MslBatch* batch, const MslCommonParams* c,
+                                                   size_t idx) {
+  // Decomp: ftCo_Wait_IASA -> ftCo_800D5FB0 (Squat enter).
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Squat.c::ftCo_800D5FB0
+  //
+  // Gate: fp->input.lstick.y < -p_ftCommonData->x90.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Squat.c::ftCo_Squat_CheckInput
+  if (batch == NULL || c == NULL) {
+    return 0u;
+  }
+  const float stick_y =
+      apply_deadzone(stick_i8_to_unit(batch->state.input_main_y[idx]), c->lstick_deadzone_y);
+  return (stick_y < -c->crouch_stick_threshold) ? 1u : 0u;
+}
+
+static inline void enter_squat(MslBatch* batch, size_t idx) {
+  // Decomp: ftCo_Squat_Enter calls Fighter_ChangeMotionState(ftCo_MS_Squat) + ftAnim_8006EBA4.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Squat.c::ftCo_Squat_Enter
+  batch->state.action_id[idx] = (uint16_t)MSL_ACT_SQUAT;
+  batch->state.animation_index[idx] = (uint32_t)MSL_SM_SQUAT;
+  msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+  if (batch->state.hitlag[idx] == 0) {
+    batch->state.anim_frame_fp_q16_16[idx] += batch->state.frame_speed_mul_fp_q16_16[idx];
+  }
+  msl_anim_timebase_recompute_derived(batch, idx);
+}
+
 static inline uint8_t should_enter_down_attack_from_bound(const MslBatch* batch, const MslCommonParams* c,
                                                           size_t idx) {
   // Decomp: refs/melee/src/melee/ft/chara/ftCommon/ftCo_Down.c::ftCo_80098400
@@ -422,6 +495,44 @@ void knockdown_update_pre_physics(MslBatch* batch) {
         continue;
       }
 
+      if (is_down_roll(a0)) {
+        // DownFoward/DownBack share ftCo_Down_Anim/Phys/Coll (common downed roll actions).
+        // Decomp: refs/melee/src/melee/ft/chara/ftCommon/ftCo_Down.c::{ftCo_Down_Anim,ftCo_Down_Phys,ftCo_Down_Coll}
+        // Anim-end exits to Wait (ftCo_Down_Anim -> ft_8008A2BC).
+        const uint32_t msid_u32 = submotion_for_down_action(a0);
+        if ((msid_u32 <= 0xFFFFu) && anim_is_finished(cid, (uint16_t)msid_u32, anim_frame)) {
+          // IMPORTANT ordering: Anim/IASA run before Phys in-engine. When the roll anim ends and
+          // transitions to Wait, any immediate Wait IASA (shield/crouch) should happen before we
+          // apply per-frame Phys. This prevents "one extra roll root-motion frame" when the player
+          // buffers shield/crouch on the roll end frame.
+          // refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate (Anim/IASA before Phys)
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Down.c::ftCo_Down_Anim (end->ft_8008A2BC)
+          enter_wait(batch, idx);
+
+          // Same-frame Wait IASA subset after roll end (decomp-shaped ordering).
+          // Wait IASA includes guard entry (ftCo_80091A4C) and squat entry (ftCo_800D5FB0).
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
+          guard_update_grounded(batch, c, idx, 1);
+          if (batch->state.action_id[idx] == (uint16_t)MSL_ACT_WAIT &&
+              should_enter_squat_from_wait(batch, c, idx)) {
+            enter_squat(batch, idx);
+          }
+
+          // Apply the new state's Phys in the same frame (ft_80084F3C friction path).
+          //
+          // Decomp:
+          // - Wait phys uses ft_80084F3C.
+          // - Squat phys uses ft_80084F3C.
+          // - Guard phys paths also include ft_80084F3C ground friction.
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Squat.c::ftCo_Squat_Phys
+          down_apply_phys_friction(batch, c, ch, idx);
+        } else {
+          // Phys: ft_80084FA8 (TransN-driven ground velocity target; see down_roll_apply_phys_transn).
+          down_roll_apply_phys_transn(batch, c, ch, idx);
+        }
+        continue;
+      }
+
       // Ground phys for downed states (ft_80084F3C).
       down_apply_phys_friction(batch, c, ch, idx);
 
@@ -435,6 +546,12 @@ void knockdown_update_pre_physics(MslBatch* batch) {
             const uint16_t roll_act = down_roll_action_from_input(batch, c, idx, a0);
             if (roll_act != 0) {
               enter_down_roll(batch, idx, roll_act);
+              // Decomp ordering: when an Anim callback changes the motion state, the new state's
+              // Phys runs later in the same frame (after Anim/IASA). Apply roll root motion now so
+              // physics_integrate uses it this frame.
+              // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownBound.c::ftCo_DownBound_Anim
+              // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Down.c::ftCo_Down_Phys
+              down_roll_apply_phys_transn(batch, c, ch, idx);
             } else {
               enter_down_wait(batch, idx, down_wait_action_from_bound(a0));
             }
@@ -450,6 +567,7 @@ void knockdown_update_pre_physics(MslBatch* batch) {
                 const uint16_t roll_act2 = down_roll_action_from_input(batch, c, idx, batch->state.action_id[idx]);
                 if (roll_act2 != 0) {
                   enter_down_roll(batch, idx, roll_act2);
+                  down_roll_apply_phys_transn(batch, c, ch, idx);
                 } else if (should_enter_down_stand_from_wait(batch, c, idx)) {
                   enter_down_stand(batch, idx, batch->state.action_id[idx]);
                 }
@@ -486,6 +604,11 @@ void knockdown_update_pre_physics(MslBatch* batch) {
           const uint16_t roll_act = down_roll_action_from_input(batch, c, idx, a0);
           if (roll_act != 0) {
             enter_down_roll(batch, idx, roll_act);
+            // Decomp: ftCo_Down_CheckInput enters roll in IASA and the roll Phys runs later in the
+            // same frame.
+            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownBound.c::ftCo_DownWait_IASA
+            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Down.c::ftCo_Down_Phys
+            down_roll_apply_phys_transn(batch, c, ch, idx);
             continue;
           }
         }
@@ -516,15 +639,6 @@ void knockdown_update_pre_physics(MslBatch* batch) {
         continue;
       }
 
-      if (is_down_roll(a0)) {
-        // DownFoward/DownBack share ftCo_Down_Anim/Phys/Coll (common downed roll actions).
-        // Decomp: refs/melee/src/melee/ft/chara/ftCommon/ftCo_Down.c::{ftCo_Down_Anim,ftCo_Down_Phys,ftCo_Down_Coll}
-        const uint32_t msid_u32 = submotion_for_down_action(a0);
-        if ((msid_u32 <= 0xFFFFu) && anim_is_finished(cid, (uint16_t)msid_u32, anim_frame)) {
-          enter_wait(batch, idx);
-        }
-        continue;
-      }
     }
   }
 }

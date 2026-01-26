@@ -163,6 +163,8 @@ typedef enum MslSubmotionId {
   MSL_SM_FALL_SPECIAL_F = 27,        // ftCo_SM_FallSpecialF
   MSL_SM_FALL_SPECIAL_B = 28,        // ftCo_SM_FallSpecialB
   MSL_SM_DAMAGE_FALL = 29,           // ftCo_SM_DamageFall
+  MSL_SM_SQUAT = 30,                 // ftCo_SM_Squat
+  MSL_SM_SQUAT_WAIT = 31,            // ftCo_SM_SquatWait
   MSL_SM_LANDING = 35,               // ftCo_SM_Landing
   MSL_SM_LANDING_FALL_SPECIAL = 36,  // ftCo_SM_LandingFallSpecial
 

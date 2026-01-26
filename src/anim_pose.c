@@ -310,3 +310,35 @@ int anim_pose_get_matrix(uint8_t char_id, uint16_t msid, uint16_t frame, uint16_
   memcpy(out_3x4, t->buf + (size_t)mat_off_u, (size_t)MAT_BYTES);
   return 0;
 }
+
+int anim_pose_get_transn(uint8_t char_id, uint16_t msid, uint16_t frame, float out_xyz[3]) {
+  if (out_xyz == NULL) {
+    return -1;
+  }
+  const MslAnimPoseTable* t = table_for_char(char_id);
+  if (t == NULL) {
+    return -1;
+  }
+  if (!t->have_msid[msid]) {
+    return -1;
+  }
+
+  const uint16_t frame_count = t->frame_count_by_msid[msid];
+  if (frame >= frame_count) {
+    return -1;
+  }
+
+  const uint32_t base_off = t->base_off_by_msid[msid];
+  const uint64_t joint_count_u = (uint64_t)t->joint_count;
+  const uint64_t frame_count_u = (uint64_t)frame_count;
+  const uint64_t frame_u = (uint64_t)frame;
+
+  const uint64_t mats_bytes = frame_count_u * joint_count_u * (uint64_t)MAT_BYTES;
+  const uint64_t transn_off_u = (uint64_t)base_off + mats_bytes + frame_u * (uint64_t)TRANSN_BYTES_PER_FRAME;
+  if (transn_off_u + (uint64_t)TRANSN_BYTES_PER_FRAME > (uint64_t)t->sz) {
+    return -1;
+  }
+
+  memcpy(out_xyz, t->buf + (size_t)transn_off_u, (size_t)TRANSN_BYTES_PER_FRAME);
+  return 0;
+}

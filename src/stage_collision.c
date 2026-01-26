@@ -3,6 +3,7 @@
 #include <ctype.h>
 #include <errno.h>
 #include <float.h>
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -1054,13 +1055,73 @@ void stage_collision_apply(MslBatch* batch) {
       uint16_t best_segment_i = 0;
       uint8_t best_foot_score = 0;
 
-      for (size_t si = 0; si < fd_floor_segment_count; si++) {
-        const MslStageFloorSegment* seg = &fd_floor_segments[si];
-        if (!stage_seg_x_contains(seg, x)) {
-          continue;
+      // Sticky FD floor selection: if we were grounded entering the frame and the previously-selected
+      // `ground_id` segment still contains the current pos_x (under the deterministic endpoint
+      // policy), keep it rather than reselecting a neighbor segment at shared vertices.
+      //
+      // Decomp shape: mpColl keeps CollData floor.index across frames and uses it for stable grounded
+      // collision connectivity (see ftCommon_8007DD7C floor.index usage).
+      // - refs/melee/src/melee/mp/mpcoll.c::mpColl_8004A908_Floor
+      // - refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007DD7C
+      if (batch->state.prev_on_ground[idx]) {
+        const uint16_t prev_segment_i = batch->state.ground_id[idx];
+        const MslStageFloorSegment* prev_seg = NULL;
+        for (size_t si = 0; si < fd_floor_segment_count; si++) {
+          const MslStageFloorSegment* seg = &fd_floor_segments[si];
+          if (seg->segment_i == prev_segment_i) {
+            prev_seg = seg;
+            break;
+          }
         }
+        if (prev_seg && stage_seg_x_contains(prev_seg, x)) {
+          const float y_at_x = stage_seg_y_at_x(prev_seg, x);
 
-        const float y_at_x = stage_seg_y_at_x(seg, x);
+          // Reuse the same y_bot/y_prev_bot grounding gates as the general search below.
+          uint8_t ok = 1;
+          if (dy < 0.0f) {
+            if (!(y_bot <= (y_at_x + ground_epsilon))) {
+              ok = 0;
+            }
+          } else {  // dy == 0
+            if (!((y_bot <= (y_at_x + ground_epsilon)) ||
+                  (y_prev_bot >= (y_at_x - ground_epsilon)))) {
+              ok = 0;
+            }
+          }
+
+          if (ok) {
+            found = 1;
+            best_y_at_x = y_at_x;
+            best_segment_i = prev_seg->segment_i;
+            best_foot_score =
+                (uint8_t)(stage_seg_x_contains(prev_seg, ecb_left_world_x) ? 1 : 0) +
+                (uint8_t)(stage_seg_x_contains(prev_seg, ecb_right_world_x) ? 1 : 0);
+          }
+        }
+      }
+
+      // If we didn't stick to the previous segment, apply a deterministic endpoint bias in the
+      // movement direction so shared-vertex segment classification doesn't oscillate when root motion
+      // lands exactly on X boundaries (notably during downed rolls).
+      float x_for_contains = x;
+      if (!found) {
+        const float vx = batch->state.speed_ground_x_self[idx];
+        if (vx > 0.0f) {
+          x_for_contains = nextafterf(x, INFINITY);
+        } else if (vx < 0.0f) {
+          x_for_contains = nextafterf(x, -INFINITY);
+        }
+      }
+
+      if (!found) {
+        for (size_t si = 0; si < fd_floor_segment_count; si++) {
+          const MslStageFloorSegment* seg = &fd_floor_segments[si];
+          if (!stage_seg_x_contains(seg, x_for_contains)) {
+            continue;
+          }
+
+          // Use the unbiased x for surface height; the bias is only for deterministic segment selection.
+          const float y_at_x = stage_seg_y_at_x(seg, x);
 
         // Only ground if we are at/below the segment surface (with epsilon).
         //
@@ -1106,14 +1167,15 @@ void stage_collision_apply(MslBatch* batch) {
         const uint8_t foot_score = (uint8_t)(stage_seg_x_contains(seg, ecb_left_world_x) ? 1 : 0) +
                                    (uint8_t)(stage_seg_x_contains(seg, ecb_right_world_x) ? 1 : 0);
 
-        if (!found || (y_at_x > best_y_at_x) ||
-            (y_at_x == best_y_at_x && foot_score > best_foot_score) ||
-            (y_at_x == best_y_at_x && foot_score == best_foot_score &&
-             seg->segment_i < best_segment_i)) {
-          found = 1;
-          best_y_at_x = y_at_x;
-          best_segment_i = seg->segment_i;
-          best_foot_score = foot_score;
+          if (!found || (y_at_x > best_y_at_x) ||
+              (y_at_x == best_y_at_x && foot_score > best_foot_score) ||
+              (y_at_x == best_y_at_x && foot_score == best_foot_score &&
+               seg->segment_i < best_segment_i)) {
+            found = 1;
+            best_y_at_x = y_at_x;
+            best_segment_i = seg->segment_i;
+            best_foot_score = foot_score;
+          }
         }
       }
 
@@ -1138,6 +1200,7 @@ void stage_collision_apply(MslBatch* batch) {
         if (batch->state.prev_on_ground[idx]) {
           batch->state.speed_y_self[idx] = 0.0f;
         }
+
         batch->state.ground_id[idx] = best_segment_i;
       } else {
         batch->state.on_ground[idx] = 0;
