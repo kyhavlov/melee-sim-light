@@ -118,6 +118,13 @@ typedef struct MslSeed {
   // - refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm ("send AS frame", loads from 0x894)
   // - refs/melee/src/melee/ft/ftaction.c::ftAction_80073240 (movescript timers use fp->cur_anim_frame)
   float anim_frame_f32[MSL_MAX_PLAYERS];
+  // Decomp: fp->frame_speed_mul controls fractional animation advance (HSD AObj rate).
+  // Not exposed by Slippi post-frames; we derive/seed it strictly causally in preprocessing.
+  //
+  // Source pointers:
+  // - refs/melee/src/melee/ft/fighter.c (Fighter_ChangeMotionState sets fp->frame_speed_mul)
+  // - refs/melee/src/melee/ft/ftanim.c (ftAnim_8006F0FC / ftAnim_SetAnimRate)
+  float frame_speed_mul_f32[MSL_MAX_PLAYERS];
   // Guard (shield) tilt pose state (seeded; decomp-shaped).
   // Decomp: refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c
   // - mv.co.guard.x8: "frame-ish" index into the Guard tilt timeline (neutral is 10 in GALE01)

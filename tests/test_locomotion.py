@@ -124,6 +124,8 @@ def _seed_base() -> np.ndarray:
     seed["pos_x"][0, 0] = np.float32(0.0)
     seed["pos_y"][0, 0] = np.float32(0.0)
     seed["ground_id"][0, 0] = np.uint16(0)
+    seed["frame_speed_mul_f32"][0, :2] = np.float32(1.0)
+    seed["anim_frame_f32"][0, :2] = np.float32(0.0)
     return seed
 
 
@@ -204,6 +206,7 @@ def test_ucf_dashback_turn_frame2_enters_dash_and_sets_x670_to_fe() -> None:
     seed["action_id"][0, 0] = np.uint16(ACT_TURN)
     # locomotion_update_pre advances action_frame by +1 before gates, so seed 1 -> check 2.
     seed["action_frame"][0, 0] = np.int16(1)
+    seed["anim_frame_f32"][0, 0] = np.float32(1.0)
     seed["animation_index"][0, 0] = np.uint32(SM_TURN)
     seed["turn_frames_to_turn"][0, 0] = np.uint8(0)
     seed["turn_has_turned"][0, 0] = np.uint8(1)
@@ -219,7 +222,7 @@ def test_ucf_dashback_turn_frame2_enters_dash_and_sets_x670_to_fe() -> None:
 
     out, internals = _step_once_with_internals(seed, prev_inp, inp)
     assert int(out["action_id"][0]) == ACT_DASH
-    assert int(out["action_frame"][0]) == 0
+    assert int(out["action_frame"][0]) == -1
     assert int(out["animation_index"][0]) == SM_DASH
 
     dash_init = np.float32(_fox_attr("dash_initial_velocity"))
@@ -239,6 +242,7 @@ def test_kneebend_takeoff_enters_jumpf_and_consumes_jump() -> None:
     seed["on_ground"][0, 0] = np.uint8(1)
     seed["action_id"][0, 0] = np.uint16(ACT_KNEEBEND)
     seed["action_frame"][0, 0] = np.int16(2)  # Fox jump_startup_frames=3, so +1 triggers takeoff.
+    seed["anim_frame_f32"][0, 0] = np.float32(2.0)
     seed["animation_index"][0, 0] = np.uint32(SM_KNEEBEND)
     seed["jumps_left"][0, 0] = np.uint8(2)
     seed["kneebend_jump_input"][0, 0] = np.uint8(3)  # JumpInput_XY (refs/melee/.../ftCommon/forward.h)
@@ -254,7 +258,7 @@ def test_kneebend_takeoff_enters_jumpf_and_consumes_jump() -> None:
 
     out = _step_once(seed, prev_inp, inp)
     assert int(out["action_id"][0]) == ACT_JUMPF
-    assert int(out["action_frame"][0]) == 0
+    assert int(out["action_frame"][0]) == -1
     assert int(out["jumps_left"][0]) == 1
     assert int(out["on_ground"][0]) == 0
     expected_vy = np.float32(_fox_attr("jump_v_initial_velocity") - _fox_attr("grav"))
@@ -284,7 +288,7 @@ def test_wait_press_jump_enters_kneebend() -> None:
 
     out = _step_once(seed, prev_inp, inp)
     assert int(out["action_id"][0]) == ACT_KNEEBEND
-    assert int(out["action_frame"][0]) == 0
+    assert int(out["action_frame"][0]) == -1
     assert int(out["jumps_left"][0]) == 2
     assert int(out["on_ground"][0]) == 1
 
@@ -299,6 +303,7 @@ def test_kneebend_release_jump_short_hops() -> None:
     seed["on_ground"][0, 0] = np.uint8(1)
     seed["action_id"][0, 0] = np.uint16(ACT_KNEEBEND)
     seed["action_frame"][0, 0] = np.int16(2)  # Fox jump_startup_frames=3, so +1 triggers takeoff.
+    seed["anim_frame_f32"][0, 0] = np.float32(2.0)
     seed["animation_index"][0, 0] = np.uint32(SM_KNEEBEND)
     seed["jumps_left"][0, 0] = np.uint8(2)
     seed["kneebend_jump_input"][0, 0] = np.uint8(3)  # JumpInput_XY
@@ -313,7 +318,7 @@ def test_kneebend_release_jump_short_hops() -> None:
 
     out = _step_once(seed, prev_inp, inp)
     assert int(out["action_id"][0]) == ACT_JUMPF
-    assert int(out["action_frame"][0]) == 0
+    assert int(out["action_frame"][0]) == -1
     expected_vy = np.float32(_fox_attr("hop_v_initial_velocity") - _fox_attr("grav"))
     assert np.isclose(out["speed_y_self"][0], expected_vy)
 
@@ -328,6 +333,7 @@ def test_kneebend_seeded_jump_input_lstick_short_hops_even_if_xy_held() -> None:
     seed["on_ground"][0, 0] = np.uint8(1)
     seed["action_id"][0, 0] = np.uint16(ACT_KNEEBEND)
     seed["action_frame"][0, 0] = np.int16(2)  # Fox jump_startup_frames=3, so +1 triggers takeoff.
+    seed["anim_frame_f32"][0, 0] = np.float32(2.0)
     seed["animation_index"][0, 0] = np.uint32(SM_KNEEBEND)
     seed["jumps_left"][0, 0] = np.uint8(2)
     seed["kneebend_jump_input"][0, 0] = np.uint8(1)  # JumpInput_LStick
@@ -357,6 +363,7 @@ def test_kneebend_seeded_short_hop_latch_is_respected() -> None:
     seed["on_ground"][0, 0] = np.uint8(1)
     seed["action_id"][0, 0] = np.uint16(ACT_KNEEBEND)
     seed["action_frame"][0, 0] = np.int16(2)  # Fox jump_startup_frames=3, so +1 triggers takeoff.
+    seed["anim_frame_f32"][0, 0] = np.float32(2.0)
     seed["animation_index"][0, 0] = np.uint32(SM_KNEEBEND)
     seed["jumps_left"][0, 0] = np.uint8(2)
     seed["kneebend_jump_input"][0, 0] = np.uint8(3)  # JumpInput_XY
@@ -402,7 +409,7 @@ def test_air_jump_consumes_jump_and_enters_jump_aerial() -> None:
     out = _step_once(seed, prev_inp, inp)
     # JumpAerialF
     assert int(out["action_id"][0]) == 0x001B
-    assert int(out["action_frame"][0]) == 0
+    assert int(out["action_frame"][0]) == -1
     assert int(out["jumps_left"][0]) == 0
 
 
@@ -428,7 +435,7 @@ def test_landing_resets_jumps_and_enters_landing() -> None:
     out = _step_once(seed, prev_inp, inp)
     assert int(out["on_ground"][0]) == 1
     assert int(out["action_id"][0]) == ACT_LANDING
-    assert int(out["action_frame"][0]) == 0
+    assert int(out["action_frame"][0]) == -1
     assert int(out["jumps_left"][0]) == 2
 
 
@@ -469,6 +476,7 @@ def test_jump_end_enters_fall() -> None:
     seed["speed_y_self"][0, 0] = np.float32(1.0)
     seed["action_id"][0, 0] = np.uint16(ACT_JUMPF)
     seed["action_frame"][0, 0] = np.int16(120)
+    seed["anim_frame_f32"][0, 0] = np.float32(120.0)
     seed["animation_index"][0, 0] = np.uint32(SM_JUMPF)
     seed["jumps_left"][0, 0] = np.uint8(1)
 
@@ -477,7 +485,7 @@ def test_jump_end_enters_fall() -> None:
 
     out = _step_once(seed, prev_inp, inp)
     assert int(out["action_id"][0]) == ACT_FALL
-    assert int(out["action_frame"][0]) == 0
+    assert int(out["action_frame"][0]) == -1
     assert int(out["animation_index"][0]) == SM_FALL
 
 

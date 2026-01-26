@@ -7,6 +7,7 @@
 
 #include "action_ids.h"
 #include "anim_frame.h"
+#include "anim_timebase.h"
 #include "buttons.h"
 #include "char_params.h"
 #include "combat_geom.h"
@@ -570,8 +571,7 @@ static inline void combat_damage_enter_state(const MslCommonParams* c, MslBatch*
 
   batch->state.action_id[d_idx] = act;
   batch->state.animation_index[d_idx] = sm;
-  batch->state.action_frame[d_idx] = 0;
-  batch->state.anim_frame_f32[d_idx] = 0.0f;
+  msl_anim_timebase_enter(batch, d_idx, 0.0f, 1.0f);
 }
 
 // Combat Mutations Pass 1 (BODY-only).
@@ -760,8 +760,7 @@ static inline void combat_mutations_pass1_future_apply_shield_hit(MslBatch* batc
   batch->state.action_id[d_idx] = (uint16_t)MSL_ACT_GUARD_SET_OFF;
   // In our replay-derived datasets, shield states frequently have `animation_index == -1`.
   batch->state.animation_index[d_idx] = 0xFFFFFFFFu;
-  batch->state.action_frame[d_idx] = 0;
-  batch->state.anim_frame_f32[d_idx] = 0.0f;
+  msl_anim_timebase_enter(batch, d_idx, 0.0f, 1.0f);
 
   // Hitlag on shield contact uses the same decomp ftCommon_CalcHitlag path as BODY, but with
   // shield-collision inputs:

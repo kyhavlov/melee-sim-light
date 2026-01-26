@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import math
 from pathlib import Path
 
 import numpy as np
@@ -27,6 +28,48 @@ MAX_PLAYERS = 4
 def _fox_attr(name: str) -> float:
     fox = json.loads(Path("data/characters/fox.json").read_text())
     return float(fox[name])
+
+
+def _common_attr(name: str) -> float:
+    common = json.loads(Path("data/common/ft_common_data.json").read_text())
+    return float(common[name])
+
+
+def _tracks_end_frame(path: Path, msid: int) -> float:
+    import struct
+
+    with path.open("rb") as f:
+        magic = f.read(8)
+        if magic != b"SSANIMT1":
+            raise ValueError(f"bad tracks magic: {magic!r}")
+        (version,) = struct.unpack("<I", f.read(4))
+        if version != 1:
+            raise ValueError(f"unsupported tracks version: {version}")
+        local_count, anim_count = struct.unpack("<HH", f.read(4))
+        f.read(local_count)  # local_parts
+        f.read(2 * local_count)  # local_parent
+        f.read(4 * local_count)  # local_flags
+
+        for _ in range(anim_count):
+            (mid,) = struct.unpack("<H", f.read(2))
+            (end_frame,) = struct.unpack("<f", f.read(4))
+            for _lp in range(local_count):
+                part_u8 = f.read(1)
+                if not part_u8:
+                    raise ValueError("unexpected EOF in tracks parts")
+                (n_tracks,) = struct.unpack("<B", f.read(1))
+                for _t in range(n_tracks):
+                    hdr = f.read(8)
+                    if len(hdr) != 8:
+                        raise ValueError("unexpected EOF in tracks header")
+                    (_obj_type, _frac_value, _frac_slope, _pad, _startframe, length) = struct.unpack(
+                        "<BBBBHH", hdr
+                    )
+                    f.read(int(length))
+            if int(mid) == int(msid):
+                return float(end_frame)
+
+    raise KeyError(f"msid {msid} not found in {path}")
 
 
 def _fox_attackair_cmd0_on_frame(move_key: str) -> int:
@@ -58,6 +101,8 @@ def _seed_base() -> np.ndarray:
     seed["pos_x"][0, :2] = np.float32(0.0)
     seed["pos_y"][0, :2] = np.float32(0.0)
     seed["ground_id"][0, :2] = np.uint16(0)
+    seed["frame_speed_mul_f32"][0, :2] = np.float32(1.0)
+    seed["anim_frame_f32"][0, :2] = seed["action_frame"][0, :2].astype(np.float32)
     return seed
 
 
@@ -101,6 +146,7 @@ def test_attack_air_n_lands_enters_landing_air_n_and_refreshes_jumps() -> None:
     # Land during the cmd_var[0] "landing lag enabled" window so we enter LandingAirN (not auto-cancel Landing).
     cmd0_on = _fox_attackair_cmd0_on_frame("ftCo_SM_AttackAirN")
     seed["action_frame"][0, 0] = np.int16(max(0, cmd0_on - 1))
+    seed["anim_frame_f32"][0, 0] = np.float32(seed["action_frame"][0, 0])
     # Use a stable ECB pose for grounding/ECB evaluation; landing selection in this sim is keyed off action_id
     # (not animation_index) on the collision->grounding transition.
     seed["animation_index"][0, 0] = np.uint32(SM_FALL)
@@ -113,7 +159,8 @@ def test_attack_air_n_lands_enters_landing_air_n_and_refreshes_jumps() -> None:
     assert int(out["on_ground"][0]) == 1
     assert int(out["action_id"][0]) == ACT_LANDING_AIR_N
     assert int(out["animation_index"][0]) == SM_LANDING_AIR_N
-    assert int(out["action_frame"][0]) == 0
+    # Motion-state entry sets cur_anim_frame = anim_start - frame_speed_mul (start=0, speed=1).
+    assert int(out["action_frame"][0]) == -1
     assert int(out["jumps_left"][0]) == int(_fox_attr("max_jumps"))
 
 
@@ -139,5 +186,11 @@ def test_escape_air_lands_enters_landing_fall_special_and_refreshes_jumps() -> N
     assert int(out["on_ground"][0]) == 1
     assert int(out["action_id"][0]) == ACT_LANDING_FALL_SPECIAL
     assert int(out["animation_index"][0]) == SM_LANDING_FALL_SPECIAL
-    assert int(out["action_frame"][0]) == 0
+    # LandingFallSpecial enters with a scaled anim speed:
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::ftCo_LandingFallSpecial_Enter
+    tracks_path = Path("data/anims/fox.tracks.bin")
+    end_frame = _tracks_end_frame(tracks_path, SM_LANDING_FALL_SPECIAL)
+    lag = float(_common_attr("landing_fall_special_lag_frames"))
+    rate = (float(end_frame) + 0.1) / float(lag)
+    assert int(out["action_frame"][0]) == int(math.floor(-rate))
     assert int(out["jumps_left"][0]) == int(_fox_attr("max_jumps"))

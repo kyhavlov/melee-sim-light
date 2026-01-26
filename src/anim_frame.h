@@ -5,7 +5,7 @@
 
 // Decomp shape:
 // - Movescripts and cmd-script timers are driven by fp->cur_anim_frame (float), advanced by
-//   fp->frame_speed_mul and affected by hitlag. (Not modeled yet in melee-sim-light.)
+//   fp->frame_speed_mul and affected by hitlag.
 //   refs/melee/src/melee/ft/ftaction.c::ftAction_80073240
 //
 // Sim policy (suite-neutral, for debug geometry / future combat enablement):
@@ -29,4 +29,3 @@ static inline uint16_t msl_anim_frame_floor_u16(float anim_frame_f32_sanitized) 
   }
   return (uint16_t)floorf(anim_frame_f32_sanitized);
 }
-

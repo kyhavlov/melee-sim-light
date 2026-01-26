@@ -99,10 +99,14 @@ def _seed_base() -> np.ndarray:
     seed["pos_y"][0, :2] = np.float32(0.0)
     seed["on_ground"][0, :2] = np.uint8(1)
     seed["ground_id"][0, :2] = np.uint16(0)
+    seed["frame_speed_mul_f32"][0, :2] = np.float32(1.0)
+    seed["anim_frame_f32"][0, :2] = seed["action_frame"][0, :2].astype(np.float32)
 
     # Default P2 to a stable grounded idle.
     seed["action_id"][0, 1] = np.uint16(ACT_WAIT)
     seed["action_frame"][0, 1] = np.int16(0)
+    seed["anim_frame_f32"][0, 1] = np.float32(0.0)
+    seed["frame_speed_mul_f32"][0, 1] = np.float32(1.0)
     seed["animation_index"][0, 1] = np.uint32(SM_WAIT1_0)
     return seed
 
@@ -143,11 +147,13 @@ def test_landing_air_n_exits_to_wait_after_lag_frames() -> None:
     end_frame = _tracks_end_frame(tracks_path, SM_LANDING_AIR_N)
     lag = int(_fox_attr("landing_airn_lag_frames"))
     assert end_frame > 0.0 and lag > 0
-    inc = _scaled_anim_inc(end_frame, lag)
+    rate = np.float32((np.float32(end_frame) + np.float32(0.1)) / np.float32(lag))
 
     seed = _seed_base()
     seed["action_id"][0, 0] = np.uint16(ACT_LANDING_AIR_N)
-    seed["action_frame"][0, 0] = np.int16(int(math.ceil(end_frame)) - inc)
+    seed["frame_speed_mul_f32"][0, 0] = rate
+    seed["anim_frame_f32"][0, 0] = np.float32(np.float32(end_frame) - rate)
+    seed["action_frame"][0, 0] = np.int16(int(math.floor(float(seed["anim_frame_f32"][0, 0]))))
     seed["animation_index"][0, 0] = np.uint32(SM_LANDING_AIR_N)
 
     prev_inp = _mk_input_bytes(1, input_stride)
@@ -156,7 +162,7 @@ def test_landing_air_n_exits_to_wait_after_lag_frames() -> None:
     out = _step_once(seed, prev_inp, inp)
     assert int(out["action_id"][0]) == ACT_WAIT
     assert int(out["animation_index"][0]) == SM_WAIT1_0
-    assert int(out["action_frame"][0]) == 0
+    assert int(out["action_frame"][0]) == -1
 
 
 def test_landing_fall_special_exits_to_wait_after_lag_frames() -> None:
@@ -169,11 +175,13 @@ def test_landing_fall_special_exits_to_wait_after_lag_frames() -> None:
     end_frame = _tracks_end_frame(tracks_path, SM_LANDING_FALL_SPECIAL)
     lag = float(_common_attr("landing_fall_special_lag_frames"))
     assert end_frame > 0.0 and lag > 0.0
-    inc = _scaled_anim_inc(end_frame, lag)
+    rate = np.float32((np.float32(end_frame) + np.float32(0.1)) / np.float32(lag))
 
     seed = _seed_base()
     seed["action_id"][0, 0] = np.uint16(ACT_LANDING_FALL_SPECIAL)
-    seed["action_frame"][0, 0] = np.int16(int(math.ceil(end_frame)) - inc)
+    seed["frame_speed_mul_f32"][0, 0] = rate
+    seed["anim_frame_f32"][0, 0] = np.float32(np.float32(end_frame) - rate)
+    seed["action_frame"][0, 0] = np.int16(int(math.floor(float(seed["anim_frame_f32"][0, 0]))))
     seed["animation_index"][0, 0] = np.uint32(SM_LANDING_FALL_SPECIAL)
 
     prev_inp = _mk_input_bytes(1, input_stride)
@@ -182,7 +190,7 @@ def test_landing_fall_special_exits_to_wait_after_lag_frames() -> None:
     out = _step_once(seed, prev_inp, inp)
     assert int(out["action_id"][0]) == ACT_WAIT
     assert int(out["animation_index"][0]) == SM_WAIT1_0
-    assert int(out["action_frame"][0]) == 0
+    assert int(out["action_frame"][0]) == -1
 
 
 def test_landing_iasa_allows_shield_entry_after_landing_lag_gate() -> None:
@@ -197,6 +205,8 @@ def test_landing_iasa_allows_shield_entry_after_landing_lag_gate() -> None:
     seed = _seed_base()
     seed["action_id"][0, 0] = np.uint16(ACT_LANDING)
     seed["action_frame"][0, 0] = np.int16(lag)
+    seed["anim_frame_f32"][0, 0] = np.float32(lag)
+    seed["frame_speed_mul_f32"][0, 0] = np.float32(1.0)
     seed["animation_index"][0, 0] = np.uint32(SM_LANDING)
     seed["shield_hp"][0, 0] = np.float32(_common_attr("start_shield_health"))
 

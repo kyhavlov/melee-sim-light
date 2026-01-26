@@ -5,6 +5,7 @@ from pathlib import Path
 import numpy as np
 
 from tools.slippi.combat_history import derive_combat_rehit_seed_fields
+from tools.slippi.anim_timebase import EndFrameTables, derive_frame_speed_mul_f32
 from tools.slippi.seed_history import (
     compute_fighter_button_timers,
     compute_fighter_stick_input_counters,
@@ -154,6 +155,64 @@ def test_derive_kneebend_internals_is_causal_wrt_future_frames() -> None:
 
     assert np.array_equal(j0, j1[: j0.size])
     assert np.array_equal(s0, s1[: s0.size])
+
+
+def test_derive_frame_speed_mul_is_prefix_invariant() -> None:
+    # LandingAirF entry should use the decomp formula (not future deltas), and the derivation must
+    # be prefix-invariant (strictly causal).
+    #
+    # Action ids (GALE01): refs/melee/src/melee/ft/chara/ftCommon/forward.h
+    act_attack_air_f = np.uint16(0x0042)
+    act_landing_air_f = np.uint16(0x0044)
+
+    # Construct a prefix where frame 1 enters LandingAirF and state_age resets.
+    state_age_prefix = np.array([5.0, -1.0, 0.8272727], dtype=np.float32)
+    action_id_prefix = np.array([act_attack_air_f, act_landing_air_f, act_landing_air_f], dtype=np.uint16)
+    hitlag_prefix = np.zeros(state_age_prefix.shape[0], dtype=np.uint16)
+    char_id_prefix = np.full(state_age_prefix.shape[0], 1, dtype=np.uint8)  # Fox
+    animation_index_prefix = np.array([100, 10, 10], dtype=np.uint32)
+    lr_press_timer_prefix = np.array([0xFF, 0, 1], dtype=np.uint8)
+
+    end_frames = EndFrameTables(by_char_id={1: {10: 20.0}})
+    char_lags = {1: {"airn": 15, "airf": 22, "airb": 20, "airhi": 18, "airlw": 18}}
+
+    out0 = derive_frame_speed_mul_f32(
+        state_age_f32=state_age_prefix,
+        action_id=action_id_prefix,
+        hitlag=hitlag_prefix,
+        char_id=char_id_prefix,
+        animation_index=animation_index_prefix,
+        lr_press_timer=lr_press_timer_prefix,
+        end_frames=end_frames,
+        common_lcancel_window_frames=7,
+        common_lcancel_lag_div=2.0,
+        common_landing_fall_special_lag_frames=10.0,
+        char_landing_air_lag_frames=char_lags,
+    )
+
+    # Extend with arbitrary future frames that should not affect prefix outputs.
+    state_age_ext = np.concatenate([state_age_prefix, np.array([0.0, 0.0, 0.0], dtype=np.float32)])
+    action_id_ext = np.concatenate([action_id_prefix, np.array([0x000E, 0x000E, 0x000E], dtype=np.uint16)])
+    hitlag_ext = np.concatenate([hitlag_prefix, np.array([0, 0, 0], dtype=np.uint16)])
+    char_id_ext = np.concatenate([char_id_prefix, np.array([1, 1, 1], dtype=np.uint8)])
+    animation_index_ext = np.concatenate([animation_index_prefix, np.array([0, 0, 0], dtype=np.uint32)])
+    lr_press_timer_ext = np.concatenate([lr_press_timer_prefix, np.array([0xFF, 0xFF, 0xFF], dtype=np.uint8)])
+
+    out1 = derive_frame_speed_mul_f32(
+        state_age_f32=state_age_ext,
+        action_id=action_id_ext,
+        hitlag=hitlag_ext,
+        char_id=char_id_ext,
+        animation_index=animation_index_ext,
+        lr_press_timer=lr_press_timer_ext,
+        end_frames=end_frames,
+        common_lcancel_window_frames=7,
+        common_lcancel_lag_div=2.0,
+        common_landing_fall_special_lag_frames=10.0,
+        char_landing_air_lag_frames=char_lags,
+    )
+
+    assert np.allclose(out0, out1[: out0.size])
 
 
 def test_fall_fast_and_x671_override_is_causal_wrt_future_frames() -> None:

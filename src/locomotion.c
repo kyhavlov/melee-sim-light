@@ -5,6 +5,7 @@
 
 #include "action_ids.h"
 #include "action.h"
+#include "anim_timebase.h"
 #include "anim_table.h"
 #include "buttons.h"
 #include "char_params.h"
@@ -317,6 +318,8 @@ static inline void enter_landing_action_from_air(MslBatch* batch, const MslCharP
     return;
   }
 
+  const MslCommonParams* c = msl_common_params();
+
   // Landed this frame.
   // Transfer air X to ground X so friction/traction apply next frame.
   batch->state.speed_ground_x_self[idx] = batch->state.speed_air_x_self[idx];
@@ -337,8 +340,73 @@ static inline void enter_landing_action_from_air(MslBatch* batch, const MslCharP
 
   batch->state.action_id[idx] = land_act;
   batch->state.animation_index[idx] = submotion_for_action(land_act);
-  batch->state.action_frame[idx] = 0;
-  batch->state.anim_frame_f32[idx] = 0.0f;
+
+  // Decomp: Fighter_ChangeMotionState sets:
+  // - fp->frame_speed_mul = anim_speed
+  // - fp->cur_anim_frame = anim_start - fp->frame_speed_mul
+  // refs/melee/src/melee/ft/fighter.c (Fighter_ChangeMotionState)
+  //
+  // LandingAir additionally calls ftAnim_SetAnimRate to adjust fp->frame_speed_mul without
+  // adjusting fp->cur_anim_frame. refs/melee/src/melee/ft/chara/ftCommon/ftCo_LandingAir.c
+  //
+  // LandingFallSpecial passes a scaled anim_speed directly. refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c
+  const uint8_t cid = batch->state.char_id[idx];
+  if (land_act == (uint16_t)MSL_ACT_LANDING_FALL_SPECIAL) {
+    const float landing_lag = (c != NULL) ? c->landing_fall_special_lag_frames : 0.0f;
+    const float end_frame = msl_anim_end_frame(cid, (uint16_t)MSL_SM_LANDING_FALL_SPECIAL);
+    const float speed = (landing_lag > 0.0f && end_frame > 0.0f) ? ((end_frame + 0.1f) / landing_lag)
+                                                                  : 1.0f;
+    msl_anim_timebase_enter(batch, idx, 0.0f, speed);
+  } else {
+    // Most motion states enter with anim_speed=1.0 and anim_start=0.0.
+    msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+
+    // LandingAir*: set anim rate so the timeline finishes in `lag` frames.
+    if (land_act == (uint16_t)MSL_ACT_LANDING_AIR_N || land_act == (uint16_t)MSL_ACT_LANDING_AIR_F ||
+        land_act == (uint16_t)MSL_ACT_LANDING_AIR_B || land_act == (uint16_t)MSL_ACT_LANDING_AIR_HI ||
+        land_act == (uint16_t)MSL_ACT_LANDING_AIR_LW) {
+      uint8_t lag_frames = 0;
+      switch (land_act) {
+        case (uint16_t)MSL_ACT_LANDING_AIR_N:
+          lag_frames = ch->landing_airn_lag_frames;
+          break;
+        case (uint16_t)MSL_ACT_LANDING_AIR_F:
+          lag_frames = ch->landing_airf_lag_frames;
+          break;
+        case (uint16_t)MSL_ACT_LANDING_AIR_B:
+          lag_frames = ch->landing_airb_lag_frames;
+          break;
+        case (uint16_t)MSL_ACT_LANDING_AIR_HI:
+          lag_frames = ch->landing_airhi_lag_frames;
+          break;
+        case (uint16_t)MSL_ACT_LANDING_AIR_LW:
+          lag_frames = ch->landing_airlw_lag_frames;
+          break;
+        default:
+          lag_frames = 0;
+          break;
+      }
+
+      float lag = (float)lag_frames;
+      // Decomp: landing lag is divided when x67F < p_ftCommonData->xE4.
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_LandingAir.c::ftCo_LandingAir_EnterWithLag
+      if (c != NULL && lag > 0.0f && batch->state.lr_press_timer[idx] < c->lcancel_window_frames) {
+        const float div_lag = lag / c->lcancel_lag_div;
+        int int_lag = (int)div_lag;
+        if (int_lag == 0) {
+          int_lag = 1;
+        }
+        lag = (float)int_lag;
+      }
+
+      const uint32_t sm = submotion_for_action(land_act);
+      const float end_frame = (sm <= 0xFFFFu) ? msl_anim_end_frame(cid, (uint16_t)sm) : 0.0f;
+      if (lag > 0.0f && end_frame > 0.0f) {
+        const float rate = (end_frame + 0.1f) / lag;
+        msl_anim_timebase_set_rate(batch, idx, rate);
+      }
+    }
+  }
 }
 
 static inline void apply_air_drift(const MslCharParams* ch, const MslCommonParams* c,
@@ -382,14 +450,9 @@ void locomotion_update_pre(MslBatch* batch) {
     return;
   }
 
-  // Decomp ordering note (approximation):
-  // - `Fighter_procUpdate` calls `ftAnim_8006EBA4(gobj)` once per frame under `if (!fp->x2219_b5)`.
-  // - Slippi exposes the resulting animation age as `state_age` (float fp->cur_anim_frame).
-  // refs/melee/src/melee/ft/fighter.c:1690-1700 and refs/melee/src/melee/ft/ftanim.c:381-388
-  //
-  // We approximate this by advancing `action_frame` by +1 exactly once per step (for fighters not in hitlag),
-  // before running locomotion state logic.
-  const int16_t max_af = INT16_MAX;
+  // Decomp ordering: anim/script timebase advances before input callbacks.
+  // In this sim, anim_timebase_update_pre_input() advances batch->state.anim_frame_f32 and
+  // batch->state.action_frame earlier in the frame (see src/step.c).
 
   const int num_players = (int)batch->config.num_players;
   for (int bi = 0; bi < batch->batch_size; bi++) {
@@ -404,85 +467,7 @@ void locomotion_update_pre(MslBatch* batch) {
       if (ch == NULL) {
         continue;
       }
-
-      // Advance anim frame (`fp->cur_anim_frame` / Slippi `state_age`).
-      //
-      // Decomp ordering note (approximation):
-      // - `Fighter_procUpdate` calls `ftAnim_8006EBA4(gobj)` once per frame under `if (!fp->x2219_b5)`.
-      // refs/melee/src/melee/ft/fighter.c:1690-1700
-      //
-      // Some actions adjust animation rate on enter (e.g. LandingAir*, LandingFallSpecial); model
-      // that by advancing `action_frame` by an integer per-frame increment derived from the same
-      // decomp formula:
-      // - LandingAir: ftAnim_SetAnimRate(gobj, (ftAnim_8006F484(gobj) + 0.1f) / lag)
-      //   refs/melee/src/melee/ft/chara/ftCommon/ftCo_LandingAir.c
-      // - LandingFallSpecial: ftCo_Landing_Enter(..., (0.1f + fp->x2EC) / landing_lag)
-      //   refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c and ftCo_EscapeAir.c
-      int16_t af_inc = 1;
-      const uint16_t a_for_af = batch->state.action_id[idx];
       const uint8_t cid = batch->state.char_id[idx];
-      if (a_for_af == (uint16_t)MSL_ACT_LANDING_FALL_SPECIAL) {
-        const float lag = c->landing_fall_special_lag_frames;
-        const float end_frame = msl_anim_end_frame(cid, (uint16_t)MSL_SM_LANDING_FALL_SPECIAL);
-        if (lag > 0.0f && end_frame > 0.0f) {
-          const float rate = (end_frame + 0.1f) / lag;
-          // NOTE: This truncates fractional rates. Some fighters/actions have non-integer rates
-          // (e.g. LandingAirF), which can produce occasional state_age "skips" when modeled as a
-          // float accumulator. Next correctness upgrade: fixed-point cur_anim_frame internal with
-          // deterministic fractional carry and reseedable reconstruction.
-          const int16_t inc = (int16_t)rate;
-          af_inc = inc > 0 ? inc : 1;
-        }
-      } else if (a_for_af == (uint16_t)MSL_ACT_LANDING_AIR_N ||
-                 a_for_af == (uint16_t)MSL_ACT_LANDING_AIR_F ||
-                 a_for_af == (uint16_t)MSL_ACT_LANDING_AIR_B ||
-                 a_for_af == (uint16_t)MSL_ACT_LANDING_AIR_HI ||
-                 a_for_af == (uint16_t)MSL_ACT_LANDING_AIR_LW) {
-        uint8_t lag_frames = 0;
-        switch (a_for_af) {
-          case (uint16_t)MSL_ACT_LANDING_AIR_N:
-            lag_frames = ch->landing_airn_lag_frames;
-            break;
-          case (uint16_t)MSL_ACT_LANDING_AIR_F:
-            lag_frames = ch->landing_airf_lag_frames;
-            break;
-          case (uint16_t)MSL_ACT_LANDING_AIR_B:
-            lag_frames = ch->landing_airb_lag_frames;
-            break;
-          case (uint16_t)MSL_ACT_LANDING_AIR_HI:
-            lag_frames = ch->landing_airhi_lag_frames;
-            break;
-          case (uint16_t)MSL_ACT_LANDING_AIR_LW:
-            lag_frames = ch->landing_airlw_lag_frames;
-            break;
-          default:
-            lag_frames = 0;
-            break;
-        }
-        const uint32_t sm = submotion_for_action(a_for_af);
-        const float end_frame = (sm <= 0xFFFFu) ? msl_anim_end_frame(cid, (uint16_t)sm) : 0.0f;
-        if (lag_frames > 0 && end_frame > 0.0f) {
-          const float rate = (end_frame + 0.1f) / (float)lag_frames;
-          // NOTE: This truncates fractional rates. See comment in LandingFallSpecial path for the
-          // planned fixed-point fractional-carry upgrade.
-          const int16_t inc = (int16_t)rate;
-          af_inc = inc > 0 ? inc : 1;
-        }
-      }
-
-      const int16_t af0 = batch->state.action_frame[idx];
-      if (af0 < max_af) {
-        const int32_t af1 = (int32_t)af0 + (int32_t)af_inc;
-        const int16_t af_new = (af1 > (int32_t)max_af) ? max_af : (int16_t)af1;
-        batch->state.action_frame[idx] = af_new;
-        // Maintain a decomp-shaped float anim/script timebase alongside action_frame:
-        // - Seeded as Slippi post-frame `state_age` (fp->cur_anim_frame).
-        // - Advanced approximately using the integer action_frame delta (does NOT model
-        //   fp->frame_speed_mul fractional carry yet).
-        // This is used only for move-script sampling in the combat geometry pipeline today.
-        // See SPEC.md ("anim_frame_f32 timebase").
-        batch->state.anim_frame_f32[idx] += (float)(af_new - af0);
-      }
 
       float stick_x;
       float stick_y;
@@ -548,11 +533,10 @@ void locomotion_update_pre(MslBatch* batch) {
           const uint32_t sm = submotion_for_action(action_id);
           const float end_frame =
               (sm <= 0xFFFFu) ? msl_anim_end_frame(batch->state.char_id[idx], (uint16_t)sm) : 0.0f;
-          if (end_frame > 0.0f && ((float)batch->state.action_frame[idx] >= end_frame)) {
+          if (end_frame > 0.0f && (batch->state.anim_frame_f32[idx] >= end_frame)) {
             batch->state.action_id[idx] = (uint16_t)MSL_ACT_WAIT;
             batch->state.animation_index[idx] = (uint32_t)MSL_SM_WAIT1_0;
-            batch->state.action_frame[idx] = 0;
-            batch->state.anim_frame_f32[idx] = 0.0f;
+            msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
             action_id = (uint16_t)MSL_ACT_WAIT;
           }
         }
@@ -605,8 +589,7 @@ void locomotion_update_pre(MslBatch* batch) {
           if (j_in != MSL_JUMP_INPUT_NONE && batch->state.jumps_left[idx] > 0) {
             batch->state.action_id[idx] = (uint16_t)MSL_ACT_KNEE_BEND;
             batch->state.animation_index[idx] = (uint32_t)MSL_SM_KNEE_BEND;
-            batch->state.action_frame[idx] = 0;
-            batch->state.anim_frame_f32[idx] = 0.0f;
+            msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
             batch->state.kneebend_jump_input[idx] = (uint8_t)j_in;
             batch->state.kneebend_is_short_hop[idx] = 0;
             action_id = (uint16_t)MSL_ACT_KNEE_BEND;
@@ -624,16 +607,14 @@ void locomotion_update_pre(MslBatch* batch) {
               batch->state.turn_frames_to_turn[idx] = 0;
               batch->state.action_id[idx] = (uint16_t)MSL_ACT_TURN;
               batch->state.animation_index[idx] = (uint32_t)MSL_SM_TURN;
-              batch->state.action_frame[idx] = 0;
-              batch->state.anim_frame_f32[idx] = 0.0f;
+              msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
               action_id = (uint16_t)MSL_ACT_TURN;
             } else {
               // Enter Dash.
               // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c::ftCo_Dash_Enter (init_vel)
               batch->state.action_id[idx] = (uint16_t)MSL_ACT_DASH;
               batch->state.animation_index[idx] = (uint32_t)MSL_SM_DASH;
-              batch->state.action_frame[idx] = 0;
-              batch->state.anim_frame_f32[idx] = 0.0f;
+              msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
               batch->state.speed_ground_x_self[idx] = facing_dir * ch->dash_initial_velocity;
               // Decomp: fp->x670_timer_lstick_tilt_x = 0xFE;
               // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c:62
@@ -647,8 +628,7 @@ void locomotion_update_pre(MslBatch* batch) {
             batch->state.animation_index[idx] = (uint32_t)MSL_SM_TURN;
             batch->state.turn_has_turned[idx] = 0;
             batch->state.turn_frames_to_turn[idx] = ch->turn_frames;
-            batch->state.action_frame[idx] = 0;
-            batch->state.anim_frame_f32[idx] = 0.0f;
+            msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
             action_id = (uint16_t)MSL_ACT_TURN;
           } else if (msl_absf(stick_x) >= c->walk_stick_threshold) {
             // Walk.
@@ -657,8 +637,7 @@ void locomotion_update_pre(MslBatch* batch) {
                 walk_action_from_speed(c, ch, batch->state.speed_ground_x_self[idx]);
             batch->state.action_id[idx] = want;
             batch->state.animation_index[idx] = anim_for_walk_action(want);
-            batch->state.action_frame[idx] = 0;
-            batch->state.anim_frame_f32[idx] = 0.0f;
+            msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
             action_id = want;
           }
         }
@@ -669,14 +648,13 @@ void locomotion_update_pre(MslBatch* batch) {
         // Decomp: ftCo_Landing_IASA calls the common grounded interrupt checks after the lag gate.
         // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c
         if (action_id == MSL_ACT_LANDING &&
-            batch->state.action_frame[idx] >= (int16_t)ch->landing_lag_frames) {
+            batch->state.anim_frame_f32[idx] >= (float)ch->landing_lag_frames) {
           const MslJumpInput j_in =
               jump_input_from_edges(c, buttons_pressed, stick_y, tilt_timer_y);
           if (j_in != MSL_JUMP_INPUT_NONE && batch->state.jumps_left[idx] > 0) {
             batch->state.action_id[idx] = (uint16_t)MSL_ACT_KNEE_BEND;
             batch->state.animation_index[idx] = (uint32_t)MSL_SM_KNEE_BEND;
-            batch->state.action_frame[idx] = 0;
-            batch->state.anim_frame_f32[idx] = 0.0f;
+            msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
             batch->state.kneebend_jump_input[idx] = (uint8_t)j_in;
             batch->state.kneebend_is_short_hop[idx] = 0;
             action_id = (uint16_t)MSL_ACT_KNEE_BEND;
@@ -690,16 +668,14 @@ void locomotion_update_pre(MslBatch* batch) {
               batch->state.turn_frames_to_turn[idx] = 0;
               batch->state.action_id[idx] = (uint16_t)MSL_ACT_TURN;
               batch->state.animation_index[idx] = (uint32_t)MSL_SM_TURN;
-              batch->state.action_frame[idx] = 0;
-              batch->state.anim_frame_f32[idx] = 0.0f;
+              msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
               action_id = (uint16_t)MSL_ACT_TURN;
             } else {
               // Enter Dash.
               // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c::ftCo_Dash_Enter (init_vel)
               batch->state.action_id[idx] = (uint16_t)MSL_ACT_DASH;
               batch->state.animation_index[idx] = (uint32_t)MSL_SM_DASH;
-              batch->state.action_frame[idx] = 0;
-              batch->state.anim_frame_f32[idx] = 0.0f;
+              msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
               batch->state.speed_ground_x_self[idx] = facing_dir * ch->dash_initial_velocity;
               // Decomp: fp->x670_timer_lstick_tilt_x = 0xFE;
               // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c:62
@@ -713,8 +689,7 @@ void locomotion_update_pre(MslBatch* batch) {
             batch->state.animation_index[idx] = (uint32_t)MSL_SM_TURN;
             batch->state.turn_has_turned[idx] = 0;
             batch->state.turn_frames_to_turn[idx] = ch->turn_frames;
-            batch->state.action_frame[idx] = 0;
-            batch->state.anim_frame_f32[idx] = 0.0f;
+            msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
             action_id = (uint16_t)MSL_ACT_TURN;
           } else if (msl_absf(stick_x) >= c->walk_stick_threshold) {
             // Walk.
@@ -723,8 +698,7 @@ void locomotion_update_pre(MslBatch* batch) {
                 walk_action_from_speed(c, ch, batch->state.speed_ground_x_self[idx]);
             batch->state.action_id[idx] = want;
             batch->state.animation_index[idx] = anim_for_walk_action(want);
-            batch->state.action_frame[idx] = 0;
-            batch->state.anim_frame_f32[idx] = 0.0f;
+            msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
             action_id = want;
           }
         }
@@ -742,7 +716,7 @@ void locomotion_update_pre(MslBatch* batch) {
               batch->state.turn_frames_to_turn[idx] = 0;
               batch->state.action_id[idx] = (uint16_t)MSL_ACT_TURN;
               batch->state.animation_index[idx] = (uint32_t)MSL_SM_TURN;
-              batch->state.action_frame[idx] = 0;
+              msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
               action_id = (uint16_t)MSL_ACT_TURN;
             }
           }
@@ -776,7 +750,7 @@ void locomotion_update_pre(MslBatch* batch) {
             // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c::ftCo_Dash_Enter
             batch->state.action_id[idx] = (uint16_t)MSL_ACT_DASH;
             batch->state.animation_index[idx] = (uint32_t)MSL_SM_DASH;
-            batch->state.action_frame[idx] = 0;
+            msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
             batch->state.speed_ground_x_self[idx] = facing_dir * ch->dash_initial_velocity;
             // Decomp: fp->x670_timer_lstick_tilt_x = 0xFE;
             // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c:62
@@ -823,7 +797,7 @@ void locomotion_update_pre(MslBatch* batch) {
           if (msl_absf(stick_x) < c->walk_stick_threshold) {
             batch->state.action_id[idx] = (uint16_t)MSL_ACT_WAIT;
             batch->state.animation_index[idx] = (uint32_t)MSL_SM_WAIT1_0;
-            // Leave action_frame as-is; Wait loops.
+            msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
             action_id = (uint16_t)MSL_ACT_WAIT;
           } else {
             // Update walk type without resetting action_frame (ftWalkCommon_800DFEC8 keeps phase).
@@ -851,7 +825,7 @@ void locomotion_update_pre(MslBatch* batch) {
           if (action_id == MSL_ACT_RUN && (stick_x * facing_dir) < c->run_stick_x_threshold) {
             batch->state.action_id[idx] = (uint16_t)MSL_ACT_RUN_BRAKE;
             batch->state.animation_index[idx] = (uint32_t)MSL_SM_RUN_BRAKE;
-            batch->state.action_frame[idx] = 0;
+            msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
             action_id = (uint16_t)MSL_ACT_RUN_BRAKE;
           }
         }
@@ -877,14 +851,14 @@ void locomotion_update_pre(MslBatch* batch) {
             }
           }
 
-          if ((uint8_t)batch->state.action_frame[idx] >= ch->jump_startup_frames) {
+          if (batch->state.action_frame[idx] >= (int16_t)ch->jump_startup_frames) {
             const uint8_t is_short = batch->state.kneebend_is_short_hop[idx] ? 1 : 0;
             const uint8_t full = (uint8_t)(!is_short);
 
             const uint16_t jump_act = jump_action_from_stick(c, stick_x, facing_dir);
             batch->state.action_id[idx] = jump_act;
             batch->state.animation_index[idx] = (uint32_t)submotion_for_action(jump_act);
-            batch->state.action_frame[idx] = 0;
+            msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
             batch->state.on_ground[idx] = 0;
 
             // Ground-to-air momentum + jump impulse (refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c::ftCo_800CB110)
@@ -924,22 +898,22 @@ void locomotion_update_pre(MslBatch* batch) {
           const uint32_t anim = batch->state.animation_index[idx];
           if (anim != 0xFFFFFFFFu && anim <= 0xFFFFu) {
             const float end_frame = msl_anim_end_frame(batch->state.char_id[idx], (uint16_t)anim);
-            if (end_frame > 0.0f && ((float)batch->state.action_frame[idx] >= end_frame)) {
+            if (end_frame > 0.0f && (batch->state.anim_frame_f32[idx] >= end_frame)) {
               const float stick_f = stick_x * facing_dir;
               if (stick_f >= c->run_stick_x_threshold) {
                 batch->state.action_id[idx] = (uint16_t)MSL_ACT_RUN;
                 batch->state.animation_index[idx] = (uint32_t)MSL_SM_RUN;
-                batch->state.action_frame[idx] = 0;
+                msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
               } else if (msl_absf(stick_x) >= c->walk_stick_threshold) {
                 const uint16_t want =
                     walk_action_from_speed(c, ch, batch->state.speed_ground_x_self[idx]);
                 batch->state.action_id[idx] = want;
                 batch->state.animation_index[idx] = anim_for_walk_action(want);
-                batch->state.action_frame[idx] = 0;
+                msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
               } else {
                 batch->state.action_id[idx] = (uint16_t)MSL_ACT_WAIT;
                 batch->state.animation_index[idx] = (uint32_t)MSL_SM_WAIT1_0;
-                // Wait loops; keep action_frame.
+                msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
               }
             }
           }
@@ -950,10 +924,10 @@ void locomotion_update_pre(MslBatch* batch) {
           const uint32_t anim = batch->state.animation_index[idx];
           if (anim != 0xFFFFFFFFu && anim <= 0xFFFFu) {
             const float end_frame = msl_anim_end_frame(batch->state.char_id[idx], (uint16_t)anim);
-            if (end_frame > 0.0f && ((float)batch->state.action_frame[idx] >= end_frame)) {
+            if (end_frame > 0.0f && (batch->state.anim_frame_f32[idx] >= end_frame)) {
               batch->state.action_id[idx] = (uint16_t)MSL_ACT_WAIT;
               batch->state.animation_index[idx] = (uint32_t)MSL_SM_WAIT1_0;
-              // Wait loops.
+              msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
             }
           }
         }
@@ -1000,15 +974,15 @@ void locomotion_update_pre(MslBatch* batch) {
         // Aerial jump (double jump) entry.
         // refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::ftCo_JumpAerial_Enter_Basic
         if ((buttons_pressed & (uint16_t)MSL_BUTTON_XY) || did_tap_jump(c, stick_y, tilt_timer_y)) {
-          if (batch->state.jumps_left[idx] > 0 && action_id != MSL_ACT_JUMP_AERIAL_F &&
-              action_id != MSL_ACT_JUMP_AERIAL_B) {
-            const uint16_t act = jump_aerial_action_from_stick(c, stick_x, facing_dir);
-            batch->state.action_id[idx] = act;
-            batch->state.animation_index[idx] = submotion_for_action(act);
-            batch->state.action_frame[idx] = 0;
-            batch->state.speed_air_x_self[idx] = stick_x * ch->air_jump_h_multiplier;
-            batch->state.speed_y_self[idx] =
-                ch->jump_v_initial_velocity * ch->air_jump_v_multiplier;
+            if (batch->state.jumps_left[idx] > 0 && action_id != MSL_ACT_JUMP_AERIAL_F &&
+                action_id != MSL_ACT_JUMP_AERIAL_B) {
+              const uint16_t act = jump_aerial_action_from_stick(c, stick_x, facing_dir);
+              batch->state.action_id[idx] = act;
+              batch->state.animation_index[idx] = submotion_for_action(act);
+              msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+              batch->state.speed_air_x_self[idx] = stick_x * ch->air_jump_h_multiplier;
+              batch->state.speed_y_self[idx] =
+                  ch->jump_v_initial_velocity * ch->air_jump_v_multiplier;
             // Decomp: fp->x671_timer_lstick_tilt_y = 0xFE;
             // refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c:152-156
             batch->state.tilt_timer_y[idx] = 0xFEu;
@@ -1041,7 +1015,7 @@ void locomotion_update_pre(MslBatch* batch) {
               const uint16_t act = jump_aerial_action_from_stick(c, stick_x, facing_dir);
               batch->state.action_id[idx] = act;
               batch->state.animation_index[idx] = submotion_for_action(act);
-              batch->state.action_frame[idx] = 0;
+              msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
               batch->state.speed_air_x_self[idx] = stick_x * ch->air_jump_h_multiplier;
               batch->state.speed_y_self[idx] =
                   ch->jump_v_initial_velocity * ch->air_jump_v_multiplier;
@@ -1067,10 +1041,10 @@ void locomotion_update_pre(MslBatch* batch) {
         const uint32_t anim = batch->state.animation_index[idx];
         if (anim != 0xFFFFFFFFu && anim <= 0xFFFFu) {
           const float end_frame = msl_anim_end_frame(batch->state.char_id[idx], (uint16_t)anim);
-          if (end_frame > 0.0f && ((float)batch->state.action_frame[idx] >= end_frame)) {
+          if (end_frame > 0.0f && (batch->state.anim_frame_f32[idx] >= end_frame)) {
             batch->state.action_id[idx] = (uint16_t)MSL_ACT_FALL;
             batch->state.animation_index[idx] = (uint32_t)MSL_SM_FALL;
-            batch->state.action_frame[idx] = 0;
+            msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
           }
         }
       }
@@ -1083,10 +1057,10 @@ void locomotion_update_pre(MslBatch* batch) {
         const uint32_t anim = batch->state.animation_index[idx];
         if (anim != 0xFFFFFFFFu && anim <= 0xFFFFu) {
           const float end_frame = msl_anim_end_frame(batch->state.char_id[idx], (uint16_t)anim);
-          if (end_frame > 0.0f && ((float)batch->state.action_frame[idx] >= end_frame)) {
+          if (end_frame > 0.0f && (batch->state.anim_frame_f32[idx] >= end_frame)) {
             batch->state.action_id[idx] = (uint16_t)MSL_ACT_FALL;
             batch->state.animation_index[idx] = (uint32_t)MSL_SM_FALL;
-            batch->state.action_frame[idx] = 0;
+            msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
           }
         }
       }
@@ -1196,7 +1170,7 @@ void locomotion_update_post_collision(MslBatch* batch) {
         // Note: we don't yet model wall hug / StopWall, so we conservatively enter Fall here.
         batch->state.action_id[idx] = (uint16_t)MSL_ACT_FALL;
         batch->state.animation_index[idx] = (uint32_t)MSL_SM_FALL;
-        batch->state.action_frame[idx] = 0;
+        msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
       }
     }
   }

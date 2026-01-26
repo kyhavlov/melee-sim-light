@@ -54,6 +54,7 @@ ext = Extension(
         str((ROOT / "src" / "char_params.c").resolve()),
         str((ROOT / "src" / "anim_table.c").resolve()),
         str((ROOT / "src" / "anim_pose.c").resolve()),
+        str((ROOT / "src" / "anim_timebase.c").resolve()),
         str((ROOT / "src" / "ecb_tables.c").resolve()),
         str((ROOT / "src" / "shield_tilt_table.c").resolve()),
         str((ROOT / "src" / "state.c").resolve()),

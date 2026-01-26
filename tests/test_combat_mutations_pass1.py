@@ -56,6 +56,7 @@ def _seed_base() -> np.ndarray:
     seed["action_id"][0, :2] = np.uint16(ACT_WAIT)
     seed["action_frame"][0, :2] = np.int16(0)
     seed["anim_frame_f32"][0, :2] = np.float32(0.0)
+    seed["frame_speed_mul_f32"][0, :2] = np.float32(1.0)
     seed["animation_index"][0, :2] = np.uint32(SM_WAIT1_0)
     seed["shield_hp"][0, :2] = np.float32(_common_attr("start_shield_health"))
     seed["instance_id"][0, 0] = np.uint16(111)
@@ -271,7 +272,7 @@ def test_combat_resolve_body_overlap_applies_percent_knockback_hitstun_and_enter
         assert int(out["hitstun"][1]) > 0
         assert int(out["action_id"][1]) == ACT_DAMAGE_N1
         assert int(out["animation_index"][1]) == SM_DAMAGE_N1
-        assert int(out["action_frame"][1]) == 0
+        assert int(out["action_frame"][1]) == -1
     finally:
         msl_binding.destroy(handle)
         del handle

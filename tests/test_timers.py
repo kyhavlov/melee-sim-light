@@ -42,6 +42,8 @@ def _seed_base() -> np.ndarray:
     seed["stocks"][0, :2] = np.uint8(4)
     seed["char_id"][0, 0] = np.uint8(1)  # Fox
     seed["char_id"][0, 1] = np.uint8(22)  # Falco
+    seed["frame_speed_mul_f32"][0, :2] = np.float32(1.0)
+    seed["anim_frame_f32"][0, :2] = np.float32(0.0)
     return seed
 
 
@@ -50,6 +52,7 @@ def test_hitlag_freezes_action_frame_and_physics() -> None:
     seed["hitlag"][0, 0] = np.uint16(2)
     seed["hitstun"][0, 0] = np.uint16(5)
     seed["action_frame"][0, 0] = np.int16(10)
+    seed["anim_frame_f32"][0, 0] = np.float32(10.0)
     seed["state_flags"][0, 0, 3] = np.uint8(0x02)  # 0x221C: isHitstun (refs/slippi-ssbm-asm)
 
     seed["pos_x"][0, 0] = np.float32(1.25)
@@ -76,6 +79,7 @@ def test_hitlag_ends_then_action_and_physics_resume() -> None:
     seed["hitlag"][0, 0] = np.uint16(1)
     seed["hitstun"][0, 0] = np.uint16(5)
     seed["action_frame"][0, 0] = np.int16(10)
+    seed["anim_frame_f32"][0, 0] = np.float32(10.0)
     seed["state_flags"][0, 0, 3] = np.uint8(0x02)  # 0x221C: isHitstun (refs/slippi-ssbm-asm)
 
     seed["pos_x"][0, 0] = np.float32(0.0)
@@ -102,6 +106,7 @@ def test_hitstun_does_not_decrement_when_not_in_hitstun_flag() -> None:
     seed["hitlag"][0, 0] = np.uint16(0)
     seed["hitstun"][0, 0] = np.uint16(5)
     seed["action_frame"][0, 0] = np.int16(10)
+    seed["anim_frame_f32"][0, 0] = np.float32(10.0)
     seed["state_flags"][0, 0, 3] = np.uint8(0x00)  # 0x221C: not in hitstun
 
     out = _step_once(seed)

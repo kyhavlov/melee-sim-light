@@ -3,6 +3,7 @@
 #include <errno.h>
 
 #include "action.h"
+#include "anim_timebase.h"
 #include "combat.h"
 #include "hitboxes.h"
 #include "hurtboxes.h"
@@ -27,6 +28,11 @@ int step_one_frame(MslBatch* batch, const uint8_t* prev_input_bytes, size_t prev
   //   before input processing, animation advancement, and physics (`Fighter_procUpdate`).
   // We follow that by updating timers before applying inputs/advancing state.
   timers_update(batch);
+
+  // Decomp: animation/script timebase advances at proc prio 1 (Fighter_8006A360) before input
+  // (prio 3). Advance our deterministic cur_anim_frame accumulator here, after timers.
+  // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360 (ftAnim_8006EBA4 under !hitlag)
+  anim_timebase_update_pre_input(batch);
 
   // Decomp-shaped "ProcessHit" consume / cleanup (see combat_processhit_consume for references).
   combat_processhit_consume(batch);

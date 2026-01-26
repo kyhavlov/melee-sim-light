@@ -195,6 +195,7 @@ def _main_impl(args) -> None:
     from pathlib import Path
 
     from tools.slippi.combat_history import derive_combat_rehit_seed_fields
+    from tools.slippi.anim_timebase import derive_frame_speed_mul_f32, load_end_frame_tables
     from tools.slippi.seed_history import (
         apply_deadzone,
         compute_fighter_button_timers,
@@ -293,6 +294,23 @@ def _main_impl(args) -> None:
     fastfall_stick_threshold = float(common["fastfall_stick_threshold"])
     fastfall_tilt_max_frames = int(common["fastfall_tilt_max_frames"])
     guard_stick_lerp_x44c = float(common["guard_stick_lerp_x44c"])
+    lcancel_window_frames = int(common["lcancel_window_frames"])
+    lcancel_lag_div = float(common["lcancel_lag_div"])
+    landing_fall_special_lag_frames = float(common["landing_fall_special_lag_frames"])
+
+    data_root = Path("data")
+    end_frames = load_end_frame_tables(data_root)
+    char_landing_air_lag_frames: dict[int, dict[str, int]] = {}
+    for cid in (1, 22):
+        key = "fox" if cid == 1 else "falco"
+        attrs = json.loads((data_root / "characters" / f"{key}.json").read_text())
+        char_landing_air_lag_frames[int(cid)] = {
+            "airn": int(attrs["landing_airn_lag_frames"]),
+            "airf": int(attrs["landing_airf_lag_frames"]),
+            "airb": int(attrs["landing_airb_lag_frames"]),
+            "airhi": int(attrs["landing_airhi_lag_frames"]),
+            "airlw": int(attrs["landing_airlw_lag_frames"]),
+        }
 
     # Guard-tilt table metadata (neutral frame + max frame) for decomp-shaped mv.co.guard.x8.
     shield_meta = load_shield_tilt_table_meta()
@@ -579,6 +597,25 @@ def _main_impl(args) -> None:
             press_mask=button_mask_lr,
             start_timer=0xFF,
         )
+
+        # Seed fp->frame_speed_mul (float) for deterministic anim timebase stepping.
+        #
+        # Slippi does not expose frame_speed_mul directly; derive it strictly causally from the replay
+        # prefix plus decomp-backed landing formulas where state_age resets on entry.
+        frame_speed_mul = derive_frame_speed_mul_f32(
+            state_age_f32=post_state_age_f32,
+            action_id=post_state,
+            hitlag=post_hitlag,
+            char_id=post_char,
+            animation_index=animation_index,
+            lr_press_timer=lr_press_timer,
+            end_frames=end_frames,
+            common_lcancel_window_frames=lcancel_window_frames,
+            common_lcancel_lag_div=lcancel_lag_div,
+            common_landing_fall_special_lag_frames=landing_fall_special_lag_frames,
+            char_landing_air_lag_frames=char_landing_air_lag_frames,
+        )
+        samples["seed_t"]["frame_speed_mul_f32"][:, slot] = frame_speed_mul[:-1]
 
         # Action-entry overrides (decomp):
         # - Dash: refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c:55-71

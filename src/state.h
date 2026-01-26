@@ -37,6 +37,13 @@ typedef struct MslStateSoA {
   uint16_t* action_id;
   int16_t* action_frame;
   float* anim_frame_f32;  // decomp fp->cur_anim_frame (float; Slippi `state_age`)
+  // Decomp-shaped internal animation/script timebase with deterministic fractional carry.
+  // - anim_frame_fp_q16_16 mirrors fp->cur_anim_frame (float) as signed Q16.16 fixed-point.
+  // - frame_speed_mul_fp_q16_16 mirrors fp->frame_speed_mul (float) as signed Q16.16 fixed-point.
+  // refs/melee/src/melee/ft/fighter.c (cur_anim_frame, frame_speed_mul init / Fighter_ChangeMotionState)
+  // refs/melee/src/melee/ft/ftanim.c (ftAnim_8006F0FC / ftAnim_SetAnimRate)
+  int32_t* anim_frame_fp_q16_16;
+  int32_t* frame_speed_mul_fp_q16_16;
   uint8_t* jumps_left;
   uint8_t* stocks;
   // Guard (shield) tilt pose state (seeded; decomp-shaped).

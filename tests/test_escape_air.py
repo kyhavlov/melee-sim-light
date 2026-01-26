@@ -95,10 +95,14 @@ def _seed_air_base() -> np.ndarray:
     seed["on_ground"][0, 0] = np.uint8(0)
     seed["on_ground"][0, 1] = np.uint8(1)
     seed["ground_id"][0, :2] = np.uint16(0)
+    seed["frame_speed_mul_f32"][0, :2] = np.float32(1.0)
+    seed["anim_frame_f32"][0, :2] = np.float32(0.0)
 
     # Default P2 to a stable grounded idle.
     seed["action_id"][0, 1] = np.uint16(ACT_WAIT)
     seed["action_frame"][0, 1] = np.int16(0)
+    seed["anim_frame_f32"][0, 1] = np.float32(0.0)
+    seed["frame_speed_mul_f32"][0, 1] = np.float32(1.0)
     seed["animation_index"][0, 1] = np.uint32(SM_WAIT1_0)
     return seed
 
@@ -138,6 +142,8 @@ def test_air_locomotion_lr_press_enters_escape_air_next_step() -> None:
     seed = _seed_air_base()
     seed["action_id"][0, 0] = np.uint16(ACT_FALL)
     seed["action_frame"][0, 0] = np.int16(0)
+    seed["anim_frame_f32"][0, 0] = np.float32(0.0)
+    seed["frame_speed_mul_f32"][0, 0] = np.float32(1.0)
     seed["animation_index"][0, 0] = np.uint32(SM_FALL)
 
     prev_inp = _mk_input_bytes(1, input_stride)
@@ -163,6 +169,8 @@ def test_escape_air_entry_velocity_within_deadzone_is_zero() -> None:
     seed = _seed_air_base()
     seed["action_id"][0, 0] = np.uint16(ACT_FALL)
     seed["action_frame"][0, 0] = np.int16(0)
+    seed["anim_frame_f32"][0, 0] = np.float32(0.0)
+    seed["frame_speed_mul_f32"][0, 0] = np.float32(1.0)
     seed["animation_index"][0, 0] = np.uint32(SM_FALL)
     seed["speed_air_x_self"][0, 0] = np.float32(1.0)
     seed["speed_y_self"][0, 0] = np.float32(-1.0)
@@ -199,6 +207,8 @@ def test_escape_air_deadzone_band_between_escapeair_and_global_deadzone_is_zero_
     seed = _seed_air_base()
     seed["action_id"][0, 0] = np.uint16(ACT_FALL)
     seed["action_frame"][0, 0] = np.int16(0)
+    seed["anim_frame_f32"][0, 0] = np.float32(0.0)
+    seed["frame_speed_mul_f32"][0, 0] = np.float32(1.0)
     seed["animation_index"][0, 0] = np.uint32(SM_FALL)
 
     prev_inp = _mk_input_bytes(1, input_stride)
@@ -229,6 +239,8 @@ def test_escape_air_entry_velocity_outside_deadzone_uses_force_and_stick_angle()
     seed = _seed_air_base()
     seed["action_id"][0, 0] = np.uint16(ACT_FALL)
     seed["action_frame"][0, 0] = np.int16(0)
+    seed["anim_frame_f32"][0, 0] = np.float32(0.0)
+    seed["frame_speed_mul_f32"][0, 0] = np.float32(1.0)
     seed["animation_index"][0, 0] = np.uint32(SM_FALL)
 
     prev_inp = _mk_input_bytes(1, input_stride)
@@ -269,6 +281,8 @@ def test_escape_air_velocity_decays_each_frame_with_escapeair_decay() -> None:
     seed = _seed_air_base()
     seed["action_id"][0, 0] = np.uint16(ACT_ESCAPE_AIR)
     seed["action_frame"][0, 0] = np.int16(0)
+    seed["anim_frame_f32"][0, 0] = np.float32(0.0)
+    seed["frame_speed_mul_f32"][0, 0] = np.float32(1.0)
     seed["animation_index"][0, 0] = np.uint32(SM_ESCAPE_AIR)
     seed["speed_air_x_self"][0, 0] = np.float32(1.25)
     seed["speed_y_self"][0, 0] = np.float32(-2.5)
@@ -296,6 +310,8 @@ def test_escape_air_anim_end_transitions_to_fall_special_not_fall() -> None:
     seed["action_id"][0, 0] = np.uint16(ACT_ESCAPE_AIR)
     # locomotion_update_pre advances action_frame by +1 before anim-end gates.
     seed["action_frame"][0, 0] = np.int16(int(math.ceil(end_frame)) - 1)
+    seed["anim_frame_f32"][0, 0] = np.float32(int(math.ceil(end_frame)) - 1)
+    seed["frame_speed_mul_f32"][0, 0] = np.float32(1.0)
     seed["animation_index"][0, 0] = np.uint32(SM_ESCAPE_AIR)
     seed["speed_air_x_self"][0, 0] = np.float32(0.0)
     seed["speed_y_self"][0, 0] = np.float32(0.0)
@@ -306,7 +322,7 @@ def test_escape_air_anim_end_transitions_to_fall_special_not_fall() -> None:
     out = _step_once(seed, prev_inp, inp)
     assert int(out["action_id"][0]) == ACT_FALL_SPECIAL
     assert int(out["animation_index"][0]) == SM_FALL_SPECIAL
-    assert int(out["action_frame"][0]) == 0
+    assert int(out["action_frame"][0]) == -1
     assert int(out["action_id"][0]) != ACT_FALL
 
 
@@ -335,6 +351,8 @@ def test_fall_special_drift_cap_reduces_horizontal_speed_vs_fall() -> None:
     seed_fall = _seed_air_base()
     seed_fall["action_id"][0, 0] = np.uint16(ACT_FALL)
     seed_fall["action_frame"][0, 0] = np.int16(0)
+    seed_fall["anim_frame_f32"][0, 0] = np.float32(0.0)
+    seed_fall["frame_speed_mul_f32"][0, 0] = np.float32(1.0)
     seed_fall["animation_index"][0, 0] = np.uint32(SM_FALL)
     # Start between FallSpecial mobility and normal target so the cap affects accel direction.
     seed_fall["speed_air_x_self"][0, 0] = np.float32((air_drift_max + mobility) * 0.5)
@@ -342,6 +360,8 @@ def test_fall_special_drift_cap_reduces_horizontal_speed_vs_fall() -> None:
     seed_special = _seed_air_base()
     seed_special["action_id"][0, 0] = np.uint16(ACT_FALL_SPECIAL)
     seed_special["action_frame"][0, 0] = np.int16(0)
+    seed_special["anim_frame_f32"][0, 0] = np.float32(0.0)
+    seed_special["frame_speed_mul_f32"][0, 0] = np.float32(1.0)
     seed_special["animation_index"][0, 0] = np.uint32(SM_FALL_SPECIAL)
     seed_special["speed_air_x_self"][0, 0] = np.float32((air_drift_max + mobility) * 0.5)
     # Trigger xC==0 derivation in core reseed: fall_fast==0 and vy < -terminal_vel.

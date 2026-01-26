@@ -94,10 +94,14 @@ def _seed_air_base() -> np.ndarray:
     seed["on_ground"][0, 0] = np.uint8(0)
     seed["on_ground"][0, 1] = np.uint8(1)
     seed["ground_id"][0, :2] = np.uint16(0)
+    seed["frame_speed_mul_f32"][0, :2] = np.float32(1.0)
+    seed["anim_frame_f32"][0, :2] = np.float32(0.0)
 
     # Default P2 to a stable grounded idle.
     seed["action_id"][0, 1] = np.uint16(ACT_WAIT)
     seed["action_frame"][0, 1] = np.int16(0)
+    seed["anim_frame_f32"][0, 1] = np.float32(0.0)
+    seed["frame_speed_mul_f32"][0, 1] = np.float32(1.0)
     seed["animation_index"][0, 1] = np.uint32(SM_WAIT1_0)
     return seed
 
@@ -166,6 +170,8 @@ def test_attackair_anim_end_enters_fall() -> None:
     seed = _seed_air_base()
     seed["action_id"][0, 0] = np.uint16(ACT_ATTACK_AIR_N)
     seed["action_frame"][0, 0] = np.int16(0)
+    seed["anim_frame_f32"][0, 0] = np.float32(0.0)
+    seed["frame_speed_mul_f32"][0, 0] = np.float32(1.0)
     seed["animation_index"][0, 0] = np.uint32(SM_ATTACK_AIR_N)
 
     prev_inp = _mk_input_bytes(1, input_stride)
@@ -185,7 +191,7 @@ def test_attackair_anim_end_enters_fall() -> None:
     _, out = first_fall
     assert int(out["action_id"][0]) == ACT_FALL
     assert int(out["animation_index"][0]) == SM_FALL
-    assert int(out["action_frame"][0]) == 0
+    assert int(out["action_frame"][0]) == -1
 
 
 def test_attackair_iasa_gates_airdodge_and_double_jump() -> None:
@@ -201,6 +207,8 @@ def test_attackair_iasa_gates_airdodge_and_double_jump() -> None:
     seed = _seed_air_base()
     seed["action_id"][0, 0] = np.uint16(ACT_ATTACK_AIR_N)
     seed["action_frame"][0, 0] = np.int16(0)
+    seed["anim_frame_f32"][0, 0] = np.float32(0.0)
+    seed["frame_speed_mul_f32"][0, 0] = np.float32(1.0)
     seed["animation_index"][0, 0] = np.uint32(SM_ATTACK_AIR_N)
     seed["jumps_left"][0, 0] = np.uint8(2)
 
@@ -216,6 +224,8 @@ def test_attackair_iasa_gates_airdodge_and_double_jump() -> None:
     seed = _seed_air_base()
     seed["action_id"][0, 0] = np.uint16(ACT_ATTACK_AIR_N)
     seed["action_frame"][0, 0] = np.int16(iasa_frame - 1)
+    seed["anim_frame_f32"][0, 0] = np.float32(iasa_frame - 1)
+    seed["frame_speed_mul_f32"][0, 0] = np.float32(1.0)
     seed["animation_index"][0, 0] = np.uint32(SM_ATTACK_AIR_N)
 
     prev_inp = _mk_input_bytes(1, input_stride)
@@ -226,11 +236,14 @@ def test_attackair_iasa_gates_airdodge_and_double_jump() -> None:
     out = _step_once(seed, prev_inp, inp)
     assert int(out["action_id"][0]) == ACT_ESCAPE_AIR
     assert int(out["animation_index"][0]) == SM_ESCAPE_AIR
+    assert int(out["action_frame"][0]) == -1
 
     # Before IASA: X press should not enter double jump.
     seed = _seed_air_base()
     seed["action_id"][0, 0] = np.uint16(ACT_ATTACK_AIR_N)
     seed["action_frame"][0, 0] = np.int16(0)
+    seed["anim_frame_f32"][0, 0] = np.float32(0.0)
+    seed["frame_speed_mul_f32"][0, 0] = np.float32(1.0)
     seed["animation_index"][0, 0] = np.uint32(SM_ATTACK_AIR_N)
     seed["jumps_left"][0, 0] = np.uint8(2)
 
@@ -246,6 +259,8 @@ def test_attackair_iasa_gates_airdodge_and_double_jump() -> None:
     seed = _seed_air_base()
     seed["action_id"][0, 0] = np.uint16(ACT_ATTACK_AIR_N)
     seed["action_frame"][0, 0] = np.int16(iasa_frame - 1)
+    seed["anim_frame_f32"][0, 0] = np.float32(iasa_frame - 1)
+    seed["frame_speed_mul_f32"][0, 0] = np.float32(1.0)
     seed["animation_index"][0, 0] = np.uint32(SM_ATTACK_AIR_N)
     seed["jumps_left"][0, 0] = np.uint8(2)
 
@@ -257,6 +272,5 @@ def test_attackair_iasa_gates_airdodge_and_double_jump() -> None:
     out = _step_once(seed, prev_inp, inp)
     assert int(out["action_id"][0]) == ACT_JUMP_AERIAL_F
     assert int(out["animation_index"][0]) == SM_JUMP_AERIAL_F
-    assert int(out["action_frame"][0]) == 0
+    assert int(out["action_frame"][0]) == -1
     assert int(out["jumps_left"][0]) == 1
-
