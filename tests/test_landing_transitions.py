@@ -10,6 +10,7 @@ from tools.eval.dataset import COMPARE_DTYPE, INPUT_DTYPE, SEED_DTYPE
 
 
 # Action ids (GALE01): refs/melee/src/melee/ft/chara/ftCommon/forward.h
+ACT_WAIT = 0x000E
 ACT_ATTACK_AIR_N = 0x0041
 ACT_ESCAPE_AIR = 0x00EC
 ACT_LANDING_AIR_N = 0x0046
@@ -97,6 +98,7 @@ def _seed_base() -> np.ndarray:
     seed["num_players"][0] = np.uint8(2)
     seed["stocks"][0, :2] = np.uint8(4)
     seed["char_id"][0, :2] = np.uint8(CHAR_FOX)
+    seed["action_id"][0, :2] = np.uint16(ACT_WAIT)
     seed["facing"][0, :2] = np.uint8(1)  # right
     seed["pos_x"][0, :2] = np.float32(0.0)
     seed["pos_y"][0, :2] = np.float32(0.0)

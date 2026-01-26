@@ -110,6 +110,17 @@ typedef struct MslSeed {
   // State machine
   uint16_t action_id[MSL_MAX_PLAYERS];    // GALE01 action id
   int16_t action_frame[MSL_MAX_PLAYERS];  // action frame (can be negative in pre-start)
+  // Reseed-only match-flow countdown timer (teacher-forcing aid).
+  // Used for match-start entry / KO / respawn states where Slippi post-frames do not expose a
+  // useful per-frame counter (action_frame is often -1).
+  //
+  // Convention: decomp-shaped countdown value (fp->x2340-style), derived from ftCommonData constants
+  // and elapsed-in-state (contiguous run length so far), clamped to 255.
+  //
+  // NOTE: This is not "remaining until the action ends" in general, because match-flow states can
+  // exit early via inputs (IASA), and the replay action_id run length may be shorter than the
+  // internal timer.
+  uint8_t match_flow_timer[MSL_MAX_PLAYERS];
   // Decomp-shaped animation/script timebase: fp->cur_anim_frame (float).
   // Slippi post-frame exposes this as `state_age` (float, can be fractional).
   //

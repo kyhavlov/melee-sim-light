@@ -90,6 +90,103 @@ def _port_name(port_1based: int) -> str:
         raise ValueError(f"port must be in 1..4, got {port_1based}")
     return f"P{port_1based}"
 
+_MATCH_FLOW_ACTION_IDS = {
+    # Dead*
+    0,  # ftCo_MS_DeadDown
+    1,  # ftCo_MS_DeadLeft
+    2,  # ftCo_MS_DeadRight
+    4,  # ftCo_MS_DeadUpStar
+    # Rebirth*
+    12,  # ftCo_MS_Rebirth
+    13,  # ftCo_MS_RebirthWait
+    # Entry*
+    322,  # ftCo_MS_Entry
+    323,  # ftCo_MS_EntryStart
+    324,  # ftCo_MS_EntryEnd
+}
+
+
+def _derive_match_flow_timer(*, action_id_u16: np.ndarray, port0: int, common: dict) -> np.ndarray:
+    """
+    Derive a per-frame decomp-shaped countdown for match-flow states.
+
+    This is required for teacher-forced one-step eval because many match-flow motions do not expose
+    a useful per-frame counter in Slippi post-frames (action_frame is often -1).
+
+    Causality:
+    - Strictly causal w.r.t. the replay: match_flow_timer[t] depends only on action_id[0..t] and
+      decomp/ISO-derived constants (no lookahead).
+
+    Convention:
+    - match_flow_timer[t] approximates the fighter's internal match-flow countdown timer (fp->x2340),
+      computed from ftCommonData constants and elapsed-in-state (run length so far).
+    - It is NOT "remaining until the action ends" in general, because some match-flow states can
+      exit early via IASA (e.g. RebirthWait) or other transitions.
+    - Values are clamped to 255 and are 0 for non-match-flow action_ids.
+    - Only populated for match-flow action_ids (Dead*/Rebirth*/Entry*); 0 for other motions.
+    """
+    a = np.asarray(action_id_u16, dtype=np.uint16).reshape(-1)
+    n = int(a.shape[0])
+    out = np.zeros(n, dtype=np.uint8)
+
+    dead_timer = int(common["dead_timer_frames"])
+    dead_up_star_initial = int(common["dead_up_star_initial_frames"])
+    dead_up_star_phase1 = int(common["dead_up_star_phase1_frames"])
+    dead_up_star_phase2 = int(common["dead_up_star_phase2_frames"])
+    rebirth_timer = int(common["rebirth_timer_frames"])
+    rebirth_wait_timer = int(common["rebirth_wait_timer_frames"])
+    entry_start_frames = int(common["entry_start_frames"])
+    entry_end_frames = int(common["entry_end_frames"])
+
+    dead_up_star_total = max(0, dead_up_star_initial) + max(0, dead_up_star_phase1) + max(0, dead_up_star_phase2)
+
+    # Match start entry delay is per-port and is driven by a Player "unk4C" counter that is set in
+    # increments of 5 during match init, then consumed by ftCo_800C61B0.
+    # refs/melee/src/melee/gm/gm_16AE.c::fn_8016D8AC (adds 5, calls Player_SetUnk4C)
+    # refs/melee/src/melee/pl/player.c::Player_GetUnk4C (read)
+    # refs/melee/src/melee/ft/ft_0C31.c::ftCo_800C61B0 (Entry uses unk4C)
+    entry_total = 5 * int(port0 + 1)
+
+    prev_ai: int | None = None
+    run_len = 0
+    for i in range(n):
+        ai = int(a[i])
+        if prev_ai is not None and ai == prev_ai:
+            run_len += 1
+        else:
+            prev_ai = ai
+            run_len = 1
+
+        total: int | None = None
+        if ai == 0 or ai == 1 or ai == 2:
+            total = dead_timer
+        elif ai == 4:
+            total = dead_up_star_total
+        elif ai == 12:
+            total = rebirth_timer
+        elif ai == 13:
+            total = rebirth_wait_timer
+        elif ai == 322:
+            total = entry_total
+        elif ai == 323:
+            # EntryStart enter sets timer=x6BC then immediately decrements it in Anim before Phys,
+            # so the first observable frame has (x6BC - 1) remaining.
+            total = max(0, entry_start_frames - 1)
+        elif ai == 324:
+            total = entry_end_frames
+
+        if total is None or ai not in _MATCH_FLOW_ACTION_IDS:
+            continue
+
+        t = total - run_len + 1
+        if t < 0:
+            t = 0
+        if t > 255:
+            t = 255
+        out[i] = np.uint8(t)
+
+    return out
+
 
 def _team_id_from_start_player(p: dict) -> int:
     t = p.get("team")
@@ -484,6 +581,10 @@ def _main_impl(args) -> None:
         samples["ref_t1"]["action_id"][:, slot] = post_state[1:]
         samples["seed_t"]["action_frame"][:, slot] = post_state_age[:-1]
         samples["ref_t1"]["action_frame"][:, slot] = post_state_age[1:]
+        port0 = int(src_ports[slot]) - 1
+        samples["seed_t"]["match_flow_timer"][:, slot] = _derive_match_flow_timer(
+            action_id_u16=post_state, port0=port0, common=common
+        )[:-1]
         samples["seed_t"]["anim_frame_f32"][:, slot] = post_anim_frame_f32[:-1]
 
         samples["seed_t"]["pos_x"][:, slot] = post_pos_x[:-1]

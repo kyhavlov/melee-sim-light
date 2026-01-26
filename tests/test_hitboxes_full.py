@@ -65,6 +65,8 @@ def test_hitboxes_refresh_full_attrs_match_table() -> None:
     seed["stocks"][0, :2] = np.uint8(4)
     seed["char_id"][0, 0] = np.uint8(1)  # Fox
     seed["char_id"][0, 1] = np.uint8(1)
+    # Keep action_update/match_flow out of the way; we only care about pose-driven refresh output.
+    seed["action_id"][0, :2] = np.uint16(0xFFFF)
     seed["pos_x"][0, 0] = np.float32(123.25)
     seed["pos_y"][0, 0] = np.float32(-45.5)
     seed["action_frame"][0, 0] = np.int16(frame)

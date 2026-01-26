@@ -104,6 +104,7 @@ def test_hurtbox_state_overwritten_when_hit_status_nonzero(char_name: str, char_
     seed["num_players"][0] = np.uint8(2)
     seed["stocks"][0, :2] = np.uint8(4)
     seed["char_id"][0, :2] = np.uint8(char_id)
+    seed["action_id"][0, :2] = np.uint16(0xFFFF)
     seed["facing"][0, :2] = np.uint8(1)
     seed["on_ground"][0, :2] = np.uint8(1)
     seed["ground_id"][0, :2] = np.uint16(0)

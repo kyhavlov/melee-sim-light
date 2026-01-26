@@ -125,6 +125,7 @@ static int load_one(const char* data_dir, const char* rel_path, uint8_t char_id)
 
   MslCharParams out = {0};
   if (json_get_f32(buf, "weight", &out.weight) != 0 ||
+      json_get_f32(buf, "trophy_scale", &out.trophy_scale) != 0 ||
       json_get_f32(buf, "walk_init_vel", &out.walk_init_vel) != 0 ||
       json_get_f32(buf, "walk_accel", &out.walk_accel) != 0 ||
       json_get_f32(buf, "walk_max_vel", &out.walk_max_vel) != 0 ||

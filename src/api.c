@@ -193,6 +193,7 @@ int msl_batch_reseed_seed(MslBatch* batch, const uint8_t* seed_bytes, size_t see
       batch->state.on_ground[idx] = seed->on_ground[p] ? 1 : 0;
 
       batch->state.action_id[idx] = seed->action_id[p];
+      batch->state.match_flow_timer[idx] = seed->match_flow_timer[p];
       // Seed deterministic anim timebase from Slippi post-frame `state_age` (fp->cur_anim_frame)
       // plus a strictly-causal derived fp->frame_speed_mul.
       msl_anim_timebase_seed(batch, idx, seed->anim_frame_f32[p], seed->frame_speed_mul_f32[p]);

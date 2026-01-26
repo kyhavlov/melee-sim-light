@@ -16,6 +16,10 @@ typedef struct MslCharParams {
   // Source of truth: ISO-extracted `data/characters/*.json` `weight`.
   float weight;
 
+  // Match start entry height scalar (ft_0C31.c::ftCo_800C6408).
+  // Source of truth: ISO-extracted `data/characters/*.json` `trophy_scale`.
+  float trophy_scale;
+
   // Ground locomotion
   float walk_init_vel;
   float walk_accel;

@@ -36,6 +36,7 @@ typedef struct MslStateSoA {
   // State machine
   uint16_t* action_id;
   int16_t* action_frame;
+  uint8_t* match_flow_timer;
   float* anim_frame_f32;  // decomp fp->cur_anim_frame (float; Slippi `state_age`)
   // Decomp-shaped internal animation/script timebase with deterministic fractional carry.
   // - anim_frame_fp_q16_16 mirrors fp->cur_anim_frame (float) as signed Q16.16 fixed-point.

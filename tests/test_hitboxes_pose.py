@@ -171,6 +171,8 @@ def test_hitboxes_refresh_matches_pose_bytes() -> None:
     seed["stocks"][0, :2] = np.uint8(4)
     seed["char_id"][0, 0] = np.uint8(1)  # Fox
     seed["char_id"][0, 1] = np.uint8(1)
+    # Keep action_update/match_flow out of the way; we only care about pose-driven refresh output.
+    seed["action_id"][0, :2] = np.uint16(0xFFFF)
     seed["facing"][0, :2] = np.uint8(1)  # right (pose-space X mirror parity)
     seed["pos_x"][0, 0] = pos_x
     seed["pos_y"][0, 0] = pos_y

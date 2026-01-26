@@ -162,6 +162,7 @@ def test_hitboxes_refresh_applies_fighter_scale_y_and_respects_ignore_flag() -> 
             seed["num_players"][0] = np.uint8(2)
             seed["stocks"][0, :2] = np.uint8(4)
             seed["char_id"][0, :2] = np.uint8(1)  # Fox
+            seed["action_id"][0, :2] = np.uint16(0xFFFF)
 
             seed["pos_x"][0, 0] = np.float32(100.0)
             seed["pos_y"][0, 0] = np.float32(-50.0)

@@ -186,6 +186,31 @@ def main() -> None:
         "entry_start_frames": int(max(0, _i32_be(buf, ft_common_abs + 0x6BC))),
         "entry_end_frames": int(max(0, _i32_be(buf, ft_common_abs + 0x6C0))),
         "entry_scale_y": float(_f32_be(buf, ft_common_abs + 0x6C4)),
+        # Offscreen death / match-flow timers (ft_0D31.c).
+        # - Top blastzone DeadUpStar gate: fp->x8c_kb_vel.y > p_ftCommonData->x4F0
+        #   refs/melee/src/melee/ft/ft_0D31.c::ftCo_800D3158
+        # - DeadDown/Left/Right timer: fp->mv.co.unk_800D3680.x40 = p_ftCommonData->x500
+        #   refs/melee/src/melee/ft/ft_0D31.c::ftCo_800D3680
+        # - DeadUpStar initial timer:
+        #   fp->mv.co.unk_deadup.x40 = p_ftCommonData->x504
+        #   refs/melee/src/melee/ft/ft_0D31.c::ftCo_800D40B8
+        # - DeadUpStar phase timers:
+        #   ftCo_DeadUpStar_Anim uses p_ftCommonData fields at 0x508 and 0x50C as per-phase timers:
+        #     - on phase enter: fp->x2340 = *(p_ftCommonData + 0x508); fp->x2344 = 1
+        #     - on stock loss:  fp->x2340 = *(p_ftCommonData + 0x50C); fp->x2344 = 2
+        #   refs/melee/build/GALE01/asm/melee/ft/ft_0D31.s::ftCo_DeadUpStar_Anim
+        # - Rebirth/RebirthWait timers:
+        #   - Rebirth:     fp->x2340 = *(p_ftCommonData + 0x5D0) right before ChangeMotionState(Rebirth)
+        #     refs/melee/build/GALE01/asm/melee/ft/ft_0D31.s (see callsite around 800D5640)
+        #   - RebirthWait: fp->x2340 = *(p_ftCommonData + 0x5D4) on enter
+        #     refs/melee/build/GALE01/asm/melee/ft/ft_0D31.s (see ftCo_800D5600 block around 800D5A08)
+        "dead_up_kb_vel_threshold": float(_f32_be(buf, ft_common_abs + 0x4F0)),
+        "dead_timer_frames": int(max(0, _i32_be(buf, ft_common_abs + 0x500))),
+        "dead_up_star_initial_frames": int(max(0, _i32_be(buf, ft_common_abs + 0x504))),
+        "dead_up_star_phase1_frames": int(max(0, _i32_be(buf, ft_common_abs + 0x508))),
+        "dead_up_star_phase2_frames": int(max(0, _i32_be(buf, ft_common_abs + 0x50C))),
+        "rebirth_timer_frames": int(max(0, _i32_be(buf, ft_common_abs + 0x5D0))),
+        "rebirth_wait_timer_frames": int(max(0, _i32_be(buf, ft_common_abs + 0x5D4))),
         # Movement scaling
         "walk_accel_scale_mul": float(_f32_be(buf, ft_common_abs + 0x30)),
         # Dash IASA velocity decay multiplier (ftCo_Dash.c): gr_vel += -gr_vel * x54 * traction

@@ -79,6 +79,24 @@ static int json_get_u8(const char* json, const char* key, uint8_t* out) {
   return 0;
 }
 
+static int json_get_u16(const char* json, const char* key, uint16_t* out) {
+  if (json == NULL || key == NULL || out == NULL) {
+    return -1;
+  }
+  float f = 0.0f;
+  if (json_get_f32(json, key, &f) != 0) {
+    return -1;
+  }
+  if (f < 0.0f) {
+    f = 0.0f;
+  }
+  if (f > 65535.0f) {
+    f = 65535.0f;
+  }
+  *out = (uint16_t)(int)(f + 0.5f);
+  return 0;
+}
+
 int common_params_init(void) {
   if (g_loaded) {
     return 0;
@@ -159,6 +177,20 @@ int common_params_init(void) {
       json_get_f32(buf, "fastfall_stick_threshold", &g_params.fastfall_stick_threshold) != 0 ||
       json_get_u8(buf, "fastfall_tilt_max_frames", &g_params.fastfall_tilt_max_frames) != 0 ||
       json_get_u8(buf, "tap_jump_tilt_max_frames", &g_params.tap_jump_tilt_max_frames) != 0) {
+    alloc_free(buf);
+    return -1;
+  }
+
+  // Match flow constants (KO/death/respawn/entry).
+  if (json_get_f32(buf, "dead_up_kb_vel_threshold", &g_params.dead_up_kb_vel_threshold) != 0 ||
+      json_get_u16(buf, "dead_timer_frames", &g_params.dead_timer_frames) != 0 ||
+      json_get_u16(buf, "dead_up_star_initial_frames", &g_params.dead_up_star_initial_frames) != 0 ||
+      json_get_u16(buf, "dead_up_star_phase1_frames", &g_params.dead_up_star_phase1_frames) != 0 ||
+      json_get_u16(buf, "dead_up_star_phase2_frames", &g_params.dead_up_star_phase2_frames) != 0 ||
+      json_get_u16(buf, "rebirth_timer_frames", &g_params.rebirth_timer_frames) != 0 ||
+      json_get_u16(buf, "rebirth_wait_timer_frames", &g_params.rebirth_wait_timer_frames) != 0 ||
+      json_get_u16(buf, "entry_start_frames", &g_params.entry_start_frames) != 0 ||
+      json_get_u16(buf, "entry_end_frames", &g_params.entry_end_frames) != 0) {
     alloc_free(buf);
     return -1;
   }

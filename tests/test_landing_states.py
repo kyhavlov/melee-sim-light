@@ -94,6 +94,7 @@ def _seed_base() -> np.ndarray:
     seed["num_players"][0] = np.uint8(2)
     seed["stocks"][0, :2] = np.uint8(4)
     seed["char_id"][0, :2] = np.uint8(CHAR_FOX)
+    seed["action_id"][0, :2] = np.uint16(ACT_WAIT)
     seed["facing"][0, :2] = np.uint8(1)  # right
     seed["pos_x"][0, :2] = np.float32(0.0)
     seed["pos_y"][0, :2] = np.float32(0.0)
@@ -103,7 +104,6 @@ def _seed_base() -> np.ndarray:
     seed["anim_frame_f32"][0, :2] = seed["action_frame"][0, :2].astype(np.float32)
 
     # Default P2 to a stable grounded idle.
-    seed["action_id"][0, 1] = np.uint16(ACT_WAIT)
     seed["action_frame"][0, 1] = np.int16(0)
     seed["anim_frame_f32"][0, 1] = np.float32(0.0)
     seed["frame_speed_mul_f32"][0, 1] = np.float32(1.0)

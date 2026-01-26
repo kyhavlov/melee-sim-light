@@ -29,6 +29,150 @@ def _i32_be(buf: bytes, off: int) -> int:
 def _f32_be(buf: bytes, off: int) -> float:
     return struct.unpack(">f", buf[off : off + 4])[0]
 
+def _u32_be(buf: bytes, off: int) -> int:
+    return int.from_bytes(buf[off : off + 4], "big", signed=False)
+
+
+def _ptr32_or_none(arc, abs_off: int) -> int | None:
+    v = _u32_be(arc.buf, abs_off)
+    if v == 0:
+        return None
+    return arc.data_base + v
+
+
+def _extract_stage_points(stage_dat: Path, arc) -> dict | None:
+    # Decomp-first: stage camera/dead ranges are derived from stage-point JObjs loaded from
+    # `map_head` (UnkStageDat) and used by:
+    # - Camera bounds: refs/melee/src/melee/gr/ground.c::Ground_801C39C0 (points 0x94-0x96)
+    # - Blast zone: refs/melee/src/melee/gr/ground.c::Ground_801C3BB4 (points 0x97-0x98)
+    #
+    # `map_head->unk8[map_id].unk0` is an HSD_Joint tree root; we traverse it and extract joint
+    # positions (HSD_Joint::position at +0x2C).
+    # refs/melee/src/sysdolphin/baselib/jobj.h (struct HSD_Joint layout)
+    buf = arc.buf
+    map_head_abs = arc.get_public_offset("map_head")
+    if map_head_abs is None:
+        return None
+
+    # UnkStageDat:
+    # - unk8: pointer to UnkStageDat_x8_t array (offset +0x08)
+    # - unkC: count (offset +0x0C)
+    # refs/melee/src/melee/gr/types.h (struct UnkStageDat)
+    unk8_arr_abs = _ptr32_or_none(arc, map_head_abs + 0x08)
+    if unk8_arr_abs is None:
+        return None
+    map_count = _i32_be(buf, map_head_abs + 0x0C)
+    if map_count <= 0:
+        return None
+
+    entry0_abs = unk8_arr_abs  # map_id==0 for the stage root (single-map FD)
+    root_joint_abs = _ptr32_or_none(arc, entry0_abs + 0x00)
+    if root_joint_abs is None:
+        return None
+
+    # Depth-first traversal of the HSD_Joint tree, matching Ground_801C126C order.
+    # refs/melee/src/melee/gr/ground.c::Ground_801C126C
+    points: list[tuple[float, float, float]] = []
+    stack: list[int] = [root_joint_abs]
+    # Stage JObj trees are expected to be acyclic; keep a hard cap to avoid infinite loops on
+    # malformed inputs.
+    max_nodes = 10000
+    while stack:
+        node_abs = stack.pop()
+        if len(points) >= max_nodes:
+            break
+        x = float(_f32_be(buf, node_abs + 0x2C))
+        y = float(_f32_be(buf, node_abs + 0x30))
+        z = float(_f32_be(buf, node_abs + 0x34))
+        # IMPORTANT: keep exact traversal order, including (0,0,0) joints, because stage-point IDs
+        # used by the game are indices into this list.
+        points.append((x, y, z))
+
+        # Pre-order: push next then child so child is processed first.
+        next_abs = _ptr32_or_none(arc, node_abs + 0x0C)
+        child_abs = _ptr32_or_none(arc, node_abs + 0x08)
+        if next_abs is not None:
+            stack.append(next_abs)
+        if child_abs is not None:
+            stack.append(child_abs)
+
+    if not points:
+        return None
+
+    out: dict = {
+        "stage_points_joint_positions": [{"x": x, "y": y, "z": z} for (x, y, z) in points],
+    }
+
+    # Stage point selection for match-flow (FD only).
+    #
+    # Decomp pointers for how these points are consumed:
+    # - Camera bounds: refs/melee/src/melee/gr/ground.c::Ground_801C39C0 (Ground_801C2D24(0x94..0x96))
+    # - Blast/dead range: refs/melee/src/melee/gr/ground.c::Ground_801C3BB4 (Ground_801C2D24(0x97..0x98))
+    # - Spawn points: refs/melee/src/melee/gr/stage.c::Stage_80224E64 (Ground_801C2D24(arg0), arg0=0..3)
+    # - Respawn platforms: refs/melee/src/melee/gr/stage.c::Stage_80224E38 (Ground_801C2D24(arg1+4), arg1=0..3)
+    #
+    # NOTE: Ground_801C2D24 reads from stage_info.x280[stage_point_id], which is populated during
+    # stage init (Ground_801C34AC / related stage setup). The DAT->x280 mapping is not extracted yet,
+    # so for now we use an explicit FD-only heuristic over the map_head joint positions.
+    #
+    # TODO(decomp): extract the stage_point_id -> JObj mapping used to populate stage_info.x280
+    # and select points by ID, not by coordinate patterns.
+    if stage_dat.name == "GrNLa.dat":
+        eps = 1e-3
+
+        def _near(a: float, b: float) -> bool:
+            return abs(a - b) <= eps
+
+        pts2 = [(x, y) for (x, y, z) in points if _near(z, 0.0)]
+
+        cam_offset = next(((x, y) for (x, y) in pts2 if _near(x, 0.0) and _near(y, 12.0)), None)
+        cam_range = [(x, y) for (x, y) in pts2 if _near(abs(x), 170.0)]
+        dead_range = [(x, y) for (x, y) in pts2 if _near(abs(x), 246.0)]
+
+        # Keep traversal order rather than sorting: stage point ids are ordered and per-port
+        # semantics depend on that ordering.
+        spawn_points = [(x, y) for (x, y) in pts2 if _near(y, 10.0)]
+
+        # GrNLa has 6 y=45 joints; exclude the two x=±25 joints that are not used as per-port
+        # respawn platforms in our suite.
+        respawn_candidates = [(x, y) for (x, y) in pts2 if _near(y, 45.0)]
+        respawn_points = [(x, y) for (x, y) in respawn_candidates if not _near(abs(x), 25.0)]
+
+        if cam_offset is not None and len(cam_range) == 2 and len(dead_range) == 2:
+            cam_l = min(cam_range[0][0], cam_range[1][0])
+            cam_r = max(cam_range[0][0], cam_range[1][0])
+            cam_b = min(cam_range[0][1], cam_range[1][1])
+            cam_t = max(cam_range[0][1], cam_range[1][1])
+            dead_l = min(dead_range[0][0], dead_range[1][0])
+            dead_r = max(dead_range[0][0], dead_range[1][0])
+            dead_b = min(dead_range[0][1], dead_range[1][1])
+            dead_t = max(dead_range[0][1], dead_range[1][1])
+
+            out.update(
+                {
+                    "cam_offset": {"x": cam_offset[0], "y": cam_offset[1]},
+                    "cam_range_points": [
+                        {"x": cam_range[0][0], "y": cam_range[0][1]},
+                        {"x": cam_range[1][0], "y": cam_range[1][1]},
+                    ],
+                    "dead_range_points": [
+                        {"x": dead_range[0][0], "y": dead_range[0][1]},
+                        {"x": dead_range[1][0], "y": dead_range[1][1]},
+                    ],
+                    # World-space helpers used by match-flow (Stage_GetCamBounds* / Stage_GetBlastZone*).
+                    # refs/melee/src/melee/gr/stage.c (Stage_GetCamBoundsTopOffset, Stage_GetBlastZoneTopOffset)
+                    "cam_bounds_world": {"left": cam_l, "right": cam_r, "top": cam_t, "bottom": cam_b},
+                    "blast_bounds_world": {"left": dead_l, "right": dead_r, "top": dead_t, "bottom": dead_b},
+                }
+            )
+
+        if len(spawn_points) == 4:
+            out["spawn_points"] = [{"x": x, "y": y} for (x, y) in spawn_points]
+        if len(respawn_points) == 4:
+            out["respawn_points"] = [{"x": x, "y": y} for (x, y) in respawn_points]
+
+    return out
+
 
 def _kind_ranges(coll_abs: int, buf: bytes) -> list[tuple[str, int, int]]:
     # mp/types.h: MapCollData
@@ -131,6 +275,7 @@ def _extract_segments(stage_dat: Path) -> dict:
         "vert_count": vert_count,
         "line_count": line_count,
         "segments": segments,
+        **(_extract_stage_points(stage_dat, arc) or {}),
     }
 
 

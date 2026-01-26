@@ -4,6 +4,9 @@ import numpy as np
 
 from tools.eval.dataset import COMPARE_DTYPE, INPUT_DTYPE, SEED_DTYPE
 
+# Action ids (GALE01): refs/melee/src/melee/ft/chara/ftCommon/forward.h
+ACT_WAIT = 0x000E
+
 
 def _fd_floor_nonplatform_edges_world() -> list[float]:
     import json
@@ -57,6 +60,8 @@ def _seed_base(*, stage_id: int) -> np.ndarray:
     seed["stage_id"][0] = np.uint32(stage_id)
     seed["num_players"][0] = np.uint8(2)
     seed["stocks"][0, :2] = np.uint8(4)
+    # Avoid accidentally starting in a match-flow action (action_id=0 is DeadDown).
+    seed["action_id"][0, :2] = np.uint16(ACT_WAIT)
     return seed
 
 

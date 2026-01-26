@@ -8,6 +8,7 @@
 #include <string.h>
 
 #include "alloc.h"
+#include "action_ids.h"
 #include "ecb_tables.h"
 
 typedef struct {
@@ -18,6 +19,13 @@ typedef struct {
   uint16_t segment_i;   // Stable `ground_id` mapping (ISO-derived segment index).
   uint8_t include_max;  // Deterministic endpoint policy for shared vertices.
 } MslStageFloorSegment;
+
+typedef struct {
+  float left;
+  float right;
+  float top;
+  float bottom;
+} MslStageBoundsWorld;
 
 static inline uint8_t stage_seg_x_contains(const MslStageFloorSegment* seg, float x) {
   const float min_x = (seg->x0 < seg->x1) ? seg->x0 : seg->x1;
@@ -44,6 +52,12 @@ static inline float stage_seg_y_at_x(const MslStageFloorSegment* seg, float x) {
 static MslStageFloorSegment* g_fd_floor_segments = NULL;
 static size_t g_fd_floor_segment_count = 0;
 static int g_fd_loaded = 0;
+static uint8_t g_fd_match_flow_loaded = 0;
+
+static MslStageBoundsWorld g_fd_blast_bounds_world;
+static MslStageBoundsWorld g_fd_cam_bounds_world;
+static MslStagePoint2 g_fd_spawn_points[MSL_MAX_PLAYERS];
+static MslStagePoint2 g_fd_respawn_points[MSL_MAX_PLAYERS];
 
 static const char* json_skip_ws(const char* s) {
   while (s && *s && isspace((unsigned char)*s)) {
@@ -142,6 +156,241 @@ static const char* json_parse_double(const char* s, double* out) {
     *out = v;
   }
   return end;
+}
+
+static const char* json_parse_bounds_world(const char* s, MslStageBoundsWorld* out) {
+  if (s == NULL || out == NULL) {
+    return NULL;
+  }
+  s = json_expect_char(s, '{');
+  if (s == NULL) {
+    return NULL;
+  }
+
+  uint8_t have_left = 0, have_right = 0, have_top = 0, have_bottom = 0;
+  float left = 0.0f, right = 0.0f, top = 0.0f, bottom = 0.0f;
+
+  const char* p = s;
+  for (;;) {
+    p = json_skip_ws(p);
+    if (p == NULL) {
+      return NULL;
+    }
+    if (*p == '}') {
+      p++;
+      break;
+    }
+    if (*p == ',') {
+      p++;
+      continue;
+    }
+
+    const char* k = NULL;
+    size_t klen = 0;
+    p = json_parse_string_view(p, &k, &klen);
+    if (p == NULL) {
+      return NULL;
+    }
+    p = json_expect_char(p, ':');
+    if (p == NULL) {
+      return NULL;
+    }
+    double v = 0.0;
+    p = json_parse_double(p, &v);
+    if (p == NULL) {
+      return NULL;
+    }
+    if (klen == 4 && strncmp(k, "left", 4) == 0) {
+      left = (float)v;
+      have_left = 1;
+    } else if (klen == 5 && strncmp(k, "right", 5) == 0) {
+      right = (float)v;
+      have_right = 1;
+    } else if (klen == 3 && strncmp(k, "top", 3) == 0) {
+      top = (float)v;
+      have_top = 1;
+    } else if (klen == 6 && strncmp(k, "bottom", 6) == 0) {
+      bottom = (float)v;
+      have_bottom = 1;
+    }
+  }
+
+  if (!(have_left && have_right && have_top && have_bottom)) {
+    return NULL;
+  }
+  *out = (MslStageBoundsWorld){ .left = left, .right = right, .top = top, .bottom = bottom };
+  return p;
+}
+
+static const char* json_parse_point2(const char* s, MslStagePoint2* out) {
+  if (s == NULL || out == NULL) {
+    return NULL;
+  }
+  s = json_expect_char(s, '{');
+  if (s == NULL) {
+    return NULL;
+  }
+  float x = 0.0f, y = 0.0f;
+  uint8_t have_x = 0, have_y = 0;
+  const char* p = s;
+  for (;;) {
+    p = json_skip_ws(p);
+    if (p == NULL) {
+      return NULL;
+    }
+    if (*p == '}') {
+      p++;
+      break;
+    }
+    if (*p == ',') {
+      p++;
+      continue;
+    }
+    const char* k = NULL;
+    size_t klen = 0;
+    p = json_parse_string_view(p, &k, &klen);
+    if (p == NULL) {
+      return NULL;
+    }
+    p = json_expect_char(p, ':');
+    if (p == NULL) {
+      return NULL;
+    }
+    double v = 0.0;
+    p = json_parse_double(p, &v);
+    if (p == NULL) {
+      return NULL;
+    }
+    if (klen == 1 && *k == 'x') {
+      x = (float)v;
+      have_x = 1;
+    } else if (klen == 1 && *k == 'y') {
+      y = (float)v;
+      have_y = 1;
+    }
+  }
+  if (!(have_x && have_y)) {
+    return NULL;
+  }
+  *out = (MslStagePoint2){ .x = x, .y = y };
+  return p;
+}
+
+static int fd_load_match_flow_from_json(const char* json) {
+  if (json == NULL) {
+    return -1;
+  }
+
+  const char* bb = strstr(json, "\"blast_bounds_world\"");
+  const char* cb = strstr(json, "\"cam_bounds_world\"");
+  const char* sp = strstr(json, "\"spawn_points\"");
+  const char* rp = strstr(json, "\"respawn_points\"");
+  if (bb == NULL || cb == NULL || rp == NULL) {
+    // Optional: allow stage collision to load even if match-flow points are absent.
+    g_fd_match_flow_loaded = 0;
+    return 0;
+  }
+
+  // Parse bounds objects.
+  bb = strchr(bb, '{');
+  cb = strchr(cb, '{');
+  if (bb == NULL || cb == NULL) {
+    g_fd_match_flow_loaded = 0;
+    return 0;
+  }
+  MslStageBoundsWorld blast = {0};
+  MslStageBoundsWorld cam = {0};
+  if (json_parse_bounds_world(bb, &blast) == NULL || json_parse_bounds_world(cb, &cam) == NULL) {
+    g_fd_match_flow_loaded = 0;
+    return 0;
+  }
+
+  // Parse 4-entry point arrays.
+  MslStagePoint2 respawn[MSL_MAX_PLAYERS] = {0};
+  uint8_t have_respawn = 0;
+  {
+    const char* p = strchr(rp, '[');
+    if (p != NULL) {
+      p++;
+      int out_n = 0;
+      for (;;) {
+        p = json_skip_ws(p);
+        if (p == NULL) {
+          break;
+        }
+        if (*p == ']') {
+          p++;
+          break;
+        }
+        if (*p == ',') {
+          p++;
+          continue;
+        }
+        if (*p != '{') {
+          break;
+        }
+        if (out_n >= MSL_MAX_PLAYERS) {
+          break;
+        }
+        p = json_parse_point2(p, &respawn[out_n]);
+        if (p == NULL) {
+          break;
+        }
+        out_n++;
+      }
+      have_respawn = (uint8_t)(out_n == MSL_MAX_PLAYERS);
+    }
+  }
+
+  MslStagePoint2 spawn[MSL_MAX_PLAYERS] = {0};
+  uint8_t have_spawn = 0;
+  if (sp != NULL) {
+    const char* p = strchr(sp, '[');
+    if (p != NULL) {
+      p++;
+      int out_n = 0;
+      for (;;) {
+        p = json_skip_ws(p);
+        if (p == NULL) {
+          break;
+        }
+        if (*p == ']') {
+          p++;
+          break;
+        }
+        if (*p == ',') {
+          p++;
+          continue;
+        }
+        if (*p != '{') {
+          break;
+        }
+        if (out_n >= MSL_MAX_PLAYERS) {
+          break;
+        }
+        p = json_parse_point2(p, &spawn[out_n]);
+        if (p == NULL) {
+          break;
+        }
+        out_n++;
+      }
+      have_spawn = (uint8_t)(out_n == MSL_MAX_PLAYERS);
+    }
+  }
+
+  if (!have_respawn) {
+    g_fd_match_flow_loaded = 0;
+    return 0;
+  }
+
+  g_fd_blast_bounds_world = blast;
+  g_fd_cam_bounds_world = cam;
+  for (int i = 0; i < MSL_MAX_PLAYERS; i++) {
+    g_fd_respawn_points[i] = respawn[i];
+    g_fd_spawn_points[i] = have_spawn ? spawn[i] : (MslStagePoint2){0};
+  }
+  g_fd_match_flow_loaded = 1;
+  return 0;
 }
 
 static int fd_load_floor_segments_from_json(const char* json) {
@@ -459,6 +708,7 @@ int stage_collision_init(void) {
   buf[sz] = '\0';
 
   const int err = fd_load_floor_segments_from_json(buf);
+  (void)fd_load_match_flow_from_json(buf);
   alloc_free(buf);
   if (err != 0) {
     return -1;
@@ -466,6 +716,74 @@ int stage_collision_init(void) {
 
   g_fd_loaded = 1;
   return 0;
+}
+
+uint8_t stage_collision_get_blast_bounds_world(uint32_t stage_id, MslStageBounds* out) {
+  if (out == NULL) {
+    return 0;
+  }
+  if (!g_fd_loaded || !g_fd_match_flow_loaded) {
+    return 0;
+  }
+  if (stage_id != 32) {
+    return 0;
+  }
+  out->left = g_fd_blast_bounds_world.left;
+  out->right = g_fd_blast_bounds_world.right;
+  out->top = g_fd_blast_bounds_world.top;
+  out->bottom = g_fd_blast_bounds_world.bottom;
+  return 1;
+}
+
+uint8_t stage_collision_get_cam_bounds_world(uint32_t stage_id, MslStageBounds* out) {
+  if (out == NULL) {
+    return 0;
+  }
+  if (!g_fd_loaded || !g_fd_match_flow_loaded) {
+    return 0;
+  }
+  if (stage_id != 32) {
+    return 0;
+  }
+  out->left = g_fd_cam_bounds_world.left;
+  out->right = g_fd_cam_bounds_world.right;
+  out->top = g_fd_cam_bounds_world.top;
+  out->bottom = g_fd_cam_bounds_world.bottom;
+  return 1;
+}
+
+uint8_t stage_collision_get_spawn_point(uint32_t stage_id, int port, MslStagePoint2* out) {
+  if (out == NULL) {
+    return 0;
+  }
+  if (!g_fd_loaded || !g_fd_match_flow_loaded) {
+    return 0;
+  }
+  if (stage_id != 32) {
+    return 0;
+  }
+  if (port < 0 || port >= (int)MSL_MAX_PLAYERS) {
+    return 0;
+  }
+  *out = g_fd_spawn_points[port];
+  return 1;
+}
+
+uint8_t stage_collision_get_respawn_point(uint32_t stage_id, int port, MslStagePoint2* out) {
+  if (out == NULL) {
+    return 0;
+  }
+  if (!g_fd_loaded || !g_fd_match_flow_loaded) {
+    return 0;
+  }
+  if (stage_id != 32) {
+    return 0;
+  }
+  if (port < 0 || port >= (int)MSL_MAX_PLAYERS) {
+    return 0;
+  }
+  *out = g_fd_respawn_points[port];
+  return 1;
 }
 
 void stage_collision_apply(MslBatch* batch) {
@@ -504,6 +822,19 @@ void stage_collision_apply(MslBatch* batch) {
 
     for (int p = 0; p < num_players; p++) {
       const size_t idx = msl_idx_player(bi, p);
+      const uint16_t action_id = batch->state.action_id[idx];
+
+      // Match flow states (Dead*/Rebirth*/Entry*) are not grounded against the stage collision mesh
+      // in the suite (on_ground=0). Skip grounding to avoid snapping during invisible/respawn
+      // phases.
+      if (action_id == (uint16_t)MSL_ACT_DEAD_DOWN || action_id == (uint16_t)MSL_ACT_DEAD_LEFT ||
+          action_id == (uint16_t)MSL_ACT_DEAD_RIGHT ||
+          action_id == (uint16_t)MSL_ACT_DEAD_UP_STAR || action_id == (uint16_t)MSL_ACT_REBIRTH ||
+          action_id == (uint16_t)MSL_ACT_REBIRTH_WAIT || action_id == (uint16_t)MSL_ACT_ENTRY ||
+          action_id == (uint16_t)MSL_ACT_ENTRY_START || action_id == (uint16_t)MSL_ACT_ENTRY_END) {
+        batch->state.on_ground[idx] = 0;
+        continue;
+      }
 
       const float x = batch->state.pos_x[idx];
       const float y = batch->state.pos_y[idx];

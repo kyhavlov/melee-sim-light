@@ -149,6 +149,7 @@ def test_pose_facing_is_mirror_x_only_for_hitbox_centers() -> None:
         seed["stocks"][0, :2] = np.uint8(4)
         seed["char_id"][0, 0] = np.uint8(1)  # Fox
         seed["char_id"][0, 1] = np.uint8(1)
+        seed["action_id"][0, :2] = np.uint16(0xFFFF)
         seed["facing"][0, :2] = np.uint8(1 if facing_right else 0)
         seed["pos_x"][0, 0] = pos_x
         seed["pos_y"][0, 0] = pos_y

@@ -10,6 +10,7 @@
 #include "input.h"
 #include "items.h"
 #include "locomotion.h"
+#include "match_flow.h"
 #include "physics.h"
 #include "shields.h"
 #include "stage_collision.h"
@@ -46,10 +47,17 @@ int step_one_frame(MslBatch* batch, const uint8_t* prev_input_bytes, size_t prev
   // We follow that by updating timers before applying inputs/advancing state.
   timers_update(batch);
 
+  // Match flow (Entry/Death/Rebirth) updates its own timers and can change action state before
+  // animation timebase advancement.
+  match_flow_update_pre_anim(batch);
+
   // Decomp: animation/script timebase advances at proc prio 1 (Fighter_8006A360) before input
   // (prio 3). Advance our deterministic cur_anim_frame accumulator here, after timers.
   // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360 (ftAnim_8006EBA4 under !hitlag)
   anim_timebase_update_pre_input(batch);
+
+  // Post anim-timebase match flow clamps (e.g. EntryStart animation end-frame).
+  match_flow_update_post_anim(batch);
 
   // Decomp-shaped "ProcessHit" consume / cleanup (see combat_processhit_consume for references).
   combat_processhit_consume(batch);
@@ -61,9 +69,15 @@ int step_one_frame(MslBatch* batch, const uint8_t* prev_input_bytes, size_t prev
     return err;
   }
 
+  // Match flow IASA: certain match-flow states can exit based on current-frame inputs.
+  // Decomp: motion state IASA callbacks run after Anim and before Phys/Coll.
+  // NOTE: match_flow_update_post_input currently includes simplified approximations (see match_flow.c).
+  match_flow_update_post_input(batch);
+
   action_update(batch);
   physics_integrate(batch);
   stage_collision_apply(batch);
+  match_flow_update_post_physics(batch);
   locomotion_update_post_collision(batch);
   hurtboxes_refresh(batch);
   hitboxes_refresh(batch);

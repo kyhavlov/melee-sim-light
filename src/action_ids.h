@@ -6,6 +6,14 @@
 //
 // Source of truth: refs/melee/src/melee/ft/chara/ftCommon/forward.h `ftCommon_MotionState`.
 typedef enum MslActionId {
+  // Match flow (suite-present).
+  MSL_ACT_DEAD_DOWN = 0x0000,     // ftCo_MS_DeadDown
+  MSL_ACT_DEAD_LEFT = 0x0001,     // ftCo_MS_DeadLeft
+  MSL_ACT_DEAD_RIGHT = 0x0002,    // ftCo_MS_DeadRight
+  MSL_ACT_DEAD_UP_STAR = 0x0004,  // ftCo_MS_DeadUpStar
+  MSL_ACT_REBIRTH = 0x000C,       // ftCo_MS_Rebirth
+  MSL_ACT_REBIRTH_WAIT = 0x000D,  // ftCo_MS_RebirthWait
+
   MSL_ACT_WAIT = 0x000E,                  // ftCo_MS_Wait
   MSL_ACT_WALK_SLOW = 0x000F,             // ftCo_MS_WalkSlow
   MSL_ACT_WALK_MIDDLE = 0x0010,           // ftCo_MS_WalkMiddle
@@ -77,6 +85,11 @@ typedef enum MslActionId {
   MSL_ACT_ESCAPE_F = 0x00E9,  // ftCo_MS_EscapeF (roll forward)
   MSL_ACT_ESCAPE_B = 0x00EA,  // ftCo_MS_EscapeB (roll backward)
   MSL_ACT_ESCAPE_N = 0x00EB,  // ftCo_MS_EscapeN (spotdodge)
+
+  // Match start entry states (ft_0C31.c / ftCo_Entry.c).
+  MSL_ACT_ENTRY = 0x0142,        // ftCo_MS_Entry
+  MSL_ACT_ENTRY_START = 0x0143,  // ftCo_MS_EntryStart
+  MSL_ACT_ENTRY_END = 0x0144,    // ftCo_MS_EntryEnd
 } MslActionId;
 
 // Additional GALE01 common action ids needed for fastfall gating.
@@ -156,6 +169,9 @@ typedef enum MslSubmotionId {
   MSL_SM_DAMAGE_FLY_LW = 179,    // ftCo_SM_DamageFlyLw
   MSL_SM_DAMAGE_FLY_TOP = 180,   // ftCo_SM_DamageFlyTop
   MSL_SM_DAMAGE_FLY_ROLL = 181,  // ftCo_SM_DamageFlyRoll
+
+  // Match-start entry: ftCo_Submotion::ftCo_SM_EntryStart (suite present).
+  MSL_SM_ENTRY_START = 238,
 } MslSubmotionId;
 
 static inline uint8_t msl_action_is_ground_locomotion(uint16_t action_id) {

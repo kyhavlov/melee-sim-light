@@ -4,6 +4,12 @@ import numpy as np
 
 from tools.eval.dataset import COMPARE_DTYPE, INPUT_DTYPE, SEED_DTYPE
 
+# Action ids (GALE01): refs/melee/src/melee/ft/chara/ftCommon/forward.h
+ACT_WAIT = 0x000E
+
+# Submotion ids (GALE01): refs/melee/src/melee/ft/chara/ftCommon/forward.h
+SM_WAIT1_0 = 2
+
 
 def _step_once(seed: np.ndarray) -> np.ndarray:
     import msl_binding
@@ -42,6 +48,9 @@ def _seed_base() -> np.ndarray:
     seed["stocks"][0, :2] = np.uint8(4)
     seed["char_id"][0, 0] = np.uint8(1)  # Fox
     seed["char_id"][0, 1] = np.uint8(22)  # Falco
+    seed["action_id"][0, :2] = np.uint16(ACT_WAIT)
+    seed["action_frame"][0, :2] = np.int16(0)
+    seed["animation_index"][0, :2] = np.uint32(SM_WAIT1_0)
     seed["frame_speed_mul_f32"][0, :2] = np.float32(1.0)
     seed["anim_frame_f32"][0, :2] = np.float32(0.0)
     return seed
