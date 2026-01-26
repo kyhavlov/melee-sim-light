@@ -15,11 +15,28 @@
 #include "stage_collision.h"
 #include "timers.h"
 
+static inline void clear_landing_transients(MslBatch* batch) {
+  if (batch == NULL) {
+    return;
+  }
+  const int num_players = (int)batch->config.num_players;
+  for (int bi = 0; bi < batch->batch_size; bi++) {
+    for (int p = 0; p < num_players; p++) {
+      const size_t idx = msl_idx_player(bi, p);
+      // Slippi post-frame `l_cancel` is a 1-frame status on LandingAir* entry. Clear it each frame
+      // and let landing entry code set it when applicable.
+      batch->state.l_cancel[idx] = 0;
+    }
+  }
+}
+
 int step_one_frame(MslBatch* batch, const uint8_t* prev_input_bytes, size_t prev_input_stride_bytes,
                    const uint8_t* input_bytes, size_t input_stride_bytes) {
   if (batch == NULL) {
     return EINVAL;
   }
+
+  clear_landing_transients(batch);
 
   // The exact ordering here is a major correctness lever. Keep it explicit and easy to reorder.
   //

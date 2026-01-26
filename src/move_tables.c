@@ -501,7 +501,7 @@ static inline int attackair_kind_from_action(uint16_t a) {
 }
 
 uint8_t move_tables_attackair_cmd0_active(uint8_t char_id, uint16_t attackair_action_id,
-                                          int16_t action_frame) {
+                                          float cur_anim_frame_f32) {
   const int kind = attackair_kind_from_action(attackair_action_id);
   if (kind < 0) {
     return 0;
@@ -516,11 +516,16 @@ uint8_t move_tables_attackair_cmd0_active(uint8_t char_id, uint16_t attackair_ac
   // Decomp: ftCo_LandingAir_EnterWithLag uses fp->cmd_vars[0] to pick between LandingAir* (lag)
   // and Landing_Enter_Basic (auto-cancel).
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_LandingAir.c
-  return (action_frame >= win.start_af && action_frame < win.end_af) ? 1 : 0;
+  //
+  // Command-script frame events are evaluated on fp->cur_anim_frame (float), not on an integer
+  // action_frame counter. Use anim_frame_f32 (seeded from Slippi state_age) as our proxy.
+  // refs/melee/src/melee/ft/ftaction.c::ftAction_80071820 (set_cmd_var)
+  return (cur_anim_frame_f32 >= (float)win.start_af && cur_anim_frame_f32 < (float)win.end_af) ? 1
+                                                                                                : 0;
 }
 
 uint8_t move_tables_attackair_allow_interrupt(uint8_t char_id, uint16_t attackair_action_id,
-                                              int16_t action_frame) {
+                                              float cur_anim_frame_f32) {
   const int kind = attackair_kind_from_action(attackair_action_id);
   if (kind < 0) {
     return 0;
@@ -534,5 +539,10 @@ uint8_t move_tables_attackair_allow_interrupt(uint8_t char_id, uint16_t attackai
 
   // Decomp: DO_IASA gates on fp->allow_interrupt (set by the move script).
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c
-  return (action_frame >= win.start_af && action_frame < win.end_af) ? 1 : 0;
+  //
+  // Source: the command script emits an "allow interrupt" cmd (ftAction_80071950), which toggles
+  // fp->allow_interrupt based on fp->cur_anim_frame (float) timing.
+  // refs/melee/src/melee/ft/ftaction.c::ftAction_80071950
+  return (cur_anim_frame_f32 >= (float)win.start_af && cur_anim_frame_f32 < (float)win.end_af) ? 1
+                                                                                                : 0;
 }

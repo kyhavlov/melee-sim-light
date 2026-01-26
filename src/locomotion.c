@@ -381,9 +381,11 @@ static inline void enter_landing_action_from_air(MslBatch* batch, const MslCharP
       }
 
       float lag = (float)lag_frames;
+      uint8_t did_lcancel = 0;
       // Decomp: landing lag is divided when x67F < p_ftCommonData->xE4.
       // refs/melee/src/melee/ft/chara/ftCommon/ftCo_LandingAir.c::ftCo_LandingAir_EnterWithLag
       if (c != NULL && lag > 0.0f && batch->state.lr_press_timer[idx] < c->lcancel_window_frames) {
+        did_lcancel = 1;
         const float div_lag = lag / c->lcancel_lag_div;
         int int_lag = (int)div_lag;
         if (int_lag == 0) {
@@ -391,6 +393,16 @@ static inline void enter_landing_action_from_air(MslBatch* batch, const MslCharP
         }
         lag = (float)int_lag;
       }
+
+      // Slippi post-frame `l_cancel` is a 1-frame status emitted on LandingAir* entry:
+      // - 0: not applicable / no lag landing.
+      // - 1: successful L-cancel.
+      // - 2: missed L-cancel.
+      //
+      // Decomp tie-down for the success condition: fp->x67F < p_ftCommonData->xE4.
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_LandingAir.c::ftCo_LandingAir_EnterWithLag
+      // refs/melee/src/melee/ft/fighter.c:2078-2086 (x67F update; see src/input.c)
+      batch->state.l_cancel[idx] = (lag_frames > 0) ? (uint8_t)(did_lcancel ? 1 : 2) : 0;
 
       const uint32_t sm = submotion_for_action(land_act);
       const float end_frame = (sm <= 0xFFFFu) ? msl_anim_end_frame(cid, (uint16_t)sm) : 0.0f;
@@ -935,10 +947,31 @@ void locomotion_update_pre(MslBatch* batch) {
       // ----------------------
       // Air locomotion updates
       // ----------------------
-      const uint8_t is_air_loco = msl_action_is_air_locomotion(action_id) ? 1 : 0;
-      const uint8_t is_attack_air = action_is_attackair(action_id) ? 1 : 0;
+      uint8_t is_air_loco = msl_action_is_air_locomotion(action_id) ? 1 : 0;
+      uint8_t is_attack_air = action_is_attackair(action_id) ? 1 : 0;
       if (!is_air_loco && !is_attack_air && action_id != (uint16_t)MSL_ACT_ESCAPE_AIR) {
         continue;
+      }
+
+      // AttackAir Anim step runs before IASA in GALE01.
+      //
+      // Decomp:
+      // - ftCo_AttackAir_Anim: if !ftAnim_IsFramesRemaining -> ftCo_Fall_Enter
+      // - ftCo_AttackAir_IASA: gated by fp->allow_interrupt (script-driven)
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c
+      if (is_attack_air) {
+        const uint32_t anim = batch->state.animation_index[idx];
+        if (anim != 0xFFFFFFFFu && anim <= 0xFFFFu) {
+          const float end_frame = msl_anim_end_frame(batch->state.char_id[idx], (uint16_t)anim);
+          if (end_frame > 0.0f && (batch->state.anim_frame_f32[idx] >= end_frame)) {
+            batch->state.action_id[idx] = (uint16_t)MSL_ACT_FALL;
+            batch->state.animation_index[idx] = (uint32_t)MSL_SM_FALL;
+            msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+            action_id = (uint16_t)MSL_ACT_FALL;
+            is_attack_air = 0;
+            is_air_loco = 1;
+          }
+        }
       }
 
       // EscapeAir per-frame update (decay + anim-end -> FallSpecial).
@@ -988,7 +1021,7 @@ void locomotion_update_pre(MslBatch* batch) {
         }
       } else if (is_attack_air) {
         const uint8_t allow_interrupt =
-            move_tables_attackair_allow_interrupt(cid, action_id, batch->state.action_frame[idx]);
+            move_tables_attackair_allow_interrupt(cid, action_id, batch->state.anim_frame_f32[idx]);
 
         // Limited subset of DO_IASA for AttackAir* (only what we currently model):
         // - EscapeAir (airdodge)
@@ -1043,22 +1076,6 @@ void locomotion_update_pre(MslBatch* batch) {
         }
       }
 
-      // AttackAir* per-frame update:
-      // - Drift path: ftCo_AttackAir_Phys -> ft_80084DB0 (common airborne helper; see drift logic).
-      // - Anim end: ftCo_AttackAir_Anim -> ftCo_Fall_Enter when !ftAnim_IsFramesRemaining.
-      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c
-      if (action_is_attackair(action_id)) {
-        const uint32_t anim = batch->state.animation_index[idx];
-        if (anim != 0xFFFFFFFFu && anim <= 0xFFFFu) {
-          const float end_frame = msl_anim_end_frame(batch->state.char_id[idx], (uint16_t)anim);
-          if (end_frame > 0.0f && (batch->state.anim_frame_f32[idx] >= end_frame)) {
-            batch->state.action_id[idx] = (uint16_t)MSL_ACT_FALL;
-            batch->state.animation_index[idx] = (uint32_t)MSL_SM_FALL;
-            msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
-          }
-        }
-      }
-
       continue;
     }
   }
@@ -1090,33 +1107,28 @@ void locomotion_update_post_collision(MslBatch* batch) {
       if (!was_ground && now_ground) {
         // Grounding transition: enter landing actions for supported airborne motion states.
         //
-        // Decomp landing-enter call paths:
-        // - AttackAir*: AttackAir_Coll -> ft_80082C74(..., ftCo_LandingAir_EnterWithLag)
-        //   refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c
-        //   refs/melee/src/melee/ft/chara/ftCommon/ftCo_LandingAir.c
-        //   - ftCo_LandingAir_EnterWithLag checks fp->cmd_vars[0] to decide between LandingAir* (lag)
-        //     vs Landing_Enter_Basic (auto-cancel).
-        //     We derive cmd_vars[0] from extracted command-script timelines:
-        //     data/moves/{fox,falco}.json `ftCo_SM_AttackAir*` set_cmd_var(idx=0) events.
-        // - EscapeAir: EscapeAir_Coll -> ft_80082C74(..., ftCo_80099D70) -> ftCo_LandingFallSpecial_Enter(..., x344)
-        //   refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c
+        // AttackAir collision callback is responsible for choosing LandingAir* vs auto-cancel Landing
+        // based on fp->cmd_vars[0] (set by the move's command script).
+        //
+        // Decomp:
+        // - AttackAir_Coll -> ft_80082C74(..., ftCo_LandingAir_EnterWithLag)
+        //   refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_Coll
+        // - ftCo_LandingAir_EnterWithLag checks fp->cmd_vars[0] to pick LandingAir* vs Landing_Enter_Basic.
+        //   refs/melee/src/melee/ft/chara/ftCommon/ftCo_LandingAir.c::ftCo_LandingAir_EnterWithLag
+        // - cmd_vars[0] is written by the command script via ftAction_80071820 (set_cmd_var).
+        //   refs/melee/src/melee/ft/ftaction.c::ftAction_80071820
+        //
+        // This sim derives cmd_vars[0] from extracted command-script timelines:
+        // data/moves/{fox,falco}.json moves["ftCo_SM_AttackAir*"]["events"] set_cmd_var(idx=0).
         uint16_t land = 0;
-        switch (a) {
-          case MSL_ACT_ATTACK_AIR_N:
-          case MSL_ACT_ATTACK_AIR_F:
-          case MSL_ACT_ATTACK_AIR_B:
-          case MSL_ACT_ATTACK_AIR_HI:
-          case MSL_ACT_ATTACK_AIR_LW:
-            land = move_tables_attackair_cmd0_active(batch->state.char_id[idx], a,
-                                                     batch->state.action_frame[idx])
-                       ? landing_air_action_from_attackair(a)
-                       : (uint16_t)MSL_ACT_LANDING;
-            break;
-          case MSL_ACT_ESCAPE_AIR:
-            land = (uint16_t)MSL_ACT_LANDING_FALL_SPECIAL;
-            break;
-          default:
-            break;
+        if (action_is_attackair(a)) {
+          const uint8_t lag_enabled = move_tables_attackair_cmd0_active(
+              batch->state.char_id[idx], a, batch->state.anim_frame_f32[idx]);
+          land = lag_enabled ? landing_air_action_from_attackair(a) : (uint16_t)MSL_ACT_LANDING;
+        } else if (a == (uint16_t)MSL_ACT_ESCAPE_AIR) {
+          // EscapeAir: EscapeAir_Coll -> ft_80082C74(..., ftCo_80099D70) -> ftCo_LandingFallSpecial_Enter(..., x344)
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c
+          land = (uint16_t)MSL_ACT_LANDING_FALL_SPECIAL;
         }
 
         // Locomotion-only fallback: fall states land into Landing/LandingFallSpecial.
