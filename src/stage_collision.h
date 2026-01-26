@@ -2,6 +2,25 @@
 
 #include "batch_internal.h"
 
+typedef struct MslStageFloorLine {
+  // Endpoints in world units, ordered so that x0 <= x1.
+  float x0;
+  float y0;
+  float x1;
+  float y1;
+  // Stable `ground_id` mapping (ISO-derived segment index).
+  uint16_t segment_i;
+  // Floor-only line graph connectivity (FD-only v1): indices into the stage's floor line array,
+  // or -1 for none.
+  int16_t prev;
+  int16_t next;
+} MslStageFloorLine;
+
+typedef struct MslStageFloorGraph {
+  const MslStageFloorLine* lines;
+  size_t line_count;
+} MslStageFloorGraph;
+
 typedef struct MslStageBounds {
   float left;
   float right;
@@ -23,6 +42,12 @@ typedef struct MslStagePoint2 {
 int stage_collision_init(void);
 
 void stage_collision_apply(MslBatch* batch);
+
+// Floor graph view for the given stage_id (FD-only v1). Returns NULL if unsupported/unloaded.
+const MslStageFloorGraph* stage_collision_get_floor_graph(uint32_t stage_id);
+
+// Map a stable ISO-derived `segment_i` (ground_id) to a floor-graph line index, or -1 if unknown.
+int stage_collision_floor_line_index(uint32_t stage_id, uint16_t segment_i);
 
 // Match-flow helpers (KO/respawn/entry). Returns 1 if stage data for the given stage_id is loaded.
 uint8_t stage_collision_get_blast_bounds_world(uint32_t stage_id, MslStageBounds* out);

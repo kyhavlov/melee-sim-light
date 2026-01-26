@@ -199,6 +199,12 @@ int msl_batch_reseed_seed(MslBatch* batch, const uint8_t* seed_bytes, size_t see
       batch->state.fighter_scale_y[idx] = scale_y;
       batch->state.facing[idx] = seed->facing[p] ? 1 : 0;
       batch->state.on_ground[idx] = seed->on_ground[p] ? 1 : 0;
+      batch->state.ground_contact_x[idx] = 0.0f;
+      batch->state.ground_contact_y[idx] = 0.0f;
+      batch->state.ground_normal_x[idx] = 0.0f;
+      batch->state.ground_normal_y[idx] = 1.0f;
+      batch->state.coll_env_flags[idx] = 0u;
+      batch->state.coll_prev_env_flags[idx] = 0u;
 
       batch->state.action_id[idx] = seed->action_id[p];
       batch->state.match_flow_timer[idx] = seed->match_flow_timer[p];

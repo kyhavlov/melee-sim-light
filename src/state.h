@@ -32,6 +32,13 @@ typedef struct MslStateSoA {
   uint8_t* facing;
   uint8_t* on_ground;
   uint8_t* prev_on_ground;  // on_ground value before stage_collision_apply().
+  // Collision contact metadata owned by mpColl ground contact substrate.
+  float* ground_contact_x;
+  float* ground_contact_y;
+  float* ground_normal_x;
+  float* ground_normal_y;
+  uint32_t* coll_env_flags;
+  uint32_t* coll_prev_env_flags;
 
   // State machine
   uint16_t* action_id;

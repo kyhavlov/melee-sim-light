@@ -10,16 +10,7 @@
 
 #include "alloc.h"
 #include "action_ids.h"
-#include "ecb_tables.h"
-
-typedef struct {
-  float x0;
-  float x1;
-  float y0;
-  float y1;
-  uint16_t segment_i;   // Stable `ground_id` mapping (ISO-derived segment index).
-  uint8_t include_max;  // Deterministic endpoint policy for shared vertices.
-} MslStageFloorSegment;
+#include "mpcoll_ground.h"
 
 typedef struct {
   float left;
@@ -28,32 +19,25 @@ typedef struct {
   float bottom;
 } MslStageBoundsWorld;
 
-static inline uint8_t stage_seg_x_contains(const MslStageFloorSegment* seg, float x) {
-  const float min_x = (seg->x0 < seg->x1) ? seg->x0 : seg->x1;
-  const float max_x = (seg->x0 < seg->x1) ? seg->x1 : seg->x0;
-  if (x < min_x || x > max_x) {
-    return 0;
-  }
-  // Half-open range by default: [min_x, max_x), with deterministic inclusion of the global right edge.
-  if (x == max_x && !seg->include_max) {
-    return 0;
-  }
-  return 1;
+static inline uint8_t stage_line_x_contains_closed(const MslStageFloorLine* line, float x) {
+  return (uint8_t)(x >= line->x0 && x <= line->x1);
 }
 
-static inline float stage_seg_y_at_x(const MslStageFloorSegment* seg, float x) {
-  const float dx = seg->x1 - seg->x0;
+static inline float stage_line_y_at_x(const MslStageFloorLine* line, float x) {
+  const float dx = line->x1 - line->x0;
   if (dx == 0.0f) {
-    return (seg->y0 > seg->y1) ? seg->y0 : seg->y1;
+    return (line->y0 > line->y1) ? line->y0 : line->y1;
   }
-  const float t = (x - seg->x0) / dx;
-  return seg->y0 + (seg->y1 - seg->y0) * t;
+  const float t = (x - line->x0) / dx;
+  return line->y0 + (line->y1 - line->y0) * t;
 }
 
-static MslStageFloorSegment* g_fd_floor_segments = NULL;
-static size_t g_fd_floor_segment_count = 0;
+static MslStageFloorLine* g_fd_floor_lines = NULL;
+static size_t g_fd_floor_line_count = 0;
 static int g_fd_loaded = 0;
 static uint8_t g_fd_match_flow_loaded = 0;
+
+static MslStageFloorGraph g_fd_floor_graph;
 
 static MslStageBoundsWorld g_fd_blast_bounds_world;
 static MslStageBoundsWorld g_fd_cam_bounds_world;
@@ -396,7 +380,88 @@ static int fd_load_match_flow_from_json(const char* json) {
   return 0;
 }
 
-static int fd_load_floor_segments_from_json(const char* json) {
+static void fd_sort_floor_lines_by_id(MslStageFloorLine* lines, size_t n) {
+  // Deterministic: keep floor lines ordered by ISO-derived line index (`segment_i`) so per-frame
+  // selection ties follow stage line order (decomp shape).
+  // refs/melee/src/melee/mp/mplib.c::mpCheckFloor (ties resolved by iteration order)
+  if (lines == NULL || n <= 1) {
+    return;
+  }
+  for (size_t i = 1; i < n; i++) {
+    const MslStageFloorLine key = lines[i];
+    size_t j = i;
+    while (j > 0 && lines[j - 1].segment_i > key.segment_i) {
+      lines[j] = lines[j - 1];
+      j--;
+    }
+    lines[j] = key;
+  }
+}
+
+static inline uint8_t fd_f32_eq_ulps1(float a, float b) {
+  // Stage connectivity should come from shared vertices and thus be bit-identical after extraction
+  // + unit scaling. Accept a 1-ULP difference to reduce brittleness from float parsing while
+  // remaining deterministic.
+  union {
+    float f;
+    uint32_t u;
+  } ua = {a}, ub = {b};
+  if (ua.u == ub.u) {
+    return 1;
+  }
+  // Reject NaNs deterministically (not expected in stage data).
+  if (((ua.u & 0x7F800000u) == 0x7F800000u && (ua.u & 0x007FFFFFu) != 0) ||
+      ((ub.u & 0x7F800000u) == 0x7F800000u && (ub.u & 0x007FFFFFu) != 0)) {
+    return 0;
+  }
+  // Map float bits to an order-preserving integer space (so ULP distance is meaningful).
+  uint32_t ia = ua.u;
+  uint32_t ib = ub.u;
+  if (ia & 0x80000000u) {
+    ia = 0x80000000u - ia;
+  }
+  if (ib & 0x80000000u) {
+    ib = 0x80000000u - ib;
+  }
+  const uint32_t diff = (ia > ib) ? (ia - ib) : (ib - ia);
+  return (uint8_t)(diff <= 1u);
+}
+
+static void fd_build_floor_prev_next(MslStageFloorLine* lines, size_t n) {
+  if (lines == NULL) {
+    return;
+  }
+  for (size_t i = 0; i < n; i++) {
+    lines[i].prev = -1;
+    lines[i].next = -1;
+  }
+  for (size_t i = 0; i < n; i++) {
+    for (size_t j = 0; j < n; j++) {
+      if (i == j) {
+        continue;
+      }
+      // prev: a line whose right endpoint equals our left endpoint.
+      if (fd_f32_eq_ulps1(lines[j].x1, lines[i].x0) && fd_f32_eq_ulps1(lines[j].y1, lines[i].y0))
+      {
+        lines[i].prev = (int16_t)j;
+        break;
+      }
+    }
+    for (size_t j = 0; j < n; j++) {
+      if (i == j) {
+        continue;
+      }
+      // next: a line whose left endpoint equals our right endpoint.
+      if (fd_f32_eq_ulps1(lines[j].x0, lines[i].x1) && fd_f32_eq_ulps1(lines[j].y0, lines[i].y1))
+      {
+        lines[i].next = (int16_t)j;
+        break;
+      }
+    }
+  }
+}
+
+static int fd_load_floor_lines_from_json(const char* json) {
   if (json == NULL) {
     return -1;
   }
@@ -467,9 +532,9 @@ static int fd_load_floor_segments_from_json(const char* json) {
     return -1;
   }
 
-  // Allocate at most `line_count` segments; we compact the floor subset into the prefix.
-  MslStageFloorSegment* tmp =
-      (MslStageFloorSegment*)alloc_calloc((size_t)line_count, sizeof(MslStageFloorSegment));
+  // Allocate at most `line_count` floor lines; we compact the floor subset into the prefix.
+  MslStageFloorLine* tmp =
+      (MslStageFloorLine*)alloc_calloc((size_t)line_count, sizeof(MslStageFloorLine));
   if (tmp == NULL) {
     return -1;
   }
@@ -636,17 +701,28 @@ static int fd_load_floor_segments_from_json(const char* json) {
     if (have_kind && kind_is_floor && have_platform && !platform && have_i && have_x0 && have_x1 &&
         have_y0 && have_y1) {
       if (out_n < (size_t)line_count) {
-        const float fx0 = (float)(unit_scale * x0);
-        const float fx1 = (float)(unit_scale * x1);
-        const float fy0 = (float)(unit_scale * y0);
-        const float fy1 = (float)(unit_scale * y1);
-        tmp[out_n] = (MslStageFloorSegment){
+        float fx0 = (float)(unit_scale * x0);
+        float fx1 = (float)(unit_scale * x1);
+        float fy0 = (float)(unit_scale * y0);
+        float fy1 = (float)(unit_scale * y1);
+        // Normalize so x0 <= x1 (mplib line math assumes ordered endpoints).
+        // refs/melee/src/melee/mp/mplib.c::mpLib_8004DD90_Floor
+        if (fx1 < fx0) {
+          const float tx = fx0;
+          const float ty = fy0;
+          fx0 = fx1;
+          fy0 = fy1;
+          fx1 = tx;
+          fy1 = ty;
+        }
+        tmp[out_n] = (MslStageFloorLine){
             .x0 = fx0,
-            .x1 = fx1,
             .y0 = fy0,
+            .x1 = fx1,
             .y1 = fy1,
             .segment_i = (uint16_t)seg_i,
-            .include_max = 0,
+            .prev = -1,
+            .next = -1,
         };
         out_n++;
       }
@@ -688,31 +764,14 @@ static int fd_load_floor_segments_from_json(const char* json) {
     return -1;
   }
 
-  // Deterministic endpoint policy: floor segments are treated as [min_x, max_x) except that any segment
-  // that touches the global rightmost x gets to include its max endpoint. This disambiguates shared
-  // vertices without relying on iteration order.
-  float global_max_x = -FLT_MAX;
-  for (size_t i = 0; i < out_n; i++) {
-    const float a = tmp[i].x0;
-    const float b = tmp[i].x1;
-    const float mx = (a > b) ? a : b;
-    if (mx > global_max_x) {
-      global_max_x = mx;
-    }
-  }
-  for (size_t i = 0; i < out_n; i++) {
-    const float a = tmp[i].x0;
-    const float b = tmp[i].x1;
-    const float mx = (a > b) ? a : b;
-    // Note: exact float-equality is fine here because `global_max_x` is computed from the same parsed
-    // float32 values. If generalized to other stages (or if extraction changes), consider a more
-    // explicit/deterministic policy (e.g., track the argmax segment by index/bitpattern).
-    tmp[i].include_max = (uint8_t)(mx == global_max_x);
-  }
+  fd_sort_floor_lines_by_id(tmp, out_n);
+  fd_build_floor_prev_next(tmp, out_n);
 
-  alloc_free(g_fd_floor_segments);
-  g_fd_floor_segments = tmp;
-  g_fd_floor_segment_count = out_n;
+  alloc_free(g_fd_floor_lines);
+  g_fd_floor_lines = tmp;
+  g_fd_floor_line_count = out_n;
+  g_fd_floor_graph.lines = g_fd_floor_lines;
+  g_fd_floor_graph.line_count = g_fd_floor_line_count;
   return 0;
 }
 
@@ -766,7 +825,7 @@ int stage_collision_init(void) {
   }
   buf[sz] = '\0';
 
-  const int err = fd_load_floor_segments_from_json(buf);
+  const int err = fd_load_floor_lines_from_json(buf);
   (void)fd_load_match_flow_from_json(buf);
   alloc_free(buf);
   if (err != 0) {
@@ -775,6 +834,32 @@ int stage_collision_init(void) {
 
   g_fd_loaded = 1;
   return 0;
+}
+
+const MslStageFloorGraph* stage_collision_get_floor_graph(uint32_t stage_id) {
+  if (!g_fd_loaded) {
+    return NULL;
+  }
+  if (stage_id != 32) {
+    return NULL;
+  }
+  if (g_fd_floor_lines == NULL || g_fd_floor_line_count == 0) {
+    return NULL;
+  }
+  return &g_fd_floor_graph;
+}
+
+int stage_collision_floor_line_index(uint32_t stage_id, uint16_t segment_i) {
+  const MslStageFloorGraph* g = stage_collision_get_floor_graph(stage_id);
+  if (g == NULL) {
+    return -1;
+  }
+  for (size_t i = 0; i < g->line_count; i++) {
+    if (g->lines[i].segment_i == segment_i) {
+      return (int)i;
+    }
+  }
+  return -1;
 }
 
 uint8_t stage_collision_get_blast_bounds_world(uint32_t stage_id, MslStageBounds* out) {
@@ -877,8 +962,8 @@ uint8_t stage_collision_item_line_hits_floor(uint32_t stage_id, float x0, float 
   if (stage_id != 32) {
     return 0;
   }
-  const MslStageFloorSegment* segs = g_fd_floor_segments;
-  const size_t n = g_fd_floor_segment_count;
+  const MslStageFloorLine* segs = g_fd_floor_lines;
+  const size_t n = g_fd_floor_line_count;
   if (segs == NULL || n == 0) {
     return 0;
   }
@@ -890,7 +975,7 @@ uint8_t stage_collision_item_line_hits_floor(uint32_t stage_id, float x0, float 
   // This is a minimal decomp-shaped approximation for itfoxlaser.c::it_8029C4D4 as used by
   // itFoxlaser_UnkMotion1_Coll.
   for (size_t si = 0; si < n; si++) {
-    const MslStageFloorSegment* seg = &segs[si];
+    const MslStageFloorLine* seg = &segs[si];
     const float sx0 = seg->x0;
     const float sy0 = seg->y0;
     const float sx1 = seg->x1;
@@ -913,8 +998,7 @@ uint8_t stage_collision_item_line_hits_floor(uint32_t stage_id, float x0, float 
     }
 
     const float ix = x0 + rx * t;
-    // Deterministic shared-vertex policy matches stage grounding: half-open by default.
-    if (!stage_seg_x_contains(seg, ix)) {
+    if (!stage_line_x_contains_closed(seg, ix)) {
       continue;
     }
     return 1;
@@ -922,289 +1006,11 @@ uint8_t stage_collision_item_line_hits_floor(uint32_t stage_id, float x0, float 
   return 0;
 }
 
+
 void stage_collision_apply(MslBatch* batch) {
   if (batch == NULL) {
     return;
   }
-
-  // Final Destination grounding based on extracted stage collision segments.
-  //
-  // Source of truth: `data/stages/final_destination.json` (ISO-derived).
-  // We currently only ground against non-platform `kind:"floor"` segments for FD.
-  // `segment_i` is the stable, ISO-derived segment index (used as `ground_id`).
-  const MslStageFloorSegment* fd_floor_segments = g_fd_floor_segments;
-  const size_t fd_floor_segment_count = g_fd_floor_segment_count;
-
-  // Numerical tolerance: accept tiny positive/negative penetration around the segment surface.
-  const float ground_epsilon = 1024.0f * FLT_EPSILON;
-
-  const int num_players = (int)batch->config.num_players;
-  for (int bi = 0; bi < batch->batch_size; bi++) {
-    // Stage ids in our datasets come from Slippi `game.start.stage` (see tools/slippi/make_dataset_from_slp.py),
-    // which corresponds to the GALE01 "stage kind" / `InternalStageId` (aka `Stage_802251E8(idx, ...)` arg).
-    //
-    // In vanilla, `InternalStageId` is mapped to the StageData index via `unk_arr_803E9960[idx].stage_id`.
-    // For Final Destination, idx=32 maps to stage_id=37 which selects `grNLa_803E7F90` ("/GrNLa.dat").
-    // Decomp refs:
-    // - refs/melee/src/melee/gr/stage.c:341-349 (unk_arr_803E9960)
-    // - refs/melee/src/melee/gr/ground.c:124-139 (Ground_803DFEDC includes grNLa_803E7F90)
-    // - refs/melee/src/melee/gr/grlast.c:151 (grNLa_803E7F90 uses "/GrNLa.dat")
-    if (batch->state.stage_id[bi] != 32) {
-      continue;
-    }
-    if (fd_floor_segments == NULL || fd_floor_segment_count == 0) {
-      continue;
-    }
-
-    for (int p = 0; p < num_players; p++) {
-      const size_t idx = msl_idx_player(bi, p);
-      const uint16_t action_id = batch->state.action_id[idx];
-
-      // Match flow states (Dead*/Rebirth*/Entry*) are not grounded against the stage collision mesh
-      // in the suite (on_ground=0). Skip grounding to avoid snapping during invisible/respawn
-      // phases.
-      if (action_id == (uint16_t)MSL_ACT_DEAD_DOWN || action_id == (uint16_t)MSL_ACT_DEAD_LEFT ||
-          action_id == (uint16_t)MSL_ACT_DEAD_RIGHT ||
-          action_id == (uint16_t)MSL_ACT_DEAD_UP_STAR || action_id == (uint16_t)MSL_ACT_REBIRTH ||
-          action_id == (uint16_t)MSL_ACT_REBIRTH_WAIT || action_id == (uint16_t)MSL_ACT_ENTRY ||
-          action_id == (uint16_t)MSL_ACT_ENTRY_START || action_id == (uint16_t)MSL_ACT_ENTRY_END) {
-        batch->state.on_ground[idx] = 0;
-        continue;
-      }
-
-      // Decomp: Fighter_procUpdate only runs ftColl_800764DC (collision) when not in hitlag.
-      // refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate (the `if (!fp->x2219_b5)` block)
-      if (batch->state.hitlag[idx] != 0) {
-        continue;
-      }
-
-      // Cliff / ledge hold actions use their own snap logic and should not be stage-grounded.
-      //
-      // Decomp:
-      // - ftCo_CliffCatch_Phys snaps to the cliff point (used by CliffCatch/Wait and also as the
-      //   initial snap for option states).
-      //   refs/melee/src/melee/ft/ftcliffcommon.c::ftCo_CliffCatch_Phys
-      // - Option states (CliffClimb/Attack/Escape) can transition from GA_Air to GA_Ground during
-      //   their Phys based on TransNPos, after which they run grounded collision.
-      //   refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffClimb.c::ftCo_CliffClimb_Phys
-      //   refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffClimb.c::ftCo_CliffClimb_Coll
-      if (action_id == (uint16_t)MSL_ACT_CLIFF_CATCH || action_id == (uint16_t)MSL_ACT_CLIFF_WAIT ||
-          action_id == (uint16_t)MSL_ACT_CLIFF_JUMP_QUICK1) {
-        batch->state.on_ground[idx] = 0;
-        continue;
-      }
-
-      const float x = batch->state.pos_x[idx];
-      const float y = batch->state.pos_y[idx];
-      // Ordering contract: physics_integrate() records prev_pos_* and then integrates pos_*.
-      // stage_collision_apply() runs after physics_integrate() (see src/step.c).
-      const float y_prev = batch->state.prev_pos_y[idx];
-      const float dy = y - y_prev;
-
-      if (dy > 0.0f) {
-        batch->state.on_ground[idx] = 0;
-        continue;
-      }
-
-      // Grounding uses the ECB bottom point (decomp-shaped): compare/snap based on the per-frame
-      // minimum Y of the 6 ECB source joints (mpColl_LoadECB_JObj expands the ECB to contain those
-      // joints).
-      //
-      // Source of truth: `data/ecb/<char>_bottom.bin` (ISO-derived from SSANIM01 and
-      // `data/characters/<char>.json` ecb_joints).
-      //
-      // Important decomp behavior: grounded collision paths can force ECB bottom to `0.0f` relative
-      // to `cur_pos` via the ECB flags. In mpColl_LoadECB_JObj, `flags & 1` sets bottom_y = 0.0f.
-      // refs/melee/src/melee/mp/mpcoll.c::mpColl_LoadECB_JObj
-      //
-      // Several stage-collision entrypoints load ECB with flags=5 (bit0 set), e.g.
-      // refs/melee/src/melee/mp/mpcoll.c::mpColl_800474E0 and ::mpColl_800478F4.
-      //
-      // Model that in our simplified stage grounding: if we were grounded entering the frame,
-      // treat ECB bottom offset as 0.0 so landing-frame negative self_y snaps do not deground.
-      const uint32_t anim = batch->state.animation_index[idx];
-      const int af = (int)batch->state.action_frame[idx];
-      const int af_prev = (af > 0) ? (af - 1) : 0;
-
-      float ecb_off = msl_ecb_bottom_rel_y(batch->state.char_id[idx], anim, af);
-      float prev_ecb_off = msl_ecb_bottom_rel_y(batch->state.char_id[idx], anim, af_prev);
-      if (batch->state.prev_on_ground[idx]) {
-        ecb_off = 0.0f;
-        prev_ecb_off = 0.0f;
-      }
-      const float y_bot = y + ecb_off;
-      const float y_prev_bot = y_prev + prev_ecb_off;
-
-      // Optional (helps ground_id at boundaries): use ECB footprint to break ties between same-height
-      // floor segments. Note that extracted matrices are fighter-local with TransN removed; mirror X
-      // based on facing like mpColl_LoadECB_Fixed does for (front,back).
-      MslEcbExtentsRel ex = msl_ecb_extents_rel(batch->state.char_id[idx], anim, af);
-      float ecb_left_rel_x = ex.min_x;
-      float ecb_right_rel_x = ex.max_x;
-      if (!batch->state.facing[idx]) {
-        const float l = -ex.max_x;
-        const float r = -ex.min_x;
-        ecb_left_rel_x = l;
-        ecb_right_rel_x = r;
-      }
-      const float ecb_left_world_x = x + ecb_left_rel_x;
-      const float ecb_right_world_x = x + ecb_right_rel_x;
-
-      uint8_t found = 0;
-      float best_y_at_x = -FLT_MAX;
-      uint16_t best_segment_i = 0;
-      uint8_t best_foot_score = 0;
-
-      // Sticky FD floor selection: if we were grounded entering the frame and the previously-selected
-      // `ground_id` segment still contains the current pos_x (under the deterministic endpoint
-      // policy), keep it rather than reselecting a neighbor segment at shared vertices.
-      //
-      // Decomp shape: mpColl keeps CollData floor.index across frames and uses it for stable grounded
-      // collision connectivity (see ftCommon_8007DD7C floor.index usage).
-      // - refs/melee/src/melee/mp/mpcoll.c::mpColl_8004A908_Floor
-      // - refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007DD7C
-      if (batch->state.prev_on_ground[idx]) {
-        const uint16_t prev_segment_i = batch->state.ground_id[idx];
-        const MslStageFloorSegment* prev_seg = NULL;
-        for (size_t si = 0; si < fd_floor_segment_count; si++) {
-          const MslStageFloorSegment* seg = &fd_floor_segments[si];
-          if (seg->segment_i == prev_segment_i) {
-            prev_seg = seg;
-            break;
-          }
-        }
-        if (prev_seg && stage_seg_x_contains(prev_seg, x)) {
-          const float y_at_x = stage_seg_y_at_x(prev_seg, x);
-
-          // Reuse the same y_bot/y_prev_bot grounding gates as the general search below.
-          uint8_t ok = 1;
-          if (dy < 0.0f) {
-            if (!(y_bot <= (y_at_x + ground_epsilon))) {
-              ok = 0;
-            }
-          } else {  // dy == 0
-            if (!((y_bot <= (y_at_x + ground_epsilon)) ||
-                  (y_prev_bot >= (y_at_x - ground_epsilon)))) {
-              ok = 0;
-            }
-          }
-
-          if (ok) {
-            found = 1;
-            best_y_at_x = y_at_x;
-            best_segment_i = prev_seg->segment_i;
-            best_foot_score =
-                (uint8_t)(stage_seg_x_contains(prev_seg, ecb_left_world_x) ? 1 : 0) +
-                (uint8_t)(stage_seg_x_contains(prev_seg, ecb_right_world_x) ? 1 : 0);
-          }
-        }
-      }
-
-      // If we didn't stick to the previous segment, apply a deterministic endpoint bias in the
-      // movement direction so shared-vertex segment classification doesn't oscillate when root motion
-      // lands exactly on X boundaries (notably during downed rolls).
-      float x_for_contains = x;
-      if (!found) {
-        const float vx = batch->state.speed_ground_x_self[idx];
-        if (vx > 0.0f) {
-          x_for_contains = nextafterf(x, INFINITY);
-        } else if (vx < 0.0f) {
-          x_for_contains = nextafterf(x, -INFINITY);
-        }
-      }
-
-      if (!found) {
-        for (size_t si = 0; si < fd_floor_segment_count; si++) {
-          const MslStageFloorSegment* seg = &fd_floor_segments[si];
-          if (!stage_seg_x_contains(seg, x_for_contains)) {
-            continue;
-          }
-
-          // Use the unbiased x for surface height; the bias is only for deterministic segment selection.
-          const float y_at_x = stage_seg_y_at_x(seg, x);
-
-        // Only ground if we are at/below the segment surface (with epsilon).
-        //
-        // For airborne collision (prev_on_ground==0), also require crossing this frame based on
-        // pre/post integration ECB bottoms. This prevents snapping up from far below.
-        //
-        // For grounded collision (prev_on_ground==1), Melee treats contact as stable even if the
-        // actor is already slightly penetrated when collision runs (e.g. due to pose-driven ECB
-        // changes and teacher-forced reseeds). Model that by allowing grounding without the strict
-        // crossing check when we were grounded entering the frame.
-        //
-        // Decomp pointers:
-        // - Floor collision uses prev_ecb.bottom vs ecb.bottom: refs/melee/src/melee/mp/mpcoll.c::mpColl_8004A908_Floor
-        // - CollData carries current floor.index across frames (example use of floor.index and
-        //   next/prev connectivity): refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007DD7C
-        if (dy < 0.0f) {
-          if (batch->state.prev_on_ground[idx]) {
-            if (!(y_bot <= (y_at_x + ground_epsilon))) {
-              continue;
-            }
-          } else if (!(y_bot <= (y_at_x + ground_epsilon) &&
-                       y_prev_bot >= (y_at_x - ground_epsilon))) {
-            continue;
-          }
-        } else {  // dy == 0
-          // If we were grounded entering the frame, gate stability on the previous-frame ECB bottom
-          // instead of skipping the constraint entirely.
-          if (batch->state.prev_on_ground[idx]) {
-            // If we were grounded entering the frame, use prev ECB to keep grounded actions stable
-            // when pose changes move ECB bottom without any vertical root motion.
-            //
-            // Important for teacher-forcing/reseeds: do not require the seeded root Y to already be
-            // perfectly aligned with ECB bottom; allow snapping up from penetration deterministically.
-            if (!((y_bot <= (y_at_x + ground_epsilon)) ||
-                  (y_prev_bot >= (y_at_x - ground_epsilon)))) {
-              continue;
-            }
-          } else if (!(y_bot <= (y_at_x + ground_epsilon) && y_bot >= (y_at_x - ground_epsilon))) {
-            continue;
-          }
-        }
-
-        const uint8_t foot_score = (uint8_t)(stage_seg_x_contains(seg, ecb_left_world_x) ? 1 : 0) +
-                                   (uint8_t)(stage_seg_x_contains(seg, ecb_right_world_x) ? 1 : 0);
-
-          if (!found || (y_at_x > best_y_at_x) ||
-              (y_at_x == best_y_at_x && foot_score > best_foot_score) ||
-              (y_at_x == best_y_at_x && foot_score == best_foot_score &&
-               seg->segment_i < best_segment_i)) {
-            found = 1;
-            best_y_at_x = y_at_x;
-            best_segment_i = seg->segment_i;
-            best_foot_score = foot_score;
-          }
-        }
-      }
-
-      if (found) {
-        // Snap the fighter root so ECB bottom rests on the segment surface.
-        //
-        // For dy==0 when we were grounded entering the frame, avoid snapping *down* from above the
-        // surface (pose can lift ECB bottom slightly while still grounded). Still snap up to
-        // resolve penetration deterministically.
-        const float snap_y = best_y_at_x - ecb_off;
-        if (dy == 0.0f && batch->state.prev_on_ground[idx]) {
-          if (y_bot <= (best_y_at_x + ground_epsilon)) {
-            batch->state.pos_y[idx] = snap_y;
-          }
-        } else {
-          batch->state.pos_y[idx] = snap_y;
-        }
-        batch->state.on_ground[idx] = 1;
-        // Preserve pre-collision vertical velocity on the *landing* frame (air -> ground) to match
-        // Slippi post-frames: on_ground can become true while `velocities.self_y` remains negative
-        // for exactly one frame, then resets to 0 on the next grounded frame.
-        if (batch->state.prev_on_ground[idx]) {
-          batch->state.speed_y_self[idx] = 0.0f;
-        }
-
-        batch->state.ground_id[idx] = best_segment_i;
-      } else {
-        batch->state.on_ground[idx] = 0;
-      }
-    }
-  }
+  // Ground contact substrate (mpColl-shaped): owns on_ground/ground_id for FD.
+  mpcoll_ground_apply(batch);
 }

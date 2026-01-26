@@ -432,6 +432,25 @@ static inline uint8_t match_flow_should_check_blastzone(uint16_t a) {
                      match_flow_is_entry_action(a)));
 }
 
+uint8_t match_flow_should_stage_collide(uint16_t action_id) {
+  // Decomp shape: match-flow actions use motion-state-specific (or NULL) collision callbacks, not
+  // the normal grounded/air collision pass.
+  //
+  // - Dead* motion states have coll_cb=NULL, so Fighter_procMap does not stage-collide them.
+  //   refs/melee/src/melee/ft/ftmotionstates.c (ftCo_MS_DeadDown et al.)
+  // - Entry has an empty coll_cb.
+  //   refs/melee/src/melee/ft/ft_0C31.c::ftCo_Entry_Coll
+  // - Rebirth/EntryStart/EntryEnd run dedicated mpColl/ECB collision entrypoints.
+  //   refs/melee/src/melee/ft/ft_0D31.c::ftCo_Rebirth_Coll
+  //   refs/melee/src/melee/ft/ft_0C31.c::ftCo_EntryStart_Coll
+  //
+  // Until those match-flow collision paths (respawn platform, special ECB gates) are modeled, skip
+  // the generic stage collision pass for these actions to avoid double-colliding.
+  return (uint8_t)(!(match_flow_is_dead_action(action_id) ||
+                     match_flow_is_respawn_action(action_id) ||
+                     match_flow_is_entry_action(action_id)));
+}
+
 void match_flow_update_post_physics(MslBatch* batch) {
   if (batch == NULL) {
     return;

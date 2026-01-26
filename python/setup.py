@@ -70,6 +70,7 @@ ext = Extension(
         str((ROOT / "src" / "decomp" / "lb" / "lb_00ce.c").resolve()),
         str((ROOT / "src" / "physics.c").resolve()),
         str((ROOT / "src" / "stage_collision.c").resolve()),
+        str((ROOT / "src" / "mpcoll_ground.c").resolve()),
         str((ROOT / "src" / "match_flow.c").resolve()),
         str((ROOT / "src" / "locomotion.c").resolve()),
         str((ROOT / "src" / "move_tables.c").resolve()),

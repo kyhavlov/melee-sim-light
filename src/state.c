@@ -46,6 +46,12 @@ int state_alloc(MslStateSoA* state, int batch_size) {
   state->facing = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->on_ground = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->prev_on_ground = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
+  state->ground_contact_x = (float*)alloc_aligned_64(sizeof(float) * bp);
+  state->ground_contact_y = (float*)alloc_aligned_64(sizeof(float) * bp);
+  state->ground_normal_x = (float*)alloc_aligned_64(sizeof(float) * bp);
+  state->ground_normal_y = (float*)alloc_aligned_64(sizeof(float) * bp);
+  state->coll_env_flags = (uint32_t*)alloc_aligned_64(sizeof(uint32_t) * bp);
+  state->coll_prev_env_flags = (uint32_t*)alloc_aligned_64(sizeof(uint32_t) * bp);
 
   state->action_id = (uint16_t*)alloc_aligned_64(sizeof(uint16_t) * bp);
   state->action_frame = (int16_t*)alloc_aligned_64(sizeof(int16_t) * bp);
@@ -191,7 +197,9 @@ int state_alloc(MslStateSoA* state, int batch_size) {
       !state->prev_pos_x || !state->prev_pos_y || !state->speed_air_x_self ||
       !state->speed_ground_x_self || !state->speed_y_self || !state->speed_x_attack ||
       !state->speed_y_attack || !state->fighter_scale_y || !state->facing || !state->on_ground ||
-      !state->prev_on_ground || !state->action_id || !state->action_frame ||
+      !state->prev_on_ground || !state->ground_contact_x || !state->ground_contact_y ||
+      !state->ground_normal_x || !state->ground_normal_y || !state->coll_env_flags ||
+      !state->coll_prev_env_flags || !state->action_id || !state->action_frame ||
       !state->match_flow_timer || !state->downwait_timer || !state->anim_frame_f32 ||
       !state->anim_frame_fp_q16_16 || !state->frame_speed_mul_fp_q16_16 || !state->jumps_left ||
       !state->stocks || !state->guard_tilt_x8 || !state->guard_tilt_x4 ||
@@ -263,6 +271,12 @@ void state_free(MslStateSoA* state) {
   alloc_free(state->facing);
   alloc_free(state->on_ground);
   alloc_free(state->prev_on_ground);
+  alloc_free(state->ground_contact_x);
+  alloc_free(state->ground_contact_y);
+  alloc_free(state->ground_normal_x);
+  alloc_free(state->ground_normal_y);
+  alloc_free(state->coll_env_flags);
+  alloc_free(state->coll_prev_env_flags);
 
   alloc_free(state->action_id);
   alloc_free(state->action_frame);

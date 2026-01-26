@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
 import numpy as np
 
 from tools.eval.dataset import COMPARE_DTYPE, INPUT_DTYPE, SEED_DTYPE
@@ -8,20 +11,66 @@ from tools.eval.dataset import COMPARE_DTYPE, INPUT_DTYPE, SEED_DTYPE
 ACT_WAIT = 0x000E
 
 
-def _fd_floor_nonplatform_edges_world() -> list[float]:
-    import json
-    from pathlib import Path
-
+def _fd_floor_lines() -> list[dict]:
     fd = json.loads(Path("data/stages/final_destination.json").read_text())
     unit_scale = float(fd.get("unit_scale", 1.0))
-
-    edges: set[float] = set()
-    for s in fd["segments"]:
-        if s["kind"] != "floor" or bool(s["platform"]):
+    out: list[dict] = []
+    for seg in fd["segments"]:
+        if seg.get("kind") != "floor" or bool(seg.get("platform")):
             continue
-        edges.add(unit_scale * float(s["x0"]))
-        edges.add(unit_scale * float(s["x1"]))
-    return sorted(edges)
+        x0 = unit_scale * float(seg["x0"])
+        y0 = unit_scale * float(seg["y0"])
+        x1 = unit_scale * float(seg["x1"])
+        y1 = unit_scale * float(seg["y1"])
+        out.append(
+            {
+                "segment_i": int(seg["i"]),
+                "x0": x0,
+                "y0": y0,
+                "x1": x1,
+                "y1": y1,
+                "min_x": min(x0, x1),
+                "max_x": max(x0, x1),
+                "span": abs(x1 - x0),
+            }
+        )
+    assert out
+    return out
+
+
+def _fd_floor_pick_line_at_x(x: float) -> dict:
+    lines = _fd_floor_lines()
+    # Prefer the longest floor segment that contains x (decomp-shaped stable selection).
+    cand = [l for l in lines if l["min_x"] <= x <= l["max_x"]]
+    assert cand
+    return max(cand, key=lambda l: float(l["span"]))
+
+
+def _fd_floor_main_and_right_lip() -> tuple[dict, dict, float, float]:
+    lines = _fd_floor_lines()
+    main = max(lines, key=lambda l: float(l["span"]))
+    # Shared endpoints are endpoints touched by >=2 floor segments.
+    endpoints: dict[tuple[float, float], int] = {}
+    for l in lines:
+        for pt in ((l["x0"], l["y0"]), (l["x1"], l["y1"])):
+            endpoints[pt] = endpoints.get(pt, 0) + 1
+    shared = [pt for pt, n in endpoints.items() if n >= 2]
+    assert shared
+    # For FD, pick the right shared endpoint (largest X) and find the segment to its right.
+    right_pt = max(shared, key=lambda pt: float(pt[0]))
+    right_x, right_y = right_pt
+    incident = [l for l in lines if (l["x0"], l["y0"]) == right_pt or (l["x1"], l["y1"]) == right_pt]
+    assert len(incident) >= 2
+    # Right lip is the incident segment whose span is smaller than main and lies to the right.
+    right_lip = None
+    for l in incident:
+        if l["segment_i"] == main["segment_i"]:
+            continue
+        if l["max_x"] >= right_x:
+            right_lip = l
+            break
+    assert right_lip is not None
+    return main, right_lip, float(right_x), float(right_y)
 
 
 def _step_once(seed: np.ndarray) -> np.ndarray:
@@ -65,35 +114,41 @@ def _seed_base(*, stage_id: int) -> np.ndarray:
     return seed
 
 
-def test_fd_floor_boundary_left_picks_mid_segment() -> None:
-    # Boundary between left lip and main floor, in world units.
-    edges = _fd_floor_nonplatform_edges_world()
-    # edges: [-x_max, -x_boundary, +x_boundary, +x_max]
-    x_boundary = edges[1]
+def test_fd_grounded_stays_grounded_on_same_line() -> None:
+    seg0 = _fd_floor_pick_line_at_x(0.0)
+
     seed = _seed_base(stage_id=32)
-    seed["pos_x"][0, 0] = np.float32(x_boundary)
+    seed["pos_x"][0, 0] = np.float32(0.0)
     seed["pos_y"][0, 0] = np.float32(0.0)
     seed["speed_y_self"][0, 0] = np.float32(0.0)
-    seed["on_ground"][0, 0] = np.uint8(0)
+    seed["speed_ground_x_self"][0, 0] = np.float32(0.05)
+    seed["on_ground"][0, 0] = np.uint8(1)
+    seed["ground_id"][0, 0] = np.uint16(seg0["segment_i"])
 
     out = _step_once(seed)
     assert int(out["on_ground"][0]) == 1
-    assert int(out["ground_id"][0]) == 1
+    assert int(out["ground_id"][0]) == int(seg0["segment_i"])
 
 
-def test_fd_floor_boundary_right_picks_right_segment() -> None:
-    # Boundary between main floor and right lip, in world units.
-    edges = _fd_floor_nonplatform_edges_world()
-    x_boundary = edges[2]
+def test_fd_shared_endpoint_does_not_flip_ground_id() -> None:
+    main, right_lip, x_boundary, y_boundary = _fd_floor_main_and_right_lip()
+
     seed = _seed_base(stage_id=32)
     seed["pos_x"][0, 0] = np.float32(x_boundary)
-    seed["pos_y"][0, 0] = np.float32(0.0)
+    seed["pos_y"][0, 0] = np.float32(y_boundary)
     seed["speed_y_self"][0, 0] = np.float32(0.0)
-    seed["on_ground"][0, 0] = np.uint8(0)
+    seed["speed_ground_x_self"][0, 0] = np.float32(0.0)
+    seed["on_ground"][0, 0] = np.uint8(1)
 
+    seed["ground_id"][0, 0] = np.uint16(main["segment_i"])
     out = _step_once(seed)
     assert int(out["on_ground"][0]) == 1
-    assert int(out["ground_id"][0]) == 2
+    assert int(out["ground_id"][0]) == int(main["segment_i"])
+
+    seed["ground_id"][0, 0] = np.uint16(right_lip["segment_i"])
+    out = _step_once(seed)
+    assert int(out["on_ground"][0]) == 1
+    assert int(out["ground_id"][0]) == int(right_lip["segment_i"])
 
 
 def test_vy_positive_never_grounds() -> None:
