@@ -692,6 +692,185 @@ static inline void combat_mutations_pass1_future_apply_body_hit(MslBatch* batch,
   batch->state.last_hit_by[d_idx] = (uint8_t)attacker;
 }
 
+void combat_apply_item_hit(MslBatch* batch, int batch_index, int attacker, int defender, float damage,
+                           uint16_t angle, uint16_t kbg, uint16_t wsk, uint16_t bkb,
+                           uint8_t defender_hurt_height) {
+  if (batch == NULL) {
+    return;
+  }
+  const int num_players = (int)batch->config.num_players;
+  if (batch_index < 0 || batch_index >= batch->batch_size) {
+    return;
+  }
+  if (attacker < 0 || attacker >= num_players || defender < 0 || defender >= num_players ||
+      attacker == defender) {
+    return;
+  }
+
+  const size_t a_idx = msl_idx_player(batch_index, attacker);
+  const size_t d_idx = msl_idx_player(batch_index, defender);
+
+  const MslCommonParams* c = msl_common_params();
+  if (c == NULL) {
+    return;
+  }
+
+  const int int_dmg = combat_get_env_dmg(damage);
+  if (int_dmg <= 0) {
+    return;
+  }
+
+  // Percent add (BODY).
+  // Decomp: Fighter_ProcessHit_8006D1EC -> Fighter_TakeDamage_8006CC7C.
+  // refs/melee/src/melee/ft/fighter.c
+  const float percent_pre = batch->state.percent[d_idx];
+  float percent = percent_pre + damage;
+  if (percent > 999.0f) {
+    percent = 999.0f;
+  }
+  batch->state.percent[d_idx] = percent;
+
+  // Hitlag (defender only): for item projectiles, the "attacker" is the item, not the owning
+  // fighter, so the fighter does not enter hitlag on laser hits.
+  //
+  // Decomp reference for fighter-vs-fighter: Fighter_ProcessHit_8006D1EC sets both attacker and
+  // defender hitlag. For items, the hitlag is applied to the item object instead.
+  // refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
+  const uint16_t d_motion_id = batch->state.action_id[d_idx];
+  const uint16_t d_hl = combat_calc_hitlag_frames(c, int_dmg, d_motion_id);
+  batch->state.hitlag[d_idx] = d_hl;
+  combat_state_flags_set_is_hitlag(batch, d_idx, d_hl);
+
+  // Knockback velocity + hitstun + damage-state entry (BODY), following the same helper chain as
+  // fighter-vs-fighter hits.
+  //
+  // Decomp chain:
+  // - Fighter_ProcessHit_8006D1EC consumes kb_applied computed by collision and enters damage
+  //   states via ftCo_8008DCE0.
+  // refs/melee/src/melee/ft/fighter.c and refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c
+  const uint8_t defender_on_ground = batch->state.on_ground[d_idx] ? 1u : 0u;
+  const MslCharParams* d_ch = msl_char_params(batch->state.char_id[d_idx]);
+  if (d_ch == NULL) {
+    return;
+  }
+
+  const float kb_applied =
+      combat_damage_calc_kb_applied(c, d_ch, d_motion_id, percent_pre, damage, int_dmg, kbg, wsk, bkb);
+  const float kb_angle_rad =
+      combat_damage_calc_angle_radians(c, angle, defender_on_ground, kb_applied);
+
+  float kb_vel_mag = kb_applied * c->kb_vel_mul;
+  if (!defender_on_ground && combat_damage_check_air_motion_kb_mul(c, batch, d_idx)) {
+    kb_vel_mag *= c->air_motion_kb_mul;
+  }
+
+  // Horizontal sign: away from attacker fighter (owner), consistent with combat BODY apply.
+  const float away = (batch->state.pos_x[d_idx] >= batch->state.pos_x[a_idx]) ? 1.0f : -1.0f;
+  batch->state.speed_x_attack[d_idx] = away * (kb_vel_mag * cosf(kb_angle_rad));
+  batch->state.speed_y_attack[d_idx] = kb_vel_mag * sinf(kb_angle_rad);
+
+  const uint16_t hs = combat_damage_hitstun_from_kb(c, kb_applied);
+  batch->state.hitstun[d_idx] = hs;
+  combat_state_flags_set_is_hitstun(batch, d_idx, hs);
+
+  combat_damage_enter_state(c, batch, d_idx, defender_on_ground, defender_hurt_height, kb_applied,
+                            kb_angle_rad);
+
+  batch->state.instance_hit_by[d_idx] = batch->state.instance_id[a_idx];
+  batch->state.last_hit_by[d_idx] = (uint8_t)attacker;
+}
+
+void combat_apply_item_shield_hit(MslBatch* batch, int batch_index, int attacker, int defender,
+                                  float damage, int8_t hitbox_shield_damage) {
+  if (batch == NULL) {
+    return;
+  }
+  const int num_players = (int)batch->config.num_players;
+  if (batch_index < 0 || batch_index >= batch->batch_size) {
+    return;
+  }
+  if (attacker < 0 || attacker >= num_players || defender < 0 || defender >= num_players ||
+      attacker == defender) {
+    return;
+  }
+
+  const size_t d_idx = msl_idx_player(batch_index, defender);
+  const size_t a_idx = msl_idx_player(batch_index, attacker);
+
+  const MslCommonParams* c = msl_common_params();
+  if (c == NULL) {
+    return;
+  }
+
+  const int int_dmg = combat_get_env_dmg(damage);
+  if (int_dmg <= 0) {
+    return;
+  }
+
+  // Powershield active flag: items are reflected elsewhere (items.c); do not apply shield HP /
+  // GuardSetOff / hitlag here.
+  // refs/melee/src/melee/ft/ftcoll.c::ftColl_80076CBC and refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
+  enum { MSL_STATE_FLAGS_STRIDE = MSL_STATE_FLAGS_BYTES };
+  enum { MSL_STATE_FLAGS_221C_INDEX = 3 };
+  enum { MSL_STATE_FLAG_221C_POWERSHIELD_ACTIVE = 0x20 };
+  const uint8_t flags_221c =
+      batch->state.state_flags[d_idx * MSL_STATE_FLAGS_STRIDE + (size_t)MSL_STATE_FLAGS_221C_INDEX];
+  if (flags_221c & (uint8_t)MSL_STATE_FLAG_221C_POWERSHIELD_ACTIVE) {
+    return;
+  }
+
+  const int shield_damage_taken =
+      (int_dmg + (int)hitbox_shield_damage > 0) ? (int_dmg + (int)hitbox_shield_damage) : 0;
+
+  const float light =
+      combat_lightshield_amount(c, batch->state.input_buttons[d_idx], batch->state.input_l[d_idx],
+                                batch->state.input_r[d_idx]);
+  const float ls = (light * (c->shield_hit_lightshield_max - c->shield_hit_lightshield_min)) +
+                   c->shield_hit_lightshield_min;
+  const float depletion = c->shield_hit_damage_mul * ((float)shield_damage_taken * (1.0f - ls)) +
+                          c->shield_hit_damage_base;
+
+  float hp = batch->state.shield_hp[d_idx];
+  hp -= depletion;
+  if (hp < 0.0f) {
+    hp = 0.0f;
+  }
+  batch->state.shield_hp[d_idx] = hp;
+
+  // Capture defender motion id before we transition into GuardSetOff.
+  const uint16_t d_motion_id_pre = batch->state.action_id[d_idx];
+
+  // Shieldstun (GuardSetOff) entry.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80092F2C
+  batch->state.action_id[d_idx] = (uint16_t)MSL_ACT_GUARD_SET_OFF;
+  batch->state.animation_index[d_idx] = (uint32_t)MSL_SM_GUARD_DAMAGE;
+  batch->state.tilt_timer_x[d_idx] = 0xFEu;
+
+  const float ls_stun =
+      (light * (c->shield_stun_lightshield_max - c->shield_stun_lightshield_min)) +
+      c->shield_stun_lightshield_min;
+  float stun_frames = c->shield_stun_mul * ((float)int_dmg * (1.0f - ls_stun)) + c->shield_stun_base;
+  if (!(stun_frames > 0.0f)) {
+    stun_frames = 1.0f;
+  }
+  const float end_frame =
+      msl_anim_end_frame(batch->state.char_id[d_idx], (uint16_t)MSL_SM_GUARD_DAMAGE);
+  float anim_rate = 1.0f;
+  if (end_frame > 0.0f) {
+    anim_rate = (end_frame + 0.1f) / stun_frames;
+  }
+  msl_anim_timebase_enter(batch, d_idx, 0.0f, anim_rate);
+
+  // Hitlag (defender only): the "attacker" for projectiles is the item, not the owning fighter.
+  // refs/melee/src/melee/ft/ftcoll.c::ftColl_80076CBC and fighter.c::Fighter_ProcessHit_8006D1EC
+  const uint16_t d_hl = combat_calc_hitlag_frames(c, int_dmg, d_motion_id_pre);
+  batch->state.hitlag[d_idx] = d_hl;
+  combat_state_flags_set_is_hitlag(batch, d_idx, d_hl);
+
+  // Track the owner as the source for shield state (Slippi instance_hit_by/last_hit_by are BODY-only).
+  (void)a_idx;
+}
+
 static inline void combat_mutations_pass1_future_apply_shield_hit(
     MslBatch* batch, size_t a_idx, size_t d_idx, int max_int_dmg, int shield_damage_taken,
     uint16_t attacker_motion_id) {

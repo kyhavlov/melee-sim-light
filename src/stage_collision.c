@@ -786,6 +786,61 @@ uint8_t stage_collision_get_respawn_point(uint32_t stage_id, int port, MslStageP
   return 1;
 }
 
+static inline float stage_cross2(float ax, float ay, float bx, float by) { return ax * by - ay * bx; }
+
+uint8_t stage_collision_item_line_hits_floor(uint32_t stage_id, float x0, float y0, float x1,
+                                             float y1) {
+  if (!g_fd_loaded) {
+    return 0;
+  }
+  if (stage_id != 32) {
+    return 0;
+  }
+  const MslStageFloorSegment* segs = g_fd_floor_segments;
+  const size_t n = g_fd_floor_segment_count;
+  if (segs == NULL || n == 0) {
+    return 0;
+  }
+
+  const float rx = x1 - x0;
+  const float ry = y1 - y0;
+
+  // Treat the projectile as a point and intersect against floor segments.
+  // This is a minimal decomp-shaped approximation for itfoxlaser.c::it_8029C4D4 as used by
+  // itFoxlaser_UnkMotion1_Coll.
+  for (size_t si = 0; si < n; si++) {
+    const MslStageFloorSegment* seg = &segs[si];
+    const float sx0 = seg->x0;
+    const float sy0 = seg->y0;
+    const float sx1 = seg->x1;
+    const float sy1 = seg->y1;
+
+    const float sx = sx1 - sx0;
+    const float sy = sy1 - sy0;
+    const float denom = stage_cross2(rx, ry, sx, sy);
+    if (denom == 0.0f) {
+      continue;
+    }
+
+    const float qpx = sx0 - x0;
+    const float qpy = sy0 - y0;
+    const float t = stage_cross2(qpx, qpy, sx, sy) / denom;
+    const float u = stage_cross2(qpx, qpy, rx, ry) / denom;
+
+    if (!(t >= 0.0f && t <= 1.0f && u >= 0.0f && u <= 1.0f)) {
+      continue;
+    }
+
+    const float ix = x0 + rx * t;
+    // Deterministic shared-vertex policy matches stage grounding: half-open by default.
+    if (!stage_seg_x_contains(seg, ix)) {
+      continue;
+    }
+    return 1;
+  }
+  return 0;
+}
+
 void stage_collision_apply(MslBatch* batch) {
   if (batch == NULL) {
     return;

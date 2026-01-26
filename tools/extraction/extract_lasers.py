@@ -1,0 +1,212 @@
+from __future__ import annotations
+
+import argparse
+import struct
+from dataclasses import dataclass
+from pathlib import Path
+
+from melee_sim.hsd_archive import parse_hsd_archive
+
+# Reuse decomp-first Pl*.dat parsers and the movescript interpreter.
+from tools.extraction.extract_character_attrs import _extract_ftco_dattrs, _extract_fox_falco_laser
+from tools.extraction.extract_fighter_moves import _parse_subaction_events, _read_s_temp4_subaction_ptr
+
+
+def _f32(x: float) -> float:
+    # Keep literals as Python floats but ensure they round to f32 when packed.
+    return struct.unpack("<f", struct.pack("<f", float(x)))[0]
+
+
+def _shoot_frames_for_msid(arc, *, ftdata_abs: int, msid: int) -> list[int]:
+    # Decomp: ftData +0x0C is `sTemp4` (subaction table) pointer.
+    # Used by tools/extraction/extract_fighter_moves.py to map submotion id -> script pointer.
+    s_temp4_list = arc.ptr32(ftdata_abs + 0x0C)
+    if s_temp4_list == arc.data_base:
+        return []
+    sub_ptr = _read_s_temp4_subaction_ptr(arc, s_temp4_list, int(msid))
+    if sub_ptr is None:
+        return []
+    events = _parse_subaction_events(arc, sub_ptr, max_frames=120, max_steps_per_frame=10000)
+    frames: set[int] = set()
+    for ev in events:
+        if ev.kind != "set_cmd_var":
+            continue
+        idx = int(ev.data.get("idx", -1))
+        value = int(ev.data.get("value", 0))
+        if idx == 2 and value != 0:
+            frames.add(int(ev.frame))
+    return sorted(frames)
+
+
+@dataclass(frozen=True)
+class LaserRecord:
+    char_id: int
+    shot_itkind: int
+    gun_itkind: int
+    spawn_bone_part_id: int
+    spawn_off: tuple[float, float, float]
+    ground_start_msid: int
+    ground_loop_msid: int
+    ground_end_msid: int
+    air_start_msid: int
+    air_loop_msid: int
+    air_end_msid: int
+    blaster_angle: float
+    blaster_speed: float
+    lifetime_frames: int
+    laser_damage: float
+    laser_size: float
+    laser_angle: int
+    laser_kbg: int
+    laser_wsk: int
+    laser_bkb: int
+    laser_shield_damage: int
+    hitbox_offsets_x: tuple[float, ...]
+    shoot_frames_ground: tuple[int, ...]
+    shoot_frames_air: tuple[int, ...]
+
+
+def _load_record(*, iso_dir: Path, dat_name: str, ftdata_symbol: str, char_id: int) -> LaserRecord:
+    pl_path = iso_dir / dat_name
+    buf = pl_path.read_bytes()
+    arc = parse_hsd_archive(buf)
+
+    ftdata_abs = arc.get_public_offset(ftdata_symbol)
+    if ftdata_abs is None:
+        raise SystemExit(f"{dat_name}: missing public symbol {ftdata_symbol!r}")
+
+    # Pull blaster dat attrs and laser article attrs/hitbox from Pl*.dat.
+    co = _extract_ftco_dattrs(pl_path, ftdata_symbol=ftdata_symbol, extract_fox_blaster=True)
+    laser = _extract_fox_falco_laser(buf, arc, ftdata_abs=ftdata_abs)
+
+    # SpecialN submotion ids are GALE01 game-code enums (not DAT attrs). Keep them table-driven
+    # (stored in lasers.bin) and cite decomp source-of-truth:
+    # - refs/melee/src/melee/ft/chara/ftFox/forward.h::ftFx_Submotion
+    ground_start_msid = 295
+    ground_loop_msid = 296
+    ground_end_msid = 297
+    air_start_msid = 298
+    air_loop_msid = 299
+    air_end_msid = 300
+
+    shoot_frames_ground = tuple(_shoot_frames_for_msid(arc, ftdata_abs=ftdata_abs, msid=ground_loop_msid))
+    shoot_frames_air = tuple(_shoot_frames_for_msid(arc, ftdata_abs=ftdata_abs, msid=air_loop_msid))
+
+    # Spawn bone and local offset are decomp-defined (not stored in DAT attrs).
+    # Decomp: refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_SpecialN_FtGetHoldJoint
+    spawn_bone_part_id = 49  # FtPart_RThumbNb (refs/melee/src/melee/ft/forward.h)
+    spawn_off = (_f32(0.0), _f32(1.2325000762939453), _f32(4.263599872589111))
+
+    hitbox_offsets_x = tuple(float(x) for x in (laser.get("laser_hitbox_offsets_x") or []) if isinstance(x, (int, float)))
+
+    return LaserRecord(
+        char_id=int(char_id),
+        shot_itkind=int(co.get("blaster_shot_itkind", 0)),
+        gun_itkind=int(co.get("blaster_gun_itkind", 0)),
+        spawn_bone_part_id=int(spawn_bone_part_id),
+        spawn_off=spawn_off,
+        ground_start_msid=int(ground_start_msid),
+        ground_loop_msid=int(ground_loop_msid),
+        ground_end_msid=int(ground_end_msid),
+        air_start_msid=int(air_start_msid),
+        air_loop_msid=int(air_loop_msid),
+        air_end_msid=int(air_end_msid),
+        blaster_angle=float(co.get("blaster_angle", 0.0)),
+        blaster_speed=float(co.get("blaster_vel", 0.0)),
+        lifetime_frames=int(laser.get("laser_lifetime_frames", 0)),
+        laser_damage=float(laser.get("laser_damage", 0.0)),
+        laser_size=float(laser.get("laser_size", 0.0)),
+        laser_angle=int(laser.get("laser_angle", 0)),
+        laser_kbg=int(laser.get("laser_kbg", 0)),
+        laser_wsk=int(laser.get("laser_wsk", 0)),
+        laser_bkb=int(laser.get("laser_bkb", 0)),
+        laser_shield_damage=int(laser.get("laser_shield_damage", 0)),
+        hitbox_offsets_x=hitbox_offsets_x,
+        shoot_frames_ground=shoot_frames_ground,
+        shoot_frames_air=shoot_frames_air,
+    )
+
+
+def _pack_record(rec: LaserRecord) -> bytes:
+    # Fixed-capacity payload for hot-path use (no variable-length allocations at runtime).
+    MAX_SHOOT_FRAMES = 8
+    MAX_HITBOX_OFFS = 16
+
+    sg = list(rec.shoot_frames_ground)[:MAX_SHOOT_FRAMES]
+    sa = list(rec.shoot_frames_air)[:MAX_SHOOT_FRAMES]
+    sg += [0] * (MAX_SHOOT_FRAMES - len(sg))
+    sa += [0] * (MAX_SHOOT_FRAMES - len(sa))
+
+    offs = list(rec.hitbox_offsets_x)[:MAX_HITBOX_OFFS]
+    offs += [0.0] * (MAX_HITBOX_OFFS - len(offs))
+
+    # Layout is documented in docs/DATA_CONTRACT.md (MSLLASR1 v2).
+    out = bytearray()
+    out += struct.pack(
+        "<BBHHHHHHHHHff3fHBBH",
+        int(rec.char_id) & 0xFF,
+        0,
+        int(rec.shot_itkind) & 0xFFFF,
+        int(rec.gun_itkind) & 0xFFFF,
+        int(rec.spawn_bone_part_id) & 0xFFFF,
+        int(rec.ground_start_msid) & 0xFFFF,
+        int(rec.ground_loop_msid) & 0xFFFF,
+        int(rec.ground_end_msid) & 0xFFFF,
+        int(rec.air_start_msid) & 0xFFFF,
+        int(rec.air_loop_msid) & 0xFFFF,
+        int(rec.air_end_msid) & 0xFFFF,
+        _f32(rec.blaster_angle),
+        _f32(rec.blaster_speed),
+        _f32(rec.spawn_off[0]),
+        _f32(rec.spawn_off[1]),
+        _f32(rec.spawn_off[2]),
+        int(rec.lifetime_frames) & 0xFFFF,
+        min(len(rec.shoot_frames_ground), MAX_SHOOT_FRAMES) & 0xFF,
+        min(len(rec.shoot_frames_air), MAX_SHOOT_FRAMES) & 0xFF,
+        0,
+    )
+    out += struct.pack("<" + "H" * MAX_SHOOT_FRAMES, *[int(x) & 0xFFFF for x in sg])
+    out += struct.pack("<" + "H" * MAX_SHOOT_FRAMES, *[int(x) & 0xFFFF for x in sa])
+    sd = int(rec.laser_shield_damage)
+    if sd < -128:
+        sd = -128
+    if sd > 127:
+        sd = 127
+    out += struct.pack(
+        "<ffHHHHb3xB3x",
+        _f32(rec.laser_damage),
+        _f32(rec.laser_size),
+        int(rec.laser_angle) & 0xFFFF,
+        int(rec.laser_kbg) & 0xFFFF,
+        int(rec.laser_wsk) & 0xFFFF,
+        int(rec.laser_bkb) & 0xFFFF,
+        sd,
+        min(len(rec.hitbox_offsets_x), MAX_HITBOX_OFFS) & 0xFF,
+    )
+    out += struct.pack("<" + "f" * MAX_HITBOX_OFFS, *[_f32(x) for x in offs])
+    return bytes(out)
+
+
+def main() -> None:
+    ap = argparse.ArgumentParser(description="Extract Fox/Falco blaster laser params into a compact .bin (decomp-first).")
+    ap.add_argument("--iso_dir", type=Path, default=Path("_iso"), help="directory containing extracted Pl*.dat files")
+    ap.add_argument("--out", type=Path, default=Path("data/items/lasers.bin"))
+    args = ap.parse_args()
+
+    recs = [
+        _load_record(iso_dir=args.iso_dir, dat_name="PlFx.dat", ftdata_symbol="ftDataFox", char_id=1),
+        _load_record(iso_dir=args.iso_dir, dat_name="PlFc.dat", ftdata_symbol="ftDataFalco", char_id=22),
+    ]
+
+    args.out.parent.mkdir(parents=True, exist_ok=True)
+    with args.out.open("wb") as f:
+        f.write(b"MSLLASR1")
+        f.write(struct.pack("<I", 2))
+        f.write(struct.pack("<H", len(recs)))
+        f.write(struct.pack("<H", 0))
+        for r in recs:
+            f.write(_pack_record(r))
+
+
+if __name__ == "__main__":
+    main()

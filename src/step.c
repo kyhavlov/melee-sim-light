@@ -82,8 +82,8 @@ int step_one_frame(MslBatch* batch, const uint8_t* prev_input_bytes, size_t prev
   hurtboxes_refresh(batch);
   hitboxes_refresh(batch);
   shields_refresh(batch);
-  combat_resolve(batch);
   items_update(batch);
+  combat_resolve(batch);
 
   return 0;
 }

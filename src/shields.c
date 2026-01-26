@@ -7,6 +7,7 @@
 #include "buttons.h"
 #include "char_params.h"
 #include "common_params.h"
+#include "msl_math.h"
 #include "shield_tilt_table.h"
 
 static inline float clamp01(float x) {
@@ -185,13 +186,11 @@ void shields_refresh(MslBatch* batch) {
               const float x = stick_x_unit * facing_dir;
               const float y = stick_y_unit;
 
-              // Keep π as an explicit constant to avoid relying on nonstandard libm macros.
-              const float k_pi = 3.14159265358979323846f;
               float rad = atan2f(y, x);
               if (rad < 0.0f) {
-                rad += 2.0f * k_pi;
+                rad += 2.0f * MSL_PI_F;
               }
-              float deg = rad * (180.0f / k_pi);
+              float deg = rad * (180.0f / MSL_PI_F);
               // Decomp: ftCo_80091BC4 clamps lstick_deg to [0, 359].
               if (deg < 0.0f) {
                 deg = 0.0f;

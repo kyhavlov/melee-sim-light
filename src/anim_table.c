@@ -13,8 +13,10 @@
 enum { MSL_CHAR_FOX = 1, MSL_CHAR_FALCO = 22 };
 
 typedef struct {
-  float end_frame_by_smid[256];
-  uint8_t have_smid[256];
+  // Submotion ids in GALE01 exceed 255 (e.g. Fox/Falco specials are in the ~295+ range).
+  // Keep this as a fixed array for hot-path lookup without allocations.
+  float end_frame_by_smid[1024];
+  uint8_t have_smid[1024];
 } MslAnimTable;
 
 static MslAnimTable g_table_by_char[256];
@@ -126,7 +128,7 @@ static int load_tracks_for_char(const char* data_dir, const char* rel_path, uint
     const float end_frame = read_f32_le(p);
     p += 4;
 
-    if (msid < 256) {
+    if (msid < 1024) {
       tbl.end_frame_by_smid[msid] = end_frame;
       tbl.have_smid[msid] = 1;
     }
@@ -185,7 +187,7 @@ float msl_anim_end_frame(uint8_t char_id, uint16_t submotion_id) {
   if (!g_loaded || !g_have_char[char_id]) {
     return 0.0f;
   }
-  if (submotion_id >= 256) {
+  if (submotion_id >= 1024) {
     return 0.0f;
   }
   const MslAnimTable* t = &g_table_by_char[char_id];

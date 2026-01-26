@@ -39,6 +39,7 @@ Characters (Fox/Falco):
 - `data/moves/fox.json`, `data/moves/falco.json` (subaction timelines for key motions + specials; decomp-first)
 - `data/anims/fox.bin`, `data/anims/falco.bin` (per-msid bone matrices + TransN; decomp-first)
 - `data/anims/fox.blend.bin`, `data/anims/falco.blend.bin` (blend/dynamics bytes; decomp-first)
+- `data/items/lasers.bin` (Fox/Falco blaster laser params; decomp-first, compact binary)
 - `data/ecb/fox_bottom.bin`, `data/ecb/falco_bottom.bin` (per-msid per-frame ECB bottom Y; decomp-shaped)
   - Source: `data/anims/<char>.bin` (SSANIM01 v3 matrices) + `data/characters/<char>.json` `ecb_joints`.
   - Per msid + integer frame `f`, we compute:
@@ -64,6 +65,76 @@ Characters (Fox/Falco):
 Notes:
 - `animation_index` in Slippi post-frames includes `0xFFFFFFFF` as a sentinel; treat that as “no animation”.
 - Item reference ordering in `.msl` datasets is **sorted by item `instance_id`**, then `id`, then `type`. The sim should follow the same stable ordering for its fixed 15 slots.
+
+## `data/items/lasers.bin` (MSLLASR1 v2)
+
+Purpose: compact, init-time-loadable Fox/Falco blaster laser tables (spawn + projectile + hitbox).
+
+Decomp semantics (source pointers):
+- SpecialN (fighter) spawns lasers by setting `cmd_vars[2]` from movescript and calling
+  `ftFx_SpecialN_CreateBlasterShot` when `cmd_vars[2] != 0` (then clearing it).
+  - refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_SpecialNLoop_Anim
+  - refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_SpecialAirNLoop_Anim
+- SpecialN submotion ids (Start/Loop/End; ground + air) are game-code enums:
+  - refs/melee/src/melee/ft/chara/ftFox/forward.h::ftFx_Submotion
+- Laser item lifetime comes from `FoxLaserAttr.lifetime` (`Article.x4_specialAttributes`):
+  - refs/melee/src/melee/it/items/itfoxlaser.c::it_8029C504 (it_80275158(item, attr->lifetime))
+  - refs/melee/src/melee/it/itCharItems.h::FoxLaserAttr
+- Laser hitbox shape/params come from the laser article state script (Pl*.dat item article):
+  - extracted by `tools/extraction/extract_character_attrs.py::_extract_fox_falco_laser` via
+    `tools/extraction/extract_fighter_moves.py::_parse_subaction_events`
+- Spawn bone is `FtPart_RThumbNb` and spawn local offset is the constant vector passed to `lb_8000B1CC`:
+  - refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_SpecialN_FtGetHoldJoint
+  - refs/melee/src/melee/ft/forward.h::Fighter_Part (FtPart_RThumbNb id domain)
+  - Constant block (decomp; not a DAT attr):
+    - `sp14.x = 0`
+    - `sp14.y = 1.2325000762939453f`
+    - `sp14.z = 4.263599872589111f`
+
+Binary layout (little-endian):
+- Header:
+  - `magic[8] = "MSLLASR1"`
+  - `version: u32 = 2`
+  - `record_count: u16` (currently 2: Fox + Falco)
+  - `reserved: u16 = 0`
+- Records (`record_count` entries), fixed-size:
+  - `char_id: u8` (Slippi/GALE01 character id: Fox=1, Falco=22)
+  - `pad0: u8 = 0`
+  - `shot_itkind: u16` (`ftFox_DatAttrs.x1C_FOX_BLASTER_SHOT_ITKIND`)
+  - `gun_itkind: u16` (`ftFox_DatAttrs.x20_FOX_BLASTER_GUN_ITKIND`)
+  - `spawn_bone_part_id: u16` (`Fighter_Part` / `FtPart_*` id; pass as `part_id` to `anim_pose_get_matrix`)
+  - `ground_start_msid: u16` (ground SpecialN start submotion id; decomp enum constant)
+  - `ground_loop_msid: u16` (ground SpecialN loop submotion id; decomp enum constant)
+  - `ground_end_msid: u16` (ground SpecialN end submotion id; decomp enum constant)
+  - `air_start_msid: u16` (air SpecialN start submotion id; decomp enum constant)
+  - `air_loop_msid: u16` (air SpecialN loop submotion id; decomp enum constant)
+  - `air_end_msid: u16` (air SpecialN end submotion id; decomp enum constant)
+  - `blaster_angle: f32` (`ftFox_DatAttrs.x10_FOX_BLASTER_ANGLE`)
+  - `blaster_speed: f32` (`ftFox_DatAttrs.x14_FOX_BLASTER_VEL`)
+  - `spawn_off_xyz: 3 * f32` (bone-local offset used by `lb_8000B1CC` in `ftFx_SpecialN_FtGetHoldJoint`;
+    decomp constant, not a DAT attr)
+  - `lifetime_frames: u16` (rounded from `FoxLaserAttr.lifetime`)
+  - `shoot_frame_count_ground: u8` (<= 8)
+  - `shoot_frame_count_air: u8` (<= 8)
+  - `reserved1: u16 = 0`
+  - `shoot_frames_ground[8]: 8 * u16` frames where movescript sets `cmd_vars[2] != 0` (ground loop)
+  - `shoot_frames_air[8]: 8 * u16` frames where movescript sets `cmd_vars[2] != 0` (air loop)
+  - `laser_damage: f32` (from laser article hitbox script)
+  - `laser_size: f32` (hitbox size/radius from laser article hitbox script)
+  - `laser_angle: u16` (degrees; from laser article hitbox script)
+  - `laser_kbg: u16` (knockback growth; from laser article hitbox script)
+  - `laser_wsk: u16` (weight set knockback; from laser article hitbox script)
+  - `laser_bkb: u16` (base knockback; from laser article hitbox script)
+  - `laser_shield_damage: i8` (signed; from laser article hitbox script)
+  - `pad2: u8[3] = 0`
+  - `hitbox_offsets_x_count: u8` (<= 16)
+  - `pad3: u8[3] = 0`
+  - `hitbox_offsets_x[16]: 16 * f32` X offsets of consecutive hitboxes along the beam (from the article state script)
+
+Runtime semantics (current C-core policy for v2 lasers):
+- The simulator uses `spawn_bone_part_id` + `spawn_off_xyz` with `anim_pose_get_matrix(...)` to compute world spawn points.
+- New laser items are allocated in a fixed 15-slot pool with deterministic (stable) ordering matching dataset sorting:
+  `(instance_id, spawn_id, type)`.
 
 ## `data/shields/<char>.bin` (MSLSHLD1 v1)
 

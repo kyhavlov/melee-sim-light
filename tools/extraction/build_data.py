@@ -91,6 +91,12 @@ def main() -> None:
         ["--pl-dir", str(iso_dir), "--out-dir", "data/characters", "--chars", ",".join(chars)],
     )
 
+    # Laser item params (Fox/Falco blaster shot) as a compact binary table.
+    _run(
+        "tools.extraction.extract_lasers",
+        ["--iso_dir", str(iso_dir), "--out", "data/items/lasers.bin"],
+    )
+
     # Guard-tilt shield bubble placement tables (used by shields_refresh for debug geometry).
     for ch in chars:
         _run(

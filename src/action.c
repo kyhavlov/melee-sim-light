@@ -9,6 +9,7 @@
 #include "input_axis.h"
 #include "locomotion.h"
 #include "jump_input.h"
+#include "blaster.h"
 
 // -----------
 // EscapeAir.c
@@ -528,4 +529,7 @@ void guard_update_grounded(MslBatch* batch, const MslCommonParams* c, size_t idx
   }
 }
 
-void action_update(MslBatch* batch) { locomotion_update_pre(batch); }
+void action_update(MslBatch* batch) {
+  locomotion_update_pre(batch);
+  blaster_update_pre_physics(batch);
+}
