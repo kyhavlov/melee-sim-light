@@ -83,6 +83,12 @@ void physics_integrate(MslBatch* batch) {
         continue;
       }
 
+      // Ledge grab cooldown timer (x2064_ledgeCooldown) decrements only when not in hitlag.
+      // refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate
+      if (batch->state.ledge_cooldown[idx] != 0) {
+        batch->state.ledge_cooldown[idx]--;
+      }
+
       const uint8_t on_ground = batch->state.on_ground[idx] ? 1 : 0;
       const uint16_t action_id = batch->state.action_id[idx];
       const float vx_self =

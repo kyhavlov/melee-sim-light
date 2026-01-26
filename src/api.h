@@ -165,6 +165,13 @@ typedef struct MslSeed {
   uint8_t tilt_timer_y[MSL_MAX_PLAYERS];  // fp->x671_timer_lstick_tilt_y
   // Decomp: refs/melee/src/melee/ft/ftcommon.c:505-520 (ftCommon_CheckFallFast)
   uint8_t fall_fast[MSL_MAX_PLAYERS];  // fp->fall_fast (bool)
+  // Ledge grab cooldown timer (seeded; decomp-shaped).
+  // Decomp: fp->x2064_ledgeCooldown decremented each frame under !hitlag.
+  // refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate
+  // Set on certain cliff releases (e.g., CliffWait drop / timeout) to suppress immediate re-grab.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffClimb.c::ftCo_8009AAFC
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffWait.c::ftCo_8009A9AC
+  uint8_t ledge_cooldown[MSL_MAX_PLAYERS];  // fp->x2064_ledgeCooldown (clamped to 0..255)
   // Decomp: refs/melee/src/melee/ft/chara/ftCommon/ftCo_Turn.c:56-88 (ftCo_Turn_Anim_Inner)
   uint8_t turn_frames_to_turn[MSL_MAX_PLAYERS];  // fp->mv.co.turn.frames_to_turn
   uint8_t turn_has_turned[MSL_MAX_PLAYERS];      // fp->mv.co.turn.has_turned

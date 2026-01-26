@@ -221,6 +221,7 @@ int msl_batch_reseed_seed(MslBatch* batch, const uint8_t* seed_bytes, size_t see
       batch->state.tilt_timer_x[idx] = seed->tilt_timer_x[p];
       batch->state.tilt_timer_y[idx] = seed->tilt_timer_y[p];
       batch->state.fall_fast[idx] = seed->fall_fast[p] ? 1 : 0;
+      batch->state.ledge_cooldown[idx] = seed->ledge_cooldown[p];
       batch->state.ledge_side[idx] = -1;
       // FallSpecial xC mode is not exposed by Slippi directly; derive it deterministically from
       // seeded post-frame velocities when possible.

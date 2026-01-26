@@ -106,6 +106,49 @@ _MATCH_FLOW_ACTION_IDS = {
 }
 
 
+def _derive_ledge_cooldown(*, action_id_u16: np.ndarray, hitlag_u16: np.ndarray, common: dict) -> np.ndarray:
+    """
+    Derive fp->x2064_ledgeCooldown (ledge grab cooldown) from replay action history.
+
+    Decomp shape:
+    - Decremented each frame under !hitlag.
+      refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate
+    - Set to p_ftCommonData->ledge_cooldown on certain cliff releases (notably CliffWait -> Fall).
+      refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffClimb.c::ftCo_8009AAFC
+      refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffWait.c::ftCo_8009A9AC
+    """
+
+    n = int(action_id_u16.shape[0])
+    out = np.zeros(n, dtype=np.uint8)
+    if n == 0:
+        return out
+
+    cooldown_frames = int(common.get("ledge_cooldown_frames", 0))
+    cooldown_frames = int(np.clip(cooldown_frames, 0, 255))
+
+    # GALE01 action id ranges:
+    # - Cliff states: 252..265 (quick/slow variants)
+    # - Fall-like states: 29..38 (Fall..DamageFall)
+    CLIFF_MIN = 0x00FC
+    CLIFF_MAX = 0x0109
+    FALL_MIN = 0x001D
+    FALL_MAX = 0x0026
+
+    for t in range(1, n):
+        cd = int(out[t - 1])
+        if int(hitlag_u16[t - 1]) == 0 and cd > 0:
+            cd -= 1
+
+        prev_a = int(action_id_u16[t - 1])
+        cur_a = int(action_id_u16[t])
+        if CLIFF_MIN <= prev_a <= CLIFF_MAX and FALL_MIN <= cur_a <= FALL_MAX:
+            cd = cooldown_frames
+
+        out[t] = np.uint8(cd)
+
+    return out
+
+
 def _derive_match_flow_timer(*, action_id_u16: np.ndarray, port0: int, common: dict) -> np.ndarray:
     """
     Derive a per-frame decomp-shaped countdown for match-flow states.
@@ -809,6 +852,8 @@ def _main_impl(args) -> None:
         samples["seed_t"]["tilt_timer_x"][:, slot] = tilt_timer_x_post[:-1]
         samples["seed_t"]["tilt_timer_y"][:, slot] = tilt_timer_y_post[:-1]
         samples["seed_t"]["fall_fast"][:, slot] = fall_fast_post[:-1]
+        ledge_cooldown = _derive_ledge_cooldown(action_id_u16=post_state, hitlag_u16=post_hitlag, common=common)
+        samples["seed_t"]["ledge_cooldown"][:, slot] = ledge_cooldown[:-1]
         samples["seed_t"]["lr_press_timer"][:, slot] = lr_press_timer[:-1]
 
         # x672 input-history timer (analog trigger hold timer) is seeded to support GuardReflect/powershield logic.

@@ -10,6 +10,7 @@
 
 #include "alloc.h"
 #include "action_ids.h"
+#include "mpcoll_env.h"
 #include "mpcoll_ground.h"
 
 typedef struct {
@@ -45,6 +46,7 @@ static MslStagePoint2 g_fd_spawn_points[MSL_MAX_PLAYERS];
 static MslStagePoint2 g_fd_respawn_points[MSL_MAX_PLAYERS];
 static MslStagePoint2 g_fd_ledge_points[2];
 static uint8_t g_fd_have_ledge_points[2];
+static int16_t g_fd_ledge_floor_line_idx[2];
 
 static const char* json_skip_ws(const char* s) {
   while (s && *s && isspace((unsigned char)*s)) {
@@ -471,6 +473,8 @@ static int fd_load_floor_lines_from_json(const char* json) {
   g_fd_have_ledge_points[1] = 0;
   g_fd_ledge_points[0] = (MslStagePoint2){0};
   g_fd_ledge_points[1] = (MslStagePoint2){0};
+  g_fd_ledge_floor_line_idx[0] = -1;
+  g_fd_ledge_floor_line_idx[1] = -1;
 
   // Temporary loader: parse ISO-extracted `data/stages/*.json` at init-time only.
   // We will switch to a compact binary stage collision artifact later to avoid JSON parsing entirely.
@@ -539,14 +543,6 @@ static int fd_load_floor_lines_from_json(const char* json) {
     return -1;
   }
   size_t out_n = 0;
-
-  // FD ledge candidates are segments with `"ledge": true` (ISO-derived line flag).
-  //
-  // Decomp context: fighter cliff physics snaps each frame to the cliff point obtained from
-  // `mpLib_80053ECC_Floor` / `mpLib_80053DA4_Floor`.
-  // refs/melee/src/melee/ft/ftcliffcommon.c::ftCo_CliffCatch_Phys
-  float best_left_x = FLT_MAX;
-  float best_right_x = -FLT_MAX;
 
   const char* p = segs + 1;
   for (;;) {
@@ -720,41 +716,13 @@ static int fd_load_floor_lines_from_json(const char* json) {
             .y0 = fy0,
             .x1 = fx1,
             .y1 = fy1,
+            .is_ledge = (uint8_t)(have_ledge && ledge),
+            ._pad0 = 0,
             .segment_i = (uint16_t)seg_i,
             .prev = -1,
             .next = -1,
         };
         out_n++;
-      }
-
-      if (have_ledge && ledge) {
-        // Deterministic: choose the most extreme X endpoint among all ledge segments.
-        // This matches FD (one left ledge, one right ledge) and generalizes to other stages with
-        // a single exterior boundary per side.
-        const float fx0 = (float)(unit_scale * x0);
-        const float fx1 = (float)(unit_scale * x1);
-        const float fy0 = (float)(unit_scale * y0);
-        const float fy1 = (float)(unit_scale * y1);
-        if (fx0 < best_left_x) {
-          best_left_x = fx0;
-          g_fd_ledge_points[0] = (MslStagePoint2){.x = fx0, .y = fy0};
-          g_fd_have_ledge_points[0] = 1;
-        }
-        if (fx1 < best_left_x) {
-          best_left_x = fx1;
-          g_fd_ledge_points[0] = (MslStagePoint2){.x = fx1, .y = fy1};
-          g_fd_have_ledge_points[0] = 1;
-        }
-        if (fx0 > best_right_x) {
-          best_right_x = fx0;
-          g_fd_ledge_points[1] = (MslStagePoint2){.x = fx0, .y = fy0};
-          g_fd_have_ledge_points[1] = 1;
-        }
-        if (fx1 > best_right_x) {
-          best_right_x = fx1;
-          g_fd_ledge_points[1] = (MslStagePoint2){.x = fx1, .y = fy1};
-          g_fd_have_ledge_points[1] = 1;
-        }
       }
     }
   }
@@ -766,6 +734,32 @@ static int fd_load_floor_lines_from_json(const char* json) {
 
   fd_sort_floor_lines_by_id(tmp, out_n);
   fd_build_floor_prev_next(tmp, out_n);
+
+  // FD ledge candidates are floor segments with `"ledge": true` (ISO-derived line flag).
+  //
+  // Decomp context: fighter cliff physics snaps each frame to the cliff point obtained from
+  // `mpLib_80053ECC_Floor` / `mpLib_80053DA4_Floor`.
+  // refs/melee/src/melee/ft/ftcliffcommon.c::ftCo_CliffCatch_Phys
+  float best_left_x = FLT_MAX;
+  float best_right_x = -FLT_MAX;
+  for (size_t i = 0; i < out_n; i++) {
+    const MslStageFloorLine* l = &tmp[i];
+    if (!l->is_ledge) {
+      continue;
+    }
+    if (l->x0 < best_left_x) {
+      best_left_x = l->x0;
+      g_fd_ledge_points[0] = (MslStagePoint2){.x = l->x0, .y = l->y0};
+      g_fd_have_ledge_points[0] = 1;
+      g_fd_ledge_floor_line_idx[0] = (int16_t)i;
+    }
+    if (l->x1 > best_right_x) {
+      best_right_x = l->x1;
+      g_fd_ledge_points[1] = (MslStagePoint2){.x = l->x1, .y = l->y1};
+      g_fd_have_ledge_points[1] = 1;
+      g_fd_ledge_floor_line_idx[1] = (int16_t)i;
+    }
+  }
 
   alloc_free(g_fd_floor_lines);
   g_fd_floor_lines = tmp;
@@ -950,6 +944,26 @@ uint8_t stage_collision_get_ledge_point(uint32_t stage_id, int side, MslStagePoi
   return 1;
 }
 
+const MslStageFloorLine* stage_collision_get_ledge_floor_line(uint32_t stage_id, int side) {
+  if (!g_fd_loaded) {
+    return NULL;
+  }
+  if (stage_id != 32) {
+    return NULL;
+  }
+  if (!(side == 0 || side == 1)) {
+    return NULL;
+  }
+  const int16_t li = g_fd_ledge_floor_line_idx[side];
+  if (li < 0) {
+    return NULL;
+  }
+  if ((size_t)li >= g_fd_floor_line_count) {
+    return NULL;
+  }
+  return &g_fd_floor_lines[(size_t)li];
+}
+
 static inline float stage_cross2(float ax, float ay, float bx, float by) {
   return ax * by - ay * bx;
 }
@@ -1013,4 +1027,7 @@ void stage_collision_apply(MslBatch* batch) {
   }
   // Ground contact substrate (mpColl-shaped): owns on_ground/ground_id for FD.
   mpcoll_ground_apply(batch);
+  // Collision environment flags (mpColl-shaped): owns Collide_LedgeGrabMask for scheduling ledge
+  // catch after collision.
+  mpcoll_env_update_ledge_grab(batch);
 }

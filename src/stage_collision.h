@@ -8,6 +8,10 @@ typedef struct MslStageFloorLine {
   float y0;
   float x1;
   float y1;
+  // ISO-derived ledge flag for this floor segment (LINE_FLAG_LEDGE / `"segments[*].ledge"`).
+  // Used by ledge-grab mask computation.
+  uint8_t is_ledge;
+  uint8_t _pad0;
   // Stable `ground_id` mapping (ISO-derived segment index).
   uint16_t segment_i;
   // Floor-only line graph connectivity (FD-only v1): indices into the stage's floor line array,
@@ -58,6 +62,10 @@ uint8_t stage_collision_get_respawn_point(uint32_t stage_id, int port, MslStageP
 // Ledge points (FD only v1): returns 1 if the stage has a ledge on the given side.
 // side: 0 = left, 1 = right.
 uint8_t stage_collision_get_ledge_point(uint32_t stage_id, int side, MslStagePoint2* out);
+
+// Ledge floor line (FD only v1): returns the floor segment that carries the exterior ledge point for
+// the given side, or NULL if unavailable.
+const MslStageFloorLine* stage_collision_get_ledge_floor_line(uint32_t stage_id, int side);
 
 // Item collision helper (lasers v1): returns 1 if the segment from (x0,y0)->(x1,y1) intersects a
 // stage floor segment for the given stage_id.

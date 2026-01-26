@@ -72,6 +72,7 @@ int state_alloc(MslStateSoA* state, int batch_size) {
   state->ledge_side = (int8_t*)alloc_aligned_64(sizeof(int8_t) * bp);
   state->stage_ledge_occupant_left = (int8_t*)alloc_aligned_64(sizeof(int8_t) * b);
   state->stage_ledge_occupant_right = (int8_t*)alloc_aligned_64(sizeof(int8_t) * b);
+  state->ledge_cooldown = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->fallspecial_xc = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->turn_has_turned = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->turn_frames_to_turn = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
@@ -206,7 +207,8 @@ int state_alloc(MslStateSoA* state, int batch_size) {
       !state->kneebend_jump_input || !state->kneebend_is_short_hop || !state->tilt_timer_x ||
       !state->tilt_timer_y || !state->fall_fast || !state->ledge_side ||
       !state->stage_ledge_occupant_left || !state->stage_ledge_occupant_right ||
-      !state->fallspecial_xc || !state->turn_has_turned || !state->turn_frames_to_turn ||
+      !state->ledge_cooldown || !state->fallspecial_xc || !state->turn_has_turned ||
+      !state->turn_frames_to_turn ||
       !state->lr_press_timer || !state->x672_input_timer || !state->x673 || !state->x674 ||
       !state->x675 || !state->x676_x || !state->x677_y || !state->x678 || !state->x679_x ||
       !state->x67A_y || !state->x67B || !state->x67C || !state->x67D || !state->x67E ||
@@ -297,6 +299,7 @@ void state_free(MslStateSoA* state) {
   alloc_free(state->ledge_side);
   alloc_free(state->stage_ledge_occupant_left);
   alloc_free(state->stage_ledge_occupant_right);
+  alloc_free(state->ledge_cooldown);
   alloc_free(state->fallspecial_xc);
   alloc_free(state->turn_has_turned);
   alloc_free(state->turn_frames_to_turn);

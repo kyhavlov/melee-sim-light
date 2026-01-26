@@ -73,9 +73,11 @@ typedef struct MslStateSoA {
   // Cliff / ledge internals (FD v1).
   // - ledge_side: -1 = none, 0 = left, 1 = right.
   // - stage_ledge_occupant_*: per-env occupant port, or -1.
+  // - ledge_cooldown: per-fighter ledge grab cooldown timer (fp->x2064_ledgeCooldown).
   int8_t* ledge_side;                  // [batch * players]
   int8_t* stage_ledge_occupant_left;   // [batch]
   int8_t* stage_ledge_occupant_right;  // [batch]
+  uint8_t* ledge_cooldown;             // [batch * players]
   // FallSpecial internals (seeded/derived).
   // Decomp: refs/melee/src/melee/ft/chara/ftCommon/ftCo_FallSpecial.c
   uint8_t* fallspecial_xc;       // fp->mv.co.fallspecial.xC (arg1 to ftCo_80096900)

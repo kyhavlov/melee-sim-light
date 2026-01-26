@@ -6,6 +6,7 @@
 #include <stdint.h>
 
 #include "action_ids.h"
+#include "coll_env_flags.h"
 #include "ecb_tables.h"
 #include "match_flow.h"
 #include "stage_collision.h"
@@ -428,7 +429,7 @@ void mpcoll_ground_apply(MslBatch* batch) {
       const float prev_bottom_x = prev_x;
       const float prev_bottom_y = prev_y + prev_ecb_bottom_rel_y;
 
-      // Collision env flags are placeholders for Parity Project #2 (ledge grab mask parity).
+      // Collision env flags (subset) for Parity Project #2 (ledge grab mask parity).
       // Decomp: CollData carries env_flags and prev_env_flags across frames.
       // refs/melee/src/melee/lb/types.h::CollData
       batch->state.coll_prev_env_flags[idx] = batch->state.coll_env_flags[idx];
@@ -466,7 +467,6 @@ void mpcoll_ground_apply(MslBatch* batch) {
             y_corr = 0.0f;
           }
           batch->state.pos_y[idx] += y_corr;
-          batch->state.coll_env_flags[idx] |= 1u;  // Collide_FloorPush placeholder.
           on_ground = 1;
           ground_id = g->lines[(size_t)out_line_idx].segment_i;
           contact_y = (cur_bottom_y + y_corr);
@@ -481,7 +481,6 @@ void mpcoll_ground_apply(MslBatch* batch) {
               floor_dd90_project(g, hit_line_idx, cur_bottom_x, cur_bottom_y, &y_corr, NULL, NULL);
           if (out_line_idx >= 0) {
             batch->state.pos_y[idx] += y_corr;
-            batch->state.coll_env_flags[idx] |= 1u;  // Collide_FloorPush placeholder.
             on_ground = 1;
             ground_id = g->lines[(size_t)out_line_idx].segment_i;
             contact_x = ix;
@@ -492,6 +491,10 @@ void mpcoll_ground_apply(MslBatch* batch) {
 
       batch->state.on_ground[idx] = on_ground;
       if (on_ground) {
+        // Decomp: floor collision sets Collide_FloorPush (+ sometimes FloorHug).
+        // refs/melee/src/melee/mp/mpcoll.c::mpColl_80044628_Floor
+        // refs/melee/src/melee/mp/mpcoll.c::mpColl_80046F78
+        batch->state.coll_env_flags[idx] |= (uint32_t)MSL_COLLIDE_FLOOR_MASK;
         batch->state.ground_id[idx] = ground_id;
         batch->state.ground_normal_x[idx] = floor_nx;
         batch->state.ground_normal_y[idx] = floor_ny;
