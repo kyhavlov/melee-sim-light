@@ -449,12 +449,54 @@ Group budgets (computed with the same normalization rule, but restricted to the 
 | Defense | `shield_hp` | ≤ 0.0025 |
 
 Evaluator note:
-- The evaluator currently prints `overall.float_norm_mae_p95`, but does not print these group-restricted metrics. RL 1.0 requires
-  either (A) extending the evaluator to print the group metrics, or (B) a documented offline computation step that produces the
-  exact same `float_norm_mae_p95` numbers by restricting the same normalization rule to the listed fields.
+- RL 1.0 requires printing the **group-restricted** float metrics (per replay + suite summary), using the exact same computation rule as
+  `overall.float_norm_mae_p95` but restricting the keys included in the aggregation.
+- Required additional output keys (names are part of the contract; add to `tools/eval/run_one_step_eval.py` output):
+  - `overall.float_norm_mae_p95.group.position_self_velocity` over: `err.pos_x`, `err.pos_y`, `err.speed_air_x_self`,
+    `err.speed_ground_x_self`, `err.speed_y_self`
+  - `overall.float_norm_mae_p95.group.damage_kb_surface` over: `err.percent`, `err.speed_x_attack`, `err.speed_y_attack`
+  - `overall.float_norm_mae_p95.group.items_projectiles` over: `err.item_pos_x`, `err.item_pos_y`, `err.item_vel_x`, `err.item_vel_y`
+  - `overall.float_norm_mae_p95.group.defense` over: `err.shield_hp`
+- Exact computation rule (must match `tools/eval/run_one_step_eval.py::_float_norm_mae_p95`):
+  - For each included float field `k`, compute `scale_k = quantile_0.95(abs(ref_k))` over **all compared scalar values** for that field
+    in the replay/suite scope; clamp `scale_k = max(scale_k, 1e-6)`.
+  - Aggregate across fields by summing normalized absolute error and dividing by total scalar count:
+    - `group_norm_sum = Σ_k (Σ_i abs(err_k[i]) / scale_k)`
+    - `group_count = Σ_k count(err_k)`
+    - `group_float_norm_mae_p95 = group_norm_sum / group_count` (0 if `group_count==0`)
+  - The group metric is not a per-field average; it is a **count-weighted** aggregate across all included scalar entries.
 
 Allowed exceptions (ideally empty):
 - If an exception is added, it must state (a) why it cannot be solved from Slippi-only truth, and (b) what Dolphin engine-dump/probe would supply the missing internal.
+
+#### Roadmap completeness audit (scorecard → owners → reduction slices)
+
+Audit checklist (keep this section current as scorecard/suite evolve):
+- Every scorecard key appears in the “Field-to-System Ownership Map” with a single primary owner (no orphan keys).
+- Every scorecard key has at least one plausible reduction slice (parity project or vertical slice) that directly reduces it.
+- If a key cannot plausibly be reduced from Slippi-visible truth + extracted tables (with causal preprocessing for history-dependent
+  internals), it must be listed under “Allowed exceptions” with a concrete engine-dump/probe plan.
+
+Scorecard keys → primary reduction slices (non-exhaustive; list at least one per key):
+
+| Scorecard key | Primary owner (see ownership map) | Primary reduction slice(s) |
+|---|---|---|
+| `overall.discrete_mismatch` | Validation harness | Reduce via per-key fixes below (not a direct target itself). |
+| `mismatch.stocks`, `mismatch.is_dead`, `mismatch.instance_id` | Match flow + deterministic allocation | Match flow slice (death/respawn/ids) (already DONE). |
+| `mismatch.action_id`, `mismatch.action_frame`, `mismatch.animation_index` | Action/timebase | Action coverage + ordering contracts (Parity Project #5 + suite action coverage). |
+| `mismatch.on_ground`, `mismatch.ground_id` | Stage collision/ECB | Parity Project #1 (mpColl-style ground contact). |
+| `mismatch.l_cancel` | Locomotion/landing | mpColl parity + aerial landing state slice (timing). |
+| `mismatch.facing`, `mismatch.jumps_left` | Locomotion/transitions | Locomotion vertical slice + ordering contracts (Parity Project #5). |
+| `mismatch.hitlag`, `mismatch.hitstun` | Damage pipeline | Parity Project #3 (hitlists/eligibility) + Parity Project #4 (damage modifiers) + timer/ordering contracts. |
+| `mismatch.hurtbox_state` | Combat geometry + damage pipeline | Eligibility gates (intangibility/invuln/throw rules) + correct action-frame driven hurtbox modes (Parity Project #3). |
+| `mismatch.instance_hit_by`, `mismatch.last_hit_by`, `mismatch.last_attack_landed`, `mismatch.combo_count` | Hit identity/timing | Parity Project #3 (hitlists/rehit semantics) + attribution ordering. |
+| `mismatch.state_flags` | Mixed | Expand sim-owned bits + implement remaining state/flag gates (often tied to Parity Projects #3–#5). |
+| `mismatch.item_*` | Items/projectiles | Deterministic item slot identity + item collision/reflect ordering (items slice; interacts with Parity Project #3 and #4 for projectile hits). |
+| `overall.float_norm_mae_p95` | Validation harness | Reduce via per-group slices below; must be tracked with group metrics. |
+| `err.pos_*`, `err.speed_*_self` | Physics + collision | mpColl parity + physics ordering (Parity Project #1 + #5). |
+| `err.percent`, `err.speed_*_attack` | Damage pipeline | Parity Project #3 (correct hits) + Parity Project #4 (stale/multipliers/armor) + KB decay correctness. |
+| `err.shield_hp` | Defense | Shield system completeness (and correct hit classification from Parity Project #3). |
+| `err.item_*` | Items/projectiles | Item spawn/physics/collision + reflect/absorb behavior (items slice + Parity Project #4). |
 
 RL 1.0 acceptance criteria
 
@@ -610,9 +652,192 @@ Prefer completing these projects in order rather than “patching symptoms” in
    - Goal: per-hitbox/per-target hitlists + cooldowns (replace conservative pair latch), consistent for fighters and items.
    - Depends on: (1) for stable contact/landing frames; uses move/hit status artifacts already present.
 
+   **Decomp entrypoints (read first; file::function)**
+   - Hit capsule victim list representation + core ops:
+     - `refs/melee/src/melee/lb/types.h::HitCapsule` (two victim lists, insertion indices, per-entry countdown)
+     - `refs/melee/src/melee/lb/lbcollision.c::lbColl_80008440` (clear both victim lists)
+     - `refs/melee/src/melee/lb/lbcollision.c::lbColl_80008688` (victims_1 “seen?” + insert + optional countdown set)
+     - `refs/melee/src/melee/lb/lbcollision.c::lbColl_80008820` (victims_2 “seen?” + insert + optional countdown set)
+     - `refs/melee/src/melee/lb/lbcollision.c::lbColl_80008A5C` (per-frame countdown decrement + expiry clear)
+   - Fighter-vs-fighter collision + where the hitlists are consumed:
+     - `refs/melee/src/melee/ft/ftcoll.c::ftColl_80078C70` (fighter-vs-fighter collision pass; adds victims during hit acceptance)
+     - `refs/melee/src/melee/ft/ftcoll.c::ftColl_80076808` (share hitlist updates across hitboxes with the same `HitCapsule.x4`)
+     - `refs/melee/src/melee/ft/ftcoll.c::ftColl_800768A0` (copy hit capsule victim lists across same-`x4` hitboxes, else clear)
+     - `refs/melee/src/melee/ft/fighter.c::Fighter_8006CB94` (proc that calls `ftColl_80078C70`; priority 13)
+     - `refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC` (post-collision consumer; priority 14)
+     - `docs/DECOMP_PROC_ORDER.md` (priority schedule; where collision/consume sits relative to hitlag/anim/phys)
+   - Item/projectile collision (must follow the same hitlist semantics):
+     - `refs/melee/src/melee/it/itcoll.c::it_8026FA2C` / `it_8026FAC4` (item vs item; updates victims_1)
+     - `refs/melee/src/melee/it/itcoll.c::it_8026FC00` (item victim list update for “phantom/tip log” style list; uses victims_2)
+     - `refs/melee/src/melee/it/itcoll.c` (per-frame decrement call site for items: `lbColl_80008A5C` on each active item hitbox)
+
+   **Inputs/outputs contract (what this system owns)**
+   - Owns (must compute/update deterministically, allocation-free):
+     - Per-hit-capsule victim bookkeeping that answers: “May this hit capsule affect this target on this frame?”
+     - Per-entry cooldown countdown behavior (rehit-rate semantics), including deterministic expiry and deterministic eviction when full.
+     - Hit capsule sharing semantics: multiple hitboxes with the same “group id” (`HitCapsule.x4`) must share the same victim lists.
+     - A stable “hit identity token” for downstream consumers (damage/stale/combo attribution), containing enough info to attribute
+       the accepted hit consistently.
+   - Does **not** own:
+     - Geometry overlap detection (hitbox↔hurtbox/shield intersection math).
+     - Damage/KB/hitlag/hitstun numeric calculation (that’s the damage pipeline).
+     - State machine transitions (Damage states, GuardSetOff, etc.).
+     - Item allocation/lifecycle (item pool identity is its own system).
+
+   **Required internal state (and what defines hit identity)**
+   - Per hit capsule (fighter hitboxes and item/projectile hitboxes) that can persist across frames:
+     - Two victim lists matching the decomp shape:
+       - `victims_1[]`: “main victim list” entries `(victim_entity_id, cooldown_frames_remaining)`
+       - `victims_2[]`: a second list used by some collision subpaths (e.g. “phantom/tip log” patterns)
+     - Deterministic insertion/eviction policy when full:
+       - Decomp uses ring indices (`HitCapsule.x44` / `HitCapsule.x45`) as overwrite pointers.
+     - Per-capsule `rehit_rate_frames` (decomp: `HitCapsule.x40_b4`) sourced from extracted hitbox data (`data/hitboxes/*.bin`).
+   - Hit identity keys (minimum; used for both suppression + attribution):
+     - `source_kind` (fighter vs item/projectile)
+     - `attacker_instance_id` (stable across respawns per seed; see `mismatch.instance_id` ownership)
+     - `defender_instance_id`
+     - `hit_group_id` (decomp: `HitCapsule.x4`; the “shared hitlist id” across hitboxes)
+     - `hitbox_id` (0..N within a group) **only** if needed for tie-breaking when multiple hitboxes in the same group overlap
+     - `element` / collision class only if the decomp uses it to choose which victim list to consult/update
+   - Teacher-forced reseed requirement:
+     - Because one-step eval reseeds at frame `t`, any hitlist state that influences whether frame `t` can apply a hit must be in the
+       explicit seed schema (no hidden “rollout-only” state).
+     - Seed values must be causally reconstructible from replay history + extracted tables (see “Seed state philosophy” above).
+
+   **Step ordering contract (hitlists vs hitlag vs collision)**
+   - Decomp-shaped ordering anchor (see `docs/DECOMP_PROC_ORDER.md`):
+     - Hit capsule world endpoints are refreshed before fighter-vs-fighter collision (priority 9 before 13).
+     - Fighter-vs-fighter collision runs at priority 13 (`ftColl_80078C70`).
+     - Post-collision consumption runs at priority 14 (`Fighter_ProcessHit_8006D1EC`).
+   - Hitlist countdown decrement:
+     - Must happen exactly once per sim frame per active hit capsule, and must be deterministic.
+     - Reference behavior: `lbColl_80008A5C` decrements per-entry countdowns and clears entries when the countdown reaches 0.
+     - **Open ordering question (must be resolved decomp-first or via probe):** whether this decrement is effectively “frame-start” or
+       “frame-end” relative to collision acceptance, and whether it is skipped/frozen during hitlag for fighters. (Items explicitly
+       call `lbColl_80008A5C` in `itcoll.c`.)
+   - Hitlist insertion/update:
+     - Happens on hit acceptance during the collision pass (fighters: `ftColl_*` paths calling `lbColl_80008688`/`_80008820`;
+       items: `it_8026FA2C`/`it_8026FC00`).
+   - Clear/refresh rules:
+     - A “full clear hitboxes” operation must clear the relevant hitlists (decomp: `lbColl_80008440` on the hit capsule).
+     - When multiple hitboxes share a group id (`HitCapsule.x4`), their hitlists must be kept in sync:
+       - copy-from-sibling if present (`ftColl_800768A0`), else clear (`lbColl_80008440`).
+
+   **Replaces these current approximations (delete once this lands)**
+   - Conservative per-(attacker, defender) rehit suppression latch that ignores per-hitbox identity:
+     - `src/state.h` (“Combat rehit suppression latch (Pass 1)”)
+     - `src/combat.c` (rehit suppression logic + latch clear rules)
+     - Seed schema carry-through: `src/api.h` `combat_rehit_*` fields (should be removed or replaced by the real hitlist seed).
+   - Any “carry-through” of hit attribution fields that depends on missing rehit bookkeeping (symptom patching).
+
+   **DONE when (tie directly to RL 1.0 scorecard keys)**
+   - `mismatch.instance_hit_by`, `mismatch.last_hit_by`, `mismatch.last_attack_landed`, `mismatch.combo_count` are scorecard-compliant
+     without relying on conservative suppression (and without introducing new allocation/ordering hacks).
+   - `mismatch.hitlag` and `mismatch.hitstun` mismatches materially reduce in cases where the current sim mis-applies or suppresses hits
+     due to missing hitlists/eligibility bookkeeping (multi-frame overlaps, same-move repeats, item hits).
+   - Rehit behavior is consistent for fighter hits and item/projectile hits (no “fighter-only” correctness).
+
+   **Ambiguities to resolve as part of this work (not separate tasks)**
+   - Exact timing of countdown decrement (`lbColl_80008A5C`) relative to collision acceptance and post-hit consume:
+     - Does it run at frame start or frame end for fighters?
+     - Does it freeze during hitlag (or is it gated by proc ordering/hitlag flags)?
+   - Semantic meaning of the `lbColl_80008688` / `lbColl_80008820` “type” codes:
+     - Which collision outcomes update which victim list and when countdowns are set/refreshed.
+   - Whether fighters inline any hitlist rules (vs calling `lbColl_*` directly), and if so, what the exact equivalence is.
+
 4) **Damage modifiers parity (stale queue + multipliers + armor/no-damage gates)** (**TODO**)
    - Goal: make percent/hitlag/hitstun/KB numerically meaningful; stop “percent drift” being dominated by missing modifiers.
    - Depends on: (3) for correct hit identity + timing.
+
+   **Decomp entrypoints (read first; file::function)**
+   - Stale queue + staling multiplier:
+     - `refs/melee/src/melee/ft/ft_0881.c::ft_800890D0` (assign `attackID` + `attack_instance`)
+     - `refs/melee/src/melee/ft/ft_0881.c::ft_80089118` (compute staling multiplier from the stale table)
+     - `refs/melee/src/melee/ft/ft_0881.c::ft_80089228` (apply staling multiplier to damage)
+     - `refs/melee/src/melee/ft/fighter.c::Fighter_800679B0` / `refs/melee/src/melee/ft/fighter.c` (`Fighter_804D6548` load; the
+       per-recency staling decrement table used by `ft_80089118`)
+     - `refs/melee/src/melee/pl/plstale.c::plStale_UpdateStaleMovesFromFighter` (enqueue `(move_id, attack_instance)` on hit)
+     - `refs/melee/src/melee/pl/plstale.c::plStale_UpdateStaleMovesFromItem` (same, but source is an item)
+     - `refs/melee/src/melee/pl/plstale.c::plStale_IncrementAttackInstance` (global `u16` instance counter; wraps, skips 0)
+     - `refs/melee/src/melee/ft/ftcoll.c::ftColl_8007BE3C` (post-hit consumer; calls stale update for fighter vs item sources)
+     - `refs/melee/src/melee/pl/types.h::StaleMoveTable` (10-entry ring buffer; `current_index` + `(move_id, instance)` pairs)
+   - Reflect/absorb modifiers (suite-relevant if lasers are reflected/absorbed):
+     - `refs/melee/src/melee/ft/ftcoll.c::ftColl_CreateReflectHit` (reflect bubble setup; attrs include damage/speed multipliers)
+     - `refs/melee/src/melee/ft/ftcoll.c` (reflect hit handling around `ReflectAttr.*` and item reflect fields like `item->xC6C/xC70`)
+     - `refs/melee/src/melee/it/itcoll.c` (absorb/reflect overlap logic and item collision subpaths)
+   - Damage gating / armor/no-damage:
+     - `refs/melee/src/melee/ft/ftcoll.c` (damage application branches that consult “no-damage/armor” flags, e.g. `x221C_b4`)
+
+   **Required internal state (allocation-free, deterministic)**
+   - Staling state (per player, per environment):
+     - `staleAttackInstance` (global counter per match/env; decomp: `u16`, wraps, skips 0)
+     - `StaleMoveTable` for each player:
+       - `current_index` (ring pointer)
+       - `StaleMoves[10]` entries: `(move_id, attack_instance)`
+   - Source identity needed to update staling correctly:
+     - Fighters: `attack_id` (`fp->x2068_attackID`) and `attack_instance` (`fp->x206C_attack_instance`)
+     - Items/projectiles: `attack_id` (`it->xD88_attackID`) and `attack_instance` (`it->xD8C_attack_instance`)
+   - Per-player/per-entity damage multipliers that influence suite-visible fields:
+     - Staling multiplier (from stale table).
+     - Reflect/absorb multipliers on projectiles (damage and speed multipliers).
+     - Any remaining per-victim or per-attacker multipliers that affect percent/KB/hitlag/hitstun (must be decomp-sourced).
+   - No-damage/armor gating internals:
+     - A representation of “damage is negated/absorbed” vs “damage is applied but reduced”, plus any remaining “armor HP” style value
+       if applicable (decomp shows a subtract-then-apply pattern on some flags in `ftcoll.c`).
+
+   **Seeding rule (teacher-forced reseed: what is causal vs explicit vs engine-dump)**
+   - Causally reconstructible from Slippi + extracted tables (preferred; implement in suite preprocessing):
+     - The stale queue contents for each player at frame `t` can be reconstructed by replaying *only the stale update rules* over the
+       replay history up to `t` (hit-confirmation events drive `plStale_Update*`), using extracted move/hitbox tables to map
+       `(action_id, animation_index, action_frame)` to the appropriate `move_id` / `attack_id` used for staling.
+     - The global `staleAttackInstance` counter can be reconstructed by mirroring the same “attack instance increment” rules over time
+       (decomp: `plStale_IncrementAttackInstance` + `ft_800890D0` and the item equivalents).
+   - Must be explicit seed internals (cannot be derived from just frame-`t` post-state alone):
+     - `staleAttackInstance`
+     - `stale_moves[player].current_index` and `stale_moves[player].StaleMoves[10]`
+     - If needed for correctness: the source’s current `attack_id`/`attack_instance` for fighters and suite-relevant items.
+   - Engine-dump required (allowed only if proven unavoidable):
+     - If a suite contains hits where the `move_id` cannot be disambiguated from replay-visible state + extracted tables (e.g. multiple
+       concurrent hitboxes with different `move_id` values whose identities are not inferable), that specific ambiguity must be listed
+       under “Allowed exceptions” with a proposed probe signal.
+
+   **Step ordering contract (modifiers relative to hit resolution)**
+   - Apply damage modifiers before any downstream quantities derived from “damage dealt”:
+     - damage → percent update
+     - damage → hitlag frames
+     - damage → hitstun frames
+     - damage/percent → knockback velocity (and the resulting `err.speed_{x,y}_attack`)
+   - Stale queue update happens after the hit is applied (decomp: `ftColl_8007BE3C` in the post-hit consumer path):
+     - The current hit’s staling multiplier must be computed from the pre-hit stale table, then the stale table is updated to include
+       this hit’s `(move_id, attack_instance)` entry.
+   - No-damage/armor gates must short-circuit downstream effects:
+     - If the hit is gated to “no damage”, it must not change percent, should not enqueue staling, and should apply only the decomp-backed
+       non-damage side effects (e.g. hitlag/shieldstun only if the decomp does so).
+   - Reflect/absorb modifiers apply at the moment the projectile interacts with the reflect/absorb bubble:
+     - projectile ownership/velocity changes must occur deterministically before the next frame’s projectile integration so item kinematics
+       (`err.item_vel_*`) remain stable.
+
+   **Replaces these current approximations (delete once this lands)**
+   - “No staling / no stale queue” behavior that makes `err.percent` drift dominated by missing modifiers rather than core hit identity.
+   - Any stopgap “percent tuning” or suite-only heuristics (explicitly disallowed by the repo rules).
+
+   **DONE when (tie directly to RL 1.0 scorecard keys)**
+   - Float group budgets become achievable without tuning:
+     - `err.percent` meets its float-group budget (Damage / KB surface group).
+     - `err.speed_x_attack` and `err.speed_y_attack` meet their float-group budgets (Damage / KB surface group).
+   - Discrete mismatch budgets materially improve where they depend on modifiers:
+     - `mismatch.hitlag` and `mismatch.hitstun` reduce for modifier-sensitive hits (staling/reflect/armor cases).
+   - Staling parity holds for both fighter hits and item/projectile hits (if suite exercises projectile hits).
+
+   **Ambiguities to resolve as part of this work (not separate tasks)**
+   - Staling reconstruction edge cases:
+     - If multiple concurrent hit sources could make `move_id` attribution ambiguous from Slippi-visible state + extracted tables,
+       identify the minimal additional signal (explicit seed internal or engine dump probe) and document it under “Allowed exceptions”.
+   - Armor/no-damage gate semantics:
+     - Which flags/timers must be explicit seed vs causally reconstructible.
+     - Whether “no-damage” cases enqueue staling or not in each decomp path.
+   - Reflect/absorb ordering details that affect suite-visible `item_*` kinematics/ownership:
+     - Ensure ownership and velocity multipliers apply at the decomp-correct moment so item integration remains stable.
 
 5) **Action ordering contracts (Anim/IASA/Phys/Coll) per bucket** (**PARTIAL**)
    - Goal: codify and enforce consistent per-frame ordering for groups of states (not per-state ad hoc).
