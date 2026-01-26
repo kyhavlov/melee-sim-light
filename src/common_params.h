@@ -18,6 +18,10 @@ typedef struct MslCommonParams {
   float lstick_tilt_y_thresh;  // p_ftCommonData->xC
   float trigger_deadzone;      // p_ftCommonData->x10 (trigger deadzone used for held_inputs L/R)
 
+  // Stick angle threshold used by several common IASA checks (including cliff/ledge options).
+  // Decomp: p_ftCommonData->x20 (radians), used by e.g. ftCo_CliffClimb.c::ftCo_8009AAFC.
+  float attack_angle_threshold_radians;  // p_ftCommonData->x20
+
   // Walk gating / walk-type thresholds (see refs/melee/src/melee/ft/ftwalkcommon.c)
   float walk_stick_threshold;  // p_ftCommonData->x24
   float walk_mid_vel_mul;      // p_ftCommonData->x28
@@ -48,6 +52,19 @@ typedef struct MslCommonParams {
   uint8_t tap_jump_tilt_max_frames;  // p_ftCommonData->x74 (tap_jump_tilt_max_frames)
   uint8_t _pad_u8_1[2];
 
+  // Cliff / ledge common behavior (ftCo_Cliff*).
+  //
+  // Decomp pointers:
+  // - refs/melee/src/melee/ft/ftcliffcommon.c::ftCliffCommon_80081298 (drop stick gate)
+  // - refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffWait.c::ftCo_8009A804 (wait timer init)
+  // - refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffClimb.c::inlineA0 / ftCo_8009AAFC (option stick/angle)
+  float cliff_drop_stick_threshold;      // p_ftCommonData->x480
+  float cliff_wait_percent_threshold;    // p_ftCommonData->x488
+  float cliff_wait_frames_low_percent;   // p_ftCommonData->x48C
+  float cliff_wait_frames_high_percent;  // p_ftCommonData->x490
+  float cliff_option_stick_threshold;    // p_ftCommonData->x494
+  uint16_t ledge_cooldown_frames;        // p_ftCommonData->ledge_cooldown (x498)
+
   // Offscreen death / match-flow (ft_0D31.c / ft_0C31.c).
   // Decomp pointers:
   // - refs/melee/src/melee/ft/ft_0D31.c::ftCo_800D3158 (dead_up_kb_vel_threshold)
@@ -56,15 +73,15 @@ typedef struct MslCommonParams {
   // - refs/melee/build/GALE01/asm/melee/ft/ft_0D31.s::ftCo_DeadUpStar_Anim (dead_up_star_phase1/2_frames)
   // - refs/melee/build/GALE01/asm/melee/ft/ft_0D31.s (Rebirth/RebirthWait timers at 0x5D0/0x5D4)
   // - refs/melee/src/melee/ft/ft_0C31.c (entry_start_frames/entry_end_frames)
-  float dead_up_kb_vel_threshold;  // p_ftCommonData->x4F0
-  uint16_t dead_timer_frames;      // p_ftCommonData->x500 (DeadDown/Left/Right timer)
+  float dead_up_kb_vel_threshold;        // p_ftCommonData->x4F0
+  uint16_t dead_timer_frames;            // p_ftCommonData->x500 (DeadDown/Left/Right timer)
   uint16_t dead_up_star_initial_frames;  // p_ftCommonData->x504
-  uint16_t dead_up_star_phase1_frames;  // p_ftCommonData->x508
-  uint16_t dead_up_star_phase2_frames;  // p_ftCommonData->x50C
+  uint16_t dead_up_star_phase1_frames;   // p_ftCommonData->x508
+  uint16_t dead_up_star_phase2_frames;   // p_ftCommonData->x50C
   uint16_t rebirth_timer_frames;         // p_ftCommonData->0x5D0
   uint16_t rebirth_wait_timer_frames;    // p_ftCommonData->0x5D4
-  uint16_t entry_start_frames;     // p_ftCommonData->x6BC
-  uint16_t entry_end_frames;       // p_ftCommonData->x6C0
+  uint16_t entry_start_frames;           // p_ftCommonData->x6BC
+  uint16_t entry_end_frames;             // p_ftCommonData->x6C0
   uint16_t _pad_u16_match_flow_0;
 
   // Ground friction multiplier when |gr_vel| > walk_max_vel (refs/melee/src/melee/ft/ft_081B.c::ft_80084F3C)
@@ -177,9 +194,9 @@ typedef struct MslCommonParams {
   float kb_wsk_mul;      // p_ftCommonData->0x118
   float kb_growth_mul;   // p_ftCommonData->0x11C
   float kb_base_add;     // p_ftCommonData->0x120
-  float kb_vel_mul;    // p_ftCommonData->x100
-  float kb_min;        // p_ftCommonData->x104
-  float kb_squat_mul;  // p_ftCommonData->x124
+  float kb_vel_mul;      // p_ftCommonData->x100
+  float kb_min;          // p_ftCommonData->x104
+  float kb_squat_mul;    // p_ftCommonData->x124
 
   // Hitstun scaling + severity thresholds (ftCo_Damage.c).
   float damage_hitstun_mul;    // p_ftCommonData->0x154

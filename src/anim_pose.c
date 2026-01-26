@@ -11,8 +11,8 @@ enum {
   ANIM_MAGIC_LEN = 8,
   ANIM_HDR_BASE_BYTES = 16,  // magic[8] + ver[u32] + joint_count[u16] + anim_count[u16]
   ANIM_VERSION_V3 = 3,
-  MAT_BYTES = 12 * 4,            // float32[12] (3x4)
-  TRANSN_BYTES_PER_FRAME = 3 * 4 // float32[3] v3 tail (TransN/root translation)
+  MAT_BYTES = 12 * 4,             // float32[12] (3x4)
+  TRANSN_BYTES_PER_FRAME = 3 * 4  // float32[3] v3 tail (TransN/root translation)
 };
 
 static const uint8_t k_anim_magic[ANIM_MAGIC_LEN] = {'S', 'S', 'A', 'N', 'I', 'M', '0', '1'};
@@ -33,10 +33,10 @@ typedef struct {
   // O(1) lookup tables (bounded, init-time allocated):
   // - msid -> (have, frame_count, base_offset)
   // - part_id -> joint_index (0xFFFF if missing)
-  uint8_t* have_msid;            // [65536]
-  uint16_t* frame_count_by_msid; // [65536]
-  uint32_t* base_off_by_msid;    // [65536] byte offset to frame0/joint0 matrices
-  uint16_t* part_to_joint_index; // [65536]
+  uint8_t* have_msid;             // [65536]
+  uint16_t* frame_count_by_msid;  // [65536]
+  uint32_t* base_off_by_msid;     // [65536] byte offset to frame0/joint0 matrices
+  uint16_t* part_to_joint_index;  // [65536]
 
   uint8_t have;
 } MslAnimPoseTable;
@@ -143,12 +143,12 @@ static int load_pose_for_char(const char* data_dir, const char* rel_path, uint8_
     alloc_free(buf);
     return -1;
   }
-  memset(part_to_joint_index, 0xFF, 65536 * sizeof(uint16_t)); // 0xFFFF sentinel
+  memset(part_to_joint_index, 0xFF, 65536 * sizeof(uint16_t));  // 0xFFFF sentinel
 
   // Build part_id -> joint index mapping from joint_parts bytes in the header (like the extractors).
   for (uint16_t ji = 0; ji < joint_count; ji++) {
     const uint8_t part_id = buf[ANIM_HDR_BASE_BYTES + (size_t)ji];
-    part_to_joint_index[(uint16_t)part_id] = ji; // overwrite on duplicates (Python dict behavior)
+    part_to_joint_index[(uint16_t)part_id] = ji;  // overwrite on duplicates (Python dict behavior)
   }
 
   // Walk payload (tools/extraction/extract_ecb_extents.py::_extract_ecb_extents_for_anim_file).
@@ -301,8 +301,8 @@ int anim_pose_get_matrix(uint8_t char_id, uint16_t msid, uint16_t frame, uint16_
   const uint64_t frame_u = (uint64_t)frame;
   const uint64_t joint_u = (uint64_t)joint_index;
 
-  const uint64_t mat_off_u =
-      (uint64_t)base_off + frame_u * joint_count_u * (uint64_t)MAT_BYTES + joint_u * (uint64_t)MAT_BYTES;
+  const uint64_t mat_off_u = (uint64_t)base_off + frame_u * joint_count_u * (uint64_t)MAT_BYTES +
+                             joint_u * (uint64_t)MAT_BYTES;
   if (mat_off_u + (uint64_t)MAT_BYTES > (uint64_t)t->sz) {
     return -1;
   }

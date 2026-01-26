@@ -16,6 +16,14 @@ static inline uint8_t physics_is_match_flow_airborne(uint16_t action_id) {
     case MSL_ACT_ENTRY:
     case MSL_ACT_ENTRY_START:
     case MSL_ACT_ENTRY_END:
+    // Cliff / ledge actions are updated via dedicated callbacks in-engine and should not receive
+    // generic gravity/fastfall updates in this simplified core.
+    case MSL_ACT_CLIFF_CATCH:
+    case MSL_ACT_CLIFF_WAIT:
+    case MSL_ACT_CLIFF_CLIMB_QUICK:
+    case MSL_ACT_CLIFF_ATTACK_QUICK:
+    case MSL_ACT_CLIFF_ESCAPE_QUICK:
+    case MSL_ACT_CLIFF_JUMP_QUICK1:
       return 1;
     default:
       return 0;
@@ -113,6 +121,13 @@ void physics_integrate(MslBatch* batch) {
         continue;
       }
 
+      // CliffJump2 is a special case: its physics callback skips the common fall helper on the
+      // first frame (no gravity/fastfall update that frame), then uses ft_80084DB0 afterward.
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffJump.c::ftCo_CliffJump2_Phys
+      if (action_id == (uint16_t)MSL_ACT_CLIFF_JUMP_QUICK2 && batch->state.action_frame[idx] <= 0) {
+        continue;
+      }
+
       // EscapeAir is a self-velocity-controlled state with its own decay; do not apply gravity or
       // fastfall here unless we later model cmd_skip_decay.
       //
@@ -140,8 +155,8 @@ void physics_integrate(MslBatch* batch) {
       // - Check: refs/melee/src/melee/ft/ftcommon.c:505-520 (ftCommon_CheckFallFast)
       // - Common call ordering: refs/melee/src/melee/ft/ft_081B.c:1347-1359 (ft_80084DB0)
       if (allow_fastfall) {
-        const float stick_y = apply_deadzone(stick_i8_to_unit(batch->state.input_main_y[idx]),
-                                             c->lstick_deadzone_y);
+        const float stick_y =
+            apply_deadzone(stick_i8_to_unit(batch->state.input_main_y[idx]), c->lstick_deadzone_y);
         (void)ftCommon_CheckFallFast(c, stick_y, vy_self, &batch->state.fall_fast[idx],
                                      &batch->state.tilt_timer_y[idx]);
       }

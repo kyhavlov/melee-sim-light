@@ -149,7 +149,9 @@ int common_params_init(void) {
       json_get_f32(buf, "lstick_deadzone_y", &g_params.lstick_deadzone_y) != 0 ||
       json_get_f32(buf, "lstick_tilt_x_thresh", &g_params.lstick_tilt_x_thresh) != 0 ||
       json_get_f32(buf, "lstick_tilt_y_thresh", &g_params.lstick_tilt_y_thresh) != 0 ||
-      json_get_f32(buf, "trigger_deadzone", &g_params.trigger_deadzone) != 0) {
+      json_get_f32(buf, "trigger_deadzone", &g_params.trigger_deadzone) != 0 ||
+      json_get_f32(buf, "attack_angle_threshold_radians",
+                   &g_params.attack_angle_threshold_radians) != 0) {
     alloc_free(buf);
     return -1;
   }
@@ -181,10 +183,26 @@ int common_params_init(void) {
     return -1;
   }
 
+  // Cliff / ledge common behavior (ftCo_Cliff*).
+  if (json_get_f32(buf, "cliff_drop_stick_threshold", &g_params.cliff_drop_stick_threshold) != 0 ||
+      json_get_f32(buf, "cliff_wait_percent_threshold", &g_params.cliff_wait_percent_threshold) !=
+          0 ||
+      json_get_f32(buf, "cliff_wait_frames_low_percent", &g_params.cliff_wait_frames_low_percent) !=
+          0 ||
+      json_get_f32(buf, "cliff_wait_frames_high_percent",
+                   &g_params.cliff_wait_frames_high_percent) != 0 ||
+      json_get_f32(buf, "cliff_option_stick_threshold", &g_params.cliff_option_stick_threshold) !=
+          0 ||
+      json_get_u16(buf, "ledge_cooldown_frames", &g_params.ledge_cooldown_frames) != 0) {
+    alloc_free(buf);
+    return -1;
+  }
+
   // Match flow constants (KO/death/respawn/entry).
   if (json_get_f32(buf, "dead_up_kb_vel_threshold", &g_params.dead_up_kb_vel_threshold) != 0 ||
       json_get_u16(buf, "dead_timer_frames", &g_params.dead_timer_frames) != 0 ||
-      json_get_u16(buf, "dead_up_star_initial_frames", &g_params.dead_up_star_initial_frames) != 0 ||
+      json_get_u16(buf, "dead_up_star_initial_frames", &g_params.dead_up_star_initial_frames) !=
+          0 ||
       json_get_u16(buf, "dead_up_star_phase1_frames", &g_params.dead_up_star_phase1_frames) != 0 ||
       json_get_u16(buf, "dead_up_star_phase2_frames", &g_params.dead_up_star_phase2_frames) != 0 ||
       json_get_u16(buf, "rebirth_timer_frames", &g_params.rebirth_timer_frames) != 0 ||

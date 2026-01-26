@@ -30,6 +30,10 @@ uint8_t stage_collision_get_cam_bounds_world(uint32_t stage_id, MslStageBounds* 
 uint8_t stage_collision_get_spawn_point(uint32_t stage_id, int port, MslStagePoint2* out);
 uint8_t stage_collision_get_respawn_point(uint32_t stage_id, int port, MslStagePoint2* out);
 
+// Ledge points (FD only v1): returns 1 if the stage has a ledge on the given side.
+// side: 0 = left, 1 = right.
+uint8_t stage_collision_get_ledge_point(uint32_t stage_id, int side, MslStagePoint2* out);
+
 // Item collision helper (lasers v1): returns 1 if the segment from (x0,y0)->(x1,y1) intersects a
 // stage floor segment for the given stage_id.
 //

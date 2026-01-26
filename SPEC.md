@@ -872,6 +872,10 @@ When a mismatch strongly suggests a missing internal that cannot be reconstructe
 - Hitbox hitlists / per-hitbox rehit timers (replacing conservative pair latch).
 - Stale-move queue (staling) + damage multipliers (requires explicit seeded queue, or deterministic reconstruction from recent hits).
 - Ledge occupancy + ledge refresh timer(s) + per-action ledge regrab restrictions.
+- Ledge option `mv.co.cliff.x8` gate is currently approximated via a “previous-stick neutral reset” check for climb/drop on CliffWait
+  (`src/ledge.c:190`); this may need to become an explicit seeded/internal latch for full parity.
+- Ledge catch region is currently approximated with an “outside-only grab” gate when using `ledge_grab_window_ok`
+  (`src/ledge.c:376`), pending a decomp-shaped `Collide_LedgeGrabMask` / collision-env implementation.
 - Grab state internals: grab attach points, breakouts, throw release frame/timers, and victim constraint mode.
 - Tech / knockdown thresholds and state vars (tumble, tech window timers, missed-tech timers).
 - Projectile internals: per-projectile RNG/state, instance ids, and collision masks.

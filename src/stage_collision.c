@@ -58,6 +58,8 @@ static MslStageBoundsWorld g_fd_blast_bounds_world;
 static MslStageBoundsWorld g_fd_cam_bounds_world;
 static MslStagePoint2 g_fd_spawn_points[MSL_MAX_PLAYERS];
 static MslStagePoint2 g_fd_respawn_points[MSL_MAX_PLAYERS];
+static MslStagePoint2 g_fd_ledge_points[2];
+static uint8_t g_fd_have_ledge_points[2];
 
 static const char* json_skip_ws(const char* s) {
   while (s && *s && isspace((unsigned char)*s)) {
@@ -218,7 +220,7 @@ static const char* json_parse_bounds_world(const char* s, MslStageBoundsWorld* o
   if (!(have_left && have_right && have_top && have_bottom)) {
     return NULL;
   }
-  *out = (MslStageBoundsWorld){ .left = left, .right = right, .top = top, .bottom = bottom };
+  *out = (MslStageBoundsWorld){.left = left, .right = right, .top = top, .bottom = bottom};
   return p;
 }
 
@@ -272,7 +274,7 @@ static const char* json_parse_point2(const char* s, MslStagePoint2* out) {
   if (!(have_x && have_y)) {
     return NULL;
   }
-  *out = (MslStagePoint2){ .x = x, .y = y };
+  *out = (MslStagePoint2){.x = x, .y = y};
   return p;
 }
 
@@ -398,6 +400,12 @@ static int fd_load_floor_segments_from_json(const char* json) {
     return -1;
   }
 
+  // Reset FD ledge points (derived from ISO-extracted stage collision segments).
+  g_fd_have_ledge_points[0] = 0;
+  g_fd_have_ledge_points[1] = 0;
+  g_fd_ledge_points[0] = (MslStagePoint2){0};
+  g_fd_ledge_points[1] = (MslStagePoint2){0};
+
   // Temporary loader: parse ISO-extracted `data/stages/*.json` at init-time only.
   // We will switch to a compact binary stage collision artifact later to avoid JSON parsing entirely.
   //
@@ -466,6 +474,14 @@ static int fd_load_floor_segments_from_json(const char* json) {
   }
   size_t out_n = 0;
 
+  // FD ledge candidates are segments with `"ledge": true` (ISO-derived line flag).
+  //
+  // Decomp context: fighter cliff physics snaps each frame to the cliff point obtained from
+  // `mpLib_80053ECC_Floor` / `mpLib_80053DA4_Floor`.
+  // refs/melee/src/melee/ft/ftcliffcommon.c::ftCo_CliffCatch_Phys
+  float best_left_x = FLT_MAX;
+  float best_right_x = -FLT_MAX;
+
   const char* p = segs + 1;
   for (;;) {
     p = json_skip_ws(p);
@@ -488,10 +504,11 @@ static int fd_load_floor_segments_from_json(const char* json) {
 
     uint8_t platform = 0;
     uint8_t kind_is_floor = 0;
+    uint8_t ledge = 0;
     int32_t seg_i = -1;
     double x0 = 0.0, x1 = 0.0, y0 = 0.0, y1 = 0.0;
     uint8_t have_i = 0, have_x0 = 0, have_x1 = 0, have_y0 = 0, have_y1 = 0, have_platform = 0,
-            have_kind = 0;
+            have_kind = 0, have_ledge = 0;
 
     for (;;) {
       p = json_skip_ws(p);
@@ -538,6 +555,13 @@ static int fd_load_floor_segments_from_json(const char* json) {
           return -1;
         }
         have_platform = 1;
+      } else if (key_len == 5 && strncmp(key, "ledge", 5) == 0) {
+        p = json_parse_bool(p, &ledge);
+        if (p == NULL) {
+          alloc_free(tmp);
+          return -1;
+        }
+        have_ledge = 1;
       } else if (key_len == 1 && *key == 'i') {
         p = json_parse_int32(p, &seg_i);
         if (p == NULL) {
@@ -611,15 +635,49 @@ static int fd_load_floor_segments_from_json(const char* json) {
     if (have_kind && kind_is_floor && have_platform && !platform && have_i && have_x0 && have_x1 &&
         have_y0 && have_y1) {
       if (out_n < (size_t)line_count) {
+        const float fx0 = (float)(unit_scale * x0);
+        const float fx1 = (float)(unit_scale * x1);
+        const float fy0 = (float)(unit_scale * y0);
+        const float fy1 = (float)(unit_scale * y1);
         tmp[out_n] = (MslStageFloorSegment){
-            .x0 = (float)(unit_scale * x0),
-            .x1 = (float)(unit_scale * x1),
-            .y0 = (float)(unit_scale * y0),
-            .y1 = (float)(unit_scale * y1),
+            .x0 = fx0,
+            .x1 = fx1,
+            .y0 = fy0,
+            .y1 = fy1,
             .segment_i = (uint16_t)seg_i,
             .include_max = 0,
         };
         out_n++;
+      }
+
+      if (have_ledge && ledge) {
+        // Deterministic: choose the most extreme X endpoint among all ledge segments.
+        // This matches FD (one left ledge, one right ledge) and generalizes to other stages with
+        // a single exterior boundary per side.
+        const float fx0 = (float)(unit_scale * x0);
+        const float fx1 = (float)(unit_scale * x1);
+        const float fy0 = (float)(unit_scale * y0);
+        const float fy1 = (float)(unit_scale * y1);
+        if (fx0 < best_left_x) {
+          best_left_x = fx0;
+          g_fd_ledge_points[0] = (MslStagePoint2){.x = fx0, .y = fy0};
+          g_fd_have_ledge_points[0] = 1;
+        }
+        if (fx1 < best_left_x) {
+          best_left_x = fx1;
+          g_fd_ledge_points[0] = (MslStagePoint2){.x = fx1, .y = fy1};
+          g_fd_have_ledge_points[0] = 1;
+        }
+        if (fx0 > best_right_x) {
+          best_right_x = fx0;
+          g_fd_ledge_points[1] = (MslStagePoint2){.x = fx0, .y = fy0};
+          g_fd_have_ledge_points[1] = 1;
+        }
+        if (fx1 > best_right_x) {
+          best_right_x = fx1;
+          g_fd_ledge_points[1] = (MslStagePoint2){.x = fx1, .y = fy1};
+          g_fd_have_ledge_points[1] = 1;
+        }
       }
     }
   }
@@ -786,7 +844,29 @@ uint8_t stage_collision_get_respawn_point(uint32_t stage_id, int port, MslStageP
   return 1;
 }
 
-static inline float stage_cross2(float ax, float ay, float bx, float by) { return ax * by - ay * bx; }
+uint8_t stage_collision_get_ledge_point(uint32_t stage_id, int side, MslStagePoint2* out) {
+  if (out == NULL) {
+    return 0;
+  }
+  if (!g_fd_loaded) {
+    return 0;
+  }
+  if (stage_id != 32) {
+    return 0;
+  }
+  if (!(side == 0 || side == 1)) {
+    return 0;
+  }
+  if (!g_fd_have_ledge_points[side]) {
+    return 0;
+  }
+  *out = g_fd_ledge_points[side];
+  return 1;
+}
+
+static inline float stage_cross2(float ax, float ay, float bx, float by) {
+  return ax * by - ay * bx;
+}
 
 uint8_t stage_collision_item_line_hits_floor(uint32_t stage_id, float x0, float y0, float x1,
                                              float y1) {
@@ -887,6 +967,22 @@ void stage_collision_apply(MslBatch* batch) {
           action_id == (uint16_t)MSL_ACT_DEAD_UP_STAR || action_id == (uint16_t)MSL_ACT_REBIRTH ||
           action_id == (uint16_t)MSL_ACT_REBIRTH_WAIT || action_id == (uint16_t)MSL_ACT_ENTRY ||
           action_id == (uint16_t)MSL_ACT_ENTRY_START || action_id == (uint16_t)MSL_ACT_ENTRY_END) {
+        batch->state.on_ground[idx] = 0;
+        continue;
+      }
+
+      // Cliff / ledge hold actions use their own snap logic and should not be stage-grounded.
+      //
+      // Decomp:
+      // - ftCo_CliffCatch_Phys snaps to the cliff point (used by CliffCatch/Wait and also as the
+      //   initial snap for option states).
+      //   refs/melee/src/melee/ft/ftcliffcommon.c::ftCo_CliffCatch_Phys
+      // - Option states (CliffClimb/Attack/Escape) can transition from GA_Air to GA_Ground during
+      //   their Phys based on TransNPos, after which they run grounded collision.
+      //   refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffClimb.c::ftCo_CliffClimb_Phys
+      //   refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffClimb.c::ftCo_CliffClimb_Coll
+      if (action_id == (uint16_t)MSL_ACT_CLIFF_CATCH || action_id == (uint16_t)MSL_ACT_CLIFF_WAIT ||
+          action_id == (uint16_t)MSL_ACT_CLIFF_JUMP_QUICK1) {
         batch->state.on_ground[idx] = 0;
         continue;
       }

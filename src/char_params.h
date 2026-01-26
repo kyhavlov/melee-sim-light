@@ -66,6 +66,16 @@ typedef struct MslCharParams {
 
   // Shield (refs/melee/src/melee/ft/types.h::ftCo_DatAttrs::initial_shield_size)
   float initial_shield_size;
+
+  // Cliff / ledge (ftCo_Cliff*).
+  //
+  // Source of truth: ISO-extracted `data/characters/*.json` (ftData_x44_t and co attrs).
+  // Extractor: tools/extraction/extract_character_attrs.py
+  float ledge_jump_horizontal_velocity;  // fp->co_attrs.ledge_jump_horizontal_velocity
+  float ledge_jump_vertical_velocity;    // fp->co_attrs.ledge_jump_vertical_velocity
+  float ledge_snap_x;                    // ftData_x44_t.x10 (used as transNPos.z snap distance)
+  float ledge_snap_y;                    // ftData_x44_t.x14 (used as transNPos.y snap distance)
+  float ledge_snap_height;               // ftData_x44_t.x18 (catch height threshold)
 } MslCharParams;
 
 int char_params_init(void);

@@ -51,8 +51,9 @@ typedef struct MslStateSoA {
   // Decomp: refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c
   // - ftCo_800921DC: mv.co.guard.x8 init (neutral frame, e.g. 10) and x4=0
   // - ftCo_80091BC4: per-frame update from L-stick direction/magnitude
-  uint16_t* guard_tilt_x8;  // mv.co.guard.x8 (frame-ish index; neutral is shield table neutral_frame)
-  float* guard_tilt_x4;     // mv.co.guard.x4 (stick magnitude smoothing; 0..1)
+  uint16_t*
+      guard_tilt_x8;     // mv.co.guard.x8 (frame-ish index; neutral is shield table neutral_frame)
+  float* guard_tilt_x4;  // mv.co.guard.x4 (stick magnitude smoothing; 0..1)
   // Locomotion/input-history internals.
   // - `tilt_timer_*`, `turn_*`, and KneeBend internals are seeded from replay history (MslSeed).
   uint8_t*
@@ -61,6 +62,12 @@ typedef struct MslStateSoA {
   uint8_t* tilt_timer_x;  // fp->x670_timer_lstick_tilt_x (refs/melee/src/melee/ft/fighter.c)
   uint8_t* tilt_timer_y;  // fp->x671_timer_lstick_tilt_y (refs/melee/src/melee/ft/fighter.c)
   uint8_t* fall_fast;     // fp->fall_fast (refs/melee/src/melee/ft/ftcommon.c:505-520)
+  // Cliff / ledge internals (FD v1).
+  // - ledge_side: -1 = none, 0 = left, 1 = right.
+  // - stage_ledge_occupant_*: per-env occupant port, or -1.
+  int8_t* ledge_side;                  // [batch * players]
+  int8_t* stage_ledge_occupant_left;   // [batch]
+  int8_t* stage_ledge_occupant_right;  // [batch]
   // FallSpecial internals (seeded/derived).
   // Decomp: refs/melee/src/melee/ft/chara/ftCommon/ftCo_FallSpecial.c
   uint8_t* fallspecial_xc;       // fp->mv.co.fallspecial.xC (arg1 to ftCo_80096900)

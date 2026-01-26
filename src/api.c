@@ -174,6 +174,8 @@ int msl_batch_reseed_seed(MslBatch* batch, const uint8_t* seed_bytes, size_t see
     batch->state.frame_pre_random_seed[bi] = seed->frame_pre_random_seed;
     batch->state.stage_id[bi] = seed->stage_id;
     batch->state.is_teams[bi] = seed->is_teams ? 1 : 0;
+    batch->state.stage_ledge_occupant_left[bi] = -1;
+    batch->state.stage_ledge_occupant_right[bi] = -1;
 
     for (int p = 0; p < MSL_MAX_PLAYERS; p++) {
       const size_t idx = msl_idx_player(bi, p);
@@ -212,6 +214,7 @@ int msl_batch_reseed_seed(MslBatch* batch, const uint8_t* seed_bytes, size_t see
       batch->state.tilt_timer_x[idx] = seed->tilt_timer_x[p];
       batch->state.tilt_timer_y[idx] = seed->tilt_timer_y[p];
       batch->state.fall_fast[idx] = seed->fall_fast[p] ? 1 : 0;
+      batch->state.ledge_side[idx] = -1;
       // FallSpecial xC mode is not exposed by Slippi directly; derive it deterministically from
       // seeded post-frame velocities when possible.
       //
