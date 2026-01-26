@@ -77,13 +77,30 @@ void physics_integrate(MslBatch* batch) {
 
       const uint8_t on_ground = batch->state.on_ground[idx] ? 1 : 0;
       const uint16_t action_id = batch->state.action_id[idx];
-      const float vx =
+      const float vx_self =
           on_ground ? batch->state.speed_ground_x_self[idx] : batch->state.speed_air_x_self[idx];
-      const float vy = batch->state.speed_y_self[idx];
+      const float vy_self = batch->state.speed_y_self[idx];
+
+      // Knockback velocity contributes to position integration in addition to self velocity.
+      //
+      // Decomp: position integrates both self velocity and knockback velocity.
+      // - refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate:
+      //   `p_kb_vel = &fp->x8c_kb_vel;`
+      //   `PSVECAdd(&fp->cur_pos, &selfVel, &fp->cur_pos); fp->cur_pos.x += p_kb_vel->x; fp->cur_pos.y += p_kb_vel->y;`
+      //
+      // Seed mapping: our `speed_{x,y}_attack` are Slippi post-frame `velocities.knockback_{x,y}`
+      // (i.e. the decomp `fp->x8c_kb_vel.{x,y}` knockback velocity term), not a "self velocity".
+      // - tools/slippi/make_dataset_from_slp.py (velocities.knockback_{x,y} → speed_{x,y}_attack)
+      //
+      // We include `speed_*_attack` in position integration (because it affects where the character is this frame),
+      // but we exclude it from gravity/fastfall updates (which operate on `self_vel` only; knockback has its own
+      // separate decay/physics paths in-engine, and is currently teacher-forced from the seed).
+      const float vx = vx_self + batch->state.speed_x_attack[idx];
+      const float vy_integrate = vy_self + batch->state.speed_y_attack[idx];
 
       // Position integration happens before gravity/fastfall updates in this simplified core.
       batch->state.pos_x[idx] += vx;
-      batch->state.pos_y[idx] += vy;
+      batch->state.pos_y[idx] += vy_integrate;
 
       if (on_ground) {
         continue;
@@ -125,7 +142,7 @@ void physics_integrate(MslBatch* batch) {
       if (allow_fastfall) {
         const float stick_y = apply_deadzone(stick_i8_to_unit(batch->state.input_main_y[idx]),
                                              c->lstick_deadzone_y);
-        (void)ftCommon_CheckFallFast(c, stick_y, vy, &batch->state.fall_fast[idx],
+        (void)ftCommon_CheckFallFast(c, stick_y, vy_self, &batch->state.fall_fast[idx],
                                      &batch->state.tilt_timer_y[idx]);
       }
 
@@ -134,7 +151,7 @@ void physics_integrate(MslBatch* batch) {
       // Decomp refs:
       // - Gravity/terminal: refs/melee/src/melee/ft/ftcommon.c::ftCommon_Fall
       // - Fastfall: refs/melee/src/melee/ft/ftcommon.c::ftCommon_FallFast (called via ft_80084DB0)
-      float next_vy = vy;
+      float next_vy = vy_self;
       if (allow_fastfall && batch->state.fall_fast[idx]) {
         // refs/melee/src/melee/ft/ftcommon.c:488-494 (ftCommon_FallFast)
         next_vy = -phys->fast_fall_velocity;

@@ -17,6 +17,17 @@ def main() -> None:
     )
     ap.add_argument("--chunk", type=int, default=4096)
     ap.add_argument("--out", type=Path, default=None, help="optional output path to write the report")
+    ap.add_argument(
+        "--debug-mismatch",
+        default="",
+        help="comma-separated discrete fields to print first mismatches for (e.g. 'stocks,is_dead')",
+    )
+    ap.add_argument(
+        "--debug-limit",
+        type=int,
+        default=10,
+        help="max mismatching records to print per dataset per debug field",
+    )
     args = ap.parse_args()
 
     root = repo_root()
@@ -69,6 +80,12 @@ def main() -> None:
                 ucf_enabled=suite.ucf_enabled,
                 ucf_cardinals_1_0_enabled=suite.ucf_cardinals_1_0_enabled,
                 reporter=reporter,
+                debug_mismatch=tuple(
+                    s.strip()
+                    for s in str(args.debug_mismatch).split(",")
+                    if s is not None and s.strip() != ""
+                ),
+                debug_limit=int(args.debug_limit),
             )
 
             if suite_mismatches is None:

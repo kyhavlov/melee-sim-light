@@ -137,6 +137,8 @@ def evaluate_dataset(
     ucf_enabled: bool | None = None,
     ucf_cardinals_1_0_enabled: bool | None = None,
     reporter: Reporter | None = None,
+    debug_mismatch: tuple[str, ...] = (),
+    debug_limit: int = 10,
 ) -> EvalSummary:
     if reporter is None:
         reporter = Reporter()
@@ -219,6 +221,15 @@ def evaluate_dataset(
     # Views for vectorized comparisons.
     out_compare_view = out_compare_bytes.view(COMPARE_DTYPE).reshape(-1)
 
+    debug_fields = tuple(f for f in debug_mismatch if f in set(mismatches.keys()))
+    debug_left: dict[str, int] = {}
+    if reporter is not None and debug_fields:
+        debug_left = {f: int(debug_limit) for f in debug_fields}
+        reporter.print(f"debug: will print first mismatches for {', '.join(debug_fields)} (limit={int(debug_limit)})")
+    else:
+        # Debug mismatch printing is strictly opt-in: no debug_mismatch flag => no extra work.
+        debug_fields = ()
+
     # Iterate in chunks, resizing the handle buffers as needed by re-init.
     offset = 0
     while offset < num_records:
@@ -256,10 +267,58 @@ def evaluate_dataset(
         binding.step_input(handle, prev_input_bytes, input_bytes)
         binding.write_compare(handle, out_compare_bytes)
 
+        seed = chunk_view["seed_t"]
         ref = chunk_view["ref_t1"]
 
         # Compare discretes for active players only.
         active = slice(0, num_players)
+
+        # Optional debug: print the first N mismatching records for selected discrete fields.
+        for field in debug_fields:
+            left = debug_left.get(field, 0)
+            if left <= 0:
+                continue
+            diff = out_compare_view[field][:, active] != ref[field][:, active]
+            if not np.any(diff):
+                continue
+            pairs = np.argwhere(diff)
+            for ri, p in pairs:
+                left = debug_left.get(field, 0)
+                if left <= 0:
+                    break
+                r = int(ri)
+                pp = int(p)
+                gi = int(offset + r)
+                reporter.print(
+                    f"debug.mismatch.{field}: record={gi} seed_frame={int(seed['frame_id'][r])} ref_frame={int(ref['frame_id'][r])} p={pp}"
+                )
+                reporter.print(
+                    "  seed:",
+                    f"action_id={int(seed['action_id'][r, pp])}",
+                    f"anim={int(seed['animation_index'][r, pp])}",
+                    f"timer={int(seed['match_flow_timer'][r, pp])}",
+                    f"af={int(seed['action_frame'][r, pp])}",
+                    f"anim_f={float(seed['anim_frame_f32'][r, pp]):.3f}",
+                    f"pos=({float(seed['pos_x'][r, pp]):.3f},{float(seed['pos_y'][r, pp]):.3f})",
+                    f"stocks={int(seed['stocks'][r, pp])}",
+                )
+                reporter.print(
+                    "  out :",
+                    f"action_id={int(out_compare_view['action_id'][r, pp])}",
+                    f"anim={int(out_compare_view['animation_index'][r, pp])}",
+                    f"pos=({float(out_compare_view['pos_x'][r, pp]):.3f},{float(out_compare_view['pos_y'][r, pp]):.3f})",
+                    f"stocks={int(out_compare_view['stocks'][r, pp])}",
+                    f"is_dead={int(out_compare_view['is_dead'][r, pp])}",
+                )
+                reporter.print(
+                    "  ref :",
+                    f"action_id={int(ref['action_id'][r, pp])}",
+                    f"anim={int(ref['animation_index'][r, pp])}",
+                    f"pos=({float(ref['pos_x'][r, pp]):.3f},{float(ref['pos_y'][r, pp]):.3f})",
+                    f"stocks={int(ref['stocks'][r, pp])}",
+                    f"is_dead={int(ref['is_dead'][r, pp])}",
+                )
+                debug_left[field] = left - 1
 
         mismatches["action_id"] += int((out_compare_view["action_id"][:, active] != ref["action_id"][:, active]).sum())
         mismatches["action_frame"] += int(
