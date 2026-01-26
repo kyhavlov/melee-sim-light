@@ -90,6 +90,22 @@ typedef struct MslCommonParams {
   float shield_hit_lightshield_min;  // p_ftCommonData->x2DC
   float shield_hit_lightshield_max;  // p_ftCommonData->x2E0
 
+  // Shieldstun (GuardSetOff) duration shaping.
+  //
+  // Decomp: refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80092F2C
+  // f = x28C*(x19A4*(1 - (lightshield_amount*(x2E8-x2E4)+x2E4))) + x290
+  // anim_rate = (0.1 + end_frame) / f
+  float shield_stun_mul;              // p_ftCommonData->x28C
+  float shield_stun_base;             // p_ftCommonData->x290
+  float shield_stun_lightshield_min;  // p_ftCommonData->x2E4
+  float shield_stun_lightshield_max;  // p_ftCommonData->x2E8
+
+  // Shield setoff pushback (grounded).
+  // Decomp: refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80092F2C
+  float shield_setoff_push_mul;            // p_ftCommonData->x294
+  float shield_setoff_push_max;            // p_ftCommonData->x298
+  float shield_setoff_push_mul_non_yoshi;  // p_ftCommonData->x2BC
+
   // L-cancel window / lag divisor (refs/melee/src/melee/ft/chara/ftCommon/ftCo_LandingAir.c)
   uint8_t lcancel_window_frames;  // p_ftCommonData->xE4
   uint8_t _pad_u8_3[3];

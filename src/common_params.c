@@ -198,6 +198,16 @@ int common_params_init(void) {
       json_get_f32(buf, "shield_hit_damage_base", &g_params.shield_hit_damage_base) != 0 ||
       json_get_f32(buf, "shield_hit_lightshield_min", &g_params.shield_hit_lightshield_min) != 0 ||
       json_get_f32(buf, "shield_hit_lightshield_max", &g_params.shield_hit_lightshield_max) != 0 ||
+      json_get_f32(buf, "shield_stun_mul", &g_params.shield_stun_mul) != 0 ||
+      json_get_f32(buf, "shield_stun_base", &g_params.shield_stun_base) != 0 ||
+      json_get_f32(buf, "shield_stun_lightshield_min", &g_params.shield_stun_lightshield_min) !=
+          0 ||
+      json_get_f32(buf, "shield_stun_lightshield_max", &g_params.shield_stun_lightshield_max) !=
+          0 ||
+      json_get_f32(buf, "shield_setoff_push_mul", &g_params.shield_setoff_push_mul) != 0 ||
+      json_get_f32(buf, "shield_setoff_push_max", &g_params.shield_setoff_push_max) != 0 ||
+      json_get_f32(buf, "shield_setoff_push_mul_non_yoshi",
+                   &g_params.shield_setoff_push_mul_non_yoshi) != 0 ||
       json_get_u8(buf, "lcancel_window_frames", &g_params.lcancel_window_frames) != 0 ||
       json_get_f32(buf, "lcancel_lag_div", &g_params.lcancel_lag_div) != 0 ||
       json_get_f32(buf, "landing_fall_special_lag_frames",

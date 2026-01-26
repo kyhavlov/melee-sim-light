@@ -12,14 +12,7 @@
 #include "common_params.h"
 #include "move_tables.h"
 #include "input_axis.h"
-
-// ftCo_JumpInput (refs/melee/src/melee/ft/chara/ftCommon/forward.h).
-typedef enum MslJumpInput {
-  MSL_JUMP_INPUT_NONE = 0,
-  MSL_JUMP_INPUT_LSTICK = 1,
-  MSL_JUMP_INPUT_CSTICK = 2,
-  MSL_JUMP_INPUT_XY = 3,
-} MslJumpInput;
+#include "jump_input.h"
 
 static inline float msl_signf(float x) { return x < 0.0f ? -1.0f : 1.0f; }
 
@@ -767,6 +760,7 @@ void locomotion_update_pre(MslBatch* batch) {
             action_id == MSL_ACT_LANDING_AIR_B || action_id == MSL_ACT_LANDING_AIR_HI ||
             action_id == MSL_ACT_LANDING_AIR_LW || action_id == MSL_ACT_GUARD_ON ||
             action_id == MSL_ACT_GUARD || action_id == MSL_ACT_GUARD_OFF ||
+            action_id == MSL_ACT_GUARD_SET_OFF ||
             action_id == MSL_ACT_GUARD_REFLECT) {
           float friction = ch->gr_friction;
           if (msl_absf(batch->state.speed_ground_x_self[idx]) > ch->walk_max_vel) {

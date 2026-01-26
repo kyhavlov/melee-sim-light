@@ -8,6 +8,7 @@
 #include "buttons.h"
 #include "input_axis.h"
 #include "locomotion.h"
+#include "jump_input.h"
 
 // -----------
 // EscapeAir.c
@@ -319,6 +320,28 @@ static inline float clamp01(float x) {
   return x;
 }
 
+static inline uint8_t guard_try_enter_jump_oos(MslBatch* batch, const MslCommonParams* c,
+                                               size_t idx) {
+  if (batch == NULL || c == NULL) {
+    return 0;
+  }
+
+  // Decomp ordering note:
+  // Guard IASA checks jump OoS before spotdodge/roll.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_Guard_IASA
+  const uint16_t buttons_pressed = batch->state.input_buttons_pressed[idx];
+  if ((buttons_pressed & (uint16_t)MSL_BUTTON_XY) != 0) {
+    batch->state.action_id[idx] = (uint16_t)MSL_ACT_KNEE_BEND;
+    batch->state.animation_index[idx] = (uint32_t)MSL_SM_KNEE_BEND;
+    msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+    batch->state.kneebend_jump_input[idx] = (uint8_t)MSL_JUMP_INPUT_XY;
+    batch->state.kneebend_is_short_hop[idx] = 0;
+    return 1;
+  }
+
+  return 0;
+}
+
 static inline void apply_shield_hold_drain(MslBatch* batch, const MslCommonParams* c, size_t idx,
                                            float trig_unit) {
   // Decomp:
@@ -394,6 +417,39 @@ void guard_update_grounded(MslBatch* batch, const MslCommonParams* c, size_t idx
   // Decomp usage: refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c:46-55.
   const uint8_t shield_held = (trig >= c->trigger_deadzone) ? 1 : 0;
 
+  // GuardSetOff (shieldstun): no IASA until the underlying "GuardDamage" animation completes.
+  //
+  // Decomp:
+  // - Enter: ftCo_80092F2C (sets anim rate based on shieldstun duration).
+  // - Update/exit: ftCo_GuardSetOff_Anim transitions to Guard or GuardOff when the animation ends.
+  // - Motion-state table selects ftCo_SM_GuardDamage as the submotion for GuardSetOff.
+  //   refs/melee/src/melee/ft/ftmotionstates.c (GuardSetOff entry uses ftCo_SM_GuardDamage).
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80092F2C
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_GuardSetOff_Anim
+  if (a0 == (uint16_t)MSL_ACT_GUARD_SET_OFF) {
+    batch->state.animation_index[idx] = (uint32_t)MSL_SM_GUARD_DAMAGE;
+    const float end_frame =
+        msl_anim_end_frame(batch->state.char_id[idx], (uint16_t)MSL_SM_GUARD_DAMAGE);
+    if (end_frame > 0.0f && (batch->state.anim_frame_f32[idx] >= end_frame)) {
+      if (shield_held && batch->state.shield_hp[idx] > 0.0f) {
+        // Shieldstun over -> return to Guard (hold).
+        enter_guard_hold(batch, idx);
+        // IASA for the newly-entered Guard state in the same frame.
+        if (guard_try_enter_jump_oos(batch, c, idx)) {
+          return;
+        }
+        if (escape_try_enter_from_guard(batch, c, idx)) {
+          return;
+        }
+        return;
+      }
+      // Shieldstun over and not holding shield -> GuardOff.
+      enter_guard_off(batch, idx);
+      return;
+    }
+    return;
+  }
+
   // ----------------
   // Guard state loop
   // ----------------
@@ -421,9 +477,16 @@ void guard_update_grounded(MslBatch* batch, const MslCommonParams* c, size_t idx
       }
     }
 
-    // Shield defensive options (grounded): spotdodge / rolls.
+    // Shield defensive options (grounded).
+    //
     // Decomp call site: ftCo_GuardOn_IASA / ftCo_Guard_IASA.
     // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c:393-409 and :454-469.
+    //
+    // Minimal OoS subset + decomp-shaped priority:
+    // - Jump OoS (ftCo_8009515C) before spotdodge/roll (ftCo_8009980C / ftCo_8009917C).
+    if (guard_try_enter_jump_oos(batch, c, idx)) {
+      return;
+    }
     if (escape_try_enter_from_guard(batch, c, idx)) {
       return;
     }
