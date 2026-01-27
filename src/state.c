@@ -57,6 +57,7 @@ int state_alloc(MslStateSoA* state, int batch_size) {
   state->coll_prev_env_flags = (uint32_t*)alloc_aligned_64(sizeof(uint32_t) * bp);
 
   state->action_id = (uint16_t*)alloc_aligned_64(sizeof(uint16_t) * bp);
+  state->prev_action_id = (uint16_t*)alloc_aligned_64(sizeof(uint16_t) * bp);
   state->action_frame = (int16_t*)alloc_aligned_64(sizeof(int16_t) * bp);
   state->match_flow_timer = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->downwait_timer = (int16_t*)alloc_aligned_64(sizeof(int16_t) * bp);
@@ -209,7 +210,7 @@ int state_alloc(MslStateSoA* state, int batch_size) {
       !state->speed_y_attack || !state->fighter_scale_y || !state->facing || !state->on_ground ||
       !state->prev_on_ground || !state->ground_contact_x || !state->ground_contact_y ||
       !state->ground_normal_x || !state->ground_normal_y || !state->coll_env_flags ||
-      !state->coll_prev_env_flags || !state->action_id || !state->action_frame ||
+      !state->coll_prev_env_flags || !state->action_id || !state->prev_action_id || !state->action_frame ||
       !state->match_flow_timer || !state->downwait_timer || !state->anim_frame_f32 ||
       !state->anim_frame_fp_q16_16 || !state->frame_speed_mul_fp_q16_16 || !state->jumps_left ||
       !state->stocks || !state->guard_tilt_x8 || !state->guard_tilt_x4 ||
@@ -293,6 +294,7 @@ void state_free(MslStateSoA* state) {
   alloc_free(state->coll_prev_env_flags);
 
   alloc_free(state->action_id);
+  alloc_free(state->prev_action_id);
   alloc_free(state->action_frame);
   alloc_free(state->match_flow_timer);
   alloc_free(state->downwait_timer);

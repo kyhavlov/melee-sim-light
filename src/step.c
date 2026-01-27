@@ -34,6 +34,19 @@ static inline void clear_landing_transients(MslBatch* batch) {
   }
 }
 
+static inline void cache_prev_action_ids(MslBatch* batch) {
+  if (batch == NULL) {
+    return;
+  }
+  const int num_players = (int)batch->config.num_players;
+  for (int bi = 0; bi < batch->batch_size; bi++) {
+    for (int p = 0; p < num_players; p++) {
+      const size_t idx = msl_idx_player(bi, p);
+      batch->state.prev_action_id[idx] = batch->state.action_id[idx];
+    }
+  }
+}
+
 int step_one_frame(MslBatch* batch, const uint8_t* prev_input_bytes, size_t prev_input_stride_bytes,
                    const uint8_t* input_bytes, size_t input_stride_bytes) {
   if (batch == NULL) {
@@ -41,6 +54,7 @@ int step_one_frame(MslBatch* batch, const uint8_t* prev_input_bytes, size_t prev
   }
 
   clear_landing_transients(batch);
+  cache_prev_action_ids(batch);
 
   // The exact ordering here is a major correctness lever. Keep it explicit and easy to reorder.
   //

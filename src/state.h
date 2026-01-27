@@ -42,6 +42,10 @@ typedef struct MslStateSoA {
 
   // State machine
   uint16_t* action_id;
+  // Previous frame's action_id (captured at step start; internal-only).
+  // Used for transition-based mechanics that depend on (t -> t+1) action changes while keeping
+  // the seed schema minimal for one-step reseeding.
+  uint16_t* prev_action_id;
   int16_t* action_frame;
   uint8_t* match_flow_timer;
   int16_t* downwait_timer;  // fp->mv.co.downwait.x0 (seeded; decomp: ftCo_DownWait_Anim)

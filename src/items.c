@@ -184,6 +184,193 @@ static inline uint16_t items_find_gun_instance_id(const MslBatch* batch, int bi,
   return 0;
 }
 
+static inline int items_find_gun_slot(const MslBatch* batch, int bi, int owner, uint16_t gun_itkind) {
+  if (batch == NULL || owner < 0) {
+    return -1;
+  }
+  for (int it = 0; it < MSL_MAX_ITEMS; it++) {
+    const size_t ii = msl_idx_item(bi, it);
+    if (!batch->state.item_exists[ii]) {
+      continue;
+    }
+    if (batch->state.item_type[ii] != gun_itkind) {
+      continue;
+    }
+    if (batch->state.item_owner[ii] != owner) {
+      continue;
+    }
+    // Blaster gun items commonly have spawn_id=0 in Slippi; don't require it here
+    // (identity keying is handled elsewhere).
+    return it;
+  }
+  return -1;
+}
+
+static inline uint8_t blaster_gun_state_from_action_id(uint16_t action_id_u16) {
+  // ftFx_SpecialN_GetBlasterAction returns:
+  // - msid = currASID - ftFx_MS_SpecialNStart for SpecialN{Start/Loop/End}/SpecialAirN{Start/Loop/End}
+  // - msid = currASID - ftCo_MS_CatchDash for Throw{B/Hi/Lw}
+  // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_SpecialN_GetBlasterAction
+  // The corresponding index enum is decomp-defined as ftFx_SpecialNIndex:
+  // refs/melee/src/melee/ft/chara/ftFox/forward.h::ftFx_SpecialNIndex
+  // (0..5 = Start/Loop/End/AirStart/AirLoop/AirEnd; 6..8 = ThrowB/ThrowHi/ThrowLw).
+  //
+  // IMPORTANT: in Slippi, `action_id` is the fighter's motion state enum (fp->state / GALE01 ft*MS_*),
+  // while `animation_index` is a separate "subaction/submotion" id used by scripts/poses.
+
+  // Fox/Falco MotionState ids (GALE01), decomp-backed numeric values:
+  // - refs/melee/src/melee/ft/chara/ftFox/ftFx_Init.c::ftFx_Init_MotionStateTable
+  //   (comments: ftFx_MS_SpecialNStart=341 .. ftFx_MS_SpecialAirNEnd=346)
+  // - refs/melee/src/melee/ft/chara/ftFalco/ftFc_Init.c::ftFc_Init_MotionStateTable
+  //   (Falco uses the same ftFx_* MotionState ids; comments match Fox)
+  // - refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_SpecialN_GetBlasterAction
+  //   (msid = currASID - ftFx_MS_SpecialNStart)
+  enum {
+    MSL_FX_MS_SPECIALN_START = 0x0155,      // ftFx_MS_SpecialNStart
+    MSL_FX_MS_SPECIALN_LOOP = 0x0156,       // ftFx_MS_SpecialNLoop
+    MSL_FX_MS_SPECIALN_END = 0x0157,        // ftFx_MS_SpecialNEnd
+    MSL_FX_MS_SPECIALAIRN_START = 0x0158,   // ftFx_MS_SpecialAirNStart
+    MSL_FX_MS_SPECIALAIRN_LOOP = 0x0159,    // ftFx_MS_SpecialAirNLoop
+    MSL_FX_MS_SPECIALAIRN_END = 0x015A,     // ftFx_MS_SpecialAirNEnd
+  };
+  // Throw MotionState ids (GALE01 common), decomp-backed numeric values:
+  // - refs/melee/src/melee/ft/ftmotionstates.c (comments: ftCo_MS_CatchDash=214, ftCo_MS_ThrowB=220, ...)
+  // - refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_SpecialN_GetBlasterAction
+  //   (msid = currASID - ftCo_MS_CatchDash for ThrowB/ThrowHi/ThrowLw)
+
+  if (action_id_u16 >= (uint16_t)MSL_FX_MS_SPECIALN_START &&
+      action_id_u16 <= (uint16_t)MSL_FX_MS_SPECIALAIRN_END) {
+    return (uint8_t)(action_id_u16 - (uint16_t)MSL_FX_MS_SPECIALN_START);
+  }
+
+  // Throw motion states that still "require the blaster item" for Fox/Falco.
+  // Decomp enum values (refs/melee/src/melee/ft/ftmotionstates.c comments):
+  // - ftCo_MS_CatchDash = 214 (base for throw indices)
+  // - ftCo_MS_ThrowB    = 220 -> index 6 (ftFx_SpecialNIndex_ThrowB)
+  // - ftCo_MS_ThrowHi   = 221 -> index 7 (ftFx_SpecialNIndex_ThrowHi)
+  // - ftCo_MS_ThrowLw   = 222 -> index 8 (ftFx_SpecialNIndex_ThrowLw)
+  enum { MSL_FTCO_MS_CATCHDASH = 214 };
+  enum { MSL_FTCO_MS_THROWB = 220, MSL_FTCO_MS_THROWHI = 221, MSL_FTCO_MS_THROWLW = 222 };
+  if (action_id_u16 == (uint16_t)MSL_FTCO_MS_THROWB || action_id_u16 == (uint16_t)MSL_FTCO_MS_THROWHI ||
+      action_id_u16 == (uint16_t)MSL_FTCO_MS_THROWLW) {
+    return (uint8_t)(action_id_u16 - (uint16_t)MSL_FTCO_MS_CATCHDASH);
+  }
+
+  return 9;
+}
+
+static void blaster_gun_update_from_fighter(MslBatch* batch, int bi, int owner, const MslLaserParams* lp) {
+  if (batch == NULL || lp == NULL) {
+    return;
+  }
+  const size_t o_idx = msl_idx_player(bi, owner);
+  const uint16_t prev_action_id_u16 = batch->state.prev_action_id[o_idx];
+  const uint8_t prev_state = blaster_gun_state_from_action_id(prev_action_id_u16);
+  const uint16_t action_id_u16 = batch->state.action_id[o_idx];
+  const uint8_t want_state = blaster_gun_state_from_action_id(action_id_u16);
+  const uint8_t want_gun = (want_state != 9) ? 1u : 0u;
+
+  const int existing_slot = items_find_gun_slot(batch, bi, owner, lp->gun_itkind);
+  // Throw states (6..8) do not *spawn* the gun; they only keep it alive if it already exists.
+  // Decomp includes throws in ftFx_SpecialN_GetBlasterAction for "moves that require the blaster item",
+  // but the gun item itself is spawned on SpecialN enter (it_802AE8A8) and persisted via owner linkage.
+  // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_SpecialN_Enter
+  // refs/melee/src/melee/it/items/itfoxblaster.c::it_802AE8A8
+  if (want_gun && want_state >= 6 && want_state <= 8 && existing_slot < 0) {
+    return;
+  }
+  if (!want_gun) {
+    if (existing_slot < 0) {
+      return;
+    }
+    const size_t ii = msl_idx_item(bi, existing_slot);
+
+    // 1-frame linger (transition-based), decomp-shaped:
+    // - The fighter clears its blaster pointer without directly destroying the item:
+    //   refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_SpecialNEnd_Anim
+    //   -> ftFox_SpecialN_RemoveBlasterNULL (sets fp->fv.fx.x222C_blasterGObj = NULL)
+    // - The item then detects the cleared pointer via ftFx_SpecialN_CheckRemoveBlaster and destroys itself:
+    //   refs/melee/src/melee/it/items/itfoxblaster.c::itFoxblaster_UnkMotion8_Anim
+    //   -> ftFx_SpecialN_CheckRemoveBlaster -> clear_blaster / it_802AEAB4
+    //
+    // NOTE: it_802AEAB4 calls Item_8026A8EC (refs/melee/src/melee/it/items/itfoxblaster.c::it_802AEAB4),
+    // which schedules item destruction; it does not necessarily remove the item from the global item
+    // list immediately. In the suite, this manifests as a single frame where the fighter's action_id
+    // is no longer SpecialN but the gun item still exists (e.g. AttachedGoodNaturedGuanaco seed_frame=-14
+    // has action_id=42 with gun present; next frame it is gone).
+    // TODO: Re-check the exact frame ordering using ftFx_SpecialN_RemoveBlaster / it_802AEAB4 and Slippi
+    // Recording/SendItemInfo.s once we model full fighter+item update ordering.
+    //
+    // Implementation: keep the gun only on the blaster->non-blaster transition (prev_state!=9), and
+    // clear it immediately if the previous frame was already non-blaster (prev_state==9).
+    if (prev_state != 9) {
+      // Keep as-is (do not overwrite item_state/pos); this is the linger frame.
+      batch->state.item_exists[ii] = 1;
+      batch->state.item_type[ii] = lp->gun_itkind;
+      batch->state.item_owner[ii] = (int8_t)owner;
+      return;
+    }
+
+    item_slot_clear(batch, ii);
+    return;
+  }
+
+  int slot = existing_slot;
+  uint8_t spawned = 0;
+  if (slot < 0) {
+    slot = items_alloc_slot(batch, bi);
+    if (slot < 0) {
+      return;
+    }
+    const size_t ii = msl_idx_item(bi, slot);
+    item_slot_clear(batch, ii);
+    batch->state.item_exists[ii] = 1;
+    batch->state.item_type[ii] = lp->gun_itkind;
+    batch->state.item_owner[ii] = (int8_t)owner;
+
+    // Slippi records item instance_id from item->xDA8_short.
+    // On item spawn with a fighter parent, xDA8_short is copied from the fighter's x2074.x2088.
+    // refs/melee/src/melee/it/it_2725.c::it_8027B070
+    batch->state.item_instance_id[ii] = batch->state.instance_id[o_idx];
+
+    // Blaster gun items commonly have spawn_id=0 (Slippi field at item+0x1C).
+    // Observed in suite replay "AttachedGoodNaturedGuanaco" at frame -26 (type=75 spawn_id=0).
+    batch->state.item_spawn_id[ii] = 0;
+
+    // GALE01 ItemCommonData->xF8 is used as a default lifeTimer in item code:
+    // refs/melee/src/melee/it/it_2725.c::it_8027518C (sets item->xD44_lifeTimer = it_804D6D28->xF8)
+    // Slippi shows blaster gun timer=1400.0f in the suite; treat 1400.0 as the GALE01 xF8 value.
+    batch->state.item_timer[ii] = 1400.0f;
+    spawned = 1;
+  }
+
+  const size_t ii = msl_idx_item(bi, slot);
+  batch->state.item_exists[ii] = 1;
+  batch->state.item_type[ii] = lp->gun_itkind;
+  batch->state.item_owner[ii] = (int8_t)owner;
+  batch->state.item_state[ii] = want_state;
+
+  // Gun is attached to a fighter part and does not have projectile physics (vel stays 0 in Slippi).
+  // refs/melee/src/melee/it/items/itfoxblaster.c::it_802AE8A8 (spawn.vel=0, attach via Item_8026AB54)
+  batch->state.item_vel_x[ii] = 0.0f;
+  batch->state.item_vel_y[ii] = 0.0f;
+
+  // Position:
+  // In v1, avoid introducing a new (potentially wrong) bone-space attachment transform that can
+  // amplify overall item MAEs. Only initialize position on spawn; otherwise preserve the seeded
+  // item position and let the one-step eval measure the residual delta.
+  if (spawned) {
+    batch->state.item_pos_x[ii] = batch->state.pos_x[o_idx];
+    batch->state.item_pos_y[ii] = batch->state.pos_y[o_idx];
+    batch->state.item_direction[ii] = batch->state.facing[o_idx] ? 1.0f : -1.0f;
+  }
+
+  // Maintain timer parity for already-seeded gun items (lifetime does not tick down in our v1).
+  if (!(batch->state.item_timer[ii] > 0.0f)) {
+    batch->state.item_timer[ii] = 1400.0f;
+  }
+}
+
 static inline const MslLaserParams* laser_params_for_item_type(uint16_t type) {
   const MslLaserParams* fox = laser_params_get(1);
   const MslLaserParams* falco = laser_params_get(22);
@@ -576,12 +763,32 @@ void items_update(MslBatch* batch) {
     return;
   }
 
+  // Ensure the blaster "gun" item (ItKind 74/75) exists and stays linked to its fighter.
+  // This stabilizes item ordering/keys when lasers coexist with the gun.
+  //
+  // Decomp-first trail:
+  // - Spawn: refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_SpecialN_Enter calls it_802AE8A8
+  // - Item spawn/attach: refs/melee/src/melee/it/items/itfoxblaster.c::it_802AE8A8 (Item_8026AB54 attach)
+  // - Per-frame: refs/melee/src/melee/it/items/itfoxblaster.c::itFoxblaster_UnkMotion8_Anim
+  // - Slippi fields: refs/slippi-ssbm-asm/Recording/SendItemInfo.s (state=0x24, instance_id=0xDA8)
+
   // Spawn lasers from fighter loop scripts (cmd_var[2] pulses).
   // Decomp: ftFx_SpecialNLoop_Anim / ftFx_SpecialAirNLoop_Anim call ftFx_SpecialN_CreateBlasterShot,
   // which checks fp->cmd_vars[2] and spawns via it_8029C6A4.
   // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c
   const int num_players = (int)batch->config.num_players;
   for (int bi = 0; bi < batch->batch_size; bi++) {
+    // Update gun items first so laser spawns can inherit the correct instance_id/spawn_id ordering.
+    for (int p = 0; p < num_players; p++) {
+      const size_t idx = msl_idx_player(bi, p);
+      const uint8_t cid = batch->state.char_id[idx];
+      const MslLaserParams* lp = laser_params_get(cid);
+      if (lp == NULL || lp->gun_itkind == 0) {
+        continue;
+      }
+      blaster_gun_update_from_fighter(batch, bi, p, lp);
+    }
+
     for (int p = 0; p < num_players; p++) {
       const size_t idx = msl_idx_player(bi, p);
       if (batch->state.hitlag[idx] != 0) {

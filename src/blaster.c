@@ -19,11 +19,13 @@ static inline uint8_t is_fox_falco(uint8_t char_id) {
   return (char_id == (uint8_t)MSL_CHAR_FOX) || (char_id == (uint8_t)MSL_CHAR_FALCO);
 }
 
-// Fox/Falco motion states (GALE01), consecutive after ftCo_MS_Count.
+// Fox/Falco motion states (GALE01) for SpecialN.
 //
-// Decomp: refs/melee/src/melee/ft/chara/ftCommon/forward.h::ftCommon_MotionState
-// - ftCo_MS_Count == 0x155 (implied by the surrounding enum comments; GALE01).
-// Decomp: refs/melee/src/melee/ft/chara/ftFox/forward.h::ftFox_MotionState
+// Decomp (explicit numeric ids in comments):
+// - refs/melee/src/melee/ft/chara/ftFox/ftFx_Init.c::ftFx_Init_MotionStateTable
+//   (ftFx_MS_SpecialNStart=341 .. ftFx_MS_SpecialAirNEnd=346)
+// - refs/melee/src/melee/ft/chara/ftFalco/ftFc_Init.c::ftFc_Init_MotionStateTable
+//   (Falco uses the same ftFx_* MotionState ids; comments match Fox)
 enum {
   MSL_ACT_FX_SPECIAL_N_START = 0x0155,      // ftFx_MS_SpecialNStart
   MSL_ACT_FX_SPECIAL_N_LOOP = 0x0156,       // ftFx_MS_SpecialNLoop
@@ -45,6 +47,18 @@ static inline uint8_t action_is_blaster(uint16_t action_id) {
     default:
       return 0;
   }
+}
+
+static inline uint8_t action_allows_blaster_entry_ground(uint16_t action_id) {
+  // Spotdodge (EscapeN) has an empty IASA in decomp, so it cannot be interrupted into SpecialN.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Escape.c::ftCo_EscapeN_IASA
+  //
+  // Keep this narrowly scoped: other ground states (including shield) have non-empty IASA callbacks
+  // and may allow specials depending on per-state input checks.
+  if (action_id == (uint16_t)MSL_ACT_ESCAPE_N) {
+    return 0;
+  }
+  return msl_action_is_ground_locomotion(action_id);
 }
 
 static inline void enter_wait(MslBatch* batch, size_t idx) {
@@ -119,7 +133,7 @@ void blaster_update_pre_physics(MslBatch* batch) {
       const uint16_t pressed = batch->state.input_buttons_pressed[idx];
       if (!action_is_blaster(a) && (pressed & (uint16_t)MSL_BUTTON_B) != 0) {
         if (on_ground) {
-          if (msl_action_is_ground_locomotion(a)) {
+          if (action_allows_blaster_entry_ground(a)) {
             enter_blaster_start(batch, idx, lp, 1);
           }
         } else {
