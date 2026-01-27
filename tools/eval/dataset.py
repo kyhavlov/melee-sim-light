@@ -31,6 +31,7 @@ def _arr(dtype: str, n: int):
 MAX_PLAYERS: Final[int] = 4
 MAX_ITEMS: Final[int] = 15
 HITLIST_GROUPS: Final[int] = 8
+STALE_QUEUE_SIZE: Final[int] = 10  # decomp: refs/melee/src/melee/pl/types.h::StaleMoveTable.StaleMoves[10]
 
 INPUT_PLAYER_DTYPE = np.dtype(
     [
@@ -152,6 +153,12 @@ SEED_DTYPE = np.dtype(
         ("state_flags", ("u1", (MAX_PLAYERS, 5))),
         ("combat_hitlist_cd", ("<u2", (MAX_PLAYERS, HITLIST_GROUPS, MAX_PLAYERS))),
         ("combat_hitlist_victim_iid", ("<u2", (MAX_PLAYERS, HITLIST_GROUPS, MAX_PLAYERS))),
+        ("stale_queue_index", _arr("u1", MAX_PLAYERS)),
+        ("stale_move_id", ("<u2", (MAX_PLAYERS, STALE_QUEUE_SIZE))),
+        ("stale_attack_instance", ("<u2", (MAX_PLAYERS, STALE_QUEUE_SIZE))),
+        # NOTE (PP#4 groundwork): preprocessing currently leaves these staling fields as all-zeros,
+        # so staling multiplier is identity until the runtime wiring updates the queue on
+        # successful damaging hits and the seed schema is populated from replay history.
         ("items", ITEM_DTYPE, (MAX_ITEMS,)),
     ],
     align=False,

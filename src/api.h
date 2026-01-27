@@ -15,6 +15,9 @@ enum { MSL_STATE_FLAGS_BYTES = 5 };
 // Decomp: `spawn_hitbox_0.hit_group` is a 3-bit field (0..7).
 // refs/melee/src/melee/lb/types.h::spawn_hitbox_0
 enum { MSL_HITLIST_GROUPS = 8 };
+// Decomp: Player's `StaleMoveTable.StaleMoves[10]` ring buffer (current_index wraps at 9).
+// refs/melee/src/melee/pl/types.h::StaleMoveTable and refs/melee/src/melee/pl/plstale.c
+enum { MSL_STALE_QUEUE_SIZE = 10 };
 
 // -----------------------------
 // Packed on-disk / wire formats
@@ -256,6 +259,25 @@ typedef struct MslSeed {
   // on death/respawn.
   // refs/melee/src/melee/lb/lbcollision.c::lbColl_80008688
   uint16_t combat_hitlist_victim_iid[MSL_MAX_PLAYERS][MSL_HITLIST_GROUPS][MSL_MAX_PLAYERS];
+
+  // Stale-move (staling) internals (seeded; not causally derivable from a single frame).
+  //
+  // Decomp shape:
+  // - Each player maintains a `StaleMoveTable` ring buffer of the last 10 (move_id, attack_instance)
+  //   pairs, with `current_index` pointing to the next write slot (wrap at 9).
+  // - Staling multiplier consults the previous 9 entries starting from (current_index - 1).
+  // refs/melee/src/melee/pl/types.h::StaleMoveTable
+  // refs/melee/src/melee/pl/plstale.c::plStale_UpdateStaleMovesFromFighter
+  // refs/melee/src/melee/ft/ft_0881.c::ft_80089118
+  uint8_t stale_queue_index[MSL_MAX_PLAYERS];
+  uint16_t stale_move_id[MSL_MAX_PLAYERS][MSL_STALE_QUEUE_SIZE];
+  uint16_t stale_attack_instance[MSL_MAX_PLAYERS][MSL_STALE_QUEUE_SIZE];
+  // IMPORTANT (current PP#4 groundwork status):
+  // - Tooling/preprocessing currently leaves these fields as all-zeros.
+  // - Therefore the stale queue is empty and any staling multiplier is effectively identity (1.0)
+  //   until PP#4 wires (move_id, attack_instance) attribution and updates the queue on qualifying
+  //   damaging hits.
+  // - Do not treat "seeded" here as "implemented"; it is only schema/state plumbing for future work.
 
   MslItem items[MSL_MAX_ITEMS];
 } MslSeed;

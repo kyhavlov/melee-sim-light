@@ -24,6 +24,7 @@
 #include "shield_tilt_table.h"
 #include "laser_params.h"
 #include "stage_collision.h"
+#include "staling_tables.h"
 #include "state.h"
 #include "step.h"
 
@@ -82,6 +83,9 @@ MslBatch* msl_batch_create(int batch_size, int num_players) {
     msl_batch_destroy(batch);
     return NULL;
   }
+
+  // Staling tables are optional (groundwork only): missing artifacts should not prevent running.
+  (void)staling_tables_init();
 
   if (anim_table_init() != 0) {
     msl_batch_destroy(batch);
@@ -306,6 +310,19 @@ int msl_batch_reseed_seed(MslBatch* batch, const uint8_t* seed_bytes, size_t see
 
       for (int k = 0; k < 5; k++) {
         batch->state.state_flags[idx * 5 + (size_t)k] = seed->state_flags[p][k];
+      }
+
+      // Stale-move (staling) queue snapshot.
+      uint8_t stale_qi = seed->stale_queue_index[p];
+      if (stale_qi >= (uint8_t)MSL_STALE_QUEUE_SIZE) {
+        stale_qi = 0;
+      }
+      batch->state.stale_queue_index[idx] = stale_qi;
+      const size_t stale_base = idx * (size_t)MSL_STALE_QUEUE_SIZE;
+      for (int k = 0; k < MSL_STALE_QUEUE_SIZE; k++) {
+        batch->state.stale_move_id[stale_base + (size_t)k] = seed->stale_move_id[p][k];
+        batch->state.stale_attack_instance[stale_base + (size_t)k] =
+            seed->stale_attack_instance[p][k];
       }
     }
 

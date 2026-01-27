@@ -84,6 +84,10 @@ def main() -> None:
         "tools.extraction.extract_ftcommon_data",
         ["--plco", str(iso_dir / "PlCo.dat"), "--out", str(out_common)],
     )
+    _run(
+        "tools.extraction.extract_staling_weights",
+        ["--plco", str(iso_dir / "PlCo.dat"), "--out", "data/staling/weights.bin"],
+    )
 
     # Character attrs (also contains key ECB/ledge snap params and laser special attrs).
     _run(
@@ -136,6 +140,17 @@ def main() -> None:
             "data/moves",
             "--special_msids_dir",
             "data/special_msids",
+            "--chars",
+            ",".join(chars),
+        ],
+    )
+    _run(
+        "tools.extraction.extract_staling_move_id",
+        [
+            "--melee_decomp",
+            str(args.melee_decomp),
+            "--out_dir",
+            "data/staling/move_id",
             "--chars",
             ",".join(chars),
         ],

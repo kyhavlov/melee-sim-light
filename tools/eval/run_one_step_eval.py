@@ -143,7 +143,18 @@ def evaluate_dataset(
     if reporter is None:
         reporter = Reporter()
 
-    ds = read_dataset(str(dataset_path))
+    try:
+        ds = read_dataset(str(dataset_path))
+    except ValueError as e:
+        msg = str(e)
+        if "record_size mismatch" in msg:
+            reporter.print(f"error: {msg}")
+            reporter.print("hint: dataset schema changed; rebuild cached datasets with --force:")
+            reporter.print(
+                "  uv run python -m tools.slippi.preprocess_suite --suite <suite.json> --datasets-dir <dir> --force"
+            )
+            raise
+        raise
     samples = ds.samples
     num_records = samples.shape[0]
     num_players = int(ds.header["num_players"])

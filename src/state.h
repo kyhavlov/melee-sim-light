@@ -197,6 +197,19 @@ typedef struct MslStateSoA {
   uint16_t* combat_hitlist_cd;
   uint16_t* combat_hitlist_victim_iid;
 
+  // Stale-move (staling) internals.
+  //
+  // Decomp shape (GALE01):
+  // - Player maintains a `StaleMoveTable` ring buffer of the last 10 (move_id, attack_instance)
+  //   pairs, with `current_index` pointing to the next write slot (wrap at 9).
+  // - Staling multiplier consults the previous 9 entries starting from (current_index - 1).
+  // refs/melee/src/melee/pl/types.h::StaleMoveTable
+  // refs/melee/src/melee/pl/plstale.c::plStale_UpdateStaleMovesFromFighter
+  // refs/melee/src/melee/ft/ft_0881.c::ft_80089118
+  uint8_t* stale_queue_index;       // [batch * players]
+  uint16_t* stale_move_id;          // [batch * players * MSL_STALE_QUEUE_SIZE]
+  uint16_t* stale_attack_instance;  // [batch * players * MSL_STALE_QUEUE_SIZE]
+
   // Inputs (processed, per-frame) written by input_apply.
   uint16_t* input_buttons;           // [batch * players]
   uint16_t* prev_input_buttons;      // [batch * players]
