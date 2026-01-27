@@ -470,14 +470,37 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
 
         if (shield_hit) {
           // Powershield reflect: on a reflected hit, reverse the velocity vector and transfer owner.
-          // Decomp: it_2725_Logic94_Reflected adds pi to angle (equivalent to -vel) and updates facing.
-          // refs/melee/src/melee/it/items/itfoxlaser.c::it_2725_Logic94_Reflected
+          //
+          // Decomp:
+          // - Laser reflect visual logic: it_2725_Logic94_Reflected flips angle (+= pi) and sets facing_dir.
+          //   refs/melee/src/melee/it/items/itfoxlaser.c::it_2725_Logic94_Reflected
+          // - GuardReflect sets fp->reflecting and powershield flags:
+          //   refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_8009370C (ftColl_CreateReflectHit)
+          //   refs/melee/build/GALE01/asm/melee/ft/ftcoll.s::ftColl_CreateReflectHit (sets 0x2218 reflect bit => 0x10)
+          //   Note: fp+0x2218:3 in refs/melee/src/melee/ft/types.h uses the game's bit numbering (MSB-first),
+          //   so this reflects as 0x10 (not 0x08).
+          // - Slippi `state_flags` packs these fighter bytes:
+          //   refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm (lbz r3,0x2218 / 0x221C)
+          //
+          // TODO(reflect): This gate models *powershield reflect only* (reflect-active + powershield-active).
+          // It will NOT reflect lasers off special-move reflect bubbles (reflect-active without the
+          // powershield bit). Implement the item-vs-reflect-bubble overlap path (ftColl_CreateReflectHit
+          // bubble) to cover those cases.
+          //
+          // Note: item attack_id / attack_instance remain spawn-latched for lasers in v1 (do not
+          // transfer on reflect here).
           enum { MSL_STATE_FLAGS_STRIDE = MSL_STATE_FLAGS_BYTES };
+          enum { MSL_STATE_FLAGS_2218_INDEX = 0 };
+          // Reflect-active bit in fp+0x2218 as packed by Slippi: 0x10.
+          enum { MSL_STATE_FLAG_2218_IS_REFLECT_ACTIVE = 0x10 };
+          const uint8_t flags_2218 = batch->state.state_flags
+              [d_idx * (size_t)MSL_STATE_FLAGS_STRIDE + (size_t)MSL_STATE_FLAGS_2218_INDEX];
           enum { MSL_STATE_FLAGS_221C_INDEX = 3 };
           enum { MSL_STATE_FLAG_221C_POWERSHIELD_ACTIVE = 0x20 };
           const uint8_t flags_221c = batch->state.state_flags
               [d_idx * (size_t)MSL_STATE_FLAGS_STRIDE + (size_t)MSL_STATE_FLAGS_221C_INDEX];
-          if (flags_221c & (uint8_t)MSL_STATE_FLAG_221C_POWERSHIELD_ACTIVE) {
+          if ((flags_2218 & (uint8_t)MSL_STATE_FLAG_2218_IS_REFLECT_ACTIVE) &&
+              (flags_221c & (uint8_t)MSL_STATE_FLAG_221C_POWERSHIELD_ACTIVE)) {
             batch->state.item_owner[ii] = (int8_t)def;
             batch->state.item_vel_x[ii] = -batch->state.item_vel_x[ii];
             batch->state.item_vel_y[ii] = -batch->state.item_vel_y[ii];

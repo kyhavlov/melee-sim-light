@@ -289,47 +289,143 @@ def evaluate_dataset(
             left = debug_left.get(field, 0)
             if left <= 0:
                 continue
-            diff = out_compare_view[field][:, active] != ref[field][:, active]
-            if not np.any(diff):
-                continue
-            pairs = np.argwhere(diff)
-            for ri, p in pairs:
-                left = debug_left.get(field, 0)
-                if left <= 0:
-                    break
-                r = int(ri)
-                pp = int(p)
-                gi = int(offset + r)
-                reporter.print(
-                    f"debug.mismatch.{field}: record={gi} seed_frame={int(seed['frame_id'][r])} ref_frame={int(ref['frame_id'][r])} p={pp}"
-                )
-                reporter.print(
-                    "  seed:",
-                    f"action_id={int(seed['action_id'][r, pp])}",
-                    f"anim={int(seed['animation_index'][r, pp])}",
-                    f"timer={int(seed['match_flow_timer'][r, pp])}",
-                    f"af={int(seed['action_frame'][r, pp])}",
-                    f"anim_f={float(seed['anim_frame_f32'][r, pp]):.3f}",
-                    f"pos=({float(seed['pos_x'][r, pp]):.3f},{float(seed['pos_y'][r, pp]):.3f})",
-                    f"stocks={int(seed['stocks'][r, pp])}",
-                )
-                reporter.print(
-                    "  out :",
-                    f"action_id={int(out_compare_view['action_id'][r, pp])}",
-                    f"anim={int(out_compare_view['animation_index'][r, pp])}",
-                    f"pos=({float(out_compare_view['pos_x'][r, pp]):.3f},{float(out_compare_view['pos_y'][r, pp]):.3f})",
-                    f"stocks={int(out_compare_view['stocks'][r, pp])}",
-                    f"is_dead={int(out_compare_view['is_dead'][r, pp])}",
-                )
-                reporter.print(
-                    "  ref :",
-                    f"action_id={int(ref['action_id'][r, pp])}",
-                    f"anim={int(ref['animation_index'][r, pp])}",
-                    f"pos=({float(ref['pos_x'][r, pp]):.3f},{float(ref['pos_y'][r, pp]):.3f})",
-                    f"stocks={int(ref['stocks'][r, pp])}",
-                    f"is_dead={int(ref['is_dead'][r, pp])}",
-                )
-                debug_left[field] = left - 1
+            if field.startswith("item_"):
+                out_items = out_compare_view["items"]
+                ref_items = ref["items"]
+                seed_items = seed["items"]
+
+                if field == "item_exists":
+                    diff = out_items["exists"] != ref_items["exists"]
+                elif field == "item_type":
+                    diff = out_items["type"] != ref_items["type"]
+                elif field == "item_state":
+                    diff = out_items["state"] != ref_items["state"]
+                elif field == "item_owner":
+                    diff = out_items["owner"] != ref_items["owner"]
+                elif field == "item_instance_id":
+                    diff = out_items["instance_id"] != ref_items["instance_id"]
+                else:
+                    continue
+
+                if not np.any(diff):
+                    continue
+
+                def _fmt_item(it) -> str:
+                    return (
+                        f"exists={int(it['exists'])}"
+                        f" type={int(it['type'])}"
+                        f" state={int(it['state'])}"
+                        f" owner={int(it['owner'])}"
+                        f" iid={int(it['instance_id'])}"
+                        f" aid={int(it['attack_id'])}"
+                        f" ains={int(it['attack_instance'])}"
+                        f" dir={float(it['direction']):.3f}"
+                        f" vel=({float(it['vel_x']):.3f},{float(it['vel_y']):.3f})"
+                        f" pos=({float(it['pos_x']):.3f},{float(it['pos_y']):.3f})"
+                        f" spawn_id={int(it['spawn_id'])}"
+                        f" misc=({int(it['misc0'])},{int(it['misc1'])},{int(it['misc2'])},{int(it['misc3'])})"
+                    )
+
+                def _reflect_like(seed_it, out_it) -> bool:
+                    if int(seed_it["exists"]) == 0 or int(out_it["exists"]) == 0:
+                        return False
+                    if int(seed_it["type"]) != int(out_it["type"]):
+                        return False
+                    if int(seed_it["owner"]) == int(out_it["owner"]):
+                        return False
+                    vx = abs(float(out_it["vel_x"]) + float(seed_it["vel_x"]))
+                    vy = abs(float(out_it["vel_y"]) + float(seed_it["vel_y"]))
+                    return vx < 1e-3 and vy < 1e-3
+
+                pairs = np.argwhere(diff)
+                for ri, si in pairs:
+                    left = debug_left.get(field, 0)
+                    if left <= 0:
+                        break
+                    r = int(ri)
+                    s = int(si)
+                    gi = int(offset + r)
+
+                    seed_it = seed_items[r, s]
+                    out_it = out_items[r, s]
+                    ref_it = ref_items[r, s]
+
+                    # Include dataset name even when called standalone; suite eval prints a header too.
+                    reporter.print(
+                        f"debug.mismatch.{field}: dataset={dataset_path.name} record={gi} seed_frame={int(seed['frame_id'][r])} ref_frame={int(ref['frame_id'][r])} slot={s} reflect_like={int(_reflect_like(seed_it, out_it))}"
+                    )
+                    reporter.print(
+                        "  seed_flags:",
+                        f"p0={tuple(int(x) for x in seed['state_flags'][r, 0, :])}",
+                        f"p1={tuple(int(x) for x in seed['state_flags'][r, 1, :])}",
+                    )
+                    p0_2218 = int(seed["state_flags"][r, 0, 0])
+                    p0_221b = int(seed["state_flags"][r, 0, 2])
+                    p0_221c = int(seed["state_flags"][r, 0, 3])
+                    p1_2218 = int(seed["state_flags"][r, 1, 0])
+                    p1_221b = int(seed["state_flags"][r, 1, 2])
+                    p1_221c = int(seed["state_flags"][r, 1, 3])
+                    reporter.print(
+                        "  seed_gate:",
+                        # Reflect-active bit is 0x10 in fp+0x2218 as packed by Slippi.
+                        # refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
+                        # refs/melee/build/GALE01/asm/melee/ft/ftcoll.s::ftColl_CreateReflectHit
+                        f"p0=(rf={int((p0_2218 & 0x10) != 0)} ps={int((p0_221c & 0x20) != 0)} sh={int((p0_221b & 0x80) != 0)})",
+                        f"p1=(rf={int((p1_2218 & 0x10) != 0)} ps={int((p1_221c & 0x20) != 0)} sh={int((p1_221b & 0x80) != 0)})",
+                    )
+                    reporter.print(
+                        "  seed_p:",
+                        f"p0_action_id={int(seed['action_id'][r, 0])}",
+                        f"p1_action_id={int(seed['action_id'][r, 1])}",
+                        f"p0_pos=({float(seed['pos_x'][r, 0]):.3f},{float(seed['pos_y'][r, 0]):.3f})",
+                        f"p1_pos=({float(seed['pos_x'][r, 1]):.3f},{float(seed['pos_y'][r, 1]):.3f})",
+                    )
+                    reporter.print("  seed:", _fmt_item(seed_it))
+                    reporter.print("  out :", _fmt_item(out_it))
+                    reporter.print("  ref :", _fmt_item(ref_it))
+                    debug_left[field] = left - 1
+            else:
+                diff = out_compare_view[field][:, active] != ref[field][:, active]
+                if not np.any(diff):
+                    continue
+                pairs = np.argwhere(diff)
+                for ri, p in pairs:
+                    left = debug_left.get(field, 0)
+                    if left <= 0:
+                        break
+                    r = int(ri)
+                    pp = int(p)
+                    gi = int(offset + r)
+                    reporter.print(
+                        f"debug.mismatch.{field}: dataset={dataset_path.name} record={gi} seed_frame={int(seed['frame_id'][r])} ref_frame={int(ref['frame_id'][r])} p={pp}"
+                    )
+                    reporter.print(
+                        "  seed:",
+                        f"action_id={int(seed['action_id'][r, pp])}",
+                        f"anim={int(seed['animation_index'][r, pp])}",
+                        f"timer={int(seed['match_flow_timer'][r, pp])}",
+                        f"af={int(seed['action_frame'][r, pp])}",
+                        f"anim_f={float(seed['anim_frame_f32'][r, pp]):.3f}",
+                        f"pos=({float(seed['pos_x'][r, pp]):.3f},{float(seed['pos_y'][r, pp]):.3f})",
+                        f"stocks={int(seed['stocks'][r, pp])}",
+                    )
+                    reporter.print(
+                        "  out :",
+                        f"action_id={int(out_compare_view['action_id'][r, pp])}",
+                        f"anim={int(out_compare_view['animation_index'][r, pp])}",
+                        f"pos=({float(out_compare_view['pos_x'][r, pp]):.3f},{float(out_compare_view['pos_y'][r, pp]):.3f})",
+                        f"stocks={int(out_compare_view['stocks'][r, pp])}",
+                        f"is_dead={int(out_compare_view['is_dead'][r, pp])}",
+                    )
+                    reporter.print(
+                        "  ref :",
+                        f"action_id={int(ref['action_id'][r, pp])}",
+                        f"anim={int(ref['animation_index'][r, pp])}",
+                        f"pos=({float(ref['pos_x'][r, pp]):.3f},{float(ref['pos_y'][r, pp]):.3f})",
+                        f"stocks={int(ref['stocks'][r, pp])}",
+                        f"is_dead={int(ref['is_dead'][r, pp])}",
+                    )
+                    debug_left[field] = left - 1
 
         mismatches["action_id"] += int((out_compare_view["action_id"][:, active] != ref["action_id"][:, active]).sum())
         mismatches["action_frame"] += int(

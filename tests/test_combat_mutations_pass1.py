@@ -18,9 +18,6 @@ HIT_ELEMENT_INERT = 11
 # Slippi post-frame `state_flags`: refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
 STATE_FLAG_221C_DETECT_HITBOX_TOUCHING_SHIELD = 0x04
 
-# Button masks: src/buttons.h (Melee/HSD PAD bits)
-BUTTON_L = 0x0040
-
 # Action ids (GALE01): refs/melee/src/melee/ft/chara/ftCommon/forward.h
 ACT_WAIT = 0x000E
 ACT_SQUAT = 0x0027
@@ -36,6 +33,8 @@ SM_DAMAGE_AIR1 = 174
 
 CHAR_FOX = 1
 STAGE_FD = 32
+
+TRIGGER_FULL = np.uint8(255)
 
 
 def _common_attr(name: str) -> float:
@@ -438,7 +437,8 @@ def test_debug_select_body_hits_shield_precedence_blocks_body_selection() -> Non
         neutral = np.zeros((1, input_stride), dtype=np.uint8)
         shield = np.zeros((1, input_stride), dtype=np.uint8)
         shield_view = shield.view(INPUT_DTYPE).reshape((1,))
-        shield_view["p"]["buttons"][0, 1] = np.uint16(BUTTON_L)
+        # Hold shield via analog trigger (avoid entering GuardReflect via digital press).
+        shield_view["p"]["l"][0, 1] = TRIGGER_FULL
 
         # Step once to compute shield bubble world geometry for defender P1.
         msl_binding.step_input(handle, neutral, shield)
@@ -505,7 +505,7 @@ def test_combat_resolve_shield_overlap_reduces_shield_hp_by_decomp_formula() -> 
         neutral = np.zeros((1, input_stride), dtype=np.uint8)
         shield = np.zeros((1, input_stride), dtype=np.uint8)
         shield_view = shield.view(INPUT_DTYPE).reshape((1,))
-        shield_view["p"]["buttons"][0, 1] = np.uint16(BUTTON_L)
+        shield_view["p"]["l"][0, 1] = TRIGGER_FULL
 
         # Step once to compute shield bubble world geometry for defender P1.
         msl_binding.step_input(handle, neutral, shield)
@@ -570,7 +570,7 @@ def test_combat_resolve_shield_hitlag_uses_get_env_dmg_semantics() -> None:
         neutral = np.zeros((1, input_stride), dtype=np.uint8)
         shield = np.zeros((1, input_stride), dtype=np.uint8)
         shield_view = shield.view(INPUT_DTYPE).reshape((1,))
-        shield_view["p"]["buttons"][0, 1] = np.uint16(BUTTON_L)
+        shield_view["p"]["l"][0, 1] = TRIGGER_FULL
 
         # Step once to compute shield bubble world geometry for defender P1.
         msl_binding.step_input(handle, neutral, shield)
@@ -622,7 +622,7 @@ def test_combat_resolve_shield_hit_uses_max_damage_for_hitlag_but_first_for_hp_i
         neutral = np.zeros((1, input_stride), dtype=np.uint8)
         shield = np.zeros((1, input_stride), dtype=np.uint8)
         shield_view = shield.view(INPUT_DTYPE).reshape((1,))
-        shield_view["p"]["buttons"][0, 1] = np.uint16(BUTTON_L)
+        shield_view["p"]["l"][0, 1] = TRIGGER_FULL
 
         # Step once to compute shield bubble world geometry for defender P1.
         msl_binding.step_input(handle, neutral, shield)
@@ -697,7 +697,7 @@ def test_combat_resolve_powershield_blocks_shield_hp_depletion_but_keeps_hitlag(
         neutral = np.zeros((1, input_stride), dtype=np.uint8)
         shield = np.zeros((1, input_stride), dtype=np.uint8)
         shield_view = shield.view(INPUT_DTYPE).reshape((1,))
-        shield_view["p"]["buttons"][0, 1] = np.uint16(BUTTON_L)
+        shield_view["p"]["l"][0, 1] = TRIGGER_FULL
 
         # Step once to compute shield bubble world geometry for defender P1.
         msl_binding.step_input(handle, neutral, shield)
@@ -749,7 +749,7 @@ def test_combat_resolve_non_inert_shield_overlap_does_not_set_detect_hitbox_flag
         neutral = np.zeros((1, input_stride), dtype=np.uint8)
         shield = np.zeros((1, input_stride), dtype=np.uint8)
         shield_view = shield.view(INPUT_DTYPE).reshape((1,))
-        shield_view["p"]["buttons"][0, 1] = np.uint16(BUTTON_L)
+        shield_view["p"]["l"][0, 1] = TRIGGER_FULL
 
         # Step once to compute shield bubble world geometry for defender P1.
         msl_binding.step_input(handle, neutral, shield)
@@ -798,7 +798,7 @@ def test_combat_resolve_inert_shield_overlap_sets_detect_hitbox_flag() -> None:
         neutral = np.zeros((1, input_stride), dtype=np.uint8)
         shield = np.zeros((1, input_stride), dtype=np.uint8)
         shield_view = shield.view(INPUT_DTYPE).reshape((1,))
-        shield_view["p"]["buttons"][0, 1] = np.uint16(BUTTON_L)
+        shield_view["p"]["l"][0, 1] = TRIGGER_FULL
 
         # Step once to compute shield bubble world geometry for defender P1.
         msl_binding.step_input(handle, neutral, shield)
@@ -847,7 +847,7 @@ def test_combat_resolve_inert_shield_overlap_does_not_apply_shield_hit_mutations
         neutral = np.zeros((1, input_stride), dtype=np.uint8)
         shield = np.zeros((1, input_stride), dtype=np.uint8)
         shield_view = shield.view(INPUT_DTYPE).reshape((1,))
-        shield_view["p"]["buttons"][0, 1] = np.uint16(BUTTON_L)
+        shield_view["p"]["l"][0, 1] = TRIGGER_FULL
 
         # Step once to compute shield bubble world geometry for defender P1.
         msl_binding.step_input(handle, neutral, shield)
@@ -914,7 +914,7 @@ def test_combat_resolve_detect_hitbox_flag_is_cleared_on_next_combat_pass() -> N
         neutral = np.zeros((1, input_stride), dtype=np.uint8)
         shield = np.zeros((1, input_stride), dtype=np.uint8)
         shield_view = shield.view(INPUT_DTYPE).reshape((1,))
-        shield_view["p"]["buttons"][0, 1] = np.uint16(BUTTON_L)
+        shield_view["p"]["l"][0, 1] = TRIGGER_FULL
 
         # Step once to compute shield bubble world geometry for defender P1.
         msl_binding.step_input(handle, neutral, shield)
@@ -1006,7 +1006,7 @@ def test_combat_resolve_shield_hitlag_gating_prevents_multiple_shield_hits() -> 
         neutral = np.zeros((1, input_stride), dtype=np.uint8)
         shield = np.zeros((1, input_stride), dtype=np.uint8)
         shield_view = shield.view(INPUT_DTYPE).reshape((1,))
-        shield_view["p"]["buttons"][0, 1] = np.uint16(BUTTON_L)
+        shield_view["p"]["l"][0, 1] = TRIGGER_FULL
 
         # Step once to compute shield bubble world geometry for defender P1.
         msl_binding.step_input(handle, neutral, shield)

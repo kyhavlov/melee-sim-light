@@ -5,9 +5,6 @@ import numpy as np
 from tools.eval.dataset import INPUT_DTYPE, SEED_DTYPE
 
 
-# Button masks: src/buttons.h (Melee/HSD PAD bits)
-BUTTON_L = 0x0040
-
 # Action ids (GALE01): refs/melee/src/melee/ft/chara/ftCommon/forward.h
 ACT_WAIT = 0x000E
 
@@ -16,6 +13,8 @@ SM_WAIT1_0 = 2
 
 CHAR_FOX = 1
 STAGE_FD = 32
+
+TRIGGER_FULL = np.uint8(255)
 
 
 def _common_attr(name: str) -> float:
@@ -66,8 +65,8 @@ def test_debug_combat_contacts_classified_shield_overlap_reports_shield() -> Non
         neutral = _mk_input_bytes(1, input_stride)
         shield = _mk_input_bytes(1, input_stride)
         shield_view = shield.view(INPUT_DTYPE).reshape((1,))
-        # Defender P1 holds shield.
-        shield_view["p"]["buttons"][0, 1] = np.uint16(BUTTON_L)
+        # Defender P1 holds shield via analog trigger (avoid the GuardReflect digital-press path).
+        shield_view["p"]["l"][0, 1] = TRIGGER_FULL
 
         # Step once to compute shield bubble world geometry.
         msl_binding.step_input(handle, neutral, shield)
@@ -136,4 +135,3 @@ def test_debug_combat_contacts_classified_shield_overlap_reports_shield() -> Non
         assert int(contacts3["contact_kind"][0]) == 1
     finally:
         msl_binding.destroy(handle)
-

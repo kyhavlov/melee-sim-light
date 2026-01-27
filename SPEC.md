@@ -1341,6 +1341,12 @@ When a mismatch strongly suggests a missing internal that cannot be reconstructe
 - Grab state internals: grab attach points, breakouts, throw release frame/timers, and victim constraint mode.
 - Tech / knockdown thresholds and state vars (tumble, tech window timers, missed-tech timers).
 - Projectile internals: per-projectile RNG/state, instance ids, and collision masks.
+- Projectile reflect bubbles: current laser reflect gate is powershield-only (requires Slippi powershield bit) and does not yet model
+  special-move reflect bubbles (reflect active without powershield). See `src/items.c` TODO(reflect).
+- Known missing: blaster “gun” items (ItKind 74/75) + Slippi `item.id==0` cases. These show up in the Slippi item list and can cause
+  fixed-slot churn (e.g. lasers shift slots when the gun appears/disappears). Decomp spawn/remove: `refs/melee/src/melee/it/items/itfoxblaster.c`
+  (`it_802AE8A8` / `it_802AEAB4`) called from `refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c` (`ftFx_SpecialN_Enter` /
+  `ftFx_SpecialN_RemoveBlaster`).
 
 ### Systems Inventory (Running List, Prioritized)
 

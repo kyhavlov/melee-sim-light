@@ -304,6 +304,13 @@ def _derive_item_attack_fields(
     Decomp shape:
     - Items spawned from fighters copy fp->x2068_attackID / fp->x206C_attack_instance at spawn.
       refs/melee/src/melee/it/it_2725.c::it_8027B070
+    - Reflected items can change owner/instance identity without despawning, but the item's staling
+      identity remains spawn-latched for lasers in v1 (do not overwrite these fields on reflect).
+      Slippi records item.instance_id from item->xDA8_short (SendItemInfo.s reads 0xDA8), and the
+      reflect path updates xDA8_short from the reflecting fighter snapshot:
+        refs/melee/src/melee/ft/ftcoll.c::ftColl_80077464 (writes item reflect snapshot fields)
+        refs/melee/src/melee/it/item.c::Item_80269F14 (applies reflect; updates owner + xDA8_short)
+        refs/slippi-ssbm-asm/Recording/SendItemInfo.s (lhz r3,0xDA8(REG_ItemData))
     - Item hits use these fields for stale multiplier + stale queue update.
       refs/melee/src/melee/it/itcoll.c::it_80272460
       refs/melee/src/melee/pl/plstale.c::plStale_UpdateStaleMovesFromItem
@@ -311,29 +318,34 @@ def _derive_item_attack_fields(
     if "attack_id" not in items_fixed.dtype.names or "attack_instance" not in items_fixed.dtype.names:
         return
 
-    # Live mapping for active items keyed by the stable fixed-ordering tuple:
-    # (instance_id, spawn_id, type) == (Slippi item.instance_id, item.id, item.type).
-    active: dict[tuple[int, int, int], tuple[int, int]] = {}
+    # Live mapping for active items keyed by the stable item identity:
+    # (spawn_id, type) == (Slippi item.id, item.type).
+    #
+    # IMPORTANT: Slippi `item.instance_id` is item->xDA8_short, which can change on reflect
+    # (and other owner transfers) without the underlying item despawning. Using instance_id as
+    # part of the map key would spuriously treat a reflected item as a new item and would break
+    # one-step reseed expectations.
+    active: dict[tuple[int, int], tuple[int, int]] = {}
     default_attack_id = 1  # FtMoveId_Default (do not stale)
 
     n_frames = int(items_fixed.shape[0])
     for fi in range(n_frames):
-        keys_this_frame: set[tuple[int, int, int]] = set()
+        keys_this_frame: set[tuple[int, int]] = set()
 
         for slot in range(15):
             if int(items_fixed[fi, slot]["exists"]) == 0:
                 continue
 
             key = (
-                int(items_fixed[fi, slot]["instance_id"]),
                 int(items_fixed[fi, slot]["spawn_id"]),
                 int(items_fixed[fi, slot]["type"]),
             )
             keys_this_frame.add(key)
 
+            owner = int(items_fixed[fi, slot]["owner"])
+
             v = active.get(key)
             if v is None:
-                owner = int(items_fixed[fi, slot]["owner"])
                 if 0 <= owner < int(num_players):
                     aid = int(fighter_attack_id[fi, owner])
                     ainst = int(fighter_attack_instance[fi, owner])
