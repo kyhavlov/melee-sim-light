@@ -10,6 +10,8 @@ import numpy as np
 MAX_PLAYERS = 4
 MAX_HITBOXES = 4
 MAX_HURTCAPS = 32
+HITLIST_GROUPS = 8
+HITLIST_CD_INDEFINITE = 0xFFFF
 
 # src/hitboxes_tables.h (MSLHITB1 u16_6 bits)
 HIT_GROUNDED = 1 << 9
@@ -272,6 +274,7 @@ class HitboxEvent:
     radius: float
     damage: float
     u16_6: int
+    u16_7: int
 
 
 def _read_hitbox_events(path: Path) -> dict[int, list[HitboxEvent]]:
@@ -325,6 +328,7 @@ def _read_hitbox_events(path: Path) -> dict[int, list[HitboxEvent]]:
                     radius=float(np.float32(radius)),
                     damage=float(np.float32(damage)),
                     u16_6=int(u16s[6]),
+                    u16_7=int(u16s[7]),
                 )
             )
         out[int(msid)] = evs
@@ -408,7 +412,7 @@ def _active_hitboxes_at_frame(events: list[HitboxEvent], frame: int) -> dict[int
     return active
 
 
-def derive_combat_rehit_seed_fields(
+def derive_combat_hitlist_seed_fields(
     *,
     num_players: int,
     is_teams: bool,
@@ -429,12 +433,13 @@ def derive_combat_rehit_seed_fields(
     input_l: np.ndarray,  # [n_frames, MAX_PLAYERS] u8 (pre-frame)
     input_r: np.ndarray,  # [n_frames, MAX_PLAYERS] u8 (pre-frame)
     data_root: str | Path = "data",
-) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+) -> tuple[np.ndarray, np.ndarray]:
     """
-    Derive combat rehit latch internals strictly causally from replay prefix history.
+    Derive combat hitlist internals strictly causally from replay prefix history.
 
-    Outputs are per-frame snapshots of the internal rehit state *after* applying combat selection
-    for that frame, using only current-frame external state and previous derived internals.
+    Output is a per-frame snapshot of the internal hitlist cooldown map *after* applying combat
+    selection for that frame, using only current-frame external state and previous derived
+    internals.
     """
     if num_players not in (2, 4):
         raise ValueError(f"num_players must be 2 or 4, got {num_players}")
@@ -454,18 +459,15 @@ def derive_combat_rehit_seed_fields(
     n_frames = int(np.asarray(action_id).shape[0])
 
     # Outputs.
-    out_active = np.zeros((n_frames, MAX_PLAYERS, MAX_PLAYERS), dtype=np.uint8)
-    out_hb_id = np.full((n_frames, MAX_PLAYERS, MAX_PLAYERS), 0xFF, dtype=np.uint8)
-    out_att_msid = np.zeros((n_frames, MAX_PLAYERS, MAX_PLAYERS), dtype=np.uint16)
-    out_def_iid = np.zeros((n_frames, MAX_PLAYERS, MAX_PLAYERS), dtype=np.uint16)
+    out_cd = np.zeros((n_frames, MAX_PLAYERS, HITLIST_GROUPS, MAX_PLAYERS), dtype=np.uint16)
+    out_iid = np.zeros((n_frames, MAX_PLAYERS, HITLIST_GROUPS, MAX_PLAYERS), dtype=np.uint16)
 
     # Internal state (rollout-causal).
-    latch_active = np.zeros((MAX_PLAYERS, MAX_PLAYERS), dtype=np.uint8)
-    latch_hb_id = np.full((MAX_PLAYERS, MAX_PLAYERS), 0xFF, dtype=np.uint8)
-    latch_att_msid = np.zeros((MAX_PLAYERS, MAX_PLAYERS), dtype=np.uint16)
-    latch_def_iid = np.zeros((MAX_PLAYERS, MAX_PLAYERS), dtype=np.uint16)
+    hitlist_cd = np.zeros((MAX_PLAYERS, HITLIST_GROUPS, MAX_PLAYERS), dtype=np.uint16)
+    hitlist_iid = np.zeros((MAX_PLAYERS, HITLIST_GROUPS, MAX_PLAYERS), dtype=np.uint16)
 
     sim_hitlag = np.zeros((MAX_PLAYERS,), dtype=np.uint16)
+    prev_group_active = np.zeros((MAX_PLAYERS, HITLIST_GROUPS), dtype=bool)
 
     trig_deadzone = float(common["trigger_deadzone"])
     shield_light_min = float(common["shield_size_lightshield_min"])
@@ -545,6 +547,9 @@ def derive_combat_rehit_seed_fields(
                             "r": float(np.float32(ev.radius)),
                             "damage": float(np.float32(ev.damage)),
                             "flags": int(ev.u16_6) & 0xFFFF,
+                            "def_frame": int(ev.frame),
+                            "hit_group": (int(ev.u16_7) >> 8) & 0x7,
+                            "rehit_frames": int(ev.u16_7) & 0xFF,
                         }
 
                 # Shields (approx center at (pos_x,pos_y,0), ftCo_Guard inlineB0 radius scaling).
@@ -569,19 +574,35 @@ def derive_combat_rehit_seed_fields(
                         sr = scale * float(ch.initial_shield_size) * float(fighter_scale_y[fi, p])
                 shield_world[p] = (sx, sy, sz, sr)
 
-        # Combat resolve (BODY-only selection + rehit latch update + simulated hitlag gate).
+        # Combat resolve (BODY-only selection + hitlist update + simulated hitlag gate).
         for attacker in range(num_players):
             if int(stocks[fi, attacker]) == 0:
                 continue
             a_hitboxes = hitboxes[attacker]
             if not a_hitboxes:
-                # Approximate ClearHitboxes: clear rehit latches for this attacker.
-                latch_active[attacker, :] = np.uint8(0)
                 continue
-
-            msid_u32 = int(animation_index[fi, attacker])
-            msid = np.uint16(msid_u32 & 0xFFFF) if 0 <= msid_u32 <= 0xFFFF else np.uint16(0)
-            a_iid = int(instance_id[fi, attacker])
+            # Hitlist clear-on-enable (per hit_group) and decrement finite cooldowns for active groups.
+            group_active = [False] * HITLIST_GROUPS
+            for hb in a_hitboxes.values():
+                g = int(hb.get("hit_group", 0)) & 0x7
+                group_active[g] = True
+            for g in range(HITLIST_GROUPS):
+                if group_active[g] and not bool(prev_group_active[attacker, g]):
+                    hitlist_cd[attacker, g, :] = np.uint16(0)
+                    hitlist_iid[attacker, g, :] = np.uint16(0)
+            for g in range(HITLIST_GROUPS):
+                prev_group_active[attacker, g] = group_active[g]
+            for g in range(HITLIST_GROUPS):
+                if not group_active[g]:
+                    continue
+                for victim in range(num_players):
+                    cd = int(hitlist_cd[attacker, g, victim])
+                    if cd == 0 or cd == HITLIST_CD_INDEFINITE:
+                        continue
+                    cd2 = int(cd - 1)
+                    hitlist_cd[attacker, g, victim] = np.uint16(cd2)
+                    if cd2 == 0:
+                        hitlist_iid[attacker, g, victim] = np.uint16(0)
 
             for defender in range(num_players):
                 if defender == attacker:
@@ -601,25 +622,12 @@ def derive_combat_rehit_seed_fields(
                 if int(sim_hitlag[attacker]) != 0 or int(sim_hitlag[defender]) != 0:
                     continue
 
-                # Clear stale latch entries on msid change, defender instance change, or latched hitbox
-                # being disabled (hitbox clear).
-                if int(latch_active[attacker, defender]) != 0:
-                    latched_msid = int(latch_att_msid[attacker, defender])
-                    defender_iid = int(instance_id[fi, defender])
-                    if latched_msid != int(msid) or int(latch_def_iid[attacker, defender]) != defender_iid:
-                        latch_active[attacker, defender] = np.uint8(0)
-                    else:
-                        latched_hb = int(latch_hb_id[attacker, defender])
-                        if latched_hb != 0xFF and latched_hb not in a_hitboxes:
-                            latch_active[attacker, defender] = np.uint8(0)
-
                 shx, shy, shz, shr = shield_world[defender]
                 shield_active = shr > 0.0
 
                 # Deterministic selection: pick the first BODY overlap in (hitbox_id, hurtcap_id) order.
                 did_hit = False
                 defender_on_ground = int(on_ground[fi, defender]) != 0
-                defender_iid = int(instance_id[fi, defender])
 
                 for hb_id in range(MAX_HITBOXES):
                     if hb_id not in a_hitboxes:
@@ -643,15 +651,19 @@ def derive_combat_rehit_seed_fields(
                     if shield_active and _sphere_sphere_intersects(hx, hy, hz, hr, shx, shy, shz, shr):
                         continue
 
-                    # Rehit suppression.
-                    if (
-                        int(latch_active[attacker, defender]) != 0
-                        and int(latch_att_msid[attacker, defender]) == int(msid)
-                        and int(latch_def_iid[attacker, defender]) == defender_iid
-                    ):
-                        latched_hb = int(latch_hb_id[attacker, defender])
-                        if latched_hb == 0xFF or latched_hb == hb_id:
+                    # Rehit suppression (hitlists): suppress repeats while the victim is present in the
+                    # per-(attacker,hit_group) hitlist.
+                    hit_group = int(hb.get("hit_group", 0)) & 0x7
+                    cd = int(hitlist_cd[attacker, hit_group, defender])
+                    if cd != 0:
+                        # Victim identity key matches decomp `HitVictim.victim` pointer:
+                        # use the Slippi-visible `instance_id` to drop stale entries on respawn.
+                        # refs/melee/src/melee/lb/lbcollision.c::lbColl_80008688
+                        def_iid = int(instance_id[fi, defender])
+                        if int(hitlist_iid[attacker, hit_group, defender]) == def_iid:
                             continue
+                        hitlist_cd[attacker, hit_group, defender] = np.uint16(0)
+                        hitlist_iid[attacker, hit_group, defender] = np.uint16(0)
 
                     for cap in hurtcaps_world[defender]:
                         if not _sphere_capsule_intersects(
@@ -669,11 +681,12 @@ def derive_combat_rehit_seed_fields(
                         ):
                             continue
 
-                        # Latch.
-                        latch_active[attacker, defender] = np.uint8(1)
-                        latch_hb_id[attacker, defender] = np.uint8(hb_id)
-                        latch_att_msid[attacker, defender] = np.uint16(msid)
-                        latch_def_iid[attacker, defender] = np.uint16(defender_iid)
+                        # Hitlist register.
+                        rehit_frames = int(hb.get("rehit_frames", 0)) & 0xFF
+                        hitlist_cd[attacker, hit_group, defender] = (
+                            np.uint16(HITLIST_CD_INDEFINITE) if rehit_frames == 0 else np.uint16(rehit_frames)
+                        )
+                        hitlist_iid[attacker, hit_group, defender] = np.uint16(int(instance_id[fi, defender]))
 
                         # Minimal hitlag simulation for hitlag gating across frames (no replay lookahead).
                         dmg_i = int(float(hb["damage"]))
@@ -687,9 +700,7 @@ def derive_combat_rehit_seed_fields(
                     if did_hit:
                         break
 
-        out_active[fi] = latch_active
-        out_hb_id[fi] = latch_hb_id
-        out_att_msid[fi] = latch_att_msid
-        out_def_iid[fi] = latch_def_iid
+        out_cd[fi] = hitlist_cd
+        out_iid[fi] = hitlist_iid
 
-    return out_active, out_hb_id, out_att_msid, out_def_iid
+    return out_cd, out_iid

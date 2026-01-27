@@ -266,7 +266,12 @@ Binary layout (little-endian):
       - bit 11: `item_hit_interaction`
       - bit 10: `hit_aerial`
       - bit 9: `hit_grounded`
-    - `u16_tail[7]`: reserved (currently 0)
+    - `u16_tail[7]`: hitlist metadata pack (decomp-shaped):
+      - low 8 bits: `rehit_rate_frames` (decomp: `HitCapsule.x40_b4`; 0 means "indefinite until cleared")
+      - bits 8..10: `hit_group` (decomp: `spawn_hitbox_0.hit_group` / `HitCapsule.x4`)
+      - remaining bits: reserved (0)
+      - note (current extraction): for **fighter** hitboxes we currently always emit `rehit_rate_frames = 0` because no GALE01
+        fighter-side writer for `HitCapsule.x40_b4` has been identified yet; **item/projectile** hitboxes may populate this field.
 
 Runtime semantics (current C-core policy):
 - Events are applied in file order up to `frame` to derive the current active hitbox definition per `hitbox_id`.

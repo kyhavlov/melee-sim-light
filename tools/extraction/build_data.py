@@ -141,6 +141,17 @@ def main() -> None:
         ],
     )
 
+    # Hitbox event tables (moves.json → hitboxes.bin; compact binary for init-time load).
+    #
+    # This is a single codepath: we do not emit MSLHITB1 from the ISO directly, and we do not patch
+    # the bins post-hoc. If you need to change hitbox metadata, do it by improving the movescript
+    # extraction (data/moves/*.json) and then rebuild.
+    for ch in chars:
+        _run(
+            "tools.extraction.extract_fighter_hitboxes",
+            ["--moves", f"data/moves/{ch}.json", "--out", f"data/hitboxes/{ch}.bin"],
+        )
+
     # Movescript-derived hurt capsule state timelines.
     _run(
         "tools.extraction.extract_fighter_hurtbox_modes",

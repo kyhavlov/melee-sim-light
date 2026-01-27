@@ -30,6 +30,7 @@ def _arr(dtype: str, n: int):
 
 MAX_PLAYERS: Final[int] = 4
 MAX_ITEMS: Final[int] = 15
+HITLIST_GROUPS: Final[int] = 8
 
 INPUT_PLAYER_DTYPE = np.dtype(
     [
@@ -149,10 +150,8 @@ SEED_DTYPE = np.dtype(
         ("last_hit_by", _arr("u1", MAX_PLAYERS)),
         ("_pad2", "V1"),
         ("state_flags", ("u1", (MAX_PLAYERS, 5))),
-        ("combat_rehit_active", ("u1", (MAX_PLAYERS, MAX_PLAYERS))),
-        ("combat_rehit_hitbox_id", ("u1", (MAX_PLAYERS, MAX_PLAYERS))),
-        ("combat_rehit_attacker_msid", ("<u2", (MAX_PLAYERS, MAX_PLAYERS))),
-        ("combat_rehit_defender_instance_id", ("<u2", (MAX_PLAYERS, MAX_PLAYERS))),
+        ("combat_hitlist_cd", ("<u2", (MAX_PLAYERS, HITLIST_GROUPS, MAX_PLAYERS))),
+        ("combat_hitlist_victim_iid", ("<u2", (MAX_PLAYERS, HITLIST_GROUPS, MAX_PLAYERS))),
         ("items", ITEM_DTYPE, (MAX_ITEMS,)),
     ],
     align=False,

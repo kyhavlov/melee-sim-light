@@ -4,7 +4,7 @@ from pathlib import Path
 
 import numpy as np
 
-from tools.slippi.combat_history import derive_combat_rehit_seed_fields
+from tools.slippi.combat_history import derive_combat_hitlist_seed_fields
 from tools.slippi.anim_timebase import EndFrameTables, derive_frame_speed_mul_f32
 from tools.slippi.seed_history import (
     compute_fighter_button_timers,
@@ -341,7 +341,7 @@ def _read_hitbox_msid_frames(path: str, *, limit: int = 512) -> list[tuple[int, 
     return out
 
 
-def test_derive_combat_rehit_seed_fields_is_causal_wrt_future_frames() -> None:
+def test_derive_combat_hitlist_seed_fields_is_causal_wrt_future_frames() -> None:
     import pytest
 
     if not Path("data/hitboxes/fox.bin").exists():
@@ -395,7 +395,7 @@ def test_derive_combat_rehit_seed_fields_is_causal_wrt_future_frames() -> None:
         input_l = z_u8.copy()
         input_r = z_u8.copy()
 
-        rehit_active, _hb_id, _att_msid, _def_iid = derive_combat_rehit_seed_fields(
+        hitlist_cd, hitlist_iid = derive_combat_hitlist_seed_fields(
             num_players=2,
             is_teams=False,
             team_id=z_u8,
@@ -416,7 +416,8 @@ def test_derive_combat_rehit_seed_fields_is_causal_wrt_future_frames() -> None:
             input_r=input_r,
             data_root="data",
         )
-        if int(rehit_active[0, 0, 1]) == 1:
+        if int(np.any(hitlist_cd[0, 0, :, 1] != 0)):
+            assert int(np.any(hitlist_iid[0, 0, :, 1] == np.uint16(222))) == 1
             picked = (msid, af)
             break
 
@@ -458,7 +459,7 @@ def test_derive_combat_rehit_seed_fields_is_causal_wrt_future_frames() -> None:
     l0 = base_u8.copy()
     r0 = base_u8.copy()
 
-    a0, hb0, ms0, di0 = derive_combat_rehit_seed_fields(
+    cd0, iid_cd0 = derive_combat_hitlist_seed_fields(
         num_players=2,
         is_teams=False,
         team_id=base_u8,
@@ -480,7 +481,8 @@ def test_derive_combat_rehit_seed_fields_is_causal_wrt_future_frames() -> None:
         data_root="data",
     )
 
-    assert int(a0[0, 0, 1]) == 1
+    assert int(np.any(cd0[0, 0, :, 1] != 0)) == 1
+    assert int(np.any(iid_cd0[0, 0, :, 1] == np.uint16(222))) == 1
 
     # Append arbitrary future frames (no hitboxes via action_frame=-1): prefix outputs must not change.
     n1 = n0 + 5
@@ -512,7 +514,7 @@ def test_derive_combat_rehit_seed_fields_is_causal_wrt_future_frames() -> None:
     l1 = np.zeros((n1, 4), dtype=np.uint8)
     r1 = np.zeros((n1, 4), dtype=np.uint8)
 
-    a1, hb1, ms1, di1 = derive_combat_rehit_seed_fields(
+    cd1, iid_cd1 = derive_combat_hitlist_seed_fields(
         num_players=2,
         is_teams=False,
         team_id=np.zeros((n1, 4), dtype=np.uint8),
@@ -534,10 +536,8 @@ def test_derive_combat_rehit_seed_fields_is_causal_wrt_future_frames() -> None:
         data_root="data",
     )
 
-    assert np.array_equal(a0, a1[: a0.shape[0]])
-    assert np.array_equal(hb0, hb1[: hb0.shape[0]])
-    assert np.array_equal(ms0, ms1[: ms0.shape[0]])
-    assert np.array_equal(di0, di1[: di0.shape[0]])
+    assert np.array_equal(cd0, cd1[: cd0.shape[0]])
+    assert np.array_equal(iid_cd0, iid_cd1[: iid_cd0.shape[0]])
 
 
 def test_fighter_stick_input_counters_are_causal_wrt_future_frames() -> None:

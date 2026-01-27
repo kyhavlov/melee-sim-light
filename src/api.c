@@ -17,6 +17,7 @@
 #include "move_tables.h"
 #include "ecb_tables.h"
 #include "hitboxes_tables.h"
+#include "hitlist.h"
 #include "hit_status_tables.h"
 #include "hurtbox_modes_tables.h"
 #include "hurtcaps_tables.h"
@@ -328,22 +329,29 @@ int msl_batch_reseed_seed(MslBatch* batch, const uint8_t* seed_bytes, size_t see
       batch->state.item_misc1[ii] = item->misc1;
       batch->state.item_misc2[ii] = item->misc2;
       batch->state.item_misc3[ii] = item->misc3;
+
+      // Item hitlists are derived (not seeded): clear on reseed so reused item slots don't
+      // inherit stale victim cooldowns.
+      const size_t cd_base = ii * (size_t)MSL_MAX_PLAYERS;
+      for (int v = 0; v < MSL_MAX_PLAYERS; v++) {
+        batch->state.item_hitlist_cd[cd_base + (size_t)v] = 0;
+        batch->state.item_hitlist_victim_iid[cd_base + (size_t)v] = 0;
+      }
     }
 
-    // Combat rehit suppression latch is part of the reseed schema (teacher-forced one-step eval).
-    const size_t pair_base = (size_t)bi * (size_t)MSL_MAX_PLAYERS * (size_t)MSL_MAX_PLAYERS;
+    // Combat hitlists are part of the reseed schema (teacher-forced one-step eval).
+    const size_t base =
+        (size_t)bi * (size_t)MSL_MAX_PLAYERS * (size_t)MSL_HITLIST_GROUPS * (size_t)MSL_MAX_PLAYERS;
     for (int attacker = 0; attacker < MSL_MAX_PLAYERS; attacker++) {
-      for (int defender = 0; defender < MSL_MAX_PLAYERS; defender++) {
-        const size_t pair =
-            pair_base + (size_t)attacker * (size_t)MSL_MAX_PLAYERS + (size_t)defender;
-        batch->state.combat_rehit_active[pair] =
-            seed->combat_rehit_active[attacker][defender] ? 1 : 0;
-        batch->state.combat_rehit_hitbox_id[pair] =
-            seed->combat_rehit_hitbox_id[attacker][defender];
-        batch->state.combat_rehit_attacker_msid[pair] =
-            seed->combat_rehit_attacker_msid[attacker][defender];
-        batch->state.combat_rehit_defender_instance_id[pair] =
-            seed->combat_rehit_defender_instance_id[attacker][defender];
+      for (int g = 0; g < MSL_HITLIST_GROUPS; g++) {
+        for (int victim = 0; victim < MSL_MAX_PLAYERS; victim++) {
+          const size_t i = base + (((size_t)attacker * (size_t)MSL_HITLIST_GROUPS + (size_t)g) *
+                                       (size_t)MSL_MAX_PLAYERS +
+                                   (size_t)victim);
+          batch->state.combat_hitlist_cd[i] = seed->combat_hitlist_cd[attacker][g][victim];
+          batch->state.combat_hitlist_victim_iid[i] =
+              seed->combat_hitlist_victim_iid[attacker][g][victim];
+        }
       }
     }
   }
@@ -1010,8 +1018,15 @@ int msl_batch_debug_clear_hitboxes_world(MslBatch* batch, int batch_index, int p
     batch->state.hitbox_z[hb_i] = 0.0f;
     batch->state.hitbox_radius[hb_i] = 0.0f;
     batch->state.hitbox_damage[hb_i] = 0.0f;
+    batch->state.hitbox_u16_7[hb_i] = 0;
     batch->state.hitbox_u16_6[hb_i] = 0;
     batch->state.hitbox_flags[hb_i] = 0;
+  }
+
+  // Debug helper: approximate the engine's "clear hitboxes" behavior by also resetting rehit
+  // suppression for this attacker so that re-enabling a hitbox can immediately apply a new hit.
+  for (uint8_t g = 0; g < (uint8_t)MSL_HITLIST_GROUPS; g++) {
+    hitlist_clear_group(batch, batch_index, player_index, g);
   }
 
   return 0;

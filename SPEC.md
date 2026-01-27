@@ -723,12 +723,14 @@ Prefer completing these projects in order rather than “patching symptoms” in
      - When multiple hitboxes share a group id (`HitCapsule.x4`), their hitlists must be kept in sync:
        - copy-from-sibling if present (`ftColl_800768A0`), else clear (`lbColl_80008440`).
 
-   **Replaces these current approximations (delete once this lands)**
-   - Conservative per-(attacker, defender) rehit suppression latch that ignores per-hitbox identity:
-     - `src/state.h` (“Combat rehit suppression latch (Pass 1)”)
-     - `src/combat.c` (rehit suppression logic + latch clear rules)
-     - Seed schema carry-through: `src/api.h` `combat_rehit_*` fields (should be removed or replaced by the real hitlist seed).
-   - Any “carry-through” of hit attribution fields that depends on missing rehit bookkeeping (symptom patching).
+   **Groundwork landed (PARTIAL)**
+   - Replaced the old conservative per-(attacker, defender) latch (`combat_rehit_*`) with a decomp-shaped hitlist map + victim instance
+     key + clear-on-enable + per-frame decrement.
+   - This does **not** mean PP#3 is “done”: on the current suite, the target mismatch fields did not move yet, and the remaining work is
+     primarily about *rehit-rate timers and ordering*.
+   - Current conclusion (asm-first): GALE01 fighter-side code does not appear to write `HitCapsule.x40_b4` (the 8-bit rehit countdown
+     field). Rehit behavior for fighters appears driven by hitbox enable/disable + `hit_group` (`HitCapsule.x4`) sharing/clears, while
+     items/projectiles do write `x40_b4` in at least some paths.
 
    **DONE when (tie directly to RL 1.0 scorecard keys)**
    - `mismatch.instance_hit_by`, `mismatch.last_hit_by`, `mismatch.last_attack_landed`, `mismatch.combo_count` are scorecard-compliant

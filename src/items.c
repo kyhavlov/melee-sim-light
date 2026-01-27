@@ -33,6 +33,13 @@ static inline void item_slot_clear(MslBatch* batch, size_t ii) {
   batch->state.item_misc1[ii] = 0;
   batch->state.item_misc2[ii] = 0;
   batch->state.item_misc3[ii] = 0;
+
+  // Clear per-item victim cooldowns (hitlist).
+  const size_t cd_base = ii * (size_t)MSL_MAX_PLAYERS;
+  for (int v = 0; v < MSL_MAX_PLAYERS; v++) {
+    batch->state.item_hitlist_cd[cd_base + (size_t)v] = 0;
+    batch->state.item_hitlist_victim_iid[cd_base + (size_t)v] = 0;
+  }
 }
 
 static inline void item_slot_swap(MslBatch* batch, size_t a, size_t b) {
@@ -63,6 +70,18 @@ static inline void item_slot_swap(MslBatch* batch, size_t a, size_t b) {
   SWAP(uint8_t, batch->state.item_misc2);
   SWAP(uint8_t, batch->state.item_misc3);
 #undef SWAP
+
+  // Swap per-item hitlist lanes to preserve deterministic item ordering invariants.
+  for (int v = 0; v < MSL_MAX_PLAYERS; v++) {
+    const size_t ia = a * (size_t)MSL_MAX_PLAYERS + (size_t)v;
+    const size_t ib = b * (size_t)MSL_MAX_PLAYERS + (size_t)v;
+    const uint16_t tmp = batch->state.item_hitlist_cd[ia];
+    batch->state.item_hitlist_cd[ia] = batch->state.item_hitlist_cd[ib];
+    batch->state.item_hitlist_cd[ib] = tmp;
+    const uint16_t tmp_iid = batch->state.item_hitlist_victim_iid[ia];
+    batch->state.item_hitlist_victim_iid[ia] = batch->state.item_hitlist_victim_iid[ib];
+    batch->state.item_hitlist_victim_iid[ib] = tmp_iid;
+  }
 }
 
 static inline int item_key_lt(MslBatch* batch, size_t a, size_t b) {
@@ -394,6 +413,20 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
         continue;
       }
       const size_t d_idx = msl_idx_player(bi, def);
+      const size_t cd_i = ii * (size_t)MSL_MAX_PLAYERS + (size_t)def;
+      const uint16_t def_iid = batch->state.instance_id[d_idx];
+      if (batch->state.item_hitlist_cd[cd_i] != 0) {
+        // Item hitlists: do not rehurt the same fighter repeatedly while the item persists.
+        //
+        // Decomp identity key is a victim pointer (`HitVictim.victim`), which changes on
+        // death/respawn. Use the fighter's `instance_id` as the stable key in the sim.
+        // refs/melee/src/melee/lb/lbcollision.c::lbColl_80008688
+        if (batch->state.item_hitlist_victim_iid[cd_i] == def_iid) {
+          continue;
+        }
+        batch->state.item_hitlist_cd[cd_i] = 0;
+        batch->state.item_hitlist_victim_iid[cd_i] = 0;
+      }
 
       // SHIELD precedence: if the item intersects the defender shield bubble, resolve as a shield
       // contact and do not take the BODY path.
@@ -445,6 +478,8 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
 
           // Regular shield hit: apply defender-side shield effects and despawn the laser.
           combat_apply_item_shield_hit(batch, bi, owner, def, lp->damage, lp->shield_damage);
+          batch->state.item_hitlist_cd[cd_i] = 0xFFFFu;
+          batch->state.item_hitlist_victim_iid[cd_i] = def_iid;
           item_slot_clear(batch, ii);
           break;
         }
@@ -493,6 +528,8 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
       // refs/melee/src/melee/ft/fighter.c and refs/melee/src/melee/ft/ftcoll.c
       combat_apply_item_hit(batch, bi, owner, def, lp->damage, lp->angle, lp->kbg, lp->wsk, lp->bkb,
                             hit_hurt_height);
+      batch->state.item_hitlist_cd[cd_i] = 0xFFFFu;
+      batch->state.item_hitlist_victim_iid[cd_i] = def_iid;
       item_slot_clear(batch, ii);
       break;
     }

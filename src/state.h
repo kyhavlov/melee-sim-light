@@ -177,23 +177,25 @@ typedef struct MslStateSoA {
   uint8_t* last_hit_by;
   uint8_t* state_flags;  // [batch * players * 5]
 
-  // Combat rehit suppression latch (Pass 1).
+  // Combat hitlists / rehit cooldowns.
   //
-  // Decomp shape: Melee tracks a per-hitbox hitlist / rehit latch to prevent repeated hits while a
-  // hitbox remains active, clearing on ClearHitboxes / hitbox changes.
+  // Decomp shape:
+  // - HitCapsule maintains per-victim hitlists (`victims_1` / `victims_2`) with per-entry cooldowns.
+  // - The cooldown countdown is initialized from `HitCapsule.x40_b4` and decremented each frame,
+  //   clearing the victim when the countdown reaches 0.
+  // refs/melee/src/melee/lb/lbcollision.c::lbColl_80008688 and ::lbColl_80008A5C
   //
-  // This simplified latch is stored per (attacker, defender) pair and is consumed by
-  // combat_resolve() to suppress "hit every frame" artifacts in rollouts.
+  // Simulator representation (minimal, fighter victims only):
+  // - Dense cooldown map indexed by (attacker_slot, hit_group, victim_slot).
+  // - Value semantics match `MslSeed.combat_hitlist_cd`.
+  // - Victim identity key matches decomp `HitVictim.victim` pointer: we store the defender's
+  //   current `instance_id` alongside the cooldown so that a death/respawn (new instance_id) does
+  //   not inherit stale rehit suppression.
+  // refs/melee/src/melee/lb/lbcollision.c::lbColl_80008688
   //
-  // Layout: [batch * MSL_MAX_PLAYERS * MSL_MAX_PLAYERS]
-  // - active: 0/1
-  // - hitbox_id: 0..MSL_MAX_HITBOXES-1, or 0xFF for "unknown / suppress any hitbox"
-  // - attacker_msid: truncated from state.animation_index (see debug contact dumps)
-  // - defender_instance_id: state.instance_id for the defender when latched
-  uint8_t* combat_rehit_active;
-  uint8_t* combat_rehit_hitbox_id;
-  uint16_t* combat_rehit_attacker_msid;
-  uint16_t* combat_rehit_defender_instance_id;
+  // Layout: [batch * MSL_MAX_PLAYERS * MSL_HITLIST_GROUPS * MSL_MAX_PLAYERS]
+  uint16_t* combat_hitlist_cd;
+  uint16_t* combat_hitlist_victim_iid;
 
   // Inputs (processed, per-frame) written by input_apply.
   uint16_t* input_buttons;           // [batch * players]
@@ -229,6 +231,15 @@ typedef struct MslStateSoA {
   uint8_t* item_misc1;
   uint8_t* item_misc2;
   uint8_t* item_misc3;
+
+  // Item->fighter hitlist cooldowns (lasers v1).
+  // Layout: [batch * MSL_MAX_ITEMS * MSL_MAX_PLAYERS]
+  // Value semantics:
+  // - 0: empty (can hit)
+  // - 0xFFFF: indefinite latch (do not rehurt the same fighter with the same item slot)
+  uint16_t* item_hitlist_cd;
+  // Victim identity key (fighter instance id) for the corresponding `item_hitlist_cd` entry.
+  uint16_t* item_hitlist_victim_iid;
 } MslStateSoA;
 
 int state_alloc(MslStateSoA* state, int batch_size);

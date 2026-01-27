@@ -36,6 +36,7 @@ def _u26(word: int) -> int:
 class Hitbox:
     hitbox_id: int
     hit_group: int
+    rehit_frames: int
     only_hit_grabbed: bool
     bone: int
     use_common_bone_ids: bool
@@ -69,9 +70,13 @@ class Event:
 
 
 def _decode_create_hitbox(words: list[int]) -> Hitbox:
-    if len(words) != 5:
-        raise ValueError("create_hitbox expects 5 words")
-    w0, w1, w2, w3, w4 = words
+    # Decomp shape: ftAction_8007121C reads spawn_hitbox_0..spawn_hitbox_5 while configuring fp->x914.
+    # refs/melee/src/melee/ft/ftaction.c::ftAction_8007121C
+    # refs/melee/src/melee/lb/types.h::spawn_hitbox_{0..5}
+    if len(words) not in (5, 6):
+        raise ValueError(f"create_hitbox expects 5 or 6 words, got {len(words)}")
+    w0, w1, w2, w3, w4 = words[:5]
+    w5 = words[5] if len(words) == 6 else None
 
     # `spawn_hitbox_0`: opcode is top 6 bits; remaining fields are MSB→LSB packed.
     hitbox_id = (w0 >> 23) & 0x7
@@ -104,9 +109,23 @@ def _decode_create_hitbox(words: list[int]) -> Hitbox:
     hit_grounded = bool((w4 >> 1) & 0x1)
     hit_aerial = bool(w4 & 0x1)
 
+    # Rehit rate (frames) used by HitCapsule hitlists:
+    # - lbColl_80008688 stores the per-victim timer from HitCapsule.x40_b4
+    # - lbColl_80008A5C decrements it and clears the victim when it reaches 0
+    # refs/melee/src/melee/lb/lbcollision.c::lbColl_80008688 and ::lbColl_80008A5C
+    #
+    # Decomp/ASM note:
+    # ftAction_8007121C (create hitbox) does NOT write the HitCapsule.x40_b4 bitfield (bits 4..11 of the
+    # u16 at hitbox+0x40). GALE01 asm only sets the neighboring flag bits (x40_b0..b3 and x41_b4..b7).
+    # refs/melee/build/GALE01/asm/melee/ft/ftaction.s::ftAction_8007121C
+    #
+    # Until we find an asm-backed source for x40_b4 (if any), keep it at 0 ("indefinite until cleared").
+    rehit_frames = 0
+
     return Hitbox(
         hitbox_id=hitbox_id,
         hit_group=hit_group,
+        rehit_frames=rehit_frames,
         only_hit_grabbed=only_hit_grabbed,
         bone=bone,
         use_common_bone_ids=use_common_bone_ids,
@@ -316,7 +335,7 @@ def _parse_subaction_events(
             # Fighter events (>=10): parse subset we care about, otherwise skip.
             n_words = _cmd_len_words(op)
             if op == 11:
-                words = _read_words(archive, pc, 5)
+                words = _read_words(archive, pc, _cmd_len_words(op))
                 hb = _decode_create_hitbox(words)
                 out.append(
                     Event(

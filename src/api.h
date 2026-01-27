@@ -12,6 +12,9 @@ enum { MSL_MAX_ITEMS = 15 };
 enum { MSL_MAX_HURTCAPS = 32 };
 enum { MSL_MAX_HITBOXES = 4 };
 enum { MSL_STATE_FLAGS_BYTES = 5 };
+// Decomp: `spawn_hitbox_0.hit_group` is a 3-bit field (0..7).
+// refs/melee/src/melee/lb/types.h::spawn_hitbox_0
+enum { MSL_HITLIST_GROUPS = 8 };
 
 // -----------------------------
 // Packed on-disk / wire formats
@@ -228,16 +231,31 @@ typedef struct MslSeed {
   uint8_t _pad2[1];
   uint8_t state_flags[MSL_MAX_PLAYERS][5];
 
-  // Combat rehit/hitlist internals (seeded; strictly causal from history in preprocessing).
+  // Combat hitlist internals (seeded; strictly causal from history in preprocessing).
   //
   // These fields are required for teacher-forced one-step eval: reseeding wipes rollout history,
   // so combat must carry its rehit suppression state through the seed schema.
   //
-  // Shape: [attacker][defender] in player-slot order.
-  uint8_t combat_rehit_active[MSL_MAX_PLAYERS][MSL_MAX_PLAYERS];     // 0/1
-  uint8_t combat_rehit_hitbox_id[MSL_MAX_PLAYERS][MSL_MAX_PLAYERS];  // 0..3 or 0xFF
-  uint16_t combat_rehit_attacker_msid[MSL_MAX_PLAYERS][MSL_MAX_PLAYERS];
-  uint16_t combat_rehit_defender_instance_id[MSL_MAX_PLAYERS][MSL_MAX_PLAYERS];
+  // Decomp shape:
+  // - per-hitbox victim hitlists live on HitCapsule (`victims_1` + per-entry cooldown),
+  // - cooldown is initialized from `HitCapsule.x40_b4` and decremented each frame,
+  //   clearing the victim when the countdown reaches 0.
+  // refs/melee/src/melee/lb/lbcollision.c::lbColl_80008688 and ::lbColl_80008A5C
+  //
+  // Simulator representation (minimal, fighter victims only):
+  // - A dense cooldown map indexed by (attacker_slot, hit_group, victim_slot).
+  // - Value semantics:
+  //   - 0: empty (victim not in hitlist => can be hit)
+  //   - 1..255: finite cooldown remaining in frames
+  //   - 0xFFFF: indefinite latch (decomp: victim present with timer==0; cleared on hitbox-group re-enable)
+  //
+  // Shape: [attacker][hit_group][victim] in player-slot order.
+  uint16_t combat_hitlist_cd[MSL_MAX_PLAYERS][MSL_HITLIST_GROUPS][MSL_MAX_PLAYERS];
+  // Victim identity key for each cooldown entry: the defender's `instance_id` at the time the entry
+  // was created. This matches decomp storing a victim pointer (`HitVictim.victim`), which changes
+  // on death/respawn.
+  // refs/melee/src/melee/lb/lbcollision.c::lbColl_80008688
+  uint16_t combat_hitlist_victim_iid[MSL_MAX_PLAYERS][MSL_HITLIST_GROUPS][MSL_MAX_PLAYERS];
 
   MslItem items[MSL_MAX_ITEMS];
 } MslSeed;

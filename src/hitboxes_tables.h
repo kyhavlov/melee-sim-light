@@ -48,7 +48,10 @@ typedef struct MslHitboxEvent {
   // - u16_4: element (low 8) | shield_damage_u8 (high 8, 2's complement)
   // - u16_5: sfx_severity (low 8) | sfx_kind (high 8)
   // - u16_6: flags bitfield (hit_grounded/hit_aerial/item_hit/clank/rebound/etc.)
-  // - u16_7: reserved (0)
+  // - u16_7: hitlist metadata pack:
+  //   - low 8 bits: `rehit_rate_frames` (decomp: HitCapsule.x40_b4)
+  //   - bits 8..10: `hit_group` (decomp: spawn_hitbox_0.hit_group / HitCapsule.x4)
+  //   - remaining bits: reserved (0)
   uint16_t u16_0;
   uint16_t u16_1;
   uint16_t u16_2;

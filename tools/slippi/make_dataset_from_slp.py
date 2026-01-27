@@ -334,7 +334,7 @@ def _main_impl(args) -> None:
     import json
     from pathlib import Path
 
-    from tools.slippi.combat_history import derive_combat_rehit_seed_fields
+    from tools.slippi.combat_history import derive_combat_hitlist_seed_fields
     from tools.slippi.anim_timebase import derive_frame_speed_mul_f32, load_end_frame_tables
     from tools.slippi.seed_history import (
         apply_deadzone,
@@ -1019,12 +1019,7 @@ def _main_impl(args) -> None:
         post_hurtbox_state[:, slot] = _to_numpy(post.field("hurtbox_state")).astype(np.uint8)
         post_instance_id[:, slot] = _to_numpy(post.field("instance_id")).astype(np.uint16)
 
-    (
-        rehit_active,
-        rehit_hb_id,
-        rehit_att_msid,
-        rehit_def_iid,
-    ) = derive_combat_rehit_seed_fields(
+    hitlist_cd, hitlist_iid = derive_combat_hitlist_seed_fields(
         num_players=num_players,
         is_teams=bool(is_teams),
         team_id=post_team_id,
@@ -1046,10 +1041,8 @@ def _main_impl(args) -> None:
         data_root="data",
     )
 
-    samples["seed_t"]["combat_rehit_active"] = rehit_active[:-1]
-    samples["seed_t"]["combat_rehit_hitbox_id"] = rehit_hb_id[:-1]
-    samples["seed_t"]["combat_rehit_attacker_msid"] = rehit_att_msid[:-1]
-    samples["seed_t"]["combat_rehit_defender_instance_id"] = rehit_def_iid[:-1]
+    samples["seed_t"]["combat_hitlist_cd"] = hitlist_cd[:-1]
+    samples["seed_t"]["combat_hitlist_victim_iid"] = hitlist_iid[:-1]
 
     write_dataset(args.out, num_players=num_players, samples=samples)
     print(f"Wrote {n_samples} samples to {args.out} from {args.slp}")

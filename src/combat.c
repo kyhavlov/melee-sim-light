@@ -16,6 +16,7 @@
 #include "hit_elements.h"
 #include "hitboxes_tables.h"
 #include "hit_status_tables.h"
+#include "hitlist.h"
 
 static inline size_t idx_hitbox(int bi, int p, int hb_i) {
   return ((size_t)bi * (size_t)MSL_MAX_PLAYERS + (size_t)p) * (size_t)MSL_MAX_HITBOXES +
@@ -25,11 +26,6 @@ static inline size_t idx_hitbox(int bi, int p, int hb_i) {
 static inline size_t idx_hurtcap(int bi, int p, int cap_i) {
   return ((size_t)bi * (size_t)MSL_MAX_PLAYERS + (size_t)p) * (size_t)MSL_MAX_HURTCAPS +
          (size_t)cap_i;
-}
-
-static inline size_t idx_pair(int bi, int attacker, int defender) {
-  return ((size_t)bi * (size_t)MSL_MAX_PLAYERS + (size_t)attacker) * (size_t)MSL_MAX_PLAYERS +
-         (size_t)defender;
 }
 
 static inline uint8_t sphere_sphere_intersects(float ax, float ay, float az, float ar, float bx,
@@ -1003,17 +999,9 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
       continue;
     }
     if (batch->state.hitbox_count[a_idx] == 0) {
-      // Approximate decomp ClearHitboxes: if there are no active hitboxes, clear rehit latches for
-      // this attacker.
-      for (int defender = 0; defender < MSL_MAX_PLAYERS; defender++) {
-        const size_t pair = idx_pair(bi, attacker, defender);
-        batch->state.combat_rehit_active[pair] = 0;
-      }
       continue;
     }
 
-    const uint32_t msid_u32 = batch->state.animation_index[a_idx];
-    const uint16_t msid = (msid_u32 <= 0xFFFFu) ? (uint16_t)msid_u32 : 0u;
     const uint16_t a_motion_id = batch->state.action_id[a_idx];
 
     for (int defender = 0; defender < num_players; defender++) {
@@ -1024,6 +1012,7 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
       if (batch->state.stocks[d_idx] == 0) {
         continue;
       }
+      const uint16_t defender_iid = batch->state.instance_id[d_idx];
 
       if (batch->state.is_teams[bi]) {
         if (batch->state.team_id[a_idx] == batch->state.team_id[d_idx]) {
@@ -1034,25 +1023,6 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
       // Hitlag gating: when either fighter is in hitlag, do not generate new BODY hits.
       if (batch->state.hitlag[a_idx] || batch->state.hitlag[d_idx]) {
         continue;
-      }
-
-      const size_t pair = idx_pair(bi, attacker, defender);
-      // Rehit latch maintenance: clear stale latch entries on attacker msid change or defender
-      // instance change.
-      //
-      // Note (approximation): the pass-1 rehit policy intentionally ignores hitbox_id (see
-      // suppression check below), and the latch does NOT clear when the latched hitbox_id is
-      // disabled. Only full hitbox clear (hitbox_count==0), msid change, or defender instance
-      // change clears the latch.
-      uint8_t rehit_active = batch->state.combat_rehit_active[pair];
-      if (rehit_active) {
-        const uint16_t latched_msid = batch->state.combat_rehit_attacker_msid[pair];
-        const uint16_t defender_iid = batch->state.instance_id[d_idx];
-        if (latched_msid != msid ||
-            batch->state.combat_rehit_defender_instance_id[pair] != defender_iid) {
-          rehit_active = 0;
-          batch->state.combat_rehit_active[pair] = 0;
-        }
       }
 
       const float shx = batch->state.shield_x[d_idx];
@@ -1109,6 +1079,8 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
         int sel_int_dmg = 0;
         int8_t sel_shield_dmg_s8 = 0;
         uint8_t sel_hb_id = 0;
+        uint8_t sel_hit_group = 0;
+        uint8_t sel_rehit_frames = 0;
 
         for (int hb_id = 0; hb_id < MSL_MAX_HITBOXES; hb_id++) {
           const size_t hb_i = idx_hitbox(bi, attacker, hb_id);
@@ -1133,11 +1105,10 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
           const float hz = batch->state.hitbox_z[hb_i];
           const float hr = batch->state.hitbox_radius[hb_i];
 
-          // Rehit suppression: if we latched a hit for this (attacker, defender) with this msid,
-          // suppress repeats for this attacker→defender pair until hitboxes clear or msid changes.
-          if (rehit_active && batch->state.combat_rehit_attacker_msid[pair] == msid &&
-              batch->state.combat_rehit_defender_instance_id[pair] ==
-                  batch->state.instance_id[d_idx]) {
+          // Rehit suppression (hitlists): suppress repeats while the victim is present in the
+          // per-(attacker,hit_group) hitlist.
+          const uint8_t hit_group = hitlist_hit_group_from_u16_7(batch->state.hitbox_u16_7[hb_i]);
+          if (!hitlist_allows(batch, bi, attacker, hit_group, defender, defender_iid)) {
             continue;
           }
 
@@ -1189,6 +1160,8 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
             sel_int_dmg = int_dmg;
             sel_shield_dmg_s8 = batch->state.hitbox_shield_damage[hb_i];
             sel_hb_id = (uint8_t)hb_id;
+            sel_hit_group = hit_group;
+            sel_rehit_frames = hitlist_rehit_frames_from_u16_7(batch->state.hitbox_u16_7[hb_i]);
           }
         }
 
@@ -1207,11 +1180,8 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
           // refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
           combat_mutations_pass1_future_apply_shield_hit(batch, a_idx, d_idx, max_int_dmg, tmp_dmg,
                                                          a_motion_id);
-
-          batch->state.combat_rehit_active[pair] = 1;
-          batch->state.combat_rehit_hitbox_id[pair] = sel_hb_id;
-          batch->state.combat_rehit_attacker_msid[pair] = msid;
-          batch->state.combat_rehit_defender_instance_id[pair] = batch->state.instance_id[d_idx];
+          hitlist_register(batch, bi, attacker, sel_hit_group, defender, defender_iid,
+                           sel_rehit_frames);
 
           did_hit = 1;
         }
@@ -1310,17 +1280,13 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
           continue;
         }
 
-        // Rehit suppression: if we latched a hit for this (attacker, defender) with this msid,
-        // suppress repeats for this attacker→defender pair until hitboxes clear or msid changes.
-        //
-        // Note: Melee tracks per-hitbox hitlists (more granular than our reseeded pair latch). This
-        // simplified policy is intentionally conservative: it latches the pair and ignores
-        // hitbox_id, suppressing repeats until hitboxes clear (hitbox_count==0) or msid changes.
-        if (rehit_active && batch->state.combat_rehit_attacker_msid[pair] == msid &&
-            batch->state.combat_rehit_defender_instance_id[pair] ==
-                batch->state.instance_id[d_idx]) {
+        // Rehit suppression (hitlists): suppress repeats while the victim is present in the
+        // per-(attacker,hit_group) hitlist.
+        const uint8_t hit_group = hitlist_hit_group_from_u16_7(batch->state.hitbox_u16_7[hb_i]);
+        if (!hitlist_allows(batch, bi, attacker, hit_group, defender, defender_iid)) {
           continue;
         }
+        const uint8_t rehit_frames = hitlist_rehit_frames_from_u16_7(batch->state.hitbox_u16_7[hb_i]);
 
         for (uint8_t cap_id = 0; cap_id < hurtcap_count; cap_id++) {
           const size_t cap_i = idx_hurtcap(bi, defender, (int)cap_id);
@@ -1341,11 +1307,7 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
           // Combat Mutations Pass 1 (BODY-only).
           combat_mutations_pass1_future_apply_body_hit(batch, a_idx, d_idx, attacker, hb_i, cap_i,
                                                        int_dmg, a_motion_id);
-
-          batch->state.combat_rehit_active[pair] = 1;
-          batch->state.combat_rehit_hitbox_id[pair] = (uint8_t)hb_id;
-          batch->state.combat_rehit_attacker_msid[pair] = msid;
-          batch->state.combat_rehit_defender_instance_id[pair] = batch->state.instance_id[d_idx];
+          hitlist_register(batch, bi, attacker, hit_group, defender, defender_iid, rehit_frames);
 
           did_hit = 1;
           break;
@@ -1355,7 +1317,7 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
   }
 }
 
-static void combat_select_body_hits_one_debug(const MslBatch* batch, int bi,
+static void combat_select_body_hits_one_debug(MslBatch* batch, int bi,
                                               MslDebugCombatContact* out_contacts,
                                               uint16_t max_contacts, uint16_t* inout_written) {
   if (batch == NULL || inout_written == NULL) {
@@ -1389,6 +1351,7 @@ static void combat_select_body_hits_one_debug(const MslBatch* batch, int bi,
       if (batch->state.stocks[d_idx] == 0) {
         continue;
       }
+      const uint16_t defender_iid = batch->state.instance_id[d_idx];
 
       if (batch->state.is_teams[bi]) {
         if (batch->state.team_id[a_idx] == batch->state.team_id[d_idx]) {
@@ -1430,15 +1393,6 @@ static void combat_select_body_hits_one_debug(const MslBatch* batch, int bi,
       if (batch->state.hitlag[a_idx] || batch->state.hitlag[d_idx]) {
         continue;
       }
-
-      const size_t pair = idx_pair(bi, attacker, defender);
-      const uint16_t defender_iid = batch->state.instance_id[d_idx];
-      const uint8_t rehit_active =
-          (batch->state.combat_rehit_active[pair] &&
-           batch->state.combat_rehit_attacker_msid[pair] == msid &&
-           batch->state.combat_rehit_defender_instance_id[pair] == defender_iid)
-              ? 1
-              : 0;
 
       const float shx = batch->state.shield_x[d_idx];
       const float shy = batch->state.shield_y[d_idx];
@@ -1488,8 +1442,10 @@ static void combat_select_body_hits_one_debug(const MslBatch* batch, int bi,
           continue;
         }
 
-        // Rehit suppression (debug view): if the pair latch is active, suppress repeats.
-        if (rehit_active) {
+        // Rehit suppression (debug view): suppress repeats while the victim is present in the
+        // per-(attacker,hit_group) hitlist.
+        const uint8_t hit_group = hitlist_hit_group_from_u16_7(batch->state.hitbox_u16_7[hb_i]);
+        if (!hitlist_allows(batch, bi, attacker, hit_group, defender, defender_iid)) {
           continue;
         }
 
