@@ -309,6 +309,15 @@ def main() -> None:
         "cliff_wait_frames_low_percent": float(_f32_be(buf, ft_common_abs + 0x48C)),
         "cliff_wait_frames_high_percent": float(_f32_be(buf, ft_common_abs + 0x490)),
         "cliff_option_stick_threshold": float(_f32_be(buf, ft_common_abs + 0x494)),
+        # ftColl_80079AB0 percent-term overrides (used when fp+0x2225 bit0 is set; see the
+        # non-WSK else-branch in GALE01 asm):
+        # - refs/melee/build/GALE01/asm/melee/ft/ftcoll.s::ftColl_80079AB0
+        #   - 0x80079B80: lwz r0, 0x6d8(p_ftCommonData)
+        #   - 0x80079B88: lwz r0, 0x6d4(p_ftCommonData)
+        #
+        # Extract as signed ints (the asm uses the signed-int -> float conversion sequence).
+        "ftcoll_percent_base_x6d4": int(_i32_be(buf, ft_common_abs + 0x6D4)),
+        "ftcoll_percent_base_x6d8": int(_i32_be(buf, ft_common_abs + 0x6D8)),
     }
 
     args.out.parent.mkdir(parents=True, exist_ok=True)

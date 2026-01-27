@@ -142,6 +142,11 @@ SEED_DTYPE = np.dtype(
         ("ucf_padbuf_stick_x", ("i1", (MAX_PLAYERS, 4))),
         ("ucf_padbuf_stick_y", ("i1", (MAX_PLAYERS, 4))),
         ("percent", _arr("<f4", MAX_PLAYERS)),
+        # Damage pipeline gates (ftColl_80079AB0 non-WSK else-branch).
+        # - dmg_x2225_b7 corresponds to Fighter fp+0x2225 bit0 (LSB).
+        # - dmg_x2224_b2 corresponds to Fighter fp+0x2224 bit5 (mask 0x20).
+        ("dmg_x2225_b7", _arr("u1", MAX_PLAYERS)),
+        ("dmg_x2224_b2", _arr("u1", MAX_PLAYERS)),
         ("shield_hp", _arr("<f4", MAX_PLAYERS)),
         ("hitlag", _arr("<u2", MAX_PLAYERS)),
         ("hitstun", _arr("<u2", MAX_PLAYERS)),

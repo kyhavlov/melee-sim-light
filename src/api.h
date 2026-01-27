@@ -238,6 +238,19 @@ typedef struct MslSeed {
 
   // Combat / timers
   float percent[MSL_MAX_PLAYERS];
+  // ftColl_80079AB0 percent-term gate bits (seeded).
+  //
+  // These correspond to Fighter flags at fp+0x2225/fp+0x2224 used by the non-WSK else-branch:
+  // refs/melee/build/GALE01/asm/melee/ft/ftcoll.s::ftColl_80079AB0 (0x80079B68..0x80079BA0)
+  //
+  // - x2225_b7 (fp+0x2225 bit0 / mask 0x01): initialized from Player_GetMoreFlagsBit2, which is set
+  //   from PlayerInitData.xC_b7 (stamina-mode flag).
+  //   refs/melee/src/melee/gm/gm_16AE.c::fn_8016D8AC (Player_SetMoreFlagsBit2)
+  //   refs/melee/src/melee/ft/fighter.c::Fighter_UnkInitLoad_80068914 (fp->x2225_b7)
+  // - x2224_b2 (fp+0x2224 bit5 / mask 0x20): selects between p_ftCommonData->0x6D4 and 0x6D8.
+  //   refs/melee/src/melee/ft/ft_0C8C.c::fn_800C8_inline (setter)
+  uint8_t dmg_x2225_b7[MSL_MAX_PLAYERS];  // 0/1
+  uint8_t dmg_x2224_b2[MSL_MAX_PLAYERS];  // 0/1
   float shield_hp[MSL_MAX_PLAYERS];
   uint16_t hitlag[MSL_MAX_PLAYERS];
   uint16_t hitstun[MSL_MAX_PLAYERS];

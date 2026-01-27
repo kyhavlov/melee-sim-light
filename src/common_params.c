@@ -97,6 +97,24 @@ static int json_get_u16(const char* json, const char* key, uint16_t* out) {
   return 0;
 }
 
+static int json_get_i32(const char* json, const char* key, int32_t* out) {
+  if (json == NULL || key == NULL || out == NULL) {
+    return -1;
+  }
+  float f = 0.0f;
+  if (json_get_f32(json, key, &f) != 0) {
+    return -1;
+  }
+  if (f < -2147483648.0f) {
+    f = -2147483648.0f;
+  }
+  if (f > 2147483647.0f) {
+    f = 2147483647.0f;
+  }
+  *out = (int32_t)f;
+  return 0;
+}
+
 int common_params_init(void) {
   if (g_loaded) {
     return 0;
@@ -284,6 +302,8 @@ int common_params_init(void) {
       json_get_f32(buf, "kb_vel_mul", &g_params.kb_vel_mul) != 0 ||
       json_get_f32(buf, "kb_min", &g_params.kb_min) != 0 ||
       json_get_f32(buf, "kb_squat_mul", &g_params.kb_squat_mul) != 0 ||
+      json_get_i32(buf, "ftcoll_percent_base_x6d4", &g_params.ftcoll_percent_base_x6d4) != 0 ||
+      json_get_i32(buf, "ftcoll_percent_base_x6d8", &g_params.ftcoll_percent_base_x6d8) != 0 ||
       json_get_f32(buf, "damage_hitstun_mul", &g_params.damage_hitstun_mul) != 0 ||
       json_get_f32(buf, "damage_severity_x158", &g_params.damage_severity_x158) != 0 ||
       json_get_f32(buf, "damage_severity_x15c", &g_params.damage_severity_x15c) != 0 ||

@@ -41,6 +41,8 @@ def _rand_inputs(rng: np.random.Generator, n: int) -> np.ndarray:
     x["seed_t"]["stocks"][:, :2] = rng.integers(1, 5, size=(n, 2), dtype=np.uint8)
 
     x["seed_t"]["percent"][:, :2] = rng.uniform(0.0, 120.0, size=(n, 2)).astype(np.float32)
+    x["seed_t"]["dmg_x2225_b7"][:, :2] = 0
+    x["seed_t"]["dmg_x2224_b2"][:, :2] = 0
     x["seed_t"]["shield_hp"][:, :2] = rng.uniform(0.0, 60.0, size=(n, 2)).astype(np.float32)
     x["seed_t"]["hitlag"][:, :2] = rng.integers(0, 10, size=(n, 2), dtype=np.uint16)
     x["seed_t"]["hitstun"][:, :2] = rng.integers(0, 60, size=(n, 2), dtype=np.uint16)

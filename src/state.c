@@ -109,6 +109,9 @@ int state_alloc(MslStateSoA* state, int batch_size) {
   state->ucf_padbuf_stick_y = (int8_t*)alloc_aligned_64(sizeof(int8_t) * bp4);
 
   state->percent = (float*)alloc_aligned_64(sizeof(float) * bp);
+  state->percent_temp = (float*)alloc_aligned_64(sizeof(float) * bp);
+  state->dmg_x2225_b7 = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
+  state->dmg_x2224_b2 = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->shield_hp = (float*)alloc_aligned_64(sizeof(float) * bp);
   state->hitlag = (uint16_t*)alloc_aligned_64(sizeof(uint16_t) * bp);
   state->hitstun = (uint16_t*)alloc_aligned_64(sizeof(uint16_t) * bp);
@@ -228,7 +231,8 @@ int state_alloc(MslStateSoA* state, int batch_size) {
       !state->x67D || !state->x67E || !state->x680 || !state->x681 || !state->x682 ||
       !state->x683 || !state->x684 || !state->ucf_padbuf_index ||
       !state->ucf_padbuf_sdrop_up_frames || !state->ucf_padbuf_stick_x ||
-      !state->ucf_padbuf_stick_y || !state->percent || !state->shield_hp || !state->hitlag ||
+      !state->ucf_padbuf_stick_y || !state->percent || !state->percent_temp || !state->dmg_x2225_b7 ||
+      !state->dmg_x2224_b2 || !state->shield_hp || !state->hitlag ||
       !state->hitstun || !state->l_cancel || !state->hurtbox_state || !state->hurtcap_count ||
       !state->hurtcap_a_x || !state->hurtcap_a_y || !state->hurtcap_a_z || !state->hurtcap_b_x ||
       !state->hurtcap_b_y || !state->hurtcap_b_z || !state->hurtcap_radius ||
@@ -349,6 +353,9 @@ void state_free(MslStateSoA* state) {
   alloc_free(state->ucf_padbuf_stick_y);
 
   alloc_free(state->percent);
+  alloc_free(state->percent_temp);
+  alloc_free(state->dmg_x2225_b7);
+  alloc_free(state->dmg_x2224_b2);
   alloc_free(state->shield_hp);
   alloc_free(state->hitlag);
   alloc_free(state->hitstun);

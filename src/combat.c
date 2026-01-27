@@ -317,10 +317,11 @@ static inline float combat_damage_ftColl_804D8314_kbg_mul(void) {
 
 static inline float combat_damage_calc_kb_applied(const MslCommonParams* c, const MslCharParams* d,
                                                   uint16_t defender_action_id,
-                                                  float defender_percent_pre, float hitbox_damage,
+                                                  float defender_percent_pre, float defender_percent_temp,
                                                   int hitbox_damage_i, uint16_t hitbox_kbg,
                                                   uint16_t hitbox_wsk, uint16_t hitbox_bkb,
-                                                  float collision_kb_mul) {
+                                                  float collision_kb_mul, uint8_t defender_dmg_x2225_b7,
+                                                  uint8_t defender_dmg_x2224_b2) {
   if (c == NULL) {
     return 0.0f;
   }
@@ -348,11 +349,17 @@ static inline float combat_damage_calc_kb_applied(const MslCommonParams* c, cons
   //   (fighter.dmg:+0x1838), which accumulates the float damage this frame:
   //   refs/melee/src/melee/ft/ftcoll.c::ftColl_80076640 (adds `*dmg` into x1838_percentTemp).
   //
-  // IMPORTANT: ftColl_80079AB0 has an alternate branch that can override the percent term using
-  // p_ftCommonData->0x6D4/0x6D8 based on fp+0x2225_b0 / fp+0x2224 flags. We do not currently seed
-  // those bytes (Slippi `state_flags` does not include fp+0x2224/0x2225), so we implement the
-  // standard `percent_int = (int)percent_pre` path. If we later need the override behavior, we
-  // must add those fields to the seed schema (do not guess).
+  // Percent-term selection (non-WSK branch):
+  //
+  // The GALE01 asm has a flag-gated path that replaces the `percent_int = (int)fp->dmg.x1830_percent`
+  // term with one of two p_ftCommonData ints (0x6D4/0x6D8):
+  // refs/melee/build/GALE01/asm/melee/ft/ftcoll.s::ftColl_80079AB0 (0x80079B68..0x80079BA0)
+  // - if (lbz fp+0x2225) & 0x01: choose base from p_ftCommonData, else use (int)fp->dmg.x1830_percent
+  // - if (lbz fp+0x2224) & 0x20: choose +0x6D8, else +0x6D4
+  //
+  // Decomp names for these bits (confirmed by matching bitfield operations in ftCommon_GrabMash asm):
+  // - fp->x2225_b7 (mask 0x01) and fp->x2224_b2 (mask 0x20)
+  // refs/melee/src/melee/ft/types.h
 
   float weight = 100.0f;
   if (d != NULL && d->weight > 0.0f) {
@@ -405,8 +412,13 @@ static inline float combat_damage_calc_kb_applied(const MslCommonParams* c, cons
     //
     // s = percent_int + dmg_temp, where dmg_temp is fp->dmg.x1838_percentTemp (float).
     // refs/melee/build/GALE01/asm/melee/ft/ftcoll.s::ftColl_80079EA8 (0x80079F8C..0x8007A00C)
-    const float percent_int = (float)(int)defender_percent_pre;  // fctiwz
-    const float s = percent_int + hitbox_damage;                 // fp->dmg.x1838_percentTemp analogue
+    float percent_int = (float)(int)defender_percent_pre;  // fctiwz
+    if (defender_dmg_x2225_b7) {
+      // Use p_ftCommonData base ints instead of (int)percent_pre.
+      const int32_t base = defender_dmg_x2224_b2 ? c->ftcoll_percent_base_x6d8 : c->ftcoll_percent_base_x6d4;
+      percent_int = (float)base;
+    }
+    const float s = percent_int + defender_percent_temp;
     const float dmg = (float)hitbox_damage_i;                    // HitCapsule.unk_count analogue
 
     // term = s * (p_ftCommonData->0x110 + p_ftCommonData->0x114 * dmg)
@@ -677,19 +689,16 @@ static inline void combat_mutations_pass1_future_apply_body_hit(MslBatch* batch,
     return;
   }
 
-  // Percent add (BODY).
+  // Percent-temp accumulation (BODY): fp->dmg.x1838_percentTemp.
   //
-  // Decomp:
-  // - Fighter_ProcessHit applies float percent via `Fighter_UnkTakeDamage_8006CC30(fp, fp->dmg.x1838_percentTemp)`.
+  // Decomp trail (GALE01):
+  // - Collision accumulates per-frame float damage into fp->dmg.x1838_percentTemp via ftColl_80076640.
+  //   refs/melee/src/melee/ft/ftcoll.c::ftColl_80076640
+  // - Fighter_ProcessHit consumes it for percent add, then resets it to 0 at end of the frame.
   //   refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
-  // - Fighter_TakeDamage_8006CC7C adds to `fp->dmg.x1830_percent` and clamps to 999.
-  //   refs/melee/src/melee/ft/fighter.c::Fighter_TakeDamage_8006CC7C
   const float percent_pre = batch->state.percent[d_idx];
-  float percent = percent_pre + dmg_f;
-  if (percent > 999.0f) {
-    percent = 999.0f;
-  }
-  batch->state.percent[d_idx] = percent;
+  batch->state.percent_temp[d_idx] += dmg_f;
+  const float dmg_temp = batch->state.percent_temp[d_idx];
 
   const uint16_t d_motion_id = batch->state.action_id[d_idx];
 
@@ -728,9 +737,9 @@ static inline void combat_mutations_pass1_future_apply_body_hit(MslBatch* batch,
   if (!(coll_kb_mul > 0.0f)) {
     coll_kb_mul = 1.0f;
   }
-  const float kb_applied =
-      combat_damage_calc_kb_applied(c, d_ch, d_motion_id, percent_pre, dmg_f, dmg_i, hb_kbg, hb_wsk,
-                                    hb_bkb, coll_kb_mul);
+  const float kb_applied = combat_damage_calc_kb_applied(
+      c, d_ch, d_motion_id, percent_pre, dmg_temp, dmg_i, hb_kbg, hb_wsk, hb_bkb, coll_kb_mul,
+      batch->state.dmg_x2225_b7[d_idx], batch->state.dmg_x2224_b2[d_idx]);
   const float kb_angle_rad =
       combat_damage_calc_angle_radians(c, hb_angle, defender_on_ground, kb_applied);
 
@@ -875,15 +884,10 @@ void combat_apply_item_hit(MslBatch* batch, int batch_index, int attacker, int d
     return;
   }
 
-  // Percent add (BODY).
-  // Decomp: Fighter_ProcessHit_8006D1EC -> Fighter_TakeDamage_8006CC7C.
-  // refs/melee/src/melee/ft/fighter.c
+  // Percent-temp accumulation (BODY): fp->dmg.x1838_percentTemp.
   const float percent_pre = batch->state.percent[d_idx];
-  float percent = percent_pre + dmg_f;
-  if (percent > 999.0f) {
-    percent = 999.0f;
-  }
-  batch->state.percent[d_idx] = percent;
+  batch->state.percent_temp[d_idx] += dmg_f;
+  const float dmg_temp = batch->state.percent_temp[d_idx];
 
   // Hitlag (defender only): for item projectiles, the "attacker" is the item, not the owning
   // fighter, so the fighter does not enter hitlag on laser hits.
@@ -910,7 +914,9 @@ void combat_apply_item_hit(MslBatch* batch, int batch_index, int attacker, int d
   }
 
   const float kb_applied =
-      combat_damage_calc_kb_applied(c, d_ch, d_motion_id, percent_pre, dmg_f, int_dmg, kbg, wsk, bkb, 1.0f);
+      combat_damage_calc_kb_applied(c, d_ch, d_motion_id, percent_pre, dmg_temp, int_dmg, kbg, wsk, bkb,
+                                    1.0f, batch->state.dmg_x2225_b7[d_idx],
+                                    batch->state.dmg_x2224_b2[d_idx]);
   const float kb_angle_rad =
       combat_damage_calc_angle_radians(c, angle, defender_on_ground, kb_applied);
 
@@ -1710,6 +1716,10 @@ void combat_processhit_consume(MslBatch* batch) {
       const size_t flags_i = idx * MSL_STATE_FLAGS_STRIDE + (size_t)MSL_STATE_FLAGS_221C_INDEX;
       batch->state.state_flags[flags_i] &=
           (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221C_DETECT_HITBOX_TOUCHING_SHIELD;
+      // fp->dmg.x1838_percentTemp is a per-frame accumulator consumed/reset by Fighter_ProcessHit.
+      // We don't simulate the full Fighter_ProcessHit pipeline; clear it at the start of each frame
+      // to ensure deterministic intra-frame accumulation during items_update/combat_resolve.
+      batch->state.percent_temp[idx] = 0.0f;
     }
   }
 }
@@ -1721,6 +1731,25 @@ void combat_resolve(MslBatch* batch) {
 
   for (int bi = 0; bi < batch->batch_size; bi++) {
     combat_select_body_hits_one_mutating(batch, bi);
+  }
+
+  // Consume fp->dmg.x1838_percentTemp into percent and reset it, matching the end-of-frame cleanup
+  // in Fighter_ProcessHit_8006D1EC.
+  // refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC (x1838_percentTemp reset)
+  const int num_players = (int)batch->config.num_players;
+  for (int bi = 0; bi < batch->batch_size; bi++) {
+    for (int p = 0; p < num_players; p++) {
+      const size_t idx = msl_idx_player(bi, p);
+      const float temp = batch->state.percent_temp[idx];
+      if (temp != 0.0f) {
+        float percent = batch->state.percent[idx] + temp;
+        if (percent > 999.0f) {
+          percent = 999.0f;
+        }
+        batch->state.percent[idx] = percent;
+      }
+      batch->state.percent_temp[idx] = 0.0f;
+    }
   }
 }
 

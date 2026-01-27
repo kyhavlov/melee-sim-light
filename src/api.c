@@ -310,6 +310,11 @@ int msl_batch_reseed_seed(MslBatch* batch, const uint8_t* seed_bytes, size_t see
       }
 
       batch->state.percent[idx] = seed->percent[p];
+      // Per-frame collision damage accumulator (fp->dmg.x1838_percentTemp) is not part of Slippi post-frame
+      // state and is reset by Fighter_ProcessHit each frame; keep it at 0 on reseed.
+      batch->state.percent_temp[idx] = 0.0f;
+      batch->state.dmg_x2225_b7[idx] = seed->dmg_x2225_b7[p] ? 1 : 0;
+      batch->state.dmg_x2224_b2[idx] = seed->dmg_x2224_b2[p] ? 1 : 0;
       batch->state.shield_hp[idx] = seed->shield_hp[p];
       batch->state.hitlag[idx] = seed->hitlag[p];
       batch->state.hitstun[idx] = seed->hitstun[p];

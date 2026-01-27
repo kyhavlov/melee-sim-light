@@ -200,6 +200,14 @@ typedef struct MslCommonParams {
   float kb_vel_mul;      // p_ftCommonData->x100
   float kb_min;          // p_ftCommonData->x104
   float kb_squat_mul;    // p_ftCommonData->x124
+  // ftColl_80079AB0 percent-term override constants (p_ftCommonData->0x6D4/0x6D8).
+  //
+  // Used in the non-WSK else-branch when fp+0x2225 bit0 is set (decomp name: fp->x2225_b7):
+  // refs/melee/build/GALE01/asm/melee/ft/ftcoll.s::ftColl_80079AB0
+  // - 0x80079B80: lwz r0, 0x6d8(p_ftCommonData)
+  // - 0x80079B88: lwz r0, 0x6d4(p_ftCommonData)
+  int32_t ftcoll_percent_base_x6d4;
+  int32_t ftcoll_percent_base_x6d8;
 
   // Hitstun scaling + severity thresholds (ftCo_Damage.c).
   float damage_hitstun_mul;    // p_ftCommonData->0x154

@@ -472,6 +472,7 @@ def _main_impl(args) -> None:
     # Map static info by 1-based port. Character may change in-game; per-frame char id comes from post.character.
     static_by_port: dict[int, PortStatic] = {}
     ratios_by_port: dict[int, tuple[float, float, float]] = {}
+    dmg_flags_by_port: dict[int, tuple[int, int]] = {}
     for p in game.start.get("players", []):
         port = str(p.get("port", ""))
         if not port.startswith("P"):
@@ -486,6 +487,21 @@ def _main_impl(args) -> None:
             float(p.get("defense_ratio", 1.0)),
             float(p.get("model_scale", 1.0)),
         )
+        # fp+0x2225/fp+0x2224 gate bits used by ftColl_80079AB0.
+        #
+        # Decomp trail:
+        # - PlayerInitData.xC_b7 (mn/types.h) feeds Player_SetMoreFlagsBit2:
+        #   refs/melee/src/melee/gm/gm_16AE.c::fn_8016D8AC
+        # - Fighter_UnkInitLoad_80068914 seeds fp->x2225_b7 from Player_GetMoreFlagsBit2:
+        #   refs/melee/src/melee/ft/fighter.c::Fighter_UnkInitLoad_80068914
+        #
+        # Slippi start `player.bitfield` is the raw PlayerInitData 0x0C byte; xC_b7 is the LSB.
+        raw_xc = int(p.get("bitfield", 0)) & 0xFF
+        dmg_x2225_b7 = 1 if (raw_xc & 0x01) else 0
+        # x2224_b2 is not exposed by Slippi post-frames; for stock/percent matches (x2225_b7==0)
+        # it is never set in decomp (only setter is in stamina KO handling).
+        dmg_x2224_b2 = 0
+        dmg_flags_by_port[port_1based] = (dmg_x2225_b7, dmg_x2224_b2)
 
     frame_ids_all = _to_numpy(frames_all.field("id"))
     keep = finalized_frame_indices(frame_ids_all)
@@ -769,6 +785,10 @@ def _main_impl(args) -> None:
 
         samples["seed_t"]["percent"][:, slot] = post_percent[:-1]
         samples["ref_t1"]["percent"][:, slot] = post_percent[1:]
+        port_1based = int(src_ports[slot])
+        dmg_x2225_b7, dmg_x2224_b2 = dmg_flags_by_port.get(port_1based, (0, 0))
+        samples["seed_t"]["dmg_x2225_b7"][:, slot] = np.uint8(dmg_x2225_b7)
+        samples["seed_t"]["dmg_x2224_b2"][:, slot] = np.uint8(dmg_x2224_b2)
         samples["seed_t"]["shield_hp"][:, slot] = post_shield[:-1]
         samples["ref_t1"]["shield_hp"][:, slot] = post_shield[1:]
         samples["seed_t"]["stocks"][:, slot] = post_stocks[:-1]

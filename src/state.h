@@ -125,6 +125,26 @@ typedef struct MslStateSoA {
 
   // Combat/timers
   float* percent;
+  // Per-frame float damage accumulator (decomp: fp->dmg.x1838_percentTemp).
+  //
+  // Decomp:
+  // - Accumulated by collision via ftColl_80076640 (adds *dmg into x1838_percentTemp).
+  //   refs/melee/src/melee/ft/ftcoll.c::ftColl_80076640
+  // - Consumed/reset by Fighter_ProcessHit_8006D1EC each frame.
+  //   refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
+  float* percent_temp;
+  // Damage pipeline gates used by ftColl_80079AB0 (non-WSK else-branch) to select the base term
+  // for `s = base + percent_temp`.
+  //
+  // Flags:
+  // - fp+0x2225 bit0 (LSB) => decomp name fp->x2225_b7 (stamina-mode gate via PlayerInitData.xC_b7).
+  //   refs/melee/build/GALE01/asm/melee/ft/ftcoll.s::ftColl_80079AB0 (0x80079B68..0x80079B90)
+  //   refs/melee/src/melee/ft/fighter.c::Fighter_UnkInitLoad_80068914 (x2225_b7 init)
+  //   refs/melee/src/melee/gm/gm_16AE.c::fn_8016D8AC (Player_SetMoreFlagsBit2 from PlayerInitData.xC_b7)
+  // - fp+0x2224 bit5 (mask 0x20) => decomp name fp->x2224_b2.
+  //   refs/melee/build/GALE01/asm/melee/ft/ftcoll.s::ftColl_80079AB0 (0x80079B74..0x80079B88)
+  uint8_t* dmg_x2225_b7;  // [batch * players] (0/1)
+  uint8_t* dmg_x2224_b2;  // [batch * players] (0/1)
   float* shield_hp;
   uint16_t* hitlag;
   uint16_t* hitstun;
