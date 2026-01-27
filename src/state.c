@@ -185,6 +185,8 @@ int state_alloc(MslStateSoA* state, int batch_size) {
   state->item_type = (uint16_t*)alloc_aligned_64(sizeof(uint16_t) * bi);
   state->item_owner = (int8_t*)alloc_aligned_64(sizeof(int8_t) * bi);
   state->item_instance_id = (uint16_t*)alloc_aligned_64(sizeof(uint16_t) * bi);
+  state->item_attack_id = (uint16_t*)alloc_aligned_64(sizeof(uint16_t) * bi);
+  state->item_attack_instance = (uint16_t*)alloc_aligned_64(sizeof(uint16_t) * bi);
   state->item_direction = (float*)alloc_aligned_64(sizeof(float) * bi);
   state->item_vel_x = (float*)alloc_aligned_64(sizeof(float) * bi);
   state->item_vel_y = (float*)alloc_aligned_64(sizeof(float) * bi);
@@ -247,6 +249,7 @@ int state_alloc(MslStateSoA* state, int batch_size) {
       !state->input_c_y || !state->prev_input_c_x || !state->prev_input_c_y || !state->input_l ||
       !state->input_r || !state->item_exists ||
       !state->item_state || !state->item_type || !state->item_owner || !state->item_instance_id ||
+      !state->item_attack_id || !state->item_attack_instance ||
       !state->item_direction || !state->item_vel_x || !state->item_vel_y || !state->item_pos_x ||
       !state->item_pos_y || !state->item_damage || !state->item_timer || !state->item_spawn_id ||
       !state->item_misc0 || !state->item_misc1 || !state->item_misc2 || !state->item_misc3 ||
@@ -418,6 +421,8 @@ void state_free(MslStateSoA* state) {
   alloc_free(state->item_type);
   alloc_free(state->item_owner);
   alloc_free(state->item_instance_id);
+  alloc_free(state->item_attack_id);
+  alloc_free(state->item_attack_instance);
   alloc_free(state->item_direction);
   alloc_free(state->item_vel_x);
   alloc_free(state->item_vel_y);

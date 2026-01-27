@@ -35,6 +35,8 @@ _STALE_QUEUE_SIZE = 10
 @dataclass(frozen=True)
 class StalingHistory:
     # [n_frames, num_players]
+    attack_id: np.ndarray
+    # [n_frames, num_players]
     attack_instance: np.ndarray
     stale_queue_index: np.ndarray
     # [n_frames, num_players, 10]
@@ -121,6 +123,7 @@ def derive_staling_history(frames: pa.StructArray, *, src_ports: list[int]) -> S
     """Derive stale-queue seed state strictly causally (prefix-invariant).
 
     Returns per-post-frame staling state:
+      - attack_id[t,p]                : derived x2068_attackID (u16; decomp-backed)
       - attack_instance[t,p]          : derived x206C_attack_instance (u16; decomp-backed)
       - stale_queue_index[t,p]        : ring buffer write index (u8)
       - stale_move_id[t,p,10]         : stale table move_id entries (u16)
@@ -162,6 +165,7 @@ def derive_staling_history(frames: pa.StructArray, *, src_ports: list[int]) -> S
     stale_mid_out = np.zeros((n_frames, num_players, _STALE_QUEUE_SIZE), dtype=np.uint16)
     stale_inst_out = np.zeros((n_frames, num_players, _STALE_QUEUE_SIZE), dtype=np.uint16)
     attack_inst_out = np.zeros((n_frames, num_players), dtype=np.uint16)
+    attack_id_out = np.zeros((n_frames, num_players), dtype=np.uint16)
 
     # Per-player live stale tables.
     qi = np.zeros(num_players, dtype=np.uint8)
@@ -240,6 +244,7 @@ def derive_staling_history(frames: pa.StructArray, *, src_ports: list[int]) -> S
                 prev_state_iid[p] = np.uint16(0)
                 cur_attack_id[p] = np.uint16(_FT_MOVE_ID_DEFAULT)
                 cur_attack_inst[p] = np.uint16(0)
+                attack_id_out[t, p] = np.uint16(_FT_MOVE_ID_DEFAULT)
                 continue
 
             if iid != int(prev_state_iid[p]):
@@ -254,6 +259,7 @@ def derive_staling_history(frames: pa.StructArray, *, src_ports: list[int]) -> S
                 by_state_iid[p].setdefault(iid, (int(cur_attack_id[p]), int(cur_attack_inst[p])))
 
             attack_inst_out[t, p] = cur_attack_inst[p]
+            attack_id_out[t, p] = cur_attack_id[p]
 
         # Damaging hits: detect via percent delta.
         if t > 0:
@@ -291,6 +297,7 @@ def derive_staling_history(frames: pa.StructArray, *, src_ports: list[int]) -> S
         stale_inst_out[t, :, :] = table_inst
 
     return StalingHistory(
+        attack_id=attack_id_out,
         attack_instance=attack_inst_out,
         stale_queue_index=qi_out,
         stale_move_id=stale_mid_out,

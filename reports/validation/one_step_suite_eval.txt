@@ -93,7 +93,7 @@ mismatch.facing: 202 / 20444 (0.009881)
 mismatch.stocks: 0 / 20444 (0.000000)
 mismatch.jumps_left: 242 / 20444 (0.011837)
 mismatch.is_dead: 0 / 20444 (0.000000)
-mismatch.hitlag: 220 / 20444 (0.010761)
+mismatch.hitlag: 219 / 20444 (0.010712)
 mismatch.hitstun: 510 / 20444 (0.024946)
 mismatch.l_cancel: 9 / 20444 (0.000440)
 mismatch.hurtbox_state: 194 / 20444 (0.009489)
@@ -117,13 +117,13 @@ err.speed_ground_x_self: mae=0.028953 p95=0.080000 max=4.239905
 err.speed_y_self: mae=0.041912 p95=0.203333 max=6.986000
 err.speed_x_attack: mae=0.013530 p95=0.036686 max=4.406406
 err.speed_y_attack: mae=0.020150 p95=0.050569 max=8.269767
-err.percent: mae=0.069841 p95=0.000000 max=162.050003
+err.percent: mae=0.069840 p95=0.000000 max=162.050003
 err.shield_hp: mae=0.004871 p95=0.000000 max=10.500000
 err.item_pos_x: mae=3.483734 p95=18.720001 max=223.601013
 err.item_pos_y: mae=0.724274 p95=4.337366 max=95.865356
 err.item_vel_x: mae=0.098130 p95=0.000000 max=7.000000
 err.item_vel_y: mae=0.058126 p95=0.000000 max=4.999367
-overall.discrete_mismatch: 9753 / 1236862
+overall.discrete_mismatch: 9752 / 1236862
 overall.float_norm_mae_p95: 0.00953800
 
 == datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/TreasuredBackKangaroo.msl ==
@@ -135,7 +135,7 @@ mismatch.facing: 237 / 15674 (0.015121)
 mismatch.stocks: 0 / 15674 (0.000000)
 mismatch.jumps_left: 208 / 15674 (0.013270)
 mismatch.is_dead: 0 / 15674 (0.000000)
-mismatch.hitlag: 185 / 15674 (0.011803)
+mismatch.hitlag: 186 / 15674 (0.011867)
 mismatch.hitstun: 572 / 15674 (0.036494)
 mismatch.l_cancel: 17 / 15674 (0.001085)
 mismatch.hurtbox_state: 182 / 15674 (0.011612)
@@ -159,14 +159,14 @@ err.speed_ground_x_self: mae=0.051887 p95=0.080000 max=4.317038
 err.speed_y_self: mae=0.050930 p95=0.213333 max=6.783999
 err.speed_x_attack: mae=0.012949 p95=0.041260 max=4.841560
 err.speed_y_attack: mae=0.022002 p95=0.050702 max=6.881653
-err.percent: mae=0.081715 p95=0.000000 max=159.530014
+err.percent: mae=0.081688 p95=0.000000 max=159.530014
 err.shield_hp: mae=0.002861 p95=0.000000 max=8.400002
 err.item_pos_x: mae=3.524962 p95=27.518038 max=427.877502
 err.item_pos_y: mae=1.317600 p95=5.190100 max=125.424088
 err.item_vel_x: mae=0.135014 p95=0.000000 max=12.000000
 err.item_vel_y: mae=0.085589 p95=0.000000 max=6.995884
-overall.discrete_mismatch: 9568 / 948277
-overall.float_norm_mae_p95: 0.01248005
+overall.discrete_mismatch: 9569 / 948277
+overall.float_norm_mae_p95: 0.01248003
 
 == suite summary ==
 overall.discrete_mismatch: 42355 / 4462843

@@ -11,6 +11,7 @@
 #include "msl_math.h"
 #include "mtx34.h"
 #include "stage_collision.h"
+#include "staling.h"
 
 static inline void item_slot_clear(MslBatch* batch, size_t ii) {
   if (batch == NULL) {
@@ -21,6 +22,8 @@ static inline void item_slot_clear(MslBatch* batch, size_t ii) {
   batch->state.item_type[ii] = 0;
   batch->state.item_owner[ii] = -1;
   batch->state.item_instance_id[ii] = 0;
+  batch->state.item_attack_id[ii] = (uint16_t)MSL_FT_MOVE_ID_DEFAULT;
+  batch->state.item_attack_instance[ii] = 0;
   batch->state.item_direction[ii] = 0.0f;
   batch->state.item_vel_x[ii] = 0.0f;
   batch->state.item_vel_y[ii] = 0.0f;
@@ -57,6 +60,8 @@ static inline void item_slot_swap(MslBatch* batch, size_t a, size_t b) {
   SWAP(uint16_t, batch->state.item_type);
   SWAP(int8_t, batch->state.item_owner);
   SWAP(uint16_t, batch->state.item_instance_id);
+  SWAP(uint16_t, batch->state.item_attack_id);
+  SWAP(uint16_t, batch->state.item_attack_instance);
   SWAP(float, batch->state.item_direction);
   SWAP(float, batch->state.item_vel_x);
   SWAP(float, batch->state.item_vel_y);
@@ -332,6 +337,10 @@ static void laser_spawn_from_fighter(MslBatch* batch, int bi, int owner, const M
   batch->state.item_state[ii] = 0;  // it_8029C6A4 uses msid=0 (itfoxlaser.c::it_8029C6A4)
   batch->state.item_type[ii] = lp->shot_itkind;
   batch->state.item_owner[ii] = (int8_t)owner;
+  // Staling identity: items copy the owner's fighter-side (attack_id, attack_instance) at spawn.
+  // refs/melee/src/melee/it/it_2725.c::it_8027B070
+  batch->state.item_attack_id[ii] = staling_move_id_from_state(batch, o_idx);
+  batch->state.item_attack_instance[ii] = batch->state.attack_instance[o_idx];
   // Slippi fixed ordering key uses instance_id; for blaster shots, it commonly matches the owner's gun item.
   // (Dataset ordering source: tools/slippi/make_dataset_from_slp.py::_fill_items_fixed.)
   const uint16_t gun_instance_id = items_find_gun_instance_id(batch, bi, owner, lp->gun_itkind);
@@ -477,7 +486,9 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
           }
 
           // Regular shield hit: apply defender-side shield effects and despawn the laser.
-          combat_apply_item_shield_hit(batch, bi, owner, def, lp->damage, lp->shield_damage);
+          combat_apply_item_shield_hit(batch, bi, owner, def, batch->state.item_attack_id[ii],
+                                       batch->state.item_attack_instance[ii], lp->damage,
+                                       lp->shield_damage);
           batch->state.item_hitlist_cd[cd_i] = 0xFFFFu;
           batch->state.item_hitlist_victim_iid[cd_i] = def_iid;
           item_slot_clear(batch, ii);
@@ -526,8 +537,9 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
       // - Fighter_ProcessHit_8006D1EC (percent add, hitlag, hitstun, damage-state entry)
       // - ftColl_80076CBC (getEnvDmg pattern)
       // refs/melee/src/melee/ft/fighter.c and refs/melee/src/melee/ft/ftcoll.c
-      combat_apply_item_hit(batch, bi, owner, def, lp->damage, lp->angle, lp->kbg, lp->wsk, lp->bkb,
-                            hit_hurt_height);
+      combat_apply_item_hit(batch, bi, owner, def, batch->state.item_attack_id[ii],
+                            batch->state.item_attack_instance[ii], lp->damage, lp->angle, lp->kbg,
+                            lp->wsk, lp->bkb, hit_hurt_height);
       batch->state.item_hitlist_cd[cd_i] = 0xFFFFu;
       batch->state.item_hitlist_victim_iid[cd_i] = def_iid;
       item_slot_clear(batch, ii);

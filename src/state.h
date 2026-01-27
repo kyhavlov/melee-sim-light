@@ -233,6 +233,16 @@ typedef struct MslStateSoA {
   uint16_t* item_type;         // [batch * MSL_MAX_ITEMS]
   int8_t* item_owner;          // [batch * MSL_MAX_ITEMS]
   uint16_t* item_instance_id;  // [batch * MSL_MAX_ITEMS]
+  // Item attack identity for staling attribution:
+  // - attack_id: it->xD88_attackID (typically copied from owner fp->x2068_attackID at spawn)
+  // - attack_instance: it->xD8C_attack_instance (typically copied from owner fp->x206C_attack_instance)
+  //
+  // Decomp refs:
+  // - Spawn copy from fighter: refs/melee/src/melee/it/it_2725.c::it_8027B070
+  // - Item damage staling: refs/melee/src/melee/it/itcoll.c::it_80272460 (calls ft_80089228)
+  // - Stale queue update: refs/melee/src/melee/pl/plstale.c::plStale_UpdateStaleMovesFromItem
+  uint16_t* item_attack_id;        // [batch * MSL_MAX_ITEMS]
+  uint16_t* item_attack_instance;  // [batch * MSL_MAX_ITEMS]
   float* item_direction;       // [batch * MSL_MAX_ITEMS]
   float* item_vel_x;           // [batch * MSL_MAX_ITEMS]
   float* item_vel_y;           // [batch * MSL_MAX_ITEMS]

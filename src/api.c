@@ -335,6 +335,8 @@ int msl_batch_reseed_seed(MslBatch* batch, const uint8_t* seed_bytes, size_t see
       batch->state.item_type[ii] = item->type;
       batch->state.item_owner[ii] = item->owner;
       batch->state.item_instance_id[ii] = item->instance_id;
+      batch->state.item_attack_id[ii] = item->attack_id;
+      batch->state.item_attack_instance[ii] = item->attack_instance;
       batch->state.item_direction[ii] = item->direction;
       batch->state.item_vel_x[ii] = item->vel_x;
       batch->state.item_vel_y[ii] = item->vel_y;
@@ -453,6 +455,8 @@ int msl_batch_write_compare(const MslBatch* batch, uint8_t* out_bytes, size_t ou
       item->type = batch->state.item_type[ii];
       item->owner = batch->state.item_owner[ii];
       item->instance_id = batch->state.item_instance_id[ii];
+      item->attack_id = batch->state.item_attack_id[ii];
+      item->attack_instance = batch->state.item_attack_instance[ii];
       item->direction = batch->state.item_direction[ii];
       item->vel_x = batch->state.item_vel_x[ii];
       item->vel_y = batch->state.item_vel_y[ii];

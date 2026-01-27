@@ -56,6 +56,8 @@ ITEM_DTYPE = np.dtype(
         ("owner", "i1"),
         ("_pad0", "V1"),
         ("instance_id", "<u2"),
+        ("attack_id", "<u2"),
+        ("attack_instance", "<u2"),
         ("direction", "<f4"),
         ("vel_x", "<f4"),
         ("vel_y", "<f4"),

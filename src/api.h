@@ -67,6 +67,13 @@ typedef struct MslItem {
   uint8_t _pad0;
   uint16_t instance_id;
 
+  // Item staling identity (GALE01):
+  // - it->xD88_attackID
+  // - it->xD8C_attack_instance
+  // refs/melee/src/melee/it/types.h
+  uint16_t attack_id;
+  uint16_t attack_instance;
+
   float direction;
   float vel_x;
   float vel_y;

@@ -249,6 +249,14 @@ def _fill_items_fixed(frames: pa.StructArray, n_frames: int) -> np.ndarray:
     """
     out = np.zeros((n_frames, 15), dtype=SAMPLE_DTYPE["seed_t"]["items"].base)
     out["owner"] = np.int8(-1)
+    # Decomp defaults for cleared/unowned items:
+    # - it->xD88_attackID = 1 (FtMoveId_Default, "do not stale")
+    # - it->xD8C_attack_instance = 0
+    # refs/melee/src/melee/it/it_2725.c::it_8027B1F4
+    if "attack_id" in out.dtype.names:
+        out["attack_id"] = np.uint16(1)
+    if "attack_instance" in out.dtype.names:
+        out["attack_instance"] = np.uint16(0)
 
     if "item" not in {f.name for f in frames.type}:
         return out
@@ -282,6 +290,67 @@ def _fill_items_fixed(frames: pa.StructArray, n_frames: int) -> np.ndarray:
             out[fi, slot]["misc3"] = np.uint8(int(misc.get("3", 0)))
 
     return out
+
+
+def _derive_item_attack_fields(
+    items_fixed: np.ndarray,
+    *,
+    fighter_attack_id: np.ndarray,
+    fighter_attack_instance: np.ndarray,
+    num_players: int,
+) -> None:
+    """Derive per-item (attack_id, attack_instance) strictly causally (prefix-invariant).
+
+    Decomp shape:
+    - Items spawned from fighters copy fp->x2068_attackID / fp->x206C_attack_instance at spawn.
+      refs/melee/src/melee/it/it_2725.c::it_8027B070
+    - Item hits use these fields for stale multiplier + stale queue update.
+      refs/melee/src/melee/it/itcoll.c::it_80272460
+      refs/melee/src/melee/pl/plstale.c::plStale_UpdateStaleMovesFromItem
+    """
+    if "attack_id" not in items_fixed.dtype.names or "attack_instance" not in items_fixed.dtype.names:
+        return
+
+    # Live mapping for active items keyed by the stable fixed-ordering tuple:
+    # (instance_id, spawn_id, type) == (Slippi item.instance_id, item.id, item.type).
+    active: dict[tuple[int, int, int], tuple[int, int]] = {}
+    default_attack_id = 1  # FtMoveId_Default (do not stale)
+
+    n_frames = int(items_fixed.shape[0])
+    for fi in range(n_frames):
+        keys_this_frame: set[tuple[int, int, int]] = set()
+
+        for slot in range(15):
+            if int(items_fixed[fi, slot]["exists"]) == 0:
+                continue
+
+            key = (
+                int(items_fixed[fi, slot]["instance_id"]),
+                int(items_fixed[fi, slot]["spawn_id"]),
+                int(items_fixed[fi, slot]["type"]),
+            )
+            keys_this_frame.add(key)
+
+            v = active.get(key)
+            if v is None:
+                owner = int(items_fixed[fi, slot]["owner"])
+                if 0 <= owner < int(num_players):
+                    aid = int(fighter_attack_id[fi, owner])
+                    ainst = int(fighter_attack_instance[fi, owner])
+                else:
+                    aid = default_attack_id
+                    ainst = 0
+                v = (aid, ainst)
+                active[key] = v
+
+            items_fixed[fi, slot]["attack_id"] = np.uint16(v[0])
+            items_fixed[fi, slot]["attack_instance"] = np.uint16(v[1])
+
+        # Drop inactive keys to keep the active map bounded.
+        if active:
+            for k in list(active.keys()):
+                if k not in keys_this_frame:
+                    del active[k]
 
 
 def write_dataset_from_slp(
@@ -967,6 +1036,12 @@ def _main_impl(args) -> None:
 
     # Items are global per frame.
     items_fixed = _fill_items_fixed(frames, n_frames)
+    _derive_item_attack_fields(
+        items_fixed,
+        fighter_attack_id=hist.attack_id,
+        fighter_attack_instance=hist.attack_instance,
+        num_players=num_players,
+    )
     samples["seed_t"]["items"] = items_fixed[:-1]
     samples["ref_t1"]["items"] = items_fixed[1:]
 

@@ -10,7 +10,8 @@ void combat_processhit_consume(MslBatch* batch);
 // Intended for simple projectiles (e.g. Fox/Falco blaster lasers) that resolve outside the
 // fighter-vs-fighter hitbox pass.
 void combat_apply_item_hit(MslBatch* batch, int batch_index, int attacker, int defender,
-                           float damage, uint16_t angle, uint16_t kbg, uint16_t wsk, uint16_t bkb,
+                           uint16_t item_attack_id, uint16_t item_attack_instance, float damage,
+                           uint16_t angle, uint16_t kbg, uint16_t wsk, uint16_t bkb,
                            uint8_t defender_hurt_height);
 
 // Apply an item->fighter SHIELD hit (shield HP depletion + GuardSetOff + defender hitlag).
@@ -18,6 +19,7 @@ void combat_apply_item_hit(MslBatch* batch, int batch_index, int attacker, int d
 // Intended for simple projectiles (e.g. Fox/Falco blaster lasers) where the item itself would
 // normally take hitlag/deflection in Melee; we apply only defender-side effects.
 void combat_apply_item_shield_hit(MslBatch* batch, int batch_index, int attacker, int defender,
+                                  uint16_t item_attack_id, uint16_t item_attack_instance,
                                   float damage, int8_t hitbox_shield_damage);
 
 // Debug/testing helper: run combat pass-1 selection (BODY-only, shield-safe, with rehit

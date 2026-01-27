@@ -26,8 +26,8 @@ def test_staling_history_prefix_invariance() -> None:
     ks = [k for k in ks if 1 <= k <= n]
     for k in ks:
         pref = derive_staling_history(frames.slice(0, k), src_ports=[1, 2])
+        assert np.array_equal(pref.attack_id, full.attack_id[:k])
         assert np.array_equal(pref.attack_instance, full.attack_instance[:k])
         assert np.array_equal(pref.stale_queue_index, full.stale_queue_index[:k])
         assert np.array_equal(pref.stale_move_id, full.stale_move_id[:k])
         assert np.array_equal(pref.stale_attack_instance, full.stale_attack_instance[:k])
-

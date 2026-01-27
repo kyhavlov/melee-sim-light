@@ -710,7 +710,8 @@ static inline void combat_mutations_pass1_future_apply_body_hit(MslBatch* batch,
   staling_queue_update(batch, a_idx, move_id, attack_instance);
 }
 
-void combat_apply_item_hit(MslBatch* batch, int batch_index, int attacker, int defender, float damage,
+void combat_apply_item_hit(MslBatch* batch, int batch_index, int attacker, int defender,
+                           uint16_t item_attack_id, uint16_t item_attack_instance, float damage,
                            uint16_t angle, uint16_t kbg, uint16_t wsk, uint16_t bkb,
                            uint8_t defender_hurt_height) {
   if (batch == NULL) {
@@ -733,7 +734,17 @@ void combat_apply_item_hit(MslBatch* batch, int batch_index, int attacker, int d
     return;
   }
 
-  const int int_dmg = combat_get_env_dmg(damage);
+  // Decomp (GALE01): item collision applies staling to the item's hitbox damage before the
+  // float->int getEnvDmg conversion and before Fighter_ProcessHit consumes the values.
+  // refs/melee/src/melee/it/itcoll.c::it_80272460 (calls ft_80089228)
+  // refs/melee/src/melee/ft/ft_0881.c::ft_80089228
+  float dmg_f = damage;
+  const float stale_mult = staling_multiplier_for_move(batch, a_idx, item_attack_id);
+  if (stale_mult != 1.0f) {
+    dmg_f *= stale_mult;
+  }
+
+  const int int_dmg = combat_get_env_dmg(dmg_f);
   if (int_dmg <= 0) {
     return;
   }
@@ -742,7 +753,7 @@ void combat_apply_item_hit(MslBatch* batch, int batch_index, int attacker, int d
   // Decomp: Fighter_ProcessHit_8006D1EC -> Fighter_TakeDamage_8006CC7C.
   // refs/melee/src/melee/ft/fighter.c
   const float percent_pre = batch->state.percent[d_idx];
-  float percent = percent_pre + damage;
+  float percent = percent_pre + dmg_f;
   if (percent > 999.0f) {
     percent = 999.0f;
   }
@@ -773,7 +784,7 @@ void combat_apply_item_hit(MslBatch* batch, int batch_index, int attacker, int d
   }
 
   const float kb_applied =
-      combat_damage_calc_kb_applied(c, d_ch, d_motion_id, percent_pre, damage, int_dmg, kbg, wsk, bkb);
+      combat_damage_calc_kb_applied(c, d_ch, d_motion_id, percent_pre, dmg_f, int_dmg, kbg, wsk, bkb);
   const float kb_angle_rad =
       combat_damage_calc_angle_radians(c, angle, defender_on_ground, kb_applied);
 
@@ -796,9 +807,14 @@ void combat_apply_item_hit(MslBatch* batch, int batch_index, int attacker, int d
 
   batch->state.instance_hit_by[d_idx] = batch->state.instance_id[a_idx];
   batch->state.last_hit_by[d_idx] = (uint8_t)attacker;
+
+  // Stale-move queue update on successful damaging BODY hit (attacker-side).
+  // Decomp: refs/melee/src/melee/pl/plstale.c::plStale_UpdateStaleMovesFromItem
+  staling_queue_update(batch, a_idx, item_attack_id, item_attack_instance);
 }
 
 void combat_apply_item_shield_hit(MslBatch* batch, int batch_index, int attacker, int defender,
+                                  uint16_t item_attack_id, uint16_t item_attack_instance,
                                   float damage, int8_t hitbox_shield_damage) {
   if (batch == NULL) {
     return;
@@ -820,7 +836,18 @@ void combat_apply_item_shield_hit(MslBatch* batch, int batch_index, int attacker
     return;
   }
 
-  const int int_dmg = combat_get_env_dmg(damage);
+  // Decomp (GALE01): item stale multiplier is applied to item hitbox damage before collision
+  // consumes it for shieldstun/hitlag as well.
+  // refs/melee/src/melee/it/itcoll.c::it_80272460 (calls ft_80089228)
+  // refs/melee/src/melee/ft/ft_0881.c::ft_80089228
+  (void)item_attack_instance;
+  float dmg_f = damage;
+  const float stale_mult = staling_multiplier_for_move(batch, a_idx, item_attack_id);
+  if (stale_mult != 1.0f) {
+    dmg_f *= stale_mult;
+  }
+
+  const int int_dmg = combat_get_env_dmg(dmg_f);
   if (int_dmg <= 0) {
     return;
   }

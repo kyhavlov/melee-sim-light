@@ -2,12 +2,6 @@
 
 #include "staling_tables.h"
 
-// Decomp: FtMoveId enum order has `FtMoveId_Default` as the second entry (value 1), and staling
-// treats move_id==1 as "do not stale".
-// refs/melee/src/melee/ft/forward.h::FtMoveId
-// refs/melee/src/melee/ft/ft_0881.c::ft_80089118
-enum { MSL_FT_MOVE_ID_DEFAULT = 1 };
-
 uint16_t staling_move_id_from_state(const MslBatch* batch, size_t fighter_idx) {
   if (batch == NULL) {
     return 0xFFFFu;
