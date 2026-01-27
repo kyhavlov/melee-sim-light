@@ -224,6 +224,12 @@ def main() -> None:
             if msid is None:
                 dropped.append({"anim_id_sym": e.anim_id_sym, "move_id_sym": e.move_id_sym, "src": e.src})
                 continue
+            # Slippi animation_index is an unsigned u16 (low 16 bits). Ignore negative enum values
+            # (e.g. decomp uses -1 sentinels for "none"), because the runtime binary-search table
+            # must be monotonic in unsigned msid order.
+            if int(msid) < 0 or int(msid) > _U16_MAX:
+                dropped.append({"anim_id_sym": e.anim_id_sym, "move_id_sym": e.move_id_sym, "src": e.src})
+                continue
             mv = ft_move_id.get(e.move_id_sym)
             if mv is None:
                 dropped.append({"anim_id_sym": e.anim_id_sym, "move_id_sym": e.move_id_sym, "src": e.src})

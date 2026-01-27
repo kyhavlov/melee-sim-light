@@ -228,6 +228,13 @@ typedef struct MslSeed {
   uint32_t animation_index[MSL_MAX_PLAYERS];
   uint16_t instance_hit_by[MSL_MAX_PLAYERS];
   uint16_t instance_id[MSL_MAX_PLAYERS];
+  // Staling "attack instance" (GALE01): fp->x206C_attack_instance.
+  // This value is used for stale-queue duplicate suppression as part of the (move_id, attack_instance) key.
+  // refs/melee/src/melee/pl/plstale.c::plStale_UpdateStaleMovesFromFighter
+  // refs/melee/src/melee/ft/ft_0881.c::ft_800890D0 and ::ft_800892A0 (x206C assignment sites)
+  //
+  // Slippi post-frames do not expose fp->x206C, so preprocessing derives it causally from replay history.
+  uint16_t attack_instance[MSL_MAX_PLAYERS];
   uint8_t last_attack_landed[MSL_MAX_PLAYERS];
   uint8_t combo_count[MSL_MAX_PLAYERS];
   uint8_t last_hit_by[MSL_MAX_PLAYERS];
@@ -272,12 +279,12 @@ typedef struct MslSeed {
   uint8_t stale_queue_index[MSL_MAX_PLAYERS];
   uint16_t stale_move_id[MSL_MAX_PLAYERS][MSL_STALE_QUEUE_SIZE];
   uint16_t stale_attack_instance[MSL_MAX_PLAYERS][MSL_STALE_QUEUE_SIZE];
-  // IMPORTANT (current PP#4 groundwork status):
-  // - Tooling/preprocessing currently leaves these fields as all-zeros.
-  // - Therefore the stale queue is empty and any staling multiplier is effectively identity (1.0)
-  //   until PP#4 wires (move_id, attack_instance) attribution and updates the queue on qualifying
-  //   damaging hits.
-  // - Do not treat "seeded" here as "implemented"; it is only schema/state plumbing for future work.
+  // Populated by replay-history preprocessing:
+  // - tools/slippi/staling_history.py (derive) and tools/slippi/make_dataset_from_slp.py (wire).
+  //
+  // Runtime usage:
+  // - src/combat.c applies the staling multiplier on damaging BODY hits and updates this queue on
+  //   qualifying hits using the seeded `attack_instance` as source-of-truth.
 
   MslItem items[MSL_MAX_ITEMS];
 } MslSeed;

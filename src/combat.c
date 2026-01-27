@@ -17,6 +17,7 @@
 #include "hitboxes_tables.h"
 #include "hit_status_tables.h"
 #include "hitlist.h"
+#include "staling.h"
 
 static inline size_t idx_hitbox(int bi, int p, int hb_i) {
   return ((size_t)bi * (size_t)MSL_MAX_PLAYERS + (size_t)p) * (size_t)MSL_MAX_HITBOXES +
@@ -601,15 +602,35 @@ static inline void combat_mutations_pass1_future_apply_body_hit(MslBatch* batch,
 
   const MslCommonParams* c = msl_common_params();
 
+  // BODY damage (staling):
+  //
+  // Decomp (GALE01): collision applies stale-move multiplier to hitbox->damage (float) before
+  // converting to int via getEnvDmg and before Fighter_ProcessHit consumes the values for
+  // percent/hitlag/knockback.
+  // - Stale multiplier: refs/melee/src/melee/ft/ft_0881.c::ft_80089118
+  // - getEnvDmg pattern: refs/melee/src/melee/ft/ftcoll.c
+  // - Hitlag/percent consumption: refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
+  //
+  // Simulator policy: apply staling to the float damage that drives percent/KB, and compute the
+  // int damage input for hitlag from the staled float (decomp-shaped).
+  const uint16_t move_id = staling_move_id_from_state(batch, a_idx);
+  const float stale_mult = staling_multiplier_for_move(batch, a_idx, move_id);
+
+  float hb_dmg = batch->state.hitbox_damage[hb_i];
+  if (stale_mult != 1.0f) {
+    hb_dmg *= stale_mult;
+  }
+
   // Decomp (GALE01): collision converts hitbox float damage -> int via getEnvDmg, and
   // Fighter_ProcessHit uses a nonzero int damage (`bool1`) as the dmg input to ftCommon_CalcHitlag.
   // refs/melee/src/melee/ft/ftcoll.c::inlineA0/inlineA1 (getEnvDmg pattern)
   // refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC (hitlag calc under `if (bool1)`)
   //
-  // Note (approximation): GALE01 also maintains `fp->dmg.int_value` as a max across contacts during
-  // collision. In pass 1 we instead pass the selected contact's `getEnvDmg(damage)` here.
-  const int dmg_i = (int_dmg > 0) ? int_dmg : 0;
-  if (dmg_i == 0) {
+  // Note: the caller provides `int_dmg` computed from the extracted hitbox damage; we instead
+  // recompute it from the staled float to match the decomp ordering.
+  (void)int_dmg;
+  const int dmg_i = combat_get_env_dmg(hb_dmg);
+  if (dmg_i <= 0) {
     return;
   }
 
@@ -620,10 +641,6 @@ static inline void combat_mutations_pass1_future_apply_body_hit(MslBatch* batch,
   //   refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
   // - Fighter_TakeDamage_8006CC7C adds to `fp->dmg.x1830_percent` and clamps to 999.
   //   refs/melee/src/melee/ft/fighter.c::Fighter_TakeDamage_8006CC7C
-  //
-  // Approximation: percent uses raw hitbox damage; expected to diverge until
-  // x1838_percentTemp/stale/multipliers/armor and exact hit timing are modeled.
-  const float hb_dmg = batch->state.hitbox_damage[hb_i];
   const float percent_pre = batch->state.percent[d_idx];
   float percent = percent_pre + hb_dmg;
   if (percent > 999.0f) {
@@ -686,6 +703,11 @@ static inline void combat_mutations_pass1_future_apply_body_hit(MslBatch* batch,
 
   batch->state.instance_hit_by[d_idx] = batch->state.instance_id[a_idx];
   batch->state.last_hit_by[d_idx] = (uint8_t)attacker;
+
+  // Stale-move queue update on successful damaging BODY hit (attacker-side).
+  // Decomp: refs/melee/src/melee/pl/plstale.c::plStale_UpdateStaleMovesFromFighter
+  const uint16_t attack_instance = batch->state.attack_instance[a_idx];
+  staling_queue_update(batch, a_idx, move_id, attack_instance);
 }
 
 void combat_apply_item_hit(MslBatch* batch, int batch_index, int attacker, int defender, float damage,

@@ -154,6 +154,7 @@ int state_alloc(MslStateSoA* state, int batch_size) {
   state->animation_index = (uint32_t*)alloc_aligned_64(sizeof(uint32_t) * bp);
   state->instance_hit_by = (uint16_t*)alloc_aligned_64(sizeof(uint16_t) * bp);
   state->instance_id = (uint16_t*)alloc_aligned_64(sizeof(uint16_t) * bp);
+  state->attack_instance = (uint16_t*)alloc_aligned_64(sizeof(uint16_t) * bp);
   state->last_attack_landed = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->combo_count = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->last_hit_by = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
@@ -235,7 +236,8 @@ int state_alloc(MslStateSoA* state, int batch_size) {
       !state->hitbox_element || !state->hitbox_shield_damage || !state->hitbox_sfx_severity ||
       !state->hitbox_sfx_kind || !state->hitbox_flags || !state->shield_x || !state->shield_y ||
       !state->shield_z || !state->shield_radius || !state->ground_id || !state->animation_index ||
-      !state->instance_hit_by || !state->instance_id || !state->last_attack_landed ||
+      !state->instance_hit_by || !state->instance_id || !state->attack_instance ||
+      !state->last_attack_landed ||
       !state->combo_count || !state->last_hit_by || !state->state_flags ||
       !state->combat_hitlist_cd || !state->combat_hitlist_victim_iid || !state->stale_queue_index ||
       !state->stale_move_id || !state->stale_attack_instance ||
@@ -385,6 +387,7 @@ void state_free(MslStateSoA* state) {
   alloc_free(state->animation_index);
   alloc_free(state->instance_hit_by);
   alloc_free(state->instance_id);
+  alloc_free(state->attack_instance);
   alloc_free(state->last_attack_landed);
   alloc_free(state->combo_count);
   alloc_free(state->last_hit_by);

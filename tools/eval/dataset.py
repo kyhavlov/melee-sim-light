@@ -146,6 +146,7 @@ SEED_DTYPE = np.dtype(
         ("animation_index", _arr("<u4", MAX_PLAYERS)),
         ("instance_hit_by", _arr("<u2", MAX_PLAYERS)),
         ("instance_id", _arr("<u2", MAX_PLAYERS)),
+        ("attack_instance", _arr("<u2", MAX_PLAYERS)),
         ("last_attack_landed", _arr("u1", MAX_PLAYERS)),
         ("combo_count", _arr("u1", MAX_PLAYERS)),
         ("last_hit_by", _arr("u1", MAX_PLAYERS)),
@@ -156,9 +157,9 @@ SEED_DTYPE = np.dtype(
         ("stale_queue_index", _arr("u1", MAX_PLAYERS)),
         ("stale_move_id", ("<u2", (MAX_PLAYERS, STALE_QUEUE_SIZE))),
         ("stale_attack_instance", ("<u2", (MAX_PLAYERS, STALE_QUEUE_SIZE))),
-        # NOTE (PP#4 groundwork): preprocessing currently leaves these staling fields as all-zeros,
-        # so staling multiplier is identity until the runtime wiring updates the queue on
-        # successful damaging hits and the seed schema is populated from replay history.
+        # NOTE (PP#4): these staling fields are populated by replay-history preprocessing:
+        # tools/slippi/staling_history.py (derive) and tools/slippi/make_dataset_from_slp.py (wire).
+        # They seed the per-player `StaleMoveTable` ring buffer and `attack_instance`.
         ("items", ITEM_DTYPE, (MAX_ITEMS,)),
     ],
     align=False,

@@ -8,6 +8,7 @@ def test_seed_schema_includes_staling_fields() -> None:
     assert "stale_queue_index" in SEED_DTYPE.fields
     assert "stale_move_id" in SEED_DTYPE.fields
     assert "stale_attack_instance" in SEED_DTYPE.fields
+    assert "attack_instance" in SEED_DTYPE.fields
 
 
 def test_dataset_dtype_sizes_match_c_structs() -> None:
@@ -17,4 +18,3 @@ def test_dataset_dtype_sizes_match_c_structs() -> None:
     sizes = msl_binding.sizes()
     assert int(sizes["seed"]) == SEED_DTYPE.itemsize
     assert int(sizes["sample"]) == SAMPLE_DTYPE.itemsize
-

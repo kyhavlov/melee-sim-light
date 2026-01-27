@@ -1330,7 +1330,9 @@ When a mismatch strongly suggests a missing internal that cannot be reconstructe
 - `fp->frame_speed_mul` fractional carry / true `cur_anim_frame` accumulator (hitlag coupling).
 - “Allow interrupt” / IASA gating latches beyond AttackAir* (many actions use DO_IASA with additional internal gates).
 - Hitbox hitlists / per-hitbox rehit timers (replacing conservative pair latch).
-- Stale-move queue (staling) + damage multipliers (requires explicit seeded queue, or deterministic reconstruction from recent hits).
+- Stale-move queue (staling) + damage multipliers: seeded via replay-history derivation, but `fp->x206C_attack_instance` is not
+  exposed by Slippi. We conservatively model the `ft_800890D0` bump (on action-state transitions) but do not model additional bump
+  sites like `ft_800892A0`, which can change duplicate suppression in the stale table (see `tools/slippi/staling_history.py`).
 - Ledge occupancy + ledge refresh timer(s) + per-action ledge regrab restrictions.
 - Ledge option `mv.co.cliff.x8` gate is currently approximated via a “previous-stick neutral reset” check for climb/drop on CliffWait
   (`src/ledge.c:190`); this may need to become an explicit seeded/internal latch for full parity.

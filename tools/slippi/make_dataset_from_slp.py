@@ -520,13 +520,17 @@ def _main_impl(args) -> None:
     samples["seed_t"]["num_players"] = num_players
     samples["seed_t"]["is_teams"] = is_teams
 
-    # Staling seed schema (PP#4 groundwork):
-    # - These fields exist in the dataset schema so reseeded one-step eval can carry staling state.
-    # - Preprocessing currently does not derive them, so we explicitly keep them zero here.
-    #   This makes staling multiplier identity until the staling system is wired.
-    samples["seed_t"]["stale_queue_index"] = np.uint8(0)
-    samples["seed_t"]["stale_move_id"] = np.uint16(0)
-    samples["seed_t"]["stale_attack_instance"] = np.uint16(0)
+    # Staling seed schema (PP#4):
+    # - Derive stale queue state strictly causally from replay history so one-step reseed can
+    #   apply staling multiplier deterministically.
+    from tools.slippi.staling_history import derive_staling_history
+
+    hist = derive_staling_history(frames, src_ports=src_ports)
+    samples["seed_t"]["attack_instance"][:, :num_players] = hist.attack_instance[:-1, :]
+    samples["seed_t"]["stale_queue_index"][:, :num_players] = hist.stale_queue_index[:-1, :]
+    samples["seed_t"]["stale_move_id"][:, :num_players, :] = hist.stale_move_id[:-1, :, :]
+    samples["seed_t"]["stale_attack_instance"][:, :num_players, :] = hist.stale_attack_instance[:-1, :, :]
+
     samples["ref_t1"]["stage_id"] = stage_id
     samples["ref_t1"]["num_players"] = num_players
     samples["ref_t1"]["is_teams"] = is_teams

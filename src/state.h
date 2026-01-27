@@ -172,6 +172,7 @@ typedef struct MslStateSoA {
   uint32_t* animation_index;
   uint16_t* instance_hit_by;
   uint16_t* instance_id;
+  uint16_t* attack_instance;
   uint8_t* last_attack_landed;
   uint8_t* combo_count;
   uint8_t* last_hit_by;
