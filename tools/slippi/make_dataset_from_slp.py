@@ -471,6 +471,7 @@ def _main_impl(args) -> None:
 
     # Map static info by 1-based port. Character may change in-game; per-frame char id comes from post.character.
     static_by_port: dict[int, PortStatic] = {}
+    ratios_by_port: dict[int, tuple[float, float, float]] = {}
     for p in game.start.get("players", []):
         port = str(p.get("port", ""))
         if not port.startswith("P"):
@@ -479,6 +480,11 @@ def _main_impl(args) -> None:
         static_by_port[port_1based] = PortStatic(
             team_id=_team_id_from_start_player(p),
             char_id=int(p.get("character", 0)),
+        )
+        ratios_by_port[port_1based] = (
+            float(p.get("offense_ratio", 1.0)),
+            float(p.get("defense_ratio", 1.0)),
+            float(p.get("model_scale", 1.0)),
         )
 
     frame_ids_all = _to_numpy(frames_all.field("id"))
@@ -600,6 +606,7 @@ def _main_impl(args) -> None:
     samples["seed_t"]["stage_id"] = stage_id
     samples["seed_t"]["num_players"] = num_players
     samples["seed_t"]["is_teams"] = is_teams
+    samples["seed_t"]["match_damage_ratio"] = np.float32(float(game.start.get("damage_ratio", 1.0)))
 
     # Staling seed schema (PP#4):
     # - Derive stale queue state strictly causally from replay history so one-step reseed can
@@ -621,6 +628,11 @@ def _main_impl(args) -> None:
         st = static_by_port.get(port_1based, PortStatic(team_id=0, char_id=0))
         samples["seed_t"]["team_id"][:, slot] = np.uint8(st.team_id)
         samples["ref_t1"]["team_id"][:, slot] = np.uint8(st.team_id)
+        atk, df, scl = ratios_by_port.get(port_1based, (1.0, 1.0, 1.0))
+        samples["seed_t"]["attack_ratio"][:, slot] = np.float32(atk)
+        samples["seed_t"]["defense_ratio"][:, slot] = np.float32(df)
+        # Fighter model scale (decomp: fp->x34_scale.y) comes from game-start settings (player.model_scale).
+        samples["seed_t"]["fighter_scale_y"][:, slot] = np.float32(scl)
 
     # Fill inputs and per-port post state.
     ports_struct = frames.field("ports")
@@ -749,10 +761,6 @@ def _main_impl(args) -> None:
         samples["ref_t1"]["speed_x_attack"][:, slot] = speed_x_attack[1:]
         samples["seed_t"]["speed_y_attack"][:, slot] = speed_y_attack[:-1]
         samples["ref_t1"]["speed_y_attack"][:, slot] = speed_y_attack[1:]
-
-        # Fighter model scale (decomp: fp->x34_scale.y) is not exposed by Slippi post-frames today.
-        # Default to 1.0 for normal matches; targeted tests may override the seed field.
-        samples["seed_t"]["fighter_scale_y"][:, slot] = np.float32(1.0)
 
         samples["seed_t"]["facing"][:, slot] = post_dir[:-1]
         samples["ref_t1"]["facing"][:, slot] = post_dir[1:]

@@ -31,9 +31,12 @@ int state_alloc(MslStateSoA* state, int batch_size) {
   state->frame_id = (int32_t*)alloc_aligned_64(sizeof(int32_t) * b);
   state->frame_pre_random_seed = (uint32_t*)alloc_aligned_64(sizeof(uint32_t) * b);
   state->stage_id = (uint32_t*)alloc_aligned_64(sizeof(uint32_t) * b);
+  state->match_damage_ratio = (float*)alloc_aligned_64(sizeof(float) * b);
   state->is_teams = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * b);
   state->team_id = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->char_id = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
+  state->attack_ratio = (float*)alloc_aligned_64(sizeof(float) * bp);
+  state->defense_ratio = (float*)alloc_aligned_64(sizeof(float) * bp);
 
   state->pos_x = (float*)alloc_aligned_64(sizeof(float) * bp);
   state->pos_y = (float*)alloc_aligned_64(sizeof(float) * bp);
@@ -203,8 +206,9 @@ int state_alloc(MslStateSoA* state, int batch_size) {
   state->item_hitlist_cd = (uint16_t*)alloc_aligned_64(sizeof(uint16_t) * bicd);
   state->item_hitlist_victim_iid = (uint16_t*)alloc_aligned_64(sizeof(uint16_t) * bicd);
 
-  if (!state->frame_id || !state->frame_pre_random_seed || !state->stage_id || !state->is_teams ||
-      !state->team_id || !state->char_id || !state->pos_x || !state->pos_y || !state->pos_z ||
+  if (!state->frame_id || !state->frame_pre_random_seed || !state->stage_id ||
+      !state->match_damage_ratio || !state->is_teams || !state->team_id || !state->char_id ||
+      !state->attack_ratio || !state->defense_ratio || !state->pos_x || !state->pos_y || !state->pos_z ||
       !state->prev_pos_x || !state->prev_pos_y || !state->speed_air_x_self ||
       !state->speed_ground_x_self || !state->speed_y_self || !state->speed_x_attack ||
       !state->speed_y_attack || !state->fighter_scale_y || !state->facing || !state->on_ground ||
@@ -218,12 +222,11 @@ int state_alloc(MslStateSoA* state, int batch_size) {
       !state->tilt_timer_y || !state->fall_fast || !state->ledge_side ||
       !state->stage_ledge_occupant_left || !state->stage_ledge_occupant_right ||
       !state->ledge_cooldown || !state->fallspecial_xc || !state->turn_has_turned ||
-      !state->turn_frames_to_turn ||
-      !state->lr_press_timer || !state->x672_input_timer || !state->x673 || !state->x674 ||
-      !state->x675 || !state->x676_x || !state->x677_y || !state->x678 || !state->x679_x ||
-      !state->x67A_y || !state->x67B || !state->x67C || !state->x67D || !state->x67E ||
-      !state->x680 || !state->x681 || !state->x682 || !state->x683 || !state->x684 ||
-      !state->ucf_padbuf_index ||
+      !state->turn_frames_to_turn || !state->lr_press_timer || !state->x672_input_timer ||
+      !state->x673 || !state->x674 || !state->x675 || !state->x676_x || !state->x677_y ||
+      !state->x678 || !state->x679_x || !state->x67A_y || !state->x67B || !state->x67C ||
+      !state->x67D || !state->x67E || !state->x680 || !state->x681 || !state->x682 ||
+      !state->x683 || !state->x684 || !state->ucf_padbuf_index ||
       !state->ucf_padbuf_sdrop_up_frames || !state->ucf_padbuf_stick_x ||
       !state->ucf_padbuf_stick_y || !state->percent || !state->shield_hp || !state->hitlag ||
       !state->hitstun || !state->l_cancel || !state->hurtbox_state || !state->hurtcap_count ||
@@ -268,9 +271,12 @@ void state_free(MslStateSoA* state) {
   alloc_free(state->frame_id);
   alloc_free(state->frame_pre_random_seed);
   alloc_free(state->stage_id);
+  alloc_free(state->match_damage_ratio);
   alloc_free(state->is_teams);
   alloc_free(state->team_id);
   alloc_free(state->char_id);
+  alloc_free(state->attack_ratio);
+  alloc_free(state->defense_ratio);
 
   alloc_free(state->pos_x);
   alloc_free(state->pos_y);

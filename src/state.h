@@ -11,9 +11,12 @@ typedef struct MslStateSoA {
   int32_t* frame_id;
   uint32_t* frame_pre_random_seed;
   uint32_t* stage_id;  // [batch]
+  float* match_damage_ratio;  // [batch] (decomp: gm_8016B248 -> StartMeleeRules.x30)
   uint8_t* is_teams;   // [batch]
   uint8_t* team_id;    // [batch * MSL_MAX_PLAYERS]
   uint8_t* char_id;    // [batch * MSL_MAX_PLAYERS]
+  float* attack_ratio;   // [batch * MSL_MAX_PLAYERS] (decomp: Player_GetAttackRatio)
+  float* defense_ratio;  // [batch * MSL_MAX_PLAYERS] (decomp: Player_GetDefenseRatio)
 
   // Kinematics
   float* pos_x;

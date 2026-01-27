@@ -319,7 +319,8 @@ static inline float combat_damage_calc_kb_applied(const MslCommonParams* c, cons
                                                   uint16_t defender_action_id,
                                                   float defender_percent_pre, float hitbox_damage,
                                                   int hitbox_damage_i, uint16_t hitbox_kbg,
-                                                  uint16_t hitbox_wsk, uint16_t hitbox_bkb) {
+                                                  uint16_t hitbox_wsk, uint16_t hitbox_bkb,
+                                                  float collision_kb_mul) {
   if (c == NULL) {
     return 0.0f;
   }
@@ -417,6 +418,26 @@ static inline float combat_damage_calc_kb_applied(const MslCommonParams* c, cons
     // The asm multiplies by `ftColl_804D82EC` (1.0) three times before returning.
     // refs/melee/build/GALE01/asm/melee/ft/ftcoll.s::ftColl_80079EA8 (0x8007A044..0x8007A04C)
     kb = one * (one * (one * kb));
+  }
+
+  // Collision multiplier chain (post-formula):
+  //
+  // ftColl_80079AB0 multiplies the computed KB by:
+  // - gm_8016B248() (StartMeleeRules.x30),
+  // - Player_GetAttackRatio(attacker_slot),
+  // - Player_GetDefenseRatio(defender_slot),
+  // before clamping to p_ftCommonData->0x108 (kb_applied_max).
+  //
+  // Call-site evidence (fighter-vs-fighter):
+  // refs/melee/build/GALE01/asm/melee/ft/ftcoll.s::ftColl_8007A06C
+  // - 0x8007A130..0x8007A148: Player_GetDefenseRatio / Player_GetAttackRatio / gm_8016B248
+  // - 0x8007A160: call ftColl_80079AB0
+  //
+  // In-function evidence:
+  // refs/melee/build/GALE01/asm/melee/ft/ftcoll.s::ftColl_80079AB0
+  // - 0x80079B58..0x80079B64 and 0x80079C48..0x80079C50: `fmuls` chain by (f1,f2,f3).
+  if (collision_kb_mul != 1.0f) {
+    kb *= collision_kb_mul;
   }
 
   // Collision clamps to p_ftCommonData->0x108 (max KB).
@@ -601,8 +622,8 @@ static inline void combat_mutations_pass1_future_apply_body_hit(MslBatch* batch,
   // NOTE (writeback reshaping pass):
   // This BODY path aims to be GALE01-shaped for the "damage/KB writeback" fields that the one-step
   // suite compares (percent, hitlag, hitstun, KB vel, damage-state entry). It is not yet a full
-  // collision+damage pipeline replica because we do not currently model the full multiplier chain
-  // that feeds ftColl_80079AB0 (attack/defense ratios and gm_8016B248()).
+  // collision+damage pipeline replica (e.g. armor/reflect/absorb), but it does model the collision
+  // multiplier chain that feeds ftColl_80079AB0 (attack/defense ratios and gm_8016B248()).
   // refs/melee/build/GALE01/asm/melee/ft/ftcoll.s::ftColl_80079AB0
   // refs/melee/src/melee/gm/gm_16AE.c::gm_8016B248
   //
@@ -698,9 +719,18 @@ static inline void combat_mutations_pass1_future_apply_body_hit(MslBatch* batch,
   const uint8_t hurt_height = batch->state.hurtcap_height[cap_i];
 
   const MslCharParams* d_ch = msl_char_params(batch->state.char_id[d_idx]);
+  const size_t bi = a_idx / (size_t)MSL_MAX_PLAYERS;
+  float coll_kb_mul = batch->state.match_damage_ratio[bi];
+  coll_kb_mul *= batch->state.attack_ratio[a_idx];
+  coll_kb_mul *= batch->state.defense_ratio[d_idx];
+  // NOTE: This multiplier chain is applied only to kb_applied (ftColl_80079AB0 output), not to
+  // percent add. Keep any percent/damage scaling tasks separate and decomp-backed.
+  if (!(coll_kb_mul > 0.0f)) {
+    coll_kb_mul = 1.0f;
+  }
   const float kb_applied =
       combat_damage_calc_kb_applied(c, d_ch, d_motion_id, percent_pre, dmg_f, dmg_i, hb_kbg, hb_wsk,
-                                    hb_bkb);
+                                    hb_bkb, coll_kb_mul);
   const float kb_angle_rad =
       combat_damage_calc_angle_radians(c, hb_angle, defender_on_ground, kb_applied);
 
@@ -880,7 +910,7 @@ void combat_apply_item_hit(MslBatch* batch, int batch_index, int attacker, int d
   }
 
   const float kb_applied =
-      combat_damage_calc_kb_applied(c, d_ch, d_motion_id, percent_pre, dmg_f, int_dmg, kbg, wsk, bkb);
+      combat_damage_calc_kb_applied(c, d_ch, d_motion_id, percent_pre, dmg_f, int_dmg, kbg, wsk, bkb, 1.0f);
   const float kb_angle_rad =
       combat_damage_calc_angle_radians(c, angle, defender_on_ground, kb_applied);
 

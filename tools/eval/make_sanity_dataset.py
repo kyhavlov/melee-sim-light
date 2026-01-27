@@ -11,6 +11,7 @@ def _rand_inputs(rng: np.random.Generator, n: int) -> np.ndarray:
     x = np.zeros(n, dtype=SAMPLE_DTYPE)
     # Some plausible-ish metadata defaults
     x["seed_t"]["stage_id"] = 0  # FD placeholder
+    x["seed_t"]["match_damage_ratio"] = np.float32(1.0)
     x["seed_t"]["num_players"] = 2
     x["seed_t"]["is_teams"] = 0
     x["seed_t"]["frame_id"] = np.arange(n, dtype=np.int32)
@@ -19,6 +20,8 @@ def _rand_inputs(rng: np.random.Generator, n: int) -> np.ndarray:
     # Randomize players 0..1; leave 2..3 zeroed.
     x["seed_t"]["char_id"][:, 0] = 0x02  # Fox placeholder
     x["seed_t"]["char_id"][:, 1] = 0x03  # Falco placeholder
+    x["seed_t"]["attack_ratio"][:, :2] = np.float32(1.0)
+    x["seed_t"]["defense_ratio"][:, :2] = np.float32(1.0)
 
     x["seed_t"]["pos_x"][:, :2] = rng.normal(0.0, 20.0, size=(n, 2)).astype(np.float32)
     x["seed_t"]["pos_y"][:, :2] = rng.normal(0.0, 5.0, size=(n, 2)).astype(np.float32)

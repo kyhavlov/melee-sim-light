@@ -95,12 +95,24 @@ typedef struct MslSeed {
       frame_pre_random_seed;  // pre-frame RNG seed (per-player seeds also exist; this is frame-level)
 
   uint32_t stage_id;
+  // Global match damage ratio (decomp: gm_8016B248 -> StartMeleeRules.x30).
+  //
+  // IMPORTANT: In this simulator, this field currently exists only to model the *knockback* multiplier
+  // chain feeding ftColl_80079AB0. It is not applied to percent add (or any other damage/percent scaling)
+  // elsewhere in the engine, if such scaling exists.
+  // refs/melee/src/melee/gm/gm_16AE.c::gm_8016B248
+  float match_damage_ratio;
   uint8_t num_players;  // 2 or 4 (<= MSL_MAX_PLAYERS)
   uint8_t is_teams;     // 0/1
   uint8_t _pad0[2];
 
   uint8_t team_id[MSL_MAX_PLAYERS];
   uint8_t char_id[MSL_MAX_PLAYERS];
+  // Per-player damage ratios (decomp: Player_GetAttackRatio / Player_GetDefenseRatio).
+  // refs/melee/src/melee/pl/player.c::Player_GetAttackRatio
+  // refs/melee/src/melee/pl/player.c::Player_GetDefenseRatio
+  float attack_ratio[MSL_MAX_PLAYERS];
+  float defense_ratio[MSL_MAX_PLAYERS];
 
   // Kinematics
   float pos_x[MSL_MAX_PLAYERS];
@@ -112,8 +124,8 @@ typedef struct MslSeed {
   float speed_y_self[MSL_MAX_PLAYERS];
   float speed_x_attack[MSL_MAX_PLAYERS];
   float speed_y_attack[MSL_MAX_PLAYERS];
-  // Fighter model scale (decomp: fp->x34_scale.y). Slippi does not currently expose this, so
-  // tooling defaults it to 1.0 for normal matches; tests may override.
+  // Fighter model scale (decomp: fp->x34_scale.y). Slippi exposes this from the game-start block
+  // (player.model_scale), but legacy datasets may still default it to 1.0.
   float fighter_scale_y[MSL_MAX_PLAYERS];
 
   uint8_t facing[MSL_MAX_PLAYERS];     // 0/1

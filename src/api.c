@@ -178,6 +178,11 @@ int msl_batch_reseed_seed(MslBatch* batch, const uint8_t* seed_bytes, size_t see
     batch->state.frame_id[bi] = seed->frame_id;
     batch->state.frame_pre_random_seed[bi] = seed->frame_pre_random_seed;
     batch->state.stage_id[bi] = seed->stage_id;
+    float match_damage_ratio = seed->match_damage_ratio;
+    if (!(match_damage_ratio > 0.0f)) {
+      match_damage_ratio = 1.0f;
+    }
+    batch->state.match_damage_ratio[bi] = match_damage_ratio;
     batch->state.is_teams[bi] = seed->is_teams ? 1 : 0;
     batch->state.stage_ledge_occupant_left[bi] = -1;
     batch->state.stage_ledge_occupant_right[bi] = -1;
@@ -186,6 +191,16 @@ int msl_batch_reseed_seed(MslBatch* batch, const uint8_t* seed_bytes, size_t see
       const size_t idx = msl_idx_player(bi, p);
       batch->state.team_id[idx] = seed->team_id[p];
       batch->state.char_id[idx] = seed->char_id[p];
+      float attack_ratio = seed->attack_ratio[p];
+      if (!(attack_ratio > 0.0f)) {
+        attack_ratio = 1.0f;
+      }
+      float defense_ratio = seed->defense_ratio[p];
+      if (!(defense_ratio > 0.0f)) {
+        defense_ratio = 1.0f;
+      }
+      batch->state.attack_ratio[idx] = attack_ratio;
+      batch->state.defense_ratio[idx] = defense_ratio;
 
       batch->state.pos_x[idx] = seed->pos_x[p];
       batch->state.pos_y[idx] = seed->pos_y[p];

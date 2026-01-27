@@ -45,10 +45,14 @@ def _common_attr(name: str) -> float:
 def _seed_base() -> np.ndarray:
     seed = np.zeros((1,), dtype=SEED_DTYPE)
     seed["stage_id"][0] = np.uint32(STAGE_FD)
+    seed["match_damage_ratio"][0] = np.float32(1.0)
     seed["num_players"][0] = np.uint8(2)
     seed["stocks"][0, :2] = np.uint8(4)
     seed["char_id"][0, 0] = np.uint8(CHAR_FOX)
     seed["char_id"][0, 1] = np.uint8(CHAR_FOX)
+    seed["attack_ratio"][0, :2] = np.float32(1.0)
+    seed["defense_ratio"][0, :2] = np.float32(1.0)
+    seed["fighter_scale_y"][0, :2] = np.float32(1.0)
     seed["facing"][0, :2] = np.uint8(1)  # right
     seed["on_ground"][0, :2] = np.uint8(1)
     seed["ground_id"][0, :2] = np.uint16(0)
@@ -272,6 +276,71 @@ def test_combat_resolve_body_overlap_applies_percent_knockback_hitstun_and_enter
         assert int(out["action_id"][1]) == ACT_DAMAGE_N1
         assert int(out["animation_index"][1]) == SM_DAMAGE_N1
         assert int(out["action_frame"][1]) == -1
+    finally:
+        msl_binding.destroy(handle)
+        del handle
+
+
+def test_combat_resolve_body_overlap_applies_kb_multiplier_chain_to_velocity_only() -> None:
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    seed_stride = int(sizes["seed"])
+    compare_stride = int(sizes["compare"])
+    assert seed_stride == SEED_DTYPE.itemsize
+    assert compare_stride == COMPARE_DTYPE.itemsize
+
+    handle = msl_binding.init(batch_size=1, num_players=2)
+    try:
+        # Baseline (all multipliers 1.0).
+        seed = _seed_base()
+        seed["pos_x"][0, 0] = np.float32(0.0)
+        seed["pos_x"][0, 1] = np.float32(1.0)
+        seed_bytes = seed.view(np.uint8).reshape((1, seed_stride))
+        msl_binding.reseed_seed(handle, seed_bytes)
+
+        msl_binding.debug_clear_hitboxes_world(handle, 0, 0)
+        msl_binding.debug_set_hitbox_world(handle, 0, 0, 0, 1.0, 0.0, 0.0, 1.0, 5.0, 1)
+        msl_binding.debug_set_hitbox_flags(handle, 0, 0, 0, int(HIT_GROUNDED))
+        # Simple low-KB horizontal hit: angle=0, KBG=0 => kb_applied ~= BKB.
+        msl_binding.debug_set_hitbox_kb_params(handle, 0, 0, 0, 0, 0, 0, 10)
+
+        msl_binding.debug_clear_hurtcaps_world(handle, 0, 1)
+        msl_binding.debug_set_hurtcap_world(handle, 0, 1, 0, 0.5, 0.0, 0.0, 1.5, 0.0, 0.0, 0.5)
+        msl_binding.debug_set_hurtcap_height(handle, 0, 1, 0, 1)
+
+        msl_binding.debug_combat_resolve(handle)
+        out1 = _read_compare(handle)
+        v1 = float(out1["speed_x_attack"][1])
+        p1 = float(out1["percent"][1])
+
+        # Apply a nontrivial collision KB multiplier chain: gm_8016B248 * attack_ratio * defense_ratio.
+        seed2 = _seed_base()
+        seed2["pos_x"][0, 0] = np.float32(0.0)
+        seed2["pos_x"][0, 1] = np.float32(1.0)
+        seed2["match_damage_ratio"][0] = np.float32(2.0)
+        seed2["attack_ratio"][0, 0] = np.float32(1.0)
+        seed2["defense_ratio"][0, 1] = np.float32(1.0)
+        seed_bytes2 = seed2.view(np.uint8).reshape((1, seed_stride))
+        msl_binding.reseed_seed(handle, seed_bytes2)
+
+        msl_binding.debug_clear_hitboxes_world(handle, 0, 0)
+        msl_binding.debug_set_hitbox_world(handle, 0, 0, 0, 1.0, 0.0, 0.0, 1.0, 5.0, 1)
+        msl_binding.debug_set_hitbox_flags(handle, 0, 0, 0, int(HIT_GROUNDED))
+        msl_binding.debug_set_hitbox_kb_params(handle, 0, 0, 0, 0, 0, 0, 10)
+
+        msl_binding.debug_clear_hurtcaps_world(handle, 0, 1)
+        msl_binding.debug_set_hurtcap_world(handle, 0, 1, 0, 0.5, 0.0, 0.0, 1.5, 0.0, 0.0, 0.5)
+        msl_binding.debug_set_hurtcap_height(handle, 0, 1, 0, 1)
+
+        msl_binding.debug_combat_resolve(handle)
+        out2 = _read_compare(handle)
+        v2 = float(out2["speed_x_attack"][1])
+        p2 = float(out2["percent"][1])
+
+        assert p1 == 5.0
+        assert p2 == 5.0
+        assert abs(v2 - 2.0 * v1) < 1e-6
     finally:
         msl_binding.destroy(handle)
         del handle
