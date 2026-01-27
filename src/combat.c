@@ -296,7 +296,7 @@ static inline float combat_damage_ftColl_804D82EC_one(void) {
   // - `.float 1`
   //
   // Used in asm:
-  // refs/melee/build/GALE01/asm/melee/ft/ftcoll.s::ftColl_80079EA8
+  // refs/melee/build/GALE01/asm/melee/ft/ftcoll.s::ftColl_80079AB0 and ::ftColl_80079EA8
   // - `lfs f8, ftColl_804D82EC@sda21(r0)` then `fadds f0, f8, f1`.
   return 1.0f;
 }
@@ -310,7 +310,7 @@ static inline float combat_damage_ftColl_804D8314_kbg_mul(void) {
   // - `.float 0.01`
   //
   // Used in asm:
-  // refs/melee/build/GALE01/asm/melee/ft/ftcoll.s::ftColl_80079EA8
+  // refs/melee/build/GALE01/asm/melee/ft/ftcoll.s::ftColl_80079AB0 and ::ftColl_80079EA8
   // - `lfs f8, ftColl_804D8314@sda21(r0)` and `fmuls f6, f8, f6` (kbg / 100).
   return 0.01f;
 }
@@ -324,14 +324,18 @@ static inline float combat_damage_calc_kb_applied(const MslCommonParams* c, cons
     return 0.0f;
   }
 
-  // Knockback magnitude computation comes from collision (ftColl_80079EA8).
+  // Knockback magnitude computation comes from collision (ftColl_80079AB0).
   //
   // Decomp entry point:
-  // refs/melee/src/melee/ft/ftcoll.h::ftColl_80079EA8(Fighter*, HitCapsule*, int)
-  // refs/melee/src/melee/ft/ftcoll.c::ftColl_80079EA8 (stub)
+  // refs/melee/src/melee/ft/ftcoll.h::ftColl_80079AB0(Fighter*, HitCapsule*, int, float, float, float, float)
+  // refs/melee/src/melee/ft/ftcoll.c::ftColl_80079AB0 (stub)
   //
   // Authoritative asm:
-  // refs/melee/build/GALE01/asm/melee/ft/ftcoll.s::ftColl_80079EA8
+  // refs/melee/build/GALE01/asm/melee/ft/ftcoll.s::ftColl_80079AB0
+  //
+  // Call chain for fighter-vs-fighter hits:
+  // - ftColl_8007A06C computes kb_applied via ftColl_80079AB0 and writes it into fp->dmg.kb_applied.
+  // refs/melee/build/GALE01/asm/melee/ft/ftcoll.s::ftColl_8007A06C
   //
   // Notes:
   // - The `int` arg corresponds to `HitCapsule.unk_count` (lb/types.h:+8). The hitbox pipeline
@@ -343,7 +347,7 @@ static inline float combat_damage_calc_kb_applied(const MslCommonParams* c, cons
   //   (fighter.dmg:+0x1838), which accumulates the float damage this frame:
   //   refs/melee/src/melee/ft/ftcoll.c::ftColl_80076640 (adds `*dmg` into x1838_percentTemp).
   //
-  // IMPORTANT: ftColl_80079EA8 has an alternate branch that can override the percent term using
+  // IMPORTANT: ftColl_80079AB0 has an alternate branch that can override the percent term using
   // p_ftCommonData->0x6D4/0x6D8 based on fp+0x2225_b0 / fp+0x2224 flags. We do not currently seed
   // those bytes (Slippi `state_flags` does not include fp+0x2224/0x2225), so we implement the
   // standard `percent_int = (int)percent_pre` path. If we later need the override behavior, we
@@ -359,9 +363,7 @@ static inline float combat_damage_calc_kb_applied(const MslCommonParams* c, cons
   // - denom = 1.0 + f1
   // - tmp = (f1 * p_ftCommonData->0xF8) / denom
   // - weight_factor = p_ftCommonData->0xF8 - tmp
-  // refs/melee/build/GALE01/asm/melee/ft/ftcoll.s::ftColl_80079EA8
-  // - WSK:   0x80079EB4..0x80079F04
-  // - noWSK: 0x80079F9C..0x80079FE4
+  // refs/melee/build/GALE01/asm/melee/ft/ftcoll.s::ftColl_80079AB0
   const float one = combat_damage_ftColl_804D82EC_one();
   const float w = weight * c->kb_weight_mul;  // p_ftCommonData->0xF4
   const float denom = one + w;
@@ -596,6 +598,14 @@ static inline void combat_mutations_pass1_future_apply_body_hit(MslBatch* batch,
   //     refs/melee/src/melee/ft/types.h
   //     refs/slippi-wiki/SPEC.md ("Last Hit By")
   //
+  // NOTE (writeback reshaping pass):
+  // This BODY path aims to be GALE01-shaped for the "damage/KB writeback" fields that the one-step
+  // suite compares (percent, hitlag, hitstun, KB vel, damage-state entry). It is not yet a full
+  // collision+damage pipeline replica because we do not currently model the full multiplier chain
+  // that feeds ftColl_80079AB0 (attack/defense ratios and gm_8016B248()).
+  // refs/melee/build/GALE01/asm/melee/ft/ftcoll.s::ftColl_80079AB0
+  // refs/melee/src/melee/gm/gm_16AE.c::gm_8016B248
+  //
   // Intentionally NOT set in this pass:
   // - last_attack_landed (Slippi "Last Hitting Attack ID") requires attack-id extraction.
   // - combo_count requires combo tracking logic beyond strict one-step mutation.
@@ -621,15 +631,27 @@ static inline void combat_mutations_pass1_future_apply_body_hit(MslBatch* batch,
     hb_dmg *= stale_mult;
   }
 
-  // Decomp (GALE01): collision converts hitbox float damage -> int via getEnvDmg, and
-  // Fighter_ProcessHit uses a nonzero int damage (`bool1`) as the dmg input to ftCommon_CalcHitlag.
-  // refs/melee/src/melee/ft/ftcoll.c::inlineA0/inlineA1 (getEnvDmg pattern)
+  // Applied damage (float) drives percent and the KB magnitude computation inputs.
+  //
+  // Decomp trail (GALE01):
+  // - Collision accumulates per-frame float damage into fp->dmg.x1838_percentTemp via ftColl_80076640.
+  //   refs/melee/src/melee/ft/ftcoll.c::ftColl_80076640
+  // - Fighter_ProcessHit consumes fp->dmg.x1838_percentTemp for percent add.
+  //   refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
+  //
+  // In this BODY-only path, `hb_dmg` is already stale-adjusted; additional modifiers/gates (armor,
+  // reflect/absorb, etc.) are handled elsewhere or require seed fields we do not yet represent.
+  const float dmg_f = hb_dmg;
+
+  // Decomp: collision converts float damage -> env int via getEnvDmg, and Fighter_ProcessHit uses
+  // a nonzero fp->dmg.x183C_applied (`bool1`) as ftCommon_CalcHitlag's `dmg` input.
+  // refs/melee/src/melee/ft/ftcoll.c::getEnvDmg + ftColl_80076640 (x183C_applied update)
   // refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC (hitlag calc under `if (bool1)`)
   //
-  // Note: the caller provides `int_dmg` computed from the extracted hitbox damage; we instead
-  // recompute it from the staled float to match the decomp ordering.
+  // Note: the caller provides `int_dmg` computed from the extracted hitbox damage; recompute it
+  // from the applied float to match the decomp ordering.
   (void)int_dmg;
-  const int dmg_i = combat_get_env_dmg(hb_dmg);
+  const int dmg_i = combat_get_env_dmg(dmg_f);
   if (dmg_i <= 0) {
     return;
   }
@@ -642,7 +664,7 @@ static inline void combat_mutations_pass1_future_apply_body_hit(MslBatch* batch,
   // - Fighter_TakeDamage_8006CC7C adds to `fp->dmg.x1830_percent` and clamps to 999.
   //   refs/melee/src/melee/ft/fighter.c::Fighter_TakeDamage_8006CC7C
   const float percent_pre = batch->state.percent[d_idx];
-  float percent = percent_pre + hb_dmg;
+  float percent = percent_pre + dmg_f;
   if (percent > 999.0f) {
     percent = 999.0f;
   }
@@ -676,23 +698,97 @@ static inline void combat_mutations_pass1_future_apply_body_hit(MslBatch* batch,
   const uint8_t hurt_height = batch->state.hurtcap_height[cap_i];
 
   const MslCharParams* d_ch = msl_char_params(batch->state.char_id[d_idx]);
-  const float kb_applied = combat_damage_calc_kb_applied(c, d_ch, d_motion_id, percent_pre, hb_dmg,
-                                                         dmg_i, hb_kbg, hb_wsk, hb_bkb);
+  const float kb_applied =
+      combat_damage_calc_kb_applied(c, d_ch, d_motion_id, percent_pre, dmg_f, dmg_i, hb_kbg, hb_wsk,
+                                    hb_bkb);
   const float kb_angle_rad =
       combat_damage_calc_angle_radians(c, hb_angle, defender_on_ground, kb_applied);
 
-  // KB velocity magnitude. Decomp: `var_f31 = kb_applied * p_ftCommonData->x100` (kb_vel_mul),
-  // then optional `* p_ftCommonData->x190` for some air-motions.
+  // Decomp (GALE01): Fighter_ProcessHit_8006D1EC only enters the damage/KB path when
+  // `fp->dmg.kb_applied` is nonzero via the exact conditional:
+  // - `forceAppliedOnHit = fp->dmg.kb_applied;`  (fighter.c:2839)
+  // - `if (forceAppliedOnHit) {`                 (fighter.c:2840)
+  // which then does `Fighter_UnkTakeDamage_8006CC30` + `ftCo_Damage_CalcKnockback` + damage state entry.
+  // refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
+  if (kb_applied == 0.0f) {
+    batch->state.speed_x_attack[d_idx] = 0.0f;
+    batch->state.speed_y_attack[d_idx] = 0.0f;
+    batch->state.hitstun[d_idx] = 0;
+    combat_state_flags_set_is_hitstun(batch, d_idx, 0);
+    batch->state.instance_hit_by[d_idx] = batch->state.instance_id[a_idx];
+    batch->state.last_hit_by[d_idx] = (uint8_t)attacker;
+
+    // Stale-move queue update on successful damaging BODY hit (attacker-side).
+    // Decomp: refs/melee/src/melee/pl/plstale.c::plStale_UpdateStaleMovesFromFighter
+    const uint16_t attack_instance = batch->state.attack_instance[a_idx];
+    staling_queue_update(batch, a_idx, move_id, attack_instance);
+    return;
+  }
+
+  // KB velocity + grounded/airborne interaction.
+  //
+  // Decomp entry: ftCo_8008DCE0 computes:
+  // - var_f31 = kb_applied * p_ftCommonData->x100 (kb_vel_mul),
+  // - x = var_f31 * cos(kb_angle), y = var_f31 * sin(kb_angle),
+  // - then applies sign via `-x * fp->facing_dir` after setting `fp->facing_dir = fp->dmg.facing_dir_1`.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
   float kb_vel_mag = kb_applied * c->kb_vel_mul;
   if (!defender_on_ground && combat_damage_check_air_motion_kb_mul(c, batch, d_idx)) {
     kb_vel_mag *= c->air_motion_kb_mul;
   }
 
-  // Approximation: apply the horizontal sign "away from attacker" based on current positions.
-  const float away = (batch->state.pos_x[d_idx] >= batch->state.pos_x[a_idx]) ? 1.0f : -1.0f;
-  batch->state.speed_x_attack[d_idx] = away * (kb_vel_mag * cosf(kb_angle_rad));
-  batch->state.speed_y_attack[d_idx] = kb_vel_mag * sinf(kb_angle_rad);
+  const float x = kb_vel_mag * cosf(kb_angle_rad);
+  const float y = kb_vel_mag * sinf(kb_angle_rad);
+
+  // Horizontal sign for knockback:
+  //
+  // Decomp:
+  // - ftCo_8008DCE0 uses `fp->dmg.facing_dir_1` (set by collision) to set `fp->facing_dir`, then flips
+  //   the KB x component via `-x * fp->facing_dir`.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
+  //
+  // Decomp (GALE01): collision writes fp->dmg.facing_dir_1 as a +/-1 sign based on relative X
+  // position between the victim and the source (fighter/item), e.g.:
+  // - If victim_pos.x > src_pos.x => facing_dir_1 = -1
+  // - Else                        => facing_dir_1 = +1
+  // refs/melee/build/GALE01/asm/melee/ft/ftcoll.s::ftColl_8007A06C (0x8007A74C..0x8007A77C sets f24)
+  const float one = combat_damage_ftColl_804D82EC_one();
+  const float defender_facing_dir_1 =
+      (batch->state.pos_x[d_idx] > batch->state.pos_x[a_idx]) ? -one : one;
+  batch->state.facing[d_idx] = (uint8_t)(defender_facing_dir_1 > 0.0f);
+
+  const float kb_x = -x * defender_facing_dir_1;
+  const float kb_y = y;
+
+  // Ground-vs-air handling for KB velocity:
+  // - When grounded, ftCo_8008DCE0 compares the floor normal to the KB vector (lbVector_Angle) and:
+  //   - if angle < 90°, launches with full (kb_x, kb_y) and clears grounded state (ftCommon_8007D5D4),
+  //   - else (angle >= 90°) and low/med damage: keeps grounded and projects along the floor normal,
+  //   - else tumble (sev==3): launches regardless.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0 (blocks 21-28)
+  if (!defender_on_ground) {
+    batch->state.speed_x_attack[d_idx] = kb_x;
+    batch->state.speed_y_attack[d_idx] = kb_y;
+  } else {
+    const float nx = batch->state.ground_normal_x[d_idx];
+    const float ny = batch->state.ground_normal_y[d_idx];
+    const float dot = nx * kb_x + ny * kb_y;
+    const uint8_t sev = combat_damage_severity_u8_from_kb(c, kb_applied);
+    if (dot > 0.0f || sev == 3u) {
+      batch->state.on_ground[d_idx] = 0;
+      batch->state.speed_x_attack[d_idx] = kb_x;
+      batch->state.speed_y_attack[d_idx] = kb_y;
+    } else {
+      batch->state.speed_x_attack[d_idx] = ny * kb_x;
+      batch->state.speed_y_attack[d_idx] = -nx * kb_x;
+    }
+  }
+
+  // Decomp: after setting KB velocity, ftCo_8008DCE0 clears self velocity (self_vel and gr_vel).
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0 (block_28)
+  batch->state.speed_air_x_self[d_idx] = 0.0f;
+  batch->state.speed_ground_x_self[d_idx] = 0.0f;
+  batch->state.speed_y_self[d_idx] = 0.0f;
 
   const uint16_t hs = combat_damage_hitstun_from_kb(c, kb_applied);
   batch->state.hitstun[d_idx] = hs;

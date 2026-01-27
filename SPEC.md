@@ -119,6 +119,10 @@ and decomp-motivated rather than arbitrary heuristics.
 - **BODY-only**: world-space hitbox spheres vs world-space hurtcap capsules, with existing grounded/airborne gating.
 - **Shield-safe**: if a hitbox overlaps the defender shield bubble, that (attacker, defender, hitbox_id) is treated as SHIELD
   and does not apply BODY mutations.
+- **Damage/KB writeback reshaping (BODY hits)**: percent/hitlag/hitstun/KB-vel/damage-state writes are decomp-shaped but still
+  incomplete until the full collision multiplier chain into `ftColl_80079AB0` (attack/defense ratios + `gm_8016B248()`) is modeled.
+  Known suite blip (2026-01-27): `TreasuredBackKangaroo.msl` net `+1` discrete mismatch due to `mismatch.facing +3` and
+  `mismatch.on_ground -2` after the reshape.
 - **SHIELD minimal mutations** (current):
   - Resolve at most 1 shield hit per attacker→defender per frame (deterministic `hitbox_id` order).
   - Apply decomp-backed shield HP depletion and enter `GuardSetOff` (shieldstun) on the defender.
