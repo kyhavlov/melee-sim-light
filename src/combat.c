@@ -465,6 +465,18 @@ static inline float combat_damage_calc_kb_applied(const MslCommonParams* c, cons
     kb *= c->kb_squat_mul;
   }
 
+  // Decomp: ftCo_Damage_CalcKnockback applies additional state-based KB multipliers:
+  // - DamageIce: kb *= p_ftCommonData->kb_ice_mul
+  // - Smash charge: kb *= p_ftCommonData->kb_smashcharge_mul (when fp->smash_attrs.state == Charging)
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_CalcKnockback
+  if (defender_action_id == (uint16_t)MSL_ACT_DAMAGE_ICE) {
+    kb *= c->kb_ice_mul;
+  }
+  // TODO(decomp): Apply kb_smashcharge_mul when we have a seedable signal for
+  // `fp->smash_attrs.state == SmashState_Charging`.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_CalcKnockback
+  // Blocked: `smash_attrs.state` is not currently present in Slippi post-frames / seed schema.
+
   // Decomp: ftCo_Damage_CalcKnockback subtracts armor and clamps to kb_min. We do not model armor yet;
   // keep the kb_min clamp.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_CalcKnockback
@@ -607,6 +619,54 @@ static inline void combat_damage_enter_state(const MslCommonParams* c, MslBatch*
   msl_anim_timebase_enter(batch, d_idx, 0.0f, 1.0f);
 }
 
+static inline void combat_mutations_pass1_future_apply_body_hit_invincible(MslBatch* batch, size_t a_idx,
+                                                                           size_t hb_i,
+                                                                           uint16_t attacker_motion_id) {
+  if (batch == NULL) {
+    return;
+  }
+
+  // "Invincible BODY contact" (no damage / no KB / no hitstun), but attacker still experiences hitlag.
+  //
+  // Decomp-first evidence (GALE01):
+  // - Collision performs hurtcapsule checks if `x1988 != 2 && x198C != 2` ("not intangible"):
+  //   refs/melee/src/melee/ft/ftcoll.c::ftColl_8007B868
+  // - Even when the defender is invincible (x1988/x198C != 0), the hit handler still computes
+  //   attacker-side max int damage (`fp0->dmg.x1914 = max(..., getEnvDmg(dmg))`) before returning
+  //   without applying percentTemp/KB to the defender:
+  //   refs/melee/src/melee/ft/ftcoll.c::ftColl_80076ED8
+  // - Fighter_ProcessHit consumes `fp->dmg.x1914` (deal-dmg path) to drive hitlag via ftCommon_CalcHitlag:
+  //   refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
+  //
+  // Selection-side rehit suppression is handled at the call-site (hitlists).
+
+  const MslCommonParams* c = msl_common_params();
+  if (c == NULL) {
+    return;
+  }
+
+  // Match the BODY stale-move ordering: apply staling to float damage before getEnvDmg, then use the
+  // resulting int as hitlag input.
+  const uint16_t move_id = staling_move_id_from_state(batch, a_idx);
+  const float stale_mult = staling_multiplier_for_move(batch, a_idx, move_id);
+
+  float dmg_f = batch->state.hitbox_damage[hb_i];
+  if (stale_mult != 1.0f) {
+    dmg_f *= stale_mult;
+  }
+
+  const int dmg_i = combat_get_env_dmg(dmg_f);
+  if (dmg_i <= 0) {
+    return;
+  }
+
+  const uint16_t a_hl = combat_calc_hitlag_frames(c, dmg_i, attacker_motion_id);
+  if (a_hl > batch->state.hitlag[a_idx]) {
+    batch->state.hitlag[a_idx] = a_hl;
+    combat_state_flags_set_is_hitlag(batch, a_idx, a_hl);
+  }
+}
+
 // Combat Mutations Pass 1 (BODY-only).
 //
 // This is the minimal "writeback" set needed for one-step eval:
@@ -620,6 +680,36 @@ static inline void combat_mutations_pass1_future_apply_body_hit(MslBatch* batch,
   if (batch == NULL) {
     return;
   }
+
+  // === GALE01 Fighter_ProcessHit/TakDamage ordering (write-site checklist) ===
+  //
+  // Decomp sources:
+  // - refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
+  // - refs/melee/src/melee/ft/fighter.c::Fighter_TakeDamage_8006CC7C
+  //
+  // Inputs (collision-produced, per-frame accumulators):
+  // 1) float damage accumulator: fp->dmg.x1838_percentTemp (sum of applied float damage this frame)
+  // 2) int damage (hitlag input): fp->dmg.x183C_applied (max of getEnvDmg(applied_float_damage))
+  // 3) knockback magnitude: fp->dmg.kb_applied (float; 0.0 means "no KB path")
+  // 4) element/flags: fp->dmg.x1860_element and other collision-written fields (angle/facing/etc.)
+  //
+  // Consume / apply ordering (victim side):
+  // 5) If fp->dmg.kb_applied != 0.0:
+  //    a) Fighter_UnkTakeDamage(fp, fp->dmg.x1838_percentTemp)  // percent add (gated inside TakeDamage)
+  //    b) ftCo_Damage_CalcKnockback(fp)                         // scales/clamps kb_applied, subtracts armor
+  //    c) enter Damage state / write KB velocity / hitstun
+  // 6) Else if fp->dmg.kb_applied == 0.0 and fp->dmg.x1838_percentTemp != 0.0:
+  //    a) Fighter_UnkTakeDamage(fp, fp->dmg.x1838_percentTemp)  // percent add only (no KB path)
+  //
+  // Damage gate inside Fighter_TakeDamage_8006CC7C:
+  // 7) If (!fp->x2226_b4 || fp->x2226_b3): percent += damage_amount; clamp to 999.
+  //
+  // Hitlag (both sides, driven by per-side "max int dmg this frame"):
+  // 8) If the resolved `bool1` is nonzero, set fp->dmg.x195c_hitlag_frames = ftCommon_CalcHitlag(...)
+  //    and start hitlag (x221A_b2).
+  //
+  // End-of-frame cleanup:
+  // 9) Reset fp->dmg.x1838_percentTemp to 0 and clear per-hit accumulators/flags.
 
   // - Set hitlag for both attacker and defender using decomp ftCommon_CalcHitlag.
   // - Update seeded/compared attribution fields that are decomp-backed:
@@ -704,10 +794,14 @@ static inline void combat_mutations_pass1_future_apply_body_hit(MslBatch* batch,
 
   const uint16_t a_hl = combat_calc_hitlag_frames(c, dmg_i, attacker_motion_id);
   const uint16_t d_hl = combat_calc_hitlag_frames(c, dmg_i, d_motion_id);
-  batch->state.hitlag[a_idx] = a_hl;
-  batch->state.hitlag[d_idx] = d_hl;
-  combat_state_flags_set_is_hitlag(batch, a_idx, a_hl);
-  combat_state_flags_set_is_hitlag(batch, d_idx, d_hl);
+  if (a_hl > batch->state.hitlag[a_idx]) {
+    batch->state.hitlag[a_idx] = a_hl;
+    combat_state_flags_set_is_hitlag(batch, a_idx, a_hl);
+  }
+  if (d_hl > batch->state.hitlag[d_idx]) {
+    batch->state.hitlag[d_idx] = d_hl;
+    combat_state_flags_set_is_hitlag(batch, d_idx, d_hl);
+  }
 
   // Knockback velocity + hitstun + damage-state entry (BODY).
   //
@@ -914,8 +1008,8 @@ void combat_apply_item_hit(MslBatch* batch, int batch_index, int attacker, int d
   }
 
   const float kb_applied =
-      combat_damage_calc_kb_applied(c, d_ch, d_motion_id, percent_pre, dmg_temp, int_dmg, kbg, wsk, bkb,
-                                    1.0f, batch->state.dmg_x2225_b7[d_idx],
+      combat_damage_calc_kb_applied(c, d_ch, d_motion_id, percent_pre, dmg_temp, int_dmg, kbg, wsk,
+                                    bkb, 1.0f, batch->state.dmg_x2225_b7[d_idx],
                                     batch->state.dmg_x2224_b2[d_idx]);
   const float kb_angle_rad =
       combat_damage_calc_angle_radians(c, angle, defender_on_ground, kb_applied);
@@ -1377,30 +1471,29 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
         continue;
       }
 
-      // Hit status eligibility gate (movescript-derived; opcode 26).
+      // Hit status / hurtbox-state eligibility gate (movescript-derived; opcode 26 + Slippi passthrough).
       //
-      // Decomp pointers:
-      // - refs/melee/src/melee/ft/ftaction.c:539 (ftAction_80071A14)
-      // - refs/melee/src/melee/ft/ftcoll.c (hit status affects collision eligibility)
+      // Decomp pointers (GALE01):
+      // - Hit status is driven by movescript opcode 26; decomp entry:
+      //   refs/melee/src/melee/ft/ftaction.c::ftAction_80071A14
+      // - Intangible blocks hurtcapsule collision checks entirely:
+      //   refs/melee/src/melee/ft/ftcoll.c::ftColl_8007B868 (guards the hurtcapsule loop on `x1988 != 2 && x198C != 2`)
+      // - Invincible (x1988/x198C != 0) still allows a "contact" that contributes to attacker-side max int damage
+      //   (hitlag driver), but the defender percentTemp write is gated on vulnerability:
+      //   refs/melee/src/melee/ft/ftcoll.c::ftColl_80076ED8 (`if (fp1->x1988 == 0 && fp1->x198C == 0 ...) { inlineB2(...) }`)
       //
-      // Current policy: only treat hit_status==0 as eligible for BODY contacts.
+      // Policy (bounded v1, Slippi-seedable):
+      // - state==2 ("intangible"): no BODY contacts selected.
+      // - state==1 ("invincible"): allow contact selection but suppress defender percent/KB/hitstun writes (attacker hitlag only).
       const uint8_t hit_status = combat_defender_hit_status_u8(batch, d_idx);
-      if (hit_status != 0) {
+      uint8_t hurt_state = batch->state.hurtbox_state[d_idx];
+      if (hit_status > hurt_state) {
+        hurt_state = hit_status;
+      }
+      if (hurt_state == 2u) {
         continue;
       }
-
-      // Hurtbox state eligibility gate.
-      //
-      // Decomp pointers:
-      // - refs/melee/src/melee/ft/ftcoll.c::ftColl_8007B868 returns a composite "hurt state" based on
-      //   fp->x221D_b6 and fp->x1988/x198C.
-      // - refs/melee/src/melee/ft/ftcoll.c (main collision loop) gates hurtbox checks on
-      //   this_fp->x1988/x198C (e.g. `!= 2` branch around hitbox-vs-hurtcapsule checks).
-      //
-      // We treat nonzero `hurtbox_state` (seeded and/or sim-owned) as not eligible for BODY hits for now.
-      if (batch->state.hurtbox_state[d_idx] != 0) {
-        continue;
-      }
+      const uint8_t defender_no_damage = (hurt_state != 0u) ? 1u : 0u;
 
       // BODY contacts (pass 1): deterministic "first overlap wins" selection in (hitbox_id,
       // hurtcap_id) order.
@@ -1486,8 +1579,12 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
             continue;
           }
           // Combat Mutations Pass 1 (BODY-only).
-          combat_mutations_pass1_future_apply_body_hit(batch, a_idx, d_idx, attacker, hb_i, cap_i,
-                                                       int_dmg, a_motion_id);
+          if (defender_no_damage) {
+            combat_mutations_pass1_future_apply_body_hit_invincible(batch, a_idx, hb_i, a_motion_id);
+          } else {
+            combat_mutations_pass1_future_apply_body_hit(batch, a_idx, d_idx, attacker, hb_i, cap_i,
+                                                         int_dmg, a_motion_id);
+          }
           hitlist_register(batch, bi, attacker, hit_group, defender, defender_iid, rehit_frames);
 
           did_hit = 1;
@@ -1545,28 +1642,13 @@ static void combat_select_body_hits_one_debug(MslBatch* batch, int bi,
         continue;
       }
 
-      // Hit status eligibility gate (movescript-derived; opcode 26).
-      //
-      // Decomp pointers:
-      // - refs/melee/src/melee/ft/ftaction.c:539 (ftAction_80071A14)
-      // - refs/melee/src/melee/ft/ftcoll.c (hit status affects collision eligibility)
-      //
-      // Current policy: only treat hit_status==0 as eligible for BODY contacts.
+      // Hit status / hurtbox-state eligibility gate (matches combat_select_body_hits_one policy).
       const uint8_t hit_status = combat_defender_hit_status_u8(batch, d_idx);
-      if (hit_status != 0) {
-        continue;
+      uint8_t hurt_state = batch->state.hurtbox_state[d_idx];
+      if (hit_status > hurt_state) {
+        hurt_state = hit_status;
       }
-
-      // Hurtbox state eligibility gate.
-      //
-      // Decomp pointers:
-      // - refs/melee/src/melee/ft/ftcoll.c::ftColl_8007B868 returns a composite "hurt state" based on
-      //   fp->x221D_b6 and fp->x1988/x198C.
-      // - refs/melee/src/melee/ft/ftcoll.c (main collision loop) gates hurtbox checks on
-      //   this_fp->x1988/x198C (e.g. `!= 2` branch around hitbox-vs-hurtcapsule checks).
-      //
-      // We treat nonzero `hurtbox_state` (seeded and/or sim-owned) as not eligible for BODY hits for now.
-      if (batch->state.hurtbox_state[d_idx] != 0) {
+      if (hurt_state == 2u) {
         continue;
       }
 

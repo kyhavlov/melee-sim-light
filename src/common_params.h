@@ -200,6 +200,8 @@ typedef struct MslCommonParams {
   float kb_vel_mul;      // p_ftCommonData->x100
   float kb_min;          // p_ftCommonData->x104
   float kb_squat_mul;    // p_ftCommonData->x124
+  float kb_ice_mul;      // p_ftCommonData->kb_ice_mul (+0x718)
+  float kb_smashcharge_mul;  // p_ftCommonData->kb_smashcharge_mul (+0x7C4)
   // ftColl_80079AB0 percent-term override constants (p_ftCommonData->0x6D4/0x6D8).
   //
   // Used in the non-WSK else-branch when fp+0x2225 bit0 is set (decomp name: fp->x2225_b7):

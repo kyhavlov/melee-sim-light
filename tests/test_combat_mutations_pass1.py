@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 
 import numpy as np
+import pytest
 
 from tools.eval.dataset import COMPARE_DTYPE, INPUT_DTYPE, SEED_DTYPE
 
@@ -188,6 +189,63 @@ def test_combat_resolve_body_overlap_sets_hitlag_and_attribution() -> None:
         assert int(out["instance_hit_by"][1]) == 111
         assert int(out["last_hit_by"][1]) == 0
         assert int(out["last_attack_landed"][0]) == 0
+    finally:
+        msl_binding.destroy(handle)
+        del handle
+
+
+def test_combat_resolve_body_overlap_defender_invincible_applies_attacker_hitlag_only() -> None:
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    seed_stride = int(sizes["seed"])
+    compare_stride = int(sizes["compare"])
+    assert seed_stride == SEED_DTYPE.itemsize
+    assert compare_stride == COMPARE_DTYPE.itemsize
+
+    handle = msl_binding.init(batch_size=1, num_players=2)
+    try:
+        seed = _seed_base()
+        seed["percent"][0, 1] = np.float32(12.0)
+        seed["instance_hit_by"][0, 1] = np.uint16(999)
+        seed["last_hit_by"][0, 1] = np.uint8(1)
+        seed_bytes = seed.view(np.uint8).reshape((1, seed_stride))
+        msl_binding.reseed_seed(handle, seed_bytes)
+
+        # Force overlapping primitives (BODY-only).
+        msl_binding.debug_clear_hitboxes_world(handle, 0, 0)
+        msl_binding.debug_set_hitbox_world(handle, 0, 0, 0, 0.0, 0.0, 0.0, 1.0, 5.0, 1)
+        msl_binding.debug_set_hitbox_flags(handle, 0, 0, 0, int(HIT_GROUNDED))
+        msl_binding.debug_clear_hurtcaps_world(handle, 0, 1)
+        msl_binding.debug_set_hurtcap_world(handle, 0, 1, 0, -0.5, 0.0, 0.0, 0.5, 0.0, 0.0, 0.5)
+
+        # Defender is invincible (opcode 26 domain): select contact, but do not apply percent/KB/hitstun.
+        msl_binding.debug_set_hit_status_override(handle, 0, 1, 1)
+        _, selected = _read_selected_body_hits(handle)
+        assert selected == 1
+
+        msl_binding.debug_combat_resolve(handle)
+        out = _read_compare(handle)
+
+        hitlag_dmg_mul = _common_attr("hitlag_dmg_mul")
+        hitlag_base = _common_attr("hitlag_base")
+        exp_hl = int(int(5) * hitlag_dmg_mul + hitlag_base)
+
+        assert int(out["hitlag"][0]) == exp_hl
+        assert int(out["hitlag"][1]) == 0
+
+        assert float(out["percent"][1]) == pytest.approx(12.0)
+        assert float(out["speed_x_attack"][1]) == pytest.approx(0.0)
+        assert float(out["speed_y_attack"][1]) == pytest.approx(0.0)
+        assert int(out["hitstun"][1]) == 0
+
+        # No "hit attribution" updates on invincible contacts.
+        assert int(out["instance_hit_by"][1]) == 999
+        assert int(out["last_hit_by"][1]) == 1
+
+        # No damage-state entry.
+        assert int(out["action_id"][1]) == ACT_WAIT
+        assert int(out["animation_index"][1]) == SM_WAIT1_0
     finally:
         msl_binding.destroy(handle)
         del handle

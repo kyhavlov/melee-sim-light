@@ -46,15 +46,18 @@ static int json_get_f32(const char* json, const char* key, float* out) {
   }
   const char* p = strstr(json, pat);
   if (p == NULL) {
+    fprintf(stderr, "ft_common_data.json: missing key \"%s\"\n", key);
     return -1;
   }
   p = strchr(p, ':');
   if (p == NULL) {
+    fprintf(stderr, "ft_common_data.json: malformed key \"%s\" (missing ':')\n", key);
     return -1;
   }
   p++;
   double v = 0.0;
   if (json_parse_double(p, &v) == NULL) {
+    fprintf(stderr, "ft_common_data.json: failed to parse number for key \"%s\"\n", key);
     return -1;
   }
   *out = (float)v;
@@ -302,6 +305,8 @@ int common_params_init(void) {
       json_get_f32(buf, "kb_vel_mul", &g_params.kb_vel_mul) != 0 ||
       json_get_f32(buf, "kb_min", &g_params.kb_min) != 0 ||
       json_get_f32(buf, "kb_squat_mul", &g_params.kb_squat_mul) != 0 ||
+      json_get_f32(buf, "kb_ice_mul", &g_params.kb_ice_mul) != 0 ||
+      json_get_f32(buf, "kb_smashcharge_mul", &g_params.kb_smashcharge_mul) != 0 ||
       json_get_i32(buf, "ftcoll_percent_base_x6d4", &g_params.ftcoll_percent_base_x6d4) != 0 ||
       json_get_i32(buf, "ftcoll_percent_base_x6d8", &g_params.ftcoll_percent_base_x6d8) != 0 ||
       json_get_f32(buf, "damage_hitstun_mul", &g_params.damage_hitstun_mul) != 0 ||

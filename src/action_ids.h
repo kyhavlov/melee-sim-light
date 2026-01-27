@@ -13,6 +13,7 @@ typedef enum MslActionId {
   MSL_ACT_DEAD_UP_STAR = 0x0004,  // ftCo_MS_DeadUpStar
   MSL_ACT_REBIRTH = 0x000C,       // ftCo_MS_Rebirth
   MSL_ACT_REBIRTH_WAIT = 0x000D,  // ftCo_MS_RebirthWait
+  MSL_ACT_DAMAGE_ICE = 0x0145,    // ftCo_MS_DamageIce
 
   MSL_ACT_WAIT = 0x000E,            // ftCo_MS_Wait
   MSL_ACT_WALK_SLOW = 0x000F,       // ftCo_MS_WalkSlow

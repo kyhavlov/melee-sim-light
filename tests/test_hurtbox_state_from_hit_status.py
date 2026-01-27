@@ -121,7 +121,14 @@ def test_hit_status_table_gates_body_contact_selection(char_name: str, char_id: 
 
         # Clear override: the table's nonzero status must block selection.
         msl_binding.debug_set_hit_status_override(handle, 0, 1, -1)
-        assert _selected_body_hit_count(handle) == 0
+        # Decomp-first policy (GALE01):
+        # - status==2 ("intangible") blocks body contact checks entirely.
+        # - status==1 ("invincible") still allows contact checks, but collision does not apply
+        #   damage/KB to the defender (handled elsewhere).
+        if int(status) == 2:
+            assert _selected_body_hit_count(handle) == 0
+        else:
+            assert _selected_body_hit_count(handle) == 1
     finally:
         msl_binding.destroy(handle)
         del handle

@@ -255,6 +255,13 @@ def main() -> None:
         "kb_vel_mul": float(_f32_be(buf, ft_common_abs + 0x100)),
         "kb_min": float(_f32_be(buf, ft_common_abs + 0x104)),
         "kb_squat_mul": float(_f32_be(buf, ft_common_abs + 0x124)),
+        # ftCo_Damage_CalcKnockback additional modifiers (GALE01):
+        # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_CalcKnockback
+        # Offsets (relative to ftCommonData base) are from decomp struct:
+        # refs/melee/src/melee/ft/types.h (ftCommonData fields at +0x6F0, +0x718, +0x7C4)
+        "metal_armor": float(_f32_be(buf, ft_common_abs + 0x6F0)),
+        "kb_ice_mul": float(_f32_be(buf, ft_common_abs + 0x718)),
+        "kb_smashcharge_mul": float(_f32_be(buf, ft_common_abs + 0x7C4)),
         # Hitstun scaling + damage severity thresholds (ftCo_Damage.c):
         # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_ScaleBy154
         # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008D8E8

@@ -38,6 +38,9 @@ The initial observation schema should be compatible with `slippi-ai`’s `Game` 
 - Per-player (minimum):
   - `percent`, `facing`, `x`, `y`, `action` (GALE01 action id), `character`, `hurtbox_state` (0/1/2),
     `jumps_left`, `shield_strength`, `on_ground`, `is_dead`, `stocks_left`
+    - `hurtbox_state` semantics (Slippi-seeded, decomp-shaped eligibility): `0` vulnerable, `1` invincible, `2` intangible.
+      Intangible prevents BODY hurtcapsule checks; invincible may still register a contact (attacker hitlag) but blocks defender percent/KB/hitstun writes.
+      Decomp: `refs/melee/src/melee/ft/ftcoll.c::ftColl_8007B868`, `refs/melee/src/melee/ft/ftcoll.c::ftColl_80076ED8`. Slippi: `tools/slippi/combat_history.py`.
 - Game (minimum):
   - `stage`, `is_teams`, and optional `randall_phase` (can be constant on FD), optional items.
 
