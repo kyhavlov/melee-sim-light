@@ -162,7 +162,7 @@ def test_landing_air_n_exits_to_wait_after_lag_frames() -> None:
     out = _step_once(seed, prev_inp, inp)
     assert int(out["action_id"][0]) == ACT_WAIT
     assert int(out["animation_index"][0]) == SM_WAIT1_0
-    assert int(out["action_frame"][0]) == -1
+    assert int(out["action_frame"][0]) == 0
 
 
 def test_landing_fall_special_exits_to_wait_after_lag_frames() -> None:
@@ -190,7 +190,7 @@ def test_landing_fall_special_exits_to_wait_after_lag_frames() -> None:
     out = _step_once(seed, prev_inp, inp)
     assert int(out["action_id"][0]) == ACT_WAIT
     assert int(out["animation_index"][0]) == SM_WAIT1_0
-    assert int(out["action_frame"][0]) == -1
+    assert int(out["action_frame"][0]) == 0
 
 
 def test_landing_iasa_allows_shield_entry_after_landing_lag_gate() -> None:

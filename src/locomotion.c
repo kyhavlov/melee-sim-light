@@ -641,6 +641,9 @@ void locomotion_update_pre(MslBatch* batch) {
               batch->state.action_id[idx] = (uint16_t)MSL_ACT_TURN;
               batch->state.animation_index[idx] = (uint32_t)MSL_SM_TURN;
               msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+              // Decomp: ftCo_Turn_Enter calls ftAnim_8006EBA4 immediately after ChangeMotionState.
+              // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Turn.c:62-64
+              msl_anim_timebase_tick_once(batch, idx);
               action_id = (uint16_t)MSL_ACT_TURN;
             } else {
               // Enter Dash.
@@ -648,6 +651,9 @@ void locomotion_update_pre(MslBatch* batch) {
               batch->state.action_id[idx] = (uint16_t)MSL_ACT_DASH;
               batch->state.animation_index[idx] = (uint32_t)MSL_SM_DASH;
               msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+              // Decomp: ftCo_Dash_Enter calls ftAnim_8006EBA4 immediately after ChangeMotionState.
+              // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c:59-62
+              msl_anim_timebase_tick_once(batch, idx);
               batch->state.speed_ground_x_self[idx] = facing_dir * ch->dash_initial_velocity;
               // Decomp: fp->x670_timer_lstick_tilt_x = 0xFE;
               // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c:62
@@ -662,6 +668,9 @@ void locomotion_update_pre(MslBatch* batch) {
             batch->state.turn_has_turned[idx] = 0;
             batch->state.turn_frames_to_turn[idx] = ch->turn_frames;
             msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+            // Decomp: ftCo_Turn_Enter calls ftAnim_8006EBA4 immediately after ChangeMotionState.
+            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Turn.c:62-64
+            msl_anim_timebase_tick_once(batch, idx);
             action_id = (uint16_t)MSL_ACT_TURN;
           } else if (msl_absf(stick_x) >= c->walk_stick_threshold) {
             // Walk.
@@ -702,6 +711,8 @@ void locomotion_update_pre(MslBatch* batch) {
               batch->state.action_id[idx] = (uint16_t)MSL_ACT_TURN;
               batch->state.animation_index[idx] = (uint32_t)MSL_SM_TURN;
               msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+              // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Turn.c:62-64
+              msl_anim_timebase_tick_once(batch, idx);
               action_id = (uint16_t)MSL_ACT_TURN;
             } else {
               // Enter Dash.
@@ -709,6 +720,8 @@ void locomotion_update_pre(MslBatch* batch) {
               batch->state.action_id[idx] = (uint16_t)MSL_ACT_DASH;
               batch->state.animation_index[idx] = (uint32_t)MSL_SM_DASH;
               msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+              // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c:59-62
+              msl_anim_timebase_tick_once(batch, idx);
               batch->state.speed_ground_x_self[idx] = facing_dir * ch->dash_initial_velocity;
               // Decomp: fp->x670_timer_lstick_tilt_x = 0xFE;
               // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c:62
@@ -723,6 +736,8 @@ void locomotion_update_pre(MslBatch* batch) {
             batch->state.turn_has_turned[idx] = 0;
             batch->state.turn_frames_to_turn[idx] = ch->turn_frames;
             msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Turn.c:62-64
+            msl_anim_timebase_tick_once(batch, idx);
             action_id = (uint16_t)MSL_ACT_TURN;
           } else if (msl_absf(stick_x) >= c->walk_stick_threshold) {
             // Walk.
@@ -777,16 +792,18 @@ void locomotion_update_pre(MslBatch* batch) {
 	                const uint8_t face = (stick_x >= 0.0f) ? 1u : 0u;
 	                batch->state.facing[idx] = face;
 	                facing_dir = face ? 1.0f : -1.0f;
-	                batch->state.turn_has_turned[idx] = 0;
-	                batch->state.turn_frames_to_turn[idx] = 0;
-	                batch->state.action_id[idx] = (uint16_t)MSL_ACT_DASH;
-	                batch->state.animation_index[idx] = (uint32_t)MSL_SM_DASH;
-	                msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
-	                batch->state.speed_ground_x_self[idx] = facing_dir * ch->dash_initial_velocity;
-	                // Decomp: fp->x670_timer_lstick_tilt_x = 0xFE;
-	                // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c:62
-	                batch->state.tilt_timer_x[idx] = 0xFEu;
-	                action_id = (uint16_t)MSL_ACT_DASH;
+		                batch->state.turn_has_turned[idx] = 0;
+		                batch->state.turn_frames_to_turn[idx] = 0;
+		                batch->state.action_id[idx] = (uint16_t)MSL_ACT_DASH;
+		                batch->state.animation_index[idx] = (uint32_t)MSL_SM_DASH;
+		                msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+		                // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c:59-62
+		                msl_anim_timebase_tick_once(batch, idx);
+		                batch->state.speed_ground_x_self[idx] = facing_dir * ch->dash_initial_velocity;
+		                // Decomp: fp->x670_timer_lstick_tilt_x = 0xFE;
+		                // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c:62
+		                batch->state.tilt_timer_x[idx] = 0xFEu;
+		                action_id = (uint16_t)MSL_ACT_DASH;
 	              }
 	            }
 
@@ -821,14 +838,16 @@ void locomotion_update_pre(MslBatch* batch) {
 
 		            if (effective_just_turned && x8_nonzero &&
 		                (stick_x * facing_after_dir) >= c->dash_flick_abs) {
-		              batch->state.action_id[idx] = (uint16_t)MSL_ACT_DASH;
-		              batch->state.animation_index[idx] = (uint32_t)MSL_SM_DASH;
-		              msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
-		              batch->state.speed_ground_x_self[idx] = facing_dir * ch->dash_initial_velocity;
-		              // Decomp: fp->x670_timer_lstick_tilt_x = 0xFE;
-		              // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c:62
-		              batch->state.tilt_timer_x[idx] = 0xFEu;
-		              action_id = (uint16_t)MSL_ACT_DASH;
+			              batch->state.action_id[idx] = (uint16_t)MSL_ACT_DASH;
+			              batch->state.animation_index[idx] = (uint32_t)MSL_SM_DASH;
+			              msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+			              // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c:59-62
+			              msl_anim_timebase_tick_once(batch, idx);
+			              batch->state.speed_ground_x_self[idx] = facing_dir * ch->dash_initial_velocity;
+			              // Decomp: fp->x670_timer_lstick_tilt_x = 0xFE;
+			              // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c:62
+			              batch->state.tilt_timer_x[idx] = 0xFEu;
+			              action_id = (uint16_t)MSL_ACT_DASH;
 		            }
 		          }
 		        }
@@ -851,20 +870,24 @@ void locomotion_update_pre(MslBatch* batch) {
             // Dash flick: forward -> Dash, backward -> Turn (smash-turn).
             // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c::ftCo_Dash_CheckInput
             if ((stick_x * facing_dir) < 0.0f) {
-              batch->state.turn_has_turned[idx] = 0;
-              batch->state.turn_frames_to_turn[idx] = 0;
-              batch->state.action_id[idx] = (uint16_t)MSL_ACT_TURN;
-              batch->state.animation_index[idx] = (uint32_t)MSL_SM_TURN;
-              msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
-              action_id = (uint16_t)MSL_ACT_TURN;
-            } else {
-              batch->state.action_id[idx] = (uint16_t)MSL_ACT_DASH;
-              batch->state.animation_index[idx] = (uint32_t)MSL_SM_DASH;
-              msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
-              batch->state.speed_ground_x_self[idx] = facing_dir * ch->dash_initial_velocity;
-              batch->state.tilt_timer_x[idx] = 0xFEu;
-              action_id = (uint16_t)MSL_ACT_DASH;
-            }
+	              batch->state.turn_has_turned[idx] = 0;
+	              batch->state.turn_frames_to_turn[idx] = 0;
+	              batch->state.action_id[idx] = (uint16_t)MSL_ACT_TURN;
+	              batch->state.animation_index[idx] = (uint32_t)MSL_SM_TURN;
+	              msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+	              // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Turn.c:62-64
+	              msl_anim_timebase_tick_once(batch, idx);
+	              action_id = (uint16_t)MSL_ACT_TURN;
+	            } else {
+	              batch->state.action_id[idx] = (uint16_t)MSL_ACT_DASH;
+	              batch->state.animation_index[idx] = (uint32_t)MSL_SM_DASH;
+	              msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+	              // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c:59-62
+	              msl_anim_timebase_tick_once(batch, idx);
+	              batch->state.speed_ground_x_self[idx] = facing_dir * ch->dash_initial_velocity;
+	              batch->state.tilt_timer_x[idx] = 0xFEu;
+	              action_id = (uint16_t)MSL_ACT_DASH;
+	            }
           }
         }
 
@@ -917,6 +940,8 @@ void locomotion_update_pre(MslBatch* batch) {
                 batch->state.action_id[idx] = (uint16_t)MSL_ACT_TURN;
                 batch->state.animation_index[idx] = (uint32_t)MSL_SM_TURN;
                 msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+                // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Turn.c:62-64
+                msl_anim_timebase_tick_once(batch, idx);
                 action_id = (uint16_t)MSL_ACT_TURN;
               }
             }

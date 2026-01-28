@@ -191,7 +191,7 @@ def test_attackair_anim_end_enters_fall() -> None:
     _, out = first_fall
     assert int(out["action_id"][0]) == ACT_FALL
     assert int(out["animation_index"][0]) == SM_FALL
-    assert int(out["action_frame"][0]) == -1
+    assert int(out["action_frame"][0]) == 0
 
 
 def test_attackair_iasa_gates_airdodge_and_double_jump() -> None:
@@ -236,7 +236,7 @@ def test_attackair_iasa_gates_airdodge_and_double_jump() -> None:
     out = _step_once(seed, prev_inp, inp)
     assert int(out["action_id"][0]) == ACT_ESCAPE_AIR
     assert int(out["animation_index"][0]) == SM_ESCAPE_AIR
-    assert int(out["action_frame"][0]) == -1
+    assert int(out["action_frame"][0]) == 0
 
     # Before IASA: X press should not enter double jump.
     seed = _seed_air_base()
@@ -272,5 +272,5 @@ def test_attackair_iasa_gates_airdodge_and_double_jump() -> None:
     out = _step_once(seed, prev_inp, inp)
     assert int(out["action_id"][0]) == ACT_JUMP_AERIAL_F
     assert int(out["animation_index"][0]) == SM_JUMP_AERIAL_F
-    assert int(out["action_frame"][0]) == -1
+    assert int(out["action_frame"][0]) == 0
     assert int(out["jumps_left"][0]) == 1

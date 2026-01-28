@@ -161,8 +161,7 @@ def test_attack_air_n_lands_enters_landing_air_n_and_refreshes_jumps() -> None:
     assert int(out["on_ground"][0]) == 1
     assert int(out["action_id"][0]) == ACT_LANDING_AIR_N
     assert int(out["animation_index"][0]) == SM_LANDING_AIR_N
-    # Motion-state entry sets cur_anim_frame = anim_start - frame_speed_mul (start=0, speed=1).
-    assert int(out["action_frame"][0]) == -1
+    assert int(out["action_frame"][0]) == 0
     assert int(out["jumps_left"][0]) == int(_fox_attr("max_jumps"))
 
 
@@ -194,5 +193,5 @@ def test_escape_air_lands_enters_landing_fall_special_and_refreshes_jumps() -> N
     end_frame = _tracks_end_frame(tracks_path, SM_LANDING_FALL_SPECIAL)
     lag = float(_common_attr("landing_fall_special_lag_frames"))
     rate = (float(end_frame) + 0.1) / float(lag)
-    assert int(out["action_frame"][0]) == int(math.floor(-rate))
+    assert int(out["action_frame"][0]) == 0
     assert int(out["jumps_left"][0]) == int(_fox_attr("max_jumps"))

@@ -13,8 +13,12 @@
 // - Fighter_ChangeMotionState sets:
 //     fp->frame_speed_mul = anim_speed;
 //     fp->cur_anim_frame = anim_start - fp->frame_speed_mul;
-//   so that the next anim-advance produces anim_start.
-//   refs/melee/src/melee/ft/fighter.c (Fighter_ChangeMotionState body)
+//   but then calls ftAnim_8006E9B4, which overwrites fp->cur_anim_frame from the current AObj
+//   frame (ftAnim_8006F3DC). This means post-frame `state_age` is shaped by the AObj curr_frame
+//   on entry (typically anim_start for anim_start==0.0f).
+//   refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState
+//   refs/melee/src/melee/ft/ftanim.c::ftAnim_8006E9B4
+//   refs/melee/src/melee/ft/ftanim.c::ftAnim_8006F3DC
 // - Animation advance is gated during hitlag:
 //   Fighter_8006A360 wraps ftAnim_8006EBA4 in `if (!fp->x2219_b5)`.
 //   refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
@@ -85,15 +89,42 @@ static inline void msl_anim_timebase_seed(MslBatch* batch, size_t idx, float cur
 
 static inline void msl_anim_timebase_enter_raw(MslBatch* batch, size_t idx, float anim_start_f32,
                                                float anim_speed_f32) {
-  // Mirror Fighter_ChangeMotionState's cur_anim_frame reset behavior.
-  // refs/melee/src/melee/ft/fighter.c (Fighter_ChangeMotionState)
+  // Mirror Fighter_ChangeMotionState's post-entry cur_anim_frame shape.
+  //
+  // Decomp:
+  // - fp->frame_speed_mul = anim_speed;
+  // - fp->cur_anim_frame = anim_start - fp->frame_speed_mul;
+  // - ftAnim_8006E9B4(gobj) overwrites fp->cur_anim_frame from ftAnim_8006F3DC (AObj curr_frame).
+  // refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState
+  // refs/melee/src/melee/ft/ftanim.c::ftAnim_8006E9B4
+  // refs/melee/src/melee/ft/ftanim.c::ftAnim_8006F3DC
   if (batch == NULL) {
     return;
   }
   const int32_t start_fp = msl_q16_16_from_f32(anim_start_f32);
   const int32_t speed_fp = msl_q16_16_from_f32(anim_speed_f32);
   batch->state.frame_speed_mul_fp_q16_16[idx] = speed_fp;
-  batch->state.anim_frame_fp_q16_16[idx] = start_fp - speed_fp;
+  batch->state.anim_frame_fp_q16_16[idx] = start_fp;
+  msl_anim_timebase_recompute_derived(batch, idx);
+}
+
+static inline void msl_anim_timebase_tick_once(MslBatch* batch, size_t idx) {
+  // Only call this for motion states whose *Enter* explicitly calls ftAnim_8006EBA4 immediately
+  // after Fighter_ChangeMotionState (e.g. Dash / Turn).
+  //
+  // Decomp examples:
+  // - refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c::ftCo_Dash_Enter
+  // - refs/melee/src/melee/ft/chara/ftCommon/ftCo_Turn.c::ftCo_Turn_Enter
+  if (batch == NULL) {
+    return;
+  }
+  // Decomp: Fighter_8006A360 gates ftAnim_8006EBA4 on !hitlag (fp->x2219_b5).
+  // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
+  if (batch->state.hitlag[idx] != 0) {
+    msl_anim_timebase_recompute_derived(batch, idx);
+    return;
+  }
+  batch->state.anim_frame_fp_q16_16[idx] += batch->state.frame_speed_mul_fp_q16_16[idx];
   msl_anim_timebase_recompute_derived(batch, idx);
 }
 

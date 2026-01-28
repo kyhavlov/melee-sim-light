@@ -337,7 +337,7 @@ def test_combat_resolve_body_overlap_applies_percent_knockback_hitstun_and_enter
         assert int(out["hitstun"][1]) > 0
         assert int(out["action_id"][1]) == ACT_DAMAGE_N1
         assert int(out["animation_index"][1]) == SM_DAMAGE_N1
-        assert int(out["action_frame"][1]) == -1
+        assert int(out["action_frame"][1]) == 0
     finally:
         msl_binding.destroy(handle)
         del handle

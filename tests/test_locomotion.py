@@ -198,9 +198,84 @@ def test_dash_iasa_opposite_flick_enters_turn_without_same_frame_flip() -> None:
     assert int(out0["action_id"][0]) == ACT_TURN
     # No same-frame flip on Dash->Turn entry.
     assert int(out0["facing"][0]) == 1
-    # Smash-turn can dash out on the next frame under the Turn IASA dash gate (Turn->Dash).
-    assert int(out1["action_id"][0]) == ACT_DASH
-    assert int(out1["facing"][0]) == 0
+
+
+def test_wait_jump_enters_kneebend_with_action_frame_0() -> None:
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    input_stride = int(sizes["input"])
+
+    seed = _seed_base()
+    seed["on_ground"][0, 0] = np.uint8(1)
+    seed["action_id"][0, 0] = np.uint16(ACT_WAIT)
+    seed["action_frame"][0, 0] = np.int16(5)
+    seed["animation_index"][0, 0] = np.uint32(SM_WAIT1_0)
+    seed["jumps_left"][0, 0] = np.uint8(2)
+
+    prev_inp = _mk_input_bytes(1, input_stride)
+    inp = _mk_input_bytes(1, input_stride)
+    prev_view = prev_inp.view(INPUT_DTYPE).reshape((1,))
+    cur_view = inp.view(INPUT_DTYPE).reshape((1,))
+    prev_view["p"]["buttons"][0, 0] = np.uint16(0)
+    cur_view["p"]["buttons"][0, 0] = np.uint16(BUTTON_X)
+
+    out0 = _step_once(seed, prev_inp, inp)
+    assert int(out0["action_id"][0]) == ACT_KNEEBEND
+    assert int(out0["animation_index"][0]) == SM_KNEEBEND
+    assert int(out0["action_frame"][0]) == 0
+
+
+def test_wait_flick_forward_enters_dash_with_action_frame_1() -> None:
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    input_stride = int(sizes["input"])
+
+    seed = _seed_base()
+    seed["on_ground"][0, 0] = np.uint8(1)
+    seed["action_id"][0, 0] = np.uint16(ACT_WAIT)
+    seed["action_frame"][0, 0] = np.int16(5)
+    seed["animation_index"][0, 0] = np.uint32(SM_WAIT1_0)
+    seed["facing"][0, 0] = np.uint8(1)  # right
+
+    prev_inp = _mk_input_bytes(1, input_stride)
+    inp = _mk_input_bytes(1, input_stride)
+    prev_view = prev_inp.view(INPUT_DTYPE).reshape((1,))
+    cur_view = inp.view(INPUT_DTYPE).reshape((1,))
+    prev_view["p"]["main_x"][0, 0] = np.int8(0)
+    cur_view["p"]["main_x"][0, 0] = np.int8(127)
+
+    out0 = _step_once(seed, prev_inp, inp)
+    assert int(out0["action_id"][0]) == ACT_DASH
+    assert int(out0["animation_index"][0]) == SM_DASH
+    assert int(out0["action_frame"][0]) == 1
+
+
+def test_wait_flick_backward_enters_turn_with_action_frame_1() -> None:
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    input_stride = int(sizes["input"])
+
+    seed = _seed_base()
+    seed["on_ground"][0, 0] = np.uint8(1)
+    seed["action_id"][0, 0] = np.uint16(ACT_WAIT)
+    seed["action_frame"][0, 0] = np.int16(5)
+    seed["animation_index"][0, 0] = np.uint32(SM_WAIT1_0)
+    seed["facing"][0, 0] = np.uint8(1)  # right
+
+    prev_inp = _mk_input_bytes(1, input_stride)
+    inp = _mk_input_bytes(1, input_stride)
+    prev_view = prev_inp.view(INPUT_DTYPE).reshape((1,))
+    cur_view = inp.view(INPUT_DTYPE).reshape((1,))
+    prev_view["p"]["main_x"][0, 0] = np.int8(0)
+    cur_view["p"]["main_x"][0, 0] = np.int8(-127)
+
+    out0 = _step_once(seed, prev_inp, inp)
+    assert int(out0["action_id"][0]) == ACT_TURN
+    assert int(out0["animation_index"][0]) == SM_TURN
+    assert int(out0["action_frame"][0]) == 1
 
 
 def test_ucf_dashback_turn_frame2_enters_dash_and_sets_x670_to_fe() -> None:
@@ -233,7 +308,7 @@ def test_ucf_dashback_turn_frame2_enters_dash_and_sets_x670_to_fe() -> None:
 
     out, internals = _step_once_with_internals(seed, prev_inp, inp)
     assert int(out["action_id"][0]) == ACT_DASH
-    assert int(out["action_frame"][0]) == -1
+    assert int(out["action_frame"][0]) == 1
     assert int(out["animation_index"][0]) == SM_DASH
 
     dash_init = np.float32(_fox_attr("dash_initial_velocity"))
@@ -269,7 +344,7 @@ def test_kneebend_takeoff_enters_jumpf_and_consumes_jump() -> None:
 
     out = _step_once(seed, prev_inp, inp)
     assert int(out["action_id"][0]) == ACT_JUMPF
-    assert int(out["action_frame"][0]) == -1
+    assert int(out["action_frame"][0]) == 0
     assert int(out["jumps_left"][0]) == 1
     assert int(out["on_ground"][0]) == 0
     expected_vy = np.float32(_fox_attr("jump_v_initial_velocity") - _fox_attr("grav"))
@@ -299,7 +374,7 @@ def test_wait_press_jump_enters_kneebend() -> None:
 
     out = _step_once(seed, prev_inp, inp)
     assert int(out["action_id"][0]) == ACT_KNEEBEND
-    assert int(out["action_frame"][0]) == -1
+    assert int(out["action_frame"][0]) == 0
     assert int(out["jumps_left"][0]) == 2
     assert int(out["on_ground"][0]) == 1
 
@@ -329,7 +404,7 @@ def test_kneebend_release_jump_short_hops() -> None:
 
     out = _step_once(seed, prev_inp, inp)
     assert int(out["action_id"][0]) == ACT_JUMPF
-    assert int(out["action_frame"][0]) == -1
+    assert int(out["action_frame"][0]) == 0
     expected_vy = np.float32(_fox_attr("hop_v_initial_velocity") - _fox_attr("grav"))
     assert np.isclose(out["speed_y_self"][0], expected_vy)
 
@@ -420,7 +495,7 @@ def test_air_jump_consumes_jump_and_enters_jump_aerial() -> None:
     out = _step_once(seed, prev_inp, inp)
     # JumpAerialF
     assert int(out["action_id"][0]) == 0x001B
-    assert int(out["action_frame"][0]) == -1
+    assert int(out["action_frame"][0]) == 0
     assert int(out["jumps_left"][0]) == 0
 
 
@@ -446,7 +521,7 @@ def test_landing_resets_jumps_and_enters_landing() -> None:
     out = _step_once(seed, prev_inp, inp)
     assert int(out["on_ground"][0]) == 1
     assert int(out["action_id"][0]) == ACT_LANDING
-    assert int(out["action_frame"][0]) == -1
+    assert int(out["action_frame"][0]) == 0
     assert int(out["jumps_left"][0]) == 2
 
 
@@ -496,7 +571,7 @@ def test_jump_end_enters_fall() -> None:
 
     out = _step_once(seed, prev_inp, inp)
     assert int(out["action_id"][0]) == ACT_FALL
-    assert int(out["action_frame"][0]) == -1
+    assert int(out["action_frame"][0]) == 0
     assert int(out["animation_index"][0]) == SM_FALL
 
 

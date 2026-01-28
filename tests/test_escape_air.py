@@ -322,7 +322,7 @@ def test_escape_air_anim_end_transitions_to_fall_special_not_fall() -> None:
     out = _step_once(seed, prev_inp, inp)
     assert int(out["action_id"][0]) == ACT_FALL_SPECIAL
     assert int(out["animation_index"][0]) == SM_FALL_SPECIAL
-    assert int(out["action_frame"][0]) == -1
+    assert int(out["action_frame"][0]) == 0
     assert int(out["action_id"][0]) != ACT_FALL
 
 
