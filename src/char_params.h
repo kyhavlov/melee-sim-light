@@ -77,6 +77,11 @@ typedef struct MslCharParams {
   // Extractor: tools/extraction/extract_character_attrs.py
   float ledge_jump_horizontal_velocity;  // fp->co_attrs.ledge_jump_horizontal_velocity
   float ledge_jump_vertical_velocity;    // fp->co_attrs.ledge_jump_vertical_velocity
+  // ECB side-point Y offset (added to midpoint between ECB bottom/top).
+  // Decomp: ftData_x44_t.unkC is added when building desired_ecb.{left,right}.y in mpColl_LoadECB_JObj.
+  // refs/melee/src/melee/ft/types.h::ftData_x44_t
+  // refs/melee/src/melee/mp/mpcoll.c::mpColl_LoadECB_JObj
+  float ecb_side_y_offset;
   float ledge_snap_x;                    // ftData_x44_t.x10 (used as transNPos.z snap distance)
   float ledge_snap_y;                    // ftData_x44_t.x14 (used as transNPos.y snap distance)
   float ledge_snap_height;               // ftData_x44_t.x18 (catch height threshold)

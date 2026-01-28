@@ -7,8 +7,8 @@
 
 #include "action_ids.h"
 #include "coll_env_flags.h"
-#include "ecb_tables.h"
 #include "match_flow.h"
+#include "mpcoll_ecb_points.h"
 #include "stage_collision.h"
 
 // Decomp constants / shapes:
@@ -52,19 +52,6 @@ static inline uint8_t is_cliff_hold_action(uint16_t a) {
       return 1;
     default:
       return 0;
-  }
-}
-
-static inline void ecb_extents_world_x(float facing_dir, MslEcbExtentsRel ext, float* out_left_x,
-                                       float* out_right_x) {
-  float lx = facing_dir * ext.min_x;
-  float rx = facing_dir * ext.max_x;
-  if (lx <= rx) {
-    *out_left_x = lx;
-    *out_right_x = rx;
-  } else {
-    *out_left_x = rx;
-    *out_right_x = lx;
   }
 }
 
@@ -715,37 +702,25 @@ void mpcoll_wall_ceil_apply(MslBatch* batch) {
       const uint8_t was_grounded = batch->state.prev_on_ground[idx] ? 1u : 0u;
       const uint8_t char_id = batch->state.char_id[idx];
       const uint32_t anim = batch->state.animation_index[idx];
-      int af = (int)batch->state.action_frame[idx];
-      if (af < 0) {
-        af = 0;
-      }
-      const int af_prev = (af > 0) ? (af - 1) : 0;
+      const uint16_t ecb_frame =
+          msl_ecb_frame_u16_from_anim_frame(batch->state.anim_frame_f32[idx]);
+      const uint16_t ecb_frame_prev = msl_ecb_prev_frame_u16(ecb_frame);
 
       const float prev_x = batch->state.prev_pos_x[idx];
       const float prev_y = batch->state.prev_pos_y[idx];
       const float fd = batch->state.facing[idx] ? 1.0f : -1.0f;
 
-      const MslEcbExtentsRel ext = msl_ecb_extents_rel(char_id, anim, af);
-      const MslEcbExtentsRel ext_prev = msl_ecb_extents_rel(char_id, anim, af_prev);
-
-      float ecb_left_x = 0.0f;
-      float ecb_right_x = 0.0f;
-      float prev_ecb_left_x = 0.0f;
-      float prev_ecb_right_x = 0.0f;
-      ecb_extents_world_x(fd, ext, &ecb_left_x, &ecb_right_x);
-      ecb_extents_world_x(fd, ext_prev, &prev_ecb_left_x, &prev_ecb_right_x);
-
-      const float ecb_top_y = msl_ecb_top_rel_y(char_id, anim, af);
-      const float prev_ecb_top_y = msl_ecb_top_rel_y(char_id, anim, af_prev);
-      const float ecb_bottom_y =
-          was_grounded ? 0.0f : msl_ecb_bottom_rel_y(char_id, anim, af);
-      const float prev_ecb_bottom_y =
-          was_grounded ? 0.0f : msl_ecb_bottom_rel_y(char_id, anim, af_prev);
-      // Decomp: mpColl_80042384 clamps desired_ecb.{left,right}.y to the midpoint between
-      // desired_ecb.top.y and desired_ecb.bottom.y when out of range / degenerate.
-      // refs/melee/src/melee/mp/mpcoll.c::mpColl_80042384
-      const float ecb_side_y = 0.5f * (ecb_top_y + ecb_bottom_y);
-      const float prev_ecb_side_y = 0.5f * (prev_ecb_top_y + prev_ecb_bottom_y);
+      MslEcbWorldPoints cur_ecb = {0};
+      MslEcbWorldPoints prev_ecb = {0};
+      // Decomp: wall and ceiling collision consume ECB-derived points:
+      // - wall: side point (left/right extent at side_y)
+      // - ceiling: top point
+      // refs/melee/src/melee/mp/mpcoll.c::mpColl_LoadECB_JObj
+      // refs/melee/src/melee/mp/mpcoll.c::mpColl_LoadECB_Fixed
+      msl_ecb_world_points_sample(&cur_ecb, char_id, anim, ecb_frame, fd, batch->state.pos_x[idx],
+                                  batch->state.pos_y[idx], was_grounded);
+      msl_ecb_world_points_sample(&prev_ecb, char_id, anim, ecb_frame_prev, fd, prev_x, prev_y,
+                                  was_grounded);
 
       // Reset per-frame wall/ceiling contact outputs; ids persist when detached (mirrors floor_id behavior).
       batch->state.wall_kind[idx] = 0;
@@ -760,10 +735,13 @@ void mpcoll_wall_ceil_apply(MslBatch* batch) {
 
       // Left wall collision (hit by the fighter's right ECB side).
       if (lwg && lwg->lines && lwg->line_count) {
-        const float cur_rx = batch->state.pos_x[idx] + ecb_right_x;
-        const float cur_ry = batch->state.pos_y[idx] + ecb_side_y;
-        const float prev_rx = prev_x + prev_ecb_right_x;
-        const float prev_ry = prev_y + prev_ecb_side_y;
+        // Decomp: mpLib_8004E398_LeftWall consumes a (x,y) point; mpColl passes ECB side points.
+        // refs/melee/src/melee/mp/mplib.c::mpLib_8004E398_LeftWall
+        // refs/melee/src/melee/mp/mpcoll.c::mpColl_80046224_LeftWall
+        const float cur_rx = cur_ecb.right_x;
+        const float cur_ry = cur_ecb.right_y;
+        const float prev_rx = prev_ecb.right_x;
+        const float prev_ry = prev_ecb.right_y;
 
         int prefer_line_idx = -1;
         if (prev_wall_kind == MSL_WALL_LEFT && prev_wall_id != 0xFFFFu) {
@@ -822,10 +800,13 @@ void mpcoll_wall_ceil_apply(MslBatch* batch) {
       // Right wall collision (hit by the fighter's left ECB side). If already touching a left wall,
       // skip the right-wall pass (FD never requires both; keep deterministic).
       if (batch->state.wall_kind[idx] == 0 && rwg && rwg->lines && rwg->line_count) {
-        const float cur_lx = batch->state.pos_x[idx] + ecb_left_x;
-        const float cur_ly = batch->state.pos_y[idx] + ecb_side_y;
-        const float prev_lx = prev_x + prev_ecb_left_x;
-        const float prev_ly = prev_y + prev_ecb_side_y;
+        // Decomp: mpLib_8004E684_RightWall consumes a (x,y) point; mpColl passes ECB side points.
+        // refs/melee/src/melee/mp/mplib.c::mpLib_8004E684_RightWall
+        // refs/melee/src/melee/mp/mpcoll.c::mpColl_800454A4_RightWall
+        const float cur_lx = cur_ecb.left_x;
+        const float cur_ly = cur_ecb.left_y;
+        const float prev_lx = prev_ecb.left_x;
+        const float prev_ly = prev_ecb.left_y;
 
         int prefer_line_idx = -1;
         if (prev_wall_kind == MSL_WALL_RIGHT && prev_wall_id != 0xFFFFu) {
@@ -879,10 +860,13 @@ void mpcoll_wall_ceil_apply(MslBatch* batch) {
 
       // Ceiling collision (hit by the fighter's top ECB point).
       if (cg && cg->lines && cg->line_count) {
-        const float cur_tx = batch->state.pos_x[idx];  // mpColl desired_ecb.top.x is 0 (JObj/FIXED).
-        const float cur_ty = batch->state.pos_y[idx] + ecb_top_y;
-        const float prev_tx = prev_x;
-        const float prev_ty = prev_y + prev_ecb_top_y;
+        // Decomp: mpLib_8004E090_Ceiling consumes the ECB top point.
+        // refs/melee/src/melee/mp/mplib.c::mpLib_8004E090_Ceiling
+        // refs/melee/src/melee/mp/mpcoll.c::mpColl_80044C74_Ceiling
+        const float cur_tx = cur_ecb.top_x;
+        const float cur_ty = cur_ecb.top_y;
+        const float prev_tx = prev_ecb.top_x;
+        const float prev_ty = prev_ecb.top_y;
 
         int prefer_line_idx = -1;
         if (prev_ceiling_id != 0xFFFFu) {

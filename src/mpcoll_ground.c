@@ -7,8 +7,8 @@
 
 #include "action_ids.h"
 #include "coll_env_flags.h"
-#include "ecb_tables.h"
 #include "match_flow.h"
+#include "mpcoll_ecb_points.h"
 #include "stage_collision.h"
 
 // Decomp constants (mplib.c):
@@ -402,32 +402,37 @@ void mpcoll_ground_apply(MslBatch* batch) {
       // mpCollInterpolateECB assigns prev_ecb = ecb before updating.
       // refs/melee/src/melee/mp/mpcoll.c::mpCollInterpolateECB
       //
-      // For FD grounding v1 we approximate the lag with action_frame-1 (same submotion).
+      // For FD grounding v1 we approximate the lag with floor(cur_anim_frame)-1 (same submotion).
       const uint8_t char_id = batch->state.char_id[idx];
       const uint32_t anim = batch->state.animation_index[idx];
-      int af = (int)batch->state.action_frame[idx];
-      if (af < 0) {
-        af = 0;
-      }
-      int af_prev = (af > 0) ? (af - 1) : 0;
+      const uint16_t ecb_frame =
+          msl_ecb_frame_u16_from_anim_frame(batch->state.anim_frame_f32[idx]);
+      const uint16_t ecb_frame_prev = msl_ecb_prev_frame_u16(ecb_frame);
 
       // Decomp: some stage collision entrypoints load ECB with flags where `flags & 1` forces
       // bottom_y = 0.0 (relative to cur_pos). This stabilizes grounded contact against pose-driven
       // ECB changes.
       // refs/melee/src/melee/mp/mpcoll.c::mpColl_LoadECB_JObj (flags & 1)
-      float ecb_bottom_rel_y = was_grounded ? 0.0f : msl_ecb_bottom_rel_y(char_id, anim, af);
-      float prev_ecb_bottom_rel_y =
-          was_grounded ? 0.0f : msl_ecb_bottom_rel_y(char_id, anim, af_prev);
+      MslEcbBottomWorldPoint cur_bot = {0};
+      MslEcbBottomWorldPoint prev_bot = {0};
 
       const float x = batch->state.pos_x[idx];
       const float y = batch->state.pos_y[idx];
       const float prev_x = batch->state.prev_pos_x[idx];
       const float prev_y = batch->state.prev_pos_y[idx];
 
-      const float cur_bottom_x = x;  // mpColl desired_ecb.bottom.x is 0 in both JObj/FIXED paths.
-      const float cur_bottom_y = y + ecb_bottom_rel_y;
-      const float prev_bottom_x = prev_x;
-      const float prev_bottom_y = prev_y + prev_ecb_bottom_rel_y;
+      // ECB bottom point for floor collision.
+      // Decomp: mpLib_8004DD90_Floor and mpCheckFloor consume the ECB bottom point.
+      // refs/melee/src/melee/mp/mplib.c::mpLib_8004DD90_Floor
+      // refs/melee/src/melee/mp/mplib.c::mpCheckFloor
+      msl_ecb_bottom_world_point_sample(&cur_bot, char_id, anim, ecb_frame, x, y, was_grounded);
+      msl_ecb_bottom_world_point_sample(&prev_bot, char_id, anim, ecb_frame_prev, prev_x, prev_y,
+                                        was_grounded);
+
+      const float cur_bottom_x = cur_bot.x;
+      const float cur_bottom_y = cur_bot.y;
+      const float prev_bottom_x = prev_bot.x;
+      const float prev_bottom_y = prev_bot.y;
 
       // Collision env flags (subset) for Parity Project #2 (ledge grab mask parity).
       // Decomp: CollData carries env_flags and prev_env_flags across frames.

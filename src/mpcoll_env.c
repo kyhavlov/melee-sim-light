@@ -6,7 +6,7 @@
 
 #include "char_params.h"
 #include "coll_env_flags.h"
-#include "ecb_tables.h"
+#include "mpcoll_ecb_points.h"
 #include "stage_collision.h"
 
 // Decomp constants / shapes:
@@ -16,7 +16,10 @@
 //   refs/melee/src/melee/mp/mpcoll.c::mpColl_80044164
 //   refs/melee/src/melee/mp/mpcoll.c::mpColl_800443C4
 static const float k_ledge_half_height_mul = 0.5f;
-static const float k_ledge_edge_dx_max = 5.0f;  // `contact.x - edge.x < 5.0F` (and mirrored).
+// Decomp: `contact.x - edge.x < 5.0F` (and mirrored).
+// refs/melee/src/melee/mp/mpcoll.c::mpColl_80044164
+// refs/melee/src/melee/mp/mpcoll.c::mpColl_800443C4
+static const float k_ledge_edge_dx_max = 5.0f;
 
 static inline float clampf(float x, float lo, float hi) {
   if (x < lo) {
@@ -28,23 +31,10 @@ static inline float clampf(float x, float lo, float hi) {
   return x;
 }
 
-static inline void ecb_extents_world_x(float facing_dir, MslEcbExtentsRel ext, float* out_left_x,
-                                       float* out_right_x) {
-  float lx = facing_dir * ext.min_x;
-  float rx = facing_dir * ext.max_x;
-  if (lx <= rx) {
-    *out_left_x = lx;
-    *out_right_x = rx;
-  } else {
-    *out_left_x = rx;
-    *out_right_x = lx;
-  }
-}
-
 static inline uint32_t ledge_grab_flags_for_fighter(uint32_t stage_id, float cur_x, float cur_y,
                                                     float prev_x, float prev_y, float facing_dir,
                                                     uint8_t char_id, uint32_t animation_index,
-                                                    int action_frame) {
+                                                    float anim_frame_f32) {
   // Decomp gate: mpColl only attempts ledge-grab checks while moving downward.
   // refs/melee/src/melee/mp/mpcoll.c::mpColl_80047E14 (cur_pos.y < prev_pos.y)
   if (!(cur_y < prev_y)) {
@@ -62,13 +52,15 @@ static inline uint32_t ledge_grab_flags_for_fighter(uint32_t stage_id, float cur
     return 0u;
   }
 
-  const MslEcbExtentsRel e = msl_ecb_extents_rel(char_id, animation_index, action_frame);
-  float ecb_left_x = 0.0f;
-  float ecb_right_x = 0.0f;
-  ecb_extents_world_x(facing_dir, e, &ecb_left_x, &ecb_right_x);
-  // Use the dedicated ECB bottom table for the bottom-point Y used by mpColl checks.
-  // refs/melee/src/melee/mp/mpcoll.c::mpColl_80044164 (uses cd->ecb.bottom.y for edge checks)
-  const float ecb_bottom_y = msl_ecb_bottom_rel_y(char_id, animation_index, action_frame);
+  const uint16_t ecb_frame = msl_ecb_frame_u16_from_anim_frame(anim_frame_f32);
+  MslEcbWorldPoints ecb = {0};
+  // Decomp: mpColl ledge-grab checks consume ECB extents (left/right x) and the ECB bottom point.
+  // In this lite sim, msl_ecb_world_points_sample sources these from the ISO-extracted ECB tables
+  // (data/ecb/*) and char attrs (data/characters/*).
+  // refs/melee/src/melee/mp/mpcoll.c::mpColl_80044164
+  // refs/melee/src/melee/mp/mpcoll.c::mpColl_800443C4
+  msl_ecb_world_points_sample(&ecb, char_id, animation_index, ecb_frame, facing_dir, cur_x, cur_y,
+                              /*lock_bottom_to_zero=*/0u);
 
   const float half_h = k_ledge_half_height_mul * ch->ledge_snap_height;
   const float min_x = (prev_x < cur_x) ? prev_x : cur_x;
@@ -90,21 +82,20 @@ static inline uint32_t ledge_grab_flags_for_fighter(uint32_t stage_id, float cur
     // right = ledge_snap_x + (max(prev_x, cur_x) + ecb.right.x)
     // bottom/top computed from (pos.y + ledge_snap_y) ± half_height.
     const float aabb_l = min_x;
-    const float aabb_r = ch->ledge_snap_x + (max_x + ecb_right_x);
+    const float aabb_r = ch->ledge_snap_x + (max_x + ecb.right_rel_x);
     const float aabb_b = (min_y + ch->ledge_snap_y) - half_h;
     const float aabb_t = (max_y + ch->ledge_snap_y) + half_h;
 
     if (edge_x >= aabb_l && edge_x <= aabb_r && edge_y >= aabb_b && edge_y <= aabb_t) {
-      // Decomp: contact.x is required to be close to the floor endpoint:
-      // `cd->contact.x - edge.x < 5.0F`.
-      // refs/melee/src/melee/mp/mpcoll.c::mpColl_80044164
-      const float contact_x = clampf(cur_x, ledge_left->x0, ledge_left->x1);
-      if ((contact_x - edge_x) < k_ledge_edge_dx_max && cur_x < edge_x &&
-          (cur_y + ecb_bottom_y) < edge_y) {
-        out |= MSL_COLLIDE_LEFT_LEDGE_GRAB;
+          // Decomp: contact.x is required to be close to the floor endpoint:
+          // `cd->contact.x - edge.x < 5.0F`.
+          // refs/melee/src/melee/mp/mpcoll.c::mpColl_80044164
+          const float contact_x = clampf(cur_x, ledge_left->x0, ledge_left->x1);
+          if ((contact_x - edge_x) < k_ledge_edge_dx_max && cur_x < edge_x && ecb.bottom_y < edge_y) {
+            out |= MSL_COLLIDE_LEFT_LEDGE_GRAB;
+          }
+        }
       }
-    }
-  }
 
   // Right ledge grab (must be facing toward -X / into stage).
   // Decomp: mpColl_80047E14 checks right ledge when facing_dir==-1 (or 0).
@@ -117,14 +108,13 @@ static inline uint32_t ledge_grab_flags_for_fighter(uint32_t stage_id, float cur
     // right = max(prev_x, cur_x)
     // left = (-ledge_snap_x) + (min(prev_x, cur_x) + ecb.left.x)
     const float aabb_r = max_x;
-    const float aabb_l = (-ch->ledge_snap_x) + (min_x + ecb_left_x);
+    const float aabb_l = (-ch->ledge_snap_x) + (min_x + ecb.left_rel_x);
     const float aabb_b = (min_y + ch->ledge_snap_y) - half_h;
     const float aabb_t = (max_y + ch->ledge_snap_y) + half_h;
 
     if (edge_x >= aabb_l && edge_x <= aabb_r && edge_y >= aabb_b && edge_y <= aabb_t) {
       const float contact_x = clampf(cur_x, ledge_right->x0, ledge_right->x1);
-      if ((edge_x - contact_x) < k_ledge_edge_dx_max && cur_x > edge_x &&
-          (cur_y + ecb_bottom_y) < edge_y) {
+      if ((edge_x - contact_x) < k_ledge_edge_dx_max && cur_x > edge_x && ecb.bottom_y < edge_y) {
         out |= MSL_COLLIDE_RIGHT_LEDGE_GRAB;
       }
     }
@@ -163,7 +153,7 @@ void mpcoll_env_update_ledge_grab(MslBatch* batch) {
       const uint32_t flags =
           ledge_grab_flags_for_fighter(stage_id, cur_x, cur_y, prev_x, prev_y, fd,
                                        batch->state.char_id[idx], batch->state.animation_index[idx],
-                                       (int)batch->state.action_frame[idx]);
+                                       batch->state.anim_frame_f32[idx]);
       batch->state.coll_env_flags[idx] |= flags;
     }
   }
