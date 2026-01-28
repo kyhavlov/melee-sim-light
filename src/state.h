@@ -203,6 +203,11 @@ typedef struct MslStateSoA {
   float* shield_y;       // [batch * players]
   float* shield_z;       // [batch * players]
   float* shield_radius;  // [batch * players]
+  // Pose-derived world-space reflector (SpecialLw) bubble parameters (computed each frame in
+  // reflector_bubbles_refresh).
+  float* reflector_x;       // [batch * players]
+  float* reflector_y;       // [batch * players]
+  float* reflector_radius;  // [batch * players]
   uint16_t* ground_id;
   uint32_t* animation_index;
   uint16_t* instance_hit_by;

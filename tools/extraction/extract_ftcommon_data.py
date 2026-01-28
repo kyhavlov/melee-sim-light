@@ -69,6 +69,21 @@ def main() -> None:
         #                        (ABS(cstick1.y) < xE0 && ABS(cstick.y) >= xE0).
         "attackair_stick_deadzone_x": float(_f32_be(buf, ft_common_abs + 0xDC)),
         "attackair_stick_deadzone_y": float(_f32_be(buf, ft_common_abs + 0xE0)),
+        # Special move direction selection (ftCo_SpecialAir.c / ftCo_SpecialS.c).
+        #
+        # Decomp:
+        # - Up/Down special: stick.y >= x21C / stick.y <= -x21C
+        # - Side special: ABS(stick.x) >= x218
+        # - Side-special facing update (B-reverse): stick.x * facing_dir < -x220
+        # - Neutral-special facing update (B-turn): fp->x676_x < x224 and fp->x2228_b7 parity
+        # refs/melee/src/melee/ft/chara/ftCommon/ftCo_SpecialAir.c::ftCo_SpecialAir_CheckInput
+        # refs/melee/src/melee/ft/chara/ftCommon/ftCo_SpecialS.c
+        "special_stick_x_threshold_side": float(_f32_be(buf, ft_common_abs + 0x218)),
+        "special_stick_y_threshold": float(_f32_be(buf, ft_common_abs + 0x21C)),
+        "special_side_reverse_threshold": float(_f32_be(buf, ft_common_abs + 0x220)),
+        # Note: ftCommonData.x224 is an int (refs/melee/src/melee/ft/types.h), but many decomp
+        # callsites compare it against a u8 timer (fp->x676_x). Store as an int count.
+        "special_neutral_reverse_threshold": int(max(0, _i32_be(buf, ft_common_abs + 0x224))),
         # Decomp mapping: p_ftCommonData->x18 (fighter.c trigger-press timer threshold for `x672`).
         "powershield_reflect_trigger_min": float(_f32_be(buf, ft_common_abs + 0x18)),
         # Tech / passive windows (ftCo_DownAttack.c / ftCo_PassiveStand.c):

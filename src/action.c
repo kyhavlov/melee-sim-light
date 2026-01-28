@@ -11,6 +11,7 @@
 #include "jump_input.h"
 #include "knockdown.h"
 #include "blaster.h"
+#include "shine.h"
 #include "ledge.h"
 
 // -----------
@@ -535,5 +536,6 @@ void action_update(MslBatch* batch) {
   locomotion_update_pre(batch);
   knockdown_update_pre_physics(batch);
   ledge_update_pre_physics(batch);
+  shine_update_pre_physics(batch);
   blaster_update_pre_physics(batch);
 }

@@ -16,8 +16,10 @@
 #include "knockdown.h"
 #include "physics.h"
 #include "shields.h"
+#include "shine.h"
 #include "stage_collision.h"
 #include "timers.h"
+#include "reflector_bubbles.h"
 
 static inline void clear_landing_transients(MslBatch* batch) {
   if (batch == NULL) {
@@ -98,10 +100,12 @@ int step_one_frame(MslBatch* batch, const uint8_t* prev_input_bytes, size_t prev
   knockdown_update_post_collision(batch);
   match_flow_update_post_physics(batch);
   locomotion_update_post_collision(batch);
+  shine_update_post_collision(batch);
   hurtboxes_refresh(batch);
   hitboxes_refresh(batch);
   hitlist_tick(batch);
   shields_refresh(batch);
+  reflector_bubbles_refresh(batch);
   items_update(batch);
   combat_resolve(batch);
 

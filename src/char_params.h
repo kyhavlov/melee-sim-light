@@ -80,6 +80,30 @@ typedef struct MslCharParams {
   float ledge_snap_x;                    // ftData_x44_t.x10 (used as transNPos.z snap distance)
   float ledge_snap_y;                    // ftData_x44_t.x14 (used as transNPos.y snap distance)
   float ledge_snap_height;               // ftData_x44_t.x18 (catch height threshold)
+
+  // Fox/Falco down special (Reflector / Shine).
+  //
+  // Source of truth: ISO-extracted `data/characters/*.json` keys:
+  // - reflector_release_lag_frames / reflector_turn_frames / reflector_gravity_delay_frames
+  // - reflector_momentum_preserve_x / reflector_fall_accel
+  // - reflector_bone_id / reflector_offset / reflector_size / reflector_damage_mul / reflector_speed_mul
+  uint8_t reflector_release_lag_frames;   // ftFox_DatAttrs.x98 (rounded frames)
+  uint8_t reflector_turn_frames;          // ftFox_DatAttrs.x9C (rounded frames)
+  uint8_t reflector_gravity_delay_frames; // ftFox_DatAttrs.xA4 (clamped)
+  uint8_t _pad_u8_reflector_0[1];
+  float reflector_momentum_preserve_x;  // ftFox_DatAttrs.xA8
+  float reflector_fall_accel;           // ftFox_DatAttrs.xAC
+  uint16_t reflector_bone_part_id;      // ReflectDesc.x0_bone_id (FtPart id domain)
+  uint16_t _pad_u16_reflector_0;
+  int32_t reflector_max_damage;  // ReflectDesc.x4_max_damage
+  float reflector_offset_x;      // ReflectDesc.x8_offset.x
+  float reflector_offset_y;      // ReflectDesc.x8_offset.y
+  float reflector_offset_z;      // ReflectDesc.x8_offset.z
+  float reflector_size;          // ReflectDesc.x14_size
+  float reflector_damage_mul;    // ReflectDesc.x18_damage_mul
+  float reflector_speed_mul;     // ReflectDesc.x1C_speed_mul
+  uint8_t reflector_behavior;    // ReflectDesc.x20_behavior
+  uint8_t _pad_u8_reflector_1[3];
 } MslCharParams;
 
 int char_params_init(void);

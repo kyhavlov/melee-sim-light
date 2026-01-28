@@ -184,6 +184,13 @@ int common_params_init(void) {
       json_get_f32(buf, "walk_accel_scale_mul", &g_params.walk_accel_scale_mul) != 0 ||
       json_get_f32(buf, "turn_stick_x_threshold", &g_params.turn_stick_x_threshold) != 0 ||
       json_get_f32(buf, "run_stick_x_threshold", &g_params.run_stick_x_threshold) != 0 ||
+      json_get_f32(buf, "special_stick_x_threshold_side",
+                   &g_params.special_stick_x_threshold_side) != 0 ||
+      json_get_f32(buf, "special_stick_y_threshold", &g_params.special_stick_y_threshold) != 0 ||
+      json_get_f32(buf, "special_side_reverse_threshold",
+                   &g_params.special_side_reverse_threshold) != 0 ||
+      json_get_f32(buf, "special_neutral_reverse_threshold",
+                   &g_params.special_neutral_reverse_threshold) != 0 ||
       json_get_f32(buf, "dash_flick_abs", &g_params.dash_flick_abs) != 0 ||
       json_get_u8(buf, "dash_flick_tilt_max_frames", &g_params.dash_flick_tilt_max_frames) != 0 ||
       json_get_f32(buf, "dash_iasa_vel_mul", &g_params.dash_iasa_vel_mul) != 0 ||

@@ -205,7 +205,23 @@ def _extract_ftco_dattrs(pl_dat: Path, *, ftdata_symbol: str, extract_fox_blaste
         out["blaster_shot_itkind"] = int(_u32_be(buf, ext_abs + 0x1C))
         out["blaster_gun_itkind"] = int(_u32_be(buf, ext_abs + 0x20))
         # Fox/Falco reflector (shine) attrs: ftFox_DatAttrs down-special section.
+        #
+        # Decomp: refs/melee/src/melee/ft/chara/ftFox/types.h (ftFox_DatAttrs):
+        # - x98_FOX_REFLECTOR_RELEASE_LAG (float)
+        # - x9C_FOX_REFLECTOR_TURN_FRAMES (float)
         # - gravity delay is stored as an s32 but treated as a small frame count.
+        try:
+            out["reflector_release_lag_frames"] = int(
+                max(0, min(255, int(round(float(_f32_be(buf, ext_abs + 0x98))))))
+            )
+        except Exception:
+            pass
+        try:
+            out["reflector_turn_frames"] = int(
+                max(0, min(255, int(round(float(_f32_be(buf, ext_abs + 0x9C))))))
+            )
+        except Exception:
+            pass
         try:
             out["reflector_gravity_delay_frames"] = int(max(0, min(255, _i32_be(buf, ext_abs + 0xA4))))
         except Exception:
@@ -277,6 +293,8 @@ def _stable_update(existing: dict, extracted: dict) -> dict:
         "blaster_shot_itkind",
         "blaster_gun_itkind",
         "reflector_gravity_delay_frames",
+        "reflector_release_lag_frames",
+        "reflector_turn_frames",
         "reflector_momentum_preserve_x",
         "reflector_fall_accel",
         "reflector_bone_id",

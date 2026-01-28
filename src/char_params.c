@@ -85,6 +85,86 @@ static int json_get_u8(const char* json, const char* key, uint8_t* out) {
   return 0;
 }
 
+static int json_get_u16(const char* json, const char* key, uint16_t* out) {
+  if (json == NULL || key == NULL || out == NULL) {
+    return -1;
+  }
+  float f = 0.0f;
+  if (json_get_f32(json, key, &f) != 0) {
+    return -1;
+  }
+  if (f < 0.0f) {
+    f = 0.0f;
+  }
+  if (f > 65535.0f) {
+    f = 65535.0f;
+  }
+  *out = (uint16_t)(unsigned int)(f + 0.5f);
+  return 0;
+}
+
+static int json_get_i32(const char* json, const char* key, int32_t* out) {
+  if (json == NULL || key == NULL || out == NULL) {
+    return -1;
+  }
+  float f = 0.0f;
+  if (json_get_f32(json, key, &f) != 0) {
+    return -1;
+  }
+  if (f > 2147483647.0f) {
+    f = 2147483647.0f;
+  }
+  if (f < -2147483648.0f) {
+    f = -2147483648.0f;
+  }
+  *out = (int32_t)f;
+  return 0;
+}
+
+static int json_get_f32_array3(const char* json, const char* key, float out3[3]) {
+  if (json == NULL || key == NULL || out3 == NULL) {
+    return -1;
+  }
+  char pat[128];
+  const int n = snprintf(pat, sizeof(pat), "\"%s\"", key);
+  if (n <= 0 || (size_t)n >= sizeof(pat)) {
+    return -1;
+  }
+  const char* p = strstr(json, pat);
+  if (p == NULL) {
+    return -1;
+  }
+  p = strchr(p, ':');
+  if (p == NULL) {
+    return -1;
+  }
+  p++;
+  p = json_skip_ws(p);
+  if (p == NULL || *p != '[') {
+    return -1;
+  }
+  p++;
+  for (int i = 0; i < 3; i++) {
+    double v = 0.0;
+    p = json_parse_double(p, &v);
+    if (p == NULL) {
+      return -1;
+    }
+    out3[i] = (float)v;
+    p = json_skip_ws(p);
+    if (p == NULL) {
+      return -1;
+    }
+    if (i < 2) {
+      if (*p != ',') {
+        return -1;
+      }
+      p++;
+    }
+  }
+  return 0;
+}
+
 static int load_one(const char* data_dir, const char* rel_path, uint8_t char_id) {
   char path[512];
   const int n = snprintf(path, sizeof(path), "%s/%s", data_dir, rel_path);
@@ -124,6 +204,7 @@ static int load_one(const char* data_dir, const char* rel_path, uint8_t char_id)
   buf[sz] = '\0';
 
   MslCharParams out = {0};
+  float refl_off[3] = {0};
   if (json_get_f32(buf, "weight", &out.weight) != 0 ||
       json_get_f32(buf, "trophy_scale", &out.trophy_scale) != 0 ||
       json_get_f32(buf, "walk_init_vel", &out.walk_init_vel) != 0 ||
@@ -169,10 +250,27 @@ static int load_one(const char* data_dir, const char* rel_path, uint8_t char_id)
       json_get_f32(buf, "ledge_jump_vertical_velocity", &out.ledge_jump_vertical_velocity) != 0 ||
       json_get_f32(buf, "ledge_snap_x", &out.ledge_snap_x) != 0 ||
       json_get_f32(buf, "ledge_snap_y", &out.ledge_snap_y) != 0 ||
-      json_get_f32(buf, "ledge_snap_height", &out.ledge_snap_height) != 0) {
+      json_get_f32(buf, "ledge_snap_height", &out.ledge_snap_height) != 0 ||
+
+      json_get_u8(buf, "reflector_release_lag_frames", &out.reflector_release_lag_frames) != 0 ||
+      json_get_u8(buf, "reflector_turn_frames", &out.reflector_turn_frames) != 0 ||
+      json_get_u8(buf, "reflector_gravity_delay_frames", &out.reflector_gravity_delay_frames) !=
+          0 ||
+      json_get_f32(buf, "reflector_momentum_preserve_x", &out.reflector_momentum_preserve_x) != 0 ||
+      json_get_f32(buf, "reflector_fall_accel", &out.reflector_fall_accel) != 0 ||
+      json_get_u16(buf, "reflector_bone_id", &out.reflector_bone_part_id) != 0 ||
+      json_get_i32(buf, "reflector_max_damage", &out.reflector_max_damage) != 0 ||
+      json_get_f32_array3(buf, "reflector_offset", refl_off) != 0 ||
+      json_get_f32(buf, "reflector_size", &out.reflector_size) != 0 ||
+      json_get_f32(buf, "reflector_damage_mul", &out.reflector_damage_mul) != 0 ||
+      json_get_f32(buf, "reflector_speed_mul", &out.reflector_speed_mul) != 0 ||
+      json_get_u8(buf, "reflector_behavior", &out.reflector_behavior) != 0) {
     alloc_free(buf);
     return -1;
   }
+  out.reflector_offset_x = refl_off[0];
+  out.reflector_offset_y = refl_off[1];
+  out.reflector_offset_z = refl_off[2];
 
   alloc_free(buf);
   g_params_by_char[char_id] = out;

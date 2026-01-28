@@ -32,6 +32,13 @@ typedef struct MslCommonParams {
   float turn_stick_x_threshold;  // p_ftCommonData->x34
   float run_stick_x_threshold;   // p_ftCommonData->x58
 
+  // Special move direction thresholds (B specials).
+  // Decomp: refs/melee/src/melee/ft/chara/ftCommon/ftCo_SpecialAir.c::ftCo_SpecialAir_CheckInput
+  float special_stick_x_threshold_side;  // p_ftCommonData->x218
+  float special_stick_y_threshold;       // p_ftCommonData->x21C
+  float special_side_reverse_threshold;  // p_ftCommonData->x220
+  float special_neutral_reverse_threshold;  // p_ftCommonData->x224
+
   // Dash flick threshold (refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c)
   float dash_flick_abs;                // p_ftCommonData->x3C
   uint8_t dash_flick_tilt_max_frames;  // p_ftCommonData->x40 (dash_flick_tilt_max_frames)

@@ -7,6 +7,7 @@
 #include "anim_frame.h"
 #include "anim_pose.h"
 #include "combat.h"
+#include "char_params.h"
 #include "laser_params.h"
 #include "msl_math.h"
 #include "mtx34.h"
@@ -711,6 +712,53 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
       // Slippi post-frame: `hurtbox_state` is seeded; movescript hit status can overwrite it.
       if (batch->state.hurtbox_state[d_idx] != 0) {
         continue;
+      }
+
+      // Special-move reflector bubble (Shine): if the item intersects the reflector bubble, reflect
+      // it and do not take the BODY path.
+      //
+      // Decomp trail:
+      // - ftColl_CreateReflectHit initializes fp->reflect_hit (bone/offset/size) and reflect multipliers:
+      //   refs/melee/src/melee/ft/ftcoll.c::ftColl_CreateReflectHit
+      // - The item overlap path writes reflect snapshot fields (owner, damage/speed mul, xDA8_short source):
+      //   refs/melee/src/melee/ft/ftcoll.c::ftColl_80077464
+      // - Item_80269F14 applies reflect by transferring owner/xDA8_short (Slippi item.instance_id):
+      //   refs/melee/src/melee/it/item.c::Item_80269F14
+      const float rr = batch->state.reflector_radius[d_idx];
+      if (rr > 0.0f) {
+        const float rx = batch->state.reflector_x[d_idx];
+        const float ry = batch->state.reflector_y[d_idx];
+        const MslCharParams* rch = msl_char_params(batch->state.char_id[d_idx]);
+        if (isfinite(rx) && isfinite(ry) && rch != NULL) {
+          uint8_t reflect_hit = 0;
+          const uint8_t off_n = lp->hitbox_offsets_x_count;
+          for (uint8_t oi = 0; oi < off_n && oi < (uint8_t)MSL_LASER_MAX_HITBOX_OFFS_X && !reflect_hit;
+               oi++) {
+            const float sx = x + (dir * lp->hitbox_offsets_x[oi]);
+            const float sy = y;
+            if (item_sphere_sphere_intersects_2d(sx, sy, sr, rx, ry, rr)) {
+              reflect_hit = 1;
+            }
+          }
+          if (!reflect_hit && off_n == 0) {
+            reflect_hit = item_sphere_sphere_intersects_2d(x, y, sr, rx, ry, rr);
+          }
+
+          if (reflect_hit) {
+            batch->state.item_owner[ii] = (int8_t)def;
+            // Slippi item.instance_id is item->xDA8_short; reflect path updates it from the reflecting
+            // fighter's snapshot (fp->x2088 / instance_id).
+            batch->state.item_instance_id[ii] = batch->state.instance_id[d_idx];
+
+            const float mul = rch->reflector_speed_mul;
+            const float new_vx = -batch->state.item_vel_x[ii] * mul;
+            const float new_vy = -batch->state.item_vel_y[ii] * mul;
+            batch->state.item_vel_x[ii] = new_vx;
+            batch->state.item_vel_y[ii] = new_vy;
+            batch->state.item_direction[ii] = (new_vx >= 0.0f) ? 1.0f : -1.0f;
+            break;
+          }
+        }
       }
 
       uint8_t hit_hurt_height = 0;

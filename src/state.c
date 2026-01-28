@@ -159,6 +159,9 @@ int state_alloc(MslStateSoA* state, int batch_size) {
   state->shield_y = (float*)alloc_aligned_64(sizeof(float) * bp);
   state->shield_z = (float*)alloc_aligned_64(sizeof(float) * bp);
   state->shield_radius = (float*)alloc_aligned_64(sizeof(float) * bp);
+  state->reflector_x = (float*)alloc_aligned_64(sizeof(float) * bp);
+  state->reflector_y = (float*)alloc_aligned_64(sizeof(float) * bp);
+  state->reflector_radius = (float*)alloc_aligned_64(sizeof(float) * bp);
   state->ground_id = (uint16_t*)alloc_aligned_64(sizeof(uint16_t) * bp);
   state->animation_index = (uint32_t*)alloc_aligned_64(sizeof(uint32_t) * bp);
   state->instance_hit_by = (uint16_t*)alloc_aligned_64(sizeof(uint16_t) * bp);
@@ -256,7 +259,8 @@ int state_alloc(MslStateSoA* state, int batch_size) {
       !state->hitbox_angle || !state->hitbox_kbg || !state->hitbox_wsk || !state->hitbox_bkb ||
       !state->hitbox_element || !state->hitbox_shield_damage || !state->hitbox_sfx_severity ||
       !state->hitbox_sfx_kind || !state->hitbox_flags || !state->shield_x || !state->shield_y ||
-      !state->shield_z || !state->shield_radius || !state->ground_id || !state->animation_index ||
+      !state->shield_z || !state->shield_radius || !state->reflector_x || !state->reflector_y ||
+      !state->reflector_radius || !state->ground_id || !state->animation_index ||
       !state->instance_hit_by || !state->instance_id || !state->instance_id_x2073 ||
       !state->instance_identity_last_action_id ||
       !state->attack_id || !state->attack_instance ||
@@ -418,6 +422,9 @@ void state_free(MslStateSoA* state) {
   alloc_free(state->shield_y);
   alloc_free(state->shield_z);
   alloc_free(state->shield_radius);
+  alloc_free(state->reflector_x);
+  alloc_free(state->reflector_y);
+  alloc_free(state->reflector_radius);
   alloc_free(state->ground_id);
   alloc_free(state->animation_index);
   alloc_free(state->instance_hit_by);

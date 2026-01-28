@@ -14,6 +14,7 @@
 #include "char_params.h"
 #include "common_params.h"
 #include "config.h"
+#include "special_msids.h"
 #include "move_tables.h"
 #include "ecb_tables.h"
 #include "hitboxes_tables.h"
@@ -71,6 +72,11 @@ MslBatch* msl_batch_create(int batch_size, int num_players) {
   }
 
   if (char_params_init() != 0) {
+    msl_batch_destroy(batch);
+    return NULL;
+  }
+
+  if (special_msids_init() != 0) {
     msl_batch_destroy(batch);
     return NULL;
   }
