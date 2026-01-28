@@ -187,6 +187,7 @@ int msl_batch_reseed_seed(MslBatch* batch, const uint8_t* seed_bytes, size_t see
     // We don't currently store the counter explicitly in the seed schema; instead, choose the
     // next value after the maximum already present in the seeded snapshots.
     uint16_t max_attack_inst = 0;
+    uint16_t max_instance_id = 0;
 
     batch->state.frame_id[bi] = seed->frame_id;
     batch->state.frame_pre_random_seed[bi] = seed->frame_pre_random_seed;
@@ -337,6 +338,33 @@ int msl_batch_reseed_seed(MslBatch* batch, const uint8_t* seed_bytes, size_t see
       batch->state.animation_index[idx] = seed->animation_index[p];
       batch->state.instance_hit_by[idx] = seed->instance_hit_by[p];
       batch->state.instance_id[idx] = seed->instance_id[p];
+      if (seed->instance_id[p] > max_instance_id) {
+        max_instance_id = seed->instance_id[p];
+      }
+      // Seed the fp->x2073 byte used by ft_800895E0's instance_id bump gate.
+      // Decomp: ft_800895E0 reads fp+0x2073 and compares against (u8)new_motion_state->x4_flags.
+      // refs/melee/build/GALE01/asm/melee/ft/ft_0892.s::ft_800895E0
+      //
+      // NOTE(unmodeled-ft_800895E0-rewrite):
+      // ft_800895E0 contains two rewrite paths that replace the x2070 word before it is written to
+      // fp->x2070, which in turn changes fp+0x2073 (the compare byte) away from the raw low byte of
+      // MotionState.x4_flags:
+      // - If fp->kind == 0x11 and flags_low == 0x71, it overwrites the word with 0x240063.
+      // - If flags_low == 0x62 and it_8026B6C8(fp->x1974) is true, it overwrites the word with 0x44003D.
+      // refs/melee/build/GALE01/asm/melee/ft/ft_0892.s::ft_800895E0
+      //
+      // The simulator currently does not model these conditions (fighter kind / item pointer), so we
+      // seed fp+0x2073 as (u8)x4_flags. A guard test enforces that suite-observed action_ids never
+      // use x4_flags low bytes 0x71 or 0x62 for Fox/Falco; if they do, we must implement the rewrite
+      // logic or add the required seeded state first.
+      uint8_t x2073 = 0;
+      if (seed->instance_id[p] != 0) {
+        const uint32_t x4_flags =
+            attack_id_x4_flags_from_action(batch->state.char_id[idx], seed->action_id[p]);
+        x2073 = (uint8_t)(x4_flags & 0xFFu);
+      }
+      batch->state.instance_id_x2073[idx] = x2073;
+      batch->state.instance_identity_last_action_id[idx] = seed->action_id[p];
       batch->state.attack_id[idx] = seed->attack_id[p];
       batch->state.attack_instance[idx] = seed->attack_instance[p];
       batch->state.attack_identity_last_action_id[idx] = seed->action_id[p];
@@ -380,6 +408,9 @@ int msl_batch_reseed_seed(MslBatch* batch, const uint8_t* seed_bytes, size_t see
       batch->state.item_type[ii] = item->type;
       batch->state.item_owner[ii] = item->owner;
       batch->state.item_instance_id[ii] = item->instance_id;
+      if (item->instance_id > max_instance_id) {
+        max_instance_id = item->instance_id;
+      }
       batch->state.item_attack_id[ii] = item->attack_id;
       batch->state.item_attack_instance[ii] = item->attack_instance;
       if (item->attack_instance > max_attack_inst) {
@@ -413,6 +444,14 @@ int msl_batch_reseed_seed(MslBatch* batch, const uint8_t* seed_bytes, size_t see
       next = 1;
     }
     batch->state.stale_attack_instance_counter[bi] = next;
+
+    // Next value for plAttack_80037B08 (global counter used for fp->x2088 and many item instance_ids).
+    // Decomp: refs/melee/src/melee/pl/plattack.c::plAttack_80037B08
+    uint16_t next_iid = (uint16_t)(max_instance_id + 1u);
+    if (next_iid == 0) {
+      next_iid = 1;
+    }
+    batch->state.instance_id_counter[bi] = next_iid;
 
     // Combat hitlists are part of the reseed schema (teacher-forced one-step eval).
     const size_t base =
@@ -573,6 +612,8 @@ int msl_batch_debug_write_internals(const MslBatch* batch, uint8_t* out_bytes,
     MslDebugInternals* out = (MslDebugInternals*)ptr;
     memset(out, 0, sizeof(*out));
 
+    out->instance_id_counter = batch->state.instance_id_counter[bi];
+
     for (int p = 0; p < MSL_MAX_PLAYERS; p++) {
       const size_t idx = msl_idx_player(bi, p);
       out->tilt_timer_x[p] = batch->state.tilt_timer_x[idx];
@@ -581,6 +622,9 @@ int msl_batch_debug_write_internals(const MslBatch* batch, uint8_t* out_bytes,
       out->attack_id[p] = batch->state.attack_id[idx];
       out->attack_instance[p] = batch->state.attack_instance[idx];
       out->attack_identity_last_action_id[p] = batch->state.attack_identity_last_action_id[idx];
+      out->instance_id[p] = batch->state.instance_id[idx];
+      out->instance_id_x2073[p] = batch->state.instance_id_x2073[idx];
+      out->instance_identity_last_action_id[p] = batch->state.instance_identity_last_action_id[idx];
     }
   }
 

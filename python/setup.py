@@ -77,6 +77,7 @@ ext = Extension(
         str((ROOT / "src" / "move_tables.c").resolve()),
         str((ROOT / "src" / "attack_id_tables.c").resolve()),
         str((ROOT / "src" / "attack_identity.c").resolve()),
+        str((ROOT / "src" / "instance_id.c").resolve()),
         str((ROOT / "src" / "hurtcaps_tables.c").resolve()),
         str((ROOT / "src" / "hurtbox_modes_tables.c").resolve()),
         str((ROOT / "src" / "hurtboxes.c").resolve()),

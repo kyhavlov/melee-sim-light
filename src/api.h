@@ -415,6 +415,12 @@ typedef struct MslDebugInternals {
   uint16_t attack_id[MSL_MAX_PLAYERS];
   uint16_t attack_instance[MSL_MAX_PLAYERS];
   uint16_t attack_identity_last_action_id[MSL_MAX_PLAYERS];
+  // Fighter action-state instance_id internals (decomp: fp->x2088 + fp->x2073 compare gate).
+  uint16_t instance_id[MSL_MAX_PLAYERS];
+  uint8_t instance_id_x2073[MSL_MAX_PLAYERS];
+  uint16_t instance_identity_last_action_id[MSL_MAX_PLAYERS];
+  // Per-environment global counter backing plAttack_80037B08 (unk_804D6480).
+  uint16_t instance_id_counter;
 } MslDebugInternals;
 
 // Debug/validation helper: record a single hitbox-vs-hurtcap contact candidate.

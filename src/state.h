@@ -15,6 +15,10 @@ typedef struct MslStateSoA {
   // One per environment in the batch (per-match global counter).
   // refs/melee/src/melee/pl/plstale.c::plStale_IncrementAttackInstance
   uint16_t* stale_attack_instance_counter;  // [batch]
+  // Global action-state instance_id counter (decomp: plAttack_80037B08 uses unk_804D6480).
+  // One per environment in the batch (per-match global counter).
+  // refs/melee/src/melee/pl/plattack.c::plAttack_80037B08
+  uint16_t* instance_id_counter;  // [batch]
   float* match_damage_ratio;  // [batch] (decomp: gm_8016B248 -> StartMeleeRules.x30)
   uint8_t* is_teams;   // [batch]
   uint8_t* team_id;    // [batch * MSL_MAX_PLAYERS]
@@ -203,6 +207,14 @@ typedef struct MslStateSoA {
   uint32_t* animation_index;
   uint16_t* instance_hit_by;
   uint16_t* instance_id;
+  // Internal-only: low 8 bits of fp->x2070 (the byte at fp+0x2073) used by ft_800895E0 to decide
+  // whether to bump fp->x2088 on motion-state change.
+  // refs/melee/build/GALE01/asm/melee/ft/ft_0892.s::ft_800895E0 (lbz fp+0x2073; compare to flags)
+  uint8_t* instance_id_x2073;  // [batch * players]
+  // Internal-only: last action_id for which instance_id update logic ran.
+  // Used to avoid bumping fp->x2088 on animation restarts (msl_anim_timebase_enter without
+  // a motion-state change).
+  uint16_t* instance_identity_last_action_id;  // [batch * players]
   uint16_t* attack_id;  // GALE01 fp->x2068_attackID (seeded; replay-history derived)
   uint16_t* attack_instance;
   // Internal-only: last action_id for which attack_id/attack_instance were updated.

@@ -18,3 +18,6 @@ int attack_id_tables_init(void);
 // is missing/out-of-range, returns FtMoveId_Default (1).
 uint16_t attack_id_move_id_from_action(uint8_t char_id, uint16_t action_id);
 
+// Return decomp MotionState.x4_flags (GALE01) for the fighter's current action_id.
+// If the character is unknown or the table is missing/out-of-range, returns 0.
+uint32_t attack_id_x4_flags_from_action(uint8_t char_id, uint16_t action_id);

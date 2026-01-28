@@ -90,11 +90,20 @@ def _load_action_move_id_table_for_char(char_id: int, *, data_dir: Path = Path("
     if buf[:8] != b"MSLACID1":
         raise ValueError(f"bad action move_id magic: {path}")
     (ver,) = struct.unpack_from("<I", buf, 8)
-    if ver != 1:
+    if ver not in (1, 2):
         raise ValueError(f"unsupported action move_id table version {ver} in {path}")
     (count,) = struct.unpack_from("<H", buf, 12)
-    (toc_off,) = struct.unpack_from("<I", buf, 16)
-    (file_bytes,) = struct.unpack_from("<I", buf, 20)
+    if ver == 1:
+        (toc_off,) = struct.unpack_from("<I", buf, 16)
+        (file_bytes,) = struct.unpack_from("<I", buf, 20)
+    else:
+        # v2 adds a second table (MotionState.x4_flags) after move_id.
+        # Layout is documented in docs/DATA_CONTRACT.md under MSLACID1 v2.
+        if len(buf) < 28:
+            raise ValueError(f"action move_id table header too small for v2: {path}")
+        (toc_off,) = struct.unpack_from("<I", buf, 16)
+        (_flags_off,) = struct.unpack_from("<I", buf, 20)
+        (file_bytes,) = struct.unpack_from("<I", buf, 24)
     if file_bytes != len(buf):
         raise ValueError(f"action move_id file_bytes mismatch in {path}: {file_bytes} != {len(buf)}")
     if toc_off + count * 2 > len(buf):

@@ -87,6 +87,10 @@ static inline void msl_anim_timebase_seed(MslBatch* batch, size_t idx, float cur
 // Defined in src/attack_identity.c.
 void attack_identity_on_motion_state_change_ft_800890D0(MslBatch* batch, size_t idx);
 
+// Forward decl: fighter action-state instance_id update on motion-state change.
+// Defined in src/instance_id.c.
+void instance_id_on_motion_state_change_ft_800895E0(MslBatch* batch, size_t idx);
+
 static inline void msl_anim_timebase_enter(MslBatch* batch, size_t idx, float anim_start_f32,
                                            float anim_speed_f32) {
   // Mirror Fighter_ChangeMotionState's cur_anim_frame reset behavior.
@@ -109,6 +113,13 @@ static inline void msl_anim_timebase_enter(MslBatch* batch, size_t idx, float an
   // refs/melee/src/melee/ft/fighter.c (Fighter_ChangeMotionState)
   // refs/melee/src/melee/ft/ft_0881.c::ft_800890D0
   attack_identity_on_motion_state_change_ft_800890D0(batch, idx);
+
+  // Decomp: Fighter_ChangeMotionState calls ft_800895E0(fp, new_motion_state->x4_flags) as part of
+  // state entry. We hook this to the common "enter action" path (timebase reset) so Slippi
+  // `instance_id` (fp->x2088) evolves on motion transitions instead of being treated as seed carry-through.
+  // refs/melee/src/melee/ft/fighter.c (Fighter_ChangeMotionState)
+  // refs/melee/build/GALE01/asm/melee/ft/ft_0892.s::ft_800895E0
+  instance_id_on_motion_state_change_ft_800895E0(batch, idx);
 }
 
 static inline void msl_anim_timebase_set_rate(MslBatch* batch, size_t idx, float anim_rate_f32) {

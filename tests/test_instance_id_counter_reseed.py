@@ -5,12 +5,11 @@ import numpy as np
 from tools.eval.dataset import SEED_DTYPE
 
 
-# Action ids (GALE01): refs/melee/src/melee/ft/chara/ftCommon/forward.h
-ACT_WAIT = 0x000E
-
 CHAR_FOX = 1
 STAGE_FD = 32
 MAX_PLAYERS = 4
+MAX_ITEMS = 15
+
 
 INTERNALS_DTYPE = np.dtype(
     [
@@ -29,16 +28,7 @@ INTERNALS_DTYPE = np.dtype(
 )
 
 
-def test_attack_identity_guard_prevents_bump_on_anim_timebase_restart() -> None:
-    import msl_binding
-
-    sizes = msl_binding.sizes()
-    seed_stride = int(sizes["seed"])
-    internals_stride = int(sizes["internals"])
-
-    assert seed_stride == SEED_DTYPE.itemsize
-    assert internals_stride == INTERNALS_DTYPE.itemsize
-
+def _seed_base() -> np.ndarray:
     seed = np.zeros((1,), dtype=SEED_DTYPE)
     seed["frame_id"][0] = np.int32(0)
     seed["stage_id"][0] = np.uint32(STAGE_FD)
@@ -50,15 +40,18 @@ def test_attack_identity_guard_prevents_bump_on_anim_timebase_restart() -> None:
     seed["attack_ratio"][0, :2] = np.float32(1.0)
     seed["defense_ratio"][0, :2] = np.float32(1.0)
     seed["fighter_scale_y"][0, :2] = np.float32(1.0)
+    return seed
 
-    # Seed into Wait but intentionally set an inconsistent attack identity. A pure animation
-    # timebase restart (without action_id change) must not "fix" attack_id/attack_instance.
-    seed["action_id"][0, :2] = np.uint16(ACT_WAIT)
-    seed["action_frame"][0, :2] = np.int16(0)
-    seed["anim_frame_f32"][0, :2] = np.float32(0.0)
-    seed["frame_speed_mul_f32"][0, :2] = np.float32(1.0)
-    seed["attack_id"][0, 0] = np.uint16(2)
-    seed["attack_instance"][0, 0] = np.uint16(7)
+
+def _reseed_and_read_counter(seed: np.ndarray) -> int:
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    seed_stride = int(sizes["seed"])
+    internals_stride = int(sizes["internals"])
+
+    assert seed_stride == SEED_DTYPE.itemsize
+    assert internals_stride == INTERNALS_DTYPE.itemsize
 
     seed_bytes = seed.view(np.uint8).reshape((1, seed_stride))
     out_int = np.zeros((1, internals_stride), dtype=np.uint8)
@@ -66,22 +59,39 @@ def test_attack_identity_guard_prevents_bump_on_anim_timebase_restart() -> None:
     handle = msl_binding.init(batch_size=1, num_players=2)
     try:
         msl_binding.reseed_seed(handle, seed_bytes)
-
         msl_binding.debug_write_internals(handle, out_int)
-        before = out_int.view(INTERNALS_DTYPE).reshape((1,))[0].copy()
-
-        # Force a timebase reset without changing action_id.
-        msl_binding.debug_force_anim_timebase_enter(handle, 0, 0, 0.0, 1.0)
-
-        msl_binding.debug_write_internals(handle, out_int)
-        after = out_int.view(INTERNALS_DTYPE).reshape((1,))[0].copy()
     finally:
         msl_binding.destroy(handle)
 
-    assert int(before["attack_id"][0]) == 2
-    assert int(before["attack_instance"][0]) == 7
-    assert int(before["attack_identity_last_action_id"][0]) == ACT_WAIT
+    v = out_int.view(INTERNALS_DTYPE).reshape((1,))[0]
+    return int(v["instance_id_counter"])
 
-    assert int(after["attack_id"][0]) == 2
-    assert int(after["attack_instance"][0]) == 7
-    assert int(after["attack_identity_last_action_id"][0]) == ACT_WAIT
+
+def test_instance_id_counter_reseed_is_max_plus_one_and_never_zero() -> None:
+    # max(seed instance_id) = 5 => counter = 6
+    seed = _seed_base()
+    seed["instance_id"][0, 0] = np.uint16(5)
+    assert _reseed_and_read_counter(seed) == 6
+
+    # max across items should contribute too.
+    seed2 = _seed_base()
+    seed2["items"][0, 0]["exists"] = np.uint8(1)
+    seed2["items"][0, 0]["instance_id"] = np.uint16(9)
+    assert _reseed_and_read_counter(seed2) == 10
+
+    # max=0 => counter = 1 (skip 0)
+    seed3 = _seed_base()
+    assert _reseed_and_read_counter(seed3) == 1
+
+
+def test_instance_id_counter_reseed_wraps_u16_and_skips_zero() -> None:
+    # max=0xFFFF => next wraps to 0 then corrected to 1.
+    seed = _seed_base()
+    seed["instance_id"][0, 0] = np.uint16(0xFFFF)
+    assert _reseed_and_read_counter(seed) == 1
+
+    seed2 = _seed_base()
+    seed2["items"][0, 0]["exists"] = np.uint8(1)
+    seed2["items"][0, 0]["instance_id"] = np.uint16(0xFFFF)
+    assert _reseed_and_read_counter(seed2) == 1
+

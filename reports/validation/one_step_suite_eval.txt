@@ -2,25 +2,25 @@ suite: fox_falco_fd_ucf084_recent  datasets: 4  ucf_enabled: True  ucf_cardinals
 
 == datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl ==
 Records: 7295  Players/scored per record: 2  Total player-frames: 14590
-mismatch.action_id: 886 / 14590 (0.060727)
-mismatch.action_frame: 1645 / 14590 (0.112748)
+mismatch.action_id: 887 / 14590 (0.060795)
+mismatch.action_frame: 1646 / 14590 (0.112817)
 mismatch.on_ground: 244 / 14590 (0.016724)
 mismatch.facing: 188 / 14590 (0.012886)
 mismatch.stocks: 0 / 14590 (0.000000)
 mismatch.jumps_left: 196 / 14590 (0.013434)
 mismatch.is_dead: 0 / 14590 (0.000000)
-mismatch.hitlag: 178 / 14590 (0.012200)
+mismatch.hitlag: 180 / 14590 (0.012337)
 mismatch.hitstun: 623 / 14590 (0.042700)
 mismatch.l_cancel: 3 / 14590 (0.000206)
 mismatch.hurtbox_state: 167 / 14590 (0.011446)
 mismatch.ground_id: 22 / 14590 (0.001508)
-mismatch.animation_index: 851 / 14590 (0.058328)
+mismatch.animation_index: 852 / 14590 (0.058396)
 mismatch.instance_hit_by: 95 / 14590 (0.006511)
-mismatch.instance_id: 1312 / 14590 (0.089925)
+mismatch.instance_id: 1185 / 14590 (0.081220)
 mismatch.last_attack_landed: 74 / 14590 (0.005072)
 mismatch.combo_count: 64 / 14590 (0.004387)
 mismatch.last_hit_by: 63 / 14590 (0.004318)
-mismatch.state_flags: 995 / 72950 (0.013639)
+mismatch.state_flags: 997 / 72950 (0.013667)
 mismatch.item_exists: 123 / 109425 (0.001124)
 mismatch.item_type: 128 / 109425 (0.001170)
 mismatch.item_state: 103 / 109425 (0.000941)
@@ -34,40 +34,40 @@ err.speed_y_self: mae=0.044507 p95=0.170000 max=6.986000
 err.speed_x_attack: mae=0.013872 p95=0.044974 max=4.004171
 err.speed_y_attack: mae=0.020730 p95=0.050095 max=4.696609
 err.percent: mae=0.086017 p95=0.000000 max=166.535339
-err.shield_hp: mae=0.005616 p95=0.000000 max=13.866562
+err.shield_hp: mae=0.006048 p95=0.000000 max=13.866562
 err.item_pos_x: mae=1.903660 p95=4.855196 max=281.847900
 err.item_pos_y: mae=0.968777 p95=0.000100 max=125.424088
 err.item_vel_x: mae=0.074761 p95=0.000000 max=10.000000
 err.item_vel_y: mae=0.121337 p95=0.000000 max=6.995884
-overall.discrete_mismatch: 8234 / 882695
-overall.float_norm_mae_p95: 0.01148919
+overall.discrete_mismatch: 8114 / 882695
+overall.float_norm_mae_p95: 0.01148996
 
 == datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl ==
 Records: 11529  Players/scored per record: 2  Total player-frames: 23058
-mismatch.action_id: 1485 / 23058 (0.064403)
-mismatch.action_frame: 2805 / 23058 (0.121650)
+mismatch.action_id: 1486 / 23058 (0.064446)
+mismatch.action_frame: 2806 / 23058 (0.121693)
 mismatch.on_ground: 261 / 23058 (0.011319)
 mismatch.facing: 315 / 23058 (0.013661)
 mismatch.stocks: 0 / 23058 (0.000000)
 mismatch.jumps_left: 315 / 23058 (0.013661)
 mismatch.is_dead: 0 / 23058 (0.000000)
-mismatch.hitlag: 247 / 23058 (0.010712)
+mismatch.hitlag: 249 / 23058 (0.010799)
 mismatch.hitstun: 1387 / 23058 (0.060153)
 mismatch.l_cancel: 12 / 23058 (0.000520)
 mismatch.hurtbox_state: 211 / 23058 (0.009151)
 mismatch.ground_id: 34 / 23058 (0.001475)
-mismatch.animation_index: 1440 / 23058 (0.062451)
+mismatch.animation_index: 1441 / 23058 (0.062495)
 mismatch.instance_hit_by: 158 / 23058 (0.006852)
-mismatch.instance_id: 2313 / 23058 (0.100312)
+mismatch.instance_id: 2076 / 23058 (0.090034)
 mismatch.last_attack_landed: 103 / 23058 (0.004467)
 mismatch.combo_count: 86 / 23058 (0.003730)
 mismatch.last_hit_by: 112 / 23058 (0.004857)
-mismatch.state_flags: 1456 / 115290 (0.012629)
+mismatch.state_flags: 1457 / 115290 (0.012638)
 mismatch.item_exists: 224 / 172935 (0.001295)
-mismatch.item_type: 247 / 172935 (0.001428)
-mismatch.item_state: 155 / 172935 (0.000896)
-mismatch.item_owner: 233 / 172935 (0.001347)
-mismatch.item_instance_id: 345 / 172935 (0.001995)
+mismatch.item_type: 243 / 172935 (0.001405)
+mismatch.item_state: 154 / 172935 (0.000891)
+mismatch.item_owner: 229 / 172935 (0.001324)
+mismatch.item_instance_id: 340 / 172935 (0.001966)
 err.pos_x: mae=0.082969 p95=0.299999 max=18.720001
 err.pos_y: mae=0.159476 p95=0.267128 max=15.983660
 err.speed_air_x_self: mae=0.078129 p95=0.160000 max=18.719999
@@ -76,40 +76,40 @@ err.speed_y_self: mae=0.050025 p95=0.170000 max=6.986000
 err.speed_x_attack: mae=0.012391 p95=0.044131 max=5.194010
 err.speed_y_attack: mae=0.015964 p95=0.047266 max=6.018493
 err.percent: mae=0.063959 p95=0.000000 max=167.750000
-err.shield_hp: mae=0.005237 p95=0.000000 max=10.500000
-err.item_pos_x: mae=1.835471 p95=0.000000 max=296.966644
-err.item_pos_y: mae=0.723778 p95=0.000000 max=125.424072
-err.item_vel_x: mae=0.079422 p95=0.000000 max=10.000000
+err.shield_hp: mae=0.005601 p95=0.000000 max=10.500000
+err.item_pos_x: mae=1.764323 p95=0.000000 max=296.966644
+err.item_pos_y: mae=0.708663 p95=0.000000 max=125.424072
+err.item_vel_x: mae=0.076848 p95=0.000000 max=10.000000
 err.item_vel_y: mae=0.058750 p95=0.000000 max=6.995884
-overall.discrete_mismatch: 13944 / 1395009
-overall.float_norm_mae_p95: 0.01085703
+overall.discrete_mismatch: 13699 / 1395009
+overall.float_norm_mae_p95: 0.01084133
 
 == datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/QuerulousGrandDinosaur.msl ==
 Records: 10222  Players/scored per record: 2  Total player-frames: 20444
-mismatch.action_id: 1085 / 20444 (0.053072)
-mismatch.action_frame: 2064 / 20444 (0.100959)
+mismatch.action_id: 1086 / 20444 (0.053121)
+mismatch.action_frame: 2065 / 20444 (0.101008)
 mismatch.on_ground: 206 / 20444 (0.010076)
 mismatch.facing: 202 / 20444 (0.009881)
 mismatch.stocks: 0 / 20444 (0.000000)
 mismatch.jumps_left: 242 / 20444 (0.011837)
 mismatch.is_dead: 0 / 20444 (0.000000)
-mismatch.hitlag: 215 / 20444 (0.010517)
+mismatch.hitlag: 217 / 20444 (0.010614)
 mismatch.hitstun: 510 / 20444 (0.024946)
 mismatch.l_cancel: 9 / 20444 (0.000440)
 mismatch.hurtbox_state: 194 / 20444 (0.009489)
 mismatch.ground_id: 53 / 20444 (0.002592)
-mismatch.animation_index: 1063 / 20444 (0.051996)
+mismatch.animation_index: 1064 / 20444 (0.052045)
 mismatch.instance_hit_by: 110 / 20444 (0.005381)
-mismatch.instance_id: 1598 / 20444 (0.078165)
+mismatch.instance_id: 1597 / 20444 (0.078116)
 mismatch.last_attack_landed: 86 / 20444 (0.004207)
 mismatch.combo_count: 67 / 20444 (0.003277)
 mismatch.last_hit_by: 85 / 20444 (0.004158)
-mismatch.state_flags: 1132 / 102220 (0.011074)
+mismatch.state_flags: 1134 / 102220 (0.011094)
 mismatch.item_exists: 127 / 153330 (0.000828)
-mismatch.item_type: 131 / 153330 (0.000854)
+mismatch.item_type: 130 / 153330 (0.000848)
 mismatch.item_state: 106 / 153330 (0.000691)
-mismatch.item_owner: 128 / 153330 (0.000835)
-mismatch.item_instance_id: 167 / 153330 (0.001089)
+mismatch.item_owner: 127 / 153330 (0.000828)
+mismatch.item_instance_id: 165 / 153330 (0.001076)
 err.pos_x: mae=0.079790 p95=0.219999 max=18.784210
 err.pos_y: mae=0.150342 p95=0.275295 max=15.983660
 err.speed_air_x_self: mae=0.065133 p95=0.128864 max=18.719999
@@ -118,56 +118,56 @@ err.speed_y_self: mae=0.041692 p95=0.203333 max=6.986000
 err.speed_x_attack: mae=0.013522 p95=0.036686 max=4.406406
 err.speed_y_attack: mae=0.020143 p95=0.050569 max=8.269767
 err.percent: mae=0.069779 p95=0.000000 max=162.050003
-err.shield_hp: mae=0.004769 p95=0.000000 max=10.500000
-err.item_pos_x: mae=2.316212 p95=1.898500 max=223.601013
-err.item_pos_y: mae=0.384795 p95=0.000000 max=95.865356
+err.shield_hp: mae=0.005077 p95=0.000000 max=10.500000
+err.item_pos_x: mae=2.214489 p95=1.839635 max=223.601013
+err.item_pos_y: mae=0.377741 p95=0.000000 max=95.865356
 err.item_vel_x: mae=0.033579 p95=0.000000 max=7.000000
 err.item_vel_y: mae=0.058126 p95=0.000000 max=4.999367
-overall.discrete_mismatch: 9580 / 1236862
-overall.float_norm_mae_p95: 0.00932959
+overall.discrete_mismatch: 9582 / 1236862
+overall.float_norm_mae_p95: 0.00932535
 
 == datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/TreasuredBackKangaroo.msl ==
 Records: 7837  Players/scored per record: 2  Total player-frames: 15674
 mismatch.action_id: 1009 / 15674 (0.064374)
 mismatch.action_frame: 1885 / 15674 (0.120263)
 mismatch.on_ground: 138 / 15674 (0.008804)
-mismatch.facing: 240 / 15674 (0.015312)
+mismatch.facing: 239 / 15674 (0.015248)
 mismatch.stocks: 0 / 15674 (0.000000)
 mismatch.jumps_left: 208 / 15674 (0.013270)
 mismatch.is_dead: 0 / 15674 (0.000000)
-mismatch.hitlag: 183 / 15674 (0.011675)
+mismatch.hitlag: 181 / 15674 (0.011548)
 mismatch.hitstun: 572 / 15674 (0.036494)
 mismatch.l_cancel: 17 / 15674 (0.001085)
 mismatch.hurtbox_state: 182 / 15674 (0.011612)
 mismatch.ground_id: 20 / 15674 (0.001276)
 mismatch.animation_index: 983 / 15674 (0.062715)
-mismatch.instance_hit_by: 108 / 15674 (0.006890)
-mismatch.instance_id: 1533 / 15674 (0.097805)
-mismatch.last_attack_landed: 82 / 15674 (0.005232)
+mismatch.instance_hit_by: 107 / 15674 (0.006827)
+mismatch.instance_id: 1289 / 15674 (0.082238)
+mismatch.last_attack_landed: 81 / 15674 (0.005168)
 mismatch.combo_count: 87 / 15674 (0.005551)
-mismatch.last_hit_by: 68 / 15674 (0.004338)
-mismatch.state_flags: 1012 / 78370 (0.012913)
+mismatch.last_hit_by: 67 / 15674 (0.004275)
+mismatch.state_flags: 1010 / 78370 (0.012888)
 mismatch.item_exists: 187 / 117555 (0.001591)
-mismatch.item_type: 199 / 117555 (0.001693)
-mismatch.item_state: 146 / 117555 (0.001242)
-mismatch.item_owner: 195 / 117555 (0.001659)
-mismatch.item_instance_id: 260 / 117555 (0.002212)
+mismatch.item_type: 194 / 117555 (0.001650)
+mismatch.item_state: 144 / 117555 (0.001225)
+mismatch.item_owner: 190 / 117555 (0.001616)
+mismatch.item_instance_id: 255 / 117555 (0.002169)
 err.pos_x: mae=0.097341 p95=0.300001 max=18.720001
 err.pos_y: mae=0.165710 p95=0.275604 max=15.983660
-err.speed_air_x_self: mae=0.088703 p95=0.186384 max=18.719999
+err.speed_air_x_self: mae=0.088674 p95=0.186384 max=18.719999
 err.speed_ground_x_self: mae=0.051765 p95=0.080000 max=4.317038
-err.speed_y_self: mae=0.050836 p95=0.213333 max=6.783999
-err.speed_x_attack: mae=0.012953 p95=0.041260 max=4.841560
-err.speed_y_attack: mae=0.021668 p95=0.050702 max=6.897891
-err.percent: mae=0.081749 p95=0.000000 max=159.530014
+err.speed_y_self: mae=0.050717 p95=0.213333 max=6.783999
+err.speed_x_attack: mae=0.012920 p95=0.041260 max=4.841560
+err.speed_y_attack: mae=0.021576 p95=0.050702 max=6.897891
+err.percent: mae=0.081037 p95=0.000000 max=159.530014
 err.shield_hp: mae=0.002677 p95=0.000000 max=8.400002
-err.item_pos_x: mae=2.142544 p95=3.160290 max=427.877502
-err.item_pos_y: mae=0.922831 p95=0.000000 max=125.424088
-err.item_vel_x: mae=0.077369 p95=0.000000 max=12.000000
+err.item_pos_x: mae=2.080914 p95=1.825858 max=427.877502
+err.item_pos_y: mae=0.872551 p95=0.000000 max=125.424088
+err.item_vel_x: mae=0.068933 p95=0.000000 max=12.000000
 err.item_vel_y: mae=0.085589 p95=0.000000 max=6.995884
-overall.discrete_mismatch: 9314 / 948277
-overall.float_norm_mae_p95: 0.01213571
+overall.discrete_mismatch: 9045 / 948277
+overall.float_norm_mae_p95: 0.01209113
 
 == suite summary ==
-overall.discrete_mismatch: 41072 / 4462843
-overall.float_norm_mae_p95: 0.01084142
+overall.discrete_mismatch: 40440 / 4462843
+overall.float_norm_mae_p95: 0.01082579

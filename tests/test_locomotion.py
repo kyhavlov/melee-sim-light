@@ -37,6 +37,10 @@ INTERNALS_DTYPE = np.dtype(
         ("attack_id", ("<u2", (MAX_PLAYERS,))),
         ("attack_instance", ("<u2", (MAX_PLAYERS,))),
         ("attack_identity_last_action_id", ("<u2", (MAX_PLAYERS,))),
+        ("instance_id", ("<u2", (MAX_PLAYERS,))),
+        ("instance_id_x2073", ("u1", (MAX_PLAYERS,))),
+        ("instance_identity_last_action_id", ("<u2", (MAX_PLAYERS,))),
+        ("instance_id_counter", "<u2"),
     ],
     align=False,
 )

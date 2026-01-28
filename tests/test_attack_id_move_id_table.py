@@ -10,10 +10,16 @@ def _read_u16_table(path: Path) -> list[int]:
     buf = path.read_bytes()
     assert buf[:8] == b"MSLACID1"
     (ver,) = struct.unpack_from("<I", buf, 8)
-    assert ver == 1
     (count,) = struct.unpack_from("<H", buf, 12)
-    (toc_off,) = struct.unpack_from("<I", buf, 16)
-    (file_bytes,) = struct.unpack_from("<I", buf, 20)
+    if ver == 1:
+        (toc_off,) = struct.unpack_from("<I", buf, 16)
+        (file_bytes,) = struct.unpack_from("<I", buf, 20)
+    elif ver == 2:
+        (toc_off,) = struct.unpack_from("<I", buf, 16)
+        (_flags_off,) = struct.unpack_from("<I", buf, 20)
+        (file_bytes,) = struct.unpack_from("<I", buf, 24)
+    else:
+        raise AssertionError(f"unsupported MSLACID1 version {ver} in {path}")
     assert file_bytes == len(buf)
     assert toc_off + count * 2 <= len(buf)
     out: list[int] = []

@@ -7,6 +7,7 @@
 #include "char_params.h"
 #include "common_params.h"
 #include "input_axis.h"
+#include "instance_id.h"
 #include "stage_collision.h"
 
 enum { MSL_ANIM_NONE_U32 = 0xFFFFFFFFu };
@@ -325,6 +326,11 @@ void match_flow_update_pre_anim(MslBatch* batch) {
         }
       } else if (a == (uint16_t)MSL_ACT_DEAD_DOWN || a == (uint16_t)MSL_ACT_DEAD_LEFT ||
                  a == (uint16_t)MSL_ACT_DEAD_RIGHT || a == (uint16_t)MSL_ACT_DEAD_UP_STAR) {
+        // Decomp: death processing calls ft_800892D4(fp), which clears fp->x2088 (instance_id) to 0.
+        // refs/melee/src/melee/ft/fighter.c::Fighter_UnkProcessDeath_80068354
+        // refs/melee/build/GALE01/asm/melee/ft/ft_0892.s::ft_800892D4
+        instance_id_reset_ft_800892D4(batch, idx);
+
         if (a == (uint16_t)MSL_ACT_DEAD_UP_STAR) {
           // DeadUpStar stock loss is delayed until late in the animation.
           // Assembly shows the stock-loss event happens when the internal phase-1 timer expires,

@@ -32,6 +32,7 @@ int state_alloc(MslStateSoA* state, int batch_size) {
   state->frame_pre_random_seed = (uint32_t*)alloc_aligned_64(sizeof(uint32_t) * b);
   state->stage_id = (uint32_t*)alloc_aligned_64(sizeof(uint32_t) * b);
   state->stale_attack_instance_counter = (uint16_t*)alloc_aligned_64(sizeof(uint16_t) * b);
+  state->instance_id_counter = (uint16_t*)alloc_aligned_64(sizeof(uint16_t) * b);
   state->match_damage_ratio = (float*)alloc_aligned_64(sizeof(float) * b);
   state->is_teams = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * b);
   state->team_id = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
@@ -162,6 +163,8 @@ int state_alloc(MslStateSoA* state, int batch_size) {
   state->animation_index = (uint32_t*)alloc_aligned_64(sizeof(uint32_t) * bp);
   state->instance_hit_by = (uint16_t*)alloc_aligned_64(sizeof(uint16_t) * bp);
   state->instance_id = (uint16_t*)alloc_aligned_64(sizeof(uint16_t) * bp);
+  state->instance_id_x2073 = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
+  state->instance_identity_last_action_id = (uint16_t*)alloc_aligned_64(sizeof(uint16_t) * bp);
   state->attack_id = (uint16_t*)alloc_aligned_64(sizeof(uint16_t) * bp);
   state->attack_instance = (uint16_t*)alloc_aligned_64(sizeof(uint16_t) * bp);
   state->attack_identity_last_action_id = (uint16_t*)alloc_aligned_64(sizeof(uint16_t) * bp);
@@ -216,7 +219,8 @@ int state_alloc(MslStateSoA* state, int batch_size) {
   state->item_hitlist_victim_iid = (uint16_t*)alloc_aligned_64(sizeof(uint16_t) * bicd);
 
   if (!state->frame_id || !state->frame_pre_random_seed || !state->stage_id ||
-      !state->stale_attack_instance_counter || !state->match_damage_ratio || !state->is_teams ||
+      !state->stale_attack_instance_counter || !state->instance_id_counter ||
+      !state->match_damage_ratio || !state->is_teams ||
       !state->team_id || !state->char_id ||
       !state->attack_ratio || !state->defense_ratio || !state->pos_x || !state->pos_y || !state->pos_z ||
       !state->prev_pos_x || !state->prev_pos_y || !state->speed_air_x_self ||
@@ -253,7 +257,9 @@ int state_alloc(MslStateSoA* state, int batch_size) {
       !state->hitbox_element || !state->hitbox_shield_damage || !state->hitbox_sfx_severity ||
       !state->hitbox_sfx_kind || !state->hitbox_flags || !state->shield_x || !state->shield_y ||
       !state->shield_z || !state->shield_radius || !state->ground_id || !state->animation_index ||
-      !state->instance_hit_by || !state->instance_id || !state->attack_id || !state->attack_instance ||
+      !state->instance_hit_by || !state->instance_id || !state->instance_id_x2073 ||
+      !state->instance_identity_last_action_id ||
+      !state->attack_id || !state->attack_instance ||
       !state->attack_identity_last_action_id ||
       !state->last_attack_landed ||
       !state->combo_count || !state->combo_victim_port || !state->combo_victim_instance_id ||
@@ -285,6 +291,7 @@ void state_free(MslStateSoA* state) {
   alloc_free(state->frame_pre_random_seed);
   alloc_free(state->stage_id);
   alloc_free(state->stale_attack_instance_counter);
+  alloc_free(state->instance_id_counter);
   alloc_free(state->match_damage_ratio);
   alloc_free(state->is_teams);
   alloc_free(state->team_id);
@@ -415,6 +422,8 @@ void state_free(MslStateSoA* state) {
   alloc_free(state->animation_index);
   alloc_free(state->instance_hit_by);
   alloc_free(state->instance_id);
+  alloc_free(state->instance_id_x2073);
+  alloc_free(state->instance_identity_last_action_id);
   alloc_free(state->attack_id);
   alloc_free(state->attack_instance);
   alloc_free(state->attack_identity_last_action_id);
