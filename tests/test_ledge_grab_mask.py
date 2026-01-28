@@ -11,6 +11,7 @@ from tools.eval.dataset import COMPARE_DTYPE, INPUT_DTYPE, SEED_DTYPE
 ACT_WAIT = 0x000E
 ACT_FALL = 0x001D
 ACT_CLIFF_CATCH = 0x00FC
+ACT_CLIFF_WAIT = 0x00FD
 
 # Submotion ids (GALE01): refs/melee/src/melee/ft/chara/ftCommon/forward.h
 SM_WAIT1_0 = 2
@@ -80,6 +81,10 @@ def _seed_base() -> np.ndarray:
 
 
 def _step_once(seed: np.ndarray) -> np.ndarray:
+    return _step_once_with_inputs(seed)
+
+
+def _step_once_with_inputs(seed: np.ndarray, *, prev_inp: np.ndarray | None = None, inp: np.ndarray | None = None) -> np.ndarray:
     import msl_binding
 
     sizes = msl_binding.sizes()
@@ -95,12 +100,16 @@ def _step_once(seed: np.ndarray) -> np.ndarray:
     handle = msl_binding.init(batch_size=1, num_players=2)
     try:
         seed_bytes = seed.view(np.uint8).reshape((1, seed_stride))
-        prev_inp = np.zeros((1, input_stride), dtype=np.uint8)
-        inp = np.zeros((1, input_stride), dtype=np.uint8)
+        if prev_inp is None:
+            prev_inp = np.zeros((1,), dtype=INPUT_DTYPE)
+        if inp is None:
+            inp = np.zeros((1,), dtype=INPUT_DTYPE)
+        prev_inp_bytes = prev_inp.view(np.uint8).reshape((1, input_stride))
+        inp_bytes = inp.view(np.uint8).reshape((1, input_stride))
         out = np.zeros((1, compare_stride), dtype=np.uint8)
 
         msl_binding.reseed_seed(handle, seed_bytes)
-        msl_binding.step_input(handle, prev_inp, inp)
+        msl_binding.step_input(handle, prev_inp_bytes, inp_bytes)
         msl_binding.write_compare(handle, out)
 
         return out.view(COMPARE_DTYPE).reshape((1,))[0]
@@ -142,6 +151,64 @@ def test_ledge_catch_requires_facing_and_outside() -> None:
     # Inside/onstage side (x > ledge_x): should not catch.
     seed["facing"][0, 0] = np.uint8(1)
     seed["pos_x"][0, 0] = np.float32(lx + 1.0)
+    out = _step_once(seed)
+    assert int(out["action_id"][0]) != ACT_CLIFF_CATCH
+
+
+def test_ledge_catch_disabled_by_hold_down() -> None:
+    (lx, ly), _ = _fd_ledge_points()
+    _, snap_y, _ = _fox_ledge_params()
+
+    seed = _seed_base()
+    seed["action_id"][0, 0] = np.uint16(ACT_FALL)
+    seed["action_frame"][0, 0] = np.int16(0)
+    seed["anim_frame_f32"][0, 0] = np.float32(0.0)
+    seed["animation_index"][0, 0] = np.uint32(SM_FALL)
+    seed["on_ground"][0, 0] = np.uint8(0)
+    seed["ground_id"][0, 0] = np.uint16(0)
+    seed["facing"][0, 0] = np.uint8(1)
+
+    seed["pos_x"][0, 0] = np.float32(float(lx - 1.0))
+    seed["pos_y"][0, 0] = np.float32(float(ly - snap_y))
+    seed["speed_y_self"][0, 0] = np.float32(-1.0)
+
+    inp = np.zeros((1,), dtype=INPUT_DTYPE)
+    # Hold down: ftCliffCommon_80081298 disables cliff catch when lstick.y <= -x480.
+    inp["p"]["main_y"][0, 0] = np.int8(-127)
+
+    out = _step_once_with_inputs(seed, inp=inp)
+    assert int(out["action_id"][0]) != ACT_CLIFF_CATCH
+
+
+def test_ledge_catch_blocked_when_ledge_occupied() -> None:
+    (lx, ly), _ = _fd_ledge_points()
+    _snap_x, snap_y, _snap_h = _fox_ledge_params()
+
+    seed = _seed_base()
+
+    # P1: falling offstage attempting to catch left ledge.
+    seed["action_id"][0, 0] = np.uint16(ACT_FALL)
+    seed["action_frame"][0, 0] = np.int16(0)
+    seed["anim_frame_f32"][0, 0] = np.float32(0.0)
+    seed["animation_index"][0, 0] = np.uint32(SM_FALL)
+    seed["on_ground"][0, 0] = np.uint8(0)
+    seed["ground_id"][0, 0] = np.uint16(0)
+    seed["facing"][0, 0] = np.uint8(1)
+    seed["pos_x"][0, 0] = np.float32(float(lx - 1.0))
+    seed["pos_y"][0, 0] = np.float32(float(ly - snap_y))
+    seed["speed_y_self"][0, 0] = np.float32(-1.0)
+
+    # P2: already holding left ledge (occupancy blocks catch).
+    seed["action_id"][0, 1] = np.uint16(ACT_CLIFF_WAIT)
+    seed["action_frame"][0, 1] = np.int16(0)
+    seed["anim_frame_f32"][0, 1] = np.float32(0.0)
+    seed["animation_index"][0, 1] = np.uint32(SM_WAIT1_0)
+    seed["on_ground"][0, 1] = np.uint8(0)
+    seed["ground_id"][0, 1] = np.uint16(0)
+    seed["facing"][0, 1] = np.uint8(1)
+    seed["pos_x"][0, 1] = np.float32(float(lx))
+    seed["pos_y"][0, 1] = np.float32(float(ly))
+
     out = _step_once(seed)
     assert int(out["action_id"][0]) != ACT_CLIFF_CATCH
 

@@ -13,6 +13,7 @@
 #include "coll_env_flags.h"
 #include "common_params.h"
 #include "input_axis.h"
+#include "match_flow.h"
 #include "stage_collision.h"
 
 static inline uint8_t is_cliff_hold_action(uint16_t a) {
@@ -434,6 +435,25 @@ void ledge_try_catch_post_collision(MslBatch* batch) {
       if (batch->state.on_ground[idx]) {
         continue;
       }
+      // Decomp: Fighter_procUpdate and Fighter_procMap collision blocks are gated out during hitlag
+      // (and thus do not run cliff catch checks).
+      // refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate (the `if (!fp->x2219_b5)` block)
+      if (batch->state.hitlag[idx] != 0) {
+        continue;
+      }
+      // Match-flow actions use dedicated (or NULL) collision callbacks in decomp; this lite sim
+      // skips generic stage collision for those motions, and thus should not schedule cliff catch.
+      // refs: src/match_flow.c::match_flow_should_stage_collide
+      if (!match_flow_should_stage_collide(a)) {
+        continue;
+      }
+      // Decomp: if fp->x2064_ledgeCooldown is nonzero, fighter collision uses the mpColl variant
+      // that does not attempt ledge grabs (e.g., mpColl_80047AC8 instead of mpColl_80047E14),
+      // so Collide_LedgeGrabMask will not be set for this collision step.
+      // refs/melee/src/melee/ft/ft_081B.c::ft_80083090_inline
+      if (batch->state.ledge_cooldown[idx] != 0) {
+        continue;
+      }
       // Action gate (suite-focused): only attempt cliff catch from a subset of airborne actions
       // whose collision callbacks include the cliff check in-engine.
       // Decomp: cliff check call sites are in shared collision wrappers that run after mpColl.
@@ -466,118 +486,82 @@ void ledge_try_catch_post_collision(MslBatch* batch) {
         continue;
       }
 
-      const float x = batch->state.pos_x[idx];
-      const float y = batch->state.pos_y[idx];
-
-      // Decomp: mpColl computes per-side ledge-grab bits; attempt only the flagged side(s), breaking
-      // ties by distance.
-      // refs/melee/src/melee/mp/mpcoll.c::mpColl_80047E14
-      int side0 = -1;
-      int side1 = -1;
-      const uint8_t can_left = (uint8_t)((grab_mask & (uint32_t)MSL_COLLIDE_LEFT_LEDGE_GRAB) != 0u);
-      const uint8_t can_right =
-          (uint8_t)((grab_mask & (uint32_t)MSL_COLLIDE_RIGHT_LEDGE_GRAB) != 0u);
-      if (can_left && !can_right) {
-        side0 = 0;
-      } else if (can_right && !can_left) {
-        side0 = 1;
-      } else if (can_left && can_right) {
-        side0 = 0;
-        side1 = 1;
-        if (have_left && have_right) {
-          const float dlx = x - ledge_left.x;
-          const float dly = y - ledge_left.y;
-          const float drx = x - ledge_right.x;
-          const float dry = y - ledge_right.y;
-          const float d0 = dlx * dlx + dly * dly;
-          const float d1 = drx * drx + dry * dry;
-          if (d1 < d0) {
-            side0 = 1;
-            side1 = 0;
-          }
-        }
-      }
-
-      for (int si = 0; si < 2; si++) {
-        const int side = (si == 0) ? side0 : side1;
-        if (!(side == 0 || side == 1)) {
+      // Decomp: ftCliffCommon_80081370 chooses ledge side based on Collide_LeftLedgeGrab (left bit
+      // wins when both bits are present), and does not attempt a second side on failure.
+      // refs/melee/src/melee/ft/ftcliffcommon.c::ftCliffCommon_80081370
+      const int side = (grab_mask & (uint32_t)MSL_COLLIDE_LEFT_LEDGE_GRAB) ? 0 : 1;
+      if (side == 0) {
+        if (!have_left) {
           continue;
         }
-        if (side == 0) {
-          if (!have_left) {
-            continue;
-          }
-          if (batch->state.stage_ledge_occupant_left[bi] >= 0) {
-            continue;
-          }
-
-          // Enter CliffCatch and snap.
-          batch->state.ledge_side[idx] = 0;
-          batch->state.action_id[idx] = (uint16_t)MSL_ACT_CLIFF_CATCH;
-          batch->state.animation_index[idx] = (uint32_t)MSL_SM_CLIFF_CATCH;
-          batch->state.on_ground[idx] = 0;
-          batch->state.fall_fast[idx] = 0;
-          msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
-          // Decomp: ftCliffCommon_80081370 sets facing toward stage and snaps to the ledge point.
-          // refs/melee/src/melee/ft/ftcliffcommon.c::ftCliffCommon_80081370
-          batch->state.facing[idx] = 1;  // left ledge -> face right
-          {
-            // Decomp: ftCo_CliffCatch_Phys snaps to `cliff_point + TransNPos` each frame.
-            // refs/melee/src/melee/ft/ftcliffcommon.c::ftCo_CliffCatch_Phys
-            float t[3] = {0};
-            if (anim_pose_get_transn(batch->state.char_id[idx], (uint16_t)MSL_SM_CLIFF_CATCH, 0, t) ==
-                0) {
-              batch->state.pos_x[idx] = ledge_left.x + (t[2] * ch->model_scaling);
-              batch->state.pos_y[idx] = ledge_left.y + (t[1] * ch->model_scaling);
-            } else {
-              // Fallback (should not happen with extracted pose data present).
-              batch->state.pos_x[idx] = ledge_left.x;
-              batch->state.pos_y[idx] = ledge_left.y + ch->ledge_snap_y;
-            }
-          }
-          batch->state.speed_ground_x_self[idx] = 0.0f;
-          batch->state.speed_air_x_self[idx] = 0.0f;
-          batch->state.speed_y_self[idx] = 0.0f;
-          batch->state.speed_x_attack[idx] = 0.0f;
-          batch->state.speed_y_attack[idx] = 0.0f;
-          batch->state.stage_ledge_occupant_left[bi] = (int8_t)p;
-          break;
-        } else {
-          if (!have_right) {
-            continue;
-          }
-          if (batch->state.stage_ledge_occupant_right[bi] >= 0) {
-            continue;
-          }
-
-          batch->state.ledge_side[idx] = 1;
-          batch->state.action_id[idx] = (uint16_t)MSL_ACT_CLIFF_CATCH;
-          batch->state.animation_index[idx] = (uint32_t)MSL_SM_CLIFF_CATCH;
-          batch->state.on_ground[idx] = 0;
-          batch->state.fall_fast[idx] = 0;
-          msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
-          batch->state.facing[idx] = 0;  // right ledge -> face left
-          {
-            // Decomp: ftCo_CliffCatch_Phys snaps to `cliff_point + TransNPos` each frame.
-            // refs/melee/src/melee/ft/ftcliffcommon.c::ftCo_CliffCatch_Phys
-            float t[3] = {0};
-            if (anim_pose_get_transn(batch->state.char_id[idx], (uint16_t)MSL_SM_CLIFF_CATCH, 0, t) ==
-                0) {
-              batch->state.pos_x[idx] = ledge_right.x + (-t[2] * ch->model_scaling);
-              batch->state.pos_y[idx] = ledge_right.y + (t[1] * ch->model_scaling);
-            } else {
-              batch->state.pos_x[idx] = ledge_right.x;
-              batch->state.pos_y[idx] = ledge_right.y + ch->ledge_snap_y;
-            }
-          }
-          batch->state.speed_ground_x_self[idx] = 0.0f;
-          batch->state.speed_air_x_self[idx] = 0.0f;
-          batch->state.speed_y_self[idx] = 0.0f;
-          batch->state.speed_x_attack[idx] = 0.0f;
-          batch->state.speed_y_attack[idx] = 0.0f;
-          batch->state.stage_ledge_occupant_right[bi] = (int8_t)p;
-          break;
+        if (batch->state.stage_ledge_occupant_left[bi] >= 0) {
+          continue;
         }
+
+        // Enter CliffCatch and snap.
+        batch->state.ledge_side[idx] = 0;
+        batch->state.action_id[idx] = (uint16_t)MSL_ACT_CLIFF_CATCH;
+        batch->state.animation_index[idx] = (uint32_t)MSL_SM_CLIFF_CATCH;
+        batch->state.on_ground[idx] = 0;
+        batch->state.fall_fast[idx] = 0;
+        msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+        // Decomp: ftCliffCommon_80081370 sets facing toward stage and snaps to the ledge point.
+        // refs/melee/src/melee/ft/ftcliffcommon.c::ftCliffCommon_80081370
+        batch->state.facing[idx] = 1;  // left ledge -> face right
+        {
+          // Decomp: ftCo_CliffCatch_Phys snaps to `cliff_point + TransNPos` each frame.
+          // refs/melee/src/melee/ft/ftcliffcommon.c::ftCo_CliffCatch_Phys
+          float t[3] = {0};
+          if (anim_pose_get_transn(batch->state.char_id[idx], (uint16_t)MSL_SM_CLIFF_CATCH, 0, t) ==
+              0) {
+            batch->state.pos_x[idx] = ledge_left.x + (t[2] * ch->model_scaling);
+            batch->state.pos_y[idx] = ledge_left.y + (t[1] * ch->model_scaling);
+          } else {
+            // Fallback (should not happen with extracted pose data present).
+            batch->state.pos_x[idx] = ledge_left.x;
+            batch->state.pos_y[idx] = ledge_left.y + ch->ledge_snap_y;
+          }
+        }
+        batch->state.speed_ground_x_self[idx] = 0.0f;
+        batch->state.speed_air_x_self[idx] = 0.0f;
+        batch->state.speed_y_self[idx] = 0.0f;
+        batch->state.speed_x_attack[idx] = 0.0f;
+        batch->state.speed_y_attack[idx] = 0.0f;
+        batch->state.stage_ledge_occupant_left[bi] = (int8_t)p;
+      } else {
+        if (!have_right) {
+          continue;
+        }
+        if (batch->state.stage_ledge_occupant_right[bi] >= 0) {
+          continue;
+        }
+
+        batch->state.ledge_side[idx] = 1;
+        batch->state.action_id[idx] = (uint16_t)MSL_ACT_CLIFF_CATCH;
+        batch->state.animation_index[idx] = (uint32_t)MSL_SM_CLIFF_CATCH;
+        batch->state.on_ground[idx] = 0;
+        batch->state.fall_fast[idx] = 0;
+        msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+        batch->state.facing[idx] = 0;  // right ledge -> face left
+        {
+          // Decomp: ftCo_CliffCatch_Phys snaps to `cliff_point + TransNPos` each frame.
+          // refs/melee/src/melee/ft/ftcliffcommon.c::ftCo_CliffCatch_Phys
+          float t[3] = {0};
+          if (anim_pose_get_transn(batch->state.char_id[idx], (uint16_t)MSL_SM_CLIFF_CATCH, 0, t) ==
+              0) {
+            batch->state.pos_x[idx] = ledge_right.x + (-t[2] * ch->model_scaling);
+            batch->state.pos_y[idx] = ledge_right.y + (t[1] * ch->model_scaling);
+          } else {
+            batch->state.pos_x[idx] = ledge_right.x;
+            batch->state.pos_y[idx] = ledge_right.y + ch->ledge_snap_y;
+          }
+        }
+        batch->state.speed_ground_x_self[idx] = 0.0f;
+        batch->state.speed_air_x_self[idx] = 0.0f;
+        batch->state.speed_y_self[idx] = 0.0f;
+        batch->state.speed_x_attack[idx] = 0.0f;
+        batch->state.speed_y_attack[idx] = 0.0f;
+        batch->state.stage_ledge_occupant_right[bi] = (int8_t)p;
       }
     }
   }
