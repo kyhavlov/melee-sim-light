@@ -438,6 +438,32 @@ typedef struct MslDebugInternals {
   uint16_t instance_id_counter;
 } MslDebugInternals;
 
+// Debug/test-only helper: write per-player stage collision contact metadata.
+//
+// Not a stable API: intended for suite debugging and synthetic tests only, and may change/remove
+// fields without a seed/compare schema version bump.
+//
+// Mirrors the subset of CollData tracked by this lite sim's mpColl substrates.
+typedef struct MslDebugCollisionContacts {
+  uint8_t wall_kind[MSL_MAX_PLAYERS];  // 0=none, 1=left_wall, 2=right_wall
+  uint8_t _pad0[MSL_MAX_PLAYERS];
+  uint16_t wall_id[MSL_MAX_PLAYERS];  // ISO-derived segment index, or 0xFFFF
+  float wall_contact_x[MSL_MAX_PLAYERS];
+  float wall_contact_y[MSL_MAX_PLAYERS];
+  float wall_normal_x[MSL_MAX_PLAYERS];
+  float wall_normal_y[MSL_MAX_PLAYERS];
+
+  uint16_t ceiling_id[MSL_MAX_PLAYERS];  // ISO-derived segment index, or 0xFFFF
+  uint16_t _pad1[MSL_MAX_PLAYERS];
+  float ceiling_contact_x[MSL_MAX_PLAYERS];
+  float ceiling_contact_y[MSL_MAX_PLAYERS];
+  float ceiling_normal_x[MSL_MAX_PLAYERS];
+  float ceiling_normal_y[MSL_MAX_PLAYERS];
+
+  uint32_t coll_env_flags[MSL_MAX_PLAYERS];
+  uint32_t coll_prev_env_flags[MSL_MAX_PLAYERS];
+} MslDebugCollisionContacts;
+
 // Debug/validation helper: record a single hitbox-vs-hurtcap contact candidate.
 // This is a compact snapshot of the world-space primitives used in combat pass 1.
 typedef struct MslDebugCombatContact {
@@ -550,6 +576,11 @@ int msl_batch_debug_write_processed_input(const MslBatch* batch, uint8_t* out_by
 // out_stride_bytes must be >= sizeof(MslDebugInternals).
 int msl_batch_debug_write_internals(const MslBatch* batch, uint8_t* out_bytes,
                                     size_t out_stride_bytes);
+
+// Debug/test-only helper: write stage collision contacts (length batch_size).
+// out_stride_bytes must be >= sizeof(MslDebugCollisionContacts).
+int msl_batch_debug_write_collision_contacts(const MslBatch* batch, uint8_t* out_bytes,
+                                             size_t out_stride_bytes);
 
 // Debug/validation helper: force an animation timebase reset for a single fighter without
 // changing action_id (test-only). This is useful to validate that mechanics keyed to action

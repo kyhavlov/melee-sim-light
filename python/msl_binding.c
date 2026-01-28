@@ -971,6 +971,38 @@ static PyObject* msl_debug_write_internals(PyObject* self, PyObject* args) {
   Py_RETURN_NONE;
 }
 
+static PyObject* msl_debug_write_collision_contacts(PyObject* self, PyObject* args) {
+  PyObject* handle_obj = NULL;
+  PyObject* out_obj = NULL;
+  if (!PyArg_ParseTuple(args, "OO", &handle_obj, &out_obj)) {
+    return NULL;
+  }
+  PyMslHandle* h = unpack_handle(handle_obj);
+  if (h == NULL) {
+    return NULL;
+  }
+
+  PyArrayObject* out = require_contiguous_array(out_obj, NPY_UINT8, 2, "out");
+  if (out == NULL) {
+    return NULL;
+  }
+  if (PyArray_DIM(out, 1) < (npy_intp)sizeof(MslDebugCollisionContacts)) {
+    PyErr_SetString(PyExc_ValueError, "out second dim too small for MslDebugCollisionContacts");
+    return NULL;
+  }
+
+  uint8_t* out_bytes = (uint8_t*)PyArray_DATA(out);
+  const size_t stride = (size_t)PyArray_STRIDE(out, 0);
+
+  const int err = msl_batch_debug_write_collision_contacts(h->batch, out_bytes, stride);
+  if (err != 0) {
+    PyErr_Format(PyExc_RuntimeError, "msl_batch_debug_write_collision_contacts failed: %d", err);
+    return NULL;
+  }
+
+  Py_RETURN_NONE;
+}
+
 static PyObject* msl_debug_force_anim_timebase_enter(PyObject* self, PyObject* args) {
   (void)self;
   PyObject* handle_obj = NULL;
@@ -997,10 +1029,11 @@ static PyObject* msl_debug_force_anim_timebase_enter(PyObject* self, PyObject* a
 }
 
 static PyObject* msl_sizes(PyObject* self, PyObject* args) {
-  return Py_BuildValue("{s:i,s:i,s:i,s:i,s:i,s:i}", "seed", (int)sizeof(MslSeed), "input",
-                       (int)sizeof(MslInput), "compare", (int)sizeof(MslCompare), "sample",
-                       (int)sizeof(MslSample), "processed_input", (int)sizeof(MslProcessedInput),
-                       "internals", (int)sizeof(MslDebugInternals));
+  return Py_BuildValue(
+      "{s:i,s:i,s:i,s:i,s:i,s:i,s:i}", "seed", (int)sizeof(MslSeed), "input", (int)sizeof(MslInput),
+      "compare", (int)sizeof(MslCompare), "sample", (int)sizeof(MslSample), "processed_input",
+      (int)sizeof(MslProcessedInput), "internals", (int)sizeof(MslDebugInternals),
+      "collision_contacts", (int)sizeof(MslDebugCollisionContacts));
 }
 
 static PyObject* msl_alloc_reset(PyObject* self, PyObject* args) {
@@ -2134,6 +2167,8 @@ static PyMethodDef methods[] = {
      "debug_write_processed_input(handle, out_bytes)"},
     {"debug_write_internals", msl_debug_write_internals, METH_VARARGS,
      "debug_write_internals(handle, out_bytes)"},
+    {"debug_write_collision_contacts", msl_debug_write_collision_contacts, METH_VARARGS,
+     "debug_write_collision_contacts(handle, out_bytes)"},
     {"debug_force_anim_timebase_enter", msl_debug_force_anim_timebase_enter, METH_VARARGS,
      "debug_force_anim_timebase_enter(handle, batch_index, player_index, anim_start, anim_speed)"},
     {"sizes", msl_sizes, METH_NOARGS, "sizes() -> dict of struct sizes"},

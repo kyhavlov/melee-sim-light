@@ -93,7 +93,7 @@ static void floor_ed5c_endpoints(const MslStageFloorGraph* g, int line_idx, floa
 
   float dist = 0.0f;
   uint8_t have_dist = 0;
-  if (l->prev >= 0) {
+  if (l->has_prev_link) {
     const float dx = x0 - x1;
     const float dy = y0 - y1;
     dist = sqrtf(dx * dx + dy * dy);
@@ -103,7 +103,7 @@ static void floor_ed5c_endpoints(const MslStageFloorGraph* g, int line_idx, floa
       y0 += (dy / dist) * k_floor_ed5c_extend;
     }
   }
-  if (l->next >= 0) {
+  if (l->has_next_link) {
     if (!have_dist) {
       const float dx = x0 - x1;
       const float dy = y0 - y1;

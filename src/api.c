@@ -243,6 +243,17 @@ int msl_batch_reseed_seed(MslBatch* batch, const uint8_t* seed_bytes, size_t see
       batch->state.ground_contact_y[idx] = 0.0f;
       batch->state.ground_normal_x[idx] = 0.0f;
       batch->state.ground_normal_y[idx] = 1.0f;
+      batch->state.wall_contact_x[idx] = 0.0f;
+      batch->state.wall_contact_y[idx] = 0.0f;
+      batch->state.wall_normal_x[idx] = 0.0f;
+      batch->state.wall_normal_y[idx] = 0.0f;
+      batch->state.wall_id[idx] = 0xFFFFu;
+      batch->state.wall_kind[idx] = 0u;
+      batch->state.ceiling_contact_x[idx] = 0.0f;
+      batch->state.ceiling_contact_y[idx] = 0.0f;
+      batch->state.ceiling_normal_x[idx] = 0.0f;
+      batch->state.ceiling_normal_y[idx] = 0.0f;
+      batch->state.ceiling_id[idx] = 0xFFFFu;
       batch->state.coll_env_flags[idx] = 0u;
       batch->state.coll_prev_env_flags[idx] = 0u;
 
@@ -636,6 +647,42 @@ int msl_batch_debug_write_internals(const MslBatch* batch, uint8_t* out_bytes,
     }
   }
 
+  return 0;
+}
+
+int msl_batch_debug_write_collision_contacts(const MslBatch* batch, uint8_t* out_bytes,
+                                             size_t out_stride_bytes) {
+  if (batch == NULL || out_bytes == NULL) {
+    return EINVAL;
+  }
+  if (out_stride_bytes < sizeof(MslDebugCollisionContacts)) {
+    return EINVAL;
+  }
+
+  for (int bi = 0; bi < batch->batch_size; bi++) {
+    uint8_t* ptr = out_bytes + (size_t)bi * out_stride_bytes;
+    MslDebugCollisionContacts* out = (MslDebugCollisionContacts*)ptr;
+    memset(out, 0, sizeof(*out));
+
+    for (int p = 0; p < MSL_MAX_PLAYERS; p++) {
+      const size_t idx = msl_idx_player(bi, p);
+      out->wall_kind[p] = batch->state.wall_kind[idx];
+      out->wall_id[p] = batch->state.wall_id[idx];
+      out->wall_contact_x[p] = batch->state.wall_contact_x[idx];
+      out->wall_contact_y[p] = batch->state.wall_contact_y[idx];
+      out->wall_normal_x[p] = batch->state.wall_normal_x[idx];
+      out->wall_normal_y[p] = batch->state.wall_normal_y[idx];
+
+      out->ceiling_id[p] = batch->state.ceiling_id[idx];
+      out->ceiling_contact_x[p] = batch->state.ceiling_contact_x[idx];
+      out->ceiling_contact_y[p] = batch->state.ceiling_contact_y[idx];
+      out->ceiling_normal_x[p] = batch->state.ceiling_normal_x[idx];
+      out->ceiling_normal_y[p] = batch->state.ceiling_normal_y[idx];
+
+      out->coll_env_flags[p] = batch->state.coll_env_flags[idx];
+      out->coll_prev_env_flags[p] = batch->state.coll_prev_env_flags[idx];
+    }
+  }
   return 0;
 }
 

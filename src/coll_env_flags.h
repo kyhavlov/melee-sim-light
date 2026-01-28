@@ -14,6 +14,22 @@
 // - refs/melee/src/melee/mp/mpcoll.c (sets Collide_* bits during stage collision)
 
 enum {
+  // Wall contact.
+  // refs/melee/src/common_structs.h
+  MSL_COLLIDE_LEFT_WALL_PUSH = 0x00000001u,  // Collide_LeftWallPush
+  MSL_COLLIDE_LEFT_WALL_HUG = 0x00000020u,   // Collide_LeftWallHug
+  MSL_COLLIDE_LEFT_WALL_MASK = 0x0000003Fu,  // Collide_LeftWallMask
+  MSL_COLLIDE_RIGHT_WALL_PUSH = 0x00000040u,  // Collide_RightWallPush
+  MSL_COLLIDE_RIGHT_WALL_HUG = 0x00000800u,   // Collide_RightWallHug
+  MSL_COLLIDE_RIGHT_WALL_MASK = 0x00000FC0u,  // Collide_RightWallMask
+  MSL_COLLIDE_WALL_MASK = (0x0000003Fu | 0x00000FC0u),
+
+  // Ceiling contact.
+  // refs/melee/src/common_structs.h
+  MSL_COLLIDE_CEILING_PUSH = 0x00002000u,  // Collide_CeilingPush
+  MSL_COLLIDE_CEILING_HUG = 0x00004000u,   // Collide_CeilingHug
+  MSL_COLLIDE_CEILING_MASK = (0x00002000u | 0x00004000u),
+
   // Floor contact.
   // refs/melee/src/common_structs.h
   MSL_COLLIDE_FLOOR_PUSH = 0x00008000u,  // Collide_FloorPush
@@ -32,4 +48,3 @@ enum {
   MSL_COLLIDE_RIGHT_LEDGE_GRAB = 0x02000000u,  // Collide_RightLedgeGrab
   MSL_COLLIDE_LEDGE_GRAB_MASK = (0x01000000u | 0x02000000u),
 };
-

@@ -58,6 +58,17 @@ int state_alloc(MslStateSoA* state, int batch_size) {
   state->ground_contact_y = (float*)alloc_aligned_64(sizeof(float) * bp);
   state->ground_normal_x = (float*)alloc_aligned_64(sizeof(float) * bp);
   state->ground_normal_y = (float*)alloc_aligned_64(sizeof(float) * bp);
+  state->wall_contact_x = (float*)alloc_aligned_64(sizeof(float) * bp);
+  state->wall_contact_y = (float*)alloc_aligned_64(sizeof(float) * bp);
+  state->wall_normal_x = (float*)alloc_aligned_64(sizeof(float) * bp);
+  state->wall_normal_y = (float*)alloc_aligned_64(sizeof(float) * bp);
+  state->wall_id = (uint16_t*)alloc_aligned_64(sizeof(uint16_t) * bp);
+  state->wall_kind = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
+  state->ceiling_contact_x = (float*)alloc_aligned_64(sizeof(float) * bp);
+  state->ceiling_contact_y = (float*)alloc_aligned_64(sizeof(float) * bp);
+  state->ceiling_normal_x = (float*)alloc_aligned_64(sizeof(float) * bp);
+  state->ceiling_normal_y = (float*)alloc_aligned_64(sizeof(float) * bp);
+  state->ceiling_id = (uint16_t*)alloc_aligned_64(sizeof(uint16_t) * bp);
   state->coll_env_flags = (uint32_t*)alloc_aligned_64(sizeof(uint32_t) * bp);
   state->coll_prev_env_flags = (uint32_t*)alloc_aligned_64(sizeof(uint32_t) * bp);
 
@@ -230,8 +241,12 @@ int state_alloc(MslStateSoA* state, int batch_size) {
       !state->speed_ground_x_self || !state->speed_y_self || !state->speed_x_attack ||
       !state->speed_y_attack || !state->fighter_scale_y || !state->facing || !state->on_ground ||
       !state->prev_on_ground || !state->ground_contact_x || !state->ground_contact_y ||
-      !state->ground_normal_x || !state->ground_normal_y || !state->coll_env_flags ||
-      !state->coll_prev_env_flags || !state->action_id || !state->prev_action_id ||
+      !state->ground_normal_x || !state->ground_normal_y || !state->wall_contact_x ||
+      !state->wall_contact_y || !state->wall_normal_x || !state->wall_normal_y || !state->wall_id ||
+      !state->wall_kind || !state->ceiling_contact_x || !state->ceiling_contact_y ||
+      !state->ceiling_normal_x || !state->ceiling_normal_y || !state->ceiling_id ||
+      !state->coll_env_flags || !state->coll_prev_env_flags || !state->action_id ||
+      !state->prev_action_id ||
       !state->action_frame || !state->match_flow_timer || !state->downwait_timer ||
       !state->anim_frame_f32 || !state->anim_frame_fp_q16_16 || !state->frame_speed_mul_fp_q16_16 ||
       !state->jumps_left || !state->stocks || !state->guard_tilt_x8 || !state->guard_tilt_x4 ||
@@ -319,6 +334,17 @@ void state_free(MslStateSoA* state) {
   alloc_free(state->ground_contact_y);
   alloc_free(state->ground_normal_x);
   alloc_free(state->ground_normal_y);
+  alloc_free(state->wall_contact_x);
+  alloc_free(state->wall_contact_y);
+  alloc_free(state->wall_normal_x);
+  alloc_free(state->wall_normal_y);
+  alloc_free(state->wall_id);
+  alloc_free(state->wall_kind);
+  alloc_free(state->ceiling_contact_x);
+  alloc_free(state->ceiling_contact_y);
+  alloc_free(state->ceiling_normal_x);
+  alloc_free(state->ceiling_normal_y);
+  alloc_free(state->ceiling_id);
   alloc_free(state->coll_env_flags);
   alloc_free(state->coll_prev_env_flags);
 

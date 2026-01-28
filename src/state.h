@@ -48,6 +48,20 @@ typedef struct MslStateSoA {
   float* ground_contact_y;
   float* ground_normal_x;
   float* ground_normal_y;
+  // Collision contact metadata owned by mpColl wall substrate (FD-only v1).
+  // - wall_kind: 0 = none, 1 = left_wall, 2 = right_wall (mplib/mpColl naming).
+  float* wall_contact_x;
+  float* wall_contact_y;
+  float* wall_normal_x;
+  float* wall_normal_y;
+  uint16_t* wall_id;   // ISO-derived segment index (stable id).
+  uint8_t* wall_kind;  // 0/1/2
+  // Collision contact metadata owned by mpColl ceiling substrate (FD-only v1).
+  float* ceiling_contact_x;
+  float* ceiling_contact_y;
+  float* ceiling_normal_x;
+  float* ceiling_normal_y;
+  uint16_t* ceiling_id;  // ISO-derived segment index (stable id).
   uint32_t* coll_env_flags;
   uint32_t* coll_prev_env_flags;
 
