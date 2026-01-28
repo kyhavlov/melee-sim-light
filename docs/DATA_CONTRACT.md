@@ -32,6 +32,25 @@ Characters (Fox/Falco):
 - `data/characters/fox.json`, `data/characters/falco.json` (movement/ecb/laser/reflector attrs; decomp-first)
   - `ecb_joints`: 6 `s16` indices into `fp->parts[]` (as stored in `ftData_x44_t`).
     Decomp: `ft_80081B38` calls `mpColl_SetECBSource_JObj(..., bones[temp_r29->unk*].joint, ...)`.
+- `data/attack_id/move_id/fox.bin`, `data/attack_id/move_id/falco.bin` (motion-state → `FtMoveId` mapping; decomp-first, compact binary)
+  - Purpose: drive fighter attack identity parity (`fp->x2068_attackID` / `fp->x206C_attack_instance`) from real
+    **action transitions** using MotionState `move_id` (not msid→move_id fallbacks).
+  - Sources:
+    - `refs/melee/src/melee/ft/ftmotionstates.c::ftData_MotionStateList` (common motion states)
+    - `refs/melee/src/melee/ft/chara/ftFox/ftFx_Init.c::ftFx_Init_MotionStateTable` (Fox self states)
+    - `refs/melee/src/melee/ft/chara/ftFalco/ftFc_Init.c::ftFc_Init_MotionStateTable` (Falco self states)
+  - Binary layout: `MSLACID1` v1 (little-endian, dense `u16` table indexed by GALE01 `action_id`)
+    - `u8  magic[8] = "MSLACID1"`
+    - `u32 version = 1`
+    - `u16 action_count` (table length; `action_id` is the index)
+    - `u16 reserved = 0`
+    - `u32 toc_off` (byte offset to `move_id[action_count]`; currently fixed to header size)
+    - `u32 file_bytes` (total file size in bytes; must match on-disk length)
+    - `u16 move_id[action_count]`
+      - `0xFFFF` = unknown/absent; loaders must treat this as `FtMoveId_Default` (decomp value 1)
+  - Runtime update rule:
+    - `Fighter_ChangeMotionState` calls `ft_800890D0(fp, new_motion_state->move_id)`.
+      Decomp: `refs/melee/src/melee/ft/fighter.c`, `refs/melee/src/melee/ft/ft_0881.c::ft_800890D0`.
 - `data/shields/fox.bin`, `data/shields/falco.bin` (guard-tilt shield bubble centers; decomp-first, compact binary)
 - `data/hurtcaps/fox.bin`, `data/hurtcaps/falco.bin` (hurt capsule init tables; decomp-first, compact binary)
 - `data/hurtcaps/fox.json`, `data/hurtcaps/falco.json` (hurt capsule init tables; debug-friendly mirror; C loads `.bin` only)

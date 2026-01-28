@@ -971,6 +971,31 @@ static PyObject* msl_debug_write_internals(PyObject* self, PyObject* args) {
   Py_RETURN_NONE;
 }
 
+static PyObject* msl_debug_force_anim_timebase_enter(PyObject* self, PyObject* args) {
+  (void)self;
+  PyObject* handle_obj = NULL;
+  int batch_index = 0;
+  int player_index = 0;
+  double anim_start = 0.0;
+  double anim_speed = 0.0;
+  if (!PyArg_ParseTuple(args, "Oiidd", &handle_obj, &batch_index, &player_index, &anim_start,
+                        &anim_speed)) {
+    return NULL;
+  }
+  PyMslHandle* h = unpack_handle(handle_obj);
+  if (h == NULL) {
+    return NULL;
+  }
+  const int err =
+      msl_batch_debug_force_anim_timebase_enter(h->batch, batch_index, player_index, (float)anim_start,
+                                                (float)anim_speed);
+  if (err != 0) {
+    PyErr_Format(PyExc_RuntimeError, "msl_batch_debug_force_anim_timebase_enter failed: %d", err);
+    return NULL;
+  }
+  Py_RETURN_NONE;
+}
+
 static PyObject* msl_sizes(PyObject* self, PyObject* args) {
   return Py_BuildValue("{s:i,s:i,s:i,s:i,s:i,s:i}", "seed", (int)sizeof(MslSeed), "input",
                        (int)sizeof(MslInput), "compare", (int)sizeof(MslCompare), "sample",
@@ -2109,6 +2134,8 @@ static PyMethodDef methods[] = {
      "debug_write_processed_input(handle, out_bytes)"},
     {"debug_write_internals", msl_debug_write_internals, METH_VARARGS,
      "debug_write_internals(handle, out_bytes)"},
+    {"debug_force_anim_timebase_enter", msl_debug_force_anim_timebase_enter, METH_VARARGS,
+     "debug_force_anim_timebase_enter(handle, batch_index, player_index, anim_start, anim_speed)"},
     {"sizes", msl_sizes, METH_NOARGS, "sizes() -> dict of struct sizes"},
     {"alloc_reset", msl_alloc_reset, METH_NOARGS,
      "Reset C allocation counters (debug/perf guardrail)."},

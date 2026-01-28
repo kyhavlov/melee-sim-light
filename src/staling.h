@@ -32,6 +32,8 @@ float staling_multiplier_for_move(const MslBatch* batch, size_t fighter_idx, uin
 void staling_queue_update(MslBatch* batch, size_t fighter_idx, uint16_t move_id,
                           uint16_t attack_instance);
 
-// Convenience helper: map current (char_id, animation_index low16) to a FtMoveId move_id.
+// Convenience helper: return the fighter-side FtMoveId for the current motion state.
+// In GALE01 this is fp->x2068_attackID, updated on motion-state changes via ft_800890D0.
+// refs/melee/src/melee/ft/ft_0881.c::ft_800890D0
 // Returns 0xFFFF if unknown.
 uint16_t staling_move_id_from_state(const MslBatch* batch, size_t fighter_idx);

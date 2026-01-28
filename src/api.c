@@ -25,6 +25,7 @@
 #include "laser_params.h"
 #include "stage_collision.h"
 #include "staling_tables.h"
+#include "attack_id_tables.h"
 #include "state.h"
 #include "step.h"
 
@@ -86,6 +87,13 @@ MslBatch* msl_batch_create(int batch_size, int num_players) {
 
   // Staling tables are optional (groundwork only): missing artifacts should not prevent running.
   (void)staling_tables_init();
+
+  // Fighter attack identity (x2068/x206C) uses decomp-derived MotionState move_id tables.
+  // Require these tables at init: attack identity and staling attribution depend on them.
+  if (attack_id_tables_init() != 0) {
+    msl_batch_destroy(batch);
+    return NULL;
+  }
 
   if (anim_table_init() != 0) {
     msl_batch_destroy(batch);
@@ -174,6 +182,11 @@ int msl_batch_reseed_seed(MslBatch* batch, const uint8_t* seed_bytes, size_t see
   for (int bi = 0; bi < batch->batch_size; bi++) {
     const uint8_t* ptr = seed_bytes + (size_t)bi * seed_stride_bytes;
     const MslSeed* seed = (const MslSeed*)ptr;
+
+    // Initialize the per-environment global stale attack instance counter from seeded values.
+    // We don't currently store the counter explicitly in the seed schema; instead, choose the
+    // next value after the maximum already present in the seeded snapshots.
+    uint16_t max_attack_inst = 0;
 
     batch->state.frame_id[bi] = seed->frame_id;
     batch->state.frame_pre_random_seed[bi] = seed->frame_pre_random_seed;
@@ -326,12 +339,17 @@ int msl_batch_reseed_seed(MslBatch* batch, const uint8_t* seed_bytes, size_t see
       batch->state.instance_id[idx] = seed->instance_id[p];
       batch->state.attack_id[idx] = seed->attack_id[p];
       batch->state.attack_instance[idx] = seed->attack_instance[p];
+      batch->state.attack_identity_last_action_id[idx] = seed->action_id[p];
       batch->state.last_attack_landed[idx] = seed->last_attack_landed[p];
       batch->state.combo_count[idx] = seed->combo_count[p];
       batch->state.combo_victim_port[idx] = seed->combo_victim_port[p];
       batch->state.combo_victim_instance_id[idx] = seed->combo_victim_instance_id[p];
       batch->state.combo_timer_x2098[idx] = seed->combo_timer_x2098[p];
       batch->state.last_hit_by[idx] = seed->last_hit_by[p];
+
+      if (seed->attack_instance[p] > max_attack_inst) {
+        max_attack_inst = seed->attack_instance[p];
+      }
 
       for (int k = 0; k < 5; k++) {
         batch->state.state_flags[idx * 5 + (size_t)k] = seed->state_flags[p][k];
@@ -348,6 +366,9 @@ int msl_batch_reseed_seed(MslBatch* batch, const uint8_t* seed_bytes, size_t see
         batch->state.stale_move_id[stale_base + (size_t)k] = seed->stale_move_id[p][k];
         batch->state.stale_attack_instance[stale_base + (size_t)k] =
             seed->stale_attack_instance[p][k];
+        if (seed->stale_attack_instance[p][k] > max_attack_inst) {
+          max_attack_inst = seed->stale_attack_instance[p][k];
+        }
       }
     }
 
@@ -361,6 +382,9 @@ int msl_batch_reseed_seed(MslBatch* batch, const uint8_t* seed_bytes, size_t see
       batch->state.item_instance_id[ii] = item->instance_id;
       batch->state.item_attack_id[ii] = item->attack_id;
       batch->state.item_attack_instance[ii] = item->attack_instance;
+      if (item->attack_instance > max_attack_inst) {
+        max_attack_inst = item->attack_instance;
+      }
       batch->state.item_direction[ii] = item->direction;
       batch->state.item_vel_x[ii] = item->vel_x;
       batch->state.item_vel_y[ii] = item->vel_y;
@@ -382,6 +406,13 @@ int msl_batch_reseed_seed(MslBatch* batch, const uint8_t* seed_bytes, size_t see
         batch->state.item_hitlist_victim_iid[cd_base + (size_t)v] = 0;
       }
     }
+
+    // Next value for plStale_IncrementAttackInstance (global counter).
+    uint16_t next = (uint16_t)(max_attack_inst + 1u);
+    if (next == 0) {
+      next = 1;
+    }
+    batch->state.stale_attack_instance_counter[bi] = next;
 
     // Combat hitlists are part of the reseed schema (teacher-forced one-step eval).
     const size_t base =
@@ -547,9 +578,28 @@ int msl_batch_debug_write_internals(const MslBatch* batch, uint8_t* out_bytes,
       out->tilt_timer_x[p] = batch->state.tilt_timer_x[idx];
       out->turn_frames_to_turn[p] = batch->state.turn_frames_to_turn[idx];
       out->turn_has_turned[p] = batch->state.turn_has_turned[idx];
+      out->attack_id[p] = batch->state.attack_id[idx];
+      out->attack_instance[p] = batch->state.attack_instance[idx];
+      out->attack_identity_last_action_id[p] = batch->state.attack_identity_last_action_id[idx];
     }
   }
 
+  return 0;
+}
+
+int msl_batch_debug_force_anim_timebase_enter(MslBatch* batch, int batch_index, int player_index,
+                                              float anim_start_f32, float anim_speed_f32) {
+  if (batch == NULL) {
+    return EINVAL;
+  }
+  if (batch_index < 0 || batch_index >= batch->batch_size) {
+    return EINVAL;
+  }
+  if (player_index < 0 || player_index >= MSL_MAX_PLAYERS) {
+    return EINVAL;
+  }
+  const size_t idx = msl_idx_player(batch_index, player_index);
+  msl_anim_timebase_enter(batch, idx, anim_start_f32, anim_speed_f32);
   return 0;
 }
 

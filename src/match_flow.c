@@ -3,6 +3,7 @@
 #include "action_ids.h"
 #include "anim_table.h"
 #include "anim_timebase.h"
+#include "attack_identity.h"
 #include "char_params.h"
 #include "common_params.h"
 #include "input_axis.h"
@@ -145,6 +146,11 @@ static inline void enter_entry_end(MslBatch* batch, size_t idx, const MslCommonP
   batch->state.speed_x_attack[idx] = 0.0f;
   batch->state.speed_y_attack[idx] = 0.0f;
 
+  // Decomp: Fighter_ChangeMotionState callsite would have updated (x2068/x206C) on EntryEnd entry.
+  // refs/melee/src/melee/ft/fighter.c (Fighter_ChangeMotionState)
+  // refs/melee/src/melee/ft/ft_0881.c::ft_800890D0
+  attack_identity_on_motion_state_change_ft_800890D0(batch, idx);
+
   // EntryEnd is observed with no submotion in the suite (animation_index=0xFFFFFFFF),
   // with action_frame=-1 and state_age=-1.
   freeze_no_submotion_timebase(batch, idx);
@@ -166,6 +172,11 @@ static inline void enter_rebirth(MslBatch* batch, size_t idx, const MslCommonPar
       !stage_collision_get_respawn_point(stage_id, port0, &respawn)) {
     return;
   }
+
+  // Decomp: respawn processing calls ft_800890BC (reset to attackID=1, instance=0).
+  // refs/melee/src/melee/ft/fighter.c::Fighter_UnkProcessDeath_80068354
+  // refs/melee/src/melee/ft/ft_0881.c::ft_800890BC
+  attack_identity_reset_ft_800890BC(batch, idx);
 
   // Decomp: respawn starts at camera top (world) and falls to the spawn platform.
   // refs/melee/src/melee/gr/stage.c::Stage_GetCamBoundsTopOffset
@@ -523,6 +534,11 @@ void match_flow_update_post_physics(MslBatch* batch) {
       batch->state.speed_y_attack[idx] = 0.0f;
       batch->state.hitlag[idx] = 0;
       batch->state.hitstun[idx] = 0;
+
+      // Decomp: motion-state entry updates (x2068/x206C) via ft_800890D0(fp, new_motion_state->move_id).
+      // refs/melee/src/melee/ft/fighter.c (Fighter_ChangeMotionState)
+      // refs/melee/src/melee/ft/ft_0881.c::ft_800890D0
+      attack_identity_on_motion_state_change_ft_800890D0(batch, idx);
 
       if (death == (uint16_t)MSL_ACT_DEAD_UP_STAR) {
         batch->state.animation_index[idx] = (uint32_t)MSL_SM_DAMAGE_FALL;

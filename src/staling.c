@@ -6,13 +6,7 @@ uint16_t staling_move_id_from_state(const MslBatch* batch, size_t fighter_idx) {
   if (batch == NULL) {
     return 0xFFFFu;
   }
-  const uint8_t char_id = batch->state.char_id[fighter_idx];
-  const uint32_t msid_u32 = batch->state.animation_index[fighter_idx];
-  if (msid_u32 > 0xFFFFu) {
-    return 0xFFFFu;
-  }
-  const uint16_t msid = (uint16_t)msid_u32;
-  return staling_move_id_from_msid(char_id, msid);
+  return batch->state.attack_id[fighter_idx];
 }
 
 float staling_multiplier_for_move(const MslBatch* batch, size_t fighter_idx, uint16_t move_id) {

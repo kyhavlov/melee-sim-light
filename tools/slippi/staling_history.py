@@ -53,77 +53,78 @@ def _to_numpy(arr) -> np.ndarray:
     return x
 
 
-_move_id_tables: dict[int, dict[int, int]] = {}
+_action_move_id_tables: dict[int, list[int]] = {}
 
 
-def _load_move_id_table_for_char(char_id: int, *, data_dir: Path = Path("data")) -> dict[int, int]:
-    cached = _move_id_tables.get(int(char_id))
+def _load_action_move_id_table_for_char(char_id: int, *, data_dir: Path = Path("data")) -> list[int]:
+    cached = _action_move_id_tables.get(int(char_id))
     if cached is not None:
         return cached
 
-    # Match the runtime binary format written by tools/extraction/extract_staling_move_id.py.
-    # data/staling/move_id/{fox,falco}.bin use magic "MSLSTID1".
+    # Match the runtime binary format written by tools/extraction/extract_attack_id_move_id.py.
+    # data/attack_id/move_id/{fox,falco}.bin use magic "MSLACID1".
     name_by_char = {1: "fox", 22: "falco"}
     rel = name_by_char.get(int(char_id))
     if rel is None:
-        _move_id_tables[int(char_id)] = {}
-        return _move_id_tables[int(char_id)]
+        _action_move_id_tables[int(char_id)] = []
+        return []
 
-    path = data_dir / "staling" / "move_id" / f"{rel}.bin"
+    path = data_dir / "attack_id" / "move_id" / f"{rel}.bin"
     try:
         buf = path.read_bytes()
     except FileNotFoundError as e:
         raise FileNotFoundError(
             "\n".join(
                 [
-                    f"Missing staling move-id table: {path}",
+                    f"Missing action_id->move_id table: {path}",
                     "",
-                    "Staling is wired unconditionally into dataset preprocessing and requires these generated artifacts.",
+                    "Fighter attack identity preprocessing requires these generated artifacts.",
                     "Generate them from the decomp refs with:",
-                    "  uv run python -m tools.extraction.extract_staling_move_id "
-                    "--melee_decomp refs/melee --out_dir data/staling/move_id --chars fox,falco",
+                    "  uv run python -m tools.extraction.extract_attack_id_move_id "
+                    "--melee_decomp refs/melee --out_dir data/attack_id/move_id --chars fox,falco",
                 ]
             )
         ) from e
     if len(buf) < 24:
-        raise ValueError(f"staling move_id table too small: {path}")
-    if buf[:8] != b"MSLSTID1":
-        raise ValueError(f"bad staling move_id magic: {path}")
+        raise ValueError(f"action move_id table too small: {path}")
+    if buf[:8] != b"MSLACID1":
+        raise ValueError(f"bad action move_id magic: {path}")
     (ver,) = struct.unpack_from("<I", buf, 8)
     if ver != 1:
-        raise ValueError(f"unsupported staling move_id table version {ver} in {path}")
+        raise ValueError(f"unsupported action move_id table version {ver} in {path}")
     (count,) = struct.unpack_from("<H", buf, 12)
     (toc_off,) = struct.unpack_from("<I", buf, 16)
     (file_bytes,) = struct.unpack_from("<I", buf, 20)
     if file_bytes != len(buf):
-        raise ValueError(f"staling move_id file_bytes mismatch in {path}: {file_bytes} != {len(buf)}")
-    if toc_off + count * 4 > len(buf):
-        raise ValueError(f"staling move_id toc out of range in {path}")
+        raise ValueError(f"action move_id file_bytes mismatch in {path}: {file_bytes} != {len(buf)}")
+    if toc_off + count * 2 > len(buf):
+        raise ValueError(f"action move_id toc out of range in {path}")
 
-    out: dict[int, int] = {}
+    out: list[int] = []
     off = toc_off
     for _ in range(int(count)):
-        msid, move_id = struct.unpack_from("<HH", buf, off)
-        off += 4
-        out[int(msid)] = int(move_id)
+        (mv,) = struct.unpack_from("<H", buf, off)
+        off += 2
+        out.append(int(mv))
 
-    _move_id_tables[int(char_id)] = out
+    _action_move_id_tables[int(char_id)] = out
     return out
 
 
-def _move_id_from_char_msid(char_id: int, msid_u32: int) -> int:
-    if msid_u32 < 0 or msid_u32 > 0xFFFF:
+def _move_id_from_char_action(char_id: int, action_id_u16: int) -> int:
+    if action_id_u16 < 0 or action_id_u16 > 0xFFFF:
         return _FT_MOVE_ID_DEFAULT
-    msid = int(msid_u32) & 0xFFFF
-    tab = _load_move_id_table_for_char(int(char_id))
-    mv = tab.get(msid)
-    # The extracted table uses 0xFFFF as a sentinel for "ambiguous/unknown". For fighter-side
-    # `x2068_attackID`, prefer the decomp-default `FtMoveId_Default` (1) over propagating a
-    # nonexistent 0xFFFF move id into combo/item attribution.
+    action_id = int(action_id_u16) & 0xFFFF
+    tab = _load_action_move_id_table_for_char(int(char_id))
+    if action_id >= len(tab):
+        return _FT_MOVE_ID_DEFAULT
+    mv = int(tab[action_id])
+    # The extracted table uses 0xFFFF as a sentinel for "unknown/absent". For fighter-side
+    # `x2068_attackID`, prefer the decomp-default `FtMoveId_Default` (1).
     # refs/melee/src/melee/ft/forward.h::FtMoveId
-    if mv is None or int(mv) == _U16_MAX:
+    if mv == _U16_MAX:
         return _FT_MOVE_ID_DEFAULT
-    return int(mv)
+    return mv
 
 
 def derive_staling_history(frames: pa.StructArray, *, src_ports: list[int]) -> StalingHistory:
@@ -189,7 +190,8 @@ def derive_staling_history(frames: pa.StructArray, *, src_ports: list[int]) -> S
     # Used to attribute hits that reference an older state instance_id (e.g. projectiles inheriting owner).
     by_state_iid: list[dict[int, tuple[int, int]]] = [dict() for _ in range(num_players)]
 
-    # Cache the last seen Slippi action-state instance_id to detect state transitions.
+    # Cache previous action_id + action-state instance_id for causality and hit attribution.
+    prev_action_id = np.full(num_players, 0xFFFF, dtype=np.uint16)
     prev_state_iid = np.zeros(num_players, dtype=np.uint16)
 
     # Pull all post-frame arrays we need (for vectorized indexing).
@@ -198,7 +200,6 @@ def derive_staling_history(frames: pa.StructArray, *, src_ports: list[int]) -> S
         post.append(ports_struct.field(name).field("leader").field("post"))
 
     char_id = np.stack([_to_numpy(p.field("character")).astype(np.uint8) for p in post], axis=1)
-    msid_u32 = np.stack([_to_numpy(p.field("animation_index")).astype(np.uint32) for p in post], axis=1)
     action_id = np.stack([_to_numpy(p.field("state")).astype(np.uint16) for p in post], axis=1)
     percent = np.stack([_to_numpy(p.field("percent")).astype(np.float32) for p in post], axis=1)
     stocks = np.stack([_to_numpy(p.field("stocks")).astype(np.uint8) for p in post], axis=1)
@@ -216,10 +217,18 @@ def derive_staling_history(frames: pa.StructArray, *, src_ports: list[int]) -> S
             stale_attack_counter = 1
         return before
 
-    def _reset_player(p: int) -> None:
+    def _reset_player_stale_table(p: int) -> None:
         qi[p] = 0
         table_mid[p, :] = 0
         table_inst[p, :] = 0
+
+    def _reset_player_attack_identity(p: int) -> None:
+        # Decomp: fighter reset/default is (attackID=1, instance=0).
+        # refs/melee/src/melee/ft/ft_0881.c::ft_800890BC
+        cur_attack_id[p] = np.uint16(_FT_MOVE_ID_DEFAULT)
+        cur_attack_inst[p] = np.uint16(0)
+        prev_action_id[p] = np.uint16(0xFFFF)
+        prev_state_iid[p] = np.uint16(0)
 
     def _queue_update(p: int, move_id: int, attack_instance: int) -> None:
         if move_id in (_U16_MAX, _FT_MOVE_ID_DEFAULT) or attack_instance == 0:
@@ -236,34 +245,43 @@ def derive_staling_history(frames: pa.StructArray, *, src_ports: list[int]) -> S
 
     # Main causal pass.
     for t in range(n_frames):
-        # Per-player: detect stock loss and reset stale tables.
+        # Per-player: detect stock loss and reset stale tables + fighter attack identity.
         if t > 0:
             for p in range(num_players):
                 if stocks[t, p] < stocks[t - 1, p]:
-                    _reset_player(p)
+                    # Decomp: stale table reset happens on stock loss.
+                    # refs/melee/src/melee/ft/ft_0D31.c::ftCo_800D34E0 (calls plStale_ResetStaleMoveTableForPlayer)
+                    _reset_player_stale_table(p)
+                    _reset_player_attack_identity(p)
 
-        # Per-player: update derived attack_instance on action-state transitions (conservative).
+        # Per-player: update derived attack_id / attack_instance on motion-state changes.
+        #
+        # Decomp trail (GALE01):
+        # - Reset/default: refs/melee/src/melee/ft/ft_0881.c::ft_800890BC
+        # - Update on motion change: refs/melee/src/melee/ft/ft_0881.c::ft_800890D0
+        # - Call site: refs/melee/src/melee/ft/fighter.c inside Fighter_ChangeMotionState calls
+        #   ft_800890D0(fp, new_motion_state->move_id).
         for p in range(num_players):
             iid = int(state_iid[t, p])
             if iid == 0:
                 # Slippi spec: instance_id resets to 0 temporarily on death.
                 # Keep the fighter's derived x206C at 0 until the next observable state transition.
-                prev_state_iid[p] = np.uint16(0)
-                cur_attack_id[p] = np.uint16(_FT_MOVE_ID_DEFAULT)
-                cur_attack_inst[p] = np.uint16(0)
+                _reset_player_attack_identity(p)
                 attack_id_out[t, p] = np.uint16(_FT_MOVE_ID_DEFAULT)
                 continue
 
-            if iid != int(prev_state_iid[p]):
-                # Conservative: treat any Slippi instance_id change as a motion-state transition.
-                move_id = _move_id_from_char_msid(int(char_id[t, p]), int(msid_u32[t, p]))
+            act = int(action_id[t, p])
+            if act != int(prev_action_id[p]):
+                move_id = _move_id_from_char_action(int(char_id[t, p]), act)
                 # Decomp: ft_800890D0 increments x206C when move_id==1 OR move_id != current attackID.
                 if move_id == _FT_MOVE_ID_DEFAULT or move_id != int(cur_attack_id[p]):
                     cur_attack_id[p] = np.uint16(move_id)
                     cur_attack_inst[p] = np.uint16(_inc_attack_instance())
+                prev_action_id[p] = np.uint16(act)
 
-                prev_state_iid[p] = np.uint16(iid)
+            if iid != int(prev_state_iid[p]):
                 by_state_iid[p].setdefault(iid, (int(cur_attack_id[p]), int(cur_attack_inst[p])))
+                prev_state_iid[p] = np.uint16(iid)
 
             attack_inst_out[t, p] = cur_attack_inst[p]
             attack_id_out[t, p] = cur_attack_id[p]

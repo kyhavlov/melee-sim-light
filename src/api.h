@@ -411,6 +411,10 @@ typedef struct MslDebugInternals {
   uint8_t tilt_timer_x[MSL_MAX_PLAYERS];         // fp->x670_timer_lstick_tilt_x
   uint8_t turn_frames_to_turn[MSL_MAX_PLAYERS];  // fp->mv.co.turn.frames_to_turn
   uint8_t turn_has_turned[MSL_MAX_PLAYERS];      // fp->mv.co.turn.has_turned
+  // Fighter attack identity internals (decomp: fp->x2068 / fp->x206C).
+  uint16_t attack_id[MSL_MAX_PLAYERS];
+  uint16_t attack_instance[MSL_MAX_PLAYERS];
+  uint16_t attack_identity_last_action_id[MSL_MAX_PLAYERS];
 } MslDebugInternals;
 
 // Debug/validation helper: record a single hitbox-vs-hurtcap contact candidate.
@@ -525,6 +529,12 @@ int msl_batch_debug_write_processed_input(const MslBatch* batch, uint8_t* out_by
 // out_stride_bytes must be >= sizeof(MslDebugInternals).
 int msl_batch_debug_write_internals(const MslBatch* batch, uint8_t* out_bytes,
                                     size_t out_stride_bytes);
+
+// Debug/validation helper: force an animation timebase reset for a single fighter without
+// changing action_id (test-only). This is useful to validate that mechanics keyed to action
+// transitions (e.g., fighter attack identity) are not accidentally updated by "anim restarts".
+int msl_batch_debug_force_anim_timebase_enter(MslBatch* batch, int batch_index, int player_index,
+                                              float anim_start_f32, float anim_speed_f32);
 
 // Debug/validation helper: read pose-driven world-space hurt capsules for a single fighter.
 // Writes `MSL_MAX_HURTCAPS * 7` floats into out_caps_7 as rows:

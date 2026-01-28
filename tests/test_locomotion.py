@@ -34,6 +34,9 @@ INTERNALS_DTYPE = np.dtype(
         ("tilt_timer_x", ("u1", (MAX_PLAYERS,))),
         ("turn_frames_to_turn", ("u1", (MAX_PLAYERS,))),
         ("turn_has_turned", ("u1", (MAX_PLAYERS,))),
+        ("attack_id", ("<u2", (MAX_PLAYERS,))),
+        ("attack_instance", ("<u2", (MAX_PLAYERS,))),
+        ("attack_identity_last_action_id", ("<u2", (MAX_PLAYERS,))),
     ],
     align=False,
 )

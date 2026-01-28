@@ -11,6 +11,10 @@ typedef struct MslStateSoA {
   int32_t* frame_id;
   uint32_t* frame_pre_random_seed;
   uint32_t* stage_id;  // [batch]
+  // Global stale-attack-instance counter (decomp: plStale_IncrementAttackInstance).
+  // One per environment in the batch (per-match global counter).
+  // refs/melee/src/melee/pl/plstale.c::plStale_IncrementAttackInstance
+  uint16_t* stale_attack_instance_counter;  // [batch]
   float* match_damage_ratio;  // [batch] (decomp: gm_8016B248 -> StartMeleeRules.x30)
   uint8_t* is_teams;   // [batch]
   uint8_t* team_id;    // [batch * MSL_MAX_PLAYERS]
@@ -201,6 +205,10 @@ typedef struct MslStateSoA {
   uint16_t* instance_id;
   uint16_t* attack_id;  // GALE01 fp->x2068_attackID (seeded; replay-history derived)
   uint16_t* attack_instance;
+  // Internal-only: last action_id for which attack_id/attack_instance were updated.
+  // Used to avoid incorrectly bumping x206C on animation restarts (msl_anim_timebase_enter without
+  // a motion-state change).
+  uint16_t* attack_identity_last_action_id;  // [batch * players]
   uint8_t* last_attack_landed;
   uint8_t* combo_count;
   // Combo tracking internals (GALE01 fp->x2094 + fp->x2098).

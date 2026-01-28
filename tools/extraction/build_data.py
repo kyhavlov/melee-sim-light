@@ -155,6 +155,17 @@ def main() -> None:
             ",".join(chars),
         ],
     )
+    _run(
+        "tools.extraction.extract_attack_id_move_id",
+        [
+            "--melee_decomp",
+            str(args.melee_decomp),
+            "--out_dir",
+            "data/attack_id/move_id",
+            "--chars",
+            ",".join(chars),
+        ],
+    )
 
     # Hitbox event tables (moves.json → hitboxes.bin; compact binary for init-time load).
     #
