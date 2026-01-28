@@ -64,6 +64,46 @@ class Reporter:
             self._fh = None
 
 
+def _iter_mismatch_pairs(diff: np.ndarray):
+    # `np.argwhere` returns one row per mismatch with shape (ndim,).
+    # We treat axis-0 as the record index, and preserve the remaining axes.
+    for row in np.argwhere(diff):
+        r = int(row[0])
+        subidx = tuple(int(x) for x in row[1:])
+        yield r, subidx
+
+
+def _fmt_subidx(field: str, subidx: tuple[int, ...]) -> str:
+    if not subidx:
+        return ""
+    if field == "state_flags":
+        if len(subidx) >= 2:
+            return f"p={subidx[0]} byte={subidx[1]}"
+        return f"p={subidx[0]}"
+    if field.startswith("item_"):
+        if len(subidx) >= 2:
+            return f"p={subidx[0]} slot={subidx[1]}"
+        return f"slot={subidx[0]}"
+    if len(subidx) == 1:
+        return f"p={subidx[0]}"
+    inner = ",".join(str(x) for x in subidx)
+    return f"idx=({inner})"
+
+
+def _safe_scalar(a, idx: tuple[int, ...]) -> str:
+    try:
+        v = a[idx]
+    except Exception:
+        return "<?>"
+    try:
+        return str(int(v))
+    except Exception:
+        try:
+            return str(float(v))
+        except Exception:
+            return str(v)
+
+
 def _denom_for_field(
     field: str,
     *,
@@ -289,6 +329,22 @@ def evaluate_dataset(
             left = debug_left.get(field, 0)
             if left <= 0:
                 continue
+            if field == "state_flags":
+                diff = out_compare_view["state_flags"][:, active, :] != ref["state_flags"][:, active, :]
+                if not np.any(diff):
+                    continue
+                for r, subidx in _iter_mismatch_pairs(diff):
+                    left = debug_left.get(field, 0)
+                    if left <= 0:
+                        break
+                    gi = int(offset + r)
+                    idx_s = _fmt_subidx(field, subidx)
+                    idx = (r,) + subidx
+                    reporter.print(
+                        f"debug.mismatch.{field}: dataset={dataset_path.name} record={gi} seed_frame={int(seed['frame_id'][r])} ref_frame={int(ref['frame_id'][r])} {idx_s} seed={_safe_scalar(seed['state_flags'], idx)} out={_safe_scalar(out_compare_view['state_flags'], idx)} ref={_safe_scalar(ref['state_flags'], idx)}"
+                    )
+                    debug_left[field] = left - 1
+                continue
             if field.startswith("item_"):
                 out_items = out_compare_view["items"]
                 ref_items = ref["items"]
@@ -337,22 +393,22 @@ def evaluate_dataset(
                     vy = abs(float(out_it["vel_y"]) + float(seed_it["vel_y"]))
                     return vx < 1e-3 and vy < 1e-3
 
-                pairs = np.argwhere(diff)
-                for ri, si in pairs:
+                for r, subidx in _iter_mismatch_pairs(diff):
                     left = debug_left.get(field, 0)
                     if left <= 0:
                         break
-                    r = int(ri)
-                    s = int(si)
                     gi = int(offset + r)
+                    idx_s = _fmt_subidx(field, subidx)
+                    idx = (r,) + subidx
+                    slot = int(subidx[-1]) if subidx else -1
 
-                    seed_it = seed_items[r, s]
-                    out_it = out_items[r, s]
-                    ref_it = ref_items[r, s]
+                    seed_it = seed_items[idx]
+                    out_it = out_items[idx]
+                    ref_it = ref_items[idx]
 
                     # Include dataset name even when called standalone; suite eval prints a header too.
                     reporter.print(
-                        f"debug.mismatch.{field}: dataset={dataset_path.name} record={gi} seed_frame={int(seed['frame_id'][r])} ref_frame={int(ref['frame_id'][r])} slot={s} reflect_like={int(_reflect_like(seed_it, out_it))}"
+                        f"debug.mismatch.{field}: dataset={dataset_path.name} record={gi} seed_frame={int(seed['frame_id'][r])} ref_frame={int(ref['frame_id'][r])} {idx_s or f'slot={slot}'} reflect_like={int(_reflect_like(seed_it, out_it))}"
                     )
                     reporter.print(
                         "  seed_flags:",
@@ -388,16 +444,22 @@ def evaluate_dataset(
                 diff = out_compare_view[field][:, active] != ref[field][:, active]
                 if not np.any(diff):
                     continue
-                pairs = np.argwhere(diff)
-                for ri, p in pairs:
+                for r, subidx in _iter_mismatch_pairs(diff):
                     left = debug_left.get(field, 0)
                     if left <= 0:
                         break
-                    r = int(ri)
-                    pp = int(p)
                     gi = int(offset + r)
+                    idx_s = _fmt_subidx(field, subidx)
+                    if len(subidx) != 1:
+                        idx = (r,) + subidx
+                        reporter.print(
+                            f"debug.mismatch.{field}: dataset={dataset_path.name} record={gi} seed_frame={int(seed['frame_id'][r])} ref_frame={int(ref['frame_id'][r])} {idx_s} seed={_safe_scalar(seed[field], idx)} out={_safe_scalar(out_compare_view[field], idx)} ref={_safe_scalar(ref[field], idx)}"
+                        )
+                        debug_left[field] = left - 1
+                        continue
+                    pp = int(subidx[0])
                     reporter.print(
-                        f"debug.mismatch.{field}: dataset={dataset_path.name} record={gi} seed_frame={int(seed['frame_id'][r])} ref_frame={int(ref['frame_id'][r])} p={pp}"
+                        f"debug.mismatch.{field}: dataset={dataset_path.name} record={gi} seed_frame={int(seed['frame_id'][r])} ref_frame={int(ref['frame_id'][r])} {idx_s}"
                     )
                     reporter.print(
                         "  seed:",
