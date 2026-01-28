@@ -83,16 +83,8 @@ static inline void msl_anim_timebase_seed(MslBatch* batch, size_t idx, float cur
   msl_anim_timebase_recompute_derived(batch, idx);
 }
 
-// Forward decl: fighter attack identity update on motion-state change.
-// Defined in src/attack_identity.c.
-void attack_identity_on_motion_state_change_ft_800890D0(MslBatch* batch, size_t idx);
-
-// Forward decl: fighter action-state instance_id update on motion-state change.
-// Defined in src/instance_id.c.
-void instance_id_on_motion_state_change_ft_800895E0(MslBatch* batch, size_t idx);
-
-static inline void msl_anim_timebase_enter(MslBatch* batch, size_t idx, float anim_start_f32,
-                                           float anim_speed_f32) {
+static inline void msl_anim_timebase_enter_raw(MslBatch* batch, size_t idx, float anim_start_f32,
+                                               float anim_speed_f32) {
   // Mirror Fighter_ChangeMotionState's cur_anim_frame reset behavior.
   // refs/melee/src/melee/ft/fighter.c (Fighter_ChangeMotionState)
   if (batch == NULL) {
@@ -103,23 +95,37 @@ static inline void msl_anim_timebase_enter(MslBatch* batch, size_t idx, float an
   batch->state.frame_speed_mul_fp_q16_16[idx] = speed_fp;
   batch->state.anim_frame_fp_q16_16[idx] = start_fp - speed_fp;
   msl_anim_timebase_recompute_derived(batch, idx);
+}
 
-  // Decomp: Fighter_ChangeMotionState calls ft_800890D0(fp, new_motion_state->move_id) as part of
-  // state entry. We hook this to the common "enter action" path (timebase reset) to keep attack
-  // identity coherent for rollouts (and item spawn attribution).
-  // Note: msl_anim_timebase_enter() is occasionally used for non-transition animation restarts;
-  // attack_identity_on_motion_state_change_ft_800890D0 internally guards on action_id to match the
-  // decomp "ChangeMotionState only" call semantics.
+// Forward decl: fighter attack identity update on motion-state change.
+// Defined in src/attack_identity.c.
+void attack_identity_on_motion_state_change_ft_800890D0(MslBatch* batch, size_t idx);
+
+// Forward decl: fighter action-state instance_id update on motion-state change.
+// Defined in src/instance_id.c.
+void instance_id_on_motion_state_change_ft_800895E0(MslBatch* batch, size_t idx);
+
+static inline void msl_anim_timebase_enter(MslBatch* batch, size_t idx, float anim_start_f32,
+                                           float anim_speed_f32) {
+  // Decomp: Fighter_ChangeMotionState sets the anim timebase then invokes motion-state identity
+  // updates (ft_800890D0 / ft_800895E0). This helper models that full "enter motion state" bundle.
   // refs/melee/src/melee/ft/fighter.c (Fighter_ChangeMotionState)
   // refs/melee/src/melee/ft/ft_0881.c::ft_800890D0
+  // refs/melee/build/GALE01/asm/melee/ft/ft_0892.s::ft_800895E0
+  msl_anim_timebase_enter_raw(batch, idx, anim_start_f32, anim_speed_f32);
+
   attack_identity_on_motion_state_change_ft_800890D0(batch, idx);
 
-  // Decomp: Fighter_ChangeMotionState calls ft_800895E0(fp, new_motion_state->x4_flags) as part of
-  // state entry. We hook this to the common "enter action" path (timebase reset) so Slippi
-  // `instance_id` (fp->x2088) evolves on motion transitions instead of being treated as seed carry-through.
-  // refs/melee/src/melee/ft/fighter.c (Fighter_ChangeMotionState)
-  // refs/melee/build/GALE01/asm/melee/ft/ft_0892.s::ft_800895E0
   instance_id_on_motion_state_change_ft_800895E0(batch, idx);
+}
+
+// Pure animation timebase reset without invoking Fighter_ChangeMotionState side-effects.
+//
+// Used by debug/test helpers that want to manipulate the anim clock without updating identity
+// (attack_id/attack_instance, instance_id).
+static inline void msl_anim_timebase_restart(MslBatch* batch, size_t idx, float anim_start_f32,
+                                             float anim_speed_f32) {
+  msl_anim_timebase_enter_raw(batch, idx, anim_start_f32, anim_speed_f32);
 }
 
 static inline void msl_anim_timebase_set_rate(MslBatch* batch, size_t idx, float anim_rate_f32) {

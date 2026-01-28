@@ -45,12 +45,9 @@ void attack_identity_on_motion_state_change_ft_800890D0(MslBatch* batch, size_t 
   //   refs/melee/src/melee/ft/ft_0881.c::ft_800890D0
   //
   // Simulator wiring:
-  // - We hook the update to msl_anim_timebase_enter() (our common "enter action" helper), but some
-  //   codepaths can legitimately reset the animation timebase without changing action_id.
-  // - Guard against those "anim restarts" so we don't incorrectly bump x206C (attack_instance).
-  if (batch->state.attack_identity_last_action_id[idx] == action_id) {
-    return;
-  }
+  // - This is wired to msl_anim_timebase_enter() (the decomp-shaped Fighter_ChangeMotionState bundle).
+  // - Pure animation timebase restarts should use msl_anim_timebase_restart() so they do not call
+  //   ft_800890D0.
   batch->state.attack_identity_last_action_id[idx] = action_id;
 
   const uint8_t char_id = batch->state.char_id[idx];

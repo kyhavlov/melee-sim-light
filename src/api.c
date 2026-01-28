@@ -643,7 +643,7 @@ int msl_batch_debug_force_anim_timebase_enter(MslBatch* batch, int batch_index, 
     return EINVAL;
   }
   const size_t idx = msl_idx_player(batch_index, player_index);
-  msl_anim_timebase_enter(batch, idx, anim_start_f32, anim_speed_f32);
+  msl_anim_timebase_restart(batch, idx, anim_start_f32, anim_speed_f32);
   return 0;
 }
 

@@ -18,6 +18,5 @@
 void instance_id_reset_ft_800892D4(MslBatch* batch, size_t idx);
 
 // Update fp->x2088 on true motion-state entry (subset of ft_800895E0 + ft_80089824 for SpecialN).
-// This is wired to msl_anim_timebase_enter() and internally guards against animation restarts.
+// This is wired to msl_anim_timebase_enter() (the decomp-shaped Fighter_ChangeMotionState bundle).
 void instance_id_on_motion_state_change_ft_800895E0(MslBatch* batch, size_t idx);
-

@@ -147,10 +147,13 @@ static inline void enter_entry_end(MslBatch* batch, size_t idx, const MslCommonP
   batch->state.speed_x_attack[idx] = 0.0f;
   batch->state.speed_y_attack[idx] = 0.0f;
 
-  // Decomp: Fighter_ChangeMotionState callsite would have updated (x2068/x206C) on EntryEnd entry.
+  // Decomp: Fighter_ChangeMotionState callsite updates identity fields on EntryEnd entry:
+  // - ft_800890D0 (attack_id/attack_instance)
+  // - ft_800895E0 (instance_id)
   // refs/melee/src/melee/ft/fighter.c (Fighter_ChangeMotionState)
   // refs/melee/src/melee/ft/ft_0881.c::ft_800890D0
-  attack_identity_on_motion_state_change_ft_800890D0(batch, idx);
+  // refs/melee/build/GALE01/asm/melee/ft/ft_0892.s::ft_800895E0
+  msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
 
   // EntryEnd is observed with no submotion in the suite (animation_index=0xFFFFFFFF),
   // with action_frame=-1 and state_age=-1.
@@ -541,14 +544,12 @@ void match_flow_update_post_physics(MslBatch* batch) {
       batch->state.hitlag[idx] = 0;
       batch->state.hitstun[idx] = 0;
 
-      // Decomp: motion-state entry updates (x2068/x206C) via ft_800890D0(fp, new_motion_state->move_id).
-      // refs/melee/src/melee/ft/fighter.c (Fighter_ChangeMotionState)
-      // refs/melee/src/melee/ft/ft_0881.c::ft_800890D0
-      attack_identity_on_motion_state_change_ft_800890D0(batch, idx);
-
       if (death == (uint16_t)MSL_ACT_DEAD_UP_STAR) {
         batch->state.animation_index[idx] = (uint32_t)MSL_SM_DAMAGE_FALL;
-        // DeadUpStar is observed with action_frame starting at 0 and advancing; set timebase to 0.
+        // Decomp: motion-state entry uses Fighter_ChangeMotionState (identity updates + timebase reset).
+        // refs/melee/src/melee/ft/fighter.c (Fighter_ChangeMotionState)
+        msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+        // DeadUpStar is observed with action_frame starting at 0 and advancing; override timebase to 0.
         msl_anim_timebase_seed(batch, idx, 0.0f, 1.0f);
         // DeadUpStar enter initializes an internal timer from p_ftCommonData->x504, then runs two
         // phases (x508/x50C). Model this with a single countdown.
@@ -570,6 +571,9 @@ void match_flow_update_post_physics(MslBatch* batch) {
         }
         batch->state.match_flow_timer[idx] = (uint8_t)total;
       } else {
+        // Decomp: motion-state entry uses Fighter_ChangeMotionState (identity updates + timebase reset).
+        // refs/melee/src/melee/ft/fighter.c (Fighter_ChangeMotionState)
+        msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
         // DeadDown/Left/Right are observed with no submotion and frozen state_age=-1.
         freeze_no_submotion_timebase(batch, idx);
         batch->state.match_flow_timer[idx] =

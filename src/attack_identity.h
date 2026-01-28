@@ -21,6 +21,8 @@
 void attack_identity_reset_ft_800890BC(MslBatch* batch, size_t idx);
 
 // Call after action_id has been changed (motion state entered). This is typically invoked from
-// msl_anim_timebase_enter(), which is part of the "enter action" path across the sim.
+// msl_anim_timebase_enter() (the decomp-shaped Fighter_ChangeMotionState bundle).
+//
+// IMPORTANT: do not call this directly from gameplay logic; use msl_anim_timebase_enter() for
+// motion-state changes and msl_anim_timebase_restart() for pure animation restarts.
 void attack_identity_on_motion_state_change_ft_800890D0(MslBatch* batch, size_t idx);
-
