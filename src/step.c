@@ -8,6 +8,7 @@
 #include "hitboxes.h"
 #include "hitlist.h"
 #include "hurtboxes.h"
+#include "blaster.h"
 #include "input.h"
 #include "items.h"
 #include "ledge.h"
@@ -20,6 +21,10 @@
 #include "stage_collision.h"
 #include "timers.h"
 #include "reflector_bubbles.h"
+
+// NOTE: `blaster_update_post_collision` is intentionally not part of the public blaster module API
+// yet; keep the forward declaration local to preserve the current include surface.
+extern void blaster_update_post_collision(MslBatch* batch);
 
 static inline void clear_landing_transients(MslBatch* batch) {
   if (batch == NULL) {
@@ -99,6 +104,7 @@ int step_one_frame(MslBatch* batch, const uint8_t* prev_input_bytes, size_t prev
   ledge_try_catch_post_collision(batch);
   knockdown_update_post_collision(batch);
   match_flow_update_post_physics(batch);
+  blaster_update_post_collision(batch);
   locomotion_update_post_collision(batch);
   shine_update_post_collision(batch);
   hurtboxes_refresh(batch);

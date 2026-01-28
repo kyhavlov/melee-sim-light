@@ -8,6 +8,7 @@
 #include "anim_table.h"
 #include "anim_timebase.h"
 #include "buttons.h"
+#include "char_params.h"
 #include "laser_params.h"
 
 // Character id mapping follows Slippi post-frame `character` (GALE01):
@@ -101,12 +102,7 @@ static inline uint8_t anim_finished(uint8_t char_id, uint16_t msid, float anim_f
   if (!(end > 0.0f)) {
     return 0;
   }
-  // Decomp uses ftAnim_IsFramesRemaining (joint-track remaining) to gate transitions; approximate
-  // deterministically by comparing integer frame indices (Slippi `action_frame` is floor(state_age)).
-  // refs/melee/src/melee/ft/ftanim.c::ftAnim_IsFramesRemaining
-  const uint16_t cur = msl_anim_frame_floor_u16(msl_anim_frame_sanitize_f32(anim_frame_f32));
-  const uint16_t end_i = msl_anim_frame_floor_u16(end);
-  return cur >= end_i;
+  return msl_anim_frame_sanitize_f32(anim_frame_f32) >= end;
 }
 
 void blaster_update_pre_physics(MslBatch* batch) {
@@ -147,6 +143,32 @@ void blaster_update_pre_physics(MslBatch* batch) {
       const uint16_t a2 = batch->state.action_id[idx];
       if (!action_is_blaster(a2)) {
         continue;
+      }
+
+      // Ensure SpecialN/SpecialAirN always has a valid msid-backed animation_index.
+      // This keeps the ECB/collision substrate stable under reseed and removes the need for
+      // teacher-forcing guards in post-collision landing logic.
+      switch (a2) {
+        case MSL_ACT_FX_SPECIAL_N_START:
+          batch->state.animation_index[idx] = (uint32_t)lp->ground_start_msid;
+          break;
+        case MSL_ACT_FX_SPECIAL_N_LOOP:
+          batch->state.animation_index[idx] = (uint32_t)lp->ground_loop_msid;
+          break;
+        case MSL_ACT_FX_SPECIAL_N_END:
+          batch->state.animation_index[idx] = (uint32_t)lp->ground_end_msid;
+          break;
+        case MSL_ACT_FX_SPECIAL_AIR_N_START:
+          batch->state.animation_index[idx] = (uint32_t)lp->air_start_msid;
+          break;
+        case MSL_ACT_FX_SPECIAL_AIR_N_LOOP:
+          batch->state.animation_index[idx] = (uint32_t)lp->air_loop_msid;
+          break;
+        case MSL_ACT_FX_SPECIAL_AIR_N_END:
+          batch->state.animation_index[idx] = (uint32_t)lp->air_end_msid;
+          break;
+        default:
+          break;
       }
 
       const float anim_frame_f32 = batch->state.anim_frame_f32[idx];
@@ -214,6 +236,68 @@ void blaster_update_pre_physics(MslBatch* batch) {
         default:
           break;
       }
+    }
+  }
+}
+
+void blaster_update_post_collision(MslBatch* batch) {
+  if (batch == NULL) {
+    return;
+  }
+  const int num_players = (int)batch->config.num_players;
+  for (int bi = 0; bi < batch->batch_size; bi++) {
+    for (int p = 0; p < num_players; p++) {
+      const size_t idx = msl_idx_player(bi, p);
+      if (batch->state.hitlag[idx] != 0) {
+        continue;
+      }
+
+      const uint8_t cid = batch->state.char_id[idx];
+      if (!is_fox_falco(cid)) {
+        continue;
+      }
+      const MslCharParams* ch = msl_char_params(cid);
+      if (ch == NULL) {
+        continue;
+      }
+
+      const uint8_t was_ground = batch->state.prev_on_ground[idx] ? 1u : 0u;
+      const uint8_t now_ground = batch->state.on_ground[idx] ? 1u : 0u;
+      if (was_ground || !now_ground) {
+        continue;
+      }
+
+      const uint16_t a = batch->state.action_id[idx];
+      if (a != (uint16_t)MSL_ACT_FX_SPECIAL_AIR_N_START &&
+          a != (uint16_t)MSL_ACT_FX_SPECIAL_AIR_N_LOOP &&
+          a != (uint16_t)MSL_ACT_FX_SPECIAL_AIR_N_END) {
+        continue;
+      }
+
+      // If the seed doesn't provide a valid animation_index, the ECB/collision substrate may snap
+      // in unrealistic ways. We enforce a valid msid-backed animation_index in blaster_update_pre_physics,
+      // so post-collision landing can be driven purely by ground contact.
+
+      // Landing transition for aerial SpecialN.
+      //
+      // Decomp:
+      // - ftFx_SpecialAirN*_Coll uses ftCo_AirCatchHit_Coll, which enters Landing_Enter_Basic.
+      //   refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::{ftFx_SpecialAirNStart_Coll,ftFx_SpecialAirNLoop_Coll,ftFx_SpecialAirNEnd_Coll}
+      //   refs/melee/src/melee/ft/ft_081B.c::ftCo_AirCatchHit_Coll
+      //
+      // Policy:
+      // - Use plain Landing (not LandingAir*): this matches Landing_Enter_Basic.
+      // - Preserve horizontal momentum by transferring air X -> ground X; clear air X.
+      // - Refresh jumps on grounded transition (fp->x1968_jumpsUsed = 0).
+      //   refs/melee/src/melee/ft/ftcommon.c:556-573
+      batch->state.speed_ground_x_self[idx] = batch->state.speed_air_x_self[idx];
+      batch->state.speed_air_x_self[idx] = 0.0f;
+      batch->state.fall_fast[idx] = 0;
+      batch->state.jumps_left[idx] = ch->max_jumps;
+
+      batch->state.action_id[idx] = (uint16_t)MSL_ACT_LANDING;
+      batch->state.animation_index[idx] = (uint32_t)MSL_SM_LANDING;
+      msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
     }
   }
 }

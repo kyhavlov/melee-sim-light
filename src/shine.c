@@ -11,6 +11,7 @@
 #include "char_params.h"
 #include "common_params.h"
 #include "input_axis.h"
+#include "jump_input.h"
 #include "special_msids.h"
 
 // Character id mapping follows Slippi post-frame `character` (GALE01):
@@ -80,6 +81,13 @@ static inline uint8_t action_is_shine_air(uint16_t action_id) {
 
 static inline uint8_t action_allows_shine_entry_ground(uint16_t action_id) {
   // Keep this narrowly scoped: only enter from basic grounded locomotion states.
+  // Decomp: many grounded IASA callbacks (including Squat/SquatWait) call ftCo_800D68C0 which
+  // can dispatch to per-character SpecialLw (Fox/Falco shine).
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Squat.c::ftCo_Squat_IASA
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_800D68C0
+  if (action_id == (uint16_t)MSL_ACT_SQUAT || action_id == (uint16_t)MSL_ACT_SQUAT_WAIT) {
+    return 1;
+  }
   return msl_action_is_ground_locomotion(action_id);
 }
 
@@ -92,9 +100,7 @@ static inline uint8_t anim_finished(uint8_t char_id, uint16_t msid, float anim_f
   if (!(end > 0.0f)) {
     return 0;
   }
-  const uint16_t cur = msl_anim_frame_floor_u16(msl_anim_frame_sanitize_f32(anim_frame_f32));
-  const uint16_t end_i = msl_anim_frame_floor_u16(end);
-  return cur >= end_i;
+  return msl_anim_frame_sanitize_f32(anim_frame_f32) >= end;
 }
 
 static inline void enter_wait(MslBatch* batch, size_t idx) {
@@ -107,6 +113,29 @@ static inline void enter_fall(MslBatch* batch, size_t idx) {
   batch->state.action_id[idx] = (uint16_t)MSL_ACT_FALL;
   batch->state.animation_index[idx] = (uint32_t)MSL_SM_FALL;
   msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+}
+
+static inline uint8_t did_tap_jump(const MslCommonParams* c, float stick_y, uint8_t tilt_timer_y) {
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c::ftCo_Jump_GetInput
+  return (stick_y >= c->tap_jump_threshold && tilt_timer_y < c->tap_jump_tilt_max_frames) ? 1 : 0;
+}
+
+static inline MslJumpInput jump_input_from_edges(const MslCommonParams* c, uint16_t buttons_pressed,
+                                                 float stick_y, uint8_t tilt_timer_y) {
+  if ((buttons_pressed & (uint16_t)MSL_BUTTON_XY) != 0) {
+    return MSL_JUMP_INPUT_XY;
+  }
+  if (did_tap_jump(c, stick_y, tilt_timer_y)) {
+    return MSL_JUMP_INPUT_LSTICK;
+  }
+  return MSL_JUMP_INPUT_NONE;
+}
+
+static inline uint16_t jump_aerial_action_from_stick(const MslCommonParams* c, float stick_x,
+                                                     float facing_dir) {
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::ftCo_JumpAerial_Enter_Basic
+  return (stick_x * facing_dir) > -c->jump_back_x_threshold ? (uint16_t)MSL_ACT_JUMP_AERIAL_F
+                                                            : (uint16_t)MSL_ACT_JUMP_AERIAL_B;
 }
 
 static inline uint8_t stick_wants_speciallw(const MslCommonParams* c, int8_t main_y) {
@@ -127,14 +156,15 @@ static inline uint8_t stick_wants_turn(const MslCommonParams* c, int8_t main_x, 
   return (x * facing_dir <= c->turn_stick_x_threshold) ? 1u : 0u;
 }
 
-static inline void enter_shine_ground_start(MslBatch* batch, size_t idx, const MslSpecialMsids* ms) {
+static inline void enter_shine_ground_start(MslBatch* batch, size_t idx,
+                                            const MslSpecialMsids* ms) {
   batch->state.action_id[idx] = (uint16_t)MSL_ACT_FX_SPECIAL_LW_START;
   batch->state.animation_index[idx] = (uint32_t)ms->speciallw_ground_start;
   msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
 }
 
 static inline void enter_shine_air_start(MslBatch* batch, size_t idx, const MslCharParams* ch,
-                                        const MslSpecialMsids* ms) {
+                                         const MslSpecialMsids* ms) {
   if (ch != NULL) {
     // Decomp: ftFx_SpecialAirLw_Enter sets self_vel.y=0 and divides self_vel.x by momentum preserve.
     // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c::ftFx_SpecialAirLw_Enter
@@ -211,10 +241,16 @@ void shine_update_pre_physics(MslBatch* batch) {
 
       const uint16_t a = batch->state.action_id[idx];
       const uint8_t on_ground = batch->state.on_ground[idx] ? 1u : 0u;
+      const uint16_t buttons_pressed = batch->state.input_buttons_pressed[idx];
+      const uint8_t tilt_timer_y = batch->state.tilt_timer_y[idx];
+      const float stick_x =
+          apply_deadzone(stick_i8_to_unit(batch->state.input_main_x[idx]), c->lstick_deadzone_x);
+      const float stick_y =
+          apply_deadzone(stick_i8_to_unit(batch->state.input_main_y[idx]), c->lstick_deadzone_y);
+      const float facing_dir = batch->state.facing[idx] ? 1.0f : -1.0f;
 
       // Entry (minimal): B press + down stick from basic locomotion.
-      const uint16_t pressed = batch->state.input_buttons_pressed[idx];
-      if (!action_is_shine(a) && (pressed & (uint16_t)MSL_BUTTON_B) != 0 &&
+      if (!action_is_shine(a) && (buttons_pressed & (uint16_t)MSL_BUTTON_B) != 0 &&
           stick_wants_speciallw(c, batch->state.input_main_y[idx])) {
         if (on_ground) {
           if (action_allows_shine_entry_ground(a)) {
@@ -276,85 +312,135 @@ void shine_update_pre_physics(MslBatch* batch) {
       const float anim_frame_f32 = batch->state.anim_frame_f32[idx];
       const uint16_t held = batch->state.input_buttons[idx];
 
-      switch (a2) {
-        case MSL_ACT_FX_SPECIAL_LW_START:
-          if (anim_finished(cid, ms->speciallw_ground_start, anim_frame_f32)) {
-            if (on_ground) {
-              enter_shine_ground_loop(batch, idx, ms);
-            } else {
-              enter_shine_air_loop(batch, idx, ms);
+      // Decomp ordering: if an Anim callback transitions into Loop (e.g. Start->Loop or Turn->Loop),
+      // the destination state's IASA can run later in the same frame. Allow one follow-up pass.
+      uint16_t a_work = a2;
+      for (int it = 0; it < 2; it++) {
+        switch (a_work) {
+          case MSL_ACT_FX_SPECIAL_LW_START:
+            if (anim_finished(cid, ms->speciallw_ground_start, anim_frame_f32)) {
+              if (on_ground) {
+                enter_shine_ground_loop(batch, idx, ms);
+              } else {
+                enter_shine_air_loop(batch, idx, ms);
+              }
+              a_work = batch->state.action_id[idx];
+              continue;
             }
-          }
-          break;
-        case MSL_ACT_FX_SPECIAL_AIR_LW_START:
-          if (anim_finished(cid, ms->speciallw_air_start, anim_frame_f32)) {
-            if (on_ground) {
-              enter_shine_ground_loop(batch, idx, ms);
-            } else {
-              enter_shine_air_loop(batch, idx, ms);
-            }
-          }
-          break;
-        case MSL_ACT_FX_SPECIAL_LW_LOOP: {
-          if (stick_wants_turn(c, batch->state.input_main_x[idx], batch->state.facing[idx])) {
-            enter_shine_ground_turn(batch, idx, ms);
             break;
-          }
-          const int16_t rl = (int16_t)ch->reflector_release_lag_frames;
-          const int16_t af = batch->state.action_frame[idx];
-          if ((held & (uint16_t)MSL_BUTTON_B) == 0) {
-            if (rl == 0 || af >= (int16_t)(rl - 1)) {
+          case MSL_ACT_FX_SPECIAL_AIR_LW_START:
+            if (anim_finished(cid, ms->speciallw_air_start, anim_frame_f32)) {
+              if (on_ground) {
+                enter_shine_ground_loop(batch, idx, ms);
+              } else {
+                enter_shine_air_loop(batch, idx, ms);
+              }
+              a_work = batch->state.action_id[idx];
+              continue;
+            }
+            break;
+          case MSL_ACT_FX_SPECIAL_LW_LOOP: {
+            if (stick_wants_turn(c, batch->state.input_main_x[idx], batch->state.facing[idx])) {
+              enter_shine_ground_turn(batch, idx, ms);
+              break;
+            }
+            // Jump cancel -> KneeBend (grounded).
+            // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c::ftFx_SpecialLwLoop_IASA
+            const MslJumpInput j_in =
+                jump_input_from_edges(c, buttons_pressed, stick_y, tilt_timer_y);
+            if (j_in != MSL_JUMP_INPUT_NONE && batch->state.jumps_left[idx] > 0) {
+              batch->state.action_id[idx] = (uint16_t)MSL_ACT_KNEE_BEND;
+              batch->state.animation_index[idx] = (uint32_t)MSL_SM_KNEE_BEND;
+              msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+              batch->state.kneebend_jump_input[idx] = (uint8_t)j_in;
+              batch->state.kneebend_is_short_hop[idx] = 0;
+              break;
+            }
+            const int16_t rl = (int16_t)ch->reflector_release_lag_frames;
+            const int16_t af = batch->state.action_frame[idx];
+            if ((held & (uint16_t)MSL_BUTTON_B) == 0) {
+              if (rl == 0 || af >= (int16_t)(rl - 1)) {
+                enter_shine_ground_end(batch, idx, ms);
+              }
+            }
+          } break;
+          case MSL_ACT_FX_SPECIAL_AIR_LW_LOOP: {
+            if (stick_wants_turn(c, batch->state.input_main_x[idx], batch->state.facing[idx])) {
+              enter_shine_air_turn(batch, idx, ms);
+              break;
+            }
+            // Jump cancel -> JumpAerial (aerial).
+            // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c::ftFx_SpecialAirLwLoop_IASA
+            if (((buttons_pressed & (uint16_t)MSL_BUTTON_XY) != 0) ||
+                did_tap_jump(c, stick_y, tilt_timer_y)) {
+              if (batch->state.jumps_left[idx] > 0) {
+                const uint16_t act = jump_aerial_action_from_stick(c, stick_x, facing_dir);
+                batch->state.action_id[idx] = act;
+                batch->state.animation_index[idx] = (act == (uint16_t)MSL_ACT_JUMP_AERIAL_F)
+                                                        ? (uint32_t)MSL_SM_JUMP_AERIAL_F
+                                                        : (uint32_t)MSL_SM_JUMP_AERIAL_B;
+                msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+                batch->state.speed_air_x_self[idx] = stick_x * ch->air_jump_h_multiplier;
+                batch->state.speed_y_self[idx] =
+                    ch->jump_v_initial_velocity * ch->air_jump_v_multiplier;
+                // Decomp: fp->x671_timer_lstick_tilt_y = 0xFE;
+                // refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c:152-156
+                batch->state.tilt_timer_y[idx] = 0xFEu;
+                batch->state.fall_fast[idx] = 0;
+                batch->state.jumps_left[idx]--;
+                break;
+              }
+            }
+            const int16_t rl = (int16_t)ch->reflector_release_lag_frames;
+            const int16_t af = batch->state.action_frame[idx];
+            if ((held & (uint16_t)MSL_BUTTON_B) == 0) {
+              if (rl == 0 || af >= (int16_t)(rl - 1)) {
+                enter_shine_air_end(batch, idx, ms);
+              }
+            }
+          } break;
+          case MSL_ACT_FX_SPECIAL_LW_TURN: {
+            const int16_t tf = (int16_t)ch->reflector_turn_frames;
+            const int16_t af = batch->state.action_frame[idx];
+            if (tf > 0 && af >= (int16_t)(tf - 1)) {
+              enter_shine_ground_loop(batch, idx, ms);
+              a_work = batch->state.action_id[idx];
+              continue;
+            }
+            if ((held & (uint16_t)MSL_BUTTON_B) == 0) {
               enter_shine_ground_end(batch, idx, ms);
             }
-          }
-        } break;
-        case MSL_ACT_FX_SPECIAL_AIR_LW_LOOP: {
-          if (stick_wants_turn(c, batch->state.input_main_x[idx], batch->state.facing[idx])) {
-            enter_shine_air_turn(batch, idx, ms);
-            break;
-          }
-          const int16_t rl = (int16_t)ch->reflector_release_lag_frames;
-          const int16_t af = batch->state.action_frame[idx];
-          if ((held & (uint16_t)MSL_BUTTON_B) == 0) {
-            if (rl == 0 || af >= (int16_t)(rl - 1)) {
+          } break;
+          case MSL_ACT_FX_SPECIAL_AIR_LW_TURN: {
+            const int16_t tf = (int16_t)ch->reflector_turn_frames;
+            const int16_t af = batch->state.action_frame[idx];
+            if (tf > 0 && af >= (int16_t)(tf - 1)) {
+              enter_shine_air_loop(batch, idx, ms);
+              a_work = batch->state.action_id[idx];
+              continue;
+            }
+            if ((held & (uint16_t)MSL_BUTTON_B) == 0) {
               enter_shine_air_end(batch, idx, ms);
             }
-          }
-        } break;
-        case MSL_ACT_FX_SPECIAL_LW_TURN: {
-          const int16_t tf = (int16_t)ch->reflector_turn_frames;
-          const int16_t af = batch->state.action_frame[idx];
-          if (tf > 0 && af >= (int16_t)(tf - 1)) {
-            enter_shine_ground_loop(batch, idx, ms);
-          } else if ((held & (uint16_t)MSL_BUTTON_B) == 0) {
-            enter_shine_ground_end(batch, idx, ms);
-          }
-        } break;
-        case MSL_ACT_FX_SPECIAL_AIR_LW_TURN: {
-          const int16_t tf = (int16_t)ch->reflector_turn_frames;
-          const int16_t af = batch->state.action_frame[idx];
-          if (tf > 0 && af >= (int16_t)(tf - 1)) {
-            enter_shine_air_loop(batch, idx, ms);
-          } else if ((held & (uint16_t)MSL_BUTTON_B) == 0) {
-            enter_shine_air_end(batch, idx, ms);
-          }
-        } break;
-        case MSL_ACT_FX_SPECIAL_LW_END:
-          if (anim_finished(cid, ms->speciallw_ground_end, anim_frame_f32)) {
-            enter_wait(batch, idx);
-          }
-          break;
-        case MSL_ACT_FX_SPECIAL_AIR_LW_END:
-          if (anim_finished(cid, ms->speciallw_air_end, anim_frame_f32)) {
-            if (on_ground) {
+          } break;
+          case MSL_ACT_FX_SPECIAL_LW_END:
+            if (anim_finished(cid, ms->speciallw_ground_end, anim_frame_f32)) {
               enter_wait(batch, idx);
-            } else {
-              enter_fall(batch, idx);
             }
-          }
-          break;
-        default:
-          break;
+            break;
+          case MSL_ACT_FX_SPECIAL_AIR_LW_END:
+            if (anim_finished(cid, ms->speciallw_air_end, anim_frame_f32)) {
+              if (on_ground) {
+                enter_wait(batch, idx);
+              } else {
+                enter_fall(batch, idx);
+              }
+            }
+            break;
+          default:
+            break;
+        }
+        break;
       }
     }
   }
@@ -384,7 +470,8 @@ void shine_update_post_collision(MslBatch* batch) {
 
       if (action_is_shine_ground(a) && !on_ground) {
         // Ground -> air: preserve anim frame.
-        batch->state.action_id[idx] = (uint16_t)(a + (uint16_t)MSL_FX_SHINE_GROUND_TO_AIR_ACTION_DELTA);
+        batch->state.action_id[idx] =
+            (uint16_t)(a + (uint16_t)MSL_FX_SHINE_GROUND_TO_AIR_ACTION_DELTA);
         // Remap msid per-state.
         const uint16_t a2 = batch->state.action_id[idx];
         if (a2 == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_LW_START) {
@@ -401,7 +488,8 @@ void shine_update_post_collision(MslBatch* batch) {
         msl_anim_timebase_enter(batch, idx, cur_frame, 1.0f);
       } else if (action_is_shine_air(a) && on_ground) {
         // Air -> ground: preserve anim frame.
-        batch->state.action_id[idx] = (uint16_t)(a - (uint16_t)MSL_FX_SHINE_GROUND_TO_AIR_ACTION_DELTA);
+        batch->state.action_id[idx] =
+            (uint16_t)(a - (uint16_t)MSL_FX_SHINE_GROUND_TO_AIR_ACTION_DELTA);
         const uint16_t a2 = batch->state.action_id[idx];
         if (a2 == (uint16_t)MSL_ACT_FX_SPECIAL_LW_START) {
           batch->state.animation_index[idx] = (uint32_t)ms->speciallw_ground_start;

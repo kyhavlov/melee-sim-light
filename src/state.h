@@ -19,12 +19,12 @@ typedef struct MslStateSoA {
   // One per environment in the batch (per-match global counter).
   // refs/melee/src/melee/pl/plattack.c::plAttack_80037B08
   uint16_t* instance_id_counter;  // [batch]
-  float* match_damage_ratio;  // [batch] (decomp: gm_8016B248 -> StartMeleeRules.x30)
-  uint8_t* is_teams;   // [batch]
-  uint8_t* team_id;    // [batch * MSL_MAX_PLAYERS]
-  uint8_t* char_id;    // [batch * MSL_MAX_PLAYERS]
-  float* attack_ratio;   // [batch * MSL_MAX_PLAYERS] (decomp: Player_GetAttackRatio)
-  float* defense_ratio;  // [batch * MSL_MAX_PLAYERS] (decomp: Player_GetDefenseRatio)
+  float* match_damage_ratio;      // [batch] (decomp: gm_8016B248 -> StartMeleeRules.x30)
+  uint8_t* is_teams;              // [batch]
+  uint8_t* team_id;               // [batch * MSL_MAX_PLAYERS]
+  uint8_t* char_id;               // [batch * MSL_MAX_PLAYERS]
+  float* attack_ratio;            // [batch * MSL_MAX_PLAYERS] (decomp: Player_GetAttackRatio)
+  float* defense_ratio;           // [batch * MSL_MAX_PLAYERS] (decomp: Player_GetDefenseRatio)
 
   // Kinematics
   float* pos_x;
@@ -60,7 +60,7 @@ typedef struct MslStateSoA {
   int16_t* action_frame;
   uint8_t* match_flow_timer;
   int16_t* downwait_timer;  // fp->mv.co.downwait.x0 (seeded; decomp: ftCo_DownWait_Anim)
-  float* anim_frame_f32;  // decomp fp->cur_anim_frame (float; Slippi `state_age`)
+  float* anim_frame_f32;    // decomp fp->cur_anim_frame (float; Slippi `state_age`)
   // Decomp-shaped internal animation/script timebase with deterministic fractional carry.
   // - anim_frame_fp_q16_16 mirrors fp->cur_anim_frame (float) as signed Q16.16 fixed-point.
   // - frame_speed_mul_fp_q16_16 mirrors fp->frame_speed_mul (float) as signed Q16.16 fixed-point.
@@ -311,15 +311,15 @@ typedef struct MslStateSoA {
   // - Stale queue update: refs/melee/src/melee/pl/plstale.c::plStale_UpdateStaleMovesFromItem
   uint16_t* item_attack_id;        // [batch * MSL_MAX_ITEMS]
   uint16_t* item_attack_instance;  // [batch * MSL_MAX_ITEMS]
-  float* item_direction;       // [batch * MSL_MAX_ITEMS]
-  float* item_vel_x;           // [batch * MSL_MAX_ITEMS]
-  float* item_vel_y;           // [batch * MSL_MAX_ITEMS]
-  float* item_pos_x;           // [batch * MSL_MAX_ITEMS]
-  float* item_pos_y;           // [batch * MSL_MAX_ITEMS]
-  uint16_t* item_damage;       // [batch * MSL_MAX_ITEMS]
-  float* item_timer;           // [batch * MSL_MAX_ITEMS]
-  uint32_t* item_spawn_id;     // [batch * MSL_MAX_ITEMS]
-  uint8_t* item_misc0;         // [batch * MSL_MAX_ITEMS]
+  float* item_direction;           // [batch * MSL_MAX_ITEMS]
+  float* item_vel_x;               // [batch * MSL_MAX_ITEMS]
+  float* item_vel_y;               // [batch * MSL_MAX_ITEMS]
+  float* item_pos_x;               // [batch * MSL_MAX_ITEMS]
+  float* item_pos_y;               // [batch * MSL_MAX_ITEMS]
+  uint16_t* item_damage;           // [batch * MSL_MAX_ITEMS]
+  float* item_timer;               // [batch * MSL_MAX_ITEMS]
+  uint32_t* item_spawn_id;         // [batch * MSL_MAX_ITEMS]
+  uint8_t* item_misc0;             // [batch * MSL_MAX_ITEMS]
   uint8_t* item_misc1;
   uint8_t* item_misc2;
   uint8_t* item_misc3;

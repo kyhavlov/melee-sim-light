@@ -103,6 +103,21 @@ static inline int8_t msl_ucf_padbuf_get_raw_y(const MslStateSoA* s, size_t idx, 
   return s->ucf_padbuf_stick_y[idx * MSL_UCF_PADBUF_SIZE + (size_t)slot];
 }
 
+uint8_t msl_ucf_check_xsmash(const MslStateSoA* s, size_t idx) {
+  // Decomp tie-down:
+  // - UCF check uses the pad buffer delta between current input and -2.
+  //   refs/ucf/include/ucf/pad_buffer.h::check_ucf_xsmash (delta^2 > 75^2)
+  //
+  // The pad buffer is a seeded ring buffer that stores raw PADStatus stick bytes (pre-UCF clamp).
+  if (s == NULL) {
+    return 0;
+  }
+  const int x_prev = (int)msl_ucf_padbuf_get_raw_x(s, idx, (uint8_t)(-2));
+  const int x_cur = (int)msl_ucf_padbuf_get_raw_x(s, idx, 0);
+  const int d = x_cur - x_prev;
+  return (d * d > 75 * 75) ? 1u : 0u;
+}
+
 static inline uint8_t x672_trigger_timer_update(uint8_t prev_timer, float trig, float prev_trig,
                                                 float trigger_min) {
   // fp->x672_input_timer_counter (saturating at 0xFE).

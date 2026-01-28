@@ -7,3 +7,7 @@
 
 int input_apply(MslBatch* batch, const uint8_t* prev_input_bytes, size_t prev_input_stride_bytes,
                 const uint8_t* input_bytes, size_t input_stride_bytes);
+
+// UCF x-smash intent heuristic (uses the seeded UCF pad buffer ring).
+// refs/ucf/include/ucf/pad_buffer.h::check_ucf_xsmash
+uint8_t msl_ucf_check_xsmash(const MslStateSoA* s, size_t idx);

@@ -24,3 +24,12 @@ uint8_t move_tables_attackair_cmd0_active(uint8_t char_id, uint16_t attackair_ac
 // Source of truth: data/moves/{fox,falco}.json moves["ftCo_SM_AttackAir*"]["events"] allow_interrupt.
 uint8_t move_tables_attackair_allow_interrupt(uint8_t char_id, uint16_t attackair_action_id,
                                               float cur_anim_frame_f32);
+
+// Returns whether cmd_var[0] is set at the given cur_anim_frame for Dash.
+//
+// Decomp: Dash IASA gates late transitions on `fp->cmd_vars[0]`.
+// refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c::ftCo_Dash_IASA
+// refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c::ftCo_Dash_Enter (cmd_vars[0] reset on entry)
+//
+// Source of truth: data/moves/{fox,falco}.json moves["ftCo_SM_Dash"]["events"] set_cmd_var(idx=0).
+uint8_t move_tables_dash_cmd0_active(uint8_t char_id, float cur_anim_frame_f32);

@@ -32,6 +32,7 @@ enum {
 
 static MslFrameWindow g_cmd0_by_char_attackair[256][MSL_ATTACKAIR_KIND_COUNT];
 static MslFrameWindow g_allow_interrupt_by_char_attackair[256][MSL_ATTACKAIR_KIND_COUNT];
+static MslFrameWindow g_cmd0_by_char_dash[256];
 static int g_loaded = 0;
 
 static const char* json_skip_ws(const char* s) {
@@ -270,6 +271,106 @@ static int parse_attackair_cmd0_window(const char* buf, const char* buf_end, con
   return 0;
 }
 
+static int parse_cmd0_window_open_end(const char* buf, const char* buf_end, const char* move_key,
+                                      MslFrameWindow* out) {
+  if (buf == NULL || buf_end == NULL || move_key == NULL || out == NULL) {
+    return -1;
+  }
+
+  char pat[128];
+  const int pn = snprintf(pat, sizeof(pat), "\"%s\"", move_key);
+  if (pn <= 0 || (size_t)pn >= sizeof(pat)) {
+    return -1;
+  }
+
+  const char* key_pos = strstr_range(buf, buf_end, pat);
+  if (key_pos == NULL) {
+    return -1;
+  }
+  const char* obj_start = (const char*)memchr(key_pos, '{', (size_t)(buf_end - key_pos));
+  if (obj_start == NULL) {
+    return -1;
+  }
+  const char* obj_end = json_find_matching_delim(obj_start, buf_end, '{', '}');
+  if (obj_end == NULL) {
+    return -1;
+  }
+
+  const char* events_key = strstr_range(obj_start, obj_end, "\"events\"");
+  if (events_key == NULL) {
+    return -1;
+  }
+  const char* arr_start = (const char*)memchr(events_key, '[', (size_t)(obj_end - events_key));
+  if (arr_start == NULL) {
+    return -1;
+  }
+  const char* arr_end = json_find_matching_delim(arr_start, obj_end, '[', ']');
+  if (arr_end == NULL) {
+    return -1;
+  }
+
+  int on_frame = -1;
+  int off_frame = -1;
+
+  // Iterate event objects in the events array.
+  const char* p = arr_start;
+  while (p && p < arr_end) {
+    const char* ev_start = (const char*)memchr(p, '{', (size_t)(arr_end - p));
+    if (ev_start == NULL) {
+      break;
+    }
+    const char* ev_end = json_find_matching_delim(ev_start, arr_end, '{', '}');
+    if (ev_end == NULL) {
+      break;
+    }
+
+    // Only care about set_cmd_var events (extracted from fighter command scripts).
+    if (json_get_str_eq_in_range(ev_start, ev_end, "kind", "set_cmd_var")) {
+      int frame = 0;
+      int idx = 0;
+      int value = 0;
+      if (json_get_i32_in_range(ev_start, ev_end, "frame", &frame) == 0 &&
+          json_get_i32_in_range(ev_start, ev_end, "idx", &idx) == 0 &&
+          json_get_i32_in_range(ev_start, ev_end, "value", &value) == 0) {
+        if (idx == 0) {
+          if (value != 0 && on_frame < 0) {
+            on_frame = frame;
+          } else if (value == 0 && on_frame >= 0 && off_frame < 0) {
+            off_frame = frame;
+          }
+        }
+      }
+    }
+
+    p = ev_end + 1;
+  }
+
+  if (on_frame < 0) {
+    return -1;
+  }
+  if (off_frame < 0) {
+    // Common pattern for grounded locomotion scripts: cmd_var[0] is set once and never explicitly
+    // cleared (it is cleared on motion-state entry instead).
+    //
+    // Decomp tie-down for Dash:
+    // - ftCo_Dash_Enter resets fp->cmd_vars[0] = 0 on motion-state entry.
+    //   refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c::ftCo_Dash_Enter
+    // - The Dash command script then sets cmd_var[0] once (no explicit clear event in the script),
+    //   so treating the window as open-ended within that motion state is correct.
+    off_frame = INT16_MAX;
+  }
+  if (off_frame < on_frame) {
+    return -1;
+  }
+
+  // Extracted move script frames are 0-based (see tools/extraction/extract_fighter_moves.py).
+  // Treat cmd_var[0] as enabled for action_frame in [on, off).
+  out->start_af = (int16_t)on_frame;
+  out->end_af = (int16_t)off_frame;
+  out->loaded = 1;
+  return 0;
+}
+
 static int parse_attackair_allow_interrupt_window(const char* buf, const char* buf_end,
                                                   const char* move_key, MslFrameWindow* out) {
   if (buf == NULL || buf_end == NULL || move_key == NULL || out == NULL) {
@@ -456,6 +557,15 @@ static int load_one(const char* data_dir, const char* rel_path, uint8_t char_id)
     g_allow_interrupt_by_char_attackair[char_id][MSL_ATTACKAIR_KIND_LW] = win;
   }
 
+  // Dash cmd_var[0] window (used for Dash IASA late transitions).
+  //
+  // Decomp: Dash IASA gates late transitions on `fp->cmd_vars[0]`.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c::ftCo_Dash_IASA
+  win = (MslFrameWindow){0};
+  if (parse_cmd0_window_open_end(buf, buf_end, "ftCo_SM_Dash", &win) == 0) {
+    g_cmd0_by_char_dash[char_id] = win;
+  }
+
   alloc_free(buf);
   return 0;
 }
@@ -521,7 +631,7 @@ uint8_t move_tables_attackair_cmd0_active(uint8_t char_id, uint16_t attackair_ac
   // action_frame counter. Use anim_frame_f32 (seeded from Slippi state_age) as our proxy.
   // refs/melee/src/melee/ft/ftaction.c::ftAction_80071820 (set_cmd_var)
   return (cur_anim_frame_f32 >= (float)win.start_af && cur_anim_frame_f32 < (float)win.end_af) ? 1
-                                                                                                : 0;
+                                                                                               : 0;
 }
 
 uint8_t move_tables_attackair_allow_interrupt(uint8_t char_id, uint16_t attackair_action_id,
@@ -544,5 +654,17 @@ uint8_t move_tables_attackair_allow_interrupt(uint8_t char_id, uint16_t attackai
   // fp->allow_interrupt based on fp->cur_anim_frame (float) timing.
   // refs/melee/src/melee/ft/ftaction.c::ftAction_80071950
   return (cur_anim_frame_f32 >= (float)win.start_af && cur_anim_frame_f32 < (float)win.end_af) ? 1
-                                                                                                : 0;
+                                                                                               : 0;
+}
+
+uint8_t move_tables_dash_cmd0_active(uint8_t char_id, float cur_anim_frame_f32) {
+  const MslFrameWindow win = g_cmd0_by_char_dash[char_id];
+  if (!win.loaded) {
+    // Conservative fallback: treat as never-enabled.
+    return 0;
+  }
+  // Command-script frame events are evaluated on fp->cur_anim_frame (float).
+  // refs/melee/src/melee/ft/ftaction.c::ftAction_80071820 (set_cmd_var)
+  return (cur_anim_frame_f32 >= (float)win.start_af && cur_anim_frame_f32 < (float)win.end_af) ? 1
+                                                                                               : 0;
 }

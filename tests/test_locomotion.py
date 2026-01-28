@@ -198,8 +198,8 @@ def test_dash_iasa_opposite_flick_enters_turn_without_same_frame_flip() -> None:
     assert int(out0["action_id"][0]) == ACT_TURN
     # No same-frame flip on Dash->Turn entry.
     assert int(out0["facing"][0]) == 1
-    # Turn anim tick flips on the next frame (frames_to_turn=0 path).
-    assert int(out1["action_id"][0]) == ACT_TURN
+    # Smash-turn can dash out on the next frame under the Turn IASA dash gate (Turn->Dash).
+    assert int(out1["action_id"][0]) == ACT_DASH
     assert int(out1["facing"][0]) == 0
 
 

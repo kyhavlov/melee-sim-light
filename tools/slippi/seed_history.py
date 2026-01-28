@@ -649,9 +649,10 @@ def derive_turn_internals(
     future outcomes (e.g. post-frame facing flips).
 
     Deterministic assumption (do NOT tune via one-step mismatch metrics):
-    - If TURN entry-frame ordering is ambiguous, we assume `ftCo_Turn_Anim_Inner` applies once on
-      the entry frame (same frame the action switches into TURN/TURN_RUN). This matches the
-      simulator's current update ordering.
+    - If TURN entry-frame ordering is ambiguous, we assume `ftCo_Turn_Anim_Inner` does NOT apply
+      on the entry frame (same frame the action switches into TURN/TURN_RUN), matching the
+      simulator's current update ordering (Turn flip is only ticked if Turn was already active at
+      frame start).
     - This assumption is expected to be revisited once we seed more complete entry history
       (notably KneeBend/jump-squat entry history), rather than being "trained" against outcomes.
     """
@@ -703,6 +704,10 @@ def derive_turn_internals(
             if frames_to_turn > 0xFE:
                 frames_to_turn = 0xFE
             has_turned = 0
+            out_frames[i] = np.uint8(frames_to_turn)
+            out_has[i] = np.uint8(has_turned)
+            prev_in_turn = True
+            continue
 
         # Apply one ftCo_Turn_Anim_Inner tick for this frame (post-frame snapshot semantics).
         if frames_to_turn > 0:
