@@ -89,6 +89,14 @@ def main() -> None:
         "down_attack_button_window_frames": float(_f32_be(buf, ft_common_abs + 0x24C)),
         "down_attack_cstick_up_threshold": float(_f32_be(buf, ft_common_abs + 0x7F4)),
         "down_wait_frames": float(_f32_be(buf, ft_common_abs + 0x424)),
+        # Combo timer window after hitstun ends (GALE01 fp->x2098 reset).
+        #
+        # Decomp trail:
+        # - set when hitstun ends:
+        #   refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008F744 (fp->x2098 = p_ftCommonData->x4CC)
+        # - decremented and used for clearing attacker combo victim (fp->x2094):
+        #   refs/melee/src/melee/ft/ftcoll.c::ftColl_800764DC
+        "combo_timer_post_hitstun_frames": int(max(0, _i32_be(buf, ft_common_abs + 0x4CC))),
         # Shield / guard (ftCo_Guard.c, fighter.c).
         # - Guard hold drain: shield_health -= x278 * (lightshield_amount*(x2F0-x2EC)+x2EC)
         # - Shield hit depletion: shield_health -= x284 * (shieldDamageTaken*(1 - (lightshield_amount*(x2E0-x2DC)+x2DC))) + x288

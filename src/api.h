@@ -260,6 +260,10 @@ typedef struct MslSeed {
   uint32_t animation_index[MSL_MAX_PLAYERS];
   uint16_t instance_hit_by[MSL_MAX_PLAYERS];
   uint16_t instance_id[MSL_MAX_PLAYERS];
+  // Staling "attack id" (GALE01): fp->x2068_attackID.
+  // Slippi post-frames do not expose fp->x2068 directly; preprocessing derives it causally from
+  // replay history (see tools/slippi/staling_history.py).
+  uint16_t attack_id[MSL_MAX_PLAYERS];
   // Staling "attack instance" (GALE01): fp->x206C_attack_instance.
   // This value is used for stale-queue duplicate suppression as part of the (move_id, attack_instance) key.
   // refs/melee/src/melee/pl/plstale.c::plStale_UpdateStaleMovesFromFighter
@@ -269,6 +273,22 @@ typedef struct MslSeed {
   uint16_t attack_instance[MSL_MAX_PLAYERS];
   uint8_t last_attack_landed[MSL_MAX_PLAYERS];
   uint8_t combo_count[MSL_MAX_PLAYERS];
+  // Combo tracking internals (GALE01 fp->x2094 + fp->x2098).
+  //
+  // Decomp trail:
+  // - Update on hit (writes fp->x208C, fp->x2090, fp->x2094):
+  //   refs/melee/src/melee/ft/ftcoll.c::ftColl_800763C0 and ::ftColl_80076444 and ::ftColl_8007646C
+  // - Clear logic (uses fp->x221C_b6 + victim fp->x2098):
+  //   refs/melee/src/melee/ft/ftcoll.c::ftColl_800764DC
+  // - Victim combo-timer set when hitstun ends:
+  //   refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008F744
+  //
+  // Seed representation:
+  // - combo_victim_port: player-slot index in [0..3], 0xFF = none (NULL).
+  // - combo_victim_instance_id: victim `instance_id` identity key (respawn-safe).
+  uint8_t combo_victim_port[MSL_MAX_PLAYERS];
+  uint16_t combo_victim_instance_id[MSL_MAX_PLAYERS];
+  uint16_t combo_timer_x2098[MSL_MAX_PLAYERS];
   uint8_t last_hit_by[MSL_MAX_PLAYERS];
   uint8_t _pad2[1];
   uint8_t state_flags[MSL_MAX_PLAYERS][5];

@@ -131,6 +131,55 @@ static inline void combat_state_flags_set_is_hitstun(MslBatch* batch, size_t idx
   batch->state.state_flags[flags_i] = f;
 }
 
+// Combo / last-attack tracking (decomp-first).
+//
+// Decomp trail (GALE01):
+// - Combo update + last-attack id:
+//   refs/melee/src/melee/ft/ftcoll.c::ftColl_800763C0 (writes fp->x208C, fp->x2090, fp->x2094)
+//   refs/melee/src/melee/ft/ftcoll.c::ftColl_80076444 (calls ftColl_800763C0(attacker, victim, fp->x2068_attackID))
+//   refs/melee/src/melee/ft/ftcoll.c::ftColl_8007646C (item->fighter variant; attack id in item domain)
+// - Slippi post-frame fields:
+//   - last_attack_landed: low byte of lwz 0x208C(fp)
+//   - combo_count: low byte of lhz 0x2090(fp)
+//   refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
+static inline void combat_combo_ftColl_800763C0(MslBatch* batch, size_t a_idx, int defender,
+                                                size_t d_idx, uint16_t attack_id_u16) {
+  if (batch == NULL) {
+    return;
+  }
+  const int num_players = (int)batch->config.num_players;
+  if (defender < 0 || defender >= num_players) {
+    return;
+  }
+
+  const uint8_t attack_id_u8 = (uint8_t)attack_id_u16;  // Slippi stores the low byte.
+  const uint8_t cur_victim = batch->state.combo_victim_port[a_idx];
+  if (cur_victim == 0xFFu) {
+    batch->state.last_attack_landed[a_idx] = attack_id_u8;
+    batch->state.combo_count[a_idx] = 1u;
+    batch->state.combo_victim_port[a_idx] = (uint8_t)defender;
+    batch->state.combo_victim_instance_id[a_idx] = batch->state.instance_id[d_idx];
+    return;
+  }
+  // Decomp uses a raw victim GObj pointer for `fp->x2094` equality checks (not an integer ID).
+  // refs/melee/src/melee/ft/ftcoll.c::ftColl_800763C0
+  //
+  // Slippi's `instance_id` (fp+0x2070 union-as-int) is not a stable "fighter object identity"
+  // across frames, so do not include it in the x2094-equivalence check. We keep the instance_id
+  // snapshot only as a seeded/debuggable overlay.
+  // refs/melee/src/melee/ft/types.h (union Struct2070 at fp+0x2070, used as s32 x2070_int)
+  if (cur_victim == (uint8_t)defender) {
+    if (attack_id_u16 != (uint16_t)MSL_FT_MOVE_ID_DEFAULT &&
+        batch->state.last_attack_landed[a_idx] == attack_id_u8) {
+      batch->state.combo_count[a_idx] = (uint8_t)(batch->state.combo_count[a_idx] + 1u);
+    } else {
+      batch->state.combo_count[a_idx] = 0u;
+      batch->state.last_attack_landed[a_idx] = attack_id_u8;
+    }
+    batch->state.combo_victim_instance_id[a_idx] = batch->state.instance_id[d_idx];
+  }
+}
+
 static inline uint16_t combat_calc_hitlag_frames(const MslCommonParams* c, int dmg,
                                                  uint16_t motion_id) {
   if (c == NULL) {
@@ -674,6 +723,7 @@ static inline void combat_mutations_pass1_future_apply_body_hit_invincible(MslBa
 // - attribution fields compared in-suite (instance_hit_by, last_hit_by)
 static inline void combat_mutations_pass1_future_apply_body_hit(MslBatch* batch, size_t a_idx,
                                                                 size_t d_idx, int attacker,
+                                                                int defender,
                                                                 size_t hb_i, size_t cap_i,
                                                                 int int_dmg,
                                                                 uint16_t attacker_motion_id) {
@@ -855,6 +905,11 @@ static inline void combat_mutations_pass1_future_apply_body_hit(MslBatch* batch,
     // Decomp: refs/melee/src/melee/pl/plstale.c::plStale_UpdateStaleMovesFromFighter
     const uint16_t attack_instance = batch->state.attack_instance[a_idx];
     staling_queue_update(batch, a_idx, move_id, attack_instance);
+
+    // Combo count + last-attack tracking still happens on the collision-confirmed hit, even if the
+    // later damage-state path is skipped due to `fp->dmg.kb_applied == 0`.
+    // Decomp: refs/melee/src/melee/ft/ftcoll.c::ftColl_80076444 -> ftColl_800763C0(fp->x2068_attackID).
+    combat_combo_ftColl_800763C0(batch, a_idx, defender, d_idx, batch->state.attack_id[a_idx]);
     return;
   }
 
@@ -937,6 +992,10 @@ static inline void combat_mutations_pass1_future_apply_body_hit(MslBatch* batch,
   // Decomp: refs/melee/src/melee/pl/plstale.c::plStale_UpdateStaleMovesFromFighter
   const uint16_t attack_instance = batch->state.attack_instance[a_idx];
   staling_queue_update(batch, a_idx, move_id, attack_instance);
+
+  // Combo count + last-attack tracking (attacker-side).
+  // Decomp: refs/melee/src/melee/ft/ftcoll.c::ftColl_80076444 -> ftColl_800763C0(fp->x2068_attackID).
+  combat_combo_ftColl_800763C0(batch, a_idx, defender, d_idx, batch->state.attack_id[a_idx]);
 }
 
 void combat_apply_item_hit(MslBatch* batch, int batch_index, int attacker, int defender,
@@ -1037,6 +1096,10 @@ void combat_apply_item_hit(MslBatch* batch, int batch_index, int attacker, int d
   // Stale-move queue update on successful damaging BODY hit (attacker-side).
   // Decomp: refs/melee/src/melee/pl/plstale.c::plStale_UpdateStaleMovesFromItem
   staling_queue_update(batch, a_idx, item_attack_id, item_attack_instance);
+
+  // Combo count + last-attack tracking (attacker-side).
+  // Decomp: refs/melee/src/melee/ft/ftcoll.c::ftColl_8007646C -> ftColl_800763C0(item attack id domain).
+  combat_combo_ftColl_800763C0(batch, a_idx, defender, d_idx, item_attack_id);
 }
 
 void combat_apply_item_shield_hit(MslBatch* batch, int batch_index, int attacker, int defender,
@@ -1582,8 +1645,8 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
           if (defender_no_damage) {
             combat_mutations_pass1_future_apply_body_hit_invincible(batch, a_idx, hb_i, a_motion_id);
           } else {
-            combat_mutations_pass1_future_apply_body_hit(batch, a_idx, d_idx, attacker, hb_i, cap_i,
-                                                         int_dmg, a_motion_id);
+            combat_mutations_pass1_future_apply_body_hit(batch, a_idx, d_idx, attacker, defender,
+                                                         hb_i, cap_i, int_dmg, a_motion_id);
           }
           hitlist_register(batch, bi, attacker, hit_group, defender, defender_iid, rehit_frames);
 

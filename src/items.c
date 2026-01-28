@@ -524,9 +524,10 @@ static void laser_spawn_from_fighter(MslBatch* batch, int bi, int owner, const M
   batch->state.item_state[ii] = 0;  // it_8029C6A4 uses msid=0 (itfoxlaser.c::it_8029C6A4)
   batch->state.item_type[ii] = lp->shot_itkind;
   batch->state.item_owner[ii] = (int8_t)owner;
-  // Staling identity: items copy the owner's fighter-side (attack_id, attack_instance) at spawn.
+  // Staling identity: items copy the owner's fighter-side (attack_id, attack_instance) at spawn:
+  // `item->xD88_attackID = fighter->x2068_attackID; item->xD8C_attack_instance = fighter->x206C_attack_instance;`
   // refs/melee/src/melee/it/it_2725.c::it_8027B070
-  batch->state.item_attack_id[ii] = staling_move_id_from_state(batch, o_idx);
+  batch->state.item_attack_id[ii] = batch->state.attack_id[o_idx];
   batch->state.item_attack_instance[ii] = batch->state.attack_instance[o_idx];
   // Slippi fixed ordering key uses instance_id; for blaster shots, it commonly matches the owner's gun item.
   // (Dataset ordering source: tools/slippi/make_dataset_from_slp.py::_fill_items_fixed.)

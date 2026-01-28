@@ -217,6 +217,15 @@ typedef struct MslCommonParams {
   float damage_severity_x15c;  // p_ftCommonData->0x15C
   float damage_severity_x160;  // p_ftCommonData->0x160
 
+  // Combo timer window after hitstun ends (used by combo victim clear logic).
+  // Decomp:
+  // - fp->x2098 = p_ftCommonData->x4CC when hitstun ends:
+  //   refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008F744
+  // - decremented and used for clearing attacker fp->x2094 (combo victim):
+  //   refs/melee/src/melee/ft/ftcoll.c::ftColl_800764DC
+  uint16_t combo_timer_post_hitstun_frames;  // p_ftCommonData->x4CC
+  uint16_t _pad_u16_combo_0;
+
   // DamageFlyTop angle window (radians) (ftCo_8008DCE0 block_33).
   float damagefly_top_angle_min_radians;  // p_ftCommonData->0x234
   float damagefly_top_angle_max_radians;  // p_ftCommonData->0x238

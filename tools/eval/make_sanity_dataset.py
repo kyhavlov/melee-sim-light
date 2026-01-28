@@ -52,8 +52,12 @@ def _rand_inputs(rng: np.random.Generator, n: int) -> np.ndarray:
     x["seed_t"]["animation_index"][:, :2] = rng.integers(0, 2048, size=(n, 2), dtype=np.uint32)
     x["seed_t"]["instance_hit_by"][:, :2] = rng.integers(0, 4096, size=(n, 2), dtype=np.uint16)
     x["seed_t"]["instance_id"][:, :2] = rng.integers(0, 4096, size=(n, 2), dtype=np.uint16)
+    x["seed_t"]["attack_id"][:, :2] = rng.integers(0, 4096, size=(n, 2), dtype=np.uint16)
     x["seed_t"]["last_attack_landed"][:, :2] = rng.integers(0, 256, size=(n, 2), dtype=np.uint8)
     x["seed_t"]["combo_count"][:, :2] = rng.integers(0, 32, size=(n, 2), dtype=np.uint8)
+    x["seed_t"]["combo_victim_port"][:, :2] = np.uint8(0xFF)
+    x["seed_t"]["combo_victim_instance_id"][:, :2] = np.uint16(0)
+    x["seed_t"]["combo_timer_x2098"][:, :2] = np.uint16(0)
     x["seed_t"]["last_hit_by"][:, :2] = rng.integers(0, 4, size=(n, 2), dtype=np.uint8)
     x["seed_t"]["state_flags"][:, :2, :] = rng.integers(0, 256, size=(n, 2, 5), dtype=np.uint8)
 

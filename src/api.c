@@ -324,9 +324,13 @@ int msl_batch_reseed_seed(MslBatch* batch, const uint8_t* seed_bytes, size_t see
       batch->state.animation_index[idx] = seed->animation_index[p];
       batch->state.instance_hit_by[idx] = seed->instance_hit_by[p];
       batch->state.instance_id[idx] = seed->instance_id[p];
+      batch->state.attack_id[idx] = seed->attack_id[p];
       batch->state.attack_instance[idx] = seed->attack_instance[p];
       batch->state.last_attack_landed[idx] = seed->last_attack_landed[p];
       batch->state.combo_count[idx] = seed->combo_count[p];
+      batch->state.combo_victim_port[idx] = seed->combo_victim_port[p];
+      batch->state.combo_victim_instance_id[idx] = seed->combo_victim_instance_id[p];
+      batch->state.combo_timer_x2098[idx] = seed->combo_timer_x2098[p];
       batch->state.last_hit_by[idx] = seed->last_hit_by[p];
 
       for (int k = 0; k < 5; k++) {

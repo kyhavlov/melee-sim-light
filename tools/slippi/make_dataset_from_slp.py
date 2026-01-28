@@ -521,6 +521,8 @@ def _main_impl(args) -> None:
     # ref_t1  := post(i)
     n_samples = n_frames - 1
     samples = np.zeros(n_samples, dtype=SAMPLE_DTYPE)
+    # Seed defaults for new internal fields.
+    samples["seed_t"]["combo_victim_port"][:] = np.uint8(0xFF)
 
     stage_id = int(game.start.get("stage", 0))
     is_teams = int(bool(game.start.get("is_teams", False)))
@@ -630,6 +632,7 @@ def _main_impl(args) -> None:
     from tools.slippi.staling_history import derive_staling_history
 
     hist = derive_staling_history(frames, src_ports=src_ports)
+    samples["seed_t"]["attack_id"][:, :num_players] = hist.attack_id[:-1, :]
     samples["seed_t"]["attack_instance"][:, :num_players] = hist.attack_instance[:-1, :]
     samples["seed_t"]["stale_queue_index"][:, :num_players] = hist.stale_queue_index[:-1, :]
     samples["seed_t"]["stale_move_id"][:, :num_players, :] = hist.stale_move_id[:-1, :, :]
@@ -1115,7 +1118,11 @@ def _main_impl(args) -> None:
     post_stocks = np.zeros((n_frames, 4), dtype=np.uint8)
     post_shield_hp = np.zeros((n_frames, 4), dtype=np.float32)
     post_hurtbox_state = np.zeros((n_frames, 4), dtype=np.uint8)
+    post_instance_hit_by = np.zeros((n_frames, 4), dtype=np.uint16)
     post_instance_id = np.zeros((n_frames, 4), dtype=np.uint16)
+    post_hitlag = np.zeros((n_frames, 4), dtype=np.uint16)
+    post_state_flags = np.zeros((n_frames, 4, 5), dtype=np.uint8)
+    post_last_hit_by = np.full((n_frames, 4), 0xFF, dtype=np.uint8)
     pre_buttons = np.zeros((n_frames, 4), dtype=np.uint16)
     pre_l = np.zeros((n_frames, 4), dtype=np.uint8)
     pre_r = np.zeros((n_frames, 4), dtype=np.uint8)
@@ -1144,7 +1151,21 @@ def _main_impl(args) -> None:
         post_stocks[:, slot] = _to_numpy(post.field("stocks")).astype(np.uint8)
         post_shield_hp[:, slot] = _to_numpy(post.field("shield")).astype(np.float32)
         post_hurtbox_state[:, slot] = _to_numpy(post.field("hurtbox_state")).astype(np.uint8)
+        post_instance_hit_by[:, slot] = _to_numpy(post.field("last_hit_by_instance")).astype(np.uint16)
         post_instance_id[:, slot] = _to_numpy(post.field("instance_id")).astype(np.uint16)
+        post_hitlag[:, slot] = _u16_from_float_frames(_to_numpy(post.field("hitlag")).astype(np.float32), n_frames)
+        post_last_hit_by[:, slot] = _to_numpy(post.field("last_hit_by")).astype(np.uint8)
+        sf = post.field("state_flags")
+        post_state_flags[:, slot, :] = np.stack(
+            [
+                _to_numpy(sf.field("0")).astype(np.uint8),
+                _to_numpy(sf.field("1")).astype(np.uint8),
+                _to_numpy(sf.field("2")).astype(np.uint8),
+                _to_numpy(sf.field("3")).astype(np.uint8),
+                _to_numpy(sf.field("4")).astype(np.uint8),
+            ],
+            axis=1,
+        )
 
     hitlist_cd, hitlist_iid = derive_combat_hitlist_seed_fields(
         num_players=num_players,
@@ -1170,6 +1191,28 @@ def _main_impl(args) -> None:
 
     samples["seed_t"]["combat_hitlist_cd"] = hitlist_cd[:-1]
     samples["seed_t"]["combat_hitlist_victim_iid"] = hitlist_iid[:-1]
+
+    # -----------------------------
+    # Combo victim + combo timer internals (strictly causal)
+    # -----------------------------
+    #
+    # These seed fields support decomp-shaped ftColl_800763C0/ftColl_800764DC combo tracking in the
+    # simulator core by reconstructing the missing fp->x2094/x2098 state from replay prefix history.
+    from tools.slippi.combo_history import derive_combo_seed_fields
+
+    combo_victim_port, combo_victim_iid, combo_timer = derive_combo_seed_fields(
+        num_players=num_players,
+        src_ports=list(src_ports),
+        hitlag=post_hitlag,
+        state_flags=post_state_flags,
+        instance_id=post_instance_id,
+        last_hit_by=post_last_hit_by,
+        instance_hit_by=post_instance_hit_by,
+        data_root="data",
+    )
+    samples["seed_t"]["combo_victim_port"][:, :num_players] = combo_victim_port[:-1, :num_players]
+    samples["seed_t"]["combo_victim_instance_id"][:, :num_players] = combo_victim_iid[:-1, :num_players]
+    samples["seed_t"]["combo_timer_x2098"][:, :num_players] = combo_timer[:-1, :num_players]
 
     write_dataset(args.out, num_players=num_players, samples=samples)
     print(f"Wrote {n_samples} samples to {args.out} from {args.slp}")

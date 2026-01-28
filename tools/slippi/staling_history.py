@@ -113,10 +113,17 @@ def _load_move_id_table_for_char(char_id: int, *, data_dir: Path = Path("data"))
 
 def _move_id_from_char_msid(char_id: int, msid_u32: int) -> int:
     if msid_u32 < 0 or msid_u32 > 0xFFFF:
-        return _U16_MAX
+        return _FT_MOVE_ID_DEFAULT
     msid = int(msid_u32) & 0xFFFF
     tab = _load_move_id_table_for_char(int(char_id))
-    return int(tab.get(msid, _U16_MAX))
+    mv = tab.get(msid)
+    # The extracted table uses 0xFFFF as a sentinel for "ambiguous/unknown". For fighter-side
+    # `x2068_attackID`, prefer the decomp-default `FtMoveId_Default` (1) over propagating a
+    # nonexistent 0xFFFF move id into combo/item attribution.
+    # refs/melee/src/melee/ft/forward.h::FtMoveId
+    if mv is None or int(mv) == _U16_MAX:
+        return _FT_MOVE_ID_DEFAULT
+    return int(mv)
 
 
 def derive_staling_history(frames: pa.StructArray, *, src_ports: list[int]) -> StalingHistory:

@@ -199,9 +199,23 @@ typedef struct MslStateSoA {
   uint32_t* animation_index;
   uint16_t* instance_hit_by;
   uint16_t* instance_id;
+  uint16_t* attack_id;  // GALE01 fp->x2068_attackID (seeded; replay-history derived)
   uint16_t* attack_instance;
   uint8_t* last_attack_landed;
   uint8_t* combo_count;
+  // Combo tracking internals (GALE01 fp->x2094 + fp->x2098).
+  //
+  // Decomp trail:
+  // - fp->x2094 victim pointer ("combo victim"): refs/melee/src/melee/ft/ftcoll.c::ftColl_800763C0
+  // - fp->x2098 combo-window timer: refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008F744
+  // - decrement + clear rule: refs/melee/src/melee/ft/ftcoll.c::ftColl_800764DC
+  //
+  // Simulator representation:
+  // - combo_victim_port: player-slot index in [0..3], or 0xFF for none.
+  // - combo_victim_instance_id: victim `instance_id` identity key to avoid respawn pointer reuse.
+  uint8_t* combo_victim_port;
+  uint16_t* combo_victim_instance_id;
+  uint16_t* combo_timer_x2098;
   uint8_t* last_hit_by;
   uint8_t* state_flags;  // [batch * players * 5]
 

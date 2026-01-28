@@ -18,6 +18,7 @@
   "cliff_wait_frames_high_percent": 480.0,
   "cliff_wait_frames_low_percent": 640.0,
   "cliff_wait_percent_threshold": 100.0,
+  "combo_timer_post_hitstun_frames": 2,
   "crouch_stick_threshold": 0.6875,
   "cstick_smash_threshold": 0.5,
   "damage_hitstun_mul": 0.4000000059604645,

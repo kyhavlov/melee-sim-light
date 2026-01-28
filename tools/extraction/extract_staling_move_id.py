@@ -18,7 +18,9 @@ class _MotionStateEntry:
     src: str
 
 
-def _parse_c_enum(header: Path, *, enum_typedef: str, prefix: str) -> dict[str, int]:
+def _parse_c_enum(
+    header: Path, *, enum_typedef: str, prefix: str, symtab: dict[str, int] | None = None
+) -> dict[str, int]:
     txt = header.read_text(encoding="utf-8", errors="replace").splitlines()
 
     in_enum = False
@@ -43,7 +45,12 @@ def _parse_c_enum(header: Path, *, enum_typedef: str, prefix: str) -> dict[str, 
                 value = int(rhs, 0)
             except ValueError:
                 # Some enums reference other symbols (e.g. `... = ftCo_SM_Count`).
-                continue
+                if symtab is None:
+                    continue
+                vv = symtab.get(rhs)
+                if vv is None:
+                    continue
+                value = int(vv)
             out[name] = value
         else:
             if value is None:
@@ -67,11 +74,17 @@ def _parse_ft_move_id_enum(melee_decomp_root: Path) -> dict[str, int]:
     return _parse_c_enum(header, enum_typedef="typedef enum FtMoveId", prefix="FtMoveId_")
 
 
-def _parse_char_submotion_enum(melee_decomp_root: Path, char_dir: str, *, typedef: str, prefix: str) -> dict[str, int]:
-    header = melee_decomp_root / "src" / "melee" / "ft" / "chara" / char_dir / "forward.h"
+def _parse_char_submotion_enum(
+    melee_decomp_root: Path, header_char_dir: str, *, typedef: str, prefix: str
+) -> dict[str, int]:
+    # Note: some char submotion enums are defined as:
+    #   ftFx_SM_* = ftCo_SM_Count,
+    # which requires resolving rhs symbols from the common ftCo enum.
+    header = melee_decomp_root / "src" / "melee" / "ft" / "chara" / header_char_dir / "forward.h"
     if not header.exists():
         return {}
-    return _parse_c_enum(header, enum_typedef=typedef, prefix=prefix)
+    ftco_sm = _parse_ftco_submotion_enum(melee_decomp_root)
+    return _parse_c_enum(header, enum_typedef=typedef, prefix=prefix, symtab=ftco_sm)
 
 
 def _parse_motion_state_table_entries(src: Path) -> list[_MotionStateEntry]:
@@ -177,15 +190,20 @@ def main() -> None:
     char_specs = {
         "fox": {
             "char_dir": "ftFox",
+            "submotion_header_dir": "ftFox",
             "init_src": melee / "src" / "melee" / "ft" / "chara" / "ftFox" / "ftFx_Init.c",
             "submotion_typedef": "typedef enum ftFx_Submotion",
             "submotion_prefix": "ftFx_SM_",
         },
         "falco": {
             "char_dir": "ftFalco",
+            # Decomp note: Falco's init table uses Fox's ftFx_* submotion enum (clone).
+            # refs/melee/src/melee/ft/chara/ftFalco/ftFc_Init.c includes `ftFox/forward.h` and its
+            # `MotionState ftFc_Init_MotionStateTable[ftFx_MS_SelfCount]` uses `ftFx_SM_*` anim ids.
+            "submotion_header_dir": "ftFox",
             "init_src": melee / "src" / "melee" / "ft" / "chara" / "ftFalco" / "ftFc_Init.c",
-            "submotion_typedef": "typedef enum ftFc_Submotion",
-            "submotion_prefix": "ftFc_SM_",
+            "submotion_typedef": "typedef enum ftFx_Submotion",
+            "submotion_prefix": "ftFx_SM_",
         },
     }
 
@@ -199,7 +217,7 @@ def main() -> None:
 
         char_sm = _parse_char_submotion_enum(
             melee,
-            spec["char_dir"],
+            spec.get("submotion_header_dir", spec["char_dir"]),
             typedef=spec["submotion_typedef"],
             prefix=spec["submotion_prefix"],
         )
