@@ -24,7 +24,7 @@ BUTTON_LR = 0x0040 | 0x0020
 ACT_GUARD_ON = 0x00B2
 ACT_GUARD = 0x00B3
 ACT_GUARD_REFLECT = 0x00B6
-ACT_GUARD_SET_OFF = 0x00B4
+ACT_GUARD_SET_OFF = 0x00B5
 
 
 def _char_key_from_char_id(char_id: int) -> str | None:
@@ -142,6 +142,24 @@ def _calc_hitlag_frames(hitlag_dmg_mul: float, hitlag_base: float, dmg_int: int)
     if tmp > 0xFFFF:
         tmp = 0xFFFF
     return tmp
+
+
+def _get_env_dmg(dmg: float) -> int:
+    # Mirror src/combat.c::combat_get_env_dmg (decomp "getEnvDmg" pattern used for hitlag inputs).
+    # refs/melee/src/melee/ft/ftcoll.c (inlineA0/inlineA1 and ftColl_80076CBC).
+    #
+    # Behavior:
+    # - dmg == 0 -> 0
+    # - dmg != 0 and (int)dmg != 0 -> (int)dmg
+    # - dmg != 0 and (int)dmg == 0 -> 1
+    if float(dmg) == 0.0:
+        return 0
+    try:
+        i = int(dmg)
+    except Exception:
+        # Should be unreachable for ISO-extracted hitbox damage; keep behavior stable.
+        return 1
+    return i if i != 0 else 1
 
 
 @dataclass(frozen=True)
@@ -344,6 +362,12 @@ class _CharCombatData:
     initial_shield_size: float
 
 
+@dataclass(frozen=True)
+class _ShieldTiltTable:
+    neutral_frame: int
+    xyz: np.ndarray  # [frame_count, 3] f32
+
+
 def _load_common_params(data_root: Path) -> dict[str, float]:
     common = json.loads((data_root / "common" / "ft_common_data.json").read_text())
     keys = [
@@ -359,6 +383,32 @@ def _load_common_params(data_root: Path) -> dict[str, float]:
     for k in keys:
         out[k] = float(common[k])
     return out
+
+
+def _read_shield_tilt_table(*, data_root: Path, key: str) -> _ShieldTiltTable | None:
+    # data/shields/<char>.bin (MSLSHLD1 v1)
+    p = data_root / "shields" / f"{key}.bin"
+    if not p.exists():
+        return None
+    buf = p.read_bytes()
+    if len(buf) < 8 + 4 + 2 + 2:
+        raise ValueError(f"{p}: too small for MSLSHLD1 header (size={len(buf)})")
+    if buf[:8] != b"MSLSHLD1":
+        raise ValueError(f"{p}: bad magic (want MSLSHLD1)")
+    ver = int.from_bytes(buf[8:12], "little", signed=False)
+    if ver != 1:
+        raise ValueError(f"{p}: unsupported MSLSHLD1 version={ver} (want 1)")
+    frame_count = int.from_bytes(buf[12:14], "little", signed=False)
+    neutral_frame = int.from_bytes(buf[14:16], "little", signed=False)
+    if frame_count <= 0:
+        raise ValueError(f"{p}: frame_count is 0")
+    if neutral_frame < 0 or neutral_frame >= frame_count:
+        raise ValueError(f"{p}: neutral_frame out of range (neutral_frame={neutral_frame}, frame_count={frame_count})")
+    want = 8 + 4 + 2 + 2 + frame_count * 3 * 4
+    if len(buf) != want:
+        raise ValueError(f"{p}: size mismatch (got {len(buf)}, want {want})")
+    xyz = np.frombuffer(buf, dtype="<f4", count=frame_count * 3, offset=16).reshape((frame_count, 3))
+    return _ShieldTiltTable(neutral_frame=int(neutral_frame), xyz=xyz)
 
 
 def _load_char_data(*, char_id: int, data_root: Path) -> _CharCombatData | None:
@@ -421,10 +471,13 @@ def derive_combat_hitlist_seed_fields(
     action_id: np.ndarray,  # [n_frames, MAX_PLAYERS] u16
     action_frame: np.ndarray,  # [n_frames, MAX_PLAYERS] i16
     animation_index: np.ndarray,  # [n_frames, MAX_PLAYERS] u32
+    facing: np.ndarray,  # [n_frames, MAX_PLAYERS] u8
     on_ground: np.ndarray,  # [n_frames, MAX_PLAYERS] u8
     pos_x: np.ndarray,  # [n_frames, MAX_PLAYERS] f32
     pos_y: np.ndarray,  # [n_frames, MAX_PLAYERS] f32
     fighter_scale_y: np.ndarray,  # [n_frames, MAX_PLAYERS] f32
+    guard_tilt_x8: np.ndarray,  # [n_frames, MAX_PLAYERS] u16
+    guard_tilt_x4: np.ndarray,  # [n_frames, MAX_PLAYERS] f32
     stocks: np.ndarray,  # [n_frames, MAX_PLAYERS] u8
     shield_hp: np.ndarray,  # [n_frames, MAX_PLAYERS] f32
     hurtbox_state: np.ndarray,  # [n_frames, MAX_PLAYERS] u8 (0 vuln, 1 invuln, 2 intangible)
@@ -449,12 +502,20 @@ def derive_combat_hitlist_seed_fields(
 
     # Per-character caches (Fox/Falco first).
     char_cache: dict[int, _CharCombatData | None] = {}
+    shield_table_cache: dict[int, _ShieldTiltTable | None] = {}
 
     def get_char(char_u8: int) -> _CharCombatData | None:
         cid = int(char_u8)
         if cid not in char_cache:
             char_cache[cid] = _load_char_data(char_id=cid, data_root=data_root)
         return char_cache[cid]
+
+    def get_shield_table(char_u8: int) -> _ShieldTiltTable | None:
+        cid = int(char_u8)
+        if cid not in shield_table_cache:
+            ch = get_char(char_u8)
+            shield_table_cache[cid] = _read_shield_tilt_table(data_root=data_root, key=ch.key) if ch else None
+        return shield_table_cache[cid]
 
     n_frames = int(np.asarray(action_id).shape[0])
 
@@ -572,6 +633,46 @@ def derive_combat_hitlist_seed_fields(
                         n2 = 1.0 - shield_min_scale
                         scale = (n2 * n1) + shield_min_scale
                         sr = scale * float(ch.initial_shield_size) * float(fighter_scale_y[fi, p])
+
+                        # Shield bubble center approximation: mirror `src/shields.c::shields_refresh`.
+                        #
+                        # Runtime shape:
+                        # - shields_refresh computes a guard-tilt offset (dx,dy,dz) by lerping between
+                        #   neutral_frame and the current guard_tilt_x8 frame using guard_tilt_x4 (0..1),
+                        #   then applies fighter_scale_y and facing_dir to place the shield center.
+                        # - guard_tilt_x8/x4 themselves are stateful (tilt smoothing), so they must be
+                        #   seeded and used consistently between dataset derivation and runtime.
+                        #
+                        # Seeding shape:
+                        # - guard_tilt_x8/x4 are derived strictly causally from replay prefix history
+                        #   in tools/slippi/seed_history.py::derive_guard_tilt_state and stored in seed_t.
+                        # - This combat hitlist derivation consumes those seeded values, so we do not
+                        #   re-run the stick/lerp logic here (avoids divergence).
+                        #
+                        # Source of truth: data/shields/<char>.bin (MSLSHLD1 v1; ISO-derived).
+                        # Approximation: we do not model stage-depth / pos_z here; current runtime
+                        # policy is effectively 2D, so pos_z is assumed 0 in this derivation.
+                        tv = get_shield_table(char_id[fi, p])
+                        if tv is not None and tv.xyz.size != 0:
+                            frame_max = int(tv.xyz.shape[0] - 1)
+                            f = int(guard_tilt_x8[fi, p])
+                            if f < 0:
+                                f = 0
+                            if f > frame_max:
+                                f = frame_max
+                            mag = float(guard_tilt_x4[fi, p])
+                            mag = _clamp01(mag)
+                            neutral = int(tv.neutral_frame)
+                            nx, ny, nz = (float(tv.xyz[neutral, 0]), float(tv.xyz[neutral, 1]), float(tv.xyz[neutral, 2]))
+                            fx, fy, fz = (float(tv.xyz[f, 0]), float(tv.xyz[f, 1]), float(tv.xyz[f, 2]))
+                            dx = nx + mag * (fx - nx)
+                            dy = ny + mag * (fy - ny)
+                            dz = nz + mag * (fz - nz)
+                            facing_dir = 1.0 if int(facing[fi, p]) != 0 else -1.0
+                            scale_y = float(fighter_scale_y[fi, p])
+                            sx = px + dx * scale_y * facing_dir
+                            sy = py + dy * scale_y
+                            sz = dz * scale_y
                 shield_world[p] = (sx, sy, sz, sr)
 
         # Combat resolve (BODY-only selection + hitlist update + simulated hitlag gate).
@@ -615,9 +716,6 @@ def derive_combat_hitlist_seed_fields(
                 if is_teams and int(team_id[fi, attacker]) == int(team_id[fi, defender]):
                     continue
 
-                if not hurtcaps_world[defender]:
-                    continue
-
                 # Hitlag gating: when either fighter is in hitlag, do not generate new BODY hits.
                 if int(sim_hitlag[attacker]) != 0 or int(sim_hitlag[defender]) != 0:
                     continue
@@ -646,13 +744,19 @@ def derive_combat_hitlist_seed_fields(
                     hz = float(hb["z"])
                     hr = float(hb["r"])
 
-                    # SHIELD precedence: if the hitbox intersects the defender shield bubble, treat as shielded
-                    # and do not apply BODY selection for this hitbox.
-                    if shield_active and _sphere_sphere_intersects(hx, hy, hz, hr, shx, shy, shz, shr):
-                        continue
-
                     # Rehit suppression (hitlists): suppress repeats while the victim is present in the
                     # per-(attacker,hit_group) hitlist.
+                    #
+                    # Decomp trail (GALE01):
+                    # - Shield overlap uses geometry only: lbColl_80007BCC(...) has no hitlist logic inside.
+                    #   refs/melee/src/melee/ft/ftcoll.c (shield path around lbColl_80007BCC)
+                    #   refs/melee/src/melee/lb/lbcollision.c::lbColl_80007BCC
+                    # - The rehit gate happens outside geometry: lbColl_8000ACFC(victim_fp, hitcapsule)
+                    #   is part of the "eligible hitcapsule" predicate, before the shield/body branches.
+                    #   refs/melee/src/melee/ft/ftcoll.c (shield branch predicate includes lbColl_8000ACFC(...)==0)
+                    #   refs/melee/src/melee/lb/lbcollision.c::lbColl_8000ACFC
+                    #
+                    # Mirror that ordering here: apply hitlist gating before shield/body geometry tests.
                     hit_group = int(hb.get("hit_group", 0)) & 0x7
                     cd = int(hitlist_cd[attacker, hit_group, defender])
                     if cd != 0:
@@ -664,6 +768,37 @@ def derive_combat_hitlist_seed_fields(
                             continue
                         hitlist_cd[attacker, hit_group, defender] = np.uint16(0)
                         hitlist_iid[attacker, hit_group, defender] = np.uint16(0)
+
+                    # SHIELD precedence: if the hitbox intersects the defender shield bubble, treat as a
+                    # shield contact and register hitlist state (so subsequent frames are suppressed).
+                    #
+                    # Decomp: this branch corresponds to the lbColl_80007BCC(...) shield overlap test
+                    # followed by shield hit handling (ftColl_80076CBC), with rehit gating already
+                    # applied by lbColl_8000ACFC in the predicate.
+                    # refs/melee/src/melee/ft/ftcoll.c (shield branch around lbColl_80007BCC + ftColl_80076CBC)
+                    if shield_active and _sphere_sphere_intersects(hx, hy, hz, hr, shx, shy, shz, shr):
+                        # Mirror src/combat.c: only treat positive-damage hitboxes as shield hits.
+                        if float(hb.get("damage", 0.0)) > 0.0:
+                            rehit_frames = int(hb.get("rehit_frames", 0)) & 0xFF
+                            hitlist_cd[attacker, hit_group, defender] = (
+                                np.uint16(HITLIST_CD_INDEFINITE)
+                                if rehit_frames == 0
+                                else np.uint16(rehit_frames)
+                            )
+                            hitlist_iid[attacker, hit_group, defender] = np.uint16(int(instance_id[fi, defender]))
+
+                            # Minimal hitlag simulation for hitlag gating across frames (no replay lookahead).
+                            dmg_i = _get_env_dmg(float(hb["damage"]))
+                            hl = _calc_hitlag_frames(hitlag_dmg_mul, hitlag_base, dmg_i)
+                            sim_hitlag[attacker] = np.uint16(hl)
+                            sim_hitlag[defender] = np.uint16(hl)
+
+                            did_hit = True
+                            break
+                        continue
+
+                    if not hurtcaps_world[defender]:
+                        continue
 
                     for cap in hurtcaps_world[defender]:
                         if not _sphere_capsule_intersects(
@@ -689,7 +824,7 @@ def derive_combat_hitlist_seed_fields(
                         hitlist_iid[attacker, hit_group, defender] = np.uint16(int(instance_id[fi, defender]))
 
                         # Minimal hitlag simulation for hitlag gating across frames (no replay lookahead).
-                        dmg_i = int(float(hb["damage"]))
+                        dmg_i = _get_env_dmg(float(hb["damage"]))
                         hl = _calc_hitlag_frames(hitlag_dmg_mul, hitlag_base, dmg_i)
                         sim_hitlag[attacker] = np.uint16(hl)
                         sim_hitlag[defender] = np.uint16(hl)

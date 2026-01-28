@@ -19,6 +19,10 @@ HIT_ELEMENT_INERT = 11
 # Slippi post-frame `state_flags`: refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
 STATE_FLAG_221C_DETECT_HITBOX_TOUCHING_SHIELD = 0x04
 
+# Hitlist cd value for "indefinite" (rehit_frames==0).
+# src/hitlist.h (MSL_HITLIST_CD_INDEFINITE).
+HITLIST_CD_INDEFINITE = 0xFFFF
+
 # Action ids (GALE01): refs/melee/src/melee/ft/chara/ftCommon/forward.h
 ACT_WAIT = 0x000E
 ACT_SQUAT = 0x0027
@@ -798,6 +802,117 @@ def test_combat_resolve_shield_hit_uses_max_damage_for_hitlag_but_first_for_hp_i
         exp_depletion = shield_hit_damage_mul * (float(int(3)) * (1.0 - ls)) + shield_hit_damage_base
 
         assert np.isclose(hp1, hp0 - exp_depletion, atol=1e-5)
+    finally:
+        msl_binding.destroy(handle)
+        del handle
+
+
+def test_combat_resolve_shield_rehit_suppression_blocks_repeat_after_guard_set_off_entry() -> None:
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    assert seed_stride == SEED_DTYPE.itemsize
+    assert input_stride == INPUT_DTYPE.itemsize
+
+    handle = msl_binding.init(batch_size=1, num_players=2)
+    try:
+        seed = _seed_base()
+        seed_bytes = seed.view(np.uint8).reshape((1, seed_stride))
+        msl_binding.reseed_seed(handle, seed_bytes)
+
+        neutral = np.zeros((1, input_stride), dtype=np.uint8)
+        shield = np.zeros((1, input_stride), dtype=np.uint8)
+        shield_view = shield.view(INPUT_DTYPE).reshape((1,))
+        # Hold shield via analog trigger (avoid entering GuardReflect via digital press).
+        shield_view["p"]["l"][0, 1] = TRIGGER_FULL
+
+        # Step once to compute shield bubble world geometry for defender P1.
+        msl_binding.step_input(handle, neutral, shield)
+        bubbles = msl_binding.debug_shield_bubbles_world(handle, 0)
+        shx, shy, shz, shr = (
+            float(bubbles[1, 0]),
+            float(bubbles[1, 1]),
+            float(bubbles[1, 2]),
+            float(bubbles[1, 3]),
+        )
+        assert shr > 0.0
+
+        # Force stable shield overlap.
+        msl_binding.debug_clear_hitboxes_world(handle, 0, 0)
+        msl_binding.debug_set_hitbox_world(handle, 0, 0, 0, shx, shy, shz, 1.0, 5.0, 1)
+        msl_binding.debug_set_hitbox_flags(handle, 0, 0, 0, int(HIT_GROUNDED))
+        msl_binding.debug_set_hitbox_element(handle, 0, 0, 0, int(HIT_ELEMENT_NORMAL))
+
+        out0 = _read_compare(handle)
+        hp0 = float(out0["shield_hp"][1])
+        iid0 = int(out0["instance_id"][1])
+
+        # First resolve applies the shield hit and enters GuardSetOff.
+        msl_binding.debug_combat_resolve(handle)
+        out1 = _read_compare(handle)
+        hp1 = float(out1["shield_hp"][1])
+        iid1 = int(out1["instance_id"][1])
+        assert int(out1["action_id"][1]) == ACT_GUARD_SET_OFF
+        assert int(out1["hitlag"][0]) > 0
+        assert int(out1["hitlag"][1]) > 0
+
+        # Ensure this exercises the GuardSetOff entry path that bumps instance_id (decomp-shaped
+        # motion-state entry bundle via msl_anim_timebase_enter()).
+        assert hp1 < hp0
+        assert iid1 != iid0
+
+        # Clear hitlag (so hitlag gating doesn't mask the rehit latch), then resolve again:
+        # rehit suppression should prevent a second shield hit from re-entering GuardSetOff.
+        msl_binding.debug_set_hitlag(handle, 0, 0, 0)
+        msl_binding.debug_set_hitlag(handle, 0, 1, 0)
+        msl_binding.debug_combat_resolve(handle)
+        out2 = _read_compare(handle)
+        assert float(out2["shield_hp"][1]) == pytest.approx(hp1)
+        assert int(out2["hitlag"][0]) == 0
+        assert int(out2["hitlag"][1]) == 0
+        assert int(out2["instance_id"][1]) == iid1
+    finally:
+        msl_binding.destroy(handle)
+        del handle
+
+
+def test_combat_resolve_rehit_suppression_clears_on_instance_id_change() -> None:
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    seed_stride = int(sizes["seed"])
+    compare_stride = int(sizes["compare"])
+    assert seed_stride == SEED_DTYPE.itemsize
+    assert compare_stride == COMPARE_DTYPE.itemsize
+
+    handle = msl_binding.init(batch_size=1, num_players=2)
+    try:
+        # Seed a stale hitlist entry for (attacker=0, hit_group=0, victim=1), then change the
+        # victim instance_id to simulate death/respawn. Rehit suppression must NOT carry over to
+        # the new instance identity key.
+        seed = _seed_base()
+        seed["combat_hitlist_cd"][0, 0, 0, 1] = np.uint16(HITLIST_CD_INDEFINITE)
+        seed["combat_hitlist_victim_iid"][0, 0, 0, 1] = np.uint16(222)
+        seed["instance_id"][0, 1] = np.uint16(333)
+        seed_bytes = seed.view(np.uint8).reshape((1, seed_stride))
+        msl_binding.reseed_seed(handle, seed_bytes)
+
+        # Force overlapping primitives (BODY-only).
+        msl_binding.debug_clear_hitboxes_world(handle, 0, 0)
+        msl_binding.debug_set_hitbox_world(handle, 0, 0, 0, 0.0, 0.0, 0.0, 1.0, 5.0, 1)
+        msl_binding.debug_set_hitbox_flags(handle, 0, 0, 0, int(HIT_GROUNDED))
+        msl_binding.debug_clear_hurtcaps_world(handle, 0, 1)
+        msl_binding.debug_set_hurtcap_world(handle, 0, 1, 0, -0.5, 0.0, 0.0, 0.5, 0.0, 0.0, 0.5)
+
+        msl_binding.debug_combat_resolve(handle)
+        out = _read_compare(handle)
+
+        # If the stale hitlist entry incorrectly carried over to the new instance_id, hitlag would
+        # remain 0. Correct behavior: iid mismatch clears the entry and allows the hit.
+        assert int(out["hitlag"][0]) > 0
+        assert int(out["hitlag"][1]) > 0
     finally:
         msl_binding.destroy(handle)
         del handle

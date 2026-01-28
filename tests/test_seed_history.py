@@ -377,12 +377,17 @@ def test_derive_combat_hitlist_seed_fields_is_causal_wrt_future_frames() -> None
         animation_index = z_u32.copy()
         animation_index[:, 0] = np.uint32(msid)
         animation_index[:, 1] = np.uint32(msid)
+        facing = z_u8.copy()
+        facing[:, 0] = np.uint8(1)
+        facing[:, 1] = np.uint8(1)
         on_ground = z_u8.copy()
         on_ground[:, 0] = np.uint8(1)
         on_ground[:, 1] = np.uint8(1)
         pos_x = z_f32.copy()
         pos_y = z_f32.copy()
         scale_y = np.ones((n, 4), dtype=np.float32)
+        guard_tilt_x8 = z_u16.copy()
+        guard_tilt_x4 = z_f32.copy()
         stocks = z_u8.copy()
         stocks[:, 0] = np.uint8(4)
         stocks[:, 1] = np.uint8(4)
@@ -403,10 +408,13 @@ def test_derive_combat_hitlist_seed_fields_is_causal_wrt_future_frames() -> None
             action_id=action_id,
             action_frame=action_frame,
             animation_index=animation_index,
+            facing=facing,
             on_ground=on_ground,
             pos_x=pos_x,
             pos_y=pos_y,
             fighter_scale_y=scale_y,
+            guard_tilt_x8=guard_tilt_x8,
+            guard_tilt_x4=guard_tilt_x4,
             stocks=stocks,
             shield_hp=shield_hp,
             hurtbox_state=z_u8,
@@ -442,12 +450,17 @@ def test_derive_combat_hitlist_seed_fields_is_causal_wrt_future_frames() -> None
     anim0 = base_u32.copy()
     anim0[:, 0] = np.uint32(msid)
     anim0[:, 1] = np.uint32(msid)
+    facing0 = base_u8.copy()
+    facing0[:, 0] = np.uint8(1)
+    facing0[:, 1] = np.uint8(1)
     on_ground0 = base_u8.copy()
     on_ground0[:, 0] = np.uint8(1)
     on_ground0[:, 1] = np.uint8(1)
     pos_x0 = base_f32.copy()
     pos_y0 = base_f32.copy()
     scale0 = np.ones((n0, 4), dtype=np.float32)
+    guard_x8_0 = base_u16.copy()
+    guard_x4_0 = base_f32.copy()
     stocks0 = base_u8.copy()
     stocks0[:, 0] = np.uint8(4)
     stocks0[:, 1] = np.uint8(4)
@@ -467,10 +480,13 @@ def test_derive_combat_hitlist_seed_fields_is_causal_wrt_future_frames() -> None
         action_id=action0,
         action_frame=af0,
         animation_index=anim0,
+        facing=facing0,
         on_ground=on_ground0,
         pos_x=pos_x0,
         pos_y=pos_y0,
         fighter_scale_y=scale0,
+        guard_tilt_x8=guard_x8_0,
+        guard_tilt_x4=guard_x4_0,
         stocks=stocks0,
         shield_hp=shield0,
         hurtbox_state=base_u8,
@@ -498,6 +514,8 @@ def test_derive_combat_hitlist_seed_fields_is_causal_wrt_future_frames() -> None
     af1[n0:, 1] = np.int16(-1)
     anim1 = np.zeros((n1, 4), dtype=np.uint32)
     anim1[:n0] = anim0
+    facing1 = np.zeros((n1, 4), dtype=np.uint8)
+    facing1[:n0] = facing0
     on_ground1 = np.zeros((n1, 4), dtype=np.uint8)
     on_ground1[:n0] = on_ground0
     pos_x1 = np.zeros((n1, 4), dtype=np.float32)
@@ -505,6 +523,10 @@ def test_derive_combat_hitlist_seed_fields_is_causal_wrt_future_frames() -> None
     pos_y1 = np.zeros((n1, 4), dtype=np.float32)
     pos_y1[:n0] = pos_y0
     scale1 = np.ones((n1, 4), dtype=np.float32)
+    guard_x8_1 = np.zeros((n1, 4), dtype=np.uint16)
+    guard_x8_1[:n0] = guard_x8_0
+    guard_x4_1 = np.zeros((n1, 4), dtype=np.float32)
+    guard_x4_1[:n0] = guard_x4_0
     stocks1 = np.zeros((n1, 4), dtype=np.uint8)
     stocks1[:n0] = stocks0
     shield1 = np.zeros((n1, 4), dtype=np.float32)
@@ -522,13 +544,213 @@ def test_derive_combat_hitlist_seed_fields_is_causal_wrt_future_frames() -> None
         action_id=action1,
         action_frame=af1,
         animation_index=anim1,
+        facing=facing1,
         on_ground=on_ground1,
         pos_x=pos_x1,
         pos_y=pos_y1,
         fighter_scale_y=scale1,
+        guard_tilt_x8=guard_x8_1,
+        guard_tilt_x4=guard_x4_1,
         stocks=stocks1,
         shield_hp=shield1,
         hurtbox_state=np.zeros((n1, 4), dtype=np.uint8),
+        instance_id=iid1,
+        input_buttons=buttons1,
+        input_l=l1,
+        input_r=r1,
+        data_root="data",
+    )
+
+    assert np.array_equal(cd0, cd1[: cd0.shape[0]])
+    assert np.array_equal(iid_cd0, iid_cd1[: iid_cd0.shape[0]])
+
+
+def test_derive_combat_hitlist_seed_fields_is_prefix_invariant_wrt_shield_inputs() -> None:
+    """
+    Guard against accidental lookahead: adding new inputs to hitlist derivation must not make
+    prefix outputs depend on future frames.
+
+    This specifically stress-tests the new shield-bubble inputs used by the strictly-causal
+    hitlist seeding path:
+    - facing
+    - guard_tilt_x8 / guard_tilt_x4 (shield bubble center)
+    """
+    from tools.slippi.combat_history import derive_combat_hitlist_seed_fields
+
+    # Choose a real (msid, frame) for Fox that has at least one active hitbox so the shield path
+    # executes overlap tests (hit is not required).
+    # This mirrors the "find any contact" scan in the existing causality test above.
+    from pathlib import Path
+    import struct
+
+    hb_path = Path("data/hitboxes/fox.bin")
+    buf = hb_path.read_bytes()
+    assert buf[:8] == b"MSLHITB1"
+    ver = struct.unpack_from("<I", buf, 8)[0]
+    assert ver == 1
+    # Table format: [u16 msid][u16 count] then count records (see tools/slippi/combat_history.py::_read_hitbox_events).
+    off = 16
+    msid = None
+    frame = None
+    while off + 4 <= len(buf):
+        m = struct.unpack_from("<H", buf, off)[0]
+        n = struct.unpack_from("<H", buf, off + 2)[0]
+        off += 4
+        rec_bytes = 34
+        if off + n * rec_bytes > len(buf):
+            break
+        # Pick the first msid that has any "set hitbox" event at frame 0.
+        for i in range(n):
+            kind = buf[off + i * rec_bytes + 0]
+            ev_frame = struct.unpack_from("<H", buf, off + i * rec_bytes + 2)[0]
+            hitbox_id = buf[off + i * rec_bytes + 1]
+            if kind == 0 and hitbox_id != 0xFF and ev_frame == 0:
+                msid = int(m)
+                frame = 0
+                break
+        if msid is not None:
+            break
+        off += n * rec_bytes
+    assert msid is not None and frame is not None
+
+    # Prefix inputs: shield active on defender, nonzero shield HP, deterministic facing + guard tilt.
+    n0 = 8
+    n1 = n0 + 7
+    base_u8 = np.zeros((n0, 4), dtype=np.uint8)
+    base_u16 = np.zeros((n0, 4), dtype=np.uint16)
+    base_u32 = np.zeros((n0, 4), dtype=np.uint32)
+    base_i16 = np.zeros((n0, 4), dtype=np.int16)
+    base_f32 = np.zeros((n0, 4), dtype=np.float32)
+
+    team_id0 = base_u8.copy()
+    char0 = base_u8.copy()
+    char0[:, 0] = np.uint8(1)
+    char0[:, 1] = np.uint8(1)
+    action0 = base_u16.copy()
+    # Defender in Guard to force shield bubble computation (GALE01 ftCo_MS_Guard = 0x00B3).
+    action0[:, 1] = np.uint16(0x00B3)
+    af0 = base_i16.copy()
+    af0[:, 0] = np.int16(frame)
+    af0[:, 1] = np.int16(frame)
+    anim0 = base_u32.copy()
+    anim0[:, 0] = np.uint32(msid)
+    anim0[:, 1] = np.uint32(msid)
+    facing0 = base_u8.copy()
+    facing0[:, :2] = np.uint8(1)
+    on_ground0 = base_u8.copy()
+    on_ground0[:, :2] = np.uint8(1)
+    pos_x0 = base_f32.copy()
+    pos_y0 = base_f32.copy()
+    scale0 = np.ones((n0, 4), dtype=np.float32)
+    guard_x8_0 = base_u16.copy()
+    guard_x4_0 = base_f32.copy()
+    stocks0 = base_u8.copy()
+    stocks0[:, :2] = np.uint8(4)
+    shield0 = base_f32.copy()
+    shield0[:, 1] = np.float32(60.0)
+    hurt0 = base_u8.copy()
+    iid0 = base_u16.copy()
+    iid0[:, 0] = np.uint16(111)
+    iid0[:, 1] = np.uint16(222)
+    buttons0 = base_u16.copy()
+    l0 = base_u8.copy()
+    r0 = base_u8.copy()
+    # Full L trigger for defender to expand shield (no lookahead; constant in prefix).
+    l0[:, 1] = np.uint8(255)
+
+    cd0, iid_cd0 = derive_combat_hitlist_seed_fields(
+        num_players=2,
+        is_teams=False,
+        team_id=team_id0,
+        char_id=char0,
+        action_id=action0,
+        action_frame=af0,
+        animation_index=anim0,
+        facing=facing0,
+        on_ground=on_ground0,
+        pos_x=pos_x0,
+        pos_y=pos_y0,
+        fighter_scale_y=scale0,
+        guard_tilt_x8=guard_x8_0,
+        guard_tilt_x4=guard_x4_0,
+        stocks=stocks0,
+        shield_hp=shield0,
+        hurtbox_state=hurt0,
+        instance_id=iid0,
+        input_buttons=buttons0,
+        input_l=l0,
+        input_r=r0,
+        data_root="data",
+    )
+
+    # Append future frames with noisy shield-related inputs: prefix outputs must not change.
+    team_id1 = np.zeros((n1, 4), dtype=np.uint8)
+    team_id1[:n0] = team_id0
+    char1 = np.zeros((n1, 4), dtype=np.uint8)
+    char1[:n0] = char0
+    action1 = np.zeros((n1, 4), dtype=np.uint16)
+    action1[:n0] = action0
+    af1 = np.zeros((n1, 4), dtype=np.int16)
+    af1[:n0] = af0
+    # Disable hitboxes in appended frames so any hitlist evolution happens only in the suffix.
+    af1[n0:, :2] = np.int16(-1)
+    anim1 = np.zeros((n1, 4), dtype=np.uint32)
+    anim1[:n0] = anim0
+    facing1 = np.zeros((n1, 4), dtype=np.uint8)
+    facing1[:n0] = facing0
+    # Flip facing randomly in the suffix to catch lookahead.
+    facing1[n0:, 0] = np.uint8(0)
+    facing1[n0:, 1] = np.uint8(1)
+    on_ground1 = np.zeros((n1, 4), dtype=np.uint8)
+    on_ground1[:n0] = on_ground0
+    pos_x1 = np.zeros((n1, 4), dtype=np.float32)
+    pos_x1[:n0] = pos_x0
+    pos_x1[n0:, 0] = np.float32(999.0)
+    pos_y1 = np.zeros((n1, 4), dtype=np.float32)
+    pos_y1[:n0] = pos_y0
+    pos_y1[n0:, 1] = np.float32(-999.0)
+    scale1 = np.ones((n1, 4), dtype=np.float32)
+    guard_x8_1 = np.zeros((n1, 4), dtype=np.uint16)
+    guard_x8_1[:n0] = guard_x8_0
+    guard_x8_1[n0:, 1] = np.uint16(123)
+    guard_x4_1 = np.zeros((n1, 4), dtype=np.float32)
+    guard_x4_1[:n0] = guard_x4_0
+    guard_x4_1[n0:, 1] = np.float32(1.0)
+    stocks1 = np.zeros((n1, 4), dtype=np.uint8)
+    stocks1[:n0] = stocks0
+    shield1 = np.zeros((n1, 4), dtype=np.float32)
+    shield1[:n0] = shield0
+    shield1[n0:, 1] = np.float32(1.0)
+    hurt1 = np.zeros((n1, 4), dtype=np.uint8)
+    hurt1[:n0] = hurt0
+    iid1 = np.zeros((n1, 4), dtype=np.uint16)
+    iid1[:n0] = iid0
+    iid1[n0:, 1] = np.uint16(9999)
+    buttons1 = np.zeros((n1, 4), dtype=np.uint16)
+    buttons1[:n0] = buttons0
+    l1 = np.zeros((n1, 4), dtype=np.uint8)
+    l1[:n0] = l0
+    l1[n0:, 1] = np.uint8(0)
+    r1 = np.zeros((n1, 4), dtype=np.uint8)
+
+    cd1, iid_cd1 = derive_combat_hitlist_seed_fields(
+        num_players=2,
+        is_teams=False,
+        team_id=team_id1,
+        char_id=char1,
+        action_id=action1,
+        action_frame=af1,
+        animation_index=anim1,
+        facing=facing1,
+        on_ground=on_ground1,
+        pos_x=pos_x1,
+        pos_y=pos_y1,
+        fighter_scale_y=scale1,
+        guard_tilt_x8=guard_x8_1,
+        guard_tilt_x4=guard_x4_1,
+        stocks=stocks1,
+        shield_hp=shield1,
+        hurtbox_state=hurt1,
         instance_id=iid1,
         input_buttons=buttons1,
         input_l=l1,

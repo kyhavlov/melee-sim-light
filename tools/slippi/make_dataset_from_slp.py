@@ -1111,10 +1111,13 @@ def _main_impl(args) -> None:
     post_action_id = np.zeros((n_frames, 4), dtype=np.uint16)
     post_action_frame = np.zeros((n_frames, 4), dtype=np.int16)
     post_animation_index = np.zeros((n_frames, 4), dtype=np.uint32)
+    post_facing = np.zeros((n_frames, 4), dtype=np.uint8)
     post_on_ground = np.zeros((n_frames, 4), dtype=np.uint8)
     post_pos_x = np.zeros((n_frames, 4), dtype=np.float32)
     post_pos_y = np.zeros((n_frames, 4), dtype=np.float32)
     post_scale_y = np.ones((n_frames, 4), dtype=np.float32)
+    post_guard_tilt_x8 = np.zeros((n_frames, 4), dtype=np.uint16)
+    post_guard_tilt_x4 = np.zeros((n_frames, 4), dtype=np.float32)
     post_stocks = np.zeros((n_frames, 4), dtype=np.uint8)
     post_shield_hp = np.zeros((n_frames, 4), dtype=np.float32)
     post_hurtbox_state = np.zeros((n_frames, 4), dtype=np.uint8)
@@ -1167,6 +1170,20 @@ def _main_impl(args) -> None:
             axis=1,
         )
 
+    # Use already-derived replay-causal seed fields for shield bubble placement:
+    # - facing (post-frame)
+    # - guard tilt state (mv.co.guard.x8/x4)
+    #
+    # These are populated per-sample for frames [0..n_frames-2]. Extend to [0..n_frames-1] by
+    # repeating the last available state; the last frame is not used by seed_t assignment anyway.
+    if n_frames >= 2:
+        post_facing[:-1, :] = samples["seed_t"]["facing"][:, :]
+        post_facing[-1, :] = post_facing[-2, :]
+        post_guard_tilt_x8[:-1, :] = samples["seed_t"]["guard_tilt_x8"][:, :]
+        post_guard_tilt_x8[-1, :] = post_guard_tilt_x8[-2, :]
+        post_guard_tilt_x4[:-1, :] = samples["seed_t"]["guard_tilt_x4"][:, :]
+        post_guard_tilt_x4[-1, :] = post_guard_tilt_x4[-2, :]
+
     hitlist_cd, hitlist_iid = derive_combat_hitlist_seed_fields(
         num_players=num_players,
         is_teams=bool(is_teams),
@@ -1175,10 +1192,13 @@ def _main_impl(args) -> None:
         action_id=post_action_id,
         action_frame=post_action_frame,
         animation_index=post_animation_index,
+        facing=post_facing,
         on_ground=post_on_ground,
         pos_x=post_pos_x,
         pos_y=post_pos_y,
         fighter_scale_y=post_scale_y,
+        guard_tilt_x8=post_guard_tilt_x8,
+        guard_tilt_x4=post_guard_tilt_x4,
         stocks=post_stocks,
         shield_hp=post_shield_hp,
         hurtbox_state=post_hurtbox_state,

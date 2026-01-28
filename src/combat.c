@@ -1443,8 +1443,17 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
           const float hz = batch->state.hitbox_z[hb_i];
           const float hr = batch->state.hitbox_radius[hb_i];
 
-          // Rehit suppression (hitlists): suppress repeats while the victim is present in the
-          // per-(attacker,hit_group) hitlist.
+          // Rehit suppression (hitlists): decomp splits "shield overlap geometry" from "hit
+          // acceptance gating".
+          //
+          // - Geometry only (no hitlist logic inside): lbColl_80007BCC(...)
+          //   refs/melee/src/melee/ft/ftcoll.c (shield path around lbColl_80007BCC)
+          //   refs/melee/src/melee/lb/lbcollision.c::lbColl_80007BCC
+          // - Rehit/hitlist gate outside geometry: lbColl_8000ACFC(victim_fp, hitcapsule)
+          //   refs/melee/src/melee/ft/ftcoll.c (eligible hitcapsule predicate includes lbColl_8000ACFC(...)==0)
+          //   refs/melee/src/melee/lb/lbcollision.c::lbColl_8000ACFC
+          //
+          // Mirror that ordering here: gate before the shield sphere overlap test.
           const uint8_t hit_group = hitlist_hit_group_from_u16_7(batch->state.hitbox_u16_7[hb_i]);
           if (!hitlist_allows(batch, bi, attacker, hit_group, defender, defender_iid)) {
             continue;
@@ -1518,7 +1527,22 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
           // refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
           combat_mutations_pass1_future_apply_shield_hit(batch, a_idx, d_idx, max_int_dmg, tmp_dmg,
                                                          a_motion_id);
-          hitlist_register(batch, bi, attacker, sel_hit_group, defender, defender_iid,
+
+          // Hitlist register: decomp hitlists store a `victim` pointer inside the HitCapsule, so
+          // the victim identity is stable across motion-state changes (e.g. GuardSetOff entry).
+          // refs/melee/src/melee/lb/lbcollision.c::lbColl_80008688 (HitVictim.victim)
+          //
+          // Our hitlist uses `instance_id` as a proxy for victim identity. A shield hit applies
+          // GuardSetOff by calling the decomp-shaped Fighter_ChangeMotionState bundle
+          // (msl_anim_timebase_enter()), which can bump `instance_id` on motion-state entry
+          // (src/instance_id.c::instance_id_on_motion_state_change_ft_800895E0).
+          //
+          // Register using the post-mutation instance_id so that, in teacher-forced one-step
+          // reseed, the hitlist identity key matches the victim identity that the reference
+          // post-frame uses at t+1 (after the GuardSetOff transition), preventing spurious shield
+          // re-hits / GuardSetOff re-entry on the next step.
+          const uint16_t defender_iid_post = batch->state.instance_id[d_idx];
+          hitlist_register(batch, bi, attacker, sel_hit_group, defender, defender_iid_post,
                            sel_rehit_frames);
 
           did_hit = 1;
