@@ -135,10 +135,10 @@ def test_reflected_laser_updates_owner_instance_and_staling_identity() -> None:
     seed["action_frame"][0, 1] = np.int16(0)
     seed["animation_index"][0, 1] = np.uint32(0xFFFFFFFF)  # shield states commonly report -1 in Slippi
     seed["shield_hp"][0, 1] = np.float32(_common_attr("start_shield_health"))
-    # Slippi fp+0x2218 reflect-active bit (0x10).
-    # refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
-    # refs/melee/build/GALE01/asm/melee/ft/ftcoll.s::ftColl_CreateReflectHit
-    seed["state_flags"][0, 1, 0] = np.uint8(0x10)
+    # Drive reflect-active via the decomp-shaped GuardReflect timer (mv.co.guard.x14).
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80093A50 (init x14=x2A4)
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80093BC0 (tick/expire; clears fp->reflecting)
+    seed["guard_reflect_timer_x14"][0, 1] = np.uint8(int(_common_attr("powershield_reflect_frames")) + 1)
     # Slippi fp+0x221C powershield-active bit (0x20).
     # refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
     seed["state_flags"][0, 1, 3] = np.uint8(0x20)

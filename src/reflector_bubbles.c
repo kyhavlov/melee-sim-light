@@ -129,12 +129,32 @@ void reflector_bubbles_refresh(MslBatch* batch) {
       //
       // Policy:
       // - Override this bit for Shine (SpecialLw) because we model the reflector bubble lifetime.
-      // - Otherwise leave it seed-carry-through until GuardReflect/powershield reflect windows are modeled
-      //   with explicit decomp-backed timers (ftCo_Guard.c::mv.co.guard.x14 / x2A4).
+      // - Override this bit for GuardReflect based on the decomp-backed reflect timer (mv.co.guard.x14),
+      //   so reflect-active is a window (timer) and not "entire action == GuardReflect".
+      //   refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80093A50 (init x14=x2A4)
+      //   refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80093BC0 (tick/expire; clears fp->reflecting)
+      // - Otherwise leave it seed-carry-through (other reflect windows not modeled yet).
       const uint16_t prev_a = batch->state.prev_action_id[idx];
-      const uint8_t override = (action_is_shine(a) || action_is_shine(prev_a)) ? 1u : 0u;
-      if (override) {
+      const uint8_t override_shine = (action_is_shine(a) || action_is_shine(prev_a)) ? 1u : 0u;
+      const uint8_t override_guard_reflect =
+          ((a == (uint16_t)MSL_ACT_GUARD_REFLECT) || (prev_a == (uint16_t)MSL_ACT_GUARD_REFLECT)) ? 1u
+                                                                                                   : 0u;
+      if (override_shine) {
         const uint8_t want = (action_is_shine_reflector_active(a) != 0) ? 1u : 0u;
+        if (want) {
+          f |= (uint8_t)MSL_STATE_FLAG_2218_IS_REFLECT_ACTIVE;
+        } else {
+          f &= (uint8_t)~(uint8_t)MSL_STATE_FLAG_2218_IS_REFLECT_ACTIVE;
+        }
+        batch->state.state_flags[flags_i] = f;
+      } else if (override_guard_reflect) {
+        // Drive Slippi reflect-active (fp+0x2218 bit4 => state_flags[0] bit 0x10) from the
+        // decomp-shaped GuardReflect timer stored in batch state.
+        //
+        // Bit packing reference:
+        // - refs/melee/src/melee/ft/types.h (fp+0x2218 bitfield includes `reflecting`)
+        // - refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm (packs fp+0x2218 into state_flags[0])
+        const uint8_t want = (batch->state.guard_reflect_timer_x14[idx] > 0) ? 1u : 0u;
         if (want) {
           f |= (uint8_t)MSL_STATE_FLAG_2218_IS_REFLECT_ACTIVE;
         } else {

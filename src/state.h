@@ -77,6 +77,8 @@ typedef struct MslStateSoA {
   uint16_t*
       guard_tilt_x8;     // mv.co.guard.x8 (frame-ish index; neutral is shield table neutral_frame)
   float* guard_tilt_x4;  // mv.co.guard.x4 (stick magnitude smoothing; 0..1)
+  // GuardReflect reflect timer (decomp: mv.co.guard.x14; seed uses +1 bias, expires at 0).
+  uint8_t* guard_reflect_timer_x14;  // [batch * players]
   // Locomotion/input-history internals.
   // - `tilt_timer_*`, `turn_*`, and KneeBend internals are seeded from replay history (MslSeed).
   uint8_t*

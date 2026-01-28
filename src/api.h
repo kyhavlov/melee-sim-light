@@ -178,6 +178,20 @@ typedef struct MslSeed {
   // - mv.co.guard.x4: stick magnitude smoothing used to blend the pose
   uint16_t guard_tilt_x8[MSL_MAX_PLAYERS];
   float guard_tilt_x4[MSL_MAX_PLAYERS];
+  // GuardReflect reflect timer (seeded; strictly causal in preprocessing).
+  //
+  // Decomp trail:
+  // - Init: refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80093A50
+  //   sets `mv.co.guard.x14 = p_ftCommonData->x2A4`.
+  // - Tick/expire: refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80093BC0
+  //   decrements `mv.co.guard.x14` and clears `fp->reflecting` when it drops below 0.
+  //
+  // Seed representation:
+  // - Store a non-negative, reseed-friendly countdown that drives the Slippi reflect-active bit
+  //   (fp+0x2218 bit4 => state_flags[0] bit 0x10).
+  // - Because the decomp timer expires on `x14 < 0`, we represent `x14 + 1` clamped to [0..255].
+  //   This allows us to expire cleanly at 0 without carrying negative values in the seed schema.
+  uint8_t guard_reflect_timer_x14[MSL_MAX_PLAYERS];
   uint8_t jumps_left[MSL_MAX_PLAYERS];
   uint8_t stocks[MSL_MAX_PLAYERS];
 
@@ -411,6 +425,7 @@ typedef struct MslDebugInternals {
   uint8_t tilt_timer_x[MSL_MAX_PLAYERS];         // fp->x670_timer_lstick_tilt_x
   uint8_t turn_frames_to_turn[MSL_MAX_PLAYERS];  // fp->mv.co.turn.frames_to_turn
   uint8_t turn_has_turned[MSL_MAX_PLAYERS];      // fp->mv.co.turn.has_turned
+  uint8_t guard_reflect_timer_x14[MSL_MAX_PLAYERS];  // mv.co.guard.x14 (+1 bias; see MslSeed)
   // Fighter attack identity internals (decomp: fp->x2068 / fp->x206C).
   uint16_t attack_id[MSL_MAX_PLAYERS];
   uint16_t attack_instance[MSL_MAX_PLAYERS];

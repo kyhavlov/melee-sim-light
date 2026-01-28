@@ -16,6 +16,7 @@ INTERNALS_DTYPE = np.dtype(
         ("tilt_timer_x", ("u1", (MAX_PLAYERS,))),
         ("turn_frames_to_turn", ("u1", (MAX_PLAYERS,))),
         ("turn_has_turned", ("u1", (MAX_PLAYERS,))),
+        ("guard_reflect_timer_x14", ("u1", (MAX_PLAYERS,))),
         ("attack_id", ("<u2", (MAX_PLAYERS,))),
         ("attack_instance", ("<u2", (MAX_PLAYERS,))),
         ("attack_identity_last_action_id", ("<u2", (MAX_PLAYERS,))),
@@ -94,4 +95,3 @@ def test_instance_id_counter_reseed_wraps_u16_and_skips_zero() -> None:
     seed2["items"][0, 0]["exists"] = np.uint8(1)
     seed2["items"][0, 0]["instance_id"] = np.uint16(0xFFFF)
     assert _reseed_and_read_counter(seed2) == 1
-

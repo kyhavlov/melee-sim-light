@@ -424,6 +424,7 @@ def _main_impl(args) -> None:
         compute_fighter_trigger_input_counters,
         compute_press_timer_u8,
         derive_downwait_timer,
+        derive_guard_reflect_timer_x14,
         derive_guard_tilt_state,
         load_shield_tilt_table_meta,
         compute_tilt_timer_axis_pre_post,
@@ -996,6 +997,16 @@ def _main_impl(args) -> None:
             start_timer_post=0xFE,
         )
         samples["seed_t"]["x672_input_timer"][:, slot] = x672_post[:-1]
+
+        # GuardReflect reflect timer (mv.co.guard.x14) as a strictly-causal internal countdown.
+        # Decomp: refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80093A50 and ::ftCo_80093BC0.
+        guard_reflect_timer_x14 = derive_guard_reflect_timer_x14(
+            action_id_u16=post_state,
+            hitlag_u16=post_hitlag,
+            act_guard_reflect=act_guard_reflect,
+            reflect_frames_x2a4=int(common["powershield_reflect_frames"]),
+        )
+        samples["seed_t"]["guard_reflect_timer_x14"][:, slot] = guard_reflect_timer_x14[:-1]
 
         # Fighter per-frame input counters block.
         # Decomp: refs/melee/src/melee/ft/fighter.c:1897-2094 (lb helper: refs/melee/src/melee/lb/lb_00CE.c:163-225).

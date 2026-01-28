@@ -108,6 +108,7 @@ SEED_DTYPE = np.dtype(
         ("frame_speed_mul_f32", _arr("<f4", MAX_PLAYERS)),
         ("guard_tilt_x8", _arr("<u2", MAX_PLAYERS)),
         ("guard_tilt_x4", _arr("<f4", MAX_PLAYERS)),
+        ("guard_reflect_timer_x14", _arr("u1", MAX_PLAYERS)),
         ("jumps_left", _arr("u1", MAX_PLAYERS)),
         ("stocks", _arr("u1", MAX_PLAYERS)),
         ("kneebend_jump_input", _arr("u1", MAX_PLAYERS)),

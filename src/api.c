@@ -254,6 +254,7 @@ int msl_batch_reseed_seed(MslBatch* batch, const uint8_t* seed_bytes, size_t see
       msl_anim_timebase_seed(batch, idx, seed->anim_frame_f32[p], seed->frame_speed_mul_f32[p]);
       batch->state.guard_tilt_x8[idx] = seed->guard_tilt_x8[p];
       batch->state.guard_tilt_x4[idx] = seed->guard_tilt_x4[p];
+      batch->state.guard_reflect_timer_x14[idx] = seed->guard_reflect_timer_x14[p];
       batch->state.jumps_left[idx] = seed->jumps_left[p];
       batch->state.stocks[idx] = seed->stocks[p];
       batch->state.kneebend_jump_input[idx] = seed->kneebend_jump_input[p];
@@ -625,6 +626,7 @@ int msl_batch_debug_write_internals(const MslBatch* batch, uint8_t* out_bytes,
       out->tilt_timer_x[p] = batch->state.tilt_timer_x[idx];
       out->turn_frames_to_turn[p] = batch->state.turn_frames_to_turn[idx];
       out->turn_has_turned[p] = batch->state.turn_has_turned[idx];
+      out->guard_reflect_timer_x14[p] = batch->state.guard_reflect_timer_x14[idx];
       out->attack_id[p] = batch->state.attack_id[idx];
       out->attack_instance[p] = batch->state.attack_instance[idx];
       out->attack_identity_last_action_id[p] = batch->state.attack_identity_last_action_id[idx];
