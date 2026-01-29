@@ -1,4 +1,5 @@
 {
+  "air_drift_overmax_friction": 0.029999999329447746,
   "air_motion_kb_mul": 0.949999988079071,
   "air_motion_max_frames": 2,
   "asdi_step_mul": 3.0,

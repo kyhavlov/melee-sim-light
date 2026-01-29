@@ -315,6 +315,11 @@ def main() -> None:
         "hitlag_dmg_mul": float(_f32_be(buf, ft_common_abs + 0x198)),
         "hitlag_base": float(_f32_be(buf, ft_common_abs + 0x19C)),
         "hitlag_squat_mul": float(_f32_be(buf, ft_common_abs + 0x1A0)),
+        # Air drift overspeed friction (ftCommon_8007CF58 / ftCommon_8007D050): when
+        # ABS(self_vel.x) > co_attrs.air_drift_max, the engine uses p_ftCommonData->x1FC as the
+        # friction magnitude for the "clamp back toward max drift" step.
+        # refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007CF58
+        "air_drift_overmax_friction": float(_f32_be(buf, ft_common_abs + 0x1FC)),
         # Grounded knockback friction multiplier (fighter.c): effective friction = gr_friction * x200.
         "ground_kb_friction_mul": float(_f32_be(buf, ft_common_abs + 0x200)),
         "knockback_frame_decay": float(_f32_be(buf, ft_common_abs + 0x204)),

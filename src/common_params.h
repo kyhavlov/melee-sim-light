@@ -188,6 +188,10 @@ typedef struct MslCommonParams {
   float hitlag_dmg_mul;    // p_ftCommonData->x198
   float hitlag_base;       // p_ftCommonData->x19C
   float hitlag_squat_mul;  // p_ftCommonData->x1A0
+  // Air drift overspeed friction magnitude (used by ftCommon_8007CF58 when |self_vel.x| exceeds
+  // co_attrs.air_drift_max).
+  // refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007CF58
+  float air_drift_overmax_friction;  // p_ftCommonData->x1FC
 
   // Knockback + Damage state entry helpers (subset).
   //

@@ -23,26 +23,6 @@ static inline uint8_t is_fox_falco(uint8_t char_id) {
   return (char_id == (uint8_t)MSL_CHAR_FOX) || (char_id == (uint8_t)MSL_CHAR_FALCO);
 }
 
-// Fox/Falco motion states (GALE01) for SpecialLw.
-//
-// Decomp (explicit numeric ids in comments):
-// - refs/melee/src/melee/ft/chara/ftFox/ftFx_Init.c::ftFx_Init_MotionStateTable
-//   (ftFx_MS_SpecialLwStart=360 .. ftFx_MS_SpecialAirLwTurn=369)
-// - refs/melee/src/melee/ft/chara/ftFalco/ftFc_Init.c::ftFc_Init_MotionStateTable
-//   (Falco uses the same ftFx_* MotionState ids; comments match Fox)
-enum {
-  MSL_ACT_FX_SPECIAL_LW_START = 0x0168,      // ftFx_MS_SpecialLwStart
-  MSL_ACT_FX_SPECIAL_LW_LOOP = 0x0169,       // ftFx_MS_SpecialLwLoop
-  MSL_ACT_FX_SPECIAL_LW_HIT = 0x016A,        // ftFx_MS_SpecialLwHit
-  MSL_ACT_FX_SPECIAL_LW_END = 0x016B,        // ftFx_MS_SpecialLwEnd
-  MSL_ACT_FX_SPECIAL_LW_TURN = 0x016C,       // ftFx_MS_SpecialLwTurn
-  MSL_ACT_FX_SPECIAL_AIR_LW_START = 0x016D,  // ftFx_MS_SpecialAirLwStart
-  MSL_ACT_FX_SPECIAL_AIR_LW_LOOP = 0x016E,   // ftFx_MS_SpecialAirLwLoop
-  MSL_ACT_FX_SPECIAL_AIR_LW_HIT = 0x016F,    // ftFx_MS_SpecialAirLwHit
-  MSL_ACT_FX_SPECIAL_AIR_LW_END = 0x0170,    // ftFx_MS_SpecialAirLwEnd
-  MSL_ACT_FX_SPECIAL_AIR_LW_TURN = 0x0171,   // ftFx_MS_SpecialAirLwTurn
-};
-
 // Decomp: in ftFx_Init.c, the aerial SpecialAirLw* motion states are a contiguous block following
 // the grounded SpecialLw* block (Start..Turn).
 enum { MSL_FX_SHINE_GROUND_TO_AIR_ACTION_DELTA = 5 };

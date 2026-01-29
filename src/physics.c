@@ -5,6 +5,135 @@
 #include "common_params.h"
 #include "input_axis.h"
 
+static inline uint8_t physics_action_skip_common_air_helper_first_frame(uint16_t action_id,
+                                                                        int16_t action_frame) {
+  // Decomp:
+  // - ftCo_Jump_Phys_Inner skips `ft_80084DB0` on the first frame after entering JumpF/B.
+  //   refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c::ftCo_Jump_Phys_Inner
+  // - ftCo_CliffJump2_Phys skips the common fall helper on the first frame.
+  //   refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffJump.c::ftCo_CliffJump2_Phys
+  if (action_frame > 0) {
+    return 0;
+  }
+  switch (action_id) {
+    case MSL_ACT_JUMP_F:
+    case MSL_ACT_JUMP_B:
+    case MSL_ACT_CLIFF_JUMP_QUICK2:
+      return 1;
+    default:
+      return 0;
+  }
+}
+
+static inline float air_apply_friction_step(float vel, float friction) {
+  // refs/melee/src/melee/ft/ftcommon.c::ftCommon_ApplyFrictionAir
+  float accel = friction;
+  if (msl_absf(accel) >= msl_absf(vel)) {
+    accel = -vel;
+  } else if (vel > 0.0f) {
+    accel = -accel;
+  }
+  return vel + accel;
+}
+
+static inline float air_apply_accel_step(float vel, float accel, float target_vel, float friction,
+                                         float air_max_horizontal_velocity) {
+  // refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007D174
+  if (target_vel == 0.0f) {
+    return air_apply_friction_step(vel, friction);
+  }
+
+  float a = accel;
+  if (!(vel * a < 0.0f)) {
+    if (a > 0.0f) {
+      if (vel + a > target_vel) {
+        a = -friction;
+        if (vel + a < target_vel) {
+          a = target_vel - vel;
+        }
+        if (vel + a > air_max_horizontal_velocity) {
+          a = air_max_horizontal_velocity - vel;
+        }
+      }
+    } else {
+      if (vel + a < target_vel) {
+        a = friction;
+        if (vel + a > target_vel) {
+          a = target_vel - vel;
+        }
+        if (vel + a < -air_max_horizontal_velocity) {
+          a = -air_max_horizontal_velocity - vel;
+        }
+      }
+    }
+  }
+  return vel + a;
+}
+
+static inline uint8_t physics_action_is_fall_special_like(uint16_t action_id) {
+  return (action_id == (uint16_t)MSL_ACT_FALL_SPECIAL ||
+          action_id == (uint16_t)MSL_ACT_FALL_SPECIAL_F ||
+          action_id == (uint16_t)MSL_ACT_FALL_SPECIAL_B)
+             ? 1
+             : 0;
+}
+
+static inline uint8_t physics_action_uses_common_air_drift(uint16_t action_id) {
+  // Decomp: the common helper `ft_80084DB0` calls `ftCommon_8007D268` to compute x drift.
+  // refs/melee/src/melee/ft/ft_081B.c::ft_80084DB0
+  //
+  // EscapeAir is special-cased: when cmd_skip_decay is false, EscapeAir scales self_vel and does
+  // not call `ft_80084DB0` in-engine.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Phys
+  if (action_id == (uint16_t)MSL_ACT_ESCAPE_AIR) {
+    return 0;
+  }
+  return msl_action_allows_fastfall(action_id);
+}
+
+static inline float physics_apply_common_air_drift(const MslCharParams* ch, const MslCommonParams* c,
+                                                   uint16_t action_id, uint8_t fallspecial_xc,
+                                                   float stick_x, float vel_x) {
+  // refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007D28C (via ftCommon_8007D268)
+  float accel_scaling = stick_x * ch->air_drift_stick_mul;
+  float accel_flat = stick_x > 0.0f ? +ch->aerial_drift_base : -ch->aerial_drift_base;
+  float target = stick_x * ch->air_drift_max;
+
+  // FallSpecial drift cap ("mobility").
+  //
+  // Decomp: ftCo_80096900 stores `mv.co.fallspecial.mobility = ca->air_drift_max * mobility_scalar`, and
+  // ftCo_FallSpecial_Phys clamps |target_vel| to that mobility only on the `xC == 0` branch.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_FallSpecial.c::ftCo_FallSpecial_Phys
+  if (physics_action_is_fall_special_like(action_id) && c != NULL && fallspecial_xc == 0) {
+    const float mobility = ch->air_drift_max * c->fall_special_mobility_scalar;
+    if (msl_absf(target) > mobility) {
+      target = (target < 0.0f) ? -mobility : +mobility;
+    }
+  }
+
+  return air_apply_accel_step(vel_x, accel_scaling + accel_flat, target, ch->aerial_friction,
+                              ch->air_max_horizontal_velocity);
+}
+
+static inline uint8_t physics_action_is_shine_air(uint16_t action_id) {
+  return (action_id >= (uint16_t)MSL_ACT_FX_SPECIAL_AIR_LW_START &&
+          action_id <= (uint16_t)MSL_ACT_FX_SPECIAL_AIR_LW_TURN)
+             ? 1
+             : 0;
+}
+
+static inline float physics_apply_shine_air_x_clamp(const MslCharParams* ch, const MslCommonParams* c,
+                                                    float vel_x) {
+  // Decomp: aerial Reflector (SpecialAirLw*) uses `ftCommon_8007CF58`, which sets fp->x74_anim_vel.x to a
+  // friction/clamp step using p_ftCommonData->x1FC when |vel| exceeds air_drift_max, else co_attrs.aerial_friction.
+  // refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007CF58
+  float friction = ch->aerial_friction;
+  if (c != NULL && msl_absf(vel_x) > ch->air_drift_max) {
+    friction = c->air_drift_overmax_friction;
+  }
+  return air_apply_friction_step(vel_x, friction);
+}
+
 static inline uint8_t physics_action_use_pre_integration_common_air_gravity(uint16_t action_id) {
   // Decomp: many common airborne action states call `ft_80084DB0` from their phys callbacks, which
   // runs `ftCommon_CheckFallFast` + `ftCommon_Fall/FallFast` (mutating `self_vel.y`) before
@@ -121,6 +250,7 @@ void physics_integrate(MslBatch* batch) {
       const uint8_t on_ground = batch->state.on_ground[idx] ? 1 : 0;
       const uint16_t action_id = batch->state.action_id[idx];
       const float vy_self_pre = batch->state.speed_y_self[idx];
+      const int16_t action_frame = batch->state.action_frame[idx];
 
       // ----------------------------
       // Air-only self-velocity update
@@ -142,10 +272,7 @@ void physics_integrate(MslBatch* batch) {
       if (!on_ground) {
         // Match-flow and cliff actions are treated as non-physical in this simplified core.
         if (!physics_is_match_flow_airborne(action_id)) {
-          // CliffJump2 special-case: its phys callback skips the common fall helper on the first
-          // frame. refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffJump.c::ftCo_CliffJump2_Phys
-          if (!(action_id == (uint16_t)MSL_ACT_CLIFF_JUMP_QUICK2 &&
-                batch->state.action_frame[idx] <= 0)) {
+          if (!physics_action_skip_common_air_helper_first_frame(action_id, action_frame)) {
             if (action_id == (uint16_t)MSL_ACT_ESCAPE_AIR) {
               // Decomp: EscapeAir_Phys scales `self_vel` by `escapeair_decay` when cmd_skip_decay is
               // false; otherwise it calls `ft_80084DB0`.
@@ -183,6 +310,36 @@ void physics_integrate(MslBatch* batch) {
                   }
                 }
                 batch->state.speed_y_self[idx] = next_vy;
+              }
+            }
+
+            // ----------------------
+            // Air horizontal drift/X
+            // ----------------------
+            //
+            // Decomp:
+            // - Common airborne helper (`ft_80084DB0`) calls `ftCommon_8007D268`, which computes an
+            //   accel into fp->x74_anim_vel.x (ftCommon_8007D174) and then Fighter_procUpdate adds
+            //   x74_anim_vel into self_vel before integrating position.
+            //   refs/melee/src/melee/ft/ft_081B.c::ft_80084DB0
+            //   refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007D268 / ftCommon_8007D28C
+            //   refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate (self_vel += x74_anim_vel)
+            //
+            // - Fox/Falco Shine aerial states are state-specific: `ftCommon_8007CF58` (not drift
+            //   from stick), still via x74_anim_vel.x.
+            //   refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c::ftFx_SpecialAirLwLoop_Phys
+            const MslCharParams* ch = msl_char_params(batch->state.char_id[idx]);
+            if (ch != NULL) {
+              const float stick_x = apply_deadzone(
+                  stick_i8_to_unit(batch->state.input_main_x[idx]), c->lstick_deadzone_x);
+              if (physics_action_is_shine_air(action_id)) {
+                batch->state.speed_air_x_self[idx] =
+                    physics_apply_shine_air_x_clamp(ch, c, batch->state.speed_air_x_self[idx]);
+              } else if (physics_action_uses_common_air_drift(action_id)) {
+                batch->state.speed_air_x_self[idx] =
+                    physics_apply_common_air_drift(ch, c, action_id,
+                                                   batch->state.fallspecial_xc[idx], stick_x,
+                                                   batch->state.speed_air_x_self[idx]);
               }
             }
           }

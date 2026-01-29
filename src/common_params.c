@@ -301,6 +301,7 @@ int common_params_init(void) {
       json_get_f32(buf, "hitlag_dmg_mul", &g_params.hitlag_dmg_mul) != 0 ||
       json_get_f32(buf, "hitlag_base", &g_params.hitlag_base) != 0 ||
       json_get_f32(buf, "hitlag_squat_mul", &g_params.hitlag_squat_mul) != 0 ||
+      json_get_f32(buf, "air_drift_overmax_friction", &g_params.air_drift_overmax_friction) != 0 ||
       json_get_f32(buf, "kb_weight_mul", &g_params.kb_weight_mul) != 0 ||
       json_get_f32(buf, "kb_weight_mul2", &g_params.kb_weight_mul2) != 0 ||
       json_get_f32(buf, "kb_applied_max", &g_params.kb_applied_max) != 0 ||

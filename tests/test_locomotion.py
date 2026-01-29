@@ -367,7 +367,9 @@ def test_kneebend_takeoff_enters_jumpf_and_consumes_jump() -> None:
     assert int(out["action_frame"][0]) == 0
     assert int(out["jumps_left"][0]) == 1
     assert int(out["on_ground"][0]) == 0
-    expected_vy = np.float32(_fox_attr("jump_v_initial_velocity") - _fox_attr("grav"))
+    # Decomp: JumpF/B phys skips ft_80084DB0 (and thus gravity) on the first frame after entry.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c::ftCo_Jump_Phys_Inner
+    expected_vy = np.float32(_fox_attr("jump_v_initial_velocity"))
     assert np.isclose(out["speed_y_self"][0], expected_vy)
 
 
@@ -425,7 +427,7 @@ def test_kneebend_release_jump_short_hops() -> None:
     out = _step_once(seed, prev_inp, inp)
     assert int(out["action_id"][0]) == ACT_JUMPF
     assert int(out["action_frame"][0]) == 0
-    expected_vy = np.float32(_fox_attr("hop_v_initial_velocity") - _fox_attr("grav"))
+    expected_vy = np.float32(_fox_attr("hop_v_initial_velocity"))
     assert np.isclose(out["speed_y_self"][0], expected_vy)
 
 
@@ -455,7 +457,7 @@ def test_kneebend_seeded_jump_input_lstick_short_hops_even_if_xy_held() -> None:
 
     out = _step_once(seed, prev_inp, inp)
     assert int(out["action_id"][0]) == ACT_JUMPF
-    expected_vy = np.float32(_fox_attr("hop_v_initial_velocity") - _fox_attr("grav"))
+    expected_vy = np.float32(_fox_attr("hop_v_initial_velocity"))
     assert np.isclose(out["speed_y_self"][0], expected_vy)
 
 
@@ -485,7 +487,7 @@ def test_kneebend_seeded_short_hop_latch_is_respected() -> None:
 
     out = _step_once(seed, prev_inp, inp)
     assert int(out["action_id"][0]) == ACT_JUMPF
-    expected_vy = np.float32(_fox_attr("hop_v_initial_velocity") - _fox_attr("grav"))
+    expected_vy = np.float32(_fox_attr("hop_v_initial_velocity"))
     assert np.isclose(out["speed_y_self"][0], expected_vy)
 
 

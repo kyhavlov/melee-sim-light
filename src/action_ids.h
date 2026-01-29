@@ -156,6 +156,21 @@ enum {
   // - refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::ftFx_SpecialHiFall_Phys
   //   (calls `ft_80084DB0`)
   MSL_ACT_FX_SPECIAL_HI_FALL = 0x0166,  // ftFx_MS_SpecialHiFall
+  // Decomp:
+  // - refs/melee/src/melee/ft/chara/ftFox/ftFx_Init.c::ftFx_Init_MotionStateTable
+  //   (ftFx_MS_SpecialLwStart=360 .. ftFx_MS_SpecialAirLwTurn=369)
+  // - refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c (physics callbacks)
+  //   - Aerial SpecialAirLw* use ftCommon_Fall + ftCommon_8007CF58 (x74_anim_vel.x friction/clamp).
+  MSL_ACT_FX_SPECIAL_LW_START = 0x0168,      // ftFx_MS_SpecialLwStart
+  MSL_ACT_FX_SPECIAL_LW_LOOP = 0x0169,       // ftFx_MS_SpecialLwLoop
+  MSL_ACT_FX_SPECIAL_LW_HIT = 0x016A,        // ftFx_MS_SpecialLwHit
+  MSL_ACT_FX_SPECIAL_LW_END = 0x016B,        // ftFx_MS_SpecialLwEnd
+  MSL_ACT_FX_SPECIAL_LW_TURN = 0x016C,       // ftFx_MS_SpecialLwTurn
+  MSL_ACT_FX_SPECIAL_AIR_LW_START = 0x016D,  // ftFx_MS_SpecialAirLwStart
+  MSL_ACT_FX_SPECIAL_AIR_LW_LOOP = 0x016E,   // ftFx_MS_SpecialAirLwLoop
+  MSL_ACT_FX_SPECIAL_AIR_LW_HIT = 0x016F,    // ftFx_MS_SpecialAirLwHit
+  MSL_ACT_FX_SPECIAL_AIR_LW_END = 0x0170,    // ftFx_MS_SpecialAirLwEnd
+  MSL_ACT_FX_SPECIAL_AIR_LW_TURN = 0x0171,   // ftFx_MS_SpecialAirLwTurn
 };
 
 // GALE01 "submotion" ids (aka `anim_id` / `ftCo_Submotion`) for common locomotion.
@@ -296,6 +311,16 @@ static inline uint8_t msl_action_is_ground_locomotion(uint16_t action_id) {
 }
 
 static inline uint8_t msl_action_is_air_locomotion(uint16_t action_id) {
+  // Semantics: "air locomotion" here is used as a broad gate for locomotion input/state-machine
+  // behavior (Jump/Fall/FallSpecial families), not as a proxy for "any airborne state that uses
+  // ft_80084DB0".
+  //
+  // Note: DamageFall is intentionally excluded from this helper to avoid leaking damage-state
+  // behavior into locomotion gates (e.g. special-move entry). DamageFall still uses the common
+  // airborne fall helper in its phys callback, so it is included explicitly in
+  // msl_action_allows_fastfall() instead.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DamageFall.c::ftCo_DamageFall_Phys
+  // refs/melee/src/melee/ft/ft_081B.c::ft_80084DB0
   switch (action_id) {
     case MSL_ACT_JUMP_F:
     case MSL_ACT_JUMP_B:
@@ -310,7 +335,6 @@ static inline uint8_t msl_action_is_air_locomotion(uint16_t action_id) {
     case MSL_ACT_FALL_SPECIAL:
     case MSL_ACT_FALL_SPECIAL_F:
     case MSL_ACT_FALL_SPECIAL_B:
-    case MSL_ACT_DAMAGE_FALL:
       return 1;
     default:
       return 0;
@@ -330,6 +354,10 @@ static inline uint8_t msl_action_allows_fastfall(uint16_t action_id) {
     return 1;
   }
   switch (action_id) {
+    // DamageFall uses the common airborne fall helper in its phys callback.
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DamageFall.c::ftCo_DamageFall_Phys
+    // refs/melee/src/melee/ft/ft_081B.c::ft_80084DB0
+    case MSL_ACT_DAMAGE_FALL:
     case MSL_ACT_ATTACK_AIR_N:
     case MSL_ACT_ATTACK_AIR_F:
     case MSL_ACT_ATTACK_AIR_B:

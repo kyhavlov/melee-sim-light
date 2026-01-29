@@ -91,51 +91,6 @@ static float apply_ground_accel(float gr_vel, float accel, float target_vel, flo
   return gr_vel + a;
 }
 
-static float apply_friction_air(float air_vel_x, float friction) {
-  // refs/melee/src/melee/ft/ftcommon.c::ftCommon_ApplyFrictionAir + ApplyAirMovement
-  float accel = friction;
-  if (msl_absf(accel) >= msl_absf(air_vel_x)) {
-    accel = -air_vel_x;
-  } else if (air_vel_x > 0.0f) {
-    accel = -accel;
-  }
-  return air_vel_x + accel;
-}
-
-static float apply_air_accel(float vel, float accel, float target_vel, float friction,
-                             float air_max_horizontal_velocity) {
-  // refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007D174 + ApplyAirMovement
-  if (target_vel == 0.0f) {
-    return apply_friction_air(vel, friction);
-  }
-
-  float a = accel;
-  if (!(vel * a < 0.0f)) {
-    if (a > 0.0f) {
-      if (vel + a > target_vel) {
-        a = -friction;
-        if (vel + a < target_vel) {
-          a = target_vel - vel;
-        }
-        if (vel + a > air_max_horizontal_velocity) {
-          a = air_max_horizontal_velocity - vel;
-        }
-      }
-    } else {
-      if (vel + a < target_vel) {
-        a = friction;
-        if (vel + a > target_vel) {
-          a = target_vel - vel;
-        }
-        if (vel + a < -air_max_horizontal_velocity) {
-          a = -air_max_horizontal_velocity - vel;
-        }
-      }
-    }
-  }
-  return vel + a;
-}
-
 static inline uint8_t action_is_walk(uint16_t a) {
   return (a == MSL_ACT_WALK_SLOW || a == MSL_ACT_WALK_MIDDLE || a == MSL_ACT_WALK_FAST) ? 1 : 0;
 }
@@ -152,12 +107,6 @@ static inline uint8_t action_is_fall_like(uint16_t a) {
     default:
       return 0;
   }
-}
-
-static inline uint8_t action_is_fall_special_like(uint16_t a) {
-  return (a == MSL_ACT_FALL_SPECIAL || a == MSL_ACT_FALL_SPECIAL_F || a == MSL_ACT_FALL_SPECIAL_B)
-             ? 1
-             : 0;
 }
 
 static inline uint8_t action_is_ground_locomotion(uint16_t a) {
@@ -427,37 +376,6 @@ static inline void enter_landing_action_from_air(MslBatch* batch, const MslCharP
       }
     }
   }
-}
-
-static inline void apply_air_drift(const MslCharParams* ch, const MslCommonParams* c,
-                                   uint16_t action_id, uint8_t fallspecial_xc, float stick_x,
-                                   float* io_air_x) {
-  // refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007D28C + ApplyAirMovement
-  if (io_air_x == NULL) {
-    return;
-  }
-  float accel_scaling = stick_x * ch->air_drift_stick_mul;
-  float accel_flat = stick_x > 0.0f ? +ch->aerial_drift_base : -ch->aerial_drift_base;
-  float target = stick_x * ch->air_drift_max;
-
-  // FallSpecial drift cap ("mobility").
-  //
-  // Decomp: ftCo_80096900 stores `mv.co.fallspecial.mobility = ca->air_drift_max * mobility_scalar`, and
-  // ftCo_FallSpecial_Phys clamps |target_vel| to that mobility.
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_FallSpecial.c
-  //
-  // Important: the clamp is only applied on the `xC == 0` branch in ftCo_FallSpecial_Phys.
-  // EscapeAir's ftCo_80096900(..., arg1=1, ...) path sets xC=1, so no cap there.
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_FallSpecial.c:97
-  if (action_is_fall_special_like(action_id) && c != NULL && fallspecial_xc == 0) {
-    const float mobility = ch->air_drift_max * c->fall_special_mobility_scalar;
-    if (msl_absf(target) > mobility) {
-      target = msl_signf(target) * mobility;
-    }
-  }
-
-  *io_air_x = apply_air_accel(*io_air_x, accel_scaling + accel_flat, target, ch->aerial_friction,
-                              ch->air_max_horizontal_velocity);
 }
 
 void locomotion_update_pre(MslBatch* batch) {
@@ -1252,10 +1170,6 @@ void locomotion_update_pre(MslBatch* batch) {
           }
         }
       }
-
-      // Air drift.
-      apply_air_drift(ch, c, action_id, batch->state.fallspecial_xc[idx], stick_x,
-                      &batch->state.speed_air_x_self[idx]);
 
       // Jump -> Fall when animation ends (and for aerial jumps too).
       if (action_id == MSL_ACT_JUMP_F || action_id == MSL_ACT_JUMP_B ||
