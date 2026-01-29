@@ -215,8 +215,8 @@ static int load_one(const char* data_dir, const char* rel_path, uint8_t char_id)
   // `data/characters/*.json` are local, gitignored artifacts and may be missing when cloning a
   // fresh repo or when the extraction schema changes.
   if (char_id == (uint8_t)MSL_CHAR_FOX || char_id == (uint8_t)MSL_CHAR_FALCO) {
-    for (size_t i =
-             0; i < (sizeof(k_illusion_required_keys) / sizeof(k_illusion_required_keys[0])); i++) {
+    for (size_t i = 0; i < (sizeof(k_illusion_required_keys) / sizeof(k_illusion_required_keys[0]));
+         i++) {
       const char* k = k_illusion_required_keys[i];
       char pat[96];
       const int pn = snprintf(pat, sizeof(pat), "\"%s\"", k);
@@ -224,9 +224,11 @@ static int load_one(const char* data_dir, const char* rel_path, uint8_t char_id)
         fprintf(stderr, "msl: missing required key %s in %s\n", pat, path);
         fprintf(stderr,
                 "hint: regenerate ISO-derived character attrs (gitignored). For Fox/Falco:\n"
-                "  uv run python -m tools.extraction.extract_character_attrs --pl-dir _iso --out-dir data/characters --chars fox,falco\n"
+                "  uv run python -m tools.extraction.extract_character_attrs --pl-dir _iso "
+                "--out-dir data/characters --chars fox,falco\n"
                 "or run the full data pipeline:\n"
-                "  uv run python -m tools.extraction.build_data --iso-dir _iso --stage grnla --chars fox,falco\n");
+                "  uv run python -m tools.extraction.build_data --iso-dir _iso --stage grnla "
+                "--chars fox,falco\n");
         alloc_free(buf);
         return -1;
       }

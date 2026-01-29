@@ -15,8 +15,9 @@ static inline int grabbed_victim_transn_interp(float* out_x, float* out_y, float
 
 static inline int pose_part_origin_world(float* out_x, float* out_y, float* out_z, uint8_t char_id,
                                          uint32_t anim_u32, float anim_frame_f32, uint16_t part_id,
-                                         float fighter_pos_x, float fighter_pos_y, float fighter_pos_z,
-                                         float fighter_scale_y, uint8_t facing_u8) {
+                                         float fighter_pos_x, float fighter_pos_y,
+                                         float fighter_pos_z, float fighter_scale_y,
+                                         uint8_t facing_u8) {
   if (out_x == NULL || out_y == NULL || out_z == NULL) {
     return -1;
   }
@@ -78,11 +79,11 @@ static inline void grabbed_victim_anchor_world(float* out_x, float* out_y, float
   float ax = batch->state.pos_x[oidx];
   float ay = batch->state.pos_y[oidx];
   float az = batch->state.pos_z[oidx];
-  (void)pose_part_origin_world(&ax, &ay, &az, batch->state.char_id[oidx],
-                               batch->state.animation_index[oidx], batch->state.anim_frame_f32[oidx],
-                               (uint16_t)MSL_FTPART_RHANDN, batch->state.pos_x[oidx],
-                               batch->state.pos_y[oidx], batch->state.pos_z[oidx],
-                               batch->state.fighter_scale_y[oidx], batch->state.facing[oidx]);
+  (void)pose_part_origin_world(
+      &ax, &ay, &az, batch->state.char_id[oidx], batch->state.animation_index[oidx],
+      batch->state.anim_frame_f32[oidx], (uint16_t)MSL_FTPART_RHANDN, batch->state.pos_x[oidx],
+      batch->state.pos_y[oidx], batch->state.pos_z[oidx], batch->state.fighter_scale_y[oidx],
+      batch->state.facing[oidx]);
 
   float tx = 0.0f, ty = 0.0f, tz = 0.0f;
   if (grabbed_victim_transn_interp(&tx, &ty, &tz, batch, vidx) != 0) {
