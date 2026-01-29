@@ -5,6 +5,35 @@
 #include "common_params.h"
 #include "input_axis.h"
 
+static inline uint8_t physics_action_use_pre_integration_common_air_gravity(uint16_t action_id) {
+  // Decomp: many common airborne action states call `ft_80084DB0` from their phys callbacks, which
+  // runs `ftCommon_CheckFallFast` + `ftCommon_Fall/FallFast` (mutating `self_vel.y`) before
+  // `Fighter_procUpdate` integrates `cur_pos`.
+  // refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate
+  // refs/melee/src/melee/ft/ft_081B.c::ft_80084DB0
+  //
+  // However, in the v1 teacher-forced reseed loop we currently treat Damage*/hitstun-y states as
+  // mostly seed-driven. Applying the common fall helper for DamageFall shifts `pos_y` by ~grav on
+  // some frames and can cause match-flow blastzone false positives (stocks decremented) vs the
+  // replay reference.
+  //
+  // Repro (suite): `AttachedGoodNaturedGuanaco.msl` record=2959 p=0 (DamageFall) crosses FD blast
+  // bottom and triggers `MSL_ACT_DEAD_DOWN` when we apply common gravity pre-integration.
+  //
+  // Until DamageFall's full physics path is modeled (including its interaction with hitstun/KB),
+  // keep the ordering fix for locomotion/attackair states but exclude DamageFall here.
+  if (!msl_action_allows_fastfall(action_id)) {
+    return 0;
+  }
+  return (uint8_t)(action_id != (uint16_t)MSL_ACT_DAMAGE_FALL);
+}
+
+static inline uint8_t physics_action_use_post_integration_common_air_gravity(uint16_t action_id) {
+  // Temporary v1 compatibility: update `speed_y_self` for next frame without affecting current
+  // frame displacement (see note above).
+  return (uint8_t)(action_id == (uint16_t)MSL_ACT_DAMAGE_FALL);
+}
+
 static inline uint8_t physics_is_match_flow_airborne(uint16_t action_id) {
   switch (action_id) {
     case MSL_ACT_DEAD_DOWN:
@@ -91,9 +120,74 @@ void physics_integrate(MslBatch* batch) {
 
       const uint8_t on_ground = batch->state.on_ground[idx] ? 1 : 0;
       const uint16_t action_id = batch->state.action_id[idx];
-      const float vx_self =
-          on_ground ? batch->state.speed_ground_x_self[idx] : batch->state.speed_air_x_self[idx];
-      const float vy_self = batch->state.speed_y_self[idx];
+      const float vy_self_pre = batch->state.speed_y_self[idx];
+
+      // ----------------------------
+      // Air-only self-velocity update
+      // ----------------------------
+      //
+      // Decomp ordering:
+      // - Motion-state phys callbacks run inside `Fighter_procUpdate` before position integration.
+      //   refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate
+      // - Many airborne states call the common fall helper `ft_80084DB0`, which runs:
+      //   (1) ftCommon_CheckFallFast, (2) ftCommon_Fall/FallFast (mutates fp->self_vel.y),
+      //   (3) ftCommon_8007D268 (air drift accel via fp->x74_anim_vel.x).
+      //   refs/melee/src/melee/ft/ft_081B.c::ft_80084DB0
+      //   refs/melee/src/melee/ft/ftcommon.c::ftCommon_CheckFallFast
+      //   refs/melee/src/melee/ft/ftcommon.c::ftCommon_Fall / ftCommon_FallFast
+      //
+      // In GALE01, `fp->cur_pos` is then integrated using the updated self velocity in the same
+      // proc. We therefore apply gravity/fastfall (and simplified EscapeAir decay) before
+      // integrating `pos_*` so our one-step outputs are aligned with the in-engine ordering.
+      if (!on_ground) {
+        // Match-flow and cliff actions are treated as non-physical in this simplified core.
+        if (!physics_is_match_flow_airborne(action_id)) {
+          // CliffJump2 special-case: its phys callback skips the common fall helper on the first
+          // frame. refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffJump.c::ftCo_CliffJump2_Phys
+          if (!(action_id == (uint16_t)MSL_ACT_CLIFF_JUMP_QUICK2 &&
+                batch->state.action_frame[idx] <= 0)) {
+            if (action_id == (uint16_t)MSL_ACT_ESCAPE_AIR) {
+              // Decomp: EscapeAir_Phys scales `self_vel` by `escapeair_decay` when cmd_skip_decay is
+              // false; otherwise it calls `ft_80084DB0`.
+              // refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Phys
+              //
+              // This sim currently does not model cmd_skip_decay, and always uses the decay path.
+              batch->state.speed_air_x_self[idx] *= c->escapeair_decay;
+              batch->state.speed_y_self[idx] *= c->escapeair_decay;
+            } else if (physics_action_use_pre_integration_common_air_gravity(action_id)) {
+              const MslCharParams* phys = msl_char_params(batch->state.char_id[idx]);
+              if (phys != NULL) {
+                const uint8_t allow_fastfall = msl_action_allows_fastfall(action_id);
+
+                // Fastfall latch (ftCommon_CheckFallFast) uses the pre-gravity `self_vel.y`.
+                // refs/melee/src/melee/ft/ftcommon.c::ftCommon_CheckFallFast
+                if (allow_fastfall) {
+                  const float stick_y = apply_deadzone(
+                      stick_i8_to_unit(batch->state.input_main_y[idx]), c->lstick_deadzone_y);
+                  (void)ftCommon_CheckFallFast(c, stick_y, vy_self_pre, &batch->state.fall_fast[idx],
+                                               &batch->state.tilt_timer_y[idx]);
+                }
+
+                // Air gravity / terminal velocity / fastfall update.
+                //
+                // Decomp refs:
+                // - Gravity/terminal: refs/melee/src/melee/ft/ftcommon.c::ftCommon_Fall
+                // - Fastfall: refs/melee/src/melee/ft/ftcommon.c::ftCommon_FallFast (called via ft_80084DB0)
+                float next_vy = vy_self_pre;
+                if (allow_fastfall && batch->state.fall_fast[idx]) {
+                  next_vy = -phys->fast_fall_velocity;
+                } else {
+                  next_vy -= phys->grav;
+                  if (next_vy < -phys->terminal_vel) {
+                    next_vy = -phys->terminal_vel;
+                  }
+                }
+                batch->state.speed_y_self[idx] = next_vy;
+              }
+            }
+          }
+        }
+      }
 
       // Knockback velocity contributes to position integration in addition to self velocity.
       //
@@ -109,80 +203,44 @@ void physics_integrate(MslBatch* batch) {
       // We include `speed_*_attack` in position integration (because it affects where the character is this frame),
       // but we exclude it from gravity/fastfall updates (which operate on `self_vel` only; knockback has its own
       // separate decay/physics paths in-engine, and is currently teacher-forced from the seed).
+      const float vx_self =
+          on_ground ? batch->state.speed_ground_x_self[idx] : batch->state.speed_air_x_self[idx];
+      const float vy_self = batch->state.speed_y_self[idx];
       const float vx = vx_self + batch->state.speed_x_attack[idx];
       const float vy_integrate = vy_self + batch->state.speed_y_attack[idx];
 
-      // Position integration happens before gravity/fastfall updates in this simplified core.
+      // Position integration uses the (possibly-updated) self velocity plus the separate knockback
+      // velocity term, matching GALE01 `Fighter_procUpdate` integration shape.
+      // refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate
       batch->state.pos_x[idx] += vx;
       batch->state.pos_y[idx] += vy_integrate;
 
-      if (on_ground) {
-        continue;
-      }
+      // Post-integration gravity update for states we intentionally keep "seed-driven" for current
+      // frame displacement (notably DamageFall; see helper docs above).
+      if (!on_ground && !physics_is_match_flow_airborne(action_id) &&
+          physics_action_use_post_integration_common_air_gravity(action_id)) {
+        const MslCharParams* phys = msl_char_params(batch->state.char_id[idx]);
+        if (phys != NULL) {
+          const uint8_t allow_fastfall = msl_action_allows_fastfall(action_id);
+          if (allow_fastfall) {
+            const float stick_y = apply_deadzone(
+                stick_i8_to_unit(batch->state.input_main_y[idx]), c->lstick_deadzone_y);
+            (void)ftCommon_CheckFallFast(c, stick_y, vy_self_pre, &batch->state.fall_fast[idx],
+                                         &batch->state.tilt_timer_y[idx]);
+          }
 
-      // Match-flow action states (KO/death/respawn/entry) are suite-modeled as non-physical:
-      // no gravity/fastfall, no hidden decay. Position updates (if any) are driven explicitly by
-      // match_flow.c and/or the seeded self-vel.
-      if (physics_is_match_flow_airborne(action_id)) {
-        continue;
-      }
-
-      // CliffJump2 is a special case: its physics callback skips the common fall helper on the
-      // first frame (no gravity/fastfall update that frame), then uses ft_80084DB0 afterward.
-      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffJump.c::ftCo_CliffJump2_Phys
-      if (action_id == (uint16_t)MSL_ACT_CLIFF_JUMP_QUICK2 && batch->state.action_frame[idx] <= 0) {
-        continue;
-      }
-
-      // EscapeAir is a self-velocity-controlled state with its own decay; do not apply gravity or
-      // fastfall here unless we later model cmd_skip_decay.
-      //
-      // Decomp: ftCo_EscapeAir_Phys scales `self_vel` by `escapeair_decay` when cmd_skip_decay is false,
-      // and otherwise calls the common fall helper (`ft_80084DB0`).
-      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Phys
-      if (action_id == (uint16_t)MSL_ACT_ESCAPE_AIR) {
-        batch->state.speed_air_x_self[idx] *= c->escapeair_decay;
-        batch->state.speed_y_self[idx] *= c->escapeair_decay;
-        continue;
-      }
-
-      const MslCharParams* phys = msl_char_params(batch->state.char_id[idx]);
-      if (phys == NULL) {
-        continue;
-      }
-
-      const uint8_t allow_fastfall = msl_action_allows_fastfall(action_id);
-
-      // Fastfall latch (ftCommon_CheckFallFast) is used by many aerial action states via a common
-      // helper (`ft_80084DB0`), but it does not run for every airborne motion state (e.g. many
-      // knockback/hitstun physics paths).
-      //
-      // Decomp refs:
-      // - Check: refs/melee/src/melee/ft/ftcommon.c:505-520 (ftCommon_CheckFallFast)
-      // - Common call ordering: refs/melee/src/melee/ft/ft_081B.c:1347-1359 (ft_80084DB0)
-      if (allow_fastfall) {
-        const float stick_y =
-            apply_deadzone(stick_i8_to_unit(batch->state.input_main_y[idx]), c->lstick_deadzone_y);
-        (void)ftCommon_CheckFallFast(c, stick_y, vy_self, &batch->state.fall_fast[idx],
-                                     &batch->state.tilt_timer_y[idx]);
-      }
-
-      // Air gravity / terminal velocity / fastfall.
-      //
-      // Decomp refs:
-      // - Gravity/terminal: refs/melee/src/melee/ft/ftcommon.c::ftCommon_Fall
-      // - Fastfall: refs/melee/src/melee/ft/ftcommon.c::ftCommon_FallFast (called via ft_80084DB0)
-      float next_vy = vy_self;
-      if (allow_fastfall && batch->state.fall_fast[idx]) {
-        // refs/melee/src/melee/ft/ftcommon.c:488-494 (ftCommon_FallFast)
-        next_vy = -phys->fast_fall_velocity;
-      } else {
-        next_vy -= phys->grav;
-        if (next_vy < -phys->terminal_vel) {
-          next_vy = -phys->terminal_vel;
+          float next_vy = vy_self_pre;
+          if (allow_fastfall && batch->state.fall_fast[idx]) {
+            next_vy = -phys->fast_fall_velocity;
+          } else {
+            next_vy -= phys->grav;
+            if (next_vy < -phys->terminal_vel) {
+              next_vy = -phys->terminal_vel;
+            }
+          }
+          batch->state.speed_y_self[idx] = next_vy;
         }
       }
-      batch->state.speed_y_self[idx] = next_vy;
     }
   }
 }

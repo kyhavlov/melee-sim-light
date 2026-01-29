@@ -26,6 +26,27 @@ STAGE_FD = 32
 MAX_PLAYERS = 4
 
 
+_ECB_LOADED = False
+
+
+def _ensure_ecb_loaded() -> None:
+    global _ECB_LOADED
+    if _ECB_LOADED:
+        return
+    import msl_binding
+
+    handle = msl_binding.init(batch_size=1, num_players=2)
+    msl_binding.destroy(handle)
+    _ECB_LOADED = True
+
+
+def _fox_ecb_bottom_rel_y(msid: int, action_frame: int) -> float:
+    _ensure_ecb_loaded()
+    import msl_binding
+
+    return float(msl_binding.ecb_bottom_rel_y(CHAR_FOX, int(msid), int(action_frame)))
+
+
 def _fox_attr(name: str) -> float:
     fox = json.loads(Path("data/characters/fox.json").read_text())
     return float(fox[name])
@@ -142,8 +163,6 @@ def test_attack_air_n_lands_enters_landing_air_n_and_refreshes_jumps() -> None:
 
     seed = _seed_base()
     seed["on_ground"][0, 0] = np.uint8(0)
-    seed["pos_y"][0, 0] = np.float32(5.0)
-    seed["speed_y_self"][0, 0] = np.float32(-10.0)
     seed["action_id"][0, 0] = np.uint16(ACT_ATTACK_AIR_N)
     # Land during the cmd_var[0] "landing lag enabled" window so we enter LandingAirN (not auto-cancel Landing).
     cmd0_on = _fox_attackair_cmd0_on_frame("ftCo_SM_AttackAirN")
@@ -152,6 +171,19 @@ def test_attack_air_n_lands_enters_landing_air_n_and_refreshes_jumps() -> None:
     # Use a stable ECB pose for grounding/ECB evaluation; landing selection in this sim is keyed off action_id
     # (not animation_index) on the collision->grounding transition.
     seed["animation_index"][0, 0] = np.uint32(SM_FALL)
+    seed["ground_id"][0, 0] = np.uint16(1)  # prefer main FD floor segment
+
+    # Ensure we cross the FD floor in one frame under ECB-bottom grounding, accounting for the
+    # sim's per-frame ordering (gravity/terminal clamp before integration).
+    af0 = int(seed["action_frame"][0, 0])
+    af1 = af0 + 1
+    bot0 = _fox_ecb_bottom_rel_y(SM_FALL, af0)
+    bot1 = _fox_ecb_bottom_rel_y(SM_FALL, af1)
+    seed["pos_y"][0, 0] = np.float32(-bot0 + 0.10)
+    # Choose a small downward self-velocity so gravity pushes us below the floor in one frame.
+    # Fox grav is ISO-extracted: data/characters/fox.json `grav`.
+    grav = np.float32(_fox_attr("grav"))
+    seed["speed_y_self"][0, 0] = np.float32(min(-0.05, -(0.20 + (bot1 - bot0)) + grav))
     seed["jumps_left"][0, 0] = np.uint8(0)
 
     prev_inp = _mk_input_bytes(1, input_stride)
@@ -173,11 +205,22 @@ def test_escape_air_lands_enters_landing_fall_special_and_refreshes_jumps() -> N
 
     seed = _seed_base()
     seed["on_ground"][0, 0] = np.uint8(0)
-    seed["pos_y"][0, 0] = np.float32(5.0)
-    seed["speed_y_self"][0, 0] = np.float32(-10.0)
     seed["action_id"][0, 0] = np.uint16(ACT_ESCAPE_AIR)
     seed["action_frame"][0, 0] = np.int16(0)
     seed["animation_index"][0, 0] = np.uint32(SM_FALL)
+    seed["ground_id"][0, 0] = np.uint16(1)  # prefer main FD floor segment
+
+    # EscapeAir applies `escapeair_decay` to self velocity before integration, and does not run the
+    # common gravity/terminal helper on the decay path (decomp: ftCo_EscapeAir_Phys).
+    af0 = int(seed["action_frame"][0, 0])
+    af1 = af0 + 1
+    bot0 = _fox_ecb_bottom_rel_y(SM_FALL, af0)
+    bot1 = _fox_ecb_bottom_rel_y(SM_FALL, af1)
+    seed["pos_y"][0, 0] = np.float32(-bot0 + 0.10)
+    decay = np.float32(_common_attr("escapeair_decay"))
+    # Pick a downward speed so (vy * decay) crosses the floor within one frame.
+    need_dy = np.float32(-(0.20 + (bot1 - bot0)))
+    seed["speed_y_self"][0, 0] = np.float32(min(-0.05, need_dy / decay))
     seed["jumps_left"][0, 0] = np.uint8(0)
 
     prev_inp = _mk_input_bytes(1, input_stride)

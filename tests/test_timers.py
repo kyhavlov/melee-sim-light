@@ -6,9 +6,11 @@ from tools.eval.dataset import COMPARE_DTYPE, INPUT_DTYPE, SEED_DTYPE
 
 # Action ids (GALE01): refs/melee/src/melee/ft/chara/ftCommon/forward.h
 ACT_WAIT = 0x000E
+ACT_FALL = 0x001D
 
 # Submotion ids (GALE01): refs/melee/src/melee/ft/chara/ftCommon/forward.h
 SM_WAIT1_0 = 2
+SM_FALL = 20
 
 
 def _step_once(seed: np.ndarray) -> np.ndarray:
@@ -67,7 +69,9 @@ def test_hitlag_freezes_action_frame_and_physics() -> None:
     seed["pos_x"][0, 0] = np.float32(1.25)
     seed["pos_y"][0, 0] = np.float32(100.0)
     seed["on_ground"][0, 0] = np.uint8(0)
-    seed["speed_air_x_self"][0, 0] = np.float32(2.0)
+    seed["action_id"][0, 0] = np.uint16(ACT_FALL)
+    seed["animation_index"][0, 0] = np.uint32(SM_FALL)
+    seed["speed_air_x_self"][0, 0] = np.float32(0.0)
     seed["speed_y_self"][0, 0] = np.float32(3.0)
 
     out = _step_once(seed)
@@ -94,7 +98,11 @@ def test_hitlag_ends_then_action_and_physics_resume() -> None:
     seed["pos_x"][0, 0] = np.float32(0.0)
     seed["pos_y"][0, 0] = np.float32(100.0)
     seed["on_ground"][0, 0] = np.uint8(0)
-    seed["speed_air_x_self"][0, 0] = np.float32(2.0)
+    seed["action_id"][0, 0] = np.uint16(ACT_FALL)
+    seed["animation_index"][0, 0] = np.uint32(SM_FALL)
+    # Use knockback X velocity so locomotion air-drift doesn't perturb this test's horizontal integration.
+    seed["speed_air_x_self"][0, 0] = np.float32(0.0)
+    seed["speed_x_attack"][0, 0] = np.float32(2.0)
     seed["speed_y_self"][0, 0] = np.float32(3.0)
 
     out = _step_once(seed)
@@ -106,7 +114,7 @@ def test_hitlag_ends_then_action_and_physics_resume() -> None:
     # Resume: action frame advances; position integrates; gravity applies (Fox grav=0.23).
     assert int(out["action_frame"][0]) == 11
     assert np.isclose(out["pos_x"][0], np.float32(2.0), atol=0.0, rtol=0.0)
-    assert np.isclose(out["pos_y"][0], np.float32(103.0), atol=0.0, rtol=0.0)
+    assert np.isclose(out["pos_y"][0], np.float32(102.77), atol=0.0, rtol=0.0)
     assert np.isclose(out["speed_y_self"][0], np.float32(2.77), atol=1e-6, rtol=0.0)
 
 

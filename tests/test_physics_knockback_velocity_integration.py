@@ -87,9 +87,9 @@ def test_physics_integrates_knockback_velocity_into_position_but_not_gravity() -
 
     # Position integrates self_vel + knockback_vel.
     assert np.isclose(float(out["pos_x"][0]), 3.25, atol=1e-6)
-    assert np.isclose(float(out["pos_y"][0]), 2000.0 - 1.75, atol=1e-6)
+    # Air self-velocity (gravity) is updated before integration, but knockback velocity is not.
+    assert np.isclose(float(out["pos_y"][0]), 2000.0 - 1.75 - _fox_grav(), atol=1e-6)
 
     # Gravity updates only self velocity; knockback velocity is not modified by physics_integrate.
     assert np.isclose(float(out["speed_y_attack"][0]), -1.75, atol=1e-6)
     assert np.isclose(float(out["speed_y_self"][0]), -_fox_grav(), atol=1e-6)
-

@@ -46,6 +46,26 @@ INTERNALS_DTYPE = np.dtype(
     align=False,
 )
 
+_ECB_LOADED = False
+
+
+def _ensure_ecb_loaded() -> None:
+    global _ECB_LOADED
+    if _ECB_LOADED:
+        return
+    import msl_binding
+
+    handle = msl_binding.init(batch_size=1, num_players=2)
+    msl_binding.destroy(handle)
+    _ECB_LOADED = True
+
+
+def _fox_ecb_bottom_rel_y(msid: int, action_frame: int) -> float:
+    _ensure_ecb_loaded()
+    import msl_binding
+
+    return float(msl_binding.ecb_bottom_rel_y(CHAR_FOX, int(msid), int(action_frame)))
+
 
 def _fox_attr(name: str) -> float:
     import json
@@ -507,13 +527,17 @@ def test_landing_resets_jumps_and_enters_landing() -> None:
 
     seed = _seed_base()
     seed["on_ground"][0, 0] = np.uint8(0)
-    # With ECB-bottom grounding, Fox's root pos_y (TopN) is not the floor contact point; ensure the
-    # fighter crosses the floor in one frame even after applying the per-frame ECB offset.
-    seed["pos_y"][0, 0] = np.float32(20.0)
-    seed["speed_y_self"][0, 0] = np.float32(-25.0)
     seed["action_id"][0, 0] = np.uint16(ACT_FALL)
     seed["action_frame"][0, 0] = np.int16(0)
     seed["animation_index"][0, 0] = np.uint32(SM_FALL)
+    seed["ground_id"][0, 0] = np.uint16(1)  # prefer main FD floor segment
+    # Arrange an ECB-bottom floor crossing in one frame (airborne: bottom_rel_y comes from ECB table).
+    bot0 = _fox_ecb_bottom_rel_y(SM_FALL, 0)
+    seed["pos_y"][0, 0] = np.float32(-bot0 + 0.10)
+    grav = np.float32(_fox_attr("grav"))
+    # Choose a small downward speed so gravity moves us below the floor this frame.
+    bot1 = _fox_ecb_bottom_rel_y(SM_FALL, 1)
+    seed["speed_y_self"][0, 0] = np.float32(min(-0.05, -(0.20 + (bot1 - bot0)) + grav))
     seed["jumps_left"][0, 0] = np.uint8(1)
 
     prev_inp = _mk_input_bytes(1, input_stride)
@@ -725,7 +749,6 @@ def test_fall_fast_clears_on_landing_and_does_not_persist_off_stage() -> None:
     assert right_edge > 0.0
 
     vx = np.float32(5.0)
-    grav = np.float32(_fox_attr("grav"))
 
     seed = _seed_base()
     seed["on_ground"][0, 0] = np.uint8(0)
@@ -733,10 +756,13 @@ def test_fall_fast_clears_on_landing_and_does_not_persist_off_stage() -> None:
     seed["action_frame"][0, 0] = np.int16(0)
     seed["animation_index"][0, 0] = np.uint32(SM_FALL)
     seed["pos_x"][0, 0] = np.float32(right_edge) - vx - np.float32(0.1)
-    # Ensure we land this frame under ECB-bottom grounding.
-    seed["pos_y"][0, 0] = np.float32(20.0)
+    seed["ground_id"][0, 0] = np.uint16(2)  # prefer right FD floor segment
+    # Ensure we land this frame under ECB-bottom grounding, accounting for fastfall and ECB offsets.
+    bot0 = _fox_ecb_bottom_rel_y(SM_FALL, 0)
+    seed["pos_y"][0, 0] = np.float32(-bot0 + 0.10)
     seed["speed_air_x_self"][0, 0] = vx
-    seed["speed_y_self"][0, 0] = np.float32(-25.0)
+    # Any negative speed is sufficient (we fastfall on this step and clamp to -fast_fall_velocity).
+    seed["speed_y_self"][0, 0] = np.float32(-0.25)
     seed["jumps_left"][0, 0] = np.uint8(2)
 
     handle = msl_binding.init(batch_size=1, num_players=2)
