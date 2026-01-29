@@ -136,6 +136,28 @@ enum {
   MSL_ACT_ESCAPE_AIR = 0x00EC,     // ftCo_MS_EscapeAir
 };
 
+// Additional GALE01 Fox/Falco action ids needed for fastfall gating.
+//
+// Decomp:
+// - refs/melee/src/melee/ft/chara/ftFox/ftFx_Init.c::ftFx_Init_MotionStateTable
+//   (ftFx_MS_SpecialNStart=341 .. ftFx_MS_SpecialAirNEnd=346)
+// - refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_SpecialAirN{Start,Loop,End}_Phys
+//   (all call `ft_80084DB0`)
+enum {
+  MSL_ACT_FX_SPECIAL_N_START = 0x0155,      // ftFx_MS_SpecialNStart
+  MSL_ACT_FX_SPECIAL_N_LOOP = 0x0156,       // ftFx_MS_SpecialNLoop
+  MSL_ACT_FX_SPECIAL_N_END = 0x0157,        // ftFx_MS_SpecialNEnd
+  MSL_ACT_FX_SPECIAL_AIR_N_START = 0x0158,  // ftFx_MS_SpecialAirNStart
+  MSL_ACT_FX_SPECIAL_AIR_N_LOOP = 0x0159,   // ftFx_MS_SpecialAirNLoop
+  MSL_ACT_FX_SPECIAL_AIR_N_END = 0x015A,    // ftFx_MS_SpecialAirNEnd
+  // Decomp:
+  // - refs/melee/src/melee/ft/chara/ftFox/ftFx_Init.c::ftFx_Init_MotionStateTable
+  //   (ftFx_MS_SpecialHiFall = 358)
+  // - refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::ftFx_SpecialHiFall_Phys
+  //   (calls `ft_80084DB0`)
+  MSL_ACT_FX_SPECIAL_HI_FALL = 0x0166,  // ftFx_MS_SpecialHiFall
+};
+
 // GALE01 "submotion" ids (aka `anim_id` / `ftCo_Submotion`) for common locomotion.
 //
 // Source of truth: refs/melee/src/melee/ft/chara/ftCommon/forward.h `ftCo_Submotion`.
@@ -313,6 +335,16 @@ static inline uint8_t msl_action_allows_fastfall(uint16_t action_id) {
     case MSL_ACT_ATTACK_AIR_B:
     case MSL_ACT_ATTACK_AIR_HI:
     case MSL_ACT_ATTACK_AIR_LW:
+    // Decomp: `ftFx_SpecialAirN{Start,Loop,End}_Phys` call `ft_80084DB0`.
+    // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_SpecialAirNStart_Phys
+    // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_SpecialAirNLoop_Phys
+    // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_SpecialAirNEnd_Phys
+    case MSL_ACT_FX_SPECIAL_AIR_N_START:
+    case MSL_ACT_FX_SPECIAL_AIR_N_LOOP:
+    case MSL_ACT_FX_SPECIAL_AIR_N_END:
+    // Decomp: `ftFx_SpecialHiFall_Phys` calls `ft_80084DB0`.
+    // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::ftFx_SpecialHiFall_Phys
+    case MSL_ACT_FX_SPECIAL_HI_FALL:
     case MSL_ACT_ESCAPE_AIR:
     case MSL_ACT_CLIFF_JUMP_QUICK2:
       return 1;

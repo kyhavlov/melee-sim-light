@@ -2,6 +2,7 @@
 
 #include <stdint.h>
 
+#include "action_ids.h"
 #include "attack_id_tables.h"
 
 // Character id mapping follows Slippi post-frame `character` (GALE01):
@@ -9,19 +10,7 @@
 // - Falco = 22
 enum { MSL_CHAR_FOX = 1, MSL_CHAR_FALCO = 22 };
 
-// Fox/Falco motion states (GALE01) for SpecialN.
-//
-// Decomp (explicit numeric ids in comments):
-// - refs/melee/src/melee/ft/chara/ftFox/ftFx_Init.c::ftFx_Init_MotionStateTable
-//   (ftFx_MS_SpecialNStart=341 .. ftFx_MS_SpecialAirNEnd=346)
-// - refs/melee/src/melee/ft/chara/ftFalco/ftFc_Init.c::ftFc_Init_MotionStateTable
 enum {
-  MSL_ACT_FX_SPECIAL_N_START = 0x0155,      // ftFx_MS_SpecialNStart
-  MSL_ACT_FX_SPECIAL_N_LOOP = 0x0156,       // ftFx_MS_SpecialNLoop
-  MSL_ACT_FX_SPECIAL_N_END = 0x0157,        // ftFx_MS_SpecialNEnd
-  MSL_ACT_FX_SPECIAL_AIR_N_START = 0x0158,  // ftFx_MS_SpecialAirNStart
-  MSL_ACT_FX_SPECIAL_AIR_N_LOOP = 0x0159,   // ftFx_MS_SpecialAirNLoop
-  MSL_ACT_FX_SPECIAL_AIR_N_END = 0x015A,    // ftFx_MS_SpecialAirNEnd
   // Common AttackLw3 (dtilt) action id is ftCo_MS_AttackLw3 = 57 (0x0039).
   // refs/melee/src/melee/ft/ftmotionstates.c::ftData_MotionStateList
   MSL_ACT_CO_ATTACK_LW3 = 0x0039,  // ftCo_MS_AttackLw3
