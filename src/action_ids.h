@@ -108,6 +108,38 @@ typedef enum MslActionId {
   MSL_ACT_ESCAPE_B = 0x00EA,  // ftCo_MS_EscapeB (roll backward)
   MSL_ACT_ESCAPE_N = 0x00EB,  // ftCo_MS_EscapeN (spotdodge)
 
+  // Grab / throw / capture (suite-present subset).
+  //
+  // Source of truth:
+  // - refs/melee/src/melee/ft/chara/ftCommon/forward.h `ftCommon_MotionState`
+  // - refs/melee/src/melee/ft/ftmotionstates.c (comments with numeric ids)
+  MSL_ACT_CATCH = 0x00D4,            // ftCo_MS_Catch (212)
+  MSL_ACT_CATCH_PULL = 0x00D5,       // ftCo_MS_CatchPull (213)
+  MSL_ACT_CATCH_DASH = 0x00D6,       // ftCo_MS_CatchDash (214)
+  MSL_ACT_CATCH_DASH_PULL = 0x00D7,  // ftCo_MS_CatchDashPull (215)
+  MSL_ACT_CATCH_WAIT = 0x00D8,       // ftCo_MS_CatchWait (216)
+  MSL_ACT_CATCH_ATTACK = 0x00D9,     // ftCo_MS_CatchAttack (217)
+  MSL_ACT_CATCH_CUT = 0x00DA,        // ftCo_MS_CatchCut (218)
+  MSL_ACT_THROW_F = 0x00DB,          // ftCo_MS_ThrowF (219)
+  MSL_ACT_THROW_B = 0x00DC,          // ftCo_MS_ThrowB (220)
+  MSL_ACT_THROW_HI = 0x00DD,         // ftCo_MS_ThrowHi (221)
+  MSL_ACT_THROW_LW = 0x00DE,         // ftCo_MS_ThrowLw (222)
+  MSL_ACT_CAPTURE_PULLED_HI = 0x00DF,  // ftCo_MS_CapturePulledHi (223)
+  MSL_ACT_CAPTURE_WAIT_HI = 0x00E0,    // ftCo_MS_CaptureWaitHi (224)
+  MSL_ACT_CAPTURE_DAMAGE_HI = 0x00E1,  // ftCo_MS_CaptureDamageHi (225)
+  MSL_ACT_CAPTURE_PULLED_LW = 0x00E2,  // ftCo_MS_CapturePulledLw (226)
+  MSL_ACT_CAPTURE_WAIT_LW = 0x00E3,    // ftCo_MS_CaptureWaitLw (227)
+  MSL_ACT_CAPTURE_DAMAGE_LW = 0x00E4,  // ftCo_MS_CaptureDamageLw (228)
+  MSL_ACT_CAPTURE_CUT = 0x00E5,        // ftCo_MS_CaptureCut (229)
+  MSL_ACT_CAPTURE_JUMP = 0x00E6,       // ftCo_MS_CaptureJump (230)
+  MSL_ACT_CAPTURE_NECK = 0x00E7,       // ftCo_MS_CaptureNeck (231)
+  MSL_ACT_CAPTURE_FOOT = 0x00E8,       // ftCo_MS_CaptureFoot (232)
+  MSL_ACT_THROWN_F = 0x00EF,           // ftCo_MS_ThrownF (239)
+  MSL_ACT_THROWN_B = 0x00F0,           // ftCo_MS_ThrownB (240)
+  MSL_ACT_THROWN_HI = 0x00F1,          // ftCo_MS_ThrownHi (241)
+  MSL_ACT_THROWN_LW = 0x00F2,          // ftCo_MS_ThrownLw (242)
+  MSL_ACT_THROWN_LW_WOMEN = 0x00F3,    // ftCo_MS_ThrownlwWomen (243)
+
   // Cliff / ledge (FD suite-present).
   // Source of truth: refs/melee/src/melee/ft/chara/ftCommon/forward.h `ftCommon_MotionState`.
   MSL_ACT_CLIFF_CATCH = 0x00FC,         // ftCo_MS_CliffCatch (252)
@@ -384,6 +416,31 @@ static inline uint8_t msl_action_allows_fastfall(uint16_t action_id) {
     case MSL_ACT_FX_SPECIAL_HI_FALL:
     case MSL_ACT_ESCAPE_AIR:
     case MSL_ACT_CLIFF_JUMP_QUICK2:
+      return 1;
+    default:
+      return 0;
+  }
+}
+
+static inline uint8_t msl_action_is_grabbed_victim(uint16_t action_id) {
+  // Grab/capture/thrown victim states where the engine drives `fp->cur_pos` from an attachment joint.
+  // Decomp example: refs/melee/src/melee/ft/chara/ftCommon/ftCo_Thrown.c::ftCo_800DE508.
+  switch (action_id) {
+    case MSL_ACT_CAPTURE_PULLED_HI:
+    case MSL_ACT_CAPTURE_WAIT_HI:
+    case MSL_ACT_CAPTURE_DAMAGE_HI:
+    case MSL_ACT_CAPTURE_PULLED_LW:
+    case MSL_ACT_CAPTURE_WAIT_LW:
+    case MSL_ACT_CAPTURE_DAMAGE_LW:
+    case MSL_ACT_CAPTURE_CUT:
+    case MSL_ACT_CAPTURE_JUMP:
+    case MSL_ACT_CAPTURE_NECK:
+    case MSL_ACT_CAPTURE_FOOT:
+    case MSL_ACT_THROWN_F:
+    case MSL_ACT_THROWN_B:
+    case MSL_ACT_THROWN_HI:
+    case MSL_ACT_THROWN_LW:
+    case MSL_ACT_THROWN_LW_WOMEN:
       return 1;
     default:
       return 0;

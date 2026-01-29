@@ -75,6 +75,9 @@ int state_alloc(MslStateSoA* state, int batch_size) {
   state->action_id = (uint16_t*)alloc_aligned_64(sizeof(uint16_t) * bp);
   state->prev_action_id = (uint16_t*)alloc_aligned_64(sizeof(uint16_t) * bp);
   state->action_frame = (int16_t*)alloc_aligned_64(sizeof(int16_t) * bp);
+  state->grab_owner_port = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
+  state->grab_offset_y = (float*)alloc_aligned_64(sizeof(float) * bp);
+  state->grab_offset_z = (float*)alloc_aligned_64(sizeof(float) * bp);
   state->match_flow_timer = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->downwait_timer = (int16_t*)alloc_aligned_64(sizeof(int16_t) * bp);
   state->anim_frame_f32 = (float*)alloc_aligned_64(sizeof(float) * bp);
@@ -350,6 +353,9 @@ void state_free(MslStateSoA* state) {
   alloc_free(state->action_id);
   alloc_free(state->prev_action_id);
   alloc_free(state->action_frame);
+  alloc_free(state->grab_owner_port);
+  alloc_free(state->grab_offset_y);
+  alloc_free(state->grab_offset_z);
   alloc_free(state->match_flow_timer);
   alloc_free(state->downwait_timer);
   alloc_free(state->anim_frame_f32);

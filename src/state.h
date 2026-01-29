@@ -72,6 +72,21 @@ typedef struct MslStateSoA {
   // the seed schema minimal for one-step reseeding.
   uint16_t* prev_action_id;
   int16_t* action_frame;
+  // Grab/throw victim attachment internals.
+  //
+  // Decomp:
+  // - Thrown victims update position each frame from an attachment joint plus fp->x1A70 offsets
+  //   (ftCo_Thrown.c::ftCo_800DE508).
+  // - The "who is the thrower/grab-owner" identity is represented by fp->victim_gobj.
+  //
+  // Seed representation:
+  // - grab_owner_port is seeded from replay data as a player-slot index in [0..3], 0xFF = none.
+  //
+  // Simulator representation:
+  // - grab_offset_{y,z} store the decomp-shaped fp->x1A70.{y,z} (unscaled) inferred at reseed-time.
+  uint8_t* grab_owner_port;  // [batch * players]
+  float* grab_offset_y;      // [batch * players]
+  float* grab_offset_z;      // [batch * players]
   uint8_t* match_flow_timer;
   int16_t* downwait_timer;  // fp->mv.co.downwait.x0 (seeded; decomp: ftCo_DownWait_Anim)
   float* anim_frame_f32;    // decomp fp->cur_anim_frame (float; Slippi `state_age`)

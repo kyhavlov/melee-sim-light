@@ -68,6 +68,7 @@ ext = Extension(
         str((ROOT / "src" / "blaster.c").resolve()),
         str((ROOT / "src" / "shine.c").resolve()),
         str((ROOT / "src" / "ledge.c").resolve()),
+        str((ROOT / "src" / "grab_attachment.c").resolve()),
         str((ROOT / "src" / "timers.c").resolve()),
         str((ROOT / "src" / "decomp" / "lb" / "lb_00ce.c").resolve()),
         str((ROOT / "src" / "physics.c").resolve()),

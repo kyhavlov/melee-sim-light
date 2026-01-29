@@ -304,6 +304,16 @@ typedef struct MslSeed {
   uint16_t combo_victim_instance_id[MSL_MAX_PLAYERS];
   uint16_t combo_timer_x2098[MSL_MAX_PLAYERS];
   uint8_t last_hit_by[MSL_MAX_PLAYERS];
+  // Grab/throw victim attachment owner identity (seeded; suite-focused).
+  //
+  // Decomp:
+  // - During capture/throw sequences, the victim stores an owner pointer in `fp->victim_gobj`.
+  //   Thrown victim position is then driven from an attachment joint plus fp->x1A70 offsets
+  //   (refs/melee/src/melee/ft/chara/ftCommon/ftCo_Thrown.c::ftCo_800DE508).
+  //
+  // Teacher-forced one-step reseed wipes pointers, so we seed only the minimal identity needed:
+  // - grab_owner_port: player-slot index in [0..3], 0xFF = none.
+  uint8_t grab_owner_port[MSL_MAX_PLAYERS];
   uint8_t _pad2[1];
   uint8_t state_flags[MSL_MAX_PLAYERS][5];
 

@@ -424,6 +424,7 @@ def _main_impl(args) -> None:
         compute_fighter_trigger_input_counters,
         compute_press_timer_u8,
         derive_downwait_timer,
+        derive_grab_owner_port_2p,
         derive_guard_reflect_timer_x14,
         derive_guard_tilt_state,
         load_shield_tilt_table_meta,
@@ -524,6 +525,7 @@ def _main_impl(args) -> None:
     samples = np.zeros(n_samples, dtype=SAMPLE_DTYPE)
     # Seed defaults for new internal fields.
     samples["seed_t"]["combo_victim_port"][:] = np.uint8(0xFF)
+    samples["seed_t"]["grab_owner_port"][:] = np.uint8(0xFF)
 
     stage_id = int(game.start.get("stage", 0))
     is_teams = int(bool(game.start.get("is_teams", False)))
@@ -1180,6 +1182,11 @@ def _main_impl(args) -> None:
             ],
             axis=1,
         )
+
+    # Grab/throw victim attachment owner identity (slot indices; 2p-only for v1 suite).
+    if int(num_players) == 2:
+        grab_owner = derive_grab_owner_port_2p(action_id_u16_2p=post_action_id[:, :2])
+        samples["seed_t"]["grab_owner_port"][:, :2] = grab_owner[:-1, :]
 
     # Use already-derived replay-causal seed fields for shield bubble placement:
     # - facing (post-frame)

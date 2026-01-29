@@ -1325,3 +1325,70 @@ def derive_downwait_timer(
         prev_is_dw = True
 
     return out
+
+
+# Grab/throw victim attachment owner identity (seeded; suite-focused).
+#
+# Decomp source of truth for action ids:
+# - refs/melee/src/melee/ft/chara/ftCommon/forward.h `ftCommon_MotionState`
+# - refs/melee/src/melee/ft/ftmotionstates.c (comments with numeric ids)
+_ACT_CAPTURE_PULLED_HI = np.uint16(0x00DF)  # ftCo_MS_CapturePulledHi (223)
+_ACT_CAPTURE_WAIT_HI = np.uint16(0x00E0)  # ftCo_MS_CaptureWaitHi (224)
+_ACT_CAPTURE_DAMAGE_HI = np.uint16(0x00E1)  # ftCo_MS_CaptureDamageHi (225)
+_ACT_CAPTURE_PULLED_LW = np.uint16(0x00E2)  # ftCo_MS_CapturePulledLw (226)
+_ACT_CAPTURE_WAIT_LW = np.uint16(0x00E3)  # ftCo_MS_CaptureWaitLw (227)
+_ACT_CAPTURE_DAMAGE_LW = np.uint16(0x00E4)  # ftCo_MS_CaptureDamageLw (228)
+_ACT_CAPTURE_CUT = np.uint16(0x00E5)  # ftCo_MS_CaptureCut (229)
+_ACT_CAPTURE_JUMP = np.uint16(0x00E6)  # ftCo_MS_CaptureJump (230)
+_ACT_CAPTURE_NECK = np.uint16(0x00E7)  # ftCo_MS_CaptureNeck (231)
+_ACT_CAPTURE_FOOT = np.uint16(0x00E8)  # ftCo_MS_CaptureFoot (232)
+_ACT_THROWN_F = np.uint16(0x00EF)  # ftCo_MS_ThrownF (239)
+_ACT_THROWN_B = np.uint16(0x00F0)  # ftCo_MS_ThrownB (240)
+_ACT_THROWN_HI = np.uint16(0x00F1)  # ftCo_MS_ThrownHi (241)
+_ACT_THROWN_LW = np.uint16(0x00F2)  # ftCo_MS_ThrownLw (242)
+_ACT_THROWN_LW_WOMEN = np.uint16(0x00F3)  # ftCo_MS_ThrownlwWomen (243)
+
+
+def derive_grab_owner_port_2p(*, action_id_u16_2p: np.ndarray) -> np.ndarray:
+    """Derive per-frame grab owner identity for 2-player replays (slot domain).
+
+    Returns an array of shape [n_frames, 2] (dtype u8) where:
+    - out[i, p] = other slot index (0/1) if player p is a captured/thrown victim at frame i
+    - out[i, p] = 0xFF otherwise
+
+    Causality / prefix-invariance:
+    - Depends only on the current frame's action_id values (no lookahead).
+    """
+    a = np.asarray(action_id_u16_2p, dtype=np.uint16)
+    if a.ndim != 2 or a.shape[1] != 2:
+        raise ValueError(f"action_id_u16_2p must have shape [n,2], got {a.shape}")
+
+    # Captured/thrown victim action ids (common).
+    is_victim = (
+        (a == _ACT_CAPTURE_PULLED_HI)
+        | (a == _ACT_CAPTURE_WAIT_HI)
+        | (a == _ACT_CAPTURE_DAMAGE_HI)
+        | (a == _ACT_CAPTURE_PULLED_LW)
+        | (a == _ACT_CAPTURE_WAIT_LW)
+        | (a == _ACT_CAPTURE_DAMAGE_LW)
+        | (a == _ACT_CAPTURE_CUT)
+        | (a == _ACT_CAPTURE_JUMP)
+        | (a == _ACT_CAPTURE_NECK)
+        | (a == _ACT_CAPTURE_FOOT)
+        | (a == _ACT_THROWN_F)
+        | (a == _ACT_THROWN_B)
+        | (a == _ACT_THROWN_HI)
+        | (a == _ACT_THROWN_LW)
+        | (a == _ACT_THROWN_LW_WOMEN)
+    )
+
+    out = np.full((a.shape[0], 2), 0xFF, dtype=np.uint8)
+    out[:, 0] = np.where(is_victim[:, 0], np.uint8(1), np.uint8(0xFF))
+    out[:, 1] = np.where(is_victim[:, 1], np.uint8(0), np.uint8(0xFF))
+
+    # Defensive guard: in real gameplay, "both players are grab/capture/thrown victims in the same
+    # frame" should not occur. If it does appear in corrupted/weird data, do not create a cyclic
+    # attachment (0<->1). Treat both as unattached.
+    both_victims = is_victim[:, 0] & is_victim[:, 1]
+    out[both_victims, :] = np.uint8(0xFF)
+    return out

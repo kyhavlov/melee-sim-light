@@ -165,6 +165,7 @@ SEED_DTYPE = np.dtype(
         ("combo_victim_instance_id", _arr("<u2", MAX_PLAYERS)),
         ("combo_timer_x2098", _arr("<u2", MAX_PLAYERS)),
         ("last_hit_by", _arr("u1", MAX_PLAYERS)),
+        ("grab_owner_port", _arr("u1", MAX_PLAYERS)),
         ("_pad2", "V1"),
         ("state_flags", ("u1", (MAX_PLAYERS, 5))),
         ("combat_hitlist_cd", ("<u2", (MAX_PLAYERS, HITLIST_GROUPS, MAX_PLAYERS))),

@@ -29,6 +29,7 @@
 #include "attack_id_tables.h"
 #include "state.h"
 #include "step.h"
+#include "grab_attachment.h"
 
 MslBatch* msl_batch_create(int batch_size, int num_players) {
   if (batch_size <= 0) {
@@ -392,6 +393,7 @@ int msl_batch_reseed_seed(MslBatch* batch, const uint8_t* seed_bytes, size_t see
       batch->state.combo_victim_instance_id[idx] = seed->combo_victim_instance_id[p];
       batch->state.combo_timer_x2098[idx] = seed->combo_timer_x2098[p];
       batch->state.last_hit_by[idx] = seed->last_hit_by[p];
+      batch->state.grab_owner_port[idx] = seed->grab_owner_port[p];
 
       if (seed->attack_instance[p] > max_attack_inst) {
         max_attack_inst = seed->attack_instance[p];
@@ -417,6 +419,9 @@ int msl_batch_reseed_seed(MslBatch* batch, const uint8_t* seed_bytes, size_t see
         }
       }
     }
+
+    // Compute decomp-shaped grab attachment offsets (fp->x1A70 analog) for any seeded victims.
+    grab_attachment_reseed_init(batch, bi);
 
     for (int it = 0; it < MSL_MAX_ITEMS; it++) {
       const size_t ii = msl_idx_item(bi, it);

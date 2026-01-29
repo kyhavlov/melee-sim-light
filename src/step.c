@@ -9,6 +9,7 @@
 #include "hitlist.h"
 #include "hurtboxes.h"
 #include "blaster.h"
+#include "grab_attachment.h"
 #include "input.h"
 #include "items.h"
 #include "ledge.h"
@@ -100,7 +101,12 @@ int step_one_frame(MslBatch* batch, const uint8_t* prev_input_bytes, size_t prev
 
   action_update(batch);
   physics_integrate(batch);
+  // NOTE(grabbed-victim-coll):
+  // Grabbed/thrown victims currently still run stage collision before their attachment callback
+  // overrides position. Decomp thrown/capture Phys/Coll callbacks are empty; consider skipping
+  // stage collision for grabbed victims rather than “collide then override pos”.
   stage_collision_apply(batch);
+  grab_attachment_update_post_collision(batch);
   ledge_try_catch_post_collision(batch);
   knockdown_update_post_collision(batch);
   match_flow_update_post_physics(batch);
