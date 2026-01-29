@@ -813,10 +813,17 @@ def _extra_anim_msids() -> list[int]:
         242,  # ftCo_SM_Catch
         243,  # ftCo_SM_CatchDash
         244,  # ftCo_SM_CatchWait
+        245,  # ftCo_SM_CatchPull (suite: grab owner anim during CapturePulled*/Wait*/Damage*)
         247,  # ftCo_SM_ThrowF
         248,  # ftCo_SM_ThrowB
         249,  # ftCo_SM_ThrowHi
         250,  # ftCo_SM_ThrowLw
+        251,  # ftCo_SM_CapturePulledHi
+        252,  # ftCo_SM_CaptureWaitHi
+        253,  # ftCo_SM_CaptureDamageHi
+        254,  # ftCo_SM_CapturePulledLw
+        255,  # ftCo_SM_CaptureWaitLw
+        256,  # ftCo_SM_CaptureDamageLw
         262,  # ftCo_SM_ThrownF
         263,  # ftCo_SM_ThrownB
         264,  # ftCo_SM_ThrownHi
@@ -1124,6 +1131,22 @@ def _read_model_scale_and_inv_part(character: str) -> tuple[float, int]:
     return float(model_scaling), inv_part
 
 
+def _read_ftdata_x8_u8(character: str, rel_off: int) -> int:
+    """Read a u8 from `ftData.x8` (refs/melee/src/melee/ft/types.h::ftData.x8) for this character."""
+    prefix = _fighter_prefix(character)
+    base = ISO_DIR / f"{prefix}.dat"
+    arc = parse_hsd_archive(base.read_bytes())
+    ftdata_abs = arc.get_public_offset(_ftdata_symbol(character))
+    if ftdata_abs is None:
+        raise RuntimeError(f"{base.name} missing ftData public symbol")
+    x8_ptr = _u32_be(arc.buf, ftdata_abs + 0x08)
+    x8_abs = arc.data_base + x8_ptr
+    off = int(x8_abs) + int(rel_off)
+    if off < 0 or off >= len(arc.buf):
+        raise RuntimeError(f"{base.name} ftData.x8 u8 out of bounds: off={off} rel={rel_off}")
+    return int(arc.buf[off])
+
+
 def _msid_anim_entry(character: str, msid: int) -> tuple[str, int, int] | None:
     prefix = _fighter_prefix(character)
     base = ISO_DIR / f"{prefix}.dat"
@@ -1299,6 +1322,16 @@ def extract_one_character(
         if part not in needed_parts:
             needed_parts = [part] + needed_parts
 
+    # Grab/capture victim attachment needs additional common Fighter_Part joints even if they are
+    # not referenced by moves/hurtcaps:
+    # - Victim attachment uses FtPart_XRotN (2) (refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_800DB464).
+    # - Grab/capture setup constrains the victim XRotN to the grab owner's FtPart_TransN2 (52)
+    #   (refs/melee/build/GALE01/asm/melee/ft/chara/ftCommon/ftCo_Attack100.s::ftCo_800DB368).
+    # - Some grab/throw flows also consult FtPart_ThrowN (51) (refs/melee/src/melee/ft/forward.h::Fighter_Part).
+    for part in (2, 52, 51):  # FtPart_XRotN=2, FtPart_TransN2=52, FtPart_ThrowN=51
+        if part not in needed_parts:
+            needed_parts.append(part)
+
     # Include additional parts needed for post-frame fidelity beyond move hitboxes.
     #
     # Decomp: hurt capsule endpoints come from `lb_8000B1CC(hurt->bone, ...)`, where `hurt->bone`
@@ -1334,6 +1367,19 @@ def extract_one_character(
     inv_model_scale = 1.0 / model_scaling if abs(model_scaling) > 1.0e-6 else 1.0
     part_to_joint, skip_parts, joint_to_part = _load_parts_table(character)
     parts_num = len(part_to_joint)
+
+    # Capture victim alignment anchor (`mv.co.capturedamage.x18`) is set from `ftData.x8->x11`.
+    # Decomp: refs/melee/build/GALE01/asm/melee/ft/chara/ftCommon/ftCo_Attack100.s::fn_800D9CE8
+    #
+    # Store the raw u8 (index into `fp->parts[]`) as a pose part id so the simulator can query
+    # that joint in SSANIM01.
+    try:
+        grab_anchor_part = _read_ftdata_x8_u8(character, 0x11)
+        if 0 <= grab_anchor_part < 256 and grab_anchor_part not in needed_parts:
+            needed_parts.append(int(grab_anchor_part))
+    except Exception:
+        pass
+
     closure_parts = _closure_with_ancestors(needed_parts, parent_part)
 
     # Parse moves file for per-move msid (submotion_id).

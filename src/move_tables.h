@@ -33,3 +33,14 @@ uint8_t move_tables_attackair_allow_interrupt(uint8_t char_id, uint16_t attackai
 //
 // Source of truth: data/moves/{fox,falco}.json moves["ftCo_SM_Dash"]["events"] set_cmd_var(idx=0).
 uint8_t move_tables_dash_cmd0_active(uint8_t char_id, float cur_anim_frame_f32);
+
+// Returns whether CatchPull/CatchDashPull should enter CatchWait due to the move script setting
+// fp->throw_flags (x2210) via the `set_throw_flags` command.
+//
+// Decomp: CatchPull_Anim transitions to CatchWait via fn_800DA1D8 when fp->throw_flags indicates the
+// throw/capture setup point has been reached.
+// refs/melee/build/GALE01/asm/melee/ft/chara/ftCommon/ftCo_Attack100.s::ftCo_CatchPull_Anim
+//
+// Source of truth: data/moves/{fox,falco}.json moves["ftCo_SM_Catch*"]["events"] set_throw_flags.
+uint8_t move_tables_catchpull_should_enter_wait(uint8_t char_id, uint16_t catch_action_id,
+                                                float cur_anim_frame_f32);

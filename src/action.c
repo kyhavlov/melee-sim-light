@@ -13,6 +13,7 @@
 #include "blaster.h"
 #include "shine.h"
 #include "ledge.h"
+#include "grab_flow.h"
 
 // -----------
 // EscapeAir.c
@@ -578,4 +579,5 @@ void action_update(MslBatch* batch) {
   ledge_update_pre_physics(batch);
   shine_update_pre_physics(batch);
   blaster_update_pre_physics(batch);
+  grab_flow_update_pre_physics(batch);
 }

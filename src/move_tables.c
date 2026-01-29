@@ -33,6 +33,8 @@ enum {
 static MslFrameWindow g_cmd0_by_char_attackair[256][MSL_ATTACKAIR_KIND_COUNT];
 static MslFrameWindow g_allow_interrupt_by_char_attackair[256][MSL_ATTACKAIR_KIND_COUNT];
 static MslFrameWindow g_cmd0_by_char_dash[256];
+static MslFrameWindow g_throw_flags_by_char_catch[256];
+static MslFrameWindow g_throw_flags_by_char_catchdash[256];
 static int g_loaded = 0;
 
 static const char* json_skip_ws(const char* s) {
@@ -453,6 +455,79 @@ static int parse_attackair_allow_interrupt_window(const char* buf, const char* b
   return 0;
 }
 
+static int parse_throw_flags_window_open_end(const char* buf, const char* buf_end, const char* move_key,
+                                             MslFrameWindow* out) {
+  if (buf == NULL || buf_end == NULL || move_key == NULL || out == NULL) {
+    return -1;
+  }
+
+  char pat[128];
+  const int pn = snprintf(pat, sizeof(pat), "\"%s\"", move_key);
+  if (pn <= 0 || (size_t)pn >= sizeof(pat)) {
+    return -1;
+  }
+
+  const char* key_pos = strstr_range(buf, buf_end, pat);
+  if (key_pos == NULL) {
+    return -1;
+  }
+  const char* obj_start = (const char*)memchr(key_pos, '{', (size_t)(buf_end - key_pos));
+  if (obj_start == NULL) {
+    return -1;
+  }
+  const char* obj_end = json_find_matching_delim(obj_start, buf_end, '{', '}');
+  if (obj_end == NULL) {
+    return -1;
+  }
+
+  const char* events_key = strstr_range(obj_start, obj_end, "\"events\"");
+  if (events_key == NULL) {
+    return -1;
+  }
+  const char* arr_start = (const char*)memchr(events_key, '[', (size_t)(obj_end - events_key));
+  if (arr_start == NULL) {
+    return -1;
+  }
+  const char* arr_end = json_find_matching_delim(arr_start, obj_end, '[', ']');
+  if (arr_end == NULL) {
+    return -1;
+  }
+
+  int on_frame = -1;
+
+  const char* p = arr_start;
+  while (p && p < arr_end) {
+    const char* ev_start = (const char*)memchr(p, '{', (size_t)(arr_end - p));
+    if (ev_start == NULL) {
+      break;
+    }
+    const char* ev_end = json_find_matching_delim(ev_start, arr_end, '{', '}');
+    if (ev_end == NULL) {
+      break;
+    }
+
+    if (json_get_str_eq_in_range(ev_start, ev_end, "kind", "set_throw_flags")) {
+      int frame = 0;
+      if (json_get_i32_in_range(ev_start, ev_end, "frame", &frame) == 0) {
+        if (on_frame < 0 || frame < on_frame) {
+          on_frame = frame;
+        }
+      }
+    }
+
+    p = ev_end + 1;
+  }
+
+  if (on_frame < 0) {
+    return -1;
+  }
+
+  out->start_af = (int16_t)on_frame;
+  out->end_af = INT16_MAX;
+  out->loaded = 1;
+  return 0;
+}
+
 static int load_one(const char* data_dir, const char* rel_path, uint8_t char_id) {
   if (data_dir == NULL || rel_path == NULL) {
     return -1;
@@ -566,6 +641,19 @@ static int load_one(const char* data_dir, const char* rel_path, uint8_t char_id)
     g_cmd0_by_char_dash[char_id] = win;
   }
 
+  // Catch/CatchDash set_throw_flags triggers (used by CatchPull_Anim -> CatchWait transition).
+  //
+  // Decomp: CatchPull_Anim tests fp->throw_flags and enters CatchWait (fn_800DA1D8) when set.
+  // refs/melee/build/GALE01/asm/melee/ft/chara/ftCommon/ftCo_Attack100.s::ftCo_CatchPull_Anim
+  win = (MslFrameWindow){0};
+  if (parse_throw_flags_window_open_end(buf, buf_end, "ftCo_SM_Catch", &win) == 0) {
+    g_throw_flags_by_char_catch[char_id] = win;
+  }
+  win = (MslFrameWindow){0};
+  if (parse_throw_flags_window_open_end(buf, buf_end, "ftCo_SM_CatchDash", &win) == 0) {
+    g_throw_flags_by_char_catchdash[char_id] = win;
+  }
+
   alloc_free(buf);
   return 0;
 }
@@ -667,4 +755,21 @@ uint8_t move_tables_dash_cmd0_active(uint8_t char_id, float cur_anim_frame_f32) 
   // refs/melee/src/melee/ft/ftaction.c::ftAction_80071820 (set_cmd_var)
   return (cur_anim_frame_f32 >= (float)win.start_af && cur_anim_frame_f32 < (float)win.end_af) ? 1
                                                                                                : 0;
+}
+
+uint8_t move_tables_catchpull_should_enter_wait(uint8_t char_id, uint16_t catch_action_id,
+                                                float cur_anim_frame_f32) {
+  // Decomp: CatchPull_Anim triggers the CatchWait transition on a throw_flags bit that is set by the
+  // move script (`set_throw_flags`) and then cleared when consumed.
+  // refs/melee/build/GALE01/asm/melee/ft/chara/ftCommon/ftCo_Attack100.s::ftCo_CatchPull_Anim
+  //
+  // In this simulator, we approximate the flag mutation using extracted move script event timing:
+  // data/moves/{fox,falco}.json moves["ftCo_SM_Catch*"]["events"] set_throw_flags.
+  const MslFrameWindow win =
+      (catch_action_id == (uint16_t)MSL_ACT_CATCH_DASH_PULL) ? g_throw_flags_by_char_catchdash[char_id]
+                                                            : g_throw_flags_by_char_catch[char_id];
+  if (!win.loaded) {
+    return 0;
+  }
+  return (cur_anim_frame_f32 >= (float)win.start_af) ? 1 : 0;
 }

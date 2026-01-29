@@ -446,3 +446,32 @@ static inline uint8_t msl_action_is_grabbed_victim(uint16_t action_id) {
       return 0;
   }
 }
+
+static inline uint8_t msl_action_is_thrown_victim(uint16_t action_id) {
+  switch (action_id) {
+    case MSL_ACT_THROWN_F:
+    case MSL_ACT_THROWN_B:
+    case MSL_ACT_THROWN_HI:
+    case MSL_ACT_THROWN_LW:
+    case MSL_ACT_THROWN_LW_WOMEN:
+      return 1;
+    default:
+      return 0;
+  }
+}
+
+static inline uint8_t msl_action_is_capture_pulled_wait_damage_victim(uint16_t action_id) {
+  // CapturePulled*/CaptureWait*/CaptureDamage* (common grabbed victim loop).
+  // Decomp: refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::fn_800DAD18.
+  switch (action_id) {
+    case MSL_ACT_CAPTURE_PULLED_HI:
+    case MSL_ACT_CAPTURE_WAIT_HI:
+    case MSL_ACT_CAPTURE_DAMAGE_HI:
+    case MSL_ACT_CAPTURE_PULLED_LW:
+    case MSL_ACT_CAPTURE_WAIT_LW:
+    case MSL_ACT_CAPTURE_DAMAGE_LW:
+      return 1;
+    default:
+      return 0;
+  }
+}

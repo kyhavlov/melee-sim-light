@@ -103,6 +103,18 @@ def _extract_ftco_dattrs(pl_dat: Path, *, ftdata_symbol: str, extract_fox_blaste
     if ftdata_abs is None:
         raise ValueError(f"{pl_dat.name}: missing public symbol {ftdata_symbol!r}")
 
+    # Grab/capture victim attachment anchor (decomp-first).
+    #
+    # Decomp: in fn_800D9CE8, the engine sets `mv.co.capturedamage.x18` by indexing `fp->parts[]`
+    # using the u8 stored at `fp->ft_data->x8->x11`.
+    # refs/melee/build/GALE01/asm/melee/ft/chara/ftCommon/ftCo_Attack100.s::fn_800D9CE8
+    #
+    # Store the raw u8 as a pose bone index (index into `fp->parts[]` / SSANIM01 part id space).
+    grab_capture_anchor_part_id = 0
+    x8_abs = arc.ptr32(ftdata_abs + 0x08)
+    if 0 <= x8_abs + 0x12 <= len(buf):
+        grab_capture_anchor_part_id = int(buf[x8_abs + 0x11])
+
     # struct ftData { ftCo_DatAttrs* x0; ... }
     attrs_abs = arc.ptr32(ftdata_abs + 0x00)
     # struct ftData { ... Vec2* x50; } (ft/types.h +0x50) => fp->x2C4 (pushbox center offset + radius).
@@ -129,6 +141,7 @@ def _extract_ftco_dattrs(pl_dat: Path, *, ftdata_symbol: str, extract_fox_blaste
 
     x44_abs = arc.ptr32(ftdata_abs + 0x44)
     out = {
+        "grab_capture_anchor_part_id": grab_capture_anchor_part_id,
         "walk_init_vel": f(0x00),
         "walk_accel": f(0x04),
         "walk_max_vel": f(0x08),
@@ -309,6 +322,7 @@ def _stable_update(existing: dict, extracted: dict) -> dict:
         "trophy_scale",
         "pushbox_x",
         "pushbox_y",
+        "grab_capture_anchor_part_id",
         "illusion_ground_vel_x",
         "illusion_ground_end_vel_x",
         "illusion_ground_friction",

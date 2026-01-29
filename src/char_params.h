@@ -71,6 +71,17 @@ typedef struct MslCharParams {
   // Source of truth: ISO-extracted `data/characters/*.json` `model_scaling`.
   float model_scaling;
 
+  // Grab/capture attachment anchor bone (bone index / fp->parts[] index domain; GALE01).
+  //
+  // Decomp:
+  // - refs/melee/build/GALE01/asm/melee/ft/chara/ftCommon/ftCo_Attack100.s::fn_800D9CE8 stores
+  //   fp->mv.co.capturedamage.x18 (fp+0x2358) by indexing `fp->parts[]` with `fp->ft_data->x8->x11`.
+  // - refs/melee/src/melee/ft/types.h::ftData.x8->x11 (u8 bone index)
+  //
+  // Source of truth: ISO-extracted `data/characters/*.json` `grab_capture_anchor_part_id`.
+  uint16_t grab_capture_anchor_part_id;
+  uint16_t _pad_u16_grab_0;
+
   // Fox/Falco side special (Illusion/Phantasm) end-state velocities + friction.
   //
   // Source of truth: ISO-extracted `data/characters/*.json` keys:

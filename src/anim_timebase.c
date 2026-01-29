@@ -2,6 +2,52 @@
 
 #include <stddef.h>
 
+#include "action_ids.h"
+#include "anim_table.h"
+
+static inline void anim_timebase_apply_capture_loop(MslBatch* batch, size_t idx) {
+  // CapturePulled*/CaptureWait*/CaptureDamage* victims use looping HSD AObj timelines in the suite
+  // (most notably the CaptureDamage* loop with end_frame=20). Vanilla wraps `cur_anim_frame` under
+  // the AObj's loop mode during ftAnim_8006EBA4 / HSD_AObjInterpretAnim.
+  //
+  // Decomp tie-down: these motion states consult their AObj timebase via fp->cur_anim_frame and
+  // read bone world translations during Phys (lb_8000B1CC), so the wrapped timebase affects the
+  // per-frame capture delta in ftCo_Attack100.c::fn_800DAD18.
+  //
+  // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
+  // refs/melee/src/melee/ft/ftanim.c::ftAnim_8006EBA4
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::fn_800DAD18
+  if (batch == NULL) {
+    return;
+  }
+  if (!msl_action_is_capture_pulled_wait_damage_victim(batch->state.action_id[idx])) {
+    return;
+  }
+  const uint32_t anim_u32 = batch->state.animation_index[idx];
+  if (anim_u32 > 0xFFFFu) {
+    return;
+  }
+  const float end_frame =
+      msl_anim_end_frame(batch->state.char_id[idx], (uint16_t)anim_u32);
+  if (!(end_frame > 0.0f)) {
+    return;
+  }
+  const int32_t end_fp = msl_q16_16_from_f32(end_frame);
+  if (end_fp <= 0) {
+    return;
+  }
+  int32_t cur_fp = batch->state.anim_frame_fp_q16_16[idx];
+  if (cur_fp < 0) {
+    return;
+  }
+  if (cur_fp >= end_fp) {
+    // Deterministic modulo wrap (Q16.16), matching the observed Slippi `state_age` wrap behavior on
+    // looping capture timelines.
+    cur_fp = cur_fp % end_fp;
+    batch->state.anim_frame_fp_q16_16[idx] = cur_fp;
+  }
+}
+
 void anim_timebase_update_pre_input(MslBatch* batch) {
   if (batch == NULL) {
     return;
@@ -21,6 +67,7 @@ void anim_timebase_update_pre_input(MslBatch* batch) {
       }
 
       batch->state.anim_frame_fp_q16_16[idx] += batch->state.frame_speed_mul_fp_q16_16[idx];
+      anim_timebase_apply_capture_loop(batch, idx);
       msl_anim_timebase_recompute_derived(batch, idx);
     }
   }

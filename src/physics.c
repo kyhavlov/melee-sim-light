@@ -374,6 +374,26 @@ void physics_integrate(MslBatch* batch) {
       const float vy_self_pre = batch->state.speed_y_self[idx];
       const int16_t action_frame = batch->state.action_frame[idx];
 
+      // Thrown victims:
+      // - Decomp thrown victim Phys/Coll callbacks are empty, and victim translation is driven by an
+      //   accessory callback (ftCo_Thrown.c::ftCo_800DE508), not by self/KB integration.
+      //
+      // Keep physics deterministic by skipping self/KB position integration here; grab_attachment
+      // will drive `pos_*` later in the frame.
+      if (msl_action_is_thrown_victim(action_id)) {
+        continue;
+      }
+
+      // CapturePulled*/CaptureWait*/CaptureDamage* victims:
+      // - Decomp capture pulled/wait/damage victim Phys applies a per-frame translation delta
+      //   (ftCo_Attack100.c::fn_800DAD18) and does not use self/KB integration as the driver.
+      // - In this simulator, that delta is applied in grab_attachment_update_pre_collision() in a
+      //   "motion-state Phys" slot before stage collision. Skip integration here to avoid double
+      //   movement (integrate + delta) on those frames.
+      if (msl_action_is_capture_pulled_wait_damage_victim(action_id)) {
+        continue;
+      }
+
       // ----------------------------
       // Air-only self-velocity update
       // ----------------------------

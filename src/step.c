@@ -102,9 +102,12 @@ int step_one_frame(MslBatch* batch, const uint8_t* prev_input_bytes, size_t prev
   action_update(batch);
   physics_integrate(batch);
   // NOTE(grabbed-victim-coll):
-  // Grabbed/thrown victims currently still run stage collision before their attachment callback
-  // overrides position. Decomp thrown/capture Phys/Coll callbacks are empty; consider skipping
-  // stage collision for grabbed victims rather than “collide then override pos”.
+  // - CapturePulled*/CaptureDamage* uses a Phys position driver (fn_800DAD18) before Coll.
+  // - In this simulator, the capture delta is applied in grab_attachment_update_pre_collision()
+  //   (pre-collision). physics_integrate() skips self/KB integration for those victims to avoid
+  //   double-moving them in a single frame.
+  // - Thrown victims are still updated in a post-collision "accessory callback" style slot.
+  grab_attachment_update_pre_collision(batch);
   stage_collision_apply(batch);
   grab_attachment_update_post_collision(batch);
   ledge_try_catch_post_collision(batch);
