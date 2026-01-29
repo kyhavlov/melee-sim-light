@@ -28,6 +28,17 @@ def main() -> None:
         default=10,
         help="max mismatching records to print per dataset per debug field",
     )
+    ap.add_argument(
+        "--debug-float",
+        default="",
+        help="comma-separated float fields to print top absolute errors for (e.g. 'speed_ground_x_self,pos_x')",
+    )
+    ap.add_argument(
+        "--debug-float-limit",
+        type=int,
+        default=10,
+        help="max top-error rows to print per dataset per debug float field",
+    )
     args = ap.parse_args()
 
     root = repo_root()
@@ -81,11 +92,13 @@ def main() -> None:
                 ucf_cardinals_1_0_enabled=suite.ucf_cardinals_1_0_enabled,
                 reporter=reporter,
                 debug_mismatch=tuple(
-                    s.strip()
-                    for s in str(args.debug_mismatch).split(",")
-                    if s is not None and s.strip() != ""
+                    s.strip() for s in args.debug_mismatch.split(",") if s.strip() != ""
                 ),
                 debug_limit=int(args.debug_limit),
+                debug_float=tuple(
+                    s.strip() for s in args.debug_float.split(",") if s.strip() != ""
+                ),
+                debug_float_limit=int(args.debug_float_limit),
             )
 
             if suite_mismatches is None:

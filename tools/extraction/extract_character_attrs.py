@@ -200,6 +200,27 @@ def _extract_ftco_dattrs(pl_dat: Path, *, ftdata_symbol: str, extract_fox_blaste
         # struct ftData { ... void* ext_attr; } (ft/types.h +0x4)
         # Fox/Falco ext attrs: struct ftFox_DatAttrs (ft/chara/ftFox/types.h)
         ext_abs = arc.ptr32(ftdata_abs + 0x04)
+        # Fox/Falco side special (Illusion/Phantasm) ground-velocity scaling.
+        #
+        # Decomp:
+        # - refs/melee/src/melee/ft/chara/ftFox/types.h (ftFox_DatAttrs):
+        #   `x28_FOX_ILLUSION_GROUND_VEL_X`
+        # - refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c::ftFx_SpecialSStart_Enter
+        #   `fp->gr_vel /= da->x28_FOX_ILLUSION_GROUND_VEL_X;`
+        # - refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c::ftFx_SpecialAirSStart_Enter
+        #   divides horizontal self velocity similarly.
+        out["illusion_ground_vel_x"] = float(_f32_be(buf, ext_abs + 0x28))
+        # End-state velocity + friction parameters (used on main->end transition and in End Phys).
+        #
+        # Decomp:
+        # - refs/melee/src/melee/ft/chara/ftFox/types.h (ftFox_DatAttrs):
+        #   x34/x38/x3C/x40 fields
+        # - refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c::{ftFx_SpecialSEnd_Enter,ftFx_SpecialSEnd_Phys}
+        # - refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c::{ftFx_SpecialAirSEnd_Enter,ftFx_SpecialAirSEnd_Phys}
+        out["illusion_ground_end_vel_x"] = float(_f32_be(buf, ext_abs + 0x34))
+        out["illusion_ground_friction"] = float(_f32_be(buf, ext_abs + 0x38))
+        out["illusion_air_end_vel_x"] = float(_f32_be(buf, ext_abs + 0x3C))
+        out["illusion_air_friction"] = float(_f32_be(buf, ext_abs + 0x40))
         out["blaster_angle"] = float(_f32_be(buf, ext_abs + 0x10))
         out["blaster_vel"] = float(_f32_be(buf, ext_abs + 0x14))
         out["blaster_shot_itkind"] = int(_u32_be(buf, ext_abs + 0x1C))
@@ -288,6 +309,11 @@ def _stable_update(existing: dict, extracted: dict) -> dict:
         "trophy_scale",
         "pushbox_x",
         "pushbox_y",
+        "illusion_ground_vel_x",
+        "illusion_ground_end_vel_x",
+        "illusion_ground_friction",
+        "illusion_air_end_vel_x",
+        "illusion_air_friction",
         "blaster_angle",
         "blaster_vel",
         "blaster_shot_itkind",

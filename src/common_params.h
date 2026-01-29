@@ -34,9 +34,9 @@ typedef struct MslCommonParams {
 
   // Special move direction thresholds (B specials).
   // Decomp: refs/melee/src/melee/ft/chara/ftCommon/ftCo_SpecialAir.c::ftCo_SpecialAir_CheckInput
-  float special_stick_x_threshold_side;  // p_ftCommonData->x218
-  float special_stick_y_threshold;       // p_ftCommonData->x21C
-  float special_side_reverse_threshold;  // p_ftCommonData->x220
+  float special_stick_x_threshold_side;     // p_ftCommonData->x218
+  float special_stick_y_threshold;          // p_ftCommonData->x21C
+  float special_side_reverse_threshold;     // p_ftCommonData->x220
   float special_neutral_reverse_threshold;  // p_ftCommonData->x224
 
   // Dash flick threshold (refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c)
@@ -58,7 +58,7 @@ typedef struct MslCommonParams {
   uint8_t fastfall_tilt_max_frames;  // p_ftCommonData->x8C (fastfall_tilt_max_frames)
   // Crouch threshold (Squat entry gate).
   // Decomp: refs/melee/src/melee/ft/chara/ftCommon/ftCo_Squat.c::ftCo_Squat_CheckInput (fp->input.lstick.y < -p_ftCommonData->x90)
-  float crouch_stick_threshold;  // p_ftCommonData->x90
+  float crouch_stick_threshold;      // p_ftCommonData->x90
   uint8_t tap_jump_tilt_max_frames;  // p_ftCommonData->x74 (tap_jump_tilt_max_frames)
   uint8_t _pad_u8_1[2];
 
@@ -96,6 +96,9 @@ typedef struct MslCommonParams {
 
   // Ground friction multiplier when |gr_vel| > walk_max_vel (refs/melee/src/melee/ft/ft_081B.c::ft_80084F3C)
   float high_speed_friction_mul;  // p_ftCommonData->x6C
+
+  // Run accel scaling when 0 < (gr_vel/target_vel) < 1 (refs/melee/src/melee/ft/chara/ftCommon/ftCo_Run.c::ftCo_Run_Phys)
+  float run_accel_scale_mul;  // p_ftCommonData->run_accel_scale_mul (0x5C)
 
   // Run friction multiplier (used in dash/run ground acceleration; refs/melee/src/melee/ft/chara/ftCommon/ftCo_Run.c)
   float run_friction_mul;  // p_ftCommonData->run_friction_mul (0x60)
@@ -200,18 +203,18 @@ typedef struct MslCommonParams {
   // - refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_CalcKnockback (kb_squat_mul/kb_min)
   // - refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_CheckAirMotion (air motion KB mul)
   // - refs/melee/build/GALE01/asm/melee/ft/ftcoll.s::ftColl_80079EA8 (kb magnitude)
-  float kb_weight_mul;   // p_ftCommonData->0xF4
-  float kb_weight_mul2;  // p_ftCommonData->0xF8
-  float kb_applied_max;  // p_ftCommonData->0x108
-  float kb_base_term;    // p_ftCommonData->0x110
-  float kb_dmg_mul;      // p_ftCommonData->0x114
-  float kb_wsk_mul;      // p_ftCommonData->0x118
-  float kb_growth_mul;   // p_ftCommonData->0x11C
-  float kb_base_add;     // p_ftCommonData->0x120
-  float kb_vel_mul;      // p_ftCommonData->x100
-  float kb_min;          // p_ftCommonData->x104
-  float kb_squat_mul;    // p_ftCommonData->x124
-  float kb_ice_mul;      // p_ftCommonData->kb_ice_mul (+0x718)
+  float kb_weight_mul;       // p_ftCommonData->0xF4
+  float kb_weight_mul2;      // p_ftCommonData->0xF8
+  float kb_applied_max;      // p_ftCommonData->0x108
+  float kb_base_term;        // p_ftCommonData->0x110
+  float kb_dmg_mul;          // p_ftCommonData->0x114
+  float kb_wsk_mul;          // p_ftCommonData->0x118
+  float kb_growth_mul;       // p_ftCommonData->0x11C
+  float kb_base_add;         // p_ftCommonData->0x120
+  float kb_vel_mul;          // p_ftCommonData->x100
+  float kb_min;              // p_ftCommonData->x104
+  float kb_squat_mul;        // p_ftCommonData->x124
+  float kb_ice_mul;          // p_ftCommonData->kb_ice_mul (+0x718)
   float kb_smashcharge_mul;  // p_ftCommonData->kb_smashcharge_mul (+0x7C4)
   // ftColl_80079AB0 percent-term override constants (p_ftCommonData->0x6D4/0x6D8).
   //

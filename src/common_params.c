@@ -243,6 +243,7 @@ int common_params_init(void) {
   }
 
   if (json_get_f32(buf, "high_speed_friction_mul", &g_params.high_speed_friction_mul) != 0 ||
+      json_get_f32(buf, "run_accel_scale_mul", &g_params.run_accel_scale_mul) != 0 ||
       json_get_f32(buf, "run_friction_mul", &g_params.run_friction_mul) != 0) {
     alloc_free(buf);
     return -1;

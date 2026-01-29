@@ -98,7 +98,7 @@ typedef enum MslActionId {
 
   // Tech / passive (suite-present subset).
   // Source of truth: refs/melee/src/melee/ft/chara/ftCommon/forward.h `ftCommon_MotionState`.
-  MSL_ACT_PASSIVE = 0x00C7,         // ftCo_MS_Passive
+  MSL_ACT_PASSIVE = 0x00C7,          // ftCo_MS_Passive
   MSL_ACT_PASSIVE_STAND_F = 0x00C8,  // ftCo_MS_PassiveStandF
   MSL_ACT_PASSIVE_STAND_B = 0x00C9,  // ftCo_MS_PassiveStandB
 
@@ -150,6 +150,15 @@ enum {
   MSL_ACT_FX_SPECIAL_AIR_N_START = 0x0158,  // ftFx_MS_SpecialAirNStart
   MSL_ACT_FX_SPECIAL_AIR_N_LOOP = 0x0159,   // ftFx_MS_SpecialAirNLoop
   MSL_ACT_FX_SPECIAL_AIR_N_END = 0x015A,    // ftFx_MS_SpecialAirNEnd
+  // Decomp:
+  // - refs/melee/src/melee/ft/chara/ftFox/ftFx_Init.c::ftFx_Init_MotionStateTable
+  //   (ftFx_MS_SpecialSStart=347 .. ftFx_MS_SpecialAirSEnd=352)
+  MSL_ACT_FX_SPECIAL_S_START = 0x015B,      // ftFx_MS_SpecialSStart
+  MSL_ACT_FX_SPECIAL_S = 0x015C,            // ftFx_MS_SpecialS
+  MSL_ACT_FX_SPECIAL_S_END = 0x015D,        // ftFx_MS_SpecialSEnd
+  MSL_ACT_FX_SPECIAL_AIR_S_START = 0x015E,  // ftFx_MS_SpecialAirSStart
+  MSL_ACT_FX_SPECIAL_AIR_S = 0x015F,        // ftFx_MS_SpecialAirS
+  MSL_ACT_FX_SPECIAL_AIR_S_END = 0x0160,    // ftFx_MS_SpecialAirSEnd
   // Decomp:
   // - refs/melee/src/melee/ft/chara/ftFox/ftFx_Init.c::ftFx_Init_MotionStateTable
   //   (ftFx_MS_SpecialHiFall = 358)

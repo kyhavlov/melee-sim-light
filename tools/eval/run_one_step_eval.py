@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import heapq
 import importlib
 from dataclasses import dataclass
 from pathlib import Path
@@ -179,6 +180,8 @@ def evaluate_dataset(
     reporter: Reporter | None = None,
     debug_mismatch: tuple[str, ...] = (),
     debug_limit: int = 10,
+    debug_float: tuple[str, ...] = (),
+    debug_float_limit: int = 10,
 ) -> EvalSummary:
     if reporter is None:
         reporter = Reporter()
@@ -272,14 +275,30 @@ def evaluate_dataset(
     # Views for vectorized comparisons.
     out_compare_view = out_compare_bytes.view(COMPARE_DTYPE).reshape(-1)
 
-    debug_fields = tuple(f for f in debug_mismatch if f in set(mismatches.keys()))
+    debug_fields: tuple[str, ...] = ()
     debug_left: dict[str, int] = {}
-    if reporter is not None and debug_fields:
-        debug_left = {f: int(debug_limit) for f in debug_fields}
-        reporter.print(f"debug: will print first mismatches for {', '.join(debug_fields)} (limit={int(debug_limit)})")
-    else:
-        # Debug mismatch printing is strictly opt-in: no debug_mismatch flag => no extra work.
-        debug_fields = ()
+    if reporter is not None and debug_mismatch:
+        valid_discrete = set(mismatches.keys())
+        debug_fields = tuple(f for f in debug_mismatch if f in valid_discrete)
+        if debug_fields:
+            debug_left = {f: int(debug_limit) for f in debug_fields}
+            reporter.print(
+                f"debug: will print first mismatches for {', '.join(debug_fields)} (limit={int(debug_limit)})"
+            )
+
+    debug_float_fields: tuple[str, ...] = ()
+    debug_float_heaps: dict[
+        str, list[tuple[float, int, int, int, int, float, float, int, int, int, int, int]]
+    ] = {}
+    debug_float_limit = int(debug_float_limit)
+    if reporter is not None and debug_float and debug_float_limit > 0:
+        valid_float = set(float_err.keys())
+        debug_float_fields = tuple(f for f in debug_float if f in valid_float and not f.startswith("item_"))
+        if debug_float_fields:
+            debug_float_heaps = {f: [] for f in debug_float_fields}
+            reporter.print(
+                f"debug: will print top abs float errors for {', '.join(debug_float_fields)} (limit={debug_float_limit})"
+            )
 
     # Iterate in chunks, resizing the handle buffers as needed by re-init.
     offset = 0
@@ -323,6 +342,42 @@ def evaluate_dataset(
 
         # Compare discretes for active players only.
         active = slice(0, num_players)
+
+        # Optional debug: track top-N absolute float errors with minimal context.
+        if debug_float_fields:
+            for field in debug_float_fields:
+                abs_err = np.abs(
+                    out_compare_view[field][:, active].astype(np.float32)
+                    - ref[field][:, active].astype(np.float32)
+                )
+                flat = abs_err.reshape(-1)
+                if flat.size == 0:
+                    continue
+                k = min(debug_float_limit, int(flat.size))
+                topk = np.argpartition(flat, -k)[-k:]
+                heap = debug_float_heaps.get(field)
+                if heap is None:
+                    continue
+                for j in topk:
+                    ae = float(flat[int(j)])
+                    r = int(j) // num_players
+                    pp = int(j) % num_players
+                    gi = int(offset + r)
+                    seed_frame = int(seed["frame_id"][r])
+                    ref_frame = int(ref["frame_id"][r])
+                    out_v = float(out_compare_view[field][r, pp])
+                    ref_v = float(ref[field][r, pp])
+                    seed_a = int(seed["action_id"][r, pp])
+                    out_a = int(out_compare_view["action_id"][r, pp])
+                    ref_a = int(ref["action_id"][r, pp])
+                    out_af = int(out_compare_view["action_frame"][r, pp])
+                    ref_af = int(ref["action_frame"][r, pp])
+                    entry = (ae, gi, seed_frame, ref_frame, pp, out_v, ref_v, seed_a, out_a, ref_a, out_af, ref_af)
+                    if len(heap) < debug_float_limit:
+                        heapq.heappush(heap, entry)
+                    else:
+                        if ae > heap[0][0]:
+                            heapq.heapreplace(heap, entry)
 
         # Optional debug: print the first N mismatching records for selected discrete fields.
         for field in debug_fields:
@@ -586,6 +641,23 @@ def evaluate_dataset(
     mismatches_total, checks_total = _discrete_mismatch_total(summary)
     reporter.print(f"overall.discrete_mismatch: {mismatches_total} / {checks_total}")
     reporter.print(f"overall.float_norm_mae_p95: {overall_float_norm:.8f}")
+
+    if debug_float_fields:
+        reporter.print()
+        for field in debug_float_fields:
+            heap = debug_float_heaps.get(field, [])
+            if not heap:
+                continue
+            reporter.print(f"debug.float.{field}: top {len(heap)} abs errors")
+            for ae, gi, seed_frame, ref_frame, pp, out_v, ref_v, seed_a, out_a, ref_a, out_af, ref_af in sorted(
+                heap, reverse=True
+            ):
+                reporter.print(
+                    f"  abs_err={ae:.6f} dataset={dataset_path.name} record={gi} seed_frame={seed_frame} ref_frame={ref_frame} p={pp} "
+                    f"out={out_v:.6f} ref={ref_v:.6f} "
+                    f"seed_action_id={seed_a} out_action_id={out_a} ref_action_id={ref_a} "
+                    f"out_action_frame={out_af} ref_action_frame={ref_af}"
+                )
     return summary
 
 

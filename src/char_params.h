@@ -71,6 +71,21 @@ typedef struct MslCharParams {
   // Source of truth: ISO-extracted `data/characters/*.json` `model_scaling`.
   float model_scaling;
 
+  // Fox/Falco side special (Illusion/Phantasm) end-state velocities + friction.
+  //
+  // Source of truth: ISO-extracted `data/characters/*.json` keys:
+  // - illusion_ground_end_vel_x / illusion_ground_friction
+  // - illusion_air_end_vel_x / illusion_air_friction
+  //
+  // Decomp:
+  // - refs/melee/src/melee/ft/chara/ftFox/types.h (ftFox_DatAttrs x34/x38/x3C/x40)
+  // - refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c::{ftFx_SpecialSEnd_Enter,ftFx_SpecialSEnd_Phys}
+  // - refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c::{ftFx_SpecialAirSEnd_Enter,ftFx_SpecialAirSEnd_Phys}
+  float illusion_ground_end_vel_x;
+  float illusion_ground_friction;
+  float illusion_air_end_vel_x;
+  float illusion_air_friction;
+
   // Cliff / ledge (ftCo_Cliff*).
   //
   // Source of truth: ISO-extracted `data/characters/*.json` (ftData_x44_t and co attrs).
@@ -82,9 +97,9 @@ typedef struct MslCharParams {
   // refs/melee/src/melee/ft/types.h::ftData_x44_t
   // refs/melee/src/melee/mp/mpcoll.c::mpColl_LoadECB_JObj
   float ecb_side_y_offset;
-  float ledge_snap_x;                    // ftData_x44_t.x10 (used as transNPos.z snap distance)
-  float ledge_snap_y;                    // ftData_x44_t.x14 (used as transNPos.y snap distance)
-  float ledge_snap_height;               // ftData_x44_t.x18 (catch height threshold)
+  float ledge_snap_x;       // ftData_x44_t.x10 (used as transNPos.z snap distance)
+  float ledge_snap_y;       // ftData_x44_t.x14 (used as transNPos.y snap distance)
+  float ledge_snap_height;  // ftData_x44_t.x18 (catch height threshold)
 
   // Fox/Falco down special (Reflector / Shine).
   //
@@ -92,9 +107,9 @@ typedef struct MslCharParams {
   // - reflector_release_lag_frames / reflector_turn_frames / reflector_gravity_delay_frames
   // - reflector_momentum_preserve_x / reflector_fall_accel
   // - reflector_bone_id / reflector_offset / reflector_size / reflector_damage_mul / reflector_speed_mul
-  uint8_t reflector_release_lag_frames;   // ftFox_DatAttrs.x98 (rounded frames)
-  uint8_t reflector_turn_frames;          // ftFox_DatAttrs.x9C (rounded frames)
-  uint8_t reflector_gravity_delay_frames; // ftFox_DatAttrs.xA4 (clamped)
+  uint8_t reflector_release_lag_frames;    // ftFox_DatAttrs.x98 (rounded frames)
+  uint8_t reflector_turn_frames;           // ftFox_DatAttrs.x9C (rounded frames)
+  uint8_t reflector_gravity_delay_frames;  // ftFox_DatAttrs.xA4 (clamped)
   uint8_t _pad_u8_reflector_0[1];
   float reflector_momentum_preserve_x;  // ftFox_DatAttrs.xA8
   float reflector_fall_accel;           // ftFox_DatAttrs.xAC

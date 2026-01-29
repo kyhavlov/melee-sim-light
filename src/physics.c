@@ -1,6 +1,8 @@
 #include "physics.h"
 
 #include "action_ids.h"
+#include "anim_frame.h"
+#include "anim_pose.h"
 #include "char_params.h"
 #include "common_params.h"
 #include "input_axis.h"
@@ -70,6 +72,125 @@ static inline float air_apply_accel_step(float vel, float accel, float target_ve
   return vel + a;
 }
 
+static inline float ground_friction_step_delta(float gr_vel, float friction) {
+  // Decomp: ftCommon_ApplyFrictionGround writes fp->xE4_ground_accel_1.
+  // refs/melee/src/melee/ft/ftcommon.c::ftCommon_ApplyFrictionGround
+  float accel = friction;
+  if (msl_absf(accel) > msl_absf(gr_vel)) {
+    accel = -gr_vel;
+  } else if (gr_vel > 0.0f) {
+    accel = -accel;
+  }
+  return accel;
+}
+
+static inline float ground_accel_step_delta(float gr_vel, float accel, float target_vel,
+                                            float friction, float ground_max_horizontal_velocity) {
+  // Decomp: ftCommon_8007C98C writes fp->xE4_ground_accel_1 (ground accel/traction step).
+  // refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007C98C
+  if (target_vel == 0.0f) {
+    return ground_friction_step_delta(gr_vel, friction);
+  }
+
+  float a = accel;
+  if (!(gr_vel * a < 0.0f)) {
+    if (a > 0.0f) {
+      if (gr_vel + a > target_vel) {
+        a = -friction;
+        if (gr_vel + a < target_vel) {
+          a = target_vel - gr_vel;
+        }
+        if (gr_vel + a > ground_max_horizontal_velocity) {
+          a = ground_max_horizontal_velocity - gr_vel;
+        }
+      }
+    } else {
+      if (gr_vel + a < target_vel) {
+        a = friction;
+        if (gr_vel + a > target_vel) {
+          a = target_vel - gr_vel;
+        }
+        if (gr_vel + a < -ground_max_horizontal_velocity) {
+          a = -ground_max_horizontal_velocity - gr_vel;
+        }
+      }
+    }
+  }
+  return a;
+}
+
+static inline uint8_t physics_action_is_walk(uint16_t action_id) {
+  return (action_id == (uint16_t)MSL_ACT_WALK_SLOW || action_id == (uint16_t)MSL_ACT_WALK_MIDDLE ||
+          action_id == (uint16_t)MSL_ACT_WALK_FAST)
+             ? 1
+             : 0;
+}
+
+static inline uint8_t physics_action_is_common_ground_friction_only(uint16_t action_id) {
+  // Decomp: these callbacks use `ft_80084F3C` (ground friction helper) in their Phys function.
+  // - refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_Phys
+  // - refs/melee/src/melee/ft/chara/ftCommon/ftCo_Turn.c::ftCo_Turn_Phys
+  // - refs/melee/src/melee/ft/chara/ftCommon/ftCo_KneeBend.c::ftCo_KneeBend_Phys
+  // - refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::ftCo_Landing_Phys
+  // - refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_Guard_Phys
+  switch (action_id) {
+    case MSL_ACT_WAIT:
+    case MSL_ACT_TURN:
+    case MSL_ACT_TURN_RUN:
+    case MSL_ACT_KNEE_BEND:
+    case MSL_ACT_LANDING:
+    case MSL_ACT_LANDING_FALL_SPECIAL:
+    case MSL_ACT_LANDING_AIR_N:
+    case MSL_ACT_LANDING_AIR_F:
+    case MSL_ACT_LANDING_AIR_B:
+    case MSL_ACT_LANDING_AIR_HI:
+    case MSL_ACT_LANDING_AIR_LW:
+    case MSL_ACT_GUARD_ON:
+    case MSL_ACT_GUARD:
+    case MSL_ACT_GUARD_OFF:
+    case MSL_ACT_GUARD_SET_OFF:
+    case MSL_ACT_GUARD_REFLECT:
+      return 1;
+    default:
+      return 0;
+  }
+}
+
+static inline uint8_t physics_try_get_transn_delta_xyz(const MslCharParams* ch, uint8_t char_id,
+                                                       uint32_t msid_u32, float anim_frame_f32,
+                                                       float out_delta_xyz[3]) {
+  if (ch == NULL || out_delta_xyz == NULL) {
+    return 0;
+  }
+  if (!(msid_u32 <= 0xFFFFu)) {
+    return 0;
+  }
+  const uint16_t msid = (uint16_t)msid_u32;
+
+  // Our ISO-derived SSANIM01 v3 artifacts store per-frame TransN translation as a tail (x,y,z);
+  // approximate the per-frame TransN offset as a finite difference between adjacent frames.
+  // - tools/extraction/extract_fighter_anims.py (SSANIM01 v3 + per-frame TransN tail)
+  // - refs/melee/src/melee/ft/ft_081B.c::ft_80085030 (consumer of fp->x6A4_transNOffset.{y,z})
+  const uint16_t f_cur = msl_anim_frame_floor_u16(msl_anim_frame_sanitize_f32(anim_frame_f32));
+  const uint16_t f_prev = (f_cur > 0u) ? (uint16_t)(f_cur - 1u) : 0u;
+
+  float t_cur[3];
+  float t_prev[3];
+  if (anim_pose_get_transn(char_id, msid, f_cur, t_cur) != 0 ||
+      anim_pose_get_transn(char_id, msid, f_prev, t_prev) != 0) {
+    return 0;
+  }
+
+  // TransNPos is in fighter model space; apply per-character model scaling so the resulting
+  // per-frame transNOffset matches engine/world units.
+  // Source of truth for model scaling: ISO-extracted `data/characters/<char>.json` `model_scaling`.
+  // Decomp: refs/melee/src/melee/ft/types.h::ftCo_DatAttrs::model_scaling
+  out_delta_xyz[0] = (t_cur[0] - t_prev[0]) * ch->model_scaling;
+  out_delta_xyz[1] = (t_cur[1] - t_prev[1]) * ch->model_scaling;
+  out_delta_xyz[2] = (t_cur[2] - t_prev[2]) * ch->model_scaling;
+  return 1;
+}
+
 static inline uint8_t physics_action_is_fall_special_like(uint16_t action_id) {
   return (action_id == (uint16_t)MSL_ACT_FALL_SPECIAL ||
           action_id == (uint16_t)MSL_ACT_FALL_SPECIAL_F ||
@@ -91,9 +212,10 @@ static inline uint8_t physics_action_uses_common_air_drift(uint16_t action_id) {
   return msl_action_allows_fastfall(action_id);
 }
 
-static inline float physics_apply_common_air_drift(const MslCharParams* ch, const MslCommonParams* c,
-                                                   uint16_t action_id, uint8_t fallspecial_xc,
-                                                   float stick_x, float vel_x) {
+static inline float physics_apply_common_air_drift(const MslCharParams* ch,
+                                                   const MslCommonParams* c, uint16_t action_id,
+                                                   uint8_t fallspecial_xc, float stick_x,
+                                                   float vel_x) {
   // refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007D28C (via ftCommon_8007D268)
   float accel_scaling = stick_x * ch->air_drift_stick_mul;
   float accel_flat = stick_x > 0.0f ? +ch->aerial_drift_base : -ch->aerial_drift_base;
@@ -122,8 +244,8 @@ static inline uint8_t physics_action_is_shine_air(uint16_t action_id) {
              : 0;
 }
 
-static inline float physics_apply_shine_air_x_clamp(const MslCharParams* ch, const MslCommonParams* c,
-                                                    float vel_x) {
+static inline float physics_apply_shine_air_x_clamp(const MslCharParams* ch,
+                                                    const MslCommonParams* c, float vel_x) {
   // Decomp: aerial Reflector (SpecialAirLw*) uses `ftCommon_8007CF58`, which sets fp->x74_anim_vel.x to a
   // friction/clamp step using p_ftCommonData->x1FC when |vel| exceeds air_drift_max, else co_attrs.aerial_friction.
   // refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007CF58
@@ -291,7 +413,8 @@ void physics_integrate(MslBatch* batch) {
                 if (allow_fastfall) {
                   const float stick_y = apply_deadzone(
                       stick_i8_to_unit(batch->state.input_main_y[idx]), c->lstick_deadzone_y);
-                  (void)ftCommon_CheckFallFast(c, stick_y, vy_self_pre, &batch->state.fall_fast[idx],
+                  (void)ftCommon_CheckFallFast(c, stick_y, vy_self_pre,
+                                               &batch->state.fall_fast[idx],
                                                &batch->state.tilt_timer_y[idx]);
                 }
 
@@ -330,18 +453,44 @@ void physics_integrate(MslBatch* batch) {
             //   refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c::ftFx_SpecialAirLwLoop_Phys
             const MslCharParams* ch = msl_char_params(batch->state.char_id[idx]);
             if (ch != NULL) {
-              const float stick_x = apply_deadzone(
-                  stick_i8_to_unit(batch->state.input_main_x[idx]), c->lstick_deadzone_x);
+              const float stick_x = apply_deadzone(stick_i8_to_unit(batch->state.input_main_x[idx]),
+                                                   c->lstick_deadzone_x);
               if (physics_action_is_shine_air(action_id)) {
                 batch->state.speed_air_x_self[idx] =
                     physics_apply_shine_air_x_clamp(ch, c, batch->state.speed_air_x_self[idx]);
               } else if (physics_action_uses_common_air_drift(action_id)) {
-                batch->state.speed_air_x_self[idx] =
-                    physics_apply_common_air_drift(ch, c, action_id,
-                                                   batch->state.fallspecial_xc[idx], stick_x,
-                                                   batch->state.speed_air_x_self[idx]);
+                batch->state.speed_air_x_self[idx] = physics_apply_common_air_drift(
+                    ch, c, action_id, batch->state.fallspecial_xc[idx], stick_x,
+                    batch->state.speed_air_x_self[idx]);
               }
             }
+          }
+        }
+
+        // Root-motion aerial side-B (Illusion/Phantasm) uses TransN-derived self velocity.
+        // Decomp: ftFx_SpecialAirS_Phys calls `ft_80085134`, which sets fp->self_vel from
+        // fp->x6A4_transNOffset.{y,z} (with facing_dir applied to z).
+        // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c::ftFx_SpecialAirS_Phys
+        // refs/melee/src/melee/ft/ft_081B.c::ft_80085134
+        if (action_id == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_S) {
+          const MslCharParams* ch = msl_char_params(batch->state.char_id[idx]);
+          if (ch != NULL) {
+            float dxyz[3];
+            if (physics_try_get_transn_delta_xyz(ch, batch->state.char_id[idx],
+                                                 batch->state.animation_index[idx],
+                                                 batch->state.anim_frame_f32[idx], dxyz)) {
+              const float facing_dir = batch->state.facing[idx] ? 1.0f : -1.0f;
+              batch->state.speed_air_x_self[idx] = dxyz[2] * facing_dir;
+              batch->state.speed_y_self[idx] = dxyz[1];
+            }
+          }
+        } else if (action_id == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_S_END) {
+          // Decomp: ftFx_SpecialAirSEnd_Phys applies air friction using ftFox_DatAttrs.x40.
+          // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c::ftFx_SpecialAirSEnd_Phys
+          const MslCharParams* ch = msl_char_params(batch->state.char_id[idx]);
+          if (ch != NULL) {
+            batch->state.speed_air_x_self[idx] = air_apply_friction_step(
+                batch->state.speed_air_x_self[idx], ch->illusion_air_friction);
           }
         }
       }
@@ -360,8 +509,98 @@ void physics_integrate(MslBatch* batch) {
       // We include `speed_*_attack` in position integration (because it affects where the character is this frame),
       // but we exclude it from gravity/fastfall updates (which operate on `self_vel` only; knockback has its own
       // separate decay/physics paths in-engine, and is currently teacher-forced from the seed).
-      const float vx_self =
+      float vx_self =
           on_ground ? batch->state.speed_ground_x_self[idx] : batch->state.speed_air_x_self[idx];
+      if (on_ground) {
+        // Grounded locomotion velocity update (single writer):
+        // - Decomp: Phys callbacks like ft_80084F3C/ftWalkCommon_800E0060/ftCo_Dash_Phys/ftCo_Run_Phys
+        //   compute a ground accel/friction step via ftCommon_ApplyFrictionGround or ftCommon_8007C98C.
+        // refs/melee/src/melee/ft/ft_081B.c::ft_80084F3C
+        // refs/melee/src/melee/ft/ftwalkcommon.c::ftWalkCommon_800E0060
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c::ftCo_Dash_Phys
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Run.c::ftCo_Run_Phys
+        const MslCharParams* ch = msl_char_params(batch->state.char_id[idx]);
+        if (ch != NULL) {
+          float gr_vel = batch->state.speed_ground_x_self[idx];
+          const float stick_x = apply_deadzone(stick_i8_to_unit(batch->state.input_main_x[idx]),
+                                               c->lstick_deadzone_x);
+          const float facing_dir = batch->state.facing[idx] ? 1.0f : -1.0f;
+          const uint16_t prev_action_id = batch->state.prev_action_id[idx];
+
+          // Root-motion grounded side-B (Illusion/Phantasm) uses a TransN-derived ground velocity.
+          // Decomp: ftFx_SpecialS_Phys calls `ft_80085088` → `ft_800850E0`, which sets fp->gr_vel
+          // from fp->x6A4_transNOffset.z * facing_dir when TransN motion is active.
+          // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c::ftFx_SpecialS_Phys
+          // refs/melee/src/melee/ft/ft_081B.c::{ft_80085088,ft_800850E0}
+          if (action_id == (uint16_t)MSL_ACT_FX_SPECIAL_S) {
+            float dxyz[3];
+            if (physics_try_get_transn_delta_xyz(ch, batch->state.char_id[idx],
+                                                 batch->state.animation_index[idx],
+                                                 batch->state.anim_frame_f32[idx], dxyz)) {
+              gr_vel = dxyz[2] * facing_dir;
+            }
+          } else if (action_id == (uint16_t)MSL_ACT_FX_SPECIAL_S_END) {
+            // Decomp: ftFx_SpecialSEnd_Phys applies ground friction using ftFox_DatAttrs.x38.
+            // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c::ftFx_SpecialSEnd_Phys
+            gr_vel += ground_friction_step_delta(gr_vel, ch->illusion_ground_friction);
+          } else if (physics_action_is_common_ground_friction_only(action_id)) {
+            float friction = ch->gr_friction;
+            if (msl_absf(gr_vel) > ch->walk_max_vel) {
+              friction *= c->high_speed_friction_mul;
+            }
+            gr_vel += ground_friction_step_delta(gr_vel, friction);
+          } else if (physics_action_is_walk(action_id)) {
+            const float accel_mul = 1.0f;
+            float accel = stick_x * ch->walk_init_vel * accel_mul;
+            accel += (stick_x > 0.0f ? +ch->walk_accel : -ch->walk_accel) * accel_mul;
+            const float target = stick_x * ch->walk_max_vel * accel_mul;
+            if (target != 0.0f) {
+              const float mult = gr_vel / target;
+              if (mult > 0.0f && mult < 1.0f) {
+                accel *= (1.0f - mult) * c->walk_accel_scale_mul;
+              }
+            }
+            gr_vel += ground_accel_step_delta(gr_vel, accel, target, ch->gr_friction,
+                                              ch->ground_max_horizontal_velocity);
+          } else if (action_id == (uint16_t)MSL_ACT_DASH) {
+            // Decomp: Dash entry initializes velocity in ftCo_Dash_Enter.
+            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c::ftCo_Dash_Enter
+            if (prev_action_id != (uint16_t)MSL_ACT_DASH) {
+              gr_vel = facing_dir * ch->dash_initial_velocity;
+            } else {
+              const float accel =
+                  stick_x * ch->dash_run_acceleration_a +
+                  (stick_x > 0.0f ? +ch->dash_run_acceleration_b : -ch->dash_run_acceleration_b);
+              const float target = stick_x * ch->dash_run_terminal_velocity;
+              const float friction = ch->gr_friction * c->run_friction_mul;
+              gr_vel += ground_accel_step_delta(gr_vel, accel, target, friction,
+                                                ch->ground_max_horizontal_velocity);
+            }
+          } else if (action_id == (uint16_t)MSL_ACT_RUN ||
+                     action_id == (uint16_t)MSL_ACT_RUN_DIRECT) {
+            const float accel_base =
+                stick_x * ch->dash_run_acceleration_a +
+                (stick_x > 0.0f ? +ch->dash_run_acceleration_b : -ch->dash_run_acceleration_b);
+            float accel = accel_base;
+            const float target = stick_x * ch->dash_run_terminal_velocity;
+            if (target != 0.0f) {
+              const float gr_frac = gr_vel / target;
+              if (gr_frac > 0.0f && gr_frac < 1.0f) {
+                accel *= (1.0f - gr_frac) * c->run_accel_scale_mul;
+              }
+            }
+            const float friction = ch->gr_friction * c->run_friction_mul;
+            gr_vel += ground_accel_step_delta(gr_vel, accel, target, friction,
+                                              ch->ground_max_horizontal_velocity);
+          } else if (action_id == (uint16_t)MSL_ACT_RUN_BRAKE) {
+            const float friction = ch->gr_friction * c->run_friction_mul;
+            gr_vel += ground_friction_step_delta(gr_vel, friction);
+          }
+
+          batch->state.speed_ground_x_self[idx] = gr_vel;
+          vx_self = gr_vel;
+        }
+      }
       const float vy_self = batch->state.speed_y_self[idx];
       const float vx = vx_self + batch->state.speed_x_attack[idx];
       const float vy_integrate = vy_self + batch->state.speed_y_attack[idx];
@@ -380,8 +619,8 @@ void physics_integrate(MslBatch* batch) {
         if (phys != NULL) {
           const uint8_t allow_fastfall = msl_action_allows_fastfall(action_id);
           if (allow_fastfall) {
-            const float stick_y = apply_deadzone(
-                stick_i8_to_unit(batch->state.input_main_y[idx]), c->lstick_deadzone_y);
+            const float stick_y = apply_deadzone(stick_i8_to_unit(batch->state.input_main_y[idx]),
+                                                 c->lstick_deadzone_y);
             (void)ftCommon_CheckFallFast(c, stick_y, vy_self_pre, &batch->state.fall_fast[idx],
                                          &batch->state.tilt_timer_y[idx]);
           }

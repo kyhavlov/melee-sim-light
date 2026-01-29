@@ -172,6 +172,13 @@ static int load_one(const char* data_dir, const char* rel_path, uint8_t char_id)
     return -1;
   }
 
+  static const char* k_illusion_required_keys[] = {
+      "illusion_ground_end_vel_x",
+      "illusion_ground_friction",
+      "illusion_air_end_vel_x",
+      "illusion_air_friction",
+  };
+
   FILE* f = fopen(path, "rb");
   if (f == NULL) {
     return -1;
@@ -202,6 +209,29 @@ static int load_one(const char* data_dir, const char* rel_path, uint8_t char_id)
     return -1;
   }
   buf[sz] = '\0';
+
+  // Helpful error when ISO-derived character attrs are missing new required fields.
+  //
+  // `data/characters/*.json` are local, gitignored artifacts and may be missing when cloning a
+  // fresh repo or when the extraction schema changes.
+  if (char_id == (uint8_t)MSL_CHAR_FOX || char_id == (uint8_t)MSL_CHAR_FALCO) {
+    for (size_t i =
+             0; i < (sizeof(k_illusion_required_keys) / sizeof(k_illusion_required_keys[0])); i++) {
+      const char* k = k_illusion_required_keys[i];
+      char pat[96];
+      const int pn = snprintf(pat, sizeof(pat), "\"%s\"", k);
+      if (pn <= 0 || (size_t)pn >= sizeof(pat) || strstr(buf, pat) == NULL) {
+        fprintf(stderr, "msl: missing required key %s in %s\n", pat, path);
+        fprintf(stderr,
+                "hint: regenerate ISO-derived character attrs (gitignored). For Fox/Falco:\n"
+                "  uv run python -m tools.extraction.extract_character_attrs --pl-dir _iso --out-dir data/characters --chars fox,falco\n"
+                "or run the full data pipeline:\n"
+                "  uv run python -m tools.extraction.build_data --iso-dir _iso --stage grnla --chars fox,falco\n");
+        alloc_free(buf);
+        return -1;
+      }
+    }
+  }
 
   MslCharParams out = {0};
   float refl_off[3] = {0};
@@ -245,6 +275,10 @@ static int load_one(const char* data_dir, const char* rel_path, uint8_t char_id)
       json_get_f32(buf, "run_animation_scaling", &out.run_animation_scaling) != 0 ||
       json_get_f32(buf, "initial_shield_size", &out.initial_shield_size) != 0 ||
       json_get_f32(buf, "model_scaling", &out.model_scaling) != 0 ||
+      json_get_f32(buf, "illusion_ground_end_vel_x", &out.illusion_ground_end_vel_x) != 0 ||
+      json_get_f32(buf, "illusion_ground_friction", &out.illusion_ground_friction) != 0 ||
+      json_get_f32(buf, "illusion_air_end_vel_x", &out.illusion_air_end_vel_x) != 0 ||
+      json_get_f32(buf, "illusion_air_friction", &out.illusion_air_friction) != 0 ||
       json_get_f32(buf, "ledge_jump_horizontal_velocity", &out.ledge_jump_horizontal_velocity) !=
           0 ||
       json_get_f32(buf, "ledge_jump_vertical_velocity", &out.ledge_jump_vertical_velocity) != 0 ||

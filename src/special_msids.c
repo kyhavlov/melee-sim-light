@@ -135,7 +135,14 @@ static int load_one(const char* data_dir, const char* rel_path, uint8_t char_id)
       json_get_u16_path3(buf, "down_air", "start", "default", &out.speciallw_air_start) != 0 ||
       json_get_u16_path3(buf, "down_air", "loop", "default", &out.speciallw_air_loop) != 0 ||
       json_get_u16_path3(buf, "down_air", "hit", "default", &out.speciallw_air_hit) != 0 ||
-      json_get_u16_path3(buf, "down_air", "end", "default", &out.speciallw_air_end) != 0) {
+      json_get_u16_path3(buf, "down_air", "end", "default", &out.speciallw_air_end) != 0 ||
+
+      json_get_u16_path3(buf, "side_ground", "start", "default", &out.specials_ground_start) != 0 ||
+      json_get_u16_path3(buf, "side_ground", "main", "default", &out.specials_ground_main) != 0 ||
+      json_get_u16_path3(buf, "side_ground", "end", "default", &out.specials_ground_end) != 0 ||
+      json_get_u16_path3(buf, "side_air", "start", "default", &out.specials_air_start) != 0 ||
+      json_get_u16_path3(buf, "side_air", "main", "default", &out.specials_air_main) != 0 ||
+      json_get_u16_path3(buf, "side_air", "end", "default", &out.specials_air_end) != 0) {
     alloc_free(buf);
     return -1;
   }
@@ -173,4 +180,3 @@ const MslSpecialMsids* msl_special_msids(uint8_t char_id) {
   }
   return &g_msids_by_char[char_id];
 }
-

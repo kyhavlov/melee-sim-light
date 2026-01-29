@@ -20,8 +20,15 @@ typedef struct MslSpecialMsids {
   uint16_t speciallw_air_loop;
   uint16_t speciallw_air_hit;
   uint16_t speciallw_air_end;
+
+  // Side special (Illusion/Phantasm) submotions.
+  uint16_t specials_ground_start;
+  uint16_t specials_ground_main;
+  uint16_t specials_ground_end;
+  uint16_t specials_air_start;
+  uint16_t specials_air_main;
+  uint16_t specials_air_end;
 } MslSpecialMsids;
 
 int special_msids_init(void);
 const MslSpecialMsids* msl_special_msids(uint8_t char_id);
-
