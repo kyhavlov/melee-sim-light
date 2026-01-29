@@ -12,4 +12,3 @@
 // - ECB prev/current and floor persistence live in CollData:
 //   refs/melee/src/melee/lb/types.h::CollData.
 void mpcoll_ground_apply(MslBatch* batch);
-

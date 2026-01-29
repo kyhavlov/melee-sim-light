@@ -139,7 +139,8 @@ static int load_file_buf(const char* path, uint8_t** out_buf, size_t* out_sz, in
   return 0;
 }
 
-static int load_table_for_char_into(uint8_t char_id, const char* rel_name, MslActionMoveIdTable* out) {
+static int load_table_for_char_into(uint8_t char_id, const char* rel_name,
+                                    MslActionMoveIdTable* out) {
   if (out == NULL) {
     return -1;
   }
@@ -178,8 +179,8 @@ static int load_table_for_char_into(uint8_t char_id, const char* rel_name, MslAc
     return -1;
   }
   if (memcmp(buf, k_magic, TABLE_MAGIC_LEN) != 0) {
-    fprintf(stderr, "msl: attack_id move_id table bad magic for char_id=%u: %s\n", (unsigned)char_id,
-            path);
+    fprintf(stderr, "msl: attack_id move_id table bad magic for char_id=%u: %s\n",
+            (unsigned)char_id, path);
     print_generate_hint(data_dir);
     alloc_free(buf);
     return -1;
@@ -199,16 +200,18 @@ static int load_table_for_char_into(uint8_t char_id, const char* rel_name, MslAc
   const uint32_t flags_toc_off = read_u32_le(buf + 20);
   const uint32_t file_bytes = read_u32_le(buf + 24);
   if (file_bytes != (uint32_t)sz) {
-    fprintf(stderr,
-            "msl: attack_id move_id table file_bytes mismatch for char_id=%u: %s (hdr=%u actual=%zu)\n",
-            (unsigned)char_id, path, (unsigned)file_bytes, sz);
+    fprintf(
+        stderr,
+        "msl: attack_id move_id table file_bytes mismatch for char_id=%u: %s (hdr=%u actual=%zu)\n",
+        (unsigned)char_id, path, (unsigned)file_bytes, sz);
     print_generate_hint(data_dir);
     alloc_free(buf);
     return -1;
   }
   if (move_toc_off < (uint32_t)TABLE_HDR_BYTES_V2) {
     fprintf(stderr,
-            "msl: attack_id move_id table move_toc_off too small for char_id=%u: %s (move_toc_off=%u)\n",
+            "msl: attack_id move_id table move_toc_off too small for char_id=%u: %s "
+            "(move_toc_off=%u)\n",
             (unsigned)char_id, path, (unsigned)move_toc_off);
     print_generate_hint(data_dir);
     alloc_free(buf);

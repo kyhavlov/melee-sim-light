@@ -13,4 +13,3 @@ void hitboxes_refresh(MslBatch* batch);
 #ifdef __cplusplus
 }  // extern "C"
 #endif
-

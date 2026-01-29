@@ -142,8 +142,8 @@ void hitlist_register(MslBatch* batch, int bi, int attacker, uint8_t hit_group, 
     hit_group = 0;
   }
 
-  const uint16_t cd = (rehit_frames == 0) ? (uint16_t)MSL_HITLIST_CD_INDEFINITE
-                                          : (uint16_t)rehit_frames;
+  const uint16_t cd =
+      (rehit_frames == 0) ? (uint16_t)MSL_HITLIST_CD_INDEFINITE : (uint16_t)rehit_frames;
   const size_t i = idx_cd(bi, attacker, hit_group, victim);
   batch->state.combat_hitlist_cd[i] = cd;
   batch->state.combat_hitlist_victim_iid[i] = victim_iid;

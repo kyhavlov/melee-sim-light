@@ -1018,9 +1018,8 @@ static PyObject* msl_debug_force_anim_timebase_enter(PyObject* self, PyObject* a
   if (h == NULL) {
     return NULL;
   }
-  const int err =
-      msl_batch_debug_force_anim_timebase_enter(h->batch, batch_index, player_index, (float)anim_start,
-                                                (float)anim_speed);
+  const int err = msl_batch_debug_force_anim_timebase_enter(h->batch, batch_index, player_index,
+                                                            (float)anim_start, (float)anim_speed);
   if (err != 0) {
     PyErr_Format(PyExc_RuntimeError, "msl_batch_debug_force_anim_timebase_enter failed: %d", err);
     return NULL;
@@ -1029,11 +1028,11 @@ static PyObject* msl_debug_force_anim_timebase_enter(PyObject* self, PyObject* a
 }
 
 static PyObject* msl_sizes(PyObject* self, PyObject* args) {
-  return Py_BuildValue(
-      "{s:i,s:i,s:i,s:i,s:i,s:i,s:i}", "seed", (int)sizeof(MslSeed), "input", (int)sizeof(MslInput),
-      "compare", (int)sizeof(MslCompare), "sample", (int)sizeof(MslSample), "processed_input",
-      (int)sizeof(MslProcessedInput), "internals", (int)sizeof(MslDebugInternals),
-      "collision_contacts", (int)sizeof(MslDebugCollisionContacts));
+  return Py_BuildValue("{s:i,s:i,s:i,s:i,s:i,s:i,s:i}", "seed", (int)sizeof(MslSeed), "input",
+                       (int)sizeof(MslInput), "compare", (int)sizeof(MslCompare), "sample",
+                       (int)sizeof(MslSample), "processed_input", (int)sizeof(MslProcessedInput),
+                       "internals", (int)sizeof(MslDebugInternals), "collision_contacts",
+                       (int)sizeof(MslDebugCollisionContacts));
 }
 
 static PyObject* msl_alloc_reset(PyObject* self, PyObject* args) {

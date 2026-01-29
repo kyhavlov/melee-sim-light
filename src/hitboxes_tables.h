@@ -24,8 +24,8 @@ typedef struct MslHitboxEvent {
   // fp->cur_anim_frame (Slippi post-frame `state_age`, float).
   // refs/melee/src/melee/ft/ftaction.c::ftAction_80073240
   uint16_t frame;
-  uint8_t kind;      // 0 = set/enable, 1 = clear
-  uint8_t hitbox_id; // 0..3 typical; 0xFF used by clear-all records.
+  uint8_t kind;       // 0 = set/enable, 1 = clear
+  uint8_t hitbox_id;  // 0..3 typical; 0xFF used by clear-all records.
 
   // Attachment (Fighter_Part id domain; used as anim_pose_get_matrix(..., part_id)).
   uint16_t bone_part_id;

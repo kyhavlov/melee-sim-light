@@ -100,7 +100,8 @@ static inline void msl_ecb_world_points_sample(MslEcbWorldPoints* out, uint8_t c
   const int frame_i = (int)frame_u16;
   const MslEcbExtentsRel ext = msl_ecb_extents_rel(char_id, animation_index, frame_i);
 
-  float bottom_rel_y = lock_bottom_to_zero ? 0.0f : msl_ecb_bottom_rel_y(char_id, animation_index, frame_i);
+  float bottom_rel_y =
+      lock_bottom_to_zero ? 0.0f : msl_ecb_bottom_rel_y(char_id, animation_index, frame_i);
   const float top_rel_y = ext.max_y;
 
   float left_rel_x = 0.0f;

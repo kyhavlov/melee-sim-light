@@ -490,8 +490,7 @@ static void fd_build_floor_prev_next(MslStageFloorLine* lines, size_t n) {
         continue;
       }
       // prev: a line whose right endpoint equals our left endpoint.
-      if (fd_f32_eq_ulps1(lines[j].x1, lines[i].x0) && fd_f32_eq_ulps1(lines[j].y1, lines[i].y0))
-      {
+      if (fd_f32_eq_ulps1(lines[j].x1, lines[i].x0) && fd_f32_eq_ulps1(lines[j].y1, lines[i].y0)) {
         lines[i].prev = (int16_t)j;
         break;
       }
@@ -501,8 +500,7 @@ static void fd_build_floor_prev_next(MslStageFloorLine* lines, size_t n) {
         continue;
       }
       // next: a line whose left endpoint equals our right endpoint.
-      if (fd_f32_eq_ulps1(lines[j].x0, lines[i].x1) && fd_f32_eq_ulps1(lines[j].y0, lines[i].y1))
-      {
+      if (fd_f32_eq_ulps1(lines[j].x0, lines[i].x1) && fd_f32_eq_ulps1(lines[j].y0, lines[i].y1)) {
         lines[i].next = (int16_t)j;
         break;
       }
@@ -523,8 +521,7 @@ static void fd_build_ceiling_prev_next(MslStageCeilingLine* lines, size_t n) {
       if (i == j) {
         continue;
       }
-      if (fd_f32_eq_ulps1(lines[j].x1, lines[i].x0) && fd_f32_eq_ulps1(lines[j].y1, lines[i].y0))
-      {
+      if (fd_f32_eq_ulps1(lines[j].x1, lines[i].x0) && fd_f32_eq_ulps1(lines[j].y1, lines[i].y0)) {
         lines[i].prev = (int16_t)j;
         break;
       }
@@ -533,8 +530,7 @@ static void fd_build_ceiling_prev_next(MslStageCeilingLine* lines, size_t n) {
       if (i == j) {
         continue;
       }
-      if (fd_f32_eq_ulps1(lines[j].x0, lines[i].x1) && fd_f32_eq_ulps1(lines[j].y0, lines[i].y1))
-      {
+      if (fd_f32_eq_ulps1(lines[j].x0, lines[i].x1) && fd_f32_eq_ulps1(lines[j].y0, lines[i].y1)) {
         lines[i].next = (int16_t)j;
         break;
       }
@@ -555,8 +551,7 @@ static void fd_build_wall_prev_next(MslStageWallLine* lines, size_t n) {
       if (i == j) {
         continue;
       }
-      if (fd_f32_eq_ulps1(lines[j].x1, lines[i].x0) && fd_f32_eq_ulps1(lines[j].y1, lines[i].y0))
-      {
+      if (fd_f32_eq_ulps1(lines[j].x1, lines[i].x0) && fd_f32_eq_ulps1(lines[j].y1, lines[i].y0)) {
         lines[i].prev = (int16_t)j;
         break;
       }
@@ -565,8 +560,7 @@ static void fd_build_wall_prev_next(MslStageWallLine* lines, size_t n) {
       if (i == j) {
         continue;
       }
-      if (fd_f32_eq_ulps1(lines[j].x0, lines[i].x1) && fd_f32_eq_ulps1(lines[j].y0, lines[i].y1))
-      {
+      if (fd_f32_eq_ulps1(lines[j].x0, lines[i].x1) && fd_f32_eq_ulps1(lines[j].y0, lines[i].y1)) {
         lines[i].next = (int16_t)j;
         break;
       }
@@ -914,11 +908,20 @@ static int fd_load_floor_lines_from_json(const char* json) {
   size_t rw_n = 0;
   for (size_t i = 0; i < seg_n; i++) {
     switch (seg_tmp[i].kind) {
-      case FD_SEG_FLOOR: floor_n++; break;
-      case FD_SEG_CEILING: ceil_n++; break;
-      case FD_SEG_LEFT_WALL: lw_n++; break;
-      case FD_SEG_RIGHT_WALL: rw_n++; break;
-      default: break;
+      case FD_SEG_FLOOR:
+        floor_n++;
+        break;
+      case FD_SEG_CEILING:
+        ceil_n++;
+        break;
+      case FD_SEG_LEFT_WALL:
+        lw_n++;
+        break;
+      case FD_SEG_RIGHT_WALL:
+        rw_n++;
+        break;
+      default:
+        break;
     }
   }
   if (floor_n == 0) {
@@ -1507,7 +1510,6 @@ uint8_t stage_collision_item_line_hits_floor(uint32_t stage_id, float x0, float 
   }
   return 0;
 }
-
 
 void stage_collision_apply(MslBatch* batch) {
   if (batch == NULL) {

@@ -334,7 +334,8 @@ int anim_pose_get_transn(uint8_t char_id, uint16_t msid, uint16_t frame, float o
   const uint64_t frame_u = (uint64_t)frame;
 
   const uint64_t mats_bytes = frame_count_u * joint_count_u * (uint64_t)MAT_BYTES;
-  const uint64_t transn_off_u = (uint64_t)base_off + mats_bytes + frame_u * (uint64_t)TRANSN_BYTES_PER_FRAME;
+  const uint64_t transn_off_u =
+      (uint64_t)base_off + mats_bytes + frame_u * (uint64_t)TRANSN_BYTES_PER_FRAME;
   if (transn_off_u + (uint64_t)TRANSN_BYTES_PER_FRAME > (uint64_t)t->sz) {
     return -1;
   }

@@ -6,7 +6,12 @@
 
 #include "alloc.h"
 
-enum { HURTCAPS_MAGIC_LEN = 8, HURTCAPS_HDR_BYTES = 16, HURTCAPS_VERSION_V1 = 1, REC_BYTES_V1 = 34 };
+enum {
+  HURTCAPS_MAGIC_LEN = 8,
+  HURTCAPS_HDR_BYTES = 16,
+  HURTCAPS_VERSION_V1 = 1,
+  REC_BYTES_V1 = 34
+};
 static const uint8_t k_magic[HURTCAPS_MAGIC_LEN] = {'M', 'S', 'L', 'H', 'U', 'R', 'T', '1'};
 
 // Character id mapping follows Slippi post-frame `character` (GALE01):
@@ -199,4 +204,3 @@ int hurtcaps_get(uint8_t char_id, const MslHurtCap** out_caps, uint16_t* out_cou
   *out_count = t->count;
   return 0;
 }
-

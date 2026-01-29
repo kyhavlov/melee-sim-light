@@ -8,10 +8,10 @@
 
 enum {
   HITBOXES_MAGIC_LEN = 8,
-  HITBOXES_HDR_BYTES = 16, // magic[8] + ver[u32] + entry_count[u32]
+  HITBOXES_HDR_BYTES = 16,  // magic[8] + ver[u32] + entry_count[u32]
   HITBOXES_VERSION_V1 = 1,
-  INDEX_REC_BYTES_V1 = 12, // msid[u16] + rec_count[u16] + rec_bytes[u32] + payload_off[u32]
-  EVENT_REC_BYTES_V1 = 44, // packed event record size
+  INDEX_REC_BYTES_V1 = 12,  // msid[u16] + rec_count[u16] + rec_bytes[u32] + payload_off[u32]
+  EVENT_REC_BYTES_V1 = 44,  // packed event record size
 };
 
 static const uint8_t k_magic[HITBOXES_MAGIC_LEN] = {'M', 'S', 'L', 'H', 'I', 'T', 'B', '1'};
@@ -171,7 +171,8 @@ static int load_for_char(const char* data_dir, const char* rel_path, uint8_t cha
   uint8_t* have_msid = (uint8_t*)alloc_calloc(65536, 1);
   uint16_t* count_by_msid = (uint16_t*)alloc_calloc(65536, sizeof(uint16_t));
   uint32_t* base_index_by_msid = (uint32_t*)alloc_calloc(65536, sizeof(uint32_t));
-  MslHitboxEvent* events = (MslHitboxEvent*)alloc_malloc((size_t)total_events_u * sizeof(MslHitboxEvent));
+  MslHitboxEvent* events =
+      (MslHitboxEvent*)alloc_malloc((size_t)total_events_u * sizeof(MslHitboxEvent));
   if (have_msid == NULL || count_by_msid == NULL || base_index_by_msid == NULL || events == NULL) {
     alloc_free(have_msid);
     alloc_free(count_by_msid);

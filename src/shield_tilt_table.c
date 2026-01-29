@@ -14,7 +14,7 @@ enum { MSL_CHAR_FOX = 1, MSL_CHAR_FALCO = 22 };
 
 enum {
   SHIELD_MAGIC_LEN = 8,
-  SHIELD_HDR_BYTES = 16, // magic[8] + ver[u32] + frame_count[u16] + neutral_frame[u16]
+  SHIELD_HDR_BYTES = 16,  // magic[8] + ver[u32] + frame_count[u16] + neutral_frame[u16]
   SHIELD_VERSION_V1 = 1,
 };
 
@@ -172,4 +172,3 @@ int msl_shield_tilt_table_view(uint8_t char_id, MslShieldTiltTableView* out) {
   };
   return 0;
 }
-

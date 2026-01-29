@@ -495,8 +495,8 @@ static uint8_t ceiling_sweep_check(const MslStageCeilingGraph* g, float ax, floa
   for (size_t li = 0; li < g->line_count; li++) {
     const MslStageCeilingLine* l = &g->lines[li];
     float x0 = 0.0f, y0 = 0.0f, x1 = 0.0f, y1 = 0.0f;
-    ed5c_endpoints_generic(l->x0, l->y0, l->x1, l->y1, l->has_prev_link, l->has_next_link, &x0,
-                           &y0, &x1, &y1);
+    ed5c_endpoints_generic(l->x0, l->y0, l->x1, l->y1, l->has_prev_link, l->has_next_link, &x0, &y0,
+                           &x1, &y1);
 
     float ix = 0.0f, iy = 0.0f;
     uint8_t hit = 0;
@@ -560,9 +560,10 @@ static uint8_t ceiling_sweep_check(const MslStageCeilingGraph* g, float ax, floa
   return 1;
 }
 
-static uint8_t wall_sweep_check(const MslStageWallGraph* g, uint8_t is_left_wall, float ax, float ay,
-                                float bx, float by, int prefer_line_idx, int* out_line_idx,
-                                float* out_ix, float* out_iy, float* out_nx, float* out_ny) {
+static uint8_t wall_sweep_check(const MslStageWallGraph* g, uint8_t is_left_wall, float ax,
+                                float ay, float bx, float by, int prefer_line_idx,
+                                int* out_line_idx, float* out_ix, float* out_iy, float* out_nx,
+                                float* out_ny) {
   if (g == NULL || out_line_idx == NULL) {
     return 0;
   }
@@ -585,8 +586,8 @@ static uint8_t wall_sweep_check(const MslStageWallGraph* g, uint8_t is_left_wall
   for (size_t li = 0; li < g->line_count; li++) {
     const MslStageWallLine* l = &g->lines[li];
     float x0 = 0.0f, y0 = 0.0f, x1 = 0.0f, y1 = 0.0f;
-    ed5c_endpoints_generic(l->x0, l->y0, l->x1, l->y1, l->has_prev_link, l->has_next_link, &x0,
-                           &y0, &x1, &y1);
+    ed5c_endpoints_generic(l->x0, l->y0, l->x1, l->y1, l->has_prev_link, l->has_next_link, &x0, &y0,
+                           &x1, &y1);
 
     float ix = 0.0f, iy = 0.0f;
     uint8_t hit = 0;

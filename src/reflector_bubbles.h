@@ -12,4 +12,3 @@
 // - refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c::ftFx_SpecialLw_CreateReflectHit
 
 void reflector_bubbles_refresh(MslBatch* batch);
-

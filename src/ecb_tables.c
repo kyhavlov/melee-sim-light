@@ -305,7 +305,8 @@ typedef struct {
 static MslEcbExtentsTable g_extents_table_by_char[256];
 static int g_extents_loaded = 0;
 
-static int load_extents_table_for_char(const char* data_dir, const char* rel_path, uint8_t char_id) {
+static int load_extents_table_for_char(const char* data_dir, const char* rel_path,
+                                       uint8_t char_id) {
   char path[512];
   const int n = snprintf(path, sizeof(path), "%s/%s", data_dir, rel_path);
   if (n <= 0 || (size_t)n >= sizeof(path)) {

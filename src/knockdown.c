@@ -36,14 +36,16 @@ static inline uint8_t is_down_roll(uint16_t a) {
              : 0u;
 }
 static inline uint8_t is_down_any(uint16_t a) {
-  return (is_down_bound(a) || is_down_wait(a) || is_down_stand(a) || is_down_attack(a) || is_down_roll(a))
+  return (is_down_bound(a) || is_down_wait(a) || is_down_stand(a) || is_down_attack(a) ||
+          is_down_roll(a))
              ? 1u
              : 0u;
 }
 
 static inline uint8_t is_passive(uint16_t a) { return (a == (uint16_t)MSL_ACT_PASSIVE) ? 1u : 0u; }
 static inline uint8_t is_passive_stand(uint16_t a) {
-  return (a == (uint16_t)MSL_ACT_PASSIVE_STAND_F || a == (uint16_t)MSL_ACT_PASSIVE_STAND_B) ? 1u : 0u;
+  return (a == (uint16_t)MSL_ACT_PASSIVE_STAND_F || a == (uint16_t)MSL_ACT_PASSIVE_STAND_B) ? 1u
+                                                                                            : 0u;
 }
 static inline uint8_t is_knockdown_any(uint16_t a) {
   return (is_down_any(a) || is_passive(a) || is_passive_stand(a)) ? 1u : 0u;
@@ -221,19 +223,23 @@ static inline uint8_t cstick_up_edge(const MslBatch* batch, const MslCommonParam
   const float cur_y =
       apply_deadzone(stick_i8_to_unit(batch->state.input_c_y[idx]), c->lstick_deadzone_y);
   // Decomp: refs/melee/src/melee/ft/ft_0DF1.c::ftCo_800DF644 (cstick1.y < x7F4 && cstick.y >= x7F4).
-  return (prev_y < c->down_attack_cstick_up_threshold && cur_y >= c->down_attack_cstick_up_threshold)
+  return (prev_y < c->down_attack_cstick_up_threshold &&
+          cur_y >= c->down_attack_cstick_up_threshold)
              ? 1u
              : 0u;
 }
 
-static inline uint8_t cstick_roll_x_edge(const MslBatch* batch, const MslCommonParams* c, size_t idx) {
+static inline uint8_t cstick_roll_x_edge(const MslBatch* batch, const MslCommonParams* c,
+                                         size_t idx) {
   if (batch == NULL || c == NULL) {
     return 0;
   }
   const float prev_x =
       apply_deadzone(stick_i8_to_unit(batch->state.prev_input_c_x[idx]), c->lstick_deadzone_x);
-  const float cur_x = apply_deadzone(stick_i8_to_unit(batch->state.input_c_x[idx]), c->lstick_deadzone_x);
-  const float cur_y = apply_deadzone(stick_i8_to_unit(batch->state.input_c_y[idx]), c->lstick_deadzone_y);
+  const float cur_x =
+      apply_deadzone(stick_i8_to_unit(batch->state.input_c_x[idx]), c->lstick_deadzone_x);
+  const float cur_y =
+      apply_deadzone(stick_i8_to_unit(batch->state.input_c_y[idx]), c->lstick_deadzone_y);
 
   // Decomp: refs/melee/src/melee/ft/ft_0DF1.c::ftCo_800DF678
   // - ABS(cstick1.x) < x248 && ABS(cstick.x) >= x248 && ftCo_GetCStickAngle(fp) < x20_radians.
@@ -247,7 +253,8 @@ static inline uint8_t cstick_roll_x_edge(const MslBatch* batch, const MslCommonP
   return (ang < c->attack_angle_threshold_radians) ? 1u : 0u;
 }
 
-static inline uint8_t lstick_roll_hold(const MslBatch* batch, const MslCommonParams* c, size_t idx) {
+static inline uint8_t lstick_roll_hold(const MslBatch* batch, const MslCommonParams* c,
+                                       size_t idx) {
   if (batch == NULL || c == NULL) {
     return 0;
   }
@@ -264,8 +271,8 @@ static inline uint8_t lstick_roll_hold(const MslBatch* batch, const MslCommonPar
   return (ang < c->attack_angle_threshold_radians) ? 1u : 0u;
 }
 
-static inline uint16_t down_roll_action_from_input(const MslBatch* batch, const MslCommonParams* c, size_t idx,
-                                                   uint16_t cur_down_act) {
+static inline uint16_t down_roll_action_from_input(const MslBatch* batch, const MslCommonParams* c,
+                                                   size_t idx, uint16_t cur_down_act) {
   // Decomp: refs/melee/src/melee/ft/chara/ftCommon/ftCo_Down.c::ftCo_Down_CheckInput
   // Stick selection:
   // - if ftCo_800DF678(fp): use c-stick.x (edge)
@@ -275,7 +282,8 @@ static inline uint16_t down_roll_action_from_input(const MslBatch* batch, const 
   if (cstick_roll_x_edge(batch, c, idx)) {
     stick_x = apply_deadzone(stick_i8_to_unit(batch->state.input_c_x[idx]), c->lstick_deadzone_x);
   } else if (lstick_roll_hold(batch, c, idx)) {
-    stick_x = apply_deadzone(stick_i8_to_unit(batch->state.input_main_x[idx]), c->lstick_deadzone_x);
+    stick_x =
+        apply_deadzone(stick_i8_to_unit(batch->state.input_main_x[idx]), c->lstick_deadzone_x);
   } else {
     return 0;
   }
@@ -398,8 +406,8 @@ static inline void enter_squat(MslBatch* batch, size_t idx) {
   msl_anim_timebase_recompute_derived(batch, idx);
 }
 
-static inline uint8_t should_enter_down_attack_from_bound(const MslBatch* batch, const MslCommonParams* c,
-                                                          size_t idx) {
+static inline uint8_t should_enter_down_attack_from_bound(const MslBatch* batch,
+                                                          const MslCommonParams* c, size_t idx) {
   // Decomp: refs/melee/src/melee/ft/chara/ftCommon/ftCo_Down.c::ftCo_80098400
   // - inlineB0: (x67C < x24C || x67D < x24C)
   // - ftCo_800DF644: cstick up edge at x7F4
@@ -410,8 +418,8 @@ static inline uint8_t should_enter_down_attack_from_bound(const MslBatch* batch,
   return cstick_up_edge(batch, c, idx);
 }
 
-static inline uint8_t should_enter_down_attack_from_wait(const MslBatch* batch, const MslCommonParams* c,
-                                                         size_t idx) {
+static inline uint8_t should_enter_down_attack_from_wait(const MslBatch* batch,
+                                                         const MslCommonParams* c, size_t idx) {
   // Decomp: refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownAttack.c::ftCo_800984D4
   // - pressed-edge A/B or cstick up edge.
   enum { AB = (uint16_t)MSL_BUTTON_A | (uint16_t)MSL_BUTTON_B };
@@ -421,8 +429,8 @@ static inline uint8_t should_enter_down_attack_from_wait(const MslBatch* batch, 
   return cstick_up_edge(batch, c, idx);
 }
 
-static inline uint8_t should_enter_down_stand_from_wait(const MslBatch* batch, const MslCommonParams* c,
-                                                        size_t idx) {
+static inline uint8_t should_enter_down_stand_from_wait(const MslBatch* batch,
+                                                        const MslCommonParams* c, size_t idx) {
   // Decomp: refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownStand.c::ftCo_800980BC
   enum { LR = (uint16_t)MSL_BUTTON_L | (uint16_t)MSL_BUTTON_R };
   if ((batch->state.input_buttons_pressed[idx] & (uint16_t)LR) != 0) {
@@ -487,8 +495,9 @@ void knockdown_update_pre_physics(MslBatch* batch) {
         // PassiveStand phys uses ft_80084FA8 (root-motion + friction via ft_80085030). We don't yet
         // model root motion here; leave self velocity teacher-forced and only handle anim-end exits.
         // refs/melee/src/melee/ft/chara/ftCommon/ftCo_PassiveStand.c::ftCo_PassiveStand_Phys
-        const uint16_t msid = (a0 == (uint16_t)MSL_ACT_PASSIVE_STAND_F) ? (uint16_t)MSL_SM_PASSIVE_STAND_F
-                                                                        : (uint16_t)MSL_SM_PASSIVE_STAND_B;
+        const uint16_t msid = (a0 == (uint16_t)MSL_ACT_PASSIVE_STAND_F)
+                                  ? (uint16_t)MSL_SM_PASSIVE_STAND_F
+                                  : (uint16_t)MSL_SM_PASSIVE_STAND_B;
         if (anim_is_finished(cid, msid, anim_frame)) {
           enter_wait(batch, idx);
         }
@@ -537,8 +546,9 @@ void knockdown_update_pre_physics(MslBatch* batch) {
       down_apply_phys_friction(batch, c, ch, idx);
 
       if (is_down_bound(a0)) {
-        const uint16_t msid = (a0 == (uint16_t)MSL_ACT_DOWN_BOUND_U) ? (uint16_t)MSL_SM_DOWN_BOUND_U
-                                                                     : (uint16_t)MSL_SM_DOWN_BOUND_D;
+        const uint16_t msid = (a0 == (uint16_t)MSL_ACT_DOWN_BOUND_U)
+                                  ? (uint16_t)MSL_SM_DOWN_BOUND_U
+                                  : (uint16_t)MSL_SM_DOWN_BOUND_D;
         if (anim_is_finished(cid, msid, anim_frame)) {
           if (should_enter_down_attack_from_bound(batch, c, idx)) {
             enter_down_attack(batch, idx, a0);
@@ -564,7 +574,8 @@ void knockdown_update_pre_physics(MslBatch* batch) {
               if (should_enter_down_attack_from_wait(batch, c, idx)) {
                 enter_down_attack(batch, idx, batch->state.action_id[idx]);
               } else {
-                const uint16_t roll_act2 = down_roll_action_from_input(batch, c, idx, batch->state.action_id[idx]);
+                const uint16_t roll_act2 =
+                    down_roll_action_from_input(batch, c, idx, batch->state.action_id[idx]);
                 if (roll_act2 != 0) {
                   enter_down_roll(batch, idx, roll_act2);
                   down_roll_apply_phys_transn(batch, c, ch, idx);
@@ -621,8 +632,9 @@ void knockdown_update_pre_physics(MslBatch* batch) {
       }
 
       if (is_down_stand(a0)) {
-        const uint16_t msid = (a0 == (uint16_t)MSL_ACT_DOWN_STAND_U) ? (uint16_t)MSL_SM_DOWN_STAND_U
-                                                                     : (uint16_t)MSL_SM_DOWN_STAND_D;
+        const uint16_t msid = (a0 == (uint16_t)MSL_ACT_DOWN_STAND_U)
+                                  ? (uint16_t)MSL_SM_DOWN_STAND_U
+                                  : (uint16_t)MSL_SM_DOWN_STAND_D;
         if (anim_is_finished(cid, msid, anim_frame)) {
           enter_wait(batch, idx);
         }
@@ -630,15 +642,14 @@ void knockdown_update_pre_physics(MslBatch* batch) {
       }
 
       if (is_down_attack(a0)) {
-        const uint16_t msid =
-            (a0 == (uint16_t)MSL_ACT_DOWN_ATTACK_U) ? (uint16_t)MSL_SM_DOWN_ATTACK_U
-                                                   : (uint16_t)MSL_SM_DOWN_ATTACK_D;
+        const uint16_t msid = (a0 == (uint16_t)MSL_ACT_DOWN_ATTACK_U)
+                                  ? (uint16_t)MSL_SM_DOWN_ATTACK_U
+                                  : (uint16_t)MSL_SM_DOWN_ATTACK_D;
         if (anim_is_finished(cid, msid, anim_frame)) {
           enter_wait(batch, idx);
         }
         continue;
       }
-
     }
   }
 }
@@ -663,7 +674,8 @@ static inline uint8_t is_damage_air_action(uint16_t a) {
              : 0u;
 }
 
-static inline void transfer_air_to_ground_on_land(MslBatch* batch, const MslCharParams* ch, size_t idx) {
+static inline void transfer_air_to_ground_on_land(MslBatch* batch, const MslCharParams* ch,
+                                                  size_t idx) {
   // Shared with locomotion landing behavior: transfer air X to ground X and refresh jumps.
   // Decomp: refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007D6A4 (jumps refresh on grounding)
   batch->state.speed_ground_x_self[idx] = batch->state.speed_air_x_self[idx];
@@ -672,7 +684,8 @@ static inline void transfer_air_to_ground_on_land(MslBatch* batch, const MslChar
   batch->state.jumps_left[idx] = ch->max_jumps;
 }
 
-static inline uint8_t tech_is_available(const MslBatch* batch, const MslCommonParams* c, size_t idx) {
+static inline uint8_t tech_is_available(const MslBatch* batch, const MslCommonParams* c,
+                                        size_t idx) {
   // Decomp: refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownAttack.c::ftCo_800986B0
   // - x680 < x250 and x684 >= x1C.
   return ((float)batch->state.x680[idx] < c->tech_window_frames &&
@@ -681,8 +694,8 @@ static inline uint8_t tech_is_available(const MslBatch* batch, const MslCommonPa
              : 0u;
 }
 
-static inline void enter_passive_from_damage_land(MslBatch* batch, const MslCharParams* ch, size_t idx,
-                                                  uint16_t passive_act) {
+static inline void enter_passive_from_damage_land(MslBatch* batch, const MslCharParams* ch,
+                                                  size_t idx, uint16_t passive_act) {
   transfer_air_to_ground_on_land(batch, ch, idx);
   batch->state.action_id[idx] = passive_act;
   batch->state.animation_index[idx] = submotion_for_down_action(passive_act);
@@ -721,8 +734,8 @@ static inline uint16_t pick_downbound_action_from_pose(const MslBatch* batch, si
   return (f > 0.0f) ? (uint16_t)MSL_ACT_DOWN_BOUND_U : (uint16_t)MSL_ACT_DOWN_BOUND_D;
 }
 
-static inline void enter_down_bound_from_damage_land(MslBatch* batch, const MslCharParams* ch, size_t idx,
-                                                     uint16_t prev_action_id) {
+static inline void enter_down_bound_from_damage_land(MslBatch* batch, const MslCharParams* ch,
+                                                     size_t idx, uint16_t prev_action_id) {
   const uint16_t bound_act = pick_downbound_action_from_pose(batch, idx, prev_action_id);
   transfer_air_to_ground_on_land(batch, ch, idx);
   batch->state.action_id[idx] = bound_act;
@@ -770,12 +783,13 @@ void knockdown_update_post_collision(MslBatch* batch) {
           // - tech-in-place (Passive): refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownAttack.c::ftCo_8009872C
           // - else: DownBound via ftCo_80097D40 (ftCo_DownBound.c)
           if (tech_is_available(batch, c, idx)) {
-            const float stick_x =
-                apply_deadzone(stick_i8_to_unit(batch->state.input_main_x[idx]), c->lstick_deadzone_x);
+            const float stick_x = apply_deadzone(stick_i8_to_unit(batch->state.input_main_x[idx]),
+                                                 c->lstick_deadzone_x);
             if (msl_absf(stick_x) >= c->tech_roll_stick_threshold) {
               const float facing_dir = batch->state.facing[idx] ? 1.0f : -1.0f;
-              const uint16_t act = (stick_x * facing_dir) >= 0.0f ? (uint16_t)MSL_ACT_PASSIVE_STAND_F
-                                                                  : (uint16_t)MSL_ACT_PASSIVE_STAND_B;
+              const uint16_t act = (stick_x * facing_dir) >= 0.0f
+                                       ? (uint16_t)MSL_ACT_PASSIVE_STAND_F
+                                       : (uint16_t)MSL_ACT_PASSIVE_STAND_B;
               enter_passive_from_damage_land(batch, ch, idx, act);
               continue;
             }

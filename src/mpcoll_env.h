@@ -18,4 +18,3 @@
 // - Fighter cliff catch checks those bits in ftCliffCommon_80081298.
 //   (refs/melee/src/melee/ft/ftcliffcommon.c::ftCliffCommon_80081298)
 void mpcoll_env_update_ledge_grab(MslBatch* batch);
-

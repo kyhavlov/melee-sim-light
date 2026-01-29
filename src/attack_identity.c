@@ -5,7 +5,8 @@
 #include "attack_id_tables.h"
 #include "staling.h"
 
-static inline uint16_t inc_attack_instance_plStale_IncrementAttackInstance(MslBatch* batch, int bi) {
+static inline uint16_t inc_attack_instance_plStale_IncrementAttackInstance(MslBatch* batch,
+                                                                           int bi) {
   // Decomp: plStale_IncrementAttackInstance never returns 0; it wraps and skips 0.
   // refs/melee/src/melee/pl/plstale.c::plStale_IncrementAttackInstance
   if (batch == NULL) {
@@ -59,6 +60,7 @@ void attack_identity_on_motion_state_change_ft_800890D0(MslBatch* batch, size_t 
   if (move_id == (uint16_t)MSL_FT_MOVE_ID_DEFAULT || move_id != cur) {
     const int bi = (int)(idx / (size_t)MSL_MAX_PLAYERS);
     batch->state.attack_id[idx] = move_id;
-    batch->state.attack_instance[idx] = inc_attack_instance_plStale_IncrementAttackInstance(batch, bi);
+    batch->state.attack_instance[idx] =
+        inc_attack_instance_plStale_IncrementAttackInstance(batch, bi);
   }
 }

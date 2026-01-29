@@ -51,10 +51,10 @@ static inline void item_slot_swap(MslBatch* batch, size_t a, size_t b) {
     return;
   }
 #define SWAP(T, arr)        \
-  do {                     \
+  do {                      \
     const T tmp = (arr)[a]; \
-    (arr)[a] = (arr)[b];   \
-    (arr)[b] = tmp;        \
+    (arr)[a] = (arr)[b];    \
+    (arr)[b] = tmp;         \
   } while (0)
   SWAP(uint8_t, batch->state.item_exists);
   SWAP(uint8_t, batch->state.item_state);
@@ -185,7 +185,8 @@ static inline uint16_t items_find_gun_instance_id(const MslBatch* batch, int bi,
   return 0;
 }
 
-static inline int items_find_gun_slot(const MslBatch* batch, int bi, int owner, uint16_t gun_itkind) {
+static inline int items_find_gun_slot(const MslBatch* batch, int bi, int owner,
+                                      uint16_t gun_itkind) {
   if (batch == NULL || owner < 0) {
     return -1;
   }
@@ -227,12 +228,12 @@ static inline uint8_t blaster_gun_state_from_action_id(uint16_t action_id_u16) {
   // - refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_SpecialN_GetBlasterAction
   //   (msid = currASID - ftFx_MS_SpecialNStart)
   enum {
-    MSL_FX_MS_SPECIALN_START = 0x0155,      // ftFx_MS_SpecialNStart
-    MSL_FX_MS_SPECIALN_LOOP = 0x0156,       // ftFx_MS_SpecialNLoop
-    MSL_FX_MS_SPECIALN_END = 0x0157,        // ftFx_MS_SpecialNEnd
-    MSL_FX_MS_SPECIALAIRN_START = 0x0158,   // ftFx_MS_SpecialAirNStart
-    MSL_FX_MS_SPECIALAIRN_LOOP = 0x0159,    // ftFx_MS_SpecialAirNLoop
-    MSL_FX_MS_SPECIALAIRN_END = 0x015A,     // ftFx_MS_SpecialAirNEnd
+    MSL_FX_MS_SPECIALN_START = 0x0155,     // ftFx_MS_SpecialNStart
+    MSL_FX_MS_SPECIALN_LOOP = 0x0156,      // ftFx_MS_SpecialNLoop
+    MSL_FX_MS_SPECIALN_END = 0x0157,       // ftFx_MS_SpecialNEnd
+    MSL_FX_MS_SPECIALAIRN_START = 0x0158,  // ftFx_MS_SpecialAirNStart
+    MSL_FX_MS_SPECIALAIRN_LOOP = 0x0159,   // ftFx_MS_SpecialAirNLoop
+    MSL_FX_MS_SPECIALAIRN_END = 0x015A,    // ftFx_MS_SpecialAirNEnd
   };
   // Throw MotionState ids (GALE01 common), decomp-backed numeric values:
   // - refs/melee/src/melee/ft/ftmotionstates.c (comments: ftCo_MS_CatchDash=214, ftCo_MS_ThrowB=220, ...)
@@ -252,7 +253,8 @@ static inline uint8_t blaster_gun_state_from_action_id(uint16_t action_id_u16) {
   // - ftCo_MS_ThrowLw   = 222 -> index 8 (ftFx_SpecialNIndex_ThrowLw)
   enum { MSL_FTCO_MS_CATCHDASH = 214 };
   enum { MSL_FTCO_MS_THROWB = 220, MSL_FTCO_MS_THROWHI = 221, MSL_FTCO_MS_THROWLW = 222 };
-  if (action_id_u16 == (uint16_t)MSL_FTCO_MS_THROWB || action_id_u16 == (uint16_t)MSL_FTCO_MS_THROWHI ||
+  if (action_id_u16 == (uint16_t)MSL_FTCO_MS_THROWB ||
+      action_id_u16 == (uint16_t)MSL_FTCO_MS_THROWHI ||
       action_id_u16 == (uint16_t)MSL_FTCO_MS_THROWLW) {
     return (uint8_t)(action_id_u16 - (uint16_t)MSL_FTCO_MS_CATCHDASH);
   }
@@ -260,7 +262,8 @@ static inline uint8_t blaster_gun_state_from_action_id(uint16_t action_id_u16) {
   return 9;
 }
 
-static void blaster_gun_update_from_fighter(MslBatch* batch, int bi, int owner, const MslLaserParams* lp) {
+static void blaster_gun_update_from_fighter(MslBatch* batch, int bi, int owner,
+                                            const MslLaserParams* lp) {
   if (batch == NULL || lp == NULL) {
     return;
   }
@@ -417,8 +420,9 @@ static inline uint8_t item_sphere_capsule_intersects(const MslBatch* batch, int 
   if (cap_i < 0 || cap_i >= (int)cap_count) {
     return 0;
   }
-  const size_t hi = ((size_t)bi * (size_t)MSL_MAX_PLAYERS + (size_t)defender) * (size_t)MSL_MAX_HURTCAPS +
-                    (size_t)cap_i;
+  const size_t hi =
+      ((size_t)bi * (size_t)MSL_MAX_PLAYERS + (size_t)defender) * (size_t)MSL_MAX_HURTCAPS +
+      (size_t)cap_i;
   if (!batch->state.hurtcap_enabled[hi]) {
     return 0;
   }
@@ -682,12 +686,14 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
           enum { MSL_STATE_FLAGS_2218_INDEX = 0 };
           // Reflect-active bit in fp+0x2218 as packed by Slippi: 0x10.
           enum { MSL_STATE_FLAG_2218_IS_REFLECT_ACTIVE = 0x10 };
-          const uint8_t flags_2218 = batch->state.state_flags
-              [d_idx * (size_t)MSL_STATE_FLAGS_STRIDE + (size_t)MSL_STATE_FLAGS_2218_INDEX];
+          const uint8_t flags_2218 =
+              batch->state.state_flags[d_idx * (size_t)MSL_STATE_FLAGS_STRIDE +
+                                       (size_t)MSL_STATE_FLAGS_2218_INDEX];
           enum { MSL_STATE_FLAGS_221C_INDEX = 3 };
           enum { MSL_STATE_FLAG_221C_POWERSHIELD_ACTIVE = 0x20 };
-          const uint8_t flags_221c = batch->state.state_flags
-              [d_idx * (size_t)MSL_STATE_FLAGS_STRIDE + (size_t)MSL_STATE_FLAGS_221C_INDEX];
+          const uint8_t flags_221c =
+              batch->state.state_flags[d_idx * (size_t)MSL_STATE_FLAGS_STRIDE +
+                                       (size_t)MSL_STATE_FLAGS_221C_INDEX];
           if ((flags_2218 & (uint8_t)MSL_STATE_FLAG_2218_IS_REFLECT_ACTIVE) &&
               (flags_221c & (uint8_t)MSL_STATE_FLAG_221C_POWERSHIELD_ACTIVE)) {
             batch->state.item_owner[ii] = (int8_t)def;
@@ -732,8 +738,8 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
         if (isfinite(rx) && isfinite(ry) && rch != NULL) {
           uint8_t reflect_hit = 0;
           const uint8_t off_n = lp->hitbox_offsets_x_count;
-          for (uint8_t oi = 0; oi < off_n && oi < (uint8_t)MSL_LASER_MAX_HITBOX_OFFS_X && !reflect_hit;
-               oi++) {
+          for (uint8_t oi = 0;
+               oi < off_n && oi < (uint8_t)MSL_LASER_MAX_HITBOX_OFFS_X && !reflect_hit; oi++) {
             const float sx = x + (dir * lp->hitbox_offsets_x[oi]);
             const float sy = y;
             if (item_sphere_sphere_intersects_2d(sx, sy, sr, rx, ry, rr)) {

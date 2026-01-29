@@ -8,11 +8,12 @@
 
 enum {
   HURTMODES_MAGIC_LEN = 8,
-  HURTMODES_HDR_BYTES = 20,     // magic[8] + ver[u32] + frame_count[u16] + capsule_count[u16] + entry_count[u32]
+  HURTMODES_HDR_BYTES =
+      20,  // magic[8] + ver[u32] + frame_count[u16] + capsule_count[u16] + entry_count[u32]
   HURTMODES_VERSION_V1 = 1,
-  INDEX_REC_BYTES_V1 = 12,      // msid[u16] + reserved[u16] + payload_bytes[u32] + payload_off[u32]
-  PAYLOAD_REC_BYTES_V1 = 8,     // u64 packed states per frame
-  MAX_CAPSULES = 32,            // MSL_MAX_HURTCAPS
+  INDEX_REC_BYTES_V1 = 12,   // msid[u16] + reserved[u16] + payload_bytes[u32] + payload_off[u32]
+  PAYLOAD_REC_BYTES_V1 = 8,  // u64 packed states per frame
+  MAX_CAPSULES = 32,         // MSL_MAX_HURTCAPS
 };
 
 static const uint8_t k_magic[HURTMODES_MAGIC_LEN] = {'M', 'S', 'L', 'H', 'U', 'R', 'M', '1'};
@@ -177,7 +178,8 @@ static int load_for_char(const char* data_dir, const char* rel_path, uint8_t cha
 
   uint8_t* have_msid = (uint8_t*)alloc_calloc(65536, 1);
   uint32_t* base_index_by_msid = (uint32_t*)alloc_calloc(65536, sizeof(uint32_t));
-  uint32_t* masks = (uint32_t*)alloc_malloc((size_t)entry_count * (size_t)frame_count * sizeof(uint32_t));
+  uint32_t* masks =
+      (uint32_t*)alloc_malloc((size_t)entry_count * (size_t)frame_count * sizeof(uint32_t));
   if (have_msid == NULL || base_index_by_msid == NULL || masks == NULL) {
     alloc_free(have_msid);
     alloc_free(base_index_by_msid);
@@ -314,4 +316,3 @@ int hurtbox_modes_can_hit_mask(uint8_t char_id, uint16_t msid, uint16_t frame, u
   *out_mask = mask & cap_mask;
   return 0;
 }
-

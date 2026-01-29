@@ -98,7 +98,8 @@ void reflector_bubbles_refresh(MslBatch* batch) {
         const uint32_t anim_u32 = batch->state.animation_index[idx];
         if (anim_u32 <= 0xFFFFu) {
           const uint16_t msid = (uint16_t)anim_u32;
-          const float anim_frame_f32 = msl_anim_frame_sanitize_f32(batch->state.anim_frame_f32[idx]);
+          const float anim_frame_f32 =
+              msl_anim_frame_sanitize_f32(batch->state.anim_frame_f32[idx]);
           const uint16_t frame = msl_anim_frame_floor_u16(anim_frame_f32);
 
           float m[12];
@@ -121,7 +122,8 @@ void reflector_bubbles_refresh(MslBatch* batch) {
       batch->state.reflector_y[idx] = ry;
       batch->state.reflector_radius[idx] = (isfinite(rr) && rr > 0.0f) ? rr : 0.0f;
 
-      const size_t flags_i = idx * (size_t)MSL_STATE_FLAGS_STRIDE + (size_t)MSL_STATE_FLAGS_2218_INDEX;
+      const size_t flags_i =
+          idx * (size_t)MSL_STATE_FLAGS_STRIDE + (size_t)MSL_STATE_FLAGS_2218_INDEX;
       uint8_t f = batch->state.state_flags[flags_i];
 
       // Slippi state_flags byte0 bit0x10 mirrors fp->reflecting (GALE01 fp+0x2218 bit4).
@@ -137,14 +139,15 @@ void reflector_bubbles_refresh(MslBatch* batch) {
       const uint16_t prev_a = batch->state.prev_action_id[idx];
       const uint8_t override_shine = (action_is_shine(a) || action_is_shine(prev_a)) ? 1u : 0u;
       const uint8_t override_guard_reflect =
-          ((a == (uint16_t)MSL_ACT_GUARD_REFLECT) || (prev_a == (uint16_t)MSL_ACT_GUARD_REFLECT)) ? 1u
-                                                                                                   : 0u;
+          ((a == (uint16_t)MSL_ACT_GUARD_REFLECT) || (prev_a == (uint16_t)MSL_ACT_GUARD_REFLECT))
+              ? 1u
+              : 0u;
       if (override_shine) {
         const uint8_t want = (action_is_shine_reflector_active(a) != 0) ? 1u : 0u;
         if (want) {
           f |= (uint8_t)MSL_STATE_FLAG_2218_IS_REFLECT_ACTIVE;
         } else {
-          f &= (uint8_t)~(uint8_t)MSL_STATE_FLAG_2218_IS_REFLECT_ACTIVE;
+          f &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_2218_IS_REFLECT_ACTIVE;
         }
         batch->state.state_flags[flags_i] = f;
       } else if (override_guard_reflect) {
@@ -158,7 +161,7 @@ void reflector_bubbles_refresh(MslBatch* batch) {
         if (want) {
           f |= (uint8_t)MSL_STATE_FLAG_2218_IS_REFLECT_ACTIVE;
         } else {
-          f &= (uint8_t)~(uint8_t)MSL_STATE_FLAG_2218_IS_REFLECT_ACTIVE;
+          f &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_2218_IS_REFLECT_ACTIVE;
         }
         batch->state.state_flags[flags_i] = f;
       }

@@ -9,4 +9,3 @@ typedef enum MslJumpInput {
   MSL_JUMP_INPUT_CSTICK = 2,
   MSL_JUMP_INPUT_XY = 3,
 } MslJumpInput;
-

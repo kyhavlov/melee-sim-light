@@ -87,15 +87,15 @@ static inline uint32_t ledge_grab_flags_for_fighter(uint32_t stage_id, float cur
     const float aabb_t = (max_y + ch->ledge_snap_y) + half_h;
 
     if (edge_x >= aabb_l && edge_x <= aabb_r && edge_y >= aabb_b && edge_y <= aabb_t) {
-          // Decomp: contact.x is required to be close to the floor endpoint:
-          // `cd->contact.x - edge.x < 5.0F`.
-          // refs/melee/src/melee/mp/mpcoll.c::mpColl_80044164
-          const float contact_x = clampf(cur_x, ledge_left->x0, ledge_left->x1);
-          if ((contact_x - edge_x) < k_ledge_edge_dx_max && cur_x < edge_x && ecb.bottom_y < edge_y) {
-            out |= MSL_COLLIDE_LEFT_LEDGE_GRAB;
-          }
-        }
+      // Decomp: contact.x is required to be close to the floor endpoint:
+      // `cd->contact.x - edge.x < 5.0F`.
+      // refs/melee/src/melee/mp/mpcoll.c::mpColl_80044164
+      const float contact_x = clampf(cur_x, ledge_left->x0, ledge_left->x1);
+      if ((contact_x - edge_x) < k_ledge_edge_dx_max && cur_x < edge_x && ecb.bottom_y < edge_y) {
+        out |= MSL_COLLIDE_LEFT_LEDGE_GRAB;
       }
+    }
+  }
 
   // Right ledge grab (must be facing toward -X / into stage).
   // Decomp: mpColl_80047E14 checks right ledge when facing_dir==-1 (or 0).
@@ -150,10 +150,9 @@ void mpcoll_env_update_ledge_grab(MslBatch* batch) {
       const float prev_y = batch->state.prev_pos_y[idx];
       const float fd = batch->state.facing[idx] ? 1.0f : -1.0f;
 
-      const uint32_t flags =
-          ledge_grab_flags_for_fighter(stage_id, cur_x, cur_y, prev_x, prev_y, fd,
-                                       batch->state.char_id[idx], batch->state.animation_index[idx],
-                                       batch->state.anim_frame_f32[idx]);
+      const uint32_t flags = ledge_grab_flags_for_fighter(
+          stage_id, cur_x, cur_y, prev_x, prev_y, fd, batch->state.char_id[idx],
+          batch->state.animation_index[idx], batch->state.anim_frame_f32[idx]);
       batch->state.coll_env_flags[idx] |= flags;
     }
   }

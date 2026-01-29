@@ -24,4 +24,3 @@ int shield_tilt_table_init(void);
 // Return a view over the loaded table for this character id.
 // Returns 0 on success; nonzero if missing/unloaded.
 int msl_shield_tilt_table_view(uint8_t char_id, MslShieldTiltTableView* out);
-

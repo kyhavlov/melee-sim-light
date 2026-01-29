@@ -10,4 +10,3 @@
 
 void shine_update_pre_physics(MslBatch* batch);
 void shine_update_post_collision(MslBatch* batch);
-

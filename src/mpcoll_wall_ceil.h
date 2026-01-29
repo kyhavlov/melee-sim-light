@@ -22,4 +22,3 @@
 //   - refs/melee/src/melee/lb/types.h::CollData (SurfaceData left_facing_wall/right_facing_wall/ceiling + contact)
 //   - refs/melee/src/common_structs.h (Collide_* env flag bit values)
 void mpcoll_wall_ceil_apply(MslBatch* batch);
-

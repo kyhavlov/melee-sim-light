@@ -25,4 +25,3 @@ void anim_timebase_update_pre_input(MslBatch* batch) {
     }
   }
 }
-

@@ -364,13 +364,11 @@ static inline float combat_damage_ftColl_804D8314_kbg_mul(void) {
   return 0.01f;
 }
 
-static inline float combat_damage_calc_kb_applied(const MslCommonParams* c, const MslCharParams* d,
-                                                  uint16_t defender_action_id,
-                                                  float defender_percent_pre, float defender_percent_temp,
-                                                  int hitbox_damage_i, uint16_t hitbox_kbg,
-                                                  uint16_t hitbox_wsk, uint16_t hitbox_bkb,
-                                                  float collision_kb_mul, uint8_t defender_dmg_x2225_b7,
-                                                  uint8_t defender_dmg_x2224_b2) {
+static inline float combat_damage_calc_kb_applied(
+    const MslCommonParams* c, const MslCharParams* d, uint16_t defender_action_id,
+    float defender_percent_pre, float defender_percent_temp, int hitbox_damage_i,
+    uint16_t hitbox_kbg, uint16_t hitbox_wsk, uint16_t hitbox_bkb, float collision_kb_mul,
+    uint8_t defender_dmg_x2225_b7, uint8_t defender_dmg_x2224_b2) {
   if (c == NULL) {
     return 0.0f;
   }
@@ -464,15 +462,16 @@ static inline float combat_damage_calc_kb_applied(const MslCommonParams* c, cons
     float percent_int = (float)(int)defender_percent_pre;  // fctiwz
     if (defender_dmg_x2225_b7) {
       // Use p_ftCommonData base ints instead of (int)percent_pre.
-      const int32_t base = defender_dmg_x2224_b2 ? c->ftcoll_percent_base_x6d8 : c->ftcoll_percent_base_x6d4;
+      const int32_t base =
+          defender_dmg_x2224_b2 ? c->ftcoll_percent_base_x6d8 : c->ftcoll_percent_base_x6d4;
       percent_int = (float)base;
     }
     const float s = percent_int + defender_percent_temp;
-    const float dmg = (float)hitbox_damage_i;                    // HitCapsule.unk_count analogue
+    const float dmg = (float)hitbox_damage_i;  // HitCapsule.unk_count analogue
 
     // term = s * (p_ftCommonData->0x110 + p_ftCommonData->0x114 * dmg)
     // refs/melee/build/GALE01/asm/melee/ft/ftcoll.s::ftColl_80079EA8 (0x8007A008..0x8007A034)
-    const float term = s * (c->kb_base_term + c->kb_dmg_mul * dmg);  // 0x110, 0x114
+    const float term = s * (c->kb_base_term + c->kb_dmg_mul * dmg);                  // 0x110, 0x114
     const float inner = c->kb_growth_mul * (weight_factor * term) + c->kb_base_add;  // 0x11C, 0x120
     kb = bkb_f + kbg_scale * inner;
 
@@ -553,7 +552,8 @@ static inline uint16_t combat_damage_hitstun_from_kb(const MslCommonParams* c, f
   return (uint16_t)hs;
 }
 
-static inline uint8_t combat_damage_severity_u8_from_kb(const MslCommonParams* c, float kb_applied) {
+static inline uint8_t combat_damage_severity_u8_from_kb(const MslCommonParams* c,
+                                                        float kb_applied) {
   // Decomp: ftCo_8008DCE0 derives severity by comparing `kb_applied * x154` against thresholds:
   // - < x158 => 0
   // - < x15C => 1
@@ -576,9 +576,10 @@ static inline uint8_t combat_damage_severity_u8_from_kb(const MslCommonParams* c
   return 3;
 }
 
-static inline void combat_damage_enter_state(const MslCommonParams* c, MslBatch* batch, size_t d_idx,
-                                             uint8_t defender_on_ground, uint8_t hurt_height,
-                                             float kb_applied, float kb_angle_rad) {
+static inline void combat_damage_enter_state(const MslCommonParams* c, MslBatch* batch,
+                                             size_t d_idx, uint8_t defender_on_ground,
+                                             uint8_t hurt_height, float kb_applied,
+                                             float kb_angle_rad) {
   if (batch == NULL) {
     return;
   }
@@ -668,9 +669,8 @@ static inline void combat_damage_enter_state(const MslCommonParams* c, MslBatch*
   msl_anim_timebase_enter(batch, d_idx, 0.0f, 1.0f);
 }
 
-static inline void combat_mutations_pass1_future_apply_body_hit_invincible(MslBatch* batch, size_t a_idx,
-                                                                           size_t hb_i,
-                                                                           uint16_t attacker_motion_id) {
+static inline void combat_mutations_pass1_future_apply_body_hit_invincible(
+    MslBatch* batch, size_t a_idx, size_t hb_i, uint16_t attacker_motion_id) {
   if (batch == NULL) {
     return;
   }
@@ -723,9 +723,8 @@ static inline void combat_mutations_pass1_future_apply_body_hit_invincible(MslBa
 // - attribution fields compared in-suite (instance_hit_by, last_hit_by)
 static inline void combat_mutations_pass1_future_apply_body_hit(MslBatch* batch, size_t a_idx,
                                                                 size_t d_idx, int attacker,
-                                                                int defender,
-                                                                size_t hb_i, size_t cap_i,
-                                                                int int_dmg,
+                                                                int defender, size_t hb_i,
+                                                                size_t cap_i, int int_dmg,
                                                                 uint16_t attacker_motion_id) {
   if (batch == NULL) {
     return;
@@ -1066,10 +1065,9 @@ void combat_apply_item_hit(MslBatch* batch, int batch_index, int attacker, int d
     return;
   }
 
-  const float kb_applied =
-      combat_damage_calc_kb_applied(c, d_ch, d_motion_id, percent_pre, dmg_temp, int_dmg, kbg, wsk,
-                                    bkb, 1.0f, batch->state.dmg_x2225_b7[d_idx],
-                                    batch->state.dmg_x2224_b2[d_idx]);
+  const float kb_applied = combat_damage_calc_kb_applied(
+      c, d_ch, d_motion_id, percent_pre, dmg_temp, int_dmg, kbg, wsk, bkb, 1.0f,
+      batch->state.dmg_x2225_b7[d_idx], batch->state.dmg_x2224_b2[d_idx]);
   const float kb_angle_rad =
       combat_damage_calc_angle_radians(c, angle, defender_on_ground, kb_applied);
 
@@ -1183,7 +1181,8 @@ void combat_apply_item_shield_hit(MslBatch* batch, int batch_index, int attacker
   const float ls_stun =
       (light * (c->shield_stun_lightshield_max - c->shield_stun_lightshield_min)) +
       c->shield_stun_lightshield_min;
-  float stun_frames = c->shield_stun_mul * ((float)int_dmg * (1.0f - ls_stun)) + c->shield_stun_base;
+  float stun_frames =
+      c->shield_stun_mul * ((float)int_dmg * (1.0f - ls_stun)) + c->shield_stun_base;
   if (!(stun_frames > 0.0f)) {
     stun_frames = 1.0f;
   }
@@ -1205,9 +1204,10 @@ void combat_apply_item_shield_hit(MslBatch* batch, int batch_index, int attacker
   (void)a_idx;
 }
 
-static inline void combat_mutations_pass1_future_apply_shield_hit(
-    MslBatch* batch, size_t a_idx, size_t d_idx, int max_int_dmg, int shield_damage_taken,
-    uint16_t attacker_motion_id) {
+static inline void combat_mutations_pass1_future_apply_shield_hit(MslBatch* batch, size_t a_idx,
+                                                                  size_t d_idx, int max_int_dmg,
+                                                                  int shield_damage_taken,
+                                                                  uint16_t attacker_motion_id) {
   if (batch == NULL) {
     return;
   }
@@ -1299,7 +1299,8 @@ static inline void combat_mutations_pass1_future_apply_shield_hit(
   }
   // GuardSetOff uses ftCo_SM_GuardDamage as the underlying animation timeline (submotion id 40).
   // refs/melee/src/melee/ft/chara/ftCommon/forward.h (ftCo_Submotion)
-  const float end_frame = msl_anim_end_frame(batch->state.char_id[d_idx], (uint16_t)MSL_SM_GUARD_DAMAGE);
+  const float end_frame =
+      msl_anim_end_frame(batch->state.char_id[d_idx], (uint16_t)MSL_SM_GUARD_DAMAGE);
   float anim_rate = 1.0f;
   if (end_frame > 0.0f) {
     anim_rate = (end_frame + 0.1f) / stun_frames;
@@ -1647,7 +1648,8 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
         if (!hitlist_allows(batch, bi, attacker, hit_group, defender, defender_iid)) {
           continue;
         }
-        const uint8_t rehit_frames = hitlist_rehit_frames_from_u16_7(batch->state.hitbox_u16_7[hb_i]);
+        const uint8_t rehit_frames =
+            hitlist_rehit_frames_from_u16_7(batch->state.hitbox_u16_7[hb_i]);
 
         for (uint8_t cap_id = 0; cap_id < hurtcap_count; cap_id++) {
           const size_t cap_i = idx_hurtcap(bi, defender, (int)cap_id);
@@ -1667,7 +1669,8 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
           }
           // Combat Mutations Pass 1 (BODY-only).
           if (defender_no_damage) {
-            combat_mutations_pass1_future_apply_body_hit_invincible(batch, a_idx, hb_i, a_motion_id);
+            combat_mutations_pass1_future_apply_body_hit_invincible(batch, a_idx, hb_i,
+                                                                    a_motion_id);
           } else {
             combat_mutations_pass1_future_apply_body_hit(batch, a_idx, d_idx, attacker, defender,
                                                          hb_i, cap_i, int_dmg, a_motion_id);

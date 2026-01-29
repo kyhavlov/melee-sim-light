@@ -151,10 +151,11 @@ void shields_refresh(MslBatch* batch) {
             // - Use stick direction (main stick) and facing to choose an angle frame.
             // - Blend towards that angled center based on inertial stick magnitude state (x4; 0..1).
             MslShieldTiltTableView tv;
-            const uint8_t has_tv = (msl_shield_tilt_table_view(batch->state.char_id[idx], &tv) == 0 &&
-                                    tv.xyz != NULL && tv.frame_count > 0)
-                                       ? 1
-                                       : 0;
+            const uint8_t has_tv =
+                (msl_shield_tilt_table_view(batch->state.char_id[idx], &tv) == 0 &&
+                 tv.xyz != NULL && tv.frame_count > 0)
+                    ? 1
+                    : 0;
 
             // Guard tilt state update (independent of whether a shield table exists for this character).
             const float facing_dir = batch->state.facing[idx] ? 1.0f : -1.0f;
@@ -242,10 +243,11 @@ void shields_refresh(MslBatch* batch) {
               sz = pos_z + (dz * scale_y);
             }
 
-            const float trig = trigger_unit_from_input(batch->state.input_buttons[idx],
-                                                       batch->state.input_l[idx],
-                                                       batch->state.input_r[idx]);
-            const float light = (denom > 0.0f) ? clamp01((trig - c->trigger_deadzone) / denom) : 0.0f;
+            const float trig =
+                trigger_unit_from_input(batch->state.input_buttons[idx], batch->state.input_l[idx],
+                                        batch->state.input_r[idx]);
+            const float light =
+                (denom > 0.0f) ? clamp01((trig - c->trigger_deadzone) / denom) : 0.0f;
             const float hp_ratio = clamp01(batch->state.shield_hp[idx] / c->start_shield_health);
             const float light_scale =
                 (light * (c->shield_size_lightshield_max - c->shield_size_lightshield_min)) +
@@ -281,7 +283,7 @@ void shields_refresh(MslBatch* batch) {
       if (sr > 0.0f) {
         f |= (uint8_t)MSL_STATE_FLAG_221B_IS_SHIELD_ACTIVE;
       } else {
-        f &= (uint8_t)~(uint8_t)MSL_STATE_FLAG_221B_IS_SHIELD_ACTIVE;
+        f &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221B_IS_SHIELD_ACTIVE;
       }
       batch->state.state_flags[flags_i] = f;
     }

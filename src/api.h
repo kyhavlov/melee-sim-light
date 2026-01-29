@@ -422,9 +422,9 @@ typedef struct MslSample {
 // Debug/validation helper: read a small set of internal locomotion/input-history fields.
 // This struct is packed for stable C<->Python inspection in tests.
 typedef struct MslDebugInternals {
-  uint8_t tilt_timer_x[MSL_MAX_PLAYERS];         // fp->x670_timer_lstick_tilt_x
-  uint8_t turn_frames_to_turn[MSL_MAX_PLAYERS];  // fp->mv.co.turn.frames_to_turn
-  uint8_t turn_has_turned[MSL_MAX_PLAYERS];      // fp->mv.co.turn.has_turned
+  uint8_t tilt_timer_x[MSL_MAX_PLAYERS];             // fp->x670_timer_lstick_tilt_x
+  uint8_t turn_frames_to_turn[MSL_MAX_PLAYERS];      // fp->mv.co.turn.frames_to_turn
+  uint8_t turn_has_turned[MSL_MAX_PLAYERS];          // fp->mv.co.turn.has_turned
   uint8_t guard_reflect_timer_x14[MSL_MAX_PLAYERS];  // mv.co.guard.x14 (+1 bias; see MslSeed)
   // Fighter attack identity internals (decomp: fp->x2068 / fp->x206C).
   uint16_t attack_id[MSL_MAX_PLAYERS];

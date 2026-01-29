@@ -266,8 +266,8 @@ static uint8_t floor_intersect_segment(float x0, float y0, float x1, float y1, f
   return 1;
 }
 
-static uint8_t floor_sweep_check(const MslStageFloorGraph* g, float ax, float ay, float bx, float by,
-                                 int prefer_line_idx, int* out_line_idx, float* out_ix,
+static uint8_t floor_sweep_check(const MslStageFloorGraph* g, float ax, float ay, float bx,
+                                 float by, int prefer_line_idx, int* out_line_idx, float* out_ix,
                                  float* out_iy, float* out_nx, float* out_ny) {
   // Decomp: mpCheckFloor iterates floor lines, intersects segment A->B with each, and chooses the
   // closest intersection to A (min dist^2), with stage-defined deterministic ordering on ties.
@@ -461,9 +461,8 @@ void mpcoll_ground_apply(MslBatch* batch) {
 
       if (was_grounded && prefer_line_idx >= 0) {
         float y_corr = 0.0f;
-        const int out_line_idx =
-            floor_dd90_project(g, prefer_line_idx, cur_bottom_x, cur_bottom_y, &y_corr, &floor_nx,
-                               &floor_ny);
+        const int out_line_idx = floor_dd90_project(g, prefer_line_idx, cur_bottom_x, cur_bottom_y,
+                                                    &y_corr, &floor_nx, &floor_ny);
         if (out_line_idx >= 0) {
           // mpLib_8004DD90_Floor returns a signed correction; for stable grounded frames we only
           // need to resolve penetration. If we are already above the floor due to upstream

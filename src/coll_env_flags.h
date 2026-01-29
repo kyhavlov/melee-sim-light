@@ -16,9 +16,9 @@
 enum {
   // Wall contact.
   // refs/melee/src/common_structs.h
-  MSL_COLLIDE_LEFT_WALL_PUSH = 0x00000001u,  // Collide_LeftWallPush
-  MSL_COLLIDE_LEFT_WALL_HUG = 0x00000020u,   // Collide_LeftWallHug
-  MSL_COLLIDE_LEFT_WALL_MASK = 0x0000003Fu,  // Collide_LeftWallMask
+  MSL_COLLIDE_LEFT_WALL_PUSH = 0x00000001u,   // Collide_LeftWallPush
+  MSL_COLLIDE_LEFT_WALL_HUG = 0x00000020u,    // Collide_LeftWallHug
+  MSL_COLLIDE_LEFT_WALL_MASK = 0x0000003Fu,   // Collide_LeftWallMask
   MSL_COLLIDE_RIGHT_WALL_PUSH = 0x00000040u,  // Collide_RightWallPush
   MSL_COLLIDE_RIGHT_WALL_HUG = 0x00000800u,   // Collide_RightWallHug
   MSL_COLLIDE_RIGHT_WALL_MASK = 0x00000FC0u,  // Collide_RightWallMask

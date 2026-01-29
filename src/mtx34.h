@@ -29,4 +29,3 @@ static inline void msl_mtx34_mul_point(const float m[12], const float v[3], floa
 #ifdef __cplusplus
 }  // extern "C"
 #endif
-

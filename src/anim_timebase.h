@@ -74,7 +74,8 @@ static inline int16_t msl_floor_i16_from_q16_16(int32_t x) {
 
 static inline void msl_anim_timebase_recompute_derived(MslBatch* batch, size_t idx) {
   batch->state.anim_frame_f32[idx] = msl_f32_from_q16_16(batch->state.anim_frame_fp_q16_16[idx]);
-  batch->state.action_frame[idx] = msl_floor_i16_from_q16_16(batch->state.anim_frame_fp_q16_16[idx]);
+  batch->state.action_frame[idx] =
+      msl_floor_i16_from_q16_16(batch->state.anim_frame_fp_q16_16[idx]);
 }
 
 static inline void msl_anim_timebase_seed(MslBatch* batch, size_t idx, float cur_anim_frame_f32,

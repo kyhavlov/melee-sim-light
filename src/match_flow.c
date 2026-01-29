@@ -290,9 +290,8 @@ void match_flow_update_pre_anim(MslBatch* batch) {
         const float x20 = entry_x20(batch, idx);
         if (a == (uint16_t)MSL_ACT_ENTRY_START) {
           // Update to the next-frame position using the decremented timer (t).
-          const float base_y =
-              entry_base_y_from_entry_start(batch->state.pos_y[idx], x20,
-                                            (uint8_t)(t + 1), entry_start_frames);
+          const float base_y = entry_base_y_from_entry_start(batch->state.pos_y[idx], x20,
+                                                             (uint8_t)(t + 1), entry_start_frames);
           if (t == 0) {
             enter_entry_end(batch, idx, c, base_y, x20);
           } else if (entry_start_frames > 0) {
@@ -303,8 +302,7 @@ void match_flow_update_pre_anim(MslBatch* batch) {
         } else {
           // EntryEnd keeps animation frozen; update position while the timer is active.
           const float base_y = entry_base_y_from_entry_end(batch->state.pos_y[idx], x20,
-                                                          (uint8_t)(t + 1),
-                                                          entry_start_frames);
+                                                           (uint8_t)(t + 1), entry_start_frames);
           if (t == 0) {
             // Transition to Fall; preserve the current EntryEnd position so Fall physics can take
             // over from the last EntryEnd pose.

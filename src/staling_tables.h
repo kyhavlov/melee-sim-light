@@ -22,4 +22,3 @@ uint16_t staling_move_id_from_msid(uint8_t char_id, uint16_t msid);
 // Decomp: `Fighter_804D6548[i]` for i=0..8 in ft_80089118.
 // refs/melee/src/melee/ft/ft_0881.c::ft_80089118
 const float* staling_weights_table(void);
-

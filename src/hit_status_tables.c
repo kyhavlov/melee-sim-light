@@ -8,7 +8,8 @@
 
 enum {
   HITSTATUS_MAGIC_LEN = 8,
-  HITSTATUS_HDR_BYTES = 20,  // magic[8] + ver[u32] + frame_count[u16] + reserved[u16] + entry_count[u32]
+  HITSTATUS_HDR_BYTES =
+      20,  // magic[8] + ver[u32] + frame_count[u16] + reserved[u16] + entry_count[u32]
   HITSTATUS_VERSION_V1 = 1,
   INDEX_REC_BYTES_V1 = 12,   // msid[u16] + reserved[u16] + payload_bytes[u32] + payload_off[u32]
   PAYLOAD_REC_BYTES_V1 = 1,  // u8 status per frame
@@ -271,4 +272,3 @@ int hit_status_get(uint8_t char_id, uint16_t msid, uint16_t frame, uint8_t* out_
   *out_status = t->status[base + (uint32_t)f];
   return 0;
 }
-

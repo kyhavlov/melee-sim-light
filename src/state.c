@@ -246,20 +246,19 @@ int state_alloc(MslStateSoA* state, int batch_size) {
       !state->wall_kind || !state->ceiling_contact_x || !state->ceiling_contact_y ||
       !state->ceiling_normal_x || !state->ceiling_normal_y || !state->ceiling_id ||
       !state->coll_env_flags || !state->coll_prev_env_flags || !state->action_id ||
-      !state->prev_action_id ||
-      !state->action_frame || !state->match_flow_timer || !state->downwait_timer ||
-      !state->anim_frame_f32 || !state->anim_frame_fp_q16_16 || !state->frame_speed_mul_fp_q16_16 ||
-      !state->jumps_left || !state->stocks || !state->guard_tilt_x8 || !state->guard_tilt_x4 ||
-      !state->guard_reflect_timer_x14 || !state->kneebend_jump_input ||
-      !state->kneebend_is_short_hop || !state->tilt_timer_x || !state->tilt_timer_y ||
-      !state->fall_fast ||
-      !state->ledge_side || !state->stage_ledge_occupant_left || !state->stage_ledge_occupant_right ||
+      !state->prev_action_id || !state->action_frame || !state->match_flow_timer ||
+      !state->downwait_timer || !state->anim_frame_f32 || !state->anim_frame_fp_q16_16 ||
+      !state->frame_speed_mul_fp_q16_16 || !state->jumps_left || !state->stocks ||
+      !state->guard_tilt_x8 || !state->guard_tilt_x4 || !state->guard_reflect_timer_x14 ||
+      !state->kneebend_jump_input || !state->kneebend_is_short_hop || !state->tilt_timer_x ||
+      !state->tilt_timer_y || !state->fall_fast || !state->ledge_side ||
+      !state->stage_ledge_occupant_left || !state->stage_ledge_occupant_right ||
       !state->ledge_cooldown || !state->fallspecial_xc || !state->turn_has_turned ||
       !state->turn_frames_to_turn || !state->lr_press_timer || !state->x672_input_timer ||
       !state->x673 || !state->x674 || !state->x675 || !state->x676_x || !state->x677_y ||
-      !state->x678 || !state->x679_x || !state->x67A_y || !state->x67B ||
-      !state->x67C || !state->x67D || !state->x67E || !state->x680 || !state->x681 ||
-      !state->x682 || !state->x683 || !state->x684 || !state->ucf_padbuf_index ||
+      !state->x678 || !state->x679_x || !state->x67A_y || !state->x67B || !state->x67C ||
+      !state->x67D || !state->x67E || !state->x680 || !state->x681 || !state->x682 ||
+      !state->x683 || !state->x684 || !state->ucf_padbuf_index ||
       !state->ucf_padbuf_sdrop_up_frames || !state->ucf_padbuf_stick_x ||
       !state->ucf_padbuf_stick_y || !state->percent || !state->percent_temp ||
       !state->dmg_x2225_b7 || !state->dmg_x2224_b2 || !state->shield_hp || !state->hitlag ||
