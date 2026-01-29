@@ -14,13 +14,14 @@ ANIM_MAGIC = b"SSANIM01"
 ANIM_VERSION = 3
 
 ECB_MAGIC = b"MSLECB01"
-ECB_VERSION = 2
+# Bump when the extents payload meaning/axis mapping changes. The loader rejects mismatches.
+ECB_VERSION = 3
 
 # SSANIM01 v3 matrix record layout: <12f (3x4) => (m00,m01,m02,tx, m10,m11,m12,ty, m20,m21,m22,tz)
-# tools/extraction/extract_fighter_anims.py:_mtx_concat emits tx at float index 3 and ty at float index 7.
+# tools/extraction/extract_fighter_anims.py:_mtx_concat emits ty at float index 7 and tz at float index 11.
 _MAT_BYTES = 12 * 4
-_MAT_TX_BYTE_OFF = 3 * 4
 _MAT_TY_BYTE_OFF = 7 * 4
+_MAT_TZ_BYTE_OFF = 11 * 4
 
 # ECB extents payload is float32[frame_count][4] in order:
 #   (min_x, max_x, min_y, max_y)
@@ -139,16 +140,21 @@ def _extract_ecb_extents_for_anim_file(*, anims: Path, attrs: Path) -> list[_Ecb
                 max_y = -math.inf
                 for ji in ecb_joint_indices:
                     base = frame_base + ji * _MAT_BYTES
-                    tx = float(_f32_le(buf, base + _MAT_TX_BYTE_OFF))
+                    # Coordinate mapping note:
+                    # - In this project, stage/world horizontal (pos_x) is aligned to SSANIM01's Z
+                    #   translation component, not X. This matches downstream consumers that treat
+                    #   TransN's z component as the horizontal axis (e.g., ledge snapping).
+                    # - Therefore, extract (min_x,max_x) from tz and (min_y,max_y) from ty.
+                    tz = float(_f32_le(buf, base + _MAT_TZ_BYTE_OFF))
                     ty = float(_f32_le(buf, base + _MAT_TY_BYTE_OFF))
-                    if not (math.isfinite(tx) and math.isfinite(ty)):
+                    if not (math.isfinite(tz) and math.isfinite(ty)):
                         raise ValueError(
                             f"SSANIM01: non-finite ECB joint xy for msid={msid} frame={fi} joint_i={ji}"
                         )
-                    if tx < min_x:
-                        min_x = tx
-                    if tx > max_x:
-                        max_x = tx
+                    if tz < min_x:
+                        min_x = tz
+                    if tz > max_x:
+                        max_x = tz
                     if ty < min_y:
                         min_y = ty
                     if ty > max_y:
@@ -241,4 +247,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
