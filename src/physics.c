@@ -543,6 +543,46 @@ void physics_integrate(MslBatch* batch) {
             // Decomp: ftFx_SpecialSEnd_Phys applies ground friction using ftFox_DatAttrs.x38.
             // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c::ftFx_SpecialSEnd_Phys
             gr_vel += ground_friction_step_delta(gr_vel, ch->illusion_ground_friction);
+          } else if (action_id == (uint16_t)MSL_ACT_ESCAPE_F ||
+                     action_id == (uint16_t)MSL_ACT_ESCAPE_B) {
+            // Roll (EscapeF/EscapeB): decomp-shaped ground phys helper chain.
+            // Decomp: ftCo_Escape_Phys -> ft_80085004 -> ft_80085030.
+            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Escape.c::ftCo_Escape_Phys
+            // refs/melee/src/melee/ft/ft_081B.c::{ft_80085004,ft_80085030}
+            //
+            // Root motion signal:
+            // - Decomp ft_80085030 root-motion branch is gated by `if (fp->x594_b0)`.
+            // - This sim does not model fp->x594_b0; for this movement-only core, treat "TransN
+            //   present for (msid, frame)" as the decomp-shaped proxy.
+            //
+            // Direction:
+            // - Decomp uses fp->facing_dir1, but it is normally a copy of facing_dir (engine init
+            //   path sets facing_dir1 = facing_dir).
+            //   refs/melee/src/melee/ft/fighter.c:264 and :955 (fp->facing_dir1 = fp->facing_dir)
+            // - We use batch->state.facing-derived `facing_dir`.
+            float dxyz[3];
+            if (physics_try_get_transn_delta_xyz(ch, batch->state.char_id[idx],
+                                                 batch->state.animation_index[idx],
+                                                 batch->state.anim_frame_f32[idx], dxyz)) {
+              // Decomp: ft_80085030 "drive to TransN vel" via xE4 = transN_vel - gr_vel.
+              // Setting gr_vel directly is equivalent after applying the accel step.
+              // refs/melee/src/melee/ft/ft_081B.c::ft_80085030
+              gr_vel = dxyz[2] * facing_dir;
+            } else {
+              // Decomp: ft_80085030 applies ftCommon_ApplyFrictionGround when not root-motion.
+              // refs/melee/src/melee/ft/ftcommon.c::ftCommon_ApplyFrictionGround
+              gr_vel += ground_friction_step_delta(gr_vel, ch->gr_friction);
+            }
+          } else if (action_id == (uint16_t)MSL_ACT_ESCAPE_N) {
+            // Spotdodge (EscapeN): decomp ground friction helper.
+            // Decomp: ftCo_EscapeN_Phys -> ft_80084F3C (high-speed friction mul).
+            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Escape.c::ftCo_EscapeN_Phys
+            // refs/melee/src/melee/ft/ft_081B.c::ft_80084F3C
+            float friction = ch->gr_friction;
+            if (msl_absf(gr_vel) > ch->walk_max_vel) {
+              friction *= c->high_speed_friction_mul;
+            }
+            gr_vel += ground_friction_step_delta(gr_vel, friction);
           } else if (physics_action_is_common_ground_friction_only(action_id)) {
             float friction = ch->gr_friction;
             if (msl_absf(gr_vel) > ch->walk_max_vel) {

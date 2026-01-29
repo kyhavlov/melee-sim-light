@@ -100,17 +100,6 @@ void escape_air_update(MslBatch* batch, const MslCommonParams* c, size_t idx) {
 // Escape.c
 // ---------
 
-static float escape_apply_friction_ground(float gr_vel, float friction) {
-  // refs/melee/src/melee/ft/ftcommon.c::ftCommon_ApplyFrictionGround
-  float accel = friction;
-  if (msl_absf(accel) > msl_absf(gr_vel)) {
-    accel = -gr_vel;
-  } else if (gr_vel > 0.0f) {
-    accel = -accel;
-  }
-  return gr_vel + accel;
-}
-
 static inline void escape_enter_wait(MslBatch* batch, size_t idx) {
   // Decomp: ft_8008A2BC -> ft_8008A348 enters Wait with anim frame 0.0.
   // refs/melee/src/melee/ft/ft_0892.c:193-236.
@@ -213,21 +202,14 @@ void escape_update_grounded(MslBatch* batch, const MslCommonParams* c, const Msl
   }
   batch->state.animation_index[idx] = smid;
 
-  // Physics (approx): apply ground friction each frame.
-  //
+  // NOTE: Escape ground velocity updates are a single-writer in physics_integrate().
   // Decomp:
-  // - EscapeF/B phys: ftCo_Escape_Phys -> ft_80085004 -> ft_80085030 (friction unless root-motion).
-  //   refs/melee/src/melee/ft/chara/ftCommon/ftCo_Escape.c:188-198 and refs/melee/src/melee/ft/ft_081B.c:1424-1449
-  // - EscapeN phys: ftCo_EscapeN_Phys -> ft_80084F3C (uses high-speed friction mul).
-  //   refs/melee/src/melee/ft/chara/ftCommon/ftCo_Escape.c:288-297 and refs/melee/src/melee/ft/ft_081B.c:1398-1423
-  float friction = ch->gr_friction;
-  if (a == (uint16_t)MSL_ACT_ESCAPE_N) {
-    if (msl_absf(batch->state.speed_ground_x_self[idx]) > ch->walk_max_vel) {
-      friction *= c->high_speed_friction_mul;
-    }
-  }
-  batch->state.speed_ground_x_self[idx] =
-      escape_apply_friction_ground(batch->state.speed_ground_x_self[idx], friction);
+  // - EscapeF/B phys: ftCo_Escape_Phys -> ft_80085004 -> ft_80085030
+  //   refs/melee/src/melee/ft/chara/ftCommon/ftCo_Escape.c::ftCo_Escape_Phys
+  //   refs/melee/src/melee/ft/ft_081B.c::{ft_80085004,ft_80085030}
+  // - EscapeN phys: ftCo_EscapeN_Phys -> ft_80084F3C
+  //   refs/melee/src/melee/ft/chara/ftCommon/ftCo_Escape.c::ftCo_EscapeN_Phys
+  //   refs/melee/src/melee/ft/ft_081B.c::ft_80084F3C
 
   // Anim end -> Wait.
   // Decomp: ftCo_Escape_Anim / ftCo_EscapeN_Anim.
