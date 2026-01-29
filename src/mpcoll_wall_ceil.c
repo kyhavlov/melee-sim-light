@@ -796,6 +796,86 @@ void mpcoll_wall_ceil_apply(MslBatch* batch) {
             batch->state.coll_env_flags[idx] |= (uint32_t)MSL_COLLIDE_LEFT_WALL_MASK;
           }
         }
+
+        // Airborne wall checks in-engine consider more than just the ECB side point.
+        //
+        // Why 3 points?
+        // - mpColl computes world-space ECB points as `coll->cur_pos + coll->ecb.{left,bottom,top}` and
+        //   runs sweep checks against those paths.
+        // - Specifically, mpColl_80044E10_RightWall checks the ECB left-side point first (hug), then the
+        //   ECB bottom point, then the ECB top point (plus additional vertical/diagonal helpers we do not
+        //   yet model in this lite sim). LeftWall uses the symmetric ECB right-side point first.
+        // - In this simulator, `msl_ecb_world_points_sample()` provides those same world-space points
+        //   (right_x/right_y, bottom_x/bottom_y, top_x/top_y) from ISO-extracted ECB tables.
+        //
+        // Determinism + selection:
+        // - We preserve a deterministic priority order that mirrors mpColl's primary check ordering:
+        //   side-point sweep first, then bottom, then top.
+        // - Each sweep's line selection is deterministic inside wall_sweep_check(): nearest (dist2),
+        //   then prefer prev/adjacent line id, then ISO-derived segment_i tie-break.
+        //
+        // Decomp refs:
+        // - refs/melee/src/melee/mp/mpcoll.c::mpColl_80044E10_RightWall (ordering over ECB points)
+        // - refs/melee/src/melee/mp/mplib.c::mpLib_8004E684_RightWall / ::mpLib_8004E398_LeftWall (projection)
+        if (batch->state.wall_kind[idx] == 0) {
+          const float cur_bx = cur_ecb.bottom_x;
+          const float cur_by = cur_ecb.bottom_y;
+          const float prev_bx = prev_ecb.bottom_x;
+          const float prev_by = prev_ecb.bottom_y;
+
+          float ix2 = 0.0f, iy2 = 0.0f;
+          float nx2 = -1.0f, ny2 = 0.0f;
+          int hit2 = -1;
+          if (wall_sweep_check(lwg, 1, prev_bx, prev_by, cur_bx, cur_by, prefer_line_idx, &hit2,
+                               &ix2, &iy2, &nx2, &ny2)) {
+            float x_corr = 0.0f;
+            const int out_line_idx =
+                left_wall_e398_project(lwg, hit2, cur_bx, cur_by, &x_corr, &nx2, &ny2);
+            if (out_line_idx >= 0) {
+              if (x_corr > 0.0f) {
+                x_corr = 0.0f;
+              }
+              batch->state.pos_x[idx] += x_corr;
+              batch->state.wall_kind[idx] = MSL_WALL_LEFT;
+              batch->state.wall_id[idx] = lwg->lines[(size_t)out_line_idx].segment_i;
+              batch->state.wall_contact_x[idx] = ix2;
+              batch->state.wall_contact_y[idx] = iy2;
+              batch->state.wall_normal_x[idx] = nx2;
+              batch->state.wall_normal_y[idx] = ny2;
+              batch->state.coll_env_flags[idx] |= (uint32_t)MSL_COLLIDE_LEFT_WALL_MASK;
+            }
+          }
+        }
+
+        if (batch->state.wall_kind[idx] == 0) {
+          const float cur_tx = cur_ecb.top_x;
+          const float cur_ty = cur_ecb.top_y;
+          const float prev_tx = prev_ecb.top_x;
+          const float prev_ty = prev_ecb.top_y;
+
+          float ix2 = 0.0f, iy2 = 0.0f;
+          float nx2 = -1.0f, ny2 = 0.0f;
+          int hit2 = -1;
+          if (wall_sweep_check(lwg, 1, prev_tx, prev_ty, cur_tx, cur_ty, prefer_line_idx, &hit2,
+                               &ix2, &iy2, &nx2, &ny2)) {
+            float x_corr = 0.0f;
+            const int out_line_idx =
+                left_wall_e398_project(lwg, hit2, cur_tx, cur_ty, &x_corr, &nx2, &ny2);
+            if (out_line_idx >= 0) {
+              if (x_corr > 0.0f) {
+                x_corr = 0.0f;
+              }
+              batch->state.pos_x[idx] += x_corr;
+              batch->state.wall_kind[idx] = MSL_WALL_LEFT;
+              batch->state.wall_id[idx] = lwg->lines[(size_t)out_line_idx].segment_i;
+              batch->state.wall_contact_x[idx] = ix2;
+              batch->state.wall_contact_y[idx] = iy2;
+              batch->state.wall_normal_x[idx] = nx2;
+              batch->state.wall_normal_y[idx] = ny2;
+              batch->state.coll_env_flags[idx] |= (uint32_t)MSL_COLLIDE_LEFT_WALL_MASK;
+            }
+          }
+        }
       }
 
       // Right wall collision (hit by the fighter's left ECB side). If already touching a left wall,
@@ -855,6 +935,69 @@ void mpcoll_wall_ceil_apply(MslBatch* batch) {
             batch->state.wall_normal_x[idx] = nx;
             batch->state.wall_normal_y[idx] = ny;
             batch->state.coll_env_flags[idx] |= (uint32_t)MSL_COLLIDE_RIGHT_WALL_MASK;
+          }
+        }
+
+        // See the decomp notes above (LeftWall section) for why we also sweep ECB bottom/top points.
+        // We keep the same deterministic priority order as mpColl_80044E10_RightWall:
+        // side-point (left) first, then bottom, then top.
+        if (batch->state.wall_kind[idx] == 0) {
+          const float cur_bx = cur_ecb.bottom_x;
+          const float cur_by = cur_ecb.bottom_y;
+          const float prev_bx = prev_ecb.bottom_x;
+          const float prev_by = prev_ecb.bottom_y;
+
+          float ix2 = 0.0f, iy2 = 0.0f;
+          float nx2 = 1.0f, ny2 = 0.0f;
+          int hit2 = -1;
+          if (wall_sweep_check(rwg, 0, prev_bx, prev_by, cur_bx, cur_by, prefer_line_idx, &hit2,
+                               &ix2, &iy2, &nx2, &ny2)) {
+            float x_corr = 0.0f;
+            const int out_line_idx =
+                right_wall_e684_project(rwg, hit2, cur_bx, cur_by, &x_corr, &nx2, &ny2);
+            if (out_line_idx >= 0) {
+              if (x_corr < 0.0f) {
+                x_corr = 0.0f;
+              }
+              batch->state.pos_x[idx] += x_corr;
+              batch->state.wall_kind[idx] = MSL_WALL_RIGHT;
+              batch->state.wall_id[idx] = rwg->lines[(size_t)out_line_idx].segment_i;
+              batch->state.wall_contact_x[idx] = ix2;
+              batch->state.wall_contact_y[idx] = iy2;
+              batch->state.wall_normal_x[idx] = nx2;
+              batch->state.wall_normal_y[idx] = ny2;
+              batch->state.coll_env_flags[idx] |= (uint32_t)MSL_COLLIDE_RIGHT_WALL_MASK;
+            }
+          }
+        }
+
+        if (batch->state.wall_kind[idx] == 0) {
+          const float cur_tx = cur_ecb.top_x;
+          const float cur_ty = cur_ecb.top_y;
+          const float prev_tx = prev_ecb.top_x;
+          const float prev_ty = prev_ecb.top_y;
+
+          float ix2 = 0.0f, iy2 = 0.0f;
+          float nx2 = 1.0f, ny2 = 0.0f;
+          int hit2 = -1;
+          if (wall_sweep_check(rwg, 0, prev_tx, prev_ty, cur_tx, cur_ty, prefer_line_idx, &hit2,
+                               &ix2, &iy2, &nx2, &ny2)) {
+            float x_corr = 0.0f;
+            const int out_line_idx =
+                right_wall_e684_project(rwg, hit2, cur_tx, cur_ty, &x_corr, &nx2, &ny2);
+            if (out_line_idx >= 0) {
+              if (x_corr < 0.0f) {
+                x_corr = 0.0f;
+              }
+              batch->state.pos_x[idx] += x_corr;
+              batch->state.wall_kind[idx] = MSL_WALL_RIGHT;
+              batch->state.wall_id[idx] = rwg->lines[(size_t)out_line_idx].segment_i;
+              batch->state.wall_contact_x[idx] = ix2;
+              batch->state.wall_contact_y[idx] = iy2;
+              batch->state.wall_normal_x[idx] = nx2;
+              batch->state.wall_normal_y[idx] = ny2;
+              batch->state.coll_env_flags[idx] |= (uint32_t)MSL_COLLIDE_RIGHT_WALL_MASK;
+            }
           }
         }
       }
