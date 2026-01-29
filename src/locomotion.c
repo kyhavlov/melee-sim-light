@@ -480,6 +480,21 @@ void locomotion_update_pre(MslBatch* batch) {
             action_id = (uint16_t)MSL_ACT_FX_SPECIAL_S_END;
           }
 
+          // Main -> End on pressed-edge B (IASA callback).
+          //
+          // Decomp: ftFx_SpecialS_IASA checks `fp->input.x668 & HSD_PAD_B` (pressed-edge B) and
+          // enters SpecialSEnd when B is pressed during the dash portion.
+          // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c::ftFx_SpecialS_IASA
+          if (action_id == (uint16_t)MSL_ACT_FX_SPECIAL_S &&
+              (buttons_pressed & (uint16_t)MSL_BUTTON_B) != 0) {
+            batch->state.action_id[idx] = (uint16_t)MSL_ACT_FX_SPECIAL_S_END;
+            batch->state.animation_index[idx] = (uint32_t)ms->specials_ground_end;
+            // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c::ftFx_SpecialSEnd_Enter
+            batch->state.speed_ground_x_self[idx] = ch->illusion_ground_end_vel_x * facing_dir;
+            msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+            action_id = (uint16_t)MSL_ACT_FX_SPECIAL_S_END;
+          }
+
           // End -> Wait on anim completion.
           // Decomp: ftFx_SpecialSEnd_Anim calls ft_8008A2BC when frames are exhausted.
           // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c::ftFx_SpecialSEnd_Anim
@@ -1060,6 +1075,22 @@ void locomotion_update_pre(MslBatch* batch) {
             batch->state.animation_index[idx] = (uint32_t)ms->specials_air_end;
             // Decomp: ftFx_SpecialAirSEnd_Enter sets fp->self_vel.x = da->x3C * facing_dir;
             //         fp->self_vel.y = 0.0f.
+            // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c::ftFx_SpecialAirSEnd_Enter
+            batch->state.speed_air_x_self[idx] = ch->illusion_air_end_vel_x * facing_dir;
+            batch->state.speed_y_self[idx] = 0.0f;
+            msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+            action_id = (uint16_t)MSL_ACT_FX_SPECIAL_AIR_S_END;
+          }
+
+          // Main -> End on pressed-edge B (IASA callback).
+          //
+          // Decomp: ftFx_SpecialAirS_IASA checks `fp->input.x668 & HSD_PAD_B` (pressed-edge B) and
+          // enters SpecialAirSEnd when B is pressed during the dash portion.
+          // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c::ftFx_SpecialAirS_IASA
+          if (action_id == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_S &&
+              (buttons_pressed & (uint16_t)MSL_BUTTON_B) != 0) {
+            batch->state.action_id[idx] = (uint16_t)MSL_ACT_FX_SPECIAL_AIR_S_END;
+            batch->state.animation_index[idx] = (uint32_t)ms->specials_air_end;
             // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c::ftFx_SpecialAirSEnd_Enter
             batch->state.speed_air_x_self[idx] = ch->illusion_air_end_vel_x * facing_dir;
             batch->state.speed_y_self[idx] = 0.0f;
