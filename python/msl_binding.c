@@ -1069,6 +1069,12 @@ static PyObject* msl_ecb_bottom_rel_y_py(PyObject* self, PyObject* args) {
     PyErr_SetString(PyExc_ValueError, "char_id out of range");
     return NULL;
   }
+  // Test/tool helpers call these accessors without creating a batch. Ensure ECB tables are loaded.
+  // (ecb_table_init/ecb_extents_table_init are idempotent.)
+  if (ecb_table_init() != 0) {
+    PyErr_SetString(PyExc_RuntimeError, "ecb_table_init failed (missing/invalid data/ecb/*_bottom.bin)");
+    return NULL;
+  }
   const float y = msl_ecb_bottom_rel_y((uint8_t)char_id_u, (uint32_t)anim_u, action_frame);
   return PyFloat_FromDouble((double)y);
 }
@@ -1083,6 +1089,13 @@ static PyObject* msl_ecb_extents_rel_py(PyObject* self, PyObject* args) {
   }
   if (char_id_u > 255u) {
     PyErr_SetString(PyExc_ValueError, "char_id out of range");
+    return NULL;
+  }
+  // Test/tool helpers call these accessors without creating a batch. Ensure ECB tables are loaded.
+  // (ecb_table_init/ecb_extents_table_init are idempotent.)
+  if (ecb_extents_table_init() != 0) {
+    PyErr_SetString(PyExc_RuntimeError,
+                    "ecb_extents_table_init failed (missing/invalid data/ecb/*_extents.bin)");
     return NULL;
   }
   const MslEcbExtentsRel ex =

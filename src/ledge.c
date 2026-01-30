@@ -52,6 +52,49 @@ static inline uint8_t is_fall_like_action(uint16_t a) {
   }
 }
 
+static inline uint8_t is_airborne_action_with_cliffcatch_check(uint16_t a) {
+  if (is_fall_like_action(a)) {
+    return 1;
+  }
+  switch (a) {
+    // Jump / aerial jump collision wrappers end with ftCliffCommon_80081298.
+    // Decomp:
+    // - refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c::ftCo_Jump_Coll
+    // - refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::ftCo_JumpAerial_Coll
+    // - refs/melee/src/melee/ft/ft_081B.c::ft_800835B0
+    case MSL_ACT_JUMP_F:
+    case MSL_ACT_JUMP_B:
+    case MSL_ACT_JUMP_AERIAL_F:
+    case MSL_ACT_JUMP_AERIAL_B:
+      return 1;
+
+    // Aerial attacks / airdodge: suite-present air locomotion.
+    case MSL_ACT_ATTACK_AIR_N:
+    case MSL_ACT_ATTACK_AIR_F:
+    case MSL_ACT_ATTACK_AIR_B:
+    case MSL_ACT_ATTACK_AIR_HI:
+    case MSL_ACT_ATTACK_AIR_LW:
+    case MSL_ACT_ESCAPE_AIR:
+      return 1;
+
+    // Spacie aerial specials with decomp call sites that include the cliff catch check.
+    // Decomp:
+    // - refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c::{ftFx_SpecialAirSStart_Coll,ftFx_SpecialAirS_Coll,ftFx_SpecialAirSEnd_Coll}
+    // - refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::{ftFx_SpecialHiHoldAir_Coll,ftFx_SpecialAirHi_Coll}
+    case MSL_ACT_FX_SPECIAL_AIR_S_START:
+    case MSL_ACT_FX_SPECIAL_AIR_S:
+    case MSL_ACT_FX_SPECIAL_AIR_S_END:
+    case MSL_ACT_FX_SPECIAL_HI_HOLD_AIR:
+    case MSL_ACT_FX_SPECIAL_AIR_HI:
+    case MSL_ACT_FX_SPECIAL_HI_FALL:
+    case MSL_ACT_FX_SPECIAL_HI_BOUND:
+      return 1;
+
+    default:
+      return 0;
+  }
+}
+
 static inline uint16_t cliff_submotion_for_action(uint16_t a) {
   switch (a) {
     case MSL_ACT_CLIFF_CATCH:
@@ -457,17 +500,19 @@ void ledge_try_catch_post_collision(MslBatch* batch) {
       // Action gate (suite-focused): only attempt cliff catch from a subset of airborne actions
       // whose collision callbacks include the cliff check in-engine.
       // Decomp: cliff check call sites are in shared collision wrappers that run after mpColl.
-      // refs/melee/src/melee/ft/ft_081B.c::ft_80082F28
-      // refs/melee/src/melee/ft/ft_081B.c::ft_80083090
-      if (!is_fall_like_action(a) && a != (uint16_t)MSL_ACT_ATTACK_AIR_N &&
-          a != (uint16_t)MSL_ACT_ATTACK_AIR_F && a != (uint16_t)MSL_ACT_ATTACK_AIR_B &&
-          a != (uint16_t)MSL_ACT_ATTACK_AIR_HI && a != (uint16_t)MSL_ACT_ATTACK_AIR_LW &&
-          a != (uint16_t)MSL_ACT_ESCAPE_AIR) {
+      // refs/melee/src/melee/ft/ft_081B.c::{ft_800835B0,ft_800831CC,ft_80083090}
+      if (!is_airborne_action_with_cliffcatch_check(a)) {
         continue;
       }
       // Decomp: cliff catch checks collision env flags for Collide_LedgeGrabMask.
       // refs/melee/src/melee/ft/ftcliffcommon.c::ftCliffCommon_80081298
       const uint32_t env = batch->state.coll_env_flags[idx];
+      // Decomp: mpColl suppresses ledge-grab checks while "on edge" (Collide_LeftEdge/RightEdge),
+      // and thus would not schedule a CliffCatch for this collision step.
+      // refs/melee/src/melee/mp/mpcoll.c::mpColl_80047E14 (on_edge gate)
+      if (env & ((uint32_t)MSL_COLLIDE_LEFT_EDGE | (uint32_t)MSL_COLLIDE_RIGHT_EDGE)) {
+        continue;
+      }
       const uint32_t grab_mask = env & (uint32_t)MSL_COLLIDE_LEDGE_GRAB_MASK;
       if (grab_mask == 0u) {
         continue;

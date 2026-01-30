@@ -143,6 +143,12 @@ void mpcoll_env_update_ledge_grab(MslBatch* batch) {
       if (batch->state.ledge_cooldown[idx] != 0) {
         continue;
       }
+      // Decomp: mpColl suppresses ledge-grab checks while "on edge" (Collide_LeftEdge/RightEdge).
+      // refs/melee/src/melee/mp/mpcoll.c (mpColl_80046904 ledge-grab block; `on_edge` gate)
+      if (batch->state.coll_env_flags[idx] &
+          ((uint32_t)MSL_COLLIDE_LEFT_EDGE | (uint32_t)MSL_COLLIDE_RIGHT_EDGE)) {
+        continue;
+      }
 
       const float cur_x = batch->state.pos_x[idx];
       const float cur_y = batch->state.pos_y[idx];

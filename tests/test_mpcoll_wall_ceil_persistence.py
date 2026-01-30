@@ -140,6 +140,7 @@ def test_wall_contact_persists_across_frames_on_fd() -> None:
     seed["animation_index"][0, 0] = np.uint32(msid_wait)
     seed["action_frame"][0, 0] = np.int16(af)
     seed["on_ground"][0, 0] = np.uint8(0)
+    seed["facing"][0, 0] = np.uint8(1)  # right (matches ECB extents usage below)
     seed["pos_x"][0, 0] = np.float32(pos_x0)
     seed["pos_y"][0, 0] = np.float32(pos_y0)
     # Move left into the right wall for multiple frames.
@@ -347,6 +348,7 @@ def test_wall_contact_triggers_on_ecb_side_crossing_not_root_on_fd() -> None:
     seed["animation_index"][0, 0] = np.uint32(msid_wait)
     seed["action_frame"][0, 0] = np.int16(af)
     seed["on_ground"][0, 0] = np.uint8(0)
+    seed["facing"][0, 0] = np.uint8(1)  # right (matches ECB extents usage below)
     seed["pos_x"][0, 0] = np.float32(pos_x0)
     seed["pos_y"][0, 0] = np.float32(pos_y0)
     seed["speed_air_x_self"][0, 0] = np.float32(-delta)

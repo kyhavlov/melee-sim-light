@@ -193,10 +193,17 @@ enum {
   MSL_ACT_FX_SPECIAL_AIR_S_END = 0x0160,    // ftFx_MS_SpecialAirSEnd
   // Decomp:
   // - refs/melee/src/melee/ft/chara/ftFox/ftFx_Init.c::ftFx_Init_MotionStateTable
-  //   (ftFx_MS_SpecialHiFall = 358)
+  //   (ftFx_MS_SpecialHiHold=353 .. ftFx_MS_SpecialHiBound=359)
+  // - refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c (collision callbacks call cliff check)
   // - refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::ftFx_SpecialHiFall_Phys
-  //   (calls `ft_80084DB0`)
+  //   (calls `ft_80084DB0` for fall-like phys)
+  MSL_ACT_FX_SPECIAL_HI_HOLD = 0x0161,       // ftFx_MS_SpecialHiHold
+  MSL_ACT_FX_SPECIAL_HI_HOLD_AIR = 0x0162,   // ftFx_MS_SpecialHiHoldAir
+  MSL_ACT_FX_SPECIAL_HI = 0x0163,            // ftFx_MS_SpecialHi
+  MSL_ACT_FX_SPECIAL_AIR_HI = 0x0164,        // ftFx_MS_SpecialAirHi
+  MSL_ACT_FX_SPECIAL_HI_LANDING = 0x0165,    // ftFx_MS_SpecialHiLanding
   MSL_ACT_FX_SPECIAL_HI_FALL = 0x0166,  // ftFx_MS_SpecialHiFall
+  MSL_ACT_FX_SPECIAL_HI_BOUND = 0x0167,  // ftFx_MS_SpecialHiBound
   // Decomp:
   // - refs/melee/src/melee/ft/chara/ftFox/ftFx_Init.c::ftFx_Init_MotionStateTable
   //   (ftFx_MS_SpecialLwStart=360 .. ftFx_MS_SpecialAirLwTurn=369)

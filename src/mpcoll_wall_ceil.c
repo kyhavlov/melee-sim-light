@@ -650,6 +650,116 @@ static uint8_t wall_sweep_check(const MslStageWallGraph* g, uint8_t is_left_wall
   return 1;
 }
 
+// Decomp: mpColl ceiling-edge helper uses +/-1 offsets from the ceiling endpoint when probing for
+// blocking walls before setting Collide_{Left,Right}Edge.
+// refs/melee/src/melee/mp/mpcoll.c::mpColl_8004C328_Ceiling
+static const float k_ceil_edge_wall_probe_x_offset = 1.0f;
+static const float k_ceil_edge_wall_probe_y_offset = -1.0f;
+
+static inline uint8_t wall_blocks_ceiling_edge_probe(const MslStageWallGraph* wg, float ax, float ay,
+                                                     float bx, float by) {
+  if (wg == NULL || wg->lines == NULL || wg->line_count == 0) {
+    return 0;
+  }
+  for (size_t wi = 0; wi < wg->line_count; wi++) {
+    const MslStageWallLine* w = &wg->lines[wi];
+    float ix = 0.0f, iy = 0.0f;
+    if (intersect_segment(w->x0, w->y0, w->x1, w->y1, ax, ay, bx, by, &ix, &iy)) {
+      return 1;
+    }
+  }
+  return 0;
+}
+
+static inline uint8_t ceiling_chain_endpoints(const MslStageCeilingGraph* g, int line_idx,
+                                              float* out_left_x, float* out_left_y,
+                                              float* out_right_x, float* out_right_y) {
+  if (g == NULL || g->lines == NULL || g->line_count == 0) {
+    return 0;
+  }
+  if (line_idx < 0 || (size_t)line_idx >= g->line_count) {
+    return 0;
+  }
+
+  // Ceiling line orientation is right->left (x0>=x1). prev links at the right endpoint, next
+  // links at the left endpoint.
+  int right_i = line_idx;
+  for (size_t k = 0; k < g->line_count; k++) {
+    const int16_t prev = g->lines[right_i].prev;
+    if (prev < 0 || (size_t)prev >= g->line_count) {
+      break;
+    }
+    right_i = (int)prev;
+  }
+  int left_i = line_idx;
+  for (size_t k = 0; k < g->line_count; k++) {
+    const int16_t next = g->lines[left_i].next;
+    if (next < 0 || (size_t)next >= g->line_count) {
+      break;
+    }
+    left_i = (int)next;
+  }
+
+  if (out_left_x) {
+    *out_left_x = g->lines[left_i].x1;
+  }
+  if (out_left_y) {
+    *out_left_y = g->lines[left_i].y1;
+  }
+  if (out_right_x) {
+    *out_right_x = g->lines[right_i].x0;
+  }
+  if (out_right_y) {
+    *out_right_y = g->lines[right_i].y0;
+  }
+  return 1;
+}
+
+static inline void ceiling_write_edge_suppression_flags(MslBatch* batch, size_t idx, uint32_t stage_id,
+                                                        const MslStageCeilingGraph* cg,
+                                                        int line_idx,
+                                                        const MslEcbWorldPoints* ecb) {
+  if (batch == NULL || cg == NULL || ecb == NULL) {
+    return;
+  }
+  float left_x = 0.0f, left_y = 0.0f, right_x = 0.0f, right_y = 0.0f;
+  if (!ceiling_chain_endpoints(cg, line_idx, &left_x, &left_y, &right_x, &right_y)) {
+    return;
+  }
+
+  const float fighter_x = batch->state.pos_x[idx];
+  if (fighter_x <= left_x) {
+    // Decomp: mpColl_8004C328_Ceiling uses mpCheckLeftWall(edge+{+1,-1}, ecb_right - ecb_top).
+    // refs/melee/src/melee/mp/mpcoll.c::mpColl_8004C328_Ceiling
+    const float probe_ax = left_x + k_ceil_edge_wall_probe_x_offset;
+    const float probe_ay = left_y + k_ceil_edge_wall_probe_y_offset;
+    const float probe_bx = left_x + (ecb->right_rel_x /* top.x == 0 */);
+    const float probe_by = left_y + (ecb->side_rel_y - ecb->top_rel_y);
+    const MslStageWallGraph* lwg = stage_collision_get_left_wall_graph(stage_id);
+    if (!wall_blocks_ceiling_edge_probe(lwg, probe_ax, probe_ay, probe_bx, probe_by)) {
+      batch->state.coll_env_flags[idx] |= (uint32_t)MSL_COLLIDE_RIGHT_EDGE;
+      // Decomp parity: Collide_Edge is used as an aggregate “edge” marker (e.g. floor snap helper
+      // mpColl_8004A678_Floor). Nothing consumes it yet in this sim, but setting it whenever we
+      // set Collide_{Left,Right}Edge keeps the env flag surface closer to decomp.
+      // refs/melee/src/melee/mp/mpcoll.c::mpColl_8004A678_Floor
+      batch->state.coll_env_flags[idx] |= (uint32_t)MSL_COLLIDE_EDGE;
+    }
+  } else if (fighter_x >= right_x) {
+    // Decomp: mpColl_8004C328_Ceiling uses mpCheckRightWall(edge+{-1,-1}, ecb_left - ecb_top).
+    // refs/melee/src/melee/mp/mpcoll.c::mpColl_8004C328_Ceiling
+    const float probe_ax = right_x - k_ceil_edge_wall_probe_x_offset;
+    const float probe_ay = right_y + k_ceil_edge_wall_probe_y_offset;
+    const float probe_bx = right_x + (ecb->left_rel_x /* top.x == 0 */);
+    const float probe_by = right_y + (ecb->side_rel_y - ecb->top_rel_y);
+    const MslStageWallGraph* rwg = stage_collision_get_right_wall_graph(stage_id);
+    if (!wall_blocks_ceiling_edge_probe(rwg, probe_ax, probe_ay, probe_bx, probe_by)) {
+      batch->state.coll_env_flags[idx] |= (uint32_t)MSL_COLLIDE_LEFT_EDGE;
+      // refs/melee/src/melee/mp/mpcoll.c::mpColl_8004A678_Floor
+      batch->state.coll_env_flags[idx] |= (uint32_t)MSL_COLLIDE_EDGE;
+    }
+  }
+}
+
 void mpcoll_wall_ceil_apply(MslBatch* batch) {
   if (batch == NULL) {
     return;
@@ -1037,6 +1147,7 @@ void mpcoll_wall_ceil_apply(MslBatch* batch) {
             batch->state.ceiling_contact_x[idx] = cur_tx;
             batch->state.ceiling_contact_y[idx] = cur_ty + y_corr;
             batch->state.coll_env_flags[idx] |= (uint32_t)MSL_COLLIDE_CEILING_MASK;
+            ceiling_write_edge_suppression_flags(batch, idx, stage_id, cg, out_line_idx, &cur_ecb);
           }
         } else {
           float ix = 0.0f, iy = 0.0f;
@@ -1058,6 +1169,7 @@ void mpcoll_wall_ceil_apply(MslBatch* batch) {
               batch->state.ceiling_contact_x[idx] = ix;
               batch->state.ceiling_contact_y[idx] = iy;
               batch->state.coll_env_flags[idx] |= (uint32_t)MSL_COLLIDE_CEILING_MASK;
+              ceiling_write_edge_suppression_flags(batch, idx, stage_id, cg, out_line_idx, &cur_ecb);
             }
           }
         }

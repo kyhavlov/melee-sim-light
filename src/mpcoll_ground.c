@@ -27,6 +27,12 @@ static const float k_floor_ed5c_min_dist = 0.001f;
 static const float k_floor_horiz_dy_thresh = 0.0001f;
 static const float k_floor_ed5c_extend = 1.0f;
 
+// Decomp: mpColl floor-edge helpers use +/-1 offsets from the floor endpoint when probing for
+// blocking walls before setting Collide_{Left,Right}Edge.
+// refs/melee/src/melee/mp/mpcoll.c::mpColl_8004A45C_Floor
+static const float k_floor_edge_wall_probe_x_offset = 1.0f;
+static const float k_floor_edge_wall_probe_y_offset = 1.0f;
+
 static inline float cross2(float ax, float ay, float bx, float by) { return ax * by - ay * bx; }
 
 static inline uint8_t is_cliff_hold_action(uint16_t a) {
@@ -266,6 +272,139 @@ static uint8_t floor_intersect_segment(float x0, float y0, float x1, float y1, f
   return 1;
 }
 
+static inline uint8_t floor_chain_endpoints(const MslStageFloorGraph* g, int line_idx,
+                                            float* out_left_x, float* out_left_y, float* out_right_x,
+                                            float* out_right_y) {
+  if (g == NULL || g->lines == NULL || g->line_count == 0) {
+    return 0;
+  }
+  if (line_idx < 0 || (size_t)line_idx >= g->line_count) {
+    return 0;
+  }
+
+  int left_i = line_idx;
+  for (size_t k = 0; k < g->line_count; k++) {
+    const int16_t prev = g->lines[left_i].prev;
+    if (prev < 0) {
+      break;
+    }
+    if ((size_t)prev >= g->line_count) {
+      break;
+    }
+    left_i = (int)prev;
+  }
+  int right_i = line_idx;
+  for (size_t k = 0; k < g->line_count; k++) {
+    const int16_t next = g->lines[right_i].next;
+    if (next < 0) {
+      break;
+    }
+    if ((size_t)next >= g->line_count) {
+      break;
+    }
+    right_i = (int)next;
+  }
+
+  if (out_left_x) {
+    *out_left_x = g->lines[left_i].x0;
+  }
+  if (out_left_y) {
+    *out_left_y = g->lines[left_i].y0;
+  }
+  if (out_right_x) {
+    *out_right_x = g->lines[right_i].x1;
+  }
+  if (out_right_y) {
+    *out_right_y = g->lines[right_i].y1;
+  }
+  return 1;
+}
+
+static inline uint8_t wall_blocks_floor_edge_probe(const MslStageWallGraph* wg, float ax, float ay,
+                                                   float bx, float by) {
+  // Decomp parity note: mpColl_8004A45C_Floor uses mpCheckLeftWall/mpCheckRightWall to ensure a
+  // wall has not stopped the fighter before setting edge suppression bits.
+  // refs/melee/src/melee/mp/mpcoll.c::mpColl_8004A45C_Floor
+  if (wg == NULL || wg->lines == NULL || wg->line_count == 0) {
+    return 0;
+  }
+
+  for (size_t wi = 0; wi < wg->line_count; wi++) {
+    const MslStageWallLine* w = &wg->lines[wi];
+    float ix = 0.0f, iy = 0.0f;
+    if (floor_intersect_segment(w->x0, w->y0, w->x1, w->y1, ax, ay, bx, by, &ix, &iy)) {
+      return 1;
+    }
+  }
+  return 0;
+}
+
+static inline void floor_write_edge_suppression_flags(MslBatch* batch, size_t idx, uint32_t stage_id,
+                                                      const MslStageFloorGraph* fg, int line_idx,
+                                                      uint8_t char_id, uint32_t anim,
+                                                      uint16_t ecb_frame, uint8_t was_grounded) {
+  if (batch == NULL || fg == NULL) {
+    return;
+  }
+  if (line_idx < 0 || (size_t)line_idx >= fg->line_count) {
+    return;
+  }
+
+  // Floor edge suppression (Collide_LeftEdge / Collide_RightEdge).
+  //
+  // Decomp: mpColl sets these bits in a floor-edge helper which snaps the fighter to the floor
+  // endpoint when their position goes beyond the chain end, provided a wall check does not block.
+  // refs/melee/src/melee/mp/mpcoll.c::mpColl_8004A45C_Floor
+  //
+  // Decomp: mpColl suppresses ledge-grab checks while "on edge" by testing these bits.
+  // refs/melee/src/melee/mp/mpcoll.c (mpColl_80046904 ledge-grab block; `on_edge` gate)
+  float left_x0 = 0.0f, left_y0 = 0.0f, right_x1 = 0.0f, right_y1 = 0.0f;
+  if (!floor_chain_endpoints(fg, line_idx, &left_x0, &left_y0, &right_x1, &right_y1)) {
+    return;
+  }
+
+  const float left_x = (left_x0 < right_x1) ? left_x0 : right_x1;
+  const float right_x = (left_x0 < right_x1) ? right_x1 : left_x0;
+  const float left_y = (left_x0 < right_x1) ? left_y0 : right_y1;
+  const float right_y = (left_x0 < right_x1) ? right_y1 : left_y0;
+
+  const float fighter_x = batch->state.pos_x[idx];
+  if (fighter_x <= left_x) {
+    const float fd = batch->state.facing[idx] ? 1.0f : -1.0f;
+    MslEcbWorldPoints ecb = {0};
+    msl_ecb_world_points_sample(&ecb, char_id, anim, ecb_frame, fd, fighter_x,
+                                batch->state.pos_y[idx], was_grounded);
+    const float probe_ax = left_x + k_floor_edge_wall_probe_x_offset;
+    const float probe_ay = left_y + k_floor_edge_wall_probe_y_offset;
+    const float probe_bx = left_x + (ecb.right_rel_x /* bottom.x == 0 */);
+    const float probe_by = left_y + (ecb.side_rel_y - ecb.bottom_rel_y);
+    const MslStageWallGraph* lwg = stage_collision_get_left_wall_graph(stage_id);
+    if (!wall_blocks_floor_edge_probe(lwg, probe_ax, probe_ay, probe_bx, probe_by)) {
+      batch->state.coll_env_flags[idx] |= (uint32_t)MSL_COLLIDE_RIGHT_EDGE;
+      // Decomp: mpColl_8004A678_Floor also sets Collide_Edge when snapping to floor endpoints.
+      // In this sim, set Collide_Edge whenever any edge suppression bit is set as a cheap parity
+      // win and to future-proof other gates.
+      // refs/melee/src/melee/mp/mpcoll.c::mpColl_8004A678_Floor
+      batch->state.coll_env_flags[idx] |= (uint32_t)MSL_COLLIDE_EDGE;
+    }
+  } else if (fighter_x >= right_x) {
+    const float fd = batch->state.facing[idx] ? 1.0f : -1.0f;
+    MslEcbWorldPoints ecb = {0};
+    msl_ecb_world_points_sample(&ecb, char_id, anim, ecb_frame, fd, fighter_x,
+                                batch->state.pos_y[idx], was_grounded);
+    const float probe_ax = right_x - k_floor_edge_wall_probe_x_offset;
+    const float probe_ay = right_y + k_floor_edge_wall_probe_y_offset;
+    const float probe_bx = right_x + (ecb.left_rel_x /* bottom.x == 0 */);
+    const float probe_by = right_y + (ecb.side_rel_y - ecb.bottom_rel_y);
+    const MslStageWallGraph* rwg = stage_collision_get_right_wall_graph(stage_id);
+    if (!wall_blocks_floor_edge_probe(rwg, probe_ax, probe_ay, probe_bx, probe_by)) {
+      batch->state.coll_env_flags[idx] |= (uint32_t)MSL_COLLIDE_LEFT_EDGE;
+      // refs/melee/src/melee/mp/mpcoll.c::mpColl_8004A678_Floor
+      batch->state.coll_env_flags[idx] |= (uint32_t)MSL_COLLIDE_EDGE;
+    }
+  }
+}
+
 static uint8_t floor_sweep_check(const MslStageFloorGraph* g, float ax, float ay, float bx,
                                  float by, int prefer_line_idx, int* out_line_idx, float* out_ix,
                                  float* out_iy, float* out_nx, float* out_ny) {
@@ -474,6 +613,12 @@ void mpcoll_ground_apply(MslBatch* batch) {
           on_ground = 1;
           ground_id = g->lines[(size_t)out_line_idx].segment_i;
           contact_y = (cur_bottom_y + y_corr);
+        } else {
+          // Decomp parity: mpColl_8004A45C_Floor can still set Collide_{Left,Right}Edge while the
+          // floor collision pass does not report "touched_floor" (airborne), and the ledge-grab
+          // block uses these bits as the `on_edge` suppression gate.
+          floor_write_edge_suppression_flags(batch, idx, stage_id, g, prefer_line_idx, char_id,
+                                             anim, ecb_frame, was_grounded);
         }
       } else {
         int hit_line_idx = -1;
@@ -489,6 +634,12 @@ void mpcoll_ground_apply(MslBatch* batch) {
             ground_id = g->lines[(size_t)out_line_idx].segment_i;
             contact_x = ix;
             contact_y = iy;
+          } else {
+            // Sweep saw a floor segment, but projection failed (often an off-end / edge case).
+            // Propagate edge suppression bits so mpColl-shaped ledge-grab checks can apply the
+            // `on_edge` gate deterministically.
+            floor_write_edge_suppression_flags(batch, idx, stage_id, g, hit_line_idx, char_id, anim,
+                                               ecb_frame, was_grounded);
           }
         }
       }
@@ -499,6 +650,11 @@ void mpcoll_ground_apply(MslBatch* batch) {
         // refs/melee/src/melee/mp/mpcoll.c::mpColl_80044628_Floor
         // refs/melee/src/melee/mp/mpcoll.c::mpColl_80046F78
         batch->state.coll_env_flags[idx] |= (uint32_t)MSL_COLLIDE_FLOOR_MASK;
+
+        floor_write_edge_suppression_flags(batch, idx, stage_id, g,
+                                           stage_collision_floor_line_index(stage_id, ground_id),
+                                           char_id, anim, ecb_frame, was_grounded);
+
         batch->state.ground_id[idx] = ground_id;
         batch->state.ground_normal_x[idx] = floor_nx;
         batch->state.ground_normal_y[idx] = floor_ny;
