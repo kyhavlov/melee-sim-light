@@ -523,10 +523,16 @@ RL 1.0 acceptance criteria
 Reach RL 1.0 by completing coherent vertical slices (match flow → locomotion → defense → combat/damage → specials/grabs → ledge/tech),
 rather than enabling one-off mutations that depend on missing upstream bookkeeping.
 
-### Roadmap Status (as of 2026-01-26)
+### Roadmap Status (as of 2026-01-31)
 
 This section is the “what is actually done” source of truth for agents. If a deeper section below contradicts this, update the deeper
 section or regenerate it; do not rely on stale tables.
+
+Recent deltas to reflect here (do not let these get “lost in chat logs”):
+- Ledge-grab mask ordering is now collision-stage prev/cur snapshot based (captured around `stage_collision_apply()` and consumed
+  post-collision); regression locked for TreasuredBackKangaroo records 1806/1807 (`tests/test_ledge_grab_treasuredbackkangaroo_regression.py`).
+- Build now forces C extension rebuild to avoid stale `.so` issues (Makefile change).
+- ECB tz/ty axis contract is locked for RL 1.0; any axis remap is a separate audit project (see `docs/SSANIM_AXIS_BASIS.md`).
 
 Legend:
 - **DONE**: implemented and suite-stable; remaining gaps are low-impact edge cases.
@@ -541,13 +547,13 @@ Legend:
 | Anim/script timebase (`cur_anim_frame`, `frame_speed_mul`, hitlag freeze) | **DONE** | Q16.16 accumulator + seeded `frame_speed_mul_f32`. |
 | Input pipeline + UCF (legalization, pad buffer, key timers/counters) | **PARTIAL** | Core UCF-on suite behavior is covered; more input-history gates remain as needed. |
 | Locomotion core (walk/dash/run/jumps/landing/fall/airdodge/escapes) | **PARTIAL** | Broad coverage exists; gaps remain in less-common action branches and ordering edge cases. |
-| Stage collision + ECB (FD ground/ledge points, grounding, `ground_id`) | **PARTIAL** | ECB tables are in; we still lack full mpColl-style ground contact state machine. |
-| Ledge system (Cliff* actions, quick options) | **PARTIAL** | Suite coverage improved; remaining parity needs collision-env ledge-grab mask + occupancy/cooldowns. |
+| Stage collision + ECB (FD ground/ledge points, grounding, `ground_id`) | **PARTIAL** | mpColl-shaped FD ground contact is implemented (floor + wall/ceiling passes + persistence); remaining gaps are mpColl substeps/platform lines and residual mismatch clusters. |
+| Ledge system (Cliff* actions, quick options) | **PARTIAL** | Ledge-grab mask now uses collision-stage prev/cur snapshots; remaining parity needs occupancy/refresh/cooldowns + mpColl substrate. |
 | Knockdown/tech (DownBound/Wait/Stand/Attack + rolls) | **PARTIAL** | Now suite-positive; remaining parity depends on deeper ground-contact semantics. |
 | Combat geometry (hurtcaps/hitboxes/shields pose-driven) | **PARTIAL** | Core data-driven primitives exist; remaining parity depends on exact facing/axis + attachment nuances. |
 | Damage pipeline (BODY + SHIELD, GuardSetOff, hitlag/hitstun/KB states) | **PARTIAL** | Big pieces are in; still missing full rehit/hitlist, stale queue, and many modifiers. |
 | Items/projectiles | **PARTIAL** | Laser/blaster coverage is in and reduces `item_*` mismatches; item system parity is incomplete beyond suite needs. |
-| Grabs/throws | **TODO** | High-impact for RL; implement suite-present actions first. |
+| Grabs/throws | **PARTIAL** | Attachment substrate exists (CapturePulled*/Wait*/Damage* + Thrown* victim driving); still missing throw release/detach/apply-throw-hit + breakout/pummel/throw state completeness. |
 
 ### Field-to-System Ownership Map (Validation Outputs)
 
@@ -601,7 +607,7 @@ if it mismatches, file/fix it under the owning system/parity project (do not “
 To avoid churn, we treat some work as **parity projects**: once done, they become the stable substrate that many systems build on.
 Prefer completing these projects in order rather than “patching symptoms” in higher-level states.
 
-1) **mpColl-style ground contact state machine** (**TODO**, next major substrate)
+1) **mpColl-style ground contact state machine** (**PARTIAL**, FD implemented)
    - Goal: stable, decomp-shaped `on_ground` + `ground_id` + “which line” selection with correct prev/current ECB usage.
    - Why now: it unblocks landing/knockdown/ledge correctness without per-state hacks.
 
@@ -642,13 +648,13 @@ Prefer completing these projects in order rather than “patching symptoms” in
    - Collision runs on the **post-integration** translation (after `phys_cb` mutates position/vel), and before any action transitions that branch on `on_ground`/`ground_id` for frame `t+1`.
    - Landing/ledge/tech logic must consult collision outputs from this step; do not special-case individual actions to “fix grounding”.
 
-   **Replaces these current approximations (delete once mpColl parity lands)**
-   - FD “previous-segment stickiness” and deterministic endpoint bias for shared-vertex segments (`src/stage_collision.c:1103`).
-   - Teacher-forcing collision conveniences / penetration snapping rules that are not directly decomp-backed (`src/stage_collision.c` grounding gates around `ground_epsilon` and dy==0 cases).
-   - Any remaining “force airborne” policies added to compensate for unstable floor selection.
-   - Downstream hacks that depend on missing collision-env semantics:
-     - “outside-only grab” ledge catch gate (`src/ledge.c:376` and risk register entry).
-     - CliffWait climb/drop “previous-stick neutral reset” latch (`src/ledge.c:190` and risk register entry).
+   **Replaces these former approximations**
+   - Legacy FD-only “stickiness/endpoint bias” grounding heuristics and non-decomp snapping rules (now owned by the mpColl-shaped passes:
+     `src/mpcoll_ground.c`, `src/mpcoll_wall_ceil.c`, and their persistence tests under `tests/`).
+   - Any per-action “force airborne” policies added solely to compensate for unstable floor selection (should be deleted when found).
+   - Downstream hacks that depend on missing collision-env semantics (still being reduced under Parity Project #2 and the ledge risk register):
+     - “outside-only grab” ledge catch gate (`src/ledge.c:376`).
+     - CliffWait climb/drop “previous-stick neutral reset” latch (`src/ledge.c:190`).
 
    **DONE when**
    - `mismatch.on_ground` and `mismatch.ground_id` become scorecard-compliant **without** any per-action grounding special cases.
@@ -1304,7 +1310,14 @@ Completed slices (suite-positive, now “owned” by the sim):
 
 Next slices (in recommended order):
 
+Driver shortlist (suite offender clusters as of the committed baseline in `reports/validation/one_step_suite_eval.txt`):
+- Grab/Capture/Throw release/attach parity: large `err.pos_x`/`err.pos_y` spikes and action mismatches concentrate in `Capture*`/`Thrown*`
+  segments when victims remain attached or fail to transition into damage/launch states on the correct frame.
+- Combat hit bookkeeping parity (hitlists/rehit/modifiers): a major driver of `mismatch.hitlag`, `mismatch.hitstun`, and `err.percent`
+  once position/state sequencing is stable.
+
 1. mpColl-style ground contact state machine (**parity project**, see Ordering Rule above)
+   - Status: **PARTIAL** (FD floor + wall/ceiling + persistence landed; see `src/mpcoll_ground.c` and `tests/test_mpcoll_ground_persistence.py`).
    - Blocked by: nothing upstream (this is the next substrate).
    - Dependencies: existing ECB tables + stage geometry.
    - Acceptance checks: materially reduce residual `mismatch.on_ground` and `mismatch.ground_id` without per-action special cases.
@@ -1326,9 +1339,15 @@ Next slices (in recommended order):
    - Acceptance checks: percent/KB/hitstun become numerically meaningful (reduce drift); avoid tuning off suite-only artifacts.
 
 5. Grab/throw core (suite-first)
-   - Blocked by: (1) mpColl parity + (3) hitlists parity (throws stress contact timing and hit attribution).
-   - Dependencies: (1) for stable contact/grounding during throws; (3) for hit identity/timing.
-   - Acceptance checks: reduce `mismatch.action_id` for Catch*/Throw*/Thrown* states and stop downstream state explosions in grab sequences.
+   - Current status: attachment substrate exists (CapturePulled*/Wait*/Damage* + Thrown* victim driving), but release/detach + throw-hit
+     application is missing/incomplete.
+   - Blocked by: (1) mpColl parity is strongly preferred for stable contact semantics; (3) hitlists parity is required for full combat
+     correctness, but we can still land release/detach timing improvements in a suite-first slice.
+   - Decomp entrypoints: `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::fn_800DAD18`,
+     `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DD724`, and
+     `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Thrown.c::ftCo_800DE508`.
+   - Acceptance checks: reduce `mismatch.action_id` for Catch*/Throw*/Thrown* and reduce large `err.pos_* max` spikes attributable to
+     “victim stayed attached / never launched”.
 
 6. Remaining Fox/Falco specials (B moves) + any suite-needed projectiles
    - Blocked by: (3)–(4) if the special applies hits/damage in ways that require correct rehit/modifiers (avoid patching around missing modifiers).
@@ -1354,6 +1373,8 @@ When a mismatch strongly suggests a missing internal that cannot be reconstructe
 - Ledge catch region is currently approximated with an “outside-only grab” gate when using `ledge_grab_window_ok`
   (`src/ledge.c:376`), pending a decomp-shaped `Collide_LedgeGrabMask` / collision-env implementation.
 - Grab state internals: grab attach points, breakouts, throw release frame/timers, and victim constraint mode.
+- SSANIM / ECB axis mapping contract: do not change tz/ty basis mappings in the core sim as an ad-hoc “fix”; treat any axis remap as a
+  separate audit project with explicit validation and documentation (see `docs/SSANIM_AXIS_BASIS.md`).
 - Tech / knockdown thresholds and state vars (tumble, tech window timers, missed-tech timers).
 - Projectile internals: per-projectile RNG/state, instance ids, and collision masks.
 - Projectile reflect bubbles: current laser reflect gate is powershield-only (requires Slippi powershield bit) and does not yet model
@@ -1395,7 +1416,7 @@ This is a living, comprehensive list of Melee-relevant systems. Any time we beco
 - Ground/air movement, friction/traction, gravity/terminal velocity, fastfall, jumps (incl. double jump).
 - Landing transitions and landing lag handling.
 
-5) Stage collision + ECB fidelity (**PARTIAL**; mpColl parity is still **TODO**)
+5) Stage collision + ECB fidelity (**PARTIAL**; mpColl-shaped FD grounding is implemented)
 - FD ground/ledge/blastzone geometry from stage files.
 - ECB-like grounding/ledge gating close enough to avoid false landings/false airborne.
 - Stable `ground_id` behavior (segment/line identity).
@@ -1421,8 +1442,8 @@ This is a living, comprehensive list of Melee-relevant systems. Any time we beco
 - All moves (A + B) whose action states appear in the suite must be implemented with correct transitions/cancel windows.
 - Special moves (B moves) for Fox/Falco are explicitly in-scope for RL 1.0.
 
-10) Grabs/throws (**TODO**)
-- Grab, pummel, throws, release rules (at least what appears in the suite).
+10) Grabs/throws (**PARTIAL**)
+- Attachment substrate exists (CapturePulled*/Wait*/Damage* + Thrown* victim driving); still missing throw release/detach/apply-throw-hit and full throw/capture state completeness (suite-first).
 - Grab interactions can dominate policy behavior; missing this makes RL “not Melee” quickly.
 
 11) Projectiles/items needed by suite (**PARTIAL**)
@@ -1450,9 +1471,9 @@ M0 Foundation (**DONE**)
 M1 Timebase + match flow (**DONE**)
 - Decomp-shaped anim/script timebase and match start/respawn/death/invuln/blastzones wired into the state machine.
 
-M2 Ground contact substrate (mpColl parity) (**TODO**, next)
-- Build a decomp-shaped ground contact state machine (ECB prev/current, line selection, stable ground ids) and make it the substrate
-  for landing/knockdown/ledge.
+M2 Ground contact substrate (mpColl parity) (**PARTIAL**)
+- FD mpColl-shaped grounding (floor + wall/ceiling) and persistence are implemented; remaining work is tightening residual mismatch clusters
+  and extending mpColl parity (substeps/platform lines/full callback coverage) as needed by the suite.
 
 M3 Locomotion + defense completeness for suite (**PARTIAL**)
 - Ensure all suite action_ids can be entered, updated, and exited without “getting stuck”.
