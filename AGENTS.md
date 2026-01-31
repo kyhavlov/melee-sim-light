@@ -117,6 +117,10 @@ Current guardrails:
 - `make validate OUT=reports/validation/one_step_suite_eval.txt`: write the report to a file (commit this)
 - `make build_data`: extract ISO-derived `data/` artifacts
 
+Notes:
+- Prefer `make build/test/validate` (they run `python/setup.py build_ext --inplace --force` via `uv run`); avoid invoking `python/setup.py` directly.
+- If you touch collision/ledge code, run `tests/test_ledge_grab_treasuredbackkangaroo_regression.py`.
+
 Validation output snapshots:
 - Commit the latest suite report under `reports/validation/` whenever you change core sim logic.
 

@@ -656,6 +656,11 @@ Prefer completing these projects in order rather than “patching symptoms” in
 
 2) **Collision-env flags + ledge grab mask parity** (**PARTIAL**)
    - Goal: decomp-shaped `Collide_LedgeGrabMask`-equivalent so ledge catch can be scheduled post-collision without regressions.
+   - Ordering/inputs (lock-in):
+     - Ledge-grab mask generation must use the collision-stage “prev/cur” snapshots captured around the stage-collision pass (not generic frame-to-frame `prev_pos`).
+     - Schedule it **post-collision** (after `stage_collision_apply`) so CliffCatch decisions consume the collision outputs for this frame.
+     - Decomp anchors: `refs/melee/src/melee/mp/mpcoll.c::mpColl_80043754`, `mpColl_80046904`, `mpColl_800443C4`.
+     - Why it matters: prevents a 1-frame-early `RightLedgeGrab` in TreasuredBackKangaroo records 1806/1807 under one-step eval.
    - Depends on: (1).
 
 3) **Hit/hurt eligibility + rehit semantics (hitlists/timers)** (**PARTIAL**)
