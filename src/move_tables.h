@@ -8,6 +8,17 @@
 // The per-frame hot path must remain alloc-free.
 int move_tables_init(void);
 
+typedef struct MslThrowHitboxParams {
+  float damage;
+  uint16_t angle;
+  uint16_t kbg;
+  uint16_t wsk;
+  uint16_t bkb;
+  uint8_t element;
+  uint8_t sfx_kind;
+  uint8_t sfx_severity;
+} MslThrowHitboxParams;
+
 // Returns whether cmd_var[0] is set at the given cur_anim_frame for an AttackAir* action.
 // Used by locomotion to decide between LandingAir* (lag) and Landing (auto-cancel).
 //
@@ -44,3 +55,20 @@ uint8_t move_tables_dash_cmd0_active(uint8_t char_id, float cur_anim_frame_f32);
 // Source of truth: data/moves/{fox,falco}.json moves["ftCo_SM_Catch*"]["events"] set_throw_flags.
 uint8_t move_tables_catchpull_should_enter_wait(uint8_t char_id, uint16_t catch_action_id,
                                                 float cur_anim_frame_f32);
+
+// Returns whether a throw release frame is known (parsed from set_throw_flags timing).
+//
+// Source of truth: data/moves/{fox,falco}.json moves["ftCo_SM_Throw*"]["events"] set_throw_flags.
+uint8_t move_tables_throw_has_release(uint8_t char_id, uint16_t throw_action_id);
+
+// Returns 1 and outputs the released hit_idx if cur_anim_frame_f32 is at/after the throw release frame.
+//
+// Source of truth: data/moves/{fox,falco}.json moves["ftCo_SM_Throw*"]["events"] set_throw_flags.
+uint8_t move_tables_throw_release_hit_idx(uint8_t char_id, uint16_t throw_action_id,
+                                          float cur_anim_frame_f32, uint8_t* out_hit_idx);
+
+// Returns 1 and outputs throw hitbox parameters for the requested hit_idx.
+//
+// Source of truth: data/moves/{fox,falco}.json moves["ftCo_SM_Throw*"]["events"] set_throw_hitbox.
+uint8_t move_tables_throw_hitbox_params(uint8_t char_id, uint16_t throw_action_id, uint8_t hit_idx,
+                                        MslThrowHitboxParams* out);

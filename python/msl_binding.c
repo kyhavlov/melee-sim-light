@@ -12,6 +12,7 @@
 #include "../src/api.h"
 #include "../src/anim_pose.h"
 #include "../src/ecb_tables.h"
+#include "../src/move_tables.h"
 
 typedef struct {
   MslBatch* batch;
@@ -2165,6 +2166,53 @@ static PyObject* msl_destroy(PyObject* self, PyObject* args) {
   Py_RETURN_NONE;
 }
 
+static PyObject* msl_move_tables_throw_has_release_py(PyObject* self, PyObject* args) {
+  int char_id = 0;
+  int throw_action_id = 0;
+  if (!PyArg_ParseTuple(args, "ii", &char_id, &throw_action_id)) {
+    return NULL;
+  }
+  const uint8_t has = move_tables_throw_has_release((uint8_t)char_id, (uint16_t)throw_action_id);
+  return PyLong_FromLong((long)has);
+}
+
+static PyObject* msl_move_tables_throw_release_hit_idx_py(PyObject* self, PyObject* args) {
+  int char_id = 0;
+  int throw_action_id = 0;
+  double cur_anim_frame = 0.0;
+  if (!PyArg_ParseTuple(args, "iid", &char_id, &throw_action_id, &cur_anim_frame)) {
+    return NULL;
+  }
+
+  uint8_t hit_idx = 0;
+  const uint8_t released = move_tables_throw_release_hit_idx(
+      (uint8_t)char_id, (uint16_t)throw_action_id, f32_from_double(cur_anim_frame), &hit_idx);
+  if (!released) {
+    return Py_BuildValue("(ii)", 0, -1);
+  }
+  return Py_BuildValue("(ii)", 1, (int)hit_idx);
+}
+
+static PyObject* msl_move_tables_throw_hitbox_params_py(PyObject* self, PyObject* args) {
+  int char_id = 0;
+  int throw_action_id = 0;
+  int hit_idx = 0;
+  if (!PyArg_ParseTuple(args, "iii", &char_id, &throw_action_id, &hit_idx)) {
+    return NULL;
+  }
+
+  MslThrowHitboxParams p = {0};
+  const uint8_t ok = move_tables_throw_hitbox_params((uint8_t)char_id, (uint16_t)throw_action_id,
+                                                     (uint8_t)hit_idx, &p);
+  if (!ok) {
+    Py_RETURN_NONE;
+  }
+
+  return Py_BuildValue("(dIIIIIII)", (double)p.damage, (unsigned int)p.angle, (unsigned int)p.kbg,
+                       (unsigned int)p.wsk, (unsigned int)p.bkb, (unsigned int)p.element,
+                       (unsigned int)p.sfx_kind, (unsigned int)p.sfx_severity);
+}
+
 static PyMethodDef methods[] = {
     {"init", (PyCFunction)msl_init, METH_VARARGS | METH_KEYWORDS,
      "init(batch_size, num_players, ucf_enabled=?, ucf_cardinals_1_0_enabled=?) -> handle"},
@@ -2196,6 +2244,14 @@ static PyMethodDef methods[] = {
      "ecb_extents_rel(char_id, animation_index, action_frame) -> (min_x, max_x, min_y, max_y)"},
     {"anim_pose_matrix", msl_anim_pose_matrix_py, METH_VARARGS,
      "anim_pose_matrix(char_id, msid, frame, part_id) -> np.ndarray[float32] shape=(12,)"},
+    {"move_tables_throw_has_release", msl_move_tables_throw_has_release_py, METH_VARARGS,
+     "move_tables_throw_has_release(char_id, throw_action_id) -> 0/1"},
+    {"move_tables_throw_release_hit_idx", msl_move_tables_throw_release_hit_idx_py, METH_VARARGS,
+     "move_tables_throw_release_hit_idx(char_id, throw_action_id, cur_anim_frame) -> (released, "
+     "hit_idx)"},
+    {"move_tables_throw_hitbox_params", msl_move_tables_throw_hitbox_params_py, METH_VARARGS,
+     "move_tables_throw_hitbox_params(char_id, throw_action_id, hit_idx) -> "
+     "(damage, angle, kbg, wsk, bkb, element, sfx_kind, sfx_severity) or None"},
     {"hurtcaps_world", msl_hurtcaps_world_py, METH_VARARGS,
      "hurtcaps_world(handle, batch_index, player_index) -> (caps[MSL_MAX_HURTCAPS,7], count)"},
     {"hitboxes_world", msl_hitboxes_world_py, METH_VARARGS,

@@ -21,6 +21,24 @@ typedef struct MslFrameWindow {
   uint8_t loaded;
 } MslFrameWindow;
 
+typedef struct MslThrowRelease {
+  int16_t release_af;  // inclusive (0-based action_frame)
+  uint8_t hit_idx;
+  uint8_t loaded;
+} MslThrowRelease;
+
+typedef struct MslThrowHitbox {
+  float damage;
+  uint16_t angle;
+  uint16_t kbg;
+  uint16_t wsk;
+  uint16_t bkb;
+  uint8_t element;
+  uint8_t sfx_kind;
+  uint8_t sfx_severity;
+  uint8_t loaded;
+} MslThrowHitbox;
+
 enum { MSL_ATTACKAIR_KIND_COUNT = 5 };
 enum {
   MSL_ATTACKAIR_KIND_N = 0,
@@ -35,6 +53,16 @@ static MslFrameWindow g_allow_interrupt_by_char_attackair[256][MSL_ATTACKAIR_KIN
 static MslFrameWindow g_cmd0_by_char_dash[256];
 static MslFrameWindow g_throw_flags_by_char_catch[256];
 static MslFrameWindow g_throw_flags_by_char_catchdash[256];
+enum { MSL_THROW_KIND_COUNT = 4 };
+enum {
+  MSL_THROW_KIND_F = 0,
+  MSL_THROW_KIND_B = 1,
+  MSL_THROW_KIND_HI = 2,
+  MSL_THROW_KIND_LW = 3,
+};
+enum { MSL_THROW_HITBOX_IDX_MAX = 8 };
+static MslThrowRelease g_throw_release_by_char[256][MSL_THROW_KIND_COUNT];
+static MslThrowHitbox g_throw_hitbox_by_char[256][MSL_THROW_KIND_COUNT][MSL_THROW_HITBOX_IDX_MAX];
 static int g_loaded = 0;
 
 static const char* json_skip_ws(const char* s) {
@@ -57,6 +85,23 @@ static const char* json_parse_int(const char* s, int* out) {
   }
   if (out) {
     *out = (int)v;
+  }
+  return end;
+}
+
+static const char* json_parse_f32(const char* s, float* out) {
+  s = json_skip_ws(s);
+  if (s == NULL) {
+    return NULL;
+  }
+  char* end = NULL;
+  errno = 0;
+  const double v = strtod(s, &end);
+  if (end == s || errno != 0) {
+    return NULL;
+  }
+  if (out) {
+    *out = (float)v;
   }
   return end;
 }
@@ -142,6 +187,32 @@ static int json_get_i32_in_range(const char* start, const char* end, const char*
   p++;
   int v = 0;
   if (json_parse_int(p, &v) == NULL) {
+    return -1;
+  }
+  *out = v;
+  return 0;
+}
+
+static int json_get_f32_in_range(const char* start, const char* end, const char* key, float* out) {
+  if (start == NULL || end == NULL || key == NULL || out == NULL || start >= end) {
+    return -1;
+  }
+  char pat[128];
+  const int n = snprintf(pat, sizeof(pat), "\"%s\"", key);
+  if (n <= 0 || (size_t)n >= sizeof(pat)) {
+    return -1;
+  }
+  const char* p = strstr_range(start, end, pat);
+  if (p == NULL) {
+    return -1;
+  }
+  p = (const char*)memchr(p, ':', (size_t)(end - p));
+  if (p == NULL) {
+    return -1;
+  }
+  p++;
+  float v = 0.0f;
+  if (json_parse_f32(p, &v) == NULL) {
     return -1;
   }
   *out = v;
@@ -455,6 +526,120 @@ static int parse_attackair_allow_interrupt_window(const char* buf, const char* b
   return 0;
 }
 
+static int parse_throw_release_and_hitboxes(const char* buf, const char* buf_end, const char* move_key,
+                                            MslThrowRelease* out_release,
+                                            MslThrowHitbox out_hitboxes[MSL_THROW_HITBOX_IDX_MAX]) {
+  if (buf == NULL || buf_end == NULL || move_key == NULL || out_release == NULL ||
+      out_hitboxes == NULL) {
+    return -1;
+  }
+
+  char pat[128];
+  const int pn = snprintf(pat, sizeof(pat), "\"%s\"", move_key);
+  if (pn <= 0 || (size_t)pn >= sizeof(pat)) {
+    return -1;
+  }
+
+  const char* key_pos = strstr_range(buf, buf_end, pat);
+  if (key_pos == NULL) {
+    return -1;
+  }
+  const char* obj_start = (const char*)memchr(key_pos, '{', (size_t)(buf_end - key_pos));
+  if (obj_start == NULL) {
+    return -1;
+  }
+  const char* obj_end = json_find_matching_delim(obj_start, buf_end, '{', '}');
+  if (obj_end == NULL) {
+    return -1;
+  }
+
+  const char* events_key = strstr_range(obj_start, obj_end, "\"events\"");
+  if (events_key == NULL) {
+    return -1;
+  }
+  const char* arr_start = (const char*)memchr(events_key, '[', (size_t)(obj_end - events_key));
+  if (arr_start == NULL) {
+    return -1;
+  }
+  const char* arr_end = json_find_matching_delim(arr_start, obj_end, '[', ']');
+  if (arr_end == NULL) {
+    return -1;
+  }
+
+  *out_release = (MslThrowRelease){0};
+  for (size_t i = 0; i < MSL_THROW_HITBOX_IDX_MAX; i++) {
+    out_hitboxes[i] = (MslThrowHitbox){0};
+  }
+
+  int best_release_frame = -1;
+  int best_release_hit_idx = INT_MAX;
+
+  const char* p = arr_start;
+  while (p && p < arr_end) {
+    const char* ev_start = (const char*)memchr(p, '{', (size_t)(arr_end - p));
+    if (ev_start == NULL) {
+      break;
+    }
+    const char* ev_end = json_find_matching_delim(ev_start, arr_end, '{', '}');
+    if (ev_end == NULL) {
+      break;
+    }
+
+    if (json_get_str_eq_in_range(ev_start, ev_end, "kind", "set_throw_flags")) {
+      int frame = 0;
+      int hit_idx = 0;
+      if (json_get_i32_in_range(ev_start, ev_end, "frame", &frame) == 0 &&
+          json_get_i32_in_range(ev_start, ev_end, "hit_idx", &hit_idx) == 0) {
+        if (best_release_frame < 0 || frame < best_release_frame ||
+            (frame == best_release_frame && hit_idx < best_release_hit_idx)) {
+          best_release_frame = frame;
+          best_release_hit_idx = hit_idx;
+        }
+      }
+    } else if (json_get_str_eq_in_range(ev_start, ev_end, "kind", "set_throw_hitbox")) {
+      int idx = 0;
+      int angle = 0;
+      int kbg = 0;
+      int wsk = 0;
+      int bkb = 0;
+      int element = 0;
+      int sfx_kind = 0;
+      int sfx_severity = 0;
+      float damage = 0.0f;
+      if (json_get_i32_in_range(ev_start, ev_end, "idx", &idx) == 0 &&
+          json_get_f32_in_range(ev_start, ev_end, "damage", &damage) == 0 &&
+          json_get_i32_in_range(ev_start, ev_end, "angle", &angle) == 0 &&
+          json_get_i32_in_range(ev_start, ev_end, "kbg", &kbg) == 0 &&
+          json_get_i32_in_range(ev_start, ev_end, "wsk", &wsk) == 0 &&
+          json_get_i32_in_range(ev_start, ev_end, "bkb", &bkb) == 0 &&
+          json_get_i32_in_range(ev_start, ev_end, "element", &element) == 0 &&
+          json_get_i32_in_range(ev_start, ev_end, "sfx_kind", &sfx_kind) == 0 &&
+          json_get_i32_in_range(ev_start, ev_end, "sfx_severity", &sfx_severity) == 0) {
+        if (idx >= 0 && idx < (int)MSL_THROW_HITBOX_IDX_MAX && !out_hitboxes[(size_t)idx].loaded) {
+          out_hitboxes[(size_t)idx].damage = damage;
+          out_hitboxes[(size_t)idx].angle = (uint16_t)angle;
+          out_hitboxes[(size_t)idx].kbg = (uint16_t)kbg;
+          out_hitboxes[(size_t)idx].wsk = (uint16_t)wsk;
+          out_hitboxes[(size_t)idx].bkb = (uint16_t)bkb;
+          out_hitboxes[(size_t)idx].element = (uint8_t)element;
+          out_hitboxes[(size_t)idx].sfx_kind = (uint8_t)sfx_kind;
+          out_hitboxes[(size_t)idx].sfx_severity = (uint8_t)sfx_severity;
+          out_hitboxes[(size_t)idx].loaded = 1;
+        }
+      }
+    }
+
+    p = ev_end + 1;
+  }
+
+  if (best_release_frame >= 0 && best_release_hit_idx != INT_MAX) {
+    out_release->release_af = (int16_t)best_release_frame;
+    out_release->hit_idx = (uint8_t)best_release_hit_idx;
+    out_release->loaded = 1;
+  }
+  return 0;
+}
+
 static int parse_throw_flags_window_open_end(const char* buf, const char* buf_end, const char* move_key,
                                              MslFrameWindow* out) {
   if (buf == NULL || buf_end == NULL || move_key == NULL || out == NULL) {
@@ -654,6 +839,35 @@ static int load_one(const char* data_dir, const char* rel_path, uint8_t char_id)
     g_throw_flags_by_char_catchdash[char_id] = win;
   }
 
+  // Throw release timing + throw hitbox params.
+  //
+  // Source:
+  // - data/moves/{fox,falco}.json moves["ftCo_SM_Throw*"]["events"] set_throw_flags (release)
+  // - data/moves/{fox,falco}.json moves["ftCo_SM_Throw*"]["events"] set_throw_hitbox
+  //
+  // Note: parsing is init-time only; per-frame queries must remain alloc-free.
+  MslThrowRelease rel = {0};
+  MslThrowHitbox hitboxes[MSL_THROW_HITBOX_IDX_MAX];
+  if (parse_throw_release_and_hitboxes(buf, buf_end, "ftCo_SM_ThrowF", &rel, hitboxes) == 0) {
+    g_throw_release_by_char[char_id][MSL_THROW_KIND_F] = rel;
+    memcpy(g_throw_hitbox_by_char[char_id][MSL_THROW_KIND_F], hitboxes, sizeof(hitboxes));
+  }
+  rel = (MslThrowRelease){0};
+  if (parse_throw_release_and_hitboxes(buf, buf_end, "ftCo_SM_ThrowB", &rel, hitboxes) == 0) {
+    g_throw_release_by_char[char_id][MSL_THROW_KIND_B] = rel;
+    memcpy(g_throw_hitbox_by_char[char_id][MSL_THROW_KIND_B], hitboxes, sizeof(hitboxes));
+  }
+  rel = (MslThrowRelease){0};
+  if (parse_throw_release_and_hitboxes(buf, buf_end, "ftCo_SM_ThrowHi", &rel, hitboxes) == 0) {
+    g_throw_release_by_char[char_id][MSL_THROW_KIND_HI] = rel;
+    memcpy(g_throw_hitbox_by_char[char_id][MSL_THROW_KIND_HI], hitboxes, sizeof(hitboxes));
+  }
+  rel = (MslThrowRelease){0};
+  if (parse_throw_release_and_hitboxes(buf, buf_end, "ftCo_SM_ThrowLw", &rel, hitboxes) == 0) {
+    g_throw_release_by_char[char_id][MSL_THROW_KIND_LW] = rel;
+    memcpy(g_throw_hitbox_by_char[char_id][MSL_THROW_KIND_LW], hitboxes, sizeof(hitboxes));
+  }
+
   alloc_free(buf);
   return 0;
 }
@@ -772,4 +986,77 @@ uint8_t move_tables_catchpull_should_enter_wait(uint8_t char_id, uint16_t catch_
     return 0;
   }
   return (cur_anim_frame_f32 >= (float)win.start_af) ? 1 : 0;
+}
+
+static inline int throw_kind_from_action(uint16_t a) {
+  switch (a) {
+    case MSL_ACT_THROW_F:
+      return MSL_THROW_KIND_F;
+    case MSL_ACT_THROW_B:
+      return MSL_THROW_KIND_B;
+    case MSL_ACT_THROW_HI:
+      return MSL_THROW_KIND_HI;
+    case MSL_ACT_THROW_LW:
+      return MSL_THROW_KIND_LW;
+    default:
+      return -1;
+  }
+}
+
+uint8_t move_tables_throw_has_release(uint8_t char_id, uint16_t throw_action_id) {
+  const int kind = throw_kind_from_action(throw_action_id);
+  if (kind < 0) {
+    return 0;
+  }
+  return g_throw_release_by_char[char_id][(size_t)kind].loaded ? 1 : 0;
+}
+
+uint8_t move_tables_throw_release_hit_idx(uint8_t char_id, uint16_t throw_action_id,
+                                          float cur_anim_frame_f32, uint8_t* out_hit_idx) {
+  const int kind = throw_kind_from_action(throw_action_id);
+  if (kind < 0) {
+    return 0;
+  }
+
+  const MslThrowRelease rel = g_throw_release_by_char[char_id][(size_t)kind];
+  if (!rel.loaded) {
+    return 0;
+  }
+
+  if (cur_anim_frame_f32 >= (float)rel.release_af) {
+    if (out_hit_idx) {
+      *out_hit_idx = rel.hit_idx;
+    }
+    return 1;
+  }
+  return 0;
+}
+
+uint8_t move_tables_throw_hitbox_params(uint8_t char_id, uint16_t throw_action_id, uint8_t hit_idx,
+                                        MslThrowHitboxParams* out) {
+  if (out == NULL) {
+    return 0;
+  }
+  const int kind = throw_kind_from_action(throw_action_id);
+  if (kind < 0) {
+    return 0;
+  }
+  if (hit_idx >= (uint8_t)MSL_THROW_HITBOX_IDX_MAX) {
+    return 0;
+  }
+
+  const MslThrowHitbox hb = g_throw_hitbox_by_char[char_id][(size_t)kind][(size_t)hit_idx];
+  if (!hb.loaded) {
+    return 0;
+  }
+
+  out->damage = hb.damage;
+  out->angle = hb.angle;
+  out->kbg = hb.kbg;
+  out->wsk = hb.wsk;
+  out->bkb = hb.bkb;
+  out->element = hb.element;
+  out->sfx_kind = hb.sfx_kind;
+  out->sfx_severity = hb.sfx_severity;
+  return 1;
 }
