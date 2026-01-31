@@ -72,3 +72,11 @@ uint8_t move_tables_throw_release_hit_idx(uint8_t char_id, uint16_t throw_action
 // Source of truth: data/moves/{fox,falco}.json moves["ftCo_SM_Throw*"]["events"] set_throw_hitbox.
 uint8_t move_tables_throw_hitbox_params(uint8_t char_id, uint16_t throw_action_id, uint8_t hit_idx,
                                         MslThrowHitboxParams* out);
+
+// Returns whether a throw should flip the thrower's facing this frame.
+//
+// Source of truth: data/moves/{fox,falco}.json moves["ftCo_SM_Throw*"]["events"] set_throw_flags(hit_idx=1),
+// which maps to throw_flags_b4 in decomp:
+// refs/melee/src/melee/ft/ftaction.c::ftAction_800718A4 (case 1).
+uint8_t move_tables_throw_should_flip_facing(uint8_t char_id, uint16_t throw_action_id,
+                                             float prev_anim_frame_f32, float cur_anim_frame_f32);

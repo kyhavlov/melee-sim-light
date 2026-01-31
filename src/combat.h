@@ -5,6 +5,16 @@
 void combat_resolve(MslBatch* batch);
 void combat_processhit_consume(MslBatch* batch);
 
+typedef struct MslThrowHitboxParams MslThrowHitboxParams;
+
+// Apply a throw hit (Throw* -> Thrown* victim), using extracted set_throw_hitbox params and the
+// same decomp-shaped percent/hitlag/KB/hitstun/state-entry machinery as combat_resolve.
+//
+// Returns 1 if defender damage/KB/state entry is applied; 0 if the hit is suppressed by
+// invincibility/intangibility gating (attacker hitlag may still apply).
+uint8_t combat_apply_throw_hit(MslBatch* batch, int batch_index, int attacker, int defender,
+                               const MslThrowHitboxParams* p);
+
 // Apply a single item->fighter BODY hit using decomp-shaped damage/hitlag/hitstun/state-entry math.
 //
 // Intended for simple projectiles (e.g. Fox/Falco blaster lasers) that resolve outside the

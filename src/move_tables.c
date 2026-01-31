@@ -62,6 +62,7 @@ enum {
 };
 enum { MSL_THROW_HITBOX_IDX_MAX = 8 };
 static MslThrowRelease g_throw_release_by_char[256][MSL_THROW_KIND_COUNT];
+static MslFrameWindow g_throw_flip_by_char[256][MSL_THROW_KIND_COUNT];
 static MslThrowHitbox g_throw_hitbox_by_char[256][MSL_THROW_KIND_COUNT][MSL_THROW_HITBOX_IDX_MAX];
 static int g_loaded = 0;
 
@@ -526,11 +527,11 @@ static int parse_attackair_allow_interrupt_window(const char* buf, const char* b
   return 0;
 }
 
-static int parse_throw_release_and_hitboxes(const char* buf, const char* buf_end, const char* move_key,
-                                            MslThrowRelease* out_release,
-                                            MslThrowHitbox out_hitboxes[MSL_THROW_HITBOX_IDX_MAX]) {
+static int parse_throw_release_and_hitboxes(
+    const char* buf, const char* buf_end, const char* move_key, MslThrowRelease* out_release,
+    MslFrameWindow* out_flip, MslThrowHitbox out_hitboxes[MSL_THROW_HITBOX_IDX_MAX]) {
   if (buf == NULL || buf_end == NULL || move_key == NULL || out_release == NULL ||
-      out_hitboxes == NULL) {
+      out_flip == NULL || out_hitboxes == NULL) {
     return -1;
   }
 
@@ -567,12 +568,13 @@ static int parse_throw_release_and_hitboxes(const char* buf, const char* buf_end
   }
 
   *out_release = (MslThrowRelease){0};
+  *out_flip = (MslFrameWindow){0};
   for (size_t i = 0; i < MSL_THROW_HITBOX_IDX_MAX; i++) {
     out_hitboxes[i] = (MslThrowHitbox){0};
   }
 
   int best_release_frame = -1;
-  int best_release_hit_idx = INT_MAX;
+  int best_flip_frame = -1;
 
   const char* p = arr_start;
   while (p && p < arr_end) {
@@ -590,10 +592,18 @@ static int parse_throw_release_and_hitboxes(const char* buf, const char* buf_end
       int hit_idx = 0;
       if (json_get_i32_in_range(ev_start, ev_end, "frame", &frame) == 0 &&
           json_get_i32_in_range(ev_start, ev_end, "hit_idx", &hit_idx) == 0) {
-        if (best_release_frame < 0 || frame < best_release_frame ||
-            (frame == best_release_frame && hit_idx < best_release_hit_idx)) {
-          best_release_frame = frame;
-          best_release_hit_idx = hit_idx;
+        // Decomp: ftAction_800718A4 interprets hit_idx as a selector for which throw_flags bit to set:
+        // - 0 => throw_flags_b3 (release / apply throw hit)
+        // - 1 => throw_flags_b4 (flip facing)
+        // refs/melee/src/melee/ft/ftaction.c::ftAction_800718A4
+        if (hit_idx == 0) {
+          if (best_release_frame < 0 || frame < best_release_frame) {
+            best_release_frame = frame;
+          }
+        } else if (hit_idx == 1) {
+          if (best_flip_frame < 0 || frame < best_flip_frame) {
+            best_flip_frame = frame;
+          }
         }
       }
     } else if (json_get_str_eq_in_range(ev_start, ev_end, "kind", "set_throw_hitbox")) {
@@ -632,10 +642,22 @@ static int parse_throw_release_and_hitboxes(const char* buf, const char* buf_end
     p = ev_end + 1;
   }
 
-  if (best_release_frame >= 0 && best_release_hit_idx != INT_MAX) {
+  if (best_release_frame >= 0) {
     out_release->release_af = (int16_t)best_release_frame;
-    out_release->hit_idx = (uint8_t)best_release_hit_idx;
+    // set_throw_flags(hit_idx=0) gates the throw-hit application; the throw hitbox params are
+    // configured separately by set_throw_hitbox(idx=...).
+    //
+    // Decomp: ftCo_800DDDE4 reads fp->xDF4[0] for the throw hit capsule (HitCapsule).
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DDDE4
+    //
+    // Current sim policy (Fox/Falco v1): use throw hitbox idx 0.
+    out_release->hit_idx = 0;
     out_release->loaded = 1;
+  }
+  if (best_flip_frame >= 0) {
+    out_flip->start_af = (int16_t)best_flip_frame;
+    out_flip->end_af = INT16_MAX;
+    out_flip->loaded = 1;
   }
   return 0;
 }
@@ -847,24 +869,32 @@ static int load_one(const char* data_dir, const char* rel_path, uint8_t char_id)
   //
   // Note: parsing is init-time only; per-frame queries must remain alloc-free.
   MslThrowRelease rel = {0};
+  MslFrameWindow flip = {0};
   MslThrowHitbox hitboxes[MSL_THROW_HITBOX_IDX_MAX];
-  if (parse_throw_release_and_hitboxes(buf, buf_end, "ftCo_SM_ThrowF", &rel, hitboxes) == 0) {
+  if (parse_throw_release_and_hitboxes(buf, buf_end, "ftCo_SM_ThrowF", &rel, &flip, hitboxes) == 0) {
     g_throw_release_by_char[char_id][MSL_THROW_KIND_F] = rel;
+    g_throw_flip_by_char[char_id][MSL_THROW_KIND_F] = flip;
     memcpy(g_throw_hitbox_by_char[char_id][MSL_THROW_KIND_F], hitboxes, sizeof(hitboxes));
   }
   rel = (MslThrowRelease){0};
-  if (parse_throw_release_and_hitboxes(buf, buf_end, "ftCo_SM_ThrowB", &rel, hitboxes) == 0) {
+  flip = (MslFrameWindow){0};
+  if (parse_throw_release_and_hitboxes(buf, buf_end, "ftCo_SM_ThrowB", &rel, &flip, hitboxes) == 0) {
     g_throw_release_by_char[char_id][MSL_THROW_KIND_B] = rel;
+    g_throw_flip_by_char[char_id][MSL_THROW_KIND_B] = flip;
     memcpy(g_throw_hitbox_by_char[char_id][MSL_THROW_KIND_B], hitboxes, sizeof(hitboxes));
   }
   rel = (MslThrowRelease){0};
-  if (parse_throw_release_and_hitboxes(buf, buf_end, "ftCo_SM_ThrowHi", &rel, hitboxes) == 0) {
+  flip = (MslFrameWindow){0};
+  if (parse_throw_release_and_hitboxes(buf, buf_end, "ftCo_SM_ThrowHi", &rel, &flip, hitboxes) == 0) {
     g_throw_release_by_char[char_id][MSL_THROW_KIND_HI] = rel;
+    g_throw_flip_by_char[char_id][MSL_THROW_KIND_HI] = flip;
     memcpy(g_throw_hitbox_by_char[char_id][MSL_THROW_KIND_HI], hitboxes, sizeof(hitboxes));
   }
   rel = (MslThrowRelease){0};
-  if (parse_throw_release_and_hitboxes(buf, buf_end, "ftCo_SM_ThrowLw", &rel, hitboxes) == 0) {
+  flip = (MslFrameWindow){0};
+  if (parse_throw_release_and_hitboxes(buf, buf_end, "ftCo_SM_ThrowLw", &rel, &flip, hitboxes) == 0) {
     g_throw_release_by_char[char_id][MSL_THROW_KIND_LW] = rel;
+    g_throw_flip_by_char[char_id][MSL_THROW_KIND_LW] = flip;
     memcpy(g_throw_hitbox_by_char[char_id][MSL_THROW_KIND_LW], hitboxes, sizeof(hitboxes));
   }
 
@@ -1059,4 +1089,25 @@ uint8_t move_tables_throw_hitbox_params(uint8_t char_id, uint16_t throw_action_i
   out->sfx_kind = hb.sfx_kind;
   out->sfx_severity = hb.sfx_severity;
   return 1;
+}
+
+uint8_t move_tables_throw_should_flip_facing(uint8_t char_id, uint16_t throw_action_id,
+                                             float prev_anim_frame_f32, float cur_anim_frame_f32) {
+  const int kind = throw_kind_from_action(throw_action_id);
+  if (kind < 0) {
+    return 0;
+  }
+  const MslFrameWindow flip = g_throw_flip_by_char[char_id][(size_t)kind];
+  if (!flip.loaded) {
+    return 0;
+  }
+  // set_throw_flags(hit_idx=1) is interpreted by ftAction_800718A4 as a "flip facing" flag that is
+  // later consumed once by ftCo_800DD724 (clearing the underlying bit).
+  // refs/melee/src/melee/ft/ftaction.c::ftAction_800718A4
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DD724
+  //
+  // Use a "crossing" check so we don't miss the flip if frame_speed_mul > 1.0 advances the
+  // animation timebase by more than one frame in a single step.
+  const float on = (float)flip.start_af;
+  return (prev_anim_frame_f32 < on && cur_anim_frame_f32 >= on) ? 1u : 0u;
 }

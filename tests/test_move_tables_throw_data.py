@@ -14,6 +14,8 @@ ACT_THROW_B = 0x00DC
 ACT_THROW_HI = 0x00DD
 ACT_THROW_LW = 0x00DE
 
+pytestmark = pytest.mark.integration
+
 
 @pytest.fixture(scope="module", autouse=True)
 def _ensure_move_tables_loaded() -> None:
@@ -31,12 +33,17 @@ def _load_throw_expectations(move_path: Path, move_key: str) -> tuple[int, int, 
     data = json.loads(move_path.read_text())
     events = data["moves"][move_key]["events"]
 
-    release_events = [ev for ev in events if ev.get("kind") == "set_throw_flags"]
+    # Decomp: set_throw_flags(hit_idx=0) sets throw_flags_b3 (release/apply throw hit),
+    # while hit_idx=1 flips facing (throw_flags_b4).
+    # refs/melee/src/melee/ft/ftaction.c::ftAction_800718A4
+    release_events = [
+        ev
+        for ev in events
+        if ev.get("kind") == "set_throw_flags" and int(ev["data"]["hit_idx"]) == 0
+    ]
     assert release_events
     release_frame = min(int(ev["frame"]) for ev in release_events)
-    hit_idx = min(
-        int(ev["data"]["hit_idx"]) for ev in release_events if int(ev["frame"]) == int(release_frame)
-    )
+    hit_idx = 0
 
     hitboxes: dict[int, dict] = {}
     for ev in events:
@@ -65,6 +72,8 @@ def test_move_tables_throwhi_release_diff_and_hitbox_params_match_json() -> None
     root = Path(__file__).resolve().parents[1]
     fox_path = root / "data" / "moves" / "fox.json"
     falco_path = root / "data" / "moves" / "falco.json"
+    if not fox_path.exists() or not falco_path.exists():
+        pytest.skip("missing local data/moves/{fox,falco}.json (gitignored)")
 
     fox_release_frame, fox_hit_idx, fox_hitboxes = _load_throw_expectations(
         fox_path, "ftCo_SM_ThrowHi"
@@ -113,6 +122,8 @@ def test_move_tables_other_throws_have_release_frame(char_id: int, throw_action_
 
     root = Path(__file__).resolve().parents[1]
     move_path = root / "data" / "moves" / ("fox.json" if char_id == CHAR_FOX else "falco.json")
+    if not move_path.exists():
+        pytest.skip(f"missing local data/moves/{move_path.name} (gitignored)")
     exp_release_frame, exp_hit_idx, _exp_hitboxes = _load_throw_expectations(move_path, move_key)
 
     got_release_frame, got_hit_idx = _find_release_frame(msl_binding, char_id, throw_action_id)

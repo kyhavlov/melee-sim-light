@@ -415,7 +415,7 @@ def _parse_subaction_events(
             elif op == 34:
                 # Set throw hitbox (ftAction_80071E04): configures fp->xDF4[2] hitboxes used during throws.
                 # Word0: opcode, idx (3), damage (23)
-                # Word1: angle (9), kbg (9), wsk (9)
+                # Word1: kb_angle (9), kbg (9), wsk (9)
                 # Word2: bkb (9), element (4), sfx_severity (3), sfx_kind (4)
                 if n_words < 3:
                     pc += 4 * n_words
@@ -426,9 +426,14 @@ def _parse_subaction_events(
                 idx = (w0 >> 23) & 0x7
                 damage = w0 & _U23_MASK
 
-                angle = (w1 >> 18) & 0x1FF
-                kbg = (w1 >> 9) & 0x1FF
-                wsk = w1 & 0x1FF
+                # Decomp shape: refs/melee/src/melee/lb/types.h::set_throw_hitbox_1
+                # Bit layout matches spawn_hitbox_3:
+                # - kb_angle: bits 23..31 (9)
+                # - kbg:      bits 14..22 (9)
+                # - wsk:      bits  5..13 (9)
+                kb_angle = (w1 >> 23) & 0x1FF
+                kbg = (w1 >> 14) & 0x1FF
+                wsk = (w1 >> 5) & 0x1FF
 
                 bkb = (w2 >> 23) & 0x1FF
                 element = (w2 >> 19) & 0xF
@@ -442,7 +447,7 @@ def _parse_subaction_events(
                         data={
                             "idx": int(idx),
                             "damage": float(damage),
-                            "angle": int(angle),
+                            "angle": int(kb_angle),
                             "kbg": int(kbg),
                             "wsk": int(wsk),
                             "bkb": int(bkb),

@@ -17,6 +17,7 @@
 #include "hitboxes_tables.h"
 #include "hit_status_tables.h"
 #include "hitlist.h"
+#include "move_tables.h"
 #include "staling.h"
 
 static inline size_t idx_hitbox(int bi, int p, int hb_i) {
@@ -1098,6 +1099,180 @@ void combat_apply_item_hit(MslBatch* batch, int batch_index, int attacker, int d
   // Combo count + last-attack tracking (attacker-side).
   // Decomp: refs/melee/src/melee/ft/ftcoll.c::ftColl_8007646C -> ftColl_800763C0(item attack id domain).
   combat_combo_ftColl_800763C0(batch, a_idx, defender, d_idx, item_attack_id);
+}
+
+uint8_t combat_apply_throw_hit(MslBatch* batch, int batch_index, int attacker, int defender,
+                               const MslThrowHitboxParams* p) {
+  if (batch == NULL || p == NULL) {
+    return 0;
+  }
+  const int num_players = (int)batch->config.num_players;
+  if (batch_index < 0 || batch_index >= batch->batch_size) {
+    return 0;
+  }
+  if (attacker < 0 || attacker >= num_players || defender < 0 || defender >= num_players ||
+      attacker == defender) {
+    return 0;
+  }
+
+  const size_t a_idx = msl_idx_player(batch_index, attacker);
+  const size_t d_idx = msl_idx_player(batch_index, defender);
+
+  const MslCommonParams* c = msl_common_params();
+  if (c == NULL) {
+    return 0;
+  }
+
+  // Hit status / hurtbox-state eligibility gate (movescript-derived; opcode 26 + Slippi passthrough).
+  //
+  // Decomp pointers (GALE01):
+  // - set_throw_flags triggers throw hit application (ftCo_800DD724), which then gates the throw
+  //   damage float on ftColl_8007B868(victim):
+  //   refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DD724
+  //   refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DDDE4
+  // - Intangible blocks hurtcapsule collision checks entirely:
+  //   refs/melee/src/melee/ft/ftcoll.c::ftColl_8007B868 (guards the hurtcapsule loop on `x1988 != 2 && x198C != 2`)
+  // - Invincible still allows a "contact" that can contribute to attacker hitlag, but suppresses
+  //   defender damage/KB/state entry:
+  //   refs/melee/src/melee/ft/ftcoll.c::ftColl_80076ED8
+  const uint8_t hit_status = combat_defender_hit_status_u8(batch, d_idx);
+  uint8_t hurt_state = batch->state.hurtbox_state[d_idx];
+  if (hit_status > hurt_state) {
+    hurt_state = hit_status;
+  }
+  if (hurt_state == 2u) {
+    return 0;
+  }
+  const uint8_t defender_no_damage = (hurt_state != 0u) ? 1u : 0u;
+
+  // Throws participate in staling (decomp: plStale tables are applied to fighter attacks).
+  const uint16_t move_id = staling_move_id_from_state(batch, a_idx);
+  const float stale_mult = staling_multiplier_for_move(batch, a_idx, move_id);
+
+  float dmg_f = p->damage;
+  if (stale_mult != 1.0f) {
+    dmg_f *= stale_mult;
+  }
+  const int dmg_i = combat_get_env_dmg(dmg_f);
+  if (dmg_i <= 0) {
+    return 0;
+  }
+
+  // Attacker hitlag applies even when defender is invincible (invincible BODY contact).
+  const uint16_t a_motion_id = batch->state.action_id[a_idx];
+  const uint16_t a_hl = combat_calc_hitlag_frames(c, dmg_i, a_motion_id);
+  if (a_hl > batch->state.hitlag[a_idx]) {
+    batch->state.hitlag[a_idx] = a_hl;
+    combat_state_flags_set_is_hitlag(batch, a_idx, a_hl);
+  }
+
+  if (defender_no_damage) {
+    return 0;
+  }
+
+  // Percent-temp accumulation (BODY): fp->dmg.x1838_percentTemp.
+  const float percent_pre = batch->state.percent[d_idx];
+  batch->state.percent_temp[d_idx] += dmg_f;
+  const float dmg_temp = batch->state.percent_temp[d_idx];
+
+  // Defender hitlag: throw hit uses the same ftCommon_CalcHitlag path as BODY hits.
+  const uint16_t d_motion_id = batch->state.action_id[d_idx];
+  const uint16_t d_hl = combat_calc_hitlag_frames(c, dmg_i, d_motion_id);
+  if (d_hl > batch->state.hitlag[d_idx]) {
+    batch->state.hitlag[d_idx] = d_hl;
+    combat_state_flags_set_is_hitlag(batch, d_idx, d_hl);
+  }
+
+  const MslCharParams* d_ch = msl_char_params(batch->state.char_id[d_idx]);
+  if (d_ch == NULL) {
+    return 0;
+  }
+
+  // Throw hits are treated as airborne damage entry (victim is detached from the throw joint).
+  // Decomp: throw release clears grounded state via ftCommon_8007D5D4 on the thrown fighter.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DDDE4
+  batch->state.on_ground[d_idx] = 0;
+  const uint8_t defender_on_ground = 0u;
+
+  // Knockback magnitude (ftColl_80079AB0) + damage angle (ftCo_Damage_CalcAngle).
+  const size_t bi = a_idx / (size_t)MSL_MAX_PLAYERS;
+  float coll_kb_mul = batch->state.match_damage_ratio[bi];
+  coll_kb_mul *= batch->state.attack_ratio[a_idx];
+  coll_kb_mul *= batch->state.defense_ratio[d_idx];
+  if (!(coll_kb_mul > 0.0f)) {
+    coll_kb_mul = 1.0f;
+  }
+
+  const float kb_applied = combat_damage_calc_kb_applied(
+      c, d_ch, d_motion_id, percent_pre, dmg_temp, dmg_i, p->kbg, p->wsk, p->bkb, coll_kb_mul,
+      batch->state.dmg_x2225_b7[d_idx], batch->state.dmg_x2224_b2[d_idx]);
+  const float kb_angle_rad =
+      combat_damage_calc_angle_radians(c, p->angle, defender_on_ground, kb_applied);
+
+  if (kb_applied == 0.0f) {
+    batch->state.speed_x_attack[d_idx] = 0.0f;
+    batch->state.speed_y_attack[d_idx] = 0.0f;
+    batch->state.hitstun[d_idx] = 0;
+    combat_state_flags_set_is_hitstun(batch, d_idx, 0);
+    batch->state.instance_hit_by[d_idx] = batch->state.instance_id[a_idx];
+    batch->state.last_hit_by[d_idx] = (uint8_t)attacker;
+
+    const uint16_t attack_instance = batch->state.attack_instance[a_idx];
+    staling_queue_update(batch, a_idx, move_id, attack_instance);
+    combat_combo_ftColl_800763C0(batch, a_idx, defender, d_idx, batch->state.attack_id[a_idx]);
+    return 1;
+  }
+
+  float kb_vel_mag = kb_applied * c->kb_vel_mul;
+  if (!defender_on_ground && combat_damage_check_air_motion_kb_mul(c, batch, d_idx)) {
+    kb_vel_mag *= c->air_motion_kb_mul;
+  }
+
+  const float x = kb_vel_mag * cosf(kb_angle_rad);
+  const float y = kb_vel_mag * sinf(kb_angle_rad);
+
+  // Horizontal sign for throw KB uses the thrower's facing, not relative X position.
+  //
+  // Decomp:
+  // - ftCo_800DDDE4 sets fp2->dmg.facing_dir_1 = -(fp->facing_dir) for the thrown fighter.
+  //   refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DDDE4
+  // - ftCo_8008DCE0 applies `kb_x = -x * fp->facing_dir` after setting facing_dir from
+  //   fp->dmg.facing_dir_1.
+  //   refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
+  const float one = combat_damage_ftColl_804D82EC_one();
+  const float thrower_facing_dir = batch->state.facing[a_idx] ? one : -one;
+  const float defender_facing_dir_1 = -thrower_facing_dir;
+  batch->state.facing[d_idx] = (uint8_t)(defender_facing_dir_1 > 0.0f);
+  const float kb_x = -x * defender_facing_dir_1;
+  const float kb_y = y;
+
+  batch->state.speed_x_attack[d_idx] = kb_x;
+  batch->state.speed_y_attack[d_idx] = kb_y;
+
+  // Decomp: after setting KB velocity, ftCo_8008DCE0 clears self velocity (self_vel and gr_vel).
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0 (block_28)
+  batch->state.speed_air_x_self[d_idx] = 0.0f;
+  batch->state.speed_ground_x_self[d_idx] = 0.0f;
+  batch->state.speed_y_self[d_idx] = 0.0f;
+
+  const uint16_t hs = combat_damage_hitstun_from_kb(c, kb_applied);
+  batch->state.hitstun[d_idx] = hs;
+  combat_state_flags_set_is_hitstun(batch, d_idx, hs);
+
+  // Throw hits mark the damaged hurtbox as "mid" in decomp (x184c_damaged_hurtbox = 1).
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DDDE4
+  const uint8_t hurt_height = 1u;
+  combat_damage_enter_state(c, batch, d_idx, defender_on_ground, hurt_height, kb_applied,
+                            kb_angle_rad);
+
+  batch->state.instance_hit_by[d_idx] = batch->state.instance_id[a_idx];
+  batch->state.last_hit_by[d_idx] = (uint8_t)attacker;
+
+  const uint16_t attack_instance = batch->state.attack_instance[a_idx];
+  staling_queue_update(batch, a_idx, move_id, attack_instance);
+  combat_combo_ftColl_800763C0(batch, a_idx, defender, d_idx, batch->state.attack_id[a_idx]);
+
+  return 1;
 }
 
 void combat_apply_item_shield_hit(MslBatch* batch, int batch_index, int attacker, int defender,
