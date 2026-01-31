@@ -12,7 +12,7 @@ VALIDATE_OUT := --out $(OUT)
 endif
 
 build:
-	@$(PY) python/setup.py build_ext --inplace
+	@$(PY) python/setup.py build_ext --inplace --force
 
 test: build
 	@$(PY) -m pytest
