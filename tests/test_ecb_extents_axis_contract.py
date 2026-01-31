@@ -15,6 +15,7 @@ def test_ecb_extents_rel_matches_ssanim01_tz_ty_joint_extrema() -> None:
     - extents X is extracted from SSANIM01 v3 matrix tz (float index 11)
     - extents Y is extracted from SSANIM01 v3 matrix ty (float index 7)
     over the 6 ECB joints listed in data/characters/<char>.json::ecb_joints.
+    - returned extents are scaled by ftData/co_attrs model_scaling (data/characters/<char>.json::model_scaling)
     """
     import msl_binding
 
@@ -58,6 +59,12 @@ def test_ecb_extents_rel_matches_ssanim01_tz_ty_joint_extrema() -> None:
     want_min_y = ty.min()
     want_max_y = ty.max()
 
+    model_scaling = float(d.get("model_scaling", 1.0))
+    want_min_x *= model_scaling
+    want_max_x *= model_scaling
+    want_min_y *= model_scaling
+    want_max_y *= model_scaling
+
     sizes = msl_binding.sizes()
     seed_stride = int(sizes["seed"])
     assert seed_stride > 0
@@ -71,4 +78,3 @@ def test_ecb_extents_rel_matches_ssanim01_tz_ty_joint_extrema() -> None:
     got = np.array([got_min_x, got_max_x, got_min_y, got_max_y], dtype=np.float32)
     want = np.array([want_min_x, want_max_x, want_min_y, want_max_y], dtype=np.float32)
     assert np.array_equal(got.view(np.uint32), want.view(np.uint32)), (int(msid), int(frame))
-

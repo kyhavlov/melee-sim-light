@@ -20,6 +20,7 @@
 #include "shields.h"
 #include "shine.h"
 #include "stage_collision.h"
+#include "mpcoll_env.h"
 #include "timers.h"
 #include "reflector_bubbles.h"
 
@@ -51,6 +52,43 @@ static inline void cache_prev_action_ids(MslBatch* batch) {
     for (int p = 0; p < num_players; p++) {
       const size_t idx = msl_idx_player(bi, p);
       batch->state.prev_action_id[idx] = batch->state.action_id[idx];
+    }
+  }
+}
+
+static inline void cache_collision_stage_prev_pos(MslBatch* batch) {
+  if (batch == NULL) {
+    return;
+  }
+
+  // Decomp: the ledge-grab AABB builders (mpColl_80044164 / mpColl_800443C4) consume CollData.prev_pos
+  // and CollData.cur_pos as managed inside the collision substep loop (mpColl_80043754).
+  //
+  // This sim does not yet implement mpColl substeps. Approximate the collision-stage prev/cur pair:
+  // - coll_stage_prev_pos: position at start of collision stage this frame
+  // - coll_stage_cur_pos: position immediately after stage_collision_apply() this frame
+  // refs/melee/src/melee/mp/mpcoll.c::mpColl_80043754
+  // refs/melee/src/melee/mp/mpcoll.c::mpColl_800443C4
+  const int num_players = (int)batch->config.num_players;
+  for (int bi = 0; bi < batch->batch_size; bi++) {
+    for (int p = 0; p < num_players; p++) {
+      const size_t idx = msl_idx_player(bi, p);
+      batch->state.coll_stage_prev_pos_x[idx] = batch->state.pos_x[idx];
+      batch->state.coll_stage_prev_pos_y[idx] = batch->state.pos_y[idx];
+    }
+  }
+}
+
+static inline void cache_collision_stage_cur_pos(MslBatch* batch) {
+  if (batch == NULL) {
+    return;
+  }
+  const int num_players = (int)batch->config.num_players;
+  for (int bi = 0; bi < batch->batch_size; bi++) {
+    for (int p = 0; p < num_players; p++) {
+      const size_t idx = msl_idx_player(bi, p);
+      batch->state.coll_stage_cur_pos_x[idx] = batch->state.pos_x[idx];
+      batch->state.coll_stage_cur_pos_y[idx] = batch->state.pos_y[idx];
     }
   }
 }
@@ -108,7 +146,12 @@ int step_one_frame(MslBatch* batch, const uint8_t* prev_input_bytes, size_t prev
   //   double-moving them in a single frame.
   // - Thrown victims are still updated in a post-collision "accessory callback" style slot.
   grab_attachment_update_pre_collision(batch);
+  cache_collision_stage_prev_pos(batch);
   stage_collision_apply(batch);
+  cache_collision_stage_cur_pos(batch);
+  // Collision environment flags (mpColl-shaped): owns Collide_LedgeGrabMask for scheduling ledge
+  // catch after collision.
+  mpcoll_env_update_ledge_grab(batch);
   grab_attachment_update_post_collision(batch);
   ledge_try_catch_post_collision(batch);
   knockdown_update_post_collision(batch);

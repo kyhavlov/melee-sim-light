@@ -45,6 +45,10 @@ int state_alloc(MslStateSoA* state, int batch_size) {
   state->pos_z = (float*)alloc_aligned_64(sizeof(float) * bp);
   state->prev_pos_x = (float*)alloc_aligned_64(sizeof(float) * bp);
   state->prev_pos_y = (float*)alloc_aligned_64(sizeof(float) * bp);
+  state->coll_stage_prev_pos_x = (float*)alloc_aligned_64(sizeof(float) * bp);
+  state->coll_stage_prev_pos_y = (float*)alloc_aligned_64(sizeof(float) * bp);
+  state->coll_stage_cur_pos_x = (float*)alloc_aligned_64(sizeof(float) * bp);
+  state->coll_stage_cur_pos_y = (float*)alloc_aligned_64(sizeof(float) * bp);
   state->speed_air_x_self = (float*)alloc_aligned_64(sizeof(float) * bp);
   state->speed_ground_x_self = (float*)alloc_aligned_64(sizeof(float) * bp);
   state->speed_y_self = (float*)alloc_aligned_64(sizeof(float) * bp);
@@ -240,21 +244,22 @@ int state_alloc(MslStateSoA* state, int batch_size) {
       !state->stale_attack_instance_counter || !state->instance_id_counter ||
       !state->match_damage_ratio || !state->is_teams || !state->team_id || !state->char_id ||
       !state->attack_ratio || !state->defense_ratio || !state->pos_x || !state->pos_y ||
-      !state->pos_z || !state->prev_pos_x || !state->prev_pos_y || !state->speed_air_x_self ||
-      !state->speed_ground_x_self || !state->speed_y_self || !state->speed_x_attack ||
-      !state->speed_y_attack || !state->fighter_scale_y || !state->facing || !state->on_ground ||
-      !state->prev_on_ground || !state->ground_contact_x || !state->ground_contact_y ||
-      !state->ground_normal_x || !state->ground_normal_y || !state->wall_contact_x ||
-      !state->wall_contact_y || !state->wall_normal_x || !state->wall_normal_y || !state->wall_id ||
-      !state->wall_kind || !state->ceiling_contact_x || !state->ceiling_contact_y ||
-      !state->ceiling_normal_x || !state->ceiling_normal_y || !state->ceiling_id ||
-      !state->coll_env_flags || !state->coll_prev_env_flags || !state->action_id ||
-      !state->prev_action_id || !state->action_frame || !state->match_flow_timer ||
-      !state->downwait_timer || !state->anim_frame_f32 || !state->anim_frame_fp_q16_16 ||
-      !state->frame_speed_mul_fp_q16_16 || !state->jumps_left || !state->stocks ||
-      !state->guard_tilt_x8 || !state->guard_tilt_x4 || !state->guard_reflect_timer_x14 ||
-      !state->kneebend_jump_input || !state->kneebend_is_short_hop || !state->tilt_timer_x ||
-      !state->tilt_timer_y || !state->fall_fast || !state->ledge_side ||
+      !state->pos_z || !state->prev_pos_x || !state->prev_pos_y || !state->coll_stage_prev_pos_x ||
+      !state->coll_stage_prev_pos_y || !state->coll_stage_cur_pos_x || !state->coll_stage_cur_pos_y ||
+      !state->speed_air_x_self || !state->speed_ground_x_self || !state->speed_y_self ||
+      !state->speed_x_attack || !state->speed_y_attack || !state->fighter_scale_y || !state->facing ||
+      !state->on_ground || !state->prev_on_ground || !state->ground_contact_x ||
+      !state->ground_contact_y || !state->ground_normal_x || !state->ground_normal_y ||
+      !state->wall_contact_x || !state->wall_contact_y || !state->wall_normal_x ||
+      !state->wall_normal_y || !state->wall_id || !state->wall_kind || !state->ceiling_contact_x ||
+      !state->ceiling_contact_y || !state->ceiling_normal_x || !state->ceiling_normal_y ||
+      !state->ceiling_id || !state->coll_env_flags || !state->coll_prev_env_flags ||
+      !state->action_id || !state->prev_action_id || !state->action_frame ||
+      !state->match_flow_timer || !state->downwait_timer || !state->anim_frame_f32 ||
+      !state->anim_frame_fp_q16_16 || !state->frame_speed_mul_fp_q16_16 ||
+      !state->jumps_left || !state->stocks || !state->guard_tilt_x8 || !state->guard_tilt_x4 ||
+      !state->guard_reflect_timer_x14 || !state->kneebend_jump_input || !state->kneebend_is_short_hop ||
+      !state->tilt_timer_x || !state->tilt_timer_y || !state->fall_fast || !state->ledge_side ||
       !state->stage_ledge_occupant_left || !state->stage_ledge_occupant_right ||
       !state->ledge_cooldown || !state->fallspecial_xc || !state->turn_has_turned ||
       !state->turn_frames_to_turn || !state->lr_press_timer || !state->x672_input_timer ||
@@ -323,6 +328,10 @@ void state_free(MslStateSoA* state) {
   alloc_free(state->pos_z);
   alloc_free(state->prev_pos_x);
   alloc_free(state->prev_pos_y);
+  alloc_free(state->coll_stage_prev_pos_x);
+  alloc_free(state->coll_stage_prev_pos_y);
+  alloc_free(state->coll_stage_cur_pos_x);
+  alloc_free(state->coll_stage_cur_pos_y);
   alloc_free(state->speed_air_x_self);
   alloc_free(state->speed_ground_x_self);
   alloc_free(state->speed_y_self);

@@ -5,6 +5,7 @@
 #include <string.h>
 
 #include "alloc.h"
+#include "char_params.h"
 
 // Character id mapping follows Slippi post-frame `character` (GALE01):
 // - Fox   = 1
@@ -195,6 +196,10 @@ int ecb_table_init(void) {
     return 0;
   }
 
+  if (char_params_init() != 0) {
+    return -1;
+  }
+
   const char* data_dir = getenv("MSL_DATA_DIR");
   if (data_dir == NULL || data_dir[0] == '\0') {
     data_dir = "data";
@@ -282,7 +287,9 @@ float msl_ecb_bottom_rel_y(uint8_t char_id, uint32_t animation_index, int action
   if (!(v == v)) {
     return 0.0f;
   }
-  return v;
+  const MslCharParams* ch = msl_char_params(char_id);
+  const float model_scaling = (ch != NULL) ? ch->model_scaling : 1.0f;
+  return v * model_scaling;
 }
 
 // -----------------
@@ -449,6 +456,10 @@ int ecb_extents_table_init(void) {
     return 0;
   }
 
+  if (char_params_init() != 0) {
+    return -1;
+  }
+
   const char* data_dir = getenv("MSL_DATA_DIR");
   if (data_dir == NULL || data_dir[0] == '\0') {
     data_dir = "data";
@@ -539,11 +550,13 @@ MslEcbExtentsRel msl_ecb_extents_rel(uint8_t char_id, uint32_t animation_index, 
     return (MslEcbExtentsRel){0};
   }
 
+  const MslCharParams* ch = msl_char_params(char_id);
+  const float model_scaling = (ch != NULL) ? ch->model_scaling : 1.0f;
   return (MslEcbExtentsRel){
-      .min_x = min_x,
-      .max_x = max_x,
-      .min_y = min_y,
-      .max_y = max_y,
+      .min_x = min_x * model_scaling,
+      .max_x = max_x * model_scaling,
+      .min_y = min_y * model_scaling,
+      .max_y = max_y * model_scaling,
   };
 }
 

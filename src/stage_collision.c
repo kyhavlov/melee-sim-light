@@ -1519,7 +1519,4 @@ void stage_collision_apply(MslBatch* batch) {
   mpcoll_ground_apply(batch);
   // Wall + ceiling contact substrate (mpColl-shaped): owns wall/ceiling contact metadata for FD.
   mpcoll_wall_ceil_apply(batch);
-  // Collision environment flags (mpColl-shaped): owns Collide_LedgeGrabMask for scheduling ledge
-  // catch after collision.
-  mpcoll_env_update_ledge_grab(batch);
 }

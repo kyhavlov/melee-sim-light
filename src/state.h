@@ -32,6 +32,21 @@ typedef struct MslStateSoA {
   float* pos_z;
   float* prev_pos_x;  // Position at start of current frame (pre-integration).
   float* prev_pos_y;  // Position at start of current frame (pre-integration).
+  // Collision-stage prev/cur position snapshots used for mpColl-shaped ledge-grab AABB checks.
+  //
+  // Decomp: the ledge-grab block consumes CollData.prev_pos / CollData.cur_pos as managed inside
+  // mpColl_80043754's collision substep loop ("previous substep", not "previous frame").
+  // refs/melee/src/melee/mp/mpcoll.c::mpColl_80043754
+  // refs/melee/src/melee/mp/mpcoll.c::mpColl_800443C4
+  //
+  // This simulator does not yet substep collision. We approximate a single collision "substep" by
+  // capturing:
+  // - coll_stage_prev_pos: fighter position immediately before stage_collision_apply() this frame
+  // - coll_stage_cur_pos: fighter position immediately after stage_collision_apply() this frame
+  float* coll_stage_prev_pos_x;
+  float* coll_stage_prev_pos_y;
+  float* coll_stage_cur_pos_x;
+  float* coll_stage_cur_pos_y;
   float* speed_air_x_self;
   float* speed_ground_x_self;
   float* speed_y_self;
