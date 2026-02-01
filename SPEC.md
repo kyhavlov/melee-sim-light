@@ -523,7 +523,7 @@ RL 1.0 acceptance criteria
 Reach RL 1.0 by completing coherent vertical slices (match flow → locomotion → defense → combat/damage → specials/grabs → ledge/tech),
 rather than enabling one-off mutations that depend on missing upstream bookkeeping.
 
-### Roadmap Status (as of 2026-01-31)
+### Roadmap Status (as of 2026-02-01)
 
 This section is the “what is actually done” source of truth for agents. If a deeper section below contradicts this, update the deeper
 section or regenerate it; do not rely on stale tables.
@@ -533,6 +533,12 @@ Recent deltas to reflect here (do not let these get “lost in chat logs”):
   post-collision); regression locked for TreasuredBackKangaroo records 1806/1807 (`tests/test_ledge_grab_treasuredbackkangaroo_regression.py`).
 - Build now forces C extension rebuild to avoid stale `.so` issues (Makefile change).
 - ECB tz/ty axis contract is locked for RL 1.0; any axis remap is a separate audit project (see `docs/SSANIM_AXIS_BASIS.md`).
+- Grab/throw release is now implemented (data-driven from `data/moves/*.json`): release/detach + throw-hit apply are wired through
+  `src/throw_flow.c` and `combat_apply_throw_hit()`, with throw-release regressions covered by integration tests.
+- Guard release no longer transitions to GuardOff early: `mv.co.guard.xC/x10` release lockout and `fp->lightshield_amount` latch are now
+  explicit seeded internals derived causally in preprocessing (see `tools/slippi/seed_history.py`).
+- Laser “phantom hits” (sim false positives) were reduced by aligning spawn transform + hurtcaps scaling/facing rotation with decomp and
+  fixing fighter-driven spawn ordering (pre-physics).
 
 Legend:
 - **DONE**: implemented and suite-stable; remaining gaps are low-impact edge cases.
@@ -553,7 +559,7 @@ Legend:
 | Combat geometry (hurtcaps/hitboxes/shields pose-driven) | **PARTIAL** | Core data-driven primitives exist; remaining parity depends on exact facing/axis + attachment nuances. |
 | Damage pipeline (BODY + SHIELD, GuardSetOff, hitlag/hitstun/KB states) | **PARTIAL** | Big pieces are in; still missing full rehit/hitlist, stale queue, and many modifiers. |
 | Items/projectiles | **PARTIAL** | Laser/blaster coverage is in and reduces `item_*` mismatches; item system parity is incomplete beyond suite needs. |
-| Grabs/throws | **PARTIAL** | Attachment substrate exists (CapturePulled*/Wait*/Damage* + Thrown* victim driving); still missing throw release/detach/apply-throw-hit + breakout/pummel/throw state completeness. |
+| Grabs/throws | **PARTIAL** | Attachment substrate exists and throw release/detach + throw-hit apply are implemented (data-driven). Remaining gaps: capture point selection/coverage, pummel/breakout rules, and suite-needed action coverage beyond release frames. |
 
 ### Field-to-System Ownership Map (Validation Outputs)
 
@@ -1287,7 +1293,7 @@ update the row rather than re-deriving the same plan again.
 | Read first (decomp) | Data artifacts (ISO-derived) | Code owner / gaps |
 |---|---|---|
 | `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_CatchDash_Anim` (grab chain pieces) | `data/moves/{fox,falco}.json` (grab/throw script events; already extracted for some msids) | Missing: `src/grabs.c` (new) + constraints/attachment rules |
-| `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_ThrowF_Anim` | (Need) throw KB/damage params (from script / action vars) | Missing: throw damage/KB + release rules |
+| `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_ThrowF_Anim` | Throw release/params (script-derived) | **PARTIAL**: release timing + throw hit params are extracted into `data/moves/*.json` and applied in `src/throw_flow.c`; remaining gaps are throw/capture action coverage and victim constraint modes beyond the release frame. |
 
 #### Projectiles/items (lasers minimum)
 
@@ -1311,8 +1317,8 @@ Completed slices (suite-positive, now “owned” by the sim):
 Next slices (in recommended order):
 
 Driver shortlist (suite offender clusters as of the committed baseline in `reports/validation/one_step_suite_eval.txt`):
-- Grab/Capture/Throw release/attach parity: large `err.pos_x`/`err.pos_y` spikes and action mismatches concentrate in `Capture*`/`Thrown*`
-  segments when victims remain attached or fail to transition into damage/launch states on the correct frame.
+- Grab/Capture/Throw completeness: release/detach + throw-hit apply are in, but remaining mismatches concentrate in `Capture*`/`Thrown*`
+  follow-up frames (constraint mode, capture point selection, pummel/breakout, and action coverage).
 - Combat hit bookkeeping parity (hitlists/rehit/modifiers): a major driver of `mismatch.hitlag`, `mismatch.hitstun`, and `err.percent`
   once position/state sequencing is stable.
 
@@ -1324,9 +1330,10 @@ Driver shortlist (suite offender clusters as of the committed baseline in `repor
    - Deliverable: one coherent ground-contact module that higher-level states call into.
 
 2. Collision-env flags + ledge grab mask parity (**parity project**)
-   - Blocked by: (1) mpColl parity (needs stable `env_flags`/line identity so ledge gates aren’t action-specific hacks).
+   - Status: **PARTIAL** (collision-stage prev/cur snapshot based ledge-grab mask is implemented and scheduled post-collision).
+   - Blocked by: (1) mpColl parity for stable `env_flags`/line identity + occupancy/refresh/cooldowns.
    - Dependencies: (1).
-   - Acceptance checks: schedule post-collision ledge catch in `src/ledge.c` without suite regressions; remove “outside-only grab” approximation.
+   - Acceptance checks: reduce remaining ledge mismatch clusters without action-specific hacks; remove remaining “outside-only grab” approximation if still present.
 
 3. Hitlists/rehit timers parity (**parity project**)
    - Blocked by: (1) mpColl parity (stable contact/landing frames; consistent “same-frame” ordering).
@@ -1339,15 +1346,14 @@ Driver shortlist (suite offender clusters as of the committed baseline in `repor
    - Acceptance checks: percent/KB/hitstun become numerically meaningful (reduce drift); avoid tuning off suite-only artifacts.
 
 5. Grab/throw core (suite-first)
-   - Current status: attachment substrate exists (CapturePulled*/Wait*/Damage* + Thrown* victim driving), but release/detach + throw-hit
-     application is missing/incomplete.
-   - Blocked by: (1) mpColl parity is strongly preferred for stable contact semantics; (3) hitlists parity is required for full combat
-     correctness, but we can still land release/detach timing improvements in a suite-first slice.
+   - Current status: attachment substrate exists and throw release/detach + throw-hit apply are implemented (data-driven).
+   - Remaining gaps: capture point selection/coverage, pummel/breakout, and victim constraint mode parity beyond the release frame.
+   - Blocked by: (3) hitlists parity for full combat correctness; (1) mpColl parity is strongly preferred for stable contact semantics.
    - Decomp entrypoints: `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::fn_800DAD18`,
      `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DD724`, and
      `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Thrown.c::ftCo_800DE508`.
-   - Acceptance checks: reduce `mismatch.action_id` for Catch*/Throw*/Thrown* and reduce large `err.pos_* max` spikes attributable to
-     “victim stayed attached / never launched”.
+   - Acceptance checks: reduce `mismatch.action_id` for Catch*/Throw*/Thrown* follow-up frames and remaining `err.pos_* max` spikes attributable to
+     constraint/attachment mismatches (not release frames).
 
 6. Remaining Fox/Falco specials (B moves) + any suite-needed projectiles
    - Blocked by: (3)–(4) if the special applies hits/damage in ways that require correct rehit/modifiers (avoid patching around missing modifiers).
