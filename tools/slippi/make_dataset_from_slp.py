@@ -423,6 +423,7 @@ def _main_impl(args) -> None:
         compute_fighter_stick_input_counters,
         compute_fighter_trigger_input_counters,
         compute_press_timer_u8,
+        derive_instance_id_x2073,
         derive_downwait_timer,
         derive_grab_owner_port_2p,
         derive_guard_reflect_timer_x14,
@@ -820,6 +821,14 @@ def _main_impl(args) -> None:
         samples["ref_t1"]["instance_hit_by"][:, slot] = instance_hit_by[1:]
         samples["seed_t"]["instance_id"][:, slot] = instance_id[:-1]
         samples["ref_t1"]["instance_id"][:, slot] = instance_id[1:]
+        # Seed fp+0x2073 compare byte used by ft_800895E0 to gate instance_id bumps.
+        # Derived strictly causally from replay history in tools/slippi/seed_history.py.
+        samples["seed_t"]["instance_id_x2073"][:, slot] = derive_instance_id_x2073(
+            char_id_u8=post_char,
+            action_id_u16=post_state,
+            action_frame_i16=post_state_age,
+            data_dir="data",
+        )[:-1]
         samples["seed_t"]["last_attack_landed"][:, slot] = last_attack_landed[:-1]
         samples["ref_t1"]["last_attack_landed"][:, slot] = last_attack_landed[1:]
         samples["seed_t"]["combo_count"][:, slot] = combo_count[:-1]

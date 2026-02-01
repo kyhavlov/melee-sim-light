@@ -294,6 +294,10 @@ typedef struct MslSeed {
   uint32_t animation_index[MSL_MAX_PLAYERS];
   uint16_t instance_hit_by[MSL_MAX_PLAYERS];
   uint16_t instance_id[MSL_MAX_PLAYERS];
+  // Fighter action-state instance_id compare byte (GALE01 fp+0x2073 within fp->x2070).
+  // Used by ft_800895E0 to gate instance_id bumps on motion-state change.
+  // refs/melee/build/GALE01/asm/melee/ft/ft_0892.s::ft_800895E0
+  uint8_t instance_id_x2073[MSL_MAX_PLAYERS];
   // Staling "attack id" (GALE01): fp->x2068_attackID.
   // Slippi post-frames do not expose fp->x2068 directly; preprocessing derives it causally from
   // replay history (see tools/slippi/staling_history.py).

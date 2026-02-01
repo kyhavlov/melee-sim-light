@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import functools
 import struct
 from pathlib import Path
 
@@ -9,6 +10,123 @@ import numpy as np
 def _sign_i16(x: np.ndarray) -> np.ndarray:
     # Match src/ucf.c::msl_sign_s8: returns +1 for 0 (though we never call it with 0).
     return np.where(x < 0, np.int16(-1), np.int16(1))
+
+
+def _read_mslacid1_v2_x4_flags_low_bytes(path: Path) -> np.ndarray:
+    """
+    Read (u8)MotionState.x4_flags low bytes from ISO-derived action->x4_flags tables.
+
+    This mirrors src/attack_id_tables.c::attack_id_x4_flags_from_action() but only keeps the low byte,
+    which is what ft_800895E0 reads via `lbz` for its fp+0x2073 compare key.
+
+    Decomp anchors:
+    - refs/melee/build/GALE01/asm/melee/ft/ft_0892.s::ft_800895E0 (lbz flags_low; compare vs fp+0x2073)
+    - refs/melee/src/melee/pl/plattack.c::plAttack_80037B08 (instance_id bump)
+    - x4_flags source of truth: data/attack_id/move_id/*.bin (loaded by src/attack_id_tables.c)
+    """
+    buf = path.read_bytes()
+    if len(buf) < 24:
+        raise ValueError(f"{path}: too small for MSLACID1 header (size={len(buf)})")
+    if buf[:8] != b"MSLACID1":
+        raise ValueError(f"{path}: bad magic (want MSLACID1)")
+    (ver,) = struct.unpack_from("<I", buf, 8)
+    if int(ver) != 2:
+        raise ValueError(f"{path}: unsupported version {int(ver)} (want 2)")
+    (count,) = struct.unpack_from("<H", buf, 12)
+    (flags_off,) = struct.unpack_from("<I", buf, 20)
+    count_i = int(count)
+    off_i = int(flags_off)
+    if count_i < 0:
+        raise ValueError(f"{path}: negative action_count={count_i}")
+    if off_i < 0 or off_i + count_i * 4 > len(buf):
+        raise ValueError(f"{path}: x4_flags table out of range (off={off_i} count={count_i})")
+    lows = (np.frombuffer(buf, dtype="<u4", offset=off_i, count=count_i) & np.uint32(0xFF)).astype(
+        np.uint8, copy=False
+    )
+    return lows
+
+
+@functools.lru_cache(maxsize=1)
+def _action_x4_flags_low_bytes_tables(*, data_dir: str = "data") -> dict[int, np.ndarray]:
+    # Character ids (GALE01): Fox=1, Falco=22.
+    base = Path(str(data_dir)) / "attack_id" / "move_id"
+    out: dict[int, np.ndarray] = {}
+    out[1] = _read_mslacid1_v2_x4_flags_low_bytes(base / "fox.bin")
+    out[22] = _read_mslacid1_v2_x4_flags_low_bytes(base / "falco.bin")
+    return out
+
+
+def derive_instance_id_x2073(
+    *,
+    char_id_u8: np.ndarray,
+    action_id_u16: np.ndarray,
+    action_frame_i16: np.ndarray,
+    data_dir: str = "data",
+) -> np.ndarray:
+    """
+    Derive the fp+0x2073 compare byte used by ft_800895E0 (instance_id bump gate), strictly causally.
+
+    Representation:
+    - Returns a u8 array `instance_id_x2073` with length N, representing the *post-frame* value at each
+      replay frame index.
+
+    Causality / prefix-invariance:
+    - Updates only on motion-state entry events, approximated causally from post-frame action_id
+      transitions (and same-action timebase restarts detected by action_frame decreasing).
+    - Does not consult future frames or replay outcomes.
+
+    Decomp anchors:
+    - refs/melee/build/GALE01/asm/melee/ft/ft_0892.s::ft_800895E0
+    - refs/melee/src/melee/pl/plattack.c::plAttack_80037B08
+
+    x4_flags mapping source:
+    - data/attack_id/move_id/{fox,falco}.bin (ISO-derived; also used by C via src/attack_id_tables.c)
+    """
+    char = np.asarray(char_id_u8, dtype=np.uint8).reshape(-1)
+    aid = np.asarray(action_id_u16, dtype=np.uint16).reshape(-1)
+    afr = np.asarray(action_frame_i16, dtype=np.int16).reshape(-1)
+    n = int(aid.size)
+    if int(char.size) != n or int(afr.size) != n:
+        raise ValueError("char_id_u8/action_id_u16/action_frame_i16 must have the same length")
+
+    tables = _action_x4_flags_low_bytes_tables(data_dir=str(data_dir))
+
+    out = np.zeros(n, dtype=np.uint8)
+    x2073 = int(0)
+
+    def _flags_low(c: int, a: int) -> int:
+        t = tables.get(int(c))
+        if t is None:
+            return 0
+        if a < 0 or a >= int(t.shape[0]):
+            return 0
+        return int(t[np.int64(a)])
+
+    for i in range(n):
+        cur_a = int(aid[i])
+        cur_c = int(char[i])
+        cur_flags_low = _flags_low(cur_c, cur_a)
+
+        entry = False
+        if i == 0:
+            entry = True
+        else:
+            prev_a = int(aid[i - 1])
+            if cur_a != prev_a:
+                entry = True
+            else:
+                # Detect same-action timebase restarts (e.g. loop restarts) by a causal action_frame drop.
+                # This mirrors "Fighter_ChangeMotionState to same action_id" patterns where Slippi state_age
+                # resets, but avoids consulting future frames.
+                if int(afr[i]) < int(afr[i - 1]):
+                    entry = True
+
+        if entry:
+            x2073 = cur_flags_low & 0xFF
+
+        out[i] = np.uint8(x2073)
+
+    return out
 
 
 def ucf_process_stick_i8(

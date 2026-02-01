@@ -160,6 +160,10 @@ SEED_DTYPE = np.dtype(
         ("animation_index", _arr("<u4", MAX_PLAYERS)),
         ("instance_hit_by", _arr("<u2", MAX_PLAYERS)),
         ("instance_id", _arr("<u2", MAX_PLAYERS)),
+        # Fighter action-state instance_id compare byte (GALE01 fp+0x2073 within fp->x2070).
+        # Used by ft_800895E0 to gate instance_id bumps on motion-state change.
+        # refs/melee/build/GALE01/asm/melee/ft/ft_0892.s::ft_800895E0
+        ("instance_id_x2073", _arr("u1", MAX_PLAYERS)),
         ("attack_id", _arr("<u2", MAX_PLAYERS)),
         ("attack_instance", _arr("<u2", MAX_PLAYERS)),
         ("last_attack_landed", _arr("u1", MAX_PLAYERS)),

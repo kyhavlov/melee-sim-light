@@ -365,27 +365,27 @@ int msl_batch_reseed_seed(MslBatch* batch, const uint8_t* seed_bytes, size_t see
       if (seed->instance_id[p] > max_instance_id) {
         max_instance_id = seed->instance_id[p];
       }
-      // Seed the fp->x2073 byte used by ft_800895E0's instance_id bump gate.
+      // Seed the fp->x2073 compare byte used by ft_800895E0's instance_id bump gate.
       // Decomp: ft_800895E0 reads fp+0x2073 and compares against (u8)new_motion_state->x4_flags.
       // refs/melee/build/GALE01/asm/melee/ft/ft_0892.s::ft_800895E0
       //
-      // NOTE(unmodeled-ft_800895E0-rewrite):
-      // ft_800895E0 contains two rewrite paths that replace the x2070 word before it is written to
-      // fp->x2070, which in turn changes fp+0x2073 (the compare byte) away from the raw low byte of
-      // MotionState.x4_flags:
-      // - If fp->kind == 0x11 and flags_low == 0x71, it overwrites the word with 0x240063.
-      // - If flags_low == 0x62 and it_8026B6C8(fp->x1974) is true, it overwrites the word with 0x44003D.
-      // refs/melee/build/GALE01/asm/melee/ft/ft_0892.s::ft_800895E0
+      // IMPORTANT:
+      // We seed this explicitly from the dataset schema (derived strictly causally from replay
+      // history in preprocessing) so teacher-forced reseeds preserve the correct compare key even
+      // when fp->x2088 (Slippi `instance_id`) is 0.
       //
-      // The simulator currently does not model these conditions (fighter kind / item pointer), so we
-      // seed fp+0x2073 as (u8)x4_flags. A guard test enforces that suite-observed action_ids never
-      // use x4_flags low bytes 0x71 or 0x62 for Fox/Falco; if they do, we must implement the rewrite
-      // logic or add the required seeded state first.
-      uint8_t x2073 = 0;
-      if (seed->instance_id[p] != 0) {
+      // Defensive fallback for synthetic tests / callers that leave the new seed field at 0:
+      // - If the motion state's flags_low byte is nonzero, prefer that nonzero value.
+      // - If the flags_low byte is 0, preserve 0 (this is observable in GALE01: ft_800895E0 bumps
+      //   unconditionally when flags_low==0, and stores the flags word to fp->x2070).
+      uint8_t x2073 = seed->instance_id_x2073[p];
+      if (x2073 == 0) {
         const uint32_t x4_flags =
             attack_id_x4_flags_from_action(batch->state.char_id[idx], seed->action_id[p]);
-        x2073 = (uint8_t)(x4_flags & 0xFFu);
+        const uint8_t flags_low = (uint8_t)(x4_flags & 0xFFu);
+        if (flags_low != 0) {
+          x2073 = flags_low;
+        }
       }
       batch->state.instance_id_x2073[idx] = x2073;
       batch->state.instance_identity_last_action_id[idx] = seed->action_id[p];
