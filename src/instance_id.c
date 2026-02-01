@@ -20,30 +20,41 @@ static inline uint8_t is_fox_falco(uint8_t char_id) {
   return (char_id == (uint8_t)MSL_CHAR_FOX) || (char_id == (uint8_t)MSL_CHAR_FALCO);
 }
 
-static inline uint8_t action_is_blaster(uint16_t action_id) {
-  switch (action_id) {
-    case MSL_ACT_FX_SPECIAL_N_START:
-    case MSL_ACT_FX_SPECIAL_N_LOOP:
-    case MSL_ACT_FX_SPECIAL_N_END:
-    case MSL_ACT_FX_SPECIAL_AIR_N_START:
-    case MSL_ACT_FX_SPECIAL_AIR_N_LOOP:
-    case MSL_ACT_FX_SPECIAL_AIR_N_END:
-      return 1;
-    default:
-      return 0;
-  }
+static inline uint8_t action_is_blaster_loop(uint16_t action_id) {
+  return (action_id == (uint16_t)MSL_ACT_FX_SPECIAL_N_LOOP ||
+          action_id == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_N_LOOP)
+             ? 1
+             : 0;
 }
 
-static inline uint8_t action_calls_ft_80089824_on_change_action(uint16_t action_id) {
+static inline uint8_t motion_state_change_calls_ft_80089824(uint16_t prev_action_id,
+                                                            uint16_t next_action_id) {
   // Decomp callsites (GALE01):
   // - ftCo_AttackLw3 sets fp->x21EC callback that calls ft_80089824 on motion-state change.
   //   refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackLw3.c::callUnk
   // - Fox/Falco SpecialN OnChangeAction calls ft_80089824 directly.
   //   refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_SpecialN_OnChangeAction
-  if (action_id == (uint16_t)MSL_ACT_CO_ATTACK_LW3) {
+  //
+  // IMPORTANT(decomp shape):
+  // These ft_80089824 callsites are tied to the *action being left* (the state that installed
+  // the x21EC OnChangeAction callback), not the state being entered.
+  //
+  // AttackLw3:
+  // - doEnter() installs fp->x21EC=callUnk before Fighter_ChangeMotionState(AttackLw3).
+  // - callUnk() calls ft_800892A0 and ft_80089824.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackLw3.c::doEnter
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackLw3.c::callUnk
+  //
+  // Special{Air}NLoop loop-restart:
+  // - The *_Loop_Anim() callbacks set fp->x21EC=ftFx_SpecialN_OnChangeAction only on the loop
+  //   restart path (motion state change from Loop -> Loop).
+  // - The Start -> Loop transition does *not* install x21EC, so it must not trigger ft_80089824.
+  // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_SpecialNLoop_Anim
+  // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_SpecialAirNLoop_Anim
+  if (prev_action_id == (uint16_t)MSL_ACT_CO_ATTACK_LW3) {
     return 1;
   }
-  if (action_is_blaster(action_id)) {
+  if (action_is_blaster_loop(prev_action_id) && prev_action_id == next_action_id) {
     return 1;
   }
   return 0;
@@ -85,6 +96,7 @@ void instance_id_on_motion_state_change_ft_800895E0(MslBatch* batch, size_t idx)
   }
 
   const uint16_t action_id = batch->state.action_id[idx];
+  const uint16_t prev_action_id = batch->state.prev_action_id[idx];
 
   // Decomp call semantics:
   // - Fighter_ChangeMotionState calls ft_800895E0(fp, new_motion_state->x4_flags) once on motion-state
@@ -131,7 +143,7 @@ void instance_id_on_motion_state_change_ft_800895E0(MslBatch* batch, size_t idx)
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackLw3.c::callUnk
   // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_SpecialN_OnChangeAction
   // refs/melee/build/GALE01/asm/melee/ft/ft_0892.s::ft_80089824 (plAttack_80037B08; sth ..., 0x2088)
-  if (is_fox_falco(char_id) && action_calls_ft_80089824_on_change_action(action_id)) {
+  if (is_fox_falco(char_id) && motion_state_change_calls_ft_80089824(prev_action_id, action_id)) {
     const int bi = (int)(idx / (size_t)MSL_MAX_PLAYERS);
     batch->state.instance_id[idx] = inc_instance_id_plAttack_80037B08(batch, bi);
   }

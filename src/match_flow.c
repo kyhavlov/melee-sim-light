@@ -327,11 +327,6 @@ void match_flow_update_pre_anim(MslBatch* batch) {
         }
       } else if (a == (uint16_t)MSL_ACT_DEAD_DOWN || a == (uint16_t)MSL_ACT_DEAD_LEFT ||
                  a == (uint16_t)MSL_ACT_DEAD_RIGHT || a == (uint16_t)MSL_ACT_DEAD_UP_STAR) {
-        // Decomp: death processing calls ft_800892D4(fp), which clears fp->x2088 (instance_id) to 0.
-        // refs/melee/src/melee/ft/fighter.c::Fighter_UnkProcessDeath_80068354
-        // refs/melee/build/GALE01/asm/melee/ft/ft_0892.s::ft_800892D4
-        instance_id_reset_ft_800892D4(batch, idx);
-
         if (a == (uint16_t)MSL_ACT_DEAD_UP_STAR) {
           // DeadUpStar stock loss is delayed until late in the animation.
           // Assembly shows the stock-loss event happens when the internal phase-1 timer expires,
@@ -544,6 +539,13 @@ void match_flow_update_post_physics(MslBatch* batch) {
 
       if (death == (uint16_t)MSL_ACT_DEAD_UP_STAR) {
         batch->state.animation_index[idx] = (uint32_t)MSL_SM_DAMAGE_FALL;
+        // Decomp: death processing calls ft_800892D4(fp), which clears fp->x2088 (instance_id) to 0,
+        // but motion-state entry then runs ft_800895E0 which may bump it back to a non-zero value.
+        // Do this on Dead* entry, not continuously during the Dead* action, so post-frame instance_id
+        // matches Slippi (and the decomp-shaped motion-state entry bundle owns the bump logic).
+        // refs/melee/src/melee/ft/fighter.c::Fighter_UnkProcessDeath_80068354
+        // refs/melee/build/GALE01/asm/melee/ft/ft_0892.s::ft_800892D4
+        instance_id_reset_ft_800892D4(batch, idx);
         // Decomp: motion-state entry uses Fighter_ChangeMotionState (identity updates + timebase reset).
         // refs/melee/src/melee/ft/fighter.c (Fighter_ChangeMotionState)
         msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
@@ -569,6 +571,8 @@ void match_flow_update_post_physics(MslBatch* batch) {
         }
         batch->state.match_flow_timer[idx] = (uint8_t)total;
       } else {
+        // See note in the DeadUpStar branch above: clear instance_id once on death entry.
+        instance_id_reset_ft_800892D4(batch, idx);
         // Decomp: motion-state entry uses Fighter_ChangeMotionState (identity updates + timebase reset).
         // refs/melee/src/melee/ft/fighter.c (Fighter_ChangeMotionState)
         msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);

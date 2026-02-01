@@ -34,6 +34,37 @@ static inline uint8_t action_is_blaster(uint16_t action_id) {
   }
 }
 
+static inline uint8_t specialn_is_blaster_loop_requested(const MslBatch* batch, size_t idx) {
+  // Decomp (GALE01): the SpecialN Start/Loop IASA callbacks set fp->mv.fx.SpecialN.isBlasterLoop
+  // when:
+  //   fp->cmd_vars[0] != 0 && (fp->input.x668 & HSD_PAD_B)
+  // where fp->input.x668 is the per-frame pressed mask (rising edge).
+  // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_SpecialNStart_IASA
+  // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_SpecialNLoop_IASA
+  // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_SpecialAirNStart_IASA
+  // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_SpecialAirNLoop_IASA
+  //
+  // This simulator does not yet model cmd_vars[0] or mv.fx.SpecialN.isBlasterLoop directly.
+  // However, the seed schema includes fp->x67D ("frames since last B press", saturating at 0xFF)
+  // and action_frame (derived from cur_anim_frame). Use the decomp-shaped condition:
+  // "B was pressed at some point since this motion state was entered".
+  if (batch == NULL) {
+    return 0;
+  }
+  const int af = (int)batch->state.action_frame[idx];
+  if (af < 0) {
+    return 0;
+  }
+  const int x67d = (int)batch->state.x67D[idx];
+  if (x67d < 0 || x67d > 255) {
+    return 0;
+  }
+  if (x67d == 0xFF) {
+    return 0;
+  }
+  return x67d <= af ? 1u : 0u;
+}
+
 static inline uint8_t action_allows_blaster_entry_ground(uint16_t action_id) {
   // Spotdodge (EscapeN) has an empty IASA in decomp, so it cannot be interrupted into SpecialN.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Escape.c::ftCo_EscapeN_IASA
@@ -173,9 +204,8 @@ void blaster_update_pre_physics(MslBatch* batch) {
           break;
         case MSL_ACT_FX_SPECIAL_N_LOOP:
           if (anim_finished(cid, lp->ground_loop_msid, anim_frame_f32)) {
-            const uint16_t held = batch->state.input_buttons[idx];
-            if ((held & (uint16_t)MSL_BUTTON_B) != 0) {
-              // Restart loop.
+            if (specialn_is_blaster_loop_requested(batch, idx)) {
+              // Loop -> Loop: request another shot cycle.
               msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
             } else {
               batch->state.action_id[idx] = (uint16_t)MSL_ACT_FX_SPECIAL_N_END;
@@ -198,8 +228,7 @@ void blaster_update_pre_physics(MslBatch* batch) {
           break;
         case MSL_ACT_FX_SPECIAL_AIR_N_LOOP:
           if (anim_finished(cid, lp->air_loop_msid, anim_frame_f32)) {
-            const uint16_t held = batch->state.input_buttons[idx];
-            if ((held & (uint16_t)MSL_BUTTON_B) != 0) {
+            if (specialn_is_blaster_loop_requested(batch, idx)) {
               msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
             } else {
               batch->state.action_id[idx] = (uint16_t)MSL_ACT_FX_SPECIAL_AIR_N_END;
