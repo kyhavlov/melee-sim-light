@@ -1304,6 +1304,7 @@ def extract_one_character(
     native: bool = True,
     timings: bool = False,
     msids: list[int] | None = None,
+    add_msids: list[int] | None = None,
 ) -> Path:
     import json
 
@@ -1405,6 +1406,10 @@ def extract_one_character(
             | set(_extra_anim_msids())
             | set(_special_anim_msids(character))
         )
+        if add_msids:
+            base = set(int(m) for m in wanted_msids)
+            extra = set(int(m) for m in add_msids if int(m) >= 0)
+            wanted_msids = sorted(base | extra)
 
     prefix = _fighter_prefix(character)
     aj_path = ISO_DIR / f"{prefix}AJ.dat"
@@ -1904,6 +1909,13 @@ def main() -> None:
     ap.add_argument("--timings", action="store_true", help="print wall-clock breakdown of extractor hot paths")
     ap.add_argument("--no-native", action="store_true", help="force pure-Python bake (ignore native helper)")
     ap.add_argument("--msid", type=int, action="append", default=None, help="only extract these submotion ids (repeatable)")
+    ap.add_argument(
+        "--add-msid",
+        type=int,
+        action="append",
+        default=None,
+        help="add these submotion ids to the default extracted set (repeatable; ignored if --msid is set)",
+    )
     args = ap.parse_args()
 
     moves = args.moves
@@ -1927,6 +1939,7 @@ def main() -> None:
         native=not bool(args.no_native),
         timings=bool(args.timings),
         msids=args.msid,
+        add_msids=args.add_msid,
     )
     _write_anim_blend_data(args.character, args.out_dir)
     print(f"wrote {out}")

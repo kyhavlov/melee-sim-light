@@ -7,6 +7,11 @@ import sys
 from pathlib import Path
 
 
+FTCO_SM_DAMAGEAIR2 = 175
+FTCO_SM_DAMAGEAIR3 = 176
+# Decomp: refs/melee/src/melee/ft/chara/ftCommon/forward.h `ftCo_Submotion`.
+
+
 def _run(mod: str, argv: list[str]) -> None:
     cmd = [sys.executable, "-m", mod, *argv]
     print("$", " ".join(str(x) for x in cmd))
@@ -220,13 +225,34 @@ def main() -> None:
             "tools.extraction.extract_fighter_anims",
             ["--character", ch, "--out-dir", "data/anims"],
         )
+
+        # ECB tables need broader msid coverage than the runtime pose/move subset.
+        #
+        # In particular, the canonical Fox/Falco suite includes DamageAir2/3 (ftCo_Submotion 175/176),
+        # and missing ECB samples can spuriously ground (Landing) during hitstun.
+        #
+        # Decomp source: refs/melee/src/melee/ft/chara/ftCommon/forward.h `ftCo_Submotion`.
+        ecb_anim_dir = "data/anims_ecb"
+        _run(
+            "tools.extraction.extract_fighter_anims",
+            [
+                "--character",
+                ch,
+                "--out-dir",
+                ecb_anim_dir,
+                "--add-msid",
+                str(FTCO_SM_DAMAGEAIR2),
+                "--add-msid",
+                str(FTCO_SM_DAMAGEAIR3),
+            ],
+        )
         _run(
             "tools.extraction.extract_ecb_bottom",
             [
                 "--character",
                 ch,
                 "--anims",
-                f"data/anims/{ch}.bin",
+                f"{ecb_anim_dir}/{ch}.bin",
                 "--attrs",
                 f"data/characters/{ch}.json",
                 "--out",
@@ -239,7 +265,7 @@ def main() -> None:
                 "--character",
                 ch,
                 "--anims",
-                f"data/anims/{ch}.bin",
+                f"{ecb_anim_dir}/{ch}.bin",
                 "--attrs",
                 f"data/characters/{ch}.json",
                 "--out",
