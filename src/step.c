@@ -23,6 +23,7 @@
 #include "mpcoll_env.h"
 #include "timers.h"
 #include "reflector_bubbles.h"
+#include "throw_flow.h"
 
 // NOTE: `blaster_update_post_collision` is intentionally not part of the public blaster module API
 // yet; keep the forward declaration local to preserve the current include surface.
@@ -165,6 +166,7 @@ int step_one_frame(MslBatch* batch, const uint8_t* prev_input_bytes, size_t prev
   shields_refresh(batch);
   reflector_bubbles_refresh(batch);
   items_update(batch);
+  throw_flow_update_post_items(batch);
   combat_resolve(batch);
 
   return 0;

@@ -93,7 +93,7 @@ int laser_params_init(void) {
   p += 8;
   const uint32_t version = read_u32_le(p);
   p += 4;
-  if (version != 1 && version != 2) {
+  if (version != 1 && version != 2 && version != 3 && version != 4) {
     alloc_free(buf);
     return -1;
   }
@@ -105,7 +105,7 @@ int laser_params_init(void) {
   // Record layout source:
   // - docs/DATA_CONTRACT.md (MSLLASR1)
   // - tools/extraction/extract_lasers.py
-  const size_t record_bytes = (version == 2) ? 166u : 158u;
+  const size_t record_bytes = (version >= 3) ? 254u : (version == 2) ? 166u : 158u;
   if ((size_t)(end - p) < (size_t)record_count * record_bytes) {
     alloc_free(buf);
     return -1;
@@ -123,7 +123,7 @@ int laser_params_init(void) {
     rec.gun_itkind = read_u16_le(p + 4);
     rec.spawn_bone_part_id = read_u16_le(p + 6);
     size_t off = 0;
-    if (version == 2) {
+    if (version >= 2) {
       rec.ground_start_msid = read_u16_le(p + 8);
       rec.ground_loop_msid = read_u16_le(p + 10);
       rec.ground_end_msid = read_u16_le(p + 12);
@@ -171,13 +171,52 @@ int laser_params_init(void) {
     rec.kbg = read_u16_le(p + off + 10);
     rec.wsk = read_u16_le(p + off + 12);
     rec.bkb = read_u16_le(p + off + 14);
+    // MSLLASR1 v4+: element is stored explicitly (GALE01 HitElement ids).
+    // For older artifacts (v1..v3), fall back to the PlFx/PlFc article scripts:
+    // - msid/state=0 uses HitElement_Normal (0)
+    // - msid/state=1 uses HitElement_Electric (2)
+    // refs/melee/src/melee/lb/forward.h::HitElement
+    // _iso/PlFx.dat and _iso/PlFc.dat blaster-shot article ItemStateDesc scripts (see tools/extraction/extract_character_attrs.py)
     rec.shield_damage = (int8_t)p[off + 16];
-    // p[off + 17..19] pad
+    rec.element = (version >= 4) ? p[off + 17] : 0u;
+    // p[off + 18..19] pad
     rec.hitbox_offsets_x_count = p[off + 20];
     // p[off + 21..23] pad
     off += 24;
     for (int i = 0; i < MSL_LASER_MAX_HITBOX_OFFS_X; i++) {
       rec.hitbox_offsets_x[i] = read_f32_le(p + off + (size_t)i * 4);
+    }
+
+    // Optional msid/state=1 hitbox params (MSLLASR1 v3+). For older versions, fall back to state0.
+    if (version >= 3) {
+      off += (size_t)MSL_LASER_MAX_HITBOX_OFFS_X * 4u;
+
+      rec.state1_damage = read_f32_le(p + off);
+      rec.state1_size = read_f32_le(p + off + 4);
+      rec.state1_angle = read_u16_le(p + off + 8);
+      rec.state1_kbg = read_u16_le(p + off + 10);
+      rec.state1_wsk = read_u16_le(p + off + 12);
+      rec.state1_bkb = read_u16_le(p + off + 14);
+      rec.state1_shield_damage = (int8_t)p[off + 16];
+      rec.state1_element = (version >= 4) ? p[off + 17] : 2u;
+      rec.state1_hitbox_offsets_x_count = p[off + 20];
+      off += 24;
+      for (int i = 0; i < MSL_LASER_MAX_HITBOX_OFFS_X; i++) {
+        rec.state1_hitbox_offsets_x[i] = read_f32_le(p + off + (size_t)i * 4);
+      }
+    } else {
+      rec.state1_damage = rec.damage;
+      rec.state1_size = rec.size;
+      rec.state1_angle = rec.angle;
+      rec.state1_kbg = rec.kbg;
+      rec.state1_wsk = rec.wsk;
+      rec.state1_bkb = rec.bkb;
+      rec.state1_element = rec.element;
+      rec.state1_shield_damage = rec.shield_damage;
+      rec.state1_hitbox_offsets_x_count = rec.hitbox_offsets_x_count;
+      for (int i = 0; i < MSL_LASER_MAX_HITBOX_OFFS_X; i++) {
+        rec.state1_hitbox_offsets_x[i] = rec.hitbox_offsets_x[i];
+      }
     }
 
     g_tbl.by_char[char_id] = rec;

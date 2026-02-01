@@ -560,11 +560,19 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
     if (!batch->state.item_exists[ii]) {
       continue;
     }
-    const uint16_t type = batch->state.item_type[ii];
-    const MslLaserParams* lp = laser_params_for_item_type(type);
-    if (lp == NULL) {
-      continue;
-    }
+	    const uint16_t type = batch->state.item_type[ii];
+	    const MslLaserParams* lp = laser_params_for_item_type(type);
+	    if (lp == NULL) {
+	      continue;
+	    }
+
+	    // Item msid/state is recorded by Slippi as u8 from Item+0x24 (enum_t msid).
+	    // refs/slippi-ssbm-asm/Recording/SendItemInfo.s
+	    // refs/melee/src/melee/it/types.h::Item (msid at +0x24)
+	    //
+	    // Blaster shots (itfoxlaser.c) can be spawned with msid 0 or 1:
+	    // refs/melee/src/melee/it/items/itfoxlaser.c::it_8029C6A4 and ::it_8029C6CC
+	    const uint8_t laser_state = (batch->state.item_state[ii] != 0) ? 1u : 0u;
 
     // Motion: item->pos += item->vel (generic add in Item_802697D4), and lifetime counts down.
     // Decomp refs:
@@ -607,8 +615,8 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
     if (owner < 0 || owner >= num_players) {
       continue;
     }
-    const float dir = batch->state.item_direction[ii];
-    const float sr = lp->size;
+	    const float dir = batch->state.item_direction[ii];
+	    const float sr = (laser_state == 0u) ? lp->size : lp->state1_size;
 
     for (int def = 0; def < num_players; def++) {
       if (def == owner) {
@@ -646,18 +654,22 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
         if (!isfinite(shx) || !isfinite(shy)) {
           shx = batch->state.pos_x[d_idx];
           shy = batch->state.pos_y[d_idx];
-        }
-        uint8_t shield_hit = 0;
-        const uint8_t off_n = lp->hitbox_offsets_x_count;
-        for (uint8_t oi = 0; oi < off_n && oi < (uint8_t)MSL_LASER_MAX_HITBOX_OFFS_X && !shield_hit;
-             oi++) {
-          const float sx = x + (dir * lp->hitbox_offsets_x[oi]);
-          const float sy = y;
-          if (item_sphere_sphere_intersects_2d(sx, sy, sr, shx, shy, shr)) {
-            shield_hit = 1;
-          }
-        }
-        if (!shield_hit && off_n == 0) {
+	        }
+ 	        uint8_t shield_hit = 0;
+	        const uint8_t off_n =
+	            (laser_state == 0u) ? lp->hitbox_offsets_x_count : lp->state1_hitbox_offsets_x_count;
+	        for (uint8_t oi = 0; oi < off_n && oi < (uint8_t)MSL_LASER_MAX_HITBOX_OFFS_X && !shield_hit;
+	             oi++) {
+	          const float off_x =
+	              (laser_state == 0u) ? lp->hitbox_offsets_x[oi] : lp->state1_hitbox_offsets_x[oi];
+	          const float sx = x + (dir * off_x);
+	          const float sy = y;
+	          if (item_sphere_sphere_intersects_2d(sx, sy, sr, shx, shy, shr)) {
+	            shield_hit = 1;
+	          }
+	        }
+        // Always include the projectile origin as an additional test point.
+        if (!shield_hit) {
           shield_hit = item_sphere_sphere_intersects_2d(x, y, sr, shx, shy, shr);
         }
 
@@ -703,16 +715,18 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
             break;
           }
 
-          // Regular shield hit: apply defender-side shield effects and despawn the laser.
-          combat_apply_item_shield_hit(batch, bi, owner, def, batch->state.item_attack_id[ii],
-                                       batch->state.item_attack_instance[ii], lp->damage,
-                                       lp->shield_damage);
-          batch->state.item_hitlist_cd[cd_i] = 0xFFFFu;
-          batch->state.item_hitlist_victim_iid[cd_i] = def_iid;
-          item_slot_clear(batch, ii);
-          break;
-        }
-      }
+	          // Regular shield hit: apply defender-side shield effects and despawn the laser.
+	          const float dmg = (laser_state == 0u) ? lp->damage : lp->state1_damage;
+	          const int8_t shd =
+	              (laser_state == 0u) ? lp->shield_damage : lp->state1_shield_damage;
+	          combat_apply_item_shield_hit(batch, bi, owner, def, batch->state.item_attack_id[ii],
+	                                       batch->state.item_attack_instance[ii], dmg, shd);
+	          batch->state.item_hitlist_cd[cd_i] = 0xFFFFu;
+	          batch->state.item_hitlist_victim_iid[cd_i] = def_iid;
+	          item_slot_clear(batch, ii);
+	          break;
+	        }
+	      }
 
       // Minimal eligibility: skip if hurtbox_state is nonzero (invincible/intangible/etc).
       // Slippi post-frame: `hurtbox_state` is seeded; movescript hit status can overwrite it.
@@ -733,20 +747,25 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
       const float rr = batch->state.reflector_radius[d_idx];
       if (rr > 0.0f) {
         const float rx = batch->state.reflector_x[d_idx];
-        const float ry = batch->state.reflector_y[d_idx];
-        const MslCharParams* rch = msl_char_params(batch->state.char_id[d_idx]);
-        if (isfinite(rx) && isfinite(ry) && rch != NULL) {
-          uint8_t reflect_hit = 0;
-          const uint8_t off_n = lp->hitbox_offsets_x_count;
-          for (uint8_t oi = 0;
-               oi < off_n && oi < (uint8_t)MSL_LASER_MAX_HITBOX_OFFS_X && !reflect_hit; oi++) {
-            const float sx = x + (dir * lp->hitbox_offsets_x[oi]);
-            const float sy = y;
-            if (item_sphere_sphere_intersects_2d(sx, sy, sr, rx, ry, rr)) {
-              reflect_hit = 1;
-            }
-          }
-          if (!reflect_hit && off_n == 0) {
+	        const float ry = batch->state.reflector_y[d_idx];
+	        const MslCharParams* rch = msl_char_params(batch->state.char_id[d_idx]);
+	        if (isfinite(rx) && isfinite(ry) && rch != NULL) {
+	          uint8_t reflect_hit = 0;
+	          const uint8_t off_n =
+	              (laser_state == 0u) ? lp->hitbox_offsets_x_count : lp->state1_hitbox_offsets_x_count;
+	          for (uint8_t oi = 0;
+	               oi < off_n && oi < (uint8_t)MSL_LASER_MAX_HITBOX_OFFS_X && !reflect_hit; oi++) {
+	            const float off_x =
+	                (laser_state == 0u) ? lp->hitbox_offsets_x[oi] : lp->state1_hitbox_offsets_x[oi];
+	            const float sx = x + (dir * off_x);
+	            const float sy = y;
+	            if (item_sphere_sphere_intersects_2d(sx, sy, sr, rx, ry, rr)) {
+	              reflect_hit = 1;
+	            }
+	          }
+          // Always include the projectile origin as an additional test point, even when the script
+          // provides per-beam offsets.
+          if (!reflect_hit) {
             reflect_hit = item_sphere_sphere_intersects_2d(x, y, sr, rx, ry, rr);
           }
 
@@ -767,24 +786,28 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
         }
       }
 
-      uint8_t hit_hurt_height = 0;
-      uint8_t hit = 0;
-      // Deterministic order: offsets (script order) then capsule slots.
-      const uint8_t off_n = lp->hitbox_offsets_x_count;
-      const uint8_t cap_n = batch->state.hurtcap_count[d_idx];
-      for (uint8_t oi = 0; oi < off_n && oi < (uint8_t)MSL_LASER_MAX_HITBOX_OFFS_X && !hit; oi++) {
-        const float sx = x + (dir * lp->hitbox_offsets_x[oi]);
-        const float sy = y;
-        for (uint8_t ci = 0; ci < cap_n; ci++) {
-          if (item_sphere_capsule_intersects(batch, bi, def, sx, sy, sr, (int)ci,
-                                             &hit_hurt_height)) {
+	      uint8_t hit_hurt_height = 0;
+	      uint8_t hit = 0;
+	      // Deterministic order: offsets (script order) then capsule slots.
+	      const uint8_t off_n =
+	          (laser_state == 0u) ? lp->hitbox_offsets_x_count : lp->state1_hitbox_offsets_x_count;
+	      const uint8_t cap_n = batch->state.hurtcap_count[d_idx];
+	      for (uint8_t oi = 0; oi < off_n && oi < (uint8_t)MSL_LASER_MAX_HITBOX_OFFS_X && !hit; oi++) {
+	        const float off_x =
+	            (laser_state == 0u) ? lp->hitbox_offsets_x[oi] : lp->state1_hitbox_offsets_x[oi];
+	        const float sx = x + (dir * off_x);
+	        const float sy = y;
+	        for (uint8_t ci = 0; ci < cap_n; ci++) {
+	          if (item_sphere_capsule_intersects(batch, bi, def, sx, sy, sr, (int)ci,
+	                                             &hit_hurt_height)) {
             hit = 1;
             break;
           }
         }
       }
-      // Fallback: if no offsets extracted, test the item origin.
-      if (!hit && off_n == 0 && cap_n > 0) {
+      // Always include the projectile origin as an additional test point (offset scripts are not
+      // required to include an x_offset==0 hitbox).
+      if (!hit && cap_n > 0) {
         for (uint8_t ci = 0; ci < cap_n; ci++) {
           if (item_sphere_capsule_intersects(batch, bi, def, x, y, sr, (int)ci, &hit_hurt_height)) {
             hit = 1;
@@ -798,17 +821,23 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
       }
 
       // Apply BODY hit to defender and despawn the laser.
-      // Decomp-first references for BODY apply:
-      // - Fighter_ProcessHit_8006D1EC (percent add, hitlag, hitstun, damage-state entry)
-      // - ftColl_80076CBC (getEnvDmg pattern)
-      // refs/melee/src/melee/ft/fighter.c and refs/melee/src/melee/ft/ftcoll.c
-      combat_apply_item_hit(batch, bi, owner, def, batch->state.item_attack_id[ii],
-                            batch->state.item_attack_instance[ii], lp->damage, lp->angle, lp->kbg,
-                            lp->wsk, lp->bkb, hit_hurt_height);
-      batch->state.item_hitlist_cd[cd_i] = 0xFFFFu;
-      batch->state.item_hitlist_victim_iid[cd_i] = def_iid;
-      item_slot_clear(batch, ii);
-      break;
+	      // Decomp-first references for BODY apply:
+	      // - Fighter_ProcessHit_8006D1EC (percent add, hitlag, hitstun, damage-state entry)
+	      // - ftColl_80076CBC (getEnvDmg pattern)
+	      // refs/melee/src/melee/ft/fighter.c and refs/melee/src/melee/ft/ftcoll.c
+		      const float dmg = (laser_state == 0u) ? lp->damage : lp->state1_damage;
+		      const uint16_t angle = (laser_state == 0u) ? lp->angle : lp->state1_angle;
+		      const uint16_t kbg = (laser_state == 0u) ? lp->kbg : lp->state1_kbg;
+		      const uint16_t wsk = (laser_state == 0u) ? lp->wsk : lp->state1_wsk;
+		      const uint16_t bkb = (laser_state == 0u) ? lp->bkb : lp->state1_bkb;
+		      const uint8_t element = (laser_state == 0u) ? lp->element : lp->state1_element;
+		      combat_apply_item_hit(batch, bi, owner, def, batch->state.item_attack_id[ii],
+		                            batch->state.item_attack_instance[ii], dmg, angle, kbg, wsk, bkb,
+		                            hit_hurt_height, element);
+	      batch->state.item_hitlist_cd[cd_i] = 0xFFFFu;
+	      batch->state.item_hitlist_victim_iid[cd_i] = def_iid;
+	      item_slot_clear(batch, ii);
+	      break;
     }
   }
 }

@@ -77,6 +77,15 @@ void timers_update(MslBatch* batch) {
       const size_t idx = msl_idx_player(bi, p);
 
       uint16_t hl = batch->state.hitlag[idx];
+      // Cache whether hitlag was active at the start of the frame (pre-decrement).
+      //
+      // Decomp scheduling note:
+      // - Fighter_8006A1BC (timer decrement) runs before Fighter_procUpdate (Anim/Phys/Coll), so
+      //   fp->dmg.x195c_hitlag_frames is decremented before motion-state callbacks observe it.
+      // - However, "this frame is in hitlag" semantics (e.g., which callbacks are skipped) are
+      //   governed by the pre-decrement state (hitlag remaining at frame start).
+      // refs/melee/src/melee/ft/fighter.c::Fighter_8006A1BC and ::Fighter_procUpdate
+      batch->state.hitlag_started_frame[idx] = (hl > 0) ? 1u : 0u;
       if (hl > 0) {
         hl--;
         batch->state.hitlag[idx] = hl;

@@ -35,16 +35,18 @@ void throw_flow_update_pre_physics(MslBatch* batch) {
   }
   const int num_players = (int)batch->config.num_players;
 
-  // Ordering note:
+  // Decomp ordering notes:
   // - `anim_timebase_update_pre_input()` runs before action_update() in step_one_frame().
-  // - In decomp, movescript opcodes (e.g. set_throw_flags / set_throw_hitbox) are processed during
-  //   the animation timebase advancement phase (ftAnim_8006EBA4), and the per-motion-state Anim
-  //   callback (ftCo_*_Anim) consumes the resulting flags before Phys/Coll.
+  // - In decomp, movescript opcodes are processed during animation advancement, and the motion
+  //   state's Anim callback consumes resulting throw flags (e.g. flip facing) before Phys/Coll.
   // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360 and Fighter_procUpdate
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_Throw*_Anim
   for (int bi = 0; bi < batch->batch_size; bi++) {
     for (int owner_p = 0; owner_p < num_players; owner_p++) {
       const size_t oidx = msl_idx_player(bi, owner_p);
+      // Internal per-frame latch: clear by iterating over throwers each frame.
+      batch->state.throw_pending_victim_port[oidx] = 0xFFu;
+      batch->state.throw_pending_hit_idx[oidx] = 0xFFu;
       if (batch->state.stocks[oidx] == 0) {
         continue;
       }
@@ -77,13 +79,21 @@ void throw_flow_update_pre_physics(MslBatch* batch) {
         batch->state.facing[oidx] = (uint8_t)!batch->state.facing[oidx];
       }
 
-      uint8_t hit_idx = 0;
-      if (!move_tables_throw_release_hit_idx(owner_char, owner_act, owner_af, &hit_idx)) {
-        continue;
-      }
-
-      MslThrowHitboxParams p = {0};
-      if (!move_tables_throw_hitbox_params(owner_char, owner_act, hit_idx, &p)) {
+      // Release/detach (set_throw_flags hit_idx=0):
+      // - Detach the victim immediately (Anim-callback timing; before Phys/Coll).
+      // - Defer the throw hit application until after items_update() so same-frame item hits can
+      //   preempt the throw hit when item procs run earlier in the decomp schedule.
+      //
+      // Decomp shape:
+      // - Throw Anim consumes throw_flags_b3, clears it, and calls ftCo_800DE2A8 / ftCo_800DE7C0 on
+      //   the victim (release/detach) before Phys/Coll.
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DD724
+      uint8_t rel_hit_idx = 0xFFu;
+      const uint8_t released_prev =
+          move_tables_throw_release_hit_idx(owner_char, owner_act, owner_prev_af, NULL);
+      const uint8_t released_cur =
+          move_tables_throw_release_hit_idx(owner_char, owner_act, owner_af, &rel_hit_idx);
+      if (!(released_cur && !released_prev)) {
         continue;
       }
 
@@ -98,29 +108,98 @@ void throw_flow_update_pre_physics(MslBatch* batch) {
         if (batch->state.stocks[vidx] == 0) {
           continue;
         }
-
         if (batch->state.grab_owner_port[vidx] != (uint8_t)owner_p) {
           continue;
         }
-        const uint16_t victim_act = batch->state.action_id[vidx];
-        if (!msl_action_is_grabbed_victim(victim_act)) {
-          continue;
+        if (!msl_action_is_grabbed_victim(batch->state.action_id[vidx])) {
+          // Defensive: if the victim is no longer in a grabbed-victim state, still clear the
+          // attachment link so grab_attachment doesn't keep driving them next frame.
+          batch->state.grab_owner_port[vidx] = 0xFFu;
+          break;
         }
 
-        const uint8_t applied = combat_apply_throw_hit(batch, bi, owner_p, victim_p, &p);
-
-        // Detach regardless of eligibility. If the throw hit is suppressed (e.g. defender is
-        // invincible/intangible), ensure we still transition out of the grabbed/thrown victim loop
-        // so the victim isn't left in a "no-physics, no-attachment" frozen state.
+        // Detach immediately. Defer the throw hit to post-items.
         batch->state.grab_owner_port[vidx] = 0xFFu;
-        if (!applied) {
-          // Defensive (suite-reachable?): in valid throw states, the victim should be in a Thrown*
-          // action by the time set_throw_flags(hit_idx=0) fires. We still force Fall on any grabbed
-          // victim if the throw hit is suppressed (invincible/intangible) so the victim can't be
-          // left detached in a non-physics grabbed-victim loop.
-          enter_fall_release(batch, vidx);
-        }
+        batch->state.throw_pending_victim_port[oidx] = (uint8_t)victim_p;
+        batch->state.throw_pending_hit_idx[oidx] = rel_hit_idx;
+
+        // Defensive broadening: on a detached frame, a grabbed-victim action (Thrown*/Capture*)
+        // has no self/KB integration in this sim (Phys callbacks are empty in decomp), so ensure we
+        // don't leave the victim in a "no physics, no attachment" freeze window if some other hit
+        // suppresses the throw hit later in the frame.
+        //
+        // Suite expectation: for valid throw scripts, the victim is Thrown* when set_throw_flags(0)
+        // fires. The broad fallback is to keep malformed seeds stable.
+        enter_fall_release(batch, vidx);
         break;
+      }
+    }
+  }
+}
+
+void throw_flow_update_post_items(MslBatch* batch) {
+  if (batch == NULL) {
+    return;
+  }
+  const int num_players = (int)batch->config.num_players;
+
+  // Apply the throw hit after items_update() (but latch the release/detach in pre-physics):
+  //
+  // Decomp scheduling evidence (GALE01):
+  // - Item GObj spawn registers multiple per-frame procs including prio 0 and prio 1.
+  //   refs/melee/src/melee/it/item.c::Item_8026862C (HSD_GObjProc_8038FD54(..., prio=0/1/...))
+  // - Fighter timer decrement is prio 0, and animation advancement is prio 1; motion-state callbacks
+  //   (Anim/Phys/Coll) are scheduled later under Fighter_procUpdate.
+  //   refs/melee/src/melee/ft/fighter.c::Fighter_8006A1BC (prio 0)
+  //   refs/melee/src/melee/ft/fighter.c::Fighter_8006A360 (prio 1)
+  //   refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate
+  //
+  // In this light sim, items_update() runs later in step_one_frame() than the fighter throw Anim
+  // callback. Deferring the throw hit here is a deterministic approximation to allow same-frame item
+  // hits to preempt the throw hit in cases where decomp ordering applies item collision earlier.
+  for (int bi = 0; bi < batch->batch_size; bi++) {
+    for (int owner_p = 0; owner_p < num_players; owner_p++) {
+      const size_t oidx = msl_idx_player(bi, owner_p);
+      if (batch->state.stocks[oidx] == 0) {
+        continue;
+      }
+
+      const uint16_t owner_act = batch->state.action_id[oidx];
+      if (!is_thrower_action(owner_act)) {
+        continue;
+      }
+
+      const uint8_t victim_p = batch->state.throw_pending_victim_port[oidx];
+      const uint8_t hit_idx = batch->state.throw_pending_hit_idx[oidx];
+      if (victim_p == 0xFFu || (int)victim_p >= num_players || (int)victim_p == owner_p) {
+        continue;
+      }
+      if (hit_idx == 0xFFu) {
+        continue;
+      }
+
+      const uint8_t owner_char = batch->state.char_id[oidx];
+
+      MslThrowHitboxParams p = {0};
+      if (!move_tables_throw_hitbox_params(owner_char, owner_act, hit_idx, &p)) {
+        continue;
+      }
+
+      const size_t vidx = msl_idx_player(bi, (int)victim_p);
+      if (batch->state.stocks[vidx] == 0) {
+        continue;
+      }
+
+      // If the victim transitioned out of the release state earlier in the frame (e.g. item hit),
+      // do not apply the throw hit.
+      if (batch->state.action_id[vidx] != (uint16_t)MSL_ACT_FALL) {
+        continue;
+      }
+
+      const uint8_t applied = combat_apply_throw_hit(batch, bi, owner_p, (int)victim_p, &p);
+      if (!applied) {
+        // Invincible/intangible suppression: the victim stays in FALL (already detached).
+        // (No additional transition needed.)
       }
     }
   }

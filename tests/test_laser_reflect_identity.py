@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import struct
+from pathlib import Path
 
 import numpy as np
+import pytest
 
 from tools.eval.dataset import COMPARE_DTYPE, INPUT_DTYPE, SEED_DTYPE
 
@@ -27,70 +29,42 @@ def _common_attr(name: str) -> float:
 
 
 def _load_fox_laser_shot_itkind_and_first_offset_x() -> tuple[int, float]:
-    # data/items/lasers.bin layout: tools/extraction/extract_lasers.py (MSLLASR1 v2).
+    # data/items/lasers.bin layout: tools/extraction/extract_lasers.py (MSLLASR1 v2/v3).
     path = "data/items/lasers.bin"
+    if not Path(path).exists():
+        pytest.skip(f"missing local artifact: {path}")
     buf = open(path, "rb").read()
     if buf[:8] != b"MSLLASR1":
         raise AssertionError(f"{path}: bad magic")
     (ver,) = struct.unpack_from("<I", buf, 8)
-    if ver < 2:
+    if ver not in (1, 2, 3, 4):
         raise AssertionError(f"{path}: unsupported ver={ver}")
     (count,) = struct.unpack_from("<H", buf, 12)
     off = 16
 
-    # Header + record packing (see tools/extraction/extract_lasers.py::_pack_record).
-    part1 = struct.Struct("<BBHHHHHHHHHff3fHBBH")
-    part2 = struct.Struct("<ffHHHHb3xB3x")
-    shoot_frames_bytes = 8 * 2  # 8 u16
-    offs_bytes = 16 * 4  # 16 f32
+    # Record packing (see tools/extraction/extract_lasers.py::_pack_record).
+    record_bytes = {1: 158, 2: 166, 3: 254, 4: 254}[int(ver)]
 
     for _ in range(int(count)):
-        char_id, _pad = struct.unpack_from("<BB", buf, off)
         base = off
-        (  # noqa: ECE001 (deliberate unpack for layout sanity)
-            _char_id,
-            _pad0,
-            shot_itkind,
-            _gun_itkind,
-            _spawn_bone_part_id,
-            _ground_start_msid,
-            _ground_loop_msid,
-            _ground_end_msid,
-            _air_start_msid,
-            _air_loop_msid,
-            _air_end_msid,
-            _blaster_angle,
-            _blaster_speed,
-            _spawn_x,
-            _spawn_y,
-            _spawn_z,
-            _lifetime_frames,
-            _shoot_frame_count_ground,
-            _shoot_frame_count_air,
-            _reserved,
-        ) = part1.unpack_from(buf, off)
-        off += part1.size
-        off += shoot_frames_bytes  # ground shoot_frames
-        off += shoot_frames_bytes  # air shoot_frames
-        (
-            _damage,
-            _size,
-            _angle,
-            _kbg,
-            _wsk,
-            _bkb,
-            _shield_damage,
-            hitbox_offsets_x_count,
-        ) = part2.unpack_from(buf, off)
-        off += part2.size
-        offsets = struct.unpack_from("<" + "f" * 16, buf, off)
-        off += offs_bytes
+        char_id = int(buf[off])
+        shot_itkind = int(struct.unpack_from("<H", buf, off + 2)[0])
+
+        # Match src/laser_params.c offsets:
+        # - v1 header ends at +38, v2+ header ends at +46.
+        # - then 16 u16 ground frames + 16 u16 air frames (+32 bytes).
+        off_header = 38 if int(ver) == 1 else 46
+        off_part2 = base + off_header + (8 * 2) + (8 * 2)
+
+        hitbox_offsets_x_count = int(buf[off_part2 + 20])
+        offs0 = off_part2 + 24
+        first = float(struct.unpack_from("<f", buf, offs0)[0]) if hitbox_offsets_x_count > 0 else 0.0
 
         if int(char_id) == CHAR_FOX:
-            first = float(offsets[0]) if int(hitbox_offsets_x_count) > 0 else 0.0
             return int(shot_itkind), first
 
         # Defensive: ensure we don't desync parsing if record size changes.
+        off += record_bytes
         if off <= base:
             raise AssertionError("record parse did not advance")
 
@@ -101,6 +75,7 @@ def _mk_input_bytes(batch: int, input_stride: int) -> np.ndarray:
     return np.zeros((batch, input_stride), dtype=np.uint8)
 
 
+@pytest.mark.integration
 def test_reflected_laser_updates_owner_instance_and_staling_identity() -> None:
     import msl_binding
 

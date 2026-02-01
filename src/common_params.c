@@ -302,6 +302,7 @@ int common_params_init(void) {
       json_get_f32(buf, "hitlag_dmg_mul", &g_params.hitlag_dmg_mul) != 0 ||
       json_get_f32(buf, "hitlag_base", &g_params.hitlag_base) != 0 ||
       json_get_f32(buf, "hitlag_squat_mul", &g_params.hitlag_squat_mul) != 0 ||
+      json_get_f32(buf, "hitlag_electric_mul", &g_params.hitlag_electric_mul) != 0 ||
       json_get_f32(buf, "air_drift_overmax_friction", &g_params.air_drift_overmax_friction) != 0 ||
       json_get_f32(buf, "kb_weight_mul", &g_params.kb_weight_mul) != 0 ||
       json_get_f32(buf, "kb_weight_mul2", &g_params.kb_weight_mul2) != 0 ||
@@ -326,6 +327,9 @@ int common_params_init(void) {
                    &g_params.damagefly_top_angle_min_radians) != 0 ||
       json_get_f32(buf, "damagefly_top_angle_max_radians",
                    &g_params.damagefly_top_angle_max_radians) != 0 ||
+      json_get_i32(buf, "damagefly_roll_percent_threshold",
+                   &g_params.damagefly_roll_percent_threshold) != 0 ||
+      json_get_f32(buf, "damagefly_roll_prob", &g_params.damagefly_roll_prob) != 0 ||
       json_get_f32(buf, "sakurai_air_radians", &g_params.sakurai_air_radians) != 0 ||
       json_get_f32(buf, "sakurai_ground_deg_max", &g_params.sakurai_ground_deg_max) != 0 ||
       json_get_f32(buf, "sakurai_kb_threshold", &g_params.sakurai_kb_threshold) != 0 ||

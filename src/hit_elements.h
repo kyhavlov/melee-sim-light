@@ -11,5 +11,6 @@
 // u16_4; see src/hitboxes_tables.h).
 enum {
   MSL_HIT_ELEMENT_NORMAL = 0,
+  MSL_HIT_ELEMENT_ELECTRIC = 2,
   MSL_HIT_ELEMENT_INERT = 11,  // HitElement_Inert
 };

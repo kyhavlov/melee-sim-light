@@ -51,10 +51,33 @@ typedef struct MslLaserParams {
   uint16_t kbg;
   uint16_t wsk;
   uint16_t bkb;
+  uint8_t element;
   int8_t shield_damage;
 
   uint8_t hitbox_offsets_x_count;
   float hitbox_offsets_x[MSL_LASER_MAX_HITBOX_OFFS_X];
+
+  // Alternate hitbox params for item msid/state=1 (ItemStateDesc[1].xC_script).
+  //
+  // Decomp: blaster shots can be spawned with msid=0 or msid=1 via itfoxlaser.c:
+  // - it_8029C6A4 -> it_8029C504(..., msid=0, ...)
+  // - it_8029C6CC -> it_8029C504(..., msid=1, ...)
+  // refs/melee/src/melee/it/items/itfoxlaser.c::it_8029C6A4 and ::it_8029C6CC
+  //
+  // The hitbox scripts for each state live in the fighter's Pl*.dat article:
+  // Article.xC_itemStates[msid].xC_script.
+  // refs/melee/src/melee/it/types.h::ItemStateDesc
+  float state1_damage;
+  float state1_size;  // radius
+  uint16_t state1_angle;
+  uint16_t state1_kbg;
+  uint16_t state1_wsk;
+  uint16_t state1_bkb;
+  uint8_t state1_element;
+  int8_t state1_shield_damage;
+
+  uint8_t state1_hitbox_offsets_x_count;
+  float state1_hitbox_offsets_x[MSL_LASER_MAX_HITBOX_OFFS_X];
 } MslLaserParams;
 
 // IMPORTANT: laser_params_init() may do IO/allocations; call only during batch init.

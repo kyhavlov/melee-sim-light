@@ -57,41 +57,73 @@ def _extract_fox_falco_laser(pl_buf: bytes, arc, *, ftdata_abs: int) -> dict:
     # FoxLaserAttr.scale (it/items/itfoxlaser.c): max visual stretch for the beam.
     out["laser_scale_max"] = float(_f32_be(pl_buf, special_abs + 0x04))
 
-    # ItemStateDesc[0].xC_script (state 0 is the one used by `it_8029C6A4`).
-    script0_abs = arc.ptr32(states_abs + 0x0C)
-    if script0_abs == arc.data_base:
-        return out
+    def _extract_state_hitbox(state_index: int) -> tuple[dict, list[dict]] | None:
+        # ItemStateDesc stride is 0x10 (it/types.h). xC_script is at offset 0x0C.
+        # refs/melee/src/melee/it/types.h::ItemStateDesc
+        script_abs = arc.ptr32(states_abs + 0x0C + int(state_index) * 0x10)
+        if script_abs == arc.data_base:
+            return None
+        events = _parse_subaction_events(arc, script_abs, max_frames=8, max_steps_per_frame=500)
+        hitboxes: list[dict] = []
+        for ev in events:
+            if ev.kind == "create_hitbox":
+                hb = ev.data.get("hitbox")
+                if isinstance(hb, dict):
+                    hitboxes.append(hb)
+        hb0 = hitboxes[0] if hitboxes else None
+        if not isinstance(hb0, dict):
+            return None
+        return hb0, hitboxes
 
-    events = _parse_subaction_events(arc, script0_abs, max_frames=4, max_steps_per_frame=200)
-    hitboxes: list[dict] = []
-    for ev in events:
-        if ev.kind == "create_hitbox":
-            hb = ev.data.get("hitbox")
-            if isinstance(hb, dict):
-                hitboxes.append(hb)
-    hb = hitboxes[0] if hitboxes else None
-    if not isinstance(hb, dict):
+    # State 0 is spawned by it_8029C6A4 (msid=0).
+    # refs/melee/src/melee/it/items/itfoxlaser.c::it_8029C6A4
+    st0 = _extract_state_hitbox(0)
+    if st0 is None:
         return out
+    hb0, hbs0 = st0
 
-    out["laser_damage"] = float(hb.get("damage", 0.0))
-    out["laser_size"] = float(hb.get("size", 0.0))
-    out["laser_angle"] = int(hb.get("angle", 0))
-    out["laser_kbg"] = int(hb.get("kbg", 0))
-    out["laser_wsk"] = int(hb.get("wsk", 0))
-    out["laser_bkb"] = int(hb.get("bkb", 0))
-    out["laser_shield_damage"] = int(hb.get("shield_damage", 0))
+    out["laser_damage"] = float(hb0.get("damage", 0.0))
+    out["laser_size"] = float(hb0.get("size", 0.0))
+    out["laser_angle"] = int(hb0.get("angle", 0))
+    out["laser_kbg"] = int(hb0.get("kbg", 0))
+    out["laser_wsk"] = int(hb0.get("wsk", 0))
+    out["laser_bkb"] = int(hb0.get("bkb", 0))
+    out["laser_element"] = int(hb0.get("element", 0))
+    out["laser_shield_damage"] = int(hb0.get("shield_damage", 0))
 
     # The blaster shot article uses multiple hitboxes spaced along the beam. Preserve the X offsets
     # so the simulator can reproduce early hits without inflating radius.
     #
     # (Decomp: Pl*.dat article state script; parsed via `_parse_subaction_events`.)
-    x_offs: list[float] = []
-    for hb in hitboxes:
+    x_offs0: list[float] = []
+    for hb in hbs0:
         try:
-            x_offs.append(float(hb.get("x_offset", 0.0)))
+            x_offs0.append(float(hb.get("x_offset", 0.0)))
         except Exception:
             pass
-    out["laser_hitbox_offsets_x"] = x_offs
+    out["laser_hitbox_offsets_x"] = x_offs0
+
+    # State 1 is spawned by it_8029C6CC (msid=1).
+    # refs/melee/src/melee/it/items/itfoxlaser.c::it_8029C6CC
+    st1 = _extract_state_hitbox(1)
+    if st1 is not None:
+        hb1, hbs1 = st1
+        out["laser_state1_damage"] = float(hb1.get("damage", 0.0))
+        out["laser_state1_size"] = float(hb1.get("size", 0.0))
+        out["laser_state1_angle"] = int(hb1.get("angle", 0))
+        out["laser_state1_kbg"] = int(hb1.get("kbg", 0))
+        out["laser_state1_wsk"] = int(hb1.get("wsk", 0))
+        out["laser_state1_bkb"] = int(hb1.get("bkb", 0))
+        out["laser_state1_element"] = int(hb1.get("element", 0))
+        out["laser_state1_shield_damage"] = int(hb1.get("shield_damage", 0))
+
+        x_offs1: list[float] = []
+        for hb in hbs1:
+            try:
+                x_offs1.append(float(hb.get("x_offset", 0.0)))
+            except Exception:
+                pass
+        out["laser_state1_hitbox_offsets_x"] = x_offs1
     return out
 
 

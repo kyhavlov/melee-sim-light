@@ -79,6 +79,8 @@ int state_alloc(MslStateSoA* state, int batch_size) {
   state->action_id = (uint16_t*)alloc_aligned_64(sizeof(uint16_t) * bp);
   state->prev_action_id = (uint16_t*)alloc_aligned_64(sizeof(uint16_t) * bp);
   state->action_frame = (int16_t*)alloc_aligned_64(sizeof(int16_t) * bp);
+  state->throw_pending_victim_port = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
+  state->throw_pending_hit_idx = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->grab_owner_port = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->grab_offset_y = (float*)alloc_aligned_64(sizeof(float) * bp);
   state->grab_offset_z = (float*)alloc_aligned_64(sizeof(float) * bp);
@@ -135,6 +137,7 @@ int state_alloc(MslStateSoA* state, int batch_size) {
   state->dmg_x2224_b2 = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->shield_hp = (float*)alloc_aligned_64(sizeof(float) * bp);
   state->hitlag = (uint16_t*)alloc_aligned_64(sizeof(uint16_t) * bp);
+  state->hitlag_started_frame = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->hitstun = (uint16_t*)alloc_aligned_64(sizeof(uint16_t) * bp);
   state->l_cancel = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->hurtbox_state = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
@@ -255,6 +258,7 @@ int state_alloc(MslStateSoA* state, int batch_size) {
       !state->ceiling_contact_y || !state->ceiling_normal_x || !state->ceiling_normal_y ||
       !state->ceiling_id || !state->coll_env_flags || !state->coll_prev_env_flags ||
       !state->action_id || !state->prev_action_id || !state->action_frame ||
+      !state->throw_pending_victim_port || !state->throw_pending_hit_idx ||
       !state->match_flow_timer || !state->downwait_timer || !state->anim_frame_f32 ||
       !state->anim_frame_fp_q16_16 || !state->frame_speed_mul_fp_q16_16 ||
       !state->jumps_left || !state->stocks || !state->guard_tilt_x8 || !state->guard_tilt_x4 ||
@@ -270,7 +274,8 @@ int state_alloc(MslStateSoA* state, int batch_size) {
       !state->ucf_padbuf_sdrop_up_frames || !state->ucf_padbuf_stick_x ||
       !state->ucf_padbuf_stick_y || !state->percent || !state->percent_temp ||
       !state->dmg_x2225_b7 || !state->dmg_x2224_b2 || !state->shield_hp || !state->hitlag ||
-      !state->hitstun || !state->l_cancel || !state->hurtbox_state || !state->hurtcap_count ||
+      !state->hitlag_started_frame || !state->hitstun || !state->l_cancel || !state->hurtbox_state ||
+      !state->hurtcap_count ||
       !state->hurtcap_a_x || !state->hurtcap_a_y || !state->hurtcap_a_z || !state->hurtcap_b_x ||
       !state->hurtcap_b_y || !state->hurtcap_b_z || !state->hurtcap_radius ||
       !state->hurtcap_enabled || !state->hurtcap_is_grabbable || !state->hurtcap_height ||
@@ -362,6 +367,8 @@ void state_free(MslStateSoA* state) {
   alloc_free(state->action_id);
   alloc_free(state->prev_action_id);
   alloc_free(state->action_frame);
+  alloc_free(state->throw_pending_victim_port);
+  alloc_free(state->throw_pending_hit_idx);
   alloc_free(state->grab_owner_port);
   alloc_free(state->grab_offset_y);
   alloc_free(state->grab_offset_z);
@@ -418,6 +425,7 @@ void state_free(MslStateSoA* state) {
   alloc_free(state->dmg_x2224_b2);
   alloc_free(state->shield_hp);
   alloc_free(state->hitlag);
+  alloc_free(state->hitlag_started_frame);
   alloc_free(state->hitstun);
   alloc_free(state->l_cancel);
   alloc_free(state->hurtbox_state);

@@ -87,6 +87,16 @@ typedef struct MslStateSoA {
   // the seed schema minimal for one-step reseeding.
   uint16_t* prev_action_id;
   int16_t* action_frame;
+  // Internal-only throw flow latch: when a throw release flag fires, we detach the victim during
+  // motion-state Anim (pre-physics), then optionally apply the throw hit later in the frame
+  // (post-items) if no other hit interrupted the victim.
+  //
+  // Stored on the thrower (not the victim) so we can clear it by iterating over players each frame.
+  // Value: 0xFF = none, else victim port in [0..MSL_MAX_PLAYERS).
+  uint8_t* throw_pending_victim_port;
+  // Internal-only throw flow latch: the throw hitbox idx to apply when throw_pending_victim_port is
+  // set. Value: 0xFF = none, else hitbox idx in [0..MSL_THROW_HITBOX_IDX_MAX).
+  uint8_t* throw_pending_hit_idx;
   // Grab/throw victim attachment internals.
   //
   // Decomp:
@@ -201,6 +211,10 @@ typedef struct MslStateSoA {
   uint8_t* dmg_x2224_b2;  // [batch * players] (0/1)
   float* shield_hp;
   uint16_t* hitlag;
+  // Internal-only helper: latched at the start of the frame before timers_update decrements
+  // hitlag. This lets gameplay logic emulate decomp scheduling where "hitlag active this frame"
+  // is based on the pre-decrement value.
+  uint8_t* hitlag_started_frame;
   uint16_t* hitstun;
   uint8_t* l_cancel;
   uint8_t* hurtbox_state;

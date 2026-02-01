@@ -181,8 +181,24 @@ static inline void combat_combo_ftColl_800763C0(MslBatch* batch, size_t a_idx, i
   }
 }
 
+static inline float combat_hitlag_mul_from_element(const MslCommonParams* c, uint8_t element) {
+  if (c == NULL) {
+    return 1.0f;
+  }
+  // Decomp/ASM: ftColl_8007A06C sets `fp->x1960_vibrateMult = p_ftCommonData->x1A4` when hit
+  // element is 2 (electric), and Fighter_ProcessHit passes `fp->x1960_vibrateMult` into
+  // ftCommon_CalcHitlag as the `mul` argument.
+  // refs/melee/build/GALE01/asm/melee/ft/ftcoll.s (search for `stfs f0, 0x1960`)
+  // refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
+  // refs/melee/src/melee/ft/ftcommon.c::ftCommon_CalcHitlag
+  if (element == (uint8_t)MSL_HIT_ELEMENT_ELECTRIC) {
+    return c->hitlag_electric_mul;
+  }
+  return 1.0f;
+}
+
 static inline uint16_t combat_calc_hitlag_frames(const MslCommonParams* c, int dmg,
-                                                 uint16_t motion_id) {
+                                                 uint16_t motion_id, float hitlag_mul) {
   if (c == NULL) {
     return 0;
   }
@@ -191,13 +207,14 @@ static inline uint16_t combat_calc_hitlag_frames(const MslCommonParams* c, int d
   // refs/melee/src/melee/ft/ftcommon.c::ftCommon_CalcHitlag
   //
   // Notes for this pass:
-  // - We use mul=1.0f (fp->x1960_vibrateMult defaults to 1.0; refs/melee/src/melee/ft/fighter.c).
+  // - `hitlag_mul` corresponds to `fp->x1960_vibrateMult` in decomp (see combat_hitlag_mul_from_element).
   const float tmp_f = (float)dmg * c->hitlag_dmg_mul + c->hitlag_base;
   int tmp = (int)tmp_f;
 
-  // Default vibrate multiplier:
-  // refs/melee/src/melee/ft/fighter.c (init sets fp->x1960_vibrateMult = 1).
-  const float mul = 1.0f;
+  float mul = hitlag_mul;
+  if (!(mul > 0.0f)) {
+    mul = 1.0f;
+  }
 
   // Decomp truncates before applying squat scaling:
   // `result = (int)(tmp * mul); if ((unsigned)msid - ftCo_MS_Squat <= 1) result = (int)(result * x1A0);`
@@ -601,8 +618,12 @@ static inline void combat_damage_enter_state(const MslCommonParams* c, MslBatch*
     // to DamageFlyTop based on angle.
     // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
     //
-    // NOTE: The full decomp logic includes an additional RNG-gated DamageFlyRoll path; we do not
-    // model that yet to keep deterministic behavior until we have a faithful RNG stream.
+    // Decomp: ftCo_8008DCE0 includes an additional RNG-gated DamageFlyRoll path when airborne,
+    // not in the DamageFlyTop window, and percent >= a common-data threshold.
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0 (block_33)
+    //
+    // This sim does not currently model the global RNG stream (HSD_Randf consumers). Keep the
+    // DamageFlyRoll branch disabled until we have a decomp-backed RNG site/stream.
     if (!defender_on_ground) {
       // DamageFlyTop window (radians).
       // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0 (block_33)
@@ -710,7 +731,9 @@ static inline void combat_mutations_pass1_future_apply_body_hit_invincible(
     return;
   }
 
-  const uint16_t a_hl = combat_calc_hitlag_frames(c, dmg_i, attacker_motion_id);
+  const uint8_t element = batch->state.hitbox_element[hb_i];
+  const float hitlag_mul = combat_hitlag_mul_from_element(c, element);
+  const uint16_t a_hl = combat_calc_hitlag_frames(c, dmg_i, attacker_motion_id, hitlag_mul);
   if (a_hl > batch->state.hitlag[a_idx]) {
     batch->state.hitlag[a_idx] = a_hl;
     combat_state_flags_set_is_hitlag(batch, a_idx, a_hl);
@@ -842,8 +865,10 @@ static inline void combat_mutations_pass1_future_apply_body_hit(MslBatch* batch,
 
   const uint16_t d_motion_id = batch->state.action_id[d_idx];
 
-  const uint16_t a_hl = combat_calc_hitlag_frames(c, dmg_i, attacker_motion_id);
-  const uint16_t d_hl = combat_calc_hitlag_frames(c, dmg_i, d_motion_id);
+  const uint8_t element = batch->state.hitbox_element[hb_i];
+  const float hitlag_mul = combat_hitlag_mul_from_element(c, element);
+  const uint16_t a_hl = combat_calc_hitlag_frames(c, dmg_i, attacker_motion_id, hitlag_mul);
+  const uint16_t d_hl = combat_calc_hitlag_frames(c, dmg_i, d_motion_id, hitlag_mul);
   if (a_hl > batch->state.hitlag[a_idx]) {
     batch->state.hitlag[a_idx] = a_hl;
     combat_state_flags_set_is_hitlag(batch, a_idx, a_hl);
@@ -1001,7 +1026,7 @@ static inline void combat_mutations_pass1_future_apply_body_hit(MslBatch* batch,
 void combat_apply_item_hit(MslBatch* batch, int batch_index, int attacker, int defender,
                            uint16_t item_attack_id, uint16_t item_attack_instance, float damage,
                            uint16_t angle, uint16_t kbg, uint16_t wsk, uint16_t bkb,
-                           uint8_t defender_hurt_height) {
+                           uint8_t defender_hurt_height, uint8_t element) {
   if (batch == NULL) {
     return;
   }
@@ -1022,6 +1047,22 @@ void combat_apply_item_hit(MslBatch* batch, int batch_index, int attacker, int d
     return;
   }
 
+  // Decomp (GALE01): collision stores both:
+  // - a raw integer damage value (HitCapsule.unk_count), and
+  // - a staled float damage value (HitCapsule.damage) for percent add.
+  //
+  // When computing hitlag and knockback, the engine consumes the integer damage value.
+  // refs/melee/build/GALE01/asm/melee/ft/ftcoll.s::ftColl_8007ABD0
+  // refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
+  //
+  // The item apply path in this lite sim receives the base hitbox damage (integer-valued for
+  // Fox/Falco blaster lasers). Keep the raw integer for hitlag/KB inputs, but apply staling to
+  // the float percent add.
+  const int dmg_raw_i = (int)damage;
+  if (dmg_raw_i <= 0) {
+    return;
+  }
+
   // Decomp (GALE01): item collision applies staling to the item's hitbox damage before the
   // float->int getEnvDmg conversion and before Fighter_ProcessHit consumes the values.
   // refs/melee/src/melee/it/itcoll.c::it_80272460 (calls ft_80089228)
@@ -1032,8 +1073,8 @@ void combat_apply_item_hit(MslBatch* batch, int batch_index, int attacker, int d
     dmg_f *= stale_mult;
   }
 
-  const int int_dmg = combat_get_env_dmg(dmg_f);
-  if (int_dmg <= 0) {
+  const int dmg_env_i = combat_get_env_dmg(dmg_f);
+  if (dmg_env_i <= 0) {
     return;
   }
 
@@ -1042,14 +1083,15 @@ void combat_apply_item_hit(MslBatch* batch, int batch_index, int attacker, int d
   batch->state.percent_temp[d_idx] += dmg_f;
   const float dmg_temp = batch->state.percent_temp[d_idx];
 
-  // Hitlag (defender only): for item projectiles, the "attacker" is the item, not the owning
-  // fighter, so the fighter does not enter hitlag on laser hits.
+  // Hitlag (defender only): for item projectiles, the "attacker" is the item object, not the owning
+  // fighter. The defender fighter still enters hitlag; the owning fighter does not.
   //
   // Decomp reference for fighter-vs-fighter: Fighter_ProcessHit_8006D1EC sets both attacker and
   // defender hitlag. For items, the hitlag is applied to the item object instead.
   // refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
   const uint16_t d_motion_id = batch->state.action_id[d_idx];
-  const uint16_t d_hl = combat_calc_hitlag_frames(c, int_dmg, d_motion_id);
+  const float hitlag_mul = combat_hitlag_mul_from_element(c, element);
+  const uint16_t d_hl = combat_calc_hitlag_frames(c, dmg_raw_i, d_motion_id, hitlag_mul);
   batch->state.hitlag[d_idx] = d_hl;
   combat_state_flags_set_is_hitlag(batch, d_idx, d_hl);
 
@@ -1067,7 +1109,7 @@ void combat_apply_item_hit(MslBatch* batch, int batch_index, int attacker, int d
   }
 
   const float kb_applied = combat_damage_calc_kb_applied(
-      c, d_ch, d_motion_id, percent_pre, dmg_temp, int_dmg, kbg, wsk, bkb, 1.0f,
+      c, d_ch, d_motion_id, percent_pre, dmg_temp, dmg_raw_i, kbg, wsk, bkb, 1.0f,
       batch->state.dmg_x2225_b7[d_idx], batch->state.dmg_x2224_b2[d_idx]);
   const float kb_angle_rad =
       combat_damage_calc_angle_radians(c, angle, defender_on_ground, kb_applied);
@@ -1086,7 +1128,11 @@ void combat_apply_item_hit(MslBatch* batch, int batch_index, int attacker, int d
   batch->state.hitstun[d_idx] = hs;
   combat_state_flags_set_is_hitstun(batch, d_idx, hs);
 
-  combat_damage_enter_state(c, batch, d_idx, defender_on_ground, defender_hurt_height, kb_applied,
+  // Decomp: ftCo_8008DCE0 can clear grounded state (ftCommon_8007D5D4) before selecting the
+  // damage motion state. Use the post-KB on_ground value for state entry.
+  const uint8_t defender_on_ground_after = batch->state.on_ground[d_idx] ? 1u : 0u;
+  combat_damage_enter_state(c, batch, d_idx, defender_on_ground_after, defender_hurt_height,
+                            kb_applied,
                             kb_angle_rad);
 
   batch->state.instance_hit_by[d_idx] = batch->state.instance_id[a_idx];
@@ -1145,7 +1191,21 @@ uint8_t combat_apply_throw_hit(MslBatch* batch, int batch_index, int attacker, i
   }
   const uint8_t defender_no_damage = (hurt_state != 0u) ? 1u : 0u;
 
-  // Throws participate in staling (decomp: plStale tables are applied to fighter attacks).
+  // Decomp (GALE01):
+  // - set_throw_hitbox (ftAction_80071E04) writes the raw integer damage into HitCapsule.unk_count
+  //   and the staled float into HitCapsule.damage via ftColl_8007ABD0 -> ft_80089228(fp->x2068, fp->x206c).
+  //   refs/melee/build/GALE01/asm/melee/ft/ftaction.s::ftAction_80071E04
+  //   refs/melee/build/GALE01/asm/melee/ft/ftcoll.s::ftColl_8007ABD0
+  //
+  // In this lite sim, the throw hitbox params come from extracted move script data (base integer
+  // damage). Apply staling to the float percent write (HitCapsule.damage analog), but keep the
+  // raw integer damage (HitCapsule.unk_count analog) for hitlag/KB inputs.
+  const int dmg_raw_i = (int)p->damage;
+  if (dmg_raw_i <= 0) {
+    return 0;
+  }
+
+  // Throws participate in staling (decomp: fp->x2068/x206c are used by ft_80089228).
   const uint16_t move_id = staling_move_id_from_state(batch, a_idx);
   const float stale_mult = staling_multiplier_for_move(batch, a_idx, move_id);
 
@@ -1153,17 +1213,9 @@ uint8_t combat_apply_throw_hit(MslBatch* batch, int batch_index, int attacker, i
   if (stale_mult != 1.0f) {
     dmg_f *= stale_mult;
   }
-  const int dmg_i = combat_get_env_dmg(dmg_f);
-  if (dmg_i <= 0) {
+  const int dmg_env_i = combat_get_env_dmg(dmg_f);
+  if (dmg_env_i <= 0) {
     return 0;
-  }
-
-  // Attacker hitlag applies even when defender is invincible (invincible BODY contact).
-  const uint16_t a_motion_id = batch->state.action_id[a_idx];
-  const uint16_t a_hl = combat_calc_hitlag_frames(c, dmg_i, a_motion_id);
-  if (a_hl > batch->state.hitlag[a_idx]) {
-    batch->state.hitlag[a_idx] = a_hl;
-    combat_state_flags_set_is_hitlag(batch, a_idx, a_hl);
   }
 
   if (defender_no_damage) {
@@ -1175,13 +1227,7 @@ uint8_t combat_apply_throw_hit(MslBatch* batch, int batch_index, int attacker, i
   batch->state.percent_temp[d_idx] += dmg_f;
   const float dmg_temp = batch->state.percent_temp[d_idx];
 
-  // Defender hitlag: throw hit uses the same ftCommon_CalcHitlag path as BODY hits.
   const uint16_t d_motion_id = batch->state.action_id[d_idx];
-  const uint16_t d_hl = combat_calc_hitlag_frames(c, dmg_i, d_motion_id);
-  if (d_hl > batch->state.hitlag[d_idx]) {
-    batch->state.hitlag[d_idx] = d_hl;
-    combat_state_flags_set_is_hitlag(batch, d_idx, d_hl);
-  }
 
   const MslCharParams* d_ch = msl_char_params(batch->state.char_id[d_idx]);
   if (d_ch == NULL) {
@@ -1204,7 +1250,7 @@ uint8_t combat_apply_throw_hit(MslBatch* batch, int batch_index, int attacker, i
   }
 
   const float kb_applied = combat_damage_calc_kb_applied(
-      c, d_ch, d_motion_id, percent_pre, dmg_temp, dmg_i, p->kbg, p->wsk, p->bkb, coll_kb_mul,
+      c, d_ch, d_motion_id, percent_pre, dmg_temp, dmg_raw_i, p->kbg, p->wsk, p->bkb, coll_kb_mul,
       batch->state.dmg_x2225_b7[d_idx], batch->state.dmg_x2224_b2[d_idx]);
   const float kb_angle_rad =
       combat_damage_calc_angle_radians(c, p->angle, defender_on_ground, kb_applied);
@@ -1371,7 +1417,7 @@ void combat_apply_item_shield_hit(MslBatch* batch, int batch_index, int attacker
 
   // Hitlag (defender only): the "attacker" for projectiles is the item, not the owning fighter.
   // refs/melee/src/melee/ft/ftcoll.c::ftColl_80076CBC and fighter.c::Fighter_ProcessHit_8006D1EC
-  const uint16_t d_hl = combat_calc_hitlag_frames(c, int_dmg, d_motion_id_pre);
+  const uint16_t d_hl = combat_calc_hitlag_frames(c, int_dmg, d_motion_id_pre, 1.0f);
   batch->state.hitlag[d_idx] = d_hl;
   combat_state_flags_set_is_hitlag(batch, d_idx, d_hl);
 
@@ -1488,8 +1534,8 @@ static inline void combat_mutations_pass1_future_apply_shield_hit(MslBatch* batc
   // - defender uses fp->x19A4 (max int_dmg over shield contacts this frame),
   // both computed from hit0->damage via getEnvDmg.
   // refs/melee/src/melee/ft/ftcoll.c::ftColl_80076CBC and fighter.c::Fighter_ProcessHit_8006D1EC
-  const uint16_t a_hl = combat_calc_hitlag_frames(c, max_int_dmg, attacker_motion_id);
-  const uint16_t d_hl = combat_calc_hitlag_frames(c, max_int_dmg, d_motion_id_pre);
+  const uint16_t a_hl = combat_calc_hitlag_frames(c, max_int_dmg, attacker_motion_id, 1.0f);
+  const uint16_t d_hl = combat_calc_hitlag_frames(c, max_int_dmg, d_motion_id_pre, 1.0f);
   batch->state.hitlag[a_idx] = a_hl;
   batch->state.hitlag[d_idx] = d_hl;
   combat_state_flags_set_is_hitlag(batch, a_idx, a_hl);

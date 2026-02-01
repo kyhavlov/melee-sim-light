@@ -164,6 +164,12 @@ def main() -> None:
         # Down smash (ftCo_AttackLw4_CheckInput): y <= xD4 and tilt_y_timer < xD8 (float).
         "attack_lw4_stick_threshold_y": float(_f32_be(buf, ft_common_abs + 0xD4)),
         "attack_lw4_tilt_max_frames": int(round(float(_f32_be(buf, ft_common_abs + 0xD8)))),
+        # DamageFlyRoll gating params (ftCo_Damage.c):
+        # - Percent threshold: compare against fp->dmg.x1838_percentTemp.
+        # - Probability: compared against HSD_Randf() to decide DamageFlyRoll entry.
+        # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c (search for M2C_FIELD(..., 0x23C/0x240))
+        "damagefly_roll_percent_threshold": int(_i32_be(buf, ft_common_abs + 0x23C)),
+        "damagefly_roll_prob": float(_f32_be(buf, ft_common_abs + 0x240)),
         # L-cancel (ftCo_LandingAir.c): if cmd_vars[0] and x67F < xE4 then lag /= xE8.
         "lcancel_window_frames": int(max(0, _i32_be(buf, ft_common_abs + 0xE4))),
         "lcancel_lag_div": float(_f32_be(buf, ft_common_abs + 0xE8)),
@@ -315,6 +321,14 @@ def main() -> None:
         "hitlag_dmg_mul": float(_f32_be(buf, ft_common_abs + 0x198)),
         "hitlag_base": float(_f32_be(buf, ft_common_abs + 0x19C)),
         "hitlag_squat_mul": float(_f32_be(buf, ft_common_abs + 0x1A0)),
+        # Hitlag multiplier (fp->x1960_vibrateMult) for electric hits.
+        #
+        # Decomp/ASM evidence (GALE01):
+        # - ftColl_8007A06C sets `fp->x1960_vibrateMult = p_ftCommonData->x1A4` when the hit element is 2.
+        #   refs/melee/build/GALE01/asm/melee/ft/ftcoll.s (search for `stfs f0, 0x1960`)
+        # - ftCommon_CalcHitlag consumes the multiplier argument as `mul`.
+        #   refs/melee/src/melee/ft/ftcommon.c::ftCommon_CalcHitlag
+        "hitlag_electric_mul": float(_f32_be(buf, ft_common_abs + 0x1A4)),
         # Air drift overspeed friction (ftCommon_8007CF58 / ftCommon_8007D050): when
         # ABS(self_vel.x) > co_attrs.air_drift_max, the engine uses p_ftCommonData->x1FC as the
         # friction magnitude for the "clamp back toward max drift" step.

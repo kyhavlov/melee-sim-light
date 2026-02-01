@@ -22,7 +22,7 @@ uint8_t combat_apply_throw_hit(MslBatch* batch, int batch_index, int attacker, i
 void combat_apply_item_hit(MslBatch* batch, int batch_index, int attacker, int defender,
                            uint16_t item_attack_id, uint16_t item_attack_instance, float damage,
                            uint16_t angle, uint16_t kbg, uint16_t wsk, uint16_t bkb,
-                           uint8_t defender_hurt_height);
+                           uint8_t defender_hurt_height, uint8_t element);
 
 // Apply an item->fighter SHIELD hit (shield HP depletion + GuardSetOff + defender hitlag).
 //

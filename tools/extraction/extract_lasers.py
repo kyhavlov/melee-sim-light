@@ -60,8 +60,18 @@ class LaserRecord:
     laser_kbg: int
     laser_wsk: int
     laser_bkb: int
+    laser_element: int
     laser_shield_damage: int
     hitbox_offsets_x: tuple[float, ...]
+    laser_state1_damage: float
+    laser_state1_size: float
+    laser_state1_angle: int
+    laser_state1_kbg: int
+    laser_state1_wsk: int
+    laser_state1_bkb: int
+    laser_state1_element: int
+    laser_state1_shield_damage: int
+    state1_hitbox_offsets_x: tuple[float, ...]
     shoot_frames_ground: tuple[int, ...]
     shoot_frames_air: tuple[int, ...]
 
@@ -97,7 +107,14 @@ def _load_record(*, iso_dir: Path, dat_name: str, ftdata_symbol: str, char_id: i
     spawn_bone_part_id = 49  # FtPart_RThumbNb (refs/melee/src/melee/ft/forward.h)
     spawn_off = (_f32(0.0), _f32(1.2325000762939453), _f32(4.263599872589111))
 
-    hitbox_offsets_x = tuple(float(x) for x in (laser.get("laser_hitbox_offsets_x") or []) if isinstance(x, (int, float)))
+    hitbox_offsets_x = tuple(
+        float(x) for x in (laser.get("laser_hitbox_offsets_x") or []) if isinstance(x, (int, float))
+    )
+    hitbox_offsets_x_state1 = tuple(
+        float(x)
+        for x in (laser.get("laser_state1_hitbox_offsets_x") or [])
+        if isinstance(x, (int, float))
+    )
 
     return LaserRecord(
         char_id=int(char_id),
@@ -120,8 +137,20 @@ def _load_record(*, iso_dir: Path, dat_name: str, ftdata_symbol: str, char_id: i
         laser_kbg=int(laser.get("laser_kbg", 0)),
         laser_wsk=int(laser.get("laser_wsk", 0)),
         laser_bkb=int(laser.get("laser_bkb", 0)),
+        laser_element=int(laser.get("laser_element", 0)),
         laser_shield_damage=int(laser.get("laser_shield_damage", 0)),
         hitbox_offsets_x=hitbox_offsets_x,
+        laser_state1_damage=float(laser.get("laser_state1_damage", laser.get("laser_damage", 0.0))),
+        laser_state1_size=float(laser.get("laser_state1_size", laser.get("laser_size", 0.0))),
+        laser_state1_angle=int(laser.get("laser_state1_angle", laser.get("laser_angle", 0))),
+        laser_state1_kbg=int(laser.get("laser_state1_kbg", laser.get("laser_kbg", 0))),
+        laser_state1_wsk=int(laser.get("laser_state1_wsk", laser.get("laser_wsk", 0))),
+        laser_state1_bkb=int(laser.get("laser_state1_bkb", laser.get("laser_bkb", 0))),
+        laser_state1_element=int(laser.get("laser_state1_element", laser.get("laser_element", 0))),
+        laser_state1_shield_damage=int(
+            laser.get("laser_state1_shield_damage", laser.get("laser_shield_damage", 0))
+        ),
+        state1_hitbox_offsets_x=hitbox_offsets_x_state1 if hitbox_offsets_x_state1 else hitbox_offsets_x,
         shoot_frames_ground=shoot_frames_ground,
         shoot_frames_air=shoot_frames_air,
     )
@@ -137,10 +166,12 @@ def _pack_record(rec: LaserRecord) -> bytes:
     sg += [0] * (MAX_SHOOT_FRAMES - len(sg))
     sa += [0] * (MAX_SHOOT_FRAMES - len(sa))
 
-    offs = list(rec.hitbox_offsets_x)[:MAX_HITBOX_OFFS]
-    offs += [0.0] * (MAX_HITBOX_OFFS - len(offs))
+    offs0 = list(rec.hitbox_offsets_x)[:MAX_HITBOX_OFFS]
+    offs0 += [0.0] * (MAX_HITBOX_OFFS - len(offs0))
+    offs1 = list(rec.state1_hitbox_offsets_x)[:MAX_HITBOX_OFFS]
+    offs1 += [0.0] * (MAX_HITBOX_OFFS - len(offs1))
 
-    # Layout is documented in docs/DATA_CONTRACT.md (MSLLASR1 v2).
+    # Layout is documented in docs/DATA_CONTRACT.md (MSLLASR1 v4).
     out = bytearray()
     out += struct.pack(
         "<BBHHHHHHHHHff3fHBBH",
@@ -173,7 +204,7 @@ def _pack_record(rec: LaserRecord) -> bytes:
     if sd > 127:
         sd = 127
     out += struct.pack(
-        "<ffHHHHb3xB3x",
+        "<ffHHHHbB2xB3x",
         _f32(rec.laser_damage),
         _f32(rec.laser_size),
         int(rec.laser_angle) & 0xFFFF,
@@ -181,9 +212,29 @@ def _pack_record(rec: LaserRecord) -> bytes:
         int(rec.laser_wsk) & 0xFFFF,
         int(rec.laser_bkb) & 0xFFFF,
         sd,
+        int(rec.laser_element) & 0xFF,
         min(len(rec.hitbox_offsets_x), MAX_HITBOX_OFFS) & 0xFF,
     )
-    out += struct.pack("<" + "f" * MAX_HITBOX_OFFS, *[_f32(x) for x in offs])
+    out += struct.pack("<" + "f" * MAX_HITBOX_OFFS, *[_f32(x) for x in offs0])
+
+    sd1 = int(rec.laser_state1_shield_damage)
+    if sd1 < -128:
+        sd1 = -128
+    if sd1 > 127:
+        sd1 = 127
+    out += struct.pack(
+        "<ffHHHHbB2xB3x",
+        _f32(rec.laser_state1_damage),
+        _f32(rec.laser_state1_size),
+        int(rec.laser_state1_angle) & 0xFFFF,
+        int(rec.laser_state1_kbg) & 0xFFFF,
+        int(rec.laser_state1_wsk) & 0xFFFF,
+        int(rec.laser_state1_bkb) & 0xFFFF,
+        sd1,
+        int(rec.laser_state1_element) & 0xFF,
+        min(len(rec.state1_hitbox_offsets_x), MAX_HITBOX_OFFS) & 0xFF,
+    )
+    out += struct.pack("<" + "f" * MAX_HITBOX_OFFS, *[_f32(x) for x in offs1])
     return bytes(out)
 
 
@@ -201,7 +252,7 @@ def main() -> None:
     args.out.parent.mkdir(parents=True, exist_ok=True)
     with args.out.open("wb") as f:
         f.write(b"MSLLASR1")
-        f.write(struct.pack("<I", 2))
+        f.write(struct.pack("<I", 4))
         f.write(struct.pack("<H", len(recs)))
         f.write(struct.pack("<H", 0))
         for r in recs:

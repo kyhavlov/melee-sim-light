@@ -13,3 +13,7 @@
 // - damage/KB/state entry is routed through combat_apply_throw_hit().
 void throw_flow_update_pre_physics(MslBatch* batch);
 
+// Post-items pass: apply release/throw-hit after items_update() so same-frame item hits (notably
+// in-flight blaster lasers) can preempt the throw-hit when they knock the victim out of the
+// grabbed/thrown victim loop.
+void throw_flow_update_post_items(MslBatch* batch);

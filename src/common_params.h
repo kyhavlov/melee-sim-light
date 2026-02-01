@@ -191,6 +191,7 @@ typedef struct MslCommonParams {
   float hitlag_dmg_mul;    // p_ftCommonData->x198
   float hitlag_base;       // p_ftCommonData->x19C
   float hitlag_squat_mul;  // p_ftCommonData->x1A0
+  float hitlag_electric_mul;  // p_ftCommonData->x1A4 (fp->x1960_vibrateMult when element==2)
   // Air drift overspeed friction magnitude (used by ftCommon_8007CF58 when |self_vel.x| exceeds
   // co_attrs.air_drift_max).
   // refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007CF58
@@ -243,6 +244,9 @@ typedef struct MslCommonParams {
   // DamageFlyTop angle window (radians) (ftCo_8008DCE0 block_33).
   float damagefly_top_angle_min_radians;  // p_ftCommonData->0x234
   float damagefly_top_angle_max_radians;  // p_ftCommonData->0x238
+  // RNG-gated DamageFlyRoll (ftCo_8008DCE0 block_33).
+  int32_t damagefly_roll_percent_threshold;  // p_ftCommonData->0x23C (s32; compared as float)
+  float damagefly_roll_prob;                // p_ftCommonData->0x240
 
   // Sakurai angle (hitbox angle 361) constants.
   float sakurai_air_radians;     // p_ftCommonData->x144_radians
