@@ -2,7 +2,32 @@
 
 #include <string.h>
 
+#include "action_ids.h"
 #include "batch_internal.h"
+
+static inline uint8_t hitlist_victim_pointer_may_change(uint8_t stocks, uint16_t action_id) {
+  // Decomp hitlists store a raw victim pointer (HitVictim.victim) and use pointer equality to
+  // decide "already hit" vs "new victim":
+  // refs/melee/src/melee/lb/lbcollision.c::lbColl_80008688
+  //
+  // This simulator does not currently have a stable pointer identity in the seed schema, so it
+  // approximates "pointer changed" using Slippi-visible state:
+  // - stocks==0 (dead), or
+  // - in a death/respawn motion state.
+  //
+  // NOTE: This boundary is an approximation; it is not guaranteed to match every engine object
+  // lifetime transition, but it is the intended substitute for "victim pointer changed" with the
+  // current seed contract.
+  if (stocks == 0) {
+    return 1u;
+  }
+  return (action_id == (uint16_t)MSL_ACT_DEAD_DOWN || action_id == (uint16_t)MSL_ACT_DEAD_LEFT ||
+          action_id == (uint16_t)MSL_ACT_DEAD_RIGHT ||
+          action_id == (uint16_t)MSL_ACT_DEAD_UP_STAR || action_id == (uint16_t)MSL_ACT_REBIRTH ||
+          action_id == (uint16_t)MSL_ACT_REBIRTH_WAIT)
+             ? 1u
+             : 0u;
+}
 
 static inline size_t idx_hitbox(int bi, int p, int hb_i) {
   return ((size_t)bi * (size_t)MSL_MAX_PLAYERS + (size_t)p) * (size_t)MSL_MAX_HITBOXES +
@@ -112,13 +137,43 @@ uint8_t hitlist_allows(MslBatch* batch, int bi, int attacker, uint8_t hit_group,
     return 1u;
   }
 
-  // Decomp stores a victim pointer (`HitVictim.victim`). On death/respawn, the new fighter instance
-  // pointer should not match the stale entry, so the victim is treated as "new" and can be hit.
+  // Victim identity semantics (decomp-faithful, reseed-friendly):
+  //
+  // Decomp hitlists store a raw victim pointer (`HitVictim.victim`) on the HitCapsule:
+  // - presence in the victim list gates re-hit (lbColl_8000ACFC),
+  // - insertion uses pointer equality for "already hit" vs "new victim" semantics (lbColl_80008688).
+  // refs/melee/src/melee/lb/lbcollision.c::lbColl_8000ACFC
   // refs/melee/src/melee/lb/lbcollision.c::lbColl_80008688
-  if (batch->state.combat_hitlist_victim_iid[i] != victim_iid) {
-    batch->state.combat_hitlist_cd[i] = (uint16_t)MSL_HITLIST_CD_EMPTY;
-    batch->state.combat_hitlist_victim_iid[i] = 0;
-    return 1u;
+  //
+  // This simulator does not have a stable per-fighter pointer identity in the seed schema, so it
+  // uses the Slippi-visible `instance_id` as a proxy. However, `instance_id` can change on motion
+  // state entry (ft_800895E0), even though the victim pointer in decomp does not.
+  // refs/melee/build/GALE01/asm/melee/ft/ft_0892.s::ft_800895E0
+  //
+  // Policy:
+  // - If the stored identity differs, do NOT treat that as a "new victim" by default; keep rehit
+  //   suppression and simply rebind the proxy to the current instance_id.
+  // - Only clear the entry (treat as "new victim") when the victim is in a death/respawn motion
+  //   state or dead by stocks. This is a heuristic approximation of "victim pointer changed" in
+  //   decomp (lbColl_80008688 uses pointer equality on HitVictim.victim).
+  //
+  // IMPORTANT: This function is intentionally not a pure predicate. Even when returning 0
+  // ("not allowed"), it may update `combat_hitlist_victim_iid` to keep the proxy identity bound to
+  // the current Slippi-visible `instance_id` for this victim.
+  const uint16_t stored_iid = batch->state.combat_hitlist_victim_iid[i];
+  if (stored_iid != victim_iid) {
+    const size_t v_idx = msl_idx_player(bi, victim);
+    const uint8_t v_stocks = batch->state.stocks[v_idx];
+    const uint16_t v_act = batch->state.action_id[v_idx];
+    if (hitlist_victim_pointer_may_change(v_stocks, v_act)) {
+      batch->state.combat_hitlist_cd[i] = (uint16_t)MSL_HITLIST_CD_EMPTY;
+      batch->state.combat_hitlist_victim_iid[i] = 0;
+      return 1u;
+    }
+
+    // Rebind proxy identity without clearing the suppression latch.
+    batch->state.combat_hitlist_victim_iid[i] = victim_iid;
+    return 0u;
   }
 
   return 0u;

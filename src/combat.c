@@ -1896,7 +1896,21 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
             combat_mutations_pass1_future_apply_body_hit(batch, a_idx, d_idx, attacker, defender,
                                                          hb_i, cap_i, int_dmg, a_motion_id);
           }
-          hitlist_register(batch, bi, attacker, hit_group, defender, defender_iid, rehit_frames);
+          // Hitlist register: decomp hitlists store a victim pointer inside HitCapsule
+          // (HitVictim.victim), so the victim identity is stable across the defender's damage-state
+          // entry and other motion-state changes.
+          // refs/melee/src/melee/lb/lbcollision.c::lbColl_80008688
+          //
+          // Our hitlist uses `instance_id` as a proxy identity key. BODY hits can enter a damage
+          // motion state within this step, which can bump `instance_id` via ft_800895E0 on the
+          // decomp-shaped ChangeMotionState path (msl_anim_timebase_enter()).
+          // refs/melee/build/GALE01/asm/melee/ft/ft_0892.s::ft_800895E0
+          //
+          // Register using the post-mutation instance_id so that the seeded identity key at t+1
+          // matches teacher-forced reseed (ref post-frame) and we don't spuriously treat the same
+          // victim as "new" on the next step.
+          const uint16_t defender_iid_post = batch->state.instance_id[d_idx];
+          hitlist_register(batch, bi, attacker, hit_group, defender, defender_iid_post, rehit_frames);
 
           did_hit = 1;
           break;
