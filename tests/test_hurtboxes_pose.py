@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import json
 import struct
 from pathlib import Path
 
 import numpy as np
+import pytest
 
 from tools.eval.dataset import INPUT_DTYPE, SEED_DTYPE
 
@@ -12,6 +14,22 @@ from tests.test_anim_pose import _MAT_BYTES, _pick_first_nonempty_anim, _pick_mi
 HURT_MAGIC = b"MSLHURT1"
 HURT_VERSION = 1
 _HURT_REC_BYTES = 34
+
+
+pytestmark = pytest.mark.integration
+
+
+def _require_local(path: Path) -> None:
+    if not path.exists():
+        pytest.skip(f"missing local artifact: {path}")
+
+
+def _require_binding():
+    try:
+        import msl_binding  # type: ignore[import-not-found]
+    except Exception as e:  # pragma: no cover - depends on local build env
+        pytest.skip(f"msl_binding extension not available: {e}")
+    return msl_binding
 
 
 def _read_hurtcaps(path: Path) -> list[dict]:
@@ -72,7 +90,10 @@ def _mtx34_mul_point(m: np.ndarray, v: np.ndarray) -> np.ndarray:
 
 
 def test_hurtboxes_refresh_matches_pose_bytes() -> None:
-    import msl_binding
+    _require_local(Path("data/anims/fox.bin"))
+    _require_local(Path("data/hurtcaps/fox.bin"))
+    _require_local(Path("data/characters/fox.json"))
+    msl_binding = _require_binding()
 
     anim_buf = Path("data/anims/fox.bin").read_bytes()
     joint_count, anim_count, joint_parts = _read_header(anim_buf)
@@ -101,15 +122,37 @@ def test_hurtboxes_refresh_matches_pose_bytes() -> None:
 
     pos_x = np.float32(123.25)
     pos_y = np.float32(-45.5)
+    pos_z = np.float32(0.0)
+    scale_y = np.float32(1.0)
+    model_scaling = np.float32(json.loads(Path("data/characters/fox.json").read_text())["model_scaling"])
+    facing_dir = np.float32(1.0)  # seed["facing"]=1 => facing_dir=+1
 
     a = _mtx34_mul_point(py_m, cap["a_offset"])
     b = _mtx34_mul_point(py_m, cap["b_offset"])
+
+    # Match hurtboxes_refresh:
+    # - scale by (fighter_scale_y * model_scaling)
+    # - apply root facing rotation (rotY = M_PI_2 * facing_dir), mixing X/Z:
+    #   x' = facing_dir * z, z' = -facing_dir * x
+    scale = np.float32(scale_y * model_scaling)
+    a *= scale
+    b *= scale
+    ax = np.float32(facing_dir * a[2])
+    az = np.float32(-facing_dir * a[0])
+    bx = np.float32(facing_dir * b[2])
+    bz = np.float32(-facing_dir * b[0])
+    a[0] = ax
+    a[2] = az
+    b[0] = bx
+    b[2] = bz
     a[0] = np.float32(a[0] + pos_x)
     a[1] = np.float32(a[1] + pos_y)
+    a[2] = np.float32(a[2] + pos_z)
     b[0] = np.float32(b[0] + pos_x)
     b[1] = np.float32(b[1] + pos_y)
+    b[2] = np.float32(b[2] + pos_z)
 
-    ref_row = np.array([a[0], a[1], a[2], b[0], b[1], b[2], cap["scale"]], dtype=np.float32)
+    ref_row = np.array([a[0], a[1], a[2], b[0], b[1], b[2], np.float32(cap["scale"] * scale)], dtype=np.float32)
 
     sizes = msl_binding.sizes()
     seed_stride = int(sizes["seed"])
@@ -127,6 +170,8 @@ def test_hurtboxes_refresh_matches_pose_bytes() -> None:
     seed["facing"][0, :2] = np.uint8(1)  # right (pose-space X mirror parity)
     seed["pos_x"][0, 0] = pos_x
     seed["pos_y"][0, 0] = pos_y
+    seed["pos_z"][0, 0] = pos_z
+    seed["fighter_scale_y"][0, 0] = scale_y
     seed["action_frame"][0, 0] = np.int16(frame)
     seed["anim_frame_f32"][0, 0] = np.float32(frame)
     seed["animation_index"][0, 0] = np.uint32(msid)
@@ -159,7 +204,9 @@ def test_hurtboxes_refresh_matches_pose_bytes() -> None:
 
 
 def test_hurtboxes_refresh_falls_back_on_missing_msid() -> None:
-    import msl_binding
+    _require_local(Path("data/anims/fox.bin"))
+    _require_local(Path("data/hurtcaps/fox.bin"))
+    msl_binding = _require_binding()
 
     anim_buf = Path("data/anims/fox.bin").read_bytes()
     joint_count, anim_count, _joint_parts = _read_header(anim_buf)
@@ -205,7 +252,10 @@ def test_hurtboxes_refresh_falls_back_on_missing_msid() -> None:
 
 
 def test_hurtboxes_refresh_applies_fighter_scale_y() -> None:
-    import msl_binding
+    _require_local(Path("data/anims/fox.bin"))
+    _require_local(Path("data/hurtcaps/fox.bin"))
+    _require_local(Path("data/characters/fox.json"))
+    msl_binding = _require_binding()
 
     anim_buf = Path("data/anims/fox.bin").read_bytes()
     joint_count, anim_count, joint_parts = _read_header(anim_buf)
@@ -234,20 +284,35 @@ def test_hurtboxes_refresh_applies_fighter_scale_y() -> None:
 
     pos_x = np.float32(123.25)
     pos_y = np.float32(-45.5)
+    pos_z = np.float32(0.0)
     scale_y = np.float32(2.0)
+    model_scaling = np.float32(json.loads(Path("data/characters/fox.json").read_text())["model_scaling"])
+    facing_dir = np.float32(1.0)  # seed["facing"]=1 => facing_dir=+1
 
     a_local = _mtx34_mul_point(py_m, cap["a_offset"])
     b_local = _mtx34_mul_point(py_m, cap["b_offset"])
 
-    a = np.array([np.float32(a_local[0] * scale_y), np.float32(a_local[1] * scale_y), np.float32(a_local[2] * scale_y)], dtype=np.float32)
-    b = np.array([np.float32(b_local[0] * scale_y), np.float32(b_local[1] * scale_y), np.float32(b_local[2] * scale_y)], dtype=np.float32)
+    scale = np.float32(scale_y * model_scaling)
+    a = np.array([np.float32(a_local[0] * scale), np.float32(a_local[1] * scale), np.float32(a_local[2] * scale)], dtype=np.float32)
+    b = np.array([np.float32(b_local[0] * scale), np.float32(b_local[1] * scale), np.float32(b_local[2] * scale)], dtype=np.float32)
+
+    ax = np.float32(facing_dir * a[2])
+    az = np.float32(-facing_dir * a[0])
+    bx = np.float32(facing_dir * b[2])
+    bz = np.float32(-facing_dir * b[0])
+    a[0] = ax
+    a[2] = az
+    b[0] = bx
+    b[2] = bz
     a[0] = np.float32(a[0] + pos_x)
     a[1] = np.float32(a[1] + pos_y)
+    a[2] = np.float32(a[2] + pos_z)
     b[0] = np.float32(b[0] + pos_x)
     b[1] = np.float32(b[1] + pos_y)
+    b[2] = np.float32(b[2] + pos_z)
 
     ref_row = np.array(
-        [a[0], a[1], a[2], b[0], b[1], b[2], np.float32(cap["scale"] * scale_y)], dtype=np.float32
+        [a[0], a[1], a[2], b[0], b[1], b[2], np.float32(cap["scale"] * scale)], dtype=np.float32
     )
 
     sizes = msl_binding.sizes()
@@ -265,6 +330,7 @@ def test_hurtboxes_refresh_applies_fighter_scale_y() -> None:
     seed["facing"][0, :2] = np.uint8(1)  # right (pose-space X mirror parity)
     seed["pos_x"][0, 0] = pos_x
     seed["pos_y"][0, 0] = pos_y
+    seed["pos_z"][0, 0] = pos_z
     seed["fighter_scale_y"][0, 0] = scale_y
     seed["fighter_scale_y"][0, 1] = np.float32(1.0)
     seed["action_frame"][0, 0] = np.int16(frame)

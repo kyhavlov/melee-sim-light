@@ -139,6 +139,9 @@ int step_one_frame(MslBatch* batch, const uint8_t* prev_input_bytes, size_t prev
   match_flow_update_post_input(batch);
 
   action_update(batch);
+  // Fighter-driven item spawns (blaster guns + shots) are evaluated before physics integration so
+  // they use the pre-physics fighter pose/position snapshot (decomp: prio1 Anim vs prio4 Update).
+  items_spawn_pre_physics(batch);
   physics_integrate(batch);
   // NOTE(grabbed-victim-coll):
   // - CapturePulled*/CaptureDamage* uses a Phys position driver (fn_800DAD18) before Coll.

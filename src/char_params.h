@@ -71,6 +71,12 @@ typedef struct MslCharParams {
   // Source of truth: ISO-extracted `data/characters/*.json` `model_scaling`.
   float model_scaling;
 
+  // Blaster shot scale cap (Fox/Falco laser article special attr `scale`).
+  //
+  // Decomp: refs/melee/src/melee/it/items/itfoxlaser.c::itFoxlaser_UnkMotion1_Anim
+  // Source of truth: ISO-extracted `data/characters/*.json` `laser_scale_max`.
+  float laser_scale_max;
+
   // Grab/capture attachment anchor bone (bone index / fp->parts[] index domain; GALE01).
   //
   // Decomp:

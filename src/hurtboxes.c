@@ -1,9 +1,11 @@
 #include "hurtboxes.h"
 
+#include <math.h>
 #include <stdint.h>
 
 #include "anim_frame.h"
 #include "anim_pose.h"
+#include "char_params.h"
 #include "hit_status_tables.h"
 #include "hurtbox_modes_tables.h"
 #include "hurtcaps_tables.h"
@@ -115,18 +117,27 @@ void hurtboxes_refresh(MslBatch* batch) {
       //   runtime fighter-scale, so we apply the same scalar uniformly to the pose-space endpoints
       //   before adding world translation.
       //
-      // Facing parity: In-engine joint matrices are also fighter-facing dependent: the fighter's
-      // root part is rotated about Y based on `fp->facing_dir` (see ftPartSetRotY(fp, 0, ...),
-      // refs/melee/src/melee/ft/fighter.c:1180-1182), and lb_8000B1CC uses that runtime joint matrix when
-      // producing world endpoints (refs/melee/src/melee/lb/lb_00B0.c::lb_8000B1CC).
+      // Facing parity: In-engine joint matrices are fighter-facing dependent because the fighter's
+      // root part is rotated about Y by +/-90° based on `fp->facing_dir`, and lb_8000B1CC consumes
+      // that runtime joint matrix when producing world endpoints.
+      // refs/melee/src/melee/ft/fighter.c (ftPartSetRotY(fp, 0, (M_PI_2 * fp->facing_dir)))
+      // refs/melee/src/melee/lb/lb_00B0.c::lb_8000B1CC
       //
-      // Our SSANIM pose matrices are extracted in a single canonical orientation, so we
-      // *approximate* facing by mirroring pose-space X only. We do not apply a true facing
-      // rotation here (which would mix X/Z); this matches the sim's current 2.5D convention.
+      // Our SSANIM pose matrices are extracted in a single canonical orientation without that
+      // runtime facing rotation, so apply the same decomp-shaped Y rotation here (mixing X/Z).
       //
       // We intentionally use only the y component (as decomp does for collision/bounds), treating
       // it as a uniform scalar for x/y/z here.
       const float scale_y = batch->state.fighter_scale_y[idx];
+      // Decomp: runtime joint matrices include ftCommon_GetModelScale(fp) (co_attrs.model_scaling)
+      // in addition to fp->x34_scale.y. Our SSANIM pose matrices are extracted without those runtime
+      // scalars, so apply model_scaling here alongside fighter_scale_y.
+      // refs/melee/src/melee/ft/ftparts.c::ftParts_80074B8C (uses ftCommon_GetModelScale)
+      const MslCharParams* chp = msl_char_params(char_id);
+      const float model_scaling = (chp && isfinite(chp->model_scaling) && chp->model_scaling > 0.0f)
+                                      ? chp->model_scaling
+                                      : 1.0f;
+      const float model_scale = scale_y * model_scaling;
       const float facing_dir = batch->state.facing[idx] ? 1.0f : -1.0f;
 
       // Fallback policy: missing pose data for a specific capsule only drops that capsule, keeping
@@ -156,12 +167,23 @@ void hurtboxes_refresh(MslBatch* batch) {
         msl_mtx34_mul_point(m, caps[ci].a_offset, &ax, &ay, &az);
         msl_mtx34_mul_point(m, caps[ci].b_offset, &bx, &by, &bz);
 
-        ax *= (scale_y * facing_dir);
-        ay *= scale_y;
-        az *= scale_y;
-        bx *= (scale_y * facing_dir);
-        by *= scale_y;
-        bz *= scale_y;
+        ax *= model_scale;
+        ay *= model_scale;
+        az *= model_scale;
+        bx *= model_scale;
+        by *= model_scale;
+        bz *= model_scale;
+
+        // Decomp: apply root facing rotation (rotY = M_PI_2 * facing_dir), mixing X/Z.
+        // refs/melee/src/melee/ft/fighter.c (ftPartSetRotY(fp, 0, (M_PI_2 * fp->facing_dir)))
+        const float ax_rot_x = facing_dir * az;
+        const float ax_rot_z = -facing_dir * ax;
+        const float bx_rot_x = facing_dir * bz;
+        const float bx_rot_z = -facing_dir * bx;
+        ax = ax_rot_x;
+        az = ax_rot_z;
+        bx = bx_rot_x;
+        bz = bx_rot_z;
 
         ax += pos_x;
         ay += pos_y;
@@ -177,7 +199,7 @@ void hurtboxes_refresh(MslBatch* batch) {
         batch->state.hurtcap_b_x[hi] = bx;
         batch->state.hurtcap_b_y[hi] = by;
         batch->state.hurtcap_b_z[hi] = bz;
-        batch->state.hurtcap_radius[hi] = caps[ci].scale * scale_y;
+        batch->state.hurtcap_radius[hi] = caps[ci].scale * model_scale;
       }
 
       batch->state.hurtcap_count[idx] = (uint8_t)cap_count;

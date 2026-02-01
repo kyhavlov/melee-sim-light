@@ -593,6 +593,15 @@ void guard_update_grounded(MslBatch* batch, const MslCommonParams* c, size_t idx
 
   // GuardOff: wait for animation end then go back to Wait.
   if (a0 == MSL_ACT_GUARD_OFF) {
+    // GuardOff IASA: allow common defensive options (including jump) while the GuardOff animation
+    // is playing.
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_GuardOff_IASA
+    if (guard_try_enter_jump_oos(batch, c, idx)) {
+      return;
+    }
+    if (escape_try_enter_from_guard(batch, c, idx)) {
+      return;
+    }
     const float end_frame =
         msl_anim_end_frame(batch->state.char_id[idx], (uint16_t)MSL_SM_GUARD_OFF);
     if (end_frame > 0.0f && (batch->state.anim_frame_f32[idx] >= end_frame)) {
