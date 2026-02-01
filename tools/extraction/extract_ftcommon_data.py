@@ -122,6 +122,14 @@ def main() -> None:
         #     radius = n3 * fp->co_attrs.initial_shield_size
         "start_shield_health": float(_f32_be(buf, ft_common_abs + 0x260)),
         "shield_size_min_scale": float(_f32_be(buf, ft_common_abs + 0x264)),
+        # Guard release lockout timer init (mv.co.guard.x10).
+        #
+        # Decomp:
+        # - fp->mv.co.guard.x10 = p_ftCommonData->x268 on GuardOn entry,
+        #   refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_800921DC
+        # - decremented while shielding in ftCo_800925A4,
+        #   refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_800925A4
+        "guard_x10_init_frames": float(_f32_be(buf, ft_common_abs + 0x268)),
         "shield_recharge_per_frame": float(_f32_be(buf, ft_common_abs + 0x27C)),
         "shield_hold_drain_mul": float(_f32_be(buf, ft_common_abs + 0x278)),
         "shield_hold_drain_base": float(_f32_be(buf, ft_common_abs + 0x2EC)),

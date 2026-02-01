@@ -192,6 +192,26 @@ typedef struct MslSeed {
   // - Because the decomp timer expires on `x14 < 0`, we represent `x14 + 1` clamped to [0..255].
   //   This allows us to expire cleanly at 0 without carrying negative values in the seed schema.
   uint8_t guard_reflect_timer_x14[MSL_MAX_PLAYERS];
+  // Guard release lockout (seeded; strictly causal in preprocessing).
+  //
+  // Decomp (GALE01):
+  // - mv.co.guard.xC: latched true when `held_inputs & HSD_PAD_LR` becomes false.
+  //   refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80092BCC
+  // - mv.co.guard.x10: initialized on GuardOn/GuardReflect entry from p_ftCommonData->x268, then
+  //   decremented while the shield is active, and gates the release transition in Guard IASA.
+  //   refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_800921DC
+  //   refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_800925A4
+  //   refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_Guard_IASA (inlineC0)
+  //
+  // Seed representation:
+  // - guard_release_latched_xc: 0/1 (mv.co.guard.xC).
+  // - guard_x10: remaining frames, clamped to [0..255] (mv.co.guard.x10).
+  uint8_t guard_release_latched_xc[MSL_MAX_PLAYERS];
+  uint8_t guard_x10[MSL_MAX_PLAYERS];
+  // Lightshield amount latch used for shield HP drain when trigger input drops below the deadzone.
+  // Decomp: fp->lightshield_amount and mv.co.guard.x2C in ftCo_800925A4.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_800925A4
+  float lightshield_amount[MSL_MAX_PLAYERS];
   uint8_t jumps_left[MSL_MAX_PLAYERS];
   uint8_t stocks[MSL_MAX_PLAYERS];
 

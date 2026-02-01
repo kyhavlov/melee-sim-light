@@ -270,6 +270,7 @@ int common_params_init(void) {
       json_get_f32(buf, "shield_size_lightshield_max", &g_params.shield_size_lightshield_max) !=
           0 ||
       json_get_f32(buf, "shield_size_min_scale", &g_params.shield_size_min_scale) != 0 ||
+      json_get_f32(buf, "guard_x10_init_frames", &g_params.guard_x10_init_frames) != 0 ||
       json_get_f32(buf, "shield_recharge_per_frame", &g_params.shield_recharge_per_frame) != 0 ||
       json_get_f32(buf, "shield_hold_drain_mul", &g_params.shield_hold_drain_mul) != 0 ||
       json_get_f32(buf, "shield_hold_drain_base", &g_params.shield_hold_drain_base) != 0 ||

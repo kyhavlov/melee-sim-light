@@ -508,6 +508,133 @@ def derive_guard_tilt_state(
     return out_x8, out_x4
 
 
+def derive_guard_release_lockout_and_lightshield(
+    *,
+    action_id: np.ndarray,
+    shield_hp: np.ndarray,
+    hitlag: np.ndarray,
+    trigger_unit: np.ndarray,
+    trigger_deadzone: float,
+    guard_x10_init_frames: int,
+    act_guard_on: int,
+    act_guard: int,
+    act_guard_reflect: int,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """
+    Derive Guard release lockout state (mv.co.guard.xC + mv.co.guard.x10) and the lightshield amount
+    latch (fp->lightshield_amount) strictly causally from replay history.
+
+    Decomp (GALE01):
+    - GuardOn/GuardReflect entry calls ftCo_800921DC, which initializes:
+        mv.co.guard.xC = false
+        mv.co.guard.x10 = p_ftCommonData->x268
+      refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_800921DC
+    - Each Guard{On}/Guard/GuardReflect Anim calls ftCo_800925A4 while the shield is active
+      (fp->x221B_b0), which:
+        - updates fp->lightshield_amount with a "reuse previous value if negative" latch
+        - decrements mv.co.guard.x10 once per frame (under !hitlag)
+      refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_800925A4
+    - GuardOn/Guard/GuardReflect IASA latches mv.co.guard.xC on trigger release and exits to GuardOff
+      only once (xC && x10==0) OR the shield is no longer active.
+      refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80092BCC
+      refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_Guard_IASA (inlineC0)
+
+    Returns (guard_release_latched_xc_u8, guard_x10_u8, lightshield_amount_f32) arrays with length N,
+    where the values represent the *post-frame* state for each frame index.
+    """
+    aid = np.asarray(action_id, dtype=np.uint16).reshape(-1)
+    hp = np.asarray(shield_hp, dtype=np.float32).reshape(-1)
+    hl = np.asarray(hitlag, dtype=np.uint16).reshape(-1)
+    trig = np.asarray(trigger_unit, dtype=np.float32).reshape(-1)
+
+    n = int(aid.size)
+    if int(hp.size) != n or int(hl.size) != n or int(trig.size) != n:
+        raise ValueError("input arrays must have the same length")
+
+    out_xc = np.zeros(n, dtype=np.uint8)
+    out_x10 = np.zeros(n, dtype=np.uint8)
+    out_light = np.zeros(n, dtype=np.float32)
+
+    dz = np.float32(float(trigger_deadzone))
+    denom = np.float32(1.0) - dz
+    if not (float(denom) > 0.0):
+        raise ValueError(f"invalid trigger_deadzone={trigger_deadzone} (1-deadzone must be >0)")
+
+    init = int(guard_x10_init_frames)
+    if init < 0:
+        init = 0
+    if init > 255:
+        init = 255
+
+    # Persistent per-fighter state.
+    xC = False
+    x10 = int(0)
+    light = np.float32(0.0)
+
+    def _is_guard(a: int) -> bool:
+        return a == int(act_guard_on) or a == int(act_guard) or a == int(act_guard_reflect)
+
+    for i in range(n):
+        a = int(aid[i])
+        prev_a = int(aid[i - 1]) if i > 0 else a
+
+        in_guard = _is_guard(a)
+        prev_in_guard = _is_guard(prev_a)
+
+        # Reset on GuardOn/GuardReflect entry (ftCo_800921DC call sites).
+        if (a == int(act_guard_on) and prev_a != int(act_guard_on)) or (
+            a == int(act_guard_reflect) and prev_a != int(act_guard_reflect)
+        ):
+            xC = False
+            x10 = init
+            light = np.float32(0.0)
+
+        if not in_guard:
+            # Outside of guard states, these internals are irrelevant; seed them as 0 to keep
+            # reseeding deterministic and schema-minimal.
+            xC = False
+            x10 = 0
+            light = np.float32(0.0)
+            out_xc[i] = np.uint8(0)
+            out_x10[i] = np.uint8(0)
+            out_light[i] = np.float32(0.0)
+            continue
+
+        # If we newly entered Guard without passing through GuardOn/GuardReflect (unexpected in GALE01),
+        # keep the internal state conservative and reinitialize.
+        if in_guard and not prev_in_guard and a == int(act_guard):
+            xC = False
+            x10 = init
+            light = np.float32(0.0)
+
+        # Only update these during non-hitlag frames, mirroring fighter proc scheduling:
+        # Anim + IASA callbacks are gated while hitlag is active.
+        if int(hl[i]) == 0 and float(hp[i]) > 0.0:
+            # Lightshield amount latch (ftCo_800925A4):
+            # lightshield_amount = (x650 - deadzone)/(1-deadzone) if >=0 else reuse previous.
+            t = np.float32((np.float32(trig[i]) - dz) / denom)
+            if float(t) >= 0.0:
+                if float(t) > 1.0:
+                    t = np.float32(1.0)
+                light = t
+
+            # x10 countdown tick (ftCo_800925A4).
+            if x10 > 0:
+                x10 -= 1
+                if x10 < 0:
+                    x10 = 0
+
+            # xC latch (ftCo_80092BCC). `held_inputs & HSD_PAD_LR` is shaped by trigger_deadzone.
+            if float(trig[i]) < float(dz):
+                xC = True
+
+        out_xc[i] = np.uint8(1 if xC else 0)
+        out_x10[i] = np.uint8(x10 & 0xFF)
+        out_light[i] = np.float32(light)
+
+    return out_xc, out_x10, out_light
+
+
 def compute_tilt_timer_y_pre_post_with_fall_fast(
     stick_y_unit: np.ndarray,
     *,

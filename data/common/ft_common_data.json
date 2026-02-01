@@ -68,6 +68,7 @@
   "ftcoll_percent_base_x6d8": 50,
   "ground_kb_friction_mul": 1.0,
   "guard_stick_lerp_x44c": 0.5,
+  "guard_x10_init_frames": 8.0,
   "high_speed_friction_mul": 2.0,
   "hitlag_base": 3.0,
   "hitlag_dmg_mul": 0.3333333432674408,

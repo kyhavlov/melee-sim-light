@@ -126,6 +126,9 @@ typedef struct MslCommonParams {
   float shield_size_lightshield_min;  // p_ftCommonData->x2D4 (shield_size_lightshield_min)
   float shield_size_lightshield_max;  // p_ftCommonData->x2D8 (shield_size_lightshield_max)
   float shield_size_min_scale;        // p_ftCommonData->x264 (shield_size_min_scale)
+  // Guard release lockout timer init (mv.co.guard.x10).
+  // Decomp: refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_800921DC
+  float guard_x10_init_frames;  // p_ftCommonData->x268
   float shield_recharge_per_frame;    // p_ftCommonData->x27C (shield_recharge_per_frame)
   float shield_hold_drain_mul;        // p_ftCommonData->x278 (shield_hold_drain_mul)
   float shield_hold_drain_base;       // p_ftCommonData->x2EC (shield_hold_drain_base)

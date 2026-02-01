@@ -133,6 +133,11 @@ typedef struct MslStateSoA {
   float* guard_tilt_x4;  // mv.co.guard.x4 (stick magnitude smoothing; 0..1)
   // GuardReflect reflect timer (decomp: mv.co.guard.x14; seed uses +1 bias, expires at 0).
   uint8_t* guard_reflect_timer_x14;  // [batch * players]
+  // Guard release lockout + shield-drain latch (seeded; decomp-shaped).
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80092BCC and ::ftCo_800925A4.
+  uint8_t* guard_release_latched_xc;  // mv.co.guard.xC (0/1)
+  uint8_t* guard_x10;                 // mv.co.guard.x10 (frames remaining; clamped to 0..255)
+  float* lightshield_amount;          // fp->lightshield_amount (0..1)
   // Locomotion/input-history internals.
   // - `tilt_timer_*`, `turn_*`, and KneeBend internals are seeded from replay history (MslSeed).
   uint8_t*

@@ -426,6 +426,7 @@ def _main_impl(args) -> None:
         derive_downwait_timer,
         derive_grab_owner_port_2p,
         derive_guard_reflect_timer_x14,
+        derive_guard_release_lockout_and_lightshield,
         derive_guard_tilt_state,
         load_shield_tilt_table_meta,
         compute_tilt_timer_axis_pre_post,
@@ -1009,6 +1010,25 @@ def _main_impl(args) -> None:
             reflect_frames_x2a4=int(common["powershield_reflect_frames"]),
         )
         samples["seed_t"]["guard_reflect_timer_x14"][:, slot] = guard_reflect_timer_x14[:-1]
+
+        # Guard release lockout (mv.co.guard.xC/x10) + lightshield latch (fp->lightshield_amount).
+        # Derived strictly causally from replay history to support teacher-forced one-step reseed.
+        guard_release_latched_xc, guard_x10, lightshield_amount = (
+            derive_guard_release_lockout_and_lightshield(
+                action_id=post_state,
+                shield_hp=post_shield,
+                hitlag=post_hitlag,
+                trigger_unit=trigger_unit,
+                trigger_deadzone=float(common["trigger_deadzone"]),
+                guard_x10_init_frames=int(common["guard_x10_init_frames"]),
+                act_guard_on=act_guard_on,
+                act_guard=act_guard,
+                act_guard_reflect=act_guard_reflect,
+            )
+        )
+        samples["seed_t"]["guard_release_latched_xc"][:, slot] = guard_release_latched_xc[:-1]
+        samples["seed_t"]["guard_x10"][:, slot] = guard_x10[:-1]
+        samples["seed_t"]["lightshield_amount"][:, slot] = lightshield_amount[:-1]
 
         # Fighter per-frame input counters block.
         # Decomp: refs/melee/src/melee/ft/fighter.c:1897-2094 (lb helper: refs/melee/src/melee/lb/lb_00CE.c:163-225).

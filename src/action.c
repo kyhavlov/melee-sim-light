@@ -275,6 +275,22 @@ static inline uint8_t guard_reflect_timer_x14_init(const MslCommonParams* c) {
   return (uint8_t)t;
 }
 
+static inline uint8_t guard_x10_init_u8(const MslCommonParams* c) {
+  // Decomp: mv.co.guard.x10 is initialized from p_ftCommonData->x268 on GuardOn/GuardReflect entry.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_800921DC
+  if (c == NULL) {
+    return 0;
+  }
+  if (!(c->guard_x10_init_frames > 0.0f)) {
+    return 0;
+  }
+  uint16_t t = (uint16_t)c->guard_x10_init_frames;
+  if (t > 255u) {
+    t = 255u;
+  }
+  return (uint8_t)t;
+}
+
 static inline void enter_guard_reflect(MslBatch* batch, const MslCommonParams* c, size_t idx) {
   // Decomp entry: ftCo_80091A4C -> ftCo_800939B4 -> ftCo_80093A50.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c:57-65 and :763-798.
@@ -284,14 +300,20 @@ static inline void enter_guard_reflect(MslBatch* batch, const MslCommonParams* c
   batch->state.animation_index[idx] = 0xFFFFFFFFu;
   msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
   batch->state.guard_reflect_timer_x14[idx] = guard_reflect_timer_x14_init(c);
+  batch->state.guard_release_latched_xc[idx] = 0;
+  batch->state.guard_x10[idx] = guard_x10_init_u8(c);
+  batch->state.lightshield_amount[idx] = 0.0f;
 }
 
-static inline void enter_guard_on(MslBatch* batch, size_t idx) {
+static inline void enter_guard_on(MslBatch* batch, const MslCommonParams* c, size_t idx) {
   // Decomp entry: ftCo_80091A4C -> ftCo_800923B4 -> ftCo_800924C0.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c:66-69 and :313-327.
   batch->state.action_id[idx] = (uint16_t)MSL_ACT_GUARD_ON;
   batch->state.animation_index[idx] = 0xFFFFFFFFu;
   msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+  batch->state.guard_release_latched_xc[idx] = 0;
+  batch->state.guard_x10[idx] = guard_x10_init_u8(c);
+  batch->state.lightshield_amount[idx] = 0.0f;
 }
 
 static inline void enter_guard_hold(MslBatch* batch, size_t idx) {
@@ -308,6 +330,9 @@ static inline void enter_guard_off(MslBatch* batch, size_t idx) {
   batch->state.action_id[idx] = (uint16_t)MSL_ACT_GUARD_OFF;
   batch->state.animation_index[idx] = (uint32_t)MSL_SM_GUARD_OFF;
   msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+  batch->state.guard_release_latched_xc[idx] = 0;
+  batch->state.guard_x10[idx] = 0;
+  batch->state.lightshield_amount[idx] = 0.0f;
 }
 
 static inline void guard_enter_wait(MslBatch* batch, size_t idx) {
@@ -352,18 +377,19 @@ static inline uint8_t guard_try_enter_jump_oos(MslBatch* batch, const MslCommonP
 
 static inline void apply_shield_hold_drain(MslBatch* batch, const MslCommonParams* c, size_t idx,
                                            float trig_unit) {
-  // Decomp:
-  // - fp->lightshield_amount = (x650 - x10)/(1-x10) with a negative check.
-  // - fp->shield_health -= x278 * (light*(x2F0-x2EC) + x2EC); clamp at 0.
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c:333-350.
-  //
-  // We do not model the "reuse previous lightshield amount when negative" latch yet; under the
-  // trigger_deadzone (x10) gate, trig_unit should be >= x10 while shielding.
+  // Decomp (GALE01): ftCo_800925A4 updates fp->lightshield_amount with a negative-input latch and
+  // drains shield HP using the resulting value.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_800925A4
   const float denom = 1.0f - c->trigger_deadzone;
-  if (denom <= 0.0f) {
+  if (!(denom > 0.0f)) {
     return;
   }
-  const float light = clamp01((trig_unit - c->trigger_deadzone) / denom);
+  float light = batch->state.lightshield_amount[idx];
+  const float t = (trig_unit - c->trigger_deadzone) / denom;
+  if (t >= 0.0f) {
+    light = clamp01(t);
+  }
+  batch->state.lightshield_amount[idx] = light;
   const float drain_factor =
       (light * (c->shield_hold_drain_max - c->shield_hold_drain_base)) + c->shield_hold_drain_base;
   const float drain = c->shield_hold_drain_mul * drain_factor;
@@ -444,12 +470,23 @@ void guard_update_grounded(MslBatch* batch, const MslCommonParams* c, size_t idx
     batch->state.guard_reflect_timer_x14[idx] = 0;
   }
 
+  if (!is_shield_active_action(a0)) {
+    batch->state.guard_release_latched_xc[idx] = 0;
+    batch->state.guard_x10[idx] = 0;
+    batch->state.lightshield_amount[idx] = 0.0f;
+  }
+
   const float trig = trigger_unit_from_input(batch->state.input_buttons[idx],
                                              batch->state.input_l[idx], batch->state.input_r[idx]);
 
   // `held_inputs & HSD_PAD_LR` behavior for shielding uses the trigger deadzone (x10).
   // Decomp usage: refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c:46-55.
   const uint8_t shield_held = (trig >= c->trigger_deadzone) ? 1 : 0;
+
+  // Guard release lockout (mv.co.guard.xC + mv.co.guard.x10) is modeled explicitly and seeded via
+  // replay-history preprocessing (Slippi does not expose move vars directly).
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80092BCC (xC latch)
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_800925A4 (x10 tick)
 
   // GuardSetOff (shieldstun): no IASA until the underlying "GuardDamage" animation completes.
   //
@@ -489,15 +526,30 @@ void guard_update_grounded(MslBatch* batch, const MslCommonParams* c, size_t idx
   // ----------------
   if (a0 == MSL_ACT_GUARD_ON || a0 == MSL_ACT_GUARD || a0 == MSL_ACT_GUARD_REFLECT) {
     batch->state.animation_index[idx] = 0xFFFFFFFFu;
-    if (!shield_held) {
-      if (a0 == (uint16_t)MSL_ACT_GUARD_REFLECT) {
-        batch->state.guard_reflect_timer_x14[idx] = 0;
+    const uint8_t can_update = (batch->state.hitlag[idx] == 0) ? 1 : 0;
+    if (can_update) {
+      if (!shield_held) {
+        // Decomp: ftCo_80092BCC latches mv.co.guard.xC when held_inputs loses HSD_PAD_LR.
+        batch->state.guard_release_latched_xc[idx] = 1;
       }
-      enter_guard_off(batch, idx);
-      return;
+      // Decomp: ftCo_800925A4 updates lightshield_amount + drains shield HP + decrements x10 while
+      // the shield is active (fp->x221B_b0). Approximate shield-active as (shield_hp > 0).
+      if (batch->state.shield_hp[idx] > 0.0f) {
+        apply_shield_hold_drain(batch, c, idx, trig);
+        if (batch->state.guard_x10[idx] > 0) {
+          batch->state.guard_x10[idx]--;
+        }
+      }
+      // Decomp: Guard IASA exits to GuardOff only once (xC && x10==0).
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_Guard_IASA (inlineC0)
+      if (batch->state.guard_release_latched_xc[idx] && batch->state.guard_x10[idx] == 0) {
+        if (a0 == (uint16_t)MSL_ACT_GUARD_REFLECT) {
+          batch->state.guard_reflect_timer_x14[idx] = 0;
+        }
+        enter_guard_off(batch, idx);
+        return;
+      }
     }
-
-    apply_shield_hold_drain(batch, c, idx, trig);
 
     // GuardOn/GuardReflect -> Guard when the GuardOn animation finishes.
     // Decomp: ftCo_GuardOn_Anim transitions to ftCo_800928CC when mv.co.guard.x0 >= fp->x2E8.
@@ -569,7 +621,15 @@ void guard_update_grounded(MslBatch* batch, const MslCommonParams* c, size_t idx
   }
 
   if (shield_held && batch->state.shield_hp[idx] > 0.0f) {
-    enter_guard_on(batch, idx);
+    enter_guard_on(batch, c, idx);
+    {
+      // Initialize lightshield_amount from the current trigger input (decomp updates this on entry
+      // via ftCo_800921DC and then per-frame via ftCo_800925A4).
+      const float denom = 1.0f - c->trigger_deadzone;
+      if (denom > 0.0f) {
+        batch->state.lightshield_amount[idx] = clamp01((trig - c->trigger_deadzone) / denom);
+      }
+    }
     return;
   }
 }
