@@ -65,19 +65,20 @@ Characters (Fox/Falco):
 - `data/moves/fox.json`, `data/moves/falco.json` (subaction timelines for key motions + specials; decomp-first)
 - `data/anims/fox.bin`, `data/anims/falco.bin` (per-msid bone matrices + TransN; decomp-first)
 - `data/anims/fox.blend.bin`, `data/anims/falco.blend.bin` (blend/dynamics bytes; decomp-first)
+- `data/anims_ecb/fox.bin`, `data/anims_ecb/falco.bin` (per-msid bone matrices + TransN; **ECB extraction input only**; not read by the C core)
 - `data/items/lasers.bin` (Fox/Falco blaster laser params; decomp-first, compact binary)
 - `data/ecb/fox_bottom.bin`, `data/ecb/falco_bottom.bin` (per-msid per-frame ECB bottom Y; decomp-shaped)
-  - Source: `data/anims/<char>.bin` (SSANIM01 v3 matrices) + `data/characters/<char>.json` `ecb_joints`.
+  - Source: `data/anims_ecb/<char>.bin` (SSANIM01 v3 matrices) + `data/characters/<char>.json` `ecb_joints`.
   - Per msid + integer frame `f`, we compute:
     - `min_joint_y[f] = min( joint_y(part) for part in ecb_joints )` using the translation `ty` from
       the fighter-local world matrices.
     - `ecb_bottom_rel_y[f] = min_joint_y[f]`.
   - Coordinate convention:
-    - `ecb_bottom_rel_y` is in the same **fighter-local** coordinate system as `data/anims/<char>.bin`
+    - `ecb_bottom_rel_y` is in the same **fighter-local** coordinate system as SSANIM01 matrices (`data/anims*.bin`)
       matrices (TransN translation removed).
     - To get world-space ECB bottom Y, add it to the fighter's world `pos_y` (Slippi post-frame position).
 - `data/ecb/fox_extents.bin`, `data/ecb/falco_extents.bin` (per-msid per-frame ECB extrema; decomp-shaped)
-  - Source: `data/anims/<char>.bin` (SSANIM01 v3 matrices) + `data/characters/<char>.json` `ecb_joints`.
+  - Source: `data/anims_ecb/<char>.bin` (SSANIM01 v3 matrices) + `data/characters/<char>.json` `ecb_joints`.
   - Per msid + integer frame `f`, we compute fighter-local joint extrema over the 6 ECB source joints:
     - `min_x[f] = min( joint_x(part) for part in ecb_joints )`
     - `max_x[f] = max( joint_x(part) for part in ecb_joints )`
@@ -86,7 +87,7 @@ Characters (Fox/Falco):
   - These correspond to the `left_x/right_x/bottom_y/top_y` extrema computed in the joint loop of
     `mpColl_LoadECB_JObj` before runtime expansion/clamping.
     Source pointer: `refs/melee/src/melee/mp/mpcoll.c:328` (ECB source joint loop).
-  - Coordinate convention matches `data/anims/<char>.bin` fighter-local matrices (TransN translation removed).
+  - Coordinate convention matches SSANIM01 fighter-local matrices (TransN translation removed).
 
 Notes:
 - `animation_index` in Slippi post-frames includes `0xFFFFFFFF` as a sentinel; treat that as “no animation”.
@@ -208,7 +209,7 @@ Binary layout (little-endian):
 Coordinate semantics:
 - Each `(x,y,z)` is the translation component (`tx,ty,tz`) of the shield joint's **fighter-local** transform under
   the `ftCo_SM_Guard` (msid 38) tilt timeline, evaluated at integer frame `f`.
-- These coordinates share the same fighter-local convention as `data/anims/<char>.bin` matrices (TransN/root translation removed).
+- These coordinates share the same fighter-local convention as SSANIM01 matrices (`data/anims*.bin`) (TransN/root translation removed).
 - `shields_refresh()` consumes them as follows:
   - Compute a target tilt frame from stick direction:
     - `rad = atan2(stick_y, stick_x * facing_dir)` in `[0, 2π)`, then `deg = clamp(rad * 180/π, 0..359)`.
@@ -392,7 +393,8 @@ To avoid “mystery drift”, prefer loading the following early:
 - **Animation attachment data**:
   - Either (A) full per-bone matrices per frame for the bones we need, or
   - (B) precomputed per-frame attachment transforms for hitboxes/hurtboxes/ECB sources.
-  - The extractor currently outputs (A)-style matrices in `data/anims/*.bin` for Fox/Falco.
+  - The extractor currently outputs (A)-style matrices in `data/anims/*.bin` for Fox/Falco, and a broader-coverage variant in
+    `data/anims_ecb/*.bin` used only to generate ECB tables.
 
 `ground_id` semantics (current assumption):
 - Our datasets store `ground_id` directly from Slippi post-frame `ground` (see `tools/slippi/make_dataset_from_slp.py`).
