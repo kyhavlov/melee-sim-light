@@ -91,8 +91,10 @@ def test_hitlag_ends_then_action_and_physics_resume() -> None:
     seed = _seed_base()
     seed["hitlag"][0, 0] = np.uint16(1)
     seed["hitstun"][0, 0] = np.uint16(5)
-    seed["action_frame"][0, 0] = np.int16(10)
-    seed["anim_frame_f32"][0, 0] = np.float32(10.0)
+    # Keep the seeded anim timebase within the (looping) Fall timeline so the assertion checks
+    # \"hitlag ends -> advance\" rather than \"loop wrap\" behavior.
+    seed["action_frame"][0, 0] = np.int16(3)
+    seed["anim_frame_f32"][0, 0] = np.float32(3.0)
     seed["state_flags"][0, 0, 3] = np.uint8(0x02)  # 0x221C: isHitstun (refs/slippi-ssbm-asm)
 
     seed["pos_x"][0, 0] = np.float32(0.0)
@@ -112,7 +114,7 @@ def test_hitlag_ends_then_action_and_physics_resume() -> None:
     assert int(out["hitstun"][0]) == 4
 
     # Resume: action frame advances; position integrates; gravity applies (Fox grav=0.23).
-    assert int(out["action_frame"][0]) == 11
+    assert int(out["action_frame"][0]) == 4
     assert np.isclose(out["pos_x"][0], np.float32(2.0), atol=0.0, rtol=0.0)
     assert np.isclose(out["pos_y"][0], np.float32(102.77), atol=0.0, rtol=0.0)
     assert np.isclose(out["speed_y_self"][0], np.float32(2.77), atol=1e-6, rtol=0.0)

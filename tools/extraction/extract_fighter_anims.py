@@ -852,7 +852,7 @@ def _special_anim_msids(character: str) -> list[int]:
         entry = _msid_anim_entry(character, msid)
         if entry is None:
             continue
-        name, _x4, _x8 = entry
+        name, _x4, _x8, _flags_u8 = entry
         # Names are AJ symbols (e.g. PlyFox5K_Share_ACTION_SpecialNStart_figatree).
         if "Special" in name:
             out.append(int(msid))
@@ -1147,7 +1147,7 @@ def _read_ftdata_x8_u8(character: str, rel_off: int) -> int:
     return int(arc.buf[off])
 
 
-def _msid_anim_entry(character: str, msid: int) -> tuple[str, int, int] | None:
+def _msid_anim_entry(character: str, msid: int) -> tuple[str, int, int, int] | None:
     prefix = _fighter_prefix(character)
     base = ISO_DIR / f"{prefix}.dat"
     arc = parse_hsd_archive(base.read_bytes())
@@ -1171,7 +1171,8 @@ def _msid_anim_entry(character: str, msid: int) -> tuple[str, int, int] | None:
     # where x4 is an offset into the AJ file and x8 is the archive size.
     x4 = _u32_be(arc.buf, off + 0x04)
     x8 = _u32_be(arc.buf, off + 0x08)
-    return name, int(x4), int(x8)
+    flags_u8 = int(arc.buf[off + 0x10])
+    return name, int(x4), int(x8), flags_u8
 
 
 def _collect_needed_parts_from_moves(character: str, moves_path: Path) -> tuple[list[int], list[int]]:
@@ -1487,7 +1488,7 @@ def extract_one_character(
         #
         # Layout:
         # - magic: 8 bytes "SSANIMT1"
-        # - version: u32 little-endian (1)
+        # - version: u32 little-endian (2)
         # - local_count: u16
         # - anim_count: u16
         # - local_parts: [u8; local_count] (common FtPart ids)
@@ -1496,6 +1497,10 @@ def extract_one_character(
         # - For each anim (anim_count):
         #   - msid: u16
         #   - end_frame: f32 (FigaTree.frames)
+        #   - aobj_loop: u8 (1 if ftData_80085FD4_ret.x10_b1 (loop) is set for this anim id, else 0)
+        #     Decomp:
+        #     - refs/melee/src/melee/ft/types.h::ftData_80085FD4_ret (+0x10 bit1)
+        #     - refs/melee/src/melee/ft/ftanim.c::ftAnim_8006EBE8 (sets AOBJ_LOOP when fp->x594_b1_loop)
         #   - For each local part (local_count):
         #     - part: u8 (must match local_parts[i])
         #     - n_tracks: u8
@@ -1508,7 +1513,7 @@ def extract_one_character(
         #       - length: u16 (bytes)
         #       - ad_bytes: [u8; length]
         f_tr.write(b"SSANIMT1")
-        f_tr.write(struct.pack("<I", 1))
+        f_tr.write(struct.pack("<I", 2))
         f_tr.write(struct.pack("<H", len(local_parts)))
         f_tr.write(struct.pack("<H", len(wanted_msids)))
         f_tr.write(bytes([p & 0xFF for p in local_parts]))
@@ -1528,6 +1533,7 @@ def extract_one_character(
                 f_loc.write(struct.pack("<H", 0))
                 f_tr.write(struct.pack("<H", int(msid) & 0xFFFF))
                 f_tr.write(struct.pack("<f", 0.0))
+                f_tr.write(struct.pack("<B", 0))
                 for part in local_parts:
                     f_tr.write(struct.pack("<BB", int(part) & 0xFF, 0))
                 if _TIMINGS is not None:
@@ -1536,7 +1542,7 @@ def extract_one_character(
                     _TIMINGS.msid_count += 1
                 continue
 
-            sym, base_off, _size = entry
+            sym, base_off, _size, msid_flags_u8 = entry
             if base_off < 0 or base_off + 0x20 > len(aj_buf):
                 t_w0 = time.perf_counter() if _TIMINGS is not None else 0.0
                 f.write(struct.pack("<H", int(msid) & 0xFFFF))
@@ -1545,6 +1551,7 @@ def extract_one_character(
                 f_loc.write(struct.pack("<H", 0))
                 f_tr.write(struct.pack("<H", int(msid) & 0xFFFF))
                 f_tr.write(struct.pack("<f", 0.0))
+                f_tr.write(struct.pack("<B", 0))
                 for part in local_parts:
                     f_tr.write(struct.pack("<BB", int(part) & 0xFF, 0))
                 if _TIMINGS is not None:
@@ -1567,6 +1574,7 @@ def extract_one_character(
                 f_loc.write(struct.pack("<H", 0))
                 f_tr.write(struct.pack("<H", int(msid) & 0xFFFF))
                 f_tr.write(struct.pack("<f", 0.0))
+                f_tr.write(struct.pack("<B", 0))
                 for part in local_parts:
                     f_tr.write(struct.pack("<BB", int(part) & 0xFF, 0))
                 if _TIMINGS is not None:
@@ -1595,6 +1603,13 @@ def extract_one_character(
             t_w_tr0 = time.perf_counter() if _TIMINGS is not None else 0.0
             f_tr.write(struct.pack("<H", int(msid) & 0xFFFF))
             f_tr.write(struct.pack("<f", float(fig.frames)))
+            # Fighter animation loop flag: fp->x594_b1_loop is sourced from ftData_80085FD4_ret.x10_b1
+            # for the anim id (which matches the submotion/msid domain for common states).
+            # refs/melee/src/melee/ft/types.h::ftData_80085FD4_ret and refs/melee/src/melee/ft/types.h::Fighter (x594_b1_loop)
+            # refs/melee/src/melee/ft/ftanim.c::ftAnim_8006EBE8 (applies AOBJ_LOOP)
+            # NOTE: The decomp bitfield `u8 x10_b1 : 1` corresponds to 0x40 in the raw byte on
+            # big-endian (PPC) builds.
+            f_tr.write(struct.pack("<B", 1 if (int(msid_flags_u8) & 0x40) != 0 else 0))
             for part in local_parts:
                 part_tracks = tracks_by_part.get(int(part), [])
                 f_tr.write(struct.pack("<BB", int(part) & 0xFF, len(part_tracks) & 0xFF))

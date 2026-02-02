@@ -51,7 +51,7 @@ def _read_tracks_msids(path: Path) -> list[int]:
         if magic != b"SSANIMT1":
             raise ValueError(f"bad tracks magic: {magic!r}")
         (version,) = struct.unpack("<I", f.read(4))
-        if version != 1:
+        if version not in (1, 2):
             raise ValueError(f"unsupported tracks version: {version}")
         local_count, anim_count = struct.unpack("<HH", f.read(4))
         f.read(local_count)  # local_parts
@@ -62,6 +62,8 @@ def _read_tracks_msids(path: Path) -> list[int]:
         for _ in range(anim_count):
             (msid,) = struct.unpack("<H", f.read(2))
             f.read(4)  # end_frame
+            if version >= 2:
+                f.read(1)  # aobj_loop
             msids.append(int(msid))
             for _lp in range(local_count):
                 part_u8 = f.read(1)
@@ -84,7 +86,7 @@ def _read_tracks_end_frame(path: Path, target_msid: int) -> float | None:
         if magic != b"SSANIMT1":
             raise ValueError(f"bad tracks magic: {magic!r}")
         (version,) = struct.unpack("<I", f.read(4))
-        if version != 1:
+        if version not in (1, 2):
             raise ValueError(f"unsupported tracks version: {version}")
         local_count, anim_count = struct.unpack("<HH", f.read(4))
         f.read(local_count)  # local_parts
@@ -94,6 +96,8 @@ def _read_tracks_end_frame(path: Path, target_msid: int) -> float | None:
         for _ in range(anim_count):
             (msid,) = struct.unpack("<H", f.read(2))
             (end_frame,) = struct.unpack("<f", f.read(4))
+            if version >= 2:
+                f.read(1)  # aobj_loop
             for _lp in range(local_count):
                 part_u8 = f.read(1)
                 if not part_u8:

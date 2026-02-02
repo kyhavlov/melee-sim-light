@@ -910,6 +910,16 @@ def _main_impl(args) -> None:
             common_landing_fall_special_lag_frames=landing_fall_special_lag_frames,
             char_landing_air_lag_frames=char_landing_air_lag_frames,
         )
+        # Seed fp->frame_speed_mul (float) for deterministic timebase stepping.
+        #
+        # Decomp shape:
+        # - In HSD_AObjInterpretAnim, curr_frame advances by framerate (fp->frame_speed_mul) and the
+        #   resulting curr_frame is what Slippi records as post-frame `state_age`.
+        #   refs/melee/src/sysdolphin/baselib/aobj.c::HSD_AObjInterpretAnim
+        #   refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
+        #
+        # So the stable-segment delta(state_age[t] - state_age[t-1]) is the rate that should be
+        # applied on the *next* one-step tick when reseeding at post-frame t.
         samples["seed_t"]["frame_speed_mul_f32"][:, slot] = frame_speed_mul[:-1]
 
         # Action-entry overrides (decomp):

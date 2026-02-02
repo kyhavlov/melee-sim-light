@@ -675,6 +675,10 @@ void locomotion_update_pre(MslBatch* batch) {
             batch->state.action_id[idx] = want;
             batch->state.animation_index[idx] = anim_for_walk_action(want);
             msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+            // Decomp: ftCo_Walk_Enter delegates to ftWalkCommon_800DFCA4, which calls
+            // ftAnim_8006EBA4 immediately after Fighter_ChangeMotionState.
+            // refs/melee/src/melee/ft/ftwalkcommon.c::ftWalkCommon_800DFCA4
+            msl_anim_timebase_tick_once(batch, idx);
             action_id = want;
           }
         }
@@ -744,6 +748,8 @@ void locomotion_update_pre(MslBatch* batch) {
             batch->state.action_id[idx] = want;
             batch->state.animation_index[idx] = anim_for_walk_action(want);
             msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+            // refs/melee/src/melee/ft/ftwalkcommon.c::ftWalkCommon_800DFCA4
+            msl_anim_timebase_tick_once(batch, idx);
             action_id = want;
           }
         }
