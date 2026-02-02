@@ -123,6 +123,20 @@ int step_one_frame(MslBatch* batch, const uint8_t* prev_input_bytes, size_t prev
   // Post anim-timebase match flow clamps (e.g. EntryStart animation end-frame).
   match_flow_update_post_anim(batch);
 
+  // Post-anim timer updates (decomp prio 1 under Fighter_8006A360's non-hitlag gate):
+  // - combo timer tick + victim clear (ftColl_800764DC)
+  // - hitstun decrement + end effects (ftCo_8008F744 family)
+  //
+  // NOTE(anim_timebase_mapping):
+  // `anim_timebase_update_pre_input()` in this sim only advances the deterministic `cur_anim_frame`
+  // timebase (Slippi `state_age`) and applies AObj loop wrap. It does *not* run per-action Anim
+  // callbacks. Those state-specific updates are modeled later in `action_update()`.
+  //
+  // This placement means timers_update_post_anim() observes the post-advance `action_frame`, while
+  // still running before action_update(), matching the decomp ordering where ftColl_800764DC runs
+  // before the per-action anim_cb within Fighter_8006A360.
+  timers_update_post_anim(batch);
+
   // Decomp-shaped "ProcessHit" consume / cleanup (see combat_processhit_consume for references).
   combat_processhit_consume(batch);
 

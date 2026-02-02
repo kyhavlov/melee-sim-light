@@ -913,9 +913,47 @@ static inline void combat_mutations_pass1_future_apply_body_hit(MslBatch* batch,
     batch->state.hitlag[a_idx] = a_hl;
     combat_state_flags_set_is_hitlag(batch, a_idx, a_hl);
   }
-  if (d_hl > batch->state.hitlag[d_idx]) {
+  const uint16_t d_hl_prev = batch->state.hitlag[d_idx];
+  if (d_hl > d_hl_prev) {
     batch->state.hitlag[d_idx] = d_hl;
     combat_state_flags_set_is_hitlag(batch, d_idx, d_hl);
+  }
+
+  // Grabbed/thrown victims are driven by an attachment joint and have empty Phys/Coll callbacks in
+  // decomp; do not force a Damage* transition from a collision-confirmed hit while the victim is
+  // still attached to the thrower/grab-owner.
+  //
+  // Decomp anchors (GALE01):
+  // - Thrown victim pos driver: refs/melee/src/melee/ft/chara/ftCommon/ftCo_Thrown.c::ftCo_800DE508
+  // - Thrown* Phys/Coll are empty (attachment-driven loop):
+  //   refs/melee/src/melee/ft/chara/ftCommon/ftCo_Thrown.c::{ftCo_ThrownF_Phys,ftCo_ThrownF_Coll}
+  // - Throw scripts can apply damage/hitlag via set_throw_hitbox while the victim is still Thrown*:
+  //   refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DD724
+  const uint8_t d_grab_owner = batch->state.grab_owner_port[d_idx];
+  if (d_grab_owner != 0xFFu && d_grab_owner == (uint8_t)attacker &&
+      msl_action_is_grabbed_victim(d_motion_id)) {
+    batch->state.instance_hit_by[d_idx] = batch->state.instance_id[a_idx];
+    batch->state.last_hit_by[d_idx] = (uint8_t)attacker;
+
+    // Decomp: Fighter_ProcessHit can set fp->x221A_b3 alongside hitlag start under KB/damage paths.
+    // For ThrowF/ThrownF style attached hits, Slippi observes x221A_b3 set even though the victim
+    // does not enter Damage* (hitstun/misc-as remains non-damage).
+    //
+    // Evidence (suite dataset):
+    // - datasets/.../AttachedGoodNaturedGuanaco.msl record=215 p0 ref_t1 has:
+    //   hitstun=0, hitlag=4, state_flags[1]=0x30 (0x20 isHitlag | 0x10 x221A_b3).
+    //
+    // Decomp anchor:
+    // refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
+    if (d_hl > d_hl_prev) {
+      combat_state_flags_set_x221a_b3(batch, d_idx);
+    }
+
+    // Attacker-side staling/combo tracking still updates on the confirmed hit.
+    const uint16_t attack_instance = batch->state.attack_instance[a_idx];
+    staling_queue_update(batch, a_idx, move_id, attack_instance);
+    combat_combo_ftColl_800763C0(batch, a_idx, defender, d_idx, batch->state.attack_id[a_idx]);
+    return;
   }
 
   // Knockback velocity + hitstun + damage-state entry (BODY).
