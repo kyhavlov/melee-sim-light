@@ -656,8 +656,8 @@ static uint8_t wall_sweep_check(const MslStageWallGraph* g, uint8_t is_left_wall
 static const float k_ceil_edge_wall_probe_x_offset = 1.0f;
 static const float k_ceil_edge_wall_probe_y_offset = -1.0f;
 
-static inline uint8_t wall_blocks_ceiling_edge_probe(const MslStageWallGraph* wg, float ax, float ay,
-                                                     float bx, float by) {
+static inline uint8_t wall_blocks_ceiling_edge_probe(const MslStageWallGraph* wg, float ax,
+                                                     float ay, float bx, float by) {
   if (wg == NULL || wg->lines == NULL || wg->line_count == 0) {
     return 0;
   }
@@ -715,7 +715,8 @@ static inline uint8_t ceiling_chain_endpoints(const MslStageCeilingGraph* g, int
   return 1;
 }
 
-static inline void ceiling_write_edge_suppression_flags(MslBatch* batch, size_t idx, uint32_t stage_id,
+static inline void ceiling_write_edge_suppression_flags(MslBatch* batch, size_t idx,
+                                                        uint32_t stage_id,
                                                         const MslStageCeilingGraph* cg,
                                                         int line_idx,
                                                         const MslEcbWorldPoints* ecb) {
@@ -782,7 +783,7 @@ void mpcoll_wall_ceil_apply(MslBatch* batch) {
       const uint8_t prev_had_ceiling =
           (batch->state.coll_prev_env_flags[idx] & (uint32_t)MSL_COLLIDE_CEILING_MASK) ? 1u : 0u;
 
-      if (batch->state.hitlag[idx] != 0) {
+      if (batch->state.hitlag_started_frame[idx] != 0) {
         continue;
       }
       if (!match_flow_should_stage_collide(action_id)) {
@@ -1169,7 +1170,8 @@ void mpcoll_wall_ceil_apply(MslBatch* batch) {
               batch->state.ceiling_contact_x[idx] = ix;
               batch->state.ceiling_contact_y[idx] = iy;
               batch->state.coll_env_flags[idx] |= (uint32_t)MSL_COLLIDE_CEILING_MASK;
-              ceiling_write_edge_suppression_flags(batch, idx, stage_id, cg, out_line_idx, &cur_ecb);
+              ceiling_write_edge_suppression_flags(batch, idx, stage_id, cg, out_line_idx,
+                                                   &cur_ecb);
             }
           }
         }

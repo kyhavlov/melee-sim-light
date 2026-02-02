@@ -503,7 +503,7 @@ static void laser_spawn_from_fighter(MslBatch* batch, int bi, int owner, const M
   // TODO(extraction): Extract ftPartsTable part_to_joint into an ISO-derived `data/` artifact and
   // load it at init. This mapping should not remain as gameplay-logic hardcodes.
   uint16_t spawn_part_id = lp->spawn_bone_part_id;
-  if (char_id == 1u) {        // Fox
+  if (char_id == 1u) {  // Fox
     spawn_part_id = 67u;
   } else if (char_id == 22u) {  // Falco
     spawn_part_id = 61u;
@@ -686,7 +686,8 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
         age = 0.0f;
       }
 
-      float s = (age * speed) / 11.25f;  // refs/melee/src/melee/it/items/itfoxlaser.c::itFoxlaser_UnkMotion1_Anim
+      float s = (age * speed) /
+                11.25f;  // refs/melee/src/melee/it/items/itfoxlaser.c::itFoxlaser_UnkMotion1_Anim
       if (s > cap) {
         s = cap;
       }
@@ -740,8 +741,8 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
         uint8_t shield_hit = 0;
         const uint8_t off_n =
             (laser_state == 0u) ? lp->hitbox_offsets_x_count : lp->state1_hitbox_offsets_x_count;
-        for (uint8_t oi = 0;
-             oi < off_n && oi < (uint8_t)MSL_LASER_MAX_HITBOX_OFFS_X && !shield_hit; oi++) {
+        for (uint8_t oi = 0; oi < off_n && oi < (uint8_t)MSL_LASER_MAX_HITBOX_OFFS_X && !shield_hit;
+             oi++) {
           const float off_x =
               (laser_state == 0u) ? lp->hitbox_offsets_x[oi] : lp->state1_hitbox_offsets_x[oi];
           const float s = off_x * laser_scale_z;
@@ -876,15 +877,15 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
       const uint8_t off_n =
           (laser_state == 0u) ? lp->hitbox_offsets_x_count : lp->state1_hitbox_offsets_x_count;
       const uint8_t cap_n = batch->state.hurtcap_count[d_idx];
-      for (uint8_t oi = 0;
-           oi < off_n && oi < (uint8_t)MSL_LASER_MAX_HITBOX_OFFS_X && !hit; oi++) {
+      for (uint8_t oi = 0; oi < off_n && oi < (uint8_t)MSL_LASER_MAX_HITBOX_OFFS_X && !hit; oi++) {
         const float off_x =
             (laser_state == 0u) ? lp->hitbox_offsets_x[oi] : lp->state1_hitbox_offsets_x[oi];
         const float s = off_x * laser_scale_z;
         const float sx = x + (ux * s);
         const float sy = y + (uy * s);
         for (uint8_t ci = 0; ci < cap_n; ci++) {
-          if (item_sphere_capsule_intersects(batch, bi, def, sx, sy, sr, (int)ci, &hit_hurt_height)) {
+          if (item_sphere_capsule_intersects(batch, bi, def, sx, sy, sr, (int)ci,
+                                             &hit_hurt_height)) {
             hit = 1;
             break;
           }
@@ -916,9 +917,9 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
       const uint16_t bkb = (laser_state == 0u) ? lp->bkb : lp->state1_bkb;
       const uint8_t element = (laser_state == 0u) ? lp->element : lp->state1_element;
       combat_apply_item_hit(batch, bi, owner, def, batch->state.item_attack_id[ii],
-                            batch->state.item_attack_instance[ii], batch->state.item_instance_id[ii],
-                            batch->state.item_type[ii], dmg, angle, kbg, wsk, bkb, hit_hurt_height,
-                            element);
+                            batch->state.item_attack_instance[ii],
+                            batch->state.item_instance_id[ii], batch->state.item_type[ii], dmg,
+                            angle, kbg, wsk, bkb, hit_hurt_height, element);
       batch->state.item_hitlist_cd[cd_i] = 0xFFFFu;
       batch->state.item_hitlist_victim_iid[cd_i] = def_iid;
       item_slot_clear(batch, ii);
@@ -977,7 +978,7 @@ void items_spawn_pre_physics(MslBatch* batch) {
 
     for (int p = 0; p < num_players; p++) {
       const size_t idx = msl_idx_player(bi, p);
-      if (batch->state.hitlag[idx] != 0) {
+      if (batch->state.hitlag_started_frame[idx] != 0) {
         continue;
       }
       const uint8_t cid = batch->state.char_id[idx];

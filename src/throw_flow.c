@@ -62,7 +62,7 @@ void throw_flow_update_pre_physics(MslBatch* batch) {
       //
       // Without this guard, single-frame set_throw_flags events (notably facing flip) would be
       // re-applied every frame while anim_frame_f32 is frozen in hitlag.
-      if (batch->state.hitlag[oidx] != 0) {
+      if (batch->state.hitlag_started_frame[oidx] != 0) {
         continue;
       }
 

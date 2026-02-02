@@ -353,7 +353,7 @@ void locomotion_update_pre(MslBatch* batch) {
     for (int p = 0; p < num_players; p++) {
       const size_t idx = msl_idx_player(bi, p);
 
-      if (batch->state.hitlag[idx] != 0) {
+      if (batch->state.hitlag_started_frame[idx] != 0) {
         continue;
       }
 
@@ -919,7 +919,8 @@ void locomotion_update_pre(MslBatch* batch) {
         // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Walk.c::ftCo_Walk_IASA
         if (action_is_walk(action_id) && action_is_walk(action_id_start) &&
             msl_absf(stick_x) >= c->walk_stick_threshold) {
-          const uint16_t want = walk_action_from_speed(c, ch, batch->state.speed_ground_x_self[idx]);
+          const uint16_t want =
+              walk_action_from_speed(c, ch, batch->state.speed_ground_x_self[idx]);
           if (want != batch->state.action_id[idx]) {
             batch->state.action_id[idx] = want;
             batch->state.animation_index[idx] = anim_for_walk_action(want);
@@ -1358,7 +1359,7 @@ void locomotion_update_post_collision(MslBatch* batch) {
   for (int bi = 0; bi < batch->batch_size; bi++) {
     for (int p = 0; p < num_players; p++) {
       const size_t idx = msl_idx_player(bi, p);
-      if (batch->state.hitlag[idx] != 0) {
+      if (batch->state.hitlag_started_frame[idx] != 0) {
         continue;
       }
 
@@ -1446,7 +1447,6 @@ void locomotion_update_post_collision(MslBatch* batch) {
         batch->state.animation_index[idx] = (uint32_t)MSL_SM_FALL;
         msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
       }
-
     }
   }
 }

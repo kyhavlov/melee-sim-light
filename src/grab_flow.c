@@ -51,7 +51,7 @@ void grab_flow_update_pre_physics(MslBatch* batch) {
   for (int bi = 0; bi < batch->batch_size; bi++) {
     for (int owner_p = 0; owner_p < num_players; owner_p++) {
       const size_t oidx = msl_idx_player(bi, owner_p);
-      if (batch->state.hitlag[oidx] != 0) {
+      if (batch->state.hitlag_started_frame[oidx] != 0) {
         continue;
       }
 
@@ -70,7 +70,7 @@ void grab_flow_update_pre_physics(MslBatch* batch) {
       // Sync victim motion state (CapturePulled* -> CaptureWait*) for all victims owned by this grabber.
       for (int victim_p = 0; victim_p < num_players; victim_p++) {
         const size_t vidx = msl_idx_player(bi, victim_p);
-        if (batch->state.hitlag[vidx] != 0) {
+        if (batch->state.hitlag_started_frame[vidx] != 0) {
           continue;
         }
         if ((int)batch->state.grab_owner_port[vidx] != owner_p) {

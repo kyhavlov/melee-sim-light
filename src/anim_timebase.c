@@ -70,8 +70,7 @@ static inline void anim_timebase_apply_capture_loop(MslBatch* batch, size_t idx)
   if (anim_u32 > 0xFFFFu) {
     return;
   }
-  const float end_frame =
-      msl_anim_end_frame(batch->state.char_id[idx], (uint16_t)anim_u32);
+  const float end_frame = msl_anim_end_frame(batch->state.char_id[idx], (uint16_t)anim_u32);
   if (!(end_frame > 0.0f)) {
     return;
   }
@@ -103,7 +102,7 @@ void anim_timebase_update_pre_input(MslBatch* batch) {
 
       // Hitlag freezes animation advancement (decomp gate is fp->x2219_b5).
       // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
-      if (batch->state.hitlag[idx] != 0) {
+      if (batch->state.hitlag_started_frame[idx] != 0) {
         // Keep derived fields coherent even when frozen.
         msl_anim_timebase_recompute_derived(batch, idx);
         continue;

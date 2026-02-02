@@ -302,8 +302,8 @@ static uint8_t floor_intersect_segment(float x0, float y0, float x1, float y1, f
 }
 
 static inline uint8_t floor_chain_endpoints(const MslStageFloorGraph* g, int line_idx,
-                                            float* out_left_x, float* out_left_y, float* out_right_x,
-                                            float* out_right_y) {
+                                            float* out_left_x, float* out_left_y,
+                                            float* out_right_x, float* out_right_y) {
   if (g == NULL || g->lines == NULL || g->line_count == 0) {
     return 0;
   }
@@ -368,7 +368,8 @@ static inline uint8_t wall_blocks_floor_edge_probe(const MslStageWallGraph* wg, 
   return 0;
 }
 
-static inline void floor_write_edge_suppression_flags(MslBatch* batch, size_t idx, uint32_t stage_id,
+static inline void floor_write_edge_suppression_flags(MslBatch* batch, size_t idx,
+                                                      uint32_t stage_id,
                                                       const MslStageFloorGraph* fg, int line_idx,
                                                       uint8_t char_id, uint32_t anim,
                                                       uint16_t ecb_frame, uint8_t was_grounded) {
@@ -546,7 +547,7 @@ void mpcoll_ground_apply(MslBatch* batch) {
 
       // Decomp: Fighter_procUpdate and Fighter_procMap collision blocks are gated out during hitlag.
       // refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate (the `if (!fp->x2219_b5)` block)
-      if (batch->state.hitlag[idx] != 0) {
+      if (batch->state.hitlag_started_frame[idx] != 0) {
         continue;
       }
 

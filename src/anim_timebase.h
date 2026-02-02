@@ -121,7 +121,7 @@ static inline void msl_anim_timebase_tick_once(MslBatch* batch, size_t idx) {
   }
   // Decomp: Fighter_8006A360 gates ftAnim_8006EBA4 on !hitlag (fp->x2219_b5).
   // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
-  if (batch->state.hitlag[idx] != 0) {
+  if (batch->state.hitlag_started_frame[idx] != 0) {
     msl_anim_timebase_recompute_derived(batch, idx);
     return;
   }

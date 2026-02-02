@@ -459,7 +459,7 @@ void guard_update_grounded(MslBatch* batch, const MslCommonParams* c, size_t idx
   // - guard_reflect_timer_x14 is x14+1 (clamped), so it expires cleanly at 0.
   // - We clamp it to 0 whenever not in GuardReflect to keep it strictly causal and reseed-friendly.
   if (a0 == (uint16_t)MSL_ACT_GUARD_REFLECT) {
-    if (batch->state.hitlag[idx] == 0) {
+    if (batch->state.hitlag_started_frame[idx] == 0) {
       uint8_t t = batch->state.guard_reflect_timer_x14[idx];
       if (t > 0) {
         t--;
@@ -526,7 +526,7 @@ void guard_update_grounded(MslBatch* batch, const MslCommonParams* c, size_t idx
   // ----------------
   if (a0 == MSL_ACT_GUARD_ON || a0 == MSL_ACT_GUARD || a0 == MSL_ACT_GUARD_REFLECT) {
     batch->state.animation_index[idx] = 0xFFFFFFFFu;
-    const uint8_t can_update = (batch->state.hitlag[idx] == 0) ? 1 : 0;
+    const uint8_t can_update = (batch->state.hitlag_started_frame[idx] == 0) ? 1 : 0;
     if (can_update) {
       if (!shield_held) {
         // Decomp: ftCo_80092BCC latches mv.co.guard.xC when held_inputs loses HSD_PAD_LR.

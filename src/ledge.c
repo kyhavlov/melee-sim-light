@@ -481,7 +481,7 @@ void ledge_try_catch_post_collision(MslBatch* batch) {
       // Decomp: Fighter_procUpdate and Fighter_procMap collision blocks are gated out during hitlag
       // (and thus do not run cliff catch checks).
       // refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate (the `if (!fp->x2219_b5)` block)
-      if (batch->state.hitlag[idx] != 0) {
+      if (batch->state.hitlag_started_frame[idx] != 0) {
         continue;
       }
       // Match-flow actions use dedicated (or NULL) collision callbacks in decomp; this lite sim

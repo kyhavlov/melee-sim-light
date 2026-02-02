@@ -369,7 +369,7 @@ void shine_update_pre_physics(MslBatch* batch) {
       }
 
       // Decomp: hitlag freezes animation advancement and blocks Anim/IASA side effects.
-      if (batch->state.hitlag[idx] != 0) {
+      if (batch->state.hitlag_started_frame[idx] != 0) {
         continue;
       }
 

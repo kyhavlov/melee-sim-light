@@ -359,7 +359,7 @@ void physics_integrate(MslBatch* batch) {
       // Hitlag freezes motion/physics advancement:
       // - refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate runs its main integration block only
       //   under `if (!fp->x2219_b5)`.
-      if (batch->state.hitlag[idx] != 0) {
+      if (batch->state.hitlag_started_frame[idx] != 0) {
         continue;
       }
 

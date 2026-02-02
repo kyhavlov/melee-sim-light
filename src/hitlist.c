@@ -73,8 +73,8 @@ void hitlist_tick(MslBatch* batch) {
       // Hitlag gating: in GALE01, fighter collision processing is gated under !hitlag, so hitlist
       // countdown decrement should also be frozen under hitlag (future-proof for finite rehit timers).
       // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360 (ftColl_800764DC under !fp->x2219_b5)
-      const size_t p_i = (size_t)bi * (size_t)num_players + (size_t)attacker;
-      if (batch->state.hitlag[p_i] != 0) {
+      const size_t p_i = msl_idx_player(bi, attacker);
+      if (batch->state.hitlag_started_frame[p_i] != 0) {
         continue;
       }
 

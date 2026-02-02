@@ -9,10 +9,10 @@
 // Fighter_Part ids (GALE01).
 // Source of truth: refs/melee/src/melee/ft/forward.h::Fighter_Part.
 enum {
-  MSL_FTPART_TRANSN = 1,   // FtPart_TransN
-  MSL_FTPART_XROTN = 2,    // FtPart_XRotN (grab/capture victim alignment joint)
-  MSL_FTPART_RHANDN = 39,  // FtPart_RHandN (fallback anchor)
-  MSL_FTPART_TRANSN2 = 52, // FtPart_TransN2 (grab/capture constraint anchor; ftCo_800DB368)
+  MSL_FTPART_TRANSN = 1,    // FtPart_TransN
+  MSL_FTPART_XROTN = 2,     // FtPart_XRotN (grab/capture victim alignment joint)
+  MSL_FTPART_RHANDN = 39,   // FtPart_RHandN (fallback anchor)
+  MSL_FTPART_TRANSN2 = 52,  // FtPart_TransN2 (grab/capture constraint anchor; ftCo_800DB368)
 };
 
 static inline int grabbed_victim_transn_interp(float* out_x, float* out_y, float* out_z,
@@ -64,8 +64,7 @@ static inline int pose_part_origin_world_facing_yrot90(float* out_x, float* out_
                                                        uint8_t char_id, uint32_t anim_u32,
                                                        float anim_frame_f32, uint16_t part_id,
                                                        float fighter_pos_x, float fighter_pos_y,
-                                                       float fighter_pos_z,
-                                                       float fighter_scale_y,
+                                                       float fighter_pos_z, float fighter_scale_y,
                                                        uint8_t facing_u8) {
   if (out_x == NULL || out_y == NULL || out_z == NULL) {
     return -1;
@@ -175,8 +174,7 @@ static inline void capture_victim_delta_apply(MslBatch* batch, int bi, int victi
   (void)pose_part_origin_world_facing_yrot90(
       &ax, &ay, &az, batch->state.char_id[oidx], batch->state.animation_index[oidx],
       batch->state.anim_frame_f32[oidx], anchor_part, batch->state.pos_x[oidx],
-      batch->state.pos_y[oidx], batch->state.pos_z[oidx], owner_scale_y,
-      batch->state.facing[oidx]);
+      batch->state.pos_y[oidx], batch->state.pos_z[oidx], owner_scale_y, batch->state.facing[oidx]);
 
   float vx = batch->state.pos_x[vidx];
   float vy = batch->state.pos_y[vidx];
@@ -432,7 +430,8 @@ void grab_attachment_update_pre_collision(MslBatch* batch) {
         const size_t oidx = msl_idx_player(bi, (int)owner);
         // Hitlag freezes motion/physics advancement (no Phys/Coll callbacks).
         // refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate
-        if (batch->state.hitlag[vidx] != 0 || batch->state.hitlag[oidx] != 0) {
+        if (batch->state.hitlag_started_frame[vidx] != 0 ||
+            batch->state.hitlag_started_frame[oidx] != 0) {
           continue;
         }
         // Decomp ordering: CapturePulled*/CaptureDamage* runs fn_800DAD18 in Phys, then runs Coll.

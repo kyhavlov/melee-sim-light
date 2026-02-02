@@ -32,7 +32,7 @@ typedef struct MslCommonParams {
   float turn_stick_x_threshold;  // p_ftCommonData->x34
   // Run -> TurnRun entry threshold (see refs/melee/src/melee/ft/chara/ftCommon/ftCo_TurnRun.c).
   float turn_run_stick_x_threshold;  // p_ftCommonData->x38
-  float run_stick_x_threshold;   // p_ftCommonData->x58
+  float run_stick_x_threshold;       // p_ftCommonData->x58
   // Run IASA lockout init used by fn_800CA644 (TurnRun->Run).
   // Decomp: refs/melee/src/melee/ft/chara/ftCommon/ftCo_Run.c::fn_800CA644 (arg0 = p_ftCommonData->x430)
   float run_x0_init_x430;  // p_ftCommonData->x430
@@ -133,11 +133,11 @@ typedef struct MslCommonParams {
   float shield_size_min_scale;        // p_ftCommonData->x264 (shield_size_min_scale)
   // Guard release lockout timer init (mv.co.guard.x10).
   // Decomp: refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_800921DC
-  float guard_x10_init_frames;  // p_ftCommonData->x268
-  float shield_recharge_per_frame;    // p_ftCommonData->x27C (shield_recharge_per_frame)
-  float shield_hold_drain_mul;        // p_ftCommonData->x278 (shield_hold_drain_mul)
-  float shield_hold_drain_base;       // p_ftCommonData->x2EC (shield_hold_drain_base)
-  float shield_hold_drain_max;        // p_ftCommonData->x2F0 (shield_hold_drain_max)
+  float guard_x10_init_frames;      // p_ftCommonData->x268
+  float shield_recharge_per_frame;  // p_ftCommonData->x27C (shield_recharge_per_frame)
+  float shield_hold_drain_mul;      // p_ftCommonData->x278 (shield_hold_drain_mul)
+  float shield_hold_drain_base;     // p_ftCommonData->x2EC (shield_hold_drain_base)
+  float shield_hold_drain_max;      // p_ftCommonData->x2F0 (shield_hold_drain_max)
 
   // Shield HP depletion on hit (blocking).
   // Decomp: refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
@@ -196,9 +196,9 @@ typedef struct MslCommonParams {
 
   // Hitlag constants (ftCommon_CalcHitlag).
   // Decomp: refs/melee/src/melee/ft/ftcommon.c::ftCommon_CalcHitlag
-  float hitlag_dmg_mul;    // p_ftCommonData->x198
-  float hitlag_base;       // p_ftCommonData->x19C
-  float hitlag_squat_mul;  // p_ftCommonData->x1A0
+  float hitlag_dmg_mul;       // p_ftCommonData->x198
+  float hitlag_base;          // p_ftCommonData->x19C
+  float hitlag_squat_mul;     // p_ftCommonData->x1A0
   float hitlag_electric_mul;  // p_ftCommonData->x1A4 (fp->x1960_vibrateMult when element==2)
   // Air drift overspeed friction magnitude (used by ftCommon_8007CF58 when |self_vel.x| exceeds
   // co_attrs.air_drift_max).
@@ -254,7 +254,7 @@ typedef struct MslCommonParams {
   float damagefly_top_angle_max_radians;  // p_ftCommonData->0x238
   // RNG-gated DamageFlyRoll (ftCo_8008DCE0 block_33).
   int32_t damagefly_roll_percent_threshold;  // p_ftCommonData->0x23C (s32; compared as float)
-  float damagefly_roll_prob;                // p_ftCommonData->0x240
+  float damagefly_roll_prob;                 // p_ftCommonData->0x240
 
   // Sakurai angle (hitbox angle 361) constants.
   float sakurai_air_radians;     // p_ftCommonData->x144_radians

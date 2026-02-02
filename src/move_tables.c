@@ -527,9 +527,10 @@ static int parse_attackair_allow_interrupt_window(const char* buf, const char* b
   return 0;
 }
 
-static int parse_throw_release_and_hitboxes(
-    const char* buf, const char* buf_end, const char* move_key, MslThrowRelease* out_release,
-    MslFrameWindow* out_flip, MslThrowHitbox out_hitboxes[MSL_THROW_HITBOX_IDX_MAX]) {
+static int parse_throw_release_and_hitboxes(const char* buf, const char* buf_end,
+                                            const char* move_key, MslThrowRelease* out_release,
+                                            MslFrameWindow* out_flip,
+                                            MslThrowHitbox out_hitboxes[MSL_THROW_HITBOX_IDX_MAX]) {
   if (buf == NULL || buf_end == NULL || move_key == NULL || out_release == NULL ||
       out_flip == NULL || out_hitboxes == NULL) {
     return -1;
@@ -662,8 +663,8 @@ static int parse_throw_release_and_hitboxes(
   return 0;
 }
 
-static int parse_throw_flags_window_open_end(const char* buf, const char* buf_end, const char* move_key,
-                                             MslFrameWindow* out) {
+static int parse_throw_flags_window_open_end(const char* buf, const char* buf_end,
+                                             const char* move_key, MslFrameWindow* out) {
   if (buf == NULL || buf_end == NULL || move_key == NULL || out == NULL) {
     return -1;
   }
@@ -871,28 +872,32 @@ static int load_one(const char* data_dir, const char* rel_path, uint8_t char_id)
   MslThrowRelease rel = {0};
   MslFrameWindow flip = {0};
   MslThrowHitbox hitboxes[MSL_THROW_HITBOX_IDX_MAX];
-  if (parse_throw_release_and_hitboxes(buf, buf_end, "ftCo_SM_ThrowF", &rel, &flip, hitboxes) == 0) {
+  if (parse_throw_release_and_hitboxes(buf, buf_end, "ftCo_SM_ThrowF", &rel, &flip, hitboxes) ==
+      0) {
     g_throw_release_by_char[char_id][MSL_THROW_KIND_F] = rel;
     g_throw_flip_by_char[char_id][MSL_THROW_KIND_F] = flip;
     memcpy(g_throw_hitbox_by_char[char_id][MSL_THROW_KIND_F], hitboxes, sizeof(hitboxes));
   }
   rel = (MslThrowRelease){0};
   flip = (MslFrameWindow){0};
-  if (parse_throw_release_and_hitboxes(buf, buf_end, "ftCo_SM_ThrowB", &rel, &flip, hitboxes) == 0) {
+  if (parse_throw_release_and_hitboxes(buf, buf_end, "ftCo_SM_ThrowB", &rel, &flip, hitboxes) ==
+      0) {
     g_throw_release_by_char[char_id][MSL_THROW_KIND_B] = rel;
     g_throw_flip_by_char[char_id][MSL_THROW_KIND_B] = flip;
     memcpy(g_throw_hitbox_by_char[char_id][MSL_THROW_KIND_B], hitboxes, sizeof(hitboxes));
   }
   rel = (MslThrowRelease){0};
   flip = (MslFrameWindow){0};
-  if (parse_throw_release_and_hitboxes(buf, buf_end, "ftCo_SM_ThrowHi", &rel, &flip, hitboxes) == 0) {
+  if (parse_throw_release_and_hitboxes(buf, buf_end, "ftCo_SM_ThrowHi", &rel, &flip, hitboxes) ==
+      0) {
     g_throw_release_by_char[char_id][MSL_THROW_KIND_HI] = rel;
     g_throw_flip_by_char[char_id][MSL_THROW_KIND_HI] = flip;
     memcpy(g_throw_hitbox_by_char[char_id][MSL_THROW_KIND_HI], hitboxes, sizeof(hitboxes));
   }
   rel = (MslThrowRelease){0};
   flip = (MslFrameWindow){0};
-  if (parse_throw_release_and_hitboxes(buf, buf_end, "ftCo_SM_ThrowLw", &rel, &flip, hitboxes) == 0) {
+  if (parse_throw_release_and_hitboxes(buf, buf_end, "ftCo_SM_ThrowLw", &rel, &flip, hitboxes) ==
+      0) {
     g_throw_release_by_char[char_id][MSL_THROW_KIND_LW] = rel;
     g_throw_flip_by_char[char_id][MSL_THROW_KIND_LW] = flip;
     memcpy(g_throw_hitbox_by_char[char_id][MSL_THROW_KIND_LW], hitboxes, sizeof(hitboxes));
@@ -1009,9 +1014,9 @@ uint8_t move_tables_catchpull_should_enter_wait(uint8_t char_id, uint16_t catch_
   //
   // In this simulator, we approximate the flag mutation using extracted move script event timing:
   // data/moves/{fox,falco}.json moves["ftCo_SM_Catch*"]["events"] set_throw_flags.
-  const MslFrameWindow win =
-      (catch_action_id == (uint16_t)MSL_ACT_CATCH_DASH_PULL) ? g_throw_flags_by_char_catchdash[char_id]
-                                                            : g_throw_flags_by_char_catch[char_id];
+  const MslFrameWindow win = (catch_action_id == (uint16_t)MSL_ACT_CATCH_DASH_PULL)
+                                 ? g_throw_flags_by_char_catchdash[char_id]
+                                 : g_throw_flags_by_char_catch[char_id];
   if (!win.loaded) {
     return 0;
   }

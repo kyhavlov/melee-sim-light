@@ -108,6 +108,32 @@ static inline void combat_state_flags_set_is_hitlag(MslBatch* batch, size_t idx,
   batch->state.state_flags[flags_i] = f;
 }
 
+static inline void combat_state_flags_set_x221a_b3(MslBatch* batch, size_t idx) {
+  // Decomp: Fighter_ProcessHit sets fp->x221A_b3 = 1 alongside hitlag start under certain
+  // knockback/damage paths (see `bool2`), and Fighter_8006A1BC clears it on hitlag end.
+  // refs/melee/src/melee/ft/fighter.c::{Fighter_ProcessHit_8006D1EC,Fighter_8006A1BC}
+  //
+  // In GALE01, `bool2` is set to 1 when the hit takes the "forceAppliedOnHit && !no_kb" path
+  // (Fighter_ProcessHit_8006D1EC sets `bool2 = 1` shortly before the `if (bool2) fp->x221A_b3 = 1`
+  // assignment). In this light sim we do not model the full `forceAppliedOnHit` / `no_kb` plumbing,
+  // so callers gate this bit on `hitstun > 0` (derived from knockback), which is a safe proxy for
+  // the current suite domain (Fox/Falco) and matches Slippi's observable "KB hit that causes hitstun"
+  // cases where this bit is set.
+  //
+  // Slippi post-frame: this bit lives in the fp+0x221A byte (`state_flags[...,1]`). The isHitlag
+  // bit is 0x20 (x221A_b2), so x221A_b3 is the adjacent 0x10 bit under the same packing.
+  // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
+  if (batch == NULL) {
+    return;
+  }
+  enum { MSL_STATE_FLAGS_STRIDE = MSL_STATE_FLAGS_BYTES };
+  enum { MSL_STATE_FLAGS_221A_INDEX = 1 };
+  enum { MSL_STATE_FLAG_221A_B3 = 0x10 };
+
+  const size_t flags_i = idx * MSL_STATE_FLAGS_STRIDE + (size_t)MSL_STATE_FLAGS_221A_INDEX;
+  batch->state.state_flags[flags_i] |= (uint8_t)MSL_STATE_FLAG_221A_B3;
+}
+
 static inline void combat_state_flags_set_is_hitstun(MslBatch* batch, size_t idx,
                                                      uint16_t hitstun) {
   if (batch == NULL) {
@@ -1020,6 +1046,9 @@ static inline void combat_mutations_pass1_future_apply_body_hit(MslBatch* batch,
   const uint16_t hs = combat_damage_hitstun_from_kb(c, kb_applied);
   batch->state.hitstun[d_idx] = hs;
   combat_state_flags_set_is_hitstun(batch, d_idx, hs);
+  if (hs > 0) {
+    combat_state_flags_set_x221a_b3(batch, d_idx);
+  }
 
   combat_damage_enter_state(c, batch, d_idx, defender_on_ground, hurt_height, kb_applied,
                             kb_angle_rad);
@@ -1171,13 +1200,15 @@ void combat_apply_item_hit(MslBatch* batch, int batch_index, int attacker, int d
   const uint16_t hs = combat_damage_hitstun_from_kb(c, kb_applied);
   batch->state.hitstun[d_idx] = hs;
   combat_state_flags_set_is_hitstun(batch, d_idx, hs);
+  if (hs > 0) {
+    combat_state_flags_set_x221a_b3(batch, d_idx);
+  }
 
   // Decomp: ftCo_8008DCE0 can clear grounded state (ftCommon_8007D5D4) before selecting the
   // damage motion state. Use the post-KB on_ground value for state entry.
   const uint8_t defender_on_ground_after = batch->state.on_ground[d_idx] ? 1u : 0u;
   combat_damage_enter_state(c, batch, d_idx, defender_on_ground_after, defender_hurt_height,
-                            kb_applied,
-                            kb_angle_rad);
+                            kb_applied, kb_angle_rad);
 
   batch->state.instance_hit_by[d_idx] = item_instance_id;
   batch->state.last_hit_by[d_idx] = (uint8_t)attacker;
@@ -1348,6 +1379,9 @@ uint8_t combat_apply_throw_hit(MslBatch* batch, int batch_index, int attacker, i
   const uint16_t hs = combat_damage_hitstun_from_kb(c, kb_applied);
   batch->state.hitstun[d_idx] = hs;
   combat_state_flags_set_is_hitstun(batch, d_idx, hs);
+  if (hs > 0) {
+    combat_state_flags_set_x221a_b3(batch, d_idx);
+  }
 
   // Throw hits mark the damaged hurtbox as "mid" in decomp (x184c_damaged_hurtbox = 1).
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DDDE4
@@ -1625,7 +1659,7 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
       }
 
       // Hitlag gating: when either fighter is in hitlag, do not generate new BODY hits.
-      if (batch->state.hitlag[a_idx] || batch->state.hitlag[d_idx]) {
+      if (batch->state.hitlag_started_frame[a_idx] || batch->state.hitlag_started_frame[d_idx]) {
         continue;
       }
 
@@ -1939,7 +1973,8 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
           // matches teacher-forced reseed (ref post-frame) and we don't spuriously treat the same
           // victim as "new" on the next step.
           const uint16_t defender_iid_post = batch->state.instance_id[d_idx];
-          hitlist_register(batch, bi, attacker, hit_group, defender, defender_iid_post, rehit_frames);
+          hitlist_register(batch, bi, attacker, hit_group, defender, defender_iid_post,
+                           rehit_frames);
 
           did_hit = 1;
           break;
@@ -2007,7 +2042,7 @@ static void combat_select_body_hits_one_debug(MslBatch* batch, int bi,
       }
 
       // Hitlag gating: when either fighter is in hitlag, do not generate new BODY hits.
-      if (batch->state.hitlag[a_idx] || batch->state.hitlag[d_idx]) {
+      if (batch->state.hitlag_started_frame[a_idx] || batch->state.hitlag_started_frame[d_idx]) {
         continue;
       }
 

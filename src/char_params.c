@@ -173,11 +173,8 @@ static int load_one(const char* data_dir, const char* rel_path, uint8_t char_id)
   }
 
   static const char* k_illusion_required_keys[] = {
-      "illusion_ground_end_vel_x",
-      "illusion_ground_friction",
-      "illusion_air_end_vel_x",
-      "illusion_air_friction",
-      "grab_capture_anchor_part_id",
+      "illusion_ground_end_vel_x", "illusion_ground_friction",    "illusion_air_end_vel_x",
+      "illusion_air_friction",     "grab_capture_anchor_part_id",
   };
 
   FILE* f = fopen(path, "rb");

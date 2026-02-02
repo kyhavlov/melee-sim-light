@@ -166,8 +166,8 @@ typedef struct MslStateSoA {
   uint8_t* turn_frames_to_turn;  // fp->mv.co.turn.frames_to_turn (refs/melee/.../ftCo_Turn.c:39-44)
   // Turn dash-out latch (decomp: fp->mv.co.turn.x8).
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Turn.c::{ftCo_Turn_IASA,fn_800C9C2C}
-  int8_t* turn_x8;  // -1/0/+1
-  uint8_t* lr_press_timer;       // fp->x67F (refs/melee/src/melee/ft/fighter.c:2078-2086)
+  int8_t* turn_x8;          // -1/0/+1
+  uint8_t* lr_press_timer;  // fp->x67F (refs/melee/src/melee/ft/fighter.c:2078-2086)
   uint8_t*
       x672_input_timer;  // fp->x672_input_timer_counter (refs/melee/src/melee/ft/fighter.c:2020-2050)
   // Fighter input counters block: refs/melee/src/melee/ft/fighter.c:1897-2094.
@@ -224,9 +224,24 @@ typedef struct MslStateSoA {
   uint8_t* dmg_x2224_b2;  // [batch * players] (0/1)
   float* shield_hp;
   uint16_t* hitlag;
-  // Internal-only helper: latched at the start of the frame before timers_update decrements
-  // hitlag. This lets gameplay logic emulate decomp scheduling where "hitlag active this frame"
-  // is based on the pre-decrement value.
+  // Internal-only helper: per-frame hitlag gate (0/1).
+  //
+  // Semantics: latched once per frame immediately after the decomp-shaped hitlag decrement step
+  // (Fighter_8006A1BC) and used to gate "frozen under hitlag" behavior for the rest of that frame.
+  //
+  // Why this exists:
+  // - In decomp, hitlag frames are decremented at proc prio 0 (Fighter_8006A1BC), then the main
+  //   per-fighter update block (Fighter_8006A360 / Fighter_procUpdate) runs under `if (!fp->x2219_b5)`.
+  // - Hitlag can be *applied* later in the frame (Fighter_ProcessHit_8006D1EC at proc prio 0xE),
+  //   but that should not retroactively suppress earlier prio stages in the same frame.
+  //
+  // Using a per-frame latch ensures mid-frame hitlag application (e.g., from item/projectile hits)
+  // doesn't change which callbacks run later in our single-pass step ordering.
+  //
+  // Decomp anchors:
+  // - refs/melee/src/melee/ft/fighter.c::Fighter_8006A1BC (hitlag decrement / end)
+  // - refs/melee/src/melee/ft/fighter.c::Fighter_8006A360 (update gate on `!fp->x2219_b5`)
+  // - refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC (hitlag start)
   uint8_t* hitlag_started_frame;
   uint16_t* hitstun;
   uint8_t* l_cancel;

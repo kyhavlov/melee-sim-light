@@ -253,49 +253,47 @@ int state_alloc(MslStateSoA* state, int batch_size) {
       !state->match_damage_ratio || !state->is_teams || !state->team_id || !state->char_id ||
       !state->attack_ratio || !state->defense_ratio || !state->pos_x || !state->pos_y ||
       !state->pos_z || !state->prev_pos_x || !state->prev_pos_y || !state->coll_stage_prev_pos_x ||
-      !state->coll_stage_prev_pos_y || !state->coll_stage_cur_pos_x || !state->coll_stage_cur_pos_y ||
-      !state->speed_air_x_self || !state->speed_ground_x_self || !state->speed_y_self ||
-      !state->speed_x_attack || !state->speed_y_attack || !state->fighter_scale_y || !state->facing ||
-      !state->on_ground || !state->prev_on_ground || !state->ground_contact_x ||
-      !state->ground_contact_y || !state->ground_normal_x || !state->ground_normal_y ||
-      !state->wall_contact_x || !state->wall_contact_y || !state->wall_normal_x ||
-      !state->wall_normal_y || !state->wall_id || !state->wall_kind || !state->ceiling_contact_x ||
-      !state->ceiling_contact_y || !state->ceiling_normal_x || !state->ceiling_normal_y ||
-      !state->ceiling_id || !state->coll_env_flags || !state->coll_prev_env_flags ||
-      !state->action_id || !state->prev_action_id || !state->action_frame ||
-      !state->throw_pending_victim_port || !state->throw_pending_hit_idx ||
+      !state->coll_stage_prev_pos_y || !state->coll_stage_cur_pos_x ||
+      !state->coll_stage_cur_pos_y || !state->speed_air_x_self || !state->speed_ground_x_self ||
+      !state->speed_y_self || !state->speed_x_attack || !state->speed_y_attack ||
+      !state->fighter_scale_y || !state->facing || !state->on_ground || !state->prev_on_ground ||
+      !state->ground_contact_x || !state->ground_contact_y || !state->ground_normal_x ||
+      !state->ground_normal_y || !state->wall_contact_x || !state->wall_contact_y ||
+      !state->wall_normal_x || !state->wall_normal_y || !state->wall_id || !state->wall_kind ||
+      !state->ceiling_contact_x || !state->ceiling_contact_y || !state->ceiling_normal_x ||
+      !state->ceiling_normal_y || !state->ceiling_id || !state->coll_env_flags ||
+      !state->coll_prev_env_flags || !state->action_id || !state->prev_action_id ||
+      !state->action_frame || !state->throw_pending_victim_port || !state->throw_pending_hit_idx ||
       !state->match_flow_timer || !state->downwait_timer || !state->anim_frame_f32 ||
-      !state->anim_frame_fp_q16_16 || !state->frame_speed_mul_fp_q16_16 ||
-      !state->jumps_left || !state->stocks || !state->guard_tilt_x8 || !state->guard_tilt_x4 ||
+      !state->anim_frame_fp_q16_16 || !state->frame_speed_mul_fp_q16_16 || !state->jumps_left ||
+      !state->stocks || !state->guard_tilt_x8 || !state->guard_tilt_x4 ||
       !state->guard_reflect_timer_x14 || !state->guard_release_latched_xc || !state->guard_x10 ||
       !state->lightshield_amount || !state->kneebend_jump_input || !state->kneebend_is_short_hop ||
       !state->tilt_timer_x || !state->tilt_timer_y || !state->fall_fast || !state->run_x0 ||
-      !state->ledge_side ||
-      !state->stage_ledge_occupant_left || !state->stage_ledge_occupant_right ||
-      !state->ledge_cooldown || !state->fallspecial_xc || !state->turn_has_turned ||
-      !state->turn_frames_to_turn || !state->turn_x8 || !state->lr_press_timer ||
-      !state->x672_input_timer ||
-      !state->x673 || !state->x674 || !state->x675 || !state->x676_x || !state->x677_y ||
-      !state->x678 || !state->x679_x || !state->x67A_y || !state->x67B || !state->x67C ||
-      !state->x67D || !state->x67E || !state->x680 || !state->x681 || !state->x682 ||
-      !state->x683 || !state->x684 || !state->ucf_padbuf_index ||
-      !state->ucf_padbuf_sdrop_up_frames || !state->ucf_padbuf_stick_x ||
-      !state->ucf_padbuf_stick_y || !state->percent || !state->percent_temp ||
-      !state->dmg_x2225_b7 || !state->dmg_x2224_b2 || !state->shield_hp || !state->hitlag ||
-      !state->hitlag_started_frame || !state->hitstun || !state->l_cancel || !state->hurtbox_state ||
-      !state->hurtcap_count ||
-      !state->hurtcap_a_x || !state->hurtcap_a_y || !state->hurtcap_a_z || !state->hurtcap_b_x ||
-      !state->hurtcap_b_y || !state->hurtcap_b_z || !state->hurtcap_radius ||
-      !state->hurtcap_enabled || !state->hurtcap_is_grabbable || !state->hurtcap_height ||
-      !state->hitbox_count || !state->hitbox_enabled || !state->hitbox_x || !state->hitbox_y ||
-      !state->hitbox_z || !state->hitbox_radius || !state->hitbox_damage ||
-      !state->hitbox_bone_part_id || !state->hitbox_u16_0 || !state->hitbox_u16_1 ||
-      !state->hitbox_u16_2 || !state->hitbox_u16_3 || !state->hitbox_u16_4 ||
-      !state->hitbox_u16_5 || !state->hitbox_u16_6 || !state->hitbox_u16_7 ||
-      !state->hitbox_angle || !state->hitbox_kbg || !state->hitbox_wsk || !state->hitbox_bkb ||
-      !state->hitbox_element || !state->hitbox_shield_damage || !state->hitbox_sfx_severity ||
-      !state->hitbox_sfx_kind || !state->hitbox_flags || !state->shield_x || !state->shield_y ||
-      !state->shield_z || !state->shield_radius || !state->reflector_x || !state->reflector_y ||
+      !state->ledge_side || !state->stage_ledge_occupant_left ||
+      !state->stage_ledge_occupant_right || !state->ledge_cooldown || !state->fallspecial_xc ||
+      !state->turn_has_turned || !state->turn_frames_to_turn || !state->turn_x8 ||
+      !state->lr_press_timer || !state->x672_input_timer || !state->x673 || !state->x674 ||
+      !state->x675 || !state->x676_x || !state->x677_y || !state->x678 || !state->x679_x ||
+      !state->x67A_y || !state->x67B || !state->x67C || !state->x67D || !state->x67E ||
+      !state->x680 || !state->x681 || !state->x682 || !state->x683 || !state->x684 ||
+      !state->ucf_padbuf_index || !state->ucf_padbuf_sdrop_up_frames ||
+      !state->ucf_padbuf_stick_x || !state->ucf_padbuf_stick_y || !state->percent ||
+      !state->percent_temp || !state->dmg_x2225_b7 || !state->dmg_x2224_b2 || !state->shield_hp ||
+      !state->hitlag || !state->hitlag_started_frame || !state->hitstun || !state->l_cancel ||
+      !state->hurtbox_state || !state->hurtcap_count || !state->hurtcap_a_x ||
+      !state->hurtcap_a_y || !state->hurtcap_a_z || !state->hurtcap_b_x || !state->hurtcap_b_y ||
+      !state->hurtcap_b_z || !state->hurtcap_radius || !state->hurtcap_enabled ||
+      !state->hurtcap_is_grabbable || !state->hurtcap_height || !state->hitbox_count ||
+      !state->hitbox_enabled || !state->hitbox_x || !state->hitbox_y || !state->hitbox_z ||
+      !state->hitbox_radius || !state->hitbox_damage || !state->hitbox_bone_part_id ||
+      !state->hitbox_u16_0 || !state->hitbox_u16_1 || !state->hitbox_u16_2 ||
+      !state->hitbox_u16_3 || !state->hitbox_u16_4 || !state->hitbox_u16_5 ||
+      !state->hitbox_u16_6 || !state->hitbox_u16_7 || !state->hitbox_angle || !state->hitbox_kbg ||
+      !state->hitbox_wsk || !state->hitbox_bkb || !state->hitbox_element ||
+      !state->hitbox_shield_damage || !state->hitbox_sfx_severity || !state->hitbox_sfx_kind ||
+      !state->hitbox_flags || !state->shield_x || !state->shield_y || !state->shield_z ||
+      !state->shield_radius || !state->reflector_x || !state->reflector_y ||
       !state->reflector_radius || !state->ground_id || !state->animation_index ||
       !state->instance_hit_by || !state->instance_id || !state->instance_id_x2073 ||
       !state->instance_identity_last_action_id || !state->attack_id || !state->attack_instance ||

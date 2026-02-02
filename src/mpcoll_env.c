@@ -42,8 +42,8 @@ static const float k_ledge_obstruction_bottom_probe_dy = -2.0f;
 
 static inline float cross2(float ax, float ay, float bx, float by) { return ax * by - ay * bx; }
 
-static uint8_t intersect_segment(float x0, float y0, float x1, float y1, float ax, float ay, float bx,
-                                 float by, float* ix_out, float* iy_out) {
+static uint8_t intersect_segment(float x0, float y0, float x1, float y1, float ax, float ay,
+                                 float bx, float by, float* ix_out, float* iy_out) {
   const float rx = bx - ax;
   const float ry = by - ay;
   const float sx = x1 - x0;
@@ -187,13 +187,14 @@ static uint8_t intersect_vert_clamped(float x0, float y0, float y1, float ax, fl
   return 1;
 }
 
-static inline uint8_t stage_line_shares_endpoint(float ax0, float ay0, float ax1, float ay1, float bx,
-                                                 float by) {
+static inline uint8_t stage_line_shares_endpoint(float ax0, float ay0, float ax1, float ay1,
+                                                 float bx, float by) {
   return (ax0 == bx && ay0 == by) || (ax1 == bx && ay1 == by);
 }
 
-static uint8_t mpcoll_ledge_obstruction_hit(uint32_t stage_id, uint32_t mpcheck_mask, float ax, float ay,
-                                            float bx, float by, float edge_x, float edge_y) {
+static uint8_t mpcoll_ledge_obstruction_hit(uint32_t stage_id, uint32_t mpcheck_mask, float ax,
+                                            float ay, float bx, float by, float edge_x,
+                                            float edge_y) {
   // Decomp: mpCheckMultiple finds the closest intersection (by dist2) among the requested kinds.
   // mpColl_80044164 / mpColl_800443C4 allow a hit when mpJointFromLine(hit) == mpJointFromLine(ledge),
   // otherwise the ledge grab is rejected.
@@ -228,8 +229,7 @@ static uint8_t mpcoll_ledge_obstruction_hit(uint32_t stage_id, uint32_t mpcheck_
         const float dist2 = dx * dx + dy * dy;
         if (dist2 < best_dist2) {
           best_dist2 = dist2;
-          best_same_joint =
-              stage_line_shares_endpoint(l->x0, l->y0, l->x1, l->y1, edge_x, edge_y);
+          best_same_joint = stage_line_shares_endpoint(l->x0, l->y0, l->x1, l->y1, edge_x, edge_y);
         }
       }
     }
@@ -261,8 +261,7 @@ static uint8_t mpcoll_ledge_obstruction_hit(uint32_t stage_id, uint32_t mpcheck_
         const float dist2 = dx * dx + dy * dy;
         if (dist2 < best_dist2) {
           best_dist2 = dist2;
-          best_same_joint =
-              stage_line_shares_endpoint(l->x0, l->y0, l->x1, l->y1, edge_x, edge_y);
+          best_same_joint = stage_line_shares_endpoint(l->x0, l->y0, l->x1, l->y1, edge_x, edge_y);
         }
       }
     }
@@ -294,8 +293,7 @@ static uint8_t mpcoll_ledge_obstruction_hit(uint32_t stage_id, uint32_t mpcheck_
         const float dist2 = dx * dx + dy * dy;
         if (dist2 < best_dist2) {
           best_dist2 = dist2;
-          best_same_joint =
-              stage_line_shares_endpoint(l->x0, l->y0, l->x1, l->y1, edge_x, edge_y);
+          best_same_joint = stage_line_shares_endpoint(l->x0, l->y0, l->x1, l->y1, edge_x, edge_y);
         }
       }
     }
@@ -545,14 +543,13 @@ static inline uint32_t ledge_grab_flags_for_fighter(uint32_t stage_id, float col
         // refs/melee/src/melee/mp/mpcoll.c::mpColl_80044164
         // refs/melee/src/melee/mp/mplib.c::mpCheckMultiple
         const float bottom_y = ecb.bottom_y;
-        const float top_x = coll_cur_x;     // ecb.top.x == 0
+        const float top_x = coll_cur_x;  // ecb.top.x == 0
         const float top_y = ecb.top_y;
-        const uint8_t blocked_top =
-            mpcoll_ledge_obstruction_hit(stage_id, /*mpcheck_mask=*/0x6u, top_x, top_y, contact_x,
-                                         contact_y, edge_x, edge_y);
+        const uint8_t blocked_top = mpcoll_ledge_obstruction_hit(
+            stage_id, /*mpcheck_mask=*/0x6u, top_x, top_y, contact_x, contact_y, edge_x, edge_y);
         const uint8_t blocked_bot = mpcoll_ledge_obstruction_hit(
-            stage_id, /*mpcheck_mask=*/0x6u, coll_cur_x, bottom_y + k_ledge_obstruction_bottom_probe_dy,
-            contact_x, contact_y, edge_x, edge_y);
+            stage_id, /*mpcheck_mask=*/0x6u, coll_cur_x,
+            bottom_y + k_ledge_obstruction_bottom_probe_dy, contact_x, contact_y, edge_x, edge_y);
         if (!(blocked_top || blocked_bot)) {
           out |= MSL_COLLIDE_LEFT_LEDGE_GRAB;
         }
@@ -587,14 +584,13 @@ static inline uint32_t ledge_grab_flags_for_fighter(uint32_t stage_id, float col
         // refs/melee/src/melee/mp/mpcoll.c::mpColl_800443C4
         // refs/melee/src/melee/mp/mplib.c::mpCheckMultiple
         const float bottom_y = ecb.bottom_y;
-        const float top_x = coll_cur_x;     // ecb.top.x == 0
+        const float top_x = coll_cur_x;  // ecb.top.x == 0
         const float top_y = ecb.top_y;
-        const uint8_t blocked_top =
-            mpcoll_ledge_obstruction_hit(stage_id, /*mpcheck_mask=*/0xAu, top_x, top_y, contact_x,
-                                         contact_y, edge_x, edge_y);
+        const uint8_t blocked_top = mpcoll_ledge_obstruction_hit(
+            stage_id, /*mpcheck_mask=*/0xAu, top_x, top_y, contact_x, contact_y, edge_x, edge_y);
         const uint8_t blocked_bot = mpcoll_ledge_obstruction_hit(
-            stage_id, /*mpcheck_mask=*/0xAu, coll_cur_x, bottom_y + k_ledge_obstruction_bottom_probe_dy,
-            contact_x, contact_y, edge_x, edge_y);
+            stage_id, /*mpcheck_mask=*/0xAu, coll_cur_x,
+            bottom_y + k_ledge_obstruction_bottom_probe_dy, contact_x, contact_y, edge_x, edge_y);
         if (!(blocked_top || blocked_bot)) {
           out |= MSL_COLLIDE_RIGHT_LEDGE_GRAB;
         }
@@ -674,8 +670,7 @@ void mpcoll_env_update_ledge_grab(MslBatch* batch) {
       const uint32_t flags = ledge_grab_flags_for_fighter(
           stage_id, coll_prev_x, coll_prev_y, coll_cur_x, coll_cur_y, descent_prev_y, descent_cur_y,
           fd, batch->state.char_id[idx], batch->state.animation_index[idx],
-          batch->state.anim_frame_f32[idx],
-          scale_y);
+          batch->state.anim_frame_f32[idx], scale_y);
       batch->state.coll_env_flags[idx] |= flags;
     }
   }

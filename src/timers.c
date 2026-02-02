@@ -20,6 +20,10 @@ void timers_update(MslBatch* batch) {
   // tools/slippi/make_dataset_from_slp.py (stack order 0..4 into `state_flags[..., 5]`)
   enum { MSL_STATE_FLAG_221C_IS_HITSTUN = 0x02 };
   enum { MSL_STATE_FLAG_221A_IS_HITLAG = 0x20 };
+  // fp+0x221A bit 0x10 corresponds to x221A_b3 in decomp (see refs/melee/src/melee/ft/types.h).
+  // Fighter_ProcessHit can set it alongside hitlag start, and Fighter_8006A1BC clears it on hitlag end.
+  // refs/melee/src/melee/ft/fighter.c::{Fighter_ProcessHit_8006D1EC,Fighter_8006A1BC}
+  enum { MSL_STATE_FLAG_221A_B3 = 0x10 };
 
   // Decomp-first references (GALE01):
   //
@@ -77,19 +81,17 @@ void timers_update(MslBatch* batch) {
       const size_t idx = msl_idx_player(bi, p);
 
       uint16_t hl = batch->state.hitlag[idx];
-      // Cache whether hitlag was active at the start of the frame (pre-decrement).
-      //
-      // Decomp scheduling note:
-      // - Fighter_8006A1BC (timer decrement) runs before Fighter_procUpdate (Anim/Phys/Coll), so
-      //   fp->dmg.x195c_hitlag_frames is decremented before motion-state callbacks observe it.
-      // - However, "this frame is in hitlag" semantics (e.g., which callbacks are skipped) are
-      //   governed by the pre-decrement state (hitlag remaining at frame start).
-      // refs/melee/src/melee/ft/fighter.c::Fighter_8006A1BC and ::Fighter_procUpdate
-      batch->state.hitlag_started_frame[idx] = (hl > 0) ? 1u : 0u;
+      // Decomp: hitlag frames are decremented at proc prio 0 before the main per-fighter update
+      // block (Anim/Phys/Coll) runs.
+      // refs/melee/src/melee/ft/fighter.c::Fighter_8006A1BC
       if (hl > 0) {
         hl--;
         batch->state.hitlag[idx] = hl;
       }
+
+      // Per-frame hitlag gate (see src/state.h for rationale).
+      // Decomp update gate: refs/melee/src/melee/ft/fighter.c::Fighter_8006A360 (`if (!fp->x2219_b5)`).
+      batch->state.hitlag_started_frame[idx] = (hl > 0) ? 1u : 0u;
 
       // Keep the Slippi `state_flags` "isHitlag" bit consistent with `hitlag` frames left.
       //
@@ -106,6 +108,10 @@ void timers_update(MslBatch* batch) {
         flags_221a |= (uint8_t)MSL_STATE_FLAG_221A_IS_HITLAG;
       } else {
         flags_221a &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221A_IS_HITLAG;
+        // Decomp: when hitlag ends, Fighter_8006A1BC clears x221A_b2 (isHitlag) and, if set,
+        // clears x221A_b3 after calling ftCo_80090718(fp).
+        // refs/melee/src/melee/ft/fighter.c::Fighter_8006A1BC
+        flags_221a &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221A_B3;
       }
       batch->state.state_flags[flags_221a_i] = flags_221a;
     }

@@ -190,7 +190,7 @@ void blaster_update_pre_physics(MslBatch* batch) {
 
       // Decomp: hitlag freezes animation advancement and blocks Anim/IASA side effects.
       // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360 (anim gate)
-      if (batch->state.hitlag[idx] != 0) {
+      if (batch->state.hitlag_started_frame[idx] != 0) {
         continue;
       }
 
@@ -261,7 +261,7 @@ void blaster_update_post_collision(MslBatch* batch) {
   for (int bi = 0; bi < batch->batch_size; bi++) {
     for (int p = 0; p < num_players; p++) {
       const size_t idx = msl_idx_player(bi, p);
-      if (batch->state.hitlag[idx] != 0) {
+      if (batch->state.hitlag_started_frame[idx] != 0) {
         continue;
       }
 

@@ -114,36 +114,72 @@ def _iter_dataset_mismatches(
         active = slice(0, num_players)
 
         for field in fields:
-            diff = out_view[field][:, active] != ref[field][:, active]
+            out_arr = out_view[field][:, active]
+            ref_arr = ref[field][:, active]
+            diff = out_arr != ref_arr
             if not np.any(diff):
                 continue
-            pairs = np.argwhere(diff)
-            for ri, p in pairs:
-                r = int(ri)
-                pp = int(p)
-                gi = int(offset + r)
 
-                seed_v = int(seed[field][r, pp])
-                out_v = int(out_view[field][r, pp])
-                ref_v = int(ref[field][r, pp])
-                if only_seed_equals_ref and seed_v != ref_v:
-                    continue
+            # Most discrete fields are shaped (records, players). Some fields (e.g. state_flags)
+            # are shaped (records, players, K). For these, emit per-subindex mismatches with a
+            # suffix like "state_flags[3]" so the output stays scalar per row.
+            if diff.ndim == 2:
+                pairs = np.argwhere(diff)
+                for ri, p in pairs:
+                    r = int(ri)
+                    pp = int(p)
+                    gi = int(offset + r)
 
-                rows.append(
-                    MismatchRow(
-                        dataset=str(dataset_path),
-                        record=gi,
-                        seed_frame=int(seed["frame_id"][r]),
-                        ref_frame=int(ref["frame_id"][r]),
-                        p=pp,
-                        field=field,
-                        seed=seed_v,
-                        out=out_v,
-                        ref=ref_v,
+                    seed_v = int(seed[field][r, pp])
+                    out_v = int(out_view[field][r, pp])
+                    ref_v = int(ref[field][r, pp])
+                    if only_seed_equals_ref and seed_v != ref_v:
+                        continue
+
+                    rows.append(
+                        MismatchRow(
+                            dataset=str(dataset_path),
+                            record=gi,
+                            seed_frame=int(seed["frame_id"][r]),
+                            ref_frame=int(ref["frame_id"][r]),
+                            p=pp,
+                            field=field,
+                            seed=seed_v,
+                            out=out_v,
+                            ref=ref_v,
+                        )
                     )
-                )
-                if max_rows is not None and len(rows) >= max_rows:
-                    return rows
+                    if max_rows is not None and len(rows) >= max_rows:
+                        return rows
+            else:
+                pairs = np.argwhere(diff)
+                for ri, p, sub in pairs:
+                    r = int(ri)
+                    pp = int(p)
+                    ss = int(sub)
+                    gi = int(offset + r)
+
+                    seed_v = int(seed[field][r, pp, ss])
+                    out_v = int(out_view[field][r, pp, ss])
+                    ref_v = int(ref[field][r, pp, ss])
+                    if only_seed_equals_ref and seed_v != ref_v:
+                        continue
+
+                    rows.append(
+                        MismatchRow(
+                            dataset=str(dataset_path),
+                            record=gi,
+                            seed_frame=int(seed["frame_id"][r]),
+                            ref_frame=int(ref["frame_id"][r]),
+                            p=pp,
+                            field=f"{field}[{ss}]",
+                            seed=seed_v,
+                            out=out_v,
+                            ref=ref_v,
+                        )
+                    )
+                    if max_rows is not None and len(rows) >= max_rows:
+                        return rows
 
         offset += chunk_n
 
@@ -153,7 +189,15 @@ def _iter_dataset_mismatches(
 def main() -> None:
     ap = argparse.ArgumentParser(description="Locate per-record discrete mismatches for a dataset.")
     ap.add_argument("--dataset", type=Path, required=True, help="Path to a .msl dataset file.")
-    ap.add_argument("--field", action="append", default=[], help="Discrete compare field to locate (repeatable).")
+    ap.add_argument(
+        "--field",
+        action="append",
+        default=[],
+        help=(
+            "Discrete compare field to locate (repeatable). For multi-dimensional fields like "
+            "`state_flags`, output rows use a suffix like `state_flags[3]`."
+        ),
+    )
     ap.add_argument("--chunk", type=int, default=4096, help="Batch size for evaluation.")
     ap.add_argument("--max", type=int, default=0, help="Max rows to print (0 = no limit).")
     ap.add_argument(

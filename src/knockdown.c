@@ -311,7 +311,7 @@ static inline void enter_wait(MslBatch* batch, size_t idx) {
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownAttack.c::ftCo_8009856C
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownBound.c::ftCo_80097E8C
   msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
-  if (batch->state.hitlag[idx] == 0) {
+  if (batch->state.hitlag_started_frame[idx] == 0) {
     batch->state.anim_frame_fp_q16_16[idx] += batch->state.frame_speed_mul_fp_q16_16[idx];
   }
   msl_anim_timebase_recompute_derived(batch, idx);
@@ -329,7 +329,7 @@ static inline void enter_down_wait(MslBatch* batch, size_t idx, uint16_t wait_ac
         (frames <= 0) ? 0 : (frames >= (int32_t)INT16_MAX ? INT16_MAX : (int16_t)frames);
   }
   msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
-  if (batch->state.hitlag[idx] == 0) {
+  if (batch->state.hitlag_started_frame[idx] == 0) {
     batch->state.anim_frame_fp_q16_16[idx] += batch->state.frame_speed_mul_fp_q16_16[idx];
   }
   msl_anim_timebase_recompute_derived(batch, idx);
@@ -340,7 +340,7 @@ static inline void enter_down_stand(MslBatch* batch, size_t idx, uint16_t wait_a
   batch->state.action_id[idx] = stand_act;
   batch->state.animation_index[idx] = submotion_for_down_action(stand_act);
   msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
-  if (batch->state.hitlag[idx] == 0) {
+  if (batch->state.hitlag_started_frame[idx] == 0) {
     batch->state.anim_frame_fp_q16_16[idx] += batch->state.frame_speed_mul_fp_q16_16[idx];
   }
   msl_anim_timebase_recompute_derived(batch, idx);
@@ -359,7 +359,7 @@ static inline void enter_down_attack(MslBatch* batch, size_t idx, uint16_t wait_
   batch->state.action_id[idx] = atk_act;
   batch->state.animation_index[idx] = submotion_for_down_action(atk_act);
   msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
-  if (batch->state.hitlag[idx] == 0) {
+  if (batch->state.hitlag_started_frame[idx] == 0) {
     batch->state.anim_frame_fp_q16_16[idx] += batch->state.frame_speed_mul_fp_q16_16[idx];
   }
   msl_anim_timebase_recompute_derived(batch, idx);
@@ -372,7 +372,7 @@ static inline void enter_down_roll(MslBatch* batch, size_t idx, uint16_t roll_ac
   batch->state.action_id[idx] = roll_act;
   batch->state.animation_index[idx] = submotion_for_down_action(roll_act);
   msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
-  if (batch->state.hitlag[idx] == 0) {
+  if (batch->state.hitlag_started_frame[idx] == 0) {
     batch->state.anim_frame_fp_q16_16[idx] += batch->state.frame_speed_mul_fp_q16_16[idx];
   }
   msl_anim_timebase_recompute_derived(batch, idx);
@@ -400,7 +400,7 @@ static inline void enter_squat(MslBatch* batch, size_t idx) {
   batch->state.action_id[idx] = (uint16_t)MSL_ACT_SQUAT;
   batch->state.animation_index[idx] = (uint32_t)MSL_SM_SQUAT;
   msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
-  if (batch->state.hitlag[idx] == 0) {
+  if (batch->state.hitlag_started_frame[idx] == 0) {
     batch->state.anim_frame_fp_q16_16[idx] += batch->state.frame_speed_mul_fp_q16_16[idx];
   }
   msl_anim_timebase_recompute_derived(batch, idx);
@@ -471,7 +471,7 @@ void knockdown_update_pre_physics(MslBatch* batch) {
 
       // Decomp: hitlag freezes animation advancement and blocks Anim/IASA side effects.
       // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360 (anim gate)
-      if (batch->state.hitlag[idx] != 0) {
+      if (batch->state.hitlag_started_frame[idx] != 0) {
         continue;
       }
 
@@ -700,7 +700,7 @@ static inline void enter_passive_from_damage_land(MslBatch* batch, const MslChar
   batch->state.action_id[idx] = passive_act;
   batch->state.animation_index[idx] = submotion_for_down_action(passive_act);
   msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
-  if (batch->state.hitlag[idx] == 0) {
+  if (batch->state.hitlag_started_frame[idx] == 0) {
     batch->state.anim_frame_fp_q16_16[idx] += batch->state.frame_speed_mul_fp_q16_16[idx];
   }
   msl_anim_timebase_recompute_derived(batch, idx);
