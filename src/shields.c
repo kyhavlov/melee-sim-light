@@ -146,10 +146,27 @@ void shields_refresh(MslBatch* batch) {
             batch->state.shield_hp[idx] > 0.0f && c->start_shield_health > 0.0f) {
           const MslCharParams* ca = msl_char_params(batch->state.char_id[idx]);
           if (ca != NULL) {
+            const float scale_y = batch->state.fighter_scale_y[idx];
+
             // Guard-tilt shield bubble center (decomp-shaped):
             // - Sample the ISO-derived msid=38 ("Guard") tilt timeline in data/shields/<char>.bin.
             // - Use stick direction (main stick) and facing to choose an angle frame.
             // - Blend towards that angled center based on inertial stick magnitude state (x4; 0..1).
+            //
+            // NOTE (model_scaling): In-engine applies per-character model scaling at the model root
+            // (ftCommon_GetModelScale(fp)), but then cancels `model_scaling` for the collision skeleton
+            // subtree by applying an inverse scale at part `fp->ft_data->x8->x10` during animation
+            // updates (ftAnim_8006FA58/ftAnim_8006FB88 call ftCommon_8007F6A4).
+            //
+            // Our `data/shields/*.bin` tables are extracted in the same "collision-subtree" space
+            // (see tools/extraction/extract_shield_tilt_table.py applying inv_model_scale), so we
+            // apply only `fighter_scale_y` here.
+            //
+            // Decomp refs:
+            // - refs/melee/src/melee/ft/ftcommon.c::ftCommon_GetModelScale
+            // - refs/melee/src/melee/ft/ftanim.c::ftAnim_8006FA58 and ::ftAnim_8006FB88 (inv-scale part x10)
+            // - refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007F6A4 (inverse model_scaling application)
+            // - refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c (shield bone `fp->ft_data->x8->x11`)
             MslShieldTiltTableView tv;
             const uint8_t has_tv =
                 (msl_shield_tilt_table_view(batch->state.char_id[idx], &tv) == 0 &&
@@ -237,7 +254,6 @@ void shields_refresh(MslBatch* batch) {
 
               // Match hurtcaps scaling policy: SSANIM-derived offsets are extracted without per-fighter
               // runtime scale (fp->x34_scale.y), so apply fighter_scale_y uniformly.
-              const float scale_y = batch->state.fighter_scale_y[idx];
               sx = pos_x + (dx * scale_y * facing_dir);
               sy = pos_y + (dy * scale_y);
               sz = pos_z + (dz * scale_y);
@@ -256,7 +272,10 @@ void shields_refresh(MslBatch* batch) {
             const float n2 = 1.0f - c->shield_size_min_scale;
             const float scale = (n2 * n1) + c->shield_size_min_scale;
 
-            sr = scale * ca->initial_shield_size * batch->state.fighter_scale_y[idx];
+            // NOTE (shield radius): In-engine shield collision uses joint transforms + a separate
+            // radius term; our debug/approx shield bubble keeps the prior scaling policy (only the
+            // per-fighter fp->x34_scale.y) to avoid global mismatch shifts.
+            sr = scale * ca->initial_shield_size * scale_y;
           }
         }
       }

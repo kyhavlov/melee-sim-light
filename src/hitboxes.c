@@ -1,9 +1,11 @@
 #include "hitboxes.h"
 
+#include <math.h>
 #include <stdint.h>
 
 #include "anim_frame.h"
 #include "anim_pose.h"
+#include "char_params.h"
 #include "hitboxes_tables.h"
 #include "hitlist.h"
 #include "mtx34.h"
@@ -267,6 +269,26 @@ void hitboxes_refresh(MslBatch* batch) {
       const float pos_y = batch->state.pos_y[idx];
       const float pos_z = batch->state.pos_z[idx];
       const float scale_y = batch->state.fighter_scale_y[idx];
+      // Decomp: runtime joint matrices include both per-fighter model scale (`fp->x34_scale.y`)
+      // and the per-character "model scaling" attribute (`ftCo_DatAttrs::model_scaling`) via
+      // ftCommon_GetModelScale(fp). However, Melee also applies an inverse per-character model
+      // scaling at part index `fp->ft_data->x8->x10` (ftAnim_8006FA58 calls ftCommon_8007F6A4),
+      // canceling out `co_attrs.model_scaling` for the collision skeleton subtree. Net effect in
+      // that subtree is typically just `fp->x34_scale.y`.
+      //
+      // Our SSANIM01 pose matrices are extracted without those runtime scalars, so apply them here
+      // before the root facing rotation and world translation.
+      //
+      // Decomp refs:
+      // - refs/melee/src/melee/ft/fighter.c (Fighter_UpdateModelScale -> HSD_JObjSetScale)
+      // - refs/melee/src/melee/ft/ftanim.c::ftAnim_8006FA58 (inv-scale part `fp->ft_data->x8->x10`)
+      // - refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007F6A4 (applies 1/model_scaling at that part)
+      // - refs/melee/src/melee/ft/ftparts.c::ftParts_80074B8C (ftCommon_GetModelScale usage)
+      const MslCharParams* chp = msl_char_params(char_id);
+      const float model_scaling = (chp && isfinite(chp->model_scaling) && chp->model_scaling > 0.0f)
+                                      ? chp->model_scaling
+                                      : 1.0f;
+      const float model_scale = scale_y * model_scaling;
       const float facing_dir = batch->state.facing[idx] ? 1.0f : -1.0f;
 
       uint8_t out_count = 0;
@@ -309,9 +331,9 @@ void hitboxes_refresh(MslBatch* batch) {
         const float off[3] = {def[hi].x, def[hi].y, def[hi].z};
         float cx = 0.0f, cy = 0.0f, cz = 0.0f;
         msl_mtx34_mul_point(m, off, &cx, &cy, &cz);
-        cx *= scale_y;
-        cy *= scale_y;
-        cz *= scale_y;
+        cx *= model_scale;
+        cy *= model_scale;
+        cz *= model_scale;
 
         // Decomp: apply root facing rotation (rotY = M_PI_2 * facing_dir), mixing X/Z.
         const float cx_rot_x = facing_dir * cz;
@@ -323,6 +345,13 @@ void hitboxes_refresh(MslBatch* batch) {
         cz += pos_z;
 
         float radius = def[hi].radius;
+        // Decomp (radius scaling): Hitbox size does not get `co_attrs.model_scaling` applied at
+        // creation time (ftAction_8007121C assigns hitbox->scale directly from the movescript).
+        // Collision radius math uses only `fp->x34_scale.y` unless ignore_fighter_scale is set.
+        //
+        // Decomp refs:
+        // - refs/melee/src/melee/ft/ftaction.c::ftAction_8007121C (hitbox->scale = size/256)
+        // - refs/melee/src/melee/lb/lbcollision.c::lbColl_80007AFC (radius *= fp->x34_scale.y)
         if (!msl_hitbox_ignore_fighter_scale(def[hi].u16_6)) {
           radius *= scale_y;
         }

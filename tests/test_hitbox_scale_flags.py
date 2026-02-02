@@ -6,6 +6,7 @@ import tempfile
 from pathlib import Path
 
 import numpy as np
+import json
 
 from tools.eval.dataset import INPUT_DTYPE, SEED_DTYPE
 
@@ -102,12 +103,16 @@ def test_hitboxes_refresh_applies_fighter_scale_y_and_respects_ignore_flag() -> 
         Path("hitboxes/falco.bin"),
     }
 
+    model_scaling = np.float32(1.0)
+
     build_dir = Path("build")
     build_dir.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(dir=build_dir) as tmp:
         tmp = Path(tmp)
         data_dir = tmp / "data"
         _populate_data_dir(data_dir, exclude=exclude)
+        with open(data_dir / "characters/fox.json", encoding="utf-8") as f:
+            model_scaling = np.float32(json.load(f)["model_scaling"])
 
         # Minimal identity pose for part_id=0 on msid=0, frame=0.
         ident = [1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0]
@@ -213,17 +218,22 @@ def test_hitboxes_refresh_applies_fighter_scale_y_and_respects_ignore_flag() -> 
     assert int(np.sum(p0_enabled != np.float32(0.0))) == 2
     assert int(np.sum(p1_enabled != np.float32(0.0))) == 2
 
-    # hb0: scales center and radius by scale_y; facing applies decomp-shaped root rotY90, mixing X/Z.
+    model_scale = np.float32(2.0) * model_scaling
+
+    # hb0: scales center by (fighter_scale_y * model_scaling). Radius scaling is controlled by the
+    # ignore-scale flag and uses only fighter_scale_y (see refs/melee/src/melee/lb/lbcollision.c::lbColl_80007AFC).
     #
-    # With identity pose, local = (x,y,z) * scale_y, then:
+    # Facing applies decomp-shaped root rotY90, mixing X/Z.
+    #
+    # With identity pose, local = (x,y,z) * (fighter_scale_y * model_scaling), then:
     # - facing right:  (x,z) -> ( z, -x)
     # - facing left:   (x,z) -> (-z,  x)
-    assert np.isclose(p0[0, 0], np.float32(100.0 + 2.0 * 3.0))  # +z -> +x
-    assert np.isclose(p1[0, 0], np.float32(100.0 - 2.0 * 3.0))  # -z -> +x
-    assert np.isclose(p0[0, 1], np.float32(-50.0 + 2.0 * 2.0))
-    assert np.isclose(p0[0, 2], np.float32(0.25 - 2.0 * 1.5))  # -x -> +z
+    assert np.isclose(p0[0, 0], np.float32(100.0 + model_scale * 3.0))  # +z -> +x
+    assert np.isclose(p1[0, 0], np.float32(100.0 - model_scale * 3.0))  # -z -> +x
+    assert np.isclose(p0[0, 1], np.float32(-50.0 + model_scale * 2.0))
+    assert np.isclose(p0[0, 2], np.float32(0.25 - model_scale * 1.5))  # -x -> +z
     assert np.isclose(p0[0, 3], np.float32(4.0 * 2.0))
 
-    # hb1: center still scales (pose space), but radius does not (ignore flag).
-    assert np.isclose(p0[1, 0], np.float32(100.0 + 2.0 * 3.0))
+    # hb1: center still scales (pose space), but radius ignores fighter_scale_y.
+    assert np.isclose(p0[1, 0], np.float32(100.0 + model_scale * 3.0))
     assert np.isclose(p0[1, 3], np.float32(4.0))

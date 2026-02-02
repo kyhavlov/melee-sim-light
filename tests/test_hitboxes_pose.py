@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import struct
 from pathlib import Path
 
@@ -106,6 +107,8 @@ def test_hitboxes_refresh_matches_pose_bytes() -> None:
         pytest.skip("missing local artifact: data/hitboxes/fox.bin")
     if not Path("data/anims/fox.bin").exists():
         pytest.skip("missing local artifact: data/anims/fox.bin")
+    if not Path("data/characters/fox.json").exists():
+        pytest.skip("missing local artifact: data/characters/fox.json")
 
     anim_buf = Path("data/anims/fox.bin").read_bytes()
     joint_count, anim_count, joint_parts = _read_header(anim_buf)
@@ -152,7 +155,11 @@ def test_hitboxes_refresh_matches_pose_bytes() -> None:
     pos_y = np.float32(-45.5)
     pos_z = np.float32(9.75)
 
+    with open("data/characters/fox.json", encoding="utf-8") as f:
+        model_scaling = np.float32(json.load(f)["model_scaling"])
+
     c = _mtx34_mul_point(py_m, np.array([ev["x"], ev["y"], ev["z"]], dtype=np.float32))
+    c *= model_scaling
 
     # Decomp-shaped root facing rotation (rotY = M_PI_2 * facing_dir), mixing X/Z.
     # See src/hitboxes.c and refs/melee/src/melee/ft/fighter.c (ftPartSetRotY).
