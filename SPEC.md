@@ -143,16 +143,17 @@ and decomp-motivated rather than arbitrary heuristics.
     for an ordering mismatch, not a decomp-backed rule.
 - **Deterministic selection**: at most 1 BODY hit per attacker→defender per frame; prefer lowest `hitbox_id`, then lowest
   `hurtcap_id` (matches debug contact ordering).
-- **Rehit suppression (simplified, conservative)**: a per-(attacker, defender) latch suppresses repeated hits for that pair
-  (ignoring `hitbox_id`) until hitboxes clear or the attacker msid changes.
-  - Rationale: we do not have per-hitbox hitlists/timers yet; this conservative policy reduces one-step false positives where
-    multiple active hitboxes would otherwise re-hit immediately after hitlag ends.
-  - Latch clear rules (current): clears on full hitbox clear (`hitbox_count==0`), attacker msid change, or defender instance_id
-    change; it does not clear when a specific hitbox_id is disabled.
-- Missing decomp pieces: per-hitbox hitlist entries, rehit-rate timers, hitbox refresh ordering vs collision, clanks/trades,
-    and full hurtbox eligibility (intangibility, thrown-fighter rules, etc.). These are required to make BODY/SHIELD
-    mutations (percent/KB/hitstun/shield HP) consistently correct; we currently accept imperfections here while building out
-    the missing bookkeeping.
+- **Rehit suppression (hitlists, decomp-shaped; PARTIAL)**: the sim uses a decomp-inspired hitlist keyed by
+  `(attacker, hit_group, victim)` with a per-entry cooldown derived from extracted hitbox metadata (`hitbox_u16_7` low 8 bits).
+  - Clear/copy on enable edges: when a hitbox becomes enabled (or its `hit_group` changes), hitlists are cleared unless a
+    currently-enabled sibling hitbox with the same `hit_group` can be copied (decomp anchor: `ftColl_800768A0`).
+  - Countdown decrement: decremented once per frame for groups that are active (and frozen under hitlag) (`src/hitlist.c`).
+  - Victim identity: decomp stores a raw victim pointer; the sim uses Slippi `instance_id` as a proxy but intentionally does
+    **not** treat an `instance_id` bump on motion-state entry (`ft_800895E0`) as a “new victim” (rebinding proxy identity instead).
+    True “pointer changed” is approximated by death/respawn states (heuristic boundary; see `src/hitlist.c`).
+- Remaining decomp pieces: exact countdown timing/order (`lbColl_80008A5C`) relative to collision acceptance, “type” code
+  semantics (`lbColl_80008688`/`lbColl_80008820`), fighter-vs-item clanks/trades, and full hurtbox eligibility (intangibility,
+  thrown-fighter rules, etc.). These are required to make BODY/SHIELD mutations (percent/KB/hitstun/shield HP) consistently correct.
 
 #### Facing rotation note (world primitives)
 

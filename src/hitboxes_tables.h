@@ -11,7 +11,8 @@ extern "C" {
 // - data/hitboxes/falco.bin (char_id=22)
 //
 // This is load-only for now: the simulator uses these tables to refresh per-frame world-space
-// hitbox centers for debug readback, but does not perform combat resolution yet.
+// hitbox centers and to drive fighter-vs-fighter combat resolution (via hitbox-vs-hurtcap overlap
+// checks in `src/combat.c`).
 int hitboxes_tables_init(void);
 
 // Test/debug helper: reset global hitbox tables so a subsequent hitboxes_tables_init() reloads from
