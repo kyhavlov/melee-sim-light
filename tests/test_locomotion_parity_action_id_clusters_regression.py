@@ -149,3 +149,66 @@ def test_locomotion_parity_turn_to_dash_latch_on_turn_complete() -> None:
         expected_action_id=20,  # MSL_ACT_DASH
         expected_anim_index=12,  # MSL_SM_DASH
     )
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    ("rel", "record", "player"),
+    [
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
+            "cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl",
+            99,
+            1,
+        ),
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
+            "cardinal_1.0_recent/GracefulAttachedTurtle.msl",
+            97,
+            0,
+        ),
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
+            "cardinal_1.0_recent/QuerulousGrandDinosaur.msl",
+            97,
+            1,
+        ),
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
+            "cardinal_1.0_recent/TreasuredBackKangaroo.msl",
+            311,
+            1,
+        ),
+    ],
+)
+def test_locomotion_parity_dash_to_run_on_cmdvar0_enable_frame(rel: str, record: int, player: int) -> None:
+    # Regression guard for the Dash->Run late IASA chain (cmd_var[0] gate).
+    #
+    # Decomp:
+    # - Dash command script sets fp->cmd_vars[0], enabling the late IASA chain in ftCo_Dash_IASA
+    #   that can enter Run via fn_800CA5F0. The exact enable frame is data-driven and extracted
+    #   into data/moves/*.json.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c::ftCo_Dash_IASA
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Run.c::fn_800CA5F0
+    #
+    # Representative records:
+    # - seed = Dash (20) near Dash anim end, ref = Run (21) at t+1
+    root = Path(__file__).resolve().parents[1]
+    for required in [
+        "data/moves/fox.json",
+        "data/moves/falco.json",
+    ]:
+        if not (root / required).exists():
+            pytest.skip(f"missing local ISO-derived move artifacts: {required}")
+
+    dataset_path = root / rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {rel}")
+
+    _run_one_step_action_and_anim(
+        dataset_path=dataset_path,
+        record=record,
+        player=player,
+        expected_action_id=21,  # MSL_ACT_RUN
+        expected_anim_index=13,  # MSL_SM_RUN
+    )

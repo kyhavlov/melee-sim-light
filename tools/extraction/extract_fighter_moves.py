@@ -581,6 +581,9 @@ def main() -> None:
 
     enum_map = _parse_ftco_submotion_enum(args.melee_decomp)
     want = [
+        # Grounded locomotion: needed for Dash IASA (cmd_var[0] gating) parity.
+        # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c::ftCo_Dash_IASA
+        "ftCo_SM_Dash",
         "ftCo_SM_Attack11",
         "ftCo_SM_AttackDash",
         "ftCo_SM_AttackS3",
