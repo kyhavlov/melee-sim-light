@@ -4,6 +4,10 @@
 #include <stdlib.h>
 #include <string.h>
 
+// Some libc configurations require feature macros for posix_memalign to be declared in headers.
+// Provide a matching declaration to avoid implicit-declaration warnings.
+int posix_memalign(void** memptr, size_t alignment, size_t size);
+
 static _Atomic uint64_t g_alloc_calls = 0;
 static _Atomic uint64_t g_alloc_bytes = 0;
 

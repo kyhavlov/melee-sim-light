@@ -740,6 +740,7 @@ static inline bool fobj_interpret(FObj* fo, float rate, float* out_value) {
 }
 
 static PyObject* msl_init(PyObject* self, PyObject* args, PyObject* kwargs) {
+  (void)self;
   static const char* kwlist[] = {
       "batch_size", "num_players", "ucf_enabled", "ucf_cardinals_1_0_enabled", NULL,
   };
@@ -804,6 +805,7 @@ static PyMslHandle* unpack_handle(PyObject* handle_obj) {
 }
 
 static PyObject* msl_reseed_seed(PyObject* self, PyObject* args) {
+  (void)self;
   PyObject* handle_obj = NULL;
   PyObject* seed_obj = NULL;
   if (!PyArg_ParseTuple(args, "OO", &handle_obj, &seed_obj)) {
@@ -836,6 +838,7 @@ static PyObject* msl_reseed_seed(PyObject* self, PyObject* args) {
 }
 
 static PyObject* msl_step_input(PyObject* self, PyObject* args) {
+  (void)self;
   PyObject* handle_obj = NULL;
   PyObject* prev_input_obj = NULL;
   PyObject* input_obj = NULL;
@@ -877,6 +880,7 @@ static PyObject* msl_step_input(PyObject* self, PyObject* args) {
 }
 
 static PyObject* msl_write_compare(PyObject* self, PyObject* args) {
+  (void)self;
   PyObject* handle_obj = NULL;
   PyObject* out_obj = NULL;
   if (!PyArg_ParseTuple(args, "OO", &handle_obj, &out_obj)) {
@@ -909,6 +913,7 @@ static PyObject* msl_write_compare(PyObject* self, PyObject* args) {
 }
 
 static PyObject* msl_debug_write_processed_input(PyObject* self, PyObject* args) {
+  (void)self;
   PyObject* handle_obj = NULL;
   PyObject* out_obj = NULL;
   if (!PyArg_ParseTuple(args, "OO", &handle_obj, &out_obj)) {
@@ -941,6 +946,7 @@ static PyObject* msl_debug_write_processed_input(PyObject* self, PyObject* args)
 }
 
 static PyObject* msl_debug_write_internals(PyObject* self, PyObject* args) {
+  (void)self;
   PyObject* handle_obj = NULL;
   PyObject* out_obj = NULL;
   if (!PyArg_ParseTuple(args, "OO", &handle_obj, &out_obj)) {
@@ -973,6 +979,7 @@ static PyObject* msl_debug_write_internals(PyObject* self, PyObject* args) {
 }
 
 static PyObject* msl_debug_write_collision_contacts(PyObject* self, PyObject* args) {
+  (void)self;
   PyObject* handle_obj = NULL;
   PyObject* out_obj = NULL;
   if (!PyArg_ParseTuple(args, "OO", &handle_obj, &out_obj)) {
@@ -1029,6 +1036,8 @@ static PyObject* msl_debug_force_anim_timebase_enter(PyObject* self, PyObject* a
 }
 
 static PyObject* msl_sizes(PyObject* self, PyObject* args) {
+  (void)self;
+  (void)args;
   return Py_BuildValue("{s:i,s:i,s:i,s:i,s:i,s:i,s:i}", "seed", (int)sizeof(MslSeed), "input",
                        (int)sizeof(MslInput), "compare", (int)sizeof(MslCompare), "sample",
                        (int)sizeof(MslSample), "processed_input", (int)sizeof(MslProcessedInput),
@@ -1037,11 +1046,15 @@ static PyObject* msl_sizes(PyObject* self, PyObject* args) {
 }
 
 static PyObject* msl_alloc_reset(PyObject* self, PyObject* args) {
+  (void)self;
+  (void)args;
   msl_alloc_reset_counters();
   Py_RETURN_NONE;
 }
 
 static PyObject* msl_alloc_stats(PyObject* self, PyObject* args) {
+  (void)self;
+  (void)args;
   const unsigned long long calls = (unsigned long long)msl_alloc_total_calls();
   const unsigned long long bytes = (unsigned long long)msl_alloc_total_bytes();
   return Py_BuildValue("{s:K,s:K}", "calls", calls, "bytes", bytes);
@@ -2152,6 +2165,7 @@ cleanup:
 }
 
 static PyObject* msl_destroy(PyObject* self, PyObject* args) {
+  (void)self;
   PyObject* capsule = NULL;
   if (!PyArg_ParseTuple(args, "O", &capsule)) {
     return NULL;
@@ -2168,6 +2182,7 @@ static PyObject* msl_destroy(PyObject* self, PyObject* args) {
 }
 
 static PyObject* msl_move_tables_throw_has_release_py(PyObject* self, PyObject* args) {
+  (void)self;
   int char_id = 0;
   int throw_action_id = 0;
   if (!PyArg_ParseTuple(args, "ii", &char_id, &throw_action_id)) {
@@ -2178,6 +2193,7 @@ static PyObject* msl_move_tables_throw_has_release_py(PyObject* self, PyObject* 
 }
 
 static PyObject* msl_move_tables_throw_release_hit_idx_py(PyObject* self, PyObject* args) {
+  (void)self;
   int char_id = 0;
   int throw_action_id = 0;
   double cur_anim_frame = 0.0;
@@ -2195,6 +2211,7 @@ static PyObject* msl_move_tables_throw_release_hit_idx_py(PyObject* self, PyObje
 }
 
 static PyObject* msl_move_tables_throw_hitbox_params_py(PyObject* self, PyObject* args) {
+  (void)self;
   int char_id = 0;
   int throw_action_id = 0;
   int hit_idx = 0;
@@ -2215,7 +2232,7 @@ static PyObject* msl_move_tables_throw_hitbox_params_py(PyObject* self, PyObject
 }
 
 static PyMethodDef methods[] = {
-    {"init", (PyCFunction)msl_init, METH_VARARGS | METH_KEYWORDS,
+    {"init", (PyCFunction)(void (*)(void))msl_init, METH_VARARGS | METH_KEYWORDS,
      "init(batch_size, num_players, ucf_enabled=?, ucf_cardinals_1_0_enabled=?) -> handle"},
     {"destroy", msl_destroy, METH_VARARGS,
      "destroy(handle) -> None (free underlying C batch immediately)"},

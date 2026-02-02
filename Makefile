@@ -1,18 +1,27 @@
-.PHONY: build test preprocess validate build_data fmt fmt-check check
+.PHONY: build test preprocess validate validate-rollout build_data fmt fmt-check check
 
 PY := uv run python
 DATASETS_DIR ?= datasets
 SUITE ?= replays/suites/fox_falco_fd_ucf084_recent.json
 CHUNK ?= 4096
 OUT ?=
+FIELDS ?= action_id,animation_index,on_ground,hitlag,hitstun,state_flags
+VERBOSE ?=
 CLANG_FORMAT ?= clang-format
 
 ifneq ($(strip $(OUT)),)
 VALIDATE_OUT := --out $(OUT)
+ROLLOUT_OUT := --out $(OUT)
+endif
+
+ifeq ($(strip $(VERBOSE)),)
+BUILD_STDOUT := >/dev/null
+else
+BUILD_STDOUT :=
 endif
 
 build:
-	@$(PY) python/setup.py build_ext --inplace --force
+	@$(PY) python/setup.py build_ext --inplace --force $(BUILD_STDOUT)
 
 test: build
 	@$(PY) -m pytest
@@ -22,6 +31,9 @@ preprocess:
 
 validate: build
 	@$(PY) -m tools.eval.run_one_step_suite_eval --suite "$(SUITE)" --datasets-dir "$(DATASETS_DIR)" --chunk "$(CHUNK)" $(VALIDATE_OUT)
+
+validate-rollout: build
+	@$(PY) -m tools.eval.run_longest_rollout_streaks --suite "$(SUITE)" --datasets-dir "$(DATASETS_DIR)" --fields "$(FIELDS)" $(ROLLOUT_OUT)
 
 build_data:
 	@$(PY) -m tools.extraction.build_data --iso-dir _iso --stage grnla --chars fox,falco

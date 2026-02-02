@@ -1,0 +1,479 @@
+from __future__ import annotations
+
+"""Longest in-sync rollout streaks over a preprocessed replay suite.
+
+This is a diagnostic evaluator: it rolls forward sequentially through each `.msl` dataset and
+records the longest contiguous streak of exact matches on a discrete-only field set. On a
+desync at record j, it reseeds at record j and retries once; if it still mismatches, it advances
+to j+1 (guard against infinite loops).
+
+Example:
+  uv run python -m tools.eval.run_longest_rollout_streaks \\
+    --suite replays/suites/fox_falco_fd_ucf084_recent.json \\
+    --datasets-dir datasets \\
+    --fields action_id,animation_index,on_ground,hitlag,hitstun,state_flags \\
+    --out reports/triage/rollout_streaks.json
+"""
+
+import argparse
+import importlib
+import json
+from collections import Counter
+from dataclasses import dataclass
+from pathlib import Path
+
+import numpy as np
+
+from tools.eval.dataset import COMPARE_DTYPE, Dataset, read_dataset
+from tools.slippi.suite_io import dataset_path_for_suite_replay, load_suite, repo_root
+
+
+def _load_binding():
+    # Built by `uv pip install -e python` (or similar).
+    return importlib.import_module("msl_binding")
+
+
+def _parse_csv(s: str) -> tuple[str, ...]:
+    return tuple(x.strip() for x in s.split(",") if x.strip() != "")
+
+
+def _parse_players(players_csv: str | None, *, num_players: int) -> tuple[int, ...]:
+    if players_csv is None or players_csv.strip() == "":
+        return tuple(range(num_players))
+    out: list[int] = []
+    for part in _parse_csv(players_csv):
+        try:
+            p = int(part)
+        except ValueError as e:
+            raise SystemExit(f"error: invalid --players entry {part!r} (want integers)") from e
+        if p < 0 or p >= num_players:
+            raise SystemExit(f"error: --players includes {p}, but dataset has num_players={num_players}")
+        out.append(p)
+    # Deterministic order; drop dups.
+    return tuple(sorted(set(out)))
+
+
+def _validate_discrete_fields(fields: tuple[str, ...]) -> tuple[str, ...]:
+    if not fields:
+        raise SystemExit("error: --fields is empty")
+    missing = [f for f in fields if f not in COMPARE_DTYPE.fields]
+    if missing:
+        raise SystemExit(f"error: unknown compare fields: {', '.join(missing)}")
+
+    floaty = []
+    for f in fields:
+        base = COMPARE_DTYPE.fields[f][0]
+        # Items is a nested struct with floats; treat as non-discrete for this evaluator.
+        if base.fields is not None:
+            floaty.append(f)
+            continue
+        if np.issubdtype(base, np.floating):
+            floaty.append(f)
+            continue
+    if floaty:
+        raise SystemExit(
+            "error: discrete-only evaluator; these fields are non-discrete or structured: "
+            + ", ".join(floaty)
+        )
+    return fields
+
+
+def _first_mismatch(
+    *,
+    out_row: np.void,
+    ref_row: np.void,
+    fields: tuple[str, ...],
+    players: tuple[int, ...],
+) -> str | None:
+    for field in fields:
+        a = out_row[field]
+        b = ref_row[field]
+
+        # Scalar field (e.g., frame_id if requested).
+        if not hasattr(a, "ndim") or a.ndim == 0:
+            if int(a) != int(b):
+                return field
+            continue
+
+        # Per-player fields: compare only selected players.
+        if a.ndim == 1:
+            for p in players:
+                if int(a[p]) != int(b[p]):
+                    return field
+            continue
+
+        # state_flags is expected to be shaped (players, 5); compare all 5 bytes per player.
+        if field == "state_flags":
+            for p in players:
+                for k in range(5):
+                    if int(a[p, k]) != int(b[p, k]):
+                        return field
+            continue
+
+        # Fallback: compare full per-player slices.
+        for p in players:
+            if not np.array_equal(a[p], b[p]):
+                return field
+
+    return None
+
+
+@dataclass(frozen=True)
+class DatasetStreaks:
+    dataset: str
+    num_records: int
+    max_records_used: int
+    players: tuple[int, ...]
+    fields: tuple[str, ...]
+    best_len: int
+    best_start_record: int
+    best_end_record_excl: int
+    best_start_seed_frame_id: int | None
+    best_end_ref_frame_id_inclusive: int | None
+    streak_histogram: dict[int, int]
+    first_mismatch_field_counts: dict[str, int]
+    first_mismatch_field_counts_seeded: dict[str, int]
+
+
+@dataclass(frozen=True)
+class _ScanResult:
+    best_len: int
+    best_start_record: int
+    best_end_record_excl: int
+    streak_histogram: Counter[int]
+    first_mismatch_field_counts: Counter[str]
+    first_mismatch_field_counts_seeded: Counter[str]
+
+
+def _scan_rollout_streaks(
+    *,
+    n: int,
+    reseed_at,
+    attempt_from_current,
+    attempt_seeded_at_record,
+) -> _ScanResult:
+    best_len = 0
+    best_start = 0
+    best_end_excl = 0
+
+    cur_start = 0
+    cur_len = 0
+
+    hist: Counter[int] = Counter()
+    mismatch_fields: Counter[str] = Counter()
+    mismatch_fields_seeded: Counter[str] = Counter()
+
+    needs_seed = True
+    j = 0
+    while j < n:
+        if needs_seed:
+            reseed_at(cur_start)
+            needs_seed = False
+
+        mm = attempt_from_current(j)
+        if mm is None:
+            cur_len += 1
+            if cur_len > best_len:
+                best_len = cur_len
+                best_start = cur_start
+                best_end_excl = cur_start + cur_len
+            j += 1
+            continue
+
+        if cur_len > 0:
+            hist[cur_len] += 1
+        mismatch_fields[mm] += 1
+
+        # Start a new streak at the same record j (reseed-at-j), retry once.
+        cur_start = j
+        cur_len = 0
+
+        mm2 = attempt_seeded_at_record(j)
+        if mm2 is None:
+            cur_len = 1
+            if cur_len > best_len:
+                best_len = cur_len
+                best_start = cur_start
+                best_end_excl = cur_start + cur_len
+            j += 1
+            continue
+
+        mismatch_fields_seeded[mm2] += 1
+
+        # Guard: if it mismatches even when seeded-at-j, advance to j+1.
+        cur_start = j + 1
+        cur_len = 0
+        j += 1
+        needs_seed = True
+
+    if cur_len > 0:
+        hist[cur_len] += 1
+
+    return _ScanResult(
+        best_len=int(best_len),
+        best_start_record=int(best_start),
+        best_end_record_excl=int(best_end_excl),
+        streak_histogram=hist,
+        first_mismatch_field_counts=mismatch_fields,
+        first_mismatch_field_counts_seeded=mismatch_fields_seeded,
+    )
+
+
+def _scan_dataset_streaks(
+    *,
+    dataset_path: Path,
+    ds: Dataset,
+    fields: tuple[str, ...],
+    players: tuple[int, ...],
+    max_records: int,
+    ucf_enabled: bool | None,
+    ucf_cardinals_1_0_enabled: bool | None,
+) -> DatasetStreaks:
+    samples = ds.samples
+    num_records_total = int(samples.shape[0])
+    num_players = int(ds.header["num_players"])
+
+    n = num_records_total
+    if max_records > 0:
+        n = min(n, int(max_records))
+
+    binding = _load_binding()
+    sizes = binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    compare_stride = int(sizes["compare"])
+
+    init_kwargs = {"batch_size": 1, "num_players": num_players}
+    if ucf_enabled is not None:
+        init_kwargs["ucf_enabled"] = int(bool(ucf_enabled))
+    if ucf_cardinals_1_0_enabled is not None:
+        init_kwargs["ucf_cardinals_1_0_enabled"] = int(bool(ucf_cardinals_1_0_enabled))
+    handle = binding.init(**init_kwargs)
+
+    # Preallocated buffers (bytes) that C reads/writes.
+    seed_bytes = np.empty((1, seed_stride), dtype=np.uint8)
+    prev_input_bytes = np.empty((1, input_stride), dtype=np.uint8)
+    input_bytes = np.empty((1, input_stride), dtype=np.uint8)
+    out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
+    out_view = out_compare_bytes.view(COMPARE_DTYPE).reshape(1)
+
+    # Efficient per-record byte slicing without per-step `.tobytes()` allocations.
+    sample_stride = int(samples.dtype.itemsize)
+    samples_u8 = samples.view(np.uint8).reshape(num_records_total, sample_stride)
+    seed_off = int(samples.dtype.fields["seed_t"][1])
+    prev_input_off = int(samples.dtype.fields["prev_input_t"][1])
+    input_off = int(samples.dtype.fields["input_t"][1])
+
+    ref = samples["ref_t1"]
+    seed = samples["seed_t"]
+
+    def reseed_at(j: int) -> None:
+        seed_bytes[0, :] = samples_u8[j, seed_off : seed_off + seed_stride]
+        binding.reseed_seed(handle, seed_bytes)
+
+    def step_and_compare(j: int) -> str | None:
+        prev_input_bytes[0, :] = samples_u8[j, prev_input_off : prev_input_off + input_stride]
+        input_bytes[0, :] = samples_u8[j, input_off : input_off + input_stride]
+        binding.step_input(handle, prev_input_bytes, input_bytes)
+        binding.write_compare(handle, out_compare_bytes)
+        return _first_mismatch(
+            out_row=out_view[0],
+            ref_row=ref[j],
+            fields=fields,
+            players=players,
+        )
+
+    def step_seeded_and_compare(j: int) -> str | None:
+        reseed_at(j)
+        return step_and_compare(j)
+
+    try:
+        scan = _scan_rollout_streaks(
+            n=n,
+            reseed_at=reseed_at,
+            attempt_from_current=step_and_compare,
+            attempt_seeded_at_record=step_seeded_and_compare,
+        )
+    finally:
+        try:
+            binding.destroy(handle)
+        except Exception:
+            pass
+
+    start_seed_frame = None
+    end_ref_frame_incl = None
+    if scan.best_len > 0:
+        try:
+            start_seed_frame = int(seed["frame_id"][scan.best_start_record])
+        except Exception:
+            start_seed_frame = None
+        try:
+            end_ref_frame_incl = int(ref["frame_id"][scan.best_end_record_excl - 1])
+        except Exception:
+            end_ref_frame_incl = None
+
+    return DatasetStreaks(
+        dataset=str(dataset_path),
+        num_records=num_records_total,
+        max_records_used=n,
+        players=players,
+        fields=fields,
+        best_len=int(scan.best_len),
+        best_start_record=int(scan.best_start_record),
+        best_end_record_excl=int(scan.best_end_record_excl),
+        best_start_seed_frame_id=start_seed_frame,
+        best_end_ref_frame_id_inclusive=end_ref_frame_incl,
+        streak_histogram=dict(sorted(scan.streak_histogram.items())),
+        first_mismatch_field_counts=dict(sorted(scan.first_mismatch_field_counts.items())),
+        first_mismatch_field_counts_seeded=dict(sorted(scan.first_mismatch_field_counts_seeded.items())),
+    )
+
+
+def _print_dataset_summary(*, root: Path, s: DatasetStreaks) -> None:
+    rel = str(Path(s.dataset).resolve().relative_to(root))
+    print(f"== {rel} ==")
+    print(
+        "best_len:",
+        s.best_len,
+        "best_records:",
+        f"[{s.best_start_record},{s.best_end_record_excl})",
+        f"(end_excl; len={s.best_len})",
+    )
+    if s.best_start_seed_frame_id is not None and s.best_end_ref_frame_id_inclusive is not None:
+        print(
+            "best_frames:",
+            "start_seed_frame_id=",
+            s.best_start_seed_frame_id,
+            "end_ref_frame_id_inclusive=",
+            s.best_end_ref_frame_id_inclusive,
+        )
+    print("records_used:", f"{s.max_records_used}/{s.num_records}", "players:", ",".join(map(str, s.players)))
+    print("fields:", ",".join(s.fields))
+
+    if s.streak_histogram:
+        pairs = sorted(s.streak_histogram.items(), key=lambda kv: (-kv[1], -kv[0]))[:12]
+        preview = " ".join(f"{k}:{v}" for k, v in pairs)
+        total_streaks = sum(s.streak_histogram.values())
+        print("streak_hist_top:", preview, f"(top12 by count; total_streaks={total_streaks})")
+    else:
+        print("streak_hist_top: (none)")
+
+    if s.first_mismatch_field_counts:
+        pairs = sorted(s.first_mismatch_field_counts.items(), key=lambda kv: (-kv[1], kv[0]))[:12]
+        preview = " ".join(f"{k}:{v}" for k, v in pairs)
+        print("first_mismatch_field_top:", preview)
+    else:
+        print("first_mismatch_field_top: (none)")
+
+    if s.first_mismatch_field_counts_seeded:
+        pairs = sorted(s.first_mismatch_field_counts_seeded.items(), key=lambda kv: (-kv[1], kv[0]))[:12]
+        preview = " ".join(f"{k}:{v}" for k, v in pairs)
+        print("seeded_mismatch_field_top:", preview)
+    else:
+        print("seeded_mismatch_field_top: (none)")
+
+
+def main() -> None:
+    ap = argparse.ArgumentParser(description="Compute longest in-sync rollout streaks over a suite.")
+    ap.add_argument("--suite", required=True, help="Suite JSON path under repo root.")
+    ap.add_argument("--datasets-dir", default="datasets", help="Datasets directory under repo root.")
+    ap.add_argument(
+        "--fields",
+        default="action_id,animation_index,on_ground,hitlag,hitstun,state_flags",
+        help="Comma-separated discrete compare fields (default: %(default)s).",
+    )
+    ap.add_argument(
+        "--players",
+        default=None,
+        help="Comma-separated player indices to compare (default: all players in dataset).",
+    )
+    ap.add_argument("--out", type=Path, default=None, help="Optional JSON output path.")
+    ap.add_argument("--max-records", type=int, default=0, help="Optional cap (0 = no cap).")
+    args = ap.parse_args()
+
+    root = repo_root()
+    suite_path = (root / args.suite).resolve()
+    suite = load_suite(suite_path)
+
+    fields = _validate_discrete_fields(_parse_csv(str(args.fields)))
+
+    missing: list[str] = []
+    dataset_paths: list[Path] = []
+    for entry in suite.replays:
+        ds_path = dataset_path_for_suite_replay(
+            suite_name=suite.name,
+            replay_rel_path=entry.replay,
+            datasets_dir=str(args.datasets_dir),
+        )
+        if not ds_path.exists():
+            missing.append(str(ds_path.relative_to(root)))
+        else:
+            dataset_paths.append(ds_path)
+
+    if missing:
+        print(f"Missing {len(missing)} preprocessed dataset files for suite {suite.name}:")
+        for p in missing:
+            print(f"  {p}")
+        print("Run preprocessing first:")
+        print(f"  uv run python -m tools.slippi.preprocess_suite --suite {args.suite} --datasets-dir {args.datasets_dir}")
+        raise SystemExit(2)
+
+    print(
+        f"suite: {suite.name}  datasets: {len(dataset_paths)}  "
+        f"ucf_enabled: {suite.ucf_enabled}  ucf_cardinals_1_0_enabled: {suite.ucf_cardinals_1_0_enabled}"
+    )
+
+    results: list[DatasetStreaks] = []
+    for ds_path in dataset_paths:
+        ds = read_dataset(str(ds_path))
+        num_players = int(ds.header["num_players"])
+        players = _parse_players(args.players, num_players=num_players)
+        print()
+        s = _scan_dataset_streaks(
+            dataset_path=ds_path,
+            ds=ds,
+            fields=fields,
+            players=players,
+            max_records=int(args.max_records),
+            ucf_enabled=suite.ucf_enabled,
+            ucf_cardinals_1_0_enabled=suite.ucf_cardinals_1_0_enabled,
+        )
+        _print_dataset_summary(root=root, s=s)
+        results.append(s)
+
+    if args.out is not None:
+        args.out.parent.mkdir(parents=True, exist_ok=True)
+        payload = {
+            "suite": suite.name,
+            "suite_path": str(Path(args.suite)),
+            "datasets_dir": str(args.datasets_dir),
+            "ucf_enabled": bool(suite.ucf_enabled),
+            "ucf_cardinals_1_0_enabled": bool(suite.ucf_cardinals_1_0_enabled),
+            "fields": list(fields),
+            "players_csv": None if args.players is None else str(args.players),
+            "max_records": int(args.max_records),
+            "per_dataset": [
+                {
+                    "dataset": str(Path(s.dataset).resolve().relative_to(root)),
+                    "num_records": s.num_records,
+                    "max_records_used": s.max_records_used,
+                    "players": list(s.players),
+                    "best_len": s.best_len,
+                    "best_start_record": s.best_start_record,
+                    "best_end_record_excl": s.best_end_record_excl,
+                    "best_start_seed_frame_id": s.best_start_seed_frame_id,
+                    "best_end_ref_frame_id_inclusive": s.best_end_ref_frame_id_inclusive,
+                    "streak_histogram": s.streak_histogram,
+                    "first_mismatch_field_counts": s.first_mismatch_field_counts,
+                    "first_mismatch_field_counts_seeded": s.first_mismatch_field_counts_seeded,
+                }
+                for s in results
+            ],
+        }
+        args.out.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        print()
+        print(f"wrote: {args.out.resolve().relative_to(root)}")
+
+
+if __name__ == "__main__":
+    main()
