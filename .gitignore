@@ -29,6 +29,7 @@ data/**
 build/
 dist/
 target/
+reports/triage/
 __pycache__/
 *.pyc
 *.so

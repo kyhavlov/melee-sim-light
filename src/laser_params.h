@@ -85,6 +85,12 @@ int laser_params_init(void);
 
 const MslLaserParams* laser_params_get(uint8_t char_id);
 
+// Map an item kind (Slippi `item.type` / GALE01 ItemKind) to the corresponding laser params, or
+// NULL if this item kind is not a supported blaster shot.
+//
+// IMPORTANT: laser_params_init() must have run during batch init.
+const MslLaserParams* laser_params_for_item_type(uint16_t type);
+
 #ifdef __cplusplus
 }  // extern "C"
 #endif

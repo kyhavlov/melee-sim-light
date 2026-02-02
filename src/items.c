@@ -375,18 +375,6 @@ static void blaster_gun_update_from_fighter(MslBatch* batch, int bi, int owner,
   }
 }
 
-static inline const MslLaserParams* laser_params_for_item_type(uint16_t type) {
-  const MslLaserParams* fox = laser_params_get(1);
-  const MslLaserParams* falco = laser_params_get(22);
-  if (fox && fox->shot_itkind == type) {
-    return fox;
-  }
-  if (falco && falco->shot_itkind == type) {
-    return falco;
-  }
-  return NULL;
-}
-
 static inline uint8_t laser_should_shoot_on_frame(const MslLaserParams* lp, uint16_t msid,
                                                   uint16_t frame) {
   if (lp == NULL) {
@@ -715,6 +703,7 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
       }
 
       const size_t d_idx = msl_idx_player(bi, def);
+
       const size_t cd_i = ii * (size_t)MSL_MAX_PLAYERS + (size_t)def;
       const uint16_t def_iid = batch->state.instance_id[d_idx];
       if (batch->state.item_hitlist_cd[cd_i] != 0) {
@@ -927,8 +916,9 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
       const uint16_t bkb = (laser_state == 0u) ? lp->bkb : lp->state1_bkb;
       const uint8_t element = (laser_state == 0u) ? lp->element : lp->state1_element;
       combat_apply_item_hit(batch, bi, owner, def, batch->state.item_attack_id[ii],
-                            batch->state.item_attack_instance[ii], dmg, angle, kbg, wsk, bkb,
-                            hit_hurt_height, element);
+                            batch->state.item_attack_instance[ii], batch->state.item_instance_id[ii],
+                            batch->state.item_type[ii], dmg, angle, kbg, wsk, bkb, hit_hurt_height,
+                            element);
       batch->state.item_hitlist_cd[cd_i] = 0xFFFFu;
       batch->state.item_hitlist_victim_iid[cd_i] = def_iid;
       item_slot_clear(batch, ii);

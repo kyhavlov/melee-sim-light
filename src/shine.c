@@ -12,6 +12,7 @@
 #include "common_params.h"
 #include "input_axis.h"
 #include "jump_input.h"
+#include "hit_status_tables.h"
 #include "special_msids.h"
 
 // Character id mapping follows Slippi post-frame `character` (GALE01):
@@ -179,6 +180,33 @@ static inline void enter_shine_ground_start(MslBatch* batch, size_t idx,
   batch->state.action_id[idx] = (uint16_t)MSL_ACT_FX_SPECIAL_LW_START;
   batch->state.animation_index[idx] = (uint32_t)ms->speciallw_ground_start;
   msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+
+  // Decomp: ftFx_SpecialLw_Enter / ftFx_SpecialAirLw_Enter call Fighter_ChangeMotionState(...)
+  // and then immediately call ftAnim_8006EBA4(gobj), which runs the fighter cmd script for the
+  // new motion state (ftAction_80073240) and can set move-induced hit status (fp->x1988) via
+  // opcode 26 (ftColl_8007B62C) on the entry frame.
+  // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c::ftFx_SpecialLw_Enter
+  // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c::ftFx_SpecialAirLw_Enter
+  //
+  // The general hurtbox_state overwrite rule in hurtboxes_refresh() defers x1988 on entry frames
+  // for post-Anim transitions; Shine Start is a known exception with a decomp anchor, so apply
+  // the table-derived hit status immediately here.
+  uint8_t hit_status = 0;
+  if (batch->debug_hit_status_override != NULL) {
+    const uint8_t ov = batch->debug_hit_status_override[idx];
+    if (ov != 0xFFu) {
+      hit_status = ov;
+    } else {
+      (void)hit_status_get(batch->state.char_id[idx], (uint16_t)ms->speciallw_ground_start, 0u,
+                           &hit_status);
+    }
+  } else {
+    (void)hit_status_get(batch->state.char_id[idx], (uint16_t)ms->speciallw_ground_start, 0u,
+                         &hit_status);
+  }
+  if (hit_status != 0u) {
+    batch->state.hurtbox_state[idx] = hit_status;
+  }
 }
 
 static inline void enter_shine_air_start(MslBatch* batch, size_t idx, const MslCharParams* ch,
@@ -195,6 +223,24 @@ static inline void enter_shine_air_start(MslBatch* batch, size_t idx, const MslC
   batch->state.action_id[idx] = (uint16_t)MSL_ACT_FX_SPECIAL_AIR_LW_START;
   batch->state.animation_index[idx] = (uint32_t)ms->speciallw_air_start;
   msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+
+  // See enter_shine_ground_start() for the decomp-backed "run cmd script on entry" exception.
+  uint8_t hit_status = 0;
+  if (batch->debug_hit_status_override != NULL) {
+    const uint8_t ov = batch->debug_hit_status_override[idx];
+    if (ov != 0xFFu) {
+      hit_status = ov;
+    } else {
+      (void)hit_status_get(batch->state.char_id[idx], (uint16_t)ms->speciallw_air_start, 0u,
+                           &hit_status);
+    }
+  } else {
+    (void)hit_status_get(batch->state.char_id[idx], (uint16_t)ms->speciallw_air_start, 0u,
+                         &hit_status);
+  }
+  if (hit_status != 0u) {
+    batch->state.hurtbox_state[idx] = hit_status;
+  }
 }
 
 static inline void enter_shine_ground_loop(MslBatch* batch, size_t idx, const MslSpecialMsids* ms) {

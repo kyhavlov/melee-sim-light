@@ -17,6 +17,7 @@
 #include "hitboxes_tables.h"
 #include "hit_status_tables.h"
 #include "hitlist.h"
+#include "laser_params.h"
 #include "move_tables.h"
 #include "staling.h"
 
@@ -1037,7 +1038,8 @@ static inline void combat_mutations_pass1_future_apply_body_hit(MslBatch* batch,
 }
 
 void combat_apply_item_hit(MslBatch* batch, int batch_index, int attacker, int defender,
-                           uint16_t item_attack_id, uint16_t item_attack_instance, float damage,
+                           uint16_t item_attack_id, uint16_t item_attack_instance,
+                           uint16_t item_instance_id, uint16_t item_type, float damage,
                            uint16_t angle, uint16_t kbg, uint16_t wsk, uint16_t bkb,
                            uint8_t defender_hurt_height, uint8_t element) {
   if (batch == NULL) {
@@ -1096,6 +1098,35 @@ void combat_apply_item_hit(MslBatch* batch, int batch_index, int attacker, int d
   batch->state.percent_temp[d_idx] += dmg_f;
   const float dmg_temp = batch->state.percent_temp[d_idx];
 
+  // Special-case: non-flinch laser hits.
+  //
+  // Scope gate: only apply this rule to item kinds that are known (via ISO-extracted MSLLASR1
+  // lasers.bin) to be Fox/Falco blaster shots.
+  const MslLaserParams* lp = laser_params_for_item_type(item_type);
+  if (lp != NULL && kbg == 0u && wsk == 0u && bkb == 0u) {
+    // Data-driven inference:
+    // - For Fox blaster shots, the ISO-extracted hitbox params (MSLLASR1) have all KB terms set to
+    //   0 (kbg/wsk/bkb), and the replay ref commonly shows percent increasing with no hitlag/hitstun
+    //   and no damage-state entry.
+    //
+    // TODO(decomp): extract and model an explicit "no flinch / no hitlag" item hitbox flag or
+    // multiplier from the article hitbox script / collision intake path, instead of keying off the
+    // triple-0 KB params heuristic.
+    //
+    // Suite target: allow percent/attribution/staling updates while leaving defender state unchanged.
+    batch->state.instance_hit_by[d_idx] = item_instance_id;
+    batch->state.last_hit_by[d_idx] = (uint8_t)attacker;
+
+    // Stale-move queue update on successful damaging BODY hit (attacker-side).
+    // Decomp: refs/melee/src/melee/pl/plstale.c::plStale_UpdateStaleMovesFromItem
+    staling_queue_update(batch, a_idx, item_attack_id, item_attack_instance);
+
+    // Combo count + last-attack tracking (attacker-side).
+    // Decomp: refs/melee/src/melee/ft/ftcoll.c::ftColl_8007646C
+    combat_combo_ftColl_800763C0(batch, a_idx, defender, d_idx, item_attack_id);
+    return;
+  }
+
   // Hitlag (defender only): for item projectiles, the "attacker" is the item object, not the owning
   // fighter. The defender fighter still enters hitlag; the owning fighter does not.
   //
@@ -1148,7 +1179,7 @@ void combat_apply_item_hit(MslBatch* batch, int batch_index, int attacker, int d
                             kb_applied,
                             kb_angle_rad);
 
-  batch->state.instance_hit_by[d_idx] = batch->state.instance_id[a_idx];
+  batch->state.instance_hit_by[d_idx] = item_instance_id;
   batch->state.last_hit_by[d_idx] = (uint8_t)attacker;
 
   // Stale-move queue update on successful damaging BODY hit (attacker-side).
@@ -1640,7 +1671,6 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
         int max_int_dmg = 0;
         int sel_int_dmg = 0;
         int8_t sel_shield_dmg_s8 = 0;
-        uint8_t sel_hb_id = 0;
         uint8_t sel_hit_group = 0;
         uint8_t sel_rehit_frames = 0;
 
@@ -1729,7 +1759,6 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
           if (sel_int_dmg == 0) {
             sel_int_dmg = int_dmg;
             sel_shield_dmg_s8 = batch->state.hitbox_shield_damage[hb_i];
-            sel_hb_id = (uint8_t)hb_id;
             sel_hit_group = hit_group;
             sel_rehit_frames = hitlist_rehit_frames_from_u16_7(batch->state.hitbox_u16_7[hb_i]);
           }

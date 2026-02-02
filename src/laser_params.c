@@ -236,3 +236,19 @@ const MslLaserParams* laser_params_get(uint8_t char_id) {
   }
   return &g_tbl.by_char[char_id];
 }
+
+const MslLaserParams* laser_params_for_item_type(uint16_t type) {
+  // Current target domain: Fox/Falco only. These are the same char ids used throughout the
+  // extracted tables (e.g. data/anims/fox.bin uses char_id=1).
+  enum { MSL_CHAR_FOX = 1, MSL_CHAR_FALCO = 22 };
+
+  const MslLaserParams* fox = laser_params_get((uint8_t)MSL_CHAR_FOX);
+  if (fox && fox->shot_itkind == type) {
+    return fox;
+  }
+  const MslLaserParams* falco = laser_params_get((uint8_t)MSL_CHAR_FALCO);
+  if (falco && falco->shot_itkind == type) {
+    return falco;
+  }
+  return NULL;
+}

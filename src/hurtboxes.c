@@ -107,6 +107,12 @@ void hurtboxes_refresh(MslBatch* batch) {
         // when we can observe that:
         // - the fighter changed action state this step (prev_action_id != action_id), and
         // - the new state's anim timebase is still at integer frame 0 (no Anim proc yet).
+        //
+        // NOTE(shine_entry): Some motion-state entry helpers call ftAnim_8006EBA4 immediately
+        // after Fighter_ChangeMotionState, meaning the new state's cmd script (and opcode 26 hit
+        // status) can run on the entry frame even though the transition happened post-Anim.
+        // Shine Start (Fox/Falco SpecialLwStart) is a decomp-anchored example and applies the
+        // entry-frame hit status directly during entry (see src/shine.c).
         // docs/DECOMP_PROC_ORDER.md (prio 1 vs prio 3).
         const uint16_t cur_action = batch->state.action_id[idx];
         if (!(frame == 0u && batch->state.prev_action_id[idx] != cur_action)) {

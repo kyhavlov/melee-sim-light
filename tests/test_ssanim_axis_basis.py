@@ -68,13 +68,13 @@ def test_ssanim_topn_is_identity_so_facing_is_not_baked(char_key: str, char_id: 
 
 
 @pytest.mark.integration
-def test_pose_facing_is_mirror_x_only_for_hitbox_centers() -> None:
-    """Distinguishes the current sim-facing policy from a true Y-rotation.
+def test_pose_facing_is_root_roty90_for_hitbox_centers() -> None:
+    """Asserts the current sim-facing policy for pose-derived hitbox centers.
 
-    The current C-core policy for pose-derived primitives mirrors only X in pose space and leaves Z
-    unchanged (see src/hitboxes.c). This test:
+    The current C-core policy applies the decomp-shaped root rotY90 (mixing X/Z) to pose-derived
+    primitives (see src/hitboxes.c). This test:
     - selects a hitbox whose extracted bone-local z offset is non-zero, and
-    - proves that flipping `seed.facing` mirrors only X about `pos_x` and keeps Z bitwise-identical.
+    - proves that flipping `seed.facing` mirrors both X (about pos_x) and Z (about pos_z) bitwise.
     """
     import msl_binding
 
@@ -178,16 +178,18 @@ def test_pose_facing_is_mirror_x_only_for_hitbox_centers() -> None:
     finally:
         msl_binding.destroy(handle)
 
-    # C-core policy: local = pose_mtx * offset; local.x *= facing_dir; world = pos + local.
+    # C-core policy (decomp-shaped): local = pose_mtx * offset; local = rotY90(local, facing_dir);
+    # world = pos + local.
     #
     # Therefore, for a fixed (pos, pose, offset):
-    # - X is mirrored about pos_x
+    # - X is mirrored about pos_x (because it comes from +/-local.z)
     # - Y is unchanged
-    # - Z is unchanged
+    # - Z is mirrored about pos_z (because it comes from -/+local.x)
     rx, ry, rz = right[0], right[1], right[2]
     lx, ly, lz = left[0], left[1], left[2]
 
     expected_lx = np.float32(np.float32(2.0) * pos_x - rx)
     assert np.array_equal(np.array([lx], dtype=np.float32).view(np.uint32), np.array([expected_lx], dtype=np.float32).view(np.uint32))
     assert np.array_equal(np.array([ly], dtype=np.float32).view(np.uint32), np.array([ry], dtype=np.float32).view(np.uint32))
-    assert np.array_equal(np.array([lz], dtype=np.float32).view(np.uint32), np.array([rz], dtype=np.float32).view(np.uint32))
+    expected_lz = np.float32(np.float32(2.0) * pos_z - rz)
+    assert np.array_equal(np.array([lz], dtype=np.float32).view(np.uint32), np.array([expected_lz], dtype=np.float32).view(np.uint32))

@@ -150,10 +150,21 @@ def test_hitboxes_refresh_matches_pose_bytes() -> None:
 
     pos_x = np.float32(123.25)
     pos_y = np.float32(-45.5)
+    pos_z = np.float32(9.75)
 
     c = _mtx34_mul_point(py_m, np.array([ev["x"], ev["y"], ev["z"]], dtype=np.float32))
+
+    # Decomp-shaped root facing rotation (rotY = M_PI_2 * facing_dir), mixing X/Z.
+    # See src/hitboxes.c and refs/melee/src/melee/ft/fighter.c (ftPartSetRotY).
+    facing_dir = np.float32(1.0)
+    cx, cy, cz = c[0], c[1], c[2]
+    c[0] = np.float32(facing_dir * cz)
+    c[1] = np.float32(cy)
+    c[2] = np.float32(-facing_dir * cx)
+
     c[0] = np.float32(c[0] + pos_x)
     c[1] = np.float32(c[1] + pos_y)
+    c[2] = np.float32(c[2] + pos_z)
 
     ref_row = np.array(
         [c[0], c[1], c[2], ev["radius"], ev["damage"]],
@@ -173,9 +184,11 @@ def test_hitboxes_refresh_matches_pose_bytes() -> None:
     seed["char_id"][0, 1] = np.uint8(1)
     # Keep action_update/match_flow out of the way; we only care about pose-driven refresh output.
     seed["action_id"][0, :2] = np.uint16(0xFFFF)
-    seed["facing"][0, :2] = np.uint8(1)  # right (pose-space X mirror parity)
+    seed["facing"][0, :2] = np.uint8(1)  # right (decomp-shaped root rotY90)
     seed["pos_x"][0, 0] = pos_x
     seed["pos_y"][0, 0] = pos_y
+    seed["pos_z"][0, 0] = pos_z
+    seed["fighter_scale_y"][0, :2] = np.float32(1.0)
     seed["action_frame"][0, 0] = np.int16(frame)
     seed["anim_frame_f32"][0, 0] = np.float32(frame)
     seed["animation_index"][0, 0] = np.uint32(msid)

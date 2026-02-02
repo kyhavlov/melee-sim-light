@@ -280,23 +280,31 @@ void hitboxes_refresh(MslBatch* batch) {
         //
         // Our SSANIM01 v3 pose matrices are extracted in a single canonical orientation and do
         // not include the runtime facing rotation or fp->x34_scale. We apply scale in pose space
-        // and *approximate* facing by mirroring only pose-space X (`x *= facing_dir`).
+        // and apply the same decomp-shaped root facing rotation used elsewhere in the sim
+        // (mixing X/Z).
         //
-        // Approximation note:
-        // - A true facing transform is a Y-axis rotation, which mixes X/Z. We do *not* rotate Z
-        //   here; we only reflect X. This matches the sim's current 2.5D convention (stage/ground
-        //   collision is X/Y, and other pose-derived offsets like shields/ECB already apply facing
-        //   as an X sign). If we later need depth-accurate X/Z facing, replace this with a proper
-        //   pose-space (x,z) rotation once the SSANIM axis mapping is fully nailed down.
+        // Decomp: the root part is rotated about Y by +/-90° based on `fp->facing_dir`:
+        // `ftPartSetRotY(fp, 0, (M_PI_2 * fp->facing_dir))`.
+        // refs/melee/src/melee/ft/fighter.c
         //
-        // Current policy:
-        //   local = (pose_mtx * offset) * scale_y; local.x *= facing_dir; world = pos + local.
+        // IMPORTANT: This must match hurtboxes_refresh() (hurtcaps) and other pose-derived geometry
+        // (e.g. blaster spawn offsets). Inconsistent facing transforms can create suite-visible
+        // false-positive BODY overlaps (hitlag/hitstun applied when ref has none).
+        //
+        // Policy:
+        //   local = (pose_mtx * offset) * scale_y; local = rotY90(local, facing_dir); world = pos + local.
         const float off[3] = {def[hi].x, def[hi].y, def[hi].z};
         float cx = 0.0f, cy = 0.0f, cz = 0.0f;
         msl_mtx34_mul_point(m, off, &cx, &cy, &cz);
-        cx *= (scale_y * facing_dir);
+        cx *= scale_y;
         cy *= scale_y;
         cz *= scale_y;
+
+        // Decomp: apply root facing rotation (rotY = M_PI_2 * facing_dir), mixing X/Z.
+        const float cx_rot_x = facing_dir * cz;
+        const float cx_rot_z = -facing_dir * cx;
+        cx = cx_rot_x;
+        cz = cx_rot_z;
         cx += pos_x;
         cy += pos_y;
         cz += pos_z;

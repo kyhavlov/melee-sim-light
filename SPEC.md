@@ -158,11 +158,13 @@ and decomp-motivated rather than arbitrary heuristics.
 #### Facing rotation note (world primitives)
 
 Decomp applies fighter facing by rotating the root part about Y (e.g. `ftPartSetRotY(fp, 0, (M_PI_2 * fp->facing_dir))`),
-which would mix X/Z for pose-derived world primitives (hurtcaps, hitboxes, shields). In this project we currently treat the
-game as effectively 2.5D and apply facing as “mirror X only” for these pose-derived primitives.
+which mixes X/Z for pose-derived world primitives.
 
-Revisit true Y-rotation only after we prove the SSANIM axis mapping end-to-end for matrices + offset tables (see
-`docs/SSANIM_AXIS_BASIS.md`).
+**Current sim policy (v1):**
+- Pose-derived **hitboxes** and **hurtcaps** apply the same decomp-shaped root rotY90 (X/Z mix) for facing, for consistency
+  across combat geometry and item spawn transforms.
+- This is **not** an SSANIM axis remap: we are only applying the decomp-facing root rotation; the extracted pose matrices
+  remain in the same canonical basis (see `docs/SSANIM_AXIS_BASIS.md`).
 
 ### `state_flags` Ownership (seed vs derived)
 

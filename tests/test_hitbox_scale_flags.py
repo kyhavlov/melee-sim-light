@@ -213,13 +213,17 @@ def test_hitboxes_refresh_applies_fighter_scale_y_and_respects_ignore_flag() -> 
     assert int(np.sum(p0_enabled != np.float32(0.0))) == 2
     assert int(np.sum(p1_enabled != np.float32(0.0))) == 2
 
-    # hb0: scales center and radius by scale_y; facing mirrors X only.
-    assert np.isclose(p0[0, 0], np.float32(100.0 + 2.0 * 1.5))  # +X
-    assert np.isclose(p1[0, 0], np.float32(100.0 - 2.0 * 1.5))  # -X
+    # hb0: scales center and radius by scale_y; facing applies decomp-shaped root rotY90, mixing X/Z.
+    #
+    # With identity pose, local = (x,y,z) * scale_y, then:
+    # - facing right:  (x,z) -> ( z, -x)
+    # - facing left:   (x,z) -> (-z,  x)
+    assert np.isclose(p0[0, 0], np.float32(100.0 + 2.0 * 3.0))  # +z -> +x
+    assert np.isclose(p1[0, 0], np.float32(100.0 - 2.0 * 3.0))  # -z -> +x
     assert np.isclose(p0[0, 1], np.float32(-50.0 + 2.0 * 2.0))
-    assert np.isclose(p0[0, 2], np.float32(0.25 + 2.0 * 3.0))
+    assert np.isclose(p0[0, 2], np.float32(0.25 - 2.0 * 1.5))  # -x -> +z
     assert np.isclose(p0[0, 3], np.float32(4.0 * 2.0))
 
     # hb1: center still scales (pose space), but radius does not (ignore flag).
-    assert np.isclose(p0[1, 0], np.float32(100.0 + 2.0 * 1.5))
+    assert np.isclose(p0[1, 0], np.float32(100.0 + 2.0 * 3.0))
     assert np.isclose(p0[1, 3], np.float32(4.0))
