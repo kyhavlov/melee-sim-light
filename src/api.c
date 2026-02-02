@@ -277,6 +277,7 @@ int msl_batch_reseed_seed(MslBatch* batch, const uint8_t* seed_bytes, size_t see
       batch->state.tilt_timer_x[idx] = seed->tilt_timer_x[p];
       batch->state.tilt_timer_y[idx] = seed->tilt_timer_y[p];
       batch->state.fall_fast[idx] = seed->fall_fast[p] ? 1 : 0;
+      batch->state.run_x0[idx] = seed->run_x0[p];
       batch->state.ledge_cooldown[idx] = seed->ledge_cooldown[p];
       batch->state.ledge_side[idx] = -1;
       // FallSpecial xC mode is not exposed by Slippi directly; derive it deterministically from
@@ -308,6 +309,7 @@ int msl_batch_reseed_seed(MslBatch* batch, const uint8_t* seed_bytes, size_t see
       }
       batch->state.turn_frames_to_turn[idx] = seed->turn_frames_to_turn[p];
       batch->state.turn_has_turned[idx] = seed->turn_has_turned[p];
+      batch->state.turn_x8[idx] = seed->turn_x8[p];
       batch->state.lr_press_timer[idx] = seed->lr_press_timer[p];
       batch->state.x672_input_timer[idx] = seed->x672_input_timer[p];
       batch->state.x673[idx] = seed->x673[p];

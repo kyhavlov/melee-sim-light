@@ -884,9 +884,9 @@ def derive_turn_internals(
     turn_frames: np.ndarray,
     act_turn: int,
     act_turn_run: int,
-) -> tuple[np.ndarray, np.ndarray]:
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
-    Derive TURN internals (`frames_to_turn`, `has_turned`) per frame from replay history.
+    Derive TURN internals (`frames_to_turn`, `has_turned`, `x8`) per frame from replay history.
 
     Decomp reference: refs/melee/src/melee/ft/chara/ftCommon/ftCo_Turn.c:56-88.
 
@@ -910,9 +910,11 @@ def derive_turn_internals(
     n = int(a.size)
     out_frames = np.zeros(n, dtype=np.uint8)
     out_has = np.zeros(n, dtype=np.uint8)
+    out_x8 = np.zeros(n, dtype=np.int8)
 
     frames_to_turn = 0
     has_turned = 0
+    x8 = 0
     prev_in_turn = False
 
     dash_max = int(dash_flick_tilt_max_frames)
@@ -920,15 +922,18 @@ def derive_turn_internals(
 
     for i in range(n):
         cur_act = int(a[i])
-        cur_in_turn = cur_act in (act_turn, act_turn_run)
+        # Decomp: fp->mv.co.turn.* is used by AS_Turn (not AS_TurnRun).
+        # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Turn.c
+        cur_in_turn = cur_act == act_turn
         if not cur_in_turn:
             frames_to_turn = 0
             has_turned = 0
+            x8 = 0
             prev_in_turn = False
             continue
 
         if not prev_in_turn:
-            # TURN entry (action transition into TURN/TURN_RUN).
+            # TURN entry (action transition into TURN).
             #
             # Determine standing turn vs smash turn (dash-flick opposite-facing) using current input
             # and the previous frame's facing_dir (causal).
@@ -949,8 +954,17 @@ def derive_turn_internals(
             if frames_to_turn > 0xFE:
                 frames_to_turn = 0xFE
             has_turned = 0
+            # Decomp:
+            # - Basic Turn: x8 init is 0 (ftCo_Turn_Enter arg3=0.0).
+            # - Smash Turn: ftCo_Turn_Enter_Smash sets x8 = facing_dir (non-zero).
+            # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Turn.c::{ftCo_Turn_Enter_Basic,ftCo_Turn_Enter_Smash}
+            if is_smash:
+                x8 = 1 if facing_dir > 0 else -1
+            else:
+                x8 = 0
             out_frames[i] = np.uint8(frames_to_turn)
             out_has[i] = np.uint8(has_turned)
+            out_x8[i] = np.int8(x8)
             prev_in_turn = True
             continue
 
@@ -960,11 +974,82 @@ def derive_turn_internals(
         elif not has_turned:
             has_turned = 1
 
+        # Apply ftCo_Turn_IASA's fn_800C9C2C latch update (post-frame snapshot semantics).
+        # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Turn.c::fn_800C9C2C
+        facing_dir_i = np.float32(1.0 if int(facing_u8[i]) else -1.0)
+        facing_after = facing_dir_i if has_turned else -facing_dir_i
+        if (stick_x[i] * facing_after) >= dash_abs and int(ttx[i]) < dash_max:
+            x8 = 1 if facing_after > 0 else -1
+
         out_frames[i] = np.uint8(frames_to_turn)
         out_has[i] = np.uint8(has_turned)
+        out_x8[i] = np.int8(x8)
         prev_in_turn = True
 
-    return out_frames, out_has
+    return out_frames, out_has, out_x8
+
+
+def derive_run_x0(
+    *,
+    action_id: np.ndarray,
+    hitlag_u16: np.ndarray,
+    run_x0_init_x430: float,
+    act_run: int,
+    act_run_direct: int,
+    act_turn_run: int,
+) -> np.ndarray:
+    """
+    Derive Run IASA lockout (`fp->mv.co.run.x0`) per post-frame from replay history.
+
+    Decomp:
+    - `fp->mv.co.run.x0` is initialized by ftCo_Run_Enter_Full (arg0).
+      refs/melee/src/melee/ft/chara/ftCommon/ftCo_Run.c::ftCo_Run_Enter_Full
+    - It is decremented by 1.0 each frame in Run_Anim.
+      refs/melee/src/melee/ft/chara/ftCommon/ftCo_Run.c::ftCo_Run_Anim
+    - It gates TurnRun/RunBrake in Run_IASA:
+      refs/melee/src/melee/ft/chara/ftCommon/ftCo_Run.c::ftCo_Run_IASA
+
+    Suite-relevant entry:
+    - TurnRun_Anim enters Run via fn_800CA644, which passes p_ftCommonData->x430 as arg0.
+      refs/melee/src/melee/ft/chara/ftCommon/ftCo_TurnRun.c::ftCo_TurnRun_Anim
+      refs/melee/src/melee/ft/chara/ftCommon/ftCo_Run.c::fn_800CA644
+
+    Seed representation:
+    - Store a reseed-friendly u8 countdown (clamped to 0..255).
+    - Interpret it as "frames remaining while x0 > 0" for the simulator's Run IASA gate.
+    """
+    a = np.asarray(action_id, dtype=np.uint16).reshape(-1)
+    hitlag = np.asarray(hitlag_u16, dtype=np.uint16).reshape(-1)
+    n = int(a.size)
+    out = np.zeros(n, dtype=np.uint8)
+    if n == 0:
+        return out
+
+    init = int(run_x0_init_x430)
+    init = int(np.clip(init, 0, 255))
+
+    for i in range(1, n):
+        prev_a = int(a[i - 1])
+        cur_a = int(a[i])
+        prev_x0 = int(out[i - 1])
+
+        x0 = 0
+        if cur_a == act_run or cur_a == act_run_direct:
+            if prev_a == act_turn_run:
+                # TurnRun -> Run: ftCo_Run_Enter called via fn_800CA644 with arg0=p_ftCommonData->x430.
+                x0 = init
+            elif prev_a == cur_a:
+                x0 = prev_x0
+                # Decrement once per frame when not in hitlag (Run_Anim is skipped under hitlag).
+                if int(hitlag[i - 1]) == 0 and x0 > 0:
+                    x0 -= 1
+            else:
+                # Other Run entries (e.g. Dash->Run via fn_800CA5F0) initialize x0=0.
+                x0 = 0
+
+        out[i] = np.uint8(x0)
+
+    return out
 
 
 def derive_kneebend_internals(

@@ -224,6 +224,17 @@ typedef struct MslSeed {
   uint8_t tilt_timer_y[MSL_MAX_PLAYERS];  // fp->x671_timer_lstick_tilt_y
   // Decomp: refs/melee/src/melee/ft/ftcommon.c:505-520 (ftCommon_CheckFallFast)
   uint8_t fall_fast[MSL_MAX_PLAYERS];  // fp->fall_fast (bool)
+  // Run IASA lockout countdown (seeded; decomp-shaped).
+  //
+  // Decomp:
+  // - Stored at fp->mv.co.run.x0 (float).
+  // - Decremented by 1.0 each frame in ftCo_Run_Anim.
+  // - Gates TurnRun/RunBrake in ftCo_Run_IASA (if x0 > 0, return early before those checks).
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Run.c::{ftCo_Run_Anim,ftCo_Run_IASA}
+  //
+  // Seed representation:
+  // - Store a reseed-friendly u8 countdown (clamped to 0..255) representing (mv.co.run.x0 > 0).
+  uint8_t run_x0[MSL_MAX_PLAYERS];
   // Ledge grab cooldown timer (seeded; decomp-shaped).
   // Decomp: fp->x2064_ledgeCooldown decremented each frame under !hitlag.
   // refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate
@@ -234,6 +245,19 @@ typedef struct MslSeed {
   // Decomp: refs/melee/src/melee/ft/chara/ftCommon/ftCo_Turn.c:56-88 (ftCo_Turn_Anim_Inner)
   uint8_t turn_frames_to_turn[MSL_MAX_PLAYERS];  // fp->mv.co.turn.frames_to_turn
   uint8_t turn_has_turned[MSL_MAX_PLAYERS];      // fp->mv.co.turn.has_turned
+  // Turn dash-out latch (seeded; decomp-shaped).
+  //
+  // Decomp:
+  // - fp->mv.co.turn.x8 is set by fn_800C9C2C when:
+  //     (lstick.x * facing_after >= p_ftCommonData->x3C) &&
+  //     (x670_timer_lstick_tilt_x < p_ftCommonData->x40)
+  // - It is consumed by ftCo_Turn_IASA as a boolean gate to allow Turn->Dash when the turn
+  //   completes (`just_turned && x8`).
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Turn.c::{ftCo_Turn_IASA,fn_800C9C2C}
+  //
+  // Seed representation:
+  // - Store the sign of x8 as i8: -1/0/+1.
+  int8_t turn_x8[MSL_MAX_PLAYERS];
   // Decomp: refs/melee/src/melee/ft/fighter.c:2078-2086 (x67F updates each frame).
   uint8_t lr_press_timer[MSL_MAX_PLAYERS];  // fp->x67F (frames since L/R press; saturates at 0xFF)
   // Decomp: refs/melee/src/melee/ft/fighter.c:2020-2050 (x672 updates each frame).

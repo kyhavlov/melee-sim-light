@@ -429,6 +429,7 @@ def _main_impl(args) -> None:
         derive_guard_reflect_timer_x14,
         derive_guard_release_lockout_and_lightshield,
         derive_guard_tilt_state,
+        derive_run_x0,
         load_shield_tilt_table_meta,
         compute_tilt_timer_axis_pre_post,
         compute_tilt_timer_y_pre_post_with_fall_fast,
@@ -575,6 +576,8 @@ def _main_impl(args) -> None:
     act_turn = 0x0012
     act_turn_run = 0x0013
     act_dash = 0x0014
+    act_run = 0x0015
+    act_run_direct = 0x0016
     act_kneebend = 0x0018
     act_jump_f = 0x0019
     act_jump_b = 0x001A
@@ -989,6 +992,15 @@ def _main_impl(args) -> None:
         samples["seed_t"]["tilt_timer_x"][:, slot] = tilt_timer_x_post[:-1]
         samples["seed_t"]["tilt_timer_y"][:, slot] = tilt_timer_y_post[:-1]
         samples["seed_t"]["fall_fast"][:, slot] = fall_fast_post[:-1]
+        run_x0 = derive_run_x0(
+            action_id=post_state,
+            hitlag_u16=post_hitlag,
+            run_x0_init_x430=float(common["run_x0_init_x430"]),
+            act_run=act_run,
+            act_run_direct=act_run_direct,
+            act_turn_run=act_turn_run,
+        )
+        samples["seed_t"]["run_x0"][:, slot] = run_x0[:-1]
         ledge_cooldown = _derive_ledge_cooldown(action_id_u16=post_state, hitlag_u16=post_hitlag, common=common)
         samples["seed_t"]["ledge_cooldown"][:, slot] = ledge_cooldown[:-1]
         samples["seed_t"]["lr_press_timer"][:, slot] = lr_press_timer[:-1]
@@ -1102,9 +1114,9 @@ def _main_impl(args) -> None:
         samples["seed_t"]["kneebend_jump_input"][:, slot] = kb_jump_in[:-1]
         samples["seed_t"]["kneebend_is_short_hop"][:, slot] = kb_short[:-1]
 
-        # TURN internals are only meaningful in TURN/TURN_RUN frames; otherwise seed 0.
+        # TURN internals are only meaningful in TURN frames; otherwise seed 0.
         turn_frames = turn_frames_lut[post_char]
-        turn_frames_to_turn, turn_has_turned = derive_turn_internals(
+        turn_frames_to_turn, turn_has_turned, turn_x8 = derive_turn_internals(
             action_id=post_state,
             facing=post_dir,
             stick_x_unit=stick_x,
@@ -1118,6 +1130,7 @@ def _main_impl(args) -> None:
 
         samples["seed_t"]["turn_frames_to_turn"][:, slot] = turn_frames_to_turn[:-1]
         samples["seed_t"]["turn_has_turned"][:, slot] = turn_has_turned[:-1]
+        samples["seed_t"]["turn_x8"][:, slot] = turn_x8[:-1]
 
     # Items are global per frame.
     items_fixed = _fill_items_fixed(frames, n_frames)

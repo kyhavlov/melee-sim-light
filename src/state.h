@@ -146,6 +146,11 @@ typedef struct MslStateSoA {
   uint8_t* tilt_timer_x;  // fp->x670_timer_lstick_tilt_x (refs/melee/src/melee/ft/fighter.c)
   uint8_t* tilt_timer_y;  // fp->x671_timer_lstick_tilt_y (refs/melee/src/melee/ft/fighter.c)
   uint8_t* fall_fast;     // fp->fall_fast (refs/melee/src/melee/ft/ftcommon.c:505-520)
+  // Run IASA lockout countdown (decomp: fp->mv.co.run.x0).
+  // - Decremented in Run_Anim.
+  // - Gates TurnRun/RunBrake in Run_IASA.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Run.c::{ftCo_Run_Anim,ftCo_Run_IASA}
+  uint8_t* run_x0;  // [batch * players], clamped to 0..255
   // Cliff / ledge internals (FD v1).
   // - ledge_side: -1 = none, 0 = left, 1 = right.
   // - stage_ledge_occupant_*: per-env occupant port, or -1.
@@ -159,6 +164,9 @@ typedef struct MslStateSoA {
   uint8_t* fallspecial_xc;       // fp->mv.co.fallspecial.xC (arg1 to ftCo_80096900)
   uint8_t* turn_has_turned;      // fp->mv.co.turn.has_turned (refs/melee/.../ftCo_Turn.c:39-44)
   uint8_t* turn_frames_to_turn;  // fp->mv.co.turn.frames_to_turn (refs/melee/.../ftCo_Turn.c:39-44)
+  // Turn dash-out latch (decomp: fp->mv.co.turn.x8).
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Turn.c::{ftCo_Turn_IASA,fn_800C9C2C}
+  int8_t* turn_x8;  // -1/0/+1
   uint8_t* lr_press_timer;       // fp->x67F (refs/melee/src/melee/ft/fighter.c:2078-2086)
   uint8_t*
       x672_input_timer;  // fp->x672_input_timer_counter (refs/melee/src/melee/ft/fighter.c:2020-2050)

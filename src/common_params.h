@@ -30,7 +30,12 @@ typedef struct MslCommonParams {
 
   // Turn / run thresholds (see refs/melee/src/melee/ft/chara/ftCommon/ftCo_Turn.c / ftCo_Run.c)
   float turn_stick_x_threshold;  // p_ftCommonData->x34
+  // Run -> TurnRun entry threshold (see refs/melee/src/melee/ft/chara/ftCommon/ftCo_TurnRun.c).
+  float turn_run_stick_x_threshold;  // p_ftCommonData->x38
   float run_stick_x_threshold;   // p_ftCommonData->x58
+  // Run IASA lockout init used by fn_800CA644 (TurnRun->Run).
+  // Decomp: refs/melee/src/melee/ft/chara/ftCommon/ftCo_Run.c::fn_800CA644 (arg0 = p_ftCommonData->x430)
+  float run_x0_init_x430;  // p_ftCommonData->x430
 
   // Special move direction thresholds (B specials).
   // Decomp: refs/melee/src/melee/ft/chara/ftCommon/ftCo_SpecialAir.c::ftCo_SpecialAir_CheckInput

@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 import argparse
+import json
+from datetime import datetime, timezone
 from pathlib import Path
 
 from tools.slippi.make_dataset_from_slp import write_dataset_from_slp
 from tools.slippi.suite_io import dataset_path_for_suite_replay, load_suite, repo_root
+from tools.eval.dataset import SAMPLE_DTYPE, SEED_DTYPE
 
 
 def main() -> None:
@@ -54,6 +57,26 @@ def main() -> None:
             ucf_cardinals_1_0_enabled=bool(suite.ucf_cardinals_1_0_enabled),
         )
         built += 1
+
+    # Write a persistent stamp so validation reports can prove whether `--force` was used.
+    #
+    # This matters whenever the dataset schema changes (record_size mismatch), because `make validate`
+    # does not implicitly rebuild cached datasets.
+    meta_path = (root / args.datasets_dir / suite.name / ".preprocess_meta.json").resolve()
+    meta_path.parent.mkdir(parents=True, exist_ok=True)
+    meta = {
+        "suite": str(args.suite),
+        "suite_name": suite.name,
+        "datasets_dir": str(args.datasets_dir),
+        "force_used": bool(args.force),
+        "timestamp_utc": datetime.now(timezone.utc).isoformat(),
+        "built": int(built),
+        "skipped": int(skipped),
+        "missing": int(missing),
+        "seed_dtype_itemsize": int(SEED_DTYPE.itemsize),
+        "sample_dtype_itemsize": int(SAMPLE_DTYPE.itemsize),
+    }
+    meta_path.write_text(json.dumps(meta, indent=2, sort_keys=True) + "\n")
 
     print(f"suite: {suite.name}")
     print(f"built: {built}  skipped: {skipped}  missing: {missing}")

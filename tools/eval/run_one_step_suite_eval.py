@@ -1,13 +1,45 @@
 from __future__ import annotations
 
 import argparse
+import json
 from pathlib import Path
 
 from tools.eval.run_one_step_eval import EvalSummary, Reporter, _discrete_mismatch_total, evaluate_dataset
 from tools.slippi.suite_io import dataset_path_for_suite_replay, load_suite, repo_root
 
 
-def _report_header(*, suite: str, datasets_dir: str) -> list[str]:
+def _preprocess_stamp_lines(*, root: Path, suite_name: str, datasets_dir: str) -> list[str]:
+    meta_path = (root / datasets_dir / suite_name / ".preprocess_meta.json").resolve()
+    if not meta_path.exists():
+        return [
+            "# preprocess_suite stamp: missing",
+            f"#   expected: {meta_path.relative_to(root)}",
+        ]
+    try:
+        meta = json.loads(meta_path.read_text())
+    except Exception as e:  # noqa: BLE001 - report header, not gameplay logic
+        return [
+            "# preprocess_suite stamp: unreadable",
+            f"#   path: {meta_path.relative_to(root)}",
+            f"#   error: {type(e).__name__}: {e}",
+        ]
+
+    ts = meta.get("timestamp_utc", "?")
+    force_used = meta.get("force_used", "?")
+    built = meta.get("built", "?")
+    skipped = meta.get("skipped", "?")
+    seed_sz = meta.get("seed_dtype_itemsize", "?")
+    sample_sz = meta.get("sample_dtype_itemsize", "?")
+    return [
+        "# preprocess_suite stamp:",
+        f"#   path: {meta_path.relative_to(root)}",
+        f"#   timestamp_utc: {ts}",
+        f"#   force_used: {force_used}  built: {built}  skipped: {skipped}",
+        f"#   seed_dtype_itemsize: {seed_sz}  sample_dtype_itemsize: {sample_sz}",
+    ]
+
+
+def _report_header(*, root: Path, suite: str, suite_name: str, datasets_dir: str) -> list[str]:
     # This header is a process requirement for committed validation snapshots under
     # `reports/validation/`: it documents how to recover if local, gitignored artifacts are missing
     # or stale. `make validate` overwrites the report file, so we emit this block at runtime.
@@ -18,6 +50,8 @@ def _report_header(*, suite: str, datasets_dir: str) -> list[str]:
         "# - If you see a `record_size mismatch` error, the dataset schema changed and your cached datasets are stale.",
         "#   Rebuild cached datasets with --force:",
         f"#     uv run python -m tools.slippi.preprocess_suite --suite {suite} --datasets-dir {datasets_dir} --force",
+        "#",
+        *_preprocess_stamp_lines(root=root, suite_name=suite_name, datasets_dir=datasets_dir),
         "#",
         "# Regenerate gitignored ISO-derived data artifacts (if missing/stale):",
         "# - Moves (data/moves/*.json):",
@@ -94,7 +128,9 @@ def main() -> None:
     reporter = Reporter(args.out)
     try:
         if args.out is not None:
-            for line in _report_header(suite=args.suite, datasets_dir=args.datasets_dir):
+            for line in _report_header(
+                root=root, suite=args.suite, suite_name=suite.name, datasets_dir=args.datasets_dir
+            ):
                 reporter.print(line)
             reporter.print()
 

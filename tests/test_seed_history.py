@@ -58,7 +58,7 @@ def test_derive_turn_internals_is_causal_wrt_future_frames() -> None:
     tilt_timer_x_prefix = np.array([0xFE, 0xFE, 0, 0xFE, 0xFE, 0xFE], dtype=np.uint8)
     turn_frames_prefix = np.full(a_prefix.shape[0], 4, dtype=np.uint8)
 
-    f0, h0 = derive_turn_internals(
+    f0, h0, x0 = derive_turn_internals(
         action_id=a_prefix,
         facing=facing_prefix,
         stick_x_unit=stick_x_prefix,
@@ -78,7 +78,7 @@ def test_derive_turn_internals_is_causal_wrt_future_frames() -> None:
     )
     turn_frames_ext = np.full(a_ext.shape[0], 4, dtype=np.uint8)
 
-    f1, h1 = derive_turn_internals(
+    f1, h1, x1 = derive_turn_internals(
         action_id=a_ext,
         facing=facing_ext,
         stick_x_unit=stick_x_ext,
@@ -92,6 +92,7 @@ def test_derive_turn_internals_is_causal_wrt_future_frames() -> None:
 
     assert np.array_equal(f0, f1[: f0.size])
     assert np.array_equal(h0, h1[: h0.size])
+    assert np.array_equal(x0, x1[: x0.size])
 
 
 def test_derive_kneebend_internals_is_causal_wrt_future_frames() -> None:

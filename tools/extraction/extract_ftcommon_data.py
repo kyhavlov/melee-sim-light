@@ -56,13 +56,21 @@ def main() -> None:
         "lstick_tilt_x_thresh": float(_f32_be(buf, ft_common_abs + 0x08)),
         "lstick_tilt_y_thresh": float(_f32_be(buf, ft_common_abs + 0x0C)),
         "trigger_deadzone": float(_f32_be(buf, ft_common_abs + 0x10)),
-        # Walk / turn / run thresholds (ftwalkcommon.c / ftCo_Turn.c / ftCo_Run.c).
-        # These are `p_ftCommonData->x24`, `x28`, `x2C`, `x34`, `x58` in doldecomp naming.
+        # Walk / turn / run thresholds (ftwalkcommon.c / ftCo_Turn.c / ftCo_Run.c / ftCo_TurnRun.c).
+        # These are `p_ftCommonData->x24`, `x28`, `x2C`, `x34`, `x38`, `x58` in doldecomp naming.
         "walk_stick_threshold": float(_f32_be(buf, ft_common_abs + 0x24)),
         "walk_mid_vel_mul": float(_f32_be(buf, ft_common_abs + 0x28)),
         "walk_fast_vel_mul": float(_f32_be(buf, ft_common_abs + 0x2C)),
         "turn_stick_x_threshold": float(_f32_be(buf, ft_common_abs + 0x34)),
+        "turn_run_stick_x_threshold": float(_f32_be(buf, ft_common_abs + 0x38)),
         "run_stick_x_threshold": float(_f32_be(buf, ft_common_abs + 0x58)),
+        # Run IASA lockout init (fp->mv.co.run.x0) used for specific Run entries (notably TurnRun->Run).
+        # Decomp:
+        # - fn_800CA644 passes p_ftCommonData->x430 as arg0 to ftCo_Run_Enter (stores into mv.co.run.x0).
+        #   refs/melee/src/melee/ft/chara/ftCommon/ftCo_Run.c::fn_800CA644
+        # - TurnRun_Anim uses fn_800CA644 when the TurnRun anim finishes.
+        #   refs/melee/src/melee/ft/chara/ftCommon/ftCo_TurnRun.c::ftCo_TurnRun_Anim
+        "run_x0_init_x430": float(_f32_be(buf, ft_common_abs + 0x430)),
         # C-stick/L-stick thresholds for aerial attack direction (ftCo_AttackAir.c / ft_0DF1.c):
         # - Neutral-air selection: ABS(stick_x) < xDC && ABS(stick_y) < xE0.
         # - C-stick aerial edge: (ABS(cstick1.x) < xDC && ABS(cstick.x) >= xDC) ||
