@@ -49,6 +49,35 @@ static inline uint8_t is_cliff_hold_action(uint16_t a) {
   }
 }
 
+static inline uint8_t action_allows_floor_edge_snap(uint16_t a) {
+  // Decomp: mpColl_8004A45C_Floor (edge snap) is used by mpColl_8004B2DC (flags=2), which is
+  // called by ft_800827A0 and used as the collision gate for the downed state family (Down*).
+  //
+  // Keep this behavior scoped to those actions; e.g. grounded locomotion should still be able to
+  // walk off ledges normally.
+  // refs/melee/src/melee/ft/ft_081B.c::ft_80084104
+  // refs/melee/src/melee/ft/ft_081B.c::ft_800827A0
+  // refs/melee/src/melee/mp/mpcoll.c::mpColl_8004B2DC
+  // refs/melee/src/melee/mp/mpcoll.c::mpColl_8004A45C_Floor
+  switch (a) {
+    case MSL_ACT_DOWN_BOUND_U:
+    case MSL_ACT_DOWN_WAIT_U:
+    case MSL_ACT_DOWN_STAND_U:
+    case MSL_ACT_DOWN_ATTACK_U:
+    case MSL_ACT_DOWN_FOWARD_U:
+    case MSL_ACT_DOWN_BACK_U:
+    case MSL_ACT_DOWN_BOUND_D:
+    case MSL_ACT_DOWN_WAIT_D:
+    case MSL_ACT_DOWN_STAND_D:
+    case MSL_ACT_DOWN_ATTACK_D:
+    case MSL_ACT_DOWN_FOWARD_D:
+    case MSL_ACT_DOWN_BACK_D:
+      return 1;
+    default:
+      return 0;
+  }
+}
+
 static inline uint8_t floor_lines_connected(const MslStageFloorGraph* g, int a, int b) {
   if (g == NULL) {
     return 0;
@@ -614,11 +643,123 @@ void mpcoll_ground_apply(MslBatch* batch) {
           ground_id = g->lines[(size_t)out_line_idx].segment_i;
           contact_y = (cur_bottom_y + y_corr);
         } else {
-          // Decomp parity: mpColl_8004A45C_Floor can still set Collide_{Left,Right}Edge while the
-          // floor collision pass does not report "touched_floor" (airborne), and the ledge-grab
-          // block uses these bits as the `on_edge` suppression gate.
-          floor_write_edge_suppression_flags(batch, idx, stage_id, g, prefer_line_idx, char_id,
-                                             anim, ecb_frame, was_grounded);
+          // Decomp shape:
+          // - Grounded collision uses mpLib_8004DD90_Floor to project onto the current floor line,
+          //   but on failure it can still (a) snap to the current floor edge (mpColl_8004A45C_Floor,
+          //   used by mpColl_8004B2DC) and/or (b) detect a floor hit via the swept segment test
+          //   (mpCheckFloor-style) before concluding the fighter is airborne.
+          // refs/melee/src/melee/mp/mplib.c::mpLib_8004DD90_Floor
+          // refs/melee/src/melee/mp/mplib.c::mpCheckFloor
+          // refs/melee/src/melee/mp/mpcoll.c::mpColl_8004A45C_Floor
+          //
+          // This matters for downed rolls near the FD ledge: the integrated position can move
+          // past the floor endpoint, but the motion segment still intersects the floor line and
+          // the engine clamps the contact to the intersection point before leaving ground.
+          uint8_t snapped_edge = 0;
+          const MslStageFloorLine* l = &g->lines[(size_t)prefer_line_idx];
+          const float left_x = l->x0;
+          const float left_y = l->y0;
+          const float right_x = l->x1;
+          const float right_y = l->y1;
+
+          // mpColl_8004A45C_Floor: when the fighter passes beyond the current floor endpoint,
+          // mpColl can snap the position to the edge point (if not blocked by a wall probe) while
+          // keeping the fighter grounded for this collision result.
+          if (action_allows_floor_edge_snap(action_id)) {
+            if (cur_bottom_x <= left_x) {
+              const float fd = batch->state.facing[idx] ? 1.0f : -1.0f;
+              MslEcbWorldPoints ecb = {0};
+              msl_ecb_world_points_sample(&ecb, char_id, anim, ecb_frame, fd, left_x, left_y,
+                                          was_grounded);
+              const float probe_ax = left_x + k_floor_edge_wall_probe_x_offset;
+              const float probe_ay = left_y + k_floor_edge_wall_probe_y_offset;
+              const float probe_bx = left_x + (ecb.right_rel_x /* bottom.x == 0 */);
+              const float probe_by = left_y + (ecb.side_rel_y - ecb.bottom_rel_y);
+              const MslStageWallGraph* lwg = stage_collision_get_left_wall_graph(stage_id);
+              if (!wall_blocks_floor_edge_probe(lwg, probe_ax, probe_ay, probe_bx, probe_by)) {
+                int out_line_idx2 = floor_dd90_project(g, prefer_line_idx, left_x, left_y, NULL,
+                                                       &floor_nx, &floor_ny);
+                if (out_line_idx2 < 0) {
+                  out_line_idx2 = prefer_line_idx;
+                }
+                batch->state.pos_x[idx] += (left_x - cur_bottom_x);
+                batch->state.pos_y[idx] = left_y;
+                on_ground = 1;
+                ground_id = g->lines[(size_t)out_line_idx2].segment_i;
+                contact_x = left_x;
+                contact_y = left_y;
+                snapped_edge = 1;
+              }
+            } else if (cur_bottom_x >= right_x) {
+              const float fd = batch->state.facing[idx] ? 1.0f : -1.0f;
+              MslEcbWorldPoints ecb = {0};
+              msl_ecb_world_points_sample(&ecb, char_id, anim, ecb_frame, fd, right_x, right_y,
+                                          was_grounded);
+              const float probe_ax = right_x - k_floor_edge_wall_probe_x_offset;
+              const float probe_ay = right_y + k_floor_edge_wall_probe_y_offset;
+              const float probe_bx = right_x + (ecb.left_rel_x /* bottom.x == 0 */);
+              const float probe_by = right_y + (ecb.side_rel_y - ecb.bottom_rel_y);
+              const MslStageWallGraph* rwg = stage_collision_get_right_wall_graph(stage_id);
+              if (!wall_blocks_floor_edge_probe(rwg, probe_ax, probe_ay, probe_bx, probe_by)) {
+                int out_line_idx2 = floor_dd90_project(g, prefer_line_idx, right_x, right_y, NULL,
+                                                       &floor_nx, &floor_ny);
+                if (out_line_idx2 < 0) {
+                  out_line_idx2 = prefer_line_idx;
+                }
+                batch->state.pos_x[idx] += (right_x - cur_bottom_x);
+                batch->state.pos_y[idx] = right_y;
+                on_ground = 1;
+                ground_id = g->lines[(size_t)out_line_idx2].segment_i;
+                contact_x = right_x;
+                contact_y = right_y;
+                snapped_edge = 1;
+              }
+            }
+          }
+
+          if (!snapped_edge) {
+            // Decomp: mpCheckFloor's horizontal intersection helper is only used on falling/non-rising
+            // segments. For grounded -> airborne transitions, avoid treating pure horizontal motion
+            // along the floor as a swept "landing" that would keep the fighter grounded.
+            // refs/melee/src/melee/mp/mplib.c::mpCheckFloor (the `if (ay >= by && mpLineIntersectionH(...))` gate)
+            const uint8_t can_sweep = (uint8_t)(cur_bottom_y < prev_bottom_y);
+            int hit_line_idx = -1;
+            float ix = 0.0f, iy = 0.0f;
+            if (can_sweep &&
+                floor_sweep_check(g, prev_bottom_x, prev_bottom_y, cur_bottom_x, cur_bottom_y,
+                                  prefer_line_idx, &hit_line_idx, &ix, &iy, &floor_nx, &floor_ny)) {
+              // Decomp: desired_ecb.bottom.x is always 0.0, so clamping the ECB bottom contact X
+              // corresponds to clamping the fighter position X.
+              // refs/melee/src/melee/mp/mpcoll.c::mpColl_LoadECB_JObj
+              batch->state.pos_x[idx] += (ix - cur_bottom_x);
+
+              float y_corr2 = 0.0f;
+              const int out_line_idx2 =
+                  floor_dd90_project(g, hit_line_idx, ix, cur_bottom_y, &y_corr2, NULL, NULL);
+              if (out_line_idx2 >= 0) {
+                batch->state.pos_y[idx] += y_corr2;
+                on_ground = 1;
+                ground_id = g->lines[(size_t)out_line_idx2].segment_i;
+                contact_x = ix;
+                contact_y = iy;
+              } else {
+                // Sweep saw a floor segment, but projection failed (unexpected). Preserve the sweep
+                // contact point deterministically and apply the decomp-shaped +0.0001 floor bias.
+                // refs/melee/src/melee/mp/mplib.c::mpLib_8004DD90_Floor
+                batch->state.pos_y[idx] += (iy - cur_bottom_y) + k_floor_y_bias;
+                on_ground = 1;
+                ground_id = g->lines[(size_t)hit_line_idx].segment_i;
+                contact_x = ix;
+                contact_y = iy;
+              }
+            } else {
+              // Decomp parity: mpColl_8004A45C_Floor can still set Collide_{Left,Right}Edge while
+              // the floor collision pass does not report "touched_floor" (airborne), and the
+              // ledge-grab block uses these bits as the `on_edge` suppression gate.
+              floor_write_edge_suppression_flags(batch, idx, stage_id, g, prefer_line_idx, char_id,
+                                                 anim, ecb_frame, was_grounded);
+            }
+          }
         }
       } else {
         int hit_line_idx = -1;

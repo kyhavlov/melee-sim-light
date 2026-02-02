@@ -790,6 +790,8 @@ def _extra_anim_msids() -> list[int]:
         177,  # ftCo_SM_DamageFlyHi
         178,  # ftCo_SM_DamageFlyN
         179,  # ftCo_SM_DamageFlyLw
+        180,  # ftCo_SM_DamageFlyTop (needed for ECB grounding parity during tumble landings; refs/melee/src/melee/ft/chara/ftCommon/forward.h `ftCo_Submotion`)
+        181,  # ftCo_SM_DamageFlyRoll (ECB coverage; action selection is gated elsewhere; refs/melee/src/melee/ft/chara/ftCommon/forward.h `ftCo_Submotion`)
         # Downed / knockdown (needed for DownAttack hitbox placement + hurtcaps during knockdown).
         183,  # ftCo_SM_DownBoundU
         184,  # ftCo_SM_DownWaitU

@@ -11,6 +11,7 @@ BUTTON_X = 0x0400
 ACT_WAIT = 0x000E
 ACT_TURN = 0x0012
 ACT_DASH = 0x0014
+ACT_RUN = 0x0015
 ACT_KNEEBEND = 0x0018
 ACT_JUMPF = 0x0019
 ACT_FALL = 0x001D
@@ -21,6 +22,7 @@ ACT_LANDING = 0x002A
 SM_WAIT1_0 = 2
 SM_TURN = 10
 SM_DASH = 12
+SM_RUN = 13
 SM_KNEEBEND = 15
 SM_JUMPF = 16
 SM_FALL = 20
@@ -565,6 +567,33 @@ def test_walk_off_consumes_ground_jump() -> None:
     seed["action_id"][0, 0] = np.uint16(ACT_WAIT)
     seed["action_frame"][0, 0] = np.int16(0)
     seed["animation_index"][0, 0] = np.uint32(SM_WAIT1_0)
+    seed["jumps_left"][0, 0] = np.uint8(2)
+
+    prev_inp = _mk_input_bytes(1, input_stride)
+    inp = _mk_input_bytes(1, input_stride)
+    out = _step_once(seed, prev_inp, inp)
+    assert int(out["on_ground"][0]) == 0
+    assert int(out["action_id"][0]) == ACT_FALL
+    assert int(out["jumps_left"][0]) == 1
+
+
+def test_run_off_does_not_snap_to_floor_edge() -> None:
+    # Regression/safety guard for FD floor-edge handling: floor-edge snap behavior is intended to be
+    # scoped to Down* states (mpColl_8004A45C_Floor-style) and must not keep normal locomotion
+    # grounded when crossing the ledge.
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    input_stride = int(sizes["input"])
+
+    seed = _seed_base()
+    seed["on_ground"][0, 0] = np.uint8(1)
+    seed["pos_x"][0, 0] = np.float32(85.4)  # FD floor edge is at ~85.5657 (data/stages/final_destination.json)
+    seed["pos_y"][0, 0] = np.float32(0.0)
+    seed["speed_ground_x_self"][0, 0] = np.float32(1.0)  # crosses offstage in one frame
+    seed["action_id"][0, 0] = np.uint16(ACT_RUN)
+    seed["action_frame"][0, 0] = np.int16(0)
+    seed["animation_index"][0, 0] = np.uint32(SM_RUN)
     seed["jumps_left"][0, 0] = np.uint8(2)
 
     prev_inp = _mk_input_bytes(1, input_stride)
