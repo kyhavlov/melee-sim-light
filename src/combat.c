@@ -272,6 +272,19 @@ static inline uint8_t combat_defender_hit_status_u8(const MslBatch* batch, size_
   const float d_anim_frame_f32 = msl_anim_frame_sanitize_f32(batch->state.anim_frame_f32[d_idx]);
   const uint16_t d_frame = msl_anim_frame_floor_u16(d_anim_frame_f32);
 
+  // Decomp timing: move-induced hit status (fp->x1988) is set by movescript opcode 26 while
+  // executing ftAction_80073240 inside the prio 1 Anim proc (ftAnim_8006EBA4). If a motion-state
+  // transition happens after that Anim tick (e.g. due to input/IASA), the new state's cmd script
+  // does not run until next frame, so x1988 should not be treated as active on the entry frame.
+  // docs/DECOMP_PROC_ORDER.md (prio 1 vs prio 3)
+  // refs/melee/src/melee/ft/ftanim.c::ftAnim_8006EBA4
+  // refs/melee/src/melee/ft/ftaction.c::ftAction_80073240
+  // refs/melee/src/melee/ft/ftcoll.c::ftColl_8007B868 (eligibility aggregates x1988/x198C)
+  const uint16_t cur_action = batch->state.action_id[d_idx];
+  if (d_frame == 0u && batch->state.prev_action_id[d_idx] != cur_action) {
+    return 0;
+  }
+
   uint8_t hit_status = 0;
   (void)hit_status_get(d_char, d_msid, d_frame, &hit_status);
   return hit_status;
@@ -1591,25 +1604,14 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
       const float shr = batch->state.shield_radius[d_idx];
       const uint8_t shield_active = (shr > 0.0f) ? 1 : 0;
 
-      // Combat collision uses world-space hitbox/hurtcap primitives that are derived from:
-      // - current pose matrices (anim timebase), and
-      // - fighter translation (pos_x/pos_y/pos_z).
+      // Combat collision consumes world-space hitbox/hurtcap primitives derived from:
+      // - pose matrices driven by fp->cur_anim_frame (prio 1, ftAnim_8006EBA4), and
+      // - post-Phys fighter translation (prio 4), applied to the model at prio 6/9 before
+      //   the prio 13 fighter-vs-fighter collision pass.
       //
-      // Decomp ordering note (GALE01, approximate):
-      // - Animation advancement and the per-motion-state `anim_cb` run before `phys_cb`
-      //   (refs/melee/src/melee/ft/fighter.c::Fighter_8006ABEC vs Fighter_procUpdate).
-      // - Our step() currently integrates physics before refreshing hitboxes/hurtboxes.
-      //
-      // Step-order workaround (current sim):
-      // - We currently run physics integration before hitbox/hurtcap refresh + combat_resolve(),
-      //   so the refreshed world primitives use the *post-physics* translation.
-      // - To approximate "pose at this frame, translation before phys", shift the already-computed
-      //   world primitives back by the per-fighter translation delta captured at the start of
-      //   physics_integrate(): prev_pos_* is the pre-integration translation for this frame.
-      const float a_shift_x = batch->state.prev_pos_x[a_idx] - batch->state.pos_x[a_idx];
-      const float a_shift_y = batch->state.prev_pos_y[a_idx] - batch->state.pos_y[a_idx];
-      const float d_shift_x = batch->state.prev_pos_x[d_idx] - batch->state.pos_x[d_idx];
-      const float d_shift_y = batch->state.prev_pos_y[d_idx] - batch->state.pos_y[d_idx];
+      // Decomp-backed ordering summary: docs/DECOMP_PROC_ORDER.md ("Implications for sim step order").
+      // In particular, collision uses post-integration translation; do not shift primitives by
+      // (prev_pos - pos) here.
 
       // Shield precedence (non-inert): if a hitbox intersects the defender shield bubble and
       // `element != HitElement_Inert`, resolve the shield hit (HP depletion, GuardSetOff, hitlag)
@@ -1660,8 +1662,8 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
             }
           }
 
-          const float hx = batch->state.hitbox_x[hb_i] + a_shift_x;
-          const float hy = batch->state.hitbox_y[hb_i] + a_shift_y;
+          const float hx = batch->state.hitbox_x[hb_i];
+          const float hy = batch->state.hitbox_y[hb_i];
           const float hz = batch->state.hitbox_z[hb_i];
           const float hr = batch->state.hitbox_radius[hb_i];
 
@@ -1681,8 +1683,7 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
             continue;
           }
 
-          if (!sphere_sphere_intersects(hx, hy, hz, hr, shx + d_shift_x, shy + d_shift_y, shz,
-                                        shr)) {
+          if (!sphere_sphere_intersects(hx, hy, hz, hr, shx, shy, shz, shr)) {
             continue;
           }
 
@@ -1831,8 +1832,8 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
           }
         }
 
-        const float hx = batch->state.hitbox_x[hb_i] + a_shift_x;
-        const float hy = batch->state.hitbox_y[hb_i] + a_shift_y;
+        const float hx = batch->state.hitbox_x[hb_i];
+        const float hy = batch->state.hitbox_y[hb_i];
         const float hz = batch->state.hitbox_z[hb_i];
         const float hr = batch->state.hitbox_radius[hb_i];
         const float hdmg = batch->state.hitbox_damage[hb_i];
@@ -1858,8 +1859,7 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
         // Shield precedence (BODY path): if the hitbox intersects the defender shield bubble, do
         // not apply BODY selection for this hitbox. The shield-hit selection above handles
         // (hitbox_id)-order shield resolution; this check is a conservative fallback.
-        if (shield_active &&
-            sphere_sphere_intersects(hx, hy, hz, hr, shx + d_shift_x, shy + d_shift_y, shz, shr)) {
+        if (shield_active && sphere_sphere_intersects(hx, hy, hz, hr, shx, shy, shz, shr)) {
           continue;
         }
 
@@ -1877,11 +1877,11 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
           if (!batch->state.hurtcap_enabled[cap_i]) {
             continue;
           }
-          const float ax = batch->state.hurtcap_a_x[cap_i] + d_shift_x;
-          const float ay = batch->state.hurtcap_a_y[cap_i] + d_shift_y;
+          const float ax = batch->state.hurtcap_a_x[cap_i];
+          const float ay = batch->state.hurtcap_a_y[cap_i];
           const float az = batch->state.hurtcap_a_z[cap_i];
-          const float bx = batch->state.hurtcap_b_x[cap_i] + d_shift_x;
-          const float by = batch->state.hurtcap_b_y[cap_i] + d_shift_y;
+          const float bx = batch->state.hurtcap_b_x[cap_i];
+          const float by = batch->state.hurtcap_b_y[cap_i];
           const float bz = batch->state.hurtcap_b_z[cap_i];
           const float cr = batch->state.hurtcap_radius[cap_i];
 
@@ -1988,11 +1988,6 @@ static void combat_select_body_hits_one_debug(MslBatch* batch, int bi,
       const float shr = batch->state.shield_radius[d_idx];
       const uint8_t shield_active = (shr > 0.0f) ? 1 : 0;
 
-      const float a_shift_x = batch->state.prev_pos_x[a_idx] - batch->state.pos_x[a_idx];
-      const float a_shift_y = batch->state.prev_pos_y[a_idx] - batch->state.pos_y[a_idx];
-      const float d_shift_x = batch->state.prev_pos_x[d_idx] - batch->state.pos_x[d_idx];
-      const float d_shift_y = batch->state.prev_pos_y[d_idx] - batch->state.pos_y[d_idx];
-
       // Deterministic selection: pick the first BODY overlap in (hitbox_id, hurtcap_id) order.
       uint8_t did_hit = 0;
       for (int hb_id = 0; hb_id < MSL_MAX_HITBOXES && !did_hit; hb_id++) {
@@ -2013,8 +2008,8 @@ static void combat_select_body_hits_one_debug(MslBatch* batch, int bi,
           }
         }
 
-        const float hx = batch->state.hitbox_x[hb_i] + a_shift_x;
-        const float hy = batch->state.hitbox_y[hb_i] + a_shift_y;
+        const float hx = batch->state.hitbox_x[hb_i];
+        const float hy = batch->state.hitbox_y[hb_i];
         const float hz = batch->state.hitbox_z[hb_i];
         const float hr = batch->state.hitbox_radius[hb_i];
         const float hdmg = batch->state.hitbox_damage[hb_i];
@@ -2025,8 +2020,7 @@ static void combat_select_body_hits_one_debug(MslBatch* batch, int bi,
 
         // SHIELD precedence: if the hitbox intersects the defender shield bubble, treat as shielded
         // and do not apply BODY selection for this hitbox.
-        if (shield_active &&
-            sphere_sphere_intersects(hx, hy, hz, hr, shx + d_shift_x, shy + d_shift_y, shz, shr)) {
+        if (shield_active && sphere_sphere_intersects(hx, hy, hz, hr, shx, shy, shz, shr)) {
           continue;
         }
 
@@ -2042,11 +2036,11 @@ static void combat_select_body_hits_one_debug(MslBatch* batch, int bi,
           if (!batch->state.hurtcap_enabled[cap_i]) {
             continue;
           }
-          const float ax = batch->state.hurtcap_a_x[cap_i] + d_shift_x;
-          const float ay = batch->state.hurtcap_a_y[cap_i] + d_shift_y;
+          const float ax = batch->state.hurtcap_a_x[cap_i];
+          const float ay = batch->state.hurtcap_a_y[cap_i];
           const float az = batch->state.hurtcap_a_z[cap_i];
-          const float bx = batch->state.hurtcap_b_x[cap_i] + d_shift_x;
-          const float by = batch->state.hurtcap_b_y[cap_i] + d_shift_y;
+          const float bx = batch->state.hurtcap_b_x[cap_i];
+          const float by = batch->state.hurtcap_b_y[cap_i];
           const float bz = batch->state.hurtcap_b_z[cap_i];
           const float cr = batch->state.hurtcap_radius[cap_i];
 

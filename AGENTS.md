@@ -133,3 +133,4 @@ Variables:
 
 - Prefer adding new “mechanics we learned about” into `SPEC.md` (Mechanics Inventory) immediately, even if not implemented yet.
 - Avoid symlinks for tooling/binaries; prefer explicit paths in config.
+- Never hand-edit `reports/validation/one_step_suite_eval.txt` (it is generator-owned by `make validate`); put extra notes in commits/PR text or separate docs.

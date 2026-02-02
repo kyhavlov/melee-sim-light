@@ -88,7 +88,30 @@ void hurtboxes_refresh(MslBatch* batch) {
         (void)hit_status_get(char_id, msid, frame, &hit_status);
       }
       if (hit_status != 0) {
-        batch->state.hurtbox_state[idx] = hit_status;
+        // Decomp timing: move-induced hit status (fp->x1988) is set by movescript opcode 26
+        // (ftAction_80071A14 -> ftColl_8007B62C) while executing the fighter cmd script inside
+        // ftAnim_8006EBA4 (ftAction_80073240), which runs at proc priority 1 before input/IASA.
+        // refs/melee/src/melee/ft/ftanim.c::ftAnim_8006EBA4
+        // refs/melee/src/melee/ft/ftaction.c::ftAction_80073240
+        //
+        // Collision eligibility in decomp consults the aggregate hit status via ftColl_8007B868,
+        // which combines x1988 (movescript), x198C (game-induced), and x221D_b6.
+        // refs/melee/src/melee/ft/ftcoll.c::ftColl_8007B868
+        //
+        // If the sim enters a new motion state after the pre-input Anim tick (e.g. due to
+        // input/IASA), the new state's movescript will not execute until the next frame's Anim
+        // proc. Slippi's post-frame `hurtbox_state` prefers x1988 only when it has actually been
+        // set nonzero for that frame (SendGamePostFrame.asm checks fp+0x1988 then fp+0x198C).
+        //
+        // Mirror that ordering by deferring the table-derived x1988 override on the entry frame
+        // when we can observe that:
+        // - the fighter changed action state this step (prev_action_id != action_id), and
+        // - the new state's anim timebase is still at integer frame 0 (no Anim proc yet).
+        // docs/DECOMP_PROC_ORDER.md (prio 1 vs prio 3).
+        const uint16_t cur_action = batch->state.action_id[idx];
+        if (!(frame == 0u && batch->state.prev_action_id[idx] != cur_action)) {
+          batch->state.hurtbox_state[idx] = hit_status;
+        }
       }
 
       const MslHurtCap* caps = NULL;

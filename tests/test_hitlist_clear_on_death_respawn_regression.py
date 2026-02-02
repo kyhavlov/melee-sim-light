@@ -76,20 +76,16 @@ def test_hitlist_clears_on_death_respawn_instance_id_mismatch_allows_hit() -> No
         binding.debug_clear_hitboxes_world(handle, 0, attacker)
         binding.debug_clear_hurtcaps_world(handle, 0, victim)
 
-        # combat_resolve() applies a per-fighter translation shift of (prev_pos - pos) to already
-        # computed world primitives. On reseed, prev_pos_* is 0, so choose coordinates that cancel
-        # this shift and overlap at the origin in the combat pass.
-        ax = float(seed_t["pos_x"][0, attacker])
-        ay = float(seed_t["pos_y"][0, attacker])
-        az = float(seed_t["pos_z"][0, attacker])
-        vx = float(seed_t["pos_x"][0, victim])
-        vy = float(seed_t["pos_y"][0, victim])
-        vz = float(seed_t["pos_z"][0, victim])
+        # Provide a deterministic overlap in world space by placing both primitives at the same
+        # coordinates.
+        cx = float(seed_t["pos_x"][0, victim])
+        cy = float(seed_t["pos_y"][0, victim])
+        cz = float(seed_t["pos_z"][0, victim])
 
         hitbox_flags = (1 << 9) | (1 << 10)  # MSL_HITBOX_FLAG_HIT_GROUNDED | MSL_HITBOX_FLAG_HIT_AERIAL
-        binding.debug_set_hitbox_world(handle, 0, attacker, 0, ax, ay, az, 5.0, 10.0, 1)
+        binding.debug_set_hitbox_world(handle, 0, attacker, 0, cx, cy, cz, 5.0, 10.0, 1)
         binding.debug_set_hitbox_flags(handle, 0, attacker, 0, hitbox_flags)
-        binding.debug_set_hurtcap_world(handle, 0, victim, 0, vx, vy, vz, vx, vy, vz, 5.0)
+        binding.debug_set_hurtcap_world(handle, 0, victim, 0, cx, cy, cz, cx, cy, cz, 5.0)
 
         binding.debug_combat_resolve(handle)
         binding.write_compare(handle, out_compare_bytes)

@@ -60,15 +60,53 @@ static inline uint8_t action_is_shine_air(uint16_t action_id) {
 }
 
 static inline uint8_t action_allows_shine_entry_ground(uint16_t action_id) {
-  // Keep this narrowly scoped: only enter from basic grounded locomotion states.
-  // Decomp: many grounded IASA callbacks (including Squat/SquatWait) call ftCo_800D68C0 which
-  // can dispatch to per-character SpecialLw (Fox/Falco shine).
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Squat.c::ftCo_Squat_IASA
+  // Decomp: specials (including SpecialLw / shine) are dispatched from per-state IASA callbacks via
+  // `ftCo_800D68C0` ("special move input" dispatcher). If a state does not call into that chain,
+  // SpecialLw cannot be entered regardless of input.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_800D68C0
-  if (action_id == (uint16_t)MSL_ACT_SQUAT || action_id == (uint16_t)MSL_ACT_SQUAT_WAIT) {
-    return 1;
+  //
+  // This simulator does not yet extract per-action IASA graphs / "can this state call ftCo_800D68C0"
+  // from motion-state tables, so we keep SpecialLw entry narrowly scoped to a suite-covered subset
+  // of grounded states whose IASA is known to route through ftCo_800D68C0 in decomp.
+  //
+  // Included examples (non-exhaustive):
+  // - Wait/Walk/Turn: RETURN_IF(ftCo_800D68C0(gobj))
+  //   refs/melee/src/melee/ft/chara/ftCommon/{ftCo_Wait.c,ftCo_Walk.c,ftCo_Turn.c}
+  // - SquatWait: RETURN_IF(ftCo_800D68C0(gobj))
+  //   refs/melee/src/melee/ft/chara/ftCommon/ftCo_SquatWait.c
+  //
+  // Explicit exclusions (decomp-anchored):
+  // - EscapeN/F/B: no ftCo_800D68C0 in IASA (Escape IASA only checks ftCo_8009563C; EscapeN IASA is empty).
+  //   refs/melee/src/melee/ft/chara/ftCommon/ftCo_Escape.c::{ftCo_Escape_IASA,ftCo_EscapeN_IASA}
+  // - LandingAir*: IASA is empty.
+  //   refs/melee/src/melee/ft/chara/ftCommon/ftCo_LandingAir.c::ftCo_LandingAir_IASA
+  // - Landing / LandingFallSpecial: decomp does allow specials after landing-lag and allow_interrupt gates via
+  //   ftCo_Landing_IASA -> ftCo_800D68C0, but this sim currently models only a minimal Landing IASA (jump/dash/turn/walk)
+  //   in src/locomotion.c and does not yet mirror the full special-dispatch chain there.
+  //   refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::ftCo_Landing_IASA
+  switch (action_id) {
+    case MSL_ACT_WAIT:
+    case MSL_ACT_WALK_SLOW:
+    case MSL_ACT_WALK_MIDDLE:
+    case MSL_ACT_WALK_FAST:
+    case MSL_ACT_TURN:
+    case MSL_ACT_TURN_RUN:
+    case MSL_ACT_DASH:
+    case MSL_ACT_RUN:
+    case MSL_ACT_RUN_DIRECT:
+    case MSL_ACT_RUN_BRAKE:
+    case MSL_ACT_KNEE_BEND:
+    case MSL_ACT_SQUAT:
+    case MSL_ACT_SQUAT_WAIT:
+    case MSL_ACT_GUARD_ON:
+    case MSL_ACT_GUARD:
+    case MSL_ACT_GUARD_OFF:
+    case MSL_ACT_GUARD_SET_OFF:
+    case MSL_ACT_GUARD_REFLECT:
+      return 1u;
+    default:
+      return 0u;
   }
-  return msl_action_is_ground_locomotion(action_id);
 }
 
 static inline uint8_t action_allows_shine_entry_air(uint16_t action_id) {
