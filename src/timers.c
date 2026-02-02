@@ -180,8 +180,10 @@ void timers_update_post_anim(MslBatch* batch) {
       // Decomp: hitstun flag is cleared when the hitstun timer reaches 0.
       // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008F744
       if (hs == 0) {
-        const size_t flags_221c_i = idx * MSL_STATE_FLAGS_STRIDE + (size_t)MSL_STATE_FLAGS_221C_INDEX;
-        batch->state.state_flags[flags_221c_i] &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221C_IS_HITSTUN;
+        const size_t flags_221c_i =
+            idx * MSL_STATE_FLAGS_STRIDE + (size_t)MSL_STATE_FLAGS_221C_INDEX;
+        batch->state.state_flags[flags_221c_i] &=
+            (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221C_IS_HITSTUN;
 
         // Decomp: when hitstun ends, set `fp->x2098 = p_ftCommonData->x4CC`.
         // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008F744

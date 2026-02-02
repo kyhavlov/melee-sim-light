@@ -8,6 +8,7 @@
 #include "anim_pose.h"
 #include "combat.h"
 #include "char_params.h"
+#include "hitlist.h"
 #include "laser_params.h"
 #include "msl_math.h"
 #include "mtx34.h"
@@ -38,12 +39,8 @@ static inline void item_slot_clear(MslBatch* batch, size_t ii) {
   batch->state.item_misc2[ii] = 0;
   batch->state.item_misc3[ii] = 0;
 
-  // Clear per-item victim cooldowns (hitlist).
-  const size_t cd_base = ii * (size_t)MSL_MAX_PLAYERS;
-  for (int v = 0; v < MSL_MAX_PLAYERS; v++) {
-    batch->state.item_hitlist_cd[cd_base + (size_t)v] = 0;
-    batch->state.item_hitlist_victim_iid[cd_base + (size_t)v] = 0;
-  }
+  // Clear per-item victim rings (hitlist).
+  hitlist_capsule_clear(&batch->state.item_hitlist[ii]);
 }
 
 static inline void item_slot_swap(MslBatch* batch, size_t a, size_t b) {
@@ -78,15 +75,10 @@ static inline void item_slot_swap(MslBatch* batch, size_t a, size_t b) {
 #undef SWAP
 
   // Swap per-item hitlist lanes to preserve deterministic item ordering invariants.
-  for (int v = 0; v < MSL_MAX_PLAYERS; v++) {
-    const size_t ia = a * (size_t)MSL_MAX_PLAYERS + (size_t)v;
-    const size_t ib = b * (size_t)MSL_MAX_PLAYERS + (size_t)v;
-    const uint16_t tmp = batch->state.item_hitlist_cd[ia];
-    batch->state.item_hitlist_cd[ia] = batch->state.item_hitlist_cd[ib];
-    batch->state.item_hitlist_cd[ib] = tmp;
-    const uint16_t tmp_iid = batch->state.item_hitlist_victim_iid[ia];
-    batch->state.item_hitlist_victim_iid[ia] = batch->state.item_hitlist_victim_iid[ib];
-    batch->state.item_hitlist_victim_iid[ib] = tmp_iid;
+  {
+    const MslHitlistCapsule tmp = batch->state.item_hitlist[a];
+    batch->state.item_hitlist[a] = batch->state.item_hitlist[b];
+    batch->state.item_hitlist[b] = tmp;
   }
 }
 
@@ -705,19 +697,11 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
 
       const size_t d_idx = msl_idx_player(bi, def);
 
-      const size_t cd_i = ii * (size_t)MSL_MAX_PLAYERS + (size_t)def;
       const uint16_t def_iid = batch->state.instance_id[d_idx];
-      if (batch->state.item_hitlist_cd[cd_i] != 0) {
-        // Item hitlists: do not rehurt the same fighter repeatedly while the item persists.
-        //
-        // Decomp identity key is a victim pointer (`HitVictim.victim`), which changes on
-        // death/respawn. Use the fighter's `instance_id` as the stable key in the sim.
-        // refs/melee/src/melee/lb/lbcollision.c::lbColl_80008688
-        if (batch->state.item_hitlist_victim_iid[cd_i] == def_iid) {
-          continue;
-        }
-        batch->state.item_hitlist_cd[cd_i] = 0;
-        batch->state.item_hitlist_victim_iid[cd_i] = 0;
+      // Rehit suppression (HitCapsule victim rings): do not rehurt the same fighter repeatedly
+      // while the item persists.
+      if (!hitlist_allows_item_fighter(batch, bi, it, def, def_iid)) {
+        continue;
       }
 
       // SHIELD precedence: if the item intersects the defender shield bubble, resolve as a shield
@@ -806,8 +790,11 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
           const int8_t shd = (laser_state == 0u) ? lp->shield_damage : lp->state1_shield_damage;
           combat_apply_item_shield_hit(batch, bi, owner, def, batch->state.item_attack_id[ii],
                                        batch->state.item_attack_instance[ii], dmg, shd);
-          batch->state.item_hitlist_cd[cd_i] = 0xFFFFu;
-          batch->state.item_hitlist_victim_iid[cd_i] = def_iid;
+          // Rehit suppression latch for this item: insert the post-mutation victim identity so
+          // teacher-forced reseed sees the same proxy at t+1.
+          const uint16_t def_iid_post = batch->state.instance_id[d_idx];
+          hitlist_register_item_fighter(batch, bi, it, def, def_iid_post,
+                                        (int)MSL_LBCOLL_INSERT_FT_SHIELD, 0);
           item_slot_clear(batch, ii);
           break;
         }
@@ -920,8 +907,11 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
                             batch->state.item_attack_instance[ii],
                             batch->state.item_instance_id[ii], batch->state.item_type[ii], dmg,
                             angle, kbg, wsk, bkb, hit_hurt_height, element);
-      batch->state.item_hitlist_cd[cd_i] = 0xFFFFu;
-      batch->state.item_hitlist_victim_iid[cd_i] = def_iid;
+      // Rehit suppression latch for this item: insert the post-mutation victim identity so
+      // teacher-forced reseed sees the same proxy at t+1.
+      const uint16_t def_iid_post = batch->state.instance_id[d_idx];
+      hitlist_register_item_fighter(batch, bi, it, def, def_iid_post,
+                                    (int)MSL_LBCOLL_INSERT_FT_BODY, 0);
       item_slot_clear(batch, ii);
       break;
     }

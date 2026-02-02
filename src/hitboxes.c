@@ -111,7 +111,18 @@ void hitboxes_refresh(MslBatch* batch) {
       // (or its hit_group changes).
       // refs/melee/src/melee/ft/ftaction.c::ftAction_8007121C
       uint8_t cur_inited = 0;
-      uint8_t group_active[MSL_HITLIST_GROUPS] = {0};
+
+      // Hitlist materialization policy (teacher-forced reseed bridge):
+      // - The seed schema carries a dense per-(attacker, hit_group, victim_port) hitlist snapshot.
+      // - Runtime uses decomp-shaped HitCapsule victim rings per hitbox slot.
+      // - For hitboxes that are already active at (pose_frame - 1), materialize their victim rings
+      //   from the seeded snapshot once per reseed generation, before applying pose_frame events.
+      //
+      // This allows ftColl_800768A0 copy/clear semantics at pose_frame to see a decomp-shaped list
+      // state even under teacher-forced reseed.
+      // refs/melee/src/melee/ft/ftcoll.c::ftColl_800768A0
+      // refs/melee/src/melee/lb/lbcollision.c::lbColl_80008440
+      const uint32_t hitlist_gen = batch->state.hitlist_reseed_gen[bi];
 
       for (uint16_t ei = 0; ei < event_count; ei++) {
         const MslHitboxEvent* ev = &events[ei];
@@ -149,82 +160,77 @@ void hitboxes_refresh(MslBatch* batch) {
             if (have_prev[hi]) {
               def[hi] = def_prev[hi];
               have_def[hi] = 1;
-              const uint8_t g = hitlist_hit_group_from_u16_7(def[hi].u16_7);
-              if (g < (uint8_t)MSL_HITLIST_GROUPS) {
-                group_active[g] = 1;
+
+              // Seed materialize the victim list for hitboxes already active at pose_frame-1.
+              const size_t hl_i = idx_hitbox(bi, p, hi);
+              if (batch->state.fighter_hitlist_init_gen[hl_i] != hitlist_gen) {
+                const uint8_t g = hitlist_hit_group_from_u16_7(def[hi].u16_7);
+                hitlist_seed_init_fighter_hitbox_from_group(batch, bi, p, hi, g);
               }
             }
           }
           cur_inited = 1;
         }
 
-        // Apply pose_frame events to produce the current active definition set, and clear the
-        // hitlist on a per-group rising edge (including clear->create sequences within the frame).
+        // Apply pose_frame events to produce the current active definition set, and apply
+        // ftColl_800768A0 copy/clear semantics on enable edges (including clear->create sequences
+        // within the frame).
+        //
+        // Decomp:
+        // - When a hitbox becomes enabled (or its hit_group changes), Melee copies the victim list
+        //   from an existing active hitbox with the same hit_group, else clears it.
+        // - This is mediated by ftColl_800768A0 calling lbColl_CopyHitCapsule (copy) or
+        //   lbColl_80008440 (clear).
+        // refs/melee/src/melee/ft/ftcoll.c::ftColl_800768A0
+        // refs/melee/src/melee/lb/lbcollision.c::{lbColl_CopyHitCapsule,lbColl_80008440}
         if (ev->kind == 1) {
           if (ev->hitbox_id == 0xFFu) {
             for (int hi = 0; hi < MSL_MAX_HITBOXES; hi++) {
               have_def[hi] = 0;
             }
-            for (uint8_t g = 0; g < (uint8_t)MSL_HITLIST_GROUPS; g++) {
-              group_active[g] = 0;
-            }
           } else if (ev->hitbox_id < (uint8_t)MSL_MAX_HITBOXES) {
-            const uint8_t hb = ev->hitbox_id;
-            uint8_t old_g = 0;
-            if (have_def[hb]) {
-              old_g = hitlist_hit_group_from_u16_7(def[hb].u16_7);
-            }
-            have_def[hb] = 0;
-            if (old_g < (uint8_t)MSL_HITLIST_GROUPS) {
-              uint8_t any = 0;
-              for (int hi = 0; hi < MSL_MAX_HITBOXES; hi++) {
-                if (!have_def[hi]) {
-                  continue;
-                }
-                if (hitlist_hit_group_from_u16_7(def[hi].u16_7) == old_g) {
-                  any = 1;
-                  break;
-                }
-              }
-              group_active[old_g] = any;
-            }
+            have_def[ev->hitbox_id] = 0;
           }
         } else if (ev->hitbox_id < (uint8_t)MSL_MAX_HITBOXES) {
           const uint8_t hb = ev->hitbox_id;
           const uint8_t new_g = hitlist_hit_group_from_u16_7(ev->u16_7);
-          const uint8_t was_active = group_active[new_g];
-
-          uint8_t old_g = 0;
-          uint8_t had_old = 0;
-          if (have_def[hb]) {
-            had_old = 1;
-            old_g = hitlist_hit_group_from_u16_7(def[hb].u16_7);
-          }
+          const uint8_t had_old = have_def[hb] ? 1u : 0u;
+          const uint8_t old_g = had_old ? hitlist_hit_group_from_u16_7(def[hb].u16_7) : 0u;
 
           def[hb] = *ev;
           have_def[hb] = 1;
-          group_active[new_g] = 1;
 
-          if (!was_active) {
-            // Decomp: ftColl_800768A0 clears (lbColl_80008440) unless it can copy an existing
-            // active hitbox with the same hit_group.
-            // refs/melee/src/melee/ft/ftcoll.c::ftColl_800768A0
-            // refs/melee/src/melee/lb/lbcollision.c::lbColl_80008440
-            hitlist_clear_group(batch, bi, p, new_g);
-          }
-
-          if (had_old && old_g != new_g && old_g < (uint8_t)MSL_HITLIST_GROUPS) {
-            uint8_t any = 0;
-            for (int hi = 0; hi < MSL_MAX_HITBOXES; hi++) {
-              if (!have_def[hi]) {
+          const uint8_t enable_edge = (!had_old || old_g != new_g) ? 1u : 0u;
+          if (enable_edge) {
+            // ftColl_800768A0: copy from an existing active hitbox with same hit_group, else clear.
+            uint8_t copied = 0;
+            for (int src = 0; src < MSL_MAX_HITBOXES; src++) {
+              if (src == (int)hb) {
                 continue;
               }
-              if (hitlist_hit_group_from_u16_7(def[hi].u16_7) == old_g) {
-                any = 1;
-                break;
+              if (!have_def[src]) {
+                continue;
               }
+              const uint8_t src_g = hitlist_hit_group_from_u16_7(def[src].u16_7);
+              if (src_g != new_g) {
+                continue;
+              }
+              const size_t src_i = idx_hitbox(bi, p, src);
+              if (batch->state.fighter_hitlist_init_gen[src_i] != hitlist_gen) {
+                hitlist_seed_init_fighter_hitbox_from_group(batch, bi, p, src, src_g);
+              }
+              const size_t dst_i = idx_hitbox(bi, p, hb);
+              hitlist_capsule_copy(&batch->state.fighter_hitlist[src_i],
+                                   &batch->state.fighter_hitlist[dst_i]);
+              batch->state.fighter_hitlist_init_gen[dst_i] = hitlist_gen;
+              copied = 1;
+              break;
             }
-            group_active[old_g] = any;
+            if (!copied) {
+              const size_t dst_i = idx_hitbox(bi, p, hb);
+              hitlist_capsule_clear(&batch->state.fighter_hitlist[dst_i]);
+              batch->state.fighter_hitlist_init_gen[dst_i] = hitlist_gen;
+            }
           }
         }
       }
@@ -235,6 +241,13 @@ void hitboxes_refresh(MslBatch* batch) {
           if (have_prev[hi]) {
             def[hi] = def_prev[hi];
             have_def[hi] = 1;
+
+            // Seed materialize for hitboxes active at pose_frame-1 even when no pose_frame events fire.
+            const size_t hl_i = idx_hitbox(bi, p, hi);
+            if (batch->state.fighter_hitlist_init_gen[hl_i] != hitlist_gen) {
+              const uint8_t g = hitlist_hit_group_from_u16_7(def[hi].u16_7);
+              hitlist_seed_init_fighter_hitbox_from_group(batch, bi, p, hi, g);
+            }
           }
         }
       }

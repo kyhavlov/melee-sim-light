@@ -1781,7 +1781,7 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
           //
           // Mirror that ordering here: gate before the shield sphere overlap test.
           const uint8_t hit_group = hitlist_hit_group_from_u16_7(batch->state.hitbox_u16_7[hb_i]);
-          if (!hitlist_allows(batch, bi, attacker, hit_group, defender, defender_iid)) {
+          if (!hitlist_allows_fighter(batch, bi, attacker, hb_id, defender, defender_iid)) {
             continue;
           }
 
@@ -1866,8 +1866,11 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
           // post-frame uses at t+1 (after the GuardSetOff transition), preventing spurious shield
           // re-hits / GuardSetOff re-entry on the next step.
           const uint16_t defender_iid_post = batch->state.instance_id[d_idx];
-          hitlist_register(batch, bi, attacker, sel_hit_group, defender, defender_iid_post,
-                           sel_rehit_frames);
+          // Decomp insertion type on shield hit path: ftColl_80076CBC calls ftColl_80076808(..., type=1, ...).
+          // refs/melee/src/melee/ft/ftcoll.c::ftColl_80076CBC
+          hitlist_register_fighter_group(batch, bi, attacker, sel_hit_group, defender,
+                                         defender_iid_post, (int)MSL_LBCOLL_INSERT_FT_SHIELD,
+                                         sel_rehit_frames);
 
           did_hit = 1;
         }
@@ -1965,9 +1968,9 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
         }
 
         // Rehit suppression (hitlists): suppress repeats while the victim is present in the
-        // per-(attacker,hit_group) hitlist.
+        // hitbox's victims_1 list (HitCapsule victim rings shared across same hit_group).
         const uint8_t hit_group = hitlist_hit_group_from_u16_7(batch->state.hitbox_u16_7[hb_i]);
-        if (!hitlist_allows(batch, bi, attacker, hit_group, defender, defender_iid)) {
+        if (!hitlist_allows_fighter(batch, bi, attacker, hb_id, defender, defender_iid)) {
           continue;
         }
         const uint8_t rehit_frames =
@@ -2011,8 +2014,11 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
           // matches teacher-forced reseed (ref post-frame) and we don't spuriously treat the same
           // victim as "new" on the next step.
           const uint16_t defender_iid_post = batch->state.instance_id[d_idx];
-          hitlist_register(batch, bi, attacker, hit_group, defender, defender_iid_post,
-                           rehit_frames);
+          // Decomp insertion type on BODY hit path: ftColl_80076ED8 calls inlineB0(..., type=0, cb=lbColl_80008688).
+          // refs/melee/src/melee/ft/ftcoll.c::ftColl_80076ED8
+          hitlist_register_fighter_group(batch, bi, attacker, hit_group, defender,
+                                         defender_iid_post, (int)MSL_LBCOLL_INSERT_FT_BODY,
+                                         rehit_frames);
 
           did_hit = 1;
           break;
@@ -2127,9 +2133,10 @@ static void combat_select_body_hits_one_debug(MslBatch* batch, int bi,
         }
 
         // Rehit suppression (debug view): suppress repeats while the victim is present in the
-        // per-(attacker,hit_group) hitlist.
+        // hitbox's victims_1 list.
         const uint8_t hit_group = hitlist_hit_group_from_u16_7(batch->state.hitbox_u16_7[hb_i]);
-        if (!hitlist_allows(batch, bi, attacker, hit_group, defender, defender_iid)) {
+        (void)hit_group;
+        if (!hitlist_allows_fighter(batch, bi, attacker, hb_id, defender, defender_iid)) {
           continue;
         }
 

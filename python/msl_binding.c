@@ -12,6 +12,7 @@
 #include "../src/api.h"
 #include "../src/anim_pose.h"
 #include "../src/ecb_tables.h"
+#include "../src/hitlist.h"
 #include "../src/move_tables.h"
 
 typedef struct {
@@ -2231,6 +2232,67 @@ static PyObject* msl_move_tables_throw_hitbox_params_py(PyObject* self, PyObject
                        (unsigned int)p.sfx_kind, (unsigned int)p.sfx_severity);
 }
 
+static PyObject* msl_debug_hitlist_fighter_contains_py(PyObject* self, PyObject* args) {
+  (void)self;
+  PyObject* capsule = NULL;
+  int batch_index = 0;
+  int attacker = 0;
+  int hb_id = 0;
+  int victim = 0;
+  if (!PyArg_ParseTuple(args, "Oiiii", &capsule, &batch_index, &attacker, &hb_id, &victim)) {
+    return NULL;
+  }
+  PyMslHandle* h = (PyMslHandle*)PyCapsule_GetPointer(capsule, "msl.Handle");
+  if (h == NULL || h->batch == NULL) {
+    PyErr_SetString(PyExc_ValueError, "invalid handle");
+    return NULL;
+  }
+
+  int present = 0;
+  const int err = msl_batch_debug_hitlist_fighter_contains(h->batch, batch_index, attacker, hb_id,
+                                                           victim, &present);
+  if (err != 0) {
+    PyErr_Format(PyExc_ValueError, "msl_batch_debug_hitlist_fighter_contains failed: %d", err);
+    return NULL;
+  }
+  return PyLong_FromLong((long)present);
+}
+
+static PyObject* msl_hitlist_ring_demo_py(PyObject* self, PyObject* args) {
+  (void)self;
+  int inserts = 0;
+  if (!PyArg_ParseTuple(args, "i", &inserts)) {
+    return NULL;
+  }
+  if (inserts < 0) {
+    inserts = 0;
+  }
+  if (inserts > 64) {
+    inserts = 64;
+  }
+
+  MslHitlistCapsule hit;
+  hitlist_capsule_clear(&hit);
+  for (int i = 0; i < inserts; i++) {
+    hitlist_debug_insert_item_victims1(&hit, 0, (uint32_t)(i + 1u), 0);
+  }
+
+  npy_intp dims[1] = {(npy_intp)MSL_HITLIST_VICTIM_CAP};
+  PyObject* out_ids = PyArray_SimpleNew(1, dims, NPY_UINT32);
+  if (out_ids == NULL) {
+    return NULL;
+  }
+  uint32_t* ids_ptr = (uint32_t*)PyArray_DATA((PyArrayObject*)out_ids);
+  for (int i = 0; i < MSL_HITLIST_VICTIM_CAP; i++) {
+    const MslHitlistVictimEntry* e = &hit.victims_1[i];
+    ids_ptr[i] = (e->kind_slot == 0xFFu) ? 0u : e->id32;
+  }
+
+  PyObject* ret = Py_BuildValue("(iO)", (int)hit.ring_1, out_ids);
+  Py_DECREF(out_ids);
+  return ret;
+}
+
 static PyMethodDef methods[] = {
     {"init", (PyCFunction)(void (*)(void))msl_init, METH_VARARGS | METH_KEYWORDS,
      "init(batch_size, num_players, ucf_enabled=?, ucf_cardinals_1_0_enabled=?) -> handle"},
@@ -2254,6 +2316,8 @@ static PyMethodDef methods[] = {
      "Reset C allocation counters (debug/perf guardrail)."},
     {"alloc_stats", msl_alloc_stats, METH_NOARGS,
      "Get C allocation counters (debug/perf guardrail)."},
+    {"hitlist_ring_demo", msl_hitlist_ring_demo_py, METH_VARARGS,
+     "hitlist_ring_demo(inserts) -> (ring, ids_u32[12]) (test-only)"},
     {"debug_reset_pose_and_hitboxes_tables", msl_debug_reset_pose_and_hitboxes_tables_py,
      METH_NOARGS, "Reset pose+hitbox global tables (test-only)."},
     {"ecb_bottom_rel_y", msl_ecb_bottom_rel_y_py, METH_VARARGS,
@@ -2280,6 +2344,8 @@ static PyMethodDef methods[] = {
     {"debug_combat_contacts", msl_debug_combat_contacts_py, METH_VARARGS,
      "debug_combat_contacts(handle, batch_index, max_contacts=256) -> (bytes[max, "
      "sizeof(MslDebugCombatContact)], count)"},
+    {"debug_hitlist_fighter_contains", msl_debug_hitlist_fighter_contains_py, METH_VARARGS,
+     "debug_hitlist_fighter_contains(handle, batch_index, attacker, hb_id, victim) -> 0/1"},
     {"debug_combat_contacts_filtered", msl_debug_combat_contacts_filtered_py, METH_VARARGS,
      "debug_combat_contacts_filtered(handle, batch_index, max_contacts=256) -> (bytes[max, "
      "sizeof(MslDebugCombatContact)], count)"},

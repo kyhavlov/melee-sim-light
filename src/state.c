@@ -3,6 +3,7 @@
 #include <string.h>
 
 #include "alloc.h"
+#include "hitlist.h"
 
 static void state_zero_ptrs(MslStateSoA* s) {
   if (s == NULL) {
@@ -26,7 +27,6 @@ int state_alloc(MslStateSoA* state, int batch_size) {
   const size_t bph = bp * (size_t)MSL_MAX_HITBOXES;
   const size_t bphl = bpp * (size_t)MSL_HITLIST_GROUPS;
   const size_t bpst = bp * (size_t)MSL_STALE_QUEUE_SIZE;
-  const size_t bicd = bi * (size_t)MSL_MAX_PLAYERS;
 
   state->frame_id = (int32_t*)alloc_aligned_64(sizeof(int32_t) * b);
   state->frame_pre_random_seed = (uint32_t*)alloc_aligned_64(sizeof(uint32_t) * b);
@@ -207,6 +207,9 @@ int state_alloc(MslStateSoA* state, int batch_size) {
   state->state_flags = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp * MSL_STATE_FLAGS_BYTES);
   state->combat_hitlist_cd = (uint16_t*)alloc_aligned_64(sizeof(uint16_t) * bphl);
   state->combat_hitlist_victim_iid = (uint16_t*)alloc_aligned_64(sizeof(uint16_t) * bphl);
+  state->hitlist_reseed_gen = (uint32_t*)alloc_aligned_64(sizeof(uint32_t) * b);
+  state->fighter_hitlist = (MslHitlistCapsule*)alloc_aligned_64(sizeof(MslHitlistCapsule) * bph);
+  state->fighter_hitlist_init_gen = (uint32_t*)alloc_aligned_64(sizeof(uint32_t) * bph);
   state->stale_queue_index = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->stale_move_id = (uint16_t*)alloc_aligned_64(sizeof(uint16_t) * bpst);
   state->stale_attack_instance = (uint16_t*)alloc_aligned_64(sizeof(uint16_t) * bpst);
@@ -245,8 +248,7 @@ int state_alloc(MslStateSoA* state, int batch_size) {
   state->item_misc1 = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bi);
   state->item_misc2 = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bi);
   state->item_misc3 = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bi);
-  state->item_hitlist_cd = (uint16_t*)alloc_aligned_64(sizeof(uint16_t) * bicd);
-  state->item_hitlist_victim_iid = (uint16_t*)alloc_aligned_64(sizeof(uint16_t) * bicd);
+  state->item_hitlist = (MslHitlistCapsule*)alloc_aligned_64(sizeof(MslHitlistCapsule) * bi);
 
   if (!state->frame_id || !state->frame_pre_random_seed || !state->stage_id ||
       !state->stale_attack_instance_counter || !state->instance_id_counter ||
@@ -300,7 +302,8 @@ int state_alloc(MslStateSoA* state, int batch_size) {
       !state->attack_identity_last_action_id || !state->last_attack_landed || !state->combo_count ||
       !state->combo_victim_port || !state->combo_victim_instance_id || !state->combo_timer_x2098 ||
       !state->last_hit_by || !state->state_flags || !state->combat_hitlist_cd ||
-      !state->combat_hitlist_victim_iid || !state->stale_queue_index || !state->stale_move_id ||
+      !state->combat_hitlist_victim_iid || !state->hitlist_reseed_gen || !state->fighter_hitlist ||
+      !state->fighter_hitlist_init_gen || !state->stale_queue_index || !state->stale_move_id ||
       !state->stale_attack_instance || !state->input_buttons || !state->prev_input_buttons ||
       !state->input_buttons_pressed || !state->input_buttons_released || !state->input_main_x ||
       !state->input_main_y || !state->prev_input_main_x || !state->prev_input_main_y ||
@@ -310,9 +313,20 @@ int state_alloc(MslStateSoA* state, int batch_size) {
       !state->item_attack_id || !state->item_attack_instance || !state->item_direction ||
       !state->item_vel_x || !state->item_vel_y || !state->item_pos_x || !state->item_pos_y ||
       !state->item_damage || !state->item_timer || !state->item_spawn_id || !state->item_misc0 ||
-      !state->item_misc1 || !state->item_misc2 || !state->item_misc3 || !state->item_hitlist_cd ||
-      !state->item_hitlist_victim_iid) {
+      !state->item_misc1 || !state->item_misc2 || !state->item_misc3 || !state->item_hitlist) {
     return -1;
+  }
+
+  // Initialize hitlists to a known-empty state (entry.kind_slot == 0xFF).
+  for (size_t i = 0; i < b; i++) {
+    state->hitlist_reseed_gen[i] = 1u;
+  }
+  for (size_t i = 0; i < bph; i++) {
+    state->fighter_hitlist_init_gen[i] = 0u;
+    hitlist_capsule_clear(&state->fighter_hitlist[i]);
+  }
+  for (size_t i = 0; i < bi; i++) {
+    hitlist_capsule_clear(&state->item_hitlist[i]);
   }
 
   return 0;
@@ -501,6 +515,9 @@ void state_free(MslStateSoA* state) {
   alloc_free(state->state_flags);
   alloc_free(state->combat_hitlist_cd);
   alloc_free(state->combat_hitlist_victim_iid);
+  alloc_free(state->hitlist_reseed_gen);
+  alloc_free(state->fighter_hitlist);
+  alloc_free(state->fighter_hitlist_init_gen);
   alloc_free(state->stale_queue_index);
   alloc_free(state->stale_move_id);
   alloc_free(state->stale_attack_instance);
@@ -539,8 +556,7 @@ void state_free(MslStateSoA* state) {
   alloc_free(state->item_misc1);
   alloc_free(state->item_misc2);
   alloc_free(state->item_misc3);
-  alloc_free(state->item_hitlist_cd);
-  alloc_free(state->item_hitlist_victim_iid);
+  alloc_free(state->item_hitlist);
 
   state_zero_ptrs(state);
 }

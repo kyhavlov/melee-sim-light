@@ -4,6 +4,7 @@
 #include <stdint.h>
 
 #include "api.h"
+#include "hitlist_types.h"
 
 // Hot SoA state owned by a batch. All arrays are sized for MAX_PLAYERS/ITEMS.
 typedef struct MslStateSoA {
@@ -332,25 +333,39 @@ typedef struct MslStateSoA {
   uint8_t* last_hit_by;
   uint8_t* state_flags;  // [batch * players * 5]
 
-  // Combat hitlists / rehit cooldowns.
+  // Combat hitlists / rehit eligibility.
   //
   // Decomp shape:
-  // - HitCapsule maintains per-victim hitlists (`victims_1` / `victims_2`) with per-entry cooldowns.
-  // - The cooldown countdown is initialized from `HitCapsule.x40_b4` and decremented each frame,
-  //   clearing the victim when the countdown reaches 0.
-  // refs/melee/src/melee/lb/lbcollision.c::lbColl_80008688 and ::lbColl_80008A5C
+  // - Each HitCapsule stores two victim rings (`victims_1`, `victims_2`) with per-entry cooldowns
+  //   and ring insertion pointers (HitCapsule.x44 / x45).
+  // - Rehit gate checks membership in victims_1: lbColl_8000ACFC(victim, hitbox).
+  // - Insertion/refresh: lbColl_80008688 (victims_1) and lbColl_80008820 (victims_2).
+  // - Decrement + expiry clear: lbColl_80008A5C.
+  // refs/melee/src/melee/lb/types.h::HitCapsule
+  // refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000ACFC,lbColl_80008688,lbColl_80008820,lbColl_80008A5C}
   //
-  // Simulator representation (minimal, fighter victims only):
-  // - Dense cooldown map indexed by (attacker_slot, hit_group, victim_slot).
-  // - Value semantics match `MslSeed.combat_hitlist_cd`.
-  // - Victim identity key matches decomp `HitVictim.victim` pointer: we store the defender's
-  //   current `instance_id` alongside the cooldown so that a death/respawn (new instance_id) does
-  //   not inherit stale rehit suppression.
-  // refs/melee/src/melee/lb/lbcollision.c::lbColl_80008688
+  // Seed schema bridge (teacher-forced one-step):
+  // - The seed schema carries a dense (attacker, hit_group, victim_port) cooldown map.
+  // - Runtime combat consumes decomp-shaped per-hitbox victim rings (fighter_hitlist).
+  // - On first use after reseed, active hitboxes materialize `victims_1` from this dense map.
   //
-  // Layout: [batch * MSL_MAX_PLAYERS * MSL_HITLIST_GROUPS * MSL_MAX_PLAYERS]
+  // IMPORTANT (rollout contract, v1):
+  // - `combat_hitlist_{cd,victim_iid}` are treated as seed-only inputs and are not maintained during
+  //   rollouts. The authoritative runtime state lives in `fighter_hitlist` / `item_hitlist`.
+  // - Serializing hitlist state mid-rollout (e.g., exporting to the dense map) is not supported yet.
+  //   TODO: add an explicit export path if/when rollout save-states are needed.
+  //
+  // Dense map layout: [batch * MSL_MAX_PLAYERS * MSL_HITLIST_GROUPS * MSL_MAX_PLAYERS]
   uint16_t* combat_hitlist_cd;
   uint16_t* combat_hitlist_victim_iid;
+  // Reseed generation counter (incremented on reseed_seed).
+  uint32_t* hitlist_reseed_gen;  // [batch]
+  // Per fighter hitbox victim rings (x914[4] analogue).
+  // Layout: [batch * MSL_MAX_PLAYERS * MSL_MAX_HITBOXES]
+  MslHitlistCapsule* fighter_hitlist;
+  // Per-hitbox init generation marker for seed materialization.
+  // Layout: [batch * MSL_MAX_PLAYERS * MSL_MAX_HITBOXES]
+  uint32_t* fighter_hitlist_init_gen;
 
   // Stale-move (staling) internals.
   //
@@ -410,14 +425,10 @@ typedef struct MslStateSoA {
   uint8_t* item_misc2;
   uint8_t* item_misc3;
 
-  // Item->fighter hitlist cooldowns (lasers v1).
-  // Layout: [batch * MSL_MAX_ITEMS * MSL_MAX_PLAYERS]
-  // Value semantics:
-  // - 0: empty (can hit)
-  // - 0xFFFF: indefinite latch (do not rehurt the same fighter with the same item slot)
-  uint16_t* item_hitlist_cd;
-  // Victim identity key (fighter instance id) for the corresponding `item_hitlist_cd` entry.
-  uint16_t* item_hitlist_victim_iid;
+  // Item hitbox victim rings (HitCapsule victim lists per item slot).
+  // Decomp anchor (tick): refs/melee/src/melee/it/itcoll.c::it_8027146C
+  // Layout: [batch * MSL_MAX_ITEMS]
+  MslHitlistCapsule* item_hitlist;
 } MslStateSoA;
 
 int state_alloc(MslStateSoA* state, int batch_size);

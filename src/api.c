@@ -430,6 +430,22 @@ int msl_batch_reseed_seed(MslBatch* batch, const uint8_t* seed_bytes, size_t see
     // Compute decomp-shaped grab attachment offsets (fp->x1A70 analog) for any seeded victims.
     grab_attachment_reseed_init(batch, bi);
 
+    // Combat hitlist reseed generation:
+    // - Seed carries a dense per-(attacker,hit_group,victim) snapshot, but runtime uses per-hitbox
+    //   victim rings (HitCapsule-shaped).
+    // - Mark all fighter hitboxes as "needs seed materialization" for this reseed.
+    uint32_t gen = batch->state.hitlist_reseed_gen[bi] + 1u;
+    if (gen == 0u) {
+      gen = 1u;
+    }
+    batch->state.hitlist_reseed_gen[bi] = gen;
+    {
+      const size_t base = ((size_t)bi * (size_t)MSL_MAX_PLAYERS) * (size_t)MSL_MAX_HITBOXES;
+      for (size_t i = 0; i < (size_t)MSL_MAX_PLAYERS * (size_t)MSL_MAX_HITBOXES; i++) {
+        batch->state.fighter_hitlist_init_gen[base + i] = 0u;
+      }
+    }
+
     for (int it = 0; it < MSL_MAX_ITEMS; it++) {
       const size_t ii = msl_idx_item(bi, it);
       const MslItem* item = &seed->items[it];
@@ -460,12 +476,8 @@ int msl_batch_reseed_seed(MslBatch* batch, const uint8_t* seed_bytes, size_t see
       batch->state.item_misc3[ii] = item->misc3;
 
       // Item hitlists are derived (not seeded): clear on reseed so reused item slots don't
-      // inherit stale victim cooldowns.
-      const size_t cd_base = ii * (size_t)MSL_MAX_PLAYERS;
-      for (int v = 0; v < MSL_MAX_PLAYERS; v++) {
-        batch->state.item_hitlist_cd[cd_base + (size_t)v] = 0;
-        batch->state.item_hitlist_victim_iid[cd_base + (size_t)v] = 0;
-      }
+      // inherit stale victim rings.
+      hitlist_capsule_clear(&batch->state.item_hitlist[ii]);
     }
 
     // Next value for plStale_IncrementAttackInstance (global counter).
@@ -1232,9 +1244,7 @@ int msl_batch_debug_clear_hitboxes_world(MslBatch* batch, int batch_index, int p
 
   // Debug helper: approximate the engine's "clear hitboxes" behavior by also resetting rehit
   // suppression for this attacker so that re-enabling a hitbox can immediately apply a new hit.
-  for (uint8_t g = 0; g < (uint8_t)MSL_HITLIST_GROUPS; g++) {
-    hitlist_clear_group(batch, batch_index, player_index, g);
-  }
+  hitlist_debug_clear_fighter_attacker(batch, batch_index, player_index);
 
   return 0;
 }
@@ -1526,6 +1536,43 @@ int msl_batch_debug_combat_select_body_hits(MslBatch* batch, int batch_index,
                                             MslDebugCombatContact* out_contacts,
                                             uint16_t max_contacts, uint16_t* out_count) {
   return combat_debug_select_body_hits(batch, batch_index, out_contacts, max_contacts, out_count);
+}
+
+int msl_batch_debug_hitlist_fighter_contains(const MslBatch* batch, int batch_index, int attacker,
+                                             int hb_id, int victim, int* out_present) {
+  if (out_present == NULL) {
+    return EINVAL;
+  }
+  *out_present = 0;
+  if (batch == NULL) {
+    return EINVAL;
+  }
+  if (batch_index < 0 || batch_index >= batch->batch_size) {
+    return EINVAL;
+  }
+  if (attacker < 0 || attacker >= MSL_MAX_PLAYERS) {
+    return EINVAL;
+  }
+  if (hb_id < 0 || hb_id >= MSL_MAX_HITBOXES) {
+    return EINVAL;
+  }
+  if (victim < 0 || victim >= MSL_MAX_PLAYERS) {
+    return EINVAL;
+  }
+
+  const size_t hl_i = ((size_t)batch_index * (size_t)MSL_MAX_PLAYERS + (size_t)attacker) *
+                          (size_t)MSL_MAX_HITBOXES +
+                      (size_t)hb_id;
+  const uint8_t key =
+      msl_hitlist_victim_pack((uint8_t)MSL_HITLIST_VICTIM_KIND_FIGHTER, (uint8_t)victim);
+  const MslHitlistCapsule* hit = &batch->state.fighter_hitlist[hl_i];
+  for (int i = 0; i < (int)MSL_HITLIST_VICTIM_CAP; i++) {
+    if (hit->victims_1[i].kind_slot == key) {
+      *out_present = 1;
+      break;
+    }
+  }
+  return 0;
 }
 
 int msl_debug_point_segment_dist2(float px, float py, float pz, float ax, float ay, float az,

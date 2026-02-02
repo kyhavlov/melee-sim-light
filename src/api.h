@@ -748,6 +748,11 @@ int msl_batch_debug_combat_select_body_hits(MslBatch* batch, int batch_index,
                                             MslDebugCombatContact* out_contacts,
                                             uint16_t max_contacts, uint16_t* out_count);
 
+// Debug/testing helper: inspect decomp-shaped fighter HitCapsule victim lists.
+// Returns `*out_present = 1` if victim port is present in victims_1 for (attacker, hb_id), else 0.
+int msl_batch_debug_hitlist_fighter_contains(const MslBatch* batch, int batch_index, int attacker,
+                                             int hb_id, int victim, int* out_present);
+
 // Debug/testing helper: pure geometry routine for unit tests.
 int msl_debug_point_segment_dist2(float px, float py, float pz, float ax, float ay, float az,
                                   float bx, float by, float bz, float* out_d2, float* out_t);
