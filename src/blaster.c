@@ -132,6 +132,10 @@ void blaster_update_pre_physics(MslBatch* batch) {
       if (!is_fox_falco(cid)) {
         continue;
       }
+      const MslCharParams* ch = msl_char_params(cid);
+      if (ch == NULL) {
+        continue;
+      }
       const MslLaserParams* lp = laser_params_get(cid);
       if (lp == NULL) {
         continue;
@@ -144,7 +148,41 @@ void blaster_update_pre_physics(MslBatch* batch) {
       const uint16_t pressed = batch->state.input_buttons_pressed[idx];
       if (!action_is_blaster(a) && (pressed & (uint16_t)MSL_BUTTON_B) != 0) {
         if (on_ground) {
-          if (action_allows_blaster_entry_ground(a)) {
+          // Landing special-case: Landing lag actions should not be interruptible until their IASA
+          // gate allows it.
+          //
+          // Decomp:
+          // - Normal Landing IASA returns early while fp->cur_anim_frame < fp->co_attrs.normal_landing_lag,
+          //   then checks specials including SpecialN (ftCo_800D6824).
+          //   refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::ftCo_Landing_IASA
+          //   refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_800D6824
+          // - LandingFallSpecial sets allow_interrupt=false, so the same IASA path blocks all interrupts.
+          //   refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::ftCo_LandingFallSpecial_Enter_Basic
+          // - LandingAir* IASA is empty, so those landing-lag actions cannot be interrupted at all.
+          //   refs/melee/src/melee/ft/chara/ftCommon/ftCo_LandingAir.c::ftCo_LandingAir_IASA
+          uint8_t allow = action_allows_blaster_entry_ground(a);
+          if (allow) {
+            switch (a) {
+              case (uint16_t)MSL_ACT_LANDING_FALL_SPECIAL:
+              case (uint16_t)MSL_ACT_LANDING_AIR_N:
+              case (uint16_t)MSL_ACT_LANDING_AIR_F:
+              case (uint16_t)MSL_ACT_LANDING_AIR_B:
+              case (uint16_t)MSL_ACT_LANDING_AIR_HI:
+              case (uint16_t)MSL_ACT_LANDING_AIR_LW:
+                allow = 0;
+                break;
+              case (uint16_t)MSL_ACT_LANDING: {
+                // `anim_timebase_update_pre_input()` runs before input processing, matching decomp
+                // prio 1 (Anim) before prio 3 (Input). Use post-advance cur_anim_frame here so the
+                // special becomes available on the correct actionable frame.
+                const float cur = msl_anim_frame_sanitize_f32(batch->state.anim_frame_f32[idx]);
+                allow = (cur >= (float)ch->landing_lag_frames) ? 1u : 0u;
+              } break;
+              default:
+                break;
+            }
+          }
+          if (allow) {
             enter_blaster_start(batch, idx, lp, 1);
           }
         } else {
