@@ -644,11 +644,17 @@ void guard_update_grounded(MslBatch* batch, const MslCommonParams* c, size_t idx
 }
 
 void action_update(MslBatch* batch) {
+  // Grab/throw Anim-callback-shaped transitions should happen before the grounded locomotion IASA
+  // chain (including shield entry). Example: Catch/CatchDash Anim end -> Wait (ft_8008A2BC) should
+  // run before the next state's guard entry check (ftCo_80091A4C) so buffered shields can block
+  // on the first actionable frame after a whiffed grab.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::{ftCo_Catch_Anim,ftCo_CatchDash_Anim}
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80091A4C
+  grab_flow_update_pre_physics(batch);
   locomotion_update_pre(batch);
   knockdown_update_pre_physics(batch);
   ledge_update_pre_physics(batch);
   shine_update_pre_physics(batch);
   blaster_update_pre_physics(batch);
-  grab_flow_update_pre_physics(batch);
   throw_flow_update_pre_physics(batch);
 }

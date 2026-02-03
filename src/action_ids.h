@@ -134,6 +134,13 @@ typedef enum MslActionId {
   MSL_ACT_CAPTURE_JUMP = 0x00E6,       // ftCo_MS_CaptureJump (230)
   MSL_ACT_CAPTURE_NECK = 0x00E7,       // ftCo_MS_CaptureNeck (231)
   MSL_ACT_CAPTURE_FOOT = 0x00E8,       // ftCo_MS_CaptureFoot (232)
+
+  // Rebound / clank response.
+  // Decomp source of truth: refs/melee/src/melee/ft/chara/ftCommon/forward.h `ftCommon_MotionState`.
+  // (See also: refs/melee/src/melee/ft/chara/ftCommon/ftCo_Rebound.c)
+  MSL_ACT_REBOUND_STOP = 0x00ED,  // ftCo_MS_ReboundStop (237)
+  MSL_ACT_REBOUND = 0x00EE,       // ftCo_MS_Rebound (238)
+
   MSL_ACT_THROWN_F = 0x00EF,           // ftCo_MS_ThrownF (239)
   MSL_ACT_THROWN_B = 0x00F0,           // ftCo_MS_ThrownB (240)
   MSL_ACT_THROWN_HI = 0x00F1,          // ftCo_MS_ThrownHi (241)

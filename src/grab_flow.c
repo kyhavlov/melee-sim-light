@@ -1,8 +1,36 @@
 #include "grab_flow.h"
 
 #include "action_ids.h"
+#include "anim_frame.h"
+#include "anim_table.h"
 #include "anim_timebase.h"
 #include "move_tables.h"
+
+static inline uint8_t anim_finished(uint8_t char_id, uint16_t msid, float anim_frame_f32) {
+  const float end = msl_anim_end_frame(char_id, msid);
+  if (!(end > 0.0f)) {
+    return 0;
+  }
+  // Decomp gates on "frames remaining" (joint track remaining). In this sim we approximate via a
+  // simple end-frame comparison on the sanitized float timebase.
+  // refs/melee/src/melee/ft/ftanim.c::ftAnim_IsFramesRemaining
+  return msl_anim_frame_sanitize_f32(anim_frame_f32) >= end;
+}
+
+static inline void enter_wait_from_catch_end(MslBatch* batch, size_t idx) {
+  // Catch/CatchDash Anim end -> Wait.
+  //
+  // Decomp:
+  // - ftCo_Catch_Anim: if !ftAnim_IsFramesRemaining, call ft_8008A2BC.
+  //   refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_Catch_Anim
+  // - ftCo_CatchDash_Anim: similar end gate, then ft_8008A2BC.
+  //   refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_CatchDash_Anim
+  // - ft_8008A2BC usually routes to ft_8008A348 -> Fighter_ChangeMotionState(ftCo_MS_Wait).
+  //   refs/melee/src/melee/ft/ft_0892.c::{ft_8008A2BC,ft_8008A348}
+  batch->state.action_id[idx] = (uint16_t)MSL_ACT_WAIT;
+  batch->state.animation_index[idx] = (uint32_t)MSL_SM_WAIT1_0;
+  msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+}
 
 static inline void enter_catch_wait_from_pull(MslBatch* batch, size_t oidx) {
   // Decomp: CatchPull_Anim enters CatchWait via fn_800DA1D8 (Fighter_ChangeMotionState to 0xD8).
@@ -56,6 +84,27 @@ void grab_flow_update_pre_physics(MslBatch* batch) {
       }
 
       const uint16_t oa = batch->state.action_id[oidx];
+
+      // Catch/CatchDash Anim end -> Wait should happen before guard entry checks later in this
+      // frame, so buffered shield inputs become active immediately on the first actionable frame
+      // after a whiffed grab.
+      //
+      // Decomp: ftCo_Catch_IASA and ftCo_CatchDash_IASA are empty. On anim end, Catch/CatchDash
+      // transition via ft_8008A2BC to a neutral state (usually ftCo_MS_Wait), and then the normal
+      // grounded interrupt checks (including shield via ftCo_80091A4C) can run later.
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::{ftCo_Catch_Anim,ftCo_CatchDash_Anim}
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::{ftCo_Catch_IASA,ftCo_CatchDash_IASA}
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80091A4C
+      if (oa == (uint16_t)MSL_ACT_CATCH || oa == (uint16_t)MSL_ACT_CATCH_DASH) {
+        const uint32_t msid_u32 = batch->state.animation_index[oidx];
+        if (msid_u32 <= 0xFFFFu) {
+          const uint16_t msid = (uint16_t)msid_u32;
+          if (anim_finished(batch->state.char_id[oidx], msid, batch->state.anim_frame_f32[oidx])) {
+            enter_wait_from_catch_end(batch, oidx);
+          }
+        }
+      }
+
       if (oa != (uint16_t)MSL_ACT_CATCH_PULL && oa != (uint16_t)MSL_ACT_CATCH_DASH_PULL) {
         continue;
       }
