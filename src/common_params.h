@@ -212,19 +212,23 @@ typedef struct MslCommonParams {
   // - refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_CalcKnockback (kb_squat_mul/kb_min)
   // - refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_CheckAirMotion (air motion KB mul)
   // - refs/melee/build/GALE01/asm/melee/ft/ftcoll.s::ftColl_80079EA8 (kb magnitude)
-  float kb_weight_mul;       // p_ftCommonData->0xF4
-  float kb_weight_mul2;      // p_ftCommonData->0xF8
-  float kb_applied_max;      // p_ftCommonData->0x108
-  float kb_base_term;        // p_ftCommonData->0x110
-  float kb_dmg_mul;          // p_ftCommonData->0x114
-  float kb_wsk_mul;          // p_ftCommonData->0x118
-  float kb_growth_mul;       // p_ftCommonData->0x11C
-  float kb_base_add;         // p_ftCommonData->0x120
-  float kb_vel_mul;          // p_ftCommonData->x100
-  float kb_min;              // p_ftCommonData->x104
-  float kb_squat_mul;        // p_ftCommonData->x124
-  float kb_ice_mul;          // p_ftCommonData->kb_ice_mul (+0x718)
-  float kb_smashcharge_mul;  // p_ftCommonData->kb_smashcharge_mul (+0x7C4)
+  float kb_weight_mul;   // p_ftCommonData->0xF4
+  float kb_weight_mul2;  // p_ftCommonData->0xF8
+  float kb_applied_max;  // p_ftCommonData->0x108
+  float kb_base_term;    // p_ftCommonData->0x110
+  float kb_dmg_mul;      // p_ftCommonData->0x114
+  float kb_wsk_mul;      // p_ftCommonData->0x118
+  float kb_growth_mul;   // p_ftCommonData->0x11C
+  float kb_base_add;     // p_ftCommonData->0x120
+  float kb_vel_mul;      // p_ftCommonData->x100
+  float kb_min;          // p_ftCommonData->x104
+  float kb_squat_mul;    // p_ftCommonData->x124
+  // Damage scalar used by ftColl on a specific "victim_gobj != NULL and != attacker" branch.
+  // refs/melee/src/melee/ft/ftcoll.c::ftColl_800765F0
+  // refs/melee/src/melee/ft/ftcoll.c::inlineB3
+  float ftcoll_damage_mul_x128;  // p_ftCommonData->x128
+  float kb_ice_mul;              // p_ftCommonData->kb_ice_mul (+0x718)
+  float kb_smashcharge_mul;      // p_ftCommonData->kb_smashcharge_mul (+0x7C4)
   // ftColl_80079AB0 percent-term override constants (p_ftCommonData->0x6D4/0x6D8).
   //
   // Used in the non-WSK else-branch when fp+0x2225 bit0 is set (decomp name: fp->x2225_b7):

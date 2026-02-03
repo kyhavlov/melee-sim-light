@@ -892,7 +892,15 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
         continue;
       }
 
-      // Apply BODY hit to defender and despawn the laser.
+      // BODY contact: attempt to apply an item hit.
+      //
+      // Laser lifetime policy (suite-stable):
+      // - Shield hit => despawn (handled above; itfoxlaser Logic94 HitShield).
+      // - Real BODY hit applied => despawn (matches in-game behavior; prevents item-slot drift).
+      // - BODY hit suppressed because the defender is still an attached grabbed/thrown victim of the
+      //   attacker => do not despawn (victim stays in Thrown*/Capture*; see combat_apply_item_hit()).
+      //
+      // Decomp-first reference for item-vs-fighter BODY intake: refs/melee/src/melee/it/itcoll.c::it_80272460.
       // Decomp-first references for BODY apply:
       // - Fighter_ProcessHit_8006D1EC (percent add, hitlag, hitstun, damage-state entry)
       // - ftColl_80076CBC (getEnvDmg pattern)
@@ -903,16 +911,21 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
       const uint16_t wsk = (laser_state == 0u) ? lp->wsk : lp->state1_wsk;
       const uint16_t bkb = (laser_state == 0u) ? lp->bkb : lp->state1_bkb;
       const uint8_t element = (laser_state == 0u) ? lp->element : lp->state1_element;
-      combat_apply_item_hit(batch, bi, owner, def, batch->state.item_attack_id[ii],
-                            batch->state.item_attack_instance[ii],
-                            batch->state.item_instance_id[ii], batch->state.item_type[ii], dmg,
-                            angle, kbg, wsk, bkb, hit_hurt_height, element);
-      // Rehit suppression latch for this item: insert the post-mutation victim identity so
-      // teacher-forced reseed sees the same proxy at t+1.
+      const MslItemHitResult res = combat_apply_item_hit(
+          batch, bi, owner, def, batch->state.item_attack_id[ii],
+          batch->state.item_attack_instance[ii], batch->state.item_instance_id[ii],
+          batch->state.item_type[ii], dmg, angle, kbg, wsk, bkb, hit_hurt_height, element);
+      if (res == MSL_ITEM_HIT_NONE) {
+        continue;
+      }
+      if (res == MSL_ITEM_HIT_APPLIED_CONSUME_ITEM) {
+        item_slot_clear(batch, ii);
+        break;
+      }
+      // Rehit suppression latch for this item (runtime): insert the post-mutation victim identity.
       const uint16_t def_iid_post = batch->state.instance_id[d_idx];
       hitlist_register_item_fighter(batch, bi, it, def, def_iid_post,
                                     (int)MSL_LBCOLL_INSERT_FT_BODY, 0);
-      item_slot_clear(batch, ii);
       break;
     }
   }

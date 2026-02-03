@@ -318,6 +318,7 @@ int common_params_init(void) {
       json_get_f32(buf, "kb_vel_mul", &g_params.kb_vel_mul) != 0 ||
       json_get_f32(buf, "kb_min", &g_params.kb_min) != 0 ||
       json_get_f32(buf, "kb_squat_mul", &g_params.kb_squat_mul) != 0 ||
+      json_get_f32(buf, "ftcoll_damage_mul_x128", &g_params.ftcoll_damage_mul_x128) != 0 ||
       json_get_f32(buf, "kb_ice_mul", &g_params.kb_ice_mul) != 0 ||
       json_get_f32(buf, "kb_smashcharge_mul", &g_params.kb_smashcharge_mul) != 0 ||
       json_get_i32(buf, "ftcoll_percent_base_x6d4", &g_params.ftcoll_percent_base_x6d4) != 0 ||

@@ -300,6 +300,10 @@ def main() -> None:
         "kb_vel_mul": float(_f32_be(buf, ft_common_abs + 0x100)),
         "kb_min": float(_f32_be(buf, ft_common_abs + 0x104)),
         "kb_squat_mul": float(_f32_be(buf, ft_common_abs + 0x124)),
+        # Damage scalar used by ftColl on a specific "victim_gobj != NULL and != attacker" branch.
+        # refs/melee/src/melee/ft/ftcoll.c::ftColl_800765F0
+        # refs/melee/src/melee/ft/ftcoll.c::inlineB3
+        "ftcoll_damage_mul_x128": float(_f32_be(buf, ft_common_abs + 0x128)),
         # ftCo_Damage_CalcKnockback additional modifiers (GALE01):
         # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_CalcKnockback
         # Offsets (relative to ftCommonData base) are from decomp struct:

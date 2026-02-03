@@ -64,6 +64,7 @@
   "fastfall_stick_threshold": 0.6625000238418579,
   "fastfall_tilt_max_frames": 4,
   "floor_skip_frames": 2,
+  "ftcoll_damage_mul_x128": 0.5,
   "ftcoll_percent_base_x6d4": 20,
   "ftcoll_percent_base_x6d8": 50,
   "ground_kb_friction_mul": 1.0,

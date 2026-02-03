@@ -136,6 +136,28 @@ def _move_id_from_char_action(char_id: int, action_id_u16: int) -> int:
     return mv
 
 
+def _infer_attacker_slot_from_last_hit_by_instance(
+    *,
+    state_iid_row: np.ndarray,
+    last_hit_by_instance: int,
+) -> int:
+    """Infer attacker slot when `last_hit_by` is unknown.
+
+    Uses only same-frame (t) state:
+    - `last_hit_by_instance` is the victim's Slippi `last_hit_by_instance` at t.
+    - `state_iid_row` is the per-player Slippi `instance_id` (action-state iid) at t.
+
+    Returns the unique matching player slot, or -1 if unknown/ambiguous.
+    """
+    hit_iid = int(last_hit_by_instance)
+    if hit_iid == 0:
+        return -1
+    matches = np.flatnonzero(state_iid_row.astype(np.int64) == hit_iid)
+    if matches.size != 1:
+        return -1
+    return int(matches[0])
+
+
 def derive_staling_history(frames: pa.StructArray, *, src_ports: list[int]) -> StalingHistory:
     """Derive stale-queue seed state strictly causally (prefix-invariant).
 
@@ -150,8 +172,9 @@ def derive_staling_history(frames: pa.StructArray, *, src_ports: list[int]) -> S
     - We model the fighter-side bump on motion-state change (ft_800890D0) using Slippi post-frame
       action-state changes. We do not currently model additional bump sites like ft_800892A0 because
       they are not unambiguously observable from Slippi post-frames in general.
-    - If the victim's `last_hit_by` does not map to a known source port (attacker unknown), we skip
-      enqueuing for that hit (no heuristic fallback).
+    - If the victim's `last_hit_by` does not map to a known source port (attacker unknown), we
+      fall back to inferring the attacker from a unique match on `last_hit_by_instance` against the
+      current frame's action-state instance_id set (no lookahead; skip if ambiguous).
     - Hit attribution uses Slippi post-frame percent deltas (damaging hits only) and the victim's
       last_hit_by / last_hit_by_instance fields to select the attacker and tie the hit to the
       attacker's historical action-state instance_id when needed (e.g. projectiles inheriting
@@ -306,8 +329,22 @@ def derive_staling_history(frames: pa.StructArray, *, src_ports: list[int]) -> S
                 a_port0 = int(last_hit_by[t, victim])
                 attacker = slot_by_port0.get(a_port0, -1)
                 if attacker < 0:
-                    # Decomp-pure behavior: if attacker port is unknown/unmapped, do not enqueue.
-                    continue
+                    # Fallback: infer attacker from the victim's `last_hit_by_instance` by matching
+                    # it against a unique player's action-state instance_id at this frame.
+                    #
+                    # Rationale:
+                    # - Some item/projectile damage events (notably "attached victim" edge cases)
+                    #   can leave `last_hit_by` unmapped while still populating `last_hit_by_instance`.
+                    # - Staling tables are attacker-owned and *do* update in-game for those hits,
+                    #   so skipping the enqueue here causes stale table drift and percent mismatches
+                    #   under teacher-forced reseed.
+                    hit_iid = int(last_hit_by_instance[t, victim])
+                    attacker = _infer_attacker_slot_from_last_hit_by_instance(
+                        state_iid_row=state_iid[t, :],
+                        last_hit_by_instance=hit_iid,
+                    )
+                    if attacker < 0:
+                        continue
                 if attacker == victim:
                     continue
 

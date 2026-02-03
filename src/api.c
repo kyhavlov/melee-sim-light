@@ -480,6 +480,61 @@ int msl_batch_reseed_seed(MslBatch* batch, const uint8_t* seed_bytes, size_t see
       hitlist_capsule_clear(&batch->state.item_hitlist[ii]);
     }
 
+    // Seed bridge: item hitlists (teacher-forced one-step).
+    //
+    // Decomp shape:
+    // - Item collision uses per-item HitCapsule victim rings to prevent re-hitting the same fighter
+    //   across frames (similar to fighter hitbox hitlists).
+    // - Tick/decrement path: refs/melee/src/melee/it/itcoll.c::it_8027146C
+    //
+    // Seed reality:
+    // - Seed schema currently carries fighter hitlist state but does not carry per-item hitlists.
+    // - Under teacher-forced reseed, this can cause false multi-frame item re-hits for items that
+    //   are supposed to persist after a suppressed BODY collision (e.g. grab-owner laser on an
+    //   attached Thrown*/Capture* victim).
+    //
+    // Minimal parity fix (suite-focused, deterministic, no allocations):
+    // - If a victim is still attached (grab_owner_port) and still in a grabbed-victim action and
+    //   is in hitlag from a prior item hit (seeded), pre-latch the matching laser item(s) into the
+    //   per-item hitlist so this step cannot apply an additional BODY hit.
+    const int num_players = (int)batch->config.num_players;
+    for (int victim = 0; victim < num_players; victim++) {
+      if (seed->hitlag[victim] == 0u) {
+        continue;
+      }
+      const uint8_t owner = seed->grab_owner_port[victim];
+      if (owner == 0xFFu || owner >= (uint8_t)num_players) {
+        continue;
+      }
+      const uint16_t act = seed->action_id[victim];
+      if (!msl_action_is_grabbed_victim(act)) {
+        continue;
+      }
+      const uint16_t hit_iid = seed->instance_hit_by[victim];
+      if (hit_iid == 0u) {
+        continue;
+      }
+      const size_t v_idx = msl_idx_player(bi, victim);
+      const uint16_t victim_iid = batch->state.instance_id[v_idx];
+      for (int it = 0; it < MSL_MAX_ITEMS; it++) {
+        const size_t ii = msl_idx_item(bi, it);
+        if (!batch->state.item_exists[ii]) {
+          continue;
+        }
+        if (batch->state.item_owner[ii] != (int8_t)owner) {
+          continue;
+        }
+        if (batch->state.item_instance_id[ii] != hit_iid) {
+          continue;
+        }
+        if (laser_params_for_item_type(batch->state.item_type[ii]) == NULL) {
+          continue;
+        }
+        hitlist_register_item_fighter(batch, bi, it, victim, victim_iid,
+                                      (int)MSL_LBCOLL_INSERT_FT_BODY, 0);
+      }
+    }
+
     // Next value for plStale_IncrementAttackInstance (global counter).
     uint16_t next = (uint16_t)(max_attack_inst + 1u);
     if (next == 0) {

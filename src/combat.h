@@ -7,6 +7,15 @@ void combat_processhit_consume(MslBatch* batch);
 
 typedef struct MslThrowHitboxParams MslThrowHitboxParams;
 
+typedef enum MslItemHitResult {
+  MSL_ITEM_HIT_NONE = 0,
+  // A real BODY hit was applied and the item should be consumed/despawned (e.g. laser on BODY hit).
+  MSL_ITEM_HIT_APPLIED_CONSUME_ITEM = 1,
+  // A collision-confirmed BODY hit was suppressed (e.g. attached Thrown*/Capture* victim),
+  // and the item should NOT be consumed/despawned.
+  MSL_ITEM_HIT_SUPPRESSED_DONT_CONSUME = 2,
+} MslItemHitResult;
+
 // Apply a throw hit (Throw* -> Thrown* victim), using extracted set_throw_hitbox params and the
 // same decomp-shaped percent/hitlag/KB/hitstun/state-entry machinery as combat_resolve.
 //
@@ -19,11 +28,11 @@ uint8_t combat_apply_throw_hit(MslBatch* batch, int batch_index, int attacker, i
 //
 // Intended for simple projectiles (e.g. Fox/Falco blaster lasers) that resolve outside the
 // fighter-vs-fighter hitbox pass.
-void combat_apply_item_hit(MslBatch* batch, int batch_index, int attacker, int defender,
-                           uint16_t item_attack_id, uint16_t item_attack_instance,
-                           uint16_t item_instance_id, uint16_t item_type, float damage,
-                           uint16_t angle, uint16_t kbg, uint16_t wsk, uint16_t bkb,
-                           uint8_t defender_hurt_height, uint8_t element);
+MslItemHitResult combat_apply_item_hit(MslBatch* batch, int batch_index, int attacker, int defender,
+                                       uint16_t item_attack_id, uint16_t item_attack_instance,
+                                       uint16_t item_instance_id, uint16_t item_type, float damage,
+                                       uint16_t angle, uint16_t kbg, uint16_t wsk, uint16_t bkb,
+                                       uint8_t defender_hurt_height, uint8_t element);
 
 // Apply an item->fighter SHIELD hit (shield HP depletion + GuardSetOff + defender hitlag).
 //
