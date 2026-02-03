@@ -1102,6 +1102,17 @@ void locomotion_update_pre(MslBatch* batch) {
             // Slippi post-frame `jumps` is "jumps left", so: jumps_left = max_jumps - jumps_used.
             batch->state.jumps_left[idx] = ch->max_jumps > 0 ? (uint8_t)(ch->max_jumps - 1) : 0;
             action_id = jump_act;
+
+            // Allow airdodge (EscapeAir) to trigger on the first airborne frame after takeoff.
+            //
+            // This matters for wavedash-style inputs: KneeBend enters Jump during Anim, and Jump's
+            // IASA can immediately enter EscapeAir on the same frame when L/R is pressed.
+            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_KneeBend.c
+            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c
+            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_80099A58
+            if (escape_air_try_enter_from_air_locomotion(batch, c, idx)) {
+              continue;
+            }
           }
         }
 

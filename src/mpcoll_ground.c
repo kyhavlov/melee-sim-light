@@ -246,35 +246,63 @@ static int floor_dd90_project(const MslStageFloorGraph* g, int line_idx, float x
 
 static uint8_t floor_intersect_horiz(float x0, float y0, float x1, float ax, float ay, float bx,
                                      float by, float* ix_out, float* iy_out) {
-  // Decomp: mpCheckFloor uses mpLineIntersectionH only when ay >= by (falling / non-rising).
+  // Decomp: mpLineIntersectionH (used by mpCheckFloor on horizontal-ish floor lines).
+  // refs/melee/src/melee/mp/mplib.c::mpLineIntersectionH
   // refs/melee/src/melee/mp/mplib.c::mpCheckFloor
+  if (ix_out == NULL || iy_out == NULL) {
+    return 0;
+  }
+
+  // mpCheckFloor gate: only consider falling / non-rising motion segments (ay >= by in this sim's
+  // y-up coordinate system).
   if (!(ay >= by)) {
     return 0;
   }
-  const float min_x = (x0 < x1) ? x0 : x1;
-  const float max_x = (x0 < x1) ? x1 : x0;
 
-  if (ay == by) {
-    if (ay != y0) {
+  float min_ax = 0.0f;
+  float max_ax = 0.0f;
+  if (x0 < x1) {
+    if ((ax < x0 && bx < x0) || (x1 < ax && x1 < bx)) {
       return 0;
     }
-    if (ax < min_x || ax > max_x) {
+    if ((ay - y0) < -k_floor_horiz_dy_thresh || (by - y0) > k_floor_horiz_dy_thresh) {
       return 0;
     }
-    *ix_out = ax;
-    *iy_out = y0;
-    return 1;
+    min_ax = x0;
+    max_ax = x1;
+  } else {
+    if ((ax < x1 && bx < x1) || (x0 < ax && x0 < bx)) {
+      return 0;
+    }
+    if ((by - y0) < -k_floor_horiz_dy_thresh || (ay - y0) > k_floor_horiz_dy_thresh) {
+      return 0;
+    }
+    min_ax = x1;
+    max_ax = x0;
   }
 
-  if (!(ay >= y0 && by <= y0)) {
+  const double dby = (double)by - (double)ay;
+  const double dbx = (double)bx - (double)ax;
+  if (fabs(dby) < (double)k_floor_horiz_dy_thresh) {
     return 0;
   }
-  const float t = (ay - y0) / (ay - by);
-  const float ix = ax + (bx - ax) * t;
-  if (ix < min_x || ix > max_x) {
-    return 0;
+
+  double new_x = dbx / dby * (double)(y0 - ay) + (double)ax;
+  double dx = new_x - (double)min_ax;
+  if (dx < 0.0) {
+    if (dx < -(double)k_floor_x_end_clamp) {
+      return 0;
+    }
+    new_x = (double)min_ax;
   }
-  *ix_out = ix;
+  if (new_x - (double)max_ax > 0.0) {
+    if (new_x - (double)max_ax > (double)k_floor_x_end_clamp) {
+      return 0;
+    }
+    new_x = (double)max_ax;
+  }
+
+  *ix_out = (float)new_x;
   *iy_out = y0;
   return 1;
 }
@@ -594,9 +622,27 @@ void mpcoll_ground_apply(MslBatch* batch) {
       // Decomp: mpLib_8004DD90_Floor and mpCheckFloor consume the ECB bottom point.
       // refs/melee/src/melee/mp/mplib.c::mpLib_8004DD90_Floor
       // refs/melee/src/melee/mp/mplib.c::mpCheckFloor
-      msl_ecb_bottom_world_point_sample(&cur_bot, char_id, anim, ecb_frame, x, y, was_grounded);
+      uint8_t lock_bottom_to_zero = was_grounded;
+      // Wavedash-style landings: EscapeAir can be entered on the first airborne frame after
+      // KneeBend takeoff, and floor collision must use the flags&1 ECB shape to detect the
+      // immediate ground contact deterministically.
+      // refs/melee/src/melee/mp/mpcoll.c::mpColl_LoadECB_JObj (flags & 1)
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll
+      // refs/melee/src/melee/ft/ft_081B.c::ft_80082C74
+      // refs/melee/src/melee/ft/ft_081B.c::ft_80081D0C
+      // refs/melee/src/melee/mp/mpcoll.c::mpColl_800471F8 (mpColl_LoadECB_inline(coll, 6))
+      // refs/melee/src/melee/mp/mpcoll.c::mpColl_LoadECB_inline (preserves desired_ecb.bottom when
+      //   CollData_X130_Locked is set)
+      // refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007D5D4 (sets CollData_X130_Locked on takeoff)
+      // refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007D60C (sets CollData_X130_Locked on takeoff)
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_80099A58
+      if (!lock_bottom_to_zero && action_id == (uint16_t)MSL_ACT_ESCAPE_AIR &&
+          batch->state.prev_action_id[idx] == (uint16_t)MSL_ACT_KNEE_BEND) {
+        lock_bottom_to_zero = 1;
+      }
+      msl_ecb_bottom_world_point_sample(&cur_bot, char_id, anim, ecb_frame, x, y, lock_bottom_to_zero);
       msl_ecb_bottom_world_point_sample(&prev_bot, char_id, anim, ecb_frame_prev, prev_x, prev_y,
-                                        was_grounded);
+                                        lock_bottom_to_zero);
 
       const float cur_bottom_x = cur_bot.x;
       const float cur_bottom_y = cur_bot.y;
@@ -719,11 +765,10 @@ void mpcoll_ground_apply(MslBatch* batch) {
           }
 
           if (!snapped_edge) {
-            // Decomp: mpCheckFloor's horizontal intersection helper is only used on falling/non-rising
-            // segments. For grounded -> airborne transitions, avoid treating pure horizontal motion
-            // along the floor as a swept "landing" that would keep the fighter grounded.
+            // Decomp: mpCheckFloor's horizontal intersection helper is gated on non-rising segments
+            // (ay >= by), so equality must be allowed (horizontal motion with vy==0 can still sweep).
             // refs/melee/src/melee/mp/mplib.c::mpCheckFloor (the `if (ay >= by && mpLineIntersectionH(...))` gate)
-            const uint8_t can_sweep = (uint8_t)(cur_bottom_y < prev_bottom_y);
+            const uint8_t can_sweep = (uint8_t)(cur_bottom_y <= prev_bottom_y);
             int hit_line_idx = -1;
             float ix = 0.0f, iy = 0.0f;
             if (can_sweep &&
@@ -782,6 +827,23 @@ void mpcoll_ground_apply(MslBatch* batch) {
             // `on_edge` gate deterministically.
             floor_write_edge_suppression_flags(batch, idx, stage_id, g, hit_line_idx, char_id, anim,
                                                ecb_frame, was_grounded);
+          }
+        } else if (prefer_line_idx >= 0 && batch->state.speed_y_self[idx] == 0.0f &&
+                   batch->state.hitlag[idx] == 0 && batch->state.hitstun[idx] == 0) {
+          // Decomp: mpLib_8004DD90_Floor can resolve a resting contact even when no crossing sweep is
+          // reported (e.g. vy==0 and the ECB bottom is already on the surface).
+          // Gate this to "already on the surface" to avoid snapping to the floor from far below.
+          // refs/melee/src/melee/mp/mplib.c::mpLib_8004DD90_Floor
+          float y_corr = 0.0f;
+          const int out_line_idx = floor_dd90_project(g, prefer_line_idx, cur_bottom_x, cur_bottom_y,
+                                                      &y_corr, &floor_nx, &floor_ny);
+          if (out_line_idx >= 0 &&
+              fabsf(y_corr - k_floor_y_bias) <= (float)k_floor_horiz_dy_thresh) {
+            batch->state.pos_y[idx] += y_corr;
+            on_ground = 1;
+            ground_id = g->lines[(size_t)out_line_idx].segment_i;
+            contact_x = cur_bottom_x;
+            contact_y = cur_bottom_y + y_corr;
           }
         }
       }
