@@ -128,6 +128,45 @@ static inline void enter_escape_roll(MslBatch* batch, size_t idx, uint16_t actio
   msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
 }
 
+static inline uint8_t escape_try_enter_spotdodge_from_guard_y(MslBatch* batch,
+                                                              const MslCommonParams* c,
+                                                              size_t idx, float stick_y,
+                                                              float cstick_y,
+                                                              uint8_t tilt_timer_y) {
+  if (batch == NULL || c == NULL) {
+    return 0;
+  }
+  // Spotdodge (EscapeN) gate (Guard IASA path).
+  // Decomp: ftCo_8009980C (stick.y + x671_timer_lstick_tilt_y) and cstick.y override path
+  // (ftCo_800DF8E8), called from ftCo_GuardOn_IASA / ftCo_Guard_IASA / ftCo_GuardOff_IASA.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Escape.c::ftCo_8009980C
+  // refs/melee/src/melee/ft/ft_0DF1.c::ftCo_800DF8E8
+  const uint8_t want_spotdodge = ((stick_y <= c->spotdodge_stick_y_threshold &&
+                                   tilt_timer_y < c->spotdodge_flick_tilt_max_frames) ||
+                                  (cstick_y <= c->spotdodge_stick_y_threshold))
+                                     ? 1
+                                     : 0;
+  if (!want_spotdodge) {
+    return 0;
+  }
+  enter_escape_n(batch, idx);
+  return 1;
+}
+
+static inline uint8_t escape_try_enter_spotdodge_from_guard(MslBatch* batch,
+                                                            const MslCommonParams* c,
+                                                            size_t idx) {
+  if (batch == NULL || c == NULL) {
+    return 0;
+  }
+  const float stick_y =
+      apply_deadzone(stick_i8_to_unit(batch->state.input_main_y[idx]), c->lstick_deadzone_y);
+  const float cstick_y =
+      apply_deadzone(stick_i8_to_unit(batch->state.input_c_y[idx]), c->lstick_deadzone_y);
+  const uint8_t tilt_timer_y = batch->state.tilt_timer_y[idx];
+  return escape_try_enter_spotdodge_from_guard_y(batch, c, idx, stick_y, cstick_y, tilt_timer_y);
+}
+
 uint8_t escape_try_enter_from_guard(MslBatch* batch, const MslCommonParams* c, size_t idx) {
   if (batch == NULL || c == NULL) {
     return 0;
@@ -145,15 +184,8 @@ uint8_t escape_try_enter_from_guard(MslBatch* batch, const MslCommonParams* c, s
   const uint8_t tilt_timer_x = batch->state.tilt_timer_x[idx];
   const uint8_t tilt_timer_y = batch->state.tilt_timer_y[idx];
 
-  // Spotdodge (EscapeN) has priority over roll checks in Guard IASA.
-  // Decomp: refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_Guard_IASA
-  const uint8_t want_spotdodge = ((stick_y <= c->spotdodge_stick_y_threshold &&
-                                   tilt_timer_y < c->spotdodge_flick_tilt_max_frames) ||
-                                  (cstick_y <= c->spotdodge_stick_y_threshold))
-                                     ? 1
-                                     : 0;
-  if (want_spotdodge) {
-    enter_escape_n(batch, idx);
+  // Spotdodge (EscapeN) has priority over rolls in Guard IASA.
+  if (escape_try_enter_spotdodge_from_guard_y(batch, c, idx, stick_y, cstick_y, tilt_timer_y)) {
     return 1;
   }
 
@@ -593,13 +625,17 @@ void guard_update_grounded(MslBatch* batch, const MslCommonParams* c, size_t idx
 
   // GuardOff: wait for animation end then go back to Wait.
   if (a0 == MSL_ACT_GUARD_OFF) {
-    // GuardOff IASA: allow common defensive options (including jump) while the GuardOff animation
-    // is playing.
+    // GuardOff IASA: allow spotdodge + jump, but not rolls.
+    //
+    // Decomp: ftCo_GuardOff_IASA calls spotdodge check (ftCo_8009980C) and jump check (ftCo_800CB024),
+    // but does *not* call the roll check (ftCo_8009917C). Allowing EscapeF/B here causes a dominant
+    // GuardOff->EscapeB mismatch cluster in teacher-forced one-step eval.
     // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_GuardOff_IASA
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Escape.c::ftCo_8009917C
     if (guard_try_enter_jump_oos(batch, c, idx)) {
       return;
     }
-    if (escape_try_enter_from_guard(batch, c, idx)) {
+    if (escape_try_enter_spotdodge_from_guard(batch, c, idx)) {
       return;
     }
     const float end_frame =

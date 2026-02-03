@@ -9,6 +9,7 @@ import pyarrow as pa
 from peppi_py import _read_slippi
 
 from tools.eval.dataset import SAMPLE_DTYPE, write_dataset
+from tools.slippi.hitstun import hitstun_u16_from_misc_as_and_state_flags3
 from tools.slippi.rollback import finalized_frame_indices
 
 
@@ -51,19 +52,23 @@ def _int8_from_float_axis(x: np.ndarray) -> np.ndarray:
     return np.round(x * 127.0).astype(np.int8)
 
 
+def _stick_i8_from_unit_stick(x: np.ndarray) -> np.ndarray:
+    # Slippi schema compatibility:
+    # - Newer schemas expose raw_analog_* int8 fields in the UCF-clamped range [-80,80].
+    # - Older schemas provide pre.joystick / pre.cstick as float in [-1,1].
+    # Map [-1,1] -> [-80,80] using the same stick max constant as the sim (MSL_STICK_MAX_I8=80).
+    # Source of truth: src/input_axis.h::MSL_STICK_MAX_I8.
+    #
+    # Use truncation (toward 0) to mirror C float->int casts for deterministic mapping.
+    STICK_MAX_I8 = np.float32(80.0)
+    x = np.clip(x, -1.0, 1.0)
+    return np.trunc(x * STICK_MAX_I8).astype(np.int8)
+
+
 def _u16_from_float_frames(x: np.ndarray | None, n: int) -> np.ndarray:
     if x is None:
         return np.zeros(n, dtype=np.uint16)
     x = np.clip(x, 0.0, 65535.0)
-    return np.floor(x).astype(np.uint16)
-
-
-def _u16_from_hitstun_misc(misc_as: np.ndarray | None, n: int) -> np.ndarray:
-    # Slippi spec: misc_as is hitstun remaining when in hitstun; otherwise used for other things.
-    # For now we clamp-negative-to-0 and floor.
-    if misc_as is None:
-        return np.zeros(n, dtype=np.uint16)
-    x = np.clip(misc_as, 0.0, 65535.0)
     return np.floor(x).astype(np.uint16)
 
 
@@ -675,8 +680,16 @@ def _main_impl(args) -> None:
         pre_buttons_physical = _to_numpy(pre.field("buttons_physical")).astype(np.uint16)
         pre_main_x = _to_numpy(pre.field("raw_analog_x")).astype(np.int8)
         pre_main_y = _to_numpy(pre.field("raw_analog_y")).astype(np.int8)
-        pre_c_x = _to_numpy(pre.field("raw_analog_cstick_x")).astype(np.int8)
-        pre_c_y = _to_numpy(pre.field("raw_analog_cstick_y")).astype(np.int8)
+        if pre.type.get_field_index("raw_analog_cstick_x") != -1:
+            pre_c_x = _to_numpy(pre.field("raw_analog_cstick_x")).astype(np.int8)
+            pre_c_y = _to_numpy(pre.field("raw_analog_cstick_y")).astype(np.int8)
+        elif pre.type.get_field_index("cstick") != -1:
+            # Older schemas: use pre.cstick float (no raw int8 fields).
+            pre_c_x = _stick_i8_from_unit_stick(_to_numpy(pre.field("cstick").field("x")).astype(np.float32))
+            pre_c_y = _stick_i8_from_unit_stick(_to_numpy(pre.field("cstick").field("y")).astype(np.float32))
+        else:
+            pre_c_x = np.zeros(n_frames, dtype=np.int8)
+            pre_c_y = np.zeros(n_frames, dtype=np.int8)
         pre_l = _u8_from_float01(_to_numpy(pre.field("triggers_physical").field("l")).astype(np.float32))
         pre_r = _u8_from_float01(_to_numpy(pre.field("triggers_physical").field("r")).astype(np.float32))
 
@@ -719,7 +732,7 @@ def _main_impl(args) -> None:
         post_airborne = _to_numpy(post.field("airborne")).astype(np.uint8)
         post_on_ground = _airborne_to_on_ground(post_airborne, n_frames)
         post_hitlag = _u16_from_float_frames(_to_numpy(post.field("hitlag")).astype(np.float32), n_frames)
-        post_hitstun = _u16_from_hitstun_misc(_to_numpy(post.field("misc_as")).astype(np.float32), n_frames)
+        post_misc_as = _to_numpy(post.field("misc_as")).astype(np.float32)
         post_state_age_f32 = _to_numpy(post.field("state_age")).astype(np.float32)
         post_state_age = _i16_from_state_age(post_state_age_f32, n_frames)
         post_anim_frame_f32 = _f32_from_state_age(post_state_age_f32, n_frames)
@@ -745,6 +758,9 @@ def _main_impl(args) -> None:
             ],
             axis=1,
         )  # [n_frames, 5]
+        post_hitstun = hitstun_u16_from_misc_as_and_state_flags3(
+            misc_as_f32=post_misc_as, state_flags3_u8=state_flags[:, 3], n=n_frames
+        )
 
         vel = post.field("velocities")
         speed_air_x_self = _to_numpy(vel.field("self_x_air")).astype(np.float32)
