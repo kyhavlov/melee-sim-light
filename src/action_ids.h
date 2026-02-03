@@ -141,11 +141,11 @@ typedef enum MslActionId {
   MSL_ACT_REBOUND_STOP = 0x00ED,  // ftCo_MS_ReboundStop (237)
   MSL_ACT_REBOUND = 0x00EE,       // ftCo_MS_Rebound (238)
 
-  MSL_ACT_THROWN_F = 0x00EF,           // ftCo_MS_ThrownF (239)
-  MSL_ACT_THROWN_B = 0x00F0,           // ftCo_MS_ThrownB (240)
-  MSL_ACT_THROWN_HI = 0x00F1,          // ftCo_MS_ThrownHi (241)
-  MSL_ACT_THROWN_LW = 0x00F2,          // ftCo_MS_ThrownLw (242)
-  MSL_ACT_THROWN_LW_WOMEN = 0x00F3,    // ftCo_MS_ThrownlwWomen (243)
+  MSL_ACT_THROWN_F = 0x00EF,         // ftCo_MS_ThrownF (239)
+  MSL_ACT_THROWN_B = 0x00F0,         // ftCo_MS_ThrownB (240)
+  MSL_ACT_THROWN_HI = 0x00F1,        // ftCo_MS_ThrownHi (241)
+  MSL_ACT_THROWN_LW = 0x00F2,        // ftCo_MS_ThrownLw (242)
+  MSL_ACT_THROWN_LW_WOMEN = 0x00F3,  // ftCo_MS_ThrownlwWomen (243)
 
   // Cliff / ledge (FD suite-present).
   // Source of truth: refs/melee/src/melee/ft/chara/ftCommon/forward.h `ftCommon_MotionState`.
@@ -201,21 +201,21 @@ enum {
 
   MSL_ACT_ATTACK_DASH = 0x0032,  // ftCo_MS_AttackDash
 
-  MSL_ACT_ATTACK_S3_HI = 0x0033,     // ftCo_MS_AttackS3Hi
-  MSL_ACT_ATTACK_S3_HI_S = 0x0034,   // ftCo_MS_AttackS3HiS
-  MSL_ACT_ATTACK_S3_S = 0x0035,      // ftCo_MS_AttackS3S
-  MSL_ACT_ATTACK_S3_LW_S = 0x0036,   // ftCo_MS_AttackS3LwS
-  MSL_ACT_ATTACK_S3_LW = 0x0037,     // ftCo_MS_AttackS3Lw
-  MSL_ACT_ATTACK_HI3 = 0x0038,       // ftCo_MS_AttackHi3
-  MSL_ACT_ATTACK_LW3 = 0x0039,       // ftCo_MS_AttackLw3
+  MSL_ACT_ATTACK_S3_HI = 0x0033,    // ftCo_MS_AttackS3Hi
+  MSL_ACT_ATTACK_S3_HI_S = 0x0034,  // ftCo_MS_AttackS3HiS
+  MSL_ACT_ATTACK_S3_S = 0x0035,     // ftCo_MS_AttackS3S
+  MSL_ACT_ATTACK_S3_LW_S = 0x0036,  // ftCo_MS_AttackS3LwS
+  MSL_ACT_ATTACK_S3_LW = 0x0037,    // ftCo_MS_AttackS3Lw
+  MSL_ACT_ATTACK_HI3 = 0x0038,      // ftCo_MS_AttackHi3
+  MSL_ACT_ATTACK_LW3 = 0x0039,      // ftCo_MS_AttackLw3
 
-  MSL_ACT_ATTACK_S4_HI = 0x003A,     // ftCo_MS_AttackS4Hi
-  MSL_ACT_ATTACK_S4_HI_S = 0x003B,   // ftCo_MS_AttackS4HiS
-  MSL_ACT_ATTACK_S4_S = 0x003C,      // ftCo_MS_AttackS4S
-  MSL_ACT_ATTACK_S4_LW_S = 0x003D,   // ftCo_MS_AttackS4LwS
-  MSL_ACT_ATTACK_S4_LW = 0x003E,     // ftCo_MS_AttackS4Lw
-  MSL_ACT_ATTACK_HI4 = 0x003F,       // ftCo_MS_AttackHi4
-  MSL_ACT_ATTACK_LW4 = 0x0040,       // ftCo_MS_AttackLw4
+  MSL_ACT_ATTACK_S4_HI = 0x003A,    // ftCo_MS_AttackS4Hi
+  MSL_ACT_ATTACK_S4_HI_S = 0x003B,  // ftCo_MS_AttackS4HiS
+  MSL_ACT_ATTACK_S4_S = 0x003C,     // ftCo_MS_AttackS4S
+  MSL_ACT_ATTACK_S4_LW_S = 0x003D,  // ftCo_MS_AttackS4LwS
+  MSL_ACT_ATTACK_S4_LW = 0x003E,    // ftCo_MS_AttackS4Lw
+  MSL_ACT_ATTACK_HI4 = 0x003F,      // ftCo_MS_AttackHi4
+  MSL_ACT_ATTACK_LW4 = 0x0040,      // ftCo_MS_AttackLw4
 };
 
 // Additional GALE01 Fox/Falco action ids needed for fastfall gating.

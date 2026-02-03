@@ -654,7 +654,8 @@ void mpcoll_ground_apply(MslBatch* batch) {
           batch->state.prev_action_id[idx] == (uint16_t)MSL_ACT_KNEE_BEND) {
         lock_bottom_to_zero = 1;
       }
-      msl_ecb_bottom_world_point_sample(&cur_bot, char_id, anim, ecb_frame, x, y, lock_bottom_to_zero);
+      msl_ecb_bottom_world_point_sample(&cur_bot, char_id, anim, ecb_frame, x, y,
+                                        lock_bottom_to_zero);
       msl_ecb_bottom_world_point_sample(&prev_bot, char_id, anim, ecb_frame_prev, prev_x, prev_y,
                                         lock_bottom_to_zero);
 
@@ -849,8 +850,8 @@ void mpcoll_ground_apply(MslBatch* batch) {
           // Gate this to "already on the surface" to avoid snapping to the floor from far below.
           // refs/melee/src/melee/mp/mplib.c::mpLib_8004DD90_Floor
           float y_corr = 0.0f;
-          const int out_line_idx = floor_dd90_project(g, prefer_line_idx, cur_bottom_x, cur_bottom_y,
-                                                      &y_corr, &floor_nx, &floor_ny);
+          const int out_line_idx = floor_dd90_project(g, prefer_line_idx, cur_bottom_x,
+                                                      cur_bottom_y, &y_corr, &floor_nx, &floor_ny);
           if (out_line_idx >= 0 &&
               fabsf(y_corr - k_floor_y_bias) <= (float)k_floor_horiz_dy_thresh) {
             batch->state.pos_y[idx] += y_corr;

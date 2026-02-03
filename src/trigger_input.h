@@ -17,4 +17,3 @@ static inline float msl_trigger_unit_from_input(uint16_t buttons, uint8_t l, uin
   const uint8_t m = l > r ? l : r;
   return msl_trigger_u8_to_unit(m);
 }
-

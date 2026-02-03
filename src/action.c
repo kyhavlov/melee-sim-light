@@ -130,9 +130,8 @@ static inline void enter_escape_roll(MslBatch* batch, size_t idx, uint16_t actio
 }
 
 static inline uint8_t escape_try_enter_spotdodge_from_guard_y(MslBatch* batch,
-                                                              const MslCommonParams* c,
-                                                              size_t idx, float stick_y,
-                                                              float cstick_y,
+                                                              const MslCommonParams* c, size_t idx,
+                                                              float stick_y, float cstick_y,
                                                               uint8_t tilt_timer_y) {
   if (batch == NULL || c == NULL) {
     return 0;
@@ -155,8 +154,7 @@ static inline uint8_t escape_try_enter_spotdodge_from_guard_y(MslBatch* batch,
 }
 
 static inline uint8_t escape_try_enter_spotdodge_from_guard(MslBatch* batch,
-                                                            const MslCommonParams* c,
-                                                            size_t idx) {
+                                                            const MslCommonParams* c, size_t idx) {
   if (batch == NULL || c == NULL) {
     return 0;
   }
@@ -495,8 +493,8 @@ void guard_update_grounded(MslBatch* batch, const MslCommonParams* c, size_t idx
     batch->state.lightshield_amount[idx] = 0.0f;
   }
 
-  const float trig = msl_trigger_unit_from_input(batch->state.input_buttons[idx],
-                                                 batch->state.input_l[idx], batch->state.input_r[idx]);
+  const float trig = msl_trigger_unit_from_input(
+      batch->state.input_buttons[idx], batch->state.input_l[idx], batch->state.input_r[idx]);
 
   // `held_inputs & HSD_PAD_LR` behavior for shielding uses the trigger deadzone (x10).
   // Decomp usage: refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c:46-55.
