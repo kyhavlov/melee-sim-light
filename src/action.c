@@ -8,6 +8,7 @@
 #include "buttons.h"
 #include "input_axis.h"
 #include "locomotion.h"
+#include "trigger_input.h"
 #include "jump_input.h"
 #include "knockdown.h"
 #include "blaster.h"
@@ -262,20 +263,6 @@ void escape_update_grounded(MslBatch* batch, const MslCommonParams* c, const Msl
 // Guard.c
 // --------
 
-static inline float trigger_u8_to_unit(uint8_t v) { return (float)v * (1.0f / 255.0f); }
-
-static inline float trigger_unit_from_input(uint16_t buttons, uint8_t l, uint8_t r) {
-  // Decomp reference: refs/melee/src/melee/ft/fighter.c:1868-1890 and :2019-2050.
-  // - If digital L/R is held, Melee treats shield trigger as fully pressed (`x650 = 1.0f`).
-  // - Otherwise use the analog max of L/R.
-  enum { LR = (uint16_t)MSL_BUTTON_L | (uint16_t)MSL_BUTTON_R };
-  if ((buttons & LR) != 0) {
-    return 1.0f;
-  }
-  const uint8_t m = l > r ? l : r;
-  return trigger_u8_to_unit(m);
-}
-
 static inline uint8_t is_shield_active_action(uint16_t a) {
   switch (a) {
     case MSL_ACT_GUARD_ON:
@@ -508,8 +495,8 @@ void guard_update_grounded(MslBatch* batch, const MslCommonParams* c, size_t idx
     batch->state.lightshield_amount[idx] = 0.0f;
   }
 
-  const float trig = trigger_unit_from_input(batch->state.input_buttons[idx],
-                                             batch->state.input_l[idx], batch->state.input_r[idx]);
+  const float trig = msl_trigger_unit_from_input(batch->state.input_buttons[idx],
+                                                 batch->state.input_l[idx], batch->state.input_r[idx]);
 
   // `held_inputs & HSD_PAD_LR` behavior for shielding uses the trigger deadzone (x10).
   // Decomp usage: refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c:46-55.

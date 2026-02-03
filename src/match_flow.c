@@ -9,6 +9,7 @@
 #include "input_axis.h"
 #include "instance_id.h"
 #include "stage_collision.h"
+#include "trigger_input.h"
 
 enum { MSL_ANIM_NONE_U32 = 0xFFFFFFFFu };
 
@@ -228,7 +229,8 @@ static inline void enter_rebirth_wait(MslBatch* batch, size_t idx, uint32_t stag
   batch->state.speed_x_attack[idx] = 0.0f;
   batch->state.speed_y_attack[idx] = 0.0f;
   // RebirthWait timer is p_ftCommonData + 0x5D4; it can end early via IASA (inputs).
-  // refs/melee/build/GALE01/asm/melee/ft/ft_0D31.s::ftCo_RebirthWait_Anim / ftCo_RebirthWait_IASA
+  // refs/melee/build/GALE01/asm/melee/ft/ft_0D31.s::ftCo_RebirthWait_Anim /
+  // refs/melee/build/GALE01/asm/melee/ft/ft_0D31.s::ftCo_RebirthWait_IASA
   const MslCommonParams* c = msl_common_params();
   const int frames = (c != NULL) ? (int)c->rebirth_wait_timer_frames : 0;
   batch->state.match_flow_timer[idx] = (uint8_t)(frames > 0 ? (frames > 255 ? 255 : frames) : 0);
@@ -414,13 +416,24 @@ void match_flow_update_post_input(MslBatch* batch) {
       // Suite note: RebirthWait runs only a few frames in many replays.
       //
       // Decomp pointers:
-      // - Timer decrement -> Fall when x2340 reaches 0: ft_0D31.s::ftCo_RebirthWait_Anim
-      // - Early exit decision logic: ft_0D31.s::ftCo_RebirthWait_IASA
+      // - Timer decrement -> Fall when x2340 reaches 0:
+      //   refs/melee/build/GALE01/asm/melee/ft/ft_0D31.s::ftCo_RebirthWait_Anim
+      // - Early exit decision logic:
+      //   refs/melee/build/GALE01/asm/melee/ft/ft_0D31.s::ftCo_RebirthWait_IASA
       //
-      // NOTE: This is an intentionally simplified approximation for suite coverage: any non-neutral
-      // input exits RebirthWait to Fall. It is not decomp-exact.
-      // TODO(decomp): implement the actual ftCo_RebirthWait_IASA decision chain.
+      // We only model the *Fall-enter* subset of the IASA chain here (not the full state machine
+      // of Specials/Attacks/Jump/etc while on the angel platform). The key is to avoid treating
+      // low analog trigger noise (common in Slippi inputs) or small stick drift as an immediate
+      // "exit RebirthWait" signal.
+      //
+      // Decomp anchors for the Fall-enter subset:
+      // - Shield held: refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80091A2C
+      // - Taunt (D-Pad Up): refs/melee/src/melee/ft/chara/ftCommon/ftCo_AppealS.c::ftCo_800DE9B8
+      // - Crouch input: refs/melee/src/melee/ft/chara/ftCommon/ftCo_Squat.c::fn_800D5F84
+      // - Turn input: refs/melee/src/melee/ft/chara/ftCommon/ftCo_Turn.c::ftCo_800C97A8
+      // - Walk input: refs/melee/src/melee/ft/ftwalkcommon.c::ftWalkCommon_800DFC70
       const uint16_t buttons = batch->state.input_buttons[idx];
+      const uint16_t buttons_pressed = batch->state.input_buttons_pressed[idx];
       const uint8_t l = batch->state.input_l[idx];
       const uint8_t r = batch->state.input_r[idx];
       const float stick_x =
@@ -428,9 +441,18 @@ void match_flow_update_post_input(MslBatch* batch) {
       const float stick_y =
           apply_deadzone(stick_i8_to_unit(batch->state.input_main_y[idx]), c->lstick_deadzone_y);
 
-      const uint8_t have_input = (uint8_t)((buttons != 0) || (l != 0) || (r != 0) ||
-                                           (stick_x != 0.0f) || (stick_y != 0.0f));
-      if (!have_input) {
+      const float trig_unit = msl_trigger_unit_from_input(buttons, l, r);
+      const uint8_t shield_held = (uint8_t)(trig_unit >= c->trigger_deadzone);
+
+      const float facing_dir = batch->state.facing[idx] ? 1.0f : -1.0f;
+      const float stick_f = stick_x * facing_dir;
+
+      const uint8_t want_fall =
+          (uint8_t)(shield_held || ((buttons_pressed & (uint16_t)MSL_BUTTON_D_UP) != 0) ||
+                    (stick_y < -c->crouch_stick_threshold) ||
+                    (stick_f <= c->turn_stick_x_threshold) || (stick_f >= c->walk_stick_threshold));
+
+      if (!want_fall) {
         continue;
       }
 
