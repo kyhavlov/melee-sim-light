@@ -34,6 +34,9 @@ def test_ledge_grab_treasuredbackkangaroo_1806_1807_regression() -> None:
     # Seed assertions (record t state).
     assert int(chunk_view["seed_t"]["action_id"][0, 0]) == 352
     assert int(chunk_view["seed_t"]["action_id"][1, 0]) == 352
+    # Reference assertions (record t+1 state).
+    assert int(chunk_view["ref_t1"]["action_id"][0, 0]) == 352
+    assert int(chunk_view["ref_t1"]["action_id"][1, 0]) == 252
 
     binding = importlib.import_module("msl_binding")
     sizes = binding.sizes()
@@ -42,25 +45,29 @@ def test_ledge_grab_treasuredbackkangaroo_1806_1807_regression() -> None:
     compare_stride = int(sizes["compare"])
 
     handle = binding.init(batch_size=2, num_players=int(ds.header["num_players"]))
+    try:
+        seed_bytes = np.empty((2, seed_stride), dtype=np.uint8)
+        prev_input_bytes = np.empty((2, input_stride), dtype=np.uint8)
+        input_bytes = np.empty((2, input_stride), dtype=np.uint8)
+        out_compare_bytes = np.empty((2, compare_stride), dtype=np.uint8)
 
-    seed_bytes = np.empty((2, seed_stride), dtype=np.uint8)
-    prev_input_bytes = np.empty((2, input_stride), dtype=np.uint8)
-    input_bytes = np.empty((2, input_stride), dtype=np.uint8)
-    out_compare_bytes = np.empty((2, compare_stride), dtype=np.uint8)
+        seed_bytes[:] = np.frombuffer(chunk_view["seed_t"].tobytes(order="C"), dtype=np.uint8).reshape(2, seed_stride)
+        prev_input_bytes[:] = np.frombuffer(chunk_view["prev_input_t"].tobytes(order="C"), dtype=np.uint8).reshape(
+            2, input_stride
+        )
+        input_bytes[:] = np.frombuffer(chunk_view["input_t"].tobytes(order="C"), dtype=np.uint8).reshape(
+            2, input_stride
+        )
 
-    seed_bytes[:] = np.frombuffer(chunk_view["seed_t"].tobytes(order="C"), dtype=np.uint8).reshape(2, seed_stride)
-    prev_input_bytes[:] = np.frombuffer(chunk_view["prev_input_t"].tobytes(order="C"), dtype=np.uint8).reshape(
-        2, input_stride
-    )
-    input_bytes[:] = np.frombuffer(chunk_view["input_t"].tobytes(order="C"), dtype=np.uint8).reshape(2, input_stride)
+        binding.reseed_seed(handle, seed_bytes)
+        binding.step_input(handle, prev_input_bytes, input_bytes)
+        binding.write_compare(handle, out_compare_bytes)
 
-    binding.reseed_seed(handle, seed_bytes)
-    binding.step_input(handle, prev_input_bytes, input_bytes)
-    binding.write_compare(handle, out_compare_bytes)
+        out = out_compare_bytes.view(COMPARE_DTYPE).reshape(-1)
+        out_action_1806_p0 = int(out["action_id"][0, 0])
+        out_action_1807_p0 = int(out["action_id"][1, 0])
 
-    out = out_compare_bytes.view(COMPARE_DTYPE).reshape(-1)
-    out_action_1806_p0 = int(out["action_id"][0, 0])
-    out_action_1807_p0 = int(out["action_id"][1, 0])
-
-    assert out_action_1806_p0 == 352, f"record=1806 p=0 expected action_id=352, got {out_action_1806_p0}"
-    assert out_action_1807_p0 == 252, f"record=1807 p=0 expected action_id=252 (CliffCatch), got {out_action_1807_p0}"
+        assert out_action_1806_p0 == 352, f"record=1806 p=0 expected action_id=352, got {out_action_1806_p0}"
+        assert out_action_1807_p0 == 252, f"record=1807 p=0 expected action_id=252 (CliffCatch), got {out_action_1807_p0}"
+    finally:
+        binding.destroy(handle)

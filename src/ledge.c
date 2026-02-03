@@ -68,14 +68,15 @@ static inline uint8_t is_airborne_action_with_cliffcatch_check(uint16_t a) {
     case MSL_ACT_JUMP_AERIAL_B:
       return 1;
 
-    // Aerial attacks / airdodge: suite-present air locomotion.
-    case MSL_ACT_ATTACK_AIR_N:
-    case MSL_ACT_ATTACK_AIR_F:
-    case MSL_ACT_ATTACK_AIR_B:
-    case MSL_ACT_ATTACK_AIR_HI:
-    case MSL_ACT_ATTACK_AIR_LW:
-    case MSL_ACT_ESCAPE_AIR:
-      return 1;
+    // NOTE(decomp): the common aerial attack / airdodge collision callbacks do not end in the
+    // cliff catch check (ftCliffCommon_80081298). They use ft_80082C74, which only runs stage
+    // collision and then optionally calls a landing transition callback.
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_Coll
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll
+    // refs/melee/src/melee/ft/ft_081B.c::ft_80082C74
+    //
+    // This lite sim therefore does not schedule CliffCatch directly from AttackAir*/EscapeAir;
+    // ledge catches are expected to occur from fall-like motions and other collision wrappers.
 
     // Spacie aerial specials with decomp call sites that include the cliff catch check.
     // Decomp:
