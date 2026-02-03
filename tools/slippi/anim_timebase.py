@@ -134,22 +134,34 @@ def derive_frame_speed_mul_f32(
     ACT_LANDING_FALL_SPECIAL = np.uint16(0x0048)
 
     for i in range(1, n):
-        if int(hitlag[i]) != 0:
-            out[i] = last
-            continue
-
         changed = (
             int(action_id[i]) != int(action_id[i - 1])
             or int(animation_index[i]) != int(animation_index[i - 1])
             or int(char_id[i]) != int(char_id[i - 1])
         )
         if not changed:
+            if int(hitlag[i]) != 0:
+                # Decomp: hitlag freezes animation advancement (Fighter_8006A360 gate) but does not
+                # modify fp->frame_speed_mul; keep the last known rate on stable segments.
+                # refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
+                out[i] = last
+                continue
+
             delta = np.float32(state_age_f32[i] - state_age_f32[i - 1])
             if np.isfinite(delta) and float(delta) >= 0.0:
                 last = delta
             out[i] = last
             continue
 
+        # Action change (or msid/char change): derive the new state's frame_speed_mul independent
+        # of hitlag. Key distinction:
+        # - Hitlag freezes the *tick* of fp->cur_anim_frame (and thus freezes Slippi `state_age`),
+        #   so delta(state_age) cannot be used to infer the rate while hitlag is active.
+        # - However, motion-state changes (Fighter_ChangeMotionState) still set fp->frame_speed_mul
+        #   to the motion state's `anim_speed` (typically 1.0f) even if hitlag is active; hitlag
+        #   only gates the subsequent ftAnim_8006EBA4 tick in Fighter_8006A360.
+        # refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState
+        # refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
         cid = int(char_id[i])
         msid_u32 = int(animation_index[i])
         msid = int(msid_u32 & 0xFFFF) if msid_u32 != 0xFFFFFFFF else None
@@ -198,6 +210,15 @@ def derive_frame_speed_mul_f32(
                     continue
 
         # Fallback: default rate.
+        #
+        # IMPORTANT(hitlag+action_change):
+        # Slippi post-frame `state_age` (fp->cur_anim_frame) is frozen under hitlag, so we cannot
+        # infer the new state's rate from delta(state_age) on the entry frame if hitlag is active.
+        #
+        # Decomp: Fighter_ChangeMotionState sets fp->frame_speed_mul to `anim_speed` (typically 1.0f)
+        # on state changes, regardless of hitlag, and hitlag only gates the tick (Fighter_8006A360).
+        # refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState
+        # refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
         last = np.float32(1.0)
         out[i] = last
 
