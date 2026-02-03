@@ -145,7 +145,10 @@ static uint8_t hitlist_insert_list(MslHitlistVictimEntry* victims, uint8_t* ring
   }
 
   victims[insert_idx] = *key;
-  victims[insert_idx].cd = (refresh_set) ? cd_set : 0u;
+  // Decomp: on insertion, always store the per-victim cooldown from HitCapsule.x40_b4 (cd_set).
+  // Refresh behavior (when already present) is type-dependent and handled above.
+  // refs/melee/src/melee/lb/lbcollision.c::lbColl_80008688
+  victims[insert_idx].cd = cd_set;
 
   if (first_empty == cap) {
     uint8_t r = (uint8_t)(*ring + 1u);

@@ -360,6 +360,7 @@ class _CharCombatData:
     hurtcaps: list[HurtCap]
     hitboxes_by_msid: dict[int, list[HitboxEvent]]
     initial_shield_size: float
+    model_scaling: float
 
 
 @dataclass(frozen=True)
@@ -420,12 +421,14 @@ def _load_char_data(*, char_id: int, data_root: Path) -> _CharCombatData | None:
     hitboxes_by_msid = _read_hitbox_events(data_root / "hitboxes" / f"{key}.bin")
     attrs = json.loads((data_root / "characters" / f"{key}.json").read_text())
     initial_shield_size = float(attrs["initial_shield_size"])
+    model_scaling = float(attrs.get("model_scaling", 1.0))
     return _CharCombatData(
         key=key,
         pose=pose,
         hurtcaps=hurtcaps,
         hitboxes_by_msid=hitboxes_by_msid,
         initial_shield_size=initial_shield_size,
+        model_scaling=model_scaling,
     )
 
 
@@ -444,6 +447,24 @@ def _mtx34_mul_point(m: np.ndarray, v: np.ndarray) -> np.ndarray:
     )
 
 
+def _apply_root_facing_rot_y90(xyz: np.ndarray, facing_dir: float) -> np.ndarray:
+    """
+    Apply the fighter root-part Y rotation used by collision geometry in the C runtime.
+
+    Decomp shape:
+    - ftPartSetRotY(fp, 0, (M_PI_2 * fp->facing_dir))
+      refs/melee/src/melee/ft/fighter.c
+
+    Runtime implementation reference:
+    - src/hitboxes.c and src/hurtboxes.c apply the same rotation by mixing X/Z:
+      (x,z) -> (facing_dir * z, -facing_dir * x)
+    """
+    x = np.float32(xyz[0])
+    y = np.float32(xyz[1])
+    z = np.float32(xyz[2])
+    return np.array([np.float32(facing_dir) * z, y, -np.float32(facing_dir) * x], dtype=np.float32)
+
+
 def _active_hitboxes_at_frame(events: list[HitboxEvent], frame: int) -> dict[int, HitboxEvent]:
     # Mirror src/hitboxes.c::hitboxes_refresh event application policy.
     active: dict[int, HitboxEvent] = {}
@@ -460,6 +481,34 @@ def _active_hitboxes_at_frame(events: list[HitboxEvent], frame: int) -> dict[int
         if 0 <= hb_id < MAX_HITBOXES:
             active[hb_id] = ev
     return active
+
+
+def _hitlist_victim_pointer_may_change(*, stocks: int, action_id: int) -> bool:
+    """
+    Mirror the C runtime's victim-identity boundary handling for hitlist entries.
+
+    Decomp shape:
+    - Hitlists key by a raw victim pointer (HitVictim.victim). When the pointer changes (death /
+      respawn object lifetime), old suppression should be dropped.
+    - C runtime proxy logic: src/hitlist.c::hitlist_victim_pointer_may_change
+      (ports are stable, instance_id is used as a proxy, and cleared only on death/respawn).
+    """
+    if int(stocks) == 0:
+        return True
+    a = int(action_id)
+    # Source of truth for these numeric IDs is src/action_ids.h.
+    #
+    # When the victim pointer changes (death/respawn lifetime boundary), decomp logic treats the
+    # prior hitlist suppression as invalid and clears it.
+    #
+    # Named actions (motion states):
+    # - 0: DeadDown
+    # - 1: DeadLeft
+    # - 2: DeadRight
+    # - 4: DeadUpStar
+    # - 12: Rebirth
+    # - 13: RebirthWait
+    return a in (0, 1, 2, 4, 12, 13)
 
 
 def derive_combat_hitlist_seed_fields(
@@ -563,16 +612,24 @@ def derive_combat_hitlist_seed_fields(
                 # Hurtcaps (pose-driven + scaled).
                 out_caps: list[dict] = []
                 scale_y = float(fighter_scale_y[fi, p])
+                model_scale = float(np.float32(scale_y) * np.float32(ch.model_scaling))
                 px = float(pos_x[fi, p])
                 py = float(pos_y[fi, p])
+                facing_dir = 1.0 if int(facing[fi, p]) != 0 else -1.0
                 for cap in ch.hurtcaps[:MAX_HURTCAPS]:
                     m = ch.pose.try_get_matrix(msid=msid, frame=frame, part_id=cap.bone_part_id)
                     if m is None:
                         continue
                     a = _mtx34_mul_point(m, cap.a_offset)
                     b = _mtx34_mul_point(m, cap.b_offset)
-                    a = (a * np.float32(scale_y)).astype(np.float32, copy=False)
-                    b = (b * np.float32(scale_y)).astype(np.float32, copy=False)
+                    # Mirror src/hurtboxes.c:
+                    #   local = (pose_mtx * offset) * (fighter_scale_y * model_scaling)
+                    #   local = rotY90(local, facing_dir)
+                    #   world = pos + local
+                    a = (a * np.float32(model_scale)).astype(np.float32, copy=False)
+                    b = (b * np.float32(model_scale)).astype(np.float32, copy=False)
+                    a = _apply_root_facing_rot_y90(a, facing_dir)
+                    b = _apply_root_facing_rot_y90(b, facing_dir)
                     a[0] = np.float32(a[0] + np.float32(px))
                     a[1] = np.float32(a[1] + np.float32(py))
                     b[0] = np.float32(b[0] + np.float32(px))
@@ -585,12 +642,12 @@ def derive_combat_hitlist_seed_fields(
                             "bx": float(b[0]),
                             "by": float(b[1]),
                             "bz": float(b[2]),
-                            "r": float(np.float32(cap.scale) * np.float32(scale_y)),
+                            "r": float(np.float32(cap.scale) * np.float32(model_scale)),
                         }
                     )
                 hurtcaps_world[p] = out_caps
 
-                # Hitboxes (pose-driven, no fighter_scale_y in current runtime policy).
+                # Hitboxes (pose-driven, runtime scale + facing).
                 events = ch.hitboxes_by_msid.get(msid)
                 if events:
                     active = _active_hitboxes_at_frame(events, frame)
@@ -599,15 +656,28 @@ def derive_combat_hitlist_seed_fields(
                         if m is None:
                             continue
                         c = _mtx34_mul_point(m, np.array([ev.x, ev.y, ev.z], dtype=np.float32))
+                        # Mirror src/hitboxes.c center placement:
+                        #   center = (pose_mtx * offset) * (fighter_scale_y * model_scaling)
+                        #   center = rotY90(center, facing_dir)
+                        #   world = pos + center
+                        c = (c * np.float32(model_scale)).astype(np.float32, copy=False)
+                        c = _apply_root_facing_rot_y90(c, facing_dir)
                         c[0] = np.float32(c[0] + np.float32(px))
                         c[1] = np.float32(c[1] + np.float32(py))
+                        # Mirror src/hitboxes.c radius scaling:
+                        # - radius uses fighter_scale_y only (not model_scaling) unless ignore flag is set.
+                        # - ignore_fighter_scale is extracted into MSLHITB1 u16_6 bit 13.
+                        flags = int(ev.u16_6) & 0xFFFF
+                        radius = float(ev.radius)
+                        if (flags & (1 << 13)) == 0:
+                            radius = float(np.float32(radius) * np.float32(scale_y))
                         hitboxes[p][int(hb_id)] = {
                             "x": float(c[0]),
                             "y": float(c[1]),
                             "z": float(c[2]),
-                            "r": float(np.float32(ev.radius)),
+                            "r": float(np.float32(radius)),
                             "damage": float(np.float32(ev.damage)),
-                            "flags": int(ev.u16_6) & 0xFFFF,
+                            "flags": flags,
                             "def_frame": int(ev.frame),
                             "hit_group": (int(ev.u16_7) >> 8) & 0x7,
                             "rehit_frames": int(ev.u16_7) & 0xFF,
@@ -766,8 +836,17 @@ def derive_combat_hitlist_seed_fields(
                         def_iid = int(instance_id[fi, defender])
                         if int(hitlist_iid[attacker, hit_group, defender]) == def_iid:
                             continue
-                        hitlist_cd[attacker, hit_group, defender] = np.uint16(0)
-                        hitlist_iid[attacker, hit_group, defender] = np.uint16(0)
+                        # Mirror src/hitlist.c: preserve suppression across instance_id changes
+                        # unless the underlying victim pointer may have changed (death/respawn).
+                        if _hitlist_victim_pointer_may_change(
+                            stocks=int(stocks[fi, defender]),
+                            action_id=int(action_id[fi, defender]),
+                        ):
+                            hitlist_cd[attacker, hit_group, defender] = np.uint16(0)
+                            hitlist_iid[attacker, hit_group, defender] = np.uint16(0)
+                        else:
+                            hitlist_iid[attacker, hit_group, defender] = np.uint16(def_iid)
+                            continue
 
                     # SHIELD precedence: if the hitbox intersects the defender shield bubble, treat as a
                     # shield contact and register hitlist state (so subsequent frames are suppressed).
