@@ -471,9 +471,11 @@ void shine_update_pre_physics(MslBatch* batch) {
               a_work = batch->state.action_id[idx];
               continue;
             }
-            if ((held & (uint16_t)MSL_BUTTON_B) == 0) {
-              enter_shine_ground_end(batch, idx, ms);
-            }
+            // Decomp: Turn does not exit immediately on B release. The Turn anim callback only sets
+            // `isRelease` when B isn't held, then waits for `turnFrames` to expire before calling
+            // `ftFx_SpecialLwHit_Check` to choose Loop vs End.
+            // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c::ftFx_SpecialLwTurn_Anim
+            // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c::ftFx_SpecialLwHit_Check
           } break;
           case MSL_ACT_FX_SPECIAL_AIR_LW_TURN: {
             const int16_t tf = (int16_t)ch->reflector_turn_frames;
@@ -483,9 +485,9 @@ void shine_update_pre_physics(MslBatch* batch) {
               a_work = batch->state.action_id[idx];
               continue;
             }
-            if ((held & (uint16_t)MSL_BUTTON_B) == 0) {
-              enter_shine_air_end(batch, idx, ms);
-            }
+            // Decomp: see grounded Turn note above (same logic in air).
+            // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c::ftFx_SpecialAirLwTurn_Anim
+            // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c::ftFx_SpecialLwHit_Check
           } break;
           case MSL_ACT_FX_SPECIAL_LW_END:
             if (anim_finished(cid, ms->speciallw_ground_end, anim_frame_f32)) {
