@@ -455,6 +455,15 @@ static inline uint8_t item_sphere_sphere_intersects_2d(float ax, float ay, float
   return (dx * dx + dy * dy) <= (rr * rr);
 }
 
+static inline uint8_t item_sphere_sphere_intersects_3d(float ax, float ay, float az, float ar,
+                                                       float bx, float by, float bz, float br) {
+  const float dx = ax - bx;
+  const float dy = ay - by;
+  const float dz = az - bz;
+  const float rr = ar + br;
+  return (dx * dx + dy * dy + dz * dz) <= (rr * rr);
+}
+
 static void laser_spawn_from_fighter(MslBatch* batch, int bi, int owner, const MslLaserParams* lp) {
   if (batch == NULL || lp == NULL) {
     return;
@@ -684,7 +693,7 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
         s = cap;
       }
       // Decomp clamps very small scale to 1e-3 (avoids degenerates).
-      if (s < 1e-3f) {  // refs/melee/src/melee/it/items/itfoxlaser.c::itFoxlaser_UnkMotion1_Anim
+      if (s < 1e-5f) {  // refs/melee/src/melee/it/items/itfoxlaser.c::itFoxlaser_UnkMotion1_Anim
         s = 1e-3f;
       }
       laser_scale_z = s;
@@ -717,28 +726,46 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
         // fighter-vs-fighter combat pass).
         float shx = batch->state.shield_x[d_idx];
         float shy = batch->state.shield_y[d_idx];
-        if (!isfinite(shx) || !isfinite(shy)) {
+        float shz = batch->state.shield_z[d_idx];
+        if (!isfinite(shx) || !isfinite(shy) || !isfinite(shz)) {
           shx = batch->state.pos_x[d_idx];
           shy = batch->state.pos_y[d_idx];
+          shz = batch->state.pos_z[d_idx];
         }
 
         uint8_t shield_hit = 0;
         const uint8_t off_n =
             (laser_state == 0u) ? lp->hitbox_offsets_x_count : lp->state1_hitbox_offsets_x_count;
+        // Shield overlap only: cap effective scaleZ stretch to 1.0.
+        //
+        // - Decomp: shield hit check is 3D via lbColl_80007BCC(..., shield_hit->pos.z = cur_pos.z).
+        //   refs/melee/src/melee/lb/lbcollision.c::lbColl_80007BCC
+        // - Laser collision hitbox offsets are authored as fixed X offsets in the article state script
+        //   (`create_hitbox` x_offset in `_iso/PlFx.dat` / `_iso/PlFc.dat`), so scaling offsets above 1.0
+        //   is an extrapolation beyond the script geometry and can produce false shield hits.
+        //
+        // This cap is suite-validated by TBK seed==ref cases where the replay stays in GuardOn (178)
+        // but the sim would otherwise enter GuardSetOff (181).
+        float laser_scale_z_shield = laser_scale_z;
+        if (laser_scale_z_shield > 1.0f) {
+          laser_scale_z_shield = 1.0f;
+        }
         for (uint8_t oi = 0; oi < off_n && oi < (uint8_t)MSL_LASER_MAX_HITBOX_OFFS_X && !shield_hit;
              oi++) {
           const float off_x =
               (laser_state == 0u) ? lp->hitbox_offsets_x[oi] : lp->state1_hitbox_offsets_x[oi];
-          const float s = off_x * laser_scale_z;
+          const float s = off_x * laser_scale_z_shield;
           const float sx = x + (ux * s);
           const float sy = y + (uy * s);
-          if (item_sphere_sphere_intersects_2d(sx, sy, sr, shx, shy, shr)) {
+          // Decomp (GALE01): shield overlap uses 3D collision (z is not ignored).
+          // refs/melee/src/melee/ft/ftcoll.c::ftColl_80076CBC (lbColl_80007BCC(..., cur_pos.z))
+          if (item_sphere_sphere_intersects_3d(sx, sy, 0.0f, sr, shx, shy, shz, shr)) {
             shield_hit = 1;
           }
         }
         // If no scripted offsets exist, fall back to the projectile origin.
         if (!shield_hit && off_n == 0) {
-          shield_hit = item_sphere_sphere_intersects_2d(x, y, sr, shx, shy, shr);
+          shield_hit = item_sphere_sphere_intersects_3d(x, y, 0.0f, sr, shx, shy, shz, shr);
         }
 
         if (shield_hit) {
