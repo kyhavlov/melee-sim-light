@@ -175,6 +175,49 @@ enum {
   MSL_ACT_ESCAPE_AIR = 0x00EC,     // ftCo_MS_EscapeAir
 };
 
+// GALE01 common grounded attack action ids (ftCommon_MotionState).
+//
+// These are contiguous in GALE01 and (for common fighters) their collision callbacks use
+// `ft_80084104` -> `ft_800827A0` -> `mpColl_8004B2DC`, which includes mpColl floor-edge snap
+// (`mpColl_8004A45C_Floor`) behavior.
+//
+// Note: Fox/Falco in the FD suite are assumed to follow the common GALE01 ftCommon_MotionState
+// contiguity for this grounded-attack block.
+//
+// Decomp pointers:
+// - refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackDash.c::ftCo_AttackDash_Coll
+// - refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackS4.c::ftCo_AttackS4_Coll
+// - refs/melee/src/melee/ft/ft_081B.c::ft_80084104 (calls ft_800827A0)
+// - refs/melee/src/melee/ft/ft_081B.c::ft_800827A0 (calls mpColl_8004B2DC)
+// - refs/melee/src/melee/mp/mpcoll.c::mpColl_8004B2DC (uses mpColl_8004A45C_Floor)
+enum {
+  MSL_ACT_ATTACK_11 = 0x002C,  // ftCo_MS_Attack11
+  MSL_ACT_ATTACK_12 = 0x002D,  // ftCo_MS_Attack12
+  MSL_ACT_ATTACK_13 = 0x002E,  // ftCo_MS_Attack13
+
+  MSL_ACT_ATTACK_100_START = 0x002F,  // ftCo_MS_Attack100Start
+  MSL_ACT_ATTACK_100_LOOP = 0x0030,   // ftCo_MS_Attack100Loop
+  MSL_ACT_ATTACK_100_END = 0x0031,    // ftCo_MS_Attack100End
+
+  MSL_ACT_ATTACK_DASH = 0x0032,  // ftCo_MS_AttackDash
+
+  MSL_ACT_ATTACK_S3_HI = 0x0033,     // ftCo_MS_AttackS3Hi
+  MSL_ACT_ATTACK_S3_HI_S = 0x0034,   // ftCo_MS_AttackS3HiS
+  MSL_ACT_ATTACK_S3_S = 0x0035,      // ftCo_MS_AttackS3S
+  MSL_ACT_ATTACK_S3_LW_S = 0x0036,   // ftCo_MS_AttackS3LwS
+  MSL_ACT_ATTACK_S3_LW = 0x0037,     // ftCo_MS_AttackS3Lw
+  MSL_ACT_ATTACK_HI3 = 0x0038,       // ftCo_MS_AttackHi3
+  MSL_ACT_ATTACK_LW3 = 0x0039,       // ftCo_MS_AttackLw3
+
+  MSL_ACT_ATTACK_S4_HI = 0x003A,     // ftCo_MS_AttackS4Hi
+  MSL_ACT_ATTACK_S4_HI_S = 0x003B,   // ftCo_MS_AttackS4HiS
+  MSL_ACT_ATTACK_S4_S = 0x003C,      // ftCo_MS_AttackS4S
+  MSL_ACT_ATTACK_S4_LW_S = 0x003D,   // ftCo_MS_AttackS4LwS
+  MSL_ACT_ATTACK_S4_LW = 0x003E,     // ftCo_MS_AttackS4Lw
+  MSL_ACT_ATTACK_HI4 = 0x003F,       // ftCo_MS_AttackHi4
+  MSL_ACT_ATTACK_LW4 = 0x0040,       // ftCo_MS_AttackLw4
+};
+
 // Additional GALE01 Fox/Falco action ids needed for fastfall gating.
 //
 // Decomp:

@@ -51,14 +51,28 @@ static inline uint8_t is_cliff_hold_action(uint16_t a) {
 
 static inline uint8_t action_allows_floor_edge_snap(uint16_t a) {
   // Decomp: mpColl_8004A45C_Floor (edge snap) is used by mpColl_8004B2DC (flags=2), which is
-  // called by ft_800827A0 and used as the collision gate for the downed state family (Down*).
+  // called by ft_800827A0. Multiple grounded motion states use ft_80084104 (which calls
+  // ft_800827A0) as their collision callback, including:
+  // - Down* (historically the first dominant mismatch cluster)
+  // - Grounded attacks (Attack11..AttackLw4), including AttackDash and AttackS4S.
   //
-  // Keep this behavior scoped to those actions; e.g. grounded locomotion should still be able to
-  // walk off ledges normally.
-  // refs/melee/src/melee/ft/ft_081B.c::ft_80084104
-  // refs/melee/src/melee/ft/ft_081B.c::ft_800827A0
-  // refs/melee/src/melee/mp/mpcoll.c::mpColl_8004B2DC
-  // refs/melee/src/melee/mp/mpcoll.c::mpColl_8004A45C_Floor
+  // Implementation note: we gate by action_id here as a proxy for "this motion state uses the
+  // ft_80084104 collision callback chain". We intentionally do not include locomotion states
+  // (Walk/Run/Dash/etc.) so walking/running off ledges still produces a ground->air transition.
+  //
+  // This lite sim uses the same edge-snap fallback when mpLib_8004DD90_Floor projection fails on
+  // a persisted floor line, to avoid spurious ground loss at floor endpoints/seams near the FD
+  // ledge.
+  //
+  // Decomp anchors:
+  // - refs/melee/src/melee/ft/ft_081B.c::ft_80084104 (calls ft_800827A0)
+  // - refs/melee/src/melee/ft/ft_081B.c::ft_800827A0 (calls mpColl_8004B2DC)
+  // - refs/melee/src/melee/mp/mpcoll.c::mpColl_8004B2DC (uses mpColl_8004A45C_Floor)
+  // - refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackDash.c::ftCo_AttackDash_Coll
+  // - refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackS4.c::ftCo_AttackS4_Coll
+  if (a >= (uint16_t)MSL_ACT_ATTACK_11 && a <= (uint16_t)MSL_ACT_ATTACK_LW4) {
+    return 1;
+  }
   switch (a) {
     case MSL_ACT_DOWN_BOUND_U:
     case MSL_ACT_DOWN_WAIT_U:
