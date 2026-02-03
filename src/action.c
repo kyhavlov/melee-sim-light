@@ -547,6 +547,14 @@ void guard_update_grounded(MslBatch* batch, const MslCommonParams* c, size_t idx
     batch->state.animation_index[idx] = 0xFFFFFFFFu;
     const uint8_t can_update = (batch->state.hitlag_started_frame[idx] == 0) ? 1 : 0;
     if (can_update) {
+      // Decomp ordering note (GuardOn/Guard discrete cluster):
+      // - mv.co.guard.x10 is decremented inside ftCo_800925A4 (called by GuardOn_Anim / Guard_Anim).
+      // - The GuardOff transition gate (xC && !x10) lives in inlineC0, called by GuardOn_IASA / Guard_IASA.
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_800925A4,inlineC0,ftCo_GuardOn_IASA,ftCo_Guard_IASA}
+      //
+      // Our step ordering models IASA before the x10 decrement, so the GuardOff check must use the
+      // pre-decrement x10 value; otherwise GuardOn can drop 1 frame early when x10 transitions 1->0.
+      const uint8_t x10_pre = batch->state.guard_x10[idx];
       if (!shield_held) {
         // Decomp: ftCo_80092BCC latches mv.co.guard.xC when held_inputs loses HSD_PAD_LR.
         batch->state.guard_release_latched_xc[idx] = 1;
@@ -555,18 +563,20 @@ void guard_update_grounded(MslBatch* batch, const MslCommonParams* c, size_t idx
       // the shield is active (fp->x221B_b0). Approximate shield-active as (shield_hp > 0).
       if (batch->state.shield_hp[idx] > 0.0f) {
         apply_shield_hold_drain(batch, c, idx, trig);
-        if (batch->state.guard_x10[idx] > 0) {
-          batch->state.guard_x10[idx]--;
-        }
       }
+
       // Decomp: Guard IASA exits to GuardOff only once (xC && x10==0).
-      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_Guard_IASA (inlineC0)
-      if (batch->state.guard_release_latched_xc[idx] && batch->state.guard_x10[idx] == 0) {
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{inlineC0,ftCo_GuardOn_IASA,ftCo_Guard_IASA}
+      if (batch->state.guard_release_latched_xc[idx] && x10_pre == 0) {
         if (a0 == (uint16_t)MSL_ACT_GUARD_REFLECT) {
           batch->state.guard_reflect_timer_x14[idx] = 0;
         }
         enter_guard_off(batch, idx);
         return;
+      }
+
+      if (x10_pre > 0 && batch->state.shield_hp[idx] > 0.0f) {
+        batch->state.guard_x10[idx] = (uint8_t)(x10_pre - 1u);
       }
     }
 
