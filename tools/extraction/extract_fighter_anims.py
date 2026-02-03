@@ -771,6 +771,11 @@ def _extra_anim_msids() -> list[int]:
         15,  # ftCo_SM_Kneebend
         16,  # ftCo_SM_JumpF
         17,  # ftCo_SM_JumpB
+        # ECB coverage (spurious Landing fix): include JumpAerialF/B so ECB sampling does not
+        # fall back to 0 for these msids.
+        # Decomp source: refs/melee/src/melee/ft/chara/ftCommon/forward.h `ftCo_Submotion`.
+        18,  # ftCo_SM_JumpAerialF
+        19,  # ftCo_SM_JumpAerialB
         20,  # ftCo_SM_Fall
         26,  # ftCo_SM_FallSpecial
         30,  # ftCo_SM_Squat
