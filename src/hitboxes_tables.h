@@ -33,6 +33,12 @@ typedef struct MslHitboxEvent {
 
   // Bone-local offsets and hitbox params. World-space center is computed via anim_pose_get_matrix(...)
   // and then translated by fighter (pos_x, pos_y, pos_z).
+  //
+  // IMPORTANT (offset basis): `data/hitboxes/<char>.bin` stores these offsets in HitCapsule.b_offset
+  // component order (b_offset.x/b_offset.y/b_offset.z), not the raw script field names
+  // (x_offset/y_offset/z_offset). The extractor performs the decomp-shaped mapping:
+  //   b_offset.x := z_offset; b_offset.y := y_offset; b_offset.z := x_offset.
+  // refs/melee/src/melee/ft/ftaction.c::ftAction_8007121C
   float x;
   float y;
   float z;

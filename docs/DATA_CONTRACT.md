@@ -282,7 +282,12 @@ Binary layout (little-endian):
   - `hitbox_id: u8` slot id (0..3 typical). If `kind==1` and `hitbox_id==0xFF`, this is a clear-all record.
   - `bone_part_id: u32` fighter part id (same domain as SSANIM `joint_parts`; pass as `part_id` to
     `anim_pose_get_matrix(...)`).
-  - `x: f32`, `y: f32`, `z: f32` bone-local hitbox center offset
+  - `x: f32`, `y: f32`, `z: f32` bone-local hitbox center offset, stored in **HitCapsule.b_offset**
+    component order (not raw script field names). Decomp mapping at hitbox creation:
+    - `b_offset.x := z_offset`
+    - `b_offset.y := y_offset`
+    - `b_offset.z := x_offset`
+    refs/melee/src/melee/ft/ftaction.c::ftAction_8007121C
   - `radius: f32`
   - `damage: f32` (stored but not yet used for resolution)
   - `u16_tail[8]: 8 * u16` additional extracted fields (decomp-shaped):

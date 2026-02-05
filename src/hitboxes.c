@@ -327,7 +327,18 @@ void hitboxes_refresh(MslBatch* batch) {
         // false-positive BODY overlaps (hitlag/hitstun applied when ref has none).
         //
         // Policy:
-        //   local = (pose_mtx * offset) * scale_y; local = rotY90(local, facing_dir); world = pos + local.
+        //   local = (pose_mtx * offset) * scale_y;
+        //   local = rotY90(local, facing_dir);
+        //   world = pos + local.
+        //
+        // Offset basis note (MSLHITB1):
+        // `data/hitboxes/<char>.bin` stores hitbox center offsets in HitCapsule.b_offset component
+        // order (b_offset.x/b_offset.y/b_offset.z), not the raw script field names
+        // (x_offset/y_offset/z_offset). The extractor already performs the decomp-shaped mapping:
+        //   b_offset.x := z_offset; b_offset.y := y_offset; b_offset.z := x_offset.
+        // refs/melee/src/melee/ft/ftaction.c::ftAction_8007121C
+        // Runtime policy: use extracted (x,y,z) directly as the bone-local offset passed through
+        // anim_pose_get_matrix(...), i.e. do not re-apply the mapping here.
         const float off[3] = {def[hi].x, def[hi].y, def[hi].z};
         float cx = 0.0f, cy = 0.0f, cz = 0.0f;
         msl_mtx34_mul_point(m, off, &cx, &cy, &cz);
