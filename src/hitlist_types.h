@@ -39,6 +39,12 @@ typedef enum MslLbCollInsertType {
   // Fighter BODY hit insert (ftColl_80076ED8 -> inlineB0 -> lbColl_80008688(..., type=0, ...)).
   // refs/melee/src/melee/ft/ftcoll.c::ftColl_80076ED8
   MSL_LBCOLL_INSERT_FT_BODY = 0,
+  // Fighter CATCH hit insert (ftColl_80078A2C -> ftColl_80076808(..., type=0, ...)).
+  // refs/melee/src/melee/ft/ftcoll.c::ftColl_80078A2C
+  //
+  // Note: this is intentionally an alias of MSL_LBCOLL_INSERT_FT_BODY (same numeric type) because
+  // decomp passes type=0 in both paths.
+  MSL_LBCOLL_INSERT_FT_CATCH = 0,
   // Fighter SHIELD hit insert (ftColl_80076CBC -> ftColl_80076808(..., type=1, ...) -> lbColl_80008688).
   // refs/melee/src/melee/ft/ftcoll.c::ftColl_80076CBC
   MSL_LBCOLL_INSERT_FT_SHIELD = 1,

@@ -12,5 +12,6 @@
 enum {
   MSL_HIT_ELEMENT_NORMAL = 0,
   MSL_HIT_ELEMENT_ELECTRIC = 2,
+  MSL_HIT_ELEMENT_CATCH = 8,   // HitElement_Catch
   MSL_HIT_ELEMENT_INERT = 11,  // HitElement_Inert
 };

@@ -4,6 +4,8 @@
 #include "anim_frame.h"
 #include "anim_table.h"
 #include "anim_timebase.h"
+#include "common_params.h"
+#include "input_axis.h"
 #include "move_tables.h"
 
 static inline uint8_t anim_finished(uint8_t char_id, uint16_t msid, float anim_frame_f32) {
@@ -36,45 +38,265 @@ static inline void enter_catch_wait_from_pull(MslBatch* batch, size_t oidx) {
   // Decomp: CatchPull_Anim enters CatchWait via fn_800DA1D8 (Fighter_ChangeMotionState to 0xD8).
   // refs/melee/build/GALE01/asm/melee/ft/chara/ftCommon/ftCo_Attack100.s::ftCo_CatchPull_Anim
   // refs/melee/build/GALE01/asm/melee/ft/chara/ftCommon/ftCo_Attack100.s::fn_800DA1D8
-  //
-  // Slippi post-frame `animation_index` is GALE01 ftCommon_AnimID. In decomp forward.h, the Catch*
-  // submotions are contiguous (Catch, CatchDash, CatchWait, ...), so we derive CatchWait's msid by
-  // a small constant offset from the current pull animation.
-  // refs/melee/src/melee/ft/chara/ftCommon/forward.h (ftCo_SM_Catch*, contiguous enum entries)
-  const uint16_t a = batch->state.action_id[oidx];
-  if (a == (uint16_t)MSL_ACT_CATCH_PULL) {
-    batch->state.animation_index[oidx] = batch->state.animation_index[oidx] + 2u;
-  } else if (a == (uint16_t)MSL_ACT_CATCH_DASH_PULL) {
-    batch->state.animation_index[oidx] = batch->state.animation_index[oidx] + 1u;
-  }
   batch->state.action_id[oidx] = (uint16_t)MSL_ACT_CATCH_WAIT;
+  batch->state.animation_index[oidx] = (uint32_t)MSL_SM_CATCH_WAIT;
   msl_anim_timebase_enter(batch, oidx, 0.0f, 1.0f);
 }
 
 static inline void enter_capture_wait_from_pulled(MslBatch* batch, size_t vidx) {
-  // Decomp: CatchPull->CatchWait entry calls fn_800DB6C8 on the victim gobj, which enters CaptureWait
-  // (hi/lw) based on the current capture variant.
+  // Decomp: CatchPull->CatchWait entry calls fn_800DB6C8 on the victim gobj, which enters
+  // CaptureWait (hi/lw) based on the current capture variant.
   // refs/melee/build/GALE01/asm/melee/ft/chara/ftCommon/ftCo_Attack100.s::fn_800DA1D8
   // refs/melee/build/GALE01/asm/melee/ft/chara/ftCommon/ftCo_Attack100.s::fn_800DB6C8
   const uint16_t a = batch->state.action_id[vidx];
   if (a == (uint16_t)MSL_ACT_CAPTURE_PULLED_HI) {
     batch->state.action_id[vidx] = (uint16_t)MSL_ACT_CAPTURE_WAIT_HI;
+    batch->state.animation_index[vidx] = (uint32_t)MSL_SM_CAPTURE_WAIT_HI;
   } else if (a == (uint16_t)MSL_ACT_CAPTURE_PULLED_LW) {
     batch->state.action_id[vidx] = (uint16_t)MSL_ACT_CAPTURE_WAIT_LW;
+    batch->state.animation_index[vidx] = (uint32_t)MSL_SM_CAPTURE_WAIT_LW;
   } else {
     return;
   }
-
-  // ftCommon_AnimID contiguous enum: CapturePulled* -> CaptureWait* is the next msid.
-  // refs/melee/src/melee/ft/chara/ftCommon/forward.h (ftCo_SM_CapturePulled*/Wait*, contiguous)
-  batch->state.animation_index[vidx] = batch->state.animation_index[vidx] + 1u;
   msl_anim_timebase_enter(batch, vidx, 0.0f, 1.0f);
+}
+
+static inline uint32_t throw_owner_submotion(uint16_t throw_action) {
+  switch (throw_action) {
+    case (uint16_t)MSL_ACT_THROW_F:
+      return (uint32_t)MSL_SM_THROW_F;
+    case (uint16_t)MSL_ACT_THROW_B:
+      return (uint32_t)MSL_SM_THROW_B;
+    case (uint16_t)MSL_ACT_THROW_HI:
+      return (uint32_t)MSL_SM_THROW_HI;
+    case (uint16_t)MSL_ACT_THROW_LW:
+      return (uint32_t)MSL_SM_THROW_LW;
+    default:
+      return 0xFFFFFFFFu;
+  }
+}
+
+static inline uint16_t throw_victim_action(uint16_t throw_action) {
+  switch (throw_action) {
+    case (uint16_t)MSL_ACT_THROW_F:
+      return (uint16_t)MSL_ACT_THROWN_F;
+    case (uint16_t)MSL_ACT_THROW_B:
+      return (uint16_t)MSL_ACT_THROWN_B;
+    case (uint16_t)MSL_ACT_THROW_HI:
+      return (uint16_t)MSL_ACT_THROWN_HI;
+    case (uint16_t)MSL_ACT_THROW_LW:
+      return (uint16_t)MSL_ACT_THROWN_LW;
+    default:
+      return 0xFFFFu;
+  }
+}
+
+static inline uint32_t throw_victim_submotion(uint16_t thrown_action) {
+  switch (thrown_action) {
+    case (uint16_t)MSL_ACT_THROWN_F:
+      return (uint32_t)MSL_SM_THROWN_F;
+    case (uint16_t)MSL_ACT_THROWN_B:
+      return (uint32_t)MSL_SM_THROWN_B;
+    case (uint16_t)MSL_ACT_THROWN_HI:
+      return (uint32_t)MSL_SM_THROWN_HI;
+    case (uint16_t)MSL_ACT_THROWN_LW:
+      return (uint32_t)MSL_SM_THROWN_LW;
+    default:
+      return 0xFFFFFFFFu;
+  }
+}
+
+static inline uint16_t catch_wait_throw_action_from_inputs(const MslBatch* batch,
+                                                           const MslCommonParams* c, size_t oidx) {
+  if (batch == NULL || c == NULL) {
+    return 0u;
+  }
+
+  const float facing_dir = batch->state.facing[oidx] ? 1.0f : -1.0f;
+
+  const float stick_x =
+      apply_deadzone(stick_i8_to_unit(batch->state.input_main_x[oidx]), c->lstick_deadzone_x);
+  const float stick_x_prev =
+      apply_deadzone(stick_i8_to_unit(batch->state.prev_input_main_x[oidx]), c->lstick_deadzone_x);
+  const float cstick_x =
+      apply_deadzone(stick_i8_to_unit(batch->state.input_c_x[oidx]), c->lstick_deadzone_x);
+  const float cstick_x_prev =
+      apply_deadzone(stick_i8_to_unit(batch->state.prev_input_c_x[oidx]), c->lstick_deadzone_x);
+  const float stick_y =
+      apply_deadzone(stick_i8_to_unit(batch->state.input_main_y[oidx]), c->lstick_deadzone_y);
+  const float stick_y_prev =
+      apply_deadzone(stick_i8_to_unit(batch->state.prev_input_main_y[oidx]), c->lstick_deadzone_y);
+  const float cstick_y =
+      apply_deadzone(stick_i8_to_unit(batch->state.input_c_y[oidx]), c->lstick_deadzone_y);
+  const float cstick_y_prev =
+      apply_deadzone(stick_i8_to_unit(batch->state.prev_input_c_y[oidx]), c->lstick_deadzone_y);
+
+  // CatchWait throw selection priority and edge checks are decomp-shaped from ftCo_800DD1E4:
+  // 1) L-stick X edge across x98
+  // 2) C-stick X edge across x98
+  // 3) L-stick/C-stick up edge across attackhi3_stick_threshold_y
+  // 4) L-stick down edge across xB0, or C-stick low hold (prev<=xB0 && cur<=xB0)
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DD1E4
+  // refs/melee/src/melee/ft/ft_0DF1.c::{ftCo_800DF7F4,ftCo_800DF844,ftCo_800DF878}
+  const float smash_thresh = c->smash_stick_threshold;
+  const uint8_t lstick_x_edge = ((stick_x_prev < smash_thresh && stick_x >= smash_thresh) ||
+                                 (stick_x_prev > -smash_thresh && stick_x <= -smash_thresh))
+                                    ? 1u
+                                    : 0u;
+  if (lstick_x_edge) {
+    return (stick_x * facing_dir > 0.0f) ? (uint16_t)MSL_ACT_THROW_F : (uint16_t)MSL_ACT_THROW_B;
+  }
+
+  const uint8_t cstick_x_edge = ((cstick_x_prev < smash_thresh && cstick_x >= smash_thresh) ||
+                                 (cstick_x_prev > -smash_thresh && cstick_x <= -smash_thresh))
+                                    ? 1u
+                                    : 0u;
+  if (cstick_x_edge) {
+    return (cstick_x * facing_dir > 0.0f) ? (uint16_t)MSL_ACT_THROW_F : (uint16_t)MSL_ACT_THROW_B;
+  }
+
+  const uint8_t lstick_y_up_edge =
+      (stick_y_prev < c->attack_hi3_stick_threshold_y && stick_y >= c->attack_hi3_stick_threshold_y)
+          ? 1u
+          : 0u;
+  const uint8_t cstick_y_up_edge = (cstick_y_prev < c->attack_hi3_stick_threshold_y &&
+                                    cstick_y >= c->attack_hi3_stick_threshold_y)
+                                       ? 1u
+                                       : 0u;
+  if (lstick_y_up_edge || cstick_y_up_edge) {
+    return (uint16_t)MSL_ACT_THROW_HI;
+  }
+
+  const uint8_t lstick_y_down_edge =
+      (stick_y_prev > c->attack_lw3_stick_threshold_y && stick_y <= c->attack_lw3_stick_threshold_y)
+          ? 1u
+          : 0u;
+  const uint8_t cstick_y_down_hold = (cstick_y_prev <= c->attack_lw3_stick_threshold_y &&
+                                      cstick_y <= c->attack_lw3_stick_threshold_y)
+                                         ? 1u
+                                         : 0u;
+  if (lstick_y_down_edge || cstick_y_down_hold) {
+    return (uint16_t)MSL_ACT_THROW_LW;
+  }
+
+  return 0u;
+}
+
+static inline uint8_t enter_throw_from_wait(MslBatch* batch, int bi, int owner_p, size_t oidx,
+                                            uint16_t throw_action) {
+  if (batch == NULL) {
+    return 0u;
+  }
+
+  const int num_players = (int)batch->config.num_players;
+  int victim_p = -1;
+  for (int p = 0; p < num_players; p++) {
+    if (p == owner_p) {
+      continue;
+    }
+    const size_t vidx = msl_idx_player(bi, p);
+    if (batch->state.stocks[vidx] == 0) {
+      continue;
+    }
+    if ((int)batch->state.grab_owner_port[vidx] != owner_p) {
+      continue;
+    }
+    if (!msl_action_is_grabbed_victim(batch->state.action_id[vidx])) {
+      continue;
+    }
+    victim_p = p;
+    break;
+  }
+  if (victim_p < 0) {
+    return 0u;
+  }
+
+  const uint16_t thrown_action = throw_victim_action(throw_action);
+  const uint32_t owner_sm = throw_owner_submotion(throw_action);
+  const uint32_t victim_sm = throw_victim_submotion(thrown_action);
+  if (thrown_action == 0xFFFFu || owner_sm == 0xFFFFFFFFu || victim_sm == 0xFFFFFFFFu) {
+    return 0u;
+  }
+
+  const size_t vidx = msl_idx_player(bi, victim_p);
+  batch->state.action_id[oidx] = throw_action;
+  batch->state.animation_index[oidx] = owner_sm;
+  msl_anim_timebase_enter(batch, oidx, 0.0f, 1.0f);
+
+  // TODO(slice2-throw-attachment): state-machine parity here is improved (CatchWait->Throw* and
+  // victim CaptureWait->Thrown*), but positional attachment/throw offsets are still approximate.
+  // Current suite max pos offenders on otherwise action-id-correct throw-entry chains include:
+  // - GracefulAttachedTurtle.msl record 2507 (p0),
+  // - QuerulousGrandDinosaur.msl record 9138 (p0).
+  // Keep this transition logic and attachment kinematics work separated in future slices.
+  batch->state.action_id[vidx] = thrown_action;
+  batch->state.animation_index[vidx] = victim_sm;
+  msl_anim_timebase_enter(batch, vidx, 0.0f, 1.0f);
+  return 1u;
+}
+
+void grab_flow_on_catch_connect(MslBatch* batch, int bi, int owner_p, int victim_p) {
+  if (batch == NULL) {
+    return;
+  }
+  if (bi < 0 || bi >= batch->batch_size) {
+    return;
+  }
+
+  const int num_players = (int)batch->config.num_players;
+  if (owner_p < 0 || owner_p >= num_players || victim_p < 0 || victim_p >= num_players ||
+      owner_p == victim_p) {
+    return;
+  }
+
+  const size_t oidx = msl_idx_player(bi, owner_p);
+  const size_t vidx = msl_idx_player(bi, victim_p);
+  if (batch->state.stocks[oidx] == 0 || batch->state.stocks[vidx] == 0) {
+    return;
+  }
+
+  const uint16_t owner_act = batch->state.action_id[oidx];
+  // Catch/CatchDash connect -> CatchPull/CatchDashPull.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::{ftCo_Catch_Coll,ftCo_CatchDash_Coll}
+  // refs/melee/build/GALE01/asm/melee/ft/chara/ftCommon/ftCo_Attack100.s::fn_800DAADC
+  if (owner_act == (uint16_t)MSL_ACT_CATCH) {
+    batch->state.action_id[oidx] = (uint16_t)MSL_ACT_CATCH_PULL;
+    batch->state.animation_index[oidx] = (uint32_t)MSL_SM_CATCH;
+  } else if (owner_act == (uint16_t)MSL_ACT_CATCH_DASH) {
+    batch->state.action_id[oidx] = (uint16_t)MSL_ACT_CATCH_DASH_PULL;
+    batch->state.animation_index[oidx] = (uint32_t)MSL_SM_CATCH_DASH;
+  } else {
+    return;
+  }
+  msl_anim_timebase_enter(batch, oidx, 0.0f, 1.0f);
+
+  // Catch connect victim entry: grounded owner uses CapturePulledLw, airborne owner uses
+  // CapturePulledHi.
+  // refs/melee/build/GALE01/asm/melee/ft/chara/ftCommon/ftCo_Attack100.s::fn_800DAADC
+  if (batch->state.on_ground[oidx] != 0) {
+    batch->state.action_id[vidx] = (uint16_t)MSL_ACT_CAPTURE_PULLED_LW;
+    batch->state.animation_index[vidx] = (uint32_t)MSL_SM_CAPTURE_PULLED_LW;
+  } else {
+    batch->state.action_id[vidx] = (uint16_t)MSL_ACT_CAPTURE_PULLED_HI;
+    batch->state.animation_index[vidx] = (uint32_t)MSL_SM_CAPTURE_PULLED_HI;
+  }
+  msl_anim_timebase_enter(batch, vidx, 0.0f, 1.0f);
+
+  // Decomp has a single victim_gobj pointer per owner; keep exactly one attached victim link.
+  for (int p = 0; p < num_players; p++) {
+    const size_t pidx = msl_idx_player(bi, p);
+    if (p != victim_p && (int)batch->state.grab_owner_port[pidx] == owner_p) {
+      batch->state.grab_owner_port[pidx] = 0xFFu;
+    }
+  }
+  batch->state.grab_owner_port[vidx] = (uint8_t)owner_p;
 }
 
 void grab_flow_update_pre_physics(MslBatch* batch) {
   if (batch == NULL) {
     return;
   }
+  const MslCommonParams* c = msl_common_params();
   const int num_players = (int)batch->config.num_players;
   for (int bi = 0; bi < batch->batch_size; bi++) {
     for (int owner_p = 0; owner_p < num_players; owner_p++) {
@@ -83,7 +305,7 @@ void grab_flow_update_pre_physics(MslBatch* batch) {
         continue;
       }
 
-      const uint16_t oa = batch->state.action_id[oidx];
+      uint16_t oa = batch->state.action_id[oidx];
 
       // Catch/CatchDash Anim end -> Wait should happen before guard entry checks later in this
       // frame, so buffered shield inputs become active immediately on the first actionable frame
@@ -101,32 +323,41 @@ void grab_flow_update_pre_physics(MslBatch* batch) {
           const uint16_t msid = (uint16_t)msid_u32;
           if (anim_finished(batch->state.char_id[oidx], msid, batch->state.anim_frame_f32[oidx])) {
             enter_wait_from_catch_end(batch, oidx);
+            oa = batch->state.action_id[oidx];
           }
         }
       }
 
-      if (oa != (uint16_t)MSL_ACT_CATCH_PULL && oa != (uint16_t)MSL_ACT_CATCH_DASH_PULL) {
+      if (oa == (uint16_t)MSL_ACT_CATCH_PULL || oa == (uint16_t)MSL_ACT_CATCH_DASH_PULL) {
+        if (move_tables_catchpull_should_enter_wait(batch->state.char_id[oidx], oa,
+                                                    batch->state.anim_frame_f32[oidx])) {
+          enter_catch_wait_from_pull(batch, oidx);
+
+          // Sync victim motion state (CapturePulled* -> CaptureWait*) for all victims owned by this
+          // grabber.
+          for (int victim_p = 0; victim_p < num_players; victim_p++) {
+            const size_t vidx = msl_idx_player(bi, victim_p);
+            if (batch->state.hitlag_started_frame[vidx] != 0) {
+              continue;
+            }
+            if ((int)batch->state.grab_owner_port[vidx] != owner_p) {
+              continue;
+            }
+            enter_capture_wait_from_pulled(batch, vidx);
+          }
+          oa = batch->state.action_id[oidx];
+        }
+      }
+
+      if (oa != (uint16_t)MSL_ACT_CATCH_WAIT || c == NULL) {
         continue;
       }
 
-      if (!move_tables_catchpull_should_enter_wait(batch->state.char_id[oidx], oa,
-                                                   batch->state.anim_frame_f32[oidx])) {
+      const uint16_t throw_action = catch_wait_throw_action_from_inputs(batch, c, oidx);
+      if (throw_action == 0u) {
         continue;
       }
-
-      enter_catch_wait_from_pull(batch, oidx);
-
-      // Sync victim motion state (CapturePulled* -> CaptureWait*) for all victims owned by this grabber.
-      for (int victim_p = 0; victim_p < num_players; victim_p++) {
-        const size_t vidx = msl_idx_player(bi, victim_p);
-        if (batch->state.hitlag_started_frame[vidx] != 0) {
-          continue;
-        }
-        if ((int)batch->state.grab_owner_port[vidx] != owner_p) {
-          continue;
-        }
-        enter_capture_wait_from_pulled(batch, vidx);
-      }
+      (void)enter_throw_from_wait(batch, bi, owner_p, oidx, throw_action);
     }
   }
 }

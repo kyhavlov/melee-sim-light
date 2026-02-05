@@ -360,6 +360,24 @@ typedef enum MslSubmotionId {
   MSL_SM_PASSIVE_STAND_F = 200,  // ftCo_SM_PassiveStandF
   MSL_SM_PASSIVE_STAND_B = 201,  // ftCo_SM_PassiveStandB
 
+  // Grab / throw / capture / thrown (suite-present subset).
+  // Source of truth: refs/melee/src/melee/ft/chara/ftCommon/forward.h `ftCo_Submotion`.
+  MSL_SM_CATCH = 242,              // ftCo_SM_Catch
+  MSL_SM_CATCH_DASH = 243,         // ftCo_SM_CatchDash
+  MSL_SM_CATCH_WAIT = 244,         // ftCo_SM_CatchWait
+  MSL_SM_THROW_F = 247,            // ftCo_SM_ThrowF
+  MSL_SM_THROW_B = 248,            // ftCo_SM_ThrowB
+  MSL_SM_THROW_HI = 249,           // ftCo_SM_ThrowHi
+  MSL_SM_THROW_LW = 250,           // ftCo_SM_ThrowLw
+  MSL_SM_CAPTURE_PULLED_HI = 251,  // ftCo_SM_CapturePulledHi
+  MSL_SM_CAPTURE_WAIT_HI = 252,    // ftCo_SM_CaptureWaitHi
+  MSL_SM_CAPTURE_PULLED_LW = 254,  // ftCo_SM_CapturePulledLw
+  MSL_SM_CAPTURE_WAIT_LW = 255,    // ftCo_SM_CaptureWaitLw
+  MSL_SM_THROWN_F = 262,           // ftCo_SM_ThrownF
+  MSL_SM_THROWN_B = 263,           // ftCo_SM_ThrownB
+  MSL_SM_THROWN_HI = 264,          // ftCo_SM_ThrownHi
+  MSL_SM_THROWN_LW = 265,          // ftCo_SM_ThrownLw
+
   // Cliff / ledge (subset used by the FD suite).
   // Source of truth: refs/melee/src/melee/ft/chara/ftCommon/forward.h `ftCo_Submotion`.
   MSL_SM_CLIFF_CATCH = 216,         // ftCo_SM_CliffCatch

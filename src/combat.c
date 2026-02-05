@@ -13,6 +13,7 @@
 #include "char_params.h"
 #include "combat_geom.h"
 #include "common_params.h"
+#include "grab_flow.h"
 #include "hit_elements.h"
 #include "hitboxes_tables.h"
 #include "hit_status_tables.h"
@@ -1726,6 +1727,159 @@ static inline void combat_mutations_pass1_future_apply_shield_hit(MslBatch* batc
   combat_state_flags_set_is_hitlag(batch, d_idx, d_hl);
 }
 
+static void combat_select_catch_hits_one_mutating(MslBatch* batch, int bi) {
+  if (batch == NULL) {
+    return;
+  }
+  const int num_players = (int)batch->config.num_players;
+
+  for (int attacker = 0; attacker < num_players; attacker++) {
+    const size_t a_idx = msl_idx_player(bi, attacker);
+    if (batch->state.stocks[a_idx] == 0) {
+      continue;
+    }
+    if (batch->state.hitlag_started_frame[a_idx] != 0) {
+      continue;
+    }
+    if (batch->state.hitbox_count[a_idx] == 0) {
+      continue;
+    }
+
+    const uint16_t a_motion_id = batch->state.action_id[a_idx];
+    if (a_motion_id != (uint16_t)MSL_ACT_CATCH && a_motion_id != (uint16_t)MSL_ACT_CATCH_DASH) {
+      continue;
+    }
+
+    // Decomp shape: ftColl_80078A2C keeps nearest victim by X distance (ftGrabDist), then runs the
+    // catch connect transition once for that selected victim.
+    // refs/melee/src/melee/ft/ftcoll.c::ftColl_80078A2C
+    int best_victim = -1;
+    float best_abs_dx = 0.0f;
+    uint8_t best_hit_group = 0u;
+    uint8_t best_rehit_frames = 0u;
+
+    for (int defender = 0; defender < num_players; defender++) {
+      if (defender == attacker) {
+        continue;
+      }
+
+      const size_t d_idx = msl_idx_player(bi, defender);
+      if (batch->state.stocks[d_idx] == 0) {
+        continue;
+      }
+      if (batch->state.hitlag_started_frame[d_idx] != 0) {
+        continue;
+      }
+      if (batch->state.grab_owner_port[d_idx] != 0xFFu) {
+        continue;
+      }
+      if (batch->state.is_teams[bi] && batch->state.team_id[a_idx] == batch->state.team_id[d_idx]) {
+        continue;
+      }
+
+      // Catch eligibility mirrors decomp vulnerable gate (x1988==0 && x198C==0): unlike BODY hits,
+      // invincible victims are not catch-selectable.
+      // refs/melee/src/melee/ft/ftcoll.c::ftColl_80078A2C
+      const uint8_t hit_status = combat_defender_hit_status_u8(batch, d_idx);
+      uint8_t hurt_state = batch->state.hurtbox_state[d_idx];
+      if (hit_status > hurt_state) {
+        hurt_state = hit_status;
+      }
+      if (hurt_state != 0u) {
+        continue;
+      }
+
+      const uint8_t hurtcap_count = batch->state.hurtcap_count[d_idx];
+      if (hurtcap_count == 0) {
+        continue;
+      }
+      const uint16_t defender_iid = batch->state.instance_id[d_idx];
+      const uint8_t defender_on_ground = batch->state.on_ground[d_idx] ? 1u : 0u;
+
+      for (int hb_id = 0; hb_id < MSL_MAX_HITBOXES; hb_id++) {
+        const size_t hb_i = idx_hitbox(bi, attacker, hb_id);
+        if (!batch->state.hitbox_enabled[hb_i]) {
+          continue;
+        }
+        if (batch->state.hitbox_element[hb_i] != (uint8_t)MSL_HIT_ELEMENT_CATCH) {
+          continue;
+        }
+
+        const uint16_t hb_flags = batch->state.hitbox_flags[hb_i];
+        if (defender_on_ground) {
+          if ((hb_flags & MSL_HITBOX_FLAG_HIT_GROUNDED) == 0) {
+            continue;
+          }
+        } else {
+          if ((hb_flags & MSL_HITBOX_FLAG_HIT_AERIAL) == 0) {
+            continue;
+          }
+        }
+
+        const uint8_t hit_group = hitlist_hit_group_from_u16_7(batch->state.hitbox_u16_7[hb_i]);
+        if (!hitlist_allows_fighter(batch, bi, attacker, hb_id, defender, defender_iid)) {
+          continue;
+        }
+        const uint8_t rehit_frames =
+            hitlist_rehit_frames_from_u16_7(batch->state.hitbox_u16_7[hb_i]);
+
+        const float hx = batch->state.hitbox_x[hb_i];
+        const float hy = batch->state.hitbox_y[hb_i];
+        const float hz = batch->state.hitbox_z[hb_i];
+        const float hr = batch->state.hitbox_radius[hb_i];
+
+        uint8_t found_grab_contact = 0u;
+        for (uint8_t cap_id = 0; cap_id < hurtcap_count; cap_id++) {
+          const size_t cap_i = idx_hurtcap(bi, defender, (int)cap_id);
+          if (!batch->state.hurtcap_enabled[cap_i] || !batch->state.hurtcap_is_grabbable[cap_i]) {
+            continue;
+          }
+          const float ax = batch->state.hurtcap_a_x[cap_i];
+          const float ay = batch->state.hurtcap_a_y[cap_i];
+          const float az = batch->state.hurtcap_a_z[cap_i];
+          const float bx = batch->state.hurtcap_b_x[cap_i];
+          const float by = batch->state.hurtcap_b_y[cap_i];
+          const float bz = batch->state.hurtcap_b_z[cap_i];
+          const float cr = batch->state.hurtcap_radius[cap_i];
+
+          if (!combat_sphere_capsule_intersects(hx, hy, hz, hr, ax, ay, az, bx, by, bz, cr, NULL)) {
+            continue;
+          }
+
+          const float abs_dx = fabsf(batch->state.pos_x[d_idx] - batch->state.pos_x[a_idx]);
+          if (best_victim < 0 || abs_dx < best_abs_dx ||
+              (abs_dx == best_abs_dx && defender < best_victim)) {
+            best_victim = defender;
+            best_abs_dx = abs_dx;
+            best_hit_group = hit_group;
+            best_rehit_frames = rehit_frames;
+          }
+          found_grab_contact = 1u;
+          break;
+        }
+        if (found_grab_contact) {
+          // Decomp shape: after finding a valid grabbable overlap for this defender, advance to the
+          // next defender candidate (ftColl_80078A2C uses a goto next_gobj path).
+          break;
+        }
+      }
+    }
+
+    if (best_victim < 0) {
+      continue;
+    }
+
+    grab_flow_on_catch_connect(batch, bi, attacker, best_victim);
+    const size_t d_idx = msl_idx_player(bi, best_victim);
+    const uint16_t defender_iid_post = batch->state.instance_id[d_idx];
+    // Decomp catch path insert type is 0 via ftColl_80076808(..., type=0, ...).
+    // refs/melee/src/melee/ft/ftcoll.c::ftColl_80078A2C
+    hitlist_register_fighter_group(batch, bi, attacker, best_hit_group, best_victim,
+                                   defender_iid_post, (int)MSL_LBCOLL_INSERT_FT_CATCH,
+                                   best_rehit_frames);
+  }
+}
+
 static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
   if (batch == NULL) {
     return;
@@ -1744,6 +1898,10 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
   // Pair-level clank bookkeeping: clank is a mutual interaction between two fighters' active
   // hitboxes, so handle it at most once per unordered pair per frame to keep ordering deterministic.
   uint8_t clanked[MSL_MAX_PLAYERS][MSL_MAX_PLAYERS] = {{0}};
+
+  // Process HitElement_Catch fighter-vs-fighter contacts before shield/body damage selection.
+  // Decomp shape: refs/melee/src/melee/ft/ftcoll.c::ftColl_80078A2C
+  combat_select_catch_hits_one_mutating(batch, bi);
 
   for (int attacker = 0; attacker < num_players; attacker++) {
     const size_t a_idx = msl_idx_player(bi, attacker);

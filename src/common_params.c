@@ -172,7 +172,12 @@ int common_params_init(void) {
       json_get_f32(buf, "lstick_tilt_y_thresh", &g_params.lstick_tilt_y_thresh) != 0 ||
       json_get_f32(buf, "trigger_deadzone", &g_params.trigger_deadzone) != 0 ||
       json_get_f32(buf, "attack_angle_threshold_radians",
-                   &g_params.attack_angle_threshold_radians) != 0) {
+                   &g_params.attack_angle_threshold_radians) != 0 ||
+      json_get_f32(buf, "smash_stick_threshold", &g_params.smash_stick_threshold) != 0 ||
+      json_get_f32(buf, "attack_hi3_stick_threshold_y", &g_params.attack_hi3_stick_threshold_y) !=
+          0 ||
+      json_get_f32(buf, "attack_lw3_stick_threshold_y", &g_params.attack_lw3_stick_threshold_y) !=
+          0) {
     alloc_free(buf);
     return -1;
   }
