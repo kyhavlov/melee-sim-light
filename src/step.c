@@ -94,8 +94,9 @@ static inline void cache_collision_stage_cur_pos(MslBatch* batch) {
   }
 }
 
-int step_one_frame(MslBatch* batch, const uint8_t* prev_input_bytes, size_t prev_input_stride_bytes,
-                   const uint8_t* input_bytes, size_t input_stride_bytes) {
+static int step_one_frame_core(MslBatch* batch, const uint8_t* prev_input_bytes,
+                               size_t prev_input_stride_bytes, const uint8_t* input_bytes,
+                               size_t input_stride_bytes, uint8_t run_combat) {
   if (batch == NULL) {
     return EINVAL;
   }
@@ -184,7 +185,22 @@ int step_one_frame(MslBatch* batch, const uint8_t* prev_input_bytes, size_t prev
   reflector_bubbles_refresh(batch);
   items_update(batch);
   throw_flow_update_post_items(batch);
-  combat_resolve(batch);
+  if (run_combat) {
+    combat_resolve(batch);
+  }
 
   return 0;
+}
+
+int step_one_frame(MslBatch* batch, const uint8_t* prev_input_bytes, size_t prev_input_stride_bytes,
+                   const uint8_t* input_bytes, size_t input_stride_bytes) {
+  return step_one_frame_core(batch, prev_input_bytes, prev_input_stride_bytes, input_bytes,
+                             input_stride_bytes, 1u);
+}
+
+int step_one_frame_pre_combat(MslBatch* batch, const uint8_t* prev_input_bytes,
+                              size_t prev_input_stride_bytes, const uint8_t* input_bytes,
+                              size_t input_stride_bytes) {
+  return step_one_frame_core(batch, prev_input_bytes, prev_input_stride_bytes, input_bytes,
+                             input_stride_bytes, 0u);
 }

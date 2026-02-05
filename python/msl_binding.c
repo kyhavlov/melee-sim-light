@@ -880,6 +880,69 @@ static PyObject* msl_step_input(PyObject* self, PyObject* args) {
   Py_RETURN_NONE;
 }
 
+static PyObject* msl_debug_step_input_pre_combat(PyObject* self, PyObject* args) {
+  (void)self;
+  PyObject* handle_obj = NULL;
+  PyObject* prev_input_obj = NULL;
+  PyObject* input_obj = NULL;
+  if (!PyArg_ParseTuple(args, "OOO", &handle_obj, &prev_input_obj, &input_obj)) {
+    return NULL;
+  }
+  PyMslHandle* h = unpack_handle(handle_obj);
+  if (h == NULL) {
+    return NULL;
+  }
+
+  PyArrayObject* prev_input = require_contiguous_array(prev_input_obj, NPY_UINT8, 2, "prev_input");
+  if (prev_input == NULL) {
+    return NULL;
+  }
+  PyArrayObject* input = require_contiguous_array(input_obj, NPY_UINT8, 2, "input");
+  if (input == NULL) {
+    return NULL;
+  }
+
+  if (PyArray_DIM(prev_input, 1) < (npy_intp)sizeof(MslInput) ||
+      PyArray_DIM(input, 1) < (npy_intp)sizeof(MslInput)) {
+    PyErr_SetString(PyExc_ValueError, "input second dim too small for MslInput");
+    return NULL;
+  }
+
+  const uint8_t* prev_bytes = (const uint8_t*)PyArray_DATA(prev_input);
+  const uint8_t* in_bytes = (const uint8_t*)PyArray_DATA(input);
+  const size_t prev_stride = (size_t)PyArray_STRIDE(prev_input, 0);
+  const size_t in_stride = (size_t)PyArray_STRIDE(input, 0);
+
+  const int err =
+      msl_batch_debug_step_input_pre_combat(h->batch, prev_bytes, prev_stride, in_bytes, in_stride);
+  if (err != 0) {
+    PyErr_Format(PyExc_RuntimeError, "msl_batch_debug_step_input_pre_combat failed: %d", err);
+    return NULL;
+  }
+
+  Py_RETURN_NONE;
+}
+
+static PyObject* msl_debug_refresh_combat_geometry(PyObject* self, PyObject* args) {
+  (void)self;
+  PyObject* handle_obj = NULL;
+  if (!PyArg_ParseTuple(args, "O", &handle_obj)) {
+    return NULL;
+  }
+  PyMslHandle* h = unpack_handle(handle_obj);
+  if (h == NULL) {
+    return NULL;
+  }
+
+  const int err = msl_batch_debug_refresh_combat_geometry(h->batch);
+  if (err != 0) {
+    PyErr_Format(PyExc_RuntimeError, "msl_batch_debug_refresh_combat_geometry failed: %d", err);
+    return NULL;
+  }
+
+  Py_RETURN_NONE;
+}
+
 static PyObject* msl_write_compare(PyObject* self, PyObject* args) {
   (void)self;
   PyObject* handle_obj = NULL;
@@ -911,6 +974,128 @@ static PyObject* msl_write_compare(PyObject* self, PyObject* args) {
   }
 
   Py_RETURN_NONE;
+}
+
+static PyObject* msl_debug_timebase_py(PyObject* self, PyObject* args) {
+  (void)self;
+  PyObject* handle_obj = NULL;
+  int batch_index = 0;
+  if (!PyArg_ParseTuple(args, "Oi", &handle_obj, &batch_index)) {
+    return NULL;
+  }
+  PyMslHandle* h = unpack_handle(handle_obj);
+  if (h == NULL) {
+    return NULL;
+  }
+
+  npy_intp dims[2] = {(npy_intp)MSL_MAX_PLAYERS, (npy_intp)8};
+  PyArrayObject* arr = (PyArrayObject*)PyArray_SimpleNew(2, dims, NPY_FLOAT32);
+  if (arr == NULL) {
+    return NULL;
+  }
+  float* out = (float*)PyArray_DATA(arr);
+  const int err = msl_batch_debug_timebase(h->batch, batch_index, out);
+  if (err != 0) {
+    Py_DECREF(arr);
+    PyErr_Format(PyExc_ValueError, "msl_batch_debug_timebase failed: %d", err);
+    return NULL;
+  }
+
+  return (PyObject*)arr;
+}
+
+static PyObject* msl_debug_hitbox_event_timing_py(PyObject* self, PyObject* args) {
+  (void)self;
+  PyObject* handle_obj = NULL;
+  int batch_index = 0;
+  int attacker = 0;
+  int hb_id = 0;
+  if (!PyArg_ParseTuple(args, "Oiii", &handle_obj, &batch_index, &attacker, &hb_id)) {
+    return NULL;
+  }
+  PyMslHandle* h = unpack_handle(handle_obj);
+  if (h == NULL) {
+    return NULL;
+  }
+
+  npy_intp dims[2] = {(npy_intp)1, (npy_intp)sizeof(MslDebugHitboxEventTiming)};
+  PyArrayObject* arr = (PyArrayObject*)PyArray_SimpleNew(2, dims, NPY_UINT8);
+  if (arr == NULL) {
+    return NULL;
+  }
+
+  MslDebugHitboxEventTiming* out = (MslDebugHitboxEventTiming*)PyArray_DATA(arr);
+  const int err = msl_batch_debug_hitbox_event_timing(h->batch, batch_index, attacker, hb_id, out);
+  if (err != 0) {
+    Py_DECREF(arr);
+    PyErr_Format(PyExc_ValueError, "msl_batch_debug_hitbox_event_timing failed: %d", err);
+    return NULL;
+  }
+
+  return (PyObject*)arr;
+}
+
+static PyObject* msl_debug_hitbox_sweep_proxy_py(PyObject* self, PyObject* args) {
+  (void)self;
+  PyObject* handle_obj = NULL;
+  int batch_index = 0;
+  int attacker = 0;
+  int hb_id = 0;
+  if (!PyArg_ParseTuple(args, "Oiii", &handle_obj, &batch_index, &attacker, &hb_id)) {
+    return NULL;
+  }
+  PyMslHandle* h = unpack_handle(handle_obj);
+  if (h == NULL) {
+    return NULL;
+  }
+
+  npy_intp dims[2] = {(npy_intp)1, (npy_intp)sizeof(MslDebugHitboxSweepProxy)};
+  PyArrayObject* arr = (PyArrayObject*)PyArray_SimpleNew(2, dims, NPY_UINT8);
+  if (arr == NULL) {
+    return NULL;
+  }
+
+  MslDebugHitboxSweepProxy* out = (MslDebugHitboxSweepProxy*)PyArray_DATA(arr);
+  const int err = msl_batch_debug_hitbox_sweep_proxy(h->batch, batch_index, attacker, hb_id, out);
+  if (err != 0) {
+    Py_DECREF(arr);
+    PyErr_Format(PyExc_ValueError, "msl_batch_debug_hitbox_sweep_proxy failed: %d", err);
+    return NULL;
+  }
+
+  return (PyObject*)arr;
+}
+
+static PyObject* msl_debug_hurtcap_slot_flags_py(PyObject* self, PyObject* args) {
+  (void)self;
+  PyObject* handle_obj = NULL;
+  int batch_index = 0;
+  int player_index = 0;
+  int cap_id = 0;
+  if (!PyArg_ParseTuple(args, "Oiii", &handle_obj, &batch_index, &player_index, &cap_id)) {
+    return NULL;
+  }
+  PyMslHandle* h = unpack_handle(handle_obj);
+  if (h == NULL) {
+    return NULL;
+  }
+
+  npy_intp dims[2] = {(npy_intp)1, (npy_intp)sizeof(MslDebugHurtcapSlotFlags)};
+  PyArrayObject* arr = (PyArrayObject*)PyArray_SimpleNew(2, dims, NPY_UINT8);
+  if (arr == NULL) {
+    return NULL;
+  }
+
+  MslDebugHurtcapSlotFlags* out = (MslDebugHurtcapSlotFlags*)PyArray_DATA(arr);
+  const int err =
+      msl_batch_debug_hurtcap_slot_flags(h->batch, batch_index, player_index, cap_id, out);
+  if (err != 0) {
+    Py_DECREF(arr);
+    PyErr_Format(PyExc_ValueError, "msl_batch_debug_hurtcap_slot_flags failed: %d", err);
+    return NULL;
+  }
+
+  return (PyObject*)arr;
 }
 
 static PyObject* msl_debug_write_processed_input(PyObject* self, PyObject* args) {
@@ -2302,6 +2487,13 @@ static PyMethodDef methods[] = {
      "reseed_seed(handle, seed_bytes[batch, seed_stride])"},
     {"step_input", msl_step_input, METH_VARARGS,
      "step_input(handle, prev_input_bytes, input_bytes)"},
+    {"debug_step_input_pre_combat", msl_debug_step_input_pre_combat, METH_VARARGS,
+     "debug_step_input_pre_combat(handle, prev_input_bytes, input_bytes) -> DEBUG-ONLY triage "
+     "step. Advances/mutates state through pre-combat stages, deliberately skips combat_resolve(), "
+     "and is not comparable to step_input() for training/rollouts."},
+    {"debug_refresh_combat_geometry", msl_debug_refresh_combat_geometry, METH_VARARGS,
+     "debug_refresh_combat_geometry(handle) -> DEBUG-ONLY. Recompute hurtcaps/hitboxes from "
+     "current state without advancing frame stages."},
     {"write_compare", msl_write_compare, METH_VARARGS, "write_compare(handle, out_bytes)"},
     {"debug_write_processed_input", msl_debug_write_processed_input, METH_VARARGS,
      "debug_write_processed_input(handle, out_bytes)"},
@@ -2311,6 +2503,17 @@ static PyMethodDef methods[] = {
      "debug_write_collision_contacts(handle, out_bytes)"},
     {"debug_force_anim_timebase_enter", msl_debug_force_anim_timebase_enter, METH_VARARGS,
      "debug_force_anim_timebase_enter(handle, batch_index, player_index, anim_start, anim_speed)"},
+    {"debug_timebase", msl_debug_timebase_py, METH_VARARGS,
+     "debug_timebase(handle, batch_index) -> np.ndarray[float32] shape=(MSL_MAX_PLAYERS,8)"},
+    {"debug_hitbox_event_timing", msl_debug_hitbox_event_timing_py, METH_VARARGS,
+     "debug_hitbox_event_timing(handle, batch_index, attacker, hb_id) -> "
+     "bytes[1,sizeof(MslDebugHitboxEventTiming)]"},
+    {"debug_hitbox_sweep_proxy", msl_debug_hitbox_sweep_proxy_py, METH_VARARGS,
+     "debug_hitbox_sweep_proxy(handle, batch_index, attacker, hb_id) -> "
+     "bytes[1,sizeof(MslDebugHitboxSweepProxy)]"},
+    {"debug_hurtcap_slot_flags", msl_debug_hurtcap_slot_flags_py, METH_VARARGS,
+     "debug_hurtcap_slot_flags(handle, batch_index, player_index, cap_id) -> "
+     "bytes[1,sizeof(MslDebugHurtcapSlotFlags)]"},
     {"sizes", msl_sizes, METH_NOARGS, "sizes() -> dict of struct sizes"},
     {"alloc_reset", msl_alloc_reset, METH_NOARGS,
      "Reset C allocation counters (debug/perf guardrail)."},

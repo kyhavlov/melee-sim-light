@@ -592,6 +592,141 @@ typedef struct MslDebugCombatContactClassified {
 
 #pragma pack(pop)
 
+// Debug-only: hitbox event timing snapshot for one fighter + hitbox slot.
+//
+// This is intended for triage of "enable-edge-only" contacts where a hitbox overlaps a hurtcap on
+// the single frame it becomes enabled, and we need to inspect whether our per-frame event gating
+// matches decomp-shaped cmd script scheduling.
+//
+// Decomp anchor for float-driven command scheduling:
+// refs/melee/src/melee/ft/ftaction.c::ftAction_80073240
+// refs/melee/src/melee/lb/lbcommand.c::{Command_02,Command_08}
+//
+// Value semantics:
+// - kind: 0=create (spawn/refresh), 1=clear (despawn), 0xFF=none
+// - start_frame/end_frame: active window for hb_id at the sampled pose_frame. end_frame is the
+//   next clear frame affecting hb_id or clear-all, or -1 if none found.
+//
+// NOTE: This struct is debug-only and not part of the stable dataset/compare schema.
+#pragma pack(push, 1)
+typedef struct MslDebugHitboxEventTiming {
+  uint8_t attacker;
+  uint8_t hb_id;
+  uint8_t char_id;
+  uint8_t _pad0;
+
+  uint16_t msid;
+  uint16_t pose_frame;
+
+  float anim_frame_f32;
+  float frame_speed_mul_f32;
+
+  int16_t start_frame;
+  int16_t end_frame;
+
+  uint8_t enabled_prev;
+  uint8_t enabled_cur;
+  uint8_t prev_hit_group;
+  uint8_t cur_hit_group;
+
+  uint8_t pose_create_count;
+  uint8_t pose_clear_count;
+  uint8_t pose_clear_all_count;
+  uint8_t enable_edge;
+
+  uint8_t last_affect_kind_le;
+  uint8_t last_affect_kind_eq;
+  uint16_t last_affect_frame_le;
+  uint16_t last_affect_frame_eq;
+  uint16_t last_affect_u16_7_le;
+  uint16_t last_affect_u16_7_eq;
+} MslDebugHitboxEventTiming;
+#pragma pack(pop)
+
+// Debug-only: hurtcap slot eligibility snapshot for one fighter + cap id.
+//
+// This captures the runtime world-slot state (enabled/height/grabbable) plus the
+// movescript-derived hurtbox mode mask bit for the sampled (char_id, msid, frame).
+//
+// Decomp anchors:
+// - refs/melee/src/melee/ft/ftcoll.c::ftColl_80078C70 (fighter-vs-fighter path checks hurt state)
+// - refs/melee/src/melee/lb/lbcollision.c::lbColl_8000805C (collision helper consumes hurt capsules)
+#pragma pack(push, 1)
+typedef struct MslDebugHurtcapSlotFlags {
+  uint8_t enabled;           // world slot enabled flag after hurtboxes_refresh()
+  uint8_t height;            // hurtcap height class (0/1/2)
+  uint8_t is_grabbable;      // hurtcap grabbable flag
+  uint8_t mode_can_hit_bit;  // bit from hurtbox_modes_can_hit_mask()
+
+  uint8_t char_id;
+  uint8_t _pad0;
+  uint16_t msid;
+  uint16_t frame;
+  uint16_t cap_id;
+  uint32_t can_hit_mask;
+} MslDebugHurtcapSlotFlags;
+#pragma pack(pop)
+
+// Debug-only: hitbox sweep proxy for one fighter + hitbox slot.
+//
+// Purpose:
+// - Approximate decomp lbColl_80006E58 inputs that use hit sweep endpoints (hit->x58, hit->x4C),
+//   by exposing a best-effort previous/current center pair in world space.
+//
+// Modeling notes:
+// - `cur_*` is sampled at pose_frame=floor(cur_anim_frame) from extracted create_hitbox def.
+// - `prev_*` is sampled at pose_frame=floor(cur_anim_frame - frame_speed_mul) using the same
+//   event table/effective slot def at that previous integer frame.
+// - This is instrumentation-only and may diverge from engine-internal per-frame x58/x4C when
+//   runtime-only flags/state not represented in extracted tables are involved.
+//
+// Runtime-only gating note:
+// - Decomp ftColl_80078C70 sets arg3 (`var_r22`) from HitCapsule.x43_b2 and lbColl_8000805C
+//   short-circuits acceptance when arg3 != 0.
+// - We currently do not carry x43_b2 in runtime state/extracted tables for this sim path.
+#pragma pack(push, 1)
+typedef struct MslDebugHitboxSweepProxy {
+  uint8_t attacker;
+  uint8_t hb_id;
+
+  uint8_t enabled_prev;
+  uint8_t enabled_cur;
+  uint8_t prev_valid;
+  uint8_t cur_valid;
+  uint8_t _pad0[2];
+
+  uint16_t msid;
+  uint16_t pose_prev;
+  uint16_t pose_cur;
+  uint8_t char_id;
+  uint8_t _pad1;
+
+  float anim_frame_f32;
+  float prev_anim_frame_f32;
+  float frame_speed_mul_f32;
+
+  float prev_x;
+  float prev_y;
+  float prev_z;
+  float prev_radius;
+
+  float cur_x;
+  float cur_y;
+  float cur_z;
+  float cur_radius;
+
+  uint16_t u16_6_prev;
+  uint16_t u16_7_prev;
+  uint16_t u16_6_cur;
+  uint16_t u16_7_cur;
+
+  uint8_t arg3_var_r22_known;             // 0=unknown in current runtime model
+  uint8_t arg3_var_r22_from_extracted;    // 0=not present in MSLHITB1
+  uint8_t arg3_var_r22_gates_collision;   // 1=decomp says it gates lbColl_8000805C acceptance
+  uint8_t _pad2;
+} MslDebugHitboxSweepProxy;
+#pragma pack(pop)
+
 // -------------
 // Simulator core
 // -------------
@@ -645,6 +780,46 @@ int msl_batch_debug_write_collision_contacts(const MslBatch* batch, uint8_t* out
 // transitions (e.g., fighter attack identity) are not accidentally updated by "anim restarts".
 int msl_batch_debug_force_anim_timebase_enter(MslBatch* batch, int batch_index, int player_index,
                                               float anim_start_f32, float anim_speed_f32);
+
+// Debug-only helper: run one frame up to (but excluding) combat_resolve().
+//
+// IMPORTANT CONTRACT:
+// - This is for instrumentation/triage only; do not use for training/rollouts.
+// - It intentionally excludes combat_resolve(), so outputs are not comparable to `step_input()`.
+// - It still advances and mutates batch state through all earlier frame stages (anim/input/action/
+//   physics/collision/hitbox/hurtbox/item updates), exactly as a normal frame would before combat.
+int msl_batch_debug_step_input_pre_combat(MslBatch* batch, const uint8_t* prev_input_bytes,
+                                          size_t prev_input_stride_bytes,
+                                          const uint8_t* input_bytes, size_t input_stride_bytes);
+
+// Debug-only helper: recompute pose-driven combat geometry from current state (hurtcaps + hitboxes)
+// without advancing frame stages.
+//
+// This mutates debug geometry arrays in-place from the current anim/action state and is intended
+// only for triage (e.g., comparing floor/ceil pose samples on the same seeded snapshot).
+int msl_batch_debug_refresh_combat_geometry(MslBatch* batch);
+
+// Debug-only helper: read per-player animation/script timebase + pose sampling frame for a batch
+// element.
+//
+// Writes `MSL_MAX_PLAYERS * 8` floats into out_rows_8p as rows:
+//   [action_id, animation_index, action_frame, anim_frame_f32_sanitized, frame_speed_mul_f32,
+//    pose_frame, hitlag_started_frame, hurtbox_state]
+int msl_batch_debug_timebase(const MslBatch* batch, int batch_index, float* out_rows_8p);
+
+// Debug-only helper: inspect extracted hitbox events and the runtime's pose_frame gating result for
+// a single fighter hitbox slot on this step.
+int msl_batch_debug_hitbox_event_timing(const MslBatch* batch, int batch_index, int attacker,
+                                        int hb_id, MslDebugHitboxEventTiming* out_timing);
+
+// Debug-only helper: inspect one hitbox slot's sweep proxy inputs (`prev`/`cur`) for decomp-shaped
+// collision triage.
+int msl_batch_debug_hitbox_sweep_proxy(const MslBatch* batch, int batch_index, int attacker,
+                                       int hb_id, MslDebugHitboxSweepProxy* out_proxy);
+
+// Debug-only helper: inspect one hurtcap slot's runtime eligibility for a fighter on this step.
+int msl_batch_debug_hurtcap_slot_flags(const MslBatch* batch, int batch_index, int player_index,
+                                       int cap_id, MslDebugHurtcapSlotFlags* out_flags);
 
 // Debug/validation helper: read pose-driven world-space hurt capsules for a single fighter.
 // Writes `MSL_MAX_HURTCAPS * 7` floats into out_caps_7 as rows:

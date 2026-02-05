@@ -1,9 +1,11 @@
 #include "api.h"
 
 #include <errno.h>
+#include <math.h>
 #include <string.h>
 
 #include "alloc.h"
+#include "anim_frame.h"
 #include "anim_timebase.h"
 #include "anim_table.h"
 #include "anim_pose.h"
@@ -20,8 +22,11 @@
 #include "hitboxes_tables.h"
 #include "hitlist.h"
 #include "hit_status_tables.h"
+#include "hitboxes.h"
 #include "hurtbox_modes_tables.h"
 #include "hurtcaps_tables.h"
+#include "hurtboxes.h"
+#include "mtx34.h"
 #include "shield_tilt_table.h"
 #include "laser_params.h"
 #include "stage_collision.h"
@@ -781,6 +786,442 @@ int msl_batch_debug_force_anim_timebase_enter(MslBatch* batch, int batch_index, 
   return 0;
 }
 
+int msl_batch_debug_step_input_pre_combat(MslBatch* batch, const uint8_t* prev_input_bytes,
+                                          size_t prev_input_stride_bytes,
+                                          const uint8_t* input_bytes,
+                                          size_t input_stride_bytes) {
+  return step_one_frame_pre_combat(batch, prev_input_bytes, prev_input_stride_bytes, input_bytes,
+                                   input_stride_bytes);
+}
+
+int msl_batch_debug_refresh_combat_geometry(MslBatch* batch) {
+  if (batch == NULL) {
+    return EINVAL;
+  }
+  hurtboxes_refresh(batch);
+  hitboxes_refresh(batch);
+  return 0;
+}
+
+int msl_batch_debug_timebase(const MslBatch* batch, int batch_index, float* out_rows_8p) {
+  if (batch == NULL || out_rows_8p == NULL) {
+    return EINVAL;
+  }
+  if (batch_index < 0 || batch_index >= batch->batch_size) {
+    return EINVAL;
+  }
+
+  // Zero-fill full fixed-size output for stable debug snapshots.
+  memset(out_rows_8p, 0, sizeof(float) * (size_t)MSL_MAX_PLAYERS * 8u);
+
+  const int num_players = (int)batch->config.num_players;
+  for (int p = 0; p < MSL_MAX_PLAYERS; p++) {
+    const size_t o = (size_t)p * 8u;
+    if (p >= num_players) {
+      continue;
+    }
+    const size_t idx = msl_idx_player(batch_index, p);
+    const float anim_frame_f32 =
+        msl_anim_frame_sanitize_f32(batch->state.anim_frame_f32[idx]);
+    const uint16_t pose_frame = msl_anim_frame_floor_u16(anim_frame_f32);
+    const float speed_mul_f32 = msl_f32_from_q16_16(batch->state.frame_speed_mul_fp_q16_16[idx]);
+    out_rows_8p[o + 0] = (float)batch->state.action_id[idx];
+    out_rows_8p[o + 1] = (float)batch->state.animation_index[idx];
+    out_rows_8p[o + 2] = (float)batch->state.action_frame[idx];
+    out_rows_8p[o + 3] = anim_frame_f32;
+    out_rows_8p[o + 4] = speed_mul_f32;
+    out_rows_8p[o + 5] = (float)pose_frame;
+    out_rows_8p[o + 6] = (float)batch->state.hitlag_started_frame[idx];
+    out_rows_8p[o + 7] = (float)batch->state.hurtbox_state[idx];
+  }
+
+  return 0;
+}
+
+static inline uint8_t hb_events_affects_slot(const MslHitboxEvent* ev, uint8_t hb_id) {
+  if (ev == NULL) {
+    return 0;
+  }
+  if (ev->kind != 1) {
+    return (ev->hitbox_id == hb_id) ? 1u : 0u;
+  }
+  // Clear event: hb_id==0xFF clears all.
+  if (ev->hitbox_id == 0xFFu) {
+    return 1u;
+  }
+  return (ev->hitbox_id == hb_id) ? 1u : 0u;
+}
+
+static inline void debug_hb_defs_apply_event(const MslHitboxEvent* ev, uint8_t have_def[MSL_MAX_HITBOXES],
+                                             MslHitboxEvent def[MSL_MAX_HITBOXES]) {
+  if (ev == NULL) {
+    return;
+  }
+  if (ev->kind == 1) {
+    if (ev->hitbox_id == 0xFFu) {
+      for (int hi = 0; hi < MSL_MAX_HITBOXES; hi++) {
+        have_def[hi] = 0;
+      }
+      return;
+    }
+    if (ev->hitbox_id < (uint8_t)MSL_MAX_HITBOXES) {
+      have_def[ev->hitbox_id] = 0;
+    }
+    return;
+  }
+  if (ev->hitbox_id < (uint8_t)MSL_MAX_HITBOXES) {
+    have_def[ev->hitbox_id] = 1;
+    def[ev->hitbox_id] = *ev;
+  }
+}
+
+static uint8_t debug_sample_hitbox_center_proxy(const MslBatch* batch, size_t idx, uint8_t char_id,
+                                                uint16_t msid, uint16_t pose_frame,
+                                                const MslHitboxEvent* def, float* out_x, float* out_y,
+                                                float* out_z, float* out_radius) {
+  if (batch == NULL || def == NULL || out_x == NULL || out_y == NULL || out_z == NULL ||
+      out_radius == NULL) {
+    return 0;
+  }
+
+  float m[12];
+  if (anim_pose_get_matrix(char_id, msid, pose_frame, def->bone_part_id, m) != 0) {
+    return 0;
+  }
+
+  const float pos_x = batch->state.pos_x[idx];
+  const float pos_y = batch->state.pos_y[idx];
+  const float pos_z = batch->state.pos_z[idx];
+  const float scale_y = batch->state.fighter_scale_y[idx];
+  const MslCharParams* chp = msl_char_params(char_id);
+  const float model_scaling = (chp && isfinite(chp->model_scaling) && chp->model_scaling > 0.0f)
+                                  ? chp->model_scaling
+                                  : 1.0f;
+  const float model_scale = scale_y * model_scaling;
+  const float facing_dir = batch->state.facing[idx] ? 1.0f : -1.0f;
+
+  const float off[3] = {def->x, def->y, def->z};
+  float cx = 0.0f;
+  float cy = 0.0f;
+  float cz = 0.0f;
+  msl_mtx34_mul_point(m, off, &cx, &cy, &cz);
+  cx *= model_scale;
+  cy *= model_scale;
+  cz *= model_scale;
+
+  const float cx_rot_x = facing_dir * cz;
+  const float cx_rot_z = -facing_dir * cx;
+  cx = cx_rot_x + pos_x;
+  cy += pos_y;
+  cz = cx_rot_z + pos_z;
+
+  float radius = def->radius;
+  if (!msl_hitbox_ignore_fighter_scale(def->u16_6)) {
+    radius *= scale_y;
+  }
+
+  *out_x = cx;
+  *out_y = cy;
+  *out_z = cz;
+  *out_radius = radius;
+  return 1;
+}
+
+int msl_batch_debug_hitbox_event_timing(const MslBatch* batch, int batch_index, int attacker,
+                                        int hb_id, MslDebugHitboxEventTiming* out_timing) {
+  if (batch == NULL || out_timing == NULL) {
+    return EINVAL;
+  }
+  if (batch_index < 0 || batch_index >= batch->batch_size) {
+    return EINVAL;
+  }
+  if (attacker < 0 || attacker >= MSL_MAX_PLAYERS) {
+    return EINVAL;
+  }
+  if (hb_id < 0 || hb_id >= MSL_MAX_HITBOXES) {
+    return EINVAL;
+  }
+
+  memset(out_timing, 0, sizeof(*out_timing));
+  out_timing->attacker = (uint8_t)attacker;
+  out_timing->hb_id = (uint8_t)hb_id;
+  out_timing->last_affect_kind_le = 0xFFu;
+  out_timing->last_affect_kind_eq = 0xFFu;
+  out_timing->start_frame = -1;
+  out_timing->end_frame = -1;
+  out_timing->prev_hit_group = 0xFFu;
+  out_timing->cur_hit_group = 0xFFu;
+
+  const int num_players = (int)batch->config.num_players;
+  if (attacker >= num_players) {
+    return 0;
+  }
+
+  const size_t idx = msl_idx_player(batch_index, attacker);
+  const uint8_t char_id = batch->state.char_id[idx];
+  out_timing->char_id = char_id;
+
+  const uint32_t anim_u32 = batch->state.animation_index[idx];
+  if (anim_u32 > 0xFFFFu) {
+    return 0;
+  }
+
+  const uint16_t msid = (uint16_t)anim_u32;
+  out_timing->msid = msid;
+
+  const float anim_frame_f32 =
+      msl_anim_frame_sanitize_f32(batch->state.anim_frame_f32[idx]);
+  out_timing->anim_frame_f32 = anim_frame_f32;
+  const float speed_mul_f32 = msl_f32_from_q16_16(batch->state.frame_speed_mul_fp_q16_16[idx]);
+  out_timing->frame_speed_mul_f32 = speed_mul_f32;
+
+  const uint16_t pose_frame = msl_anim_frame_floor_u16(anim_frame_f32);
+  out_timing->pose_frame = pose_frame;
+
+  const MslHitboxEvent* events = NULL;
+  uint16_t event_count = 0;
+  if (hitboxes_get_events(char_id, msid, &events, &event_count) != 0 || events == NULL ||
+      event_count == 0) {
+    return 0;
+  }
+
+  uint8_t enabled_prev = 0;
+  uint16_t u16_7_prev = 0;
+  int16_t start_prev = -1;
+
+  // Build state at the end of (pose_frame - 1) by applying events strictly before pose_frame.
+  for (uint16_t ei = 0; ei < event_count; ei++) {
+    const MslHitboxEvent* ev = &events[ei];
+    if ((float)ev->frame > anim_frame_f32) {
+      continue;
+    }
+    if (ev->frame >= pose_frame) {
+      break;
+    }
+    if (!hb_events_affects_slot(ev, (uint8_t)hb_id)) {
+      continue;
+    }
+    if (ev->kind == 1) {
+      enabled_prev = 0;
+      u16_7_prev = 0;
+      start_prev = -1;
+      out_timing->last_affect_kind_le = 1u;
+      out_timing->last_affect_frame_le = ev->frame;
+      out_timing->last_affect_u16_7_le = 0;
+    } else {
+      enabled_prev = 1;
+      u16_7_prev = ev->u16_7;
+      start_prev = (int16_t)ev->frame;
+      out_timing->last_affect_kind_le = 0u;
+      out_timing->last_affect_frame_le = ev->frame;
+      out_timing->last_affect_u16_7_le = ev->u16_7;
+    }
+  }
+
+  out_timing->enabled_prev = enabled_prev;
+  if (enabled_prev) {
+    out_timing->prev_hit_group = hitlist_hit_group_from_u16_7(u16_7_prev);
+  }
+
+  // Initialize current from prev and apply all pose_frame events in order.
+  uint8_t enabled_cur = enabled_prev;
+  uint16_t u16_7_cur = u16_7_prev;
+  int16_t start_cur = start_prev;
+
+  uint8_t pose_create = 0;
+  uint8_t pose_clear = 0;
+  uint8_t pose_clear_all = 0;
+  uint8_t enable_edge = 0;
+
+  for (uint16_t ei = 0; ei < event_count; ei++) {
+    const MslHitboxEvent* ev = &events[ei];
+    if ((float)ev->frame > anim_frame_f32) {
+      continue;
+    }
+    if (ev->frame > pose_frame) {
+      break;
+    }
+    if (ev->frame != pose_frame) {
+      continue;
+    }
+
+    const uint8_t affects = hb_events_affects_slot(ev, (uint8_t)hb_id);
+    if (!affects) {
+      continue;
+    }
+
+    if (ev->kind == 1) {
+      if (ev->hitbox_id == 0xFFu) {
+        pose_clear_all++;
+      } else {
+        pose_clear++;
+      }
+      enabled_cur = 0;
+      u16_7_cur = 0;
+      start_cur = -1;
+
+      out_timing->last_affect_kind_le = 1u;
+      out_timing->last_affect_frame_le = ev->frame;
+      out_timing->last_affect_u16_7_le = 0;
+      out_timing->last_affect_kind_eq = 1u;
+      out_timing->last_affect_frame_eq = ev->frame;
+      out_timing->last_affect_u16_7_eq = 0;
+    } else {
+      pose_create++;
+
+      const uint8_t had_old = enabled_cur ? 1u : 0u;
+      const uint8_t old_g = had_old ? hitlist_hit_group_from_u16_7(u16_7_cur) : 0u;
+      const uint8_t new_g = hitlist_hit_group_from_u16_7(ev->u16_7);
+      if (!had_old || old_g != new_g) {
+        enable_edge = 1u;
+      }
+
+      enabled_cur = 1;
+      u16_7_cur = ev->u16_7;
+      start_cur = (int16_t)ev->frame;
+
+      out_timing->last_affect_kind_le = 0u;
+      out_timing->last_affect_frame_le = ev->frame;
+      out_timing->last_affect_u16_7_le = ev->u16_7;
+      out_timing->last_affect_kind_eq = 0u;
+      out_timing->last_affect_frame_eq = ev->frame;
+      out_timing->last_affect_u16_7_eq = ev->u16_7;
+    }
+  }
+
+  out_timing->pose_create_count = pose_create;
+  out_timing->pose_clear_count = pose_clear;
+  out_timing->pose_clear_all_count = pose_clear_all;
+  out_timing->enable_edge = enable_edge;
+
+  out_timing->enabled_cur = enabled_cur;
+  if (enabled_cur) {
+    out_timing->cur_hit_group = hitlist_hit_group_from_u16_7(u16_7_cur);
+    out_timing->start_frame = start_cur;
+
+    // Find the next clear (for hb_id or clear-all) after pose_frame.
+    for (uint16_t ei = 0; ei < event_count; ei++) {
+      const MslHitboxEvent* ev = &events[ei];
+      if (ev->frame <= pose_frame) {
+        continue;
+      }
+      if (ev->kind != 1) {
+        continue;
+      }
+      if (!hb_events_affects_slot(ev, (uint8_t)hb_id)) {
+        continue;
+      }
+      out_timing->end_frame = (int16_t)ev->frame;
+      break;
+    }
+  }
+
+  return 0;
+}
+
+int msl_batch_debug_hitbox_sweep_proxy(const MslBatch* batch, int batch_index, int attacker,
+                                       int hb_id, MslDebugHitboxSweepProxy* out_proxy) {
+  if (batch == NULL || out_proxy == NULL) {
+    return EINVAL;
+  }
+  if (batch_index < 0 || batch_index >= batch->batch_size) {
+    return EINVAL;
+  }
+  if (attacker < 0 || attacker >= MSL_MAX_PLAYERS) {
+    return EINVAL;
+  }
+  if (hb_id < 0 || hb_id >= MSL_MAX_HITBOXES) {
+    return EINVAL;
+  }
+
+  memset(out_proxy, 0, sizeof(*out_proxy));
+  out_proxy->attacker = (uint8_t)attacker;
+  out_proxy->hb_id = (uint8_t)hb_id;
+  out_proxy->arg3_var_r22_known = 0u;
+  out_proxy->arg3_var_r22_from_extracted = 0u;
+  out_proxy->arg3_var_r22_gates_collision = 1u;
+
+  const int num_players = (int)batch->config.num_players;
+  if (attacker >= num_players) {
+    return 0;
+  }
+
+  const size_t idx = msl_idx_player(batch_index, attacker);
+  const uint8_t char_id = batch->state.char_id[idx];
+  out_proxy->char_id = char_id;
+
+  const uint32_t anim_u32 = batch->state.animation_index[idx];
+  if (anim_u32 > 0xFFFFu) {
+    return 0;
+  }
+  const uint16_t msid = (uint16_t)anim_u32;
+  out_proxy->msid = msid;
+
+  const float anim_frame_f32 =
+      msl_anim_frame_sanitize_f32(batch->state.anim_frame_f32[idx]);
+  const float speed_mul_f32 = msl_f32_from_q16_16(batch->state.frame_speed_mul_fp_q16_16[idx]);
+  const float prev_anim_frame_f32 = msl_anim_frame_sanitize_f32(anim_frame_f32 - speed_mul_f32);
+  const uint16_t pose_cur = msl_anim_frame_floor_u16(anim_frame_f32);
+  const uint16_t pose_prev = msl_anim_frame_floor_u16(prev_anim_frame_f32);
+
+  out_proxy->anim_frame_f32 = anim_frame_f32;
+  out_proxy->frame_speed_mul_f32 = speed_mul_f32;
+  out_proxy->prev_anim_frame_f32 = prev_anim_frame_f32;
+  out_proxy->pose_cur = pose_cur;
+  out_proxy->pose_prev = pose_prev;
+
+  const MslHitboxEvent* events = NULL;
+  uint16_t event_count = 0;
+  if (hitboxes_get_events(char_id, msid, &events, &event_count) != 0 || events == NULL ||
+      event_count == 0) {
+    return 0;
+  }
+
+  uint8_t have_prev[MSL_MAX_HITBOXES] = {0};
+  uint8_t have_cur[MSL_MAX_HITBOXES] = {0};
+  MslHitboxEvent def_prev[MSL_MAX_HITBOXES] = {0};
+  MslHitboxEvent def_cur[MSL_MAX_HITBOXES] = {0};
+
+  for (uint16_t ei = 0; ei < event_count; ei++) {
+    const MslHitboxEvent* ev = &events[ei];
+    if ((float)ev->frame > anim_frame_f32) {
+      break;
+    }
+    if (ev->frame > pose_cur) {
+      break;
+    }
+    debug_hb_defs_apply_event(ev, have_cur, def_cur);
+    if (ev->frame <= pose_prev) {
+      debug_hb_defs_apply_event(ev, have_prev, def_prev);
+    }
+  }
+
+  const int slot = hb_id;
+  out_proxy->enabled_prev = have_prev[slot] ? 1u : 0u;
+  out_proxy->enabled_cur = have_cur[slot] ? 1u : 0u;
+
+  if (have_prev[slot]) {
+    out_proxy->u16_6_prev = def_prev[slot].u16_6;
+    out_proxy->u16_7_prev = def_prev[slot].u16_7;
+    if (debug_sample_hitbox_center_proxy(batch, idx, char_id, msid, pose_prev, &def_prev[slot],
+                                         &out_proxy->prev_x, &out_proxy->prev_y, &out_proxy->prev_z,
+                                         &out_proxy->prev_radius)) {
+      out_proxy->prev_valid = 1u;
+    }
+  }
+  if (have_cur[slot]) {
+    out_proxy->u16_6_cur = def_cur[slot].u16_6;
+    out_proxy->u16_7_cur = def_cur[slot].u16_7;
+    if (debug_sample_hitbox_center_proxy(batch, idx, char_id, msid, pose_cur, &def_cur[slot],
+                                         &out_proxy->cur_x, &out_proxy->cur_y, &out_proxy->cur_z,
+                                         &out_proxy->cur_radius)) {
+      out_proxy->cur_valid = 1u;
+    }
+  }
+
+  return 0;
+}
+
 int msl_batch_debug_hurtcaps_world(const MslBatch* batch, int batch_index, int player_index,
                                    float* out_caps_7, uint8_t* out_count) {
   if (batch == NULL || out_caps_7 == NULL || out_count == NULL) {
@@ -918,6 +1359,59 @@ static inline size_t debug_idx_hitbox(int bi, int p, int hb_i) {
 static inline size_t debug_idx_hurtcap(int bi, int p, int cap_i) {
   return ((size_t)bi * (size_t)MSL_MAX_PLAYERS + (size_t)p) * (size_t)MSL_MAX_HURTCAPS +
          (size_t)cap_i;
+}
+
+int msl_batch_debug_hurtcap_slot_flags(const MslBatch* batch, int batch_index, int player_index,
+                                       int cap_id, MslDebugHurtcapSlotFlags* out_flags) {
+  if (batch == NULL || out_flags == NULL) {
+    return EINVAL;
+  }
+  if (batch_index < 0 || batch_index >= batch->batch_size) {
+    return EINVAL;
+  }
+  if (player_index < 0 || player_index >= MSL_MAX_PLAYERS) {
+    return EINVAL;
+  }
+  if (cap_id < 0 || cap_id >= MSL_MAX_HURTCAPS) {
+    return EINVAL;
+  }
+  const int num_players = (int)batch->config.num_players;
+  if (player_index >= num_players) {
+    return EINVAL;
+  }
+
+  memset(out_flags, 0, sizeof(*out_flags));
+  out_flags->cap_id = (uint16_t)cap_id;
+
+  const size_t p_idx = msl_idx_player(batch_index, player_index);
+  const size_t hc_idx = debug_idx_hurtcap(batch_index, player_index, cap_id);
+
+  out_flags->enabled = batch->state.hurtcap_enabled[hc_idx];
+  out_flags->height = batch->state.hurtcap_height[hc_idx];
+  out_flags->is_grabbable = batch->state.hurtcap_is_grabbable[hc_idx];
+  out_flags->char_id = batch->state.char_id[p_idx];
+
+  const uint32_t anim_u32 = batch->state.animation_index[p_idx];
+  if (anim_u32 > 0xFFFFu) {
+    return 0;
+  }
+
+  const uint16_t msid = (uint16_t)anim_u32;
+  out_flags->msid = msid;
+  const float anim_frame_f32 =
+      msl_anim_frame_sanitize_f32(batch->state.anim_frame_f32[p_idx]);
+  const uint16_t frame = msl_anim_frame_floor_u16(anim_frame_f32);
+  out_flags->frame = frame;
+
+  const uint8_t cap_count_u8 = batch->state.hurtcap_count[p_idx];
+  const uint16_t cap_count = (cap_count_u8 > (uint8_t)MSL_MAX_HURTCAPS) ? (uint16_t)MSL_MAX_HURTCAPS
+                                                                          : (uint16_t)cap_count_u8;
+  uint32_t can_hit_mask = 0xFFFFFFFFu;
+  (void)hurtbox_modes_can_hit_mask(out_flags->char_id, msid, frame, cap_count, &can_hit_mask);
+  out_flags->can_hit_mask = can_hit_mask;
+  out_flags->mode_can_hit_bit = (uint8_t)((can_hit_mask >> cap_id) & 0x1u);
+
+  return 0;
 }
 
 static inline uint8_t sphere_sphere_intersects(float ax, float ay, float az, float ar, float bx,
