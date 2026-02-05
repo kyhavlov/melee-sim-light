@@ -306,6 +306,35 @@ static inline int grabbed_victim_transn_interp(float* out_x, float* out_y, float
   return 0;
 }
 
+void grab_attachment_recompute_offsets_for_thrown_entry(MslBatch* batch, int batch_index,
+                                                        int victim_p, int owner_p) {
+  if (batch == NULL) {
+    return;
+  }
+  if (batch_index < 0 || batch_index >= batch->batch_size) {
+    return;
+  }
+  const int num_players = (int)batch->config.num_players;
+  if (victim_p < 0 || victim_p >= num_players || owner_p < 0 || owner_p >= num_players ||
+      victim_p == owner_p) {
+    return;
+  }
+
+  const size_t vidx = msl_idx_player(batch_index, victim_p);
+  const float scale_y = batch->state.fighter_scale_y[vidx];
+  if (!(scale_y > 0.0f)) {
+    return;
+  }
+
+  float ax = 0.0f, ay = 0.0f, az = 0.0f;
+  grabbed_victim_anchor_world(&ax, &ay, &az, batch, batch_index, victim_p, owner_p);
+  (void)az;
+
+  const float facing_dir = batch->state.facing[vidx] ? 1.0f : -1.0f;
+  batch->state.grab_offset_y[vidx] = (batch->state.pos_y[vidx] - ay) / scale_y;
+  batch->state.grab_offset_z[vidx] = (batch->state.pos_x[vidx] - ax) / (scale_y * facing_dir);
+}
+
 void grab_attachment_reseed_init(MslBatch* batch, int batch_index) {
   if (batch == NULL) {
     return;

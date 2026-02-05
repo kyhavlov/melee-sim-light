@@ -5,6 +5,7 @@
 #include "anim_table.h"
 #include "anim_timebase.h"
 #include "common_params.h"
+#include "grab_attachment.h"
 #include "input_axis.h"
 #include "move_tables.h"
 
@@ -232,6 +233,7 @@ static inline uint8_t enter_throw_from_wait(MslBatch* batch, int bi, int owner_p
   batch->state.action_id[vidx] = thrown_action;
   batch->state.animation_index[vidx] = victim_sm;
   msl_anim_timebase_enter(batch, vidx, 0.0f, 1.0f);
+  grab_attachment_recompute_offsets_for_thrown_entry(batch, bi, victim_p, owner_p);
   return 1u;
 }
 
