@@ -123,6 +123,16 @@ typedef struct MslStateSoA {
   // refs/melee/src/melee/ft/ftanim.c (ftAnim_8006F0FC / ftAnim_SetAnimRate)
   int32_t* anim_frame_fp_q16_16;
   int32_t* frame_speed_mul_fp_q16_16;
+  // Transient: defer a single ftAnim_8006EBA4-shaped timebase tick until after combat resolves.
+  //
+  // Rationale: some motion-state entry paths in decomp call ftAnim_8006EBA4 immediately after
+  // Fighter_ChangeMotionState (e.g. Shine/Blaster/AttackAir enter). Hits can occur during that
+  // within-frame advance interval even when the post-frame pose_frame is the next integer.
+  //
+  // This lite sim's hitbox materialization is currently pose_frame-sampled; deferring the tick keeps
+  // hitbox evaluation on the entry pose_frame while still producing the correct post-frame
+  // action_frame/state_age after the step.
+  uint8_t* anim_defer_tick_once;
   uint8_t* jumps_left;
   uint8_t* stocks;
   // Guard (shield) tilt pose state (seeded; decomp-shaped).

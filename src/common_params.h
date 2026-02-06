@@ -21,6 +21,14 @@ typedef struct MslCommonParams {
   // Stick angle threshold used by several common IASA checks (including cliff/ledge options).
   // Decomp: p_ftCommonData->x20 (radians), used by e.g. ftCo_CliffClimb.c::ftCo_8009AAFC.
   float attack_angle_threshold_radians;  // p_ftCommonData->x20
+  // Aerial attack direction / neutral gating thresholds.
+  //
+  // Decomp: ftCo_AttackAir_GetMsidFromCStick consults p_ftCommonData->xDC/xE0 to decide whether
+  // the stick is "neutral" enough to select AttackAirN.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_GetMsidFromCStick
+  // refs/melee/src/melee/ft/ft_0DF1.c::ftCo_800DF478 (C-stick edge uses the same thresholds)
+  float attackair_stick_deadzone_x;  // p_ftCommonData->xDC
+  float attackair_stick_deadzone_y;  // p_ftCommonData->xE0
   // Throw direction IASA thresholds (ftCo_800DD1E4 and ftCo_800DF7F4/844/878).
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DD1E4
   // refs/melee/src/melee/ft/ft_0DF1.c::{ftCo_800DF7F4,ftCo_800DF844,ftCo_800DF878}

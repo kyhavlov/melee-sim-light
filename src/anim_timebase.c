@@ -209,18 +209,73 @@ void anim_timebase_update_pre_input(MslBatch* batch) {
       //
       // We do not model per-state Anim callbacks yet, but we can observe restart-like boundaries
       // via a wrap in the derived `action_frame` and clear fastfall in those cases.
+      //
+      // IMPORTANT: Do not clear `fall_fast` generically on any AObj loop wrap. Many common motion
+      // states (including Fall) use AOBJ_LOOP and wrap `cur_anim_frame` without invoking
+      // Fighter_ChangeMotionState; fastfall persists across those wraps in decomp.
       if (did_wrap && action_frame_pre >= 0 && batch->state.action_frame[idx] < action_frame_pre) {
         const uint16_t a = batch->state.action_id[idx];
         if (a == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_N_LOOP) {
           batch->state.fall_fast[idx] = 0;
-        } else {
-          const uint32_t x4_flags = attack_id_x4_flags_from_action(batch->state.char_id[idx],
-                                                                   batch->state.action_id[idx]);
-          if ((x4_flags & (uint32_t)Ft_MF_KeepFastFall) == 0u) {
-            batch->state.fall_fast[idx] = 0;
+        }
+      }
+    }
+  }
+}
+
+void anim_timebase_apply_deferred_tick_once_post_combat(MslBatch* batch) {
+  if (batch == NULL) {
+    return;
+  }
+  const int num_players = (int)batch->config.num_players;
+  for (int bi = 0; bi < batch->batch_size; bi++) {
+    for (int p = 0; p < num_players; p++) {
+      const size_t idx = msl_idx_player(bi, p);
+      if (!batch->state.anim_defer_tick_once[idx]) {
+        continue;
+      }
+      batch->state.anim_defer_tick_once[idx] = 0u;
+
+      // Decomp: some motion-state entry paths call ftAnim_8006EBA4 immediately after
+      // Fighter_ChangeMotionState, before combat/hitlag for this frame is resolved. This deferred
+      // tick is applied post-combat to keep hitbox evaluation on the entry pose_frame while still
+      // matching Slippi post-frame state_age/action_frame.
+      //
+      // Apply it post-combat in this simulator to preserve pre-combat/combat geometry side effects
+      // (hitbox refresh + collision/KB resolution) while still matching the decomp entry semantics
+      // seen in ftFx_Special{N,Lw}_Enter and ftCo_AttackAir_EnterFromMsid.
+      // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c
+      // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c
+      //
+      // IMPORTANT: do not gate this on `hitlag_started_frame`; hitlag can be started by combat later
+      // in the frame, after the decomp tick already occurred.
+      batch->state.anim_frame_fp_q16_16[idx] += batch->state.frame_speed_mul_fp_q16_16[idx];
+      const uint8_t did_wrap = anim_timebase_apply_aobj_loop(batch, idx);
+      anim_timebase_apply_capture_loop(batch, idx);
+
+      if (!did_wrap) {
+        const uint32_t anim_u32 = batch->state.animation_index[idx];
+        if (anim_u32 <= 0xFFFFu &&
+            !msl_anim_is_looping(batch->state.char_id[idx], (uint16_t)anim_u32)) {
+          const float end_frame = msl_anim_end_frame(batch->state.char_id[idx], (uint16_t)anim_u32);
+          if (end_frame > 0.0f) {
+            const int32_t end_fp = msl_q16_16_from_f32(end_frame);
+            if (end_fp > 0) {
+              int32_t cur_fp = batch->state.anim_frame_fp_q16_16[idx];
+              if (cur_fp > end_fp) {
+                cur_fp = end_fp;
+                batch->state.anim_frame_fp_q16_16[idx] = cur_fp;
+              }
+              if (cur_fp >= end_fp) {
+                batch->state.frame_speed_mul_fp_q16_16[idx] = 0;
+              }
+            }
           }
         }
       }
+
+      msl_anim_timebase_recompute_derived(batch, idx);
     }
   }
 }

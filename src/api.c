@@ -269,6 +269,7 @@ int msl_batch_reseed_seed(MslBatch* batch, const uint8_t* seed_bytes, size_t see
       // Seed deterministic anim timebase from Slippi post-frame `state_age` (fp->cur_anim_frame)
       // plus a strictly-causal derived fp->frame_speed_mul.
       msl_anim_timebase_seed(batch, idx, seed->anim_frame_f32[p], seed->frame_speed_mul_f32[p]);
+      batch->state.anim_defer_tick_once[idx] = 0;
       batch->state.guard_tilt_x8[idx] = seed->guard_tilt_x8[p];
       batch->state.guard_tilt_x4[idx] = seed->guard_tilt_x4[p];
       batch->state.guard_reflect_timer_x14[idx] = seed->guard_reflect_timer_x14[p];
@@ -304,18 +305,7 @@ int msl_batch_reseed_seed(MslBatch* batch, const uint8_t* seed_bytes, size_t see
       // refs/melee/src/melee/ft/fighter.c (Fighter_ChangeMotionState; clears when (flags & Ft_MF_KeepFastFall)==0)
       // refs/melee/src/melee/ft/forward.h (Ft_MF_KeepFastFall = 1<<0)
       //
-      // Seed history can only approximate fall_fast causally; correct an important class of
-      // false-positive fall_fast snapshots:
-      // - If the current action does not keep fastfall across entries, and the action's phys does
-      //   not run the common fastfall helper (`ft_80084DB0` / ftCommon_CheckFallFast), then
-      //   fall_fast cannot become 1 while remaining in this action.
-      // Clear it on reseed to align with Slippi's fp+0x221A fall_fast bit for such states.
-      const uint16_t a_seed = seed->action_id[p];
-      const uint32_t x4_flags = attack_id_x4_flags_from_action(batch->state.char_id[idx], a_seed);
-      const uint8_t keep_fastfall = (x4_flags & 0x1u) ? 1u : 0u;
-      if (!keep_fastfall && !msl_action_allows_fastfall(a_seed)) {
-        batch->state.fall_fast[idx] = 0;
-      }
+      // Teacher-forced reseed parity: do not override Slippi's raw fp+0x221A fall_fast bit here.
       batch->state.run_x0[idx] = seed->run_x0[p];
       batch->state.ledge_cooldown[idx] = seed->ledge_cooldown[p];
       batch->state.ledge_side[idx] = -1;

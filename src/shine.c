@@ -180,6 +180,11 @@ static inline void enter_shine_ground_start(MslBatch* batch, size_t idx,
   batch->state.action_id[idx] = (uint16_t)MSL_ACT_FX_SPECIAL_LW_START;
   batch->state.animation_index[idx] = (uint32_t)ms->speciallw_ground_start;
   msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+  // Decomp: ftFx_SpecialLw_Enter calls ftAnim_8006EBA4 immediately after ChangeMotionState.
+  // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c::ftFx_SpecialLw_Enter
+  //
+  // Defer the tick to post-combat so hitbox evaluation remains on the entry pose_frame.
+  msl_anim_timebase_defer_tick_once(batch, idx);
 
   // Decomp: ftFx_SpecialLw_Enter / ftFx_SpecialAirLw_Enter call Fighter_ChangeMotionState(...)
   // and then immediately call ftAnim_8006EBA4(gobj), which runs the fighter cmd script for the
@@ -223,6 +228,8 @@ static inline void enter_shine_air_start(MslBatch* batch, size_t idx, const MslC
   batch->state.action_id[idx] = (uint16_t)MSL_ACT_FX_SPECIAL_AIR_LW_START;
   batch->state.animation_index[idx] = (uint32_t)ms->speciallw_air_start;
   msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+  // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c::ftFx_SpecialAirLw_Enter
+  msl_anim_timebase_defer_tick_once(batch, idx);
 
   // See enter_shine_ground_start() for the decomp-backed "run cmd script on entry" exception.
   uint8_t hit_status = 0;

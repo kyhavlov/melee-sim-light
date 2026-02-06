@@ -89,6 +89,7 @@ int state_alloc(MslStateSoA* state, int batch_size) {
   state->anim_frame_f32 = (float*)alloc_aligned_64(sizeof(float) * bp);
   state->anim_frame_fp_q16_16 = (int32_t*)alloc_aligned_64(sizeof(int32_t) * bp);
   state->frame_speed_mul_fp_q16_16 = (int32_t*)alloc_aligned_64(sizeof(int32_t) * bp);
+  state->anim_defer_tick_once = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->jumps_left = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->stocks = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->guard_tilt_x8 = (uint16_t*)alloc_aligned_64(sizeof(uint16_t) * bp);
@@ -267,22 +268,23 @@ int state_alloc(MslStateSoA* state, int batch_size) {
       !state->coll_prev_env_flags || !state->action_id || !state->prev_action_id ||
       !state->action_frame || !state->throw_pending_victim_port || !state->throw_pending_hit_idx ||
       !state->match_flow_timer || !state->downwait_timer || !state->anim_frame_f32 ||
-      !state->anim_frame_fp_q16_16 || !state->frame_speed_mul_fp_q16_16 || !state->jumps_left ||
-      !state->stocks || !state->guard_tilt_x8 || !state->guard_tilt_x4 ||
-      !state->guard_reflect_timer_x14 || !state->guard_release_latched_xc || !state->guard_x10 ||
-      !state->lightshield_amount || !state->kneebend_jump_input || !state->kneebend_is_short_hop ||
-      !state->tilt_timer_x || !state->tilt_timer_y || !state->fall_fast || !state->run_x0 ||
-      !state->ledge_side || !state->stage_ledge_occupant_left ||
-      !state->stage_ledge_occupant_right || !state->ledge_cooldown || !state->fallspecial_xc ||
-      !state->turn_has_turned || !state->turn_frames_to_turn || !state->turn_x8 ||
-      !state->lr_press_timer || !state->x672_input_timer || !state->x673 || !state->x674 ||
-      !state->x675 || !state->x676_x || !state->x677_y || !state->x678 || !state->x679_x ||
-      !state->x67A_y || !state->x67B || !state->x67C || !state->x67D || !state->x67E ||
-      !state->x680 || !state->x681 || !state->x682 || !state->x683 || !state->x684 ||
-      !state->ucf_padbuf_index || !state->ucf_padbuf_sdrop_up_frames ||
-      !state->ucf_padbuf_stick_x || !state->ucf_padbuf_stick_y || !state->percent ||
-      !state->percent_temp || !state->dmg_x2225_b7 || !state->dmg_x2224_b2 || !state->shield_hp ||
-      !state->hitlag || !state->hitlag_started_frame || !state->hitstun || !state->l_cancel ||
+      !state->anim_frame_fp_q16_16 || !state->frame_speed_mul_fp_q16_16 ||
+      !state->anim_defer_tick_once || !state->jumps_left || !state->stocks ||
+      !state->guard_tilt_x8 || !state->guard_tilt_x4 || !state->guard_reflect_timer_x14 ||
+      !state->guard_release_latched_xc || !state->guard_x10 || !state->lightshield_amount ||
+      !state->kneebend_jump_input || !state->kneebend_is_short_hop || !state->tilt_timer_x ||
+      !state->tilt_timer_y || !state->fall_fast || !state->run_x0 || !state->ledge_side ||
+      !state->stage_ledge_occupant_left || !state->stage_ledge_occupant_right ||
+      !state->ledge_cooldown || !state->fallspecial_xc || !state->turn_has_turned ||
+      !state->turn_frames_to_turn || !state->turn_x8 || !state->lr_press_timer ||
+      !state->x672_input_timer || !state->x673 || !state->x674 || !state->x675 || !state->x676_x ||
+      !state->x677_y || !state->x678 || !state->x679_x || !state->x67A_y || !state->x67B ||
+      !state->x67C || !state->x67D || !state->x67E || !state->x680 || !state->x681 ||
+      !state->x682 || !state->x683 || !state->x684 || !state->ucf_padbuf_index ||
+      !state->ucf_padbuf_sdrop_up_frames || !state->ucf_padbuf_stick_x ||
+      !state->ucf_padbuf_stick_y || !state->percent || !state->percent_temp ||
+      !state->dmg_x2225_b7 || !state->dmg_x2224_b2 || !state->shield_hp || !state->hitlag ||
+      !state->hitlag_started_frame || !state->hitstun || !state->l_cancel ||
       !state->hurtbox_state || !state->hurtcap_count || !state->hurtcap_a_x ||
       !state->hurtcap_a_y || !state->hurtcap_a_z || !state->hurtcap_b_x || !state->hurtcap_b_y ||
       !state->hurtcap_b_z || !state->hurtcap_radius || !state->hurtcap_enabled ||
@@ -397,6 +399,7 @@ void state_free(MslStateSoA* state) {
   alloc_free(state->anim_frame_f32);
   alloc_free(state->anim_frame_fp_q16_16);
   alloc_free(state->frame_speed_mul_fp_q16_16);
+  alloc_free(state->anim_defer_tick_once);
   alloc_free(state->jumps_left);
   alloc_free(state->stocks);
   alloc_free(state->guard_tilt_x8);

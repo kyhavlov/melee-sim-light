@@ -41,6 +41,8 @@ static inline void clear_landing_transients(MslBatch* batch) {
       // Slippi post-frame `l_cancel` is a 1-frame status on LandingAir* entry. Clear it each frame
       // and let landing entry code set it when applicable.
       batch->state.l_cancel[idx] = 0;
+      // Clear per-frame anim-timebase transients.
+      batch->state.anim_defer_tick_once[idx] = 0;
     }
   }
 }
@@ -189,6 +191,12 @@ static int step_one_frame_core(MslBatch* batch, const uint8_t* prev_input_bytes,
   if (run_combat) {
     combat_resolve(batch);
   }
+  // Decomp parity: some entries call ftAnim_8006EBA4 immediately after ChangeMotionState; we defer
+  // to post-combat to match action_frame/state_age without perturbing pre-combat/combat geometry.
+  // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c
+  // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c
+  anim_timebase_apply_deferred_tick_once_post_combat(batch);
   state_flags_refresh_post_frame(batch);
 
   return 0;

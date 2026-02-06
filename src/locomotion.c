@@ -48,6 +48,126 @@ static inline uint16_t landing_air_action_from_attackair(uint16_t a) {
   }
 }
 
+static inline uint32_t attackair_submotion_from_action(uint16_t a) {
+  // Decomp: AttackAir motion states map to `ftCo_Submotion` AttackAir* animations.
+  // Source of truth: refs/melee/src/melee/ft/chara/ftCommon/forward.h `ftCo_Submotion`.
+  switch (a) {
+    case MSL_ACT_ATTACK_AIR_N:
+      return (uint32_t)MSL_SM_ATTACK_AIR_N;
+    case MSL_ACT_ATTACK_AIR_F:
+      return (uint32_t)MSL_SM_ATTACK_AIR_F;
+    case MSL_ACT_ATTACK_AIR_B:
+      return (uint32_t)MSL_SM_ATTACK_AIR_B;
+    case MSL_ACT_ATTACK_AIR_HI:
+      return (uint32_t)MSL_SM_ATTACK_AIR_HI;
+    case MSL_ACT_ATTACK_AIR_LW:
+      return (uint32_t)MSL_SM_ATTACK_AIR_LW;
+    default:
+      return 0xFFFFFFFFu;
+  }
+}
+
+static inline uint8_t attackair_cstick_edge(const MslCommonParams* c, int8_t prev_cx,
+                                            int8_t prev_cy, int8_t cx, int8_t cy) {
+  // Decomp: ftCo_800DF478 is a C-stick *edge* (threshold crossing) helper used by AttackAir input
+  // checks. It compares current vs prior C-stick against p_ftCommonData->xDC/xE0.
+  // refs/melee/src/melee/ft/ft_0DF1.c::ftCo_800DF478
+  if (c == NULL) {
+    return 0;
+  }
+  const float prev_x = stick_i8_to_unit(prev_cx);
+  const float prev_y = stick_i8_to_unit(prev_cy);
+  const float x = stick_i8_to_unit(cx);
+  const float y = stick_i8_to_unit(cy);
+  if ((fabsf(prev_x) < c->attackair_stick_deadzone_x &&
+       fabsf(x) >= c->attackair_stick_deadzone_x) ||
+      (fabsf(prev_y) < c->attackair_stick_deadzone_y &&
+       fabsf(y) >= c->attackair_stick_deadzone_y)) {
+    return 1;
+  }
+  return 0;
+}
+
+static inline uint16_t attackair_action_from_stick(const MslCommonParams* c, float stick_x,
+                                                   float stick_y, float facing_dir) {
+  // Decomp: ftCo_AttackAir_GetMsidFromCStick chooses AttackAirN vs directional attacks based on
+  // (xDC/xE0) deadzones and the stick angle threshold (x20 radians).
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_GetMsidFromCStick
+  if (c == NULL) {
+    return (uint16_t)MSL_ACT_ATTACK_AIR_N;
+  }
+  if (fabsf(stick_x) < c->attackair_stick_deadzone_x &&
+      fabsf(stick_y) < c->attackair_stick_deadzone_y) {
+    return (uint16_t)MSL_ACT_ATTACK_AIR_N;
+  }
+  const float ang = atan2f(stick_y, stick_x);
+  if (ang > c->attack_angle_threshold_radians) {
+    return (uint16_t)MSL_ACT_ATTACK_AIR_HI;
+  }
+  if (ang < -c->attack_angle_threshold_radians) {
+    return (uint16_t)MSL_ACT_ATTACK_AIR_LW;
+  }
+  return (stick_x * facing_dir) >= 0.0f ? (uint16_t)MSL_ACT_ATTACK_AIR_F
+                                        : (uint16_t)MSL_ACT_ATTACK_AIR_B;
+}
+
+static inline uint8_t attackair_try_enter_from_air_locomotion(MslBatch* batch,
+                                                              const MslCommonParams* c,
+                                                              size_t idx) {
+  // Decomp: ftCo_AttackAir_CheckInput enters AttackAir when either:
+  // - A is pressed-edge this frame, or
+  // - the C-stick crosses its directional threshold this frame (ftCo_800DF478).
+  // It then enters via Fighter_ChangeMotionState(..., Ft_MF_KeepFastFall, ...) and immediately runs
+  // ftAnim_8006EBA4 on the new motion state.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c
+  if (batch == NULL || c == NULL) {
+    return 0;
+  }
+  const uint16_t a0 = batch->state.action_id[idx];
+  if (!msl_action_is_air_locomotion(a0)) {
+    return 0;
+  }
+  // Special fall should not be interruptible into aerial attacks.
+  if (a0 == (uint16_t)MSL_ACT_FALL_SPECIAL || a0 == (uint16_t)MSL_ACT_FALL_SPECIAL_F ||
+      a0 == (uint16_t)MSL_ACT_FALL_SPECIAL_B) {
+    return 0;
+  }
+
+  const uint16_t pressed = batch->state.input_buttons_pressed[idx];
+  const uint8_t c_edge =
+      attackair_cstick_edge(c, batch->state.prev_input_c_x[idx], batch->state.prev_input_c_y[idx],
+                            batch->state.input_c_x[idx], batch->state.input_c_y[idx]);
+  if ((pressed & (uint16_t)MSL_BUTTON_A) == 0 && !c_edge) {
+    return 0;
+  }
+
+  float stick_x = 0.0f;
+  float stick_y = 0.0f;
+  if (c_edge) {
+    stick_x = stick_i8_to_unit(batch->state.input_c_x[idx]);
+    stick_y = stick_i8_to_unit(batch->state.input_c_y[idx]);
+  } else {
+    stick_x =
+        apply_deadzone(stick_i8_to_unit(batch->state.input_main_x[idx]), c->lstick_deadzone_x);
+    stick_y =
+        apply_deadzone(stick_i8_to_unit(batch->state.input_main_y[idx]), c->lstick_deadzone_y);
+  }
+  const float facing_dir = batch->state.facing[idx] ? 1.0f : -1.0f;
+
+  const uint16_t act = attackair_action_from_stick(c, stick_x, stick_y, facing_dir);
+  const uint32_t smid = attackair_submotion_from_action(act);
+  if (smid == 0xFFFFFFFFu) {
+    return 0;
+  }
+
+  batch->state.action_id[idx] = act;
+  batch->state.animation_index[idx] = smid;
+  msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_EnterFromMsid
+  msl_anim_timebase_defer_tick_once(batch, idx);
+  return 1;
+}
+
 static inline uint8_t action_is_walk(uint16_t a) {
   return (a == MSL_ACT_WALK_SLOW || a == MSL_ACT_WALK_MIDDLE || a == MSL_ACT_WALK_FAST) ? 1 : 0;
 }
@@ -1300,6 +1420,13 @@ void locomotion_update_pre(MslBatch* batch) {
                 ? 1
                 : 0;
         if (allow_escape_air && escape_air_try_enter_from_air_locomotion(batch, c, idx)) {
+          continue;
+        }
+
+        // Aerial attack (AttackAir*) entry from eligible air locomotion states.
+        // Decomp: ftCo_AttackAir_CheckInput is consulted from IASA in common aerial states.
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c
+        if (attackair_try_enter_from_air_locomotion(batch, c, idx)) {
           continue;
         }
 

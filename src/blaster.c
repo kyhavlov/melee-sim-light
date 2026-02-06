@@ -102,6 +102,10 @@ static inline void enter_blaster_start(MslBatch* batch, size_t idx, const MslLas
     batch->state.animation_index[idx] = (uint32_t)lp->air_start_msid;
   }
   msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+  // Decomp: both grounded and aerial SpecialN enter paths call ftAnim_8006EBA4 immediately after
+  // ChangeMotionState.
+  // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::{ftFx_SpecialN_Enter,ftFx_SpecialAirN_Enter}
+  msl_anim_timebase_defer_tick_once(batch, idx);
 
   // Decomp: SpecialN enter clears self velocities (gr_vel/self_vel.x/y/z = 0).
   // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_SpecialN_Enter and ::ftFx_SpecialAirN_Enter

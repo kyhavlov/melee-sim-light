@@ -313,6 +313,14 @@ typedef enum MslSubmotionId {
   MSL_SM_ESCAPE_B = 43,      // ftCo_SM_EscapeB
   MSL_SM_ESCAPE_AIR = 44,    // ftCo_SM_EscapeAir
 
+  // Aerial attacks (ftCo_AttackAir*).
+  // Source of truth: refs/melee/src/melee/ft/chara/ftCommon/forward.h `ftCo_Submotion`.
+  MSL_SM_ATTACK_AIR_N = 68,   // ftCo_SM_AttackAirN
+  MSL_SM_ATTACK_AIR_F = 69,   // ftCo_SM_AttackAirF
+  MSL_SM_ATTACK_AIR_B = 70,   // ftCo_SM_AttackAirB
+  MSL_SM_ATTACK_AIR_HI = 71,  // ftCo_SM_AttackAirHi
+  MSL_SM_ATTACK_AIR_LW = 72,  // ftCo_SM_AttackAirLw
+
   MSL_SM_LANDING_AIR_N = 73,   // ftCo_SM_LandingAirN
   MSL_SM_LANDING_AIR_F = 74,   // ftCo_SM_LandingAirF
   MSL_SM_LANDING_AIR_B = 75,   // ftCo_SM_LandingAirB

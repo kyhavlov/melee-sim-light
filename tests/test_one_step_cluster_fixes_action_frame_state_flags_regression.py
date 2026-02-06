@@ -246,3 +246,365 @@ def test_state_flags_x221a_b3_not_set_on_throw_release_damage_entry() -> None:
     finally:
         binding.destroy(handle)
 
+
+@pytest.mark.integration
+def test_action_frame_blaster_start_entry_ticks_once() -> None:
+    # Cluster lock: SpecialAirNStart entry calls ftAnim_8006EBA4 immediately after ChangeMotionState,
+    # so post-frame action_frame is 1 (not 0) on the entry frame.
+    #
+    # Regression target: TBK rec 3786 p1 (JumpF -> SpecialAirNStart) with seed.action_frame == ref.action_frame == 1.
+    root = Path(__file__).resolve().parents[1]
+    dataset_rel = (
+        "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
+        "cardinal_1.0_recent/TreasuredBackKangaroo.msl"
+    )
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+    record = 3786
+    p = 1
+    assert int(samples.shape[0]) > record, f"dataset too short: num_records={int(samples.shape[0])}"
+    row = samples[record : record + 1]
+
+    assert int(row["seed_t"]["action_id"][0, p]) == 25  # JumpF
+    assert int(row["ref_t1"]["action_id"][0, p]) == 344  # ftFx_MS_SpecialAirNStart
+    assert int(row["seed_t"]["action_frame"][0, p]) == 1
+    assert int(row["ref_t1"]["action_frame"][0, p]) == 1
+    assert int(row["seed_t"]["hitlag"][0, p]) == 0
+    assert int(row["ref_t1"]["hitlag"][0, p]) == 0
+    assert int(row["seed_t"]["hitstun"][0, p]) == 0
+    assert int(row["ref_t1"]["hitstun"][0, p]) == 0
+
+    # Entry input: pressed-edge B.
+    prev_buttons = int(row["prev_input_t"]["p"][0, p]["buttons"])
+    cur_buttons = int(row["input_t"]["p"][0, p]["buttons"])
+    assert (prev_buttons & 0x0200) == 0  # MSL_BUTTON_B
+    assert (cur_buttons & 0x0200) != 0
+
+    binding = pytest.importorskip("msl_binding")
+    sizes = binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    compare_stride = int(sizes["compare"])
+
+    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    try:
+        seed_bytes = np.empty((1, seed_stride), dtype=np.uint8)
+        prev_input_bytes = np.empty((1, input_stride), dtype=np.uint8)
+        input_bytes = np.empty((1, input_stride), dtype=np.uint8)
+        out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
+
+        seed_bytes[:] = np.frombuffer(row["seed_t"].tobytes(order="C"), dtype=np.uint8).reshape(1, seed_stride)
+        prev_input_bytes[:] = np.frombuffer(row["prev_input_t"].tobytes(order="C"), dtype=np.uint8).reshape(
+            1, input_stride
+        )
+        input_bytes[:] = np.frombuffer(row["input_t"].tobytes(order="C"), dtype=np.uint8).reshape(
+            1, input_stride
+        )
+
+        binding.reseed_seed(handle, seed_bytes)
+        binding.step_input(handle, prev_input_bytes, input_bytes)
+        binding.write_compare(handle, out_compare_bytes)
+
+        out = out_compare_bytes.view(COMPARE_DTYPE).reshape(-1)
+        got_a = int(out["action_id"][0, p])
+        want_a = int(row["ref_t1"]["action_id"][0, p])
+        assert got_a == want_a, f"record={record} p={p} expected action_id={want_a}, got {got_a}"
+
+        got_af = int(out["action_frame"][0, p])
+        want_af = int(row["ref_t1"]["action_frame"][0, p])
+        assert got_af == want_af, f"record={record} p={p} expected action_frame={want_af}, got {got_af}"
+    finally:
+        binding.destroy(handle)
+
+
+@pytest.mark.integration
+def test_action_frame_shine_start_entry_ticks_once() -> None:
+    # Cluster lock: SpecialLwStart entry calls ftAnim_8006EBA4 immediately after ChangeMotionState,
+    # so post-frame action_frame is 1 (not 0) on the entry frame.
+    #
+    # Regression target: TBK rec 1601 p1 (Squat -> SpecialLwStart) with seed.action_frame == ref.action_frame == 1.
+    root = Path(__file__).resolve().parents[1]
+    dataset_rel = (
+        "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
+        "cardinal_1.0_recent/TreasuredBackKangaroo.msl"
+    )
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+    record = 1601
+    p = 1
+    assert int(samples.shape[0]) > record, f"dataset too short: num_records={int(samples.shape[0])}"
+    row = samples[record : record + 1]
+
+    assert int(row["seed_t"]["action_id"][0, p]) == 39  # Squat
+    assert int(row["ref_t1"]["action_id"][0, p]) == 360  # ftFx_MS_SpecialLwStart
+    assert int(row["seed_t"]["action_frame"][0, p]) == 1
+    assert int(row["ref_t1"]["action_frame"][0, p]) == 1
+
+    # Entry input: pressed-edge B + down stick.
+    prev_buttons = int(row["prev_input_t"]["p"][0, p]["buttons"])
+    cur_buttons = int(row["input_t"]["p"][0, p]["buttons"])
+    assert (prev_buttons & 0x0200) == 0  # MSL_BUTTON_B
+    assert (cur_buttons & 0x0200) != 0
+    assert int(row["input_t"]["p"][0, p]["main_y"]) < 0
+
+    binding = pytest.importorskip("msl_binding")
+    sizes = binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    compare_stride = int(sizes["compare"])
+
+    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    try:
+        seed_bytes = np.empty((1, seed_stride), dtype=np.uint8)
+        prev_input_bytes = np.empty((1, input_stride), dtype=np.uint8)
+        input_bytes = np.empty((1, input_stride), dtype=np.uint8)
+        out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
+
+        seed_bytes[:] = np.frombuffer(row["seed_t"].tobytes(order="C"), dtype=np.uint8).reshape(1, seed_stride)
+        prev_input_bytes[:] = np.frombuffer(row["prev_input_t"].tobytes(order="C"), dtype=np.uint8).reshape(
+            1, input_stride
+        )
+        input_bytes[:] = np.frombuffer(row["input_t"].tobytes(order="C"), dtype=np.uint8).reshape(
+            1, input_stride
+        )
+
+        binding.reseed_seed(handle, seed_bytes)
+        binding.step_input(handle, prev_input_bytes, input_bytes)
+        binding.write_compare(handle, out_compare_bytes)
+
+        out = out_compare_bytes.view(COMPARE_DTYPE).reshape(-1)
+        got_a = int(out["action_id"][0, p])
+        want_a = int(row["ref_t1"]["action_id"][0, p])
+        assert got_a == want_a, f"record={record} p={p} expected action_id={want_a}, got {got_a}"
+
+        got_af = int(out["action_frame"][0, p])
+        want_af = int(row["ref_t1"]["action_frame"][0, p])
+        assert got_af == want_af, f"record={record} p={p} expected action_frame={want_af}, got {got_af}"
+    finally:
+        binding.destroy(handle)
+
+
+@pytest.mark.integration
+def test_action_frame_attackair_entry_from_cstick_edge() -> None:
+    # Cluster lock: AttackAir entry can be triggered via a C-stick threshold crossing (ftCo_800DF478),
+    # and the entry path runs ftAnim_8006EBA4 immediately so action_frame is 1 on the entry frame.
+    #
+    # Regression target: TBK rec 734 p0 (JumpF -> AttackAirLw) with seed.action_frame == ref.action_frame == 1.
+    root = Path(__file__).resolve().parents[1]
+    dataset_rel = (
+        "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
+        "cardinal_1.0_recent/TreasuredBackKangaroo.msl"
+    )
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+    record = 734
+    p = 0
+    assert int(samples.shape[0]) > record, f"dataset too short: num_records={int(samples.shape[0])}"
+    row = samples[record : record + 1]
+
+    assert int(row["seed_t"]["action_id"][0, p]) == 25  # JumpF
+    assert int(row["ref_t1"]["action_id"][0, p]) == 69  # ftCo_MS_AttackAirLw
+    assert int(row["seed_t"]["action_frame"][0, p]) == 1
+    assert int(row["ref_t1"]["action_frame"][0, p]) == 1
+    assert int(row["seed_t"]["hitlag"][0, p]) == 0
+    assert int(row["ref_t1"]["hitlag"][0, p]) == 0
+    assert int(row["seed_t"]["hitstun"][0, p]) == 0
+    assert int(row["ref_t1"]["hitstun"][0, p]) == 0
+
+    # Entry input: no A press, but C-stick moves sharply this frame.
+    prev_buttons = int(row["prev_input_t"]["p"][0, p]["buttons"])
+    cur_buttons = int(row["input_t"]["p"][0, p]["buttons"])
+    assert (prev_buttons & 0x0100) == 0  # MSL_BUTTON_A
+    assert (cur_buttons & 0x0100) == 0
+    assert abs(int(row["prev_input_t"]["p"][0, p]["c_y"])) < 30
+    assert abs(int(row["input_t"]["p"][0, p]["c_y"])) > 60
+
+    binding = pytest.importorskip("msl_binding")
+    sizes = binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    compare_stride = int(sizes["compare"])
+
+    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    try:
+        seed_bytes = np.empty((1, seed_stride), dtype=np.uint8)
+        prev_input_bytes = np.empty((1, input_stride), dtype=np.uint8)
+        input_bytes = np.empty((1, input_stride), dtype=np.uint8)
+        out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
+
+        seed_bytes[:] = np.frombuffer(row["seed_t"].tobytes(order="C"), dtype=np.uint8).reshape(1, seed_stride)
+        prev_input_bytes[:] = np.frombuffer(row["prev_input_t"].tobytes(order="C"), dtype=np.uint8).reshape(
+            1, input_stride
+        )
+        input_bytes[:] = np.frombuffer(row["input_t"].tobytes(order="C"), dtype=np.uint8).reshape(
+            1, input_stride
+        )
+
+        binding.reseed_seed(handle, seed_bytes)
+        binding.step_input(handle, prev_input_bytes, input_bytes)
+        binding.write_compare(handle, out_compare_bytes)
+
+        out = out_compare_bytes.view(COMPARE_DTYPE).reshape(-1)
+        got_a = int(out["action_id"][0, p])
+        want_a = int(row["ref_t1"]["action_id"][0, p])
+        assert got_a == want_a, f"record={record} p={p} expected action_id={want_a}, got {got_a}"
+
+        got_af = int(out["action_frame"][0, p])
+        want_af = int(row["ref_t1"]["action_frame"][0, p])
+        assert got_af == want_af, f"record={record} p={p} expected action_frame={want_af}, got {got_af}"
+    finally:
+        binding.destroy(handle)
+
+
+@pytest.mark.integration
+def test_action_frame_attackair_entry_from_cstick_edge_second_example() -> None:
+    # Same cluster lock as test_action_frame_attackair_entry_from_cstick_edge, but on a second replay
+    # row to reduce overfitting to a single record.
+    #
+    # Regression target: TBK rec 5460 p1 (JumpB -> AttackAirLw).
+    root = Path(__file__).resolve().parents[1]
+    dataset_rel = (
+        "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
+        "cardinal_1.0_recent/TreasuredBackKangaroo.msl"
+    )
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+    record = 5460
+    p = 1
+    assert int(samples.shape[0]) > record, f"dataset too short: num_records={int(samples.shape[0])}"
+    row = samples[record : record + 1]
+
+    assert int(row["seed_t"]["action_id"][0, p]) == 26  # JumpB
+    assert int(row["ref_t1"]["action_id"][0, p]) == 69  # ftCo_MS_AttackAirLw
+    assert int(row["seed_t"]["action_frame"][0, p]) == 1
+    assert int(row["ref_t1"]["action_frame"][0, p]) == 1
+    assert int(row["seed_t"]["hitlag"][0, p]) == 0
+    assert int(row["ref_t1"]["hitlag"][0, p]) == 0
+    assert int(row["seed_t"]["hitstun"][0, p]) == 0
+    assert int(row["ref_t1"]["hitstun"][0, p]) == 0
+
+    # Entry input: no A press, but C-stick moves sharply this frame.
+    prev_buttons = int(row["prev_input_t"]["p"][0, p]["buttons"])
+    cur_buttons = int(row["input_t"]["p"][0, p]["buttons"])
+    assert (prev_buttons & 0x0100) == 0  # MSL_BUTTON_A
+    assert (cur_buttons & 0x0100) == 0
+    assert abs(int(row["prev_input_t"]["p"][0, p]["c_y"])) < 30
+    assert abs(int(row["input_t"]["p"][0, p]["c_y"])) > 60
+
+    binding = pytest.importorskip("msl_binding")
+    sizes = binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    compare_stride = int(sizes["compare"])
+
+    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    try:
+        seed_bytes = np.empty((1, seed_stride), dtype=np.uint8)
+        prev_input_bytes = np.empty((1, input_stride), dtype=np.uint8)
+        input_bytes = np.empty((1, input_stride), dtype=np.uint8)
+        out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
+
+        seed_bytes[:] = np.frombuffer(row["seed_t"].tobytes(order="C"), dtype=np.uint8).reshape(1, seed_stride)
+        prev_input_bytes[:] = np.frombuffer(row["prev_input_t"].tobytes(order="C"), dtype=np.uint8).reshape(
+            1, input_stride
+        )
+        input_bytes[:] = np.frombuffer(row["input_t"].tobytes(order="C"), dtype=np.uint8).reshape(
+            1, input_stride
+        )
+
+        binding.reseed_seed(handle, seed_bytes)
+        binding.step_input(handle, prev_input_bytes, input_bytes)
+        binding.write_compare(handle, out_compare_bytes)
+
+        out = out_compare_bytes.view(COMPARE_DTYPE).reshape(-1)
+        got_a = int(out["action_id"][0, p])
+        want_a = int(row["ref_t1"]["action_id"][0, p])
+        assert got_a == want_a, f"record={record} p={p} expected action_id={want_a}, got {got_a}"
+
+        got_af = int(out["action_frame"][0, p])
+        want_af = int(row["ref_t1"]["action_frame"][0, p])
+        assert got_af == want_af, f"record={record} p={p} expected action_frame={want_af}, got {got_af}"
+    finally:
+        binding.destroy(handle)
+
+
+@pytest.mark.integration
+def test_state_flags_fastfall_bit_persists_across_fall_anim_wrap() -> None:
+    # Cluster lock: fastfall state (fp->fall_fast) should persist across AOBJ_LOOP wraps of the Fall
+    # animation; wrapping cur_anim_frame does not imply a Fighter_ChangeMotionState call in decomp.
+    #
+    # Regression target: TBK rec 2645 p1 (Fall -> Fall) where ref.state_flags[1] stays 0x08 but the
+    # sim previously cleared it on the wrap boundary.
+    root = Path(__file__).resolve().parents[1]
+    dataset_rel = (
+        "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
+        "cardinal_1.0_recent/TreasuredBackKangaroo.msl"
+    )
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+    record = 2645
+    p = 1
+    assert int(samples.shape[0]) > record, f"dataset too short: num_records={int(samples.shape[0])}"
+    row = samples[record : record + 1]
+
+    assert int(row["seed_t"]["action_id"][0, p]) == 29  # Fall
+    assert int(row["ref_t1"]["action_id"][0, p]) == 29
+    assert int(row["seed_t"]["hitlag"][0, p]) == 0
+    assert int(row["ref_t1"]["hitlag"][0, p]) == 0
+    assert int(row["seed_t"]["hitstun"][0, p]) == 0
+    assert int(row["ref_t1"]["hitstun"][0, p]) == 0
+    assert int(row["seed_t"]["fall_fast"][0, p]) == 1
+    assert int(row["seed_t"]["state_flags"][0, p, 1]) == 8
+    assert int(row["ref_t1"]["state_flags"][0, p, 1]) == 8
+
+    binding = pytest.importorskip("msl_binding")
+    sizes = binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    compare_stride = int(sizes["compare"])
+
+    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    try:
+        seed_bytes = np.empty((1, seed_stride), dtype=np.uint8)
+        prev_input_bytes = np.empty((1, input_stride), dtype=np.uint8)
+        input_bytes = np.empty((1, input_stride), dtype=np.uint8)
+        out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
+
+        seed_bytes[:] = np.frombuffer(row["seed_t"].tobytes(order="C"), dtype=np.uint8).reshape(1, seed_stride)
+        prev_input_bytes[:] = np.frombuffer(row["prev_input_t"].tobytes(order="C"), dtype=np.uint8).reshape(
+            1, input_stride
+        )
+        input_bytes[:] = np.frombuffer(row["input_t"].tobytes(order="C"), dtype=np.uint8).reshape(
+            1, input_stride
+        )
+
+        binding.reseed_seed(handle, seed_bytes)
+        binding.step_input(handle, prev_input_bytes, input_bytes)
+        binding.write_compare(handle, out_compare_bytes)
+
+        out = out_compare_bytes.view(COMPARE_DTYPE).reshape(-1)
+        got = int(out["state_flags"][0, p, 1])
+        want = int(row["ref_t1"]["state_flags"][0, p, 1])
+        assert got == want, f"record={record} p={p} expected state_flags[1]={want}, got {got}"
+    finally:
+        binding.destroy(handle)

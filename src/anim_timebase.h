@@ -5,6 +5,7 @@
 
 #include "attack_id_tables.h"
 #include "batch_internal.h"
+#include "action_ids.h"
 
 // Deterministic animation/script timebase helpers.
 //
@@ -135,6 +136,13 @@ static inline void msl_anim_timebase_tick_once(MslBatch* batch, size_t idx) {
   msl_anim_timebase_recompute_derived(batch, idx);
 }
 
+static inline void msl_anim_timebase_defer_tick_once(MslBatch* batch, size_t idx) {
+  if (batch == NULL) {
+    return;
+  }
+  batch->state.anim_defer_tick_once[idx] = 1u;
+}
+
 // Forward decl: fighter attack identity update on motion-state change.
 // Defined in src/attack_identity.c.
 void attack_identity_on_motion_state_change_ft_800890D0(MslBatch* batch, size_t idx);
@@ -160,10 +168,16 @@ static inline void msl_anim_timebase_enter(MslBatch* batch, size_t idx, float an
   // using the ISO-extracted per-action x4_flags table (same source used for move identity).
   enum { Ft_MF_KeepFastFall = 1 << 0 };
   if (batch != NULL) {
-    const uint32_t x4_flags =
-        attack_id_x4_flags_from_action(batch->state.char_id[idx], batch->state.action_id[idx]);
-    if ((x4_flags & (uint32_t)Ft_MF_KeepFastFall) == 0u) {
-      batch->state.fall_fast[idx] = 0;
+    const uint16_t a = batch->state.action_id[idx];
+    // Decomp: AttackAir enters with Ft_MF_KeepFastFall unconditionally.
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_EnterFromMsid
+    if (!(a == (uint16_t)MSL_ACT_ATTACK_AIR_N || a == (uint16_t)MSL_ACT_ATTACK_AIR_F ||
+          a == (uint16_t)MSL_ACT_ATTACK_AIR_B || a == (uint16_t)MSL_ACT_ATTACK_AIR_HI ||
+          a == (uint16_t)MSL_ACT_ATTACK_AIR_LW)) {
+      const uint32_t x4_flags = attack_id_x4_flags_from_action(batch->state.char_id[idx], a);
+      if ((x4_flags & (uint32_t)Ft_MF_KeepFastFall) == 0u) {
+        batch->state.fall_fast[idx] = 0;
+      }
     }
   }
 
@@ -189,3 +203,6 @@ static inline void msl_anim_timebase_set_rate(MslBatch* batch, size_t idx, float
 }
 
 void anim_timebase_update_pre_input(MslBatch* batch);
+
+// Apply deferred "tick once" requests (see MslState::anim_defer_tick_once).
+void anim_timebase_apply_deferred_tick_once_post_combat(MslBatch* batch);
