@@ -1085,7 +1085,17 @@ static inline void combat_mutations_pass1_future_apply_body_hit(MslBatch* batch,
   const uint16_t hs = combat_damage_hitstun_from_kb(c, kb_applied);
   batch->state.hitstun[d_idx] = hs;
   combat_state_flags_set_is_hitstun(batch, d_idx, hs);
-  if (hs > 0) {
+  // Decomp: Fighter_ProcessHit can set fp->x221A_b3 alongside hitlag start under KB/damage paths
+  // (see `bool2`). The stable latch point we can model without additional hidden state is
+  // "hitlag started this frame" (hitlag increased), because x221A_b3 is:
+  // - set at hitlag start by Fighter_ProcessHit_8006D1EC, and
+  // - cleared when hitlag ends by Fighter_8006A1BC.
+  // refs/melee/src/melee/ft/fighter.c::{Fighter_ProcessHit_8006D1EC,Fighter_8006A1BC}
+  //
+  // This intentionally excludes throw-release damage entry (ftCo_800DDDE4) where Slippi observes
+  // hitstun without hitlag and x221A_b3 unset.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DDDE4
+  if (d_hl > d_hl_prev) {
     combat_state_flags_set_x221a_b3(batch, d_idx);
   }
 
@@ -1306,7 +1316,9 @@ MslItemHitResult combat_apply_item_hit(MslBatch* batch, int batch_index, int att
   const uint16_t hs = combat_damage_hitstun_from_kb(c, kb_applied);
   batch->state.hitstun[d_idx] = hs;
   combat_state_flags_set_is_hitstun(batch, d_idx, hs);
-  if (hs > 0) {
+  // Mirror Fighter_ProcessHit's x221A_b3 update shape (gate on hitlag start).
+  // refs/melee/src/melee/ft/fighter.c::{Fighter_ProcessHit_8006D1EC,Fighter_8006A1BC}
+  if (d_hl > d_hl_prev) {
     combat_state_flags_set_x221a_b3(batch, d_idx);
   }
 
@@ -1486,9 +1498,9 @@ uint8_t combat_apply_throw_hit(MslBatch* batch, int batch_index, int attacker, i
   const uint16_t hs = combat_damage_hitstun_from_kb(c, kb_applied);
   batch->state.hitstun[d_idx] = hs;
   combat_state_flags_set_is_hitstun(batch, d_idx, hs);
-  if (hs > 0) {
-    combat_state_flags_set_x221a_b3(batch, d_idx);
-  }
+  // Throw-release hits do not apply hitlag in the suite (Slippi hitlag stays 0), and `x221A_b3`
+  // is observed unset. Do not set it here.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DDDE4
 
   // Throw hits mark the damaged hurtbox as "mid" in decomp (x184c_damaged_hurtbox = 1).
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DDDE4

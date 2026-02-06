@@ -1,10 +1,12 @@
 #include "anim_timebase.h"
 
+#include <math.h>
 #include <stddef.h>
 
 #include "action_ids.h"
 #include "anim_table.h"
 #include "attack_id_tables.h"
+#include "char_params.h"
 
 enum { Ft_MF_KeepFastFall = 1 << 0 };
 
@@ -113,6 +115,37 @@ void anim_timebase_update_pre_input(MslBatch* batch) {
         continue;
       }
 
+      // Decomp: Run animation rate is scaled from current ground velocity:
+      // `ftAnim_SetAnimRate(fp, ABS(fp->gr_vel) / fp->co_attrs.run_animation_scaling)`.
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Run.c::ftCo_Run_Anim
+      // refs/melee/src/melee/ft/ftanim.c::ftAnim_SetAnimRate
+      //
+      // Source of truth for the per-character scaling:
+      // - ISO-extracted `data/characters/{fox,falco}.json` `run_animation_scaling`.
+      const uint16_t a = batch->state.action_id[idx];
+      //
+      // Decomp-shaped entry-frame rule (why `action_frame==1` is not a magic number):
+      // - Run is entered via Fighter_ChangeMotionState(..., anim_start=0, anim_speed=1).
+      //   refs/melee/src/melee/ft/chara/ftCommon/ftCo_Run.c::ftCo_Run_Enter_Full
+      // - Animation advance for the frame happens first (ftAnim_8006EBA4), then the per-motion
+      //   Anim callback runs (Run_Anim), which sets the anim rate for the *next* advance.
+      //   refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
+      //   refs/melee/src/melee/ft/ftanim.c::ftAnim_8006EBA4
+      //
+      // Under teacher-forced reseed, a Run segment commonly starts with `state_age==1` (so
+      // `action_frame==1`) while the strictly-causal seeded `frame_speed_mul` still reflects the
+      // entry rate (1.0). Apply Run_Anim's velocity-scaled rate on that first "steady" frame so
+      // our next advance matches Slippi's post-frame `state_age` delta.
+      if ((a == (uint16_t)MSL_ACT_RUN || a == (uint16_t)MSL_ACT_RUN_DIRECT) &&
+          batch->state.action_frame[idx] == 1) {
+        const MslCharParams* ch = msl_char_params(batch->state.char_id[idx]);
+        if (ch != NULL && ch->run_animation_scaling > 0.0f) {
+          const float vx = batch->state.speed_ground_x_self[idx];
+          const float rate = fabsf(vx) / ch->run_animation_scaling;
+          batch->state.frame_speed_mul_fp_q16_16[idx] = msl_q16_16_from_f32(rate);
+        }
+      }
+
       // Slippi parity (no-submotion snapshots):
       // Slippi can report `animation_index==0xFFFFFFFF` with `state_age==-1` (i.e.
       // `anim_frame_f32==-1`, `action_frame==-1`). Preserve that frozen (-1) timebase even if a
@@ -127,6 +160,39 @@ void anim_timebase_update_pre_input(MslBatch* batch) {
       batch->state.anim_frame_fp_q16_16[idx] += batch->state.frame_speed_mul_fp_q16_16[idx];
       const uint8_t did_wrap = anim_timebase_apply_aobj_loop(batch, idx);
       anim_timebase_apply_capture_loop(batch, idx);
+
+      // Non-looping timelines clamp at end_frame and stop advancing.
+      //
+      // Decomp:
+      // - ftAnim_8006EBA4 advances the underlying HSD AObj timeline.
+      // - HSD_AObjInterpretAnim clamps curr_frame at end_frame when not looping.
+      // refs/melee/src/melee/ft/ftanim.c::ftAnim_8006EBA4
+      // refs/melee/src/sysdolphin/baselib/aobj.c::HSD_AObjInterpretAnim
+      //
+      // Scope guard: only apply this clamp to non-looping tracks (AOBJ_LOOP==0 in extracted
+      // `data/anims/*.tracks.bin`). Looping tracks continue to use the deterministic modulo wrap
+      // in anim_timebase_apply_aobj_loop() exactly as before.
+      if (!did_wrap) {
+        const uint32_t anim_u32 = batch->state.animation_index[idx];
+        if (anim_u32 <= 0xFFFFu &&
+            !msl_anim_is_looping(batch->state.char_id[idx], (uint16_t)anim_u32)) {
+          const float end_frame = msl_anim_end_frame(batch->state.char_id[idx], (uint16_t)anim_u32);
+          if (end_frame > 0.0f) {
+            const int32_t end_fp = msl_q16_16_from_f32(end_frame);
+            if (end_fp > 0) {
+              int32_t cur_fp = batch->state.anim_frame_fp_q16_16[idx];
+              if (cur_fp > end_fp) {
+                cur_fp = end_fp;
+                batch->state.anim_frame_fp_q16_16[idx] = cur_fp;
+              }
+              if (cur_fp >= end_fp) {
+                batch->state.frame_speed_mul_fp_q16_16[idx] = 0;
+              }
+            }
+          }
+        }
+      }
+
       msl_anim_timebase_recompute_derived(batch, idx);
 
       // Decomp: Fighter_ChangeMotionState clears `fp->fall_fast` unless KeepFastFall is requested.
