@@ -11,6 +11,11 @@ void grab_flow_update_pre_physics(MslBatch* batch);
 // Returns 1 if the fighter entered Catch on this call.
 uint8_t grab_flow_try_enter_catch_from_iasa(MslBatch* batch, const MslCommonParams* c, size_t idx);
 
+// Decomp-shaped CatchDash input check subset used by grounded dash/run IASA call sites.
+// Returns 1 if the fighter entered CatchDash on this call.
+uint8_t grab_flow_try_enter_catchdash_from_iasa(MslBatch* batch, const MslCommonParams* c,
+                                                size_t idx);
+
 // Decomp-shaped catch connect transition entry point (called by fighter-vs-fighter catch collision).
 // owner_p / victim_p are fighter ports in [0, num_players).
 void grab_flow_on_catch_connect(MslBatch* batch, int bi, int owner_p, int victim_p);

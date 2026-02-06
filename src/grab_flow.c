@@ -136,10 +136,8 @@ static inline uint8_t catch_input_a_pressed_edge(const MslBatch* batch, size_t i
   // - We treat Z as satisfying the Catch-check predicate because Z is "grab" on controller and
   //   Slippi provides raw button bits, not the internal held_inputs/x668 representation.
   // refs/melee/build/GALE01/asm/melee/ft/chara/ftCommon/ftCo_Attack100.s::{ftCo_Catch_CheckInput,fn_800DA4C0}
-  return ((pressed & (uint16_t)MSL_BUTTON_A) != 0 ||
-          (pressed & (uint16_t)MSL_BUTTON_Z) != 0)
-             ? 1u
-             : 0u;
+  return ((pressed & (uint16_t)MSL_BUTTON_A) != 0 || (pressed & (uint16_t)MSL_BUTTON_Z) != 0) ? 1u
+                                                                                              : 0u;
 }
 
 static inline uint8_t catch_input_lr_held(const MslBatch* batch, const MslCommonParams* c,
@@ -159,6 +157,27 @@ static inline uint8_t catch_input_lr_held(const MslBatch* batch, const MslCommon
   return (trig >= c->trigger_deadzone) ? 1u : 0u;
 }
 
+static inline void enter_catch_motion_state(MslBatch* batch, size_t idx, uint16_t action_id,
+                                            uint32_t submotion) {
+  if (batch == NULL) {
+    return;
+  }
+
+  // Decomp: ftCo_800D8C54 is the common Catch/CatchDash enter helper.
+  // - Clears fp->x74_anim_vel.{x,y,z}
+  // - Clears fp->mv.co.catch.x0
+  // - Fighter_ChangeMotionState(..., msid, ..., anim_start=0.0f, anim_speed=1.0f)
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_800D8C54
+  // Sim mapping note:
+  // - `speed_{x,y}_attack` are transient additive velocity lanes consumed by physics integration.
+  //   Clear them on catch entry so stale knockback/attack carry does not leak into grab startup.
+  batch->state.speed_x_attack[idx] = 0.0f;
+  batch->state.speed_y_attack[idx] = 0.0f;
+  batch->state.action_id[idx] = action_id;
+  batch->state.animation_index[idx] = submotion;
+  msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+}
+
 uint8_t grab_flow_try_enter_catch_from_iasa(MslBatch* batch, const MslCommonParams* c, size_t idx) {
   if (batch == NULL || c == NULL) {
     return 0u;
@@ -176,9 +195,35 @@ uint8_t grab_flow_try_enter_catch_from_iasa(MslBatch* batch, const MslCommonPara
     return 0u;
   }
 
-  batch->state.action_id[idx] = (uint16_t)MSL_ACT_CATCH;
-  batch->state.animation_index[idx] = (uint32_t)MSL_SM_CATCH;
-  msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+  enter_catch_motion_state(batch, idx, (uint16_t)MSL_ACT_CATCH, (uint32_t)MSL_SM_CATCH);
+  return 1u;
+}
+
+uint8_t grab_flow_try_enter_catchdash_from_iasa(MslBatch* batch, const MslCommonParams* c,
+                                                size_t idx) {
+  if (batch == NULL || c == NULL) {
+    return 0u;
+  }
+
+  // Decomp (ftCo_800D8A38) for the CatchDash-enter subset:
+  // - Requires held_inputs & HSD_PAD_LR and pressed-edge A (input.x668 & HSD_PAD_A).
+  // - On success calls ftCo_800D8C54(..., ftCo_MS_CatchDash).
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_800D8A38
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_800D8C54
+  //
+  // NOTE(v1-domain):
+  // - ftCo_800D8A38 also gates through fn_800D8E94/fn_800D952C before input checks.
+  // - For Fox/Falco-only v1, those gates are effectively pass-through; keep the source pointers
+  //   and model the input+enter shape directly.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::{fn_800D8E94,fn_800D952C}
+  if (!catch_input_a_pressed_edge(batch, idx)) {
+    return 0u;
+  }
+  if (!catch_input_lr_held(batch, c, idx)) {
+    return 0u;
+  }
+
+  enter_catch_motion_state(batch, idx, (uint16_t)MSL_ACT_CATCH_DASH, (uint32_t)MSL_SM_CATCH_DASH);
   return 1u;
 }
 

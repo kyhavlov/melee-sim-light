@@ -936,6 +936,14 @@ void locomotion_update_pre(MslBatch* batch) {
         // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c::fn_800CAF78
         if ((action_id == MSL_ACT_RUN || action_id == MSL_ACT_RUN_DIRECT) &&
             action_id_start == action_id) {
+          // Run/RunDirect IASA catch-dash check before jump/attack/run-brake branches.
+          // Decomp: ftCo_Run_IASA and ftCo_RunDirect_IASA call ftCo_800D8A38.
+          // refs/melee/src/melee/ft/chara/ftCommon/{ftCo_Run.c,ftCo_RunDirect.c}
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_800D8A38
+          if (grab_flow_try_enter_catchdash_from_iasa(batch, c, idx)) {
+            continue;
+          }
+
           const MslJumpInput j_in =
               jump_input_from_edges(c, buttons_pressed, stick_y, tilt_timer_y);
           if (j_in != MSL_JUMP_INPUT_NONE && batch->state.jumps_left[idx] > 0) {
@@ -985,6 +993,14 @@ void locomotion_update_pre(MslBatch* batch) {
         // - refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c::ftCo_Dash_IASA
         // - refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c::ftCo_Dash_CheckInput
         if (action_id == MSL_ACT_DASH && action_id_start == MSL_ACT_DASH) {
+          // Dash IASA catch-dash check before jump/turn/run branches.
+          // Decomp: ftCo_Dash_IASA calls ftCo_800D8A38 in all three timing branches.
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c::ftCo_Dash_IASA
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_800D8A38
+          if (grab_flow_try_enter_catchdash_from_iasa(batch, c, idx)) {
+            continue;
+          }
+
           // Dash -> KneeBend (Jump).
           //
           // Decomp: Dash IASA can enter KneeBend via fn_800CAF78.
