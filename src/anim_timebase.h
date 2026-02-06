@@ -3,6 +3,7 @@
 #include <math.h>
 #include <stdint.h>
 
+#include "attack_id_tables.h"
 #include "batch_internal.h"
 
 // Deterministic animation/script timebase helpers.
@@ -150,6 +151,21 @@ static inline void msl_anim_timebase_enter(MslBatch* batch, size_t idx, float an
   // refs/melee/src/melee/ft/ft_0881.c::ft_800890D0
   // refs/melee/build/GALE01/asm/melee/ft/ft_0892.s::ft_800895E0
   msl_anim_timebase_enter_raw(batch, idx, anim_start_f32, anim_speed_f32);
+
+  // Decomp: Fighter_ChangeMotionState clears `fp->fall_fast` when (flags & Ft_MF_KeepFastFall)==0.
+  // refs/melee/src/melee/ft/fighter.c (see KeepFastFall gate).
+  // refs/melee/src/melee/ft/forward.h (Ft_MF_KeepFastFall = 1<<0).
+  //
+  // This simulator does not plumb the per-transition `flags` argument explicitly; approximate
+  // using the ISO-extracted per-action x4_flags table (same source used for move identity).
+  enum { Ft_MF_KeepFastFall = 1 << 0 };
+  if (batch != NULL) {
+    const uint32_t x4_flags =
+        attack_id_x4_flags_from_action(batch->state.char_id[idx], batch->state.action_id[idx]);
+    if ((x4_flags & (uint32_t)Ft_MF_KeepFastFall) == 0u) {
+      batch->state.fall_fast[idx] = 0;
+    }
+  }
 
   attack_identity_on_motion_state_change_ft_800890D0(batch, idx);
 

@@ -281,7 +281,40 @@ int msl_batch_reseed_seed(MslBatch* batch, const uint8_t* seed_bytes, size_t see
       batch->state.kneebend_is_short_hop[idx] = seed->kneebend_is_short_hop[p];
       batch->state.tilt_timer_x[idx] = seed->tilt_timer_x[p];
       batch->state.tilt_timer_y[idx] = seed->tilt_timer_y[p];
-      batch->state.fall_fast[idx] = seed->fall_fast[p] ? 1 : 0;
+      // Slippi post-frame sends the raw fp+0x221A byte as `state_flags[...,1]` and documents
+      // bit 0x08 as "isFastFalling".
+      // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
+      //
+      // Our seed-history pipeline also provides a derived `seed->fall_fast`, but it is not a
+      // first-class Slippi field and can disagree with the raw byte snapshot. Prefer the raw
+      // Slippi bit when it disagrees to improve reseed parity.
+      enum { MSL_STATE_FLAGS_221A_INDEX = 1 };
+      enum { MSL_STATE_FLAG_221A_IS_FASTFALL = 0x08 };
+      uint8_t fall_fast = seed->fall_fast[p] ? 1u : 0u;
+      const uint8_t slippi_fall_fast =
+          (seed->state_flags[p][MSL_STATE_FLAGS_221A_INDEX] & MSL_STATE_FLAG_221A_IS_FASTFALL) ? 1u
+                                                                                               : 0u;
+      if (slippi_fall_fast != fall_fast) {
+        fall_fast = slippi_fall_fast;
+      }
+      batch->state.fall_fast[idx] = fall_fast;
+      // Decomp: Fighter_ChangeMotionState clears fp->fall_fast unless the motion-state flags
+      // include Ft_MF_KeepFastFall.
+      // refs/melee/src/melee/ft/fighter.c (Fighter_ChangeMotionState; clears when (flags & Ft_MF_KeepFastFall)==0)
+      // refs/melee/src/melee/ft/forward.h (Ft_MF_KeepFastFall = 1<<0)
+      //
+      // Seed history can only approximate fall_fast causally; correct an important class of
+      // false-positive fall_fast snapshots:
+      // - If the current action does not keep fastfall across entries, and the action's phys does
+      //   not run the common fastfall helper (`ft_80084DB0` / ftCommon_CheckFallFast), then
+      //   fall_fast cannot become 1 while remaining in this action.
+      // Clear it on reseed to align with Slippi's fp+0x221A fall_fast bit for such states.
+      const uint16_t a_seed = seed->action_id[p];
+      const uint32_t x4_flags = attack_id_x4_flags_from_action(batch->state.char_id[idx], a_seed);
+      const uint8_t keep_fastfall = (x4_flags & 0x1u) ? 1u : 0u;
+      if (!keep_fastfall && !msl_action_allows_fastfall(a_seed)) {
+        batch->state.fall_fast[idx] = 0;
+      }
       batch->state.run_x0[idx] = seed->run_x0[p];
       batch->state.ledge_cooldown[idx] = seed->ledge_cooldown[p];
       batch->state.ledge_side[idx] = -1;
@@ -788,8 +821,7 @@ int msl_batch_debug_force_anim_timebase_enter(MslBatch* batch, int batch_index, 
 
 int msl_batch_debug_step_input_pre_combat(MslBatch* batch, const uint8_t* prev_input_bytes,
                                           size_t prev_input_stride_bytes,
-                                          const uint8_t* input_bytes,
-                                          size_t input_stride_bytes) {
+                                          const uint8_t* input_bytes, size_t input_stride_bytes) {
   return step_one_frame_pre_combat(batch, prev_input_bytes, prev_input_stride_bytes, input_bytes,
                                    input_stride_bytes);
 }
@@ -821,8 +853,7 @@ int msl_batch_debug_timebase(const MslBatch* batch, int batch_index, float* out_
       continue;
     }
     const size_t idx = msl_idx_player(batch_index, p);
-    const float anim_frame_f32 =
-        msl_anim_frame_sanitize_f32(batch->state.anim_frame_f32[idx]);
+    const float anim_frame_f32 = msl_anim_frame_sanitize_f32(batch->state.anim_frame_f32[idx]);
     const uint16_t pose_frame = msl_anim_frame_floor_u16(anim_frame_f32);
     const float speed_mul_f32 = msl_f32_from_q16_16(batch->state.frame_speed_mul_fp_q16_16[idx]);
     out_rows_8p[o + 0] = (float)batch->state.action_id[idx];
@@ -852,7 +883,8 @@ static inline uint8_t hb_events_affects_slot(const MslHitboxEvent* ev, uint8_t h
   return (ev->hitbox_id == hb_id) ? 1u : 0u;
 }
 
-static inline void debug_hb_defs_apply_event(const MslHitboxEvent* ev, uint8_t have_def[MSL_MAX_HITBOXES],
+static inline void debug_hb_defs_apply_event(const MslHitboxEvent* ev,
+                                             uint8_t have_def[MSL_MAX_HITBOXES],
                                              MslHitboxEvent def[MSL_MAX_HITBOXES]) {
   if (ev == NULL) {
     return;
@@ -877,8 +909,8 @@ static inline void debug_hb_defs_apply_event(const MslHitboxEvent* ev, uint8_t h
 
 static uint8_t debug_sample_hitbox_center_proxy(const MslBatch* batch, size_t idx, uint8_t char_id,
                                                 uint16_t msid, uint16_t pose_frame,
-                                                const MslHitboxEvent* def, float* out_x, float* out_y,
-                                                float* out_z, float* out_radius) {
+                                                const MslHitboxEvent* def, float* out_x,
+                                                float* out_y, float* out_z, float* out_radius) {
   if (batch == NULL || def == NULL || out_x == NULL || out_y == NULL || out_z == NULL ||
       out_radius == NULL) {
     return 0;
@@ -969,8 +1001,7 @@ int msl_batch_debug_hitbox_event_timing(const MslBatch* batch, int batch_index, 
   const uint16_t msid = (uint16_t)anim_u32;
   out_timing->msid = msid;
 
-  const float anim_frame_f32 =
-      msl_anim_frame_sanitize_f32(batch->state.anim_frame_f32[idx]);
+  const float anim_frame_f32 = msl_anim_frame_sanitize_f32(batch->state.anim_frame_f32[idx]);
   out_timing->anim_frame_f32 = anim_frame_f32;
   const float speed_mul_f32 = msl_f32_from_q16_16(batch->state.frame_speed_mul_fp_q16_16[idx]);
   out_timing->frame_speed_mul_f32 = speed_mul_f32;
@@ -1157,8 +1188,7 @@ int msl_batch_debug_hitbox_sweep_proxy(const MslBatch* batch, int batch_index, i
   const uint16_t msid = (uint16_t)anim_u32;
   out_proxy->msid = msid;
 
-  const float anim_frame_f32 =
-      msl_anim_frame_sanitize_f32(batch->state.anim_frame_f32[idx]);
+  const float anim_frame_f32 = msl_anim_frame_sanitize_f32(batch->state.anim_frame_f32[idx]);
   const float speed_mul_f32 = msl_f32_from_q16_16(batch->state.frame_speed_mul_fp_q16_16[idx]);
   const float prev_anim_frame_f32 = msl_anim_frame_sanitize_f32(anim_frame_f32 - speed_mul_f32);
   const uint16_t pose_cur = msl_anim_frame_floor_u16(anim_frame_f32);
@@ -1398,14 +1428,13 @@ int msl_batch_debug_hurtcap_slot_flags(const MslBatch* batch, int batch_index, i
 
   const uint16_t msid = (uint16_t)anim_u32;
   out_flags->msid = msid;
-  const float anim_frame_f32 =
-      msl_anim_frame_sanitize_f32(batch->state.anim_frame_f32[p_idx]);
+  const float anim_frame_f32 = msl_anim_frame_sanitize_f32(batch->state.anim_frame_f32[p_idx]);
   const uint16_t frame = msl_anim_frame_floor_u16(anim_frame_f32);
   out_flags->frame = frame;
 
   const uint8_t cap_count_u8 = batch->state.hurtcap_count[p_idx];
   const uint16_t cap_count = (cap_count_u8 > (uint8_t)MSL_MAX_HURTCAPS) ? (uint16_t)MSL_MAX_HURTCAPS
-                                                                          : (uint16_t)cap_count_u8;
+                                                                        : (uint16_t)cap_count_u8;
   uint32_t can_hit_mask = 0xFFFFFFFFu;
   (void)hurtbox_modes_can_hit_mask(out_flags->char_id, msid, frame, cap_count, &can_hit_mask);
   out_flags->can_hit_mask = can_hit_mask;

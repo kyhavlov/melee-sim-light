@@ -23,6 +23,7 @@
 #include "mpcoll_env.h"
 #include "timers.h"
 #include "reflector_bubbles.h"
+#include "state_flags.h"
 #include "throw_flow.h"
 
 // NOTE: `blaster_update_post_collision` is intentionally not part of the public blaster module API
@@ -188,6 +189,7 @@ static int step_one_frame_core(MslBatch* batch, const uint8_t* prev_input_bytes,
   if (run_combat) {
     combat_resolve(batch);
   }
+  state_flags_refresh_post_frame(batch);
 
   return 0;
 }

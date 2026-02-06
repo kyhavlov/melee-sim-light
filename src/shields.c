@@ -299,7 +299,33 @@ void shields_refresh(MslBatch* batch) {
       // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
       const size_t flags_i = idx * MSL_STATE_FLAGS_STRIDE + (size_t)MSL_STATE_FLAGS_221B_INDEX;
       uint8_t f = batch->state.state_flags[flags_i];
-      if (sr > 0.0f) {
+      // Decomp: fp->x221B_b0 is toggled by collision "shield desc" creation/destruction:
+      // - set by ftColl_8007B1B8 (shield desc init),
+      // - cleared on shield break (ftCo_800925A4) and on the default GuardReflect entry path
+      //   (ftCo_8009388C).
+      // refs/melee/src/melee/ft/ftcoll.c::ftColl_8007B1B8
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_800925A4,ftCo_8009388C}
+      //
+      // GuardReflect nuance:
+      // - ftCo_8009388C clears fp->x221B_b0 on entry (bubble inactive while reflecting).
+      // - ftCo_80093A50 (alternate entry used by some contexts) calls ftCo_80092450 on entry, which
+      //   recreates the shield desc and sets fp->x221B_b0 back to true.
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_80093A50,ftCo_80092450}
+      //
+      // Our sim does not currently model the full entry-path split for GuardReflect without adding
+      // new hidden state. Preserve the seeded fp->x221B_b0 bit during the reflect window, and force
+      // it back on once the reflect timer expires (mv.co.guard.x14 < 0 => +1 biased timer reaches 0).
+      const uint8_t in_guard_reflect =
+          (batch->state.action_id[idx] == (uint16_t)MSL_ACT_GUARD_REFLECT) ? 1u : 0u;
+      const uint8_t guard_reflect_timer_active =
+          (in_guard_reflect && batch->state.guard_reflect_timer_x14[idx] != 0) ? 1u : 0u;
+
+      // Always clear when the shield is broken / absent (decomp clears x221B_b0 on break).
+      if (!(batch->state.stocks[idx] != 0 && batch->state.shield_hp[idx] > 0.0f)) {
+        f &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221B_IS_SHIELD_ACTIVE;
+      } else if (guard_reflect_timer_active) {
+        // Preserve.
+      } else if (sr > 0.0f) {
         f |= (uint8_t)MSL_STATE_FLAG_221B_IS_SHIELD_ACTIVE;
       } else {
         f &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221B_IS_SHIELD_ACTIVE;

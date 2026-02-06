@@ -519,20 +519,26 @@ void guard_update_grounded(MslBatch* batch, const MslCommonParams* c, size_t idx
     const float end_frame =
         msl_anim_end_frame(batch->state.char_id[idx], (uint16_t)MSL_SM_GUARD_DAMAGE);
     if (end_frame > 0.0f && (batch->state.anim_frame_f32[idx] >= end_frame)) {
-      if (shield_held && batch->state.shield_hp[idx] > 0.0f) {
-        // Shieldstun over -> return to Guard (hold).
-        enter_guard_hold(batch, idx);
-        // IASA for the newly-entered Guard state in the same frame.
-        if (guard_try_enter_jump_oos(batch, c, idx)) {
-          return;
-        }
-        if (escape_try_enter_from_guard(batch, c, idx)) {
-          return;
-        }
+      // Shieldstun over:
+      // - If mv.co.guard.xC is latched, transition to GuardOff (ftCo_80092BE8 -> ftCo_80092C54).
+      // - Else transition to Guard (ftCo_800928CC).
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_GuardSetOff_Anim
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80092BE8
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_800928CC
+      if (batch->state.guard_release_latched_xc[idx]) {
+        enter_guard_off(batch, idx);
         return;
       }
-      // Shieldstun over and not holding shield -> GuardOff.
-      enter_guard_off(batch, idx);
+
+      // Shieldstun over -> return to Guard (hold).
+      enter_guard_hold(batch, idx);
+      // IASA for the newly-entered Guard state in the same frame.
+      if (guard_try_enter_jump_oos(batch, c, idx)) {
+        return;
+      }
+      if (escape_try_enter_from_guard(batch, c, idx)) {
+        return;
+      }
       return;
     }
     return;
@@ -647,6 +653,23 @@ void guard_update_grounded(MslBatch* batch, const MslCommonParams* c, size_t idx
   // Guard entry gate
   // ----------------
   if (!allow_entry) {
+    return;
+  }
+
+  // Dash IASA: early shield-hold forces EscapeF.
+  //
+  // Decomp:
+  // - ftCo_Dash_IASA calls ftCo_80099264 when fp->cur_anim_frame <= p_ftCommonData->x48.
+  // - ftCo_80099264 enters EscapeF if (held_inputs & HSD_PAD_LR).
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c::ftCo_Dash_IASA
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Escape.c::ftCo_80099264
+  //
+  // Approximation:
+  // - Use `shield_held` as our decomp-shaped "held_inputs & LR" proxy.
+  // - Use extracted p_ftCommonData->x48 via common params (dash_iasa_x48).
+  if (a0 == (uint16_t)MSL_ACT_DASH && shield_held &&
+      batch->state.anim_frame_f32[idx] <= c->dash_iasa_x48) {
+    enter_escape_roll(batch, idx, (uint16_t)MSL_ACT_ESCAPE_F);
     return;
   }
 

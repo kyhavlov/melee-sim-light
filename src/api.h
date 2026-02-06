@@ -720,9 +720,9 @@ typedef struct MslDebugHitboxSweepProxy {
   uint16_t u16_6_cur;
   uint16_t u16_7_cur;
 
-  uint8_t arg3_var_r22_known;             // 0=unknown in current runtime model
-  uint8_t arg3_var_r22_from_extracted;    // 0=not present in MSLHITB1
-  uint8_t arg3_var_r22_gates_collision;   // 1=decomp says it gates lbColl_8000805C acceptance
+  uint8_t arg3_var_r22_known;            // 0=unknown in current runtime model
+  uint8_t arg3_var_r22_from_extracted;   // 0=not present in MSLHITB1
+  uint8_t arg3_var_r22_gates_collision;  // 1=decomp says it gates lbColl_8000805C acceptance
   uint8_t _pad2;
 } MslDebugHitboxSweepProxy;
 #pragma pack(pop)
