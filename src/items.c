@@ -891,10 +891,38 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
       const uint8_t off_n =
           (laser_state == 0u) ? lp->hitbox_offsets_x_count : lp->state1_hitbox_offsets_x_count;
       const uint8_t cap_n = batch->state.hurtcap_count[d_idx];
+      // TEMP (replay-derived last resort; shield-active only):
+      //
+      // Laser BODY overlap probes scale the authored offsets (`hitbox_offsets_x[]`) by the model
+      // scaleZ ramp (itFoxlaser_UnkMotion1_Anim). This extrapolates offsets beyond the authored
+      // article script geometry when scaleZ > 1, and has produced spurious BODY hits during
+      // GuardSetOff teacher-forced one-step (seed==ref expects remaining in GuardSetOff).
+      //
+      // Why this is still here (not decomp/ISO-backed yet):
+      // - We do not yet have a decomp-backed statement for whether Melee's *collision* hitcapsule
+      //   positions for blaster shots inherit the visual scaleZ stretch, or if collision uses
+      //   unscaled offsets from the article state script.
+      // - The ISO artifact (MSLLASR1) provides the authored offsets, but not the exact runtime
+      //   transform chain applied to collision primitives.
+      //
+      // Policy until we implement the decomp-backed collision transform:
+      // - While the defender shield bubble is active, clamp the effective stretch to 1.0f
+      //   (identity) so we never extrapolate beyond authored offsets on this path.
+      //
+      // Constant rationale:
+      // - 1.0f means "no stretch" (identity scale), i.e. offsets are used exactly as authored.
+      //
+      // TODO(decomp/items): Confirm the runtime collision-space transform for fox/falco laser
+      // hitbox offsets (including whether item model scaleZ affects collision) and remove this
+      // replay-derived clamp once the correct policy is implemented.
+      float laser_scale_z_body = laser_scale_z;
+      if (batch->state.shield_radius[d_idx] > 0.0f && laser_scale_z_body > 1.0f) {
+        laser_scale_z_body = 1.0f;
+      }
       for (uint8_t oi = 0; oi < off_n && oi < (uint8_t)MSL_LASER_MAX_HITBOX_OFFS_X && !hit; oi++) {
         const float off_x =
             (laser_state == 0u) ? lp->hitbox_offsets_x[oi] : lp->state1_hitbox_offsets_x[oi];
-        const float s = off_x * laser_scale_z;
+        const float s = off_x * laser_scale_z_body;
         const float sx = x + (ux * s);
         const float sy = y + (uy * s);
         for (uint8_t ci = 0; ci < cap_n; ci++) {

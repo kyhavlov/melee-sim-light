@@ -254,9 +254,18 @@ void shields_refresh(MslBatch* batch) {
 
               // Match hurtcaps scaling policy: SSANIM-derived offsets are extracted without per-fighter
               // runtime scale (fp->x34_scale.y), so apply fighter_scale_y uniformly.
-              sx = pos_x + (dx * scale_y * facing_dir);
-              sy = pos_y + (dy * scale_y);
-              sz = pos_z + (dz * scale_y);
+              //
+              // Facing parity: same as hurtcaps_refresh() / in-engine root part rotY = (M_PI_2 * fp->facing_dir),
+              // which mixes X/Z in world space.
+              // refs/melee/src/melee/ft/fighter.c (ftPartSetRotY(fp, 0, (M_PI_2 * fp->facing_dir)))
+              const float lx = dx * scale_y;
+              const float ly = dy * scale_y;
+              const float lz = dz * scale_y;
+              const float off_x = facing_dir * lz;
+              const float off_z = -facing_dir * lx;
+              sx = pos_x + off_x;
+              sy = pos_y + ly;
+              sz = pos_z + off_z;
             }
 
             const float trig =

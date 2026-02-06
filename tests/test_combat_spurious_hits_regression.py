@@ -9,6 +9,11 @@ import pytest
 from tools.eval.dataset import COMPARE_DTYPE, read_dataset
 
 
+def _skip_if_missing_laser_artifacts(root: Path) -> None:
+    if not (root / "data/items/lasers.bin").exists():
+        pytest.skip("missing local artifact: data/items/lasers.bin")
+
+
 @pytest.mark.integration
 def test_spurious_body_hitstun_not_applied_treasuredbackkangaroo_record_1075_p1() -> None:
     # Locks in a suite offender where a spurious BODY hit was being applied to p=1 even though
@@ -78,6 +83,173 @@ def test_spurious_body_hitstun_not_applied_treasuredbackkangaroo_record_1075_p1(
         assert got_hitstun == expected_hitstun, f"record=1075 p=1 expected hitstun={expected_hitstun}, got {got_hitstun}"
     finally:
         binding.destroy(handle)
+
+
+def _one_step_out_compare(*, ds, row) -> np.ndarray:
+    binding = pytest.importorskip("msl_binding")
+    sizes = binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    compare_stride = int(sizes["compare"])
+
+    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    try:
+        seed_bytes = np.empty((1, seed_stride), dtype=np.uint8)
+        prev_input_bytes = np.empty((1, input_stride), dtype=np.uint8)
+        input_bytes = np.empty((1, input_stride), dtype=np.uint8)
+        out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
+
+        seed_bytes[:] = np.frombuffer(row["seed_t"].tobytes(order="C"), dtype=np.uint8).reshape(1, seed_stride)
+        prev_input_bytes[:] = np.frombuffer(row["prev_input_t"].tobytes(order="C"), dtype=np.uint8).reshape(
+            1, input_stride
+        )
+        input_bytes[:] = np.frombuffer(row["input_t"].tobytes(order="C"), dtype=np.uint8).reshape(1, input_stride)
+
+        binding.reseed_seed(handle, seed_bytes)
+        binding.step_input(handle, prev_input_bytes, input_bytes)
+        binding.write_compare(handle, out_compare_bytes)
+
+        return out_compare_bytes.view(COMPARE_DTYPE).reshape(-1)
+    finally:
+        binding.destroy(handle)
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    ("dataset_rel", "record", "p"),
+    [
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl",
+            4047,
+            1,
+        ),
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl",
+            9483,
+            0,
+        ),
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/QuerulousGrandDinosaur.msl",
+            1444,
+            1,
+        ),
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/TreasuredBackKangaroo.msl",
+            3496,
+            0,
+        ),
+    ],
+)
+def test_guard_family_seed_eq_ref_action_id_clusters_eliminated(dataset_rel: str, record: int, p: int) -> None:
+    # Locks in guard-family seed==ref spurious-hit clusters:
+    # - GuardSetOff -> Damage* when replay stays GuardSetOff (181/181/{75,78})
+    # - GuardReflect -> GuardSetOff when replay stays GuardReflect (182/182/181)
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_missing_laser_artifacts(root)
+
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+    num_records = int(samples.shape[0])
+    assert num_records > record, f"dataset too short for regression check: num_records={num_records}"
+
+    row = samples[record : record + 1]
+
+    # Replay-real preconditions.
+    seed_action = int(row["seed_t"]["action_id"][0, p])
+    ref_action = int(row["ref_t1"]["action_id"][0, p])
+    assert seed_action == ref_action
+    assert seed_action in (181, 182)
+    assert int(row["ref_t1"]["hitlag"][0, p]) == 0
+    assert int(row["ref_t1"]["hitstun"][0, p]) == 0
+
+    expected_action = int(row["ref_t1"]["action_id"][0, p])
+    expected_hitlag = int(row["ref_t1"]["hitlag"][0, p])
+    expected_hitstun = int(row["ref_t1"]["hitstun"][0, p])
+    expected_shield_hp = float(row["ref_t1"]["shield_hp"][0, p])
+
+    out = _one_step_out_compare(ds=ds, row=row)
+    got_action = int(out["action_id"][0, p])
+    got_hitlag = int(out["hitlag"][0, p])
+    got_hitstun = int(out["hitstun"][0, p])
+    got_shield_hp = float(out["shield_hp"][0, p])
+
+    assert got_action == expected_action, f"record={record} p={p} expected action_id={expected_action}, got {got_action}"
+    assert got_hitlag == expected_hitlag, f"record={record} p={p} expected hitlag={expected_hitlag}, got {got_hitlag}"
+    assert got_hitstun == expected_hitstun, f"record={record} p={p} expected hitstun={expected_hitstun}, got {got_hitstun}"
+    got_bits = int(np.float32(got_shield_hp).view(np.uint32))
+    exp_bits = int(np.float32(expected_shield_hp).view(np.uint32))
+    assert got_bits == exp_bits, (
+        f"record={record} p={p} expected shield_hp={expected_shield_hp} (0x{exp_bits:08x}), "
+        f"got {got_shield_hp} (0x{got_bits:08x})"
+    )
+
+
+@pytest.mark.integration
+def test_laser_shield_hit_still_applies_and_despawns_laser_gracefulattachedturtle_record_3600_p0() -> None:
+    # Negative regression: lock that replay-real laser->shield hits still apply shield HP depletion
+    # + GuardSetOff (and despawn the laser) so the BODY-only clamp cannot accidentally suppress
+    # legitimate shield collisions in future refactors.
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_missing_laser_artifacts(root)
+
+    dataset_rel = (
+        "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
+        "cardinal_1.0_recent/GracefulAttachedTurtle.msl"
+    )
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+    record = 3600
+    num_records = int(samples.shape[0])
+    assert num_records > record, f"dataset too short for regression check: num_records={num_records}"
+
+    row = samples[record : record + 1]
+
+    p = 0
+    # Preconditions: laser exists at seed and is despawned in ref (shield hit), and ref enters GuardSetOff.
+    assert int(row["seed_t"]["items"]["exists"][0, 0]) != 0
+    assert int(row["seed_t"]["items"]["type"][0, 0]) == 55  # laser ItKind (current suite extraction)
+    assert int(row["ref_t1"]["items"]["exists"][0, 0]) == 0
+
+    seed_hp = np.float32(row["seed_t"]["shield_hp"][0, p])
+    ref_hp = np.float32(row["ref_t1"]["shield_hp"][0, p])
+    assert ref_hp < seed_hp
+    assert int(row["ref_t1"]["action_id"][0, p]) == 181  # GuardSetOff
+    assert int(row["ref_t1"]["hitlag"][0, p]) > 0
+    assert int(row["ref_t1"]["hitstun"][0, p]) == 0
+
+    expected_action = int(row["ref_t1"]["action_id"][0, p])
+    expected_hitlag = int(row["ref_t1"]["hitlag"][0, p])
+    expected_hitstun = int(row["ref_t1"]["hitstun"][0, p])
+    expected_shield_hp = float(row["ref_t1"]["shield_hp"][0, p])
+    expected_item_exists = int(row["ref_t1"]["items"]["exists"][0, 0])
+
+    out = _one_step_out_compare(ds=ds, row=row)
+    got_action = int(out["action_id"][0, p])
+    got_hitlag = int(out["hitlag"][0, p])
+    got_hitstun = int(out["hitstun"][0, p])
+    got_shield_hp = float(out["shield_hp"][0, p])
+    got_item_exists = int(out["items"]["exists"][0, 0])
+
+    assert got_action == expected_action, f"record={record} p={p} expected action_id={expected_action}, got {got_action}"
+    assert got_hitlag == expected_hitlag, f"record={record} p={p} expected hitlag={expected_hitlag}, got {got_hitlag}"
+    assert got_hitstun == expected_hitstun, f"record={record} p={p} expected hitstun={expected_hitstun}, got {got_hitstun}"
+    got_bits = int(np.float32(got_shield_hp).view(np.uint32))
+    exp_bits = int(np.float32(expected_shield_hp).view(np.uint32))
+    assert got_bits == exp_bits, (
+        f"record={record} p={p} expected shield_hp={expected_shield_hp} (0x{exp_bits:08x}), "
+        f"got {got_shield_hp} (0x{got_bits:08x})"
+    )
+    assert got_item_exists == expected_item_exists, (
+        f"record={record} expected item[0].exists={expected_item_exists}, got {got_item_exists}"
+    )
 
 
 @pytest.mark.integration
