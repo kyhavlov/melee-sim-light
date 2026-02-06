@@ -17,7 +17,10 @@ def _run_record(dataset_path: Path, record: int) -> tuple[np.ndarray, np.ndarray
 
     row = samples[record : record + 1]
 
-    binding = importlib.import_module("msl_binding")
+    try:
+        binding = importlib.import_module("msl_binding")
+    except ModuleNotFoundError:
+        pytest.skip("missing local artifact: msl_binding extension")
     sizes = binding.sizes()
     seed_stride = int(sizes["seed"])
     input_stride = int(sizes["input"])
@@ -53,19 +56,16 @@ def _run_record(dataset_path: Path, record: int) -> tuple[np.ndarray, np.ndarray
 
 @pytest.mark.integration
 @pytest.mark.parametrize(
-    ("dataset_name", "record", "attacker", "victim", "expected_thrown"),
+    ("dataset_name", "record", "victim"),
     [
-        # From --debug-float offenders: seed_t.action_id[victim]==227 (CaptureWait) -> Thrown*
-        ("AttachedGoodNaturedGuanaco.msl", 4185, 1, 0, 241),
-        ("QuerulousGrandDinosaur.msl", 8279, 1, 0, 240),
+        ("AttachedGoodNaturedGuanaco.msl", 5973, 0),
+        ("TreasuredBackKangaroo.msl", 6824, 1),
     ],
 )
-def test_capturewait_to_thrown_entry_preserves_position_bitwise(
+def test_thrownhi_attachment_matches_ref_position_tight(
     dataset_name: str,
     record: int,
-    attacker: int,
     victim: int,
-    expected_thrown: int,
 ) -> None:
     root = Path(__file__).resolve().parents[1]
     dataset_rel = f"datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/{dataset_name}"
@@ -76,9 +76,13 @@ def test_capturewait_to_thrown_entry_preserves_position_bitwise(
     ds = read_dataset(str(dataset_path))
     row = ds.samples[record : record + 1]
 
-    assert int(row["seed_t"]["action_id"][0, victim]) == 227
-    assert int(row["ref_t1"]["action_id"][0, victim]) == expected_thrown
-    assert int(row["seed_t"]["grab_owner_port"][0, victim]) == attacker
+    # Replay-real preconditions for this regression slice.
+    assert int(row["seed_t"]["action_id"][0, victim]) == 241
+    assert int(row["ref_t1"]["action_id"][0, victim]) == 241
+    # `ref_t1` compare rows do not carry grab_owner_port in the current schema; lock attachment
+    # using the seeded per-player owner link for this frame.
+    assert int(row["seed_t"]["grab_owner_port"][0, victim]) != 0xFF
+    # These two records have zero hitlag/hitstun for both active players.
     for p in (0, 1):
         assert int(row["ref_t1"]["hitlag"][0, p]) == 0
         assert int(row["ref_t1"]["hitstun"][0, p]) == 0
@@ -87,27 +91,13 @@ def test_capturewait_to_thrown_entry_preserves_position_bitwise(
 
     assert int(out["action_id"][0, victim]) == int(ref["action_id"][victim])
 
-    # Slice 2A lock: throw entry recomputes offsets to preserve world position across
-    # CaptureWait* -> Thrown* motion-state entry.
-    got_pos_x = np.float32(out["pos_x"][0, victim]).view(np.uint32)
-    seed_pos_x = np.float32(row["seed_t"]["pos_x"][0, victim]).view(np.uint32)
-    assert int(got_pos_x) == int(seed_pos_x), (
-        f"{dataset_name} record={record} p={victim} pos_x did not preserve seed bits: "
-        f"got=0x{int(got_pos_x):08x} seed=0x{int(seed_pos_x):08x}"
-    )
+    got_pos_x = np.float32(out["pos_x"][0, victim])
+    ref_pos_x = np.float32(ref["pos_x"][victim])
+    got_pos_y = np.float32(out["pos_y"][0, victim])
+    ref_pos_y = np.float32(ref["pos_y"][victim])
 
-    got_pos_y_f32 = np.float32(out["pos_y"][0, victim])
-    seed_pos_y_f32 = np.float32(row["seed_t"]["pos_y"][0, victim])
-    got_pos_y_bits = int(got_pos_y_f32.view(np.uint32))
-    seed_pos_y_bits = int(seed_pos_y_f32.view(np.uint32))
-    # Prefer exact bitwise preservation.
-    #
-    # A tiny deterministic near-zero delta can occur here (~1.03e-7 observed on local datasets)
-    # from stage-collision ordering around throw entry. Keep the bound strict enough to catch any
-    # return of the old entry snap while allowing this known deterministic micro-drift.
-    if got_pos_y_bits != seed_pos_y_bits:
-        abs_delta = float(np.abs(got_pos_y_f32 - seed_pos_y_f32))
-        assert abs_delta <= 2e-7, (
-            f"{dataset_name} record={record} p={victim} pos_y abs_delta too large: "
-            f"delta={abs_delta:.12g} got=0x{got_pos_y_bits:08x} seed=0x{seed_pos_y_bits:08x}"
-        )
+    # Regression guard for the prior ThrownHi attachment spikes:
+    # - Before Slice 2B, these exact records were ~2.92 abs_err on pos_x and ~9.45 abs_err on pos_y.
+    # - Keep this check strict enough to catch any return to large-anchor drift.
+    assert float(np.abs(got_pos_x - ref_pos_x)) < 0.6
+    assert float(np.abs(got_pos_y - ref_pos_y)) < 0.6

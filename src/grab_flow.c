@@ -232,6 +232,10 @@ static inline uint8_t enter_throw_from_wait(MslBatch* batch, int bi, int owner_p
   // Keep this transition logic and attachment kinematics work separated in future slices.
   batch->state.action_id[vidx] = thrown_action;
   batch->state.animation_index[vidx] = victim_sm;
+  // Decomp: Thrown entry copies victim facing from thrower before installing/accessing the
+  // per-frame thrown accessory callback.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Thrown.c::ftCo_800DE3FC
+  batch->state.facing[vidx] = batch->state.facing[oidx];
   msl_anim_timebase_enter(batch, vidx, 0.0f, 1.0f);
   grab_attachment_recompute_offsets_for_thrown_entry(batch, bi, victim_p, owner_p);
   return 1u;

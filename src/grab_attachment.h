@@ -26,6 +26,12 @@ void grab_attachment_update_pre_collision(MslBatch* batch);
 // Decomp-shaped "accessory callback"-style update: drive captured/thrown victim position from the
 // grab owner joint + per-victim offsets.
 //
+// Thrown* anchor proxy contract:
+// - Approximate ftCo_800DE508 by composing owner capture-anchor world + victim XRotN local.
+// - Apply x1A70.z/x1A70.y-style offsets onto pos_x/pos_y after that anchor is resolved.
+// - Decomp refs:
+//   refs/melee/src/melee/ft/chara/ftCommon/ftCo_Thrown.c::{ftCo_800DE3FC,ftCo_800DE508}
+//
 // Ordering contract:
 // - Call after stage collision so collision does not perturb attached victims.
 // - Call before hitbox/hurtbox refresh so pose-driven primitives are placed at the attached position.

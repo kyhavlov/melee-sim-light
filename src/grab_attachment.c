@@ -11,54 +11,11 @@
 enum {
   MSL_FTPART_TRANSN = 1,    // FtPart_TransN
   MSL_FTPART_XROTN = 2,     // FtPart_XRotN (grab/capture victim alignment joint)
-  MSL_FTPART_RHANDN = 39,   // FtPart_RHandN (fallback anchor)
   MSL_FTPART_TRANSN2 = 52,  // FtPart_TransN2 (grab/capture constraint anchor; ftCo_800DB368)
 };
 
 static inline int grabbed_victim_transn_interp(float* out_x, float* out_y, float* out_z,
                                                const MslBatch* batch, size_t victim_idx);
-
-static inline int pose_part_origin_world(float* out_x, float* out_y, float* out_z, uint8_t char_id,
-                                         uint32_t anim_u32, float anim_frame_f32, uint16_t part_id,
-                                         float fighter_pos_x, float fighter_pos_y,
-                                         float fighter_pos_z, float fighter_scale_y,
-                                         uint8_t facing_u8) {
-  if (out_x == NULL || out_y == NULL || out_z == NULL) {
-    return -1;
-  }
-  if (anim_u32 > 0xFFFFu) {
-    return -1;
-  }
-  const uint16_t msid = (uint16_t)anim_u32;
-  const float f = msl_anim_frame_sanitize_f32(anim_frame_f32);
-  const uint16_t frame = msl_anim_frame_floor_u16(f);
-
-  float m[12];
-  if (anim_pose_get_matrix(char_id, msid, frame, part_id, m) != 0) {
-    return -1;
-  }
-
-  float lx = 0.0f, ly = 0.0f, lz = 0.0f;
-  const float zero[3] = {0.0f, 0.0f, 0.0f};
-  msl_mtx34_mul_point(m, zero, &lx, &ly, &lz);
-
-  // Facing transform:
-  // - Simulator convention: apply facing as a mirror on X only.
-  // - This matches the rest of the simulator's 2.5D convention (world Z is always 0.0f).
-  //
-  // Facing sign convention:
-  // - `facing` is a 0/1 bit where 1 means facing right (Slippi post-frame direction > 0).
-  //   tools/slippi/make_dataset_from_slp.py::_dir_to_facing
-  const float facing_dir = facing_u8 ? 1.0f : -1.0f;
-  lx *= fighter_scale_y * facing_dir;
-  ly *= fighter_scale_y;
-  lz *= fighter_scale_y;
-
-  *out_x = lx + fighter_pos_x;
-  *out_y = ly + fighter_pos_y;
-  *out_z = lz + fighter_pos_z;
-  return 0;
-}
 
 static inline int pose_part_origin_world_facing_yrot90(float* out_x, float* out_y, float* out_z,
                                                        uint8_t char_id, uint32_t anim_u32,
@@ -135,6 +92,34 @@ static inline int pose_part_origin_world_facing_yrot90(float* out_x, float* out_
   return 0;
 }
 
+static inline float pose_model_scale_y(const MslBatch* batch, size_t idx) {
+  if (batch == NULL) {
+    return 1.0f;
+  }
+  float scale_y = batch->state.fighter_scale_y[idx];
+  const MslCharParams* ch = msl_char_params(batch->state.char_id[idx]);
+  if (ch != NULL && ch->model_scaling > 0.0f) {
+    scale_y *= ch->model_scaling;
+  }
+  return scale_y;
+}
+
+static inline uint8_t action_is_capture_pulled_wait_victim(uint16_t action_id) {
+  // Scope helper for throw-entry preservation gate:
+  // - CapturePulledHi/WaitHi and CapturePulledLw/WaitLw are the common victim attachment states
+  //   leading into thrown entry in the current slice.
+  // - Keep CaptureDamage* excluded here so the one-frame skip stays narrowly targeted.
+  switch (action_id) {
+    case MSL_ACT_CAPTURE_PULLED_HI:
+    case MSL_ACT_CAPTURE_WAIT_HI:
+    case MSL_ACT_CAPTURE_PULLED_LW:
+    case MSL_ACT_CAPTURE_WAIT_LW:
+      return 1;
+    default:
+      return 0;
+  }
+}
+
 static inline void capture_victim_delta_apply(MslBatch* batch, int bi, int victim_p, int owner_p) {
   if (batch == NULL) {
     return;
@@ -167,10 +152,7 @@ static inline void capture_victim_delta_apply(MslBatch* batch, int bi, int victi
   }
   // Contract: SSANIM01 matrices are unscaled; multiply translations by fighter_scale_y*model_scaling
   // to match lb_8000B1CC world space (ftCo_Attack100.s::fn_800DAD18).
-  float owner_scale_y = batch->state.fighter_scale_y[oidx];
-  if (ch != NULL && ch->model_scaling > 0.0f) {
-    owner_scale_y *= ch->model_scaling;
-  }
+  const float owner_scale_y = pose_model_scale_y(batch, oidx);
   (void)pose_part_origin_world_facing_yrot90(
       &ax, &ay, &az, batch->state.char_id[oidx], batch->state.animation_index[oidx],
       batch->state.anim_frame_f32[oidx], anchor_part, batch->state.pos_x[oidx],
@@ -179,11 +161,7 @@ static inline void capture_victim_delta_apply(MslBatch* batch, int bi, int victi
   float vx = batch->state.pos_x[vidx];
   float vy = batch->state.pos_y[vidx];
   float vz = batch->state.pos_z[vidx];
-  float victim_scale_y = batch->state.fighter_scale_y[vidx];
-  const MslCharParams* vch = msl_char_params(batch->state.char_id[vidx]);
-  if (vch != NULL && vch->model_scaling > 0.0f) {
-    victim_scale_y *= vch->model_scaling;
-  }
+  const float victim_scale_y = pose_model_scale_y(batch, vidx);
   (void)pose_part_origin_world_facing_yrot90(
       &vx, &vy, &vz, batch->state.char_id[vidx], batch->state.animation_index[vidx],
       batch->state.anim_frame_f32[vidx], (uint16_t)MSL_FTPART_XROTN, batch->state.pos_x[vidx],
@@ -212,56 +190,75 @@ static inline void grabbed_victim_anchor_world(float* out_x, float* out_y, float
   //   fp->x1A70.{y,z} (scaled) onto it.
   //
   // Simulator approximation:
-  // - SSANIM01 v3 currently stores only a subset of Fighter_Part joints as u8 part ids, and does not
-  //   include FtPart_ThrowN (part id 51) or inserted/runtime-reparented joints like FtPart_XRotN (2)
-  //   for many suite-relevant motion states.
-  // - Try FtPart_RHandN as a suite-focused proxy owner anchor when present; otherwise fall back to
-  //   owner root (fp->cur_pos) and rely on victim TransN tail + offsets for stability.
-  // - Add victim TransN tail (SSANIM01 v3) in the owner's (mirrored+scaled) space.
+  // - Resolve owner anchor world from ISO-extracted `grab_capture_anchor_part_id` (fallback TransN2).
+  // - Resolve victim XRotN local translation in pose space; if unavailable for this (char,msid,frame),
+  //   fall back to TransN interpolation in the same facing/model-scale convention.
+  // - Compose anchor_world = owner_anchor_world + victim_local.
   if (out_x == NULL || out_y == NULL || out_z == NULL || batch == NULL) {
     return;
   }
   const size_t oidx = msl_idx_player(bi, owner_p);
   const size_t vidx = msl_idx_player(bi, victim_p);
 
+  // Decomp-shaped proxy for ftCo_Thrown.c::ftCo_800DE508:
+  // - Read world translation of victim FtPart_XRotN joint (lb_8000B1CC on re-parented joint).
+  // - Then apply x1A70 offsets separately in caller.
+  //
+  // Proxy structure (data/ISO-first):
+  // - owner_anchor_world: owner capture anchor part origin in world
+  //   (`grab_capture_anchor_part_id`, fallback FtPart_TransN2), using unscaled pose matrices with
+  //   fighter_scale_y*model_scaling.
+  // - victim_xrotn_local: victim FtPart_XRotN local translation transformed by facing +/-90deg Y and
+  //   scaled by fighter_scale_y*model_scaling.
+  // - anchor_world = owner_anchor_world + victim_xrotn_local.
+  //
+  // Decomp anchors:
+  // - refs/melee/src/melee/ft/chara/ftCommon/ftCo_Thrown.c::ftCo_800DE508
+  // - refs/melee/src/melee/ft/chara/ftCommon/ftCo_Thrown.c::ftCo_800DE3FC
+  // - refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::fn_800DAD18
   float ax = batch->state.pos_x[oidx];
   float ay = batch->state.pos_y[oidx];
   float az = batch->state.pos_z[oidx];
-  // Keep thrown-anchor behavior stable while iterating on capture attachment: use the historical
-  // suite-stable proxy FtPart_RHandN only.
-  (void)pose_part_origin_world(
-      &ax, &ay, &az, batch->state.char_id[oidx], batch->state.animation_index[oidx],
-      batch->state.anim_frame_f32[oidx], (uint16_t)MSL_FTPART_RHANDN, batch->state.pos_x[oidx],
-      batch->state.pos_y[oidx], batch->state.pos_z[oidx], batch->state.fighter_scale_y[oidx],
-      batch->state.facing[oidx]);
-
-  float tx = 0.0f, ty = 0.0f, tz = 0.0f;
-  if (grabbed_victim_transn_interp(&tx, &ty, &tz, batch, vidx) != 0) {
-    tx = 0.0f;
-    ty = 0.0f;
-    tz = 0.0f;
+  uint16_t owner_anchor_part = (uint16_t)MSL_FTPART_TRANSN2;
+  const MslCharParams* och = msl_char_params(batch->state.char_id[oidx]);
+  if (och != NULL) {
+    owner_anchor_part = och->grab_capture_anchor_part_id;
+  }
+  const float owner_scale_y = pose_model_scale_y(batch, oidx);
+  if (pose_part_origin_world_facing_yrot90(
+          &ax, &ay, &az, batch->state.char_id[oidx], batch->state.animation_index[oidx],
+          batch->state.anim_frame_f32[oidx], owner_anchor_part, batch->state.pos_x[oidx],
+          batch->state.pos_y[oidx], batch->state.pos_z[oidx], owner_scale_y,
+          batch->state.facing[oidx]) != 0) {
+    ax = batch->state.pos_x[oidx];
+    ay = batch->state.pos_y[oidx];
+    az = batch->state.pos_z[oidx];
   }
 
-  // Victim TransN tail scaling:
-  // - anim_pose_get_transn returns the raw SSANIM01 v3 TransN tail in model space.
-  // - Convert to engine/world units using ISO-derived `model_scaling` and per-fighter model scale
-  //   (`fp->x34_scale.y` / fighter_scale_y).
-  //
-  // Decomp context:
-  // - The thrown/capture position driver uses a world-space joint translation via lb_8000B1CC, and
-  //   adds offsets scaled by fp->x34_scale.y:
-  //   refs/melee/src/melee/ft/chara/ftCommon/ftCo_Thrown.c::ftCo_800DE508.
-  // - `model_scaling` is a per-character attribute used for TransN-like consumers:
-  //   refs/melee/src/melee/ft/types.h::ftCo_DatAttrs::model_scaling.
-  const MslCharParams* ch = msl_char_params(batch->state.char_id[vidx]);
-  const float model_scaling = (ch != NULL) ? ch->model_scaling : 1.0f;
-  const float victim_scale_y = batch->state.fighter_scale_y[vidx];
+  float vx_local = 0.0f, vy_local = 0.0f, vz_local = 0.0f;
+  const float victim_scale_y = pose_model_scale_y(batch, vidx);
+  if (pose_part_origin_world_facing_yrot90(
+          &vx_local, &vy_local, &vz_local, batch->state.char_id[vidx],
+          batch->state.animation_index[vidx], batch->state.anim_frame_f32[vidx],
+          (uint16_t)MSL_FTPART_XROTN, 0.0f, 0.0f, 0.0f, victim_scale_y,
+          batch->state.facing[vidx]) != 0) {
+    // Deterministic fallback for datasets missing XRotN pose rows in the current anim extract:
+    // use TransN tail in the same model_scale/facing convention used by the previous proxy.
+    float tx = 0.0f, ty = 0.0f, tz = 0.0f;
+    if (grabbed_victim_transn_interp(&tx, &ty, &tz, batch, vidx) != 0) {
+      tx = 0.0f;
+      ty = 0.0f;
+      tz = 0.0f;
+    }
+    const float facing_dir = batch->state.facing[vidx] ? 1.0f : -1.0f;
+    vx_local = facing_dir * (tz * victim_scale_y);
+    vy_local = ty * victim_scale_y;
+    vz_local = 0.0f;
+  }
 
-  // 2.5D convention:
-  // - Use TransN.z as the forward-axis offset and apply it onto world X with facing_dir.
-  const float facing_dir = batch->state.facing[vidx] ? 1.0f : -1.0f;
-  ax += facing_dir * (tz * model_scaling * victim_scale_y);
-  ay += ty * model_scaling * victim_scale_y;
+  ax += vx_local;
+  ay += vy_local;
+  az += vz_local;
 
   *out_x = ax;
   *out_y = ay;
@@ -401,6 +398,18 @@ void grab_attachment_update_post_collision(MslBatch* batch) {
       }
 
       if (!msl_action_is_capture_pulled_wait_damage_victim(batch->state.action_id[vidx])) {
+        const uint16_t cur_action = batch->state.action_id[vidx];
+        const uint16_t prev_action = batch->state.prev_action_id[vidx];
+        // One-frame reconstruction skip scope:
+        // - Only when transitioning CapturePulled*/CaptureWait* -> Thrown*.
+        // - Decomp anchor: thrown entry installs the accessory-driven victim position callback in
+        //   ftCo_800DE3FC after throw setup; capture victim loops are maintained by fn_800DAD18.
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Thrown.c::ftCo_800DE3FC
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::fn_800DAD18
+        const uint8_t thrown_entered_from_capture_wait_pulled =
+            (uint8_t)(msl_action_is_thrown_victim(cur_action) &&
+                      action_is_capture_pulled_wait_victim(prev_action));
+
         float ax = 0.0f, ay = 0.0f, az = 0.0f;
         grabbed_victim_anchor_world(&ax, &ay, &az, batch, bi, p, (int)owner);
         (void)az;
@@ -414,9 +423,18 @@ void grab_attachment_update_post_collision(MslBatch* batch) {
         // Decomp-shaped axis mapping:
         // - ftCo_Thrown.c::ftCo_800DE508 uses x1A70.z as the "forward" offset term, applied onto
         //   pos.x with facing_dir, and adds x1A70.y to pos.y.
-        batch->state.pos_x[vidx] = ax + facing_dir * (batch->state.grab_offset_z[vidx] * scale_y);
-        batch->state.pos_y[vidx] = ay + batch->state.grab_offset_y[vidx] * scale_y;
-        batch->state.pos_z[vidx] = 0.0f;
+        //
+        // Throw-entry exactness:
+        // - On CapturePulled*/CaptureWait* -> Thrown* transition, offsets are recomputed from current
+        //   world position.
+        // - Preserve that world position exactly on the same frame (no float round-trip through
+        //   offset->reconstruct) and start callback-style reconstruction on subsequent frames.
+        if (!thrown_entered_from_capture_wait_pulled) {
+          batch->state.pos_x[vidx] =
+              fmaf(batch->state.grab_offset_z[vidx], facing_dir * scale_y, ax);
+          batch->state.pos_y[vidx] = batch->state.grab_offset_y[vidx] * scale_y + ay;
+          batch->state.pos_z[vidx] = 0.0f;
+        }
       }
 
       // Victim velocities:
