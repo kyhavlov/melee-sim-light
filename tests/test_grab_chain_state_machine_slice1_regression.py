@@ -135,3 +135,40 @@ def test_catchwait_throw_iasa_enters_throw_and_thrown(
     out, ref = _run_record(dataset_path, record)
     assert int(out["action_id"][0, attacker]) == int(ref["action_id"][attacker])
     assert int(out["action_id"][0, victim]) == int(ref["action_id"][victim])
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    ("dataset_name", "record", "p", "expected_action_id"),
+    [
+        ("AttachedGoodNaturedGuanaco.msl", 568, 0, 221),
+        ("GracefulAttachedTurtle.msl", 448, 0, 221),
+        ("GracefulAttachedTurtle.msl", 2507, 1, 220),
+    ],
+)
+def test_catchwait_throw_entry_preserves_action_frame_parity(
+    dataset_name: str,
+    record: int,
+    p: int,
+    expected_action_id: int,
+) -> None:
+    root = Path(__file__).resolve().parents[1]
+    dataset_rel = f"{_BASE_REL}/{dataset_name}"
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    row = ds.samples[record : record + 1]
+
+    # Replay preconditions for this lock (seed CatchWait, throw entry on next frame).
+    assert int(row["seed_t"]["action_id"][0, p]) == 216
+    assert int(row["seed_t"]["action_frame"][0, p]) == 1
+    assert int(row["ref_t1"]["action_id"][0, p]) == expected_action_id
+    assert int(row["ref_t1"]["action_frame"][0, p]) == 1
+    assert int(row["ref_t1"]["hitlag"][0, p]) == 0
+    assert int(row["ref_t1"]["hitstun"][0, p]) == 0
+
+    out, ref = _run_record(dataset_path, record)
+    assert int(out["action_id"][0, p]) == int(ref["action_id"][p])
+    assert int(out["action_frame"][0, p]) == int(ref["action_frame"][p])

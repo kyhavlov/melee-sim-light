@@ -1,5 +1,7 @@
 #include "grab_flow.h"
 
+#include <assert.h>
+
 #include "action_ids.h"
 #include "anim_frame.h"
 #include "anim_table.h"
@@ -388,6 +390,18 @@ static inline uint8_t enter_throw_from_wait(MslBatch* batch, int bi, int owner_p
   batch->state.action_id[oidx] = throw_action;
   batch->state.animation_index[oidx] = owner_sm;
   msl_anim_timebase_enter(batch, oidx, 0.0f, 1.0f);
+  // Safety contract: this immediate tick is *only* valid for CatchWait throw-entry because
+  // decomp's ftCo_800DD398 does Fighter_ChangeMotionState + immediate ftAnim_8006EBA4 in the same
+  // callback. Generic motion-state entries must not do this extra tick because step.c already runs
+  // the per-frame anim advance once via anim_timebase_update_pre_input().
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DD398
+  // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
+  assert(batch->state.action_id[oidx] >= (uint16_t)MSL_ACT_THROW_F &&
+         batch->state.action_id[oidx] <= (uint16_t)MSL_ACT_THROW_LW);
+  // Decomp: throw entry helper ftCo_800DD398 calls Fighter_ChangeMotionState, then immediately
+  // ftAnim_8006EBA4 in the same frame.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DD398
+  msl_anim_timebase_tick_once(batch, oidx);
 
   // TODO(slice2-throw-attachment): state-machine parity here is improved (CatchWait->Throw* and
   // victim CaptureWait->Thrown*), but positional attachment/throw offsets are still approximate.
@@ -402,6 +416,14 @@ static inline uint8_t enter_throw_from_wait(MslBatch* batch, int bi, int owner_p
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Thrown.c::ftCo_800DE3FC
   batch->state.facing[vidx] = batch->state.facing[oidx];
   msl_anim_timebase_enter(batch, vidx, 0.0f, 1.0f);
+  // Safety contract matches the thrower-side guard above: this extra tick mirrors
+  // ftCo_800DE3FC's immediate ftAnim_8006EBA4 and must not be generalized to arbitrary entries.
+  assert(batch->state.action_id[vidx] >= (uint16_t)MSL_ACT_THROWN_F &&
+         batch->state.action_id[vidx] <= (uint16_t)MSL_ACT_THROWN_LW);
+  // Decomp: thrown-victim entry helper also performs an immediate ftAnim_8006EBA4 after
+  // Fighter_ChangeMotionState.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Thrown.c::ftCo_800DE3FC
+  msl_anim_timebase_tick_once(batch, vidx);
   grab_attachment_recompute_offsets_for_thrown_entry(batch, bi, victim_p, owner_p);
   return 1u;
 }
