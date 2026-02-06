@@ -14,9 +14,6 @@ enum {
   MSL_FTPART_TRANSN2 = 52,  // FtPart_TransN2 (grab/capture constraint anchor; ftCo_800DB368)
 };
 
-static inline int grabbed_victim_transn_interp(float* out_x, float* out_y, float* out_z,
-                                               const MslBatch* batch, size_t victim_idx);
-
 static inline int pose_part_origin_world_facing_yrot90(float* out_x, float* out_y, float* out_z,
                                                        uint8_t char_id, uint32_t anim_u32,
                                                        float anim_frame_f32, uint16_t part_id,
@@ -190,27 +187,28 @@ static inline void grabbed_victim_anchor_world(float* out_x, float* out_y, float
   //   fp->x1A70.{y,z} (scaled) onto it.
   //
   // Simulator approximation:
-  // - Resolve owner anchor world from ISO-extracted `grab_capture_anchor_part_id` (fallback TransN2).
-  // - Resolve victim XRotN local translation in pose space; if unavailable for this (char,msid,frame),
-  //   fall back to TransN interpolation in the same facing/model-scale convention.
-  // - Compose anchor_world = owner_anchor_world + victim_local.
+  // - Resolve owner anchor world from ISO-extracted `grab_capture_anchor_part_id` (capturedamage.x18
+  //   source; fallback FtPart_TransN2).
+  // - Minimal-state inference: replay seeds do not carry enough internal re-parented-joint state to
+  //   reconstruct the full FtPart_XRotN world chain deterministically on their own.
+  // - Use owner-anchor world as the thrown proxy and intentionally store the residual in
+  //   grab_offset_{y,z} at reseed/entry to avoid double-count drift.
   if (out_x == NULL || out_y == NULL || out_z == NULL || batch == NULL) {
     return;
   }
   const size_t oidx = msl_idx_player(bi, owner_p);
-  const size_t vidx = msl_idx_player(bi, victim_p);
+  (void)victim_p;
 
   // Decomp-shaped proxy for ftCo_Thrown.c::ftCo_800DE508:
   // - Read world translation of victim FtPart_XRotN joint (lb_8000B1CC on re-parented joint).
   // - Then apply x1A70 offsets separately in caller.
   //
-  // Proxy structure (data/ISO-first):
-  // - owner_anchor_world: owner capture anchor part origin in world
+  // Proxy structure:
+  // - owner_anchor_world: owner capturedamage.x18 proxy origin in world
   //   (`grab_capture_anchor_part_id`, fallback FtPart_TransN2), using unscaled pose matrices with
   //   fighter_scale_y*model_scaling.
-  // - victim_xrotn_local: victim FtPart_XRotN local translation transformed by facing +/-90deg Y and
-  //   scaled by fighter_scale_y*model_scaling.
-  // - anchor_world = owner_anchor_world + victim_xrotn_local.
+  // - anchor_world := owner_anchor_world. Residual re-parent/constraint offset is represented by
+  //   grab_offset_{y,z} (fp->x1A70 analog in this sim).
   //
   // Decomp anchors:
   // - refs/melee/src/melee/ft/chara/ftCommon/ftCo_Thrown.c::ftCo_800DE508
@@ -235,72 +233,9 @@ static inline void grabbed_victim_anchor_world(float* out_x, float* out_y, float
     az = batch->state.pos_z[oidx];
   }
 
-  float vx_local = 0.0f, vy_local = 0.0f, vz_local = 0.0f;
-  const float victim_scale_y = pose_model_scale_y(batch, vidx);
-  if (pose_part_origin_world_facing_yrot90(
-          &vx_local, &vy_local, &vz_local, batch->state.char_id[vidx],
-          batch->state.animation_index[vidx], batch->state.anim_frame_f32[vidx],
-          (uint16_t)MSL_FTPART_XROTN, 0.0f, 0.0f, 0.0f, victim_scale_y,
-          batch->state.facing[vidx]) != 0) {
-    // Deterministic fallback for datasets missing XRotN pose rows in the current anim extract:
-    // use TransN tail in the same model_scale/facing convention used by the previous proxy.
-    float tx = 0.0f, ty = 0.0f, tz = 0.0f;
-    if (grabbed_victim_transn_interp(&tx, &ty, &tz, batch, vidx) != 0) {
-      tx = 0.0f;
-      ty = 0.0f;
-      tz = 0.0f;
-    }
-    const float facing_dir = batch->state.facing[vidx] ? 1.0f : -1.0f;
-    vx_local = facing_dir * (tz * victim_scale_y);
-    vy_local = ty * victim_scale_y;
-    vz_local = 0.0f;
-  }
-
-  ax += vx_local;
-  ay += vy_local;
-  az += vz_local;
-
   *out_x = ax;
   *out_y = ay;
   *out_z = 0.0f;
-}
-
-static inline int grabbed_victim_transn_interp(float* out_x, float* out_y, float* out_z,
-                                               const MslBatch* batch, size_t victim_idx) {
-  if (out_x == NULL || out_y == NULL || out_z == NULL || batch == NULL) {
-    return -1;
-  }
-  const uint32_t anim_u32 = batch->state.animation_index[victim_idx];
-  if (anim_u32 > 0xFFFFu) {
-    return -1;
-  }
-  const uint16_t msid = (uint16_t)anim_u32;
-  const float f = msl_anim_frame_sanitize_f32(batch->state.anim_frame_f32[victim_idx]);
-  const float base_f = floorf(f);
-  const float frac = f - base_f;
-  const uint16_t frame0 = msl_anim_frame_floor_u16(f);
-
-  float t0[3] = {0.0f, 0.0f, 0.0f};
-  if (anim_pose_get_transn(batch->state.char_id[victim_idx], msid, frame0, t0) != 0) {
-    return -1;
-  }
-  float t1[3] = {t0[0], t0[1], t0[2]};
-  if (frac > 0.0f) {
-    const uint16_t frame1 = (uint16_t)(frame0 + 1u);
-    if (frame1 != 0) {
-      float tmp[3] = {0.0f, 0.0f, 0.0f};
-      if (anim_pose_get_transn(batch->state.char_id[victim_idx], msid, frame1, tmp) == 0) {
-        t1[0] = tmp[0];
-        t1[1] = tmp[1];
-        t1[2] = tmp[2];
-      }
-    }
-  }
-  const float a = (frac <= 0.0f) ? 0.0f : ((frac >= 1.0f) ? 1.0f : frac);
-  *out_x = t0[0] + (t1[0] - t0[0]) * a;
-  *out_y = t0[1] + (t1[1] - t0[1]) * a;
-  *out_z = t0[2] + (t1[2] - t0[2]) * a;
-  return 0;
 }
 
 void grab_attachment_recompute_offsets_for_thrown_entry(MslBatch* batch, int batch_index,

@@ -56,16 +56,22 @@ def _run_record(dataset_path: Path, record: int) -> tuple[np.ndarray, np.ndarray
 
 @pytest.mark.integration
 @pytest.mark.parametrize(
-    ("dataset_name", "record", "victim"),
+    ("dataset_name", "record", "victim", "pos_x_max_err", "pos_y_max_err"),
     [
-        ("AttachedGoodNaturedGuanaco.msl", 5973, 0),
-        ("TreasuredBackKangaroo.msl", 6824, 1),
+        # Frame-6 regression rows where the prior repeated spike was centered.
+        ("AttachedGoodNaturedGuanaco.msl", 5972, 0, 0.25, 0.05),
+        ("TreasuredBackKangaroo.msl", 6823, 1, 0.25, 0.05),
+        # Keep original frame-7 coverage as a broad "no return of spike" guard.
+        ("AttachedGoodNaturedGuanaco.msl", 5973, 0, 0.6, 0.6),
+        ("TreasuredBackKangaroo.msl", 6824, 1, 0.6, 0.6),
     ],
 )
 def test_thrownhi_attachment_matches_ref_position_tight(
     dataset_name: str,
     record: int,
     victim: int,
+    pos_x_max_err: float,
+    pos_y_max_err: float,
 ) -> None:
     root = Path(__file__).resolve().parents[1]
     dataset_rel = f"datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/{dataset_name}"
@@ -97,7 +103,8 @@ def test_thrownhi_attachment_matches_ref_position_tight(
     ref_pos_y = np.float32(ref["pos_y"][victim])
 
     # Regression guard for the prior ThrownHi attachment spikes:
-    # - Before Slice 2B, these exact records were ~2.92 abs_err on pos_x and ~9.45 abs_err on pos_y.
-    # - Keep this check strict enough to catch any return to large-anchor drift.
-    assert float(np.abs(got_pos_x - ref_pos_x)) < 0.6
-    assert float(np.abs(got_pos_y - ref_pos_y)) < 0.6
+    # - Frame-6 offenders in this slice had a repeatable ~9.38 abs_err on pos_y before the
+    #   thrown-anchor proxy correction.
+    # - Keep frame-6 checks tight and frame-7 checks broad enough to guard against regressions.
+    assert float(np.abs(got_pos_x - ref_pos_x)) < pos_x_max_err
+    assert float(np.abs(got_pos_y - ref_pos_y)) < pos_y_max_err
