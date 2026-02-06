@@ -124,6 +124,7 @@ def test_dash_grab_enters_catchdash(dataset_name: str, record: int, attacker: in
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
         pytest.skip(f"missing local dataset: {dataset_rel}")
+    _skip_if_required_artifacts_missing(root)
 
     ds = read_dataset(str(dataset_path))
     row = ds.samples[record : record + 1]
@@ -139,6 +140,54 @@ def test_dash_grab_enters_catchdash(dataset_name: str, record: int, attacker: in
 
     out, ref = _run_record(dataset_path, record)
     assert int(out["action_id"][0, attacker]) == int(ref["action_id"][attacker])
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    ("dataset_name", "record", "attacker", "victim"),
+    [
+        ("GracefulAttachedTurtle.msl", 3402, 1, 0),
+        ("QuerulousGrandDinosaur.msl", 5369, 0, 1),
+    ],
+)
+def test_replay_catchdash_connect_enters_pull_and_capture_pulled(
+    dataset_name: str,
+    record: int,
+    attacker: int,
+    victim: int,
+) -> None:
+    root = Path(__file__).resolve().parents[1]
+    dataset_rel = f"{_BASE_REL}/{dataset_name}"
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+    _skip_if_required_artifacts_missing(root)
+
+    ds = read_dataset(str(dataset_path))
+    row = ds.samples[record : record + 1]
+
+    # Replay-real lock preconditions for CatchDash connect.
+    assert int(row["seed_t"]["action_id"][0, attacker]) == _ACT_CATCH_DASH
+    assert int(row["seed_t"]["grab_owner_port"][0, attacker]) == 0xFF
+    assert int(row["seed_t"]["grab_owner_port"][0, victim]) == 0xFF
+    assert int(row["ref_t1"]["action_id"][0, attacker]) == _ACT_CATCH_DASH_PULL
+    assert int(row["ref_t1"]["action_id"][0, victim]) in (_ACT_CAPTURE_PULLED_HI, _ACT_CAPTURE_PULLED_LW)
+    assert int(row["seed_t"]["hitlag"][0, attacker]) == 0
+    assert int(row["seed_t"]["hitlag"][0, victim]) == 0
+    assert int(row["seed_t"]["hitstun"][0, attacker]) == 0
+    assert int(row["seed_t"]["hitstun"][0, victim]) == 0
+    assert int(row["ref_t1"]["hitlag"][0, attacker]) == 0
+    assert int(row["ref_t1"]["hitlag"][0, victim]) == 0
+    assert int(row["ref_t1"]["hitstun"][0, attacker]) == 0
+    assert int(row["ref_t1"]["hitstun"][0, victim]) == 0
+
+    out, ref = _run_record(dataset_path, record)
+    assert int(out["action_id"][0, attacker]) == int(ref["action_id"][attacker])
+    assert int(out["action_id"][0, victim]) == int(ref["action_id"][victim])
+    assert int(out["action_frame"][0, attacker]) == int(ref["action_frame"][attacker])
+    assert int(out["action_frame"][0, victim]) == int(ref["action_frame"][victim])
+    assert int(out["animation_index"][0, attacker]) == int(ref["animation_index"][attacker])
+    assert int(out["animation_index"][0, victim]) == int(ref["animation_index"][victim])
 
 
 @pytest.mark.parametrize(

@@ -449,8 +449,10 @@ void grab_flow_on_catch_connect(MslBatch* batch, int bi, int owner_p, int victim
   }
 
   const uint16_t owner_act = batch->state.action_id[oidx];
+  const float owner_anim_start = msl_anim_frame_sanitize_f32(batch->state.anim_frame_f32[oidx]);
   // Catch/CatchDash connect -> CatchPull/CatchDashPull.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::{ftCo_Catch_Coll,ftCo_CatchDash_Coll}
+  // refs/melee/build/GALE01/asm/melee/ft/chara/ftCommon/ftCo_Attack100.s::fn_800D9CE8
   // refs/melee/build/GALE01/asm/melee/ft/chara/ftCommon/ftCo_Attack100.s::fn_800DAADC
   if (owner_act == (uint16_t)MSL_ACT_CATCH) {
     batch->state.action_id[oidx] = (uint16_t)MSL_ACT_CATCH_PULL;
@@ -461,7 +463,10 @@ void grab_flow_on_catch_connect(MslBatch* batch, int bi, int owner_p, int victim
   } else {
     return;
   }
-  msl_anim_timebase_enter(batch, oidx, 0.0f, 1.0f);
+  // Decomp: fn_800D9CE8 installs CatchPull/CatchDashPull with anim_start=fp->cur_anim_frame
+  // (preserve current catch timeline instead of restarting from frame 0).
+  // refs/melee/build/GALE01/asm/melee/ft/chara/ftCommon/ftCo_Attack100.s::fn_800D9CE8
+  msl_anim_timebase_enter(batch, oidx, owner_anim_start, 1.0f);
 
   // Catch connect victim entry: grounded owner uses CapturePulledLw, airborne owner uses
   // CapturePulledHi.
@@ -474,6 +479,11 @@ void grab_flow_on_catch_connect(MslBatch* batch, int bi, int owner_p, int victim
     batch->state.animation_index[vidx] = (uint32_t)MSL_SM_CAPTURE_PULLED_HI;
   }
   msl_anim_timebase_enter(batch, vidx, 0.0f, 1.0f);
+  // Decomp: capture-pulled entry helper immediately ticks anim once via ftAnim_8006EBA4.
+  // refs/melee/build/GALE01/asm/melee/ft/chara/ftCommon/ftCo_Attack100.s::fn_800DAA10
+  assert(batch->state.action_id[vidx] == (uint16_t)MSL_ACT_CAPTURE_PULLED_HI ||
+         batch->state.action_id[vidx] == (uint16_t)MSL_ACT_CAPTURE_PULLED_LW);
+  msl_anim_timebase_tick_once(batch, vidx);
 
   // Decomp has a single victim_gobj pointer per owner; keep exactly one attached victim link.
   for (int p = 0; p < num_players; p++) {

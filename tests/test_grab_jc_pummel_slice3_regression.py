@@ -201,3 +201,53 @@ def test_catchwait_pummel_loop_and_anim_end_returns(
     out_end, ref_end = _run_record(dataset_path, record_anim_end)
     assert int(out_end["action_id"][0, attacker]) == int(ref_end["action_id"][attacker])
     assert int(out_end["action_id"][0, victim]) == int(ref_end["action_id"][victim])
+
+
+@pytest.mark.integration
+def test_replay_catchattack_capture_damage_entry_and_return_lock() -> None:
+    root = Path(__file__).resolve().parents[1]
+    dataset_rel = f"{_BASE_REL}/GracefulAttachedTurtle.msl"
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+    _skip_if_required_artifacts_missing(root)
+
+    attacker = 0
+    victim = 1
+    record_victim_enter = 374
+    record_anim_end = 397
+
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+
+    # Replay lock: CatchAttack -> CaptureDamageLw entry frame.
+    row_v = samples[record_victim_enter : record_victim_enter + 1]
+    assert int(row_v["seed_t"]["action_id"][0, attacker]) == 217
+    assert int(row_v["seed_t"]["action_id"][0, victim]) == 227
+    assert int(row_v["seed_t"]["grab_owner_port"][0, victim]) == attacker
+    assert int(row_v["ref_t1"]["action_id"][0, attacker]) == 217
+    assert int(row_v["ref_t1"]["action_id"][0, victim]) == 228
+    assert int(row_v["ref_t1"]["hitlag"][0, attacker]) == 4
+    assert int(row_v["ref_t1"]["hitlag"][0, victim]) == 4
+    assert int(row_v["ref_t1"]["hitstun"][0, attacker]) == 0
+    assert int(row_v["ref_t1"]["hitstun"][0, victim]) == 0
+
+    # Replay lock: CatchAttack/CaptureDamage anim-end return to CatchWait/CaptureWait.
+    row_end = samples[record_anim_end : record_anim_end + 1]
+    assert int(row_end["seed_t"]["action_id"][0, attacker]) == 217
+    assert int(row_end["seed_t"]["action_id"][0, victim]) == 228
+    assert int(row_end["seed_t"]["grab_owner_port"][0, victim]) == attacker
+    assert int(row_end["ref_t1"]["action_id"][0, attacker]) == 216
+    assert int(row_end["ref_t1"]["action_id"][0, victim]) == 227
+    assert int(row_end["ref_t1"]["hitlag"][0, attacker]) == 0
+    assert int(row_end["ref_t1"]["hitlag"][0, victim]) == 0
+    assert int(row_end["ref_t1"]["hitstun"][0, attacker]) == 0
+    assert int(row_end["ref_t1"]["hitstun"][0, victim]) == 0
+
+    out_v, ref_v = _run_record(dataset_path, record_victim_enter)
+    assert int(out_v["action_id"][0, attacker]) == int(ref_v["action_id"][attacker])
+    assert int(out_v["action_id"][0, victim]) == int(ref_v["action_id"][victim])
+
+    out_end, ref_end = _run_record(dataset_path, record_anim_end)
+    assert int(out_end["action_id"][0, attacker]) == int(ref_end["action_id"][attacker])
+    assert int(out_end["action_id"][0, victim]) == int(ref_end["action_id"][victim])
