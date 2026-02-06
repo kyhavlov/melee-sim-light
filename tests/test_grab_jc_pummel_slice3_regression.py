@@ -1,0 +1,203 @@
+from __future__ import annotations
+
+import importlib
+from pathlib import Path
+
+import numpy as np
+import pytest
+
+from tools.eval.dataset import COMPARE_DTYPE, read_dataset
+
+
+_BASE_REL = "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent"
+_BUTTON_A = 0x0100
+_BUTTON_Z = 0x0010
+_BUTTON_L = 0x0040
+_BUTTON_R = 0x0020
+_REQUIRED_ARTIFACTS = (
+    "data/moves/fox.json",
+    "data/moves/falco.json",
+    # Optional but useful guards for this slice's extraction targets.
+    "data/hit_status/fox.bin",
+    "data/hit_status/falco.bin",
+    "data/hurtbox_states/fox.bin",
+    "data/hurtbox_states/falco.bin",
+)
+
+
+def _skip_if_required_artifacts_missing(root: Path) -> None:
+    missing = [rel for rel in _REQUIRED_ARTIFACTS if not (root / rel).exists()]
+    if missing:
+        pytest.skip(f"missing local extracted artifacts: {', '.join(missing)}")
+
+
+def _buttons(row: np.ndarray, field: str, port: int) -> int:
+    return int(row[field]["p"]["buttons"][0, port])
+
+
+def _button_edge(row: np.ndarray, port: int, mask: int) -> bool:
+    cur = _buttons(row, "input_t", port)
+    prev = _buttons(row, "prev_input_t", port)
+    return (cur & mask) != 0 and (prev & mask) == 0
+
+
+def _shield_or_trigger_held(row: np.ndarray, port: int) -> bool:
+    cur_buttons = _buttons(row, "input_t", port)
+    if (cur_buttons & (_BUTTON_L | _BUTTON_R)) != 0:
+        return True
+    return int(row["input_t"]["p"]["l"][0, port]) > 0 or int(row["input_t"]["p"]["r"][0, port]) > 0
+
+
+def _grab_attempt_edge(row: np.ndarray, port: int) -> bool:
+    z_edge = _button_edge(row, port, _BUTTON_Z)
+    a_edge = _button_edge(row, port, _BUTTON_A)
+    return z_edge or (a_edge and _shield_or_trigger_held(row, port))
+
+
+def _run_record(dataset_path: Path, record: int) -> tuple[np.ndarray, np.ndarray]:
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+    num_records = int(samples.shape[0])
+    assert num_records > record, f"dataset too short for regression check: num_records={num_records}"
+
+    row = samples[record : record + 1]
+
+    binding = importlib.import_module("msl_binding")
+    sizes = binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    compare_stride = int(sizes["compare"])
+
+    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    try:
+        seed_bytes = np.empty((1, seed_stride), dtype=np.uint8)
+        prev_input_bytes = np.empty((1, input_stride), dtype=np.uint8)
+        input_bytes = np.empty((1, input_stride), dtype=np.uint8)
+        out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
+
+        seed_bytes[:] = np.frombuffer(row["seed_t"].tobytes(order="C"), dtype=np.uint8).reshape(
+            1, seed_stride
+        )
+        prev_input_bytes[:] = np.frombuffer(row["prev_input_t"].tobytes(order="C"), dtype=np.uint8).reshape(
+            1, input_stride
+        )
+        input_bytes[:] = np.frombuffer(row["input_t"].tobytes(order="C"), dtype=np.uint8).reshape(
+            1, input_stride
+        )
+
+        binding.reseed_seed(handle, seed_bytes)
+        binding.step_input(handle, prev_input_bytes, input_bytes)
+        binding.write_compare(handle, out_compare_bytes)
+
+        out = out_compare_bytes.view(COMPARE_DTYPE).reshape(-1)
+        ref = row["ref_t1"].reshape(-1)[0]
+        return out, ref
+    finally:
+        binding.destroy(handle)
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    ("dataset_name", "record", "attacker"),
+    [
+        ("GracefulAttachedTurtle.msl", 212, 0),
+        ("TreasuredBackKangaroo.msl", 401, 0),
+    ],
+)
+def test_kneebend_jc_grab_enters_catch(dataset_name: str, record: int, attacker: int) -> None:
+    root = Path(__file__).resolve().parents[1]
+    dataset_rel = f"{_BASE_REL}/{dataset_name}"
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+    _skip_if_required_artifacts_missing(root)
+
+    ds = read_dataset(str(dataset_path))
+    row = ds.samples[record : record + 1]
+    victim = 1 - attacker
+
+    # Dataset schema only carries seed_t/ref_t1 rows. seed_t is the replay-derived t-state.
+    assert int(row["seed_t"]["action_id"][0, attacker]) == 24
+    assert int(row["ref_t1"]["action_id"][0, attacker]) == 212
+    assert int(row["ref_t1"]["hitlag"][0, attacker]) == 0
+    assert int(row["ref_t1"]["hitstun"][0, attacker]) == 0
+    assert int(row["ref_t1"]["hitlag"][0, victim]) == 0
+    assert int(row["ref_t1"]["hitstun"][0, victim]) == 0
+    assert _grab_attempt_edge(row, attacker)
+
+    out, ref = _run_record(dataset_path, record)
+    assert int(out["action_id"][0, attacker]) == int(ref["action_id"][attacker])
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    ("dataset_name", "attacker", "victim", "record_attacker_enter", "record_victim_enter", "record_anim_end"),
+    [
+        ("GracefulAttachedTurtle.msl", 0, 1, 370, 374, 397),
+        ("TreasuredBackKangaroo.msl", 0, 1, 410, 414, 437),
+    ],
+)
+def test_catchwait_pummel_loop_and_anim_end_returns(
+    dataset_name: str,
+    attacker: int,
+    victim: int,
+    record_attacker_enter: int,
+    record_victim_enter: int,
+    record_anim_end: int,
+) -> None:
+    root = Path(__file__).resolve().parents[1]
+    dataset_rel = f"{_BASE_REL}/{dataset_name}"
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+    _skip_if_required_artifacts_missing(root)
+
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+
+    row_a = samples[record_attacker_enter : record_attacker_enter + 1]
+    assert int(row_a["seed_t"]["action_id"][0, attacker]) == 216
+    assert int(row_a["seed_t"]["action_id"][0, victim]) == 227
+    assert int(row_a["seed_t"]["grab_owner_port"][0, victim]) == attacker
+    assert int(row_a["ref_t1"]["action_id"][0, attacker]) == 217
+    assert int(row_a["ref_t1"]["action_id"][0, victim]) == 227
+    assert int(row_a["ref_t1"]["hitlag"][0, attacker]) == 0
+    assert int(row_a["ref_t1"]["hitstun"][0, attacker]) == 0
+    assert int(row_a["ref_t1"]["hitlag"][0, victim]) == 0
+    assert int(row_a["ref_t1"]["hitstun"][0, victim]) == 0
+    assert _button_edge(row_a, attacker, _BUTTON_A) or _button_edge(row_a, attacker, _BUTTON_Z)
+
+    # Replay-real pummel victim damage entry has hitlag on both players in local suites.
+    row_v = samples[record_victim_enter : record_victim_enter + 1]
+    assert int(row_v["seed_t"]["action_id"][0, attacker]) == 217
+    assert int(row_v["seed_t"]["action_id"][0, victim]) == 227
+    assert int(row_v["seed_t"]["grab_owner_port"][0, victim]) == attacker
+    assert int(row_v["ref_t1"]["action_id"][0, attacker]) == 217
+    assert int(row_v["ref_t1"]["action_id"][0, victim]) == 228
+    assert int(row_v["ref_t1"]["hitstun"][0, attacker]) == 0
+    assert int(row_v["ref_t1"]["hitstun"][0, victim]) == 0
+    assert int(row_v["ref_t1"]["hitlag"][0, attacker]) == 4
+    assert int(row_v["ref_t1"]["hitlag"][0, victim]) == 4
+
+    row_end = samples[record_anim_end : record_anim_end + 1]
+    assert int(row_end["seed_t"]["action_id"][0, attacker]) == 217
+    assert int(row_end["seed_t"]["action_id"][0, victim]) == 228
+    assert int(row_end["seed_t"]["grab_owner_port"][0, victim]) == attacker
+    assert int(row_end["ref_t1"]["action_id"][0, attacker]) == 216
+    assert int(row_end["ref_t1"]["action_id"][0, victim]) == 227
+    assert int(row_end["ref_t1"]["hitlag"][0, attacker]) == 0
+    assert int(row_end["ref_t1"]["hitstun"][0, attacker]) == 0
+    assert int(row_end["ref_t1"]["hitlag"][0, victim]) == 0
+    assert int(row_end["ref_t1"]["hitstun"][0, victim]) == 0
+
+    out_a, ref_a = _run_record(dataset_path, record_attacker_enter)
+    assert int(out_a["action_id"][0, attacker]) == int(ref_a["action_id"][attacker])
+    assert int(out_a["action_id"][0, victim]) == int(ref_a["action_id"][victim])
+
+    out_v, ref_v = _run_record(dataset_path, record_victim_enter)
+    assert int(out_v["action_id"][0, attacker]) == int(ref_v["action_id"][attacker])
+    assert int(out_v["action_id"][0, victim]) == int(ref_v["action_id"][victim])
+
+    out_end, ref_end = _run_record(dataset_path, record_anim_end)
+    assert int(out_end["action_id"][0, attacker]) == int(ref_end["action_id"][attacker])
+    assert int(out_end["action_id"][0, victim]) == int(ref_end["action_id"][victim])

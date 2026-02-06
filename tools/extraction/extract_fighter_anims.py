@@ -820,7 +820,7 @@ def _extra_anim_msids() -> list[int]:
         242,  # ftCo_SM_Catch
         243,  # ftCo_SM_CatchDash
         244,  # ftCo_SM_CatchWait
-        245,  # ftCo_SM_CatchPull (suite: grab owner anim during CapturePulled*/Wait*/Damage*)
+        245,  # ftCo_SM_CatchAttack
         247,  # ftCo_SM_ThrowF
         248,  # ftCo_SM_ThrowB
         249,  # ftCo_SM_ThrowHi

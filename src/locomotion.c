@@ -11,6 +11,7 @@
 #include "buttons.h"
 #include "char_params.h"
 #include "common_params.h"
+#include "grab_flow.h"
 #include "input.h"
 #include "move_tables.h"
 #include "input_axis.h"
@@ -1044,6 +1045,15 @@ void locomotion_update_pre(MslBatch* batch) {
 
         // KneeBend -> Jump
         if (action_id == MSL_ACT_KNEE_BEND) {
+          // KneeBend IASA catch check (JC grab) before the jump transition.
+          //
+          // Decomp ordering:
+          // - ftCo_KneeBend_IASA calls ftCo_Catch_CheckInput before short-hop/jump progression.
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_KneeBend.c::ftCo_KneeBend_IASA
+          if (grab_flow_try_enter_catch_from_iasa(batch, c, idx)) {
+            continue;
+          }
+
           // Latch short hop state (ftCo_KneeBend_Check_ShortHop).
           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_KneeBend.c:46
           if (!batch->state.kneebend_is_short_hop[idx]) {

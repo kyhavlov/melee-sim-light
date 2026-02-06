@@ -56,6 +56,20 @@ uint8_t move_tables_dash_cmd0_active(uint8_t char_id, float cur_anim_frame_f32);
 uint8_t move_tables_catchpull_should_enter_wait(uint8_t char_id, uint16_t catch_action_id,
                                                 float cur_anim_frame_f32);
 
+// Returns whether CatchAttack's grabbed-only hitbox window is active at the given cur_anim_frame.
+//
+// Decomp tie-down:
+// - CatchWait IASA enters CatchAttack via fn_800DA4FC.
+//   refs/melee/build/GALE01/asm/melee/ft/chara/ftCommon/ftCo_Attack100.s::{fn_800DA4C0,fn_800DA4FC}
+// - The victim transitions to CaptureDamage* when CatchAttack's grabbed-only hitbox connects
+//   (ftCo_800DC284 / ftCo_800DC3A4 call sites).
+//   refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::{ftCo_800DC284,ftCo_800DC3A4}
+//
+// Source of truth:
+// - data/moves/{fox,falco}.json moves["ftCo_SM_CatchAttack"]["events"] create_hitbox
+//   (only_hit_grabbed=true) and clear_hitboxes.
+uint8_t move_tables_catchattack_grabbed_hit_active(uint8_t char_id, float cur_anim_frame_f32);
+
 // Returns whether a throw release frame is known (parsed from set_throw_flags timing).
 //
 // Source of truth: data/moves/{fox,falco}.json moves["ftCo_SM_Throw*"]["events"] set_throw_flags.

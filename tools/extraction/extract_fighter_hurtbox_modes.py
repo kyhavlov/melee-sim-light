@@ -210,6 +210,7 @@ def main() -> None:
         "ftCo_SM_Catch",
         "ftCo_SM_CatchDash",
         "ftCo_SM_CatchWait",
+        "ftCo_SM_CatchAttack",
         "ftCo_SM_ThrowF",
         "ftCo_SM_ThrowB",
         "ftCo_SM_ThrowHi",

@@ -4,10 +4,12 @@
 #include "anim_frame.h"
 #include "anim_table.h"
 #include "anim_timebase.h"
+#include "buttons.h"
 #include "common_params.h"
 #include "grab_attachment.h"
 #include "input_axis.h"
 #include "move_tables.h"
+#include "trigger_input.h"
 
 static inline uint8_t anim_finished(uint8_t char_id, uint16_t msid, float anim_frame_f32) {
   const float end = msl_anim_end_frame(char_id, msid);
@@ -44,6 +46,15 @@ static inline void enter_catch_wait_from_pull(MslBatch* batch, size_t oidx) {
   msl_anim_timebase_enter(batch, oidx, 0.0f, 1.0f);
 }
 
+static inline void enter_catch_wait_from_attack(MslBatch* batch, size_t oidx) {
+  // Decomp: CatchAttack anim end calls fn_800DA2B0, which enters ftCo_MS_CatchWait (0xD8).
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_CatchAttack_Anim
+  // refs/melee/build/GALE01/asm/melee/ft/chara/ftCommon/ftCo_Attack100.s::fn_800DA2B0
+  batch->state.action_id[oidx] = (uint16_t)MSL_ACT_CATCH_WAIT;
+  batch->state.animation_index[oidx] = (uint32_t)MSL_SM_CATCH_WAIT;
+  msl_anim_timebase_enter(batch, oidx, 0.0f, 1.0f);
+}
+
 static inline void enter_capture_wait_from_pulled(MslBatch* batch, size_t vidx) {
   // Decomp: CatchPull->CatchWait entry calls fn_800DB6C8 on the victim gobj, which enters
   // CaptureWait (hi/lw) based on the current capture variant.
@@ -60,6 +71,115 @@ static inline void enter_capture_wait_from_pulled(MslBatch* batch, size_t vidx) 
     return;
   }
   msl_anim_timebase_enter(batch, vidx, 0.0f, 1.0f);
+}
+
+static inline uint8_t enter_capture_damage_from_wait(MslBatch* batch, size_t vidx) {
+  if (batch == NULL) {
+    return 0u;
+  }
+  const uint16_t va = batch->state.action_id[vidx];
+  if (va == (uint16_t)MSL_ACT_CAPTURE_WAIT_HI) {
+    // Decomp: CaptureWaitHi victim enters CaptureDamageHi (0xE1) via ftCo_800DC284.
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_800DC284
+    batch->state.action_id[vidx] = (uint16_t)MSL_ACT_CAPTURE_DAMAGE_HI;
+    batch->state.animation_index[vidx] = (uint32_t)MSL_SM_CAPTURE_DAMAGE_HI;
+  } else if (va == (uint16_t)MSL_ACT_CAPTURE_WAIT_LW) {
+    // Decomp: CaptureWaitLw victim enters CaptureDamageLw (0xE4) via ftCo_800DC3A4.
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_800DC3A4
+    batch->state.action_id[vidx] = (uint16_t)MSL_ACT_CAPTURE_DAMAGE_LW;
+    batch->state.animation_index[vidx] = (uint32_t)MSL_SM_CAPTURE_DAMAGE_LW;
+  } else {
+    return 0u;
+  }
+  msl_anim_timebase_enter(batch, vidx, 0.0f, 1.0f);
+  return 1u;
+}
+
+static inline uint8_t enter_capture_wait_from_damage(MslBatch* batch, size_t vidx) {
+  if (batch == NULL) {
+    return 0u;
+  }
+  const uint16_t va = batch->state.action_id[vidx];
+  if (va == (uint16_t)MSL_ACT_CAPTURE_DAMAGE_HI) {
+    // Decomp: CaptureDamageHi anim end calls fn_800DB790 -> CaptureWaitHi (0xE0).
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_CaptureDamageHi_Anim
+    batch->state.action_id[vidx] = (uint16_t)MSL_ACT_CAPTURE_WAIT_HI;
+    batch->state.animation_index[vidx] = (uint32_t)MSL_SM_CAPTURE_WAIT_HI;
+  } else if (va == (uint16_t)MSL_ACT_CAPTURE_DAMAGE_LW) {
+    // Decomp: CaptureDamageLw anim end calls fn_800DBAE4 -> CaptureWaitLw (0xE3).
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_CaptureDamageLw_Anim
+    batch->state.action_id[vidx] = (uint16_t)MSL_ACT_CAPTURE_WAIT_LW;
+    batch->state.animation_index[vidx] = (uint32_t)MSL_SM_CAPTURE_WAIT_LW;
+  } else {
+    return 0u;
+  }
+  msl_anim_timebase_enter(batch, vidx, 0.0f, 1.0f);
+  return 1u;
+}
+
+static inline void enter_catch_attack_from_wait(MslBatch* batch, size_t oidx) {
+  // Decomp: CatchWait IASA checks pressed A in fn_800DA4C0 and enters CatchAttack via fn_800DA4FC.
+  // refs/melee/build/GALE01/asm/melee/ft/chara/ftCommon/ftCo_Attack100.s::{fn_800DA4C0,fn_800DA4FC}
+  batch->state.action_id[oidx] = (uint16_t)MSL_ACT_CATCH_ATTACK;
+  batch->state.animation_index[oidx] = (uint32_t)MSL_SM_CATCH_ATTACK;
+  msl_anim_timebase_enter(batch, oidx, 0.0f, 1.0f);
+}
+
+static inline uint8_t catch_input_a_pressed_edge(const MslBatch* batch, size_t idx) {
+  if (batch == NULL) {
+    return 0u;
+  }
+  const uint16_t pressed = batch->state.input_buttons_pressed[idx];
+  // Decomp tie-down:
+  // - Catch_CheckInput and CatchWait pummel check read `fp->input.x668 & HSD_PAD_A`.
+  // Sim inference:
+  // - We treat Z as satisfying the Catch-check predicate because Z is "grab" on controller and
+  //   Slippi provides raw button bits, not the internal held_inputs/x668 representation.
+  // refs/melee/build/GALE01/asm/melee/ft/chara/ftCommon/ftCo_Attack100.s::{ftCo_Catch_CheckInput,fn_800DA4C0}
+  return ((pressed & (uint16_t)MSL_BUTTON_A) != 0 ||
+          (pressed & (uint16_t)MSL_BUTTON_Z) != 0)
+             ? 1u
+             : 0u;
+}
+
+static inline uint8_t catch_input_lr_held(const MslBatch* batch, const MslCommonParams* c,
+                                          size_t idx) {
+  if (batch == NULL || c == NULL) {
+    return 0u;
+  }
+  const uint16_t buttons = batch->state.input_buttons[idx];
+  // Sim inference: treat held Z as satisfying the LR-held half of Catch_CheckInput for the same
+  // reason as catch_input_a_pressed_edge above (raw Slippi buttons vs internal held_inputs).
+  if ((buttons & (uint16_t)(MSL_BUTTON_L | MSL_BUTTON_R | MSL_BUTTON_Z)) != 0) {
+    return 1u;
+  }
+
+  const float trig =
+      msl_trigger_unit_from_input(buttons, batch->state.input_l[idx], batch->state.input_r[idx]);
+  return (trig >= c->trigger_deadzone) ? 1u : 0u;
+}
+
+uint8_t grab_flow_try_enter_catch_from_iasa(MslBatch* batch, const MslCommonParams* c, size_t idx) {
+  if (batch == NULL || c == NULL) {
+    return 0u;
+  }
+
+  // Decomp (Catch_CheckInput) for the catch-enter subset:
+  // - Requires held_inputs & HSD_PAD_LR and pressed-edge A (input.x668 & HSD_PAD_A).
+  // - On success calls ftCo_800D8C54(..., ftCo_MS_Catch=0xD4).
+  // refs/melee/build/GALE01/asm/melee/ft/chara/ftCommon/ftCo_Attack100.s::ftCo_Catch_CheckInput
+  // refs/melee/build/GALE01/asm/melee/ft/chara/ftCommon/ftCo_Attack100.s::ftCo_800D8C54
+  if (!catch_input_a_pressed_edge(batch, idx)) {
+    return 0u;
+  }
+  if (!catch_input_lr_held(batch, c, idx)) {
+    return 0u;
+  }
+
+  batch->state.action_id[idx] = (uint16_t)MSL_ACT_CATCH;
+  batch->state.animation_index[idx] = (uint32_t)MSL_SM_CATCH;
+  msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+  return 1u;
 }
 
 static inline uint32_t throw_owner_submotion(uint16_t throw_action) {
@@ -312,6 +432,7 @@ void grab_flow_update_pre_physics(MslBatch* batch) {
       }
 
       uint16_t oa = batch->state.action_id[oidx];
+      uint8_t owner_catch_attack_ended = 0u;
 
       // Catch/CatchDash Anim end -> Wait should happen before guard entry checks later in this
       // frame, so buffered shield inputs become active immediately on the first actionable frame
@@ -355,7 +476,73 @@ void grab_flow_update_pre_physics(MslBatch* batch) {
         }
       }
 
+      if (oa == (uint16_t)MSL_ACT_CATCH_ATTACK) {
+        if (move_tables_catchattack_grabbed_hit_active(batch->state.char_id[oidx],
+                                                       batch->state.anim_frame_f32[oidx])) {
+          // Decomp: CatchAttack's grabbed-only hitbox drives CaptureWait* -> CaptureDamage*.
+          // Keep victim selection deterministic by scanning ports in ascending order.
+          for (int victim_p = 0; victim_p < num_players; victim_p++) {
+            const size_t vidx = msl_idx_player(bi, victim_p);
+            if ((int)batch->state.grab_owner_port[vidx] != owner_p) {
+              continue;
+            }
+            if (enter_capture_damage_from_wait(batch, vidx)) {
+              break;
+            }
+          }
+        }
+
+        const uint32_t msid_u32 = batch->state.animation_index[oidx];
+        const uint16_t msid =
+            (msid_u32 <= 0xFFFFu) ? (uint16_t)msid_u32 : (uint16_t)MSL_SM_CATCH_ATTACK;
+        if (anim_finished(batch->state.char_id[oidx], msid, batch->state.anim_frame_f32[oidx])) {
+          enter_catch_wait_from_attack(batch, oidx);
+          oa = batch->state.action_id[oidx];
+          owner_catch_attack_ended = 1u;
+        }
+      }
+
+      // CaptureDamage* anim-end transitions are owned by the grabber/victim linkage.
+      // Keep the iteration owner-deterministic: scan victim ports in ascending order.
+      for (int victim_p = 0; victim_p < num_players; victim_p++) {
+        const size_t vidx = msl_idx_player(bi, victim_p);
+        if (batch->state.hitlag_started_frame[vidx] != 0) {
+          continue;
+        }
+        if ((int)batch->state.grab_owner_port[vidx] != owner_p) {
+          continue;
+        }
+        const uint16_t va = batch->state.action_id[vidx];
+        if (va != (uint16_t)MSL_ACT_CAPTURE_DAMAGE_HI &&
+            va != (uint16_t)MSL_ACT_CAPTURE_DAMAGE_LW) {
+          continue;
+        }
+        if (owner_catch_attack_ended) {
+          (void)enter_capture_wait_from_damage(batch, vidx);
+          continue;
+        }
+        const uint32_t vmsid_u32 = batch->state.animation_index[vidx];
+        uint16_t vmsid = 0u;
+        if (vmsid_u32 <= 0xFFFFu) {
+          vmsid = (uint16_t)vmsid_u32;
+        } else if (va == (uint16_t)MSL_ACT_CAPTURE_DAMAGE_HI) {
+          vmsid = (uint16_t)MSL_SM_CAPTURE_DAMAGE_HI;
+        } else {
+          vmsid = (uint16_t)MSL_SM_CAPTURE_DAMAGE_LW;
+        }
+        if (anim_finished(batch->state.char_id[vidx], vmsid, batch->state.anim_frame_f32[vidx])) {
+          (void)enter_capture_wait_from_damage(batch, vidx);
+        }
+      }
+
       if (oa != (uint16_t)MSL_ACT_CATCH_WAIT || c == NULL) {
+        continue;
+      }
+
+      // CatchWait IASA ordering: pummel check before throw check.
+      // refs/melee/build/GALE01/asm/melee/ft/chara/ftCommon/ftCo_Attack100.s::ftCo_CatchWait_IASA
+      if (catch_input_a_pressed_edge(batch, oidx)) {
+        enter_catch_attack_from_wait(batch, oidx);
         continue;
       }
 

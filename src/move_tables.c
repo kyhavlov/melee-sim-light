@@ -53,6 +53,7 @@ static MslFrameWindow g_allow_interrupt_by_char_attackair[256][MSL_ATTACKAIR_KIN
 static MslFrameWindow g_cmd0_by_char_dash[256];
 static MslFrameWindow g_throw_flags_by_char_catch[256];
 static MslFrameWindow g_throw_flags_by_char_catchdash[256];
+static MslFrameWindow g_catchattack_grabbed_hit_by_char[256];
 enum { MSL_THROW_KIND_COUNT = 4 };
 enum {
   MSL_THROW_KIND_F = 0,
@@ -218,6 +219,38 @@ static int json_get_f32_in_range(const char* start, const char* end, const char*
   }
   *out = v;
   return 0;
+}
+
+static int json_get_bool_in_range(const char* start, const char* end, const char* key, int* out) {
+  if (start == NULL || end == NULL || key == NULL || out == NULL || start >= end) {
+    return -1;
+  }
+  char pat[128];
+  const int n = snprintf(pat, sizeof(pat), "\"%s\"", key);
+  if (n <= 0 || (size_t)n >= sizeof(pat)) {
+    return -1;
+  }
+  const char* p = strstr_range(start, end, pat);
+  if (p == NULL) {
+    return -1;
+  }
+  p = (const char*)memchr(p, ':', (size_t)(end - p));
+  if (p == NULL) {
+    return -1;
+  }
+  p = json_skip_ws(p + 1);
+  if (p == NULL || p >= end) {
+    return -1;
+  }
+  if ((size_t)(end - p) >= 4 && memcmp(p, "true", 4) == 0) {
+    *out = 1;
+    return 0;
+  }
+  if ((size_t)(end - p) >= 5 && memcmp(p, "false", 5) == 0) {
+    *out = 0;
+    return 0;
+  }
+  return -1;
 }
 
 static int json_get_str_eq_in_range(const char* start, const char* end, const char* key,
@@ -736,6 +769,99 @@ static int parse_throw_flags_window_open_end(const char* buf, const char* buf_en
   return 0;
 }
 
+static int parse_catchattack_grabbed_hit_window(const char* buf, const char* buf_end,
+                                                const char* move_key, MslFrameWindow* out) {
+  if (buf == NULL || buf_end == NULL || move_key == NULL || out == NULL) {
+    return -1;
+  }
+
+  char pat[128];
+  const int pn = snprintf(pat, sizeof(pat), "\"%s\"", move_key);
+  if (pn <= 0 || (size_t)pn >= sizeof(pat)) {
+    return -1;
+  }
+
+  const char* key_pos = strstr_range(buf, buf_end, pat);
+  if (key_pos == NULL) {
+    return -1;
+  }
+  const char* obj_start = (const char*)memchr(key_pos, '{', (size_t)(buf_end - key_pos));
+  if (obj_start == NULL) {
+    return -1;
+  }
+  const char* obj_end = json_find_matching_delim(obj_start, buf_end, '{', '}');
+  if (obj_end == NULL) {
+    return -1;
+  }
+
+  const char* events_key = strstr_range(obj_start, obj_end, "\"events\"");
+  if (events_key == NULL) {
+    return -1;
+  }
+  const char* arr_start = (const char*)memchr(events_key, '[', (size_t)(obj_end - events_key));
+  if (arr_start == NULL) {
+    return -1;
+  }
+  const char* arr_end = json_find_matching_delim(arr_start, obj_end, '[', ']');
+  if (arr_end == NULL) {
+    return -1;
+  }
+
+  int on_frame = -1;
+  int off_frame = -1;
+
+  const char* p = arr_start;
+  while (p && p < arr_end) {
+    const char* ev_start = (const char*)memchr(p, '{', (size_t)(arr_end - p));
+    if (ev_start == NULL) {
+      break;
+    }
+    const char* ev_end = json_find_matching_delim(ev_start, arr_end, '{', '}');
+    if (ev_end == NULL) {
+      break;
+    }
+
+    if (json_get_str_eq_in_range(ev_start, ev_end, "kind", "create_hitbox")) {
+      int frame = 0;
+      int only_hit_grabbed = 0;
+      if (json_get_i32_in_range(ev_start, ev_end, "frame", &frame) == 0 &&
+          json_get_bool_in_range(ev_start, ev_end, "only_hit_grabbed", &only_hit_grabbed) == 0 &&
+          only_hit_grabbed != 0) {
+        if (on_frame < 0 || frame < on_frame) {
+          on_frame = frame;
+        }
+      }
+    } else if (json_get_str_eq_in_range(ev_start, ev_end, "kind", "clear_hitboxes") &&
+               on_frame >= 0) {
+      int frame = 0;
+      if (json_get_i32_in_range(ev_start, ev_end, "frame", &frame) == 0 && frame >= on_frame) {
+        if (off_frame < 0 || frame < off_frame) {
+          off_frame = frame;
+        }
+      }
+    }
+
+    p = ev_end + 1;
+  }
+
+  if (on_frame < 0) {
+    return -1;
+  }
+  if (off_frame < 0) {
+    // CatchAttack scripts clear hitboxes explicitly in extracted Fox/Falco data. Keep an open
+    // fallback so missing clear events still provide a deterministic active window.
+    off_frame = on_frame + 1;
+  }
+  if (off_frame < on_frame) {
+    return -1;
+  }
+
+  out->start_af = (int16_t)on_frame;
+  out->end_af = (int16_t)off_frame;
+  out->loaded = 1;
+  return 0;
+}
+
 static int load_one(const char* data_dir, const char* rel_path, uint8_t char_id) {
   if (data_dir == NULL || rel_path == NULL) {
     return -1;
@@ -860,6 +986,23 @@ static int load_one(const char* data_dir, const char* rel_path, uint8_t char_id)
   win = (MslFrameWindow){0};
   if (parse_throw_flags_window_open_end(buf, buf_end, "ftCo_SM_CatchDash", &win) == 0) {
     g_throw_flags_by_char_catchdash[char_id] = win;
+  }
+
+  // CatchAttack grabbed-victim hitbox active window (pummel damage timing).
+  //
+  // Decomp:
+  // - CatchWait IASA enters CatchAttack via fn_800DA4FC.
+  // - CatchAttack then drives the grabbed-victim CaptureDamage* transition when its grabbed-only
+  //   hitbox connects (ftCo_800DC284 / ftCo_800DC3A4).
+  // refs/melee/build/GALE01/asm/melee/ft/chara/ftCommon/ftCo_Attack100.s::{fn_800DA4C0,fn_800DA4FC}
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::{ftCo_800DC284,ftCo_800DC3A4}
+  //
+  // Source of truth:
+  // data/moves/{fox,falco}.json moves["ftCo_SM_CatchAttack"]["events"] create_hitbox
+  // (only_hit_grabbed=true) and clear_hitboxes.
+  win = (MslFrameWindow){0};
+  if (parse_catchattack_grabbed_hit_window(buf, buf_end, "ftCo_SM_CatchAttack", &win) == 0) {
+    g_catchattack_grabbed_hit_by_char[char_id] = win;
   }
 
   // Throw release timing + throw hitbox params.
@@ -1021,6 +1164,15 @@ uint8_t move_tables_catchpull_should_enter_wait(uint8_t char_id, uint16_t catch_
     return 0;
   }
   return (cur_anim_frame_f32 >= (float)win.start_af) ? 1 : 0;
+}
+
+uint8_t move_tables_catchattack_grabbed_hit_active(uint8_t char_id, float cur_anim_frame_f32) {
+  const MslFrameWindow win = g_catchattack_grabbed_hit_by_char[char_id];
+  if (!win.loaded) {
+    return 0;
+  }
+  return (cur_anim_frame_f32 >= (float)win.start_af && cur_anim_frame_f32 < (float)win.end_af) ? 1
+                                                                                               : 0;
 }
 
 static inline int throw_kind_from_action(uint16_t a) {
