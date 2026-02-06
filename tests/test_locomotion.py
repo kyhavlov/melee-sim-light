@@ -752,6 +752,8 @@ def test_fastfall_latched_sets_vy_to_minus_fast_fall_velocity_each_frame() -> No
     seed["pos_y"][0, 0] = np.float32(10.0)
     seed["speed_y_self"][0, 0] = np.float32(-fast_fall_v)
     seed["fall_fast"][0, 0] = np.uint8(1)
+    # Slippi post-frame fp+0x221A bit 0x08 is "isFastFalling" (raw byte captured in state_flags[1]).
+    seed["state_flags"][0, 0, 1] = np.uint8(0x08)
 
     prev_inp = _mk_input_bytes(1, input_stride)
     inp = _mk_input_bytes(1, input_stride)
