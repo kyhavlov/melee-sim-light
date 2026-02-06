@@ -73,6 +73,22 @@ static inline void enter_capture_wait_from_pulled(MslBatch* batch, size_t vidx) 
     return;
   }
   msl_anim_timebase_enter(batch, vidx, 0.0f, 1.0f);
+  // Decomp call path and same-frame advance rationale:
+  // - CatchPull anim-end enters CatchWait via fn_800DA1D8, and that helper calls fn_800DB6C8 on
+  //   the victim gobj.
+  //   refs/melee/build/GALE01/asm/melee/ft/chara/ftCommon/ftCo_Attack100.s::{fn_800DA1D8,fn_800DB6C8}
+  // - fn_800DB6C8 dispatches to CaptureWait entry helpers fn_800DB790/fn_800DBAE4, which call
+  //   Fighter_ChangeMotionState.
+  //   refs/melee/build/GALE01/asm/melee/ft/chara/ftCommon/ftCo_Attack100.s::{fn_800DB790,fn_800DBAE4}
+  // - Fighter_ChangeMotionState runs ftAnim_8006E9B4 on entry in the same call, so the new motion
+  //   state's cur_anim_frame is advanced on the entry frame even without an explicit
+  //   ftAnim_8006EBA4 call at this site.
+  //   refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState
+  //   refs/melee/src/melee/ft/ftanim.c::{ftAnim_8006E9B4,ftAnim_8006EBA4}
+  //
+  // Our msl_anim_timebase_enter() models motion-state install but not that same-call advance, so
+  // we apply one deterministic tick to preserve action_frame parity for this decomp entry path.
+  msl_anim_timebase_tick_once(batch, vidx);
 }
 
 static inline uint8_t enter_capture_damage_from_wait(MslBatch* batch, size_t vidx) {
@@ -510,6 +526,15 @@ void grab_flow_update_pre_physics(MslBatch* batch) {
 
       uint16_t oa = batch->state.action_id[oidx];
       uint8_t owner_catch_attack_ended = 0u;
+
+      if (oa == (uint16_t)MSL_ACT_WAIT && c != NULL) {
+        // Decomp: Wait IASA runs ftCo_Catch_CheckInput before the grounded locomotion checks.
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
+        // refs/melee/build/GALE01/asm/melee/ft/chara/ftCommon/ftCo_Attack100.s::ftCo_Catch_CheckInput
+        if (grab_flow_try_enter_catch_from_iasa(batch, c, oidx)) {
+          continue;
+        }
+      }
 
       // Catch/CatchDash Anim end -> Wait should happen before guard entry checks later in this
       // frame, so buffered shield inputs become active immediately on the first actionable frame

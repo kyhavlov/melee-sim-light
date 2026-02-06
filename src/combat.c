@@ -1793,7 +1793,6 @@ static void combat_select_catch_hits_one_mutating(MslBatch* batch, int bi) {
       if (hurtcap_count == 0) {
         continue;
       }
-      const uint16_t defender_iid = batch->state.instance_id[d_idx];
       const uint8_t defender_on_ground = batch->state.on_ground[d_idx] ? 1u : 0u;
 
       for (int hb_id = 0; hb_id < MSL_MAX_HITBOXES; hb_id++) {
@@ -1817,9 +1816,23 @@ static void combat_select_catch_hits_one_mutating(MslBatch* batch, int bi) {
         }
 
         const uint8_t hit_group = hitlist_hit_group_from_u16_7(batch->state.hitbox_u16_7[hb_i]);
-        if (!hitlist_allows_fighter(batch, bi, attacker, hb_id, defender, defender_iid)) {
-          continue;
-        }
+        // Catch-select path is not identical to our BODY-hit suppression pipeline.
+        //
+        // Decomp:
+        // - ftColl_80078A2C does run lbColl_8000ACFC(this_hit, victim) plus the victim mask gate
+        //   `(victim_fp->x1A6A & this_fp->x1A68)` before overlap tests.
+        //   refs/melee/src/melee/ft/ftcoll.c::ftColl_80078A2C
+        //   refs/melee/src/melee/lb/lbcollision.c::lbColl_8000ACFC
+        //
+        // Seed-bridge note:
+        // - Our reseed bridge reconstructs HitVictim rings from the dense seed cooldown map
+        //   (`combat_hitlist_cd`/`combat_hitlist_victim_iid`). On catch frames this can over-latch
+        //   stale victims relative to decomp runtime pointers/masks and block replay-real connect.
+        // - Intentional v1 approximation here: keep decomp-shaped catch eligibility gates above and
+        //   defer HitVictim insertion to the selected catch connect below.
+        //
+        // This is scoped to catch selection only; BODY hits still use hitlist_allows_fighter.
+        // refs/melee/src/melee/ft/ftcoll.c::ftColl_80078A2C
         const uint8_t rehit_frames =
             hitlist_rehit_frames_from_u16_7(batch->state.hitbox_u16_7[hb_i]);
 

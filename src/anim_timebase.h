@@ -110,12 +110,17 @@ static inline void msl_anim_timebase_enter_raw(MslBatch* batch, size_t idx, floa
 }
 
 static inline void msl_anim_timebase_tick_once(MslBatch* batch, size_t idx) {
-  // Only call this for motion states whose *Enter* explicitly calls ftAnim_8006EBA4 immediately
-  // after Fighter_ChangeMotionState (e.g. Dash / Turn).
+  // Only call this for decomp-anchored motion-state entry paths that perform an immediate
+  // same-frame animation advance on entry:
+  // - explicit ftAnim_8006EBA4 after Fighter_ChangeMotionState (e.g. Dash / Turn), or
+  // - Fighter_ChangeMotionState entry paths where same-call ftAnim_8006E9B4 advancement must be
+  //   represented by this simulator's timebase layer.
   //
   // Decomp examples:
   // - refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c::ftCo_Dash_Enter
   // - refs/melee/src/melee/ft/chara/ftCommon/ftCo_Turn.c::ftCo_Turn_Enter
+  // - refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState
+  // - refs/melee/src/melee/ft/ftanim.c::ftAnim_8006E9B4
   if (batch == NULL) {
     return;
   }

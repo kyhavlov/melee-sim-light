@@ -1,0 +1,175 @@
+from __future__ import annotations
+
+import importlib
+from pathlib import Path
+
+import numpy as np
+import pytest
+
+from tools.eval.dataset import COMPARE_DTYPE, read_dataset
+
+
+_BASE_REL = "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent"
+_BUTTON_Z = 0x0010
+_REQUIRED_ARTIFACTS = (
+    "data/moves/fox.json",
+    "data/moves/falco.json",
+    "data/hit_status/fox.bin",
+    "data/hit_status/falco.bin",
+    "data/hurtbox_states/fox.bin",
+    "data/hurtbox_states/falco.bin",
+)
+
+
+def _skip_if_required_artifacts_missing(root: Path) -> None:
+    missing = [rel for rel in _REQUIRED_ARTIFACTS if not (root / rel).exists()]
+    if missing:
+        pytest.skip(f"missing local extracted artifacts: {', '.join(missing)}")
+
+
+def _button_edge(row: np.ndarray, port: int, mask: int) -> bool:
+    cur = int(row["input_t"]["p"][0, port]["buttons"])
+    prev = int(row["prev_input_t"]["p"][0, port]["buttons"])
+    return (cur & mask) != 0 and (prev & mask) == 0
+
+
+def _run_record(dataset_path: Path, record: int) -> tuple[np.ndarray, np.ndarray]:
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+    num_records = int(samples.shape[0])
+    assert num_records > record, f"dataset too short for regression check: num_records={num_records}"
+
+    row = samples[record : record + 1]
+
+    binding = importlib.import_module("msl_binding")
+    sizes = binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    compare_stride = int(sizes["compare"])
+
+    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    try:
+        seed_bytes = np.empty((1, seed_stride), dtype=np.uint8)
+        prev_input_bytes = np.empty((1, input_stride), dtype=np.uint8)
+        input_bytes = np.empty((1, input_stride), dtype=np.uint8)
+        out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
+
+        seed_bytes[:] = np.frombuffer(row["seed_t"].tobytes(order="C"), dtype=np.uint8).reshape(
+            1, seed_stride
+        )
+        prev_input_bytes[:] = np.frombuffer(row["prev_input_t"].tobytes(order="C"), dtype=np.uint8).reshape(
+            1, input_stride
+        )
+        input_bytes[:] = np.frombuffer(row["input_t"].tobytes(order="C"), dtype=np.uint8).reshape(
+            1, input_stride
+        )
+
+        binding.reseed_seed(handle, seed_bytes)
+        binding.step_input(handle, prev_input_bytes, input_bytes)
+        binding.write_compare(handle, out_compare_bytes)
+
+        out = out_compare_bytes.view(COMPARE_DTYPE).reshape(-1)
+        ref = row["ref_t1"].reshape(-1)[0]
+        return out, ref
+    finally:
+        binding.destroy(handle)
+
+
+@pytest.mark.integration
+def test_replay_wait_to_catch_iasa_record_1176_lock() -> None:
+    root = Path(__file__).resolve().parents[1]
+    dataset_rel = f"{_BASE_REL}/AttachedGoodNaturedGuanaco.msl"
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+    _skip_if_required_artifacts_missing(root)
+
+    port = 1
+    record = 1176
+    ds = read_dataset(str(dataset_path))
+    row = ds.samples[record : record + 1]
+
+    assert int(row["seed_t"]["action_id"][0, port]) == 14
+    assert int(row["seed_t"]["action_frame"][0, port]) == 0
+    assert int(row["seed_t"]["animation_index"][0, port]) == 2
+    assert int(row["seed_t"]["grab_owner_port"][0, port]) == 0xFF
+    assert int(row["ref_t1"]["action_id"][0, port]) == 212
+    assert int(row["ref_t1"]["action_frame"][0, port]) == 0
+    assert int(row["ref_t1"]["animation_index"][0, port]) == 242
+    assert int(row["ref_t1"]["hitlag"][0, 0]) == 0
+    assert int(row["ref_t1"]["hitlag"][0, 1]) == 0
+    assert int(row["ref_t1"]["hitstun"][0, 0]) == 0
+    assert int(row["ref_t1"]["hitstun"][0, 1]) == 0
+    assert _button_edge(row, port, _BUTTON_Z)
+
+    out, ref = _run_record(dataset_path, record)
+    assert int(out["action_id"][0, port]) == int(ref["action_id"][port])
+    assert int(out["action_frame"][0, port]) == int(ref["action_frame"][port])
+    assert int(out["animation_index"][0, port]) == int(ref["animation_index"][port])
+
+
+@pytest.mark.integration
+def test_replay_catch_connect_escapeb_victim_record_6100_lock() -> None:
+    root = Path(__file__).resolve().parents[1]
+    dataset_rel = f"{_BASE_REL}/TreasuredBackKangaroo.msl"
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+    _skip_if_required_artifacts_missing(root)
+
+    attacker = 0
+    victim = 1
+    record = 6100
+    ds = read_dataset(str(dataset_path))
+    row = ds.samples[record : record + 1]
+
+    assert int(row["seed_t"]["action_id"][0, attacker]) == 212
+    assert int(row["seed_t"]["action_id"][0, victim]) == 234
+    assert int(row["seed_t"]["grab_owner_port"][0, victim]) == 0xFF
+    assert int(row["ref_t1"]["action_id"][0, attacker]) == 213
+    assert int(row["ref_t1"]["action_id"][0, victim]) == 226
+    assert int(row["ref_t1"]["action_frame"][0, victim]) == 1
+    assert int(row["ref_t1"]["animation_index"][0, victim]) == 254
+    assert int(row["ref_t1"]["hitlag"][0, attacker]) == 0
+    assert int(row["ref_t1"]["hitlag"][0, victim]) == 0
+    assert int(row["ref_t1"]["hitstun"][0, attacker]) == 0
+    assert int(row["ref_t1"]["hitstun"][0, victim]) == 0
+
+    out, ref = _run_record(dataset_path, record)
+    assert int(out["action_id"][0, attacker]) == int(ref["action_id"][attacker])
+    assert int(out["action_id"][0, victim]) == int(ref["action_id"][victim])
+    assert int(out["action_frame"][0, victim]) == int(ref["action_frame"][victim])
+    assert int(out["animation_index"][0, victim]) == int(ref["animation_index"][victim])
+
+
+@pytest.mark.integration
+def test_replay_capturepulled_to_capturewait_record_6101_lock() -> None:
+    root = Path(__file__).resolve().parents[1]
+    dataset_rel = f"{_BASE_REL}/TreasuredBackKangaroo.msl"
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+    _skip_if_required_artifacts_missing(root)
+
+    attacker = 0
+    victim = 1
+    record = 6101
+    ds = read_dataset(str(dataset_path))
+    row = ds.samples[record : record + 1]
+
+    assert int(row["seed_t"]["action_id"][0, victim]) == 226
+    assert int(row["seed_t"]["action_frame"][0, victim]) == 1
+    assert int(row["seed_t"]["animation_index"][0, victim]) == 254
+    assert int(row["seed_t"]["grab_owner_port"][0, victim]) == attacker
+    assert int(row["ref_t1"]["action_id"][0, victim]) == 227
+    assert int(row["ref_t1"]["action_frame"][0, victim]) == 1
+    assert int(row["ref_t1"]["animation_index"][0, victim]) == 255
+    assert int(row["ref_t1"]["hitlag"][0, attacker]) == 0
+    assert int(row["ref_t1"]["hitlag"][0, victim]) == 0
+    assert int(row["ref_t1"]["hitstun"][0, attacker]) == 0
+    assert int(row["ref_t1"]["hitstun"][0, victim]) == 0
+
+    out, ref = _run_record(dataset_path, record)
+    assert int(out["action_id"][0, victim]) == int(ref["action_id"][victim])
+    assert int(out["action_frame"][0, victim]) == int(ref["action_frame"][victim])
+    assert int(out["animation_index"][0, victim]) == int(ref["animation_index"][victim])
