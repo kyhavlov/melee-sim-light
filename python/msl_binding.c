@@ -2443,6 +2443,39 @@ static PyObject* msl_debug_hitlist_fighter_contains_py(PyObject* self, PyObject*
   return PyLong_FromLong((long)present);
 }
 
+static PyObject* msl_debug_hitlist_fighter_capsule_py(PyObject* self, PyObject* args) {
+  (void)self;
+  PyObject* capsule = NULL;
+  int batch_index = 0;
+  int attacker = 0;
+  int hb_id = 0;
+  if (!PyArg_ParseTuple(args, "Oiii", &capsule, &batch_index, &attacker, &hb_id)) {
+    return NULL;
+  }
+  PyMslHandle* h = (PyMslHandle*)PyCapsule_GetPointer(capsule, "msl.Handle");
+  if (h == NULL || h->batch == NULL) {
+    PyErr_SetString(PyExc_ValueError, "invalid handle");
+    return NULL;
+  }
+
+  npy_intp dims[2] = {(npy_intp)1, (npy_intp)sizeof(MslDebugHitlistCapsule)};
+  PyArrayObject* arr = (PyArrayObject*)PyArray_SimpleNew(2, dims, NPY_UINT8);
+  if (arr == NULL) {
+    return NULL;
+  }
+
+  MslDebugHitlistCapsule* out = (MslDebugHitlistCapsule*)PyArray_DATA(arr);
+  const int err =
+      msl_batch_debug_hitlist_fighter_capsule(h->batch, batch_index, attacker, hb_id, out);
+  if (err != 0) {
+    Py_DECREF(arr);
+    PyErr_Format(PyExc_ValueError, "msl_batch_debug_hitlist_fighter_capsule failed: %d", err);
+    return NULL;
+  }
+
+  return (PyObject*)arr;
+}
+
 static PyObject* msl_hitlist_ring_demo_py(PyObject* self, PyObject* args) {
   (void)self;
   int inserts = 0;
@@ -2549,6 +2582,9 @@ static PyMethodDef methods[] = {
      "sizeof(MslDebugCombatContact)], count)"},
     {"debug_hitlist_fighter_contains", msl_debug_hitlist_fighter_contains_py, METH_VARARGS,
      "debug_hitlist_fighter_contains(handle, batch_index, attacker, hb_id, victim) -> 0/1"},
+    {"debug_hitlist_fighter_capsule", msl_debug_hitlist_fighter_capsule_py, METH_VARARGS,
+     "debug_hitlist_fighter_capsule(handle, batch_index, attacker, hb_id) -> "
+     "bytes[1,sizeof(MslDebugHitlistCapsule)]"},
     {"debug_combat_contacts_filtered", msl_debug_combat_contacts_filtered_py, METH_VARARGS,
      "debug_combat_contacts_filtered(handle, batch_index, max_contacts=256) -> (bytes[max, "
      "sizeof(MslDebugCombatContact)], count)"},

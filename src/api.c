@@ -287,7 +287,8 @@ int msl_batch_reseed_seed(MslBatch* batch, const uint8_t* seed_bytes, size_t see
       //
       // Our seed-history pipeline also provides a derived `seed->fall_fast`, but it is not a
       // first-class Slippi field and can disagree with the raw byte snapshot. Prefer the raw
-      // Slippi bit when it disagrees to improve reseed parity.
+      // Slippi snapshot bit when it disagrees; this is teacher-forced reseed output parity
+      // (prefix-invariant/causal), not a replay-fit heuristic.
       enum { MSL_STATE_FLAGS_221A_INDEX = 1 };
       enum { MSL_STATE_FLAG_221A_IS_FASTFALL = 0x08 };
       uint8_t fall_fast = seed->fall_fast[p] ? 1u : 0u;
@@ -2149,6 +2150,49 @@ int msl_batch_debug_hitlist_fighter_contains(const MslBatch* batch, int batch_in
       *out_present = 1;
       break;
     }
+  }
+  return 0;
+}
+
+int msl_batch_debug_hitlist_fighter_capsule(const MslBatch* batch, int batch_index, int attacker,
+                                            int hb_id, MslDebugHitlistCapsule* out_capsule) {
+  if (out_capsule == NULL) {
+    return EINVAL;
+  }
+  memset(out_capsule, 0, sizeof(*out_capsule));
+  if (batch == NULL) {
+    return EINVAL;
+  }
+  if (batch_index < 0 || batch_index >= batch->batch_size) {
+    return EINVAL;
+  }
+  if (attacker < 0 || attacker >= MSL_MAX_PLAYERS) {
+    return EINVAL;
+  }
+  if (hb_id < 0 || hb_id >= MSL_MAX_HITBOXES) {
+    return EINVAL;
+  }
+
+  const size_t hl_i = ((size_t)batch_index * (size_t)MSL_MAX_PLAYERS + (size_t)attacker) *
+                          (size_t)MSL_MAX_HITBOXES +
+                      (size_t)hb_id;
+  const MslHitlistCapsule* hit = &batch->state.fighter_hitlist[hl_i];
+  out_capsule->ring_1 = hit->ring_1;
+  out_capsule->ring_2 = hit->ring_2;
+  for (int i = 0; i < (int)MSL_HITLIST_VICTIM_CAP; i++) {
+    const MslHitlistVictimEntry* s1 = &hit->victims_1[i];
+    MslDebugHitlistVictimEntry* d1 = &out_capsule->victims_1[i];
+    d1->id32 = s1->id32;
+    d1->id16 = s1->id16;
+    d1->kind_slot = s1->kind_slot;
+    d1->cd = s1->cd;
+
+    const MslHitlistVictimEntry* s2 = &hit->victims_2[i];
+    MslDebugHitlistVictimEntry* d2 = &out_capsule->victims_2[i];
+    d2->id32 = s2->id32;
+    d2->id16 = s2->id16;
+    d2->kind_slot = s2->kind_slot;
+    d2->cd = s2->cd;
   }
   return 0;
 }

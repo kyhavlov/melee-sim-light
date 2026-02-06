@@ -113,6 +113,16 @@ void anim_timebase_update_pre_input(MslBatch* batch) {
         continue;
       }
 
+      // Slippi parity (no-submotion snapshots):
+      // Slippi can report `animation_index==0xFFFFFFFF` with `state_age==-1` (i.e.
+      // `anim_frame_f32==-1`, `action_frame==-1`). Preserve that frozen (-1) timebase even if a
+      // nonzero `frame_speed_mul` is seeded.
+      if (batch->state.animation_index[idx] == 0xFFFFFFFFu &&
+          batch->state.anim_frame_fp_q16_16[idx] < 0) {
+        msl_anim_timebase_recompute_derived(batch, idx);
+        continue;
+      }
+
       const int16_t action_frame_pre = batch->state.action_frame[idx];
       batch->state.anim_frame_fp_q16_16[idx] += batch->state.frame_speed_mul_fp_q16_16[idx];
       const uint8_t did_wrap = anim_timebase_apply_aobj_loop(batch, idx);

@@ -4,6 +4,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include "action_ids.h"
 #include "anim_frame.h"
 #include "anim_pose.h"
 #include "combat.h"
@@ -789,20 +790,16 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
           //
           // Note: item attack_id / attack_instance remain spawn-latched for lasers in v1 (do not
           // transfer on reflect here).
-          enum { MSL_STATE_FLAGS_STRIDE = MSL_STATE_FLAGS_BYTES };
-          enum { MSL_STATE_FLAGS_2218_INDEX = 0 };
-          // Reflect-active bit in fp+0x2218 as packed by Slippi: 0x10.
-          enum { MSL_STATE_FLAG_2218_IS_REFLECT_ACTIVE = 0x10 };
-          const uint8_t flags_2218 =
-              batch->state.state_flags[d_idx * (size_t)MSL_STATE_FLAGS_STRIDE +
-                                       (size_t)MSL_STATE_FLAGS_2218_INDEX];
-          enum { MSL_STATE_FLAGS_221C_INDEX = 3 };
-          enum { MSL_STATE_FLAG_221C_POWERSHIELD_ACTIVE = 0x20 };
-          const uint8_t flags_221c =
-              batch->state.state_flags[d_idx * (size_t)MSL_STATE_FLAGS_STRIDE +
-                                       (size_t)MSL_STATE_FLAGS_221C_INDEX];
-          if ((flags_2218 & (uint8_t)MSL_STATE_FLAG_2218_IS_REFLECT_ACTIVE) &&
-              (flags_221c & (uint8_t)MSL_STATE_FLAG_221C_POWERSHIELD_ACTIVE)) {
+          // In v1 we do not yet derive the full GuardReflect/powershield flag bytes (fp+0x2218 /
+          // fp+0x221C) at combat-time. Gate reflect off the decomp-shaped GuardReflect action +
+          // reflect-window timer (mv.co.guard.x14; seeded/updated in action.c), which is sufficient
+          // to model powershield reflects deterministically under teacher-forced reseed.
+          //
+          // Decomp anchors:
+          // - GuardReflect reflect window timer: refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c
+          //   (mv.co.guard.x14 = p_ftCommonData->x2A4; tick in ftCo_80093BC0).
+          if (batch->state.action_id[d_idx] == (uint16_t)MSL_ACT_GUARD_REFLECT &&
+              batch->state.guard_reflect_timer_x14[d_idx] != 0) {
             batch->state.item_owner[ii] = (int8_t)def;
             const float new_vx = -batch->state.item_vel_x[ii];
             const float new_vy = -batch->state.item_vel_y[ii];

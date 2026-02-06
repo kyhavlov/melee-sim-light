@@ -138,6 +138,27 @@ CONTACT_BODY_DTYPE = np.dtype(
     align=False,
 )
 
+HITLIST_VICTIM_ENTRY_DTYPE = np.dtype(
+    [
+        ("id32", "<u4"),
+        ("id16", "<u2"),
+        ("kind_slot", "u1"),
+        ("cd", "u1"),
+    ],
+    align=False,
+)
+
+HITLIST_CAPSULE_DTYPE = np.dtype(
+    [
+        ("ring_1", "u1"),
+        ("ring_2", "u1"),
+        ("_pad0", "u1", (2,)),
+        ("victims_1", HITLIST_VICTIM_ENTRY_DTYPE, (12,)),
+        ("victims_2", HITLIST_VICTIM_ENTRY_DTYPE, (12,)),
+    ],
+    align=False,
+)
+
 HITBOX_EVENT_TIMING_DTYPE = np.dtype(
     [
         ("attacker", "u1"),
@@ -464,6 +485,36 @@ def _load_model_scaling(root: Path, char_id: int) -> float:
     return val
 
 
+def _fmt_state_flags(flags_u8_5: np.ndarray) -> str:
+    vals = [int(x) & 0xFF for x in flags_u8_5.reshape(-1).tolist()]
+    return "[" + " ".join(f"{v:02X}" for v in vals) + "]"
+
+
+def _fmt_hitlist_capsule(label: str, cap: np.void) -> list[str]:
+    lines: list[str] = []
+    lines.append(f"{label}: ring_1={int(cap['ring_1'])} ring_2={int(cap['ring_2'])}")
+    for lane_name in ("victims_1", "victims_2"):
+        lane = cap[lane_name]
+        present: list[str] = []
+        for i in range(int(lane.shape[0])):
+            e = lane[i]
+            kind_slot = int(e["kind_slot"]) & 0xFF
+            if kind_slot == 0xFF:
+                continue
+            kind = (kind_slot >> 6) & 0x3
+            slot = kind_slot & 0x3F
+            present.append(
+                f"{lane_name}[{i}]=kind{kind}:slot{slot} iid={int(e['id16'])} cd={int(e['cd'])}"
+            )
+        if not present:
+            lines.append(f"  {lane_name}: (empty)")
+        else:
+            lines.append(f"  {lane_name}:")
+            for s in present:
+                lines.append(f"    {s}")
+    return lines
+
+
 def _triage_one(root: Path, off: Offender, out_dir: Path) -> Path:
     ds_path = root / off.dataset_rel
     if not ds_path.exists():
@@ -475,6 +526,8 @@ def _triage_one(root: Path, off: Offender, out_dir: Path) -> Path:
         raise ValueError(f"dataset too short: records={int(samples.shape[0])} need>{off.record}")
 
     row = samples[off.record : off.record + 1]
+    seed_t = row["seed_t"].reshape(-1)[0]
+    ref_t1 = row["ref_t1"].reshape(-1)[0]
 
     # Seed/ref sanity for "spurious BODY hit": victim expects no hit at t+1.
     assert int(row["seed_t"]["hitlag"][0, off.victim_port]) == 0
@@ -514,6 +567,30 @@ def _triage_one(root: Path, off: Offender, out_dir: Path) -> Path:
         timing_raw = binding.debug_hitbox_event_timing(handle, 0, off.attacker_port, off.hb_id)
         assert int(timing_raw.shape[1]) == HITBOX_EVENT_TIMING_DTYPE.itemsize
         timing = timing_raw.reshape(-1).view(HITBOX_EVENT_TIMING_DTYPE)[0]
+
+        # Hitlist state dump (post-pre-combat, pre-combat-resolve).
+        hitlist_cur_g = int(timing["cur_hit_group"]) if int(timing["enabled_cur"]) else 0
+        seed_cd = int(seed_t["combat_hitlist_cd"][off.attacker_port, hitlist_cur_g, off.victim_port])
+        seed_iid = int(
+            seed_t["combat_hitlist_victim_iid"][off.attacker_port, hitlist_cur_g, off.victim_port]
+        )
+
+        hb_capsule_raw = binding.debug_hitlist_fighter_capsule(handle, 0, off.attacker_port, off.hb_id)
+        assert int(hb_capsule_raw.shape[1]) == HITLIST_CAPSULE_DTYPE.itemsize
+        hb_capsule = hb_capsule_raw.reshape(-1).view(HITLIST_CAPSULE_DTYPE)[0]
+
+        # Same-group enabled hitboxes as potential ftColl_800768A0 copy sources.
+        group_capsules: list[tuple[int, np.void, np.void]] = []
+        for hb_other in range(4):
+            t_raw = binding.debug_hitbox_event_timing(handle, 0, off.attacker_port, hb_other)
+            t_other = t_raw.reshape(-1).view(HITBOX_EVENT_TIMING_DTYPE)[0]
+            if int(t_other["enabled_cur"]) == 0:
+                continue
+            if int(t_other["cur_hit_group"]) != hitlist_cur_g:
+                continue
+            c_raw = binding.debug_hitlist_fighter_capsule(handle, 0, off.attacker_port, hb_other)
+            c_other = c_raw.reshape(-1).view(HITLIST_CAPSULE_DTYPE)[0]
+            group_capsules.append((hb_other, t_other, c_other))
         sweep_raw = binding.debug_hitbox_sweep_proxy(handle, 0, off.attacker_port, off.hb_id)
         assert int(sweep_raw.shape[1]) == HITBOX_SWEEP_PROXY_DTYPE.itemsize
         sweep = sweep_raw.reshape(-1).view(HITBOX_SWEEP_PROXY_DTYPE)[0]
@@ -760,6 +837,13 @@ def _triage_one(root: Path, off: Offender, out_dir: Path) -> Path:
                 )
 
         # Apply combat only (mutating) so we can record the actual spurious outcome for the victim.
+        #
+        # NOTE: This tool performs debug-only probing above that intentionally mutates simulator
+        # state (timebase/geometry refresh). Reset to the original seeded pre-combat state before
+        # applying combat so the post-combat outcome corresponds to the same state used for the
+        # earlier contact/hitlist dumps.
+        binding.reseed_seed(handle, seed_bytes)
+        binding.debug_step_input_pre_combat(handle, prev_input_bytes, input_bytes)
         binding.debug_combat_resolve(handle)
         binding.write_compare(handle, out_compare_bytes)
         out = out_compare_bytes.view(COMPARE_DTYPE).reshape(-1)[0]
@@ -777,6 +861,27 @@ def _triage_one(root: Path, off: Offender, out_dir: Path) -> Path:
         lines.append(f"record: {off.record} victim_port={off.victim_port}")
         lines.append(f"attacker_port={off.attacker_port} hb_id={off.hb_id} cap_id={off.cap_id}")
         lines.append("WARNING: mutates simulator state; this report is generated from a fresh handle.")
+        lines.append("")
+        lines.append("seed/ref/out snapshot (required fields):")
+        for p in range(int(ds.header["num_players"])):
+            lines.append(
+                "  "
+                f"p{p} seed: act={int(seed_t['action_id'][p])} hitlag={int(seed_t['hitlag'][p])} "
+                f"hitstun={int(seed_t['hitstun'][p])} percent={float(seed_t['percent'][p]):.3f} "
+                f"state_flags={_fmt_state_flags(seed_t['state_flags'][p])}"
+            )
+            lines.append(
+                "  "
+                f"p{p} ref:  act={int(ref_t1['action_id'][p])} hitlag={int(ref_t1['hitlag'][p])} "
+                f"hitstun={int(ref_t1['hitstun'][p])} percent={float(ref_t1['percent'][p]):.3f} "
+                f"state_flags={_fmt_state_flags(ref_t1['state_flags'][p])}"
+            )
+            lines.append(
+                "  "
+                f"p{p} out:  act={int(out['action_id'][p])} hitlag={int(out['hitlag'][p])} "
+                f"hitstun={int(out['hitstun'][p])} percent={float(out['percent'][p]):.3f} "
+                f"state_flags={_fmt_state_flags(out['state_flags'][p])}"
+            )
         lines.append("")
         lines.append("pre-combat timebase (runtime):")
         lines.append(_fmt_timebase(tb, off.attacker_port))
@@ -1008,6 +1113,41 @@ def _triage_one(root: Path, off: Offender, out_dir: Path) -> Path:
         lines.append(f"  classified_filtered count={int(count)} body_count={int(body_contacts.shape[0])}")
         lines.append(f"  body match (attacker/victim/hb/cap) count={int(body_match.shape[0])}")
         lines.append(f"  select_body_hits count={int(sel_count)} selected match count={int(sel_match.shape[0])}")
+        if int(count) > 0:
+            lines.append("  classified_filtered contacts:")
+            for c in contacts:
+                kind = "BODY" if int(c["contact_kind"]) == 0 else "SHIELD"
+                lines.append(
+                    "    "
+                    f"{kind} a={int(c['attacker'])} d={int(c['defender'])} hb={int(c['hitbox_id'])} "
+                    f"cap={int(c['hurtcap_id'])} dmg={float(c['hitbox_damage']):.3f} "
+                    f"hb_r={float(c['hitbox_radius']):.6f} cap_r={float(c['hurtcap_radius']):.6f}"
+                )
+        lines.append("")
+        lines.append(
+            "hitlist state (pre-combat): gate=victims_1 (lbColl_8000ACFC), BODY insert type=0 (lbColl_80008688)"
+        )
+        lines.append(
+            "  "
+            f"seed_dense[att={off.attacker_port} g={hitlist_cur_g} vic={off.victim_port}]: "
+            f"cd={seed_cd} victim_iid={seed_iid} present={(1 if seed_cd != 0 else 0)}"
+        )
+        lines.extend(["  " + s for s in _fmt_hitlist_capsule(f"hb{off.hb_id}", hb_capsule)])
+        if group_capsules:
+            lines.append("  same-group enabled hitboxes (potential ftColl_800768A0 copy sources):")
+            any_sources = False
+            for hb_other, t_other, c_other in group_capsules:
+                if hb_other == off.hb_id:
+                    continue
+                any_sources = True
+                lines.append(
+                    "    "
+                    f"hb{hb_other}: enabled_prev={int(t_other['enabled_prev'])} enabled_cur={int(t_other['enabled_cur'])} "
+                    f"cur_g={int(t_other['cur_hit_group'])} enable_edge={int(t_other['enable_edge'])}"
+                )
+                lines.extend(["    " + s for s in _fmt_hitlist_capsule(f"hb{hb_other}", c_other)])
+            if not any_sources:
+                lines.append("    (none)")
         lines.append("")
         lines.append("post-combat outcome (sim vs ref_t1 for victim):")
         lines.append(f"  got: action_id={got_action} hitlag={got_hitlag} hitstun={got_hitstun}")

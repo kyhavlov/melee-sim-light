@@ -592,6 +592,37 @@ typedef struct MslDebugCombatContactClassified {
 
 #pragma pack(pop)
 
+// Debug-only: decomp-shaped HitCapsule victim list dump for one fighter hitbox slot.
+//
+// Purpose:
+// - Triage rehit-suppression and enable-edge copy/clear semantics (ftColl_800768A0 /
+//   lbColl_CopyHitCapsule / lbColl_80008440) under teacher-forced reseed.
+//
+// Decomp anchors:
+// - HitCapsule victim lists: refs/melee/src/melee/lb/types.h::HitCapsule
+// - Clear: refs/melee/src/melee/lb/lbcollision.c::lbColl_80008440
+// - Copy: refs/melee/src/melee/lb/lbcollision.c::lbColl_CopyHitCapsule
+// - Gate check: refs/melee/src/melee/lb/lbcollision.c::lbColl_8000ACFC (uses victims_1)
+//
+// NOTE: This struct is debug-only and not part of the stable dataset/compare schema.
+#pragma pack(push, 1)
+typedef struct MslDebugHitlistVictimEntry {
+  uint32_t id32;
+  uint16_t id16;
+  uint8_t kind_slot;
+  uint8_t cd;
+} MslDebugHitlistVictimEntry;
+
+typedef struct MslDebugHitlistCapsule {
+  uint8_t ring_1;
+  uint8_t ring_2;
+  uint8_t _pad0[2];
+
+  MslDebugHitlistVictimEntry victims_1[12];  // decomp: HitCapsule.victims_1[12]
+  MslDebugHitlistVictimEntry victims_2[12];  // decomp: HitCapsule.victims_2[12]
+} MslDebugHitlistCapsule;
+#pragma pack(pop)
+
 // Debug-only: hitbox event timing snapshot for one fighter + hitbox slot.
 //
 // This is intended for triage of "enable-edge-only" contacts where a hitbox overlaps a hurtcap on
@@ -927,6 +958,10 @@ int msl_batch_debug_combat_select_body_hits(MslBatch* batch, int batch_index,
 // Returns `*out_present = 1` if victim port is present in victims_1 for (attacker, hb_id), else 0.
 int msl_batch_debug_hitlist_fighter_contains(const MslBatch* batch, int batch_index, int attacker,
                                              int hb_id, int victim, int* out_present);
+
+// Debug/testing helper: dump a fighter hitbox slot's HitCapsule victim lists and ring indices.
+int msl_batch_debug_hitlist_fighter_capsule(const MslBatch* batch, int batch_index, int attacker,
+                                            int hb_id, MslDebugHitlistCapsule* out_capsule);
 
 // Debug/testing helper: pure geometry routine for unit tests.
 int msl_debug_point_segment_dist2(float px, float py, float pz, float ax, float ay, float az,

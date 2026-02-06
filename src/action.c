@@ -551,6 +551,30 @@ void guard_update_grounded(MslBatch* batch, const MslCommonParams* c, size_t idx
     batch->state.animation_index[idx] = 0xFFFFFFFFu;
     const uint8_t can_update = (batch->state.hitlag_started_frame[idx] == 0) ? 1 : 0;
     if (can_update) {
+      // Powershield / GuardReflect entry (while guarding).
+      //
+      // Decomp: ftCo_80093694:
+      //   if (fp->mv.co.guard.x0 < p_ftCommonData->x2A0 &&
+      //       fp->input.x668 & (HSD_PAD_R | HSD_PAD_L) &&
+      //       fp->x672_input_timer_counter < p_ftCommonData->x2A0)
+      //     ftCo_80093850(gobj);
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80093694
+      //
+      // Snapshot note: in-suite Slippi seeds can carry `action_frame < 0` when
+      // `animation_index==0xFFFFFFFF`. For this *guard.x0* gate only, treat negative action_frame
+      // as 0 (entry-like) rather than a large/underflowed value; this preserves teacher-forced
+      // prefix-invariant powershield behavior without using replay-fit heuristics.
+      enum { LR = (uint16_t)MSL_BUTTON_L | (uint16_t)MSL_BUTTON_R };
+      const uint16_t guard_x0 =
+          (batch->state.action_frame[idx] < 0) ? 0u : (uint16_t)batch->state.action_frame[idx];
+      if (a0 != (uint16_t)MSL_ACT_GUARD_REFLECT &&
+          guard_x0 < (uint16_t)c->powershield_reflect_window_frames &&
+          (batch->state.input_buttons_pressed[idx] & (uint16_t)LR) != 0 &&
+          batch->state.x672_input_timer[idx] < c->powershield_reflect_window_frames) {
+        enter_guard_reflect(batch, c, idx);
+        return;
+      }
+
       // Decomp ordering note (GuardOn/Guard discrete cluster):
       // - mv.co.guard.x10 is decremented inside ftCo_800925A4 (called by GuardOn_Anim / Guard_Anim).
       // - The GuardOff transition gate (xC && !x10) lives in inlineC0, called by GuardOn_IASA / Guard_IASA.
