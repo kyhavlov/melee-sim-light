@@ -849,6 +849,34 @@ void locomotion_update_pre(MslBatch* batch) {
               batch->state.tilt_timer_x[idx] = 0xFEu;
               action_id = (uint16_t)MSL_ACT_DASH;
             }
+          } else if (batch->state.anim_frame_f32[idx] <
+                         (msl_f32_from_q16_16(batch->state.frame_speed_mul_fp_q16_16[idx]) +
+                          (float)ch->landing_lag_frames) &&
+                     stick_y < -c->crouch_stick_threshold) {
+            // Landing IASA crouch: Landing -> SquatWait on the first interruptible frame when holding down.
+            //
+            // Decomp:
+            // - ftCo_Landing_IASA first gates interrupts:
+            //     RETURN_IF(fp->cur_anim_frame < landing_lag)
+            // - Then it only checks squat on the *first* interruptible tick:
+            //     RETURN_IF((fp->cur_anim_frame < (fp->frame_speed_mul + landing_lag)) &&
+            //               ftCo_SquatWait_CheckInput(gobj))
+            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::ftCo_Landing_IASA
+            //
+            // Sim mapping:
+            // - `anim_timebase_update_pre_input()` advances `anim_frame_f32` for this frame before
+            //   locomotion IASA runs (step.c ordering). So the first interruptible tick corresponds
+            //   to `anim_frame_f32 == landing_lag_frames` (with positive `frame_speed_mul`), and the
+            //   decomp's `< (frame_speed_mul + landing_lag)` window becomes:
+            //     landing_lag_frames <= anim_frame_f32 < landing_lag_frames + frame_speed_mul
+            //
+            // Squat input:
+            // - ftCo_SquatWait_CheckInput enters SquatWait when (lstick.y < -p_ftCommonData->x90).
+            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_SquatWait.c::ftCo_SquatWait_CheckInput
+            batch->state.action_id[idx] = (uint16_t)MSL_ACT_SQUAT_WAIT;
+            batch->state.animation_index[idx] = (uint32_t)MSL_SM_SQUAT_WAIT;
+            msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+            continue;
           } else if ((stick_x * facing_dir) <= c->turn_stick_x_threshold) {
             // Turn.
             // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Turn.c::ftCo_Turn_CheckInput

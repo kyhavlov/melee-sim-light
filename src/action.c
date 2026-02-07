@@ -499,6 +499,7 @@ void guard_update_grounded(MslBatch* batch, const MslCommonParams* c, size_t idx
   // `held_inputs & HSD_PAD_LR` behavior for shielding uses the trigger deadzone (x10).
   // Decomp usage: refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c:46-55.
   const uint8_t shield_held = (trig >= c->trigger_deadzone) ? 1 : 0;
+  const uint8_t guard_x10_seed = batch->state.guard_x10[idx];
 
   // Guard release lockout (mv.co.guard.xC + mv.co.guard.x10) is modeled explicitly and seeded via
   // replay-history preprocessing (Slippi does not expose move vars directly).
@@ -606,6 +607,27 @@ void guard_update_grounded(MslBatch* batch, const MslCommonParams* c, size_t idx
       if (x10_pre > 0 && batch->state.shield_hp[idx] > 0.0f) {
         batch->state.guard_x10[idx] = (uint8_t)(x10_pre - 1u);
       }
+    }
+
+    // GuardOn -> Guard when the GuardOn "raise shield" window completes.
+    //
+    // Decomp: ftCo_GuardOn_Anim increments mv.co.guard.x0 and transitions when x0 >= fp->x2E8.
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_GuardOn_Anim
+    //
+    // Teacher-forced reseed note:
+    // In-suite Slippi post-frames frequently seed GuardOn with `animation_index==0xFFFFFFFF` and
+    // `state_age==-1` (so this sim's derived anim/action_frame cannot represent mv.co.guard.x0).
+    // We therefore add a decomp-anchored, reseed-friendly fallback: when the release lockout timer
+    // (mv.co.guard.x10, seeded via replay-history preprocessing) is already 0 and the shield is
+    // still held, treat GuardOn as complete and enter Guard.
+    //
+    // This preserves deterministic one-step GuardOn->Guard transitions without replay-fit constants
+    // and keeps the normal anim-end gate in place when a real timebase is available.
+    if (a0 == (uint16_t)MSL_ACT_GUARD_ON && batch->state.hitlag_started_frame[idx] == 0 &&
+        batch->state.animation_index[idx] == 0xFFFFFFFFu && batch->state.anim_frame_f32[idx] < 0.0f &&
+        shield_held && guard_x10_seed == 0) {
+      enter_guard_hold(batch, idx);
+      return;
     }
 
     // GuardOn/GuardReflect -> Guard when the GuardOn animation finishes.

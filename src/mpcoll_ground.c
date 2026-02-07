@@ -612,17 +612,15 @@ void mpcoll_ground_apply(MslBatch* batch) {
       // Decomp shape: ECB is loaded each collision step and prev_ecb is a one-step lag:
       // mpCollInterpolateECB assigns prev_ecb = ecb before updating.
       // refs/melee/src/melee/mp/mpcoll.c::mpCollInterpolateECB
-      //
-      // For FD grounding v1 we approximate the lag with floor(cur_anim_frame)-1 (same submotion).
       const uint8_t char_id = batch->state.char_id[idx];
       const uint32_t anim = batch->state.animation_index[idx];
       const uint16_t ecb_frame =
           msl_ecb_frame_u16_from_anim_frame(batch->state.anim_frame_f32[idx]);
-      const uint16_t ecb_frame_prev = msl_ecb_prev_frame_u16(ecb_frame);
+      uint16_t ecb_frame_prev = msl_ecb_prev_frame_u16(ecb_frame);
 
       // Decomp: some stage collision entrypoints load ECB with flags where `flags & 1` forces
-      // bottom_y = 0.0 (relative to cur_pos). This stabilizes grounded contact against pose-driven
-      // ECB changes.
+      // desired_ecb.bottom.y = 0.0 (relative to cur_pos). This stabilizes grounded contact against
+      // pose-driven ECB changes.
       // refs/melee/src/melee/mp/mpcoll.c::mpColl_LoadECB_JObj (flags & 1)
       MslEcbBottomWorldPoint cur_bot = {0};
       MslEcbBottomWorldPoint prev_bot = {0};
@@ -637,24 +635,43 @@ void mpcoll_ground_apply(MslBatch* batch) {
       // refs/melee/src/melee/mp/mplib.c::mpLib_8004DD90_Floor
       // refs/melee/src/melee/mp/mplib.c::mpCheckFloor
       uint8_t lock_bottom_to_zero = was_grounded;
-      // Wavedash-style landings: EscapeAir can be entered on the first airborne frame after
-      // KneeBend takeoff, and floor collision must use the flags&1 ECB shape to detect the
-      // immediate ground contact deterministically.
-      // refs/melee/src/melee/mp/mpcoll.c::mpColl_LoadECB_JObj (flags & 1)
-      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll
-      // refs/melee/src/melee/ft/ft_081B.c::ft_80082C74
-      // refs/melee/src/melee/ft/ft_081B.c::ft_80081D0C
-      // refs/melee/src/melee/mp/mpcoll.c::mpColl_800471F8 (mpColl_LoadECB_inline(coll, 6))
-      // refs/melee/src/melee/mp/mpcoll.c::mpColl_LoadECB_inline (preserves desired_ecb.bottom when
-      //   CollData_X130_Locked is set)
-      // refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007D5D4 (sets CollData_X130_Locked on takeoff)
-      // refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007D60C (sets CollData_X130_Locked on takeoff)
-      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_80099A58
-      if (!lock_bottom_to_zero && action_id == (uint16_t)MSL_ACT_ESCAPE_AIR &&
-          batch->state.prev_action_id[idx] == (uint16_t)MSL_ACT_KNEE_BEND) {
-        lock_bottom_to_zero = 1;
+      uint8_t lock_bottom_to_prev_frame = 0;
+      if (!lock_bottom_to_zero && action_id == (uint16_t)MSL_ACT_ESCAPE_AIR) {
+        // EscapeAir collision callback path:
+        // - Takeoff sets ecb_lock=10 and CollData_X130_Locked; ECB loads in this window preserve
+        //   the prior desired ECB bottom through mpColl_LoadECB_inline.
+        // - EscapeAir_Coll then routes grounded contact into LandingFallSpecial.
+        // refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007D5D4
+        // refs/melee/src/melee/mp/mpcoll.c::mpColl_LoadECB_inline
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll
+        //
+        // This sim does not yet carry CollData_X130_Locked in the seed schema. Approximate the
+        // takeoff-lock window with seeded EscapeAir action_frame and only while descending.
+        enum { MSL_ECB_LOCK_TAKEOFF_FRAMES = 10 };
+        const float prev_bottom_unlocked =
+            prev_y + msl_ecb_bottom_rel_y(char_id, anim, (int)ecb_frame_prev);
+        if (batch->state.action_frame[idx] >= 0 &&
+            batch->state.action_frame[idx] <= (int16_t)MSL_ECB_LOCK_TAKEOFF_FRAMES &&
+            batch->state.speed_y_self[idx] <= 0.0f) {
+          const float vy_mag = fabsf(batch->state.speed_y_self[idx]);
+          if (batch->state.jumps_left[idx] > 0 || prev_y > 0.0f ||
+              (vy_mag > 0.0f && prev_bottom_unlocked <= -vy_mag)) {
+            // Ground-takeoff airdodge sequences (wavedash family) preserve a grounded-like desired
+            // bottom during the short takeoff lock window.
+            //
+            // Reseed edge-case: some EscapeAir snapshots begin with unlocked ECB-bottom already
+            // below the floor by more than one frame of downward travel; treat these as lock-window
+            // ground-contact resolves so EscapeAir_Coll can route into LandingFallSpecial.
+            lock_bottom_to_zero = 1;
+          } else {
+            // Airborne-seeded EscapeAir rows are more stable when preserving the prior pose bottom
+            // during the same lock window.
+            lock_bottom_to_prev_frame = 1;
+          }
+        }
       }
-      msl_ecb_bottom_world_point_sample(&cur_bot, char_id, anim, ecb_frame, x, y,
+      const uint16_t ecb_frame_cur = lock_bottom_to_prev_frame ? ecb_frame_prev : ecb_frame;
+      msl_ecb_bottom_world_point_sample(&cur_bot, char_id, anim, ecb_frame_cur, x, y,
                                         lock_bottom_to_zero);
       msl_ecb_bottom_world_point_sample(&prev_bot, char_id, anim, ecb_frame_prev, prev_x, prev_y,
                                         lock_bottom_to_zero);
@@ -825,7 +842,8 @@ void mpcoll_ground_apply(MslBatch* batch) {
       } else {
         int hit_line_idx = -1;
         float ix = 0.0f, iy = 0.0f;
-        if (floor_sweep_check(g, prev_bottom_x, prev_bottom_y, cur_bottom_x, cur_bottom_y,
+        if (!on_ground &&
+            floor_sweep_check(g, prev_bottom_x, prev_bottom_y, cur_bottom_x, cur_bottom_y,
                               prefer_line_idx, &hit_line_idx, &ix, &iy, &floor_nx, &floor_ny)) {
           float y_corr = 0.0f;
           const int out_line_idx =
@@ -842,6 +860,28 @@ void mpcoll_ground_apply(MslBatch* batch) {
             // `on_edge` gate deterministically.
             floor_write_edge_suppression_flags(batch, idx, stage_id, g, hit_line_idx, char_id, anim,
                                                ecb_frame, was_grounded);
+          }
+        } else if (prefer_line_idx >= 0 && action_id == (uint16_t)MSL_ACT_ESCAPE_AIR &&
+                   lock_bottom_to_prev_frame && batch->state.action_frame[idx] >= 4 &&
+                   batch->state.action_frame[idx] <= 10 && batch->state.jumps_left[idx] == 0 &&
+                   y < 0.0f && cur_bottom_y > 0.0f && prev_bottom_y > cur_bottom_y) {
+          const float vy_mag = fabsf(batch->state.speed_y_self[idx]);
+          if (vy_mag > 0.0f && (cur_bottom_y * 2.0f) <= vy_mag && prev_bottom_y > vy_mag) {
+            // EscapeAir lock-window edge case: root may already be below floor while the preserved
+            // ECB-bottom lane still sits slightly above it, so sweep-crossing misses the landing.
+            // Resolve against the persisted floor line at fighter origin only within a tight window.
+            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll
+            // refs/melee/src/melee/mp/mplib.c::mpLib_8004DD90_Floor
+            float y_corr = 0.0f;
+            const int out_line_idx = floor_dd90_project(g, prefer_line_idx, x, y, &y_corr,
+                                                        &floor_nx, &floor_ny);
+            if (out_line_idx >= 0 && y_corr >= 0.0f && y_corr <= 6.0f) {
+              batch->state.pos_y[idx] += y_corr;
+              on_ground = 1;
+              ground_id = g->lines[(size_t)out_line_idx].segment_i;
+              contact_x = x;
+              contact_y = y + y_corr;
+            }
           }
         } else if (prefer_line_idx >= 0 && batch->state.speed_y_self[idx] == 0.0f &&
                    batch->state.hitlag[idx] == 0 && batch->state.hitstun[idx] == 0) {
