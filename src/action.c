@@ -72,10 +72,10 @@ uint8_t escape_air_try_enter_from_air_locomotion(MslBatch* batch, const MslCommo
 
   batch->state.action_id[idx] = (uint16_t)MSL_ACT_ESCAPE_AIR;
   batch->state.animation_index[idx] = (uint32_t)MSL_SM_ESCAPE_AIR;
-  msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
-  // Decomp: EscapeAir entry immediately ticks ftAnim_8006EBA4 after ChangeMotionState.
+  // Decomp: EscapeAir entry calls ftAnim_8006EBA4 immediately after ChangeMotionState.
+  // We defer that tick to post-combat to keep pre-combat/combat geometry stable.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_80099A9C
-  msl_anim_timebase_defer_tick_once(batch, idx);
+  msl_anim_timebase_enter_with_policy(batch, idx, 0.0f, 1.0f, MSL_ANIM_ENTER_TICK_IMMEDIATE);
   batch->state.speed_air_x_self[idx] = vx;
   batch->state.speed_y_self[idx] = vy;
   // Decomp: EscapeAir enters without KeepFastFall; treat EscapeAir as a self-velocity-controlled
@@ -119,7 +119,9 @@ static inline void enter_escape_n(MslBatch* batch, size_t idx) {
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Escape.c:248-269.
   batch->state.action_id[idx] = (uint16_t)MSL_ACT_ESCAPE_N;
   batch->state.animation_index[idx] = (uint32_t)MSL_SM_ESCAPE_N;
-  msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+  // Decomp: ftCo_800998EC calls ftAnim_8006EBA4 immediately after ChangeMotionState.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Escape.c::ftCo_800998EC
+  msl_anim_timebase_enter_with_policy(batch, idx, 0.0f, 1.0f, MSL_ANIM_ENTER_TICK_IMMEDIATE);
 }
 
 static inline void enter_escape_roll(MslBatch* batch, size_t idx, uint16_t action_id) {
@@ -129,7 +131,9 @@ static inline void enter_escape_roll(MslBatch* batch, size_t idx, uint16_t actio
   batch->state.animation_index[idx] = (action_id == (uint16_t)MSL_ACT_ESCAPE_F)
                                           ? (uint32_t)MSL_SM_ESCAPE_F
                                           : (uint32_t)MSL_SM_ESCAPE_B;
-  msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+  // Decomp: ftCo_80099314 calls ftAnim_8006EBA4 immediately after ChangeMotionState.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Escape.c::ftCo_80099314
+  msl_anim_timebase_enter_with_policy(batch, idx, 0.0f, 1.0f, MSL_ANIM_ENTER_TICK_IMMEDIATE);
 }
 
 static inline uint8_t escape_try_enter_spotdodge_from_guard_y(MslBatch* batch,
@@ -330,14 +334,15 @@ static inline uint8_t guard_x10_init_u8(const MslCommonParams* c) {
   return (uint8_t)t;
 }
 
-static inline void enter_guard_reflect(MslBatch* batch, const MslCommonParams* c, size_t idx) {
-  // Decomp entry: ftCo_80091A4C -> ftCo_800939B4 -> ftCo_80093A50.
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c:57-65 and :763-798.
+static inline void enter_guard_reflect_common_setup(MslBatch* batch, const MslCommonParams* c,
+                                                    size_t idx) {
+  if (batch == NULL) {
+    return;
+  }
   batch->state.action_id[idx] = (uint16_t)MSL_ACT_GUARD_REFLECT;
   // Slippi post-frame `animation_index` is frequently -1 for shield states in our datasets.
   // Keep this consistent with replay seeds/refs so validation compares cleanly.
   batch->state.animation_index[idx] = 0xFFFFFFFFu;
-  msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
   batch->state.guard_reflect_timer_x14[idx] = guard_reflect_timer_x14_init(c);
   batch->state.guard_reflect_timer_x18[idx] = guard_reflect_timer_x18_init(c);
   batch->state.guard_release_latched_xc[idx] = 0;
@@ -345,12 +350,36 @@ static inline void enter_guard_reflect(MslBatch* batch, const MslCommonParams* c
   batch->state.lightshield_amount[idx] = 0.0f;
 }
 
+static inline void enter_guard_reflect_from_guard(MslBatch* batch, const MslCommonParams* c,
+                                                  size_t idx) {
+  // Decomp entry path while already guarding:
+  // - ftCo_80093694 -> ftCo_80093850 -> ftCo_8009388C.
+  // - ftCo_8009388C keeps the current anim frame and does not call ftAnim_8006EBA4.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_8009388C
+  const float anim_start = batch->state.anim_frame_f32[idx];
+  enter_guard_reflect_common_setup(batch, c, idx);
+  msl_anim_timebase_enter(batch, idx, anim_start, 1.0f);
+}
+
+static inline void enter_guard_reflect_from_locomotion(MslBatch* batch, const MslCommonParams* c,
+                                                       size_t idx) {
+  // Decomp entry path from locomotion guard check:
+  // - ftCo_80091A4C -> ftCo_800939B4 -> ftCo_80093A50.
+  // - ftCo_80093A50 calls ftAnim_8006EBA4 immediately after ChangeMotionState.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80093A50
+  enter_guard_reflect_common_setup(batch, c, idx);
+  msl_anim_timebase_enter_with_policy(batch, idx, 0.0f, 1.0f, MSL_ANIM_ENTER_TICK_IMMEDIATE);
+}
+
 static inline void enter_guard_on(MslBatch* batch, const MslCommonParams* c, size_t idx) {
   // Decomp entry: ftCo_80091A4C -> ftCo_800923B4 -> ftCo_800924C0.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c:66-69 and :313-327.
   batch->state.action_id[idx] = (uint16_t)MSL_ACT_GUARD_ON;
   batch->state.animation_index[idx] = 0xFFFFFFFFu;
-  msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+  // Decomp: ftCo_800924C0 calls ftAnim_8006EBA4 immediately after ChangeMotionState.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_800924C0
+  msl_anim_timebase_enter_with_policy(batch, idx, 0.0f, 1.0f,
+                                      MSL_ANIM_ENTER_TICK_DEFER_POST_COMBAT);
   batch->state.guard_release_latched_xc[idx] = 0;
   batch->state.guard_x10[idx] = guard_x10_init_u8(c);
   batch->state.lightshield_amount[idx] = 0.0f;
@@ -613,7 +642,7 @@ void guard_update_grounded(MslBatch* batch, const MslCommonParams* c, size_t idx
           guard_x0 < (uint16_t)c->powershield_reflect_window_frames &&
           (batch->state.input_buttons_pressed[idx] & (uint16_t)LR) != 0 &&
           batch->state.x672_input_timer[idx] < c->powershield_reflect_window_frames) {
-        enter_guard_reflect(batch, c, idx);
+        enter_guard_reflect_from_guard(batch, c, idx);
         return;
       }
 
@@ -770,7 +799,7 @@ void guard_update_grounded(MslBatch* batch, const MslCommonParams* c, size_t idx
   const uint16_t pressed = batch->state.input_buttons_pressed[idx];
   if ((pressed & (uint16_t)LR) != 0 &&
       batch->state.x672_input_timer[idx] < c->powershield_reflect_window_frames) {
-    enter_guard_reflect(batch, c, idx);
+    enter_guard_reflect_from_locomotion(batch, c, idx);
     return;
   }
 
