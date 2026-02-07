@@ -248,10 +248,17 @@ static inline void physics_apply_specialhi_hold_air(const MslCharParams* ch, int
   // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::ftFx_SpecialHiHoldAir_Phys
   *io_vel_x = air_apply_friction_step(*io_vel_x, ch->firefox_hold_air_friction);
 
-  // Decomp: gravity starts once `mv.fx.SpecialHi.gravityDelay` expires; acceleration uses
-  // ftFox_DatAttrs.x60 and terminal velocity uses co_attrs.terminal_vel.
+  // Decomp exact gate in ftFx_SpecialHiHoldAir_Phys:
+  // - if (mv.fx.SpecialHi.gravityDelay != 0) { --gravityDelay; } else { apply gravity; }
   // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::ftFx_SpecialHiHoldAir_Phys
-  if (action_frame >= (int16_t)ch->firefox_hold_gravity_delay_frames) {
+  //
+  // Mapping in this sim:
+  // - `action_frame` is our post-advance integer frame index (derived from anim timebase), not the
+  //   fighter's internal float countdown field.
+  // - Therefore parity is `>` (not `>=`) against the extracted hold delay frame count.
+  // - Gravity accel and terminal clamp are still sourced from decomp/data:
+  //   ftFox_DatAttrs.x60 and co_attrs.terminal_vel.
+  if (action_frame > (int16_t)ch->firefox_hold_gravity_delay_frames) {
     *io_vel_y -= ch->firefox_hold_air_fall_accel;
     if (*io_vel_y < -ch->terminal_vel) {
       *io_vel_y = -ch->terminal_vel;

@@ -336,9 +336,20 @@ static inline void enter_guard_on(MslBatch* batch, const MslCommonParams* c, siz
 static inline void enter_guard_hold(MslBatch* batch, size_t idx) {
   // Decomp: ftCo_800928CC -> ftCo_80092908 changes motion to ftCo_MS_Guard.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c:421-446.
+  const uint32_t prev_anim = batch->state.animation_index[idx];
+  const float prev_anim_frame = batch->state.anim_frame_f32[idx];
   batch->state.action_id[idx] = (uint16_t)MSL_ACT_GUARD;
   batch->state.animation_index[idx] = 0xFFFFFFFFu;
   msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+
+  // Slippi parity for no-submotion shield snapshots:
+  // GuardOn->Guard is frequently seeded/ref'd with animation_index=-1 and action_frame=-1.
+  // Preserve that (-1) timebase shape across the Guard entry when no real submotion exists.
+  // This is a snapshot-shape parity rule only; it is not a gameplay claim about GALE01 Guard
+  // behavior when a real submotion is present.
+  if (prev_anim == 0xFFFFFFFFu && prev_anim_frame < 0.0f) {
+    msl_anim_timebase_seed(batch, idx, -1.0f, msl_f32_from_q16_16(batch->state.frame_speed_mul_fp_q16_16[idx]));
+  }
 }
 
 static inline void enter_guard_off(MslBatch* batch, size_t idx) {

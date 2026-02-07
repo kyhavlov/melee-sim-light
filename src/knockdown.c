@@ -447,6 +447,11 @@ static inline uint8_t should_enter_down_stand_from_wait(const MslBatch* batch,
   return (ang >= c->attack_angle_threshold_radians) ? 1u : 0u;
 }
 
+static inline uint8_t is_damage_fly_action(uint16_t a);
+static inline uint8_t is_damage_air_action(uint16_t a);
+static inline void enter_damage_fall_from_damage_anim(MslBatch* batch, const MslCharParams* ch,
+                                                      size_t idx);
+
 void knockdown_update_pre_physics(MslBatch* batch) {
   if (batch == NULL) {
     return;
@@ -461,7 +466,8 @@ void knockdown_update_pre_physics(MslBatch* batch) {
     for (int p = 0; p < num_players; p++) {
       const size_t idx = msl_idx_player(bi, p);
       const uint16_t a0 = batch->state.action_id[idx];
-      if (!is_knockdown_any(a0)) {
+      const uint8_t damage_fly = is_damage_fly_action(a0);
+      if (!is_knockdown_any(a0) && !damage_fly) {
         continue;
       }
       const MslCharParams* ch = msl_char_params(batch->state.char_id[idx]);
@@ -480,6 +486,36 @@ void knockdown_update_pre_physics(MslBatch* batch) {
 
       const uint8_t cid = batch->state.char_id[idx];
       const float anim_frame = batch->state.anim_frame_f32[idx];
+
+      if (damage_fly) {
+        const uint32_t damage_msid_u32 = submotion_for_damage_action(a0);
+        if (damage_msid_u32 <= 0xFFFFu) {
+          batch->state.animation_index[idx] = damage_msid_u32;
+        }
+
+        const uint8_t in_hitstun = (batch->state.hitstun[idx] > 0) ? 1u : 0u;
+        uint8_t anim_done = 0u;
+        if (damage_msid_u32 <= 0xFFFFu) {
+          anim_done = anim_is_finished(cid, (uint16_t)damage_msid_u32, anim_frame);
+        }
+
+        // Decomp transition gates:
+        // - DamageFly_Anim: enter DamageFall only when anim has ended and hitstun has ended.
+        // - DamageFlyRoll_Anim: enter DamageFall immediately when hitstun has ended (no anim-end gate).
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{
+        //   ftCo_DamageFly_Anim,ftCo_DamageFlyRoll_Anim
+        // }
+        // Callback ordering parity:
+        // - This block is already under the non-hitlag path via `hitlag_started_frame` gate above,
+        //   matching fighter update ordering for anim callbacks.
+        const uint8_t should_enter_damage_fall =
+            (a0 == (uint16_t)MSL_ACT_DAMAGE_FLY_ROLL) ? (uint8_t)!in_hitstun
+                                                       : (uint8_t)(!in_hitstun && anim_done);
+        if (should_enter_damage_fall) {
+          enter_damage_fall_from_damage_anim(batch, ch, idx);
+        }
+        continue;
+      }
 
       if (is_passive(a0)) {
         // Decomp: ftCo_Passive_Phys uses ft_80084F3C.
@@ -672,6 +708,35 @@ static inline uint8_t is_damage_air_action(uint16_t a) {
           a == (uint16_t)MSL_ACT_DAMAGE_AIR_3)
              ? 1u
              : 0u;
+}
+
+static inline void enter_damage_fall_from_damage_anim(MslBatch* batch, const MslCharParams* ch,
+                                                      size_t idx) {
+  if (batch == NULL || ch == NULL) {
+    return;
+  }
+
+  // Decomp: ftCo_80090780 handles both air/ground callers, forcing GA_Air first when needed.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DamageFall.c::ftCo_80090780
+  if (batch->state.on_ground[idx]) {
+    batch->state.on_ground[idx] = 0;
+    batch->state.speed_air_x_self[idx] = batch->state.speed_ground_x_self[idx];
+    batch->state.speed_ground_x_self[idx] = 0.0f;
+    batch->state.jumps_left[idx] = ch->max_jumps > 0 ? (uint8_t)(ch->max_jumps - 1) : 0;
+  }
+
+  // Decomp: ftCo_80090780 calls ftCommon_ClampAirDrift after entering DamageFall.
+  // Bound source: character air max horizontal velocity from extracted attrs (`air_max_horizontal_velocity`).
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DamageFall.c::ftCo_80090780
+  if (batch->state.speed_air_x_self[idx] > ch->air_max_horizontal_velocity) {
+    batch->state.speed_air_x_self[idx] = ch->air_max_horizontal_velocity;
+  } else if (batch->state.speed_air_x_self[idx] < -ch->air_max_horizontal_velocity) {
+    batch->state.speed_air_x_self[idx] = -ch->air_max_horizontal_velocity;
+  }
+
+  batch->state.action_id[idx] = (uint16_t)MSL_ACT_DAMAGE_FALL;
+  batch->state.animation_index[idx] = (uint32_t)MSL_SM_DAMAGE_FALL;
+  msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
 }
 
 static inline void transfer_air_to_ground_on_land(MslBatch* batch, const MslCharParams* ch,
