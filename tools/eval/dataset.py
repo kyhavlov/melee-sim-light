@@ -109,6 +109,7 @@ SEED_DTYPE = np.dtype(
         ("guard_tilt_x8", _arr("<u2", MAX_PLAYERS)),
         ("guard_tilt_x4", _arr("<f4", MAX_PLAYERS)),
         ("guard_reflect_timer_x14", _arr("u1", MAX_PLAYERS)),
+        ("guard_reflect_timer_x18", _arr("u1", MAX_PLAYERS)),
         ("guard_release_latched_xc", _arr("u1", MAX_PLAYERS)),
         ("guard_x10", _arr("u1", MAX_PLAYERS)),
         ("lightshield_amount", _arr("<f4", MAX_PLAYERS)),

@@ -412,32 +412,14 @@ def compute_tilt_timer_axis_pre_post(
     return out_pre, out_post
 
 
-def derive_guard_reflect_timer_x14(
+def _derive_guard_reflect_timer_plus1(
     *,
     action_id_u16: np.ndarray,
     hitlag_u16: np.ndarray,
     act_guard_reflect: int,
-    reflect_frames_x2a4: int,
+    init_frames: int,
 ) -> np.ndarray:
-    """
-    Derive GuardReflect's reflect-active window as a strictly-causal timer.
-
-    Decomp trail:
-    - Init: refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80093A50
-      sets `mv.co.guard.x14 = p_ftCommonData->x2A4`.
-    - Tick/expire: refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80093BC0
-      decrements `mv.co.guard.x14` and clears `fp->reflecting` when it drops below 0.
-    - Hitlag gate: per-action anim callbacks (including GuardReflect_Anim) do not run under hitlag:
-      refs/melee/src/melee/ft/fighter.c (Fighter_8006A360 anim_cb gated on !hitlag)
-
-    Representation:
-    - Return u8 `guard_reflect_timer_x14` values with a +1 bias (store x14+1), clamped to [0..255],
-      so we can expire cleanly at 0 without carrying negative values in the dataset schema.
-
-    Causality / prefix-invariance:
-    - Depends only on (action_id prefix, hitlag prefix, reflect_frames constant).
-    - Does not consult future frames/deltas.
-    """
+    """Shared +1-biased GuardReflect timer derivation (strictly causal)."""
     a = np.asarray(action_id_u16, dtype=np.uint16).reshape(-1)
     hl = np.asarray(hitlag_u16, dtype=np.uint16).reshape(-1)
     if a.shape != hl.shape:
@@ -446,7 +428,7 @@ def derive_guard_reflect_timer_x14(
     out = np.empty(n, dtype=np.uint8)
 
     act = np.uint16(int(act_guard_reflect) & 0xFFFF)
-    init = int(reflect_frames_x2a4) + 1
+    init = int(init_frames) + 1
     if init < 0:
         init = 0
     if init > 255:
@@ -469,6 +451,58 @@ def derive_guard_reflect_timer_x14(
         prev_in = in_gr
 
     return out
+
+
+def derive_guard_reflect_timer_x14(
+    *,
+    action_id_u16: np.ndarray,
+    hitlag_u16: np.ndarray,
+    act_guard_reflect: int,
+    reflect_frames_x2a4: int,
+) -> np.ndarray:
+    """
+    Derive GuardReflect's reflect-active timer (mv.co.guard.x14) as a strictly-causal u8 countdown.
+
+    Decomp trail:
+    - Init: refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80093A50
+      sets `mv.co.guard.x14 = p_ftCommonData->x2A4`.
+    - Tick/expire: refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80093BC0
+      decrements `mv.co.guard.x14` and clears `fp->reflecting` when it drops below 0.
+    - Hitlag gate: per-action anim callbacks (including GuardReflect_Anim) do not run under hitlag:
+      refs/melee/src/melee/ft/fighter.c (Fighter_8006A360 anim_cb gated on !hitlag)
+    """
+    return _derive_guard_reflect_timer_plus1(
+        action_id_u16=action_id_u16,
+        hitlag_u16=hitlag_u16,
+        act_guard_reflect=act_guard_reflect,
+        init_frames=reflect_frames_x2a4,
+    )
+
+
+def derive_guard_reflect_timer_x18(
+    *,
+    action_id_u16: np.ndarray,
+    hitlag_u16: np.ndarray,
+    act_guard_reflect: int,
+    reflect_total_frames_x2b4: int,
+) -> np.ndarray:
+    """
+    Derive GuardReflect's powershield-active timer (mv.co.guard.x18) as a strictly-causal u8 countdown.
+
+    Decomp trail:
+    - Init: refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80093A50
+      sets `mv.co.guard.x18 = p_ftCommonData->x2B4`.
+    - Tick/expire: refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80093BC0
+      decrements `mv.co.guard.x18` and clears `fp->x221C_b2` when it drops below 0.
+    - Hitlag gate: per-action anim callbacks (including GuardReflect_Anim) do not run under hitlag:
+      refs/melee/src/melee/ft/fighter.c (Fighter_8006A360 anim_cb gated on !hitlag)
+    """
+    return _derive_guard_reflect_timer_plus1(
+        action_id_u16=action_id_u16,
+        hitlag_u16=hitlag_u16,
+        act_guard_reflect=act_guard_reflect,
+        init_frames=reflect_total_frames_x2b4,
+    )
 
 
 def load_shield_tilt_table_meta(*, data_dir: str = "data") -> dict[int, tuple[int, int]]:

@@ -144,6 +144,8 @@ typedef struct MslStateSoA {
   float* guard_tilt_x4;  // mv.co.guard.x4 (stick magnitude smoothing; 0..1)
   // GuardReflect reflect timer (decomp: mv.co.guard.x14; seed uses +1 bias, expires at 0).
   uint8_t* guard_reflect_timer_x14;  // [batch * players]
+  // GuardReflect powershield-active timer (decomp: mv.co.guard.x18; +1 bias, expires at 0).
+  uint8_t* guard_reflect_timer_x18;  // [batch * players]
   // Guard release lockout + shield-drain latch (seeded; decomp-shaped).
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80092BCC and ::ftCo_800925A4.
   uint8_t* guard_release_latched_xc;  // mv.co.guard.xC (0/1)

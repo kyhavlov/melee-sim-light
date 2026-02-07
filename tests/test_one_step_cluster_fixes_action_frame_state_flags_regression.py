@@ -264,6 +264,148 @@ def test_state_flags_x221a_b3_not_set_on_throw_release_damage_entry() -> None:
 
 
 @pytest.mark.integration
+def test_state_flags_x221c_b2_set_on_guard_reflect_entry() -> None:
+    # Schema note: this slice adds `seed_t.guard_reflect_timer_x18`; rebuild cached suite datasets
+    # with `uv run python -m tools.slippi.preprocess_suite --suite ... --datasets-dir datasets --force`.
+    #
+    # Cluster lock: GuardReflect entry sets fp->x221C_b2 ("Powershield Active Bool") alongside
+    # fp->x221C_b1/fp->x221C_b3.
+    #
+    # Decomp:
+    # - Entry set: refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80093A50
+    # - Slippi flag packing: refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm (0x221C 0x20)
+    #
+    # Regression target: TBK rec 213 p0 (Dash -> GuardReflect), ref.state_flags[3] == 112
+    # (0x40|0x20|0x10), where the sim previously emitted 80 (0x40|0x10).
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_rel = (
+        "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
+        "cardinal_1.0_recent/TreasuredBackKangaroo.msl"
+    )
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+    record = 213
+    p = 0
+    assert int(samples.shape[0]) > record, f"dataset too short: num_records={int(samples.shape[0])}"
+    row = samples[record : record + 1]
+
+    assert int(row["seed_t"]["action_id"][0, p]) == 20  # Dash
+    assert int(row["ref_t1"]["action_id"][0, p]) == 182  # GuardReflect
+    assert int(row["seed_t"]["hitlag"][0, p]) == 0
+    assert int(row["ref_t1"]["hitlag"][0, p]) == 0
+    assert int(row["seed_t"]["hitstun"][0, p]) == 0
+    assert int(row["ref_t1"]["hitstun"][0, p]) == 0
+    assert int(row["ref_t1"]["state_flags"][0, p, 3]) == 112  # 0x40|0x20|0x10
+
+    binding = pytest.importorskip("msl_binding")
+    sizes = binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    compare_stride = int(sizes["compare"])
+
+    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    try:
+        seed_bytes = np.empty((1, seed_stride), dtype=np.uint8)
+        prev_input_bytes = np.empty((1, input_stride), dtype=np.uint8)
+        input_bytes = np.empty((1, input_stride), dtype=np.uint8)
+        out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
+
+        seed_bytes[:] = np.frombuffer(row["seed_t"].tobytes(order="C"), dtype=np.uint8).reshape(1, seed_stride)
+        prev_input_bytes[:] = np.frombuffer(row["prev_input_t"].tobytes(order="C"), dtype=np.uint8).reshape(
+            1, input_stride
+        )
+        input_bytes[:] = np.frombuffer(row["input_t"].tobytes(order="C"), dtype=np.uint8).reshape(
+            1, input_stride
+        )
+
+        binding.reseed_seed(handle, seed_bytes)
+        binding.step_input(handle, prev_input_bytes, input_bytes)
+        binding.write_compare(handle, out_compare_bytes)
+
+        out = out_compare_bytes.view(COMPARE_DTYPE).reshape(-1)
+        got = int(out["state_flags"][0, p, 3])
+        want = int(row["ref_t1"]["state_flags"][0, p, 3])
+        assert got == want, f"record={record} p={p} expected state_flags[3]={want}, got {got}"
+    finally:
+        binding.destroy(handle)
+
+
+@pytest.mark.integration
+def test_state_flags_x221c_b2_clears_after_guard_reflect_window() -> None:
+    # Cluster lock: when the GuardReflect timer is inactive, x221C_b2 should clear instead of
+    # carrying a stale seed bit.
+    #
+    # Decomp clear path: refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80093BC0
+    #
+    # Regression target: TBK rec 217 p0 (GuardReflect -> GuardReflect), seed.state_flags[3] has 0x20
+    # but ref.state_flags[3] is 0.
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_rel = (
+        "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
+        "cardinal_1.0_recent/TreasuredBackKangaroo.msl"
+    )
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+    record = 217
+    p = 0
+    assert int(samples.shape[0]) > record, f"dataset too short: num_records={int(samples.shape[0])}"
+    row = samples[record : record + 1]
+
+    assert int(row["seed_t"]["action_id"][0, p]) == 182  # GuardReflect
+    assert int(row["ref_t1"]["action_id"][0, p]) == 182
+    assert int(row["seed_t"]["hitlag"][0, p]) == 0
+    assert int(row["ref_t1"]["hitlag"][0, p]) == 0
+    assert int(row["seed_t"]["hitstun"][0, p]) == 0
+    assert int(row["ref_t1"]["hitstun"][0, p]) == 0
+    assert int(row["seed_t"]["guard_reflect_timer_x14"][0, p]) == 0
+    assert int(row["seed_t"]["guard_reflect_timer_x18"][0, p]) == 1
+    assert int(row["seed_t"]["state_flags"][0, p, 3]) == 32
+    assert int(row["ref_t1"]["state_flags"][0, p, 3]) == 0
+
+    binding = pytest.importorskip("msl_binding")
+    sizes = binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    compare_stride = int(sizes["compare"])
+
+    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    try:
+        seed_bytes = np.empty((1, seed_stride), dtype=np.uint8)
+        prev_input_bytes = np.empty((1, input_stride), dtype=np.uint8)
+        input_bytes = np.empty((1, input_stride), dtype=np.uint8)
+        out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
+
+        seed_bytes[:] = np.frombuffer(row["seed_t"].tobytes(order="C"), dtype=np.uint8).reshape(1, seed_stride)
+        prev_input_bytes[:] = np.frombuffer(row["prev_input_t"].tobytes(order="C"), dtype=np.uint8).reshape(
+            1, input_stride
+        )
+        input_bytes[:] = np.frombuffer(row["input_t"].tobytes(order="C"), dtype=np.uint8).reshape(
+            1, input_stride
+        )
+
+        binding.reseed_seed(handle, seed_bytes)
+        binding.step_input(handle, prev_input_bytes, input_bytes)
+        binding.write_compare(handle, out_compare_bytes)
+
+        out = out_compare_bytes.view(COMPARE_DTYPE).reshape(-1)
+        got = int(out["state_flags"][0, p, 3])
+        want = int(row["ref_t1"]["state_flags"][0, p, 3])
+        assert got == want, f"record={record} p={p} expected state_flags[3]={want}, got {got}"
+    finally:
+        binding.destroy(handle)
+
+
+@pytest.mark.integration
 def test_action_frame_blaster_start_entry_ticks_once() -> None:
     # Cluster lock: SpecialAirNStart entry calls ftAnim_8006EBA4 immediately after ChangeMotionState,
     # so post-frame action_frame is 1 (not 0) on the entry frame.

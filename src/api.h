@@ -192,6 +192,17 @@ typedef struct MslSeed {
   // - Because the decomp timer expires on `x14 < 0`, we represent `x14 + 1` clamped to [0..255].
   //   This allows us to expire cleanly at 0 without carrying negative values in the seed schema.
   uint8_t guard_reflect_timer_x14[MSL_MAX_PLAYERS];
+  // GuardReflect powershield-active timer (seeded; strictly causal in preprocessing).
+  //
+  // Decomp trail:
+  // - Init: refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80093A50
+  //   sets `mv.co.guard.x18 = p_ftCommonData->x2B4`.
+  // - Tick/expire: refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80093BC0
+  //   decrements `mv.co.guard.x18` and clears `fp->x221C_b2` when it drops below 0.
+  //
+  // Seed representation:
+  // - Store `x18 + 1` clamped to [0..255] (same +1-bias contract as x14).
+  uint8_t guard_reflect_timer_x18[MSL_MAX_PLAYERS];
   // Guard release lockout (seeded; strictly causal in preprocessing).
   //
   // Decomp (GALE01):

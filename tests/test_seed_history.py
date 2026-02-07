@@ -15,6 +15,7 @@ from tools.slippi.seed_history import (
     compute_tilt_timer_y_pre_post_with_fall_fast,
     compute_x672_trigger_timer_pre_post,
     derive_guard_reflect_timer_x14,
+    derive_guard_reflect_timer_x18,
     derive_ucf_pad_buffer_state,
     derive_kneebend_internals,
     derive_turn_internals,
@@ -236,6 +237,14 @@ def test_derive_guard_reflect_timer_counts_down_and_expires() -> None:
     assert out.dtype == np.uint8
     # reflect_frames_x2a4=1 => init=(1+1)=2; tick once per GuardReflect frame (except entry).
     assert out.tolist() == [0, 2, 1, 0, 0, 2]
+    out18 = derive_guard_reflect_timer_x18(
+        action_id_u16=a,
+        hitlag_u16=hitlag,
+        act_guard_reflect=int(act_guard_reflect),
+        reflect_total_frames_x2b4=3,
+    )
+    # reflect_total_frames_x2b4=3 => init=(3+1)=4.
+    assert out18.tolist() == [0, 4, 3, 2, 0, 4]
 
     # Hitlag gate: under hitlag, GuardReflect_Anim does not run, so the timer should not tick.
     a2 = np.array([act_guard_reflect, act_guard_reflect, act_guard_reflect], dtype=np.uint16)
@@ -247,6 +256,13 @@ def test_derive_guard_reflect_timer_counts_down_and_expires() -> None:
         reflect_frames_x2a4=1,
     )
     assert out2.tolist() == [2, 2, 1]
+    out18_2 = derive_guard_reflect_timer_x18(
+        action_id_u16=a2,
+        hitlag_u16=hitlag2,
+        act_guard_reflect=int(act_guard_reflect),
+        reflect_total_frames_x2b4=3,
+    )
+    assert out18_2.tolist() == [4, 4, 3]
 
 
 def test_derive_guard_reflect_timer_is_prefix_invariant() -> None:
@@ -272,6 +288,19 @@ def test_derive_guard_reflect_timer_is_prefix_invariant() -> None:
     )
 
     assert np.array_equal(out0, out1[: out0.size])
+    out0_18 = derive_guard_reflect_timer_x18(
+        action_id_u16=a_prefix,
+        hitlag_u16=hl_prefix,
+        act_guard_reflect=int(act_guard_reflect),
+        reflect_total_frames_x2b4=3,
+    )
+    out1_18 = derive_guard_reflect_timer_x18(
+        action_id_u16=a_ext,
+        hitlag_u16=hl_ext,
+        act_guard_reflect=int(act_guard_reflect),
+        reflect_total_frames_x2b4=3,
+    )
+    assert np.array_equal(out0_18, out1_18[: out0_18.size])
 
 
 def test_fall_fast_and_x671_override_is_causal_wrt_future_frames() -> None:

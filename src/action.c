@@ -295,6 +295,25 @@ static inline uint8_t guard_reflect_timer_x14_init(const MslCommonParams* c) {
   return (uint8_t)t;
 }
 
+static inline uint8_t guard_reflect_timer_x18_init(const MslCommonParams* c) {
+  // Decomp: GuardReflect powershield-active window uses p_ftCommonData->x2B4 frames.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80093A50 (mv.co.guard.x18 = x2B4)
+  //
+  // Decomp: timer ticks down in ftCo_80093BC0 and x221C_b2 clears when it drops below 0.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80093BC0
+  //
+  // Seed/state representation uses a +1 bias so we can expire at 0 without negative values.
+  if (c == NULL) {
+    return 0;
+  }
+  uint16_t t = (uint16_t)c->powershield_reflect_total_frames;
+  t = (uint16_t)(t + 1u);
+  if (t > 255u) {
+    t = 255u;
+  }
+  return (uint8_t)t;
+}
+
 static inline uint8_t guard_x10_init_u8(const MslCommonParams* c) {
   // Decomp: mv.co.guard.x10 is initialized from p_ftCommonData->x268 on GuardOn/GuardReflect entry.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_800921DC
@@ -320,6 +339,7 @@ static inline void enter_guard_reflect(MslBatch* batch, const MslCommonParams* c
   batch->state.animation_index[idx] = 0xFFFFFFFFu;
   msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
   batch->state.guard_reflect_timer_x14[idx] = guard_reflect_timer_x14_init(c);
+  batch->state.guard_reflect_timer_x18[idx] = guard_reflect_timer_x18_init(c);
   batch->state.guard_release_latched_xc[idx] = 0;
   batch->state.guard_x10[idx] = guard_x10_init_u8(c);
   batch->state.lightshield_amount[idx] = 0.0f;
@@ -476,7 +496,7 @@ void guard_update_grounded(MslBatch* batch, const MslCommonParams* c, size_t idx
   }
 
   const uint16_t a0 = batch->state.action_id[idx];
-  // GuardReflect reflect timer tick/expire (mv.co.guard.x14).
+  // GuardReflect timers tick/expire (mv.co.guard.x14 / x18).
   //
   // Decomp ordering:
   // - GuardReflect_Anim calls ftCo_80093BC0 (timer tick + reflecting clear), then calls GuardOn_Anim.
@@ -488,18 +508,24 @@ void guard_update_grounded(MslBatch* batch, const MslCommonParams* c, size_t idx
   //   refs/melee/src/melee/ft/fighter.c (Fighter_8006A360 anim_cb gated on !hitlag)
   //
   // Seed/state semantics:
-  // - guard_reflect_timer_x14 is x14+1 (clamped), so it expires cleanly at 0.
+  // - guard_reflect_timer_x14/x18 are x14+1/x18+1 (clamped), so they expire cleanly at 0.
   // - We clamp it to 0 whenever not in GuardReflect to keep it strictly causal and reseed-friendly.
   if (a0 == (uint16_t)MSL_ACT_GUARD_REFLECT) {
     if (batch->state.hitlag_started_frame[idx] == 0) {
-      uint8_t t = batch->state.guard_reflect_timer_x14[idx];
-      if (t > 0) {
-        t--;
-        batch->state.guard_reflect_timer_x14[idx] = t;
+      uint8_t t14 = batch->state.guard_reflect_timer_x14[idx];
+      if (t14 > 0) {
+        t14--;
+        batch->state.guard_reflect_timer_x14[idx] = t14;
+      }
+      uint8_t t18 = batch->state.guard_reflect_timer_x18[idx];
+      if (t18 > 0) {
+        t18--;
+        batch->state.guard_reflect_timer_x18[idx] = t18;
       }
     }
   } else {
     batch->state.guard_reflect_timer_x14[idx] = 0;
+    batch->state.guard_reflect_timer_x18[idx] = 0;
   }
 
   if (!is_shield_active_action(a0)) {
@@ -614,6 +640,7 @@ void guard_update_grounded(MslBatch* batch, const MslCommonParams* c, size_t idx
       if (batch->state.guard_release_latched_xc[idx] && x10_pre == 0) {
         if (a0 == (uint16_t)MSL_ACT_GUARD_REFLECT) {
           batch->state.guard_reflect_timer_x14[idx] = 0;
+          batch->state.guard_reflect_timer_x18[idx] = 0;
         }
         enter_guard_off(batch, idx);
         return;
@@ -658,6 +685,7 @@ void guard_update_grounded(MslBatch* batch, const MslCommonParams* c, size_t idx
       if (end_frame > 0.0f && (batch->state.anim_frame_f32[idx] >= end_frame)) {
         if (a0 == (uint16_t)MSL_ACT_GUARD_REFLECT) {
           batch->state.guard_reflect_timer_x14[idx] = 0;
+          batch->state.guard_reflect_timer_x18[idx] = 0;
         }
         enter_guard_hold(batch, idx);
       }
@@ -673,12 +701,14 @@ void guard_update_grounded(MslBatch* batch, const MslCommonParams* c, size_t idx
     if (guard_try_enter_jump_oos(batch, c, idx)) {
       if (a0 == (uint16_t)MSL_ACT_GUARD_REFLECT) {
         batch->state.guard_reflect_timer_x14[idx] = 0;
+        batch->state.guard_reflect_timer_x18[idx] = 0;
       }
       return;
     }
     if (escape_try_enter_from_guard(batch, c, idx)) {
       if (a0 == (uint16_t)MSL_ACT_GUARD_REFLECT) {
         batch->state.guard_reflect_timer_x14[idx] = 0;
+        batch->state.guard_reflect_timer_x18[idx] = 0;
       }
       return;
     }

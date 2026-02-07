@@ -433,6 +433,7 @@ def _main_impl(args) -> None:
         derive_damage_jump_buffer_x14,
         derive_grab_owner_port_2p,
         derive_guard_reflect_timer_x14,
+        derive_guard_reflect_timer_x18,
         derive_guard_release_lockout_and_lightshield,
         derive_guard_tilt_state,
         derive_dash_x4,
@@ -1131,6 +1132,13 @@ def _main_impl(args) -> None:
             reflect_frames_x2a4=int(common["powershield_reflect_frames"]),
         )
         samples["seed_t"]["guard_reflect_timer_x14"][:, slot] = guard_reflect_timer_x14[:-1]
+        guard_reflect_timer_x18 = derive_guard_reflect_timer_x18(
+            action_id_u16=post_state,
+            hitlag_u16=post_hitlag,
+            act_guard_reflect=act_guard_reflect,
+            reflect_total_frames_x2b4=int(common["powershield_reflect_total_frames"]),
+        )
+        samples["seed_t"]["guard_reflect_timer_x18"][:, slot] = guard_reflect_timer_x18[:-1]
 
         # Guard release lockout (mv.co.guard.xC/x10) + lightshield latch (fp->lightshield_amount).
         # Derived strictly causally from replay history to support teacher-forced one-step reseed.
