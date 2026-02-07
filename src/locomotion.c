@@ -92,6 +92,7 @@ static inline uint16_t attackair_action_from_stick(const MslCommonParams* c, flo
                                                    float stick_y, float facing_dir) {
   // Decomp: ftCo_AttackAir_GetMsidFromCStick chooses AttackAirN vs directional attacks based on
   // (xDC/xE0) deadzones and the stick angle threshold (x20 radians).
+  // This is a common ftCo_* path (not Fox/Falco-specific).
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_GetMsidFromCStick
   if (c == NULL) {
     return (uint16_t)MSL_ACT_ATTACK_AIR_N;
@@ -100,7 +101,12 @@ static inline uint16_t attackair_action_from_stick(const MslCommonParams* c, flo
       fabsf(stick_y) < c->attackair_stick_deadzone_y) {
     return (uint16_t)MSL_ACT_ATTACK_AIR_N;
   }
-  const float ang = atan2f(stick_y, stick_x);
+  // Decomp angle helper uses ABS(stick.x):
+  // - ftCo_AttackAir_GetMsidFromCStick computes `stick_angle` via ftCo_Get{L,C}StickAngle.
+  // - ftCo_Get{L,C}StickAngle is `atan2(stick.y, ABS(stick.x))`.
+  // This shape is shared by common ftCo_* stick-angle gates.
+  // refs/melee/src/melee/ft/ftcommon.c::{ftCo_GetLStickAngle,ftCo_GetCStickAngle}
+  const float ang = atan2f(stick_y, msl_absf(stick_x));
   if (ang > c->attack_angle_threshold_radians) {
     return (uint16_t)MSL_ACT_ATTACK_AIR_HI;
   }
@@ -1241,7 +1247,28 @@ void locomotion_update_pre(MslBatch* batch) {
             const uint8_t is_short = batch->state.kneebend_is_short_hop[idx] ? 1 : 0;
             const uint8_t full = (uint8_t)(!is_short);
 
-            const uint16_t jump_act = jump_action_from_stick(c, stick_x, facing_dir);
+            // KneeBend->Jump happens in Anim before the frame's input update, so ftCo_Jump_Enter
+            // reads the prior frame's fp->input.lstick.x.
+            //
+            // Common ftCo_* call chain / ordering (not Fox/Falco-specific):
+            // - ftCo_KneeBend_Anim -> ftCo_Jump_Enter
+            // - anim_cb runs in Fighter_procUpdate
+            // - input update + input_cb run later in Fighter_procInterrupt
+            //
+            // Sim mapping:
+            // - input_apply() has already loaded both prev_input_t and input_t for this step.
+            // - `prev_input_main_x` corresponds to prior-frame fp->input.lstick.x.
+            // - Fighter_Spaghetti_8006AD10 applies common lstick deadzone before ftCo_Jump_Enter reads
+            //   fp->input.lstick.x, so apply c->lstick_deadzone_x here.
+            //
+            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_KneeBend.c::ftCo_KneeBend_Anim
+            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c::ftCo_Jump_Enter
+            // refs/melee/src/melee/ft/fighter.c::{Fighter_procUpdate,Fighter_procInterrupt}
+            // refs/melee/src/melee/ft/fighter.c::Fighter_Spaghetti_8006AD10
+            const float jump_stick_x =
+                apply_deadzone(stick_i8_to_unit(batch->state.prev_input_main_x[idx]),
+                               c->lstick_deadzone_x);
+            const uint16_t jump_act = jump_action_from_stick(c, jump_stick_x, facing_dir);
             batch->state.action_id[idx] = jump_act;
             batch->state.animation_index[idx] = (uint32_t)submotion_for_action(jump_act);
             msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
@@ -1250,7 +1277,7 @@ void locomotion_update_pre(MslBatch* batch) {
             // Ground-to-air momentum + jump impulse (refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c::ftCo_800CB110)
             const float base_x =
                 batch->state.speed_ground_x_self[idx] * ch->ground_to_air_jump_momentum_multiplier;
-            float h_vel = base_x + stick_x * ch->jump_h_initial_velocity;
+            float h_vel = base_x + jump_stick_x * ch->jump_h_initial_velocity;
             const float h_max = ch->jump_h_max_velocity;
             if (msl_absf(h_vel) > h_max) {
               h_vel = msl_signf(h_vel) * h_max;
