@@ -160,6 +160,31 @@ static inline void combat_state_flags_set_is_hitstun(MslBatch* batch, size_t idx
   batch->state.state_flags[flags_i] = f;
 }
 
+static inline uint8_t combat_is_powershield_active(const MslBatch* batch, size_t idx) {
+  if (batch == NULL) {
+    return 0;
+  }
+  // Decomp gate at collision-time is on fp->x221C_b2 directly.
+  // refs/melee/src/melee/ft/ftcoll.c::ftColl_80076CBC
+  enum { MSL_STATE_FLAGS_STRIDE = MSL_STATE_FLAGS_BYTES };
+  enum { MSL_STATE_FLAGS_221C_INDEX = 3 };
+  enum { MSL_STATE_FLAG_221C_POWERSHIELD_ACTIVE = 0x20 };
+  const uint8_t flags_221c =
+      batch->state.state_flags[idx * MSL_STATE_FLAGS_STRIDE + (size_t)MSL_STATE_FLAGS_221C_INDEX];
+  if (flags_221c & (uint8_t)MSL_STATE_FLAG_221C_POWERSHIELD_ACTIVE) {
+    return 1u;
+  }
+
+  // Fallback for reduced-hidden-state slices: when GuardReflect timer is still active in an
+  // explicitly GuardReflect state, keep collision gating aligned even if the seeded bit is absent.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80093BC0
+  if (batch->state.action_id[idx] == (uint16_t)MSL_ACT_GUARD_REFLECT &&
+      batch->state.guard_reflect_timer_x18[idx] != 0) {
+    return 1u;
+  }
+  return 0u;
+}
+
 // Combo / last-attack tracking (decomp-first).
 //
 // Decomp trail (GALE01):
@@ -1577,13 +1602,8 @@ void combat_apply_item_shield_hit(MslBatch* batch, int batch_index, int attacker
 
   // Powershield active flag: items are reflected elsewhere (items.c); do not apply shield HP /
   // GuardSetOff / hitlag here.
-  // refs/melee/src/melee/ft/ftcoll.c::ftColl_80076CBC and refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
-  enum { MSL_STATE_FLAGS_STRIDE = MSL_STATE_FLAGS_BYTES };
-  enum { MSL_STATE_FLAGS_221C_INDEX = 3 };
-  enum { MSL_STATE_FLAG_221C_POWERSHIELD_ACTIVE = 0x20 };
-  const uint8_t flags_221c =
-      batch->state.state_flags[d_idx * MSL_STATE_FLAGS_STRIDE + (size_t)MSL_STATE_FLAGS_221C_INDEX];
-  if (flags_221c & (uint8_t)MSL_STATE_FLAG_221C_POWERSHIELD_ACTIVE) {
+  // refs/melee/src/melee/ft/ftcoll.c::ftColl_80076CBC
+  if (combat_is_powershield_active(batch, d_idx)) {
     return;
   }
 
@@ -1678,14 +1698,7 @@ static inline void combat_mutations_pass1_future_apply_shield_hit(MslBatch* batc
   // Powershield gating: collision does not accumulate shieldDamageTaken when the "powershield
   // active" flag is set (x221C_b2).
   // refs/melee/src/melee/ft/ftcoll.c::ftColl_80076CBC (`if (!fp1->x221C_b2) { ...shieldDamageTaken... }`)
-  // Slippi post-frame: `lbz r3,0x221C(REG_PlayerData)  #0x20 = Powershield Active Bool`.
-  // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
-  enum { MSL_STATE_FLAGS_STRIDE = MSL_STATE_FLAGS_BYTES };
-  enum { MSL_STATE_FLAGS_221C_INDEX = 3 };
-  enum { MSL_STATE_FLAG_221C_POWERSHIELD_ACTIVE = 0x20 };
-  const uint8_t flags_221c =
-      batch->state.state_flags[d_idx * MSL_STATE_FLAGS_STRIDE + (size_t)MSL_STATE_FLAGS_221C_INDEX];
-  if (flags_221c & (uint8_t)MSL_STATE_FLAG_221C_POWERSHIELD_ACTIVE) {
+  if (combat_is_powershield_active(batch, d_idx)) {
     shield_damage_taken = 0;
   }
 
