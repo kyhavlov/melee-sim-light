@@ -743,6 +743,9 @@ static inline void combat_damage_enter_state(const MslCommonParams* c, MslBatch*
 
   batch->state.action_id[d_idx] = act;
   batch->state.animation_index[d_idx] = sm;
+  // Decomp: ftCo_8008DCE0 clears mv.co.damage.x14 on damage entry.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
+  batch->state.damage_jump_buffer_x14[d_idx] = 0;
   msl_anim_timebase_enter(batch, d_idx, 0.0f, 1.0f);
 }
 

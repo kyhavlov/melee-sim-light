@@ -392,10 +392,94 @@ static inline uint8_t laser_should_shoot_on_frame(const MslLaserParams* lp, uint
   return 0;
 }
 
-static inline uint8_t item_sphere_capsule_intersects(const MslBatch* batch, int bi, int defender,
-                                                     float sx, float sy, float sr, int cap_i,
-                                                     uint8_t* out_hurt_height) {
-  // Sphere (sx,sy,0,sr) vs capsule defined by endpoints (a,b,radius) in world space.
+static inline float item_segment_segment_dist2(float p0x, float p0y, float p0z, float p1x,
+                                               float p1y, float p1z, float q0x, float q0y,
+                                               float q0z, float q1x, float q1y, float q1z) {
+  // Closest distance between two 3D segments (projectile sweep segment vs hurt capsule segment).
+  // Decomp shape for fox/falco lasers:
+  // - itFoxlaser_UnkMotion1_Phys snapshots prev_pos before velocity integration.
+  // - it_8029C4D4 resolves collision across (prev_pos -> cur_pos), not a point probe at cur_pos.
+  // refs/melee/src/melee/it/items/itfoxlaser.c::{itFoxlaser_UnkMotion1_Phys,it_8029C4D4}
+  const float ux = p1x - p0x;
+  const float uy = p1y - p0y;
+  const float uz = p1z - p0z;
+  const float vx = q1x - q0x;
+  const float vy = q1y - q0y;
+  const float vz = q1z - q0z;
+  const float wx = p0x - q0x;
+  const float wy = p0y - q0y;
+  const float wz = p0z - q0z;
+
+  const float a = ux * ux + uy * uy + uz * uz;
+  const float b = ux * vx + uy * vy + uz * vz;
+  const float c = vx * vx + vy * vy + vz * vz;
+  const float d = ux * wx + uy * wy + uz * wz;
+  const float e = vx * wx + vy * wy + vz * wz;
+  const float D = a * c - b * b;
+  const float eps = 1e-8f;
+
+  float sN = 0.0f;
+  float sD = D;
+  float tN = 0.0f;
+  float tD = D;
+
+  if (D < eps) {
+    sN = 0.0f;
+    sD = 1.0f;
+    tN = e;
+    tD = c;
+  } else {
+    sN = b * e - c * d;
+    tN = a * e - b * d;
+    if (sN < 0.0f) {
+      sN = 0.0f;
+      tN = e;
+      tD = c;
+    } else if (sN > sD) {
+      sN = sD;
+      tN = e + b;
+      tD = c;
+    }
+  }
+
+  if (tN < 0.0f) {
+    tN = 0.0f;
+    if (-d < 0.0f) {
+      sN = 0.0f;
+    } else if (-d > a) {
+      sN = sD;
+    } else {
+      sN = -d;
+      sD = a;
+    }
+  } else if (tN > tD) {
+    tN = tD;
+    if ((-d + b) < 0.0f) {
+      sN = 0.0f;
+    } else if ((-d + b) > a) {
+      sN = sD;
+    } else {
+      sN = -d + b;
+      sD = a;
+    }
+  }
+
+  const float sc = (fabsf(sN) < eps) ? 0.0f : (sN / sD);
+  const float tc = (fabsf(tN) < eps) ? 0.0f : (tN / tD);
+
+  const float dx = wx + sc * ux - tc * vx;
+  const float dy = wy + sc * uy - tc * vy;
+  const float dz = wz + sc * uz - tc * vz;
+  return dx * dx + dy * dy + dz * dz;
+}
+
+static inline uint8_t item_swept_sphere_capsule_intersects(const MslBatch* batch, int bi,
+                                                           int defender, float sx0, float sy0,
+                                                           float sx1, float sy1, float sr, int cap_i,
+                                                           uint8_t* out_hurt_height) {
+  // Swept sphere segment (sx0,sy0,0)->(sx1,sy1,0) vs hurt capsule segment AB.
+  // Decomp item-vs-fighter collision sweep uses prev_pos -> cur_pos.
+  // refs/melee/src/melee/it/items/itfoxlaser.c::{itFoxlaser_UnkMotion1_Phys,it_8029C4D4}
   const size_t d_idx = msl_idx_player(bi, defender);
   const uint8_t cap_count = batch->state.hurtcap_count[d_idx];
   if (cap_i < 0 || cap_i >= (int)cap_count) {
@@ -415,31 +499,8 @@ static inline uint8_t item_sphere_capsule_intersects(const MslBatch* batch, int 
   const float bz = batch->state.hurtcap_b_z[hi];
   const float cr = batch->state.hurtcap_radius[hi];
   const float rr = sr + cr;
-
-  // Closest point on segment AB to point S (sx,sy,0).
-  const float abx = bx - ax;
-  const float aby = by - ay;
-  const float abz = bz - az;
-  const float asx = sx - ax;
-  const float asy = sy - ay;
-  const float asz = 0.0f - az;
-  const float ab2 = abx * abx + aby * aby + abz * abz;
-  float t = 0.0f;
-  if (ab2 > 0.0f) {
-    t = (asx * abx + asy * aby + asz * abz) / ab2;
-    if (t < 0.0f) {
-      t = 0.0f;
-    } else if (t > 1.0f) {
-      t = 1.0f;
-    }
-  }
-  const float cx = ax + t * abx;
-  const float cy = ay + t * aby;
-  const float cz = az + t * abz;
-  const float dx = sx - cx;
-  const float dy = sy - cy;
-  const float dz = 0.0f - cz;
-  if ((dx * dx + dy * dy + dz * dz) > (rr * rr)) {
+  const float d2 = item_segment_segment_dist2(sx0, sy0, 0.0f, sx1, sy1, 0.0f, ax, ay, az, bx, by, bz);
+  if (d2 > (rr * rr)) {
     return 0;
   }
   if (out_hurt_height) {
@@ -596,6 +657,10 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
     if (lp == NULL) {
       continue;
     }
+    // Scope guard: all collision logic in this function is laser-only.
+    // `laser_params_for_item_type` returns NULL for non-MSLLASR1-backed item kinds, so the swept
+    // overlap path below cannot affect bombs/turnips/etc.
+    // Source: data/items/lasers.bin (MSLLASR1), loaded by laser_params_for_item_type().
 
     // Item msid/state is recorded by Slippi as u8 from Item+0x24 (enum_t msid).
     // refs/slippi-ssbm-asm/Recording/SendItemInfo.s
@@ -951,15 +1016,28 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
       if (batch->state.shield_radius[d_idx] > 0.0f && laser_scale_z_body > 1.0f) {
         laser_scale_z_body = 1.0f;
       }
+      // Laser BODY overlap parity for fast-moving airborne defenders:
+      // - Decomp computes collision over projectile travel in-frame (prev_pos -> cur_pos), so a
+      //   current-point-only probe can miss replay-causal same-frame hits.
+      // - We currently gate the sweep to airborne defenders (`on_ground==0`) and keep grounded on
+      //   the point proxy to avoid broadening scope until grounded hurt-status gating is modeled.
+      // refs/melee/src/melee/it/items/itfoxlaser.c::{itFoxlaser_UnkMotion1_Phys,it_8029C4D4}
+      // TODO(decomp/items): mirror grounded BODY hurt-status/collision gating from it_80272460 and
+      // ftColl callbacks, then remove this temporary airborne-only split.
+      const uint8_t use_swept_body = (batch->state.on_ground[d_idx] == 0u) ? 1u : 0u;
       for (uint8_t oi = 0; oi < off_n && oi < (uint8_t)MSL_LASER_MAX_HITBOX_OFFS_X && !hit; oi++) {
         const float off_x =
             (laser_state == 0u) ? lp->hitbox_offsets_x[oi] : lp->state1_hitbox_offsets_x[oi];
         const float s = off_x * laser_scale_z_body;
+        const float sx0 = x0 + (ux * s);
+        const float sy0 = y0 + (uy * s);
         const float sx = x + (ux * s);
         const float sy = y + (uy * s);
         for (uint8_t ci = 0; ci < cap_n; ci++) {
-          if (item_sphere_capsule_intersects(batch, bi, def, sx, sy, sr, (int)ci,
-                                             &hit_hurt_height)) {
+          const float hx0 = use_swept_body ? sx0 : sx;
+          const float hy0 = use_swept_body ? sy0 : sy;
+          if (item_swept_sphere_capsule_intersects(batch, bi, def, hx0, hy0, sx, sy, sr, (int)ci,
+                                                   &hit_hurt_height)) {
             hit = 1;
             break;
           }
@@ -968,7 +1046,10 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
       // If no scripted offsets exist, fall back to the projectile origin.
       if (!hit && cap_n > 0 && off_n == 0) {
         for (uint8_t ci = 0; ci < cap_n; ci++) {
-          if (item_sphere_capsule_intersects(batch, bi, def, x, y, sr, (int)ci, &hit_hurt_height)) {
+          const float hx0 = use_swept_body ? x0 : x;
+          const float hy0 = use_swept_body ? y0 : y;
+          if (item_swept_sphere_capsule_intersects(batch, bi, def, hx0, hy0, x, y, sr, (int)ci,
+                                                   &hit_hurt_height)) {
             hit = 1;
             break;
           }

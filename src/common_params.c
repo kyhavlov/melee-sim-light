@@ -352,6 +352,8 @@ int common_params_init(void) {
       json_get_u8(buf, "tech_lr_debounce_frames", &g_params.tech_lr_debounce_frames) != 0 ||
       json_get_f32(buf, "tech_window_frames", &g_params.tech_window_frames) != 0 ||
       json_get_f32(buf, "tech_roll_stick_threshold", &g_params.tech_roll_stick_threshold) != 0 ||
+      json_get_f32(buf, "damage_jump_buffer_window_frames",
+                   &g_params.damage_jump_buffer_window_frames) != 0 ||
       json_get_f32(buf, "damagefly_downbound_kb_vel_threshold",
                    &g_params.damagefly_downbound_kb_vel_threshold) != 0 ||
       json_get_f32(buf, "damagefly_landing_kb_vel_threshold",

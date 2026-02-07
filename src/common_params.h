@@ -296,6 +296,7 @@ typedef struct MslCommonParams {
 
   // Damage landing thresholds (ftCo_Damage_Coll).
   // Decomp: refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_Coll
+  float damage_jump_buffer_window_frames;      // p_ftCommonData->x1D0 (mv.co.damage.x14 gate)
   float damagefly_downbound_kb_vel_threshold;  // p_ftCommonData->x1E0
   float damagefly_landing_kb_vel_threshold;    // p_ftCommonData->x1E4
 

@@ -1052,6 +1052,77 @@ def derive_run_x0(
     return out
 
 
+def derive_damage_jump_buffer_x14(
+    *,
+    action_id: np.ndarray,
+    hitstun_u16: np.ndarray,
+    buttons_pressed: np.ndarray,
+    stick_y_unit: np.ndarray,
+    tilt_timer_y: np.ndarray,
+    tap_jump_threshold: float,
+    tap_jump_tilt_max_frames: int,
+    button_mask_xy: int,
+    damage_actions: tuple[int, ...],
+) -> np.ndarray:
+    """
+    Derive `fp->mv.co.damage.x14` (damage jump-buffer snapshot) per post-frame.
+
+    Decomp anchors:
+    - Cleared on damage entry in ftCo_8008DCE0:
+      refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
+    - Set from `mv.co.damage.x0` when jump input is detected in doIasa:
+      refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::doIasa
+    - Compared against p_ftCommonData->x1D0 in Damage_Anim inlineC0:
+      refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_Anim
+
+    Causality:
+    - Uses only current/past frame values.
+    - Resets on causal action transitions into the configured damage action set.
+    """
+    a = np.asarray(action_id, dtype=np.uint16).reshape(-1)
+    hs = np.asarray(hitstun_u16, dtype=np.uint16).reshape(-1)
+    bp = np.asarray(buttons_pressed, dtype=np.uint16).reshape(-1)
+    sy = np.asarray(stick_y_unit, dtype=np.float32).reshape(-1)
+    tty = np.asarray(tilt_timer_y, dtype=np.uint8).reshape(-1)
+    n = int(a.size)
+    if int(hs.size) != n or int(bp.size) != n or int(sy.size) != n or int(tty.size) != n:
+        raise ValueError("all derive_damage_jump_buffer_x14 inputs must have the same length")
+
+    out = np.zeros(n, dtype=np.uint16)
+    if n == 0:
+        return out
+
+    damage_set = {int(x) & 0xFFFF for x in damage_actions}
+    xy = int(button_mask_xy) & 0xFFFF
+    tap_thr = np.float32(tap_jump_threshold)
+    tilt_max = int(tap_jump_tilt_max_frames)
+
+    x14 = 0
+    for i in range(n):
+        cur_a = int(a[i])
+        in_damage = cur_a in damage_set
+        if not in_damage:
+            x14 = 0
+            out[i] = np.uint16(0)
+            continue
+
+        if i == 0 or cur_a != int(a[i - 1]):
+            x14 = 0
+
+        jump_input = False
+        if (int(bp[i]) & xy) != 0:
+            jump_input = True
+        elif sy[i] >= tap_thr and int(tty[i]) < tilt_max:
+            jump_input = True
+
+        if int(hs[i]) > 0 and jump_input:
+            x14 = int(hs[i])
+
+        out[i] = np.uint16(max(0, min(x14, 0xFFFF)))
+
+    return out
+
+
 def derive_kneebend_internals(
     *,
     action_id: np.ndarray,

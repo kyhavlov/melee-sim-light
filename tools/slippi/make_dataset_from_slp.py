@@ -430,6 +430,7 @@ def _main_impl(args) -> None:
         compute_press_timer_u8,
         derive_instance_id_x2073,
         derive_downwait_timer,
+        derive_damage_jump_buffer_x14,
         derive_grab_owner_port_2p,
         derive_guard_reflect_timer_x14,
         derive_guard_release_lockout_and_lightshield,
@@ -598,6 +599,18 @@ def _main_impl(args) -> None:
     act_fall_special_f = 0x0024
     act_fall_special_b = 0x0025
     act_damage_fall = 0x0026
+    act_damage_hi_1 = 0x004B
+    act_damage_hi_2 = 0x004C
+    act_damage_hi_3 = 0x004D
+    act_damage_n_1 = 0x004E
+    act_damage_n_2 = 0x004F
+    act_damage_n_3 = 0x0050
+    act_damage_lw_1 = 0x0051
+    act_damage_lw_2 = 0x0052
+    act_damage_lw_3 = 0x0053
+    act_damage_air_1 = 0x0054
+    act_damage_air_2 = 0x0055
+    act_damage_air_3 = 0x0056
     act_attack_air_n = 0x0041
     act_attack_air_f = 0x0042
     act_attack_air_b = 0x0043
@@ -1027,6 +1040,31 @@ def _main_impl(args) -> None:
             act_turn_run=act_turn_run,
         )
         samples["seed_t"]["run_x0"][:, slot] = run_x0[:-1]
+        damage_jump_buffer_x14 = derive_damage_jump_buffer_x14(
+            action_id=post_state,
+            hitstun_u16=post_hitstun,
+            buttons_pressed=buttons_pressed,
+            stick_y_unit=stick_y,
+            tilt_timer_y=tilt_timer_y_pre,
+            tap_jump_threshold=tap_jump_threshold,
+            tap_jump_tilt_max_frames=tap_jump_tilt_max_frames,
+            button_mask_xy=button_mask_xy,
+            damage_actions=(
+                act_damage_hi_1,
+                act_damage_hi_2,
+                act_damage_hi_3,
+                act_damage_n_1,
+                act_damage_n_2,
+                act_damage_n_3,
+                act_damage_lw_1,
+                act_damage_lw_2,
+                act_damage_lw_3,
+                act_damage_air_1,
+                act_damage_air_2,
+                act_damage_air_3,
+            ),
+        )
+        samples["seed_t"]["damage_jump_buffer_x14"][:, slot] = damage_jump_buffer_x14[:-1]
         ledge_cooldown = _derive_ledge_cooldown(action_id_u16=post_state, hitlag_u16=post_hitlag, common=common)
         samples["seed_t"]["ledge_cooldown"][:, slot] = ledge_cooldown[:-1]
         samples["seed_t"]["lr_press_timer"][:, slot] = lr_press_timer[:-1]

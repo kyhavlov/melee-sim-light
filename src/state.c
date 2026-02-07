@@ -145,6 +145,7 @@ int state_alloc(MslStateSoA* state, int batch_size) {
   state->hitlag = (uint16_t*)alloc_aligned_64(sizeof(uint16_t) * bp);
   state->hitlag_started_frame = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->hitstun = (uint16_t*)alloc_aligned_64(sizeof(uint16_t) * bp);
+  state->damage_jump_buffer_x14 = (uint16_t*)alloc_aligned_64(sizeof(uint16_t) * bp);
   state->l_cancel = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->hurtbox_state = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->hurtcap_count = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
@@ -284,7 +285,8 @@ int state_alloc(MslStateSoA* state, int batch_size) {
       !state->ucf_padbuf_sdrop_up_frames || !state->ucf_padbuf_stick_x ||
       !state->ucf_padbuf_stick_y || !state->percent || !state->percent_temp ||
       !state->dmg_x2225_b7 || !state->dmg_x2224_b2 || !state->shield_hp || !state->hitlag ||
-      !state->hitlag_started_frame || !state->hitstun || !state->l_cancel ||
+      !state->hitlag_started_frame || !state->hitstun || !state->damage_jump_buffer_x14 ||
+      !state->l_cancel ||
       !state->hurtbox_state || !state->hurtcap_count || !state->hurtcap_a_x ||
       !state->hurtcap_a_y || !state->hurtcap_a_z || !state->hurtcap_b_x || !state->hurtcap_b_y ||
       !state->hurtcap_b_z || !state->hurtcap_radius || !state->hurtcap_enabled ||
@@ -455,6 +457,7 @@ void state_free(MslStateSoA* state) {
   alloc_free(state->hitlag);
   alloc_free(state->hitlag_started_frame);
   alloc_free(state->hitstun);
+  alloc_free(state->damage_jump_buffer_x14);
   alloc_free(state->l_cancel);
   alloc_free(state->hurtbox_state);
   alloc_free(state->hurtcap_count);

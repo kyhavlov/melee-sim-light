@@ -214,6 +214,71 @@ static inline float stick_angle_y_over_abs_x(float stick_x, float stick_y) {
   return atan2f(stick_y, msl_absf(stick_x));
 }
 
+static inline uint8_t did_tap_jump(const MslCommonParams* c, float stick_y, uint8_t tilt_timer_y) {
+  // Decomp: refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c::ftCo_Jump_GetInput
+  return (stick_y >= c->tap_jump_threshold && tilt_timer_y < c->tap_jump_tilt_max_frames) ? 1u
+                                                                                            : 0u;
+}
+
+static inline uint16_t jump_aerial_action_from_stick(const MslCommonParams* c, float stick_x,
+                                                     float facing_dir) {
+  // Decomp: refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::ftCo_JumpAerial_Enter_Basic
+  return (stick_x * facing_dir) > -c->jump_back_x_threshold ? (uint16_t)MSL_ACT_JUMP_AERIAL_F
+                                                            : (uint16_t)MSL_ACT_JUMP_AERIAL_B;
+}
+
+static inline uint8_t damage_jump_input_from_edges(const MslBatch* batch, const MslCommonParams* c,
+                                                   size_t idx) {
+  if (batch == NULL || c == NULL) {
+    return 0u;
+  }
+
+  if ((batch->state.input_buttons_pressed[idx] & (uint16_t)MSL_BUTTON_XY) != 0) {
+    return 1u;
+  }
+
+  const float stick_y =
+      apply_deadzone(stick_i8_to_unit(batch->state.input_main_y[idx]), c->lstick_deadzone_y);
+  return did_tap_jump(c, stick_y, batch->state.tilt_timer_y[idx]);
+}
+
+static inline uint8_t damage_air_try_jump_aerial(MslBatch* batch, const MslCommonParams* c,
+                                                 const MslCharParams* ch, size_t idx,
+                                                 uint8_t force_jump_input) {
+  if (batch == NULL || c == NULL || ch == NULL) {
+    return 0u;
+  }
+  if (batch->state.jumps_left[idx] == 0) {
+    return 0u;
+  }
+
+  const uint8_t has_jump_input =
+      force_jump_input ? 1u : damage_jump_input_from_edges(batch, c, idx);
+  if (!has_jump_input) {
+    return 0u;
+  }
+
+  const float stick_x =
+      apply_deadzone(stick_i8_to_unit(batch->state.input_main_x[idx]), c->lstick_deadzone_x);
+  const float facing_dir = batch->state.facing[idx] ? 1.0f : -1.0f;
+  const uint16_t act = jump_aerial_action_from_stick(c, stick_x, facing_dir);
+  const uint32_t msid = (act == (uint16_t)MSL_ACT_JUMP_AERIAL_F) ? (uint32_t)MSL_SM_JUMP_AERIAL_F
+                                                                  : (uint32_t)MSL_SM_JUMP_AERIAL_B;
+
+  // ftCo_Damage inlineC0 path: on buffered jump gate, call ftCo_800CB870 which enters JumpAerial.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{inlineC0,ftCo_Damage_Anim}
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::ftCo_JumpAerial_Enter_Basic
+  batch->state.action_id[idx] = act;
+  batch->state.animation_index[idx] = msid;
+  msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+  batch->state.speed_air_x_self[idx] = stick_x * ch->air_jump_h_multiplier;
+  batch->state.speed_y_self[idx] = ch->jump_v_initial_velocity * ch->air_jump_v_multiplier;
+  batch->state.tilt_timer_y[idx] = 0xFEu;
+  batch->state.fall_fast[idx] = 0u;
+  batch->state.jumps_left[idx]--;
+  return 1u;
+}
+
 static inline uint8_t cstick_up_edge(const MslBatch* batch, const MslCommonParams* c, size_t idx) {
   if (batch == NULL || c == NULL) {
     return 0;
@@ -451,6 +516,7 @@ static inline uint8_t is_damage_fly_action(uint16_t a);
 static inline uint8_t is_damage_air_action(uint16_t a);
 static inline void enter_damage_fall_from_damage_anim(MslBatch* batch, const MslCharParams* ch,
                                                       size_t idx);
+static inline uint8_t is_damage_air_submotion(uint32_t smid);
 
 void knockdown_update_pre_physics(MslBatch* batch) {
   if (batch == NULL) {
@@ -467,7 +533,8 @@ void knockdown_update_pre_physics(MslBatch* batch) {
       const size_t idx = msl_idx_player(bi, p);
       const uint16_t a0 = batch->state.action_id[idx];
       const uint8_t damage_fly = is_damage_fly_action(a0);
-      if (!is_knockdown_any(a0) && !damage_fly) {
+      const uint8_t damage_air = is_damage_air_action(a0);
+      if (!is_knockdown_any(a0) && !damage_fly && !damage_air) {
         continue;
       }
       const MslCharParams* ch = msl_char_params(batch->state.char_id[idx]);
@@ -513,6 +580,42 @@ void knockdown_update_pre_physics(MslBatch* batch) {
                                                        : (uint8_t)(!in_hitstun && anim_done);
         if (should_enter_damage_fall) {
           enter_damage_fall_from_damage_anim(batch, ch, idx);
+        }
+        continue;
+      }
+
+      if (damage_air) {
+        const uint32_t damage_msid_u32 = submotion_for_damage_action(a0);
+        if (damage_msid_u32 <= 0xFFFFu) {
+          batch->state.animation_index[idx] = damage_msid_u32;
+        }
+
+        const uint8_t in_hitstun = (batch->state.hitstun[idx] > 0) ? 1u : 0u;
+        if (in_hitstun && damage_jump_input_from_edges(batch, c, idx)) {
+          // Decomp: doIasa snapshots x0 into mv.co.damage.x14 when ftCo_Jump_GetInput succeeds.
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::doIasa
+          batch->state.damage_jump_buffer_x14[idx] = batch->state.hitstun[idx];
+        }
+
+        uint8_t anim_done = 0u;
+        if (damage_msid_u32 <= 0xFFFFu) {
+          anim_done = anim_is_finished(cid, (uint16_t)damage_msid_u32, anim_frame);
+        }
+        if (anim_done && !in_hitstun) {
+          const uint16_t x14 = batch->state.damage_jump_buffer_x14[idx];
+          const uint8_t gate_open =
+              (x14 != 0u && (float)x14 <= c->damage_jump_buffer_window_frames) ? 1u : 0u;
+          // Decomp: Damage_Anim checks the inlineC0 jump-buffer gate first.
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_Anim
+          if (!(gate_open && damage_air_try_jump_aerial(batch, c, ch, idx, 1u))) {
+            // Decomp: Damage_Anim enters Fall via ftCo_Fall_Enter when anim/hitstun gates clear.
+            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_Anim
+            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_Enter
+            //
+            // ftCo_Fall_Enter does not call ftAnim_8006EBA4, so keep the previous DamageAir pose
+            // for this frame's collision/hurtbox updates and commit Fall animation/timebase later.
+            batch->state.action_id[idx] = (uint16_t)MSL_ACT_FALL;
+          }
         }
         continue;
       }
@@ -690,6 +793,38 @@ void knockdown_update_pre_physics(MslBatch* batch) {
   }
 }
 
+void knockdown_update_post_combat(MslBatch* batch) {
+  if (batch == NULL) {
+    return;
+  }
+
+  const int num_players = (int)batch->config.num_players;
+  for (int bi = 0; bi < batch->batch_size; bi++) {
+    for (int p = 0; p < num_players; p++) {
+      const size_t idx = msl_idx_player(bi, p);
+      const uint16_t a0 = batch->state.action_id[idx];
+      if (a0 != (uint16_t)MSL_ACT_FALL) {
+        continue;
+      }
+      if (!is_damage_air_submotion(batch->state.animation_index[idx])) {
+        continue;
+      }
+
+      // Decomp ordering:
+      // - Damage_Anim runs before Fighter_ProcessHit_8006D1EC.
+      // - A same-frame hit can overwrite the pending DamageAir->Fall result.
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_Anim
+      // refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
+      if (batch->state.hitlag[idx] != 0u || batch->state.hitstun[idx] != 0u) {
+        continue;
+      }
+
+      batch->state.animation_index[idx] = (uint32_t)MSL_SM_FALL;
+      msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+    }
+  }
+}
+
 static inline uint8_t is_damage_fly_action(uint16_t a) {
   switch (a) {
     case (uint16_t)MSL_ACT_DAMAGE_FLY_HI:
@@ -706,6 +841,13 @@ static inline uint8_t is_damage_fly_action(uint16_t a) {
 static inline uint8_t is_damage_air_action(uint16_t a) {
   return (a == (uint16_t)MSL_ACT_DAMAGE_AIR_1 || a == (uint16_t)MSL_ACT_DAMAGE_AIR_2 ||
           a == (uint16_t)MSL_ACT_DAMAGE_AIR_3)
+             ? 1u
+             : 0u;
+}
+
+static inline uint8_t is_damage_air_submotion(uint32_t smid) {
+  return (smid == (uint32_t)MSL_SM_DAMAGE_AIR_1 || smid == (uint32_t)MSL_SM_DAMAGE_AIR_2 ||
+          smid == (uint32_t)MSL_SM_DAMAGE_AIR_3)
              ? 1u
              : 0u;
 }

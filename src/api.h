@@ -312,6 +312,12 @@ typedef struct MslSeed {
   float shield_hp[MSL_MAX_PLAYERS];
   uint16_t hitlag[MSL_MAX_PLAYERS];
   uint16_t hitstun[MSL_MAX_PLAYERS];
+  // Damage jump-buffer snapshot (decomp: fp->mv.co.damage.x14).
+  // - Cleared on damage entry (ftCo_8008DCE0).
+  // - Set to hitstun timer (mv.co.damage.x0) on jump-input detect in doIasa.
+  // - Gated against p_ftCommonData->x1D0 in Damage_Anim's inlineC0 jump path.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{ftCo_8008DCE0,doIasa,ftCo_Damage_Anim}
+  uint16_t damage_jump_buffer_x14[MSL_MAX_PLAYERS];
   uint8_t l_cancel[MSL_MAX_PLAYERS];
   uint8_t hurtbox_state[MSL_MAX_PLAYERS];  // 0 vuln, 1 invuln, 2 intangible
   uint16_t ground_id[MSL_MAX_PLAYERS];

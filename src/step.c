@@ -191,6 +191,7 @@ static int step_one_frame_core(MslBatch* batch, const uint8_t* prev_input_bytes,
   if (run_combat) {
     combat_resolve(batch);
   }
+  knockdown_update_post_combat(batch);
   // Decomp parity: some entries call ftAnim_8006EBA4 immediately after ChangeMotionState; we defer
   // to post-combat to match action_frame/state_age without perturbing pre-combat/combat geometry.
   // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c

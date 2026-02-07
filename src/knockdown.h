@@ -20,3 +20,7 @@ void knockdown_update_pre_physics(MslBatch* batch);
 // - landing transitions from tumble-style damage into DownBound (Damage*_Coll paths)
 // - grounded->air fallback for downed states (Down*_Coll paths)
 void knockdown_update_post_collision(MslBatch* batch);
+
+// Post-combat knockdown updates:
+// - finalize DamageAir anim-end exits after combat has had a chance to overwrite state via hits.
+void knockdown_update_post_combat(MslBatch* batch);

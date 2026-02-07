@@ -255,6 +255,10 @@ typedef struct MslStateSoA {
   // - refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC (hitlag start)
   uint8_t* hitlag_started_frame;
   uint16_t* hitstun;
+  // Damage jump-buffer snapshot (decomp: fp->mv.co.damage.x14, set from x0 on jump input while in
+  // hitstun; used by Damage_Anim inlineC0 gate vs p_ftCommonData->x1D0).
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{doIasa,ftCo_Damage_Anim}
+  uint16_t* damage_jump_buffer_x14;  // [batch * players]
   uint8_t* l_cancel;
   uint8_t* hurtbox_state;
   // Pose-driven world-space hurt capsule endpoints (computed each frame in hurtboxes_refresh).
