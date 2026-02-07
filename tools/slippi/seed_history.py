@@ -671,6 +671,7 @@ def derive_guard_release_lockout_and_lightshield(
     act_guard_on: int,
     act_guard: int,
     act_guard_reflect: int,
+    act_guard_set_off: int,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
     Derive Guard release lockout state (mv.co.guard.xC + mv.co.guard.x10) and the lightshield amount
@@ -690,6 +691,9 @@ def derive_guard_release_lockout_and_lightshield(
       only once (xC && x10==0) OR the shield is no longer active.
       refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80092BCC
       refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_Guard_IASA (inlineC0)
+    - GuardSetOff entry consumes the existing fp->lightshield_amount when computing anim rate, and
+      does not reset that fighter field on entry.
+      refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80092F2C
 
     Returns (guard_release_latched_xc_u8, guard_x10_u8, lightshield_amount_f32) arrays with length N,
     where the values represent the *post-frame* state for each frame index.
@@ -732,6 +736,7 @@ def derive_guard_release_lockout_and_lightshield(
 
         in_guard = _is_guard(a)
         prev_in_guard = _is_guard(prev_a)
+        in_guard_set_off = a == int(act_guard_set_off)
 
         # Reset on GuardOn/GuardReflect entry (ftCo_800921DC call sites).
         if (a == int(act_guard_on) and prev_a != int(act_guard_on)) or (
@@ -741,7 +746,7 @@ def derive_guard_release_lockout_and_lightshield(
             x10 = init
             light = np.float32(0.0)
 
-        if not in_guard:
+        if not in_guard and not in_guard_set_off:
             # Outside of guard states, these internals are irrelevant; seed them as 0 to keep
             # reseeding deterministic and schema-minimal.
             xC = False
@@ -758,6 +763,16 @@ def derive_guard_release_lockout_and_lightshield(
             xC = False
             x10 = init
             light = np.float32(0.0)
+
+        if in_guard_set_off:
+            # GuardSetOff still consumes fp->lightshield_amount (ftCo_80092F2C), but xC/x10
+            # lockout internals are specific to Guard IASA paths.
+            xC = False
+            x10 = 0
+            out_xc[i] = np.uint8(0)
+            out_x10[i] = np.uint8(0)
+            out_light[i] = np.float32(light)
+            continue
 
         # Only update these during non-hitlag frames, mirroring fighter proc scheduling:
         # Anim + IASA callbacks are gated while hitlag is active.

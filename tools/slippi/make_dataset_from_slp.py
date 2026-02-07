@@ -622,6 +622,7 @@ def _main_impl(args) -> None:
     act_attack_air_lw = 0x0045
     act_guard_on = 0x00B2
     act_guard = 0x00B3
+    act_guard_set_off = 0x00B5
     act_guard_reflect = 0x00B6
     act_down_bound_u = 0x00B7
     act_down_wait_u = 0x00B8
@@ -926,6 +927,29 @@ def _main_impl(args) -> None:
         prev_buttons = np.concatenate(([np.uint16(0)], pre_buttons_physical[:-1]))
         buttons_pressed = pre_buttons_physical & ~prev_buttons
 
+        trigger_unit = np.maximum(pre_l, pre_r).astype(np.float32) / np.float32(255.0)
+        trigger_unit = np.where(
+            (pre_buttons_physical & np.uint16(button_mask_lr)) != 0, np.float32(1.0), trigger_unit
+        )
+
+        # Guard release lockout (mv.co.guard.xC/x10) + lightshield latch (fp->lightshield_amount).
+        # Derived strictly causally from replay history to support teacher-forced one-step reseed.
+        guard_release_latched_xc, guard_x10, lightshield_amount = derive_guard_release_lockout_and_lightshield(
+            action_id=post_state,
+            shield_hp=post_shield,
+            hitlag=post_hitlag,
+            trigger_unit=trigger_unit,
+            trigger_deadzone=float(common["trigger_deadzone"]),
+            guard_x10_init_frames=int(common["guard_x10_init_frames"]),
+            act_guard_on=act_guard_on,
+            act_guard=act_guard,
+            act_guard_reflect=act_guard_reflect,
+            act_guard_set_off=act_guard_set_off,
+        )
+        samples["seed_t"]["guard_release_latched_xc"][:, slot] = guard_release_latched_xc[:-1]
+        samples["seed_t"]["guard_x10"][:, slot] = guard_x10[:-1]
+        samples["seed_t"]["lightshield_amount"][:, slot] = lightshield_amount[:-1]
+
         # x67F input-history timer ("frames since last L/R press"). Decomp: refs/melee/src/melee/ft/fighter.c:2078-2086.
         lr_press_timer = compute_press_timer_u8(
             buttons_pressed=buttons_pressed,
@@ -944,6 +968,16 @@ def _main_impl(args) -> None:
             char_id=post_char,
             animation_index=animation_index,
             lr_press_timer=lr_press_timer,
+            shield_hp=post_shield,
+            lightshield_amount=lightshield_amount,
+            common_shield_hit_damage_mul=float(common["shield_hit_damage_mul"]),
+            common_shield_hit_damage_base=float(common["shield_hit_damage_base"]),
+            common_shield_hit_lightshield_min=float(common["shield_hit_lightshield_min"]),
+            common_shield_hit_lightshield_max=float(common["shield_hit_lightshield_max"]),
+            common_shield_stun_mul=float(common["shield_stun_mul"]),
+            common_shield_stun_base=float(common["shield_stun_base"]),
+            common_shield_stun_lightshield_min=float(common["shield_stun_lightshield_min"]),
+            common_shield_stun_lightshield_max=float(common["shield_stun_lightshield_max"]),
             end_frames=end_frames,
             common_lcancel_window_frames=lcancel_window_frames,
             common_lcancel_lag_div=lcancel_lag_div,
@@ -1106,13 +1140,10 @@ def _main_impl(args) -> None:
         samples["seed_t"]["ledge_cooldown"][:, slot] = ledge_cooldown[:-1]
         samples["seed_t"]["lr_press_timer"][:, slot] = lr_press_timer[:-1]
 
-        # x672 input-history timer (analog trigger hold timer) is seeded to support GuardReflect/powershield logic.
+        # x672 input-history timer (analog trigger hold timer) is seeded to support
+        # GuardReflect/powershield logic.
         # Decomp update: refs/melee/src/melee/ft/fighter.c:2020-2050.
         # Decomp override on GuardReflect entry: refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c:746-804.
-        trigger_unit = np.maximum(pre_l, pre_r).astype(np.float32) / np.float32(255.0)
-        trigger_unit = np.where(
-            (pre_buttons_physical & np.uint16(button_mask_lr)) != 0, np.float32(1.0), trigger_unit
-        )
         is_guard_reflect = post_state == np.uint16(act_guard_reflect)
         guard_reflect_entry = is_guard_reflect & ~np.concatenate(([False], is_guard_reflect[:-1]))
         _, x672_post = compute_x672_trigger_timer_pre_post(
@@ -1139,25 +1170,6 @@ def _main_impl(args) -> None:
             reflect_total_frames_x2b4=int(common["powershield_reflect_total_frames"]),
         )
         samples["seed_t"]["guard_reflect_timer_x18"][:, slot] = guard_reflect_timer_x18[:-1]
-
-        # Guard release lockout (mv.co.guard.xC/x10) + lightshield latch (fp->lightshield_amount).
-        # Derived strictly causally from replay history to support teacher-forced one-step reseed.
-        guard_release_latched_xc, guard_x10, lightshield_amount = (
-            derive_guard_release_lockout_and_lightshield(
-                action_id=post_state,
-                shield_hp=post_shield,
-                hitlag=post_hitlag,
-                trigger_unit=trigger_unit,
-                trigger_deadzone=float(common["trigger_deadzone"]),
-                guard_x10_init_frames=int(common["guard_x10_init_frames"]),
-                act_guard_on=act_guard_on,
-                act_guard=act_guard,
-                act_guard_reflect=act_guard_reflect,
-            )
-        )
-        samples["seed_t"]["guard_release_latched_xc"][:, slot] = guard_release_latched_xc[:-1]
-        samples["seed_t"]["guard_x10"][:, slot] = guard_x10[:-1]
-        samples["seed_t"]["lightshield_amount"][:, slot] = lightshield_amount[:-1]
 
         # Fighter per-frame input counters block.
         # Decomp: refs/melee/src/melee/ft/fighter.c:1897-2094 (lb helper: refs/melee/src/melee/lb/lb_00CE.c:163-225).

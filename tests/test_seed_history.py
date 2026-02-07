@@ -16,6 +16,7 @@ from tools.slippi.seed_history import (
     compute_x672_trigger_timer_pre_post,
     derive_guard_reflect_timer_x14,
     derive_guard_reflect_timer_x18,
+    derive_guard_release_lockout_and_lightshield,
     derive_ucf_pad_buffer_state,
     derive_kneebend_internals,
     derive_turn_internals,
@@ -208,6 +209,171 @@ def test_derive_frame_speed_mul_is_prefix_invariant() -> None:
         char_id=char_id_ext,
         animation_index=animation_index_ext,
         lr_press_timer=lr_press_timer_ext,
+        end_frames=end_frames,
+        common_lcancel_window_frames=7,
+        common_lcancel_lag_div=2.0,
+        common_landing_fall_special_lag_frames=10.0,
+        char_landing_air_lag_frames=char_lags,
+    )
+
+    assert np.allclose(out0, out1[: out0.size])
+
+
+def test_derive_guard_release_lightshield_persists_through_guard_set_off() -> None:
+    # GuardSetOff entry uses the already-latched fp->lightshield_amount and does not reset it.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80092F2C
+    act_guard_on = 0x00B2
+    act_guard = 0x00B3
+    act_guard_set_off = 0x00B5
+    act_guard_reflect = 0x00B6
+    act_wait = 0x000E
+
+    action_id = np.array(
+        [act_wait, act_guard_on, act_guard_on, act_guard_set_off, act_guard_set_off, act_wait],
+        dtype=np.uint16,
+    )
+    shield_hp = np.array([60.0, 60.0, 59.0, 55.0, 55.0, 55.0], dtype=np.float32)
+    hitlag = np.zeros(action_id.shape[0], dtype=np.uint16)
+    trigger = np.ones(action_id.shape[0], dtype=np.float32)
+    trigger[-1] = np.float32(0.0)
+
+    x_c, x10, light = derive_guard_release_lockout_and_lightshield(
+        action_id=action_id,
+        shield_hp=shield_hp,
+        hitlag=hitlag,
+        trigger_unit=trigger,
+        trigger_deadzone=0.3,
+        guard_x10_init_frames=8,
+        act_guard_on=act_guard_on,
+        act_guard=act_guard,
+        act_guard_reflect=act_guard_reflect,
+        act_guard_set_off=act_guard_set_off,
+    )
+
+    assert x_c.tolist() == [0, 0, 0, 0, 0, 0]
+    assert x10.tolist() == [0, 7, 6, 0, 0, 0]
+    assert light.tolist() == [0.0, 1.0, 1.0, 1.0, 1.0, 0.0]
+
+
+def test_derive_frame_speed_mul_guard_set_off_entry_rate_from_shield_drop() -> None:
+    # GuardSetOff entry rate should follow ftCo_80092F2C using a causal estimate of x19A4 from
+    # shield HP drop and latched lightshield amount; the derived rate must persist through hitlag.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80092F2C
+    # refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
+    act_guard_on = np.uint16(0x00B2)
+    act_guard_set_off = np.uint16(0x00B5)
+
+    state_age = np.array([-1.0, 0.0, 0.0], dtype=np.float32)
+    action_id = np.array([act_guard_on, act_guard_set_off, act_guard_set_off], dtype=np.uint16)
+    hitlag = np.array([0, 3, 2], dtype=np.uint16)
+    char_id = np.array([1, 1, 1], dtype=np.uint8)
+    animation_index = np.array([37, 40, 40], dtype=np.uint32)
+    lr_press_timer = np.array([0xFF, 0xFF, 0xFF], dtype=np.uint8)
+    shield_hp = np.array([60.0, 55.52, 55.52], dtype=np.float32)
+    lightshield = np.array([1.0, 1.0, 1.0], dtype=np.float32)
+
+    end_frames = EndFrameTables(by_char_id={1: {40: 20.0}})
+
+    out = derive_frame_speed_mul_f32(
+        state_age_f32=state_age,
+        action_id=action_id,
+        hitlag=hitlag,
+        char_id=char_id,
+        animation_index=animation_index,
+        lr_press_timer=lr_press_timer,
+        shield_hp=shield_hp,
+        lightshield_amount=lightshield,
+        common_shield_hit_damage_mul=1.0,
+        common_shield_hit_damage_base=0.0,
+        common_shield_hit_lightshield_min=0.1,
+        common_shield_hit_lightshield_max=0.3,
+        common_shield_stun_mul=1.5,
+        common_shield_stun_base=2.0,
+        common_shield_stun_lightshield_min=0.05,
+        common_shield_stun_lightshield_max=0.7,
+        end_frames=end_frames,
+        common_lcancel_window_frames=7,
+        common_lcancel_lag_div=2.0,
+        common_landing_fall_special_lag_frames=10.0,
+        char_landing_air_lag_frames={1: {"airn": 15, "airf": 22, "airb": 20, "airhi": 18, "airlw": 18}},
+    )
+
+    expected_rate = np.float32((20.0 + 0.1) / 4.7)
+    assert np.isclose(out[1], expected_rate, rtol=1e-6, atol=1e-6)
+    assert out[2] == out[1]
+
+
+def test_derive_frame_speed_mul_guard_set_off_entry_is_prefix_invariant() -> None:
+    # GuardSetOff entry-rate backsolve depends on shield_hp[i-1]-shield_hp[i] and lightshield_amount
+    # at entry; extending future frames must not change prefix outputs.
+    act_wait = np.uint16(0x000E)
+    act_guard_set_off = np.uint16(0x00B5)
+
+    state_age_prefix = np.array([-1.0, 0.0, 0.0, 0.0], dtype=np.float32)
+    action_id_prefix = np.array(
+        [act_wait, act_guard_set_off, act_guard_set_off, act_guard_set_off],
+        dtype=np.uint16,
+    )
+    hitlag_prefix = np.array([0, 3, 2, 1], dtype=np.uint16)
+    char_id_prefix = np.array([1, 1, 1, 1], dtype=np.uint8)
+    animation_index_prefix = np.array([37, 40, 40, 40], dtype=np.uint32)
+    lr_press_timer_prefix = np.array([0xFF, 0xFF, 0xFF, 0xFF], dtype=np.uint8)
+    shield_hp_prefix = np.array([60.0, 55.52, 55.52, 55.52], dtype=np.float32)
+    lightshield_prefix = np.array([1.0, 1.0, 1.0, 1.0], dtype=np.float32)
+
+    end_frames = EndFrameTables(by_char_id={1: {40: 20.0}})
+    char_lags = {1: {"airn": 15, "airf": 22, "airb": 20, "airhi": 18, "airlw": 18}}
+
+    out0 = derive_frame_speed_mul_f32(
+        state_age_f32=state_age_prefix,
+        action_id=action_id_prefix,
+        hitlag=hitlag_prefix,
+        char_id=char_id_prefix,
+        animation_index=animation_index_prefix,
+        lr_press_timer=lr_press_timer_prefix,
+        shield_hp=shield_hp_prefix,
+        lightshield_amount=lightshield_prefix,
+        common_shield_hit_damage_mul=1.0,
+        common_shield_hit_damage_base=0.0,
+        common_shield_hit_lightshield_min=0.1,
+        common_shield_hit_lightshield_max=0.3,
+        common_shield_stun_mul=1.5,
+        common_shield_stun_base=2.0,
+        common_shield_stun_lightshield_min=0.05,
+        common_shield_stun_lightshield_max=0.7,
+        end_frames=end_frames,
+        common_lcancel_window_frames=7,
+        common_lcancel_lag_div=2.0,
+        common_landing_fall_special_lag_frames=10.0,
+        char_landing_air_lag_frames=char_lags,
+    )
+
+    state_age_ext = np.concatenate([state_age_prefix, np.array([5.0, 6.0, 7.0], dtype=np.float32)])
+    action_id_ext = np.concatenate([action_id_prefix, np.array([act_wait, act_wait, act_wait], dtype=np.uint16)])
+    hitlag_ext = np.concatenate([hitlag_prefix, np.array([0, 0, 0], dtype=np.uint16)])
+    char_id_ext = np.concatenate([char_id_prefix, np.array([1, 1, 1], dtype=np.uint8)])
+    animation_index_ext = np.concatenate([animation_index_prefix, np.array([0, 0, 0], dtype=np.uint32)])
+    lr_press_timer_ext = np.concatenate([lr_press_timer_prefix, np.array([0xFF, 0xFF, 0xFF], dtype=np.uint8)])
+    shield_hp_ext = np.concatenate([shield_hp_prefix, np.array([55.52, 55.52, 55.52], dtype=np.float32)])
+    lightshield_ext = np.concatenate([lightshield_prefix, np.array([1.0, 1.0, 1.0], dtype=np.float32)])
+
+    out1 = derive_frame_speed_mul_f32(
+        state_age_f32=state_age_ext,
+        action_id=action_id_ext,
+        hitlag=hitlag_ext,
+        char_id=char_id_ext,
+        animation_index=animation_index_ext,
+        lr_press_timer=lr_press_timer_ext,
+        shield_hp=shield_hp_ext,
+        lightshield_amount=lightshield_ext,
+        common_shield_hit_damage_mul=1.0,
+        common_shield_hit_damage_base=0.0,
+        common_shield_hit_lightshield_min=0.1,
+        common_shield_hit_lightshield_max=0.3,
+        common_shield_stun_mul=1.5,
+        common_shield_stun_base=2.0,
+        common_shield_stun_lightshield_min=0.05,
+        common_shield_stun_lightshield_max=0.7,
         end_frames=end_frames,
         common_lcancel_window_frames=7,
         common_lcancel_lag_div=2.0,

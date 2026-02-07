@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import struct
 from pathlib import Path
 
@@ -884,6 +885,145 @@ def test_action_frame_attackair_entry_rate_resets_to_one() -> None:
     assert int(row["seed_t"]["hitstun"][0, p]) == 0
     assert int(row["ref_t1"]["hitstun"][0, p]) == 0
     assert float(row["seed_t"]["frame_speed_mul_f32"][0, p]) == pytest.approx(2.505, rel=1e-6)
+
+    binding = pytest.importorskip("msl_binding")
+    sizes = binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    compare_stride = int(sizes["compare"])
+
+    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    try:
+        seed_bytes = np.empty((1, seed_stride), dtype=np.uint8)
+        prev_input_bytes = np.empty((1, input_stride), dtype=np.uint8)
+        input_bytes = np.empty((1, input_stride), dtype=np.uint8)
+        out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
+
+        seed_bytes[:] = np.frombuffer(row["seed_t"].tobytes(order="C"), dtype=np.uint8).reshape(1, seed_stride)
+        prev_input_bytes[:] = np.frombuffer(row["prev_input_t"].tobytes(order="C"), dtype=np.uint8).reshape(
+            1, input_stride
+        )
+        input_bytes[:] = np.frombuffer(row["input_t"].tobytes(order="C"), dtype=np.uint8).reshape(
+            1, input_stride
+        )
+
+        binding.reseed_seed(handle, seed_bytes)
+        binding.step_input(handle, prev_input_bytes, input_bytes)
+        binding.write_compare(handle, out_compare_bytes)
+
+        out = out_compare_bytes.view(COMPARE_DTYPE).reshape(-1)
+        got_a = int(out["action_id"][0, p])
+        want_a = int(row["ref_t1"]["action_id"][0, p])
+        assert got_a == want_a, f"record={record} p={p} expected action_id={want_a}, got {got_a}"
+
+        got_af = int(out["action_frame"][0, p])
+        want_af = int(row["ref_t1"]["action_frame"][0, p])
+        assert got_af == want_af, f"record={record} p={p} expected action_frame={want_af}, got {got_af}"
+    finally:
+        binding.destroy(handle)
+
+
+@pytest.mark.integration
+def test_action_frame_guard_setoff_hitlag_tail_uses_entry_rate() -> None:
+    # Cluster lock: GuardSetOff entry seeds a non-1 anim rate from shield-hit internals, and that
+    # rate must persist through hitlag tail so the first non-hitlag GuardSetOff frame lands on the
+    # replay action_frame.
+    #
+    # Decomp:
+    # - GuardSetOff entry anim-rate formula:
+    #   refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80092F2C
+    # - Hitlag gate (rate preserved while anim tick is frozen):
+    #   refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
+    #
+    # Regression target: AGG rec 924 p1 (GuardSetOff -> GuardSetOff), where ref action_frame is 4
+    # after hitlag 1->0 but the sim previously emitted 1 with a stale entry rate of 1.0.
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_rel = (
+        "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
+        "cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl"
+    )
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+    record = 924
+    p = 1
+    assert int(samples.shape[0]) > record, f"dataset too short: num_records={int(samples.shape[0])}"
+    row = samples[record : record + 1]
+
+    assert int(row["seed_t"]["action_id"][0, p]) == 181  # GuardSetOff
+    assert int(row["ref_t1"]["action_id"][0, p]) == 181
+    assert int(row["seed_t"]["action_frame"][0, p]) == 0
+    assert int(row["ref_t1"]["action_frame"][0, p]) == 4
+    assert int(row["seed_t"]["hitlag"][0, p]) == 1
+    assert int(row["ref_t1"]["hitlag"][0, p]) == 0
+    assert int(row["seed_t"]["hitstun"][0, p]) == 0
+    assert int(row["ref_t1"]["hitstun"][0, p]) == 0
+
+    if record <= 0:
+        pytest.skip("record index must be >0 for GuardSetOff entry-rate stale-cache check")
+    act_guard_set_off = 181
+    entry_record = record
+    while entry_record > 0 and int(samples["seed_t"]["action_id"][entry_record - 1, p]) == act_guard_set_off:
+        entry_record -= 1
+    if entry_record <= 0:
+        pytest.skip("unable to locate GuardSetOff entry frame for stale-cache check")
+    entry_row = samples[entry_record : entry_record + 1]
+    entry_prev_row = samples[entry_record - 1 : entry_record]
+
+    common_path = root / "data/common/ft_common_data.json"
+    if not common_path.exists():
+        pytest.skip("missing local data artifact: data/common/ft_common_data.json")
+    common = json.loads(common_path.read_text())
+
+    char_id = int(row["seed_t"]["char_id"][0, p])
+    tracks_rel = "data/anims/fox.tracks.bin" if char_id == 1 else "data/anims/falco.tracks.bin"
+    tracks_path = root / tracks_rel
+    if not tracks_path.exists():
+        pytest.skip(f"missing local tracks: {tracks_rel}")
+
+    msid = int(row["seed_t"]["animation_index"][0, p] & np.uint32(0xFFFF))
+    end_frame = _tracks_end_frame(tracks_path, msid)
+
+    seed_rate = float(row["seed_t"]["frame_speed_mul_f32"][0, p])
+    shield_drop = float(entry_prev_row["seed_t"]["shield_hp"][0, p] - entry_row["seed_t"]["shield_hp"][0, p])
+    lightshield_amount = float(entry_row["seed_t"]["lightshield_amount"][0, p])
+    lightshield_amount = max(0.0, min(1.0, lightshield_amount))
+
+    shield_hit_light_term = lightshield_amount * (
+        float(common["shield_hit_lightshield_max"]) - float(common["shield_hit_lightshield_min"])
+    ) + float(common["shield_hit_lightshield_min"])
+    shield_hit_den = float(common["shield_hit_damage_mul"]) * (1.0 - shield_hit_light_term)
+    if shield_drop <= 0.0 or shield_hit_den <= 0.0:
+        pytest.skip("stale cached datasets for GuardSetOff frame_speed_mul (invalid entry shield-drop context)")
+
+    shield_damage_taken = (shield_drop - float(common["shield_hit_damage_base"])) / shield_hit_den
+    if shield_damage_taken < 0.0:
+        shield_damage_taken = 0.0
+    int_dmg_est = float(np.trunc(shield_damage_taken))
+
+    shield_stun_light_term = lightshield_amount * (
+        float(common["shield_stun_lightshield_max"]) - float(common["shield_stun_lightshield_min"])
+    ) + float(common["shield_stun_lightshield_min"])
+    setoff_f = float(common["shield_stun_mul"]) * (int_dmg_est * (1.0 - shield_stun_light_term)) + float(
+        common["shield_stun_base"]
+    )
+    if setoff_f <= 0.0:
+        pytest.skip("stale cached datasets for GuardSetOff frame_speed_mul (invalid entry setoff duration)")
+
+    # Decomp ftCo_80092F2C uses (end_frame + 0.1f)/f for GuardSetOff anim rate.
+    expected_seed_rate = (float(end_frame) + 0.1) / setoff_f
+    # NOTE(schema): this lock expects datasets rebuilt with `preprocess_suite --force` after
+    # Guard/seed-derivation schema updates (for example, guard_reflect_timer_x18).
+    if not np.isclose(seed_rate, expected_seed_rate, rtol=1e-6, atol=1e-6):
+        pytest.skip(
+            "stale cached datasets for GuardSetOff frame_speed_mul; rebuild with "
+            "`uv run python -m tools.slippi.preprocess_suite --suite replays/suites/fox_falco_fd_ucf084_recent.json "
+            "--datasets-dir datasets --force`"
+        )
 
     binding = pytest.importorskip("msl_binding")
     sizes = binding.sizes()

@@ -98,6 +98,16 @@ def derive_frame_speed_mul_f32(
     char_id: np.ndarray,  # [n] u8
     animation_index: np.ndarray,  # [n] u32 (msid or 0xFFFFFFFF)
     lr_press_timer: np.ndarray,  # [n] u8 (x67F: frames since L/R press)
+    shield_hp: np.ndarray | None = None,  # [n] f32 (post-frame shield health)
+    lightshield_amount: np.ndarray | None = None,  # [n] f32 (fp->lightshield_amount)
+    common_shield_hit_damage_mul: float | None = None,  # p_ftCommonData->x284
+    common_shield_hit_damage_base: float | None = None,  # p_ftCommonData->x288
+    common_shield_hit_lightshield_min: float | None = None,  # p_ftCommonData->x2DC
+    common_shield_hit_lightshield_max: float | None = None,  # p_ftCommonData->x2E0
+    common_shield_stun_mul: float | None = None,  # p_ftCommonData->x28C
+    common_shield_stun_base: float | None = None,  # p_ftCommonData->x290
+    common_shield_stun_lightshield_min: float | None = None,  # p_ftCommonData->x2E4
+    common_shield_stun_lightshield_max: float | None = None,  # p_ftCommonData->x2E8
     end_frames: EndFrameTables,
     common_lcancel_window_frames: int,
     common_lcancel_lag_div: float,
@@ -112,7 +122,7 @@ def derive_frame_speed_mul_f32(
 
     - On stable segments (same action+msid), use delta(state_age) as a proxy for the rate.
     - On motion-state entry frames where state_age is reset (delta may be negative), use decomp-backed
-      LandingAir / LandingFallSpecial formulas to seed the new rate.
+      LandingAir / LandingFallSpecial / GuardSetOff formulas to seed the new rate.
 
     This is intentionally conservative and suite-scoped: LandingAir*/LandingFallSpecial are the early
     primary drivers for fractional anim advance in the Fox/Falco FD suite.
@@ -124,6 +134,41 @@ def derive_frame_speed_mul_f32(
         return out
     out[0] = last
 
+    hp = None if shield_hp is None else np.asarray(shield_hp, dtype=np.float32).reshape(-1)
+    light = None if lightshield_amount is None else np.asarray(lightshield_amount, dtype=np.float32).reshape(-1)
+    use_guard_setoff_entry_rate = (
+        hp is not None
+        and light is not None
+        and common_shield_hit_damage_mul is not None
+        and common_shield_hit_damage_base is not None
+        and common_shield_hit_lightshield_min is not None
+        and common_shield_hit_lightshield_max is not None
+        and common_shield_stun_mul is not None
+        and common_shield_stun_base is not None
+        and common_shield_stun_lightshield_min is not None
+        and common_shield_stun_lightshield_max is not None
+    )
+    if use_guard_setoff_entry_rate:
+        if int(hp.size) != n or int(light.size) != n:
+            raise ValueError("shield_hp/lightshield_amount must match state_age length when provided")
+        shield_hit_mul = np.float32(float(common_shield_hit_damage_mul))
+        shield_hit_base = np.float32(float(common_shield_hit_damage_base))
+        shield_hit_ls_min = np.float32(float(common_shield_hit_lightshield_min))
+        shield_hit_ls_max = np.float32(float(common_shield_hit_lightshield_max))
+        shield_stun_mul = np.float32(float(common_shield_stun_mul))
+        shield_stun_base = np.float32(float(common_shield_stun_base))
+        shield_stun_ls_min = np.float32(float(common_shield_stun_lightshield_min))
+        shield_stun_ls_max = np.float32(float(common_shield_stun_lightshield_max))
+    else:
+        shield_hit_mul = np.float32(0.0)
+        shield_hit_base = np.float32(0.0)
+        shield_hit_ls_min = np.float32(0.0)
+        shield_hit_ls_max = np.float32(0.0)
+        shield_stun_mul = np.float32(0.0)
+        shield_stun_base = np.float32(0.0)
+        shield_stun_ls_min = np.float32(0.0)
+        shield_stun_ls_max = np.float32(0.0)
+
     # Action ids (GALE01) for suite-relevant landing states.
     # These are stable identifiers, not heuristics.
     ACT_LANDING_AIR_N = np.uint16(0x0043)
@@ -132,6 +177,7 @@ def derive_frame_speed_mul_f32(
     ACT_LANDING_AIR_HI = np.uint16(0x0046)
     ACT_LANDING_AIR_LW = np.uint16(0x0047)
     ACT_LANDING_FALL_SPECIAL = np.uint16(0x0048)
+    ACT_GUARD_SET_OFF = np.uint16(0x00B5)
 
     for i in range(1, n):
         changed = (
@@ -208,6 +254,66 @@ def derive_frame_speed_mul_f32(
                     last = np.float32((np.float32(end_frame) + np.float32(0.1)) / np.float32(lag))
                     out[i] = last
                     continue
+
+        if (
+            a == ACT_GUARD_SET_OFF
+            and int(action_id[i - 1]) != int(ACT_GUARD_SET_OFF)
+            and end_frame is not None
+            and use_guard_setoff_entry_rate
+        ):
+            # Decomp:
+            # - GuardSetOff entry sets anim rate to:
+            #     (0.1f + lbGetJObjEndFrame(...)) /
+            #     (x28C * (x19A4 * (1 - (lightshield_amount*(x2E8-x2E4)+x2E4))) + x290)
+            #   refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80092F2C
+            # - x19A4 is written from shield-hit int damage on resolve:
+            #   refs/melee/src/melee/ft/ftcoll.c::ftColl_80076CBC
+            # - Shield HP drop is driven by x19A0_shieldDamageTaken and lightshield_amount:
+            #   refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
+            #
+            # APPROXIMATION(seed bridge): Slippi does not expose x19A4/x19A0 directly, so this
+            # backsolves an inferred x19A4 from the causal post-frame shield HP drop on
+            # GuardSetOff entry, then applies the decomp GuardSetOff anim-rate formula.
+            #
+            # TODO(seed source): replace this inference when we have a direct/reseedable source for
+            # shield-hit internals (prefer Slippi-ASM export of x19A4/x19A0, targeted Dolphin dump,
+            # or promoted explicit seed field derived from a decomp-backed pipeline).
+            shield_drop = np.float32(hp[i - 1] - hp[i])
+            if float(shield_drop) > 0.0 and float(shield_hit_mul) > 0.0:
+                ls = np.float32(light[i])
+                if float(ls) < 0.0:
+                    ls = np.float32(0.0)
+                if float(ls) > 1.0:
+                    ls = np.float32(1.0)
+
+                shield_hit_light_term = np.float32(
+                    ls * (shield_hit_ls_max - shield_hit_ls_min) + shield_hit_ls_min
+                )
+                shield_hit_den = np.float32(shield_hit_mul * (np.float32(1.0) - shield_hit_light_term))
+                if float(shield_hit_den) > 0.0:
+                    shield_damage_taken = np.float32((shield_drop - shield_hit_base) / shield_hit_den)
+                    if float(shield_damage_taken) < 0.0:
+                        shield_damage_taken = np.float32(0.0)
+                    # Decomp rounding semantics for x19A4 shield-hit integer damage:
+                    # ftColl_80076CBC assigns `int int_dmg = getEnvDmg(hit0->damage);` then writes
+                    # `fp1->x19A4 = int_dmg`. `getEnvDmg` uses C float->int cast semantics
+                    # (`(int)dmg`), i.e. truncation toward zero (not round-to-nearest).
+                    # refs/melee/src/melee/ft/ftcoll.c::ftColl_80076CBC
+                    # refs/melee/src/melee/ft/ftcoll.c::getEnvDmg
+                    int_dmg_est = np.float32(np.trunc(shield_damage_taken))
+                    if float(int_dmg_est) < 0.0:
+                        int_dmg_est = np.float32(0.0)
+
+                    shield_stun_light_term = np.float32(
+                        ls * (shield_stun_ls_max - shield_stun_ls_min) + shield_stun_ls_min
+                    )
+                    setoff_f = np.float32(
+                        shield_stun_mul * (int_dmg_est * (np.float32(1.0) - shield_stun_light_term)) + shield_stun_base
+                    )
+                    if float(setoff_f) > 0.0:
+                        last = np.float32((np.float32(end_frame) + np.float32(0.1)) / setoff_f)
+                        out[i] = last
+                        continue
 
         # Fallback: default rate.
         #
