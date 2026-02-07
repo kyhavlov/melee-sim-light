@@ -316,22 +316,44 @@ void shields_refresh(MslBatch* batch) {
       // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_800925A4,ftCo_8009388C}
       //
       // GuardReflect nuance:
-      // - ftCo_8009388C clears fp->x221B_b0 on entry (bubble inactive while reflecting).
-      // - ftCo_80093A50 (alternate entry used by some contexts) calls ftCo_80092450 on entry, which
-      //   recreates the shield desc and sets fp->x221B_b0 back to true.
-      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_80093A50,ftCo_80092450}
+      // - GuardOn IASA path (ftCo_80093694 -> ftCo_80093850 -> ftCo_8009388C) clears fp->x221B_b0.
+      // - Locomotion guard-check path (ftCo_80091A4C -> ftCo_800939B4 -> ftCo_80093A50) calls
+      //   ftCo_80092450 on entry, which recreates shield desc and sets fp->x221B_b0.
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
+      //   ftCo_GuardOn_IASA,ftCo_80093694,ftCo_8009388C,ftCo_80091A4C,ftCo_800939B4,ftCo_80093A50,ftCo_80092450}
       //
-      // Our sim does not currently model the full entry-path split for GuardReflect without adding
-      // new hidden state. Preserve the seeded fp->x221B_b0 bit during the reflect window, and force
-      // it back on once the reflect timer expires (mv.co.guard.x14 < 0 => +1 biased timer reaches 0).
+      // Sim mapping without new hidden state:
+      // - Use prev_action_id (cached at frame start) to detect GuardReflect entry.
+      // - GuardOn -> GuardReflect uses the clear path.
+      // - All other entry sources use the set path.
+      // - While GuardReflect x14 is active, preserve the selected entry-path value.
       const uint8_t in_guard_reflect =
           (batch->state.action_id[idx] == (uint16_t)MSL_ACT_GUARD_REFLECT) ? 1u : 0u;
       const uint8_t guard_reflect_timer_active =
           (in_guard_reflect && batch->state.guard_reflect_timer_x14[idx] != 0) ? 1u : 0u;
+      const uint8_t entered_guard_reflect =
+          (in_guard_reflect && batch->state.prev_action_id[idx] != (uint16_t)MSL_ACT_GUARD_REFLECT)
+              ? 1u
+              : 0u;
 
       // Always clear when the shield is broken / absent (decomp clears x221B_b0 on break).
       if (!(batch->state.stocks[idx] != 0 && batch->state.shield_hp[idx] > 0.0f)) {
         f &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221B_IS_SHIELD_ACTIVE;
+      } else if (entered_guard_reflect) {
+        const uint16_t prev_a = batch->state.prev_action_id[idx];
+        if (prev_a == (uint16_t)MSL_ACT_GUARD_ON) {
+          // GuardOn_IASA powershield path (ftCo_8009388C): clear on entry.
+          f &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221B_IS_SHIELD_ACTIVE;
+        } else if (prev_a == (uint16_t)MSL_ACT_DASH) {
+          // GuardReflect set-path proxy is modeled from ftCo_80091A4C call sites (Wait/Walk/Run/Turn
+          // style grounded IASA), not Dash IASA.
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80091A4C
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
+          f &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221B_IS_SHIELD_ACTIVE;
+        } else {
+          // Locomotion guard-check powershield path (ftCo_80093A50 -> ftCo_80092450): set on entry.
+          f |= (uint8_t)MSL_STATE_FLAG_221B_IS_SHIELD_ACTIVE;
+        }
       } else if (guard_reflect_timer_active) {
         // Preserve.
       } else if (sr > 0.0f) {

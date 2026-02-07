@@ -628,7 +628,10 @@ void guard_update_grounded(MslBatch* batch, const MslCommonParams* c, size_t idx
       //       fp->input.x668 & (HSD_PAD_R | HSD_PAD_L) &&
       //       fp->x672_input_timer_counter < p_ftCommonData->x2A0)
       //     ftCo_80093850(gobj);
+      // Scope gate: this check is in ftCo_GuardOn_IASA only (not ftCo_Guard_IASA), so only
+      // GuardOn can re-enter GuardReflect through this path.
       // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80093694
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_GuardOn_IASA,ftCo_Guard_IASA}
       //
       // Snapshot note: in-suite Slippi seeds can carry `action_frame < 0` when
       // `animation_index==0xFFFFFFFF`. For this *guard.x0* gate only, treat negative action_frame
@@ -637,7 +640,7 @@ void guard_update_grounded(MslBatch* batch, const MslCommonParams* c, size_t idx
       enum { LR = (uint16_t)MSL_BUTTON_L | (uint16_t)MSL_BUTTON_R };
       const uint16_t guard_x0 =
           (batch->state.action_frame[idx] < 0) ? 0u : (uint16_t)batch->state.action_frame[idx];
-      if (a0 != (uint16_t)MSL_ACT_GUARD_REFLECT &&
+      if (a0 == (uint16_t)MSL_ACT_GUARD_ON &&
           guard_x0 < (uint16_t)c->powershield_reflect_window_frames &&
           (batch->state.input_buttons_pressed[idx] & (uint16_t)LR) != 0 &&
           batch->state.x672_input_timer[idx] < c->powershield_reflect_window_frames) {

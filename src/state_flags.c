@@ -34,9 +34,13 @@ void state_flags_refresh_post_frame(MslBatch* batch) {
 
   // fp+0x221B:
   // - 0x80 = isShieldActive (fp->x221B_b0 in the decomp bitfield layout)
+  // - 0x04 = fp->x221B_b5 (grab-owner latch; set while this fighter owns a grabbed victim)
+  // Bit-order note: fp+0x221B b* numbering is MSB-first in GALE01/Slippi packing
+  // (b0==0x80 ... b5==0x04), matching refs/melee/src/melee/ft/types.h + SendGamePostFrame.asm.
   // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
   // refs/melee/src/melee/ft/types.h (fp+0x221B bitfields)
   enum { MSL_STATE_FLAG_221B_IS_SHIELD_ACTIVE = 0x80 };
+  enum { MSL_STATE_FLAG_221B_B5 = 0x04 };
 
   // fp+0x221C:
   // - 0x02 = isHitstun
@@ -83,15 +87,49 @@ void state_flags_refresh_post_frame(MslBatch* batch) {
         f221a &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221A_IS_FASTFALL;
       }
 
+      // x221B_b5 ownership (grab-owner latch):
+      // - set in catch collision when this fighter acquires victim_gobj (ftGrabDist),
+      // - cleared on throw release helper and capture-cut paths.
+      // refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078A2C,ftGrabDist}
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DDDE4
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_CaptureCut.c
+      //
+      // Internal mapping: `grab_owner_port` is this sim's explicit victim_gobj owner link; derive
+      // x221B_b5 from "any live grabbed victim points at owner p" to avoid stale seeded carryover.
+      const size_t flags_221b_i = idx * MSL_STATE_FLAGS_STRIDE + (size_t)MSL_STATE_FLAGS_221B_INDEX;
+      uint8_t f221b = batch->state.state_flags[flags_221b_i];
+      uint8_t owner_has_grabbed_victim = 0;
+      for (int v = 0; v < num_players; v++) {
+        if (v == p) {
+          continue;
+        }
+        const size_t vidx = msl_idx_player(bi, v);
+        if (batch->state.stocks[vidx] == 0) {
+          continue;
+        }
+        if (batch->state.grab_owner_port[vidx] != (uint8_t)p) {
+          continue;
+        }
+        if (!msl_action_is_grabbed_victim(batch->state.action_id[vidx])) {
+          continue;
+        }
+        owner_has_grabbed_victim = 1;
+        break;
+      }
+      if (owner_has_grabbed_victim) {
+        f221b |= (uint8_t)MSL_STATE_FLAG_221B_B5;
+      } else {
+        f221b &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221B_B5;
+      }
+
       // Approximate fp->x221A_b7 from shield activation (fp->x221B_b0) to keep the byte stable
       // under teacher-forced reseeds without introducing new hidden state.
-      const size_t flags_221b_i = idx * MSL_STATE_FLAGS_STRIDE + (size_t)MSL_STATE_FLAGS_221B_INDEX;
-      const uint8_t f221b = batch->state.state_flags[flags_221b_i];
       if (f221b & (uint8_t)MSL_STATE_FLAG_221B_IS_SHIELD_ACTIVE) {
         f221a |= (uint8_t)MSL_STATE_FLAG_221A_B7;
       } else {
         f221a &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221A_B7;
       }
+      batch->state.state_flags[flags_221b_i] = f221b;
       batch->state.state_flags[flags_221a_i] = f221a;
 
       // 0x221C: isHitstun derived from hitstun frames left.

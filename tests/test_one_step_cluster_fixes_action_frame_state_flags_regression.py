@@ -265,6 +265,142 @@ def test_state_flags_x221a_b3_not_set_on_throw_release_damage_entry() -> None:
 
 
 @pytest.mark.integration
+def test_state_flags_x221b_b5_set_on_catchpull_entry() -> None:
+    # Cluster lock: fp->x221B_b5 (state_flags[2] bit 0x04) sets when catch collision acquires a
+    # victim and transitions Catch -> CatchPull.
+    #
+    # Decomp:
+    # - set on acquire: refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078A2C,ftGrabDist}
+    # - Slippi packing: refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm (0x221B byte)
+    #
+    # Regression target: AGG rec 203 p1 where ref.state_flags[2] == 0x04 on CatchPull entry.
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_rel = (
+        "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
+        "cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl"
+    )
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+    record = 203
+    p = 1
+    assert int(samples.shape[0]) > record, f"dataset too short: num_records={int(samples.shape[0])}"
+    row = samples[record : record + 1]
+
+    assert int(row["seed_t"]["action_id"][0, p]) == 212  # Catch
+    assert int(row["ref_t1"]["action_id"][0, p]) == 213  # CatchPull
+    assert int(row["seed_t"]["hitlag"][0, p]) == 0
+    assert int(row["ref_t1"]["hitlag"][0, p]) == 0
+    assert int(row["seed_t"]["hitstun"][0, p]) == 0
+    assert int(row["ref_t1"]["hitstun"][0, p]) == 0
+    assert int(row["seed_t"]["state_flags"][0, p, 2]) == 0
+    assert int(row["ref_t1"]["state_flags"][0, p, 2]) == 4
+
+    binding = pytest.importorskip("msl_binding")
+    sizes = binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    compare_stride = int(sizes["compare"])
+
+    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    try:
+        seed_bytes = np.empty((1, seed_stride), dtype=np.uint8)
+        prev_input_bytes = np.empty((1, input_stride), dtype=np.uint8)
+        input_bytes = np.empty((1, input_stride), dtype=np.uint8)
+        out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
+
+        seed_bytes[:] = np.frombuffer(row["seed_t"].tobytes(order="C"), dtype=np.uint8).reshape(1, seed_stride)
+        prev_input_bytes[:] = np.frombuffer(row["prev_input_t"].tobytes(order="C"), dtype=np.uint8).reshape(
+            1, input_stride
+        )
+        input_bytes[:] = np.frombuffer(row["input_t"].tobytes(order="C"), dtype=np.uint8).reshape(
+            1, input_stride
+        )
+
+        binding.reseed_seed(handle, seed_bytes)
+        binding.step_input(handle, prev_input_bytes, input_bytes)
+        binding.write_compare(handle, out_compare_bytes)
+
+        out = out_compare_bytes.view(COMPARE_DTYPE).reshape(-1)
+        got = int(out["state_flags"][0, p, 2])
+        want = int(row["ref_t1"]["state_flags"][0, p, 2])
+        assert got == want, f"record={record} p={p} expected state_flags[2]={want}, got {got}"
+    finally:
+        binding.destroy(handle)
+
+
+@pytest.mark.integration
+def test_state_flags_x221b_b5_clears_after_throw_release() -> None:
+    # Cluster lock: fp->x221B_b5 (state_flags[2] bit 0x04) clears when throw release drops
+    # victim_gobj ownership.
+    #
+    # Decomp clear path: refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DDDE4
+    #
+    # Regression target: AGG rec 573 p0 where seed.state_flags[2] has 0x04 but ref clears to 0.
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_rel = (
+        "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
+        "cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl"
+    )
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+    record = 573
+    p = 0
+    assert int(samples.shape[0]) > record, f"dataset too short: num_records={int(samples.shape[0])}"
+    row = samples[record : record + 1]
+
+    assert int(row["seed_t"]["action_id"][0, p]) == 221  # ThrowHi
+    assert int(row["ref_t1"]["action_id"][0, p]) == 221
+    assert int(row["seed_t"]["hitlag"][0, p]) == 0
+    assert int(row["ref_t1"]["hitlag"][0, p]) == 0
+    assert int(row["seed_t"]["hitstun"][0, p]) == 0
+    assert int(row["ref_t1"]["hitstun"][0, p]) == 0
+    assert int(row["seed_t"]["state_flags"][0, p, 2]) == 4
+    assert int(row["ref_t1"]["state_flags"][0, p, 2]) == 0
+
+    binding = pytest.importorskip("msl_binding")
+    sizes = binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    compare_stride = int(sizes["compare"])
+
+    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    try:
+        seed_bytes = np.empty((1, seed_stride), dtype=np.uint8)
+        prev_input_bytes = np.empty((1, input_stride), dtype=np.uint8)
+        input_bytes = np.empty((1, input_stride), dtype=np.uint8)
+        out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
+
+        seed_bytes[:] = np.frombuffer(row["seed_t"].tobytes(order="C"), dtype=np.uint8).reshape(1, seed_stride)
+        prev_input_bytes[:] = np.frombuffer(row["prev_input_t"].tobytes(order="C"), dtype=np.uint8).reshape(
+            1, input_stride
+        )
+        input_bytes[:] = np.frombuffer(row["input_t"].tobytes(order="C"), dtype=np.uint8).reshape(
+            1, input_stride
+        )
+
+        binding.reseed_seed(handle, seed_bytes)
+        binding.step_input(handle, prev_input_bytes, input_bytes)
+        binding.write_compare(handle, out_compare_bytes)
+
+        out = out_compare_bytes.view(COMPARE_DTYPE).reshape(-1)
+        got = int(out["state_flags"][0, p, 2])
+        want = int(row["ref_t1"]["state_flags"][0, p, 2])
+        assert got == want, f"record={record} p={p} expected state_flags[2]={want}, got {got}"
+    finally:
+        binding.destroy(handle)
+
+
+@pytest.mark.integration
 def test_state_flags_x221c_b2_set_on_guard_reflect_entry() -> None:
     # Schema note: this slice adds `seed_t.guard_reflect_timer_x18`; rebuild cached suite datasets
     # with `uv run python -m tools.slippi.preprocess_suite --suite ... --datasets-dir datasets --force`.

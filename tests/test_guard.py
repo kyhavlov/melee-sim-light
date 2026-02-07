@@ -120,3 +120,43 @@ def test_grounded_guard_entry_hold_exit_changes_action_and_drains_shield() -> No
         assert int(out_last["animation_index"][0]) == SM_WAIT1_0
     finally:
         msl_binding.destroy(handle)
+
+
+def test_guard_state_does_not_reenter_guard_reflect_on_lr_edge() -> None:
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    compare_stride = int(sizes["compare"])
+
+    seed = _seed_base()
+    seed["action_id"][0, 0] = np.uint16(ACT_GUARD)
+    seed["action_frame"][0, 0] = np.int16(0)
+    seed["animation_index"][0, 0] = np.uint32(0xFFFFFFFF)
+    seed["anim_frame_f32"][0, 0] = np.float32(-1.0)
+    seed["x672_input_timer"][0, 0] = np.uint8(0)
+    seed["guard_x10"][0, 0] = np.uint8(3)
+    seed["state_flags"][0, 0, 2] = np.uint8(0x80)  # fp+0x221B isShieldActive
+
+    handle = msl_binding.init(batch_size=1, num_players=2)
+    try:
+        seed_bytes = seed.view(np.uint8).reshape((1, seed_stride))
+        out = np.zeros((1, compare_stride), dtype=np.uint8)
+
+        neutral = _mk_input_bytes(1, input_stride)
+        shield_edge = _mk_input_bytes(1, input_stride)
+        shield_edge_view = shield_edge.view(INPUT_DTYPE).reshape((1,))
+        shield_edge_view["p"]["buttons"][0, 0] = np.uint16(BUTTON_L)
+
+        # Decomp: powershield re-entry helper ftCo_80093694 is called from GuardOn_IASA, not
+        # Guard_IASA, so a Guard frame with an LR pressed-edge should remain in Guard.
+        # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_GuardOn_IASA,ftCo_Guard_IASA,ftCo_80093694}
+        msl_binding.reseed_seed(handle, seed_bytes)
+        msl_binding.step_input(handle, neutral, shield_edge)
+        msl_binding.write_compare(handle, out)
+
+        got = out.view(COMPARE_DTYPE).reshape((1,))[0]
+        assert int(got["action_id"][0]) == ACT_GUARD
+    finally:
+        msl_binding.destroy(handle)
