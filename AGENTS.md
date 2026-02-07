@@ -29,6 +29,16 @@ Initial target domain:
   - Not acceptable: choosing constants from replay distributions/heuristics as a convenience.
 - Replay-derived heuristics are an absolute last resort; if used, label them explicitly as such and justify why game data/decomp couldn’t be used.
 
+### Decomp-backed gameplay only
+- **All gameplay logic changes must be decomp-backed or sourced from game code** (melee decomp C, GALE01 ASM, or Slippi ASM where appropriate).
+- Every gameplay logic change in `src/` must include a nearby inline source pointer near the branch/constant being changed:
+  - `refs/melee/src/...` and/or `refs/melee/build/GALE01/asm/...` and/or `refs/slippi-ssbm-asm/...`
+  - Or an extracted data key in `data/...` (cite both if applicable).
+- If something is not currently decomp-explainable, do **not** “fit to the suite” in C. Prefer:
+  - adding triage tooling/tests,
+  - promoting a minimal seedable internal with prefix-invariance, or
+  - documenting it as a blocker.
+
 ### C core + dumb Python wrapper
 - All gameplay/physics/combat logic lives in **C** under `src/`.
 - Python under `python/` is a **thin wrapper only**:
@@ -100,6 +110,7 @@ Default tests are intended to be **very fast** and should not rebuild ISO data o
 - Run integration checks (validate existing local `data/` artifacts): `uv run pytest -m integration`
 - Convenience: `make test`
 - Final validation before committing: `make check` (runs `fmt-check` + `test`)
+Note: `make validate` only reads existing `.msl` datasets; it does **not** rebuild `.slp → .msl`. Rebuild explicitly via `preprocess_suite` (use `--force` after schema/seed derivation changes).
 
 ## Formatting (C)
 
@@ -119,6 +130,7 @@ Current guardrails:
 - `make preprocess`: build/update cached `datasets/` for a suite
 - `make validate`: run one-step suite eval (assumes datasets exist)
 - `make validate OUT=reports/validation/one_step_suite_eval.txt`: write the report to a file (commit this)
+- `make validate-rollout OUT=reports/triage/rollout_streaks.json`: longest in-sync rollout streaks (writes to gitignored `reports/triage/`)
 - `make build_data`: extract ISO-derived `data/` artifacts
 
 Notes:
@@ -138,3 +150,25 @@ Variables:
 - Prefer adding new “mechanics we learned about” into `SPEC.md` (Mechanics Inventory) immediately, even if not implemented yet.
 - Avoid symlinks for tooling/binaries; prefer explicit paths in config.
 - Never hand-edit `reports/validation/one_step_suite_eval.txt` (it is generator-owned by `make validate`); put extra notes in commits/PR text or separate docs.
+- Triage/debug scripts must default outputs under gitignored `reports/triage/` (or print to stdout). Never default to `/tmp`. Never stage files under `reports/triage/`.
+
+## Agent Checklist (do this every work chunk)
+
+- Do not commit unless the prompt explicitly says to.
+- Any C gameplay change without a nearby decomp/asm/data citation is not reviewable; add the citation or don’t land it.
+- Test-only change: do **not** regenerate `reports/validation/one_step_suite_eval.txt`.
+- Sim-logic change: run `make test` and `make validate OUT=reports/validation/one_step_suite_eval.txt`.
+- Seed/schema change trigger: if you touch any of:
+  - `src/api.h` seed structs, `src/api.c` reseed/write paths
+  - `src/state.h`/`src/state.c` (new SoA fields)
+  - `tools/eval/dataset.py`
+  - `tools/slippi/seed_history.py` or `tools/slippi/make_dataset_from_slp.py`
+  then you must run:
+  - `uv run python -m tools.slippi.preprocess_suite --suite $SUITE --datasets-dir $DATASETS_DIR --force`
+  and ensure the validate header stamp updates.
+- Integration regressions: never mutate `seed_t` / `ref_t1` buffers; assert replay-real preconditions instead. Always:
+  - `pytest.importorskip("msl_binding")`
+  - dataset + artifact skip policy
+  - `binding.destroy(handle)` in `finally`
+- Never key C gameplay behavior on dataset name / record id (record ids belong only in tests/triage).
+- Keep git state clean for review: avoid partial staging (`AM` / `MM`) and include `git status --porcelain` in handoffs.
