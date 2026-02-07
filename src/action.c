@@ -73,7 +73,6 @@ uint8_t escape_air_try_enter_from_air_locomotion(MslBatch* batch, const MslCommo
   batch->state.action_id[idx] = (uint16_t)MSL_ACT_ESCAPE_AIR;
   batch->state.animation_index[idx] = (uint32_t)MSL_SM_ESCAPE_AIR;
   // Decomp: EscapeAir entry calls ftAnim_8006EBA4 immediately after ChangeMotionState.
-  // We defer that tick to post-combat to keep pre-combat/combat geometry stable.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_80099A9C
   msl_anim_timebase_enter_with_policy(batch, idx, 0.0f, 1.0f, MSL_ANIM_ENTER_TICK_IMMEDIATE);
   batch->state.speed_air_x_self[idx] = vx;
@@ -378,8 +377,7 @@ static inline void enter_guard_on(MslBatch* batch, const MslCommonParams* c, siz
   batch->state.animation_index[idx] = 0xFFFFFFFFu;
   // Decomp: ftCo_800924C0 calls ftAnim_8006EBA4 immediately after ChangeMotionState.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_800924C0
-  msl_anim_timebase_enter_with_policy(batch, idx, 0.0f, 1.0f,
-                                      MSL_ANIM_ENTER_TICK_DEFER_POST_COMBAT);
+  msl_anim_timebase_enter_with_policy(batch, idx, 0.0f, 1.0f, MSL_ANIM_ENTER_TICK_IMMEDIATE);
   batch->state.guard_release_latched_xc[idx] = 0;
   batch->state.guard_x10[idx] = guard_x10_init_u8(c);
   batch->state.lightshield_amount[idx] = 0.0f;
