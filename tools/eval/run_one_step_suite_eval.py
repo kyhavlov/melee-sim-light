@@ -24,7 +24,6 @@ def _preprocess_stamp_lines(*, root: Path, suite_name: str, datasets_dir: str) -
             f"#   error: {type(e).__name__}: {e}",
         ]
 
-    ts = meta.get("timestamp_utc", "?")
     force_used = meta.get("force_used", "?")
     built = meta.get("built", "?")
     skipped = meta.get("skipped", "?")
@@ -33,7 +32,6 @@ def _preprocess_stamp_lines(*, root: Path, suite_name: str, datasets_dir: str) -
     return [
         "# preprocess_suite stamp:",
         f"#   path: {meta_path.relative_to(root)}",
-        f"#   timestamp_utc: {ts}",
         f"#   force_used: {force_used}  built: {built}  skipped: {skipped}",
         f"#   seed_dtype_itemsize: {seed_sz}  sample_dtype_itemsize: {sample_sz}",
     ]

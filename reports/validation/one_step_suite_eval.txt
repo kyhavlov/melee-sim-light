@@ -7,7 +7,6 @@
 #
 # preprocess_suite stamp:
 #   path: datasets/fox_falco_fd_ucf084_recent/.preprocess_meta.json
-#   timestamp_utc: 2026-02-07T12:38:50.284955+00:00
 #   force_used: True  built: 4  skipped: 0
 #   seed_dtype_itemsize: 2091  sample_dtype_itemsize: 3177
 #
