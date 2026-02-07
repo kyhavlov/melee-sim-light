@@ -7,6 +7,7 @@
 #include "anim_table.h"
 #include "attack_id_tables.h"
 #include "char_params.h"
+#include "common_params.h"
 
 enum { Ft_MF_KeepFastFall = 1 << 0 };
 
@@ -97,10 +98,83 @@ static inline void anim_timebase_apply_capture_loop(MslBatch* batch, size_t idx)
   }
 }
 
+static inline uint8_t anim_timebase_is_attackair(uint16_t a) {
+  switch (a) {
+    case MSL_ACT_ATTACK_AIR_N:
+    case MSL_ACT_ATTACK_AIR_F:
+    case MSL_ACT_ATTACK_AIR_B:
+    case MSL_ACT_ATTACK_AIR_HI:
+    case MSL_ACT_ATTACK_AIR_LW:
+      return 1;
+    default:
+      return 0;
+  }
+}
+
+static inline uint8_t anim_timebase_try_landing_air_rate(uint16_t a, const MslCharParams* ch,
+                                                         const MslCommonParams* c, uint8_t char_id,
+                                                         uint8_t lr_press_timer, float* out_rate) {
+  if (ch == NULL || c == NULL || out_rate == NULL) {
+    return 0;
+  }
+
+  uint16_t smid = 0;
+  uint8_t lag_frames = 0;
+  switch (a) {
+    case MSL_ACT_LANDING_AIR_N:
+      smid = (uint16_t)MSL_SM_LANDING_AIR_N;
+      lag_frames = ch->landing_airn_lag_frames;
+      break;
+    case MSL_ACT_LANDING_AIR_F:
+      smid = (uint16_t)MSL_SM_LANDING_AIR_F;
+      lag_frames = ch->landing_airf_lag_frames;
+      break;
+    case MSL_ACT_LANDING_AIR_B:
+      smid = (uint16_t)MSL_SM_LANDING_AIR_B;
+      lag_frames = ch->landing_airb_lag_frames;
+      break;
+    case MSL_ACT_LANDING_AIR_HI:
+      smid = (uint16_t)MSL_SM_LANDING_AIR_HI;
+      lag_frames = ch->landing_airhi_lag_frames;
+      break;
+    case MSL_ACT_LANDING_AIR_LW:
+      smid = (uint16_t)MSL_SM_LANDING_AIR_LW;
+      lag_frames = ch->landing_airlw_lag_frames;
+      break;
+    default:
+      return 0;
+  }
+
+  float lag = (float)lag_frames;
+  // Decomp: LandingAir lag is divided (integer truncation, min 1) when fp->x67F < p_ftCommonData->xE4.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_LandingAir.c::ftCo_LandingAir_EnterWithLag
+  if (lag > 0.0f && lr_press_timer < c->lcancel_window_frames) {
+    const float div_lag = lag / c->lcancel_lag_div;
+    int int_lag = (int)div_lag;
+    if (int_lag == 0) {
+      int_lag = 1;
+    }
+    lag = (float)int_lag;
+  }
+
+  if (!(lag > 0.0f)) {
+    return 0;
+  }
+  const float end_frame = msl_anim_end_frame(char_id, smid);
+  if (!(end_frame > 0.0f)) {
+    return 0;
+  }
+  // Decomp: ftAnim_SetAnimRate((ftAnim_8006F484(gobj) + 0.1f) / lag).
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_LandingAir.c::ftCo_LandingAir_EnterWithMsidLag
+  *out_rate = (end_frame + 0.1f) / lag;
+  return 1;
+}
+
 void anim_timebase_update_pre_input(MslBatch* batch) {
   if (batch == NULL) {
     return;
   }
+  const MslCommonParams* c = msl_common_params();
 
   const int num_players = (int)batch->config.num_players;
   for (int bi = 0; bi < batch->batch_size; bi++) {
@@ -123,6 +197,8 @@ void anim_timebase_update_pre_input(MslBatch* batch) {
       // Source of truth for the per-character scaling:
       // - ISO-extracted `data/characters/{fox,falco}.json` `run_animation_scaling`.
       const uint16_t a = batch->state.action_id[idx];
+      const int16_t action_frame_pre = batch->state.action_frame[idx];
+      const MslCharParams* ch = msl_char_params(batch->state.char_id[idx]);
       //
       // Decomp-shaped entry-frame rule (why `action_frame==1` is not a magic number):
       // - Run is entered via Fighter_ChangeMotionState(..., anim_start=0, anim_speed=1).
@@ -137,12 +213,52 @@ void anim_timebase_update_pre_input(MslBatch* batch) {
       // entry rate (1.0). Apply Run_Anim's velocity-scaled rate on that first "steady" frame so
       // our next advance matches Slippi's post-frame `state_age` delta.
       if ((a == (uint16_t)MSL_ACT_RUN || a == (uint16_t)MSL_ACT_RUN_DIRECT) &&
-          batch->state.action_frame[idx] == 1) {
-        const MslCharParams* ch = msl_char_params(batch->state.char_id[idx]);
+          action_frame_pre == 1) {
         if (ch != NULL && ch->run_animation_scaling > 0.0f) {
           const float vx = batch->state.speed_ground_x_self[idx];
           const float rate = fabsf(vx) / ch->run_animation_scaling;
           batch->state.frame_speed_mul_fp_q16_16[idx] = msl_q16_16_from_f32(rate);
+        }
+      }
+
+      // Decomp: AttackAir entry always uses anim_speed=1.0f (KeepFastFall only affects fastfall).
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_EnterFromMsid
+      //
+      // Decomp ordering rationale for `action_frame_pre == 1` (not a magic constant):
+      // - ChangeMotionState enters at anim_start=0, anim_speed=1.
+      // - The first ftAnim tick advances frame 0->1 before motion Anim callback-style rate updates
+      //   are visible to the next tick.
+      // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
+      // refs/melee/src/melee/ft/ftanim.c::ftAnim_8006EBA4
+      // So frame 1 is the first "steady" reseed frame where stale carry-over rates must be reset.
+      if (anim_timebase_is_attackair(a) && action_frame_pre == 1) {
+        batch->state.frame_speed_mul_fp_q16_16[idx] = msl_q16_16_from_f32(1.0f);
+      }
+
+      // Decomp entry-rate corrections for landing states:
+      // - LandingAir*: rate = (end_frame + 0.1f) / lag (with x67F L-cancel lag divide branch)
+      // - LandingFallSpecial: anim_speed = (0.1f + fp->x2EC) / landing_lag
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_LandingAir.c
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::ftCo_LandingFallSpecial_Enter
+      //
+      // Apply on action_frame==0 (entry-shaped snapshots) so one-step reseeds do not depend on
+      // prior-frame hidden rates.
+      if (action_frame_pre == 0 && c != NULL) {
+        float entry_rate = 0.0f;
+        if (a == (uint16_t)MSL_ACT_LANDING_FALL_SPECIAL) {
+          const float lag = c->landing_fall_special_lag_frames;
+          const float end_frame =
+              msl_anim_end_frame(batch->state.char_id[idx], (uint16_t)MSL_SM_LANDING_FALL_SPECIAL);
+          if (lag > 0.0f && end_frame > 0.0f) {
+            entry_rate = (end_frame + 0.1f) / lag;
+          }
+        } else if (anim_timebase_try_landing_air_rate(a, ch, c, batch->state.char_id[idx],
+                                                      batch->state.lr_press_timer[idx],
+                                                      &entry_rate)) {
+          // rate already written to entry_rate by helper.
+        }
+        if (entry_rate > 0.0f) {
+          batch->state.frame_speed_mul_fp_q16_16[idx] = msl_q16_16_from_f32(entry_rate);
         }
       }
 
@@ -156,7 +272,6 @@ void anim_timebase_update_pre_input(MslBatch* batch) {
         continue;
       }
 
-      const int16_t action_frame_pre = batch->state.action_frame[idx];
       batch->state.anim_frame_fp_q16_16[idx] += batch->state.frame_speed_mul_fp_q16_16[idx];
       const uint8_t did_wrap = anim_timebase_apply_aobj_loop(batch, idx);
       anim_timebase_apply_capture_loop(batch, idx);

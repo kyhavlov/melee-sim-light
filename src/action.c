@@ -73,6 +73,9 @@ uint8_t escape_air_try_enter_from_air_locomotion(MslBatch* batch, const MslCommo
   batch->state.action_id[idx] = (uint16_t)MSL_ACT_ESCAPE_AIR;
   batch->state.animation_index[idx] = (uint32_t)MSL_SM_ESCAPE_AIR;
   msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+  // Decomp: EscapeAir entry immediately ticks ftAnim_8006EBA4 after ChangeMotionState.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_80099A9C
+  msl_anim_timebase_defer_tick_once(batch, idx);
   batch->state.speed_air_x_self[idx] = vx;
   batch->state.speed_y_self[idx] = vy;
   // Decomp: EscapeAir enters without KeepFastFall; treat EscapeAir as a self-velocity-controlled
@@ -348,7 +351,8 @@ static inline void enter_guard_hold(MslBatch* batch, size_t idx) {
   // This is a snapshot-shape parity rule only; it is not a gameplay claim about GALE01 Guard
   // behavior when a real submotion is present.
   if (prev_anim == 0xFFFFFFFFu && prev_anim_frame < 0.0f) {
-    msl_anim_timebase_seed(batch, idx, -1.0f, msl_f32_from_q16_16(batch->state.frame_speed_mul_fp_q16_16[idx]));
+    msl_anim_timebase_seed(batch, idx, -1.0f,
+                           msl_f32_from_q16_16(batch->state.frame_speed_mul_fp_q16_16[idx]));
   }
 }
 
