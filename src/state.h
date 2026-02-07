@@ -167,6 +167,12 @@ typedef struct MslStateSoA {
   // - ftCo_Dash_IASA uses (x4 != 0 && cur_anim_frame <= x44) for early-branch gating.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c
   uint8_t* dash_x4;  // [batch * players], 0/1
+  // Fox/Falco Shine release internals (decomp: fp->mv.fx.SpecialLw.{releaseLag,isRelease}).
+  // - Set on SpecialLw enter by ftFox_SpecialLw_SetVars.
+  // - Ticked in Start/Loop/Turn/Hit anim callbacks and consulted by ftFx_SpecialLwHit_Check.
+  // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c
+  uint8_t* shine_release_lag;  // [batch * players], clamped to 0..255
+  uint8_t* shine_is_release;   // [batch * players], 0/1
   // ECB lock countdown (decomp: fp->ecb_lock) used with CollData_X130_Locked.
   // - Set by ftCommon_8007D5D4 / ftCommon_8007D60C.
   // - Decremented once per map/collision callback in Fighter_procMap and clears lock at 0.

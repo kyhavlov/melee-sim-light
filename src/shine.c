@@ -250,6 +250,42 @@ static inline void enter_shine_air_start(MslBatch* batch, size_t idx, const MslC
   }
 }
 
+static inline void shine_release_setvars(MslBatch* batch, size_t idx, const MslCharParams* ch) {
+  // Decomp: ftFox_SpecialLw_SetVars initializes releaseLag/isRelease on shine enter.
+  // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c::ftFox_SpecialLw_SetVars
+  batch->state.shine_release_lag[idx] = ch->reflector_release_lag_frames;
+  batch->state.shine_is_release[idx] = 0u;
+}
+
+static inline void shine_release_latch_anim(MslBatch* batch, size_t idx, uint16_t held) {
+  // Decomp: Start/Loop/Turn/Hit anim callbacks latch isRelease when B is not held.
+  // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c::{
+  //   ftFx_SpecialLwStart_Anim,ftFx_SpecialLwLoop_Anim,ftFx_SpecialLwTurn_Anim,ftFx_SpecialLwHit_Anim}
+  if ((held & (uint16_t)MSL_BUTTON_B) == 0) {
+    batch->state.shine_is_release[idx] = 1u;
+  }
+}
+
+static inline void shine_release_tick_anim(MslBatch* batch, size_t idx, uint16_t held) {
+  // Decomp: Loop/Turn/Hit anim callbacks:
+  // - latch isRelease when B is not held
+  // - decrement releaseLag while > 0
+  // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c::{
+  //   ftFx_SpecialLwLoop_Anim,ftFx_SpecialLwTurn_Anim,ftFx_SpecialLwHit_Anim}
+  shine_release_latch_anim(batch, idx, held);
+  if (batch->state.shine_release_lag[idx] > 0u) {
+    batch->state.shine_release_lag[idx] = (uint8_t)(batch->state.shine_release_lag[idx] - 1u);
+  }
+}
+
+static inline uint8_t shine_release_should_end(const MslBatch* batch, size_t idx) {
+  // Decomp: ftFx_SpecialLwHit_Check gates End when (releaseLag <= 0 && isRelease).
+  // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c::ftFx_SpecialLwHit_Check
+  return (batch->state.shine_release_lag[idx] == 0u && batch->state.shine_is_release[idx] != 0u)
+             ? 1u
+             : 0u;
+}
+
 static inline void enter_shine_ground_loop(MslBatch* batch, size_t idx, const MslSpecialMsids* ms) {
   batch->state.action_id[idx] = (uint16_t)MSL_ACT_FX_SPECIAL_LW_LOOP;
   batch->state.animation_index[idx] = (uint32_t)ms->speciallw_ground_loop;
@@ -311,6 +347,7 @@ void shine_update_pre_physics(MslBatch* batch) {
       }
 
       const uint16_t a = batch->state.action_id[idx];
+      uint8_t shine_entered_this_frame = 0u;
       const uint8_t on_ground = batch->state.on_ground[idx] ? 1u : 0u;
       const uint16_t buttons_pressed = batch->state.input_buttons_pressed[idx];
       const uint8_t tilt_timer_y = batch->state.tilt_timer_y[idx];
@@ -325,11 +362,15 @@ void shine_update_pre_physics(MslBatch* batch) {
           stick_wants_speciallw(c, batch->state.input_main_y[idx])) {
         if (on_ground) {
           if (action_allows_shine_entry_ground(a)) {
+            shine_release_setvars(batch, idx, ch);
             enter_shine_ground_start(batch, idx, ms);
+            shine_entered_this_frame = 1u;
           }
         } else {
           if (action_allows_shine_entry_air(a)) {
+            shine_release_setvars(batch, idx, ch);
             enter_shine_air_start(batch, idx, ch, ms);
+            shine_entered_this_frame = 1u;
           }
         }
       }
@@ -389,6 +430,11 @@ void shine_update_pre_physics(MslBatch* batch) {
       for (int it = 0; it < 2; it++) {
         switch (a_work) {
           case MSL_ACT_FX_SPECIAL_LW_START:
+            if (shine_entered_this_frame == 0u) {
+              // Decomp: Start_Anim latches isRelease only; releaseLag is not decremented in Start.
+              // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c::ftFx_SpecialLwStart_Anim
+              shine_release_latch_anim(batch, idx, held);
+            }
             if (anim_finished(cid, ms->speciallw_ground_start, anim_frame_f32)) {
               if (on_ground) {
                 enter_shine_ground_loop(batch, idx, ms);
@@ -400,6 +446,11 @@ void shine_update_pre_physics(MslBatch* batch) {
             }
             break;
           case MSL_ACT_FX_SPECIAL_AIR_LW_START:
+            if (shine_entered_this_frame == 0u) {
+              // Decomp: SpecialAirLwStart_Anim latches isRelease only.
+              // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c::ftFx_SpecialAirLwStart_Anim
+              shine_release_latch_anim(batch, idx, held);
+            }
             if (anim_finished(cid, ms->speciallw_air_start, anim_frame_f32)) {
               if (on_ground) {
                 enter_shine_ground_loop(batch, idx, ms);
@@ -411,6 +462,18 @@ void shine_update_pre_physics(MslBatch* batch) {
             }
             break;
           case MSL_ACT_FX_SPECIAL_LW_LOOP: {
+            // Slippi post-frame alignment: gate Loop->End from the reseeded lag value before
+            // decrementing for this simulated frame, so teacher-forced one-step mirrors when the
+            // post snapshot crosses the release boundary.
+            shine_release_latch_anim(batch, idx, held);
+            if (shine_release_should_end(batch, idx)) {
+              enter_shine_ground_end(batch, idx, ms);
+              break;
+            }
+            if (batch->state.shine_release_lag[idx] > 0u) {
+              batch->state.shine_release_lag[idx] =
+                  (uint8_t)(batch->state.shine_release_lag[idx] - 1u);
+            }
             if (stick_wants_turn(c, batch->state.input_main_x[idx], batch->state.facing[idx])) {
               enter_shine_ground_turn(batch, idx, ms);
               break;
@@ -427,15 +490,17 @@ void shine_update_pre_physics(MslBatch* batch) {
               batch->state.kneebend_is_short_hop[idx] = 0;
               break;
             }
-            const int16_t rl = (int16_t)ch->reflector_release_lag_frames;
-            const int16_t af = batch->state.action_frame[idx];
-            if ((held & (uint16_t)MSL_BUTTON_B) == 0) {
-              if (rl == 0 || af >= (int16_t)(rl - 1)) {
-                enter_shine_ground_end(batch, idx, ms);
-              }
-            }
           } break;
           case MSL_ACT_FX_SPECIAL_AIR_LW_LOOP: {
+            shine_release_latch_anim(batch, idx, held);
+            if (shine_release_should_end(batch, idx)) {
+              enter_shine_air_end(batch, idx, ms);
+              break;
+            }
+            if (batch->state.shine_release_lag[idx] > 0u) {
+              batch->state.shine_release_lag[idx] =
+                  (uint8_t)(batch->state.shine_release_lag[idx] - 1u);
+            }
             if (stick_wants_turn(c, batch->state.input_main_x[idx], batch->state.facing[idx])) {
               enter_shine_air_turn(batch, idx, ms);
               break;
@@ -466,39 +531,58 @@ void shine_update_pre_physics(MslBatch* batch) {
                 break;
               }
             }
-            const int16_t rl = (int16_t)ch->reflector_release_lag_frames;
-            const int16_t af = batch->state.action_frame[idx];
-            if ((held & (uint16_t)MSL_BUTTON_B) == 0) {
-              if (rl == 0 || af >= (int16_t)(rl - 1)) {
+          } break;
+          case MSL_ACT_FX_SPECIAL_LW_HIT:
+            shine_release_tick_anim(batch, idx, held);
+            if (anim_finished(cid, ms->speciallw_ground_hit, anim_frame_f32)) {
+              if (shine_release_should_end(batch, idx)) {
+                enter_shine_ground_end(batch, idx, ms);
+              } else {
+                enter_shine_ground_loop(batch, idx, ms);
+                a_work = batch->state.action_id[idx];
+                continue;
+              }
+            }
+            break;
+          case MSL_ACT_FX_SPECIAL_AIR_LW_HIT:
+            shine_release_tick_anim(batch, idx, held);
+            if (anim_finished(cid, ms->speciallw_air_hit, anim_frame_f32)) {
+              if (shine_release_should_end(batch, idx)) {
                 enter_shine_air_end(batch, idx, ms);
+              } else {
+                enter_shine_air_loop(batch, idx, ms);
+                a_work = batch->state.action_id[idx];
+                continue;
+              }
+            }
+            break;
+          case MSL_ACT_FX_SPECIAL_LW_TURN: {
+            shine_release_tick_anim(batch, idx, held);
+            const int16_t tf = (int16_t)ch->reflector_turn_frames;
+            const int16_t af = batch->state.action_frame[idx];
+            if (tf > 0 && af >= (int16_t)(tf - 1)) {
+              if (shine_release_should_end(batch, idx)) {
+                enter_shine_ground_end(batch, idx, ms);
+              } else {
+                enter_shine_ground_loop(batch, idx, ms);
+                a_work = batch->state.action_id[idx];
+                continue;
               }
             }
           } break;
-          case MSL_ACT_FX_SPECIAL_LW_TURN: {
-            const int16_t tf = (int16_t)ch->reflector_turn_frames;
-            const int16_t af = batch->state.action_frame[idx];
-            if (tf > 0 && af >= (int16_t)(tf - 1)) {
-              enter_shine_ground_loop(batch, idx, ms);
-              a_work = batch->state.action_id[idx];
-              continue;
-            }
-            // Decomp: Turn does not exit immediately on B release. The Turn anim callback only sets
-            // `isRelease` when B isn't held, then waits for `turnFrames` to expire before calling
-            // `ftFx_SpecialLwHit_Check` to choose Loop vs End.
-            // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c::ftFx_SpecialLwTurn_Anim
-            // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c::ftFx_SpecialLwHit_Check
-          } break;
           case MSL_ACT_FX_SPECIAL_AIR_LW_TURN: {
+            shine_release_tick_anim(batch, idx, held);
             const int16_t tf = (int16_t)ch->reflector_turn_frames;
             const int16_t af = batch->state.action_frame[idx];
             if (tf > 0 && af >= (int16_t)(tf - 1)) {
-              enter_shine_air_loop(batch, idx, ms);
-              a_work = batch->state.action_id[idx];
-              continue;
+              if (shine_release_should_end(batch, idx)) {
+                enter_shine_air_end(batch, idx, ms);
+              } else {
+                enter_shine_air_loop(batch, idx, ms);
+                a_work = batch->state.action_id[idx];
+                continue;
+              }
             }
-            // Decomp: see grounded Turn note above (same logic in air).
-            // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c::ftFx_SpecialAirLwTurn_Anim
-            // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c::ftFx_SpecialLwHit_Check
           } break;
           case MSL_ACT_FX_SPECIAL_LW_END:
             if (anim_finished(cid, ms->speciallw_ground_end, anim_frame_f32)) {

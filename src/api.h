@@ -246,6 +246,20 @@ typedef struct MslSeed {
   // Seed representation:
   // - Store a reseed-friendly u8 latch (0/1) for fp->mv.co.dash.x4.
   uint8_t dash_x4[MSL_MAX_PLAYERS];
+  // Fox/Falco Shine release internals (seeded; decomp-shaped).
+  //
+  // Decomp:
+  // - ftFox_SpecialLw_SetVars initializes releaseLag/isRelease on SpecialLw enter.
+  // - Start/Loop/Turn/Hit anim callbacks tick releaseLag and latch isRelease from held B.
+  // - ftFx_SpecialLwHit_Check gates Loop vs End using (releaseLag <= 0 && isRelease).
+  // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c::{
+  //   ftFox_SpecialLw_SetVars,ftFx_SpecialLwLoop_Anim,ftFx_SpecialLwTurn_Anim,ftFx_SpecialLwHit_Check}
+  //
+  // Seed representation:
+  // - shine_release_lag: non-negative countdown (u8 mirror of mv.fx.SpecialLw.releaseLag).
+  // - shine_is_release: 0/1 latch (u8 mirror of mv.fx.SpecialLw.isRelease).
+  uint8_t shine_release_lag[MSL_MAX_PLAYERS];
+  uint8_t shine_is_release[MSL_MAX_PLAYERS];
   // ECB lock countdown (seeded; decomp-shaped).
   //
   // Decomp:

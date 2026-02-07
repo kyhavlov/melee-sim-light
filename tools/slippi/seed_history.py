@@ -1112,6 +1112,139 @@ def derive_dash_x4(
     return out
 
 
+def derive_shine_release_state(
+    *,
+    action_id_u16: np.ndarray,
+    action_frame_i16: np.ndarray,
+    buttons_held_u16: np.ndarray,
+    hitlag_u16: np.ndarray,
+    release_lag_init_u8: np.ndarray,
+    button_mask_b: int = 0x0200,
+    act_special_lw_start: int = 0x0168,
+    act_special_lw_loop: int = 0x0169,
+    act_special_lw_hit: int = 0x016A,
+    act_special_lw_end: int = 0x016B,
+    act_special_lw_turn: int = 0x016C,
+    act_special_air_lw_start: int = 0x016D,
+    act_special_air_lw_loop: int = 0x016E,
+    act_special_air_lw_hit: int = 0x016F,
+    act_special_air_lw_end: int = 0x0170,
+    act_special_air_lw_turn: int = 0x0171,
+) -> tuple[np.ndarray, np.ndarray]:
+    """
+    Derive Fox/Falco shine release internals strictly causally.
+
+    Returns:
+    - shine_release_lag_u8: post-frame mirror of `fp->mv.fx.SpecialLw.releaseLag`
+    - shine_is_release_u8: post-frame mirror of `fp->mv.fx.SpecialLw.isRelease` (0/1)
+
+    Decomp anchors:
+    - ftFox_SpecialLw_SetVars initializes {releaseLag,isRelease} on SpecialLw enter.
+      refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c::ftFox_SpecialLw_SetVars
+    - Start anim callbacks latch isRelease from held B (no releaseLag decrement).
+    - Loop/Turn/Hit anim callbacks latch isRelease and decrement releaseLag.
+      refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c::{
+          ftFx_SpecialLwStart_Anim,ftFx_SpecialLwLoop_Anim,ftFx_SpecialLwTurn_Anim,ftFx_SpecialLwHit_Anim}
+    - Loop/Turn/Hit end-vs-loop gating uses (releaseLag <= 0 && isRelease).
+      refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c::ftFx_SpecialLwHit_Check
+    """
+    a = np.asarray(action_id_u16, dtype=np.uint16).reshape(-1)
+    af = np.asarray(action_frame_i16, dtype=np.int16).reshape(-1)
+    held = np.asarray(buttons_held_u16, dtype=np.uint16).reshape(-1)
+    hitlag = np.asarray(hitlag_u16, dtype=np.uint16).reshape(-1)
+    lag_init = np.asarray(release_lag_init_u8, dtype=np.uint8).reshape(-1)
+    n = int(a.size)
+
+    out_lag = np.zeros(n, dtype=np.uint8)
+    out_is_release = np.zeros(n, dtype=np.uint8)
+    if n == 0:
+        return out_lag, out_is_release
+    if int(af.size) != n or int(held.size) != n or int(hitlag.size) != n or int(lag_init.size) != n:
+        raise ValueError("all shine release inputs must have matching length")
+
+    act_start_set = {
+        int(act_special_lw_start) & 0xFFFF,
+        int(act_special_air_lw_start) & 0xFFFF,
+    }
+    act_latch_set = {
+        int(act_special_lw_start) & 0xFFFF,
+        int(act_special_air_lw_start) & 0xFFFF,
+        int(act_special_lw_loop) & 0xFFFF,
+        int(act_special_lw_hit) & 0xFFFF,
+        int(act_special_lw_turn) & 0xFFFF,
+        int(act_special_air_lw_loop) & 0xFFFF,
+        int(act_special_air_lw_hit) & 0xFFFF,
+        int(act_special_air_lw_turn) & 0xFFFF,
+    }
+    act_tick_set = {
+        int(act_special_lw_loop) & 0xFFFF,
+        int(act_special_lw_hit) & 0xFFFF,
+        int(act_special_lw_turn) & 0xFFFF,
+        int(act_special_air_lw_loop) & 0xFFFF,
+        int(act_special_air_lw_hit) & 0xFFFF,
+        int(act_special_air_lw_turn) & 0xFFFF,
+    }
+    act_shine_all = {
+        int(act_special_lw_start) & 0xFFFF,
+        int(act_special_lw_loop) & 0xFFFF,
+        int(act_special_lw_hit) & 0xFFFF,
+        int(act_special_lw_end) & 0xFFFF,
+        int(act_special_lw_turn) & 0xFFFF,
+        int(act_special_air_lw_start) & 0xFFFF,
+        int(act_special_air_lw_loop) & 0xFFFF,
+        int(act_special_air_lw_hit) & 0xFFFF,
+        int(act_special_air_lw_end) & 0xFFFF,
+        int(act_special_air_lw_turn) & 0xFFFF,
+    }
+    mask_b = int(button_mask_b) & 0xFFFF
+
+    lag = 0
+    is_release = 0
+    for i in range(n):
+        cur_a = int(a[i]) & 0xFFFF
+        cur_af = int(af[i])
+        cur_lag_init = int(lag_init[i]) & 0xFF
+        prev_a = int(a[i - 1]) & 0xFFFF if i > 0 else cur_a
+        prev_af = int(af[i - 1]) if i > 0 else cur_af
+
+        if cur_a not in act_shine_all:
+            lag = 0
+            is_release = 0
+            out_lag[i] = np.uint8(0)
+            out_is_release[i] = np.uint8(0)
+            continue
+
+        shine_start_entry = False
+        skip_tick_this_frame = False
+        if cur_a in act_start_set:
+            if i == 0 or prev_a not in act_shine_all:
+                shine_start_entry = True
+            elif cur_a == prev_a and cur_af < prev_af:
+                # Same-action restart safety for causal replay slices.
+                shine_start_entry = True
+        if shine_start_entry:
+            lag = cur_lag_init
+            is_release = 0
+            # Entry frame uses SetVars only; Start_Anim ticking begins on subsequent frames.
+            skip_tick_this_frame = True
+        elif i == 0:
+            # Best-effort initialization for first-frame mid-shine slices.
+            lag = max(0, cur_lag_init - max(0, cur_af + 1))
+            is_release = 0
+
+        if cur_a in act_latch_set and not skip_tick_this_frame and int(hitlag[i]) == 0:
+            if (int(held[i]) & mask_b) == 0:
+                is_release = 1
+        if cur_a in act_tick_set and not skip_tick_this_frame and int(hitlag[i]) == 0:
+            if lag > 0:
+                lag -= 1
+
+        out_lag[i] = np.uint8(lag)
+        out_is_release[i] = np.uint8(is_release)
+
+    return out_lag, out_is_release
+
+
 def derive_ecb_lock_timer(
     *,
     on_ground_u8: np.ndarray,

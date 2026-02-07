@@ -436,6 +436,7 @@ def _main_impl(args) -> None:
         derive_guard_release_lockout_and_lightshield,
         derive_guard_tilt_state,
         derive_dash_x4,
+        derive_shine_release_state,
         derive_run_x0,
         derive_ecb_lock_timer,
         load_shield_tilt_table_meta,
@@ -642,6 +643,13 @@ def _main_impl(args) -> None:
     )
     turn_frames_lut[np.uint8(22)] = np.uint8(
         json.loads(Path("data/characters/falco.json").read_text())["turn_frames"]
+    )
+    reflector_release_lag_lut = np.zeros(256, dtype=np.uint8)
+    reflector_release_lag_lut[np.uint8(1)] = np.uint8(
+        json.loads(Path("data/characters/fox.json").read_text())["reflector_release_lag_frames"]
+    )
+    reflector_release_lag_lut[np.uint8(22)] = np.uint8(
+        json.loads(Path("data/characters/falco.json").read_text())["reflector_release_lag_frames"]
     )
     # Frame ids and seeds (seed from frame i-1, ref from frame i).
     samples["seed_t"]["frame_id"] = frame_ids[:-1]
@@ -1049,6 +1057,16 @@ def _main_impl(args) -> None:
             act_turn=act_turn,
         )
         samples["seed_t"]["dash_x4"][:, slot] = dash_x4[:-1]
+        shine_release_lag, shine_is_release = derive_shine_release_state(
+            action_id_u16=post_state,
+            action_frame_i16=post_state_age,
+            buttons_held_u16=pre_buttons_physical,
+            hitlag_u16=post_hitlag,
+            release_lag_init_u8=reflector_release_lag_lut[post_char],
+            button_mask_b=button_mask_b,
+        )
+        samples["seed_t"]["shine_release_lag"][:, slot] = shine_release_lag[:-1]
+        samples["seed_t"]["shine_is_release"][:, slot] = shine_is_release[:-1]
         # Decomp: ftCommon_8007D5D4 sets fp->ecb_lock=10 on ground->air and Fighter_procMap ticks it.
         # refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007D5D4
         # refs/melee/src/melee/ft/fighter.c::Fighter_procMap
