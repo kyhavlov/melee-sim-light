@@ -27,6 +27,7 @@ HITLIST_CD_INDEFINITE = 0xFFFF
 ACT_WAIT = 0x000E
 ACT_SQUAT = 0x0027
 ACT_SQUAT_WAIT = 0x0028
+ACT_GUARD_REFLECT = 0x00B6
 ACT_GUARD_SET_OFF = 0x00B5
 ACT_DAMAGE_N1 = 0x004E
 ACT_DAMAGE_AIR1 = 0x0054
@@ -930,7 +931,13 @@ def test_combat_resolve_powershield_blocks_shield_hp_depletion_but_keeps_hitlag(
     handle = msl_binding.init(batch_size=1, num_players=2)
     try:
         seed = _seed_base()
-        # 0x221C bit 0x20: powershield active.
+        # Decomp-shaped powershield-active setup: GuardReflect owner state + x18 timer.
+        # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_8009388C,ftCo_80093BC0}
+        seed["action_id"][0, 1] = np.uint16(ACT_GUARD_REFLECT)
+        seed["animation_index"][0, 1] = np.uint32(0xFFFFFFFF)
+        seed["guard_reflect_timer_x14"][0, 1] = np.uint8(2)
+        seed["guard_reflect_timer_x18"][0, 1] = np.uint8(2)
+        # Slippi post-frame packing parity for x221C_b2.
         # refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
         seed["state_flags"][0, 1, 3] = np.uint8(0x20)
         seed_bytes = seed.view(np.uint8).reshape((1, seed_stride))
