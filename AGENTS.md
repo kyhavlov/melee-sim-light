@@ -85,6 +85,10 @@ Use `uv` for Python dependencies and editable installs:
 Note: `uv sync` only manages declared dependencies; re-run `uv pip install -e python` after syncing if the extension is missing.
 Note: pass `--force` to `preprocess_suite` after any dataset schema changes (the cache is just for convenience).
 Note: `--chunk` in evaluators is the in-memory batch size for processing; it does **not** limit how many frames/records get evaluated.
+Note: fast locate-triage CLIs live under `tools/eval/`:
+- `uv run python -m tools.eval.top_triples ...` (top `(seed,ref,out)` clusters, per-dataset + suite aggregate)
+- `uv run python -m tools.eval.diff_locate --before <before.tsv> --after <after.tsv> ...` (row-level new/gone/delta diff for locate TSVs)
+- `uv run python -m tools.eval.locate_discrete_mismatches ... --format tsv` (TSV source; columns are `seed,out,ref`)
 
 Avoid invoking `pip` directly unless it is being run through `uv` (e.g. `uv pip ...`).
 
