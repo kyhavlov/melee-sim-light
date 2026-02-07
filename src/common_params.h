@@ -32,7 +32,9 @@ typedef struct MslCommonParams {
   // Throw direction IASA thresholds (ftCo_800DD1E4 and ftCo_800DF7F4/844/878).
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DD1E4
   // refs/melee/src/melee/ft/ft_0DF1.c::{ftCo_800DF7F4,ftCo_800DF844,ftCo_800DF878}
-  float smash_stick_threshold;         // p_ftCommonData->x98
+  float smash_stick_threshold;         // p_ftCommonData->x7B8 (smash_stick_threshold)
+  // Grounded A-tilt directional checks (ftCo_AttackS3/Hi3/Lw3 input helpers).
+  float attack_s3_stick_threshold_x;   // p_ftCommonData->x98 (attack_s3_stick_threshold_x)
   float attack_hi3_stick_threshold_y;  // p_ftCommonData->attackhi3_stick_threshold_y
   float attack_lw3_stick_threshold_y;  // p_ftCommonData->xB0 (attack_lw3_stick_threshold_y)
 

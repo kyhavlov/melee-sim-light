@@ -204,6 +204,7 @@ enum {
   MSL_ACT_ATTACK_S3_HI = 0x0033,    // ftCo_MS_AttackS3Hi
   MSL_ACT_ATTACK_S3_HI_S = 0x0034,  // ftCo_MS_AttackS3HiS
   MSL_ACT_ATTACK_S3_S = 0x0035,     // ftCo_MS_AttackS3S
+  MSL_ACT_ATTACK_S3 = MSL_ACT_ATTACK_S3_S,  // ftCo_MS_AttackS3 (side tilt)
   MSL_ACT_ATTACK_S3_LW_S = 0x0036,  // ftCo_MS_AttackS3LwS
   MSL_ACT_ATTACK_S3_LW = 0x0037,    // ftCo_MS_AttackS3Lw
   MSL_ACT_ATTACK_HI3 = 0x0038,      // ftCo_MS_AttackHi3
@@ -312,6 +313,12 @@ typedef enum MslSubmotionId {
   MSL_SM_ESCAPE_F = 42,      // ftCo_SM_EscapeF
   MSL_SM_ESCAPE_B = 43,      // ftCo_SM_EscapeB
   MSL_SM_ESCAPE_AIR = 44,    // ftCo_SM_EscapeAir
+  // Grounded attacks (subset) used by the grounded A-attack selector.
+  // Source of truth: refs/melee/src/melee/ft/chara/ftCommon/forward.h `ftCo_Submotion`.
+  MSL_SM_ATTACK_DASH = 52,  // ftCo_SM_AttackDash
+  MSL_SM_ATTACK_S3 = 55,    // ftCo_SM_AttackS3
+  MSL_SM_ATTACK_HI3 = 58,   // ftCo_SM_AttackHi3
+  MSL_SM_ATTACK_LW3 = 59,   // ftCo_SM_AttackLw3
 
   // Aerial attacks (ftCo_AttackAir*).
   // Source of truth: refs/melee/src/melee/ft/chara/ftCommon/forward.h `ftCo_Submotion`.
@@ -435,6 +442,14 @@ static inline uint8_t msl_action_is_ground_locomotion(uint16_t action_id) {
     case MSL_ACT_ESCAPE_F:
     case MSL_ACT_ESCAPE_B:
     case MSL_ACT_ESCAPE_N:
+    case MSL_ACT_ATTACK_DASH:
+    case MSL_ACT_ATTACK_S3_HI:
+    case MSL_ACT_ATTACK_S3_HI_S:
+    case MSL_ACT_ATTACK_S3_S:
+    case MSL_ACT_ATTACK_S3_LW_S:
+    case MSL_ACT_ATTACK_S3_LW:
+    case MSL_ACT_ATTACK_HI3:
+    case MSL_ACT_ATTACK_LW3:
       return 1;
     default:
       return 0;
