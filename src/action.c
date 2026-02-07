@@ -516,27 +516,18 @@ void guard_update_shield_recharge(MslBatch* batch, const MslCommonParams* c, siz
   }
 }
 
-void guard_update_grounded(MslBatch* batch, const MslCommonParams* c, size_t idx,
-                           uint8_t allow_entry) {
-  if (batch == NULL || c == NULL) {
+static inline void guard_update_grounded_anim_callback_pre_input(MslBatch* batch, size_t idx) {
+  if (batch == NULL) {
     return;
   }
 
   const uint16_t a0 = batch->state.action_id[idx];
-  // GuardReflect timers tick/expire (mv.co.guard.x14 / x18).
-  //
-  // Decomp ordering:
-  // - GuardReflect_Anim calls ftCo_80093BC0 (timer tick + reflecting clear), then calls GuardOn_Anim.
-  //   refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_GuardReflect_Anim
-  //   refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80093BC0
-  //
-  // Hitlag gate:
-  // - Per-action anim callbacks (including GuardReflect_Anim) do not run under hitlag.
-  //   refs/melee/src/melee/ft/fighter.c (Fighter_8006A360 anim_cb gated on !hitlag)
-  //
-  // Seed/state semantics:
-  // - guard_reflect_timer_x14/x18 are x14+1/x18+1 (clamped), so they expire cleanly at 0.
-  // - We clamp it to 0 whenever not in GuardReflect to keep it strictly causal and reseed-friendly.
+
+  // GuardReflect_Anim callback timing (prio 1):
+  // - ftCo_GuardReflect_Anim calls ftCo_80093BC0 (x14/x18 tick + expire clears), then GuardOn_Anim.
+  // - Fighter_8006A360 runs this under !hitlag.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_GuardReflect_Anim,ftCo_80093BC0}
+  // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
   if (a0 == (uint16_t)MSL_ACT_GUARD_REFLECT) {
     if (batch->state.hitlag_started_frame[idx] == 0) {
       uint8_t t14 = batch->state.guard_reflect_timer_x14[idx];
@@ -551,9 +542,19 @@ void guard_update_grounded(MslBatch* batch, const MslCommonParams* c, size_t idx
       }
     }
   } else {
+    // Keep GuardReflect timers strictly action-owned to avoid stale seeded carryover.
     batch->state.guard_reflect_timer_x14[idx] = 0;
     batch->state.guard_reflect_timer_x18[idx] = 0;
   }
+}
+
+void guard_update_grounded(MslBatch* batch, const MslCommonParams* c, size_t idx,
+                           uint8_t allow_entry) {
+  if (batch == NULL || c == NULL) {
+    return;
+  }
+
+  const uint16_t a0 = batch->state.action_id[idx];
 
   if (!is_shield_active_action(a0)) {
     batch->state.guard_release_latched_xc[idx] = 0;
@@ -744,6 +745,7 @@ void guard_update_grounded(MslBatch* batch, const MslCommonParams* c, size_t idx
 
   // GuardOff: wait for animation end then go back to Wait.
   if (a0 == MSL_ACT_GUARD_OFF) {
+    batch->state.animation_index[idx] = (uint32_t)MSL_SM_GUARD_OFF;
     // GuardOff IASA: allow spotdodge + jump, but not rolls.
     //
     // Decomp: ftCo_GuardOff_IASA calls spotdodge check (ftCo_8009980C) and jump check (ftCo_800CB024),
@@ -763,7 +765,6 @@ void guard_update_grounded(MslBatch* batch, const MslCommonParams* c, size_t idx
       guard_enter_wait(batch, idx);
       return;
     }
-    batch->state.animation_index[idx] = (uint32_t)MSL_SM_GUARD_OFF;
     return;
   }
 
@@ -812,6 +813,25 @@ void guard_update_grounded(MslBatch* batch, const MslCommonParams* c, size_t idx
       }
     }
     return;
+  }
+}
+
+void action_update_anim_callbacks_pre_input(MslBatch* batch) {
+  if (batch == NULL) {
+    return;
+  }
+  // Decomp ordering anchor:
+  // - fighter Anim callbacks run in Fighter_8006A360 (prio 1) under !hitlag.
+  // - input callback (IASA checks) runs later in Fighter_procUpdate (prio 3).
+  // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A360,Fighter_procUpdate}
+  // Scope (current slice): only GuardReflect x14/x18 timer tick/expire is modeled here; this phase
+  // must not consume current-frame input edges.
+  const int num_players = (int)batch->config.num_players;
+  for (int bi = 0; bi < batch->batch_size; bi++) {
+    for (int p = 0; p < num_players; p++) {
+      const size_t idx = msl_idx_player(bi, p);
+      guard_update_grounded_anim_callback_pre_input(batch, idx);
+    }
   }
 }
 

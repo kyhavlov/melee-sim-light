@@ -141,6 +141,17 @@ static int step_one_frame_core(MslBatch* batch, const uint8_t* prev_input_bytes,
   // before the per-action anim_cb within Fighter_8006A360.
   timers_update_post_anim(batch);
 
+  // Per-action Anim-callback phase (subset) before input processing.
+  // Decomp: Fighter_8006A360 (prio 1) runs anim callbacks before Fighter_procUpdate input_cb (prio 3).
+  // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A360,Fighter_procUpdate}
+  //
+  // Ordering rationale vs ProcessHit consume:
+  // - This phase currently owns GuardReflect x14/x18 timer tick/expire (ftCo_GuardReflect_Anim path),
+  //   which is a prio-1 anim callback update.
+  // - combat_processhit_consume() models the post-collision ProcessHit-style cleanup (decomp prio 14),
+  //   so it should remain after prio-1 callback effects.
+  action_update_anim_callbacks_pre_input(batch);
+
   // Decomp-shaped "ProcessHit" consume / cleanup (see combat_processhit_consume for references).
   combat_processhit_consume(batch);
 

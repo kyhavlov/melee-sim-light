@@ -43,7 +43,8 @@ void state_flags_refresh_post_frame(MslBatch* batch) {
   // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
   // refs/melee/src/melee/ft/types.h (fp+0x221C bitfields)
   enum { MSL_STATE_FLAG_221C_IS_HITSTUN = 0x02 };
-  // GuardReflect flags at fp+0x221C:
+
+  // fp+0x221C GuardReflect flags:
   // - x221C_b1 (mask 0x40) is cleared when mv.co.guard.x14 expires,
   // - x221C_b2 (mask 0x20) is "Powershield Active Bool" (Slippi post-frame) and is cleared when
   //   mv.co.guard.x18 expires,
