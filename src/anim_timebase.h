@@ -143,6 +143,24 @@ static inline void msl_anim_timebase_defer_tick_once(MslBatch* batch, size_t idx
   batch->state.anim_defer_tick_once[idx] = 1u;
 }
 
+typedef enum MslAnimEnterTickPolicy {
+  MSL_ANIM_ENTER_TICK_NONE = 0,
+  MSL_ANIM_ENTER_TICK_IMMEDIATE = 1,
+  MSL_ANIM_ENTER_TICK_DEFER_POST_COMBAT = 2,
+} MslAnimEnterTickPolicy;
+
+static inline void msl_anim_timebase_apply_enter_tick_policy(MslBatch* batch, size_t idx,
+                                                             MslAnimEnterTickPolicy policy) {
+  if (batch == NULL) {
+    return;
+  }
+  if (policy == MSL_ANIM_ENTER_TICK_IMMEDIATE) {
+    msl_anim_timebase_tick_once(batch, idx);
+  } else if (policy == MSL_ANIM_ENTER_TICK_DEFER_POST_COMBAT) {
+    msl_anim_timebase_defer_tick_once(batch, idx);
+  }
+}
+
 // Forward decl: fighter attack identity update on motion-state change.
 // Defined in src/attack_identity.c.
 void attack_identity_on_motion_state_change_ft_800890D0(MslBatch* batch, size_t idx);
@@ -184,6 +202,13 @@ static inline void msl_anim_timebase_enter(MslBatch* batch, size_t idx, float an
   attack_identity_on_motion_state_change_ft_800890D0(batch, idx);
 
   instance_id_on_motion_state_change_ft_800895E0(batch, idx);
+}
+
+static inline void msl_anim_timebase_enter_with_policy(MslBatch* batch, size_t idx,
+                                                       float anim_start_f32, float anim_speed_f32,
+                                                       MslAnimEnterTickPolicy policy) {
+  msl_anim_timebase_enter(batch, idx, anim_start_f32, anim_speed_f32);
+  msl_anim_timebase_apply_enter_tick_policy(batch, idx, policy);
 }
 
 // Pure animation timebase reset without invoking Fighter_ChangeMotionState side-effects.
