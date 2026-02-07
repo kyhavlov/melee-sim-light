@@ -307,6 +307,7 @@ int msl_batch_reseed_seed(MslBatch* batch, const uint8_t* seed_bytes, size_t see
       //
       // Teacher-forced reseed parity: do not override Slippi's raw fp+0x221A fall_fast bit here.
       batch->state.run_x0[idx] = seed->run_x0[p];
+      batch->state.dash_x4[idx] = seed->dash_x4[p];
       batch->state.ecb_lock_timer[idx] = seed->ecb_lock_timer[p];
       batch->state.ledge_cooldown[idx] = seed->ledge_cooldown[p];
       batch->state.ledge_side[idx] = -1;

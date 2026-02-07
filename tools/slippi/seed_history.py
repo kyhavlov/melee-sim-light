@@ -1052,6 +1052,66 @@ def derive_run_x0(
     return out
 
 
+def derive_dash_x4(
+    *,
+    action_id_u16: np.ndarray,
+    action_frame_i16: np.ndarray,
+    act_dash: int = 0x0014,
+    act_turn: int = 0x0012,
+) -> np.ndarray:
+    """
+    Derive `fp->mv.co.dash.x4` per post-frame, strictly causally.
+
+    Decomp anchors:
+    - ftCo_Dash_Enter stores arg1 into `fp->mv.co.dash.x4`.
+      refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c::ftCo_Dash_Enter
+    - Turn->Dash path enters via `ftCo_Dash_Enter(gobj, 0)`.
+      refs/melee/src/melee/ft/chara/ftCommon/ftCo_Turn.c::ftCo_Turn_IASA
+    - Dash_CheckInput enters Dash via `ftCo_Dash_Enter(gobj, 1)`.
+      refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c::ftCo_Dash_CheckInput
+
+    Representation:
+    - Returns a u8 array with length N, carrying the post-frame latch value.
+    - For non-Dash frames, emits 0.
+
+    Causal entry detection:
+    - Dash entry is detected from post-frame action transitions and same-action frame resets
+      (`action_frame` drop while staying in Dash).
+    """
+    a = np.asarray(action_id_u16, dtype=np.uint16).reshape(-1)
+    af = np.asarray(action_frame_i16, dtype=np.int16).reshape(-1)
+    n = int(a.size)
+    out = np.zeros(n, dtype=np.uint8)
+    if n == 0:
+        return out
+    if int(af.size) != n:
+        raise ValueError("action_frame_i16 must match action_id_u16 length")
+
+    act_dash_u = int(act_dash) & 0xFFFF
+    act_turn_u = int(act_turn) & 0xFFFF
+
+    x4 = 0
+    for i in range(n):
+        cur_a = int(a[i]) & 0xFFFF
+        cur_af = int(af[i])
+
+        if cur_a != act_dash_u:
+            x4 = 0
+            out[i] = np.uint8(0)
+            continue
+
+        prev_a = int(a[i - 1]) & 0xFFFF if i > 0 else cur_a
+        prev_af = int(af[i - 1]) if i > 0 else cur_af
+        dash_entry = i == 0 or cur_a != prev_a or cur_af < prev_af
+        if dash_entry:
+            # Decomp: Turn_IASA enters Dash with arg1=0; Dash_CheckInput paths use arg1=1.
+            x4 = 0 if prev_a == act_turn_u else 1
+
+        out[i] = np.uint8(x4)
+
+    return out
+
+
 def derive_ecb_lock_timer(
     *,
     on_ground_u8: np.ndarray,

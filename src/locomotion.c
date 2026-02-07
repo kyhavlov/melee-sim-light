@@ -1069,6 +1069,7 @@ void locomotion_update_pre(MslBatch* batch) {
                 // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c::ftCo_Dash_Enter (init_vel)
                 batch->state.action_id[idx] = (uint16_t)MSL_ACT_DASH;
                 batch->state.animation_index[idx] = (uint32_t)MSL_SM_DASH;
+                batch->state.dash_x4[idx] = 1u;
                 msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
                 // Decomp: ftCo_Dash_Enter calls ftAnim_8006EBA4 immediately after ChangeMotionState.
                 // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c:59-62
@@ -1144,6 +1145,7 @@ void locomotion_update_pre(MslBatch* batch) {
               // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c::ftCo_Dash_Enter (init_vel)
               batch->state.action_id[idx] = (uint16_t)MSL_ACT_DASH;
               batch->state.animation_index[idx] = (uint32_t)MSL_SM_DASH;
+              batch->state.dash_x4[idx] = 1u;
               msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
               // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c:59-62
               msl_anim_timebase_tick_once(batch, idx);
@@ -1257,6 +1259,10 @@ void locomotion_update_pre(MslBatch* batch) {
                 batch->state.turn_x8[idx] = 0;
                 batch->state.action_id[idx] = (uint16_t)MSL_ACT_DASH;
                 batch->state.animation_index[idx] = (uint32_t)MSL_SM_DASH;
+                // Decomp: Turn->Dash uses ftCo_Dash_Enter(gobj, 0), so mv.co.dash.x4 = 0.
+                // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Turn.c::ftCo_Turn_IASA
+                // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c::ftCo_Dash_Enter
+                batch->state.dash_x4[idx] = 0u;
                 msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
                 // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c:59-62
                 msl_anim_timebase_tick_once(batch, idx);
@@ -1293,6 +1299,10 @@ void locomotion_update_pre(MslBatch* batch) {
                 (stick_x * facing_after_dir) >= c->dash_flick_abs) {
               batch->state.action_id[idx] = (uint16_t)MSL_ACT_DASH;
               batch->state.animation_index[idx] = (uint32_t)MSL_SM_DASH;
+              // Decomp: Turn->Dash uses ftCo_Dash_Enter(gobj, 0), so mv.co.dash.x4 = 0.
+              // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Turn.c::ftCo_Turn_IASA
+              // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c::ftCo_Dash_Enter
+              batch->state.dash_x4[idx] = 0u;
               msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
               // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c:59-62
               msl_anim_timebase_tick_once(batch, idx);
@@ -1358,6 +1368,7 @@ void locomotion_update_pre(MslBatch* batch) {
             } else {
               batch->state.action_id[idx] = (uint16_t)MSL_ACT_DASH;
               batch->state.animation_index[idx] = (uint32_t)MSL_SM_DASH;
+              batch->state.dash_x4[idx] = 1u;
               msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
               // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c:59-62
               msl_anim_timebase_tick_once(batch, idx);
@@ -1497,6 +1508,9 @@ void locomotion_update_pre(MslBatch* batch) {
           }
 
           const float cur_anim_frame = batch->state.anim_frame_f32[idx];
+          const uint8_t dash_x4 = batch->state.dash_x4[idx];
+          const uint8_t dash_iasa_early_x4 =
+              (dash_x4 != 0u && cur_anim_frame <= c->dash_iasa_x44) ? 1u : 0u;
           if (cur_anim_frame <= c->dash_iasa_x4c &&
               grounded_a_attack_try_enter_from_iasa(batch, c, idx, buttons_pressed, stick_x,
                                                     stick_y, facing_dir, 1, 0)) {
@@ -1519,7 +1533,7 @@ void locomotion_update_pre(MslBatch* batch) {
               batch->state.kneebend_is_short_hop[idx] = 0;
               action_id = (uint16_t)MSL_ACT_KNEE_BEND;
             } else {
-            if (cur_anim_frame <= c->dash_iasa_x4c) {
+            if (!dash_iasa_early_x4 && cur_anim_frame <= c->dash_iasa_x4c) {
               if ((stick_x * facing_dir) < 0.0f && is_dash_flick(c, stick_x, tilt_timer_x)) {
                 // Dash flick opposite-facing triggers Turn (smash-turn path in vanilla).
                 // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c:41-43 (ftCo_Turn_Enter_Smash)

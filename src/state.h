@@ -162,6 +162,11 @@ typedef struct MslStateSoA {
   // - Gates TurnRun/RunBrake in Run_IASA.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Run.c::{ftCo_Run_Anim,ftCo_Run_IASA}
   uint8_t* run_x0;  // [batch * players], clamped to 0..255
+  // Dash IASA branch latch (decomp: fp->mv.co.dash.x4).
+  // - Set by ftCo_Dash_Enter(arg1).
+  // - ftCo_Dash_IASA uses (x4 != 0 && cur_anim_frame <= x44) for early-branch gating.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c
+  uint8_t* dash_x4;  // [batch * players], 0/1
   // ECB lock countdown (decomp: fp->ecb_lock) used with CollData_X130_Locked.
   // - Set by ftCommon_8007D5D4 / ftCommon_8007D60C.
   // - Decremented once per map/collision callback in Fighter_procMap and clears lock at 0.

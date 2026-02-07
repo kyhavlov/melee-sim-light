@@ -235,6 +235,17 @@ typedef struct MslSeed {
   // Seed representation:
   // - Store a reseed-friendly u8 countdown (clamped to 0..255) representing (mv.co.run.x0 > 0).
   uint8_t run_x0[MSL_MAX_PLAYERS];
+  // Dash IASA branch latch (seeded; decomp-shaped).
+  //
+  // Decomp:
+  // - ftCo_Dash_Enter stores arg1 into fp->mv.co.dash.x4.
+  // - ftCo_Dash_IASA uses (x4 != 0 && cur_anim_frame <= p_ftCommonData->x44) to select the
+  //   early interrupt branch.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c::{ftCo_Dash_Enter,ftCo_Dash_IASA}
+  //
+  // Seed representation:
+  // - Store a reseed-friendly u8 latch (0/1) for fp->mv.co.dash.x4.
+  uint8_t dash_x4[MSL_MAX_PLAYERS];
   // ECB lock countdown (seeded; decomp-shaped).
   //
   // Decomp:

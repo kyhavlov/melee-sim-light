@@ -435,6 +435,7 @@ def _main_impl(args) -> None:
         derive_guard_reflect_timer_x14,
         derive_guard_release_lockout_and_lightshield,
         derive_guard_tilt_state,
+        derive_dash_x4,
         derive_run_x0,
         derive_ecb_lock_timer,
         load_shield_tilt_table_meta,
@@ -1041,6 +1042,13 @@ def _main_impl(args) -> None:
             act_turn_run=act_turn_run,
         )
         samples["seed_t"]["run_x0"][:, slot] = run_x0[:-1]
+        dash_x4 = derive_dash_x4(
+            action_id_u16=post_state,
+            action_frame_i16=post_state_age,
+            act_dash=act_dash,
+            act_turn=act_turn,
+        )
+        samples["seed_t"]["dash_x4"][:, slot] = dash_x4[:-1]
         # Decomp: ftCommon_8007D5D4 sets fp->ecb_lock=10 on ground->air and Fighter_procMap ticks it.
         # refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007D5D4
         # refs/melee/src/melee/ft/fighter.c::Fighter_procMap
