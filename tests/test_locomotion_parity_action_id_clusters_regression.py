@@ -212,3 +212,56 @@ def test_locomotion_parity_dash_to_run_on_cmdvar0_enable_frame(rel: str, record:
         expected_action_id=21,  # MSL_ACT_RUN
         expected_anim_index=13,  # MSL_SM_RUN
     )
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    ("rel", "record", "player"),
+    [
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
+            "cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl",
+            3086,
+            1,
+        ),
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
+            "cardinal_1.0_recent/GracefulAttachedTurtle.msl",
+            641,
+            0,
+        ),
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
+            "cardinal_1.0_recent/QuerulousGrandDinosaur.msl",
+            1786,
+            1,
+        ),
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
+            "cardinal_1.0_recent/TreasuredBackKangaroo.msl",
+            859,
+            0,
+        ),
+    ],
+)
+def test_locomotion_parity_runbrake_iasa_enters_squat_on_down_hold(
+    rel: str, record: int, player: int
+) -> None:
+    # Regression guard for RunBrake IASA squat routing.
+    #
+    # Decomp: ftCo_RunBrake_IASA ends with ftCo_800D5FB0, which checks down-stick and
+    # enters Squat immediately when lstick.y < -p_ftCommonData->x90.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_RunBrake.c::ftCo_RunBrake_IASA
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Squat.c::ftCo_800D5FB0
+    root = Path(__file__).resolve().parents[1]
+    dataset_path = root / rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {rel}")
+
+    _run_one_step_action_and_anim(
+        dataset_path=dataset_path,
+        record=record,
+        player=player,
+        expected_action_id=39,  # MSL_ACT_SQUAT
+        expected_anim_index=30,  # MSL_SM_SQUAT
+    )

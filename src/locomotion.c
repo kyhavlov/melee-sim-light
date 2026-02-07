@@ -1453,6 +1453,33 @@ void locomotion_update_pre(MslBatch* batch) {
           action_id = (uint16_t)MSL_ACT_RUN_BRAKE;
         }
 
+        // RunBrake IASA (minimal): Jump + Squat.
+        //
+        // Decomp:
+        // - ftCo_RunBrake_IASA runs:
+        //   - fn_800CAF78 (jump)
+        //   - (cmd_vars[0] && fn_800C9CEC) (TurnRun path; not modeled yet)
+        //   - ftCo_800D5FB0 (Squat check/enter)
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_RunBrake.c::ftCo_RunBrake_IASA
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Squat.c::ftCo_800D5FB0
+        if (action_id == MSL_ACT_RUN_BRAKE && action_id_start == MSL_ACT_RUN_BRAKE) {
+          const MslJumpInput j_in =
+              jump_input_from_edges(c, buttons_pressed, stick_y, tilt_timer_y);
+          if (j_in != MSL_JUMP_INPUT_NONE && batch->state.jumps_left[idx] > 0) {
+            batch->state.action_id[idx] = (uint16_t)MSL_ACT_KNEE_BEND;
+            batch->state.animation_index[idx] = (uint32_t)MSL_SM_KNEE_BEND;
+            msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+            batch->state.kneebend_jump_input[idx] = (uint8_t)j_in;
+            batch->state.kneebend_is_short_hop[idx] = 0;
+            action_id = (uint16_t)MSL_ACT_KNEE_BEND;
+          } else if (stick_y < -c->crouch_stick_threshold) {
+            batch->state.action_id[idx] = (uint16_t)MSL_ACT_SQUAT;
+            batch->state.animation_index[idx] = (uint32_t)MSL_SM_SQUAT;
+            msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+            action_id = (uint16_t)MSL_ACT_SQUAT;
+          }
+        }
+
         // Dash IASA (dash-dance / dashback start): allow smash-turn from Dash on a flick opposite-facing.
         // Decomp:
         // - refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c::ftCo_Dash_IASA
