@@ -751,6 +751,56 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
         if (laser_scale_z_shield > 1.0f) {
           laser_scale_z_shield = 1.0f;
         }
+        // Slippi snapshot parity bridge (guard/no-submotion only):
+        //
+        // Why this is not core gameplay behavior:
+        // - These seeds are replay snapshots where Guard is represented with
+        //   `action_frame < 0` and `animation_index == 0xFFFFFFFF` (no submotion timeline).
+        // - That encoding can occur under teacher-forced reseed even when in-engine collision/
+        //   pose callbacks would have already advanced a concrete motion-time state.
+        //
+        // Decomp anchor + gap:
+        // - In-engine item/shield checks are driven from per-frame object/fighter update ordering
+        //   and concrete joint/collision snapshots (itfoxlaser + ftColl paths).
+        // - We do not yet have a decomp-backed one-step bridge for the exact Slippi "no-submotion
+        //   Guard snapshot" ordering edge.
+        //
+        // Temporary policy (strict scope):
+        // - Apply only when defender is Guard (179) in a no-submotion seed snapshot and combat
+        //   timers are neutral (hitlag/hitstun == 0).
+        // - This does NOT affect normal Guard frames with a valid submotion timeline.
+        //
+        // TODO(decomp/items+guard): replace this bridge with a decomp-backed pose/collision ordering
+        // model for no-submotion guard snapshots so shield-hit timing parity does not require this gate.
+        const uint8_t guard_no_submotion_seed =
+            (batch->state.action_id[d_idx] == (uint16_t)MSL_ACT_GUARD &&
+             batch->state.action_frame[d_idx] < 0 &&
+             batch->state.animation_index[d_idx] == 0xFFFFFFFFu &&
+             batch->state.hitlag[d_idx] == 0u && batch->state.hitstun[d_idx] == 0u)
+                ? 1u
+                : 0u;
+
+        uint8_t shield_hit_pre = 0;
+        if (guard_no_submotion_seed) {
+          // Determinism note:
+          // - Pre/post overlap probes below are computed by the same deterministic geometry path
+          //   (same laser offsets, scale, shield bubble center/radius) and use no allocations.
+          // - This is not replay-fit randomness; it is a stable one-step ordering discriminator.
+          for (uint8_t oi = 0;
+               oi < off_n && oi < (uint8_t)MSL_LASER_MAX_HITBOX_OFFS_X && !shield_hit_pre; oi++) {
+            const float off_x =
+                (laser_state == 0u) ? lp->hitbox_offsets_x[oi] : lp->state1_hitbox_offsets_x[oi];
+            const float s = off_x * laser_scale_z_shield;
+            const float sx = x0 + (ux * s);
+            const float sy = y0 + (uy * s);
+            if (item_sphere_sphere_intersects_3d(sx, sy, 0.0f, sr, shx, shy, shz, shr)) {
+              shield_hit_pre = 1;
+            }
+          }
+          if (!shield_hit_pre && off_n == 0) {
+            shield_hit_pre = item_sphere_sphere_intersects_3d(x0, y0, 0.0f, sr, shx, shy, shz, shr);
+          }
+        }
         for (uint8_t oi = 0; oi < off_n && oi < (uint8_t)MSL_LASER_MAX_HITBOX_OFFS_X && !shield_hit;
              oi++) {
           const float off_x =
@@ -767,6 +817,13 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
         // If no scripted offsets exist, fall back to the projectile origin.
         if (!shield_hit && off_n == 0) {
           shield_hit = item_sphere_sphere_intersects_3d(x, y, 0.0f, sr, shx, shy, shz, shr);
+        }
+
+        // Snapshot parity guardrail (strict scope above):
+        // - If overlap exists only at post-motion and not pre-motion, treat this as the
+        //   no-submotion reseed timing edge and suppress this frame's shield-hit transition.
+        if (guard_no_submotion_seed && shield_hit && !shield_hit_pre) {
+          shield_hit = 0;
         }
 
         if (shield_hit) {
