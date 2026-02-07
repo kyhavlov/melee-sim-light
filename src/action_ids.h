@@ -418,6 +418,8 @@ static inline uint8_t msl_action_is_ground_locomotion(uint16_t action_id) {
     case MSL_ACT_RUN_DIRECT:
     case MSL_ACT_RUN_BRAKE:
     case MSL_ACT_KNEE_BEND:
+    case MSL_ACT_SQUAT:
+    case MSL_ACT_SQUAT_WAIT:
     case MSL_ACT_LANDING:
     case MSL_ACT_LANDING_FALL_SPECIAL:
     case MSL_ACT_LANDING_AIR_N:

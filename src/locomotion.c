@@ -195,7 +195,8 @@ static inline uint8_t action_is_fall_like(uint16_t a) {
 static inline uint8_t action_is_ground_locomotion(uint16_t a) {
   if (a == MSL_ACT_WAIT || action_is_walk(a) || a == MSL_ACT_TURN || a == MSL_ACT_TURN_RUN ||
       a == MSL_ACT_DASH || a == MSL_ACT_RUN || a == MSL_ACT_RUN_BRAKE || a == MSL_ACT_KNEE_BEND ||
-      a == MSL_ACT_LANDING || a == MSL_ACT_LANDING_FALL_SPECIAL || a == MSL_ACT_LANDING_AIR_N ||
+      a == MSL_ACT_SQUAT || a == MSL_ACT_SQUAT_WAIT || a == MSL_ACT_LANDING ||
+      a == MSL_ACT_LANDING_FALL_SPECIAL || a == MSL_ACT_LANDING_AIR_N ||
       a == MSL_ACT_LANDING_AIR_F || a == MSL_ACT_LANDING_AIR_B || a == MSL_ACT_LANDING_AIR_HI ||
       a == MSL_ACT_LANDING_AIR_LW || a == MSL_ACT_ESCAPE_F || a == MSL_ACT_ESCAPE_B ||
       a == MSL_ACT_ESCAPE_N) {
@@ -303,6 +304,10 @@ static inline uint32_t submotion_for_action(uint16_t a) {
       return (uint32_t)MSL_SM_RUN_BRAKE;
     case MSL_ACT_KNEE_BEND:
       return (uint32_t)MSL_SM_KNEE_BEND;
+    case MSL_ACT_SQUAT:
+      return (uint32_t)MSL_SM_SQUAT;
+    case MSL_ACT_SQUAT_WAIT:
+      return (uint32_t)MSL_SM_SQUAT_WAIT;
     case MSL_ACT_JUMP_F:
       return (uint32_t)MSL_SM_JUMP_F;
     case MSL_ACT_JUMP_B:
@@ -544,6 +549,43 @@ void locomotion_update_pre(MslBatch* batch) {
           batch->state.run_x0[idx] = 0;
         }
 
+        // Squat/SquatWait updates.
+        //
+        // Decomp:
+        // - ftCo_Squat_Anim transitions on anim end:
+        //   - hold down -> ftCo_SquatWait_Enter
+        //   - else -> ft_8008A2BC (Wait enter)
+        // - ftCo_SquatWait_CheckInput / IASA keeps SquatWait while (lstick.y < -x90), else exits.
+        // Squat threshold source:
+        // - c->crouch_stick_threshold is p_ftCommonData->x90 loaded from
+        //   data/common/ft_common_data.json via src/common_params.c.
+        // refs/melee/src/melee/ft/chara/ftCommon/{ftCo_Squat.c,ftCo_SquatWait.c}
+        if (action_id == MSL_ACT_SQUAT) {
+          batch->state.animation_index[idx] = (uint32_t)MSL_SM_SQUAT;
+          if (anim_finished(cid, (uint16_t)MSL_SM_SQUAT, batch->state.anim_frame_f32[idx])) {
+            if (stick_y < -c->crouch_stick_threshold) {
+              batch->state.action_id[idx] = (uint16_t)MSL_ACT_SQUAT_WAIT;
+              batch->state.animation_index[idx] = (uint32_t)MSL_SM_SQUAT_WAIT;
+              msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+              action_id = (uint16_t)MSL_ACT_SQUAT_WAIT;
+            } else {
+              batch->state.action_id[idx] = (uint16_t)MSL_ACT_WAIT;
+              batch->state.animation_index[idx] = (uint32_t)MSL_SM_WAIT1_0;
+              msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+              action_id = (uint16_t)MSL_ACT_WAIT;
+            }
+          }
+        }
+        if (action_id == MSL_ACT_SQUAT_WAIT) {
+          batch->state.animation_index[idx] = (uint32_t)MSL_SM_SQUAT_WAIT;
+          if (!(stick_y < -c->crouch_stick_threshold)) {
+            batch->state.action_id[idx] = (uint16_t)MSL_ACT_WAIT;
+            batch->state.animation_index[idx] = (uint32_t)MSL_SM_WAIT1_0;
+            msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+            action_id = (uint16_t)MSL_ACT_WAIT;
+          }
+        }
+
         // Landing states -> Wait on completion (Anim step).
         //
         // Decomp references:
@@ -700,7 +742,8 @@ void locomotion_update_pre(MslBatch* batch) {
         if (action_id == MSL_ACT_WAIT || action_is_walk(action_id) || action_id == MSL_ACT_TURN ||
             action_id == MSL_ACT_TURN_RUN || action_id == MSL_ACT_DASH ||
             action_id == MSL_ACT_RUN || action_id == MSL_ACT_RUN_BRAKE ||
-            action_id == MSL_ACT_RUN_DIRECT) {
+            action_id == MSL_ACT_RUN_DIRECT || action_id == MSL_ACT_SQUAT ||
+            action_id == MSL_ACT_SQUAT_WAIT) {
           allow_guard_entry = 1;
         }
         // Landing IASA: allow guard only after the landing lag gate.
@@ -720,12 +763,23 @@ void locomotion_update_pre(MslBatch* batch) {
         guard_update_shield_recharge(batch, c, idx);
 
         // Escape actions (from shield): friction + end->Wait.
-        // Keep this before other grounded IASA so Escape->Wait doesn't chain into Wait IASA
-        // in the same frame.
+        // If Escape ended this frame, allow the destination state's IASA to run in the same frame.
+        // Decomp ordering: Anim callback can change motion state before the frame's input_cb dispatch.
+        // - Escape end: refs/melee/src/melee/ft/chara/ftCommon/ftCo_Escape.c::{ftCo_Escape_Anim,ftCo_EscapeN_Anim}
+        // - Destination Wait IASA includes ftCo_Squat_CheckInput:
+        //   refs/melee/src/melee/ft/chara/ftCommon/{ftCo_Wait.c,ftCo_Squat.c}
+        // Squat threshold source:
+        // - c->crouch_stick_threshold is p_ftCommonData->x90 loaded from
+        //   data/common/ft_common_data.json via src/common_params.c.
+        // refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate
         if (action_id == MSL_ACT_ESCAPE_N || action_id == MSL_ACT_ESCAPE_F ||
             action_id == MSL_ACT_ESCAPE_B) {
           escape_update_grounded(batch, c, ch, idx);
-          continue;
+          action_id = batch->state.action_id[idx];
+          if (action_id == MSL_ACT_ESCAPE_N || action_id == MSL_ACT_ESCAPE_F ||
+              action_id == MSL_ACT_ESCAPE_B) {
+            continue;
+          }
         }
 
         // WAIT entry transitions (minimal locomotion-only IASA chain):
@@ -746,6 +800,18 @@ void locomotion_update_pre(MslBatch* batch) {
             batch->state.kneebend_jump_input[idx] = (uint8_t)j_in;
             batch->state.kneebend_is_short_hop[idx] = 0;
             action_id = (uint16_t)MSL_ACT_KNEE_BEND;
+          } else if ((buttons_pressed & (uint16_t)MSL_BUTTON_B) == 0 &&
+                     (action_id_start != MSL_ACT_WAIT || (buttons & (uint16_t)MSL_BUTTON_B) == 0) &&
+                     stick_y < -c->crouch_stick_threshold) {
+            // Decomp: ftCo_Wait_IASA -> ftCo_Squat_CheckInput -> ftCo_Squat_Enter.
+            // refs/melee/src/melee/ft/chara/ftCommon/{ftCo_Wait.c,ftCo_Squat.c}
+            // Squat threshold source:
+            // - c->crouch_stick_threshold is p_ftCommonData->x90 loaded from
+            //   data/common/ft_common_data.json via src/common_params.c.
+            batch->state.action_id[idx] = (uint16_t)MSL_ACT_SQUAT;
+            batch->state.animation_index[idx] = (uint32_t)MSL_SM_SQUAT;
+            msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+            action_id = (uint16_t)MSL_ACT_SQUAT;
           } else if (is_dash_flick(c, stick_x, tilt_timer_x)) {
             // Dash flick.
             // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c::ftCo_Dash_CheckInput
@@ -1265,9 +1331,8 @@ void locomotion_update_pre(MslBatch* batch) {
             // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c::ftCo_Jump_Enter
             // refs/melee/src/melee/ft/fighter.c::{Fighter_procUpdate,Fighter_procInterrupt}
             // refs/melee/src/melee/ft/fighter.c::Fighter_Spaghetti_8006AD10
-            const float jump_stick_x =
-                apply_deadzone(stick_i8_to_unit(batch->state.prev_input_main_x[idx]),
-                               c->lstick_deadzone_x);
+            const float jump_stick_x = apply_deadzone(
+                stick_i8_to_unit(batch->state.prev_input_main_x[idx]), c->lstick_deadzone_x);
             const uint16_t jump_act = jump_action_from_stick(c, jump_stick_x, facing_dir);
             batch->state.action_id[idx] = jump_act;
             batch->state.animation_index[idx] = (uint32_t)submotion_for_action(jump_act);
@@ -1331,6 +1396,19 @@ void locomotion_update_pre(MslBatch* batch) {
               batch->state.animation_index[idx] = (uint32_t)MSL_SM_WAIT1_0;
               msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
               action_id = (uint16_t)MSL_ACT_WAIT;
+              if ((buttons_pressed & (uint16_t)MSL_BUTTON_B) == 0 &&
+                  (action_id_start != MSL_ACT_WAIT || (buttons & (uint16_t)MSL_BUTTON_B) == 0) &&
+                  stick_y < -c->crouch_stick_threshold) {
+                // Decomp ordering: Dash anim-end -> Wait, then Wait IASA can enter Squat.
+                // refs/melee/src/melee/ft/chara/ftCommon/{ftCo_Dash.c,ftCo_Wait.c,ftCo_Squat.c}
+                // Squat threshold source:
+                // - c->crouch_stick_threshold is p_ftCommonData->x90 loaded from
+                //   data/common/ft_common_data.json via src/common_params.c.
+                batch->state.action_id[idx] = (uint16_t)MSL_ACT_SQUAT;
+                batch->state.animation_index[idx] = (uint32_t)MSL_SM_SQUAT;
+                msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+                action_id = (uint16_t)MSL_ACT_SQUAT;
+              }
             }
           }
         }
@@ -1344,6 +1422,18 @@ void locomotion_update_pre(MslBatch* batch) {
               batch->state.action_id[idx] = (uint16_t)MSL_ACT_WAIT;
               batch->state.animation_index[idx] = (uint32_t)MSL_SM_WAIT1_0;
               msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+              if ((buttons_pressed & (uint16_t)MSL_BUTTON_B) == 0 &&
+                  (action_id_start != MSL_ACT_WAIT || (buttons & (uint16_t)MSL_BUTTON_B) == 0) &&
+                  stick_y < -c->crouch_stick_threshold) {
+                // Decomp ordering: RunBrake anim-end -> Wait, then Wait IASA can enter Squat.
+                // refs/melee/src/melee/ft/chara/ftCommon/{ftCo_RunBrake.c,ftCo_Wait.c,ftCo_Squat.c}
+                // Squat threshold source:
+                // - c->crouch_stick_threshold is p_ftCommonData->x90 loaded from
+                //   data/common/ft_common_data.json via src/common_params.c.
+                batch->state.action_id[idx] = (uint16_t)MSL_ACT_SQUAT;
+                batch->state.animation_index[idx] = (uint32_t)MSL_SM_SQUAT;
+                msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+              }
             }
           }
         }

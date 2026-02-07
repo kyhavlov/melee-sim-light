@@ -138,6 +138,8 @@ static inline uint8_t physics_action_is_common_ground_friction_only(uint16_t act
     case MSL_ACT_TURN:
     case MSL_ACT_TURN_RUN:
     case MSL_ACT_KNEE_BEND:
+    case MSL_ACT_SQUAT:
+    case MSL_ACT_SQUAT_WAIT:
     case MSL_ACT_LANDING:
     case MSL_ACT_LANDING_FALL_SPECIAL:
     case MSL_ACT_LANDING_AIR_N:
