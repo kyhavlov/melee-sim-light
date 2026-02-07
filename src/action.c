@@ -624,8 +624,8 @@ void guard_update_grounded(MslBatch* batch, const MslCommonParams* c, size_t idx
     // This preserves deterministic one-step GuardOn->Guard transitions without replay-fit constants
     // and keeps the normal anim-end gate in place when a real timebase is available.
     if (a0 == (uint16_t)MSL_ACT_GUARD_ON && batch->state.hitlag_started_frame[idx] == 0 &&
-        batch->state.animation_index[idx] == 0xFFFFFFFFu && batch->state.anim_frame_f32[idx] < 0.0f &&
-        shield_held && guard_x10_seed == 0) {
+        batch->state.animation_index[idx] == 0xFFFFFFFFu &&
+        batch->state.anim_frame_f32[idx] < 0.0f && shield_held && guard_x10_seed == 0) {
       enter_guard_hold(batch, idx);
       return;
     }
@@ -751,6 +751,7 @@ void action_update(MslBatch* batch) {
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::{ftCo_Catch_Anim,ftCo_CatchDash_Anim}
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80091A4C
   grab_flow_update_pre_physics(batch);
+  throw_flow_update_pre_physics(batch);
   locomotion_update_pre(batch);
   knockdown_update_pre_physics(batch);
   ledge_update_pre_physics(batch);
@@ -758,5 +759,4 @@ void action_update(MslBatch* batch) {
   // intentionally Neutral/Side/Up-only and relies on this ordering.
   shine_update_pre_physics(batch);
   blaster_update_pre_physics(batch);
-  throw_flow_update_pre_physics(batch);
 }

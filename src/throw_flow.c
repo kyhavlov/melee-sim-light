@@ -1,6 +1,8 @@
 #include "throw_flow.h"
 
 #include "action_ids.h"
+#include "anim_frame.h"
+#include "anim_table.h"
 #include "anim_timebase.h"
 #include "combat.h"
 #include "move_tables.h"
@@ -15,6 +17,34 @@ static inline uint8_t is_thrower_action(uint16_t a) {
     default:
       return 0u;
   }
+}
+
+static inline uint8_t throw_anim_finished(uint8_t char_id, uint16_t msid, float anim_frame_f32) {
+  const float end = msl_anim_end_frame(char_id, msid);
+  if (!(end > 0.0f)) {
+    return 0u;
+  }
+  // Decomp gates throw-state exit on ftAnim_IsFramesRemaining()==0.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_Throw{F,B,Hi,Lw}_Anim
+  // refs/melee/src/melee/ft/ftanim.c::ftAnim_IsFramesRemaining
+  return msl_anim_frame_sanitize_f32(anim_frame_f32) >= end;
+}
+
+static inline void enter_wait_or_fall_from_throw_end(MslBatch* batch, size_t idx) {
+  if (batch == NULL) {
+    return;
+  }
+  // Decomp Throw* Anim end calls ftCommon_8007D92C (ThrowF has an x2222_b0 branch to
+  // ftCo_8009B56C that is currently out-of-scope for Fox/Falco suite offenders).
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_Throw{F,B,Hi,Lw}_Anim
+  if (batch->state.on_ground[idx] != 0) {
+    batch->state.action_id[idx] = (uint16_t)MSL_ACT_WAIT;
+    batch->state.animation_index[idx] = (uint32_t)MSL_SM_WAIT1_0;
+  } else {
+    batch->state.action_id[idx] = (uint16_t)MSL_ACT_FALL;
+    batch->state.animation_index[idx] = (uint32_t)MSL_SM_FALL;
+  }
+  msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
 }
 
 static inline void enter_fall_release(MslBatch* batch, size_t idx) {
@@ -93,45 +123,49 @@ void throw_flow_update_pre_physics(MslBatch* batch) {
           move_tables_throw_release_hit_idx(owner_char, owner_act, owner_prev_af, NULL);
       const uint8_t released_cur =
           move_tables_throw_release_hit_idx(owner_char, owner_act, owner_af, &rel_hit_idx);
-      if (!(released_cur && !released_prev)) {
-        continue;
-      }
+      if (released_cur && !released_prev) {
+        // Find the grabbed victim owned by this thrower (decomp: fp->victim_gobj is a single
+        // pointer). If a malformed seed contains multiple victims with the same grab_owner_port,
+        // choose the lowest port deterministically and process only that one.
+        for (int victim_p = 0; victim_p < num_players; victim_p++) {
+          if (victim_p == owner_p) {
+            continue;
+          }
+          const size_t vidx = msl_idx_player(bi, victim_p);
+          if (batch->state.stocks[vidx] == 0) {
+            continue;
+          }
+          if (batch->state.grab_owner_port[vidx] != (uint8_t)owner_p) {
+            continue;
+          }
+          if (!msl_action_is_grabbed_victim(batch->state.action_id[vidx])) {
+            // Defensive: if the victim is no longer in a grabbed-victim state, still clear the
+            // attachment link so grab_attachment doesn't keep driving them next frame.
+            batch->state.grab_owner_port[vidx] = 0xFFu;
+            break;
+          }
 
-      // Find the grabbed victim owned by this thrower (decomp: fp->victim_gobj is a single pointer).
-      // If a malformed seed contains multiple victims with the same grab_owner_port, choose the
-      // lowest port deterministically and process only that one.
-      for (int victim_p = 0; victim_p < num_players; victim_p++) {
-        if (victim_p == owner_p) {
-          continue;
-        }
-        const size_t vidx = msl_idx_player(bi, victim_p);
-        if (batch->state.stocks[vidx] == 0) {
-          continue;
-        }
-        if (batch->state.grab_owner_port[vidx] != (uint8_t)owner_p) {
-          continue;
-        }
-        if (!msl_action_is_grabbed_victim(batch->state.action_id[vidx])) {
-          // Defensive: if the victim is no longer in a grabbed-victim state, still clear the
-          // attachment link so grab_attachment doesn't keep driving them next frame.
+          // Detach immediately. Defer the throw hit to post-items.
           batch->state.grab_owner_port[vidx] = 0xFFu;
+          batch->state.throw_pending_victim_port[oidx] = (uint8_t)victim_p;
+          batch->state.throw_pending_hit_idx[oidx] = rel_hit_idx;
+
+          // Defensive broadening: on a detached frame, a grabbed-victim action (Thrown*/Capture*)
+          // has no self/KB integration in this sim (Phys callbacks are empty in decomp), so ensure
+          // we don't leave the victim in a "no physics, no attachment" freeze window if some other
+          // hit suppresses the throw hit later in the frame.
+          //
+          // Suite expectation: for valid throw scripts, the victim is Thrown* when set_throw_flags(0)
+          // fires. The broad fallback is to keep malformed seeds stable.
+          enter_fall_release(batch, vidx);
           break;
         }
+      }
 
-        // Detach immediately. Defer the throw hit to post-items.
-        batch->state.grab_owner_port[vidx] = 0xFFu;
-        batch->state.throw_pending_victim_port[oidx] = (uint8_t)victim_p;
-        batch->state.throw_pending_hit_idx[oidx] = rel_hit_idx;
-
-        // Defensive broadening: on a detached frame, a grabbed-victim action (Thrown*/Capture*)
-        // has no self/KB integration in this sim (Phys callbacks are empty in decomp), so ensure we
-        // don't leave the victim in a "no physics, no attachment" freeze window if some other hit
-        // suppresses the throw hit later in the frame.
-        //
-        // Suite expectation: for valid throw scripts, the victim is Thrown* when set_throw_flags(0)
-        // fires. The broad fallback is to keep malformed seeds stable.
-        enter_fall_release(batch, vidx);
-        break;
+      const uint32_t owner_sm_u32 = batch->state.animation_index[oidx];
+      if (owner_sm_u32 <= 0xFFFFu &&
+          throw_anim_finished(owner_char, (uint16_t)owner_sm_u32, owner_af)) {
+        enter_wait_or_fall_from_throw_end(batch, oidx);
       }
     }
   }
@@ -164,11 +198,6 @@ void throw_flow_update_post_items(MslBatch* batch) {
         continue;
       }
 
-      const uint16_t owner_act = batch->state.action_id[oidx];
-      if (!is_thrower_action(owner_act)) {
-        continue;
-      }
-
       const uint8_t victim_p = batch->state.throw_pending_victim_port[oidx];
       const uint8_t hit_idx = batch->state.throw_pending_hit_idx[oidx];
       if (victim_p == 0xFFu || (int)victim_p >= num_players || (int)victim_p == owner_p) {
@@ -179,9 +208,30 @@ void throw_flow_update_post_items(MslBatch* batch) {
       }
 
       const uint8_t owner_char = batch->state.char_id[oidx];
+      uint16_t throw_action = batch->state.action_id[oidx];
+      if (!is_thrower_action(throw_action)) {
+        // Fallback for deferred throw-hit lookup:
+        // - Why needed: in decomp, Throw Anim handles release/throw-script timing and can then exit
+        //   the throw state on the same frame (`ftCo_Throw*_Anim` does `ftCo_800DD724` then
+        //   `ftCommon_8007D92C` on anim end).
+        //   refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_Throw{F,B,Hi,Lw}_Anim
+        // - This simulator defers throw-hit application to post-items so same-frame item hits can
+        //   preempt throw hits; scheduling anchor is item procs before fighter motion callbacks in
+        //   decomp (`Item_8026862C` proc registration vs fighter proc chain).
+        //   refs/melee/src/melee/it/item.c::Item_8026862C
+        //   refs/melee/src/melee/ft/fighter.c::{Fighter_8006A1BC,Fighter_8006A360,Fighter_procUpdate}
+        // - Safety/determinism: only recover from frame-start action_id when it is strictly one of
+        //   Throw{F,B,Hi,Lw}. If the thrower was interrupted/canceled into a non-throw state,
+        //   fallback is disabled and no throw-hit is applied.
+        const uint16_t prev_act = batch->state.prev_action_id[oidx];
+        if (!is_thrower_action(prev_act)) {
+          continue;
+        }
+        throw_action = prev_act;
+      }
 
       MslThrowHitboxParams p = {0};
-      if (!move_tables_throw_hitbox_params(owner_char, owner_act, hit_idx, &p)) {
+      if (!move_tables_throw_hitbox_params(owner_char, throw_action, hit_idx, &p)) {
         continue;
       }
 
