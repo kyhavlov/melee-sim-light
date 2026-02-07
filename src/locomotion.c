@@ -569,6 +569,9 @@ static inline void enter_landing_action_from_air(MslBatch* batch, const MslCharP
   batch->state.speed_air_x_self[idx] = 0.0f;
 
   batch->state.fall_fast[idx] = 0;
+  // Decomp: grounding transitions clear ECB lock via ftCommon_UnlockECB.
+  // refs/melee/src/melee/ft/ftcommon.c::{ftCommon_8007D6A4,ftCommon_UnlockECB}
+  batch->state.ecb_lock_timer[idx] = 0u;
 
   // Jump refresh is tied to explicit landing-enter transitions only (not raw on_ground flips).
   //
@@ -1618,6 +1621,10 @@ void locomotion_update_pre(MslBatch* batch) {
             batch->state.animation_index[idx] = (uint32_t)submotion_for_action(jump_act);
             msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
             batch->state.on_ground[idx] = 0;
+            // Decomp: ftCo_Jump_Enter calls ftCommon_8007D5D4 (sets fp->ecb_lock=10 and lock flag).
+            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c::ftCo_Jump_Enter
+            // refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007D5D4
+            batch->state.ecb_lock_timer[idx] = 10u;
 
             // Ground-to-air momentum + jump impulse (refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c::ftCo_800CB110)
             const float base_x =
@@ -1876,6 +1883,10 @@ void locomotion_update_pre(MslBatch* batch) {
             batch->state.fall_fast[idx] = 0;
             tilt_timer_y = 0xFEu;
             batch->state.jumps_left[idx]--;
+            // Decomp: ftCo_JumpAerial_Enter_Basic calls ftCommon_8007D5D4.
+            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::ftCo_JumpAerial_Enter_Basic
+            // refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007D5D4
+            batch->state.ecb_lock_timer[idx] = 10u;
             action_id = act;
           }
         }
@@ -1912,6 +1923,10 @@ void locomotion_update_pre(MslBatch* batch) {
               batch->state.fall_fast[idx] = 0;
               tilt_timer_y = 0xFEu;
               batch->state.jumps_left[idx]--;
+              // Decomp: ftCo_JumpAerial_Enter_Basic calls ftCommon_8007D5D4.
+              // refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::ftCo_JumpAerial_Enter_Basic
+              // refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007D5D4
+              batch->state.ecb_lock_timer[idx] = 10u;
               action_id = act;
             }
           }
@@ -2023,6 +2038,7 @@ void locomotion_update_post_collision(MslBatch* batch) {
         //   refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c:51-74
         //   refs/melee/src/melee/ft/ftcommon.c:525-535
         batch->state.jumps_left[idx] = ch->max_jumps > 0 ? (uint8_t)(ch->max_jumps - 1) : 0;
+        batch->state.ecb_lock_timer[idx] = 10u;
 
         // Walked/ran off the ground: carry grounded X velocity into air.
         batch->state.speed_air_x_self[idx] = batch->state.speed_ground_x_self[idx];

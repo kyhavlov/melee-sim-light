@@ -162,6 +162,12 @@ typedef struct MslStateSoA {
   // - Gates TurnRun/RunBrake in Run_IASA.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Run.c::{ftCo_Run_Anim,ftCo_Run_IASA}
   uint8_t* run_x0;  // [batch * players], clamped to 0..255
+  // ECB lock countdown (decomp: fp->ecb_lock) used with CollData_X130_Locked.
+  // - Set by ftCommon_8007D5D4 / ftCommon_8007D60C.
+  // - Decremented once per map/collision callback in Fighter_procMap and clears lock at 0.
+  // refs/melee/src/melee/ft/ftcommon.c::{ftCommon_8007D5D4,ftCommon_8007D60C,ftCommon_UnlockECB}
+  // refs/melee/src/melee/ft/fighter.c::Fighter_procMap
+  uint8_t* ecb_lock_timer;  // [batch * players], clamped to 0..255
   // Cliff / ledge internals (FD v1).
   // - ledge_side: -1 = none, 0 = left, 1 = right.
   // - stage_ledge_occupant_*: per-env occupant port, or -1.

@@ -235,6 +235,17 @@ typedef struct MslSeed {
   // Seed representation:
   // - Store a reseed-friendly u8 countdown (clamped to 0..255) representing (mv.co.run.x0 > 0).
   uint8_t run_x0[MSL_MAX_PLAYERS];
+  // ECB lock countdown (seeded; decomp-shaped).
+  //
+  // Decomp:
+  // - ftCommon_8007D5D4 / ftCommon_8007D60C set fp->ecb_lock and set CollData_X130_Locked.
+  // - Fighter_procMap decrements fp->ecb_lock each map/collision callback and clears the lock at 0.
+  // refs/melee/src/melee/ft/ftcommon.c::{ftCommon_8007D5D4,ftCommon_8007D60C,ftCommon_UnlockECB}
+  // refs/melee/src/melee/ft/fighter.c::Fighter_procMap
+  //
+  // Seed representation:
+  // - Store a reseed-friendly u8 countdown (clamped to 0..255) for fp->ecb_lock.
+  uint8_t ecb_lock_timer[MSL_MAX_PLAYERS];
   // Ledge grab cooldown timer (seeded; decomp-shaped).
   // Decomp: fp->x2064_ledgeCooldown decremented each frame under !hitlag.
   // refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate

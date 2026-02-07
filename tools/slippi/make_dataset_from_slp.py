@@ -436,6 +436,7 @@ def _main_impl(args) -> None:
         derive_guard_release_lockout_and_lightshield,
         derive_guard_tilt_state,
         derive_run_x0,
+        derive_ecb_lock_timer,
         load_shield_tilt_table_meta,
         compute_tilt_timer_axis_pre_post,
         compute_tilt_timer_y_pre_post_with_fall_fast,
@@ -1040,6 +1041,15 @@ def _main_impl(args) -> None:
             act_turn_run=act_turn_run,
         )
         samples["seed_t"]["run_x0"][:, slot] = run_x0[:-1]
+        # Decomp: ftCommon_8007D5D4 sets fp->ecb_lock=10 on ground->air and Fighter_procMap ticks it.
+        # refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007D5D4
+        # refs/melee/src/melee/ft/fighter.c::Fighter_procMap
+        ecb_lock_timer = derive_ecb_lock_timer(
+            on_ground_u8=post_on_ground,
+            action_id_u16=post_state,
+            lock_frames_ground_to_air=10,
+        )
+        samples["seed_t"]["ecb_lock_timer"][:, slot] = ecb_lock_timer[:-1]
         damage_jump_buffer_x14 = derive_damage_jump_buffer_x14(
             action_id=post_state,
             hitstun_u16=post_hitstun,

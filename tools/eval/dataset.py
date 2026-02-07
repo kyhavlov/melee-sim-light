@@ -120,6 +120,7 @@ SEED_DTYPE = np.dtype(
         ("tilt_timer_y", _arr("u1", MAX_PLAYERS)),
         ("fall_fast", _arr("u1", MAX_PLAYERS)),
         ("run_x0", _arr("u1", MAX_PLAYERS)),
+        ("ecb_lock_timer", _arr("u1", MAX_PLAYERS)),
         ("ledge_cooldown", _arr("u1", MAX_PLAYERS)),
         ("turn_frames_to_turn", _arr("u1", MAX_PLAYERS)),
         ("turn_has_turned", _arr("u1", MAX_PLAYERS)),

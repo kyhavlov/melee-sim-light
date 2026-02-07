@@ -1052,6 +1052,73 @@ def derive_run_x0(
     return out
 
 
+def derive_ecb_lock_timer(
+    *,
+    on_ground_u8: np.ndarray,
+    action_id_u16: np.ndarray,
+    lock_frames_ground_to_air: int = 10,
+    act_jump_f: int = 0x0019,
+    act_jump_b: int = 0x001A,
+    act_jump_aerial_f: int = 0x001B,
+    act_jump_aerial_b: int = 0x001C,
+) -> np.ndarray:
+    """
+    Derive `fp->ecb_lock` per post-frame from replay grounding history.
+
+    Decomp anchors:
+    - ftCommon_8007D5D4 sets `fp->ecb_lock = 10` and enables CollData_X130_Locked on ground->air.
+      refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007D5D4
+    - Fighter_procMap decrements `fp->ecb_lock` once per map/collision callback and clears the lock
+      when it reaches 0.
+      refs/melee/src/melee/ft/fighter.c::Fighter_procMap
+      refs/melee/src/melee/ft/ftcommon.c::ftCommon_UnlockECB
+    - Grounding transitions clear the lock via ftCommon_UnlockECB (called by ftCommon_8007D6A4).
+      refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007D6A4
+
+    Representation:
+    - Return u8 post-frame countdown values (clamped to [0,255]).
+    - On a detected post-frame grounded->air transition, write `(lock_frames_ground_to_air - 1)`
+      for that frame to account for the same-frame procMap decrement.
+    """
+    on_ground = np.asarray(on_ground_u8, dtype=np.uint8).reshape(-1)
+    action_id = np.asarray(action_id_u16, dtype=np.uint16).reshape(-1)
+    n = int(on_ground.size)
+    out = np.zeros(n, dtype=np.uint8)
+    if n == 0:
+        return out
+    if int(action_id.size) != n:
+        raise ValueError("action_id_u16 must match on_ground_u8 length")
+
+    lock_frames = int(lock_frames_ground_to_air)
+    lock_frames = int(np.clip(lock_frames, 0, 255))
+    set_post = max(0, lock_frames - 1)
+    jump_set = {
+        int(act_jump_f) & 0xFFFF,
+        int(act_jump_b) & 0xFFFF,
+        int(act_jump_aerial_f) & 0xFFFF,
+        int(act_jump_aerial_b) & 0xFFFF,
+    }
+
+    timer = 0
+    prev_ground = bool(int(on_ground[0]) != 0)
+    for i in range(n):
+        cur_ground = bool(int(on_ground[i]) != 0)
+        cur_action = int(action_id[i]) & 0xFFFF
+        prev_action = int(action_id[i - 1]) & 0xFFFF if i > 0 else cur_action
+        jump_entry = (i > 0) and (cur_action in jump_set) and (cur_action != prev_action)
+        if cur_ground:
+            timer = 0
+        else:
+            if jump_entry or (i > 0 and prev_ground):
+                timer = set_post
+            elif timer > 0:
+                timer -= 1
+        out[i] = np.uint8(timer)
+        prev_ground = cur_ground
+
+    return out
+
+
 def derive_damage_jump_buffer_x14(
     *,
     action_id: np.ndarray,

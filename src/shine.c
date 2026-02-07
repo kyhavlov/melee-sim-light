@@ -459,6 +459,10 @@ void shine_update_pre_physics(MslBatch* batch) {
                 batch->state.tilt_timer_y[idx] = 0xFEu;
                 batch->state.fall_fast[idx] = 0;
                 batch->state.jumps_left[idx]--;
+                // Decomp: ftCo_JumpAerial_Enter_Basic calls ftCommon_8007D5D4.
+                // refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::ftCo_JumpAerial_Enter_Basic
+                // refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007D5D4
+                batch->state.ecb_lock_timer[idx] = 10u;
                 break;
               }
             }
