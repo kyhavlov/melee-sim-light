@@ -636,9 +636,9 @@ static inline uint8_t combat_damage_severity_u8_from_kb(const MslCommonParams* c
 }
 
 static inline void combat_damage_enter_state(const MslCommonParams* c, MslBatch* batch,
-                                             size_t d_idx, uint8_t defender_on_ground,
-                                             uint8_t hurt_height, float kb_applied,
-                                             float kb_angle_rad) {
+                                             size_t d_idx, uint8_t defender_on_ground_before,
+                                             uint8_t defender_on_ground_after, uint8_t hurt_height,
+                                             float kb_applied, float kb_angle_rad) {
   if (batch == NULL) {
     return;
   }
@@ -665,7 +665,21 @@ static inline void combat_damage_enter_state(const MslCommonParams* c, MslBatch*
     //
     // This sim does not currently model the global RNG stream (HSD_Randf consumers). Keep the
     // DamageFlyRoll branch disabled until we have a decomp-backed RNG site/stream.
-    if (!defender_on_ground) {
+    // Decomp order in ftCo_8008DCE0:
+    // - Ground-vs-air KB handling can call ftCommon_8007D5D4 (blocks 21-28), which flips
+    //   `ground_or_air` to Air for launched grounded victims.
+    // - DamageFlyTop window check runs later and gates on the *current* `ground_or_air` (block_36).
+    //
+    // Sim mapping for `defender_on_ground_after`:
+    // - this is sampled immediately after this contact's KB application in combat pass 1
+    //   (i.e. after we may clear `state.on_ground[d_idx]` on launch in the same damage apply),
+    // - before later frame systems (stage collision/physics integration of resulting velocity).
+    //
+    // Intentional scope: only this tumble DamageFlyTop window uses post-KB grounded state. The
+    // broader low/med airborne-vs-grounded damage state split below continues to use the pre-hit
+    // grounded flag to avoid changing non-tumble behavior.
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
+    if (!defender_on_ground_after) {
       // DamageFlyTop window (radians).
       // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0 (block_33)
       // refs/melee/src/melee/ft/types.h (ftCommonData offsets 0x234/0x238)
@@ -688,7 +702,7 @@ static inline void combat_damage_enter_state(const MslCommonParams* c, MslBatch*
         sm = (uint32_t)MSL_SM_DAMAGE_FLY_LW;
       }
     }
-  } else if (!defender_on_ground) {
+  } else if (!defender_on_ground_before) {
     // Airborne low/med damage states (DamageAir1/2/3).
     if (sev == 0u) {
       act = (uint16_t)MSL_ACT_DAMAGE_AIR_1;
@@ -1099,8 +1113,9 @@ static inline void combat_mutations_pass1_future_apply_body_hit(MslBatch* batch,
     combat_state_flags_set_x221a_b3(batch, d_idx);
   }
 
-  combat_damage_enter_state(c, batch, d_idx, defender_on_ground, hurt_height, kb_applied,
-                            kb_angle_rad);
+  const uint8_t defender_on_ground_after = batch->state.on_ground[d_idx] ? 1u : 0u;
+  combat_damage_enter_state(c, batch, d_idx, defender_on_ground, defender_on_ground_after,
+                            hurt_height, kb_applied, kb_angle_rad);
 
   batch->state.instance_hit_by[d_idx] = batch->state.instance_id[a_idx];
   batch->state.last_hit_by[d_idx] = (uint8_t)attacker;
@@ -1325,8 +1340,8 @@ MslItemHitResult combat_apply_item_hit(MslBatch* batch, int batch_index, int att
   // Decomp: ftCo_8008DCE0 can clear grounded state (ftCommon_8007D5D4) before selecting the
   // damage motion state. Use the post-KB on_ground value for state entry.
   const uint8_t defender_on_ground_after = batch->state.on_ground[d_idx] ? 1u : 0u;
-  combat_damage_enter_state(c, batch, d_idx, defender_on_ground_after, defender_hurt_height,
-                            kb_applied, kb_angle_rad);
+  combat_damage_enter_state(c, batch, d_idx, defender_on_ground, defender_on_ground_after,
+                            defender_hurt_height, kb_applied, kb_angle_rad);
 
   batch->state.instance_hit_by[d_idx] = item_instance_id;
   batch->state.last_hit_by[d_idx] = (uint8_t)attacker;
@@ -1505,8 +1520,8 @@ uint8_t combat_apply_throw_hit(MslBatch* batch, int batch_index, int attacker, i
   // Throw hits mark the damaged hurtbox as "mid" in decomp (x184c_damaged_hurtbox = 1).
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DDDE4
   const uint8_t hurt_height = 1u;
-  combat_damage_enter_state(c, batch, d_idx, defender_on_ground, hurt_height, kb_applied,
-                            kb_angle_rad);
+  combat_damage_enter_state(c, batch, d_idx, defender_on_ground, defender_on_ground, hurt_height,
+                            kb_applied, kb_angle_rad);
 
   batch->state.instance_hit_by[d_idx] = batch->state.instance_id[a_idx];
   batch->state.last_hit_by[d_idx] = (uint8_t)attacker;
