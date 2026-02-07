@@ -172,9 +172,15 @@ static int load_one(const char* data_dir, const char* rel_path, uint8_t char_id)
     return -1;
   }
 
-  static const char* k_illusion_required_keys[] = {
-      "illusion_ground_end_vel_x", "illusion_ground_friction",    "illusion_air_end_vel_x",
-      "illusion_air_friction",     "grab_capture_anchor_part_id",
+  static const char* k_spacie_required_keys[] = {
+      "illusion_ground_end_vel_x",
+      "illusion_ground_friction",
+      "illusion_air_end_vel_x",
+      "illusion_air_friction",
+      "firefox_hold_gravity_delay_frames",
+      "firefox_hold_air_friction",
+      "firefox_hold_air_fall_accel",
+      "grab_capture_anchor_part_id",
   };
 
   FILE* f = fopen(path, "rb");
@@ -213,9 +219,9 @@ static int load_one(const char* data_dir, const char* rel_path, uint8_t char_id)
   // `data/characters/*.json` are local, gitignored artifacts and may be missing when cloning a
   // fresh repo or when the extraction schema changes.
   if (char_id == (uint8_t)MSL_CHAR_FOX || char_id == (uint8_t)MSL_CHAR_FALCO) {
-    for (size_t i = 0; i < (sizeof(k_illusion_required_keys) / sizeof(k_illusion_required_keys[0]));
+    for (size_t i = 0; i < (sizeof(k_spacie_required_keys) / sizeof(k_spacie_required_keys[0]));
          i++) {
-      const char* k = k_illusion_required_keys[i];
+      const char* k = k_spacie_required_keys[i];
       char pat[96];
       const int pn = snprintf(pat, sizeof(pat), "\"%s\"", k);
       if (pn <= 0 || (size_t)pn >= sizeof(pat) || strstr(buf, pat) == NULL) {
@@ -281,6 +287,10 @@ static int load_one(const char* data_dir, const char* rel_path, uint8_t char_id)
       json_get_f32(buf, "illusion_ground_friction", &out.illusion_ground_friction) != 0 ||
       json_get_f32(buf, "illusion_air_end_vel_x", &out.illusion_air_end_vel_x) != 0 ||
       json_get_f32(buf, "illusion_air_friction", &out.illusion_air_friction) != 0 ||
+      json_get_u8(buf, "firefox_hold_gravity_delay_frames",
+                  &out.firefox_hold_gravity_delay_frames) != 0 ||
+      json_get_f32(buf, "firefox_hold_air_friction", &out.firefox_hold_air_friction) != 0 ||
+      json_get_f32(buf, "firefox_hold_air_fall_accel", &out.firefox_hold_air_fall_accel) != 0 ||
       json_get_f32(buf, "ledge_jump_horizontal_velocity", &out.ledge_jump_horizontal_velocity) !=
           0 ||
       json_get_f32(buf, "ledge_jump_vertical_velocity", &out.ledge_jump_vertical_velocity) != 0 ||

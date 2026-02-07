@@ -103,6 +103,21 @@ typedef struct MslCharParams {
   float illusion_air_end_vel_x;
   float illusion_air_friction;
 
+  // Fox/Falco up special HoldAir (Firefox/Firebird charge in air) physics attrs.
+  //
+  // Source of truth: ISO-extracted `data/characters/*.json` keys:
+  // - firefox_hold_gravity_delay_frames
+  // - firefox_hold_air_friction
+  // - firefox_hold_air_fall_accel
+  //
+  // Decomp:
+  // - refs/melee/src/melee/ft/chara/ftFox/types.h (ftFox_DatAttrs x54/x5C/x60)
+  // - refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::ftFx_SpecialHiHoldAir_Phys
+  uint8_t firefox_hold_gravity_delay_frames;  // ftFox_DatAttrs.x54
+  uint8_t _pad_u8_firefox_hold_0[3];
+  float firefox_hold_air_friction;    // ftFox_DatAttrs.x5C
+  float firefox_hold_air_fall_accel;  // ftFox_DatAttrs.x60
+
   // Cliff / ledge (ftCo_Cliff*).
   //
   // Source of truth: ISO-extracted `data/characters/*.json` (ftData_x44_t and co attrs).

@@ -266,6 +266,14 @@ def _extract_ftco_dattrs(pl_dat: Path, *, ftdata_symbol: str, extract_fox_blaste
         out["illusion_ground_friction"] = float(_f32_be(buf, ext_abs + 0x38))
         out["illusion_air_end_vel_x"] = float(_f32_be(buf, ext_abs + 0x3C))
         out["illusion_air_friction"] = float(_f32_be(buf, ext_abs + 0x40))
+        # Fox/Falco up special HoldAir (Firefox/Firebird charge) physics attrs.
+        #
+        # Decomp:
+        # - refs/melee/src/melee/ft/chara/ftFox/types.h (ftFox_DatAttrs x54/x5C/x60)
+        # - refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::ftFx_SpecialHiHoldAir_Phys
+        out["firefox_hold_gravity_delay_frames"] = int(max(0, min(255, int(round(float(_f32_be(buf, ext_abs + 0x54)))))))
+        out["firefox_hold_air_friction"] = float(_f32_be(buf, ext_abs + 0x5C))
+        out["firefox_hold_air_fall_accel"] = float(_f32_be(buf, ext_abs + 0x60))
         out["blaster_angle"] = float(_f32_be(buf, ext_abs + 0x10))
         out["blaster_vel"] = float(_f32_be(buf, ext_abs + 0x14))
         out["blaster_shot_itkind"] = int(_u32_be(buf, ext_abs + 0x1C))
@@ -360,6 +368,9 @@ def _stable_update(existing: dict, extracted: dict) -> dict:
         "illusion_ground_friction",
         "illusion_air_end_vel_x",
         "illusion_air_friction",
+        "firefox_hold_gravity_delay_frames",
+        "firefox_hold_air_friction",
+        "firefox_hold_air_fall_accel",
         "blaster_angle",
         "blaster_vel",
         "blaster_shot_itkind",

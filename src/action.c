@@ -754,6 +754,8 @@ void action_update(MslBatch* batch) {
   locomotion_update_pre(batch);
   knockdown_update_pre_physics(batch);
   ledge_update_pre_physics(batch);
+  // Keep Shine before Blaster so Down-B owns B-edge + down-stick entry; blaster resolver is
+  // intentionally Neutral/Side/Up-only and relies on this ordering.
   shine_update_pre_physics(batch);
   blaster_update_pre_physics(batch);
   throw_flow_update_pre_physics(batch);

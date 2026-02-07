@@ -31,6 +31,67 @@ static inline uint8_t anim_finished(uint8_t char_id, uint16_t msid, float anim_f
   return msl_anim_frame_sanitize_f32(anim_frame_f32) >= end;
 }
 
+static inline uint8_t spacie_specialhi_update(MslBatch* batch, size_t idx, uint8_t char_id,
+                                              const MslSpecialMsids* ms, uint8_t on_ground) {
+  if (batch == NULL || ms == NULL) {
+    return 0;
+  }
+  uint16_t a = batch->state.action_id[idx];
+  // Decomp collision wrappers for Hold/HoldAir keep the same logical state when crossing
+  // ground/air, preserving current animation frame.
+  // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::{ftFx_SpecialHiHold_GroundToAir,ftFx_SpecialHiHoldAir_AirToGround}
+  if (a == (uint16_t)MSL_ACT_FX_SPECIAL_HI_HOLD && !on_ground) {
+    a = (uint16_t)MSL_ACT_FX_SPECIAL_HI_HOLD_AIR;
+    batch->state.action_id[idx] = a;
+  } else if (a == (uint16_t)MSL_ACT_FX_SPECIAL_HI_HOLD_AIR && on_ground) {
+    a = (uint16_t)MSL_ACT_FX_SPECIAL_HI_HOLD;
+    batch->state.action_id[idx] = a;
+  }
+
+  switch (a) {
+    case MSL_ACT_FX_SPECIAL_HI_HOLD:
+      batch->state.animation_index[idx] = (uint32_t)ms->specialhi_ground_hold;
+      if (anim_finished(char_id, ms->specialhi_ground_hold, batch->state.anim_frame_f32[idx])) {
+        // Decomp: both Hold and HoldAir transition into launch state strictly on anim end.
+        // There is no input-hold gate here (IASA handlers are empty).
+        // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::{
+        //   ftFx_SpecialHiHold_Anim,ftFx_SpecialHiHoldAir_Anim,
+        //   ftFx_SpecialHiHold_IASA,ftFx_SpecialHiHoldAir_IASA
+        // }
+        batch->state.action_id[idx] =
+            on_ground ? (uint16_t)MSL_ACT_FX_SPECIAL_HI : (uint16_t)MSL_ACT_FX_SPECIAL_AIR_HI;
+        batch->state.animation_index[idx] = (uint32_t)ms->specialhi_ground_main;
+        msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+      }
+      return 1;
+    case MSL_ACT_FX_SPECIAL_HI_HOLD_AIR:
+      batch->state.animation_index[idx] = (uint32_t)ms->specialhi_air_hold;
+      if (anim_finished(char_id, ms->specialhi_air_hold, batch->state.anim_frame_f32[idx])) {
+        batch->state.action_id[idx] =
+            on_ground ? (uint16_t)MSL_ACT_FX_SPECIAL_HI : (uint16_t)MSL_ACT_FX_SPECIAL_AIR_HI;
+        batch->state.animation_index[idx] = (uint32_t)ms->specialhi_ground_main;
+        msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+      }
+      return 1;
+    case MSL_ACT_FX_SPECIAL_HI:
+      batch->state.animation_index[idx] = (uint32_t)ms->specialhi_ground_main;
+      // Decomp: SpecialHi ground collision can transition into SpecialAirHi while preserving frame.
+      // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::ftFx_SpecialHi_GroundToAir
+      if (!on_ground) {
+        batch->state.action_id[idx] = (uint16_t)MSL_ACT_FX_SPECIAL_AIR_HI;
+        batch->state.animation_index[idx] = (uint32_t)ms->specialhi_ground_main;
+      }
+      return 1;
+    case MSL_ACT_FX_SPECIAL_AIR_HI:
+      // Decomp: SpecialHi and SpecialAirHi share ftFx_SM_SpecialHi (same launch submotion id).
+      // refs/melee/src/melee/ft/chara/ftFox/ftFx_Init.c
+      batch->state.animation_index[idx] = (uint32_t)ms->specialhi_ground_main;
+      return 1;
+    default:
+      return 0;
+  }
+}
+
 static inline uint16_t landing_air_action_from_attackair(uint16_t a) {
   switch (a) {
     case MSL_ACT_ATTACK_AIR_N:
@@ -494,6 +555,7 @@ void locomotion_update_pre(MslBatch* batch) {
         continue;
       }
       const uint8_t cid = batch->state.char_id[idx];
+      const MslSpecialMsids* ms = msl_special_msids(cid);
 
       float stick_x;
       float stick_y;
@@ -607,6 +669,10 @@ void locomotion_update_pre(MslBatch* batch) {
           }
         }
 
+        if (spacie_specialhi_update(batch, idx, cid, ms, 1u)) {
+          continue;
+        }
+
         // Fox/Falco side special (Illusion/Phantasm): keep animation_index stable and model
         // Anim-end transitions before Phys, matching Fighter_procUpdate callback ordering.
         //
@@ -615,7 +681,6 @@ void locomotion_update_pre(MslBatch* batch) {
         //   refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c::{ftFx_SpecialS_Anim,ftFx_SpecialSEnd_Enter}
         // - Fighter_procUpdate order (Anim before Phys):
         //   refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate
-        const MslSpecialMsids* ms = msl_special_msids(cid);
         if (ms != NULL) {
           // Keep animation_index stable for side special states (avoid seed carry-through).
           switch (action_id) {
@@ -1444,6 +1509,10 @@ void locomotion_update_pre(MslBatch* batch) {
       // Air / non-ground: shield recharge can still occur (decomp checks shield-active flag, not ground/air).
       guard_update_shield_recharge(batch, c, idx);
 
+      if (spacie_specialhi_update(batch, idx, cid, ms, 0u)) {
+        continue;
+      }
+
       // Fox/Falco side special (Illusion/Phantasm) air states: keep animation_index stable and
       // model Anim-end transitions before Phys, matching Fighter_procUpdate callback ordering.
       //
@@ -1451,7 +1520,6 @@ void locomotion_update_pre(MslBatch* batch) {
       // - ftFx_SpecialAirSStart_Anim transitions to ftFx_SpecialAirS_Enter when frames are exhausted.
       // - ftFx_SpecialAirS_Anim transitions to ftFx_SpecialAirSEnd_Enter when frames are exhausted.
       // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c::{ftFx_SpecialAirSStart_Anim,ftFx_SpecialAirS_Anim}
-      const MslSpecialMsids* ms = msl_special_msids(cid);
       if (ms != NULL) {
         if (action_id == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_S_START ||
             action_id == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_S ||

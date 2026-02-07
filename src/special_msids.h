@@ -28,6 +28,18 @@ typedef struct MslSpecialMsids {
   uint16_t specials_air_start;
   uint16_t specials_air_main;
   uint16_t specials_air_end;
+
+  // Up special (Firefox/Firebird) submotions.
+  //
+  // Decomp tie-down:
+  // - ftFx_MS_SpecialHiHold      -> ftFx_SM_SpecialHiHold
+  // - ftFx_MS_SpecialHiHoldAir   -> ftFx_SM_SpecialHiHoldAir
+  // - ftFx_MS_SpecialHi          -> ftFx_SM_SpecialHi
+  // - ftFx_MS_SpecialAirHi       -> ftFx_SM_SpecialHi (same launch submotion as ground)
+  // refs/melee/src/melee/ft/chara/ftFox/ftFx_Init.c
+  uint16_t specialhi_ground_hold;
+  uint16_t specialhi_ground_main;
+  uint16_t specialhi_air_hold;
 } MslSpecialMsids;
 
 int special_msids_init(void);

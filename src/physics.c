@@ -239,6 +239,26 @@ static inline float physics_apply_common_air_drift(const MslCharParams* ch,
                               ch->air_max_horizontal_velocity);
 }
 
+static inline void physics_apply_specialhi_hold_air(const MslCharParams* ch, int16_t action_frame,
+                                                    float* io_vel_x, float* io_vel_y) {
+  if (ch == NULL || io_vel_x == NULL || io_vel_y == NULL) {
+    return;
+  }
+  // Decomp: SpecialHi HoldAir applies air friction using ftFox_DatAttrs.x5C each frame.
+  // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::ftFx_SpecialHiHoldAir_Phys
+  *io_vel_x = air_apply_friction_step(*io_vel_x, ch->firefox_hold_air_friction);
+
+  // Decomp: gravity starts once `mv.fx.SpecialHi.gravityDelay` expires; acceleration uses
+  // ftFox_DatAttrs.x60 and terminal velocity uses co_attrs.terminal_vel.
+  // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::ftFx_SpecialHiHoldAir_Phys
+  if (action_frame >= (int16_t)ch->firefox_hold_gravity_delay_frames) {
+    *io_vel_y -= ch->firefox_hold_air_fall_accel;
+    if (*io_vel_y < -ch->terminal_vel) {
+      *io_vel_y = -ch->terminal_vel;
+    }
+  }
+}
+
 static inline uint8_t physics_action_is_shine_air(uint16_t action_id) {
   return (action_id >= (uint16_t)MSL_ACT_FX_SPECIAL_AIR_LW_START &&
           action_id <= (uint16_t)MSL_ACT_FX_SPECIAL_AIR_LW_TURN)
@@ -425,6 +445,13 @@ void physics_integrate(MslBatch* batch) {
               // This sim currently does not model cmd_skip_decay, and always uses the decay path.
               batch->state.speed_air_x_self[idx] *= c->escapeair_decay;
               batch->state.speed_y_self[idx] *= c->escapeair_decay;
+            } else if (action_id == (uint16_t)MSL_ACT_FX_SPECIAL_HI_HOLD_AIR) {
+              const MslCharParams* phys = msl_char_params(batch->state.char_id[idx]);
+              if (phys != NULL) {
+                physics_apply_specialhi_hold_air(phys, action_frame,
+                                                 &batch->state.speed_air_x_self[idx],
+                                                 &batch->state.speed_y_self[idx]);
+              }
             } else if (physics_action_use_pre_integration_common_air_gravity(action_id)) {
               const MslCharParams* phys = msl_char_params(batch->state.char_id[idx]);
               if (phys != NULL) {

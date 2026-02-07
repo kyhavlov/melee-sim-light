@@ -142,7 +142,11 @@ static int load_one(const char* data_dir, const char* rel_path, uint8_t char_id)
       json_get_u16_path3(buf, "side_ground", "end", "default", &out.specials_ground_end) != 0 ||
       json_get_u16_path3(buf, "side_air", "start", "default", &out.specials_air_start) != 0 ||
       json_get_u16_path3(buf, "side_air", "main", "default", &out.specials_air_main) != 0 ||
-      json_get_u16_path3(buf, "side_air", "end", "default", &out.specials_air_end) != 0) {
+      json_get_u16_path3(buf, "side_air", "end", "default", &out.specials_air_end) != 0 ||
+
+      json_get_u16_path3(buf, "up_ground", "hold", "default", &out.specialhi_ground_hold) != 0 ||
+      json_get_u16_path3(buf, "up_ground", "main", "default", &out.specialhi_ground_main) != 0 ||
+      json_get_u16_path3(buf, "up_air", "hold", "default", &out.specialhi_air_hold) != 0) {
     alloc_free(buf);
     return -1;
   }

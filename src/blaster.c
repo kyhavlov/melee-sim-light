@@ -9,7 +9,10 @@
 #include "anim_timebase.h"
 #include "buttons.h"
 #include "char_params.h"
+#include "common_params.h"
+#include "input_axis.h"
 #include "laser_params.h"
+#include "special_msids.h"
 
 // Character id mapping follows Slippi post-frame `character` (GALE01):
 // - Fox   = 1
@@ -65,7 +68,7 @@ static inline uint8_t specialn_is_blaster_loop_requested(const MslBatch* batch, 
   return x67d <= af ? 1u : 0u;
 }
 
-static inline uint8_t action_allows_blaster_entry_ground(uint16_t action_id) {
+static inline uint8_t action_allows_special_entry_ground(uint16_t action_id) {
   // Spotdodge (EscapeN) has an empty IASA in decomp, so it cannot be interrupted into SpecialN.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Escape.c::ftCo_EscapeN_IASA
   //
@@ -75,6 +78,56 @@ static inline uint8_t action_allows_blaster_entry_ground(uint16_t action_id) {
     return 0;
   }
   return msl_action_is_ground_locomotion(action_id);
+}
+
+typedef enum MslSpacieBSpecialKind {
+  MSL_SPACIE_B_SPECIAL_NONE = 0,
+  MSL_SPACIE_B_SPECIAL_NEUTRAL = 1,
+  MSL_SPACIE_B_SPECIAL_SIDE = 2,
+  MSL_SPACIE_B_SPECIAL_UP = 3,
+} MslSpacieBSpecialKind;
+
+static inline MslSpacieBSpecialKind resolve_spacie_b_special_kind(const MslCommonParams* c,
+                                                                  uint8_t grounded, float stick_x,
+                                                                  float stick_y) {
+  if (c == NULL) {
+    return MSL_SPACIE_B_SPECIAL_NONE;
+  }
+  // Decomp-special input order references:
+  // - Grounded interrupt chains call SpecialS -> SpecialHi -> SpecialN -> SpecialLw.
+  //   refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
+  //   refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::{ftCo_SpecialS_CheckInput,ftCo_Attack100_CheckInput,ftCo_800D67C4}
+  // - Aerial interrupt helper checks Up -> Down -> Side -> Neutral.
+  //   refs/melee/src/melee/ft/chara/ftCommon/ftCo_SpecialAir.c::ftCo_SpecialAir_CheckInput
+  //
+  // This resolver is intentionally scoped to Neutral/Side/Up routing; Down-B is owned by shine.c.
+  // If input is in the down-special region, return NONE so Neutral-B does not steal it.
+  //
+  // Ordering guarantee:
+  // - action_update() runs shine_update_pre_physics() before blaster_update_pre_physics().
+  // - Shine entry uses the same raw B-edge (`input_buttons_pressed`) and does not consume it.
+  // So a B-edge + down-stick frame enters Shine first; this resolver then sees a Shine action and
+  // does not enter Blaster.
+  if (stick_y <= -c->special_stick_y_threshold) {
+    return MSL_SPACIE_B_SPECIAL_NONE;
+  }
+  const float abs_x = stick_x < 0.0f ? -stick_x : stick_x;
+  if (grounded) {
+    if (abs_x >= c->special_stick_x_threshold_side) {
+      return MSL_SPACIE_B_SPECIAL_SIDE;
+    }
+    if (stick_y >= c->special_stick_y_threshold) {
+      return MSL_SPACIE_B_SPECIAL_UP;
+    }
+    return MSL_SPACIE_B_SPECIAL_NEUTRAL;
+  }
+  if (stick_y >= c->special_stick_y_threshold) {
+    return MSL_SPACIE_B_SPECIAL_UP;
+  }
+  if (abs_x >= c->special_stick_x_threshold_side) {
+    return MSL_SPACIE_B_SPECIAL_SIDE;
+  }
+  return MSL_SPACIE_B_SPECIAL_NEUTRAL;
 }
 
 static inline void enter_wait(MslBatch* batch, size_t idx) {
@@ -116,6 +169,50 @@ static inline void enter_blaster_start(MslBatch* batch, size_t idx, const MslLas
   batch->state.speed_y_attack[idx] = 0.0f;
 }
 
+static inline void enter_side_special_start(MslBatch* batch, size_t idx, const MslCommonParams* c,
+                                            const MslSpecialMsids* ms, uint8_t grounded,
+                                            float stick_x) {
+  if (batch == NULL || c == NULL || ms == NULL) {
+    return;
+  }
+  const float facing_dir = batch->state.facing[idx] ? 1.0f : -1.0f;
+  // Decomp: grounded/aerial Side-B entry reverses facing when lstick.x * facing_dir < -x220.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_SpecialS.c::ftCo_SpecialS_CheckInput
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_SpecialAir.c::ftCo_SpecialAir_CheckInput
+  if (stick_x * facing_dir < -c->special_side_reverse_threshold) {
+    batch->state.facing[idx] = batch->state.facing[idx] ? 0u : 1u;
+  }
+  if (grounded) {
+    batch->state.action_id[idx] = (uint16_t)MSL_ACT_FX_SPECIAL_S_START;
+    batch->state.animation_index[idx] = (uint32_t)ms->specials_ground_start;
+  } else {
+    batch->state.action_id[idx] = (uint16_t)MSL_ACT_FX_SPECIAL_AIR_S_START;
+    batch->state.animation_index[idx] = (uint32_t)ms->specials_air_start;
+  }
+  batch->state.fall_fast[idx] = 0;
+  msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+  msl_anim_timebase_defer_tick_once(batch, idx);
+}
+
+static inline void enter_specialhi_hold(MslBatch* batch, size_t idx, const MslSpecialMsids* ms,
+                                        uint8_t grounded) {
+  if (batch == NULL || ms == NULL) {
+    return;
+  }
+  if (grounded) {
+    batch->state.action_id[idx] = (uint16_t)MSL_ACT_FX_SPECIAL_HI_HOLD;
+    batch->state.animation_index[idx] = (uint32_t)ms->specialhi_ground_hold;
+  } else {
+    batch->state.action_id[idx] = (uint16_t)MSL_ACT_FX_SPECIAL_HI_HOLD_AIR;
+    batch->state.animation_index[idx] = (uint32_t)ms->specialhi_air_hold;
+  }
+  batch->state.fall_fast[idx] = 0;
+  msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+  // Decomp: SpecialHi hold enters call ftAnim_8006EBA4 on the entered state.
+  // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::{ftFx_SpecialHi_Enter,ftFx_SpecialAirHiStart_Enter}
+  msl_anim_timebase_defer_tick_once(batch, idx);
+}
+
 static inline uint8_t anim_finished(uint8_t char_id, uint16_t msid, float anim_frame_f32) {
   const float end = msl_anim_end_frame(char_id, msid);
   if (!(end > 0.0f)) {
@@ -140,17 +237,21 @@ void blaster_update_pre_physics(MslBatch* batch) {
       if (ch == NULL) {
         continue;
       }
-      const MslLaserParams* lp = laser_params_get(cid);
-      if (lp == NULL) {
+      const MslCommonParams* c = msl_common_params();
+      const MslSpecialMsids* ms = msl_special_msids(cid);
+      if (c == NULL || ms == NULL) {
         continue;
       }
+      const MslLaserParams* lp = laser_params_get(cid);
 
       const uint16_t a = batch->state.action_id[idx];
       const uint8_t on_ground = batch->state.on_ground[idx] ? 1u : 0u;
 
-      // Entry (minimal): allow from basic locomotion states.
+      // Entry: route grounded/aerial B-special to Side/Up/Neutral.
+      // Down-B is entered in shine_update_pre_physics() earlier in action_update() ordering.
       const uint16_t pressed = batch->state.input_buttons_pressed[idx];
       if (!action_is_blaster(a) && (pressed & (uint16_t)MSL_BUTTON_B) != 0) {
+        uint8_t allow = 0;
         if (on_ground) {
           // Landing special-case: Landing lag actions should not be interruptible until their IASA
           // gate allows it.
@@ -164,7 +265,7 @@ void blaster_update_pre_physics(MslBatch* batch) {
           //   refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::ftCo_LandingFallSpecial_Enter_Basic
           // - LandingAir* IASA is empty, so those landing-lag actions cannot be interrupted at all.
           //   refs/melee/src/melee/ft/chara/ftCommon/ftCo_LandingAir.c::ftCo_LandingAir_IASA
-          uint8_t allow = action_allows_blaster_entry_ground(a);
+          allow = action_allows_special_entry_ground(a);
           if (allow) {
             switch (a) {
               case (uint16_t)MSL_ACT_LANDING_FALL_SPECIAL:
@@ -186,12 +287,33 @@ void blaster_update_pre_physics(MslBatch* batch) {
                 break;
             }
           }
-          if (allow) {
-            enter_blaster_start(batch, idx, lp, 1);
-          }
         } else {
           if (msl_action_is_air_locomotion(a)) {
-            enter_blaster_start(batch, idx, lp, 0);
+            allow = 1u;
+          }
+        }
+        if (allow) {
+          const float stick_x = apply_deadzone(stick_i8_to_unit(batch->state.input_main_x[idx]),
+                                               c->lstick_deadzone_x);
+          const float stick_y = apply_deadzone(stick_i8_to_unit(batch->state.input_main_y[idx]),
+                                               c->lstick_deadzone_y);
+          const MslSpacieBSpecialKind kind =
+              resolve_spacie_b_special_kind(c, on_ground, stick_x, stick_y);
+          switch (kind) {
+            case MSL_SPACIE_B_SPECIAL_SIDE:
+              enter_side_special_start(batch, idx, c, ms, on_ground, stick_x);
+              break;
+            case MSL_SPACIE_B_SPECIAL_UP:
+              enter_specialhi_hold(batch, idx, ms, on_ground);
+              break;
+            case MSL_SPACIE_B_SPECIAL_NEUTRAL:
+              if (lp != NULL) {
+                enter_blaster_start(batch, idx, lp, on_ground);
+              }
+              break;
+            case MSL_SPACIE_B_SPECIAL_NONE:
+            default:
+              break;
           }
         }
       }
