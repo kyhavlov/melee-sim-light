@@ -63,6 +63,20 @@ def _skip_if_required_artifacts_missing(root: Path) -> None:
         pytest.skip(f"missing local data artifacts: {', '.join(missing)}")
 
 
+def _landing_air_lag_frames_for_action(char_data: dict[str, object], action_id: int) -> int:
+    by_action = {
+        70: "landing_airn_lag_frames",  # ftCo_MS_LandingAirN
+        71: "landing_airf_lag_frames",  # ftCo_MS_LandingAirF
+        72: "landing_airb_lag_frames",  # ftCo_MS_LandingAirB
+        73: "landing_airhi_lag_frames",  # ftCo_MS_LandingAirHi
+        74: "landing_airlw_lag_frames",  # ftCo_MS_LandingAirLw
+    }
+    key = by_action.get(int(action_id))
+    if key is None:
+        raise AssertionError(f"expected LandingAir* action_id, got {action_id}")
+    return int(char_data[key])
+
+
 @pytest.mark.integration
 def test_action_frame_run_anim_rate_scaled_from_ground_speed() -> None:
     # Cluster lock: Action-frame mismatch on Run where Slippi state_age advances by a fractional
@@ -260,6 +274,75 @@ def test_state_flags_x221a_b3_not_set_on_throw_release_damage_entry() -> None:
         got = int(out["state_flags"][0, p, 1])
         want = int(row["ref_t1"]["state_flags"][0, p, 1])
         assert got == want, f"record={record} p={p} expected state_flags[1]={want}, got {got}"
+    finally:
+        binding.destroy(handle)
+
+
+@pytest.mark.integration
+def test_state_flags_x221a_b3_clears_when_hitlag_reaches_zero() -> None:
+    # Cluster lock: fp->x221A_b3 (state_flags[1] bit 0x10) clears on the frame hitlag reaches 0.
+    #
+    # Decomp clear path:
+    # refs/melee/src/melee/ft/fighter.c::Fighter_8006A1BC
+    #
+    # Regression target: AGG rec 182 p1 where seed carries 0x10 with hitlag=1 but ref clears to 0
+    # with hitlag=0 on the next frame.
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_rel = (
+        "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
+        "cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl"
+    )
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+    record = 182
+    p = 1
+    assert int(samples.shape[0]) > record, f"dataset too short: num_records={int(samples.shape[0])}"
+    row = samples[record : record + 1]
+
+    assert int(row["seed_t"]["action_id"][0, p]) == 75  # ftCo_MS_DamageHi1
+    assert int(row["ref_t1"]["action_id"][0, p]) == 75
+    assert int(row["seed_t"]["hitlag"][0, p]) == 1
+    assert int(row["ref_t1"]["hitlag"][0, p]) == 0
+    assert int(row["seed_t"]["state_flags"][0, p, 1]) & 0x10
+    assert (int(row["ref_t1"]["state_flags"][0, p, 1]) & 0x10) == 0
+
+    binding = pytest.importorskip("msl_binding")
+    sizes = binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    compare_stride = int(sizes["compare"])
+
+    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    try:
+        seed_bytes = np.empty((1, seed_stride), dtype=np.uint8)
+        prev_input_bytes = np.empty((1, input_stride), dtype=np.uint8)
+        input_bytes = np.empty((1, input_stride), dtype=np.uint8)
+        out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
+
+        seed_bytes[:] = np.frombuffer(row["seed_t"].tobytes(order="C"), dtype=np.uint8).reshape(1, seed_stride)
+        prev_input_bytes[:] = np.frombuffer(row["prev_input_t"].tobytes(order="C"), dtype=np.uint8).reshape(
+            1, input_stride
+        )
+        input_bytes[:] = np.frombuffer(row["input_t"].tobytes(order="C"), dtype=np.uint8).reshape(
+            1, input_stride
+        )
+
+        binding.reseed_seed(handle, seed_bytes)
+        binding.step_input(handle, prev_input_bytes, input_bytes)
+        binding.write_compare(handle, out_compare_bytes)
+
+        out = out_compare_bytes.view(COMPARE_DTYPE).reshape(-1)
+        got_flags = int(out["state_flags"][0, p, 1])
+        want_flags = int(row["ref_t1"]["state_flags"][0, p, 1])
+        assert got_flags == want_flags, (
+            f"record={record} p={p} expected state_flags[1]={want_flags}, got {got_flags}"
+        )
+        assert (got_flags & 0x10) == 0, f"record={record} p={p} expected x221A_b3 clear, got {got_flags:#04x}"
     finally:
         binding.destroy(handle)
 
@@ -1131,13 +1214,15 @@ def test_state_flags_fastfall_bit_persists_across_fall_anim_wrap() -> None:
 
 @pytest.mark.integration
 def test_action_frame_landingairn_entry_rate_uses_decomp_lag_formula() -> None:
-    # Cluster lock: LandingAirN entry must use the decomp anim-rate formula on entry-shaped
-    # snapshots (`action_frame == 0`) so t->t+1 state_age/action_frame matches replay.
+    # Cluster lock: LandingAir* entry on L-cancel must use the divided-lag decomp branch on
+    # entry-shaped snapshots (`action_frame == 0`) so t->t+1 state_age/action_frame matches replay.
     #
     # Decomp:
     # - ftCo_LandingAir_EnterWithLag (lag + L-cancel divide gate)
     # - ftCo_LandingAir_EnterWithMsidLag ((ftAnim_8006F484 + 0.1f) / lag)
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_LandingAir.c
+    # Slippi seed-bridge field used by this lock:
+    # refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm (`l_cancel` from x67F gate)
     #
     # Regression target: AGG rec 320 p1 (LandingAirN -> LandingAirN) where ref action_frame jumps
     # 0->4 but the sim previously advanced only to 3.
@@ -1168,7 +1253,38 @@ def test_action_frame_landingairn_entry_rate_uses_decomp_lag_formula() -> None:
     assert int(row["ref_t1"]["hitlag"][0, p]) == 0
     assert int(row["seed_t"]["hitstun"][0, p]) == 0
     assert int(row["ref_t1"]["hitstun"][0, p]) == 0
-    assert float(row["seed_t"]["frame_speed_mul_f32"][0, p]) == pytest.approx(3.3444445, rel=1e-6)
+    assert int(row["seed_t"]["l_cancel"][0, p]) == 1
+
+    char_id = int(row["seed_t"]["char_id"][0, p])
+    char_name = "fox" if char_id == 1 else "falco"
+    char_path = root / f"data/characters/{char_name}.json"
+    assert char_path.exists(), f"missing local data artifact: {char_path}"
+    char_data = json.loads(char_path.read_text())
+
+    tracks_rel = "data/anims/fox.tracks.bin" if char_id == 1 else "data/anims/falco.tracks.bin"
+    tracks_path = root / tracks_rel
+    assert tracks_path.exists(), f"missing local tracks: {tracks_rel}"
+
+    common_path = root / "data/common/ft_common_data.json"
+    assert common_path.exists(), "missing local data artifact: data/common/ft_common_data.json"
+    common = json.loads(common_path.read_text())
+
+    end_frame = _tracks_end_frame(tracks_path, int(row["seed_t"]["animation_index"][0, p]))
+    lag_frames = _landing_air_lag_frames_for_action(char_data, int(row["seed_t"]["action_id"][0, p]))
+    div_rate = (float(end_frame) + 0.1) / (float(lag_frames) / float(common["lcancel_lag_div"]))
+    no_div_rate = (float(end_frame) + 0.1) / float(lag_frames)
+    seed_anim = float(row["seed_t"]["anim_frame_f32"][0, p])
+    expected_div_action_frame = int(np.floor(seed_anim + div_rate))
+    expected_no_div_action_frame = int(np.floor(seed_anim + no_div_rate))
+    want_af = int(row["ref_t1"]["action_frame"][0, p])
+    assert expected_div_action_frame == want_af, (
+        f"record={record} p={p} expected divided-lag action_frame={expected_div_action_frame}, "
+        f"ref has {want_af}"
+    )
+    assert expected_no_div_action_frame != want_af, (
+        f"record={record} p={p} expected non-divided action_frame={expected_no_div_action_frame} "
+        f"to differ from ref action_frame={want_af}"
+    )
 
     binding = pytest.importorskip("msl_binding")
     sizes = binding.sizes()
@@ -1201,7 +1317,6 @@ def test_action_frame_landingairn_entry_rate_uses_decomp_lag_formula() -> None:
         assert got_a == want_a, f"record={record} p={p} expected action_id={want_a}, got {got_a}"
 
         got_af = int(out["action_frame"][0, p])
-        want_af = int(row["ref_t1"]["action_frame"][0, p])
         assert got_af == want_af, f"record={record} p={p} expected action_frame={want_af}, got {got_af}"
     finally:
         binding.destroy(handle)

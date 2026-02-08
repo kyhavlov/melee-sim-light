@@ -88,6 +88,8 @@ static inline void enter_capture_wait_from_pulled(MslBatch* batch, size_t vidx) 
   //
   // Our msl_anim_timebase_enter() models motion-state install but not that same-call advance, so
   // we apply one deterministic tick to preserve action_frame parity for this decomp entry path.
+  // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
+  // refs/melee/src/melee/ft/ftanim.c::ftAnim_8006EBA4
   msl_anim_timebase_tick_once(batch, vidx);
 }
 

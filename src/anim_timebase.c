@@ -161,7 +161,8 @@ static inline uint8_t anim_timebase_try_walk_rate(uint16_t a, const MslCharParam
 
 static inline uint8_t anim_timebase_try_landing_air_rate(uint16_t a, const MslCharParams* ch,
                                                          const MslCommonParams* c, uint8_t char_id,
-                                                         uint8_t lr_press_timer, float* out_rate) {
+                                                         uint8_t lr_press_timer, uint8_t l_cancel,
+                                                         float* out_rate) {
   if (ch == NULL || c == NULL || out_rate == NULL) {
     return 0;
   }
@@ -196,7 +197,15 @@ static inline uint8_t anim_timebase_try_landing_air_rate(uint16_t a, const MslCh
   float lag = (float)lag_frames;
   // Decomp: LandingAir lag is divided (integer truncation, min 1) when fp->x67F < p_ftCommonData->xE4.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_LandingAir.c::ftCo_LandingAir_EnterWithLag
-  if (lag > 0.0f && lr_press_timer < c->lcancel_window_frames) {
+  //
+  // Seed-bridge note:
+  // - Slippi does not expose fp->x67F directly.
+  // - Post-frame `l_cancel==1` is emitted by the exact same x67F < xE4 check on LandingAir* entry.
+  //   refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
+  // So on entry-shaped reseeds we treat `l_cancel==1` as authoritative for the divide branch.
+  const uint8_t did_lcancel =
+      (lr_press_timer < c->lcancel_window_frames || l_cancel == 1u) ? 1u : 0u;
+  if (lag > 0.0f && did_lcancel) {
     const float div_lag = lag / c->lcancel_lag_div;
     int int_lag = (int)div_lag;
     if (int_lag == 0) {
@@ -314,7 +323,7 @@ void anim_timebase_update_pre_input(MslBatch* batch) {
           }
         } else if (anim_timebase_try_landing_air_rate(a, ch, c, batch->state.char_id[idx],
                                                       batch->state.lr_press_timer[idx],
-                                                      &entry_rate)) {
+                                                      batch->state.l_cancel[idx], &entry_rate)) {
           // rate already written to entry_rate by helper.
         }
         if (entry_rate > 0.0f) {
