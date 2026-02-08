@@ -17,6 +17,7 @@ SM_WAIT1_0 = 2
 
 CHAR_FOX = 1
 STAGE_FD = 32
+STICK_MAX_I8 = 80  # src/input_axis.h::MSL_STICK_MAX_I8
 
 
 def _common_attr(name: str) -> float:
@@ -29,6 +30,18 @@ def _common_attr(name: str) -> float:
 
 def _mk_input_bytes(batch: int, input_stride: int) -> np.ndarray:
     return np.zeros((batch, input_stride), dtype=np.uint8)
+
+
+def _up_tilt_without_tap_jump_i8() -> np.int8:
+    # Guard tilt tests require "up" input that remains below jump entry.
+    # Decomp jump gate: refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c::ftCo_Jump_GetInput
+    tap_jump_thresh = _common_attr("tap_jump_threshold")
+    v = int(np.floor(tap_jump_thresh * float(STICK_MAX_I8))) - 1
+    if v < 0:
+        v = 0
+    if v > STICK_MAX_I8:
+        v = STICK_MAX_I8
+    return np.int8(v)
 
 
 def _seed_guard(*, facing_p1: int) -> np.ndarray:
@@ -90,7 +103,7 @@ def test_shield_bubble_center_moves_with_guard_tilt_and_mirrors_with_facing() ->
         tilt_up_view = tilt_up.view(INPUT_DTYPE).reshape((1,))
         tilt_up_view["p"]["buttons"][0, 1] = np.uint16(BUTTON_L)
         tilt_up_view["p"]["main_x"][0, 1] = np.int8(0)
-        tilt_up_view["p"]["main_y"][0, 1] = np.int8(80)
+        tilt_up_view["p"]["main_y"][0, 1] = _up_tilt_without_tap_jump_i8()
 
         msl_binding.step_input(handle, tilt_right, tilt_up)
         b2 = msl_binding.debug_shield_bubbles_world(handle, 0)
@@ -152,7 +165,7 @@ def test_guard_tilt_has_inertia_and_converges_over_multiple_frames() -> None:
         up_view = up.view(INPUT_DTYPE).reshape((1,))
         up_view["p"]["buttons"][0, 1] = np.uint16(BUTTON_L)
         up_view["p"]["main_x"][0, 1] = np.int8(0)
-        up_view["p"]["main_y"][0, 1] = np.int8(80)
+        up_view["p"]["main_y"][0, 1] = _up_tilt_without_tap_jump_i8()
 
         # Baseline (neutral): bubble at neutral.
         msl_binding.step_input(handle, neutral, neutral)

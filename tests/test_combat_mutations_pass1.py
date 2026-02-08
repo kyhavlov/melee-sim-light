@@ -338,7 +338,10 @@ def test_combat_resolve_body_overlap_applies_percent_knockback_hitstun_and_enter
         assert int(out["hitstun"][1]) > 0
         assert int(out["action_id"][1]) == ACT_DAMAGE_N1
         assert int(out["animation_index"][1]) == SM_DAMAGE_N1
-        assert int(out["action_frame"][1]) == 0
+        # Decomp: ftCo_8008DCE0 does Fighter_ChangeMotionState + immediate ftAnim_8006EBA4,
+        # so entry-frame Damage* snapshots are action_frame==1 (not 0).
+        # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
+        assert int(out["action_frame"][1]) == 1
     finally:
         msl_binding.destroy(handle)
         del handle
