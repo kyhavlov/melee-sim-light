@@ -687,6 +687,16 @@ void mpcoll_ground_apply(MslBatch* batch) {
         if (ecb_frame_bias_next != 0xFFFFu) {
           ecb_frame_bias_next = (uint16_t)(ecb_frame_bias_next + 1u);
         }
+      } else if (is_damage_collision_landing_action(action_id) &&
+                 batch->state.action_frame[idx] <= 2) {
+        // Damage/DamageFly callback ordering is also Anim then Coll in Fighter_8006A360. On early
+        // entry frames, sampling the post-Anim ECB pose reduces one-frame "still airborne" misses
+        // before DownBound/Landing transitions.
+        // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{ftCo_Damage_Anim,ftCo_DamageFly_Anim,ftCo_Damage_Coll,ftCo_DamageFly_Coll}
+        if (ecb_frame_bias_next != 0xFFFFu) {
+          ecb_frame_bias_next = (uint16_t)(ecb_frame_bias_next + 1u);
+        }
       }
 
       // Decomp: some stage collision entrypoints load ECB with flags where `flags & 1` forces
