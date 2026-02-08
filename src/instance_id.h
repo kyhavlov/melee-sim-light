@@ -17,6 +17,11 @@
 // Clear fp->x2088 (instance_id) and related internal gate state (subset of ft_800892D4).
 void instance_id_reset_ft_800892D4(MslBatch* batch, size_t idx);
 
+// Consume one plAttack_80037B08 counter value without writing fp->x2088.
+// Seed-bridge helper for decomp call chains that can consume the global counter through
+// unmodeled internals before the fighter's own ft_800895E0 write.
+void instance_id_counter_consume_plAttack_80037B08(MslBatch* batch, size_t idx);
+
 // Update fp->x2088 on true motion-state entry (subset of ft_800895E0 + ft_80089824 for SpecialN).
 // This is wired to msl_anim_timebase_enter() (the decomp-shaped Fighter_ChangeMotionState bundle).
 void instance_id_on_motion_state_change_ft_800895E0(MslBatch* batch, size_t idx);

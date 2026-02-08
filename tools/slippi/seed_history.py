@@ -129,6 +129,55 @@ def derive_instance_id_x2073(
     return out
 
 
+def derive_instance_id_counter(
+    *,
+    fighter_instance_id_u16_2d: np.ndarray,
+    item_instance_id_u16_2d: np.ndarray,
+) -> np.ndarray:
+    """
+    Derive plAttack_80037B08's "next id" counter strictly causally from replay-visible ids.
+
+    Source signals (Slippi-visible):
+    - fighter_instance_id_u16_2d: post-frame fighter `instance_id` lanes.
+    - item_instance_id_u16_2d: post-frame item `instance_id` lanes from parsed item snapshots.
+
+    Representation:
+    - Returns u16 array length N, where output[i] is the seeded "next instance_id" value to use
+      after replay post-frame i (and therefore for one-step seed_t at sample i).
+
+    Seed-bridge rationale:
+    - Slippi exposes fighter/item instance ids, but not the internal global counter
+      (`unk_804D6480`) read/written by plAttack_80037B08.
+    - Use a strictly-causal lower-bound bridge: next nonzero id after the running max id observed
+      so far across fighters + items.
+    - Prefix-invariant by construction: output[i] depends only on rows <= i via running max.
+
+    Decomp anchors:
+    - refs/melee/src/melee/pl/plattack.c::plAttack_80037B08 (monotonic u16 counter; skips 0)
+    """
+    f = np.asarray(fighter_instance_id_u16_2d, dtype=np.uint16)
+    it = np.asarray(item_instance_id_u16_2d, dtype=np.uint16)
+    if f.ndim != 2:
+        raise ValueError("fighter_instance_id_u16_2d must be 2D [n_frames, num_players]")
+    if it.ndim != 2:
+        raise ValueError("item_instance_id_u16_2d must be 2D [n_frames, max_items]")
+    n = int(f.shape[0])
+    if int(it.shape[0]) != n:
+        raise ValueError("fighter/item instance_id arrays must have the same frame length")
+
+    out = np.empty(n, dtype=np.uint16)
+    max_seen = 0
+    for i in range(n):
+        cur_max = int(max(int(np.max(f[i])), int(np.max(it[i]))))
+        if cur_max > max_seen:
+            max_seen = cur_max
+        next_id = (max_seen + 1) & 0xFFFF
+        if next_id == 0:
+            next_id = 1
+        out[i] = np.uint16(next_id)
+    return out
+
+
 def ucf_process_stick_i8(
     raw_x: np.ndarray,
     raw_y: np.ndarray,

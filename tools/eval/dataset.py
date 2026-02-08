@@ -176,6 +176,9 @@ SEED_DTYPE = np.dtype(
         # Used by ft_800895E0 to gate instance_id bumps on motion-state change.
         # refs/melee/build/GALE01/asm/melee/ft/ft_0892.s::ft_800895E0
         ("instance_id_x2073", _arr("u1", MAX_PLAYERS)),
+        # Seeded next value for plAttack_80037B08 (global instance_id counter).
+        # Slippi does not expose this directly; preprocessing derives it causally from replay history.
+        ("instance_id_counter", "<u2"),
         ("attack_id", _arr("<u2", MAX_PLAYERS)),
         ("attack_instance", _arr("<u2", MAX_PLAYERS)),
         ("last_attack_landed", _arr("u1", MAX_PLAYERS)),

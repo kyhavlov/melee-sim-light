@@ -78,6 +78,14 @@ static inline uint16_t inc_instance_id_plAttack_80037B08(MslBatch* batch, int bi
   return before;
 }
 
+void instance_id_counter_consume_plAttack_80037B08(MslBatch* batch, size_t idx) {
+  if (batch == NULL) {
+    return;
+  }
+  const int bi = (int)(idx / (size_t)MSL_MAX_PLAYERS);
+  (void)inc_instance_id_plAttack_80037B08(batch, bi);
+}
+
 void instance_id_reset_ft_800892D4(MslBatch* batch, size_t idx) {
   if (batch == NULL) {
     return;
@@ -96,7 +104,21 @@ void instance_id_on_motion_state_change_ft_800895E0(MslBatch* batch, size_t idx)
   }
 
   const uint16_t action_id = batch->state.action_id[idx];
-  const uint16_t prev_action_id = batch->state.prev_action_id[idx];
+  // Decomp shape:
+  // - ft_800895E0 / ft_80089824 are evaluated per Fighter_ChangeMotionState invocation.
+  // - Multiple motion-state entries can occur in one simulated frame (Anim/IASA chaining), so the
+  //   "action being left" for ft_80089824 gating must track the most recent entered action within
+  //   the frame, not only the frame-start cached prev_action_id.
+  //
+  // Simulator mapping:
+  // - `instance_identity_last_action_id` is seeded from seed action_id and updated on every
+  //   msl_anim_timebase_enter() identity bundle.
+  // - Use it as the primary "previous action" source; fall back to frame-start prev_action_id if
+  //   the lane is uninitialized.
+  const uint16_t prev_action_id_cached = batch->state.prev_action_id[idx];
+  const uint16_t prev_action_id_last = batch->state.instance_identity_last_action_id[idx];
+  const uint16_t prev_action_id =
+      (prev_action_id_last != 0xFFFFu) ? prev_action_id_last : prev_action_id_cached;
 
   // Decomp call semantics:
   // - Fighter_ChangeMotionState calls ft_800895E0(fp, new_motion_state->x4_flags) once on motion-state

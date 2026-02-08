@@ -11,6 +11,7 @@ from tools.slippi.seed_history import (
     compute_fighter_stick_input_counters,
     compute_fighter_trigger_input_counters,
     compute_lr_press_timer_x67f,
+    derive_instance_id_counter,
     compute_press_timer_u8,
     compute_tilt_timer_axis,
     compute_tilt_timer_y_pre_post_with_fall_fast,
@@ -42,6 +43,82 @@ def test_compute_tilt_timer_axis_saturates_at_fe() -> None:
     axis = np.full(300, 0.30, dtype=np.float32)
     out = compute_tilt_timer_axis(axis, tilt_thresh=0.25)
     assert int(out[-1]) == 0xFE
+
+
+def test_derive_instance_id_counter_running_max_seed_bridge() -> None:
+    # Seed bridge contract:
+    # - Counter follows running max across fighter+item instance ids (strictly causal).
+    # - It does not drop when current-frame live ids drop.
+    # - It skips 0 on wrap (plAttack_80037B08 shape).
+    fighter_iid = np.array(
+        [
+            [0, 0, 0, 0],
+            [10, 0, 0, 0],
+            [10, 0, 0, 0],
+            [0, 0, 0, 0],
+            [12, 0, 0, 0],
+            [0, 0, 0, 0],
+            [65535, 0, 0, 0],
+            [0, 0, 0, 0],
+        ],
+        dtype=np.uint16,
+    )
+    item_iid = np.array(
+        [
+            [0, 0, 0],
+            [0, 0, 0],
+            [11, 0, 0],
+            [0, 0, 0],
+            [0, 0, 0],
+            [0, 0, 0],
+            [0, 0, 0],
+            [0, 0, 0],
+        ],
+        dtype=np.uint16,
+    )
+
+    got = derive_instance_id_counter(
+        fighter_instance_id_u16_2d=fighter_iid,
+        item_instance_id_u16_2d=item_iid,
+    )
+    assert got.dtype == np.uint16
+    assert got.tolist() == [1, 11, 12, 12, 13, 13, 1, 1]
+
+
+def test_derive_instance_id_counter_prefix_invariant() -> None:
+    fighter_iid = np.array(
+        [
+            [0, 0, 0, 0],
+            [2, 0, 0, 0],
+            [2, 0, 0, 0],
+            [4, 0, 0, 0],
+            [4, 0, 0, 0],
+            [7, 0, 0, 0],
+        ],
+        dtype=np.uint16,
+    )
+    item_iid = np.array(
+        [
+            [0, 0],
+            [0, 0],
+            [3, 0],
+            [0, 0],
+            [5, 0],
+            [0, 0],
+        ],
+        dtype=np.uint16,
+    )
+
+    full = derive_instance_id_counter(
+        fighter_instance_id_u16_2d=fighter_iid,
+        item_instance_id_u16_2d=item_iid,
+    )
+    for k in (1, 2, 3, 4, int(fighter_iid.shape[0])):
+        got = derive_instance_id_counter(
+            fighter_instance_id_u16_2d=fighter_iid[:k],
+            item_instance_id_u16_2d=item_iid[:k],
+        )
+        assert np.array_equal(got, full[:k])
 
 
 def test_derive_turn_internals_is_causal_wrt_future_frames() -> None:
