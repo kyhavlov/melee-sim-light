@@ -36,6 +36,16 @@ uint8_t move_tables_attackair_cmd0_active(uint8_t char_id, uint16_t attackair_ac
 uint8_t move_tables_attackair_allow_interrupt(uint8_t char_id, uint16_t attackair_action_id,
                                               float cur_anim_frame_f32);
 
+// Returns whether grounded Attack* can be interrupted (IASA) at the given cur_anim_frame.
+//
+// Decomp:
+// - Most grounded Attack* IASA handlers gate on fp->allow_interrupt and then delegate to Wait IASA.
+// refs/melee/src/melee/ft/chara/ftCommon/{ftCo_AttackDash.c,ftCo_AttackS3.c,ftCo_AttackHi3.c,ftCo_AttackHi4.c,ftCo_AttackLw4.c}
+//
+// Source of truth: data/moves/{fox,falco}.json moves["ftCo_SM_Attack*"]["events"] allow_interrupt.
+uint8_t move_tables_grounded_attack_allow_interrupt(uint8_t char_id, uint16_t grounded_action_id,
+                                                    float cur_anim_frame_f32);
+
 // Returns whether cmd_var[0] is set at the given cur_anim_frame for Dash.
 //
 // Decomp: Dash IASA gates late transitions on `fp->cmd_vars[0]`.

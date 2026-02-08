@@ -20,6 +20,13 @@
 
 static inline float msl_signf(float x) { return x < 0.0f ? -1.0f : 1.0f; }
 
+static inline uint16_t walk_action_from_speed(const MslCommonParams* c, const MslCharParams* ch,
+                                              float speed_ground_x_self);
+static inline uint32_t anim_for_walk_action(uint16_t a);
+static inline uint8_t is_dash_flick(const MslCommonParams* c, float stick_x, uint8_t tilt_timer_x);
+static inline MslJumpInput jump_input_from_edges(const MslCommonParams* c, uint16_t buttons_pressed,
+                                                 float stick_y, uint8_t tilt_timer_y);
+
 static inline uint8_t anim_finished(uint8_t char_id, uint16_t msid, float anim_frame_f32) {
   const float end = msl_anim_end_frame(char_id, msid);
   if (!(end > 0.0f)) {
@@ -536,6 +543,89 @@ static inline uint8_t grounded_attack_update(MslBatch* batch, size_t idx, uint8_
     msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
   }
   return 1;
+}
+
+static inline uint8_t grounded_attack_try_iasa_subset(MslBatch* batch, const MslCommonParams* c,
+                                                      const MslCharParams* ch, size_t idx,
+                                                      uint16_t buttons, uint16_t buttons_pressed,
+                                                      float stick_x, float stick_y,
+                                                      uint8_t tilt_timer_x, uint8_t tilt_timer_y,
+                                                      float facing_dir) {
+  if (batch == NULL || c == NULL || ch == NULL) {
+    return 0u;
+  }
+
+  // Decomp shape:
+  // - Grounded Attack* input callbacks gate on fp->allow_interrupt.
+  // - Most of those callbacks then delegate into ftCo_Wait_IASA (or an equivalent superset path).
+  // refs/melee/src/melee/ft/chara/ftCommon/{ftCo_AttackDash.c,ftCo_AttackS3.c,ftCo_AttackHi3.c,ftCo_AttackHi4.c,ftCo_AttackLw4.c}
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
+  //
+  // Current sim scope: grounded locomotion subset (attacks/jump/squat/dash/turn/walk) only.
+  if (grounded_a_attack_try_enter_from_iasa(batch, c, idx, buttons_pressed, stick_x, stick_y,
+                                            tilt_timer_x, tilt_timer_y, facing_dir, 0, 1)) {
+    return 1u;
+  }
+
+  const MslJumpInput j_in = jump_input_from_edges(c, buttons_pressed, stick_y, tilt_timer_y);
+  if (j_in != MSL_JUMP_INPUT_NONE && batch->state.jumps_left[idx] > 0) {
+    batch->state.action_id[idx] = (uint16_t)MSL_ACT_KNEE_BEND;
+    batch->state.animation_index[idx] = (uint32_t)MSL_SM_KNEE_BEND;
+    msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+    batch->state.kneebend_jump_input[idx] = (uint8_t)j_in;
+    batch->state.kneebend_is_short_hop[idx] = 0;
+    return 1u;
+  }
+
+  if ((buttons_pressed & (uint16_t)MSL_BUTTON_B) == 0u && (buttons & (uint16_t)MSL_BUTTON_B) == 0u &&
+      stick_y < -c->crouch_stick_threshold) {
+    enter_squat_immediate(batch, idx);
+    return 1u;
+  }
+
+  if (is_dash_flick(c, stick_x, tilt_timer_x)) {
+    if ((stick_x * facing_dir) < 0.0f) {
+      batch->state.turn_has_turned[idx] = 0;
+      batch->state.turn_frames_to_turn[idx] = 0;
+      // Decomp: ftCo_Turn_Enter_Smash sets mv.co.turn.x8 = facing_dir.
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Turn.c::ftCo_Turn_Enter_Smash
+      batch->state.turn_x8[idx] = (int8_t)(facing_dir > 0.0f ? 1 : -1);
+      batch->state.action_id[idx] = (uint16_t)MSL_ACT_TURN;
+      batch->state.animation_index[idx] = (uint32_t)MSL_SM_TURN;
+      msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+      msl_anim_timebase_tick_once(batch, idx);
+      return 1u;
+    }
+    batch->state.action_id[idx] = (uint16_t)MSL_ACT_DASH;
+    batch->state.animation_index[idx] = (uint32_t)MSL_SM_DASH;
+    batch->state.dash_x4[idx] = 1u;
+    msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+    msl_anim_timebase_tick_once(batch, idx);
+    batch->state.tilt_timer_x[idx] = 0xFEu;
+    return 1u;
+  }
+
+  if ((stick_x * facing_dir) <= c->turn_stick_x_threshold) {
+    batch->state.action_id[idx] = (uint16_t)MSL_ACT_TURN;
+    batch->state.animation_index[idx] = (uint32_t)MSL_SM_TURN;
+    batch->state.turn_has_turned[idx] = 0;
+    batch->state.turn_frames_to_turn[idx] = ch->turn_frames;
+    batch->state.turn_x8[idx] = 0;
+    msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+    msl_anim_timebase_tick_once(batch, idx);
+    return 1u;
+  }
+
+  if (msl_absf(stick_x) >= c->walk_stick_threshold) {
+    const uint16_t want = walk_action_from_speed(c, ch, batch->state.speed_ground_x_self[idx]);
+    batch->state.action_id[idx] = want;
+    batch->state.animation_index[idx] = anim_for_walk_action(want);
+    msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+    msl_anim_timebase_tick_once(batch, idx);
+    return 1u;
+  }
+
+  return 0u;
 }
 
 static inline uint8_t action_is_walk(uint16_t a) {
@@ -1238,11 +1328,29 @@ void locomotion_update_pre(MslBatch* batch) {
         if (grounded_attack_update(batch, idx, cid)) {
           action_id = batch->state.action_id[idx];
           if (grounded_attack_submotion_from_action(action_id) != 0xFFFFFFFFu) {
-            // Known gap: AttackDash IASA's allow_interrupt -> Wait_IASA delegation is still
-            // incomplete in this slice; see tests/test_ground_attack_selector_regression.py
-            // (AGG rec=2351 p=1 residual context lock).
+            // AttackDash IASA has an extra pre-gate (`ftCo_800D8AE0`) before Wait_IASA delegation.
+            // Keep AttackDash on the existing path until that gate is modeled explicitly.
             // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackDash.c::ftCo_AttackDash_IASA
-            continue;
+            // refs/melee/build/GALE01/asm/melee/ft/chara/ftCommon/ftCo_Attack100.s::ftCo_800D8AE0
+            if (action_id == (uint16_t)MSL_ACT_ATTACK_DASH) {
+              continue;
+            }
+
+            const uint8_t allow_interrupt = move_tables_grounded_attack_allow_interrupt(
+                cid, action_id, batch->state.anim_frame_f32[idx]);
+
+            // Decomp: grounded Attack* IASA gates on fp->allow_interrupt before delegating to
+            // grounded interrupt checks (typically Wait IASA path).
+            // refs/melee/src/melee/ft/chara/ftCommon/{ftCo_AttackDash.c,ftCo_AttackS3.c,ftCo_AttackHi3.c,ftCo_AttackHi4.c,ftCo_AttackLw4.c}
+            if (allow_interrupt &&
+                grounded_attack_try_iasa_subset(batch, c, ch, idx, buttons, buttons_pressed, stick_x,
+                                                stick_y, tilt_timer_x, tilt_timer_y, facing_dir)) {
+              action_id = batch->state.action_id[idx];
+            }
+
+            if (grounded_attack_submotion_from_action(action_id) != 0xFFFFFFFFu) {
+              continue;
+            }
           }
         }
 
