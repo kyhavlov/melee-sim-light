@@ -60,6 +60,7 @@ void timers_update(MslBatch* batch) {
       const size_t idx = msl_idx_player(bi, p);
 
       uint16_t hl = batch->state.hitlag[idx];
+      batch->state.hitlag_pre_timer[idx] = (hl > 0u) ? 1u : 0u;
       // Decomp: hitlag frames are decremented at proc prio 0 before the main per-fighter update
       // block (Anim/Phys/Coll) runs.
       // refs/melee/src/melee/ft/fighter.c::Fighter_8006A1BC

@@ -254,6 +254,15 @@ typedef struct MslStateSoA {
   uint8_t* dmg_x2224_b2;  // [batch * players] (0/1)
   float* shield_hp;
   uint16_t* hitlag;
+  // Internal-only helper: latched "hitlag > 0 at frame start" (before prio-0 decrement).
+  //
+  // Decomp ordering anchor:
+  // - Fighter_8006A1BC decrements hitlag at proc prio 0 before anim/input callbacks.
+  // refs/melee/src/melee/ft/fighter.c::Fighter_8006A1BC
+  //
+  // This preserves the pre-decrement hitlag lane for seed-bridge pulse reconstruction that must
+  // avoid re-emitting one-shot script flags when reseeded inside an already-active hitlag window.
+  uint8_t* hitlag_pre_timer;
   // Internal-only helper: per-frame hitlag gate (0/1).
   //
   // Semantics: latched once per frame immediately after the decomp-shaped hitlag decrement step

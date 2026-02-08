@@ -39,6 +39,13 @@ typedef struct MslThrowHitbox {
   uint8_t loaded;
 } MslThrowHitbox;
 
+enum { MSL_FRAME_PULSES_MAX = 16 };
+typedef struct MslFramePulses {
+  int16_t frame[MSL_FRAME_PULSES_MAX];
+  uint8_t count;
+  uint8_t loaded;
+} MslFramePulses;
+
 enum { MSL_ATTACKAIR_KIND_COUNT = 5 };
 enum {
   MSL_ATTACKAIR_KIND_N = 0,
@@ -64,6 +71,8 @@ enum {
 enum { MSL_THROW_HITBOX_IDX_MAX = 8 };
 static MslThrowRelease g_throw_release_by_char[256][MSL_THROW_KIND_COUNT];
 static MslFrameWindow g_throw_flip_by_char[256][MSL_THROW_KIND_COUNT];
+static MslFrameWindow g_throw_cmd1_by_char[256][MSL_THROW_KIND_COUNT];
+static MslFramePulses g_throw_spawn_projectile_by_char[256][MSL_THROW_KIND_COUNT];
 static MslThrowHitbox g_throw_hitbox_by_char[256][MSL_THROW_KIND_COUNT][MSL_THROW_HITBOX_IDX_MAX];
 static int g_loaded = 0;
 
@@ -288,6 +297,23 @@ static int json_get_str_eq_in_range(const char* start, const char* end, const ch
     return 0;
   }
   return 1;
+}
+
+static void frame_pulses_push(MslFramePulses* out, int frame) {
+  if (out == NULL) {
+    return;
+  }
+  if (out->count >= (uint8_t)MSL_FRAME_PULSES_MAX) {
+    return;
+  }
+  // Keep deterministic order and avoid duplicates at the same frame.
+  for (uint8_t i = 0; i < out->count; i++) {
+    if ((int)out->frame[i] == frame) {
+      return;
+    }
+  }
+  out->frame[out->count] = (int16_t)frame;
+  out->count = (uint8_t)(out->count + 1u);
 }
 
 static int parse_attackair_cmd0_window(const char* buf, const char* buf_end, const char* move_key,
@@ -562,10 +588,12 @@ static int parse_attackair_allow_interrupt_window(const char* buf, const char* b
 
 static int parse_throw_release_and_hitboxes(const char* buf, const char* buf_end,
                                             const char* move_key, MslThrowRelease* out_release,
-                                            MslFrameWindow* out_flip,
+                                            MslFrameWindow* out_flip, MslFrameWindow* out_cmd1,
+                                            MslFramePulses* out_spawn_projectile,
                                             MslThrowHitbox out_hitboxes[MSL_THROW_HITBOX_IDX_MAX]) {
   if (buf == NULL || buf_end == NULL || move_key == NULL || out_release == NULL ||
-      out_flip == NULL || out_hitboxes == NULL) {
+      out_flip == NULL || out_cmd1 == NULL || out_spawn_projectile == NULL ||
+      out_hitboxes == NULL) {
     return -1;
   }
 
@@ -603,12 +631,16 @@ static int parse_throw_release_and_hitboxes(const char* buf, const char* buf_end
 
   *out_release = (MslThrowRelease){0};
   *out_flip = (MslFrameWindow){0};
+  *out_cmd1 = (MslFrameWindow){0};
+  *out_spawn_projectile = (MslFramePulses){0};
   for (size_t i = 0; i < MSL_THROW_HITBOX_IDX_MAX; i++) {
     out_hitboxes[i] = (MslThrowHitbox){0};
   }
 
   int best_release_frame = -1;
   int best_flip_frame = -1;
+  int cmd1_on_frame = -1;
+  int cmd1_off_frame = -1;
 
   const char* p = arr_start;
   while (p && p < arr_end) {
@@ -639,6 +671,35 @@ static int parse_throw_release_and_hitboxes(const char* buf, const char* buf_end
             best_flip_frame = frame;
           }
         }
+      }
+    } else if (json_get_str_eq_in_range(ev_start, ev_end, "kind", "set_cmd_var")) {
+      int frame = 0;
+      int idx = -1;
+      int value = 0;
+      if (json_get_i32_in_range(ev_start, ev_end, "frame", &frame) == 0 &&
+          json_get_i32_in_range(ev_start, ev_end, "idx", &idx) == 0 &&
+          json_get_i32_in_range(ev_start, ev_end, "value", &value) == 0) {
+        // Throw-side blaster flow in ftFx_Throw_Anim switches on cmd_vars[1]:
+        // - 1 => spawn/update gun + shoot handling
+        // - 2 => clear pointer path
+        // - 0 => disabled path
+        // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
+        if (idx == 1) {
+          if (value == 1) {
+            if (cmd1_on_frame < 0 || frame < cmd1_on_frame) {
+              cmd1_on_frame = frame;
+            }
+          } else if (cmd1_on_frame >= 0 && frame >= cmd1_on_frame) {
+            if (cmd1_off_frame < 0 || frame < cmd1_off_frame) {
+              cmd1_off_frame = frame;
+            }
+          }
+        }
+      }
+    } else if (json_get_str_eq_in_range(ev_start, ev_end, "kind", "set_throw_spawn_projectile")) {
+      int frame = 0;
+      if (json_get_i32_in_range(ev_start, ev_end, "frame", &frame) == 0) {
+        frame_pulses_push(out_spawn_projectile, frame);
       }
     } else if (json_get_str_eq_in_range(ev_start, ev_end, "kind", "set_throw_hitbox")) {
       int idx = 0;
@@ -692,6 +753,16 @@ static int parse_throw_release_and_hitboxes(const char* buf, const char* buf_end
     out_flip->start_af = (int16_t)best_flip_frame;
     out_flip->end_af = INT16_MAX;
     out_flip->loaded = 1;
+  }
+  if (cmd1_on_frame >= 0) {
+    out_cmd1->start_af = (int16_t)cmd1_on_frame;
+    out_cmd1->end_af = (cmd1_off_frame >= 0 && cmd1_off_frame >= cmd1_on_frame)
+                           ? (int16_t)cmd1_off_frame
+                           : (int16_t)INT16_MAX;
+    out_cmd1->loaded = 1;
+  }
+  if (out_spawn_projectile->count > 0) {
+    out_spawn_projectile->loaded = 1;
   }
   return 0;
 }
@@ -1014,35 +1085,51 @@ static int load_one(const char* data_dir, const char* rel_path, uint8_t char_id)
   // Note: parsing is init-time only; per-frame queries must remain alloc-free.
   MslThrowRelease rel = {0};
   MslFrameWindow flip = {0};
+  MslFrameWindow cmd1 = {0};
+  MslFramePulses spawn_projectile = {0};
   MslThrowHitbox hitboxes[MSL_THROW_HITBOX_IDX_MAX];
-  if (parse_throw_release_and_hitboxes(buf, buf_end, "ftCo_SM_ThrowF", &rel, &flip, hitboxes) ==
-      0) {
+  if (parse_throw_release_and_hitboxes(buf, buf_end, "ftCo_SM_ThrowF", &rel, &flip, &cmd1,
+                                       &spawn_projectile, hitboxes) == 0) {
     g_throw_release_by_char[char_id][MSL_THROW_KIND_F] = rel;
     g_throw_flip_by_char[char_id][MSL_THROW_KIND_F] = flip;
+    g_throw_cmd1_by_char[char_id][MSL_THROW_KIND_F] = cmd1;
+    g_throw_spawn_projectile_by_char[char_id][MSL_THROW_KIND_F] = spawn_projectile;
     memcpy(g_throw_hitbox_by_char[char_id][MSL_THROW_KIND_F], hitboxes, sizeof(hitboxes));
   }
   rel = (MslThrowRelease){0};
   flip = (MslFrameWindow){0};
-  if (parse_throw_release_and_hitboxes(buf, buf_end, "ftCo_SM_ThrowB", &rel, &flip, hitboxes) ==
-      0) {
+  cmd1 = (MslFrameWindow){0};
+  spawn_projectile = (MslFramePulses){0};
+  if (parse_throw_release_and_hitboxes(buf, buf_end, "ftCo_SM_ThrowB", &rel, &flip, &cmd1,
+                                       &spawn_projectile, hitboxes) == 0) {
     g_throw_release_by_char[char_id][MSL_THROW_KIND_B] = rel;
     g_throw_flip_by_char[char_id][MSL_THROW_KIND_B] = flip;
+    g_throw_cmd1_by_char[char_id][MSL_THROW_KIND_B] = cmd1;
+    g_throw_spawn_projectile_by_char[char_id][MSL_THROW_KIND_B] = spawn_projectile;
     memcpy(g_throw_hitbox_by_char[char_id][MSL_THROW_KIND_B], hitboxes, sizeof(hitboxes));
   }
   rel = (MslThrowRelease){0};
   flip = (MslFrameWindow){0};
-  if (parse_throw_release_and_hitboxes(buf, buf_end, "ftCo_SM_ThrowHi", &rel, &flip, hitboxes) ==
-      0) {
+  cmd1 = (MslFrameWindow){0};
+  spawn_projectile = (MslFramePulses){0};
+  if (parse_throw_release_and_hitboxes(buf, buf_end, "ftCo_SM_ThrowHi", &rel, &flip, &cmd1,
+                                       &spawn_projectile, hitboxes) == 0) {
     g_throw_release_by_char[char_id][MSL_THROW_KIND_HI] = rel;
     g_throw_flip_by_char[char_id][MSL_THROW_KIND_HI] = flip;
+    g_throw_cmd1_by_char[char_id][MSL_THROW_KIND_HI] = cmd1;
+    g_throw_spawn_projectile_by_char[char_id][MSL_THROW_KIND_HI] = spawn_projectile;
     memcpy(g_throw_hitbox_by_char[char_id][MSL_THROW_KIND_HI], hitboxes, sizeof(hitboxes));
   }
   rel = (MslThrowRelease){0};
   flip = (MslFrameWindow){0};
-  if (parse_throw_release_and_hitboxes(buf, buf_end, "ftCo_SM_ThrowLw", &rel, &flip, hitboxes) ==
-      0) {
+  cmd1 = (MslFrameWindow){0};
+  spawn_projectile = (MslFramePulses){0};
+  if (parse_throw_release_and_hitboxes(buf, buf_end, "ftCo_SM_ThrowLw", &rel, &flip, &cmd1,
+                                       &spawn_projectile, hitboxes) == 0) {
     g_throw_release_by_char[char_id][MSL_THROW_KIND_LW] = rel;
     g_throw_flip_by_char[char_id][MSL_THROW_KIND_LW] = flip;
+    g_throw_cmd1_by_char[char_id][MSL_THROW_KIND_LW] = cmd1;
+    g_throw_spawn_projectile_by_char[char_id][MSL_THROW_KIND_LW] = spawn_projectile;
     memcpy(g_throw_hitbox_by_char[char_id][MSL_THROW_KIND_LW], hitboxes, sizeof(hitboxes));
   }
 
@@ -1267,4 +1354,64 @@ uint8_t move_tables_throw_should_flip_facing(uint8_t char_id, uint16_t throw_act
   // animation timebase by more than one frame in a single step.
   const float on = (float)flip.start_af;
   return (prev_anim_frame_f32 < on && cur_anim_frame_f32 >= on) ? 1u : 0u;
+}
+
+uint8_t move_tables_throw_cmd1_active(uint8_t char_id, uint16_t throw_action_id,
+                                      float cur_anim_frame_f32) {
+  const int kind = throw_kind_from_action(throw_action_id);
+  if (kind < 0) {
+    return 0;
+  }
+  const MslFrameWindow win = g_throw_cmd1_by_char[char_id][(size_t)kind];
+  if (!win.loaded) {
+    return 0;
+  }
+  return (cur_anim_frame_f32 >= (float)win.start_af && cur_anim_frame_f32 < (float)win.end_af) ? 1u
+                                                                                               : 0u;
+}
+
+uint8_t move_tables_throw_should_spawn_projectile(uint8_t char_id, uint16_t throw_action_id,
+                                                  float prev_anim_frame_f32,
+                                                  float cur_anim_frame_f32) {
+  const int kind = throw_kind_from_action(throw_action_id);
+  if (kind < 0) {
+    return 0;
+  }
+  const MslFramePulses pulses = g_throw_spawn_projectile_by_char[char_id][(size_t)kind];
+  if (!pulses.loaded || pulses.count == 0u) {
+    return 0;
+  }
+  // ftAction_80071974 sets throw_flags_b0 as a pulse at script-time.
+  // refs/melee/src/melee/ft/ftaction.c::ftAction_80071974
+  // Use crossing semantics so frame_speed_mul > 1.0 does not skip a pulse.
+  for (uint8_t i = 0; i < pulses.count; i++) {
+    const float on = (float)pulses.frame[i];
+    if (prev_anim_frame_f32 < on && cur_anim_frame_f32 >= on) {
+      return 1u;
+    }
+  }
+  return 0;
+}
+
+uint8_t move_tables_throw_projectile_last_pulse_frame(uint8_t char_id, uint16_t throw_action_id,
+                                                      int16_t* out_last_pulse_frame) {
+  if (out_last_pulse_frame == NULL) {
+    return 0;
+  }
+  const int kind = throw_kind_from_action(throw_action_id);
+  if (kind < 0) {
+    return 0;
+  }
+  const MslFramePulses pulses = g_throw_spawn_projectile_by_char[char_id][(size_t)kind];
+  if (!pulses.loaded || pulses.count == 0u) {
+    return 0;
+  }
+  int16_t last = pulses.frame[0];
+  for (uint8_t i = 1; i < pulses.count; i++) {
+    if (pulses.frame[i] > last) {
+      last = pulses.frame[i];
+    }
+  }
+  *out_last_pulse_frame = last;
+  return 1u;
 }

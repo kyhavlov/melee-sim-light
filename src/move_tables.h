@@ -94,3 +94,36 @@ uint8_t move_tables_throw_hitbox_params(uint8_t char_id, uint16_t throw_action_i
 // refs/melee/src/melee/ft/ftaction.c::ftAction_800718A4 (case 1).
 uint8_t move_tables_throw_should_flip_facing(uint8_t char_id, uint16_t throw_action_id,
                                              float prev_anim_frame_f32, float cur_anim_frame_f32);
+
+// Returns whether throw cmd_var[1] is active (value==1) at the given cur_anim_frame.
+//
+// Decomp:
+// - Throw-side blaster flow in ftFx_Throw_Anim switches on fp->cmd_vars[1]:
+//   case 1 owns spawn/update, case 2 clears pointer, case 0 disables.
+// refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
+//
+// Source of truth: data/moves/{fox,falco}.json moves["ftCo_SM_Throw*"]["events"] set_cmd_var(idx=1).
+uint8_t move_tables_throw_cmd1_active(uint8_t char_id, uint16_t throw_action_id,
+                                      float cur_anim_frame_f32);
+
+// Returns whether a throw-script projectile pulse (throw_flags_b0) was crossed this frame.
+//
+// Decomp:
+// - ftAction_80071974 sets fp->throw_flags_b0.
+// - ftFx_Throw_Anim consumes throw_flags_b0 to spawn blaster shots during Throw{B,Hi,Lw}.
+// refs/melee/src/melee/ft/ftaction.c::ftAction_80071974
+// refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
+//
+// Source of truth:
+// data/moves/{fox,falco}.json moves["ftCo_SM_Throw*"]["events"] set_throw_spawn_projectile.
+uint8_t move_tables_throw_should_spawn_projectile(uint8_t char_id, uint16_t throw_action_id,
+                                                  float prev_anim_frame_f32,
+                                                  float cur_anim_frame_f32);
+
+// Returns 1 and outputs the latest throw projectile pulse frame (max frame over
+// `set_throw_spawn_projectile` events) for the throw action.
+//
+// Source of truth:
+// data/moves/{fox,falco}.json moves["ftCo_SM_Throw*"]["events"] set_throw_spawn_projectile.
+uint8_t move_tables_throw_projectile_last_pulse_frame(uint8_t char_id, uint16_t throw_action_id,
+                                                      int16_t* out_last_pulse_frame);

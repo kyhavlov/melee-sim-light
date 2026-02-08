@@ -7,10 +7,12 @@
 #include "action_ids.h"
 #include "anim_frame.h"
 #include "anim_pose.h"
+#include "anim_timebase.h"
 #include "combat.h"
 #include "char_params.h"
 #include "hitlist.h"
 #include "laser_params.h"
+#include "move_tables.h"
 #include "msl_math.h"
 #include "mtx34.h"
 #include "stage_collision.h"
@@ -141,6 +143,13 @@ static inline int items_alloc_slot(MslBatch* batch, int bi) {
 }
 
 static inline uint32_t items_next_spawn_id(const MslBatch* batch, int bi) {
+  // Deterministic local monotonic id over currently-live items in this env.
+  // - If any items exist: next is (max live spawn_id + 1).
+  // - If no items exist: resets to 0.
+  //
+  // This is acceptable for v1 because spawn_id is only used as a stable secondary ordering key
+  // for fixed-slot item sorting (`_fill_items_fixed`: instance_id, spawn_id, type), not as a
+  // persistent gameplay identity across itemless gaps.
   uint32_t max_id = 0;
   uint8_t any = 0;
   for (int it = 0; it < MSL_MAX_ITEMS; it++) {
@@ -155,27 +164,6 @@ static inline uint32_t items_next_spawn_id(const MslBatch* batch, int bi) {
     }
   }
   return any ? (max_id + 1u) : 0u;
-}
-
-static inline uint16_t items_find_gun_instance_id(const MslBatch* batch, int bi, int owner,
-                                                  uint16_t gun_itkind) {
-  if (owner < 0) {
-    return 0;
-  }
-  for (int it = 0; it < MSL_MAX_ITEMS; it++) {
-    const size_t ii = msl_idx_item(bi, it);
-    if (!batch->state.item_exists[ii]) {
-      continue;
-    }
-    if (batch->state.item_type[ii] != gun_itkind) {
-      continue;
-    }
-    if (batch->state.item_owner[ii] != owner) {
-      continue;
-    }
-    return batch->state.item_instance_id[ii];
-  }
-  return 0;
 }
 
 static inline int items_find_gun_slot(const MslBatch* batch, int bi, int owner,
@@ -255,6 +243,14 @@ static inline uint8_t blaster_gun_state_from_action_id(uint16_t action_id_u16) {
   return 9;
 }
 
+static inline uint8_t action_is_blaster_throw(uint16_t action_id_u16) {
+  return (action_id_u16 == (uint16_t)MSL_ACT_THROW_B ||
+          action_id_u16 == (uint16_t)MSL_ACT_THROW_HI ||
+          action_id_u16 == (uint16_t)MSL_ACT_THROW_LW)
+             ? 1u
+             : 0u;
+}
+
 static void blaster_gun_update_from_fighter(MslBatch* batch, int bi, int owner,
                                             const MslLaserParams* lp) {
   if (batch == NULL || lp == NULL) {
@@ -268,13 +264,16 @@ static void blaster_gun_update_from_fighter(MslBatch* batch, int bi, int owner,
   const uint8_t want_gun = (want_state != 9) ? 1u : 0u;
 
   const int existing_slot = items_find_gun_slot(batch, bi, owner, lp->gun_itkind);
-  // Throw states (6..8) do not *spawn* the gun; they only keep it alive if it already exists.
-  // Decomp includes throws in ftFx_SpecialN_GetBlasterAction for "moves that require the blaster item",
-  // but the gun item itself is spawned on SpecialN enter (it_802AE8A8) and persisted via owner linkage.
-  // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_SpecialN_Enter
-  // refs/melee/src/melee/it/items/itfoxblaster.c::it_802AE8A8
-  if (want_gun && want_state >= 6 && want_state <= 8 && existing_slot < 0) {
-    return;
+  if (want_gun && existing_slot < 0 && action_is_blaster_throw(action_id_u16)) {
+    // Throw-side gun spawn is gated by cmd_vars[1]==1 in ftFx_Throw_Anim.
+    // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
+    // Source-of-truth proxy: data/moves/{fox,falco}.json
+    // moves["ftCo_SM_Throw*"]["events"] set_cmd_var(idx=1) parsed into move_tables_throw_cmd1_active().
+    const uint8_t owner_char = batch->state.char_id[o_idx];
+    const float af_cur = msl_anim_frame_sanitize_f32(batch->state.anim_frame_f32[o_idx]);
+    if (!move_tables_throw_cmd1_active(owner_char, action_id_u16, af_cur)) {
+      return;
+    }
   }
   if (!want_gun) {
     if (existing_slot < 0) {
@@ -330,9 +329,10 @@ static void blaster_gun_update_from_fighter(MslBatch* batch, int bi, int owner,
     // refs/melee/src/melee/it/it_2725.c::it_8027B070
     batch->state.item_instance_id[ii] = batch->state.instance_id[o_idx];
 
-    // Blaster gun items commonly have spawn_id=0 (Slippi field at item+0x1C).
-    // Observed in suite replay "AttachedGoodNaturedGuanaco" at frame -26 (type=75 spawn_id=0).
-    batch->state.item_spawn_id[ii] = 0;
+    // Slippi item `spawn_id` is item->x1C. Item spawn assigns x1C from a global incrementing
+    // counter (`it_804D6D10++`), so use our deterministic next-id allocator for new spawns.
+    // refs/melee/src/melee/it/item.c::Item_80267AA8
+    batch->state.item_spawn_id[ii] = items_next_spawn_id(batch, bi);
 
     // GALE01 ItemCommonData->xF8 is used as a default lifeTimer in item code:
     // refs/melee/src/melee/it/it_2725.c::it_8027518C (sets item->xD44_lifeTimer = it_804D6D28->xF8)
@@ -475,8 +475,8 @@ static inline float item_segment_segment_dist2(float p0x, float p0y, float p0z, 
 
 static inline uint8_t item_swept_sphere_capsule_intersects(const MslBatch* batch, int bi,
                                                            int defender, float sx0, float sy0,
-                                                           float sx1, float sy1, float sr, int cap_i,
-                                                           uint8_t* out_hurt_height) {
+                                                           float sx1, float sy1, float sr,
+                                                           int cap_i, uint8_t* out_hurt_height) {
   // Swept sphere segment (sx0,sy0,0)->(sx1,sy1,0) vs hurt capsule segment AB.
   // Decomp item-vs-fighter collision sweep uses prev_pos -> cur_pos.
   // refs/melee/src/melee/it/items/itfoxlaser.c::{itFoxlaser_UnkMotion1_Phys,it_8029C4D4}
@@ -499,7 +499,8 @@ static inline uint8_t item_swept_sphere_capsule_intersects(const MslBatch* batch
   const float bz = batch->state.hurtcap_b_z[hi];
   const float cr = batch->state.hurtcap_radius[hi];
   const float rr = sr + cr;
-  const float d2 = item_segment_segment_dist2(sx0, sy0, 0.0f, sx1, sy1, 0.0f, ax, ay, az, bx, by, bz);
+  const float d2 =
+      item_segment_segment_dist2(sx0, sy0, 0.0f, sx1, sy1, 0.0f, ax, ay, az, bx, by, bz);
   if (d2 > (rr * rr)) {
     return 0;
   }
@@ -526,7 +527,8 @@ static inline uint8_t item_sphere_sphere_intersects_3d(float ax, float ay, float
   return (dx * dx + dy * dy + dz * dz) <= (rr * rr);
 }
 
-static void laser_spawn_from_fighter(MslBatch* batch, int bi, int owner, const MslLaserParams* lp) {
+static void laser_spawn_from_fighter(MslBatch* batch, int bi, int owner, const MslLaserParams* lp,
+                                     uint8_t spawn_state) {
   if (batch == NULL || lp == NULL) {
     return;
   }
@@ -618,7 +620,12 @@ static void laser_spawn_from_fighter(MslBatch* batch, int bi, int owner, const M
   const float dir = (vx >= 0.0f) ? 1.0f : -1.0f;
 
   batch->state.item_exists[ii] = 1;
-  batch->state.item_state[ii] = 0;  // it_8029C6A4 uses msid=0 (itfoxlaser.c::it_8029C6A4)
+  // Decomp (itfoxlaser.c):
+  // - it_8029C6A4 spawns with msid=0
+  // - it_8029C6CC spawns with msid=1 (used by ftFx_Throw_Anim for Throw{B,Hi,Lw})
+  // refs/melee/src/melee/it/items/itfoxlaser.c::{it_8029C6A4,it_8029C6CC}
+  // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
+  batch->state.item_state[ii] = spawn_state;
   batch->state.item_type[ii] = lp->shot_itkind;
   batch->state.item_owner[ii] = (int8_t)owner;
   // Staling identity: items copy the owner's fighter-side (attack_id, attack_instance) at spawn:
@@ -626,11 +633,11 @@ static void laser_spawn_from_fighter(MslBatch* batch, int bi, int owner, const M
   // refs/melee/src/melee/it/it_2725.c::it_8027B070
   batch->state.item_attack_id[ii] = batch->state.attack_id[o_idx];
   batch->state.item_attack_instance[ii] = batch->state.attack_instance[o_idx];
-  // Slippi fixed ordering key uses instance_id; for blaster shots, it commonly matches the owner's gun item.
-  // (Dataset ordering source: tools/slippi/make_dataset_from_slp.py::_fill_items_fixed.)
-  const uint16_t gun_instance_id = items_find_gun_instance_id(batch, bi, owner, lp->gun_itkind);
-  batch->state.item_instance_id[ii] =
-      (gun_instance_id != 0) ? gun_instance_id : batch->state.instance_id[o_idx];
+  // Slippi item.instance_id is item->xDA8_short. On spawn with a fighter parent, xDA8_short copies
+  // fighter->x2088 (fighter instance_id) in the generic item spawn path.
+  // refs/melee/src/melee/it/it_2725.c::it_8027B070
+  // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_SpecialN_CreateBlasterShot
+  batch->state.item_instance_id[ii] = batch->state.instance_id[o_idx];
   batch->state.item_spawn_id[ii] = items_next_spawn_id(batch, bi);
   batch->state.item_direction[ii] = dir;
   batch->state.item_vel_x[ii] = vx;
@@ -646,6 +653,8 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
   }
   const int num_players = (int)batch->config.num_players;
   const uint32_t stage_id = batch->state.stage_id[bi];
+  MslStageBounds blast_bounds = {0};
+  const uint8_t has_blast_bounds = stage_collision_get_blast_bounds_world(stage_id, &blast_bounds);
 
   for (int it = 0; it < MSL_MAX_ITEMS; it++) {
     const size_t ii = msl_idx_item(bi, it);
@@ -681,6 +690,22 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
     batch->state.item_pos_x[ii] = x;
     batch->state.item_pos_y[ii] = y;
 
+    // Blast-zone cull after motion integration.
+    //
+    // Decomp shape:
+    // - Item_802697D4 integrates position, then calls Item_802696CC (when cull flags are enabled).
+    // - Item_802696CC destroys items that cross left/right/bottom blast boundaries.
+    // refs/melee/src/melee/it/item.c::{Item_802697D4,Item_802696CC}
+    //
+    // Sim scope: laser articles are always culled by left/right/bottom blast bounds in-suite.
+    // Top-bound cull in decomp uses a large constant gate (10000.0f) under a separate flag path and
+    // is intentionally left to lifetime/collision ownership until a full item-flag model is seeded.
+    if (has_blast_bounds &&
+        (x > blast_bounds.right || x < blast_bounds.left || y < blast_bounds.bottom)) {
+      item_slot_clear(batch, ii);
+      continue;
+    }
+
     float t = batch->state.item_timer[ii];
     t -= 1.0f;
     batch->state.item_timer[ii] = t;
@@ -715,6 +740,7 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
     if (owner < 0 || owner >= num_players) {
       continue;
     }
+    const size_t o_idx = msl_idx_player(bi, owner);
 
     // Beam axis in world space. Use velocity direction so angled shots do not erroneously collide
     // as if they were perfectly horizontal.
@@ -1060,6 +1086,27 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
         continue;
       }
 
+      // Seed-bridge approximation for ThrowLw late blaster pulses:
+      // - ftFx_Throw_Anim emits multiple throw_flags_b0 pulses during ThrowLw (data/moves
+      //   set_throw_spawn_projectile @ 23/25/28/31) and spawns with it_8029C6CC (msid=1).
+      // - In reseeded one-step frames deep in ThrowLw, replay refs can carry the spawned item at
+      //   t+1 without a new same-frame BODY hit while the victim is still attached.
+      // - Slippi does not expose the consumed per-pulse latch for this path, so suppress the
+      //   late attached BODY re-hit in this narrow window.
+      // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
+      // refs/melee/src/melee/ft/ftaction.c::ftAction_80071974
+      int16_t last_throw_pulse_af = 0;
+      const uint8_t has_last_throw_pulse = move_tables_throw_projectile_last_pulse_frame(
+          batch->state.char_id[o_idx], batch->state.action_id[o_idx], &last_throw_pulse_af);
+      if (laser_state != 0u && batch->state.action_id[o_idx] == (uint16_t)MSL_ACT_THROW_LW &&
+          has_last_throw_pulse &&
+          msl_anim_frame_sanitize_f32(batch->state.anim_frame_f32[o_idx]) >=
+              ((float)last_throw_pulse_af + 1.0f) &&
+          batch->state.grab_owner_port[d_idx] == (uint8_t)owner &&
+          msl_action_is_grabbed_victim(batch->state.action_id[d_idx])) {
+        continue;
+      }
+
       // BODY contact: attempt to apply an item hit.
       //
       // Laser lifetime policy (suite-stable):
@@ -1131,7 +1178,6 @@ void items_spawn_pre_physics(MslBatch* batch) {
   // Decomp: ftFx_SpecialNLoop_Anim / ftFx_SpecialAirNLoop_Anim check fp->cmd_vars[2] and spawn via
   // it_8029C6A4.
   // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::{ftFx_SpecialNLoop_Anim,ftFx_SpecialAirNLoop_Anim}
-  //
   // Note: This sim uses a precomputed shoot-frame list from `data/items/lasers.bin` as a proxy for
   // cmd_vars[2] pulses.
   const int num_players = (int)batch->config.num_players;
@@ -1164,10 +1210,42 @@ void items_spawn_pre_physics(MslBatch* batch) {
       const uint16_t msid = (uint16_t)anim_u32;
       const float af = msl_anim_frame_sanitize_f32(batch->state.anim_frame_f32[idx]);
       const uint16_t frame = msl_anim_frame_floor_u16(af);
-      if (!laser_should_shoot_on_frame(lp, msid, frame)) {
+      uint8_t should_shoot = laser_should_shoot_on_frame(lp, msid, frame);
+      uint8_t shoot_spawn_state = 0u;
+      // Throw-side blaster shots are driven by throw_flags_b0 pulses consumed in ftFx_Throw_Anim,
+      // not by SpecialN loop cmd_vars[2].
+      // refs/melee/src/melee/ft/ftaction.c::ftAction_80071974
+      // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
+      const uint16_t action_id = batch->state.action_id[idx];
+      if (!should_shoot && action_is_blaster_throw(action_id)) {
+        // Seed-bridge guard for one-shot throw_flags_b0 reconstruction:
+        // - Throw projectile pulses are script-time one-shot flags (set by ftAction_80071974 and
+        //   consumed by ftFx_Throw_Anim).
+        // - On one-step reseed in the middle of a throw/hitlag exchange, the consumed-latch is not
+        //   exposed by Slippi. Reconstructing pulses purely from anim-frame crossing can re-emit a
+        //   pulse while the fighter was already in hitlag at frame start.
+        // - Gate pulse reconstruction on "no pre-timer hitlag this frame" to avoid that stale-latch
+        //   replay artifact.
+        // refs/melee/src/melee/ft/ftaction.c::ftAction_80071974
+        // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
+        if (batch->state.hitlag_pre_timer[idx] != 0u) {
+          continue;
+        }
+        const int32_t prev_fp =
+            batch->state.anim_frame_fp_q16_16[idx] - batch->state.frame_speed_mul_fp_q16_16[idx];
+        const float af_prev = msl_anim_frame_sanitize_f32(msl_f32_from_q16_16(prev_fp));
+        if (move_tables_throw_cmd1_active(cid, action_id, af) &&
+            move_tables_throw_should_spawn_projectile(cid, action_id, af_prev, af)) {
+          should_shoot = 1u;
+          // Throw-side spawn path in ftFx_Throw_Anim uses it_8029C6CC (msid=1).
+          // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
+          shoot_spawn_state = 1u;
+        }
+      }
+      if (!should_shoot) {
         continue;
       }
-      laser_spawn_from_fighter(batch, bi, p, lp);
+      laser_spawn_from_fighter(batch, bi, p, lp, shoot_spawn_state);
     }
 
     // Keep item ordering stable for fixed-slot comparisons.

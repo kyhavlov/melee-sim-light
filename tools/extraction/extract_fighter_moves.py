@@ -390,6 +390,14 @@ def _parse_subaction_events(
             elif op == 23:
                 # Allow interrupt: sets `fp->allow_interrupt = true` (ftAction_80071950).
                 out.append(Event(frame=frame, kind="allow_interrupt", data={}))
+            elif op == 24:
+                # Throw script projectile pulse (ftAction_80071974): sets fp->throw_flags_b0.
+                #
+                # Decomp:
+                # - refs/melee/src/melee/ft/ftaction.c::ftAction_80071974
+                # - refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
+                #   (consumes throw_flags_b0 to spawn blaster shots in Throw{B,Hi,Lw} flows)
+                out.append(Event(frame=frame, kind="set_throw_spawn_projectile", data={}))
             elif op == 25:
                 # Set airborne/grounded state (ftAction_80071998 -> ftCommon_8007D7FC/8007D5D4/8007D60C).
                 # Payload is `state` in [0,2].

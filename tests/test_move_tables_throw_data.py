@@ -55,6 +55,47 @@ def _load_throw_expectations(move_path: Path, move_key: str) -> tuple[int, int, 
     return int(release_frame), int(hit_idx), hitboxes
 
 
+def _load_throw_cmd1_window(move_path: Path, move_key: str) -> tuple[int, int]:
+    data = json.loads(move_path.read_text())
+    events = data["moves"][move_key]["events"]
+
+    on_frame = None
+    off_frame = None
+    for ev in events:
+        if ev.get("kind") != "set_cmd_var":
+            continue
+        payload = ev.get("data") or {}
+        if int(payload.get("idx", -1)) != 1:
+            continue
+        frame = int(ev["frame"])
+        value = int(payload.get("value", 0))
+        if value == 1:
+            if on_frame is None or frame < on_frame:
+                on_frame = frame
+        elif on_frame is not None and frame >= on_frame:
+            if off_frame is None or frame < off_frame:
+                off_frame = frame
+
+    assert on_frame is not None
+    if off_frame is None:
+        off_frame = 10_000
+    return int(on_frame), int(off_frame)
+
+
+def _load_throw_projectile_pulses(move_path: Path, move_key: str) -> list[int]:
+    data = json.loads(move_path.read_text())
+    events = data["moves"][move_key]["events"]
+    frames = sorted(
+        {
+            int(ev["frame"])
+            for ev in events
+            if ev.get("kind") == "set_throw_spawn_projectile"
+        }
+    )
+    assert frames
+    return frames
+
+
 def _find_release_frame(msl_binding, char_id: int, throw_action_id: int) -> tuple[int, int]:
     assert int(msl_binding.move_tables_throw_has_release(char_id, throw_action_id)) == 1
     for f in range(0, 60):
@@ -129,3 +170,68 @@ def test_move_tables_other_throws_have_release_frame(char_id: int, throw_action_
     got_release_frame, got_hit_idx = _find_release_frame(msl_binding, char_id, throw_action_id)
     assert got_release_frame == exp_release_frame
     assert got_hit_idx == exp_hit_idx
+
+
+@pytest.mark.parametrize(
+    "char_id,throw_action_id,move_key",
+    [
+        (CHAR_FOX, ACT_THROW_B, "ftCo_SM_ThrowB"),
+        (CHAR_FOX, ACT_THROW_HI, "ftCo_SM_ThrowHi"),
+        (CHAR_FOX, ACT_THROW_LW, "ftCo_SM_ThrowLw"),
+        (CHAR_FALCO, ACT_THROW_B, "ftCo_SM_ThrowB"),
+        (CHAR_FALCO, ACT_THROW_HI, "ftCo_SM_ThrowHi"),
+        (CHAR_FALCO, ACT_THROW_LW, "ftCo_SM_ThrowLw"),
+    ],
+)
+def test_move_tables_throw_cmd1_active_matches_json(
+    char_id: int, throw_action_id: int, move_key: str
+) -> None:
+    import msl_binding
+
+    root = Path(__file__).resolve().parents[1]
+    move_path = root / "data" / "moves" / ("fox.json" if char_id == CHAR_FOX else "falco.json")
+    if not move_path.exists():
+        pytest.skip(f"missing local data/moves/{move_path.name} (gitignored)")
+
+    on_frame, off_frame = _load_throw_cmd1_window(move_path, move_key)
+    for f in range(0, 80):
+        expected = 1 if (f >= on_frame and f < off_frame) else 0
+        got = int(msl_binding.move_tables_throw_cmd1_active(char_id, throw_action_id, float(f)))
+        assert got == expected, (
+            f"{move_key} frame={f} expected cmd1_active={expected}, got={got}"
+        )
+
+
+@pytest.mark.parametrize(
+    "char_id,throw_action_id,move_key",
+    [
+        (CHAR_FOX, ACT_THROW_B, "ftCo_SM_ThrowB"),
+        (CHAR_FOX, ACT_THROW_HI, "ftCo_SM_ThrowHi"),
+        (CHAR_FOX, ACT_THROW_LW, "ftCo_SM_ThrowLw"),
+        (CHAR_FALCO, ACT_THROW_B, "ftCo_SM_ThrowB"),
+        (CHAR_FALCO, ACT_THROW_HI, "ftCo_SM_ThrowHi"),
+        (CHAR_FALCO, ACT_THROW_LW, "ftCo_SM_ThrowLw"),
+    ],
+)
+def test_move_tables_throw_projectile_pulses_match_json(
+    char_id: int, throw_action_id: int, move_key: str
+) -> None:
+    import msl_binding
+
+    root = Path(__file__).resolve().parents[1]
+    move_path = root / "data" / "moves" / ("fox.json" if char_id == CHAR_FOX else "falco.json")
+    if not move_path.exists():
+        pytest.skip(f"missing local data/moves/{move_path.name} (gitignored)")
+
+    pulse_frames = set(_load_throw_projectile_pulses(move_path, move_key))
+    for cur in range(1, 80):
+        prev = cur - 1
+        expected = 1 if cur in pulse_frames else 0
+        got = int(
+            msl_binding.move_tables_throw_should_spawn_projectile(
+                char_id, throw_action_id, float(prev), float(cur)
+            )
+        )
+        assert got == expected, (
+            f"{move_key} prev={prev} cur={cur} expected spawn={expected}, got={got}"
+        )
