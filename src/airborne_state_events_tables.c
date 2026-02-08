@@ -252,10 +252,13 @@ int airborne_state_event_get(uint8_t char_id, uint16_t msid, uint16_t frame, uin
     return 1;
   }
 
-  uint16_t f = frame;
-  if (f >= t->frame_count) {
-    f = (uint16_t)(t->frame_count - 1);
+  // Out-of-range frame samples are treated as "no event" rather than clamping to the last table
+  // frame. MSLAIRS1 payloads store sparse opcode-25 events by explicit frame index; reading beyond
+  // extracted range should not replay a trailing event state.
+  if (frame >= t->frame_count) {
+    return 1;
   }
+  const uint16_t f = frame;
   const uint32_t base = t->base_index_by_msid[msid];
   if ((uint64_t)base + (uint64_t)f >= (uint64_t)t->events_count) {
     return 1;

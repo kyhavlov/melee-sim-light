@@ -20,6 +20,15 @@
 #include "grab_flow.h"
 #include "throw_flow.h"
 
+enum {
+  // Decomp: ftCommon_8007D5D4 writes fp->ecb_lock = 10 on ground->air transition.
+  // refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007D5D4
+  MSL_ECB_LOCK_FRAMES_COMMON_GROUND_TO_AIR = 10u,
+  // Decomp: ftCommon_8007D60C writes fp->ecb_lock = 5 on the alternate ground->air helper path.
+  // refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007D60C
+  MSL_ECB_LOCK_FRAMES_COMMON_GROUND_TO_AIR_ALT = 5u,
+};
+
 // -----------
 // EscapeAir.c
 // -----------
@@ -934,15 +943,14 @@ void action_update_anim_callbacks_pre_input(MslBatch* batch) {
               batch->state.on_ground[idx] = 0u;
               batch->state.speed_air_x_self[idx] = batch->state.speed_ground_x_self[idx];
               batch->state.speed_ground_x_self[idx] = 0.0f;
-              batch->state.jumps_left[idx] =
-                  (max_jumps > 0u) ? (uint8_t)(max_jumps - 1u) : 0u;
-              batch->state.ecb_lock_timer[idx] = 10u;
+              batch->state.jumps_left[idx] = (max_jumps > 0u) ? (uint8_t)(max_jumps - 1u) : 0u;
+              batch->state.ecb_lock_timer[idx] = MSL_ECB_LOCK_FRAMES_COMMON_GROUND_TO_AIR;
             } else if (air_state == 2u) {
               batch->state.on_ground[idx] = 0u;
               batch->state.speed_air_x_self[idx] = batch->state.speed_ground_x_self[idx];
               batch->state.speed_ground_x_self[idx] = 0.0f;
               batch->state.jumps_left[idx] = 0u;
-              batch->state.ecb_lock_timer[idx] = 5u;
+              batch->state.ecb_lock_timer[idx] = MSL_ECB_LOCK_FRAMES_COMMON_GROUND_TO_AIR_ALT;
             }
           }
         }

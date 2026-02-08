@@ -678,6 +678,12 @@ void mpcoll_ground_apply(MslBatch* batch) {
       uint16_t ecb_frame_bias_next = ecb_frame;
       if (action_id == (uint16_t)MSL_ACT_DOWN_BOUND_U ||
           action_id == (uint16_t)MSL_ACT_DOWN_BOUND_D) {
+        // DownBound callback ordering is Anim then Coll in the same frame; sampling the next ECB
+        // frame better matches the post-Anim pose used by ftCo_DownBound_Coll on the bounce frame.
+        // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A360,Fighter_procMap}
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownBound.c::{
+        //   ftCo_DownBound_Anim,ftCo_DownBound_Coll
+        // }
         if (ecb_frame_bias_next != 0xFFFFu) {
           ecb_frame_bias_next = (uint16_t)(ecb_frame_bias_next + 1u);
         }
@@ -1018,10 +1024,14 @@ void mpcoll_ground_apply(MslBatch* batch) {
                                                  anim, ecb_frame, was_grounded);
             }
           }
+          // Decomp anchor for this gate:
+          // - Damage/DamageFly states own landing/DownBound decisions in their collision callbacks;
+          //   keep generic "resting contact" floor projection out of hitstun frames.
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{ftCo_Damage_Coll,ftCo_DamageFly_Coll}
+          // TODO(decomp-coll-coverage): once DamageFly* per-action Coll callback coverage is fully
+          // modeled here, this gate may be relaxed/removed in favor of callback-owned landing flow.
         } else if (prefer_line_idx >= 0 && batch->state.speed_y_self[idx] == 0.0f &&
-                   batch->state.hitlag[idx] == 0 &&
-                   (batch->state.hitstun[idx] == 0 ||
-                    is_damage_collision_landing_action(action_id))) {
+                   batch->state.hitlag[idx] == 0 && batch->state.hitstun[idx] == 0) {
           // Decomp: mpLib_8004DD90_Floor can resolve a resting contact even when no crossing sweep is
           // reported (e.g. vy==0 and the ECB bottom is already on the surface).
           // Gate this to "already on the surface" to avoid snapping to the floor from far below.

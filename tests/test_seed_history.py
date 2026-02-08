@@ -679,6 +679,81 @@ def test_derive_colanim_internals_is_causal_wrt_future_frames() -> None:
         assert np.array_equal(x0, x1[: x0.size])
 
 
+def test_derive_colanim_seed_lanes_are_prefix_invariant() -> None:
+    # Seed lanes added by derive_colanim_internals in make_dataset_from_slp:
+    # - seed_t.colanim_hit_status_x198c
+    # - seed_t.colanim_timer_x1990
+    # - seed_t.colanim_timer_x1994
+    # - seed_t.colanim_lock_x2221_b0
+    act_wait = 0x000E
+    act_damage_n1 = 0x004E
+    act_throw_f = 0x00DB
+    act_cliff_wait = 0x00FD
+
+    a_full = np.array(
+        [
+            act_wait,
+            act_damage_n1,
+            act_damage_n1,
+            act_damage_n1,
+            act_wait,
+            act_throw_f,
+            act_throw_f,
+            act_cliff_wait,
+            act_cliff_wait,
+            act_wait,
+        ],
+        dtype=np.uint16,
+    )
+    af_full = np.array([1, 1, 2, 3, 1, 1, 2, 1, 2, 1], dtype=np.int16)
+    hl_full = np.array([0, 3, 2, 0, 0, 0, 0, 0, 0, 0], dtype=np.uint16)
+    hs_full = np.array([0, 5, 4, 3, 0, 0, 0, 0, 0, 0], dtype=np.uint16)
+    hb_full = np.zeros(a_full.size, dtype=np.uint8)
+
+    full = derive_colanim_internals(
+        action_id_u16=a_full,
+        action_frame_i16=af_full,
+        hitlag_u16=hl_full,
+        hitstun_u16=hs_full,
+        hurtbox_state_u8=hb_full,
+        colanim_throw_x1994_frames=8,
+        colanim_cliff_x1990_frames=30,
+        colanim_damage_x1994_frames=5,
+        throw_actions=(act_throw_f,),
+        cliff_actions=(act_cliff_wait,),
+        damage_actions=(act_damage_n1,),
+    )
+    lane_by_name = {
+        "colanim_hit_status_x198c": full[0],
+        "colanim_timer_x1990": full[1],
+        "colanim_timer_x1994": full[2],
+        "colanim_lock_x2221_b0": full[3],
+    }
+
+    for cut in range(1, int(a_full.size) + 1):
+        pref = derive_colanim_internals(
+            action_id_u16=a_full[:cut],
+            action_frame_i16=af_full[:cut],
+            hitlag_u16=hl_full[:cut],
+            hitstun_u16=hs_full[:cut],
+            hurtbox_state_u8=hb_full[:cut],
+            colanim_throw_x1994_frames=8,
+            colanim_cliff_x1990_frames=30,
+            colanim_damage_x1994_frames=5,
+            throw_actions=(act_throw_f,),
+            cliff_actions=(act_cliff_wait,),
+            damage_actions=(act_damage_n1,),
+        )
+        pref_lane_by_name = {
+            "colanim_hit_status_x198c": pref[0],
+            "colanim_timer_x1990": pref[1],
+            "colanim_timer_x1994": pref[2],
+            "colanim_lock_x2221_b0": pref[3],
+        }
+        for lane, got in pref_lane_by_name.items():
+            assert np.array_equal(got, lane_by_name[lane][:cut]), lane
+
+
 def test_x672_trigger_timer_is_causal_wrt_future_frames() -> None:
     import json
     from pathlib import Path

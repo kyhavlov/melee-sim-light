@@ -1940,3 +1940,86 @@ def test_action_id_catch_wait_throw_entry_uses_x98_threshold_lane() -> None:
         assert int(out["action_frame"][0, victim_p]) == int(row["ref_t1"]["action_frame"][0, victim_p])
     finally:
         binding.destroy(handle)
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    ("dataset_rel", "record", "p"),
+    [
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
+            "cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl",
+            6465,
+            0,
+        ),
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
+            "cardinal_1.0_recent/GracefulAttachedTurtle.msl",
+            4593,
+            1,
+        ),
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
+            "cardinal_1.0_recent/QuerulousGrandDinosaur.msl",
+            7456,
+            0,
+        ),
+    ],
+    ids=["agg_r6465_p0", "gat_r4593_p1", "qgd_r7456_p0"],
+)
+def test_damagefly_hitlag_exit_rows_stay_airborne(dataset_rel: str, record: int, p: int) -> None:
+    # Cluster lock: these replay-real seed==ref rows were regressed to early on_ground=1 while in
+    # DamageFlyN hitstun-exit ordering. Keep them airborne on t+1 with matching ground_id/action_id.
+    # Regression cause/fix: generic floor resting-contact fallback under hitstun produced 0/0/1;
+    # runtime fix gates that fallback to hitstun==0 so DamageFlyN callback ownership remains intact.
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+    assert int(samples.shape[0]) > record, f"dataset too short: num_records={int(samples.shape[0])}"
+    row = samples[record : record + 1]
+
+    # Replay-real preconditions for this cluster.
+    assert int(row["seed_t"]["action_id"][0, p]) == 88  # ftCo_MS_DamageFlyN
+    assert int(row["ref_t1"]["action_id"][0, p]) == 88
+    assert int(row["ref_t1"]["on_ground"][0, p]) == 0
+    assert int(row["seed_t"]["hitlag"][0, p]) == 1
+    assert int(row["ref_t1"]["hitlag"][0, p]) == 0
+    assert int(row["seed_t"]["hitstun"][0, p]) == 32
+    assert int(row["ref_t1"]["hitstun"][0, p]) == 31
+
+    binding = pytest.importorskip("msl_binding")
+    sizes = binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    compare_stride = int(sizes["compare"])
+
+    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    try:
+        seed_bytes = np.empty((1, seed_stride), dtype=np.uint8)
+        prev_input_bytes = np.empty((1, input_stride), dtype=np.uint8)
+        input_bytes = np.empty((1, input_stride), dtype=np.uint8)
+        out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
+
+        seed_bytes[:] = np.frombuffer(row["seed_t"].tobytes(order="C"), dtype=np.uint8).reshape(1, seed_stride)
+        prev_input_bytes[:] = np.frombuffer(row["prev_input_t"].tobytes(order="C"), dtype=np.uint8).reshape(
+            1, input_stride
+        )
+        input_bytes[:] = np.frombuffer(row["input_t"].tobytes(order="C"), dtype=np.uint8).reshape(
+            1, input_stride
+        )
+
+        binding.reseed_seed(handle, seed_bytes)
+        binding.step_input(handle, prev_input_bytes, input_bytes)
+        binding.write_compare(handle, out_compare_bytes)
+        out = out_compare_bytes.view(COMPARE_DTYPE).reshape(-1)
+
+        assert int(out["action_id"][0, p]) == int(row["ref_t1"]["action_id"][0, p])
+        assert int(out["on_ground"][0, p]) == 0
+        assert int(out["ground_id"][0, p]) == int(row["ref_t1"]["ground_id"][0, p])
+    finally:
+        binding.destroy(handle)

@@ -256,6 +256,9 @@ static inline void cliff_option_phys_airground(MslBatch* batch, int bi, size_t i
     batch->state.speed_air_x_self[idx] = 0.0f;
     batch->state.jumps_left[idx] = ch->max_jumps;
     batch->state.ecb_lock_timer[idx] = 0u;
+    // Keep ground normal/contact ownership in the generic map-collision pass. This helper models
+    // the Cliff option air->ground transfer; floor normals/contacts are refreshed on the next
+    // collision step.
   }
 }
 

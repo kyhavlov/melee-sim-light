@@ -63,6 +63,7 @@ Characters (Fox/Falco):
 - `data/hurtcaps/fox.json`, `data/hurtcaps/falco.json` (hurt capsule init tables; debug-friendly mirror; C loads `.bin` only)
 - `data/hitboxes/fox.bin`, `data/hitboxes/falco.bin` (hitbox event tables; decomp-first, compact binary)
 - `data/moves/fox.json`, `data/moves/falco.json` (subaction timelines for key motions + specials; decomp-first)
+- `data/airborne_state_events/fox.bin`, `data/airborne_state_events/falco.bin` (movescript opcode-25 set_airborne_state timelines; decomp-first, compact binary)
 - `data/anims/fox.bin`, `data/anims/falco.bin` (per-msid bone matrices + TransN; decomp-first)
 - `data/anims/fox.blend.bin`, `data/anims/falco.blend.bin` (blend/dynamics bytes; decomp-first)
 - `data/anims_ecb/fox.bin`, `data/anims_ecb/falco.bin` (per-msid bone matrices + TransN; **ECB extraction input only**; not read by the C core)
@@ -92,6 +93,40 @@ Characters (Fox/Falco):
 Notes:
 - `animation_index` in Slippi post-frames includes `0xFFFFFFFF` as a sentinel; treat that as “no animation”.
 - Item reference ordering in `.msl` datasets is **sorted by item `instance_id`**, then `id`, then `type`. The sim should follow the same stable ordering for its fixed 15 slots.
+
+## `data/airborne_state_events/<char>.bin` (MSLAIRS1 v1)
+
+Purpose: compact, init-time-loadable per-msid timelines for movescript opcode-25
+`set_airborne_state` events (used by `ftAction_80071998` dispatch).
+
+Decomp semantics (source pointers):
+- Opcode-25 dispatcher:
+  - refs/melee/src/melee/ft/ftaction.c::ftAction_80071998
+- State dispatch targets:
+  - state=0 -> `ftCommon_8007D7FC` (air->ground helper)
+  - state=1 -> `ftCommon_8007D5D4` (ground->air helper)
+  - state=2 -> `ftCommon_8007D60C` (ground->air alt helper)
+  - refs/melee/src/melee/ft/ftcommon.c::{ftCommon_8007D7FC,ftCommon_8007D5D4,ftCommon_8007D60C}
+
+Binary layout (little-endian):
+- Header:
+  - `magic[8] = "MSLAIRS1"`
+  - `version: u32 = 1`
+  - `frame_count: u16`
+  - `reserved: u16 = 0`
+  - `entry_count: u32`
+- Index (`entry_count` entries), each:
+  - `msid: u16`
+  - `reserved: u16 = 0`
+  - `payload_bytes: u32 = frame_count`
+  - `payload_off: u32` absolute byte offset
+- Payload:
+  - `u8 event_state[frame_count]` per entry
+  - Value domain:
+    - `0`: dispatch state 0 (`ftCommon_8007D7FC`)
+    - `1`: dispatch state 1 (`ftCommon_8007D5D4`)
+    - `2`: dispatch state 2 (`ftCommon_8007D60C`)
+    - `0xFF`: no opcode-25 event at this frame
 
 ## `data/items/lasers.bin` (MSLLASR1 v4)
 
