@@ -5,6 +5,7 @@
 #include <stdint.h>
 
 #include "action_ids.h"
+#include "anim_frame.h"
 #include "anim_table.h"
 #include "anim_pose.h"
 #include "anim_timebase.h"
@@ -184,6 +185,78 @@ static inline uint8_t enter_cliff_option_quick(MslBatch* batch, int bi, int p, u
   batch->state.fall_fast[idx] = 0;
   msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
   return 1;
+}
+
+static inline void cliff_option_phys_airground(MslBatch* batch, int bi, size_t idx, uint16_t smid) {
+  if (batch == NULL) {
+    return;
+  }
+  if (batch->state.on_ground[idx]) {
+    // Decomp: once CliffClimb/Attack/Escape is grounded, Phys uses ft_80084FA8.
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffClimb.c::ftCo_CliffClimb_Phys
+    return;
+  }
+
+  int side = (int)batch->state.ledge_side[idx];
+  if (!(side == 0 || side == 1)) {
+    side = batch->state.facing[idx] ? 0 : 1;
+    batch->state.ledge_side[idx] = (int8_t)side;
+  }
+
+  const uint32_t stage_id = batch->state.stage_id[bi];
+  MslStagePoint2 ledge = {0};
+  if (!stage_collision_get_ledge_point(stage_id, side, &ledge)) {
+    // Decomp: ftCo_CliffClimb_Phys falls back to Fall when the ledge id is invalid.
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffClimb.c::ftCo_CliffClimb_Phys
+    enter_fall(batch, idx);
+    batch->state.ledge_side[idx] = -1;
+    return;
+  }
+
+  const MslCharParams* ch = msl_char_params(batch->state.char_id[idx]);
+  if (ch == NULL) {
+    return;
+  }
+
+  const uint16_t frame =
+      msl_anim_frame_floor_u16(msl_anim_frame_sanitize_f32(batch->state.anim_frame_f32[idx]));
+  float t[3] = {0};
+  if (anim_pose_get_transn(batch->state.char_id[idx], smid, frame, t) != 0) {
+    return;
+  }
+
+  // Decomp CliffClimb_Phys (shared by CliffAttack/Escape) while airborne:
+  //   cur_pos.x = transNPos.z * facing_dir + ledge_x;
+  //   cur_pos.y = ledge_y + transNPos.y;
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffClimb.c::ftCo_CliffClimb_Phys
+  const float fd = facing_dir(batch->state.facing[idx]);
+  const float scale = ch->model_scaling;
+  const float trans_z = t[2] * scale;
+  const float trans_y = t[1] * scale;
+  batch->state.pos_x[idx] = ledge.x + trans_z * fd;
+  batch->state.pos_y[idx] = ledge.y + trans_y;
+
+  if (trans_z >= 0.0f && trans_y >= 0.0f) {
+    // Decomp: when airborne CliffClimb reaches non-negative transN.y/z, it writes floor.index to
+    // the ledge id and calls ftCommon_8007D7FC (air->ground helper).
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffClimb.c::ftCo_CliffClimb_Phys
+    const MslStageFloorLine* ledge_floor = stage_collision_get_ledge_floor_line(stage_id, side);
+    if (ledge_floor != NULL) {
+      batch->state.ground_id[idx] = ledge_floor->segment_i;
+    }
+    float gr = batch->state.speed_air_x_self[idx];
+    const float gmax = ch->ground_max_horizontal_velocity;
+    if (gr > gmax) {
+      gr = gmax;
+    } else if (gr < -gmax) {
+      gr = -gmax;
+    }
+    batch->state.on_ground[idx] = 1;
+    batch->state.speed_ground_x_self[idx] = gr;
+    batch->state.speed_air_x_self[idx] = 0.0f;
+    batch->state.jumps_left[idx] = ch->max_jumps;
+    batch->state.ecb_lock_timer[idx] = 0u;
+  }
 }
 
 static inline uint8_t ledge_wait_try_attack(MslBatch* batch, int bi, int p) {
@@ -374,6 +447,11 @@ void ledge_update_pre_physics(MslBatch* batch) {
           // Infer ledge side from facing: on the left ledge the fighter faces right (+).
           batch->state.ledge_side[idx] = batch->state.facing[idx] ? 0 : 1;
         }
+      }
+
+      if (a == (uint16_t)MSL_ACT_CLIFF_CLIMB_QUICK || a == (uint16_t)MSL_ACT_CLIFF_ATTACK_QUICK ||
+          a == (uint16_t)MSL_ACT_CLIFF_ESCAPE_QUICK) {
+        cliff_option_phys_airground(batch, bi, idx, smid);
       }
 
       // Anim-end transitions / IASA.

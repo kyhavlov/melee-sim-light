@@ -190,6 +190,15 @@ static inline void enter_rebirth(MslBatch* batch, size_t idx, const MslCommonPar
   msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
 
   batch->state.on_ground[idx] = 0;
+  // Rebirth entry is airborne (camera-top spawn). Clear floor index on entry so post-frame
+  // ground_id matches the airborne snapshot shape (0xFFFF) instead of inheriting Dead* contact.
+  // refs/melee/src/melee/ft/ft_0D31.c::ftCo_800D4FF4 (Rebirth enter path)
+  // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm (ground ID from fp+0x83C)
+  batch->state.ground_id[idx] = 0xFFFFu;
+  batch->state.ground_normal_x[idx] = 0.0f;
+  batch->state.ground_normal_y[idx] = 1.0f;
+  batch->state.ground_contact_x[idx] = 0.0f;
+  batch->state.ground_contact_y[idx] = 0.0f;
   batch->state.pos_x[idx] = respawn.x;
   batch->state.pos_y[idx] = cam.top;
 

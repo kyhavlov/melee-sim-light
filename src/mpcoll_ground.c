@@ -49,6 +49,36 @@ static inline uint8_t is_cliff_hold_action(uint16_t a) {
   }
 }
 
+static inline uint8_t is_damage_collision_landing_action(uint16_t a) {
+  // Damage collision callbacks can resolve grounded contact while hitstun remains active:
+  // - ftCo_Damage_Coll
+  // - ftCo_DamageFly_Coll
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{ftCo_Damage_Coll,ftCo_DamageFly_Coll}
+  switch (a) {
+    case MSL_ACT_DAMAGE_HI_1:
+    case MSL_ACT_DAMAGE_HI_2:
+    case MSL_ACT_DAMAGE_HI_3:
+    case MSL_ACT_DAMAGE_N_1:
+    case MSL_ACT_DAMAGE_N_2:
+    case MSL_ACT_DAMAGE_N_3:
+    case MSL_ACT_DAMAGE_LW_1:
+    case MSL_ACT_DAMAGE_LW_2:
+    case MSL_ACT_DAMAGE_LW_3:
+    case MSL_ACT_DAMAGE_AIR_1:
+    case MSL_ACT_DAMAGE_AIR_2:
+    case MSL_ACT_DAMAGE_AIR_3:
+    case MSL_ACT_DAMAGE_FLY_HI:
+    case MSL_ACT_DAMAGE_FLY_N:
+    case MSL_ACT_DAMAGE_FLY_LW:
+    case MSL_ACT_DAMAGE_FLY_TOP:
+    case MSL_ACT_DAMAGE_FLY_ROLL:
+    case MSL_ACT_DAMAGE_FALL:
+      return 1;
+    default:
+      return 0;
+  }
+}
+
 static inline uint8_t action_allows_floor_edge_snap(uint16_t a) {
   // Decomp: mpColl_8004A45C_Floor (edge snap) is used by mpColl_8004B2DC (flags=2), which is
   // called by ft_800827A0. Multiple grounded motion states use ft_80084104 (which calls
@@ -588,11 +618,10 @@ void mpcoll_ground_apply(MslBatch* batch) {
       const uint16_t action_id = batch->state.action_id[idx];
       const uint16_t prev_action_id = batch->state.prev_action_id[idx];
 
-      // Decomp: Fighter_procUpdate and Fighter_procMap collision blocks are gated out during hitlag.
-      // refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate (the `if (!fp->x2219_b5)` block)
-      if (batch->state.hitlag_started_frame[idx] != 0) {
-        continue;
-      }
+      // Decomp: Fighter_procMap runs every frame (not gated by hitlag), and collision callbacks
+      // such as ftCo_DamageFly_Coll internally select hitlag-specific mpColl paths when needed.
+      // refs/melee/src/melee/ft/fighter.c::Fighter_procMap
+      // refs/melee/src/melee/ft/ft_081B.c::ft_80081DD4
 
       // Match-flow actions use dedicated (or NULL) collision callbacks in decomp; this lite sim
       // skips the generic stage collision pass until those paths are implemented.
@@ -680,14 +709,18 @@ void mpcoll_ground_apply(MslBatch* batch) {
         lock_bottom_to_zero = 0u;
       }
       uint8_t lock_bottom_to_prev_frame = 0u;
-      if (!lock_bottom_to_zero && action_id == (uint16_t)MSL_ACT_ESCAPE_AIR && ecb_lock_active) {
-        // EscapeAir collision callback path:
-        // - ftCommon_8007D5D4 sets fp->ecb_lock=10 and CollData_X130_Locked on ground->air takeoff.
-        // - mpColl_LoadECB_inline preserves desired_ecb.bottom while CollData_X130_Locked is set.
-        // - EscapeAir_Coll routes grounded contact into LandingFallSpecial.
+      if (!lock_bottom_to_zero && ecb_lock_active &&
+          (action_id == (uint16_t)MSL_ACT_ESCAPE_AIR ||
+           is_damage_collision_landing_action(action_id))) {
+        // ECB lock-bottom semantics while CollData_X130_Locked is active:
+        // - ftCommon_8007D5D4 sets fp->ecb_lock and CollData_X130_Locked on ground->air transitions.
+        // - mpColl_LoadECB_inline preserves desired_ecb.bottom while locked.
+        // - EscapeAir and Damage/DamageFly collision callbacks can resolve grounded contact during
+        //   this lock window.
         // refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007D5D4
         // refs/melee/src/melee/mp/mpcoll.c::mpColl_LoadECB_inline
         // refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{ftCo_Damage_Coll,ftCo_DamageFly_Coll}
         lock_bottom_to_zero = 1u;
       } else if (!lock_bottom_to_zero && action_id == (uint16_t)MSL_ACT_ESCAPE_AIR &&
                  batch->state.action_frame[idx] >= 0 && batch->state.action_frame[idx] <= 10 &&
@@ -764,8 +797,7 @@ void mpcoll_ground_apply(MslBatch* batch) {
             // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c::ftCo_Dash_Coll
             // refs/melee/src/melee/mp/mplib.c::mpLib_8004DD90_Floor
             const uint8_t dash_entry_keep_prev_line =
-                (action_id == (uint16_t)MSL_ACT_DASH &&
-                 prev_action_id != (uint16_t)MSL_ACT_DASH)
+                (action_id == (uint16_t)MSL_ACT_DASH && prev_action_id != (uint16_t)MSL_ACT_DASH)
                     ? 1u
                     : 0u;
             if ((pl->is_ledge && !ol->is_ledge) || dash_entry_keep_prev_line) {
@@ -925,8 +957,8 @@ void mpcoll_ground_apply(MslBatch* batch) {
           //   air until the regular sweep/projection path lands.
           // refs/data/ecb/*_bottom.bin via msl_ecb_bottom_rel_y()
           float y_corr = 0.0f;
-          const int out_line_idx = floor_dd90_project(g, prefer_line_idx, cur_bottom_x, cur_bottom_y,
-                                                      &y_corr, &floor_nx, &floor_ny);
+          const int out_line_idx = floor_dd90_project(g, prefer_line_idx, cur_bottom_x,
+                                                      cur_bottom_y, &y_corr, &floor_nx, &floor_ny);
           if (out_line_idx >= 0 && y_corr > 0.0f) {
             batch->state.pos_y[idx] += y_corr;
             on_ground = 1;
@@ -970,8 +1002,8 @@ void mpcoll_ground_apply(MslBatch* batch) {
                                                ecb_frame, was_grounded);
           } else {
             float y_corr = 0.0f;
-            const int out_line_idx =
-                floor_dd90_project(g, hit_line_idx, cur_bottom_x, cur_bottom_y, &y_corr, NULL, NULL);
+            const int out_line_idx = floor_dd90_project(g, hit_line_idx, cur_bottom_x, cur_bottom_y,
+                                                        &y_corr, NULL, NULL);
             if (out_line_idx >= 0) {
               batch->state.pos_y[idx] += y_corr;
               on_ground = 1;
@@ -987,7 +1019,9 @@ void mpcoll_ground_apply(MslBatch* batch) {
             }
           }
         } else if (prefer_line_idx >= 0 && batch->state.speed_y_self[idx] == 0.0f &&
-                   batch->state.hitlag[idx] == 0 && batch->state.hitstun[idx] == 0) {
+                   batch->state.hitlag[idx] == 0 &&
+                   (batch->state.hitstun[idx] == 0 ||
+                    is_damage_collision_landing_action(action_id))) {
           // Decomp: mpLib_8004DD90_Floor can resolve a resting contact even when no crossing sweep is
           // reported (e.g. vy==0 and the ECB bottom is already on the surface).
           // Gate this to "already on the surface" to avoid snapping to the floor from far below.
