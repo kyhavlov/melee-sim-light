@@ -372,18 +372,16 @@ static inline uint16_t down_roll_action_from_input(const MslBatch* batch, const 
 static inline void enter_wait(MslBatch* batch, size_t idx) {
   // Decomp: ft_8008A2BC (common "enter Wait").
   // refs/melee/src/melee/ft/ft_0892.c::ft_8008A2BC
+  // refs/melee/src/melee/ft/ft_0892.c::ft_8008A348
+  //
+  // Ordering note:
+  // - This path calls Fighter_ChangeMotionState(ftCo_MS_Wait, ...) via ft_8008A348.
+  // - Unlike explicit immediate-tick helpers (e.g. ftCo_80098324), this path does not call
+  //   ftAnim_8006EBA4 directly after the state change.
+  // Keep Wait entry at frame 0 here; the normal per-frame anim update runs next frame.
   batch->state.action_id[idx] = (uint16_t)MSL_ACT_WAIT;
   batch->state.animation_index[idx] = (uint32_t)MSL_SM_WAIT1_0;
-  // Decomp: almost all motion-state enters call ftAnim_8006EBA4 immediately after
-  // Fighter_ChangeMotionState so that the first post-enter frame is `anim_start`.
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Down.c::ftCo_80098324
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownAttack.c::ftCo_8009856C
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownBound.c::ftCo_80097E8C
   msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
-  if (batch->state.hitlag_started_frame[idx] == 0) {
-    batch->state.anim_frame_fp_q16_16[idx] += batch->state.frame_speed_mul_fp_q16_16[idx];
-  }
-  msl_anim_timebase_recompute_derived(batch, idx);
 }
 
 static inline void enter_down_wait(MslBatch* batch, size_t idx, uint16_t wait_act) {

@@ -130,6 +130,7 @@ def test_replay_catch_connect_escapeb_victim_record_6100_lock() -> None:
     assert int(row["ref_t1"]["action_id"][0, victim]) == 226
     assert int(row["ref_t1"]["action_frame"][0, victim]) == 1
     assert int(row["ref_t1"]["animation_index"][0, victim]) == 254
+    assert int(row["seed_t"]["on_ground"][0, victim]) == 1
     assert int(row["ref_t1"]["hitlag"][0, attacker]) == 0
     assert int(row["ref_t1"]["hitlag"][0, victim]) == 0
     assert int(row["ref_t1"]["hitstun"][0, attacker]) == 0
@@ -157,10 +158,22 @@ def test_replay_capturepulled_to_capturewait_record_6101_lock() -> None:
     ds = read_dataset(str(dataset_path))
     row = ds.samples[record : record + 1]
 
+    # Replay-real cluster lock for the CapturePulledLw -> CaptureWaitLw handoff:
+    # - attacker in CatchDashPull owns victim
+    # - victim stays in low (grounded) capture lane
+    # - no hitlag/hitstun side effects on either side.
+    assert int(row["seed_t"]["action_id"][0, attacker]) == 213
     assert int(row["seed_t"]["action_id"][0, victim]) == 226
     assert int(row["seed_t"]["action_frame"][0, victim]) == 1
     assert int(row["seed_t"]["animation_index"][0, victim]) == 254
     assert int(row["seed_t"]["grab_owner_port"][0, victim]) == attacker
+    assert int(row["seed_t"]["on_ground"][0, victim]) == 1
+    assert int(row["seed_t"]["hitlag"][0, attacker]) == 0
+    assert int(row["seed_t"]["hitlag"][0, victim]) == 0
+    assert int(row["seed_t"]["hitstun"][0, attacker]) == 0
+    assert int(row["seed_t"]["hitstun"][0, victim]) == 0
+    assert int(row["ref_t1"]["action_id"][0, attacker]) == 216
+    assert int(row["ref_t1"]["action_frame"][0, attacker]) == 0
     assert int(row["ref_t1"]["action_id"][0, victim]) == 227
     assert int(row["ref_t1"]["action_frame"][0, victim]) == 1
     assert int(row["ref_t1"]["animation_index"][0, victim]) == 255
@@ -170,6 +183,53 @@ def test_replay_capturepulled_to_capturewait_record_6101_lock() -> None:
     assert int(row["ref_t1"]["hitstun"][0, victim]) == 0
 
     out, ref = _run_record(dataset_path, record)
+    assert int(out["action_id"][0, attacker]) == int(ref["action_id"][attacker])
+    assert int(out["action_frame"][0, attacker]) == int(ref["action_frame"][attacker])
+    assert int(out["action_id"][0, victim]) == int(ref["action_id"][victim])
+    assert int(out["action_frame"][0, victim]) == int(ref["action_frame"][victim])
+    assert int(out["animation_index"][0, victim]) == int(ref["animation_index"][victim])
+
+
+@pytest.mark.integration
+def test_replay_capturepulled_stays_pulled_record_408_negative_lock() -> None:
+    root = Path(__file__).resolve().parents[1]
+    dataset_rel = f"{_BASE_REL}/TreasuredBackKangaroo.msl"
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+    _skip_if_required_artifacts_missing(root)
+
+    attacker = 0
+    victim = 1
+    record = 408
+    ds = read_dataset(str(dataset_path))
+    row = ds.samples[record : record + 1]
+
+    # Negative lock: victim is already in CapturePulledLw and should remain there on t+1.
+    # This guards the CapturePulled->CaptureWait snapshot bridge from over-broad application.
+    assert int(row["seed_t"]["action_id"][0, attacker]) == 213
+    assert int(row["seed_t"]["action_id"][0, victim]) == 226
+    assert int(row["seed_t"]["action_frame"][0, victim]) == 1
+    assert int(row["seed_t"]["animation_index"][0, victim]) == 254
+    assert int(row["seed_t"]["grab_owner_port"][0, victim]) == attacker
+    assert int(row["seed_t"]["on_ground"][0, victim]) == 1
+    assert int(row["seed_t"]["hitlag"][0, attacker]) == 0
+    assert int(row["seed_t"]["hitlag"][0, victim]) == 0
+    assert int(row["seed_t"]["hitstun"][0, attacker]) == 0
+    assert int(row["seed_t"]["hitstun"][0, victim]) == 0
+    assert int(row["ref_t1"]["action_id"][0, attacker]) == 213
+    assert int(row["ref_t1"]["action_frame"][0, attacker]) == 7
+    assert int(row["ref_t1"]["action_id"][0, victim]) == 226
+    assert int(row["ref_t1"]["action_frame"][0, victim]) == 2
+    assert int(row["ref_t1"]["animation_index"][0, victim]) == 254
+    assert int(row["ref_t1"]["hitlag"][0, attacker]) == 0
+    assert int(row["ref_t1"]["hitlag"][0, victim]) == 0
+    assert int(row["ref_t1"]["hitstun"][0, attacker]) == 0
+    assert int(row["ref_t1"]["hitstun"][0, victim]) == 0
+
+    out, ref = _run_record(dataset_path, record)
+    assert int(out["action_id"][0, attacker]) == int(ref["action_id"][attacker])
+    assert int(out["action_frame"][0, attacker]) == int(ref["action_frame"][attacker])
     assert int(out["action_id"][0, victim]) == int(ref["action_id"][victim])
     assert int(out["action_frame"][0, victim]) == int(ref["action_frame"][victim])
     assert int(out["animation_index"][0, victim]) == int(ref["animation_index"][victim])

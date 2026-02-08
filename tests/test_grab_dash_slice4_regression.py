@@ -191,14 +191,14 @@ def test_replay_catchdash_connect_enters_pull_and_capture_pulled(
 
 
 @pytest.mark.parametrize(
-    ("owner_on_ground", "expected_victim_action"),
+    ("victim_on_ground", "expected_victim_action"),
     [
         (1, _ACT_CAPTURE_PULLED_LW),
         (0, _ACT_CAPTURE_PULLED_HI),
     ],
 )
 def test_catchdash_connect_enters_catchdashpull_and_capture_variant(
-    owner_on_ground: int,
+    victim_on_ground: int,
     expected_victim_action: int,
 ) -> None:
     root = Path(__file__).resolve().parents[1]
@@ -223,13 +223,16 @@ def test_catchdash_connect_enters_catchdashpull_and_capture_variant(
 
         seed["action_id"][0, 0] = np.uint16(_ACT_CATCH_DASH)
         seed["animation_index"][0, 0] = np.uint32(_SM_CATCH_DASH)
-        seed["on_ground"][0, 0] = np.uint8(owner_on_ground)
+        seed["on_ground"][0, 0] = np.uint8(0)
         seed["pos_x"][0, 0] = np.float32(0.0)
         seed["pos_y"][0, 0] = np.float32(0.0)
 
         seed["action_id"][0, 1] = np.uint16(_ACT_WAIT)
         seed["animation_index"][0, 1] = np.uint32(_SM_WAIT1_0)
-        seed["on_ground"][0, 1] = np.uint8(1)
+        # Decomp tie-down: fn_800DAADC picks CapturePulledLw/Hi from callback-target xE0 lane
+        # (mapped to victim on_ground in the sim), not owner grounding.
+        # refs/melee/build/GALE01/asm/melee/ft/chara/ftCommon/ftCo_Attack100.s::fn_800DAADC
+        seed["on_ground"][0, 1] = np.uint8(victim_on_ground)
         seed["pos_x"][0, 1] = np.float32(0.0)
         seed["pos_y"][0, 1] = np.float32(0.0)
 

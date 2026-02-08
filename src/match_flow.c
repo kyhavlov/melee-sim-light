@@ -199,6 +199,16 @@ static inline void enter_rebirth(MslBatch* batch, size_t idx, const MslCommonPar
   batch->state.action_id[idx] = (uint16_t)MSL_ACT_REBIRTH;
   batch->state.animation_index[idx] = (uint32_t)MSL_SM_WAIT1_0;
   msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+  // Snapshot-order bridge:
+  // - In engine order, dead->rebirth/rebirthwait transition callbacks run in the match-flow update
+  //   path, and post-frame `state_age` for the first steady Rebirth lane is observed at 0.
+  // - This simulator performs match-flow transitions before the shared anim-timebase pass, so
+  //   entering at 0 would advance to 1 in the same frame.
+  // Seed the pre-tick lane at -1 to preserve first post-transition frame parity (0 after this
+  // frame's anim pass), while keeping Fighter_ChangeMotionState identity side effects above.
+  // refs/melee/build/GALE01/asm/melee/ft/ft_0D31.s::ftCo_Dead{Down,Left,Right,UpStar}_Anim
+  // refs/melee/build/GALE01/asm/melee/ft/ft_0D31.s::ftCo_Rebirth_Anim
+  msl_anim_timebase_seed(batch, idx, -1.0f, 1.0f);
 
   batch->state.on_ground[idx] = 0;
   // Rebirth entry is airborne (camera-top spawn). Clear floor index on entry so post-frame
@@ -240,6 +250,10 @@ static inline void enter_rebirth_wait(MslBatch* batch, size_t idx, uint32_t stag
   batch->state.action_id[idx] = (uint16_t)MSL_ACT_REBIRTH_WAIT;
   batch->state.animation_index[idx] = (uint32_t)MSL_SM_WAIT1_0;
   msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+  // Same ordering bridge as Rebirth entry above (pre-tick lane -> first steady frame at 0).
+  // refs/melee/build/GALE01/asm/melee/ft/ft_0D31.s::ftCo_Rebirth_Anim
+  // refs/melee/build/GALE01/asm/melee/ft/ft_0D31.s::ftCo_RebirthWait_Anim
+  msl_anim_timebase_seed(batch, idx, -1.0f, 1.0f);
   batch->state.on_ground[idx] = 0;
   batch->state.pos_x[idx] = respawn.x;
   batch->state.pos_y[idx] = respawn.y;
