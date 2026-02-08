@@ -428,6 +428,7 @@ def _main_impl(args) -> None:
         compute_fighter_stick_input_counters,
         compute_fighter_trigger_input_counters,
         compute_lr_press_timer_x67f,
+        derive_instance_id_counter,
         derive_instance_id_x2073,
         derive_colanim_internals,
         derive_downwait_timer,
@@ -1390,6 +1391,18 @@ def _main_impl(args) -> None:
             ],
             axis=1,
         )
+
+    # Seed bridge: plAttack_80037B08 global next-id counter (unk_804D6480).
+    #
+    # Slippi does not expose this internal directly. Seed it strictly causally from replay-visible
+    # fighter/item instance_id history so one-step reseed starts from a counter that preserves
+    # prior-frame id churn (instead of only current-frame max(live ids)).
+    # refs/melee/src/melee/pl/plattack.c::plAttack_80037B08
+    counter_post = derive_instance_id_counter(
+        fighter_instance_id_u16_2d=post_instance_id[:, :num_players],
+        item_instance_id_u16_2d=items_fixed["instance_id"],
+    )
+    samples["seed_t"]["instance_id_counter"] = counter_post[:-1]
 
     # Grab/throw victim attachment owner identity (slot indices; 2p-only for v1 suite).
     if int(num_players) == 2:

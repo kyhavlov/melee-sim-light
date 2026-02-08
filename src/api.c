@@ -261,11 +261,13 @@ int msl_batch_reseed_seed(MslBatch* batch, const uint8_t* seed_bytes, size_t see
     const uint8_t* ptr = seed_bytes + (size_t)bi * seed_stride_bytes;
     const MslSeed* seed = (const MslSeed*)ptr;
 
-    // Initialize the per-environment global stale attack instance counter from seeded values.
-    // We don't currently store the counter explicitly in the seed schema; instead, choose the
-    // next value after the maximum already present in the seeded snapshots.
+    // Initialize per-environment global counters from seeded values.
+    // - stale_attack_instance_counter: seeded as next after max observed attack_instance lanes.
+    // - instance_id_counter: prefer explicit seed lane (derived strictly causally in tooling);
+    //   fallback to next after max observed instance_id lanes for backward compatibility.
     uint16_t max_attack_inst = 0;
     uint16_t max_instance_id = 0;
+    uint16_t seeded_instance_id_counter = seed->instance_id_counter;
 
     batch->state.frame_id[bi] = seed->frame_id;
     batch->state.frame_pre_random_seed[bi] = seed->frame_pre_random_seed;
@@ -714,9 +716,26 @@ int msl_batch_reseed_seed(MslBatch* batch, const uint8_t* seed_bytes, size_t see
 
     // Next value for plAttack_80037B08 (global counter used for fp->x2088 and many item instance_ids).
     // Decomp: refs/melee/src/melee/pl/plattack.c::plAttack_80037B08
-    uint16_t next_iid = (uint16_t)(max_instance_id + 1u);
-    if (next_iid == 0) {
-      next_iid = 1;
+    //
+    // Seed bridge:
+    // - Prefer the explicit seed lane (seed->instance_id_counter), which preprocessing derives
+    //   strictly causally from replay-visible fighter/item instance_id history.
+    // - Enforce a decomp-shaped lower bound from current live IDs: plAttack_80037B08 returns the
+    //   current global counter and then increments, so with no wrap the next counter cannot be
+    //   below max(live instance_id)+1.
+    //   refs/melee/src/melee/pl/plattack.c::plAttack_80037B08
+    // - If absent (0), fall back to that lower bound for older datasets/tests.
+    //
+    // NOTE(seed bridge): 16-bit wrap is theoretically possible in very long sessions. The replay
+    // suites used for one-step validation are far below wrap scale, so we enforce the lower bound
+    // unconditionally for deterministic reseed parity.
+    uint16_t next_iid = seeded_instance_id_counter;
+    uint16_t min_next_iid = (uint16_t)(max_instance_id + 1u);
+    if (min_next_iid == 0u) {
+      min_next_iid = 1u;
+    }
+    if (next_iid == 0u || next_iid < min_next_iid) {
+      next_iid = min_next_iid;
     }
     batch->state.instance_id_counter[bi] = next_iid;
 
