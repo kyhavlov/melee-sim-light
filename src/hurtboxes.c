@@ -3,6 +3,7 @@
 #include <math.h>
 #include <stdint.h>
 
+#include "action_ids.h"
 #include "anim_frame.h"
 #include "anim_pose.h"
 #include "char_params.h"
@@ -14,6 +15,35 @@
 static inline size_t idx_hurtcap(int bi, int p, int cap_i) {
   return ((size_t)bi * (size_t)MSL_MAX_PLAYERS + (size_t)p) * (size_t)MSL_MAX_HURTCAPS +
          (size_t)cap_i;
+}
+
+static inline uint8_t hurtboxes_guard_fallback_submotion(uint16_t action_id, uint16_t* out_msid) {
+  if (out_msid == NULL) {
+    return 0u;
+  }
+  // Guard-family motion-state -> submotion mapping from ftmotionstates table.
+  // refs/melee/src/melee/ft/ftmotionstates.c::{ftCo_MS_GuardOn,ftCo_MS_Guard,ftCo_MS_GuardOff,
+  //                                            ftCo_MS_GuardSetOff,ftCo_MS_GuardReflect}
+  // Note: GuardReflect uses ftCo_SM_GuardOn in GALE01.
+  switch (action_id) {
+    case MSL_ACT_GUARD_ON:
+      *out_msid = (uint16_t)MSL_SM_GUARD_ON;
+      return 1u;
+    case MSL_ACT_GUARD:
+      *out_msid = (uint16_t)MSL_SM_GUARD;
+      return 1u;
+    case MSL_ACT_GUARD_OFF:
+      *out_msid = (uint16_t)MSL_SM_GUARD_OFF;
+      return 1u;
+    case MSL_ACT_GUARD_SET_OFF:
+      *out_msid = (uint16_t)MSL_SM_GUARD_DAMAGE;
+      return 1u;
+    case MSL_ACT_GUARD_REFLECT:
+      *out_msid = (uint16_t)MSL_SM_GUARD_ON;
+      return 1u;
+    default:
+      return 0u;
+  }
 }
 
 void hurtboxes_refresh(MslBatch* batch) {
@@ -73,14 +103,59 @@ void hurtboxes_refresh(MslBatch* batch) {
         }
       }
 
+      uint16_t msid = 0u;
       if (anim_u32 > 0xFFFFu) {
-        if (hit_status != 0) {
-          batch->state.hurtbox_state[idx] = hit_status;
+        enum { MSL_STATE_FLAGS_STRIDE = MSL_STATE_FLAGS_BYTES };
+        enum { MSL_STATE_FLAGS_221B_INDEX = 2 };
+        enum { MSL_STATE_FLAG_221B_IS_SHIELD_ACTIVE = 0x80 };
+        const uint8_t flags_221b =
+            batch->state.state_flags[idx * MSL_STATE_FLAGS_STRIDE + (size_t)MSL_STATE_FLAGS_221B_INDEX];
+        // Guarded no-submotion snapshots can represent a live shield descriptor where we should
+        // not synthesize fallback body capsules from motion-state mapping. Exception: while an
+        // opponent is in catch startup, decomp catch collision (ftColl_80078A2C / ftGrabDist)
+        // can still acquire a guarded victim, so keep fallback capsules available for grab tests.
+        // refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078A2C,ftGrabDist}
+        uint8_t any_opponent_in_catch_startup = 0u;
+        for (int op = 0; op < num_players; op++) {
+          if (op == p) {
+            continue;
+          }
+          const size_t oidx = msl_idx_player(bi, op);
+          const uint16_t oa = batch->state.action_id[oidx];
+          if (oa == (uint16_t)MSL_ACT_CATCH || oa == (uint16_t)MSL_ACT_CATCH_DASH) {
+            any_opponent_in_catch_startup = 1u;
+            break;
+          }
         }
-        continue;
+        const uint8_t guard_snapshot_with_shield =
+            (batch->state.action_id[idx] == (uint16_t)MSL_ACT_GUARD &&
+             batch->state.action_frame[idx] < 0 &&
+             !any_opponent_in_catch_startup &&
+             (flags_221b & (uint8_t)MSL_STATE_FLAG_221B_IS_SHIELD_ACTIVE))
+                ? 1u
+                : 0u;
+        // Seed-bridge fallback (guard-family only):
+        // Slippi post-frames commonly encode guard-family snapshots with animation_index=-1 while
+        // decomp collision still uses the active ftCo submotion timeline. Keep the raw compare
+        // field unchanged, but derive hurtcaps from the decomp motion-state table mapping.
+        // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
+        // refs/melee/src/melee/ft/ftmotionstates.c (Guard* motion-state rows)
+        //
+        // Guard (hold) no-submotion snapshots with x221B_b0 set represent a live shield descriptor.
+        // In this case, avoid synthesizing guard hurtcaps from msid fallback to keep shield-first
+        // collision ownership in item/fighter paths.
+        // refs/melee/src/melee/ft/ftcoll.c::ftColl_8007B1B8
+        if (guard_snapshot_with_shield ||
+            !hurtboxes_guard_fallback_submotion(batch->state.action_id[idx], &msid)) {
+          if (hit_status != 0) {
+            batch->state.hurtbox_state[idx] = hit_status;
+          }
+          continue;
+        }
+      } else {
+        msid = (uint16_t)anim_u32;
       }
 
-      const uint16_t msid = (uint16_t)anim_u32;
       const float anim_frame_f32 = msl_anim_frame_sanitize_f32(batch->state.anim_frame_f32[idx]);
       const uint16_t frame = msl_anim_frame_floor_u16(anim_frame_f32);
 

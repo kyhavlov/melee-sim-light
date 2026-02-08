@@ -344,12 +344,6 @@ void shields_refresh(MslBatch* batch) {
         if (prev_a == (uint16_t)MSL_ACT_GUARD_ON) {
           // GuardOn_IASA powershield path (ftCo_8009388C): clear on entry.
           f &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221B_IS_SHIELD_ACTIVE;
-        } else if (prev_a == (uint16_t)MSL_ACT_DASH) {
-          // GuardReflect set-path proxy is modeled from ftCo_80091A4C call sites (Wait/Walk/Run/Turn
-          // style grounded IASA), not Dash IASA.
-          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80091A4C
-          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
-          f &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221B_IS_SHIELD_ACTIVE;
         } else {
           // Locomotion guard-check powershield path (ftCo_80093A50 -> ftCo_80092450): set on entry.
           f |= (uint8_t)MSL_STATE_FLAG_221B_IS_SHIELD_ACTIVE;

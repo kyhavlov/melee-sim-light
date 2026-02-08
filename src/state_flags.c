@@ -22,6 +22,7 @@ void state_flags_refresh_post_frame(MslBatch* batch) {
   // fp+0x221A:
   // - 0x01 = fp->x221A_b7
   // - 0x08 = isFastFalling
+  // - 0x20 = isHitlag
   // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
   // refs/melee/src/melee/ft/types.h (fp+0x221A bitfields)
   //
@@ -30,6 +31,7 @@ void state_flags_refresh_post_frame(MslBatch* batch) {
   // - cleared on GuardReflect entry (ftCo_8009388C) and shield break (ftCo_800925A4).
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_80092450,ftCo_8009388C,ftCo_800925A4}
   enum { MSL_STATE_FLAG_221A_IS_FASTFALL = 0x08 };
+  enum { MSL_STATE_FLAG_221A_IS_HITLAG = 0x20 };
   enum { MSL_STATE_FLAG_221A_B7 = 0x01 };
 
   // fp+0x221B:
@@ -85,6 +87,15 @@ void state_flags_refresh_post_frame(MslBatch* batch) {
         f221a |= (uint8_t)MSL_STATE_FLAG_221A_IS_FASTFALL;
       } else {
         f221a &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221A_IS_FASTFALL;
+      }
+      // Slippi packs fp+0x221A bit0x20 as isHitlag; keep this byte causally owned by the runtime
+      // hitlag counter to avoid stale seeded carryover.
+      // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
+      // refs/melee/src/melee/ft/ftcoll.c::ftColl_80076CBC (fp->hitlag_remaining_frames update path)
+      if (batch->state.hitlag[idx] > 0) {
+        f221a |= (uint8_t)MSL_STATE_FLAG_221A_IS_HITLAG;
+      } else {
+        f221a &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221A_IS_HITLAG;
       }
 
       // x221B_b5 ownership (grab-owner latch):
