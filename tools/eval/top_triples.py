@@ -204,7 +204,14 @@ def main() -> None:
     target.add_argument("--suite", type=Path, help="Suite JSON path (e.g. replays/suites/...).")
     target.add_argument("--dataset", type=Path, help="Single dataset .msl path.")
     ap.add_argument("--datasets-dir", default="datasets", help="Datasets root under repo for suite mode.")
-    ap.add_argument("--field", required=True, help="Discrete compare field (e.g. action_id).")
+    ap.add_argument(
+        "--field",
+        required=True,
+        help=(
+            "Discrete compare field (e.g. action_id). Item aliases are supported via "
+            "item_exists,item_type,item_state,item_owner,item_instance_id."
+        ),
+    )
     ap.add_argument("--only-seed-equals-ref", action="store_true", help="Only include rows where seed==ref.")
     ap.add_argument("--top", type=int, default=20, help="Top-N rows to print.")
     ap.add_argument("--chunk", type=int, default=4096, help="Chunk size for locate command.")

@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from tools.eval.diff_locate import diff_locate_rows
+from tools.eval.locate_discrete_mismatches import ITEM_FIELD_TO_SUBFIELD
 from tools.eval.locate_tsv import parse_locate_tsv
 from tools.eval.rollout_metrics import diff_rollout_summaries, summarize_rollout_payload, validate_rollout_payload
 from tools.eval.top_triples import count_ref_out, count_triples
@@ -85,6 +86,16 @@ def test_top_triples_reports_seed_ref_out_and_ref_out_from_seed_out_ref_tsv(tmp_
 
     assert triples[(100, 200, 900)] == 2
     assert ref_out[(200, 900)] == 2
+
+
+def test_locate_discrete_item_aliases_map_to_compare_item_subfields() -> None:
+    assert ITEM_FIELD_TO_SUBFIELD == {
+        "item_exists": "exists",
+        "item_type": "type",
+        "item_state": "state",
+        "item_owner": "owner",
+        "item_instance_id": "instance_id",
+    }
 
 
 def test_rollout_metrics_summary_and_diff_on_synthetic_payload() -> None:

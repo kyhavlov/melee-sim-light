@@ -27,6 +27,15 @@ def _load_binding():
     return importlib.import_module("msl_binding")
 
 
+ITEM_FIELD_TO_SUBFIELD: dict[str, str] = {
+    "item_exists": "exists",
+    "item_type": "type",
+    "item_state": "state",
+    "item_owner": "owner",
+    "item_instance_id": "instance_id",
+}
+
+
 @dataclass(frozen=True)
 class MismatchRow:
     dataset: str
@@ -114,6 +123,43 @@ def _iter_dataset_mismatches(
         active = slice(0, num_players)
 
         for field in fields:
+            item_subfield = ITEM_FIELD_TO_SUBFIELD.get(field)
+            if item_subfield is not None:
+                out_arr = out_view["items"][item_subfield]
+                ref_arr = ref["items"][item_subfield]
+                diff = out_arr != ref_arr
+                if not np.any(diff):
+                    continue
+
+                pairs = np.argwhere(diff)
+                for ri, item_slot in pairs:
+                    r = int(ri)
+                    slot = int(item_slot)
+                    gi = int(offset + r)
+
+                    seed_v = int(seed["items"][item_subfield][r, slot])
+                    out_v = int(out_arr[r, slot])
+                    ref_v = int(ref_arr[r, slot])
+                    if only_seed_equals_ref and seed_v != ref_v:
+                        continue
+
+                    rows.append(
+                        MismatchRow(
+                            dataset=str(dataset_path),
+                            record=gi,
+                            seed_frame=int(seed["frame_id"][r]),
+                            ref_frame=int(ref["frame_id"][r]),
+                            p=slot,
+                            field=field,
+                            seed=seed_v,
+                            out=out_v,
+                            ref=ref_v,
+                        )
+                    )
+                    if max_rows is not None and len(rows) >= max_rows:
+                        return rows
+                continue
+
             out_arr = out_view[field][:, active]
             ref_arr = ref[field][:, active]
             diff = out_arr != ref_arr
@@ -195,7 +241,9 @@ def main() -> None:
         default=[],
         help=(
             "Discrete compare field to locate (repeatable). For multi-dimensional fields like "
-            "`state_flags`, output rows use a suffix like `state_flags[3]`."
+            "`state_flags`, output rows use a suffix like `state_flags[3]`. "
+            "Item fields are supported via aliases: item_exists,item_type,item_state,item_owner,item_instance_id "
+            "(with `p` interpreted as item slot index)."
         ),
     )
     ap.add_argument("--chunk", type=int, default=4096, help="Batch size for evaluation.")
