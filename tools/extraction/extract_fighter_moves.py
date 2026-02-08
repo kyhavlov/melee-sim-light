@@ -412,6 +412,17 @@ def _parse_subaction_events(
                         data={"bone_idx": int(bone_idx), "state": int(state)},
                     )
                 )
+            elif op == 52:
+                # Set fp->x221C_u16_y flags (ftAction_80072C6C -> ft_8008A1B8).
+                # refs/melee/src/melee/ft/ftaction.c::ftAction_80072C6C
+                # refs/melee/src/melee/ft/ft_0892.c::ft_8008A1B8
+                out.append(
+                    Event(
+                        frame=frame,
+                        kind="set_state_flags_221c_u16_y",
+                        data={"flags": int(_u26(w0))},
+                    )
+                )
             elif op == 34:
                 # Set throw hitbox (ftAction_80071E04): configures fp->xDF4[2] hitboxes used during throws.
                 # Word0: opcode, idx (3), damage (23)

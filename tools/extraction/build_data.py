@@ -219,6 +219,23 @@ def main() -> None:
         ],
     )
 
+    # Movescript-derived fp->x221C_u16_y timelines (opcode 52 / ftAction_80072C6C).
+    _run(
+        "tools.extraction.extract_fighter_state_flags_221c_y",
+        [
+            "--iso_dir",
+            str(iso_dir),
+            "--melee_decomp",
+            str(args.melee_decomp),
+            "--special_msids_dir",
+            "data/special_msids",
+            "--out_dir",
+            "data/state_flags_221c_y",
+            "--chars",
+            ",".join(chars),
+        ],
+    )
+
     # Anim matrices per needed msid (depends on data/moves + data/hurtcaps + data/characters).
     for ch in chars:
         _run(

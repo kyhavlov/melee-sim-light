@@ -22,6 +22,7 @@
 #include "hitboxes_tables.h"
 #include "hitlist.h"
 #include "hit_status_tables.h"
+#include "state_flags_221c_y_tables.h"
 #include "hitboxes.h"
 #include "hurtbox_modes_tables.h"
 #include "hurtcaps_tables.h"
@@ -148,6 +149,10 @@ MslBatch* msl_batch_create(int batch_size, int num_players) {
     msl_batch_destroy(batch);
     return NULL;
   }
+
+  // Optional timeline table (x221C_u16_y opcode-52 lane): missing artifacts should not prevent
+  // running.
+  (void)state_flags_221c_y_tables_init();
 
   return batch;
 }

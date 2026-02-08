@@ -4,7 +4,9 @@
 #include <stdint.h>
 
 #include "action_ids.h"
+#include "anim_frame.h"
 #include "common_params.h"
+#include "state_flags_221c_y_tables.h"
 
 static inline uint8_t state_flags_221a_b7_action_uses_guard_shield(uint16_t action_id) {
   switch (action_id) {
@@ -64,6 +66,14 @@ void state_flags_refresh_post_frame(MslBatch* batch) {
   // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
   // refs/melee/src/melee/ft/types.h (fp+0x221C bitfields)
   enum { MSL_STATE_FLAG_221C_IS_HITSTUN = 0x02 };
+  // Movescript opcode 52 writes fp->x221C_u16_y (3-bit field). Slippi emits only fp+0x221C
+  // (the high byte at +0x221C), and the overlapping exported lane there is high-byte bit0
+  // (mask 0x01).
+  // refs/melee/src/melee/ft/ftaction.c::ftAction_80072C6C
+  // refs/melee/src/melee/ft/ft_0892.c::ft_8008A1B8
+  // refs/melee/src/melee/ft/types.h (fp+0x221C bitfield layout)
+  enum { MSL_STATE_FLAG_221C_U16_Y_VISIBLE_BIT = 0x01 };
+
   // fp+0x221C GuardReflect flags:
   // - x221C_b1 (mask 0x40) is cleared when mv.co.guard.x14 expires,
   // - x221C_b2 (mask 0x20) is "Powershield Active Bool" (Slippi post-frame) and is cleared when
@@ -193,6 +203,34 @@ void state_flags_refresh_post_frame(MslBatch* batch) {
         f221c |= (uint8_t)MSL_STATE_FLAG_221C_IS_HITSTUN;
       } else {
         f221c &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221C_IS_HITSTUN;
+      }
+
+      // Script-owned x221C_u16_y contribution to fp+0x221C high-byte bit0:
+      // - opcode 52 writes a 3-bit payload (dbanim "L/R/T", masks 1/2/4),
+      // - x221C_u16_y occupies bits 7..9; in this MSB-first packed lane, the "T" bit (0x4) is
+      //   the overlap that lands in the recorded fp+0x221C byte as mask 0x01.
+      // refs/melee/src/melee/ft/ftaction.c::ftAction_80072C6C
+      // refs/melee/src/melee/db/dbanim.c
+      // refs/melee/src/melee/ft/types.h (fp+0x221C_u16_y : 3 at bits 7..9)
+      const uint32_t anim_u32 = batch->state.animation_index[idx];
+      if (anim_u32 <= 0xFFFFu) {
+        const uint16_t msid = (uint16_t)anim_u32;
+        const float anim_frame_f32 = msl_anim_frame_sanitize_f32(batch->state.anim_frame_f32[idx]);
+        const uint16_t frame = msl_anim_frame_floor_u16(anim_frame_f32);
+        uint8_t y_flags = 0u;
+        if (state_flags_221c_y_get(batch->state.char_id[idx], msid, frame, &y_flags) == 0) {
+          if (y_flags & 0x4u) {
+            f221c |= (uint8_t)MSL_STATE_FLAG_221C_U16_Y_VISIBLE_BIT;
+          } else {
+            f221c &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221C_U16_Y_VISIBLE_BIT;
+          }
+        } else {
+          // No opcode-52 timeline for this (char, msid): keep x221C_u16_y visible bit cleared to
+          // avoid stale seeded carryover into states that do not script-drive this lane.
+          f221c &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221C_U16_Y_VISIBLE_BIT;
+        }
+      } else {
+        f221c &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221C_U16_Y_VISIBLE_BIT;
       }
 
       // GuardReflect flag parity (x221C_b1 / x221C_b2 / x221C_b3) driven by GuardReflect timers.
