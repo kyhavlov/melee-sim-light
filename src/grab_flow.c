@@ -310,17 +310,23 @@ static inline uint16_t catch_wait_throw_action_from_inputs(const MslBatch* batch
   // 4) L-stick down edge across xB0, or C-stick low hold (prev<=xB0 && cur<=xB0)
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DD1E4
   // refs/melee/src/melee/ft/ft_0DF1.c::{ftCo_800DF7F4,ftCo_800DF844,ftCo_800DF878}
-  const float smash_thresh = c->smash_stick_threshold;
-  const uint8_t lstick_x_edge = ((stick_x_prev < smash_thresh && stick_x >= smash_thresh) ||
-                                 (stick_x_prev > -smash_thresh && stick_x <= -smash_thresh))
+  // x98 maps to the grounded A-tilt X threshold lane in ftCommonData.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DD1E4
+  // refs/melee/src/melee/ft/ft_0DF1.c::ftCo_800DF7F4
+  const float throw_x_thresh = c->attack_s3_stick_threshold_x;
+  const uint8_t lstick_x_edge = ((stick_x_prev < throw_x_thresh && stick_x >= throw_x_thresh) ||
+                                 (stick_x_prev > -throw_x_thresh && stick_x <= -throw_x_thresh))
                                     ? 1u
                                     : 0u;
   if (lstick_x_edge) {
     return (stick_x * facing_dir > 0.0f) ? (uint16_t)MSL_ACT_THROW_F : (uint16_t)MSL_ACT_THROW_B;
   }
 
-  const uint8_t cstick_x_edge = ((cstick_x_prev < smash_thresh && cstick_x >= smash_thresh) ||
-                                 (cstick_x_prev > -smash_thresh && cstick_x <= -smash_thresh))
+  // Use the same x98 threshold lane for C-stick X-edge checks as L-stick in this throw selector.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DD1E4
+  // refs/melee/src/melee/ft/ft_0DF1.c::ftCo_800DF7F4
+  const uint8_t cstick_x_edge = ((cstick_x_prev < throw_x_thresh && cstick_x >= throw_x_thresh) ||
+                                 (cstick_x_prev > -throw_x_thresh && cstick_x <= -throw_x_thresh))
                                     ? 1u
                                     : 0u;
   if (cstick_x_edge) {

@@ -1866,3 +1866,77 @@ def test_action_frame_escapeair_entry_ticks_once() -> None:
         assert got_af == want_af, f"record={record} p={p} expected action_frame={want_af}, got {got_af}"
     finally:
         binding.destroy(handle)
+
+
+@pytest.mark.integration
+def test_action_id_catch_wait_throw_entry_uses_x98_threshold_lane() -> None:
+    # Cluster lock: CatchWait throw selection should use the ftCommonData x98 stick lane
+    # (attack_s3_stick_threshold_x), allowing CatchWait->ThrowF and CaptureWaitLw->ThrownF
+    # transitions on this replay-real row.
+    #
+    # Decomp:
+    # - refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DD1E4
+    # - refs/melee/src/melee/ft/ft_0DF1.c::ftCo_800DF7F4
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_rel = (
+        "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
+        "cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl"
+    )
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+    record = 206
+    owner_p = 1
+    victim_p = 0
+    assert int(samples.shape[0]) > record, f"dataset too short: num_records={int(samples.shape[0])}"
+    row = samples[record : record + 1]
+
+    assert int(row["seed_t"]["action_id"][0, owner_p]) == 216  # CatchWait
+    assert int(row["seed_t"]["action_id"][0, victim_p]) == 227  # CaptureWaitLw
+    assert int(row["ref_t1"]["action_id"][0, owner_p]) == 219  # ThrowF
+    assert int(row["ref_t1"]["action_id"][0, victim_p]) == 239  # ThrownF
+    assert int(row["seed_t"]["hitlag"][0, owner_p]) == 0
+    assert int(row["seed_t"]["hitlag"][0, victim_p]) == 0
+    assert int(row["seed_t"]["hitstun"][0, owner_p]) == 0
+    assert int(row["seed_t"]["hitstun"][0, victim_p]) == 0
+    assert int(row["ref_t1"]["hitlag"][0, owner_p]) == 0
+    assert int(row["ref_t1"]["hitlag"][0, victim_p]) == 0
+    assert int(row["ref_t1"]["hitstun"][0, owner_p]) == 0
+    assert int(row["ref_t1"]["hitstun"][0, victim_p]) == 0
+
+    binding = pytest.importorskip("msl_binding")
+    sizes = binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    compare_stride = int(sizes["compare"])
+
+    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    try:
+        seed_bytes = np.empty((1, seed_stride), dtype=np.uint8)
+        prev_input_bytes = np.empty((1, input_stride), dtype=np.uint8)
+        input_bytes = np.empty((1, input_stride), dtype=np.uint8)
+        out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
+
+        seed_bytes[:] = np.frombuffer(row["seed_t"].tobytes(order="C"), dtype=np.uint8).reshape(1, seed_stride)
+        prev_input_bytes[:] = np.frombuffer(row["prev_input_t"].tobytes(order="C"), dtype=np.uint8).reshape(
+            1, input_stride
+        )
+        input_bytes[:] = np.frombuffer(row["input_t"].tobytes(order="C"), dtype=np.uint8).reshape(
+            1, input_stride
+        )
+
+        binding.reseed_seed(handle, seed_bytes)
+        binding.step_input(handle, prev_input_bytes, input_bytes)
+        binding.write_compare(handle, out_compare_bytes)
+
+        out = out_compare_bytes.view(COMPARE_DTYPE).reshape(-1)
+        assert int(out["action_id"][0, owner_p]) == int(row["ref_t1"]["action_id"][0, owner_p])
+        assert int(out["action_id"][0, victim_p]) == int(row["ref_t1"]["action_id"][0, victim_p])
+        assert int(out["action_frame"][0, owner_p]) == int(row["ref_t1"]["action_frame"][0, owner_p])
+        assert int(out["action_frame"][0, victim_p]) == int(row["ref_t1"]["action_frame"][0, victim_p])
+    finally:
+        binding.destroy(handle)
