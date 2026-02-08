@@ -592,8 +592,6 @@ void grab_flow_update_pre_physics(MslBatch* batch) {
         const uint16_t msid =
             (msid_u32 <= 0xFFFFu) ? (uint16_t)msid_u32 : (uint16_t)MSL_SM_CATCH_ATTACK;
         if (anim_finished(batch->state.char_id[oidx], msid, batch->state.anim_frame_f32[oidx])) {
-          enter_catch_wait_from_attack(batch, oidx);
-          oa = batch->state.action_id[oidx];
           owner_catch_attack_ended = 1u;
         }
       }
@@ -614,6 +612,12 @@ void grab_flow_update_pre_physics(MslBatch* batch) {
           continue;
         }
         if (owner_catch_attack_ended) {
+          if (victim_p > owner_p) {
+            // Defer higher-slot victim transition until after owner transition so this coupled path
+            // follows player-slot callback ordering (lower slot first) for same-frame dual enters.
+            // Decomp callback anchors: ftCo_CatchAttack_Anim / ftCo_CaptureDamage*_Anim.
+            continue;
+          }
           (void)enter_capture_wait_from_damage(batch, vidx);
           continue;
         }
@@ -628,6 +632,30 @@ void grab_flow_update_pre_physics(MslBatch* batch) {
         }
         if (anim_finished(batch->state.char_id[vidx], vmsid, batch->state.anim_frame_f32[vidx])) {
           (void)enter_capture_wait_from_damage(batch, vidx);
+        }
+      }
+
+      // Decomp shape: CatchAttack and CaptureDamage* anim-end ownership are separate callbacks.
+      // In this sim path we model both under the owner linkage; apply victim returns first so
+      // global instance_id bump ordering matches replay for same-frame dual transitions.
+      if (owner_catch_attack_ended) {
+        enter_catch_wait_from_attack(batch, oidx);
+        oa = batch->state.action_id[oidx];
+
+        // Apply deferred victim returns for higher-slot victims after owner transition.
+        for (int victim_p = owner_p + 1; victim_p < num_players; victim_p++) {
+          const size_t vidx = msl_idx_player(bi, victim_p);
+          if (batch->state.hitlag_started_frame[vidx] != 0) {
+            continue;
+          }
+          if ((int)batch->state.grab_owner_port[vidx] != owner_p) {
+            continue;
+          }
+          const uint16_t va = batch->state.action_id[vidx];
+          if (va == (uint16_t)MSL_ACT_CAPTURE_DAMAGE_HI ||
+              va == (uint16_t)MSL_ACT_CAPTURE_DAMAGE_LW) {
+            (void)enter_capture_wait_from_damage(batch, vidx);
+          }
         }
       }
 

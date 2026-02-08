@@ -616,6 +616,15 @@ static inline void guard_update_grounded_anim_callback_pre_input(MslBatch* batch
       if (t18 > 0) {
         t18--;
         batch->state.guard_reflect_timer_x18[idx] = t18;
+        if (t18 == 0u) {
+          // Decomp: when mv.co.guard.x18 expires in ftCo_80093BC0, x221C_b2 is cleared in the
+          // same GuardReflect_Anim callback pass.
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80093BC0
+          enum { MSL_STATE_FLAGS_221C_INDEX = 3 };
+          enum { MSL_STATE_FLAG_221C_POWERSHIELD_ACTIVE = 0x20 };
+          const size_t flags_i = idx * (size_t)MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_221C_INDEX;
+          batch->state.state_flags[flags_i] &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221C_POWERSHIELD_ACTIVE;
+        }
       }
     }
   } else {
@@ -694,6 +703,7 @@ void guard_update_grounded(MslBatch* batch, const MslCommonParams* c, size_t idx
   if (a0 == MSL_ACT_GUARD_ON || a0 == MSL_ACT_GUARD || a0 == MSL_ACT_GUARD_REFLECT) {
     batch->state.animation_index[idx] = 0xFFFFFFFFu;
     const uint8_t can_update = (batch->state.hitlag_started_frame[idx] == 0) ? 1 : 0;
+
     if (can_update) {
       // Powershield / GuardReflect entry (while guarding).
       //
@@ -743,6 +753,21 @@ void guard_update_grounded(MslBatch* batch, const MslCommonParams* c, size_t idx
       // Decomp: Guard IASA exits to GuardOff only once (xC && x10==0).
       // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{inlineC0,ftCo_GuardOn_IASA,ftCo_Guard_IASA}
       if (batch->state.guard_release_latched_xc[idx] && x10_pre == 0) {
+        if (a0 == (uint16_t)MSL_ACT_GUARD_ON) {
+          // Seed-snapshot bridge for GuardOn no-submotion rows:
+          // - GALE01 ordering is GuardOn_Anim then GuardOn_IASA.
+          // - On snapshot-shaped GuardOn seeds (animation_index=-1, state_age=-1), this can appear
+          //   as GuardOn -> Guard -> GuardOff in one frame when release gate fires, consuming two
+          //   motion-state entry bundles before the final GuardOff output.
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_GuardOn_Anim,ftCo_GuardOn_IASA,ftCo_800928CC,ftCo_80092C54}
+          const uint8_t guard_no_submotion_snapshot = (batch->state.animation_index[idx] == 0xFFFFFFFFu &&
+                                                       batch->state.anim_frame_f32[idx] < 0.0f)
+                                                          ? 1u
+                                                          : 0u;
+          if (guard_no_submotion_snapshot && guard_x10_seed == 0) {
+            enter_guard_hold(batch, idx);
+          }
+        }
         if (a0 == (uint16_t)MSL_ACT_GUARD_REFLECT) {
           batch->state.guard_reflect_timer_x14[idx] = 0;
           batch->state.guard_reflect_timer_x18[idx] = 0;
@@ -778,10 +803,30 @@ void guard_update_grounded(MslBatch* batch, const MslCommonParams* c, size_t idx
                                                     : 0u;
     const uint8_t guard_reflect_window_expired =
         (batch->state.guard_reflect_timer_x14[idx] == 0u) ? 1u : 0u;
-    if (batch->state.hitlag_started_frame[idx] == 0 && guard_no_submotion_snapshot && shield_held &&
-        guard_x10_seed == 0 &&
-        (a0 == (uint16_t)MSL_ACT_GUARD_ON ||
-         (a0 == (uint16_t)MSL_ACT_GUARD_REFLECT && guard_reflect_window_expired))) {
+    // Snapshot bridge (GuardReflect negative lane):
+    // - Replay snapshots can land on GuardReflect with no submotion (anim=-1) and action_frame<=-2.
+    // - In this lane, reflect timers can already be expired while mv.co.guard.x10 still reflects a
+    //   stale release-lockout seed, and GALE01 callback ordering at this boundary can advance to
+    //   Guard before the next "normal" x10 gate observation.
+    // - Keep the usual x10 gate for GuardOn and GuardReflect's normal lane; only bypass x10 for
+    //   GuardReflect no-submotion rows at action_frame<=-2 with expired reflect timer.
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_GuardReflect_Anim,ftCo_GuardOn_Anim,ftCo_800928CC}
+    const uint8_t guard_reflect_snapshot_neg_lane =
+        (a0 == (uint16_t)MSL_ACT_GUARD_REFLECT && batch->state.action_frame[idx] <= -2 &&
+         batch->state.guard_reflect_timer_x14[idx] == 0u &&
+         batch->state.guard_reflect_timer_x18[idx] == 0u)
+            ? 1u
+            : 0u;
+    const uint8_t guard_reflect_snapshot_neg_lane_x10_one =
+        (guard_reflect_snapshot_neg_lane && guard_x10_seed == 1u) ? 1u : 0u;
+    const uint8_t guard_snapshot_hold_fallback =
+        (guard_no_submotion_snapshot && shield_held &&
+         ((a0 == (uint16_t)MSL_ACT_GUARD_ON && guard_x10_seed == 0) ||
+          (a0 == (uint16_t)MSL_ACT_GUARD_REFLECT && guard_reflect_window_expired &&
+           (guard_x10_seed == 0 || guard_reflect_snapshot_neg_lane_x10_one))))
+            ? 1u
+            : 0u;
+    if (batch->state.hitlag_started_frame[idx] == 0 && guard_snapshot_hold_fallback) {
       enter_guard_hold(batch, idx);
       return;
     }

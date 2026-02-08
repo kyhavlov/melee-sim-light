@@ -171,18 +171,18 @@ static inline uint8_t combat_is_powershield_active(const MslBatch* batch, size_t
   enum { MSL_STATE_FLAG_221C_POWERSHIELD_ACTIVE = 0x20 };
   const uint8_t flags_221c =
       batch->state.state_flags[idx * MSL_STATE_FLAGS_STRIDE + (size_t)MSL_STATE_FLAGS_221C_INDEX];
-  if (flags_221c & (uint8_t)MSL_STATE_FLAG_221C_POWERSHIELD_ACTIVE) {
-    return 1u;
+  if (batch->state.action_id[idx] == (uint16_t)MSL_ACT_GUARD_REFLECT) {
+    // GuardReflect timer ownership (decomp):
+    // - ftCo_80093BC0 decrements mv.co.guard.x18 and clears x221C_b2 when the timer expires.
+    // - This sim stores x18 with +1 bias and ticks it in GuardReflect_Anim pre-input; x18==0 means
+    //   the powershield-active lane has expired for the current frame.
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80093BC0
+    //
+    // Use action-owned x18 as source of truth in GuardReflect, so stale seeded 0x221C bits do not
+    // keep collision in powershield-active mode after the timer has reached 0.
+    return (batch->state.guard_reflect_timer_x18[idx] != 0u) ? 1u : 0u;
   }
-
-  // Fallback for reduced-hidden-state slices: when GuardReflect timer is still active in an
-  // explicitly GuardReflect state, keep collision gating aligned even if the seeded bit is absent.
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80093BC0
-  if (batch->state.action_id[idx] == (uint16_t)MSL_ACT_GUARD_REFLECT &&
-      batch->state.guard_reflect_timer_x18[idx] != 0) {
-    return 1u;
-  }
-  return 0u;
+  return (flags_221c & (uint8_t)MSL_STATE_FLAG_221C_POWERSHIELD_ACTIVE) ? 1u : 0u;
 }
 
 // Combo / last-attack tracking (decomp-first).
