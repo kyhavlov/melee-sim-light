@@ -39,8 +39,13 @@ static inline uint8_t hurtboxes_guard_fallback_submotion(uint16_t action_id, uin
       *out_msid = (uint16_t)MSL_SM_GUARD_DAMAGE;
       return 1u;
     case MSL_ACT_GUARD_REFLECT:
-      *out_msid = (uint16_t)MSL_SM_GUARD_ON;
-      return 1u;
+      // No-submotion GuardReflect snapshots are ordering-sensitive with shield descriptor ownership
+      // (x221B_b0 / ftColl_8007B1B8) and can spuriously admit BODY contacts when we synthesize a
+      // GuardOn timeline from action_id alone. Keep GuardReflect on raw snapshot geometry unless
+      // a decomp-backed seed for this phase is promoted.
+      // refs/melee/src/melee/ft/ftcoll.c::ftColl_8007B1B8
+      // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
+      return 0u;
     default:
       return 0u;
   }

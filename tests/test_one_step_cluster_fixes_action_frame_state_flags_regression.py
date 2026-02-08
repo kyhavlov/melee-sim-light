@@ -430,6 +430,134 @@ def test_catchpull_connect_with_guard_no_submotion_victim() -> None:
 
 
 @pytest.mark.integration
+def test_guardreflect_no_submotion_seed_eq_ref_stays_stable_gat_1289() -> None:
+    # Seed==ref lock (GAT rec 1289 p0): GuardReflect no-submotion snapshot must not synthesize a
+    # BODY hit that flips into Damage and introduces new action_id/hitlag/hitstun mismatches.
+    #
+    # Slippi no-submotion snapshot source:
+    # refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
+    # Shield descriptor ownership:
+    # refs/melee/src/melee/ft/ftcoll.c::ftColl_8007B1B8
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_rel = (
+        "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
+        "cardinal_1.0_recent/GracefulAttachedTurtle.msl"
+    )
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+    record = 1289
+    p = 0
+    assert int(samples.shape[0]) > record, f"dataset too short: num_records={int(samples.shape[0])}"
+    row = samples[record : record + 1]
+
+    assert int(row["seed_t"]["action_id"][0, p]) == 182  # GuardReflect
+    assert int(row["ref_t1"]["action_id"][0, p]) == 182
+    assert int(row["seed_t"]["animation_index"][0, p]) == 0xFFFFFFFF
+    assert int(row["ref_t1"]["animation_index"][0, p]) == 0xFFFFFFFF
+    assert int(row["seed_t"]["hitlag"][0, p]) == 0
+    assert int(row["ref_t1"]["hitlag"][0, p]) == 0
+    assert int(row["seed_t"]["hitstun"][0, p]) == 0
+    assert int(row["ref_t1"]["hitstun"][0, p]) == 0
+
+    binding = pytest.importorskip("msl_binding")
+    sizes = binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    compare_stride = int(sizes["compare"])
+
+    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    try:
+        seed_bytes = np.empty((1, seed_stride), dtype=np.uint8)
+        prev_input_bytes = np.empty((1, input_stride), dtype=np.uint8)
+        input_bytes = np.empty((1, input_stride), dtype=np.uint8)
+        out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
+
+        seed_bytes[:] = np.frombuffer(row["seed_t"].tobytes(order="C"), dtype=np.uint8).reshape(1, seed_stride)
+        prev_input_bytes[:] = np.frombuffer(row["prev_input_t"].tobytes(order="C"), dtype=np.uint8).reshape(
+            1, input_stride
+        )
+        input_bytes[:] = np.frombuffer(row["input_t"].tobytes(order="C"), dtype=np.uint8).reshape(
+            1, input_stride
+        )
+
+        binding.reseed_seed(handle, seed_bytes)
+        binding.step_input(handle, prev_input_bytes, input_bytes)
+        binding.write_compare(handle, out_compare_bytes)
+
+        out = out_compare_bytes.view(COMPARE_DTYPE).reshape(-1)
+        assert int(out["action_id"][0, p]) == int(row["ref_t1"]["action_id"][0, p])
+        assert int(out["hitlag"][0, p]) == int(row["ref_t1"]["hitlag"][0, p])
+        assert int(out["hitstun"][0, p]) == int(row["ref_t1"]["hitstun"][0, p])
+        assert int(out["animation_index"][0, p]) == int(row["ref_t1"]["animation_index"][0, p])
+    finally:
+        binding.destroy(handle)
+
+
+@pytest.mark.integration
+def test_guardreflect_no_submotion_no_new_hitstun_tbk_3610() -> None:
+    # Seed==ref lock (TBK rec 3610 p1): this row should not gain a new hitstun mismatch from a
+    # synthesized GuardReflect no-submotion BODY contact.
+    #
+    # Note: action_id/hitlag here are pre-existing non-seed==ref mismatches in the branch base.
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_rel = (
+        "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
+        "cardinal_1.0_recent/TreasuredBackKangaroo.msl"
+    )
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+    record = 3610
+    p = 1
+    assert int(samples.shape[0]) > record, f"dataset too short: num_records={int(samples.shape[0])}"
+    row = samples[record : record + 1]
+
+    assert int(row["seed_t"]["action_id"][0, p]) == 182  # GuardReflect
+    assert int(row["seed_t"]["animation_index"][0, p]) == 0xFFFFFFFF
+    assert int(row["seed_t"]["hitstun"][0, p]) == 0
+    assert int(row["ref_t1"]["hitstun"][0, p]) == 0
+
+    binding = pytest.importorskip("msl_binding")
+    sizes = binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    compare_stride = int(sizes["compare"])
+
+    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    try:
+        seed_bytes = np.empty((1, seed_stride), dtype=np.uint8)
+        prev_input_bytes = np.empty((1, input_stride), dtype=np.uint8)
+        input_bytes = np.empty((1, input_stride), dtype=np.uint8)
+        out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
+
+        seed_bytes[:] = np.frombuffer(row["seed_t"].tobytes(order="C"), dtype=np.uint8).reshape(1, seed_stride)
+        prev_input_bytes[:] = np.frombuffer(row["prev_input_t"].tobytes(order="C"), dtype=np.uint8).reshape(
+            1, input_stride
+        )
+        input_bytes[:] = np.frombuffer(row["input_t"].tobytes(order="C"), dtype=np.uint8).reshape(
+            1, input_stride
+        )
+
+        binding.reseed_seed(handle, seed_bytes)
+        binding.step_input(handle, prev_input_bytes, input_bytes)
+        binding.write_compare(handle, out_compare_bytes)
+
+        out = out_compare_bytes.view(COMPARE_DTYPE).reshape(-1)
+        assert int(out["hitstun"][0, p]) == int(row["ref_t1"]["hitstun"][0, p])
+    finally:
+        binding.destroy(handle)
+
+
+@pytest.mark.integration
 def test_state_flags_x221b_b5_clears_after_throw_release() -> None:
     # Cluster lock: fp->x221B_b5 (state_flags[2] bit 0x04) clears when throw release drops
     # victim_gobj ownership.
