@@ -771,7 +771,9 @@ static inline void combat_damage_enter_state(const MslCommonParams* c, MslBatch*
   // Decomp: ftCo_8008DCE0 clears mv.co.damage.x14 on damage entry.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
   batch->state.damage_jump_buffer_x14[d_idx] = 0;
-  msl_anim_timebase_enter(batch, d_idx, 0.0f, 1.0f);
+  // Decomp: ftCo_8008DCE0 performs Fighter_ChangeMotionState then immediate ftAnim_8006EBA4.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
+  msl_anim_timebase_enter_with_policy(batch, d_idx, 0.0f, 1.0f, MSL_ANIM_ENTER_TICK_IMMEDIATE);
 }
 
 static inline void combat_mutations_pass1_future_apply_body_hit_invincible(
@@ -1550,6 +1552,16 @@ uint8_t combat_apply_throw_hit(MslBatch* batch, int batch_index, int attacker, i
   const uint8_t hurt_height = 1u;
   combat_damage_enter_state(c, batch, d_idx, defender_on_ground, defender_on_ground, hurt_height,
                             kb_applied, kb_angle_rad);
+  // Throw-release ordering: ftCo_800DDDE4 populates dmg fields, then Fighter_ProcessHit enters the
+  // Damage* state (ftCo_8008DCE0 does immediate ftAnim_8006EBA4), and the frame still runs the
+  // normal Fighter_8006A360 anim step afterward under !hitlag.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DDDE4
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
+  // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
+  //
+  // Sim mapping: schedule one post-combat deferred tick in addition to damage-entry immediate tick
+  // so throw-release damage entries land on the same first steady-frame action_frame as Slippi.
+  msl_anim_timebase_defer_tick_once(batch, d_idx);
 
   batch->state.instance_hit_by[d_idx] = batch->state.instance_id[a_idx];
   batch->state.last_hit_by[d_idx] = (uint8_t)attacker;
