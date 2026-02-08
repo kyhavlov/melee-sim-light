@@ -427,8 +427,9 @@ def _main_impl(args) -> None:
         compute_fighter_button_timers,
         compute_fighter_stick_input_counters,
         compute_fighter_trigger_input_counters,
-        compute_press_timer_u8,
+        compute_lr_press_timer_x67f,
         derive_instance_id_x2073,
+        derive_colanim_internals,
         derive_downwait_timer,
         derive_damage_jump_buffer_x14,
         derive_grab_owner_port_2p,
@@ -624,6 +625,12 @@ def _main_impl(args) -> None:
     act_guard = 0x00B3
     act_guard_set_off = 0x00B5
     act_guard_reflect = 0x00B6
+    act_throw_f = 0x00DB
+    act_throw_b = 0x00DC
+    act_throw_hi = 0x00DD
+    act_throw_lw = 0x00DE
+    act_cliff_catch = 0x00FC
+    act_cliff_wait = 0x00FD
     act_down_bound_u = 0x00B7
     act_down_wait_u = 0x00B8
     act_down_bound_d = 0x00BF
@@ -631,6 +638,7 @@ def _main_impl(args) -> None:
     act_escape_air = 0x00EC
     button_mask_xy = 0x0400 | 0x0800  # HSD_PAD_XY / src/buttons.h::MSL_BUTTON_XY
     button_mask_lr = 0x0040 | 0x0020  # HSD_PAD_L|HSD_PAD_R / src/buttons.h::MSL_BUTTON_{L,R}
+    button_mask_z = 0x0010  # HSD_PAD_Z / src/buttons.h::MSL_BUTTON_Z
     button_mask_a = 0x0100  # HSD_PAD_A / src/buttons.h::MSL_BUTTON_A
     button_mask_b = 0x0200  # HSD_PAD_B / src/buttons.h::MSL_BUTTON_B
     button_mask_dpad_up = 0x0008  # HSD_PAD_DPADUP / refs/melee/src/common_structs.h
@@ -857,6 +865,36 @@ def _main_impl(args) -> None:
         samples["ref_t1"]["l_cancel"][:, slot] = l_cancel[1:]
         samples["seed_t"]["hurtbox_state"][:, slot] = hurtbox_state[:-1]
         samples["ref_t1"]["hurtbox_state"][:, slot] = hurtbox_state[1:]
+        colanim_x198c, colanim_x1990, colanim_x1994, colanim_x2221_b0 = derive_colanim_internals(
+            action_id_u16=post_state,
+            action_frame_i16=post_state_age,
+            hitlag_u16=post_hitlag,
+            hitstun_u16=post_hitstun,
+            hurtbox_state_u8=hurtbox_state,
+            colanim_throw_x1994_frames=int(common["colanim_throw_x1994_frames"]),
+            colanim_cliff_x1990_frames=int(common["colanim_cliff_x1990_frames"]),
+            colanim_damage_x1994_frames=int(common["colanim_damage_x1994_frames"]),
+            throw_actions=(act_throw_f, act_throw_b, act_throw_hi, act_throw_lw),
+            cliff_actions=(act_cliff_catch, act_cliff_wait),
+            damage_actions=(
+                act_damage_hi_1,
+                act_damage_hi_2,
+                act_damage_hi_3,
+                act_damage_n_1,
+                act_damage_n_2,
+                act_damage_n_3,
+                act_damage_lw_1,
+                act_damage_lw_2,
+                act_damage_lw_3,
+                act_damage_air_1,
+                act_damage_air_2,
+                act_damage_air_3,
+            ),
+        )
+        samples["seed_t"]["colanim_hit_status_x198c"][:, slot] = colanim_x198c[:-1]
+        samples["seed_t"]["colanim_lock_x2221_b0"][:, slot] = colanim_x2221_b0[:-1]
+        samples["seed_t"]["colanim_timer_x1990"][:, slot] = colanim_x1990[:-1]
+        samples["seed_t"]["colanim_timer_x1994"][:, slot] = colanim_x1994[:-1]
         samples["seed_t"]["ground_id"][:, slot] = ground_id[:-1]
         samples["ref_t1"]["ground_id"][:, slot] = ground_id[1:]
         samples["seed_t"]["animation_index"][:, slot] = animation_index[:-1]
@@ -950,10 +988,18 @@ def _main_impl(args) -> None:
         samples["seed_t"]["guard_x10"][:, slot] = guard_x10[:-1]
         samples["seed_t"]["lightshield_amount"][:, slot] = lightshield_amount[:-1]
 
-        # x67F input-history timer ("frames since last L/R press"). Decomp: refs/melee/src/melee/ft/fighter.c:2078-2086.
-        lr_press_timer = compute_press_timer_u8(
-            buttons_pressed=buttons_pressed,
-            press_mask=button_mask_lr,
+        # x67F input-history timer:
+        # - resets on x668 LR-lane edge (digital LR, trigger lane, Z-mapped LR lane),
+        # - otherwise increments and saturates at 0xFF.
+        # refs/melee/src/melee/ft/fighter.c:1868-1890
+        # refs/melee/src/melee/ft/fighter.c:2078-2086
+        lr_press_timer = compute_lr_press_timer_x67f(
+            buttons=pre_buttons_physical,
+            trigger_unit=trigger_unit,
+            hitlag_frames=post_hitlag,
+            trigger_deadzone=float(common["trigger_deadzone"]),
+            button_mask_lr=button_mask_lr,
+            button_mask_z=button_mask_z,
             start_timer=0xFF,
         )
 

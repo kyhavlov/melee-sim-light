@@ -40,11 +40,10 @@ static inline uint8_t tilt_timer_update(uint8_t prev_timer, float axis, float pr
   return (uint8_t)t;
 }
 
-static inline uint8_t press_timer_u8_update(uint8_t prev_timer, uint16_t buttons_pressed,
-                                            uint16_t press_mask) {
+static inline uint8_t press_timer_u8_update_edge(uint8_t prev_timer, uint8_t pressed_now) {
   // Decomp example (x67F): refs/melee/src/melee/ft/fighter.c:2078-2086.
   uint16_t t = (uint16_t)prev_timer;
-  if ((buttons_pressed & press_mask) != 0) {
+  if (pressed_now) {
     t = 0;
   } else if (t < 0xFFu) {
     t++;
@@ -307,11 +306,30 @@ int input_apply(MslBatch* batch, const uint8_t* prev_input_bytes, size_t prev_in
         LR = (uint16_t)MSL_BUTTON_L | (uint16_t)MSL_BUTTON_R,
       };
 
-      batch->state.lr_press_timer[idx] = press_timer_u8_update(
-          batch->state.lr_press_timer[idx], batch->state.input_buttons_pressed[idx], LR);
-
       const float trig = trigger_unit_from_input(cur_buttons, cur->p[p].l, cur->p[p].r);
       const float prev_trig = trigger_unit_from_input(prev_buttons, prev->p[p].l, prev->p[p].r);
+      // Decomp x67F tie-down:
+      // - fp->x67F updates from `fp->input.x668 & HSD_PAD_LR` (edge mask), not held bits directly.
+      // - x668 edges are built from held-input lanes that include digital L/R, trigger lane, and
+      //   Z-mapped LR lane.
+      // refs/melee/src/melee/ft/fighter.c::{Fighter_Spaghetti_8006AD10_Inner1}
+      // refs/melee/src/melee/ft/fighter.c:1868-1890
+      // refs/melee/src/melee/ft/fighter.c:2078-2086
+      const uint8_t held_lr_lane_now =
+          (((cur_buttons & (uint16_t)(MSL_BUTTON_L | MSL_BUTTON_R | MSL_BUTTON_Z)) != 0u) ||
+           (trig > com->trigger_deadzone))
+              ? 1u
+              : 0u;
+      const uint8_t held_lr_lane_prev =
+          (((prev_buttons & (uint16_t)(MSL_BUTTON_L | MSL_BUTTON_R | MSL_BUTTON_Z)) != 0u) ||
+           (prev_trig > com->trigger_deadzone))
+              ? 1u
+              : 0u;
+      const uint8_t pressed_lr_lane =
+          (held_lr_lane_now != 0u && held_lr_lane_prev == 0u) ? 1u : 0u;
+      batch->state.lr_press_timer[idx] =
+          press_timer_u8_update_edge(batch->state.lr_press_timer[idx], pressed_lr_lane);
+
       batch->state.x672_input_timer[idx] =
           x672_trigger_timer_update(batch->state.x672_input_timer[idx], trig, prev_trig,
                                     com->powershield_reflect_trigger_min);

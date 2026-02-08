@@ -107,8 +107,11 @@ typedef struct MslCommonParams {
   // Decomp:
   // - refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DD398 (ftColl_8007B7A4(..., x348))
   // - refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffWait.c::ftCo_8009A77C (ftColl_8007B760(..., x49C))
+  // - refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_OnExitHitlag
+  //   (ftColl_8007B7A4(..., x130))
   uint16_t colanim_throw_x1994_frames;  // p_ftCommonData->x348
   uint16_t colanim_cliff_x1990_frames;  // p_ftCommonData->x49C
+  uint16_t colanim_damage_x1994_frames; // p_ftCommonData->x130
 
   // Offscreen death / match-flow (ft_0D31.c / ft_0C31.c).
   // Decomp pointers:

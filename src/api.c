@@ -22,6 +22,7 @@
 #include "hitboxes_tables.h"
 #include "hitlist.h"
 #include "hit_status_tables.h"
+#include "airborne_state_events_tables.h"
 #include "state_flags_221c_y_tables.h"
 #include "hitboxes.h"
 #include "hurtbox_modes_tables.h"
@@ -210,6 +211,8 @@ MslBatch* msl_batch_create(int batch_size, int num_players) {
   // Optional timeline table (x221C_u16_y opcode-52 lane): missing artifacts should not prevent
   // running.
   (void)state_flags_221c_y_tables_init();
+  // Optional movescript opcode-25 table (set_airborne_state timeline).
+  (void)airborne_state_events_tables_init();
 
   return batch;
 }
@@ -483,6 +486,19 @@ int msl_batch_reseed_seed(MslBatch* batch, const uint8_t* seed_bytes, size_t see
         }
         if (seed_x1988 != 0u && seed_hurtbox_state == seed_x1988) {
           batch->state.colanim_hit_status_x198c[idx] = 0u;
+        }
+        // Narrow seed-bridge for x198C=2 timer ownership:
+        // - Slippi exposes merged hurtbox_state but not x1990 remaining.
+        // - When x1988 is absent and replay history derivation provides a nonzero x1990 hint
+        //   (with no x1994/x2221 ownership), seed x1990 so Fighter_8006A360 timer decay can
+        //   clear x198C on the correct frame.
+        // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
+        // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
+        if (seed->hitlag[p] == 0u && seed->hitstun[p] == 0u &&
+            seed->colanim_hit_status_x198c[p] == 2u && seed->colanim_timer_x1990[p] != 0u &&
+            seed->colanim_timer_x1994[p] == 0u && seed->colanim_lock_x2221_b0[p] == 0u) {
+          batch->state.colanim_timer_x1990[idx] = seed->colanim_timer_x1990[p];
+          batch->state.colanim_hit_status_x198c[idx] = 2u;
         }
       }
       if (common != NULL) {

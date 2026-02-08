@@ -3,9 +3,12 @@
 #include <math.h>
 
 #include "action_ids.h"
+#include "airborne_state_events_tables.h"
+#include "anim_frame.h"
 #include "anim_timebase.h"
 #include "anim_table.h"
 #include "buttons.h"
+#include "char_params.h"
 #include "input_axis.h"
 #include "locomotion.h"
 #include "trigger_input.h"
@@ -896,6 +899,54 @@ void action_update_anim_callbacks_pre_input(MslBatch* batch) {
   for (int bi = 0; bi < batch->batch_size; bi++) {
     for (int p = 0; p < num_players; p++) {
       const size_t idx = msl_idx_player(bi, p);
+      {
+        const uint32_t anim_u32 = batch->state.animation_index[idx];
+        if (anim_u32 <= 0xFFFFu) {
+          const uint16_t msid = (uint16_t)anim_u32;
+          const uint16_t frame = msl_anim_frame_floor_u16(
+              msl_anim_frame_sanitize_f32(batch->state.anim_frame_f32[idx]));
+          uint8_t air_state = 0xFFu;
+          if (airborne_state_event_get(batch->state.char_id[idx], msid, frame, &air_state) == 0) {
+            const MslCharParams* ch = msl_char_params(batch->state.char_id[idx]);
+            const uint8_t max_jumps = (ch != NULL) ? ch->max_jumps : batch->state.jumps_left[idx];
+            // Movescript opcode 25 (ftAction_80071998) dispatch:
+            // state=0 -> ftCommon_8007D7FC (air->ground common helper)
+            // state=1 -> ftCommon_8007D5D4 (ground->air common helper)
+            // state=2 -> ftCommon_8007D60C (ground->air alt helper)
+            // refs/melee/src/melee/ft/ftaction.c::ftAction_80071998
+            // refs/melee/src/melee/ft/ftcommon.c::{ftCommon_8007D7FC,ftCommon_8007D5D4,ftCommon_8007D60C}
+            if (air_state == 0u) {
+              float gr = batch->state.speed_air_x_self[idx];
+              if (ch != NULL) {
+                const float gmax = ch->ground_max_horizontal_velocity;
+                if (gr > gmax) {
+                  gr = gmax;
+                } else if (gr < -gmax) {
+                  gr = -gmax;
+                }
+              }
+              batch->state.on_ground[idx] = 1u;
+              batch->state.speed_ground_x_self[idx] = gr;
+              batch->state.speed_air_x_self[idx] = 0.0f;
+              batch->state.jumps_left[idx] = max_jumps;
+              batch->state.ecb_lock_timer[idx] = 0u;
+            } else if (air_state == 1u) {
+              batch->state.on_ground[idx] = 0u;
+              batch->state.speed_air_x_self[idx] = batch->state.speed_ground_x_self[idx];
+              batch->state.speed_ground_x_self[idx] = 0.0f;
+              batch->state.jumps_left[idx] =
+                  (max_jumps > 0u) ? (uint8_t)(max_jumps - 1u) : 0u;
+              batch->state.ecb_lock_timer[idx] = 10u;
+            } else if (air_state == 2u) {
+              batch->state.on_ground[idx] = 0u;
+              batch->state.speed_air_x_self[idx] = batch->state.speed_ground_x_self[idx];
+              batch->state.speed_ground_x_self[idx] = 0.0f;
+              batch->state.jumps_left[idx] = 0u;
+              batch->state.ecb_lock_timer[idx] = 5u;
+            }
+          }
+        }
+      }
       guard_update_grounded_anim_callback_pre_input(batch, idx);
     }
   }

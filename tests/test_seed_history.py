@@ -10,10 +10,12 @@ from tools.slippi.seed_history import (
     compute_fighter_button_timers,
     compute_fighter_stick_input_counters,
     compute_fighter_trigger_input_counters,
+    compute_lr_press_timer_x67f,
     compute_press_timer_u8,
     compute_tilt_timer_axis,
     compute_tilt_timer_y_pre_post_with_fall_fast,
     compute_x672_trigger_timer_pre_post,
+    derive_colanim_internals,
     derive_guard_reflect_timer_x14,
     derive_guard_reflect_timer_x18,
     derive_guard_release_lockout_and_lightshield,
@@ -523,6 +525,158 @@ def test_press_timer_u8_is_causal_wrt_future_frames() -> None:
     bp_ext = np.concatenate([bp_prefix, np.array([0, 0, mask_lr, 0], dtype=np.uint16)])
     t1 = compute_press_timer_u8(buttons_pressed=bp_ext, press_mask=mask_lr, start_timer=0xFF)
     assert np.array_equal(t0, t1[: t0.size])
+
+
+def test_lr_press_timer_x67f_is_causal_wrt_future_frames() -> None:
+    # Decomp lane for x67F uses held LR/Z and trigger deadzone edge, not only digital LR.
+    # refs/melee/src/melee/ft/fighter.c:1868-1890
+    # refs/melee/src/melee/ft/fighter.c:2078-2086
+    mask_lr = 0x0040 | 0x0020
+    mask_z = 0x0010
+    dz = 0.3
+
+    b_prefix = np.array([0, 0, 0, mask_z, mask_z, 0], dtype=np.uint16)
+    trig_prefix = np.array([0.0, 0.5, 0.5, 0.5, 0.1, 0.1], dtype=np.float32)
+    t0 = compute_lr_press_timer_x67f(
+        buttons=b_prefix,
+        trigger_unit=trig_prefix,
+        trigger_deadzone=dz,
+        button_mask_lr=mask_lr,
+        button_mask_z=mask_z,
+        start_timer=0xFF,
+    )
+    assert t0.tolist() == [0xFF, 0, 1, 2, 3, 4]
+
+    b_ext = np.concatenate([b_prefix, np.array([0, 0, mask_lr], dtype=np.uint16)])
+    trig_ext = np.concatenate([trig_prefix, np.array([0.0, 0.0, 1.0], dtype=np.float32)])
+    t1 = compute_lr_press_timer_x67f(
+        buttons=b_ext,
+        trigger_unit=trig_ext,
+        trigger_deadzone=dz,
+        button_mask_lr=mask_lr,
+        button_mask_z=mask_z,
+        start_timer=0xFF,
+    )
+    assert np.array_equal(t0, t1[: t0.size])
+
+
+def test_lr_press_timer_x67f_latches_lr_edge_during_hitlag() -> None:
+    # Decomp: when x2219_b5 is set, Fighter_Spaghetti OR-latches x668 edges (`x668 |= edge`).
+    # For x67F this means an LR edge persists for the whole hitlag window.
+    # refs/melee/src/melee/ft/fighter.c::{Fighter_Spaghetti_8006AD10_Inner1}
+    # refs/melee/src/melee/ft/fighter.c:2078-2086
+    mask_lr = 0x0040 | 0x0020
+    mask_z = 0x0010
+    dz = 0.3
+
+    buttons = np.array([0, mask_lr, mask_lr, mask_lr, mask_lr, mask_lr], dtype=np.uint16)
+    trigger = np.zeros(buttons.size, dtype=np.float32)
+    # Enter hitlag on frame 1 and remain there through frame 3.
+    hitlag = np.array([0, 3, 2, 1, 0, 0], dtype=np.uint16)
+    out = compute_lr_press_timer_x67f(
+        buttons=buttons,
+        trigger_unit=trigger,
+        hitlag_frames=hitlag,
+        trigger_deadzone=dz,
+        button_mask_lr=mask_lr,
+        button_mask_z=mask_z,
+        start_timer=0xFF,
+    )
+
+    # Frame 1 edge resets to 0; hitlag keeps the LR edge latched so timer stays 0 until hitlag ends.
+    assert out.tolist() == [0xFF, 0, 0, 0, 1, 2]
+
+
+def test_derive_colanim_internals_damage_exit_throw_and_cliff_entry() -> None:
+    # Decomp anchors:
+    # - ftCo_Damage_OnExitHitlag sets x1994 from p_ftCommonData->x130.
+    # - Throw entry sets x1994 via ftColl_8007B7A4.
+    # - CliffWait entry sets x1990 via ftColl_8007B760.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_OnExitHitlag
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DD398
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffWait.c::ftCo_8009A77C
+    act_wait = 0x000E
+    act_damage_n1 = 0x004E
+    act_throw_f = 0x00DB
+    act_cliff_wait = 0x00FD
+
+    action = np.array(
+        [act_wait, act_damage_n1, act_damage_n1, act_damage_n1, act_wait, act_throw_f, act_throw_f, act_cliff_wait],
+        dtype=np.uint16,
+    )
+    action_frame = np.array([1, 1, 2, 3, 1, 1, 2, 1], dtype=np.int16)
+    hitlag = np.array([0, 3, 2, 0, 0, 0, 0, 0], dtype=np.uint16)
+    hitstun = np.array([0, 5, 4, 3, 0, 0, 0, 0], dtype=np.uint16)
+    hurt = np.zeros(action.size, dtype=np.uint8)
+
+    x198c, x1990, x1994, x2221 = derive_colanim_internals(
+        action_id_u16=action,
+        action_frame_i16=action_frame,
+        hitlag_u16=hitlag,
+        hitstun_u16=hitstun,
+        hurtbox_state_u8=hurt,
+        colanim_throw_x1994_frames=8,
+        colanim_cliff_x1990_frames=30,
+        colanim_damage_x1994_frames=5,
+        throw_actions=(act_throw_f,),
+        cliff_actions=(act_cliff_wait,),
+        damage_actions=(act_damage_n1,),
+    )
+
+    assert x1994.tolist() == [0, 0, 0, 5, 4, 8, 7, 6]
+    assert x1990.tolist() == [0, 0, 0, 0, 0, 0, 0, 30]
+    assert x198c.tolist() == [0, 0, 0, 1, 1, 1, 1, 2]
+    assert x2221.tolist() == [0] * action.size
+
+
+def test_derive_colanim_internals_is_causal_wrt_future_frames() -> None:
+    act_wait = 0x000E
+    act_damage_n1 = 0x004E
+    act_throw_f = 0x00DB
+    act_cliff_wait = 0x00FD
+
+    a0 = np.array([act_wait, act_damage_n1, act_damage_n1, act_damage_n1, act_wait, act_throw_f], dtype=np.uint16)
+    af0 = np.array([1, 1, 2, 3, 1, 1], dtype=np.int16)
+    hl0 = np.array([0, 3, 2, 0, 0, 0], dtype=np.uint16)
+    hs0 = np.array([0, 5, 4, 3, 0, 0], dtype=np.uint16)
+    hb0 = np.zeros(a0.size, dtype=np.uint8)
+
+    out0 = derive_colanim_internals(
+        action_id_u16=a0,
+        action_frame_i16=af0,
+        hitlag_u16=hl0,
+        hitstun_u16=hs0,
+        hurtbox_state_u8=hb0,
+        colanim_throw_x1994_frames=8,
+        colanim_cliff_x1990_frames=30,
+        colanim_damage_x1994_frames=5,
+        throw_actions=(act_throw_f,),
+        cliff_actions=(act_cliff_wait,),
+        damage_actions=(act_damage_n1,),
+    )
+
+    a1 = np.concatenate([a0, np.array([act_throw_f, act_cliff_wait, act_cliff_wait, act_wait], dtype=np.uint16)])
+    af1 = np.concatenate([af0, np.array([2, 1, 2, 1], dtype=np.int16)])
+    hl1 = np.concatenate([hl0, np.array([0, 0, 0, 0], dtype=np.uint16)])
+    hs1 = np.concatenate([hs0, np.array([0, 0, 0, 0], dtype=np.uint16)])
+    hb1 = np.concatenate([hb0, np.zeros(4, dtype=np.uint8)])
+
+    out1 = derive_colanim_internals(
+        action_id_u16=a1,
+        action_frame_i16=af1,
+        hitlag_u16=hl1,
+        hitstun_u16=hs1,
+        hurtbox_state_u8=hb1,
+        colanim_throw_x1994_frames=8,
+        colanim_cliff_x1990_frames=30,
+        colanim_damage_x1994_frames=5,
+        throw_actions=(act_throw_f,),
+        cliff_actions=(act_cliff_wait,),
+        damage_actions=(act_damage_n1,),
+    )
+
+    for x0, x1 in zip(out0, out1):
+        assert np.array_equal(x0, x1[: x0.size])
 
 
 def test_x672_trigger_timer_is_causal_wrt_future_frames() -> None:

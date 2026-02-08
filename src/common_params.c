@@ -242,7 +242,9 @@ int common_params_init(void) {
           0 ||
       json_get_u16(buf, "ledge_cooldown_frames", &g_params.ledge_cooldown_frames) != 0 ||
       json_get_u16(buf, "colanim_throw_x1994_frames", &g_params.colanim_throw_x1994_frames) != 0 ||
-      json_get_u16(buf, "colanim_cliff_x1990_frames", &g_params.colanim_cliff_x1990_frames) != 0) {
+      json_get_u16(buf, "colanim_cliff_x1990_frames", &g_params.colanim_cliff_x1990_frames) != 0 ||
+      json_get_u16(buf, "colanim_damage_x1994_frames", &g_params.colanim_damage_x1994_frames) !=
+          0) {
     alloc_free(buf);
     return -1;
   }

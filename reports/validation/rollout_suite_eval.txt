@@ -8,7 +8,7 @@
 # preprocess_suite stamp:
 #   path: datasets/fox_falco_fd_ucf084_recent/.preprocess_meta.json
 #   force_used: True  built: 4  skipped: 0
-#   seed_dtype_itemsize: 2095  sample_dtype_itemsize: 3181
+#   seed_dtype_itemsize: 2119  sample_dtype_itemsize: 3205
 #
 # Machine-readable rollout JSON (gitignored triage artifact):
 # - Capture current:
@@ -23,50 +23,50 @@ fields: action_id,animation_index,on_ground,hitlag,hitstun,state_flags
 
 == datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl ==
 rollout.best_len: 95
-rollout.streak_count: 354
+rollout.streak_count: 346
 rollout.streak_len.median: 16
-rollout.streak_len.p90: 45
+rollout.streak_len.p90: 46
 rollout.streak_len.p95: 58
 rollout.streak_len.max: 95
-rollout.first_mismatch_total: 368
-rollout.first_mismatch_seeded_total: 257
+rollout.first_mismatch_total: 360
+rollout.first_mismatch_seeded_total: 246
 
 == datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl ==
 rollout.best_len: 113
-rollout.streak_count: 537
-rollout.streak_len.median: 14
-rollout.streak_len.p90: 47
-rollout.streak_len.p95: 57
+rollout.streak_count: 509
+rollout.streak_len.median: 15
+rollout.streak_len.p90: 50
+rollout.streak_len.p95: 59
 rollout.streak_len.max: 113
-rollout.first_mismatch_total: 554
-rollout.first_mismatch_seeded_total: 381
+rollout.first_mismatch_total: 526
+rollout.first_mismatch_seeded_total: 350
 
 == datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/QuerulousGrandDinosaur.msl ==
 rollout.best_len: 128
-rollout.streak_count: 490
-rollout.streak_len.median: 14
-rollout.streak_len.p90: 47
-rollout.streak_len.p95: 56
+rollout.streak_count: 470
+rollout.streak_len.median: 15
+rollout.streak_len.p90: 49
+rollout.streak_len.p95: 57
 rollout.streak_len.max: 128
-rollout.first_mismatch_total: 503
-rollout.first_mismatch_seeded_total: 372
+rollout.first_mismatch_total: 483
+rollout.first_mismatch_seeded_total: 351
 
 == datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/TreasuredBackKangaroo.msl ==
-rollout.best_len: 114
-rollout.streak_count: 385
+rollout.best_len: 121
+rollout.streak_count: 373
 rollout.streak_len.median: 15
-rollout.streak_len.p90: 43
-rollout.streak_len.p95: 52
-rollout.streak_len.max: 114
-rollout.first_mismatch_total: 400
-rollout.first_mismatch_seeded_total: 264
+rollout.streak_len.p90: 44
+rollout.streak_len.p95: 55
+rollout.streak_len.max: 121
+rollout.first_mismatch_total: 388
+rollout.first_mismatch_seeded_total: 253
 
 == suite summary ==
-overall.rollout.streak_count: 1766
+overall.rollout.streak_count: 1698
 overall.rollout.streak_len.median: 15
-overall.rollout.streak_len.p90: 45
-overall.rollout.streak_len.p95: 56
+overall.rollout.streak_len.p90: 47
+overall.rollout.streak_len.p95: 58
 overall.rollout.streak_len.max: 128
 overall.rollout.best_len.max: 128
-overall.rollout.first_mismatch_total: 1825
-overall.rollout.first_mismatch_seeded_total: 1274
+overall.rollout.first_mismatch_total: 1757
+overall.rollout.first_mismatch_seeded_total: 1200

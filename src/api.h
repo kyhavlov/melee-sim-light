@@ -367,6 +367,21 @@ typedef struct MslSeed {
   uint16_t damage_jump_buffer_x14[MSL_MAX_PLAYERS];
   uint8_t l_cancel[MSL_MAX_PLAYERS];
   uint8_t hurtbox_state[MSL_MAX_PLAYERS];  // 0 vuln, 1 invuln, 2 intangible
+  // Collision hit-status internals (decomp fp->x198C / x1990 / x1994 / x2221_b0).
+  //
+  // Slippi only exposes merged hurtbox_state (x1988 when nonzero else x198C). These internal
+  // lanes are seeded explicitly from strictly-causal replay-history derivation so teacher-forced
+  // one-step reseed does not have to infer timer ownership from a single frame.
+  //
+  // Decomp anchors:
+  // - refs/melee/src/melee/ft/fighter.c::Fighter_8006A360 (x1990/x1994 tick + x198C updates)
+  // - refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DD398 (x1994 setter)
+  // - refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffWait.c::ftCo_8009A77C (x1990 setter)
+  // - refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_OnExitHitlag (x1994 setter)
+  uint8_t colanim_hit_status_x198c[MSL_MAX_PLAYERS];  // 0/1/2
+  uint8_t colanim_lock_x2221_b0[MSL_MAX_PLAYERS];     // 0/1
+  uint16_t colanim_timer_x1990[MSL_MAX_PLAYERS];
+  uint16_t colanim_timer_x1994[MSL_MAX_PLAYERS];
   uint16_t ground_id[MSL_MAX_PLAYERS];
   uint32_t animation_index[MSL_MAX_PLAYERS];
   uint16_t instance_hit_by[MSL_MAX_PLAYERS];

@@ -369,10 +369,13 @@ def main() -> None:
         # Collision hit-status timers (x198C path).
         #
         # Decomp:
+        # - Damage hitlag-exit hook calls ftColl_8007B7A4(gobj, p_ftCommonData->x130).
+        #   refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_OnExitHitlag
         # - Throw entry calls ftColl_8007B7A4(gobj, p_ftCommonData->x348), which sets x1994 and x198C.
         #   refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DD398
         # - Cliff wait path calls ftColl_8007B760(gobj, p_ftCommonData->x49C), which sets x1990 and x198C.
         #   refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffWait.c::ftCo_8009A77C
+        "colanim_damage_x1994_frames": int(max(0, _i32_be(buf, ft_common_abs + 0x130))),
         "colanim_throw_x1994_frames": int(max(0, _i32_be(buf, ft_common_abs + 0x348))),
         "colanim_cliff_x1990_frames": int(max(0, _i32_be(buf, ft_common_abs + 0x49C))),
         # SDI / ASDI / DI (ftCo_Damage.c)

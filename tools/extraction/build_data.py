@@ -236,6 +236,23 @@ def main() -> None:
         ],
     )
 
+    # Movescript-derived set_airborne_state timelines (opcode 25 / ftAction_80071998).
+    _run(
+        "tools.extraction.extract_fighter_airborne_state_events",
+        [
+            "--iso_dir",
+            str(iso_dir),
+            "--melee_decomp",
+            str(args.melee_decomp),
+            "--special_msids_dir",
+            "data/special_msids",
+            "--out_dir",
+            "data/airborne_state_events",
+            "--chars",
+            ",".join(chars),
+        ],
+    )
+
     # Anim matrices per needed msid (depends on data/moves + data/hurtcaps + data/characters).
     for ch in chars:
         _run(

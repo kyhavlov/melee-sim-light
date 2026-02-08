@@ -97,6 +97,7 @@ ext = Extension(
         str((ROOT / "src" / "reflector_bubbles.c").resolve()),
         str((ROOT / "src" / "state_flags.c").resolve()),
         str((ROOT / "src" / "state_flags_221c_y_tables.c").resolve()),
+        str((ROOT / "src" / "airborne_state_events_tables.c").resolve()),
         str((ROOT / "src" / "combat.c").resolve()),
         str((ROOT / "src" / "items.c").resolve()),
     ],

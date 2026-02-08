@@ -1553,6 +1553,206 @@ def compute_press_timer_u8(
     return out
 
 
+def compute_lr_press_timer_x67f(
+    *,
+    buttons: np.ndarray,
+    trigger_unit: np.ndarray,
+    hitlag_frames: np.ndarray | None = None,
+    trigger_deadzone: float,
+    button_mask_lr: int,
+    button_mask_z: int,
+    start_timer: int = 0xFF,
+) -> np.ndarray:
+    """
+    Compute fp->x67F (frames since LR-lane press edge) causally.
+
+    Decomp tie-down:
+    - x67F update checks edge mask lane `fp->input.x668 & HSD_PAD_LR`.
+      refs/melee/src/melee/ft/fighter.c:2078-2086
+    - x668 edge lane derives from held-input synthesis that includes:
+      - digital L/R,
+      - trigger lane (`x650 > deadzone`), and
+      - Z-mapped LR lane.
+      refs/melee/src/melee/ft/fighter.c::{Fighter_Spaghetti_8006AD10_Inner1}
+      refs/melee/src/melee/ft/fighter.c:1868-1890
+    - When hitlag gate x2219_b5 is set, x668 edges are OR-latched (`x668 |= edge`) rather than
+      overwritten, so an LR edge persists for the rest of that hitlag window.
+      refs/melee/src/melee/ft/fighter.c::{Fighter_Spaghetti_8006AD10_Inner1}
+    """
+    b = np.asarray(buttons, dtype=np.uint16).reshape(-1)
+    trig = np.asarray(trigger_unit, dtype=np.float32).reshape(-1)
+    if int(b.size) != int(trig.size):
+        raise ValueError("buttons and trigger_unit must match length")
+    if hitlag_frames is None:
+        hl = np.zeros(int(b.size), dtype=np.uint16)
+    else:
+        hl = np.asarray(hitlag_frames, dtype=np.uint16).reshape(-1)
+        if int(hl.size) != int(b.size):
+            raise ValueError("hitlag_frames must match buttons length")
+
+    n = int(b.size)
+    out = np.empty(n, dtype=np.uint8)
+    timer = int(start_timer) & 0xFF
+    prev_held = False
+    x668_lr_latched = False
+    mask = (int(button_mask_lr) | int(button_mask_z)) & 0xFFFF
+    deadzone = np.float32(trigger_deadzone)
+
+    for i in range(n):
+        held = ((int(b[i]) & mask) != 0) or (np.float32(trig[i]) > deadzone)
+        pressed_edge = held and (not prev_held)
+        if int(hl[i]) > 0:
+            x668_lr_latched = x668_lr_latched or pressed_edge
+        else:
+            x668_lr_latched = pressed_edge
+        if x668_lr_latched:
+            timer = 0
+        elif timer < 0xFF:
+            timer += 1
+        out[i] = np.uint8(timer)
+        prev_held = held
+    return out
+
+
+def _colanim_timer_remaining_from_action_frame(init_frames: int, action_frame: int) -> int:
+    if int(init_frames) <= 0:
+        return 0
+    if int(action_frame) <= 0:
+        return int(init_frames)
+    rem = int(init_frames) + 1 - int(action_frame)
+    if rem < 0:
+        rem = 0
+    if rem > 0xFFFF:
+        rem = 0xFFFF
+    return int(rem)
+
+
+def derive_colanim_internals(
+    *,
+    action_id_u16: np.ndarray,
+    action_frame_i16: np.ndarray,
+    hitlag_u16: np.ndarray,
+    hitstun_u16: np.ndarray,
+    hurtbox_state_u8: np.ndarray,
+    colanim_throw_x1994_frames: int,
+    colanim_cliff_x1990_frames: int,
+    colanim_damage_x1994_frames: int,
+    throw_actions: tuple[int, ...],
+    cliff_actions: tuple[int, ...],
+    damage_actions: tuple[int, ...],
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """
+    Derive fp->x198C/x1990/x1994/x2221_b0 seed internals strictly causally.
+
+    Why this exists:
+    - Slippi exposes merged `hurtbox_state` (x1988 when nonzero else x198C), but not x198C timers.
+    - One-step reseed needs timer ownership internals to avoid single-frame inference drift.
+
+    Decomp anchors:
+    - refs/melee/src/melee/ft/fighter.c::Fighter_8006A360 (x1990/x1994 decrements + x198C updates)
+    - refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DD398 (ftColl_8007B7A4, x1994)
+    - refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffWait.c::ftCo_8009A77C (ftColl_8007B760, x1990)
+    - refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_OnExitHitlag (x1994)
+
+    Notes:
+    - `x2221_b0` currently has no reliable Slippi-exposed signal in this replay path; we keep it 0.
+    - This is a seed bridge over missing internals, not a claim that every x198C source is modeled.
+    """
+    aid = np.asarray(action_id_u16, dtype=np.uint16).reshape(-1)
+    afr = np.asarray(action_frame_i16, dtype=np.int16).reshape(-1)
+    hl = np.asarray(hitlag_u16, dtype=np.uint16).reshape(-1)
+    hs = np.asarray(hitstun_u16, dtype=np.uint16).reshape(-1)
+    hurt = np.asarray(hurtbox_state_u8, dtype=np.uint8).reshape(-1)
+    n = int(aid.size)
+    if int(afr.size) != n or int(hl.size) != n or int(hs.size) != n or int(hurt.size) != n:
+        raise ValueError("action/action_frame/hitlag/hitstun/hurtbox_state arrays must match length")
+
+    throw_set = {int(x) & 0xFFFF for x in throw_actions}
+    cliff_set = {int(x) & 0xFFFF for x in cliff_actions}
+    damage_set = {int(x) & 0xFFFF for x in damage_actions}
+
+    out_x198c = np.zeros(n, dtype=np.uint8)
+    out_x1990 = np.zeros(n, dtype=np.uint16)
+    out_x1994 = np.zeros(n, dtype=np.uint16)
+    out_x2221_b0 = np.zeros(n, dtype=np.uint8)
+
+    x1990 = 0
+    x1994 = 0
+    x2221_b0 = 0
+    prev_a = int(aid[0]) if n > 0 else 0
+    prev_afr = int(afr[0]) if n > 0 else 0
+    prev_hl = int(hl[0]) if n > 0 else 0
+    prev_hs = int(hs[0]) if n > 0 else 0
+
+    for i in range(n):
+        cur_a = int(aid[i])
+        cur_afr = int(afr[i])
+        cur_hl = int(hl[i])
+        cur_hs = int(hs[i])
+
+        # Decomp ordering: x1990/x1994 decrement once per frame in Fighter_8006A360.
+        if i > 0:
+            if x1990 > 0:
+                x1990 -= 1
+            if x1994 > 0:
+                x1994 -= 1
+
+        entered = False
+        if i == 0:
+            entered = True
+        elif cur_a != prev_a:
+            entered = True
+        elif cur_afr < prev_afr:
+            # Same-action restart (e.g., self-transition with reset state_age).
+            entered = True
+
+        if entered and cur_a in throw_set:
+            rem = _colanim_timer_remaining_from_action_frame(int(colanim_throw_x1994_frames), cur_afr)
+            if rem > x1994:
+                x1994 = rem
+
+        if entered and cur_a in cliff_set:
+            rem = _colanim_timer_remaining_from_action_frame(int(colanim_cliff_x1990_frames), cur_afr)
+            if rem > x1990:
+                x1990 = rem
+
+        # Damage hitlag-exit hook: ftCo_Damage_OnExitHitlag sets x1994 via p_ftCommonData->x130.
+        if i > 0 and prev_hl > 0 and cur_hl == 0:
+            if cur_a in damage_set or prev_a in damage_set or cur_hs > 0 or prev_hs > 0:
+                rem = int(colanim_damage_x1994_frames)
+                if rem > 0xFFFF:
+                    rem = 0xFFFF
+                if rem > x1994:
+                    x1994 = rem
+
+        # Causal bootstrap for first frame when replay starts in an unobserved prior timer window.
+        if i == 0 and x1990 == 0 and x1994 == 0:
+            h0 = int(hurt[0])
+            if h0 == 2:
+                x1990 = 1
+            elif h0 == 1:
+                x1994 = 1
+
+        if x1990 > 0 or x2221_b0:
+            x198c = 2
+        elif x1994 > 0:
+            x198c = 1
+        else:
+            x198c = 0
+
+        out_x198c[i] = np.uint8(x198c)
+        out_x1990[i] = np.uint16(x1990)
+        out_x1994[i] = np.uint16(x1994)
+        out_x2221_b0[i] = np.uint8(1 if x2221_b0 else 0)
+
+        prev_a = cur_a
+        prev_afr = cur_afr
+        prev_hl = cur_hl
+        prev_hs = cur_hs
+
+    return out_x198c, out_x1990, out_x1994, out_x2221_b0
+
+
 def compute_x672_trigger_timer_pre_post(
     *,
     trigger_unit: np.ndarray,
