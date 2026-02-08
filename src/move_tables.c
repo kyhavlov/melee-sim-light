@@ -57,6 +57,18 @@ enum {
 
 static MslFrameWindow g_cmd0_by_char_attackair[256][MSL_ATTACKAIR_KIND_COUNT];
 static MslFrameWindow g_allow_interrupt_by_char_attackair[256][MSL_ATTACKAIR_KIND_COUNT];
+enum { MSL_GROUNDED_ATTACK_KIND_COUNT = 8 };
+enum {
+  MSL_GROUNDED_ATTACK_KIND_11 = 0,
+  MSL_GROUNDED_ATTACK_KIND_DASH = 1,
+  MSL_GROUNDED_ATTACK_KIND_S3 = 2,
+  MSL_GROUNDED_ATTACK_KIND_HI3 = 3,
+  MSL_GROUNDED_ATTACK_KIND_LW3 = 4,
+  MSL_GROUNDED_ATTACK_KIND_S4 = 5,
+  MSL_GROUNDED_ATTACK_KIND_HI4 = 6,
+  MSL_GROUNDED_ATTACK_KIND_LW4 = 7,
+};
+static MslFrameWindow g_allow_interrupt_by_char_grounded_attack[256][MSL_GROUNDED_ATTACK_KIND_COUNT];
 static MslFrameWindow g_cmd0_by_char_dash[256];
 static MslFrameWindow g_throw_flags_by_char_catch[256];
 static MslFrameWindow g_throw_flags_by_char_catchdash[256];
@@ -504,8 +516,8 @@ static int parse_cmd0_window_open_end(const char* buf, const char* buf_end, cons
   return 0;
 }
 
-static int parse_attackair_allow_interrupt_window(const char* buf, const char* buf_end,
-                                                  const char* move_key, MslFrameWindow* out) {
+static int parse_allow_interrupt_window(const char* buf, const char* buf_end, const char* move_key,
+                                        MslFrameWindow* out) {
   if (buf == NULL || buf_end == NULL || move_key == NULL || out == NULL) {
     return -1;
   }
@@ -1017,24 +1029,63 @@ static int load_one(const char* data_dir, const char* rel_path, uint8_t char_id)
   // Source: data/moves/{fox,falco}.json moves["ftCo_SM_AttackAir*"]["events"] allow_interrupt events.
   // Decomp: refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c (DO_IASA).
   win = (MslFrameWindow){0};
-  if (parse_attackair_allow_interrupt_window(buf, buf_end, "ftCo_SM_AttackAirN", &win) == 0) {
+  if (parse_allow_interrupt_window(buf, buf_end, "ftCo_SM_AttackAirN", &win) == 0) {
     g_allow_interrupt_by_char_attackair[char_id][MSL_ATTACKAIR_KIND_N] = win;
   }
   win = (MslFrameWindow){0};
-  if (parse_attackair_allow_interrupt_window(buf, buf_end, "ftCo_SM_AttackAirF", &win) == 0) {
+  if (parse_allow_interrupt_window(buf, buf_end, "ftCo_SM_AttackAirF", &win) == 0) {
     g_allow_interrupt_by_char_attackair[char_id][MSL_ATTACKAIR_KIND_F] = win;
   }
   win = (MslFrameWindow){0};
-  if (parse_attackair_allow_interrupt_window(buf, buf_end, "ftCo_SM_AttackAirB", &win) == 0) {
+  if (parse_allow_interrupt_window(buf, buf_end, "ftCo_SM_AttackAirB", &win) == 0) {
     g_allow_interrupt_by_char_attackair[char_id][MSL_ATTACKAIR_KIND_B] = win;
   }
   win = (MslFrameWindow){0};
-  if (parse_attackair_allow_interrupt_window(buf, buf_end, "ftCo_SM_AttackAirHi", &win) == 0) {
+  if (parse_allow_interrupt_window(buf, buf_end, "ftCo_SM_AttackAirHi", &win) == 0) {
     g_allow_interrupt_by_char_attackair[char_id][MSL_ATTACKAIR_KIND_HI] = win;
   }
   win = (MslFrameWindow){0};
-  if (parse_attackair_allow_interrupt_window(buf, buf_end, "ftCo_SM_AttackAirLw", &win) == 0) {
+  if (parse_allow_interrupt_window(buf, buf_end, "ftCo_SM_AttackAirLw", &win) == 0) {
     g_allow_interrupt_by_char_attackair[char_id][MSL_ATTACKAIR_KIND_LW] = win;
+  }
+
+  // Grounded Attack* `allow_interrupt` windows (DO_IASA gate).
+  //
+  // Decomp:
+  // - Grounded attack IASA handlers gate on fp->allow_interrupt before delegating to grounded
+  //   interrupt checks (typically ftCo_Wait_IASA).
+  // refs/melee/src/melee/ft/chara/ftCommon/{ftCo_AttackDash.c,ftCo_AttackS3.c,ftCo_AttackHi3.c,ftCo_AttackHi4.c,ftCo_AttackLw4.c}
+  win = (MslFrameWindow){0};
+  if (parse_allow_interrupt_window(buf, buf_end, "ftCo_SM_Attack11", &win) == 0) {
+    g_allow_interrupt_by_char_grounded_attack[char_id][MSL_GROUNDED_ATTACK_KIND_11] = win;
+  }
+  win = (MslFrameWindow){0};
+  if (parse_allow_interrupt_window(buf, buf_end, "ftCo_SM_AttackDash", &win) == 0) {
+    g_allow_interrupt_by_char_grounded_attack[char_id][MSL_GROUNDED_ATTACK_KIND_DASH] = win;
+  }
+  win = (MslFrameWindow){0};
+  if (parse_allow_interrupt_window(buf, buf_end, "ftCo_SM_AttackS3", &win) == 0) {
+    g_allow_interrupt_by_char_grounded_attack[char_id][MSL_GROUNDED_ATTACK_KIND_S3] = win;
+  }
+  win = (MslFrameWindow){0};
+  if (parse_allow_interrupt_window(buf, buf_end, "ftCo_SM_AttackHi3", &win) == 0) {
+    g_allow_interrupt_by_char_grounded_attack[char_id][MSL_GROUNDED_ATTACK_KIND_HI3] = win;
+  }
+  win = (MslFrameWindow){0};
+  if (parse_allow_interrupt_window(buf, buf_end, "ftCo_SM_AttackLw3", &win) == 0) {
+    g_allow_interrupt_by_char_grounded_attack[char_id][MSL_GROUNDED_ATTACK_KIND_LW3] = win;
+  }
+  win = (MslFrameWindow){0};
+  if (parse_allow_interrupt_window(buf, buf_end, "ftCo_SM_AttackS4", &win) == 0) {
+    g_allow_interrupt_by_char_grounded_attack[char_id][MSL_GROUNDED_ATTACK_KIND_S4] = win;
+  }
+  win = (MslFrameWindow){0};
+  if (parse_allow_interrupt_window(buf, buf_end, "ftCo_SM_AttackHi4", &win) == 0) {
+    g_allow_interrupt_by_char_grounded_attack[char_id][MSL_GROUNDED_ATTACK_KIND_HI4] = win;
+  }
+  win = (MslFrameWindow){0};
+  if (parse_allow_interrupt_window(buf, buf_end, "ftCo_SM_AttackLw4", &win) == 0) {
+    g_allow_interrupt_by_char_grounded_attack[char_id][MSL_GROUNDED_ATTACK_KIND_LW4] = win;
   }
 
   // Dash cmd_var[0] window (used for Dash IASA late transitions).
@@ -1177,6 +1228,37 @@ static inline int attackair_kind_from_action(uint16_t a) {
   }
 }
 
+static inline int grounded_attack_kind_from_action(uint16_t a) {
+  switch (a) {
+    case MSL_ACT_ATTACK_11:
+      return MSL_GROUNDED_ATTACK_KIND_11;
+    case MSL_ACT_ATTACK_DASH:
+      return MSL_GROUNDED_ATTACK_KIND_DASH;
+    case MSL_ACT_ATTACK_S3_HI:
+    case MSL_ACT_ATTACK_S3_HI_S:
+    case MSL_ACT_ATTACK_S3_S:
+    case MSL_ACT_ATTACK_S3_LW_S:
+    case MSL_ACT_ATTACK_S3_LW:
+      return MSL_GROUNDED_ATTACK_KIND_S3;
+    case MSL_ACT_ATTACK_HI3:
+      return MSL_GROUNDED_ATTACK_KIND_HI3;
+    case MSL_ACT_ATTACK_LW3:
+      return MSL_GROUNDED_ATTACK_KIND_LW3;
+    case MSL_ACT_ATTACK_S4_HI:
+    case MSL_ACT_ATTACK_S4_HI_S:
+    case MSL_ACT_ATTACK_S4_S:
+    case MSL_ACT_ATTACK_S4_LW_S:
+    case MSL_ACT_ATTACK_S4_LW:
+      return MSL_GROUNDED_ATTACK_KIND_S4;
+    case MSL_ACT_ATTACK_HI4:
+      return MSL_GROUNDED_ATTACK_KIND_HI4;
+    case MSL_ACT_ATTACK_LW4:
+      return MSL_GROUNDED_ATTACK_KIND_LW4;
+    default:
+      return -1;
+  }
+}
+
 uint8_t move_tables_attackair_cmd0_active(uint8_t char_id, uint16_t attackair_action_id,
                                           float cur_anim_frame_f32) {
   const int kind = attackair_kind_from_action(attackair_action_id);
@@ -1220,6 +1302,25 @@ uint8_t move_tables_attackair_allow_interrupt(uint8_t char_id, uint16_t attackai
   // Source: the command script emits an "allow interrupt" cmd (ftAction_80071950), which toggles
   // fp->allow_interrupt based on fp->cur_anim_frame (float) timing.
   // refs/melee/src/melee/ft/ftaction.c::ftAction_80071950
+  return (cur_anim_frame_f32 >= (float)win.start_af && cur_anim_frame_f32 < (float)win.end_af) ? 1
+                                                                                               : 0;
+}
+
+uint8_t move_tables_grounded_attack_allow_interrupt(uint8_t char_id, uint16_t grounded_action_id,
+                                                    float cur_anim_frame_f32) {
+  const int kind = grounded_attack_kind_from_action(grounded_action_id);
+  if (kind < 0) {
+    return 0;
+  }
+
+  const MslFrameWindow win = g_allow_interrupt_by_char_grounded_attack[char_id][(size_t)kind];
+  if (!win.loaded) {
+    return 0;
+  }
+
+  // Decomp: grounded Attack* input callbacks gate on fp->allow_interrupt.
+  // refs/melee/src/melee/ft/chara/ftCommon/{ftCo_AttackDash.c,ftCo_AttackS3.c,ftCo_AttackHi3.c,ftCo_AttackHi4.c,ftCo_AttackLw4.c}
+  // Source: command-script `allow_interrupt` events in data/moves/{fox,falco}.json.
   return (cur_anim_frame_f32 >= (float)win.start_af && cur_anim_frame_f32 < (float)win.end_af) ? 1
                                                                                                : 0;
 }
