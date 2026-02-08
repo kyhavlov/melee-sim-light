@@ -586,6 +586,7 @@ void mpcoll_ground_apply(MslBatch* batch) {
     for (int p = 0; p < num_players; p++) {
       const size_t idx = msl_idx_player(bi, p);
       const uint16_t action_id = batch->state.action_id[idx];
+      const uint16_t prev_action_id = batch->state.prev_action_id[idx];
 
       // Decomp: Fighter_procUpdate and Fighter_procMap collision blocks are gated out during hitlag.
       // refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate (the `if (!fp->x2219_b5)` block)
@@ -605,6 +606,18 @@ void mpcoll_ground_apply(MslBatch* batch) {
       if (is_cliff_hold_action(action_id)) {
         batch->state.on_ground[idx] = 0;
         continue;
+      }
+
+      if (msl_action_is_thrown_victim(action_id)) {
+        const uint8_t owner = batch->state.grab_owner_port[idx];
+        if (owner != 0xFFu && owner < (uint8_t)num_players && owner != (uint8_t)p) {
+          // Decomp: common Thrown* states have empty Coll callbacks, so generic stage-collision
+          // grounding does not run while the victim remains attached to the throw owner.
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Thrown.c::{
+          //   ftCo_ThrownF_Coll,ftCo_ThrownB_Coll,ftCo_ThrownHi_Coll,ftCo_ThrownLw_Coll
+          // }
+          continue;
+        }
       }
 
       const uint8_t was_grounded = batch->state.prev_on_ground[idx] ? 1u : 0u;
@@ -633,6 +646,13 @@ void mpcoll_ground_apply(MslBatch* batch) {
       const uint16_t ecb_frame =
           msl_ecb_frame_u16_from_anim_frame(batch->state.anim_frame_f32[idx]);
       uint16_t ecb_frame_prev = msl_ecb_prev_frame_u16(ecb_frame);
+      uint16_t ecb_frame_bias_next = ecb_frame;
+      if (action_id == (uint16_t)MSL_ACT_DOWN_BOUND_U ||
+          action_id == (uint16_t)MSL_ACT_DOWN_BOUND_D) {
+        if (ecb_frame_bias_next != 0xFFFFu) {
+          ecb_frame_bias_next = (uint16_t)(ecb_frame_bias_next + 1u);
+        }
+      }
 
       // Decomp: some stage collision entrypoints load ECB with flags where `flags & 1` forces
       // desired_ecb.bottom.y = 0.0 (relative to cur_pos). This stabilizes grounded contact against
@@ -651,6 +671,14 @@ void mpcoll_ground_apply(MslBatch* batch) {
       // refs/melee/src/melee/mp/mplib.c::mpLib_8004DD90_Floor
       // refs/melee/src/melee/mp/mplib.c::mpCheckFloor
       uint8_t lock_bottom_to_zero = was_grounded;
+      if (action_id == (uint16_t)MSL_ACT_DOWN_BOUND_U ||
+          action_id == (uint16_t)MSL_ACT_DOWN_BOUND_D) {
+        // DownBound collision allows leaving/re-contacting ground while the action continues;
+        // forcing ECB.bottom=0 for all previously-grounded snapshots suppresses that phase.
+        // Keep pose-driven ECB bottom for DownBound to match the callback's ground/air behavior.
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownBound.c::ftCo_DownBound_Coll
+        lock_bottom_to_zero = 0u;
+      }
       uint8_t lock_bottom_to_prev_frame = 0u;
       if (!lock_bottom_to_zero && action_id == (uint16_t)MSL_ACT_ESCAPE_AIR && ecb_lock_active) {
         // EscapeAir collision callback path:
@@ -670,7 +698,8 @@ void mpcoll_ground_apply(MslBatch* batch) {
         // refs/melee/src/melee/mp/mpcoll.c::mpCollInterpolateECB
         lock_bottom_to_prev_frame = 1u;
       }
-      const uint16_t ecb_frame_cur = lock_bottom_to_prev_frame ? ecb_frame_prev : ecb_frame;
+      const uint16_t ecb_frame_cur =
+          lock_bottom_to_prev_frame ? ecb_frame_prev : ecb_frame_bias_next;
       msl_ecb_bottom_world_point_sample(&cur_bot, char_id, anim, ecb_frame_cur, x, y,
                                         lock_bottom_to_zero);
       msl_ecb_bottom_world_point_sample(&prev_bot, char_id, anim, ecb_frame_prev, prev_x, prev_y,
@@ -694,7 +723,8 @@ void mpcoll_ground_apply(MslBatch* batch) {
       // refs/melee/src/melee/mp/mplib.c::mpLib_8004DD90_Floor
       // refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007DD7C (example of floor.index persistence)
       uint8_t on_ground = 0;
-      uint16_t ground_id = batch->state.ground_id[idx];
+      const uint16_t seed_ground_id = batch->state.ground_id[idx];
+      uint16_t ground_id = seed_ground_id;
 
       float floor_nx = 0.0f;
       float floor_ny = 1.0f;
@@ -717,9 +747,39 @@ void mpcoll_ground_apply(MslBatch* batch) {
           if (y_corr < 0.0f) {
             y_corr = 0.0f;
           }
+          int resolved_line_idx = out_line_idx;
+          if (prefer_line_idx >= 0 && out_line_idx != prefer_line_idx &&
+              floor_lines_connected(g, prefer_line_idx, out_line_idx)) {
+            const MslStageFloorLine* pl = &g->lines[(size_t)prefer_line_idx];
+            const MslStageFloorLine* ol = &g->lines[(size_t)out_line_idx];
+            // Decomp-shaped tie-break:
+            // - floor.index persists across connected floor seams,
+            // - edge floor segments (ledge=true) tend to keep ownership until contact fully exits
+            //   that segment's endpoint clamp window.
+            // Restrict persistence to ledge->non-ledge handoff to avoid center-line stickiness.
+            // refs/melee/src/melee/mp/mplib.c::mpLib_8004DD90_Floor
+            // refs/melee/src/melee/lb/types.h::CollData (floor.index persistence)
+            // Dash entry coll callback still uses generic floor projection (ft_80084104 path), so
+            // floor.index persistence across connected seams should hold for the entry frame.
+            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c::ftCo_Dash_Coll
+            // refs/melee/src/melee/mp/mplib.c::mpLib_8004DD90_Floor
+            const uint8_t dash_entry_keep_prev_line =
+                (action_id == (uint16_t)MSL_ACT_DASH &&
+                 prev_action_id != (uint16_t)MSL_ACT_DASH)
+                    ? 1u
+                    : 0u;
+            if ((pl->is_ledge && !ol->is_ledge) || dash_entry_keep_prev_line) {
+              const float min_x = (pl->x0 < pl->x1) ? pl->x0 : pl->x1;
+              const float max_x = (pl->x0 > pl->x1) ? pl->x0 : pl->x1;
+              if (cur_bottom_x >= (min_x - k_floor_x_end_clamp) &&
+                  cur_bottom_x <= (max_x + k_floor_x_end_clamp)) {
+                resolved_line_idx = prefer_line_idx;
+              }
+            }
+          }
           batch->state.pos_y[idx] += y_corr;
           on_ground = 1;
-          ground_id = g->lines[(size_t)out_line_idx].segment_i;
+          ground_id = g->lines[(size_t)resolved_line_idx].segment_i;
           contact_y = (cur_bottom_y + y_corr);
         } else {
           // Decomp shape:
@@ -875,7 +935,11 @@ void mpcoll_ground_apply(MslBatch* batch) {
             contact_y = cur_bottom_y + y_corr;
           }
         }
-        if (!on_ground &&
+        // Decomp: mpCheckFloor's horizontal intersection helper is gated on non-rising segments
+        // (`ay >= by`), so upward sweeps should not report a floor crossing.
+        // refs/melee/src/melee/mp/mplib.c::mpCheckFloor
+        const uint8_t can_sweep = (uint8_t)(cur_bottom_y <= prev_bottom_y);
+        if (!on_ground && can_sweep &&
             floor_sweep_check(g, prev_bottom_x, prev_bottom_y, cur_bottom_x, cur_bottom_y,
                               prefer_line_idx, &hit_line_idx, &ix, &iy, &floor_nx, &floor_ny)) {
           // EscapeAir lock semantics:
@@ -944,6 +1008,14 @@ void mpcoll_ground_apply(MslBatch* batch) {
 
       batch->state.on_ground[idx] = on_ground;
       if (on_ground) {
+        if (action_id == (uint16_t)MSL_ACT_DASH && prev_action_id != (uint16_t)MSL_ACT_DASH &&
+            seed_ground_id != 0xFFFFu) {
+          // Dash entry floor-index ownership:
+          // keep the pre-entry floor.index on the entry frame to avoid an early seam handoff.
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c::ftCo_Dash_Coll
+          // refs/melee/src/melee/mp/mplib.c::mpLib_8004DD90_Floor
+          ground_id = seed_ground_id;
+        }
         // Decomp: floor collision sets Collide_FloorPush (+ sometimes FloorHug).
         // refs/melee/src/melee/mp/mpcoll.c::mpColl_80044628_Floor
         // refs/melee/src/melee/mp/mpcoll.c::mpColl_80046F78
