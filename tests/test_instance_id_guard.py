@@ -178,7 +178,18 @@ def test_instance_id_bumps_on_blaster_loop_restart_same_action_id() -> None:
     # Prevent laser spawn noise: items_update skips per-frame spawns when animation_index is -1.
     seed["animation_index"][0, 0] = np.uint32(0xFFFFFFFF)
 
+    # Keep P1 inert so this test isolates P0's SpecialAirNLoop restart path and does not consume
+    # plAttack_80037B08 through unrelated match-flow transitions.
+    seed["action_id"][0, 1] = np.uint16(ACT_WAIT)
+    seed["action_frame"][0, 1] = np.int16(0)
+    seed["anim_frame_f32"][0, 1] = np.float32(0.0)
+    seed["frame_speed_mul_f32"][0, 1] = np.float32(1.0)
+    seed["on_ground"][0, 1] = np.uint8(1)
+
     seed["instance_id"][0, 0] = np.uint16(100)
+    # Force a non-matching prior x2073 compare byte so the same-action loop restart exercises both
+    # writers: ft_800895E0 (x4 low-byte mismatch) and ft_80089824 (OnChangeAction callback).
+    seed["instance_id_x2073"][0, 0] = np.uint8(16)
     seed["on_ground"][0, 0] = np.uint8(0)
 
     seed_bytes = seed.view(np.uint8).reshape((1, seed_stride))

@@ -179,9 +179,20 @@ static inline void enter_rebirth(MslBatch* batch, size_t idx, const MslCommonPar
   }
 
   // Decomp: respawn processing calls ft_800890BC (reset to attackID=1, instance=0).
+  // and ft_800892D4 (clear instance_id/x2073 gate state) before Rebirth motion-state entry.
   // refs/melee/src/melee/ft/fighter.c::Fighter_UnkProcessDeath_80068354
   // refs/melee/src/melee/ft/ft_0881.c::ft_800890BC
+  // refs/melee/build/GALE01/asm/melee/ft/ft_0892.s::ft_800892D4
   attack_identity_reset_ft_800890BC(batch, idx);
+  instance_id_reset_ft_800892D4(batch, idx);
+  // Seed-bridge (decomp call-chain parity):
+  // - Rebirth entry runs Fighter_UnkProcessDeath_80068354 before Fighter_ChangeMotionState(Rebirth).
+  // - That call chain includes unmodeled internals (ftCo_800BFFAC / ftCo_800C0074 / ...), and
+  //   suite-observed Dead* -> Rebirth transitions show one hidden plAttack_80037B08 consumption
+  //   before the fighter's own ft_800895E0 write.
+  // refs/melee/build/GALE01/asm/melee/ft/ft_0D31.s::ftCo_800D4FF4
+  // refs/melee/build/GALE01/asm/melee/ft/fighter.s::Fighter_UnkProcessDeath_80068354
+  instance_id_counter_consume_plAttack_80037B08(batch, idx);
 
   // Decomp: respawn starts at camera top (world) and falls to the spawn platform.
   // refs/melee/src/melee/gr/stage.c::Stage_GetCamBoundsTopOffset

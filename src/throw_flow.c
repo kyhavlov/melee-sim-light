@@ -53,10 +53,15 @@ static inline void enter_fall_release(MslBatch* batch, size_t idx) {
   }
   // Decomp: generic fall entry.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_Enter
+  //
+  // Simulator note:
+  // - This helper is only used as a detached-victim fallback bridge in throw-release paths.
+  // - Use a pure timebase restart (no motion-identity side effects) so this bridge state does not
+  //   consume an extra instance_id bump before deferred throw-hit resolution.
   batch->state.on_ground[idx] = 0;
   batch->state.action_id[idx] = (uint16_t)MSL_ACT_FALL;
   batch->state.animation_index[idx] = (uint32_t)MSL_SM_FALL;
-  msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+  msl_anim_timebase_restart(batch, idx, 0.0f, 1.0f);
 }
 
 void throw_flow_update_pre_physics(MslBatch* batch) {
