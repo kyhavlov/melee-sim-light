@@ -518,9 +518,12 @@ static inline uint8_t should_enter_down_stand_from_wait(const MslBatch* batch,
 
 static inline uint8_t is_damage_fly_action(uint16_t a);
 static inline uint8_t is_damage_air_action(uint16_t a);
+static inline uint8_t is_damage_ground_action(uint16_t a);
+static inline uint32_t submotion_for_damage_ground_action(uint16_t a);
 static inline void enter_damage_fall_from_damage_anim(MslBatch* batch, const MslCharParams* ch,
                                                       size_t idx);
 static inline uint8_t is_damage_air_submotion(uint32_t smid);
+static inline uint8_t damage_iasa_lockout_x221c_b6(const MslBatch* batch, size_t idx);
 
 void knockdown_update_pre_physics(MslBatch* batch) {
   if (batch == NULL) {
@@ -538,7 +541,8 @@ void knockdown_update_pre_physics(MslBatch* batch) {
       const uint16_t a0 = batch->state.action_id[idx];
       const uint8_t damage_fly = is_damage_fly_action(a0);
       const uint8_t damage_air = is_damage_air_action(a0);
-      if (!is_knockdown_any(a0) && !damage_fly && !damage_air) {
+      const uint8_t damage_ground = is_damage_ground_action(a0);
+      if (!is_knockdown_any(a0) && !damage_fly && !damage_air && !damage_ground) {
         continue;
       }
       const MslCharParams* ch = msl_char_params(batch->state.char_id[idx]);
@@ -631,6 +635,37 @@ void knockdown_update_pre_physics(MslBatch* batch) {
             // for this frame's collision/hurtbox updates and commit Fall animation/timebase later.
             batch->state.action_id[idx] = (uint16_t)MSL_ACT_FALL;
           }
+        }
+        continue;
+      }
+
+      if (damage_ground) {
+        // Grounded Damage callback parity subset.
+        //
+        // Decomp:
+        // - ftCo_Damage_Anim enters Wait on anim end when !x221C_b6.
+        // - ftCo_Damage_IASA delegates to Wait_IASA on ground when !x221C_b6.
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{ftCo_Damage_Anim,ftCo_Damage_IASA}
+        const uint32_t damage_msid_u32 = submotion_for_damage_ground_action(a0);
+        if (damage_msid_u32 <= 0xFFFFu) {
+          batch->state.animation_index[idx] = damage_msid_u32;
+        }
+        const uint8_t iasa_locked = damage_iasa_lockout_x221c_b6(batch, idx);
+        uint8_t anim_done = 0u;
+        if (damage_msid_u32 <= 0xFFFFu) {
+          anim_done = anim_is_finished(cid, (uint16_t)damage_msid_u32, anim_frame);
+        }
+
+        if (!iasa_locked) {
+          // Wait_IASA subset used by current sim coverage: guard entry.
+          guard_update_grounded(batch, c, idx, 1);
+          if (batch->state.action_id[idx] != a0) {
+            continue;
+          }
+        }
+
+        if (anim_done && !iasa_locked) {
+          enter_wait(batch, idx);
         }
         continue;
       }
@@ -858,6 +893,63 @@ static inline uint8_t is_damage_air_action(uint16_t a) {
           a == (uint16_t)MSL_ACT_DAMAGE_AIR_3)
              ? 1u
              : 0u;
+}
+
+static inline uint8_t is_damage_ground_action(uint16_t a) {
+  switch (a) {
+    case (uint16_t)MSL_ACT_DAMAGE_HI_1:
+    case (uint16_t)MSL_ACT_DAMAGE_HI_2:
+    case (uint16_t)MSL_ACT_DAMAGE_HI_3:
+    case (uint16_t)MSL_ACT_DAMAGE_N_1:
+    case (uint16_t)MSL_ACT_DAMAGE_N_2:
+    case (uint16_t)MSL_ACT_DAMAGE_N_3:
+    case (uint16_t)MSL_ACT_DAMAGE_LW_1:
+    case (uint16_t)MSL_ACT_DAMAGE_LW_2:
+    case (uint16_t)MSL_ACT_DAMAGE_LW_3:
+      return 1u;
+    default:
+      return 0u;
+  }
+}
+
+static inline uint32_t submotion_for_damage_ground_action(uint16_t a) {
+  switch (a) {
+    case (uint16_t)MSL_ACT_DAMAGE_HI_1:
+      return (uint32_t)MSL_SM_DAMAGE_HI_1;
+    case (uint16_t)MSL_ACT_DAMAGE_HI_2:
+      return (uint32_t)MSL_SM_DAMAGE_HI_2;
+    case (uint16_t)MSL_ACT_DAMAGE_HI_3:
+      return (uint32_t)MSL_SM_DAMAGE_HI_3;
+    case (uint16_t)MSL_ACT_DAMAGE_N_1:
+      return (uint32_t)MSL_SM_DAMAGE_N_1;
+    case (uint16_t)MSL_ACT_DAMAGE_N_2:
+      return (uint32_t)MSL_SM_DAMAGE_N_2;
+    case (uint16_t)MSL_ACT_DAMAGE_N_3:
+      return (uint32_t)MSL_SM_DAMAGE_N_3;
+    case (uint16_t)MSL_ACT_DAMAGE_LW_1:
+      return (uint32_t)MSL_SM_DAMAGE_LW_1;
+    case (uint16_t)MSL_ACT_DAMAGE_LW_2:
+      return (uint32_t)MSL_SM_DAMAGE_LW_2;
+    case (uint16_t)MSL_ACT_DAMAGE_LW_3:
+      return (uint32_t)MSL_SM_DAMAGE_LW_3;
+    default:
+      return 0xFFFFFFFFu;
+  }
+}
+
+static inline uint8_t damage_iasa_lockout_x221c_b6(const MslBatch* batch, size_t idx) {
+  if (batch == NULL) {
+    return 0u;
+  }
+  // Decomp: grounded Damage callback gates (Damage_Anim and Damage_IASA) branch on fp->x221C_b6.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{ftCo_Damage_Anim,ftCo_Damage_IASA}
+  //
+  // Slippi state_flags packs x221C high-byte bits in state_flags[3] (MSB-first bit numbering):
+  // x221C_b6 == high-byte bit1 == mask 0x02.
+  enum { MSL_STATE_FLAGS_221C_INDEX = 3 };
+  enum { MSL_STATE_FLAG_221C_B6 = 0x02 };
+  const size_t fi = idx * (size_t)MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_221C_INDEX;
+  return (batch->state.state_flags[fi] & (uint8_t)MSL_STATE_FLAG_221C_B6) ? 1u : 0u;
 }
 
 static inline uint8_t is_damage_air_submotion(uint32_t smid) {
