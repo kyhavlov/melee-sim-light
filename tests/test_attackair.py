@@ -17,6 +17,7 @@ ACT_WAIT = 0x000E
 ACT_FALL = 0x001D
 ACT_JUMP_AERIAL_F = 0x001B
 ACT_ATTACK_AIR_N = 0x0041
+ACT_ATTACK_AIR_B = 0x0043
 ACT_ESCAPE_AIR = 0x00EC
 
 # Submotion ids (GALE01): refs/melee/src/melee/ft/chara/ftCommon/forward.h `ftCo_Submotion`
@@ -26,6 +27,7 @@ SM_JUMP_AERIAL_F = 18
 SM_ESCAPE_AIR = 44
 # AttackAirN immediately precedes LandingAirN (73) in ftCo_Submotion.
 SM_ATTACK_AIR_N = 68
+SM_ATTACK_AIR_B = 70
 
 CHAR_FOX = 1
 STAGE_FD = 32
@@ -278,3 +280,32 @@ def test_attackair_iasa_gates_airdodge_and_double_jump() -> None:
     assert int(out["animation_index"][0]) == SM_JUMP_AERIAL_F
     assert int(out["action_frame"][0]) == 0
     assert int(out["jumps_left"][0]) == 1
+
+
+def test_attackairb_allow_interrupt_probe_clamps_at_entry_frame() -> None:
+    # Underflow guard lock for state_flags[0] allow_interrupt snapshot probe:
+    # entry frame has anim_frame_f32==0.0, so probe must clamp (no negative-frame read).
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    input_stride = int(sizes["input"])
+
+    seed = _seed_air_base()
+    seed["action_id"][0, 0] = np.uint16(ACT_ATTACK_AIR_B)
+    seed["action_frame"][0, 0] = np.int16(0)
+    seed["anim_frame_f32"][0, 0] = np.float32(0.0)
+    seed["frame_speed_mul_f32"][0, 0] = np.float32(1.0)
+    seed["animation_index"][0, 0] = np.uint32(SM_ATTACK_AIR_B)
+    seed["state_flags"][0, 0, 0] = np.uint8(0x80)  # seed carry bit on purpose
+
+    prev_inp = _mk_input_bytes(1, input_stride)
+    inp = _mk_input_bytes(1, input_stride)
+
+    out = _step_once(seed, prev_inp, inp)
+    assert int(out["action_id"][0]) == ACT_ATTACK_AIR_B
+    # At entry (action_frame 1), AttackAirB allow_interrupt window is not active yet.
+    assert int(out["state_flags"][0, 0] & np.uint8(0x80)) == 0
+
+    # Extracted script window sanity: AttackAirB allow_interrupt turns on much later.
+    iasa_frame = _attackair_allow_interrupt_frame("ftCo_SM_AttackAirB")
+    assert iasa_frame > 1

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib
+import json
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -22,6 +23,38 @@ class _Case:
     seed_action_id: int | None = None
     ref_action_id: int | None = None
     seed_guard_reflect_timer_x14: int | None = None
+    seed_hitlag: int | None = None
+    ref_hitlag: int | None = None
+    seed_hitstun: int | None = None
+    ref_hitstun: int | None = None
+
+
+def _allow_interrupt_active_from_moves(root: Path, char_id: int, action_id: int, action_frame: int) -> int:
+    if int(char_id) == 1:
+        move_file = root / "data/moves/fox.json"
+    elif int(char_id) == 22:
+        move_file = root / "data/moves/falco.json"
+    else:
+        raise AssertionError(f"unsupported char_id for allow_interrupt check: {char_id}")
+
+    move_key_by_action = {
+        0x0032: "ftCo_SM_AttackDash",
+        0x0043: "ftCo_SM_AttackAirB",
+    }
+    move_key = move_key_by_action.get(int(action_id))
+    if move_key is None:
+        raise AssertionError(f"unsupported action_id for allow_interrupt check: {action_id:#06x}")
+
+    d = json.loads(move_file.read_text())
+    events = d["moves"][move_key]["events"]
+    on_frame = None
+    for e in events:
+        if e.get("kind") == "allow_interrupt":
+            on_frame = int(e["frame"])
+            break
+    if on_frame is None:
+        raise AssertionError(f"missing allow_interrupt event in {move_file} for {move_key}")
+    return 1 if int(action_frame) >= on_frame else 0
 
 
 def _run_case(c: _Case) -> None:
@@ -54,6 +87,18 @@ def _run_case(c: _Case) -> None:
         assert got == c.seed_guard_reflect_timer_x14, (
             f"{c.note}: seed guard_reflect_timer_x14 mismatch: got={got} want={c.seed_guard_reflect_timer_x14}"
         )
+    if c.seed_hitlag is not None:
+        got = int(row["seed_t"]["hitlag"][0, c.p])
+        assert got == c.seed_hitlag, f"{c.note}: seed hitlag mismatch: got={got} want={c.seed_hitlag}"
+    if c.ref_hitlag is not None:
+        got = int(row["ref_t1"]["hitlag"][0, c.p])
+        assert got == c.ref_hitlag, f"{c.note}: ref hitlag mismatch: got={got} want={c.ref_hitlag}"
+    if c.seed_hitstun is not None:
+        got = int(row["seed_t"]["hitstun"][0, c.p])
+        assert got == c.seed_hitstun, f"{c.note}: seed hitstun mismatch: got={got} want={c.seed_hitstun}"
+    if c.ref_hitstun is not None:
+        got = int(row["ref_t1"]["hitstun"][0, c.p])
+        assert got == c.ref_hitstun, f"{c.note}: ref hitstun mismatch: got={got} want={c.ref_hitstun}"
 
     binding = importlib.import_module("msl_binding")
     sizes = binding.sizes()
@@ -166,6 +211,24 @@ def _run_case(c: _Case) -> None:
             ref_action_id=0x00B6,
             seed_guard_reflect_timer_x14=2,
         ),
+        _Case(
+            dataset_rel=(
+                "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
+                "cardinal_1.0_recent/GracefulAttachedTurtle.msl"
+            ),
+            record=367,
+            p=1,
+            byte=2,
+            seed_byte=0x80,
+            ref_byte=0x00,
+            note="0x221B isShieldActive clears on captured-victim transition (GuardOn->CapturePulledLw)",
+            seed_action_id=0x00B2,
+            ref_action_id=0x00E2,
+            seed_hitlag=0,
+            ref_hitlag=0,
+            seed_hitstun=0,
+            ref_hitstun=0,
+        ),
         # 0x221C (state_flags[3]) bit 0x02 isHitstun.
         _Case(
             dataset_rel=(
@@ -195,3 +258,74 @@ def _run_case(c: _Case) -> None:
 )
 def test_state_flags_parity_regression(c: _Case) -> None:
     _run_case(c)
+
+
+@pytest.mark.integration
+def test_state_flags_2218_allow_interrupt_attackairb_window_active_parity() -> None:
+    # Regression lock for the AttackAirB allow_interrupt lane (fp+0x2218 bit0 => state_flags[0] 0x80):
+    # this record is in-window (allow_interrupt active) and action-id-stable at t/t+1.
+    root = Path(__file__).resolve().parents[1]
+    dataset_rel = (
+        "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
+        "cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl"
+    )
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+    record = 1344
+    p = 0
+    assert int(samples.shape[0]) > record
+    row = samples[record : record + 1]
+
+    seed_action = int(row["seed_t"]["action_id"][0, p])
+    ref_action = int(row["ref_t1"]["action_id"][0, p])
+    assert seed_action == ref_action == 0x0043  # AttackAirB stable
+    assert int(row["seed_t"]["hitlag"][0, p]) == 0
+    assert int(row["ref_t1"]["hitlag"][0, p]) == 0
+    assert int(row["seed_t"]["hitstun"][0, p]) == 0
+    assert int(row["ref_t1"]["hitstun"][0, p]) == 0
+
+    char_id = int(row["seed_t"]["char_id"][0, p])
+    ref_action_frame = int(row["ref_t1"]["action_frame"][0, p])
+    expected_allow_interrupt = _allow_interrupt_active_from_moves(root, char_id, ref_action, ref_action_frame)
+    assert expected_allow_interrupt == 1
+
+    seed_byte = int(row["seed_t"]["state_flags"][0, p, 0])
+    ref_byte = int(row["ref_t1"]["state_flags"][0, p, 0])
+    assert (seed_byte & 0x80) != 0
+    assert (ref_byte & 0x80) != 0
+
+    binding = importlib.import_module("msl_binding")
+    sizes = binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    compare_stride = int(sizes["compare"])
+
+    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    try:
+        seed_bytes = np.empty((1, seed_stride), dtype=np.uint8)
+        prev_input_bytes = np.empty((1, input_stride), dtype=np.uint8)
+        input_bytes = np.empty((1, input_stride), dtype=np.uint8)
+        out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
+
+        seed_bytes[:] = np.frombuffer(row["seed_t"].tobytes(order="C"), dtype=np.uint8).reshape(1, seed_stride)
+        prev_input_bytes[:] = np.frombuffer(row["prev_input_t"].tobytes(order="C"), dtype=np.uint8).reshape(
+            1, input_stride
+        )
+        input_bytes[:] = np.frombuffer(row["input_t"].tobytes(order="C"), dtype=np.uint8).reshape(1, input_stride)
+
+        binding.reseed_seed(handle, seed_bytes)
+        binding.step_input(handle, prev_input_bytes, input_bytes)
+        binding.write_compare(handle, out_compare_bytes)
+        out = out_compare_bytes.view(COMPARE_DTYPE).reshape(-1)
+
+        out_action = int(out["action_id"][0, p])
+        out_byte = int(out["state_flags"][0, p, 0])
+        assert out_action == ref_action
+        assert (out_byte & 0x80) != 0
+        assert out_byte == ref_byte
+    finally:
+        binding.destroy(handle)
