@@ -90,6 +90,10 @@ Use `uv` for Python dependencies and editable installs:
 - Build a dataset from a replay: `uv run python -m tools.slippi.make_dataset_from_slp --slp <path.slp> --out <out.msl> --ports 1,2`
 - Preprocess a suite (cached, gitignored): `uv run python -m tools.slippi.preprocess_suite --suite replays/suites/<suite>.json --datasets-dir datasets`
 - Validate a preprocessed suite: `uv run python -m tools.eval.run_one_step_suite_eval --suite replays/suites/<suite>.json --datasets-dir datasets`
+- Validate rollout streaks (generator-owned text report): `uv run python -m tools.eval.run_rollout_suite_eval --suite replays/suites/<suite>.json --datasets-dir datasets --fields action_id,animation_index,on_ground,hitlag,hitstun,state_flags --out reports/validation/rollout_suite_eval.txt`
+- Rollout streak capture (JSON): `uv run python -m tools.eval.run_longest_rollout_streaks --suite replays/suites/<suite>.json --datasets-dir datasets --fields action_id,animation_index,on_ground,hitlag,hitstun,state_flags --out reports/triage/current_rollout_streaks.json`
+- Rollout summary (headline metrics): `uv run python -m tools.eval.summarize_rollout_streaks --in reports/triage/current_rollout_streaks.json`
+- Rollout diff (before vs after): `uv run python -m tools.eval.diff_rollout_streaks --before reports/triage/baseline_rollout_streaks.json --after reports/triage/current_rollout_streaks.json`
 - Build ISO-derived data artifacts (gitignored): `uv run python -m tools.extraction.build_data --iso-dir _iso --stage grnla --chars fox,falco`
 
 Note: `uv sync` only manages declared dependencies; re-run `uv pip install -e python` after syncing if the extension is missing.
@@ -130,7 +134,10 @@ Current guardrails:
 - `make preprocess`: build/update cached `datasets/` for a suite
 - `make validate`: run one-step suite eval (assumes datasets exist)
 - `make validate OUT=reports/validation/one_step_suite_eval.txt`: write the report to a file (commit this)
-- `make validate-rollout OUT=reports/triage/rollout_streaks.json`: longest in-sync rollout streaks (writes to gitignored `reports/triage/`)
+- `make validate-rollout OUT=reports/validation/rollout_suite_eval.txt`: write rollout suite report to a file (commit this)
+- `make rollout-capture ROLLOUT_JSON=reports/triage/current_rollout_streaks.json`: capture rollout JSON snapshot (gitignored)
+- `make rollout-summary ROLLOUT_JSON=reports/triage/current_rollout_streaks.json`: print suite + per-dataset rollout headline metrics
+- `make rollout-diff ROLLOUT_BEFORE=reports/triage/baseline_rollout_streaks.json ROLLOUT_AFTER=reports/triage/current_rollout_streaks.json`: print rollout metric deltas
 - `make build_data`: extract ISO-derived `data/` artifacts
 
 Notes:
@@ -138,7 +145,9 @@ Notes:
 - If you touch collision/ledge code, run `tests/test_ledge_grab_treasuredbackkangaroo_regression.py`.
 
 Validation output snapshots:
-- Commit the latest suite report under `reports/validation/` whenever you change core sim logic.
+- Commit the latest suite reports under `reports/validation/` whenever you change core sim logic:
+  - `reports/validation/one_step_suite_eval.txt`
+  - `reports/validation/rollout_suite_eval.txt`
 
 Variables:
 - `SUITE=replays/suites/fox_falco_fd_ucf084_recent.json`
@@ -149,15 +158,20 @@ Variables:
 
 - Prefer adding new “mechanics we learned about” into `SPEC.md` (Mechanics Inventory) immediately, even if not implemented yet.
 - Avoid symlinks for tooling/binaries; prefer explicit paths in config.
-- Never hand-edit `reports/validation/one_step_suite_eval.txt` (it is generator-owned by `make validate`); put extra notes in commits/PR text or separate docs.
+- Never hand-edit `reports/validation/one_step_suite_eval.txt` or `reports/validation/rollout_suite_eval.txt` (generator-owned); put extra notes in commits/PR text or separate docs.
 - Triage/debug scripts must default outputs under gitignored `reports/triage/` (or print to stdout). Never default to `/tmp`. Never stage files under `reports/triage/`.
+- Rollout-first workflow (recommended when treating rollout as primary):
+  1) Capture baseline once: `make rollout-capture ROLLOUT_JSON=reports/triage/baseline_rollout_streaks.json`
+  2) After changes, capture current: `make rollout-capture ROLLOUT_JSON=reports/triage/current_rollout_streaks.json`
+  3) Inspect headline metrics: `make rollout-summary ROLLOUT_JSON=reports/triage/current_rollout_streaks.json`
+  4) Compare before/after: `make rollout-diff ROLLOUT_BEFORE=reports/triage/baseline_rollout_streaks.json ROLLOUT_AFTER=reports/triage/current_rollout_streaks.json`
 
 ## Agent Checklist (do this every work chunk)
 
 - Do not commit unless the prompt explicitly says to.
 - Any C gameplay change without a nearby decomp/asm/data citation is not reviewable; add the citation or don’t land it.
-- Test-only change: do **not** regenerate `reports/validation/one_step_suite_eval.txt`.
-- Sim-logic change: run `make test` and `make validate OUT=reports/validation/one_step_suite_eval.txt`.
+- Test-only change: do **not** regenerate `reports/validation/one_step_suite_eval.txt` or `reports/validation/rollout_suite_eval.txt`.
+- Sim-logic change: run `make test`, `make validate OUT=reports/validation/one_step_suite_eval.txt`, and `make validate-rollout OUT=reports/validation/rollout_suite_eval.txt`.
 - Seed/schema change trigger: if you touch any of:
   - `src/api.h` seed structs, `src/api.c` reseed/write paths
   - `src/state.h`/`src/state.c` (new SoA fields)
