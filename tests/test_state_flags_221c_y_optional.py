@@ -11,6 +11,41 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def _skip_if_required_artifacts_missing(root: Path) -> None:
+    # Integration policy: skip if required local artifacts are missing.
+    required = [
+        "data/common/ft_common_data.json",
+        "data/characters/fox.json",
+        "data/characters/falco.json",
+        "data/special_msids/fox.json",
+        "data/special_msids/falco.json",
+        "data/moves/fox.json",
+        "data/moves/falco.json",
+        "data/attack_id/move_id/fox.bin",
+        "data/attack_id/move_id/falco.bin",
+        "data/anims/fox.bin",
+        "data/anims/falco.bin",
+        "data/anims/fox.tracks.bin",
+        "data/anims/falco.tracks.bin",
+        "data/hurtcaps/fox.bin",
+        "data/hurtcaps/falco.bin",
+        "data/hurtbox_states/fox.bin",
+        "data/hurtbox_states/falco.bin",
+        "data/hit_status/fox.bin",
+        "data/hit_status/falco.bin",
+        "data/hitboxes/fox.bin",
+        "data/hitboxes/falco.bin",
+        "data/ecb/fox_bottom.bin",
+        "data/ecb/falco_bottom.bin",
+        "data/ecb/fox_extents.bin",
+        "data/ecb/falco_extents.bin",
+        "data/items/lasers.bin",
+    ]
+    missing = [rel for rel in required if not (root / rel).exists()]
+    if missing:
+        pytest.skip(f"missing local data artifacts: {', '.join(missing)}")
+
+
 def _populate_data_overlay_without_state_flags_221c_y(dst_data_dir: Path) -> None:
     src_data_dir = ROOT / "data"
     dst_data_dir.mkdir(parents=True, exist_ok=True)
@@ -34,8 +69,10 @@ def _populate_data_overlay_without_state_flags_221c_y(dst_data_dir: Path) -> Non
             dst.write_bytes(src.read_bytes())
 
 
+@pytest.mark.integration
 def test_init_succeeds_without_state_flags_221c_y_tables() -> None:
     pytest.importorskip("msl_binding")
+    _skip_if_required_artifacts_missing(ROOT)
 
     build_dir = ROOT / "build"
     build_dir.mkdir(parents=True, exist_ok=True)

@@ -29,6 +29,9 @@
 #     uv run python -m tools.extraction.extract_lasers --iso_dir _iso --out data/items/lasers.bin
 # - Character attrs (data/characters/*.json, includes model_scaling):
 #     uv run python -m tools.extraction.extract_character_attrs --pl-dir _iso --out-dir data/characters --chars fox,falco
+# - Opcode-52 x221C_u16_y timelines (data/state_flags_221c_y/{fox,falco}.bin):
+#     uv run python -m tools.extraction.extract_fighter_state_flags_221c_y --iso_dir _iso --melee_decomp refs/melee --special_msids_dir data/special_msids --out_dir data/state_flags_221c_y --chars fox,falco
+#   Note: runtime degrades safely when these bins are missing, but state_flags parity/suite totals can differ.
 #
 # (Optional) One-shot build for stage+chars:
 #     uv run python -m tools.extraction.build_data --iso-dir _iso --stage grnla --chars fox,falco
