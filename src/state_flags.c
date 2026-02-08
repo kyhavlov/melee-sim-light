@@ -6,6 +6,19 @@
 #include "action_ids.h"
 #include "common_params.h"
 
+static inline uint8_t state_flags_221a_b7_action_uses_guard_shield(uint16_t action_id) {
+  switch (action_id) {
+    case MSL_ACT_GUARD_ON:
+    case MSL_ACT_GUARD:
+    case MSL_ACT_GUARD_OFF:
+    case MSL_ACT_GUARD_SET_OFF:
+    case MSL_ACT_GUARD_REFLECT:
+      return 1u;
+    default:
+      return 0u;
+  }
+}
+
 void state_flags_refresh_post_frame(MslBatch* batch) {
   if (batch == NULL) {
     return;
@@ -32,6 +45,7 @@ void state_flags_refresh_post_frame(MslBatch* batch) {
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_80092450,ftCo_8009388C,ftCo_800925A4}
   enum { MSL_STATE_FLAG_221A_IS_FASTFALL = 0x08 };
   enum { MSL_STATE_FLAG_221A_IS_HITLAG = 0x20 };
+  enum { MSL_STATE_FLAG_221A_B5 = 0x04 };
   enum { MSL_STATE_FLAG_221A_B3 = 0x10 };
   enum { MSL_STATE_FLAG_221A_B7 = 0x01 };
 
@@ -50,7 +64,6 @@ void state_flags_refresh_post_frame(MslBatch* batch) {
   // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
   // refs/melee/src/melee/ft/types.h (fp+0x221C bitfields)
   enum { MSL_STATE_FLAG_221C_IS_HITSTUN = 0x02 };
-
   // fp+0x221C GuardReflect flags:
   // - x221C_b1 (mask 0x40) is cleared when mv.co.guard.x14 expires,
   // - x221C_b2 (mask 0x20) is "Powershield Active Bool" (Slippi post-frame) and is cleared when
@@ -102,6 +115,26 @@ void state_flags_refresh_post_frame(MslBatch* batch) {
         f221a &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221A_B3;
       }
 
+      // x221A_b5 ownership:
+      // - ftColl_8007B0C0 sets/clears fp->x221A_b5 based on whole-capsule hit status argument.
+      // - ftColl_8007B128 sets fp->x221A_b5 when any part hurt capsule state is non-enabled.
+      // Mirror that by marking b5 when any current hurtcap in the active set is non-enabled.
+      // refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007B0C0,ftColl_8007B128}
+      uint8_t any_non_enabled_hurtcap = 0u;
+      const uint8_t cap_count = batch->state.hurtcap_count[idx];
+      const size_t cap_base = idx * (size_t)MSL_MAX_HURTCAPS;
+      for (uint8_t ci = 0; ci < cap_count && ci < (uint8_t)MSL_MAX_HURTCAPS; ci++) {
+        if (batch->state.hurtcap_enabled[cap_base + (size_t)ci] == 0u) {
+          any_non_enabled_hurtcap = 1u;
+          break;
+        }
+      }
+      if (any_non_enabled_hurtcap) {
+        f221a |= (uint8_t)MSL_STATE_FLAG_221A_B5;
+      } else {
+        f221a &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221A_B5;
+      }
+
       // x221B_b5 ownership (grab-owner latch):
       // - set in catch collision when this fighter acquires victim_gobj (ftGrabDist),
       // - cleared on throw release helper and capture-cut paths.
@@ -137,9 +170,15 @@ void state_flags_refresh_post_frame(MslBatch* batch) {
         f221b &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221B_B5;
       }
 
-      // Approximate fp->x221A_b7 from shield activation (fp->x221B_b0) to keep the byte stable
-      // under teacher-forced reseeds without introducing new hidden state.
-      if (f221b & (uint8_t)MSL_STATE_FLAG_221B_IS_SHIELD_ACTIVE) {
+      // Approximate fp->x221A_b7 from shield activation (fp->x221B_b0), but only for the
+      // guard-family states that own shield descriptor lifecycle in decomp.
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_80092450,ftCo_8009388C,ftCo_800925A4}
+      const uint8_t b7_shield_active =
+          ((f221b & (uint8_t)MSL_STATE_FLAG_221B_IS_SHIELD_ACTIVE) != 0u &&
+           state_flags_221a_b7_action_uses_guard_shield(batch->state.action_id[idx]))
+              ? 1u
+              : 0u;
+      if (b7_shield_active) {
         f221a |= (uint8_t)MSL_STATE_FLAG_221A_B7;
       } else {
         f221a &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221A_B7;
