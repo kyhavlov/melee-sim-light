@@ -26,7 +26,7 @@ def _skip_if_required_artifacts_missing(root: Path) -> None:
 
 @pytest.mark.integration
 @pytest.mark.parametrize(
-    ("dataset_rel", "record", "p", "seed_action", "ref_action", "seed_hitlag", "ref_hitlag"),
+    ("dataset_rel", "record", "p", "seed_action", "ref_action", "seed_hitlag", "ref_hitlag", "mechanism"),
     [
         (
             "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl",
@@ -36,6 +36,7 @@ def _skip_if_required_artifacts_missing(root: Path) -> None:
             12,  # Rebirth
             0,
             0,
+            "rebirth path consumes hidden plAttack counter before fighter motion-state write",
         ),
         (
             "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/TreasuredBackKangaroo.msl",
@@ -45,6 +46,7 @@ def _skip_if_required_artifacts_missing(root: Path) -> None:
             90,  # DamageFlyTop
             0,
             0,
+            "throw-release fallback must use timebase restart (no extra motion-identity bump)",
         ),
         (
             "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl",
@@ -54,6 +56,7 @@ def _skip_if_required_artifacts_missing(root: Path) -> None:
             88,  # DamageFlyN
             1,
             0,
+            "throw-hit transition keeps instance-id parity across hitlag-to-damage boundary",
         ),
     ],
 )
@@ -65,6 +68,7 @@ def test_instance_id_transition_clusters_match_ref(
     ref_action: int,
     seed_hitlag: int,
     ref_hitlag: int,
+    mechanism: str,
 ) -> None:
     # Regression lock for core instance_id transitions:
     # - Dead* -> Rebirth call-chain consumes one hidden plAttack_80037B08 lane before ft_800895E0.
@@ -120,10 +124,10 @@ def test_instance_id_transition_clusters_match_ref(
         want_iid = int(row["ref_t1"]["instance_id"][0, p])
 
         assert got_action == want_action, (
-            f"record={record} p={p} expected action_id={want_action}, got {got_action}"
+            f"record={record} p={p} expected action_id={want_action}, got {got_action} ({mechanism})"
         )
         assert got_iid == want_iid, (
-            f"record={record} p={p} expected instance_id={want_iid}, got {got_iid}"
+            f"record={record} p={p} expected instance_id={want_iid}, got {got_iid} ({mechanism})"
         )
     finally:
         binding.destroy(handle)

@@ -137,6 +137,10 @@ def derive_instance_id_counter(
     """
     Derive plAttack_80037B08's "next id" counter strictly causally from replay-visible ids.
 
+    Source signals (Slippi-visible):
+    - fighter_instance_id_u16_2d: post-frame fighter `instance_id` lanes.
+    - item_instance_id_u16_2d: post-frame item `instance_id` lanes from parsed item snapshots.
+
     Representation:
     - Returns u16 array length N, where output[i] is the seeded "next instance_id" value to use
       after replay post-frame i (and therefore for one-step seed_t at sample i).
@@ -146,6 +150,7 @@ def derive_instance_id_counter(
       (`unk_804D6480`) read/written by plAttack_80037B08.
     - Use a strictly-causal lower-bound bridge: next nonzero id after the running max id observed
       so far across fighters + items.
+    - Prefix-invariant by construction: output[i] depends only on rows <= i via running max.
 
     Decomp anchors:
     - refs/melee/src/melee/pl/plattack.c::plAttack_80037B08 (monotonic u16 counter; skips 0)
