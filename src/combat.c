@@ -816,9 +816,11 @@ static inline void combat_mutations_pass1_future_apply_body_hit_invincible(
     return;
   }
 
-  const uint8_t element = batch->state.hitbox_element[hb_i];
-  const float hitlag_mul = combat_hitlag_mul_from_element(c, element);
-  const uint16_t a_hl = combat_calc_hitlag_frames(c, dmg_i, attacker_motion_id, hitlag_mul);
+  // Decomp/ASM: electric hitlag multiplier is written to the *victim* fighter's fp+0x1960 in
+  // ftColl_8007A06C when element==HitElement_Electric; attacker-side CalcHitlag uses default 1.0.
+  // refs/melee/build/GALE01/asm/melee/ft/ftcoll.s::ftColl_8007A06C (stfs ... 0x1960(r25))
+  // refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC (ftCommon_CalcHitlag(..., x1960))
+  const uint16_t a_hl = combat_calc_hitlag_frames(c, dmg_i, attacker_motion_id, 1.0f);
   if (a_hl > batch->state.hitlag[a_idx]) {
     batch->state.hitlag[a_idx] = a_hl;
     combat_state_flags_set_is_hitlag(batch, a_idx, a_hl);
@@ -951,9 +953,14 @@ static inline void combat_mutations_pass1_future_apply_body_hit(MslBatch* batch,
   const uint16_t d_motion_id = batch->state.action_id[d_idx];
 
   const uint8_t element = batch->state.hitbox_element[hb_i];
-  const float hitlag_mul = combat_hitlag_mul_from_element(c, element);
-  const uint16_t a_hl = combat_calc_hitlag_frames(c, dmg_i, attacker_motion_id, hitlag_mul);
-  const uint16_t d_hl = combat_calc_hitlag_frames(c, dmg_i, d_motion_id, hitlag_mul);
+  // Decomp/ASM: fp->x1960_vibrateMult electric override is victim-owned (ftColl_8007A06C writes
+  // 0x1960 on the fighter being processed as the collision victim), so attacker-side hitlag should
+  // use mul=1.0 while defender-side uses the element-derived multiplier.
+  // refs/melee/build/GALE01/asm/melee/ft/ftcoll.s::ftColl_8007A06C
+  // refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
+  const float d_hitlag_mul = combat_hitlag_mul_from_element(c, element);
+  const uint16_t a_hl = combat_calc_hitlag_frames(c, dmg_i, attacker_motion_id, 1.0f);
+  const uint16_t d_hl = combat_calc_hitlag_frames(c, dmg_i, d_motion_id, d_hitlag_mul);
   if (a_hl > batch->state.hitlag[a_idx]) {
     batch->state.hitlag[a_idx] = a_hl;
     combat_state_flags_set_is_hitlag(batch, a_idx, a_hl);
