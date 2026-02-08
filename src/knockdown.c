@@ -584,6 +584,17 @@ void knockdown_update_pre_physics(MslBatch* batch) {
                                                        : (uint8_t)(!in_hitstun && anim_done);
         if (should_enter_damage_fall) {
           enter_damage_fall_from_damage_anim(batch, ch, idx);
+        } else if (!in_hitstun) {
+          // DamageFly IASA parity: when hitstun has ended, DamageFly_IASA delegates to
+          // DamageFall_IASA even before DamageFly_Anim enters DamageFall.
+          //
+          // This slice models the JumpAerial subset (`ftCo_800CB870` path) here for the
+          // non-transitioning DamageFly frame; when we *do* enter DamageFall above, the shared
+          // airborne IASA path in locomotion handles the same-frame follow-up.
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_DamageFly_IASA
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DamageFall.c::ftCo_DamageFall_IASA
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::ftCo_800CB870
+          (void)damage_air_try_jump_aerial(batch, c, ch, idx, 0u);
         }
         continue;
       }

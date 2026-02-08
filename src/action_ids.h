@@ -175,6 +175,21 @@ enum {
   MSL_ACT_ESCAPE_AIR = 0x00EC,     // ftCo_MS_EscapeAir
 };
 
+// Fox/Falco up-special submotions needed for SpecialAirHi -> SpecialHiFall/Landing transitions.
+//
+// Decomp source:
+// - refs/melee/src/melee/ft/chara/ftFox/forward.h::ftFx_Submotion
+//   ftFx_SM_SpecialHi        = ftCo_SM_Count + 14
+//   ftFx_SM_SpecialHiLanding = ftCo_SM_Count + 15
+//   ftFx_SM_SpecialHiFall    = ftCo_SM_Count + 16
+// - refs/melee/src/melee/ft/chara/ftCommon/forward.h::ftCo_Submotion
+//   ftCo_SM_Count = 295
+enum {
+  MSL_SM_FX_SPECIAL_HI = 309,
+  MSL_SM_FX_SPECIAL_HI_LANDING = 310,
+  MSL_SM_FX_SPECIAL_HI_FALL = 311,
+};
+
 // GALE01 common grounded attack action ids (ftCommon_MotionState).
 //
 // These are contiguous in GALE01 and (for common fighters) their collision callbacks use
@@ -313,12 +328,29 @@ typedef enum MslSubmotionId {
   MSL_SM_ESCAPE_F = 42,      // ftCo_SM_EscapeF
   MSL_SM_ESCAPE_B = 43,      // ftCo_SM_EscapeB
   MSL_SM_ESCAPE_AIR = 44,    // ftCo_SM_EscapeAir
+  MSL_SM_ATTACK_11 = 46,     // ftCo_SM_Attack11
+  MSL_SM_ATTACK_12 = 47,     // ftCo_SM_Attack12
+  MSL_SM_ATTACK_13 = 48,     // ftCo_SM_Attack13
   // Grounded attacks (subset) used by the grounded A-attack selector.
   // Source of truth: refs/melee/src/melee/ft/chara/ftCommon/forward.h `ftCo_Submotion`.
-  MSL_SM_ATTACK_DASH = 52,  // ftCo_SM_AttackDash
-  MSL_SM_ATTACK_S3 = 55,    // ftCo_SM_AttackS3
-  MSL_SM_ATTACK_HI3 = 58,   // ftCo_SM_AttackHi3
-  MSL_SM_ATTACK_LW3 = 59,   // ftCo_SM_AttackLw3
+  MSL_SM_ATTACK_DASH = 52,    // ftCo_SM_AttackDash
+  MSL_SM_ATTACK_S3_HI = 53,   // ftCo_SM_AttackS3Hi
+  MSL_SM_ATTACK_S3_HI_S = 54, // ftCo_SM_AttackS3HiS
+  MSL_SM_ATTACK_S3 = 55,      // ftCo_SM_AttackS3
+  MSL_SM_ATTACK_S3_LW_S = 56, // ftCo_SM_AttackS3LwS
+  MSL_SM_ATTACK_S3_LW = 57,   // ftCo_SM_AttackS3Lw
+  // Contiguous ftCo_Submotion ordering in GALE01:
+  // refs/melee/src/melee/ft/chara/ftCommon/forward.h::ftCo_Submotion
+  // refs/melee/src/melee/ft/ftmotionstates.c (AttackS3* motion-state table entries)
+  MSL_SM_ATTACK_HI3 = 58,  // ftCo_SM_AttackHi3
+  MSL_SM_ATTACK_LW3 = 59,  // ftCo_SM_AttackLw3
+  MSL_SM_ATTACK_S4_HI = 60,    // ftCo_SM_AttackS4Hi
+  MSL_SM_ATTACK_S4_HI_S = 61,  // ftCo_SM_AttackS4HiS
+  MSL_SM_ATTACK_S4 = 62,       // ftCo_SM_AttackS4
+  MSL_SM_ATTACK_S4_LW_S = 63,  // ftCo_SM_AttackS4LwS
+  MSL_SM_ATTACK_S4_LW = 64,    // ftCo_SM_AttackS4Lw
+  MSL_SM_ATTACK_HI4 = 66,      // ftCo_SM_AttackHi4
+  MSL_SM_ATTACK_LW4 = 67,      // ftCo_SM_AttackLw4
 
   // Aerial attacks (ftCo_AttackAir*).
   // Source of truth: refs/melee/src/melee/ft/chara/ftCommon/forward.h `ftCo_Submotion`.

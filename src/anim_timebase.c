@@ -111,6 +111,54 @@ static inline uint8_t anim_timebase_is_attackair(uint16_t a) {
   }
 }
 
+static inline uint8_t anim_timebase_is_walk(uint16_t a) {
+  return (a == (uint16_t)MSL_ACT_WALK_SLOW || a == (uint16_t)MSL_ACT_WALK_MIDDLE ||
+          a == (uint16_t)MSL_ACT_WALK_FAST)
+             ? 1u
+             : 0u;
+}
+
+static inline uint8_t anim_timebase_try_walk_rate(uint16_t a, const MslCharParams* ch,
+                                                  float speed_ground_x_self, uint8_t facing_right,
+                                                  float* out_rate) {
+  if (ch == NULL || out_rate == NULL) {
+    return 0u;
+  }
+
+  float denom = 0.0f;
+  switch (a) {
+    case (uint16_t)MSL_ACT_WALK_SLOW:
+      denom = ch->slow_walk_max;
+      break;
+    case (uint16_t)MSL_ACT_WALK_MIDDLE:
+      denom = ch->mid_walk_point;
+      break;
+    case (uint16_t)MSL_ACT_WALK_FAST:
+      denom = ch->fast_walk_min;
+      break;
+    default:
+      return 0u;
+  }
+  if (!(denom > 0.0f)) {
+    return 0u;
+  }
+
+  const float facing_dir = facing_right ? 1.0f : -1.0f;
+  const float mv_x0 = speed_ground_x_self;
+
+  // Decomp: ftWalkCommon_800DFDDC sets walk anim_rate from motion velocity:
+  // - if mv_x0 * facing_dir <= 0, anim_rate = 0,
+  // - else anim_rate = ABS(mv_x0) / {slow_walk_max, mid_walk_point, fast_walk_min}.
+  // refs/melee/src/melee/ft/ftwalkcommon.c::ftWalkCommon_800DFDDC
+  // refs/melee/src/melee/ft/types.h::ftCo_DatAttrs
+  if (mv_x0 * facing_dir <= 0.0f) {
+    *out_rate = 0.0f;
+  } else {
+    *out_rate = fabsf(mv_x0) / denom;
+  }
+  return 1u;
+}
+
 static inline uint8_t anim_timebase_try_landing_air_rate(uint16_t a, const MslCharParams* ch,
                                                          const MslCommonParams* c, uint8_t char_id,
                                                          uint8_t lr_press_timer, float* out_rate) {
@@ -199,6 +247,18 @@ void anim_timebase_update_pre_input(MslBatch* batch) {
       const uint16_t a = batch->state.action_id[idx];
       const int16_t action_frame_pre = batch->state.action_frame[idx];
       const MslCharParams* ch = msl_char_params(batch->state.char_id[idx]);
+
+      // Decomp: Walk Anim callback (ftCo_Walk_Anim -> ftWalkCommon_800DFDDC) updates anim rate
+      // each frame from current walk velocity and facing.
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Walk.c::ftCo_Walk_Anim
+      // refs/melee/src/melee/ft/ftwalkcommon.c::ftWalkCommon_800DFDDC
+      if (anim_timebase_is_walk(a)) {
+        float walk_rate = 0.0f;
+        if (anim_timebase_try_walk_rate(a, ch, batch->state.speed_ground_x_self[idx],
+                                        batch->state.facing[idx], &walk_rate)) {
+          batch->state.frame_speed_mul_fp_q16_16[idx] = msl_q16_16_from_f32(walk_rate);
+        }
+      }
       //
       // Decomp-shaped entry-frame rule (why `action_frame==1` is not a magic number):
       // - Run is entered via Fighter_ChangeMotionState(..., anim_start=0, anim_speed=1).

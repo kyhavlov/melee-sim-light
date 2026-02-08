@@ -106,6 +106,11 @@ static inline void msl_anim_timebase_enter_raw(MslBatch* batch, size_t idx, floa
   }
   const int32_t start_fp = msl_q16_16_from_f32(anim_start_f32);
   const int32_t speed_fp = msl_q16_16_from_f32(anim_speed_f32);
+  // Simulator scheduling invariant:
+  // entering a new motion state supersedes any prior state's deferred one-shot anim tick request.
+  // Without this clear, an earlier same-frame `MSL_ANIM_ENTER_TICK_DEFER_POST_COMBAT` can leak
+  // across a later ChangeMotionState and double-advance the new action's frame counter.
+  batch->state.anim_defer_tick_once[idx] = 0u;
   batch->state.frame_speed_mul_fp_q16_16[idx] = speed_fp;
   batch->state.anim_frame_fp_q16_16[idx] = start_fp;
   msl_anim_timebase_recompute_derived(batch, idx);

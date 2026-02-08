@@ -177,6 +177,13 @@ def _extract_ftco_dattrs(pl_dat: Path, *, ftdata_symbol: str, extract_fox_blaste
         "walk_init_vel": f(0x00),
         "walk_accel": f(0x04),
         "walk_max_vel": f(0x08),
+        # Decomp: ftCo_DatAttrs walk animation-rate divisors (ft/types.h +0x0C/+0x10/+0x14),
+        # used by ftWalkCommon_800DFDDC (ABS(mv_x0) / {slow,mid,fast}_walk_*).
+        # refs/melee/src/melee/ft/types.h::ftCo_DatAttrs
+        # refs/melee/src/melee/ft/ftwalkcommon.c::ftWalkCommon_800DFDDC
+        "slow_walk_max": f(0x0C),
+        "mid_walk_point": f(0x10),
+        "fast_walk_min": f(0x14),
         "gr_friction": f(0x18),
         "dash_initial_velocity": f(0x1C),
         "dash_run_acceleration_a": f(0x20),
@@ -331,6 +338,9 @@ def _stable_update(existing: dict, extracted: dict) -> dict:
         "walk_init_vel",
         "walk_accel",
         "walk_max_vel",
+        "slow_walk_max",
+        "mid_walk_point",
+        "fast_walk_min",
         "gr_friction",
         "ground_max_horizontal_velocity",
         "turn_frames",

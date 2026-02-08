@@ -24,6 +24,9 @@ typedef struct MslCharParams {
   float walk_init_vel;
   float walk_accel;
   float walk_max_vel;
+  float slow_walk_max;
+  float mid_walk_point;
+  float fast_walk_min;
   float gr_friction;
   float ground_max_horizontal_velocity;
 

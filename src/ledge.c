@@ -119,6 +119,16 @@ static inline uint16_t cliff_submotion_for_action(uint16_t a) {
 
 static inline float facing_dir(uint8_t facing) { return facing ? 1.0f : -1.0f; }
 
+static inline void enter_cliff_catch_immediate(MslBatch* batch, size_t idx) {
+  if (batch == NULL) {
+    return;
+  }
+  // Decomp: ftCliffCommon_80081370 enters CliffCatch, then calls ftAnim_8006EBA4 in the same
+  // update before input callbacks run.
+  // refs/melee/src/melee/ft/ftcliffcommon.c::ftCliffCommon_80081370
+  msl_anim_timebase_enter_with_policy(batch, idx, 0.0f, 1.0f, MSL_ANIM_ENTER_TICK_IMMEDIATE);
+}
+
 static inline void enter_fall(MslBatch* batch, size_t idx) {
   if (batch == NULL) {
     return;
@@ -550,7 +560,7 @@ void ledge_try_catch_post_collision(MslBatch* batch) {
         batch->state.animation_index[idx] = (uint32_t)MSL_SM_CLIFF_CATCH;
         batch->state.on_ground[idx] = 0;
         batch->state.fall_fast[idx] = 0;
-        msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+        enter_cliff_catch_immediate(batch, idx);
         // Decomp: ftCliffCommon_80081370 sets facing toward stage and snaps to the ledge point.
         // refs/melee/src/melee/ft/ftcliffcommon.c::ftCliffCommon_80081370
         batch->state.facing[idx] = 1;  // left ledge -> face right
@@ -587,7 +597,7 @@ void ledge_try_catch_post_collision(MslBatch* batch) {
         batch->state.animation_index[idx] = (uint32_t)MSL_SM_CLIFF_CATCH;
         batch->state.on_ground[idx] = 0;
         batch->state.fall_fast[idx] = 0;
-        msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+        enter_cliff_catch_immediate(batch, idx);
         batch->state.facing[idx] = 0;  // right ledge -> face left
         {
           // Decomp: ftCo_CliffCatch_Phys snaps to `cliff_point + TransNPos` each frame.

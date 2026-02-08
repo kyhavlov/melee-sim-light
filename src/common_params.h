@@ -33,10 +33,18 @@ typedef struct MslCommonParams {
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DD1E4
   // refs/melee/src/melee/ft/ft_0DF1.c::{ftCo_800DF7F4,ftCo_800DF844,ftCo_800DF878}
   float smash_stick_threshold;         // p_ftCommonData->x7B8 (smash_stick_threshold)
+  float cstick_smash_threshold;        // p_ftCommonData->x3C (ftCo_800DF1C8 side-smash edge)
   // Grounded A-tilt directional checks (ftCo_AttackS3/Hi3/Lw3 input helpers).
   float attack_s3_stick_threshold_x;   // p_ftCommonData->x98 (attack_s3_stick_threshold_x)
   float attack_hi3_stick_threshold_y;  // p_ftCommonData->attackhi3_stick_threshold_y
   float attack_lw3_stick_threshold_y;  // p_ftCommonData->xB0 (attack_lw3_stick_threshold_y)
+  // Grounded A-smash directional checks (ftCo_AttackHi4/Lw4 and ft_0DF1 C-stick helpers).
+  float attack_hi4_stick_threshold_y;  // p_ftCommonData->xCC
+  uint8_t attack_hi4_tilt_max_frames;  // p_ftCommonData->xD0
+  uint8_t _pad_u8_attack_hi4[3];
+  float attack_lw4_stick_threshold_y;  // p_ftCommonData->xD4
+  uint8_t attack_lw4_tilt_max_frames;  // p_ftCommonData->xD8
+  uint8_t _pad_u8_attack_lw4[3];
 
   // Walk gating / walk-type thresholds (see refs/melee/src/melee/ft/ftwalkcommon.c)
   float walk_stick_threshold;  // p_ftCommonData->x24

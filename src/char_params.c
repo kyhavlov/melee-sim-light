@@ -67,6 +67,19 @@ static int json_get_f32(const char* json, const char* key, float* out) {
   return 0;
 }
 
+static int json_get_f32_or_default(const char* json, const char* key, float default_v, float* out) {
+  if (json == NULL || key == NULL || out == NULL) {
+    return -1;
+  }
+  float v = 0.0f;
+  if (json_get_f32(json, key, &v) != 0) {
+    *out = default_v;
+    return 0;
+  }
+  *out = v;
+  return 0;
+}
+
 static int json_get_u8(const char* json, const char* key, uint8_t* out) {
   if (json == NULL || key == NULL || out == NULL) {
     return -1;
@@ -312,6 +325,18 @@ static int load_one(const char* data_dir, const char* rel_path, uint8_t char_id)
       json_get_f32(buf, "reflector_damage_mul", &out.reflector_damage_mul) != 0 ||
       json_get_f32(buf, "reflector_speed_mul", &out.reflector_speed_mul) != 0 ||
       json_get_u8(buf, "reflector_behavior", &out.reflector_behavior) != 0) {
+    alloc_free(buf);
+    return -1;
+  }
+  // Backward-compatible optional fields (added for ftWalkCommon_800DFDDC parity):
+  // if stale local artifacts are missing these keys, default to walk_max_vel so init keeps
+  // working; regenerated extracts provide the decomp-sourced values.
+  out.slow_walk_max = out.walk_max_vel;
+  out.mid_walk_point = out.walk_max_vel;
+  out.fast_walk_min = out.walk_max_vel;
+  if (json_get_f32_or_default(buf, "slow_walk_max", out.walk_max_vel, &out.slow_walk_max) != 0 ||
+      json_get_f32_or_default(buf, "mid_walk_point", out.walk_max_vel, &out.mid_walk_point) != 0 ||
+      json_get_f32_or_default(buf, "fast_walk_min", out.walk_max_vel, &out.fast_walk_min) != 0) {
     alloc_free(buf);
     return -1;
   }
