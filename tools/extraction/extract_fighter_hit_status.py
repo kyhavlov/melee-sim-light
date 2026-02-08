@@ -120,58 +120,12 @@ def main() -> None:
     }
 
     enum_map = _parse_ftco_submotion_enum(args.melee_decomp)
-    # Keep the extraction domain conservative: some DAT tables contain entries that are not valid
-    # subaction scripts (or have unusual control-flow), which can trip the lightweight script
-    # interpreter step budget. Prefer coverage of combat-relevant / invincibility-relevant moves
-    # first, and rely on special_msids for character specials.
-    want = [
-        # Attacks / throws (parity with hitbox and hurtbox-mode extraction).
-        "ftCo_SM_Attack11",
-        "ftCo_SM_AttackDash",
-        "ftCo_SM_AttackS3",
-        "ftCo_SM_AttackHi3",
-        "ftCo_SM_AttackLw3",
-        "ftCo_SM_AttackS4",
-        "ftCo_SM_AttackHi4",
-        "ftCo_SM_AttackLw4",
-        "ftCo_SM_AttackAirN",
-        "ftCo_SM_AttackAirF",
-        "ftCo_SM_AttackAirB",
-        "ftCo_SM_AttackAirHi",
-        "ftCo_SM_AttackAirLw",
-        "ftCo_SM_DownAttackU",
-        "ftCo_SM_DownAttackD",
-        "ftCo_SM_Catch",
-        "ftCo_SM_CatchDash",
-        "ftCo_SM_CatchWait",
-        "ftCo_SM_CatchAttack",
-        "ftCo_SM_ThrowF",
-        "ftCo_SM_ThrowB",
-        "ftCo_SM_ThrowHi",
-        "ftCo_SM_ThrowLw",
-        "ftCo_SM_ThrownF",
-        "ftCo_SM_ThrownB",
-        "ftCo_SM_ThrownHi",
-        "ftCo_SM_ThrownLw",
-        # Invincibility / intangibility-relevant common actions (dodges / ledge options).
-        "ftCo_SM_EscapeN",
-        "ftCo_SM_EscapeF",
-        "ftCo_SM_EscapeB",
-        "ftCo_SM_EscapeAir",
-        "ftCo_SM_CliffEscapeSlow",
-        "ftCo_SM_CliffEscapeQuick",
-        "ftCo_SM_DamageFlyRoll",
-        # Stage entry / spawn sequences.
-        "ftCo_SM_EntryStart",
-    ]
     msid_candidates: set[int] = set()
-    for name in want:
-        v = enum_map.get(name)
-        if v is None:
-            continue
-        vv = int(v)
-        if 0 <= vv <= 0xFFFF:
-            msid_candidates.add(vv)
+    ftco_sm_count = int(enum_map.get("ftCo_SM_Count", 0))
+    if ftco_sm_count > 0:
+        for msid in range(ftco_sm_count):
+            if 0 <= msid <= 0xFFFF:
+                msid_candidates.add(msid)
 
     out_dir: Path = args.out_dir
     out_dir.mkdir(parents=True, exist_ok=True)

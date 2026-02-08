@@ -71,7 +71,9 @@ def main() -> None:
     entry = efa._msid_anim_entry(character, 38)  # ftCo_SM_Guard (tilt timeline uses this)
     if entry is None:
         raise SystemExit(f"{character}: missing msid 38 entry")
-    sym, base_off, _size = entry
+    # extract_fighter_anims._msid_anim_entry returns
+    # (public_symbol, aj_base_off, size_bytes, msid_flags_u8).
+    sym, base_off, _size, _msid_flags_u8 = entry
 
     aj_buf = aj_dat.read_bytes()
     arc = parse_hsd_archive(aj_buf, base=base_off)
@@ -230,4 +232,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

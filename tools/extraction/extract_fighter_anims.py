@@ -758,7 +758,7 @@ def _move_key_idx(name: str) -> int | None:
 def _extra_anim_msids() -> list[int]:
     # Common `ftCo_Submotion` IDs (from doldecomp `ftCommon/forward.h`) that we
     # bake so hurt capsules can follow the animated pose outside Attack states.
-    return [
+    curated = [
         238,  # ftCo_SM_EntryStart (used for entry pose even when anim_id is -1)
         2,  # ftCo_SM_Wait1_0
         7,  # ftCo_SM_WalkSlow
@@ -849,6 +849,15 @@ def _extra_anim_msids() -> list[int]:
         227,  # ftCo_SM_CliffJumpQuick1
         228,  # ftCo_SM_CliffJumpQuick2
     ]
+    # Foundation coverage pass:
+    # include the full GALE01 common submotion domain so replay-used common states
+    # (Damage*/Passive*/Guard*/Capture*/etc.) always have pose tracks when present.
+    #
+    # Decomp source:
+    # - refs/melee/src/melee/ft/chara/ftCommon/forward.h::ftCo_Submotion
+    #   (`ftCo_SM_Count = 295`, so valid common submotions are [0, 295)).
+    common_all = list(range(0, 295))
+    return sorted(set(curated) | set(common_all))
 
 
 def _special_anim_msids(character: str) -> list[int]:
