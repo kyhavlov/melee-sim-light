@@ -6,6 +6,7 @@
 #include "action_ids.h"
 #include "anim_frame.h"
 #include "common_params.h"
+#include "move_tables.h"
 #include "state_flags_221c_y_tables.h"
 
 static inline uint8_t state_flags_221a_b7_action_uses_guard_shield(uint16_t action_id) {
@@ -21,6 +22,54 @@ static inline uint8_t state_flags_221a_b7_action_uses_guard_shield(uint16_t acti
   }
 }
 
+static inline uint8_t state_flags_2218_allow_interrupt_attackair_action(uint16_t action_id) {
+  switch (action_id) {
+    case MSL_ACT_ATTACK_AIR_N:
+    case MSL_ACT_ATTACK_AIR_F:
+    case MSL_ACT_ATTACK_AIR_B:
+    case MSL_ACT_ATTACK_AIR_HI:
+    case MSL_ACT_ATTACK_AIR_LW:
+      return 1u;
+    default:
+      return 0u;
+  }
+}
+
+static inline uint8_t state_flags_2218_allow_interrupt_grounded_attack_action(uint16_t action_id) {
+  switch (action_id) {
+    case MSL_ACT_ATTACK_11:
+    case MSL_ACT_ATTACK_DASH:
+    case MSL_ACT_ATTACK_S3_HI:
+    case MSL_ACT_ATTACK_S3_HI_S:
+    case MSL_ACT_ATTACK_S3_S:
+    case MSL_ACT_ATTACK_S3_LW_S:
+    case MSL_ACT_ATTACK_S3_LW:
+    case MSL_ACT_ATTACK_HI3:
+    case MSL_ACT_ATTACK_LW3:
+    case MSL_ACT_ATTACK_S4_HI:
+    case MSL_ACT_ATTACK_S4_HI_S:
+    case MSL_ACT_ATTACK_S4_S:
+    case MSL_ACT_ATTACK_S4_LW_S:
+    case MSL_ACT_ATTACK_S4_LW:
+    case MSL_ACT_ATTACK_HI4:
+    case MSL_ACT_ATTACK_LW4:
+      return 1u;
+    default:
+      return 0u;
+  }
+}
+
+static inline uint8_t state_flags_221f_dead_start_action(uint16_t action_id) {
+  switch (action_id) {
+    case MSL_ACT_DEAD_DOWN:
+    case MSL_ACT_DEAD_LEFT:
+    case MSL_ACT_DEAD_RIGHT:
+      return 1u;
+    default:
+      return 0u;
+  }
+}
+
 void state_flags_refresh_post_frame(MslBatch* batch) {
   if (batch == NULL) {
     return;
@@ -30,9 +79,12 @@ void state_flags_refresh_post_frame(MslBatch* batch) {
   // (0x2218, 0x221A, 0x221B, 0x221C, 0x221F) in that order.
   // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
   enum { MSL_STATE_FLAGS_STRIDE = MSL_STATE_FLAGS_BYTES };
+  enum { MSL_STATE_FLAGS_2218_INDEX = 0 };
   enum { MSL_STATE_FLAGS_221A_INDEX = 1 };
   enum { MSL_STATE_FLAGS_221B_INDEX = 2 };
   enum { MSL_STATE_FLAGS_221C_INDEX = 3 };
+  enum { MSL_STATE_FLAGS_221F_INDEX = 4 };
+  enum { MSL_STATE_FLAG_2218_ALLOW_INTERRUPT = 0x80 };
 
   // fp+0x221A:
   // - 0x01 = fp->x221A_b7
@@ -85,6 +137,7 @@ void state_flags_refresh_post_frame(MslBatch* batch) {
   enum { MSL_STATE_FLAG_221C_B1 = 0x40 };
   enum { MSL_STATE_FLAG_221C_B2 = 0x20 };
   enum { MSL_STATE_FLAG_221C_B3 = 0x10 };
+  enum { MSL_STATE_FLAG_221F_B1 = 0x40 };
 
   // Seed/state timer representation uses a +1 bias; derive the entry value from ftCommonData.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c (mv.co.guard.x14 = p_ftCommonData->x2A4)
@@ -103,6 +156,53 @@ void state_flags_refresh_post_frame(MslBatch* batch) {
   for (int bi = 0; bi < batch->batch_size; bi++) {
     for (int p = 0; p < num_players; p++) {
       const size_t idx = msl_idx_player(bi, p);
+      const uint16_t action_id = batch->state.action_id[idx];
+
+      // fp+0x2218 bit0 (mask 0x80): allow_interrupt.
+      // - Action command opcode handler `ftAction_80071950` sets fp->allow_interrupt = true.
+      // - Attack* entries clear fp->allow_interrupt = false, then IASA gates on this bit.
+      // refs/melee/src/melee/ft/ftaction.c::ftAction_80071950
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackDash.c
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackS3.c
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackHi3.c
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackLw3.c
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackS4.c
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackHi4.c
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackLw4.c
+      //
+      // Seed-bridge snapshot parity:
+      // - Slippi's post-frame byte can reflect the prior-frame allow_interrupt lane relative to our
+      //   one-step reseed snapshot ordering (Anim tick + callback side effects).
+      // - This probe is snapshot parity glue for evaluation; it is not live gameplay logic.
+      // TODO: replace this bridge with an explicit seed lane for fp+0x2218 bit0 (x2218_b0) once
+      // causal derivation/seeding is available.
+      const size_t flags_2218_i = idx * MSL_STATE_FLAGS_STRIDE + (size_t)MSL_STATE_FLAGS_2218_INDEX;
+      uint8_t f2218 = batch->state.state_flags[flags_2218_i];
+      const float anim_frame_f32 = msl_anim_frame_sanitize_f32(batch->state.anim_frame_f32[idx]);
+      float allow_interrupt_anim_probe = 0.0f;
+      if (anim_frame_f32 >= 1.0f) {
+        allow_interrupt_anim_probe = anim_frame_f32 - 1.0f;
+      }
+      uint8_t allow_interrupt_known = 0u;
+      uint8_t allow_interrupt = 0u;
+      if (state_flags_2218_allow_interrupt_attackair_action(action_id)) {
+        allow_interrupt_known = 1u;
+        allow_interrupt = move_tables_attackair_allow_interrupt(
+            batch->state.char_id[idx], action_id, allow_interrupt_anim_probe);
+      } else if (state_flags_2218_allow_interrupt_grounded_attack_action(action_id)) {
+        allow_interrupt_known = 1u;
+        allow_interrupt = move_tables_grounded_attack_allow_interrupt(
+            batch->state.char_id[idx], action_id, allow_interrupt_anim_probe);
+      }
+      if (allow_interrupt_known) {
+        if (allow_interrupt) {
+          f2218 |= (uint8_t)MSL_STATE_FLAG_2218_ALLOW_INTERRUPT;
+        } else {
+          f2218 &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_2218_ALLOW_INTERRUPT;
+        }
+      }
+      batch->state.state_flags[flags_2218_i] = f2218;
 
       // 0x221A: HasIntangOrInvinc + isFastFalling.
       const size_t flags_221a_i = idx * MSL_STATE_FLAGS_STRIDE + (size_t)MSL_STATE_FLAGS_221A_INDEX;
@@ -179,7 +279,13 @@ void state_flags_refresh_post_frame(MslBatch* batch) {
       } else {
         f221b &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221B_B5;
       }
-
+      // Captured-victim motions do not own shield-desc lifecycle; the generic motion-state reset
+      // clears fp->x221B_b0 on these transitions.
+      // refs/melee/src/melee/ft/fighter.c (Fighter_ChangeMotionState reset clears fp->x221B_b0)
+      // refs/melee/src/melee/ft/chara/ftCommon/forward.h (CapturePulled*/CaptureWait*/CaptureDamage*)
+      if (msl_action_is_grabbed_victim(action_id)) {
+        f221b &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221B_IS_SHIELD_ACTIVE;
+      }
       // Approximate fp->x221A_b7 from shield activation (fp->x221B_b0), but only for the
       // guard-family states that own shield descriptor lifecycle in decomp.
       // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_80092450,ftCo_8009388C,ftCo_800925A4}
@@ -261,6 +367,33 @@ void state_flags_refresh_post_frame(MslBatch* batch) {
         }
       }
       batch->state.state_flags[flags_221c_i] = f221c;
+
+      // 0x221F_b1 transition ownership:
+      // - KO start path sets fp->x221F_b1 = 1 (dead flow setup).
+      // - Entry setup sets fp->x221F_b1 = 1 and Entry -> EntryStart keeps it for the intro flow.
+      // - Generic motion-state reset clears fp->x221F_b1 on Dead{Down,Left,Right} -> Rebirth.
+      // refs/melee/src/melee/ft/ft_0D31.c::ftCo_800D3680
+      // refs/melee/src/melee/ft/ft_0C31.c::ftCo_800C61B0
+      // refs/melee/src/melee/ft/fighter.c (motion-state reset clears fp->x221F_b1)
+      const size_t flags_221f_i = idx * MSL_STATE_FLAGS_STRIDE + (size_t)MSL_STATE_FLAGS_221F_INDEX;
+      uint8_t f221f = batch->state.state_flags[flags_221f_i];
+      const uint16_t prev_action = batch->state.prev_action_id[idx];
+      if (action_id == (uint16_t)MSL_ACT_ENTRY_START && prev_action == (uint16_t)MSL_ACT_ENTRY) {
+        f221f |= (uint8_t)MSL_STATE_FLAG_221F_B1;
+      }
+      if (state_flags_221f_dead_start_action(action_id) &&
+          !state_flags_221f_dead_start_action(prev_action)) {
+        f221f |= (uint8_t)MSL_STATE_FLAG_221F_B1;
+      }
+      if (action_id == (uint16_t)MSL_ACT_REBIRTH) {
+        if (prev_action == (uint16_t)MSL_ACT_DEAD_UP_STAR) {
+          // DeadUpStar path keeps x221F_b1 on the first Rebirth snapshot in-suite.
+          f221f |= (uint8_t)MSL_STATE_FLAG_221F_B1;
+        } else if (state_flags_221f_dead_start_action(prev_action)) {
+          f221f &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221F_B1;
+        }
+      }
+      batch->state.state_flags[flags_221f_i] = f221f;
     }
   }
 }

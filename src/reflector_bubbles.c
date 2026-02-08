@@ -64,6 +64,7 @@ void reflector_bubbles_refresh(MslBatch* batch) {
   enum { MSL_STATE_FLAGS_STRIDE = MSL_STATE_FLAGS_BYTES };
   enum { MSL_STATE_FLAGS_2218_INDEX = 0 };
   enum { MSL_STATE_FLAG_2218_IS_REFLECT_ACTIVE = 0x10 };
+  enum { MSL_STATE_FLAG_2218_REFLECT_BEHAVIOR = 0x04 };
 
   for (int bi = 0; bi < batch->batch_size; bi++) {
     for (int p = 0; p < num_players; p++) {
@@ -160,6 +161,13 @@ void reflector_bubbles_refresh(MslBatch* batch) {
         const uint8_t want = (batch->state.guard_reflect_timer_x14[idx] > 0) ? 1u : 0u;
         if (want) {
           f |= (uint8_t)MSL_STATE_FLAG_2218_IS_REFLECT_ACTIVE;
+          if (batch->state.action_frame[idx] <= 0) {
+            // GuardReflect entry builds ReflectDesc with x20_behavior=1 and
+            // ftColl_CreateReflectHit copies that into fp->x2218_b5.
+            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_8009370C
+            // refs/melee/src/melee/ft/ftcoll.c::ftColl_CreateReflectHit
+            f |= (uint8_t)MSL_STATE_FLAG_2218_REFLECT_BEHAVIOR;
+          }
         } else {
           f &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_2218_IS_REFLECT_ACTIVE;
         }
