@@ -280,6 +280,13 @@ typedef struct MslStateSoA {
   uint16_t* damage_jump_buffer_x14;  // [batch * players]
   uint8_t* l_cancel;
   uint8_t* hurtbox_state;
+  // Collision hit-status internals (decomp fp->x198C / x1990 / x1994 / x2221_b0).
+  // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
+  // refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007B760,ftColl_8007B7A4}
+  uint8_t* colanim_hit_status_x198c;  // [batch * players] (0/1/2)
+  uint16_t* colanim_timer_x1990;      // [batch * players]
+  uint16_t* colanim_timer_x1994;      // [batch * players]
+  uint8_t* colanim_lock_x2221_b0;     // [batch * players] (0/1)
   // Pose-driven world-space hurt capsule endpoints (computed each frame in hurtboxes_refresh).
   uint8_t* hurtcap_count;  // [batch * players]
   float* hurtcap_a_x;      // [batch * players * caps]

@@ -118,6 +118,40 @@ void timers_update_post_anim(MslBatch* batch) {
     // refs/melee/src/melee/ft/ftcoll.c::ftColl_800764DC
     // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008F744
 
+    // Pass 1: x198C timer ownership (x1990/x1994) before combo/hitstun passes.
+    //
+    // Decomp:
+    // - Fighter_8006A360 decrements x1990/x1994 every frame and updates x198C on expiry.
+    // - x1990 expiry: if (!x2221_b0) x198C = (x1994 != 0) ? 1 : 0
+    // - x1994 expiry: x198C = (x2221_b0 || x1990 != 0) ? 2 : 0
+    // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
+    for (int p = 0; p < num_players; p++) {
+      const size_t idx = msl_idx_player(bi, p);
+
+      uint16_t x1990 = batch->state.colanim_timer_x1990[idx];
+      if (x1990 != 0u) {
+        x1990--;
+        batch->state.colanim_timer_x1990[idx] = x1990;
+        if (x1990 == 0u && batch->state.colanim_lock_x2221_b0[idx] == 0u) {
+          batch->state.colanim_hit_status_x198c[idx] =
+              (batch->state.colanim_timer_x1994[idx] != 0u) ? 1u : 0u;
+        }
+      }
+
+      uint16_t x1994 = batch->state.colanim_timer_x1994[idx];
+      if (x1994 != 0u) {
+        x1994--;
+        batch->state.colanim_timer_x1994[idx] = x1994;
+        if (x1994 == 0u) {
+          batch->state.colanim_hit_status_x198c[idx] =
+              (batch->state.colanim_lock_x2221_b0[idx] != 0u ||
+               batch->state.colanim_timer_x1990[idx] != 0u)
+                  ? 2u
+                  : 0u;
+        }
+      }
+    }
+
     // Pass 2: combo timer tick + combo-victim clear (ftColl_800764DC family).
     for (int p = 0; p < num_players; p++) {
       const size_t idx = msl_idx_player(bi, p);

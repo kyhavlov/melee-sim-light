@@ -103,6 +103,12 @@ typedef struct MslCommonParams {
   float cliff_wait_frames_high_percent;  // p_ftCommonData->x490
   float cliff_option_stick_threshold;    // p_ftCommonData->x494
   uint16_t ledge_cooldown_frames;        // p_ftCommonData->ledge_cooldown (x498)
+  // Collision hit-status timers (x198C path).
+  // Decomp:
+  // - refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DD398 (ftColl_8007B7A4(..., x348))
+  // - refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffWait.c::ftCo_8009A77C (ftColl_8007B760(..., x49C))
+  uint16_t colanim_throw_x1994_frames;  // p_ftCommonData->x348
+  uint16_t colanim_cliff_x1990_frames;  // p_ftCommonData->x49C
 
   // Offscreen death / match-flow (ft_0D31.c / ft_0C31.c).
   // Decomp pointers:
@@ -119,6 +125,7 @@ typedef struct MslCommonParams {
   uint16_t dead_up_star_phase2_frames;   // p_ftCommonData->x50C
   uint16_t rebirth_timer_frames;         // p_ftCommonData->0x5D0
   uint16_t rebirth_wait_timer_frames;    // p_ftCommonData->0x5D4
+  uint16_t colanim_rebirth_fall_x1994_frames;  // p_ftCommonData->0x5D8 (ftColl_8007B7A4 on Fall enter)
   uint16_t entry_start_frames;           // p_ftCommonData->x6BC
   uint16_t entry_end_frames;             // p_ftCommonData->x6C0
   uint16_t _pad_u16_match_flow_0;

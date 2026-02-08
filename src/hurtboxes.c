@@ -7,6 +7,7 @@
 #include "anim_frame.h"
 #include "anim_pose.h"
 #include "char_params.h"
+#include "common_params.h"
 #include "hit_status_tables.h"
 #include "hurtbox_modes_tables.h"
 #include "hurtcaps_tables.h"
@@ -51,6 +52,93 @@ static inline uint8_t hurtboxes_guard_fallback_submotion(uint16_t action_id, uin
   }
 }
 
+static inline uint16_t hurtboxes_timer_remaining_from_action_frame(uint16_t init_frames,
+                                                                   int16_t action_frame) {
+  if (init_frames == 0u) {
+    return 0u;
+  }
+  if (action_frame <= 0) {
+    return init_frames;
+  }
+  int rem = (int)init_frames + 1 - (int)action_frame;
+  if (rem < 0) {
+    rem = 0;
+  }
+  if (rem > 0xFFFF) {
+    rem = 0xFFFF;
+  }
+  return (uint16_t)rem;
+}
+
+static inline void hurtboxes_apply_colanim_action_entry(MslBatch* batch, size_t idx) {
+  if (batch == NULL) {
+    return;
+  }
+  const uint16_t action = batch->state.action_id[idx];
+  const uint16_t prev_action = batch->state.prev_action_id[idx];
+  if (action == prev_action) {
+    return;
+  }
+  const MslCommonParams* c = msl_common_params();
+  if (c == NULL) {
+    return;
+  }
+  const int16_t action_frame = batch->state.action_frame[idx];
+
+  // RebirthWait -> Fall colanim ownership (x1994/x198C):
+  //
+  // Decomp:
+  // - RebirthWait_Anim and RebirthWait_IASA call ftColl_8007B7A4(gobj, p_ftCommonData->x5D8)
+  //   immediately before Fall enter.
+  //   refs/melee/build/GALE01/asm/melee/ft/ft_0D31.s::{ftCo_RebirthWait_Anim,ftCo_RebirthWait_IASA}
+  // - RebirthWait_Coll helper fn_800D5A30 also calls ftColl_8007B7A4(..., x5D8) before ft_8008A2BC.
+  //   refs/melee/build/GALE01/asm/melee/ft/ft_0D31.s::fn_800D5A30
+  //
+  // Seed-bridge note:
+  // - Some teacher-forced seeds can observe a direct Rebirth -> Fall snapshot without the explicit
+  //   intermediate RebirthWait row. Treat prev_action=Rebirth as equivalent for this entry hook.
+  if (action == (uint16_t)MSL_ACT_FALL &&
+      (prev_action == (uint16_t)MSL_ACT_REBIRTH_WAIT || prev_action == (uint16_t)MSL_ACT_REBIRTH)) {
+    const uint16_t rem = hurtboxes_timer_remaining_from_action_frame(
+        c->colanim_rebirth_fall_x1994_frames, action_frame);
+    if (rem > batch->state.colanim_timer_x1994[idx]) {
+      batch->state.colanim_timer_x1994[idx] = rem;
+    }
+    if (rem != 0u) {
+      batch->state.colanim_hit_status_x198c[idx] =
+          (batch->state.colanim_timer_x1990[idx] != 0u) ? 2u : 1u;
+    }
+  }
+
+  // Throw entry ownership:
+  // - ftCo_800DD398 enters Throw* and calls ftColl_8007B7A4(..., x348), which sets x1994 and x198C.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DD398
+  if (action == (uint16_t)MSL_ACT_THROW_F || action == (uint16_t)MSL_ACT_THROW_B ||
+      action == (uint16_t)MSL_ACT_THROW_HI || action == (uint16_t)MSL_ACT_THROW_LW) {
+    uint16_t rem =
+        hurtboxes_timer_remaining_from_action_frame(c->colanim_throw_x1994_frames, action_frame);
+    if (rem > batch->state.colanim_timer_x1994[idx]) {
+      batch->state.colanim_timer_x1994[idx] = rem;
+    }
+    batch->state.colanim_hit_status_x198c[idx] =
+        (batch->state.colanim_timer_x1990[idx] != 0u) ? 2u : 1u;
+  }
+
+  // Cliff catch/wait invulnerability timer ownership (x49C -> x1990):
+  // decomp callsite anchor: ftCo_CliffWait path uses ftColl_8007B760(..., x49C).
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffWait.c::ftCo_8009A77C
+  if (action == (uint16_t)MSL_ACT_CLIFF_CATCH || action == (uint16_t)MSL_ACT_CLIFF_WAIT) {
+    uint16_t rem =
+        hurtboxes_timer_remaining_from_action_frame(c->colanim_cliff_x1990_frames, action_frame);
+    if (rem > batch->state.colanim_timer_x1990[idx]) {
+      batch->state.colanim_timer_x1990[idx] = rem;
+    }
+    if (rem != 0u) {
+      batch->state.colanim_hit_status_x198c[idx] = 2u;
+    }
+  }
+}
+
 void hurtboxes_refresh(MslBatch* batch) {
   if (batch == NULL) {
     return;
@@ -92,12 +180,17 @@ void hurtboxes_refresh(MslBatch* batch) {
       }
 
       const uint8_t char_id = batch->state.char_id[idx];
+      hurtboxes_apply_colanim_action_entry(batch, idx);
+      uint8_t final_hurtbox_state = batch->state.colanim_hit_status_x198c[idx];
 
       const uint32_t anim_u32 = batch->state.animation_index[idx];
 
-      // Partial sim-owned hurtbox_state:
-      // - If movescript-derived hit status (x1988) is nonzero, overwrite hurtbox_state with it.
-      // - Otherwise, preserve passthrough (represents x198C in Slippi's send policy when x1988==0).
+      // Hurtbox-state composition:
+      // - x1988 lane: movescript-derived hit status (opcode 26 / ftColl_8007B62C).
+      // - x198C lane: timer/system-owned collision status (x1990/x1994 path).
+      // Slippi post-frame reports x1988 when nonzero, else x198C.
+      // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
+      // refs/melee/src/melee/ft/ftcoll.c::ftColl_8007B868
       uint8_t hit_status = 0;
       uint8_t have_hit_status_override = 0;
       if (batch->debug_hit_status_override != NULL) {
@@ -114,7 +207,8 @@ void hurtboxes_refresh(MslBatch* batch) {
         enum { MSL_STATE_FLAGS_221B_INDEX = 2 };
         enum { MSL_STATE_FLAG_221B_IS_SHIELD_ACTIVE = 0x80 };
         const uint8_t flags_221b =
-            batch->state.state_flags[idx * MSL_STATE_FLAGS_STRIDE + (size_t)MSL_STATE_FLAGS_221B_INDEX];
+            batch->state
+                .state_flags[idx * MSL_STATE_FLAGS_STRIDE + (size_t)MSL_STATE_FLAGS_221B_INDEX];
         // Guarded no-submotion snapshots can represent a live shield descriptor where we should
         // not synthesize fallback body capsules from motion-state mapping. Exception: while an
         // opponent is in catch startup, decomp catch collision (ftColl_80078A2C / ftGrabDist)
@@ -134,8 +228,7 @@ void hurtboxes_refresh(MslBatch* batch) {
         }
         const uint8_t guard_snapshot_with_shield =
             (batch->state.action_id[idx] == (uint16_t)MSL_ACT_GUARD &&
-             batch->state.action_frame[idx] < 0 &&
-             !any_opponent_in_catch_startup &&
+             batch->state.action_frame[idx] < 0 && !any_opponent_in_catch_startup &&
              (flags_221b & (uint8_t)MSL_STATE_FLAG_221B_IS_SHIELD_ACTIVE))
                 ? 1u
                 : 0u;
@@ -153,8 +246,9 @@ void hurtboxes_refresh(MslBatch* batch) {
         if (guard_snapshot_with_shield ||
             !hurtboxes_guard_fallback_submotion(batch->state.action_id[idx], &msid)) {
           if (hit_status != 0) {
-            batch->state.hurtbox_state[idx] = hit_status;
+            final_hurtbox_state = hit_status;
           }
+          batch->state.hurtbox_state[idx] = final_hurtbox_state;
           continue;
         }
       } else {
@@ -191,14 +285,21 @@ void hurtboxes_refresh(MslBatch* batch) {
         // NOTE(shine_entry): Some motion-state entry helpers call ftAnim_8006EBA4 immediately
         // after Fighter_ChangeMotionState, meaning the new state's cmd script (and opcode 26 hit
         // status) can run on the entry frame even though the transition happened post-Anim.
-        // Shine Start (Fox/Falco SpecialLwStart) is a decomp-anchored example and applies the
-        // entry-frame hit status directly during entry (see src/shine.c).
+        // Shine Start (Fox/Falco SpecialLwStart / SpecialAirLwStart) is a decomp-anchored example.
+        // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c::{ftFx_SpecialLw_Enter,ftFx_SpecialAirLw_Enter}
         // docs/DECOMP_PROC_ORDER.md (prio 1 vs prio 3).
         const uint16_t cur_action = batch->state.action_id[idx];
-        if (!(frame == 0u && batch->state.prev_action_id[idx] != cur_action)) {
-          batch->state.hurtbox_state[idx] = hit_status;
+        const uint8_t is_shine_start_entry =
+            (cur_action == (uint16_t)MSL_ACT_FX_SPECIAL_LW_START ||
+             cur_action == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_LW_START)
+                ? 1u
+                : 0u;
+        if (!(frame == 0u && batch->state.prev_action_id[idx] != cur_action &&
+              !is_shine_start_entry)) {
+          final_hurtbox_state = hit_status;
         }
       }
+      batch->state.hurtbox_state[idx] = final_hurtbox_state;
 
       const MslHurtCap* caps = NULL;
       uint16_t cap_count_u16 = 0;

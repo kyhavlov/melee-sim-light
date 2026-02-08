@@ -37,6 +37,63 @@
 #include "step.h"
 #include "grab_attachment.h"
 
+static inline uint16_t colanim_timer_remaining_from_action_frame(uint16_t init_frames,
+                                                                 int16_t action_frame) {
+  if (init_frames == 0u) {
+    return 0u;
+  }
+  if (action_frame <= 0) {
+    return init_frames;
+  }
+  // Seed bridge: entry frame is action_frame==1 for states that set x1990/x1994 in their
+  // ChangeMotionState path; the timer has not decremented yet for that post-frame snapshot.
+  // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360 (x1990/x1994 decrement pass)
+  int rem = (int)init_frames + 1 - (int)action_frame;
+  if (rem < 0) {
+    rem = 0;
+  }
+  if (rem > 0xFFFF) {
+    rem = 0xFFFF;
+  }
+  return (uint16_t)rem;
+}
+
+static inline uint16_t colanim_timer_remaining_from_seed_bridge(uint16_t init_frames,
+                                                                int16_t action_frame,
+                                                                float anim_frame_f32,
+                                                                float frame_speed_mul_f32) {
+  // Seed-bridge inference for x1990/x1994 timers:
+  // - Decomp decrements x1990/x1994 once per frame in Fighter_8006A360.
+  // - Decomp advances cur_anim_frame by frame_speed_mul in ftAnim_8006EBA4.
+  // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
+  // refs/melee/src/melee/ft/ftanim.c::ftAnim_8006EBA4
+  //
+  // Slippi does not expose x1990/x1994 directly. Recover remaining timer from snapshot-visible
+  // animation progress by estimating elapsed frames as round(cur_anim_frame / frame_speed_mul),
+  // while keeping action_frame-based fallback for degenerate rates.
+  uint16_t rem = colanim_timer_remaining_from_action_frame(init_frames, action_frame);
+  const float rate = fabsf(frame_speed_mul_f32);
+  if (!(rate > 0.0f) || !isfinite(rate)) {
+    return rem;
+  }
+  const float af = msl_anim_frame_sanitize_f32(anim_frame_f32);
+  int elapsed = (int)floorf((af / rate) + 0.5f);
+  if (elapsed < 0) {
+    elapsed = 0;
+  }
+  int rem_est = (int)init_frames + 1 - elapsed;
+  if (rem_est < 0) {
+    rem_est = 0;
+  }
+  if (rem_est > 0xFFFF) {
+    rem_est = 0xFFFF;
+  }
+  if ((uint16_t)rem_est > rem) {
+    rem = (uint16_t)rem_est;
+  }
+  return rem;
+}
+
 MslBatch* msl_batch_create(int batch_size, int num_players) {
   if (batch_size <= 0) {
     return NULL;
@@ -195,6 +252,7 @@ int msl_batch_reseed_seed(MslBatch* batch, const uint8_t* seed_bytes, size_t see
   if (seed_stride_bytes < sizeof(MslSeed)) {
     return EINVAL;
   }
+  const MslCommonParams* common = msl_common_params();
 
   for (int bi = 0; bi < batch->batch_size; bi++) {
     const uint8_t* ptr = seed_bytes + (size_t)bi * seed_stride_bytes;
@@ -399,7 +457,62 @@ int msl_batch_reseed_seed(MslBatch* batch, const uint8_t* seed_bytes, size_t see
       batch->state.damage_jump_buffer_x14[idx] = seed->damage_jump_buffer_x14[p];
       batch->state.throw_pending_victim_port[idx] = 0xFFu;
       batch->state.l_cancel[idx] = seed->l_cancel[p];
-      batch->state.hurtbox_state[idx] = seed->hurtbox_state[p];
+      // Collision hit-status ownership bridge (x1988/x198C):
+      // - Slippi post-frame `hurtbox_state` reports x1988 when nonzero, else x198C.
+      //   refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
+      // - x1988 is movescript-owned (opcode 26), while x198C is timer/system-owned.
+      //   refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007B62C,ftColl_8007B760,ftColl_8007B7A4}
+      uint8_t seed_hurtbox_state = seed->hurtbox_state[p];
+      batch->state.hurtbox_state[idx] = seed_hurtbox_state;
+      batch->state.colanim_hit_status_x198c[idx] = seed_hurtbox_state;
+      batch->state.colanim_timer_x1990[idx] = 0u;
+      batch->state.colanim_timer_x1994[idx] = 0u;
+      batch->state.colanim_lock_x2221_b0[idx] = 0u;
+      {
+        // Seed-bridge inference: if the movescript table reports a nonzero x1988 at the seeded
+        // (msid, frame) and it matches the seeded merged value, treat the x198C lane as 0.
+        // This prevents stale carry when x1988 windows end on the next frame.
+        uint8_t seed_x1988 = 0u;
+        const uint32_t anim_u32 = seed->animation_index[p];
+        if (anim_u32 <= 0xFFFFu) {
+          const uint16_t msid = (uint16_t)anim_u32;
+          const float af = msl_anim_frame_sanitize_f32(seed->anim_frame_f32[p]);
+          const uint16_t fr = msl_anim_frame_floor_u16(af);
+          (void)hit_status_get(seed->char_id[p], msid, fr, &seed_x1988);
+        }
+        if (seed_x1988 != 0u && seed_hurtbox_state == seed_x1988) {
+          batch->state.colanim_hit_status_x198c[idx] = 0u;
+        }
+      }
+      if (common != NULL) {
+        const uint16_t action = seed->action_id[p];
+        const int16_t action_frame = seed->action_frame[p];
+        // Throw entry uses ftColl_8007B7A4(..., x348): x1994 timer + x198C={1,2} depending on x1990.
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DD398
+        if (action == (uint16_t)MSL_ACT_THROW_F || action == (uint16_t)MSL_ACT_THROW_B ||
+            action == (uint16_t)MSL_ACT_THROW_HI || action == (uint16_t)MSL_ACT_THROW_LW) {
+          const uint16_t rem = colanim_timer_remaining_from_seed_bridge(
+              common->colanim_throw_x1994_frames, action_frame, seed->anim_frame_f32[p],
+              seed->frame_speed_mul_f32[p]);
+          batch->state.colanim_timer_x1994[idx] = rem;
+          if (rem != 0u) {
+            batch->state.colanim_hit_status_x198c[idx] =
+                (batch->state.colanim_timer_x1990[idx] != 0u) ? 2u : 1u;
+          }
+        }
+        // Cliff catch/wait invulnerability path uses x1990 timer (x49C).
+        // Decomp callsite anchor:
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffWait.c::ftCo_8009A77C
+        if (action == (uint16_t)MSL_ACT_CLIFF_CATCH || action == (uint16_t)MSL_ACT_CLIFF_WAIT) {
+          const uint16_t rem = colanim_timer_remaining_from_seed_bridge(
+              common->colanim_cliff_x1990_frames, action_frame, seed->anim_frame_f32[p],
+              seed->frame_speed_mul_f32[p]);
+          batch->state.colanim_timer_x1990[idx] = rem;
+          if (rem != 0u) {
+            batch->state.colanim_hit_status_x198c[idx] = 2u;
+          }
+        }
+      }
       batch->state.ground_id[idx] = seed->ground_id[p];
       batch->state.animation_index[idx] = seed->animation_index[p];
       batch->state.instance_hit_by[idx] = seed->instance_hit_by[p];

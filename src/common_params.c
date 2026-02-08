@@ -240,7 +240,9 @@ int common_params_init(void) {
                    &g_params.cliff_wait_frames_high_percent) != 0 ||
       json_get_f32(buf, "cliff_option_stick_threshold", &g_params.cliff_option_stick_threshold) !=
           0 ||
-      json_get_u16(buf, "ledge_cooldown_frames", &g_params.ledge_cooldown_frames) != 0) {
+      json_get_u16(buf, "ledge_cooldown_frames", &g_params.ledge_cooldown_frames) != 0 ||
+      json_get_u16(buf, "colanim_throw_x1994_frames", &g_params.colanim_throw_x1994_frames) != 0 ||
+      json_get_u16(buf, "colanim_cliff_x1990_frames", &g_params.colanim_cliff_x1990_frames) != 0) {
     alloc_free(buf);
     return -1;
   }
@@ -254,6 +256,8 @@ int common_params_init(void) {
       json_get_u16(buf, "dead_up_star_phase2_frames", &g_params.dead_up_star_phase2_frames) != 0 ||
       json_get_u16(buf, "rebirth_timer_frames", &g_params.rebirth_timer_frames) != 0 ||
       json_get_u16(buf, "rebirth_wait_timer_frames", &g_params.rebirth_wait_timer_frames) != 0 ||
+      json_get_u16(buf, "colanim_rebirth_fall_x1994_frames",
+                   &g_params.colanim_rebirth_fall_x1994_frames) != 0 ||
       json_get_u16(buf, "entry_start_frames", &g_params.entry_start_frames) != 0 ||
       json_get_u16(buf, "entry_end_frames", &g_params.entry_end_frames) != 0) {
     alloc_free(buf);

@@ -254,6 +254,12 @@ def main() -> None:
         #     refs/melee/build/GALE01/asm/melee/ft/ft_0D31.s (see callsite around 800D5640)
         #   - RebirthWait: fp->x2340 = *(p_ftCommonData + 0x5D4) on enter
         #     refs/melee/build/GALE01/asm/melee/ft/ft_0D31.s (see ftCo_800D5600 block around 800D5A08)
+        # - RebirthWait -> Fall collision status:
+        #   - ftCo_RebirthWait_{Anim,IASA} call ftColl_8007B7A4(gobj, p_ftCommonData->x5D8) before Fall enter.
+        #     refs/melee/build/GALE01/asm/melee/ft/ft_0D31.s::{ftCo_RebirthWait_Anim,ftCo_RebirthWait_IASA}
+        #   - fn_800D5A30 (RebirthWait_Coll helper) calls ftColl_8007B7A4(gobj, p_ftCommonData->x5D8) before
+        #     ft_8008A2BC (usually Fall enter).
+        #     refs/melee/build/GALE01/asm/melee/ft/ft_0D31.s::fn_800D5A30
         "dead_up_kb_vel_threshold": float(_f32_be(buf, ft_common_abs + 0x4F0)),
         "dead_timer_frames": int(max(0, _i32_be(buf, ft_common_abs + 0x500))),
         "dead_up_star_initial_frames": int(max(0, _i32_be(buf, ft_common_abs + 0x504))),
@@ -261,6 +267,7 @@ def main() -> None:
         "dead_up_star_phase2_frames": int(max(0, _i32_be(buf, ft_common_abs + 0x50C))),
         "rebirth_timer_frames": int(max(0, _i32_be(buf, ft_common_abs + 0x5D0))),
         "rebirth_wait_timer_frames": int(max(0, _i32_be(buf, ft_common_abs + 0x5D4))),
+        "colanim_rebirth_fall_x1994_frames": int(max(0, _i32_be(buf, ft_common_abs + 0x5D8))),
         # Movement scaling
         "walk_accel_scale_mul": float(_f32_be(buf, ft_common_abs + 0x30)),
         # Dash IASA velocity decay multiplier (ftCo_Dash.c): gr_vel += -gr_vel * x54 * traction
@@ -359,6 +366,15 @@ def main() -> None:
         "knockback_frame_decay": float(_f32_be(buf, ft_common_abs + 0x204)),
         # Ledge regrab cooldown (fighter.c / ftCo_Cliff*)
         "ledge_cooldown_frames": int(max(0, _i32_be(buf, ft_common_abs + 0x498))),
+        # Collision hit-status timers (x198C path).
+        #
+        # Decomp:
+        # - Throw entry calls ftColl_8007B7A4(gobj, p_ftCommonData->x348), which sets x1994 and x198C.
+        #   refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DD398
+        # - Cliff wait path calls ftColl_8007B760(gobj, p_ftCommonData->x49C), which sets x1990 and x198C.
+        #   refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffWait.c::ftCo_8009A77C
+        "colanim_throw_x1994_frames": int(max(0, _i32_be(buf, ft_common_abs + 0x348))),
+        "colanim_cliff_x1990_frames": int(max(0, _i32_be(buf, ft_common_abs + 0x49C))),
         # SDI / ASDI / DI (ftCo_Damage.c)
         # - SDI: x4B0 (radius), x4B4 (tilt timer max), x4B8 (step mul) via ftCo_Damage_OnEveryHitlag
         # - ASDI: x4BC (step mul) via ftCo_Damage_OnExitHitlag

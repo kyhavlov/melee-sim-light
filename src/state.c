@@ -153,6 +153,10 @@ int state_alloc(MslStateSoA* state, int batch_size) {
   state->damage_jump_buffer_x14 = (uint16_t*)alloc_aligned_64(sizeof(uint16_t) * bp);
   state->l_cancel = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->hurtbox_state = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
+  state->colanim_hit_status_x198c = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
+  state->colanim_timer_x1990 = (uint16_t*)alloc_aligned_64(sizeof(uint16_t) * bp);
+  state->colanim_timer_x1994 = (uint16_t*)alloc_aligned_64(sizeof(uint16_t) * bp);
+  state->colanim_lock_x2221_b0 = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->hurtcap_count = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->hurtcap_a_x = (float*)alloc_aligned_64(sizeof(float) * bpc);
   state->hurtcap_a_y = (float*)alloc_aligned_64(sizeof(float) * bpc);
@@ -293,8 +297,10 @@ int state_alloc(MslStateSoA* state, int batch_size) {
       !state->percent_temp || !state->dmg_x2225_b7 || !state->dmg_x2224_b2 || !state->shield_hp ||
       !state->hitlag || !state->hitlag_started_frame || !state->hitstun ||
       !state->damage_jump_buffer_x14 || !state->l_cancel || !state->hurtbox_state ||
-      !state->hurtcap_count || !state->hurtcap_a_x || !state->hurtcap_a_y || !state->hurtcap_a_z ||
-      !state->hurtcap_b_x || !state->hurtcap_b_y || !state->hurtcap_b_z || !state->hurtcap_radius ||
+      !state->colanim_hit_status_x198c || !state->colanim_timer_x1990 ||
+      !state->colanim_timer_x1994 || !state->colanim_lock_x2221_b0 || !state->hurtcap_count ||
+      !state->hurtcap_a_x || !state->hurtcap_a_y || !state->hurtcap_a_z || !state->hurtcap_b_x ||
+      !state->hurtcap_b_y || !state->hurtcap_b_z || !state->hurtcap_radius ||
       !state->hurtcap_enabled || !state->hurtcap_is_grabbable || !state->hurtcap_height ||
       !state->hitbox_count || !state->hitbox_enabled || !state->hitbox_x || !state->hitbox_y ||
       !state->hitbox_z || !state->hitbox_radius || !state->hitbox_damage ||
@@ -470,6 +476,10 @@ void state_free(MslStateSoA* state) {
   alloc_free(state->damage_jump_buffer_x14);
   alloc_free(state->l_cancel);
   alloc_free(state->hurtbox_state);
+  alloc_free(state->colanim_hit_status_x198c);
+  alloc_free(state->colanim_timer_x1990);
+  alloc_free(state->colanim_timer_x1994);
+  alloc_free(state->colanim_lock_x2221_b0);
   alloc_free(state->hurtcap_count);
   alloc_free(state->hurtcap_a_x);
   alloc_free(state->hurtcap_a_y);
