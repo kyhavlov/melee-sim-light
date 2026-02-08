@@ -363,7 +363,16 @@ static inline void enter_guard_reflect_from_guard(MslBatch* batch, const MslComm
   // frozen -1 shape used by Slippi snapshots.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_8009388C
   // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
-  msl_anim_timebase_seed(batch, idx, (anim_start < 0.0f) ? anim_start : -1.0f,
+  // Decomp ordering for GuardOn/GuardReflect path:
+  // - GuardOn_Anim runs before GuardOn_IASA (same Fighter proc), then ftCo_80093694 can enter
+  //   GuardReflect while keeping current anim frame.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_GuardOn_Anim,ftCo_GuardOn_IASA,ftCo_8009388C}
+  //
+  // For no-submotion snapshots (`animation_index==-1`, negative state_age/action_frame), preserve
+  // that "Anim-before-IASA" consumption by stepping one frame deeper into the negative lane so
+  // the next frame's action_frame matches Slippi's -1-lane snapshot shape.
+  // Snapshot-parity only: this is not claiming GALE01 uses a persistent "-2" lane in normal play.
+  msl_anim_timebase_seed(batch, idx, (anim_start < 0.0f) ? (anim_start - 1.0f) : -1.0f,
                          msl_f32_from_q16_16(batch->state.frame_speed_mul_fp_q16_16[idx]));
 }
 
@@ -751,10 +760,10 @@ void guard_update_grounded(MslBatch* batch, const MslCommonParams* c, size_t idx
     //
     // This preserves deterministic one-step GuardOn->Guard transitions without replay-fit constants
     // and keeps the normal anim-end gate in place when a real timebase is available.
-    const uint8_t guard_no_submotion_snapshot =
-        (batch->state.animation_index[idx] == 0xFFFFFFFFu && batch->state.anim_frame_f32[idx] < 0.0f)
-            ? 1u
-            : 0u;
+    const uint8_t guard_no_submotion_snapshot = (batch->state.animation_index[idx] == 0xFFFFFFFFu &&
+                                                 batch->state.anim_frame_f32[idx] < 0.0f)
+                                                    ? 1u
+                                                    : 0u;
     const uint8_t guard_reflect_window_expired =
         (batch->state.guard_reflect_timer_x14[idx] == 0u) ? 1u : 0u;
     if (batch->state.hitlag_started_frame[idx] == 0 && guard_no_submotion_snapshot && shield_held &&

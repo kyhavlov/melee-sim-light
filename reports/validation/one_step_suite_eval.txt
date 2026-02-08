@@ -38,7 +38,7 @@ suite: fox_falco_fd_ucf084_recent  datasets: 4  ucf_enabled: True  ucf_cardinals
 == datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl ==
 Records: 7295  Players/scored per record: 2  Total player-frames: 14590
 mismatch.action_id: 133 / 14590 (0.009116)
-mismatch.action_frame: 199 / 14590 (0.013639)
+mismatch.action_frame: 190 / 14590 (0.013023)
 mismatch.on_ground: 38 / 14590 (0.002605)
 mismatch.facing: 33 / 14590 (0.002262)
 mismatch.stocks: 0 / 14590 (0.000000)
@@ -74,13 +74,13 @@ err.item_pos_x: mae=1.682391 p95=0.000000 max=281.847900
 err.item_pos_y: mae=0.905052 p95=0.000000 max=125.424088
 err.item_vel_x: mae=0.063025 p95=0.000000 max=10.000000
 err.item_vel_y: mae=0.141296 p95=0.000000 max=6.995884
-overall.discrete_mismatch: 1986 / 882695
+overall.discrete_mismatch: 1977 / 882695
 overall.float_norm_mae_p95: 0.00828241
 
 == datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl ==
 Records: 11529  Players/scored per record: 2  Total player-frames: 23058
 mismatch.action_id: 191 / 23058 (0.008283)
-mismatch.action_frame: 299 / 23058 (0.012967)
+mismatch.action_frame: 287 / 23058 (0.012447)
 mismatch.on_ground: 79 / 23058 (0.003426)
 mismatch.facing: 78 / 23058 (0.003383)
 mismatch.stocks: 0 / 23058 (0.000000)
@@ -116,7 +116,7 @@ err.item_pos_x: mae=1.395028 p95=0.000000 max=296.966644
 err.item_pos_y: mae=0.572834 p95=0.000000 max=125.424072
 err.item_vel_x: mae=0.056761 p95=0.000000 max=10.000000
 err.item_vel_y: mae=0.063766 p95=0.000000 max=6.995884
-overall.discrete_mismatch: 3105 / 1395009
+overall.discrete_mismatch: 3093 / 1395009
 overall.float_norm_mae_p95: 0.00779722
 
 == datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/QuerulousGrandDinosaur.msl ==
@@ -164,7 +164,7 @@ overall.float_norm_mae_p95: 0.00659127
 == datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/TreasuredBackKangaroo.msl ==
 Records: 7837  Players/scored per record: 2  Total player-frames: 15674
 mismatch.action_id: 122 / 15674 (0.007784)
-mismatch.action_frame: 164 / 15674 (0.010463)
+mismatch.action_frame: 163 / 15674 (0.010399)
 mismatch.on_ground: 35 / 15674 (0.002233)
 mismatch.facing: 43 / 15674 (0.002743)
 mismatch.stocks: 0 / 15674 (0.000000)
@@ -200,9 +200,9 @@ err.item_pos_x: mae=1.865728 p95=0.000000 max=427.877502
 err.item_pos_y: mae=0.746651 p95=0.000000 max=125.424088
 err.item_vel_x: mae=0.043397 p95=0.000000 max=12.000000
 err.item_vel_y: mae=0.093754 p95=0.000000 max=6.995884
-overall.discrete_mismatch: 2131 / 948277
+overall.discrete_mismatch: 2130 / 948277
 overall.float_norm_mae_p95: 0.00848936
 
 == suite summary ==
-overall.discrete_mismatch: 9738 / 4462843
+overall.discrete_mismatch: 9716 / 4462843
 overall.float_norm_mae_p95: 0.00771378

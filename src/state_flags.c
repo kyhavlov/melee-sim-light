@@ -32,6 +32,7 @@ void state_flags_refresh_post_frame(MslBatch* batch) {
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_80092450,ftCo_8009388C,ftCo_800925A4}
   enum { MSL_STATE_FLAG_221A_IS_FASTFALL = 0x08 };
   enum { MSL_STATE_FLAG_221A_IS_HITLAG = 0x20 };
+  enum { MSL_STATE_FLAG_221A_B3 = 0x10 };
   enum { MSL_STATE_FLAG_221A_B7 = 0x01 };
 
   // fp+0x221B:
@@ -96,6 +97,9 @@ void state_flags_refresh_post_frame(MslBatch* batch) {
         f221a |= (uint8_t)MSL_STATE_FLAG_221A_IS_HITLAG;
       } else {
         f221a &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221A_IS_HITLAG;
+        // Decomp: Fighter_8006A1BC clears fp->x221A_b3 when hitlag reaches 0.
+        // refs/melee/src/melee/ft/fighter.c::Fighter_8006A1BC
+        f221a &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221A_B3;
       }
 
       // x221B_b5 ownership (grab-owner latch):
