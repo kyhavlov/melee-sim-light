@@ -2216,3 +2216,186 @@ def test_action_id_damagefly_to_downbound_entry_rows(
         assert int(out["on_ground"][0, p]) == int(row["ref_t1"]["on_ground"][0, p])
     finally:
         binding.destroy(handle)
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    ("dataset_rel", "record", "p", "ref_action_id"),
+    [
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
+            "cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl",
+            2095,
+            0,
+            183,  # ftCo_MS_DownBoundU
+        ),
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
+            "cardinal_1.0_recent/GracefulAttachedTurtle.msl",
+            2316,
+            1,
+            183,  # ftCo_MS_DownBoundU
+        ),
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
+            "cardinal_1.0_recent/QuerulousGrandDinosaur.msl",
+            5287,
+            1,
+            199,  # ftCo_MS_Passive
+        ),
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
+            "cardinal_1.0_recent/TreasuredBackKangaroo.msl",
+            1156,
+            1,
+            199,  # ftCo_MS_Passive
+        ),
+    ],
+    ids=["agg_r2095_p0", "gat_r2316_p1", "qgd_r5287_p1", "tbk_r1156_p1"],
+)
+def test_action_id_damageflyhi_hitlag_exit_ground_entry_rows(
+    dataset_rel: str,
+    record: int,
+    p: int,
+    ref_action_id: int,
+) -> None:
+    # Dirty-seed hitlag-exit landing cluster for DamageFlyHi:
+    # - seed carries hitlag/hitstun while replay t+1 has already entered grounded follow-up
+    #   (DownBound/Passive).
+    # - this locks callback-ownership ordering for DamageFly* collision resolution.
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+    assert int(samples.shape[0]) > record, f"dataset too short: num_records={int(samples.shape[0])}"
+    row = samples[record : record + 1]
+
+    assert int(row["seed_t"]["action_id"][0, p]) == 87  # ftCo_MS_DamageFlyHi
+    assert int(row["ref_t1"]["action_id"][0, p]) == ref_action_id
+    assert int(row["seed_t"]["hitlag"][0, p]) == 1
+    assert int(row["ref_t1"]["hitlag"][0, p]) == 0
+    assert int(row["seed_t"]["hitstun"][0, p]) > 0
+    assert int(row["ref_t1"]["hitstun"][0, p]) == 0
+    assert int(row["seed_t"]["on_ground"][0, p]) == 0
+    assert int(row["ref_t1"]["on_ground"][0, p]) == 1
+
+    binding = pytest.importorskip("msl_binding")
+    sizes = binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    compare_stride = int(sizes["compare"])
+
+    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    try:
+        seed_bytes = np.empty((1, seed_stride), dtype=np.uint8)
+        prev_input_bytes = np.empty((1, input_stride), dtype=np.uint8)
+        input_bytes = np.empty((1, input_stride), dtype=np.uint8)
+        out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
+
+        seed_bytes[:] = np.frombuffer(row["seed_t"].tobytes(order="C"), dtype=np.uint8).reshape(1, seed_stride)
+        prev_input_bytes[:] = np.frombuffer(row["prev_input_t"].tobytes(order="C"), dtype=np.uint8).reshape(
+            1, input_stride
+        )
+        input_bytes[:] = np.frombuffer(row["input_t"].tobytes(order="C"), dtype=np.uint8).reshape(
+            1, input_stride
+        )
+
+        binding.reseed_seed(handle, seed_bytes)
+        binding.step_input(handle, prev_input_bytes, input_bytes)
+        binding.write_compare(handle, out_compare_bytes)
+        out = out_compare_bytes.view(COMPARE_DTYPE).reshape(-1)
+
+        assert int(out["action_id"][0, p]) == int(row["ref_t1"]["action_id"][0, p])
+        assert int(out["animation_index"][0, p]) == int(row["ref_t1"]["animation_index"][0, p])
+        assert int(out["on_ground"][0, p]) == int(row["ref_t1"]["on_ground"][0, p])
+        assert int(out["ground_id"][0, p]) == int(row["ref_t1"]["ground_id"][0, p])
+    finally:
+        binding.destroy(handle)
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    ("dataset_rel", "record", "p"),
+    [
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
+            "cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl",
+            6468,
+            0,
+        ),
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
+            "cardinal_1.0_recent/QuerulousGrandDinosaur.msl",
+            484,
+            1,
+        ),
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
+            "cardinal_1.0_recent/QuerulousGrandDinosaur.msl",
+            8152,
+            1,
+        ),
+    ],
+    ids=["agg_r6468_p0", "qgd_r484_p1", "qgd_r8152_p1"],
+)
+def test_action_id_downboundu_ledge_release_to_fall_rows(dataset_rel: str, record: int, p: int) -> None:
+    # Ledge-release ownership lock for DownBoundU:
+    # - decomp ftCo_DownBound_Coll uses ft_80082708 (mpColl_8004B108 path), not the generic
+    #   ft_800827A0/mpColl_8004B2DC edge-snap family.
+    # - these replay-real rows should release into Fall (29) on t+1 at the ledge edge.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownBound.c::ftCo_DownBound_Coll
+    # refs/melee/src/melee/ft/ft_081B.c::{ft_80082708,ft_800827A0}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+    assert int(samples.shape[0]) > record, f"dataset too short: num_records={int(samples.shape[0])}"
+    row = samples[record : record + 1]
+
+    assert int(row["seed_t"]["action_id"][0, p]) == 183  # ftCo_MS_DownBoundU
+    assert int(row["ref_t1"]["action_id"][0, p]) == 29  # ftCo_MS_Fall
+    assert int(row["seed_t"]["hitlag"][0, p]) == 0
+    assert int(row["seed_t"]["hitstun"][0, p]) == 0
+    assert int(row["ref_t1"]["hitlag"][0, p]) == 0
+    assert int(row["ref_t1"]["hitstun"][0, p]) == 0
+
+    binding = pytest.importorskip("msl_binding")
+    sizes = binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    compare_stride = int(sizes["compare"])
+
+    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    try:
+        seed_bytes = np.empty((1, seed_stride), dtype=np.uint8)
+        prev_input_bytes = np.empty((1, input_stride), dtype=np.uint8)
+        input_bytes = np.empty((1, input_stride), dtype=np.uint8)
+        out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
+
+        seed_bytes[:] = np.frombuffer(row["seed_t"].tobytes(order="C"), dtype=np.uint8).reshape(1, seed_stride)
+        prev_input_bytes[:] = np.frombuffer(row["prev_input_t"].tobytes(order="C"), dtype=np.uint8).reshape(
+            1, input_stride
+        )
+        input_bytes[:] = np.frombuffer(row["input_t"].tobytes(order="C"), dtype=np.uint8).reshape(
+            1, input_stride
+        )
+
+        binding.reseed_seed(handle, seed_bytes)
+        binding.step_input(handle, prev_input_bytes, input_bytes)
+        binding.write_compare(handle, out_compare_bytes)
+        out = out_compare_bytes.view(COMPARE_DTYPE).reshape(-1)
+
+        assert int(out["action_id"][0, p]) == int(row["ref_t1"]["action_id"][0, p])
+        assert int(out["animation_index"][0, p]) == int(row["ref_t1"]["animation_index"][0, p])
+        assert int(out["on_ground"][0, p]) == int(row["ref_t1"]["on_ground"][0, p])
+        assert int(out["ground_id"][0, p]) == int(row["ref_t1"]["ground_id"][0, p])
+    finally:
+        binding.destroy(handle)
