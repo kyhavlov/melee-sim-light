@@ -1,9 +1,12 @@
 #pragma once
 
+#include <stddef.h>
+
 #include "batch_internal.h"
 
 void combat_resolve(MslBatch* batch);
 void combat_processhit_consume(MslBatch* batch);
+uint8_t combat_is_powershield_active_idx(const MslBatch* batch, size_t idx);
 
 typedef struct MslThrowHitboxParams MslThrowHitboxParams;
 

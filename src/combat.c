@@ -160,7 +160,7 @@ static inline void combat_state_flags_set_is_hitstun(MslBatch* batch, size_t idx
   batch->state.state_flags[flags_i] = f;
 }
 
-static inline uint8_t combat_is_powershield_active(const MslBatch* batch, size_t idx) {
+uint8_t combat_is_powershield_active_idx(const MslBatch* batch, size_t idx) {
   if (batch == NULL) {
     return 0;
   }
@@ -180,23 +180,6 @@ static inline uint8_t combat_is_powershield_active(const MslBatch* batch, size_t
     //
     // Use action-owned x18 as source of truth in GuardReflect, so stale seeded 0x221C bits do not
     // keep collision in powershield-active mode after the timer has reached 0.
-    //
-    // Snapshot bridge (GuardReflect no-submotion lane):
-    // - Slippi post-frame reseeds can land on GuardReflect with no submotion timeline
-    //   (animation_index=-1, action_frame<0, anim_frame<0).
-    // - At this boundary, ftCo_80093BC0/GuardOn_Anim ownership can already have ended the active
-    //   reflect window (x14==0), while stale seeded x18 remains nonzero.
-    // - Treat x14 expiry as authoritative for collision-time powershield gating in this lane.
-    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_GuardReflect_Anim,ftCo_80093BC0,ftCo_GuardOn_Anim}
-    // refs/melee/src/melee/ft/ftanim.c::ftAnim_8006E9B4
-    const uint8_t guard_reflect_no_submotion_snapshot =
-        (batch->state.animation_index[idx] == 0xFFFFFFFFu && batch->state.action_frame[idx] < 0 &&
-         batch->state.anim_frame_f32[idx] < 0.0f)
-            ? 1u
-            : 0u;
-    if (guard_reflect_no_submotion_snapshot && batch->state.guard_reflect_timer_x14[idx] == 0u) {
-      return 0u;
-    }
     return (batch->state.guard_reflect_timer_x18[idx] != 0u) ? 1u : 0u;
   }
   return (flags_221c & (uint8_t)MSL_STATE_FLAG_221C_POWERSHIELD_ACTIVE) ? 1u : 0u;
@@ -1640,7 +1623,7 @@ void combat_apply_item_shield_hit(MslBatch* batch, int batch_index, int attacker
   // Powershield active flag: items are reflected elsewhere (items.c); do not apply shield HP /
   // GuardSetOff / hitlag here.
   // refs/melee/src/melee/ft/ftcoll.c::ftColl_80076CBC
-  if (combat_is_powershield_active(batch, d_idx)) {
+  if (combat_is_powershield_active_idx(batch, d_idx)) {
     return;
   }
 
@@ -1735,7 +1718,7 @@ static inline void combat_mutations_pass1_future_apply_shield_hit(MslBatch* batc
   // Powershield gating: collision does not accumulate shieldDamageTaken when the "powershield
   // active" flag is set (x221C_b2).
   // refs/melee/src/melee/ft/ftcoll.c::ftColl_80076CBC (`if (!fp1->x221C_b2) { ...shieldDamageTaken... }`)
-  if (combat_is_powershield_active(batch, d_idx)) {
+  if (combat_is_powershield_active_idx(batch, d_idx)) {
     shield_damage_taken = 0;
   }
 

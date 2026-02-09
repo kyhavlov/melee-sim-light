@@ -966,25 +966,13 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
           // Decomp anchors:
           // - GuardReflect reflect window timer: refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c
           //   (mv.co.guard.x14 = p_ftCommonData->x2A4; tick in ftCo_80093BC0).
-          const uint8_t guard_reflect_no_submotion_snapshot =
-              (batch->state.action_id[d_idx] == (uint16_t)MSL_ACT_GUARD_REFLECT &&
-               batch->state.action_frame[d_idx] < 0 &&
-               batch->state.animation_index[d_idx] == 0xFFFFFFFFu &&
-               batch->state.anim_frame_f32[d_idx] < 0.0f)
-                  ? 1u
-                  : 0u;
-          // No-submotion snapshot bridge:
-          // Slippi post-frame reseeds can land on GuardReflect with no submotion timeline, where
-          // x14 may already be expired by callback ordering while x18 (powershield-active window)
-          // still owns the reflect gate for this collision slice.
-          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_80093A50,ftCo_80093BC0}
-          // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
+          // - Powershield-active lane: fp->x221C_b2 at collision-time:
+          //   refs/melee/src/melee/ft/ftcoll.c::ftColl_80076CBC
+          //
+          // Keep item reflect gating aligned with combat collision-time powershield semantics by
+          // sharing combat_is_powershield_active_idx().
           const uint8_t can_powershield_reflect =
-              (batch->state.guard_reflect_timer_x18[d_idx] != 0u &&
-               (batch->state.guard_reflect_timer_x14[d_idx] != 0u ||
-                guard_reflect_no_submotion_snapshot))
-                  ? 1u
-                  : 0u;
+              combat_is_powershield_active_idx(batch, d_idx) ? 1u : 0u;
           if (batch->state.action_id[d_idx] == (uint16_t)MSL_ACT_GUARD_REFLECT &&
               can_powershield_reflect) {
             batch->state.item_owner[ii] = (int8_t)def;
