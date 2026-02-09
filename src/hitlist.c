@@ -250,6 +250,37 @@ uint8_t hitlist_allows_fighter(MslBatch* batch, int bi, int attacker, int hb_id,
   size_t found = 0;
   if (hitlist_capsule_find_fighter_entry(batch, bi, hit->victims_1, (size_t)MSL_HITLIST_VICTIM_CAP,
                                          (uint8_t)victim, victim_iid, &found)) {
+    // Seed-bridge stale-latch trim for fighter victim rings.
+    //
+    // Decomp anchor: BODY/SHIELD hit acceptance is gated by HitCapsule victim lists
+    // (lbColl_8000ACFC with per-capsule victim pointer storage in lbColl_80008688).
+    // refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000ACFC,lbColl_80008688}
+    //
+    // Teacher-forced reseed can preserve stale suppression entries across step boundaries when the
+    // attacker's hitcapsule ownership has already advanced. If attacker-instance attribution now
+    // disagrees and the victim is neutral this frame (post-frame hitlag/hitstun both zero), trim
+    // the stale entry and allow this contact.
+    const size_t v_idx = msl_idx_player(bi, victim);
+    const size_t a_idx = msl_idx_player(bi, attacker);
+    const uint16_t attacker_iid = batch->state.instance_id[a_idx];
+    const uint16_t v_act = batch->state.action_id[v_idx];
+    const uint8_t stale_by_instance =
+        (batch->state.instance_hit_by[v_idx] != attacker_iid) ? 1u : 0u;
+    const uint8_t victim_neutral_hit_timers =
+        (batch->state.hitlag[v_idx] == 0u && batch->state.hitstun[v_idx] == 0u) ? 1u : 0u;
+    const uint8_t victim_in_guard_family =
+        (v_act == (uint16_t)MSL_ACT_GUARD_ON || v_act == (uint16_t)MSL_ACT_GUARD ||
+         v_act == (uint16_t)MSL_ACT_GUARD_SET_OFF || v_act == (uint16_t)MSL_ACT_GUARD_REFLECT ||
+         v_act == (uint16_t)MSL_ACT_GUARD_OFF)
+            ? 1u
+            : 0u;
+    // Keep guard-family actions on strict suppression until guard ownership is fully modeled;
+    // these actions have separate dedicated ownership gates.
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_Guard_Anim,ftCo_GuardReflect_Anim}
+    if (stale_by_instance && victim_neutral_hit_timers && !victim_in_guard_family) {
+      entry_clear(&hit->victims_1[found]);
+      return 1u;
+    }
     return 0u;
   }
   return 1u;

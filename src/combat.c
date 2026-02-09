@@ -180,6 +180,23 @@ static inline uint8_t combat_is_powershield_active(const MslBatch* batch, size_t
     //
     // Use action-owned x18 as source of truth in GuardReflect, so stale seeded 0x221C bits do not
     // keep collision in powershield-active mode after the timer has reached 0.
+    //
+    // Snapshot bridge (GuardReflect no-submotion lane):
+    // - Slippi post-frame reseeds can land on GuardReflect with no submotion timeline
+    //   (animation_index=-1, action_frame<0, anim_frame<0).
+    // - At this boundary, ftCo_80093BC0/GuardOn_Anim ownership can already have ended the active
+    //   reflect window (x14==0), while stale seeded x18 remains nonzero.
+    // - Treat x14 expiry as authoritative for collision-time powershield gating in this lane.
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_GuardReflect_Anim,ftCo_80093BC0,ftCo_GuardOn_Anim}
+    // refs/melee/src/melee/ft/ftanim.c::ftAnim_8006E9B4
+    const uint8_t guard_reflect_no_submotion_snapshot =
+        (batch->state.animation_index[idx] == 0xFFFFFFFFu && batch->state.action_frame[idx] < 0 &&
+         batch->state.anim_frame_f32[idx] < 0.0f)
+            ? 1u
+            : 0u;
+    if (guard_reflect_no_submotion_snapshot && batch->state.guard_reflect_timer_x14[idx] == 0u) {
+      return 0u;
+    }
     return (batch->state.guard_reflect_timer_x18[idx] != 0u) ? 1u : 0u;
   }
   return (flags_221c & (uint8_t)MSL_STATE_FLAG_221C_POWERSHIELD_ACTIVE) ? 1u : 0u;
@@ -1192,17 +1209,18 @@ MslItemHitResult combat_apply_item_hit(MslBatch* batch, int batch_index, int att
     return MSL_ITEM_HIT_NONE;
   }
 
-  // Decomp (GALE01): collision stores both:
-  // - a raw integer damage value (HitCapsule.unk_count), and
-  // - a staled float damage value (HitCapsule.damage) for percent add.
+  // Decomp (GALE01): item-vs-fighter BODY apply stores both:
+  // - `HitCapsule.unk_count` (raw/base integer lane from it_80272460),
+  // - `HitCapsule.damage` (staled/adjusted float lane).
   //
-  // When computing hitlag and knockback, the engine consumes the integer damage value.
-  // refs/melee/build/GALE01/asm/melee/ft/ftcoll.s::ftColl_8007ABD0
+  // For ProcessHit ownership, `fp->dmg.x183C_applied` (hitlag/KB input lane) is sourced from
+  // getEnvDmg(HitCapsule.damage), i.e. the staled float converted to int.
+  // refs/melee/src/melee/it/itcoll.c::it_80272460
+  // refs/melee/src/melee/ft/ftcoll.c::{ftColl_80076ED8,inlineB2}
   // refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
   //
-  // The item apply path in this lite sim receives the base hitbox damage (integer-valued for
-  // Fox/Falco blaster lasers). Keep the raw integer for hitlag/KB inputs, but apply staling to
-  // the float percent add.
+  // The item apply path receives the base hitbox damage (integer-valued for Fox/Falco blasters),
+  // but hitlag/KB lanes below follow decomp ownership via getEnvDmg(staled_damage).
   const int dmg_raw_i = (int)damage;
   if (dmg_raw_i <= 0) {
     return MSL_ITEM_HIT_NONE;
@@ -1281,7 +1299,7 @@ MslItemHitResult combat_apply_item_hit(MslBatch* batch, int batch_index, int att
   }
 
   const float hitlag_mul = combat_hitlag_mul_from_element(c, element);
-  const uint16_t d_hl = combat_calc_hitlag_frames(c, dmg_raw_i, d_motion_id, hitlag_mul);
+  const uint16_t d_hl = combat_calc_hitlag_frames(c, dmg_env_i, d_motion_id, hitlag_mul);
   const uint16_t d_hl_prev = batch->state.hitlag[d_idx];
   if (d_hl > d_hl_prev) {
     batch->state.hitlag[d_idx] = d_hl;
@@ -1350,7 +1368,7 @@ MslItemHitResult combat_apply_item_hit(MslBatch* batch, int batch_index, int att
   }
 
   const float kb_applied = combat_damage_calc_kb_applied(
-      c, d_ch, d_motion_id, percent_pre, dmg_temp, dmg_raw_i, kbg, wsk, bkb, 1.0f,
+      c, d_ch, d_motion_id, percent_pre, dmg_temp, dmg_env_i, kbg, wsk, bkb, 1.0f,
       batch->state.dmg_x2225_b7[d_idx], batch->state.dmg_x2224_b2[d_idx]);
   const float kb_angle_rad =
       combat_damage_calc_angle_radians(c, angle, defender_on_ground, kb_applied);
