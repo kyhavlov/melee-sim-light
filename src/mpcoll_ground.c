@@ -79,11 +79,24 @@ static inline uint8_t is_damage_collision_landing_action(uint16_t a) {
   }
 }
 
+static inline uint8_t is_damage_fly_collision_action(uint16_t a) {
+  switch (a) {
+    case MSL_ACT_DAMAGE_FLY_HI:
+    case MSL_ACT_DAMAGE_FLY_N:
+    case MSL_ACT_DAMAGE_FLY_LW:
+    case MSL_ACT_DAMAGE_FLY_TOP:
+    case MSL_ACT_DAMAGE_FLY_ROLL:
+      return 1u;
+    default:
+      return 0u;
+  }
+}
+
 static inline uint8_t action_allows_floor_edge_snap(uint16_t a) {
   // Decomp: mpColl_8004A45C_Floor (edge snap) is used by mpColl_8004B2DC (flags=2), which is
   // called by ft_800827A0. Multiple grounded motion states use ft_80084104 (which calls
   // ft_800827A0) as their collision callback, including:
-  // - Down* (historically the first dominant mismatch cluster)
+  // - Down* (except DownBound, which uses ft_80082708 -> mpColl_8004B108)
   // - Grounded attacks (Attack11..AttackLw4), including AttackDash and AttackS4S.
   //
   // Implementation note: we gate by action_id here as a proxy for "this motion state uses the
@@ -97,6 +110,8 @@ static inline uint8_t action_allows_floor_edge_snap(uint16_t a) {
   // Decomp anchors:
   // - refs/melee/src/melee/ft/ft_081B.c::ft_80084104 (calls ft_800827A0)
   // - refs/melee/src/melee/ft/ft_081B.c::ft_800827A0 (calls mpColl_8004B2DC)
+  // - refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownBound.c::ftCo_DownBound_Coll
+  // - refs/melee/src/melee/ft/ft_081B.c::ft_80082708 (calls mpColl_8004B108)
   // - refs/melee/src/melee/mp/mpcoll.c::mpColl_8004B2DC (uses mpColl_8004A45C_Floor)
   // - refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackDash.c::ftCo_AttackDash_Coll
   // - refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackS4.c::ftCo_AttackS4_Coll
@@ -104,13 +119,18 @@ static inline uint8_t action_allows_floor_edge_snap(uint16_t a) {
     return 1;
   }
   switch (a) {
-    case MSL_ACT_DOWN_BOUND_U:
+    // DownBound intentionally excluded from this bucket:
+    // - generic edge-snap bucket here models ft_800827A0 -> mpColl_8004B2DC users,
+    // - DownBound_Coll uses ft_80082708 -> mpColl_8004B108 (allow-ground-to-air path) and should
+    //   not inherit the ft_800827A0 edge-snap helper semantics.
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownBound.c::ftCo_DownBound_Coll
+    // refs/melee/src/melee/ft/ft_081B.c::{ft_80082708,ft_800827A0}
+    // refs/melee/src/melee/mp/mpcoll.c::{mpColl_8004B108,mpColl_8004B2DC}
     case MSL_ACT_DOWN_WAIT_U:
     case MSL_ACT_DOWN_STAND_U:
     case MSL_ACT_DOWN_ATTACK_U:
     case MSL_ACT_DOWN_FOWARD_U:
     case MSL_ACT_DOWN_BACK_U:
-    case MSL_ACT_DOWN_BOUND_D:
     case MSL_ACT_DOWN_WAIT_D:
     case MSL_ACT_DOWN_STAND_D:
     case MSL_ACT_DOWN_ATTACK_D:
@@ -687,8 +707,7 @@ void mpcoll_ground_apply(MslBatch* batch) {
         if (ecb_frame_bias_next != 0xFFFFu) {
           ecb_frame_bias_next = (uint16_t)(ecb_frame_bias_next + 1u);
         }
-      } else if (is_damage_collision_landing_action(action_id) &&
-                 batch->state.action_frame[idx] <= 2) {
+      } else if (is_damage_fly_collision_action(action_id) && batch->state.action_frame[idx] <= 2) {
         // Damage/DamageFly callback ordering is also Anim then Coll in Fighter_8006A360. On early
         // entry frames, sampling the post-Anim ECB pose reduces one-frame "still airborne" misses
         // before DownBound/Landing transitions.
@@ -957,16 +976,16 @@ void mpcoll_ground_apply(MslBatch* batch) {
         // Narrowing note:
         // - This scope clamp is independent of the damage_post_hitlag_cb_kind seed lane.
         // - It prevents known seed==ref airborne regressions by keeping locked-floor projection in
-        //   the currently modeled DamageFlyN collision-ownership window only.
+        //   the currently modeled DamageFly* collision-ownership window only (not DamageAir*).
         // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_DamageFly_Coll
-        const uint8_t damagefly_n_locked =
-            (damage_locked && action_id == (uint16_t)MSL_ACT_DAMAGE_FLY_N) ? 1u : 0u;
+        const uint8_t damagefly_locked =
+            (damage_locked && is_damage_fly_collision_action(action_id)) ? 1u : 0u;
         uint8_t deep_lock_penetration = 0u;
-        if (escapeair_locked || damagefly_n_locked) {
+        if (escapeair_locked || damagefly_locked) {
           const float bottom_rel0 = msl_ecb_bottom_rel_y(char_id, anim, 0);
           deep_lock_penetration = (bottom_rel0 > 0.0f && cur_bottom_y <= -bottom_rel0) ? 1u : 0u;
         }
-        if (!on_ground && (escapeair_locked || damagefly_n_locked) && deep_lock_penetration &&
+        if (!on_ground && (escapeair_locked || damagefly_locked) && deep_lock_penetration &&
             prefer_line_idx >= 0) {
           // Decomp shape: while CollData_X130_Locked is active, collision callbacks can still
           // resolve against the persisted floor.index via mpLib_8004DD90_Floor-style projection.
@@ -986,7 +1005,36 @@ void mpcoll_ground_apply(MslBatch* batch) {
           float y_corr = 0.0f;
           const int out_line_idx = floor_dd90_project(g, prefer_line_idx, cur_bottom_x,
                                                       cur_bottom_y, &y_corr, &floor_nx, &floor_ny);
-          if (out_line_idx >= 0 && y_corr > 0.0f) {
+          if (out_line_idx >= 0 && y_corr >= 0.0f) {
+            batch->state.pos_y[idx] += y_corr;
+            on_ground = 1;
+            ground_id = g->lines[(size_t)out_line_idx].segment_i;
+            contact_x = cur_bottom_x;
+            contact_y = cur_bottom_y + y_corr;
+          }
+        }
+        if (!on_ground && damagefly_locked && prefer_line_idx >= 0 &&
+            batch->state.hitlag_pre_timer[idx] != 0u && batch->state.hitlag[idx] == 0u) {
+          // Damage hitlag-exit callback ordering:
+          // - Fighter_8006D10C invokes ftCo_Damage_OnExitHitlag at hitlag exit.
+          // - ftCo_Damage_OnExitHitlag can shift cur_pos (ASDI) before DamageFly_Coll decides
+          //   grounded landing / DownBound on the same frame.
+          // refs/melee/src/melee/ft/fighter.c::Fighter_8006D10C
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{
+          //   ftCo_Damage_OnExitHitlag,ftCo_DamageFly_Coll
+          // }
+          //
+          // Scope this to DamageFly* for now: this pass models replay-observed Dirty-seed
+          // hitlag-exit landings in DamageFly collision ownership, while still excluding DamageAir*
+          // (which regressed seed==ref rows when included here).
+          //
+          // Evaluate this before sweep handling so persisted-floor projection still applies when
+          // a sweep candidate line is reported but mpLib_8004DD90 projection fails on that path.
+          // refs/melee/src/melee/mp/mplib.c::mpLib_8004DD90_Floor
+          float y_corr = 0.0f;
+          const int out_line_idx = floor_dd90_project(g, prefer_line_idx, cur_bottom_x,
+                                                      cur_bottom_y, &y_corr, &floor_nx, &floor_ny);
+          if (out_line_idx >= 0 && y_corr >= 0.0f) {
             batch->state.pos_y[idx] += y_corr;
             on_ground = 1;
             ground_id = g->lines[(size_t)out_line_idx].segment_i;
@@ -1051,35 +1099,6 @@ void mpcoll_ground_apply(MslBatch* batch) {
           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{ftCo_Damage_Coll,ftCo_DamageFly_Coll}
           // TODO(decomp-coll-coverage): once DamageFly* per-action Coll callback coverage is fully
           // modeled here, this gate may be relaxed/removed in favor of callback-owned landing flow.
-        } else if (!on_ground && damagefly_n_locked &&
-                   action_id == (uint16_t)MSL_ACT_DAMAGE_FLY_N && prefer_line_idx >= 0 &&
-                   batch->state.hitlag_pre_timer[idx] != 0u && batch->state.hitlag[idx] == 0u) {
-          // Damage hitlag-exit callback ordering:
-          // - Fighter_8006D10C invokes ftCo_Damage_OnExitHitlag at hitlag exit.
-          // - ftCo_Damage_OnExitHitlag can shift cur_pos (ASDI) before DamageFly_Coll decides
-          //   grounded landing / DownBound on the same frame.
-          // refs/melee/src/melee/ft/fighter.c::Fighter_8006D10C
-          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{
-          //   ftCo_Damage_OnExitHitlag,ftCo_DamageFly_Coll
-          // }
-          //
-          // Scope this to DamageFlyN for now: this pass is modeling the replay-observed
-          // DamageFlyN->DownBound transition ownership, and broadening to other damage states here
-          // regresses seed==ref DamageAir rows.
-          //
-          // Under CollData_X130_Locked, project against the persisted floor.index once on this
-          // edge and accept only penetration-resolving corrections.
-          // refs/melee/src/melee/mp/mplib.c::mpLib_8004DD90_Floor
-          float y_corr = 0.0f;
-          const int out_line_idx = floor_dd90_project(g, prefer_line_idx, cur_bottom_x,
-                                                      cur_bottom_y, &y_corr, &floor_nx, &floor_ny);
-          if (out_line_idx >= 0 && y_corr > 0.0f) {
-            batch->state.pos_y[idx] += y_corr;
-            on_ground = 1;
-            ground_id = g->lines[(size_t)out_line_idx].segment_i;
-            contact_x = cur_bottom_x;
-            contact_y = cur_bottom_y + y_corr;
-          }
         } else if (prefer_line_idx >= 0 && batch->state.speed_y_self[idx] == 0.0f &&
                    batch->state.hitlag[idx] == 0 && batch->state.hitstun[idx] == 0) {
           // Decomp: mpLib_8004DD90_Floor can resolve a resting contact even when no crossing sweep is
