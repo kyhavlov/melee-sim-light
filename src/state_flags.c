@@ -180,8 +180,13 @@ void state_flags_refresh_post_frame(MslBatch* batch) {
       const size_t flags_2218_i = idx * MSL_STATE_FLAGS_STRIDE + (size_t)MSL_STATE_FLAGS_2218_INDEX;
       uint8_t f2218 = batch->state.state_flags[flags_2218_i];
       const float anim_frame_f32 = msl_anim_frame_sanitize_f32(batch->state.anim_frame_f32[idx]);
-      float allow_interrupt_anim_probe = 0.0f;
-      if (anim_frame_f32 >= 1.0f) {
+      float allow_interrupt_anim_probe = anim_frame_f32;
+      const uint32_t allow_interrupt_anim_u32 = batch->state.animation_index[idx];
+      const int16_t action_frame_i = batch->state.action_frame[idx];
+      // Restrict previous-frame probe to true no-submotion negative-lane snapshots.
+      // For normal in-motion rows, sample current anim frame so allow_interrupt windows are not
+      // shifted one frame late.
+      if (allow_interrupt_anim_u32 == 0xFFFFFFFFu && action_frame_i < 0 && anim_frame_f32 >= 1.0f) {
         allow_interrupt_anim_probe = anim_frame_f32 - 1.0f;
       }
       uint8_t allow_interrupt_known = 0u;

@@ -581,10 +581,26 @@ void knockdown_update_pre_physics(MslBatch* batch) {
         // Callback ordering parity:
         // - This block is already under the non-hitlag path via `hitlag_started_frame` gate above,
         //   matching fighter update ordering for anim callbacks.
+        const uint8_t fly_roll = (a0 == (uint16_t)MSL_ACT_DAMAGE_FLY_ROLL) ? 1u : 0u;
         const uint8_t should_enter_damage_fall =
-            (a0 == (uint16_t)MSL_ACT_DAMAGE_FLY_ROLL) ? (uint8_t)!in_hitstun
-                                                       : (uint8_t)(!in_hitstun && anim_done);
+            fly_roll ? (uint8_t)!in_hitstun : (uint8_t)(!in_hitstun && anim_done);
         if (should_enter_damage_fall) {
+          if (!fly_roll) {
+            // Decomp IASA ordering (not collision/physics):
+            // - ftCo_DamageFly_Anim calls inlineC0 first when
+            //   !ftAnim_IsFramesRemaining && !x221C_b6.
+            // - inlineC0 checks mv.co.damage.x14 against p_ftCommonData->x1D0 and can consume
+            //   the jump-buffer path before DamageFall enter.
+            // - Only when that x14 gate fails does the state enter DamageFall.
+            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_DamageFly_Anim
+            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::inlineC0
+            const uint16_t x14 = batch->state.damage_jump_buffer_x14[idx];
+            const uint8_t gate_open =
+                (x14 != 0u && (float)x14 <= c->damage_jump_buffer_window_frames) ? 1u : 0u;
+            if (gate_open && damage_air_try_jump_aerial(batch, c, ch, idx, 1u)) {
+              continue;
+            }
+          }
           enter_damage_fall_from_damage_anim(batch, ch, idx);
         } else if (!in_hitstun) {
           // DamageFly IASA parity: when hitstun has ended, DamageFly_IASA delegates to
@@ -1012,6 +1028,16 @@ static inline void enter_passive_from_damage_land(MslBatch* batch, const MslChar
   batch->state.action_id[idx] = passive_act;
   batch->state.animation_index[idx] = submotion_for_down_action(passive_act);
   msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+  // Decomp ownership: hitstun lives in the Damage motion-var lane (x2340). Entering Passive from
+  // ftCo_80090184 switches to a non-Damage motion state, so Slippi post hitstun becomes 0.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_80090184
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_PassiveStand.c::ftCo_80098928
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownAttack.c::ftCo_8009872C
+  batch->state.hitstun[idx] = 0u;
+  enum { MSL_STATE_FLAGS_221C_INDEX = 3 };
+  enum { MSL_STATE_FLAG_221C_IS_HITSTUN = 0x02 };
+  const size_t flags_i = idx * (size_t)MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_221C_INDEX;
+  batch->state.state_flags[flags_i] &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221C_IS_HITSTUN;
   if (batch->state.hitlag_started_frame[idx] == 0) {
     batch->state.anim_frame_fp_q16_16[idx] += batch->state.frame_speed_mul_fp_q16_16[idx];
   }
@@ -1053,6 +1079,15 @@ static inline void enter_down_bound_from_damage_land(MslBatch* batch, const MslC
   batch->state.action_id[idx] = bound_act;
   batch->state.animation_index[idx] = submotion_for_down_action(bound_act);
   msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+  // Decomp ownership: ftCo_80097D40 enters DownBound from ftCo_80090184 and writes to the
+  // non-Damage motion-var lane; Damage hitstun (x2340) is no longer the active state var.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_80090184
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownBound.c::ftCo_80097D40
+  batch->state.hitstun[idx] = 0u;
+  enum { MSL_STATE_FLAGS_221C_INDEX = 3 };
+  enum { MSL_STATE_FLAG_221C_IS_HITSTUN = 0x02 };
+  const size_t flags_i = idx * (size_t)MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_221C_INDEX;
+  batch->state.state_flags[flags_i] &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221C_IS_HITSTUN;
 
   // Decomp: DownBound entry clears A/B press timers so buffered presses from before landing don't
   // trigger the getup attack window.
