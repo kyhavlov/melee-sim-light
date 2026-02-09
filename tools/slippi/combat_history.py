@@ -530,6 +530,7 @@ def derive_combat_hitlist_seed_fields(
     stocks: np.ndarray,  # [n_frames, MAX_PLAYERS] u8
     shield_hp: np.ndarray,  # [n_frames, MAX_PLAYERS] f32
     hurtbox_state: np.ndarray,  # [n_frames, MAX_PLAYERS] u8 (0 vuln, 1 invuln, 2 intangible)
+    hitlag: np.ndarray | None = None,  # [n_frames, MAX_PLAYERS] u16 (Slippi post hitlag frames left)
     instance_id: np.ndarray,  # [n_frames, MAX_PLAYERS] u16
     input_buttons: np.ndarray,  # [n_frames, MAX_PLAYERS] u16 (pre-frame)
     input_l: np.ndarray,  # [n_frames, MAX_PLAYERS] u8 (pre-frame)
@@ -542,6 +543,16 @@ def derive_combat_hitlist_seed_fields(
     Output is a per-frame snapshot of the internal hitlist cooldown map *after* applying combat
     selection for that frame, using only current-frame external state and previous derived
     internals.
+
+    Seed-bridge note:
+    - This derivation uses coarse pose collision to approximate HitCapsule acceptance under
+      teacher-forced reseed.
+    - To avoid writing synthetic stale latches from geometry-only false positives, insertion is
+      additionally corroborated by replay-visible defender hitlag when `hitlag` is provided.
+      This keeps the bridge strictly causal while reducing over-latched suppression rows.
+    - Decomp ownership anchor for hitlag as accepted-hit consequence:
+      refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
+      refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
     """
     if num_players not in (2, 4):
         raise ValueError(f"num_players must be 2 or 4, got {num_players}")
@@ -567,6 +578,11 @@ def derive_combat_hitlist_seed_fields(
         return shield_table_cache[cid]
 
     n_frames = int(np.asarray(action_id).shape[0])
+    hitlag_arr: np.ndarray | None = None
+    if hitlag is not None:
+        hitlag_arr = np.asarray(hitlag, dtype=np.uint16)
+        if hitlag_arr.shape[0] != n_frames:
+            raise ValueError("hitlag must have the same number of frames as action_id")
 
     # Outputs.
     out_cd = np.zeros((n_frames, MAX_PLAYERS, HITLIST_GROUPS, MAX_PLAYERS), dtype=np.uint16)
@@ -796,6 +812,12 @@ def derive_combat_hitlist_seed_fields(
                 # Deterministic selection: pick the first BODY overlap in (hitbox_id, hurtcap_id) order.
                 did_hit = False
                 defender_on_ground = int(on_ground[fi, defender]) != 0
+                # Replay-visible corroboration gate (strictly causal):
+                # only seed a hitlist latch when the defender is in hitlag on this frame.
+                # This trims synthetic stale latches from approximate geometry without using lookahead.
+                defender_hitlag_seen = (
+                    int(hitlag_arr[fi, defender]) > 0 if hitlag_arr is not None else True
+                )
 
                 for hb_id in range(MAX_HITBOXES):
                     if hb_id not in a_hitboxes:
@@ -857,7 +879,7 @@ def derive_combat_hitlist_seed_fields(
                     # refs/melee/src/melee/ft/ftcoll.c (shield branch around lbColl_80007BCC + ftColl_80076CBC)
                     if shield_active and _sphere_sphere_intersects(hx, hy, hz, hr, shx, shy, shz, shr):
                         # Mirror src/combat.c: only treat positive-damage hitboxes as shield hits.
-                        if float(hb.get("damage", 0.0)) > 0.0:
+                        if float(hb.get("damage", 0.0)) > 0.0 and defender_hitlag_seen:
                             rehit_frames = int(hb.get("rehit_frames", 0)) & 0xFF
                             hitlist_cd[attacker, hit_group, defender] = (
                                 np.uint16(HITLIST_CD_INDEFINITE)
@@ -895,7 +917,10 @@ def derive_combat_hitlist_seed_fields(
                         ):
                             continue
 
-                        # Hitlist register.
+                        # Hitlist register (replay-corroborated when hitlag is provided).
+                        if not defender_hitlag_seen:
+                            continue
+
                         rehit_frames = int(hb.get("rehit_frames", 0)) & 0xFF
                         hitlist_cd[attacker, hit_group, defender] = (
                             np.uint16(HITLIST_CD_INDEFINITE) if rehit_frames == 0 else np.uint16(rehit_frames)
