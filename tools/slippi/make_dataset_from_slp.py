@@ -617,6 +617,11 @@ def _main_impl(args) -> None:
     act_damage_air_1 = 0x0054
     act_damage_air_2 = 0x0055
     act_damage_air_3 = 0x0056
+    act_damage_fly_hi = 0x0057
+    act_damage_fly_n = 0x0058
+    act_damage_fly_lw = 0x0059
+    act_damage_fly_top = 0x005A
+    act_damage_fly_roll = 0x005B
     act_attack_air_n = 0x0041
     act_attack_air_f = 0x0042
     act_attack_air_b = 0x0043
@@ -890,6 +895,12 @@ def _main_impl(args) -> None:
                 act_damage_air_1,
                 act_damage_air_2,
                 act_damage_air_3,
+                act_damage_fly_hi,
+                act_damage_fly_n,
+                act_damage_fly_lw,
+                act_damage_fly_top,
+                act_damage_fly_roll,
+                act_damage_fall,
             ),
         )
         samples["seed_t"]["colanim_hit_status_x198c"][:, slot] = colanim_x198c[:-1]
@@ -1180,6 +1191,12 @@ def _main_impl(args) -> None:
                 act_damage_air_1,
                 act_damage_air_2,
                 act_damage_air_3,
+                act_damage_fly_hi,
+                act_damage_fly_n,
+                act_damage_fly_lw,
+                act_damage_fly_top,
+                act_damage_fly_roll,
+                act_damage_fall,
             ),
         )
         samples["seed_t"]["damage_jump_buffer_x14"][:, slot] = damage_jump_buffer_x14[:-1]

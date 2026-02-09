@@ -1425,17 +1425,26 @@ def derive_damage_jump_buffer_x14(
     """
     Derive `fp->mv.co.damage.x14` (damage jump-buffer snapshot) per post-frame.
 
-    Decomp anchors:
-    - Cleared on damage entry in ftCo_8008DCE0:
-      refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
-    - Set from `mv.co.damage.x0` when jump input is detected in doIasa:
-      refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::doIasa
-    - Compared against p_ftCommonData->x1D0 in Damage_Anim inlineC0:
-      refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_Anim
+    Seed bridge scope:
+    - Slippi does not expose `mv.co.damage.x14` directly, so this derives the internal lane from
+      replay-visible signals for reseed parity.
 
-    Causality:
-    - Uses only current/past frame values.
-    - Resets on causal action transitions into the configured damage action set.
+    Decomp anchors:
+    - Cleared on Damage entry in `ftCo_8008DCE0` (`mv.co.damage.x14 = 0`):
+      refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
+    - Set from `mv.co.damage.x0` when jump input is detected in `doIasa`:
+      refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::doIasa
+    - Consumed by `inlineC0` gate before DamageFall enter in `ftCo_Damage_Anim` /
+      `ftCo_DamageFly_Anim`, compared against `p_ftCommonData->x1D0`:
+      refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_Anim
+      refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_DamageFly_Anim
+      refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::inlineC0
+
+    Causality / prefix-invariance:
+    - Uses only <=t replay frames (current/past values), never future samples.
+    - Resets on causal entry into the configured damage-action family.
+    - Resets on in-family fresh-hit boundaries (`hitstun` increase), matching that
+      ftCo_8008DCE0 clears x14 on damage re-entry.
     """
     a = np.asarray(action_id, dtype=np.uint16).reshape(-1)
     hs = np.asarray(hitstun_u16, dtype=np.uint16).reshape(-1)
@@ -1464,7 +1473,13 @@ def derive_damage_jump_buffer_x14(
             out[i] = np.uint16(0)
             continue
 
-        if i == 0 or cur_a != int(a[i - 1]):
+        prev_in_damage = i > 0 and (int(a[i - 1]) in damage_set)
+        if i == 0 or not prev_in_damage:
+            x14 = 0
+        elif int(hs[i]) > int(hs[i - 1]):
+            # Decomp: ftCo_8008DCE0 clears mv.co.damage.x14 on fresh damage entry.
+            # Within the damage-family seed bridge, rising hitstun is the causal replay-visible
+            # boundary for that re-entry while preserving <=t prefix-invariance.
             x14 = 0
 
         jump_input = False
