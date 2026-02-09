@@ -957,14 +957,18 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
           // transfer on reflect here).
           // In v1 we do not yet derive the full GuardReflect/powershield flag bytes (fp+0x2218 /
           // fp+0x221C) at combat-time. Gate reflect off the decomp-shaped GuardReflect action +
-          // reflect-window timer (mv.co.guard.x14; seeded/updated in action.c), which is sufficient
-          // to model powershield reflects deterministically under teacher-forced reseed.
+          // timer lanes owned by ftCo_80093A50/ftCo_80093BC0:
+          // - x14: reflect window (`fp->reflecting` ownership window),
+          // - x18: powershield-active window (x221C_b2 lifetime).
+          // This keeps powershield reflect ownership coupled to the same timer gates used by
+          // GuardReflect callback timing under teacher-forced reseed.
           //
           // Decomp anchors:
           // - GuardReflect reflect window timer: refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c
           //   (mv.co.guard.x14 = p_ftCommonData->x2A4; tick in ftCo_80093BC0).
           if (batch->state.action_id[d_idx] == (uint16_t)MSL_ACT_GUARD_REFLECT &&
-              batch->state.guard_reflect_timer_x14[d_idx] != 0) {
+              batch->state.guard_reflect_timer_x14[d_idx] != 0 &&
+              batch->state.guard_reflect_timer_x18[d_idx] != 0) {
             batch->state.item_owner[ii] = (int8_t)def;
             const float new_vx = -batch->state.item_vel_x[ii];
             const float new_vy = -batch->state.item_vel_y[ii];
