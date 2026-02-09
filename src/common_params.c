@@ -330,6 +330,10 @@ int common_params_init(void) {
       json_get_f32(buf, "hitlag_base", &g_params.hitlag_base) != 0 ||
       json_get_f32(buf, "hitlag_squat_mul", &g_params.hitlag_squat_mul) != 0 ||
       json_get_f32(buf, "hitlag_electric_mul", &g_params.hitlag_electric_mul) != 0 ||
+      json_get_f32(buf, "sdi_radius", &g_params.sdi_radius) != 0 ||
+      json_get_f32(buf, "asdi_step_mul", &g_params.asdi_step_mul) != 0 ||
+      json_get_f32(buf, "di_max_deg", &g_params.di_max_deg) != 0 ||
+      json_get_f32(buf, "lsi_lr_held_mul", &g_params.lsi_lr_held_mul) != 0 ||
       json_get_f32(buf, "air_drift_overmax_friction", &g_params.air_drift_overmax_friction) != 0 ||
       json_get_f32(buf, "kb_weight_mul", &g_params.kb_weight_mul) != 0 ||
       json_get_f32(buf, "kb_weight_mul2", &g_params.kb_weight_mul2) != 0 ||

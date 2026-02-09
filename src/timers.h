@@ -10,3 +10,7 @@ void timers_update(MslBatch* batch);
 // - Combo timer tick + victim clear (ftColl_800764DC)
 // - Hitstun decrement + end effects (ftCo_8008F744 family)
 void timers_update_post_anim(MslBatch* batch);
+
+// Consume decomp-shaped post-hitlag callbacks that depend on current-frame inputs.
+// Current modeled subset: `ftCo_Damage_OnExitHitlag` ASDI stick displacement.
+void timers_consume_post_hitlag_callbacks_after_input(MslBatch* batch);

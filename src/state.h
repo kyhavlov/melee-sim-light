@@ -287,6 +287,10 @@ typedef struct MslStateSoA {
   // hitstun; used by Damage_Anim inlineC0 gate vs p_ftCommonData->x1D0).
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{doIasa,ftCo_Damage_Anim}
   uint16_t* damage_jump_buffer_x14;  // [batch * players]
+  // Post-hitlag callback ownership lane (`fp->post_hitlag_cb`).
+  // 0 = none, 1 = ftCo_Damage_OnExitHitlag (decomp: ftCo_8008DCE0 sets callback pointer).
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
+  uint8_t* damage_post_hitlag_cb_kind;  // [batch * players]
   uint8_t* l_cancel;
   uint8_t* hurtbox_state;
   // Collision hit-status internals (decomp fp->x198C / x1990 / x1994 / x2221_b0).

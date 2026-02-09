@@ -238,6 +238,12 @@ typedef struct MslCommonParams {
   float hitlag_base;          // p_ftCommonData->x19C
   float hitlag_squat_mul;     // p_ftCommonData->x1A0
   float hitlag_electric_mul;  // p_ftCommonData->x1A4 (fp->x1960_vibrateMult when element==2)
+  // Damage hitlag-exit callback (ftCo_Damage_OnExitHitlag) stick-displacement constants.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_OnExitHitlag
+  float sdi_radius;    // p_ftCommonData->x4B0 (stick magnitude gate; also used by ftCo_800DF608)
+  float asdi_step_mul; // p_ftCommonData->x4BC (ASDI displacement multiplier)
+  float di_max_deg;    // p_ftCommonData->x1A8 (DI max angle in degrees)
+  float lsi_lr_held_mul;  // p_ftCommonData->x1AC (LSI multiplier when L/R held on hitlag exit)
   // Air drift overspeed friction magnitude (used by ftCommon_8007CF58 when |self_vel.x| exceeds
   // co_attrs.air_drift_max).
   // refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007CF58

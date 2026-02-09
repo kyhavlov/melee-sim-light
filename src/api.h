@@ -18,6 +18,11 @@ enum { MSL_HITLIST_GROUPS = 8 };
 // Decomp: Player's `StaleMoveTable.StaleMoves[10]` ring buffer (current_index wraps at 9).
 // refs/melee/src/melee/pl/types.h::StaleMoveTable and refs/melee/src/melee/pl/plstale.c
 enum { MSL_STALE_QUEUE_SIZE = 10 };
+// Seeded post-hitlag callback kind lane (`fp->post_hitlag_cb` ownership).
+enum {
+  MSL_DAMAGE_POST_HITLAG_CB_NONE = 0,
+  MSL_DAMAGE_POST_HITLAG_CB_DAMAGE_ON_EXIT = 1,
+};
 
 // -----------------------------
 // Packed on-disk / wire formats
@@ -476,6 +481,18 @@ typedef struct MslSeed {
   uint8_t stale_queue_index[MSL_MAX_PLAYERS];
   uint16_t stale_move_id[MSL_MAX_PLAYERS][MSL_STALE_QUEUE_SIZE];
   uint16_t stale_attack_instance[MSL_MAX_PLAYERS][MSL_STALE_QUEUE_SIZE];
+  // Damage hitlag-exit callback ownership lane (seed bridge).
+  //
+  // Decomp:
+  // - Damage entry sets `fp->post_hitlag_cb = ftCo_Damage_OnExitHitlag`.
+  //   refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
+  // - Hitlag-exit path invokes `post_hitlag_cb`.
+  //   refs/melee/src/melee/ft/fighter.c::Fighter_8006D10C
+  //
+  // Encoding:
+  // - 0: no callback
+  // - 1: ftCo_Damage_OnExitHitlag
+  uint8_t damage_post_hitlag_cb_kind[MSL_MAX_PLAYERS];
   // Populated by replay-history preprocessing:
   // - tools/slippi/staling_history.py (derive) and tools/slippi/make_dataset_from_slp.py (wire).
   //

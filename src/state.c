@@ -152,6 +152,7 @@ int state_alloc(MslStateSoA* state, int batch_size) {
   state->hitlag_started_frame = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->hitstun = (uint16_t*)alloc_aligned_64(sizeof(uint16_t) * bp);
   state->damage_jump_buffer_x14 = (uint16_t*)alloc_aligned_64(sizeof(uint16_t) * bp);
+  state->damage_post_hitlag_cb_kind = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->l_cancel = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->hurtbox_state = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->colanim_hit_status_x198c = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
@@ -297,7 +298,8 @@ int state_alloc(MslStateSoA* state, int batch_size) {
       !state->ucf_padbuf_stick_x || !state->ucf_padbuf_stick_y || !state->percent ||
       !state->percent_temp || !state->dmg_x2225_b7 || !state->dmg_x2224_b2 || !state->shield_hp ||
       !state->hitlag || !state->hitlag_pre_timer || !state->hitlag_started_frame ||
-      !state->hitstun || !state->damage_jump_buffer_x14 || !state->l_cancel ||
+      !state->hitstun || !state->damage_jump_buffer_x14 || !state->damage_post_hitlag_cb_kind ||
+      !state->l_cancel ||
       !state->hurtbox_state || !state->colanim_hit_status_x198c || !state->colanim_timer_x1990 ||
       !state->colanim_timer_x1994 || !state->colanim_lock_x2221_b0 || !state->hurtcap_count ||
       !state->hurtcap_a_x || !state->hurtcap_a_y || !state->hurtcap_a_z || !state->hurtcap_b_x ||
@@ -476,6 +478,7 @@ void state_free(MslStateSoA* state) {
   alloc_free(state->hitlag_started_frame);
   alloc_free(state->hitstun);
   alloc_free(state->damage_jump_buffer_x14);
+  alloc_free(state->damage_post_hitlag_cb_kind);
   alloc_free(state->l_cancel);
   alloc_free(state->hurtbox_state);
   alloc_free(state->colanim_hit_status_x198c);
