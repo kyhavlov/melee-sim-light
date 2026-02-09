@@ -337,10 +337,11 @@ def test_derive_guard_release_lightshield_persists_through_guard_set_off() -> No
     assert light.tolist() == [0.0, 1.0, 1.0, 1.0, 1.0, 0.0]
 
 
-def test_derive_guard_release_lockout_is_not_reinitialized_on_guard_setoff_to_guard() -> None:
-    # Decomp ownership: GuardSetOff -> Guard uses ftCo_800928CC and does not call ftCo_800921DC,
-    # so mv.co.guard.xC/x10 should carry through this transition.
-    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_GuardSetOff_Anim,ftCo_800928CC,ftCo_800921DC}
+def test_derive_guard_release_lockout_reinitializes_on_snapshot_guard_entry_bridge() -> None:
+    # Seed bridge: replay snapshots can enter Guard directly without exposing the intermediate
+    # submotion timeline; in that lane we conservatively reseed lockout internals on Guard entry.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_GuardOn_Anim,ftCo_800928CC}
+    # refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
     act_guard_on = 0x00B2
     act_guard = 0x00B3
     act_guard_set_off = 0x00B5
@@ -368,8 +369,8 @@ def test_derive_guard_release_lockout_is_not_reinitialized_on_guard_setoff_to_gu
     )
 
     assert x_c.tolist() == [0, 0, 0, 0, 0, 1, 1, 0]
-    assert x10.tolist() == [0, 7, 6, 6, 6, 5, 4, 0]
-    assert light.tolist() == [0.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.0]
+    assert x10.tolist() == [0, 7, 6, 6, 6, 7, 6, 0]
+    assert light.tolist() == [0.0, 1.0, 1.0, 1.0, 1.0, 0.0, 0.0, 0.0]
 
 
 def test_derive_guard_release_lockout_is_prefix_invariant() -> None:

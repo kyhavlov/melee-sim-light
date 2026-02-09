@@ -606,6 +606,7 @@ def _main_impl(args) -> None:
     act_fall_special_f = 0x0024
     act_fall_special_b = 0x0025
     act_damage_fall = 0x0026
+    act_landing_fall_special = 0x002B
     act_damage_hi_1 = 0x004B
     act_damage_hi_2 = 0x004C
     act_damage_hi_3 = 0x004D
@@ -630,6 +631,7 @@ def _main_impl(args) -> None:
     act_attack_air_lw = 0x0045
     act_guard_on = 0x00B2
     act_guard = 0x00B3
+    act_guard_off = 0x00B4
     act_guard_set_off = 0x00B5
     act_guard_reflect = 0x00B6
     act_throw_f = 0x00DB
@@ -1377,6 +1379,7 @@ def _main_impl(args) -> None:
     post_instance_hit_by = np.zeros((n_frames, 4), dtype=np.uint16)
     post_instance_id = np.zeros((n_frames, 4), dtype=np.uint16)
     post_hitlag = np.zeros((n_frames, 4), dtype=np.uint16)
+    post_hitstun = np.zeros((n_frames, 4), dtype=np.uint16)
     post_state_flags = np.zeros((n_frames, 4, 5), dtype=np.uint8)
     post_last_hit_by = np.full((n_frames, 4), 0xFF, dtype=np.uint8)
     pre_buttons = np.zeros((n_frames, 4), dtype=np.uint16)
@@ -1421,6 +1424,11 @@ def _main_impl(args) -> None:
                 _to_numpy(sf.field("4")).astype(np.uint8),
             ],
             axis=1,
+        )
+        post_hitstun[:, slot] = hitstun_u16_from_misc_as_and_state_flags3(
+            misc_as_f32=_to_numpy(post.field("misc_as")).astype(np.float32),
+            state_flags3_u8=post_state_flags[:, slot, 3],
+            n=n_frames,
         )
 
     # Seed bridge: plAttack_80037B08 global next-id counter (unk_804D6480).
@@ -1479,6 +1487,55 @@ def _main_impl(args) -> None:
         input_r=pre_r,
         data_root="data",
     )
+
+    # Seed-bridge stale-latch cleanup (strictly causal; replay-visible lanes only).
+    #
+    # Runtime C previously trimmed stale hitlist entries when attribution disagreed and the victim
+    # was neutral (hitlag/hitstun zero, non-guard-family). Keep this ownership repair in seed
+    # materialization so sim runtime remains decomp-shaped.
+    #
+    # Source lanes:
+    # - instance_id / last_hit_by_instance / hitlag / hitstun / action_id from Slippi post-frame
+    #   refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
+    # - Hitlist ownership container:
+    #   refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000ACFC,lbColl_80008688}
+    guard_family = {
+        int(act_guard_on),
+        int(act_guard),
+        int(act_guard_set_off),
+        int(act_guard_reflect),
+        int(act_guard_off),
+    }
+    for fi in range(n_frames):
+        for attacker in range(num_players):
+            attacker_iid = int(post_instance_id[fi, attacker])
+            for defender in range(num_players):
+                if int(post_instance_hit_by[fi, defender]) == attacker_iid:
+                    continue
+                hitlag_pre = int(post_hitlag[fi, defender])
+                if hitlag_pre > 0:
+                    hitlag_pre -= 1
+                hitstun_pre = int(post_hitstun[fi, defender])
+                if hitstun_pre > 0:
+                    hitstun_pre -= 1
+                if hitlag_pre != 0 or hitstun_pre != 0:
+                    continue
+                if int(post_action_id[fi, defender]) in guard_family:
+                    continue
+                # Keep LandingFallSpecial suppression stable: this state can carry transient
+                # post-landing overlap lanes where clearing suppression synthesizes false BODY hits.
+                # refs/melee/src/melee/ft/chara/ftCommon/forward.h (ftCo_MS_LandingFallSpecial)
+                if int(post_action_id[fi, defender]) == int(act_landing_fall_special):
+                    continue
+                # Attribution corroboration: only trim stale suppression for attacker/defender pairs
+                # where replay-visible ownership points to this attacker port.
+                #
+                # Slippi post-frame `last_hit_by` mirrors fighter->x2088 and is replay-visible:
+                # refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
+                if int(post_last_hit_by[fi, defender]) != attacker:
+                    continue
+                hitlist_cd[fi, attacker, :, defender] = np.uint16(0)
+                hitlist_iid[fi, attacker, :, defender] = np.uint16(0)
 
     samples["seed_t"]["combat_hitlist_cd"] = hitlist_cd[:-1]
     samples["seed_t"]["combat_hitlist_victim_iid"] = hitlist_iid[:-1]

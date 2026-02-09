@@ -788,8 +788,6 @@ def derive_guard_release_lockout_and_lightshield(
     xC = False
     x10 = int(0)
     light = np.float32(0.0)
-    suppress_setoff_carry_release = False
-    suppress_setoff_carry_held_frames = 0
 
     def _is_guard(a: int) -> bool:
         return a == int(act_guard_on) or a == int(act_guard) or a == int(act_guard_reflect)
@@ -809,8 +807,6 @@ def derive_guard_release_lockout_and_lightshield(
             xC = False
             x10 = init
             light = np.float32(0.0)
-            suppress_setoff_carry_release = False
-            suppress_setoff_carry_held_frames = 0
 
         if not in_guard and not in_guard_set_off:
             # Outside of guard states, these internals are irrelevant; seed them as 0 to keep
@@ -818,12 +814,21 @@ def derive_guard_release_lockout_and_lightshield(
             xC = False
             x10 = 0
             light = np.float32(0.0)
-            suppress_setoff_carry_release = False
-            suppress_setoff_carry_held_frames = 0
             out_xc[i] = np.uint8(0)
             out_x10[i] = np.uint8(0)
             out_light[i] = np.float32(0.0)
             continue
+
+        if in_guard and not prev_in_guard and a == int(act_guard):
+            # Snapshot bridge for teacher-forced reseed:
+            # Guard entry can appear without an explicit GuardOn/GuardReflect predecessor in replay
+            # snapshots (no submotion timeline at the boundary). Seed conservatively with a fresh
+            # lockout window to avoid synthesizing immediate Guard->GuardOff exits from stale xC/x10.
+            # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_GuardOn_Anim,ftCo_800928CC}
+            # refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
+            xC = False
+            x10 = init
+            light = np.float32(0.0)
 
         if in_guard_set_off:
             # GuardSetOff consumes the already-latched fp->lightshield_amount for entry anim-rate
@@ -834,16 +839,6 @@ def derive_guard_release_lockout_and_lightshield(
             out_x10[i] = np.uint8(x10 & 0xFF)
             out_light[i] = np.float32(light)
             continue
-
-        if a == int(act_guard) and prev_a == int(act_guard_set_off):
-            # GuardSetOff->Guard carry lane (ftCo_800928CC): when lockout already reached x10==0
-            # at entry, keep xC suppressed in no-submotion carry snapshots to avoid synthesizing
-            # immediate GuardOff exits from stale release history.
-            # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_GuardSetOff_Anim,ftCo_800928CC}
-            suppress_setoff_carry_release = x10 == 0
-            if suppress_setoff_carry_release:
-                xC = False
-                suppress_setoff_carry_held_frames = 0
 
         # Hitlag gate for Guard anim/IASA ownership:
         # - Fighter_8006A1BC decrements hitlag at proc prio 0.
@@ -860,15 +855,6 @@ def derive_guard_release_lockout_and_lightshield(
         hl_after_prio0 = hl_prev - 1 if hl_prev > 0 else 0
         prev_held = (float(trig[i - 1]) >= float(dz)) if i > 0 else (float(trig[i]) >= float(dz))
         held = float(trig[i]) >= float(dz)
-        if suppress_setoff_carry_release:
-            if held:
-                suppress_setoff_carry_held_frames += 1
-            else:
-                suppress_setoff_carry_held_frames = 0
-            if suppress_setoff_carry_held_frames >= 2:
-                suppress_setoff_carry_release = False
-                suppress_setoff_carry_held_frames = 0
-
         # Only update these when guard callbacks can run and shield is still active.
         if hl_after_prio0 == 0 and float(hp[i]) > 0.0:
             # Lightshield amount latch (ftCo_800925A4):
@@ -887,11 +873,8 @@ def derive_guard_release_lockout_and_lightshield(
 
             # xC latch (ftCo_80092BCC): edge-triggered on held-input loss.
             # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_80092BCC,ftCo_GuardSetOff_Anim,ftCo_800928CC}
-            if (not suppress_setoff_carry_release) and prev_held and (not held):
+            if prev_held and (not held):
                 xC = True
-
-        if suppress_setoff_carry_release:
-            xC = False
 
         out_xc[i] = np.uint8(1 if xC else 0)
         out_x10[i] = np.uint8(x10 & 0xFF)
