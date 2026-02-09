@@ -293,6 +293,8 @@ int input_apply(MslBatch* batch, const uint8_t* prev_input_bytes, size_t prev_in
 
       batch->state.input_l[idx] = cur->p[p].l;
       batch->state.input_r[idx] = cur->p[p].r;
+      batch->state.prev_input_l[idx] = prev->p[p].l;
+      batch->state.prev_input_r[idx] = prev->p[p].r;
 
       // Update fighter input counters / input-history timers (single-writer invariant: input.c).
       // Decomp reference for the full block:

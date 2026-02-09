@@ -239,6 +239,8 @@ int state_alloc(MslStateSoA* state, int batch_size) {
   state->input_c_y = (int8_t*)alloc_aligned_64(sizeof(int8_t) * bp);
   state->prev_input_c_x = (int8_t*)alloc_aligned_64(sizeof(int8_t) * bp);
   state->prev_input_c_y = (int8_t*)alloc_aligned_64(sizeof(int8_t) * bp);
+  state->prev_input_l = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
+  state->prev_input_r = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->input_l = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->input_r = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
 
@@ -326,7 +328,8 @@ int state_alloc(MslStateSoA* state, int batch_size) {
       !state->input_buttons_pressed || !state->input_buttons_released || !state->input_main_x ||
       !state->input_main_y || !state->prev_input_main_x || !state->prev_input_main_y ||
       !state->input_c_x || !state->input_c_y || !state->prev_input_c_x || !state->prev_input_c_y ||
-      !state->input_l || !state->input_r || !state->item_exists || !state->item_state ||
+      !state->prev_input_l || !state->prev_input_r || !state->input_l || !state->input_r ||
+      !state->item_exists || !state->item_state ||
       !state->item_type || !state->item_owner || !state->item_instance_id ||
       !state->item_attack_id || !state->item_attack_instance || !state->item_direction ||
       !state->item_vel_x || !state->item_vel_y || !state->item_pos_x || !state->item_pos_y ||
@@ -565,6 +568,8 @@ void state_free(MslStateSoA* state) {
   alloc_free(state->input_c_y);
   alloc_free(state->prev_input_c_x);
   alloc_free(state->prev_input_c_y);
+  alloc_free(state->prev_input_l);
+  alloc_free(state->prev_input_r);
   alloc_free(state->input_l);
   alloc_free(state->input_r);
 

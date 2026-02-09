@@ -446,6 +446,8 @@ typedef struct MslStateSoA {
   int8_t* input_c_y;                 // [batch * players] (legalized/clamped; -80..80)
   int8_t* prev_input_c_x;            // [batch * players] (processed from prev_input_bytes)
   int8_t* prev_input_c_y;            // [batch * players] (processed from prev_input_bytes)
+  uint8_t* prev_input_l;             // [batch * players] (0..255)
+  uint8_t* prev_input_r;             // [batch * players] (0..255)
   uint8_t* input_l;                  // [batch * players] (0..255)
   uint8_t* input_r;                  // [batch * players] (0..255)
 

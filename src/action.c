@@ -650,10 +650,13 @@ void guard_update_grounded(MslBatch* batch, const MslCommonParams* c, size_t idx
 
   const float trig = msl_trigger_unit_from_input(
       batch->state.input_buttons[idx], batch->state.input_l[idx], batch->state.input_r[idx]);
-
+  const float prev_trig =
+      msl_trigger_unit_from_input(batch->state.prev_input_buttons[idx], batch->state.prev_input_l[idx],
+                                  batch->state.prev_input_r[idx]);
   // `held_inputs & HSD_PAD_LR` behavior for shielding uses the trigger deadzone (x10).
   // Decomp usage: refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c:46-55.
   const uint8_t shield_held = (trig >= c->trigger_deadzone) ? 1 : 0;
+  const uint8_t prev_shield_held = (prev_trig >= c->trigger_deadzone) ? 1u : 0u;
   const uint8_t guard_x10_seed = batch->state.guard_x10[idx];
 
   // Guard release lockout (mv.co.guard.xC + mv.co.guard.x10) is modeled explicitly and seeded via
@@ -740,8 +743,26 @@ void guard_update_grounded(MslBatch* batch, const MslCommonParams* c, size_t idx
       // Our step ordering models IASA before the x10 decrement, so the GuardOff check must use the
       // pre-decrement x10 value; otherwise GuardOn can drop 1 frame early when x10 transitions 1->0.
       const uint8_t x10_pre = batch->state.guard_x10[idx];
-      if (!shield_held) {
-        // Decomp: ftCo_80092BCC latches mv.co.guard.xC when held_inputs loses HSD_PAD_LR.
+      const uint8_t guard_no_submotion_snapshot =
+          (a0 == (uint16_t)MSL_ACT_GUARD && batch->state.action_frame[idx] < 0 &&
+           batch->state.animation_index[idx] == 0xFFFFFFFFu && batch->state.anim_frame_f32[idx] < 0.0f)
+              ? 1u
+              : 0u;
+      const uint8_t guard_setoff_carry_snapshot =
+          // Restrict the no-submotion carry suppression lane to true GuardSetOff->Guard carry.
+          // A plain Guard hold snapshot can share (anim=-1, frame_speed>0, x672=0xFE) after
+          // powershield entry; suppressing release there incorrectly blocks GuardOff on LR release.
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_GuardSetOff_Anim,ftCo_800928CC}
+          (guard_no_submotion_snapshot &&
+           batch->state.prev_action_id[idx] == (uint16_t)MSL_ACT_GUARD_SET_OFF &&
+           msl_f32_from_q16_16(batch->state.frame_speed_mul_fp_q16_16[idx]) > 0.0f &&
+           batch->state.x672_input_timer[idx] == 0xFEu)
+              ? 1u
+              : 0u;
+      // Guard release latch ownership (ftCo_80092BCC):
+      // - latch on held-inputs edge loss (prev held -> current not held), not on level-held 0.
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80092BCC
+      if (prev_shield_held && !shield_held && !guard_setoff_carry_snapshot) {
         batch->state.guard_release_latched_xc[idx] = 1;
       }
       // Decomp: ftCo_800925A4 updates lightshield_amount + drains shield HP + decrements x10 while
@@ -752,7 +773,7 @@ void guard_update_grounded(MslBatch* batch, const MslCommonParams* c, size_t idx
 
       // Decomp: Guard IASA exits to GuardOff only once (xC && x10==0).
       // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{inlineC0,ftCo_GuardOn_IASA,ftCo_Guard_IASA}
-      if (batch->state.guard_release_latched_xc[idx] && x10_pre == 0) {
+      if (!guard_setoff_carry_snapshot && batch->state.guard_release_latched_xc[idx] && x10_pre == 0) {
         if (a0 == (uint16_t)MSL_ACT_GUARD_ON) {
           // Seed-snapshot bridge for GuardOn no-submotion rows:
           // - GALE01 ordering is GuardOn_Anim then GuardOn_IASA.
