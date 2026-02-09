@@ -316,7 +316,6 @@ def test_derive_guard_release_lightshield_persists_through_guard_set_off() -> No
     hitlag = np.zeros(action_id.shape[0], dtype=np.uint16)
     trigger = np.ones(action_id.shape[0], dtype=np.float32)
     trigger[-1] = np.float32(0.0)
-
     x_c, x10, light = derive_guard_release_lockout_and_lightshield(
         action_id=action_id,
         shield_hp=shield_hp,
@@ -330,9 +329,96 @@ def test_derive_guard_release_lightshield_persists_through_guard_set_off() -> No
         act_guard_set_off=act_guard_set_off,
     )
 
+    # GuardSetOff snapshots preserve the lockout lanes; the GuardSetOff -> Guard path does not
+    # call ftCo_800921DC (no xC/x10 reinit on this transition).
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_GuardSetOff_Anim,ftCo_800928CC,ftCo_800921DC}
     assert x_c.tolist() == [0, 0, 0, 0, 0, 0]
-    assert x10.tolist() == [0, 7, 6, 0, 0, 0]
+    assert x10.tolist() == [0, 7, 6, 6, 6, 0]
     assert light.tolist() == [0.0, 1.0, 1.0, 1.0, 1.0, 0.0]
+
+
+def test_derive_guard_release_lockout_is_not_reinitialized_on_guard_setoff_to_guard() -> None:
+    # Decomp ownership: GuardSetOff -> Guard uses ftCo_800928CC and does not call ftCo_800921DC,
+    # so mv.co.guard.xC/x10 should carry through this transition.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_GuardSetOff_Anim,ftCo_800928CC,ftCo_800921DC}
+    act_guard_on = 0x00B2
+    act_guard = 0x00B3
+    act_guard_set_off = 0x00B5
+    act_guard_reflect = 0x00B6
+    act_wait = 0x000E
+
+    action_id = np.array(
+        [act_wait, act_guard_on, act_guard_on, act_guard_set_off, act_guard_set_off, act_guard, act_guard, act_wait],
+        dtype=np.uint16,
+    )
+    shield_hp = np.array([60.0, 60.0, 59.0, 55.0, 55.0, 55.0, 55.0, 55.0], dtype=np.float32)
+    hitlag = np.zeros(action_id.shape[0], dtype=np.uint16)
+    trigger = np.array([0.0, 1.0, 1.0, 1.0, 1.0, 0.0, 0.0, 0.0], dtype=np.float32)
+    x_c, x10, light = derive_guard_release_lockout_and_lightshield(
+        action_id=action_id,
+        shield_hp=shield_hp,
+        hitlag=hitlag,
+        trigger_unit=trigger,
+        trigger_deadzone=0.3,
+        guard_x10_init_frames=8,
+        act_guard_on=act_guard_on,
+        act_guard=act_guard,
+        act_guard_reflect=act_guard_reflect,
+        act_guard_set_off=act_guard_set_off,
+    )
+
+    assert x_c.tolist() == [0, 0, 0, 0, 0, 1, 1, 0]
+    assert x10.tolist() == [0, 7, 6, 6, 6, 5, 4, 0]
+    assert light.tolist() == [0.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.0]
+
+
+def test_derive_guard_release_lockout_is_prefix_invariant() -> None:
+    act_guard_on = np.uint16(0x00B2)
+    act_guard = np.uint16(0x00B3)
+    act_guard_set_off = np.uint16(0x00B5)
+    act_guard_reflect = np.uint16(0x00B6)
+    act_wait = np.uint16(0x000E)
+
+    action_id_prefix = np.array(
+        [act_wait, act_guard_on, act_guard_on, act_guard_set_off, act_guard_set_off, act_guard, act_guard],
+        dtype=np.uint16,
+    )
+    shield_hp_prefix = np.array([60.0, 60.0, 59.0, 55.0, 55.0, 55.0, 55.0], dtype=np.float32)
+    hitlag_prefix = np.zeros(action_id_prefix.shape[0], dtype=np.uint16)
+    trigger_prefix = np.array([0.0, 1.0, 1.0, 1.0, 1.0, 0.0, 0.0], dtype=np.float32)
+    x_c0, x100, light0 = derive_guard_release_lockout_and_lightshield(
+        action_id=action_id_prefix,
+        shield_hp=shield_hp_prefix,
+        hitlag=hitlag_prefix,
+        trigger_unit=trigger_prefix,
+        trigger_deadzone=0.3,
+        guard_x10_init_frames=8,
+        act_guard_on=int(act_guard_on),
+        act_guard=int(act_guard),
+        act_guard_reflect=int(act_guard_reflect),
+        act_guard_set_off=int(act_guard_set_off),
+    )
+
+    action_id_ext = np.concatenate([action_id_prefix, np.array([act_wait, act_wait, act_wait], dtype=np.uint16)])
+    shield_hp_ext = np.concatenate([shield_hp_prefix, np.array([55.0, 55.0, 55.0], dtype=np.float32)])
+    hitlag_ext = np.concatenate([hitlag_prefix, np.array([0, 0, 0], dtype=np.uint16)])
+    trigger_ext = np.concatenate([trigger_prefix, np.array([0.0, 0.0, 0.0], dtype=np.float32)])
+    x_c1, x101, light1 = derive_guard_release_lockout_and_lightshield(
+        action_id=action_id_ext,
+        shield_hp=shield_hp_ext,
+        hitlag=hitlag_ext,
+        trigger_unit=trigger_ext,
+        trigger_deadzone=0.3,
+        guard_x10_init_frames=8,
+        act_guard_on=int(act_guard_on),
+        act_guard=int(act_guard),
+        act_guard_reflect=int(act_guard_reflect),
+        act_guard_set_off=int(act_guard_set_off),
+    )
+
+    assert np.array_equal(x_c0, x_c1[: x_c0.size])
+    assert np.array_equal(x100, x101[: x100.size])
+    assert np.allclose(light0, light1[: light0.size])
 
 
 def test_derive_frame_speed_mul_guard_set_off_entry_rate_from_shield_drop() -> None:
@@ -492,7 +578,8 @@ def test_derive_guard_reflect_timer_counts_down_and_expires() -> None:
     # reflect_total_frames_x2b4=3 => init=(3+1)=4.
     assert out18.tolist() == [0, 4, 3, 2, 0, 4]
 
-    # Hitlag gate: under hitlag, GuardReflect_Anim does not run, so the timer should not tick.
+    # Hitlag gate: GuardReflect_Anim callback ownership is based on the post-prio0 hitlag lane.
+    # With post-frame replay hitlag inputs, this is modeled from frame-(i-1) after decrement.
     a2 = np.array([act_guard_reflect, act_guard_reflect, act_guard_reflect], dtype=np.uint16)
     hitlag2 = np.array([0, 2, 0], dtype=np.uint16)
     out2 = derive_guard_reflect_timer_x14(
@@ -501,14 +588,14 @@ def test_derive_guard_reflect_timer_counts_down_and_expires() -> None:
         act_guard_reflect=int(act_guard_reflect),
         reflect_frames_x2a4=1,
     )
-    assert out2.tolist() == [2, 2, 1]
+    assert out2.tolist() == [2, 1, 1]
     out18_2 = derive_guard_reflect_timer_x18(
         action_id_u16=a2,
         hitlag_u16=hitlag2,
         act_guard_reflect=int(act_guard_reflect),
         reflect_total_frames_x2b4=3,
     )
-    assert out18_2.tolist() == [4, 4, 3]
+    assert out18_2.tolist() == [4, 3, 3]
 
 
 def test_derive_guard_reflect_timer_is_prefix_invariant() -> None:
