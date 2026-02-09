@@ -952,16 +952,27 @@ void mpcoll_ground_apply(MslBatch* batch) {
         float ix = 0.0f, iy = 0.0f;
         const uint8_t escapeair_locked =
             (action_id == (uint16_t)MSL_ACT_ESCAPE_AIR && ecb_lock_active) ? 1u : 0u;
+        const uint8_t damage_locked =
+            (is_damage_collision_landing_action(action_id) && ecb_lock_active) ? 1u : 0u;
+        // Narrowing note:
+        // - This scope clamp is independent of the damage_post_hitlag_cb_kind seed lane.
+        // - It prevents known seed==ref airborne regressions by keeping locked-floor projection in
+        //   the currently modeled DamageFlyN collision-ownership window only.
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_DamageFly_Coll
+        const uint8_t damagefly_n_locked =
+            (damage_locked && action_id == (uint16_t)MSL_ACT_DAMAGE_FLY_N) ? 1u : 0u;
         uint8_t deep_lock_penetration = 0u;
-        if (escapeair_locked) {
+        if (escapeair_locked || damagefly_n_locked) {
           const float bottom_rel0 = msl_ecb_bottom_rel_y(char_id, anim, 0);
           deep_lock_penetration = (bottom_rel0 > 0.0f && cur_bottom_y <= -bottom_rel0) ? 1u : 0u;
         }
-        if (!on_ground && escapeair_locked && deep_lock_penetration && prefer_line_idx >= 0) {
-          // Decomp shape: while CollData_X130_Locked is active, EscapeAir collision still resolves
-          // against the persisted floor.index line via mpLib_8004DD90_Floor-style projection.
+        if (!on_ground && (escapeair_locked || damagefly_n_locked) && deep_lock_penetration &&
+            prefer_line_idx >= 0) {
+          // Decomp shape: while CollData_X130_Locked is active, collision callbacks can still
+          // resolve against the persisted floor.index via mpLib_8004DD90_Floor-style projection.
           // refs/melee/src/melee/mp/mplib.c::mpLib_8004DD90_Floor
           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{ftCo_Damage_Coll,ftCo_DamageFly_Coll}
           //
           // This projection allows deterministic floor contact even when the locked ECB bottom is
           // already below the floor line (no crossing sweep this frame).
@@ -1040,6 +1051,35 @@ void mpcoll_ground_apply(MslBatch* batch) {
           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{ftCo_Damage_Coll,ftCo_DamageFly_Coll}
           // TODO(decomp-coll-coverage): once DamageFly* per-action Coll callback coverage is fully
           // modeled here, this gate may be relaxed/removed in favor of callback-owned landing flow.
+        } else if (!on_ground && damagefly_n_locked &&
+                   action_id == (uint16_t)MSL_ACT_DAMAGE_FLY_N && prefer_line_idx >= 0 &&
+                   batch->state.hitlag_pre_timer[idx] != 0u && batch->state.hitlag[idx] == 0u) {
+          // Damage hitlag-exit callback ordering:
+          // - Fighter_8006D10C invokes ftCo_Damage_OnExitHitlag at hitlag exit.
+          // - ftCo_Damage_OnExitHitlag can shift cur_pos (ASDI) before DamageFly_Coll decides
+          //   grounded landing / DownBound on the same frame.
+          // refs/melee/src/melee/ft/fighter.c::Fighter_8006D10C
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{
+          //   ftCo_Damage_OnExitHitlag,ftCo_DamageFly_Coll
+          // }
+          //
+          // Scope this to DamageFlyN for now: this pass is modeling the replay-observed
+          // DamageFlyN->DownBound transition ownership, and broadening to other damage states here
+          // regresses seed==ref DamageAir rows.
+          //
+          // Under CollData_X130_Locked, project against the persisted floor.index once on this
+          // edge and accept only penetration-resolving corrections.
+          // refs/melee/src/melee/mp/mplib.c::mpLib_8004DD90_Floor
+          float y_corr = 0.0f;
+          const int out_line_idx = floor_dd90_project(g, prefer_line_idx, cur_bottom_x,
+                                                      cur_bottom_y, &y_corr, &floor_nx, &floor_ny);
+          if (out_line_idx >= 0 && y_corr > 0.0f) {
+            batch->state.pos_y[idx] += y_corr;
+            on_ground = 1;
+            ground_id = g->lines[(size_t)out_line_idx].segment_i;
+            contact_x = cur_bottom_x;
+            contact_y = cur_bottom_y + y_corr;
+          }
         } else if (prefer_line_idx >= 0 && batch->state.speed_y_self[idx] == 0.0f &&
                    batch->state.hitlag[idx] == 0 && batch->state.hitstun[idx] == 0) {
           // Decomp: mpLib_8004DD90_Floor can resolve a resting contact even when no crossing sweep is
