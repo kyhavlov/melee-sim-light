@@ -823,9 +823,22 @@ def derive_guard_release_lockout_and_lightshield(
             out_light[i] = np.float32(light)
             continue
 
-        # Only update these during non-hitlag frames, mirroring fighter proc scheduling:
-        # Anim + IASA callbacks are gated while hitlag is active.
-        if int(hl[i]) == 0 and float(hp[i]) > 0.0:
+        # Hitlag gate for Guard anim/IASA ownership:
+        # - Fighter_8006A1BC decrements hitlag at proc prio 0.
+        # - Guard callbacks run later in Fighter_8006A360 / Fighter_procUpdate and are gated on
+        #   the post-decrement hitlag lane (`!fp->x2219_b5`).
+        # refs/melee/src/melee/ft/fighter.c::{Fighter_8006A1BC,Fighter_8006A360}
+        #
+        # Replay input here is post-frame hitlag. For frame `i`, callback gating is controlled by
+        # frame-`i-1` post hitlag after the prio-0 decrement:
+        #   can_update = (max(post_hitlag[i-1] - 1, 0) == 0).
+        # Using current-frame post hitlag over-freezes Guard internals on frames where hitlag is
+        # newly applied later in the frame by collision callbacks.
+        hl_prev = int(hl[i - 1]) if i > 0 else 0
+        hl_after_prio0 = hl_prev - 1 if hl_prev > 0 else 0
+
+        # Only update these when guard callbacks can run and shield is still active.
+        if hl_after_prio0 == 0 and float(hp[i]) > 0.0:
             # Lightshield amount latch (ftCo_800925A4):
             # lightshield_amount = (x650 - deadzone)/(1-deadzone) if >=0 else reuse previous.
             t = np.float32((np.float32(trig[i]) - dz) / denom)
