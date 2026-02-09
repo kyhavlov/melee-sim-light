@@ -114,6 +114,9 @@ def test_reflected_laser_updates_owner_instance_and_staling_identity() -> None:
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80093A50 (init x14=x2A4)
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80093BC0 (tick/expire; clears fp->reflecting)
     seed["guard_reflect_timer_x14"][0, 1] = np.uint8(int(_common_attr("powershield_reflect_frames")) + 1)
+    # Powershield-active lifetime (mv.co.guard.x18) must also be active for powershield reflect.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_80093A50,ftCo_80093BC0}
+    seed["guard_reflect_timer_x18"][0, 1] = np.uint8(int(_common_attr("powershield_reflect_total_frames")) + 1)
     # Slippi fp+0x221C powershield-active bit (0x20).
     # refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
     seed["state_flags"][0, 1, 3] = np.uint8(0x20)
