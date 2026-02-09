@@ -8,6 +8,22 @@ import pytest
 from tools.eval.dataset import COMPARE_DTYPE, read_dataset
 
 
+def _skip_if_required_artifacts_missing(root: Path) -> None:
+    required = [
+        "data/stages/final_destination.json",
+        "data/common/ft_common_data.json",
+        "data/characters/fox.json",
+        "data/characters/falco.json",
+        "data/anims/fox.tracks.bin",
+        "data/anims/falco.tracks.bin",
+        "data/moves/fox.json",
+        "data/moves/falco.json",
+    ]
+    missing = [rel for rel in required if not (root / rel).exists()]
+    if missing:
+        pytest.skip(f"missing local data artifacts: {', '.join(missing)}")
+
+
 @pytest.mark.integration
 @pytest.mark.parametrize(
     ("dataset_rel", "record", "p", "seed_action"),
@@ -37,7 +53,7 @@ from tools.eval.dataset import COMPARE_DTYPE, read_dataset
             0x0019,  # Hitlist stale-latch row that previously synthesized hitlag/hitstun.
         ),
     ],
-)
+) 
 def test_seed_eq_guardrail_rows_stay_replay_exact(
     dataset_rel: str,
     record: int,
@@ -45,6 +61,7 @@ def test_seed_eq_guardrail_rows_stay_replay_exact(
     seed_action: int,
 ) -> None:
     root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
         pytest.skip(f"missing local dataset: {dataset_rel}")
