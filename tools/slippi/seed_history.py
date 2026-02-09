@@ -493,8 +493,16 @@ def _derive_guard_reflect_timer_plus1(
             if not prev_in:
                 t = init
             else:
-                # Decomp: timer tick runs in GuardReflect_Anim (not under hitlag).
-                if t > 0 and int(hl[i]) == 0:
+                # Decomp: GuardReflect_Anim runs after Fighter_8006A1BC prio-0 hitlag decrement and
+                # is gated by the post-decrement lane (`!fp->x2219_b5`).
+                # refs/melee/src/melee/ft/fighter.c::{Fighter_8006A1BC,Fighter_8006A360}
+                #
+                # Replay input lane here is post-frame hitlag, so for frame i the callback gate is
+                # determined by frame-(i-1) post hitlag after prio-0 decrement:
+                #   can_tick = (max(post_hitlag[i-1] - 1, 0) == 0)
+                hl_prev = int(hl[i - 1]) if i > 0 else 0
+                hl_after_prio0 = hl_prev - 1 if hl_prev > 0 else 0
+                if t > 0 and hl_after_prio0 == 0:
                     t -= 1
         out[i] = np.uint8(t & 0xFF)
         prev_in = in_gr
@@ -517,8 +525,9 @@ def derive_guard_reflect_timer_x14(
       sets `mv.co.guard.x14 = p_ftCommonData->x2A4`.
     - Tick/expire: refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80093BC0
       decrements `mv.co.guard.x14` and clears `fp->reflecting` when it drops below 0.
-    - Hitlag gate: per-action anim callbacks (including GuardReflect_Anim) do not run under hitlag:
-      refs/melee/src/melee/ft/fighter.c (Fighter_8006A360 anim_cb gated on !hitlag)
+    - Hitlag gate: per-action anim callbacks (including GuardReflect_Anim) run after prio-0 hitlag
+      decrement and gate on the post-decrement lane (`!fp->x2219_b5`):
+      refs/melee/src/melee/ft/fighter.c::{Fighter_8006A1BC,Fighter_8006A360}
     """
     return _derive_guard_reflect_timer_plus1(
         action_id_u16=action_id_u16,
@@ -543,8 +552,9 @@ def derive_guard_reflect_timer_x18(
       sets `mv.co.guard.x18 = p_ftCommonData->x2B4`.
     - Tick/expire: refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80093BC0
       decrements `mv.co.guard.x18` and clears `fp->x221C_b2` when it drops below 0.
-    - Hitlag gate: per-action anim callbacks (including GuardReflect_Anim) do not run under hitlag:
-      refs/melee/src/melee/ft/fighter.c (Fighter_8006A360 anim_cb gated on !hitlag)
+    - Hitlag gate: per-action anim callbacks (including GuardReflect_Anim) run after prio-0 hitlag
+      decrement and gate on the post-decrement lane (`!fp->x2219_b5`):
+      refs/melee/src/melee/ft/fighter.c::{Fighter_8006A1BC,Fighter_8006A360}
     """
     return _derive_guard_reflect_timer_plus1(
         action_id_u16=action_id_u16,
@@ -742,7 +752,10 @@ def derive_guard_release_lockout_and_lightshield(
       refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_Guard_IASA (inlineC0)
     - GuardSetOff entry consumes the existing fp->lightshield_amount when computing anim rate, and
       does not reset that fighter field on entry.
+    - GuardSetOff -> Guard path uses ftCo_800928CC (via ftCo_GuardSetOff_Anim) and does not call
+      ftCo_800921DC, so mv.co.guard.xC/x10 should not be reinitialized on this transition.
       refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80092F2C
+      refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_GuardSetOff_Anim,ftCo_800928CC}
 
     Returns (guard_release_latched_xc_u8, guard_x10_u8, lightshield_amount_f32) arrays with length N,
     where the values represent the *post-frame* state for each frame index.
@@ -775,6 +788,8 @@ def derive_guard_release_lockout_and_lightshield(
     xC = False
     x10 = int(0)
     light = np.float32(0.0)
+    suppress_setoff_carry_release = False
+    suppress_setoff_carry_held_frames = 0
 
     def _is_guard(a: int) -> bool:
         return a == int(act_guard_on) or a == int(act_guard) or a == int(act_guard_reflect)
@@ -794,6 +809,8 @@ def derive_guard_release_lockout_and_lightshield(
             xC = False
             x10 = init
             light = np.float32(0.0)
+            suppress_setoff_carry_release = False
+            suppress_setoff_carry_held_frames = 0
 
         if not in_guard and not in_guard_set_off:
             # Outside of guard states, these internals are irrelevant; seed them as 0 to keep
@@ -801,27 +818,32 @@ def derive_guard_release_lockout_and_lightshield(
             xC = False
             x10 = 0
             light = np.float32(0.0)
+            suppress_setoff_carry_release = False
+            suppress_setoff_carry_held_frames = 0
             out_xc[i] = np.uint8(0)
             out_x10[i] = np.uint8(0)
             out_light[i] = np.float32(0.0)
             continue
 
-        # If we newly entered Guard without passing through GuardOn/GuardReflect (unexpected in GALE01),
-        # keep the internal state conservative and reinitialize.
-        if in_guard and not prev_in_guard and a == int(act_guard):
-            xC = False
-            x10 = init
-            light = np.float32(0.0)
-
         if in_guard_set_off:
-            # GuardSetOff still consumes fp->lightshield_amount (ftCo_80092F2C), but xC/x10
-            # lockout internals are specific to Guard IASA paths.
-            xC = False
-            x10 = 0
-            out_xc[i] = np.uint8(0)
-            out_x10[i] = np.uint8(0)
+            # GuardSetOff consumes the already-latched fp->lightshield_amount for entry anim-rate
+            # shaping and does not reinitialize guard lockout lanes on the SetOff->Guard path.
+            # Preserve xC/x10 across GuardSetOff snapshots.
+            # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_80092F2C,ftCo_GuardSetOff_Anim,ftCo_800928CC}
+            out_xc[i] = np.uint8(1 if xC else 0)
+            out_x10[i] = np.uint8(x10 & 0xFF)
             out_light[i] = np.float32(light)
             continue
+
+        if a == int(act_guard) and prev_a == int(act_guard_set_off):
+            # GuardSetOff->Guard carry lane (ftCo_800928CC): when lockout already reached x10==0
+            # at entry, keep xC suppressed in no-submotion carry snapshots to avoid synthesizing
+            # immediate GuardOff exits from stale release history.
+            # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_GuardSetOff_Anim,ftCo_800928CC}
+            suppress_setoff_carry_release = x10 == 0
+            if suppress_setoff_carry_release:
+                xC = False
+                suppress_setoff_carry_held_frames = 0
 
         # Hitlag gate for Guard anim/IASA ownership:
         # - Fighter_8006A1BC decrements hitlag at proc prio 0.
@@ -836,6 +858,16 @@ def derive_guard_release_lockout_and_lightshield(
         # newly applied later in the frame by collision callbacks.
         hl_prev = int(hl[i - 1]) if i > 0 else 0
         hl_after_prio0 = hl_prev - 1 if hl_prev > 0 else 0
+        prev_held = (float(trig[i - 1]) >= float(dz)) if i > 0 else (float(trig[i]) >= float(dz))
+        held = float(trig[i]) >= float(dz)
+        if suppress_setoff_carry_release:
+            if held:
+                suppress_setoff_carry_held_frames += 1
+            else:
+                suppress_setoff_carry_held_frames = 0
+            if suppress_setoff_carry_held_frames >= 2:
+                suppress_setoff_carry_release = False
+                suppress_setoff_carry_held_frames = 0
 
         # Only update these when guard callbacks can run and shield is still active.
         if hl_after_prio0 == 0 and float(hp[i]) > 0.0:
@@ -853,9 +885,13 @@ def derive_guard_release_lockout_and_lightshield(
                 if x10 < 0:
                     x10 = 0
 
-            # xC latch (ftCo_80092BCC). `held_inputs & HSD_PAD_LR` is shaped by trigger_deadzone.
-            if float(trig[i]) < float(dz):
+            # xC latch (ftCo_80092BCC): edge-triggered on held-input loss.
+            # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_80092BCC,ftCo_GuardSetOff_Anim,ftCo_800928CC}
+            if (not suppress_setoff_carry_release) and prev_held and (not held):
                 xC = True
+
+        if suppress_setoff_carry_release:
+            xC = False
 
         out_xc[i] = np.uint8(1 if xC else 0)
         out_x10[i] = np.uint8(x10 & 0xFF)
