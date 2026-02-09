@@ -44,6 +44,7 @@ typedef enum MslActionId {
   // refs/melee/src/melee/ft/chara/ftCommon/forward.h:300-330 (ftCommon_MotionState enum).
   MSL_ACT_SQUAT = 0x0027,                 // ftCo_MS_Squat
   MSL_ACT_SQUAT_WAIT = 0x0028,            // ftCo_MS_SquatWait
+  MSL_ACT_SQUAT_RV = 0x0029,              // ftCo_MS_SquatRv
   MSL_ACT_LANDING = 0x002A,               // ftCo_MS_Landing
   MSL_ACT_LANDING_FALL_SPECIAL = 0x002B,  // ftCo_MS_LandingFallSpecial
 
@@ -317,6 +318,9 @@ typedef enum MslSubmotionId {
   MSL_SM_DAMAGE_FALL = 29,           // ftCo_SM_DamageFall
   MSL_SM_SQUAT = 30,                 // ftCo_SM_Squat
   MSL_SM_SQUAT_WAIT = 31,            // ftCo_SM_SquatWait
+  MSL_SM_SQUAT_UNK032 = 32,          // ftCo_SM_Unk032
+  MSL_SM_SQUAT_WAIT_ITEM = 33,       // ftCo_SM_SquatWaitItem
+  MSL_SM_SQUAT_RV = 34,              // ftCo_SM_SquatRv
   MSL_SM_LANDING = 35,               // ftCo_SM_Landing
   MSL_SM_LANDING_FALL_SPECIAL = 36,  // ftCo_SM_LandingFallSpecial
 
@@ -459,6 +463,7 @@ static inline uint8_t msl_action_is_ground_locomotion(uint16_t action_id) {
     case MSL_ACT_KNEE_BEND:
     case MSL_ACT_SQUAT:
     case MSL_ACT_SQUAT_WAIT:
+    case MSL_ACT_SQUAT_RV:
     case MSL_ACT_LANDING:
     case MSL_ACT_LANDING_FALL_SPECIAL:
     case MSL_ACT_LANDING_AIR_N:

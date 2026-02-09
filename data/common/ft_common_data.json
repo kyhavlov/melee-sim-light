@@ -24,6 +24,7 @@
   "colanim_rebirth_fall_x1994_frames": 120,
   "colanim_throw_x1994_frames": 8,
   "combo_timer_post_hitstun_frames": 2,
+  "crouch_release_stick_threshold": 0.625,
   "crouch_stick_threshold": 0.6875,
   "cstick_smash_threshold": 0.5,
   "damage_hitstun_mul": 0.4000000059604645,

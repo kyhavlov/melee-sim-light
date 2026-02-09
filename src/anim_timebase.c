@@ -258,14 +258,29 @@ void anim_timebase_update_pre_input(MslBatch* batch) {
       const MslCharParams* ch = msl_char_params(batch->state.char_id[idx]);
 
       // Decomp: Walk Anim callback (ftCo_Walk_Anim -> ftWalkCommon_800DFDDC) updates anim rate
-      // each frame from current walk velocity and facing.
+      // from current walk velocity and facing.
       // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Walk.c::ftCo_Walk_Anim
       // refs/melee/src/melee/ft/ftwalkcommon.c::ftWalkCommon_800DFDDC
+      //
+      // Entry ordering (not a magic threshold):
+      // - Walk entry uses Fighter_ChangeMotionState(..., anim_start=0, anim_speed=1).
+      // - The first ftAnim tick (0->1) happens before Walk_Anim writes the velocity-scaled rate.
+      // - Therefore the entry frame (`action_frame==0`) must advance at 1.0; scaled walk rate
+      //   applies from the next steady frame onward.
+      // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
+      // refs/melee/src/melee/ft/ftanim.c::ftAnim_8006EBA4
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Walk.c::ftCo_Walk_Anim
       if (anim_timebase_is_walk(a)) {
-        float walk_rate = 0.0f;
-        if (anim_timebase_try_walk_rate(a, ch, batch->state.speed_ground_x_self[idx],
-                                        batch->state.facing[idx], &walk_rate)) {
-          batch->state.frame_speed_mul_fp_q16_16[idx] = msl_q16_16_from_f32(walk_rate);
+        // Entry-only guard: apply 1.0 only on true walk motion-state entry.
+        const uint8_t walk_entry = (batch->state.prev_action_id[idx] != a) ? 1u : 0u;
+        if (walk_entry) {
+          batch->state.frame_speed_mul_fp_q16_16[idx] = msl_q16_16_from_f32(1.0f);
+        } else {
+          float walk_rate = 0.0f;
+          if (anim_timebase_try_walk_rate(a, ch, batch->state.speed_ground_x_self[idx],
+                                          batch->state.facing[idx], &walk_rate)) {
+            batch->state.frame_speed_mul_fp_q16_16[idx] = msl_q16_16_from_f32(walk_rate);
+          }
         }
       }
       //

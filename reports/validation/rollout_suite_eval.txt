@@ -29,33 +29,33 @@ fields: action_id,animation_index,on_ground,hitlag,hitstun,state_flags
 
 == datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl ==
 rollout.best_len: 95
-rollout.streak_count: 306
-rollout.streak_len.median: 17
+rollout.streak_count: 302
+rollout.streak_len.median: 18
 rollout.streak_len.p90: 49
 rollout.streak_len.p95: 65
 rollout.streak_len.max: 95
-rollout.first_mismatch_total: 310
-rollout.first_mismatch_seeded_total: 173
+rollout.first_mismatch_total: 303
+rollout.first_mismatch_seeded_total: 165
 
 == datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl ==
 rollout.best_len: 140
-rollout.streak_count: 473
+rollout.streak_count: 470
 rollout.streak_len.median: 17
-rollout.streak_len.p90: 51
-rollout.streak_len.p95: 63
+rollout.streak_len.p90: 52
+rollout.streak_len.p95: 66
 rollout.streak_len.max: 140
-rollout.first_mismatch_total: 480
-rollout.first_mismatch_seeded_total: 270
+rollout.first_mismatch_total: 477
+rollout.first_mismatch_seeded_total: 266
 
 == datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/QuerulousGrandDinosaur.msl ==
 rollout.best_len: 128
-rollout.streak_count: 404
+rollout.streak_count: 400
 rollout.streak_len.median: 19
 rollout.streak_len.p90: 53
 rollout.streak_len.p95: 61
 rollout.streak_len.max: 128
-rollout.first_mismatch_total: 413
-rollout.first_mismatch_seeded_total: 232
+rollout.first_mismatch_total: 408
+rollout.first_mismatch_seeded_total: 226
 
 == datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/TreasuredBackKangaroo.msl ==
 rollout.best_len: 129
@@ -68,11 +68,11 @@ rollout.first_mismatch_total: 349
 rollout.first_mismatch_seeded_total: 197
 
 == suite summary ==
-overall.rollout.streak_count: 1523
-overall.rollout.streak_len.median: 17
+overall.rollout.streak_count: 1512
+overall.rollout.streak_len.median: 18
 overall.rollout.streak_len.p90: 51
 overall.rollout.streak_len.p95: 63
 overall.rollout.streak_len.max: 140
 overall.rollout.best_len.max: 140
-overall.rollout.first_mismatch_total: 1552
-overall.rollout.first_mismatch_seeded_total: 872
+overall.rollout.first_mismatch_total: 1537
+overall.rollout.first_mismatch_seeded_total: 854

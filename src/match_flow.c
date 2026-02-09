@@ -116,6 +116,13 @@ static inline void enter_entry_start(MslBatch* batch, size_t idx, const MslCommo
   batch->state.speed_y_attack[idx] = 0.0f;
   // EntryStart uses a real submotion; start its timebase at 0.0.
   msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+  // Entry->EntryStart transition ownership in decomp lives in Entry_Anim (prio-1 callback), i.e.
+  // after the frame's anim advance. This simulator performs match-flow transitions before the shared
+  // anim-timebase pass, so seed the pre-tick lane at -1 to preserve the first EntryStart post-frame
+  // action_frame=0 snapshot shape.
+  // refs/melee/src/melee/ft/ft_0C31.c::ftCo_Entry_Anim
+  // refs/melee/src/melee/ft/ft_0C31.c::ftCo_EntryStart_Anim
+  msl_anim_timebase_seed(batch, idx, -1.0f, 1.0f);
 
   // Position update for the first EntryStart frame after transition:
   // - EntryStart_Anim decrements timer before Phys.
@@ -343,6 +350,12 @@ void match_flow_update_pre_anim(MslBatch* batch) {
             // Transition to Fall; preserve the current EntryEnd position so Fall physics can take
             // over from the last EntryEnd pose.
             enter_fall(batch, idx);
+            // EntryEnd->Fall transition is evaluated here before the shared anim-timebase advance;
+            // in decomp this state transition is callback-owned (prio 1), so preserve the first Fall
+            // post-frame at action_frame=0 by seeding the pre-tick lane.
+            // refs/melee/src/melee/ft/ft_0C31.c::ftCo_EntryEnd_Anim
+            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_Anim
+            msl_anim_timebase_seed(batch, idx, -1.0f, 1.0f);
             batch->state.match_flow_timer[idx] = 0;
           } else if (entry_start_frames > 0) {
             const float denom = (float)entry_start_frames;

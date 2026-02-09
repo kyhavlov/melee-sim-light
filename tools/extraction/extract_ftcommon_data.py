@@ -218,6 +218,10 @@ def main() -> None:
         "landing_fall_special_lag_frames": float(_f32_be(buf, ft_common_abs + 0x344)),
         # Crouch (ftCo_Squat / SquatWait)
         "crouch_stick_threshold": float(_f32_be(buf, ft_common_abs + 0x90)),
+        # SquatRv exit threshold from SquatWait.
+        # Decomp: refs/melee/src/melee/ft/chara/ftCommon/ftCo_SquatRv.c::ftCo_SquatRv_CheckInput
+        #         (fp->input.lstick.y > -p_ftCommonData->x94)
+        "crouch_release_stick_threshold": float(_f32_be(buf, ft_common_abs + 0x94)),
         # Gameplay thresholds
         "tap_jump_threshold": float(_f32_be(buf, ft_common_abs + 0x70)),
         "tap_jump_tilt_max_frames": int(_i32_be(buf, ft_common_abs + 0x74)),

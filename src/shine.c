@@ -99,6 +99,7 @@ static inline uint8_t action_allows_shine_entry_ground(uint16_t action_id) {
     case MSL_ACT_KNEE_BEND:
     case MSL_ACT_SQUAT:
     case MSL_ACT_SQUAT_WAIT:
+    case MSL_ACT_SQUAT_RV:
     case MSL_ACT_GUARD_ON:
     case MSL_ACT_GUARD:
     case MSL_ACT_GUARD_OFF:

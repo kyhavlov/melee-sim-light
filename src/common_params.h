@@ -88,6 +88,10 @@ typedef struct MslCommonParams {
   // Crouch threshold (Squat entry gate).
   // Decomp: refs/melee/src/melee/ft/chara/ftCommon/ftCo_Squat.c::ftCo_Squat_CheckInput (fp->input.lstick.y < -p_ftCommonData->x90)
   float crouch_stick_threshold;      // p_ftCommonData->x90
+  // SquatRv exit threshold from SquatWait.
+  // Decomp: refs/melee/src/melee/ft/chara/ftCommon/ftCo_SquatRv.c::ftCo_SquatRv_CheckInput
+  //         (fp->input.lstick.y > -p_ftCommonData->x94)
+  float crouch_release_stick_threshold;  // p_ftCommonData->x94
   uint8_t tap_jump_tilt_max_frames;  // p_ftCommonData->x74 (tap_jump_tilt_max_frames)
   uint8_t _pad_u8_1[2];
 
