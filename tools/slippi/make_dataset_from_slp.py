@@ -433,6 +433,7 @@ def _main_impl(args) -> None:
         derive_colanim_internals,
         derive_downwait_timer,
         derive_damage_jump_buffer_x14,
+        derive_damage_post_hitlag_cb_kind,
         derive_grab_owner_port_2p,
         derive_guard_reflect_timer_x14,
         derive_guard_reflect_timer_x18,
@@ -1200,6 +1201,19 @@ def _main_impl(args) -> None:
             ),
         )
         samples["seed_t"]["damage_jump_buffer_x14"][:, slot] = damage_jump_buffer_x14[:-1]
+        damage_post_hitlag_cb_kind = derive_damage_post_hitlag_cb_kind(
+            action_id=post_state,
+            hitstun_u16=post_hitstun,
+            damage_actions=(
+                act_damage_fly_hi,
+                act_damage_fly_n,
+                act_damage_fly_lw,
+                act_damage_fly_top,
+                act_damage_fly_roll,
+                act_damage_fall,
+            ),
+        )
+        samples["seed_t"]["damage_post_hitlag_cb_kind"][:, slot] = damage_post_hitlag_cb_kind[:-1]
         ledge_cooldown = _derive_ledge_cooldown(action_id_u16=post_state, hitlag_u16=post_hitlag, common=common)
         samples["seed_t"]["ledge_cooldown"][:, slot] = ledge_cooldown[:-1]
         samples["seed_t"]["lr_press_timer"][:, slot] = lr_press_timer[:-1]

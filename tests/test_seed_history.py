@@ -17,6 +17,7 @@ from tools.slippi.seed_history import (
     compute_tilt_timer_y_pre_post_with_fall_fast,
     compute_x672_trigger_timer_pre_post,
     derive_colanim_internals,
+    derive_damage_post_hitlag_cb_kind,
     derive_guard_reflect_timer_x14,
     derive_guard_reflect_timer_x18,
     derive_guard_release_lockout_and_lightshield,
@@ -1533,3 +1534,44 @@ def test_derive_ucf_pad_buffer_state_basic_sequence() -> None:
     # Spot-check ring content after the first sdrop-up trigger frame (frame 2).
     assert entries_x[2].tolist() == [0, 0, 0, 0]
     assert entries_y[2].tolist() == [0, 0, 0, -127]
+
+
+def test_derive_damage_post_hitlag_cb_kind_prefix_invariant() -> None:
+    act_wait = np.uint16(14)
+    act_damage_fly_n = np.uint16(88)
+    act_damage_fall = np.uint16(91)
+
+    action = np.array(
+        [act_wait, act_damage_fly_n, act_damage_fly_n, act_damage_fall, act_wait, act_damage_fly_n],
+        dtype=np.uint16,
+    )
+    hitstun = np.array([0, 36, 35, 34, 0, 22], dtype=np.uint16)
+    damage_actions = (int(act_damage_fly_n), int(act_damage_fall))
+
+    full = derive_damage_post_hitlag_cb_kind(
+        action_id=action,
+        hitstun_u16=hitstun,
+        damage_actions=damage_actions,
+    )
+    assert full.tolist() == [0, 1, 1, 1, 0, 1]
+
+    for k in (1, 2, 3, 4, 5, int(action.size)):
+        got = derive_damage_post_hitlag_cb_kind(
+            action_id=action[:k],
+            hitstun_u16=hitstun[:k],
+            damage_actions=damage_actions,
+        )
+        assert np.array_equal(got, full[:k])
+
+
+def test_derive_damage_post_hitlag_cb_kind_fresh_hit_reentry_stays_active() -> None:
+    act_damage_fly_n = np.uint16(88)
+    action = np.array([act_damage_fly_n, act_damage_fly_n, act_damage_fly_n, act_damage_fly_n], dtype=np.uint16)
+    hitstun = np.array([30, 29, 40, 39], dtype=np.uint16)  # rising hitstun on frame 2 => fresh hit.
+
+    got = derive_damage_post_hitlag_cb_kind(
+        action_id=action,
+        hitstun_u16=hitstun,
+        damage_actions=(int(act_damage_fly_n),),
+    )
+    assert got.tolist() == [1, 1, 1, 1]

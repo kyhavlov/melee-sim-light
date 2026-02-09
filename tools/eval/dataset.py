@@ -195,6 +195,10 @@ SEED_DTYPE = np.dtype(
         ("stale_queue_index", _arr("u1", MAX_PLAYERS)),
         ("stale_move_id", ("<u2", (MAX_PLAYERS, STALE_QUEUE_SIZE))),
         ("stale_attack_instance", ("<u2", (MAX_PLAYERS, STALE_QUEUE_SIZE))),
+        # Damage hitlag-exit callback lane (decomp: fp->post_hitlag_cb = ftCo_Damage_OnExitHitlag).
+        # Slippi does not expose callback pointers; this seeded lane is derived causally from replay
+        # history for one-step reseed parity.
+        ("damage_post_hitlag_cb_kind", _arr("u1", MAX_PLAYERS)),
         # NOTE (PP#4): these staling fields are populated by replay-history preprocessing:
         # tools/slippi/staling_history.py (derive) and tools/slippi/make_dataset_from_slp.py (wire).
         # They seed the per-player `StaleMoveTable` ring buffer and `attack_instance`.

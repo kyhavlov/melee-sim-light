@@ -1496,6 +1496,74 @@ def derive_damage_jump_buffer_x14(
     return out
 
 
+def derive_damage_post_hitlag_cb_kind(
+    *,
+    action_id: np.ndarray,
+    hitstun_u16: np.ndarray,
+    damage_actions: tuple[int, ...],
+) -> np.ndarray:
+    """
+    Derive `fp->post_hitlag_cb` ownership lane for a configured action-family subset as a causal u8 enum.
+
+    Enum encoding (u8):
+    - 0: no callback
+    - 1: `ftCo_Damage_OnExitHitlag`
+
+    Decomp anchors:
+    - Damage entry sets `fp->post_hitlag_cb = ftCo_Damage_OnExitHitlag`:
+      refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
+    - Hitlag-exit path invokes `post_hitlag_cb`:
+      refs/melee/src/melee/ft/fighter.c::Fighter_8006D10C
+    - Callback body:
+      refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_OnExitHitlag
+
+    Seed bridge scope:
+    - Slippi does not expose callback pointers directly, so this lane is seeded from replay-visible
+      action family/history for teacher-forced one-step parity.
+
+    Causality / prefix-invariance:
+    - Uses only <=t samples.
+    - Uses a damage-family ownership latch and fresh-hit boundaries (`hitstun` increase) as causal
+      re-entry markers.
+    """
+    a = np.asarray(action_id, dtype=np.uint16).reshape(-1)
+    hs = np.asarray(hitstun_u16, dtype=np.uint16).reshape(-1)
+    n = int(a.size)
+    if int(hs.size) != n:
+        raise ValueError("action_id and hitstun_u16 must have same length")
+
+    out = np.zeros(n, dtype=np.uint8)
+    if n == 0:
+        return out
+
+    damage_set = {int(x) & 0xFFFF for x in damage_actions}
+    kind = 0
+    prev_in_damage = False
+    prev_hs = int(hs[0])
+
+    for i in range(n):
+        cur_a = int(a[i]) & 0xFFFF
+        cur_hs = int(hs[i])
+        in_damage = cur_a in damage_set
+
+        if not in_damage:
+            kind = 0
+        else:
+            entered_damage = (i == 0) or (not prev_in_damage)
+            fresh_hit_reentry = (i > 0) and (cur_hs > prev_hs)
+            if entered_damage or fresh_hit_reentry:
+                kind = 1
+            elif kind == 0:
+                # Defensive latch restore for synthetic partial histories.
+                kind = 1
+
+        out[i] = np.uint8(kind)
+        prev_in_damage = in_damage
+        prev_hs = cur_hs
+
+    return out
+
+
 def derive_kneebend_internals(
     *,
     action_id: np.ndarray,
