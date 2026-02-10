@@ -650,13 +650,14 @@ void guard_update_grounded(MslBatch* batch, const MslCommonParams* c, size_t idx
 
   const float trig = msl_trigger_unit_from_input(
       batch->state.input_buttons[idx], batch->state.input_l[idx], batch->state.input_r[idx]);
-  const float prev_trig =
-      msl_trigger_unit_from_input(batch->state.prev_input_buttons[idx], batch->state.prev_input_l[idx],
-                                  batch->state.prev_input_r[idx]);
-  // `held_inputs & HSD_PAD_LR` behavior for shielding uses the trigger deadzone (x10).
-  // Decomp usage: refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c:46-55.
-  const uint8_t shield_held = (trig >= c->trigger_deadzone) ? 1 : 0;
-  const uint8_t prev_shield_held = (prev_trig >= c->trigger_deadzone) ? 1u : 0u;
+  enum { LR = (uint16_t)MSL_BUTTON_L | (uint16_t)MSL_BUTTON_R };
+  // Decomp uses held_inputs & HSD_PAD_LR for guard-release latch ownership (ftCo_80092BCC).
+  // Use replay-visible held button bits as primary proxy; fall back to trigger deadzone only when
+  // digital LR bits are absent.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80092BCC
+  const uint16_t held_buttons = batch->state.input_buttons[idx];
+  const uint8_t shield_held_inputs =
+      ((held_buttons & (uint16_t)LR) != 0u) ? 1u : ((trig >= c->trigger_deadzone) ? 1u : 0u);
   const uint8_t guard_x10_seed = batch->state.guard_x10[idx];
 
   // Guard release lockout (mv.co.guard.xC + mv.co.guard.x10) is modeled explicitly and seeded via
@@ -724,7 +725,6 @@ void guard_update_grounded(MslBatch* batch, const MslCommonParams* c, size_t idx
       // `animation_index==0xFFFFFFFF`. For this *guard.x0* gate only, treat negative action_frame
       // as 0 (entry-like) rather than a large/underflowed value; this preserves teacher-forced
       // prefix-invariant powershield behavior without using replay-fit heuristics.
-      enum { LR = (uint16_t)MSL_BUTTON_L | (uint16_t)MSL_BUTTON_R };
       const uint16_t guard_x0 =
           (batch->state.action_frame[idx] < 0) ? 0u : (uint16_t)batch->state.action_frame[idx];
       if (a0 == (uint16_t)MSL_ACT_GUARD_ON &&
@@ -760,9 +760,9 @@ void guard_update_grounded(MslBatch* batch, const MslCommonParams* c, size_t idx
               ? 1u
               : 0u;
       // Guard release latch ownership (ftCo_80092BCC):
-      // - latch on held-inputs edge loss (prev held -> current not held), not on level-held 0.
+      // - level check: if (!(held_inputs & HSD_PAD_LR)) xC = true.
       // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80092BCC
-      if (prev_shield_held && !shield_held && !guard_setoff_carry_snapshot) {
+      if (!shield_held_inputs && !guard_setoff_carry_snapshot) {
         batch->state.guard_release_latched_xc[idx] = 1;
       }
       // Decomp: ftCo_800925A4 updates lightshield_amount + drains shield HP + decrements x10 while
@@ -841,7 +841,7 @@ void guard_update_grounded(MslBatch* batch, const MslCommonParams* c, size_t idx
     const uint8_t guard_reflect_snapshot_neg_lane_x10_one =
         (guard_reflect_snapshot_neg_lane && guard_x10_seed == 1u) ? 1u : 0u;
     const uint8_t guard_snapshot_hold_fallback =
-        (guard_no_submotion_snapshot && shield_held &&
+        (guard_no_submotion_snapshot && shield_held_inputs &&
          ((a0 == (uint16_t)MSL_ACT_GUARD_ON && guard_x10_seed == 0) ||
           (a0 == (uint16_t)MSL_ACT_GUARD_REFLECT && guard_reflect_window_expired &&
            (guard_x10_seed == 0 || guard_reflect_snapshot_neg_lane_x10_one))))
@@ -928,9 +928,9 @@ void guard_update_grounded(MslBatch* batch, const MslCommonParams* c, size_t idx
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Escape.c::ftCo_80099264
   //
   // Approximation:
-  // - Use `shield_held` as our decomp-shaped "held_inputs & LR" proxy.
+  // - Use `shield_held_inputs` as our decomp-shaped "held_inputs & LR" proxy.
   // - Use extracted p_ftCommonData->x48 via common params (dash_iasa_x48).
-  if (a0 == (uint16_t)MSL_ACT_DASH && shield_held &&
+  if (a0 == (uint16_t)MSL_ACT_DASH && shield_held_inputs &&
       batch->state.anim_frame_f32[idx] <= c->dash_iasa_x48) {
     enter_escape_roll(batch, idx, (uint16_t)MSL_ACT_ESCAPE_F);
     return;
@@ -938,7 +938,6 @@ void guard_update_grounded(MslBatch* batch, const MslCommonParams* c, size_t idx
 
   // Decomp: ftCo_80091A4C (used by grounded locomotion IASA functions like Wait/Walk/Run/Turn).
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c:57-70 and ftCo_Wait.c:43-66.
-  enum { LR = (uint16_t)MSL_BUTTON_L | (uint16_t)MSL_BUTTON_R };
   const uint16_t pressed = batch->state.input_buttons_pressed[idx];
   if ((pressed & (uint16_t)LR) != 0 &&
       batch->state.x672_input_timer[idx] < c->powershield_reflect_window_frames) {
@@ -946,7 +945,7 @@ void guard_update_grounded(MslBatch* batch, const MslCommonParams* c, size_t idx
     return;
   }
 
-  if (shield_held && batch->state.shield_hp[idx] > 0.0f) {
+  if (shield_held_inputs && batch->state.shield_hp[idx] > 0.0f) {
     enter_guard_on(batch, c, idx);
     {
       // Initialize lightshield_amount from the current trigger input (decomp updates this on entry

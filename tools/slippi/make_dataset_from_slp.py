@@ -991,6 +991,8 @@ def _main_impl(args) -> None:
             action_id=post_state,
             shield_hp=post_shield,
             hitlag=post_hitlag,
+            buttons_held=pre_buttons_physical,
+            button_mask_lr=int(button_mask_lr),
             trigger_unit=trigger_unit,
             trigger_deadzone=float(common["trigger_deadzone"]),
             guard_x10_init_frames=int(common["guard_x10_init_frames"]),

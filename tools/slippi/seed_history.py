@@ -724,6 +724,8 @@ def derive_guard_release_lockout_and_lightshield(
     action_id: np.ndarray,
     shield_hp: np.ndarray,
     hitlag: np.ndarray,
+    buttons_held: np.ndarray,
+    button_mask_lr: int,
     trigger_unit: np.ndarray,
     trigger_deadzone: float,
     guard_x10_init_frames: int,
@@ -763,11 +765,15 @@ def derive_guard_release_lockout_and_lightshield(
     aid = np.asarray(action_id, dtype=np.uint16).reshape(-1)
     hp = np.asarray(shield_hp, dtype=np.float32).reshape(-1)
     hl = np.asarray(hitlag, dtype=np.uint16).reshape(-1)
+    buttons = np.asarray(buttons_held, dtype=np.uint16).reshape(-1)
     trig = np.asarray(trigger_unit, dtype=np.float32).reshape(-1)
+    mask_lr = int(button_mask_lr) & 0xFFFF
 
     n = int(aid.size)
-    if int(hp.size) != n or int(hl.size) != n or int(trig.size) != n:
+    if int(hp.size) != n or int(hl.size) != n or int(buttons.size) != n or int(trig.size) != n:
         raise ValueError("input arrays must have the same length")
+    if mask_lr == 0:
+        raise ValueError("button_mask_lr must be non-zero")
 
     out_xc = np.zeros(n, dtype=np.uint8)
     out_x10 = np.zeros(n, dtype=np.uint8)
@@ -868,8 +874,11 @@ def derive_guard_release_lockout_and_lightshield(
         # newly applied later in the frame by collision callbacks.
         hl_prev = int(hl[i - 1]) if i > 0 else 0
         hl_after_prio0 = hl_prev - 1 if hl_prev > 0 else 0
-        prev_held = (float(trig[i - 1]) >= float(dz)) if i > 0 else (float(trig[i]) >= float(dz))
-        held = float(trig[i]) >= float(dz)
+        # held_inputs proxy for ftCo_80092BCC:
+        # - prefer replay-visible held digital bits (buttons_held & LR),
+        # - fall back to analog trigger deadzone when digital bits are absent.
+        # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80092BCC
+        held = ((int(buttons[i]) & mask_lr) != 0) or (float(trig[i]) >= float(dz))
         # Only update these when guard callbacks can run and shield is still active.
         if hl_after_prio0 == 0 and float(hp[i]) > 0.0:
             # Lightshield amount latch (ftCo_800925A4):

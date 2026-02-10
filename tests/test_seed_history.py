@@ -307,6 +307,7 @@ def test_derive_guard_release_lightshield_persists_through_guard_set_off() -> No
     act_guard_set_off = 0x00B5
     act_guard_reflect = 0x00B6
     act_wait = 0x000E
+    button_mask_lr = 0x0060
 
     action_id = np.array(
         [act_wait, act_guard_on, act_guard_on, act_guard_set_off, act_guard_set_off, act_wait],
@@ -316,10 +317,13 @@ def test_derive_guard_release_lightshield_persists_through_guard_set_off() -> No
     hitlag = np.zeros(action_id.shape[0], dtype=np.uint16)
     trigger = np.ones(action_id.shape[0], dtype=np.float32)
     trigger[-1] = np.float32(0.0)
+    buttons_held = np.zeros(action_id.shape[0], dtype=np.uint16)
     x_c, x10, light = derive_guard_release_lockout_and_lightshield(
         action_id=action_id,
         shield_hp=shield_hp,
         hitlag=hitlag,
+        buttons_held=buttons_held,
+        button_mask_lr=button_mask_lr,
         trigger_unit=trigger,
         trigger_deadzone=0.3,
         guard_x10_init_frames=8,
@@ -345,6 +349,7 @@ def test_derive_guard_release_lockout_guard_setoff_to_guard_carries_lanes() -> N
     act_guard_set_off = 0x00B5
     act_guard_reflect = 0x00B6
     act_wait = 0x000E
+    button_mask_lr = 0x0060
 
     action_id = np.array(
         [act_wait, act_guard_on, act_guard_on, act_guard_set_off, act_guard_set_off, act_guard, act_guard, act_wait],
@@ -353,10 +358,13 @@ def test_derive_guard_release_lockout_guard_setoff_to_guard_carries_lanes() -> N
     shield_hp = np.array([60.0, 60.0, 59.0, 55.0, 55.0, 55.0, 55.0, 55.0], dtype=np.float32)
     hitlag = np.zeros(action_id.shape[0], dtype=np.uint16)
     trigger = np.array([0.0, 1.0, 1.0, 1.0, 1.0, 0.0, 0.0, 0.0], dtype=np.float32)
+    buttons_held = np.zeros(action_id.shape[0], dtype=np.uint16)
     x_c, x10, light = derive_guard_release_lockout_and_lightshield(
         action_id=action_id,
         shield_hp=shield_hp,
         hitlag=hitlag,
+        buttons_held=buttons_held,
+        button_mask_lr=button_mask_lr,
         trigger_unit=trigger,
         trigger_deadzone=0.3,
         guard_x10_init_frames=8,
@@ -380,15 +388,19 @@ def test_derive_guard_release_lockout_reinitializes_on_non_setoff_snapshot_guard
     act_guard_set_off = 0x00B5
     act_guard_reflect = 0x00B6
     act_wait = 0x000E
+    button_mask_lr = 0x0060
 
     action_id = np.array([act_wait, act_wait, act_guard, act_guard, act_wait], dtype=np.uint16)
     shield_hp = np.array([60.0, 60.0, 60.0, 60.0, 60.0], dtype=np.float32)
     hitlag = np.zeros(action_id.shape[0], dtype=np.uint16)
     trigger = np.array([0.0, 0.0, 0.0, 0.0, 0.0], dtype=np.float32)
+    buttons_held = np.zeros(action_id.shape[0], dtype=np.uint16)
     x_c, x10, _light = derive_guard_release_lockout_and_lightshield(
         action_id=action_id,
         shield_hp=shield_hp,
         hitlag=hitlag,
+        buttons_held=buttons_held,
+        button_mask_lr=button_mask_lr,
         trigger_unit=trigger,
         trigger_deadzone=0.3,
         guard_x10_init_frames=8,
@@ -402,12 +414,49 @@ def test_derive_guard_release_lockout_reinitializes_on_non_setoff_snapshot_guard
     assert x10.tolist() == [0, 0, 7, 6, 0]
 
 
+def test_derive_guard_release_lockout_uses_buttons_held_lr_proxy() -> None:
+    # ftCo_80092BCC uses held_inputs & HSD_PAD_LR; keep xC unlatch while LR buttons are held even
+    # when analog trigger is below deadzone.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80092BCC
+    act_guard_on = 0x00B2
+    act_guard = 0x00B3
+    act_guard_set_off = 0x00B5
+    act_guard_reflect = 0x00B6
+    act_wait = 0x000E
+    button_mask_lr = 0x0060
+
+    action_id = np.array([act_wait, act_guard_on, act_guard, act_guard, act_wait], dtype=np.uint16)
+    shield_hp = np.array([60.0, 60.0, 60.0, 60.0, 60.0], dtype=np.float32)
+    hitlag = np.zeros(action_id.shape[0], dtype=np.uint16)
+    trigger = np.zeros(action_id.shape[0], dtype=np.float32)
+    buttons_held = np.array([0, button_mask_lr, button_mask_lr, 0, 0], dtype=np.uint16)
+
+    x_c, x10, _light = derive_guard_release_lockout_and_lightshield(
+        action_id=action_id,
+        shield_hp=shield_hp,
+        hitlag=hitlag,
+        buttons_held=buttons_held,
+        button_mask_lr=button_mask_lr,
+        trigger_unit=trigger,
+        trigger_deadzone=0.3,
+        guard_x10_init_frames=8,
+        act_guard_on=act_guard_on,
+        act_guard=act_guard,
+        act_guard_reflect=act_guard_reflect,
+        act_guard_set_off=act_guard_set_off,
+    )
+
+    assert x_c.tolist() == [0, 0, 0, 1, 0]
+    assert x10.tolist() == [0, 7, 6, 5, 0]
+
+
 def test_derive_guard_release_lockout_is_prefix_invariant() -> None:
     act_guard_on = np.uint16(0x00B2)
     act_guard = np.uint16(0x00B3)
     act_guard_set_off = np.uint16(0x00B5)
     act_guard_reflect = np.uint16(0x00B6)
     act_wait = np.uint16(0x000E)
+    button_mask_lr = 0x0060
 
     action_id_prefix = np.array(
         [act_wait, act_guard_on, act_guard_on, act_guard_set_off, act_guard_set_off, act_guard, act_guard],
@@ -416,10 +465,13 @@ def test_derive_guard_release_lockout_is_prefix_invariant() -> None:
     shield_hp_prefix = np.array([60.0, 60.0, 59.0, 55.0, 55.0, 55.0, 55.0], dtype=np.float32)
     hitlag_prefix = np.zeros(action_id_prefix.shape[0], dtype=np.uint16)
     trigger_prefix = np.array([0.0, 1.0, 1.0, 1.0, 1.0, 0.0, 0.0], dtype=np.float32)
+    buttons_prefix = np.zeros(action_id_prefix.shape[0], dtype=np.uint16)
     x_c0, x100, light0 = derive_guard_release_lockout_and_lightshield(
         action_id=action_id_prefix,
         shield_hp=shield_hp_prefix,
         hitlag=hitlag_prefix,
+        buttons_held=buttons_prefix,
+        button_mask_lr=button_mask_lr,
         trigger_unit=trigger_prefix,
         trigger_deadzone=0.3,
         guard_x10_init_frames=8,
@@ -433,10 +485,13 @@ def test_derive_guard_release_lockout_is_prefix_invariant() -> None:
     shield_hp_ext = np.concatenate([shield_hp_prefix, np.array([55.0, 55.0, 55.0], dtype=np.float32)])
     hitlag_ext = np.concatenate([hitlag_prefix, np.array([0, 0, 0], dtype=np.uint16)])
     trigger_ext = np.concatenate([trigger_prefix, np.array([0.0, 0.0, 0.0], dtype=np.float32)])
+    buttons_ext = np.concatenate([buttons_prefix, np.array([0, 0, 0], dtype=np.uint16)])
     x_c1, x101, light1 = derive_guard_release_lockout_and_lightshield(
         action_id=action_id_ext,
         shield_hp=shield_hp_ext,
         hitlag=hitlag_ext,
+        buttons_held=buttons_ext,
+        button_mask_lr=button_mask_lr,
         trigger_unit=trigger_ext,
         trigger_deadzone=0.3,
         guard_x10_init_frames=8,
