@@ -819,18 +819,33 @@ def derive_guard_release_lockout_and_lightshield(
             out_light[i] = np.float32(0.0)
             continue
 
-        if in_guard and not prev_in_guard and a == int(act_guard):
+        if in_guard and not prev_in_guard and a == int(act_guard) and prev_a != int(act_guard_set_off):
             # Snapshot bridge for teacher-forced reseed:
             # Guard entry can appear without an explicit GuardOn/GuardReflect predecessor in replay
             # snapshots (no submotion timeline at the boundary). Seed conservatively with a fresh
             # lockout window to avoid synthesizing immediate Guard->GuardOff exits from stale xC/x10.
+            #
+            # Decomp exception: GuardSetOff -> Guard uses ftCo_800928CC and does not call
+            # ftCo_800921DC, so xC/x10 must carry through (do not reinitialize on this path).
             # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_GuardOn_Anim,ftCo_800928CC}
+            # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_GuardSetOff_Anim,ftCo_800928CC,ftCo_800921DC}
             # refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
             xC = False
             x10 = init
             light = np.float32(0.0)
 
         if in_guard_set_off:
+            if prev_a != int(act_guard_set_off) and not prev_in_guard and x10 == 0:
+                # Snapshot bridge: replay post-frames can show direct non-guard -> GuardSetOff
+                # boundaries when the preceding GuardOn/Guard/GuardReflect context is absent.
+                # Decomp GuardSetOff itself does not call ftCo_800921DC, but the missing guard-entry
+                # context would have initialized x10 earlier in-frame before ftCo_80092F2C.
+                # Seed a fresh lockout window so GuardSetOff->Guard carry does not collapse into an
+                # immediate GuardOff on the next no-submotion Guard snapshot.
+                # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_800921DC,ftCo_80092F2C,ftCo_GuardSetOff_Anim}
+                xC = False
+                x10 = init
+
             # GuardSetOff consumes the already-latched fp->lightshield_amount for entry anim-rate
             # shaping and does not reinitialize guard lockout lanes on the SetOff->Guard path.
             # Preserve xC/x10 across GuardSetOff snapshots.
@@ -871,9 +886,10 @@ def derive_guard_release_lockout_and_lightshield(
                 if x10 < 0:
                     x10 = 0
 
-            # xC latch (ftCo_80092BCC): edge-triggered on held-input loss.
-            # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_80092BCC,ftCo_GuardSetOff_Anim,ftCo_800928CC}
-            if prev_held and (not held):
+            # xC latch (ftCo_80092BCC): level-held check, not edge-triggered.
+            # if (!(fp->input.held_inputs & HSD_PAD_LR)) fp->mv.co.guard.xC = true;
+            # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80092BCC
+            if not held:
                 xC = True
 
         out_xc[i] = np.uint8(1 if xC else 0)

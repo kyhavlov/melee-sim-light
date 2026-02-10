@@ -337,11 +337,9 @@ def test_derive_guard_release_lightshield_persists_through_guard_set_off() -> No
     assert light.tolist() == [0.0, 1.0, 1.0, 1.0, 1.0, 0.0]
 
 
-def test_derive_guard_release_lockout_reinitializes_on_snapshot_guard_entry_bridge() -> None:
-    # Seed bridge: replay snapshots can enter Guard directly without exposing the intermediate
-    # submotion timeline; in that lane we conservatively reseed lockout internals on Guard entry.
-    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_GuardOn_Anim,ftCo_800928CC}
-    # refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
+def test_derive_guard_release_lockout_guard_setoff_to_guard_carries_lanes() -> None:
+    # GuardSetOff -> Guard snapshots must carry xC/x10 (no ftCo_800921DC reinit on this path).
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_GuardSetOff_Anim,ftCo_800928CC,ftCo_800921DC}
     act_guard_on = 0x00B2
     act_guard = 0x00B3
     act_guard_set_off = 0x00B5
@@ -369,8 +367,39 @@ def test_derive_guard_release_lockout_reinitializes_on_snapshot_guard_entry_brid
     )
 
     assert x_c.tolist() == [0, 0, 0, 0, 0, 1, 1, 0]
-    assert x10.tolist() == [0, 7, 6, 6, 6, 7, 6, 0]
-    assert light.tolist() == [0.0, 1.0, 1.0, 1.0, 1.0, 0.0, 0.0, 0.0]
+    assert x10.tolist() == [0, 7, 6, 6, 6, 5, 4, 0]
+    assert light.tolist() == [0.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.0]
+
+
+def test_derive_guard_release_lockout_reinitializes_on_non_setoff_snapshot_guard_entry_bridge() -> None:
+    # Snapshot bridge lane: direct Guard entry without a GuardSetOff predecessor should reseed.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_GuardOn_Anim,ftCo_800928CC}
+    # refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
+    act_guard_on = 0x00B2
+    act_guard = 0x00B3
+    act_guard_set_off = 0x00B5
+    act_guard_reflect = 0x00B6
+    act_wait = 0x000E
+
+    action_id = np.array([act_wait, act_wait, act_guard, act_guard, act_wait], dtype=np.uint16)
+    shield_hp = np.array([60.0, 60.0, 60.0, 60.0, 60.0], dtype=np.float32)
+    hitlag = np.zeros(action_id.shape[0], dtype=np.uint16)
+    trigger = np.array([0.0, 0.0, 0.0, 0.0, 0.0], dtype=np.float32)
+    x_c, x10, _light = derive_guard_release_lockout_and_lightshield(
+        action_id=action_id,
+        shield_hp=shield_hp,
+        hitlag=hitlag,
+        trigger_unit=trigger,
+        trigger_deadzone=0.3,
+        guard_x10_init_frames=8,
+        act_guard_on=act_guard_on,
+        act_guard=act_guard,
+        act_guard_reflect=act_guard_reflect,
+        act_guard_set_off=act_guard_set_off,
+    )
+
+    assert x_c.tolist() == [0, 0, 1, 1, 0]
+    assert x10.tolist() == [0, 0, 7, 6, 0]
 
 
 def test_derive_guard_release_lockout_is_prefix_invariant() -> None:
