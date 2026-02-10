@@ -450,6 +450,45 @@ def test_derive_guard_release_lockout_uses_buttons_held_lr_proxy() -> None:
     assert x10.tolist() == [0, 7, 6, 5, 0]
 
 
+def test_derive_guard_release_lockout_analog_only_hold_falls_back_to_trigger() -> None:
+    # Decomp ownership uses held_inputs & HSD_PAD_LR; dataset seeds may carry analog-only trigger
+    # holds (no digital L/R held bits). In that lane, fallback to trigger deadzone should keep
+    # guard hold semantics stable.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80092BCC
+    act_guard_on = 0x00B2
+    act_guard = 0x00B3
+    act_guard_set_off = 0x00B5
+    act_guard_reflect = 0x00B6
+    act_wait = 0x000E
+    button_mask_lr = 0x0060
+
+    action_id = np.array([act_wait, act_guard_on, act_guard, act_guard, act_wait], dtype=np.uint16)
+    shield_hp = np.array([60.0, 60.0, 60.0, 60.0, 60.0], dtype=np.float32)
+    hitlag = np.zeros(action_id.shape[0], dtype=np.uint16)
+    # Analog-only hold (trigger>=deadzone while digital L/R bits are clear) on the two guard frames.
+    trigger = np.array([0.0, 1.0, 1.0, 0.0, 0.0], dtype=np.float32)
+    buttons_held = np.zeros(action_id.shape[0], dtype=np.uint16)
+
+    x_c, x10, _light = derive_guard_release_lockout_and_lightshield(
+        action_id=action_id,
+        shield_hp=shield_hp,
+        hitlag=hitlag,
+        buttons_held=buttons_held,
+        button_mask_lr=button_mask_lr,
+        trigger_unit=trigger,
+        trigger_deadzone=0.3,
+        guard_x10_init_frames=8,
+        act_guard_on=act_guard_on,
+        act_guard=act_guard,
+        act_guard_reflect=act_guard_reflect,
+        act_guard_set_off=act_guard_set_off,
+    )
+
+    # Hold remains active through frame 2; release latches once trigger drops on frame 3.
+    assert x_c.tolist() == [0, 0, 0, 1, 0]
+    assert x10.tolist() == [0, 7, 6, 5, 0]
+
+
 def test_derive_guard_release_lockout_is_prefix_invariant() -> None:
     act_guard_on = np.uint16(0x00B2)
     act_guard = np.uint16(0x00B3)

@@ -5,7 +5,9 @@
 
 #include "anim_frame.h"
 #include "anim_pose.h"
+#include "action_ids.h"
 #include "char_params.h"
+#include "common_params.h"
 #include "hitboxes_tables.h"
 #include "hitlist.h"
 #include "mtx34.h"
@@ -13,6 +15,164 @@
 static inline size_t idx_hitbox(int bi, int p, int hb_i) {
   return ((size_t)bi * (size_t)MSL_MAX_PLAYERS + (size_t)p) * (size_t)MSL_MAX_HITBOXES +
          (size_t)hb_i;
+}
+
+static inline int hitboxes_seed_bridge_get_env_dmg(float dmg) {
+  // Decomp (GALE01): "getEnvDmg" pattern used by collision when converting float hitbox damage to
+  // the integer damage lane used by shield interactions / hitlag input.
+  // refs/melee/src/melee/ft/ftcoll.c (inlineA0/inlineA1 and ftColl_80076CBC).
+  if (dmg == 0.0f) {
+    return 0;
+  }
+  const int i = (int)dmg;
+  return (i != 0) ? i : 1;
+}
+
+static inline uint16_t hitboxes_seed_bridge_shield_hitlag_frames(const MslCommonParams* c,
+                                                                 float dmg) {
+  if (c == NULL) {
+    return 0;
+  }
+  const int dmg_i = hitboxes_seed_bridge_get_env_dmg(dmg);
+  if (dmg_i <= 0) {
+    return 0;
+  }
+  // Decomp (GALE01): ftCommon_CalcHitlag truncation shape for shield-hit lanes.
+  // Shield-hit entry (ftColl_80076CBC/Fighter_ProcessHit_8006D1EC) uses non-squat defenders and
+  // hitlag mul 1.0 for this bucket, so we only need the base truncation lane here.
+  // refs/melee/src/melee/ft/ftcommon.c::ftCommon_CalcHitlag
+  // refs/melee/src/melee/ft/ftcoll.c::ftColl_80076CBC
+  const float tmp_f = (float)dmg_i * c->hitlag_dmg_mul + c->hitlag_base;
+  int hl_i = (int)tmp_f;
+  if (hl_i < 0) {
+    hl_i = 0;
+  }
+  if (hl_i > 0xFFFF) {
+    hl_i = 0xFFFF;
+  }
+  return (uint16_t)hl_i;
+}
+
+static inline void hitboxes_seed_bridge_entry_clear(MslHitlistVictimEntry* e) {
+  if (e == NULL) {
+    return;
+  }
+  e->id32 = 0;
+  e->id16 = 0;
+  e->kind_slot = 0xFFu;
+  e->cd = 0;
+}
+
+static void hitboxes_seed_bridge_trim_impossible_indefinite(MslBatch* batch, int bi, int attacker,
+                                                            int hb_id, const MslHitboxEvent* def,
+                                                            uint16_t pose_frame,
+                                                            uint8_t seed_materialized_now,
+                                                            uint8_t from_prev_active_snapshot) {
+  if (batch == NULL || def == NULL) {
+    return;
+  }
+  // Teacher-forced reseed snapshot bridge only; not GALE01 runtime behavior.
+  // This trim is valid only when the hitcapsule was just materialized from seeded dense hitlist
+  // lanes and the slot came from the pose_frame-1 active snapshot lane (not a pose-frame
+  // create/enable-edge path).
+  //
+  // Defensive guardrail: keep this path impossible to trigger unless seed materialization happened
+  // this frame, even if a future refactor broadens callsites.
+  if (!seed_materialized_now) {
+    return;
+  }
+  if (!from_prev_active_snapshot) {
+    return;
+  }
+  if (attacker < 0 || attacker >= (int)batch->config.num_players) {
+    return;
+  }
+  if (hb_id < 0 || hb_id >= MSL_MAX_HITBOXES) {
+    return;
+  }
+  if (!(def->damage > 0.0f)) {
+    return;
+  }
+  if (pose_frame < def->frame) {
+    return;
+  }
+
+  const MslCommonParams* c = msl_common_params();
+  const uint16_t expected_hitlag = hitboxes_seed_bridge_shield_hitlag_frames(c, def->damage);
+  if (expected_hitlag == 0u) {
+    return;
+  }
+  const uint16_t window_age = (uint16_t)(pose_frame - def->frame);
+  // Only trim at the tail of the decomp hitlag horizon (age >= hitlag-1).
+  //
+  // Safety proof (decomp-shaped):
+  // - A real shield hit in this active window applies defender hitlag in ftColl_80076CBC.
+  // - Hitlag duration follows ftCommon_CalcHitlag truncation shape.
+  // refs/melee/src/melee/ft/ftcoll.c::ftColl_80076CBC
+  // refs/melee/src/melee/ft/ftcommon.c::ftCommon_CalcHitlag
+  //
+  // Therefore, when window_age+1 has reached expected_hitlag and defender is still neutral
+  // (hitlag==0 && hitstun==0), an indefinite seeded victim entry cannot represent a real prior
+  // hit from this same active window.
+  //
+  // Decomp shape:
+  // - ftColl_800768A0 clear/copy ownership is tied to hitbox enable-edge / hit_group transitions.
+  // - ftColl_80076CBC applies nonzero defender hitlag on real shield contact.
+  // refs/melee/src/melee/ft/ftcoll.c::{ftColl_800768A0,ftColl_80076CBC}
+  if ((uint16_t)(window_age + 1u) < expected_hitlag) {
+    return;
+  }
+
+  // Reseed bridge: dense per-group hitlist snapshots can over-latch indefinite (x4==0) entries
+  // onto active capsules before the first real hit in a newly active window, because the seed
+  // schema lacks per-HitCapsule victim lists and per-victim insertion frame provenance.
+  //
+  // Decomp anchors:
+  // - lbColl_8000ACFC gates by victim presence in victims_1 (x4 is ignored for acceptance).
+  // - lbColl_80008A5C only decrements nonzero x4; x4==0 entries persist until clear/copy.
+  // - ftColl_80076CBC shield hits set nonzero defender hitlag on contact.
+  // refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000ACFC,lbColl_80008A5C}
+  // refs/melee/src/melee/ft/ftcoll.c::ftColl_80076CBC
+  //
+  // At this tail lane, if defender is neutral (hitlag==0 && hitstun==0), any seeded indefinite
+  // entry is stale for the current overlap window and must be cleared so ftColl_800768A0 ownership
+  // can proceed from real runtime contacts.
+  const size_t hl_i = idx_hitbox(bi, attacker, hb_id);
+  MslHitlistCapsule* hit = &batch->state.fighter_hitlist[hl_i];
+  for (size_t i = 0; i < (size_t)MSL_HITLIST_VICTIM_CAP; i++) {
+    MslHitlistVictimEntry* e = &hit->victims_1[i];
+    if (msl_hitlist_victim_is_empty(e->kind_slot)) {
+      continue;
+    }
+    if (msl_hitlist_victim_kind(e->kind_slot) != (uint8_t)MSL_HITLIST_VICTIM_KIND_FIGHTER) {
+      continue;
+    }
+    if (e->cd != 0u) {
+      continue;
+    }
+    const uint8_t victim_port = msl_hitlist_victim_slot(e->kind_slot);
+    if (victim_port >= (uint8_t)batch->config.num_players || victim_port == (uint8_t)attacker) {
+      continue;
+    }
+    const size_t v_idx = msl_idx_player(bi, (int)victim_port);
+    if (batch->state.hitlag[v_idx] != 0u || batch->state.hitstun[v_idx] != 0u) {
+      continue;
+    }
+    const uint16_t v_action = batch->state.action_id[v_idx];
+    const uint8_t guard_no_submotion_snapshot =
+        (v_action == (uint16_t)MSL_ACT_GUARD && batch->state.action_frame[v_idx] < 0 &&
+         batch->state.animation_index[v_idx] == 0xFFFFFFFFu &&
+         batch->state.anim_frame_f32[v_idx] < 0.0f)
+            ? 1u
+            : 0u;
+    if (!guard_no_submotion_snapshot) {
+      continue;
+    }
+    if (batch->state.prev_action_id[v_idx] != (uint16_t)MSL_ACT_GUARD) {
+      continue;
+    }
+    hitboxes_seed_bridge_entry_clear(e);
+  }
 }
 
 void hitboxes_refresh(MslBatch* batch) {
@@ -166,8 +326,12 @@ void hitboxes_refresh(MslBatch* batch) {
               // Seed materialize the victim list for hitboxes already active at pose_frame-1.
               const size_t hl_i = idx_hitbox(bi, p, hi);
               if (batch->state.fighter_hitlist_init_gen[hl_i] != hitlist_gen) {
+                const uint8_t seed_materialized_now = 1u;
                 const uint8_t g = hitlist_hit_group_from_u16_7(def[hi].u16_7);
                 hitlist_seed_init_fighter_hitbox_from_group(batch, bi, p, hi, g);
+                hitboxes_seed_bridge_trim_impossible_indefinite(batch, bi, p, hi, &def[hi],
+                                                                pose_frame, seed_materialized_now,
+                                                                1u);
               }
             }
           }
@@ -247,8 +411,12 @@ void hitboxes_refresh(MslBatch* batch) {
             // Seed materialize for hitboxes active at pose_frame-1 even when no pose_frame events fire.
             const size_t hl_i = idx_hitbox(bi, p, hi);
             if (batch->state.fighter_hitlist_init_gen[hl_i] != hitlist_gen) {
+              const uint8_t seed_materialized_now = 1u;
               const uint8_t g = hitlist_hit_group_from_u16_7(def[hi].u16_7);
               hitlist_seed_init_fighter_hitbox_from_group(batch, bi, p, hi, g);
+              hitboxes_seed_bridge_trim_impossible_indefinite(batch, bi, p, hi, &def[hi],
+                                                              pose_frame, seed_materialized_now,
+                                                              1u);
             }
           }
         }
