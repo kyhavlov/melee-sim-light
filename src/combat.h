@@ -54,3 +54,12 @@ void combat_apply_item_shield_hit(MslBatch* batch, int batch_index, int attacker
 int combat_debug_select_body_hits(MslBatch* batch, int batch_index,
                                   MslDebugCombatContact* out_contacts, uint16_t max_contacts,
                                   uint16_t* out_count);
+
+// Debug/testing helper: emit shield-candidate gate decisions for one batch row.
+//
+// This mirrors the fighter-vs-fighter shield path ownership/order in:
+// - refs/melee/src/melee/ft/ftcoll.c::ftColl_80078C70
+// - refs/melee/src/melee/lb/lbcollision.c::lbColl_80007BCC
+int combat_debug_shield_candidate_decisions(MslBatch* batch, int batch_index,
+                                            MslDebugShieldCandidateDecision* out_rows,
+                                            uint16_t max_rows, uint16_t* out_count);

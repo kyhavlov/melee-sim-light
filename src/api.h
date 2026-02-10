@@ -680,6 +680,83 @@ typedef struct MslDebugCombatContactClassified {
   float shield_radius;
 } MslDebugCombatContactClassified;
 
+// Debug-only shield candidate observability for decomp-shaped pre-combat triage.
+//
+// This struct captures one candidate decision in the fighter shield-contact path owned by:
+// - refs/melee/src/melee/ft/ftcoll.c::ftColl_80078C70
+// - refs/melee/src/melee/lb/lbcollision.c::lbColl_80007BCC
+//
+// source_kind:
+//  0 = fighter hitbox candidate (one row per attacker/defender/hitbox slot)
+//  1 = pair gate (attacker/defender-level early reject; hitbox_id=0xFF)
+//
+// reject_reason:
+//  0  = ACCEPT_SHIELD
+//  1  = REJECT_ATTACKER_STOCKS_ZERO
+//  2  = REJECT_DEFENDER_STOCKS_ZERO
+//  3  = REJECT_TEAMS_FRIENDLY
+//  4  = REJECT_HITLAG_GATE
+//  5  = REJECT_SHIELD_INACTIVE
+//  6  = REJECT_HITBOX_DISABLED
+//  7  = REJECT_GROUND_AIR_FLAGS
+//  8  = REJECT_HITLIST_CONTAINS
+//  9  = REJECT_SHIELD_GEOM_NO_OVERLAP
+//  10 = REJECT_INERT_ELEMENT
+//  11 = REJECT_NONPOS_DAMAGE
+enum {
+  MSL_DEBUG_SHIELD_SOURCE_FIGHTER_HITBOX = 0,
+  MSL_DEBUG_SHIELD_SOURCE_PAIR_GATE = 1,
+};
+
+enum {
+  MSL_DEBUG_SHIELD_DECISION_ACCEPT_SHIELD = 0,
+  MSL_DEBUG_SHIELD_REJECT_ATTACKER_STOCKS_ZERO = 1,
+  MSL_DEBUG_SHIELD_REJECT_DEFENDER_STOCKS_ZERO = 2,
+  MSL_DEBUG_SHIELD_REJECT_TEAMS_FRIENDLY = 3,
+  MSL_DEBUG_SHIELD_REJECT_HITLAG_GATE = 4,
+  MSL_DEBUG_SHIELD_REJECT_SHIELD_INACTIVE = 5,
+  MSL_DEBUG_SHIELD_REJECT_HITBOX_DISABLED = 6,
+  MSL_DEBUG_SHIELD_REJECT_GROUND_AIR_FLAGS = 7,
+  MSL_DEBUG_SHIELD_REJECT_HITLIST_CONTAINS = 8,
+  MSL_DEBUG_SHIELD_REJECT_SHIELD_GEOM_NO_OVERLAP = 9,
+  MSL_DEBUG_SHIELD_REJECT_INERT_ELEMENT = 10,
+  MSL_DEBUG_SHIELD_REJECT_NONPOS_DAMAGE = 11,
+};
+
+typedef struct MslDebugShieldCandidateDecision {
+  uint8_t source_kind;    // MSL_DEBUG_SHIELD_SOURCE_*
+  uint8_t attacker;       // player index
+  uint8_t defender;       // player index
+  uint8_t hitbox_id;      // 0..3, or 0xFF for pair gate rows
+  uint8_t reject_reason;  // MSL_DEBUG_SHIELD_* reason enum
+
+  uint8_t attacker_hitlag_started_frame;
+  uint8_t defender_hitlag_started_frame;
+  uint8_t shield_active;
+  uint8_t hitbox_enabled;
+  uint8_t defender_on_ground;
+  uint8_t hitlist_allows;
+  uint8_t overlap_shield;
+  uint8_t element;
+
+  uint16_t hb_flags;
+  uint16_t attacker_msid;
+  int16_t attacker_action_frame;
+
+  float hitbox_damage;
+  float hitbox_x;
+  float hitbox_y;
+  float hitbox_z;
+  float hitbox_radius;
+
+  float shield_x;
+  float shield_y;
+  float shield_z;
+  float shield_radius;
+  // Positive means overlap by this margin; negative means separation.
+  float shield_overlap_margin;
+} MslDebugShieldCandidateDecision;
+
 #pragma pack(pop)
 
 // Debug-only: decomp-shaped HitCapsule victim list dump for one fighter hitbox slot.
@@ -1002,6 +1079,15 @@ int msl_batch_debug_combat_contacts_classified(const MslBatch* batch, int batch_
 int msl_batch_debug_combat_contacts_classified_filtered(
     const MslBatch* batch, int batch_index, MslDebugCombatContactClassified* out_contacts,
     uint16_t max_contacts, uint16_t* out_count);
+
+// Debug/validation helper: emit decomp-shaped shield-candidate gate decisions (non-mutating).
+//
+// Deterministic ordering:
+// attacker 0..num_players-1, defender 0..num_players-1 (skip attacker==defender),
+// first one pair-gate row (hitbox_id=0xFF), then hitbox rows hitbox_id 0..3 when pair gates pass.
+int msl_batch_debug_shield_candidate_decisions(MslBatch* batch, int batch_index,
+                                               MslDebugShieldCandidateDecision* out_rows,
+                                               uint16_t max_rows, uint16_t* out_count);
 
 // Debug/validation helper: write per-player shield bubble world params for a batch element.
 // Writes `MSL_MAX_PLAYERS * 4` floats into out_xyzw_4p as rows: [x, y, z, radius].

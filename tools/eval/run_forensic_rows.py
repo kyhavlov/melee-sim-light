@@ -55,6 +55,38 @@ _DEBUG_CONTACT_CLASSIFIED_DTYPE = np.dtype(
     align=False,
 )
 
+_DEBUG_SHIELD_CANDIDATE_DTYPE = np.dtype(
+    [
+        ("source_kind", "u1"),
+        ("attacker", "u1"),
+        ("defender", "u1"),
+        ("hitbox_id", "u1"),
+        ("reject_reason", "u1"),
+        ("attacker_hitlag_started_frame", "u1"),
+        ("defender_hitlag_started_frame", "u1"),
+        ("shield_active", "u1"),
+        ("hitbox_enabled", "u1"),
+        ("defender_on_ground", "u1"),
+        ("hitlist_allows", "u1"),
+        ("overlap_shield", "u1"),
+        ("element", "u1"),
+        ("hb_flags", "<u2"),
+        ("attacker_msid", "<u2"),
+        ("attacker_action_frame", "<i2"),
+        ("hitbox_damage", "<f4"),
+        ("hitbox_x", "<f4"),
+        ("hitbox_y", "<f4"),
+        ("hitbox_z", "<f4"),
+        ("hitbox_radius", "<f4"),
+        ("shield_x", "<f4"),
+        ("shield_y", "<f4"),
+        ("shield_z", "<f4"),
+        ("shield_radius", "<f4"),
+        ("shield_overlap_margin", "<f4"),
+    ],
+    align=False,
+)
+
 _DEBUG_HITBOX_EVENT_TIMING_DTYPE = np.dtype(
     [
         ("attacker", "u1"),
@@ -313,6 +345,47 @@ def _body_contacts_from_raw(raw: np.ndarray, count: int) -> list[dict[str, objec
     return out
 
 
+def _shield_candidates_from_raw(raw: np.ndarray, count: int) -> list[dict[str, object]]:
+    rows = raw.reshape(-1).view(_DEBUG_SHIELD_CANDIDATE_DTYPE)[: int(count)]
+    out: list[dict[str, object]] = []
+    for r in rows:
+        out.append(
+            {
+                "source_kind": int(r["source_kind"]),
+                "attacker": int(r["attacker"]),
+                "defender": int(r["defender"]),
+                "hitbox_id": int(r["hitbox_id"]),
+                "reject_reason": int(r["reject_reason"]),
+                "attacker_hitlag_started_frame": int(r["attacker_hitlag_started_frame"]),
+                "defender_hitlag_started_frame": int(r["defender_hitlag_started_frame"]),
+                "shield_active": int(r["shield_active"]),
+                "hitbox_enabled": int(r["hitbox_enabled"]),
+                "defender_on_ground": int(r["defender_on_ground"]),
+                "hitlist_allows": int(r["hitlist_allows"]),
+                "overlap_shield": int(r["overlap_shield"]),
+                "element": int(r["element"]),
+                "hb_flags": int(r["hb_flags"]),
+                "attacker_msid": int(r["attacker_msid"]),
+                "attacker_action_frame": int(r["attacker_action_frame"]),
+                "hitbox_damage": float(r["hitbox_damage"]),
+                "hitbox": [
+                    float(r["hitbox_x"]),
+                    float(r["hitbox_y"]),
+                    float(r["hitbox_z"]),
+                    float(r["hitbox_radius"]),
+                ],
+                "shield": [
+                    float(r["shield_x"]),
+                    float(r["shield_y"]),
+                    float(r["shield_z"]),
+                    float(r["shield_radius"]),
+                ],
+                "shield_overlap_margin": float(r["shield_overlap_margin"]),
+            }
+        )
+    return out
+
+
 def _collect_hitbox_timing(binding: object, handle: object, num_players: int) -> list[dict[str, object]]:
     out: list[dict[str, object]] = []
     for attacker in range(num_players):
@@ -406,11 +479,15 @@ def _format_report(payload: dict[str, object]) -> str:
         lines.append("pre_combat:")
         lines.append(
             f"  contacts classified={row['pre_combat']['classified_count']} "
-            f"filtered={row['pre_combat']['filtered_count']} selected_body={row['pre_combat']['selected_body_count']}"
+            f"filtered={row['pre_combat']['filtered_count']} selected_body={row['pre_combat']['selected_body_count']} "
+            f"shield_candidates={row['pre_combat']['shield_candidate_count']}"
         )
         lines.append(
             f"  hitboxes_active={len(row['pre_combat']['hitbox_timing_active'])} "
             f"defender_contacts={len(row['pre_combat']['defender_contacts'])}"
+        )
+        lines.append(
+            f"  defender_shield_candidates={len(row['pre_combat']['defender_shield_candidates'])}"
         )
         lines.append("post_step:")
         lines.append(
@@ -513,13 +590,22 @@ def main() -> None:
             selected_raw, selected_count = binding.debug_combat_select_body_hits(
                 handle, 0, int(args.max_contacts)
             )
+            shield_candidates_raw, shield_candidate_count = binding.debug_shield_candidate_decisions(
+                handle, 0, int(args.max_contacts)
+            )
 
             contacts_classified = _contacts_from_raw(classified_raw, int(classified_count))
             contacts_filtered = _contacts_from_raw(filtered_raw, int(filtered_count))
             contacts_selected = _body_contacts_from_raw(selected_raw, int(selected_count))
+            shield_candidates = _shield_candidates_from_raw(
+                shield_candidates_raw, int(shield_candidate_count)
+            )
 
             defender_contacts = [
                 c for c in contacts_classified if int(c["defender"]) == int(spec.p)
+            ]
+            defender_shield_candidates = [
+                c for c in shield_candidates if int(c["defender"]) == int(spec.p)
             ]
 
             for c in defender_contacts:
@@ -573,10 +659,13 @@ def main() -> None:
                     "classified_count": int(classified_count),
                     "filtered_count": int(filtered_count),
                     "selected_body_count": int(selected_count),
+                    "shield_candidate_count": int(shield_candidate_count),
                     "defender_contacts": defender_contacts,
+                    "defender_shield_candidates": defender_shield_candidates,
                     "classified_contacts": contacts_classified,
                     "filtered_contacts": contacts_filtered,
                     "selected_body_contacts": contacts_selected,
+                    "shield_candidate_decisions": shield_candidates,
                     "hitbox_timing_active": hitbox_timing,
                     "shield_bubbles_world": [
                         [float(v) for v in shield_world[p].tolist()] for p in range(num_players)

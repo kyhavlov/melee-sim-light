@@ -16,6 +16,38 @@ STAGE_FD = 32
 
 TRIGGER_FULL = np.uint8(255)
 
+_DEBUG_SHIELD_CANDIDATE_DTYPE = np.dtype(
+    [
+        ("source_kind", "u1"),
+        ("attacker", "u1"),
+        ("defender", "u1"),
+        ("hitbox_id", "u1"),
+        ("reject_reason", "u1"),
+        ("attacker_hitlag_started_frame", "u1"),
+        ("defender_hitlag_started_frame", "u1"),
+        ("shield_active", "u1"),
+        ("hitbox_enabled", "u1"),
+        ("defender_on_ground", "u1"),
+        ("hitlist_allows", "u1"),
+        ("overlap_shield", "u1"),
+        ("element", "u1"),
+        ("hb_flags", "<u2"),
+        ("attacker_msid", "<u2"),
+        ("attacker_action_frame", "<i2"),
+        ("hitbox_damage", "<f4"),
+        ("hitbox_x", "<f4"),
+        ("hitbox_y", "<f4"),
+        ("hitbox_z", "<f4"),
+        ("hitbox_radius", "<f4"),
+        ("shield_x", "<f4"),
+        ("shield_y", "<f4"),
+        ("shield_z", "<f4"),
+        ("shield_radius", "<f4"),
+        ("shield_overlap_margin", "<f4"),
+    ],
+    align=False,
+)
+
 
 def _common_attr(name: str) -> float:
     import json
@@ -133,5 +165,52 @@ def test_debug_combat_contacts_classified_shield_overlap_reports_shield() -> Non
         assert count3 == 1
         contacts3 = raw3.reshape(-1).view(contact_dtype)[:count3]
         assert int(contacts3["contact_kind"][0]) == 1
+    finally:
+        msl_binding.destroy(handle)
+
+
+def test_debug_shield_candidate_decisions_reports_pair_and_hitbox_rejects() -> None:
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+
+    handle = msl_binding.init(batch_size=1, num_players=2)
+    try:
+        seed = _seed_base()
+        seed_bytes = seed.view(np.uint8).reshape((1, seed_stride))
+        msl_binding.reseed_seed(handle, seed_bytes)
+
+        neutral = _mk_input_bytes(1, input_stride)
+        msl_binding.step_input(handle, neutral, neutral)
+        raw0, count0 = msl_binding.debug_shield_candidate_decisions(handle, 0, 64)
+        rows0 = raw0.reshape(-1).view(_DEBUG_SHIELD_CANDIDATE_DTYPE)[:count0]
+
+        pair01 = [
+            r
+            for r in rows0
+            if int(r["source_kind"]) == 1 and int(r["attacker"]) == 0 and int(r["defender"]) == 1
+        ]
+        assert pair01
+        # Reject at defender shield inactive gate.
+        assert int(pair01[0]["reject_reason"]) == 5
+
+        # Activate defender shield, force attacker hitboxes disabled, then expect hitbox-disabled
+        # reject reasons for attacker->defender hitbox candidates.
+        shield = _mk_input_bytes(1, input_stride)
+        shield_view = shield.view(INPUT_DTYPE).reshape((1,))
+        shield_view["p"]["l"][0, 1] = TRIGGER_FULL
+        msl_binding.step_input(handle, neutral, shield)
+        msl_binding.debug_clear_hitboxes_world(handle, 0, 0)
+        raw1, count1 = msl_binding.debug_shield_candidate_decisions(handle, 0, 64)
+        rows1 = raw1.reshape(-1).view(_DEBUG_SHIELD_CANDIDATE_DTYPE)[:count1]
+        hb01 = [
+            r
+            for r in rows1
+            if int(r["source_kind"]) == 0 and int(r["attacker"]) == 0 and int(r["defender"]) == 1
+        ]
+        assert len(hb01) == 4
+        assert all(int(r["reject_reason"]) == 6 for r in hb01)
     finally:
         msl_binding.destroy(handle)

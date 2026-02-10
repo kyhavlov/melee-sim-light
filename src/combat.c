@@ -2753,3 +2753,212 @@ int combat_debug_select_body_hits(MslBatch* batch, int batch_index,
   *out_count = written;
   return 0;
 }
+
+static inline float combat_debug_shield_overlap_margin(float hx, float hy, float hz, float hr,
+                                                       float shx, float shy, float shz, float shr) {
+  const float dx = hx - shx;
+  const float dy = hy - shy;
+  const float dz = hz - shz;
+  const float rr = hr + shr;
+  const float d2 = dx * dx + dy * dy + dz * dz;
+  const float d = sqrtf(d2);
+  return rr - d;
+}
+
+int combat_debug_shield_candidate_decisions(MslBatch* batch, int batch_index,
+                                            MslDebugShieldCandidateDecision* out_rows,
+                                            uint16_t max_rows, uint16_t* out_count) {
+  if (batch == NULL || out_count == NULL) {
+    return EINVAL;
+  }
+  *out_count = 0;
+  if (batch_index < 0 || batch_index >= batch->batch_size) {
+    return EINVAL;
+  }
+  if (max_rows == 0) {
+    return 0;
+  }
+  if (out_rows == NULL) {
+    return EINVAL;
+  }
+
+  const int num_players = (int)batch->config.num_players;
+  uint16_t written = 0;
+  const int bi = batch_index;
+
+  for (int attacker = 0; attacker < num_players; attacker++) {
+    const size_t a_idx = msl_idx_player(bi, attacker);
+    const uint32_t msid_u32 = batch->state.animation_index[a_idx];
+    const uint16_t msid = (msid_u32 <= 0xFFFFu) ? (uint16_t)msid_u32 : 0u;
+    const int16_t action_frame = batch->state.action_frame[a_idx];
+    const uint8_t attacker_stock_zero = (batch->state.stocks[a_idx] == 0u) ? 1u : 0u;
+
+    for (int defender = 0; defender < num_players; defender++) {
+      if (defender == attacker) {
+        continue;
+      }
+      const size_t d_idx = msl_idx_player(bi, defender);
+      const uint8_t defender_stock_zero = (batch->state.stocks[d_idx] == 0u) ? 1u : 0u;
+      const uint8_t teams_friendly =
+          (batch->state.is_teams[bi] && batch->state.team_id[a_idx] == batch->state.team_id[d_idx])
+              ? 1u
+              : 0u;
+      const uint8_t attacker_hitlag_started = batch->state.hitlag_started_frame[a_idx] ? 1u : 0u;
+      const uint8_t defender_hitlag_started = batch->state.hitlag_started_frame[d_idx] ? 1u : 0u;
+      const uint8_t hitlag_gate = (attacker_hitlag_started || defender_hitlag_started) ? 1u : 0u;
+      const float shx = batch->state.shield_x[d_idx];
+      const float shy = batch->state.shield_y[d_idx];
+      const float shz = batch->state.shield_z[d_idx];
+      const float shr = batch->state.shield_radius[d_idx];
+      const uint8_t shield_active = (shr > 0.0f) ? 1u : 0u;
+      const uint8_t defender_on_ground = batch->state.on_ground[d_idx] ? 1u : 0u;
+
+      uint8_t pair_reason = (uint8_t)MSL_DEBUG_SHIELD_DECISION_ACCEPT_SHIELD;
+      if (attacker_stock_zero) {
+        pair_reason = (uint8_t)MSL_DEBUG_SHIELD_REJECT_ATTACKER_STOCKS_ZERO;
+      } else if (defender_stock_zero) {
+        pair_reason = (uint8_t)MSL_DEBUG_SHIELD_REJECT_DEFENDER_STOCKS_ZERO;
+      } else if (teams_friendly) {
+        pair_reason = (uint8_t)MSL_DEBUG_SHIELD_REJECT_TEAMS_FRIENDLY;
+      } else if (hitlag_gate) {
+        // Decomp gate: shield/body collision path does not process new hit candidates when either
+        // fighter hitlag-started gate is active for the frame.
+        // refs/melee/src/melee/ft/ftcoll.c::ftColl_80078C70
+        pair_reason = (uint8_t)MSL_DEBUG_SHIELD_REJECT_HITLAG_GATE;
+      } else if (!shield_active) {
+        // Decomp shield overlap path is only reached when the defender shield descriptor is active.
+        // refs/melee/src/melee/ft/ftcoll.c::ftColl_80078C70
+        pair_reason = (uint8_t)MSL_DEBUG_SHIELD_REJECT_SHIELD_INACTIVE;
+      }
+
+      {
+        MslDebugShieldCandidateDecision* out = &out_rows[written];
+        memset(out, 0, sizeof(*out));
+        out->source_kind = (uint8_t)MSL_DEBUG_SHIELD_SOURCE_PAIR_GATE;
+        out->attacker = (uint8_t)attacker;
+        out->defender = (uint8_t)defender;
+        out->hitbox_id = 0xFFu;
+        out->reject_reason = pair_reason;
+        out->attacker_hitlag_started_frame = attacker_hitlag_started;
+        out->defender_hitlag_started_frame = defender_hitlag_started;
+        out->shield_active = shield_active;
+        out->defender_on_ground = defender_on_ground;
+        out->attacker_msid = msid;
+        out->attacker_action_frame = action_frame;
+        out->shield_x = shx;
+        out->shield_y = shy;
+        out->shield_z = shz;
+        out->shield_radius = shr;
+        written++;
+      }
+
+      if (written >= max_rows) {
+        *out_count = written;
+        return 0;
+      }
+
+      if (pair_reason != (uint8_t)MSL_DEBUG_SHIELD_DECISION_ACCEPT_SHIELD) {
+        continue;
+      }
+
+      const uint16_t defender_iid = batch->state.instance_id[d_idx];
+      for (int hb_id = 0; hb_id < MSL_MAX_HITBOXES; hb_id++) {
+        const size_t hb_i = idx_hitbox(bi, attacker, hb_id);
+        MslDebugShieldCandidateDecision* out = &out_rows[written];
+        memset(out, 0, sizeof(*out));
+        out->source_kind = (uint8_t)MSL_DEBUG_SHIELD_SOURCE_FIGHTER_HITBOX;
+        out->attacker = (uint8_t)attacker;
+        out->defender = (uint8_t)defender;
+        out->hitbox_id = (uint8_t)hb_id;
+        out->attacker_hitlag_started_frame = attacker_hitlag_started;
+        out->defender_hitlag_started_frame = defender_hitlag_started;
+        out->shield_active = shield_active;
+        out->defender_on_ground = defender_on_ground;
+        out->attacker_msid = msid;
+        out->attacker_action_frame = action_frame;
+        out->shield_x = shx;
+        out->shield_y = shy;
+        out->shield_z = shz;
+        out->shield_radius = shr;
+
+        const uint8_t enabled = batch->state.hitbox_enabled[hb_i] ? 1u : 0u;
+        out->hitbox_enabled = enabled;
+        out->hb_flags = batch->state.hitbox_flags[hb_i];
+        out->element = batch->state.hitbox_element[hb_i];
+        out->hitbox_damage = batch->state.hitbox_damage[hb_i];
+        out->hitbox_x = batch->state.hitbox_x[hb_i];
+        out->hitbox_y = batch->state.hitbox_y[hb_i];
+        out->hitbox_z = batch->state.hitbox_z[hb_i];
+        out->hitbox_radius = batch->state.hitbox_radius[hb_i];
+
+        uint8_t reason = (uint8_t)MSL_DEBUG_SHIELD_DECISION_ACCEPT_SHIELD;
+
+        if (!enabled) {
+          reason = (uint8_t)MSL_DEBUG_SHIELD_REJECT_HITBOX_DISABLED;
+        } else {
+          // Ground/air eligibility gate (decomp hitcapsule x40_b2/x40_b3).
+          // refs/melee/src/melee/ft/ftcoll.c::ftColl_80078C70
+          const uint16_t hb_flags = batch->state.hitbox_flags[hb_i];
+          if (defender_on_ground) {
+            if ((hb_flags & MSL_HITBOX_FLAG_HIT_GROUNDED) == 0) {
+              reason = (uint8_t)MSL_DEBUG_SHIELD_REJECT_GROUND_AIR_FLAGS;
+            }
+          } else {
+            if ((hb_flags & MSL_HITBOX_FLAG_HIT_AERIAL) == 0) {
+              reason = (uint8_t)MSL_DEBUG_SHIELD_REJECT_GROUND_AIR_FLAGS;
+            }
+          }
+        }
+
+        if (reason == (uint8_t)MSL_DEBUG_SHIELD_DECISION_ACCEPT_SHIELD) {
+          // Decomp ownership: rehit suppression gate (lbColl_8000ACFC) is evaluated outside
+          // shield geometry helper lbColl_80007BCC.
+          // refs/melee/src/melee/lb/lbcollision.c::lbColl_8000ACFC
+          // refs/melee/src/melee/lb/lbcollision.c::lbColl_80007BCC
+          const uint8_t allows =
+              hitlist_allows_fighter(batch, bi, attacker, hb_id, defender, defender_iid);
+          out->hitlist_allows = allows ? 1u : 0u;
+          if (!allows) {
+            reason = (uint8_t)MSL_DEBUG_SHIELD_REJECT_HITLIST_CONTAINS;
+          }
+        }
+
+        if (reason == (uint8_t)MSL_DEBUG_SHIELD_DECISION_ACCEPT_SHIELD) {
+          const uint8_t overlaps = sphere_sphere_intersects(out->hitbox_x, out->hitbox_y,
+                                                            out->hitbox_z, out->hitbox_radius, shx,
+                                                            shy, shz, shr);
+          out->overlap_shield = overlaps ? 1u : 0u;
+          out->shield_overlap_margin = combat_debug_shield_overlap_margin(
+              out->hitbox_x, out->hitbox_y, out->hitbox_z, out->hitbox_radius, shx, shy, shz, shr);
+          if (!overlaps) {
+            // Decomp shield geometry test helper:
+            // refs/melee/src/melee/lb/lbcollision.c::lbColl_80007BCC
+            reason = (uint8_t)MSL_DEBUG_SHIELD_REJECT_SHIELD_GEOM_NO_OVERLAP;
+          }
+        }
+
+        if (reason == (uint8_t)MSL_DEBUG_SHIELD_DECISION_ACCEPT_SHIELD) {
+          if (out->element == (uint8_t)MSL_HIT_ELEMENT_INERT) {
+            // Decomp split: inert overlaps set x221C_b5 and do not enter ftColl_80076CBC.
+            // refs/melee/src/melee/ft/ftcoll.c::ftColl_80078C70
+            reason = (uint8_t)MSL_DEBUG_SHIELD_REJECT_INERT_ELEMENT;
+          } else if (!(out->hitbox_damage > 0.0f)) {
+            // Decomp shield-hit effects consume damaging hitcapsules (ftColl_80076CBC path).
+            // refs/melee/src/melee/ft/ftcoll.c::ftColl_80076CBC
+            reason = (uint8_t)MSL_DEBUG_SHIELD_REJECT_NONPOS_DAMAGE;
+          }
+        }
+
+        out->reject_reason = reason;
+        written++;
+        if (written >= max_rows) {
+          *out_count = written;
+          return 0;
+        }
+      }
+    }
+  }
+
+  *out_count = written;
+  return 0;
+}

@@ -1917,6 +1917,12 @@ int msl_batch_debug_combat_contacts_classified_filtered(
                                                out_count, 1);
 }
 
+int msl_batch_debug_shield_candidate_decisions(MslBatch* batch, int batch_index,
+                                               MslDebugShieldCandidateDecision* out_rows,
+                                               uint16_t max_rows, uint16_t* out_count) {
+  return combat_debug_shield_candidate_decisions(batch, batch_index, out_rows, max_rows, out_count);
+}
+
 int msl_batch_debug_shield_bubbles_world(const MslBatch* batch, int batch_index,
                                          float* out_xyzw_4p) {
   if (batch == NULL || out_xyzw_4p == NULL) {
