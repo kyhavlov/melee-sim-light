@@ -1516,27 +1516,47 @@ def _main_impl(args) -> None:
             for defender in range(num_players):
                 if int(post_instance_hit_by[fi, defender]) == attacker_iid:
                     continue
-                hitlag_pre = int(post_hitlag[fi, defender])
-                if hitlag_pre > 0:
-                    hitlag_pre -= 1
-                hitstun_pre = int(post_hitstun[fi, defender])
-                if hitstun_pre > 0:
-                    hitstun_pre -= 1
-                if hitlag_pre != 0 or hitstun_pre != 0:
-                    continue
-                if int(post_action_id[fi, defender]) in guard_family:
-                    continue
-                # Keep LandingFallSpecial suppression stable: this state can carry transient
-                # post-landing overlap lanes where clearing suppression synthesizes false BODY hits.
-                # refs/melee/src/melee/ft/chara/ftCommon/forward.h (ftCo_MS_LandingFallSpecial)
-                if int(post_action_id[fi, defender]) == int(act_landing_fall_special):
-                    continue
                 # Attribution corroboration: only trim stale suppression for attacker/defender pairs
                 # where replay-visible ownership points to this attacker port.
                 #
                 # Slippi post-frame `last_hit_by` mirrors fighter->x2088 and is replay-visible:
                 # refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
                 if int(post_last_hit_by[fi, defender]) != attacker:
+                    continue
+                hitlag_pre = int(post_hitlag[fi, defender])
+                if hitlag_pre > 0:
+                    hitlag_pre -= 1
+                hitstun_pre = int(post_hitstun[fi, defender])
+                if hitstun_pre > 0:
+                    hitstun_pre -= 1
+                defender_action = int(post_action_id[fi, defender])
+
+                # Neutral non-guard stale suppression (existing bridge policy).
+                neutral_non_guard = (
+                    hitlag_pre == 0
+                    and hitstun_pre == 0
+                    and defender_action not in guard_family
+                    and defender_action != int(act_landing_fall_special)
+                )
+
+                # Damage-family stale suppression (narrow extension):
+                # - Decomp ownership for suppression gate is lbColl_8000ACFC victim presence, not
+                #   defender hitstun state itself.
+                # - When replay-visible attribution disagrees on instance identity for this attacker
+                #   while defender remains in Damage*, stale dense-seeded suppression can block
+                #   first valid re-contacts in one-step reseed.
+                # refs/melee/src/melee/lb/lbcollision.c::lbColl_8000ACFC
+                # refs/melee/src/melee/lb/lbcollision.c::lbColl_80008688
+                # Narrow damage bridge scope to early DamageFlyTop windows only. This keeps the
+                # bridge tied to the known stale-containment family while avoiding late-window
+                # reseed rows where suppression should remain intact.
+                damage_state_bridge = (
+                    hitlag_pre == 0
+                    and defender_action == int(act_damage_fly_top)
+                    and int(post_action_frame[fi, defender]) <= 40
+                )
+
+                if not (neutral_non_guard or damage_state_bridge):
                     continue
                 hitlist_cd[fi, attacker, :, defender] = np.uint16(0)
                 hitlist_iid[fi, attacker, :, defender] = np.uint16(0)
