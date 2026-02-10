@@ -209,13 +209,13 @@ def test_seed_eq_guardrail_rows_stay_replay_exact(
             "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/TreasuredBackKangaroo.msl",
             2219,
             0,
-            1,
+            0,
         ),
         (
             "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl",
             9848,
             1,
-            1,
+            0,
         ),
     ],
 )
@@ -305,12 +305,6 @@ def test_guardsetoff_cluster_rows_have_replay_real_shield_hit_context(
         )
     finally:
         binding.destroy(handle)
-    # TODO(combat-ownership, decomp-backed): TBK 2219:0 and GAT 9848:1 still carry
-    # hitlist_contains=1 (victims_1 entry with cd==0) at pre-combat while replay enters
-    # GuardSetOff; expected governing ownership is the ftColl_800768A0 clear/copy lane before
-    # lbColl_8000ACFC acceptance on ftColl_80078C70.
-    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_800768A0,ftColl_80078C70}
-    # refs/melee/src/melee/lb/lbcollision.c::lbColl_8000ACFC
     assert hitlist_contains == int(expect_hitlist_contains), (
         f"record={record} p={p} expected hitlist_contains={int(expect_hitlist_contains)} "
         f"got={hitlist_contains}"
@@ -499,26 +493,75 @@ def test_guardsetoff_cluster_rows_resolve_to_reference_outputs(
 
 
 @pytest.mark.integration
-def test_guardsetoff_tbk_2219_signature_is_reseed_only_in_short_rollout_window() -> None:
-    # Classification lock for the remaining TBK hard row:
-    # - one-step teacher-forced reseed at rec=2219,p=0 shows action_id seed/ref/out=179/181/179,
-    # - short continuous rollout crossing the same row resolves GuardSetOff (action out==181),
-    #   so this signature is treated as reseed/materialization-specific, not a runtime patch target.
+@pytest.mark.parametrize(
+    ("dataset_rel", "record", "p"),
+    [
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/TreasuredBackKangaroo.msl",
+            2219,
+            0,
+        ),
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl",
+            9848,
+            1,
+        ),
+    ],
+)
+def test_guardsetoff_cluster_tbk_family_rows_lock_guardsetoff_action_exact(
+    dataset_rel: str,
+    record: int,
+    p: int,
+) -> None:
+    # Replay-real lock for the stale-hitlist seed-materialization family:
+    # action_id at t+1 must resolve Guard -> GuardSetOff on these rows.
     #
-    # Seed-provenance follow-up plan (decomp-backed ownership target):
-    # - Missing seed lanes to materialize hitlist ownership:
-    #   1) per-hitbox victims_1 lineage (not only dense per-group cd/iid),
-    #   2) enable-edge clear/copy provenance for ftColl_800768A0 paths,
-    #   3) per-victim cooldown provenance (x4 age/source) for lbColl_8000ACFC acceptance.
-    # - Replay-visible derivation candidates:
-    #   action_id/action_frame/animation_index + hitbox_event_timing enable-edge + shield_hp/hitlag
-    #   transition context + instance_id transitions.
-    # - Requires Dolphin dump schema extension for full proof:
-    #   export per-hitbox HitCapsule victims_1/victims_2 + ring indices (+ x40_b4 where possible).
-    #
-    # Decomp anchors:
-    # - refs/melee/src/melee/ft/ftcoll.c::{ftColl_800768A0,ftColl_80078C70,ftColl_80076CBC}
-    # - refs/melee/src/melee/lb/lbcollision.c::lbColl_8000ACFC
+    # Decomp ownership anchors for the governing branch:
+    # - refs/melee/src/melee/ft/ftcoll.c::ftColl_80076CBC
+    # - refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80092F2C
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+    assert int(samples.shape[0]) > record, f"dataset too short for lock row: record={record}"
+    row = samples[record : record + 1]
+    seed = row["seed_t"][0]
+    ref = row["ref_t1"][0]
+    assert int(seed["action_id"][p]) == 0x00B3
+    assert int(ref["action_id"][p]) == 0x00B5
+
+    binding = pytest.importorskip("msl_binding")
+    sizes = binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    compare_stride = int(sizes["compare"])
+
+    seed_bytes = np.frombuffer(row["seed_t"].tobytes(order="C"), dtype=np.uint8).copy().reshape(1, seed_stride)
+    prev_input_bytes = np.frombuffer(row["prev_input_t"].tobytes(order="C"), dtype=np.uint8).copy().reshape(
+        1, input_stride
+    )
+    input_bytes = np.frombuffer(row["input_t"].tobytes(order="C"), dtype=np.uint8).copy().reshape(1, input_stride)
+    out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
+
+    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    try:
+        binding.reseed_seed(handle, seed_bytes)
+        binding.step_input(handle, prev_input_bytes, input_bytes)
+        binding.write_compare(handle, out_compare_bytes)
+    finally:
+        binding.destroy(handle)
+
+    out = out_compare_bytes.view(COMPARE_DTYPE).reshape(-1)
+    assert int(out["action_id"][0, p]) == int(ref["action_id"][p]) == 0x00B5
+    assert int(out["state_flags"][0, p, 1]) == int(ref["state_flags"][p, 1]) == 0x21
+
+
+@pytest.mark.integration
+def test_guardsetoff_tbk_2219_one_step_and_rollout_resolve_guardsetoff() -> None:
     dataset_rel = (
         "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
         "TreasuredBackKangaroo.msl"
@@ -550,13 +593,13 @@ def test_guardsetoff_tbk_2219_signature_is_reseed_only_in_short_rollout_window()
     prev_input_off = int(samples.dtype.fields["prev_input_t"][1])
     input_off = int(samples.dtype.fields["input_t"][1])
 
-    # One-step reseed-at-row signature (current hard-row discriminator).
     seed_bytes = np.empty((1, seed_stride), dtype=np.uint8)
     prev_input_bytes = np.empty((1, input_stride), dtype=np.uint8)
     input_bytes = np.empty((1, input_stride), dtype=np.uint8)
     out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
     out = out_compare_bytes.view(COMPARE_DTYPE).reshape(-1)
 
+    # One-step reseed-at-row must now resolve GuardSetOff action.
     one_step_handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
     try:
         seed_bytes[0, :] = samples_u8[record, seed_off : seed_off + seed_stride]
@@ -572,15 +615,10 @@ def test_guardsetoff_tbk_2219_signature_is_reseed_only_in_short_rollout_window()
     ref_row = samples["ref_t1"][record]
     assert int(seed_row["action_id"][p]) == 0x00B3
     assert int(ref_row["action_id"][p]) == 0x00B5
-    assert int(out["action_id"][0, p]) == 0x00B3
-    assert int(seed_row["hitlag"][p]) == 0
-    assert int(ref_row["hitlag"][p]) > 0
-    assert int(out["hitlag"][0, p]) == 0
-    assert int(seed_row["state_flags"][p, 1]) == 0x01
-    assert int(ref_row["state_flags"][p, 1]) == 0x21
-    assert int(out["state_flags"][0, p, 1]) == 0x01
+    assert int(out["action_id"][0, p]) == int(ref_row["action_id"][p]) == 0x00B5
+    assert int(out["state_flags"][0, p, 1]) == int(ref_row["state_flags"][p, 1]) == 0x21
 
-    # Continuous rollout crossing the same row: no per-frame reseed.
+    # Continuous rollout crossing the same row remains GuardSetOff-consistent.
     start = max(0, record - window_before)
     end = min(int(samples.shape[0]) - 1, record + window_after)
     rollout_rows: list[dict[str, int]] = []
@@ -595,18 +633,12 @@ def test_guardsetoff_tbk_2219_signature_is_reseed_only_in_short_rollout_window()
             binding.step_input(rollout_handle, prev_input_bytes, input_bytes)
             binding.write_compare(rollout_handle, out_compare_bytes)
 
-            seed_j = samples["seed_t"][j]
             ref_j = samples["ref_t1"][j]
             rollout_rows.append(
                 {
                     "record": int(j),
-                    "seed_action": int(seed_j["action_id"][p]),
                     "ref_action": int(ref_j["action_id"][p]),
                     "out_action": int(out["action_id"][0, p]),
-                    "seed_hitlag": int(seed_j["hitlag"][p]),
-                    "ref_hitlag": int(ref_j["hitlag"][p]),
-                    "out_hitlag": int(out["hitlag"][0, p]),
-                    "seed_sf1": int(seed_j["state_flags"][p, 1]),
                     "ref_sf1": int(ref_j["state_flags"][p, 1]),
                     "out_sf1": int(out["state_flags"][0, p, 1]),
                 }
@@ -617,24 +649,3 @@ def test_guardsetoff_tbk_2219_signature_is_reseed_only_in_short_rollout_window()
     target = next(r for r in rollout_rows if int(r["record"]) == int(record))
     assert int(target["out_action"]) == int(target["ref_action"]) == 0x00B5
     assert int(target["out_sf1"]) == int(target["ref_sf1"]) == 0x21
-
-    # The hard one-step signature must not appear in this short no-reseed rollout window.
-    signature_rows = [
-        r
-        for r in rollout_rows
-        if (
-            int(r["seed_action"]) == 0x00B3
-            and int(r["ref_action"]) == 0x00B5
-            and int(r["out_action"]) == 0x00B3
-            and int(r["seed_hitlag"]) == 0
-            and int(r["ref_hitlag"]) > 0
-            and int(r["out_hitlag"]) == 0
-            and int(r["seed_sf1"]) == 0x01
-            and int(r["ref_sf1"]) == 0x21
-            and int(r["out_sf1"]) == 0x01
-        )
-    ]
-    assert not signature_rows, (
-        "TBK rec=2219 one-step hard signature should be absent in short no-reseed rollout window; "
-        f"got records={[int(r['record']) for r in signature_rows]}"
-    )

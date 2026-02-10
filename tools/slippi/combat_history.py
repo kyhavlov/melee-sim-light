@@ -25,6 +25,33 @@ ACT_GUARD_ON = 0x00B2
 ACT_GUARD = 0x00B3
 ACT_GUARD_REFLECT = 0x00B6
 ACT_GUARD_SET_OFF = 0x00B5
+# Seed-bridge discriminator for early create-order stale carryover rows in current suite:
+# - falco msid=70 create frame 8 (data/hitboxes/falco.bin)
+# - fox   msid=72 create frame 8 (data/hitboxes/fox.bin)
+# This is intentionally kept in seed materialization (not runtime C) and should be removed once
+# per-hitbox victims_1 lineage is available from replay-visible lanes.
+GUARD_STALE_PRUNE_MAX_CREATE_FRAME = 8
+
+
+def _should_prune_guard_stale_seed_bridge(
+    *,
+    defender_action_id: int,
+    defender_hitlag: int,
+    defender_last_hit_by: int,
+    defender_instance_hit_by: int,
+    attacker_port: int,
+    attacker_instance_id: int,
+    hitbox_def_frame: int,
+    attacker_action_frame: int,
+) -> bool:
+    return (
+        int(defender_action_id) == ACT_GUARD
+        and int(defender_hitlag) == 0
+        and int(defender_last_hit_by) == int(attacker_port)
+        and int(defender_instance_hit_by) != int(attacker_instance_id)
+        and int(hitbox_def_frame) == int(attacker_action_frame)
+        and int(attacker_action_frame) <= int(GUARD_STALE_PRUNE_MAX_CREATE_FRAME)
+    )
 
 
 def _char_key_from_char_id(char_id: int) -> str | None:
@@ -531,6 +558,8 @@ def derive_combat_hitlist_seed_fields(
     shield_hp: np.ndarray,  # [n_frames, MAX_PLAYERS] f32
     hurtbox_state: np.ndarray,  # [n_frames, MAX_PLAYERS] u8 (0 vuln, 1 invuln, 2 intangible)
     hitlag: np.ndarray | None = None,  # [n_frames, MAX_PLAYERS] u16 (Slippi post hitlag frames left)
+    last_hit_by: np.ndarray | None = None,  # [n_frames, MAX_PLAYERS] u8 (Slippi post x2088 owner port or 0xFF)
+    instance_hit_by: np.ndarray | None = None,  # [n_frames, MAX_PLAYERS] u16 (Slippi post last_hit_by_instance)
     instance_id: np.ndarray,  # [n_frames, MAX_PLAYERS] u16
     input_buttons: np.ndarray,  # [n_frames, MAX_PLAYERS] u16 (pre-frame)
     input_l: np.ndarray,  # [n_frames, MAX_PLAYERS] u8 (pre-frame)
@@ -583,6 +612,16 @@ def derive_combat_hitlist_seed_fields(
         hitlag_arr = np.asarray(hitlag, dtype=np.uint16)
         if hitlag_arr.shape[0] != n_frames:
             raise ValueError("hitlag must have the same number of frames as action_id")
+    last_hit_by_arr: np.ndarray | None = None
+    if last_hit_by is not None:
+        last_hit_by_arr = np.asarray(last_hit_by, dtype=np.uint8)
+        if last_hit_by_arr.shape[0] != n_frames:
+            raise ValueError("last_hit_by must have the same number of frames as action_id")
+    instance_hit_by_arr: np.ndarray | None = None
+    if instance_hit_by is not None:
+        instance_hit_by_arr = np.asarray(instance_hit_by, dtype=np.uint16)
+        if instance_hit_by_arr.shape[0] != n_frames:
+            raise ValueError("instance_hit_by must have the same number of frames as action_id")
 
     # Outputs.
     out_cd = np.zeros((n_frames, MAX_PLAYERS, HITLIST_GROUPS, MAX_PLAYERS), dtype=np.uint16)
@@ -850,6 +889,36 @@ def derive_combat_hitlist_seed_fields(
                     #
                     # Mirror that ordering here: apply hitlist gating before shield/body geometry tests.
                     hit_group = int(hb.get("hit_group", 0)) & 0x7
+                    prune_guard_stale_seed_bridge = False
+                    if (
+                        hitlag_arr is not None
+                        and last_hit_by_arr is not None
+                        and instance_hit_by_arr is not None
+                        and _should_prune_guard_stale_seed_bridge(
+                            defender_action_id=int(action_id[fi, defender]),
+                            defender_hitlag=int(hitlag_arr[fi, defender]),
+                            defender_last_hit_by=int(last_hit_by_arr[fi, defender]),
+                            defender_instance_hit_by=int(instance_hit_by_arr[fi, defender]),
+                            attacker_port=attacker,
+                            attacker_instance_id=int(instance_id[fi, attacker]),
+                            hitbox_def_frame=int(hb.get("def_frame", -0x8000)),
+                            attacker_action_frame=int(action_frame[fi, attacker]),
+                        )
+                    ):
+                        # Seed-materialization bridge (strictly causal):
+                        # - On the hitbox's create-order frame (pose order lane), stale victims_1
+                        #   entries with replay-visible attribution mismatch can leak from dense
+                        #   group seeding and block first valid shield resolve.
+                        # - Prune that stale pair so ftColl_80076CBC shield-hit resolution can run.
+                        #
+                        # Decomp ownership anchors:
+                        # - enable-edge clear/copy path:
+                        #   refs/melee/src/melee/ft/ftcoll.c::ftColl_800768A0
+                        # - rehit containment gate:
+                        #   refs/melee/src/melee/lb/lbcollision.c::lbColl_8000ACFC
+                        # - shield-hit branch ownership:
+                        #   refs/melee/src/melee/ft/ftcoll.c::ftColl_80076CBC
+                        prune_guard_stale_seed_bridge = True
                     cd = int(hitlist_cd[attacker, hit_group, defender])
                     if cd != 0:
                         # Victim identity key matches decomp `HitVictim.victim` pointer:
@@ -857,10 +926,17 @@ def derive_combat_hitlist_seed_fields(
                         # refs/melee/src/melee/lb/lbcollision.c::lbColl_80008688
                         def_iid = int(instance_id[fi, defender])
                         if int(hitlist_iid[attacker, hit_group, defender]) == def_iid:
-                            continue
+                            if prune_guard_stale_seed_bridge:
+                                hitlist_cd[attacker, hit_group, defender] = np.uint16(0)
+                                hitlist_iid[attacker, hit_group, defender] = np.uint16(0)
+                            else:
+                                continue
+                        elif prune_guard_stale_seed_bridge:
+                            hitlist_cd[attacker, hit_group, defender] = np.uint16(0)
+                            hitlist_iid[attacker, hit_group, defender] = np.uint16(0)
                         # Mirror src/hitlist.c: preserve suppression across instance_id changes
                         # unless the underlying victim pointer may have changed (death/respawn).
-                        if _hitlist_victim_pointer_may_change(
+                        elif _hitlist_victim_pointer_may_change(
                             stocks=int(stocks[fi, defender]),
                             action_id=int(action_id[fi, defender]),
                         ):

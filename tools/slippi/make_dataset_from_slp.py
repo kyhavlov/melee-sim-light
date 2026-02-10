@@ -1483,6 +1483,8 @@ def _main_impl(args) -> None:
         shield_hp=post_shield_hp,
         hurtbox_state=post_hurtbox_state,
         hitlag=post_hitlag,
+        last_hit_by=post_last_hit_by,
+        instance_hit_by=post_instance_hit_by,
         instance_id=post_instance_id,
         input_buttons=pre_buttons,
         input_l=pre_l,
