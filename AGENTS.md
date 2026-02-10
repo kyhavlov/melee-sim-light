@@ -95,6 +95,9 @@ Use `uv` for Python dependencies and editable installs:
 - Rollout summary (headline metrics): `uv run python -m tools.eval.summarize_rollout_streaks --in reports/triage/current_rollout_streaks.json`
 - Rollout diff (before vs after): `uv run python -m tools.eval.diff_rollout_streaks --before reports/triage/baseline_rollout_streaks.json --after reports/triage/current_rollout_streaks.json`
 - Build ISO-derived data artifacts (gitignored): `uv run python -m tools.extraction.build_data --iso-dir _iso --stage grnla --chars fox,falco`
+- Capture playback engine dump (CLI-only, no libmelee): `uv run python -m tools.dolphin.dolphin_engine_dump --replay <path.slp> --dolphin refs/Ishiiruka/build/Binaries/dolphin-emu-nogui --iso SSBM.iso --start-frame <f0> --end-frame <f1> --out-bin reports/triage/<run>/dump.bin`
+- Extract frame-window rows from dump: `uv run python -m tools.dolphin.extract_engine_dump_rows --dump reports/triage/<run>/dump.bin --start-frame <f0> --end-frame <f1>`
+- One-row forensic dump from dataset row: `uv run python -m tools.dolphin.forensic_row_dump --row <dataset.msl:record:p> --dolphin refs/Ishiiruka/build/Binaries/dolphin-emu-nogui --iso SSBM.iso`
 
 Note: `uv sync` only manages declared dependencies; re-run `uv pip install -e python` after syncing if the extension is missing.
 Note: pass `--force` to `preprocess_suite` after any dataset schema changes (the cache is just for convenience).
@@ -143,11 +146,15 @@ Current guardrails:
 - `make guardrail-preflight-full`: full suite tests + guardrail diff checks
 - `make guardrail-baseline`: regenerate committed guardrail baseline fixtures under `tests/fixtures/guardrails/current_main/`
 - `make forensic-rows ARGS='--row <dataset>:<record>:<p>'`: deterministic per-row forensic report under `reports/triage/`
+- `make dolphin-engine-dump ARGS='--replay <path.slp> --dolphin refs/Ishiiruka/build/Binaries/dolphin-emu-nogui --iso SSBM.iso --start-frame <f0> --end-frame <f1> --out-bin reports/triage/<run>/dump.bin'`
+- `make dolphin-extract ARGS='--dump reports/triage/<run>/dump.bin --start-frame <f0> --end-frame <f1>'`
+- `make dolphin-forensic-row ARGS='--row <dataset.msl:record:p> --dolphin refs/Ishiiruka/build/Binaries/dolphin-emu-nogui --iso SSBM.iso'`
 
 Notes:
 - Prefer `make build/test/validate` (they run `python/setup.py build_ext --inplace --force` via `uv run`); avoid invoking `python/setup.py` directly.
 - If you touch collision/ledge code, run `tests/test_ledge_grab_treasuredbackkangaroo_regression.py`.
 - `make guardrail-baseline` is for intentional baseline updates only (after a reviewed mainline behavior change). Do not refresh it during normal iteration.
+- Active Dolphin workflow is playback CLI dump + extraction (`tools/dolphin/README.md`). Legacy live probes were moved under `tools/dolphin/legacy/`.
 
 Validation output snapshots:
 - Commit the latest suite reports under `reports/validation/` whenever you change core sim logic:

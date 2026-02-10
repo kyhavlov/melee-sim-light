@@ -7,7 +7,7 @@
 // Source of truth:
 // - Slippi `buttons_physical` (tools/slippi/make_dataset_from_slp.py)
 // - Dolphin engine-dump capture uses the same stable mapping:
-//   tools/dolphin/engine_dump_capture.py
+//   tools/dolphin/dolphin_engine_dump.py
 //
 // These match Melee/HSD PAD bit positions (GALE01).
 

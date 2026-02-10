@@ -1,4 +1,4 @@
-.PHONY: build test preprocess validate validate-rollout rollout-capture rollout-summary rollout-diff build_data fmt fmt-check check guardrail-preflight guardrail-preflight-full guardrail-baseline forensic-rows
+.PHONY: build test preprocess validate validate-rollout rollout-capture rollout-summary rollout-diff build_data fmt fmt-check check guardrail-preflight guardrail-preflight-full guardrail-baseline forensic-rows dolphin-engine-dump dolphin-extract dolphin-forensic-row
 
 PY := uv run python
 DATASETS_DIR ?= datasets
@@ -83,3 +83,12 @@ guardrail-preflight-full: test
 
 forensic-rows: build
 	@$(PY) -m tools.eval.run_forensic_rows $(ARGS)
+
+dolphin-engine-dump:
+	@$(PY) -m tools.dolphin.dolphin_engine_dump $(ARGS)
+
+dolphin-extract:
+	@$(PY) -m tools.dolphin.extract_engine_dump_rows $(ARGS)
+
+dolphin-forensic-row:
+	@$(PY) -m tools.dolphin.forensic_row_dump $(ARGS)

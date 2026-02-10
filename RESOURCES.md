@@ -80,11 +80,11 @@ Carry over (mostly **gitignored**, but scripts/configs should be committed):
 - Local Dolphin user dirs:
   - `.local_dolphin/`, `.local_ExiAI/` (gitignored; keep as disposable caches)
 
-Also carry over probe scripts/config patterns:
-- `scripts/dolphin_mem_probe_ecb.py`
-- `scripts/dolphin_probe_ecb.py`
-- `scripts/playback_step_probe.py`
-- `docs/DOLPHIN_TOOLING.md` (copy relevant parts into lite docs; don’t bring the whole old doc set verbatim unless it still matches the new repo.)
+Also carry over playback dump tooling:
+- `tools/dolphin/dolphin_engine_dump.py`
+- `tools/dolphin/extract_engine_dump_rows.py`
+- `tools/dolphin/forensic_row_dump.py`
+- `tools/dolphin/README.md`
 
 ## Extraction / Data Pipeline
 
@@ -117,11 +117,9 @@ The lite repo’s evaluation should primarily consume:
 Carry over scripts that remain conceptually useful, even if they’re rewritten:
 
 - Engine-dump workflows (optional but high value if reseeding requires hidden/internal fields):
-  - `scripts/engine_dump_suite.py`
-  - `scripts/engine_dump_capture.py`
-  - `scripts/dolphin_engine_dump.py`
-  - `docs/engine_dump_schema.md`
-  - `docs/ENGINE_DUMP_WORKFLOW.md`
+  - `tools/dolphin/dolphin_engine_dump.py`
+  - `tools/dolphin/extract_engine_dump_rows.py`
+  - `tools/dolphin/forensic_row_dump.py`
 
 Even if `melee-sim-light` does not target full dump parity, engine dumps can be used to:
 - validate “hard-to-derive” internal timers/flags during reseeding,

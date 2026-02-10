@@ -6,7 +6,12 @@ import json
 import os
 import subprocess
 import time
+from datetime import datetime, timezone
 from pathlib import Path
+
+
+def _timestamp() -> str:
+    return datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
 
 
 def _write_dolphin_ini(user_dir: Path) -> None:
@@ -97,32 +102,15 @@ def _write_playback_txt(
     return playback_path
 
 
-def main() -> int:
-    ap = argparse.ArgumentParser(description="Generate engine dump via playback dolphin.")
-    ap.add_argument("--replay", required=True)
-    ap.add_argument("--iso", default=str(Path.cwd() / "SSBM.iso"))
-    ap.add_argument("--dolphin", required=True, help="path to playback dolphin-emu")
-    ap.add_argument("--user-dir", default=str(Path("/tmp/ish_playback_user")))
-    ap.add_argument("--start-frame", type=int, default=None)
-    ap.add_argument("--end-frame", type=int, default=None)
-    ap.add_argument("--out-bin", required=True)
-    ap.add_argument("--timeout", type=float, default=120.0)
-    args = ap.parse_args()
-
-    replay = Path(args.replay)
-    if not replay.exists():
-        raise FileNotFoundError(replay)
-    out_bin = Path(args.out_bin)
-    if out_bin.exists():
-        out_bin.unlink()
-
-    user_dir = Path(args.user_dir)
-    user_dir.mkdir(parents=True, exist_ok=True)
-    _write_dolphin_ini(user_dir)
-
-    start_frame = args.start_frame
-    end_frame = args.end_frame
-    if start_frame is None or end_frame is None:
+def _resolve_frame_window(
+    *,
+    replay: Path,
+    start_frame: int | None,
+    end_frame: int | None,
+) -> tuple[int, int]:
+    out_start = start_frame
+    out_end = end_frame
+    if out_start is None or out_end is None:
         try:
             import peppi_bytes  # type: ignore
 
@@ -132,33 +120,61 @@ def main() -> int:
             rb = read_replay_bytes(str(replay))
             sample = canonicalize_slippi_sample_last(peppi_bytes.read_slippi_bytes_sample(rb, 0, False))
             frames = sample["frame"]
-            if start_frame is None:
-                start_frame = int(frames[0])
-            if end_frame is None:
-                end_frame = int(frames[-1])
+            if out_start is None:
+                out_start = int(frames[0])
+            if out_end is None:
+                out_end = int(frames[-1])
         except Exception:
             pass
-    if start_frame is None:
-        start_frame = -123
-    if end_frame is None:
-        end_frame = 999999
+    if out_start is None:
+        out_start = -123
+    if out_end is None:
+        out_end = 999999
+    return int(out_start), int(out_end)
+
+
+def capture_engine_dump(
+    *,
+    replay: str | Path,
+    dolphin: str | Path,
+    iso: str | Path,
+    user_dir: str | Path,
+    out_bin: str | Path,
+    start_frame: int | None = None,
+    end_frame: int | None = None,
+    timeout: float = 120.0,
+) -> tuple[int, Path]:
+    replay = Path(replay)
+    if not replay.exists():
+        raise FileNotFoundError(replay)
+    out_bin = Path(out_bin)
+    if out_bin.exists():
+        out_bin.unlink()
+
+    user_dir = Path(user_dir)
+    user_dir.mkdir(parents=True, exist_ok=True)
+    _write_dolphin_ini(user_dir)
+
+    resolved_start, resolved_end = _resolve_frame_window(
+        replay=replay, start_frame=start_frame, end_frame=end_frame
+    )
 
     playback_txt = _write_playback_txt(
         user_dir,
         replay=replay,
-        start_frame=start_frame,
-        end_frame=end_frame,
+        start_frame=resolved_start,
+        end_frame=resolved_end,
         dump_path=out_bin,
     )
 
-    dolphin = Path(args.dolphin)
+    dolphin = Path(dolphin)
     if not dolphin.exists():
         raise FileNotFoundError(dolphin)
 
     proc_args = [
         str(dolphin),
         "-e",
-        str(Path(args.iso).resolve()),
+        str(Path(iso).resolve()),
         "-u",
         str(user_dir.resolve()),
         "--slippi-input",
@@ -169,7 +185,7 @@ def main() -> int:
 
     t0 = time.monotonic()
     try:
-        while time.monotonic() - t0 < args.timeout:
+        while time.monotonic() - t0 < timeout:
             if out_bin.exists():
                 break
             if proc.poll() is not None:
@@ -187,8 +203,41 @@ def main() -> int:
                 pass
 
     if not out_bin.exists():
-        return 1
-    return 0
+        return 1, out_bin
+    return 0, out_bin
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser(description="Generate engine dump via playback dolphin CLI only.")
+    ap.add_argument("--replay", required=True, type=Path)
+    ap.add_argument("--iso", default=str(Path.cwd() / "SSBM.iso"))
+    ap.add_argument("--dolphin", required=True, help="path to playback dolphin-emu")
+    ap.add_argument(
+        "--user-dir",
+        default=str(Path("reports/triage") / f"{_timestamp()}_dolphin_user"),
+        help="Dolphin user dir for playback config/temporary state",
+    )
+    ap.add_argument("--start-frame", type=int, default=None)
+    ap.add_argument("--end-frame", type=int, default=None)
+    ap.add_argument("--out-bin", required=True)
+    ap.add_argument("--timeout", type=float, default=120.0)
+    args = ap.parse_args()
+
+    rc, out_bin = capture_engine_dump(
+        replay=args.replay,
+        dolphin=args.dolphin,
+        iso=args.iso,
+        user_dir=args.user_dir,
+        out_bin=args.out_bin,
+        start_frame=args.start_frame,
+        end_frame=args.end_frame,
+        timeout=float(args.timeout),
+    )
+    if rc != 0:
+        print(f"engine dump capture failed: {out_bin}")
+    else:
+        print(f"wrote {out_bin.resolve()}")
+    return int(rc)
 
 
 if __name__ == "__main__":

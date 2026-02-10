@@ -57,8 +57,9 @@ When investigating desyncs or implementing new game mechanics:
 - ISO-derived stage collision extraction (authoritative stage geometry):
   - `tools/extraction/extract_stage_collision.py`
   - `_iso/` (output from `tools/extraction/iso_extract.py`)
-- Live game memory reads (for “what did the game do on this exact frame?”):
-  - `tools/dolphin/dolphin_mem_probe_ecb.py` (Dolphin + `dolphin-memory-engine`)
+- Playback engine-dump forensic rows (for “what did the game do on this exact frame window?”):
+  - `tools/dolphin/forensic_row_dump.py` (single-row capture + extraction)
+  - `tools/dolphin/extract_engine_dump_rows.py` (dump window extraction)
 - Slippi post-frame field meanings (what the replay actually records):
   - `slippi-ssbm-asm/Recording/SendGamePostFrame.asm`
 

@@ -1,0 +1,198 @@
+from __future__ import annotations
+
+import argparse
+import json
+from dataclasses import dataclass
+from datetime import datetime, timezone
+from pathlib import Path
+
+from tools.dolphin.engine_dump_io import f32_from_bits, i8_from_u8, read_engine_dump
+
+
+BUTTON_LR = 1 << 31
+
+
+def _timestamp() -> str:
+    return datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+
+
+@dataclass(frozen=True)
+class Window:
+    start: int
+    end: int
+
+    def contains(self, frame_index: int) -> bool:
+        return int(self.start) <= int(frame_index) <= int(self.end)
+
+
+def _collect_rows(dump_path: str | Path, window: Window, ports: list[int]) -> dict[str, object]:
+    d = read_engine_dump(dump_path)
+    frame_count = int(d.header["frame_count"])
+    port_count = int(d.header["port_count"])
+    stage_id = int(d.header["stage_id"])
+    is_teams = int(d.header["is_teams"])
+    rows: list[dict[str, object]] = []
+
+    if not ports:
+        ports = list(range(1, port_count + 1))
+
+    valid_ports = {p for p in ports if 1 <= p <= port_count}
+    if len(valid_ports) != len(ports):
+        raise ValueError(f"requested ports={ports} outside port_count={port_count}")
+    ports = sorted(valid_ports)
+
+    for frame_slot in range(frame_count):
+        fr = d.frames[frame_slot]
+        frame_index = int(fr["frame_index"])
+        if not window.contains(frame_index):
+            continue
+
+        items_start = int(fr["item_offset"])
+        items_end = items_start + int(fr["item_count"])
+        frame_items = []
+        for ii in range(items_start, items_end):
+            it = d.items[ii]
+            frame_items.append(
+                {
+                    "item_id": int(it["item_id"]),
+                    "kind": int(it["kind"]),
+                    "state": int(it["state"]),
+                    "owner_port": int(it["owner_port_i8"]),
+                    "anim_id": int(it["anim_id"]),
+                    "damage": int(it["damage"]),
+                    "pos_x": f32_from_bits(int(it["pos_x_bits"])),
+                    "pos_y": f32_from_bits(int(it["pos_y_bits"])),
+                    "vel_x": f32_from_bits(int(it["vel_x_bits"])),
+                    "vel_y": f32_from_bits(int(it["vel_y_bits"])),
+                }
+            )
+
+        for port in ports:
+            idx = frame_slot * port_count + (port - 1)
+            inp = d.inputs[idx]
+            fighter = d.fighters[idx]
+            buttons = int(inp["buttons"])
+            rows.append(
+                {
+                    "frame_index": frame_index,
+                    "port": int(port),
+                    "stage_id": stage_id,
+                    "is_teams": is_teams,
+                    "action_id": int(fighter["action_state"]),
+                    "animation_id": int(fighter["anim_id"]),
+                    "action_frame_f32": f32_from_bits(int(fighter["action_frame_bits"])),
+                    "anim_frame_f32": f32_from_bits(int(fighter["anim_frame_bits"])),
+                    "pos_x": f32_from_bits(int(fighter["pos_x_bits"])),
+                    "pos_y": f32_from_bits(int(fighter["pos_y_bits"])),
+                    "self_vel_x": f32_from_bits(int(fighter["self_vel_x_bits"])),
+                    "self_vel_y": f32_from_bits(int(fighter["self_vel_y_bits"])),
+                    "shield_hp": f32_from_bits(int(fighter["shield_health_bits"])),
+                    "hitlag_left_f32": f32_from_bits(int(fighter["hitlag_left_bits"])),
+                    "misc_as_bits": int(fighter["misc_as_bits"]),
+                    "ground_or_air": int(fighter["ground_or_air"]),
+                    "state_flags": [
+                        int(fighter["state_flags_2218"]),
+                        int(fighter["state_flags_221a"]),
+                        int(fighter["state_flags_221b"]),
+                        int(fighter["state_flags_221c"]),
+                        int(fighter["state_flags_221f"]),
+                    ],
+                    "input": {
+                        "buttons": buttons,
+                        "held_lr_proxy": int((buttons & BUTTON_LR) != 0),
+                        "stick_x": f32_from_bits(int(inp["stick_x_bits"])),
+                        "stick_y": f32_from_bits(int(inp["stick_y_bits"])),
+                        "cstick_x": f32_from_bits(int(inp["cstick_x_bits"])),
+                        "cstick_y": f32_from_bits(int(inp["cstick_y_bits"])),
+                        "l_shoulder": f32_from_bits(int(inp["l_shoulder_bits"])),
+                        "r_shoulder": f32_from_bits(int(inp["r_shoulder_bits"])),
+                        "raw_stick_x": i8_from_u8(int(inp["raw_stick_x_u8"])),
+                        "raw_stick_y": i8_from_u8(int(inp["raw_stick_y_u8"])),
+                        "raw_cstick_x": i8_from_u8(int(inp["raw_cstick_x_u8"])),
+                        "raw_cstick_y": i8_from_u8(int(inp["raw_cstick_y_u8"])),
+                    },
+                    "items": frame_items,
+                }
+            )
+
+    rows.sort(key=lambda r: (int(r["frame_index"]), int(r["port"])))
+    return {
+        "dump_path": str(Path(dump_path).resolve()),
+        "frame_window": {"start": int(window.start), "end": int(window.end)},
+        "frame_count": frame_count,
+        "port_count": port_count,
+        "rows": rows,
+        "row_count": len(rows),
+    }
+
+
+def _summary_text(payload: dict[str, object]) -> str:
+    rows = payload["rows"]
+    lines = []
+    lines.append("# engine_dump_rows")
+    lines.append(
+        f"dump={payload['dump_path']} frame_window={payload['frame_window']['start']}..{payload['frame_window']['end']} rows={payload['row_count']}"
+    )
+    lines.append("")
+    for r in rows:
+        lines.append(
+            f"frame={r['frame_index']} p={r['port']} action={r['action_id']} anim={r['animation_id']} "
+            f"action_f32={r['action_frame_f32']:.3f} hitlag={r['hitlag_left_f32']:.3f} "
+            f"shield={r['shield_hp']:.3f} flags={r['state_flags']} buttons=0x{int(r['input']['buttons']):08x}"
+        )
+    return "\n".join(lines).rstrip() + "\n"
+
+
+def extract_to_dir(
+    *,
+    dump_path: str | Path,
+    start_frame: int,
+    end_frame: int,
+    ports: list[int],
+    out_dir: str | Path,
+) -> tuple[Path, Path]:
+    payload = _collect_rows(dump_path, Window(start_frame, end_frame), ports)
+    dst = Path(out_dir).resolve()
+    dst.mkdir(parents=True, exist_ok=True)
+    json_path = dst / "engine_dump_rows.json"
+    txt_path = dst / "engine_dump_rows.txt"
+    json_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    txt_path.write_text(_summary_text(payload), encoding="utf-8")
+    return json_path, txt_path
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser(description="Extract deterministic frame rows from an engine-dump binary.")
+    ap.add_argument("--dump", required=True, type=Path, help="path to engine dump .bin")
+    ap.add_argument("--start-frame", required=True, type=int)
+    ap.add_argument("--end-frame", required=True, type=int)
+    ap.add_argument(
+        "--ports",
+        type=str,
+        default="1,2",
+        help="comma-separated port list (1-based), e.g. '1' or '1,2'",
+    )
+    ap.add_argument(
+        "--out-dir",
+        type=Path,
+        default=Path("reports/triage") / f"{_timestamp()}_engine_dump_rows",
+    )
+    args = ap.parse_args()
+
+    if args.end_frame < args.start_frame:
+        raise SystemExit(f"--end-frame ({args.end_frame}) must be >= --start-frame ({args.start_frame})")
+    ports = [int(tok.strip()) for tok in str(args.ports).split(",") if tok.strip()]
+    json_path, txt_path = extract_to_dir(
+        dump_path=args.dump,
+        start_frame=int(args.start_frame),
+        end_frame=int(args.end_frame),
+        ports=ports,
+        out_dir=args.out_dir,
+    )
+    print(f"wrote {json_path}")
+    print(f"wrote {txt_path}")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

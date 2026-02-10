@@ -31,10 +31,10 @@ def _run(cmd: list[str], env: dict[str, str] | None = None) -> int:
 def main() -> int:
     ap = argparse.ArgumentParser(description="Generate engine dumps for a replay suite and run validator.")
     ap.add_argument("--suite", type=Path, default=Path("replays/suites/fox_falco_fd_ucf084_recent.json"))
-    ap.add_argument("--out-dir", type=Path, default=Path("/tmp/engine_dumps"))
+    ap.add_argument("--out-dir", type=Path, default=Path("reports/triage/engine_dumps"))
     ap.add_argument("--dolphin", type=Path, default=Path("refs/Ishiiruka/build/Binaries/dolphin-emu-nogui"))
     ap.add_argument("--iso", type=Path, default=Path("SSBM.iso"))
-    ap.add_argument("--user-dir-base", type=Path, default=Path("/tmp/ish_playback_user"))
+    ap.add_argument("--user-dir-base", type=Path, default=Path("reports/triage/engine_dump_user"))
     ap.add_argument("--skip-existing", action="store_true")
     ap.add_argument("--dump-only", action="store_true")
     ap.add_argument("--validate-only", action="store_true")
@@ -65,7 +65,8 @@ def main() -> int:
                     "uv",
                     "run",
                     "python",
-                    "scripts/dolphin_engine_dump.py",
+                    "-m",
+                    "tools.dolphin.dolphin_engine_dump",
                     "--replay",
                     str(replay),
                     "--dolphin",
