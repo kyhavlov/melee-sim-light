@@ -2185,6 +2185,15 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
       //   does NOT enter the normal shield-hit effects path.
       uint8_t did_hit = 0;
       if (shield_active) {
+        // Decomp (GALE01): shield collision consumes the staled HitCapsule.damage lane.
+        // - Collision writes staled float damage via ft_80089228 when building HitCapsule.
+        // - ftColl_80076CBC then derives max int damage with getEnvDmg(hit0->damage).
+        // refs/melee/src/melee/ft/ft_0881.c::ft_80089228
+        // refs/melee/build/GALE01/asm/melee/ft/ftcoll.s::ftColl_8007ABD0
+        // refs/melee/src/melee/ft/ftcoll.c::ftColl_80076CBC
+        const uint16_t shield_move_id = staling_move_id_from_state(batch, a_idx);
+        const float shield_stale_mult = staling_multiplier_for_move(batch, a_idx, shield_move_id);
+
         // Decomp (GALE01): shield collision accumulates max int damage for hitlag as:
         // - attacker: `fp0->dmg.x1924 = max(fp0->dmg.x1924, getEnvDmg(hit0->damage))`
         // - defender: `fp1->x19A4 = max(fp1->x19A4, getEnvDmg(hit0->damage))`
@@ -2272,7 +2281,10 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
             continue;
           }
 
-          const float hdmg = batch->state.hitbox_damage[hb_i];
+          float hdmg = batch->state.hitbox_damage[hb_i];
+          if (shield_stale_mult != 1.0f) {
+            hdmg *= shield_stale_mult;
+          }
           if (!(hdmg > 0.0f)) {
             continue;
           }

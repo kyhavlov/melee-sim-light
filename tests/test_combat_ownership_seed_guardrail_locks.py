@@ -313,19 +313,21 @@ def test_guardsetoff_cluster_rows_have_replay_real_shield_hit_context(
 
 @pytest.mark.integration
 @pytest.mark.parametrize(
-    ("dataset_rel", "record", "p", "attacker"),
+    ("dataset_rel", "record", "p", "attacker", "ref_hitlag"),
     [
         (
             "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/TreasuredBackKangaroo.msl",
             5614,
             0,
             1,
+            5,
         ),
         (
             "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl",
             8297,
             1,
             0,
+            8,
         ),
     ],
 )
@@ -334,6 +336,7 @@ def test_guardsetoff_cluster_rows_keep_no_fighter_shield_contact_discriminator(
     record: int,
     p: int,
     attacker: int,
+    ref_hitlag: int,
 ) -> None:
     # TODO(combat-ownership, decomp-backed): keep these rows context-only until we can
     # decomp-explain why replay enters GuardSetOff despite no fighter SHIELD candidate in the
@@ -406,6 +409,32 @@ def test_guardsetoff_cluster_rows_keep_no_fighter_shield_contact_discriminator(
         f"record={record} p={p} expected no fighter SHIELD contacts in pre-combat classifier; "
         f"got count={len(shield_contacts_on_p)} of total={int(count)}"
     )
+
+    # Context lock (explicit triple): these rows are still action-mismatch residuals.
+    # Keep exact seed/ref/out discrete signatures stable while we isolate ownership parity.
+    compare_stride = int(sizes["compare"])
+    out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
+    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    try:
+        binding.reseed_seed(handle, seed_bytes)
+        binding.step_input(handle, prev_input_bytes, input_bytes)
+        binding.write_compare(handle, out_compare_bytes)
+    finally:
+        binding.destroy(handle)
+
+    out = out_compare_bytes.view(COMPARE_DTYPE).reshape(-1)
+    assert int(seed["action_id"][p]) == 0x00B3
+    assert int(ref["action_id"][p]) == 0x00B5
+    assert int(out["action_id"][0, p]) == 0x00B3
+    assert int(seed["hitlag"][p]) == 0
+    assert int(ref["hitlag"][p]) == int(ref_hitlag)
+    assert int(out["hitlag"][0, p]) == 0
+    assert int(seed["hitstun"][p]) == 0
+    assert int(ref["hitstun"][p]) == 0
+    assert int(out["hitstun"][0, p]) == 0
+    assert int(seed["state_flags"][p, 1]) == 0x01
+    assert int(ref["state_flags"][p, 1]) == 0x21
+    assert int(out["state_flags"][0, p, 1]) == 0x01
 
 
 @pytest.mark.integration
@@ -557,6 +586,8 @@ def test_guardsetoff_cluster_tbk_family_rows_lock_guardsetoff_action_exact(
 
     out = out_compare_bytes.view(COMPARE_DTYPE).reshape(-1)
     assert int(out["action_id"][0, p]) == int(ref["action_id"][p]) == 0x00B5
+    assert int(out["hitlag"][0, p]) == int(ref["hitlag"][p])
+    assert int(out["hitstun"][0, p]) == int(ref["hitstun"][p])
     assert int(out["state_flags"][0, p, 1]) == int(ref["state_flags"][p, 1]) == 0x21
 
 
