@@ -515,6 +515,19 @@ void grab_flow_on_catch_connect(MslBatch* batch, int bi, int owner_p, int victim
   assert(batch->state.action_id[vidx] == (uint16_t)MSL_ACT_CAPTURE_PULLED_HI ||
          batch->state.action_id[vidx] == (uint16_t)MSL_ACT_CAPTURE_PULLED_LW);
   msl_anim_timebase_tick_once(batch, vidx);
+  // Decomp ownership: catch-connect callback fn_800DAADC installs CapturePulled* and calls
+  // fn_800DAA10; this transition switches to non-Damage motion-state vars, so Damage* hitstun
+  // (x2340) is no longer the active lane after this transition.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::fn_800DAADC
+  // refs/melee/build/GALE01/asm/melee/ft/chara/ftCommon/ftCo_Attack100.s::fn_800DAADC
+  // refs/melee/build/GALE01/asm/melee/ft/chara/ftCommon/ftCo_Attack100.s::fn_800DAA10
+  // refs/melee/src/melee/ft/chara/ftCommon/types.h (mv.co.damage.x0 at fp+0x2340)
+  // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm (misc AS variable @ fp+0x2340)
+  batch->state.hitstun[vidx] = 0u;
+  enum { MSL_STATE_FLAGS_221C_INDEX = 3 };
+  enum { MSL_STATE_FLAG_221C_IS_HITSTUN = 0x02 };
+  const size_t flags_i = vidx * (size_t)MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_221C_INDEX;
+  batch->state.state_flags[flags_i] &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221C_IS_HITSTUN;
 
   // Decomp has a single victim_gobj pointer per owner; keep exactly one attached victim link.
   for (int p = 0; p < num_players; p++) {

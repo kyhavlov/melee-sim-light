@@ -93,7 +93,7 @@ mismatch.stocks: 0 / 23058 (0.000000)
 mismatch.jumps_left: 80 / 23058 (0.003470)
 mismatch.is_dead: 0 / 23058 (0.000000)
 mismatch.hitlag: 71 / 23058 (0.003079)
-mismatch.hitstun: 69 / 23058 (0.002992)
+mismatch.hitstun: 68 / 23058 (0.002949)
 mismatch.l_cancel: 0 / 23058 (0.000000)
 mismatch.hurtbox_state: 19 / 23058 (0.000824)
 mismatch.ground_id: 7 / 23058 (0.000304)
@@ -103,7 +103,7 @@ mismatch.instance_id: 147 / 23058 (0.006375)
 mismatch.last_attack_landed: 32 / 23058 (0.001388)
 mismatch.combo_count: 42 / 23058 (0.001821)
 mismatch.last_hit_by: 92 / 23058 (0.003990)
-mismatch.state_flags: 224 / 115290 (0.001943)
+mismatch.state_flags: 223 / 115290 (0.001934)
 mismatch.item_exists: 33 / 172935 (0.000191)
 mismatch.item_type: 34 / 172935 (0.000197)
 mismatch.item_state: 26 / 172935 (0.000150)
@@ -122,7 +122,7 @@ err.item_pos_x: mae=0.311407 p95=0.000000 max=179.321686
 err.item_pos_y: mae=0.087860 p95=0.000000 max=26.796017
 err.item_vel_x: mae=0.081992 p95=0.000000 max=10.000000
 err.item_vel_y: mae=0.055523 p95=0.000000 max=6.995885
-overall.discrete_mismatch: 1535 / 1395009
+overall.discrete_mismatch: 1533 / 1395009
 overall.float_norm_mae_p95: 0.00736138
 
 == datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/QuerulousGrandDinosaur.msl ==
@@ -177,7 +177,7 @@ mismatch.stocks: 0 / 15674 (0.000000)
 mismatch.jumps_left: 59 / 15674 (0.003764)
 mismatch.is_dead: 0 / 15674 (0.000000)
 mismatch.hitlag: 41 / 15674 (0.002616)
-mismatch.hitstun: 63 / 15674 (0.004019)
+mismatch.hitstun: 60 / 15674 (0.003828)
 mismatch.l_cancel: 0 / 15674 (0.000000)
 mismatch.hurtbox_state: 10 / 15674 (0.000638)
 mismatch.ground_id: 1 / 15674 (0.000064)
@@ -187,7 +187,7 @@ mismatch.instance_id: 94 / 15674 (0.005997)
 mismatch.last_attack_landed: 22 / 15674 (0.001404)
 mismatch.combo_count: 39 / 15674 (0.002488)
 mismatch.last_hit_by: 42 / 15674 (0.002680)
-mismatch.state_flags: 172 / 78370 (0.002195)
+mismatch.state_flags: 169 / 78370 (0.002156)
 mismatch.item_exists: 26 / 117555 (0.000221)
 mismatch.item_type: 26 / 117555 (0.000221)
 mismatch.item_state: 24 / 117555 (0.000204)
@@ -206,9 +206,9 @@ err.item_pos_x: mae=0.477561 p95=0.000000 max=163.959488
 err.item_pos_y: mae=0.135677 p95=0.000000 max=31.795383
 err.item_vel_x: mae=0.090068 p95=0.000000 max=10.000000
 err.item_vel_y: mae=0.085781 p95=0.000000 max=6.995885
-overall.discrete_mismatch: 1031 / 948277
+overall.discrete_mismatch: 1025 / 948277
 overall.float_norm_mae_p95: 0.00806729
 
 == suite summary ==
-overall.discrete_mismatch: 4887 / 4462843
+overall.discrete_mismatch: 4879 / 4462843
 overall.float_norm_mae_p95: 0.00722778

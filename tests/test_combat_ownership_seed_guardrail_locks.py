@@ -718,3 +718,78 @@ def test_guardsetoff_tbk_2219_one_step_and_rollout_resolve_guardsetoff() -> None
     target = next(r for r in rollout_rows if int(r["record"]) == int(record))
     assert int(target["out_action"]) == int(target["ref_action"]) == 0x00B5
     assert int(target["out_sf1"]) == int(target["ref_sf1"]) == 0x21
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    ("dataset_rel", "record", "p", "seed_action", "ref_action"),
+    [
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/TreasuredBackKangaroo.msl",
+            5813,
+            1,
+            0x005A,  # DamageFlyTop
+            0x00DF,  # CapturePulledHi
+        ),
+    ],
+)
+def test_damage_exit_rows_clear_hitstun_on_non_damage_entry(
+    dataset_rel: str,
+    record: int,
+    p: int,
+    seed_action: int,
+    ref_action: int,
+) -> None:
+    # Replay-real lock for residual hitstun cluster (seed/ref/out=5/0/4):
+    # when Damage* exits into non-Damage CapturePulled* entry, t+1 hitstun must be 0.
+    #
+    # Decomp ownership:
+    # - Catch connect victim entry uses CapturePulled* motion states.
+    #   refs/melee/build/GALE01/asm/melee/ft/chara/ftCommon/ftCo_Attack100.s::fn_800DAA10
+    # - Slippi misc AS var (hitstun lane in Damage*) is sampled from fp+0x2340.
+    #   refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+    assert int(samples.shape[0]) > record, f"dataset too short for lock row: record={record}"
+    row = samples[record : record + 1]
+    seed = row["seed_t"][0]
+    ref = row["ref_t1"][0]
+
+    assert int(seed["action_id"][p]) == int(seed_action)
+    assert int(ref["action_id"][p]) == int(ref_action)
+    assert int(seed["on_ground"][p]) == 0
+    assert int(seed["hitstun"][p]) == 5
+    assert int(ref["hitstun"][p]) == 0
+
+    binding = pytest.importorskip("msl_binding")
+    sizes = binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    compare_stride = int(sizes["compare"])
+
+    seed_bytes = np.frombuffer(row["seed_t"].tobytes(order="C"), dtype=np.uint8).copy().reshape(1, seed_stride)
+    prev_input_bytes = np.frombuffer(row["prev_input_t"].tobytes(order="C"), dtype=np.uint8).copy().reshape(
+        1, input_stride
+    )
+    input_bytes = np.frombuffer(row["input_t"].tobytes(order="C"), dtype=np.uint8).copy().reshape(1, input_stride)
+    out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
+
+    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    try:
+        binding.reseed_seed(handle, seed_bytes)
+        binding.step_input(handle, prev_input_bytes, input_bytes)
+        binding.write_compare(handle, out_compare_bytes)
+    finally:
+        binding.destroy(handle)
+
+    out = out_compare_bytes.view(COMPARE_DTYPE).reshape(-1)
+    assert int(out["action_id"][0, p]) == int(ref["action_id"][p]) == int(ref_action)
+    assert int(out["hitlag"][0, p]) == int(ref["hitlag"][p])
+    assert int(out["hitstun"][0, p]) == int(ref["hitstun"][p]) == 0
+    assert int(out["state_flags"][0, p, 3] & 0x02) == int(ref["state_flags"][p, 3] & 0x02) == 0
