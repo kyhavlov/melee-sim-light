@@ -316,6 +316,30 @@ typedef struct MslStateSoA {
   // Used by combat_resolve() (Pass 1) for hitbox-vs-hurtcap intersection.
   uint8_t* hitbox_count;    // [batch * players]
   uint8_t* hitbox_enabled;  // [batch * players * MSL_MAX_HITBOXES]
+  // Previous-frame world-space hitbox centers and enabled flags.
+  //
+  // Decomp ownership:
+  // - HitCapsule stores previous/current centers as x58/x4C, updated once per frame by
+  //   ftColl_8007AD18.
+  // - Shield/body geometry helpers consume the x58->x4C sweep segment (lbColl_80007BCC /
+  //   lbColl_8000805C).
+  // refs/melee/src/melee/ft/ftcoll.c::ftColl_8007AD18
+  // refs/melee/src/melee/lb/lbcollision.c::{lbColl_80007BCC,lbColl_8000805C}
+  uint8_t* hitbox_prev_enabled;  // [batch * players * MSL_MAX_HITBOXES]
+  float* hitbox_prev_x;          // [batch * players * MSL_MAX_HITBOXES]
+  float* hitbox_prev_y;
+  float* hitbox_prev_z;
+  // Pose-frame create-event marker (1 if a create event affected the slot at pose_frame).
+  // Mirrors ftAction script writes consumed by ftColl_800768A0 / ftColl_8007AD18.
+  // refs/melee/src/melee/ft/ftaction.c::ftAction_8007121C
+  uint8_t* hitbox_pose_create;  // [batch * players * MSL_MAX_HITBOXES]
+  // Pose-frame enable-edge proxy (1 when slot is newly enabled or hit_group changes this frame).
+  // Mirrors ftColl_800768A0 clear/copy ownership trigger used by ftColl_8007AD18 state transitions.
+  // refs/melee/src/melee/ft/ftcoll.c::{ftColl_800768A0,ftColl_8007AD18}
+  uint8_t* hitbox_enable_edge;  // [batch * players * MSL_MAX_HITBOXES]
+  // First-frame bootstrap flag for x58 previous centers after teacher-forced reseed.
+  // 1 => bootstrap hitbox_prev_* once in hitboxes_refresh(), then clear to 0.
+  uint8_t* hitbox_prev_bootstrap;  // [batch * players]
   float* hitbox_x;
   float* hitbox_y;
   float* hitbox_z;

@@ -202,6 +202,16 @@ void hitboxes_refresh(MslBatch* batch) {
       // Clear fixed slots for stable debug readback.
       for (int hi = 0; hi < MSL_MAX_HITBOXES; hi++) {
         const size_t oi = idx_hitbox(bi, p, hi);
+        // Decomp shape: ftColl_8007AD18 stores previous/current capsule centers in x58/x4C.
+        // Preserve the previous frame's world center before refreshing this frame's pose sample.
+        // refs/melee/src/melee/ft/ftcoll.c::ftColl_8007AD18
+        batch->state.hitbox_prev_enabled[oi] = batch->state.hitbox_enabled[oi];
+        batch->state.hitbox_prev_x[oi] = batch->state.hitbox_x[oi];
+        batch->state.hitbox_prev_y[oi] = batch->state.hitbox_y[oi];
+        batch->state.hitbox_prev_z[oi] = batch->state.hitbox_z[oi];
+        batch->state.hitbox_pose_create[oi] = 0u;
+        batch->state.hitbox_enable_edge[oi] = 0u;
+
         batch->state.hitbox_enabled[oi] = 0;
         batch->state.hitbox_x[oi] = 0.0f;
         batch->state.hitbox_y[oi] = 0.0f;
@@ -261,6 +271,7 @@ void hitboxes_refresh(MslBatch* batch) {
       // refs/melee/src/melee/ft/ftaction.c::ftAction_8007121C
       uint8_t have_prev[MSL_MAX_HITBOXES] = {0};
       MslHitboxEvent def_prev[MSL_MAX_HITBOXES] = {0};
+      uint8_t pose_create_count[MSL_MAX_HITBOXES] = {0};
 
       // Build hitbox definitions for:
       // - pose_frame - 1 (previous integer frame): for detecting enable edges, and
@@ -359,6 +370,7 @@ void hitboxes_refresh(MslBatch* batch) {
           }
         } else if (ev->hitbox_id < (uint8_t)MSL_MAX_HITBOXES) {
           const uint8_t hb = ev->hitbox_id;
+          pose_create_count[hb] = (uint8_t)(pose_create_count[hb] + 1u);
           const uint8_t new_g = hitlist_hit_group_from_u16_7(ev->u16_7);
           const uint8_t had_old = have_def[hb] ? 1u : 0u;
           const uint8_t old_g = had_old ? hitlist_hit_group_from_u16_7(def[hb].u16_7) : 0u;
@@ -536,7 +548,15 @@ void hitboxes_refresh(MslBatch* batch) {
         }
 
         const size_t oi = idx_hitbox(bi, p, hi);
+        uint8_t enable_edge = 1u;
+        if (have_prev[hi]) {
+          const uint8_t old_g = hitlist_hit_group_from_u16_7(def_prev[hi].u16_7);
+          const uint8_t new_g = hitlist_hit_group_from_u16_7(def[hi].u16_7);
+          enable_edge = (old_g != new_g) ? 1u : 0u;
+        }
         batch->state.hitbox_enabled[oi] = 1;
+        batch->state.hitbox_pose_create[oi] = (pose_create_count[hi] != 0u) ? 1u : 0u;
+        batch->state.hitbox_enable_edge[oi] = enable_edge;
         batch->state.hitbox_x[oi] = cx;
         batch->state.hitbox_y[oi] = cy;
         batch->state.hitbox_z[oi] = cz;
@@ -564,6 +584,32 @@ void hitboxes_refresh(MslBatch* batch) {
       }
 
       batch->state.hitbox_count[idx] = out_count;
+
+      if (batch->state.hitbox_prev_bootstrap[idx]) {
+        // Teacher-forced reseed bootstrap (first frame only):
+        // Decomp keeps previous/current hitcapsule centers (x58/x4C) across frames.
+        // On reseed, we lack persisted x58; bootstrap it from in-frame translation so shield
+        // overlap tests (lbColl_80007BCC) can still use a swept segment on the first stepped frame.
+        // refs/melee/src/melee/ft/ftcoll.c::ftColl_8007AD18
+        // refs/melee/src/melee/lb/lbcollision.c::lbColl_80007BCC
+        const float dx = batch->state.pos_x[idx] - batch->state.prev_pos_x[idx];
+        const float dy = batch->state.pos_y[idx] - batch->state.prev_pos_y[idx];
+        for (int hi = 0; hi < MSL_MAX_HITBOXES; hi++) {
+          const size_t oi = idx_hitbox(bi, p, hi);
+          if (batch->state.hitbox_enabled[oi]) {
+            batch->state.hitbox_prev_enabled[oi] = 1u;
+            batch->state.hitbox_prev_x[oi] = batch->state.hitbox_x[oi] - dx;
+            batch->state.hitbox_prev_y[oi] = batch->state.hitbox_y[oi] - dy;
+            batch->state.hitbox_prev_z[oi] = batch->state.hitbox_z[oi];
+          } else {
+            batch->state.hitbox_prev_enabled[oi] = 0u;
+            batch->state.hitbox_prev_x[oi] = 0.0f;
+            batch->state.hitbox_prev_y[oi] = 0.0f;
+            batch->state.hitbox_prev_z[oi] = 0.0f;
+          }
+        }
+        batch->state.hitbox_prev_bootstrap[idx] = 0u;
+      }
     }
   }
 }
