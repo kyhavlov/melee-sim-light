@@ -72,6 +72,30 @@ def _collect_rows(dump_path: str | Path, window: Window, ports: list[int]) -> di
             inp = d.inputs[idx]
             fighter = d.fighters[idx]
             buttons = int(inp["buttons"])
+            hitlist_rows: list[dict[str, object]] = []
+            if d.hitlists.size != 0:
+                hitlist_base = idx * 4
+                for hb_id in range(4):
+                    hl = d.hitlists[hitlist_base + hb_id]
+                    v1_ptr = [int(x) for x in hl["victims1_ptr"].tolist()]
+                    v1_cd = [int(x) for x in hl["victims1_cooldown"].tolist()]
+                    v2_ptr = [int(x) for x in hl["victims2_ptr"].tolist()]
+                    v2_cd = [int(x) for x in hl["victims2_cooldown"].tolist()]
+                    hitlist_rows.append(
+                        {
+                            "hitbox_id": hb_id,
+                            "group": int(hl["group"]),
+                            "victims1_cursor": int(hl["victims1_cursor"]),
+                            "victims2_cursor": int(hl["victims2_cursor"]),
+                            "owner_gobj": int(hl["owner_gobj"]),
+                            "victims1_ptr": v1_ptr,
+                            "victims1_cooldown": v1_cd,
+                            "victims2_ptr": v2_ptr,
+                            "victims2_cooldown": v2_cd,
+                            "victims1_active_slots": [i for i, ptr in enumerate(v1_ptr) if ptr != 0],
+                            "victims2_active_slots": [i for i, ptr in enumerate(v2_ptr) if ptr != 0],
+                        }
+                    )
             rows.append(
                 {
                     "frame_index": frame_index,
@@ -111,6 +135,7 @@ def _collect_rows(dump_path: str | Path, window: Window, ports: list[int]) -> di
                         "raw_cstick_x": i8_from_u8(int(inp["raw_cstick_x_u8"])),
                         "raw_cstick_y": i8_from_u8(int(inp["raw_cstick_y_u8"])),
                     },
+                    "hitlist_provenance": hitlist_rows,
                     "items": frame_items,
                 }
             )
@@ -135,10 +160,22 @@ def _summary_text(payload: dict[str, object]) -> str:
     )
     lines.append("")
     for r in rows:
+        hitlist_summary = "hitlist=v6"
+        if r["hitlist_provenance"]:
+            compact = []
+            for hb in r["hitlist_provenance"]:
+                v1n = len(hb["victims1_active_slots"])
+                v2n = len(hb["victims2_active_slots"])
+                compact.append(
+                    f"hb{hb['hitbox_id']}[g={hb['group']} c={hb['victims1_cursor']}/{hb['victims2_cursor']} "
+                    f"a={v1n}/{v2n}]"
+                )
+            hitlist_summary = " ".join(compact)
         lines.append(
             f"frame={r['frame_index']} p={r['port']} action={r['action_id']} anim={r['animation_id']} "
             f"action_f32={r['action_frame_f32']:.3f} hitlag={r['hitlag_left_f32']:.3f} "
-            f"shield={r['shield_hp']:.3f} flags={r['state_flags']} buttons=0x{int(r['input']['buttons']):08x}"
+            f"shield={r['shield_hp']:.3f} flags={r['state_flags']} buttons=0x{int(r['input']['buttons']):08x} "
+            f"{hitlist_summary}"
         )
     return "\n".join(lines).rstrip() + "\n"
 

@@ -20,12 +20,15 @@ uv run python -m tools.dolphin.forensic_row_dump \
 
 Outputs are written under `reports/triage/<timestamp>_dolphin_forensic_row/`.
 
+Requires `refs/Ishiiruka@3e676fab03b19faf1a6b00cb63934bd2f6502827` for v7 hitlist provenance lanes.
+
 ## Active scripts
 
 - `dolphin_engine_dump.py`: playback CLI wrapper -> `.bin` engine dump.
-- `engine_dump_io.py`: v6 dump parser (schema + typed readers).
-- `extract_engine_dump_rows.py`: deterministic JSON/txt extraction for frame windows.
+- `engine_dump_io.py`: v6/v7 dump parser (schema + typed readers, including v7 hitlist provenance).
+- `extract_engine_dump_rows.py`: deterministic JSON/txt extraction for frame windows (including hitlist provenance lanes when available).
 - `forensic_row_dump.py`: dataset row => frame window => dump + extracted rows.
+- `compare_hitlist_provenance.py`: frame-by-frame comparison of extracted hitlist provenance between two row captures.
 
 ## Legacy scripts
 

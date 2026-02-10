@@ -8,7 +8,8 @@ import numpy as np
 
 
 ENGINE_DUMP_MAGIC = b"MSIMDMP\0"
-ENGINE_DUMP_VERSION = 6
+ENGINE_DUMP_VERSION = 7
+ENGINE_DUMP_SUPPORTED_VERSIONS = (6, 7)
 
 HEADER_DTYPE = np.dtype(
     [
@@ -27,7 +28,9 @@ HEADER_DTYPE = np.dtype(
         ("hitboxes_offset", "<u4"),
         ("hurtboxes_offset", "<u4"),
         ("total_items", "<u4"),
-        ("_pad1", "V11"),
+        # v7+: offset of hitlist-provenance section (v6 keeps this 0 in padding).
+        ("hitlists_offset", "<u4"),
+        ("_pad1", "V7"),
     ],
     align=False,
 )
@@ -143,6 +146,20 @@ ITEM_DTYPE = np.dtype(
 
 HITBOX_DTYPE = np.dtype("V88")
 HURTBOX_DTYPE = np.dtype("V68")
+HITLIST_DTYPE = np.dtype(
+    [
+        ("group", "<u4"),
+        ("victims1_cursor", "u1"),
+        ("victims2_cursor", "u1"),
+        ("_pad0", "V2"),
+        ("owner_gobj", "<u4"),
+        ("victims1_ptr", ("<u4", (12,))),
+        ("victims1_cooldown", ("<u4", (12,))),
+        ("victims2_ptr", ("<u4", (12,))),
+        ("victims2_cooldown", ("<u4", (12,))),
+    ],
+    align=False,
+)
 
 
 @dataclass(frozen=True)
@@ -155,6 +172,7 @@ class EngineDump:
     items: np.ndarray
     hitboxes: np.ndarray
     hurtboxes: np.ndarray
+    hitlists: np.ndarray
 
 
 def _f32_from_bits(bits: int) -> float:
@@ -184,8 +202,11 @@ def read_engine_dump(path: str | Path) -> EngineDump:
 
     header = np.frombuffer(blob, dtype=HEADER_DTYPE, count=1, offset=0)[0]
     version = int(header["version"])
-    if version != ENGINE_DUMP_VERSION:
-        raise ValueError(f"unsupported engine dump version: {version} (expected {ENGINE_DUMP_VERSION})")
+    if version not in ENGINE_DUMP_SUPPORTED_VERSIONS:
+        raise ValueError(
+            f"unsupported engine dump version: {version} "
+            f"(supported={ENGINE_DUMP_SUPPORTED_VERSIONS})"
+        )
 
     frame_count = int(header["frame_count"])
     port_count = int(header["port_count"])
@@ -207,6 +228,10 @@ def read_engine_dump(path: str | Path) -> EngineDump:
     items = _read(ITEM_DTYPE, total_items, int(header["items_offset"]))
     hitboxes = _read(HITBOX_DTYPE, frame_count * port_count * 4, int(header["hitboxes_offset"]))
     hurtboxes = _read(HURTBOX_DTYPE, frame_count * port_count * 15, int(header["hurtboxes_offset"]))
+    if version >= 7 and int(header["hitlists_offset"]) > 0:
+        hitlists = _read(HITLIST_DTYPE, frame_count * port_count * 4, int(header["hitlists_offset"]))
+    else:
+        hitlists = np.empty((0,), dtype=HITLIST_DTYPE)
 
     return EngineDump(
         path=dump_path,
@@ -217,4 +242,5 @@ def read_engine_dump(path: str | Path) -> EngineDump:
         items=items,
         hitboxes=hitboxes,
         hurtboxes=hurtboxes,
+        hitlists=hitlists,
     )
