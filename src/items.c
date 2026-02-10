@@ -904,7 +904,19 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
       // - collision shield precedence: ftColl_80076CBC / lbColl_80007BCC
       // refs/melee/src/melee/it/items/itfoxlaser.c and refs/melee/src/melee/ft/ftcoll.c
       const float shr = batch->state.shield_radius[d_idx];
-      if (shr > 0.0f) {
+      const uint8_t guard_on_no_submotion_snapshot =
+          (batch->state.action_id[d_idx] == (uint16_t)MSL_ACT_GUARD_ON &&
+           batch->state.action_frame[d_idx] < 0 &&
+           batch->state.animation_index[d_idx] == 0xFFFFFFFFu)
+              ? 1u
+              : 0u;
+      const uint16_t prev_action = batch->state.prev_action_id[d_idx];
+      const uint8_t guard_on_entry_from_landing =
+          (guard_on_no_submotion_snapshot &&
+           (prev_action == (uint16_t)MSL_ACT_LANDING))
+              ? 1u
+              : 0u;
+      if (shr > 0.0f && !guard_on_entry_from_landing) {
         // Use derived shield bubble center from shields_refresh() (same geometry used by the
         // fighter-vs-fighter combat pass).
         float shx = batch->state.shield_x[d_idx];
@@ -927,14 +939,15 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
         // refs/melee/src/melee/it/items/itfoxlaser.c::{
         //   itFoxlaser_UnkMotion1_Phys,it_8029C4D4,it_2725_Logic94_HitShield}
         //
-        // Sim rule for Slippi no-submotion Guard seeds (`animation_index==0xFFFFFFFF`):
-        // when the defender is Guard with neutral hitlag/hitstun and no submotion timeline, do
+        // Sim rule for Slippi no-submotion Guard/GuardOn seeds (`animation_index==0xFFFFFFFF`):
+        // when the defender is Guard* with neutral hitlag/hitstun and no submotion timeline, do
         // not create new shield-hit contacts from the post-motion endpoint this frame. Sample
         // shield overlap at segment start (`prev_pos`) only.
         // refs/melee/src/melee/ft/ftanim.c::ftAnim_8006E9B4
         //
         const uint8_t defender_no_submotion_snapshot =
-            (batch->state.action_id[d_idx] == (uint16_t)MSL_ACT_GUARD &&
+            ((batch->state.action_id[d_idx] == (uint16_t)MSL_ACT_GUARD ||
+              batch->state.action_id[d_idx] == (uint16_t)MSL_ACT_GUARD_ON) &&
              batch->state.action_frame[d_idx] < 0 &&
              batch->state.animation_index[d_idx] == 0xFFFFFFFFu &&
              batch->state.hitlag[d_idx] == 0u && batch->state.hitstun[d_idx] == 0u)

@@ -117,8 +117,8 @@
       "field": "hitlag",
       "seed": 0,
       "ref": 0,
-      "out": 4,
-      "cluster_count": 2,
+      "out": 0,
+      "cluster_count": 0,
       "base_field": "hitlag"
     },
     {
@@ -139,8 +139,8 @@
       "field": "hitlag",
       "seed": 0,
       "ref": 0,
-      "out": 3,
-      "cluster_count": 1,
+      "out": 0,
+      "cluster_count": 0,
       "base_field": "hitlag"
     },
     {

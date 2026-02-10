@@ -846,11 +846,21 @@ def test_damage_exit_rows_clear_hitstun_on_non_damage_entry(
             "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl",
             3347,
             0,
-            0x002A,  # EscapeF
+            0x002A,  # Landing
             0x004B,  # DamageHi1
             3,
             9,
             0x30,
+        ),
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl",
+            6206,
+            0,
+            0x002A,  # Landing
+            0x00B2,  # DamageFlyN
+            0,
+            0,
+            0x01,
         ),
     ],
 )
@@ -891,7 +901,7 @@ def test_runtime_hitlag_clusters_rows_resolve_to_exact_ref_t1(
     assert int(ref["hitstun"][p]) == int(ref_hitstun)
     assert int(ref["state_flags"][p, 1]) == int(ref_sf1)
 
-    # AGG: row enters DamageHi1 from EscapeF under live laser context.
+    # AGG: row enters DamageHi1 from Landing under live laser context.
     assert int(np.count_nonzero(seed["items"]["exists"])) > 0
 
     # Exact t+1 parity lock.
@@ -918,20 +928,7 @@ def test_runtime_hitlag_clusters_rows_resolve_to_exact_ref_t1(
     ),
     [
         # Context-only rows (explicitly non-parity targets for this slice).
-        # Keep these as deterministic signatures to preserve triage context while AGG lands.
-        (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl",
-            6206,
-            0,
-            0x002A,  # EscapeF
-            0x00B2,  # DamageFlyN
-            0x00B5,  # GuardSetOff
-            0,
-            4,
-            0,
-            0x01,
-            0x21,
-        ),
+        # Keep these as deterministic signatures to preserve triage context while runtime rows land.
         (
             "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/QuerulousGrandDinosaur.msl",
             7173,
@@ -949,8 +946,8 @@ def test_runtime_hitlag_clusters_rows_resolve_to_exact_ref_t1(
             "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/QuerulousGrandDinosaur.msl",
             8222,
             1,
-            0x002B,  # EscapeB
-            0x002B,  # EscapeB
+            0x002B,  # LandingFallSpecial
+            0x002B,  # LandingFallSpecial
             0x005A,  # DamageN2
             0,
             6,
@@ -1026,8 +1023,8 @@ def test_runtime_hitlag_clusters_context_rows_keep_current_signatures(
             "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl",
             6205,
             0,
-            0x002A,  # EscapeF
-            0x002A,  # EscapeF
+            0x002A,  # Landing
+            0x002A,  # Landing
             0,
             0,
             0x00,
@@ -1056,11 +1053,21 @@ def test_runtime_hitlag_clusters_context_rows_keep_current_signatures(
             "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/QuerulousGrandDinosaur.msl",
             8221,
             1,
-            0x002B,  # EscapeB
-            0x002B,  # EscapeB
+            0x002B,  # LandingFallSpecial
+            0x002B,  # LandingFallSpecial
             0,
             0,
             0x00,
+        ),
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/TreasuredBackKangaroo.msl",
+            1248,
+            0,
+            0x0015,  # Run
+            0x00B5,  # GuardSetOff
+            3,
+            0,
+            0x21,
         ),
     ],
 )
