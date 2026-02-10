@@ -85,6 +85,38 @@ _DEBUG_HITBOX_EVENT_TIMING_DTYPE = np.dtype(
     align=False,
 )
 
+_DEBUG_SHIELD_CANDIDATE_DTYPE = np.dtype(
+    [
+        ("source_kind", "u1"),
+        ("attacker", "u1"),
+        ("defender", "u1"),
+        ("hitbox_id", "u1"),
+        ("reject_reason", "u1"),
+        ("attacker_hitlag_started_frame", "u1"),
+        ("defender_hitlag_started_frame", "u1"),
+        ("shield_active", "u1"),
+        ("hitbox_enabled", "u1"),
+        ("defender_on_ground", "u1"),
+        ("hitlist_allows", "u1"),
+        ("overlap_shield", "u1"),
+        ("element", "u1"),
+        ("hb_flags", "<u2"),
+        ("attacker_msid", "<u2"),
+        ("attacker_action_frame", "<i2"),
+        ("hitbox_damage", "<f4"),
+        ("hitbox_x", "<f4"),
+        ("hitbox_y", "<f4"),
+        ("hitbox_z", "<f4"),
+        ("hitbox_radius", "<f4"),
+        ("shield_x", "<f4"),
+        ("shield_y", "<f4"),
+        ("shield_z", "<f4"),
+        ("shield_radius", "<f4"),
+        ("shield_overlap_margin", "<f4"),
+    ],
+    align=False,
+)
+
 
 def _shield_contact_without_body_conflict(contacts: np.ndarray, defender: int) -> np.void | None:
     for c in contacts:
@@ -331,21 +363,21 @@ def test_guardsetoff_cluster_rows_have_replay_real_shield_hit_context(
         ),
     ],
 )
-def test_guardsetoff_cluster_rows_keep_no_fighter_shield_contact_discriminator(
+def test_guardsetoff_cluster_rows_runtime_shield_overlap_and_exact_parity(
     dataset_rel: str,
     record: int,
     p: int,
     attacker: int,
     ref_hitlag: int,
 ) -> None:
-    # TODO(combat-ownership, decomp-backed): keep these rows context-only until we can
-    # decomp-explain why replay enters GuardSetOff despite no fighter SHIELD candidate in the
-    # current sim pre-combat snapshot.
+    # Residual GuardSetOff rows: lock that the runtime shield path reaches overlap acceptance on at
+    # least one fighter hitbox candidate and that t+1 discrete outputs match replay exactly.
     #
-    # Discriminator family:
-    # - replay reference transitions Guard -> GuardSetOff with shield HP drop and hitlag>0,
-    # - no active item lanes in seed/ref snapshots,
-    # - pre-combat classified SHIELD contacts for defender p are 0 while attacker hitboxes are active.
+    # Decomp owners:
+    # - ftColl_80078C70 shields branch + GuardSetOff entry dispatch.
+    # - lbColl_80007BCC shield overlap geometry (consumes x58->x4C hitcapsule sweep).
+    # refs/melee/src/melee/ft/ftcoll.c::ftColl_80078C70
+    # refs/melee/src/melee/lb/lbcollision.c::lbColl_80007BCC
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / dataset_rel
@@ -390,7 +422,7 @@ def test_guardsetoff_cluster_rows_keep_no_fighter_shield_contact_discriminator(
     try:
         binding.reseed_seed(handle, seed_bytes)
         binding.debug_step_input_pre_combat(handle, prev_input_bytes, input_bytes)
-        raw, count = binding.debug_combat_contacts_classified(handle, 0, 64)
+        raw_cand, count_cand = binding.debug_shield_candidate_decisions(handle, 0, 128)
 
         active_hitboxes = 0
         for hb_id in range(4):
@@ -402,16 +434,22 @@ def test_guardsetoff_cluster_rows_keep_no_fighter_shield_contact_discriminator(
         binding.destroy(handle)
 
     assert active_hitboxes > 0, f"record={record} p={p} attacker={attacker} expected active hitboxes"
-    assert int(raw.shape[1]) == int(_DEBUG_CONTACT_CLASSIFIED_DTYPE.itemsize)
-    contacts = raw.reshape(-1).view(_DEBUG_CONTACT_CLASSIFIED_DTYPE)[:count]
-    shield_contacts_on_p = [c for c in contacts if int(c["defender"]) == int(p) and int(c["contact_kind"]) == 1]
-    assert not shield_contacts_on_p, (
-        f"record={record} p={p} expected no fighter SHIELD contacts in pre-combat classifier; "
-        f"got count={len(shield_contacts_on_p)} of total={int(count)}"
+    assert int(raw_cand.shape[1]) == int(_DEBUG_SHIELD_CANDIDATE_DTYPE.itemsize)
+    cand = raw_cand.reshape(-1).view(_DEBUG_SHIELD_CANDIDATE_DTYPE)[:count_cand]
+    accepted = [
+        c
+        for c in cand
+        if int(c["defender"]) == int(p)
+        and int(c["source_kind"]) == 0
+        and int(c["reject_reason"]) == 0
+        and int(c["overlap_shield"]) == 1
+    ]
+    assert accepted, (
+        f"record={record} p={p} expected at least one accepted SHIELD candidate in pre-combat "
+        f"shield path; got accepted={len(accepted)} total={int(count_cand)}"
     )
 
-    # Context lock (explicit triple): these rows are still action-mismatch residuals.
-    # Keep exact seed/ref/out discrete signatures stable while we isolate ownership parity.
+    # Exact discrete t+1 parity lock for residual rows.
     compare_stride = int(sizes["compare"])
     out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
     handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
@@ -425,16 +463,16 @@ def test_guardsetoff_cluster_rows_keep_no_fighter_shield_contact_discriminator(
     out = out_compare_bytes.view(COMPARE_DTYPE).reshape(-1)
     assert int(seed["action_id"][p]) == 0x00B3
     assert int(ref["action_id"][p]) == 0x00B5
-    assert int(out["action_id"][0, p]) == 0x00B3
+    assert int(out["action_id"][0, p]) == int(ref["action_id"][p]) == 0x00B5
     assert int(seed["hitlag"][p]) == 0
     assert int(ref["hitlag"][p]) == int(ref_hitlag)
-    assert int(out["hitlag"][0, p]) == 0
+    assert int(out["hitlag"][0, p]) == int(ref["hitlag"][p]) == int(ref_hitlag)
     assert int(seed["hitstun"][p]) == 0
     assert int(ref["hitstun"][p]) == 0
-    assert int(out["hitstun"][0, p]) == 0
+    assert int(out["hitstun"][0, p]) == int(ref["hitstun"][p]) == 0
     assert int(seed["state_flags"][p, 1]) == 0x01
     assert int(ref["state_flags"][p, 1]) == 0x21
-    assert int(out["state_flags"][0, p, 1]) == 0x01
+    assert int(out["state_flags"][0, p, 1]) == int(ref["state_flags"][p, 1]) == 0x21
 
 
 @pytest.mark.integration
