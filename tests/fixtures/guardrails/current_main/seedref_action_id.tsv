@@ -1,0 +1,15 @@
+dataset	record	seed_frame	ref_frame	p	field	seed	out	ref
+datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl	5060	4937	4938	0	action_id	91	199	91
+datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl	5207	5084	5085	0	action_id	87	199	87
+datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl	1370	1247	1248	0	action_id	84	42	84
+datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl	2221	2098	2099	0	action_id	25	88	25
+datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl	3349	3226	3227	0	action_id	27	67	27
+datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl	4529	4406	4407	0	action_id	20	360	20
+datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl	8293	8170	8171	0	action_id	25	67	25
+datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl	11164	11041	11042	1	action_id	91	183	91
+datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/QuerulousGrandDinosaur.msl	285	162	163	1	action_id	90	86	90
+datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/QuerulousGrandDinosaur.msl	8222	8099	8100	1	action_id	43	90	43
+datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/QuerulousGrandDinosaur.msl	9530	9407	9408	1	action_id	29	42	29
+datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/TreasuredBackKangaroo.msl	330	207	208	1	action_id	79	76	79
+datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/TreasuredBackKangaroo.msl	2377	2254	2255	0	action_id	91	183	91
+datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/TreasuredBackKangaroo.msl	5247	5124	5125	0	action_id	90	85	90

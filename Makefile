@@ -1,4 +1,4 @@
-.PHONY: build test preprocess validate validate-rollout rollout-capture rollout-summary rollout-diff build_data fmt fmt-check check
+.PHONY: build test preprocess validate validate-rollout rollout-capture rollout-summary rollout-diff build_data fmt fmt-check check guardrail-preflight guardrail-preflight-full guardrail-baseline forensic-rows
 
 PY := uv run python
 DATASETS_DIR ?= datasets
@@ -12,6 +12,7 @@ ROLLOUT_AFTER ?= reports/triage/current_rollout_streaks.json
 ROLLOUT_TOP ?= 8
 ROLLOUT_SUMMARY_OUT ?=
 ROLLOUT_DIFF_OUT ?=
+ARGS ?=
 VERBOSE ?=
 CLANG_FORMAT ?= clang-format
 
@@ -70,3 +71,15 @@ fmt-check:
 	@find src python -type f '(' -name '*.c' -o -name '*.h' ')' -print0 | xargs -0 "$(CLANG_FORMAT)" --dry-run --Werror
 
 check: fmt-check test
+
+guardrail-baseline: build
+	@$(PY) -m tools.eval.generate_guardrail_baseline --suite "$(SUITE)" --datasets-dir "$(DATASETS_DIR)" --chunk "$(CHUNK)"
+
+guardrail-preflight: build
+	@$(PY) -m tools.eval.run_guardrail_preflight --suite "$(SUITE)" --datasets-dir "$(DATASETS_DIR)" --chunk "$(CHUNK)"
+
+guardrail-preflight-full: test
+	@$(PY) -m tools.eval.run_guardrail_preflight --suite "$(SUITE)" --datasets-dir "$(DATASETS_DIR)" --chunk "$(CHUNK)" --skip-lock-pack
+
+forensic-rows: build
+	@$(PY) -m tools.eval.run_forensic_rows $(ARGS)

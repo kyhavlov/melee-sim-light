@@ -1,0 +1,4 @@
+dataset	record	seed_frame	ref_frame	p	field	seed	out	ref
+datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl	2221	2098	2099	0	hitstun	0	61	0
+datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/QuerulousGrandDinosaur.msl	7173	7050	7051	1	hitstun	0	37	0
+datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/QuerulousGrandDinosaur.msl	8222	8099	8100	1	hitstun	0	52	0

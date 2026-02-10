@@ -139,10 +139,15 @@ Current guardrails:
 - `make rollout-summary ROLLOUT_JSON=reports/triage/current_rollout_streaks.json`: print suite + per-dataset rollout headline metrics
 - `make rollout-diff ROLLOUT_BEFORE=reports/triage/baseline_rollout_streaks.json ROLLOUT_AFTER=reports/triage/current_rollout_streaks.json`: print rollout metric deltas
 - `make build_data`: extract ISO-derived `data/` artifacts
+- `make guardrail-preflight`: fast gate (build + hard-row lock pack + seed==ref diff + float top-key diff)
+- `make guardrail-preflight-full`: full suite tests + guardrail diff checks
+- `make guardrail-baseline`: regenerate committed guardrail baseline fixtures under `tests/fixtures/guardrails/current_main/`
+- `make forensic-rows ARGS='--row <dataset>:<record>:<p>'`: deterministic per-row forensic report under `reports/triage/`
 
 Notes:
 - Prefer `make build/test/validate` (they run `python/setup.py build_ext --inplace --force` via `uv run`); avoid invoking `python/setup.py` directly.
 - If you touch collision/ledge code, run `tests/test_ledge_grab_treasuredbackkangaroo_regression.py`.
+- `make guardrail-baseline` is for intentional baseline updates only (after a reviewed mainline behavior change). Do not refresh it during normal iteration.
 
 Validation output snapshots:
 - Commit the latest suite reports under `reports/validation/` whenever you change core sim logic:
