@@ -141,6 +141,39 @@ def _shield_contact_without_body_conflict(contacts: np.ndarray, defender: int) -
     return None
 
 
+def _run_one_step_row(ds_path: Path, record: int, p: int) -> tuple[np.void, np.void, np.void]:
+    ds = read_dataset(str(ds_path))
+    samples = ds.samples
+    assert int(samples.shape[0]) > record, f"dataset too short for lock row: record={record}"
+    row = samples[record : record + 1]
+    seed = row["seed_t"][0]
+    ref = row["ref_t1"][0]
+
+    binding = pytest.importorskip("msl_binding")
+    sizes = binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    compare_stride = int(sizes["compare"])
+
+    seed_bytes = np.frombuffer(row["seed_t"].tobytes(order="C"), dtype=np.uint8).copy().reshape(1, seed_stride)
+    prev_input_bytes = np.frombuffer(row["prev_input_t"].tobytes(order="C"), dtype=np.uint8).copy().reshape(
+        1, input_stride
+    )
+    input_bytes = np.frombuffer(row["input_t"].tobytes(order="C"), dtype=np.uint8).copy().reshape(1, input_stride)
+    out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
+
+    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    try:
+        binding.reseed_seed(handle, seed_bytes)
+        binding.step_input(handle, prev_input_bytes, input_bytes)
+        binding.write_compare(handle, out_compare_bytes)
+    finally:
+        binding.destroy(handle)
+
+    out = out_compare_bytes.view(COMPARE_DTYPE).reshape(-1)[0]
+    return seed, ref, out
+
+
 @pytest.mark.integration
 @pytest.mark.parametrize(
     ("dataset_rel", "record", "p", "seed_action"),
@@ -793,3 +826,268 @@ def test_damage_exit_rows_clear_hitstun_on_non_damage_entry(
     assert int(out["hitlag"][0, p]) == int(ref["hitlag"][p])
     assert int(out["hitstun"][0, p]) == int(ref["hitstun"][p]) == 0
     assert int(out["state_flags"][0, p, 3] & 0x02) == int(ref["state_flags"][p, 3] & 0x02) == 0
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    (
+        "dataset_rel",
+        "record",
+        "p",
+        "seed_action",
+        "ref_action",
+        "ref_hitlag",
+        "ref_hitstun",
+        "ref_sf1",
+    ),
+    [
+        # Runtime fix target for this slice (strict parity).
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl",
+            3347,
+            0,
+            0x002A,  # EscapeF
+            0x004B,  # DamageHi1
+            3,
+            9,
+            0x30,
+        ),
+    ],
+)
+def test_runtime_hitlag_clusters_rows_resolve_to_exact_ref_t1(
+    dataset_rel: str,
+    record: int,
+    p: int,
+    seed_action: int,
+    ref_action: int,
+    ref_hitlag: int,
+    ref_hitstun: int,
+    ref_sf1: int,
+) -> None:
+    # Runtime-only lock pack for the selected hitlag/hitstun clusters.
+    # This test is the parity lock for the single runtime fix target in this slice (AGG 3347:0).
+    #
+    # Decomp ownership anchors:
+    # - fighter collision/contact gate + apply path: refs/melee/src/melee/ft/ftcoll.c::{
+    #   ftColl_8007B868,ftColl_80076ED8,ftColl_80076CBC}
+    # - item-vs-fighter collision/apply path: refs/melee/src/melee/it/itcoll.c::{
+    #   it_802703E8,it_80272460}
+    # - hitlag start/decrement ordering: refs/melee/src/melee/ft/fighter.c::{
+    #   Fighter_ProcessHit_8006D1EC,Fighter_8006A1BC}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    seed, ref, out = _run_one_step_row(dataset_path, record, p)
+
+    # Minimal causal context.
+    assert int(seed["action_id"][p]) == int(seed_action)
+    assert int(ref["action_id"][p]) == int(ref_action)
+    assert int(seed["hitlag"][p]) == 0
+    assert int(seed["hitstun"][p]) == 0
+    assert int(ref["hitlag"][p]) == int(ref_hitlag)
+    assert int(ref["hitstun"][p]) == int(ref_hitstun)
+    assert int(ref["state_flags"][p, 1]) == int(ref_sf1)
+
+    # AGG: row enters DamageHi1 from EscapeF under live laser context.
+    assert int(np.count_nonzero(seed["items"]["exists"])) > 0
+
+    # Exact t+1 parity lock.
+    assert int(out["action_id"][p]) == int(ref["action_id"][p]) == int(ref_action)
+    assert int(out["hitlag"][p]) == int(ref["hitlag"][p]) == int(ref_hitlag)
+    assert int(out["hitstun"][p]) == int(ref["hitstun"][p]) == int(ref_hitstun)
+    assert int(out["state_flags"][p, 1]) == int(ref["state_flags"][p, 1]) == int(ref_sf1)
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    (
+        "dataset_rel",
+        "record",
+        "p",
+        "seed_action",
+        "ref_action",
+        "out_action",
+        "ref_hitlag",
+        "out_hitlag",
+        "out_hitstun",
+        "ref_sf1",
+        "out_sf1",
+    ),
+    [
+        # Context-only rows (explicitly non-parity targets for this slice).
+        # Keep these as deterministic signatures to preserve triage context while AGG lands.
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl",
+            6206,
+            0,
+            0x002A,  # EscapeF
+            0x00B2,  # DamageFlyN
+            0x00B5,  # GuardSetOff
+            0,
+            4,
+            0,
+            0x01,
+            0x21,
+        ),
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/QuerulousGrandDinosaur.msl",
+            7173,
+            0,
+            0x0038,  # AttackS3LwS
+            0x0038,  # AttackS3LwS
+            0x0038,  # AttackS3LwS
+            0,
+            6,
+            0,
+            0x00,
+            0x20,
+        ),
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/QuerulousGrandDinosaur.msl",
+            8222,
+            1,
+            0x002B,  # EscapeB
+            0x002B,  # EscapeB
+            0x005A,  # DamageN2
+            0,
+            6,
+            52,
+            0x00,
+            0x30,
+        ),
+    ],
+)
+def test_runtime_hitlag_clusters_context_rows_keep_current_signatures(
+    dataset_rel: str,
+    record: int,
+    p: int,
+    seed_action: int,
+    ref_action: int,
+    out_action: int,
+    ref_hitlag: int,
+    out_hitlag: int,
+    out_hitstun: int,
+    ref_sf1: int,
+    out_sf1: int,
+) -> None:
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    seed, ref, out = _run_one_step_row(dataset_path, record, p)
+
+    # Context preconditions.
+    assert int(seed["action_id"][p]) == int(seed_action)
+    assert int(ref["action_id"][p]) == int(ref_action)
+    assert int(ref["hitlag"][p]) == int(ref_hitlag)
+    assert int(ref["state_flags"][p, 1]) == int(ref_sf1)
+
+    if "GracefulAttachedTurtle.msl" in dataset_rel:
+        assert int(np.count_nonzero(seed["items"]["exists"])) > 0
+        assert int(np.count_nonzero(ref["items"]["exists"])) > 0
+    if "QuerulousGrandDinosaur.msl" in dataset_rel:
+        assert int(np.count_nonzero(seed["items"]["exists"])) == 0
+        assert int(np.count_nonzero(ref["items"]["exists"])) == 0
+        assert int(seed["colanim_hit_status_x198c"][1]) == 1
+
+    # Context signature (non-parity by design for this slice).
+    assert int(out["action_id"][p]) == int(out_action)
+    assert int(out["hitlag"][p]) == int(out_hitlag)
+    assert int(out["hitstun"][p]) == int(out_hitstun)
+    assert int(out["state_flags"][p, 1]) == int(out_sf1)
+    assert (
+        int(out["action_id"][p]) != int(ref["action_id"][p])
+        or int(out["hitlag"][p]) != int(ref["hitlag"][p])
+        or int(out["hitstun"][p]) != int(ref["hitstun"][p])
+        or int(out["state_flags"][p, 1]) != int(ref["state_flags"][p, 1])
+    )
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    (
+        "dataset_rel",
+        "record",
+        "p",
+        "seed_action",
+        "ref_action",
+        "ref_hitlag",
+        "ref_hitstun",
+        "ref_sf1",
+    ),
+    [
+        # Negative controls adjacent to the target rows.
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl",
+            6205,
+            0,
+            0x002A,  # EscapeF
+            0x002A,  # EscapeF
+            0,
+            0,
+            0x00,
+        ),
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl",
+            3348,
+            0,
+            0x004B,  # DamageHi1
+            0x004B,  # DamageHi1
+            2,
+            9,
+            0x30,
+        ),
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/QuerulousGrandDinosaur.msl",
+            7172,
+            0,
+            0x0038,  # AttackS3LwS
+            0x0038,  # AttackS3LwS
+            0,
+            0,
+            0x00,
+        ),
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/QuerulousGrandDinosaur.msl",
+            8221,
+            1,
+            0x002B,  # EscapeB
+            0x002B,  # EscapeB
+            0,
+            0,
+            0x00,
+        ),
+    ],
+)
+def test_runtime_hitlag_clusters_negative_controls_remain_exact(
+    dataset_rel: str,
+    record: int,
+    p: int,
+    seed_action: int,
+    ref_action: int,
+    ref_hitlag: int,
+    ref_hitstun: int,
+    ref_sf1: int,
+) -> None:
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    seed, ref, out = _run_one_step_row(dataset_path, record, p)
+    assert int(seed["action_id"][p]) == int(seed_action)
+    assert int(ref["action_id"][p]) == int(ref_action)
+    assert int(ref["hitlag"][p]) == int(ref_hitlag)
+    assert int(ref["hitstun"][p]) == int(ref_hitstun)
+    assert int(ref["state_flags"][p, 1]) == int(ref_sf1)
+
+    assert int(out["action_id"][p]) == int(ref["action_id"][p]) == int(ref_action)
+    assert int(out["hitlag"][p]) == int(ref["hitlag"][p]) == int(ref_hitlag)
+    assert int(out["hitstun"][p]) == int(ref["hitstun"][p]) == int(ref_hitstun)
+    assert int(out["state_flags"][p, 1]) == int(ref["state_flags"][p, 1]) == int(ref_sf1)

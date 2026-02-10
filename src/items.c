@@ -9,6 +9,7 @@
 #include "anim_pose.h"
 #include "anim_timebase.h"
 #include "combat.h"
+#include "common_params.h"
 #include "char_params.h"
 #include "hitlist.h"
 #include "laser_params.h"
@@ -566,6 +567,57 @@ static inline uint8_t item_sphere_sphere_intersects_3d(float ax, float ay, float
   return (dx * dx + dy * dy + dz * dz) <= (rr * rr);
 }
 
+static inline float item_reflected_powershield_damage_lane(const MslBatch* batch, size_t owner_idx,
+                                                           float base_damage) {
+  if (batch == NULL || !(base_damage > 0.0f)) {
+    return base_damage;
+  }
+  // BRIDGE APPROXIMATION (runtime):
+  // Decomp owner path for reflected-item damage lane is per-item, not owner-action-derived:
+  // - GuardReflect builds ReflectDesc.x18_damage_mul from ftCommonData->x2AC.
+  //   refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_8009370C
+  // - Reflect collision writes item->xC6C = fp->ReflectAttr.x1A34_damageMul.
+  //   refs/melee/src/melee/ft/ftcoll.c::ftColl_80077464
+  // - Item reflect apply rewrites HitCapsule.unk_count as:
+  //     (u32)(hit.damage * item->xC6C + 0.99f), then calls it_80272460.
+  //   refs/melee/src/melee/it/item.c::Item_80269F14
+  //   refs/melee/src/melee/it/itcoll.c::it_80272460
+  // Current sim proxy:
+  // - Uses owner reflect context snapshot (action/prev_action/state_flags) as a temporary bridge
+  //   for "item was recently reflected with powershield semantics".
+  // - This is intentionally narrow and only selects when applying reflected-lane damage shaping.
+  //
+  // TODO(bridge/items): Promote/persist a per-item reflect damage-mult lane (item->xC6C analog)
+  // in state so this helper no longer depends on owner action/flags snapshots.
+  enum { MSL_STATE_FLAGS_STRIDE_LOCAL = MSL_STATE_FLAGS_BYTES };
+  enum { MSL_STATE_FLAGS_221C_INDEX_LOCAL = 3 };
+  enum { MSL_STATE_FLAG_221C_POWERSHIELD_ACTIVE = 0x20 };
+  const uint8_t flags_221c = batch->state.state_flags
+      [owner_idx * MSL_STATE_FLAGS_STRIDE_LOCAL + (size_t)MSL_STATE_FLAGS_221C_INDEX_LOCAL];
+  const uint8_t owner_reflect_context =
+      (batch->state.action_id[owner_idx] == (uint16_t)MSL_ACT_GUARD_REFLECT ||
+       batch->state.prev_action_id[owner_idx] == (uint16_t)MSL_ACT_GUARD_REFLECT ||
+       (flags_221c & (uint8_t)MSL_STATE_FLAG_221C_POWERSHIELD_ACTIVE) != 0u)
+          ? 1u
+          : 0u;
+  if (!owner_reflect_context) {
+    return base_damage;
+  }
+  const MslCommonParams* c = msl_common_params();
+  if (c == NULL) {
+    return base_damage;
+  }
+  float tmp = base_damage * c->powershield_reflect_damage_mul + 0.99f;
+  uint32_t dmg_i = 0u;
+  if (tmp > 0.0f) {
+    dmg_i = (uint32_t)tmp;
+  }
+  if (dmg_i == 0u) {
+    dmg_i = 1u;
+  }
+  return (float)dmg_i;
+}
+
 static void laser_spawn_from_fighter(MslBatch* batch, int bi, int owner, const MslLaserParams* lp,
                                      uint8_t spawn_state) {
   if (batch == NULL || lp == NULL) {
@@ -985,7 +1037,8 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
           }
 
           // Regular shield hit: apply defender-side shield effects and despawn the laser.
-          const float dmg = (laser_state == 0u) ? lp->damage : lp->state1_damage;
+          float dmg = (laser_state == 0u) ? lp->damage : lp->state1_damage;
+          dmg = item_reflected_powershield_damage_lane(batch, o_idx, dmg);
           const int8_t shd = (laser_state == 0u) ? lp->shield_damage : lp->state1_shield_damage;
           combat_apply_item_shield_hit(batch, bi, owner, def, batch->state.item_attack_id[ii],
                                        batch->state.item_attack_instance[ii], dmg, shd);
@@ -1168,7 +1221,8 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
       // - Fighter_ProcessHit_8006D1EC (percent add, hitlag, hitstun, damage-state entry)
       // - ftColl_80076CBC (getEnvDmg pattern)
       // refs/melee/src/melee/ft/fighter.c and refs/melee/src/melee/ft/ftcoll.c
-      const float dmg = (laser_state == 0u) ? lp->damage : lp->state1_damage;
+      float dmg = (laser_state == 0u) ? lp->damage : lp->state1_damage;
+      dmg = item_reflected_powershield_damage_lane(batch, o_idx, dmg);
       const uint16_t angle = (laser_state == 0u) ? lp->angle : lp->state1_angle;
       const uint16_t kbg = (laser_state == 0u) ? lp->kbg : lp->state1_kbg;
       const uint16_t wsk = (laser_state == 0u) ? lp->wsk : lp->state1_wsk;

@@ -150,6 +150,8 @@ typedef struct MslCommonParams {
   float powershield_reflect_trigger_min;      // p_ftCommonData->x18
   uint8_t powershield_reflect_window_frames;  // p_ftCommonData->x2A0
   uint8_t powershield_reflect_frames;         // p_ftCommonData->x2A4 (rounded)
+  float powershield_reflect_damage_mul;       // p_ftCommonData->x2AC
+  float powershield_reflect_speed_mul;        // p_ftCommonData->x2B0
   uint8_t powershield_reflect_total_frames;   // p_ftCommonData->x2B4 (rounded)
   uint8_t _pad_u8_2[1];
 
