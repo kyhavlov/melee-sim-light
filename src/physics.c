@@ -698,6 +698,16 @@ void physics_integrate(MslBatch* batch) {
           vx_self = gr_vel;
         }
       }
+      if (on_ground) {
+        // Decomp: grounded movement helpers always run ftCommon_ApplyGroundMovement, which writes
+        // fp->self_vel.x from fp->gr_vel each frame after applying ground accel/friction.
+        // Our seed/output `speed_air_x_self` lane maps fp->self_vel.x, so keep it synced on
+        // grounded frames from the resolved ground velocity used for integration.
+        // refs/melee/src/melee/ft/ftcommon.c::ftCommon_ApplyGroundMovement
+        // refs/melee/src/melee/ft/ft_081B.c::{ft_80084F3C,ft_80085030,ft_800850E0}
+        batch->state.speed_air_x_self[idx] = vx_self;
+      }
+
       const float vy_self = batch->state.speed_y_self[idx];
       const float vx = vx_self + batch->state.speed_x_attack[idx];
       const float vy_integrate = vy_self + batch->state.speed_y_attack[idx];
