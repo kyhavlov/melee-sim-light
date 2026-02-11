@@ -1519,9 +1519,34 @@ def _main_impl(args) -> None:
                 # Attribution corroboration: only trim stale suppression for attacker/defender pairs
                 # where replay-visible ownership points to this attacker port.
                 #
-                # Slippi post-frame `last_hit_by` mirrors fighter->x2088 and is replay-visible:
-                # refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
-                if int(post_last_hit_by[fi, defender]) != attacker:
+                # Slippi post-frame ownership lanes:
+                # - `last_hit_by` mirrors fighter->x2088 (port index):
+                #   refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
+                # - `last_hit_by_instance` mirrors fighter->x18EC (instance id):
+                #   refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
+                #
+                # For the singles (2p) target domain, allow a narrow fallback when `last_hit_by`
+                # is unmapped and `last_hit_by_instance` does not map to any live fighter iid this
+                # frame (stale owner lane). In 2p, the non-defender slot is the only valid attacker.
+                #
+                # Keep this fallback out of early/common grounded action space (<= AttackLw4), where
+                # seeded suppression frequently represents valid same-victim rehit blocking.
+                # refs/melee/src/melee/ft/chara/ftCommon/forward.h (ftCommon_MotionState)
+                # src/action_ids.h::MSL_ACT_ATTACK_LW4 (0x0040)
+                defender_action = int(post_action_id[fi, defender])
+                last_hit_by_owner = int(post_last_hit_by[fi, defender])
+                owner_iid = int(post_instance_hit_by[fi, defender])
+                owner_iid_matches_live = any(
+                    owner_iid == int(post_instance_id[fi, slot]) for slot in range(num_players)
+                )
+                fallback_singles_unmapped_owner = (
+                    num_players == 2
+                    and attacker != defender
+                    and defender_action > 0x0040
+                    and last_hit_by_owner >= num_players
+                    and not owner_iid_matches_live
+                )
+                if last_hit_by_owner != attacker and not fallback_singles_unmapped_owner:
                     continue
                 hitlag_pre = int(post_hitlag[fi, defender])
                 if hitlag_pre > 0:
@@ -1529,8 +1554,6 @@ def _main_impl(args) -> None:
                 hitstun_pre = int(post_hitstun[fi, defender])
                 if hitstun_pre > 0:
                     hitstun_pre -= 1
-                defender_action = int(post_action_id[fi, defender])
-
                 # Neutral non-guard stale suppression (existing bridge policy).
                 neutral_non_guard = (
                     hitlag_pre == 0
@@ -1558,8 +1581,17 @@ def _main_impl(args) -> None:
 
                 if not (neutral_non_guard or damage_state_bridge):
                     continue
-                hitlist_cd[fi, attacker, :, defender] = np.uint16(0)
-                hitlist_iid[fi, attacker, :, defender] = np.uint16(0)
+                # Only trim stale indefinite suppression lanes (0xFFFF). Finite cooldown lanes are
+                # replay-causal and should decay naturally.
+                #
+                # Hitlist cooldown ownership:
+                # - 0xFFFF is the "indefinite" sentinel used by hitlist victim suppression.
+                #   refs/melee/src/melee/lb/lbcollision.c::lbColl_80008688
+                stale_indef_mask = hitlist_cd[fi, attacker, :, defender] == np.uint16(0xFFFF)
+                if not bool(np.any(stale_indef_mask)):
+                    continue
+                hitlist_cd[fi, attacker, stale_indef_mask, defender] = np.uint16(0)
+                hitlist_iid[fi, attacker, stale_indef_mask, defender] = np.uint16(0)
 
     samples["seed_t"]["combat_hitlist_cd"] = hitlist_cd[:-1]
     samples["seed_t"]["combat_hitlist_victim_iid"] = hitlist_iid[:-1]
