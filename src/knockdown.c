@@ -14,6 +14,7 @@
 #include "common_params.h"
 #include "input_axis.h"
 #include "msl_math.h"
+#include "state_flags.h"
 
 enum { MSL_FTPART_HIPN = 4 };  // refs/melee/src/melee/ft/forward.h::Fighter_Part (FtPart_HipN)
 
@@ -958,12 +959,7 @@ static inline uint8_t damage_iasa_lockout_x221c_b6(const MslBatch* batch, size_t
   // Decomp: grounded Damage callback gates (Damage_Anim and Damage_IASA) branch on fp->x221C_b6.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{ftCo_Damage_Anim,ftCo_Damage_IASA}
   //
-  // Slippi state_flags packs x221C high-byte bits in state_flags[3] (MSB-first bit numbering):
-  // x221C_b6 == high-byte bit1 == mask 0x02.
-  enum { MSL_STATE_FLAGS_221C_INDEX = 3 };
-  enum { MSL_STATE_FLAG_221C_B6 = 0x02 };
-  const size_t fi = idx * (size_t)MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_221C_INDEX;
-  return (batch->state.state_flags[fi] & (uint8_t)MSL_STATE_FLAG_221C_B6) ? 1u : 0u;
+  return msl_state_flags_221c_b6_at(batch->state.state_flags, idx);
 }
 
 static inline uint8_t is_damage_air_submotion(uint32_t smid) {

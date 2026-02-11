@@ -6,6 +6,7 @@
 #include "char_params.h"
 #include "common_params.h"
 #include "input_axis.h"
+#include "state_flags.h"
 
 static inline uint8_t physics_action_skip_common_air_helper_first_frame(uint16_t action_id,
                                                                         int16_t action_frame) {
@@ -274,6 +275,34 @@ static inline uint8_t physics_action_is_shine_air(uint16_t action_id) {
              : 0;
 }
 
+static inline uint8_t physics_action_is_damage_fly(uint16_t action_id) {
+  switch (action_id) {
+    case MSL_ACT_DAMAGE_FLY_HI:
+    case MSL_ACT_DAMAGE_FLY_N:
+    case MSL_ACT_DAMAGE_FLY_LW:
+    case MSL_ACT_DAMAGE_FLY_TOP:
+    case MSL_ACT_DAMAGE_FLY_ROLL:
+      return 1u;
+    default:
+      return 0u;
+  }
+}
+
+static inline uint8_t physics_damage_iasa_lockout_x221c_b6(const MslBatch* batch, size_t idx) {
+  if (batch == NULL) {
+    return 0u;
+  }
+  // Decomp: DamageFly/DamageFlyRoll Phys callbacks branch on fp->x221C_b6:
+  // - x221C_b6==0: ft_80084DB0 (fall helper + drift)
+  // - x221C_b6==1: ft_80084EEC (fall + aerial friction)
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{
+  //   ftCo_DamageFly_Phys,ftCo_DamageFlyRoll_Phys
+  // }
+  // refs/melee/src/melee/ft/ft_081B.c::{ft_80084DB0,ft_80084EEC}
+  //
+  return msl_state_flags_221c_b6_at(batch->state.state_flags, idx);
+}
+
 static inline float physics_apply_shine_air_x_clamp(const MslCharParams* ch,
                                                     const MslCommonParams* c, float vel_x) {
   // Decomp: aerial Reflector (SpecialAirLw*) uses `ftCommon_8007CF58`, which sets fp->x74_anim_vel.x to a
@@ -303,6 +332,7 @@ static inline uint8_t physics_action_use_pre_integration_common_air_gravity(uint
   //
   // Until DamageFall's full physics path is modeled (including its interaction with hitstun/KB),
   // keep the ordering fix for locomotion/attackair states but exclude DamageFall here.
+  // Note: DamageFly is handled via its own x221C_b6-gated branch below.
   if (!msl_action_allows_fastfall(action_id)) {
     return 0;
   }
@@ -403,6 +433,13 @@ void physics_integrate(MslBatch* batch) {
       const uint16_t action_id = batch->state.action_id[idx];
       const float vy_self_pre = batch->state.speed_y_self[idx];
       const int16_t action_frame = batch->state.action_frame[idx];
+      const uint8_t is_damage_fly = physics_action_is_damage_fly(action_id);
+      const uint8_t damage_iasa_lockout =
+          is_damage_fly ? physics_damage_iasa_lockout_x221c_b6(batch, idx) : 0u;
+      const uint8_t damage_uses_common_air_helper =
+          (is_damage_fly && !damage_iasa_lockout) ? 1u : 0u;
+      float damageflyroll_post_integrate_vy = 0.0f;
+      uint8_t damageflyroll_defer_vy_write = 0u;
 
       // Thrown victims:
       // - Decomp thrown victim Phys/Coll callbacks are empty, and victim translation is driven by an
@@ -460,10 +497,49 @@ void physics_integrate(MslBatch* batch) {
                                                  &batch->state.speed_air_x_self[idx],
                                                  &batch->state.speed_y_self[idx]);
               }
-            } else if (physics_action_use_pre_integration_common_air_gravity(action_id)) {
+            } else if (damage_iasa_lockout) {
+              // DamageFly/DamageFlyRoll x221C_b6 path (`ft_80084EEC`): apply gravity + terminal
+              // clamp and
+              // aerial friction (no fastfall latch, no drift accel from stick).
+              //
+              // Decomp scope:
+              // - ftCo_DamageFly_Phys and ftCo_DamageFlyRoll_Phys branch to ft_80084EEC when
+              //   x221C_b6 is set.
+              // - DamageAir* still routes through the broader Damage state lane and remains
+              //   intentionally out of this runtime-only ownership slice for now.
+              // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{
+              //   ftCo_DamageFly_Phys,ftCo_DamageFlyRoll_Phys
+              // }
+              // refs/melee/src/melee/ft/ft_081B.c::ft_80084EEC
               const MslCharParams* phys = msl_char_params(batch->state.char_id[idx]);
               if (phys != NULL) {
-                const uint8_t allow_fastfall = msl_action_allows_fastfall(action_id);
+                float next_vy = vy_self_pre - phys->grav;
+                if (next_vy < -phys->terminal_vel) {
+                  next_vy = -phys->terminal_vel;
+                }
+                if (action_id == (uint16_t)MSL_ACT_DAMAGE_FLY_ROLL) {
+                  // Temporary compatibility bridge: keep DamageFlyRoll x221C_b6 vertical-lane
+                  // ownership but defer the write until after current-frame integration in this
+                  // simplified one-step lane.
+                  // TODO: remove this defer once decomp-owned DamageFlyRoll Phys/Coll ordering
+                  // parity is fully modeled in runtime (ftCo_DamageFlyRoll_Phys /
+                  // ftCo_DamageFlyRoll_Coll).
+                  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{
+                  //   ftCo_DamageFlyRoll_Phys,ftCo_DamageFlyRoll_Coll
+                  // }
+                  damageflyroll_post_integrate_vy = next_vy;
+                  damageflyroll_defer_vy_write = 1u;
+                } else {
+                  batch->state.speed_y_self[idx] = next_vy;
+                }
+              }
+            } else if (physics_action_use_pre_integration_common_air_gravity(action_id) ||
+                       damage_uses_common_air_helper) {
+              const MslCharParams* phys = msl_char_params(batch->state.char_id[idx]);
+              if (phys != NULL) {
+                const uint8_t allow_fastfall =
+                    (msl_action_allows_fastfall(action_id) || damage_uses_common_air_helper) ? 1u
+                                                                                              : 0u;
 
                 // Fastfall latch (ftCommon_CheckFallFast) uses the pre-gravity `self_vel.y`.
                 // refs/melee/src/melee/ft/ftcommon.c::ftCommon_CheckFallFast
@@ -515,7 +591,14 @@ void physics_integrate(MslBatch* batch) {
               if (physics_action_is_shine_air(action_id)) {
                 batch->state.speed_air_x_self[idx] =
                     physics_apply_shine_air_x_clamp(ch, c, batch->state.speed_air_x_self[idx]);
-              } else if (physics_action_uses_common_air_drift(action_id)) {
+              } else if (damage_iasa_lockout) {
+                // DamageFly/DamageFlyRoll x221C_b6 path (`ft_80084EEC`) uses friction-only x
+                // update.
+                // refs/melee/src/melee/ft/ft_081B.c::ft_80084EEC
+                batch->state.speed_air_x_self[idx] =
+                    air_apply_friction_step(batch->state.speed_air_x_self[idx], ch->aerial_friction);
+              } else if (physics_action_uses_common_air_drift(action_id) ||
+                         damage_uses_common_air_helper) {
                 batch->state.speed_air_x_self[idx] = physics_apply_common_air_drift(
                     ch, c, action_id, batch->state.fallspecial_xc[idx], stick_x,
                     batch->state.speed_air_x_self[idx]);
@@ -718,6 +801,10 @@ void physics_integrate(MslBatch* batch) {
       batch->state.pos_x[idx] += vx;
       batch->state.pos_y[idx] += vy_integrate;
 
+      if (damageflyroll_defer_vy_write) {
+        batch->state.speed_y_self[idx] = damageflyroll_post_integrate_vy;
+      }
+
       // Post-integration gravity update for states we intentionally keep "seed-driven" for current
       // frame displacement (notably DamageFall; see helper docs above).
       if (!on_ground && !physics_is_match_flow_airborne(action_id) &&
@@ -744,6 +831,7 @@ void physics_integrate(MslBatch* batch) {
           batch->state.speed_y_self[idx] = next_vy;
         }
       }
+
     }
   }
 }
