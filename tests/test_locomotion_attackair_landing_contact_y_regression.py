@@ -271,18 +271,88 @@ def test_landing_basic_rows_keep_contact_y_parity_for_jump_and_specialairn_famil
     [
         (
             "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-            "TreasuredBackKangaroo.msl",
-            2678,
+            "AttachedGoodNaturedGuanaco.msl",
+            1334,
             1,
-            27,  # JumpAerialF
+            28,  # JumpAerialB
             42,  # Landing
         ),
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
+            "GracefulAttachedTurtle.msl",
+            3486,
+            0,
+            28,  # JumpAerialB
+            42,  # Landing
+        ),
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
+            "QuerulousGrandDinosaur.msl",
+            2350,
+            1,
+            28,  # JumpAerialB
+            42,  # Landing
+        ),
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
+            "QuerulousGrandDinosaur.msl",
+            3306,
+            1,
+            28,  # JumpAerialB
+            42,  # Landing
+        ),
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
+            "QuerulousGrandDinosaur.msl",
+            5074,
+            1,
+            28,  # JumpAerialB
+            42,  # Landing
+        ),
+    ],
+)
+def test_landing_basic_rows_keep_contact_y_parity_for_jumpaerialb_family(
+    dataset_rel: str, record: int, p: int, seed_action: int, ref_action: int
+) -> None:
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    seed, out, ref = _step_one_row(dataset_path, record, p)
+
+    # Decomp ownership:
+    # - JumpAerial collision callback routes through ft_80082B1C and enters Landing_Enter_Basic.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::ftCo_JumpAerial_Coll
+    # refs/melee/src/melee/ft/ft_081B.c::ft_80082B1C
+    assert int(seed["action_id"][p]) == int(seed_action)
+    assert int(ref["action_id"][p]) == int(ref_action)
+    assert int(seed["on_ground"][p]) == 0
+
+    assert int(out["action_id"][p]) == int(ref["action_id"][p]) == 42
+    assert int(out["on_ground"][p]) == int(ref["on_ground"][p]) == 1
+    assert abs(float(out["pos_y"][p]) - float(ref["pos_y"][p])) <= 2e-4
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    ("dataset_rel", "record", "p", "seed_action", "ref_action"),
+    [
         (
             "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
             "GracefulAttachedTurtle.msl",
             10477,
             1,
             86,  # DamageAir3
+            42,  # Landing
+        ),
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
+            "TreasuredBackKangaroo.msl",
+            2678,
+            1,
+            27,  # JumpAerialF
             42,  # Landing
         ),
     ],
@@ -305,3 +375,66 @@ def test_landing_basic_contact_y_context_controls_remain_outside_bridge_scope(
     assert int(out["action_id"][p]) == int(ref["action_id"][p]) == 42
     assert np.isfinite(float(out["pos_y"][p]))
     assert np.isfinite(float(ref["pos_y"][p]))
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    ("dataset_rel", "record", "p", "seed_action", "ref_action"),
+    [
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
+            "QuerulousGrandDinosaur.msl",
+            10216,
+            0,
+            27,  # JumpAerialF
+            42,  # Landing
+        ),
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
+            "QuerulousGrandDinosaur.msl",
+            1255,
+            0,
+            236,  # EscapeAir
+            43,  # LandingFallSpecial
+        ),
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
+            "AttachedGoodNaturedGuanaco.msl",
+            2378,
+            0,
+            236,  # EscapeAir
+            43,  # LandingFallSpecial
+        ),
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
+            "TreasuredBackKangaroo.msl",
+            5671,
+            0,
+            27,  # JumpAerialF
+            42,  # Landing
+        ),
+    ],
+)
+def test_landing_rows_keep_self_vel_x_synced_with_ground_velocity(
+    dataset_rel: str, record: int, p: int, seed_action: int, ref_action: int
+) -> None:
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    seed, out, ref = _step_one_row(dataset_path, record, p)
+
+    # Decomp ownership:
+    # - Grounding path keeps gr_vel and self_vel.x aligned (`gr_vel = self_vel.x`).
+    # refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007D6A4
+    # - Grounded movement writes self_vel.x from gr_vel each frame.
+    # refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate
+    assert int(seed["action_id"][p]) == int(seed_action)
+    assert int(ref["action_id"][p]) == int(ref_action)
+    assert int(seed["on_ground"][p]) == 0
+    assert int(out["on_ground"][p]) == int(ref["on_ground"][p]) == 1
+
+    assert abs(float(out["speed_ground_x_self"][p]) - float(ref["speed_ground_x_self"][p])) <= 1e-6
+    assert abs(float(out["speed_air_x_self"][p]) - float(ref["speed_air_x_self"][p])) <= 1e-6

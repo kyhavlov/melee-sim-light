@@ -238,6 +238,8 @@ static inline uint8_t landing_contact_y_bridge_matches_source(uint16_t source_ac
   // Additional ft_80082B1C -> Landing_Enter_Basic callback family:
   // - Jump ground-collision callback path (JumpF/B -> Landing).
   //   refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c::ftCo_Jump_Coll
+  // - Aerial jump collision callback path (JumpAerialB -> Landing in observed suite rows).
+  //   refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::ftCo_JumpAerial_Coll
   // - Fox/Falco Blaster aerial collision path via AirCatchHit (SpecialAirN* -> Landing).
   //   refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::{
   //     ftFx_SpecialAirNStart_Coll,ftFx_SpecialAirNLoop_Coll,ftFx_SpecialAirNEnd_Coll
@@ -246,6 +248,7 @@ static inline uint8_t landing_contact_y_bridge_matches_source(uint16_t source_ac
   //   refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::ftCo_Landing_Enter_Basic
   if (land_act == (uint16_t)MSL_ACT_LANDING &&
       (source_act == (uint16_t)MSL_ACT_JUMP_F || source_act == (uint16_t)MSL_ACT_JUMP_B ||
+       source_act == (uint16_t)MSL_ACT_JUMP_AERIAL_B ||
        source_act == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_N_START ||
        source_act == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_N_LOOP ||
        source_act == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_N_END ||
@@ -929,9 +932,18 @@ static inline void enter_landing_action_from_air(MslBatch* batch, const MslCharP
   const MslCommonParams* c = msl_common_params();
 
   // Landed this frame.
-  // Transfer air X to ground X so friction/traction apply next frame.
-  batch->state.speed_ground_x_self[idx] = batch->state.speed_air_x_self[idx];
-  batch->state.speed_air_x_self[idx] = 0.0f;
+  // Decomp grounding keeps self_vel.x and gr_vel aligned on ground entry:
+  // - ftCommon_8007D6A4 sets `fp->gr_vel = fp->self_vel.x` (does not zero self_vel.x).
+  //   refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007D6A4
+  // - Ground update keeps `fp->self_vel.x` synced from `fp->gr_vel` each frame.
+  //   refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate
+  //
+  // Keep both seed/output lanes synchronized at landing entry:
+  // - speed_ground_x_self <-> fp->gr_vel
+  // - speed_air_x_self <-> fp->self_vel.x
+  const float landing_self_vel_x = batch->state.speed_air_x_self[idx];
+  batch->state.speed_ground_x_self[idx] = landing_self_vel_x;
+  batch->state.speed_air_x_self[idx] = landing_self_vel_x;
   // AttackAir landing-entry compatibility bridge:
   // - AttackAir_Coll resolves floor contact, then transitions through
   //   ftCo_LandingAir_EnterWithLag / ftCo_Landing_Enter_Basic.
