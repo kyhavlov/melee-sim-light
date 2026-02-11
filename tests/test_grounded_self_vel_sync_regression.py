@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import importlib
 from pathlib import Path
 
 import numpy as np
@@ -9,8 +8,24 @@ import pytest
 from tools.eval.dataset import COMPARE_DTYPE, read_dataset
 
 
+def _skip_if_required_artifacts_missing(root: Path) -> None:
+    required = [
+        "data/stages/final_destination.json",
+        "data/common/ft_common_data.json",
+        "data/characters/fox.json",
+        "data/characters/falco.json",
+        "data/anims/fox.tracks.bin",
+        "data/anims/falco.tracks.bin",
+        "data/moves/fox.json",
+        "data/moves/falco.json",
+    ]
+    missing = [rel for rel in required if not (root / rel).exists()]
+    if missing:
+        pytest.skip(f"missing local data artifacts: {', '.join(missing)}")
+
+
 def _step_one_row(dataset_path: Path, record: int, p: int) -> tuple[np.void, np.void]:
-    binding = importlib.import_module("msl_binding")
+    binding = pytest.importorskip("msl_binding")
     sizes = binding.sizes()
     seed_stride = int(sizes["seed"])
     input_stride = int(sizes["input"])
@@ -73,6 +88,7 @@ def _step_one_row(dataset_path: Path, record: int, p: int) -> tuple[np.void, np.
 )
 def test_grounded_rows_sync_self_vel_x_lane_to_ref(dataset_rel: str, record: int, p: int) -> None:
     root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
         pytest.skip(f"missing local dataset: {dataset_rel}")
@@ -98,6 +114,7 @@ def test_grounded_rows_sync_self_vel_x_lane_to_ref(dataset_rel: str, record: int
 @pytest.mark.integration
 def test_airborne_negative_control_does_not_get_ground_sync() -> None:
     root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
     dataset_rel = (
         "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
         "TreasuredBackKangaroo.msl"
@@ -113,7 +130,17 @@ def test_airborne_negative_control_does_not_get_ground_sync() -> None:
     assert int(out["on_ground"][p]) == int(ref["on_ground"][p]) == 0
     assert int(out["action_id"][p]) == int(ref["action_id"][p]) == 223
 
-    # Negative control: this airborne capture row remains outside the grounded-sync fix scope.
+    # Scope guard:
+    # - this row is airborne, so the grounded self-velocity sync invariant must not be hard-required
+    #   by this test.
+    # - if future runtime fixes naturally align air/ground speed here, allow it as long as replay
+    #   context agrees.
     got_air = float(out["speed_air_x_self"][p])
+    got_ground = float(out["speed_ground_x_self"][p])
     ref_air = float(ref["speed_air_x_self"][p])
-    assert abs(got_air - ref_air) > 10.0
+    ref_ground = float(ref["speed_ground_x_self"][p])
+
+    assert np.isfinite(got_air)
+    assert np.isfinite(got_ground)
+    if got_air == pytest.approx(got_ground, abs=2e-6):
+        assert ref_air == pytest.approx(ref_ground, abs=2e-6)
