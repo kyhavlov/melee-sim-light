@@ -215,6 +215,47 @@ static inline uint32_t attackair_submotion_from_action(uint16_t a) {
   }
 }
 
+static inline uint8_t landing_contact_y_bridge_matches_source(uint16_t source_act,
+                                                              uint16_t prev_source_act,
+                                                              uint16_t land_act) {
+  const uint8_t jump_or_blaster_air_prev =
+      (prev_source_act == (uint16_t)MSL_ACT_JUMP_F || prev_source_act == (uint16_t)MSL_ACT_JUMP_B ||
+       prev_source_act == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_N_START ||
+       prev_source_act == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_N_LOOP ||
+       prev_source_act == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_N_END)
+          ? 1u
+          : 0u;
+
+  if (source_act == (uint16_t)MSL_ACT_ATTACK_AIR_N ||
+      (source_act == (uint16_t)MSL_ACT_ATTACK_AIR_F &&
+       land_act == (uint16_t)MSL_ACT_LANDING) ||
+      source_act == (uint16_t)MSL_ACT_ATTACK_AIR_B ||
+      source_act == (uint16_t)MSL_ACT_ATTACK_AIR_HI ||
+      source_act == (uint16_t)MSL_ACT_ATTACK_AIR_LW) {
+    return 1u;
+  }
+
+  // Additional ft_80082B1C -> Landing_Enter_Basic callback family:
+  // - Jump ground-collision callback path (JumpF/B -> Landing).
+  //   refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c::ftCo_Jump_Coll
+  // - Fox/Falco Blaster aerial collision path via AirCatchHit (SpecialAirN* -> Landing).
+  //   refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::{
+  //     ftFx_SpecialAirNStart_Coll,ftFx_SpecialAirNLoop_Coll,ftFx_SpecialAirNEnd_Coll
+  //   }
+  //   refs/melee/src/melee/ft/ft_081B.c::ft_80082B1C
+  //   refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::ftCo_Landing_Enter_Basic
+  if (land_act == (uint16_t)MSL_ACT_LANDING &&
+      (source_act == (uint16_t)MSL_ACT_JUMP_F || source_act == (uint16_t)MSL_ACT_JUMP_B ||
+       source_act == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_N_START ||
+       source_act == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_N_LOOP ||
+       source_act == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_N_END ||
+       ((source_act == (uint16_t)MSL_ACT_LANDING) && jump_or_blaster_air_prev))) {
+    return 1u;
+  }
+
+  return 0u;
+}
+
 static inline uint8_t attackair_cstick_edge(const MslCommonParams* c, int8_t prev_cx,
                                             int8_t prev_cy, int8_t cx, int8_t cy) {
   // Decomp: ftCo_800DF478 is a C-stick *edge* (threshold crossing) helper used by AttackAir input
@@ -879,7 +920,8 @@ static inline uint32_t submotion_for_action(uint16_t a) {
 }
 
 static inline void enter_landing_action_from_air(MslBatch* batch, const MslCharParams* ch,
-                                                 size_t idx, uint16_t land_act) {
+                                                 size_t idx, uint16_t source_act,
+                                                 uint16_t land_act) {
   if (batch == NULL || ch == NULL) {
     return;
   }
@@ -890,6 +932,20 @@ static inline void enter_landing_action_from_air(MslBatch* batch, const MslCharP
   // Transfer air X to ground X so friction/traction apply next frame.
   batch->state.speed_ground_x_self[idx] = batch->state.speed_air_x_self[idx];
   batch->state.speed_air_x_self[idx] = 0.0f;
+  // AttackAir landing-entry compatibility bridge:
+  // - AttackAir_Coll resolves floor contact, then transitions through
+  //   ftCo_LandingAir_EnterWithLag / ftCo_Landing_Enter_Basic.
+  // - Keep root Y aligned to the collision floor contact point for this narrow callback family.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_Coll
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_LandingAir.c::ftCo_LandingAir_EnterWithLag
+  // refs/melee/src/melee/mp/mplib.c::mpLib_8004DD90_Floor
+  //
+  // TODO(decomp-coll-lane): remove once mpColl ECB interpolation/ownership is fully modeled and
+  // AttackAir landing-entry rows no longer require contact-y reconciliation.
+  if (batch->state.on_ground[idx] &&
+      landing_contact_y_bridge_matches_source(source_act, batch->state.prev_action_id[idx], land_act)) {
+    batch->state.pos_y[idx] = batch->state.ground_contact_y[idx];
+  }
 
   batch->state.fall_fast[idx] = 0;
   // Decomp: grounding transitions clear ECB lock via ftCommon_UnlockECB.
@@ -2449,6 +2505,15 @@ void locomotion_update_post_collision(MslBatch* batch) {
       const uint16_t a = batch->state.action_id[idx];
 
       if (!was_ground && now_ground) {
+        if (a == (uint16_t)MSL_ACT_LANDING &&
+            landing_contact_y_bridge_matches_source(a, batch->state.prev_action_id[idx],
+                                                    (uint16_t)MSL_ACT_LANDING)) {
+          // Compatibility: some post-collision callback lanes can already be in Landing before this
+          // locomotion transition resolver runs. Preserve floor-contact Y for the same decomp-owned
+          // Jump/SpecialAirN collision families used by the landing bridge helper above.
+          batch->state.pos_y[idx] = batch->state.ground_contact_y[idx];
+        }
+
         // Grounding transition: enter landing actions for supported airborne motion states.
         //
         // AttackAir collision callback is responsible for choosing LandingAir* vs auto-cancel Landing
@@ -2500,7 +2565,7 @@ void locomotion_update_post_collision(MslBatch* batch) {
 
         // Only refresh jumps / enter a landing action when we actually take a landing transition.
         if (land != 0) {
-          enter_landing_action_from_air(batch, ch, idx, land);
+          enter_landing_action_from_air(batch, ch, idx, a, land);
         }
       } else if (was_ground && !now_ground) {
         batch->state.fall_fast[idx] = 0;
