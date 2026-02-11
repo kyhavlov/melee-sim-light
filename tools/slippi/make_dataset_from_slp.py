@@ -95,6 +95,47 @@ def _port_name(port_1based: int) -> str:
         raise ValueError(f"port must be in 1..4, got {port_1based}")
     return f"P{port_1based}"
 
+
+def _seed_bridge_owner_matches_attacker(
+    *,
+    num_players: int,
+    attacker: int,
+    defender: int,
+    defender_action: int,
+    act_attack_lw4: int,
+    last_hit_by_owner: int,
+    owner_iid: int,
+    live_instance_ids: np.ndarray,
+) -> bool:
+    if int(last_hit_by_owner) == int(attacker):
+        return True
+    owner_iid_matches_live = bool(np.any(np.asarray(live_instance_ids, dtype=np.uint16) == np.uint16(owner_iid)))
+    # TODO: temporary singles-only seed bridge; replace with decomp-owned ownership lane once available.
+    fallback_singles_unmapped_owner = (
+        int(num_players) == 2
+        and int(attacker) != int(defender)
+        and int(defender_action) > int(act_attack_lw4)
+        and int(last_hit_by_owner) >= int(num_players)
+        and not owner_iid_matches_live
+    )
+    return bool(fallback_singles_unmapped_owner)
+
+
+def _seed_bridge_trim_indefinite_lanes(
+    *,
+    hitlist_cd: np.ndarray,
+    hitlist_iid: np.ndarray,
+    fi: int,
+    attacker: int,
+    defender: int,
+) -> bool:
+    stale_indef_mask = hitlist_cd[fi, attacker, :, defender] == np.uint16(0xFFFF)
+    if not bool(np.any(stale_indef_mask)):
+        return False
+    hitlist_cd[fi, attacker, stale_indef_mask, defender] = np.uint16(0)
+    hitlist_iid[fi, attacker, stale_indef_mask, defender] = np.uint16(0)
+    return True
+
 _MATCH_FLOW_ACTION_IDS = {
     # Dead*
     0,  # ftCo_MS_DeadDown
@@ -629,6 +670,7 @@ def _main_impl(args) -> None:
     act_attack_air_b = 0x0043
     act_attack_air_hi = 0x0044
     act_attack_air_lw = 0x0045
+    act_attack_lw4 = 0x0040
     act_guard_on = 0x00B2
     act_guard = 0x00B3
     act_guard_off = 0x00B4
@@ -1536,17 +1578,16 @@ def _main_impl(args) -> None:
                 defender_action = int(post_action_id[fi, defender])
                 last_hit_by_owner = int(post_last_hit_by[fi, defender])
                 owner_iid = int(post_instance_hit_by[fi, defender])
-                owner_iid_matches_live = any(
-                    owner_iid == int(post_instance_id[fi, slot]) for slot in range(num_players)
-                )
-                fallback_singles_unmapped_owner = (
-                    num_players == 2
-                    and attacker != defender
-                    and defender_action > 0x0040
-                    and last_hit_by_owner >= num_players
-                    and not owner_iid_matches_live
-                )
-                if last_hit_by_owner != attacker and not fallback_singles_unmapped_owner:
+                if not _seed_bridge_owner_matches_attacker(
+                    num_players=num_players,
+                    attacker=attacker,
+                    defender=defender,
+                    defender_action=defender_action,
+                    act_attack_lw4=int(act_attack_lw4),
+                    last_hit_by_owner=last_hit_by_owner,
+                    owner_iid=owner_iid,
+                    live_instance_ids=post_instance_id[fi, :num_players],
+                ):
                     continue
                 hitlag_pre = int(post_hitlag[fi, defender])
                 if hitlag_pre > 0:
@@ -1587,11 +1628,14 @@ def _main_impl(args) -> None:
                 # Hitlist cooldown ownership:
                 # - 0xFFFF is the "indefinite" sentinel used by hitlist victim suppression.
                 #   refs/melee/src/melee/lb/lbcollision.c::lbColl_80008688
-                stale_indef_mask = hitlist_cd[fi, attacker, :, defender] == np.uint16(0xFFFF)
-                if not bool(np.any(stale_indef_mask)):
+                if not _seed_bridge_trim_indefinite_lanes(
+                    hitlist_cd=hitlist_cd,
+                    hitlist_iid=hitlist_iid,
+                    fi=fi,
+                    attacker=attacker,
+                    defender=defender,
+                ):
                     continue
-                hitlist_cd[fi, attacker, stale_indef_mask, defender] = np.uint16(0)
-                hitlist_iid[fi, attacker, stale_indef_mask, defender] = np.uint16(0)
 
     samples["seed_t"]["combat_hitlist_cd"] = hitlist_cd[:-1]
     samples["seed_t"]["combat_hitlist_victim_iid"] = hitlist_iid[:-1]
