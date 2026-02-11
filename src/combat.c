@@ -2225,8 +2225,12 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
         }
       }
 
-      // Hitlag gating: when either fighter is in hitlag, do not generate new BODY hits.
-      if (batch->state.hitlag_started_frame[a_idx] || batch->state.hitlag_started_frame[d_idx]) {
+      // Hitlag gating (attacker-owned):
+      // - Decomp collision pass ftColl_80078C70 does not gate BODY/SHIELD candidate evaluation on
+      //   victim hitlag state; each fighter is processed independently as collision owner.
+      // - Keep only the attacker-side gate in this simulator lane.
+      // refs/melee/src/melee/ft/ftcoll.c::ftColl_80078C70
+      if (batch->state.hitlag_started_frame[a_idx]) {
         continue;
       }
 
@@ -2647,8 +2651,9 @@ static void combat_select_body_hits_one_debug(MslBatch* batch, int bi,
         continue;
       }
 
-      // Hitlag gating: when either fighter is in hitlag, do not generate new BODY hits.
-      if (batch->state.hitlag_started_frame[a_idx] || batch->state.hitlag_started_frame[d_idx]) {
+      // Hitlag gating (attacker-owned): mirror combat_select_body_hits_one.
+      // refs/melee/src/melee/ft/ftcoll.c::ftColl_80078C70
+      if (batch->state.hitlag_started_frame[a_idx]) {
         continue;
       }
 
@@ -2895,7 +2900,7 @@ int combat_debug_shield_candidate_decisions(MslBatch* batch, int batch_index,
               : 0u;
       const uint8_t attacker_hitlag_started = batch->state.hitlag_started_frame[a_idx] ? 1u : 0u;
       const uint8_t defender_hitlag_started = batch->state.hitlag_started_frame[d_idx] ? 1u : 0u;
-      const uint8_t hitlag_gate = (attacker_hitlag_started || defender_hitlag_started) ? 1u : 0u;
+      const uint8_t hitlag_gate = attacker_hitlag_started ? 1u : 0u;
       const float shx = batch->state.shield_x[d_idx];
       const float shy = batch->state.shield_y[d_idx];
       const float shz = batch->state.shield_z[d_idx];
@@ -2925,8 +2930,8 @@ int combat_debug_shield_candidate_decisions(MslBatch* batch, int batch_index,
       } else if (teams_friendly) {
         pair_reason = (uint8_t)MSL_DEBUG_SHIELD_REJECT_TEAMS_FRIENDLY;
       } else if (hitlag_gate) {
-        // Decomp gate: shield/body collision path does not process new hit candidates when either
-        // fighter hitlag-started gate is active for the frame.
+        // Decomp gate shape: ftColl_80078C70 collision ownership is attacker-centric; keep this
+        // debug pair gate aligned to attacker-side hitlag only.
         // refs/melee/src/melee/ft/ftcoll.c::ftColl_80078C70
         pair_reason = (uint8_t)MSL_DEBUG_SHIELD_REJECT_HITLAG_GATE;
       } else if (!shield_active) {
