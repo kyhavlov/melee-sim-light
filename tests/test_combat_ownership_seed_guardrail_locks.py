@@ -841,6 +841,17 @@ def test_damage_exit_rows_clear_hitstun_on_non_damage_entry(
         "ref_sf1",
     ),
     [
+        # Runtime-minority containment row fixed by attacker-owned hitlag pair gate narrowing.
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/QuerulousGrandDinosaur.msl",
+            6822,
+            1,
+            0x0041,  # AttackAirN
+            0x0041,  # AttackAirN
+            7,
+            0,
+            0x20,
+        ),
         # Runtime fix target for this slice (strict parity).
         (
             "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl",
@@ -875,7 +886,8 @@ def test_runtime_hitlag_clusters_rows_resolve_to_exact_ref_t1(
     ref_sf1: int,
 ) -> None:
     # Runtime-only lock pack for the selected hitlag/hitstun clusters.
-    # This test is the parity lock for the single runtime fix target in this slice (AGG 3347:0).
+    # This test is the strict parity lock for runtime-contained rows, including the
+    # attacker-owned hitlag gate row family.
     #
     # Decomp ownership anchors:
     # - fighter collision/contact gate + apply path: refs/melee/src/melee/ft/ftcoll.c::{
@@ -901,8 +913,13 @@ def test_runtime_hitlag_clusters_rows_resolve_to_exact_ref_t1(
     assert int(ref["hitstun"][p]) == int(ref_hitstun)
     assert int(ref["state_flags"][p, 1]) == int(ref_sf1)
 
-    # AGG: row enters DamageHi1 from Landing under live laser context.
-    assert int(np.count_nonzero(seed["items"]["exists"])) > 0
+    # Row-family context:
+    # - AGG target row enters DamageHi1 from Landing under live laser context.
+    # - QGD runtime-minority containment row is fighter-only in this window.
+    if "AttachedGoodNaturedGuanaco.msl" in dataset_rel:
+        assert int(np.count_nonzero(seed["items"]["exists"])) > 0
+    if "QuerulousGrandDinosaur.msl" in dataset_rel:
+        assert int(np.count_nonzero(seed["items"]["exists"])) == 0
 
     # Exact t+1 parity lock.
     assert int(out["action_id"][p]) == int(ref["action_id"][p]) == int(ref_action)
@@ -1018,6 +1035,17 @@ def test_runtime_hitlag_clusters_context_rows_keep_current_signatures(
         "ref_sf1",
     ),
     [
+        # Adjacent negative control in the same local QGD window as the runtime fix row above.
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/QuerulousGrandDinosaur.msl",
+            6821,
+            1,
+            0x0041,  # AttackAirN
+            0x0041,  # AttackAirN
+            0,
+            0,
+            0x00,
+        ),
         # Negative controls adjacent to the target rows.
         (
             "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl",
