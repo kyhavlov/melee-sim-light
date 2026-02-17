@@ -999,9 +999,23 @@ static inline void enter_damage_fall_from_damage_anim(MslBatch* batch, const Msl
 }
 
 static inline void transfer_air_to_ground_on_land(MslBatch* batch, const MslCharParams* ch,
-                                                  size_t idx) {
+                                                  size_t idx, uint16_t prev_action_id) {
   // Shared with locomotion landing behavior: transfer air X to ground X and refresh jumps.
   // Decomp: refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007D6A4 (jumps refresh on grounding)
+  // DamageFly collision callbacks run after ft_80081DD4 floor resolution, so entering
+  // DownBound/Passive from ftCo_80090184 owns a floor-contact root position this frame.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{ftCo_DamageFly_Coll,ftCo_80090184}
+  // refs/melee/src/melee/ft/ft_081B.c::ft_80081DD4
+  // refs/melee/src/melee/mp/mplib.c::mpLib_8004DD90_Floor
+  if (batch->state.on_ground[idx] &&
+      (prev_action_id == (uint16_t)MSL_ACT_DAMAGE_FLY_N ||
+       prev_action_id == (uint16_t)MSL_ACT_DAMAGE_FLY_LW)) {
+    // Narrow runtime ownership slice:
+    // keep floor-contact root Y for DamageFlyN/Lw landing -> DownBound/Passive callback rows.
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_DamageFly_Coll
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_80090184
+    batch->state.pos_y[idx] = batch->state.ground_contact_y[idx];
+  }
   batch->state.speed_ground_x_self[idx] = batch->state.speed_air_x_self[idx];
   batch->state.speed_air_x_self[idx] = 0.0f;
   batch->state.fall_fast[idx] = 0;
@@ -1019,8 +1033,9 @@ static inline uint8_t tech_is_available(const MslBatch* batch, const MslCommonPa
 }
 
 static inline void enter_passive_from_damage_land(MslBatch* batch, const MslCharParams* ch,
-                                                  size_t idx, uint16_t passive_act) {
-  transfer_air_to_ground_on_land(batch, ch, idx);
+                                                  size_t idx, uint16_t passive_act,
+                                                  uint16_t prev_action_id) {
+  transfer_air_to_ground_on_land(batch, ch, idx, prev_action_id);
   batch->state.action_id[idx] = passive_act;
   batch->state.animation_index[idx] = submotion_for_down_action(passive_act);
   msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
@@ -1071,7 +1086,7 @@ static inline uint16_t pick_downbound_action_from_pose(const MslBatch* batch, si
 static inline void enter_down_bound_from_damage_land(MslBatch* batch, const MslCharParams* ch,
                                                      size_t idx, uint16_t prev_action_id) {
   const uint16_t bound_act = pick_downbound_action_from_pose(batch, idx, prev_action_id);
-  transfer_air_to_ground_on_land(batch, ch, idx);
+  transfer_air_to_ground_on_land(batch, ch, idx, prev_action_id);
   batch->state.action_id[idx] = bound_act;
   batch->state.animation_index[idx] = submotion_for_down_action(bound_act);
   msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
@@ -1133,10 +1148,10 @@ void knockdown_update_post_collision(MslBatch* batch) {
               const uint16_t act = (stick_x * facing_dir) >= 0.0f
                                        ? (uint16_t)MSL_ACT_PASSIVE_STAND_F
                                        : (uint16_t)MSL_ACT_PASSIVE_STAND_B;
-              enter_passive_from_damage_land(batch, ch, idx, act);
+              enter_passive_from_damage_land(batch, ch, idx, act, a0);
               continue;
             }
-            enter_passive_from_damage_land(batch, ch, idx, (uint16_t)MSL_ACT_PASSIVE);
+            enter_passive_from_damage_land(batch, ch, idx, (uint16_t)MSL_ACT_PASSIVE, a0);
             continue;
           }
           enter_down_bound_from_damage_land(batch, ch, idx, a0);
@@ -1154,7 +1169,7 @@ void knockdown_update_post_collision(MslBatch* batch) {
           if (mag >= c->damagefly_landing_kb_vel_threshold) {
             // Decomp: ftCo_Landing_Enter_Basic.
             // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c
-            transfer_air_to_ground_on_land(batch, ch, idx);
+            transfer_air_to_ground_on_land(batch, ch, idx, a0);
             batch->state.action_id[idx] = (uint16_t)MSL_ACT_LANDING;
             batch->state.animation_index[idx] = (uint32_t)MSL_SM_LANDING;
             msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);

@@ -1,12 +1,27 @@
 from __future__ import annotations
 
-import importlib
 from pathlib import Path
 
 import numpy as np
 import pytest
 
 from tools.eval.dataset import COMPARE_DTYPE, read_dataset
+
+
+def _skip_if_required_artifacts_missing(root: Path) -> None:
+    required = [
+        "data/stages/final_destination.json",
+        "data/common/ft_common_data.json",
+        "data/characters/fox.json",
+        "data/characters/falco.json",
+        "data/anims/fox.tracks.bin",
+        "data/anims/falco.tracks.bin",
+        "data/moves/fox.json",
+        "data/moves/falco.json",
+    ]
+    missing = [rel for rel in required if not (root / rel).exists()]
+    if missing:
+        pytest.skip(f"missing local data artifacts: {', '.join(missing)}")
 
 
 def _run_one_step(*, dataset_rel: str, record: int, p: int) -> tuple[np.ndarray, np.ndarray]:
@@ -22,7 +37,7 @@ def _run_one_step(*, dataset_rel: str, record: int, p: int) -> tuple[np.ndarray,
 
     row = samples[record : record + 1]
 
-    binding = importlib.import_module("msl_binding")
+    binding = pytest.importorskip("msl_binding")
     sizes = binding.sizes()
     seed_stride = int(sizes["seed"])
     input_stride = int(sizes["input"])
@@ -52,6 +67,68 @@ def _run_one_step(*, dataset_rel: str, record: int, p: int) -> tuple[np.ndarray,
         binding.destroy(handle)
 
 
+def _run_one_step_with_rollout(
+    *, dataset_rel: str, record: int, p: int, window_before: int = 24
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    root = Path(__file__).resolve().parents[1]
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+    num_records = int(samples.shape[0])
+    assert num_records > record, f"dataset too short: num_records={num_records} record={record}"
+
+    binding = pytest.importorskip("msl_binding")
+    sizes = binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    compare_stride = int(sizes["compare"])
+
+    sample_stride = int(samples.dtype.itemsize)
+    samples_u8 = samples.view(np.uint8).reshape(num_records, sample_stride)
+    seed_off = int(samples.dtype.fields["seed_t"][1])
+    prev_input_off = int(samples.dtype.fields["prev_input_t"][1])
+    input_off = int(samples.dtype.fields["input_t"][1])
+
+    seed_bytes = np.empty((1, seed_stride), dtype=np.uint8)
+    prev_input_bytes = np.empty((1, input_stride), dtype=np.uint8)
+    input_bytes = np.empty((1, input_stride), dtype=np.uint8)
+    out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
+    out_view = out_compare_bytes.view(COMPARE_DTYPE).reshape(-1)
+
+    one_step_handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    try:
+        seed_bytes[0, :] = samples_u8[record, seed_off : seed_off + seed_stride]
+        prev_input_bytes[0, :] = samples_u8[record, prev_input_off : prev_input_off + input_stride]
+        input_bytes[0, :] = samples_u8[record, input_off : input_off + input_stride]
+        binding.reseed_seed(one_step_handle, seed_bytes)
+        binding.step_input(one_step_handle, prev_input_bytes, input_bytes)
+        binding.write_compare(one_step_handle, out_compare_bytes)
+        out_one = out_view[0].copy()
+    finally:
+        binding.destroy(one_step_handle)
+
+    start = max(0, int(record) - int(window_before))
+    rollout_handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    try:
+        seed_bytes[0, :] = samples_u8[start, seed_off : seed_off + seed_stride]
+        binding.reseed_seed(rollout_handle, seed_bytes)
+        for j in range(start, int(record) + 1):
+            prev_input_bytes[0, :] = samples_u8[j, prev_input_off : prev_input_off + input_stride]
+            input_bytes[0, :] = samples_u8[j, input_off : input_off + input_stride]
+            binding.step_input(rollout_handle, prev_input_bytes, input_bytes)
+            if j == int(record):
+                binding.write_compare(rollout_handle, out_compare_bytes)
+        out_roll = out_view[0].copy()
+    finally:
+        binding.destroy(rollout_handle)
+
+    ref = samples["ref_t1"][record].copy()
+    return out_one, ref, out_roll
+
+
 @pytest.mark.integration
 def test_downboundu_stays_downboundu_attachedgoodnaturedguanaco_record_2101_p0() -> None:
     # Seed==ref cluster regression:
@@ -63,7 +140,9 @@ def test_downboundu_stays_downboundu_attachedgoodnaturedguanaco_record_2101_p0()
     record = 2101
     p = 0
 
-    dataset_path = Path(__file__).resolve().parents[1] / dataset_rel
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / dataset_rel
     if not dataset_path.exists():
         pytest.skip(f"missing local dataset: {dataset_rel}")
     ds = read_dataset(str(dataset_path))
@@ -89,7 +168,9 @@ def test_downboundu_stays_downboundu_gracefulattachedturtle_record_2317_p1() -> 
     record = 2317
     p = 1
 
-    dataset_path = Path(__file__).resolve().parents[1] / dataset_rel
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / dataset_rel
     if not dataset_path.exists():
         pytest.skip(f"missing local dataset: {dataset_rel}")
     ds = read_dataset(str(dataset_path))
@@ -105,6 +186,122 @@ def test_downboundu_stays_downboundu_gracefulattachedturtle_record_2317_p1() -> 
 
 
 @pytest.mark.integration
+@pytest.mark.parametrize(
+    ("dataset_rel", "record", "p", "seed_action", "ref_action", "expected_out_action"),
+    [
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
+            "QuerulousGrandDinosaur.msl",
+            1804,
+            0,
+            88,   # DamageFlyN
+            183,  # DownBoundU
+            183,
+        ),
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
+            "TreasuredBackKangaroo.msl",
+            5645,
+            1,
+            89,   # DamageFlyLw
+            183,  # DownBoundU
+            183,
+        ),
+    ],
+)
+def test_damagefly_land_to_downbound_passive_rows_keep_contact_y_parity_runtime_family(
+    dataset_rel: str, record: int, p: int, seed_action: int, ref_action: int, expected_out_action: int
+) -> None:
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    row = ds.samples[record]
+    assert int(row["seed_t"]["action_id"][p]) == int(seed_action)
+    assert int(row["ref_t1"]["action_id"][p]) == int(ref_action)
+    assert int(row["seed_t"]["on_ground"][p]) == 0
+    assert int(row["ref_t1"]["on_ground"][p]) == 1
+    assert int(row["seed_t"]["hitlag"][p]) == int(row["ref_t1"]["hitlag"][p]) == 0
+
+    out, ref, out_roll = _run_one_step_with_rollout(dataset_rel=dataset_rel, record=record, p=p)
+
+    # Decomp ownership:
+    # - DamageFly collision callback enters ftCo_80090184 on grounded contact.
+    # - ftCo_80090184 then enters Passive* or DownBound.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{ftCo_DamageFly_Coll,ftCo_80090184}
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownBound.c::ftCo_80097D40
+    assert int(out["action_id"][p]) == int(expected_out_action)
+    assert int(out["on_ground"][p]) == int(ref["on_ground"][p]) == 1
+    assert abs(float(out["pos_y"][p]) - float(ref["pos_y"][p])) <= 2e-4
+
+    # Runtime-dominant lock: one-step@t and rollout@t agree for this contact-y lane.
+    assert int(out_roll["action_id"][p]) == int(out["action_id"][p])
+    assert int(out_roll["on_ground"][p]) == int(out["on_ground"][p])
+    assert abs(float(out_roll["pos_y"][p]) - float(out["pos_y"][p])) <= 1e-4
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    ("dataset_rel", "record", "p", "seed_action", "ref_action", "expected_out_action"),
+    [
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
+            "QuerulousGrandDinosaur.msl",
+            1802,
+            0,
+            88,  # DamageFlyN (pre-landing control)
+            88,
+            88,
+        ),
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
+            "TreasuredBackKangaroo.msl",
+            5644,
+            1,
+            89,  # DamageFlyLw (pre-landing control)
+            89,
+            89,
+        ),
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
+            "GracefulAttachedTurtle.msl",
+            5821,
+            0,
+            88,   # DamageFlyN
+            183,  # DownBoundU (reference)
+            201,  # PassiveStandB (current runtime ownership lane)
+        ),
+    ],
+)
+def test_damagefly_land_to_downbound_passive_context_controls_stay_replay_real(
+    dataset_rel: str, record: int, p: int, seed_action: int, ref_action: int, expected_out_action: int
+) -> None:
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    row = ds.samples[record]
+    assert int(row["seed_t"]["action_id"][p]) == int(seed_action)
+    assert int(row["ref_t1"]["action_id"][p]) == int(ref_action)
+
+    out, ref, out_roll = _run_one_step_with_rollout(dataset_rel=dataset_rel, record=record, p=p)
+
+    assert int(out["action_id"][p]) == int(expected_out_action)
+    assert np.isfinite(float(out["pos_y"][p]))
+    assert np.isfinite(float(ref["pos_y"][p]))
+
+    assert int(out_roll["action_id"][p]) == int(out["action_id"][p])
+    assert int(out_roll["on_ground"][p]) == int(out["on_ground"][p])
+    assert abs(float(out_roll["pos_y"][p]) - float(out["pos_y"][p])) <= 1e-4
+
+
+@pytest.mark.integration
 def test_damageflyhi_stays_damageflyhi_attachedgoodnaturedguanaco_record_1695_p1() -> None:
     # Seed==ref cluster regression:
     # ref=DamageFlyHi (87) -> out=DamageFlyLw (89) at record=1695 p1.
@@ -115,7 +312,9 @@ def test_damageflyhi_stays_damageflyhi_attachedgoodnaturedguanaco_record_1695_p1
     record = 1695
     p = 1
 
-    dataset_path = Path(__file__).resolve().parents[1] / dataset_rel
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / dataset_rel
     if not dataset_path.exists():
         pytest.skip(f"missing local dataset: {dataset_rel}")
     ds = read_dataset(str(dataset_path))
