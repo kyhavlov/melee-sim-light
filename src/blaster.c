@@ -160,11 +160,18 @@ static inline void enter_blaster_start(MslBatch* batch, size_t idx, const MslLas
   // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::{ftFx_SpecialN_Enter,ftFx_SpecialAirN_Enter}
   msl_anim_timebase_defer_tick_once(batch, idx);
 
-  // Decomp: SpecialN enter clears self velocities (gr_vel/self_vel.x/y/z = 0).
-  // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_SpecialN_Enter and ::ftFx_SpecialAirN_Enter
-  batch->state.speed_ground_x_self[idx] = 0.0f;
-  batch->state.speed_air_x_self[idx] = 0.0f;
-  batch->state.speed_y_self[idx] = 0.0f;
+  // Decomp split:
+  // - Grounded SpecialN enter clears gr_vel/self_vel.x/y/z.
+  //   refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_SpecialN_Enter
+  // - Aerial SpecialAirN enter does not clear self velocities.
+  //   refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_SpecialAirN_Enter
+  if (grounded) {
+    batch->state.speed_ground_x_self[idx] = 0.0f;
+    batch->state.speed_air_x_self[idx] = 0.0f;
+    batch->state.speed_y_self[idx] = 0.0f;
+  }
+  // Sim-owned attack-velocity lanes are not decomp state fields; keep enter behavior deterministic
+  // and neutral by clearing them on both grounded and aerial SpecialN enters.
   batch->state.speed_x_attack[idx] = 0.0f;
   batch->state.speed_y_attack[idx] = 0.0f;
 }
