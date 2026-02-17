@@ -94,8 +94,20 @@ static inline uint8_t spacie_specialhi_update(MslBatch* batch, size_t idx, uint8
         //   ftFx_SpecialHiHold_Anim,ftFx_SpecialHiHoldAir_Anim,
         //   ftFx_SpecialHiHold_IASA,ftFx_SpecialHiHoldAir_IASA
         // }
+        //
+        // Decomp launch enter (`ftFx_SpecialAirHi_Enter`) overwrites self velocity from
+        // launch parameters/angle; hold-state carry-through velocity is not preserved.
+        // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::ftFx_SpecialAirHi_Enter
+        //
+        // Runtime bridge (narrow): clear hold-air carry velocity on Hold/HoldAir -> launch
+        // transition so launch state does not retain stale downward drift. Keep full launch vector
+        // derivation TODO-bound to explicit SpecialHi attrs (`x64/x74/x88`) extraction.
         batch->state.action_id[idx] =
             on_ground ? (uint16_t)MSL_ACT_FX_SPECIAL_HI : (uint16_t)MSL_ACT_FX_SPECIAL_AIR_HI;
+        if (!on_ground) {
+          batch->state.speed_air_x_self[idx] = 0.0f;
+          batch->state.speed_y_self[idx] = 0.0f;
+        }
         batch->state.animation_index[idx] = (uint32_t)ms->specialhi_ground_main;
         msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
       }
@@ -105,6 +117,10 @@ static inline uint8_t spacie_specialhi_update(MslBatch* batch, size_t idx, uint8
       if (anim_finished(char_id, ms->specialhi_air_hold, batch->state.anim_frame_f32[idx])) {
         batch->state.action_id[idx] =
             on_ground ? (uint16_t)MSL_ACT_FX_SPECIAL_HI : (uint16_t)MSL_ACT_FX_SPECIAL_AIR_HI;
+        if (!on_ground) {
+          batch->state.speed_air_x_self[idx] = 0.0f;
+          batch->state.speed_y_self[idx] = 0.0f;
+        }
         batch->state.animation_index[idx] = (uint32_t)ms->specialhi_ground_main;
         msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
       }
