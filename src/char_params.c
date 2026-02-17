@@ -193,6 +193,9 @@ static int load_one(const char* data_dir, const char* rel_path, uint8_t char_id)
       "firefox_hold_gravity_delay_frames",
       "firefox_hold_air_friction",
       "firefox_hold_air_fall_accel",
+      "firefox_direction_stick_range_min",
+      "firefox_launch_speed",
+      "firefox_facing_stick_range_min",
       "grab_capture_anchor_part_id",
   };
 
@@ -304,6 +307,11 @@ static int load_one(const char* data_dir, const char* rel_path, uint8_t char_id)
                   &out.firefox_hold_gravity_delay_frames) != 0 ||
       json_get_f32(buf, "firefox_hold_air_friction", &out.firefox_hold_air_friction) != 0 ||
       json_get_f32(buf, "firefox_hold_air_fall_accel", &out.firefox_hold_air_fall_accel) != 0 ||
+      json_get_f32(buf, "firefox_direction_stick_range_min",
+                   &out.firefox_direction_stick_range_min) != 0 ||
+      json_get_f32(buf, "firefox_launch_speed", &out.firefox_launch_speed) != 0 ||
+      json_get_f32(buf, "firefox_facing_stick_range_min",
+                   &out.firefox_facing_stick_range_min) != 0 ||
       json_get_f32(buf, "ledge_jump_horizontal_velocity", &out.ledge_jump_horizontal_velocity) !=
           0 ||
       json_get_f32(buf, "ledge_jump_vertical_velocity", &out.ledge_jump_vertical_velocity) != 0 ||

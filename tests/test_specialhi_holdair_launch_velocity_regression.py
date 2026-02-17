@@ -93,30 +93,37 @@ def _step_one_row_with_rollout_at_record(
         (
             "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
             "GracefulAttachedTurtle.msl",
+            3083,
+            0,
+            3.359558,
+        ),
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
+            "GracefulAttachedTurtle.msl",
             2905,
             0,
-            4.204998,
+            3.799999,
+        ),
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
+            "GracefulAttachedTurtle.msl",
+            7904,
+            0,
+            3.799999,
+        ),
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
+            "QuerulousGrandDinosaur.msl",
+            8473,
+            1,
+            3.799999,
         ),
         (
             "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
             "TreasuredBackKangaroo.msl",
             7079,
             0,
-            3.231899,
-        ),
-        (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-            "QuerulousGrandDinosaur.msl",
-            635,
-            1,
-            2.944418,
-        ),
-        (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-            "QuerulousGrandDinosaur.msl",
-            8924,
-            1,
-            2.944418,
+            2.826900,
         ),
     ],
 )
@@ -133,7 +140,8 @@ def test_specialhi_holdair_launch_rows_clear_hold_velocity_and_improve_pos_y_err
 
     # Decomp ownership:
     # - HoldAir anim end enters launch (`ftFx_SpecialAirHi_Enter`) in-air.
-    # - Launch enter overwrites `fp->self_vel.{x,y}` (does not preserve HoldAir drift velocity).
+    # - Launch enter derives launch angle from current stick and ftFox_DatAttrs.{x64,x88},
+    #   then overwrites `fp->self_vel.{x,y}` from x74 launch speed.
     # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::{
     #   ftFx_SpecialHiHoldAir_Anim,ftFx_SpecialAirHi_Enter
     # }
@@ -144,7 +152,8 @@ def test_specialhi_holdair_launch_rows_clear_hold_velocity_and_improve_pos_y_err
     assert int(seed["hitstun"][p]) == int(ref["hitstun"][p]) == 0
 
     assert int(out["action_id"][p]) == int(ref["action_id"][p]) == 356
-    assert abs(float(out["speed_y_self"][p])) <= 1e-6
+    assert abs(float(out["speed_air_x_self"][p]) - float(ref["speed_air_x_self"][p])) <= 1e-3
+    assert abs(float(out["speed_y_self"][p]) - float(ref["speed_y_self"][p])) <= 1e-3
 
     # Runtime-dominant locks: one-step@t and rollout@t agree for these rows.
     assert int(out_roll["action_id"][p]) == int(out["action_id"][p])
@@ -169,11 +178,11 @@ def test_specialhi_holdair_launch_rows_clear_hold_velocity_and_improve_pos_y_err
         ),
         (
             "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-            "AttachedGoodNaturedGuanaco.msl",
-            7246,
-            1,
-            354,  # HoldAir -> AirHi context lane (rollout-sensitive)
-            356,
+            "GracefulAttachedTurtle.msl",
+            7903,
+            0,
+            354,  # HoldAir one frame before launch
+            354,
         ),
     ],
 )

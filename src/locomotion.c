@@ -67,6 +67,40 @@ static inline void enter_fall_special_from_specialhi(MslBatch* batch, size_t idx
   batch->state.fallspecial_xc[idx] = 1u;
 }
 
+static inline void specialhi_apply_air_launch_ownership(MslBatch* batch, size_t idx,
+                                                        const MslCharParams* ch) {
+  if (batch == NULL || ch == NULL) {
+    return;
+  }
+  // Decomp: ftFx_SpecialAirHi_Enter derives launch direction from current stick and
+  // ftFox_DatAttrs.{x64,x88}, then overwrites self_vel using x74 launch speed.
+  // - stickGetDir(..., 0.0f) is used for x64 magnitude gate.
+  // - facing updates when |stick_x| > x88 before atan2f.
+  // - rotateModel defaults to HALF_PI32 when below direction threshold.
+  // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::ftFx_SpecialAirHi_Enter
+  // refs/melee/src/melee/ft/chara/ftFox/types.h::ftFox_DatAttrs
+  // Source keys: data/characters/{fox,falco}.json
+  // - firefox_direction_stick_range_min
+  // - firefox_launch_speed
+  // - firefox_facing_stick_range_min
+  const float stick_x = stick_i8_to_unit(batch->state.input_main_x[idx]);
+  const float stick_y = stick_i8_to_unit(batch->state.input_main_y[idx]);
+  const float abs_x = msl_absf(stick_x);
+  const float abs_y = msl_absf(stick_y);
+
+  float facing_dir = batch->state.facing[idx] ? 1.0f : -1.0f;
+  float launch_angle = 1.5707963705062866f;
+  if ((abs_x + abs_y) >= ch->firefox_direction_stick_range_min) {
+    if (abs_x > ch->firefox_facing_stick_range_min) {
+      batch->state.facing[idx] = (uint8_t)(stick_x >= 0.0f);
+      facing_dir = batch->state.facing[idx] ? 1.0f : -1.0f;
+    }
+    launch_angle = atan2f(stick_y, stick_x * facing_dir);
+  }
+  batch->state.speed_air_x_self[idx] = facing_dir * (ch->firefox_launch_speed * cosf(launch_angle));
+  batch->state.speed_y_self[idx] = ch->firefox_launch_speed * sinf(launch_angle);
+}
+
 static inline uint8_t spacie_specialhi_update(MslBatch* batch, size_t idx, uint8_t char_id,
                                               const MslSpecialMsids* ms, uint8_t on_ground) {
   if (batch == NULL || ms == NULL) {
@@ -105,8 +139,13 @@ static inline uint8_t spacie_specialhi_update(MslBatch* batch, size_t idx, uint8
         batch->state.action_id[idx] =
             on_ground ? (uint16_t)MSL_ACT_FX_SPECIAL_HI : (uint16_t)MSL_ACT_FX_SPECIAL_AIR_HI;
         if (!on_ground) {
-          batch->state.speed_air_x_self[idx] = 0.0f;
-          batch->state.speed_y_self[idx] = 0.0f;
+          const MslCharParams* ch = msl_char_params(char_id);
+          if (ch != NULL) {
+            specialhi_apply_air_launch_ownership(batch, idx, ch);
+          } else {
+            batch->state.speed_air_x_self[idx] = 0.0f;
+            batch->state.speed_y_self[idx] = 0.0f;
+          }
         }
         batch->state.animation_index[idx] = (uint32_t)ms->specialhi_ground_main;
         msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
@@ -118,8 +157,13 @@ static inline uint8_t spacie_specialhi_update(MslBatch* batch, size_t idx, uint8
         batch->state.action_id[idx] =
             on_ground ? (uint16_t)MSL_ACT_FX_SPECIAL_HI : (uint16_t)MSL_ACT_FX_SPECIAL_AIR_HI;
         if (!on_ground) {
-          batch->state.speed_air_x_self[idx] = 0.0f;
-          batch->state.speed_y_self[idx] = 0.0f;
+          const MslCharParams* ch = msl_char_params(char_id);
+          if (ch != NULL) {
+            specialhi_apply_air_launch_ownership(batch, idx, ch);
+          } else {
+            batch->state.speed_air_x_self[idx] = 0.0f;
+            batch->state.speed_y_self[idx] = 0.0f;
+          }
         }
         batch->state.animation_index[idx] = (uint32_t)ms->specialhi_ground_main;
         msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
