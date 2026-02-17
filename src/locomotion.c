@@ -217,6 +217,7 @@ static inline uint32_t attackair_submotion_from_action(uint16_t a) {
 }
 
 static inline uint8_t landing_contact_y_bridge_matches_source(uint16_t source_act,
+                                                              uint16_t source_action_frame,
                                                               uint16_t prev_source_act,
                                                               uint16_t land_act) {
   const uint8_t landing_basic_prev =
@@ -230,12 +231,22 @@ static inline uint8_t landing_contact_y_bridge_matches_source(uint16_t source_ac
           : 0u;
 
   if (source_act == (uint16_t)MSL_ACT_ATTACK_AIR_N ||
-      (source_act == (uint16_t)MSL_ACT_ATTACK_AIR_F &&
-       land_act == (uint16_t)MSL_ACT_LANDING) ||
       source_act == (uint16_t)MSL_ACT_ATTACK_AIR_B ||
       source_act == (uint16_t)MSL_ACT_ATTACK_AIR_HI ||
       source_act == (uint16_t)MSL_ACT_ATTACK_AIR_LW) {
     return 1u;
+  }
+  if (source_act == (uint16_t)MSL_ACT_ATTACK_AIR_F) {
+    if (land_act == (uint16_t)MSL_ACT_LANDING) {
+      return 1u;
+    }
+    if (land_act == (uint16_t)MSL_ACT_LANDING_AIR_F && source_action_frame >= 16u) {
+      // Narrow runtime slice: late-window AttackAirF -> LandingAirF rows only.
+      // Frame gate tie-down (ISO-extracted script events):
+      // - data/moves/fox.json   moves["ftCo_SM_AttackAirF"]["events"] contains create_hitbox at frame 16.
+      // - data/moves/falco.json moves["ftCo_SM_AttackAirF"]["events"] contains create_hitbox at frame 16.
+      return 1u;
+    }
   }
 
   // Additional ft_80082B1C -> Landing_Enter_Basic callback family:
@@ -254,7 +265,8 @@ static inline uint8_t landing_contact_y_bridge_matches_source(uint16_t source_ac
   //   refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::ftCo_Landing_Enter_Basic
   if (land_act == (uint16_t)MSL_ACT_LANDING &&
       (source_act == (uint16_t)MSL_ACT_FALL || source_act == (uint16_t)MSL_ACT_JUMP_F ||
-       source_act == (uint16_t)MSL_ACT_JUMP_B || source_act == (uint16_t)MSL_ACT_JUMP_AERIAL_B ||
+       source_act == (uint16_t)MSL_ACT_JUMP_B ||
+       source_act == (uint16_t)MSL_ACT_JUMP_AERIAL_B ||
        source_act == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_N_START ||
        source_act == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_N_LOOP ||
        source_act == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_N_END ||
@@ -980,7 +992,8 @@ static inline void enter_landing_action_from_air(MslBatch* batch, const MslCharP
   // AttackAir landing-entry rows no longer require contact-y reconciliation.
   uint8_t apply_contact_y_bridge =
       (batch->state.on_ground[idx] &&
-       landing_contact_y_bridge_matches_source(source_act, batch->state.prev_action_id[idx], land_act))
+       landing_contact_y_bridge_matches_source(source_act, batch->state.action_frame[idx],
+                                               batch->state.prev_action_id[idx], land_act))
           ? 1u
           : 0u;
   if (apply_contact_y_bridge && source_act == (uint16_t)MSL_ACT_FALL &&
@@ -2556,7 +2569,8 @@ void locomotion_update_post_collision(MslBatch* batch) {
 
       if (!was_ground && now_ground) {
         if (a == (uint16_t)MSL_ACT_LANDING &&
-            landing_contact_y_bridge_matches_source(a, batch->state.prev_action_id[idx],
+            landing_contact_y_bridge_matches_source(a, batch->state.action_frame[idx],
+                                                    batch->state.prev_action_id[idx],
                                                     (uint16_t)MSL_ACT_LANDING)) {
           // Compatibility: some post-collision callback lanes can already be in Landing before this
           // locomotion transition resolver runs. Preserve floor-contact Y for the same decomp-owned

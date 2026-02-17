@@ -398,6 +398,141 @@ def test_landing_basic_rows_keep_contact_y_parity_for_jumpaerialb_family(
     [
         (
             "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
+            "TreasuredBackKangaroo.msl",
+            1161,
+            0,
+            66,  # AttackAirF
+            71,  # LandingAirF
+        ),
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
+            "GracefulAttachedTurtle.msl",
+            4974,
+            1,
+            66,  # AttackAirF
+            71,  # LandingAirF
+        ),
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
+            "TreasuredBackKangaroo.msl",
+            1966,
+            0,
+            66,  # AttackAirF
+            71,  # LandingAirF
+        ),
+    ],
+)
+def test_landing_airf_rows_keep_contact_y_parity_runtime_family(
+    dataset_rel: str, record: int, p: int, seed_action: int, ref_action: int
+) -> None:
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    seed, out, ref, out_roll = _step_one_row_with_rollout_at_record(dataset_path, record, p)
+
+    # Decomp ownership:
+    # - AttackAir collision callback enters LandingAir_EnterWithLag.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_Coll
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_LandingAir.c::ftCo_LandingAir_EnterWithLag
+    assert int(seed["action_id"][p]) == int(seed_action)
+    assert int(ref["action_id"][p]) == int(ref_action)
+    assert int(seed["on_ground"][p]) == 0
+    assert int(ref["on_ground"][p]) == 1
+    assert int(seed["hitlag"][p]) == int(ref["hitlag"][p]) == 0
+    assert int(seed["hitstun"][p]) == int(ref["hitstun"][p]) == 0
+
+    assert int(out["action_id"][p]) == int(ref["action_id"][p]) == 71
+    assert int(out["on_ground"][p]) == int(ref["on_ground"][p]) == 1
+    assert abs(float(out["pos_y"][p]) - float(ref["pos_y"][p])) <= 2e-4
+
+    # Runtime-dominant lock: one-step@t and rollout@t agree for this float lane.
+    assert int(out_roll["action_id"][p]) == int(out["action_id"][p])
+    assert abs(float(out_roll["pos_y"][p]) - float(out["pos_y"][p])) <= 1e-4
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    (
+        "dataset_rel",
+        "record",
+        "p",
+        "seed_action",
+        "ref_action",
+        "seed_on_ground",
+        "ref_on_ground",
+        "rollout_action",
+        "rollout_min_delta",
+    ),
+    [
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
+            "QuerulousGrandDinosaur.msl",
+            385,
+            0,
+            66,  # AttackAirF (pre-landing frame)
+            66,
+            0,
+            0,
+            66,  # rollout matches one-step here
+            0.0,
+        ),
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
+            "QuerulousGrandDinosaur.msl",
+            387,
+            0,
+            71,  # LandingAirF (post-landing frame)
+            71,
+            1,
+            1,
+            66,  # rollout remains in AttackAirF at this nearby reseed-sensitive row
+            1.0,
+        ),
+    ],
+)
+def test_landing_airf_runtime_context_controls_stay_replay_real(
+    dataset_rel: str,
+    record: int,
+    p: int,
+    seed_action: int,
+    ref_action: int,
+    seed_on_ground: int,
+    ref_on_ground: int,
+    rollout_action: int,
+    rollout_min_delta: float,
+) -> None:
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    seed, out, ref, out_roll = _step_one_row_with_rollout_at_record(dataset_path, record, p)
+
+    assert int(seed["action_id"][p]) == int(seed_action)
+    assert int(ref["action_id"][p]) == int(ref_action)
+    assert int(seed["on_ground"][p]) == int(seed_on_ground)
+    assert int(ref["on_ground"][p]) == int(ref_on_ground)
+
+    assert int(out["action_id"][p]) == int(ref["action_id"][p])
+    assert int(out["on_ground"][p]) == int(ref["on_ground"][p])
+    assert abs(float(out["pos_y"][p]) - float(ref["pos_y"][p])) <= 2e-4
+    assert int(out_roll["action_id"][p]) == int(rollout_action)
+    if rollout_min_delta <= 0.0:
+        assert abs(float(out_roll["pos_y"][p]) - float(out["pos_y"][p])) <= 1e-4
+    else:
+        assert abs(float(out_roll["pos_y"][p]) - float(out["pos_y"][p])) >= float(rollout_min_delta)
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    ("dataset_rel", "record", "p", "seed_action", "ref_action"),
+    [
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
             "GracefulAttachedTurtle.msl",
             10477,
             1,
