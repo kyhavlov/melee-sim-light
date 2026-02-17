@@ -17,6 +17,7 @@
 #include "input_axis.h"
 #include "jump_input.h"
 #include "special_msids.h"
+#include "stage_collision.h"
 
 static inline float msl_signf(float x) { return x < 0.0f ? -1.0f : 1.0f; }
 
@@ -218,8 +219,10 @@ static inline uint32_t attackair_submotion_from_action(uint16_t a) {
 static inline uint8_t landing_contact_y_bridge_matches_source(uint16_t source_act,
                                                               uint16_t prev_source_act,
                                                               uint16_t land_act) {
-  const uint8_t jump_or_blaster_air_prev =
+  const uint8_t landing_basic_prev =
       (prev_source_act == (uint16_t)MSL_ACT_JUMP_F || prev_source_act == (uint16_t)MSL_ACT_JUMP_B ||
+       prev_source_act == (uint16_t)MSL_ACT_FALL ||
+       prev_source_act == (uint16_t)MSL_ACT_JUMP_AERIAL_B ||
        prev_source_act == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_N_START ||
        prev_source_act == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_N_LOOP ||
        prev_source_act == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_N_END)
@@ -236,6 +239,9 @@ static inline uint8_t landing_contact_y_bridge_matches_source(uint16_t source_ac
   }
 
   // Additional ft_80082B1C -> Landing_Enter_Basic callback family:
+  // - Fall collision callback path (Fall -> Landing), including lanes that have already entered
+  //   Landing before this resolver (source_act==Landing with prev_source_act==Fall).
+  //   refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_Coll
   // - Jump ground-collision callback path (JumpF/B -> Landing).
   //   refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c::ftCo_Jump_Coll
   // - Aerial jump collision callback path (JumpAerialB -> Landing in observed suite rows).
@@ -247,16 +253,34 @@ static inline uint8_t landing_contact_y_bridge_matches_source(uint16_t source_ac
   //   refs/melee/src/melee/ft/ft_081B.c::ft_80082B1C
   //   refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::ftCo_Landing_Enter_Basic
   if (land_act == (uint16_t)MSL_ACT_LANDING &&
-      (source_act == (uint16_t)MSL_ACT_JUMP_F || source_act == (uint16_t)MSL_ACT_JUMP_B ||
-       source_act == (uint16_t)MSL_ACT_JUMP_AERIAL_B ||
+      (source_act == (uint16_t)MSL_ACT_FALL || source_act == (uint16_t)MSL_ACT_JUMP_F ||
+       source_act == (uint16_t)MSL_ACT_JUMP_B || source_act == (uint16_t)MSL_ACT_JUMP_AERIAL_B ||
        source_act == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_N_START ||
        source_act == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_N_LOOP ||
        source_act == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_N_END ||
-       ((source_act == (uint16_t)MSL_ACT_LANDING) && jump_or_blaster_air_prev))) {
+       ((source_act == (uint16_t)MSL_ACT_LANDING) && landing_basic_prev))) {
     return 1u;
   }
 
   return 0u;
+}
+
+static inline uint8_t landing_contact_is_ledge_floor(const MslBatch* batch, size_t idx,
+                                                     size_t bi) {
+  if (batch == NULL || !batch->state.on_ground[idx]) {
+    return 0u;
+  }
+  const uint16_t ground_id = batch->state.ground_id[idx];
+  if (ground_id == 0xFFFFu) {
+    return 0u;
+  }
+  const uint32_t stage_id = batch->state.stage_id[bi];
+  const MslStageFloorGraph* g = stage_collision_get_floor_graph(stage_id);
+  const int line_idx = stage_collision_floor_line_index(stage_id, ground_id);
+  if (g == NULL || line_idx < 0 || (size_t)line_idx >= g->line_count) {
+    return 0u;
+  }
+  return g->lines[(size_t)line_idx].is_ledge ? 1u : 0u;
 }
 
 static inline uint8_t attackair_cstick_edge(const MslCommonParams* c, int8_t prev_cx,
@@ -923,7 +947,7 @@ static inline uint32_t submotion_for_action(uint16_t a) {
 }
 
 static inline void enter_landing_action_from_air(MslBatch* batch, const MslCharParams* ch,
-                                                 size_t idx, uint16_t source_act,
+                                                 size_t idx, size_t bi, uint16_t source_act,
                                                  uint16_t land_act) {
   if (batch == NULL || ch == NULL) {
     return;
@@ -954,8 +978,22 @@ static inline void enter_landing_action_from_air(MslBatch* batch, const MslCharP
   //
   // TODO(decomp-coll-lane): remove once mpColl ECB interpolation/ownership is fully modeled and
   // AttackAir landing-entry rows no longer require contact-y reconciliation.
-  if (batch->state.on_ground[idx] &&
-      landing_contact_y_bridge_matches_source(source_act, batch->state.prev_action_id[idx], land_act)) {
+  uint8_t apply_contact_y_bridge =
+      (batch->state.on_ground[idx] &&
+       landing_contact_y_bridge_matches_source(source_act, batch->state.prev_action_id[idx], land_act))
+          ? 1u
+          : 0u;
+  if (apply_contact_y_bridge && source_act == (uint16_t)MSL_ACT_FALL &&
+      landing_contact_is_ledge_floor(batch, idx, bi)) {
+    // Keep edge/walk-off positioning owned by mpColl on ledge floor segments.
+    // Decomp shape:
+    // - Fall collision callback routes through ft_80082B1C.
+    // - mpColl floor-edge snap/ownership is handled in mpColl_8004A45C_Floor.
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_Coll
+    // refs/melee/src/melee/mp/mpcoll.c::mpColl_8004A45C_Floor
+    apply_contact_y_bridge = 0u;
+  }
+  if (apply_contact_y_bridge) {
     batch->state.pos_y[idx] = batch->state.ground_contact_y[idx];
   }
 
@@ -2577,7 +2615,7 @@ void locomotion_update_post_collision(MslBatch* batch) {
 
         // Only refresh jumps / enter a landing action when we actually take a landing transition.
         if (land != 0) {
-          enter_landing_action_from_air(batch, ch, idx, a, land);
+          enter_landing_action_from_air(batch, ch, idx, (size_t)bi, a, land);
         }
       } else if (was_ground && !now_ground) {
         batch->state.fall_fast[idx] = 0;

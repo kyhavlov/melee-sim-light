@@ -45,7 +45,7 @@ rollout.streak_len.p90: 53
 rollout.streak_len.p95: 66
 rollout.streak_len.max: 140
 rollout.first_mismatch_total: 453
-rollout.first_mismatch_seeded_total: 220
+rollout.first_mismatch_seeded_total: 219
 
 == datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/QuerulousGrandDinosaur.msl ==
 rollout.best_len: 128
@@ -65,7 +65,7 @@ rollout.streak_len.p90: 55
 rollout.streak_len.p95: 65
 rollout.streak_len.max: 129
 rollout.first_mismatch_total: 335
-rollout.first_mismatch_seeded_total: 171
+rollout.first_mismatch_seeded_total: 170
 
 == suite summary ==
 overall.rollout.streak_count: 1450
@@ -75,4 +75,4 @@ overall.rollout.streak_len.p95: 66
 overall.rollout.streak_len.max: 140
 overall.rollout.best_len.max: 140
 overall.rollout.first_mismatch_total: 1468
-overall.rollout.first_mismatch_seeded_total: 739
+overall.rollout.first_mismatch_seeded_total: 737

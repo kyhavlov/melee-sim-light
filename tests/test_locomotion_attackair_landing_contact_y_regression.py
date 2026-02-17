@@ -63,6 +63,63 @@ def _step_one_row(dataset_path: Path, record: int, p: int) -> tuple[np.void, np.
         binding.destroy(handle)
 
 
+def _step_one_row_with_rollout_at_record(
+    dataset_path: Path, record: int, p: int, *, window_before: int = 24
+) -> tuple[np.void, np.void, np.void, np.void]:
+    binding = pytest.importorskip("msl_binding")
+    sizes = binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    compare_stride = int(sizes["compare"])
+
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+    assert int(samples.shape[0]) > record, f"dataset too short for record={record}"
+
+    sample_stride = int(samples.dtype.itemsize)
+    samples_u8 = samples.view(np.uint8).reshape(int(samples.shape[0]), sample_stride)
+    seed_off = int(samples.dtype.fields["seed_t"][1])
+    prev_input_off = int(samples.dtype.fields["prev_input_t"][1])
+    input_off = int(samples.dtype.fields["input_t"][1])
+
+    seed_bytes = np.empty((1, seed_stride), dtype=np.uint8)
+    prev_input_bytes = np.empty((1, input_stride), dtype=np.uint8)
+    input_bytes = np.empty((1, input_stride), dtype=np.uint8)
+    out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
+    out_view = out_compare_bytes.view(COMPARE_DTYPE).reshape(-1)
+
+    one_step_handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    try:
+        seed_bytes[0, :] = samples_u8[record, seed_off : seed_off + seed_stride]
+        prev_input_bytes[0, :] = samples_u8[record, prev_input_off : prev_input_off + input_stride]
+        input_bytes[0, :] = samples_u8[record, input_off : input_off + input_stride]
+        binding.reseed_seed(one_step_handle, seed_bytes)
+        binding.step_input(one_step_handle, prev_input_bytes, input_bytes)
+        binding.write_compare(one_step_handle, out_compare_bytes)
+        out_one = out_view[0].copy()
+    finally:
+        binding.destroy(one_step_handle)
+
+    start = max(0, int(record) - int(window_before))
+    rollout_handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    try:
+        seed_bytes[0, :] = samples_u8[start, seed_off : seed_off + seed_stride]
+        binding.reseed_seed(rollout_handle, seed_bytes)
+        for j in range(start, int(record) + 1):
+            prev_input_bytes[0, :] = samples_u8[j, prev_input_off : prev_input_off + input_stride]
+            input_bytes[0, :] = samples_u8[j, input_off : input_off + input_stride]
+            binding.step_input(rollout_handle, prev_input_bytes, input_bytes)
+            if j == int(record):
+                binding.write_compare(rollout_handle, out_compare_bytes)
+        out_roll = out_view[0].copy()
+    finally:
+        binding.destroy(rollout_handle)
+
+    seed = samples["seed_t"][record]
+    ref = samples["ref_t1"][record]
+    return seed, out_one, ref, out_roll
+
+
 @pytest.mark.integration
 @pytest.mark.parametrize(
     ("dataset_rel", "record", "p", "seed_action", "ref_action"),
@@ -347,14 +404,6 @@ def test_landing_basic_rows_keep_contact_y_parity_for_jumpaerialb_family(
             86,  # DamageAir3
             42,  # Landing
         ),
-        (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-            "TreasuredBackKangaroo.msl",
-            2678,
-            1,
-            27,  # JumpAerialF
-            42,  # Landing
-        ),
     ],
 )
 def test_landing_basic_contact_y_context_controls_remain_outside_bridge_scope(
@@ -438,3 +487,131 @@ def test_landing_rows_keep_self_vel_x_synced_with_ground_velocity(
 
     assert abs(float(out["speed_ground_x_self"][p]) - float(ref["speed_ground_x_self"][p])) <= 1e-6
     assert abs(float(out["speed_air_x_self"][p]) - float(ref["speed_air_x_self"][p])) <= 1e-6
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    ("dataset_rel", "record", "p", "seed_action", "ref_action"),
+    [
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
+            "AttachedGoodNaturedGuanaco.msl",
+            75,
+            0,
+            29,  # Fall
+            42,  # Landing
+        ),
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
+            "GracefulAttachedTurtle.msl",
+            80,
+            1,
+            29,  # Fall
+            42,  # Landing
+        ),
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
+            "QuerulousGrandDinosaur.msl",
+            75,
+            0,
+            29,  # Fall
+            42,  # Landing
+        ),
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
+            "TreasuredBackKangaroo.msl",
+            80,
+            1,
+            29,  # Fall
+            42,  # Landing
+        ),
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
+            "QuerulousGrandDinosaur.msl",
+            4561,
+            0,
+            29,  # Fall
+            42,  # Landing
+        ),
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
+            "TreasuredBackKangaroo.msl",
+            6426,
+            1,
+            29,  # Fall
+            42,  # Landing
+        ),
+    ],
+)
+def test_landing_contact_y_bridge_runtime_rows_fall_to_landing_keep_pos_y_parity(
+    dataset_rel: str, record: int, p: int, seed_action: int, ref_action: int
+) -> None:
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    seed, out, ref, out_roll = _step_one_row_with_rollout_at_record(dataset_path, record, p)
+
+    # Decomp ownership:
+    # - Fall collision callback path enters Landing via ft_80082B1C.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_Coll
+    # refs/melee/src/melee/ft/ft_081B.c::ft_80082B1C
+    assert int(seed["action_id"][p]) == int(seed_action)
+    assert int(ref["action_id"][p]) == int(ref_action)
+    assert int(seed["on_ground"][p]) == 0
+    assert int(ref["on_ground"][p]) == 1
+    assert int(seed["hitlag"][p]) == int(ref["hitlag"][p]) == 0
+    assert int(seed["hitstun"][p]) == int(ref["hitstun"][p]) == 0
+
+    assert int(out["action_id"][p]) == int(ref["action_id"][p]) == 42
+    assert int(out["on_ground"][p]) == int(ref["on_ground"][p]) == 1
+    assert abs(float(out["pos_y"][p]) - float(ref["pos_y"][p])) <= 2e-4
+
+    # Runtime-dominant lock: one-step@t and rollout@t agree on this float lane.
+    assert int(out_roll["action_id"][p]) == int(out["action_id"][p])
+    assert abs(float(out_roll["pos_y"][p]) - float(out["pos_y"][p])) <= 1e-4
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    ("dataset_rel", "record", "p", "seed_action", "ref_action", "rollout_action", "min_delta"),
+    [
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
+            "QuerulousGrandDinosaur.msl",
+            9531,
+            1,
+            29,  # Fall
+            42,  # Landing
+            29,  # rollout stays in Fall at this row
+            1.0,
+        ),
+    ],
+)
+def test_landing_contact_y_bridge_runtime_controls_stay_reseed_sensitive(
+    dataset_rel: str,
+    record: int,
+    p: int,
+    seed_action: int,
+    ref_action: int,
+    rollout_action: int,
+    min_delta: float,
+) -> None:
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    seed, out, ref, out_roll = _step_one_row_with_rollout_at_record(dataset_path, record, p)
+
+    assert int(seed["action_id"][p]) == int(seed_action)
+    assert int(ref["action_id"][p]) == int(ref_action)
+    assert int(seed["on_ground"][p]) == 0
+    assert int(ref["on_ground"][p]) == 1
+
+    assert int(out["action_id"][p]) == int(rollout_action)
+    assert int(out_roll["action_id"][p]) == int(rollout_action)
+    assert abs(float(out["pos_y"][p]) - float(out_roll["pos_y"][p])) >= float(min_delta)
