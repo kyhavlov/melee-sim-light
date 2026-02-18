@@ -41,14 +41,10 @@ static inline uint8_t sphere_sphere_intersects(float ax, float ay, float az, flo
   return (dx * dx + dy * dy + dz * dz) <= (rr * rr);
 }
 
-static inline uint8_t combat_shield_overlap_ftcoll_80007bcc(const MslBatch* batch, int bi,
-                                                             int attacker, int hb_id, float hx,
-                                                             float hy, float hz, float hr, float shx,
-                                                             float shy, float shz, float shr,
-                                                             float shield_desc_radius,
-                                                             float shield_owner_scale_y,
-                                                             uint8_t shield_desc_envelope_ready,
-                                                             float* out_overlap_margin) {
+static inline uint8_t combat_shield_overlap_ftcoll_80007bcc(
+    const MslBatch* batch, int bi, int attacker, int hb_id, float hx, float hy, float hz, float hr,
+    float shx, float shy, float shz, float shr, float shield_desc_radius,
+    float shield_owner_scale_y, uint8_t shield_desc_envelope_ready, float* out_overlap_margin) {
   if (out_overlap_margin != NULL) {
     *out_overlap_margin = 0.0f;
   }
@@ -840,6 +836,17 @@ static inline void combat_damage_enter_state(const MslCommonParams* c, MslBatch*
 
   batch->state.action_id[d_idx] = act;
   batch->state.animation_index[d_idx] = sm;
+  // Fighter_ChangeMotionState reset clears fp->x221B_b0 (shield descriptor active) on damage
+  // entry, so do not carry seeded Guard no-submotion shield-active bits into Damage* states.
+  // refs/melee/src/melee/ft/fighter.c (Fighter_ChangeMotionState reset block)
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
+  enum { MSL_STATE_FLAGS_STRIDE = MSL_STATE_FLAGS_BYTES };
+  enum { MSL_STATE_FLAGS_221B_INDEX = 2 };
+  enum { MSL_STATE_FLAG_221B_IS_SHIELD_ACTIVE = 0x80 };
+  {
+    const size_t flags_i = d_idx * MSL_STATE_FLAGS_STRIDE + (size_t)MSL_STATE_FLAGS_221B_INDEX;
+    batch->state.state_flags[flags_i] &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221B_IS_SHIELD_ACTIVE;
+  }
   // Decomp: ftCo_8008DCE0 clears mv.co.damage.x14 on damage entry.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
   batch->state.damage_jump_buffer_x14[d_idx] = 0;
@@ -2250,8 +2257,7 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
            batch->state.animation_index[d_idx] == UINT32_MAX)
               ? 1u
               : 0u;
-      const uint8_t shield_active =
-          (shr > 0.0f && !guard_reflect_entry_no_submotion) ? 1u : 0u;
+      const uint8_t shield_active = (shr > 0.0f && !guard_reflect_entry_no_submotion) ? 1u : 0u;
       const uint8_t shield_desc_envelope_ready = !guard_reflect_entry_no_submotion;
 
       // Combat collision consumes world-space hitbox/hurtcap primitives derived from:
@@ -2525,11 +2531,10 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
         // Shield precedence (BODY path): if the hitbox intersects the defender shield bubble, do
         // not apply BODY selection for this hitbox. The shield-hit selection above handles
         // (hitbox_id)-order shield resolution; this check is a conservative fallback.
-        if (shield_active &&
-            combat_shield_overlap_ftcoll_80007bcc(
-                batch, bi, attacker, hb_id, hx, hy, hz, hr, shx, shy, shz, shr,
-                /*shield_desc_radius=*/1.0f, batch->state.fighter_scale_y[d_idx],
-                shield_desc_envelope_ready, NULL)) {
+        if (shield_active && combat_shield_overlap_ftcoll_80007bcc(
+                                 batch, bi, attacker, hb_id, hx, hy, hz, hr, shx, shy, shz, shr,
+                                 /*shield_desc_radius=*/1.0f, batch->state.fighter_scale_y[d_idx],
+                                 shield_desc_envelope_ready, NULL)) {
           continue;
         }
 
@@ -2668,8 +2673,7 @@ static void combat_select_body_hits_one_debug(MslBatch* batch, int bi,
            batch->state.animation_index[d_idx] == UINT32_MAX)
               ? 1u
               : 0u;
-      const uint8_t shield_active =
-          (shr > 0.0f && !guard_reflect_entry_no_submotion) ? 1u : 0u;
+      const uint8_t shield_active = (shr > 0.0f && !guard_reflect_entry_no_submotion) ? 1u : 0u;
 
       // Deterministic selection: pick the first BODY overlap in (hitbox_id, hurtcap_id) order.
       uint8_t did_hit = 0;
@@ -2912,8 +2916,7 @@ int combat_debug_shield_candidate_decisions(MslBatch* batch, int batch_index,
            batch->state.animation_index[d_idx] == UINT32_MAX)
               ? 1u
               : 0u;
-      const uint8_t shield_active =
-          (shr > 0.0f && !guard_reflect_entry_no_submotion) ? 1u : 0u;
+      const uint8_t shield_active = (shr > 0.0f && !guard_reflect_entry_no_submotion) ? 1u : 0u;
       // GuardReflect no-submotion entry snapshots (action_frame<0, msid sentinel) carry
       // ambiguous ordering between ftCo_8009388C clear and ftCo_80092450 recreate.
       // Keep shield-active ownership from x221B_b0, but disable ShieldDesc envelope expansion

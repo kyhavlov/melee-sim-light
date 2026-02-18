@@ -203,35 +203,6 @@ void hurtboxes_refresh(MslBatch* batch) {
 
       uint16_t msid = 0u;
       if (anim_u32 > 0xFFFFu) {
-        enum { MSL_STATE_FLAGS_STRIDE = MSL_STATE_FLAGS_BYTES };
-        enum { MSL_STATE_FLAGS_221B_INDEX = 2 };
-        enum { MSL_STATE_FLAG_221B_IS_SHIELD_ACTIVE = 0x80 };
-        const uint8_t flags_221b =
-            batch->state
-                .state_flags[idx * MSL_STATE_FLAGS_STRIDE + (size_t)MSL_STATE_FLAGS_221B_INDEX];
-        // Guarded no-submotion snapshots can represent a live shield descriptor where we should
-        // not synthesize fallback body capsules from motion-state mapping. Exception: while an
-        // opponent is in catch startup, decomp catch collision (ftColl_80078A2C / ftGrabDist)
-        // can still acquire a guarded victim, so keep fallback capsules available for grab tests.
-        // refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078A2C,ftGrabDist}
-        uint8_t any_opponent_in_catch_startup = 0u;
-        for (int op = 0; op < num_players; op++) {
-          if (op == p) {
-            continue;
-          }
-          const size_t oidx = msl_idx_player(bi, op);
-          const uint16_t oa = batch->state.action_id[oidx];
-          if (oa == (uint16_t)MSL_ACT_CATCH || oa == (uint16_t)MSL_ACT_CATCH_DASH) {
-            any_opponent_in_catch_startup = 1u;
-            break;
-          }
-        }
-        const uint8_t guard_snapshot_with_shield =
-            (batch->state.action_id[idx] == (uint16_t)MSL_ACT_GUARD &&
-             batch->state.action_frame[idx] < 0 && !any_opponent_in_catch_startup &&
-             (flags_221b & (uint8_t)MSL_STATE_FLAG_221B_IS_SHIELD_ACTIVE))
-                ? 1u
-                : 0u;
         // Seed-bridge fallback (guard-family only):
         // Slippi post-frames commonly encode guard-family snapshots with animation_index=-1 while
         // decomp collision still uses the active ftCo submotion timeline. Keep the raw compare
@@ -239,12 +210,11 @@ void hurtboxes_refresh(MslBatch* batch) {
         // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
         // refs/melee/src/melee/ft/ftmotionstates.c (Guard* motion-state rows)
         //
-        // Guard (hold) no-submotion snapshots with x221B_b0 set represent a live shield descriptor.
-        // In this case, avoid synthesizing guard hurtcaps from msid fallback to keep shield-first
-        // collision ownership in item/fighter paths.
-        // refs/melee/src/melee/ft/ftcoll.c::ftColl_8007B1B8
-        if (guard_snapshot_with_shield ||
-            !hurtboxes_guard_fallback_submotion(batch->state.action_id[idx], &msid)) {
+        // Guard (hold) no-submotion snapshots with x221B_b0 can still resolve BODY contacts when
+        // shield overlap fails ("shield poke"), so keep fallback hurtcaps available when we can
+        // map the current guard-family motion-state to its submotion table.
+        // refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007B1B8,ftColl_80076CBC,ftColl_80076ED8}
+        if (!hurtboxes_guard_fallback_submotion(batch->state.action_id[idx], &msid)) {
           if (hit_status != 0) {
             final_hurtbox_state = hit_status;
           }
