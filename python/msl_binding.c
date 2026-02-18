@@ -2414,6 +2414,23 @@ static PyObject* msl_move_tables_throw_has_release_py(PyObject* self, PyObject* 
   return PyLong_FromLong((long)has);
 }
 
+static PyObject* msl_move_tables_throw_release_frame_py(PyObject* self, PyObject* args) {
+  (void)self;
+  int char_id = 0;
+  int throw_action_id = 0;
+  if (!PyArg_ParseTuple(args, "ii", &char_id, &throw_action_id)) {
+    return NULL;
+  }
+
+  float release_af = 0.0f;
+  const uint8_t ok =
+      move_tables_throw_release_frame((uint8_t)char_id, (uint16_t)throw_action_id, &release_af);
+  if (!ok) {
+    return Py_BuildValue("(id)", 0, 0.0);
+  }
+  return Py_BuildValue("(id)", 1, (double)release_af);
+}
+
 static PyObject* msl_move_tables_throw_release_hit_idx_py(PyObject* self, PyObject* args) {
   (void)self;
   int char_id = 0;
@@ -2629,6 +2646,8 @@ static PyMethodDef methods[] = {
      "anim_pose_matrix(char_id, msid, frame, part_id) -> np.ndarray[float32] shape=(12,)"},
     {"move_tables_throw_has_release", msl_move_tables_throw_has_release_py, METH_VARARGS,
      "move_tables_throw_has_release(char_id, throw_action_id) -> 0/1"},
+    {"move_tables_throw_release_frame", msl_move_tables_throw_release_frame_py, METH_VARARGS,
+     "move_tables_throw_release_frame(char_id, throw_action_id) -> (ok, release_af)"},
     {"move_tables_throw_release_hit_idx", msl_move_tables_throw_release_hit_idx_py, METH_VARARGS,
      "move_tables_throw_release_hit_idx(char_id, throw_action_id, cur_anim_frame) -> (released, "
      "hit_idx)"},

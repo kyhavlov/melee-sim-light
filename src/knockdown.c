@@ -1049,10 +1049,11 @@ static inline void enter_passive_from_damage_land(MslBatch* batch, const MslChar
   enum { MSL_STATE_FLAG_221C_IS_HITSTUN = 0x02 };
   const size_t flags_i = idx * (size_t)MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_221C_INDEX;
   batch->state.state_flags[flags_i] &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221C_IS_HITSTUN;
-  if (batch->state.hitlag_started_frame[idx] == 0) {
-    batch->state.anim_frame_fp_q16_16[idx] += batch->state.frame_speed_mul_fp_q16_16[idx];
-  }
-  msl_anim_timebase_recompute_derived(batch, idx);
+  // Passive/PassiveStand entry in ftCo_80090184 uses Fighter_ChangeMotionState via
+  // ftCo_80098928 / ftCo_8009872C and does not do a local immediate ftAnim_8006EBA4 tick.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_80090184
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_PassiveStand.c::ftCo_80098928
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownAttack.c::ftCo_8009872C
 }
 
 static inline uint16_t pick_downbound_action_from_pose(const MslBatch* batch, size_t idx,

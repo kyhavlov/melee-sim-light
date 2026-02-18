@@ -85,6 +85,12 @@ uint8_t move_tables_catchattack_grabbed_hit_active(uint8_t char_id, float cur_an
 // Source of truth: data/moves/{fox,falco}.json moves["ftCo_SM_Throw*"]["events"] set_throw_flags.
 uint8_t move_tables_throw_has_release(uint8_t char_id, uint16_t throw_action_id);
 
+// Returns 1 and outputs the parsed throw release action-frame threshold.
+//
+// Source of truth: data/moves/{fox,falco}.json moves["ftCo_SM_Throw*"]["events"] set_throw_flags.
+uint8_t move_tables_throw_release_frame(uint8_t char_id, uint16_t throw_action_id,
+                                        float* out_release_af);
+
 // Returns 1 and outputs the released hit_idx if cur_anim_frame_f32 is at/after the throw release frame.
 //
 // Source of truth: data/moves/{fox,falco}.json moves["ftCo_SM_Throw*"]["events"] set_throw_flags.

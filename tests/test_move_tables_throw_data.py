@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import math
 from pathlib import Path
 
 import pytest
@@ -171,6 +172,38 @@ def test_move_tables_other_throws_have_release_frame(char_id: int, throw_action_
     assert got_release_frame == exp_release_frame
     assert got_hit_idx == exp_hit_idx
 
+
+@pytest.mark.parametrize(
+    "char_id,throw_action_id,move_key",
+    [
+        (CHAR_FOX, ACT_THROW_F, "ftCo_SM_ThrowF"),
+        (CHAR_FOX, ACT_THROW_B, "ftCo_SM_ThrowB"),
+        (CHAR_FALCO, ACT_THROW_F, "ftCo_SM_ThrowF"),
+        (CHAR_FALCO, ACT_THROW_B, "ftCo_SM_ThrowB"),
+    ],
+)
+def test_move_tables_throw_release_frame_valid_actions(char_id: int, throw_action_id: int, move_key: str) -> None:
+    import msl_binding
+
+    root = Path(__file__).resolve().parents[1]
+    move_path = root / "data" / "moves" / ("fox.json" if char_id == CHAR_FOX else "falco.json")
+    if not move_path.exists():
+        pytest.skip(f"missing local data/moves/{move_path.name} (gitignored)")
+
+    exp_release_frame, _exp_hit_idx, _exp_hitboxes = _load_throw_expectations(move_path, move_key)
+    ok, release_af = msl_binding.move_tables_throw_release_frame(char_id, throw_action_id)
+    assert int(ok) == 1
+    assert math.isfinite(float(release_af))
+    assert float(release_af) == pytest.approx(float(exp_release_frame), abs=1e-6)
+
+
+def test_move_tables_throw_release_frame_invalid_action_returns_0() -> None:
+    import msl_binding
+
+    invalid_action = 0x0020  # not a Throw* GALE01 action id
+    ok, release_af = msl_binding.move_tables_throw_release_frame(CHAR_FOX, invalid_action)
+    assert int(ok) == 0
+    assert float(release_af) == pytest.approx(0.0, abs=0.0)
 
 @pytest.mark.parametrize(
     "char_id,throw_action_id,move_key",

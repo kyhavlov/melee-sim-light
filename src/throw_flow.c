@@ -122,19 +122,49 @@ static inline float throw_flow_owner_self_dx(const MslBatch* batch, size_t owner
 }
 
 static inline float throw_flow_owner_throwf_deferred_extra_share(const MslBatch* batch,
+                                                                 uint8_t owner_char,
+                                                                 uint16_t throw_action,
+                                                                 float owner_prev_af, float owner_af,
                                                                  size_t owner_idx) {
   if (batch == NULL) {
     return 0.0f;
   }
   // Decomp/timebase-backed split for deferred ThrowF release apply:
-  // - ThrowF release is consumed from throw Anim callback timing, and ThrowF commonly runs at
-  //   anim speed > 1.0x on release rows.
-  // - Post-items deferred throw-hit apply therefore needs to carry the overspeed portion of owner
-  //   root motion (beyond the base 1.0x frame share) so release ownership remains aligned.
+  // - Throw release timing is owned by set_throw_flags(0) in ThrowF script events.
+  // - Decomp consumes that release in ThrowF Anim before Phys integration; this sim defers
+  //   throw-hit apply to post-items, so we carry a bounded owner-motion share tied to:
+  //   (a) overspeed contribution from thrower anim-rate, and
+  //   (b) post-release fraction within the current (prev_af -> cur_af) step.
   // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_ThrowF_Anim
+  // refs/melee/src/melee/ft/ftaction.c::ftAction_800718A4 (case 0 set_throw_flags)
+  // refs/data/moves/{fox,falco}.json moves["ftCo_SM_ThrowF"]["events"] set_throw_flags
   const float frame_speed_mul = msl_f32_from_q16_16(batch->state.frame_speed_mul_fp_q16_16[owner_idx]);
-  return (frame_speed_mul > 1.0f) ? (frame_speed_mul - 1.0f) : 0.0f;
+  if (!(frame_speed_mul > 1.0f)) {
+    return 0.0f;
+  }
+  const float overspeed_share = frame_speed_mul - 1.0f;
+  float release_af = 0.0f;
+  if (!move_tables_throw_release_frame(owner_char, throw_action, &release_af)) {
+    return overspeed_share;
+  }
+  const float span = owner_af - owner_prev_af;
+  if (!(span > 0.0f)) {
+    return overspeed_share;
+  }
+  const float post_release = owner_af - release_af;
+  if (!(post_release > 0.0f)) {
+    return 0.0f;
+  }
+  float release_share = post_release / span;
+  if (release_share < 0.0f) {
+    release_share = 0.0f;
+  } else if (release_share > 1.0f) {
+    release_share = 1.0f;
+  }
+  // Weight is derived from anim-rate itself (0 at 1.0x; approaches 1 as rate increases).
+  const float weight = 1.0f - (1.0f / frame_speed_mul);
+  return overspeed_share + (release_share - overspeed_share) * weight;
 }
 
 void throw_flow_update_pre_physics(MslBatch* batch) {
@@ -352,7 +382,12 @@ void throw_flow_update_post_items(MslBatch* batch) {
           // refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate
           // Deferred ThrowF ownership split bridge:
           // - Carry only the owner-motion overspeed share derived from thrower anim timebase.
-          const float extra_owner_share = throw_flow_owner_throwf_deferred_extra_share(batch, oidx);
+          const int32_t owner_prev_fp =
+              batch->state.anim_frame_fp_q16_16[oidx] - batch->state.frame_speed_mul_fp_q16_16[oidx];
+          const float owner_prev_af = msl_f32_from_q16_16(owner_prev_fp);
+          const float owner_af = batch->state.anim_frame_f32[oidx];
+          const float extra_owner_share = throw_flow_owner_throwf_deferred_extra_share(
+              batch, owner_char, throw_action, owner_prev_af, owner_af, oidx);
           batch->state.pos_x[vidx] += extra_owner_share * throw_flow_owner_self_dx(batch, oidx, vidx);
         }
       }

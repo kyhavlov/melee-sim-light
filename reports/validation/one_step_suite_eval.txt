@@ -44,7 +44,7 @@ suite: fox_falco_fd_ucf084_recent  datasets: 4  ucf_enabled: True  ucf_cardinals
 == datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl ==
 Records: 7295  Players/scored per record: 2  Total player-frames: 14590
 mismatch.action_id: 64 / 14590 (0.004387)
-mismatch.action_frame: 109 / 14590 (0.007471)
+mismatch.action_frame: 105 / 14590 (0.007197)
 mismatch.on_ground: 13 / 14590 (0.000891)
 mismatch.facing: 25 / 14590 (0.001714)
 mismatch.stocks: 0 / 14590 (0.000000)
@@ -53,7 +53,7 @@ mismatch.is_dead: 0 / 14590 (0.000000)
 mismatch.hitlag: 29 / 14590 (0.001988)
 mismatch.hitstun: 25 / 14590 (0.001714)
 mismatch.l_cancel: 0 / 14590 (0.000000)
-mismatch.hurtbox_state: 20 / 14590 (0.001371)
+mismatch.hurtbox_state: 22 / 14590 (0.001508)
 mismatch.ground_id: 2 / 14590 (0.000137)
 mismatch.animation_index: 64 / 14590 (0.004387)
 mismatch.instance_hit_by: 28 / 14590 (0.001919)
@@ -80,13 +80,13 @@ err.item_pos_x: mae=0.740426 p95=0.000000 max=145.596008
 err.item_pos_y: mae=0.179889 p95=0.000000 max=26.364082
 err.item_vel_x: mae=0.142800 p95=0.000000 max=10.000000
 err.item_vel_y: mae=0.122106 p95=0.000000 max=6.995885
-overall.discrete_mismatch: 843 / 882695
+overall.discrete_mismatch: 841 / 882695
 overall.float_norm_mae_p95: 0.00532235
 
 == datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl ==
 Records: 11529  Players/scored per record: 2  Total player-frames: 23058
 mismatch.action_id: 110 / 23058 (0.004771)
-mismatch.action_frame: 175 / 23058 (0.007590)
+mismatch.action_frame: 160 / 23058 (0.006939)
 mismatch.on_ground: 24 / 23058 (0.001041)
 mismatch.facing: 69 / 23058 (0.002992)
 mismatch.stocks: 0 / 23058 (0.000000)
@@ -95,7 +95,7 @@ mismatch.is_dead: 0 / 23058 (0.000000)
 mismatch.hitlag: 55 / 23058 (0.002385)
 mismatch.hitstun: 54 / 23058 (0.002342)
 mismatch.l_cancel: 0 / 23058 (0.000000)
-mismatch.hurtbox_state: 18 / 23058 (0.000781)
+mismatch.hurtbox_state: 31 / 23058 (0.001344)
 mismatch.ground_id: 7 / 23058 (0.000304)
 mismatch.animation_index: 108 / 23058 (0.004684)
 mismatch.instance_hit_by: 44 / 23058 (0.001908)
@@ -109,7 +109,7 @@ mismatch.item_type: 31 / 172935 (0.000179)
 mismatch.item_state: 25 / 172935 (0.000145)
 mismatch.item_owner: 40 / 172935 (0.000231)
 mismatch.item_instance_id: 33 / 172935 (0.000191)
-err.pos_x: mae=0.066449 p95=0.264646 max=6.344639
+err.pos_x: mae=0.066438 p95=0.264646 max=6.254021
 err.pos_y: mae=0.026861 p95=0.050587 max=8.338652
 err.speed_air_x_self: mae=0.044576 p95=0.080000 max=3.360000
 err.speed_ground_x_self: mae=0.020948 p95=0.050060 max=3.360000
@@ -122,13 +122,13 @@ err.item_pos_x: mae=0.304626 p95=0.000000 max=179.321686
 err.item_pos_y: mae=0.084865 p95=0.000000 max=26.796017
 err.item_vel_x: mae=0.080102 p95=0.000000 max=10.000000
 err.item_vel_y: mae=0.057218 p95=0.000000 max=6.995885
-overall.discrete_mismatch: 1400 / 1395009
-overall.float_norm_mae_p95: 0.00541433
+overall.discrete_mismatch: 1398 / 1395009
+overall.float_norm_mae_p95: 0.00541432
 
 == datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/QuerulousGrandDinosaur.msl ==
 Records: 10222  Players/scored per record: 2  Total player-frames: 20444
 mismatch.action_id: 97 / 20444 (0.004745)
-mismatch.action_frame: 203 / 20444 (0.009930)
+mismatch.action_frame: 189 / 20444 (0.009245)
 mismatch.on_ground: 13 / 20444 (0.000636)
 mismatch.facing: 41 / 20444 (0.002005)
 mismatch.stocks: 0 / 20444 (0.000000)
@@ -137,7 +137,7 @@ mismatch.is_dead: 0 / 20444 (0.000000)
 mismatch.hitlag: 48 / 20444 (0.002348)
 mismatch.hitstun: 27 / 20444 (0.001321)
 mismatch.l_cancel: 0 / 20444 (0.000000)
-mismatch.hurtbox_state: 18 / 20444 (0.000880)
+mismatch.hurtbox_state: 32 / 20444 (0.001565)
 mismatch.ground_id: 4 / 20444 (0.000196)
 mismatch.animation_index: 97 / 20444 (0.004745)
 mismatch.instance_hit_by: 37 / 20444 (0.001810)
@@ -170,7 +170,7 @@ overall.float_norm_mae_p95: 0.00430801
 == datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/TreasuredBackKangaroo.msl ==
 Records: 7837  Players/scored per record: 2  Total player-frames: 15674
 mismatch.action_id: 73 / 15674 (0.004657)
-mismatch.action_frame: 104 / 15674 (0.006635)
+mismatch.action_frame: 99 / 15674 (0.006316)
 mismatch.on_ground: 11 / 15674 (0.000702)
 mismatch.facing: 38 / 15674 (0.002424)
 mismatch.stocks: 0 / 15674 (0.000000)
@@ -179,7 +179,7 @@ mismatch.is_dead: 0 / 15674 (0.000000)
 mismatch.hitlag: 30 / 15674 (0.001914)
 mismatch.hitstun: 33 / 15674 (0.002105)
 mismatch.l_cancel: 0 / 15674 (0.000000)
-mismatch.hurtbox_state: 10 / 15674 (0.000638)
+mismatch.hurtbox_state: 15 / 15674 (0.000957)
 mismatch.ground_id: 1 / 15674 (0.000064)
 mismatch.animation_index: 72 / 15674 (0.004594)
 mismatch.instance_hit_by: 31 / 15674 (0.001978)
@@ -210,5 +210,5 @@ overall.discrete_mismatch: 924 / 948277
 overall.float_norm_mae_p95: 0.00587384
 
 == suite summary ==
-overall.discrete_mismatch: 4386 / 4462843
-overall.float_norm_mae_p95: 0.00519590
+overall.discrete_mismatch: 4382 / 4462843
+overall.float_norm_mae_p95: 0.00519589

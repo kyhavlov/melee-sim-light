@@ -1386,6 +1386,23 @@ uint8_t move_tables_throw_has_release(uint8_t char_id, uint16_t throw_action_id)
   return g_throw_release_by_char[char_id][(size_t)kind].loaded ? 1 : 0;
 }
 
+uint8_t move_tables_throw_release_frame(uint8_t char_id, uint16_t throw_action_id,
+                                        float* out_release_af) {
+  if (out_release_af == NULL) {
+    return 0;
+  }
+  const int kind = throw_kind_from_action(throw_action_id);
+  if (kind < 0) {
+    return 0;
+  }
+  const MslThrowRelease rel = g_throw_release_by_char[char_id][(size_t)kind];
+  if (!rel.loaded) {
+    return 0;
+  }
+  *out_release_af = (float)rel.release_af;
+  return 1;
+}
+
 uint8_t move_tables_throw_release_hit_idx(uint8_t char_id, uint16_t throw_action_id,
                                           float cur_anim_frame_f32, uint8_t* out_hit_idx) {
   const int kind = throw_kind_from_action(throw_action_id);

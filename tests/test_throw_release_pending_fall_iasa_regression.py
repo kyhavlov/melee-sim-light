@@ -184,8 +184,9 @@ def test_throw_release_pending_context_controls_adjacent_rows_5716_5718() -> Non
 @pytest.mark.integration
 def test_throw_release_pending_context_row_owner_fsm_le1_extra_share_noop() -> None:
     # Context lock: ThrowF owner row with frame_speed_mul <= 1.0.
-    # Derived deferred-share term max(0, frame_speed_mul - 1) must be zero, so the
-    # ThrowF-specific extra ownership carry is a no-op on this lane.
+    # throw_flow_owner_throwf_deferred_extra_share() early-outs to 0.0 when
+    # frame_speed_mul <= 1.0, so the ThrowF-specific extra ownership carry is a
+    # no-op on this lane.
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_rel = (
@@ -207,9 +208,8 @@ def test_throw_release_pending_context_row_owner_fsm_le1_extra_share_noop() -> N
     assert int(ref["action_id"][victim_p]) == 239
 
     frame_speed_mul = float(seed["frame_speed_mul_f32"][owner_p])
+    # Function branch contract: no overspeed means no deferred ThrowF extra share.
     assert frame_speed_mul <= 1.0 + 1e-6
-    extra_owner_share = max(0.0, frame_speed_mul - 1.0)
-    assert extra_owner_share == pytest.approx(0.0, abs=1e-6)
 
     owner_dx = float(seed["speed_ground_x_self"][owner_p])
     assert abs(owner_dx) > 1e-4
