@@ -37,6 +37,8 @@ if [[ ! -f "$ROLLOUT_REPORT" ]]; then
   exit 1
 fi
 
+baseline_sha=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
+
 discrete=$(
   awk '/^overall\.discrete_mismatch:/ {v=$2} END {print v}' "$ONE_STEP_REPORT"
 )
@@ -88,6 +90,7 @@ Important workflow:
 - Revert failed attempts immediately and continue; do not stop on first failure.
 
 Pinned baseline for this run:
+- baseline git SHA: ${baseline_sha}
 - overall.discrete_mismatch: ${discrete}
 - mismatch.hitlag: ${hitlag}
 - mismatch.hitstun: ${hitstun}
@@ -100,6 +103,7 @@ Mandatory success criteria for final uncommitted diff:
 1) overall.discrete_mismatch decreases
 2) overall.float_norm_mae_p95 decreases
 3) at least one of err.pos_x max or err.pos_y max decreases
+4) You may satisfy (1)-(3) via one slice or multiple slices, but final combined diff must satisfy all.
 
 Priority order:
 - A-class first (likely dual-impact: discrete + float)
@@ -113,10 +117,23 @@ Hard constraints:
 - no xfail
 - no hand-editing reports
 
+Bridge/heuristic ablation rule (mandatory when applicable):
+- If a gameplay change introduces any micro-bridge behavior (epsilon nudges, snapshot-only branches, no-submotion handoff logic, carry-share tuning, or new C-only fallback lanes), run A/B/C ablation before finalizing:
+  - A: full candidate
+  - B: candidate without the new micro-bridge subpiece
+  - C: both new bridge pieces removed (or nearest neutral baseline)
+- Prefer the narrowest variant that preserves meaningful gains on core metrics.
+- If A and B are effectively tied on core suite metrics, choose B.
+
 Lock-first rules:
 - add strict replay-real locks for targeted rows (exact parity or tight epsilon)
 - add adjacent context controls (stability/shape only)
 - no “improved-to-threshold” lock assertions
+
+Test hygiene rules (integration tests):
+- use pytest.importorskip("msl_binding")
+- use required-artifact skip helper
+- always destroy handles in finally
 
 Required gates on final diff:
 - make test
@@ -127,6 +144,10 @@ Required gates on final diff:
 - float top-key drift: pos_x new=0 gone=0, pos_y new=0 gone=0
 - mismatch.hitlag/hitstun non-increasing
 - rollout seeded non-increasing
+
+Diff hygiene:
+- Keep the final diff minimal and on-slice.
+- If unexpected files are touched (e.g., wrapper/API/tooling not required by the slice), either revert them or explicitly justify them in the report.
 
 Return only when done, with:
 1) git diff --name-only
@@ -142,5 +163,6 @@ Return only when done, with:
 4) targeted row outcomes (before -> after)
 5) guardrail checklist pass/fail
 6) class (A/B/C) for each slice in the final diff + rationale
-7) git status --porcelain -b
+7) if bridge/heuristic ablation rule was triggered: include A/B/C table + chosen variant rationale
+8) git status --porcelain -b
 EOF
