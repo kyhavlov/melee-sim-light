@@ -65,6 +65,7 @@ static inline void enter_fall_release(MslBatch* batch, size_t idx) {
 }
 
 static inline void throw_flow_bridge_integrate_deferred_throw_hit_position(MslBatch* batch,
+                                                                           size_t owner_idx,
                                                                            size_t victim_idx) {
   if (batch == NULL) {
     return;
@@ -82,6 +83,12 @@ static inline void throw_flow_bridge_integrate_deferred_throw_hit_position(MslBa
   const float vy_self = batch->state.speed_y_self[victim_idx];
   const float vx = vx_self + batch->state.speed_x_attack[victim_idx];
   const float vy = vy_self + batch->state.speed_y_attack[victim_idx];
+  float owner_dx = 0.0f;
+  if (owner_idx != victim_idx) {
+    const uint8_t owner_on_ground = batch->state.on_ground[owner_idx] ? 1u : 0u;
+    owner_dx = owner_on_ground ? batch->state.speed_ground_x_self[owner_idx]
+                               : batch->state.speed_air_x_self[owner_idx];
+  }
 
   // Throw release/hit ordering bridge:
   // - In decomp, set_throw_flags(0) consume + throw-hit application (ftCo_800DE2A8/ftCo_800DE7C0)
@@ -92,7 +99,15 @@ static inline void throw_flow_bridge_integrate_deferred_throw_hit_position(MslBa
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DE2A8
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Thrown.c::ftCo_800DE7C0
   // refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate
-  batch->state.pos_x[victim_idx] += vx;
+  //
+  // Release-position bridge (narrow x-lane ownership):
+  // - ftCo_800DDDE4 resolves thrown-release world position from throw-side joints after the
+  //   thrower's own motion update for the frame.
+  // - This simulator defers release/hit apply to post-items; carry the thrower displacement once
+  //   so deferred rows don't drop that owner-motion term on pos_x.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DDDE4
+  // refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate
+  batch->state.pos_x[victim_idx] += vx + owner_dx;
   batch->state.pos_y[victim_idx] += vy;
 }
 
@@ -288,7 +303,18 @@ void throw_flow_update_post_items(MslBatch* batch) {
         // Invincible/intangible suppression: the victim stays in FALL (already detached).
         // (No additional transition needed.)
       } else {
-        throw_flow_bridge_integrate_deferred_throw_hit_position(batch, vidx);
+        // Throw-release damage-entry anim advance ownership:
+        // - ftCo_8008DCE0 always performs immediate ftAnim_8006EBA4 on Damage* entry.
+        // - Non-ThrowF release chains in this sim still need one deferred post-combat tick to keep
+        //   first steady-frame action_frame parity after post-items throw-hit apply.
+        // - ThrowF release rows over-advance with that extra deferred tick; keep ThrowF on the
+        //   immediate-entry tick only.
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_Throw{F,B,Hi,Lw}_Anim
+        if (throw_action != (uint16_t)MSL_ACT_THROW_F) {
+          msl_anim_timebase_defer_tick_once(batch, vidx);
+        }
+        throw_flow_bridge_integrate_deferred_throw_hit_position(batch, oidx, vidx);
       }
     }
   }

@@ -1650,16 +1650,14 @@ uint8_t combat_apply_throw_hit(MslBatch* batch, int batch_index, int attacker, i
   const uint8_t hurt_height = 1u;
   combat_damage_enter_state(c, batch, d_idx, defender_on_ground, defender_on_ground, hurt_height,
                             kb_applied, kb_angle_rad);
-  // Throw-release ordering: ftCo_800DDDE4 populates dmg fields, then Fighter_ProcessHit enters the
-  // Damage* state (ftCo_8008DCE0 does immediate ftAnim_8006EBA4), and the frame still runs the
-  // normal Fighter_8006A360 anim step afterward under !hitlag.
+  // Throw-release ordering:
+  // - ftCo_800DDDE4 routes into Fighter_ProcessHit damage entry, and ftCo_8008DCE0 already performs
+  //   an immediate ftAnim_8006EBA4 on state change.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DDDE4
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
-  // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
   //
-  // Sim mapping: schedule one post-combat deferred tick in addition to damage-entry immediate tick
-  // so throw-release damage entries land on the same first steady-frame action_frame as Slippi.
-  msl_anim_timebase_defer_tick_once(batch, d_idx);
+  // Deferred throw-hit apply in this simulator happens post-items; keep only the damage-entry
+  // immediate tick here (no extra deferred tick) so release rows do not over-advance action_frame.
 
   batch->state.instance_hit_by[d_idx] = batch->state.instance_id[a_idx];
   batch->state.last_hit_by[d_idx] = (uint8_t)attacker;
