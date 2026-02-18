@@ -655,11 +655,11 @@ void mpcoll_env_update_ledge_grab(MslBatch* batch) {
       // Note: prev_pos_* is written in physics_integrate(), so it is not a previous-frame snapshot.
       // refs/melee/src/melee/mp/mpcoll.c::mpColl_80043754
       // refs/melee/src/melee/mp/mpcoll.c::mpColl_80046904
-      const float coll_prev_x = batch->state.coll_stage_prev_pos_x[idx];
-      const float coll_prev_y = batch->state.coll_stage_prev_pos_y[idx];
+      const float coll_prev_x = batch->state.prev_pos_x[idx];
+      const float coll_prev_y = batch->state.prev_pos_y[idx];
       const float coll_cur_x = batch->state.coll_stage_cur_pos_x[idx];
       const float coll_cur_y = batch->state.coll_stage_cur_pos_y[idx];
-      const float descent_prev_y = batch->state.prev_pos_y[idx];
+      const float descent_prev_y = coll_prev_y;
       const float descent_cur_y = coll_cur_y;
       // Decomp: fp->x34_scale.y is initialized from Player_GetModelScale (per-character default
       // scale in most cases). Older datasets may still seed fighter_scale_y as 1.0 for all
