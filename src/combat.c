@@ -1003,9 +1003,10 @@ static inline void combat_mutations_pass1_future_apply_body_hit(MslBatch* batch,
   // refs/melee/src/melee/ft/ftcoll.c::getEnvDmg + ftColl_80076640 (x183C_applied update)
   // refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC (hitlag calc under `if (bool1)`)
   //
-  // Note: the caller provides `int_dmg` computed from the extracted hitbox damage; recompute it
-  // from the applied float to match the decomp ordering.
-  (void)int_dmg;
+  // Keep two integer damage lanes:
+  // - `dmg_i`: env damage from applied float (drives hitlag path via x183C_applied)
+  // - `int_dmg`: collision HitCapsule integer lane (drives ftColl_80079AB0 KB formula)
+  // refs/melee/build/GALE01/asm/melee/ft/ftcoll.s::ftColl_80079EA8
   const int dmg_i = combat_get_env_dmg(dmg_f);
   if (dmg_i <= 0) {
     return;
@@ -1109,7 +1110,7 @@ static inline void combat_mutations_pass1_future_apply_body_hit(MslBatch* batch,
     coll_kb_mul = 1.0f;
   }
   const float kb_applied = combat_damage_calc_kb_applied(
-      c, d_ch, d_motion_id, percent_pre, dmg_temp, dmg_i, hb_kbg, hb_wsk, hb_bkb, coll_kb_mul,
+      c, d_ch, d_motion_id, percent_pre, dmg_temp, int_dmg, hb_kbg, hb_wsk, hb_bkb, coll_kb_mul,
       batch->state.dmg_x2225_b7[d_idx], batch->state.dmg_x2224_b2[d_idx]);
   const float kb_angle_rad =
       combat_damage_calc_angle_radians(c, hb_angle, defender_on_ground, kb_applied);
