@@ -64,6 +64,38 @@ static inline void enter_fall_release(MslBatch* batch, size_t idx) {
   msl_anim_timebase_restart(batch, idx, 0.0f, 1.0f);
 }
 
+static inline void throw_flow_bridge_integrate_deferred_throw_hit_position(MslBatch* batch,
+                                                                           size_t victim_idx) {
+  if (batch == NULL) {
+    return;
+  }
+
+  const uint8_t on_ground = batch->state.on_ground[victim_idx] ? 1u : 0u;
+  const float vx_self =
+      on_ground ? batch->state.speed_ground_x_self[victim_idx] : batch->state.speed_air_x_self[victim_idx];
+  if (on_ground) {
+    // Keep self_vel.x synced with grounded integration velocity, matching ftCommon_ApplyGroundMovement.
+    // refs/melee/src/melee/ft/ftcommon.c::ftCommon_ApplyGroundMovement
+    batch->state.speed_air_x_self[victim_idx] = vx_self;
+  }
+
+  const float vy_self = batch->state.speed_y_self[victim_idx];
+  const float vx = vx_self + batch->state.speed_x_attack[victim_idx];
+  const float vy = vy_self + batch->state.speed_y_attack[victim_idx];
+
+  // Throw release/hit ordering bridge:
+  // - In decomp, set_throw_flags(0) consume + throw-hit application (ftCo_800DE2A8/ftCo_800DE7C0)
+  //   occurs in Throw Anim callback before Fighter_procUpdate Phys integration.
+  // - This simulator defers throw-hit apply to post-items to preserve item-preemption ordering;
+  //   apply one immediate position integration here so throw-hit velocities displace in-frame.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DD724
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DE2A8
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Thrown.c::ftCo_800DE7C0
+  // refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate
+  batch->state.pos_x[victim_idx] += vx;
+  batch->state.pos_y[victim_idx] += vy;
+}
+
 void throw_flow_update_pre_physics(MslBatch* batch) {
   if (batch == NULL) {
     return;
@@ -255,6 +287,8 @@ void throw_flow_update_post_items(MslBatch* batch) {
       if (!applied) {
         // Invincible/intangible suppression: the victim stays in FALL (already detached).
         // (No additional transition needed.)
+      } else {
+        throw_flow_bridge_integrate_deferred_throw_hit_position(batch, vidx);
       }
     }
   }

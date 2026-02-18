@@ -1171,6 +1171,25 @@ static inline void enter_landing_action_from_air(MslBatch* batch, const MslCharP
   }
 }
 
+static inline uint8_t locomotion_is_throw_release_pending_victim(const MslBatch* batch, int bi,
+                                                                  int victim_p) {
+  if (batch == NULL) {
+    return 0u;
+  }
+  const int num_players = (int)batch->config.num_players;
+  for (int owner_p = 0; owner_p < num_players; owner_p++) {
+    if (owner_p == victim_p) {
+      continue;
+    }
+    const size_t oidx = msl_idx_player(bi, owner_p);
+    if (batch->state.throw_pending_victim_port[oidx] == (uint8_t)victim_p &&
+        batch->state.throw_pending_hit_idx[oidx] != 0xFFu) {
+      return 1u;
+    }
+  }
+  return 0u;
+}
+
 void locomotion_update_pre(MslBatch* batch) {
   if (batch == NULL) {
     return;
@@ -1232,6 +1251,18 @@ void locomotion_update_pre(MslBatch* batch) {
 
       action_id = batch->state.action_id[idx];
       const uint16_t action_id_start = action_id;
+
+      // Deferred throw-release bridge guard:
+      // - In this sim, throw release detaches the victim and installs a temporary FALL bridge, then
+      //   applies the throw hit in throw_flow_update_post_items().
+      // - In decomp, throw release/hit runs inside Throw Anim callback (`ftCo_800DD724` ->
+      //   `ftCo_800DDDE4`) before normal victim locomotion IASA has a chance to consume aerial
+      //   jump/attack inputs on that same release frame.
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DD724
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DDDE4
+      if (locomotion_is_throw_release_pending_victim(batch, bi, p)) {
+        continue;
+      }
 
       // -------------------------
       // Ground locomotion updates

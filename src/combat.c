@@ -1030,7 +1030,17 @@ static inline void combat_mutations_pass1_future_apply_body_hit(MslBatch* batch,
   batch->state.percent_temp[d_idx] += dmg_f;
   const float dmg_temp = batch->state.percent_temp[d_idx];
 
-  const uint16_t d_motion_id = batch->state.action_id[d_idx];
+  uint16_t d_motion_id = batch->state.action_id[d_idx];
+  if (d_motion_id == (uint16_t)MSL_ACT_FALL &&
+      msl_action_is_thrown_victim(batch->state.prev_action_id[d_idx])) {
+    // Deferred throw-release bridge ownership:
+    // - This sim may transiently place the victim in FALL before deferred throw-hit consume.
+    // - In decomp, set_throw_flags consume + throw-hit apply run while victim is still in Thrown*;
+    //   there is no intermediate FALL state feeding Damage calc inputs.
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DD724
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DDDE4
+    d_motion_id = batch->state.prev_action_id[d_idx];
+  }
 
   const uint8_t element = batch->state.hitbox_element[hb_i];
   // Decomp/ASM: fp->x1960_vibrateMult electric override is victim-owned (ftColl_8007A06C writes
