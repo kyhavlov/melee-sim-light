@@ -2256,7 +2256,8 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
       const float shr = batch->state.shield_radius[d_idx];
       // GuardReflect no-submotion entry (`action_frame<0`, sentinel anim index) is the ambiguous
       // ordering frame between ftCo_8009388C clear and ftCo_80092450 recreate.
-      // Treat shield collision as inactive only on that entry snapshot.
+      // Keep shield-active ownership from the live ShieldDesc radius (x221B_b0 lane) and only
+      // suppress ShieldDesc envelope expansion lanes on that entry snapshot.
       // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
       //   ftCo_80093694,ftCo_8009388C,ftCo_80093A50,ftCo_80092450}
       const uint8_t guard_reflect_entry_no_submotion =
@@ -2265,7 +2266,7 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
            batch->state.animation_index[d_idx] == UINT32_MAX)
               ? 1u
               : 0u;
-      const uint8_t shield_active = (shr > 0.0f && !guard_reflect_entry_no_submotion) ? 1u : 0u;
+      const uint8_t shield_active = (shr > 0.0f) ? 1u : 0u;
       const uint8_t shield_desc_envelope_ready = !guard_reflect_entry_no_submotion;
 
       // Combat collision consumes world-space hitbox/hurtcap primitives derived from:
@@ -2675,13 +2676,7 @@ static void combat_select_body_hits_one_debug(MslBatch* batch, int bi,
       const float shy = batch->state.shield_y[d_idx];
       const float shz = batch->state.shield_z[d_idx];
       const float shr = batch->state.shield_radius[d_idx];
-      const uint8_t guard_reflect_entry_no_submotion =
-          (batch->state.action_id[d_idx] == (uint16_t)MSL_ACT_GUARD_REFLECT &&
-           batch->state.action_frame[d_idx] < 0 &&
-           batch->state.animation_index[d_idx] == UINT32_MAX)
-              ? 1u
-              : 0u;
-      const uint8_t shield_active = (shr > 0.0f && !guard_reflect_entry_no_submotion) ? 1u : 0u;
+      const uint8_t shield_active = (shr > 0.0f) ? 1u : 0u;
 
       // Deterministic selection: pick the first BODY overlap in (hitbox_id, hurtcap_id) order.
       uint8_t did_hit = 0;
@@ -2924,7 +2919,7 @@ int combat_debug_shield_candidate_decisions(MslBatch* batch, int batch_index,
            batch->state.animation_index[d_idx] == UINT32_MAX)
               ? 1u
               : 0u;
-      const uint8_t shield_active = (shr > 0.0f && !guard_reflect_entry_no_submotion) ? 1u : 0u;
+      const uint8_t shield_active = (shr > 0.0f) ? 1u : 0u;
       // GuardReflect no-submotion entry snapshots (action_frame<0, msid sentinel) carry
       // ambiguous ordering between ftCo_8009388C clear and ftCo_80092450 recreate.
       // Keep shield-active ownership from x221B_b0, but disable ShieldDesc envelope expansion

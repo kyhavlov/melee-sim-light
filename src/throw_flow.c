@@ -111,6 +111,32 @@ static inline void throw_flow_bridge_integrate_deferred_throw_hit_position(MslBa
   batch->state.pos_y[victim_idx] += vy;
 }
 
+static inline float throw_flow_owner_self_dx(const MslBatch* batch, size_t owner_idx,
+                                             size_t victim_idx) {
+  if (batch == NULL || owner_idx == victim_idx) {
+    return 0.0f;
+  }
+  const uint8_t owner_on_ground = batch->state.on_ground[owner_idx] ? 1u : 0u;
+  return owner_on_ground ? batch->state.speed_ground_x_self[owner_idx]
+                         : batch->state.speed_air_x_self[owner_idx];
+}
+
+static inline float throw_flow_owner_throwf_deferred_extra_share(const MslBatch* batch,
+                                                                 size_t owner_idx) {
+  if (batch == NULL) {
+    return 0.0f;
+  }
+  // Decomp/timebase-backed split for deferred ThrowF release apply:
+  // - ThrowF release is consumed from throw Anim callback timing, and ThrowF commonly runs at
+  //   anim speed > 1.0x on release rows.
+  // - Post-items deferred throw-hit apply therefore needs to carry the overspeed portion of owner
+  //   root motion (beyond the base 1.0x frame share) so release ownership remains aligned.
+  // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_ThrowF_Anim
+  const float frame_speed_mul = msl_f32_from_q16_16(batch->state.frame_speed_mul_fp_q16_16[owner_idx]);
+  return (frame_speed_mul > 1.0f) ? (frame_speed_mul - 1.0f) : 0.0f;
+}
+
 void throw_flow_update_pre_physics(MslBatch* batch) {
   if (batch == NULL) {
     return;
@@ -315,6 +341,20 @@ void throw_flow_update_post_items(MslBatch* batch) {
           msl_anim_timebase_defer_tick_once(batch, vidx);
         }
         throw_flow_bridge_integrate_deferred_throw_hit_position(batch, oidx, vidx);
+        if (throw_action == (uint16_t)MSL_ACT_THROW_F) {
+          // ThrowF release-position ownership (deferred apply bridge):
+          // - ftCo_800DDDE4 resolves thrown release position from thrower-side joints after thrower
+          //   motion callback work for the frame.
+          // - In this simulator, throw-hit apply is deferred to post-items; keep one extra owner
+          //   root-motion term on ThrowF release rows where no deferred anim tick is consumed.
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DDDE4
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_ThrowF_Anim
+          // refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate
+          // Deferred ThrowF ownership split bridge:
+          // - Carry only the owner-motion overspeed share derived from thrower anim timebase.
+          const float extra_owner_share = throw_flow_owner_throwf_deferred_extra_share(batch, oidx);
+          batch->state.pos_x[vidx] += extra_owner_share * throw_flow_owner_self_dx(batch, oidx, vidx);
+        }
       }
     }
   }

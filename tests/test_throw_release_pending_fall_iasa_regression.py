@@ -179,3 +179,40 @@ def test_throw_release_pending_context_controls_adjacent_rows_5716_5718() -> Non
     assert int(seed["action_id"][p]) == 239
     assert int(ref["action_id"][p]) == 91
     assert int(out["action_id"][p]) in (88, 91)
+
+
+@pytest.mark.integration
+def test_throw_release_pending_context_row_owner_fsm_le1_extra_share_noop() -> None:
+    # Context lock: ThrowF owner row with frame_speed_mul <= 1.0.
+    # Derived deferred-share term max(0, frame_speed_mul - 1) must be zero, so the
+    # ThrowF-specific extra ownership carry is a no-op on this lane.
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_rel = (
+        "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl"
+    )
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    # Replay-real context row: victim still attached-thrown under owner ThrowF, no release step yet.
+    record = 216
+    victim_p = 0
+    owner_p = 1
+    seed, ref, out = _run_one_step_row(dataset_path, record)
+
+    assert int(seed["action_id"][victim_p]) == 239
+    assert int(seed["action_id"][owner_p]) == 219
+    assert int(seed["grab_owner_port"][victim_p]) == owner_p
+    assert int(ref["action_id"][victim_p]) == 239
+
+    frame_speed_mul = float(seed["frame_speed_mul_f32"][owner_p])
+    assert frame_speed_mul <= 1.0 + 1e-6
+    extra_owner_share = max(0.0, frame_speed_mul - 1.0)
+    assert extra_owner_share == pytest.approx(0.0, abs=1e-6)
+
+    owner_dx = float(seed["speed_ground_x_self"][owner_p])
+    assert abs(owner_dx) > 1e-4
+
+    assert int(out["action_id"][victim_p]) == int(ref["action_id"][victim_p])
+    assert float(out["pos_x"][victim_p]) == pytest.approx(float(ref["pos_x"][victim_p]), abs=1e-6)
