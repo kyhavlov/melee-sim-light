@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import importlib
 from pathlib import Path
 
 import numpy as np
@@ -41,7 +40,7 @@ def _run_record(dataset_path: Path, record: int) -> tuple[np.ndarray, np.ndarray
 
     row = samples[record : record + 1]
 
-    binding = importlib.import_module("msl_binding")
+    binding = pytest.importorskip("msl_binding")
     sizes = binding.sizes()
     seed_stride = int(sizes["seed"])
     input_stride = int(sizes["input"])
@@ -158,10 +157,9 @@ def test_replay_capturepulled_to_capturewait_record_6101_lock() -> None:
     ds = read_dataset(str(dataset_path))
     row = ds.samples[record : record + 1]
 
-    # Replay-real cluster lock for the CapturePulledLw -> CaptureWaitLw handoff:
-    # - attacker in CatchDashPull owns victim
-    # - victim stays in low (grounded) capture lane
-    # - no hitlag/hitstun side effects on either side.
+    # Replay-real lock for the CapturePulledLw -> CaptureWaitLw handoff:
+    # - strict discrete parity on owner/victim action progression and no hitlag/hitstun side effects
+    # - float lanes are context-only (finite/shape guard).
     assert int(row["seed_t"]["action_id"][0, attacker]) == 213
     assert int(row["seed_t"]["action_id"][0, victim]) == 226
     assert int(row["seed_t"]["action_frame"][0, victim]) == 1
@@ -188,6 +186,8 @@ def test_replay_capturepulled_to_capturewait_record_6101_lock() -> None:
     assert int(out["action_id"][0, victim]) == int(ref["action_id"][victim])
     assert int(out["action_frame"][0, victim]) == int(ref["action_frame"][victim])
     assert int(out["animation_index"][0, victim]) == int(ref["animation_index"][victim])
+    assert np.isfinite(float(out["pos_x"][0, victim]))
+    assert np.isfinite(float(out["pos_y"][0, victim]))
 
 
 @pytest.mark.integration
@@ -233,3 +233,103 @@ def test_replay_capturepulled_stays_pulled_record_408_negative_lock() -> None:
     assert int(out["action_id"][0, victim]) == int(ref["action_id"][victim])
     assert int(out["action_frame"][0, victim]) == int(ref["action_frame"][victim])
     assert int(out["animation_index"][0, victim]) == int(ref["animation_index"][victim])
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    "dataset_name,record,owner,victim",
+    [
+        ("GracefulAttachedTurtle.msl", 446, 0, 1),
+        ("TreasuredBackKangaroo.msl", 5771, 0, 1),
+        ("TreasuredBackKangaroo.msl", 5910, 0, 1),
+    ],
+)
+def test_replay_capturepulledhi_grounded_handoff_enters_capturewaitlw_strict_lock(
+    dataset_name: str, record: int, owner: int, victim: int
+) -> None:
+    root = Path(__file__).resolve().parents[1]
+    dataset_rel = f"{_BASE_REL}/{dataset_name}"
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+    _skip_if_required_artifacts_missing(root)
+
+    ds = read_dataset(str(dataset_path))
+    row = ds.samples[record : record + 1]
+
+    # Replay-real handoff shape:
+    # - owner CatchPull frame-7 grounded -> CatchWait
+    # - victim CapturePulledHi frame-2 -> CaptureWaitLw frame-1
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::{
+    #   fn_800DA1D8,ftCo_CaptureWaitHi_Coll,fn_800DBAC4,fn_800DBBF8
+    # }
+    assert int(row["seed_t"]["action_id"][0, owner]) == 213
+    assert int(row["seed_t"]["action_frame"][0, owner]) == 7
+    assert int(row["seed_t"]["on_ground"][0, owner]) == 1
+    assert int(row["seed_t"]["action_id"][0, victim]) == 223
+    assert int(row["seed_t"]["action_frame"][0, victim]) == 2
+    assert int(row["seed_t"]["animation_index"][0, victim]) == 251
+    assert int(row["seed_t"]["on_ground"][0, victim]) == 0
+    assert int(row["seed_t"]["ground_id"][0, victim]) != 0xFFFF
+    assert int(row["ref_t1"]["action_id"][0, owner]) == 216
+    assert int(row["ref_t1"]["action_frame"][0, owner]) == 0
+    assert int(row["ref_t1"]["action_id"][0, victim]) == 227
+    assert int(row["ref_t1"]["action_frame"][0, victim]) == 1
+    assert int(row["ref_t1"]["animation_index"][0, victim]) == 255
+    assert int(row["ref_t1"]["on_ground"][0, victim]) == 1
+
+    out, ref = _run_record(dataset_path, record)
+
+    for field in (
+        "action_id",
+        "action_frame",
+        "animation_index",
+        "on_ground",
+        "hitlag",
+        "hitstun",
+        "ground_id",
+        "instance_id",
+    ):
+        assert int(out[field][0, victim]) == int(ref[field][victim]), (
+            f"{dataset_name} rec={record} victim={victim} field={field} "
+            f"expected={int(ref[field][victim])} got={int(out[field][0, victim])}"
+        )
+
+    got_flags = tuple(int(x) for x in out["state_flags"][0, victim].tolist())
+    exp_flags = tuple(int(x) for x in ref["state_flags"][victim].tolist())
+    assert got_flags == exp_flags
+
+    assert float(out["pos_x"][0, victim]) == pytest.approx(float(ref["pos_x"][victim]), abs=1e-4)
+    assert float(out["pos_y"][0, victim]) == pytest.approx(float(ref["pos_y"][victim]), abs=2e-4)
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    "record,victim,exp_ref_action",
+    [
+        (2693, 0, 224),  # Held-A owner context: stay in CaptureWaitHi (no low-lane bridge).
+        (5815, 1, 241),  # Adjacent throw-up branch remains owner-driven.
+        (5863, 1, 241),  # Adjacent throw-up branch remains owner-driven.
+    ],
+)
+def test_replay_capturepulledhi_grounded_handoff_context_controls(
+    record: int, victim: int, exp_ref_action: int
+) -> None:
+    root = Path(__file__).resolve().parents[1]
+    dataset_rel = f"{_BASE_REL}/TreasuredBackKangaroo.msl"
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+    _skip_if_required_artifacts_missing(root)
+
+    ds = read_dataset(str(dataset_path))
+    row = ds.samples[record : record + 1]
+    assert int(row["seed_t"]["action_id"][0, victim]) == 223
+    assert int(row["ref_t1"]["action_id"][0, victim]) == exp_ref_action
+
+    out, ref = _run_record(dataset_path, record)
+    out_action = int(out["action_id"][0, victim])
+    ref_action = int(ref["action_id"][victim])
+    assert out_action == ref_action == exp_ref_action
+    assert np.isfinite(float(out["pos_x"][0, victim]))
+    assert np.isfinite(float(out["pos_y"][0, victim]))

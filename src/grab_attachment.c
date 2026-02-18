@@ -3,6 +3,8 @@
 #include "action_ids.h"
 #include "anim_frame.h"
 #include "anim_pose.h"
+#include "anim_timebase.h"
+#include "buttons.h"
 #include "char_params.h"
 #include "mtx34.h"
 
@@ -171,6 +173,72 @@ static inline void capture_victim_delta_apply(MslBatch* batch, int bi, int victi
   batch->state.pos_z[vidx] += az - vz;
 }
 
+static inline uint8_t action_is_catch_pull_state(uint16_t action_id) {
+  return (action_id == (uint16_t)MSL_ACT_CATCH_PULL ||
+          action_id == (uint16_t)MSL_ACT_CATCH_DASH_PULL)
+             ? 1u
+             : 0u;
+}
+
+static inline void capture_wait_hi_handoff_bridge_to_lw(MslBatch* batch, int bi, int victim_p,
+                                                        int owner_p) {
+  if (batch == NULL) {
+    return;
+  }
+  const int num_players = (int)batch->config.num_players;
+  if (victim_p < 0 || victim_p >= num_players || owner_p < 0 || owner_p >= num_players) {
+    return;
+  }
+  const size_t vidx = msl_idx_player(bi, victim_p);
+  const size_t oidx = msl_idx_player(bi, owner_p);
+  if (batch->state.action_id[vidx] != (uint16_t)MSL_ACT_CAPTURE_WAIT_HI ||
+      batch->state.prev_action_id[vidx] != (uint16_t)MSL_ACT_CAPTURE_PULLED_HI) {
+    return;
+  }
+  if (batch->state.action_id[oidx] != (uint16_t)MSL_ACT_CATCH_WAIT ||
+      !action_is_catch_pull_state(batch->state.prev_action_id[oidx])) {
+    return;
+  }
+  if ((batch->state.input_buttons[oidx] & (uint16_t)MSL_BUTTON_A) != 0u) {
+    return;
+  }
+  if (batch->state.on_ground[oidx] == 0) {
+    return;
+  }
+  if (batch->state.hitlag_started_frame[vidx] != 0 ||
+      batch->state.hitlag_started_frame[oidx] != 0) {
+    return;
+  }
+
+  // Decomp callback-order bridge:
+  // - CatchPull_Anim can enter CatchWait and call victim transition fn_800DB6C8 in the same frame.
+  // - On this handoff, CaptureWaitHi_Coll may immediately route through fn_800DBAC4 -> fn_800DBBF8,
+  //   transitioning to CaptureWaitLw (0xE3) with Fighter_ChangeMotionState(..., flags=0x4000).
+  // - This lite sim does not run the per-victim CaptureWait Coll callback inside the owner handoff
+  //   callback chain; bridge the same-frame motion identity on grounded CatchPull->CatchWait handoff.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::{
+  //   fn_800DA1D8,ftCo_CaptureWaitHi_Coll,fn_800DBAC4,fn_800DBBF8
+  // }
+  // refs/melee/build/GALE01/asm/melee/ft/chara/ftCommon/ftCo_Attack100.s::{
+  //   fn_800DA1D8,ftCo_CaptureWaitHi_Coll,fn_800DBAC4,fn_800DBBF8
+  // }
+  //
+  // Keep-frame enter (flags=0x4000 path) to preserve current action_frame while bumping motion
+  // identity side-effects (instance_id / attack identity) through the standard enter helper.
+  const float cur_anim = batch->state.anim_frame_f32[vidx];
+  const float cur_rate = msl_f32_from_q16_16(batch->state.frame_speed_mul_fp_q16_16[vidx]);
+  batch->state.action_id[vidx] = (uint16_t)MSL_ACT_CAPTURE_WAIT_LW;
+  batch->state.animation_index[vidx] = (uint32_t)MSL_SM_CAPTURE_WAIT_LW;
+  msl_anim_timebase_enter(batch, vidx, cur_anim, cur_rate);
+
+  // Grounded handoff context: keep victim grounded with the owner's floor ownership and Y anchor.
+  batch->state.on_ground[vidx] = 1u;
+  if (batch->state.ground_id[oidx] != 0xFFFFu) {
+    batch->state.ground_id[vidx] = batch->state.ground_id[oidx];
+  }
+  batch->state.pos_y[vidx] = batch->state.pos_y[oidx];
+}
+
 static inline void grabbed_victim_anchor_world(float* out_x, float* out_y, float* out_z,
                                                const MslBatch* batch, int bi, int victim_p,
                                                int owner_p) {
@@ -330,6 +398,10 @@ void grab_attachment_update_post_collision(MslBatch* batch) {
       if (!msl_action_is_grabbed_victim(batch->state.action_id[vidx])) {
         batch->state.grab_owner_port[vidx] = 0xFFu;
         continue;
+      }
+
+      if (batch->state.action_id[vidx] == (uint16_t)MSL_ACT_CAPTURE_WAIT_HI) {
+        capture_wait_hi_handoff_bridge_to_lw(batch, bi, p, (int)owner);
       }
 
       if (!msl_action_is_capture_pulled_wait_damage_victim(batch->state.action_id[vidx])) {
