@@ -11,6 +11,8 @@ from tools.eval.dataset import COMPARE_DTYPE, read_dataset
 
 ACT_SQUAT = 39
 SM_SQUAT = 30
+ACT_SQUAT_RV = 41
+SM_SQUAT_RV = 34
 
 
 def _apply_deadzone(v: float, dz: float) -> float:
@@ -149,3 +151,54 @@ def test_wait_iasa_neutral_stick_does_not_enter_squat() -> None:
     out = _step_one_record(binding=binding, row=row, num_players=int(ds.header["num_players"]))
     assert int(out["action_id"][p]) == 14
     assert int(out["action_id"][p]) != ACT_SQUAT
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    ("dataset_rel", "record", "player", "seed_action"),
+    [
+        (f"{_BASE}/AttachedGoodNaturedGuanaco.msl", 5867, 1, 39),
+        (f"{_BASE}/AttachedGoodNaturedGuanaco.msl", 7106, 0, 57),
+        (f"{_BASE}/GracefulAttachedTurtle.msl", 6234, 1, 39),
+        (f"{_BASE}/QuerulousGrandDinosaur.msl", 6462, 0, 57),
+        (f"{_BASE}/QuerulousGrandDinosaur.msl", 7616, 1, 57),
+    ],
+)
+def test_squat_and_attacklw3_anim_end_route_to_squatrv_on_release(
+    dataset_rel: str, record: int, player: int, seed_action: int
+) -> None:
+    # Replay-real lock for the crouch-release chain:
+    # - ftCo_Squat_Anim and ftCo_AttackLw3_Anim both route anim-end through ftCo_800D638C
+    #   (enter SquatWait), then SquatWait_IASA checks Dash first and SquatRv_CheckInput after.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Squat.c::ftCo_Squat_Anim
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackLw3.c::ftCo_AttackLw3_Anim
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_SquatWait.c::{ftCo_800D638C,ftCo_SquatWait_IASA}
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_SquatRv.c::ftCo_SquatRv_CheckInput
+    binding = pytest.importorskip("msl_binding")
+    root = Path(__file__).resolve().parents[1]
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+    assert int(samples.shape[0]) > int(record), f"dataset too short: num_records={int(samples.shape[0])}"
+    row = samples[record : record + 1]
+    p = int(player)
+
+    assert int(row["seed_t"]["action_id"][0, p]) == int(seed_action)
+    assert int(row["seed_t"]["on_ground"][0, p]) == 1
+    assert int(row["seed_t"]["hitlag"][0, p]) == 0
+    assert int(row["seed_t"]["hitstun"][0, p]) == 0
+    assert int(row["ref_t1"]["action_id"][0, p]) == ACT_SQUAT_RV
+    assert int(row["ref_t1"]["action_frame"][0, p]) == 0
+    assert int(row["ref_t1"]["animation_index"][0, p]) == SM_SQUAT_RV
+    assert int(row["ref_t1"]["hitlag"][0, p]) == 0
+    assert int(row["ref_t1"]["hitstun"][0, p]) == 0
+
+    out = _step_one_record(binding=binding, row=row, num_players=int(ds.header["num_players"]))
+    assert int(out["action_id"][p]) == int(row["ref_t1"]["action_id"][0, p])
+    assert int(out["action_frame"][p]) == int(row["ref_t1"]["action_frame"][0, p])
+    assert int(out["animation_index"][p]) == int(row["ref_t1"]["animation_index"][0, p])
+    assert int(out["hitlag"][p]) == int(row["ref_t1"]["hitlag"][0, p])
+    assert int(out["hitstun"][p]) == int(row["ref_t1"]["hitstun"][0, p])
