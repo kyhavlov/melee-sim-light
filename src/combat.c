@@ -228,6 +228,25 @@ static inline void combat_state_flags_set_is_hitstun(MslBatch* batch, size_t idx
   batch->state.state_flags[flags_i] = f;
 }
 
+static inline uint8_t combat_is_guard_reflect_frozen_snapshot_idx(const MslBatch* batch, size_t idx) {
+  if (batch == NULL) {
+    return 0;
+  }
+  if (batch->state.action_id[idx] != (uint16_t)MSL_ACT_GUARD_REFLECT) {
+    return 0;
+  }
+  // Decomp ordering context:
+  // - Guard->GuardReflect entry path ftCo_8009388C preserves the current timebase state while
+  //   GuardReflect_Anim/ftCo_80093BC0 owns the canonical callback tick.
+  // - Under teacher-forced replay snapshots, this boundary appears as frozen no-submotion rows.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_8009388C,ftCo_GuardReflect_Anim,ftCo_80093BC0}
+  //
+  // Keep frozen-snapshot detection behavior identical to the existing lane:
+  // action_frame <= -2.
+  enum { MSL_GUARD_REFLECT_FROZEN_ACTION_FRAME_MAX = -2 };
+  return (batch->state.action_frame[idx] <= MSL_GUARD_REFLECT_FROZEN_ACTION_FRAME_MAX) ? 1u : 0u;
+}
+
 uint8_t combat_is_powershield_active_idx(const MslBatch* batch, size_t idx) {
   if (batch == NULL) {
     return 0;
@@ -240,15 +259,16 @@ uint8_t combat_is_powershield_active_idx(const MslBatch* batch, size_t idx) {
   const uint8_t flags_221c =
       batch->state.state_flags[idx * MSL_STATE_FLAGS_STRIDE + (size_t)MSL_STATE_FLAGS_221C_INDEX];
   if (batch->state.action_id[idx] == (uint16_t)MSL_ACT_GUARD_REFLECT) {
-    // GuardReflect timer ownership (decomp):
-    // - ftCo_80093BC0 decrements mv.co.guard.x18 and clears x221C_b2 when the timer expires.
-    // - This sim stores x18 with +1 bias and ticks it in GuardReflect_Anim pre-input; x18==0 means
-    //   the powershield-active lane has expired for the current frame.
-    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80093BC0
-    //
-    // Use action-owned x18 as source of truth in GuardReflect, so stale seeded 0x221C bits do not
-    // keep collision in powershield-active mode after the timer has reached 0.
-    return (batch->state.guard_reflect_timer_x18[idx] != 0u) ? 1u : 0u;
+    // GuardReflect lane split:
+    // - frozen no-submotion snapshot lane keeps x18 (legacy powershield-active lane) so replay-real
+    //   frozen rows do not collapse before the first canonical callback-owned transition;
+    // - normal GuardReflect lane uses x14 (active reflect callback lane).
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_8009388C,ftCo_GuardReflect_Anim,ftCo_80093BC0}
+    if (combat_is_guard_reflect_frozen_snapshot_idx(batch, idx)) {
+      return (batch->state.guard_reflect_timer_x18[idx] != 0u) ? 1u : 0u;
+    }
+    // For non-frozen GuardReflect frames, gate suppression on the active reflect callback lane.
+    return (batch->state.guard_reflect_timer_x14[idx] != 0u) ? 1u : 0u;
   }
   return (flags_221c & (uint8_t)MSL_STATE_FLAG_221C_POWERSHIELD_ACTIVE) ? 1u : 0u;
 }

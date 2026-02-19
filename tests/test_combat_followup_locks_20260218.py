@@ -202,3 +202,83 @@ def test_followup_context_control_adjacent_rows_guard_nosubmotion_lane() -> None
         got = _scalar_out(out, p=p, field=field)
         exp = _scalar_seed_or_ref(ref, p=p, field=field)
         assert got == exp, f"context rec=1617 p={p} field={field} expected={exp} got={got}"
+
+
+@pytest.mark.integration
+def test_followup_lock_row_guard_reflect_snapshot_exit_gat_6315_p0() -> None:
+    # Focus lock for reflect-cluster row family fixed by the GuardReflect frozen-snapshot lane split.
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_rel = (
+        "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl"
+    )
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    record = 6315
+    p = 0
+    seed, ref, out = _run_one_step_row(dataset_path, record)
+
+    # Exact replay-real preconditions for this no-submotion/frozen GuardReflect row.
+    assert int(seed["action_id"][p]) == 182  # GuardReflect
+    assert int(seed["action_frame"][p]) == -1
+    assert int(seed["animation_index"][p]) == 0xFFFFFFFF
+    assert int(seed["hitlag"][p]) == 0
+    assert int(seed["guard_reflect_timer_x14"][p]) == 1
+    assert int(seed["guard_reflect_timer_x18"][p]) == 3
+
+    # Expected replay transition target at t+1.
+    assert int(ref["action_id"][p]) == 181  # GuardSetOff
+    assert int(ref["action_frame"][p]) == 0
+    assert int(ref["animation_index"][p]) == 40
+    assert int(ref["hitlag"][p]) == 3
+    assert int(ref["state_flags"][p, 1]) == 33
+    assert int(ref["instance_id"][p]) == 1443
+
+    # Strict parity on the lanes this slice targets for this row family.
+    for field in ("action_id", "action_frame", "animation_index", "hitlag", "hitstun", "state_flags[1]", "instance_id"):
+        got = _scalar_out(out, p=p, field=field)
+        exp = _scalar_seed_or_ref(ref, p=p, field=field)
+        assert got == exp, f"record={record} p={p} field={field} expected={exp} got={got}"
+
+
+@pytest.mark.integration
+def test_followup_context_control_adjacent_guard_reflect_snapshot_gat_6314_p0() -> None:
+    # Adjacent context control (pre-transition neighbor) for the rec=6315 reflect lock family.
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_rel = (
+        "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl"
+    )
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    record = 6314
+    p = 0
+    seed, ref, out = _run_one_step_row(dataset_path, record)
+
+    # Exact replay-real context lane: still GuardReflect snapshot with active timers.
+    assert int(seed["action_id"][p]) == 182
+    assert int(seed["action_frame"][p]) == -1
+    assert int(seed["animation_index"][p]) == 0xFFFFFFFF
+    assert int(seed["guard_reflect_timer_x14"][p]) == 2
+    assert int(seed["guard_reflect_timer_x18"][p]) == 4
+    assert int(seed["state_flags"][p, 3]) == 112
+    assert int(ref["state_flags"][p, 3]) == 96
+
+    # Strict t+1 parity for adjacent control lanes.
+    for field in (
+        "action_id",
+        "action_frame",
+        "animation_index",
+        "hitlag",
+        "hitstun",
+        "state_flags[1]",
+        "state_flags[3]",
+        "instance_id",
+    ):
+        got = _scalar_out(out, p=p, field=field)
+        exp = _scalar_seed_or_ref(ref, p=p, field=field)
+        assert got == exp, f"context rec={record} p={p} field={field} expected={exp} got={got}"
