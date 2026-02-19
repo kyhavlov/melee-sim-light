@@ -88,6 +88,8 @@ Important workflow:
 - DO NOT COMMIT in this run.
 - Keep iterating until you have a review-ready uncommitted diff that is usable.
 - Revert failed attempts immediately and continue; do not stop on first failure.
+- If a lane is exhausted/regressive, pivot to the next ranked lane in the same run.
+- Do not return with an empty diff unless explicitly instructed.
 
 Pinned baseline for this run:
 - baseline git SHA: ${baseline_sha}
@@ -116,6 +118,7 @@ Hard constraints:
 - no replay-fit heuristics in C
 - no xfail
 - no hand-editing reports
+- do not refresh guardrail baseline fixtures during normal iteration
 
 Bridge/heuristic ablation rule (mandatory when applicable):
 - If a gameplay change introduces any micro-bridge behavior (epsilon nudges, snapshot-only branches, no-submotion handoff logic, carry-share tuning, or new C-only fallback lanes), run A/B/C ablation before finalizing:
@@ -135,6 +138,12 @@ Test hygiene rules (integration tests):
 - use required-artifact skip helper
 - always destroy handles in finally
 
+Automatic disqualifiers (reject and keep iterating):
+- Any edit under tests/fixtures/guardrails/current_main/* unless the task explicitly requests baseline refresh.
+- Any attempt to make preflight pass by changing baseline fixtures instead of fixing code.
+- Any C gameplay formula that is only replay-fit/approximation without decomp/data ownership (e.g., ad-hoc trigonometric mixes, unexplained epsilon nudges, fitted blend weights) unless replaced by a decomp-anchored ownership/order rule.
+- Any unexpected cross-layer API/wrapper churn not required by the kept slice.
+
 Required gates on final diff:
 - make test
 - make validate OUT=reports/validation/one_step_suite_eval.txt
@@ -148,6 +157,9 @@ Required gates on final diff:
 Diff hygiene:
 - Keep the final diff minimal and on-slice.
 - If unexpected files are touched (e.g., wrapper/API/tooling not required by the slice), either revert them or explicitly justify them in the report.
+- Before returning final results, ensure disallowed paths are clean:
+  - tests/fixtures/guardrails/current_main/*
+  - reports/triage/*
 
 Return only when done, with:
 1) git diff --name-only
@@ -165,4 +177,5 @@ Return only when done, with:
 6) class (A/B/C) for each slice in the final diff + rationale
 7) if bridge/heuristic ablation rule was triggered: include A/B/C table + chosen variant rationale
 8) git status --porcelain -b
+9) if final diff is empty, include blocker dossier + next ranked actionable lane and why no further pivot was possible in this run
 EOF
