@@ -87,9 +87,10 @@ Work from current \`main\` tip in autonomous persistent mode.
 Important workflow:
 - DO NOT COMMIT in this run.
 - Keep iterating until you have a review-ready uncommitted diff that is usable.
-- Revert failed attempts immediately and continue; do not stop on first failure.
-- If a lane is exhausted/regressive, pivot to the next ranked lane in the same run.
-- Do not return with an empty diff unless explicitly instructed.
+- Do not keep failed attempts in the final diff; continue iterating instead of stopping on first failure.
+- When a lane is exhausted/regressive, pivot to the next ranked lane in the same run.
+- Do not return with an empty diff.
+- Keep working until you have a non-empty, landable diff that satisfies this prompt.
 
 Pinned baseline for this run:
 - baseline git SHA: ${baseline_sha}
@@ -101,27 +102,46 @@ Pinned baseline for this run:
 - err.pos_x max: ${posx_max}
 - err.pos_y max: ${posy_max}
 
-Mandatory success criteria for final uncommitted diff:
-1) overall.discrete_mismatch decreases
-2) overall.float_norm_mae_p95 decreases
-3) at least one of err.pos_x max or err.pos_y max decreases
-4) You may satisfy (1)-(3) via one slice or multiple slices, but final combined diff must satisfy all.
+Last-mile acceptance rule (final combined diff):
+- Keep full guardrails green, and achieve at least ONE meaningful improvement:
+  1) overall.discrete_mismatch decreases by >= 1, OR
+  2) overall.float_norm_mae_p95 decreases by >= 0.000001, OR
+  3) err.pos_x max decreases by >= 0.0001, OR
+  4) err.pos_y max decreases by >= 0.0001.
+- Metrics not targeted by the slice must be non-increasing (allow tiny numeric noise only):
+  - float_p95 noise tolerance: <= 0.000001 increase
+  - err.pos_x/err.pos_y max noise tolerance: <= 0.0001 increase
+- You may satisfy this via one slice or multiple slices in the same run; evaluate final combined diff vs pinned baseline.
+- Final deliverable requirement: non-empty landable diff only.
+
+Correctness-hardening path (allowed when no meaningful metric movement):
+- A slice is still landable if ALL are true:
+  1) change is decomp/ASM/data-owned correctness behavior (not replay-fit),
+  2) all required gates/guardrails pass,
+  3) no core metric regression beyond the noise tolerances above,
+  4) at least one strict replay-real lock is added/strengthened for the corrected behavior.
+- If using this path, label the slice as "correctness hardening" (not metric-improving) in the report.
 
 Priority order:
-- A-class first (likely dual-impact: discrete + float)
-- then B-class only if still compatible with mandatory success criteria
-- then C-class only if still compatible with mandatory success criteria
+- A-class first: changes likely to reduce discrete AND (float p95 or float max).
+- B-class next: changes likely to reduce discrete only.
+- C-class next: changes likely to reduce float (p95 or max) only.
+- Use correctness-hardening path before declaring blocker.
+- If a lane fails, immediately pivot to the next lane and continue.
 
 Hard constraints:
 - C gameplay logic only (no gameplay logic in Python)
 - decomp/ASM/ISO/data citations near changed gameplay branches/constants
 - no replay-fit heuristics in C
+- never implement replay-driven heuristic gameplay behavior in C
 - no xfail
 - no hand-editing reports
 - do not refresh guardrail baseline fixtures during normal iteration
+- do not edit prompt/tooling files under tools/agent/* unless explicitly requested
+- no new C-side seed-bridge/snapshot-repair behavior in src/* (seed bridges belong in Python tooling unless explicitly requested)
 
-Bridge/heuristic ablation rule (mandatory when applicable):
-- If a gameplay change introduces any micro-bridge behavior (epsilon nudges, snapshot-only branches, no-submotion handoff logic, carry-share tuning, or new C-only fallback lanes), run A/B/C ablation before finalizing:
+Bridge/heuristic ablation rule:
+- For any gameplay change that includes micro-bridge behavior (epsilon nudges, snapshot-only branches, no-submotion handoff logic, carry-share tuning, or new C-only fallback lanes), run A/B/C ablation before finalizing:
   - A: full candidate
   - B: candidate without the new micro-bridge subpiece
   - C: both new bridge pieces removed (or nearest neutral baseline)
@@ -138,11 +158,14 @@ Test hygiene rules (integration tests):
 - use required-artifact skip helper
 - always destroy handles in finally
 
-Automatic disqualifiers (reject and keep iterating):
-- Any edit under tests/fixtures/guardrails/current_main/* unless the task explicitly requests baseline refresh.
-- Any attempt to make preflight pass by changing baseline fixtures instead of fixing code.
-- Any C gameplay formula that is only replay-fit/approximation without decomp/data ownership (e.g., ad-hoc trigonometric mixes, unexplained epsilon nudges, fitted blend weights) unless replaced by a decomp-anchored ownership/order rule.
-- Any unexpected cross-layer API/wrapper churn not required by the kept slice.
+Prohibited content in final diff:
+- Edits under tests/fixtures/guardrails/current_main/* (except when the task explicitly requests baseline refresh).
+- Baseline-fixture edits used to make preflight pass.
+- Edits to tests/fixtures/hard_row_lock_pack_seedref.json that are not tied to the final kept gameplay subset with explicit row-level/decomp justification.
+- C gameplay formulas that are replay-fit/approximation without decomp/data ownership (e.g., ad-hoc trigonometric mixes, unexplained epsilon nudges, fitted blend weights).
+- Runtime branches keyed on replay-snapshot ambiguity as shortcuts (e.g., no-submotion snapshot suppression, last_attack_landed fallback for gameplay ownership, seed-only carry suppression in src/*).
+- Unexpected cross-layer API/wrapper churn not required by the kept slice.
+- Report-only diffs (validation files changed with no gameplay/test changes), unless explicitly requested.
 
 Required gates on final diff:
 - make test
@@ -156,10 +179,10 @@ Required gates on final diff:
 
 Diff hygiene:
 - Keep the final diff minimal and on-slice.
-- If unexpected files are touched (e.g., wrapper/API/tooling not required by the slice), either revert them or explicitly justify them in the report.
-- Before returning final results, ensure disallowed paths are clean:
+- Do not keep unexpected files (e.g., wrapper/API/tooling not required by the slice) in the final diff; justify only if explicitly required by the kept slice.
+- Before returning final results, ensure disallowed paths have no staged/tracked edits:
   - tests/fixtures/guardrails/current_main/*
-  - reports/triage/*
+  - reports/triage/* (untracked artifacts are fine; never stage them)
 
 Return only when done, with:
 1) git diff --name-only
@@ -175,7 +198,7 @@ Return only when done, with:
 4) targeted row outcomes (before -> after)
 5) guardrail checklist pass/fail
 6) class (A/B/C) for each slice in the final diff + rationale
+6b) per changed gameplay file: exact decomp/data anchors for each kept branch/constant (file:line + reference)
 7) if bridge/heuristic ablation rule was triggered: include A/B/C table + chosen variant rationale
 8) git status --porcelain -b
-9) if final diff is empty, include blocker dossier + next ranked actionable lane and why no further pivot was possible in this run
 EOF
