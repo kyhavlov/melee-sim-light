@@ -792,14 +792,16 @@ void physics_integrate(MslBatch* batch) {
       }
 
       const float vy_self = batch->state.speed_y_self[idx];
-      const float vx = vx_self + batch->state.speed_x_attack[idx];
-      const float vy_integrate = vy_self + batch->state.speed_y_attack[idx];
+      const float vx_kb = batch->state.speed_x_attack[idx];
+      const float vy_kb = batch->state.speed_y_attack[idx];
 
       // Position integration uses the (possibly-updated) self velocity plus the separate knockback
       // velocity term, matching GALE01 `Fighter_procUpdate` integration shape.
       // refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate
-      batch->state.pos_x[idx] += vx;
-      batch->state.pos_y[idx] += vy_integrate;
+      batch->state.pos_x[idx] += vx_self;
+      batch->state.pos_x[idx] += vx_kb;
+      batch->state.pos_y[idx] += vy_self;
+      batch->state.pos_y[idx] += vy_kb;
 
       if (damageflyroll_defer_vy_write) {
         batch->state.speed_y_self[idx] = damageflyroll_post_integrate_vy;
