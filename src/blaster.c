@@ -195,6 +195,9 @@ static inline void enter_side_special_start(MslBatch* batch, size_t idx, const M
   } else {
     batch->state.action_id[idx] = (uint16_t)MSL_ACT_FX_SPECIAL_AIR_S_START;
     batch->state.animation_index[idx] = (uint32_t)ms->specials_air_start;
+    // Decomp: ftFx_SpecialAirSStart_Enter zeroes self_vel.y at aerial Side-B entry.
+    // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c::ftFx_SpecialAirSStart_Enter
+    batch->state.speed_y_self[idx] = 0.0f;
   }
   batch->state.fall_fast[idx] = 0;
   msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
@@ -212,6 +215,9 @@ static inline void enter_specialhi_hold(MslBatch* batch, size_t idx, const MslSp
   } else {
     batch->state.action_id[idx] = (uint16_t)MSL_ACT_FX_SPECIAL_HI_HOLD_AIR;
     batch->state.animation_index[idx] = (uint32_t)ms->specialhi_air_hold;
+    // Decomp: ftFx_SpecialAirHiStart_Enter zeroes self_vel.y before entering HoldAir.
+    // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::ftFx_SpecialAirHiStart_Enter
+    batch->state.speed_y_self[idx] = 0.0f;
   }
   batch->state.fall_fast[idx] = 0;
   msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);

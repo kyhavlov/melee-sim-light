@@ -177,5 +177,12 @@ def test_spacie_bspecial_entry_and_specialhi_progression_regression() -> None:
                     assert (
                         out_action_frame == ref_action_frame
                     ), f"{rel} record={case.record} p={p} {case.cluster} expected action_frame={ref_action_frame}, got {out_action_frame}"
+
+                if case.check_resolver_entry and ref_action in (350, 354):
+                    # Strict replay-real lock: aerial Side-B/Up-B resolver entries clear vertical
+                    # self velocity on enter.
+                    # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c::ftFx_SpecialAirSStart_Enter
+                    # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::ftFx_SpecialAirHiStart_Enter
+                    assert abs(float(out["speed_y_self"][0, p]) - float(row["ref_t1"]["speed_y_self"][p])) <= 1e-6
             finally:
                 binding.destroy(handle)
