@@ -10,6 +10,12 @@ set -euo pipefail
 
 ONE_STEP_REPORT="reports/validation/one_step_suite_eval.txt"
 ROLLOUT_REPORT="reports/validation/rollout_suite_eval.txt"
+MIN_KEPT_SLICES=3
+MIN_SUBSYSTEMS=3
+MIN_DISCRETE_DROP=5
+MIN_FLOAT_P95_DROP=0.000010
+MIN_MAX_DROP=0.0100
+MIN_SECONDARY_DROP=1
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -19,6 +25,30 @@ while [[ $# -gt 0 ]]; do
       ;;
     --rollout)
       ROLLOUT_REPORT="${2:?missing value for --rollout}"
+      shift 2
+      ;;
+    --min-kept-slices)
+      MIN_KEPT_SLICES="${2:?missing value for --min-kept-slices}"
+      shift 2
+      ;;
+    --min-subsystems)
+      MIN_SUBSYSTEMS="${2:?missing value for --min-subsystems}"
+      shift 2
+      ;;
+    --min-discrete-drop)
+      MIN_DISCRETE_DROP="${2:?missing value for --min-discrete-drop}"
+      shift 2
+      ;;
+    --min-float-p95-drop)
+      MIN_FLOAT_P95_DROP="${2:?missing value for --min-float-p95-drop}"
+      shift 2
+      ;;
+    --min-max-drop)
+      MIN_MAX_DROP="${2:?missing value for --min-max-drop}"
+      shift 2
+      ;;
+    --min-secondary-drop)
+      MIN_SECONDARY_DROP="${2:?missing value for --min-secondary-drop}"
       shift 2
       ;;
     *)
@@ -38,6 +68,29 @@ if [[ ! -f "$ROLLOUT_REPORT" ]]; then
 fi
 
 baseline_sha=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
+
+if ! [[ "$MIN_KEPT_SLICES" =~ ^[0-9]+$ ]] || ! [[ "$MIN_SUBSYSTEMS" =~ ^[0-9]+$ ]] || \
+   ! [[ "$MIN_DISCRETE_DROP" =~ ^[0-9]+$ ]] || ! [[ "$MIN_SECONDARY_DROP" =~ ^[0-9]+$ ]]; then
+  echo "--min-kept-slices/--min-subsystems/--min-discrete-drop/--min-secondary-drop must be non-negative integers" >&2
+  exit 2
+fi
+if (( MIN_KEPT_SLICES <= 0 || MIN_SUBSYSTEMS <= 0 || MIN_DISCRETE_DROP <= 0 || MIN_SECONDARY_DROP <= 0 )); then
+  echo "--min-kept-slices/--min-subsystems/--min-discrete-drop/--min-secondary-drop must be > 0" >&2
+  exit 2
+fi
+
+if ! [[ "$MIN_FLOAT_P95_DROP" =~ ^[0-9]*\.?[0-9]+$ ]] || ! [[ "$MIN_MAX_DROP" =~ ^[0-9]*\.?[0-9]+$ ]]; then
+  echo "--min-float-p95-drop/--min-max-drop must be numeric" >&2
+  exit 2
+fi
+if awk "BEGIN {exit !($MIN_FLOAT_P95_DROP > 0)}"; then :; else
+  echo "--min-float-p95-drop must be > 0" >&2
+  exit 2
+fi
+if awk "BEGIN {exit !($MIN_MAX_DROP > 0)}"; then :; else
+  echo "--min-max-drop must be > 0" >&2
+  exit 2
+fi
 
 discrete=$(
   awk '/^overall\.discrete_mismatch:/ {v=$2} END {print v}' "$ONE_STEP_REPORT"
@@ -90,7 +143,8 @@ Important workflow:
 - Do not keep failed attempts in the final diff; continue iterating instead of stopping on first failure.
 - When a lane is exhausted/regressive, pivot to the next ranked lane in the same run.
 - Do not return with an empty diff.
-- Keep working until you have a non-empty, landable diff that satisfies this prompt.
+- Keep working until you have a non-empty, landable multi-fix diff that satisfies this prompt.
+- This is campaign mode: do not return early after one small win; build a substantial package.
 
 Pinned baseline for this run:
 - baseline git SHA: ${baseline_sha}
@@ -102,32 +156,33 @@ Pinned baseline for this run:
 - err.pos_x max: ${posx_max}
 - err.pos_y max: ${posy_max}
 
-Last-mile acceptance rule (final combined diff):
-- Keep full guardrails green, and achieve at least ONE meaningful improvement:
-  1) overall.discrete_mismatch decreases by >= 1, OR
-  2) overall.float_norm_mae_p95 decreases by >= 0.000001, OR
-  3) err.pos_x max decreases by >= 0.0001, OR
-  4) err.pos_y max decreases by >= 0.0001.
-- Metrics not targeted by the slice must be non-increasing (allow tiny numeric noise only):
+Campaign success rule (final combined diff vs pinned baseline):
+- Keep full guardrails green.
+- Keep at least ${MIN_KEPT_SLICES} gameplay slices in the final diff across >= ${MIN_SUBSYSTEMS} distinct gameplay subsystems.
+- Metric requirements:
+  1) overall.discrete_mismatch must decrease by >= ${MIN_DISCRETE_DROP}, AND
+  2) float headline must improve by a meaningful amount:
+     - overall.float_norm_mae_p95 decreases by >= ${MIN_FLOAT_P95_DROP}, OR
+     - err.pos_x max decreases by >= ${MIN_MAX_DROP}, OR
+     - err.pos_y max decreases by >= ${MIN_MAX_DROP}, AND
+  3) at least one secondary headline must improve by >= ${MIN_SECONDARY_DROP}:
+     - mismatch.hitlag decreases, OR
+     - mismatch.hitstun decreases, OR
+     - overall.rollout.first_mismatch_seeded_total decreases.
+- Metrics not directly targeted by a kept slice must be non-increasing (tiny numeric noise only):
   - float_p95 noise tolerance: <= 0.000001 increase
   - err.pos_x/err.pos_y max noise tolerance: <= 0.0001 increase
-- You may satisfy this via one slice or multiple slices in the same run; evaluate final combined diff vs pinned baseline.
-- Final deliverable requirement: non-empty landable diff only.
-
-Correctness-hardening path (allowed when no meaningful metric movement):
-- A slice is still landable if ALL are true:
-  1) change is decomp/ASM/data-owned correctness behavior (not replay-fit),
-  2) all required gates/guardrails pass,
-  3) no core metric regression beyond the noise tolerances above,
-  4) at least one strict replay-real lock is added/strengthened for the corrected behavior.
-- If using this path, label the slice as "correctness hardening" (not metric-improving) in the report.
+- Final deliverable requirement: non-empty landable campaign package only.
+- Do not return a blocker-only report. Keep iterating and pivoting until campaign success rule is met.
 
 Priority order:
 - A-class first: changes likely to reduce discrete AND (float p95 or float max).
 - B-class next: changes likely to reduce discrete only.
 - C-class next: changes likely to reduce float (p95 or max) only.
-- Use correctness-hardening path before declaring blocker.
 - If a lane fails, immediately pivot to the next lane and continue.
+- Pivot rule:
+  - after 2 failed/regressive attempts in one lane, move to a different lane.
+  - do not end run until campaign success rule is met.
 
 Hard constraints:
 - C gameplay logic only (no gameplay logic in Python)
@@ -200,5 +255,10 @@ Return only when done, with:
 6) class (A/B/C) for each slice in the final diff + rationale
 6b) per changed gameplay file: exact decomp/data anchors for each kept branch/constant (file:line + reference)
 7) if bridge/heuristic ablation rule was triggered: include A/B/C table + chosen variant rationale
-8) git status --porcelain -b
+8) fix ledger for all kept slices:
+   - row/family id
+   - before -> after targeted lanes
+   - lock test reference added/updated
+9) subsystem coverage summary (which ${MIN_SUBSYSTEMS}+ subsystems are touched and why)
+10) git status --porcelain -b
 EOF
