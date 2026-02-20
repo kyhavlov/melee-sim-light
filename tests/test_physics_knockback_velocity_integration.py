@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import math
 from pathlib import Path
 
 import numpy as np
@@ -26,6 +27,11 @@ def _mk_input_bytes(batch: int, input_stride: int) -> np.ndarray:
 def _fox_grav() -> float:
     d = json.loads(Path("data/characters/fox.json").read_text())
     return float(d["grav"])
+
+
+def _knockback_frame_decay() -> float:
+    d = json.loads(Path("data/common/ft_common_data.json").read_text())
+    return float(d["knockback_frame_decay"])
 
 
 def test_physics_integrates_knockback_velocity_into_position_but_not_gravity() -> None:
@@ -85,11 +91,26 @@ def test_physics_integrates_knockback_velocity_into_position_but_not_gravity() -
     finally:
         msl_binding.destroy(handle)
 
-    # Position integrates self_vel + knockback_vel.
-    assert np.isclose(float(out["pos_x"][0]), 3.25, atol=1e-6)
-    # Air self-velocity (gravity) is updated before integration, but knockback velocity is not.
-    assert np.isclose(float(out["pos_y"][0]), 2000.0 - 1.75 - _fox_grav(), atol=1e-6)
+    # Decomp: Fighter_procUpdate decays kb_vel first, then integrates cur_pos using self_vel+kb_vel.
+    # refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate
+    kb_decay = _knockback_frame_decay()
+    kb_x0 = 3.25
+    kb_y0 = -1.75
+    kb_mag = math.sqrt(kb_x0 * kb_x0 + kb_y0 * kb_y0)
+    if kb_mag < kb_decay:
+        kb_x1 = 0.0
+        kb_y1 = 0.0
+    else:
+        kb_angle = math.atan2(kb_y0, kb_x0)
+        kb_x1 = kb_x0 - kb_decay * math.cos(kb_angle)
+        kb_y1 = kb_y0 - kb_decay * math.sin(kb_angle)
 
-    # Gravity updates only self velocity; knockback velocity is not modified by physics_integrate.
-    assert np.isclose(float(out["speed_y_attack"][0]), -1.75, atol=1e-6)
+    # Position integrates self_vel + (decayed) knockback_vel.
+    assert np.isclose(float(out["pos_x"][0]), kb_x1, atol=1e-6)
+    # Air self-velocity (gravity) is updated before integration, but knockback velocity is not.
+    assert np.isclose(float(out["pos_y"][0]), 2000.0 + kb_y1 - _fox_grav(), atol=1e-6)
+
+    # Gravity updates only self velocity; knockback velocity follows the kb frame-decay path.
+    assert np.isclose(float(out["speed_x_attack"][0]), kb_x1, atol=1e-6)
+    assert np.isclose(float(out["speed_y_attack"][0]), kb_y1, atol=1e-6)
     assert np.isclose(float(out["speed_y_self"][0]), -_fox_grav(), atol=1e-6)

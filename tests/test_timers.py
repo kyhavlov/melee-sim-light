@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
 import numpy as np
 
 from tools.eval.dataset import COMPARE_DTYPE, INPUT_DTYPE, SEED_DTYPE
@@ -11,6 +14,11 @@ ACT_FALL = 0x001D
 # Submotion ids (GALE01): refs/melee/src/melee/ft/chara/ftCommon/forward.h
 SM_WAIT1_0 = 2
 SM_FALL = 20
+
+
+def _knockback_frame_decay() -> float:
+    d = json.loads(Path("data/common/ft_common_data.json").read_text())
+    return float(d["knockback_frame_decay"])
 
 
 def _step_once(seed: np.ndarray) -> np.ndarray:
@@ -115,7 +123,8 @@ def test_hitlag_ends_then_action_and_physics_resume() -> None:
 
     # Resume: action frame advances; position integrates; gravity applies (Fox grav=0.23).
     assert int(out["action_frame"][0]) == 4
-    assert np.isclose(out["pos_x"][0], np.float32(2.0), atol=0.0, rtol=0.0)
+    expected_kb_x = max(0.0, 2.0 - _knockback_frame_decay())
+    assert np.isclose(out["pos_x"][0], np.float32(expected_kb_x), atol=0.0, rtol=0.0)
     assert np.isclose(out["pos_y"][0], np.float32(102.77), atol=0.0, rtol=0.0)
     assert np.isclose(out["speed_y_self"][0], np.float32(2.77), atol=1e-6, rtol=0.0)
 

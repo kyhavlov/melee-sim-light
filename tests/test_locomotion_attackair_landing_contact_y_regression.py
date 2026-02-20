@@ -711,7 +711,16 @@ def test_landing_contact_y_bridge_runtime_rows_fall_to_landing_keep_pos_y_parity
 
 @pytest.mark.integration
 @pytest.mark.parametrize(
-    ("dataset_rel", "record", "p", "seed_action", "ref_action", "rollout_action", "min_delta"),
+    (
+        "dataset_rel",
+        "record",
+        "p",
+        "seed_action",
+        "ref_action",
+        "one_step_action",
+        "rollout_action",
+        "min_delta",
+    ),
     [
         (
             "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
@@ -720,7 +729,8 @@ def test_landing_contact_y_bridge_runtime_rows_fall_to_landing_keep_pos_y_parity
             1,
             29,  # Fall
             42,  # Landing
-            29,  # rollout stays in Fall at this row
+            29,  # one-step remains in Fall at this row
+            42,  # rollout lands at this row
             1.0,
         ),
     ],
@@ -731,6 +741,7 @@ def test_landing_contact_y_bridge_runtime_controls_stay_reseed_sensitive(
     p: int,
     seed_action: int,
     ref_action: int,
+    one_step_action: int,
     rollout_action: int,
     min_delta: float,
 ) -> None:
@@ -747,6 +758,6 @@ def test_landing_contact_y_bridge_runtime_controls_stay_reseed_sensitive(
     assert int(seed["on_ground"][p]) == 0
     assert int(ref["on_ground"][p]) == 1
 
-    assert int(out["action_id"][p]) == int(rollout_action)
+    assert int(out["action_id"][p]) == int(one_step_action)
     assert int(out_roll["action_id"][p]) == int(rollout_action)
     assert abs(float(out["pos_y"][p]) - float(out_roll["pos_y"][p])) >= float(min_delta)

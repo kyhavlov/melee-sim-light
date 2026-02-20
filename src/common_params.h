@@ -234,6 +234,14 @@ typedef struct MslCommonParams {
   //   refs/melee/src/melee/ft/chara/ftCommon/ftCo_FallSpecial.c
   float fall_special_mobility_scalar;  // p_ftCommonData->x340
 
+  // Knockback velocity decay (Fighter_procUpdate).
+  // Decomp:
+  // - Air lane subtracts `x204_knockbackFrameDecay` along current KB direction each frame.
+  // - Ground lane applies friction scaled by `x200` through ftCommon_8007CCA0.
+  // refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate
+  float ground_kb_friction_mul;  // p_ftCommonData->x200
+  float knockback_frame_decay;   // p_ftCommonData->x204
+
   // Hitlag constants (ftCommon_CalcHitlag).
   // Decomp: refs/melee/src/melee/ft/ftcommon.c::ftCommon_CalcHitlag
   float hitlag_dmg_mul;       // p_ftCommonData->x198

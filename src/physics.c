@@ -1,5 +1,7 @@
 #include "physics.h"
 
+#include <math.h>
+
 #include "action_ids.h"
 #include "anim_frame.h"
 #include "anim_pose.h"
@@ -118,6 +120,73 @@ static inline float ground_accel_step_delta(float gr_vel, float accel, float tar
     }
   }
   return a;
+}
+
+static inline void physics_apply_knockback_decay(MslBatch* batch, size_t idx,
+                                                 const MslCharParams* ch,
+                                                 const MslCommonParams* c, uint8_t on_ground) {
+  if (batch == NULL || c == NULL) {
+    return;
+  }
+  float kb_x = batch->state.speed_x_attack[idx];
+  float kb_y = batch->state.speed_y_attack[idx];
+  if (kb_x == 0.0f && kb_y == 0.0f) {
+    return;
+  }
+
+  // Decomp: Fighter_procUpdate applies knockback decay before integrating current-frame position.
+  // refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate
+  if (!on_ground) {
+    // Decomp air branch: if |kb| < p_ftCommonData->x204 then zero; else subtract that amount along
+    // the current knockback direction.
+    // refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate
+    const float kb_mag = sqrtf(kb_x * kb_x + kb_y * kb_y);
+    const float decay = c->knockback_frame_decay;
+    if (kb_mag < decay) {
+      kb_x = 0.0f;
+      kb_y = 0.0f;
+    } else {
+      const float kb_angle = atan2f(kb_y, kb_x);
+      kb_x -= decay * cosf(kb_angle);
+      kb_y -= decay * sinf(kb_angle);
+    }
+  } else if (ch != NULL) {
+    // Decomp ground branch:
+    // - decay scalar ground KB (`xF0_ground_kb_vel`) via ftCommon_8007CCA0 with
+    //   arg = ft_GetGroundFrictionMultiplier(fp) * co_attrs.gr_friction * p_ftCommonData->x200.
+    // - rebuild kb_vel as ground_kb_vel * floor tangent.
+    // refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate
+    // refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007CCA0
+    //
+    // Temporary bridge: this runtime does not yet model/seed the owner lane consumed by
+    // ft_GetGroundFrictionMultiplier(fp), so ground knockback friction uses a unit multiplier.
+    // refs/melee/src/melee/ft/ft_081B.c::ft_GetGroundFrictionMultiplier
+    // TODO(decomp-ground-friction-mul): wire the owning lane and replace this implicit 1.0 bridge.
+    const float nx = batch->state.ground_normal_x[idx];
+    const float ny = batch->state.ground_normal_y[idx];
+    const float tangent_x = ny;
+    const float tangent_y = -nx;
+    float ground_kb = kb_x * tangent_x + kb_y * tangent_y;
+    const float friction = ch->gr_friction * c->ground_kb_friction_mul;
+
+    if (ground_kb < 0.0f) {
+      ground_kb += friction;
+      if (ground_kb > 0.0f) {
+        ground_kb = 0.0f;
+      }
+    } else {
+      ground_kb -= friction;
+      if (ground_kb < 0.0f) {
+        ground_kb = 0.0f;
+      }
+    }
+
+    kb_x = tangent_x * ground_kb;
+    kb_y = tangent_y * ground_kb;
+  }
+
+  batch->state.speed_x_attack[idx] = kb_x;
+  batch->state.speed_y_attack[idx] = kb_y;
 }
 
 static inline uint8_t physics_action_is_walk(uint16_t action_id) {
@@ -811,6 +880,15 @@ void physics_integrate(MslBatch* batch) {
         batch->state.speed_air_x_self[idx] = vx_self;
       }
 
+      const uint8_t defer_damageflyroll_kb_decay =
+          (!on_ground && action_id == (uint16_t)MSL_ACT_DAMAGE_FLY_ROLL && damage_iasa_lockout)
+              ? 1u
+              : 0u;
+      if (!defer_damageflyroll_kb_decay) {
+        physics_apply_knockback_decay(batch, idx, msl_char_params(batch->state.char_id[idx]), c,
+                                      on_ground);
+      }
+
       const float vy_self = batch->state.speed_y_self[idx];
       const float vx_kb = batch->state.speed_x_attack[idx];
       const float vy_kb = batch->state.speed_y_attack[idx];
@@ -822,6 +900,20 @@ void physics_integrate(MslBatch* batch) {
       batch->state.pos_x[idx] += vx_kb;
       batch->state.pos_y[idx] += vy_self;
       batch->state.pos_y[idx] += vy_kb;
+
+      if (defer_damageflyroll_kb_decay) {
+        // Temporary compatibility bridge: keep DamageFlyRoll x221C_b6 ownership in the
+        // DamageFlyRoll Phys/Coll lane while deferring knockback decay writes until after
+        // current-frame integration in this simplified runtime.
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{
+        //   ftCo_DamageFlyRoll_Phys,ftCo_DamageFlyRoll_Coll
+        // }
+        // refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate
+        // TODO(decomp-coll-coverage): remove this defer once DamageFlyRoll Phys/Coll ordering
+        // parity is fully modeled end-to-end.
+        physics_apply_knockback_decay(batch, idx, msl_char_params(batch->state.char_id[idx]), c,
+                                      on_ground);
+      }
 
       if (damageflyroll_defer_vy_write) {
         batch->state.speed_y_self[idx] = damageflyroll_post_integrate_vy;
