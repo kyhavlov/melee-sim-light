@@ -29,7 +29,7 @@
       "field": "action_id",
       "seed": 25,
       "ref": 25,
-      "out": 67,
+      "out": 25,
       "cluster_count": 1,
       "base_field": "action_id"
     },
@@ -51,7 +51,7 @@
       "field": "action_id",
       "seed": 27,
       "ref": 27,
-      "out": 67,
+      "out": 27,
       "cluster_count": 1,
       "base_field": "action_id"
     },
@@ -436,7 +436,7 @@
       "field": "instance_id",
       "seed": 757,
       "ref": 757,
-      "out": 758,
+      "out": 757,
       "cluster_count": 1,
       "base_field": "instance_id"
     },

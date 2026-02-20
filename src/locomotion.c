@@ -412,14 +412,21 @@ static inline uint8_t attackair_cstick_edge(const MslCommonParams* c, int8_t pre
                                             int8_t prev_cy, int8_t cx, int8_t cy) {
   // Decomp: ftCo_800DF478 is a C-stick *edge* (threshold crossing) helper used by AttackAir input
   // checks. It compares current vs prior C-stick against p_ftCommonData->xDC/xE0.
+  //
+  // Input lane ownership:
+  // - Fighter proc input preprocessing zeros cstick axes inside p_ftCommonData->x0/x4 before
+  //   IASA callbacks run.
+  // - ftCo_800DF478 then reads fp->input.cstick{1,0} from that deadzoned lane.
+  // refs/melee/src/melee/ft/fighter.c (input deadzone preprocessing at fp->input.cstick.*)
+  // refs/melee/src/melee/ft/ft_0DF1.c::ftCo_800DF478
   // refs/melee/src/melee/ft/ft_0DF1.c::ftCo_800DF478
   if (c == NULL) {
     return 0;
   }
-  const float prev_x = stick_i8_to_unit(prev_cx);
-  const float prev_y = stick_i8_to_unit(prev_cy);
-  const float x = stick_i8_to_unit(cx);
-  const float y = stick_i8_to_unit(cy);
+  const float prev_x = apply_deadzone(stick_i8_to_unit(prev_cx), c->lstick_deadzone_x);
+  const float prev_y = apply_deadzone(stick_i8_to_unit(prev_cy), c->lstick_deadzone_y);
+  const float x = apply_deadzone(stick_i8_to_unit(cx), c->lstick_deadzone_x);
+  const float y = apply_deadzone(stick_i8_to_unit(cy), c->lstick_deadzone_y);
   if ((fabsf(prev_x) < c->attackair_stick_deadzone_x &&
        fabsf(x) >= c->attackair_stick_deadzone_x) ||
       (fabsf(prev_y) < c->attackair_stick_deadzone_y &&
@@ -491,8 +498,12 @@ static inline uint8_t attackair_try_enter_from_air_locomotion(MslBatch* batch,
   float stick_x = 0.0f;
   float stick_y = 0.0f;
   if (c_edge) {
-    stick_x = stick_i8_to_unit(batch->state.input_c_x[idx]);
-    stick_y = stick_i8_to_unit(batch->state.input_c_y[idx]);
+    // Decomp: ftCo_AttackAir_GetMsidFromCStick consumes preprocessed fp->input.cstick lanes (same
+    // deadzone-preprocessing owner as ftCo_800DF478).
+    // refs/melee/src/melee/ft/fighter.c (input deadzone preprocessing at fp->input.cstick.*)
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_GetMsidFromCStick
+    stick_x = apply_deadzone(stick_i8_to_unit(batch->state.input_c_x[idx]), c->lstick_deadzone_x);
+    stick_y = apply_deadzone(stick_i8_to_unit(batch->state.input_c_y[idx]), c->lstick_deadzone_y);
   } else {
     stick_x =
         apply_deadzone(stick_i8_to_unit(batch->state.input_main_x[idx]), c->lstick_deadzone_x);
