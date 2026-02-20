@@ -196,6 +196,22 @@ static inline uint8_t physics_action_is_walk(uint16_t action_id) {
              : 0;
 }
 
+static inline uint8_t physics_action_uses_ft_80084FA8(uint16_t action_id) {
+  // Decomp callback ownership:
+  // - ftCo_Attack11/12/13 all use ftCo_Attack11_Phys.
+  // - ftCo_Attack11_Phys calls ft_80084FA8.
+  // refs/melee/src/melee/ft/ftmotionstates.c (Attack11/12/13 entries)
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack1.c::ftCo_Attack11_Phys
+  switch (action_id) {
+    case MSL_ACT_ATTACK_11:
+    case MSL_ACT_ATTACK_12:
+    case MSL_ACT_ATTACK_13:
+      return 1;
+    default:
+      return 0;
+  }
+}
+
 static inline uint8_t physics_action_is_common_ground_friction_only(uint16_t action_id) {
   // Decomp: these callbacks use `ft_80084F3C` (ground friction helper) in their Phys function.
   // - refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_Phys
@@ -812,6 +828,26 @@ void physics_integrate(MslBatch* batch) {
               friction *= c->high_speed_friction_mul;
             }
             gr_vel += ground_friction_step_delta(gr_vel, friction);
+          } else if (physics_action_uses_ft_80084FA8(action_id)) {
+            // Attack11/12/13 Phys uses ft_80084FA8:
+            // - high-speed friction scale gate (walk_max_vel, p_ftCommonData->x6C)
+            // - ft_80085030 root-motion branch (transNOffset.z * facing_dir) or friction fallback
+            // refs/melee/src/melee/ft/ft_081B.c::{ft_80084FA8,ft_80085030}
+            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack1.c::ftCo_Attack11_Phys
+            float friction = ch->gr_friction;
+            if (msl_absf(gr_vel) > ch->walk_max_vel) {
+              friction *= c->high_speed_friction_mul;
+            }
+            float dxyz[3];
+            if (physics_try_get_transn_delta_xyz(ch, batch->state.char_id[idx],
+                                                 batch->state.animation_index[idx],
+                                                 batch->state.anim_frame_f32[idx], dxyz)) {
+              // Decomp: ft_80085030 root-motion branch drives to transNOffset.z * facing_dir.
+              // refs/melee/src/melee/ft/ft_081B.c::ft_80085030
+              gr_vel = dxyz[2] * facing_dir;
+            } else {
+              gr_vel += ground_friction_step_delta(gr_vel, friction);
+            }
           } else if (physics_action_is_common_ground_friction_only(action_id)) {
             float friction = ch->gr_friction;
             if (msl_absf(gr_vel) > ch->walk_max_vel) {

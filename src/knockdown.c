@@ -688,6 +688,9 @@ void knockdown_update_pre_physics(MslBatch* batch) {
       if (is_passive(a0)) {
         // Decomp: ftCo_Passive_Phys uses ft_80084F3C.
         // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Passive.c::ftCo_Passive_Phys
+        // Motion-state table binds Passive to ftCo_SM_Passive submotion.
+        // refs/melee/src/melee/ft/ftmotionstates.c (ftCo_MS_Passive entry)
+        batch->state.animation_index[idx] = (uint32_t)MSL_SM_PASSIVE;
         down_apply_phys_friction(batch, c, ch, idx);
         if (anim_is_finished(cid, (uint16_t)MSL_SM_PASSIVE, anim_frame)) {
           enter_wait(batch, idx);
@@ -702,6 +705,9 @@ void knockdown_update_pre_physics(MslBatch* batch) {
         const uint16_t msid = (a0 == (uint16_t)MSL_ACT_PASSIVE_STAND_F)
                                   ? (uint16_t)MSL_SM_PASSIVE_STAND_F
                                   : (uint16_t)MSL_SM_PASSIVE_STAND_B;
+        // Motion-state table binds PassiveStandF/B to ftCo_SM_PassiveStandF/B submotions.
+        // refs/melee/src/melee/ft/ftmotionstates.c (ftCo_MS_PassiveStandF / ftCo_MS_PassiveStandB)
+        batch->state.animation_index[idx] = (uint32_t)msid;
         if (anim_is_finished(cid, msid, anim_frame)) {
           enter_wait(batch, idx);
         }

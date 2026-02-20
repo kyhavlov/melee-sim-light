@@ -928,9 +928,12 @@ void guard_update_grounded(MslBatch* batch, const MslCommonParams* c, size_t idx
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Escape.c::ftCo_80099264
   //
   // Approximation:
-  // - Use `shield_held_inputs` as our decomp-shaped "held_inputs & LR" proxy.
-  // - Use extracted p_ftCommonData->x48 via common params (dash_iasa_x48).
-  if (a0 == (uint16_t)MSL_ACT_DASH && shield_held_inputs &&
+  // - Keep decomp ordering/gating: ftCo_80099264 is only reached in Dash IASA early branch
+  //   (dash.x4 != 0 && cur_anim_frame <= p_ftCommonData->x44), then checks held_inputs&LR.
+  // - Use extracted p_ftCommonData->x44/x48 via common params (dash_iasa_x44/dash_iasa_x48).
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c::ftCo_Dash_IASA
+  if (a0 == (uint16_t)MSL_ACT_DASH && batch->state.dash_x4[idx] != 0u && shield_held_inputs &&
+      batch->state.anim_frame_f32[idx] <= c->dash_iasa_x44 &&
       batch->state.anim_frame_f32[idx] <= c->dash_iasa_x48) {
     enter_escape_roll(batch, idx, (uint16_t)MSL_ACT_ESCAPE_F);
     return;
