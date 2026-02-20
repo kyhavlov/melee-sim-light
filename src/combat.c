@@ -421,13 +421,34 @@ static inline uint8_t combat_defender_hit_status_u8(const MslBatch* batch, size_
   // refs/melee/src/melee/ft/ftanim.c::ftAnim_8006EBA4
   // refs/melee/src/melee/ft/ftaction.c::ftAction_80073240
   // refs/melee/src/melee/ft/ftcoll.c::ftColl_8007B868 (eligibility aggregates x1988/x198C)
+  uint8_t hit_status = 0;
   const uint16_t cur_action = batch->state.action_id[d_idx];
-  if (d_frame == 0u && batch->state.prev_action_id[d_idx] != cur_action) {
-    return 0;
+  const uint8_t is_shine_start_entry =
+      (cur_action == (uint16_t)MSL_ACT_FX_SPECIAL_LW_START ||
+       cur_action == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_LW_START)
+          ? 1u
+          : 0u;
+  // Entry-frame x1988 ownership:
+  // - Generic post-Anim action transitions should not consume new-state script hit_status until the
+  //   next frame's ftAnim_8006EBA4 tick.
+  // - Shine Start is a decomp-anchored exception where enter helpers call ftAnim_8006EBA4
+  //   immediately after state change, so opcode-26 hit_status is valid on entry.
+  // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c::{ftFx_SpecialLw_Enter,ftFx_SpecialAirLw_Enter}
+  // refs/melee/src/melee/ft/ftanim.c::ftAnim_8006EBA4
+  if (!(d_frame == 0u && batch->state.prev_action_id[d_idx] != cur_action &&
+        !is_shine_start_entry)) {
+    (void)hit_status_get(d_char, d_msid, d_frame, &hit_status);
   }
 
-  uint8_t hit_status = 0;
-  (void)hit_status_get(d_char, d_msid, d_frame, &hit_status);
+  // Decomp collision eligibility uses max(fp->x1988, fp->x198C):
+  // - x1988: script/hurtcaps-derived hit status (vulnerable/invincible/intangible).
+  // - x198C: color-animation hit status lane that can independently elevate collision immunity.
+  // refs/melee/src/melee/ft/ftcoll.c::ftColl_8007B868
+  // refs/melee/src/melee/ft/fighter.c::{Fighter_procUpdate,Fighter_8006A1BC}
+  const uint8_t colanim_status = batch->state.colanim_hit_status_x198c[d_idx];
+  if (colanim_status > hit_status) {
+    hit_status = colanim_status;
+  }
   return hit_status;
 }
 

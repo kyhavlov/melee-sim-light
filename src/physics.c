@@ -868,10 +868,25 @@ void physics_integrate(MslBatch* batch) {
             gr_vel += ground_accel_step_delta(gr_vel, accel, target, ch->gr_friction,
                                               ch->ground_max_horizontal_velocity);
           } else if (action_id == (uint16_t)MSL_ACT_DASH) {
-            // Decomp: Dash entry initializes velocity in ftCo_Dash_Enter.
-            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c::ftCo_Dash_Enter
+            // Decomp Dash entry/Phys ownership:
+            // - ftCo_Dash_Enter computes mv.co.dash.x0 and writes it through
+            //   ftCommon_800804A0 (xE8_ground_accel_2 lane).
+            // - Fighter_procUpdate then applies gr_vel += xE4 + xE8 before position integration.
+            // - ftCo_Dash_Phys first frame consumes mv.co.dash.x0 without calling
+            //   ftCommon_8007C98C accel.
+            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c::{ftCo_Dash_Enter,ftCo_Dash_Phys}
+            // refs/melee/src/melee/ft/ftcommon.c::ftCommon_800804A0
+            // refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate
             if (prev_action_id != (uint16_t)MSL_ACT_DASH) {
-              gr_vel = facing_dir * ch->dash_initial_velocity;
+              const float init_vel = facing_dir * ch->dash_initial_velocity;
+              if ((gr_vel * facing_dir) < 0.0f) {
+                // ftCo_Dash_Enter: if existing ground speed opposes facing, x0 = init_vel and the
+                // Fighter_procUpdate xE8 add behaves as gr_vel += init_vel this frame.
+                gr_vel += init_vel;
+              } else {
+                // Otherwise x0 = init_vel - gr_vel, so post-add resolves exactly to init_vel.
+                gr_vel = init_vel;
+              }
             } else {
               const float accel =
                   stick_x * ch->dash_run_acceleration_a +

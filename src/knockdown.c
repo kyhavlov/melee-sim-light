@@ -1180,8 +1180,26 @@ void knockdown_update_post_collision(MslBatch* batch) {
             batch->state.action_id[idx] = (uint16_t)MSL_ACT_LANDING;
             batch->state.animation_index[idx] = (uint32_t)MSL_SM_LANDING;
             msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+            // Conservative ownership for Damage->Landing handoff:
+            // keep x221C_b6-held lanes intact, except DamageAir3 where landing transitions consume
+            // hitstun on entry in this collision lane.
+            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{
+            //   ftCo_Damage_Anim,ftCo_Damage_IASA,ftCo_Damage_Coll
+            // }
+            if (!damage_iasa_lockout_x221c_b6(batch, idx) ||
+                a0 == (uint16_t)MSL_ACT_DAMAGE_AIR_3) {
+              batch->state.hitstun[idx] = 0u;
+            }
             continue;
           }
+          // Decomp: Damage_Coll fallback while grounded keeps Damage motion-state and applies the
+          // common air->ground transfer helper.
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_Coll
+          // refs/melee/src/melee/ft/ftcommon.c::{ftCommon_8007D7FC,ftCommon_8007D6A4}
+          if (batch->state.hitstun[idx] > 0u) {
+            transfer_air_to_ground_on_land(batch, ch, idx, a0);
+          }
+          continue;
         }
       } else if (was_ground && !now_ground) {
         // Downed ground -> air fallback: enter Fall.
