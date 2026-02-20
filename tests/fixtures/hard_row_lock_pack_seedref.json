@@ -18,7 +18,7 @@
       "field": "action_id",
       "seed": 20,
       "ref": 20,
-      "out": 360,
+      "out": 20,
       "cluster_count": 1,
       "base_field": "action_id"
     },

@@ -92,7 +92,12 @@ static inline uint8_t action_allows_shine_entry_ground(uint16_t action_id) {
     case MSL_ACT_WALK_FAST:
     case MSL_ACT_TURN:
     case MSL_ACT_TURN_RUN:
-    case MSL_ACT_DASH:
+    // Decomp: Dash IASA does not call ftCo_800D68C0 directly.
+    // Dash special entry paths route through ftCo_SpecialS_CheckInput / ftCo_800D8A38 /
+    // ftCo_80091A4C branches in ftCo_Dash_IASA, while grounded SpecialLw dispatch (ftCo_800D68C0)
+    // is owned by states like Wait/Walk/Turn/Run/Squat family.
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c::ftCo_Dash_IASA
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_800D68C0
     case MSL_ACT_RUN:
     case MSL_ACT_RUN_DIRECT:
     case MSL_ACT_RUN_BRAKE:

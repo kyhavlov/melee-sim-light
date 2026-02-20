@@ -704,10 +704,30 @@ void physics_integrate(MslBatch* batch) {
             if (physics_try_get_transn_delta_xyz(ch, batch->state.char_id[idx],
                                                  batch->state.animation_index[idx],
                                                  batch->state.anim_frame_f32[idx], dxyz)) {
+              float facing_dir_roll = facing_dir;
+              // Decomp branch ownership:
+              // - ftCo_Escape_Phys -> ft_80085004 -> ft_80085030 uses fp->facing_dir1.
+              // - Escape_Anim can flip fp->facing_dir via throw-flag b3 while fp->facing_dir1
+              //   remains the roll-motion lane.
+              // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Escape.c::{
+              //   ftCo_Escape_Phys,ftCo_Escape_Anim
+              // }
+              // refs/melee/src/melee/ft/ft_081B.c::{ft_80085004,ft_80085030}
+              //
+              // Bridge lane (explicit): this sim does not currently seed fp->facing_dir1.
+              // Use the decomp identity from ft_80085030 root-motion (`gr_vel ~= transN.z *
+              // facing_dir1`) to reconstruct sign only when both terms are non-zero; otherwise
+              // fall back to seeded facing_dir.
+              // TODO(decomp-seed): promote facing_dir1 as an explicit seeded/runtime lane and
+              // remove this sign-reconstruction bridge once that lane is available.
+              const float transn_z = dxyz[2];
+              if (msl_absf(transn_z) > 0.0f && msl_absf(gr_vel) > 0.0f) {
+                facing_dir_roll = (gr_vel / transn_z) >= 0.0f ? 1.0f : -1.0f;
+              }
               // Decomp: ft_80085030 "drive to TransN vel" via xE4 = transN_vel - gr_vel.
               // Setting gr_vel directly is equivalent after applying the accel step.
               // refs/melee/src/melee/ft/ft_081B.c::ft_80085030
-              gr_vel = dxyz[2] * facing_dir;
+              gr_vel = transn_z * facing_dir_roll;
             } else {
               // Decomp: ft_80085030 applies ftCommon_ApplyFrictionGround when not root-motion.
               // refs/melee/src/melee/ft/ftcommon.c::ftCommon_ApplyFrictionGround
