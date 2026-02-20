@@ -2304,7 +2304,8 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
       const uint8_t guard_reflect_entry_no_submotion =
           (batch->state.action_id[d_idx] == (uint16_t)MSL_ACT_GUARD_REFLECT &&
            batch->state.action_frame[d_idx] < 0 &&
-           batch->state.animation_index[d_idx] == UINT32_MAX)
+           batch->state.animation_index[d_idx] == UINT32_MAX &&
+           batch->state.guard_reflect_timer_x14[d_idx] != 0u)
               ? 1u
               : 0u;
       const uint8_t shield_active = (shr > 0.0f) ? 1u : 0u;
@@ -2957,7 +2958,8 @@ int combat_debug_shield_candidate_decisions(MslBatch* batch, int batch_index,
       const uint8_t guard_reflect_entry_no_submotion =
           (batch->state.action_id[d_idx] == (uint16_t)MSL_ACT_GUARD_REFLECT &&
            batch->state.action_frame[d_idx] < 0 &&
-           batch->state.animation_index[d_idx] == UINT32_MAX)
+           batch->state.animation_index[d_idx] == UINT32_MAX &&
+           batch->state.guard_reflect_timer_x14[d_idx] != 0u)
               ? 1u
               : 0u;
       const uint8_t shield_active = (shr > 0.0f) ? 1u : 0u;

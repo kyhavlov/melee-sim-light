@@ -599,16 +599,15 @@ void ledge_try_catch_post_collision(MslBatch* batch) {
       // Decomp: cliff catch checks collision env flags for Collide_LedgeGrabMask.
       // refs/melee/src/melee/ft/ftcliffcommon.c::ftCliffCommon_80081298
       const uint32_t env = batch->state.coll_env_flags[idx];
-      // Decomp: mpColl suppresses ledge-grab checks while "on edge" (Collide_LeftEdge/RightEdge),
-      // and thus would not schedule a CliffCatch for this collision step.
-      // refs/melee/src/melee/mp/mpcoll.c::mpColl_80047E14 (on_edge gate)
-      if (env & ((uint32_t)MSL_COLLIDE_LEFT_EDGE | (uint32_t)MSL_COLLIDE_RIGHT_EDGE)) {
-        continue;
-      }
       const uint32_t grab_mask = env & (uint32_t)MSL_COLLIDE_LEDGE_GRAB_MASK;
       if (grab_mask == 0u) {
         continue;
       }
+      // mpColl's on-edge suppression is already modeled in mpcoll_env_update_ledge_grab() when
+      // producing Collide_LedgeGrabMask. If ledge-grab bits are set here, treat them as
+      // authoritative for ftCliffCommon_80081298 scheduling.
+      // refs/melee/src/melee/mp/mpcoll.c::mpColl_80047E14
+      // refs/melee/src/melee/ft/ftcliffcommon.c::ftCliffCommon_80081298
 
       const float stick_y =
           apply_deadzone(stick_i8_to_unit(batch->state.input_main_y[idx]), c->lstick_deadzone_y);

@@ -515,6 +515,14 @@ void grab_flow_on_catch_connect(MslBatch* batch, int bi, int owner_p, int victim
   assert(batch->state.action_id[vidx] == (uint16_t)MSL_ACT_CAPTURE_PULLED_HI ||
          batch->state.action_id[vidx] == (uint16_t)MSL_ACT_CAPTURE_PULLED_LW);
   msl_anim_timebase_tick_once(batch, vidx);
+  // CapturePulled entry ownership: victim translation is driven by fn_800DAD18 in Phys callbacks,
+  // so pre-grab self/KB velocity lanes should not remain active on the entry frame.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::{ftCo_CapturePulledHi_Phys,ftCo_CapturePulledLw_Phys,fn_800DAD18}
+  batch->state.speed_air_x_self[vidx] = 0.0f;
+  batch->state.speed_ground_x_self[vidx] = 0.0f;
+  batch->state.speed_y_self[vidx] = 0.0f;
+  batch->state.speed_x_attack[vidx] = 0.0f;
+  batch->state.speed_y_attack[vidx] = 0.0f;
   // Decomp ownership: catch-connect callback fn_800DAADC installs CapturePulled* and calls
   // fn_800DAA10; this transition switches to non-Damage motion-state vars, so Damage* hitstun
   // (x2340) is no longer the active lane after this transition.

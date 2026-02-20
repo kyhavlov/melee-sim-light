@@ -543,14 +543,22 @@ static inline uint32_t ledge_grab_flags_for_fighter(uint32_t stage_id, float col
         // refs/melee/src/melee/mp/mpcoll.c::mpColl_80044164
         // refs/melee/src/melee/mp/mplib.c::mpCheckMultiple
         const float bottom_y = ecb.bottom_y;
-        const float top_x = coll_cur_x;  // ecb.top.x == 0
-        const float top_y = ecb.top_y;
-        const uint8_t blocked_top = mpcoll_ledge_obstruction_hit(
-            stage_id, /*mpcheck_mask=*/0x6u, top_x, top_y, contact_x, contact_y, edge_x, edge_y);
-        const uint8_t blocked_bot = mpcoll_ledge_obstruction_hit(
-            stage_id, /*mpcheck_mask=*/0x6u, coll_cur_x,
-            bottom_y + k_ledge_obstruction_bottom_probe_dy, contact_x, contact_y, edge_x, edge_y);
-        if (!(blocked_top || blocked_bot)) {
+        // Decomp fast-accept gate:
+        // - mpColl_80044164 accepts immediately when `cur_pos.y + ecb.bottom.y > contact.y`.
+        // - Obstruction mpCheckMultiple probes are only evaluated on the opposite branch.
+        // refs/melee/src/melee/mp/mpcoll.c::mpColl_80044164
+        uint8_t clear_path = (bottom_y > contact_y) ? 1u : 0u;
+        if (!clear_path) {
+          const float top_x = coll_cur_x;  // ecb.top.x == 0
+          const float top_y = ecb.top_y;
+          const uint8_t blocked_top = mpcoll_ledge_obstruction_hit(
+              stage_id, /*mpcheck_mask=*/0x6u, top_x, top_y, contact_x, contact_y, edge_x, edge_y);
+          const uint8_t blocked_bot = mpcoll_ledge_obstruction_hit(
+              stage_id, /*mpcheck_mask=*/0x6u, coll_cur_x,
+              bottom_y + k_ledge_obstruction_bottom_probe_dy, contact_x, contact_y, edge_x, edge_y);
+          clear_path = (uint8_t)(!(blocked_top || blocked_bot));
+        }
+        if (clear_path) {
           out |= MSL_COLLIDE_LEFT_LEDGE_GRAB;
         }
       }
@@ -584,14 +592,21 @@ static inline uint32_t ledge_grab_flags_for_fighter(uint32_t stage_id, float col
         // refs/melee/src/melee/mp/mpcoll.c::mpColl_800443C4
         // refs/melee/src/melee/mp/mplib.c::mpCheckMultiple
         const float bottom_y = ecb.bottom_y;
-        const float top_x = coll_cur_x;  // ecb.top.x == 0
-        const float top_y = ecb.top_y;
-        const uint8_t blocked_top = mpcoll_ledge_obstruction_hit(
-            stage_id, /*mpcheck_mask=*/0xAu, top_x, top_y, contact_x, contact_y, edge_x, edge_y);
-        const uint8_t blocked_bot = mpcoll_ledge_obstruction_hit(
-            stage_id, /*mpcheck_mask=*/0xAu, coll_cur_x,
-            bottom_y + k_ledge_obstruction_bottom_probe_dy, contact_x, contact_y, edge_x, edge_y);
-        if (!(blocked_top || blocked_bot)) {
+        // Decomp fast-accept gate mirrored from mpColl_80044164:
+        // - mpColl_800443C4 accepts immediately when `cur_pos.y + ecb.bottom.y > contact.y`.
+        // refs/melee/src/melee/mp/mpcoll.c::mpColl_800443C4
+        uint8_t clear_path = (bottom_y > contact_y) ? 1u : 0u;
+        if (!clear_path) {
+          const float top_x = coll_cur_x;  // ecb.top.x == 0
+          const float top_y = ecb.top_y;
+          const uint8_t blocked_top = mpcoll_ledge_obstruction_hit(
+              stage_id, /*mpcheck_mask=*/0xAu, top_x, top_y, contact_x, contact_y, edge_x, edge_y);
+          const uint8_t blocked_bot = mpcoll_ledge_obstruction_hit(
+              stage_id, /*mpcheck_mask=*/0xAu, coll_cur_x,
+              bottom_y + k_ledge_obstruction_bottom_probe_dy, contact_x, contact_y, edge_x, edge_y);
+          clear_path = (uint8_t)(!(blocked_top || blocked_bot));
+        }
+        if (clear_path) {
           out |= MSL_COLLIDE_RIGHT_LEDGE_GRAB;
         }
       }
