@@ -217,14 +217,14 @@ enum {
 
   MSL_ACT_ATTACK_DASH = 0x0032,  // ftCo_MS_AttackDash
 
-  MSL_ACT_ATTACK_S3_HI = 0x0033,    // ftCo_MS_AttackS3Hi
-  MSL_ACT_ATTACK_S3_HI_S = 0x0034,  // ftCo_MS_AttackS3HiS
-  MSL_ACT_ATTACK_S3_S = 0x0035,     // ftCo_MS_AttackS3S
+  MSL_ACT_ATTACK_S3_HI = 0x0033,            // ftCo_MS_AttackS3Hi
+  MSL_ACT_ATTACK_S3_HI_S = 0x0034,          // ftCo_MS_AttackS3HiS
+  MSL_ACT_ATTACK_S3_S = 0x0035,             // ftCo_MS_AttackS3S
   MSL_ACT_ATTACK_S3 = MSL_ACT_ATTACK_S3_S,  // ftCo_MS_AttackS3 (side tilt)
-  MSL_ACT_ATTACK_S3_LW_S = 0x0036,  // ftCo_MS_AttackS3LwS
-  MSL_ACT_ATTACK_S3_LW = 0x0037,    // ftCo_MS_AttackS3Lw
-  MSL_ACT_ATTACK_HI3 = 0x0038,      // ftCo_MS_AttackHi3
-  MSL_ACT_ATTACK_LW3 = 0x0039,      // ftCo_MS_AttackLw3
+  MSL_ACT_ATTACK_S3_LW_S = 0x0036,          // ftCo_MS_AttackS3LwS
+  MSL_ACT_ATTACK_S3_LW = 0x0037,            // ftCo_MS_AttackS3Lw
+  MSL_ACT_ATTACK_HI3 = 0x0038,              // ftCo_MS_AttackHi3
+  MSL_ACT_ATTACK_LW3 = 0x0039,              // ftCo_MS_AttackLw3
 
   MSL_ACT_ATTACK_S4_HI = 0x003A,    // ftCo_MS_AttackS4Hi
   MSL_ACT_ATTACK_S4_HI_S = 0x003B,  // ftCo_MS_AttackS4HiS
@@ -337,17 +337,17 @@ typedef enum MslSubmotionId {
   MSL_SM_ATTACK_13 = 48,     // ftCo_SM_Attack13
   // Grounded attacks (subset) used by the grounded A-attack selector.
   // Source of truth: refs/melee/src/melee/ft/chara/ftCommon/forward.h `ftCo_Submotion`.
-  MSL_SM_ATTACK_DASH = 52,    // ftCo_SM_AttackDash
-  MSL_SM_ATTACK_S3_HI = 53,   // ftCo_SM_AttackS3Hi
-  MSL_SM_ATTACK_S3_HI_S = 54, // ftCo_SM_AttackS3HiS
-  MSL_SM_ATTACK_S3 = 55,      // ftCo_SM_AttackS3
-  MSL_SM_ATTACK_S3_LW_S = 56, // ftCo_SM_AttackS3LwS
-  MSL_SM_ATTACK_S3_LW = 57,   // ftCo_SM_AttackS3Lw
+  MSL_SM_ATTACK_DASH = 52,     // ftCo_SM_AttackDash
+  MSL_SM_ATTACK_S3_HI = 53,    // ftCo_SM_AttackS3Hi
+  MSL_SM_ATTACK_S3_HI_S = 54,  // ftCo_SM_AttackS3HiS
+  MSL_SM_ATTACK_S3 = 55,       // ftCo_SM_AttackS3
+  MSL_SM_ATTACK_S3_LW_S = 56,  // ftCo_SM_AttackS3LwS
+  MSL_SM_ATTACK_S3_LW = 57,    // ftCo_SM_AttackS3Lw
   // Contiguous ftCo_Submotion ordering in GALE01:
   // refs/melee/src/melee/ft/chara/ftCommon/forward.h::ftCo_Submotion
   // refs/melee/src/melee/ft/ftmotionstates.c (AttackS3* motion-state table entries)
-  MSL_SM_ATTACK_HI3 = 58,  // ftCo_SM_AttackHi3
-  MSL_SM_ATTACK_LW3 = 59,  // ftCo_SM_AttackLw3
+  MSL_SM_ATTACK_HI3 = 58,      // ftCo_SM_AttackHi3
+  MSL_SM_ATTACK_LW3 = 59,      // ftCo_SM_AttackLw3
   MSL_SM_ATTACK_S4_HI = 60,    // ftCo_SM_AttackS4Hi
   MSL_SM_ATTACK_S4_HI_S = 61,  // ftCo_SM_AttackS4HiS
   MSL_SM_ATTACK_S4 = 62,       // ftCo_SM_AttackS4

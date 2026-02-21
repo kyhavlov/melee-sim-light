@@ -154,11 +154,11 @@ typedef struct MslCharParams {
   //   }
   uint8_t firefox_hold_gravity_delay_frames;  // ftFox_DatAttrs.x54
   uint8_t _pad_u8_firefox_hold_0[3];
-  float firefox_hold_air_friction;    // ftFox_DatAttrs.x5C
-  float firefox_hold_air_fall_accel;  // ftFox_DatAttrs.x60
+  float firefox_hold_air_friction;          // ftFox_DatAttrs.x5C
+  float firefox_hold_air_fall_accel;        // ftFox_DatAttrs.x60
   float firefox_direction_stick_range_min;  // ftFox_DatAttrs.x64
-  float firefox_launch_speed;              // ftFox_DatAttrs.x74
-  float firefox_facing_stick_range_min;    // ftFox_DatAttrs.x88
+  float firefox_launch_speed;               // ftFox_DatAttrs.x74
+  float firefox_facing_stick_range_min;     // ftFox_DatAttrs.x88
 
   // Cliff / ledge (ftCo_Cliff*).
   //
