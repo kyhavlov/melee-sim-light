@@ -665,6 +665,7 @@ def _main_impl(args) -> None:
     act_damage_fly_lw = 0x0059
     act_damage_fly_top = 0x005A
     act_damage_fly_roll = 0x005B
+    act_attack_11 = 0x002C
     act_attack_air_n = 0x0041
     act_attack_air_f = 0x0042
     act_attack_air_b = 0x0043
@@ -1603,21 +1604,22 @@ def _main_impl(args) -> None:
                     and defender_action != int(act_landing_fall_special)
                 )
 
-                # Damage-family stale suppression (narrow extension):
+                # DamageFlyTop stale suppression (grounded-attack ownership lane):
                 # - Decomp ownership for suppression gate is lbColl_8000ACFC victim presence, not
                 #   defender hitstun state itself.
                 # - When replay-visible attribution disagrees on instance identity for this attacker
-                #   while defender remains in Damage*, stale dense-seeded suppression can block
-                #   first valid re-contacts in one-step reseed.
+                #   while defender remains in DamageFlyTop, stale dense-seeded suppression can block
+                #   first valid grounded re-contacts in one-step reseed.
                 # refs/melee/src/melee/lb/lbcollision.c::lbColl_8000ACFC
                 # refs/melee/src/melee/lb/lbcollision.c::lbColl_80008688
-                # Narrow damage bridge scope to early DamageFlyTop windows only. This keeps the
-                # bridge tied to the known stale-containment family while avoiding late-window
-                # reseed rows where suppression should remain intact.
+                # Grounded attack action-id range (ftCo_MS_Attack11..ftCo_MS_AttackLw4) is
+                # contiguous in GALE01:
+                # refs/melee/src/melee/ft/chara/ftCommon/forward.h::ftCommon_MotionState
+                attacker_action = int(post_action_id[fi, attacker])
                 damage_state_bridge = (
                     hitlag_pre == 0
                     and defender_action == int(act_damage_fly_top)
-                    and int(post_action_frame[fi, defender]) <= 40
+                    and int(act_attack_11) <= attacker_action <= int(act_attack_lw4)
                 )
 
                 if not (neutral_non_guard or damage_state_bridge):
