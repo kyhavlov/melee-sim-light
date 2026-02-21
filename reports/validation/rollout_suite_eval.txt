@@ -8,7 +8,7 @@
 # preprocess_suite stamp:
 #   path: datasets/fox_falco_fd_ucf084_recent/.preprocess_meta.json
 #   force_used: True  built: 4  skipped: 0
-#   seed_dtype_itemsize: 2125  sample_dtype_itemsize: 3211
+#   seed_dtype_itemsize: 2185  sample_dtype_itemsize: 3271
 #
 # Regenerate gitignored ISO-derived data artifacts (if missing/stale):
 # - Opcode-25 airborne-state timelines (data/airborne_state_events/{fox,falco}.bin):
@@ -49,13 +49,13 @@ rollout.first_mismatch_seeded_total: 195
 
 == datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/QuerulousGrandDinosaur.msl ==
 rollout.best_len: 168
-rollout.streak_count: 312
+rollout.streak_count: 311
 rollout.streak_len.median: 24
 rollout.streak_len.p90: 73
 rollout.streak_len.p95: 96
 rollout.streak_len.max: 168
-rollout.first_mismatch_total: 319
-rollout.first_mismatch_seeded_total: 172
+rollout.first_mismatch_total: 318
+rollout.first_mismatch_seeded_total: 170
 
 == datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/TreasuredBackKangaroo.msl ==
 rollout.best_len: 172
@@ -68,11 +68,11 @@ rollout.first_mismatch_total: 274
 rollout.first_mismatch_seeded_total: 136
 
 == suite summary ==
-overall.rollout.streak_count: 1221
+overall.rollout.streak_count: 1220
 overall.rollout.streak_len.median: 21
 overall.rollout.streak_len.p90: 67
 overall.rollout.streak_len.p95: 89
 overall.rollout.streak_len.max: 172
 overall.rollout.best_len.max: 172
-overall.rollout.first_mismatch_total: 1233
-overall.rollout.first_mismatch_seeded_total: 630
+overall.rollout.first_mismatch_total: 1232
+overall.rollout.first_mismatch_seeded_total: 628

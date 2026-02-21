@@ -36,6 +36,9 @@ static inline void item_slot_clear(MslBatch* batch, size_t ii) {
   batch->state.item_pos_x[ii] = 0.0f;
   batch->state.item_pos_y[ii] = 0.0f;
   batch->state.item_damage[ii] = 0;
+  // Decomp default for non-reflected items: item->xC6C starts at identity.
+  // refs/melee/src/melee/it/item.c::Item_80269F14
+  batch->state.item_reflect_damage_mul[ii] = 1.0f;
   batch->state.item_timer[ii] = 0.0f;
   batch->state.item_spawn_id[ii] = 0;
   batch->state.item_misc0[ii] = 0;
@@ -70,6 +73,7 @@ static inline void item_slot_swap(MslBatch* batch, size_t a, size_t b) {
   SWAP(float, batch->state.item_pos_x);
   SWAP(float, batch->state.item_pos_y);
   SWAP(uint16_t, batch->state.item_damage);
+  SWAP(float, batch->state.item_reflect_damage_mul);
   SWAP(float, batch->state.item_timer);
   SWAP(uint32_t, batch->state.item_spawn_id);
   SWAP(uint8_t, batch->state.item_misc0);
@@ -569,8 +573,8 @@ static inline uint8_t item_sphere_sphere_intersects_3d(float ax, float ay, float
 
 static inline uint8_t item_swept_sphere_sphere_intersects_3d(float ax0, float ay0, float az0,
                                                              float ax1, float ay1, float az1,
-                                                             float ar, float bx, float by,
-                                                             float bz, float br) {
+                                                             float ar, float bx, float by, float bz,
+                                                             float br) {
   // Segment-point closest distance for swept item sphere vs shield sphere center.
   const float vx = ax1 - ax0;
   const float vy = ay1 - ay0;
@@ -661,8 +665,7 @@ static inline uint8_t illusion_item_hit_params_from_state(const MslCharParams* c
   return 1u;
 }
 
-static inline uint8_t illusion_owner_motion_is_active(const MslBatch* batch,
-                                                      size_t owner_idx) {
+static inline uint8_t illusion_owner_motion_is_active(const MslBatch* batch, size_t owner_idx) {
   if (batch == NULL) {
     return 0u;
   }
@@ -676,8 +679,7 @@ static inline uint8_t illusion_owner_motion_is_active(const MslBatch* batch,
              : 0u;
 }
 
-static inline uint8_t illusion_item_anim_step(MslBatch* batch, size_t ii,
-                                              const MslCharParams* chp,
+static inline uint8_t illusion_item_anim_step(MslBatch* batch, size_t ii, const MslCharParams* chp,
                                               uint8_t owner_motion_active) {
   if (batch == NULL || chp == NULL) {
     return 0u;
@@ -719,47 +721,22 @@ static inline uint8_t illusion_item_anim_step(MslBatch* batch, size_t ii,
   return 1u;
 }
 
-static inline float item_reflected_powershield_damage_lane(const MslBatch* batch, size_t owner_idx,
-                                                           float base_damage) {
+static inline float item_reflected_damage_lane(const MslBatch* batch, size_t item_idx,
+                                               float base_damage) {
   if (batch == NULL || !(base_damage > 0.0f)) {
     return base_damage;
   }
-  // BRIDGE APPROXIMATION (runtime):
-  // Decomp owner path for reflected-item damage lane is per-item, not owner-action-derived:
-  // - GuardReflect builds ReflectDesc.x18_damage_mul from ftCommonData->x2AC.
-  //   refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_8009370C
-  // - Reflect collision writes item->xC6C = fp->ReflectAttr.x1A34_damageMul.
+  // Decomp reflected-item damage lane is item-owned (`item->xC6C`), not owner-action-derived:
+  // - reflect overlap writes `item->xC6C = ReflectDesc.damage_mul`.
   //   refs/melee/src/melee/ft/ftcoll.c::ftColl_80077464
-  // - Item reflect apply rewrites HitCapsule.unk_count as:
-  //     (u32)(hit.damage * item->xC6C + 0.99f), then calls it_80272460.
+  // - apply path uses `(u32)(hit.damage * item->xC6C + 0.99f)`.
   //   refs/melee/src/melee/it/item.c::Item_80269F14
   //   refs/melee/src/melee/it/itcoll.c::it_80272460
-  // Current sim proxy:
-  // - Uses owner reflect context snapshot (action/prev_action/state_flags) as a temporary bridge
-  //   for "item was recently reflected with powershield semantics".
-  // - This is intentionally narrow and only selects when applying reflected-lane damage shaping.
-  //
-  // TODO(bridge/items): Promote/persist a per-item reflect damage-mult lane (item->xC6C analog)
-  // in state so this helper no longer depends on owner action/flags snapshots.
-  enum { MSL_STATE_FLAGS_STRIDE_LOCAL = MSL_STATE_FLAGS_BYTES };
-  enum { MSL_STATE_FLAGS_221C_INDEX_LOCAL = 3 };
-  enum { MSL_STATE_FLAG_221C_POWERSHIELD_ACTIVE = 0x20 };
-  const uint8_t flags_221c = batch->state.state_flags
-      [owner_idx * MSL_STATE_FLAGS_STRIDE_LOCAL + (size_t)MSL_STATE_FLAGS_221C_INDEX_LOCAL];
-  const uint8_t owner_reflect_context =
-      (batch->state.action_id[owner_idx] == (uint16_t)MSL_ACT_GUARD_REFLECT ||
-       batch->state.prev_action_id[owner_idx] == (uint16_t)MSL_ACT_GUARD_REFLECT ||
-       (flags_221c & (uint8_t)MSL_STATE_FLAG_221C_POWERSHIELD_ACTIVE) != 0u)
-          ? 1u
-          : 0u;
-  if (!owner_reflect_context) {
-    return base_damage;
+  float mul = batch->state.item_reflect_damage_mul[item_idx];
+  if (!(mul > 0.0f)) {
+    mul = 1.0f;
   }
-  const MslCommonParams* c = msl_common_params();
-  if (c == NULL) {
-    return base_damage;
-  }
-  float tmp = base_damage * c->powershield_reflect_damage_mul + 0.99f;
+  float tmp = base_damage * mul + 0.99f;
   uint32_t dmg_i = 0u;
   if (tmp > 0.0f) {
     dmg_i = (uint32_t)tmp;
@@ -981,9 +958,9 @@ static void illusion_items_update_and_collide(MslBatch* batch, int bi) {
         if (batch->state.fighter_scale_y[d_idx] > 0.0f) {
           shield_desc_world_r *= batch->state.fighter_scale_y[d_idx];
         }
-        if (item_swept_sphere_sphere_intersects_3d(
-                x0, y0, 0.0f, x1, y1, 0.0f, hp.radius, shx, shy, shz, shr + shield_desc_world_r)) {
-          const float dmg = item_reflected_powershield_damage_lane(batch, o_idx, hp.damage);
+        if (item_swept_sphere_sphere_intersects_3d(x0, y0, 0.0f, x1, y1, 0.0f, hp.radius, shx, shy,
+                                                   shz, shr + shield_desc_world_r)) {
+          const float dmg = item_reflected_damage_lane(batch, ii, hp.damage);
           int8_t shield_damage = hp.shield_damage;
           // Data extraction uses -128 as the unset sentinel for shield-damage delta in this lane.
           if (shield_damage == (int8_t)MSL_ILLUSION_SHIELD_DAMAGE_UNSET) {
@@ -1016,12 +993,12 @@ static void illusion_items_update_and_collide(MslBatch* batch, int bi) {
         continue;
       }
 
-      const float dmg = item_reflected_powershield_damage_lane(batch, o_idx, hp.damage);
+      const float dmg = item_reflected_damage_lane(batch, ii, hp.damage);
       const MslItemHitResult res =
           combat_apply_item_hit(batch, bi, owner, def, batch->state.item_attack_id[ii],
-                                batch->state.item_attack_instance[ii], batch->state.item_instance_id[ii],
-                                batch->state.item_type[ii], dmg, hp.angle, hp.kbg, hp.wsk, hp.bkb,
-                                hit_hurt_height, hp.element);
+                                batch->state.item_attack_instance[ii],
+                                batch->state.item_instance_id[ii], batch->state.item_type[ii], dmg,
+                                hp.angle, hp.kbg, hp.wsk, hp.bkb, hit_hurt_height, hp.element);
       if (res == MSL_ITEM_HIT_NONE) {
         continue;
       }
@@ -1216,10 +1193,7 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
               : 0u;
       const uint16_t prev_action = batch->state.prev_action_id[d_idx];
       const uint8_t guard_on_entry_from_landing =
-          (guard_on_no_submotion_snapshot &&
-           (prev_action == (uint16_t)MSL_ACT_LANDING))
-              ? 1u
-              : 0u;
+          (guard_on_no_submotion_snapshot && (prev_action == (uint16_t)MSL_ACT_LANDING)) ? 1u : 0u;
       if (shr > 0.0f && !guard_on_entry_from_landing) {
         // Use derived shield bubble center from shields_refresh() (same geometry used by the
         // fighter-vs-fighter combat pass).
@@ -1345,6 +1319,17 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
           if (batch->state.action_id[d_idx] == (uint16_t)MSL_ACT_GUARD_REFLECT &&
               can_powershield_reflect) {
             batch->state.item_owner[ii] = (int8_t)def;
+            // Decomp reflect snapshot ownership:
+            // - GuardReflect builds ReflectDesc.damage_mul from ftCommonData->x2AC.
+            //   refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_8009370C
+            // - Reflect overlap writes item->xC6C from that damage multiplier.
+            //   refs/melee/src/melee/ft/ftcoll.c::ftColl_80077464
+            const MslCommonParams* c = msl_common_params();
+            if (c != NULL && c->powershield_reflect_damage_mul > 0.0f) {
+              batch->state.item_reflect_damage_mul[ii] = c->powershield_reflect_damage_mul;
+            } else {
+              batch->state.item_reflect_damage_mul[ii] = 1.0f;
+            }
             const float new_vx = -batch->state.item_vel_x[ii];
             const float new_vy = -batch->state.item_vel_y[ii];
             batch->state.item_vel_x[ii] = new_vx;
@@ -1355,7 +1340,7 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
 
           // Regular shield hit: apply defender-side shield effects and despawn the laser.
           float dmg = (laser_state == 0u) ? lp->damage : lp->state1_damage;
-          dmg = item_reflected_powershield_damage_lane(batch, o_idx, dmg);
+          dmg = item_reflected_damage_lane(batch, ii, dmg);
           const int8_t shd = (laser_state == 0u) ? lp->shield_damage : lp->state1_shield_damage;
           combat_apply_item_shield_hit(batch, bi, owner, def, batch->state.item_attack_id[ii],
                                        batch->state.item_attack_instance[ii], dmg, shd);
@@ -1415,6 +1400,12 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
             // Slippi item.instance_id is item->xDA8_short; reflect path updates it from the reflecting
             // fighter's snapshot (fp->x2088 / instance_id).
             batch->state.item_instance_id[ii] = batch->state.instance_id[d_idx];
+            // Decomp reflect snapshot ownership:
+            // - ftColl_CreateReflectHit stores ReflectDesc.damage_mul / speed_mul.
+            // - ftColl_80077464 writes both multipliers to item reflect snapshot (`item->xC6C` et al).
+            // refs/melee/src/melee/ft/ftcoll.c::{ftColl_CreateReflectHit,ftColl_80077464}
+            batch->state.item_reflect_damage_mul[ii] =
+                (rch->reflector_damage_mul > 0.0f) ? rch->reflector_damage_mul : 1.0f;
 
             const float mul = rch->reflector_speed_mul;
             const float new_vx = -batch->state.item_vel_x[ii] * mul;
@@ -1539,7 +1530,7 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
       // - ftColl_80076CBC (getEnvDmg pattern)
       // refs/melee/src/melee/ft/fighter.c and refs/melee/src/melee/ft/ftcoll.c
       float dmg = (laser_state == 0u) ? lp->damage : lp->state1_damage;
-      dmg = item_reflected_powershield_damage_lane(batch, o_idx, dmg);
+      dmg = item_reflected_damage_lane(batch, ii, dmg);
       const uint16_t angle = (laser_state == 0u) ? lp->angle : lp->state1_angle;
       const uint16_t kbg = (laser_state == 0u) ? lp->kbg : lp->state1_kbg;
       const uint16_t wsk = (laser_state == 0u) ? lp->wsk : lp->state1_wsk;

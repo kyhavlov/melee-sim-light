@@ -1,0 +1,284 @@
+from __future__ import annotations
+
+from dataclasses import dataclass
+from pathlib import Path
+
+import numpy as np
+import pytest
+
+from tools.eval.dataset import COMPARE_DTYPE, read_dataset
+
+
+ACT_GUARD_REFLECT = 0x00B6
+
+
+def _skip_if_required_artifacts_missing(root: Path) -> None:
+    required = [
+        "data/stages/final_destination.json",
+        "data/common/ft_common_data.json",
+        "data/characters/fox.json",
+        "data/characters/falco.json",
+        "data/anims/fox.tracks.bin",
+        "data/anims/falco.tracks.bin",
+        "data/moves/fox.json",
+        "data/moves/falco.json",
+    ]
+    missing = [rel for rel in required if not (root / rel).exists()]
+    if missing:
+        pytest.skip(f"missing local data artifacts: {', '.join(missing)}")
+
+
+def _find_item_slot_by_key(items: np.ndarray, *, spawn_id: int, item_type: int) -> int:
+    for it in range(int(items.shape[0])):
+        row = items[it]
+        if int(row["exists"]) == 0:
+            continue
+        if int(row["spawn_id"]) == int(spawn_id) and int(row["type"]) == int(item_type):
+            return it
+    return -1
+
+
+def _step_one_row(dataset_path: Path, record: int) -> tuple[np.void, np.void, np.void]:
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+    assert int(samples.shape[0]) > record, f"dataset too short for lock row: record={record}"
+    row = samples[record : record + 1]
+    seed = row["seed_t"][0]
+    ref = row["ref_t1"][0]
+
+    binding = pytest.importorskip("msl_binding")
+    sizes = binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    compare_stride = int(sizes["compare"])
+
+    seed_bytes = np.frombuffer(row["seed_t"].tobytes(order="C"), dtype=np.uint8).copy().reshape(1, seed_stride)
+    prev_input_bytes = np.frombuffer(row["prev_input_t"].tobytes(order="C"), dtype=np.uint8).copy().reshape(
+        1, input_stride
+    )
+    input_bytes = np.frombuffer(row["input_t"].tobytes(order="C"), dtype=np.uint8).copy().reshape(1, input_stride)
+    out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
+
+    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    try:
+        binding.reseed_seed(handle, seed_bytes)
+        binding.step_input(handle, prev_input_bytes, input_bytes)
+        binding.write_compare(handle, out_compare_bytes)
+    finally:
+        binding.destroy(handle)
+
+    out = out_compare_bytes.view(COMPARE_DTYPE).reshape(-1)[0]
+    return seed, out, ref
+
+
+@dataclass(frozen=True)
+class _TransferCase:
+    dataset_rel: str
+    record: int
+    prev_record: int
+    spawn_id: int
+    item_type: int
+    owner_prev: int
+    owner_seed: int
+    note: str
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    "case",
+    [
+        _TransferCase(
+            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl",
+            record=4829,
+            prev_record=4828,
+            spawn_id=125,
+            item_type=55,
+            owner_prev=1,
+            owner_seed=0,
+            note="powershield transfer lane A",
+        ),
+        _TransferCase(
+            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl",
+            record=6208,
+            prev_record=6207,
+            spawn_id=149,
+            item_type=55,
+            owner_prev=1,
+            owner_seed=0,
+            note="powershield transfer lane B",
+        ),
+        _TransferCase(
+            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/TreasuredBackKangaroo.msl",
+            record=7449,
+            prev_record=7448,
+            spawn_id=142,
+            item_type=55,
+            owner_prev=1,
+            owner_seed=0,
+            note="powershield transfer lane C",
+        ),
+    ],
+)
+def test_reflected_laser_transfer_rows_match_replay_real_item_identity(case: _TransferCase) -> None:
+    # Replay-real lock for reflected-laser transfer rows:
+    # - owner/instance transfer happens in item reflect apply path.
+    # refs/melee/src/melee/ft/ftcoll.c::ftColl_80077464
+    # refs/melee/src/melee/it/item.c::Item_80269F14
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / case.dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {case.dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+    assert int(samples.shape[0]) > case.record
+    assert int(samples.shape[0]) > case.prev_record
+    seed_prev = samples[case.prev_record]["seed_t"]
+    seed = samples[case.record]["seed_t"]
+    ref = samples[case.record]["ref_t1"]
+
+    prev_slot = _find_item_slot_by_key(seed_prev["items"], spawn_id=case.spawn_id, item_type=case.item_type)
+    seed_slot = _find_item_slot_by_key(seed["items"], spawn_id=case.spawn_id, item_type=case.item_type)
+    ref_slot = _find_item_slot_by_key(ref["items"], spawn_id=case.spawn_id, item_type=case.item_type)
+    assert prev_slot >= 0, f"{case.note}: expected prior-frame reflected item key"
+    assert seed_slot >= 0, f"{case.note}: expected seed reflected item key"
+    assert ref_slot >= 0, f"{case.note}: expected ref reflected item key"
+    assert int(seed_prev["items"][prev_slot]["owner"]) == int(case.owner_prev), case.note
+    assert int(seed["items"][seed_slot]["owner"]) == int(case.owner_seed), case.note
+    assert int(seed["action_id"][case.owner_seed]) == ACT_GUARD_REFLECT, case.note
+    assert int(seed["guard_reflect_timer_x14"][case.owner_seed]) > 0, case.note
+    assert int(seed["guard_reflect_timer_x18"][case.owner_seed]) > 0, case.note
+
+    seed_out, out, ref_out = _step_one_row(dataset_path=dataset_path, record=case.record)
+    out_slot = _find_item_slot_by_key(out["items"], spawn_id=case.spawn_id, item_type=case.item_type)
+    assert out_slot >= 0, f"{case.note}: reflected item key must persist through transfer frame"
+    assert int(seed_out["items"][seed_slot]["owner"]) == int(case.owner_seed), case.note
+
+    # Strict replay-real discrete lock on transfer-owned item identity lanes.
+    for fld in ("exists", "type", "state", "owner", "instance_id"):
+        got = int(out["items"][out_slot][fld])
+        exp = int(ref_out["items"][ref_slot][fld])
+        assert got == exp, f"{case.note}: field={fld} expected={exp} got={got}"
+
+
+@dataclass(frozen=True)
+class _HitCase:
+    dataset_rel: str
+    record: int
+    spawn_id: int
+    item_type: int
+    reflected_owner: int
+    target_p: int
+    expect_ref_hitlag: int
+    expect_ref_hitstun: int
+    note: str
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    "case",
+    [
+        _HitCase(
+            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl",
+            record=4833,
+            spawn_id=125,
+            item_type=55,
+            reflected_owner=0,
+            target_p=1,
+            expect_ref_hitlag=0,
+            expect_ref_hitstun=0,
+            note="adjacent control A (no hit yet)",
+        ),
+        _HitCase(
+            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl",
+            record=4834,
+            spawn_id=125,
+            item_type=55,
+            reflected_owner=0,
+            target_p=1,
+            expect_ref_hitlag=3,
+            expect_ref_hitstun=9,
+            note="reflected hit A",
+        ),
+        _HitCase(
+            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl",
+            record=6212,
+            spawn_id=149,
+            item_type=55,
+            reflected_owner=0,
+            target_p=1,
+            expect_ref_hitlag=0,
+            expect_ref_hitstun=0,
+            note="adjacent control B (no hit yet)",
+        ),
+        _HitCase(
+            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl",
+            record=6213,
+            spawn_id=149,
+            item_type=55,
+            reflected_owner=0,
+            target_p=1,
+            expect_ref_hitlag=3,
+            expect_ref_hitstun=9,
+            note="reflected hit B",
+        ),
+        _HitCase(
+            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/TreasuredBackKangaroo.msl",
+            record=7475,
+            spawn_id=142,
+            item_type=55,
+            reflected_owner=0,
+            target_p=1,
+            expect_ref_hitlag=0,
+            expect_ref_hitstun=0,
+            note="adjacent control C (no hit yet)",
+        ),
+        _HitCase(
+            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/TreasuredBackKangaroo.msl",
+            record=7476,
+            spawn_id=142,
+            item_type=55,
+            reflected_owner=0,
+            target_p=1,
+            expect_ref_hitlag=4,
+            expect_ref_hitstun=30,
+            note="reflected hit C",
+        ),
+    ],
+)
+def test_reflected_laser_hit_rows_and_adjacent_controls_lock_replay_real(case: _HitCase) -> None:
+    # Replay-real reflected-hit lock rows where the reflected owner is no longer in GuardReflect.
+    # This asserts item-owned reflected damage shaping after transfer, not owner action snapshots.
+    # refs/melee/src/melee/ft/ftcoll.c::ftColl_80077464
+    # refs/melee/src/melee/it/item.c::Item_80269F14
+    # refs/melee/src/melee/it/itcoll.c::it_80272460
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / case.dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {case.dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+    assert int(samples.shape[0]) > case.record
+    row = samples[case.record]
+    seed = row["seed_t"]
+    ref = row["ref_t1"]
+
+    seed_slot = _find_item_slot_by_key(seed["items"], spawn_id=case.spawn_id, item_type=case.item_type)
+    assert seed_slot >= 0, f"{case.note}: expected reflected item key in seed"
+    assert int(seed["items"][seed_slot]["owner"]) == int(case.reflected_owner), case.note
+    # The reflected item should remain reflected after owner transfer even when GuardReflect timers
+    # have expired on the owner by the time collision lands.
+    assert int(seed["guard_reflect_timer_x14"][case.reflected_owner]) == 0, case.note
+    assert int(seed["guard_reflect_timer_x18"][case.reflected_owner]) == 0, case.note
+
+    assert int(ref["hitlag"][case.target_p]) == int(case.expect_ref_hitlag), case.note
+    assert int(ref["hitstun"][case.target_p]) == int(case.expect_ref_hitstun), case.note
+
+    _seed, out, ref_out = _step_one_row(dataset_path=dataset_path, record=case.record)
+    assert int(out["hitlag"][case.target_p]) == int(ref_out["hitlag"][case.target_p]), case.note
+    assert int(out["hitstun"][case.target_p]) == int(ref_out["hitstun"][case.target_p]), case.note
+    assert int(out["action_id"][case.target_p]) == int(ref_out["action_id"][case.target_p]), case.note
+

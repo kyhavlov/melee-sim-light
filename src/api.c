@@ -641,6 +641,11 @@ int msl_batch_reseed_seed(MslBatch* batch, const uint8_t* seed_bytes, size_t see
       batch->state.item_pos_x[ii] = item->pos_x;
       batch->state.item_pos_y[ii] = item->pos_y;
       batch->state.item_damage[ii] = item->damage;
+      float reflect_mul = seed->item_reflect_damage_mul[it];
+      if (!(reflect_mul > 0.0f)) {
+        reflect_mul = 1.0f;
+      }
+      batch->state.item_reflect_damage_mul[ii] = reflect_mul;
       batch->state.item_timer[ii] = item->timer;
       batch->state.item_spawn_id[ii] = item->spawn_id;
       batch->state.item_misc0[ii] = item->misc0;

@@ -499,6 +499,22 @@ typedef struct MslSeed {
   // Runtime usage:
   // - src/combat.c applies the staling multiplier on damaging BODY hits and updates this queue on
   //   qualifying hits using the seeded `attack_instance` as source-of-truth.
+  //
+  // Per-item reflected-damage multiplier lane (decomp: item->xC6C).
+  //
+  // Decomp:
+  // - Reflect collision writes `item->xC6C` from fighter ReflectDesc damage multiplier.
+  //   refs/melee/src/melee/ft/ftcoll.c::ftColl_80077464
+  // - Item reflect apply rewrites HitCapsule.unk_count as:
+  //     (u32)(hit.damage * item->xC6C + 0.99f)
+  //   before calling item-vs-fighter apply.
+  //   refs/melee/src/melee/it/item.c::Item_80269F14
+  //   refs/melee/src/melee/it/itcoll.c::it_80272460
+  //
+  // Seed representation:
+  // - Strictly-causal per-item value aligned to fixed item slots in `items`.
+  // - Runtime reseed sanitizes invalid/non-positive values back to 1.0f.
+  float item_reflect_damage_mul[MSL_MAX_ITEMS];
 
   MslItem items[MSL_MAX_ITEMS];
 } MslSeed;

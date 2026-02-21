@@ -487,6 +487,109 @@ def _derive_item_attack_fields(
                     del active[k]
 
 
+def _derive_item_reflect_damage_mul(
+    items_fixed: np.ndarray,
+    *,
+    post_action_id_u16: np.ndarray,
+    post_char_id_u8: np.ndarray,
+    post_state_flags_u8: np.ndarray,
+    powershield_reflect_damage_mul: float,
+    reflector_damage_mul_lut: np.ndarray,
+    num_players: int,
+) -> np.ndarray:
+    """Derive per-item reflected-damage multiplier (`item->xC6C`) strictly causally.
+
+    Decomp shape:
+    - Reflect overlap stores per-item reflect multipliers on the item (`xC6C` damage, speed mul lane).
+      refs/melee/src/melee/ft/ftcoll.c::ftColl_80077464
+    - Item apply path uses `(u32)(hit.damage * item->xC6C + 0.99f)`.
+      refs/melee/src/melee/it/item.c::Item_80269F14
+      refs/melee/src/melee/it/itcoll.c::it_80272460
+
+    Causality contract:
+    - Track each live item key `(spawn_id, type)` over replay frames.
+    - On owner transfer, update that key's reflect multiplier from replay-visible reflector context:
+      GuardReflect powershield lane or reflector character attrs.
+    - Carry the value forward while the item stays alive.
+    """
+    n_frames = int(items_fixed.shape[0])
+    out = np.ones((n_frames, int(items_fixed.shape[1])), dtype=np.float32)
+    if n_frames == 0:
+        return out
+
+    ACT_GUARD_REFLECT = 0x00B6
+    STATE_FLAGS_221C_INDEX = 3
+    STATE_FLAG_221C_POWERSHIELD_ACTIVE = 0x20
+
+    active_mul: dict[tuple[int, int], float] = {}
+    active_owner: dict[tuple[int, int], int] = {}
+    active_vel: dict[tuple[int, int], tuple[float, float]] = {}
+
+    for fi in range(n_frames):
+        keys_this_frame: set[tuple[int, int]] = set()
+        for slot in range(int(items_fixed.shape[1])):
+            if int(items_fixed[fi, slot]["exists"]) == 0:
+                continue
+
+            key = (int(items_fixed[fi, slot]["spawn_id"]), int(items_fixed[fi, slot]["type"]))
+            keys_this_frame.add(key)
+
+            owner = int(items_fixed[fi, slot]["owner"])
+            vel_x = float(items_fixed[fi, slot]["vel_x"])
+            vel_y = float(items_fixed[fi, slot]["vel_y"])
+            mul = float(active_mul.get(key, 1.0))
+            prev_owner = int(active_owner.get(key, owner))
+            prev_vel_x, prev_vel_y = active_vel.get(key, (vel_x, vel_y))
+
+            # Reflect-event observability:
+            # - Owner transfer is a direct signal from Item_80269F14-style reflect apply.
+            # - Some replay rows preserve owner but still show the decomp reflect velocity inversion
+            #   (`it_2725_Logic94_Reflected` angle += pi), so also key on in-frame velocity reversal.
+            # refs/melee/src/melee/it/items/itfoxlaser.c::it_2725_Logic94_Reflected
+            # refs/melee/src/melee/it/item.c::Item_80269F14
+            owner_changed = owner != prev_owner
+            prev_speed_sq = prev_vel_x * prev_vel_x + prev_vel_y * prev_vel_y
+            cur_speed_sq = vel_x * vel_x + vel_y * vel_y
+            # TODO(reflect-observability): temporary replay-observability heuristic.
+            # Replace this same-owner velocity-reversal signal with a stricter extracted reflect
+            # event signal once available from extraction/decomp-backed artifacts.
+            reversed_vel_same_owner = (
+                owner == prev_owner
+                and prev_speed_sq > 1e-6
+                and cur_speed_sq > 1e-6
+                and (prev_vel_x * vel_x + prev_vel_y * vel_y) < 0.0
+            )
+
+            if (owner_changed or reversed_vel_same_owner) and 0 <= owner < int(num_players):
+                act = int(post_action_id_u16[fi, owner])
+                flags3 = int(post_state_flags_u8[fi, owner, STATE_FLAGS_221C_INDEX])
+                if act == ACT_GUARD_REFLECT and (flags3 & STATE_FLAG_221C_POWERSHIELD_ACTIVE):
+                    mul = (
+                        float(powershield_reflect_damage_mul)
+                        if float(powershield_reflect_damage_mul) > 0.0
+                        else 1.0
+                    )
+                else:
+                    char_id = int(post_char_id_u8[fi, owner])
+                    ch_mul = float(reflector_damage_mul_lut[np.uint8(char_id)])
+                    if ch_mul > 0.0:
+                        mul = ch_mul
+
+            active_mul[key] = float(mul)
+            active_owner[key] = int(owner)
+            active_vel[key] = (vel_x, vel_y)
+            out[fi, slot] = np.float32(mul)
+
+        if active_mul:
+            for key in list(active_mul.keys()):
+                if key not in keys_this_frame:
+                    del active_mul[key]
+                    active_owner.pop(key, None)
+                    active_vel.pop(key, None)
+
+    return out
+
+
 def write_dataset_from_slp(
     *,
     slp_path: str,
@@ -789,6 +892,13 @@ def _main_impl(args) -> None:
     reflector_release_lag_lut[np.uint8(22)] = np.uint8(
         json.loads(Path("data/characters/falco.json").read_text())["reflector_release_lag_frames"]
     )
+    reflector_damage_mul_lut = np.ones(256, dtype=np.float32)
+    reflector_damage_mul_lut[np.uint8(1)] = np.float32(
+        json.loads(Path("data/characters/fox.json").read_text())["reflector_damage_mul"]
+    )
+    reflector_damage_mul_lut[np.uint8(22)] = np.float32(
+        json.loads(Path("data/characters/falco.json").read_text())["reflector_damage_mul"]
+    )
     # Frame ids and seeds (seed from frame i-1, ref from frame i).
     samples["seed_t"]["frame_id"] = frame_ids[:-1]
     samples["ref_t1"]["frame_id"] = frame_ids[1:]
@@ -829,8 +939,10 @@ def _main_impl(args) -> None:
 
     # Fill inputs and per-port post state.
     post_action_id_u16 = np.zeros((n_frames, 4), dtype=np.uint16)
+    post_char_id_u8 = np.zeros((n_frames, 4), dtype=np.uint8)
     post_pos_x_all = np.zeros((n_frames, 4), dtype=np.float32)
     post_pos_y_all = np.zeros((n_frames, 4), dtype=np.float32)
+    post_state_flags_u8 = np.zeros((n_frames, 4, 5), dtype=np.uint8)
     ports_struct = frames.field("ports")
     available_ports = set(f.name for f in ports_struct.type)
     for slot, port_name in enumerate(src_port_names):
@@ -879,6 +991,7 @@ def _main_impl(args) -> None:
         post_pos = post.field("position")
         post_pos_x = _to_numpy(post_pos.field("x")).astype(np.float32)
         post_pos_y = _to_numpy(post_pos.field("y")).astype(np.float32)
+        post_char_id_u8[:, slot] = post_char
         post_action_id_u16[:, slot] = post_state
         post_pos_x_all[:, slot] = post_pos_x
         post_pos_y_all[:, slot] = post_pos_y
@@ -928,6 +1041,7 @@ def _main_impl(args) -> None:
         post_hitstun = hitstun_u16_from_misc_as_and_state_flags3(
             misc_as_f32=post_misc_as, state_flags3_u8=state_flags[:, 3], n=n_frames
         )
+        post_state_flags_u8[:, slot, :] = state_flags
 
         vel = post.field("velocities")
         speed_air_x_self = _to_numpy(vel.field("self_x_air")).astype(np.float32)
@@ -1474,6 +1588,16 @@ def _main_impl(args) -> None:
         post_pos_y=post_pos_y_all,
         num_players=num_players,
     )
+    item_reflect_damage_mul = _derive_item_reflect_damage_mul(
+        items_fixed,
+        post_action_id_u16=post_action_id_u16,
+        post_char_id_u8=post_char_id_u8,
+        post_state_flags_u8=post_state_flags_u8,
+        powershield_reflect_damage_mul=float(common["powershield_reflect_damage_mul"]),
+        reflector_damage_mul_lut=reflector_damage_mul_lut,
+        num_players=num_players,
+    )
+    samples["seed_t"]["item_reflect_damage_mul"] = item_reflect_damage_mul[:-1]
     samples["seed_t"]["items"] = items_seed[:-1]
     samples["ref_t1"]["items"] = items_fixed[1:]
 

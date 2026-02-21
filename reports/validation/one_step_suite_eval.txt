@@ -8,7 +8,7 @@
 # preprocess_suite stamp:
 #   path: datasets/fox_falco_fd_ucf084_recent/.preprocess_meta.json
 #   force_used: True  built: 4  skipped: 0
-#   seed_dtype_itemsize: 2125  sample_dtype_itemsize: 3211
+#   seed_dtype_itemsize: 2185  sample_dtype_itemsize: 3271
 #
 # Regenerate gitignored ISO-derived data artifacts (if missing/stale):
 # - Moves (data/moves/*.json):
@@ -50,7 +50,7 @@ mismatch.facing: 24 / 14590 (0.001645)
 mismatch.stocks: 0 / 14590 (0.000000)
 mismatch.jumps_left: 55 / 14590 (0.003770)
 mismatch.is_dead: 0 / 14590 (0.000000)
-mismatch.hitlag: 26 / 14590 (0.001782)
+mismatch.hitlag: 27 / 14590 (0.001851)
 mismatch.hitstun: 19 / 14590 (0.001302)
 mismatch.l_cancel: 0 / 14590 (0.000000)
 mismatch.hurtbox_state: 22 / 14590 (0.001508)
@@ -74,14 +74,14 @@ err.speed_ground_x_self: mae=0.012105 p95=0.000001 max=2.200000
 err.speed_y_self: mae=0.006489 p95=0.000000 max=3.500000
 err.speed_x_attack: mae=0.001818 p95=0.000000 max=4.018438
 err.speed_y_attack: mae=0.003320 p95=0.000000 max=3.593244
-err.percent: mae=0.047810 p95=0.000000 max=166.535339
+err.percent: mae=0.047878 p95=0.000000 max=166.535339
 err.shield_hp: mae=0.002774 p95=0.000000 max=13.866562
 err.item_pos_x: mae=0.751787 p95=0.000000 max=145.596008
 err.item_pos_y: mae=0.179799 p95=0.000000 max=26.364082
 err.item_vel_x: mae=0.142800 p95=0.000000 max=10.000000
 err.item_vel_y: mae=0.122106 p95=0.000000 max=6.995885
-overall.discrete_mismatch: 751 / 882695
-overall.float_norm_mae_p95: 0.00360711
+overall.discrete_mismatch: 752 / 882695
+overall.float_norm_mae_p95: 0.00360716
 
 == datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl ==
 Records: 11529  Players/scored per record: 2  Total player-frames: 23058
@@ -116,14 +116,14 @@ err.speed_ground_x_self: mae=0.014986 p95=0.018471 max=2.929587
 err.speed_y_self: mae=0.006989 p95=0.000000 max=6.986000
 err.speed_x_attack: mae=0.001758 p95=0.000000 max=5.426626
 err.speed_y_attack: mae=0.003231 p95=0.000000 max=4.594820
-err.percent: mae=0.033498 p95=0.000000 max=167.750000
+err.percent: mae=0.033390 p95=0.000000 max=167.750000
 err.shield_hp: mae=0.001839 p95=0.000000 max=5.599998
 err.item_pos_x: mae=0.272438 p95=0.000000 max=179.321686
 err.item_pos_y: mae=0.084865 p95=0.000000 max=26.796017
 err.item_vel_x: mae=0.080102 p95=0.000000 max=10.000000
 err.item_vel_y: mae=0.057218 p95=0.000000 max=6.995885
 overall.discrete_mismatch: 1271 / 1395009
-overall.float_norm_mae_p95: 0.00395645
+overall.float_norm_mae_p95: 0.00395637
 
 == datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/QuerulousGrandDinosaur.msl ==
 Records: 10222  Players/scored per record: 2  Total player-frames: 20444
@@ -134,7 +134,7 @@ mismatch.facing: 41 / 20444 (0.002005)
 mismatch.stocks: 0 / 20444 (0.000000)
 mismatch.jumps_left: 61 / 20444 (0.002984)
 mismatch.is_dead: 0 / 20444 (0.000000)
-mismatch.hitlag: 46 / 20444 (0.002250)
+mismatch.hitlag: 44 / 20444 (0.002152)
 mismatch.hitstun: 22 / 20444 (0.001076)
 mismatch.l_cancel: 0 / 20444 (0.000000)
 mismatch.hurtbox_state: 32 / 20444 (0.001565)
@@ -158,14 +158,14 @@ err.speed_ground_x_self: mae=0.011121 p95=0.007956 max=2.929587
 err.speed_y_self: mae=0.008917 p95=0.000000 max=3.760000
 err.speed_x_attack: mae=0.001583 p95=0.000000 max=3.136160
 err.speed_y_attack: mae=0.002973 p95=0.000000 max=5.618131
-err.percent: mae=0.039423 p95=0.000000 max=162.050003
-err.shield_hp: mae=0.001865 p95=0.000000 max=8.400002
+err.percent: mae=0.039234 p95=0.000000 max=162.050003
+err.shield_hp: mae=0.001831 p95=0.000000 max=8.400002
 err.item_pos_x: mae=0.842021 p95=0.000000 max=147.967606
 err.item_pos_y: mae=0.206685 p95=0.000000 max=47.838112
 err.item_vel_x: mae=0.025461 p95=0.000000 max=4.920459
 err.item_vel_y: mae=0.050268 p95=0.000000 max=4.999368
-overall.discrete_mismatch: 1148 / 1236862
-overall.float_norm_mae_p95: 0.00312758
+overall.discrete_mismatch: 1146 / 1236862
+overall.float_norm_mae_p95: 0.00312735
 
 == datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/TreasuredBackKangaroo.msl ==
 Records: 7837  Players/scored per record: 2  Total player-frames: 15674
@@ -200,15 +200,15 @@ err.speed_ground_x_self: mae=0.014803 p95=0.000001 max=2.556731
 err.speed_y_self: mae=0.009520 p95=0.000000 max=3.680000
 err.speed_x_attack: mae=0.001888 p95=0.000000 max=2.624223
 err.speed_y_attack: mae=0.003655 p95=0.000000 max=7.370053
-err.percent: mae=0.040266 p95=0.000000 max=159.530014
+err.percent: mae=0.040204 p95=0.000000 max=159.530014
 err.shield_hp: mae=0.001332 p95=0.000000 max=5.599998
 err.item_pos_x: mae=0.417285 p95=0.000000 max=163.959488
 err.item_pos_y: mae=0.136413 p95=0.000000 max=31.795383
 err.item_vel_x: mae=0.091834 p95=0.000000 max=10.000000
 err.item_vel_y: mae=0.088142 p95=0.000000 max=6.995885
 overall.discrete_mismatch: 835 / 948277
-overall.float_norm_mae_p95: 0.00428190
+overall.float_norm_mae_p95: 0.00428185
 
 == suite summary ==
-overall.discrete_mismatch: 4005 / 4462843
-overall.float_norm_mae_p95: 0.00373441
+overall.discrete_mismatch: 4004 / 4462843
+overall.float_norm_mae_p95: 0.00373431

@@ -497,6 +497,16 @@ typedef struct MslStateSoA {
   float* item_pos_x;               // [batch * MSL_MAX_ITEMS]
   float* item_pos_y;               // [batch * MSL_MAX_ITEMS]
   uint16_t* item_damage;           // [batch * MSL_MAX_ITEMS]
+  // Per-item reflected damage multiplier lane (decomp: item->xC6C).
+  //
+  // Decomp trail:
+  // - Reflect collision writes item->xC6C from fighter ReflectDesc damage multiplier.
+  //   refs/melee/src/melee/ft/ftcoll.c::ftColl_80077464
+  // - Item reflect apply rewrites HitCapsule.unk_count as
+  //   (u32)(hit.damage * item->xC6C + 0.99f), then routes through it_80272460.
+  //   refs/melee/src/melee/it/item.c::Item_80269F14
+  //   refs/melee/src/melee/it/itcoll.c::it_80272460
+  float* item_reflect_damage_mul;  // [batch * MSL_MAX_ITEMS]
   float* item_timer;               // [batch * MSL_MAX_ITEMS]
   uint32_t* item_spawn_id;         // [batch * MSL_MAX_ITEMS]
   uint8_t* item_misc0;             // [batch * MSL_MAX_ITEMS]
