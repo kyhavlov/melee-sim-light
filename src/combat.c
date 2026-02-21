@@ -2163,6 +2163,10 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
         const uint8_t p1_grounded = batch->state.on_ground[p1_idx] != 0 ? 1u : 0u;
         if (p0_grounded && p1_grounded && batch->state.hitbox_count[p0_idx] != 0 &&
             batch->state.hitbox_count[p1_idx] != 0) {
+          // Clank damage-delta threshold (ftCommonData.x3CC) consumed by ftColl_8007699C.
+          // refs/melee/src/melee/ft/ftcoll.c::ftColl_8007699C
+          // refs/melee/src/melee/ft/types.h (ftCommonData +0x3CC)
+          const int clank_damage_diff_threshold = c->clank_damage_diff_threshold;
           int max_int_dmg[2] = {0, 0};
           uint8_t max_elem[2] = {0, 0};
           uint8_t want_rebound_stop[2] = {0, 0};
@@ -2225,6 +2229,14 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
               const float z1 = batch->state.hitbox_z[hb1_i];
               const float r1 = batch->state.hitbox_radius[hb1_i];
               if (!sphere_sphere_intersects(x0, y0, z0, r0, x1, y1, z1, r1)) {
+                continue;
+              }
+              // Decomp clank confirmation requires reciprocal x3CC comparisons.
+              // refs/melee/src/melee/ft/ftcoll.c::ftColl_8007699C
+              const int raw0 = (int)d0;
+              const int raw1 = (int)d1;
+              if (!(((raw0 - clank_damage_diff_threshold) < raw1) &&
+                    ((raw1 - clank_damage_diff_threshold) < raw0))) {
                 continue;
               }
 

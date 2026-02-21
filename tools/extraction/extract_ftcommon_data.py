@@ -360,6 +360,12 @@ def main() -> None:
         # - ftCommon_CalcHitlag consumes the multiplier argument as `mul`.
         #   refs/melee/src/melee/ft/ftcommon.c::ftCommon_CalcHitlag
         "hitlag_electric_mul": float(_f32_be(buf, ft_common_abs + 0x1A4)),
+        # Clank damage-delta threshold consumed by ftColl_8007699C:
+        # - if ((int)dmg_other - x3CC < (int)dmg_self) the side-specific clank branch runs,
+        # - full clank-confirm requires the reciprocal check too.
+        # refs/melee/src/melee/ft/ftcoll.c::ftColl_8007699C
+        # refs/melee/src/melee/ft/types.h (ftCommonData +0x3CC is s32)
+        "clank_damage_diff_threshold": int(_i32_be(buf, ft_common_abs + 0x3CC)),
         # Air drift overspeed friction (ftCommon_8007CF58 / ftCommon_8007D050): when
         # ABS(self_vel.x) > co_attrs.air_drift_max, the engine uses p_ftCommonData->x1FC as the
         # friction magnitude for the "clamp back toward max drift" step.

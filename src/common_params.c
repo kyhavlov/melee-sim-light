@@ -334,6 +334,8 @@ int common_params_init(void) {
       json_get_f32(buf, "hitlag_base", &g_params.hitlag_base) != 0 ||
       json_get_f32(buf, "hitlag_squat_mul", &g_params.hitlag_squat_mul) != 0 ||
       json_get_f32(buf, "hitlag_electric_mul", &g_params.hitlag_electric_mul) != 0 ||
+      json_get_i32(buf, "clank_damage_diff_threshold",
+                   &g_params.clank_damage_diff_threshold) != 0 ||
       json_get_f32(buf, "sdi_radius", &g_params.sdi_radius) != 0 ||
       json_get_f32(buf, "asdi_step_mul", &g_params.asdi_step_mul) != 0 ||
       json_get_f32(buf, "di_max_deg", &g_params.di_max_deg) != 0 ||

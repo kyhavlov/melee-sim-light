@@ -14,6 +14,7 @@
   "attackair_stick_deadzone_x": 0.25,
   "attackair_stick_deadzone_y": 0.25,
   "catch_friction_mul": 1.0,
+  "clank_damage_diff_threshold": 9,
   "cliff_drop_stick_threshold": 0.6600000262260437,
   "cliff_option_stick_threshold": 0.25,
   "cliff_wait_frames_high_percent": 480.0,

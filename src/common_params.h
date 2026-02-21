@@ -248,6 +248,13 @@ typedef struct MslCommonParams {
   float hitlag_base;          // p_ftCommonData->x19C
   float hitlag_squat_mul;     // p_ftCommonData->x1A0
   float hitlag_electric_mul;  // p_ftCommonData->x1A4 (fp->x1960_vibrateMult when element==2)
+  // Clank damage-delta threshold used by ftColl_8007699C:
+  // - if ((int)dmg_other - x3CC < (int)dmg_self) side-self applies clank-contact ownership,
+  // - full clank-confirm (skip shield/body follow-up on this victim hitbox) occurs when the
+  //   reciprocal check also passes.
+  // refs/melee/src/melee/ft/ftcoll.c::ftColl_8007699C
+  // refs/melee/src/melee/ft/types.h (ftCommonData +0x3CC)
+  int32_t clank_damage_diff_threshold;  // p_ftCommonData->x3CC
   // Damage hitlag-exit callback (ftCo_Damage_OnExitHitlag) stick-displacement constants.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_OnExitHitlag
   float sdi_radius;    // p_ftCommonData->x4B0 (stick magnitude gate; also used by ftCo_800DF608)

@@ -573,6 +573,64 @@ def test_clank_ordering_gracefulattachedturtle_record_10025_family_replay_real_l
 
 
 @pytest.mark.integration
+def test_clank_x3cc_reciprocal_threshold_gat_10025_family_with_adjacent_controls() -> None:
+    # Locks the reciprocal x3CC clank-threshold ownership shape in the GAT:10025 family:
+    # - target row 10025 is asymmetric on follow-up ownership (p0 takes hitstun, p1 does not),
+    # - adjacent controls 10024/10026 preserve entry/decay context.
+    #
+    # Decomp pointers:
+    # - refs/melee/src/melee/ft/ftcoll.c::ftColl_8007699C
+    # - refs/melee/src/melee/ft/ftcoll.c::ftColl_80078C70
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_missing_laser_artifacts(root)
+
+    dataset_rel = (
+        "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
+        "cardinal_1.0_recent/GracefulAttachedTurtle.msl"
+    )
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+    for record in (10024, 10025, 10026):
+        assert int(samples.shape[0]) > record, f"dataset too short for regression check: record={record}"
+
+    # Target-frame replay preconditions for reciprocal ownership shape.
+    target = samples[10025 : 10026]
+    assert int(target["seed_t"]["hitlag"][0, 0]) == 0
+    assert int(target["seed_t"]["hitlag"][0, 1]) == 0
+    assert int(target["ref_t1"]["hitlag"][0, 0]) == 7
+    assert int(target["ref_t1"]["hitlag"][0, 1]) == 5
+    assert int(target["ref_t1"]["hitstun"][0, 0]) == 53
+    assert int(target["ref_t1"]["hitstun"][0, 1]) == 0
+    assert int(target["ref_t1"]["action_id"][0, 0]) == 90
+    assert int(target["ref_t1"]["action_id"][0, 1]) == 360
+
+    # Adjacent context controls: hitlag tail into target, then decay after target.
+    pre = samples[10024 : 10025]
+    post = samples[10026 : 10027]
+    assert int(pre["seed_t"]["hitlag"][0, 0]) == 1
+    assert int(pre["ref_t1"]["hitlag"][0, 0]) == 0
+    assert int(post["seed_t"]["hitlag"][0, 0]) == 7
+    assert int(post["ref_t1"]["hitlag"][0, 0]) == 6
+    assert int(post["seed_t"]["hitlag"][0, 1]) == 5
+    assert int(post["ref_t1"]["hitlag"][0, 1]) == 4
+
+    for record in (10024, 10025, 10026):
+        row = samples[record : record + 1]
+        out = _one_step_out_compare(ds=ds, row=row)
+        for p in (0, 1):
+            for field in ("action_id", "animation_index", "hitlag", "hitstun"):
+                got = int(out[field][0, p])
+                exp = int(row["ref_t1"][field][0, p])
+                assert got == exp, (
+                    f"record={record} p={p} field={field} expected={exp} got={got}"
+                )
+
+
+@pytest.mark.integration
 def test_spurious_body_hitlag_not_applied_gracefulattachedturtle_record_4505_p0() -> None:
     # Locks in a seed==ref false-positive BODY hit (hitlag/hitstun/action_id divergence) that was
     # caused by pose-driven hitbox geometry being mis-scaled relative to ISO-derived hurtcaps.
