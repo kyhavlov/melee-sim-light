@@ -134,6 +134,24 @@ static int json_get_i32(const char* json, const char* key, int32_t* out) {
   return 0;
 }
 
+static int json_get_i8(const char* json, const char* key, int8_t* out) {
+  if (json == NULL || key == NULL || out == NULL) {
+    return -1;
+  }
+  int32_t v = 0;
+  if (json_get_i32(json, key, &v) != 0) {
+    return -1;
+  }
+  if (v < -128) {
+    v = -128;
+  }
+  if (v > 127) {
+    v = 127;
+  }
+  *out = (int8_t)v;
+  return 0;
+}
+
 static int json_get_f32_array3(const char* json, const char* key, float out3[3]) {
   if (json == NULL || key == NULL || out3 == NULL) {
     return -1;
@@ -190,6 +208,25 @@ static int load_one(const char* data_dir, const char* rel_path, uint8_t char_id)
       "illusion_ground_friction",
       "illusion_air_end_vel_x",
       "illusion_air_friction",
+      "illusion_item_hitbox_size",
+      "illusion_item_lifetime_state01_frames",
+      "illusion_item_lifetime_state2_frames",
+      "illusion_item_state0_damage",
+      "illusion_item_state0_shield_damage",
+      "illusion_item_state0_angle",
+      "illusion_item_state0_kbg",
+      "illusion_item_state0_wsk",
+      "illusion_item_state0_bkb",
+      "illusion_item_state0_element",
+      "illusion_item_state0_hitbox_y_offset",
+      "illusion_item_state1_damage",
+      "illusion_item_state1_shield_damage",
+      "illusion_item_state1_angle",
+      "illusion_item_state1_kbg",
+      "illusion_item_state1_wsk",
+      "illusion_item_state1_bkb",
+      "illusion_item_state1_element",
+      "illusion_item_state1_hitbox_y_offset",
       "firefox_hold_gravity_delay_frames",
       "firefox_hold_air_friction",
       "firefox_hold_air_fall_accel",
@@ -303,6 +340,31 @@ static int load_one(const char* data_dir, const char* rel_path, uint8_t char_id)
       json_get_f32(buf, "illusion_ground_friction", &out.illusion_ground_friction) != 0 ||
       json_get_f32(buf, "illusion_air_end_vel_x", &out.illusion_air_end_vel_x) != 0 ||
       json_get_f32(buf, "illusion_air_friction", &out.illusion_air_friction) != 0 ||
+      json_get_f32(buf, "illusion_item_hitbox_size", &out.illusion_item_hitbox_size) != 0 ||
+      json_get_u8(buf, "illusion_item_lifetime_state01_frames",
+                  &out.illusion_item_lifetime_state01_frames) != 0 ||
+      json_get_u8(buf, "illusion_item_lifetime_state2_frames",
+                  &out.illusion_item_lifetime_state2_frames) != 0 ||
+      json_get_f32(buf, "illusion_item_state0_damage", &out.illusion_item_state0_damage) != 0 ||
+      json_get_i8(buf, "illusion_item_state0_shield_damage",
+                  &out.illusion_item_state0_shield_damage) != 0 ||
+      json_get_u16(buf, "illusion_item_state0_angle", &out.illusion_item_state0_angle) != 0 ||
+      json_get_u16(buf, "illusion_item_state0_kbg", &out.illusion_item_state0_kbg) != 0 ||
+      json_get_u16(buf, "illusion_item_state0_wsk", &out.illusion_item_state0_wsk) != 0 ||
+      json_get_u16(buf, "illusion_item_state0_bkb", &out.illusion_item_state0_bkb) != 0 ||
+      json_get_u8(buf, "illusion_item_state0_element", &out.illusion_item_state0_element) != 0 ||
+      json_get_f32(buf, "illusion_item_state0_hitbox_y_offset",
+                   &out.illusion_item_state0_hitbox_y_offset) != 0 ||
+      json_get_f32(buf, "illusion_item_state1_damage", &out.illusion_item_state1_damage) != 0 ||
+      json_get_i8(buf, "illusion_item_state1_shield_damage",
+                  &out.illusion_item_state1_shield_damage) != 0 ||
+      json_get_u16(buf, "illusion_item_state1_angle", &out.illusion_item_state1_angle) != 0 ||
+      json_get_u16(buf, "illusion_item_state1_kbg", &out.illusion_item_state1_kbg) != 0 ||
+      json_get_u16(buf, "illusion_item_state1_wsk", &out.illusion_item_state1_wsk) != 0 ||
+      json_get_u16(buf, "illusion_item_state1_bkb", &out.illusion_item_state1_bkb) != 0 ||
+      json_get_u8(buf, "illusion_item_state1_element", &out.illusion_item_state1_element) != 0 ||
+      json_get_f32(buf, "illusion_item_state1_hitbox_y_offset",
+                   &out.illusion_item_state1_hitbox_y_offset) != 0 ||
       json_get_u8(buf, "firefox_hold_gravity_delay_frames",
                   &out.firefox_hold_gravity_delay_frames) != 0 ||
       json_get_f32(buf, "firefox_hold_air_friction", &out.firefox_hold_air_friction) != 0 ||

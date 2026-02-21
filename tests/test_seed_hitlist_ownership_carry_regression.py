@@ -116,13 +116,37 @@ def test_seed_hitlist_ownership_carry_agg_1430_family_context_and_seed_blocker_l
     assert int(seed_post["hitlag"][p]) == 5
     assert int(ref_post["hitlag"][p]) == 4
 
-    # Seed-side blocker lock: stale indefinite suppression is still present on the target row.
-    # This is tracked explicitly so follow-up seed-lane work can remove it without runtime C bridges.
+    # Seed-side blocker context remains observable on this row and is kept as a replay-real lock.
     assert int(seed["combat_hitlist_cd"][0, 0, 1]) == 0xFFFF
     assert int(seed["combat_hitlist_victim_iid"][0, 0, 1]) == 281
 
+    # Causal Illusion context lock for this family:
+    # - rec=1430 seeds one Falco Phantasm item (ItKind=57) owned by p0.
+    # - Seed materialization carries ghost index-1 position (owner prior-frame world position).
+    # - Adjacent control verifies timer/instance continuity at rec=1431.
+    items_mid = seed["items"]
+    mid_live = [i for i in range(items_mid.shape[0]) if int(items_mid[i]["exists"]) != 0]
+    assert mid_live == [0]
+    it_mid = items_mid[mid_live[0]]
+    assert int(it_mid["type"]) == 57
+    assert int(it_mid["state"]) == 0
+    assert int(it_mid["owner"]) == 0
+    assert int(seed_pre["action_id"][0]) == 348
+    assert float(it_mid["pos_x"]) == pytest.approx(float(seed_pre["pos_x"][0]), abs=1e-6)
+    assert float(it_mid["pos_y"]) == pytest.approx(float(seed_pre["pos_y"][0]), abs=1e-6)
+
+    items_post = seed_post["items"]
+    post_live = [i for i in range(items_post.shape[0]) if int(items_post[i]["exists"]) != 0]
+    assert post_live == [0]
+    it_post = items_post[post_live[0]]
+    assert int(it_post["type"]) == 57
+    assert int(it_post["owner"]) == 0
+    assert int(it_post["instance_id"]) == int(it_mid["instance_id"])
+    assert float(it_post["timer"]) == pytest.approx(float(it_mid["timer"]) - 1.0, abs=1e-6)
+
     fields = ("action_id", "action_frame", "animation_index", "hitlag", "hitstun", "instance_id", "state_flags[1]")
     _assert_fields_match_ref(dataset_path, record=1429, p=1, fields=fields)
+    _assert_fields_match_ref(dataset_path, record=1430, p=1, fields=fields)
     _assert_fields_match_ref(dataset_path, record=1431, p=1, fields=fields)
     _assert_fields_match_ref(dataset_path, record=1430, p=0, fields=("action_id", "hitlag", "hitstun"))
 

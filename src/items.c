@@ -567,6 +567,158 @@ static inline uint8_t item_sphere_sphere_intersects_3d(float ax, float ay, float
   return (dx * dx + dy * dy + dz * dz) <= (rr * rr);
 }
 
+static inline uint8_t item_swept_sphere_sphere_intersects_3d(float ax0, float ay0, float az0,
+                                                             float ax1, float ay1, float az1,
+                                                             float ar, float bx, float by,
+                                                             float bz, float br) {
+  // Segment-point closest distance for swept item sphere vs shield sphere center.
+  const float vx = ax1 - ax0;
+  const float vy = ay1 - ay0;
+  const float vz = az1 - az0;
+  const float wx = bx - ax0;
+  const float wy = by - ay0;
+  const float wz = bz - az0;
+  const float vv = vx * vx + vy * vy + vz * vz;
+  float t = 0.0f;
+  if (vv > 0.0f) {
+    t = (wx * vx + wy * vy + wz * vz) / vv;
+    if (t < 0.0f) {
+      t = 0.0f;
+    } else if (t > 1.0f) {
+      t = 1.0f;
+    }
+  }
+  const float cx = ax0 + t * vx;
+  const float cy = ay0 + t * vy;
+  const float cz = az0 + t * vz;
+  return item_sphere_sphere_intersects_3d(cx, cy, cz, ar, bx, by, bz, br);
+}
+
+typedef struct MslIllusionItemHitParams {
+  float radius;
+  float damage;
+  int8_t shield_damage;
+  uint16_t angle;
+  uint16_t kbg;
+  uint16_t wsk;
+  uint16_t bkb;
+  uint8_t element;
+  float hitbox_y_offset;
+} MslIllusionItemHitParams;
+
+enum {
+  MSL_IT_KIND_FOX_ILLUSION = 56,
+  MSL_IT_KIND_FALCO_PHANTASM = 57,
+};
+
+enum {
+  // Item script extraction uses -128 as the "no shield-damage delta" sentinel for some lanes.
+  // Source: data/characters/{fox,falco}.json illusion_item_state{0,1}_shield_damage.
+  MSL_ILLUSION_SHIELD_DAMAGE_UNSET = INT8_C(-128),
+};
+
+static inline uint8_t item_type_is_spacie_illusion(uint16_t type) {
+  // GALE01 ItKind enum order:
+  // - It_Kind_Fox_Illusion
+  // - It_Kind_Falco_Phantasm
+  // refs/melee/src/melee/it/forward.h::ItemKind
+  return (type == (uint16_t)MSL_IT_KIND_FOX_ILLUSION ||
+          type == (uint16_t)MSL_IT_KIND_FALCO_PHANTASM)
+             ? 1u
+             : 0u;
+}
+
+static inline uint8_t illusion_item_hit_params_from_state(const MslCharParams* chp,
+                                                          uint8_t item_state,
+                                                          MslIllusionItemHitParams* out) {
+  if (chp == NULL || out == NULL) {
+    return 0u;
+  }
+  out->radius = chp->illusion_item_hitbox_size;
+  if (item_state == 0u) {
+    out->damage = chp->illusion_item_state0_damage;
+    out->shield_damage = chp->illusion_item_state0_shield_damage;
+    out->angle = chp->illusion_item_state0_angle;
+    out->kbg = chp->illusion_item_state0_kbg;
+    out->wsk = chp->illusion_item_state0_wsk;
+    out->bkb = chp->illusion_item_state0_bkb;
+    out->element = chp->illusion_item_state0_element;
+    out->hitbox_y_offset = chp->illusion_item_state0_hitbox_y_offset;
+  } else if (item_state == 1u) {
+    out->damage = chp->illusion_item_state1_damage;
+    out->shield_damage = chp->illusion_item_state1_shield_damage;
+    out->angle = chp->illusion_item_state1_angle;
+    out->kbg = chp->illusion_item_state1_kbg;
+    out->wsk = chp->illusion_item_state1_wsk;
+    out->bkb = chp->illusion_item_state1_bkb;
+    out->element = chp->illusion_item_state1_element;
+    out->hitbox_y_offset = chp->illusion_item_state1_hitbox_y_offset;
+  } else {
+    // State 2 uses a visual-only callback lane (no hit callback ownership here).
+    // refs/melee/src/melee/it/items/itfoxillusion.c::itFoxillusion_UnkMotion2_Coll
+    return 0u;
+  }
+  return 1u;
+}
+
+static inline uint8_t illusion_owner_motion_is_active(const MslBatch* batch,
+                                                      size_t owner_idx) {
+  if (batch == NULL) {
+    return 0u;
+  }
+  // Illusion article lifetime is owned by ftFx_SpecialS_CheckGhostRemove(owner):
+  // active while motion_id is within [ftFx_MS_SpecialSStart .. ftFx_MS_SpecialAirSEnd].
+  // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c::ftFx_SpecialS_CheckGhostRemove
+  const uint16_t owner_action = batch->state.action_id[owner_idx];
+  return (owner_action >= (uint16_t)MSL_ACT_FX_SPECIAL_S_START &&
+          owner_action <= (uint16_t)MSL_ACT_FX_SPECIAL_AIR_S_END)
+             ? 1u
+             : 0u;
+}
+
+static inline uint8_t illusion_item_anim_step(MslBatch* batch, size_t ii,
+                                              const MslCharParams* chp,
+                                              uint8_t owner_motion_active) {
+  if (batch == NULL || chp == NULL) {
+    return 0u;
+  }
+  if (!owner_motion_active) {
+    item_slot_clear(batch, ii);
+    return 0u;
+  }
+
+  // Item animation callback ownership:
+  // - state0/state1 share anim: decrement timer; on expiry enter state2 and reset timer.
+  // - state2 anim: decrement timer; on expiry destroy.
+  // refs/melee/src/melee/it/items/itfoxillusion.c::{
+  //   itFoxillusion_UnkMotion0_Anim,itFoxillusion_UnkMotion1_Anim,
+  //   itFoxillusion_UnkMotion2_Anim,it_8029D798}
+  const uint8_t state = batch->state.item_state[ii];
+  float timer = batch->state.item_timer[ii];
+  if (state <= 1u) {
+    timer -= 1.0f;
+    if (timer <= 0.0f) {
+      if (chp->illusion_item_lifetime_state2_frames == 0u) {
+        item_slot_clear(batch, ii);
+        return 0u;
+      }
+      batch->state.item_state[ii] = 2u;
+      batch->state.item_timer[ii] = (float)chp->illusion_item_lifetime_state2_frames;
+      return 1u;
+    }
+    batch->state.item_timer[ii] = timer;
+    return 1u;
+  }
+
+  timer -= 1.0f;
+  if (timer <= 0.0f) {
+    item_slot_clear(batch, ii);
+    return 0u;
+  }
+  batch->state.item_timer[ii] = timer;
+  return 1u;
+}
+
 static inline float item_reflected_powershield_damage_lane(const MslBatch* batch, size_t owner_idx,
                                                            float base_damage) {
   if (batch == NULL || !(base_damage > 0.0f)) {
@@ -736,6 +888,158 @@ static void laser_spawn_from_fighter(MslBatch* batch, int bi, int owner, const M
   batch->state.item_pos_x[ii] = pos_x;
   batch->state.item_pos_y[ii] = pos_y;
   batch->state.item_timer[ii] = (float)lp->lifetime_frames;
+}
+
+static void illusion_items_update_and_collide(MslBatch* batch, int bi) {
+  if (batch == NULL) {
+    return;
+  }
+  const int num_players = (int)batch->config.num_players;
+
+  for (int it = 0; it < MSL_MAX_ITEMS; it++) {
+    const size_t ii = msl_idx_item(bi, it);
+    if (!batch->state.item_exists[ii]) {
+      continue;
+    }
+    const uint16_t type = batch->state.item_type[ii];
+    if (!item_type_is_spacie_illusion(type)) {
+      continue;
+    }
+
+    const int owner = (int)batch->state.item_owner[ii];
+    if (owner < 0 || owner >= num_players) {
+      continue;
+    }
+    const size_t o_idx = msl_idx_player(bi, owner);
+    const MslCharParams* chp = msl_char_params(batch->state.char_id[o_idx]);
+    const uint8_t owner_motion_active = illusion_owner_motion_is_active(batch, o_idx);
+    if (!illusion_item_anim_step(batch, ii, chp, owner_motion_active)) {
+      continue;
+    }
+    if (batch->state.item_state[ii] >= 2u) {
+      continue;
+    }
+    MslIllusionItemHitParams hp = {0};
+    if (!illusion_item_hit_params_from_state(chp, batch->state.item_state[ii], &hp)) {
+      continue;
+    }
+
+    // Decomp owner lane for Phys callback:
+    // - state0/state1 copy item->pos from owner ghostEffectPos[1].
+    // - this runtime does not synthesize ghostEffectPos from owner displacement in C.
+    // refs/melee/src/melee/it/items/itfoxillusion.c::{
+    //   itFoxillusion_UnkMotion0_Phys,itFoxillusion_UnkMotion1_Phys}
+    // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c::ftFx_SpecialS_CopyGhostPosIndexed
+    //
+    // Without promoted ghost-ring seed lanes, keep item position at the seeded runtime value.
+    const float base_x0 = batch->state.item_pos_x[ii];
+    const float base_y0 = batch->state.item_pos_y[ii];
+    const float base_x1 = base_x0;
+    const float base_y1 = base_y0;
+    const float x0 = base_x0;
+    const float y0 = base_y0 + hp.hitbox_y_offset;
+    const float x1 = base_x1;
+    const float y1 = base_y1 + hp.hitbox_y_offset;
+
+    uint8_t consumed_item = 0u;
+    for (int def = 0; def < num_players; def++) {
+      if (def == owner) {
+        continue;
+      }
+      const size_t d_idx = msl_idx_player(bi, def);
+      // Hitlag gating: item collision acceptance is frozen while either participant is in hitlag.
+      // Decomp ordering applies hitlag before collision callbacks in the per-frame fighter/item loop.
+      // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
+      // refs/melee/src/melee/it/item.c::Item_80268F7C
+      if (batch->state.hitlag[o_idx] != 0u || batch->state.hitlag[d_idx] != 0u) {
+        continue;
+      }
+      const uint16_t def_iid = batch->state.instance_id[d_idx];
+      if (!hitlist_allows_item_fighter(batch, bi, it, def, def_iid)) {
+        continue;
+      }
+
+      // Shield precedence mirrors fighter/item collision ownership: resolve shield overlap before
+      // BODY intake.
+      // refs/melee/src/melee/ft/ftcoll.c::ftColl_80076CBC
+      const float shr = batch->state.shield_radius[d_idx];
+      if (shr > 0.0f) {
+        float shx = batch->state.shield_x[d_idx];
+        float shy = batch->state.shield_y[d_idx];
+        float shz = batch->state.shield_z[d_idx];
+        if (!isfinite(shx) || !isfinite(shy) || !isfinite(shz)) {
+          shx = batch->state.pos_x[d_idx];
+          shy = batch->state.pos_y[d_idx];
+          shz = batch->state.pos_z[d_idx];
+        }
+
+        // Decomp shield overlap helper consumes ShieldDesc radius with the shield bubble.
+        // In GALE01 ShieldDesc radius is 1.0f and scales by fighter scale.
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c
+        // refs/melee/src/melee/lb/lbcollision.c::lbColl_80007BCC
+        float shield_desc_world_r = 1.0f;
+        if (batch->state.fighter_scale_y[d_idx] > 0.0f) {
+          shield_desc_world_r *= batch->state.fighter_scale_y[d_idx];
+        }
+        if (item_swept_sphere_sphere_intersects_3d(
+                x0, y0, 0.0f, x1, y1, 0.0f, hp.radius, shx, shy, shz, shr + shield_desc_world_r)) {
+          const float dmg = item_reflected_powershield_damage_lane(batch, o_idx, hp.damage);
+          int8_t shield_damage = hp.shield_damage;
+          // Data extraction uses -128 as the unset sentinel for shield-damage delta in this lane.
+          if (shield_damage == (int8_t)MSL_ILLUSION_SHIELD_DAMAGE_UNSET) {
+            shield_damage = 0;
+          }
+          combat_apply_item_shield_hit(batch, bi, owner, def, batch->state.item_attack_id[ii],
+                                       batch->state.item_attack_instance[ii], dmg, shield_damage);
+          const uint16_t def_iid_post = batch->state.instance_id[d_idx];
+          hitlist_register_item_fighter(batch, bi, it, def, def_iid_post,
+                                        (int)MSL_LBCOLL_INSERT_FT_SHIELD, 0);
+          break;
+        }
+      }
+
+      if (batch->state.hurtbox_state[d_idx] != 0u) {
+        continue;
+      }
+
+      uint8_t hit_hurt_height = 0u;
+      uint8_t hit = 0u;
+      const uint8_t cap_n = batch->state.hurtcap_count[d_idx];
+      for (uint8_t ci = 0; ci < cap_n; ci++) {
+        if (item_swept_sphere_capsule_intersects(batch, bi, def, x0, y0, x1, y1, hp.radius, (int)ci,
+                                                 &hit_hurt_height)) {
+          hit = 1u;
+          break;
+        }
+      }
+      if (!hit) {
+        continue;
+      }
+
+      const float dmg = item_reflected_powershield_damage_lane(batch, o_idx, hp.damage);
+      const MslItemHitResult res =
+          combat_apply_item_hit(batch, bi, owner, def, batch->state.item_attack_id[ii],
+                                batch->state.item_attack_instance[ii], batch->state.item_instance_id[ii],
+                                batch->state.item_type[ii], dmg, hp.angle, hp.kbg, hp.wsk, hp.bkb,
+                                hit_hurt_height, hp.element);
+      if (res == MSL_ITEM_HIT_NONE) {
+        continue;
+      }
+      if (res == MSL_ITEM_HIT_APPLIED_CONSUME_ITEM) {
+        item_slot_clear(batch, ii);
+        consumed_item = 1u;
+        break;
+      }
+      const uint16_t def_iid_post = batch->state.instance_id[d_idx];
+      hitlist_register_item_fighter(batch, bi, it, def, def_iid_post,
+                                    (int)MSL_LBCOLL_INSERT_FT_BODY, 0);
+      break;
+    }
+
+    if (consumed_item) {
+      continue;
+    }
+  }
 }
 
 static void lasers_update_and_collide(MslBatch* batch, int bi) {
@@ -1267,6 +1571,9 @@ void items_update(MslBatch* batch) {
   }
 
   for (int bi = 0; bi < batch->batch_size; bi++) {
+    // Motion + collision/hit apply for Illusion/Phantasm ghost items.
+    illusion_items_update_and_collide(batch, bi);
+
     // Motion + collision/hit apply for existing lasers.
     lasers_update_and_collide(batch, bi);
 

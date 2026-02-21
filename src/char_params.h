@@ -106,6 +106,37 @@ typedef struct MslCharParams {
   float illusion_air_end_vel_x;
   float illusion_air_friction;
 
+  // Fox/Falco side special ghost item (Illusion/Phantasm article) collision attrs.
+  //
+  // Source of truth: ISO-extracted `data/characters/*.json` keys:
+  // - illusion_item_hitbox_size
+  // - illusion_item_lifetime_state01_frames / illusion_item_lifetime_state2_frames
+  // - illusion_item_state{0,1}_{damage,shield_damage,angle,kbg,wsk,bkb,element,hitbox_y_offset}
+  //
+  // Decomp anchors:
+  // - refs/melee/src/melee/it/items/itfoxillusion.c
+  // - refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c
+  float illusion_item_hitbox_size;
+  uint8_t illusion_item_lifetime_state01_frames;
+  uint8_t illusion_item_lifetime_state2_frames;
+  int8_t illusion_item_state0_shield_damage;
+  int8_t illusion_item_state1_shield_damage;
+  float illusion_item_state0_damage;
+  float illusion_item_state1_damage;
+  float illusion_item_state0_hitbox_y_offset;
+  float illusion_item_state1_hitbox_y_offset;
+  uint16_t illusion_item_state0_angle;
+  uint16_t illusion_item_state0_kbg;
+  uint16_t illusion_item_state0_wsk;
+  uint16_t illusion_item_state0_bkb;
+  uint16_t illusion_item_state1_angle;
+  uint16_t illusion_item_state1_kbg;
+  uint16_t illusion_item_state1_wsk;
+  uint16_t illusion_item_state1_bkb;
+  uint8_t illusion_item_state0_element;
+  uint8_t illusion_item_state1_element;
+  uint8_t _pad_u8_illusion_item_0[2];
+
   // Fox/Falco up special HoldAir/Launch (Firefox/Firebird) attrs.
   //
   // Source of truth: ISO-extracted `data/characters/*.json` keys:

@@ -338,6 +338,82 @@ def _fill_items_fixed(frames: pa.StructArray, n_frames: int) -> np.ndarray:
     return out
 
 
+def _materialize_illusion_seed_positions(
+    items_fixed: np.ndarray,
+    *,
+    post_action_id_u16: np.ndarray,
+    post_pos_x: np.ndarray,
+    post_pos_y: np.ndarray,
+    num_players: int,
+) -> np.ndarray:
+    """Materialize Illusion/Phantasm seed positions causally from replay history.
+
+    Rationale:
+    - Decomp owner lane copies Illusion item position from fighter SpecialS ghost history
+      (ftFx_SpecialS_CopyGhostPosIndexed(index=1)).
+      refs/melee/src/melee/it/items/itfoxillusion.c::{
+        itFoxillusion_UnkMotion0_Phys,itFoxillusion_UnkMotion1_Phys}
+      refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c::ftFx_SpecialS_CopyGhostPosIndexed
+    - Slippi post-frame does not expose mv.fx.SpecialS.ghostEffectPos ring contents directly.
+
+    Policy:
+    - Keep gameplay C free of ghost-position proxy bridging.
+    - Materialize a causal Illusion seed position as the owner's prior-frame world position
+      (frame i-1) only while owner is in SpecialS SetPhys callback states at frame i.
+      refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c::{
+        ftFx_SpecialS_Phys,ftFx_SpecialAirS_Phys,ftFx_SpecialSEnd_Phys,ftFx_SpecialAirSEnd_Phys}
+    """
+    out = np.array(items_fixed, copy=True)
+    n_frames = int(out.shape[0])
+    if n_frames <= 1:
+        return out
+
+    # GALE01 item/action ids:
+    # - It_Kind_Fox_Illusion = 56
+    # - It_Kind_Falco_Phantasm = 57
+    # refs/melee/src/melee/it/forward.h::ItemKind
+    IT_KIND_FOX_ILLUSION = 56
+    IT_KIND_FALCO_PHANTASM = 57
+    illusion_item_kinds = (IT_KIND_FOX_ILLUSION, IT_KIND_FALCO_PHANTASM)
+    # - ftFx_MS_SpecialS        = 0x015C (348)
+    # - ftFx_MS_SpecialSEnd     = 0x015D (349)
+    # - ftFx_MS_SpecialAirS     = 0x015F (351)
+    # - ftFx_MS_SpecialAirSEnd  = 0x0160 (352)
+    # refs/melee/src/melee/ft/chara/ftFox/ftFx_Init.c::ftFx_Init_MotionStateTable
+    # refs/melee/src/melee/ft/chara/ftFalco/ftFc_Init.c::ftFc_Init_MotionStateTable
+    ACT_FX_SPECIAL_S = 348
+    ACT_FX_SPECIAL_S_END = 349
+    ACT_FX_SPECIAL_AIR_S = 351
+    ACT_FX_SPECIAL_AIR_S_END = 352
+    setphys_action_ids = (
+        ACT_FX_SPECIAL_S,
+        ACT_FX_SPECIAL_S_END,
+        ACT_FX_SPECIAL_AIR_S,
+        ACT_FX_SPECIAL_AIR_S_END,
+    )
+
+    for fi in range(1, n_frames):
+        for slot in range(out.shape[1]):
+            it = out[fi, slot]
+            if int(it["exists"]) == 0:
+                continue
+            if int(it["type"]) not in illusion_item_kinds:
+                continue
+            owner = int(it["owner"])
+            if owner < 0 or owner >= int(num_players):
+                continue
+            if int(post_action_id_u16[fi, owner]) not in setphys_action_ids:
+                continue
+            # Materialize ghost index-1 position causally from replay frame (i-1) owner position.
+            # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c::ftFox_SpecialS_SetPhys
+            # TODO(seed/illusion): Replace this temporary prior-frame owner-position materialization
+            # with direct SpecialS ghost ring state promotion/materialization.
+            out[fi, slot]["pos_x"] = np.float32(float(post_pos_x[fi - 1, owner]))
+            out[fi, slot]["pos_y"] = np.float32(float(post_pos_y[fi - 1, owner]))
+
+    return out
+
+
 def _derive_item_attack_fields(
     items_fixed: np.ndarray,
     *,
@@ -752,6 +828,9 @@ def _main_impl(args) -> None:
         samples["seed_t"]["fighter_scale_y"][:, slot] = np.float32(scl)
 
     # Fill inputs and per-port post state.
+    post_action_id_u16 = np.zeros((n_frames, 4), dtype=np.uint16)
+    post_pos_x_all = np.zeros((n_frames, 4), dtype=np.float32)
+    post_pos_y_all = np.zeros((n_frames, 4), dtype=np.float32)
     ports_struct = frames.field("ports")
     available_ports = set(f.name for f in ports_struct.type)
     for slot, port_name in enumerate(src_port_names):
@@ -800,6 +879,9 @@ def _main_impl(args) -> None:
         post_pos = post.field("position")
         post_pos_x = _to_numpy(post_pos.field("x")).astype(np.float32)
         post_pos_y = _to_numpy(post_pos.field("y")).astype(np.float32)
+        post_action_id_u16[:, slot] = post_state
+        post_pos_x_all[:, slot] = post_pos_x
+        post_pos_y_all[:, slot] = post_pos_y
         # Slippi Z: prefer position.z when present, otherwise fall back to 0 (older schemas are 2D-only).
         if post_pos.type.get_field_index("z") != -1:
             post_pos_z = _to_numpy(post_pos.field("z")).astype(np.float32)
@@ -1385,7 +1467,14 @@ def _main_impl(args) -> None:
         fighter_attack_instance=hist.attack_instance,
         num_players=num_players,
     )
-    samples["seed_t"]["items"] = items_fixed[:-1]
+    items_seed = _materialize_illusion_seed_positions(
+        items_fixed,
+        post_action_id_u16=post_action_id_u16,
+        post_pos_x=post_pos_x_all,
+        post_pos_y=post_pos_y_all,
+        num_players=num_players,
+    )
+    samples["seed_t"]["items"] = items_seed[:-1]
     samples["ref_t1"]["items"] = items_fixed[1:]
 
     # is_dead in compare is derived from stocks in the evaluator too, but fill it here for completeness.
