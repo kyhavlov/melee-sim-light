@@ -302,6 +302,166 @@ def test_damagefly_land_to_downbound_passive_context_controls_stay_replay_real(
 
 
 @pytest.mark.integration
+@pytest.mark.parametrize(
+    ("record", "expected_ref_action", "expected_ref_on_ground", "expected_ref_hitstun", "expected_ref_state_flag3"),
+    [
+        (5060, 91, 0, 26, 2),
+        (5062, 91, 0, 24, 2),
+        (5063, 199, 1, 0, 0),
+    ],
+    ids=["agg_r5060_p0_roll_air", "agg_r5062_p0_roll_air", "agg_r5063_p0_roll_land"],
+)
+def test_damageflyroll_x221c_b6_floor_ownership_window_attachedgoodnaturedguanaco(
+    record: int,
+    expected_ref_action: int,
+    expected_ref_on_ground: int,
+    expected_ref_hitstun: int,
+    expected_ref_state_flag3: int,
+) -> None:
+    # DamageFlyRoll ownership window:
+    # - DamageFlyRoll_Anim/Phys keep the x221C_b6 lane active while tumble continues.
+    # - DamageFlyRoll_Coll resolves grounded follow-up only when floor ownership turns over.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{
+    #   ftCo_DamageFlyRoll_Anim,ftCo_DamageFlyRoll_Phys,ftCo_DamageFlyRoll_Coll
+    # }
+    dataset_rel = (
+        "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
+        "cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl"
+    )
+    p = 0
+
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    row = ds.samples[record]
+    assert int(row["seed_t"]["action_id"][p]) == 91  # DamageFlyRoll
+    assert int(row["seed_t"]["on_ground"][p]) == 0
+    assert int(row["seed_t"]["ecb_lock_timer"][p]) == 0
+    assert int(row["seed_t"]["state_flags"][p, 3]) & 0x02  # x221C_b6 lane
+    assert int(row["ref_t1"]["action_id"][p]) == int(expected_ref_action)
+    assert int(row["ref_t1"]["on_ground"][p]) == int(expected_ref_on_ground)
+    assert int(row["ref_t1"]["hitstun"][p]) == int(expected_ref_hitstun)
+    assert int(row["ref_t1"]["state_flags"][p, 3]) == int(expected_ref_state_flag3)
+
+    out, ref = _run_one_step(dataset_rel=dataset_rel, record=record, p=p)
+    assert int(ref["action_id"][p]) == int(expected_ref_action)
+    assert int(ref["on_ground"][p]) == int(expected_ref_on_ground)
+    assert int(ref["hitstun"][p]) == int(expected_ref_hitstun)
+    assert int(ref["state_flags"][p, 3]) == int(expected_ref_state_flag3)
+
+    assert int(out["action_id"][p]) == int(ref["action_id"][p]) == int(expected_ref_action)
+    assert int(out["on_ground"][p]) == int(ref["on_ground"][p]) == int(expected_ref_on_ground)
+    assert int(out["hitstun"][p]) == int(ref["hitstun"][p]) == int(expected_ref_hitstun)
+    assert int(out["state_flags"][p, 3]) == int(ref["state_flags"][p, 3]) == int(expected_ref_state_flag3)
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    ("record", "expect_ref_action", "expect_ref_state_flag3"),
+    [
+        (11163, 91, 2),
+        (11164, 91, 2),
+        (11165, 91, 2),
+    ],
+    ids=["gat_r11163_p1_ctx_prev", "gat_r11164_p1_fixture_row", "gat_r11165_p1_ctx_next"],
+)
+def test_phasea_lock_gat_11164_action_and_stateflag3_window(
+    record: int,
+    expect_ref_action: int,
+    expect_ref_state_flag3: int,
+) -> None:
+    dataset_rel = (
+        "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
+        "cardinal_1.0_recent/GracefulAttachedTurtle.msl"
+    )
+    p = 1
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+    ds = read_dataset(str(dataset_path))
+    row = ds.samples[record]
+
+    assert int(row["ref_t1"]["action_id"][p]) == expect_ref_action
+    assert int(row["ref_t1"]["state_flags"][p, 3]) == expect_ref_state_flag3
+    assert int(row["ref_t1"]["on_ground"][p]) == 0
+
+    out, ref = _run_one_step(dataset_rel=dataset_rel, record=record, p=p)
+    assert int(out["action_id"][p]) == int(ref["action_id"][p]) == expect_ref_action
+    assert int(out["state_flags"][p, 3]) == int(ref["state_flags"][p, 3]) == expect_ref_state_flag3
+    assert int(out["on_ground"][p]) == int(ref["on_ground"][p]) == 0
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    ("record", "expect_ref_instance_id"),
+    [
+        (2376, 509),
+        (2377, 509),
+        (2378, 510),
+    ],
+    ids=["tbk_r2376_p0_ctx_prev", "tbk_r2377_p0_fixture_row", "tbk_r2378_p0_ctx_next"],
+)
+def test_phasea_lock_tbk_2377_instance_id_window(
+    record: int,
+    expect_ref_instance_id: int,
+) -> None:
+    dataset_rel = (
+        "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
+        "cardinal_1.0_recent/TreasuredBackKangaroo.msl"
+    )
+    p = 0
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+    ds = read_dataset(str(dataset_path))
+    row = ds.samples[record]
+
+    assert int(row["ref_t1"]["instance_id"][p]) == expect_ref_instance_id
+    out, ref = _run_one_step(dataset_rel=dataset_rel, record=record, p=p)
+    assert int(out["instance_id"][p]) == int(ref["instance_id"][p]) == expect_ref_instance_id
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    ("record", "expect_ref_on_ground"),
+    [
+        (5059, 0),
+        (5060, 0),
+        (5061, 0),
+    ],
+    ids=["agg_r5059_p0_ctx_prev", "agg_r5060_p0_fixture_row", "agg_r5061_p0_ctx_next"],
+)
+def test_phasea_lock_agg_5060_on_ground_window(
+    record: int,
+    expect_ref_on_ground: int,
+) -> None:
+    dataset_rel = (
+        "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
+        "cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl"
+    )
+    p = 0
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+    ds = read_dataset(str(dataset_path))
+    row = ds.samples[record]
+
+    assert int(row["ref_t1"]["on_ground"][p]) == expect_ref_on_ground
+    out, ref = _run_one_step(dataset_rel=dataset_rel, record=record, p=p)
+    assert int(out["on_ground"][p]) == int(ref["on_ground"][p]) == expect_ref_on_ground
+
+
+@pytest.mark.integration
 def test_damageflyhi_stays_damageflyhi_attachedgoodnaturedguanaco_record_1695_p1() -> None:
     # Seed==ref cluster regression:
     # ref=DamageFlyHi (87) -> out=DamageFlyLw (89) at record=1695 p1.

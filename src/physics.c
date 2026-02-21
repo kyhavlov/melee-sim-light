@@ -523,8 +523,6 @@ void physics_integrate(MslBatch* batch) {
           is_damage_fly ? physics_damage_iasa_lockout_x221c_b6(batch, idx) : 0u;
       const uint8_t damage_uses_common_air_helper =
           (is_damage_fly && !damage_iasa_lockout) ? 1u : 0u;
-      float damageflyroll_post_integrate_vy = 0.0f;
-      uint8_t damageflyroll_defer_vy_write = 0u;
 
       // Thrown victims:
       // - Decomp thrown victim Phys/Coll callbacks are empty, and victim translation is driven by an
@@ -602,21 +600,7 @@ void physics_integrate(MslBatch* batch) {
                 if (next_vy < -phys->terminal_vel) {
                   next_vy = -phys->terminal_vel;
                 }
-                if (action_id == (uint16_t)MSL_ACT_DAMAGE_FLY_ROLL) {
-                  // Temporary compatibility bridge: keep DamageFlyRoll x221C_b6 vertical-lane
-                  // ownership but defer the write until after current-frame integration in this
-                  // simplified one-step lane.
-                  // TODO: remove this defer once decomp-owned DamageFlyRoll Phys/Coll ordering
-                  // parity is fully modeled in runtime (ftCo_DamageFlyRoll_Phys /
-                  // ftCo_DamageFlyRoll_Coll).
-                  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{
-                  //   ftCo_DamageFlyRoll_Phys,ftCo_DamageFlyRoll_Coll
-                  // }
-                  damageflyroll_post_integrate_vy = next_vy;
-                  damageflyroll_defer_vy_write = 1u;
-                } else {
-                  batch->state.speed_y_self[idx] = next_vy;
-                }
+                batch->state.speed_y_self[idx] = next_vy;
               }
             } else if (physics_action_use_pre_integration_common_air_gravity(action_id) ||
                        damage_uses_common_air_helper) {
@@ -931,14 +915,8 @@ void physics_integrate(MslBatch* batch) {
         batch->state.speed_air_x_self[idx] = vx_self;
       }
 
-      const uint8_t defer_damageflyroll_kb_decay =
-          (!on_ground && action_id == (uint16_t)MSL_ACT_DAMAGE_FLY_ROLL && damage_iasa_lockout)
-              ? 1u
-              : 0u;
-      if (!defer_damageflyroll_kb_decay) {
-        physics_apply_knockback_decay(batch, idx, msl_char_params(batch->state.char_id[idx]), c,
-                                      on_ground);
-      }
+      physics_apply_knockback_decay(batch, idx, msl_char_params(batch->state.char_id[idx]), c,
+                                    on_ground);
 
       const float vy_self = batch->state.speed_y_self[idx];
       const float vx_kb = batch->state.speed_x_attack[idx];
@@ -951,24 +929,6 @@ void physics_integrate(MslBatch* batch) {
       batch->state.pos_x[idx] += vx_kb;
       batch->state.pos_y[idx] += vy_self;
       batch->state.pos_y[idx] += vy_kb;
-
-      if (defer_damageflyroll_kb_decay) {
-        // Temporary compatibility bridge: keep DamageFlyRoll x221C_b6 ownership in the
-        // DamageFlyRoll Phys/Coll lane while deferring knockback decay writes until after
-        // current-frame integration in this simplified runtime.
-        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{
-        //   ftCo_DamageFlyRoll_Phys,ftCo_DamageFlyRoll_Coll
-        // }
-        // refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate
-        // TODO(decomp-coll-coverage): remove this defer once DamageFlyRoll Phys/Coll ordering
-        // parity is fully modeled end-to-end.
-        physics_apply_knockback_decay(batch, idx, msl_char_params(batch->state.char_id[idx]), c,
-                                      on_ground);
-      }
-
-      if (damageflyroll_defer_vy_write) {
-        batch->state.speed_y_self[idx] = damageflyroll_post_integrate_vy;
-      }
 
       // Post-integration gravity update for states we intentionally keep "seed-driven" for current
       // frame displacement (notably DamageFall; see helper docs above).

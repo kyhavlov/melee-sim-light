@@ -2148,8 +2148,35 @@ def test_damagefly_hitlag_exit_rows_stay_airborne(dataset_rel: str, record: int,
             32,
             0,
         ),
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
+            "cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl",
+            6466,
+            0,
+            0,
+            0,
+            31,
+            0,
+        ),
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
+            "cardinal_1.0_recent/QuerulousGrandDinosaur.msl",
+            7457,
+            0,
+            0,
+            0,
+            31,
+            0,
+        ),
     ],
-    ids=["agg_r4553_p0", "gat_r4651_p0", "qgd_r482_p1", "tbk_r352_p1"],
+    ids=[
+        "agg_r4553_p0",
+        "gat_r4651_p0",
+        "qgd_r482_p1",
+        "tbk_r352_p1",
+        "agg_r6466_p0",
+        "qgd_r7457_p0",
+    ],
 )
 def test_action_id_damagefly_to_downbound_entry_rows(
     dataset_rel: str,
@@ -2160,13 +2187,10 @@ def test_action_id_damagefly_to_downbound_entry_rows(
     seed_hitstun: int,
     ref_hitstun: int,
 ) -> None:
-    # Dirty-seed hitlag-exit landing cluster:
+    # Dirty-seed hitlag/hitstun-exit landing cluster:
     # - replay rows where seed still carries hitlag/hitstun (seed != ref on those timers),
     # - but ref_t1 has already transitioned to DownBound.
     # This is not a seed==ref correctness lock; it guards ordering behavior on reseed-dirty rows.
-    # Triage-only remaining unsolved rows (no xfail in test suite):
-    # - AttachedGoodNaturedGuanaco.msl rec=6466 p0
-    # - QuerulousGrandDinosaur.msl rec=7457 p0
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / dataset_rel

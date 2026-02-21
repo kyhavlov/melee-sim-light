@@ -7,7 +7,7 @@
       "field": "action_id",
       "seed": 91,
       "ref": 91,
-      "out": 183,
+      "out": 91,
       "cluster_count": 2,
       "base_field": "action_id"
     },
@@ -304,7 +304,7 @@
       "field": "state_flags[3]",
       "seed": 2,
       "ref": 2,
-      "out": 1,
+      "out": 2,
       "cluster_count": 3,
       "base_field": "state_flags"
     },
@@ -403,7 +403,7 @@
       "field": "instance_id",
       "seed": 509,
       "ref": 509,
-      "out": 510,
+      "out": 509,
       "cluster_count": 1,
       "base_field": "instance_id"
     },
@@ -469,7 +469,7 @@
       "field": "on_ground",
       "seed": 0,
       "ref": 0,
-      "out": 1,
+      "out": 0,
       "cluster_count": 5,
       "base_field": "on_ground"
     },

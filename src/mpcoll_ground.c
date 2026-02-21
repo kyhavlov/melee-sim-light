@@ -9,6 +9,7 @@
 #include "coll_env_flags.h"
 #include "match_flow.h"
 #include "mpcoll_ecb_points.h"
+#include "state_flags.h"
 #include "stage_collision.h"
 
 // Decomp constants (mplib.c):
@@ -32,6 +33,11 @@ static const float k_floor_ed5c_extend = 1.0f;
 // refs/melee/src/melee/mp/mpcoll.c::mpColl_8004A45C_Floor
 static const float k_floor_edge_wall_probe_x_offset = 1.0f;
 static const float k_floor_edge_wall_probe_y_offset = 1.0f;
+// Decomp ECB vertical unit in the callback path:
+// - mpColl_80042384 enforces a minimum +1.0f vertical separation for desired ECB extents.
+// - mpColl_LoadECB_JObj uses midpoint +/- 1.0f in its tightened vertical-span path.
+// refs/melee/src/melee/mp/mpcoll.c::{mpColl_80042384,mpColl_LoadECB_JObj}
+static const float k_ecb_vertical_unit = 1.0f;
 
 static inline float cross2(float ax, float ay, float bx, float by) { return ax * by - ay * bx; }
 
@@ -971,40 +977,41 @@ void mpcoll_ground_apply(MslBatch* batch) {
         float ix = 0.0f, iy = 0.0f;
         const uint8_t escapeair_locked =
             (action_id == (uint16_t)MSL_ACT_ESCAPE_AIR && ecb_lock_active) ? 1u : 0u;
-        const uint8_t damage_locked =
-            (is_damage_collision_landing_action(action_id) && ecb_lock_active) ? 1u : 0u;
-        // Narrowing note:
-        // - This scope clamp is independent of the damage_post_hitlag_cb_kind seed lane.
-        // - It prevents known seed==ref airborne regressions by keeping locked-floor projection in
-        //   the currently modeled DamageFly* collision-ownership window only (not DamageAir*).
-        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_DamageFly_Coll
-        const uint8_t damagefly_locked =
-            (damage_locked && is_damage_fly_collision_action(action_id)) ? 1u : 0u;
-        uint8_t deep_lock_penetration = 0u;
-        if (escapeair_locked || damagefly_locked) {
-          const float bottom_rel0 = msl_ecb_bottom_rel_y(char_id, anim, 0);
-          deep_lock_penetration = (bottom_rel0 > 0.0f && cur_bottom_y <= -bottom_rel0) ? 1u : 0u;
-        }
-        if (!on_ground && (escapeair_locked || damagefly_locked) && deep_lock_penetration &&
-            prefer_line_idx >= 0) {
-          // Decomp shape: while CollData_X130_Locked is active, collision callbacks can still
-          // resolve against the persisted floor.index via mpLib_8004DD90_Floor-style projection.
+        const uint8_t damage_hitlag_exit_projection_owner =
+            (is_damage_collision_landing_action(action_id) && ecb_lock_active &&
+             batch->state.damage_post_hitlag_cb_kind[idx] ==
+                 (uint8_t)MSL_DAMAGE_POST_HITLAG_CB_DAMAGE_ON_EXIT &&
+             batch->state.hitlag_pre_timer[idx] != 0u && batch->state.hitlag[idx] == 0u)
+                ? 1u
+                : 0u;
+        // DamageFlyRoll ownership lane for this floor-projection pass:
+        // - keep x221C_b6-gated roll handling after hitlag-exit callback consumption,
+        // - avoid re-running this lane on the same frame that Fighter_8006D10C consumes
+        //   ftCo_Damage_OnExitHitlag.
+        // refs/melee/src/melee/ft/fighter.c::Fighter_8006D10C
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{
+        //   ftCo_Damage_OnExitHitlag,ftCo_DamageFlyRoll_Phys,ftCo_DamageFlyRoll_Coll
+        // }
+        const uint8_t damageflyroll_iasa_lockout =
+            (action_id == (uint16_t)MSL_ACT_DAMAGE_FLY_ROLL &&
+             msl_state_flags_221c_b6_at(batch->state.state_flags, idx) &&
+             batch->state.hitlag_pre_timer[idx] == 0u && batch->state.hitlag[idx] == 0u)
+                ? 1u
+                : 0u;
+        if (!on_ground && damage_hitlag_exit_projection_owner && prefer_line_idx >= 0) {
+          // Damage hitlag-exit callback ownership:
+          // - Damage entry writes `post_hitlag_cb = ftCo_Damage_OnExitHitlag`.
+          // - Fighter_8006D10C invokes that callback on hitlag exit before Damage collision callback.
+          // - DamageFly_Coll / Damage_Coll then resolve grounded contact via ft_80081DD4/ftCo_80090184.
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{
+          //   ftCo_8008DCE0,ftCo_Damage_OnExitHitlag,ftCo_Damage_Coll,ftCo_DamageFly_Coll,ftCo_80090184
+          // }
+          // refs/melee/src/melee/ft/fighter.c::Fighter_8006D10C
+          // refs/melee/src/melee/ft/ft_081B.c::ft_80081DD4
           // refs/melee/src/melee/mp/mplib.c::mpLib_8004DD90_Floor
-          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll
-          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{ftCo_Damage_Coll,ftCo_DamageFly_Coll}
-          //
-          // This projection allows deterministic floor contact even when the locked ECB bottom is
-          // already below the floor line (no crossing sweep this frame).
-          //
-          // Gate to deep penetration only:
-          // - The lock path forces desired_ecb.bottom.y=0 relative to the fighter root.
-          // - Use the ISO-extracted EscapeAir frame-0 bottom extent as a deterministic depth
-          //   threshold so normal lock-active airborne descent (still above this depth) remains in
-          //   air until the regular sweep/projection path lands.
-          // refs/data/ecb/*_bottom.bin via msl_ecb_bottom_rel_y()
           float y_corr = 0.0f;
-          const int out_line_idx = floor_dd90_project(g, prefer_line_idx, cur_bottom_x,
-                                                      cur_bottom_y, &y_corr, &floor_nx, &floor_ny);
+          const int out_line_idx = floor_dd90_project(g, prefer_line_idx, cur_bottom_x, cur_bottom_y,
+                                                      &y_corr, &floor_nx, &floor_ny);
           if (out_line_idx >= 0 && y_corr >= 0.0f) {
             batch->state.pos_y[idx] += y_corr;
             on_ground = 1;
@@ -1013,33 +1020,91 @@ void mpcoll_ground_apply(MslBatch* batch) {
             contact_y = cur_bottom_y + y_corr;
           }
         }
-        if (!on_ground && damagefly_locked && prefer_line_idx >= 0 &&
-            batch->state.hitlag_pre_timer[idx] != 0u && batch->state.hitlag[idx] == 0u) {
-          // Damage hitlag-exit callback ordering:
-          // - Fighter_8006D10C invokes ftCo_Damage_OnExitHitlag at hitlag exit.
-          // - ftCo_Damage_OnExitHitlag can shift cur_pos (ASDI) before DamageFly_Coll decides
-          //   grounded landing / DownBound on the same frame.
-          // refs/melee/src/melee/ft/fighter.c::Fighter_8006D10C
+        float damageflyroll_root_proj_y_corr = 0.0f;
+        float damageflyroll_side_y_thresh = 0.0f;
+        int damageflyroll_root_proj_line_idx = -1;
+        uint8_t damageflyroll_root_proj_ready = 0u;
+        uint8_t damageflyroll_deep_side_penetration = 0u;
+        if (!on_ground && damageflyroll_iasa_lockout && prefer_line_idx >= 0) {
+          // Decomp ownership: DamageFlyRoll_Coll resolves grounded follow-up via ft_80081DD4, which
+          // runs mpColl_800473CC (air callback path) before ftCo_80090184 selection.
           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{
-          //   ftCo_Damage_OnExitHitlag,ftCo_DamageFly_Coll
+          //   ftCo_DamageFlyRoll_Phys,ftCo_DamageFlyRoll_Coll,ftCo_80090184
           // }
+          // refs/melee/src/melee/ft/ft_081B.c::ft_80081DD4
+          // refs/melee/src/melee/mp/mpcoll.c::{mpColl_800473CC,mpColl_80046904,mpColl_80044838_Floor}
           //
-          // Scope this to DamageFly* for now: this pass models replay-observed Dirty-seed
-          // hitlag-exit landings in DamageFly collision ownership, while still excluding DamageAir*
-          // (which regressed seed==ref rows when included here).
-          //
-          // Evaluate this before sweep handling so persisted-floor projection still applies when
-          // a sweep candidate line is reported but mpLib_8004DD90 projection fails on that path.
-          // refs/melee/src/melee/mp/mplib.c::mpLib_8004DD90_Floor
-          float y_corr = 0.0f;
-          const int out_line_idx = floor_dd90_project(g, prefer_line_idx, cur_bottom_x,
-                                                      cur_bottom_y, &y_corr, &floor_nx, &floor_ny);
-          if (out_line_idx >= 0 && y_corr >= 0.0f) {
-            batch->state.pos_y[idx] += y_corr;
-            on_ground = 1;
-            ground_id = g->lines[(size_t)out_line_idx].segment_i;
-            contact_x = cur_bottom_x;
-            contact_y = cur_bottom_y + y_corr;
+          // mpColl_LoadECB_JObj defines side-point Y as midpoint(bottom, top) + x124 offset.
+          // Combine side- and bottom-point depths as a conservative callback-owned gate for the
+          // root-based floor projection path (mpColl_80044838_Floor ignore_bottom branch).
+          // This keeps shallow bottom-only crossings in-air while the DamageFlyRoll ownership lane
+          // is still active, and turns over once the lane is deeply penetrated.
+          // refs/melee/src/melee/mp/mpcoll.c::mpColl_LoadECB_JObj
+          const float facing_dir = batch->state.facing[idx] ? 1.0f : -1.0f;
+          MslEcbWorldPoints ecb_world = {0};
+          msl_ecb_world_points_sample(&ecb_world, char_id, anim, ecb_frame_cur, facing_dir,
+                                      batch->state.pos_x[idx], batch->state.pos_y[idx],
+                                      lock_bottom_to_zero);
+          damageflyroll_side_y_thresh =
+              ecb_world.side_rel_y + ecb_world.bottom_rel_y + k_floor_y_bias;
+
+          damageflyroll_root_proj_line_idx =
+              floor_dd90_project(g, prefer_line_idx, batch->state.pos_x[idx],
+                                 batch->state.pos_y[idx], &damageflyroll_root_proj_y_corr,
+                                 &floor_nx, &floor_ny);
+          if (damageflyroll_root_proj_line_idx >= 0 && damageflyroll_root_proj_y_corr >= 0.0f) {
+            damageflyroll_root_proj_ready = 1u;
+            if (damageflyroll_root_proj_y_corr >= damageflyroll_side_y_thresh) {
+              damageflyroll_deep_side_penetration = 1u;
+              const float root_x = batch->state.pos_x[idx];
+              const float root_y = batch->state.pos_y[idx];
+              const float contact_y_root = root_y + damageflyroll_root_proj_y_corr;
+              // Decomp-owned callback math for this lane:
+              // - mpLib_8004DD90_Floor yields projection delta in world-space y (`y_out`).
+              // - mpColl_80044838_Floor(ignore_bottom=true) applies that delta directly to
+              //   coll->cur_pos.y with no additional cap.
+              // - mpColl_LoadECB_JObj defines side-point y as midpoint(bottom, top) + x124.
+              // Keep root placement as "root-contact minus callback-owned side-depth threshold"
+              // without an extra clamp.
+              // refs/melee/src/melee/mp/mplib.c::mpLib_8004DD90_Floor
+              // refs/melee/src/melee/mp/mpcoll.c::{mpColl_80044838_Floor,mpColl_LoadECB_JObj}
+              float root_y_corr = damageflyroll_root_proj_y_corr - damageflyroll_side_y_thresh;
+              // Callback-owned cap for this DamageFlyRoll projection lane:
+              // - ft_80081DD4 routes through mpColl_800473CC -> mpColl_LoadECB_inline -> mpColl_80042384.
+              // - keep root lift bounded to the ECB vertical unit used by that callback path
+              //   (not mpLib_8004ED5C endpoint-extension constants).
+              // refs/melee/src/melee/ft/ft_081B.c::ft_80081DD4
+              // refs/melee/src/melee/mp/mpcoll.c::{mpColl_800473CC,mpColl_LoadECB_inline,mpColl_80042384}
+              if (root_y_corr > k_ecb_vertical_unit) {
+                root_y_corr = k_ecb_vertical_unit;
+              }
+              batch->state.pos_y[idx] = root_y + root_y_corr;
+              on_ground = 1;
+              ground_id = g->lines[(size_t)damageflyroll_root_proj_line_idx].segment_i;
+              contact_x = root_x;
+              contact_y = contact_y_root;
+            }
+          }
+        }
+        uint8_t deep_lock_penetration = 0u;
+        if (!on_ground && escapeair_locked && prefer_line_idx >= 0) {
+          const float bottom_rel0 = msl_ecb_bottom_rel_y(char_id, anim, 0);
+          deep_lock_penetration = (bottom_rel0 > 0.0f && cur_bottom_y <= -bottom_rel0) ? 1u : 0u;
+          if (deep_lock_penetration) {
+            // Decomp shape: while CollData_X130_Locked is active, EscapeAir_Coll can still resolve
+            // against the persisted floor.index via mpLib_8004DD90_Floor-style projection.
+            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll
+            // refs/melee/src/melee/mp/mplib.c::mpLib_8004DD90_Floor
+            float y_corr = 0.0f;
+            const int out_line_idx = floor_dd90_project(g, prefer_line_idx, cur_bottom_x,
+                                                        cur_bottom_y, &y_corr, &floor_nx, &floor_ny);
+            if (out_line_idx >= 0 && y_corr >= 0.0f) {
+              batch->state.pos_y[idx] += y_corr;
+              on_ground = 1;
+              ground_id = g->lines[(size_t)out_line_idx].segment_i;
+              contact_x = cur_bottom_x;
+              contact_y = cur_bottom_y + y_corr;
+            }
           }
         }
         // Decomp: mpCheckFloor's horizontal intersection helper is gated on non-rising segments
@@ -1072,7 +1137,14 @@ void mpcoll_ground_apply(MslBatch* batch) {
                fabsf(cur_bottom_x - prev_bottom_x) <= (float)k_floor_horiz_dy_thresh)
                   ? 1u
                   : 0u;
-          if (suppress_locked_ledge_land || suppress_locked_vertical_af3_land) {
+          const uint8_t suppress_damageflyroll_shallow_land =
+              (damageflyroll_iasa_lockout && !damageflyroll_deep_side_penetration &&
+               damageflyroll_root_proj_ready &&
+               damageflyroll_root_proj_y_corr < damageflyroll_side_y_thresh)
+                  ? 1u
+                  : 0u;
+          if (suppress_locked_ledge_land || suppress_locked_vertical_af3_land ||
+              suppress_damageflyroll_shallow_land) {
             floor_write_edge_suppression_flags(batch, idx, stage_id, g, hit_line_idx, char_id, anim,
                                                ecb_frame, was_grounded);
           } else {

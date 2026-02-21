@@ -177,7 +177,7 @@ def test_tbk_2378_context_guard_does_not_worsen_posy_regression_band() -> None:
     assert int(ref["action_id"][p]) == 191  # ftCo_MS_DownBoundD
     assert (int(seed["state_flags"][p, 3]) & 0x02) != 0  # x221C_b6 set
 
-    # Baseline band from current_main top-20 fixture for this row:
-    # 8.310089111328125. Keep this row from regressing above that lane.
+    # Row-baseline non-regression guard for this lane: keep this row in the improved
+    # post-fix band and block drift back toward the historical ~8.49 regression.
     err = abs(float(out["pos_y"][p]) - float(ref["pos_y"][p]))
     assert err <= 8.311
