@@ -502,6 +502,77 @@ def test_spurious_hitstun_not_applied_clank_reboundstop_querulousgranddinosaur_r
 
 
 @pytest.mark.integration
+def test_clank_ordering_gracefulattachedturtle_record_10025_family_replay_real_locks() -> None:
+    # Locks the GAT clank-ordering family around record 10025:
+    # - target rows: 10025:p0 and 10025:p1 (transition frame),
+    # - adjacent controls: 10024 and 10026 for both players.
+    #
+    # This ensures combat ordering changes keep replay-real action/hitlag/hitstun ownership stable
+    # through the clank-contact transition frame and neighboring context.
+    root = Path(__file__).resolve().parents[1]
+    expected_rel = (
+        "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
+        "cardinal_1.0_recent/GracefulAttachedTurtle.msl"
+    )
+    dataset_path = root / expected_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {expected_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+
+    cases = [
+        (10024, 0),
+        (10024, 1),
+        (10025, 0),
+        (10025, 1),
+        (10026, 0),
+        (10026, 1),
+    ]
+
+    for record, p in cases:
+        num_records = int(samples.shape[0])
+        assert num_records > record, f"dataset too short for regression check: num_records={num_records}"
+        row = samples[record : record + 1]
+
+        # Replay-real preconditions for the clank family target frame.
+        if record == 10025 and p == 0:
+            assert int(row["seed_t"]["action_id"][0, p]) == 63
+            assert int(row["ref_t1"]["action_id"][0, p]) == 90
+            assert int(row["seed_t"]["hitlag"][0, p]) == 0
+            assert int(row["ref_t1"]["hitlag"][0, p]) == 7
+            assert int(row["seed_t"]["hitstun"][0, p]) == 0
+            assert int(row["ref_t1"]["hitstun"][0, p]) == 53
+        if record == 10025 and p == 1:
+            assert int(row["seed_t"]["action_id"][0, p]) == 42
+            assert int(row["ref_t1"]["action_id"][0, p]) == 360
+            assert int(row["seed_t"]["hitlag"][0, p]) == 0
+            assert int(row["ref_t1"]["hitlag"][0, p]) == 5
+            assert int(row["seed_t"]["hitstun"][0, p]) == 0
+            assert int(row["ref_t1"]["hitstun"][0, p]) == 0
+
+        expected_action = int(row["ref_t1"]["action_id"][0, p])
+        expected_anim = int(row["ref_t1"]["animation_index"][0, p])
+        expected_hitlag = int(row["ref_t1"]["hitlag"][0, p])
+        expected_hitstun = int(row["ref_t1"]["hitstun"][0, p])
+
+        out = _one_step_out_compare(ds=ds, row=row)
+        got_action = int(out["action_id"][0, p])
+        got_anim = int(out["animation_index"][0, p])
+        got_hitlag = int(out["hitlag"][0, p])
+        got_hitstun = int(out["hitstun"][0, p])
+
+        assert got_action == expected_action, f"record={record} p={p} expected action_id={expected_action}, got {got_action}"
+        assert got_anim == expected_anim, (
+            f"record={record} p={p} expected animation_index={expected_anim}, got {got_anim}"
+        )
+        assert got_hitlag == expected_hitlag, f"record={record} p={p} expected hitlag={expected_hitlag}, got {got_hitlag}"
+        assert got_hitstun == expected_hitstun, (
+            f"record={record} p={p} expected hitstun={expected_hitstun}, got {got_hitstun}"
+        )
+
+
+@pytest.mark.integration
 def test_spurious_body_hitlag_not_applied_gracefulattachedturtle_record_4505_p0() -> None:
     # Locks in a seed==ref false-positive BODY hit (hitlag/hitstun/action_id divergence) that was
     # caused by pose-driven hitbox geometry being mis-scaled relative to ISO-derived hurtcaps.

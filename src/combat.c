@@ -2100,9 +2100,16 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
   enum { MSL_STATE_FLAGS_221C_INDEX = 3 };
   enum { MSL_STATE_FLAG_221C_DETECT_HITBOX_TOUCHING_SHIELD = 0x04 };
 
-  // Pair-level clank bookkeeping: clank is a mutual interaction between two fighters' active
-  // hitboxes, so handle it at most once per unordered pair per frame to keep ordering deterministic.
-  uint8_t clanked[MSL_MAX_PLAYERS][MSL_MAX_PLAYERS] = {{0}};
+  // Clank bookkeeping:
+  // - resolve clank hitlag/rebound once per unordered pair,
+  // - suppress only the clanked hitboxes (not the entire fighter pair).
+  //
+  // Decomp ownership:
+  // - ftColl_80078C70 evaluates clank per victim hitbox branch, and only that branch skips
+  //   shield/body follow-up when ftColl_8007699C confirms a clank.
+  // refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078C70,ftColl_8007699C}
+  uint8_t clank_pair_done[MSL_MAX_PLAYERS][MSL_MAX_PLAYERS] = {{0}};
+  uint8_t clank_skip_hb[MSL_MAX_PLAYERS][MSL_MAX_PLAYERS][MSL_MAX_HITBOXES] = {{{0}}};
 
   // Process HitElement_Catch fighter-vs-fighter contacts before shield/body damage selection.
   // Decomp shape: refs/melee/src/melee/ft/ftcoll.c::ftColl_80078A2C
@@ -2135,144 +2142,152 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
       // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Rebound.c::ftCo_80099D9C (enter ReboundStop)
       // refs/melee/src/melee/ft/chara/ftCommon/forward.h (ftCo_MS_ReboundStop=237, Rebound=238)
       //
-      // Bounded v1 policy (suite-driven):
-      // - If any clankable hitbox sphere overlaps any clankable hitbox sphere for this unordered
-      //   fighter pair, treat the pair as clanked this frame and do not apply BODY or SHIELD hits.
+      // Bounded v1 policy (decomp-shaped ordering):
+      // - Resolve clank hitlag/rebound once per unordered fighter pair.
+      // - Suppress only the clanked attacker hitboxes on each directional pass (attacker->defender).
       // - Apply per-fighter hitlag using decomp ftCommon_CalcHitlag inputs derived from each
       //   fighter's max int damage among the clanking hitboxes.
       // - If a fighter has any clanking hitbox with the `rebound` flag set, enter ReboundStop for
       //   that fighter (animation_index is -1 in-suite for ReboundStop).
-      if (!clanked[attacker][defender]) {
-        const int p0 = attacker < defender ? attacker : defender;
-        const int p1 = attacker < defender ? defender : attacker;
-        if (attacker == p0) {
-          const size_t p0_idx = msl_idx_player(bi, p0);
-          const size_t p1_idx = msl_idx_player(bi, p1);
-          // Decomp: hitbox-vs-hitbox clank check in ftColl_80079AB0 is gated to both fighters being
-          // grounded (`this_fp->ground_or_air == GA_Ground && victim_fp->ground_or_air == GA_Ground`).
-          // refs/melee/src/melee/ft/ftcoll.c::ftColl_80079AB0
-          const uint8_t p0_grounded = batch->state.on_ground[p0_idx] != 0 ? 1u : 0u;
-          const uint8_t p1_grounded = batch->state.on_ground[p1_idx] != 0 ? 1u : 0u;
-          if (p0_grounded && p1_grounded && batch->state.hitbox_count[p0_idx] != 0 &&
-              batch->state.hitbox_count[p1_idx] != 0) {
-            int max_int_dmg[2] = {0, 0};
-            uint8_t max_elem[2] = {0, 0};
-            uint8_t want_rebound_stop[2] = {0, 0};
-            uint8_t did_clank = 0;
+      const int p0 = attacker < defender ? attacker : defender;
+      const int p1 = attacker < defender ? defender : attacker;
+      if (!clank_pair_done[p0][p1]) {
+        clank_pair_done[p0][p1] = 1u;
+        clank_pair_done[p1][p0] = 1u;
+        const size_t p0_idx = msl_idx_player(bi, p0);
+        const size_t p1_idx = msl_idx_player(bi, p1);
+        // Decomp: hitbox-vs-hitbox clank check in ftColl_80079AB0 is gated to both fighters being
+        // grounded (`this_fp->ground_or_air == GA_Ground && victim_fp->ground_or_air == GA_Ground`).
+        // refs/melee/src/melee/ft/ftcoll.c::ftColl_80079AB0
+        const uint8_t p0_grounded = batch->state.on_ground[p0_idx] != 0 ? 1u : 0u;
+        const uint8_t p1_grounded = batch->state.on_ground[p1_idx] != 0 ? 1u : 0u;
+        if (p0_grounded && p1_grounded && batch->state.hitbox_count[p0_idx] != 0 &&
+            batch->state.hitbox_count[p1_idx] != 0) {
+          int max_int_dmg[2] = {0, 0};
+          uint8_t max_elem[2] = {0, 0};
+          uint8_t want_rebound_stop[2] = {0, 0};
+          uint8_t did_clank = 0;
 
-            for (int hb0 = 0; hb0 < MSL_MAX_HITBOXES; hb0++) {
-              const size_t hb0_i = idx_hitbox(bi, p0, hb0);
-              if (!batch->state.hitbox_enabled[hb0_i]) {
+          for (int hb0 = 0; hb0 < MSL_MAX_HITBOXES; hb0++) {
+            const size_t hb0_i = idx_hitbox(bi, p0, hb0);
+            if (!batch->state.hitbox_enabled[hb0_i]) {
+              continue;
+            }
+            const uint16_t p1_iid = batch->state.instance_id[p1_idx];
+            // Decomp clank candidate gating includes lbColl_8000ACFC(victim, hitbox)==0 for both
+            // sides before entering ftColl_8007699C.
+            // refs/melee/src/melee/ft/ftcoll.c::ftColl_80078C70
+            // refs/melee/src/melee/lb/lbcollision.c::lbColl_8000ACFC
+            if (!hitlist_allows_fighter(batch, bi, p0, hb0, p1, p1_iid)) {
+              continue;
+            }
+            const uint16_t f0 = batch->state.hitbox_flags[hb0_i];
+            if ((f0 & (uint16_t)MSL_HITBOX_FLAG_CLANK) == 0) {
+              continue;
+            }
+            const uint8_t e0 = batch->state.hitbox_element[hb0_i];
+            if (e0 == (uint8_t)MSL_HIT_ELEMENT_INERT) {
+              continue;
+            }
+            const float d0 = batch->state.hitbox_damage[hb0_i];
+            if (!(d0 > 0.0f)) {
+              continue;
+            }
+            const float x0 = batch->state.hitbox_x[hb0_i];
+            const float y0 = batch->state.hitbox_y[hb0_i];
+            const float z0 = batch->state.hitbox_z[hb0_i];
+            const float r0 = batch->state.hitbox_radius[hb0_i];
+
+            for (int hb1 = 0; hb1 < MSL_MAX_HITBOXES; hb1++) {
+              const size_t hb1_i = idx_hitbox(bi, p1, hb1);
+              if (!batch->state.hitbox_enabled[hb1_i]) {
                 continue;
               }
-              const uint16_t f0 = batch->state.hitbox_flags[hb0_i];
-              if ((f0 & (uint16_t)MSL_HITBOX_FLAG_CLANK) == 0) {
+              const uint16_t p0_iid = batch->state.instance_id[p0_idx];
+              if (!hitlist_allows_fighter(batch, bi, p1, hb1, p0, p0_iid)) {
                 continue;
               }
-              const uint8_t e0 = batch->state.hitbox_element[hb0_i];
-              if (e0 == (uint8_t)MSL_HIT_ELEMENT_INERT) {
+              const uint16_t f1 = batch->state.hitbox_flags[hb1_i];
+              if ((f1 & (uint16_t)MSL_HITBOX_FLAG_CLANK) == 0) {
                 continue;
               }
-              const float d0 = batch->state.hitbox_damage[hb0_i];
-              if (!(d0 > 0.0f)) {
+              const uint8_t e1 = batch->state.hitbox_element[hb1_i];
+              if (e1 == (uint8_t)MSL_HIT_ELEMENT_INERT) {
                 continue;
               }
-              const float x0 = batch->state.hitbox_x[hb0_i];
-              const float y0 = batch->state.hitbox_y[hb0_i];
-              const float z0 = batch->state.hitbox_z[hb0_i];
-              const float r0 = batch->state.hitbox_radius[hb0_i];
+              const float d1 = batch->state.hitbox_damage[hb1_i];
+              if (!(d1 > 0.0f)) {
+                continue;
+              }
 
-              for (int hb1 = 0; hb1 < MSL_MAX_HITBOXES; hb1++) {
-                const size_t hb1_i = idx_hitbox(bi, p1, hb1);
-                if (!batch->state.hitbox_enabled[hb1_i]) {
-                  continue;
-                }
-                const uint16_t f1 = batch->state.hitbox_flags[hb1_i];
-                if ((f1 & (uint16_t)MSL_HITBOX_FLAG_CLANK) == 0) {
-                  continue;
-                }
-                const uint8_t e1 = batch->state.hitbox_element[hb1_i];
-                if (e1 == (uint8_t)MSL_HIT_ELEMENT_INERT) {
-                  continue;
-                }
-                const float d1 = batch->state.hitbox_damage[hb1_i];
-                if (!(d1 > 0.0f)) {
-                  continue;
-                }
+              const float x1 = batch->state.hitbox_x[hb1_i];
+              const float y1 = batch->state.hitbox_y[hb1_i];
+              const float z1 = batch->state.hitbox_z[hb1_i];
+              const float r1 = batch->state.hitbox_radius[hb1_i];
+              if (!sphere_sphere_intersects(x0, y0, z0, r0, x1, y1, z1, r1)) {
+                continue;
+              }
 
-                const float x1 = batch->state.hitbox_x[hb1_i];
-                const float y1 = batch->state.hitbox_y[hb1_i];
-                const float z1 = batch->state.hitbox_z[hb1_i];
-                const float r1 = batch->state.hitbox_radius[hb1_i];
-                if (!sphere_sphere_intersects(x0, y0, z0, r0, x1, y1, z1, r1)) {
-                  continue;
-                }
+              did_clank = 1u;
+              clank_skip_hb[p0][p1][hb0] = 1u;
+              clank_skip_hb[p1][p0][hb1] = 1u;
 
-                did_clank = 1;
+              const int int0 = combat_get_env_dmg(d0);
+              if (int0 > max_int_dmg[0]) {
+                max_int_dmg[0] = int0;
+                max_elem[0] = e0;
+              }
+              if ((f0 & (uint16_t)MSL_HITBOX_FLAG_REBOUND) != 0) {
+                want_rebound_stop[0] = 1u;
+              }
 
-                const int int0 = combat_get_env_dmg(d0);
-                if (int0 > max_int_dmg[0]) {
-                  max_int_dmg[0] = int0;
-                  max_elem[0] = e0;
-                }
-                if ((f0 & (uint16_t)MSL_HITBOX_FLAG_REBOUND) != 0) {
-                  want_rebound_stop[0] = 1;
-                }
+              const int int1 = combat_get_env_dmg(d1);
+              if (int1 > max_int_dmg[1]) {
+                max_int_dmg[1] = int1;
+                max_elem[1] = e1;
+              }
+              if ((f1 & (uint16_t)MSL_HITBOX_FLAG_REBOUND) != 0) {
+                want_rebound_stop[1] = 1u;
+              }
+            }
+          }
 
-                const int int1 = combat_get_env_dmg(d1);
-                if (int1 > max_int_dmg[1]) {
-                  max_int_dmg[1] = int1;
-                  max_elem[1] = e1;
-                }
-                if ((f1 & (uint16_t)MSL_HITBOX_FLAG_REBOUND) != 0) {
-                  want_rebound_stop[1] = 1;
-                }
+          if (did_clank) {
+            // Apply hitlag per fighter using each side's max int damage among clanking hitboxes.
+            // Decomp: ftCommon_CalcHitlag, used by Fighter_ProcessHit_8006D1EC.
+            // refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
+            const uint16_t m0 = batch->state.action_id[p0_idx];
+            const uint16_t m1 = batch->state.action_id[p1_idx];
+            if (max_int_dmg[0] > 0) {
+              const float mul0 = combat_hitlag_mul_from_element(c, max_elem[0]);
+              const uint16_t hl0 = combat_calc_hitlag_frames(c, max_int_dmg[0], m0, mul0);
+              if (hl0 > batch->state.hitlag[p0_idx]) {
+                batch->state.hitlag[p0_idx] = hl0;
+                combat_state_flags_set_is_hitlag(batch, p0_idx, hl0);
+              }
+            }
+            if (max_int_dmg[1] > 0) {
+              const float mul1 = combat_hitlag_mul_from_element(c, max_elem[1]);
+              const uint16_t hl1 = combat_calc_hitlag_frames(c, max_int_dmg[1], m1, mul1);
+              if (hl1 > batch->state.hitlag[p1_idx]) {
+                batch->state.hitlag[p1_idx] = hl1;
+                combat_state_flags_set_is_hitlag(batch, p1_idx, hl1);
               }
             }
 
-            if (did_clank) {
-              // Apply hitlag per fighter using each side's max int damage among clanking hitboxes.
-              // Decomp: ftCommon_CalcHitlag, used by Fighter_ProcessHit_8006D1EC.
-              // refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
-              const uint16_t m0 = batch->state.action_id[p0_idx];
-              const uint16_t m1 = batch->state.action_id[p1_idx];
-              if (max_int_dmg[0] > 0) {
-                const float mul0 = combat_hitlag_mul_from_element(c, max_elem[0]);
-                const uint16_t hl0 = combat_calc_hitlag_frames(c, max_int_dmg[0], m0, mul0);
-                if (hl0 > batch->state.hitlag[p0_idx]) {
-                  batch->state.hitlag[p0_idx] = hl0;
-                  combat_state_flags_set_is_hitlag(batch, p0_idx, hl0);
-                }
-              }
-              if (max_int_dmg[1] > 0) {
-                const float mul1 = combat_hitlag_mul_from_element(c, max_elem[1]);
-                const uint16_t hl1 = combat_calc_hitlag_frames(c, max_int_dmg[1], m1, mul1);
-                if (hl1 > batch->state.hitlag[p1_idx]) {
-                  batch->state.hitlag[p1_idx] = hl1;
-                  combat_state_flags_set_is_hitlag(batch, p1_idx, hl1);
-                }
-              }
-
-              // ReboundStop transitions for hitboxes that request rebound on clank.
-              if (want_rebound_stop[0]) {
-                batch->state.action_id[p0_idx] = (uint16_t)MSL_ACT_REBOUND_STOP;
-                batch->state.animation_index[p0_idx] = 0xFFFFFFFFu;
-                msl_anim_timebase_enter(batch, p0_idx, 0.0f, 1.0f);
-              }
-              if (want_rebound_stop[1]) {
-                batch->state.action_id[p1_idx] = (uint16_t)MSL_ACT_REBOUND_STOP;
-                batch->state.animation_index[p1_idx] = 0xFFFFFFFFu;
-                msl_anim_timebase_enter(batch, p1_idx, 0.0f, 1.0f);
-              }
-
-              clanked[p0][p1] = 1;
-              clanked[p1][p0] = 1;
+            // ReboundStop transitions for hitboxes that request rebound on clank.
+            if (want_rebound_stop[0]) {
+              batch->state.action_id[p0_idx] = (uint16_t)MSL_ACT_REBOUND_STOP;
+              batch->state.animation_index[p0_idx] = 0xFFFFFFFFu;
+              msl_anim_timebase_enter(batch, p0_idx, 0.0f, 1.0f);
+            }
+            if (want_rebound_stop[1]) {
+              batch->state.action_id[p1_idx] = (uint16_t)MSL_ACT_REBOUND_STOP;
+              batch->state.animation_index[p1_idx] = 0xFFFFFFFFu;
+              msl_anim_timebase_enter(batch, p1_idx, 0.0f, 1.0f);
             }
           }
         }
-      }
-      if (clanked[attacker][defender]) {
-        continue;
       }
       const uint16_t defender_iid = batch->state.instance_id[d_idx];
 
@@ -2362,6 +2377,9 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
         for (int hb_id = 0; hb_id < MSL_MAX_HITBOXES; hb_id++) {
           const size_t hb_i = idx_hitbox(bi, attacker, hb_id);
           if (!batch->state.hitbox_enabled[hb_i]) {
+            continue;
+          }
+          if (clank_skip_hb[attacker][defender][hb_id]) {
             continue;
           }
 
@@ -2540,6 +2558,9 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
       for (int hb_id = 0; hb_id < MSL_MAX_HITBOXES && !did_hit; hb_id++) {
         const size_t hb_i = idx_hitbox(bi, attacker, hb_id);
         if (!batch->state.hitbox_enabled[hb_i]) {
+          continue;
+        }
+        if (clank_skip_hb[attacker][defender][hb_id]) {
           continue;
         }
 
