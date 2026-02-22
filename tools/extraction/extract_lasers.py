@@ -62,6 +62,7 @@ class LaserRecord:
     laser_bkb: int
     laser_element: int
     laser_shield_damage: int
+    laser_non_flinch: int
     hitbox_offsets_x: tuple[float, ...]
     laser_state1_damage: float
     laser_state1_size: float
@@ -71,6 +72,7 @@ class LaserRecord:
     laser_state1_bkb: int
     laser_state1_element: int
     laser_state1_shield_damage: int
+    laser_state1_non_flinch: int
     state1_hitbox_offsets_x: tuple[float, ...]
     shoot_frames_ground: tuple[int, ...]
     shoot_frames_air: tuple[int, ...]
@@ -107,6 +109,17 @@ def _load_record(*, iso_dir: Path, dat_name: str, ftdata_symbol: str, char_id: i
     spawn_bone_part_id = 49  # FtPart_RThumbNb (refs/melee/src/melee/ft/forward.h)
     spawn_off = (_f32(0.0), _f32(1.2325000762939453), _f32(4.263599872589111))
 
+    def _derive_no_flinch_signal(kbg: int, wsk: int, bkb: int) -> int:
+        # Decomp collision ownership:
+        # - item BODY apply computes KB from hitbox kbg/wsk/bkb lanes before entering Damage*.
+        #   refs/melee/src/melee/it/itcoll.c::it_80272460
+        #   refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_CalcKnockback
+        # - Fox/Falco blaster article hitboxes with all three KB terms zero produce non-flinch
+        #   percent-only contacts in-suite (no hitlag/hitstun/damage-state entry).
+        # TODO(decomp/non-flinch-authoritative-signal): replace this KB-triplet-derived proxy with
+        # an authoritative no-flinch signal from decomp/game data ownership.
+        return 1 if (int(kbg) == 0 and int(wsk) == 0 and int(bkb) == 0) else 0
+
     hitbox_offsets_x = tuple(
         float(x) for x in (laser.get("laser_hitbox_offsets_x") or []) if isinstance(x, (int, float))
     )
@@ -139,6 +152,11 @@ def _load_record(*, iso_dir: Path, dat_name: str, ftdata_symbol: str, char_id: i
         laser_bkb=int(laser.get("laser_bkb", 0)),
         laser_element=int(laser.get("laser_element", 0)),
         laser_shield_damage=int(laser.get("laser_shield_damage", 0)),
+        laser_non_flinch=_derive_no_flinch_signal(
+            int(laser.get("laser_kbg", 0)),
+            int(laser.get("laser_wsk", 0)),
+            int(laser.get("laser_bkb", 0)),
+        ),
         hitbox_offsets_x=hitbox_offsets_x,
         laser_state1_damage=float(laser.get("laser_state1_damage", laser.get("laser_damage", 0.0))),
         laser_state1_size=float(laser.get("laser_state1_size", laser.get("laser_size", 0.0))),
@@ -149,6 +167,11 @@ def _load_record(*, iso_dir: Path, dat_name: str, ftdata_symbol: str, char_id: i
         laser_state1_element=int(laser.get("laser_state1_element", laser.get("laser_element", 0))),
         laser_state1_shield_damage=int(
             laser.get("laser_state1_shield_damage", laser.get("laser_shield_damage", 0))
+        ),
+        laser_state1_non_flinch=_derive_no_flinch_signal(
+            int(laser.get("laser_state1_kbg", laser.get("laser_kbg", 0))),
+            int(laser.get("laser_state1_wsk", laser.get("laser_wsk", 0))),
+            int(laser.get("laser_state1_bkb", laser.get("laser_bkb", 0))),
         ),
         state1_hitbox_offsets_x=hitbox_offsets_x_state1 if hitbox_offsets_x_state1 else hitbox_offsets_x,
         shoot_frames_ground=shoot_frames_ground,
@@ -204,7 +227,7 @@ def _pack_record(rec: LaserRecord) -> bytes:
     if sd > 127:
         sd = 127
     out += struct.pack(
-        "<ffHHHHbB2xB3x",
+        "<ffHHHHbBBxB3x",
         _f32(rec.laser_damage),
         _f32(rec.laser_size),
         int(rec.laser_angle) & 0xFFFF,
@@ -213,6 +236,7 @@ def _pack_record(rec: LaserRecord) -> bytes:
         int(rec.laser_bkb) & 0xFFFF,
         sd,
         int(rec.laser_element) & 0xFF,
+        int(rec.laser_non_flinch) & 0xFF,
         min(len(rec.hitbox_offsets_x), MAX_HITBOX_OFFS) & 0xFF,
     )
     out += struct.pack("<" + "f" * MAX_HITBOX_OFFS, *[_f32(x) for x in offs0])
@@ -223,7 +247,7 @@ def _pack_record(rec: LaserRecord) -> bytes:
     if sd1 > 127:
         sd1 = 127
     out += struct.pack(
-        "<ffHHHHbB2xB3x",
+        "<ffHHHHbBBxB3x",
         _f32(rec.laser_state1_damage),
         _f32(rec.laser_state1_size),
         int(rec.laser_state1_angle) & 0xFFFF,
@@ -232,6 +256,7 @@ def _pack_record(rec: LaserRecord) -> bytes:
         int(rec.laser_state1_bkb) & 0xFFFF,
         sd1,
         int(rec.laser_state1_element) & 0xFF,
+        int(rec.laser_state1_non_flinch) & 0xFF,
         min(len(rec.state1_hitbox_offsets_x), MAX_HITBOX_OFFS) & 0xFF,
     )
     out += struct.pack("<" + "f" * MAX_HITBOX_OFFS, *[_f32(x) for x in offs1])

@@ -53,6 +53,12 @@ typedef struct MslLaserParams {
   uint16_t bkb;
   uint8_t element;
   int8_t shield_damage;
+  // Extracted proxy "no flinch" signal for this laser state.
+  // Source of truth: `data/items/lasers.bin` (MSLLASR1 reserved-byte lane), currently derived in
+  // extraction from article hitbox kbg/wsk/bkb terms by tools/extraction/extract_lasers.py.
+  // TODO(decomp/non-flinch-authoritative-signal): replace with a truly authoritative no-flinch lane
+  // once identified in decomp/game data.
+  uint8_t non_flinch;
 
   uint8_t hitbox_offsets_x_count;
   float hitbox_offsets_x[MSL_LASER_MAX_HITBOX_OFFS_X];
@@ -75,6 +81,7 @@ typedef struct MslLaserParams {
   uint16_t state1_bkb;
   uint8_t state1_element;
   int8_t state1_shield_damage;
+  uint8_t state1_non_flinch;
 
   uint8_t state1_hitbox_offsets_x_count;
   float state1_hitbox_offsets_x[MSL_LASER_MAX_HITBOX_OFFS_X];

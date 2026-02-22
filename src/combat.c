@@ -1300,8 +1300,9 @@ static inline void combat_mutations_pass1_future_apply_body_hit(MslBatch* batch,
 
 MslItemHitResult combat_apply_item_hit(MslBatch* batch, int batch_index, int attacker, int defender,
                                        uint16_t item_attack_id, uint16_t item_attack_instance,
-                                       uint16_t item_instance_id, uint16_t item_type, float damage,
-                                       uint16_t angle, uint16_t kbg, uint16_t wsk, uint16_t bkb,
+                                       uint16_t item_instance_id, uint16_t item_type,
+                                       uint8_t item_state, float damage, uint16_t angle,
+                                       uint16_t kbg, uint16_t wsk, uint16_t bkb,
                                        uint8_t defender_hurt_height, uint8_t element) {
   if (batch == NULL) {
     return MSL_ITEM_HIT_NONE;
@@ -1388,17 +1389,17 @@ MslItemHitResult combat_apply_item_hit(MslBatch* batch, int batch_index, int att
   // Scope gate: only apply this rule to item kinds that are known (via ISO-extracted MSLLASR1
   // lasers.bin) to be Fox/Falco blaster shots.
   const MslLaserParams* lp = laser_params_for_item_type(item_type);
-  if (lp != NULL && kbg == 0u && wsk == 0u && bkb == 0u) {
-    // Data-driven inference:
-    // - For Fox blaster shots, the ISO-extracted hitbox params (MSLLASR1) have all KB terms set to
-    //   0 (kbg/wsk/bkb), and the replay ref commonly shows percent increasing with no hitlag/hitstun
-    //   and no damage-state entry.
-    //
-    // TODO(decomp): extract and model an explicit "no flinch / no hitlag" item hitbox flag or
-    // multiplier from the article hitbox script / collision intake path, instead of keying off the
-    // triple-0 KB params heuristic.
-    //
-    // Suite target: allow percent/attribution/staling updates while leaving defender state unchanged.
+  const uint8_t non_flinch_hit =
+      (lp != NULL && ((item_state == 0u) ? lp->non_flinch : lp->state1_non_flinch) != 0u) ? 1u
+                                                                                             : 0u;
+  if (non_flinch_hit) {
+    // Extracted proxy lane ownership:
+    // - non_flinch is extracted into MSLLASR1 from article hitbox kbg/wsk/bkb terms
+    //   (tools/extraction/extract_lasers.py), then consumed directly here.
+    // - This narrows runtime proxy logic to data ownership instead of recomputing the triplet test
+    //   in combat, but the source signal is still derived from KB terms.
+    // TODO(decomp/non-flinch-authoritative-signal): replace this KB-triplet-derived lane with a
+    // truly authoritative decomp/data-owned no-flinch signal once identified.
     batch->state.instance_hit_by[d_idx] = item_instance_id;
     batch->state.last_hit_by[d_idx] = (uint8_t)attacker;
 

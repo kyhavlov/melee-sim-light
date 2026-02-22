@@ -747,6 +747,54 @@ static inline float item_reflected_damage_lane(const MslBatch* batch, size_t ite
   return (float)dmg_i;
 }
 
+static inline float laser_collision_offset_scale(const MslLaserParams* lp, uint8_t laser_state,
+                                                 float laser_scale_z, uint8_t clamp_max_to_one) {
+  (void)lp;
+  (void)laser_state;
+  // Collision-space policy (decomp/data-owned):
+  // - Hitbox offsets are extracted authored lanes from the article script (`create_hitbox` x_offset):
+  //   tools/extraction/extract_lasers.py
+  // - Laser motion anim applies a per-frame model scaleZ ramp:
+  //   refs/melee/src/melee/it/items/itfoxlaser.c::itFoxlaser_UnkMotion1_Anim
+  //
+  // Runtime approximation:
+  // - use the same per-frame scaleZ lane for offset sampling,
+  // - optionally cap to identity (1.0f) for shield-adjacent probes to avoid sampling beyond
+  //   authored offsets when scaleZ grows above one.
+  //
+  // TODO(decomp/items-collision-space): confirm full collision-space transform ownership for laser
+  // offsets (especially shield/bubble branches) and replace this clamp policy with a directly
+  // decomp-proven transform chain end-to-end.
+  float s = laser_scale_z;
+  if (!(s > 0.0f)) {
+    s = 1.0f;
+  }
+  if (clamp_max_to_one && s > 1.0f) {
+    s = 1.0f;
+  }
+  return s;
+}
+
+static inline void item_apply_reflect_transfer(MslBatch* batch, size_t ii, size_t reflector_idx,
+                                               int reflector_port, float damage_mul, float speed_mul) {
+  if (batch == NULL) {
+    return;
+  }
+  batch->state.item_owner[ii] = (int8_t)reflector_port;
+  // Slippi item.instance_id is item->xDA8_short; reflect apply rewrites it from the reflecting
+  // fighter snapshot (fp->x2088 / instance_id).
+  // refs/melee/src/melee/ft/ftcoll.c::ftColl_80077464
+  // refs/melee/src/melee/it/item.c::Item_80269F14
+  batch->state.item_instance_id[ii] = batch->state.instance_id[reflector_idx];
+  batch->state.item_reflect_damage_mul[ii] = (damage_mul > 0.0f) ? damage_mul : 1.0f;
+  const float mul = (speed_mul > 0.0f) ? speed_mul : 1.0f;
+  const float new_vx = -batch->state.item_vel_x[ii] * mul;
+  const float new_vy = -batch->state.item_vel_y[ii] * mul;
+  batch->state.item_vel_x[ii] = new_vx;
+  batch->state.item_vel_y[ii] = new_vy;
+  batch->state.item_direction[ii] = (new_vx >= 0.0f) ? 1.0f : -1.0f;
+}
+
 static void laser_spawn_from_fighter(MslBatch* batch, int bi, int owner, const MslLaserParams* lp,
                                      uint8_t spawn_state) {
   if (batch == NULL || lp == NULL) {
@@ -990,8 +1038,9 @@ static void illusion_items_update_and_collide(MslBatch* batch, int bi) {
       const MslItemHitResult res =
           combat_apply_item_hit(batch, bi, owner, def, batch->state.item_attack_id[ii],
                                 batch->state.item_attack_instance[ii],
-                                batch->state.item_instance_id[ii], batch->state.item_type[ii], dmg,
-                                hp.angle, hp.kbg, hp.wsk, hp.bkb, hit_hurt_height, hp.element);
+                                batch->state.item_instance_id[ii], batch->state.item_type[ii],
+                                batch->state.item_state[ii], dmg, hp.angle, hp.kbg, hp.wsk, hp.bkb,
+                                hit_hurt_height, hp.element);
       if (res == MSL_ITEM_HIT_NONE) {
         continue;
       }
@@ -1127,8 +1176,7 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
     }
     const float sr = (laser_state == 0u) ? lp->size : lp->state1_size;
 
-    // Beam length scaling: fox/falco blaster shots ramp their model scaleZ over time, which scales
-    // the authored hitbox offsets along the beam axis.
+    // Beam length visual scaling: fox/falco blaster shots ramp model scaleZ over time.
     // refs/melee/src/melee/it/items/itfoxlaser.c::itFoxlaser_UnkMotion1_Anim
     float laser_scale_z = 1.0f;
     {
@@ -1155,6 +1203,7 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
       }
       laser_scale_z = s;
     }
+    (void)laser_scale_z;
 
     for (int def = 0; def < num_players; def++) {
       if (def == owner) {
@@ -1237,25 +1286,13 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
 
         const uint8_t off_n =
             (laser_state == 0u) ? lp->hitbox_offsets_x_count : lp->state1_hitbox_offsets_x_count;
-        // Shield overlap only: cap effective scaleZ stretch to 1.0.
-        //
-        // - Decomp: shield hit check is 3D via lbColl_80007BCC(..., shield_hit->pos.z = cur_pos.z).
-        //   refs/melee/src/melee/lb/lbcollision.c::lbColl_80007BCC
-        // - Laser collision hitbox offsets are authored as fixed X offsets in the article state script
-        //   (`create_hitbox` x_offset in `_iso/PlFx.dat` / `_iso/PlFc.dat`), so scaling offsets above 1.0
-        //   is an extrapolation beyond the script geometry and can produce false shield hits.
-        //
-        // This cap is suite-validated by TBK seed==ref cases where the replay stays in GuardOn (178)
-        // but the sim would otherwise enter GuardSetOff (181).
-        float laser_scale_z_shield = laser_scale_z;
-        if (laser_scale_z_shield > 1.0f) {
-          laser_scale_z_shield = 1.0f;
-        }
+        const float laser_offset_scale =
+            laser_collision_offset_scale(lp, laser_state, laser_scale_z, 1u);
         for (uint8_t oi = 0; oi < off_n && oi < (uint8_t)MSL_LASER_MAX_HITBOX_OFFS_X && !shield_hit;
              oi++) {
           const float off_x =
               (laser_state == 0u) ? lp->hitbox_offsets_x[oi] : lp->state1_hitbox_offsets_x[oi];
-          const float s = off_x * laser_scale_z_shield;
+          const float s = off_x * laser_offset_scale;
           const float sx = shield_probe_x + (ux * s);
           const float sy = shield_probe_y + (uy * s);
           // Decomp (GALE01): shield overlap uses 3D collision (z is not ignored).
@@ -1284,11 +1321,6 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
           // - Slippi `state_flags` packs these fighter bytes:
           //   refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm (lbz r3,0x2218 / 0x221C)
           //
-          // TODO(reflect): This gate models *powershield reflect only* (reflect-active + powershield-active).
-          // It will NOT reflect lasers off special-move reflect bubbles (reflect-active without the
-          // powershield bit). Implement the item-vs-reflect-bubble overlap path (ftColl_CreateReflectHit
-          // bubble) to cover those cases.
-          //
           // Note: item attack_id / attack_instance remain spawn-latched for lasers in v1 (do not
           // transfer on reflect here).
           // In v1 we do not yet derive the full GuardReflect/powershield flag bytes (fp+0x2218 /
@@ -1310,23 +1342,34 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
           const uint8_t can_powershield_reflect =
               combat_is_powershield_active_idx(batch, d_idx) ? 1u : 0u;
           if (can_powershield_reflect) {
-            batch->state.item_owner[ii] = (int8_t)def;
             // Decomp reflect snapshot ownership:
             // - GuardReflect builds ReflectDesc.damage_mul from ftCommonData->x2AC.
+            // - GuardReflect builds ReflectDesc.speed_mul from ftCommonData->x2B0.
             //   refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_8009370C
-            // - Reflect overlap writes item->xC6C from that damage multiplier.
+            // - Reflect overlap writes owner/xDA8_short and multipliers to item reflect snapshot.
             //   refs/melee/src/melee/ft/ftcoll.c::ftColl_80077464
+            // - Item apply consumes that snapshot (`item->xC6C`) and updates trajectory.
+            //   refs/melee/src/melee/it/item.c::Item_80269F14
             const MslCommonParams* c = msl_common_params();
-            if (c != NULL && c->powershield_reflect_damage_mul > 0.0f) {
-              batch->state.item_reflect_damage_mul[ii] = c->powershield_reflect_damage_mul;
-            } else {
-              batch->state.item_reflect_damage_mul[ii] = 1.0f;
-            }
-            const float new_vx = -batch->state.item_vel_x[ii];
-            const float new_vy = -batch->state.item_vel_y[ii];
+            const float dmg_mul =
+                (c != NULL && c->powershield_reflect_damage_mul > 0.0f)
+                    ? c->powershield_reflect_damage_mul
+                    : 1.0f;
+            // TODO(decomp/powershield-reflect-speed-mul): validate x2B0 speed-mul ownership/timing
+            // for powershield rows under one-step/rollout parity before enabling it here.
+            // Current salvage lane keeps powershield reflection speed at identity.
+            const float speed_mul = 1.0f;
+            batch->state.item_owner[ii] = (int8_t)def;
+            batch->state.item_reflect_damage_mul[ii] = dmg_mul;
+            const float new_vx = -batch->state.item_vel_x[ii] * speed_mul;
+            const float new_vy = -batch->state.item_vel_y[ii] * speed_mul;
             batch->state.item_vel_x[ii] = new_vx;
             batch->state.item_vel_y[ii] = new_vy;
             batch->state.item_direction[ii] = (new_vx >= 0.0f) ? 1.0f : -1.0f;
+            // TODO(decomp/powershield-reflect-ownership): confirm xDA8_short ownership timing for
+            // powershield-only rows in one-step reseed. Current lane keeps item.instance_id
+            // unchanged to preserve replay-real lock rows where owner transfer is visible but
+            // item.instance_id remains stable at t+1.
             break;
           }
 
@@ -1375,7 +1418,7 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
                oi < off_n && oi < (uint8_t)MSL_LASER_MAX_HITBOX_OFFS_X && !reflect_hit; oi++) {
             const float off_x =
                 (laser_state == 0u) ? lp->hitbox_offsets_x[oi] : lp->state1_hitbox_offsets_x[oi];
-            const float s = off_x * laser_scale_z;
+            const float s = off_x * laser_collision_offset_scale(lp, laser_state, laser_scale_z, 0u);
             const float sx = x + (ux * s);
             const float sy = y + (uy * s);
             if (item_sphere_sphere_intersects_2d(sx, sy, sr, rx, ry, rr)) {
@@ -1388,23 +1431,12 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
           }
 
           if (reflect_hit) {
-            batch->state.item_owner[ii] = (int8_t)def;
-            // Slippi item.instance_id is item->xDA8_short; reflect path updates it from the reflecting
-            // fighter's snapshot (fp->x2088 / instance_id).
-            batch->state.item_instance_id[ii] = batch->state.instance_id[d_idx];
             // Decomp reflect snapshot ownership:
             // - ftColl_CreateReflectHit stores ReflectDesc.damage_mul / speed_mul.
             // - ftColl_80077464 writes both multipliers to item reflect snapshot (`item->xC6C` et al).
             // refs/melee/src/melee/ft/ftcoll.c::{ftColl_CreateReflectHit,ftColl_80077464}
-            batch->state.item_reflect_damage_mul[ii] =
-                (rch->reflector_damage_mul > 0.0f) ? rch->reflector_damage_mul : 1.0f;
-
-            const float mul = rch->reflector_speed_mul;
-            const float new_vx = -batch->state.item_vel_x[ii] * mul;
-            const float new_vy = -batch->state.item_vel_y[ii] * mul;
-            batch->state.item_vel_x[ii] = new_vx;
-            batch->state.item_vel_y[ii] = new_vy;
-            batch->state.item_direction[ii] = (new_vx >= 0.0f) ? 1.0f : -1.0f;
+            item_apply_reflect_transfer(batch, ii, d_idx, def, rch->reflector_damage_mul,
+                                        rch->reflector_speed_mul);
             break;
           }
         }
@@ -1416,47 +1448,22 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
       const uint8_t off_n =
           (laser_state == 0u) ? lp->hitbox_offsets_x_count : lp->state1_hitbox_offsets_x_count;
       const uint8_t cap_n = batch->state.hurtcap_count[d_idx];
-      // TEMP (replay-derived last resort; shield-active only):
-      //
-      // Laser BODY overlap probes scale the authored offsets (`hitbox_offsets_x[]`) by the model
-      // scaleZ ramp (itFoxlaser_UnkMotion1_Anim). This extrapolates offsets beyond the authored
-      // article script geometry when scaleZ > 1, and has produced spurious BODY hits during
-      // GuardSetOff teacher-forced one-step (seed==ref expects remaining in GuardSetOff).
-      //
-      // Why this is still here (not decomp/ISO-backed yet):
-      // - We do not yet have a decomp-backed statement for whether Melee's *collision* hitcapsule
-      //   positions for blaster shots inherit the visual scaleZ stretch, or if collision uses
-      //   unscaled offsets from the article state script.
-      // - The ISO artifact (MSLLASR1) provides the authored offsets, but not the exact runtime
-      //   transform chain applied to collision primitives.
-      //
-      // Policy until we implement the decomp-backed collision transform:
-      // - While the defender shield bubble is active, clamp the effective stretch to 1.0f
-      //   (identity) so we never extrapolate beyond authored offsets on this path.
-      //
-      // Constant rationale:
-      // - 1.0f means "no stretch" (identity scale), i.e. offsets are used exactly as authored.
-      //
-      // TODO(decomp/items): Confirm the runtime collision-space transform for fox/falco laser
-      // hitbox offsets (including whether item model scaleZ affects collision) and remove this
-      // replay-derived clamp once the correct policy is implemented.
-      float laser_scale_z_body = laser_scale_z;
-      if (batch->state.shield_radius[d_idx] > 0.0f && laser_scale_z_body > 1.0f) {
-        laser_scale_z_body = 1.0f;
-      }
-      // Laser BODY overlap parity for fast-moving airborne defenders:
+      const float laser_offset_scale =
+          laser_collision_offset_scale(lp, laser_state, laser_scale_z,
+                                      (batch->state.shield_radius[d_idx] > 0.0f) ? 1u : 0u);
+      // Laser BODY overlap parity:
       // - Decomp computes collision over projectile travel in-frame (prev_pos -> cur_pos), so a
       //   current-point-only probe can miss replay-causal same-frame hits.
-      // - We currently gate the sweep to airborne defenders (`on_ground==0`) and keep grounded on
-      //   the point proxy to avoid broadening scope until grounded hurt-status gating is modeled.
+      // - Current implementation only applies swept BODY overlap for airborne defenders.
       // refs/melee/src/melee/it/items/itfoxlaser.c::{itFoxlaser_UnkMotion1_Phys,it_8029C4D4}
-      // TODO(decomp/items): mirror grounded BODY hurt-status/collision gating from it_80272460 and
-      // ftColl callbacks, then remove this temporary airborne-only split.
+      // TODO(decomp/items-grounded-body-gating): mirror grounded BODY hurt-status/collision gating
+      // from it_80272460 + ftColl callbacks, then remove this temporary airborne-only split.
+      // refs/melee/src/melee/it/items/itfoxlaser.c::{itFoxlaser_UnkMotion1_Phys,it_8029C4D4}
       const uint8_t use_swept_body = (batch->state.on_ground[d_idx] == 0u) ? 1u : 0u;
       for (uint8_t oi = 0; oi < off_n && oi < (uint8_t)MSL_LASER_MAX_HITBOX_OFFS_X && !hit; oi++) {
         const float off_x =
             (laser_state == 0u) ? lp->hitbox_offsets_x[oi] : lp->state1_hitbox_offsets_x[oi];
-        const float s = off_x * laser_scale_z_body;
+        const float s = off_x * laser_offset_scale;
         const float sx0 = x0 + (ux * s);
         const float sy0 = y0 + (uy * s);
         const float sx = x + (ux * s);
@@ -1531,7 +1538,8 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
       const MslItemHitResult res = combat_apply_item_hit(
           batch, bi, owner, def, batch->state.item_attack_id[ii],
           batch->state.item_attack_instance[ii], batch->state.item_instance_id[ii],
-          batch->state.item_type[ii], dmg, angle, kbg, wsk, bkb, hit_hurt_height, element);
+          batch->state.item_type[ii], laser_state, dmg, angle, kbg, wsk, bkb, hit_hurt_height,
+          element);
       if (res == MSL_ITEM_HIT_NONE) {
         continue;
       }

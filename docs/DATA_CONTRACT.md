@@ -189,7 +189,8 @@ Binary layout (little-endian):
   - `laser_bkb: u16` (base knockback; from laser article hitbox script)
   - `laser_shield_damage: i8` (signed; from laser article hitbox script)
   - `laser_element: u8` (GALE01 `HitElement` id; from laser article hitbox script)
-  - `pad2: u8[2] = 0`
+  - `laser_non_flinch: u8` (extracted proxy signal; currently 1 when the state's KB terms are all zero)
+  - `reserved2: u8 = 0`
   - `hitbox_offsets_x_count: u8` (<= 16)
   - `pad3: u8[3] = 0`
   - `hitbox_offsets_x[16]: 16 * f32` X offsets of consecutive hitboxes along the beam (from the article state script)
@@ -198,7 +199,8 @@ Version notes:
 - v1: no start/end msids and no state=1 params.
 - v2: adds SpecialN start/end msids.
 - v3: adds state=1 hitbox params (ItemStateDesc[1].xC_script).
-- v4: adds per-state `laser_element` so hitlag_mul can match decomp for electric hits (see p_ftCommonData->0x1A4).
+- v4: adds per-state `laser_element` so hitlag_mul can match decomp for electric hits (see p_ftCommonData->0x1A4),
+  and uses one reserved byte for proxy-extracted `laser_non_flinch` (currently derived from KB triplet).
 
 Runtime semantics (current C-core policy for v2 lasers):
 - The simulator uses `spawn_bone_part_id` + `spawn_off_xyz` with `anim_pose_get_matrix(...)` to compute world spawn points.
