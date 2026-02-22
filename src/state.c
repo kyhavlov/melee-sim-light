@@ -181,6 +181,7 @@ int state_alloc(MslStateSoA* state, int batch_size) {
   state->hitbox_prev_z = (float*)alloc_aligned_64(sizeof(float) * bph);
   state->hitbox_pose_create = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bph);
   state->hitbox_enable_edge = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bph);
+  state->hitbox_x43_b2 = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bph);
   state->hitbox_prev_bootstrap = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->hitbox_x = (float*)alloc_aligned_64(sizeof(float) * bph);
   state->hitbox_y = (float*)alloc_aligned_64(sizeof(float) * bph);
@@ -320,7 +321,8 @@ int state_alloc(MslStateSoA* state, int batch_size) {
       !state->hurtcap_enabled || !state->hurtcap_is_grabbable || !state->hurtcap_height ||
       !state->hitbox_count || !state->hitbox_enabled || !state->hitbox_prev_enabled ||
       !state->hitbox_prev_x || !state->hitbox_prev_y || !state->hitbox_prev_z ||
-      !state->hitbox_pose_create || !state->hitbox_enable_edge || !state->hitbox_prev_bootstrap ||
+      !state->hitbox_pose_create || !state->hitbox_enable_edge || !state->hitbox_x43_b2 ||
+      !state->hitbox_prev_bootstrap ||
       !state->hitbox_x || !state->hitbox_y || !state->hitbox_z || !state->hitbox_radius ||
       !state->hitbox_damage || !state->hitbox_bone_part_id || !state->hitbox_u16_0 ||
       !state->hitbox_u16_1 || !state->hitbox_u16_2 || !state->hitbox_u16_3 ||
@@ -524,6 +526,7 @@ void state_free(MslStateSoA* state) {
   alloc_free(state->hitbox_prev_z);
   alloc_free(state->hitbox_pose_create);
   alloc_free(state->hitbox_enable_edge);
+  alloc_free(state->hitbox_x43_b2);
   alloc_free(state->hitbox_prev_bootstrap);
   alloc_free(state->hitbox_x);
   alloc_free(state->hitbox_y);

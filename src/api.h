@@ -922,7 +922,8 @@ typedef struct MslDebugHurtcapSlotFlags {
 // Runtime-only gating note:
 // - Decomp ftColl_80078C70 sets arg3 (`var_r22`) from HitCapsule.x43_b2 and lbColl_8000805C
 //   short-circuits acceptance when arg3 != 0.
-// - We currently do not carry x43_b2 in runtime state/extracted tables for this sim path.
+// - Runtime carries a minimal x43_b2 lane for combat ownership, but extracted hitbox tables
+//   (MSLHITB1) still do not encode this bit.
 #pragma pack(push, 1)
 typedef struct MslDebugHitboxSweepProxy {
   uint8_t attacker;
@@ -959,7 +960,7 @@ typedef struct MslDebugHitboxSweepProxy {
   uint16_t u16_6_cur;
   uint16_t u16_7_cur;
 
-  uint8_t arg3_var_r22_known;            // 0=unknown in current runtime model
+  uint8_t arg3_var_r22_known;            // 1=runtime model carries the lane
   uint8_t arg3_var_r22_from_extracted;   // 0=not present in MSLHITB1
   uint8_t arg3_var_r22_gates_collision;  // 1=decomp says it gates lbColl_8000805C acceptance
   uint8_t _pad2;

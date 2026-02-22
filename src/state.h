@@ -343,6 +343,16 @@ typedef struct MslStateSoA {
   // Mirrors ftColl_800768A0 clear/copy ownership trigger used by ftColl_8007AD18 state transitions.
   // refs/melee/src/melee/ft/ftcoll.c::{ftColl_800768A0,ftColl_8007AD18}
   uint8_t* hitbox_enable_edge;  // [batch * players * MSL_MAX_HITBOXES]
+  // HitCapsule.x43_b2 runtime lane (ftColl_80078C70 var_r22 -> lbColl_8000805C arg3).
+  //
+  // Decomp ownership:
+  // - Spawn/create initializes x43_b2=0 in ftAction_8007121C.
+  // - ftColl_80078C70 reads x43_b2 and forwards it to lbColl_8000805C arg3.
+  // - lbColl_8000805C short-circuits acceptance when arg3!=0.
+  // refs/melee/src/melee/ft/ftaction.c::ftAction_8007121C
+  // refs/melee/src/melee/ft/ftcoll.c::ftColl_80078C70
+  // refs/melee/src/melee/lb/lbcollision.c::lbColl_8000805C
+  uint8_t* hitbox_x43_b2;  // [batch * players * MSL_MAX_HITBOXES]
   // First-frame bootstrap flag for x58 previous centers after teacher-forced reseed.
   // 1 => bootstrap hitbox_prev_* once in hitboxes_refresh(), then clear to 0.
   uint8_t* hitbox_prev_bootstrap;  // [batch * players]

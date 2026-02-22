@@ -22,6 +22,14 @@
 #include "move_tables.h"
 #include "staling.h"
 
+#ifndef MSL_BODY_LBCOLL_80006E58_SCAFFOLD_ACTIVE
+// Scaffolding gate for decomp-shaped BODY narrow phase.
+// Keep off by default to preserve baseline behavior while arg3/x43_b2 plumbing lands.
+// refs/melee/src/melee/ft/ftcoll.c::ftColl_80078C70
+// refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000805C,lbColl_80006E58}
+#define MSL_BODY_LBCOLL_80006E58_SCAFFOLD_ACTIVE 0
+#endif
+
 static inline size_t idx_hitbox(int bi, int p, int hb_i) {
   return ((size_t)bi * (size_t)MSL_MAX_PLAYERS + (size_t)p) * (size_t)MSL_MAX_HITBOXES +
          (size_t)hb_i;
@@ -39,6 +47,70 @@ static inline uint8_t sphere_sphere_intersects(float ax, float ay, float az, flo
   const float dz = az - bz;
   const float rr = ar + br;
   return (dx * dx + dy * dy + dz * dz) <= (rr * rr);
+}
+
+static inline float combat_lbColl_804D7A38(void) {
+  // lbColl_8000805C BODY path forwards arg11 = lbColl_804D7A38 * hurt_owner_scale_y.
+  // refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000805C,lbColl_80006E58}
+  // refs/melee/src/melee/lb/lbcollision.c (lbColl_804D7A38 = 3)
+  return 3.0f;
+}
+
+static inline uint8_t combat_body_overlap_lbColl_80006E58_scaffold(
+    const MslBatch* batch, int bi, int attacker, int hb_id, float hx, float hy, float hz, float hr,
+    float ax, float ay, float az, float bx, float by, float bz, float cr,
+    float defender_scale_y) {
+  const size_t hb_i = idx_hitbox(bi, attacker, hb_id);
+
+  // ftColl_80078C70 forwards HitCapsule.x43_b2 as lbColl_8000805C arg3 (`var_r22`).
+  // lbColl_8000805C accepts immediately when arg3 != 0.
+  // refs/melee/src/melee/ft/ftcoll.c::ftColl_80078C70
+  // refs/melee/src/melee/lb/lbcollision.c::lbColl_8000805C
+  if (batch->state.hitbox_x43_b2[hb_i]) {
+    return 1u;
+  }
+
+  float px = hx;
+  float py = hy;
+  float pz = hz;
+  if (batch->state.hitbox_prev_enabled[hb_i]) {
+    px = batch->state.hitbox_prev_x[hb_i];
+    py = batch->state.hitbox_prev_y[hb_i];
+    pz = batch->state.hitbox_prev_z[hb_i];
+  }
+
+  // lbColl_80006E58 broad envelope:
+  //   temp_f3 = (arg10 * arg11) + scl
+  // BODY path mapping:
+  //   scl=hit radius, arg10=hurt radius, arg11=lbColl_804D7A38*hurt_owner_scale_y.
+  // refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000805C,lbColl_80006E58}
+  float arg11 = 0.0f;
+  if (defender_scale_y > 0.0f) {
+    arg11 = combat_lbColl_804D7A38() * defender_scale_y;
+  }
+  const float broad_r = hr + cr * arg11;
+
+  const float hminx = fminf(px, hx);
+  const float hmaxx = fmaxf(px, hx);
+  const float hminy = fminf(py, hy);
+  const float hmaxy = fmaxf(py, hy);
+  const float hminz = fminf(pz, hz);
+  const float hmaxz = fmaxf(pz, hz);
+  const float cminx = fminf(ax, bx);
+  const float cmaxx = fmaxf(ax, bx);
+  const float cminy = fminf(ay, by);
+  const float cmaxy = fmaxf(ay, by);
+  const float cminz = fminf(az, bz);
+  const float cmaxz = fmaxf(az, bz);
+  if (hmaxx + broad_r < cminx || cmaxx + broad_r < hminx || hmaxy + broad_r < cminy ||
+      cmaxy + broad_r < hminy || hmaxz + broad_r < cminz || cmaxz + broad_r < hminz) {
+    return 0u;
+  }
+
+  float d2 = 0.0f;
+  combat_segment_segment_dist2(px, py, pz, hx, hy, hz, ax, ay, az, bx, by, bz, &d2, NULL, NULL);
+  const float rr = hr + cr;
+  return (uint8_t)(d2 <= rr * rr);
 }
 
 static inline uint8_t combat_shield_overlap_ftcoll_80007bcc(
@@ -2653,7 +2725,14 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
           const float bz = batch->state.hurtcap_b_z[cap_i];
           const float cr = batch->state.hurtcap_radius[cap_i];
 
-          if (!combat_sphere_capsule_intersects(hx, hy, hz, hr, ax, ay, az, bx, by, bz, cr, NULL)) {
+          uint8_t overlaps =
+              combat_sphere_capsule_intersects(hx, hy, hz, hr, ax, ay, az, bx, by, bz, cr, NULL);
+          if (MSL_BODY_LBCOLL_80006E58_SCAFFOLD_ACTIVE) {
+            overlaps = combat_body_overlap_lbColl_80006E58_scaffold(
+                batch, bi, attacker, hb_id, hx, hy, hz, hr, ax, ay, az, bx, by, bz, cr,
+                batch->state.fighter_scale_y[d_idx]);
+          }
+          if (!overlaps) {
             continue;
           }
           // Combat Mutations Pass 1 (BODY-only).

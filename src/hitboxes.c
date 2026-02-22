@@ -198,10 +198,12 @@ void hitboxes_refresh(MslBatch* batch) {
     for (int p = 0; p < MSL_MAX_PLAYERS; p++) {
       const size_t idx = msl_idx_player(bi, p);
       batch->state.hitbox_count[idx] = 0;
+      uint8_t x43_b2_prev[MSL_MAX_HITBOXES] = {0};
 
       // Clear fixed slots for stable debug readback.
       for (int hi = 0; hi < MSL_MAX_HITBOXES; hi++) {
         const size_t oi = idx_hitbox(bi, p, hi);
+        x43_b2_prev[hi] = batch->state.hitbox_x43_b2[oi];
         // Decomp shape: ftColl_8007AD18 stores previous/current capsule centers in x58/x4C.
         // Preserve the previous frame's world center before refreshing this frame's pose sample.
         // refs/melee/src/melee/ft/ftcoll.c::ftColl_8007AD18
@@ -211,6 +213,7 @@ void hitboxes_refresh(MslBatch* batch) {
         batch->state.hitbox_prev_z[oi] = batch->state.hitbox_z[oi];
         batch->state.hitbox_pose_create[oi] = 0u;
         batch->state.hitbox_enable_edge[oi] = 0u;
+        batch->state.hitbox_x43_b2[oi] = 0u;
 
         batch->state.hitbox_enabled[oi] = 0;
         batch->state.hitbox_x[oi] = 0.0f;
@@ -580,6 +583,18 @@ void hitboxes_refresh(MslBatch* batch) {
         batch->state.hitbox_sfx_severity[oi] = (uint8_t)(def[hi].u16_5 & 0xFFu);
         batch->state.hitbox_sfx_kind[oi] = (uint8_t)((def[hi].u16_5 >> 8) & 0xFFu);
         batch->state.hitbox_flags[oi] = def[hi].u16_6;
+        // x43_b2 ownership mapping:
+        // - ftAction_8007121C create path initializes x43_b2=0.
+        // - ftColl_800768A0 copy/clear transitions preserve per-slot runtime ownership otherwise.
+        // - ftColl_80078C70 forwards x43_b2 as lbColl_8000805C arg3.
+        // refs/melee/src/melee/ft/ftaction.c::ftAction_8007121C
+        // refs/melee/src/melee/ft/ftcoll.c::{ftColl_800768A0,ftColl_80078C70}
+        // refs/melee/src/melee/lb/lbcollision.c::lbColl_8000805C
+        if (pose_create_count[hi] != 0u || !have_prev[hi]) {
+          batch->state.hitbox_x43_b2[oi] = 0u;
+        } else {
+          batch->state.hitbox_x43_b2[oi] = x43_b2_prev[hi];
+        }
         out_count++;
       }
 

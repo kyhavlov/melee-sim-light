@@ -611,6 +611,10 @@ int msl_batch_reseed_seed(MslBatch* batch, const uint8_t* seed_bytes, size_t see
         batch->state.hitbox_prev_z[hb_i] = 0.0f;
         batch->state.hitbox_pose_create[hb_i] = 0u;
         batch->state.hitbox_enable_edge[hb_i] = 0u;
+        // x43_b2 ownership lane: create/reset starts at 0 before any character callback mutation.
+        // refs/melee/src/melee/ft/ftaction.c::ftAction_8007121C
+        // refs/melee/src/melee/ft/ftcoll.c::ftColl_80078C70
+        batch->state.hitbox_x43_b2[hb_i] = 0u;
       }
 
       if (seed->attack_instance[p] > max_attack_inst) {
@@ -1363,7 +1367,7 @@ int msl_batch_debug_hitbox_sweep_proxy(const MslBatch* batch, int batch_index, i
   memset(out_proxy, 0, sizeof(*out_proxy));
   out_proxy->attacker = (uint8_t)attacker;
   out_proxy->hb_id = (uint8_t)hb_id;
-  out_proxy->arg3_var_r22_known = 0u;
+  out_proxy->arg3_var_r22_known = 1u;
   out_proxy->arg3_var_r22_from_extracted = 0u;
   out_proxy->arg3_var_r22_gates_collision = 1u;
 
@@ -2019,6 +2023,7 @@ int msl_batch_debug_clear_hitboxes_world(MslBatch* batch, int batch_index, int p
     batch->state.hitbox_u16_7[hb_i] = 0;
     batch->state.hitbox_u16_6[hb_i] = 0;
     batch->state.hitbox_flags[hb_i] = 0;
+    batch->state.hitbox_x43_b2[hb_i] = 0u;
   }
 
   // Debug helper: approximate the engine's "clear hitboxes" behavior by also resetting rehit
@@ -2051,6 +2056,9 @@ int msl_batch_debug_set_hitbox_world(MslBatch* batch, int batch_index, int playe
   batch->state.hitbox_z[hb_i] = z;
   batch->state.hitbox_radius[hb_i] = radius;
   batch->state.hitbox_damage[hb_i] = damage;
+  if (!enabled) {
+    batch->state.hitbox_x43_b2[hb_i] = 0u;
+  }
 
   // Keep hitbox_count consistent with enabled slots.
   const size_t idx = msl_idx_player(batch_index, player_index);
