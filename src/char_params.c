@@ -234,6 +234,7 @@ static int load_one(const char* data_dir, const char* rel_path, uint8_t char_id)
       "firefox_launch_speed",
       "firefox_facing_stick_range_min",
       "grab_capture_anchor_part_id",
+      "laser_spawn_joint_part_id",
   };
 
   FILE* f = fopen(path, "rb");
@@ -335,6 +336,7 @@ static int load_one(const char* data_dir, const char* rel_path, uint8_t char_id)
       json_get_f32(buf, "initial_shield_size", &out.initial_shield_size) != 0 ||
       json_get_f32(buf, "model_scaling", &out.model_scaling) != 0 ||
       json_get_f32(buf, "laser_scale_max", &out.laser_scale_max) != 0 ||
+      json_get_u16(buf, "laser_spawn_joint_part_id", &out.laser_spawn_joint_part_id) != 0 ||
       json_get_u16(buf, "grab_capture_anchor_part_id", &out.grab_capture_anchor_part_id) != 0 ||
       json_get_f32(buf, "illusion_ground_end_vel_x", &out.illusion_ground_end_vel_x) != 0 ||
       json_get_f32(buf, "illusion_ground_friction", &out.illusion_ground_friction) != 0 ||

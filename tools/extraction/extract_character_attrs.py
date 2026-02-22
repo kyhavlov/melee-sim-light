@@ -332,6 +332,55 @@ def _extract_ftco_dattrs(pl_dat: Path, *, ftdata_symbol: str, extract_fox_blaste
     return out
 
 
+def _extract_ftparts_rthumb_joint_index(pl_dir: Path, *, character: str) -> int | None:
+    """Read ftPartsTable.part_to_joint[FtPart_RThumbNb] from PlCo.dat.
+
+    Decomp/source of truth:
+    - refs/melee/src/melee/ft/ftparts.c::ftParts_GetBoneIndex
+    - refs/melee/src/melee/ft/forward.h::FighterKind and Fighter_Part (FtPart_RThumbNb=49)
+    - `_iso/PlCo.dat` public symbol `ftLoadCommonData`, field p_ftCommonData->x10
+      (`ftPartsTable`) loaded by ftLoadCommonData.
+    """
+    ftkind_by_name = {
+        "fox": 0x01,    # FTKIND_FOX
+        "falco": 0x16,  # FTKIND_FALCO
+    }
+    ftkind = ftkind_by_name.get(character)
+    if ftkind is None:
+        return None
+    plco_path = pl_dir / "PlCo.dat"
+    if not plco_path.exists():
+        return None
+    plco_buf = plco_path.read_bytes()
+    plco = parse_hsd_archive(plco_buf)
+    ft_load_common_abs = plco.get_public_offset("ftLoadCommonData")
+    if ft_load_common_abs is None:
+        return None
+    # ftLoadCommonData points to a table of common pointers; slot[4] is ftPartsTable.
+    # refs/melee/src/melee/ft/ftparts.c::ftParts_GetBoneIndex
+    p_data = [_u32_be(plco_buf, ft_load_common_abs + i * 4) for i in range(23)]
+    ft_parts_table_ptr = int(p_data[4])
+    if ft_parts_table_ptr == 0:
+        return None
+    ft_parts_table_abs = plco.data_base + ft_parts_table_ptr
+    ft_parts_tbl_ptr = _u32_be(plco_buf, ft_parts_table_abs + int(ftkind) * 4)
+    if ft_parts_tbl_ptr == 0:
+        return None
+    ft_parts_tbl_abs = plco.data_base + ft_parts_tbl_ptr
+    part_to_joint_ptr = _u32_be(plco_buf, ft_parts_tbl_abs + 0x04)
+    parts_num = _u32_be(plco_buf, ft_parts_tbl_abs + 0x08)
+    if part_to_joint_ptr == 0:
+        return None
+    # Fighter_Part::FtPart_RThumbNb
+    ft_part_rthumb_nb = 49
+    if parts_num <= ft_part_rthumb_nb:
+        return None
+    part_to_joint_abs = plco.data_base + part_to_joint_ptr
+    if part_to_joint_abs + int(parts_num) > len(plco_buf):
+        return None
+    return int(plco_buf[part_to_joint_abs + ft_part_rthumb_nb])
+
+
 def _stable_update(existing: dict, extracted: dict) -> dict:
     out: dict = {}
     # Deprecated keys from previous extractor iterations; drop them on rewrite so downstream
@@ -393,6 +442,7 @@ def _stable_update(existing: dict, extracted: dict) -> dict:
         "blaster_vel",
         "blaster_shot_itkind",
         "blaster_gun_itkind",
+        "laser_spawn_joint_part_id",
         "reflector_gravity_delay_frames",
         "reflector_release_lag_frames",
         "reflector_turn_frames",
@@ -494,6 +544,13 @@ def main() -> None:
             raise SystemExit(f"missing {pl_path} (pass --iso to extract)")
 
         extracted = _extract_ftco_dattrs(pl_path, ftdata_symbol=sym, extract_fox_blaster=bool(blaster))
+        if blaster:
+            # Decomp ownership: SpecialN spawn joint uses ftParts_GetBoneIndex(fp, FtPart_RThumbNb).
+            # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_SpecialN_FtGetHoldJoint
+            # refs/melee/src/melee/ft/ftparts.c::ftParts_GetBoneIndex
+            joint_part = _extract_ftparts_rthumb_joint_index(args.pl_dir, character=name)
+            if joint_part is not None:
+                extracted["laser_spawn_joint_part_id"] = int(joint_part)
         out_path = args.out_dir / f"{name}.json"
         try:
             existing = json.loads(out_path.read_text())

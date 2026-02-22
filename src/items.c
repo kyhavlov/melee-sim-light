@@ -768,6 +768,7 @@ static void laser_spawn_from_fighter(MslBatch* batch, int bi, int owner, const M
   const uint16_t msid = (uint16_t)anim_u32;
   const float anim_frame_f32 = items_cur_anim_frame_f32(batch, o_idx);
   const uint16_t frame = msl_anim_frame_floor_u16(anim_frame_f32);
+  const MslCharParams* chp = msl_char_params(char_id);
 
   // Spawn point: lb_8000B1CC(bone_joint, offset, out) (decomp), approximated with pose matrices.
   // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_SpecialN_FtGetHoldJoint
@@ -775,23 +776,16 @@ static void laser_spawn_from_fighter(MslBatch* batch, int bi, int owner, const M
   // IMPORTANT (bone index domain):
   // - Decomp uses ftParts_GetBoneIndex(fp, FtPart_RThumbNb) to pick an index into fp->parts[].
   //   refs/melee/src/melee/ft/ftparts.c::ftParts_GetBoneIndex
-  // - Our SSANIM01 pose tables are keyed by these fp->parts[] indices (not Fighter_Part ids).
-  // - MSLLASR1 currently stores the Fighter_Part id (49) for documentation, so remap to the
-  //   fp->parts[] index here for Fox/Falco.
+  // - Our SSANIM01 pose tables are keyed by these fp->parts[] indices.
   //
-  // Remap values (GALE01 `_iso/PlCo.dat` ftPartsTable[ftkind].part_to_joint[FtPart_RThumbNb]):
-  // - Fox   (FTKIND_FOX):   67
-  // - Falco (FTKIND_FALCO): 61
-  // Source-of-truth: PlCo.dat common fighter parts table (loaded by ftLoadCommonData).
-  // refs/melee/src/melee/ft/ftparts.c::ftParts_GetBoneIndex
-  // tools/extraction/extract_fighter_anims.py::_load_parts_table (reads `_iso/PlCo.dat`)
-  // TODO(extraction): Extract ftPartsTable part_to_joint into an ISO-derived `data/` artifact and
-  // load it at init. This mapping should not remain as gameplay-logic hardcodes.
+  // Source of truth:
+  // - ISO-extracted character attr key `laser_spawn_joint_part_id`, derived from:
+  //   `_iso/PlCo.dat` ftPartsTable[ftkind].part_to_joint[FtPart_RThumbNb].
+  //   tools/extraction/extract_character_attrs.py::_extract_ftparts_rthumb_joint_index
+  //   refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_SpecialN_FtGetHoldJoint
   uint16_t spawn_part_id = lp->spawn_bone_part_id;
-  if (char_id == 1u) {  // Fox
-    spawn_part_id = 67u;
-  } else if (char_id == 22u) {  // Falco
-    spawn_part_id = 61u;
+  if (chp != NULL && chp->laser_spawn_joint_part_id != 0u) {
+    spawn_part_id = chp->laser_spawn_joint_part_id;
   }
   float m[12];
   if (anim_pose_get_matrix(char_id, msid, frame, spawn_part_id, m) != 0) {
@@ -816,7 +810,6 @@ static void laser_spawn_from_fighter(MslBatch* batch, int bi, int owner, const M
   // refs/melee/src/melee/ft/ftlib.c::ftLib_800869D4 (ftCommon_GetModelScale)
   const float scale_y = batch->state.fighter_scale_y[o_idx];
   float model_scaling = 1.0f;
-  const MslCharParams* chp = msl_char_params(char_id);
   if (chp != NULL && chp->model_scaling > 0.0f) {
     model_scaling = chp->model_scaling;
   }

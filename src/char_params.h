@@ -79,6 +79,18 @@ typedef struct MslCharParams {
   // Decomp: refs/melee/src/melee/it/items/itfoxlaser.c::itFoxlaser_UnkMotion1_Anim
   // Source of truth: ISO-extracted `data/characters/*.json` `laser_scale_max`.
   float laser_scale_max;
+  // Fox/Falco blaster shot spawn joint index (fp->parts[] domain).
+  //
+  // Decomp:
+  // - SpecialN spawn uses ftParts_GetBoneIndex(fp, FtPart_RThumbNb), then lb_8000B1CC on that joint.
+  //   refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_SpecialN_FtGetHoldJoint
+  //   refs/melee/src/melee/ft/ftparts.c::ftParts_GetBoneIndex
+  //
+  // Source of truth:
+  // - ISO-extracted `data/characters/*.json` key `laser_spawn_joint_part_id`,
+  //   derived from `_iso/PlCo.dat` ftPartsTable[ftkind].part_to_joint[FtPart_RThumbNb].
+  uint16_t laser_spawn_joint_part_id;
+  uint16_t _pad_u16_laser_spawn_0;
 
   // Grab/capture attachment anchor bone (bone index / fp->parts[] index domain; GALE01).
   //
