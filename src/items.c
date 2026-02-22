@@ -747,6 +747,72 @@ static inline float item_reflected_damage_lane(const MslBatch* batch, size_t ite
   return (float)dmg_i;
 }
 
+static inline void item_apply_pending_powershield_reflect_speed(MslBatch* batch, size_t ii) {
+  if (batch == NULL) {
+    return;
+  }
+  // Decomp ownership split:
+  // - overlap path can commit reflected orientation (`facing_dir` / angle lane) immediately,
+  // - velocity lane is consumed by item logic after reflect snapshot ownership transfer.
+  // refs/melee/src/melee/it/items/itfoxlaser.c::it_2725_Logic94_Reflected
+  // refs/melee/src/melee/it/item.c::Item_80269F14
+  const float vx = batch->state.item_vel_x[ii];
+  if (!(vx > 0.0f || vx < 0.0f)) {
+    return;
+  }
+  const float dir = batch->state.item_direction[ii];
+  const uint8_t pending_reflect = ((vx > 0.0f && dir < 0.0f) || (vx < 0.0f && dir > 0.0f)) ? 1u : 0u;
+  if (!pending_reflect) {
+    return;
+  }
+  // Narrowed temporary behavior (kept):
+  // - apply deferred reflect with identity speed multiplier (1.0f) on the next item pass,
+  //   keyed by reflected orientation mismatch.
+  // TODO(decomp/powershield-reflect-speed-mul): validate authoritative x2B0 ownership/timing
+  // for these rows and replace this identity speed-mul bridge.
+  const float mul = 1.0f;
+  const float new_vx = -vx * mul;
+  const float new_vy = -batch->state.item_vel_y[ii] * mul;
+  batch->state.item_vel_x[ii] = new_vx;
+  batch->state.item_vel_y[ii] = new_vy;
+  batch->state.item_direction[ii] = (new_vx >= 0.0f) ? 1.0f : -1.0f;
+}
+
+static inline void item_apply_powershield_reflect_snapshot(MslBatch* batch, size_t ii,
+                                                           int reflector_port, float damage_mul) {
+  if (batch == NULL) {
+    return;
+  }
+  // Reflect snapshot ownership:
+  // - overlap writes owner/xDA8_short and multipliers to item-owned reflect snapshot.
+  // refs/melee/src/melee/ft/ftcoll.c::ftColl_80077464
+  // - item logic consumes that snapshot in Item_80269F14.
+  // refs/melee/src/melee/it/item.c::Item_80269F14
+  batch->state.item_owner[ii] = (int8_t)reflector_port;
+
+  const float dmg_mul = (damage_mul > 0.0f) ? damage_mul : 1.0f;
+  // Decomp visual reflect lane flips facing/angle on overlap (`it_2725_Logic94_Reflected`) even when
+  // velocity update is consumed later by item logic (`Item_80269F14`).
+  // refs/melee/src/melee/it/items/itfoxlaser.c::it_2725_Logic94_Reflected
+  // refs/melee/src/melee/it/item.c::Item_80269F14
+  const float reflect_vx = -batch->state.item_vel_x[ii];
+  if (reflect_vx > 0.0f) {
+    batch->state.item_direction[ii] = 1.0f;
+  } else if (reflect_vx < 0.0f) {
+    batch->state.item_direction[ii] = -1.0f;
+  } else {
+    const float cur_dir = batch->state.item_direction[ii];
+    batch->state.item_direction[ii] = (cur_dir >= 0.0f) ? -1.0f : 1.0f;
+  }
+  // Keep damage ownership immediately item-owned; deferred speed apply is signaled by the
+  // reflected orientation lane (`item_direction`) and consumed in item_update_lasers().
+  //
+  // TODO(decomp/powershield-reflect-ownership-timing): transfer-frame xDA8_short
+  // (Slippi item.instance_id) remains seed-latched in this lane until the authoritative
+  // transfer ordering is extracted.
+  batch->state.item_reflect_damage_mul[ii] = dmg_mul;
+}
+
 static inline float laser_collision_offset_scale(const MslLaserParams* lp, uint8_t laser_state,
                                                  float laser_scale_z, uint8_t clamp_max_to_one) {
   (void)lp;
@@ -1092,6 +1158,7 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
     // Blaster shots (itfoxlaser.c) can be spawned with msid 0 or 1:
     // refs/melee/src/melee/it/items/itfoxlaser.c::it_8029C6A4 and ::it_8029C6CC
     const uint8_t laser_state = (batch->state.item_state[ii] != 0) ? 1u : 0u;
+    item_apply_pending_powershield_reflect_speed(batch, ii);
 
     // Motion: item->pos += item->vel (generic add in Item_802697D4), and lifetime counts down.
     // Decomp refs:
@@ -1343,33 +1410,25 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
               combat_is_powershield_active_idx(batch, d_idx) ? 1u : 0u;
           if (can_powershield_reflect) {
             // Decomp reflect snapshot ownership:
-            // - GuardReflect builds ReflectDesc.damage_mul from ftCommonData->x2AC.
-            // - GuardReflect builds ReflectDesc.speed_mul from ftCommonData->x2B0.
+            // - GuardReflect reflect setup path initializes ReflectDesc lanes.
             //   refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_8009370C
-            // - Reflect overlap writes owner/xDA8_short and multipliers to item reflect snapshot.
+            //   refs/melee/src/melee/ft/ftcoll.c::ftColl_CreateReflectHit
+            // - overlap writes owner/xDA8_short and reflect multipliers to item snapshot.
             //   refs/melee/src/melee/ft/ftcoll.c::ftColl_80077464
-            // - Item apply consumes that snapshot (`item->xC6C`) and updates trajectory.
+            // - item logic consumes snapshot in Item_80269F14; speed update may be deferred to that
+            //   pass via item_apply_pending_powershield_reflect_speed().
             //   refs/melee/src/melee/it/item.c::Item_80269F14
             const MslCommonParams* c = msl_common_params();
             const float dmg_mul =
                 (c != NULL && c->powershield_reflect_damage_mul > 0.0f)
                     ? c->powershield_reflect_damage_mul
                     : 1.0f;
-            // TODO(decomp/powershield-reflect-speed-mul): validate x2B0 speed-mul ownership/timing
-            // for powershield rows under one-step/rollout parity before enabling it here.
-            // Current salvage lane keeps powershield reflection speed at identity.
-            const float speed_mul = 1.0f;
-            batch->state.item_owner[ii] = (int8_t)def;
-            batch->state.item_reflect_damage_mul[ii] = dmg_mul;
-            const float new_vx = -batch->state.item_vel_x[ii] * speed_mul;
-            const float new_vy = -batch->state.item_vel_y[ii] * speed_mul;
-            batch->state.item_vel_x[ii] = new_vx;
-            batch->state.item_vel_y[ii] = new_vy;
-            batch->state.item_direction[ii] = (new_vx >= 0.0f) ? 1.0f : -1.0f;
-            // TODO(decomp/powershield-reflect-ownership): confirm xDA8_short ownership timing for
-            // powershield-only rows in one-step reseed. Current lane keeps item.instance_id
-            // unchanged to preserve replay-real lock rows where owner transfer is visible but
-            // item.instance_id remains stable at t+1.
+            item_apply_powershield_reflect_snapshot(batch, ii, def, dmg_mul);
+            // TODO(decomp/powershield-reflect-ownership-timing): transfer-frame xDA8_short
+            // (Slippi item.instance_id) is intentionally left seed-latched in this lane until the
+            // exact authoritative transfer ordering is extracted for non-regressive rollout parity.
+            // TODO(decomp/powershield-reflect-speed-mul): validate whether powershield reflect uses
+            // ftCommonData x2B0 directly (or identity) for these rows.
             break;
           }
 

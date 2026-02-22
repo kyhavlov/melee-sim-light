@@ -83,6 +83,17 @@ class _TransferCase:
     note: str
 
 
+@dataclass(frozen=True)
+class _TimingCase:
+    dataset_rel: str
+    control_record: int
+    transfer_record: int
+    apply_record: int
+    spawn_id: int
+    item_type: int
+    note: str
+
+
 @pytest.mark.integration
 @pytest.mark.parametrize(
     "case",
@@ -160,6 +171,115 @@ def test_reflected_laser_transfer_rows_match_replay_real_item_identity(case: _Tr
         got = int(out["items"][out_slot][fld])
         exp = int(ref_out["items"][ref_slot][fld])
         assert got == exp, f"{case.note}: field={fld} expected={exp} got={got}"
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    "case",
+    [
+        _TimingCase(
+            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl",
+            control_record=4830,
+            transfer_record=4828,
+            apply_record=4829,
+            spawn_id=125,
+            item_type=55,
+            note="powershield timing lane A",
+        ),
+        _TimingCase(
+            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl",
+            control_record=6209,
+            transfer_record=6207,
+            apply_record=6208,
+            spawn_id=149,
+            item_type=55,
+            note="powershield timing lane B",
+        ),
+        _TimingCase(
+            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/TreasuredBackKangaroo.msl",
+            control_record=7450,
+            transfer_record=7448,
+            apply_record=7449,
+            spawn_id=142,
+            item_type=55,
+            note="powershield timing lane C",
+        ),
+    ],
+)
+def test_powershield_reflect_transfer_then_speed_apply_timing_locks(case: _TimingCase) -> None:
+    # Replay-real timing lock for powershield reflect:
+    # - GuardReflect setup creates reflect snapshot/multipliers.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_8009370C
+    # refs/melee/src/melee/ft/ftcoll.c::ftColl_CreateReflectHit
+    # - Overlap writes owner/xDA8_short + reflect snapshot lanes on transfer frame.
+    # refs/melee/src/melee/ft/ftcoll.c::ftColl_80077464
+    # - Item logic consumes snapshot and applies reflected trajectory update on follow-up frame.
+    # refs/melee/src/melee/it/item.c::Item_80269F14
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / case.dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {case.dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+    assert int(samples.shape[0]) > case.apply_record
+    assert int(samples.shape[0]) > case.transfer_record
+    assert int(samples.shape[0]) > case.control_record
+
+    # Strict replay-real parity: adjacent control row after transfer/apply should stay stable.
+    _seed_ctrl, out_ctrl, ref_ctrl = _step_one_row(dataset_path=dataset_path, record=case.control_record)
+    ctrl_slot_out = _find_item_slot_by_key(out_ctrl["items"], spawn_id=case.spawn_id, item_type=case.item_type)
+    ctrl_slot_ref = _find_item_slot_by_key(ref_ctrl["items"], spawn_id=case.spawn_id, item_type=case.item_type)
+    assert ctrl_slot_out >= 0, f"{case.note}: control row item missing in out"
+    assert ctrl_slot_ref >= 0, f"{case.note}: control row item missing in ref"
+    for fld in ("owner", "instance_id", "direction"):
+        got = int(out_ctrl["items"][ctrl_slot_out][fld])
+        exp = int(ref_ctrl["items"][ctrl_slot_ref][fld])
+        assert got == exp, f"{case.note}: control field={fld} expected={exp} got={got}"
+    for fld in ("vel_x", "vel_y"):
+        got = float(out_ctrl["items"][ctrl_slot_out][fld])
+        exp = float(ref_ctrl["items"][ctrl_slot_ref][fld])
+        assert np.isclose(got, exp, atol=1e-6), f"{case.note}: control field={fld} expected={exp} got={got}"
+
+    # Transfer frame strict parity lanes: owner/direction/velocity.
+    seed_tx, out_tx, ref_tx = _step_one_row(dataset_path=dataset_path, record=case.transfer_record)
+    tx_slot_seed = _find_item_slot_by_key(seed_tx["items"], spawn_id=case.spawn_id, item_type=case.item_type)
+    tx_slot_out = _find_item_slot_by_key(out_tx["items"], spawn_id=case.spawn_id, item_type=case.item_type)
+    tx_slot_ref = _find_item_slot_by_key(ref_tx["items"], spawn_id=case.spawn_id, item_type=case.item_type)
+    assert tx_slot_seed >= 0 and tx_slot_out >= 0 and tx_slot_ref >= 0, f"{case.note}: transfer row item key missing"
+    for fld in ("owner", "direction"):
+        got = int(out_tx["items"][tx_slot_out][fld])
+        exp = int(ref_tx["items"][tx_slot_ref][fld])
+        assert got == exp, f"{case.note}: transfer field={fld} expected={exp} got={got}"
+    # Known-gap expectation (not parity lock):
+    # transfer-frame item.instance_id (xDA8_short) remains seed-latched in this narrowed lane
+    # until authoritative transfer ownership timing is extracted.
+    # refs/melee/src/melee/ft/ftcoll.c::ftColl_80077464
+    # refs/melee/src/melee/it/item.c::Item_80269F14
+    tx_iid_out = int(out_tx["items"][tx_slot_out]["instance_id"])
+    tx_iid_ref = int(ref_tx["items"][tx_slot_ref]["instance_id"])
+    tx_iid_seed = int(seed_tx["items"][tx_slot_seed]["instance_id"])
+    assert tx_iid_out == tx_iid_seed, f"{case.note}: known-gap transfer instance_id expected_seed={tx_iid_seed} got={tx_iid_out}"
+    assert tx_iid_out != tx_iid_ref, f"{case.note}: known-gap expectation requires transfer instance_id != ref ({tx_iid_ref})"
+    for fld in ("vel_x", "vel_y"):
+        got = float(out_tx["items"][tx_slot_out][fld])
+        exp = float(ref_tx["items"][tx_slot_ref][fld])
+        assert np.isclose(got, exp, atol=1e-6), f"{case.note}: transfer field={fld} expected={exp} got={got}"
+
+    # Strict replay-real parity: follow-up frame after deferred speed apply.
+    _seed_ap, out_ap, ref_ap = _step_one_row(dataset_path=dataset_path, record=case.apply_record)
+    ap_slot_out = _find_item_slot_by_key(out_ap["items"], spawn_id=case.spawn_id, item_type=case.item_type)
+    ap_slot_ref = _find_item_slot_by_key(ref_ap["items"], spawn_id=case.spawn_id, item_type=case.item_type)
+    assert ap_slot_out >= 0 and ap_slot_ref >= 0, f"{case.note}: follow-up row item key missing"
+    for fld in ("owner", "instance_id", "direction"):
+        got = int(out_ap["items"][ap_slot_out][fld])
+        exp = int(ref_ap["items"][ap_slot_ref][fld])
+        assert got == exp, f"{case.note}: apply field={fld} expected={exp} got={got}"
+    for fld in ("vel_x", "vel_y"):
+        got = float(out_ap["items"][ap_slot_out][fld])
+        exp = float(ref_ap["items"][ap_slot_ref][fld])
+        assert np.isclose(got, exp, atol=1e-6), f"{case.note}: apply field={fld} expected={exp} got={got}"
 
 
 @dataclass(frozen=True)
@@ -281,4 +401,3 @@ def test_reflected_laser_hit_rows_and_adjacent_controls_lock_replay_real(case: _
     assert int(out["hitlag"][case.target_p]) == int(ref_out["hitlag"][case.target_p]), case.note
     assert int(out["hitstun"][case.target_p]) == int(ref_out["hitstun"][case.target_p]), case.note
     assert int(out["action_id"][case.target_p]) == int(ref_out["action_id"][case.target_p]), case.note
-
