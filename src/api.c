@@ -586,6 +586,33 @@ int msl_batch_reseed_seed(MslBatch* batch, const uint8_t* seed_bytes, size_t see
       batch->state.last_hit_by[idx] = seed->last_hit_by[p];
       batch->state.grab_owner_port[idx] = seed->grab_owner_port[p];
 
+      // BODY sweep ownership (x58/x4C) on reseed:
+      // - Decomp keeps previous/current HitCapsule centers in ftColl_8007AD18 and BODY overlap
+      //   consumes that lane through lbColl_8000805C -> lbColl_80006E58.
+      // refs/melee/src/melee/ft/ftcoll.c::ftColl_8007AD18
+      // refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000805C,lbColl_80006E58}
+      //
+      // Teacher-forced one-step reseed does not provide prior-frame x58, so clear stale carried
+      // slots and bootstrap x58 from the first post-reseed hitboxes_refresh() pass.
+      // refs/melee/src/melee/ft/ftcoll.c::ftColl_8007AD18
+      // refs/melee/src/melee/lb/lbcollision.c::lbColl_8000805C
+      batch->state.hitbox_prev_bootstrap[idx] = 1u;
+      const size_t hb_base = ((size_t)bi * (size_t)MSL_MAX_PLAYERS + (size_t)p) *
+                             (size_t)MSL_MAX_HITBOXES;
+      for (int hb = 0; hb < MSL_MAX_HITBOXES; hb++) {
+        const size_t hb_i = hb_base + (size_t)hb;
+        batch->state.hitbox_enabled[hb_i] = 0u;
+        batch->state.hitbox_x[hb_i] = 0.0f;
+        batch->state.hitbox_y[hb_i] = 0.0f;
+        batch->state.hitbox_z[hb_i] = 0.0f;
+        batch->state.hitbox_prev_enabled[hb_i] = 0u;
+        batch->state.hitbox_prev_x[hb_i] = 0.0f;
+        batch->state.hitbox_prev_y[hb_i] = 0.0f;
+        batch->state.hitbox_prev_z[hb_i] = 0.0f;
+        batch->state.hitbox_pose_create[hb_i] = 0u;
+        batch->state.hitbox_enable_edge[hb_i] = 0u;
+      }
+
       if (seed->attack_instance[p] > max_attack_inst) {
         max_attack_inst = seed->attack_instance[p];
       }

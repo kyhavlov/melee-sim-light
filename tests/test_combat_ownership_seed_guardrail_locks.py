@@ -174,6 +174,16 @@ def _run_one_step_row(ds_path: Path, record: int, p: int) -> tuple[np.void, np.v
     return seed, ref, out
 
 
+def _assert_body_overlap_lock_fields_match_ref(*, out_row: np.void, ref_row: np.void, record: int, p: int) -> None:
+    for field in ("action_id", "action_frame", "animation_index", "hitlag", "hitstun", "instance_id"):
+        got = int(out_row[field][p])
+        exp = int(ref_row[field][p])
+        assert got == exp, f"record={record} p={p} field={field} expected={exp} got={got}"
+    got_sf = out_row["state_flags"][p].tolist()
+    exp_sf = ref_row["state_flags"][p].tolist()
+    assert got_sf == exp_sf, f"record={record} p={p} field=state_flags expected={exp_sf} got={got_sf}"
+
+
 @pytest.mark.integration
 @pytest.mark.parametrize(
     ("dataset_rel", "record", "p", "seed_action"),
@@ -1126,3 +1136,138 @@ def test_runtime_hitlag_clusters_negative_controls_remain_exact(
     assert int(out["hitlag"][p]) == int(ref["hitlag"][p]) == int(ref_hitlag)
     assert int(out["hitstun"][p]) == int(ref["hitstun"][p]) == int(ref_hitstun)
     assert int(out["state_flags"][p, 1]) == int(ref["state_flags"][p, 1]) == int(ref_sf1)
+
+
+@pytest.mark.integration
+def test_qgd_body_overlap_sweep_family_rows_and_adjacent_controls_stay_replay_exact() -> None:
+    # Lock the exact QGD family regressed by the failed A2 BODY sweep lane:
+    # - target rows: 4646/4647/4648
+    # - adjacent controls: 4645 and 4649
+    #
+    # Required strict lock fields:
+    # action_id, action_frame, animation_index, hitlag, hitstun, state_flags, instance_id.
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_rel = (
+        "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/QuerulousGrandDinosaur.msl"
+    )
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+    for rec in (4645, 4646, 4647, 4648, 4649):
+        assert int(samples.shape[0]) > rec, f"dataset too short for lock row: record={rec}"
+
+    # Replay-real family preconditions for the target rows (no hit expected at t+1).
+    for rec in (4646, 4647, 4648):
+        row = samples[rec : rec + 1]
+        assert int(row["seed_t"]["hitlag"][0, 0]) == int(row["ref_t1"]["hitlag"][0, 0]) == 0
+        assert int(row["seed_t"]["hitlag"][0, 1]) == int(row["ref_t1"]["hitlag"][0, 1]) == 0
+        assert int(row["seed_t"]["hitstun"][0, 1]) == int(row["ref_t1"]["hitstun"][0, 1]) == 0
+
+    for rec in (4645, 4646, 4647, 4648, 4649):
+        _, ref, out = _run_one_step_row(dataset_path, rec, 0)
+        for p in (0, 1):
+            _assert_body_overlap_lock_fields_match_ref(out_row=out, ref_row=ref, record=rec, p=p)
+
+
+@pytest.mark.integration
+def test_qgd_body_overlap_reseed_bootstrap_x58_x4c_continuity_is_handle_independent() -> None:
+    # Decomp ownership: BODY overlap consumes HitCapsule previous/current centers (x58/x4C)
+    # via ftColl_8007AD18 -> lbColl_8000805C -> lbColl_80006E58.
+    # refs/melee/src/melee/ft/ftcoll.c::ftColl_8007AD18
+    # refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000805C,lbColl_80006E58}
+    #
+    # Reseed lock: target row output must be identical whether evaluated on a fresh handle or after
+    # a prior row on the same handle (x58/x4C continuity bootstrap after reseed).
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_rel = (
+        "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/QuerulousGrandDinosaur.msl"
+    )
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+    prime_record = 4645
+    target_record = 4646
+    assert int(samples.shape[0]) > target_record, f"dataset too short for lock row: record={target_record}"
+
+    # Replay-real precondition: target row is a no-hit frame in reference for both players.
+    target_row = samples[target_record : target_record + 1]
+    assert int(target_row["seed_t"]["hitlag"][0, 0]) == int(target_row["ref_t1"]["hitlag"][0, 0]) == 0
+    assert int(target_row["seed_t"]["hitlag"][0, 1]) == int(target_row["ref_t1"]["hitlag"][0, 1]) == 0
+    assert int(target_row["seed_t"]["hitstun"][0, 1]) == int(target_row["ref_t1"]["hitstun"][0, 1]) == 0
+
+    binding = pytest.importorskip("msl_binding")
+    sizes = binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    compare_stride = int(sizes["compare"])
+
+    sample_stride = int(samples.dtype.itemsize)
+    samples_u8 = samples.view(np.uint8).reshape(int(samples.shape[0]), sample_stride)
+    seed_off = int(samples.dtype.fields["seed_t"][1])
+    prev_input_off = int(samples.dtype.fields["prev_input_t"][1])
+    input_off = int(samples.dtype.fields["input_t"][1])
+
+    seed_bytes = np.empty((1, seed_stride), dtype=np.uint8)
+    prev_input_bytes = np.empty((1, input_stride), dtype=np.uint8)
+    input_bytes = np.empty((1, input_stride), dtype=np.uint8)
+    out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
+
+    def _step_row(handle: object, record: int) -> np.void:
+        seed_bytes[0, :] = samples_u8[record, seed_off : seed_off + seed_stride]
+        prev_input_bytes[0, :] = samples_u8[record, prev_input_off : prev_input_off + input_stride]
+        input_bytes[0, :] = samples_u8[record, input_off : input_off + input_stride]
+        binding.reseed_seed(handle, seed_bytes)
+        binding.step_input(handle, prev_input_bytes, input_bytes)
+        binding.write_compare(handle, out_compare_bytes)
+        return out_compare_bytes.view(COMPARE_DTYPE).reshape(-1)[0].copy()
+
+    fresh_handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    try:
+        out_target_fresh = _step_row(fresh_handle, target_record)
+    finally:
+        binding.destroy(fresh_handle)
+
+    reused_handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    try:
+        out_prime = _step_row(reused_handle, prime_record)
+        out_target_after_prime = _step_row(reused_handle, target_record)
+    finally:
+        binding.destroy(reused_handle)
+
+    ref_prime = samples["ref_t1"][prime_record]
+    ref_target = samples["ref_t1"][target_record]
+
+    # Adjacent control row parity on reused handle.
+    for p in (0, 1):
+        _assert_body_overlap_lock_fields_match_ref(out_row=out_prime, ref_row=ref_prime, record=prime_record, p=p)
+
+    # Target row parity on both handle paths.
+    for p in (0, 1):
+        _assert_body_overlap_lock_fields_match_ref(
+            out_row=out_target_fresh, ref_row=ref_target, record=target_record, p=p
+        )
+        _assert_body_overlap_lock_fields_match_ref(
+            out_row=out_target_after_prime, ref_row=ref_target, record=target_record, p=p
+        )
+
+    # Bootstrap continuity: target output is handle-independent across reseeds.
+    for p in (0, 1):
+        for field in ("action_id", "action_frame", "animation_index", "hitlag", "hitstun", "instance_id"):
+            a = int(out_target_fresh[field][p])
+            b = int(out_target_after_prime[field][p])
+            assert a == b, (
+                f"record={target_record} p={p} field={field} fresh={a} after_prime={b}"
+            )
+        assert out_target_fresh["state_flags"][p].tolist() == out_target_after_prime["state_flags"][p].tolist(), (
+            f"record={target_record} p={p} field=state_flags "
+            f"fresh={out_target_fresh['state_flags'][p].tolist()} "
+            f"after_prime={out_target_after_prime['state_flags'][p].tolist()}"
+        )
