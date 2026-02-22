@@ -1271,3 +1271,61 @@ def test_qgd_body_overlap_reseed_bootstrap_x58_x4c_continuity_is_handle_independ
             f"fresh={out_target_fresh['state_flags'][p].tolist()} "
             f"after_prime={out_target_after_prime['state_flags'][p].tolist()}"
         )
+
+
+@pytest.mark.integration
+def test_body_overlap_rollout_plus4_regression_families_and_adjacent_controls_stay_replay_exact() -> None:
+    # Failed BODY sweep A/B dossier (first_mismatch_total +4) families:
+    # - AGG: 2864:p0 (action_id)
+    # - QGD: 652:p0 (hitlag), 8637:p1 (action_id), 9627:p1 (action_id)
+    # - TBK: 4592:p0 (action_id)
+    #
+    # Lock each target row and adjacent controls with strict replay parity on BODY ownership fields.
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+
+    families = {
+        "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl": [
+            (2864, 0, "action_id", 356, 87, (2863, 2865)),
+        ],
+        "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/QuerulousGrandDinosaur.msl": [
+            (652, 0, "hitlag", 67, 67, (651, 653)),
+            # Immediate +1 row (8638) is not replay-exact on baseline for locked fields; use the
+            # nearest replay-exact post control row (8639) instead.
+            (8637, 1, "action_id", 90, 90, (8636, 8639)),
+            (9627, 1, "action_id", 14, 14, (9626, 9628)),
+        ],
+        "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/TreasuredBackKangaroo.msl": [
+            (4592, 0, "action_id", 87, 87, (4591, 4593)),
+        ],
+    }
+
+    for dataset_rel, target_rows in families.items():
+        dataset_path = root / dataset_rel
+        if not dataset_path.exists():
+            pytest.skip(f"missing local dataset: {dataset_rel}")
+
+        ds = read_dataset(str(dataset_path))
+        samples = ds.samples
+        rows_to_lock: set[int] = set()
+        for rec, p, field, seed_action, ref_action, controls in target_rows:
+            assert int(samples.shape[0]) > rec, f"dataset too short for lock row: record={rec}"
+            row = samples[rec : rec + 1]
+            assert int(row["seed_t"]["action_id"][0, p]) == int(seed_action), (
+                f"dataset={dataset_rel} record={rec} p={p} expected seed action {seed_action}"
+            )
+            assert int(row["ref_t1"]["action_id"][0, p]) == int(ref_action), (
+                f"dataset={dataset_rel} record={rec} p={p} expected ref action {ref_action}"
+            )
+            # Guard the exact first-mismatch field families identified in the +4 dossier.
+            assert field in ("action_id", "hitlag")
+            rows_to_lock.add(rec)
+            for ctl in controls:
+                rows_to_lock.add(int(ctl))
+
+        for rec in sorted(rows_to_lock):
+            assert rec >= 0, f"invalid negative control row: record={rec}"
+            assert int(samples.shape[0]) > rec, f"dataset too short for lock row: record={rec}"
+            _, ref, out = _run_one_step_row(dataset_path, rec, 0)
+            for p in (0, 1):
+                _assert_body_overlap_lock_fields_match_ref(out_row=out, ref_row=ref, record=rec, p=p)
