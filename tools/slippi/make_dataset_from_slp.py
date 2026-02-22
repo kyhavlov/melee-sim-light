@@ -523,6 +523,7 @@ def _derive_item_reflect_damage_mul(
 
     active_mul: dict[tuple[int, int], float] = {}
     active_owner: dict[tuple[int, int], int] = {}
+    active_instance_id: dict[tuple[int, int], int] = {}
     active_vel: dict[tuple[int, int], tuple[float, float]] = {}
 
     for fi in range(n_frames):
@@ -535,32 +536,39 @@ def _derive_item_reflect_damage_mul(
             keys_this_frame.add(key)
 
             owner = int(items_fixed[fi, slot]["owner"])
+            instance_id = int(items_fixed[fi, slot]["instance_id"])
             vel_x = float(items_fixed[fi, slot]["vel_x"])
             vel_y = float(items_fixed[fi, slot]["vel_y"])
             mul = float(active_mul.get(key, 1.0))
             prev_owner = int(active_owner.get(key, owner))
+            prev_instance_id = int(active_instance_id.get(key, instance_id))
             prev_vel_x, prev_vel_y = active_vel.get(key, (vel_x, vel_y))
 
             # Reflect-event observability:
             # - Owner transfer is a direct signal from Item_80269F14-style reflect apply.
-            # - Some replay rows preserve owner but still show the decomp reflect velocity inversion
-            #   (`it_2725_Logic94_Reflected` angle += pi), so also key on in-frame velocity reversal.
+            # - Even when owner does not change, reflect apply rewrites item->xDA8_short from the
+            #   reflecting fighter snapshot; Slippi exports this as item.instance_id.
+            #   refs/melee/src/melee/ft/ftcoll.c::ftColl_80077464
+            #   refs/melee/src/melee/it/item.c::Item_80269F14
             # refs/melee/src/melee/it/items/itfoxlaser.c::it_2725_Logic94_Reflected
             # refs/melee/src/melee/it/item.c::Item_80269F14
             owner_changed = owner != prev_owner
+            instance_transfer = instance_id != prev_instance_id
             prev_speed_sq = prev_vel_x * prev_vel_x + prev_vel_y * prev_vel_y
             cur_speed_sq = vel_x * vel_x + vel_y * vel_y
-            # TODO(reflect-observability): temporary replay-observability heuristic.
-            # Replace this same-owner velocity-reversal signal with a stricter extracted reflect
-            # event signal once available from extraction/decomp-backed artifacts.
+            # Tight fallback for replay rows where reflect apply is observable via direction flip
+            # but owner/xDA8 transfer is not visible in post-frame lanes at this key.
+            # refs/melee/src/melee/it/items/itfoxlaser.c::it_2725_Logic94_Reflected
             reversed_vel_same_owner = (
                 owner == prev_owner
+                and not instance_transfer
                 and prev_speed_sq > 1e-6
                 and cur_speed_sq > 1e-6
                 and (prev_vel_x * vel_x + prev_vel_y * vel_y) < 0.0
+                and abs(cur_speed_sq - prev_speed_sq) <= (0.25 * max(prev_speed_sq, cur_speed_sq))
             )
 
-            if (owner_changed or reversed_vel_same_owner) and 0 <= owner < int(num_players):
+            if (owner_changed or instance_transfer or reversed_vel_same_owner) and 0 <= owner < int(num_players):
                 act = int(post_action_id_u16[fi, owner])
                 flags3 = int(post_state_flags_u8[fi, owner, STATE_FLAGS_221C_INDEX])
                 if act == ACT_GUARD_REFLECT and (flags3 & STATE_FLAG_221C_POWERSHIELD_ACTIVE):
@@ -577,6 +585,7 @@ def _derive_item_reflect_damage_mul(
 
             active_mul[key] = float(mul)
             active_owner[key] = int(owner)
+            active_instance_id[key] = int(instance_id)
             active_vel[key] = (vel_x, vel_y)
             out[fi, slot] = np.float32(mul)
 
@@ -585,9 +594,58 @@ def _derive_item_reflect_damage_mul(
                 if key not in keys_this_frame:
                     del active_mul[key]
                     active_owner.pop(key, None)
+                    active_instance_id.pop(key, None)
                     active_vel.pop(key, None)
 
     return out
+
+
+def _derive_facing_dir1_sign(*, facing_u8: np.ndarray, action_id_u16: np.ndarray) -> np.ndarray:
+    """Derive fp->facing_dir1 as a strictly-causal signed lane.
+
+    Decomp:
+    - fp->facing_dir1 is copied from fp->facing_dir on Fighter_ChangeMotionState.
+      refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState
+    - Escape/root-motion helpers consume fp->facing_dir1.
+      refs/melee/src/melee/ft/ft_081B.c::ft_80085030
+    """
+    facing = np.asarray(facing_u8, dtype=np.uint8).reshape(-1)
+    action = np.asarray(action_id_u16, dtype=np.uint16).reshape(-1)
+    n = int(facing.shape[0])
+    if int(action.shape[0]) != n:
+        raise ValueError("facing_u8 and action_id_u16 must have same length")
+    out = np.zeros(n, dtype=np.int8)
+    prev_action = None
+    cur_sign = np.int8(1)
+    for i in range(n):
+        face_sign = np.int8(1 if int(facing[i]) != 0 else -1)
+        a = int(action[i])
+        if i == 0 or prev_action is None or a != prev_action:
+            cur_sign = face_sign
+        out[i] = cur_sign
+        prev_action = a
+    return out
+
+
+def _derive_kb_smashcharge_active_from_post(*, post) -> np.ndarray:
+    """Extract smash-charge active signal from replay post-frame when available.
+
+    Decomp consumer:
+    - ftCo_Damage_CalcKnockback applies kb_smashcharge_mul when
+      fp->smash_attrs.state == SmashState_Charging.
+      refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_CalcKnockback
+    """
+    candidates = (
+        "smash_charge",
+        "smash_charge_active",
+        "smash_charging",
+    )
+    for name in candidates:
+        if post.type.get_field_index(name) != -1:
+            lane = _to_numpy(post.field(name))
+            return (np.asarray(lane) != 0).astype(np.uint8)
+    # Slippi post schemas in current suite do not expose smash_attrs.state directly.
+    return np.zeros(len(post), dtype=np.uint8)
 
 
 def write_dataset_from_slp(
@@ -1088,6 +1146,18 @@ def _main_impl(args) -> None:
 
         samples["seed_t"]["facing"][:, slot] = post_dir[:-1]
         samples["ref_t1"]["facing"][:, slot] = post_dir[1:]
+        # fp->facing_dir1 seeded lane (signed).
+        samples["seed_t"]["facing_dir1"][:, slot] = _derive_facing_dir1_sign(
+            facing_u8=post_dir, action_id_u16=post_state
+        )[:-1]
+        # Ground friction multiplier lane used by grounded-KB decay.
+        # Decomp source is ft_GetGroundFrictionMultiplier(fp); Slippi currently exposes no direct
+        # post-frame lane for this value in-suite, so seed explicit default identity.
+        samples["seed_t"]["ground_friction_mul"][:, slot] = np.float32(1.0)
+        # Smash-charge gate lane (fp->smash_attrs.state == Charging) when present in schema.
+        samples["seed_t"]["kb_smashcharge_active"][:, slot] = _derive_kb_smashcharge_active_from_post(
+            post=post
+        )[:-1]
         samples["seed_t"]["on_ground"][:, slot] = post_on_ground[:-1]
         samples["ref_t1"]["on_ground"][:, slot] = post_on_ground[1:]
 

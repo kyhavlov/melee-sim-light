@@ -561,7 +561,8 @@ static inline float combat_damage_calc_kb_applied(
     const MslCommonParams* c, const MslCharParams* d, uint16_t defender_action_id,
     float defender_percent_pre, float defender_percent_temp, int hitbox_damage_i,
     uint16_t hitbox_kbg, uint16_t hitbox_wsk, uint16_t hitbox_bkb, float collision_kb_mul,
-    uint8_t defender_dmg_x2225_b7, uint8_t defender_dmg_x2224_b2) {
+    uint8_t defender_dmg_x2225_b7, uint8_t defender_dmg_x2224_b2,
+    uint8_t defender_kb_smashcharge_active) {
   if (c == NULL) {
     return 0.0f;
   }
@@ -713,10 +714,14 @@ static inline float combat_damage_calc_kb_applied(
   if (defender_action_id == (uint16_t)MSL_ACT_DAMAGE_ICE) {
     kb *= c->kb_ice_mul;
   }
-  // TODO(decomp): Apply kb_smashcharge_mul when we have a seedable signal for
-  // `fp->smash_attrs.state == SmashState_Charging`.
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_CalcKnockback
-  // Blocked: `smash_attrs.state` is not currently present in Slippi post-frames / seed schema.
+  // Seed/runtime lane scaffold (currently non-authoritative in replay preprocessing):
+  // - decomp applies kb_smashcharge_mul when fp->smash_attrs.state == SmashState_Charging.
+  //   refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_CalcKnockback
+  // - current Slippi suite schemas do not expose smash_attrs.state directly, so keep this lane
+  //   wired in seed/runtime but gameplay-neutral until an authoritative extracted signal is available.
+  // TODO(decomp/kb-smashcharge-lane): enable kb_smashcharge_mul consumption once replay-real source
+  // for SmashState_Charging is extracted and lock-tested.
+  (void)defender_kb_smashcharge_active;
 
   // Decomp: ftCo_Damage_CalcKnockback subtracts armor and clamps to kb_min. We do not model armor yet;
   // keep the kb_min clamp.
@@ -1169,7 +1174,8 @@ static inline void combat_mutations_pass1_future_apply_body_hit(MslBatch* batch,
   }
   const float kb_applied = combat_damage_calc_kb_applied(
       c, d_ch, d_motion_id, percent_pre, dmg_temp, int_dmg, hb_kbg, hb_wsk, hb_bkb, coll_kb_mul,
-      batch->state.dmg_x2225_b7[d_idx], batch->state.dmg_x2224_b2[d_idx]);
+      batch->state.dmg_x2225_b7[d_idx], batch->state.dmg_x2224_b2[d_idx],
+      batch->state.kb_smashcharge_active[d_idx]);
   const float kb_angle_rad =
       combat_damage_calc_angle_radians(c, hb_angle, defender_on_ground, kb_applied);
 
@@ -1484,7 +1490,8 @@ MslItemHitResult combat_apply_item_hit(MslBatch* batch, int batch_index, int att
 
   const float kb_applied = combat_damage_calc_kb_applied(
       c, d_ch, d_motion_id, percent_pre, dmg_temp, dmg_env_i, kbg, wsk, bkb, 1.0f,
-      batch->state.dmg_x2225_b7[d_idx], batch->state.dmg_x2224_b2[d_idx]);
+      batch->state.dmg_x2225_b7[d_idx], batch->state.dmg_x2224_b2[d_idx],
+      batch->state.kb_smashcharge_active[d_idx]);
   const float kb_angle_rad =
       combat_damage_calc_angle_radians(c, angle, defender_on_ground, kb_applied);
 
@@ -1630,7 +1637,8 @@ uint8_t combat_apply_throw_hit(MslBatch* batch, int batch_index, int attacker, i
 
   const float kb_applied = combat_damage_calc_kb_applied(
       c, d_ch, d_motion_id, percent_pre, dmg_temp, dmg_raw_i, p->kbg, p->wsk, p->bkb, coll_kb_mul,
-      batch->state.dmg_x2225_b7[d_idx], batch->state.dmg_x2224_b2[d_idx]);
+      batch->state.dmg_x2225_b7[d_idx], batch->state.dmg_x2224_b2[d_idx],
+      batch->state.kb_smashcharge_active[d_idx]);
   const float kb_angle_rad =
       combat_damage_calc_angle_radians(c, p->angle, defender_on_ground, kb_applied);
 

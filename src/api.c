@@ -312,6 +312,17 @@ int msl_batch_reseed_seed(MslBatch* batch, const uint8_t* seed_bytes, size_t see
       }
       batch->state.fighter_scale_y[idx] = scale_y;
       batch->state.facing[idx] = seed->facing[p] ? 1 : 0;
+      int8_t facing_dir1 = seed->facing_dir1[p];
+      if (facing_dir1 == 0) {
+        facing_dir1 = batch->state.facing[idx] ? (int8_t)1 : (int8_t)-1;
+      }
+      batch->state.facing_dir1[idx] = facing_dir1;
+      float ground_friction_mul = seed->ground_friction_mul[p];
+      if (!(ground_friction_mul > 0.0f)) {
+        ground_friction_mul = 1.0f;
+      }
+      batch->state.ground_friction_mul[idx] = ground_friction_mul;
+      batch->state.kb_smashcharge_active[idx] = seed->kb_smashcharge_active[p] ? 1u : 0u;
       batch->state.on_ground[idx] = seed->on_ground[p] ? 1 : 0;
       batch->state.ground_contact_x[idx] = 0.0f;
       batch->state.ground_contact_y[idx] = 0.0f;

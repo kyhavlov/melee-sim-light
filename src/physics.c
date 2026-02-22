@@ -158,16 +158,17 @@ static inline void physics_apply_knockback_decay(MslBatch* batch, size_t idx,
     // refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate
     // refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007CCA0
     //
-    // Temporary bridge: this runtime does not yet model/seed the owner lane consumed by
-    // ft_GetGroundFrictionMultiplier(fp), so ground knockback friction uses a unit multiplier.
+    // Ground friction multiplier lane ownership:
+    // - `ground_friction_mul` is a seeded/runtime lane mirroring ft_GetGroundFrictionMultiplier(fp).
+    // - For stale datasets/tests without this lane, reseed sanitizes non-positive values to 1.0f.
     // refs/melee/src/melee/ft/ft_081B.c::ft_GetGroundFrictionMultiplier
-    // TODO(decomp-ground-friction-mul): wire the owning lane and replace this implicit 1.0 bridge.
     const float nx = batch->state.ground_normal_x[idx];
     const float ny = batch->state.ground_normal_y[idx];
     const float tangent_x = ny;
     const float tangent_y = -nx;
     float ground_kb = kb_x * tangent_x + kb_y * tangent_y;
-    const float friction = ch->gr_friction * c->ground_kb_friction_mul;
+    const float friction =
+        batch->state.ground_friction_mul[idx] * ch->gr_friction * c->ground_kb_friction_mul;
 
     if (ground_kb < 0.0f) {
       ground_kb += friction;
@@ -773,30 +774,18 @@ void physics_integrate(MslBatch* batch) {
             if (physics_try_get_transn_delta_xyz(ch, batch->state.char_id[idx],
                                                  batch->state.animation_index[idx],
                                                  batch->state.anim_frame_f32[idx], dxyz)) {
-              float facing_dir_roll = facing_dir;
-              // Decomp branch ownership:
-              // - ftCo_Escape_Phys -> ft_80085004 -> ft_80085030 uses fp->facing_dir1.
-              // - Escape_Anim can flip fp->facing_dir via throw-flag b3 while fp->facing_dir1
-              //   remains the roll-motion lane.
-              // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Escape.c::{
-              //   ftCo_Escape_Phys,ftCo_Escape_Anim
-              // }
-              // refs/melee/src/melee/ft/ft_081B.c::{ft_80085004,ft_80085030}
-              //
-              // Bridge lane (explicit): this sim does not currently seed fp->facing_dir1.
-              // Use the decomp identity from ft_80085030 root-motion (`gr_vel ~= transN.z *
-              // facing_dir1`) to reconstruct sign only when both terms are non-zero; otherwise
-              // fall back to seeded facing_dir.
-              // TODO(decomp-seed): promote facing_dir1 as an explicit seeded/runtime lane and
-              // remove this sign-reconstruction bridge once that lane is available.
-              const float transn_z = dxyz[2];
-              if (msl_absf(transn_z) > 0.0f && msl_absf(gr_vel) > 0.0f) {
-                facing_dir_roll = (gr_vel / transn_z) >= 0.0f ? 1.0f : -1.0f;
+              float facing_dir_roll = (batch->state.facing_dir1[idx] < 0) ? -1.0f : 1.0f;
+              // Motion-state entry ownership:
+              // - Fighter_ChangeMotionState copies facing_dir -> facing_dir1.
+              // - If Escape* was entered this frame, match that reset by using current facing.
+              // refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState
+              if (action_id != prev_action_id) {
+                facing_dir_roll = facing_dir;
               }
               // Decomp: ft_80085030 "drive to TransN vel" via xE4 = transN_vel - gr_vel.
               // Setting gr_vel directly is equivalent after applying the accel step.
               // refs/melee/src/melee/ft/ft_081B.c::ft_80085030
-              gr_vel = transn_z * facing_dir_roll;
+              gr_vel = dxyz[2] * facing_dir_roll;
             } else {
               // Decomp: ft_80085030 applies ftCommon_ApplyFrictionGround when not root-motion.
               // refs/melee/src/melee/ft/ftcommon.c::ftCommon_ApplyFrictionGround

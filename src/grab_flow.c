@@ -429,12 +429,12 @@ static inline uint8_t enter_throw_from_wait(MslBatch* batch, int bi, int owner_p
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DD398
   msl_anim_timebase_tick_once(batch, oidx);
 
-  // TODO(slice2-throw-attachment): state-machine parity here is improved (CatchWait->Throw* and
-  // victim CaptureWait->Thrown*), but positional attachment/throw offsets are still approximate.
-  // Current suite max pos offenders on otherwise action-id-correct throw-entry chains include:
-  // - GracefulAttachedTurtle.msl record 2507 (p0),
-  // - QuerulousGrandDinosaur.msl record 9138 (p0).
-  // Keep this transition logic and attachment kinematics work separated in future slices.
+  // Throw-entry state-machine ownership and attachment handoff:
+  // - CatchWait->Throw* and CaptureWait/Pulled->Thrown* transitions are owned here.
+  // - Positional attachment offsets are computed by grab_attachment_recompute_offsets_for_thrown_entry
+  //   with ftCo_800DE508-shaped axis/scaling semantics.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DD398
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Thrown.c::{ftCo_800DE3FC,ftCo_800DE508}
   batch->state.action_id[vidx] = thrown_action;
   batch->state.animation_index[vidx] = victim_sm;
   // Decomp: Thrown entry copies victim facing from thrower before installing/accessing the

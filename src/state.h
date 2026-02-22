@@ -57,6 +57,12 @@ typedef struct MslStateSoA {
   // various collision/visual calculations; default is 1.0 in normal matches.
   float* fighter_scale_y;
   uint8_t* facing;
+  // Motion-state facing lane (decomp: fp->facing_dir1).
+  int8_t* facing_dir1;
+  // Grounded knockback friction multiplier lane (decomp: ft_GetGroundFrictionMultiplier(fp)).
+  float* ground_friction_mul;
+  // Smash charge lane (decomp: fp->smash_attrs.state == SmashState_Charging).
+  uint8_t* kb_smashcharge_active;
   uint8_t* on_ground;
   uint8_t* prev_on_ground;  // on_ground value before stage_collision_apply().
   // Collision contact metadata owned by mpColl ground contact substrate.

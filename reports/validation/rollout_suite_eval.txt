@@ -8,7 +8,7 @@
 # preprocess_suite stamp:
 #   path: datasets/fox_falco_fd_ucf084_recent/.preprocess_meta.json
 #   force_used: True  built: 4  skipped: 0
-#   seed_dtype_itemsize: 2185  sample_dtype_itemsize: 3271
+#   seed_dtype_itemsize: 2208  sample_dtype_itemsize: 3294
 #
 # Regenerate gitignored ISO-derived data artifacts (if missing/stale):
 # - Opcode-25 airborne-state timelines (data/airborne_state_events/{fox,falco}.bin):
@@ -29,12 +29,12 @@ fields: action_id,animation_index,on_ground,hitlag,hitstun,state_flags
 
 == datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl ==
 rollout.best_len: 111
-rollout.streak_count: 255
+rollout.streak_count: 256
 rollout.streak_len.median: 21
 rollout.streak_len.p90: 67
 rollout.streak_len.p95: 90
 rollout.streak_len.max: 111
-rollout.first_mismatch_total: 257
+rollout.first_mismatch_total: 258
 rollout.first_mismatch_seeded_total: 127
 
 == datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl ==
@@ -68,11 +68,11 @@ rollout.first_mismatch_total: 274
 rollout.first_mismatch_seeded_total: 136
 
 == suite summary ==
-overall.rollout.streak_count: 1220
+overall.rollout.streak_count: 1221
 overall.rollout.streak_len.median: 21
 overall.rollout.streak_len.p90: 67
 overall.rollout.streak_len.p95: 89
 overall.rollout.streak_len.max: 172
 overall.rollout.best_len.max: 172
-overall.rollout.first_mismatch_total: 1232
+overall.rollout.first_mismatch_total: 1233
 overall.rollout.first_mismatch_seeded_total: 628

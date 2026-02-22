@@ -321,7 +321,7 @@ void grab_attachment_recompute_offsets_for_thrown_entry(MslBatch* batch, int bat
   }
 
   const size_t vidx = msl_idx_player(batch_index, victim_p);
-  const float scale_y = batch->state.fighter_scale_y[vidx];
+  const float scale_y = pose_model_scale_y(batch, vidx);
   if (!(scale_y > 0.0f)) {
     return;
   }
@@ -371,7 +371,7 @@ void grab_attachment_reseed_init(MslBatch* batch, int batch_index) {
     grabbed_victim_anchor_world(&ax, &ay, &az, batch, batch_index, p, (int)owner);
     (void)az;
 
-    const float scale_y = batch->state.fighter_scale_y[vidx];
+    const float scale_y = pose_model_scale_y(batch, vidx);
     if (!(scale_y > 0.0f)) {
       continue;
     }
@@ -421,7 +421,7 @@ void grab_attachment_update_post_collision(MslBatch* batch) {
         grabbed_victim_anchor_world(&ax, &ay, &az, batch, bi, p, (int)owner);
         (void)az;
 
-        const float scale_y = batch->state.fighter_scale_y[vidx];
+        const float scale_y = pose_model_scale_y(batch, vidx);
         if (!(scale_y > 0.0f)) {
           continue;
         }

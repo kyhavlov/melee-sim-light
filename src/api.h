@@ -133,9 +133,34 @@ typedef struct MslSeed {
   // (player.model_scale), but legacy datasets may still default it to 1.0.
   float fighter_scale_y[MSL_MAX_PLAYERS];
 
-  uint8_t facing[MSL_MAX_PLAYERS];     // 0/1
+  uint8_t facing[MSL_MAX_PLAYERS];  // 0/1
+  // Motion-state facing lane (decomp: fp->facing_dir1).
+  //
+  // Decomp:
+  // - Fighter_UnkInitReset and Fighter_ChangeMotionState copy fp->facing_dir into fp->facing_dir1.
+  //   refs/melee/src/melee/ft/fighter.c::{Fighter_UnkInitReset_80067C98,Fighter_ChangeMotionState}
+  // - Escape/roll root-motion helper ft_80085030 consumes fp->facing_dir1.
+  //   refs/melee/src/melee/ft/ft_081B.c::ft_80085030
+  //
+  // Seed representation:
+  // - Signed lane in {-1,+1}; 0 is treated as invalid and sanitized to sign(facing) at reseed.
+  int8_t facing_dir1[MSL_MAX_PLAYERS];
+  // Ground friction multiplier lane consumed by grounded knockback decay.
+  //
+  // Decomp:
+  // - Fighter_procUpdate grounded-KB decay uses:
+  //     ft_GetGroundFrictionMultiplier(fp) * fp->co_attrs.gr_friction * p_ftCommonData->x200
+  //   refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate
+  //   refs/melee/src/melee/ft/ft_081B.c::ft_GetGroundFrictionMultiplier
+  //
+  // Seed representation:
+  // - Positive scalar; non-positive values are sanitized to 1.0f at reseed.
+  float ground_friction_mul[MSL_MAX_PLAYERS];
+  // Smash-charge knockback multiplier gate (decomp: fp->smash_attrs.state == SmashState_Charging).
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_CalcKnockback
+  uint8_t kb_smashcharge_active[MSL_MAX_PLAYERS];
   uint8_t on_ground[MSL_MAX_PLAYERS];  // 0/1
-  uint8_t _pad1[2];
+  uint8_t _pad1[1];
 
   // State machine
   uint16_t action_id[MSL_MAX_PLAYERS];    // GALE01 action id
