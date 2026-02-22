@@ -1316,8 +1316,7 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
           // sharing combat_is_powershield_active_idx().
           const uint8_t can_powershield_reflect =
               combat_is_powershield_active_idx(batch, d_idx) ? 1u : 0u;
-          if (batch->state.action_id[d_idx] == (uint16_t)MSL_ACT_GUARD_REFLECT &&
-              can_powershield_reflect) {
+          if (can_powershield_reflect) {
             batch->state.item_owner[ii] = (int8_t)def;
             // Decomp reflect snapshot ownership:
             // - GuardReflect builds ReflectDesc.damage_mul from ftCommonData->x2AC.
