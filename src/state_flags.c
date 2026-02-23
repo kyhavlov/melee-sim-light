@@ -207,6 +207,23 @@ void state_flags_refresh_post_frame(MslBatch* batch) {
           f2218 &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_2218_ALLOW_INTERRUPT;
         }
       }
+      // AttackDash exit ownership bridge for fp+0x2218 bit0 (0x80):
+      // - ftCo_AttackDash_IASA runs ftCo_800D8AE0, then delegates to Wait_IASA family checks.
+      // - Those checks can consume into Squat/GuardOn on the same frame.
+      // - In decomp, fp+0x2218 is command-owned (ftAction_80071950); replay rows in these
+      //   transitions expose bit0x80 set on the destination frame, while this simulator does not
+      //   yet run full command ownership for non-Attack* destinations.
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackDash.c::ftCo_AttackDash_IASA
+      // refs/melee/build/GALE01/asm/melee/ft/chara/ftCommon/ftCo_Attack100.s::ftCo_800D8AE0
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
+      // refs/melee/src/melee/ft/ftaction.c::ftAction_80071950
+      const uint16_t prev_action_2218 = batch->state.prev_action_id[idx];
+      if ((state_flags_2218_allow_interrupt_grounded_attack_action(prev_action_2218) &&
+           action_id == (uint16_t)MSL_ACT_SQUAT && action_frame_i <= 1) ||
+          (prev_action_2218 == (uint16_t)MSL_ACT_ATTACK_DASH &&
+           action_id == (uint16_t)MSL_ACT_GUARD_ON && action_frame_i <= 0)) {
+        f2218 |= (uint8_t)MSL_STATE_FLAG_2218_ALLOW_INTERRUPT;
+      }
       batch->state.state_flags[flags_2218_i] = f2218;
 
       // 0x221A: HasIntangOrInvinc + isFastFalling.
