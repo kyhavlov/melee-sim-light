@@ -822,7 +822,8 @@ typedef enum MslLaserCollisionSpaceLane {
 static inline float laser_collision_offset_scale(const MslLaserParams* lp, uint8_t laser_state,
                                                  float laser_scale_z,
                                                  MslLaserCollisionSpaceLane lane,
-                                                 uint8_t body_shield_adjacent) {
+                                                 uint8_t body_shield_adjacent,
+                                                 uint8_t shield_cap_enabled) {
   (void)lp;
   (void)laser_state;
   // Collision-space policy (decomp/data-owned, shared ownership lanes):
@@ -857,7 +858,7 @@ static inline float laser_collision_offset_scale(const MslLaserParams* lp, uint8
   // refs/melee/src/melee/lb/lbcollision.c::lbColl_80007BCC
   if ((lane == MSL_LASER_COLLISION_SPACE_SHIELD ||
        (lane == MSL_LASER_COLLISION_SPACE_BODY && body_shield_adjacent)) &&
-      s > 1.0f) {
+      shield_cap_enabled && s > 1.0f) {
     s = 1.0f;
   }
   return s;
@@ -1362,6 +1363,13 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
              batch->state.hitlag[d_idx] == 0u && batch->state.hitstun[d_idx] == 0u)
                 ? 1u
                 : 0u;
+        const uint8_t defender_guard_reflect_no_submotion_snapshot =
+            (batch->state.action_id[d_idx] == (uint16_t)MSL_ACT_GUARD_REFLECT &&
+             batch->state.action_frame[d_idx] < 0 &&
+             batch->state.animation_index[d_idx] == 0xFFFFFFFFu &&
+             batch->state.hitlag[d_idx] == 0u && batch->state.hitstun[d_idx] == 0u)
+                ? 1u
+                : 0u;
         float probe_lerp = 1.0f;
         if (defender_no_submotion_snapshot) {
           // Apply the no-submotion rule above: overlap probe uses prev_pos, not cur_pos.
@@ -1375,26 +1383,47 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
 
         const uint8_t off_n =
             (laser_state == 0u) ? lp->hitbox_offsets_x_count : lp->state1_hitbox_offsets_x_count;
+        // Decomp consumes one shared scaleZ transform chain for laser collision spaces
+        // (shield/body/reflect) via item collision callbacks. Keep the narrowed shield cap off for
+        // GuardReflect no-submotion snapshots and use the shared scale lane directly there.
+        // refs/melee/src/melee/it/items/itfoxlaser.c::{itFoxlaser_UnkMotion1_Anim,it_8029C4D4}
+        // refs/melee/src/melee/it/itcoll.c::it_8027137C
+        const uint8_t shield_cap_enabled = defender_guard_reflect_no_submotion_snapshot ? 0u : 1u;
         const float laser_offset_scale =
             laser_collision_offset_scale(lp, laser_state, laser_scale_z,
-                                         MSL_LASER_COLLISION_SPACE_SHIELD, 0u);
+                                         MSL_LASER_COLLISION_SPACE_SHIELD, 0u,
+                                         shield_cap_enabled);
         for (uint8_t oi = 0; oi < off_n && oi < (uint8_t)MSL_LASER_MAX_HITBOX_OFFS_X && !shield_hit;
              oi++) {
           const float off_x =
               (laser_state == 0u) ? lp->hitbox_offsets_x[oi] : lp->state1_hitbox_offsets_x[oi];
           const float s = off_x * laser_offset_scale;
+          const float sx0 = x0 + (ux * s);
+          const float sy0 = y0 + (uy * s);
           const float sx = shield_probe_x + (ux * s);
           const float sy = shield_probe_y + (uy * s);
-          // Decomp (GALE01): shield overlap uses 3D collision (z is not ignored).
+          // Decomp (GALE01): shield overlap uses 3D collision (z is not ignored), and item
+          // collision callbacks consume prev->cur segment ownership (`it_8029C4D4`).
           // refs/melee/src/melee/ft/ftcoll.c::ftColl_80076CBC (lbColl_80007BCC(..., cur_pos.z))
-          if (item_sphere_sphere_intersects_3d(sx, sy, 0.0f, sr, shx, shy, shz, shr)) {
+          // refs/melee/src/melee/it/items/itfoxlaser.c::it_8029C4D4
+          if (defender_guard_reflect_no_submotion_snapshot) {
+            if (item_swept_sphere_sphere_intersects_3d(sx0, sy0, 0.0f, sx, sy, 0.0f, sr, shx, shy,
+                                                       shz, shr)) {
+              shield_hit = 1;
+            }
+          } else if (item_sphere_sphere_intersects_3d(sx, sy, 0.0f, sr, shx, shy, shz, shr)) {
             shield_hit = 1;
           }
         }
         // If no scripted offsets exist, fall back to the projectile origin.
         if (!shield_hit && off_n == 0) {
-          shield_hit = item_sphere_sphere_intersects_3d(shield_probe_x, shield_probe_y, 0.0f, sr,
-                                                        shx, shy, shz, shr);
+          if (defender_guard_reflect_no_submotion_snapshot) {
+            shield_hit = item_swept_sphere_sphere_intersects_3d(
+                x0, y0, 0.0f, shield_probe_x, shield_probe_y, 0.0f, sr, shx, shy, shz, shr);
+          } else {
+            shield_hit = item_sphere_sphere_intersects_3d(shield_probe_x, shield_probe_y, 0.0f, sr,
+                                                          shx, shy, shz, shr);
+          }
         }
 
         if (shield_hit) {
@@ -1502,7 +1531,7 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
                 (laser_state == 0u) ? lp->hitbox_offsets_x[oi] : lp->state1_hitbox_offsets_x[oi];
             const float s =
                 off_x * laser_collision_offset_scale(lp, laser_state, laser_scale_z,
-                                                     MSL_LASER_COLLISION_SPACE_REFLECT, 0u);
+                                                     MSL_LASER_COLLISION_SPACE_REFLECT, 0u, 1u);
             const float sx = x + (ux * s);
             const float sy = y + (uy * s);
             if (item_sphere_sphere_intersects_2d(sx, sy, sr, rx, ry, rr)) {
@@ -1535,7 +1564,7 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
       const uint8_t body_shield_adjacent = (batch->state.shield_radius[d_idx] > 0.0f) ? 1u : 0u;
       const float laser_offset_scale =
           laser_collision_offset_scale(lp, laser_state, laser_scale_z,
-                                       MSL_LASER_COLLISION_SPACE_BODY, body_shield_adjacent);
+                                       MSL_LASER_COLLISION_SPACE_BODY, body_shield_adjacent, 1u);
       // Laser BODY overlap parity:
       // - Decomp computes collision over projectile travel in-frame (prev_pos -> cur_pos), so a
       //   current-point-only probe can miss replay-causal same-frame hits.

@@ -58,7 +58,8 @@ static inline void enter_catch_wait_from_attack(MslBatch* batch, size_t oidx) {
   msl_anim_timebase_enter(batch, oidx, 0.0f, 1.0f);
 }
 
-static inline void enter_capture_wait_from_pulled(MslBatch* batch, size_t vidx) {
+static inline void enter_capture_wait_from_pulled(MslBatch* batch, int owner_p, int victim_p,
+                                                  size_t vidx) {
   const float pulled_anim_frame = msl_anim_frame_sanitize_f32(batch->state.anim_frame_f32[vidx]);
   const uint16_t pulled_hitlag = batch->state.hitlag[vidx];
   const uint16_t pulled_hitstun = batch->state.hitstun[vidx];
@@ -80,18 +81,21 @@ static inline void enter_capture_wait_from_pulled(MslBatch* batch, size_t vidx) 
   // fn_800DB790/fn_800DBAE4 (Fighter_ChangeMotionState) with no local ftAnim_8006EBA4.
   // refs/melee/build/GALE01/asm/melee/ft/chara/ftCommon/ftCo_Attack100.s::{fn_800DB6C8,fn_800DB790,fn_800DBAE4}
   msl_anim_timebase_enter(batch, vidx, 0.0f, 1.0f);
-  // Seed bridge (Slippi snapshot parity only): when CatchPull_Anim triggers fn_800DA1D8 and that
-  // path immediately enters victim CaptureWait via fn_800DB6C8, replay samples can observe
-  // CaptureWait action_frame==1 on this same frame. We apply one local tick here to preserve that
-  // snapshot shape; this is not a generic gameplay rule for CaptureWait entry.
-  // Decomp enter/tick path being approximated:
-  // - owner callback: ftCo_CatchPull_Anim -> fn_800DA1D8
-  // - victim callback: fn_800DB6C8 -> fn_800DB790/fn_800DBAE4
-  // refs/melee/build/GALE01/asm/melee/ft/chara/ftCommon/ftCo_Attack100.s::{ftCo_CatchPull_Anim,fn_800DA1D8,fn_800DB6C8,fn_800DB790,fn_800DBAE4}
-  // Hard scope gate:
-  // - only on non-hitlag/non-hitstun pulled->wait handoff frames
-  // - only when pulled motion had advanced to at least frame 1 before the handoff.
-  if (pulled_anim_frame >= 1.0f && pulled_hitlag == 0u && pulled_hitstun == 0u) {
+  // Decomp call shape for this lane is "ChangeMotionState only" (no local ftAnim_8006EBA4):
+  // - fn_800DB6C8 dispatches to fn_800DB790/fn_800DBAE4,
+  // - each helper calls Fighter_ChangeMotionState(..., anim_start=0.0f, anim_speed=1.0f),
+  // - neither helper performs an immediate local tick after entry.
+  // refs/melee/build/GALE01/asm/melee/ft/chara/ftCommon/ftCo_Attack100.s::{fn_800DB6C8,fn_800DB790,fn_800DBAE4}
+  //
+  // Runtime ordering parity for one-step:
+  // - owner CatchPull callback can force victim CaptureWait entry in the same frame,
+  // - victim may still receive that frame's Fighter_8006A360 anim tick if victim callback order
+  //   runs after owner callback.
+  // Mirror this by applying one entry-frame tick only when owner slot precedes victim slot.
+  // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
+  // refs/melee/build/GALE01/asm/melee/ft/chara/ftCommon/ftCo_Attack100.s::{ftCo_CatchPull_Anim,fn_800DA1D8,fn_800DB6C8}
+  if (owner_p < victim_p && pulled_hitlag == 0u && pulled_hitstun == 0u &&
+      pulled_anim_frame >= 1.0f) {
     msl_anim_timebase_tick_once(batch, vidx);
   }
 }
@@ -653,7 +657,7 @@ void grab_flow_update_pre_physics(MslBatch* batch) {
             if ((int)batch->state.grab_owner_port[vidx] != owner_p) {
               continue;
             }
-            enter_capture_wait_from_pulled(batch, vidx);
+            enter_capture_wait_from_pulled(batch, owner_p, victim_p, vidx);
           }
           oa = batch->state.action_id[oidx];
         }

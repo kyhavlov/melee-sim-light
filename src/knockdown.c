@@ -13,6 +13,7 @@
 #include "char_params.h"
 #include "common_params.h"
 #include "input_axis.h"
+#include "jump_input.h"
 #include "msl_math.h"
 #include "state_flags.h"
 
@@ -241,6 +242,45 @@ static inline uint8_t damage_jump_input_from_edges(const MslBatch* batch, const 
   const float stick_y =
       apply_deadzone(stick_i8_to_unit(batch->state.input_main_y[idx]), c->lstick_deadzone_y);
   return did_tap_jump(c, stick_y, batch->state.tilt_timer_y[idx]);
+}
+
+static inline uint8_t damage_ground_try_enter_kneebend_from_wait_iasa(MslBatch* batch,
+                                                                       const MslCommonParams* c,
+                                                                       size_t idx) {
+  if (batch == NULL || c == NULL) {
+    return 0u;
+  }
+
+  // Decomp call chain:
+  // - ftCo_Damage_IASA: when !x221C_b6 and grounded, delegates to ftCo_Wait_IASA.
+  // - Before that delegate, it ORs XY when (mv.co.damage.x14 && x14 <= p_ftCommonData->x1D0).
+  // - ftCo_Wait_IASA then reaches ftCo_Jump_CheckInput -> ftCo_Jump_GetInput ->
+  //   ftCo_KneeBend_Enter.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_IASA
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c::{ftCo_Jump_CheckInput,ftCo_Jump_GetInput}
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_KneeBend.c::ftCo_KneeBend_Enter
+  uint8_t jump_input = (uint8_t)MSL_JUMP_INPUT_NONE;
+  const uint16_t x14 = batch->state.damage_jump_buffer_x14[idx];
+  if (x14 != 0u && (float)x14 <= c->damage_jump_buffer_window_frames) {
+    jump_input = (uint8_t)MSL_JUMP_INPUT_XY;
+  } else if (damage_jump_input_from_edges(batch, c, idx)) {
+    const float stick_y =
+        apply_deadzone(stick_i8_to_unit(batch->state.input_main_y[idx]), c->lstick_deadzone_y);
+    const uint8_t tap_jump = did_tap_jump(c, stick_y, batch->state.tilt_timer_y[idx]);
+    jump_input =
+        tap_jump ? (uint8_t)MSL_JUMP_INPUT_LSTICK : (uint8_t)MSL_JUMP_INPUT_XY;
+  }
+  if (jump_input == (uint8_t)MSL_JUMP_INPUT_NONE) {
+    return 0u;
+  }
+
+  batch->state.action_id[idx] = (uint16_t)MSL_ACT_KNEE_BEND;
+  batch->state.animation_index[idx] = (uint32_t)MSL_SM_KNEE_BEND;
+  msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+  batch->state.kneebend_jump_input[idx] = jump_input;
+  batch->state.kneebend_is_short_hop[idx] = 0u;
+  return 1u;
 }
 
 static inline uint8_t damage_air_try_jump_aerial(MslBatch* batch, const MslCommonParams* c,
@@ -675,6 +715,9 @@ void knockdown_update_pre_physics(MslBatch* batch) {
           // Wait_IASA subset used by current sim coverage: guard entry.
           guard_update_grounded(batch, c, idx, 1);
           if (batch->state.action_id[idx] != a0) {
+            continue;
+          }
+          if (damage_ground_try_enter_kneebend_from_wait_iasa(batch, c, idx)) {
             continue;
           }
         }

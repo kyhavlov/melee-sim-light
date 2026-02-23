@@ -336,6 +336,34 @@ static inline uint8_t combat_is_guard_reflect_frozen_snapshot_idx(const MslBatch
   return (batch->state.action_frame[idx] <= MSL_GUARD_REFLECT_FROZEN_ACTION_FRAME_MAX) ? 1u : 0u;
 }
 
+static inline uint8_t combat_shield_damage_powershield_suppressed_idx(const MslBatch* batch,
+                                                                      size_t idx) {
+  if (batch == NULL) {
+    return 0u;
+  }
+  uint8_t powershield_active = combat_is_powershield_active_idx(batch, idx);
+  if (!powershield_active) {
+    return 0u;
+  }
+  // GuardReflect frozen snapshot ownership split:
+  // - ftColl_80076CBC shield-damage accumulation reads fp->x221C_b2, but callback ownership for
+  //   active reflect window expiration is in GuardReflect_Anim (ftCo_80093BC0, x14 lane).
+  // - In no-submotion frozen snapshots, x18 can remain non-zero while x14 is already expired.
+  // - For shield-damage accumulation only (GuardSetOff/hitlag ownership), suppress powershield
+  //   gating in this narrow lane; item reflect ownership continues to use
+  //   combat_is_powershield_active_idx().
+  // refs/melee/src/melee/ft/ftcoll.c::ftColl_80076CBC
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_GuardReflect_Anim,ftCo_80093BC0}
+  if (batch->state.action_id[idx] == (uint16_t)MSL_ACT_GUARD_REFLECT &&
+      combat_is_guard_reflect_frozen_snapshot_idx(batch, idx) &&
+      batch->state.animation_index[idx] == UINT32_MAX &&
+      batch->state.guard_reflect_timer_x14[idx] == 0u &&
+      batch->state.guard_reflect_timer_x18[idx] != 0u) {
+    powershield_active = 0u;
+  }
+  return powershield_active;
+}
+
 uint8_t combat_is_powershield_active_idx(const MslBatch* batch, size_t idx) {
   if (batch == NULL) {
     return 0;
@@ -1873,15 +1901,17 @@ void combat_apply_item_shield_hit(MslBatch* batch, int batch_index, int attacker
     return;
   }
 
-  // Powershield active flag: items are reflected elsewhere (items.c); do not apply shield HP /
-  // GuardSetOff / hitlag here.
+  // Decomp: powershield-active (`fp->x221C_b2`) gates only shieldDamageTaken accumulation, not
+  // the full shield-hit path (x19A4/x1924 max-int lanes still drive GuardSetOff/hitlag in
+  // Fighter_ProcessHit_8006D1EC).
   // refs/melee/src/melee/ft/ftcoll.c::ftColl_80076CBC
-  if (combat_is_powershield_active_idx(batch, d_idx)) {
-    return;
-  }
-
-  const int shield_damage_taken =
+  // refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
+  const uint8_t powershield_active = combat_shield_damage_powershield_suppressed_idx(batch, d_idx);
+  int shield_damage_taken =
       (int_dmg + (int)hitbox_shield_damage > 0) ? (int_dmg + (int)hitbox_shield_damage) : 0;
+  if (powershield_active) {
+    shield_damage_taken = 0;
+  }
 
   const float light =
       combat_lightshield_amount(c, batch->state.input_buttons[d_idx], batch->state.input_l[d_idx],
@@ -1971,7 +2001,8 @@ static inline void combat_mutations_pass1_future_apply_shield_hit(MslBatch* batc
   // Powershield gating: collision does not accumulate shieldDamageTaken when the "powershield
   // active" flag is set (x221C_b2).
   // refs/melee/src/melee/ft/ftcoll.c::ftColl_80076CBC (`if (!fp1->x221C_b2) { ...shieldDamageTaken... }`)
-  if (combat_is_powershield_active_idx(batch, d_idx)) {
+  uint8_t powershield_active = combat_shield_damage_powershield_suppressed_idx(batch, d_idx);
+  if (powershield_active) {
     shield_damage_taken = 0;
   }
 

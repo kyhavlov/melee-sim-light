@@ -193,6 +193,243 @@ def _assert_throw_release_action_anim_match_ref(
         assert got == exp, f"record={record} p={p} field={field} expected={exp} got={got}"
 
 
+def _assert_transition_lock_fields_match_ref(*, out_row: np.void, ref_row: np.void, record: int, p: int) -> None:
+    for field in ("action_id", "action_frame", "animation_index", "hitlag", "hitstun", "instance_id"):
+        got = int(out_row[field][p])
+        exp = int(ref_row[field][p])
+        assert got == exp, f"record={record} p={p} field={field} expected={exp} got={got}"
+    got_sf = out_row["state_flags"][p].tolist()
+    exp_sf = ref_row["state_flags"][p].tolist()
+    assert got_sf == exp_sf, f"record={record} p={p} field=state_flags expected={exp_sf} got={got_sf}"
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    ("dataset_rel", "record", "p", "seed_action", "ref_action"),
+    [
+        # Fixed family (A-vs-B): grounded Damage* -> KneeBend enter ownership.
+        # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_IASA
+        # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
+        # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c::ftCo_Jump_CheckInput
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl",
+            329,
+            0,
+            79,
+            24,
+        ),
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl",
+            161,
+            0,
+            78,
+            24,
+        ),
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/QuerulousGrandDinosaur.msl",
+            129,
+            1,
+            75,
+            24,
+        ),
+        # Adjacent controls (same local transition window, strict replay parity).
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl",
+            328,
+            0,
+            79,
+            79,
+        ),
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl",
+            330,
+            0,
+            24,
+            24,
+        ),
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl",
+            160,
+            0,
+            78,
+            78,
+        ),
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl",
+            162,
+            0,
+            24,
+            24,
+        ),
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/QuerulousGrandDinosaur.msl",
+            128,
+            1,
+            75,
+            75,
+        ),
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/QuerulousGrandDinosaur.msl",
+            130,
+            1,
+            24,
+            90,
+        ),
+    ],
+)
+def test_damage_ground_to_kneebend_transition_rows_and_adjacent_controls_are_replay_exact(
+    dataset_rel: str,
+    record: int,
+    p: int,
+    seed_action: int,
+    ref_action: int,
+) -> None:
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    seed_row, ref_row, out_row = _run_one_step_row(dataset_path, record, p)
+    assert int(seed_row["action_id"][p]) == int(seed_action)
+    assert int(ref_row["action_id"][p]) == int(ref_action)
+    _assert_transition_lock_fields_match_ref(out_row=out_row, ref_row=ref_row, record=record, p=p)
+
+
+@pytest.mark.integration
+def test_guardreflect_frozen_powershield_shield_damage_rows_and_adjacent_controls_are_replay_exact() -> None:
+    # Lock family for src/combat.c:339 lane:
+    # GuardReflect frozen no-submotion snapshot with x14 expired and x18 still set, where
+    # shieldDamageTaken suppression must be disabled for GuardSetOff/hitlag ownership parity.
+    #
+    # Decomp refs:
+    # - refs/melee/src/melee/ft/ftcoll.c::ftColl_80076CBC
+    # - refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_GuardReflect_Anim,ftCo_80093BC0}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_rel = (
+        "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl"
+    )
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    # target-1, target, target+1
+    rows = (115, 116, 117)
+    target = 116
+    p_target = 1
+
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+    for rec in rows:
+        assert int(samples.shape[0]) > rec, f"dataset too short for lock row: record={rec}"
+
+    seed_t = samples["seed_t"][target]
+    ref_t1 = samples["ref_t1"][target]
+    assert int(seed_t["action_id"][p_target]) == 0x00B6  # GuardReflect
+    assert int(seed_t["action_frame"][p_target]) <= -2
+    assert int(seed_t["animation_index"][p_target]) == 0xFFFFFFFF
+    assert int(seed_t["guard_reflect_timer_x14"][p_target]) == 0
+    assert int(seed_t["guard_reflect_timer_x18"][p_target]) == 1
+    assert int(ref_t1["action_id"][p_target]) == 0x00B5  # GuardSetOff
+    assert int(ref_t1["hitlag"][p_target]) > 0
+
+    for rec in rows:
+        _, ref_row, out_row = _run_one_step_row(dataset_path, rec, p_target)
+        for p in (0, 1):
+            _assert_transition_lock_fields_match_ref(out_row=out_row, ref_row=ref_row, record=rec, p=p)
+
+
+@pytest.mark.integration
+def test_catchpull_capturewait_owner_before_victim_tick_rows_and_adjacent_controls_are_replay_exact() -> None:
+    # Lock family for src/grab_flow.c:61 lane:
+    # CatchPull owner callback forces victim CaptureWait entry; victim receives one local anim tick
+    # only when owner port < victim port, matching callback/tick ordering.
+    #
+    # Decomp refs:
+    # - refs/melee/build/GALE01/asm/melee/ft/chara/ftCommon/ftCo_Attack100.s::{
+    #     ftCo_CatchPull_Anim,fn_800DA1D8,fn_800DB6C8,fn_800DB790,fn_800DBAE4}
+    # - refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_rel = (
+        "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl"
+    )
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    # target-1, target, target+1
+    rows = (219, 220, 221)
+    target = 220
+    p_target = 1
+
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+    for rec in rows:
+        assert int(samples.shape[0]) > rec, f"dataset too short for lock row: record={rec}"
+
+    seed_t = samples["seed_t"][target]
+    ref_t1 = samples["ref_t1"][target]
+    assert int(seed_t["grab_owner_port"][p_target]) == 0  # owner-before-victim ordering lane
+    assert int(seed_t["action_id"][p_target]) == 0x00E2  # CapturePulledHi
+    assert int(seed_t["action_frame"][p_target]) == 2
+    assert int(ref_t1["action_id"][p_target]) == 0x00E3  # CaptureWaitHi
+    assert int(ref_t1["action_frame"][p_target]) == 1
+
+    for rec in rows:
+        _, ref_row, out_row = _run_one_step_row(dataset_path, rec, p_target)
+        for p in (0, 1):
+            _assert_transition_lock_fields_match_ref(out_row=out_row, ref_row=ref_row, record=rec, p=p)
+
+
+@pytest.mark.integration
+def test_items_guardreflect_no_submotion_shield_sweep_rows_and_adjacent_controls_are_replay_exact() -> None:
+    # Lock family for src/items.c:1366 lane:
+    # GuardReflect no-submotion snapshots route shield overlap through swept segment + cap gate
+    # split (shield cap disabled for this lane).
+    #
+    # Decomp refs:
+    # - refs/melee/src/melee/it/items/itfoxlaser.c::{itFoxlaser_UnkMotion1_Phys,it_8029C4D4}
+    # - refs/melee/src/melee/it/itcoll.c::it_8027137C
+    # - refs/melee/src/melee/lb/lbcollision.c::lbColl_80007BCC
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_rel = (
+        "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/TreasuredBackKangaroo.msl"
+    )
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    # target-1, target, target+1
+    rows = (217, 218, 219)
+    target = 218
+    p_target = 0
+
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+    for rec in rows:
+        assert int(samples.shape[0]) > rec, f"dataset too short for lock row: record={rec}"
+
+    seed_t = samples["seed_t"][target]
+    ref_t1 = samples["ref_t1"][target]
+    assert int(seed_t["action_id"][p_target]) == 0x00B6  # GuardReflect
+    assert int(seed_t["action_frame"][p_target]) < 0
+    assert int(seed_t["animation_index"][p_target]) == 0xFFFFFFFF
+    assert int(seed_t["hitlag"][p_target]) == 0
+    assert int(seed_t["hitstun"][p_target]) == 0
+    assert int(np.count_nonzero(seed_t["items"]["exists"])) > 0
+    assert int(np.count_nonzero(ref_t1["items"]["exists"])) == 0
+    assert int(ref_t1["action_id"][p_target]) == 0x00B5  # GuardSetOff
+    assert int(ref_t1["hitlag"][p_target]) > 0
+
+    for rec in rows:
+        _, ref_row, out_row = _run_one_step_row(dataset_path, rec, p_target)
+        for p in (0, 1):
+            _assert_transition_lock_fields_match_ref(out_row=out_row, ref_row=ref_row, record=rec, p=p)
+
+
 @pytest.mark.integration
 @pytest.mark.parametrize(
     ("dataset_rel", "record", "p", "seed_action"),
