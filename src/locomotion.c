@@ -1718,15 +1718,42 @@ void locomotion_update_pre(MslBatch* batch) {
                     (int16_t)(batch->state.attackdash_x0[idx] - 1);
               }
             }
+            // Decomp: grounded Attack* IASA gates on fp->allow_interrupt before delegating to
+            // grounded interrupt checks (typically Wait IASA path).
+            // refs/melee/src/melee/ft/chara/ftCommon/{ftCo_AttackDash.c,ftCo_AttackS3.c,ftCo_AttackHi3.c,ftCo_AttackHi4.c,ftCo_AttackLw4.c}
             const uint8_t attackdash_wait_iasa_enabled =
                 (action_id != (uint16_t)MSL_ACT_ATTACK_DASH ||
                  stick_y < -c->crouch_stick_threshold)
                     ? 1u
                     : 0u;
-            // Decomp: grounded Attack* IASA gates on fp->allow_interrupt before delegating to
-            // grounded interrupt checks (typically Wait IASA path).
-            // refs/melee/src/melee/ft/chara/ftCommon/{ftCo_AttackDash.c,ftCo_AttackS3.c,ftCo_AttackHi3.c,ftCo_AttackHi4.c,ftCo_AttackLw4.c}
+            uint8_t attackdash_guard_iasa_consumed = 0u;
             if (!attackdash_pregate_consumed &&
+                allow_interrupt &&
+                attackdash_wait_iasa_enabled &&
+                action_id == (uint16_t)MSL_ACT_ATTACK_DASH) {
+              // Decomp ordering for AttackDash IASA delegation:
+              // - ftCo_AttackDash_IASA delegates into the Wait-style interrupt checks.
+              // - In ftCo_Wait_IASA, guard entry (ftCo_80091A4C) is checked before
+              //   jump/dash/squat/turn/walk checks.
+              // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackDash.c::ftCo_AttackDash_IASA
+              // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
+              //
+              // Identity continuity note:
+              // entering an intermediate locomotion state before GuardOn can consume an extra
+              // Fighter_ChangeMotionState identity bundle (ft_800895E0 / instance_id bump lane).
+              // Keep the AttackDash guard lane aligned to Wait_IASA ordering to avoid that spillover.
+              // refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState
+              // refs/melee/build/GALE01/asm/melee/ft/ft_0892.s::ft_800895E0
+              const uint16_t act_before_guard = batch->state.action_id[idx];
+              guard_update_grounded(batch, c, idx, 1u);
+              action_id = batch->state.action_id[idx];
+              if (act_before_guard == (uint16_t)MSL_ACT_ATTACK_DASH &&
+                  action_id != (uint16_t)MSL_ACT_ATTACK_DASH) {
+                attackdash_guard_iasa_consumed = 1u;
+              }
+            }
+            if (!attackdash_pregate_consumed &&
+                !attackdash_guard_iasa_consumed &&
                 allow_interrupt &&
                 attackdash_wait_iasa_enabled &&
                 grounded_attack_try_iasa_subset(batch, c, ch, idx, buttons, buttons_pressed,
