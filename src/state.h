@@ -165,6 +165,15 @@ typedef struct MslStateSoA {
   uint8_t* tilt_timer_x;  // fp->x670_timer_lstick_tilt_x (refs/melee/src/melee/ft/fighter.c)
   uint8_t* tilt_timer_y;  // fp->x671_timer_lstick_tilt_y (refs/melee/src/melee/ft/fighter.c)
   uint8_t* fall_fast;     // fp->fall_fast (refs/melee/src/melee/ft/ftcommon.c:505-520)
+  // fp+0x2340 AttackDash lane:
+  // - mv.co.attackdash.x0 countdown consumed by ftCo_800D8AE0.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackDash.c::ftCo_AttackDash_IASA
+  // refs/melee/build/GALE01/asm/melee/ft/chara/ftCommon/ftCo_Attack100.s::ftCo_800D8AE0
+  int16_t* attackdash_x0;  // [batch * players]
+  // fp+0x2340 Attack1 lane:
+  // - mv.co.attack1.x0 latched intent consumed by checkAttack12/checkAttack13.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack1.c::{checkAttack12,checkAttack13}
+  uint8_t* jab_x0;  // [batch * players], 0/1
   // Run IASA lockout countdown (decomp: fp->mv.co.run.x0).
   // - Decremented in Run_Anim.
   // - Gates TurnRun/RunBrake in Run_IASA.

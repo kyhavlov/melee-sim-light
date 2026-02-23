@@ -46,6 +46,30 @@ uint8_t move_tables_attackair_allow_interrupt(uint8_t char_id, uint16_t attackai
 uint8_t move_tables_grounded_attack_allow_interrupt(uint8_t char_id, uint16_t grounded_action_id,
                                                     float cur_anim_frame_f32);
 
+// Returns whether jab combo gate (fp->x2218_b1) is active at the given cur_anim_frame.
+//
+// Decomp:
+// - command ftAction_80071AE8 sets x2218_b1 from the action script.
+// refs/melee/src/melee/ft/ftaction.c::ftAction_80071AE8
+// refs/melee/build/GALE01/asm/melee/ft/ftaction.s::ftAction_80071AE8
+//
+// Source of truth:
+// data/moves/{fox,falco}.json moves["ftCo_SM_Attack11"/"ftCo_SM_Attack12"]["events"] set_jab_combo.
+uint8_t move_tables_jab_combo_active(uint8_t char_id, uint16_t grounded_action_id,
+                                     float cur_anim_frame_f32);
+
+// Returns whether jab rapid gate (fp->x2218_b2) is active at the given cur_anim_frame.
+//
+// Decomp:
+// - command ftAction_80071B28 sets x2218_b2 from the action script.
+// refs/melee/src/melee/ft/ftaction.c::ftAction_80071B28
+// refs/melee/build/GALE01/asm/melee/ft/ftaction.s::ftAction_80071B28
+//
+// Source of truth:
+// data/moves/{fox,falco}.json moves["ftCo_SM_Attack12"]["events"] set_jab_rapid.
+uint8_t move_tables_jab_rapid_active(uint8_t char_id, uint16_t grounded_action_id,
+                                     float cur_anim_frame_f32);
+
 // Returns whether cmd_var[0] is set at the given cur_anim_frame for Dash.
 //
 // Decomp: Dash IASA gates late transitions on `fp->cmd_vars[0]`.

@@ -903,6 +903,9 @@ def _main_impl(args) -> None:
     act_damage_fly_top = 0x005A
     act_damage_fly_roll = 0x005B
     act_attack_11 = 0x002C
+    act_attack_12 = 0x002D
+    act_attack_13 = 0x002E
+    act_attack_dash = 0x0032
     act_attack_air_n = 0x0041
     act_attack_air_f = 0x0042
     act_attack_air_b = 0x0043
@@ -1116,6 +1119,33 @@ def _main_impl(args) -> None:
         samples["ref_t1"]["action_id"][:, slot] = post_state[1:]
         samples["seed_t"]["action_frame"][:, slot] = post_state_age[:-1]
         samples["ref_t1"]["action_frame"][:, slot] = post_state_age[1:]
+        # fp+0x2340 AttackDash lane (decomp-backed targeted ownership seed):
+        # - mv.co.attackdash.x0 is consumed by ftCo_800D8AE0 during AttackDash IASA.
+        # - Slippi emits fp+0x2340 as `misc_as`; AttackDash treats this lane as signed int.
+        # refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackDash.c::ftCo_AttackDash_IASA
+        # refs/melee/build/GALE01/asm/melee/ft/chara/ftCommon/ftCo_Attack100.s::ftCo_800D8AE0
+        # refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
+        post_attackdash_x0 = np.zeros(n_frames, dtype=np.int16)
+        attackdash_mask = post_state == np.uint16(act_attack_dash)
+        post_attackdash_x0[attackdash_mask] = np.clip(
+            post_misc_as[attackdash_mask].astype(np.int32),
+            np.iinfo(np.int16).min,
+            np.iinfo(np.int16).max,
+        ).astype(np.int16)
+        samples["seed_t"]["attackdash_x0"][:, slot] = post_attackdash_x0[:-1]
+        # fp+0x2340 Attack1 lane (decomp-backed targeted ownership seed):
+        # - mv.co.attack1.x0 is latched intent consumed by checkAttack12/checkAttack13.
+        # - Slippi emits fp+0x2340 as `misc_as`; this lane is a bool in Attack11/Attack12/Attack13.
+        # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack1.c::{checkAttack12,checkAttack13}
+        # refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
+        post_jab_x0 = np.zeros(n_frames, dtype=np.uint8)
+        jab_mask = (
+            (post_state == np.uint16(act_attack_11))
+            | (post_state == np.uint16(act_attack_12))
+            | (post_state == np.uint16(act_attack_13))
+        )
+        post_jab_x0[jab_mask] = (post_misc_as[jab_mask] > 0.0).astype(np.uint8)
+        samples["seed_t"]["jab_x0"][:, slot] = post_jab_x0[:-1]
         port0 = int(src_ports[slot]) - 1
         samples["seed_t"]["match_flow_timer"][:, slot] = _derive_match_flow_timer(
             action_id_u16=post_state, port0=port0, common=common

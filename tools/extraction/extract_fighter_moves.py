@@ -420,6 +420,37 @@ def _parse_subaction_events(
                         data={"bone_idx": int(bone_idx), "state": int(state)},
                     )
                 )
+            elif op == 29:
+                # Set jab combo gate (ftAction_80071AE8 -> fp->x2218_b1).
+                #
+                # Decomp:
+                # refs/melee/src/melee/ft/ftaction.c::ftAction_80071AE8
+                # refs/melee/build/GALE01/asm/melee/ft/ftaction.s::ftAction_80071AE8
+                #
+                # Payload semantics:
+                # - low 26-bit payload is `set_jab_combo.disabled`.
+                # - command sets x2218_b1 when !disabled (or when fp->x197C != NULL).
+                #   Fox/Falco lane uses !disabled path.
+                out.append(
+                    Event(
+                        frame=frame,
+                        kind="set_jab_combo",
+                        data={"disabled": int(_u26(w0) != 0)},
+                    )
+                )
+            elif op == 30:
+                # Set jab rapid flag (ftAction_80071B28 -> fp->x2218_b2).
+                #
+                # Decomp:
+                # refs/melee/src/melee/ft/ftaction.c::ftAction_80071B28
+                # refs/melee/build/GALE01/asm/melee/ft/ftaction.s::ftAction_80071B28
+                out.append(
+                    Event(
+                        frame=frame,
+                        kind="set_jab_rapid",
+                        data={"state": int(_u26(w0) != 0)},
+                    )
+                )
             elif op == 52:
                 # Set fp->x221C_u16_y flags (ftAction_80072C6C -> ft_8008A1B8).
                 # refs/melee/src/melee/ft/ftaction.c::ftAction_80072C6C
@@ -604,6 +635,8 @@ def main() -> None:
         # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c::ftCo_Dash_IASA
         "ftCo_SM_Dash",
         "ftCo_SM_Attack11",
+        "ftCo_SM_Attack12",
+        "ftCo_SM_Attack13",
         "ftCo_SM_AttackDash",
         "ftCo_SM_AttackS3",
         "ftCo_SM_AttackHi3",

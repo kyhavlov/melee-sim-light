@@ -105,6 +105,19 @@ SEED_DTYPE = np.dtype(
         ("_pad1", "V1"),
         ("action_id", _arr("<u2", MAX_PLAYERS)),
         ("action_frame", _arr("<i2", MAX_PLAYERS)),
+        # fp+0x2340 AttackDash lane (targeted seed ownership):
+        # - mv.co.attackdash.x0 countdown consumed by ftCo_800D8AE0.
+        # refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackDash.c::ftCo_AttackDash_IASA
+        # refs/melee/build/GALE01/asm/melee/ft/chara/ftCommon/ftCo_Attack100.s::ftCo_800D8AE0
+        # Slippi source lane: SendGamePostFrame emits fp+0x2340 as `misc_as`.
+        # refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
+        ("attackdash_x0", _arr("<i2", MAX_PLAYERS)),
+        # fp+0x2340 Attack1 lane:
+        # - mv.co.attack1.x0 latched jab intent consumed by checkAttack12/checkAttack13.
+        # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack1.c::{checkAttack12,checkAttack13}
+        # Slippi source lane: SendGamePostFrame emits fp+0x2340 as `misc_as`.
+        # refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
+        ("jab_x0", _arr("u1", MAX_PLAYERS)),
         ("match_flow_timer", _arr("u1", MAX_PLAYERS)),
         ("downwait_timer", _arr("<i2", MAX_PLAYERS)),
         ("anim_frame_f32", _arr("<f4", MAX_PLAYERS)),

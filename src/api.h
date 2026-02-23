@@ -165,6 +165,16 @@ typedef struct MslSeed {
   // State machine
   uint16_t action_id[MSL_MAX_PLAYERS];    // GALE01 action id
   int16_t action_frame[MSL_MAX_PLAYERS];  // action frame (can be negative in pre-start)
+  // fp+0x2340 AttackDash lane:
+  // - mv.co.attackdash.x0 countdown consumed by ftCo_800D8AE0.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackDash.c::ftCo_AttackDash_IASA
+  // refs/melee/build/GALE01/asm/melee/ft/chara/ftCommon/ftCo_Attack100.s::ftCo_800D8AE0
+  int16_t attackdash_x0[MSL_MAX_PLAYERS];
+  // fp+0x2340 Attack1 lane:
+  // - mv.co.attack1.x0 latched jab-chain intent consumed by checkAttack12/checkAttack13.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack1.c::{checkAttack12,checkAttack13}
+  // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm (misc AS variable @ fp+0x2340)
+  uint8_t jab_x0[MSL_MAX_PLAYERS];
   // Reseed-only match-flow countdown timer (teacher-forcing aid).
   // Used for match-start entry / KO / respawn states where Slippi post-frames do not expose a
   // useful per-frame counter (action_frame is often -1).

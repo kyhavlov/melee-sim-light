@@ -60,7 +60,6 @@ static inline void enter_catch_wait_from_attack(MslBatch* batch, size_t oidx) {
 
 static inline void enter_capture_wait_from_pulled(MslBatch* batch, int owner_p, int victim_p,
                                                   size_t vidx) {
-  const float pulled_anim_frame = msl_anim_frame_sanitize_f32(batch->state.anim_frame_f32[vidx]);
   const uint16_t pulled_hitlag = batch->state.hitlag[vidx];
   const uint16_t pulled_hitstun = batch->state.hitstun[vidx];
   // Decomp: CatchPull->CatchWait entry calls fn_800DB6C8 on the victim gobj, which enters
@@ -94,8 +93,7 @@ static inline void enter_capture_wait_from_pulled(MslBatch* batch, int owner_p, 
   // Mirror this by applying one entry-frame tick only when owner slot precedes victim slot.
   // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
   // refs/melee/build/GALE01/asm/melee/ft/chara/ftCommon/ftCo_Attack100.s::{ftCo_CatchPull_Anim,fn_800DA1D8,fn_800DB6C8}
-  if (owner_p < victim_p && pulled_hitlag == 0u && pulled_hitstun == 0u &&
-      pulled_anim_frame >= 1.0f) {
+  if (owner_p < victim_p && pulled_hitlag == 0u && pulled_hitstun == 0u) {
     msl_anim_timebase_tick_once(batch, vidx);
   }
 }
@@ -252,6 +250,15 @@ uint8_t grab_flow_try_enter_catchdash_from_iasa(MslBatch* batch, const MslCommon
 
   enter_catch_motion_state(batch, idx, (uint16_t)MSL_ACT_CATCH_DASH, (uint32_t)MSL_SM_CATCH_DASH);
   return 1u;
+}
+
+void grab_flow_enter_catchdash_from_attackdash_pregate(MslBatch* batch, size_t idx) {
+  if (batch == NULL) {
+    return;
+  }
+  // AttackDash IASA pre-gate consumes into CatchDash via ftCo_800D8C54(msid=0xD6).
+  // refs/melee/build/GALE01/asm/melee/ft/chara/ftCommon/ftCo_Attack100.s::{ftCo_800D8AE0,ftCo_800D8C54}
+  enter_catch_motion_state(batch, idx, (uint16_t)MSL_ACT_CATCH_DASH, (uint32_t)MSL_SM_CATCH_DASH);
 }
 
 static inline uint32_t throw_owner_submotion(uint16_t throw_action) {

@@ -386,6 +386,14 @@ int msl_batch_reseed_seed(MslBatch* batch, const uint8_t* seed_bytes, size_t see
       // refs/melee/src/melee/ft/forward.h (Ft_MF_KeepFastFall = 1<<0)
       //
       // Teacher-forced reseed parity: do not override Slippi's raw fp+0x221A fall_fast bit here.
+      // fp+0x2340 AttackDash lane (mv.co.attackdash.x0) targeted seed carry:
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackDash.c::ftCo_AttackDash_IASA
+      // refs/melee/build/GALE01/asm/melee/ft/chara/ftCommon/ftCo_Attack100.s::ftCo_800D8AE0
+      batch->state.attackdash_x0[idx] = seed->attackdash_x0[p];
+      // Attack1 jab intent latch (mv.co.attack1.x0) seeded from fp+0x2340 misc AS lane.
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack1.c::{checkAttack12,checkAttack13}
+      // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm (misc AS variable @ fp+0x2340)
+      batch->state.jab_x0[idx] = seed->jab_x0[p] ? 1u : 0u;
       batch->state.run_x0[idx] = seed->run_x0[p];
       batch->state.dash_x4[idx] = seed->dash_x4[p];
       batch->state.shine_release_lag[idx] = seed->shine_release_lag[p];

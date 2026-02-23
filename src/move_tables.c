@@ -57,18 +57,22 @@ enum {
 
 static MslFrameWindow g_cmd0_by_char_attackair[256][MSL_ATTACKAIR_KIND_COUNT];
 static MslFrameWindow g_allow_interrupt_by_char_attackair[256][MSL_ATTACKAIR_KIND_COUNT];
-enum { MSL_GROUNDED_ATTACK_KIND_COUNT = 8 };
+enum { MSL_GROUNDED_ATTACK_KIND_COUNT = 10 };
 enum {
   MSL_GROUNDED_ATTACK_KIND_11 = 0,
-  MSL_GROUNDED_ATTACK_KIND_DASH = 1,
-  MSL_GROUNDED_ATTACK_KIND_S3 = 2,
-  MSL_GROUNDED_ATTACK_KIND_HI3 = 3,
-  MSL_GROUNDED_ATTACK_KIND_LW3 = 4,
-  MSL_GROUNDED_ATTACK_KIND_S4 = 5,
-  MSL_GROUNDED_ATTACK_KIND_HI4 = 6,
-  MSL_GROUNDED_ATTACK_KIND_LW4 = 7,
+  MSL_GROUNDED_ATTACK_KIND_12 = 1,
+  MSL_GROUNDED_ATTACK_KIND_13 = 2,
+  MSL_GROUNDED_ATTACK_KIND_DASH = 3,
+  MSL_GROUNDED_ATTACK_KIND_S3 = 4,
+  MSL_GROUNDED_ATTACK_KIND_HI3 = 5,
+  MSL_GROUNDED_ATTACK_KIND_LW3 = 6,
+  MSL_GROUNDED_ATTACK_KIND_S4 = 7,
+  MSL_GROUNDED_ATTACK_KIND_HI4 = 8,
+  MSL_GROUNDED_ATTACK_KIND_LW4 = 9,
 };
 static MslFrameWindow g_allow_interrupt_by_char_grounded_attack[256][MSL_GROUNDED_ATTACK_KIND_COUNT];
+static MslFrameWindow g_jab_combo_by_char_grounded_attack[256][MSL_GROUNDED_ATTACK_KIND_COUNT];
+static MslFrameWindow g_jab_rapid_by_char_grounded_attack[256][MSL_GROUNDED_ATTACK_KIND_COUNT];
 static MslFrameWindow g_cmd0_by_char_dash[256];
 static MslFrameWindow g_throw_flags_by_char_catch[256];
 static MslFrameWindow g_throw_flags_by_char_catchdash[256];
@@ -598,6 +602,166 @@ static int parse_allow_interrupt_window(const char* buf, const char* buf_end, co
   return 0;
 }
 
+static int parse_jab_combo_window_open_end(const char* buf, const char* buf_end,
+                                           const char* move_key, MslFrameWindow* out) {
+  if (buf == NULL || buf_end == NULL || move_key == NULL || out == NULL) {
+    return -1;
+  }
+
+  char pat[128];
+  const int pn = snprintf(pat, sizeof(pat), "\"%s\"", move_key);
+  if (pn <= 0 || (size_t)pn >= sizeof(pat)) {
+    return -1;
+  }
+
+  const char* key_pos = strstr_range(buf, buf_end, pat);
+  if (key_pos == NULL) {
+    return -1;
+  }
+  const char* obj_start = (const char*)memchr(key_pos, '{', (size_t)(buf_end - key_pos));
+  if (obj_start == NULL) {
+    return -1;
+  }
+  const char* obj_end = json_find_matching_delim(obj_start, buf_end, '{', '}');
+  if (obj_end == NULL) {
+    return -1;
+  }
+
+  const char* events_key = strstr_range(obj_start, obj_end, "\"events\"");
+  if (events_key == NULL) {
+    return -1;
+  }
+  const char* arr_start = (const char*)memchr(events_key, '[', (size_t)(obj_end - events_key));
+  if (arr_start == NULL) {
+    return -1;
+  }
+  const char* arr_end = json_find_matching_delim(arr_start, obj_end, '[', ']');
+  if (arr_end == NULL) {
+    return -1;
+  }
+
+  int on_frame = -1;
+  const char* p = arr_start;
+  while (p && p < arr_end) {
+    const char* ev_start = (const char*)memchr(p, '{', (size_t)(arr_end - p));
+    if (ev_start == NULL) {
+      break;
+    }
+    const char* ev_end = json_find_matching_delim(ev_start, arr_end, '{', '}');
+    if (ev_end == NULL) {
+      break;
+    }
+
+    // Jab combo gate command: ftAction_80071AE8 (set_jab_combo).
+    // refs/melee/src/melee/ft/ftaction.c::ftAction_80071AE8
+    if (json_get_str_eq_in_range(ev_start, ev_end, "kind", "set_jab_combo")) {
+      int frame = 0;
+      int disabled = 0;
+      if (json_get_i32_in_range(ev_start, ev_end, "frame", &frame) == 0 &&
+          json_get_i32_in_range(ev_start, ev_end, "disabled", &disabled) == 0) {
+        if (disabled == 0) {
+          on_frame = frame;
+          break;
+        }
+      }
+    }
+    p = ev_end + 1;
+  }
+
+  if (on_frame < 0) {
+    return -1;
+  }
+
+  out->start_af = (int16_t)on_frame;
+  out->end_af = (int16_t)INT16_MAX;
+  out->loaded = 1;
+  return 0;
+}
+
+static int parse_jab_rapid_window_open_end(const char* buf, const char* buf_end,
+                                           const char* move_key, MslFrameWindow* out) {
+  if (buf == NULL || buf_end == NULL || move_key == NULL || out == NULL) {
+    return -1;
+  }
+
+  char pat[128];
+  const int pn = snprintf(pat, sizeof(pat), "\"%s\"", move_key);
+  if (pn <= 0 || (size_t)pn >= sizeof(pat)) {
+    return -1;
+  }
+
+  const char* key_pos = strstr_range(buf, buf_end, pat);
+  if (key_pos == NULL) {
+    return -1;
+  }
+  const char* obj_start = (const char*)memchr(key_pos, '{', (size_t)(buf_end - key_pos));
+  if (obj_start == NULL) {
+    return -1;
+  }
+  const char* obj_end = json_find_matching_delim(obj_start, buf_end, '{', '}');
+  if (obj_end == NULL) {
+    return -1;
+  }
+
+  const char* events_key = strstr_range(obj_start, obj_end, "\"events\"");
+  if (events_key == NULL) {
+    return -1;
+  }
+  const char* arr_start = (const char*)memchr(events_key, '[', (size_t)(obj_end - events_key));
+  if (arr_start == NULL) {
+    return -1;
+  }
+  const char* arr_end = json_find_matching_delim(arr_start, obj_end, '[', ']');
+  if (arr_end == NULL) {
+    return -1;
+  }
+
+  int on_frame = -1;
+  int off_frame = -1;
+  const char* p = arr_start;
+  while (p && p < arr_end) {
+    const char* ev_start = (const char*)memchr(p, '{', (size_t)(arr_end - p));
+    if (ev_start == NULL) {
+      break;
+    }
+    const char* ev_end = json_find_matching_delim(ev_start, arr_end, '{', '}');
+    if (ev_end == NULL) {
+      break;
+    }
+
+    // Jab rapid gate command: ftAction_80071B28 (set_jab_rapid).
+    // refs/melee/src/melee/ft/ftaction.c::ftAction_80071B28
+    if (json_get_str_eq_in_range(ev_start, ev_end, "kind", "set_jab_rapid")) {
+      int frame = 0;
+      int state = 0;
+      if (json_get_i32_in_range(ev_start, ev_end, "frame", &frame) == 0 &&
+          json_get_i32_in_range(ev_start, ev_end, "state", &state) == 0) {
+        if (state != 0 && on_frame < 0) {
+          on_frame = frame;
+        } else if (state == 0 && on_frame >= 0 && off_frame < 0) {
+          off_frame = frame;
+        }
+      }
+    }
+    p = ev_end + 1;
+  }
+
+  if (on_frame < 0) {
+    return -1;
+  }
+  if (off_frame < 0) {
+    off_frame = INT16_MAX;
+  }
+  if (off_frame < on_frame) {
+    return -1;
+  }
+
+  out->start_af = (int16_t)on_frame;
+  out->end_af = (int16_t)off_frame;
+  out->loaded = 1;
+  return 0;
+}
+
 static int parse_throw_release_and_hitboxes(const char* buf, const char* buf_end,
                                             const char* move_key, MslThrowRelease* out_release,
                                             MslFrameWindow* out_flip, MslFrameWindow* out_cmd1,
@@ -1054,10 +1218,18 @@ static int load_one(const char* data_dir, const char* rel_path, uint8_t char_id)
   // Decomp:
   // - Grounded attack IASA handlers gate on fp->allow_interrupt before delegating to grounded
   //   interrupt checks (typically ftCo_Wait_IASA).
-  // refs/melee/src/melee/ft/chara/ftCommon/{ftCo_AttackDash.c,ftCo_AttackS3.c,ftCo_AttackHi3.c,ftCo_AttackHi4.c,ftCo_AttackLw4.c}
+  // refs/melee/src/melee/ft/chara/ftCommon/{ftCo_Attack1.c,ftCo_AttackDash.c,ftCo_AttackS3.c,ftCo_AttackHi3.c,ftCo_AttackHi4.c,ftCo_AttackLw4.c}
   win = (MslFrameWindow){0};
   if (parse_allow_interrupt_window(buf, buf_end, "ftCo_SM_Attack11", &win) == 0) {
     g_allow_interrupt_by_char_grounded_attack[char_id][MSL_GROUNDED_ATTACK_KIND_11] = win;
+  }
+  win = (MslFrameWindow){0};
+  if (parse_allow_interrupt_window(buf, buf_end, "ftCo_SM_Attack12", &win) == 0) {
+    g_allow_interrupt_by_char_grounded_attack[char_id][MSL_GROUNDED_ATTACK_KIND_12] = win;
+  }
+  win = (MslFrameWindow){0};
+  if (parse_allow_interrupt_window(buf, buf_end, "ftCo_SM_Attack13", &win) == 0) {
+    g_allow_interrupt_by_char_grounded_attack[char_id][MSL_GROUNDED_ATTACK_KIND_13] = win;
   }
   win = (MslFrameWindow){0};
   if (parse_allow_interrupt_window(buf, buf_end, "ftCo_SM_AttackDash", &win) == 0) {
@@ -1086,6 +1258,25 @@ static int load_one(const char* data_dir, const char* rel_path, uint8_t char_id)
   win = (MslFrameWindow){0};
   if (parse_allow_interrupt_window(buf, buf_end, "ftCo_SM_AttackLw4", &win) == 0) {
     g_allow_interrupt_by_char_grounded_attack[char_id][MSL_GROUNDED_ATTACK_KIND_LW4] = win;
+  }
+
+  // Jab lifecycle command windows (x2218_b1/x2218_b2 ownership).
+  //
+  // Decomp:
+  // - ftAction_80071AE8 sets x2218_b1 (set_jab_combo).
+  // - ftAction_80071B28 sets x2218_b2 (set_jab_rapid).
+  // refs/melee/src/melee/ft/ftaction.c::{ftAction_80071AE8,ftAction_80071B28}
+  win = (MslFrameWindow){0};
+  if (parse_jab_combo_window_open_end(buf, buf_end, "ftCo_SM_Attack11", &win) == 0) {
+    g_jab_combo_by_char_grounded_attack[char_id][MSL_GROUNDED_ATTACK_KIND_11] = win;
+  }
+  win = (MslFrameWindow){0};
+  if (parse_jab_combo_window_open_end(buf, buf_end, "ftCo_SM_Attack12", &win) == 0) {
+    g_jab_combo_by_char_grounded_attack[char_id][MSL_GROUNDED_ATTACK_KIND_12] = win;
+  }
+  win = (MslFrameWindow){0};
+  if (parse_jab_rapid_window_open_end(buf, buf_end, "ftCo_SM_Attack12", &win) == 0) {
+    g_jab_rapid_by_char_grounded_attack[char_id][MSL_GROUNDED_ATTACK_KIND_12] = win;
   }
 
   // Dash cmd_var[0] window (used for Dash IASA late transitions).
@@ -1232,6 +1423,10 @@ static inline int grounded_attack_kind_from_action(uint16_t a) {
   switch (a) {
     case MSL_ACT_ATTACK_11:
       return MSL_GROUNDED_ATTACK_KIND_11;
+    case MSL_ACT_ATTACK_12:
+      return MSL_GROUNDED_ATTACK_KIND_12;
+    case MSL_ACT_ATTACK_13:
+      return MSL_GROUNDED_ATTACK_KIND_13;
     case MSL_ACT_ATTACK_DASH:
       return MSL_GROUNDED_ATTACK_KIND_DASH;
     case MSL_ACT_ATTACK_S3_HI:
@@ -1321,6 +1516,38 @@ uint8_t move_tables_grounded_attack_allow_interrupt(uint8_t char_id, uint16_t gr
   // Decomp: grounded Attack* input callbacks gate on fp->allow_interrupt.
   // refs/melee/src/melee/ft/chara/ftCommon/{ftCo_AttackDash.c,ftCo_AttackS3.c,ftCo_AttackHi3.c,ftCo_AttackHi4.c,ftCo_AttackLw4.c}
   // Source: command-script `allow_interrupt` events in data/moves/{fox,falco}.json.
+  return (cur_anim_frame_f32 >= (float)win.start_af && cur_anim_frame_f32 < (float)win.end_af) ? 1
+                                                                                               : 0;
+}
+
+uint8_t move_tables_jab_combo_active(uint8_t char_id, uint16_t grounded_action_id,
+                                     float cur_anim_frame_f32) {
+  const int kind = grounded_attack_kind_from_action(grounded_action_id);
+  if (kind < 0) {
+    return 0;
+  }
+  const MslFrameWindow win = g_jab_combo_by_char_grounded_attack[char_id][(size_t)kind];
+  if (!win.loaded) {
+    return 0;
+  }
+  // Decomp: ftAction_80071AE8 sets x2218_b1 when command timeline reaches set_jab_combo.
+  // refs/melee/src/melee/ft/ftaction.c::ftAction_80071AE8
+  return (cur_anim_frame_f32 >= (float)win.start_af && cur_anim_frame_f32 < (float)win.end_af) ? 1
+                                                                                               : 0;
+}
+
+uint8_t move_tables_jab_rapid_active(uint8_t char_id, uint16_t grounded_action_id,
+                                     float cur_anim_frame_f32) {
+  const int kind = grounded_attack_kind_from_action(grounded_action_id);
+  if (kind < 0) {
+    return 0;
+  }
+  const MslFrameWindow win = g_jab_rapid_by_char_grounded_attack[char_id][(size_t)kind];
+  if (!win.loaded) {
+    return 0;
+  }
+  // Decomp: ftAction_80071B28 writes x2218_b2 from set_jab_rapid command events.
+  // refs/melee/src/melee/ft/ftaction.c::ftAction_80071B28
   return (cur_anim_frame_f32 >= (float)win.start_af && cur_anim_frame_f32 < (float)win.end_af) ? 1
                                                                                                : 0;
 }
