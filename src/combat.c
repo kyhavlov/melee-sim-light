@@ -53,14 +53,12 @@ static inline uint8_t combat_body_overlap_lbColl_80006E58_subset_allows(
   if (batch == NULL) {
     return 0u;
   }
-  // ftColl_800768A0 clear/copy ownership runs on HitCapsule enable/group edges. Keep the
-  // lbColl_80006E58 BODY lane on steady ownership only until the edge transition lane is fully
-  // represented.
-  // refs/melee/src/melee/ft/ftcoll.c::ftColl_800768A0
-  // refs/melee/src/melee/ft/ftcoll.c::ftColl_8007AD18
-  if (batch->state.hitbox_enable_edge[hb_i]) {
-    return 0u;
-  }
+  (void)hb_i;
+  // ftColl_800768A0 clear/copy ownership runs on HitCapsule enable/group edges.
+  // Enable this lane through edge transitions to exercise lbColl_8000805C/80006E58 continuity
+  // using x58/x4C carried by ftColl_8007AD18.
+  // refs/melee/src/melee/ft/ftcoll.c::{ftColl_800768A0,ftColl_8007AD18}
+  // refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000805C,lbColl_80006E58}
   // Pre-hit ownership subset: keep defender-in-hitstun lanes on baseline overlap while enabling
   // decomp-shaped sweep for neutral BODY checks.
   // refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078C70,ftColl_80076ED8}

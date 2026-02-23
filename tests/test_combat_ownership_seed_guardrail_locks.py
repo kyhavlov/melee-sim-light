@@ -1359,3 +1359,35 @@ def test_body_overlap_subset_attachedgoodnaturedguanaco_2533_family_stays_replay
         _, ref, out = _run_one_step_row(dataset_path, rec, 0)
         for p in (0, 1):
             _assert_body_overlap_lock_fields_match_ref(out_row=out, ref_row=ref, record=rec, p=p)
+
+
+@pytest.mark.integration
+def test_body_overlap_enable_edge_qgd_645_seeded_family_and_controls_stay_replay_exact() -> None:
+    # Enable-edge BODY subset lock:
+    # - QGD rec=645:p1 is the seeded rollout first-mismatch family removed by enabling the
+    #   ftColl_800768A0/ftColl_8007AD18 edge lane in the lbColl_80006E58 subset.
+    # - Adjacent controls: 644 and 646.
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_rel = (
+        "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/QuerulousGrandDinosaur.msl"
+    )
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+    target_record = 645
+    controls = (644, 646)
+    for rec in (target_record, *controls):
+        assert int(samples.shape[0]) > rec, f"dataset too short for lock row: record={rec}"
+
+    row = samples[target_record : target_record + 1]
+    assert int(row["seed_t"]["action_id"][0, 1]) == 356
+    assert int(row["ref_t1"]["action_id"][0, 1]) == 88
+
+    for rec in (target_record, *controls):
+        _, ref, out = _run_one_step_row(dataset_path, rec, 0)
+        for p in (0, 1):
+            _assert_body_overlap_lock_fields_match_ref(out_row=out, ref_row=ref, record=rec, p=p)

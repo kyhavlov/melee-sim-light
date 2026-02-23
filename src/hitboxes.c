@@ -275,6 +275,7 @@ void hitboxes_refresh(MslBatch* batch) {
       uint8_t have_prev[MSL_MAX_HITBOXES] = {0};
       MslHitboxEvent def_prev[MSL_MAX_HITBOXES] = {0};
       uint8_t pose_create_count[MSL_MAX_HITBOXES] = {0};
+      uint8_t x43_b2_cur[MSL_MAX_HITBOXES] = {0};
 
       // Build hitbox definitions for:
       // - pose_frame - 1 (previous integer frame): for detecting enable edges, and
@@ -336,6 +337,7 @@ void hitboxes_refresh(MslBatch* batch) {
             if (have_prev[hi]) {
               def[hi] = def_prev[hi];
               have_def[hi] = 1;
+              x43_b2_cur[hi] = x43_b2_prev[hi];
 
               // Seed materialize the victim list for hitboxes already active at pose_frame-1.
               const size_t hl_i = idx_hitbox(bi, p, hi);
@@ -367,9 +369,11 @@ void hitboxes_refresh(MslBatch* batch) {
           if (ev->hitbox_id == 0xFFu) {
             for (int hi = 0; hi < MSL_MAX_HITBOXES; hi++) {
               have_def[hi] = 0;
+              x43_b2_cur[hi] = 0u;
             }
           } else if (ev->hitbox_id < (uint8_t)MSL_MAX_HITBOXES) {
             have_def[ev->hitbox_id] = 0;
+            x43_b2_cur[ev->hitbox_id] = 0u;
           }
         } else if (ev->hitbox_id < (uint8_t)MSL_MAX_HITBOXES) {
           const uint8_t hb = ev->hitbox_id;
@@ -377,6 +381,7 @@ void hitboxes_refresh(MslBatch* batch) {
           const uint8_t new_g = hitlist_hit_group_from_u16_7(ev->u16_7);
           const uint8_t had_old = have_def[hb] ? 1u : 0u;
           const uint8_t old_g = had_old ? hitlist_hit_group_from_u16_7(def[hb].u16_7) : 0u;
+          uint8_t x43_b2_next = had_old ? x43_b2_cur[hb] : 0u;
 
           def[hb] = *ev;
           have_def[hb] = 1;
@@ -404,6 +409,13 @@ void hitboxes_refresh(MslBatch* batch) {
               hitlist_capsule_copy(&batch->state.fighter_hitlist[src_i],
                                    &batch->state.fighter_hitlist[dst_i]);
               batch->state.fighter_hitlist_init_gen[dst_i] = hitlist_gen;
+              // Decomp ownership map:
+              // - ftAction_8007121C enable-edge path calls ftColl_800768A0 (copy/clear by hit_group).
+              // - lbColl_CopyHitCapsule copies full HitCapsule fields, including x43_b2.
+              // refs/melee/src/melee/ft/ftaction.c::ftAction_8007121C
+              // refs/melee/src/melee/ft/ftcoll.c::ftColl_800768A0
+              // refs/melee/src/melee/lb/lbcollision.c::lbColl_CopyHitCapsule
+              x43_b2_next = x43_b2_cur[src];
               copied = 1;
               break;
             }
@@ -411,8 +423,19 @@ void hitboxes_refresh(MslBatch* batch) {
               const size_t dst_i = idx_hitbox(bi, p, hb);
               hitlist_capsule_clear(&batch->state.fighter_hitlist[dst_i]);
               batch->state.fighter_hitlist_init_gen[dst_i] = hitlist_gen;
+              // ftColl_800768A0 clear lane delegates to lbColl_80008440, which leaves x43_b2 unchanged
+              // inside the struct, but ftAction_8007121C immediately rewrites x43_b2=0 on create.
+              // refs/melee/src/melee/ft/ftaction.c::ftAction_8007121C
+              // refs/melee/src/melee/ft/ftcoll.c::ftColl_800768A0
+              // refs/melee/src/melee/lb/lbcollision.c::lbColl_80008440
+              x43_b2_next = 0u;
             }
           }
+          // ftAction_8007121C always initializes x43_b2=0 after processing create payload.
+          // Keep this reset even if ftColl_800768A0 copied a prior capsule first.
+          // refs/melee/src/melee/ft/ftaction.c::ftAction_8007121C
+          (void)x43_b2_next;
+          x43_b2_cur[hb] = 0u;
         }
       }
 
@@ -422,6 +445,7 @@ void hitboxes_refresh(MslBatch* batch) {
           if (have_prev[hi]) {
             def[hi] = def_prev[hi];
             have_def[hi] = 1;
+            x43_b2_cur[hi] = x43_b2_prev[hi];
 
             // Seed materialize for hitboxes active at pose_frame-1 even when no pose_frame events fire.
             const size_t hl_i = idx_hitbox(bi, p, hi);
@@ -590,11 +614,7 @@ void hitboxes_refresh(MslBatch* batch) {
         // refs/melee/src/melee/ft/ftaction.c::ftAction_8007121C
         // refs/melee/src/melee/ft/ftcoll.c::{ftColl_800768A0,ftColl_80078C70}
         // refs/melee/src/melee/lb/lbcollision.c::lbColl_8000805C
-        if (pose_create_count[hi] != 0u || !have_prev[hi]) {
-          batch->state.hitbox_x43_b2[oi] = 0u;
-        } else {
-          batch->state.hitbox_x43_b2[oi] = x43_b2_prev[hi];
-        }
+        batch->state.hitbox_x43_b2[oi] = x43_b2_cur[hi];
         out_count++;
       }
 
