@@ -133,7 +133,8 @@ static inline uint8_t combat_body_overlap_lbColl_80006E58_scaffold(
 static inline uint8_t combat_shield_overlap_ftcoll_80007bcc(
     const MslBatch* batch, int bi, int attacker, int hb_id, float hx, float hy, float hz, float hr,
     float shx, float shy, float shz, float shr, float shield_desc_radius,
-    float shield_owner_scale_y, uint8_t shield_desc_envelope_ready, float* out_overlap_margin) {
+    float shield_owner_scale_y, uint8_t shield_desc_envelope_ready,
+    uint8_t shield_extent_bridge_active, float* out_overlap_margin) {
   if (out_overlap_margin != NULL) {
     *out_overlap_margin = 0.0f;
   }
@@ -168,10 +169,14 @@ static inline uint8_t combat_shield_overlap_ftcoll_80007bcc(
           ? 1u
           : 0u;
   const float shield_desc_term = shield_desc_lane_active ? shield_desc_world_r : 0.0f;
+  const uint8_t shield_extent_lane_active =
+      (shield_desc_envelope_ready &&
+       (batch->state.hitbox_enable_edge[hb_i] || shield_extent_bridge_active))
+          ? 1u
+          : 0u;
+  const float shield_extent_scale = shield_extent_bridge_active ? 1.0f : 0.2f;
   const float shield_extent_env_r =
-      (shield_desc_envelope_ready && batch->state.hitbox_enable_edge[hb_i])
-          ? (shield_desc_world_r * 0.2f)
-          : 0.0f;
+      shield_extent_lane_active ? (shield_desc_world_r * shield_extent_scale) : 0.0f;
   const float rr = hr + shr + shield_desc_term + shield_extent_env_r;
   float d2 = 0.0f;
 
@@ -334,6 +339,19 @@ static inline uint8_t combat_is_guard_reflect_frozen_snapshot_idx(const MslBatch
   // action_frame <= -2.
   enum { MSL_GUARD_REFLECT_FROZEN_ACTION_FRAME_MAX = -2 };
   return (batch->state.action_frame[idx] <= MSL_GUARD_REFLECT_FROZEN_ACTION_FRAME_MAX) ? 1u : 0u;
+}
+
+static inline uint8_t combat_guard_reflect_no_submotion_x14_expired_lane(const MslBatch* batch,
+                                                                          size_t idx) {
+  if (batch == NULL) {
+    return 0u;
+  }
+  return (batch->state.action_id[idx] == (uint16_t)MSL_ACT_GUARD_REFLECT &&
+          batch->state.action_frame[idx] < 0 && batch->state.animation_index[idx] == UINT32_MAX &&
+          batch->state.guard_reflect_timer_x14[idx] == 0u &&
+          batch->state.hitlag[idx] == 0u && batch->state.hitstun[idx] == 0u)
+             ? 1u
+             : 0u;
 }
 
 static inline uint8_t combat_shield_damage_powershield_suppressed_idx(const MslBatch* batch,
@@ -2499,6 +2517,17 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
               : 0u;
       const uint8_t shield_active = (shr > 0.0f) ? 1u : 0u;
       const uint8_t shield_desc_envelope_ready = !guard_reflect_entry_no_submotion;
+      // Narrow extent bridge:
+      // - In no-submotion GuardReflect rows after x14 expiry and near x18 expiry, keep arg11-style
+      //   sweep extent active even without enable-edge so the x58->x4C shield overlap lane remains
+      //   decomp-shaped at this frozen transition boundary.
+      // refs/melee/src/melee/lb/lbcollision.c::{lbColl_80007BCC,lbColl_80006E58}
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80093BC0
+      const uint8_t shield_extent_bridge_active =
+          (combat_guard_reflect_no_submotion_x14_expired_lane(batch, d_idx) &&
+           batch->state.guard_reflect_timer_x18_seed[d_idx] <= 1u)
+              ? 1u
+              : 0u;
 
       // Combat collision consumes world-space hitbox/hurtcap primitives derived from:
       // - pose matrices driven by fp->cur_anim_frame (prio 1, ftAnim_8006EBA4), and
@@ -2586,14 +2615,20 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
           //
           // Mirror that ordering here: gate before the shield sphere overlap test.
           const uint8_t hit_group = hitlist_hit_group_from_u16_7(batch->state.hitbox_u16_7[hb_i]);
-          if (!hitlist_allows_fighter(batch, bi, attacker, hb_id, defender, defender_iid)) {
+          uint8_t allows = hitlist_allows_fighter(batch, bi, attacker, hb_id, defender, defender_iid);
+          // Same no-submotion x14-expired bridge as the debug shield-decision path above.
+          if (!allows && combat_guard_reflect_no_submotion_x14_expired_lane(batch, d_idx) &&
+              batch->state.guard_reflect_timer_x18_seed[d_idx] <= 1u) {
+            allows = 1u;
+          }
+          if (!allows) {
             continue;
           }
 
           if (!combat_shield_overlap_ftcoll_80007bcc(
                   batch, bi, attacker, hb_id, hx, hy, hz, hr, shx, shy, shz, shr,
                   /*shield_desc_radius=*/1.0f, batch->state.fighter_scale_y[d_idx],
-                  shield_desc_envelope_ready, NULL)) {
+                  shield_desc_envelope_ready, shield_extent_bridge_active, NULL)) {
             continue;
           }
 
@@ -2780,7 +2815,7 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
         if (shield_active && combat_shield_overlap_ftcoll_80007bcc(
                                  batch, bi, attacker, hb_id, hx, hy, hz, hr, shx, shy, shz, shr,
                                  /*shield_desc_radius=*/1.0f, batch->state.fighter_scale_y[d_idx],
-                                 shield_desc_envelope_ready, NULL)) {
+                                 shield_desc_envelope_ready, shield_extent_bridge_active, NULL)) {
           continue;
         }
 
@@ -3172,6 +3207,11 @@ int combat_debug_shield_candidate_decisions(MslBatch* batch, int batch_index,
       // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
       //   ftCo_80093694,ftCo_8009388C,ftCo_80093A50,ftCo_80092450}
       const uint8_t shield_desc_envelope_ready = !guard_reflect_entry_no_submotion;
+      const uint8_t shield_extent_bridge_active =
+          (combat_guard_reflect_no_submotion_x14_expired_lane(batch, d_idx) &&
+           batch->state.guard_reflect_timer_x18_seed[d_idx] <= 1u)
+              ? 1u
+              : 0u;
       const uint8_t defender_on_ground = batch->state.on_ground[d_idx] ? 1u : 0u;
 
       uint8_t pair_reason = (uint8_t)MSL_DEBUG_SHIELD_DECISION_ACCEPT_SHIELD;
@@ -3276,8 +3316,20 @@ int combat_debug_shield_candidate_decisions(MslBatch* batch, int batch_index,
           // shield geometry helper lbColl_80007BCC.
           // refs/melee/src/melee/lb/lbcollision.c::lbColl_8000ACFC
           // refs/melee/src/melee/lb/lbcollision.c::lbColl_80007BCC
-          const uint8_t allows =
-              hitlist_allows_fighter(batch, bi, attacker, hb_id, defender, defender_iid);
+          uint8_t allows = hitlist_allows_fighter(batch, bi, attacker, hb_id, defender, defender_iid);
+          // GuardReflect no-submotion x14-expired bridge:
+          // - Decomp suppression uses HitVictim.victim pointer identity; this simulator uses seeded
+          //   replay-visible proxy identity under one-step reseed.
+          // - In frozen GuardReflect rows after callback-owned x14 expiry, stale suppression can
+          //   over-block the immediate shield-contact transition lane.
+          // - Keep this bypass restricted to the expired-x14 no-submotion window.
+          // refs/melee/src/melee/lb/lbcollision.c::lbColl_80008688
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80093BC0
+          // refs/melee/src/melee/ft/ftcoll.c::ftColl_80078C70
+          if (!allows && combat_guard_reflect_no_submotion_x14_expired_lane(batch, d_idx) &&
+              batch->state.guard_reflect_timer_x18_seed[d_idx] <= 1u) {
+            allows = 1u;
+          }
           out->hitlist_allows = allows ? 1u : 0u;
           if (!allows) {
             reason = (uint8_t)MSL_DEBUG_SHIELD_REJECT_HITLIST_CONTAINS;
@@ -3289,7 +3341,8 @@ int combat_debug_shield_candidate_decisions(MslBatch* batch, int batch_index,
           const uint8_t overlaps = combat_shield_overlap_ftcoll_80007bcc(
               batch, bi, attacker, hb_id, out->hitbox_x, out->hitbox_y, out->hitbox_z,
               out->hitbox_radius, shx, shy, shz, shr, /*shield_desc_radius=*/1.0f,
-              batch->state.fighter_scale_y[d_idx], shield_desc_envelope_ready, &overlap_margin);
+              batch->state.fighter_scale_y[d_idx], shield_desc_envelope_ready,
+              shield_extent_bridge_active, &overlap_margin);
           out->overlap_shield = overlaps ? 1u : 0u;
           out->shield_overlap_margin = overlap_margin;
           if (!overlaps) {

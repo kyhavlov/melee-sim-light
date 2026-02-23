@@ -506,6 +506,52 @@ def test_items_guardreflect_seed_x14_stale_lane_rows_and_adjacent_controls_are_r
 
 
 @pytest.mark.integration
+def test_guardreflect_no_submotion_x14_expired_transition_rows_and_adjacent_controls_are_replay_exact() -> None:
+    # Lock families for kept GuardReflect no-submotion x14-expired shield bridge lanes:
+    # - QGD 1446/9107 transition to GuardSetOff with shield-hitlag ownership preserved.
+    # - Adjacent controls (target-1/target/target+1) remain replay exact.
+    #
+    # Decomp refs:
+    # - refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80093BC0
+    # - refs/melee/src/melee/ft/ftcoll.c::ftColl_80078C70
+    # - refs/melee/src/melee/lb/lbcollision.c::{lbColl_80007BCC,lbColl_80006E58,lbColl_8000ACFC}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_rel = (
+        "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/QuerulousGrandDinosaur.msl"
+    )
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    families = [
+        ((1445, 1446, 1447), 1),
+        ((9106, 9107, 9108), 1),
+    ]
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+
+    for rows, p_target in families:
+        for rec in rows:
+            assert int(samples.shape[0]) > rec, f"dataset too short for lock row: record={rec}"
+        target = rows[1]
+        seed_t = samples["seed_t"][target]
+        ref_t1 = samples["ref_t1"][target]
+        assert int(seed_t["action_id"][p_target]) == 0x00B6  # GuardReflect
+        assert int(seed_t["action_frame"][p_target]) < 0
+        assert int(seed_t["animation_index"][p_target]) == 0xFFFFFFFF
+        assert int(seed_t["guard_reflect_timer_x14"][p_target]) == 0
+        assert int(seed_t["guard_reflect_timer_x18"][p_target]) <= 1
+        assert int(ref_t1["action_id"][p_target]) == 0x00B5  # GuardSetOff
+        assert int(ref_t1["hitlag"][p_target]) > 0
+
+        for rec in rows:
+            _, ref_row, out_row = _run_one_step_row(dataset_path, rec, p_target)
+            for p in (0, 1):
+                _assert_transition_lock_fields_match_ref(out_row=out_row, ref_row=ref_row, record=rec, p=p)
+
+
+@pytest.mark.integration
 @pytest.mark.parametrize(
     ("dataset_rel", "record", "p", "seed_action"),
     [
