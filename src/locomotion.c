@@ -844,6 +844,58 @@ static inline uint8_t grounded_attack_try_iasa_subset(MslBatch* batch, const Msl
   return 0u;
 }
 
+static inline uint8_t grounded_attack_try_jab_chain_subset(MslBatch* batch, size_t idx,
+                                                           uint16_t action_id,
+                                                           uint16_t buttons_pressed) {
+  if (batch == NULL) {
+    return 0u;
+  }
+  if (action_id != (uint16_t)MSL_ACT_ATTACK_11) {
+    return 0u;
+  }
+  // Decomp: Attack11_IASA executes checkAttack12 outside the fp->allow_interrupt gate.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack1.c::ftCo_Attack11_IASA
+  //
+  // checkAttack12 gate:
+  // - requires fp->x2218_b1 ("set jab combo" movescript command),
+  // - consumes A-latched intent (mv.co.attack1.x0), where input.x668 is the source edge.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack1.c::checkAttack12
+  // refs/melee/src/melee/ft/ftaction.c::ftAction_80071AE8
+  //
+  // Slippi state byte mapping:
+  // - state_flags[0] mirrors fp+0x2218 bitfield; bit0x80 is x2218_b0 (allow_interrupt),
+  //   so x2218_b1 maps to bit0x40 in this packed byte.
+  // refs/melee/src/melee/ft/types.h (fp+0x2218 bitfield order)
+  // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm (packed state bytes emission)
+  enum { MSL_STATE_FLAG_2218_JAB_COMBO = 0x40 };
+  enum { MSL_STATE_FLAGS_2218_INDEX = 0 };
+  const size_t flags_i = idx * (size_t)MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_2218_INDEX;
+  const uint8_t f2218 = batch->state.state_flags[flags_i];
+  if ((f2218 & (uint8_t)MSL_STATE_FLAG_2218_JAB_COMBO) == 0u) {
+    return 0u;
+  }
+
+  // checkAttack12 sources jab intent from `input.x668 & HSD_PAD_A` while hitlag_mul > 0.
+  // Mirror this subset with A-edge only (no held-A proxy).
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack1.c::checkAttack12
+  if ((buttons_pressed & (uint16_t)MSL_BUTTON_A) == 0u) {
+    return 0u;
+  }
+
+  // doAttack12Normal clears allow_interrupt and x2218_b1 on entry.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack1.c::doAttack12Normal
+  enum { MSL_STATE_FLAG_2218_ALLOW_INTERRUPT = 0x80 };
+  batch->state.state_flags[flags_i] &= (uint8_t) ~(uint8_t)(MSL_STATE_FLAG_2218_ALLOW_INTERRUPT |
+                                                             MSL_STATE_FLAG_2218_JAB_COMBO);
+  batch->state.action_id[idx] = (uint16_t)MSL_ACT_ATTACK_12;
+  batch->state.animation_index[idx] = (uint32_t)MSL_SM_ATTACK_12;
+  // Decomp doAttack12Normal performs Fighter_ChangeMotionState only (no local ftAnim_8006EBA4),
+  // so this transition enters at frame 0 and does not take an immediate local anim tick.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack1.c::doAttack12Normal
+  msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+  return 1u;
+}
+
 static inline uint8_t action_is_walk(uint16_t a) {
   return (a == MSL_ACT_WALK_SLOW || a == MSL_ACT_WALK_MIDDLE || a == MSL_ACT_WALK_FAST) ? 1 : 0;
 }
@@ -1615,24 +1667,30 @@ void locomotion_update_pre(MslBatch* batch) {
                                    facing_dir)) {
           action_id = batch->state.action_id[idx];
           if (grounded_attack_submotion_from_action(action_id) != 0xFFFFFFFFu) {
-            // AttackDash IASA has an extra pre-gate (`ftCo_800D8AE0`) before Wait_IASA delegation.
-            // Keep AttackDash on the existing path until that gate is modeled explicitly.
-            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackDash.c::ftCo_AttackDash_IASA
-            // refs/melee/build/GALE01/asm/melee/ft/chara/ftCommon/ftCo_Attack100.s::ftCo_800D8AE0
-            if (action_id == (uint16_t)MSL_ACT_ATTACK_DASH) {
-              continue;
+            if (grounded_attack_try_jab_chain_subset(batch, idx, action_id, buttons_pressed)) {
+              action_id = batch->state.action_id[idx];
             }
 
             const uint8_t allow_interrupt = move_tables_grounded_attack_allow_interrupt(
                 cid, action_id, batch->state.anim_frame_f32[idx]);
 
-            // Decomp: grounded Attack* IASA gates on fp->allow_interrupt before delegating to
-            // grounded interrupt checks (typically Wait IASA path).
-            // refs/melee/src/melee/ft/chara/ftCommon/{ftCo_AttackDash.c,ftCo_AttackS3.c,ftCo_AttackHi3.c,ftCo_AttackHi4.c,ftCo_AttackLw4.c}
-            if (allow_interrupt &&
-                grounded_attack_try_iasa_subset(batch, c, ch, idx, buttons, buttons_pressed, stick_x,
-                                                stick_y, tilt_timer_x, tilt_timer_y, facing_dir)) {
-              action_id = batch->state.action_id[idx];
+            if (action_id == (uint16_t)MSL_ACT_ATTACK_DASH) {
+              // AttackDash IASA has an extra pre-gate (`ftCo_800D8AE0`) before Wait_IASA delegation.
+              // Keep AttackDash on the existing path until that gate is modeled explicitly.
+              // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackDash.c::ftCo_AttackDash_IASA
+              // refs/melee/build/GALE01/asm/melee/ft/chara/ftCommon/ftCo_Attack100.s::ftCo_800D8AE0
+              (void)allow_interrupt;
+              continue;
+            } else {
+              // Decomp: grounded Attack* IASA gates on fp->allow_interrupt before delegating to
+              // grounded interrupt checks (typically Wait IASA path).
+              // refs/melee/src/melee/ft/chara/ftCommon/{ftCo_AttackDash.c,ftCo_AttackS3.c,ftCo_AttackHi3.c,ftCo_AttackHi4.c,ftCo_AttackLw4.c}
+              if (allow_interrupt &&
+                  grounded_attack_try_iasa_subset(batch, c, ch, idx, buttons, buttons_pressed,
+                                                  stick_x, stick_y, tilt_timer_x, tilt_timer_y,
+                                                  facing_dir)) {
+                action_id = batch->state.action_id[idx];
+              }
             }
 
             if (grounded_attack_submotion_from_action(action_id) != 0xFFFFFFFFu) {

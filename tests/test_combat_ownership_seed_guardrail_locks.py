@@ -1828,3 +1828,64 @@ def test_shine_reflect_behavior_transition_rows_and_adjacent_controls_stay_repla
     for rec in (controls[0], target_record, controls[1]):
         _, ref, out = _run_one_step_row(dataset_path, rec, p)
         _assert_body_overlap_lock_fields_match_ref(out_row=out, ref_row=ref, record=rec, p=p)
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    ("dataset_rel", "target_record", "p"),
+    [
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl",
+            5403,
+            0,
+        ),
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/QuerulousGrandDinosaur.msl",
+            9658,
+            0,
+        ),
+    ],
+)
+def test_attack11_jab_chain_transition_rows_and_adjacent_controls_stay_replay_exact(
+    dataset_rel: str,
+    target_record: int,
+    p: int,
+) -> None:
+    # Attack11 -> Attack12 transition lock for the kept decomp-backed jab-chain ownership lane:
+    # - Attack11_IASA evaluates checkAttack12 outside allow_interrupt.
+    # - checkAttack12 requires x2218_b1 (set_jab_combo) and A-edge input intent.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack1.c::{ftCo_Attack11_IASA,checkAttack12}
+    # refs/melee/src/melee/ft/ftaction.c::ftAction_80071AE8
+    #
+    # Adjacent controls:
+    # - target-1 stays in Attack11
+    # - target+1 stays in Attack12
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+    controls = (target_record - 1, target_record + 1)
+    for rec in (target_record, *controls):
+        assert int(samples.shape[0]) > rec, f"dataset too short for lock row: record={rec}"
+
+    target_row = samples[target_record : target_record + 1]
+    assert int(target_row["seed_t"]["action_id"][0, p]) == 44
+    assert int(target_row["ref_t1"]["action_id"][0, p]) == 45
+    assert int(target_row["seed_t"]["animation_index"][0, p]) == 46
+    assert int(target_row["ref_t1"]["animation_index"][0, p]) == 47
+
+    pre_row = samples[controls[0] : controls[0] + 1]
+    assert int(pre_row["seed_t"]["action_id"][0, p]) == 44
+    assert int(pre_row["ref_t1"]["action_id"][0, p]) == 44
+
+    post_row = samples[controls[1] : controls[1] + 1]
+    assert int(post_row["seed_t"]["action_id"][0, p]) == 45
+    assert int(post_row["ref_t1"]["action_id"][0, p]) == 45
+
+    for rec in (controls[0], target_record, controls[1]):
+        _, ref, out = _run_one_step_row(dataset_path, rec, p)
+        _assert_transition_lock_fields_match_ref(out_row=out, ref_row=ref, record=rec, p=p)
