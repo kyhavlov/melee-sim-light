@@ -1458,8 +1458,20 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
           //
           // Keep item reflect gating aligned with combat collision-time powershield semantics by
           // sharing combat_is_powershield_active_idx().
-          const uint8_t can_powershield_reflect =
+          uint8_t can_powershield_reflect =
               combat_is_powershield_active_idx(batch, d_idx) ? 1u : 0u;
+          // No-submotion GuardReflect stale-x18 lane:
+          // - Reflect ownership is callback-gated by the active reflect window (mv.co.guard.x14).
+          // - Some frozen snapshots carry x18 from the previous frame while x14 was already 0 in
+          //   the seed snapshot; those rows should resolve through normal shield-hit ownership
+          //   (GuardSetOff/hitlag), not item reflect.
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_8009370C,ftCo_80093BC0}
+          // refs/melee/src/melee/ft/ftcoll.c::{ftColl_CreateReflectHit,ftColl_80076CBC}
+          if (can_powershield_reflect && defender_guard_reflect_no_submotion_snapshot &&
+              batch->state.guard_reflect_timer_x14_seed[d_idx] == 0u &&
+              batch->state.guard_reflect_timer_x18_seed[d_idx] != 0u) {
+            can_powershield_reflect = 0u;
+          }
           if (can_powershield_reflect) {
             // Decomp reflect snapshot ownership:
             // - GuardReflect reflect setup path initializes ReflectDesc lanes.

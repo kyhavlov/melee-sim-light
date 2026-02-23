@@ -1244,8 +1244,15 @@ static inline void combat_mutations_pass1_future_apply_body_hit(MslBatch* batch,
       batch->state.hitlag[d_idx] = d_hl;
       combat_state_flags_set_is_hitlag(batch, d_idx, d_hl);
     }
+    // Attached grabbed/thrown victim lane ownership:
+    // - Keep instance attribution (`x18EC`) on the confirming contact, but do not overwrite
+    //   source player (`x18C4`) here.
+    // - In decomp, source-player reset ownership is timer-driven in Fighter_8006A360 via
+    //   `dmg.x18C8` expiry, not a direct write in this attached-collision branch.
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Thrown.c::ftCo_800DE508
+    // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
+    // refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState
     batch->state.instance_hit_by[d_idx] = batch->state.instance_id[a_idx];
-    batch->state.last_hit_by[d_idx] = (uint8_t)attacker;
 
     // Decomp: Fighter_ProcessHit can set fp->x221A_b3 alongside hitlag start under KB/damage paths.
     // For ThrowF/ThrownF style attached hits, Slippi observes x221A_b3 set even though the victim

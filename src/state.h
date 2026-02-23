@@ -152,6 +152,10 @@ typedef struct MslStateSoA {
   uint8_t* guard_reflect_timer_x14;  // [batch * players]
   // GuardReflect powershield-active timer (decomp: mv.co.guard.x18; +1 bias, expires at 0).
   uint8_t* guard_reflect_timer_x18;  // [batch * players]
+  // Per-step pre-tick GuardReflect timer snapshots (captured at frame start, before timer/callback
+  // ownership updates). Used by collision/item lanes that need seed-lifetime ownership boundaries.
+  uint8_t* guard_reflect_timer_x14_seed;  // [batch * players]
+  uint8_t* guard_reflect_timer_x18_seed;  // [batch * players]
   // Guard release lockout + shield-drain latch (seeded; decomp-shaped).
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80092BCC and ::ftCo_800925A4.
   uint8_t* guard_release_latched_xc;  // mv.co.guard.xC (0/1)

@@ -454,6 +454,58 @@ def test_items_guardreflect_no_submotion_shield_sweep_rows_and_adjacent_controls
 
 
 @pytest.mark.integration
+def test_items_guardreflect_seed_x14_stale_lane_rows_and_adjacent_controls_are_replay_exact() -> None:
+    # Lock family for the kept GuardReflect no-submotion stale-x18 lane:
+    # - frozen snapshot keeps x18 non-zero while seed x14 is already 0,
+    # - reflect ownership must follow the pre-tick x14 seed lane and resolve as regular shield hit.
+    #
+    # Decomp refs:
+    # - refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_8009370C,ftCo_80093BC0}
+    # - refs/melee/src/melee/ft/ftcoll.c::{ftColl_CreateReflectHit,ftColl_80076CBC}
+    # - refs/melee/src/melee/it/items/itfoxlaser.c::{it_2725_Logic94_HitShield,it_2725_Logic94_Reflected}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+
+    families = [
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl",
+            (548, 549, 550),
+            1,
+        ),
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl",
+            (2275, 2276, 2277),
+            0,
+        ),
+    ]
+
+    for dataset_rel, rows, p_target in families:
+        dataset_path = root / dataset_rel
+        if not dataset_path.exists():
+            pytest.skip(f"missing local dataset: {dataset_rel}")
+        ds = read_dataset(str(dataset_path))
+        samples = ds.samples
+        for rec in rows:
+            assert int(samples.shape[0]) > rec, f"dataset too short for lock row: record={rec}"
+
+        target = rows[1]
+        seed_t = samples["seed_t"][target]
+        ref_t1 = samples["ref_t1"][target]
+        assert int(seed_t["action_id"][p_target]) == 0x00B6  # GuardReflect
+        assert int(seed_t["action_frame"][p_target]) <= -2
+        assert int(seed_t["animation_index"][p_target]) == 0xFFFFFFFF
+        assert int(seed_t["guard_reflect_timer_x14"][p_target]) == 0
+        assert int(seed_t["guard_reflect_timer_x18"][p_target]) > 0
+        assert int(ref_t1["action_id"][p_target]) == 0x00B5  # GuardSetOff
+        assert int(ref_t1["hitlag"][p_target]) > 0
+
+        for rec in rows:
+            _, ref_row, out_row = _run_one_step_row(dataset_path, rec, p_target)
+            for p in (0, 1):
+                _assert_transition_lock_fields_match_ref(out_row=out_row, ref_row=ref_row, record=rec, p=p)
+
+
+@pytest.mark.integration
 @pytest.mark.parametrize(
     ("dataset_rel", "record", "p", "seed_action"),
     [
