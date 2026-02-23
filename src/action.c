@@ -654,6 +654,24 @@ void guard_update_grounded(MslBatch* batch, const MslCommonParams* c, size_t idx
   }
 
   const uint16_t a0 = batch->state.action_id[idx];
+  enum { LR = (uint16_t)MSL_BUTTON_L | (uint16_t)MSL_BUTTON_R };
+  const uint8_t guard_on_fresh_entry_from_non_shield_snapshot =
+      // Decomp ownership: input callbacks run once per fighter per frame (Fighter_procUpdate).
+      // When Wait/Damage IASA enters GuardOn via ftCo_80091A4C -> ftCo_800924C0, GuardOn_IASA must
+      // not consume the same input again in that frame.
+      // refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_80091A4C,ftCo_800924C0,ftCo_GuardOn_IASA}
+      // Scope gate: ftCo_80091A4C checks HSD_PAD_LR (digital hold) before GuardOn entry.
+      // Scope gate: keep this bridge to buffered jump+shield entries (X/Y edge lane) so plain
+      // shield-hold entries still run the same-frame GuardOn IASA ownership as usual.
+      (a0 == (uint16_t)MSL_ACT_GUARD_ON && batch->state.action_frame[idx] < 0 &&
+       (batch->state.input_buttons[idx] & (uint16_t)LR) != 0u &&
+       (batch->state.input_buttons_pressed[idx] &
+        (uint16_t)((uint16_t)MSL_BUTTON_X | (uint16_t)MSL_BUTTON_Y)) != 0u &&
+       batch->state.animation_index[idx] == 0xFFFFFFFFu &&
+       !is_shield_active_action(batch->state.prev_action_id[idx]))
+          ? 1u
+          : 0u;
 
   if (!is_shield_active_action(a0)) {
     batch->state.guard_release_latched_xc[idx] = 0;
@@ -663,7 +681,6 @@ void guard_update_grounded(MslBatch* batch, const MslCommonParams* c, size_t idx
 
   const float trig = msl_trigger_unit_from_input(
       batch->state.input_buttons[idx], batch->state.input_l[idx], batch->state.input_r[idx]);
-  enum { LR = (uint16_t)MSL_BUTTON_L | (uint16_t)MSL_BUTTON_R };
   // Decomp uses held_inputs & HSD_PAD_LR for guard-release latch ownership (ftCo_80092BCC).
   // Use replay-visible held button bits as primary proxy; fall back to trigger deadzone only when
   // digital LR bits are absent.
@@ -720,6 +737,9 @@ void guard_update_grounded(MslBatch* batch, const MslCommonParams* c, size_t idx
   if (a0 == MSL_ACT_GUARD_ON || a0 == MSL_ACT_GUARD || a0 == MSL_ACT_GUARD_REFLECT) {
     batch->state.animation_index[idx] = 0xFFFFFFFFu;
     const uint8_t can_update = (batch->state.hitlag_started_frame[idx] == 0) ? 1 : 0;
+    if (guard_on_fresh_entry_from_non_shield_snapshot) {
+      return;
+    }
 
     if (can_update) {
       // Powershield / GuardReflect entry (while guarding).
@@ -861,7 +881,18 @@ void guard_update_grounded(MslBatch* batch, const MslCommonParams* c, size_t idx
             ? 1u
             : 0u;
     if (batch->state.hitlag_started_frame[idx] == 0 && guard_snapshot_hold_fallback) {
+      // Decomp ordering: GuardReflect_Anim can transition to Guard before input callback dispatch,
+      // and the destination Guard_IASA still consumes OoS options in the same frame.
+      // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A360,Fighter_procUpdate}
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_GuardReflect_Anim,ftCo_GuardOn_IASA,ftCo_Guard_IASA}
+      if (a0 == (uint16_t)MSL_ACT_GUARD_REFLECT) {
+        batch->state.guard_reflect_timer_x14[idx] = 0;
+        batch->state.guard_reflect_timer_x18[idx] = 0;
+      }
       enter_guard_hold(batch, idx);
+      if (guard_try_enter_iasa_defense(batch, c, idx)) {
+        return;
+      }
       return;
     }
 

@@ -2219,6 +2219,50 @@ def test_attackdash_guardon_entry_countdown_row_and_adjacent_controls_are_replay
 
 
 @pytest.mark.integration
+def test_guard_damage_and_guardreflect_transition_rows_and_adjacent_controls_are_replay_exact() -> None:
+    # Guard transition ownership locks for the kept action lane:
+    # 1) DamageHi* -> GuardOn (jump+shield buffered) must not double-consume into KneeBend.
+    # 2) GuardReflect no-submotion snapshot fallback must still allow same-frame Guard IASA jump.
+    #
+    # Decomp refs:
+    # - refs/melee/src/melee/ft/fighter.c::{Fighter_8006A360,Fighter_procUpdate}
+    # - refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_IASA
+    # - refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
+    # - refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
+    #     ftCo_80091A4C,ftCo_800924C0,ftCo_GuardReflect_Anim,ftCo_Guard_IASA}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_rel = (
+        "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
+        "AttachedGoodNaturedGuanaco.msl"
+    )
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+    families = [
+        # target-1 / target / target+1
+        ((189, 190, 191), 1, 75, 178),  # DamageHi1 -> GuardOn
+        ((434, 435, 436), 1, 182, 24),  # GuardReflect -> KneeBend
+    ]
+
+    for rows, p_target, seed_action, ref_action in families:
+        for rec in rows:
+            assert int(samples.shape[0]) > rec, f"dataset too short for lock row: record={rec}"
+        target = rows[1]
+        target_row = samples[target : target + 1]
+        assert int(target_row["seed_t"]["action_id"][0, p_target]) == int(seed_action)
+        assert int(target_row["ref_t1"]["action_id"][0, p_target]) == int(ref_action)
+
+        for rec in rows:
+            _, ref, out = _run_one_step_row(dataset_path, rec, p_target)
+            for p in (0, 1):
+                _assert_transition_lock_fields_match_ref(out_row=out, ref_row=ref, record=rec, p=p)
+
+
+@pytest.mark.integration
 @pytest.mark.parametrize(
     ("dataset_rel", "target_record", "p", "seed_action", "ref_action"),
     [
