@@ -212,6 +212,11 @@ def _extract_ftco_dattrs(pl_dat: Path, *, ftdata_symbol: str, extract_fox_blaste
         "air_jump_v_multiplier": f(0x50),
         "air_jump_h_multiplier": f(0x54),
         "weight": f(0x88),
+        # Decomp: ftCo_800DD4B0 checks ftCo_DatAttrs.weight_independent_throws_mask (bitfield by
+        # throw index) before applying weight-based throw anim-speed scaling.
+        # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DD4B0
+        # refs/melee/src/melee/ft/types.h::ftCo_DatAttrs (+0x180)
+        "weight_independent_throws_mask": int(buf[attrs_abs + 0x180]),
         "model_scaling": f(0x8C),
         "initial_shield_size": f(0x90),
         "trophy_scale": f(0x110),
@@ -421,6 +426,7 @@ def _stable_update(existing: dict, extracted: dict) -> dict:
         "dash_run_terminal_velocity",
         "run_animation_scaling",
         "weight",
+        "weight_independent_throws_mask",
         "model_scaling",
         "initial_shield_size",
         "trophy_scale",

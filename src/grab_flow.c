@@ -7,6 +7,7 @@
 #include "anim_table.h"
 #include "anim_timebase.h"
 #include "buttons.h"
+#include "char_params.h"
 #include "common_params.h"
 #include "grab_attachment.h"
 #include "input_axis.h"
@@ -294,6 +295,21 @@ static inline uint32_t throw_victim_submotion(uint16_t thrown_action) {
   }
 }
 
+static inline int throw_index_from_action(uint16_t throw_action) {
+  switch (throw_action) {
+    case (uint16_t)MSL_ACT_THROW_F:
+      return 0;
+    case (uint16_t)MSL_ACT_THROW_B:
+      return 1;
+    case (uint16_t)MSL_ACT_THROW_HI:
+      return 2;
+    case (uint16_t)MSL_ACT_THROW_LW:
+      return 3;
+    default:
+      return -1;
+  }
+}
+
 static inline uint16_t catch_wait_throw_action_from_inputs(const MslBatch* batch,
                                                            const MslCommonParams* c, size_t oidx) {
   if (batch == NULL || c == NULL) {
@@ -413,9 +429,38 @@ static inline uint8_t enter_throw_from_wait(MslBatch* batch, int bi, int owner_p
   }
 
   const size_t vidx = msl_idx_player(bi, victim_p);
+  float throw_anim_speed = 1.0f;
+  {
+    const MslCommonParams* c = msl_common_params();
+    const MslCharParams* owner_ch = msl_char_params(batch->state.char_id[oidx]);
+    const MslCharParams* victim_ch = msl_char_params(batch->state.char_id[vidx]);
+    // Decomp throw-entry anim-speed ownership:
+    // - ftCo_800DD4B0 computes throw_index = msid - 219, then:
+    //   if (!(weight_independent_throws_mask & (1 << throw_index))) {
+    //     anim_speed = 1.0f / (victim->ft_data->x0->weight * p_ftCommonData->x37C);
+    //   } else {
+    //     anim_speed = 1.0f;
+    //   }
+    // - ftCo_800DD398 passes that anim_speed into both thrower and thrown-victim motion entries.
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::{ftCo_800DD4B0,ftCo_800DD398}
+    // refs/melee/src/melee/ft/types.h::ftCo_DatAttrs (+0x180 weight_independent_throws_mask)
+    const int throw_index = throw_index_from_action(throw_action);
+    const uint8_t weight_independent =
+        (throw_index >= 0 && owner_ch != NULL)
+            ? ((owner_ch->weight_independent_throws_mask & (uint8_t)(1u << throw_index)) ? 1u : 0u)
+            : 0u;
+    if (!weight_independent && c != NULL && victim_ch != NULL &&
+        victim_ch->weight > 0.0f && c->throw_anim_speed_weight_mul > 0.0f) {
+      throw_anim_speed = 1.0f / (victim_ch->weight * c->throw_anim_speed_weight_mul);
+      if (!(throw_anim_speed > 0.0f)) {
+        throw_anim_speed = 1.0f;
+      }
+    }
+  }
+
   batch->state.action_id[oidx] = throw_action;
   batch->state.animation_index[oidx] = owner_sm;
-  msl_anim_timebase_enter(batch, oidx, 0.0f, 1.0f);
+  msl_anim_timebase_enter(batch, oidx, 0.0f, throw_anim_speed);
   // Safety contract: this immediate tick is *only* valid for CatchWait throw-entry because
   // decomp's ftCo_800DD398 does Fighter_ChangeMotionState + immediate ftAnim_8006EBA4 in the same
   // callback. Generic motion-state entries must not do this extra tick because step.c already runs
@@ -441,7 +486,7 @@ static inline uint8_t enter_throw_from_wait(MslBatch* batch, int bi, int owner_p
   // per-frame thrown accessory callback.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Thrown.c::ftCo_800DE3FC
   batch->state.facing[vidx] = batch->state.facing[oidx];
-  msl_anim_timebase_enter(batch, vidx, 0.0f, 1.0f);
+  msl_anim_timebase_enter(batch, vidx, 0.0f, throw_anim_speed);
   // Safety contract matches the thrower-side guard above: this extra tick mirrors
   // ftCo_800DE3FC's immediate ftAnim_8006EBA4 and must not be generalized to arbitrary entries.
   assert(batch->state.action_id[vidx] >= (uint16_t)MSL_ACT_THROWN_F &&

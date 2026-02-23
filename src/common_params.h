@@ -38,6 +38,13 @@ typedef struct MslCommonParams {
   float attack_s3_stick_threshold_x;   // p_ftCommonData->x98 (attack_s3_stick_threshold_x)
   float attack_hi3_stick_threshold_y;  // p_ftCommonData->attackhi3_stick_threshold_y
   float attack_lw3_stick_threshold_y;  // p_ftCommonData->xB0 (attack_lw3_stick_threshold_y)
+  // Throw entry anim-speed weight scalar.
+  //
+  // Decomp: ftCo_800DD4B0 computes
+  //   anim_speed = 1.0f / (victim->ft_data->x0->weight * p_ftCommonData->x37C)
+  // when weight-independent mask bit is not set.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DD4B0
+  float throw_anim_speed_weight_mul;  // p_ftCommonData->x37C
   // Grounded A-smash directional checks (ftCo_AttackHi4/Lw4 and ft_0DF1 C-stick helpers).
   float attack_hi4_stick_threshold_y;  // p_ftCommonData->xCC
   uint8_t attack_hi4_tilt_max_frames;  // p_ftCommonData->xD0
@@ -276,6 +283,9 @@ typedef struct MslCommonParams {
   float kb_weight_mul;   // p_ftCommonData->0xF4
   float kb_weight_mul2;  // p_ftCommonData->0xF8
   float kb_applied_max;  // p_ftCommonData->0x108
+  // Throw release uses x10C as the ftColl_80079AB0 weight parameter.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DDDE4
+  float throw_kb_weight_x10c;  // p_ftCommonData->0x10C
   float kb_base_term;    // p_ftCommonData->0x110
   float kb_dmg_mul;      // p_ftCommonData->0x114
   float kb_wsk_mul;      // p_ftCommonData->0x118

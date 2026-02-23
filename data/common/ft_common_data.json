@@ -163,6 +163,8 @@
   "tech_lr_debounce_frames": 40,
   "tech_roll_stick_threshold": 0.20000000298023224,
   "tech_window_frames": 20.0,
+  "throw_anim_speed_weight_mul": 0.009999999776482582,
+  "throw_kb_weight_x10c": 100.0,
   "trigger_deadzone": 0.30000001192092896,
   "turn_run_stick_x_threshold": -0.375,
   "turn_stick_x_threshold": -0.25,

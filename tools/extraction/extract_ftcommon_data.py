@@ -169,6 +169,13 @@ def main() -> None:
         "smash_stick_threshold": float(_f32_be(buf, ft_common_abs + 0x7B8)),
         "cstick_smash_threshold": float(_f32_be(buf, ft_common_abs + 0x7BC)),
         "smash_flick_tilt_max_frames": int(round(float(_f32_be(buf, ft_common_abs + 0x7C0)))),
+        # Throw entry anim-speed weight scalar.
+        #
+        # Decomp:
+        # - ftCo_800DD4B0 computes weight-based throw anim speed as:
+        #     1.0f / (victim->ft_data->x0->weight * p_ftCommonData->x37C)
+        # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DD4B0
+        "throw_anim_speed_weight_mul": float(_f32_be(buf, ft_common_abs + 0x37C)),
         # Ground A-attacks input checks (ftCo_Attack*; ftCommonData offsets).
         "attack_angle_threshold_radians": float(_f32_be(buf, ft_common_abs + 0x20)),
         "attack_s3_stick_threshold_x": float(_f32_be(buf, ft_common_abs + 0x98)),
@@ -301,6 +308,9 @@ def main() -> None:
         "kb_weight_mul": float(_f32_be(buf, ft_common_abs + 0xF4)),
         "kb_weight_mul2": float(_f32_be(buf, ft_common_abs + 0xF8)),
         "kb_applied_max": float(_f32_be(buf, ft_common_abs + 0x108)),
+        # Throw release uses x10C as ftColl_80079AB0's `weight` argument.
+        # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DDDE4
+        "throw_kb_weight_x10c": float(_f32_be(buf, ft_common_abs + 0x10C)),
         "kb_base_term": float(_f32_be(buf, ft_common_abs + 0x110)),
         "kb_dmg_mul": float(_f32_be(buf, ft_common_abs + 0x114)),
         "kb_wsk_mul": float(_f32_be(buf, ft_common_abs + 0x118)),

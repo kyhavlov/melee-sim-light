@@ -1708,6 +1708,14 @@ uint8_t combat_apply_throw_hit(MslBatch* batch, int batch_index, int attacker, i
   if (d_ch == NULL) {
     return 0;
   }
+  MslCharParams d_ch_throw = *d_ch;
+  // Decomp throw-release KB path uses p_ftCommonData->x10C as the ftColl_80079AB0 "weight"
+  // argument (instead of victim co_attrs.weight), then routes into ftCo_Damage_CalcKnockback.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DDDE4
+  // refs/melee/build/GALE01/asm/melee/ft/ftcoll.s::ftColl_80079AB0
+  if (c->throw_kb_weight_x10c > 0.0f) {
+    d_ch_throw.weight = c->throw_kb_weight_x10c;
+  }
 
   // Throw hits are treated as airborne damage entry (victim is detached from the throw joint).
   // Decomp: throw release clears grounded state via ftCommon_8007D5D4 on the thrown fighter.
@@ -1725,7 +1733,8 @@ uint8_t combat_apply_throw_hit(MslBatch* batch, int batch_index, int attacker, i
   }
 
   const float kb_applied = combat_damage_calc_kb_applied(
-      c, d_ch, d_motion_id, percent_pre, dmg_temp, dmg_raw_i, p->kbg, p->wsk, p->bkb, coll_kb_mul,
+      c, &d_ch_throw, d_motion_id, percent_pre, dmg_temp, dmg_raw_i, p->kbg, p->wsk, p->bkb,
+      coll_kb_mul,
       batch->state.dmg_x2225_b7[d_idx], batch->state.dmg_x2224_b2[d_idx],
       batch->state.kb_smashcharge_active[d_idx]);
   const float kb_angle_rad =

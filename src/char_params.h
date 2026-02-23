@@ -15,6 +15,16 @@ typedef struct MslCharParams {
   // Decomp: ftCo_Damage knockback uses `fp->co_attrs.weight` (ftCo_Damage / ftColl).
   // Source of truth: ISO-extracted `data/characters/*.json` `weight`.
   float weight;
+  // Throw anim-speed mask (per-throw bitfield).
+  //
+  // Decomp: ftCo_800DD4B0 skips the weight-based anim-speed formula when
+  // `fp->ft_data->x0->weight_independent_throws_mask & (1 << throw_index)` is set.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DD4B0
+  // refs/melee/src/melee/ft/types.h::ftCo_DatAttrs (+0x180)
+  //
+  // Source of truth: ISO-extracted `data/characters/*.json` `weight_independent_throws_mask`.
+  uint8_t weight_independent_throws_mask;
+  uint8_t _pad_u8_weight_independent_throws_mask[3];
 
   // Match start entry height scalar (ft_0C31.c::ftCo_800C6408).
   // Source of truth: ISO-extracted `data/characters/*.json` `trophy_scale`.

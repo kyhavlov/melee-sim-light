@@ -183,6 +183,8 @@ int common_params_init(void) {
           0 ||
       json_get_f32(buf, "attack_lw3_stick_threshold_y", &g_params.attack_lw3_stick_threshold_y) !=
           0 ||
+      json_get_f32(buf, "throw_anim_speed_weight_mul", &g_params.throw_anim_speed_weight_mul) !=
+          0 ||
       json_get_f32(buf, "attack_hi4_stick_threshold_y", &g_params.attack_hi4_stick_threshold_y) !=
           0 ||
       json_get_u8(buf, "attack_hi4_tilt_max_frames", &g_params.attack_hi4_tilt_max_frames) != 0 ||
@@ -346,6 +348,7 @@ int common_params_init(void) {
       json_get_f32(buf, "kb_weight_mul", &g_params.kb_weight_mul) != 0 ||
       json_get_f32(buf, "kb_weight_mul2", &g_params.kb_weight_mul2) != 0 ||
       json_get_f32(buf, "kb_applied_max", &g_params.kb_applied_max) != 0 ||
+      json_get_f32(buf, "throw_kb_weight_x10c", &g_params.throw_kb_weight_x10c) != 0 ||
       json_get_f32(buf, "kb_base_term", &g_params.kb_base_term) != 0 ||
       json_get_f32(buf, "kb_dmg_mul", &g_params.kb_dmg_mul) != 0 ||
       json_get_f32(buf, "kb_wsk_mul", &g_params.kb_wsk_mul) != 0 ||
