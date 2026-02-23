@@ -187,7 +187,7 @@ def _assert_body_overlap_lock_fields_match_ref(*, out_row: np.void, ref_row: np.
 def _assert_throw_release_action_anim_match_ref(
     *, out_row: np.void, ref_row: np.void, record: int, p: int
 ) -> None:
-    for field in ("action_id", "animation_index"):
+    for field in ("action_id", "animation_index", "jumps_left"):
         got = int(out_row[field][p])
         exp = int(ref_row[field][p])
         assert got == exp, f"record={record} p={p} field={field} expected={exp} got={got}"
@@ -1822,6 +1822,9 @@ def test_throw_release_transition_families_and_adjacent_controls_action_anim_sta
     # Throw-release lock families resolved by the decomp-backed parity bundle:
     # - action_id 241->90 with animation 264->180
     # - action_id 240->88 with animation 263->178
+    # - jumps_left 2->1 parity from grounded/throw release ftCommon_8007D5D4 ownership lane.
+    # refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007D5D4
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DDDE4
     #
     # Adjacent controls assert transition continuity:
     # - target-1 remains in pre-release Thrown*

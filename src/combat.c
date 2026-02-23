@@ -322,6 +322,26 @@ static inline void combat_state_flags_set_is_hitstun(MslBatch* batch, size_t idx
   batch->state.state_flags[flags_i] = f;
 }
 
+static inline void combat_apply_ftCommon_8007D5D4_ground_to_air(MslBatch* batch, size_t idx) {
+  if (batch == NULL) {
+    return;
+  }
+  // Decomp common helper ownership:
+  // - ftCommon_8007D5D4 sets ground_or_air=Air, gr_vel=0, jumpsUsed=1, ecb_lock=10.
+  // - Damage entry / throw-release lanes call this helper when launching victim airborne.
+  // refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007D5D4
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DDDE4
+  batch->state.on_ground[idx] = 0u;
+  // Narrow ownership parity for this lane: keep existing velocity/ecb ownership in their
+  // current systems and source jumpsUsed parity here (jumps_left=max_jumps-1).
+  // refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007D5D4
+  const MslCharParams* ch = msl_char_params(batch->state.char_id[idx]);
+  if (ch != NULL) {
+    batch->state.jumps_left[idx] = (ch->max_jumps > 0u) ? (uint8_t)(ch->max_jumps - 1u) : 0u;
+  }
+}
+
 static inline uint8_t combat_is_guard_reflect_frozen_snapshot_idx(const MslBatch* batch, size_t idx) {
   if (batch == NULL) {
     return 0;
@@ -1408,7 +1428,7 @@ static inline void combat_mutations_pass1_future_apply_body_hit(MslBatch* batch,
     const float dot = nx * kb_x + ny * kb_y;
     const uint8_t sev = combat_damage_severity_u8_from_kb(c, kb_applied);
     if (dot > 0.0f || sev == 3u) {
-      batch->state.on_ground[d_idx] = 0;
+      combat_apply_ftCommon_8007D5D4_ground_to_air(batch, d_idx);
       batch->state.speed_x_attack[d_idx] = kb_x;
       batch->state.speed_y_attack[d_idx] = kb_y;
     } else {
@@ -1790,7 +1810,7 @@ uint8_t combat_apply_throw_hit(MslBatch* batch, int batch_index, int attacker, i
   // Throw hits are treated as airborne damage entry (victim is detached from the throw joint).
   // Decomp: throw release clears grounded state via ftCommon_8007D5D4 on the thrown fighter.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DDDE4
-  batch->state.on_ground[d_idx] = 0;
+  combat_apply_ftCommon_8007D5D4_ground_to_air(batch, d_idx);
   const uint8_t defender_on_ground = 0u;
 
   // Knockback magnitude (ftColl_80079AB0) + damage angle (ftCo_Damage_CalcAngle).
