@@ -22,14 +22,6 @@
 #include "move_tables.h"
 #include "staling.h"
 
-#ifndef MSL_BODY_LBCOLL_80006E58_SCAFFOLD_ACTIVE
-// Scaffolding gate for decomp-shaped BODY narrow phase.
-// Keep off by default to preserve baseline behavior while arg3/x43_b2 plumbing lands.
-// refs/melee/src/melee/ft/ftcoll.c::ftColl_80078C70
-// refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000805C,lbColl_80006E58}
-#define MSL_BODY_LBCOLL_80006E58_SCAFFOLD_ACTIVE 0
-#endif
-
 static inline size_t idx_hitbox(int bi, int p, int hb_i) {
   return ((size_t)bi * (size_t)MSL_MAX_PLAYERS + (size_t)p) * (size_t)MSL_MAX_HITBOXES +
          (size_t)hb_i;
@@ -54,6 +46,33 @@ static inline float combat_lbColl_804D7A38(void) {
   // refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000805C,lbColl_80006E58}
   // refs/melee/src/melee/lb/lbcollision.c (lbColl_804D7A38 = 3)
   return 3.0f;
+}
+
+static inline uint8_t combat_body_overlap_lbColl_80006E58_subset_allows(
+    const MslBatch* batch, size_t hb_i, size_t d_idx) {
+  if (batch == NULL) {
+    return 0u;
+  }
+  // ftColl_800768A0 clear/copy ownership runs on HitCapsule enable/group edges. Keep the
+  // lbColl_80006E58 BODY lane on steady ownership only until the edge transition lane is fully
+  // represented.
+  // refs/melee/src/melee/ft/ftcoll.c::ftColl_800768A0
+  // refs/melee/src/melee/ft/ftcoll.c::ftColl_8007AD18
+  if (batch->state.hitbox_enable_edge[hb_i]) {
+    return 0u;
+  }
+  // Pre-hit ownership subset: keep defender-in-hitstun lanes on baseline overlap while enabling
+  // decomp-shaped sweep for neutral BODY checks.
+  // refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078C70,ftColl_80076ED8}
+  if (batch->state.hitstun[d_idx] != 0u) {
+    return 0u;
+  }
+  // Start with the aerial-victim eligibility branch (x40_b2) from ftColl_80078C70.
+  // refs/melee/src/melee/ft/ftcoll.c::ftColl_80078C70
+  if (batch->state.on_ground[d_idx]) {
+    return 0u;
+  }
+  return 1u;
 }
 
 static inline uint8_t combat_body_overlap_lbColl_80006E58_scaffold(
@@ -2727,7 +2746,7 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
 
           uint8_t overlaps =
               combat_sphere_capsule_intersects(hx, hy, hz, hr, ax, ay, az, bx, by, bz, cr, NULL);
-          if (MSL_BODY_LBCOLL_80006E58_SCAFFOLD_ACTIVE) {
+          if (combat_body_overlap_lbColl_80006E58_subset_allows(batch, hb_i, d_idx)) {
             overlaps = combat_body_overlap_lbColl_80006E58_scaffold(
                 batch, bi, attacker, hb_id, hx, hy, hz, hr, ax, ay, az, bx, by, bz, cr,
                 batch->state.fighter_scale_y[d_idx]);

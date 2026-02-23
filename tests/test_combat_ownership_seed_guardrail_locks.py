@@ -1329,3 +1329,33 @@ def test_body_overlap_rollout_plus4_regression_families_and_adjacent_controls_st
             _, ref, out = _run_one_step_row(dataset_path, rec, 0)
             for p in (0, 1):
                 _assert_body_overlap_lock_fields_match_ref(out_row=out, ref_row=ref, record=rec, p=p)
+
+
+@pytest.mark.integration
+def test_body_overlap_subset_attachedgoodnaturedguanaco_2533_family_stays_replay_exact() -> None:
+    # BODY subset activation lock: AGG rec=2533:p1 is the rollout first-mismatch family resolved by
+    # the kept lbColl_80006E58 subset lane (with adjacent controls).
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_rel = (
+        "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl"
+    )
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+    target_record = 2533
+    controls = (2532, 2534)
+    for rec in (target_record, *controls):
+        assert int(samples.shape[0]) > rec, f"dataset too short for lock row: record={rec}"
+
+    row = samples[target_record : target_record + 1]
+    assert int(row["seed_t"]["action_id"][0, 1]) == 68
+    assert int(row["ref_t1"]["action_id"][0, 1]) == 85
+
+    for rec in (target_record, *controls):
+        _, ref, out = _run_one_step_row(dataset_path, rec, 0)
+        for p in (0, 1):
+            _assert_body_overlap_lock_fields_match_ref(out_row=out, ref_row=ref, record=rec, p=p)
