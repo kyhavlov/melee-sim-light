@@ -339,6 +339,13 @@ void shields_refresh(MslBatch* batch) {
       // Always clear when the shield is broken / absent (decomp clears x221B_b0 on break).
       if (!(batch->state.stocks[idx] != 0 && batch->state.shield_hp[idx] > 0.0f)) {
         f &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221B_IS_SHIELD_ACTIVE;
+      } else if (batch->state.action_id[idx] == (uint16_t)MSL_ACT_GUARD_ON) {
+        // GuardOn entry path creates shield desc via ftCo_80092450 before GuardOn motion state setup.
+        // Keep fp+0x221B_b0 ownership aligned on GuardOn entry even when this frame has no resolved
+        // shield bubble radius sample yet.
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80092450
+        // refs/melee/src/melee/ft/ftcoll.c::ftColl_8007B1B8
+        f |= (uint8_t)MSL_STATE_FLAG_221B_IS_SHIELD_ACTIVE;
       } else if (entered_guard_reflect) {
         const uint16_t prev_a = batch->state.prev_action_id[idx];
         if (prev_a == (uint16_t)MSL_ACT_GUARD_ON) {

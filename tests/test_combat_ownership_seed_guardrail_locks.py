@@ -2075,3 +2075,46 @@ def test_attackdash_iasa_guardon_identity_continuity_row_and_adjacent_controls_a
     for rec in (controls[0], target_record, controls[1]):
         _, ref, out = _run_one_step_row(dataset_path, rec, p)
         _assert_transition_identity_lock_fields_match_ref(out_row=out, ref_row=ref, record=rec, p=p)
+
+
+@pytest.mark.integration
+def test_attackdash_guardon_entry_countdown_row_and_adjacent_controls_are_replay_exact() -> None:
+    # AttackDash -> GuardOn countdown ownership lock:
+    # - AttackDash IASA delegates into Wait-style interrupt checks once.
+    # - GuardOn callback/IASA ordering should not be double-applied in the same frame.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackDash.c::ftCo_AttackDash_IASA
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_GuardOn_Anim,ftCo_GuardOn_IASA}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_rel = (
+        "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
+        "GracefulAttachedTurtle.msl"
+    )
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    target_record = 10911
+    p = 0
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+    controls = (target_record - 1, target_record + 1)
+    for rec in (target_record, *controls):
+        assert int(samples.shape[0]) > rec, f"dataset too short for lock row: record={rec}"
+
+    pre_row = samples[controls[0] : controls[0] + 1]
+    assert int(pre_row["seed_t"]["action_id"][0, p]) == 50  # AttackDash
+    assert int(pre_row["ref_t1"]["action_id"][0, p]) == 178  # GuardOn entry
+
+    target_row = samples[target_record : target_record + 1]
+    assert int(target_row["seed_t"]["action_id"][0, p]) == 178  # GuardOn
+    assert int(target_row["ref_t1"]["action_id"][0, p]) == 178  # GuardOn hold
+
+    post_row = samples[controls[1] : controls[1] + 1]
+    assert int(post_row["seed_t"]["action_id"][0, p]) == 178  # GuardOn hold
+    assert int(post_row["ref_t1"]["action_id"][0, p]) == 178  # GuardOn hold
+
+    for rec in (controls[0], target_record, controls[1]):
+        _, ref, out = _run_one_step_row(dataset_path, rec, p)
+        _assert_transition_lock_fields_match_ref(out_row=out, ref_row=ref, record=rec, p=p)

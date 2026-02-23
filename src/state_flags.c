@@ -387,6 +387,19 @@ void state_flags_refresh_post_frame(MslBatch* batch) {
         } else {
           f221c &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221C_B3;
         }
+      } else {
+        // Decomp: x221C_b3 is the 1-frame GuardReflect-entry latch written on ftCo_8009388C entry
+        // and cleared by the next ftCo_80093BC0 callback pass; non-GuardReflect states do not own
+        // this bit, so clear it outside GuardReflect.
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_8009388C,ftCo_80093BC0}
+        f221c &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221C_B3;
+
+        // Decomp guard hold ownership: the reflect-window bit x221C_b1 is tied to GuardReflect
+        // timer/callback ownership and should not persist through GuardOn/Guard hold windows.
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_GuardOn_Anim,ftCo_Guard_Anim,ftCo_80093BC0}
+        if (action_id == (uint16_t)MSL_ACT_GUARD_ON || action_id == (uint16_t)MSL_ACT_GUARD) {
+          f221c &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221C_B1;
+        }
       }
       batch->state.state_flags[flags_221c_i] = f221c;
 
