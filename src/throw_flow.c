@@ -361,13 +361,16 @@ void throw_flow_update_post_items(MslBatch* batch) {
       } else {
         // Throw-release damage-entry anim advance ownership:
         // - ftCo_8008DCE0 always performs immediate ftAnim_8006EBA4 on Damage* entry.
-        // - Non-ThrowF release chains in this sim still need one deferred post-combat tick to keep
-        //   first steady-frame action_frame parity after post-items throw-hit apply.
-        // - ThrowF release rows over-advance with that extra deferred tick; keep ThrowF on the
-        //   immediate-entry tick only.
+        // - Post-items deferred throw-hit apply in this sim needs a deferred extra tick for the
+        //   Throw{Hi,Lw} lanes; applying it broadly over-advances other throw-release families.
         // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
-        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_Throw{F,B,Hi,Lw}_Anim
-        if (throw_action != (uint16_t)MSL_ACT_THROW_F) {
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::{ftCo_ThrowHi_Anim,ftCo_ThrowLw_Anim}
+        //
+        // TODO(narrowed_temporary): subset is intentionally limited to ThrowHi/Lw. Full parity needs
+        // explicit throw-release callback/tick ownership data for ThrowF/ThrowB in this deferred
+        // post-items apply architecture (instead of broad extra-tick policy).
+        if (throw_action == (uint16_t)MSL_ACT_THROW_HI ||
+            throw_action == (uint16_t)MSL_ACT_THROW_LW) {
           msl_anim_timebase_defer_tick_once(batch, vidx);
         }
         throw_flow_bridge_integrate_deferred_throw_hit_position(batch, oidx, vidx);

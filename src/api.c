@@ -268,6 +268,7 @@ int msl_batch_reseed_seed(MslBatch* batch, const uint8_t* seed_bytes, size_t see
     uint16_t max_attack_inst = 0;
     uint16_t max_instance_id = 0;
     uint16_t seeded_instance_id_counter = seed->instance_id_counter;
+    const int32_t prev_seed_frame_id = batch->state.frame_id[bi];
 
     batch->state.frame_id[bi] = seed->frame_id;
     batch->state.frame_pre_random_seed[bi] = seed->frame_pre_random_seed;
@@ -283,6 +284,10 @@ int msl_batch_reseed_seed(MslBatch* batch, const uint8_t* seed_bytes, size_t see
 
     for (int p = 0; p < MSL_MAX_PLAYERS; p++) {
       const size_t idx = msl_idx_player(bi, p);
+      const uint16_t prev_seed_action_id = batch->state.action_id[idx];
+      const uint16_t prev_seed_instance_id = batch->state.instance_id[idx];
+      const int32_t prev_seed_rate_snapshot_fp =
+          batch->state.capture_wait_seed_rate_snapshot_fp_q16_16[idx];
       batch->state.team_id[idx] = seed->team_id[p];
       batch->state.char_id[idx] = seed->char_id[p];
       float attack_ratio = seed->attack_ratio[p];
@@ -556,6 +561,36 @@ int msl_batch_reseed_seed(MslBatch* batch, const uint8_t* seed_bytes, size_t see
       batch->state.animation_index[idx] = seed->animation_index[p];
       batch->state.instance_hit_by[idx] = seed->instance_hit_by[p];
       batch->state.instance_id[idx] = seed->instance_id[p];
+      {
+        const uint16_t seeded_action = seed->action_id[p];
+        // CaptureWait continuity bridge gate:
+        // - CaptureWait Anim callback (ftCo_CaptureWaitHi_Anim) writes frame_speed_mul after
+        //   Fighter_8006A360's per-frame anim advance.
+        // - Preserve previous seeded rate only when reseed continuity keeps the same motion-state
+        //   owner instance across consecutive frames.
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_CaptureWaitHi_Anim
+        // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
+        const uint8_t is_capture_wait_seed =
+            (seeded_action == (uint16_t)MSL_ACT_CAPTURE_WAIT_HI ||
+             seeded_action == (uint16_t)MSL_ACT_CAPTURE_WAIT_LW)
+                ? 1u
+                : 0u;
+        const uint8_t capture_wait_continuity =
+            (is_capture_wait_seed &&
+             prev_seed_frame_id + 1 == seed->frame_id &&
+             prev_seed_action_id == seeded_action &&
+             prev_seed_instance_id == seed->instance_id[p] &&
+             seed->instance_id[p] != 0u)
+                ? 1u
+                : 0u;
+        batch->state.capture_wait_prev_rate_valid[idx] = capture_wait_continuity;
+        batch->state.capture_wait_prev_rate_fp_q16_16[idx] = prev_seed_rate_snapshot_fp;
+        batch->state.capture_wait_seed_rate_snapshot_fp_q16_16[idx] =
+            msl_q16_16_from_f32(seed->frame_speed_mul_f32[p]);
+        // TODO(narrowed_temporary): continuity is currently inferred from
+        // {frame_id+1,action_id,instance_id}. Full parity needs a direct seedable callback-phase
+        // ownership marker from the producer lane (CaptureWait Anim-rate write committed or not).
+      }
       if (seed->instance_id[p] > max_instance_id) {
         max_instance_id = seed->instance_id[p];
       }

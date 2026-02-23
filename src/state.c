@@ -92,6 +92,10 @@ int state_alloc(MslStateSoA* state, int batch_size) {
   state->anim_frame_f32 = (float*)alloc_aligned_64(sizeof(float) * bp);
   state->anim_frame_fp_q16_16 = (int32_t*)alloc_aligned_64(sizeof(int32_t) * bp);
   state->frame_speed_mul_fp_q16_16 = (int32_t*)alloc_aligned_64(sizeof(int32_t) * bp);
+  state->capture_wait_prev_rate_fp_q16_16 = (int32_t*)alloc_aligned_64(sizeof(int32_t) * bp);
+  state->capture_wait_seed_rate_snapshot_fp_q16_16 =
+      (int32_t*)alloc_aligned_64(sizeof(int32_t) * bp);
+  state->capture_wait_prev_rate_valid = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->anim_defer_tick_once = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->jumps_left = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->stocks = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
@@ -300,7 +304,10 @@ int state_alloc(MslStateSoA* state, int batch_size) {
       !state->prev_action_id || !state->action_frame || !state->throw_pending_victim_port ||
       !state->throw_pending_hit_idx || !state->match_flow_timer || !state->downwait_timer ||
       !state->anim_frame_f32 || !state->anim_frame_fp_q16_16 || !state->frame_speed_mul_fp_q16_16 ||
-      !state->anim_defer_tick_once || !state->jumps_left || !state->stocks ||
+      !state->capture_wait_prev_rate_fp_q16_16 ||
+      !state->capture_wait_seed_rate_snapshot_fp_q16_16 ||
+      !state->capture_wait_prev_rate_valid || !state->anim_defer_tick_once || !state->jumps_left ||
+      !state->stocks ||
       !state->guard_tilt_x8 || !state->guard_tilt_x4 || !state->guard_reflect_timer_x14 ||
       !state->guard_reflect_timer_x18 || !state->guard_reflect_timer_x14_seed ||
       !state->guard_reflect_timer_x18_seed || !state->guard_release_latched_xc ||
@@ -365,6 +372,10 @@ int state_alloc(MslStateSoA* state, int batch_size) {
   for (size_t i = 0; i < b; i++) {
     state->hitlist_reseed_gen[i] = 1u;
   }
+  memset(state->frame_id, 0, sizeof(int32_t) * b);
+  memset(state->capture_wait_prev_rate_fp_q16_16, 0, sizeof(int32_t) * bp);
+  memset(state->capture_wait_seed_rate_snapshot_fp_q16_16, 0, sizeof(int32_t) * bp);
+  memset(state->capture_wait_prev_rate_valid, 0, sizeof(uint8_t) * bp);
   for (size_t i = 0; i < bph; i++) {
     state->fighter_hitlist_init_gen[i] = 0u;
     hitlist_capsule_clear(&state->fighter_hitlist[i]);
@@ -444,6 +455,9 @@ void state_free(MslStateSoA* state) {
   alloc_free(state->anim_frame_f32);
   alloc_free(state->anim_frame_fp_q16_16);
   alloc_free(state->frame_speed_mul_fp_q16_16);
+  alloc_free(state->capture_wait_prev_rate_fp_q16_16);
+  alloc_free(state->capture_wait_seed_rate_snapshot_fp_q16_16);
+  alloc_free(state->capture_wait_prev_rate_valid);
   alloc_free(state->anim_defer_tick_once);
   alloc_free(state->jumps_left);
   alloc_free(state->stocks);

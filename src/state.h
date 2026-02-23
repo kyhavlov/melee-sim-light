@@ -129,6 +129,17 @@ typedef struct MslStateSoA {
   // refs/melee/src/melee/ft/ftanim.c (ftAnim_8006F0FC / ftAnim_SetAnimRate)
   int32_t* anim_frame_fp_q16_16;
   int32_t* frame_speed_mul_fp_q16_16;
+  // CaptureWait Anim-rate ownership bridge:
+  // - ftCo_CaptureWaitHi_Anim updates fp->frame_speed_mul via ftAnim_SetAnimRate in Anim callback.
+  // - Fighter_8006A360 advances ftAnim before callback-owned rate writes each frame.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_CaptureWaitHi_Anim
+  // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
+  //
+  // Teacher-forced reseed stores post-frame snapshots, so CaptureWait lanes can need a one-frame
+  // prior-rate bridge to preserve callback ownership ordering.
+  int32_t* capture_wait_prev_rate_fp_q16_16;           // previous seeded frame_speed_mul snapshot
+  int32_t* capture_wait_seed_rate_snapshot_fp_q16_16;  // current seeded frame_speed_mul snapshot
+  uint8_t* capture_wait_prev_rate_valid;               // 1 when previous snapshot continuity applies
   // Transient: defer a single ftAnim_8006EBA4-shaped timebase tick until after combat resolves.
   //
   // Rationale: some motion-state entry paths in decomp call ftAnim_8006EBA4 immediately after

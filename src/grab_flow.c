@@ -98,6 +98,17 @@ static inline void enter_capture_wait_from_pulled(MslBatch* batch, int owner_p, 
   }
 }
 
+static inline uint8_t is_capture_pulled_action(uint16_t a) {
+  return (a == (uint16_t)MSL_ACT_CAPTURE_PULLED_HI || a == (uint16_t)MSL_ACT_CAPTURE_PULLED_LW)
+             ? 1u
+             : 0u;
+}
+
+static inline uint8_t is_capture_wait_action(uint16_t a) {
+  return (a == (uint16_t)MSL_ACT_CAPTURE_WAIT_HI || a == (uint16_t)MSL_ACT_CAPTURE_WAIT_LW) ? 1u
+                                                                                               : 0u;
+}
+
 static inline uint8_t enter_capture_damage_from_wait(MslBatch* batch, size_t vidx) {
   if (batch == NULL) {
     return 0u;
@@ -617,6 +628,7 @@ void grab_flow_update_pre_physics(MslBatch* batch) {
       }
 
       uint16_t oa = batch->state.action_id[oidx];
+      const uint16_t oa_seed = oa;
       uint8_t owner_catch_attack_ended = 0u;
 
       if (oa == (uint16_t)MSL_ACT_WAIT && c != NULL) {
@@ -754,6 +766,47 @@ void grab_flow_update_pre_physics(MslBatch* batch) {
               va == (uint16_t)MSL_ACT_CAPTURE_DAMAGE_LW) {
             (void)enter_capture_wait_from_damage(batch, vidx);
           }
+        }
+      }
+
+      // CaptureWait one-tick ownership bridge (owner-driven victim callback window):
+      // - CatchPull_Anim enters CatchWait through fn_800DA1D8, and that path can drive victim
+      //   CapturePulled* -> CaptureWait* via fn_800DB6C8.
+      // - On the first steady CaptureWait frame, decomp callback ordering can still execute an extra
+      //   victim Anim tick after owner CatchWait/CatchAttack ownership, producing the observed
+      //   af=1 -> af=3 transition in replay rows.
+      // refs/melee/build/GALE01/asm/melee/ft/chara/ftCommon/ftCo_Attack100.s::{ftCo_CatchPull_Anim,fn_800DA1D8,fn_800DB6C8}
+      // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
+      //
+      // TODO(narrowed_temporary): this bridge targets the first steady CaptureWait ownership window
+      // only. Full parity needs a seed-visible callback order lane for owner/victim procUpdate
+      // precedence across all capture sub-variants.
+      if ((oa_seed == (uint16_t)MSL_ACT_CATCH_WAIT || oa_seed == (uint16_t)MSL_ACT_CATCH_ATTACK) &&
+          (oa == (uint16_t)MSL_ACT_CATCH_WAIT || oa == (uint16_t)MSL_ACT_CATCH_ATTACK) &&
+          batch->state.action_frame[oidx] <= 1) {
+        for (int victim_p = 0; victim_p < num_players; victim_p++) {
+          if (victim_p == owner_p) {
+            continue;
+          }
+          const size_t vidx = msl_idx_player(bi, victim_p);
+          if (batch->state.hitlag_started_frame[vidx] != 0 || batch->state.hitstun[vidx] != 0u) {
+            continue;
+          }
+          if ((int)batch->state.grab_owner_port[vidx] != owner_p) {
+            continue;
+          }
+          const uint16_t va = batch->state.action_id[vidx];
+          if (!is_capture_wait_action(va)) {
+            continue;
+          }
+          const int32_t v_speed_fp = batch->state.frame_speed_mul_fp_q16_16[vidx];
+          const int16_t v_pre_af = msl_floor_i16_from_q16_16(
+              batch->state.anim_frame_fp_q16_16[vidx] - v_speed_fp);
+          if (batch->state.action_frame[vidx] != 2 || v_pre_af != 1 ||
+              v_speed_fp != msl_q16_16_from_f32(1.0f)) {
+            continue;
+          }
+          msl_anim_timebase_tick_once(batch, vidx);
         }
       }
 

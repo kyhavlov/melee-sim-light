@@ -119,7 +119,7 @@ static inline uint8_t anim_timebase_is_walk(uint16_t a) {
 }
 
 static inline uint8_t anim_timebase_try_walk_rate(uint16_t a, const MslCharParams* ch,
-                                                  float speed_ground_x_self, uint8_t facing_right,
+                                                  float speed_ground_x_self, int8_t facing_dir1,
                                                   float* out_rate) {
   if (ch == NULL || out_rate == NULL) {
     return 0u;
@@ -143,7 +143,7 @@ static inline uint8_t anim_timebase_try_walk_rate(uint16_t a, const MslCharParam
     return 0u;
   }
 
-  const float facing_dir = facing_right ? 1.0f : -1.0f;
+  const float facing_dir = (facing_dir1 < 0) ? -1.0f : 1.0f;
   const float mv_x0 = speed_ground_x_self;
 
   // Decomp: ftWalkCommon_800DFDDC sets walk anim_rate from motion velocity:
@@ -237,6 +237,7 @@ void anim_timebase_update_pre_input(MslBatch* batch) {
   for (int bi = 0; bi < batch->batch_size; bi++) {
     for (int p = 0; p < num_players; p++) {
       const size_t idx = msl_idx_player(bi, p);
+      const uint16_t a = batch->state.action_id[idx];
 
       // Hitlag freezes animation advancement (decomp gate is fp->x2219_b5).
       // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
@@ -253,7 +254,6 @@ void anim_timebase_update_pre_input(MslBatch* batch) {
       //
       // Source of truth for the per-character scaling:
       // - ISO-extracted `data/characters/{fox,falco}.json` `run_animation_scaling`.
-      const uint16_t a = batch->state.action_id[idx];
       const int16_t action_frame_pre = batch->state.action_frame[idx];
       const MslCharParams* ch = msl_char_params(batch->state.char_id[idx]);
 
@@ -275,16 +275,27 @@ void anim_timebase_update_pre_input(MslBatch* batch) {
         const uint8_t walk_entry = (batch->state.prev_action_id[idx] != a) ? 1u : 0u;
         if (walk_entry) {
           batch->state.frame_speed_mul_fp_q16_16[idx] = msl_q16_16_from_f32(1.0f);
+        } else if (action_frame_pre == 1) {
+          // Decomp ordering bridge for first steady walk frame:
+          // - Walk enter uses ChangeMotionState(..., anim_speed=1) then immediate ftAnim tick.
+          // - Walk_Anim (ftWalkCommon_800DFDDC) writes the velocity-scaled rate after that tick,
+          //   for the *next* frame's advance.
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Walk.c::ftCo_Walk_Enter
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Walk.c::ftCo_Walk_Anim
+          // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
+          //
+          // Keep the seeded 1.0 entry carry here; applying the scaled walk rate one frame early
+          // at action_frame==1 shifts Walk timebase ownership.
         } else {
           float walk_rate = 0.0f;
           if (anim_timebase_try_walk_rate(a, ch, batch->state.speed_ground_x_self[idx],
-                                          batch->state.facing[idx], &walk_rate)) {
+                                          batch->state.facing_dir1[idx], &walk_rate)) {
             batch->state.frame_speed_mul_fp_q16_16[idx] = msl_q16_16_from_f32(walk_rate);
           }
         }
       }
-      //
-      // Decomp-shaped entry-frame rule (why `action_frame==1` is not a magic number):
+
+      // Decomp-shaped early-steady bridge (why `action_frame in {1,2}` is not a magic number):
       // - Run is entered via Fighter_ChangeMotionState(..., anim_start=0, anim_speed=1).
       //   refs/melee/src/melee/ft/chara/ftCommon/ftCo_Run.c::ftCo_Run_Enter_Full
       // - Animation advance for the frame happens first (ftAnim_8006EBA4), then the per-motion
@@ -292,12 +303,15 @@ void anim_timebase_update_pre_input(MslBatch* batch) {
       //   refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
       //   refs/melee/src/melee/ft/ftanim.c::ftAnim_8006EBA4
       //
-      // Under teacher-forced reseed, a Run segment commonly starts with `state_age==1` (so
-      // `action_frame==1`) while the strictly-causal seeded `frame_speed_mul` still reflects the
-      // entry rate (1.0). Apply Run_Anim's velocity-scaled rate on that first "steady" frame so
-      // our next advance matches Slippi's post-frame `state_age` delta.
+      // Under teacher-forced reseed, a Run segment can enter with `state_age` already at 1-2 while
+      // the seeded `frame_speed_mul` still reflects entry carry. Apply the Run_Anim-scaled rate in
+      // this early steady window so the next advance matches decomp callback ownership.
+      //
+      // TODO(narrowed_temporary): this <=2 early-steady window is a bounded bridge. Full parity
+      // needs a seed-visible callback-phase ownership marker equivalent to whether Run_Anim already
+      // committed the next rate in the previous frame; Slippi post-frame does not expose that bit.
       if ((a == (uint16_t)MSL_ACT_RUN || a == (uint16_t)MSL_ACT_RUN_DIRECT) &&
-          action_frame_pre == 1) {
+          action_frame_pre > 0 && action_frame_pre <= 2) {
         if (ch != NULL && ch->run_animation_scaling > 0.0f) {
           const float vx = batch->state.speed_ground_x_self[idx];
           const float rate = fabsf(vx) / ch->run_animation_scaling;
@@ -305,6 +319,25 @@ void anim_timebase_update_pre_input(MslBatch* batch) {
         }
       }
 
+      // CaptureWait Anim-rate ownership bridge:
+      // - ftCo_CaptureWaitHi_Anim updates frame_speed_mul via ftAnim_SetAnimRate in Anim callback.
+      // - Fighter_8006A360 advances the AObj timeline before callback-owned rate writes.
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_CaptureWaitHi_Anim
+      // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
+      //
+      // Teacher-forced reseed snapshots are post-frame; for stable CaptureWait ownership we apply
+      // the previous seeded rate when continuity is preserved across consecutive reseeds.
+      //
+      // TODO(narrowed_temporary): this bridge is continuity-gated only. Full parity needs an
+      // explicit seed lane for whether the prior frame's CaptureWait callback already committed a
+      // non-1.0 ftAnim_SetAnimRate write before reseed.
+      if ((a == (uint16_t)MSL_ACT_CAPTURE_WAIT_HI || a == (uint16_t)MSL_ACT_CAPTURE_WAIT_LW) &&
+          batch->state.capture_wait_prev_rate_valid[idx]) {
+        batch->state.frame_speed_mul_fp_q16_16[idx] =
+            batch->state.capture_wait_prev_rate_fp_q16_16[idx];
+      }
+
+      //
       // Decomp: AttackAir entry always uses anim_speed=1.0f (KeepFastFall only affects fastfall).
       // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_EnterFromMsid
       //

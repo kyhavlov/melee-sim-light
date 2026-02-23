@@ -2222,6 +2222,267 @@ def test_attackdash_guardon_entry_countdown_row_and_adjacent_controls_are_replay
 
 
 @pytest.mark.integration
+@pytest.mark.parametrize(
+    (
+        "dataset_rel",
+        "target_record",
+        "p",
+        "target_seed_action",
+        "target_ref_action",
+        "pre_seed_action",
+        "pre_ref_action",
+        "post_seed_action",
+        "post_ref_action",
+    ),
+    [
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/QuerulousGrandDinosaur.msl",
+            593,
+            1,
+            38,
+            354,
+            38,
+            38,
+            354,
+            354,
+        ),
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/QuerulousGrandDinosaur.msl",
+            718,
+            1,
+            38,
+            354,
+            38,
+            38,
+            354,
+            354,
+        ),
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/QuerulousGrandDinosaur.msl",
+            5807,
+            1,
+            38,
+            354,
+            38,
+            38,
+            354,
+            354,
+        ),
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl",
+            6596,
+            0,
+            88,
+            354,
+            88,
+            88,
+            354,
+            354,
+        ),
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl",
+            7204,
+            1,
+            38,
+            354,
+            88,
+            38,
+            354,
+            354,
+        ),
+    ],
+)
+def test_damagefall_specialhi_transition_rows_and_adjacent_controls_are_replay_exact(
+    dataset_rel: str,
+    target_record: int,
+    p: int,
+    target_seed_action: int,
+    target_ref_action: int,
+    pre_seed_action: int,
+    pre_ref_action: int,
+    post_seed_action: int,
+    post_ref_action: int,
+) -> None:
+    # DamageFall IASA B-special lock families for the kept narrow air-special lane:
+    # - ftCo_DamageFall_IASA delegates to ftCo_SpecialAir_CheckInput for B-special checks.
+    # - This lock covers the improved transition families that now enter SpecialHiHoldAir (354)
+    #   with strict replay parity, plus adjacent controls around each target row.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_DamageFall.c::ftCo_DamageFall_IASA
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_SpecialAir.c::ftCo_SpecialAir_CheckInput
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+    controls = (target_record - 1, target_record + 1)
+    for rec in (target_record, *controls):
+        assert int(samples.shape[0]) > rec, f"dataset too short for lock row: record={rec}"
+
+    target_row = samples[target_record : target_record + 1]
+    assert int(target_row["seed_t"]["action_id"][0, p]) == int(target_seed_action)
+    assert int(target_row["ref_t1"]["action_id"][0, p]) == int(target_ref_action)
+
+    pre_row = samples[controls[0] : controls[0] + 1]
+    assert int(pre_row["seed_t"]["action_id"][0, p]) == int(pre_seed_action)
+    assert int(pre_row["ref_t1"]["action_id"][0, p]) == int(pre_ref_action)
+
+    post_row = samples[controls[1] : controls[1] + 1]
+    assert int(post_row["seed_t"]["action_id"][0, p]) == int(post_seed_action)
+    assert int(post_row["ref_t1"]["action_id"][0, p]) == int(post_ref_action)
+
+    for rec in (controls[0], target_record, controls[1]):
+        _, ref, out = _run_one_step_row(dataset_path, rec, p)
+        _assert_transition_lock_fields_match_ref(out_row=out, ref_row=ref, record=rec, p=p)
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    ("dataset_rel", "target_record", "p", "target_seed_action", "target_ref_action"),
+    [
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl",
+            1151,
+            1,
+            15,
+            16,
+        ),
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/TreasuredBackKangaroo.msl",
+            7373,
+            0,
+            21,
+            21,
+        ),
+    ],
+)
+def test_walk_run_timebase_ownership_rows_and_adjacent_controls_are_replay_exact(
+    dataset_rel: str, target_record: int, p: int, target_seed_action: int, target_ref_action: int
+) -> None:
+    # Walk/Run timebase ownership lock families:
+    # - Walk type-switch preserves remapped phase via ftWalkCommon_800DFEC8 + ftCo_Walk_Enter.
+    # - Walk/Run Anim callbacks own next-frame ftAnim_SetAnimRate after ftAnim tick.
+    # refs/melee/src/melee/ft/ftwalkcommon.c::{ftWalkCommon_800DFEC8,ftWalkCommon_800DFDDC}
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Walk.c::{ftCo_Walk_Enter,ftCo_Walk_Anim}
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Run.c::ftCo_Run_Anim
+    # refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+    controls = (target_record - 1, target_record + 1)
+    for rec in (target_record, *controls):
+        assert int(samples.shape[0]) > rec, f"dataset too short for lock row: record={rec}"
+
+    target_row = samples[target_record : target_record + 1]
+    assert int(target_row["seed_t"]["action_id"][0, p]) == int(target_seed_action)
+    assert int(target_row["ref_t1"]["action_id"][0, p]) == int(target_ref_action)
+
+    for rec in (controls[0], target_record, controls[1]):
+        _, ref, out = _run_one_step_row(dataset_path, rec, p)
+        _assert_transition_lock_fields_match_ref(out_row=out, ref_row=ref, record=rec, p=p)
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    ("dataset_rel", "target_record", "p"),
+    [
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl",
+            370,
+            1,
+        ),
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl",
+            567,
+            1,
+        ),
+    ],
+)
+def test_capturewait_rate_ownership_rows_and_adjacent_controls_are_replay_exact(
+    dataset_rel: str, target_record: int, p: int
+) -> None:
+    # CaptureWait ownership/rate bridge lock families:
+    # - CatchPull/CatchWait callback ordering can drive CapturePulled* -> CaptureWait* on victim.
+    # - CaptureWait Anim callback owns frame_speed_mul update after Fighter_8006A360 anim tick.
+    # refs/melee/build/GALE01/asm/melee/ft/chara/ftCommon/ftCo_Attack100.s::{ftCo_CatchPull_Anim,fn_800DA1D8,fn_800DB6C8}
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_CaptureWaitHi_Anim
+    # refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+    controls = (target_record - 1, target_record + 1)
+    for rec in (target_record, *controls):
+        assert int(samples.shape[0]) > rec, f"dataset too short for lock row: record={rec}"
+
+    target_row = samples[target_record : target_record + 1]
+    assert int(target_row["seed_t"]["action_id"][0, p]) in (226, 227)
+    assert int(target_row["ref_t1"]["action_id"][0, p]) == 227
+
+    for rec in (controls[0], target_record, controls[1]):
+        _, ref, out = _run_one_step_row(dataset_path, rec, p)
+        _assert_transition_lock_fields_match_ref(out_row=out, ref_row=ref, record=rec, p=p)
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    ("dataset_rel", "target_record", "p", "target_seed_action"),
+    [
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl",
+            224,
+            1,
+            241,
+        ),
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/QuerulousGrandDinosaur.msl",
+            424,
+            1,
+            242,
+        ),
+    ],
+)
+def test_throw_deferred_anim_tick_rows_and_adjacent_controls_are_replay_exact(
+    dataset_rel: str, target_record: int, p: int, target_seed_action: int
+) -> None:
+    # Throw deferred anim-rate/tick lock families:
+    # - Throw release damage-entry path applies immediate ftAnim_8006EBA4 on Damage* entry.
+    # - Post-items throw-hit apply lane defers one extra victim tick for Throw{Hi,Lw} windows.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::{ftCo_ThrowHi_Anim,ftCo_ThrowLw_Anim}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+    controls = (target_record - 1, target_record + 1)
+    for rec in (target_record, *controls):
+        assert int(samples.shape[0]) > rec, f"dataset too short for lock row: record={rec}"
+
+    target_row = samples[target_record : target_record + 1]
+    assert int(target_row["seed_t"]["action_id"][0, p]) == int(target_seed_action)
+    assert int(target_row["ref_t1"]["action_id"][0, p]) == int(target_seed_action)
+
+    for rec in (controls[0], target_record, controls[1]):
+        _, ref, out = _run_one_step_row(dataset_path, rec, p)
+        _assert_transition_lock_fields_match_ref(out_row=out, ref_row=ref, record=rec, p=p)
+
+
+@pytest.mark.integration
 def test_guard_damage_and_guardreflect_transition_rows_and_adjacent_controls_are_replay_exact() -> None:
     # Guard transition ownership locks for the kept action lane:
     # 1) DamageHi* -> GuardOn (jump+shield buffered) must not double-consume into KneeBend.

@@ -999,6 +999,118 @@ static inline uint32_t anim_for_walk_action(uint16_t a) {
   }
 }
 
+static inline void walk_change_type_ftWalkCommon_800DFEC8(MslBatch* batch, size_t idx,
+                                                           uint16_t target_walk_action) {
+  if (batch == NULL) {
+    return;
+  }
+  const uint16_t cur_action = batch->state.action_id[idx];
+  if (!action_is_walk(cur_action) || !action_is_walk(target_walk_action) ||
+      cur_action == target_walk_action) {
+    return;
+  }
+
+  const uint8_t cid = batch->state.char_id[idx];
+  const uint32_t cur_sm = anim_for_walk_action(cur_action);
+  const uint32_t dst_sm = anim_for_walk_action(target_walk_action);
+  if (cur_sm > 0xFFFFu || dst_sm > 0xFFFFu) {
+    return;
+  }
+
+  const float cur_cycle = msl_anim_end_frame(cid, (uint16_t)cur_sm);
+  const float dst_cycle = msl_anim_end_frame(cid, (uint16_t)dst_sm);
+  if (!(cur_cycle > 0.0f) || !(dst_cycle > 0.0f)) {
+    return;
+  }
+
+  // Decomp walk-type change ownership (ftWalkCommon_800DFEC8 -> ftCo_Walk_Enter):
+  // - preserve phase by remapping cur_anim_frame across walk cycle lengths,
+  // - then call Walk_Enter(arg8=final_anim_frame), which runs Fighter_ChangeMotionState with
+  //   anim_start=arg8 and immediate ftAnim_8006EBA4.
+  // refs/melee/src/melee/ft/ftwalkcommon.c::{ftWalkCommon_800DFEC8,ftWalkCommon_800DFCA4}
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Walk.c::ftCo_Walk_Enter
+  const float init_anim_frame = msl_anim_frame_sanitize_f32(batch->state.anim_frame_f32[idx]);
+  const int quotient = (int)(init_anim_frame / cur_cycle);  // PPC fctiwz truncation shape.
+  const float adjusted = init_anim_frame - (cur_cycle * (float)quotient);
+  // Decomp stores the remapped phase as s32 before passing it to Walk_Enter(arg8):
+  // final_animFrame = frame * (adjusted_animFrame / float_result)
+  // refs/melee/src/melee/ft/ftwalkcommon.c::ftWalkCommon_800DFEC8
+  const int32_t final_anim_frame = (int32_t)(dst_cycle * (adjusted / cur_cycle));
+
+  batch->state.action_id[idx] = target_walk_action;
+  batch->state.animation_index[idx] = dst_sm;
+  msl_anim_timebase_enter(batch, idx, (float)final_anim_frame, 1.0f);
+  msl_anim_timebase_tick_once(batch, idx);
+}
+
+static inline float walk_anim_rate_divisor_for_action(const MslCharParams* ch, uint16_t walk_action) {
+  if (ch == NULL) {
+    return 0.0f;
+  }
+  switch (walk_action) {
+    case MSL_ACT_WALK_SLOW:
+      return ch->slow_walk_max;
+    case MSL_ACT_WALK_MIDDLE:
+      return ch->mid_walk_point;
+    case MSL_ACT_WALK_FAST:
+      return ch->fast_walk_min;
+    default:
+      return 0.0f;
+  }
+}
+
+static inline void walk_anim_rate_ftWalkCommon_800DFDDC(MslBatch* batch, const MslCharParams* ch,
+                                                        size_t idx, uint16_t walk_action,
+                                                        float facing_dir) {
+  if (batch == NULL || ch == NULL || !action_is_walk(walk_action)) {
+    return;
+  }
+  // Decomp walk anim-rate ownership (ftCo_Walk_Anim -> ftWalkCommon_800DFDDC):
+  // - if signed ground velocity is non-forward relative to facing, rate is 0.
+  // - otherwise rate is |gr_vel| divided by the walk-type speed divisor
+  //   (co_attrs.slow_walk_max / mid_walk_point / fast_walk_min).
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Walk.c::ftCo_Walk_Anim
+  // refs/melee/src/melee/ft/ftwalkcommon.c::ftWalkCommon_800DFDDC
+  //
+  // Sim scope: mv.co.walk.accel_mul (metal/size/item modifiers) is not explicitly represented yet;
+  // for current Fox/Falco suite rows this lane is effectively accel_mul=1.0.
+  // TODO(narrowed_temporary): add seed/runtime representation for mv.co.walk.accel_mul and wire
+  // extraction-backed modifiers; this is required for full parity outside current suite domain.
+  const float signed_ground_vel = batch->state.speed_ground_x_self[idx];
+  float anim_rate = 0.0f;
+  if ((signed_ground_vel * facing_dir) > 0.0f) {
+    const float denom = walk_anim_rate_divisor_for_action(ch, walk_action);
+    if (denom > 0.0f) {
+      anim_rate = msl_absf(signed_ground_vel) / denom;
+    }
+  }
+  msl_anim_timebase_set_rate(batch, idx, anim_rate);
+}
+
+static inline void run_anim_rate_ftCo_Run_Anim(MslBatch* batch, const MslCharParams* ch, size_t idx,
+                                                uint16_t run_action) {
+  if (batch == NULL || ch == NULL) {
+    return;
+  }
+  if (run_action != (uint16_t)MSL_ACT_RUN && run_action != (uint16_t)MSL_ACT_RUN_DIRECT) {
+    return;
+  }
+  if (!(ch->run_animation_scaling > 0.0f)) {
+    return;
+  }
+  // Decomp Run anim-rate ownership:
+  // - ftCo_Run_Anim / ftCo_RunDirect_Anim call ftAnim_SetAnimRate(ABS(gr_vel) / run_animation_scaling).
+  // - This runs in Fighter_procUpdate motion callbacks after the frame's ftAnim tick, so it owns
+  //   the *next* frame's advancement rate.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Run.c::ftCo_Run_Anim
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_RunDirect.c::ftCo_RunDirect_Anim
+  // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
+  // refs/melee/src/melee/ft/ftanim.c::ftAnim_SetAnimRate
+  const float vx = batch->state.speed_ground_x_self[idx];
+  const float rate = msl_absf(vx) / ch->run_animation_scaling;
+  msl_anim_timebase_set_rate(batch, idx, rate);
+}
+
 static inline uint16_t jump_action_from_stick(const MslCommonParams* c, float stick_x,
                                               float facing_dir) {
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c::ftCo_Jump_Enter
@@ -1680,6 +1792,7 @@ void locomotion_update_pre(MslBatch* batch) {
           if (batch->state.run_x0[idx] > 0) {
             batch->state.run_x0[idx]--;
           }
+          run_anim_rate_ftCo_Run_Anim(batch, ch, idx, action_id_start);
         }
 
         // Grounded attack state updates (Anim before IASA in Fighter_procUpdate).
@@ -2146,6 +2259,10 @@ void locomotion_update_pre(MslBatch* batch) {
         // ftCo_800D5FB0 (Squat check/enter).
         // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Walk.c::ftCo_Walk_IASA
         if (action_is_walk(action_id) && action_is_walk(action_id_start)) {
+          // Decomp ordering: Walk_Anim (ftWalkCommon_800DFDDC anim-rate ownership) runs before
+          // Walk_IASA in Fighter_procUpdate.
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Walk.c::{ftCo_Walk_Anim,ftCo_Walk_IASA}
+          walk_anim_rate_ftWalkCommon_800DFDDC(batch, ch, idx, action_id, facing_dir);
           if (grounded_a_attack_try_enter_from_iasa(batch, c, idx, buttons_pressed, stick_x,
                                                      stick_y, tilt_timer_x, tilt_timer_y,
                                                      facing_dir, 0, 1)) {
@@ -2211,8 +2328,7 @@ void locomotion_update_pre(MslBatch* batch) {
           const uint16_t want =
               walk_action_from_speed(c, ch, batch->state.speed_ground_x_self[idx]);
           if (want != batch->state.action_id[idx]) {
-            batch->state.action_id[idx] = want;
-            batch->state.animation_index[idx] = anim_for_walk_action(want);
+            walk_change_type_ftWalkCommon_800DFEC8(batch, idx, want);
             action_id = want;
           }
         }

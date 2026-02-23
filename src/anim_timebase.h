@@ -85,8 +85,32 @@ static inline void msl_anim_timebase_seed(MslBatch* batch, size_t idx, float cur
   if (batch == NULL) {
     return;
   }
-  batch->state.anim_frame_fp_q16_16[idx] = msl_q16_16_from_f32(cur_anim_frame_f32);
-  batch->state.frame_speed_mul_fp_q16_16[idx] = msl_q16_16_from_f32(frame_speed_mul_f32);
+  int32_t anim_q = msl_q16_16_from_f32(cur_anim_frame_f32);
+  const int32_t speed_q = msl_q16_16_from_f32(frame_speed_mul_f32);
+
+  // Seed phase alignment (decomp-shaped action_frame ownership):
+  // - action_frame progression is floor(cur_anim_frame) after per-frame anim advance.
+  // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
+  // refs/melee/src/melee/ft/ftanim.c::ftAnim_8006EBA4
+  //
+  // Q16.16 quantization can shift `cur_anim_frame` by ~1 LSB around integer boundaries and flip
+  // the next-frame floor by one. Clamp seeded q16 into the interval that preserves
+  // floor(seed_cur + seed_speed) computed from the seeded float snapshot.
+  if (isfinite(cur_anim_frame_f32) && isfinite(frame_speed_mul_f32)) {
+    const int32_t expect_next_af = (int32_t)floorf(cur_anim_frame_f32 + frame_speed_mul_f32);
+    const int64_t lo = (int64_t)expect_next_af * (int64_t)MSL_Q16_16_ONE - (int64_t)speed_q;
+    const int64_t hi =
+        (int64_t)(expect_next_af + 1) * (int64_t)MSL_Q16_16_ONE - 1LL - (int64_t)speed_q;
+    if ((int64_t)anim_q < lo) {
+      anim_q = (lo < (int64_t)INT32_MIN) ? INT32_MIN : (lo > (int64_t)INT32_MAX) ? INT32_MAX
+                                                                                    : (int32_t)lo;
+    } else if ((int64_t)anim_q > hi) {
+      anim_q = (hi < (int64_t)INT32_MIN) ? INT32_MIN : (hi > (int64_t)INT32_MAX) ? INT32_MAX
+                                                                                    : (int32_t)hi;
+    }
+  }
+  batch->state.anim_frame_fp_q16_16[idx] = anim_q;
+  batch->state.frame_speed_mul_fp_q16_16[idx] = speed_q;
   msl_anim_timebase_recompute_derived(batch, idx);
 }
 

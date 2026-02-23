@@ -301,8 +301,23 @@ void blaster_update_pre_physics(MslBatch* batch) {
             }
           }
         } else {
+          // DamageFall IASA explicitly delegates to ftCo_SpecialAir_CheckInput before other aerial
+          // checks. Keep a narrow decomp-backed subset here: DamageFall -> SpecialHi entry when
+          // up-B intent is present, while standard air locomotion keeps full B-special routing.
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DamageFall.c::ftCo_DamageFall_IASA
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_SpecialAir.c::ftCo_SpecialAir_CheckInput
+          //
+          // TODO(narrowed_temporary): this subset currently enables only up-B intent in DamageFall.
+          // Full parity needs the remaining ftCo_SpecialAir_CheckInput ownership lanes (side/neutral
+          // selection and their callback-order constraints) validated non-regressively.
           if (msl_action_is_air_locomotion(a)) {
             allow = 1u;
+          } else if (a == (uint16_t)MSL_ACT_DAMAGE_FALL) {
+            const float stick_y = apply_deadzone(stick_i8_to_unit(batch->state.input_main_y[idx]),
+                                                 c->lstick_deadzone_y);
+            if (stick_y >= c->special_stick_y_threshold) {
+              allow = 1u;
+            }
           }
         }
         if (allow) {
