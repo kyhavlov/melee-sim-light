@@ -147,6 +147,17 @@ void reflector_bubbles_refresh(MslBatch* batch) {
         const uint8_t want = (action_is_shine_reflector_active(a) != 0) ? 1u : 0u;
         if (want) {
           f |= (uint8_t)MSL_STATE_FLAG_2218_IS_REFLECT_ACTIVE;
+          // Decomp: ftColl_CreateReflectHit writes ReflectDesc.x20_behavior into fp->x2218_b5.
+          // Shine loop/hit/turn states recreate this lane from Fox/Falco special attrs each time
+          // reflector creation is active, so state_flags[0] bit0x04 must follow reflector_behavior.
+          // refs/melee/src/melee/ft/ftcoll.c::ftColl_CreateReflectHit
+          // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c::ftFx_SpecialLw_CreateReflectHit
+          // data/characters/{fox,falco}.json::reflector_behavior
+          if (ch->reflector_behavior != 0) {
+            f |= (uint8_t)MSL_STATE_FLAG_2218_REFLECT_BEHAVIOR;
+          } else {
+            f &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_2218_REFLECT_BEHAVIOR;
+          }
         } else {
           f &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_2218_IS_REFLECT_ACTIVE;
         }

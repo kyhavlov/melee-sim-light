@@ -1501,3 +1501,93 @@ def test_throw_release_transition_families_and_adjacent_controls_action_anim_sta
     for rec in (controls[0], target_record, controls[1]):
         _, ref, out = _run_one_step_row(dataset_path, rec, p)
         _assert_throw_release_action_anim_match_ref(out_row=out, ref_row=ref, record=rec, p=p)
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    ("dataset_rel", "target_record", "p", "seed_action", "ref_action"),
+    [
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl",
+            2237,
+            0,
+            360,  # ftFx_MS_SpecialLwStart
+            361,  # ftFx_MS_SpecialLwLoop
+        ),
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl",
+            1592,
+            0,
+            360,  # ftFx_MS_SpecialLwStart
+            361,  # ftFx_MS_SpecialLwLoop
+        ),
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/TreasuredBackKangaroo.msl",
+            1761,
+            0,
+            365,  # ftFx_MS_SpecialAirLwStart
+            366,  # ftFx_MS_SpecialAirLwLoop
+        ),
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/TreasuredBackKangaroo.msl",
+            3677,
+            1,
+            365,  # ftFx_MS_SpecialAirLwStart
+            366,  # ftFx_MS_SpecialAirLwLoop
+        ),
+    ],
+)
+def test_shine_reflect_behavior_transition_rows_and_adjacent_controls_stay_replay_exact(
+    dataset_rel: str,
+    target_record: int,
+    p: int,
+    seed_action: int,
+    ref_action: int,
+) -> None:
+    # Lock the Shine Start->Loop transition lane where state_flags[0] bit0x04 (fp+0x2218_b5) must
+    # clear while bit0x10 (fp->reflecting) stays set on entry.
+    #
+    # Decomp ownership:
+    # - Shine loop enter path creates reflect hit from Special attrs ReflectDesc.
+    # - ftColl_CreateReflectHit copies ReflectDesc.x20_behavior -> fp->x2218_b5.
+    # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c::ftFx_SpecialLw_CreateReflectHit
+    # refs/melee/src/melee/ft/ftcoll.c::ftColl_CreateReflectHit
+    #
+    # Adjacent controls:
+    # - target-1 remains in Start
+    # - target+1 remains in Loop
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+    controls = (target_record - 1, target_record + 1)
+    for rec in (target_record, *controls):
+        assert int(samples.shape[0]) > rec, f"dataset too short for lock row: record={rec}"
+
+    target_row = samples[target_record : target_record + 1]
+    assert int(target_row["seed_t"]["action_id"][0, p]) == int(seed_action)
+    assert int(target_row["ref_t1"]["action_id"][0, p]) == int(ref_action)
+    seed_flags_target = int(target_row["seed_t"]["state_flags"][0, p, 0])
+    ref_flags_target = int(target_row["ref_t1"]["state_flags"][0, p, 0])
+    assert (seed_flags_target & 0x04) != 0  # x2218_b5 set in Start snapshot.
+    assert (ref_flags_target & 0x04) == 0  # x2218_b5 cleared by ReflectDesc.x20_behavior.
+    assert (ref_flags_target & 0x10) != 0  # reflecting bit stays active in Loop.
+
+    pre_row = samples[controls[0] : controls[0] + 1]
+    assert int(pre_row["seed_t"]["action_id"][0, p]) == int(seed_action)
+    assert int(pre_row["ref_t1"]["action_id"][0, p]) == int(seed_action)
+
+    post_row = samples[controls[1] : controls[1] + 1]
+    assert int(post_row["seed_t"]["action_id"][0, p]) == int(ref_action)
+    assert int(post_row["ref_t1"]["action_id"][0, p]) == int(ref_action)
+    post_ref_flags = int(post_row["ref_t1"]["state_flags"][0, p, 0])
+    assert (post_ref_flags & 0x04) == 0
+    assert (post_ref_flags & 0x10) != 0
+
+    for rec in (controls[0], target_record, controls[1]):
+        _, ref, out = _run_one_step_row(dataset_path, rec, p)
+        _assert_body_overlap_lock_fields_match_ref(out_row=out, ref_row=ref, record=rec, p=p)

@@ -986,8 +986,14 @@ static inline void combat_damage_enter_state(const MslCommonParams* c, MslBatch*
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
   batch->state.damage_jump_buffer_x14[d_idx] = 0;
   // Decomp: ftCo_8008DCE0 performs Fighter_ChangeMotionState then immediate ftAnim_8006EBA4.
+  // This call path is inside Fighter_ProcessHit (prio 14), not Fighter_8006A360's `!hitlag`
+  // callback gate, so the entry tick is consumed even when hitlag is currently active.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
-  msl_anim_timebase_enter_with_policy(batch, d_idx, 0.0f, 1.0f, MSL_ANIM_ENTER_TICK_IMMEDIATE);
+  // refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
+  // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
+  msl_anim_timebase_enter(batch, d_idx, 0.0f, 1.0f);
+  batch->state.anim_frame_fp_q16_16[d_idx] += batch->state.frame_speed_mul_fp_q16_16[d_idx];
+  msl_anim_timebase_recompute_derived(batch, d_idx);
 }
 
 static inline void combat_mutations_pass1_future_apply_body_hit_invincible(
@@ -1191,10 +1197,7 @@ static inline void combat_mutations_pass1_future_apply_body_hit(MslBatch* batch,
     combat_state_flags_set_is_hitlag(batch, a_idx, a_hl);
   }
   const uint16_t d_hl_prev = batch->state.hitlag[d_idx];
-  if (d_hl > d_hl_prev) {
-    batch->state.hitlag[d_idx] = d_hl;
-    combat_state_flags_set_is_hitlag(batch, d_idx, d_hl);
-  }
+  const uint8_t d_hl_increased = (d_hl > d_hl_prev) ? 1u : 0u;
 
   // Grabbed/thrown victims are driven by an attachment joint and have empty Phys/Coll callbacks in
   // decomp; do not force a Damage* transition from a collision-confirmed hit while the victim is
@@ -1209,6 +1212,10 @@ static inline void combat_mutations_pass1_future_apply_body_hit(MslBatch* batch,
   const uint8_t d_grab_owner = batch->state.grab_owner_port[d_idx];
   if (d_grab_owner != 0xFFu && d_grab_owner == (uint8_t)attacker &&
       msl_action_is_grabbed_victim(d_motion_id)) {
+    if (d_hl_increased) {
+      batch->state.hitlag[d_idx] = d_hl;
+      combat_state_flags_set_is_hitlag(batch, d_idx, d_hl);
+    }
     batch->state.instance_hit_by[d_idx] = batch->state.instance_id[a_idx];
     batch->state.last_hit_by[d_idx] = (uint8_t)attacker;
 
@@ -1222,7 +1229,7 @@ static inline void combat_mutations_pass1_future_apply_body_hit(MslBatch* batch,
     //
     // Decomp anchor:
     // refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
-    if (d_hl > d_hl_prev) {
+    if (d_hl_increased) {
       combat_state_flags_set_x221a_b3(batch, d_idx);
     }
 
@@ -1275,6 +1282,10 @@ static inline void combat_mutations_pass1_future_apply_body_hit(MslBatch* batch,
   // which then does `Fighter_UnkTakeDamage_8006CC30` + `ftCo_Damage_CalcKnockback` + damage state entry.
   // refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
   if (kb_applied == 0.0f) {
+    if (d_hl_increased) {
+      batch->state.hitlag[d_idx] = d_hl;
+      combat_state_flags_set_is_hitlag(batch, d_idx, d_hl);
+    }
     batch->state.speed_x_attack[d_idx] = 0.0f;
     batch->state.speed_y_attack[d_idx] = 0.0f;
     batch->state.hitstun[d_idx] = 0;
@@ -1372,13 +1383,19 @@ static inline void combat_mutations_pass1_future_apply_body_hit(MslBatch* batch,
   // This intentionally excludes throw-release damage entry (ftCo_800DDDE4) where Slippi observes
   // hitstun without hitlag and x221A_b3 unset.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DDDE4
-  if (d_hl > d_hl_prev) {
-    combat_state_flags_set_x221a_b3(batch, d_idx);
-  }
-
   const uint8_t defender_on_ground_after = batch->state.on_ground[d_idx] ? 1u : 0u;
   combat_damage_enter_state(c, batch, d_idx, defender_on_ground, defender_on_ground_after,
                             hurt_height, kb_applied, kb_angle_rad);
+  // Decomp ordering: Damage state entry runs before hitlag assignment in Fighter_ProcessHit.
+  // - forceAppliedOnHit path enters ftCo_8008DCE0 (ChangeMotionState + immediate ftAnim_8006EBA4),
+  // - then bool1 drives fp->dmg.x195c_hitlag_frames assignment.
+  // refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
+  if (d_hl_increased) {
+    batch->state.hitlag[d_idx] = d_hl;
+    combat_state_flags_set_is_hitlag(batch, d_idx, d_hl);
+    combat_state_flags_set_x221a_b3(batch, d_idx);
+  }
 
   batch->state.instance_hit_by[d_idx] = batch->state.instance_id[a_idx];
   batch->state.last_hit_by[d_idx] = (uint8_t)attacker;
