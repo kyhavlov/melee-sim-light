@@ -40,6 +40,33 @@ static inline uint8_t match_flow_is_respawn_action(uint16_t a) {
   return (uint8_t)(a == MSL_ACT_REBIRTH || a == MSL_ACT_REBIRTH_WAIT);
 }
 
+static inline void match_flow_identity_reset_Fighter_UnkInitReset_80067C98_subset(MslBatch* batch,
+                                                                                   size_t idx) {
+  if (batch == NULL) {
+    return;
+  }
+  // Decomp: Fighter_UnkInitReset_80067C98 reset lane for hit attribution/combo ownership:
+  // - fp->dmg.x18c4_source_ply = 6 (Slippi last_hit_by sentinel)
+  // - fp->x208C = 0 (Slippi last_attack_landed)
+  // - fp->x2090 = 0 (Slippi combo_count)
+  // - fp->x2098 = 0 (combo timer)
+  // refs/melee/src/melee/ft/fighter.c::Fighter_UnkInitReset_80067C98
+  batch->state.last_hit_by[idx] = 6u;
+  // Decomp/asm: Fighter_UnkProcessDeath call-chain invokes ft_800892D4, which clears
+  // fp->x18EC (Slippi instance_hit_by) before Rebirth entry.
+  // refs/melee/build/GALE01/asm/melee/ft/ft_0892.s::ft_800892D4
+  batch->state.instance_hit_by[idx] = 0u;
+  batch->state.last_attack_landed[idx] = 0u;
+  batch->state.combo_count[idx] = 0u;
+  batch->state.combo_timer_x2098[idx] = 0u;
+  // Decomp: Fighter_UnkInitReset also clears fp->x2094 (combo victim gobj).
+  // Keep the simulator's victim latch aligned so ftColl_800764DC ownership starts from a clean lane.
+  // refs/melee/src/melee/ft/fighter.c::Fighter_UnkInitReset_80067C98
+  // refs/melee/src/melee/ft/ftcoll.c::ftColl_800764DC
+  batch->state.combo_victim_port[idx] = 0xFFu;
+  batch->state.combo_victim_instance_id[idx] = 0u;
+}
+
 static inline void freeze_no_submotion_timebase(MslBatch* batch, size_t idx) {
   if (batch == NULL) {
     return;
@@ -191,6 +218,7 @@ static inline void enter_rebirth(MslBatch* batch, size_t idx, const MslCommonPar
   // refs/melee/src/melee/ft/ft_0881.c::ft_800890BC
   // refs/melee/build/GALE01/asm/melee/ft/ft_0892.s::ft_800892D4
   attack_identity_reset_ft_800890BC(batch, idx);
+  match_flow_identity_reset_Fighter_UnkInitReset_80067C98_subset(batch, idx);
   instance_id_reset_ft_800892D4(batch, idx);
   // Seed-bridge (decomp call-chain parity):
   // - Rebirth entry runs Fighter_UnkProcessDeath_80068354 before Fighter_ChangeMotionState(Rebirth).

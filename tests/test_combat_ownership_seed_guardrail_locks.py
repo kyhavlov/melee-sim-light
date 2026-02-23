@@ -2118,3 +2118,72 @@ def test_attackdash_guardon_entry_countdown_row_and_adjacent_controls_are_replay
     for rec in (controls[0], target_record, controls[1]):
         _, ref, out = _run_one_step_row(dataset_path, rec, p)
         _assert_transition_lock_fields_match_ref(out_row=out, ref_row=ref, record=rec, p=p)
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    ("dataset_rel", "target_record", "p", "seed_action", "ref_action"),
+    [
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl",
+            3020,
+            0,
+            0,   # DeadDown
+            12,  # Rebirth
+        ),
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl",
+            3646,
+            1,
+            0,   # DeadDown
+            12,  # Rebirth
+        ),
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/QuerulousGrandDinosaur.msl",
+            961,
+            1,
+            0,   # DeadDown
+            12,  # Rebirth
+        ),
+    ],
+)
+def test_death_to_rebirth_identity_reset_rows_and_adjacent_controls_are_replay_exact(
+    dataset_rel: str, target_record: int, p: int, seed_action: int, ref_action: int
+) -> None:
+    # Death->Rebirth identity reset lock:
+    # - Fighter_UnkProcessDeath runs Fighter_UnkInitReset + ft_800892D4 before Rebirth entry.
+    # - That call chain owns `instance_hit_by`, `last_hit_by`, and combo/last-attack fields.
+    # refs/melee/src/melee/ft/fighter.c::Fighter_UnkProcessDeath_80068354
+    # refs/melee/src/melee/ft/fighter.c::Fighter_UnkInitReset_80067C98
+    # refs/melee/build/GALE01/asm/melee/ft/ft_0892.s::ft_800892D4
+    #
+    # Adjacent controls:
+    # - target-1 remains in DeadDown (pre-transition)
+    # - target+1 remains in Rebirth (post-transition)
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+    controls = (target_record - 1, target_record + 1)
+    for rec in (target_record, *controls):
+        assert int(samples.shape[0]) > rec, f"dataset too short for lock row: record={rec}"
+
+    target_row = samples[target_record : target_record + 1]
+    assert int(target_row["seed_t"]["action_id"][0, p]) == int(seed_action)
+    assert int(target_row["ref_t1"]["action_id"][0, p]) == int(ref_action)
+
+    pre_row = samples[controls[0] : controls[0] + 1]
+    assert int(pre_row["seed_t"]["action_id"][0, p]) == int(seed_action)
+    assert int(pre_row["ref_t1"]["action_id"][0, p]) == int(seed_action)
+
+    post_row = samples[controls[1] : controls[1] + 1]
+    assert int(post_row["seed_t"]["action_id"][0, p]) == int(ref_action)
+    assert int(post_row["ref_t1"]["action_id"][0, p]) == int(ref_action)
+
+    for rec in (controls[0], target_record, controls[1]):
+        _, ref, out = _run_one_step_row(dataset_path, rec, p)
+        _assert_transition_identity_lock_fields_match_ref(out_row=out, ref_row=ref, record=rec, p=p)
