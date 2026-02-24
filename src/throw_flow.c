@@ -369,8 +369,16 @@ void throw_flow_update_post_items(MslBatch* batch) {
         // TODO(narrowed_temporary): subset is intentionally limited to ThrowHi/Lw. Full parity needs
         // explicit throw-release callback/tick ownership data for ThrowF/ThrowB in this deferred
         // post-items apply architecture (instead of broad extra-tick policy).
-        if (throw_action == (uint16_t)MSL_ACT_THROW_HI ||
-            throw_action == (uint16_t)MSL_ACT_THROW_LW) {
+        if ((throw_action == (uint16_t)MSL_ACT_THROW_HI ||
+             throw_action == (uint16_t)MSL_ACT_THROW_LW) &&
+            owner_p < (int)victim_p) {
+          // Owner-before-victim callback-order bridge (deferred throw-hit apply only):
+          // - In decomp, throw release/hit is consumed in the thrower's Anim callback, and victim
+          //   Anim callback execution order in the same frame depends on Fighter_procUpdate order.
+          // - This simulator defers throw-hit apply to post-items; only the owner-before-victim
+          //   subset needs one deferred victim tick to preserve same-frame callback ownership.
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DD724
+          // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A360,Fighter_procUpdate}
           msl_anim_timebase_defer_tick_once(batch, vidx);
         }
         throw_flow_bridge_integrate_deferred_throw_hit_position(batch, oidx, vidx);

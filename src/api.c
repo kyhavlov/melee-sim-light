@@ -260,6 +260,12 @@ int msl_batch_reseed_seed(MslBatch* batch, const uint8_t* seed_bytes, size_t see
   for (int bi = 0; bi < batch->batch_size; bi++) {
     const uint8_t* ptr = seed_bytes + (size_t)bi * seed_stride_bytes;
     const MslSeed* seed = (const MslSeed*)ptr;
+    int active_players = (int)batch->config.num_players;
+    if (active_players < 1) {
+      active_players = 1;
+    } else if (active_players > MSL_MAX_PLAYERS) {
+      active_players = MSL_MAX_PLAYERS;
+    }
 
     // Initialize per-environment global counters from seeded values.
     // - stale_attack_instance_counter: seeded as next after max observed attack_instance lanes.
@@ -682,6 +688,57 @@ int msl_batch_reseed_seed(MslBatch* batch, const uint8_t* seed_bytes, size_t see
         if (seed->stale_attack_instance[p][k] > max_attack_inst) {
           max_attack_inst = seed->stale_attack_instance[p][k];
         }
+      }
+    }
+
+    // Combo victim ownership reconstruction bridge (fp->x2094 equivalent):
+    // - Decomp combo continuation in ftColl_800763C0 compares the stored victim pointer
+    //   (fp->x2094) and attack id, not just combo_count.
+    // - Slippi post-frame does not expose fp->x2094 directly, but does expose victim-side
+    //   attribution producers:
+    //   * fp->dmg.x18C4_source_ply   -> last_hit_by
+    //   * fp->dmg.x18EC_instancehitby -> instance_hit_by
+    // refs/melee/src/melee/ft/ftcoll.c::ftColl_800763C0
+    // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
+    //
+    // Strict bridge policy:
+    // - only if seed combo_count>0 and combo_victim_port is invalid,
+    // - infer a victim only when exactly one opponent matches both attribution lanes:
+    //     victim.last_hit_by == attacker_port
+    //     victim.instance_hit_by == attacker.instance_id
+    // This avoids heuristic victim guessing on ambiguous rows.
+    for (int attacker_p = 0; attacker_p < active_players; attacker_p++) {
+      const size_t a_idx = msl_idx_player(bi, attacker_p);
+      if (batch->state.combo_count[a_idx] == 0u) {
+        continue;
+      }
+      const uint8_t seed_victim = batch->state.combo_victim_port[a_idx];
+      if (seed_victim < (uint8_t)active_players && seed_victim != (uint8_t)attacker_p) {
+        continue;
+      }
+      const uint16_t attacker_instance = batch->state.instance_id[a_idx];
+      int inferred_victim_p = -1;
+      for (int victim_p = 0; victim_p < active_players; victim_p++) {
+        if (victim_p == attacker_p) {
+          continue;
+        }
+        const size_t v_idx = msl_idx_player(bi, victim_p);
+        if (batch->state.last_hit_by[v_idx] != (uint8_t)attacker_p) {
+          continue;
+        }
+        if (batch->state.instance_hit_by[v_idx] != attacker_instance) {
+          continue;
+        }
+        if (inferred_victim_p >= 0) {
+          inferred_victim_p = -1;
+          break;
+        }
+        inferred_victim_p = victim_p;
+      }
+      if (inferred_victim_p >= 0) {
+        const size_t v_idx = msl_idx_player(bi, inferred_victim_p);
+        batch->state.combo_victim_port[a_idx] = (uint8_t)inferred_victim_p;
+        batch->state.combo_victim_instance_id[a_idx] = batch->state.instance_id[v_idx];
       }
     }
 

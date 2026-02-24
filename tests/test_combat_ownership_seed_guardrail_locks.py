@@ -270,6 +270,25 @@ def _assert_transition_identity_lock_fields_match_ref(
     assert got_sf == exp_sf, f"record={record} p={p} field=state_flags expected={exp_sf} got={got_sf}"
 
 
+def _find_unique_combo_victim_from_seed(seed_row: np.void, attacker_p: int) -> int | None:
+    num_players = int(seed_row["num_players"])
+    if attacker_p < 0 or attacker_p >= num_players:
+        return None
+    attacker_instance = int(seed_row["instance_id"][attacker_p])
+    matches: list[int] = []
+    for victim_p in range(num_players):
+        if victim_p == attacker_p:
+            continue
+        if int(seed_row["last_hit_by"][victim_p]) != attacker_p:
+            continue
+        if int(seed_row["instance_hit_by"][victim_p]) != attacker_instance:
+            continue
+        matches.append(victim_p)
+    if len(matches) != 1:
+        return None
+    return matches[0]
+
+
 @pytest.mark.integration
 @pytest.mark.parametrize(
     ("dataset_rel", "record", "p", "seed_action", "ref_action"),
@@ -2617,6 +2636,118 @@ def test_throw_deferred_anim_tick_rows_and_adjacent_controls_are_replay_exact(
     for rec in (controls[0], target_record, controls[1]):
         _, ref, out = _run_one_step_row(dataset_path, rec, p)
         _assert_transition_lock_fields_match_ref(out_row=out, ref_row=ref, record=rec, p=p)
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    ("dataset_rel", "target_record", "owner_p", "victim_p"),
+    [
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl",
+            989,
+            0,
+            1,
+        ),
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl",
+            974,
+            0,
+            1,
+        ),
+    ],
+)
+def test_throw_owner_before_victim_deferred_tick_rows_and_adjacent_controls_are_replay_exact(
+    dataset_rel: str, target_record: int, owner_p: int, victim_p: int
+) -> None:
+    # Owner-before-victim ThrowLw deferred tick lock families (causal subset):
+    # - Post-items deferred throw-hit apply adds one victim tick only for Throw{Hi,Lw} when
+    #   thrower callback ownership precedes victim callback in Fighter_procUpdate order.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::{ftCo_ThrowLw_Anim,ftCo_800DD724}
+    # refs/melee/src/melee/ft/fighter.c::{Fighter_8006A360,Fighter_procUpdate}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+    controls = (target_record - 1, target_record + 1)
+    for rec in (target_record, *controls):
+        assert int(samples.shape[0]) > rec, f"dataset too short for lock row: record={rec}"
+
+    target_row = samples[target_record : target_record + 1]
+    seed_t = target_row["seed_t"][0]
+    ref_t1 = target_row["ref_t1"][0]
+
+    assert owner_p < victim_p
+    assert int(seed_t["action_id"][owner_p]) == 241  # ThrowLw
+    assert int(ref_t1["action_id"][owner_p]) == 90   # DamageLw2
+    assert int(seed_t["action_id"][victim_p]) == 221  # ThrownLw
+    assert int(seed_t["action_frame"][owner_p]) >= 6
+    assert int(ref_t1["action_frame"][owner_p]) == 1
+
+    for rec in (controls[0], target_record, controls[1]):
+        _, ref, out = _run_one_step_row(dataset_path, rec, owner_p)
+        _assert_transition_lock_fields_match_ref(out_row=out, ref_row=ref, record=rec, p=owner_p)
+        _assert_transition_lock_fields_match_ref(out_row=out, ref_row=ref, record=rec, p=victim_p)
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    ("dataset_rel", "target_record", "attacker_p", "victim_p"),
+    [
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl",
+            999,
+            1,
+            0,
+        ),
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl",
+            237,
+            0,
+            1,
+        ),
+    ],
+)
+def test_combo_victim_reseed_bridge_rows_and_adjacent_controls_are_replay_exact(
+    dataset_rel: str, target_record: int, attacker_p: int, victim_p: int
+) -> None:
+    # Combo-victim ownership reseed bridge lock families:
+    # - ftColl_800763C0 combo continuation compares stored victim pointer (fp->x2094) + attack id.
+    # - Slippi omits fp->x2094; bridge reconstructs victim only when attribution lanes are unique.
+    # refs/melee/src/melee/ft/ftcoll.c::ftColl_800763C0
+    # refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+    controls = (target_record - 1, target_record + 1)
+    for rec in (target_record, *controls):
+        assert int(samples.shape[0]) > rec, f"dataset too short for lock row: record={rec}"
+
+    target_row = samples[target_record : target_record + 1]
+    seed_t = target_row["seed_t"][0]
+    ref_t1 = target_row["ref_t1"][0]
+    num_players = int(seed_t["num_players"])
+
+    assert int(seed_t["combo_count"][attacker_p]) > 0
+    seed_combo_victim = int(seed_t["combo_victim_port"][attacker_p])
+    assert seed_combo_victim >= num_players or seed_combo_victim == attacker_p
+    inferred_victim = _find_unique_combo_victim_from_seed(seed_t, attacker_p)
+    assert inferred_victim == victim_p
+    assert int(seed_t["last_hit_by"][victim_p]) == attacker_p
+    assert int(seed_t["instance_hit_by"][victim_p]) == int(seed_t["instance_id"][attacker_p])
+    assert int(ref_t1["combo_count"][attacker_p]) > int(seed_t["combo_count"][attacker_p])
+
+    for rec in (controls[0], target_record, controls[1]):
+        _, ref, out = _run_one_step_row(dataset_path, rec, attacker_p)
+        _assert_transition_identity_lock_fields_match_ref(out_row=out, ref_row=ref, record=rec, p=attacker_p)
 
 
 @pytest.mark.integration
