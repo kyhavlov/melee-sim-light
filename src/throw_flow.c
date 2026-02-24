@@ -167,6 +167,30 @@ static inline float throw_flow_owner_throwf_deferred_extra_share(const MslBatch*
   return overspeed_share + (release_share - overspeed_share) * weight;
 }
 
+static inline void throw_flow_deferred_throwhi_owner_before_victim_hitstun_tick(MslBatch* batch,
+                                                                                 size_t victim_idx) {
+  if (batch == NULL) {
+    return;
+  }
+  // Deferred ThrowHi release apply ownership bridge:
+  // - In decomp, ThrowHi release/hit consume runs in the thrower's Anim callback
+  //   (ftCo_ThrowHi_Anim -> ftCo_800DD724 -> ftCo_800DE7C0/ftCo_800DDDE4).
+  // - Under owner-before-victim callback order, the victim can then execute Damage* callback work
+  //   in the same Fighter_8006A360 pass; hitstun decrement ownership is in ftCo_8008F744.
+  // - This simulator applies throw-hit in post-items, after timers_update_post_anim(), so the
+  //   owner-before-victim ThrowHi lane needs one deferred hitstun tick to preserve callback order.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::{ftCo_ThrowHi_Anim,ftCo_800DD724,ftCo_800DE7C0,ftCo_800DDDE4}
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008F744
+  // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A360,Fighter_procUpdate}
+  if (batch->state.hitlag[victim_idx] != 0u) {
+    return;
+  }
+  const uint16_t hs = batch->state.hitstun[victim_idx];
+  if (hs > 0u) {
+    batch->state.hitstun[victim_idx] = (uint16_t)(hs - 1u);
+  }
+}
+
 void throw_flow_update_pre_physics(MslBatch* batch) {
   if (batch == NULL) {
     return;
@@ -377,9 +401,13 @@ void throw_flow_update_post_items(MslBatch* batch) {
           //   Anim callback execution order in the same frame depends on Fighter_procUpdate order.
           // - This simulator defers throw-hit apply to post-items; only the owner-before-victim
           //   subset needs one deferred victim tick to preserve same-frame callback ownership.
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::{ftCo_ThrowHi_Anim,ftCo_ThrowLw_Anim}
           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DD724
           // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A360,Fighter_procUpdate}
           msl_anim_timebase_defer_tick_once(batch, vidx);
+          if (throw_action == (uint16_t)MSL_ACT_THROW_HI) {
+            throw_flow_deferred_throwhi_owner_before_victim_hitstun_tick(batch, vidx);
+          }
         }
         throw_flow_bridge_integrate_deferred_throw_hit_position(batch, oidx, vidx);
         if (throw_action == (uint16_t)MSL_ACT_THROW_F) {

@@ -322,6 +322,25 @@ static inline void combat_state_flags_set_is_hitstun(MslBatch* batch, size_t idx
   batch->state.state_flags[flags_i] = f;
 }
 
+static inline void combat_state_flags_set_x221c_b0(MslBatch* batch, size_t idx) {
+  if (batch == NULL) {
+    return;
+  }
+  enum { MSL_STATE_FLAGS_STRIDE = MSL_STATE_FLAGS_BYTES };
+  enum { MSL_STATE_FLAGS_221C_INDEX = 3 };
+  enum { MSL_STATE_FLAG_221C_B0 = 0x80 };
+
+  // fp+0x221C bit 0x80 ownership in attached hit windows:
+  // - This bit is exposed by Slippi's post-frame byte capture at fp+0x221C.
+  //   refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
+  // - Damage flow consumes fp->x221C_b0 as part of the no-reaction branch gate.
+  //   refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::inlineB1
+  // - Generic motion-state change clears fp+0x221C lanes owned by transition reset paths.
+  //   refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState
+  const size_t flags_i = idx * MSL_STATE_FLAGS_STRIDE + (size_t)MSL_STATE_FLAGS_221C_INDEX;
+  batch->state.state_flags[flags_i] |= (uint8_t)MSL_STATE_FLAG_221C_B0;
+}
+
 static inline void combat_apply_ftCommon_8007D5D4_ground_to_air(MslBatch* batch, size_t idx) {
   if (batch == NULL) {
     return;
@@ -1304,6 +1323,11 @@ static inline void combat_mutations_pass1_future_apply_body_hit(MslBatch* batch,
     // refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
     if (d_hl_increased) {
       combat_state_flags_set_x221a_b3(batch, d_idx);
+      // Keep x221C_b0 ownership on the attached fighter-vs-fighter hitlag lane; Damage no-reaction
+      // gate consumes this bit in inlineB1 while transition clears are owned by motion-state change.
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::inlineB1
+      // refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState
+      combat_state_flags_set_x221c_b0(batch, d_idx);
     }
 
     // Attacker-side staling/combo tracking still updates on the confirmed hit.

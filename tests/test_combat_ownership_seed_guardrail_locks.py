@@ -2695,6 +2695,119 @@ def test_throw_owner_before_victim_deferred_tick_rows_and_adjacent_controls_are_
 
 @pytest.mark.integration
 @pytest.mark.parametrize(
+    ("dataset_rel", "rows", "owner_p", "victim_p"),
+    [
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl",
+            (226, 227, 228),
+            0,
+            1,
+        ),
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/TreasuredBackKangaroo.msl",
+            (443, 444, 445),
+            0,
+            1,
+        ),
+    ],
+)
+def test_throwhi_owner_before_victim_deferred_hitstun_tick_rows_and_adjacent_controls_are_replay_exact(
+    dataset_rel: str, rows: tuple[int, int, int], owner_p: int, victim_p: int
+) -> None:
+    # ThrowHi owner-before-victim deferred hitstun-tick lock families:
+    # - ThrowHi release/hit consume runs in thrower Anim callback (ftCo_ThrowHi_Anim -> ftCo_800DD724).
+    # - Damage* callback ownership decrements hitstun in ftCo_8008F744.
+    # - Deferred post-items throw-hit apply must preserve same-frame owner-before-victim callback order.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::{ftCo_ThrowHi_Anim,ftCo_800DD724,ftCo_800DE7C0,ftCo_800DDDE4}
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008F744
+    # refs/melee/src/melee/ft/fighter.c::{Fighter_8006A360,Fighter_procUpdate}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+    for rec in rows:
+        assert int(samples.shape[0]) > rec, f"dataset too short for lock row: record={rec}"
+
+    target = rows[1]
+    seed_t = samples["seed_t"][target]
+    ref_t1 = samples["ref_t1"][target]
+    assert int(seed_t["action_id"][owner_p]) == 221  # ThrowHi
+    assert int(seed_t["action_id"][victim_p]) == 241  # ThrownHi
+    assert int(ref_t1["action_id"][victim_p]) == 90  # DamageLw2
+    assert int(ref_t1["action_frame"][victim_p]) == 2
+    assert int(ref_t1["hitlag"][victim_p]) == 0
+    assert int(ref_t1["hitstun"][victim_p]) > 0
+
+    for rec in rows:
+        _, ref_row, out_row = _run_one_step_row(dataset_path, rec, victim_p)
+        _assert_transition_lock_fields_match_ref(
+            out_row=out_row, ref_row=ref_row, record=rec, p=victim_p
+        )
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    ("dataset_rel", "rows", "owner_p", "victim_p"),
+    [
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/QuerulousGrandDinosaur.msl",
+            (437, 438, 439),
+            0,
+            1,
+        ),
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/QuerulousGrandDinosaur.msl",
+            (447, 448, 449),
+            0,
+            1,
+        ),
+    ],
+)
+def test_throwlw_attached_item_hitlag_x221c_b0_rows_and_adjacent_controls_are_replay_exact(
+    dataset_rel: str, rows: tuple[int, int, int], owner_p: int, victim_p: int
+) -> None:
+    # ThrowLw attached-item hitlag ownership lock families:
+    # - While victim remains ThrownLw/attached, attached-hit windows can produce hitlag without
+    #   entering Damage*.
+    # - Keep x221C_b0 ownership aligned to no-reaction gate usage (inlineB1), avoiding spurious set
+    #   on this item-attached lane.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DD724
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Thrown.c::ftCo_800DE508
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{ftCo_8008EC90,inlineB1}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+    for rec in rows:
+        assert int(samples.shape[0]) > rec, f"dataset too short for lock row: record={rec}"
+
+    target = rows[1]
+    seed_t = samples["seed_t"][target]
+    ref_t1 = samples["ref_t1"][target]
+    assert int(seed_t["action_id"][owner_p]) == 222  # ThrowLw
+    assert int(seed_t["action_id"][victim_p]) == 242  # ThrownLw
+    assert int(seed_t["hitlag"][victim_p]) == 0
+    assert int(ref_t1["hitlag"][victim_p]) > 0
+    assert int(ref_t1["action_id"][victim_p]) == 242  # stays ThrownLw
+    assert int(ref_t1["state_flags"][victim_p, 3]) == 0
+
+    for rec in rows:
+        _, ref_row, out_row = _run_one_step_row(dataset_path, rec, victim_p)
+        _assert_transition_lock_fields_match_ref(
+            out_row=out_row, ref_row=ref_row, record=rec, p=victim_p
+        )
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
     ("dataset_rel", "target_record", "attacker_p", "victim_p"),
     [
         (
