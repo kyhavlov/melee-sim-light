@@ -63,6 +63,18 @@ static inline void hitboxes_seed_bridge_entry_clear(MslHitlistVictimEntry* e) {
   e->cd = 0;
 }
 
+static inline uint8_t hitboxes_seed_bridge_is_guard_transition_owner(uint16_t action_id) {
+  switch (action_id) {
+    case MSL_ACT_GUARD_ON:
+    case MSL_ACT_GUARD:
+    case MSL_ACT_GUARD_SET_OFF:
+    case MSL_ACT_GUARD_REFLECT:
+      return 1u;
+    default:
+      return 0u;
+  }
+}
+
 static void hitboxes_seed_bridge_trim_impossible_indefinite(MslBatch* batch, int bi, int attacker,
                                                             int hb_id, const MslHitboxEvent* def,
                                                             uint16_t pose_frame,
@@ -103,6 +115,8 @@ static void hitboxes_seed_bridge_trim_impossible_indefinite(MslBatch* batch, int
     return;
   }
   const uint16_t window_age = (uint16_t)(pose_frame - def->frame);
+  const uint16_t window_age_1based = (uint16_t)(window_age + 1u);
+  const uint8_t early_window = (window_age_1based <= expected_hitlag) ? 1u : 0u;
   // Only trim at the tail of the decomp hitlag horizon (age >= hitlag-1).
   //
   // Safety proof (decomp-shaped):
@@ -119,9 +133,8 @@ static void hitboxes_seed_bridge_trim_impossible_indefinite(MslBatch* batch, int
   // - ftColl_800768A0 clear/copy ownership is tied to hitbox enable-edge / hit_group transitions.
   // - ftColl_80076CBC applies nonzero defender hitlag on real shield contact.
   // refs/melee/src/melee/ft/ftcoll.c::{ftColl_800768A0,ftColl_80076CBC}
-  if ((uint16_t)(window_age + 1u) < expected_hitlag) {
-    return;
-  }
+  const size_t a_idx = msl_idx_player(bi, attacker);
+  const uint16_t attacker_iid = batch->state.instance_id[a_idx];
 
   // Reseed bridge: dense per-group hitlist snapshots can over-latch indefinite (x4==0) entries
   // onto active capsules before the first real hit in a newly active window, because the seed
@@ -155,10 +168,48 @@ static void hitboxes_seed_bridge_trim_impossible_indefinite(MslBatch* batch, int
       continue;
     }
     const size_t v_idx = msl_idx_player(bi, (int)victim_port);
+
+    // Seed-bridge stale suppression trim (narrow early-window BODY lane only):
+    // - BODY attribution (`instance_hit_by`) is written on ftColl_80076ED8/Fighter_ProcessHit paths.
+    // - Shield-only path (`ftColl_80076CBC`) does not own this BODY attribution lane.
+    // refs/melee/src/melee/ft/ftcoll.c::{ftColl_80076ED8,ftColl_80076CBC}
+    // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm (0x18EC export)
+    //
+    // In the first hitlag horizon of a newly materialized active window, an indefinite seeded
+    // suppression entry with mismatched BODY source owner and neutral victim hitstun is stale
+    // dense-map carry (group-level seed lacks per-HitCapsule insertion provenance). Trim only this
+    // early-window, non-shield, hitstun-neutral subset before lbColl_8000ACFC-style
+    // victim-presence suppression.
+    // refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000ACFC,lbColl_80008A5C}
+    // Shield-ownership guard for this trim:
+    // - ftColl_80078C70 gates shield collision by live ShieldDesc ownership (`fp->x221B_b0`), then
+    //   calls lbColl_80007BCC with the shield descriptor.
+    // - Our runtime shield lane treats nonzero `shield_radius` as active ShieldDesc ownership in the
+    //   same collision windows.
+    // refs/melee/src/melee/ft/ftcoll.c::ftColl_80078C70
+    // refs/melee/src/melee/lb/lbcollision.c::lbColl_80007BCC
+    const uint8_t shield_desc_active = (batch->state.shield_radius[v_idx] > 0.0f) ? 1u : 0u;
+    const uint16_t v_action = batch->state.action_id[v_idx];
+    // Guard-family transitions own shield/GuardSetOff timing lanes in decomp even when snapshot
+    // artifacts temporarily expose no-submotion/no-desc windows; do not clear reseed suppression
+    // there from BODY attribution mismatch alone.
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80093BC0
+    if (early_window && !shield_desc_active &&
+        !hitboxes_seed_bridge_is_guard_transition_owner(v_action) &&
+        batch->state.hitlag[v_idx] == 0u &&
+        batch->state.hitstun[v_idx] == 0u &&
+        batch->state.instance_hit_by[v_idx] != attacker_iid) {
+      hitboxes_seed_bridge_entry_clear(e);
+      continue;
+    }
+
+    if ((uint16_t)(window_age + 1u) < expected_hitlag) {
+      continue;
+    }
+
     if (batch->state.hitlag[v_idx] != 0u || batch->state.hitstun[v_idx] != 0u) {
       continue;
     }
-    const uint16_t v_action = batch->state.action_id[v_idx];
     const uint8_t guard_no_submotion_snapshot =
         (v_action == (uint16_t)MSL_ACT_GUARD && batch->state.action_frame[v_idx] < 0 &&
          batch->state.animation_index[v_idx] == 0xFFFFFFFFu &&

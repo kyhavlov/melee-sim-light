@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import numpy as np
@@ -172,6 +173,49 @@ def _run_one_step_row(ds_path: Path, record: int, p: int) -> tuple[np.void, np.v
 
     out = out_compare_bytes.view(COMPARE_DTYPE).reshape(-1)[0]
     return seed, ref, out
+
+
+def _run_pre_combat_debug_row(
+    ds_path: Path, record: int, attacker: int, hb_id: int
+) -> tuple[np.void, np.ndarray, np.ndarray, np.void]:
+    ds = read_dataset(str(ds_path))
+    samples = ds.samples
+    assert int(samples.shape[0]) > record, f"dataset too short for lock row: record={record}"
+    row = samples[record : record + 1]
+    seed = row["seed_t"][0]
+
+    binding = pytest.importorskip("msl_binding")
+    sizes = binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+
+    seed_bytes = np.frombuffer(row["seed_t"].tobytes(order="C"), dtype=np.uint8).copy().reshape(1, seed_stride)
+    prev_input_bytes = np.frombuffer(row["prev_input_t"].tobytes(order="C"), dtype=np.uint8).copy().reshape(
+        1, input_stride
+    )
+    input_bytes = np.frombuffer(row["input_t"].tobytes(order="C"), dtype=np.uint8).copy().reshape(1, input_stride)
+
+    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    try:
+        binding.reseed_seed(handle, seed_bytes)
+        binding.debug_step_input_pre_combat(handle, prev_input_bytes, input_bytes)
+        contacts_raw, count = binding.debug_combat_contacts_classified(handle, 0, 256)
+        contacts = contacts_raw.reshape(-1).view(_DEBUG_CONTACT_CLASSIFIED_DTYPE)[:count].copy()
+        shield_world = np.array(binding.debug_shield_bubbles_world(handle, 0), copy=True)
+        timing_raw = binding.debug_hitbox_event_timing(handle, 0, attacker, hb_id)
+        timing = timing_raw.reshape(-1).view(_DEBUG_HITBOX_EVENT_TIMING_DTYPE)[0].copy()
+    finally:
+        binding.destroy(handle)
+    return seed, contacts, shield_world, timing
+
+
+def _seed_bridge_expected_hitlag_from_damage(dmg: float) -> int:
+    common = json.loads((Path(__file__).resolve().parents[1] / "data/common/ft_common_data.json").read_text())
+    dmg_i = int(dmg)
+    env_dmg = 0 if dmg == 0.0 else (dmg_i if dmg_i != 0 else 1)
+    if env_dmg <= 0:
+        return 0
+    return int((float(env_dmg) * float(common["hitlag_dmg_mul"])) + float(common["hitlag_base"]))
 
 
 def _assert_body_overlap_lock_fields_match_ref(*, out_row: np.void, ref_row: np.void, record: int, p: int) -> None:
@@ -967,6 +1011,99 @@ def test_guardsetoff_cluster_rows_resolve_to_reference_outputs(
     assert int(out["instance_id"][0, p]) == int(ref["instance_id"][p])
     assert int(out["on_ground"][0, p]) == int(ref["on_ground"][p])
     assert int(out["ground_id"][0, p]) == int(ref["ground_id"][p])
+
+
+@pytest.mark.integration
+def test_hitboxes_seed_bridge_early_window_owner_mismatch_trim_rows_and_adjacent_controls_are_replay_exact() -> None:
+    # Lock families for src/hitboxes.c::hitboxes_seed_bridge_trim_impossible_indefinite
+    # early-window stale-suppression trim:
+    # - stale indefinite seed lane (cd=0xFFFF) on attacker group-0 victim slot
+    # - victim neutral hitlag/hitstun + no live shield descriptor radius
+    # - victim BODY owner mismatch (instance_hit_by != attacker instance_id)
+    # - early window age (pose_frame-start_frame+1) still inside expected hitlag horizon.
+    #
+    # Decomp refs:
+    # - refs/melee/src/melee/ft/ftcoll.c::{ftColl_80076ED8,ftColl_80076CBC,ftColl_800768A0}
+    # - refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000ACFC,lbColl_80008A5C,lbColl_80007BCC}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+
+    # Causal row families from locate diff (baseline 0bba852 -> current):
+    # - AGN rec=4059 p0 transition 20->90 with stale lane a=1,hb=1,v=0.
+    # - GAT rec=1982 p1 transition 25->86 with stale lane a=0,hb=1,v=1.
+    families = [
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl",
+            (4058, 4059, 4060),
+            0,  # attacked victim
+            1,  # attacker
+            1,  # hitbox id
+            20,
+            90,
+        ),
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl",
+            (1981, 1982, 1983),
+            1,  # attacked victim
+            0,  # attacker
+            1,  # hitbox id
+            25,
+            86,
+        ),
+    ]
+
+    for dataset_rel, rows, attacked, attacker, hb_id, seed_action, ref_action in families:
+        dataset_path = root / dataset_rel
+        if not dataset_path.exists():
+            pytest.skip(f"missing local dataset: {dataset_rel}")
+
+        ds = read_dataset(str(dataset_path))
+        samples = ds.samples
+        for rec in rows:
+            assert int(samples.shape[0]) > rec, f"dataset too short for lock row: record={rec}"
+        target = rows[1]
+        seed_t = samples["seed_t"][target]
+        ref_t1 = samples["ref_t1"][target]
+
+        # Target preconditions proving this specific stale-suppression branch context.
+        assert int(seed_t["combat_hitlist_cd"][attacker, 0, attacked]) == 0xFFFF
+        assert int(seed_t["hitlag"][attacked]) == 0
+        assert int(seed_t["hitstun"][attacked]) == 0
+        assert int(seed_t["instance_hit_by"][attacked]) != int(seed_t["instance_id"][attacker])
+        assert int(seed_t["action_id"][attacked]) == int(seed_action)
+        assert int(ref_t1["action_id"][attacked]) == int(ref_action)
+
+        seed_dbg, contacts, shield_world, timing = _run_pre_combat_debug_row(dataset_path, target, attacker, hb_id)
+        assert int(seed_dbg["hitlag"][attacked]) == 0
+        assert int(seed_dbg["hitstun"][attacked]) == 0
+        assert float(shield_world[attacked, 3]) <= 0.0
+        assert int(timing["enabled_cur"]) == 1
+        age_1based = int(timing["pose_frame"]) - int(timing["start_frame"]) + 1
+        assert age_1based > 0
+
+        body_hits = [
+            c
+            for c in contacts
+            if int(c["attacker"]) == attacker
+            and int(c["defender"]) == attacked
+            and int(c["hitbox_id"]) == hb_id
+            and int(c["contact_kind"]) == 0
+        ]
+        assert body_hits, f"record={target} expected BODY contact for a={attacker} d={attacked} hb={hb_id}"
+        expected_hitlag = _seed_bridge_expected_hitlag_from_damage(float(body_hits[0]["hitbox_damage"]))
+        assert expected_hitlag > 0
+        assert age_1based <= expected_hitlag
+
+        for rec in rows:
+            _, ref_row, out_row = _run_one_step_row(dataset_path, rec, attacked)
+            for p in (0, 1):
+                _assert_transition_lock_fields_match_ref(out_row=out_row, ref_row=ref_row, record=rec, p=p)
+            for fld in ("instance_hit_by", "last_hit_by"):
+                got = int(out_row[fld][attacked])
+                exp = int(ref_row[fld][attacked])
+                assert got == exp, (
+                    f"record={rec} p={attacked} field={fld} expected={exp} got={got}"
+                )
 
 
 @pytest.mark.integration
