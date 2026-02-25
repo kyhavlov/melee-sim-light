@@ -106,7 +106,7 @@ static inline uint8_t is_capture_pulled_action(uint16_t a) {
 
 static inline uint8_t is_capture_wait_action(uint16_t a) {
   return (a == (uint16_t)MSL_ACT_CAPTURE_WAIT_HI || a == (uint16_t)MSL_ACT_CAPTURE_WAIT_LW) ? 1u
-                                                                                               : 0u;
+                                                                                            : 0u;
 }
 
 static inline uint8_t enter_capture_damage_from_wait(MslBatch* batch, size_t vidx) {
@@ -471,8 +471,8 @@ static inline uint8_t enter_throw_from_wait(MslBatch* batch, int bi, int owner_p
         (throw_index >= 0 && owner_ch != NULL)
             ? ((owner_ch->weight_independent_throws_mask & (uint8_t)(1u << throw_index)) ? 1u : 0u)
             : 0u;
-    if (!weight_independent && c != NULL && victim_ch != NULL &&
-        victim_ch->weight > 0.0f && c->throw_anim_speed_weight_mul > 0.0f) {
+    if (!weight_independent && c != NULL && victim_ch != NULL && victim_ch->weight > 0.0f &&
+        c->throw_anim_speed_weight_mul > 0.0f) {
       throw_anim_speed = 1.0f / (victim_ch->weight * c->throw_anim_speed_weight_mul);
       if (!(throw_anim_speed > 0.0f)) {
         throw_anim_speed = 1.0f;
@@ -537,6 +537,7 @@ void grab_flow_on_catch_connect(MslBatch* batch, int bi, int owner_p, int victim
 
   const size_t oidx = msl_idx_player(bi, owner_p);
   const size_t vidx = msl_idx_player(bi, victim_p);
+  const uint16_t owner_instance_id_pre_connect = batch->state.instance_id[oidx];
   if (batch->state.stocks[oidx] == 0 || batch->state.stocks[vidx] == 0) {
     return;
   }
@@ -599,6 +600,18 @@ void grab_flow_on_catch_connect(MslBatch* batch, int bi, int owner_p, int victim
   // refs/melee/src/melee/ft/chara/ftCommon/types.h (mv.co.damage.x0 at fp+0x2340)
   // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm (misc AS variable @ fp+0x2340)
   batch->state.hitstun[vidx] = 0u;
+  // Catch-connect identity ownership:
+  // - fn_800DA8E4 installs owner linkage pointers on the grabbed victim (`fp->x1A58/x1A5C`).
+  // - Catch connect is a non-damaging callback lane (no Fighter_ProcessHit body write), so we
+  //   carry the catcher identity from the pre-entry owner instance.
+  // refs/melee/build/GALE01/asm/melee/ft/chara/ftCommon/ftCo_Attack100.s::{fn_800DAADC,fn_800DA8E4}
+  // refs/melee/src/melee/ft/ftcoll.c::ftColl_80078A2C
+  batch->state.instance_hit_by[vidx] = owner_instance_id_pre_connect;
+  // Grounded CapturePulledLw entry should clear stale damage-source attribution.
+  // refs/melee/src/melee/ft/ftcommon.c::ftCommon_800804FC (x18c4_source_ply = 6 on grounded lane)
+  if (batch->state.action_id[vidx] == (uint16_t)MSL_ACT_CAPTURE_PULLED_LW) {
+    batch->state.last_hit_by[vidx] = 6u;
+  }
   enum { MSL_STATE_FLAGS_221C_INDEX = 3 };
   enum { MSL_STATE_FLAG_221C_IS_HITSTUN = 0x02 };
   const size_t flags_i = vidx * (size_t)MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_221C_INDEX;
@@ -799,13 +812,14 @@ void grab_flow_update_pre_physics(MslBatch* batch) {
           if (!is_capture_wait_action(va)) {
             continue;
           }
-          const int32_t v_speed_fp = batch->state.frame_speed_mul_fp_q16_16[vidx];
-          const int16_t v_pre_af = msl_floor_i16_from_q16_16(
-              batch->state.anim_frame_fp_q16_16[vidx] - v_speed_fp);
-          if (batch->state.action_frame[vidx] != 2 || v_pre_af != 1 ||
-              v_speed_fp != msl_q16_16_from_f32(1.0f)) {
+          if (batch->state.action_frame[vidx] != 2) {
             continue;
           }
+          // Decomp callback ownership runs owner linkage (ftCo_CatchPull_Anim -> fn_800DB6C8) after
+          // victim entry on the first steady CaptureWait frame; keep this bridge keyed to that
+          // single-frame action counter, not to seed-time rate snapshots.
+          // refs/melee/build/GALE01/asm/melee/ft/chara/ftCommon/ftCo_Attack100.s::{ftCo_CatchPull_Anim,fn_800DA1D8,fn_800DB6C8}
+          // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
           msl_anim_timebase_tick_once(batch, vidx);
         }
       }
