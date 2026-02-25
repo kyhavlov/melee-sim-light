@@ -137,9 +137,19 @@ static inline void enter_wait(MslBatch* batch, size_t idx) {
 }
 
 static inline void enter_fall(MslBatch* batch, size_t idx) {
+  if (batch == NULL) {
+    return;
+  }
+  const uint8_t keep_fastfall = batch->state.fall_fast[idx] ? 1u : 0u;
   batch->state.action_id[idx] = (uint16_t)MSL_ACT_FALL;
   batch->state.animation_index[idx] = (uint32_t)MSL_SM_FALL;
   msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+  // Decomp: ftFx_SpecialAirNEnd_Anim exits through ftCo_Fall_Enter when landing-lag attr x18 is 0;
+  // ftCo_Fall_Enter uses Ft_MF_KeepFastFall.
+  // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_SpecialAirNEnd_Anim
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_Enter
+  // refs/melee/src/melee/ft/fighter.c (KeepFastFall gate inside Fighter_ChangeMotionState)
+  batch->state.fall_fast[idx] = keep_fastfall;
 }
 
 static inline void enter_blaster_start(MslBatch* batch, size_t idx, const MslLaserParams* lp,
@@ -398,30 +408,47 @@ void blaster_update_pre_physics(MslBatch* batch) {
       switch (a2) {
         case MSL_ACT_FX_SPECIAL_N_START:
           if (anim_finished(cid, lp->ground_start_msid, anim_frame_f32)) {
+            const uint8_t had_fastfall = batch->state.fall_fast[idx] ? 1u : 0u;
             batch->state.action_id[idx] = (uint16_t)MSL_ACT_FX_SPECIAL_N_LOOP;
             batch->state.animation_index[idx] = (uint32_t)lp->ground_loop_msid;
             // Decomp: ftFx_SpecialNStart_Anim transitions via Fighter_ChangeMotionState without
             // Ft_MF_KeepFastFall, so fp->fall_fast is cleared on entry.
             // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_SpecialNStart_Anim
             // refs/melee/src/melee/ft/fighter.c (KeepFastFall gate inside ChangeMotionState)
+            //
+            // Decomp continuity: ftCommon_CheckFallFast writes fp->x671_timer_lstick_tilt_y=0xFE when
+            // fastfall latches. If this motion change clears fastfall while it was active, keep x671 in
+            // the held-tilt sentinel band so fastfall does not immediately re-latch on the next frame.
+            // refs/melee/src/melee/ft/ftcommon.c::ftCommon_CheckFallFast
             batch->state.fall_fast[idx] = 0;
+            if (had_fastfall != 0u) {
+              batch->state.tilt_timer_y[idx] = 0xFEu;
+            }
             msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
           }
           break;
         case MSL_ACT_FX_SPECIAL_N_LOOP:
           if (anim_finished(cid, lp->ground_loop_msid, anim_frame_f32)) {
             if (specialn_is_blaster_loop_requested(batch, idx)) {
+              const uint8_t had_fastfall = batch->state.fall_fast[idx] ? 1u : 0u;
               // Loop -> Loop: request another shot cycle.
               // Decomp: Loop restarts itself via Fighter_ChangeMotionState without KeepFastFall.
               // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_SpecialNLoop_Anim
               batch->state.fall_fast[idx] = 0;
+              if (had_fastfall != 0u) {
+                batch->state.tilt_timer_y[idx] = 0xFEu;
+              }
               msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
             } else {
+              const uint8_t had_fastfall = batch->state.fall_fast[idx] ? 1u : 0u;
               batch->state.action_id[idx] = (uint16_t)MSL_ACT_FX_SPECIAL_N_END;
               batch->state.animation_index[idx] = (uint32_t)lp->ground_end_msid;
               // Decomp: Loop -> End uses Fighter_ChangeMotionState without KeepFastFall.
               // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_SpecialNLoop_Anim
               batch->state.fall_fast[idx] = 0;
+              if (had_fastfall != 0u) {
+                batch->state.tilt_timer_y[idx] = 0xFEu;
+              }
               msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
             }
           }
@@ -433,6 +460,7 @@ void blaster_update_pre_physics(MslBatch* batch) {
           break;
         case MSL_ACT_FX_SPECIAL_AIR_N_START:
           if (anim_finished(cid, lp->air_start_msid, anim_frame_f32)) {
+            const uint8_t had_fastfall = batch->state.fall_fast[idx] ? 1u : 0u;
             batch->state.action_id[idx] = (uint16_t)MSL_ACT_FX_SPECIAL_AIR_N_LOOP;
             batch->state.animation_index[idx] = (uint32_t)lp->air_loop_msid;
             // Decomp: ftFx_SpecialAirNStart_Anim transitions via Fighter_ChangeMotionState without
@@ -440,22 +468,33 @@ void blaster_update_pre_physics(MslBatch* batch) {
             // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_SpecialAirNStart_Anim
             // refs/melee/src/melee/ft/fighter.c (KeepFastFall gate inside ChangeMotionState)
             batch->state.fall_fast[idx] = 0;
+            if (had_fastfall != 0u) {
+              batch->state.tilt_timer_y[idx] = 0xFEu;
+            }
             msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
           }
           break;
         case MSL_ACT_FX_SPECIAL_AIR_N_LOOP:
           if (anim_finished(cid, lp->air_loop_msid, anim_frame_f32)) {
             if (specialn_is_blaster_loop_requested(batch, idx)) {
+              const uint8_t had_fastfall = batch->state.fall_fast[idx] ? 1u : 0u;
               // Decomp: Aerial loop restarts itself via Fighter_ChangeMotionState without KeepFastFall.
               // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_SpecialAirNLoop_Anim
               batch->state.fall_fast[idx] = 0;
+              if (had_fastfall != 0u) {
+                batch->state.tilt_timer_y[idx] = 0xFEu;
+              }
               msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
             } else {
+              const uint8_t had_fastfall = batch->state.fall_fast[idx] ? 1u : 0u;
               batch->state.action_id[idx] = (uint16_t)MSL_ACT_FX_SPECIAL_AIR_N_END;
               batch->state.animation_index[idx] = (uint32_t)lp->air_end_msid;
               // Decomp: Aerial loop -> end uses Fighter_ChangeMotionState without KeepFastFall.
               // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_SpecialAirNLoop_Anim
               batch->state.fall_fast[idx] = 0;
+              if (had_fastfall != 0u) {
+                batch->state.tilt_timer_y[idx] = 0xFEu;
+              }
               msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
             }
           }
