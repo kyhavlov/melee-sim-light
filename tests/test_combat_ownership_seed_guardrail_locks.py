@@ -2379,6 +2379,81 @@ def test_attackdash_guardon_entry_countdown_row_and_adjacent_controls_are_replay
 
 @pytest.mark.integration
 @pytest.mark.parametrize(
+    ("dataset_rel", "rows", "p", "post_ref_action"),
+    [
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl",
+            (607, 608, 609),
+            1,
+            178,
+        ),
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl",
+            (8284, 8285, 8286),
+            1,
+            178,
+        ),
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl",
+            (9829, 9830, 9831),
+            1,
+            178,
+        ),
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/TreasuredBackKangaroo.msl",
+            (6800, 6801, 6802),
+            1,
+            235,
+        ),
+    ],
+)
+def test_escape_wait_guardon_bridge_rows_and_adjacent_controls_are_replay_exact(
+    dataset_rel: str, rows: tuple[int, int, int], p: int, post_ref_action: int
+) -> None:
+    # Escape* anim-end -> Wait destination guard bridge lock families:
+    # - Escape*_Anim can transition to Wait before this frame's callback dispatch.
+    # - Wait_IASA guard check (ftCo_80091A4C) must still own same-frame GuardOn entry on this lane.
+    # - Scope gate excludes spotdodge (EscapeN) and crouch-intent windows (main_y down).
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Escape.c::{ftCo_Escape_Anim,ftCo_EscapeN_Anim}
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Escape.c::{ftCo_Escape_IASA,ftCo_EscapeN_IASA}
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80091A4C
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+    for rec in rows:
+        assert int(samples.shape[0]) > rec, f"dataset too short for lock row: record={rec}"
+
+    pre, target, post = rows
+    pre_row = samples[pre : pre + 1]
+    target_row = samples[target : target + 1]
+    post_row = samples[post : post + 1]
+
+    # target-1 / target / target+1 controls around the improved transition row.
+    assert int(pre_row["seed_t"]["action_id"][0, p]) == 233
+    assert int(pre_row["ref_t1"]["action_id"][0, p]) == 233
+    assert int(target_row["seed_t"]["action_id"][0, p]) == 233
+    assert int(target_row["ref_t1"]["action_id"][0, p]) == 178
+    assert int(post_row["seed_t"]["action_id"][0, p]) == 178
+    assert int(post_row["ref_t1"]["action_id"][0, p]) == int(post_ref_action)
+
+    # Lane preconditions: roll-escape terminal frame, non-crouch input window.
+    assert int(target_row["seed_t"]["action_frame"][0, p]) == 31
+    assert int(target_row["seed_t"]["animation_index"][0, p]) == 42
+    assert int(target_row["input_t"]["p"][0, p]["main_y"]) >= 0
+
+    for rec in rows:
+        _, ref, out = _run_one_step_row(dataset_path, rec, p)
+        _assert_transition_lock_fields_match_ref(out_row=out, ref_row=ref, record=rec, p=p)
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
     (
         "dataset_rel",
         "target_record",

@@ -1960,8 +1960,32 @@ void locomotion_update_pre(MslBatch* batch) {
         // refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate
         if (action_id == MSL_ACT_ESCAPE_N || action_id == MSL_ACT_ESCAPE_F ||
             action_id == MSL_ACT_ESCAPE_B) {
+          const uint16_t escape_action_start = action_id;
           escape_update_grounded(batch, c, ch, idx);
           action_id = batch->state.action_id[idx];
+          if (action_id == MSL_ACT_WAIT && escape_action_start != (uint16_t)MSL_ACT_ESCAPE_N &&
+              stick_y > -c->crouch_stick_threshold) {
+            // Decomp callback order bridge for Escape* anim-end -> Wait:
+            // - Escape*_Anim can enter Wait before this frame's input callback dispatch.
+            // - Wait_IASA then runs guard-check (ftCo_80091A4C) in the destination frame.
+            //   Our main guard_update_grounded() pass already ran while still in Escape*, so rerun
+            //   GuardOn ownership once on the Wait destination to keep this transition parity.
+            // Spotdodge scope gate:
+            // - ftCo_EscapeN_IASA is empty in decomp, so keep this same-frame Wait guard bridge to
+            //   roll escapes only (EscapeF/EscapeB) where ftCo_Escape_IASA is non-empty.
+            // Narrowed bridge gate:
+            // - Exclude crouch-intent windows; Escape end rows with downward stick are handled by
+            //   the destination grounded-input chain and should not force same-frame guard entry.
+            // - TODO(narrowed_temporary): promote Escape end callback ordering to run full Wait_IASA
+            //   destination chain on no-submotion snapshot rows; then remove this destination gate.
+            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Escape.c::{ftCo_Escape_Anim,ftCo_EscapeN_Anim}
+            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Escape.c::{ftCo_Escape_IASA,ftCo_EscapeN_IASA}
+            // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
+            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
+            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80091A4C
+            guard_update_grounded(batch, c, idx, 1u);
+            action_id = batch->state.action_id[idx];
+          }
           if (action_id == MSL_ACT_ESCAPE_N || action_id == MSL_ACT_ESCAPE_F ||
               action_id == MSL_ACT_ESCAPE_B) {
             continue;
