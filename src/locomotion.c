@@ -239,12 +239,10 @@ static inline uint8_t spacie_specialhi_update(MslBatch* batch, size_t idx, uint8
       // submotion end frame as the transition gate so action-time progression remains data-driven
       // (replace with explicit travelFrames seed when available).
       if (anim_finished(char_id, ms->specialhi_ground_main, batch->state.anim_frame_f32[idx])) {
-        batch->state.action_id[idx] =
-            on_ground ? (uint16_t)MSL_ACT_FX_SPECIAL_HI_LANDING
-                      : (uint16_t)MSL_ACT_FX_SPECIAL_HI_FALL;
-        batch->state.animation_index[idx] =
-            on_ground ? (uint32_t)MSL_SM_FX_SPECIAL_HI_LANDING
-                      : (uint32_t)MSL_SM_FX_SPECIAL_HI_FALL;
+        batch->state.action_id[idx] = on_ground ? (uint16_t)MSL_ACT_FX_SPECIAL_HI_LANDING
+                                                : (uint16_t)MSL_ACT_FX_SPECIAL_HI_FALL;
+        batch->state.animation_index[idx] = on_ground ? (uint32_t)MSL_SM_FX_SPECIAL_HI_LANDING
+                                                      : (uint32_t)MSL_SM_FX_SPECIAL_HI_FALL;
         msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
       }
       return 1;
@@ -253,12 +251,10 @@ static inline uint8_t spacie_specialhi_update(MslBatch* batch, size_t idx, uint8
       // refs/melee/src/melee/ft/chara/ftFox/ftFx_Init.c
       batch->state.animation_index[idx] = (uint32_t)ms->specialhi_ground_main;
       if (anim_finished(char_id, ms->specialhi_ground_main, batch->state.anim_frame_f32[idx])) {
-        batch->state.action_id[idx] =
-            on_ground ? (uint16_t)MSL_ACT_FX_SPECIAL_HI_LANDING
-                      : (uint16_t)MSL_ACT_FX_SPECIAL_HI_FALL;
-        batch->state.animation_index[idx] =
-            on_ground ? (uint32_t)MSL_SM_FX_SPECIAL_HI_LANDING
-                      : (uint32_t)MSL_SM_FX_SPECIAL_HI_FALL;
+        batch->state.action_id[idx] = on_ground ? (uint16_t)MSL_ACT_FX_SPECIAL_HI_LANDING
+                                                : (uint16_t)MSL_ACT_FX_SPECIAL_HI_FALL;
+        batch->state.animation_index[idx] = on_ground ? (uint32_t)MSL_SM_FX_SPECIAL_HI_LANDING
+                                                      : (uint32_t)MSL_SM_FX_SPECIAL_HI_FALL;
         msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
       }
       return 1;
@@ -378,8 +374,7 @@ static inline uint8_t landing_contact_y_bridge_matches_source(uint16_t source_ac
   //   refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::ftCo_Landing_Enter_Basic
   if (land_act == (uint16_t)MSL_ACT_LANDING &&
       (source_act == (uint16_t)MSL_ACT_FALL || source_act == (uint16_t)MSL_ACT_JUMP_F ||
-       source_act == (uint16_t)MSL_ACT_JUMP_B ||
-       source_act == (uint16_t)MSL_ACT_JUMP_AERIAL_B ||
+       source_act == (uint16_t)MSL_ACT_JUMP_B || source_act == (uint16_t)MSL_ACT_JUMP_AERIAL_B ||
        source_act == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_N_START ||
        source_act == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_N_LOOP ||
        source_act == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_N_END ||
@@ -390,8 +385,7 @@ static inline uint8_t landing_contact_y_bridge_matches_source(uint16_t source_ac
   return 0u;
 }
 
-static inline uint8_t landing_contact_is_ledge_floor(const MslBatch* batch, size_t idx,
-                                                     size_t bi) {
+static inline uint8_t landing_contact_is_ledge_floor(const MslBatch* batch, size_t idx, size_t bi) {
   if (batch == NULL || !batch->state.on_ground[idx]) {
     return 0u;
   }
@@ -535,7 +529,8 @@ static inline uint8_t cstick_side_smash_edge(const MslCommonParams* c, const Msl
   // Decomp: refs/melee/src/melee/ft/ft_0DF1.c::ftCo_800DF1C8
   const float prev_x = stick_i8_to_unit(batch->state.prev_input_c_x[idx]);
   const float cur_x = stick_i8_to_unit(batch->state.input_c_x[idx]);
-  return (msl_absf(prev_x) < c->cstick_smash_threshold && msl_absf(cur_x) >= c->cstick_smash_threshold)
+  return (msl_absf(prev_x) < c->cstick_smash_threshold &&
+          msl_absf(cur_x) >= c->cstick_smash_threshold)
              ? 1u
              : 0u;
 }
@@ -568,15 +563,11 @@ static inline uint8_t cstick_down_smash_edge(const MslCommonParams* c, const Msl
              : 0u;
 }
 
-static inline uint16_t grounded_a_attack_select_action(const MslCommonParams* c,
-                                                       uint16_t buttons_pressed,
-                                                       uint8_t cstick_side_edge,
-                                                       uint8_t cstick_up_edge,
-                                                       uint8_t cstick_down_edge, float stick_x,
-                                                       float stick_y, uint8_t tilt_timer_x,
-                                                       uint8_t tilt_timer_y, float facing_dir,
-                                                       uint8_t allow_attack_dash,
-                                                       uint8_t allow_tilts) {
+static inline uint16_t grounded_a_attack_select_action(
+    const MslCommonParams* c, uint16_t buttons_pressed, uint8_t cstick_side_edge,
+    uint8_t cstick_up_edge, uint8_t cstick_down_edge, float stick_x, float stick_y,
+    uint8_t tilt_timer_x, uint8_t tilt_timer_y, float facing_dir, uint8_t allow_attack_dash,
+    uint8_t allow_tilts) {
   if (c == NULL) {
     return 0xFFFFu;
   }
@@ -682,15 +673,44 @@ static inline uint8_t action_is_attack_s3_family(uint16_t action_id) {
   }
 }
 
-static inline uint8_t grounded_a_attack_try_enter_from_iasa(MslBatch* batch,
-                                                            const MslCommonParams* c, size_t idx,
-                                                            uint16_t buttons_pressed,
-                                                            float stick_x, float stick_y,
-                                                            uint8_t tilt_timer_x,
-                                                            uint8_t tilt_timer_y,
-                                                            float facing_dir,
-                                                            uint8_t allow_attack_dash,
-                                                            uint8_t allow_tilts) {
+static inline uint8_t grounded_attack_wait_iasa_interrupt_dest_action(uint16_t action_id) {
+  switch (action_id) {
+    case MSL_ACT_WALK_SLOW:
+    case MSL_ACT_WALK_MIDDLE:
+    case MSL_ACT_WALK_FAST:
+    case MSL_ACT_TURN:
+    case MSL_ACT_DASH:
+    case MSL_ACT_SQUAT:
+    case MSL_ACT_KNEE_BEND:
+    case MSL_ACT_GUARD_ON:
+    case MSL_ACT_ESCAPE_N:
+    case MSL_ACT_CATCH:
+    case MSL_ACT_CATCH_DASH:
+      return 1u;
+    default:
+      return 0u;
+  }
+}
+
+static inline void enter_fall_keep_fastfall_ftco_fall_enter(MslBatch* batch, size_t idx) {
+  if (batch == NULL) {
+    return;
+  }
+  const uint8_t keep_fastfall = batch->state.fall_fast[idx] ? 1u : 0u;
+  batch->state.action_id[idx] = (uint16_t)MSL_ACT_FALL;
+  batch->state.animation_index[idx] = (uint32_t)MSL_SM_FALL;
+  msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+  // Decomp: ftCo_Fall_Enter calls Fighter_ChangeMotionState(..., Ft_MF_KeepFastFall, ...), so
+  // fp->fall_fast persists across this motion change.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_Enter
+  // refs/melee/src/melee/ft/fighter.c (KeepFastFall gate inside Fighter_ChangeMotionState)
+  batch->state.fall_fast[idx] = keep_fastfall;
+}
+
+static inline uint8_t grounded_a_attack_try_enter_from_iasa(
+    MslBatch* batch, const MslCommonParams* c, size_t idx, uint16_t buttons_pressed, float stick_x,
+    float stick_y, uint8_t tilt_timer_x, uint8_t tilt_timer_y, float facing_dir,
+    uint8_t allow_attack_dash, uint8_t allow_tilts) {
   if (batch == NULL || c == NULL) {
     return 0;
   }
@@ -702,10 +722,9 @@ static inline uint8_t grounded_a_attack_try_enter_from_iasa(MslBatch* batch,
     return 0;
   }
 
-  const uint16_t act =
-      grounded_a_attack_select_action(c, buttons_pressed, c_side_edge, c_up_edge, c_down_edge,
-                                      stick_x, stick_y, tilt_timer_x, tilt_timer_y, facing_dir,
-                                      allow_attack_dash, allow_tilts);
+  const uint16_t act = grounded_a_attack_select_action(
+      c, buttons_pressed, c_side_edge, c_up_edge, c_down_edge, stick_x, stick_y, tilt_timer_x,
+      tilt_timer_y, facing_dir, allow_attack_dash, allow_tilts);
   const uint32_t sm = grounded_attack_submotion_from_action(act);
   if (sm == 0xFFFFFFFFu) {
     return 0;
@@ -835,8 +854,8 @@ static inline uint8_t grounded_attack_try_iasa_subset(MslBatch* batch, const Msl
 
   // Wait_IASA ordering (decomp): Jump -> Dash -> Squat -> Turn -> Walk.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
-  if ((buttons_pressed & (uint16_t)MSL_BUTTON_B) == 0u && (buttons & (uint16_t)MSL_BUTTON_B) == 0u &&
-      stick_y < -c->crouch_stick_threshold) {
+  if ((buttons_pressed & (uint16_t)MSL_BUTTON_B) == 0u &&
+      (buttons & (uint16_t)MSL_BUTTON_B) == 0u && stick_y < -c->crouch_stick_threshold) {
     enter_squat_immediate(batch, idx);
     return 1u;
   }
@@ -887,8 +906,7 @@ static inline uint8_t grounded_attack_try_jab_chain_subset(MslBatch* batch, size
   // Runtime ownership in this lane is command-timeline driven from extracted move events.
   // refs/melee/src/melee/ft/ftaction.c::ftAction_80071AE8
   // data/moves/{fox,falco}.json moves["ftCo_SM_Attack11"]["events"] set_jab_combo
-  const uint8_t jab_combo_active =
-      move_tables_jab_combo_active(char_id, action_id, script_frame);
+  const uint8_t jab_combo_active = move_tables_jab_combo_active(char_id, action_id, script_frame);
   // Input edge -> jab intent latch (mv.co.attack1.x0 = true) in checkAttack12/checkAttack13.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack1.c::{checkAttack12,checkAttack13}
   if ((buttons_pressed & (uint16_t)MSL_BUTTON_A) != 0u) {
@@ -904,8 +922,8 @@ static inline uint8_t grounded_attack_try_jab_chain_subset(MslBatch* batch, size
   enum { MSL_STATE_FLAG_2218_ALLOW_INTERRUPT = 0x80 };
   enum { MSL_STATE_FLAG_2218_JAB_COMBO = 0x40 };
   const size_t flags_i = idx * (size_t)MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_2218_INDEX;
-  batch->state.state_flags[flags_i] &= (uint8_t) ~(uint8_t)(MSL_STATE_FLAG_2218_ALLOW_INTERRUPT |
-                                                             MSL_STATE_FLAG_2218_JAB_COMBO);
+  batch->state.state_flags[flags_i] &=
+      (uint8_t) ~(uint8_t)(MSL_STATE_FLAG_2218_ALLOW_INTERRUPT | MSL_STATE_FLAG_2218_JAB_COMBO);
   batch->state.jab_x0[idx] = 0u;
   if (action_id == (uint16_t)MSL_ACT_ATTACK_11) {
     batch->state.action_id[idx] = (uint16_t)MSL_ACT_ATTACK_12;
@@ -943,16 +961,14 @@ static inline uint8_t action_is_ground_locomotion(uint16_t a) {
   if (a == MSL_ACT_WAIT || action_is_walk(a) || a == MSL_ACT_TURN || a == MSL_ACT_TURN_RUN ||
       a == MSL_ACT_DASH || a == MSL_ACT_RUN || a == MSL_ACT_RUN_BRAKE || a == MSL_ACT_KNEE_BEND ||
       a == MSL_ACT_SQUAT || a == MSL_ACT_SQUAT_WAIT || a == MSL_ACT_SQUAT_RV ||
-      a == MSL_ACT_LANDING ||
-      a == MSL_ACT_LANDING_FALL_SPECIAL || a == MSL_ACT_LANDING_AIR_N ||
+      a == MSL_ACT_LANDING || a == MSL_ACT_LANDING_FALL_SPECIAL || a == MSL_ACT_LANDING_AIR_N ||
       a == MSL_ACT_LANDING_AIR_F || a == MSL_ACT_LANDING_AIR_B || a == MSL_ACT_LANDING_AIR_HI ||
       a == MSL_ACT_LANDING_AIR_LW || a == MSL_ACT_ESCAPE_F || a == MSL_ACT_ESCAPE_B ||
       a == MSL_ACT_ESCAPE_N || a == MSL_ACT_ATTACK_11 || a == MSL_ACT_ATTACK_12 ||
       a == MSL_ACT_ATTACK_13 || a == MSL_ACT_ATTACK_DASH || action_is_attack_s3_family(a) ||
       a == MSL_ACT_ATTACK_HI3 || a == MSL_ACT_ATTACK_LW3 || a == MSL_ACT_ATTACK_S4_HI ||
-      a == MSL_ACT_ATTACK_S4_HI_S || a == MSL_ACT_ATTACK_S4_S ||
-      a == MSL_ACT_ATTACK_S4_LW_S || a == MSL_ACT_ATTACK_S4_LW || a == MSL_ACT_ATTACK_HI4 ||
-      a == MSL_ACT_ATTACK_LW4) {
+      a == MSL_ACT_ATTACK_S4_HI_S || a == MSL_ACT_ATTACK_S4_S || a == MSL_ACT_ATTACK_S4_LW_S ||
+      a == MSL_ACT_ATTACK_S4_LW || a == MSL_ACT_ATTACK_HI4 || a == MSL_ACT_ATTACK_LW4) {
     return 1;
   }
   return 0;
@@ -1000,7 +1016,7 @@ static inline uint32_t anim_for_walk_action(uint16_t a) {
 }
 
 static inline void walk_change_type_ftWalkCommon_800DFEC8(MslBatch* batch, size_t idx,
-                                                           uint16_t target_walk_action) {
+                                                          uint16_t target_walk_action) {
   if (batch == NULL) {
     return;
   }
@@ -1043,7 +1059,8 @@ static inline void walk_change_type_ftWalkCommon_800DFEC8(MslBatch* batch, size_
   msl_anim_timebase_tick_once(batch, idx);
 }
 
-static inline float walk_anim_rate_divisor_for_action(const MslCharParams* ch, uint16_t walk_action) {
+static inline float walk_anim_rate_divisor_for_action(const MslCharParams* ch,
+                                                      uint16_t walk_action) {
   if (ch == NULL) {
     return 0.0f;
   }
@@ -1088,7 +1105,7 @@ static inline void walk_anim_rate_ftWalkCommon_800DFDDC(MslBatch* batch, const M
 }
 
 static inline void run_anim_rate_ftCo_Run_Anim(MslBatch* batch, const MslCharParams* ch, size_t idx,
-                                                uint16_t run_action) {
+                                               uint16_t run_action) {
   if (batch == NULL || ch == NULL) {
     return;
   }
@@ -1148,9 +1165,9 @@ static inline MslJumpInput jump_input_from_edges(const MslCommonParams* c, uint1
 }
 
 static inline uint8_t kneebend_try_enter_attack_hi4_from_iasa(MslBatch* batch,
-                                                               const MslCommonParams* c, size_t idx,
-                                                               uint16_t buttons_pressed,
-                                                               float stick_y) {
+                                                              const MslCommonParams* c, size_t idx,
+                                                              uint16_t buttons_pressed,
+                                                              float stick_y) {
   if (batch == NULL || c == NULL) {
     return 0u;
   }
@@ -1160,10 +1177,10 @@ static inline uint8_t kneebend_try_enter_attack_hi4_from_iasa(MslBatch* batch,
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_KneeBend.c::ftCo_KneeBend_IASA
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackHi4.c::ftCo_AttackHi4_CheckInputNoD0
   // refs/melee/src/melee/ft/ft_0DF1.c::ftCo_800DF2D8
-  const uint8_t a_up_smash =
-      ((buttons_pressed & (uint16_t)MSL_BUTTON_A) != 0u && stick_y >= c->attack_hi4_stick_threshold_y)
-          ? 1u
-          : 0u;
+  const uint8_t a_up_smash = ((buttons_pressed & (uint16_t)MSL_BUTTON_A) != 0u &&
+                              stick_y >= c->attack_hi4_stick_threshold_y)
+                                 ? 1u
+                                 : 0u;
   if (!a_up_smash && !cstick_up_smash_edge(c, batch, idx)) {
     return 0u;
   }
@@ -1437,7 +1454,7 @@ static inline void enter_landing_action_from_air(MslBatch* batch, const MslCharP
 }
 
 static inline uint8_t locomotion_is_throw_release_pending_victim(const MslBatch* batch, int bi,
-                                                                  int victim_p) {
+                                                                 int victim_p) {
   if (batch == NULL) {
     return 0u;
   }
@@ -1598,8 +1615,8 @@ void locomotion_update_pre(MslBatch* batch) {
         if (action_id == MSL_ACT_SQUAT || action_id == MSL_ACT_SQUAT_WAIT ||
             action_id == MSL_ACT_SQUAT_RV) {
           if (grounded_a_attack_try_enter_from_iasa(batch, c, idx, buttons_pressed, stick_x,
-                                                    stick_y, tilt_timer_x, tilt_timer_y,
-                                                    facing_dir, 0, 1)) {
+                                                    stick_y, tilt_timer_x, tilt_timer_y, facing_dir,
+                                                    0, 1)) {
             action_id = batch->state.action_id[idx];
           } else {
             const MslJumpInput j_in =
@@ -1821,28 +1838,23 @@ void locomotion_update_pre(MslBatch* batch) {
               // - else decrement x0 when x0>0.
               // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackDash.c::ftCo_AttackDash_IASA
               // refs/melee/build/GALE01/asm/melee/ft/chara/ftCommon/ftCo_Attack100.s::{ftCo_800D8AE0,ftCo_800D8C54}
-              if ((buttons & (uint16_t)MSL_BUTTON_A) != 0u &&
-                  batch->state.attackdash_x0[idx] > 0) {
+              if ((buttons & (uint16_t)MSL_BUTTON_A) != 0u && batch->state.attackdash_x0[idx] > 0) {
                 grab_flow_enter_catchdash_from_attackdash_pregate(batch, idx);
                 action_id = batch->state.action_id[idx];
                 attackdash_pregate_consumed = 1u;
               } else if (batch->state.attackdash_x0[idx] > 0) {
-                batch->state.attackdash_x0[idx] =
-                    (int16_t)(batch->state.attackdash_x0[idx] - 1);
+                batch->state.attackdash_x0[idx] = (int16_t)(batch->state.attackdash_x0[idx] - 1);
               }
             }
             // Decomp: grounded Attack* IASA gates on fp->allow_interrupt before delegating to
             // grounded interrupt checks (typically Wait IASA path).
             // refs/melee/src/melee/ft/chara/ftCommon/{ftCo_AttackDash.c,ftCo_AttackS3.c,ftCo_AttackHi3.c,ftCo_AttackHi4.c,ftCo_AttackLw4.c}
             const uint8_t attackdash_wait_iasa_enabled =
-                (action_id != (uint16_t)MSL_ACT_ATTACK_DASH ||
-                 stick_y < -c->crouch_stick_threshold)
+                (action_id != (uint16_t)MSL_ACT_ATTACK_DASH || stick_y < -c->crouch_stick_threshold)
                     ? 1u
                     : 0u;
             uint8_t attackdash_guard_iasa_consumed = 0u;
-            if (!attackdash_pregate_consumed &&
-                allow_interrupt &&
-                attackdash_wait_iasa_enabled &&
+            if (!attackdash_pregate_consumed && allow_interrupt && attackdash_wait_iasa_enabled &&
                 action_id == (uint16_t)MSL_ACT_ATTACK_DASH) {
               // Decomp ordering for AttackDash IASA delegation:
               // - ftCo_AttackDash_IASA delegates into the Wait-style interrupt checks.
@@ -1863,16 +1875,45 @@ void locomotion_update_pre(MslBatch* batch) {
               if (act_before_guard == (uint16_t)MSL_ACT_ATTACK_DASH &&
                   action_id != (uint16_t)MSL_ACT_ATTACK_DASH) {
                 attackdash_guard_iasa_consumed = 1u;
+                // Decomp ownership bridge for fp+0x2218.allow_interrupt:
+                // - Attack* IASA delegates into Wait_IASA only when fp->allow_interrupt is true.
+                // - If that callback consumes into a non-attack destination, the post-frame byte at
+                //   fp+0x2218 should still carry allow_interrupt on the destination frame.
+                // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackDash.c::ftCo_AttackDash_IASA
+                // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
+                if (grounded_attack_wait_iasa_interrupt_dest_action(action_id)) {
+                  enum { MSL_STATE_FLAGS_2218_INDEX = 0 };
+                  enum { MSL_STATE_FLAG_2218_ALLOW_INTERRUPT = 0x80 };
+                  const size_t flags_i =
+                      idx * (size_t)MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_2218_INDEX;
+                  batch->state.state_flags[flags_i] |= (uint8_t)MSL_STATE_FLAG_2218_ALLOW_INTERRUPT;
+                }
               }
             }
-            if (!attackdash_pregate_consumed &&
-                !attackdash_guard_iasa_consumed &&
-                allow_interrupt &&
-                attackdash_wait_iasa_enabled &&
+            if (!attackdash_pregate_consumed && !attackdash_guard_iasa_consumed &&
+                allow_interrupt && attackdash_wait_iasa_enabled &&
                 grounded_attack_try_iasa_subset(batch, c, ch, idx, buttons, buttons_pressed,
                                                 stick_x, stick_y, tilt_timer_x, tilt_timer_y,
                                                 facing_dir)) {
               action_id = batch->state.action_id[idx];
+              // Decomp ownership bridge for fp+0x2218.allow_interrupt:
+              // - Grounded Attack* IASA checks fp->allow_interrupt before calling Wait_IASA path.
+              // - Preserve that bit on immediate Wait_IASA destination transitions.
+              // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack1.c::ftCo_Attack11_IASA
+              // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackS3.c::ftCo_AttackS3_IASA
+              // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackHi3.c::ftCo_AttackHi3_IASA
+              // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackLw3.c::ftCo_AttackLw3_IASA
+              // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackS4.c::ftCo_AttackS4_IASA
+              // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackHi4.c::ftCo_AttackHi4_IASA
+              // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackLw4.c::ftCo_AttackLw4_IASA
+              // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
+              if (grounded_attack_wait_iasa_interrupt_dest_action(action_id)) {
+                enum { MSL_STATE_FLAGS_2218_INDEX = 0 };
+                enum { MSL_STATE_FLAG_2218_ALLOW_INTERRUPT = 0x80 };
+                const size_t flags_i =
+                    idx * (size_t)MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_2218_INDEX;
+                batch->state.state_flags[flags_i] |= (uint8_t)MSL_STATE_FLAG_2218_ALLOW_INTERRUPT;
+              }
             }
 
             if (grounded_attack_submotion_from_action(action_id) != 0xFFFFFFFFu) {
@@ -1936,8 +1977,8 @@ void locomotion_update_pre(MslBatch* batch) {
         //   - ftCo_Walk_CheckInput
         if (action_id == MSL_ACT_WAIT) {
           if (grounded_a_attack_try_enter_from_iasa(batch, c, idx, buttons_pressed, stick_x,
-                                                    stick_y, tilt_timer_x, tilt_timer_y,
-                                                    facing_dir, 0, 1)) {
+                                                    stick_y, tilt_timer_x, tilt_timer_y, facing_dir,
+                                                    0, 1)) {
             action_id = batch->state.action_id[idx];
           } else {
             // Jump -> KneeBend.
@@ -1952,7 +1993,8 @@ void locomotion_update_pre(MslBatch* batch) {
               batch->state.kneebend_is_short_hop[idx] = 0;
               action_id = (uint16_t)MSL_ACT_KNEE_BEND;
             } else if ((buttons_pressed & (uint16_t)MSL_BUTTON_B) == 0 &&
-                       (action_id_start != MSL_ACT_WAIT || (buttons & (uint16_t)MSL_BUTTON_B) == 0) &&
+                       (action_id_start != MSL_ACT_WAIT ||
+                        (buttons & (uint16_t)MSL_BUTTON_B) == 0) &&
                        stick_y < -c->crouch_stick_threshold) {
               // Decomp: ftCo_Wait_IASA -> ftCo_Squat_CheckInput -> ftCo_Squat_Enter.
               // refs/melee/src/melee/ft/chara/ftCommon/{ftCo_Wait.c,ftCo_Squat.c}
@@ -2141,8 +2183,8 @@ void locomotion_update_pre(MslBatch* batch) {
           const float turn_attack_facing_dir =
               batch->state.turn_has_turned[idx] ? facing_dir : -facing_dir;
           if (grounded_a_attack_try_enter_from_iasa(batch, c, idx, buttons_pressed, stick_x,
-                                                     stick_y, tilt_timer_x, tilt_timer_y,
-                                                     turn_attack_facing_dir, 0, 1)) {
+                                                    stick_y, tilt_timer_x, tilt_timer_y,
+                                                    turn_attack_facing_dir, 0, 1)) {
             action_id = batch->state.action_id[idx];
           } else {
             const MslJumpInput j_in =
@@ -2155,28 +2197,68 @@ void locomotion_update_pre(MslBatch* batch) {
               batch->state.kneebend_is_short_hop[idx] = 0;
               action_id = (uint16_t)MSL_ACT_KNEE_BEND;
             } else if (action_id == MSL_ACT_TURN) {
-            // UCF dashback patch (UCF 0.84): on AS_Turn anim frame 2, if vanilla x-smash conditions
-            // hold and the UCF xsmash intent heuristic passes, allow dashback.
-            //
-            // refs/ucf/src/dashback/dashback.cpp
-            // refs/ucf/include/ucf/pad_buffer.h::check_ucf_xsmash
-            // refs/ucf/include/melee/asm/player.h (.set Player.input.stick_x_hold_time, 0x670)
-            // Decomp timing:
-            // - x670 is updated in Fighter_Spaghetti_8006AD10 (prio 3).
-            //   refs/melee/src/melee/ft/fighter.c:1903-1955
-            // - The motion state's "input_cb" (IASA) is invoked afterward, in the same proc.
-            //   refs/melee/src/melee/ft/fighter.c:2117-2119
-            // So `tilt_timer_x` here corresponds to the post-input-update x670 value.
-            if (batch->config.ucf_enabled) {
-              const float af = msl_anim_frame_sanitize_f32(batch->state.anim_frame_f32[idx]);
-              if (af == 2.0f && msl_absf(stick_x) >= c->dash_flick_abs && tilt_timer_x < 2u &&
-                  msl_ucf_check_xsmash(&batch->state, idx)) {
-                const uint8_t face = (stick_x >= 0.0f) ? 1u : 0u;
-                batch->state.facing[idx] = face;
-                facing_dir = face ? 1.0f : -1.0f;
-                batch->state.turn_has_turned[idx] = 0;
-                batch->state.turn_frames_to_turn[idx] = 0;
-                batch->state.turn_x8[idx] = 0;
+              // UCF dashback patch (UCF 0.84): on AS_Turn anim frame 2, if vanilla x-smash conditions
+              // hold and the UCF xsmash intent heuristic passes, allow dashback.
+              //
+              // refs/ucf/src/dashback/dashback.cpp
+              // refs/ucf/include/ucf/pad_buffer.h::check_ucf_xsmash
+              // refs/ucf/include/melee/asm/player.h (.set Player.input.stick_x_hold_time, 0x670)
+              // Decomp timing:
+              // - x670 is updated in Fighter_Spaghetti_8006AD10 (prio 3).
+              //   refs/melee/src/melee/ft/fighter.c:1903-1955
+              // - The motion state's "input_cb" (IASA) is invoked afterward, in the same proc.
+              //   refs/melee/src/melee/ft/fighter.c:2117-2119
+              // So `tilt_timer_x` here corresponds to the post-input-update x670 value.
+              if (batch->config.ucf_enabled) {
+                const float af = msl_anim_frame_sanitize_f32(batch->state.anim_frame_f32[idx]);
+                if (af == 2.0f && msl_absf(stick_x) >= c->dash_flick_abs && tilt_timer_x < 2u &&
+                    msl_ucf_check_xsmash(&batch->state, idx)) {
+                  const uint8_t face = (stick_x >= 0.0f) ? 1u : 0u;
+                  batch->state.facing[idx] = face;
+                  facing_dir = face ? 1.0f : -1.0f;
+                  batch->state.turn_has_turned[idx] = 0;
+                  batch->state.turn_frames_to_turn[idx] = 0;
+                  batch->state.turn_x8[idx] = 0;
+                  batch->state.action_id[idx] = (uint16_t)MSL_ACT_DASH;
+                  batch->state.animation_index[idx] = (uint32_t)MSL_SM_DASH;
+                  // Decomp: Turn->Dash uses ftCo_Dash_Enter(gobj, 0), so mv.co.dash.x4 = 0.
+                  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Turn.c::ftCo_Turn_IASA
+                  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c::ftCo_Dash_Enter
+                  batch->state.dash_x4[idx] = 0u;
+                  msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+                  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c:59-62
+                  msl_anim_timebase_tick_once(batch, idx);
+                  // Decomp: fp->x670_timer_lstick_tilt_x = 0xFE;
+                  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c:62
+                  batch->state.tilt_timer_x[idx] = 0xFEu;
+                  action_id = (uint16_t)MSL_ACT_DASH;
+                }
+              }
+
+              // Vanilla Turn->Dash enter path (decomp-shaped).
+              //
+              // Decomp:
+              // - fn_800C9C2C sets mv.co.turn.x8 when:
+              //   (lstick.x * facing_after >= x3C) && (x670 < x40).
+              // - ftCo_Turn_IASA enters Dash when:
+              //   (just_turned && x8) && (lstick.x * facing_after >= x3C).
+              // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Turn.c::fn_800C9C2C
+              // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Turn.c::ftCo_Turn_IASA
+              //
+              // Note: `turn_just_turned` is tracked only when we flip has_turned in the Turn Anim
+              // countdown (ftCo_Turn_Anim_Inner).
+              const float facing_after_dir =
+                  batch->state.turn_has_turned[idx] ? facing_dir : -facing_dir;
+
+              // Decomp latch: fn_800C9C2C sets mv.co.turn.x8 and it persists until overwritten.
+              // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Turn.c::fn_800C9C2C
+              if ((stick_x * facing_after_dir) >= c->dash_flick_abs &&
+                  tilt_timer_x < c->dash_flick_tilt_max_frames) {
+                batch->state.turn_x8[idx] = (int8_t)(facing_after_dir > 0.0f ? 1 : -1);
+              }
+
+              if (turn_just_turned && batch->state.turn_x8[idx] != 0 &&
+                  (stick_x * facing_after_dir) >= c->dash_flick_abs) {
                 batch->state.action_id[idx] = (uint16_t)MSL_ACT_DASH;
                 batch->state.animation_index[idx] = (uint32_t)MSL_SM_DASH;
                 // Decomp: Turn->Dash uses ftCo_Dash_Enter(gobj, 0), so mv.co.dash.x4 = 0.
@@ -2192,47 +2274,7 @@ void locomotion_update_pre(MslBatch* batch) {
                 action_id = (uint16_t)MSL_ACT_DASH;
               }
             }
-
-            // Vanilla Turn->Dash enter path (decomp-shaped).
-            //
-            // Decomp:
-            // - fn_800C9C2C sets mv.co.turn.x8 when:
-            //   (lstick.x * facing_after >= x3C) && (x670 < x40).
-            // - ftCo_Turn_IASA enters Dash when:
-            //   (just_turned && x8) && (lstick.x * facing_after >= x3C).
-            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Turn.c::fn_800C9C2C
-            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Turn.c::ftCo_Turn_IASA
-            //
-            // Note: `turn_just_turned` is tracked only when we flip has_turned in the Turn Anim
-            // countdown (ftCo_Turn_Anim_Inner).
-            const float facing_after_dir =
-                batch->state.turn_has_turned[idx] ? facing_dir : -facing_dir;
-
-            // Decomp latch: fn_800C9C2C sets mv.co.turn.x8 and it persists until overwritten.
-            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Turn.c::fn_800C9C2C
-            if ((stick_x * facing_after_dir) >= c->dash_flick_abs &&
-                tilt_timer_x < c->dash_flick_tilt_max_frames) {
-              batch->state.turn_x8[idx] = (int8_t)(facing_after_dir > 0.0f ? 1 : -1);
-            }
-
-            if (turn_just_turned && batch->state.turn_x8[idx] != 0 &&
-                (stick_x * facing_after_dir) >= c->dash_flick_abs) {
-              batch->state.action_id[idx] = (uint16_t)MSL_ACT_DASH;
-              batch->state.animation_index[idx] = (uint32_t)MSL_SM_DASH;
-              // Decomp: Turn->Dash uses ftCo_Dash_Enter(gobj, 0), so mv.co.dash.x4 = 0.
-              // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Turn.c::ftCo_Turn_IASA
-              // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c::ftCo_Dash_Enter
-              batch->state.dash_x4[idx] = 0u;
-              msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
-              // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c:59-62
-              msl_anim_timebase_tick_once(batch, idx);
-              // Decomp: fp->x670_timer_lstick_tilt_x = 0xFE;
-              // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c:62
-              batch->state.tilt_timer_x[idx] = 0xFEu;
-              action_id = (uint16_t)MSL_ACT_DASH;
-            }
           }
-        }
         }
 
         // TurnRun IASA (minimal): Jump.
@@ -2264,8 +2306,8 @@ void locomotion_update_pre(MslBatch* batch) {
           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Walk.c::{ftCo_Walk_Anim,ftCo_Walk_IASA}
           walk_anim_rate_ftWalkCommon_800DFDDC(batch, ch, idx, action_id, facing_dir);
           if (grounded_a_attack_try_enter_from_iasa(batch, c, idx, buttons_pressed, stick_x,
-                                                     stick_y, tilt_timer_x, tilt_timer_y,
-                                                     facing_dir, 0, 1)) {
+                                                    stick_y, tilt_timer_x, tilt_timer_y, facing_dir,
+                                                    0, 1)) {
             action_id = batch->state.action_id[idx];
           } else {
             const MslJumpInput j_in =
@@ -2349,8 +2391,8 @@ void locomotion_update_pre(MslBatch* batch) {
           }
 
           if (grounded_a_attack_try_enter_from_iasa(batch, c, idx, buttons_pressed, stick_x,
-                                                    stick_y, tilt_timer_x, tilt_timer_y,
-                                                    facing_dir, 1, 0)) {
+                                                    stick_y, tilt_timer_x, tilt_timer_y, facing_dir,
+                                                    1, 0)) {
             action_id = batch->state.action_id[idx];
           } else {
             const MslJumpInput j_in =
@@ -2442,8 +2484,8 @@ void locomotion_update_pre(MslBatch* batch) {
               (dash_x4 != 0u && cur_anim_frame <= c->dash_iasa_x44) ? 1u : 0u;
           if (cur_anim_frame <= c->dash_iasa_x4c &&
               grounded_a_attack_try_enter_from_iasa(batch, c, idx, buttons_pressed, stick_x,
-                                                    stick_y, tilt_timer_x, tilt_timer_y,
-                                                    facing_dir, 1, 0)) {
+                                                    stick_y, tilt_timer_x, tilt_timer_y, facing_dir,
+                                                    1, 0)) {
             // Decomp: AttackDash input is only checked in Dash IASA while cur_anim_frame <= x4C.
             // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c::ftCo_Dash_IASA
             action_id = batch->state.action_id[idx];
@@ -2463,45 +2505,45 @@ void locomotion_update_pre(MslBatch* batch) {
               batch->state.kneebend_is_short_hop[idx] = 0;
               action_id = (uint16_t)MSL_ACT_KNEE_BEND;
             } else {
-            if (!dash_iasa_early_x4 && cur_anim_frame <= c->dash_iasa_x4c) {
-              if ((stick_x * facing_dir) < 0.0f && is_dash_flick(c, stick_x, tilt_timer_x)) {
-                // Dash flick opposite-facing triggers Turn (smash-turn path in vanilla).
-                // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c:41-43 (ftCo_Turn_Enter_Smash)
-                batch->state.turn_has_turned[idx] = 0;
-                batch->state.turn_frames_to_turn[idx] = 0;
-                // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Turn.c::ftCo_Turn_Enter_Smash
-                batch->state.turn_x8[idx] = (int8_t)(facing_dir > 0.0f ? 1 : -1);
-                batch->state.action_id[idx] = (uint16_t)MSL_ACT_TURN;
-                batch->state.animation_index[idx] = (uint32_t)MSL_SM_TURN;
-                msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
-                // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Turn.c:62-64
-                msl_anim_timebase_tick_once(batch, idx);
-                action_id = (uint16_t)MSL_ACT_TURN;
+              if (!dash_iasa_early_x4 && cur_anim_frame <= c->dash_iasa_x4c) {
+                if ((stick_x * facing_dir) < 0.0f && is_dash_flick(c, stick_x, tilt_timer_x)) {
+                  // Dash flick opposite-facing triggers Turn (smash-turn path in vanilla).
+                  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c:41-43 (ftCo_Turn_Enter_Smash)
+                  batch->state.turn_has_turned[idx] = 0;
+                  batch->state.turn_frames_to_turn[idx] = 0;
+                  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Turn.c::ftCo_Turn_Enter_Smash
+                  batch->state.turn_x8[idx] = (int8_t)(facing_dir > 0.0f ? 1 : -1);
+                  batch->state.action_id[idx] = (uint16_t)MSL_ACT_TURN;
+                  batch->state.animation_index[idx] = (uint32_t)MSL_SM_TURN;
+                  msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+                  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Turn.c:62-64
+                  msl_anim_timebase_tick_once(batch, idx);
+                  action_id = (uint16_t)MSL_ACT_TURN;
+                }
               }
-            }
 
-            // Dash -> Run when cmd_var[0] enables the late IASA chain and stick is held forward.
-            //
-            // Decomp:
-            // - ftCo_Dash_IASA reaches a shared "block_42" chain which gates on fp->cmd_vars[0] then
-            //   calls fn_800CA5F0 (Run enter check).
-            //   refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c::ftCo_Dash_IASA
-            //   refs/melee/src/melee/ft/chara/ftCommon/ftCo_Run.c::fn_800CA5F0
-            //
-            // Source of truth for fp->cmd_vars[0] timing:
-            // - data/moves/{fox,falco}.json moves["ftCo_SM_Dash"]["events"] set_cmd_var(idx=0).
-            if (action_id == MSL_ACT_DASH && move_tables_dash_cmd0_active(cid, cur_anim_frame)) {
-              const float stick_f = stick_x * facing_dir;
-              if (stick_f >= c->run_stick_x_threshold) {
-                batch->state.action_id[idx] = (uint16_t)MSL_ACT_RUN;
-                batch->state.animation_index[idx] = (uint32_t)MSL_SM_RUN;
-                // Decomp: fn_800CA5F0 enters Run with arg0=0.0, so mv.co.run.x0 starts at 0.
-                // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Run.c::fn_800CA5F0
-                batch->state.run_x0[idx] = 0;
-                msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
-                action_id = (uint16_t)MSL_ACT_RUN;
+              // Dash -> Run when cmd_var[0] enables the late IASA chain and stick is held forward.
+              //
+              // Decomp:
+              // - ftCo_Dash_IASA reaches a shared "block_42" chain which gates on fp->cmd_vars[0] then
+              //   calls fn_800CA5F0 (Run enter check).
+              //   refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c::ftCo_Dash_IASA
+              //   refs/melee/src/melee/ft/chara/ftCommon/ftCo_Run.c::fn_800CA5F0
+              //
+              // Source of truth for fp->cmd_vars[0] timing:
+              // - data/moves/{fox,falco}.json moves["ftCo_SM_Dash"]["events"] set_cmd_var(idx=0).
+              if (action_id == MSL_ACT_DASH && move_tables_dash_cmd0_active(cid, cur_anim_frame)) {
+                const float stick_f = stick_x * facing_dir;
+                if (stick_f >= c->run_stick_x_threshold) {
+                  batch->state.action_id[idx] = (uint16_t)MSL_ACT_RUN;
+                  batch->state.animation_index[idx] = (uint32_t)MSL_SM_RUN;
+                  // Decomp: fn_800CA5F0 enters Run with arg0=0.0, so mv.co.run.x0 starts at 0.
+                  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Run.c::fn_800CA5F0
+                  batch->state.run_x0[idx] = 0;
+                  msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+                  action_id = (uint16_t)MSL_ACT_RUN;
+                }
               }
-            }
             }
           }
         }
@@ -2784,9 +2826,10 @@ void locomotion_update_pre(MslBatch* batch) {
         if (anim != 0xFFFFFFFFu && anim <= 0xFFFFu) {
           if (anim_finished(batch->state.char_id[idx], (uint16_t)anim,
                             batch->state.anim_frame_f32[idx])) {
-            batch->state.action_id[idx] = (uint16_t)MSL_ACT_FALL;
-            batch->state.animation_index[idx] = (uint32_t)MSL_SM_FALL;
-            msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+            // Decomp: ftCo_AttackAir_Anim enters Fall via ftCo_Fall_Enter (KeepFastFall set).
+            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_Anim
+            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_Enter
+            enter_fall_keep_fastfall_ftco_fall_enter(batch, idx);
             action_id = (uint16_t)MSL_ACT_FALL;
             is_attack_air = 0;
             is_air_loco = 1;
@@ -2908,11 +2951,13 @@ void locomotion_update_pre(MslBatch* batch) {
             if (action_id == MSL_ACT_JUMP_AERIAL_F || action_id == MSL_ACT_JUMP_AERIAL_B) {
               batch->state.action_id[idx] = (uint16_t)MSL_ACT_FALL_AERIAL;
               batch->state.animation_index[idx] = (uint32_t)MSL_SM_FALL_AERIAL;
+              msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
             } else {
-              batch->state.action_id[idx] = (uint16_t)MSL_ACT_FALL;
-              batch->state.animation_index[idx] = (uint32_t)MSL_SM_FALL;
+              // Decomp: ground Jump_Anim enters Fall through ftCo_Fall_Enter (KeepFastFall set).
+              // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c::ftCo_Jump_Anim
+              // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_Enter
+              enter_fall_keep_fastfall_ftco_fall_enter(batch, idx);
             }
-            msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
           }
         }
       }
@@ -2997,7 +3042,8 @@ void locomotion_update_post_collision(MslBatch* batch) {
           // }
           batch->state.action_id[idx] = (uint16_t)MSL_ACT_FX_SPECIAL_HI_LANDING;
           batch->state.animation_index[idx] = (uint32_t)MSL_SM_FX_SPECIAL_HI_LANDING;
-          msl_anim_timebase_enter_with_policy(batch, idx, 13.0f, 1.0f, MSL_ANIM_ENTER_TICK_IMMEDIATE);
+          msl_anim_timebase_enter_with_policy(batch, idx, 13.0f, 1.0f,
+                                              MSL_ANIM_ENTER_TICK_IMMEDIATE);
           continue;
         }
 
