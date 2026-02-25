@@ -2908,6 +2908,55 @@ def test_guard_damage_and_guardreflect_transition_rows_and_adjacent_controls_are
 
 
 @pytest.mark.integration
+def test_damage_ground_airborne_landing_transition_rows_and_adjacent_controls_are_replay_exact() -> None:
+    # Damage_Coll landing ownership lock for grounded Damage* actions that are currently airborne:
+    # - ftCo_Damage_Coll resolves floor contact and chooses Landing/DownBound/fallback by kb magnitude.
+    # - For the kept lane, these rows must transition into Landing (42) at hitlag exit.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_Coll
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::ftCo_Landing_Enter_Basic
+    # refs/melee/src/melee/ft/ftcommon.c::{ftCommon_8007D7FC,ftCommon_8007D6A4}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_rel = (
+        "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
+        "GracefulAttachedTurtle.msl"
+    )
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+    families = [
+        # target-1 / target / target+1
+        ((197, 198, 199), 1, 79, 42),      # DamageN2 -> Landing
+        ((4511, 4512, 4513), 0, 76, 42),   # DamageHi2 -> Landing
+        ((10020, 10021, 10022), 1, 80, 42),  # DamageN3 -> Landing
+    ]
+
+    for rows, p_target, seed_action, ref_action in families:
+        for rec in rows:
+            assert int(samples.shape[0]) > rec, f"dataset too short for lock row: record={rec}"
+        target = rows[1]
+        target_row = samples[target : target + 1]
+        seed_t = target_row["seed_t"][0]
+        ref_t1 = target_row["ref_t1"][0]
+        assert int(seed_t["action_id"][p_target]) == int(seed_action)
+        assert int(ref_t1["action_id"][p_target]) == int(ref_action)
+        # Preconditions for this lane: airborne Damage*, one-frame hitlag exit, then grounded Landing.
+        assert int(seed_t["on_ground"][p_target]) == 0
+        assert int(seed_t["hitlag"][p_target]) > 0
+        assert int(ref_t1["on_ground"][p_target]) == 1
+        assert int(ref_t1["hitlag"][p_target]) == 0
+
+        for rec in rows:
+            _, ref, out = _run_one_step_row(dataset_path, rec, p_target)
+            _assert_transition_lock_fields_match_ref(
+                out_row=out, ref_row=ref, record=rec, p=p_target
+            )
+
+
+@pytest.mark.integration
 @pytest.mark.parametrize(
     ("dataset_rel", "target_record", "p", "seed_action", "ref_action"),
     [

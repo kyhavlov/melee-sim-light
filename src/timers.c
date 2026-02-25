@@ -105,11 +105,22 @@ void timers_update(MslBatch* batch) {
 static inline uint8_t damage_post_hitlag_cb_owner_action(uint16_t a) {
   switch (a) {
     // Modeled ownership subset for this pass:
-    // - DamageFly* and DamageFall callback lanes. DamageHi/N/Lw/Air owners are intentionally left
-    //   to callback coverage work to avoid over-broad hitlag-exit effects.
+    // - Damage entry writes `post_hitlag_cb = ftCo_Damage_OnExitHitlag` for common Damage states.
+    // - Include grounded DamageHi/N/Lw + DamageFly* + DamageFall ownership lanes; keep DamageAir*
+    //   deferred until its full callback/collision handoff lane is modeled.
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
     // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{
     //   ftCo_DamageFly_Coll,ftCo_Damage_Anim,ftCo_DamageFly_Anim
     // }
+    case MSL_ACT_DAMAGE_HI_1:
+    case MSL_ACT_DAMAGE_HI_2:
+    case MSL_ACT_DAMAGE_HI_3:
+    case MSL_ACT_DAMAGE_N_1:
+    case MSL_ACT_DAMAGE_N_2:
+    case MSL_ACT_DAMAGE_N_3:
+    case MSL_ACT_DAMAGE_LW_1:
+    case MSL_ACT_DAMAGE_LW_2:
+    case MSL_ACT_DAMAGE_LW_3:
     case MSL_ACT_DAMAGE_FLY_HI:
     case MSL_ACT_DAMAGE_FLY_N:
     case MSL_ACT_DAMAGE_FLY_LW:

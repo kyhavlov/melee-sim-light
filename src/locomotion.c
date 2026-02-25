@@ -2743,6 +2743,16 @@ void locomotion_update_pre(MslBatch* batch) {
             action_id = (uint16_t)MSL_ACT_FX_SPECIAL_AIR_S_END;
           }
 
+          if (action_id == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_S_END &&
+              anim_finished(cid, ms->specials_air_end, batch->state.anim_frame_f32[idx])) {
+            // Decomp: ftFx_SpecialAirSEnd_Anim exits through ftCo_80096900(arg1=1,...), entering
+            // FallSpecial and setting mv.co.fallspecial.xC.
+            // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c::ftFx_SpecialAirSEnd_Anim
+            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_FallSpecial.c::ftCo_80096900
+            enter_fall_special_from_specialhi(batch, idx);
+            action_id = (uint16_t)MSL_ACT_FALL_SPECIAL;
+          }
+
           continue;
         }
       }

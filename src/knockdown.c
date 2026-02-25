@@ -1208,6 +1208,36 @@ void knockdown_update_post_collision(MslBatch* batch) {
           continue;
         }
 
+        if (is_damage_ground_action(a0)) {
+          const float kbx = batch->state.speed_x_attack[idx];
+          const float kby = batch->state.speed_y_attack[idx];
+          const float mag = sqrtf(kbx * kbx + kby * kby);
+          // Decomp: ftCo_Damage_Coll (non-fly damage lanes) uses ft_80081DD4 floor contact and then:
+          // - if fp->x2224_b2 or |kb| >= x1E0: enter DownBound via ftCo_80097D40,
+          // - else if |kb| >= x1E4: enter Landing via ftCo_Landing_Enter_Basic,
+          // - else: keep Damage state and run ftCommon_8007D7FC transfer helper.
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_Coll
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownBound.c::ftCo_80097D40
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::ftCo_Landing_Enter_Basic
+          // refs/melee/src/melee/ft/ftcommon.c::{ftCommon_8007D7FC,ftCommon_8007D6A4}
+          if (batch->state.dmg_x2224_b2[idx] || mag >= c->damagefly_downbound_kb_vel_threshold) {
+            enter_down_bound_from_damage_land(batch, ch, idx, a0);
+            continue;
+          }
+          if (mag >= c->damagefly_landing_kb_vel_threshold) {
+            transfer_air_to_ground_on_land(batch, ch, idx, a0);
+            batch->state.action_id[idx] = (uint16_t)MSL_ACT_LANDING;
+            batch->state.animation_index[idx] = (uint32_t)MSL_SM_LANDING;
+            msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+            batch->state.hitstun[idx] = 0u;
+            continue;
+          }
+          if (batch->state.hitstun[idx] > 0u) {
+            transfer_air_to_ground_on_land(batch, ch, idx, a0);
+          }
+          continue;
+        }
+
         if (is_damage_air_action(a0)) {
           const float kbx = batch->state.speed_x_attack[idx];
           const float kby = batch->state.speed_y_attack[idx];
