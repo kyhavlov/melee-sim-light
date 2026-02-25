@@ -235,6 +235,10 @@ typedef struct MslStateSoA {
   uint8_t* x674;    // fp->x674
   uint8_t* x675;    // fp->x675
   uint8_t* x676_x;  // fp->x676_x
+  // Decomp: fp->x2228_b7 tracks most-recent fresh X stick-entry sign (1 right / 0 left).
+  // refs/melee/src/melee/ft/fighter.c:1924,1949
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_SpecialAir.c::ftCo_SpecialAir_CheckInput
+  uint8_t* x2228_b7;  // fp->x2228_b7
   uint8_t* x677_y;  // fp->x677_y
   uint8_t* x678;    // fp->x678
   uint8_t* x679_x;  // fp->x679_x

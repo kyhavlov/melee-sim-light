@@ -1539,7 +1539,7 @@ def test_fighter_stick_input_counters_are_causal_wrt_future_frames() -> None:
     sx_prefix = np.array([0.0, 0.9, 0.9, -0.9, -0.9], dtype=np.float32)
     sy_prefix = np.zeros(sx_prefix.shape[0], dtype=np.float32)
 
-    x673_0, x674_0, x676_x_0, x677_y_0, x679_x_0, x67A_y_0 = compute_fighter_stick_input_counters(
+    x673_0, x674_0, x676_x_0, x2228_b7_0, x677_y_0, x679_x_0, x67A_y_0 = compute_fighter_stick_input_counters(
         stick_x_unit=sx_prefix,
         stick_y_unit=sy_prefix,
         tilt_thresh_x=0.25,
@@ -1553,10 +1553,12 @@ def test_fighter_stick_input_counters_are_causal_wrt_future_frames() -> None:
     assert int(x679_x_0[1]) == 0  # lb_8000D148 zeroing on neutral->tilt
     assert int(x673_0[2]) == 1  # second consecutive frame >= threshold increments
     assert int(x679_x_0[3]) == 0  # right->left flip crosses (0,0) => lb zeroing
+    assert int(x2228_b7_0[1]) == 1  # fresh right entry
+    assert int(x2228_b7_0[3]) == 0  # fresh left entry
 
     sx_ext = np.concatenate([sx_prefix, np.array([0.0, 0.9, 0.0], dtype=np.float32)])
     sy_ext = np.zeros(sx_ext.shape[0], dtype=np.float32)
-    x673_1, x674_1, x676_x_1, x677_y_1, x679_x_1, x67A_y_1 = compute_fighter_stick_input_counters(
+    x673_1, x674_1, x676_x_1, x2228_b7_1, x677_y_1, x679_x_1, x67A_y_1 = compute_fighter_stick_input_counters(
         stick_x_unit=sx_ext,
         stick_y_unit=sy_ext,
         tilt_thresh_x=0.25,
@@ -1567,6 +1569,7 @@ def test_fighter_stick_input_counters_are_causal_wrt_future_frames() -> None:
     assert np.array_equal(x673_0, x673_1[: x673_0.size])
     assert np.array_equal(x674_0, x674_1[: x674_0.size])
     assert np.array_equal(x676_x_0, x676_x_1[: x676_x_0.size])
+    assert np.array_equal(x2228_b7_0, x2228_b7_1[: x2228_b7_0.size])
     assert np.array_equal(x677_y_0, x677_y_1[: x677_y_0.size])
     assert np.array_equal(x679_x_0, x679_x_1[: x679_x_0.size])
     assert np.array_equal(x67A_y_0, x67A_y_1[: x67A_y_0.size])

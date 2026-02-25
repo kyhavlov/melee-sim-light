@@ -301,23 +301,15 @@ void blaster_update_pre_physics(MslBatch* batch) {
             }
           }
         } else {
-          // DamageFall IASA explicitly delegates to ftCo_SpecialAir_CheckInput before other aerial
-          // checks. Keep a narrow decomp-backed subset here: DamageFall -> SpecialHi entry when
-          // up-B intent is present, while standard air locomotion keeps full B-special routing.
+          // Decomp routing: DamageFall IASA delegates directly to ftCo_SpecialAir_CheckInput, so
+          // B-special selection (Neutral/Side/Up) follows the same resolver used by standard air
+          // locomotion once B is pressed.
           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DamageFall.c::ftCo_DamageFall_IASA
           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_SpecialAir.c::ftCo_SpecialAir_CheckInput
-          //
-          // TODO(narrowed_temporary): this subset currently enables only up-B intent in DamageFall.
-          // Full parity needs the remaining ftCo_SpecialAir_CheckInput ownership lanes (side/neutral
-          // selection and their callback-order constraints) validated non-regressively.
           if (msl_action_is_air_locomotion(a)) {
             allow = 1u;
           } else if (a == (uint16_t)MSL_ACT_DAMAGE_FALL) {
-            const float stick_y = apply_deadzone(stick_i8_to_unit(batch->state.input_main_y[idx]),
-                                                 c->lstick_deadzone_y);
-            if (stick_y >= c->special_stick_y_threshold) {
-              allow = 1u;
-            }
+            allow = 1u;
           }
         }
         if (allow) {
@@ -336,6 +328,23 @@ void blaster_update_pre_physics(MslBatch* batch) {
               break;
             case MSL_SPACIE_B_SPECIAL_NEUTRAL:
               if (lp != NULL) {
+                if (!on_ground) {
+                  // Decomp aerial neutral-B reversal gate:
+                  // - ftCo_SpecialAir_CheckInput flips facing for neutral-B when:
+                  //     x676_x < p_ftCommonData->x224 &&
+                  //     ((facing_dir==-1 && x2228_b7==1) || (facing_dir==+1 && x2228_b7==0))
+                  // - x2228_b7 is owned by Fighter's input-counter update block on fresh X entries.
+                  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_SpecialAir.c::ftCo_SpecialAir_CheckInput
+                  // refs/melee/src/melee/ft/fighter.c:1921-1925,1946-1950
+                  if ((float)batch->state.x676_x[idx] < c->special_neutral_reverse_threshold) {
+                    const uint8_t facing = batch->state.facing[idx] ? 1u : 0u;  // 1:+1, 0:-1
+                    const uint8_t x2228_b7 = batch->state.x2228_b7[idx] ? 1u : 0u;
+                    if ((facing == 0u && x2228_b7 == 1u) || (facing == 1u && x2228_b7 == 0u)) {
+                      batch->state.facing[idx] = facing ? 0u : 1u;
+                      batch->state.facing_dir1[idx] = batch->state.facing[idx] ? 1 : -1;
+                    }
+                  }
+                }
                 enter_blaster_start(batch, idx, lp, on_ground);
               }
               break;

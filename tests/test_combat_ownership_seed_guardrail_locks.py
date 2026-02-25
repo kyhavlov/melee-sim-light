@@ -2496,6 +2496,129 @@ def test_damagefall_specialhi_transition_rows_and_adjacent_controls_are_replay_e
 
 @pytest.mark.integration
 @pytest.mark.parametrize(
+    ("target_record", "p", "target_ref_action", "target_ref_anim"),
+    [
+        (6160, 0, 344, 298),
+        (8988, 1, 350, 304),
+        (9536, 0, 344, 298),
+    ],
+)
+def test_damagefall_specialairn_transition_rows_and_adjacent_controls_are_replay_exact(
+    target_record: int, p: int, target_ref_action: int, target_ref_anim: int
+) -> None:
+    # DamageFall -> SpecialAirN transition lock families for the kept SpecialAir resolver lane:
+    # - ftCo_DamageFall_IASA delegates to ftCo_SpecialAir_CheckInput.
+    # - With B pressed in DamageFall and neutral/up-eligible stick, action must transition to the
+    #   replay-exact SpecialAirN entry msid/action in the target window.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_DamageFall.c::ftCo_DamageFall_IASA
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_SpecialAir.c::ftCo_SpecialAir_CheckInput
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_rel = (
+        "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
+        "QuerulousGrandDinosaur.msl"
+    )
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+    controls = (target_record - 1, target_record + 1)
+    for rec in (target_record, *controls):
+        assert int(samples.shape[0]) > rec, f"dataset too short for lock row: record={rec}"
+
+    target = samples[target_record : target_record + 1]
+    assert int(target["seed_t"]["action_id"][0, p]) == 38  # DamageFall
+    assert int(target["ref_t1"]["action_id"][0, p]) == int(target_ref_action)
+    assert int(target["seed_t"]["animation_index"][0, p]) == 29  # DamageFall msid
+    assert int(target["ref_t1"]["animation_index"][0, p]) == int(target_ref_anim)
+    assert int(target["seed_t"]["action_frame"][0, p]) == 2
+    assert int(target["ref_t1"]["action_frame"][0, p]) == 1
+    assert int(target["seed_t"]["hitlag"][0, p]) == 0
+    assert int(target["seed_t"]["hitstun"][0, p]) == 0
+    assert int(target["seed_t"]["on_ground"][0, p]) == 0
+    assert (int(target["input_t"]["p"][0, p]["buttons"]) & 0x0200) != 0  # B pressed edge window.
+
+    pre = samples[controls[0] : controls[0] + 1]
+    assert int(pre["seed_t"]["action_id"][0, p]) == 38
+    assert int(pre["ref_t1"]["action_id"][0, p]) == 38
+    post = samples[controls[1] : controls[1] + 1]
+    assert int(post["seed_t"]["action_id"][0, p]) == int(target_ref_action)
+    assert int(post["ref_t1"]["action_id"][0, p]) == int(target_ref_action)
+
+    for rec in (controls[0], target_record, controls[1]):
+        _, ref, out = _run_one_step_row(dataset_path, rec, p)
+        _assert_transition_identity_lock_fields_match_ref(out_row=out, ref_row=ref, record=rec, p=p)
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    ("target_record", "p", "seed_facing", "ref_facing"),
+    [
+        (785, 1, 0, 1),
+        (823, 1, 0, 1),
+        (1911, 1, 0, 1),
+    ],
+)
+def test_specialairn_reversal_x2228_transition_rows_and_adjacent_controls_are_replay_exact(
+    target_record: int, p: int, seed_facing: int, ref_facing: int
+) -> None:
+    # Aerial SpecialN reversal lock families for the kept x2228_b7 lane:
+    # - ftCo_SpecialAir_CheckInput flips facing when x676_x is below x224 and
+    #   facing/x2228_b7 satisfy the reverse condition before entering SpecialAirN.
+    # - x2228_b7 comes from Fighter's fresh X-entry update block.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_SpecialAir.c::ftCo_SpecialAir_CheckInput
+    # refs/melee/src/melee/ft/fighter.c:1921-1925,1946-1950
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_rel = (
+        "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
+        "GracefulAttachedTurtle.msl"
+    )
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+    controls = (target_record - 1, target_record + 1)
+    for rec in (target_record, *controls):
+        assert int(samples.shape[0]) > rec, f"dataset too short for lock row: record={rec}"
+
+    target = samples[target_record : target_record + 1]
+    assert int(target["seed_t"]["on_ground"][0, p]) == 0
+    assert int(target["seed_t"]["action_id"][0, p]) == 25
+    assert int(target["ref_t1"]["action_id"][0, p]) == 344
+    assert int(target["seed_t"]["animation_index"][0, p]) == 16
+    assert int(target["ref_t1"]["animation_index"][0, p]) == 298
+    assert int(target["seed_t"]["action_frame"][0, p]) == 4
+    assert int(target["ref_t1"]["action_frame"][0, p]) == 1
+    assert int(target["seed_t"]["facing"][0, p]) == int(seed_facing)
+    assert int(target["ref_t1"]["facing"][0, p]) == int(ref_facing)
+    assert int(target["seed_t"]["x2228_b7"][0, p]) == 1
+    assert int(target["seed_t"]["x676_x"][0, p]) <= 4
+    assert (int(target["input_t"]["p"][0, p]["buttons"]) & 0x0200) != 0
+
+    pre = samples[controls[0] : controls[0] + 1]
+    assert int(pre["seed_t"]["action_id"][0, p]) == 25
+    assert int(pre["ref_t1"]["action_id"][0, p]) == 25
+    post = samples[controls[1] : controls[1] + 1]
+    assert int(post["seed_t"]["action_id"][0, p]) == 344
+    assert int(post["ref_t1"]["action_id"][0, p]) == 344
+
+    for rec in (controls[0], target_record, controls[1]):
+        _, ref, out = _run_one_step_row(dataset_path, rec, p)
+        _assert_transition_identity_lock_fields_match_ref(out_row=out, ref_row=ref, record=rec, p=p)
+        got_facing = int(out["facing"][p])
+        exp_facing = int(ref["facing"][p])
+        assert got_facing == exp_facing, (
+            f"record={rec} p={p} field=facing expected={exp_facing} got={got_facing}"
+        )
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
     ("dataset_rel", "target_record", "p", "target_seed_action", "target_ref_action"),
     [
         (

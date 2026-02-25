@@ -2090,12 +2090,13 @@ def compute_fighter_stick_input_counters(
     tilt_thresh_x: float,
     tilt_thresh_y: float,
     start_timer: int = 0xFE,
-) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """
     Compute the stick-driven fighter input counters block (u8, saturating at 0xFE), causally.
 
     Outputs are per-frame post-update values for:
     - x673, x679_x, x676_x (lstick x companions + age counter)
+    - x2228_b7 (most-recent fresh X-entry sign: 1 right / 0 left)
     - x674, x67A_y, x677_y (lstick y companions + age counter)
 
     Decomp reference: refs/melee/src/melee/ft/fighter.c:1897-2019
@@ -2109,6 +2110,7 @@ def compute_fighter_stick_input_counters(
 
     out_x673 = np.empty(n, dtype=np.uint8)
     out_x676_x = np.empty(n, dtype=np.uint8)
+    out_x2228_b7 = np.empty(n, dtype=np.uint8)
     out_x679_x = np.empty(n, dtype=np.uint8)
     out_x674 = np.empty(n, dtype=np.uint8)
     out_x677_y = np.empty(n, dtype=np.uint8)
@@ -2119,6 +2121,7 @@ def compute_fighter_stick_input_counters(
 
     x673 = int(start_timer) & 0xFF
     x676_x = int(start_timer) & 0xFF
+    x2228_b7 = int(0) & 0xFF
     x679_x = int(start_timer) & 0xFF
     x674 = int(start_timer) & 0xFF
     x677_y = int(start_timer) & 0xFF
@@ -2148,6 +2151,7 @@ def compute_fighter_stick_input_counters(
             else:
                 x676_x = 0
                 x673 = 0
+                x2228_b7 = 1
         elif cur_x <= -thr_x:
             if prev_x <= -thr_x:
                 x673 += 1
@@ -2159,6 +2163,7 @@ def compute_fighter_stick_input_counters(
             else:
                 x676_x = 0
                 x673 = 0
+                x2228_b7 = 0
         else:
             x679_x = 0xFE
             x673 = 0xFE
@@ -2201,6 +2206,7 @@ def compute_fighter_stick_input_counters(
 
         out_x673[i] = np.uint8(x673)
         out_x676_x[i] = np.uint8(x676_x)
+        out_x2228_b7[i] = np.uint8(x2228_b7)
         out_x679_x[i] = np.uint8(x679_x)
         out_x674[i] = np.uint8(x674)
         out_x677_y[i] = np.uint8(x677_y)
@@ -2209,7 +2215,7 @@ def compute_fighter_stick_input_counters(
         prev_x = cur_x
         prev_y = cur_y
 
-    return out_x673, out_x674, out_x676_x, out_x677_y, out_x679_x, out_x67A_y
+    return out_x673, out_x674, out_x676_x, out_x2228_b7, out_x677_y, out_x679_x, out_x67A_y
 
 
 def compute_fighter_trigger_input_counters(

@@ -345,6 +345,9 @@ int input_apply(MslBatch* batch, const uint8_t* prev_input_bytes, size_t prev_in
         } else {
           batch->state.x676_x[idx] = 0;
           batch->state.x673[idx] = 0;
+          // Decomp: on a fresh >= threshold X entry, Fighter updates fp->x2228_b7 = 1.
+          // refs/melee/src/melee/ft/fighter.c:1921-1925
+          batch->state.x2228_b7[idx] = 1u;
         }
       } else if (stick_x <= -com->lstick_tilt_x_thresh) {
         if (prev_stick_x <= -com->lstick_tilt_x_thresh) {
@@ -353,6 +356,9 @@ int input_apply(MslBatch* batch, const uint8_t* prev_input_bytes, size_t prev_in
         } else {
           batch->state.x676_x[idx] = 0;
           batch->state.x673[idx] = 0;
+          // Decomp: on a fresh <= -threshold X entry, Fighter updates fp->x2228_b7 = 0.
+          // refs/melee/src/melee/ft/fighter.c:1946-1950
+          batch->state.x2228_b7[idx] = 0u;
         }
       } else {
         batch->state.x679_x[idx] = 0xFEu;

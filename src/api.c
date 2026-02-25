@@ -448,6 +448,7 @@ int msl_batch_reseed_seed(MslBatch* batch, const uint8_t* seed_bytes, size_t see
       batch->state.x674[idx] = seed->x674[p];
       batch->state.x675[idx] = seed->x675[p];
       batch->state.x676_x[idx] = seed->x676_x[p];
+      batch->state.x2228_b7[idx] = seed->x2228_b7[p];
       batch->state.x677_y[idx] = seed->x677_y[p];
       batch->state.x678[idx] = seed->x678[p];
       batch->state.x679_x[idx] = seed->x679_x[p];

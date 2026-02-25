@@ -1594,7 +1594,7 @@ def _main_impl(args) -> None:
 
         # Fighter per-frame input counters block.
         # Decomp: refs/melee/src/melee/ft/fighter.c:1897-2094 (lb helper: refs/melee/src/melee/lb/lb_00CE.c:163-225).
-        x673, x674, x676_x, x677_y, x679_x, x67A_y = compute_fighter_stick_input_counters(
+        x673, x674, x676_x, x2228_b7, x677_y, x679_x, x67A_y = compute_fighter_stick_input_counters(
             stick_x_unit=stick_x,
             stick_y_unit=stick_y,
             tilt_thresh_x=lstick_tilt_x_thresh,
@@ -1604,6 +1604,7 @@ def _main_impl(args) -> None:
         samples["seed_t"]["x673"][:, slot] = x673[:-1]
         samples["seed_t"]["x674"][:, slot] = x674[:-1]
         samples["seed_t"]["x676_x"][:, slot] = x676_x[:-1]
+        samples["seed_t"]["x2228_b7"][:, slot] = x2228_b7[:-1]
         samples["seed_t"]["x677_y"][:, slot] = x677_y[:-1]
         samples["seed_t"]["x679_x"][:, slot] = x679_x[:-1]
         samples["seed_t"]["x67A_y"][:, slot] = x67A_y[:-1]

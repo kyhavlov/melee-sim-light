@@ -151,6 +151,10 @@ SEED_DTYPE = np.dtype(
         ("x674", _arr("u1", MAX_PLAYERS)),
         ("x675", _arr("u1", MAX_PLAYERS)),
         ("x676_x", _arr("u1", MAX_PLAYERS)),
+        # Decomp: fp->x2228_b7 tracks most-recent fresh X-directional entry sign.
+        # refs/melee/src/melee/ft/fighter.c:1924,1949
+        # refs/melee/src/melee/ft/chara/ftCommon/ftCo_SpecialAir.c::ftCo_SpecialAir_CheckInput
+        ("x2228_b7", _arr("u1", MAX_PLAYERS)),
         ("x677_y", _arr("u1", MAX_PLAYERS)),
         ("x678", _arr("u1", MAX_PLAYERS)),
         ("x679_x", _arr("u1", MAX_PLAYERS)),

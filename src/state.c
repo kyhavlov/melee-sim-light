@@ -134,6 +134,7 @@ int state_alloc(MslStateSoA* state, int batch_size) {
   state->x674 = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->x675 = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->x676_x = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
+  state->x2228_b7 = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->x677_y = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->x678 = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->x679_x = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
@@ -313,14 +314,16 @@ int state_alloc(MslStateSoA* state, int batch_size) {
       !state->guard_reflect_timer_x18_seed || !state->guard_release_latched_xc ||
       !state->guard_x10 || !state->lightshield_amount || !state->kneebend_jump_input ||
       !state->kneebend_is_short_hop ||
-      !state->tilt_timer_x || !state->tilt_timer_y || !state->fall_fast || !state->attackdash_x0 ||
+      !state->tilt_timer_x || !state->tilt_timer_y || !state->fall_fast ||
+      !state->attackdash_x0 ||
       !state->jab_x0 || !state->run_x0 ||
       !state->dash_x4 || !state->shine_release_lag || !state->shine_is_release ||
       !state->ecb_lock_timer || !state->ledge_side || !state->stage_ledge_occupant_left ||
       !state->stage_ledge_occupant_right || !state->ledge_cooldown || !state->fallspecial_xc ||
       !state->turn_has_turned || !state->turn_frames_to_turn || !state->turn_x8 ||
       !state->lr_press_timer || !state->x672_input_timer || !state->x673 || !state->x674 ||
-      !state->x675 || !state->x676_x || !state->x677_y || !state->x678 || !state->x679_x ||
+      !state->x675 || !state->x676_x || !state->x2228_b7 || !state->x677_y || !state->x678 ||
+      !state->x679_x ||
       !state->x67A_y || !state->x67B || !state->x67C || !state->x67D || !state->x67E ||
       !state->x680 || !state->x681 || !state->x682 || !state->x683 || !state->x684 ||
       !state->ucf_padbuf_index || !state->ucf_padbuf_sdrop_up_frames ||
@@ -376,6 +379,7 @@ int state_alloc(MslStateSoA* state, int batch_size) {
   memset(state->capture_wait_prev_rate_fp_q16_16, 0, sizeof(int32_t) * bp);
   memset(state->capture_wait_seed_rate_snapshot_fp_q16_16, 0, sizeof(int32_t) * bp);
   memset(state->capture_wait_prev_rate_valid, 0, sizeof(uint8_t) * bp);
+  memset(state->x2228_b7, 0, sizeof(uint8_t) * bp);
   for (size_t i = 0; i < bph; i++) {
     state->fighter_hitlist_init_gen[i] = 0u;
     hitlist_capsule_clear(&state->fighter_hitlist[i]);
@@ -496,6 +500,7 @@ void state_free(MslStateSoA* state) {
   alloc_free(state->x674);
   alloc_free(state->x675);
   alloc_free(state->x676_x);
+  alloc_free(state->x2228_b7);
   alloc_free(state->x677_y);
   alloc_free(state->x678);
   alloc_free(state->x679_x);

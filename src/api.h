@@ -355,6 +355,11 @@ typedef struct MslSeed {
   uint8_t x674[MSL_MAX_PLAYERS];    // fp->x674 (lstick y companion)
   uint8_t x675[MSL_MAX_PLAYERS];    // fp->x675 (trigger companion)
   uint8_t x676_x[MSL_MAX_PLAYERS];  // fp->x676_x ("age since last change", x)
+  // Decomp: fp->x2228_b7 stores the sign of the most recent fresh X-directional stick entry
+  // (set to 1 on fresh >=+threshold entry, set to 0 on fresh <=-threshold entry).
+  // refs/melee/src/melee/ft/fighter.c:1924,1949
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_SpecialAir.c::ftCo_SpecialAir_CheckInput
+  uint8_t x2228_b7[MSL_MAX_PLAYERS];  // 0/1
   uint8_t x677_y[MSL_MAX_PLAYERS];  // fp->x677_y ("age since last change", y)
   uint8_t x678[MSL_MAX_PLAYERS];    // fp->x678 ("age since last change", trigger)
   uint8_t x679_x[MSL_MAX_PLAYERS];  // fp->x679_x (lstick x companion)
