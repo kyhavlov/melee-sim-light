@@ -96,6 +96,8 @@ int state_alloc(MslStateSoA* state, int batch_size) {
   state->capture_wait_seed_rate_snapshot_fp_q16_16 =
       (int32_t*)alloc_aligned_64(sizeof(int32_t) * bp);
   state->capture_wait_prev_rate_valid = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
+  state->throw_lw_prev_rate_fp_q16_16 = (int32_t*)alloc_aligned_64(sizeof(int32_t) * bp);
+  state->throw_lw_prev_rate_valid = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->anim_defer_tick_once = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->jumps_left = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->stocks = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
@@ -306,27 +308,24 @@ int state_alloc(MslStateSoA* state, int batch_size) {
       !state->throw_pending_hit_idx || !state->match_flow_timer || !state->downwait_timer ||
       !state->anim_frame_f32 || !state->anim_frame_fp_q16_16 || !state->frame_speed_mul_fp_q16_16 ||
       !state->capture_wait_prev_rate_fp_q16_16 ||
-      !state->capture_wait_seed_rate_snapshot_fp_q16_16 ||
-      !state->capture_wait_prev_rate_valid || !state->anim_defer_tick_once || !state->jumps_left ||
-      !state->stocks ||
+      !state->capture_wait_seed_rate_snapshot_fp_q16_16 || !state->capture_wait_prev_rate_valid ||
+      !state->throw_lw_prev_rate_fp_q16_16 || !state->throw_lw_prev_rate_valid ||
+      !state->anim_defer_tick_once || !state->jumps_left || !state->stocks ||
       !state->guard_tilt_x8 || !state->guard_tilt_x4 || !state->guard_reflect_timer_x14 ||
       !state->guard_reflect_timer_x18 || !state->guard_reflect_timer_x14_seed ||
       !state->guard_reflect_timer_x18_seed || !state->guard_release_latched_xc ||
       !state->guard_x10 || !state->lightshield_amount || !state->kneebend_jump_input ||
-      !state->kneebend_is_short_hop ||
-      !state->tilt_timer_x || !state->tilt_timer_y || !state->fall_fast ||
-      !state->attackdash_x0 ||
-      !state->jab_x0 || !state->run_x0 ||
+      !state->kneebend_is_short_hop || !state->tilt_timer_x || !state->tilt_timer_y ||
+      !state->fall_fast || !state->attackdash_x0 || !state->jab_x0 || !state->run_x0 ||
       !state->dash_x4 || !state->shine_release_lag || !state->shine_is_release ||
       !state->ecb_lock_timer || !state->ledge_side || !state->stage_ledge_occupant_left ||
       !state->stage_ledge_occupant_right || !state->ledge_cooldown || !state->fallspecial_xc ||
       !state->turn_has_turned || !state->turn_frames_to_turn || !state->turn_x8 ||
       !state->lr_press_timer || !state->x672_input_timer || !state->x673 || !state->x674 ||
       !state->x675 || !state->x676_x || !state->x2228_b7 || !state->x677_y || !state->x678 ||
-      !state->x679_x ||
-      !state->x67A_y || !state->x67B || !state->x67C || !state->x67D || !state->x67E ||
-      !state->x680 || !state->x681 || !state->x682 || !state->x683 || !state->x684 ||
-      !state->ucf_padbuf_index || !state->ucf_padbuf_sdrop_up_frames ||
+      !state->x679_x || !state->x67A_y || !state->x67B || !state->x67C || !state->x67D ||
+      !state->x67E || !state->x680 || !state->x681 || !state->x682 || !state->x683 ||
+      !state->x684 || !state->ucf_padbuf_index || !state->ucf_padbuf_sdrop_up_frames ||
       !state->ucf_padbuf_stick_x || !state->ucf_padbuf_stick_y || !state->percent ||
       !state->percent_temp || !state->dmg_x2225_b7 || !state->dmg_x2224_b2 || !state->shield_hp ||
       !state->hitlag || !state->hitlag_pre_timer || !state->hitlag_started_frame ||
@@ -339,28 +338,27 @@ int state_alloc(MslStateSoA* state, int batch_size) {
       !state->hitbox_count || !state->hitbox_enabled || !state->hitbox_prev_enabled ||
       !state->hitbox_prev_x || !state->hitbox_prev_y || !state->hitbox_prev_z ||
       !state->hitbox_pose_create || !state->hitbox_enable_edge || !state->hitbox_x43_b2 ||
-      !state->hitbox_prev_bootstrap ||
-      !state->hitbox_x || !state->hitbox_y || !state->hitbox_z || !state->hitbox_radius ||
-      !state->hitbox_damage || !state->hitbox_bone_part_id || !state->hitbox_u16_0 ||
-      !state->hitbox_u16_1 || !state->hitbox_u16_2 || !state->hitbox_u16_3 ||
-      !state->hitbox_u16_4 || !state->hitbox_u16_5 || !state->hitbox_u16_6 ||
-      !state->hitbox_u16_7 || !state->hitbox_angle || !state->hitbox_kbg || !state->hitbox_wsk ||
-      !state->hitbox_bkb || !state->hitbox_element || !state->hitbox_shield_damage ||
-      !state->hitbox_sfx_severity || !state->hitbox_sfx_kind || !state->hitbox_flags ||
-      !state->shield_x || !state->shield_y || !state->shield_z || !state->shield_radius ||
-      !state->reflector_x || !state->reflector_y || !state->reflector_radius || !state->ground_id ||
-      !state->animation_index || !state->instance_hit_by || !state->instance_id ||
-      !state->instance_id_x2073 || !state->instance_identity_last_action_id || !state->attack_id ||
-      !state->attack_instance || !state->attack_identity_last_action_id ||
-      !state->last_attack_landed || !state->combo_count || !state->combo_victim_port ||
-      !state->combo_victim_instance_id || !state->combo_timer_x2098 || !state->last_hit_by ||
-      !state->state_flags || !state->combat_hitlist_cd || !state->combat_hitlist_victim_iid ||
-      !state->hitlist_reseed_gen || !state->fighter_hitlist || !state->fighter_hitlist_init_gen ||
-      !state->stale_queue_index || !state->stale_move_id || !state->stale_attack_instance ||
-      !state->input_buttons || !state->prev_input_buttons || !state->input_buttons_pressed ||
-      !state->input_buttons_released || !state->input_main_x || !state->input_main_y ||
-      !state->prev_input_main_x || !state->prev_input_main_y || !state->input_c_x ||
-      !state->input_c_y || !state->prev_input_c_x || !state->prev_input_c_y ||
+      !state->hitbox_prev_bootstrap || !state->hitbox_x || !state->hitbox_y || !state->hitbox_z ||
+      !state->hitbox_radius || !state->hitbox_damage || !state->hitbox_bone_part_id ||
+      !state->hitbox_u16_0 || !state->hitbox_u16_1 || !state->hitbox_u16_2 ||
+      !state->hitbox_u16_3 || !state->hitbox_u16_4 || !state->hitbox_u16_5 ||
+      !state->hitbox_u16_6 || !state->hitbox_u16_7 || !state->hitbox_angle || !state->hitbox_kbg ||
+      !state->hitbox_wsk || !state->hitbox_bkb || !state->hitbox_element ||
+      !state->hitbox_shield_damage || !state->hitbox_sfx_severity || !state->hitbox_sfx_kind ||
+      !state->hitbox_flags || !state->shield_x || !state->shield_y || !state->shield_z ||
+      !state->shield_radius || !state->reflector_x || !state->reflector_y ||
+      !state->reflector_radius || !state->ground_id || !state->animation_index ||
+      !state->instance_hit_by || !state->instance_id || !state->instance_id_x2073 ||
+      !state->instance_identity_last_action_id || !state->attack_id || !state->attack_instance ||
+      !state->attack_identity_last_action_id || !state->last_attack_landed || !state->combo_count ||
+      !state->combo_victim_port || !state->combo_victim_instance_id || !state->combo_timer_x2098 ||
+      !state->last_hit_by || !state->state_flags || !state->combat_hitlist_cd ||
+      !state->combat_hitlist_victim_iid || !state->hitlist_reseed_gen || !state->fighter_hitlist ||
+      !state->fighter_hitlist_init_gen || !state->stale_queue_index || !state->stale_move_id ||
+      !state->stale_attack_instance || !state->input_buttons || !state->prev_input_buttons ||
+      !state->input_buttons_pressed || !state->input_buttons_released || !state->input_main_x ||
+      !state->input_main_y || !state->prev_input_main_x || !state->prev_input_main_y ||
+      !state->input_c_x || !state->input_c_y || !state->prev_input_c_x || !state->prev_input_c_y ||
       !state->prev_input_l || !state->prev_input_r || !state->input_l || !state->input_r ||
       !state->item_exists || !state->item_state || !state->item_type || !state->item_owner ||
       !state->item_instance_id || !state->item_attack_id || !state->item_attack_instance ||
@@ -462,6 +460,8 @@ void state_free(MslStateSoA* state) {
   alloc_free(state->capture_wait_prev_rate_fp_q16_16);
   alloc_free(state->capture_wait_seed_rate_snapshot_fp_q16_16);
   alloc_free(state->capture_wait_prev_rate_valid);
+  alloc_free(state->throw_lw_prev_rate_fp_q16_16);
+  alloc_free(state->throw_lw_prev_rate_valid);
   alloc_free(state->anim_defer_tick_once);
   alloc_free(state->jumps_left);
   alloc_free(state->stocks);

@@ -139,7 +139,17 @@ typedef struct MslStateSoA {
   // prior-rate bridge to preserve callback ownership ordering.
   int32_t* capture_wait_prev_rate_fp_q16_16;           // previous seeded frame_speed_mul snapshot
   int32_t* capture_wait_seed_rate_snapshot_fp_q16_16;  // current seeded frame_speed_mul snapshot
-  uint8_t* capture_wait_prev_rate_valid;               // 1 when previous snapshot continuity applies
+  uint8_t* capture_wait_prev_rate_valid;  // 1 when previous snapshot continuity applies
+  // ThrowLw Anim-rate ownership bridge (narrow, continuity-gated):
+  // - Throw script flags are consumed in ThrowLw Anim callback (ftCo_800DD724), which runs under
+  //   Fighter_8006A360 after prio-0 hitlag decrement in Fighter_8006A1BC.
+  // - Teacher-forced reseed can snapshot a post-hitlag ThrowLw row with frame_speed_mul==0 even
+  //   when the prior continuous row had a nonzero ThrowLw callback-owned rate; carry the previous
+  //   seeded rate only on strict (frame_id,action,instance) continuity for the first post-hitlag row.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::{ftCo_ThrowLw_Anim,ftCo_800DD724}
+  // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A1BC,Fighter_8006A360}
+  int32_t* throw_lw_prev_rate_fp_q16_16;  // previous seeded frame_speed_mul snapshot
+  uint8_t* throw_lw_prev_rate_valid;      // 1 when ThrowLw continuity bridge applies
   // Transient: defer a single ftAnim_8006EBA4-shaped timebase tick until after combat resolves.
   //
   // Rationale: some motion-state entry paths in decomp call ftAnim_8006EBA4 immediately after
@@ -239,19 +249,19 @@ typedef struct MslStateSoA {
   // refs/melee/src/melee/ft/fighter.c:1924,1949
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_SpecialAir.c::ftCo_SpecialAir_CheckInput
   uint8_t* x2228_b7;  // fp->x2228_b7
-  uint8_t* x677_y;  // fp->x677_y
-  uint8_t* x678;    // fp->x678
-  uint8_t* x679_x;  // fp->x679_x
-  uint8_t* x67A_y;  // fp->x67A_y
-  uint8_t* x67B;    // fp->x67B
-  uint8_t* x67C;    // fp->x67C
-  uint8_t* x67D;    // fp->x67D
-  uint8_t* x67E;    // fp->x67E
-  uint8_t* x680;    // fp->x680
-  uint8_t* x681;    // fp->x681
-  uint8_t* x682;    // fp->x682
-  uint8_t* x683;    // fp->x683
-  uint8_t* x684;    // fp->x684
+  uint8_t* x677_y;    // fp->x677_y
+  uint8_t* x678;      // fp->x678
+  uint8_t* x679_x;    // fp->x679_x
+  uint8_t* x67A_y;    // fp->x67A_y
+  uint8_t* x67B;      // fp->x67B
+  uint8_t* x67C;      // fp->x67C
+  uint8_t* x67D;      // fp->x67D
+  uint8_t* x67E;      // fp->x67E
+  uint8_t* x680;      // fp->x680
+  uint8_t* x681;      // fp->x681
+  uint8_t* x682;      // fp->x682
+  uint8_t* x683;      // fp->x683
+  uint8_t* x684;      // fp->x684
 
   // UCF pad buffer (seeded, multi-frame).
   // refs/ucf/include/ucf/pad_buffer.h

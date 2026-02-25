@@ -337,6 +337,32 @@ void anim_timebase_update_pre_input(MslBatch* batch) {
             batch->state.capture_wait_prev_rate_fp_q16_16[idx];
       }
 
+      // ThrowLw hitlag-release anim-rate ownership bridge:
+      // - Hitlag decrement runs at Fighter_8006A1BC before Fighter_8006A360 callback work.
+      // - ThrowLw callback ownership (ftCo_ThrowLw_Anim -> ftCo_800DD724) can leave reseeded
+      //   first post-hitlag rows with frame_speed_mul==0 while the prior continuous row had a
+      //   nonzero callback-owned rate.
+      // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A1BC,Fighter_8006A360}
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::{ftCo_ThrowLw_Anim,ftCo_800DD724}
+      //
+      // Bridge policy (narrowed):
+      // - On the frame that started in hitlag (`hitlag_pre_timer!=0`) but is no longer frozen after
+      //   decrement (`hitlag_started_frame==0`), keep ThrowLw rate at 0 for this pre-input tick.
+      // - On strict continuity rows flagged during reseed, restore prior ThrowLw seeded rate only
+      //   when the current seeded rate is 0.
+      // TODO(narrowed_temporary): full parity needs a direct seed-visible "ThrowLw callback wrote
+      // next anim rate" ownership marker instead of continuity inference.
+      if (a == (uint16_t)MSL_ACT_THROW_LW) {
+        if (batch->state.hitlag_pre_timer[idx] != 0u &&
+            batch->state.hitlag_started_frame[idx] == 0u) {
+          batch->state.frame_speed_mul_fp_q16_16[idx] = 0;
+        } else if (batch->state.throw_lw_prev_rate_valid[idx] != 0u &&
+                   batch->state.frame_speed_mul_fp_q16_16[idx] == 0) {
+          batch->state.frame_speed_mul_fp_q16_16[idx] =
+              batch->state.throw_lw_prev_rate_fp_q16_16[idx];
+        }
+      }
+
       //
       // Decomp: AttackAir entry always uses anim_speed=1.0f (KeepFastFall only affects fastfall).
       // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_EnterFromMsid
