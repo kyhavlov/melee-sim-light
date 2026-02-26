@@ -75,9 +75,19 @@ static inline uint8_t hitboxes_seed_bridge_is_guard_transition_owner(uint16_t ac
   }
 }
 
-static inline uint8_t hitboxes_seed_bridge_is_attackair_trim_owner(uint16_t action_id) {
+static inline uint8_t hitboxes_seed_bridge_is_attackair_owner(uint16_t action_id) {
   switch (action_id) {
     case MSL_ACT_ATTACK_AIR_N:
+    case MSL_ACT_ATTACK_AIR_F:
+    case MSL_ACT_ATTACK_AIR_B:
+    // narrowed_temporary:
+    // Keep the reseed stale-trim owner map on AttackAirN/F/B/Lw where target-1/target/target+1
+    // strict replay-real controls are currently lockable for this lane.
+    // AttackAirHi remains disabled until we have a clean strict-control family for the same branch
+    // (current hi candidate cluster has adjacent-control mismatches from a separate pre-existing
+    // DamageFlyTop transition lane, so it cannot be pinned as a strict replay-real lock yet).
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_Anim
+    // refs/melee/src/melee/lb/lbcollision.c::{lbColl_80008A5C,lbColl_8000ACFC}
     case MSL_ACT_ATTACK_AIR_LW:
       return 1u;
     default:
@@ -87,6 +97,9 @@ static inline uint8_t hitboxes_seed_bridge_is_attackair_trim_owner(uint16_t acti
 
 static void hitboxes_seed_bridge_trim_impossible_indefinite(MslBatch* batch, int bi, int attacker,
                                                             int hb_id, const MslHitboxEvent* def,
+                                                            uint16_t first_create_frame,
+                                                            uint16_t second_create_frame,
+                                                            float first_create_damage,
                                                             uint16_t pose_frame,
                                                             uint8_t seed_materialized_now,
                                                             uint8_t from_prev_active_snapshot) {
@@ -196,32 +209,54 @@ static void hitboxes_seed_bridge_trim_impossible_indefinite(MslBatch* batch, int
     // suppression.
     // refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000ACFC,lbColl_80008A5C}
     //
-    // Narrow decomp-backed extension:
-    // AttackAir owners can land followup BODY hits while the victim is still in hitstun (combo
-    // continuation), and those contacts still rewrite attribution through ftColl_80076ED8.
-    // For AttackAir owners only, allow this stale-owner trim even when victim hitstun is nonzero
-    // during the early active-create window (`action_frame <= 8`) while this hitbox remains in
-    // the first hitlag horizon after create_hitbox (`early_window`).
-    // For the kept N/Lw subset, this 8-frame cap is data-derived:
-    // - AttackAirN first create_hitbox frame = 4 (fox/falco) and first-hitlag horizon is 3.
-    // - AttackAirLw first create_hitbox frame = 5 (fox/falco) and first-hitlag horizon is 3.
-    // So max(first_create + first_hitlag_horizon) = 8.
-    // `def->frame` is extracted from data/moves create_hitbox script events, and `expected_hitlag`
-    // follows ftCommon_CalcHitlag truncation shape.
+    // Decomp/data-backed AttackAir continuation extension:
+    // - AttackAir scripts can produce multiple Body-collision windows while the victim is already
+    //   in hitstun, and each confirmed contact rewrites attribution through ftColl_80076ED8.
+    // - Scope this stale-owner trim to the hitbox-local create window (`early_window`) derived from
+    //   extracted create_hitbox timing (`def->frame`) + ftCommon_CalcHitlag horizon
+    //   (`expected_hitlag`), not a fixed action-frame constant.
     // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_Anim
-    // data/moves/{fox,falco}.json: moves.{ftCo_SM_AttackAirN,ftCo_SM_AttackAirLw}.events.create_hitbox
+    // data/moves/{fox,falco}.json: moves.{ftCo_SM_AttackAirN,ftCo_SM_AttackAirF,ftCo_SM_AttackAirB,
+    //   ftCo_SM_AttackAirHi,ftCo_SM_AttackAirLw}.events.create_hitbox
     // refs/melee/src/melee/ft/ftcommon.c::ftCommon_CalcHitlag
     // refs/melee/src/melee/ft/ftcoll.c::ftColl_80076ED8
-    //
-    // Current narrowed subset includes AttackAirN/AttackAirLw only:
-    // AttackAirF/B/Hi need dedicated ownership bridges because replay-real rows still retain
-    // continuation semantics where this stale-trim would over-clear seeded suppression.
-    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_Anim
-    const uint8_t attacker_is_attackair_early =
-        (hitboxes_seed_bridge_is_attackair_trim_owner(batch->state.action_id[a_idx]) &&
-         batch->state.action_frame[a_idx] <= 8)
-            ? 1u
-            : 0u;
+    uint8_t attacker_is_attackair_window = 0u;
+    if (hitboxes_seed_bridge_is_attackair_owner(batch->state.action_id[a_idx])) {
+      // AttackAir stale-trim window anchor:
+      // - Keep the trim scoped to the first create_hitbox window of this action (not later refresh
+      //   create events like AttackAirB frame 8), because decomp hitlist suppression for rehit=0
+      //   moves is expected to persist after the first-hit horizon.
+      // - Window length uses the same ftCommon_CalcHitlag truncation lane as the non-attackair trim.
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_Anim
+      // refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000ACFC,lbColl_80008A5C}
+      // refs/melee/src/melee/ft/ftcommon.c::ftCommon_CalcHitlag
+      uint16_t anchor_frame = def->frame;
+      uint16_t anchor_hitlag = expected_hitlag;
+      if (first_create_frame != 0xFFFFu) {
+        const uint16_t first_hitlag = hitboxes_seed_bridge_shield_hitlag_frames(c, first_create_damage);
+        if (first_hitlag > 0u) {
+          anchor_frame = first_create_frame;
+          anchor_hitlag = first_hitlag;
+        }
+      }
+      // Multi-create AttackAir scripts (e.g. N/B early->late refresh) can legitimately carry a
+      // same-move rehit=0 suppression latch beyond the second create edge. Limit this reseed-only
+      // stale-trim window to the first create segment.
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_Anim
+      // data/moves/{fox,falco}.json: moves.ftCo_SM_AttackAir*.events.create_hitbox
+      if (second_create_frame != 0xFFFFu && pose_frame >= second_create_frame) {
+        anchor_hitlag = 0u;
+      }
+      if (pose_frame >= anchor_frame) {
+        const uint16_t age_1based = (uint16_t)((pose_frame - anchor_frame) + 1u);
+        // Use a strict-before-tail window for AttackAir stale trims: once the first-hit horizon
+        // reaches its terminal frame, keep rehit=0 suppression latched unless a decomp copy/clear
+        // edge rewires ownership.
+        // refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000ACFC,lbColl_80008A5C}
+        attacker_is_attackair_window = (age_1based < anchor_hitlag) ? 1u : 0u;
+      }
+    }
+    const uint8_t stale_clear_window = attacker_is_attackair_window ? 1u : early_window;
     // Shield-ownership guard for this trim:
     // - ftColl_80078C70 gates shield collision by live ShieldDesc ownership (`fp->x221B_b0`), then
     //   calls lbColl_80007BCC with the shield descriptor.
@@ -235,10 +270,10 @@ static void hitboxes_seed_bridge_trim_impossible_indefinite(MslBatch* batch, int
     // artifacts temporarily expose no-submotion/no-desc windows; do not clear reseed suppression
     // there from BODY attribution mismatch alone.
     // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80093BC0
-    if (early_window && !shield_desc_active &&
+    if (stale_clear_window && !shield_desc_active &&
         !hitboxes_seed_bridge_is_guard_transition_owner(v_action) &&
         batch->state.hitlag[v_idx] == 0u &&
-        (attacker_is_attackair_early || batch->state.hitstun[v_idx] == 0u) &&
+        (attacker_is_attackair_window || batch->state.hitstun[v_idx] == 0u) &&
         batch->state.instance_hit_by[v_idx] != attacker_iid) {
       hitboxes_seed_bridge_entry_clear(e);
       continue;
@@ -368,6 +403,37 @@ void hitboxes_refresh(MslBatch* batch) {
       MslHitboxEvent def_prev[MSL_MAX_HITBOXES] = {0};
       uint8_t pose_create_count[MSL_MAX_HITBOXES] = {0};
       uint8_t x43_b2_cur[MSL_MAX_HITBOXES] = {0};
+      uint16_t first_create_frame[MSL_MAX_HITBOXES];
+      uint16_t second_create_frame[MSL_MAX_HITBOXES];
+      float first_create_damage[MSL_MAX_HITBOXES] = {0.0f};
+      for (int hi = 0; hi < MSL_MAX_HITBOXES; hi++) {
+        first_create_frame[hi] = 0xFFFFu;
+        second_create_frame[hi] = 0xFFFFu;
+      }
+
+      // First create_hitbox anchors per slot for this action/frame snapshot.
+      // These anchors are used by reseed hitlist stale-trim windows for AttackAir ownership.
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_Anim
+      // data/moves/{fox,falco}.json: moves.*.events.create_hitbox
+      for (uint16_t ei = 0; ei < event_count; ei++) {
+        const MslHitboxEvent* ev = &events[ei];
+        if ((float)ev->frame > anim_frame_f32) {
+          continue;
+        }
+        if (ev->frame > pose_frame) {
+          break;
+        }
+        if (ev->kind == 1 || ev->hitbox_id >= (uint8_t)MSL_MAX_HITBOXES) {
+          continue;
+        }
+        const uint8_t hb = ev->hitbox_id;
+        if (first_create_frame[hb] == 0xFFFFu) {
+          first_create_frame[hb] = ev->frame;
+          first_create_damage[hb] = ev->damage;
+        } else if (second_create_frame[hb] == 0xFFFFu && ev->frame != first_create_frame[hb]) {
+          second_create_frame[hb] = ev->frame;
+        }
+      }
 
       // Build hitbox definitions for:
       // - pose_frame - 1 (previous integer frame): for detecting enable edges, and
@@ -438,7 +504,10 @@ void hitboxes_refresh(MslBatch* batch) {
                 const uint8_t g = hitlist_hit_group_from_u16_7(def[hi].u16_7);
                 hitlist_seed_init_fighter_hitbox_from_group(batch, bi, p, hi, g);
                 hitboxes_seed_bridge_trim_impossible_indefinite(batch, bi, p, hi, &def[hi],
-                                                                pose_frame, seed_materialized_now,
+                                                                first_create_frame[hi],
+                                                                second_create_frame[hi],
+                                                                first_create_damage[hi], pose_frame,
+                                                                seed_materialized_now,
                                                                 1u);
               }
             }
@@ -546,7 +615,10 @@ void hitboxes_refresh(MslBatch* batch) {
               const uint8_t g = hitlist_hit_group_from_u16_7(def[hi].u16_7);
               hitlist_seed_init_fighter_hitbox_from_group(batch, bi, p, hi, g);
               hitboxes_seed_bridge_trim_impossible_indefinite(batch, bi, p, hi, &def[hi],
-                                                              pose_frame, seed_materialized_now,
+                                                              first_create_frame[hi],
+                                                              second_create_frame[hi],
+                                                              first_create_damage[hi], pose_frame,
+                                                              seed_materialized_now,
                                                               1u);
             }
           }
