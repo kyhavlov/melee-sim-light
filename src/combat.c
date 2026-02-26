@@ -1036,7 +1036,12 @@ static inline uint8_t combat_damage_severity_u8_from_kb(const MslCommonParams* c
   return 3;
 }
 
-static inline uint8_t combat_damageflyroll_rng_subset_allows_pre_action(uint16_t action_id) {
+static inline uint8_t combat_damageflyroll_rng_subset_allows_pre_action(const MslBatch* batch,
+                                                                        size_t d_idx,
+                                                                        uint16_t action_id) {
+  if (batch == NULL) {
+    return 0u;
+  }
   // Narrowed pre-gate ownership bridge for ftCo_8008DCE0 block_33:
   // - DamageFlyRoll RNG gate is evaluated while entering damage from Fighter_ProcessHit.
   // - Keep the gate scoped to decomp-confirmed carry contexts until additional pre-gate
@@ -1058,6 +1063,15 @@ static inline uint8_t combat_damageflyroll_rng_subset_allows_pre_action(uint16_t
     case (uint16_t)MSL_ACT_RUN:
     case (uint16_t)MSL_ACT_ATTACK_AIR_LW:
       return 1u;
+    case (uint16_t)MSL_ACT_ATTACK_AIR_B: {
+      // narrowed_temporary:
+      // - AttackAirB pre-action is enabled from the extracted create-window onward.
+      // - Early pre-create frames remain excluded until upstream RNG consumers in this window
+      //   are fully represented, preventing non-causal stream skew.
+      // data/moves/{fox,falco}.json moves["ftCo_SM_AttackAirB"].events create_hitbox frame=4
+      const int16_t pre_af = batch->state.action_frame[d_idx];
+      return (pre_af >= 5) ? 1u : 0u;
+    }
     default:
       return 0u;
   }
@@ -1131,7 +1145,7 @@ static inline void combat_damage_enter_state(const MslCommonParams* c, MslBatch*
         //   MSL_RNG_ENABLE_DAMAGE_FLY_ROLL_GATE=1 as a debug kill-switch for ablations.
         const uint16_t pre_action = batch->state.action_id[d_idx];
         const uint8_t damagefly_roll_rng_subset_ok =
-            combat_damageflyroll_rng_subset_allows_pre_action(pre_action);
+            combat_damageflyroll_rng_subset_allows_pre_action(batch, d_idx, pre_action);
         const float percent_cur = batch->state.percent[d_idx] + batch->state.percent_temp[d_idx];
         if (damagefly_roll_rng_subset_ok && percent_cur >= (float)c->damagefly_roll_percent_threshold) {
           const float roll =

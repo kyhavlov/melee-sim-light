@@ -3696,6 +3696,79 @@ def test_damageflyroll_rng_gate_transition_rows_and_adjacent_controls_are_replay
 
 
 @pytest.mark.integration
+@pytest.mark.parametrize(
+    ("dataset_rel", "target_record", "p_victim", "expect_site1"),
+    [
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
+            "AttachedGoodNaturedGuanaco.msl",
+            2694,
+            1,
+            1,
+        ),
+    ],
+)
+def test_damageflyroll_attackairb_subset_rng_pulse_rows_and_adjacent_controls_are_replay_exact(
+    dataset_rel: str, target_record: int, p_victim: int, expect_site1: int
+) -> None:
+    # DamageFlyRoll RNG gate narrowed AttackAirB ownership subset:
+    # - Decomp gate site is in ftCo_8008DCE0 block_33 (HSD_Randf compare in severe airborne damage).
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
+    #
+    # Runtime narrowed_temporary bridge:
+    # - AttackAirB pre-action is enabled from extracted create-window onward while early
+    #   pre-create frames remain excluded until upstream RNG consumers are modeled.
+    # data/moves/{fox,falco}.json moves["ftCo_SM_AttackAirB"].events create_hitbox frame=4
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+    rows = (target_record - 1, target_record, target_record + 1)
+    for rec in rows:
+        assert int(samples.shape[0]) > rec, f"dataset too short for lock row: record={rec}"
+
+    target_seed = samples[target_record : target_record + 1]["seed_t"][0]
+    assert int(target_seed["action_id"][p_victim]) == 67  # ftCo_MS_AttackAirB
+
+    prev_trace_env = os.environ.get("MSL_RNG_TRACE_PATH")
+    try:
+        for rec in rows:
+            trace_path = root / f"reports/triage/rng_attackairb_subset_lock_{target_record}_{rec}_{p_victim}.tsv"
+            os.environ["MSL_RNG_TRACE_PATH"] = str(trace_path)
+            _, ref_row, out_row = _run_one_step_row(dataset_path, rec, p_victim, rng_damage_fly_roll_gate=True)
+
+            site1_calls = 0
+            with trace_path.open("r", encoding="utf-8") as fh:
+                reader = csv.DictReader(fh, delimiter="\t")
+                for row in reader:
+                    if int(row["site_id"]) == 1:
+                        site1_calls += int(row["call_count"])
+
+            if rec == target_record:
+                assert site1_calls == expect_site1, (
+                    f"unexpected DamageFlyRoll RNG pulse at record {rec}: expected {expect_site1}"
+                )
+            else:
+                assert site1_calls == 0, f"unexpected site-1 pulse on adjacent control record {rec}"
+
+            _assert_transition_identity_lock_fields_match_ref(
+                out_row=out_row,
+                ref_row=ref_row,
+                record=rec,
+                p=p_victim,
+            )
+    finally:
+        if prev_trace_env is None:
+            os.environ.pop("MSL_RNG_TRACE_PATH", None)
+        else:
+            os.environ["MSL_RNG_TRACE_PATH"] = prev_trace_env
+
+
+@pytest.mark.integration
 def test_specialhi_upground_pseudo_random_sfx_rng_pulse_row_and_adjacent_controls_are_replay_exact() -> None:
     # Pseudo-random SFX command RNG consumer lane (opcode 38):
     # - ftAction_80071FC8 consumes one HSD_Randi(random_range) when the event executes.
