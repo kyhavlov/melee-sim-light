@@ -207,6 +207,10 @@ int common_params_init(void) {
       json_get_f32(buf, "special_stick_x_threshold_side",
                    &g_params.special_stick_x_threshold_side) != 0 ||
       json_get_f32(buf, "special_stick_y_threshold", &g_params.special_stick_y_threshold) != 0 ||
+      json_get_f32(buf, "damagefall_fall_stick_x_threshold",
+                   &g_params.damagefall_fall_stick_x_threshold) != 0 ||
+      json_get_u8(buf, "damagefall_fall_tilt_max_frames",
+                  &g_params.damagefall_fall_tilt_max_frames) != 0 ||
       json_get_f32(buf, "special_side_reverse_threshold",
                    &g_params.special_side_reverse_threshold) != 0 ||
       json_get_f32(buf, "special_neutral_reverse_threshold",

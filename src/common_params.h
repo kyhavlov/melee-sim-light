@@ -73,6 +73,11 @@ typedef struct MslCommonParams {
   float special_stick_x_threshold_side;     // p_ftCommonData->x218
   float special_stick_y_threshold;          // p_ftCommonData->x21C
   float special_side_reverse_threshold;     // p_ftCommonData->x220
+  // DamageFall IASA -> Fall gate.
+  // Decomp: refs/melee/src/melee/ft/chara/ftCommon/ftCo_DamageFall.c::ftCo_DamageFall_IASA
+  float damagefall_fall_stick_x_threshold;     // p_ftCommonData->x210
+  uint8_t damagefall_fall_tilt_max_frames;     // p_ftCommonData->x214
+  uint8_t _pad_u8_damagefall_fall[3];
   float special_neutral_reverse_threshold;  // p_ftCommonData->x224
 
   // Dash flick threshold (refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c)

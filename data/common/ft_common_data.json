@@ -33,6 +33,8 @@
   "damage_severity_x158": 10.0,
   "damage_severity_x15c": 21.0,
   "damage_severity_x160": 32.0,
+  "damagefall_fall_stick_x_threshold": 0.800000011920929,
+  "damagefall_fall_tilt_max_frames": 1,
   "damagefly_downbound_kb_vel_threshold": 5.0,
   "damagefly_landing_kb_vel_threshold": 0.5,
   "damagefly_roll_percent_threshold": 100,

@@ -89,6 +89,12 @@ def main() -> None:
         "special_stick_x_threshold_side": float(_f32_be(buf, ft_common_abs + 0x218)),
         "special_stick_y_threshold": float(_f32_be(buf, ft_common_abs + 0x21C)),
         "special_side_reverse_threshold": float(_f32_be(buf, ft_common_abs + 0x220)),
+        # DamageFall IASA -> Fall gate (ftCo_DamageFall_IASA):
+        # - ABS(lstick.x) >= x210
+        # - x670_timer_lstick_tilt_x < x214
+        # refs/melee/src/melee/ft/chara/ftCommon/ftCo_DamageFall.c::ftCo_DamageFall_IASA
+        "damagefall_fall_stick_x_threshold": float(_f32_be(buf, ft_common_abs + 0x210)),
+        "damagefall_fall_tilt_max_frames": int(max(0, _i32_be(buf, ft_common_abs + 0x214))),
         # Note: ftCommonData.x224 is an int (refs/melee/src/melee/ft/types.h), but many decomp
         # callsites compare it against a u8 timer (fp->x676_x). Store as an int count.
         "special_neutral_reverse_threshold": int(max(0, _i32_be(buf, ft_common_abs + 0x224))),
