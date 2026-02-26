@@ -3614,6 +3614,22 @@ def test_attackairfb_early_stale_suppression_trim_rows_and_adjacent_controls_are
         ),
         (
             "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
+            "AttachedGoodNaturedGuanaco.msl",
+            5033,
+            0,
+            1,
+            21,
+        ),
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
+            "GracefulAttachedTurtle.msl",
+            8633,
+            1,
+            0,
+            69,
+        ),
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
             "TreasuredBackKangaroo.msl",
             2752,
             0,
@@ -3636,7 +3652,7 @@ def test_damageflyroll_rng_gate_transition_rows_and_adjacent_controls_are_replay
     # refs/melee/src/sysdolphin/baselib/random.c::HSD_Randf
     #
     # Narrowed subset coverage for the current gate enablement scope:
-    # - pre-hit action is DamageFall or DamageFlyN/Lw
+    # - pre-hit action is DamageFall, DamageFlyN/Lw, Run, or AttackAirLw
     # - target transitions to DamageFlyRoll (action_id 91) matching replay
     #
     # Lock each family with adjacent controls under explicit RNG gate enablement:

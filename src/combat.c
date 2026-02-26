@@ -1036,6 +1036,33 @@ static inline uint8_t combat_damage_severity_u8_from_kb(const MslCommonParams* c
   return 3;
 }
 
+static inline uint8_t combat_damageflyroll_rng_subset_allows_pre_action(uint16_t action_id) {
+  // Narrowed pre-gate ownership bridge for ftCo_8008DCE0 block_33:
+  // - DamageFlyRoll RNG gate is evaluated while entering damage from Fighter_ProcessHit.
+  // - Keep the gate scoped to decomp-confirmed carry contexts until additional pre-gate
+  //   random-consumer ownership lanes are modeled.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{
+  //   ftCo_Damage_Anim,ftCo_DamageFall_IASA,ftCo_8008DCE0
+  // }
+  // refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
+  //
+  // narrowed_temporary:
+  // - Includes Run/AttackAirLw carry windows with replay-exact RNG pulse parity in the suite.
+  // - Keep SpecialHi/Jump/Landing pre-actions excluded until their upstream RNG consumers are
+  //   represented in this runtime.
+  // refs/melee/src/melee/ft/chara/ftCommon/forward.h::ftCommon_MotionState
+  switch (action_id) {
+    case (uint16_t)MSL_ACT_DAMAGE_FALL:
+    case (uint16_t)MSL_ACT_DAMAGE_FLY_N:
+    case (uint16_t)MSL_ACT_DAMAGE_FLY_LW:
+    case (uint16_t)MSL_ACT_RUN:
+    case (uint16_t)MSL_ACT_ATTACK_AIR_LW:
+      return 1u;
+    default:
+      return 0u;
+  }
+}
+
 static inline void combat_damage_enter_state(const MslCommonParams* c, MslBatch* batch, int bi,
                                              size_t d_idx, uint8_t defender_on_ground_before,
                                              uint8_t defender_on_ground_after, uint8_t hurt_height,
@@ -1104,24 +1131,7 @@ static inline void combat_damage_enter_state(const MslCommonParams* c, MslBatch*
         //   MSL_RNG_ENABLE_DAMAGE_FLY_ROLL_GATE=1 as a debug kill-switch for ablations.
         const uint16_t pre_action = batch->state.action_id[d_idx];
         const uint8_t damagefly_roll_rng_subset_ok =
-            // Narrowed activation subset (decomp-backed call-context bridge):
-            // - Keep RNG-gated DamageFlyRoll enabled only on re-hit windows where the defender is
-            //   already in non-Top Damage tumble carry states.
-            // - Decomp call chain for these states re-enters ftCo_8008DCE0 through common
-            //   Fighter_ProcessHit damage routing (no action-script pseudo-random command lane in
-            //   the modeled subset before block_33).
-            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{
-            //   ftCo_DamageFall_IASA,ftCo_Damage_Anim,ftCo_8008DCE0
-            // }
-            // refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
-            //
-            // TODO(narrowed_temporary): Expand once additional pre-gate RNG consumers are modeled
-            // for non-damage carry actions (e.g. action/callback audio/effect lanes).
-            (pre_action == (uint16_t)MSL_ACT_DAMAGE_FALL ||
-             pre_action == (uint16_t)MSL_ACT_DAMAGE_FLY_N ||
-             pre_action == (uint16_t)MSL_ACT_DAMAGE_FLY_LW)
-                ? 1u
-                : 0u;
+            combat_damageflyroll_rng_subset_allows_pre_action(pre_action);
         const float percent_cur = batch->state.percent[d_idx] + batch->state.percent_temp[d_idx];
         if (damagefly_roll_rng_subset_ok && percent_cur >= (float)c->damagefly_roll_percent_threshold) {
           const float roll =

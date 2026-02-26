@@ -43,7 +43,7 @@ suite: fox_falco_fd_ucf084_recent  datasets: 4  ucf_enabled: True  ucf_cardinals
 
 == datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl ==
 Records: 7295  Players/scored per record: 2  Total player-frames: 14590
-mismatch.action_id: 43 / 14590 (0.002947)
+mismatch.action_id: 42 / 14590 (0.002879)
 mismatch.action_frame: 55 / 14590 (0.003770)
 mismatch.on_ground: 9 / 14590 (0.000617)
 mismatch.facing: 15 / 14590 (0.001028)
@@ -55,7 +55,7 @@ mismatch.hitstun: 10 / 14590 (0.000685)
 mismatch.l_cancel: 0 / 14590 (0.000000)
 mismatch.hurtbox_state: 22 / 14590 (0.001508)
 mismatch.ground_id: 2 / 14590 (0.000137)
-mismatch.animation_index: 43 / 14590 (0.002947)
+mismatch.animation_index: 42 / 14590 (0.002879)
 mismatch.instance_hit_by: 10 / 14590 (0.000685)
 mismatch.instance_id: 63 / 14590 (0.004318)
 mismatch.last_attack_landed: 11 / 14590 (0.000754)
@@ -80,12 +80,12 @@ err.item_pos_x: mae=0.749027 p95=0.000000 max=145.596008
 err.item_pos_y: mae=0.150167 p95=0.000000 max=26.364082
 err.item_vel_x: mae=0.112977 p95=0.000000 max=10.000000
 err.item_vel_y: mae=0.115190 p95=0.000000 max=6.995885
-overall.discrete_mismatch: 496 / 882695
+overall.discrete_mismatch: 494 / 882695
 overall.float_norm_mae_p95: 0.00343805
 
 == datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl ==
 Records: 11529  Players/scored per record: 2  Total player-frames: 23058
-mismatch.action_id: 66 / 23058 (0.002862)
+mismatch.action_id: 65 / 23058 (0.002819)
 mismatch.action_frame: 74 / 23058 (0.003209)
 mismatch.on_ground: 14 / 23058 (0.000607)
 mismatch.facing: 28 / 23058 (0.001214)
@@ -97,7 +97,7 @@ mismatch.hitstun: 15 / 23058 (0.000651)
 mismatch.l_cancel: 0 / 23058 (0.000000)
 mismatch.hurtbox_state: 30 / 23058 (0.001301)
 mismatch.ground_id: 6 / 23058 (0.000260)
-mismatch.animation_index: 64 / 23058 (0.002776)
+mismatch.animation_index: 63 / 23058 (0.002732)
 mismatch.instance_hit_by: 13 / 23058 (0.000564)
 mismatch.instance_id: 96 / 23058 (0.004163)
 mismatch.last_attack_landed: 13 / 23058 (0.000564)
@@ -122,7 +122,7 @@ err.item_pos_x: mae=0.266685 p95=0.000000 max=179.321686
 err.item_pos_y: mae=0.084539 p95=0.000000 max=26.796017
 err.item_vel_x: mae=0.050283 p95=0.000000 max=7.782612
 err.item_vel_y: mae=0.056726 p95=0.000000 max=6.995885
-overall.discrete_mismatch: 787 / 1395009
+overall.discrete_mismatch: 785 / 1395009
 overall.float_norm_mae_p95: 0.00377452
 
 == datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/QuerulousGrandDinosaur.msl ==
@@ -210,5 +210,5 @@ overall.discrete_mismatch: 581 / 948277
 overall.float_norm_mae_p95: 0.00416955
 
 == suite summary ==
-overall.discrete_mismatch: 2652 / 4462843
+overall.discrete_mismatch: 2648 / 4462843
 overall.float_norm_mae_p95: 0.00358175
