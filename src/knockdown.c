@@ -15,6 +15,7 @@
 #include "input_axis.h"
 #include "jump_input.h"
 #include "msl_math.h"
+#include "stage_collision.h"
 #include "state_flags.h"
 
 enum { MSL_FTPART_HIPN = 4 };  // refs/melee/src/melee/ft/forward.h::Fighter_Part (FtPart_HipN)
@@ -1001,6 +1002,34 @@ static inline uint32_t submotion_for_damage_ground_action(uint16_t a) {
   }
 }
 
+static inline uint8_t down_bound_airborne_ledge_cross_to_fall(const MslBatch* batch, size_t idx,
+                                                               uint32_t stage_id) {
+  const float vx = batch->state.speed_x_attack[idx];
+  if (!(vx > 0.0f || vx < 0.0f)) {
+    return 0u;
+  }
+  // Decomp shape:
+  // - ftCo_DownBound_Coll uses ft_80082708 (allow-ground-to-air path).
+  // - ft_80082708 delegates to mpColl_8004B108, which resolves ground->air by evaluating floor edge
+  //   ownership against the motion segment on the active floor line.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownBound.c::ftCo_DownBound_Coll
+  // refs/melee/src/melee/ft/ft_081B.c::ft_80082708
+  // refs/melee/src/melee/mp/mpcoll.c::mpColl_8004B108
+  const int side = (vx > 0.0f) ? 1 : 0;
+  const MslStageFloorLine* ledge = stage_collision_get_ledge_floor_line(stage_id, side);
+  if (ledge == NULL) {
+    return 0u;
+  }
+
+  const float edge_x = (side == 1) ? ((ledge->x0 > ledge->x1) ? ledge->x0 : ledge->x1)
+                                   : ((ledge->x0 < ledge->x1) ? ledge->x0 : ledge->x1);
+  // Use the current-step motion segment start (`prev_pos_x`) with callback-owned post-physics
+  // horizontal velocity to match the mpColl allow-ground-to-air floor-edge test shape.
+  // refs/melee/src/melee/mp/mpcoll.c::mpColl_8004B108
+  const float next_x = batch->state.prev_pos_x[idx] + vx;
+  return (side == 1) ? (next_x >= edge_x ? 1u : 0u) : (next_x <= edge_x ? 1u : 0u);
+}
+
 static inline uint8_t damage_iasa_lockout_x221c_b6(const MslBatch* batch, size_t idx) {
   if (batch == NULL) {
     return 0u;
@@ -1168,6 +1197,7 @@ void knockdown_update_post_collision(MslBatch* batch) {
 
   const int num_players = (int)batch->config.num_players;
   for (int bi = 0; bi < batch->batch_size; bi++) {
+    const uint32_t stage_id = batch->state.stage_id[bi];
     for (int p = 0; p < num_players; p++) {
       const size_t idx = msl_idx_player(bi, p);
       const uint16_t a0 = batch->state.action_id[idx];
@@ -1274,6 +1304,19 @@ void knockdown_update_post_collision(MslBatch* batch) {
           }
           continue;
         }
+      } else if (!now_ground && is_down_bound(a0) &&
+                 down_bound_airborne_ledge_cross_to_fall(batch, idx, stage_id)) {
+        // Decomp: DownBound_Coll immediately enters Fall when the allow-ground-to-air helper reports
+        // edge exit for this collision step.
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownBound.c::ftCo_DownBound_Coll
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_Enter
+        batch->state.fall_fast[idx] = 0;
+        batch->state.jumps_left[idx] = ch->max_jumps > 0 ? (uint8_t)(ch->max_jumps - 1) : 0;
+        batch->state.speed_air_x_self[idx] = batch->state.speed_ground_x_self[idx];
+        batch->state.speed_ground_x_self[idx] = 0.0f;
+        batch->state.action_id[idx] = (uint16_t)MSL_ACT_FALL;
+        batch->state.animation_index[idx] = (uint32_t)MSL_SM_FALL;
+        msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
       } else if (was_ground && !now_ground) {
         // Downed ground -> air fallback: enter Fall.
         // Decomp: DownBound_Coll/DownStand_Coll/DownWait_Coll/DownAttack_Coll select common ground
