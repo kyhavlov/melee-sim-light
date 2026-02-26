@@ -191,6 +191,83 @@ def _run_one_step_row(
     return seed, ref, out
 
 
+def _run_rollout_window_rows_with_trace(
+    ds_path: Path,
+    *,
+    start_record: int,
+    window_records: tuple[int, int, int],
+    rng_damage_fly_roll_gate: bool | None,
+    trace_path: Path,
+) -> dict[int, tuple[np.void, np.void, int]]:
+    ds = read_dataset(str(ds_path))
+    samples = ds.samples
+    assert int(samples.shape[0]) > max(window_records), "dataset too short for rollout lock window"
+    assert start_record <= min(window_records), "rollout start must be <= window start"
+
+    binding = pytest.importorskip("msl_binding")
+    sizes = binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    compare_stride = int(sizes["compare"])
+
+    seed_bytes = np.frombuffer(
+        samples[start_record : start_record + 1]["seed_t"].tobytes(order="C"), dtype=np.uint8
+    ).copy().reshape(1, seed_stride)
+    out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
+
+    prev_rng_gate_env = os.environ.get("MSL_RNG_ENABLE_DAMAGE_FLY_ROLL_GATE")
+    prev_trace_env = os.environ.get("MSL_RNG_TRACE_PATH")
+    if rng_damage_fly_roll_gate is True:
+        os.environ.pop("MSL_RNG_ENABLE_DAMAGE_FLY_ROLL_GATE", None)
+    elif rng_damage_fly_roll_gate is False:
+        os.environ["MSL_RNG_ENABLE_DAMAGE_FLY_ROLL_GATE"] = "1"
+    os.environ["MSL_RNG_TRACE_PATH"] = str(trace_path)
+
+    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    window_out: dict[int, np.void] = {}
+    try:
+        binding.reseed_seed(handle, seed_bytes)
+        for rec in range(start_record, max(window_records) + 1):
+            row = samples[rec : rec + 1]
+            prev_input_bytes = np.frombuffer(row["prev_input_t"].tobytes(order="C"), dtype=np.uint8).copy().reshape(
+                1, input_stride
+            )
+            input_bytes = np.frombuffer(row["input_t"].tobytes(order="C"), dtype=np.uint8).copy().reshape(
+                1, input_stride
+            )
+            binding.step_input(handle, prev_input_bytes, input_bytes)
+            binding.write_compare(handle, out_compare_bytes)
+            if rec in window_records:
+                window_out[rec] = out_compare_bytes.view(COMPARE_DTYPE).reshape(-1)[0].copy()
+    finally:
+        binding.destroy(handle)
+        if prev_rng_gate_env is None:
+            os.environ.pop("MSL_RNG_ENABLE_DAMAGE_FLY_ROLL_GATE", None)
+        else:
+            os.environ["MSL_RNG_ENABLE_DAMAGE_FLY_ROLL_GATE"] = prev_rng_gate_env
+        if prev_trace_env is None:
+            os.environ.pop("MSL_RNG_TRACE_PATH", None)
+        else:
+            os.environ["MSL_RNG_TRACE_PATH"] = prev_trace_env
+
+    rec_to_site1_count: dict[int, int] = {}
+    with trace_path.open("r", encoding="utf-8") as fh:
+        reader = csv.DictReader(fh, delimiter="\t")
+        for row_trace in reader:
+            if int(row_trace["site_id"]) != 1:
+                continue
+            # Trace `step` is rollout-relative for this handle; map back to dataset record.
+            rec = start_record + int(row_trace["step"])
+            rec_to_site1_count[rec] = rec_to_site1_count.get(rec, 0) + int(row_trace["call_count"])
+
+    result: dict[int, tuple[np.void, np.void, int]] = {}
+    for rec in window_records:
+        ref_row = samples[rec : rec + 1]["ref_t1"][0]
+        site1_count = rec_to_site1_count.get(rec, 0)
+        result[rec] = (ref_row, window_out[rec], site1_count)
+    return result
+
+
 def _run_pre_combat_debug_row(
     ds_path: Path, record: int, attacker: int, hb_id: int
 ) -> tuple[np.void, np.ndarray, np.ndarray, np.void]:
@@ -3838,3 +3915,74 @@ def test_specialhi_upground_pseudo_random_sfx_rng_pulse_row_and_adjacent_control
             os.environ.pop("MSL_RNG_DISABLE_PSEUDO_RANDOM_SFX_CMD", None)
         else:
             os.environ["MSL_RNG_DISABLE_PSEUDO_RANDOM_SFX_CMD"] = prev_disable_env
+
+
+@pytest.mark.integration
+def test_damageflyroll_fall_admission_rollout_window_rows_and_adjacent_controls_are_replay_exact() -> None:
+    # Decomp gate site is in ftCo_8008DCE0 block_33 (HSD_Randf compare in severe airborne damage).
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
+    # refs/melee/src/sysdolphin/baselib/random.c::HSD_Randf
+    #
+    # Kept narrowed lane: include pre_action Fall in the DamageFlyRoll gate subset.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_Anim
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_rel = (
+        "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
+        "GracefulAttachedTurtle.msl"
+    )
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+    start_record = 5617
+    rows = (5716, 5717, 5718)  # target-1, target, target+1 in the stabilized rollout window
+    for rec in rows:
+        assert int(samples.shape[0]) > rec, f"dataset too short for lock row: record={rec}"
+
+    # Replay-real precondition anchoring this family to the Fall lane:
+    # this rollout segment contains the victim Fall ownership row prior to the RNG-gated
+    # DamageFlyRoll decision frame.
+    fall_seed = samples[5737 : 5738]["seed_t"][0]
+    assert int(fall_seed["action_id"][1]) == 14  # ftCo_MS_Fall
+
+    # Causality sanity: one-step at target is still mismatched, so this lock is specifically
+    # a seeded-rollout transition-ownership window (not a one-step row lock).
+    _, target_ref_single, target_out_single = _run_one_step_row(dataset_path, 5717, 0, rng_damage_fly_roll_gate=True)
+    assert int(target_out_single["action_id"][0]) != int(target_ref_single["action_id"][0])
+
+    trace_on = root / "reports/triage/rng_fall_admission_rollout_window_on.tsv"
+    on_rows = _run_rollout_window_rows_with_trace(
+        dataset_path,
+        start_record=start_record,
+        window_records=rows,
+        rng_damage_fly_roll_gate=True,
+        trace_path=trace_on,
+    )
+    for rec in rows:
+        ref_row, out_row, site1_count = on_rows[rec]
+        for p in (0, 1):
+            _assert_transition_identity_lock_fields_match_ref(
+                out_row=out_row,
+                ref_row=ref_row,
+                record=rec,
+                p=p,
+            )
+        if rec == 5717:
+            assert site1_count == 1, f"expected one site-1 pulse at target row {rec}"
+        else:
+            assert site1_count == 0, f"unexpected site-1 pulse on adjacent control row {rec}"
+
+    # Disabled-gate causality check: same rollout start should fail at target row.
+    trace_off = root / "reports/triage/rng_fall_admission_rollout_window_off.tsv"
+    off_rows = _run_rollout_window_rows_with_trace(
+        dataset_path,
+        start_record=start_record,
+        window_records=rows,
+        rng_damage_fly_roll_gate=False,
+        trace_path=trace_off,
+    )
+    ref_off_target, out_off_target, _ = off_rows[5717]
+    assert int(out_off_target["action_id"][0]) != int(ref_off_target["action_id"][0])

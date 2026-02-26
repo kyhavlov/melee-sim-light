@@ -1052,7 +1052,9 @@ static inline uint8_t combat_damageflyroll_rng_subset_allows_pre_action(const Ms
   // refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
   //
   // narrowed_temporary:
-  // - Includes Run/AttackAirLw carry windows with replay-exact RNG pulse parity in the suite.
+  // - Includes Fall/Run/AttackAirLw carry windows with replay-exact RNG pulse parity in the
+  //   suite's severe-airborne damage transition families.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_Anim
   // - Keep SpecialHi/Jump/Landing pre-actions excluded until their upstream RNG consumers are
   //   represented in this runtime.
   // refs/melee/src/melee/ft/chara/ftCommon/forward.h::ftCommon_MotionState
@@ -1060,6 +1062,7 @@ static inline uint8_t combat_damageflyroll_rng_subset_allows_pre_action(const Ms
     case (uint16_t)MSL_ACT_DAMAGE_FALL:
     case (uint16_t)MSL_ACT_DAMAGE_FLY_N:
     case (uint16_t)MSL_ACT_DAMAGE_FLY_LW:
+    case (uint16_t)MSL_ACT_FALL:
     case (uint16_t)MSL_ACT_RUN:
     case (uint16_t)MSL_ACT_ATTACK_AIR_LW:
       return 1u;
