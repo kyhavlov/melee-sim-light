@@ -167,3 +167,22 @@ uint8_t move_tables_throw_should_spawn_projectile(uint8_t char_id, uint16_t thro
 // data/moves/{fox,falco}.json moves["ftCo_SM_Throw*"]["events"] set_throw_spawn_projectile.
 uint8_t move_tables_throw_projectile_last_pulse_frame(uint8_t char_id, uint16_t throw_action_id,
                                                       int16_t* out_last_pulse_frame);
+
+// Emits pseudo-random SFX command HSD_Randi(random_range) pulses crossed this frame for a specific
+// submotion id.
+//
+// Decomp:
+// - Command opcode 38 (`ftAction_80071FC8`) consumes exactly one HSD_Randi(random_range) when the
+//   event executes.
+// refs/melee/src/melee/ft/ftaction.c::ftAction_80071FC8
+// refs/melee/src/sysdolphin/baselib/random.c::HSD_Randi
+//
+// Source of truth:
+// - data/moves/{fox,falco}.json specials_by_msid["<msid>"].events pseudo_random_sfx.
+//
+// Returns the number of crossed pulses copied to `out_random_ranges` (up to `max_out`).
+uint8_t move_tables_special_pseudo_random_sfx_ranges_crossed(uint8_t char_id, uint16_t msid,
+                                                             float prev_anim_frame_f32,
+                                                             float cur_anim_frame_f32,
+                                                             uint8_t* out_random_ranges,
+                                                             uint8_t max_out);

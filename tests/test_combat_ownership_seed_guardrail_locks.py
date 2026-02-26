@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import csv
 import json
 import os
 from pathlib import Path
@@ -3676,3 +3677,75 @@ def test_damageflyroll_rng_gate_transition_rows_and_adjacent_controls_are_replay
             record=rec,
             p=p_victim,
         )
+
+
+@pytest.mark.integration
+def test_specialhi_upground_pseudo_random_sfx_rng_pulse_row_and_adjacent_controls_are_replay_exact() -> None:
+    # Pseudo-random SFX command RNG consumer lane (opcode 38):
+    # - ftAction_80071FC8 consumes one HSD_Randi(random_range) when the event executes.
+    # - Fox/Falco SpecialHi ground-main msid=309 has a frame-0 pseudo_random_sfx event in extracted
+    #   data (`specials_by_msid`), so the frame0->frame1 row is a deterministic pulse site.
+    # refs/melee/src/melee/ft/ftaction.c::ftAction_80071FC8
+    # refs/melee/src/sysdolphin/baselib/random.c::HSD_Randi
+    # data/moves/{fox,falco}.json specials_by_msid["309"].events pseudo_random_sfx
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_rel = (
+        "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
+        "AttachedGoodNaturedGuanaco.msl"
+    )
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    target_record = 2603
+    p_special = 1
+    rows = (target_record - 1, target_record, target_record + 1)
+
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+    for rec in rows:
+        assert int(samples.shape[0]) > rec, f"dataset too short for lock row: record={rec}"
+
+    target_seed = samples[target_record : target_record + 1]["seed_t"][0]
+    assert int(target_seed["action_id"][p_special]) == 356
+    assert int(target_seed["action_frame"][p_special]) == 0
+    assert int(target_seed["animation_index"][p_special]) == 309
+
+    prev_trace_env = os.environ.get("MSL_RNG_TRACE_PATH")
+    prev_disable_env = os.environ.get("MSL_RNG_DISABLE_PSEUDO_RANDOM_SFX_CMD")
+    try:
+        os.environ.pop("MSL_RNG_DISABLE_PSEUDO_RANDOM_SFX_CMD", None)
+        for rec in rows:
+            trace_path = root / f"reports/triage/rng_pseudo_sfx_lock_{rec}.tsv"
+            os.environ["MSL_RNG_TRACE_PATH"] = str(trace_path)
+            _, ref_row, out_row = _run_one_step_row(dataset_path, rec, 0, rng_damage_fly_roll_gate=True)
+
+            site4_calls = 0
+            with trace_path.open("r", encoding="utf-8") as fh:
+                reader = csv.DictReader(fh, delimiter="\t")
+                for row in reader:
+                    if int(row["site_id"]) == 4:
+                        site4_calls += int(row["call_count"])
+
+            if rec == target_record:
+                assert site4_calls == 1, f"expected one pseudo_random_sfx RNG pulse at record {rec}"
+            else:
+                assert site4_calls == 0, f"unexpected pseudo_random_sfx RNG pulse at record {rec}"
+
+            for p in (0, 1):
+                _assert_transition_identity_lock_fields_match_ref(
+                    out_row=out_row,
+                    ref_row=ref_row,
+                    record=rec,
+                    p=p,
+                )
+    finally:
+        if prev_trace_env is None:
+            os.environ.pop("MSL_RNG_TRACE_PATH", None)
+        else:
+            os.environ["MSL_RNG_TRACE_PATH"] = prev_trace_env
+        if prev_disable_env is None:
+            os.environ.pop("MSL_RNG_DISABLE_PSEUDO_RANDOM_SFX_CMD", None)
+        else:
+            os.environ["MSL_RNG_DISABLE_PSEUDO_RANDOM_SFX_CMD"] = prev_disable_env

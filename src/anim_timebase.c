@@ -9,6 +9,7 @@
 #include "char_params.h"
 #include "combat.h"
 #include "common_params.h"
+#include "move_tables.h"
 
 enum { Ft_MF_KeepFastFall = 1 << 0 };
 
@@ -453,6 +454,40 @@ void anim_timebase_update_pre_input(MslBatch* batch) {
       }
 
       msl_anim_timebase_recompute_derived(batch, idx);
+
+      // Action-script pseudo-random SFX command RNG lane:
+      // - Command opcode 38 (`ftAction_80071FC8`) consumes one HSD_Randi(random_range) when the
+      //   event executes during command-script interpretation.
+      // - Command scripts are interpreted on the anim callback timeline under Fighter_8006A360.
+      // refs/melee/src/melee/ft/ftaction.c::ftAction_80071FC8
+      // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
+      // refs/melee/src/sysdolphin/baselib/random.c::HSD_Randi
+      //
+      // Runtime mapping:
+      // - Extracted event pulses are sourced from `data/moves/{fox,falco}.json`
+      //   `specials_by_msid["<msid>"].events` with kind `pseudo_random_sfx`.
+      // - Consume each crossed pulse once using the same frame-crossing policy as other script
+      //   pulse lanes.
+      // - `MSL_RNG_DISABLE_PSEUDO_RANDOM_SFX_CMD=1` is a debug kill-switch for A/B ablations.
+      if (!batch->debug_rng_disable_pseudo_random_sfx_cmd && action_frame_pre >= 0) {
+        const uint32_t smid_u32 = batch->state.animation_index[idx];
+        const int16_t action_frame_cur = batch->state.action_frame[idx];
+        if (smid_u32 <= 0xFFFFu && action_frame_cur >= action_frame_pre) {
+          enum { MSL_PSEUDO_SFX_PULSE_MAX = 16 };
+          uint8_t random_ranges[MSL_PSEUDO_SFX_PULSE_MAX] = {0};
+          const uint8_t pulse_n = move_tables_special_pseudo_random_sfx_ranges_crossed(
+              batch->state.char_id[idx], (uint16_t)smid_u32, (float)action_frame_pre,
+              (float)action_frame_cur, random_ranges, (uint8_t)MSL_PSEUDO_SFX_PULSE_MAX);
+          for (uint8_t ri = 0; ri < pulse_n; ri++) {
+            const uint8_t rr = random_ranges[ri];
+            if (rr > 0u) {
+              (void)combat_rng_consume_randi_site(batch, bi,
+                                                  MSL_RNG_SITE_FTACTION_PSEUDO_RANDOM_SFX_CMD,
+                                                  (uint32_t)rr);
+            }
+          }
+        }
+      }
 
       // Decomp: Fighter_ChangeMotionState clears `fp->fall_fast` unless KeepFastFall is requested.
       // refs/melee/src/melee/ft/fighter.c (KeepFastFall gate inside ChangeMotionState).

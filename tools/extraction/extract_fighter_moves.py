@@ -462,6 +462,31 @@ def _parse_subaction_events(
                         data={"flags": int(_u26(w0))},
                     )
                 )
+            elif op == 38:
+                # Pseudo-random SFX command (ftAction_80071FC8):
+                # - consumes one HSD_Randi(random_range) per command execution.
+                # - then selects one of six SFX ids and dispatches via behavior.
+                # refs/melee/src/melee/ft/ftaction.c::ftAction_80071FC8
+                # refs/melee/src/sysdolphin/baselib/random.c::HSD_Randi
+                #
+                # Word0 bit layout (MSB->LSB), matching lb/types.h::pseudo_random_sfx_0:
+                # - opcode       : bits 26..31 (already decoded as `op`)
+                # - volume       : bits 18..25
+                # - panning      : bits 10..17
+                # - behavior     : bits  6.. 9
+                # - random_range : bits  0.. 5
+                out.append(
+                    Event(
+                        frame=frame,
+                        kind="pseudo_random_sfx",
+                        data={
+                            "volume": int((w0 >> 18) & 0xFF),
+                            "panning": int((w0 >> 10) & 0xFF),
+                            "behavior": int((w0 >> 6) & 0xF),
+                            "random_range": int(w0 & 0x3F),
+                        },
+                    )
+                )
             elif op == 34:
                 # Set throw hitbox (ftAction_80071E04): configures fp->xDF4[2] hitboxes used during throws.
                 # Word0: opcode, idx (3), damage (23)

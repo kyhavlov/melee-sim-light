@@ -7,7 +7,8 @@ enum {
   MSL_RNG_SITE_DAMAGE_FLY_ROLL_GATE = 1,
   MSL_RNG_SITE_FTCOLL_ELECTRIC_CLANK_SFX = 2,
   MSL_RNG_SITE_FTWAIT_ANIM_VARIANT = 3,
-  MSL_RNG_SITE_COUNT = 4,
+  MSL_RNG_SITE_FTACTION_PSEUDO_RANDOM_SFX_CMD = 4,
+  MSL_RNG_SITE_COUNT = 5,
 };
 
 struct MslBatch {
@@ -26,7 +27,10 @@ struct MslBatch {
   // - Optional TSV trace writes to MSL_RNG_TRACE_PATH when set.
   // - DamageFlyRoll gate is enabled by default; set MSL_RNG_ENABLE_DAMAGE_FLY_ROLL_GATE=1
   //   as a debug/triage kill-switch (disable) for ablations.
+  // - Pseudo-random SFX command consumption is enabled by default; set
+  //   MSL_RNG_DISABLE_PSEUDO_RANDOM_SFX_CMD=1 as a debug/triage kill-switch (disable).
   uint8_t debug_rng_enable_damage_fly_roll_gate;
+  uint8_t debug_rng_disable_pseudo_random_sfx_cmd;
   uint8_t debug_rng_trace_enabled;
   void* debug_rng_trace_file;
   uint64_t debug_rng_trace_step_counter;

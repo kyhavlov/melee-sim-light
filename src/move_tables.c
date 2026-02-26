@@ -90,6 +90,15 @@ static MslFrameWindow g_throw_flip_by_char[256][MSL_THROW_KIND_COUNT];
 static MslFrameWindow g_throw_cmd1_by_char[256][MSL_THROW_KIND_COUNT];
 static MslFramePulses g_throw_spawn_projectile_by_char[256][MSL_THROW_KIND_COUNT];
 static MslThrowHitbox g_throw_hitbox_by_char[256][MSL_THROW_KIND_COUNT][MSL_THROW_HITBOX_IDX_MAX];
+enum { MSL_SPECIAL_PSEUDO_RNG_ENTRIES_MAX = 64 };
+typedef struct MslPseudoRandomSfxByMsid {
+  uint16_t msid;
+  MslFramePulses pulses;
+  uint8_t random_range[MSL_FRAME_PULSES_MAX];
+} MslPseudoRandomSfxByMsid;
+static MslPseudoRandomSfxByMsid
+    g_special_pseudo_rng_by_char[256][MSL_SPECIAL_PSEUDO_RNG_ENTRIES_MAX];
+static uint8_t g_special_pseudo_rng_count_by_char[256];
 static int g_loaded = 0;
 
 static const char* json_skip_ws(const char* s) {
@@ -1109,6 +1118,145 @@ static int parse_catchattack_grabbed_hit_window(const char* buf, const char* buf
   return 0;
 }
 
+static int parse_special_pseudo_random_sfx_ranges(const char* move_obj_start, const char* move_obj_end,
+                                                  MslFramePulses* out_pulses,
+                                                  uint8_t out_ranges[MSL_FRAME_PULSES_MAX]) {
+  if (move_obj_start == NULL || move_obj_end == NULL || out_pulses == NULL || out_ranges == NULL) {
+    return -1;
+  }
+  const char* events_key = strstr_range(move_obj_start, move_obj_end, "\"events\"");
+  if (events_key == NULL) {
+    return -1;
+  }
+  const char* arr_start = (const char*)memchr(events_key, '[', (size_t)(move_obj_end - events_key));
+  if (arr_start == NULL) {
+    return -1;
+  }
+  const char* arr_end = json_find_matching_delim(arr_start, move_obj_end, '[', ']');
+  if (arr_end == NULL) {
+    return -1;
+  }
+
+  MslFramePulses pulses = {0};
+  uint8_t ranges[MSL_FRAME_PULSES_MAX] = {0};
+  const char* p = arr_start;
+  while (p && p < arr_end) {
+    const char* ev_start = (const char*)memchr(p, '{', (size_t)(arr_end - p));
+    if (ev_start == NULL) {
+      break;
+    }
+    const char* ev_end = json_find_matching_delim(ev_start, arr_end, '{', '}');
+    if (ev_end == NULL) {
+      break;
+    }
+
+    if (json_get_str_eq_in_range(ev_start, ev_end, "kind", "pseudo_random_sfx")) {
+      int frame = 0;
+      int random_range = 0;
+      if (json_get_i32_in_range(ev_start, ev_end, "frame", &frame) == 0 &&
+          json_get_i32_in_range(ev_start, ev_end, "random_range", &random_range) == 0 &&
+          random_range > 0 && random_range <= 255) {
+        // Decomp command opcode 38 consumes one HSD_Randi(random_range) when executed.
+        // refs/melee/src/melee/ft/ftaction.c::ftAction_80071FC8
+        // refs/melee/src/sysdolphin/baselib/random.c::HSD_Randi
+        const uint8_t prev_count = pulses.count;
+        frame_pulses_push(&pulses, frame);
+        if (pulses.count > prev_count) {
+          ranges[prev_count] = (uint8_t)random_range;
+        }
+      }
+    }
+
+    p = ev_end + 1;
+  }
+
+  if (pulses.count > 0u) {
+    pulses.loaded = 1u;
+  }
+  *out_pulses = pulses;
+  memcpy(out_ranges, ranges, sizeof(ranges));
+  return 0;
+}
+
+static int parse_specials_by_msid_pseudo_random_sfx(const char* buf, const char* buf_end,
+                                                    uint8_t char_id) {
+  if (buf == NULL || buf_end == NULL) {
+    return -1;
+  }
+  const char* specials_key = strstr_range(buf, buf_end, "\"specials_by_msid\"");
+  if (specials_key == NULL) {
+    g_special_pseudo_rng_count_by_char[char_id] = 0u;
+    return 0;
+  }
+  const char* obj_start = (const char*)memchr(specials_key, '{', (size_t)(buf_end - specials_key));
+  if (obj_start == NULL) {
+    return -1;
+  }
+  const char* obj_end = json_find_matching_delim(obj_start, buf_end, '{', '}');
+  if (obj_end == NULL) {
+    return -1;
+  }
+
+  uint8_t entry_count = 0u;
+  const char* p = obj_start + 1;
+  while (p && p < obj_end) {
+    const char* key_start = (const char*)memchr(p, '"', (size_t)(obj_end - p));
+    if (key_start == NULL || key_start >= obj_end) {
+      break;
+    }
+    const char* key_end = (const char*)memchr(key_start + 1, '"', (size_t)(obj_end - (key_start + 1)));
+    if (key_end == NULL || key_end >= obj_end) {
+      break;
+    }
+
+    char key_buf[16];
+    const size_t key_len = (size_t)(key_end - (key_start + 1));
+    if (key_len == 0 || key_len >= sizeof(key_buf)) {
+      p = key_end + 1;
+      continue;
+    }
+    memcpy(key_buf, key_start + 1, key_len);
+    key_buf[key_len] = '\0';
+
+    char* key_parse_end = NULL;
+    errno = 0;
+    long msid_long = strtol(key_buf, &key_parse_end, 10);
+    if (key_parse_end == key_buf || *key_parse_end != '\0' || errno != 0 || msid_long < 0 ||
+        msid_long > 0xFFFFL) {
+      p = key_end + 1;
+      continue;
+    }
+
+    const char* colon = (const char*)memchr(key_end, ':', (size_t)(obj_end - key_end));
+    if (colon == NULL || colon >= obj_end) {
+      break;
+    }
+    const char* move_obj_start = json_skip_ws(colon + 1);
+    if (move_obj_start == NULL || move_obj_start >= obj_end || *move_obj_start != '{') {
+      p = colon + 1;
+      continue;
+    }
+    const char* move_obj_end = json_find_matching_delim(move_obj_start, obj_end, '{', '}');
+    if (move_obj_end == NULL) {
+      break;
+    }
+
+    MslFramePulses pulses = {0};
+    uint8_t ranges[MSL_FRAME_PULSES_MAX] = {0};
+    if (parse_special_pseudo_random_sfx_ranges(move_obj_start, move_obj_end, &pulses, ranges) == 0 &&
+        pulses.count > 0u && entry_count < (uint8_t)MSL_SPECIAL_PSEUDO_RNG_ENTRIES_MAX) {
+      MslPseudoRandomSfxByMsid* ent = &g_special_pseudo_rng_by_char[char_id][entry_count];
+      ent->msid = (uint16_t)msid_long;
+      ent->pulses = pulses;
+      memcpy(ent->random_range, ranges, sizeof(ranges));
+      entry_count = (uint8_t)(entry_count + 1u);
+    }
+    p = move_obj_end + 1;
+  }
+  g_special_pseudo_rng_count_by_char[char_id] = entry_count;
+  return 0;
+}
+
 static int load_one(const char* data_dir, const char* rel_path, uint8_t char_id) {
   if (data_dir == NULL || rel_path == NULL) {
     return -1;
@@ -1373,6 +1521,13 @@ static int load_one(const char* data_dir, const char* rel_path, uint8_t char_id)
     g_throw_cmd1_by_char[char_id][MSL_THROW_KIND_LW] = cmd1;
     g_throw_spawn_projectile_by_char[char_id][MSL_THROW_KIND_LW] = spawn_projectile;
     memcpy(g_throw_hitbox_by_char[char_id][MSL_THROW_KIND_LW], hitboxes, sizeof(hitboxes));
+  }
+
+  // Pseudo-random SFX command (opcode 38) event pulses for specials keyed by msid.
+  // refs/melee/src/melee/ft/ftaction.c::ftAction_80071FC8
+  if (parse_specials_by_msid_pseudo_random_sfx(buf, buf_end, char_id) != 0) {
+    alloc_free(buf);
+    return -1;
   }
 
   alloc_free(buf);
@@ -1759,4 +1914,40 @@ uint8_t move_tables_throw_projectile_last_pulse_frame(uint8_t char_id, uint16_t 
   }
   *out_last_pulse_frame = last;
   return 1u;
+}
+
+uint8_t move_tables_special_pseudo_random_sfx_ranges_crossed(uint8_t char_id, uint16_t msid,
+                                                             float prev_anim_frame_f32,
+                                                             float cur_anim_frame_f32,
+                                                             uint8_t* out_random_ranges,
+                                                             uint8_t max_out) {
+  if (out_random_ranges == NULL || max_out == 0u) {
+    return 0u;
+  }
+  const uint8_t n = g_special_pseudo_rng_count_by_char[char_id];
+  if (n == 0u) {
+    return 0u;
+  }
+  for (uint8_t i = 0; i < n; i++) {
+    const MslPseudoRandomSfxByMsid* ent = &g_special_pseudo_rng_by_char[char_id][i];
+    if (ent->msid != msid || !ent->pulses.loaded || ent->pulses.count == 0u) {
+      continue;
+    }
+    uint8_t out_n = 0u;
+    // Command-script events execute when crossing the command frame boundary.
+    // refs/melee/src/melee/ft/ftaction.c::ftAction_80071FC8
+    for (uint8_t pi = 0; pi < ent->pulses.count && out_n < max_out; pi++) {
+      const float on = (float)ent->pulses.frame[pi];
+      // Frame-0 command pulses execute on fresh motion-state entry scripts (cur_anim_frame starts at
+      // 0 and advances to 1 in the first steady frame). Preserve that entry pulse with an explicit
+      // frame-0 bridge so `on==0` events are not skipped under teacher-forced reseed snapshots.
+      // refs/melee/src/melee/ft/ftanim.c::ftAnim_8006E9B4
+      if ((prev_anim_frame_f32 < on && cur_anim_frame_f32 >= on) ||
+          (on == 0.0f && prev_anim_frame_f32 == 0.0f && cur_anim_frame_f32 > 0.0f)) {
+        out_random_ranges[out_n++] = ent->random_range[pi];
+      }
+    }
+    return out_n;
+  }
+  return 0u;
 }

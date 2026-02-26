@@ -150,6 +150,11 @@ MslBatch* msl_batch_create(int batch_size, int num_players) {
   if (rng_gate_env != NULL && rng_gate_env[0] == '1') {
     batch->debug_rng_enable_damage_fly_roll_gate = 1u;
   }
+  batch->debug_rng_disable_pseudo_random_sfx_cmd = 0u;
+  const char* rng_pseudo_sfx_env = getenv("MSL_RNG_DISABLE_PSEUDO_RANDOM_SFX_CMD");
+  if (rng_pseudo_sfx_env != NULL && rng_pseudo_sfx_env[0] == '1') {
+    batch->debug_rng_disable_pseudo_random_sfx_cmd = 1u;
+  }
   batch->debug_rng_trace_enabled = 0u;
   batch->debug_rng_trace_file = NULL;
   batch->debug_rng_trace_step_counter = 0u;
