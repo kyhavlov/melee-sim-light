@@ -1066,6 +1066,37 @@ static inline uint8_t combat_damageflyroll_rng_subset_allows_pre_action(const Ms
     case (uint16_t)MSL_ACT_RUN:
     case (uint16_t)MSL_ACT_ATTACK_AIR_LW:
       return 1u;
+    case (uint16_t)MSL_ACT_DAMAGE_FLY_TOP: {
+      // narrowed_temporary:
+      // - ftCo_8008DCE0 evaluates the DamageFlyRoll RNG gate before entering a new damage
+      //   motion state, so `action_id` here is the defender pre-action from the prior frame.
+      // - In the currently modeled stream, only AttackAirB steady windows after the
+      //   create/edge frames show causal parity gains for this pre-action carry lane.
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
+      // refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
+      // data/moves/{fox,falco}.json moves["ftCo_SM_AttackAirB"].events create_hitbox frame=4
+      //
+      // TODO(narrowed_temporary): Expand beyond AttackAirB once upstream pre-gate RNG consumers
+      // are represented for the regressing AttackAirF/ThrowHi windows.
+      const int num_players = (int)batch->config.num_players;
+      const uint8_t attacker = batch->state.last_hit_by[d_idx];
+      if ((int)attacker >= num_players) {
+        return 0u;
+      }
+      const size_t bi = d_idx / (size_t)MSL_MAX_PLAYERS;
+      const size_t a_idx = bi * (size_t)MSL_MAX_PLAYERS + (size_t)attacker;
+      const uint16_t a_action = batch->state.action_id[a_idx];
+      const int16_t a_af = batch->state.action_frame[a_idx];
+      // narrowed_temporary threshold:
+      // - create_hitbox starts at frame 4, and this runtime checks the pre-action gate after the
+      //   same-frame fighter tick. Keep only post-create steady frames (>=6) to avoid early-edge
+      //   windows until their upstream RNG consumers are represented.
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_Anim
+      if (a_action == (uint16_t)MSL_ACT_ATTACK_AIR_B && a_af >= 6) {
+        return 1u;
+      }
+      return 0u;
+    }
     case (uint16_t)MSL_ACT_ATTACK_AIR_B: {
       // narrowed_temporary:
       // - AttackAirB pre-action is enabled from the extracted create-window onward.

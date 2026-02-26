@@ -3846,6 +3846,86 @@ def test_damageflyroll_attackairb_subset_rng_pulse_rows_and_adjacent_controls_ar
 
 
 @pytest.mark.integration
+def test_damageflyroll_damageflytop_attackairb_steady_admission_rows_and_adjacent_controls_are_replay_exact() -> None:
+    # DamageFlyRoll RNG gate narrowed_temporary DamageFlyTop admission:
+    # - Decomp gate site is in ftCo_8008DCE0 block_33 (HSD_Randf compare in severe airborne damage).
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
+    # refs/melee/src/sysdolphin/baselib/random.c::HSD_Randf
+    #
+    # Runtime narrowed_temporary bridge:
+    # - pre_action DamageFlyTop admits the RNG gate only for attacker AttackAirB steady window.
+    # - AttackAirB create_hitbox starts at frame 4; keep pulse on steady window while adjacent controls stay cold.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_Anim
+    # data/moves/{fox,falco}.json moves["ftCo_SM_AttackAirB"].events create_hitbox frame=4
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_rel = (
+        "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
+        "AttachedGoodNaturedGuanaco.msl"
+    )
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    target_record = 6020
+    p_victim = 0
+    p_attacker = 1
+    rows = (target_record - 1, target_record, target_record + 1)
+
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+    for rec in rows:
+        assert int(samples.shape[0]) > rec, f"dataset too short for lock row: record={rec}"
+
+    target_seed = samples[target_record : target_record + 1]["seed_t"][0]
+    target_ref = samples[target_record : target_record + 1]["ref_t1"][0]
+    assert int(target_seed["action_id"][p_victim]) == 90  # ftCo_MS_DamageFlyTop
+    assert int(target_ref["action_id"][p_victim]) == 91  # ftCo_MS_DamageFlyRoll
+    assert int(target_seed["action_id"][p_attacker]) == 67  # ftCo_MS_AttackAirB
+    assert int(target_seed["action_frame"][p_attacker]) == 5
+
+    prev_trace_env = os.environ.get("MSL_RNG_TRACE_PATH")
+    try:
+        for rec in rows:
+            trace_path = root / f"reports/triage/rng_damageflytop_attackairb_admission_{rec}.tsv"
+            os.environ["MSL_RNG_TRACE_PATH"] = str(trace_path)
+            _, ref_row, out_row = _run_one_step_row(dataset_path, rec, p_attacker, rng_damage_fly_roll_gate=True)
+
+            site1_calls = 0
+            with trace_path.open("r", encoding="utf-8") as fh:
+                reader = csv.DictReader(fh, delimiter="\t")
+                for row in reader:
+                    if int(row["site_id"]) == 1:
+                        site1_calls += int(row["call_count"])
+
+            expected_site1 = 1 if rec == target_record else 0
+            assert site1_calls == expected_site1, (
+                f"unexpected DamageFlyRoll site-1 pulse at record {rec}: expected {expected_site1} got {site1_calls}"
+            )
+
+            # Keep strict transition lock coverage for both players on target±1.
+            for p in (0, 1):
+                _assert_transition_lock_fields_match_ref(
+                    out_row=out_row,
+                    ref_row=ref_row,
+                    record=rec,
+                    p=p,
+                )
+            # Victim-side identity ownership is causal for this lane.
+            _assert_transition_identity_lock_fields_match_ref(
+                out_row=out_row,
+                ref_row=ref_row,
+                record=rec,
+                p=p_victim,
+            )
+    finally:
+        if prev_trace_env is None:
+            os.environ.pop("MSL_RNG_TRACE_PATH", None)
+        else:
+            os.environ["MSL_RNG_TRACE_PATH"] = prev_trace_env
+
+
+@pytest.mark.integration
 def test_specialhi_upground_pseudo_random_sfx_rng_pulse_row_and_adjacent_controls_are_replay_exact() -> None:
     # Pseudo-random SFX command RNG consumer lane (opcode 38):
     # - ftAction_80071FC8 consumes one HSD_Randi(random_range) when the event executes.
