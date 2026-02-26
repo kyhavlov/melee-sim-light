@@ -2,6 +2,7 @@
 
 #include <errno.h>
 #include <math.h>
+#include <stdio.h>
 #include <stdint.h>
 #include <string.h>
 
@@ -30,6 +31,79 @@ static inline size_t idx_hitbox(int bi, int p, int hb_i) {
 static inline size_t idx_hurtcap(int bi, int p, int cap_i) {
   return ((size_t)bi * (size_t)MSL_MAX_PLAYERS + (size_t)p) * (size_t)MSL_MAX_HURTCAPS +
          (size_t)cap_i;
+}
+
+static inline uint32_t combat_hsd_rand_step(uint32_t seed) {
+  // HSD global RNG LCG step:
+  // refs/melee/src/sysdolphin/baselib/random.c::{HSD_Rand,HSD_Randf}
+  return seed * 214013u + 2531011u;
+}
+
+static inline float combat_hsd_randf_consume_site(MslBatch* batch, int bi, uint16_t site_id) {
+  if (batch == NULL || bi < 0 || bi >= batch->batch_size) {
+    return 0.0f;
+  }
+  if (batch->debug_rng_shadow_seed == NULL || batch->debug_rng_site_counts == NULL) {
+    return 0.0f;
+  }
+  if (site_id >= (uint16_t)MSL_RNG_SITE_COUNT) {
+    return 0.0f;
+  }
+  const size_t bi_u = (size_t)bi;
+  const size_t site_i = bi_u * (size_t)MSL_RNG_SITE_COUNT + (size_t)site_id;
+  if (batch->debug_rng_site_counts[site_i] != 0xFFFFu) {
+    batch->debug_rng_site_counts[site_i]++;
+  }
+  uint32_t seed = batch->debug_rng_shadow_seed[bi_u];
+  seed = combat_hsd_rand_step(seed);
+  batch->debug_rng_shadow_seed[bi_u] = seed;
+  // HSD_Randf output mapping: upper 16 bits / 65536.0f.
+  // refs/melee/src/sysdolphin/baselib/random.c::HSD_Randf
+  return (float)(seed >> 16) * (1.0f / 65536.0f);
+}
+
+void combat_rng_trace_begin_frame(MslBatch* batch) {
+  if (batch == NULL || batch->debug_rng_shadow_seed == NULL || batch->debug_rng_seed_in == NULL ||
+      batch->debug_rng_seed_out == NULL || batch->debug_rng_site_counts == NULL) {
+    return;
+  }
+  for (int bi = 0; bi < batch->batch_size; bi++) {
+    const size_t bi_u = (size_t)bi;
+    const uint32_t seed_in = batch->state.frame_pre_random_seed[bi_u];
+    batch->debug_rng_shadow_seed[bi_u] = seed_in;
+    batch->debug_rng_seed_in[bi_u] = seed_in;
+    batch->debug_rng_seed_out[bi_u] = seed_in;
+    memset(batch->debug_rng_site_counts + bi_u * (size_t)MSL_RNG_SITE_COUNT, 0,
+           (size_t)MSL_RNG_SITE_COUNT * sizeof(uint16_t));
+  }
+}
+
+void combat_rng_trace_end_frame(MslBatch* batch) {
+  if (batch == NULL || batch->debug_rng_shadow_seed == NULL || batch->debug_rng_seed_out == NULL) {
+    return;
+  }
+  FILE* trace_file = NULL;
+  if (batch->debug_rng_trace_enabled && batch->debug_rng_trace_file != NULL) {
+    trace_file = (FILE*)batch->debug_rng_trace_file;
+  }
+  const uint64_t step_id = batch->debug_rng_trace_step_counter++;
+  for (int bi = 0; bi < batch->batch_size; bi++) {
+    const size_t bi_u = (size_t)bi;
+    batch->debug_rng_seed_out[bi_u] = batch->debug_rng_shadow_seed[bi_u];
+    if (trace_file == NULL || batch->debug_rng_seed_in == NULL || batch->debug_rng_site_counts == NULL) {
+      continue;
+    }
+    const int32_t frame_id = batch->state.frame_id[bi_u];
+    const uint32_t seed_in = batch->debug_rng_seed_in[bi_u];
+    const uint32_t seed_out = batch->debug_rng_seed_out[bi_u];
+    for (uint16_t site_id = 1; site_id < (uint16_t)MSL_RNG_SITE_COUNT; site_id++) {
+      const size_t site_i = bi_u * (size_t)MSL_RNG_SITE_COUNT + (size_t)site_id;
+      const uint16_t count = batch->debug_rng_site_counts[site_i];
+      (void)fprintf(trace_file, "%llu\t%d\t%d\t%u\t%u\t%u\t%u\n",
+                    (unsigned long long)step_id, bi, (int)frame_id, seed_in, seed_out,
+                    (unsigned int)site_id, (unsigned int)count);
+    }
+  }
 }
 
 static inline uint8_t sphere_sphere_intersects(float ax, float ay, float az, float ar, float bx,
@@ -948,7 +1022,7 @@ static inline uint8_t combat_damage_severity_u8_from_kb(const MslCommonParams* c
   return 3;
 }
 
-static inline void combat_damage_enter_state(const MslCommonParams* c, MslBatch* batch,
+static inline void combat_damage_enter_state(const MslCommonParams* c, MslBatch* batch, int bi,
                                              size_t d_idx, uint8_t defender_on_ground_before,
                                              uint8_t defender_on_ground_after, uint8_t hurt_height,
                                              float kb_applied, float kb_angle_rad) {
@@ -992,14 +1066,37 @@ static inline void combat_damage_enter_state(const MslCommonParams* c, MslBatch*
     // broader low/med airborne-vs-grounded damage state split below continues to use the pre-hit
     // grounded flag to avoid changing non-tumble behavior.
     // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
-    if (!defender_on_ground_after) {
+    if (!defender_on_ground_after && c != NULL) {
       // DamageFlyTop window (radians).
       // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0 (block_33)
       // refs/melee/src/melee/ft/types.h (ftCommonData offsets 0x234/0x238)
-      if (c != NULL && kb_angle_rad > c->damagefly_top_angle_min_radians &&
+      if (kb_angle_rad > c->damagefly_top_angle_min_radians &&
           kb_angle_rad < c->damagefly_top_angle_max_radians) {
         act = (uint16_t)MSL_ACT_DAMAGE_FLY_TOP;
         sm = (uint32_t)MSL_SM_DAMAGE_FLY_TOP;
+      } else {
+        // RNG-gated DamageFlyRoll lane (decomp block_33):
+        // - sev==3 (var_r28)
+        // - airborne after KB ownership (fp->ground_or_air == GA_Air)
+        // - outside DamageFlyTop angle window
+        // - percent >= p_ftCommonData->x23C
+        // - HSD_Randf() < p_ftCommonData->x240
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
+        // refs/melee/src/sysdolphin/baselib/random.c::HSD_Randf
+        //
+        // Runtime mapping:
+        // - percent lane uses replay-seeded percent + per-frame damage accumulator (x1838).
+        // - RNG stream ownership is debug-only until explicitly enabled via
+        //   MSL_RNG_ENABLE_DAMAGE_FLY_ROLL_GATE=1.
+        const float percent_cur = batch->state.percent[d_idx] + batch->state.percent_temp[d_idx];
+        if (percent_cur >= (float)c->damagefly_roll_percent_threshold) {
+          const float roll =
+              combat_hsd_randf_consume_site(batch, bi, MSL_RNG_SITE_DAMAGE_FLY_ROLL_GATE);
+          if (batch->debug_rng_enable_damage_fly_roll_gate && roll < c->damagefly_roll_prob) {
+            act = (uint16_t)MSL_ACT_DAMAGE_FLY_ROLL;
+            sm = (uint32_t)MSL_SM_DAMAGE_FLY_ROLL;
+          }
+        }
       }
     }
 
@@ -1481,7 +1578,7 @@ static inline void combat_mutations_pass1_future_apply_body_hit(MslBatch* batch,
   // hitstun without hitlag and x221A_b3 unset.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DDDE4
   const uint8_t defender_on_ground_after = batch->state.on_ground[d_idx] ? 1u : 0u;
-  combat_damage_enter_state(c, batch, d_idx, defender_on_ground, defender_on_ground_after,
+  combat_damage_enter_state(c, batch, (int)bi, d_idx, defender_on_ground, defender_on_ground_after,
                             hurt_height, kb_applied, kb_angle_rad);
   // Decomp ordering: Damage state entry runs before hitlag assignment in Fighter_ProcessHit.
   // - forceAppliedOnHit path enters ftCo_8008DCE0 (ChangeMotionState + immediate ftAnim_8006EBA4),
@@ -1720,7 +1817,8 @@ MslItemHitResult combat_apply_item_hit(MslBatch* batch, int batch_index, int att
   // Decomp: ftCo_8008DCE0 can clear grounded state (ftCommon_8007D5D4) before selecting the
   // damage motion state. Use the post-KB on_ground value for state entry.
   const uint8_t defender_on_ground_after = batch->state.on_ground[d_idx] ? 1u : 0u;
-  combat_damage_enter_state(c, batch, d_idx, defender_on_ground, defender_on_ground_after,
+  combat_damage_enter_state(c, batch, batch_index, d_idx, defender_on_ground,
+                            defender_on_ground_after,
                             defender_hurt_height, kb_applied, kb_angle_rad);
 
   batch->state.instance_hit_by[d_idx] = item_instance_id;
@@ -1910,8 +2008,8 @@ uint8_t combat_apply_throw_hit(MslBatch* batch, int batch_index, int attacker, i
   // Throw hits mark the damaged hurtbox as "mid" in decomp (x184c_damaged_hurtbox = 1).
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DDDE4
   const uint8_t hurt_height = 1u;
-  combat_damage_enter_state(c, batch, d_idx, defender_on_ground, defender_on_ground, hurt_height,
-                            kb_applied, kb_angle_rad);
+  combat_damage_enter_state(c, batch, batch_index, d_idx, defender_on_ground,
+                            defender_on_ground, hurt_height, kb_applied, kb_angle_rad);
   // Throw-release ordering:
   // - ftCo_800DDDE4 routes into Fighter_ProcessHit damage entry, and ftCo_8008DCE0 already performs
   //   an immediate ftAnim_8006EBA4 on state change.

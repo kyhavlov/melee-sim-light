@@ -118,6 +118,8 @@ static int step_one_frame_core(MslBatch* batch, const uint8_t* prev_input_bytes,
     return EINVAL;
   }
 
+  combat_rng_trace_begin_frame(batch);
+
   clear_landing_transients(batch);
   cache_prev_action_ids(batch);
   cache_guard_reflect_timer_seed_snapshots(batch);
@@ -174,6 +176,7 @@ static int step_one_frame_core(MslBatch* batch, const uint8_t* prev_input_bytes,
   err = input_apply(batch, prev_input_bytes, prev_input_stride_bytes, input_bytes,
                     input_stride_bytes);
   if (err != 0) {
+    combat_rng_trace_end_frame(batch);
     return err;
   }
 
@@ -234,6 +237,7 @@ static int step_one_frame_core(MslBatch* batch, const uint8_t* prev_input_bytes,
   anim_timebase_apply_deferred_tick_once_post_combat(batch);
   state_flags_refresh_post_frame(batch);
 
+  combat_rng_trace_end_frame(batch);
   return 0;
 }
 

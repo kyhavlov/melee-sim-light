@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 import numpy as np
@@ -142,7 +143,9 @@ def _shield_contact_without_body_conflict(contacts: np.ndarray, defender: int) -
     return None
 
 
-def _run_one_step_row(ds_path: Path, record: int, p: int) -> tuple[np.void, np.void, np.void]:
+def _run_one_step_row(
+    ds_path: Path, record: int, p: int, *, rng_damage_fly_roll_gate: bool | None = None
+) -> tuple[np.void, np.void, np.void]:
     ds = read_dataset(str(ds_path))
     samples = ds.samples
     assert int(samples.shape[0]) > record, f"dataset too short for lock row: record={record}"
@@ -163,6 +166,12 @@ def _run_one_step_row(ds_path: Path, record: int, p: int) -> tuple[np.void, np.v
     input_bytes = np.frombuffer(row["input_t"].tobytes(order="C"), dtype=np.uint8).copy().reshape(1, input_stride)
     out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
 
+    prev_rng_gate_env = os.environ.get("MSL_RNG_ENABLE_DAMAGE_FLY_ROLL_GATE")
+    if rng_damage_fly_roll_gate is True:
+        os.environ["MSL_RNG_ENABLE_DAMAGE_FLY_ROLL_GATE"] = "1"
+    elif rng_damage_fly_roll_gate is False:
+        os.environ.pop("MSL_RNG_ENABLE_DAMAGE_FLY_ROLL_GATE", None)
+
     handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
     try:
         binding.reseed_seed(handle, seed_bytes)
@@ -170,6 +179,10 @@ def _run_one_step_row(ds_path: Path, record: int, p: int) -> tuple[np.void, np.v
         binding.write_compare(handle, out_compare_bytes)
     finally:
         binding.destroy(handle)
+        if prev_rng_gate_env is None:
+            os.environ.pop("MSL_RNG_ENABLE_DAMAGE_FLY_ROLL_GATE", None)
+        else:
+            os.environ["MSL_RNG_ENABLE_DAMAGE_FLY_ROLL_GATE"] = prev_rng_gate_env
 
     out = out_compare_bytes.view(COMPARE_DTYPE).reshape(-1)[0]
     return seed, ref, out
@@ -3579,6 +3592,105 @@ def test_attackairfb_early_stale_suppression_trim_rows_and_adjacent_controls_are
         _assert_transition_identity_lock_fields_match_ref(
             out_row=out,
             ref_row=ref,
+            record=rec,
+            p=p_victim,
+        )
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    ("dataset_rel", "target_record", "p_victim", "p_attacker", "seed_action"),
+    [
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
+            "AttachedGoodNaturedGuanaco.msl",
+            1738,
+            1,
+            0,
+            38,
+        ),
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
+            "AttachedGoodNaturedGuanaco.msl",
+            5033,
+            0,
+            1,
+            21,
+        ),
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
+            "AttachedGoodNaturedGuanaco.msl",
+            6020,
+            0,
+            1,
+            90,
+        ),
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
+            "GracefulAttachedTurtle.msl",
+            8633,
+            1,
+            0,
+            69,
+        ),
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
+            "TreasuredBackKangaroo.msl",
+            2752,
+            0,
+            1,
+            88,
+        ),
+    ],
+)
+def test_damageflyroll_rng_gate_transition_rows_and_adjacent_controls_are_replay_exact_when_enabled(
+    dataset_rel: str,
+    target_record: int,
+    p_victim: int,
+    p_attacker: int,
+    seed_action: int,
+) -> None:
+    # RNG-gated DamageFlyRoll ownership lane in ftCo_8008DCE0 block_33:
+    # - sev==3 airborne victim and outside DamageFlyTop angle window can switch to DamageFlyRoll
+    #   when percent >= x23C and HSD_Randf() < x240.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
+    # refs/melee/src/sysdolphin/baselib/random.c::HSD_Randf
+    #
+    # Lock each family with adjacent controls under the explicit RNG gate enablement:
+    # - target-1 stays in the pre-roll damage action
+    # - target transitions to DamageFlyRoll (action_id 91) matching replay
+    # - target+1 stays in DamageFlyRoll
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+    rows = (target_record - 1, target_record, target_record + 1)
+    for rec in rows:
+        assert int(samples.shape[0]) > rec, f"dataset too short for lock row: record={rec}"
+
+    target = samples[target_record : target_record + 1]
+    seed_t = target["seed_t"][0]
+    ref_t1 = target["ref_t1"][0]
+    assert int(seed_t["action_id"][p_victim]) == int(seed_action)
+    assert int(ref_t1["action_id"][p_victim]) == 91  # DamageFlyRoll
+
+    # Causality check: without the RNG-gated lane this target row is still mismatched.
+    _, ref_disabled, out_disabled = _run_one_step_row(
+        dataset_path, target_record, p_attacker, rng_damage_fly_roll_gate=False
+    )
+    assert int(out_disabled["action_id"][p_victim]) != int(ref_disabled["action_id"][p_victim])
+
+    for rec in rows:
+        _, ref_enabled, out_enabled = _run_one_step_row(
+            dataset_path, rec, p_attacker, rng_damage_fly_roll_gate=True
+        )
+        _assert_transition_identity_lock_fields_match_ref(
+            out_row=out_enabled,
+            ref_row=ref_enabled,
             record=rec,
             p=p_victim,
         )

@@ -2,6 +2,8 @@
 
 #include <errno.h>
 #include <math.h>
+#include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "alloc.h"
@@ -126,6 +128,42 @@ MslBatch* msl_batch_create(int batch_size, int num_players) {
   memset(batch->debug_hit_status_override, 0xFF,
          (size_t)batch_size * (size_t)MSL_MAX_PLAYERS * sizeof(uint8_t));
 
+  batch->debug_rng_shadow_seed = (uint32_t*)alloc_malloc((size_t)batch_size * sizeof(uint32_t));
+  batch->debug_rng_seed_in = (uint32_t*)alloc_malloc((size_t)batch_size * sizeof(uint32_t));
+  batch->debug_rng_seed_out = (uint32_t*)alloc_malloc((size_t)batch_size * sizeof(uint32_t));
+  batch->debug_rng_site_counts = (uint16_t*)alloc_malloc((size_t)batch_size *
+                                                          (size_t)MSL_RNG_SITE_COUNT *
+                                                          sizeof(uint16_t));
+  if (batch->debug_rng_shadow_seed == NULL || batch->debug_rng_seed_in == NULL ||
+      batch->debug_rng_seed_out == NULL || batch->debug_rng_site_counts == NULL) {
+    msl_batch_destroy(batch);
+    return NULL;
+  }
+  memset(batch->debug_rng_shadow_seed, 0, (size_t)batch_size * sizeof(uint32_t));
+  memset(batch->debug_rng_seed_in, 0, (size_t)batch_size * sizeof(uint32_t));
+  memset(batch->debug_rng_seed_out, 0, (size_t)batch_size * sizeof(uint32_t));
+  memset(batch->debug_rng_site_counts, 0,
+         (size_t)batch_size * (size_t)MSL_RNG_SITE_COUNT * sizeof(uint16_t));
+
+  batch->debug_rng_enable_damage_fly_roll_gate = 0u;
+  const char* rng_gate_env = getenv("MSL_RNG_ENABLE_DAMAGE_FLY_ROLL_GATE");
+  if (rng_gate_env != NULL && rng_gate_env[0] == '1') {
+    batch->debug_rng_enable_damage_fly_roll_gate = 1u;
+  }
+  batch->debug_rng_trace_enabled = 0u;
+  batch->debug_rng_trace_file = NULL;
+  batch->debug_rng_trace_step_counter = 0u;
+  const char* rng_trace_path = getenv("MSL_RNG_TRACE_PATH");
+  if (rng_trace_path != NULL && rng_trace_path[0] != '\0') {
+    FILE* rng_trace_file = fopen(rng_trace_path, "w");
+    if (rng_trace_file != NULL) {
+      batch->debug_rng_trace_enabled = 1u;
+      batch->debug_rng_trace_file = (void*)rng_trace_file;
+      (void)fprintf(rng_trace_file,
+                    "step\tbatch_index\tframe_id\tseed_in\tseed_out\tsite_id\tcall_count\n");
+    }
+  }
+
   if (stage_collision_init() != 0) {
     msl_batch_destroy(batch);
     return NULL;
@@ -221,6 +259,13 @@ void msl_batch_destroy(MslBatch* batch) {
   if (batch == NULL) {
     return;
   }
+  if (batch->debug_rng_trace_file != NULL) {
+    (void)fclose((FILE*)batch->debug_rng_trace_file);
+  }
+  alloc_free(batch->debug_rng_site_counts);
+  alloc_free(batch->debug_rng_seed_out);
+  alloc_free(batch->debug_rng_seed_in);
+  alloc_free(batch->debug_rng_shadow_seed);
   alloc_free(batch->debug_hit_status_override);
   state_free(&batch->state);
   alloc_free(batch);

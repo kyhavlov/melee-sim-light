@@ -7,6 +7,8 @@
 void combat_resolve(MslBatch* batch);
 void combat_processhit_consume(MslBatch* batch);
 uint8_t combat_is_powershield_active_idx(const MslBatch* batch, size_t idx);
+void combat_rng_trace_begin_frame(MslBatch* batch);
+void combat_rng_trace_end_frame(MslBatch* batch);
 
 typedef struct MslThrowHitboxParams MslThrowHitboxParams;
 

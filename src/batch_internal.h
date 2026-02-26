@@ -3,6 +3,11 @@
 #include "config.h"
 #include "state.h"
 
+enum {
+  MSL_RNG_SITE_DAMAGE_FLY_ROLL_GATE = 1,
+  MSL_RNG_SITE_COUNT = 2,
+};
+
 struct MslBatch {
   int batch_size;
   MslConfig config;
@@ -12,6 +17,21 @@ struct MslBatch {
   // Indexed like other per-player state arrays: [batch_size * MSL_MAX_PLAYERS].
   // Value 0xFF means "no override; use table lookup".
   uint8_t* debug_hit_status_override;
+
+  // Debug/triage RNG observability (no gameplay ownership by default):
+  // - Shadow RNG stream starts from frame_pre_random_seed each step.
+  // - Per-site consume counts are indexed by MSL_RNG_SITE_*.
+  // - Optional TSV trace writes to MSL_RNG_TRACE_PATH when set.
+  // - Optional DamageFlyRoll gate enablement comes from MSL_RNG_ENABLE_DAMAGE_FLY_ROLL_GATE=1.
+  //   (debug/triage only; default off).
+  uint8_t debug_rng_enable_damage_fly_roll_gate;
+  uint8_t debug_rng_trace_enabled;
+  void* debug_rng_trace_file;
+  uint64_t debug_rng_trace_step_counter;
+  uint32_t* debug_rng_shadow_seed;   // [batch]
+  uint32_t* debug_rng_seed_in;       // [batch]
+  uint32_t* debug_rng_seed_out;      // [batch]
+  uint16_t* debug_rng_site_counts;   // [batch * MSL_RNG_SITE_COUNT]
 };
 
 static inline size_t msl_idx_player(int bi, int p) {
