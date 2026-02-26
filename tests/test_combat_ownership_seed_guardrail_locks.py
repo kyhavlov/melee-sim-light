@@ -2629,6 +2629,96 @@ def test_damagefall_specialairn_transition_rows_and_adjacent_controls_are_replay
 
 @pytest.mark.integration
 @pytest.mark.parametrize(
+    (
+        "dataset_rel",
+        "target_record",
+        "p",
+        "pre_seed_action",
+        "pre_ref_action",
+        "post_seed_action",
+        "post_ref_action",
+    ),
+    [
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl",
+            8021,
+            0,
+            87,
+            38,
+            29,
+            29,
+        ),
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/QuerulousGrandDinosaur.msl",
+            8825,
+            0,
+            38,
+            38,
+            29,
+            28,
+        ),
+    ],
+)
+def test_damagefall_stick_fall_transition_rows_and_adjacent_controls_are_replay_exact(
+    dataset_rel: str,
+    target_record: int,
+    p: int,
+    pre_seed_action: int,
+    pre_ref_action: int,
+    post_seed_action: int,
+    post_ref_action: int,
+) -> None:
+    # DamageFall stick-fall transition lock families (new x670 ownership bridge):
+    # - ftCo_DamageFall_IASA transitions to Fall when ABS(lstick.x) >= x210 and x670 < x214.
+    # - x670 is updated in Fighter_Spaghetti_8006AD10, which runs after A360/IASA callbacks.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_DamageFall.c::ftCo_DamageFall_IASA
+    # refs/melee/src/melee/ft/fighter.c:903-906
+    # refs/melee/src/melee/ft/fighter.c:1903-1955
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+    controls = (target_record - 1, target_record + 1)
+    for rec in (target_record, *controls):
+        assert int(samples.shape[0]) > rec, f"dataset too short for lock row: record={rec}"
+
+    common = json.loads((root / "data/common/ft_common_data.json").read_text())
+    tilt_thresh_i8 = int(np.floor(float(common["lstick_tilt_x_thresh"]) * 80.0))
+    damagefall_fall_i8 = int(np.floor(float(common["damagefall_fall_stick_x_threshold"]) * 80.0))
+
+    target = samples[target_record : target_record + 1]
+    assert int(target["seed_t"]["action_id"][0, p]) == 38  # DamageFall
+    assert int(target["ref_t1"]["action_id"][0, p]) == 29  # Fall
+    assert int(target["seed_t"]["animation_index"][0, p]) == 29  # ftCo_SM_DamageFall
+    assert int(target["ref_t1"]["animation_index"][0, p]) == 20  # ftCo_SM_Fall
+    assert int(target["seed_t"]["on_ground"][0, p]) == 0
+    assert int(target["seed_t"]["hitlag"][0, p]) == 0
+    assert int(target["seed_t"]["hitstun"][0, p]) == 0
+    assert int(target["seed_t"]["tilt_timer_x"][0, p]) == 0
+    main_x = int(target["input_t"]["p"][0, p]["main_x"])
+    prev_main_x = int(target["prev_input_t"]["p"][0, p]["main_x"])
+    assert abs(main_x) >= damagefall_fall_i8
+    assert abs(prev_main_x) >= tilt_thresh_i8
+    assert (main_x > 0 and prev_main_x > 0) or (main_x < 0 and prev_main_x < 0)
+
+    pre = samples[controls[0] : controls[0] + 1]
+    assert int(pre["seed_t"]["action_id"][0, p]) == int(pre_seed_action)
+    assert int(pre["ref_t1"]["action_id"][0, p]) == int(pre_ref_action)
+    post = samples[controls[1] : controls[1] + 1]
+    assert int(post["seed_t"]["action_id"][0, p]) == int(post_seed_action)
+    assert int(post["ref_t1"]["action_id"][0, p]) == int(post_ref_action)
+
+    for rec in (controls[0], target_record, controls[1]):
+        _, ref, out = _run_one_step_row(dataset_path, rec, p)
+        _assert_transition_lock_fields_match_ref(out_row=out, ref_row=ref, record=rec, p=p)
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
     ("target_record", "p", "seed_facing", "ref_facing"),
     [
         (785, 1, 0, 1),
@@ -3156,6 +3246,88 @@ def test_damage_ground_airborne_landing_transition_rows_and_adjacent_controls_ar
 
 @pytest.mark.integration
 @pytest.mark.parametrize(
+    ("dataset_rel", "target_record", "p", "pre_ref_action", "post_ref_action"),
+    [
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl",
+            4572,
+            0,
+            183,
+            29,
+        ),
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl",
+            6386,
+            0,
+            183,
+            29,
+        ),
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl",
+            9103,
+            1,
+            183,
+            29,
+        ),
+    ],
+)
+def test_downbound_airborne_ledge_exit_transition_rows_and_adjacent_controls_are_replay_exact(
+    dataset_rel: str, target_record: int, p: int, pre_ref_action: int, post_ref_action: int
+) -> None:
+    # DownBound airborne ledge-exit lock families for the kept ft_80082708 ownership bridge:
+    # - DownBound_Coll calls ft_80082708 (mpColl_8004B108 allow-ground-to-air), and this lane
+    #   enters Fall exactly on the edge-exit frame.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownBound.c::ftCo_DownBound_Coll
+    # refs/melee/src/melee/ft/ft_081B.c::ft_80082708
+    # refs/melee/src/melee/mp/mpcoll.c::mpColl_8004B108
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+    controls = (target_record - 1, target_record + 1)
+    for rec in (target_record, *controls):
+        assert int(samples.shape[0]) > rec, f"dataset too short for lock row: record={rec}"
+
+    stage = json.loads((root / "data/stages/final_destination.json").read_text())
+    ledge_segments = [s for s in stage["segments"] if s.get("ledge")]
+    left_edge_x = min(float(s["x0"]) for s in ledge_segments)
+    right_edge_x = max(float(s["x1"]) for s in ledge_segments)
+
+    target = samples[target_record : target_record + 1]
+    seed_t = target["seed_t"][0]
+    ref_t1 = target["ref_t1"][0]
+    assert int(seed_t["action_id"][p]) == 183  # DownBoundU
+    assert int(ref_t1["action_id"][p]) == 29  # Fall
+    assert int(seed_t["animation_index"][p]) == 183
+    assert int(ref_t1["animation_index"][p]) == 20
+    assert int(seed_t["on_ground"][p]) == 0
+    assert int(seed_t["hitlag"][p]) == 0
+    assert int(seed_t["hitstun"][p]) == 0
+    projected_next_x = float(seed_t["pos_x"][p]) + float(seed_t["speed_x_attack"][p])
+    if float(seed_t["speed_x_attack"][p]) > 0.0:
+        assert projected_next_x >= right_edge_x
+    else:
+        assert projected_next_x <= left_edge_x
+
+    pre = samples[controls[0] : controls[0] + 1]
+    assert int(pre["seed_t"]["action_id"][0, p]) == 183
+    assert int(pre["ref_t1"]["action_id"][0, p]) == int(pre_ref_action)
+    post = samples[controls[1] : controls[1] + 1]
+    assert int(post["seed_t"]["action_id"][0, p]) == 29
+    assert int(post["ref_t1"]["action_id"][0, p]) == int(post_ref_action)
+
+    for rec in (controls[0], target_record, controls[1]):
+        _, ref, out = _run_one_step_row(dataset_path, rec, p)
+        for pp in (0, 1):
+            _assert_transition_lock_fields_match_ref(out_row=out, ref_row=ref, record=rec, p=pp)
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
     ("dataset_rel", "target_record", "p", "seed_action", "ref_action"),
     [
         (
@@ -3318,3 +3490,95 @@ def test_attackairn_early_stale_suppression_trim_rows_and_adjacent_controls_are_
                 record=rec,
                 p=p,
             )
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    (
+        "dataset_rel",
+        "target_record",
+        "p_victim",
+        "p_attacker",
+        "attacker_action",
+        "pre_ref_action",
+        "target_ref_action",
+        "post_ref_action",
+    ),
+    [
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl",
+            2635,
+            0,
+            1,
+            67,  # AttackAirB
+            90,
+            87,
+            87,
+        ),
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/TreasuredBackKangaroo.msl",
+            1943,
+            1,
+            0,
+            66,  # AttackAirF
+            90,
+            89,
+            89,
+        ),
+    ],
+)
+def test_attackairfb_early_stale_suppression_trim_rows_and_adjacent_controls_are_replay_exact(
+    dataset_rel: str,
+    target_record: int,
+    p_victim: int,
+    p_attacker: int,
+    attacker_action: int,
+    pre_ref_action: int,
+    target_ref_action: int,
+    post_ref_action: int,
+) -> None:
+    # Lock families for src/hitboxes.c AttackAirF/B stale-suppression window:
+    # - AttackAir create_hitbox windows can rewrite BODY attribution in ftColl_80076ED8.
+    # - Reseed-only stale indefinite victim entries (lbColl_80008A5C / lbColl_8000ACFC shape)
+    #   must be trimmed in the early create window when owner attribution mismatches.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_Anim
+    # refs/melee/src/melee/ft/ftcoll.c::ftColl_80076ED8
+    # refs/melee/src/melee/lb/lbcollision.c::{lbColl_80008A5C,lbColl_8000ACFC}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+    rows = (target_record - 1, target_record, target_record + 1)
+    for rec in rows:
+        assert int(samples.shape[0]) > rec, f"dataset too short for lock row: record={rec}"
+
+    target = samples[target_record : target_record + 1]
+    seed_t = target["seed_t"][0]
+    ref_t1 = target["ref_t1"][0]
+    assert int(seed_t["action_id"][p_attacker]) == int(attacker_action)
+    assert int(seed_t["on_ground"][p_attacker]) == 0
+    assert int(seed_t["hitlag"][p_attacker]) == 0
+    assert int(seed_t["hitstun"][p_victim]) > 0
+    assert int(seed_t["instance_hit_by"][p_victim]) != int(seed_t["instance_id"][p_attacker])
+    assert int(seed_t["action_id"][p_victim]) == int(pre_ref_action)
+    assert int(ref_t1["action_id"][p_victim]) == int(target_ref_action)
+    assert int(ref_t1["hitlag"][p_victim]) > 0
+
+    pre = samples[rows[0] : rows[0] + 1]
+    assert int(pre["ref_t1"]["action_id"][0, p_victim]) == int(pre_ref_action)
+    post = samples[rows[2] : rows[2] + 1]
+    assert int(post["seed_t"]["action_id"][0, p_victim]) == int(target_ref_action)
+    assert int(post["ref_t1"]["action_id"][0, p_victim]) == int(post_ref_action)
+
+    for rec in rows:
+        _, ref, out = _run_one_step_row(dataset_path, rec, p_attacker)
+        _assert_transition_identity_lock_fields_match_ref(
+            out_row=out,
+            ref_row=ref,
+            record=rec,
+            p=p_victim,
+        )
