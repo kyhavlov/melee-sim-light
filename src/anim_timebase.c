@@ -7,6 +7,7 @@
 #include "anim_table.h"
 #include "attack_id_tables.h"
 #include "char_params.h"
+#include "combat.h"
 #include "common_params.h"
 
 enum { Ft_MF_KeepFastFall = 1 << 0 };
@@ -473,6 +474,13 @@ void anim_timebase_update_pre_input(MslBatch* batch) {
       // Fighter_ChangeMotionState; fastfall persists across those wraps in decomp.
       if (did_wrap && action_frame_pre >= 0 && batch->state.action_frame[idx] < action_frame_pre) {
         const uint16_t a = batch->state.action_id[idx];
+        // Wait anim variant selection consumes HSD_Randi(100) when ftCo_8008A7A8 needs a new
+        // idle sub-animation at end-of-anim.
+        // refs/melee/src/melee/ft/ftwaitanim.c::{ftCo_8008A7A8,getAnimID}
+        // refs/melee/src/sysdolphin/baselib/random.c::HSD_Randi
+        if (a == (uint16_t)MSL_ACT_WAIT) {
+          (void)combat_rng_consume_randi_site(batch, bi, MSL_RNG_SITE_FTWAIT_ANIM_VARIANT, 100);
+        }
         if (a == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_N_LOOP) {
           batch->state.fall_fast[idx] = 0;
         }

@@ -39,15 +39,15 @@ static inline uint32_t combat_hsd_rand_step(uint32_t seed) {
   return seed * 214013u + 2531011u;
 }
 
-static inline float combat_hsd_randf_consume_site(MslBatch* batch, int bi, uint16_t site_id) {
+static inline uint16_t combat_hsd_rand_u16_consume_site(MslBatch* batch, int bi, uint16_t site_id) {
   if (batch == NULL || bi < 0 || bi >= batch->batch_size) {
-    return 0.0f;
+    return 0u;
   }
   if (batch->debug_rng_shadow_seed == NULL || batch->debug_rng_site_counts == NULL) {
-    return 0.0f;
+    return 0u;
   }
   if (site_id >= (uint16_t)MSL_RNG_SITE_COUNT) {
-    return 0.0f;
+    return 0u;
   }
   const size_t bi_u = (size_t)bi;
   const size_t site_i = bi_u * (size_t)MSL_RNG_SITE_COUNT + (size_t)site_id;
@@ -57,9 +57,24 @@ static inline float combat_hsd_randf_consume_site(MslBatch* batch, int bi, uint1
   uint32_t seed = batch->debug_rng_shadow_seed[bi_u];
   seed = combat_hsd_rand_step(seed);
   batch->debug_rng_shadow_seed[bi_u] = seed;
+  return (uint16_t)(seed >> 16);
+}
+
+float combat_rng_consume_randf_site(MslBatch* batch, int bi, uint16_t site_id) {
+  const uint16_t rnd = combat_hsd_rand_u16_consume_site(batch, bi, site_id);
   // HSD_Randf output mapping: upper 16 bits / 65536.0f.
   // refs/melee/src/sysdolphin/baselib/random.c::HSD_Randf
-  return (float)(seed >> 16) * (1.0f / 65536.0f);
+  return (float)rnd * (1.0f / 65536.0f);
+}
+
+int32_t combat_rng_consume_randi_site(MslBatch* batch, int bi, uint16_t site_id, int32_t max_val) {
+  if (max_val <= 0) {
+    return 0;
+  }
+  const uint16_t rnd = combat_hsd_rand_u16_consume_site(batch, bi, site_id);
+  // HSD_Randi(max) = max * HSD_Rand() / 65536.
+  // refs/melee/src/sysdolphin/baselib/random.c::HSD_Randi
+  return (int32_t)(((int64_t)max_val * (int64_t)rnd) >> 16);
 }
 
 void combat_rng_trace_begin_frame(MslBatch* batch) {
@@ -90,7 +105,8 @@ void combat_rng_trace_end_frame(MslBatch* batch) {
   for (int bi = 0; bi < batch->batch_size; bi++) {
     const size_t bi_u = (size_t)bi;
     batch->debug_rng_seed_out[bi_u] = batch->debug_rng_shadow_seed[bi_u];
-    if (trace_file == NULL || batch->debug_rng_seed_in == NULL || batch->debug_rng_site_counts == NULL) {
+    if (trace_file == NULL || batch->debug_rng_seed_in == NULL ||
+        batch->debug_rng_site_counts == NULL) {
       continue;
     }
     const int32_t frame_id = batch->state.frame_id[bi_u];
@@ -99,9 +115,8 @@ void combat_rng_trace_end_frame(MslBatch* batch) {
     for (uint16_t site_id = 1; site_id < (uint16_t)MSL_RNG_SITE_COUNT; site_id++) {
       const size_t site_i = bi_u * (size_t)MSL_RNG_SITE_COUNT + (size_t)site_id;
       const uint16_t count = batch->debug_rng_site_counts[site_i];
-      (void)fprintf(trace_file, "%llu\t%d\t%d\t%u\t%u\t%u\t%u\n",
-                    (unsigned long long)step_id, bi, (int)frame_id, seed_in, seed_out,
-                    (unsigned int)site_id, (unsigned int)count);
+      (void)fprintf(trace_file, "%llu\t%d\t%d\t%u\t%u\t%u\t%u\n", (unsigned long long)step_id, bi,
+                    (int)frame_id, seed_in, seed_out, (unsigned int)site_id, (unsigned int)count);
     }
   }
 }
@@ -122,8 +137,8 @@ static inline float combat_lbColl_804D7A38(void) {
   return 3.0f;
 }
 
-static inline uint8_t combat_body_overlap_lbColl_80006E58_subset_allows(
-    const MslBatch* batch, size_t hb_i, size_t d_idx) {
+static inline uint8_t combat_body_overlap_lbColl_80006E58_subset_allows(const MslBatch* batch,
+                                                                        size_t hb_i, size_t d_idx) {
   if (batch == NULL) {
     return 0u;
   }
@@ -149,8 +164,7 @@ static inline uint8_t combat_body_overlap_lbColl_80006E58_subset_allows(
 
 static inline uint8_t combat_body_overlap_lbColl_80006E58_scaffold(
     const MslBatch* batch, int bi, int attacker, int hb_id, float hx, float hy, float hz, float hr,
-    float ax, float ay, float az, float bx, float by, float bz, float cr,
-    float defender_scale_y) {
+    float ax, float ay, float az, float bx, float by, float bz, float cr, float defender_scale_y) {
   const size_t hb_i = idx_hitbox(bi, attacker, hb_id);
 
   // ftColl_80078C70 forwards HitCapsule.x43_b2 as lbColl_8000805C arg3 (`var_r22`).
@@ -435,7 +449,8 @@ static inline void combat_apply_ftCommon_8007D5D4_ground_to_air(MslBatch* batch,
   }
 }
 
-static inline uint8_t combat_is_guard_reflect_frozen_snapshot_idx(const MslBatch* batch, size_t idx) {
+static inline uint8_t combat_is_guard_reflect_frozen_snapshot_idx(const MslBatch* batch,
+                                                                  size_t idx) {
   if (batch == NULL) {
     return 0;
   }
@@ -455,14 +470,14 @@ static inline uint8_t combat_is_guard_reflect_frozen_snapshot_idx(const MslBatch
 }
 
 static inline uint8_t combat_guard_reflect_no_submotion_x14_expired_lane(const MslBatch* batch,
-                                                                          size_t idx) {
+                                                                         size_t idx) {
   if (batch == NULL) {
     return 0u;
   }
   return (batch->state.action_id[idx] == (uint16_t)MSL_ACT_GUARD_REFLECT &&
           batch->state.action_frame[idx] < 0 && batch->state.animation_index[idx] == UINT32_MAX &&
-          batch->state.guard_reflect_timer_x14[idx] == 0u &&
-          batch->state.hitlag[idx] == 0u && batch->state.hitstun[idx] == 0u)
+          batch->state.guard_reflect_timer_x14[idx] == 0u && batch->state.hitlag[idx] == 0u &&
+          batch->state.hitstun[idx] == 0u)
              ? 1u
              : 0u;
 }
@@ -671,11 +686,10 @@ static inline uint8_t combat_defender_hit_status_u8(const MslBatch* batch, size_
   // refs/melee/src/melee/ft/ftcoll.c::ftColl_8007B868 (eligibility aggregates x1988/x198C)
   uint8_t hit_status = 0;
   const uint16_t cur_action = batch->state.action_id[d_idx];
-  const uint8_t is_shine_start_entry =
-      (cur_action == (uint16_t)MSL_ACT_FX_SPECIAL_LW_START ||
-       cur_action == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_LW_START)
-          ? 1u
-          : 0u;
+  const uint8_t is_shine_start_entry = (cur_action == (uint16_t)MSL_ACT_FX_SPECIAL_LW_START ||
+                                        cur_action == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_LW_START)
+                                           ? 1u
+                                           : 0u;
   // Entry-frame x1988 ownership:
   // - Generic post-Anim action transitions should not consume new-state script hit_status until the
   //   next frame's ftAnim_8006EBA4 tick.
@@ -1086,13 +1100,33 @@ static inline void combat_damage_enter_state(const MslCommonParams* c, MslBatch*
         //
         // Runtime mapping:
         // - percent lane uses replay-seeded percent + per-frame damage accumulator (x1838).
-        // - RNG stream ownership is debug-only until explicitly enabled via
-        //   MSL_RNG_ENABLE_DAMAGE_FLY_ROLL_GATE=1.
+        // - RNG stream ownership is active by default; keep
+        //   MSL_RNG_ENABLE_DAMAGE_FLY_ROLL_GATE=1 as a debug kill-switch for ablations.
+        const uint16_t pre_action = batch->state.action_id[d_idx];
+        const uint8_t damagefly_roll_rng_subset_ok =
+            // Narrowed activation subset (decomp-backed call-context bridge):
+            // - Keep RNG-gated DamageFlyRoll enabled only on re-hit windows where the defender is
+            //   already in non-Top Damage tumble carry states.
+            // - Decomp call chain for these states re-enters ftCo_8008DCE0 through common
+            //   Fighter_ProcessHit damage routing (no action-script pseudo-random command lane in
+            //   the modeled subset before block_33).
+            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{
+            //   ftCo_DamageFall_IASA,ftCo_Damage_Anim,ftCo_8008DCE0
+            // }
+            // refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
+            //
+            // TODO(narrowed_temporary): Expand once additional pre-gate RNG consumers are modeled
+            // for non-damage carry actions (e.g. action/callback audio/effect lanes).
+            (pre_action == (uint16_t)MSL_ACT_DAMAGE_FALL ||
+             pre_action == (uint16_t)MSL_ACT_DAMAGE_FLY_N ||
+             pre_action == (uint16_t)MSL_ACT_DAMAGE_FLY_LW)
+                ? 1u
+                : 0u;
         const float percent_cur = batch->state.percent[d_idx] + batch->state.percent_temp[d_idx];
-        if (percent_cur >= (float)c->damagefly_roll_percent_threshold) {
+        if (damagefly_roll_rng_subset_ok && percent_cur >= (float)c->damagefly_roll_percent_threshold) {
           const float roll =
-              combat_hsd_randf_consume_site(batch, bi, MSL_RNG_SITE_DAMAGE_FLY_ROLL_GATE);
-          if (batch->debug_rng_enable_damage_fly_roll_gate && roll < c->damagefly_roll_prob) {
+              combat_rng_consume_randf_site(batch, bi, MSL_RNG_SITE_DAMAGE_FLY_ROLL_GATE);
+          if (!batch->debug_rng_enable_damage_fly_roll_gate && roll < c->damagefly_roll_prob) {
             act = (uint16_t)MSL_ACT_DAMAGE_FLY_ROLL;
             sm = (uint32_t)MSL_SM_DAMAGE_FLY_ROLL;
           }
@@ -1696,8 +1730,7 @@ MslItemHitResult combat_apply_item_hit(MslBatch* batch, int batch_index, int att
   // lasers.bin) to be Fox/Falco blaster shots.
   const MslLaserParams* lp = laser_params_for_item_type(item_type);
   const uint8_t non_flinch_hit =
-      (lp != NULL && ((item_state == 0u) ? lp->non_flinch : lp->state1_non_flinch) != 0u) ? 1u
-                                                                                             : 0u;
+      (lp != NULL && ((item_state == 0u) ? lp->non_flinch : lp->state1_non_flinch) != 0u) ? 1u : 0u;
   if (non_flinch_hit) {
     // Extracted proxy lane ownership:
     // - non_flinch is extracted into MSLLASR1 from article hitbox kbg/wsk/bkb terms
@@ -1818,8 +1851,8 @@ MslItemHitResult combat_apply_item_hit(MslBatch* batch, int batch_index, int att
   // damage motion state. Use the post-KB on_ground value for state entry.
   const uint8_t defender_on_ground_after = batch->state.on_ground[d_idx] ? 1u : 0u;
   combat_damage_enter_state(c, batch, batch_index, d_idx, defender_on_ground,
-                            defender_on_ground_after,
-                            defender_hurt_height, kb_applied, kb_angle_rad);
+                            defender_on_ground_after, defender_hurt_height, kb_applied,
+                            kb_angle_rad);
 
   batch->state.instance_hit_by[d_idx] = item_instance_id;
   batch->state.last_hit_by[d_idx] = (uint8_t)attacker;
@@ -1946,8 +1979,7 @@ uint8_t combat_apply_throw_hit(MslBatch* batch, int batch_index, int attacker, i
 
   const float kb_applied = combat_damage_calc_kb_applied(
       c, &d_ch_throw, d_motion_id, percent_pre, dmg_temp, dmg_raw_i, p->kbg, p->wsk, p->bkb,
-      coll_kb_mul,
-      batch->state.dmg_x2225_b7[d_idx], batch->state.dmg_x2224_b2[d_idx],
+      coll_kb_mul, batch->state.dmg_x2225_b7[d_idx], batch->state.dmg_x2224_b2[d_idx],
       batch->state.kb_smashcharge_active[d_idx]);
   const float kb_angle_rad =
       combat_damage_calc_angle_radians(c, p->angle, defender_on_ground, kb_applied);
@@ -2008,8 +2040,8 @@ uint8_t combat_apply_throw_hit(MslBatch* batch, int batch_index, int attacker, i
   // Throw hits mark the damaged hurtbox as "mid" in decomp (x184c_damaged_hurtbox = 1).
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DDDE4
   const uint8_t hurt_height = 1u;
-  combat_damage_enter_state(c, batch, batch_index, d_idx, defender_on_ground,
-                            defender_on_ground, hurt_height, kb_applied, kb_angle_rad);
+  combat_damage_enter_state(c, batch, batch_index, d_idx, defender_on_ground, defender_on_ground,
+                            hurt_height, kb_applied, kb_angle_rad);
   // Throw-release ordering:
   // - ftCo_800DDDE4 routes into Fighter_ProcessHit damage entry, and ftCo_8008DCE0 already performs
   //   an immediate ftAnim_8006EBA4 on state change.
@@ -2565,6 +2597,15 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
               did_clank = 1u;
               clank_skip_hb[p0][p1][hb0] = 1u;
               clank_skip_hb[p1][p0][hb1] = 1u;
+              // Electric-vs-electric clank SFX lane consumes HSD_Randi(3) to pick one of three
+              // entries in ftColl_803C0C4C.
+              // refs/melee/src/melee/ft/ftcoll.c::ftColl_800784B4
+              // refs/melee/src/sysdolphin/baselib/random.c::HSD_Randi
+              if (e0 == (uint8_t)MSL_HIT_ELEMENT_ELECTRIC &&
+                  e1 == (uint8_t)MSL_HIT_ELEMENT_ELECTRIC) {
+                (void)combat_rng_consume_randi_site(batch, bi,
+                                                    MSL_RNG_SITE_FTCOLL_ELECTRIC_CLANK_SFX, 3);
+              }
 
               const int int0 = combat_get_env_dmg(d0);
               if (int0 > max_int_dmg[0]) {
@@ -2757,7 +2798,8 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
           //
           // Mirror that ordering here: gate before the shield sphere overlap test.
           const uint8_t hit_group = hitlist_hit_group_from_u16_7(batch->state.hitbox_u16_7[hb_i]);
-          uint8_t allows = hitlist_allows_fighter(batch, bi, attacker, hb_id, defender, defender_iid);
+          uint8_t allows =
+              hitlist_allows_fighter(batch, bi, attacker, hb_id, defender, defender_iid);
           // Same no-submotion x14-expired bridge as the debug shield-decision path above.
           if (!allows && combat_guard_reflect_no_submotion_x14_expired_lane(batch, d_idx) &&
               batch->state.guard_reflect_timer_x18_seed[d_idx] <= 1u) {
@@ -3458,7 +3500,8 @@ int combat_debug_shield_candidate_decisions(MslBatch* batch, int batch_index,
           // shield geometry helper lbColl_80007BCC.
           // refs/melee/src/melee/lb/lbcollision.c::lbColl_8000ACFC
           // refs/melee/src/melee/lb/lbcollision.c::lbColl_80007BCC
-          uint8_t allows = hitlist_allows_fighter(batch, bi, attacker, hb_id, defender, defender_iid);
+          uint8_t allows =
+              hitlist_allows_fighter(batch, bi, attacker, hb_id, defender, defender_iid);
           // GuardReflect no-submotion x14-expired bridge:
           // - Decomp suppression uses HitVictim.victim pointer identity; this simulator uses seeded
           //   replay-visible proxy identity under one-step reseed.

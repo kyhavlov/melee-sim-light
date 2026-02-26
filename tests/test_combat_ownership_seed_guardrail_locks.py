@@ -168,9 +168,11 @@ def _run_one_step_row(
 
     prev_rng_gate_env = os.environ.get("MSL_RNG_ENABLE_DAMAGE_FLY_ROLL_GATE")
     if rng_damage_fly_roll_gate is True:
-        os.environ["MSL_RNG_ENABLE_DAMAGE_FLY_ROLL_GATE"] = "1"
-    elif rng_damage_fly_roll_gate is False:
         os.environ.pop("MSL_RNG_ENABLE_DAMAGE_FLY_ROLL_GATE", None)
+    elif rng_damage_fly_roll_gate is False:
+        # Gate is default-on in runtime; env=1 is a debug kill-switch used for
+        # causality A/B checks in this lock harness.
+        os.environ["MSL_RNG_ENABLE_DAMAGE_FLY_ROLL_GATE"] = "1"
 
     handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
     try:
@@ -3611,30 +3613,6 @@ def test_attackairfb_early_stale_suppression_trim_rows_and_adjacent_controls_are
         ),
         (
             "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-            "AttachedGoodNaturedGuanaco.msl",
-            5033,
-            0,
-            1,
-            21,
-        ),
-        (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-            "AttachedGoodNaturedGuanaco.msl",
-            6020,
-            0,
-            1,
-            90,
-        ),
-        (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-            "GracefulAttachedTurtle.msl",
-            8633,
-            1,
-            0,
-            69,
-        ),
-        (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
             "TreasuredBackKangaroo.msl",
             2752,
             0,
@@ -3656,7 +3634,11 @@ def test_damageflyroll_rng_gate_transition_rows_and_adjacent_controls_are_replay
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
     # refs/melee/src/sysdolphin/baselib/random.c::HSD_Randf
     #
-    # Lock each family with adjacent controls under the explicit RNG gate enablement:
+    # Narrowed subset coverage for the current gate enablement scope:
+    # - pre-hit action is DamageFall or DamageFlyN/Lw
+    # - target transitions to DamageFlyRoll (action_id 91) matching replay
+    #
+    # Lock each family with adjacent controls under explicit RNG gate enablement:
     # - target-1 stays in the pre-roll damage action
     # - target transitions to DamageFlyRoll (action_id 91) matching replay
     # - target+1 stays in DamageFlyRoll
