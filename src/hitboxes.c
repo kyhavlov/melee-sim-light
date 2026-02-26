@@ -75,6 +75,16 @@ static inline uint8_t hitboxes_seed_bridge_is_guard_transition_owner(uint16_t ac
   }
 }
 
+static inline uint8_t hitboxes_seed_bridge_is_attackair_trim_owner(uint16_t action_id) {
+  switch (action_id) {
+    case MSL_ACT_ATTACK_AIR_N:
+    case MSL_ACT_ATTACK_AIR_LW:
+      return 1u;
+    default:
+      return 0u;
+  }
+}
+
 static void hitboxes_seed_bridge_trim_impossible_indefinite(MslBatch* batch, int bi, int attacker,
                                                             int hb_id, const MslHitboxEvent* def,
                                                             uint16_t pose_frame,
@@ -176,11 +186,42 @@ static void hitboxes_seed_bridge_trim_impossible_indefinite(MslBatch* batch, int
     // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm (0x18EC export)
     //
     // In the first hitlag horizon of a newly materialized active window, an indefinite seeded
-    // suppression entry with mismatched BODY source owner and neutral victim hitstun is stale
-    // dense-map carry (group-level seed lacks per-HitCapsule insertion provenance). Trim only this
-    // early-window, non-shield, hitstun-neutral subset before lbColl_8000ACFC-style
-    // victim-presence suppression.
+    // suppression entry with mismatched BODY source owner is stale dense-map carry (group-level
+    // seed lacks per-HitCapsule insertion provenance). BODY source ownership is exported via
+    // instance_hit_by on ftColl_80076ED8/Fighter_ProcessHit paths; a mismatched source cannot own
+    // the current attacker's live hitcapsule suppression lane.
+    // refs/melee/src/melee/ft/ftcoll.c::ftColl_80076ED8
+    // refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
+    // Trim only this early-window, non-shield subset before lbColl_8000ACFC-style victim-presence
+    // suppression.
     // refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000ACFC,lbColl_80008A5C}
+    //
+    // Narrow decomp-backed extension:
+    // AttackAir owners can land followup BODY hits while the victim is still in hitstun (combo
+    // continuation), and those contacts still rewrite attribution through ftColl_80076ED8.
+    // For AttackAir owners only, allow this stale-owner trim even when victim hitstun is nonzero
+    // during the early active-create window (`action_frame <= 8`) while this hitbox remains in
+    // the first hitlag horizon after create_hitbox (`early_window`).
+    // For the kept N/Lw subset, this 8-frame cap is data-derived:
+    // - AttackAirN first create_hitbox frame = 4 (fox/falco) and first-hitlag horizon is 3.
+    // - AttackAirLw first create_hitbox frame = 5 (fox/falco) and first-hitlag horizon is 3.
+    // So max(first_create + first_hitlag_horizon) = 8.
+    // `def->frame` is extracted from data/moves create_hitbox script events, and `expected_hitlag`
+    // follows ftCommon_CalcHitlag truncation shape.
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_Anim
+    // data/moves/{fox,falco}.json: moves.{ftCo_SM_AttackAirN,ftCo_SM_AttackAirLw}.events.create_hitbox
+    // refs/melee/src/melee/ft/ftcommon.c::ftCommon_CalcHitlag
+    // refs/melee/src/melee/ft/ftcoll.c::ftColl_80076ED8
+    //
+    // Current narrowed subset includes AttackAirN/AttackAirLw only:
+    // AttackAirF/B/Hi need dedicated ownership bridges because replay-real rows still retain
+    // continuation semantics where this stale-trim would over-clear seeded suppression.
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_Anim
+    const uint8_t attacker_is_attackair_early =
+        (hitboxes_seed_bridge_is_attackair_trim_owner(batch->state.action_id[a_idx]) &&
+         batch->state.action_frame[a_idx] <= 8)
+            ? 1u
+            : 0u;
     // Shield-ownership guard for this trim:
     // - ftColl_80078C70 gates shield collision by live ShieldDesc ownership (`fp->x221B_b0`), then
     //   calls lbColl_80007BCC with the shield descriptor.
@@ -197,7 +238,7 @@ static void hitboxes_seed_bridge_trim_impossible_indefinite(MslBatch* batch, int
     if (early_window && !shield_desc_active &&
         !hitboxes_seed_bridge_is_guard_transition_owner(v_action) &&
         batch->state.hitlag[v_idx] == 0u &&
-        batch->state.hitstun[v_idx] == 0u &&
+        (attacker_is_attackair_early || batch->state.hitstun[v_idx] == 0u) &&
         batch->state.instance_hit_by[v_idx] != attacker_iid) {
       hitboxes_seed_bridge_entry_clear(e);
       continue;

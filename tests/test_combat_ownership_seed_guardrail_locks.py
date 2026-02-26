@@ -3221,3 +3221,100 @@ def test_death_to_rebirth_identity_reset_rows_and_adjacent_controls_are_replay_e
     for rec in (controls[0], target_record, controls[1]):
         _, ref, out = _run_one_step_row(dataset_path, rec, p)
         _assert_transition_identity_lock_fields_match_ref(out_row=out, ref_row=ref, record=rec, p=p)
+
+
+@pytest.mark.integration
+def test_attackairlw_early_stale_suppression_trim_rows_and_adjacent_controls_are_replay_exact() -> None:
+    # Lock family for src/hitboxes.c stale-suppression early AttackAir window trim:
+    # - HitCapsule seeded indefinite entries can stale-carry across reseeds.
+    # - When BODY owner attribution (`instance_hit_by`) mismatches the current attacker instance,
+    #   early AttackAir windows must clear stale suppression so real BODY contacts can land.
+    # refs/melee/src/melee/ft/ftcoll.c::ftColl_80076ED8
+    # refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000ACFC,lbColl_80008A5C}
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_Anim
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_rel = (
+        "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
+        "TreasuredBackKangaroo.msl"
+    )
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+    # target-1 / target / target+1
+    rows = (5401, 5402, 5403)
+    target = 5402
+    p_attacker = 1
+    p_victim = 0
+    for rec in rows:
+        assert int(samples.shape[0]) > rec, f"dataset too short for lock row: record={rec}"
+
+    seed_t = samples["seed_t"][target]
+    ref_t1 = samples["ref_t1"][target]
+    assert int(seed_t["action_id"][p_attacker]) == 69  # AttackAirLw
+    assert int(seed_t["action_frame"][p_attacker]) <= 8
+    assert int(seed_t["hitlag"][p_attacker]) == 0
+    assert int(seed_t["hitstun"][p_victim]) > 0
+    assert int(seed_t["instance_hit_by"][p_victim]) != int(seed_t["instance_id"][p_attacker])
+    assert int(ref_t1["hitlag"][p_attacker]) > 0
+
+    for rec in rows:
+        _, ref, out = _run_one_step_row(dataset_path, rec, p_attacker)
+        for p in (0, 1):
+            _assert_transition_identity_lock_fields_match_ref(
+                out_row=out,
+                ref_row=ref,
+                record=rec,
+                p=p,
+            )
+
+
+@pytest.mark.integration
+def test_attackairn_early_stale_suppression_trim_rows_and_adjacent_controls_are_replay_exact() -> None:
+    # Lock family for src/hitboxes.c stale-suppression early AttackAirN window trim:
+    # - HitCapsule seeded indefinite entries can stale-carry across reseeds.
+    # - When BODY owner attribution (`instance_hit_by`) mismatches the current attacker instance,
+    #   early AttackAirN windows must clear stale suppression so real BODY contacts can land.
+    # refs/melee/src/melee/ft/ftcoll.c::ftColl_80076ED8
+    # refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000ACFC,lbColl_80008A5C}
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_Anim
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_rel = (
+        "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
+        "AttachedGoodNaturedGuanaco.msl"
+    )
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+    rows = (3467, 3468, 3469)
+    target = 3468
+    p_attacker = 0
+    p_victim = 1
+    for rec in rows:
+        assert int(samples.shape[0]) > rec, f"dataset too short for lock row: record={rec}"
+
+    seed_t = samples["seed_t"][target]
+    ref_t1 = samples["ref_t1"][target]
+    assert int(seed_t["action_id"][p_attacker]) == 65  # AttackAirN
+    assert int(seed_t["action_frame"][p_attacker]) <= 8
+    assert int(seed_t["hitlag"][p_attacker]) == 0
+    assert int(seed_t["hitstun"][p_victim]) > 0
+    assert int(seed_t["instance_hit_by"][p_victim]) != int(seed_t["instance_id"][p_attacker])
+    assert int(ref_t1["hitlag"][p_attacker]) > 0
+
+    for rec in rows:
+        _, ref, out = _run_one_step_row(dataset_path, rec, p_attacker)
+        for p in (0, 1):
+            _assert_transition_identity_lock_fields_match_ref(
+                out_row=out,
+                ref_row=ref,
+                record=rec,
+                p=p,
+            )
