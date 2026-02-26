@@ -2917,6 +2917,56 @@ void locomotion_update_pre(MslBatch* batch) {
             action_id = act;
           }
         }
+
+        uint8_t damagefall_x670_timer_for_iasa = batch->state.tilt_timer_x[idx];
+        if (action_id == (uint16_t)MSL_ACT_DAMAGE_FALL) {
+          const float prev_stick_x =
+              apply_deadzone(stick_i8_to_unit(batch->state.prev_input_main_x[idx]),
+                             c->lstick_deadzone_x);
+          // DamageFall_IASA consumes fp->x670_timer_lstick_tilt_x before the fighter input-history
+          // updater (Fighter_Spaghetti_8006AD10) runs for the frame:
+          // - proc order: Fighter_8006A360 (prio 1), Fighter_8006ABA0 (prio 2),
+          //   Fighter_Spaghetti_8006AD10 (prio 3).
+          // - x670 update logic lives in Fighter_Spaghetti_8006AD10.
+          // refs/melee/src/melee/ft/fighter.c:903-906
+          // refs/melee/src/melee/ft/fighter.c:1903-1955
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DamageFall.c::ftCo_DamageFall_IASA
+          //
+          // This sim updates x670 in input_apply() before locomotion callbacks. Reconstruct the
+          // pre-Spaghetti value for this IASA gate only from the decomp x670 recurrence.
+          if (stick_x >= c->lstick_tilt_x_thresh) {
+            if (prev_stick_x >= c->lstick_tilt_x_thresh) {
+              if (damagefall_x670_timer_for_iasa > 0u && damagefall_x670_timer_for_iasa < 0xFEu) {
+                damagefall_x670_timer_for_iasa =
+                    (uint8_t)(damagefall_x670_timer_for_iasa - 1u);
+              }
+            } else {
+              damagefall_x670_timer_for_iasa = 0xFEu;
+            }
+          } else if (stick_x <= -c->lstick_tilt_x_thresh) {
+            if (prev_stick_x <= -c->lstick_tilt_x_thresh) {
+              if (damagefall_x670_timer_for_iasa > 0u && damagefall_x670_timer_for_iasa < 0xFEu) {
+                damagefall_x670_timer_for_iasa =
+                    (uint8_t)(damagefall_x670_timer_for_iasa - 1u);
+              }
+            } else {
+              damagefall_x670_timer_for_iasa = 0xFEu;
+            }
+          }
+        }
+
+        if (action_id == (uint16_t)MSL_ACT_DAMAGE_FALL &&
+            msl_absf(stick_x) >= c->damagefall_fall_stick_x_threshold &&
+            damagefall_x670_timer_for_iasa < c->damagefall_fall_tilt_max_frames) {
+          // DamageFall IASA stick-fall gate:
+          // - after aerial IASA checks (special/item/aircatch/jump),
+          // - if ABS(lstick.x) >= p_ftCommonData->x210 and x670_timer_lstick_tilt_x < x214,
+          //   enter Fall.
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DamageFall.c::ftCo_DamageFall_IASA
+          // refs/melee/src/melee/ft/types.h (fp+0x670 timer, ftCommonData x210/x214)
+          enter_fall_keep_fastfall_ftco_fall_enter(batch, idx);
+          continue;
+        }
       } else if (is_attack_air) {
         const uint8_t allow_interrupt =
             move_tables_attackair_allow_interrupt(cid, action_id, batch->state.anim_frame_f32[idx]);
