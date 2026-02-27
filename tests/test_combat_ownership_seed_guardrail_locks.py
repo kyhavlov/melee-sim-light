@@ -2471,6 +2471,67 @@ def test_attackdash_guardon_entry_countdown_row_and_adjacent_controls_are_replay
 
 
 @pytest.mark.integration
+def test_attackdash_guardon_noncrouch_wait_iasa_rows_and_adjacent_controls_are_replay_exact() -> None:
+    # AttackDash -> GuardOn strict lock for the kept non-crouch Wait-IASA guard admission lane:
+    # - ftCo_AttackDash_IASA delegates into Wait-style checks.
+    # - Guard check (ftCo_80091A4C) is evaluated before crouch/squat checks.
+    # - These target rows are AttackDash frame-35 -> GuardOn entry with non-crouch stick input.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackDash.c::ftCo_AttackDash_IASA
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80091A4C
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    families = [
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl",
+            (7165, 7166, 7167),
+            0,
+        ),
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/QuerulousGrandDinosaur.msl",
+            (7375, 7376, 7377),
+            0,
+        ),
+    ]
+
+    for dataset_rel, rows, p_target in families:
+        dataset_path = root / dataset_rel
+        if not dataset_path.exists():
+            pytest.skip(f"missing local dataset: {dataset_rel}")
+
+        ds = read_dataset(str(dataset_path))
+        samples = ds.samples
+        for rec in rows:
+            assert int(samples.shape[0]) > rec, f"dataset too short for lock row: record={rec}"
+
+        pre_row = samples[rows[0] : rows[0] + 1]
+        target_row = samples[rows[1] : rows[1] + 1]
+        post_row = samples[rows[2] : rows[2] + 1]
+
+        assert int(pre_row["seed_t"]["action_id"][0, p_target]) == 50
+        assert int(pre_row["ref_t1"]["action_id"][0, p_target]) == 50
+
+        assert int(target_row["seed_t"]["action_id"][0, p_target]) == 50  # AttackDash
+        assert int(target_row["seed_t"]["action_frame"][0, p_target]) == 35
+        assert int(target_row["seed_t"]["animation_index"][0, p_target]) == 52
+        assert int(target_row["ref_t1"]["action_id"][0, p_target]) == 178  # GuardOn
+        assert int(target_row["ref_t1"]["action_frame"][0, p_target]) == -1
+        assert int(target_row["ref_t1"]["animation_index"][0, p_target]) == 0xFFFFFFFF
+        # Non-crouch precondition for this lane: target input main_y is not downward.
+        assert int(target_row["input_t"]["p"][0, p_target]["main_y"]) >= 0
+
+        assert int(post_row["seed_t"]["action_id"][0, p_target]) == 178
+        assert int(post_row["ref_t1"]["action_id"][0, p_target]) == 178
+
+        for rec in rows:
+            _, ref, out = _run_one_step_row(dataset_path, rec, p_target)
+            for p in (0, 1):
+                _assert_transition_identity_lock_fields_match_ref(
+                    out_row=out, ref_row=ref, record=rec, p=p
+                )
+
+
+@pytest.mark.integration
 @pytest.mark.parametrize(
     ("dataset_rel", "rows", "p", "post_ref_action"),
     [

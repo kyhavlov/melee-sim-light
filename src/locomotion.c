@@ -1853,8 +1853,16 @@ void locomotion_update_pre(MslBatch* batch) {
                 (action_id != (uint16_t)MSL_ACT_ATTACK_DASH || stick_y < -c->crouch_stick_threshold)
                     ? 1u
                     : 0u;
+            const uint8_t attackdash_guard_iasa_enabled =
+                // Decomp ordering in ftCo_AttackDash_IASA delegates into Wait-style checks where
+                // guard entry (ftCo_80091A4C) is evaluated before crouch/squat checks.
+                // Keep GuardOn admission ungated by crouch-threshold narrowing that we apply to the
+                // generic grounded_attack_try_iasa_subset bridge.
+                // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackDash.c::ftCo_AttackDash_IASA
+                // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
+                (action_id == (uint16_t)MSL_ACT_ATTACK_DASH) ? 1u : attackdash_wait_iasa_enabled;
             uint8_t attackdash_guard_iasa_consumed = 0u;
-            if (!attackdash_pregate_consumed && allow_interrupt && attackdash_wait_iasa_enabled &&
+            if (!attackdash_pregate_consumed && allow_interrupt && attackdash_guard_iasa_enabled &&
                 action_id == (uint16_t)MSL_ACT_ATTACK_DASH) {
               // Decomp ordering for AttackDash IASA delegation:
               // - ftCo_AttackDash_IASA delegates into the Wait-style interrupt checks.
