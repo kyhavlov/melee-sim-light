@@ -702,6 +702,28 @@ static inline uint8_t grounded_attack_wait_iasa_interrupt_dest_action(uint16_t a
   }
 }
 
+static inline uint8_t locomotion_has_opponent_active_catch_connect_window(
+    const MslBatch* batch, int bi, int self_p, int num_players) {
+  if (batch == NULL) {
+    return 0u;
+  }
+  // Keep KneeBend startup-complete reordering out of active opponent CatchDash connect windows.
+  // In decomp, CatchDash connect resolution is keyed off CatchDash owner motion before Pull entry.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_CatchDash_Anim
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_CatchPull_Anim
+  for (int op = 0; op < num_players; op++) {
+    if (op == self_p) {
+      continue;
+    }
+    const size_t oidx = msl_idx_player(bi, op);
+    const uint16_t oa = batch->state.action_id[oidx];
+    if (oa == (uint16_t)MSL_ACT_CATCH_DASH) {
+      return 1u;
+    }
+  }
+  return 0u;
+}
+
 static inline void enter_fall_keep_fastfall_ftco_fall_enter(MslBatch* batch, size_t idx) {
   if (batch == NULL) {
     return;
@@ -2591,16 +2613,28 @@ void locomotion_update_pre(MslBatch* batch) {
 
         // KneeBend -> Jump
         if (action_id == MSL_ACT_KNEE_BEND) {
+          const uint8_t startup_complete =
+              (batch->state.action_frame[idx] >= (int16_t)ch->jump_startup_frames) ? 1u : 0u;
+          const uint8_t opponent_active_catch_window =
+              locomotion_has_opponent_active_catch_connect_window(batch, bi, p, num_players);
+
           // KneeBend IASA catch check (JC grab) before the jump transition.
           //
           // Decomp ordering:
           // - ftCo_KneeBend_IASA calls ftCo_Catch_CheckInput before short-hop/jump progression.
           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_KneeBend.c::ftCo_KneeBend_IASA
-          if (grab_flow_try_enter_catch_from_iasa(batch, c, idx)) {
-            continue;
-          }
-          if (kneebend_try_enter_attack_hi4_from_iasa(batch, c, idx, buttons_pressed, stick_y)) {
-            continue;
+          // On startup-complete frames, allow Anim-first Jump ordering unless an opponent currently
+          // owns a Catch/CatchDash connect window (then preserve baseline IASA-before-Jump order).
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_KneeBend.c::{
+          //   ftCo_KneeBend_Anim,ftCo_KneeBend_IASA
+          // }
+          if (!startup_complete || opponent_active_catch_window) {
+            if (grab_flow_try_enter_catch_from_iasa(batch, c, idx)) {
+              continue;
+            }
+            if (kneebend_try_enter_attack_hi4_from_iasa(batch, c, idx, buttons_pressed, stick_y)) {
+              continue;
+            }
           }
 
           // Latch short hop state (ftCo_KneeBend_Check_ShortHop).
@@ -2622,7 +2656,7 @@ void locomotion_update_pre(MslBatch* batch) {
             }
           }
 
-          if (batch->state.action_frame[idx] >= (int16_t)ch->jump_startup_frames) {
+          if (startup_complete) {
             const uint8_t is_short = batch->state.kneebend_is_short_hop[idx] ? 1 : 0;
             const uint8_t full = (uint8_t)(!is_short);
 
@@ -2686,14 +2720,17 @@ void locomotion_update_pre(MslBatch* batch) {
             batch->state.jumps_left[idx] = ch->max_jumps > 0 ? (uint8_t)(ch->max_jumps - 1) : 0;
             action_id = jump_act;
 
-            // Allow airdodge (EscapeAir) to trigger on the first airborne frame after takeoff.
-            //
-            // This matters for wavedash-style inputs: KneeBend enters Jump during Anim, and Jump's
-            // IASA can immediately enter EscapeAir on the same frame when L/R is pressed.
-            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_KneeBend.c
-            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c
-            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_80099A58
+            // Jump IASA subset on the transition frame:
+            // - EscapeAir gate (ftCo_80099A58),
+            // - AttackAir A-edge subset from ftCo_AttackAir_CheckInput.
+            //   (C-stick-edge AttackAir remains in the generic air-locomotion IASA pass.)
+            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c::ftCo_Jump_IASA
+            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_CheckInput
             if (escape_air_try_enter_from_air_locomotion(batch, c, idx)) {
+              continue;
+            }
+            if ((buttons_pressed & (uint16_t)MSL_BUTTON_A) != 0u &&
+                attackair_try_enter_from_air_locomotion(batch, c, idx)) {
               continue;
             }
           }

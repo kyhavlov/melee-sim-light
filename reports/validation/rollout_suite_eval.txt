@@ -45,7 +45,7 @@ rollout.streak_len.p90: 80
 rollout.streak_len.p95: 112
 rollout.streak_len.max: 197
 rollout.first_mismatch_total: 296
-rollout.first_mismatch_seeded_total: 109
+rollout.first_mismatch_seeded_total: 107
 
 == datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/QuerulousGrandDinosaur.msl ==
 rollout.best_len: 181
@@ -55,7 +55,7 @@ rollout.streak_len.p90: 89
 rollout.streak_len.p95: 111
 rollout.streak_len.max: 181
 rollout.first_mismatch_total: 267
-rollout.first_mismatch_seeded_total: 111
+rollout.first_mismatch_seeded_total: 109
 
 == datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/TreasuredBackKangaroo.msl ==
 rollout.best_len: 179
@@ -65,7 +65,7 @@ rollout.streak_len.p90: 70
 rollout.streak_len.p95: 95
 rollout.streak_len.max: 179
 rollout.first_mismatch_total: 222
-rollout.first_mismatch_seeded_total: 81
+rollout.first_mismatch_seeded_total: 80
 
 == suite summary ==
 overall.rollout.streak_count: 990
@@ -75,4 +75,4 @@ overall.rollout.streak_len.p95: 101
 overall.rollout.streak_len.max: 197
 overall.rollout.best_len.max: 197
 overall.rollout.first_mismatch_total: 996
-overall.rollout.first_mismatch_seeded_total: 376
+overall.rollout.first_mismatch_seeded_total: 371

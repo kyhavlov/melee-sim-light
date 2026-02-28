@@ -13,6 +13,7 @@ from tools.eval.dataset import COMPARE_DTYPE, read_dataset
 MSL_BUTTON_Z = 0x0010
 MSL_BUTTON_R = 0x0020
 MSL_BUTTON_L = 0x0040
+MSL_BUTTON_A = 0x0100
 
 
 def _skip_if_required_artifacts_missing(root: Path) -> None:
@@ -2989,6 +2990,85 @@ def test_walk_run_timebase_ownership_rows_and_adjacent_controls_are_replay_exact
     for rec in (controls[0], target_record, controls[1]):
         _, ref, out = _run_one_step_row(dataset_path, rec, p)
         _assert_transition_lock_fields_match_ref(out_row=out, ref_row=ref, record=rec, p=p)
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    ("dataset_rel", "target_record", "p_target", "ref_action"),
+    [
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl",
+            11033,
+            0,
+            68,  # AttackAirB
+        ),
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/QuerulousGrandDinosaur.msl",
+            1958,
+            1,
+            68,  # AttackAirB
+        ),
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl",
+            5496,
+            1,
+            65,  # AttackAirN
+        ),
+    ],
+)
+def test_kneebend_jump_iasa_attackair_seed_lock_target_pm1_both_players(
+    dataset_rel: str,
+    target_record: int,
+    p_target: int,
+    ref_action: int,
+) -> None:
+    # Decomp ownership lock for KneeBend startup-complete transition ordering:
+    # - ftCo_KneeBend_Anim enters Jump before ftCo_KneeBend_IASA consumes grounded branches.
+    # - ftCo_Jump_IASA can immediately admit EscapeAir/AttackAir on that destination frame.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_KneeBend.c::{ftCo_KneeBend_Anim,ftCo_KneeBend_IASA}
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c::ftCo_Jump_IASA
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_CheckInput
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+    assert int(samples.shape[0]) > (target_record + 1), f"dataset too short for lock row: record={target_record}"
+
+    prev_row = samples[target_record - 1 : target_record]
+    target_row = samples[target_record : target_record + 1]
+    next_row = samples[target_record + 1 : target_record + 2]
+
+    # Replay-real preconditions anchoring this family to the KneeBend->Jump transition boundary.
+    assert int(prev_row["seed_t"]["action_id"][0, p_target]) == 24
+    assert int(prev_row["ref_t1"]["action_id"][0, p_target]) == 24
+    assert int(prev_row["seed_t"]["on_ground"][0, p_target]) == 1
+    assert int(prev_row["ref_t1"]["on_ground"][0, p_target]) == 1
+
+    assert int(target_row["seed_t"]["action_id"][0, p_target]) == 24
+    assert int(target_row["seed_t"]["on_ground"][0, p_target]) == 1
+    assert int(target_row["ref_t1"]["action_id"][0, p_target]) == int(ref_action)
+    assert int(target_row["ref_t1"]["action_frame"][0, p_target]) == 1
+    assert int(target_row["ref_t1"]["on_ground"][0, p_target]) == 0
+
+    assert int(next_row["seed_t"]["action_id"][0, p_target]) == int(ref_action)
+    assert int(next_row["seed_t"]["action_frame"][0, p_target]) == 1
+    assert int(next_row["seed_t"]["on_ground"][0, p_target]) == 0
+    assert int(next_row["ref_t1"]["action_id"][0, p_target]) == int(ref_action)
+    assert int(next_row["ref_t1"]["on_ground"][0, p_target]) == 0
+
+    prev_buttons = int(prev_row["input_t"][0]["p"]["buttons"][p_target])
+    cur_buttons = int(target_row["input_t"][0]["p"]["buttons"][p_target])
+    a_edge = ((prev_buttons & MSL_BUTTON_A) == 0) and ((cur_buttons & MSL_BUTTON_A) != 0)
+    assert a_edge
+
+    for rec in (target_record - 1, target_record, target_record + 1):
+        _, ref_row, out_row = _run_one_step_row(dataset_path, rec, p_target, rng_damage_fly_roll_gate=True)
+        for p in (0, 1):
+            _assert_transition_lock_fields_match_ref(out_row=out_row, ref_row=ref_row, record=rec, p=p)
 
 
 @pytest.mark.integration

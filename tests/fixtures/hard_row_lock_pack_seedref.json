@@ -216,7 +216,7 @@
       "field": "state_flags[1]",
       "seed": 0,
       "ref": 0,
-      "out": 4,
+      "out": 0,
       "cluster_count": 5,
       "base_field": "state_flags"
     },
