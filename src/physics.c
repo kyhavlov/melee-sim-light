@@ -695,12 +695,28 @@ void physics_integrate(MslBatch* batch) {
             }
           }
         } else if (action_id == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_S_END) {
-          // Decomp: ftFx_SpecialAirSEnd_Phys applies air friction using ftFox_DatAttrs.x40.
+          // Decomp: ftFx_SpecialAirSEnd_Phys applies air friction using ftFox_DatAttrs.x40 and
+          // applies gravity after mv.fx.SpecialS.gravityDelay expires (x44 gate, x48 accel).
           // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c::ftFx_SpecialAirSEnd_Phys
+          // refs/melee/src/melee/ft/chara/ftFox/types.h::ftFox_DatAttrs
+          // data/characters/{fox,falco}.json::{
+          //   illusion_air_friction,illusion_gravity_delay_end_frames,illusion_fall_accel_end,terminal_vel
+          // }
           const MslCharParams* ch = msl_char_params(batch->state.char_id[idx]);
           if (ch != NULL) {
             batch->state.speed_air_x_self[idx] = air_apply_friction_step(
                 batch->state.speed_air_x_self[idx], ch->illusion_air_friction);
+            // Mapping note:
+            // - decomp uses `if (gravityDelay != 0) --gravityDelay; else Fall(...)`.
+            // - this core does not carry mv.fx.SpecialS.gravityDelay in state, so gate by
+            //   action_frame age to preserve the same countdown boundary.
+            if (batch->state.action_frame[idx] >= (int16_t)ch->illusion_gravity_delay_end_frames) {
+              float next_vy = batch->state.speed_y_self[idx] - ch->illusion_fall_accel_end;
+              if (next_vy < -ch->terminal_vel) {
+                next_vy = -ch->terminal_vel;
+              }
+              batch->state.speed_y_self[idx] = next_vy;
+            }
           }
         }
       }

@@ -118,15 +118,19 @@ typedef struct MslCharParams {
   // Source of truth: ISO-extracted `data/characters/*.json` keys:
   // - illusion_ground_end_vel_x / illusion_ground_friction
   // - illusion_air_end_vel_x / illusion_air_friction
+  // - illusion_gravity_delay_end_frames / illusion_fall_accel_end
   //
   // Decomp:
-  // - refs/melee/src/melee/ft/chara/ftFox/types.h (ftFox_DatAttrs x34/x38/x3C/x40)
+  // - refs/melee/src/melee/ft/chara/ftFox/types.h (ftFox_DatAttrs x34/x38/x3C/x40/x44/x48)
   // - refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c::{ftFx_SpecialSEnd_Enter,ftFx_SpecialSEnd_Phys}
   // - refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c::{ftFx_SpecialAirSEnd_Enter,ftFx_SpecialAirSEnd_Phys}
   float illusion_ground_end_vel_x;
   float illusion_ground_friction;
   float illusion_air_end_vel_x;
   float illusion_air_friction;
+  uint8_t illusion_gravity_delay_end_frames;
+  uint8_t _pad_u8_illusion_0[3];
+  float illusion_fall_accel_end;
 
   // Fox/Falco side special ghost item (Illusion/Phantasm article) collision attrs.
   //
@@ -166,19 +170,22 @@ typedef struct MslCharParams {
   // - firefox_hold_air_friction
   // - firefox_hold_air_fall_accel
   // - firefox_direction_stick_range_min
+  // - firefox_launch_duration_frames
   // - firefox_launch_speed
   // - firefox_facing_stick_range_min
   //
   // Decomp:
-  // - refs/melee/src/melee/ft/chara/ftFox/types.h (ftFox_DatAttrs x54/x5C/x60/x64/x74/x88)
+  // - refs/melee/src/melee/ft/chara/ftFox/types.h (ftFox_DatAttrs x54/x5C/x60/x64/x70/x74/x88)
   // - refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::{
-  //     ftFx_SpecialHiHoldAir_Phys,ftFx_SpecialAirHi_Enter
+  //     ftFx_SpecialHiHoldAir_Phys,ftFx_SpecialAirHi_Enter,ftFx_SpecialHi_Anim,ftFx_SpecialAirHi_Anim
   //   }
   uint8_t firefox_hold_gravity_delay_frames;  // ftFox_DatAttrs.x54
   uint8_t _pad_u8_firefox_hold_0[3];
   float firefox_hold_air_friction;          // ftFox_DatAttrs.x5C
   float firefox_hold_air_fall_accel;        // ftFox_DatAttrs.x60
   float firefox_direction_stick_range_min;  // ftFox_DatAttrs.x64
+  uint8_t firefox_launch_duration_frames;   // ftFox_DatAttrs.x70
+  uint8_t _pad_u8_firefox_hold_1[3];
   float firefox_launch_speed;               // ftFox_DatAttrs.x74
   float firefox_facing_stick_range_min;     // ftFox_DatAttrs.x88
 

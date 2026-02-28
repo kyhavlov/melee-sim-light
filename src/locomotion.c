@@ -234,11 +234,15 @@ static inline uint8_t spacie_specialhi_update(MslBatch* batch, size_t idx, uint8
       // Decomp: launch phase decrements travelFrames and transitions into end states when it expires.
       // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::{ftFx_SpecialHi_Anim,ftFx_SpecialAirHi_Anim}
       //
-      // Seed-bridge approximation:
-      // Slippi post-frames do not expose mv.fx.SpecialHi.travelFrames directly. Use the launch
-      // submotion end frame as the transition gate so action-time progression remains data-driven
-      // (replace with explicit travelFrames seed when available).
-      if (anim_finished(char_id, ms->specialhi_ground_main, batch->state.anim_frame_f32[idx])) {
+      // Data bridge (ISO-extracted): ftFox_DatAttrs.x70 stores launch travel duration.
+      // refs/melee/src/melee/ft/chara/ftFox/types.h::ftFox_DatAttrs
+      // data/characters/{fox,falco}.json::firefox_launch_duration_frames
+      const MslCharParams* ch_hi = msl_char_params(char_id);
+      const uint8_t launch_done_hi =
+          (ch_hi != NULL && ch_hi->firefox_launch_duration_frames > 0u)
+              ? (batch->state.action_frame[idx] >= (int16_t)ch_hi->firefox_launch_duration_frames)
+              : anim_finished(char_id, ms->specialhi_ground_main, batch->state.anim_frame_f32[idx]);
+      if (launch_done_hi) {
         batch->state.action_id[idx] = on_ground ? (uint16_t)MSL_ACT_FX_SPECIAL_HI_LANDING
                                                 : (uint16_t)MSL_ACT_FX_SPECIAL_HI_FALL;
         batch->state.animation_index[idx] = on_ground ? (uint32_t)MSL_SM_FX_SPECIAL_HI_LANDING
@@ -250,7 +254,13 @@ static inline uint8_t spacie_specialhi_update(MslBatch* batch, size_t idx, uint8
       // Decomp: SpecialHi and SpecialAirHi share ftFx_SM_SpecialHi (same launch submotion id).
       // refs/melee/src/melee/ft/chara/ftFox/ftFx_Init.c
       batch->state.animation_index[idx] = (uint32_t)ms->specialhi_ground_main;
-      if (anim_finished(char_id, ms->specialhi_ground_main, batch->state.anim_frame_f32[idx])) {
+      const MslCharParams* ch_air_hi = msl_char_params(char_id);
+      const uint8_t launch_done_air_hi =
+          (ch_air_hi != NULL && ch_air_hi->firefox_launch_duration_frames > 0u)
+              ? (batch->state.action_frame[idx] >=
+                 (int16_t)ch_air_hi->firefox_launch_duration_frames)
+              : anim_finished(char_id, ms->specialhi_ground_main, batch->state.anim_frame_f32[idx]);
+      if (launch_done_air_hi) {
         batch->state.action_id[idx] = on_ground ? (uint16_t)MSL_ACT_FX_SPECIAL_HI_LANDING
                                                 : (uint16_t)MSL_ACT_FX_SPECIAL_HI_FALL;
         batch->state.animation_index[idx] = on_ground ? (uint32_t)MSL_SM_FX_SPECIAL_HI_LANDING

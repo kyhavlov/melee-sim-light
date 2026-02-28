@@ -222,6 +222,8 @@ static int load_one(const char* data_dir, const char* rel_path, uint8_t char_id)
       "illusion_ground_friction",
       "illusion_air_end_vel_x",
       "illusion_air_friction",
+      "illusion_gravity_delay_end_frames",
+      "illusion_fall_accel_end",
       "illusion_item_hitbox_size",
       "illusion_item_lifetime_state01_frames",
       "illusion_item_lifetime_state2_frames",
@@ -245,6 +247,7 @@ static int load_one(const char* data_dir, const char* rel_path, uint8_t char_id)
       "firefox_hold_air_friction",
       "firefox_hold_air_fall_accel",
       "firefox_direction_stick_range_min",
+      "firefox_launch_duration_frames",
       "firefox_launch_speed",
       "firefox_facing_stick_range_min",
       "grab_capture_anchor_part_id",
@@ -358,6 +361,9 @@ static int load_one(const char* data_dir, const char* rel_path, uint8_t char_id)
       json_get_f32(buf, "illusion_ground_friction", &out.illusion_ground_friction) != 0 ||
       json_get_f32(buf, "illusion_air_end_vel_x", &out.illusion_air_end_vel_x) != 0 ||
       json_get_f32(buf, "illusion_air_friction", &out.illusion_air_friction) != 0 ||
+      json_get_u8(buf, "illusion_gravity_delay_end_frames",
+                  &out.illusion_gravity_delay_end_frames) != 0 ||
+      json_get_f32(buf, "illusion_fall_accel_end", &out.illusion_fall_accel_end) != 0 ||
       json_get_f32(buf, "illusion_item_hitbox_size", &out.illusion_item_hitbox_size) != 0 ||
       json_get_u8(buf, "illusion_item_lifetime_state01_frames",
                   &out.illusion_item_lifetime_state01_frames) != 0 ||
@@ -389,6 +395,8 @@ static int load_one(const char* data_dir, const char* rel_path, uint8_t char_id)
       json_get_f32(buf, "firefox_hold_air_fall_accel", &out.firefox_hold_air_fall_accel) != 0 ||
       json_get_f32(buf, "firefox_direction_stick_range_min",
                    &out.firefox_direction_stick_range_min) != 0 ||
+      json_get_u8(buf, "firefox_launch_duration_frames", &out.firefox_launch_duration_frames) !=
+          0 ||
       json_get_f32(buf, "firefox_launch_speed", &out.firefox_launch_speed) != 0 ||
       json_get_f32(buf, "firefox_facing_stick_range_min",
                    &out.firefox_facing_stick_range_min) != 0 ||

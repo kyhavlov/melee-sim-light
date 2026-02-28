@@ -4146,6 +4146,7 @@ def test_damageflyroll_fall_admission_rollout_window_rows_and_adjacent_controls_
     for rec in rows:
         assert int(samples.shape[0]) > rec, f"dataset too short for lock row: record={rec}"
 
+
     # Replay-real precondition anchoring this family to the Fall lane:
     # this rollout segment contains the victim Fall ownership row prior to the RNG-gated
     # DamageFlyRoll decision frame.
@@ -4190,3 +4191,180 @@ def test_damageflyroll_fall_admission_rollout_window_rows_and_adjacent_controls_
     )
     ref_off_target, out_off_target, _ = off_rows[5717]
     assert int(out_off_target["action_id"][0]) != int(ref_off_target["action_id"][0])
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    ("dataset_rel", "target_record", "p_target", "seed_action", "ref_action", "seed_anim", "ref_anim"),
+    [
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
+            "AttachedGoodNaturedGuanaco.msl",
+            6660,
+            0,
+            356,  # SpecialHiBound
+            358,  # SpecialHiFall
+            309,  # ftFx_SM_SpecialHi
+            311,  # ftFx_SM_SpecialHiFall
+        ),
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
+            "QuerulousGrandDinosaur.msl",
+            8477,
+            0,
+            356,
+            358,
+            309,
+            311,
+        ),
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
+            "QuerulousGrandDinosaur.msl",
+            9397,
+            0,
+            356,
+            358,
+            309,
+            311,
+        ),
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
+            "QuerulousGrandDinosaur.msl",
+            9837,
+            0,
+            356,
+            358,
+            309,
+            311,
+        ),
+    ],
+)
+def test_specialhi_launch_duration_seed_lock_target_pm1_both_players(
+    dataset_rel: str,
+    target_record: int,
+    p_target: int,
+    seed_action: int,
+    ref_action: int,
+    seed_anim: int,
+    ref_anim: int,
+) -> None:
+    # Decomp/data ownership lock for launch-duration transition:
+    # - ftFx_SpecialHi_Anim / ftFx_SpecialAirHi_Anim transition into fall/landing when travelFrames
+    #   expires.
+    # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::{ftFx_SpecialHi_Anim,ftFx_SpecialAirHi_Anim}
+    # refs/melee/src/melee/ft/chara/ftFox/types.h::ftFox_DatAttrs
+    # data/characters/{fox,falco}.json::firefox_launch_duration_frames
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+    target = samples[target_record : target_record + 1]
+    assert int(target["seed_t"]["action_id"][0, p_target]) == int(seed_action)
+    assert int(target["ref_t1"]["action_id"][0, p_target]) == int(ref_action)
+    assert int(target["seed_t"]["animation_index"][0, p_target]) == int(seed_anim)
+    assert int(target["ref_t1"]["animation_index"][0, p_target]) == int(ref_anim)
+    assert int(target["seed_t"]["action_frame"][0, p_target]) == 21
+    assert int(target["ref_t1"]["action_frame"][0, p_target]) == 0
+
+    for rec in (target_record - 1, target_record, target_record + 1):
+        _, ref_row, out_row = _run_one_step_row(dataset_path, rec, p_target, rng_damage_fly_roll_gate=True)
+        for p in (0, 1):
+            _assert_transition_lock_fields_match_ref(out_row=out_row, ref_row=ref_row, record=rec, p=p)
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    ("dataset_rel", "target_record", "p_target", "seed_action", "seed_anim"),
+    [
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
+            "AttachedGoodNaturedGuanaco.msl",
+            2332,
+            0,
+            352,  # SpecialAirSEnd
+            306,  # ftFx_SM_SpecialSEnd
+        ),
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
+            "AttachedGoodNaturedGuanaco.msl",
+            5401,
+            1,
+            352,
+            306,
+        ),
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
+            "QuerulousGrandDinosaur.msl",
+            3866,
+            0,
+            352,
+            306,
+        ),
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
+            "TreasuredBackKangaroo.msl",
+            696,
+            1,
+            352,
+            306,
+        ),
+    ],
+)
+def test_specialairsend_gravity_delay_seed_lock_target_pm1_both_players(
+    dataset_rel: str,
+    target_record: int,
+    p_target: int,
+    seed_action: int,
+    seed_anim: int,
+) -> None:
+    # Decomp/data ownership lock for SpecialAirSEnd gravity-delay countdown:
+    # - ftFx_SpecialAirSEnd_Phys decrements gravityDelay and only applies fall accel after expiry.
+    # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c::ftFx_SpecialAirSEnd_Phys
+    # refs/melee/src/melee/ft/chara/ftFox/types.h::ftFox_DatAttrs
+    # data/characters/{fox,falco}.json::{illusion_gravity_delay_end_frames,illusion_fall_accel_end}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+    pre = samples[target_record - 1 : target_record]
+    target = samples[target_record : target_record + 1]
+    post = samples[target_record + 1 : target_record + 2]
+
+    # Replay-real preconditions anchoring this lock family to the gravity-delay boundary.
+    assert int(pre["seed_t"]["action_id"][0, p_target]) == int(seed_action)
+    assert int(target["seed_t"]["action_id"][0, p_target]) == int(seed_action)
+    assert int(post["seed_t"]["action_id"][0, p_target]) == int(seed_action)
+    assert int(pre["seed_t"]["animation_index"][0, p_target]) == int(seed_anim)
+    assert int(target["seed_t"]["animation_index"][0, p_target]) == int(seed_anim)
+    assert int(post["seed_t"]["animation_index"][0, p_target]) == int(seed_anim)
+    assert int(pre["seed_t"]["action_frame"][0, p_target]) == 3
+    assert int(pre["ref_t1"]["action_frame"][0, p_target]) == 4
+    assert int(target["seed_t"]["action_frame"][0, p_target]) == 4
+    assert int(target["ref_t1"]["action_frame"][0, p_target]) == 5
+    assert int(post["seed_t"]["action_frame"][0, p_target]) == 5
+    assert int(post["ref_t1"]["action_frame"][0, p_target]) == 6
+
+    pre_delta_vy = float(pre["ref_t1"]["speed_y_self"][0, p_target]) - float(pre["seed_t"]["speed_y_self"][0, p_target])
+    target_delta_vy = float(target["ref_t1"]["speed_y_self"][0, p_target]) - float(
+        target["seed_t"]["speed_y_self"][0, p_target]
+    )
+    post_delta_vy = float(post["ref_t1"]["speed_y_self"][0, p_target]) - float(
+        post["seed_t"]["speed_y_self"][0, p_target]
+    )
+    assert pre_delta_vy == pytest.approx(0.0, abs=1e-7)
+    assert target_delta_vy < 0.0
+    assert post_delta_vy < 0.0
+    assert target_delta_vy == pytest.approx(post_delta_vy, abs=1e-7)
+
+    for rec in (target_record - 1, target_record, target_record + 1):
+        _, ref_row, out_row = _run_one_step_row(dataset_path, rec, p_target, rng_damage_fly_roll_gate=True)
+        for p in (0, 1):
+            _assert_transition_lock_fields_match_ref(out_row=out_row, ref_row=ref_row, record=rec, p=p)
