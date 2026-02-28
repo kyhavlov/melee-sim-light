@@ -1004,7 +1004,15 @@ static inline uint32_t submotion_for_damage_ground_action(uint16_t a) {
 
 static inline uint8_t down_bound_airborne_ledge_cross_to_fall(const MslBatch* batch, size_t idx,
                                                                uint32_t stage_id) {
-  const float vx = batch->state.speed_x_attack[idx];
+  float vx = batch->state.speed_x_attack[idx];
+  if (!(vx > 0.0f || vx < 0.0f)) {
+    // Decomp shape: ft_80082708 -> mpColl_8004B108 evaluates the active floor-contact motion
+    // segment. In grounded DownBound rows where attack KB has already been consumed into
+    // self/ground velocity ownership, use grounded horizontal velocity for the edge-cross test.
+    // refs/melee/src/melee/ft/ft_081B.c::ft_80082708
+    // refs/melee/src/melee/mp/mpcoll.c::mpColl_8004B108
+    vx = batch->state.speed_ground_x_self[idx];
+  }
   if (!(vx > 0.0f || vx < 0.0f)) {
     return 0u;
   }

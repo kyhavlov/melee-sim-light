@@ -662,12 +662,10 @@ void guard_update_grounded(MslBatch* batch, const MslCommonParams* c, size_t idx
       // refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate
       // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_80091A4C,ftCo_800924C0,ftCo_GuardOn_IASA}
       // Scope gate: ftCo_80091A4C checks HSD_PAD_LR (digital hold) before GuardOn entry.
-      // Scope gate: keep this bridge to buffered jump+shield entries (X/Y edge lane) so plain
-      // shield-hold entries still run the same-frame GuardOn IASA ownership as usual.
+      // GuardOn entry from a non-shield owner has already consumed this frame's callback lane,
+      // so suppress immediate re-consume regardless of jump-button edge source.
       (a0 == (uint16_t)MSL_ACT_GUARD_ON && batch->state.action_frame[idx] < 0 &&
        (batch->state.input_buttons[idx] & (uint16_t)LR) != 0u &&
-       (batch->state.input_buttons_pressed[idx] &
-        (uint16_t)((uint16_t)MSL_BUTTON_X | (uint16_t)MSL_BUTTON_Y)) != 0u &&
        batch->state.animation_index[idx] == 0xFFFFFFFFu &&
        !is_shield_active_action(batch->state.prev_action_id[idx]))
           ? 1u
