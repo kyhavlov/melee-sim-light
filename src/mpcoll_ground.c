@@ -148,6 +148,27 @@ static inline uint8_t action_allows_floor_edge_snap(uint16_t a) {
   }
 }
 
+static inline uint8_t action_uses_landing_floor_release_coll(uint16_t a) {
+  // Landing-family collision callbacks route through ft_80084280 -> mpColl_8004B4B0
+  // (inline2 flags=1), which uses the current floor-id release helper (mpColl_8004A678_Floor)
+  // rather than the generic edge-snap helper path (mpColl_8004A45C_Floor).
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::ftCo_Landing_Coll
+  // refs/melee/src/melee/ft/ft_081B.c::ft_80084280
+  // refs/melee/src/melee/mp/mpcoll.c::{mpColl_8004B4B0,mpColl_8004A678_Floor,mpColl_8004A45C_Floor}
+  switch (a) {
+    case MSL_ACT_LANDING:
+    case MSL_ACT_LANDING_FALL_SPECIAL:
+    case MSL_ACT_LANDING_AIR_N:
+    case MSL_ACT_LANDING_AIR_F:
+    case MSL_ACT_LANDING_AIR_B:
+    case MSL_ACT_LANDING_AIR_HI:
+    case MSL_ACT_LANDING_AIR_LW:
+      return 1u;
+    default:
+      return 0u;
+  }
+}
+
 static inline uint8_t floor_lines_connected(const MslStageFloorGraph* g, int a, int b) {
   if (g == NULL) {
     return 0;
@@ -930,13 +951,18 @@ void mpcoll_ground_apply(MslBatch* batch) {
           }
 
           if (!snapped_edge) {
+            const uint8_t landing_release_skip_floor_sweep =
+                (action_uses_landing_floor_release_coll(action_id) &&
+                 batch->state.action_frame[idx] <= 1)
+                    ? 1u
+                    : 0u;
             // Decomp: mpCheckFloor's horizontal intersection helper is gated on non-rising segments
             // (ay >= by), so equality must be allowed (horizontal motion with vy==0 can still sweep).
             // refs/melee/src/melee/mp/mplib.c::mpCheckFloor (the `if (ay >= by && mpLineIntersectionH(...))` gate)
             const uint8_t can_sweep = (uint8_t)(cur_bottom_y <= prev_bottom_y);
             int hit_line_idx = -1;
             float ix = 0.0f, iy = 0.0f;
-            if (can_sweep &&
+            if (!landing_release_skip_floor_sweep && can_sweep &&
                 floor_sweep_check(g, prev_bottom_x, prev_bottom_y, cur_bottom_x, cur_bottom_y,
                                   prefer_line_idx, &hit_line_idx, &ix, &iy, &floor_nx, &floor_ny)) {
               // Decomp: desired_ecb.bottom.x is always 0.0, so clamping the ECB bottom contact X
@@ -1133,9 +1159,22 @@ void mpcoll_ground_apply(MslBatch* batch) {
                batch->state.action_frame[idx] >= 3)
                   ? 1u
                   : 0u;
+          const uint8_t escapeair_kneebend_entry_floor_handoff =
+              (escapeair_locked &&
+               // Decomp path: KneeBend transitions into jump, EscapeAir can be entered from the
+               // jump startup window, and EscapeAir_Coll resolves landing via ft_80082C74 on the
+               // same callback pass. Keep this handoff narrow to immediate KneeBend-entry rows.
+               // refs/melee/src/melee/ft/chara/ftCommon/ftCo_KneeBend.c::ftCo_KneeBend_Anim
+               // refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll
+               // refs/melee/src/melee/ft/ft_081B.c::ft_80082C74
+               prev_action_id == (uint16_t)MSL_ACT_KNEE_BEND &&
+               batch->state.action_frame[idx] <= 2)
+                  ? 1u
+                  : 0u;
           const uint8_t suppress_locked_ledge_land =
               (escapeair_locked && !deep_lock_penetration && hit_line_idx >= 0 &&
-               g->lines[(size_t)hit_line_idx].is_ledge && !escapeair_sustained_floor_handoff)
+               g->lines[(size_t)hit_line_idx].is_ledge && !escapeair_sustained_floor_handoff &&
+               !escapeair_kneebend_entry_floor_handoff)
                   ? 1u
                   : 0u;
           const uint8_t suppress_locked_vertical_af3_land =

@@ -491,7 +491,7 @@
       "field": "on_ground",
       "seed": 1,
       "ref": 1,
-      "out": 0,
+      "out": 1,
       "cluster_count": 8,
       "base_field": "on_ground"
     },
@@ -502,7 +502,7 @@
       "field": "on_ground",
       "seed": 1,
       "ref": 1,
-      "out": 0,
+      "out": 1,
       "cluster_count": 8,
       "base_field": "on_ground"
     },

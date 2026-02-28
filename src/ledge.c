@@ -331,7 +331,11 @@ static inline uint8_t ledge_wait_try_climb_or_drop(MslBatch* batch, const MslCom
   }
 
   const float fd = facing_dir(batch->state.facing[idx]);
-  const float angle = atan2f(stick_y, stick_x);
+  // Decomp: ftCo_GetLStickAngle / ftCo_GetCStickAngle compute atan2(y, ABS(x)), not atan2(y, x).
+  // This keeps "away-horizontal" stick inputs near 0 radians so CliffWait option routing can rely
+  // on the stick_x*facing sign gate for climb vs drop.
+  // refs/melee/src/melee/ft/ftcommon.c::{ftCo_GetLStickAngle,ftCo_GetCStickAngle}
+  const float angle = atan2f(stick_y, msl_absf(stick_x));
   if (angle > c->attack_angle_threshold_radians ||
       (angle > -c->attack_angle_threshold_radians && (stick_x * fd) >= 0.0f)) {
     // ClimbQuick entry (percent-based Quick/Slow selection is omitted for v1; suite is Quick-only).

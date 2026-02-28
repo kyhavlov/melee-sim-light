@@ -8,6 +8,18 @@ import pytest
 from tools.eval.dataset import COMPARE_DTYPE, read_dataset
 
 
+_STRICT_TRANSITION_FIELDS = (
+    "action_id",
+    "action_frame",
+    "animation_index",
+    "hitlag",
+    "hitstun",
+    "instance_id",
+    "on_ground",
+    "ground_id",
+)
+
+
 def _skip_if_required_artifacts_missing(root: Path) -> None:
     required = [
         "data/stages/final_destination.json",
@@ -86,6 +98,20 @@ def _run_one_step_with_rollout(
     return out_one, ref, out_roll
 
 
+def _assert_strict_transition_fields_match_ref_all_players(
+    *, out_row: np.void, ref_row: np.void, record: int
+) -> None:
+    num_players = int(ref_row["num_players"])
+    for p in range(num_players):
+        for field in _STRICT_TRANSITION_FIELDS:
+            got = int(out_row[field][p])
+            exp = int(ref_row[field][p])
+            assert got == exp, f"record={record} p={p} field={field} expected={exp} got={got}"
+        got_sf = out_row["state_flags"][p].tolist()
+        exp_sf = ref_row["state_flags"][p].tolist()
+        assert got_sf == exp_sf, f"record={record} p={p} field=state_flags expected={exp_sf} got={got_sf}"
+
+
 @pytest.mark.integration
 @pytest.mark.parametrize(
     ("dataset_rel", "record", "p", "seed_action", "ref_action", "ref_action_frame"),
@@ -161,16 +187,15 @@ def test_special_cliffcatch_runtime_strict_rows(
 
 @pytest.mark.integration
 @pytest.mark.parametrize(
-    ("dataset_rel", "record", "p", "seed_action", "ref_action", "expected_out_action"),
+    ("dataset_rel", "target_record", "p_target", "seed_action", "ref_action"),
     [
         (
             "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-            "TreasuredBackKangaroo.msl",
-            3246,
+            "GracefulAttachedTurtle.msl",
+            6761,
             1,
             354,  # SpecialHiHoldAir
             252,  # CliffCatch in reference
-            354,  # current runtime ownership lane
         ),
         (
             "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
@@ -179,12 +204,11 @@ def test_special_cliffcatch_runtime_strict_rows(
             1,
             354,  # SpecialHiHoldAir
             252,
-            354,
         ),
     ],
 )
-def test_special_cliffcatch_runtime_context_controls(
-    dataset_rel: str, record: int, p: int, seed_action: int, ref_action: int, expected_out_action: int
+def test_special_cliffcatch_seed_lock_target_pm1_both_players(
+    dataset_rel: str, target_record: int, p_target: int, seed_action: int, ref_action: int
 ) -> None:
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
@@ -193,17 +217,107 @@ def test_special_cliffcatch_runtime_context_controls(
         pytest.skip(f"missing local dataset: {dataset_rel}")
 
     ds = read_dataset(str(dataset_path))
-    row = ds.samples[record]
-    assert int(row["seed_t"]["action_id"][p]) == int(seed_action)
-    assert int(row["ref_t1"]["action_id"][p]) == int(ref_action)
-    assert int(row["seed_t"]["on_ground"][p]) == 0
-    assert int(row["ref_t1"]["on_ground"][p]) == 0
+    target = ds.samples[target_record]
+    assert int(target["seed_t"]["action_id"][p_target]) == int(seed_action)
+    assert int(target["ref_t1"]["action_id"][p_target]) == int(ref_action)
+    assert int(target["seed_t"]["on_ground"][p_target]) == 0
+    assert int(target["ref_t1"]["on_ground"][p_target]) == 0
 
-    out, _, out_roll = _run_one_step_with_rollout(dataset_rel=dataset_rel, record=record, p=p)
+    # Strict replay-real lock coverage for target-1 / target / target+1 on both players.
+    for record in (target_record - 1, target_record, target_record + 1):
+        out, ref, _ = _run_one_step_with_rollout(dataset_rel=dataset_rel, record=record, p=p_target)
+        _assert_strict_transition_fields_match_ref_all_players(out_row=out, ref_row=ref, record=record)
+        assert np.isfinite(float(out["pos_x"][p_target]))
+        assert np.isfinite(float(out["pos_y"][p_target]))
 
-    # Context-control coverage: keep this adjacent lane stable (no parity assertion here).
-    assert int(out["action_id"][p]) == int(expected_out_action)
-    assert int(out_roll["action_id"][p]) == int(out["action_id"][p])
-    assert int(out_roll["on_ground"][p]) == int(out["on_ground"][p]) == 0
-    assert np.isfinite(float(out["pos_x"][p]))
-    assert np.isfinite(float(out["pos_y"][p]))
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    (
+        "dataset_rel",
+        "target_record",
+        "p_target",
+        "seed_action",
+        "ref_action",
+        "seed_on_ground",
+        "ref_on_ground",
+    ),
+    [
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
+            "GracefulAttachedTurtle.msl",
+            2879,
+            1,
+            42,  # EscapeF
+            29,  # DamageFall
+            1,
+            0,
+        ),
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
+            "GracefulAttachedTurtle.msl",
+            5120,
+            1,
+            42,
+            29,
+            1,
+            0,
+        ),
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
+            "QuerulousGrandDinosaur.msl",
+            7765,
+            1,
+            42,
+            29,
+            1,
+            0,
+        ),
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
+            "GracefulAttachedTurtle.msl",
+            4038,
+            0,
+            24,  # FallAerial
+            43,  # EscapeB
+            1,
+            1,
+        ),
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
+            "GracefulAttachedTurtle.msl",
+            5270,
+            0,
+            24,  # FallAerial
+            43,  # EscapeB
+            1,
+            1,
+        ),
+    ],
+)
+def test_escapeair_landing_release_seed_lock_target_pm1_both_players(
+    dataset_rel: str,
+    target_record: int,
+    p_target: int,
+    seed_action: int,
+    ref_action: int,
+    seed_on_ground: int,
+    ref_on_ground: int,
+) -> None:
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    target = ds.samples[target_record]
+    assert int(target["seed_t"]["action_id"][p_target]) == int(seed_action)
+    assert int(target["ref_t1"]["action_id"][p_target]) == int(ref_action)
+    assert int(target["seed_t"]["on_ground"][p_target]) == int(seed_on_ground)
+    assert int(target["ref_t1"]["on_ground"][p_target]) == int(ref_on_ground)
+
+    # Lock target-1 / target / target+1 with strict transition parity on both players.
+    for record in (target_record - 1, target_record, target_record + 1):
+        out, ref, _ = _run_one_step_with_rollout(dataset_rel=dataset_rel, record=record, p=p_target)
+        _assert_strict_transition_fields_match_ref_all_players(out_row=out, ref_row=ref, record=record)

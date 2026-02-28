@@ -171,12 +171,20 @@ def _derive_ledge_cooldown(*, action_id_u16: np.ndarray, hitlag_u16: np.ndarray,
 
     cooldown_frames = int(common.get("ledge_cooldown_frames", 0))
     cooldown_frames = int(np.clip(cooldown_frames, 0, 255))
+    # Decomp ordering note:
+    # - CliffWait release paths assign fp->x2064_ledgeCooldown = p_ftCommonData->ledge_cooldown.
+    # - Fighter_procUpdate decrements x2064 once per !hitlag frame.
+    # - Replay post-frames are end-of-frame snapshots, so the first visible seeded value on the
+    #   release frame is effectively one tick after assignment.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffWait.c::ftCo_8009A9AC
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffClimb.c::ftCo_8009AAFC
+    # refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate
+    cooldown_seed_frames = max(cooldown_frames - 1, 0)
 
-    # GALE01 action id ranges:
-    # - Cliff states: 252..265 (quick/slow variants)
-    # - Fall-like states: 29..38 (Fall..DamageFall)
-    CLIFF_MIN = 0x00FC
-    CLIFF_MAX = 0x0109
+    # GALE01 action ids:
+    # - CliffWait is 0x00FD (253).
+    # - Fall-like states: 29..38 (Fall..DamageFall).
+    CLIFF_WAIT = 0x00FD
     FALL_MIN = 0x001D
     FALL_MAX = 0x0026
 
@@ -187,8 +195,12 @@ def _derive_ledge_cooldown(*, action_id_u16: np.ndarray, hitlag_u16: np.ndarray,
 
         prev_a = int(action_id_u16[t - 1])
         cur_a = int(action_id_u16[t])
-        if CLIFF_MIN <= prev_a <= CLIFF_MAX and FALL_MIN <= cur_a <= FALL_MAX:
-            cd = cooldown_frames
+        # Decomp ownership: x2064_ledgeCooldown is explicitly set on CliffWait release paths
+        # (manual drop / timeout), not on generic "any Cliff* -> Fall*" transitions.
+        # refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffClimb.c::ftCo_8009AAFC
+        # refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffWait.c::ftCo_8009A9AC
+        if prev_a == CLIFF_WAIT and FALL_MIN <= cur_a <= FALL_MAX:
+            cd = cooldown_seed_frames
 
         out[t] = np.uint8(cd)
 
