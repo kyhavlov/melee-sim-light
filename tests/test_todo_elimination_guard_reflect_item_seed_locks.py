@@ -6,6 +6,9 @@ from pathlib import Path
 import numpy as np
 import pytest
 
+from tests.test_combat_ownership_seed_guardrail_locks import (
+    _assert_transition_lock_fields_match_ref,
+)
 from tools.eval.dataset import COMPARE_DTYPE, read_dataset
 
 
@@ -144,6 +147,8 @@ def test_guard_reflect_non_guardreflect_powershield_rows_lock_item_identity(case
         got = int(out["items"][slot][fld])
         exp = int(ref["items"][slot][fld])
         assert got == exp, f"{case.note}: field={fld} expected={exp} got={got}"
+    for p in (0, 1):
+        _assert_transition_lock_fields_match_ref(out_row=out, ref_row=ref, record=case.record, p=p)
 
 
 @dataclass(frozen=True)
@@ -151,7 +156,6 @@ class _ControlRow:
     dataset_rel: str
     record: int
     slot: int
-    expect_powershield_non_guardreflect: bool
     note: str
 
 
@@ -161,23 +165,20 @@ class _ControlRow:
     [
         _ControlRow(
             dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl",
-            record=4044,
+            record=4043,
             slot=0,
-            expect_powershield_non_guardreflect=False,
             note="adjacent control A (pre-lane)",
         ),
         _ControlRow(
             dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl",
-            record=9479,
+            record=9478,
             slot=0,
-            expect_powershield_non_guardreflect=False,
             note="adjacent control B (still GuardReflect)",
         ),
         _ControlRow(
             dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/TreasuredBackKangaroo.msl",
-            record=3493,
+            record=3492,
             slot=0,
-            expect_powershield_non_guardreflect=False,
             note="adjacent control C (pre-lane)",
         ),
     ],
@@ -197,9 +198,11 @@ def test_guard_reflect_item_identity_adjacent_controls(case: _ControlRow) -> Non
         and int(seed["action_id"][p]) != ACT_GUARD_REFLECT
         for p in range(int(seed["num_players"]))
     )
-    assert has_powershield_non_guardreflect is case.expect_powershield_non_guardreflect, case.note
+    assert not has_powershield_non_guardreflect, case.note
 
     for fld in ("exists", "type", "instance_id"):
         got = int(out["items"][slot][fld])
         exp = int(ref["items"][slot][fld])
         assert got == exp, f"{case.note}: field={fld} expected={exp} got={got}"
+    for p in (0, 1):
+        _assert_transition_lock_fields_match_ref(out_row=out, ref_row=ref, record=case.record, p=p)

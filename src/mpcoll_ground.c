@@ -1122,9 +1122,20 @@ void mpcoll_ground_apply(MslBatch* batch) {
           // mpColl edge helpers, so touching a ledge floor segment is not always equivalent to
           // immediate grounded resolution in EscapeAir lock windows.
           // refs/melee/src/melee/mp/mpcoll.c::mpColl_8004A45C_Floor
+          const uint8_t escapeair_sustained_floor_handoff =
+              (escapeair_locked &&
+               // Callback ordering is Anim then Coll (Fighter_procMap/Fighter_8006A360). Require a
+               // sustained EscapeAir ownership window (already EscapeAir at frame start) and post-
+               // entry anim age before handing ledge-floor sweeps to floor projection.
+               // refs/melee/src/melee/ft/fighter.c::{Fighter_procMap,Fighter_8006A360}
+               // refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll
+               prev_action_id == (uint16_t)MSL_ACT_ESCAPE_AIR &&
+               batch->state.action_frame[idx] >= 3)
+                  ? 1u
+                  : 0u;
           const uint8_t suppress_locked_ledge_land =
               (escapeair_locked && !deep_lock_penetration && hit_line_idx >= 0 &&
-               g->lines[(size_t)hit_line_idx].is_ledge)
+               g->lines[(size_t)hit_line_idx].is_ledge && !escapeair_sustained_floor_handoff)
                   ? 1u
                   : 0u;
           const uint8_t suppress_locked_vertical_af3_land =

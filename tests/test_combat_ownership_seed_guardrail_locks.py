@@ -3400,6 +3400,69 @@ def test_damage_ground_airborne_landing_transition_rows_and_adjacent_controls_ar
 
 @pytest.mark.integration
 @pytest.mark.parametrize(
+    ("dataset_rel", "target_record", "p"),
+    [
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl",
+            6706,
+            1,
+        ),
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl",
+            11382,
+            0,
+        ),
+    ],
+)
+def test_escapeair_sustained_ledge_floor_handoff_rows_and_adjacent_controls_are_replay_exact(
+    dataset_rel: str, target_record: int, p: int
+) -> None:
+    # EscapeAir sustained ledge-floor ownership handoff lock families for src/mpcoll_ground.c:
+    # - Keep early lock-entry ticks on ledge-floor suppression.
+    # - Hand off sustained EscapeAir ledge-floor sweeps to floor projection once the state is
+    #   stable across frame-start ownership.
+    #
+    # Decomp refs:
+    # - refs/melee/src/melee/ft/fighter.c::{Fighter_procMap,Fighter_8006A360}
+    # - refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll
+    # - refs/melee/src/melee/mp/mpcoll.c::mpColl_8004A45C_Floor
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+    rows = (target_record - 1, target_record, target_record + 1)
+    for rec in rows:
+        assert int(samples.shape[0]) > rec, f"dataset too short for lock row: record={rec}"
+
+    target = samples[target_record : target_record + 1]
+    seed_t = target["seed_t"][0]
+    ref_t1 = target["ref_t1"][0]
+    assert int(seed_t["action_id"][p]) == 236  # EscapeAir
+    assert int(seed_t["action_frame"][p]) == 2
+    assert int(seed_t["animation_index"][p]) == 44
+    assert int(seed_t["on_ground"][p]) == 0
+    assert int(ref_t1["action_id"][p]) == 43  # LandingFallSpecial
+    assert int(ref_t1["on_ground"][p]) == 1
+
+    pre = samples[rows[0] : rows[0] + 1]
+    assert int(pre["seed_t"]["action_id"][0, p]) == 236
+    assert int(pre["ref_t1"]["action_id"][0, p]) == 236
+    post = samples[rows[2] : rows[2] + 1]
+    assert int(post["seed_t"]["action_id"][0, p]) == 43
+    assert int(post["ref_t1"]["action_id"][0, p]) == 43
+
+    for rec in rows:
+        _, ref, out = _run_one_step_row(dataset_path, rec, p)
+        for pp in (0, 1):
+            _assert_transition_lock_fields_match_ref(out_row=out, ref_row=ref, record=rec, p=pp)
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
     ("dataset_rel", "target_record", "p", "pre_ref_action", "post_ref_action"),
     [
         (
