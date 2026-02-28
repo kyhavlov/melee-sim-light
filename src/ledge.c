@@ -162,6 +162,166 @@ static inline uint8_t did_tap_jump(const MslCommonParams* c, float stick_y, uint
   return (stick_y >= c->tap_jump_threshold && tilt_timer_y < c->tap_jump_tilt_max_frames) ? 1 : 0;
 }
 
+static inline float trigger_u8_to_unit(uint8_t v) { return (float)v * (1.0f / 255.0f); }
+
+static inline float trigger_unit_from_input_lane(uint16_t buttons, uint8_t l, uint8_t r) {
+  // Decomp input lane shape: digital L/R/Z force the shield trigger lane to 1.0f; otherwise use
+  // analog max(L, R).
+  // refs/melee/src/melee/ft/fighter.c (input lane build at 1868-1890)
+  enum { LRZ = (uint16_t)MSL_BUTTON_L | (uint16_t)MSL_BUTTON_R | (uint16_t)MSL_BUTTON_Z };
+  if ((buttons & LRZ) != 0u) {
+    return 1.0f;
+  }
+  const uint8_t m = (l > r) ? l : r;
+  return trigger_u8_to_unit(m);
+}
+
+static inline uint8_t pressed_lr_lane_edge(const MslBatch* batch, const MslCommonParams* c,
+                                           size_t idx) {
+  if (batch == NULL || c == NULL) {
+    return 0;
+  }
+  const uint16_t prev_buttons = batch->state.prev_input_buttons[idx];
+  const uint16_t cur_buttons = batch->state.input_buttons[idx];
+  const float prev_trigger = trigger_unit_from_input_lane(prev_buttons, batch->state.prev_input_l[idx],
+                                                          batch->state.prev_input_r[idx]);
+  const float cur_trigger =
+      trigger_unit_from_input_lane(cur_buttons, batch->state.input_l[idx], batch->state.input_r[idx]);
+
+  const uint8_t prev_lr_lane =
+      (((prev_buttons & (uint16_t)(MSL_BUTTON_L | MSL_BUTTON_R | MSL_BUTTON_Z)) != 0u) ||
+       (prev_trigger > c->trigger_deadzone))
+          ? 1u
+          : 0u;
+  const uint8_t cur_lr_lane =
+      (((cur_buttons & (uint16_t)(MSL_BUTTON_L | MSL_BUTTON_R | MSL_BUTTON_Z)) != 0u) ||
+       (cur_trigger > c->trigger_deadzone))
+          ? 1u
+          : 0u;
+  return (cur_lr_lane != 0u && prev_lr_lane == 0u) ? 1u : 0u;
+}
+
+static inline uint8_t held_lr_lane(const MslBatch* batch, const MslCommonParams* c, size_t idx) {
+  if (batch == NULL || c == NULL) {
+    return 0;
+  }
+  const uint16_t buttons = batch->state.input_buttons[idx];
+  const float trig =
+      trigger_unit_from_input_lane(buttons, batch->state.input_l[idx], batch->state.input_r[idx]);
+  return (((buttons & (uint16_t)(MSL_BUTTON_L | MSL_BUTTON_R | MSL_BUTTON_Z)) != 0u) ||
+          (trig > c->trigger_deadzone))
+             ? 1u
+             : 0u;
+}
+
+static inline uint8_t guard_x10_init_u8(const MslCommonParams* c) {
+  // Decomp: mv.co.guard.x10 is initialized from p_ftCommonData->x268 on GuardOn entry.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_800921DC
+  if (c == NULL || !(c->guard_x10_init_frames > 0.0f)) {
+    return 0u;
+  }
+  uint16_t t = (uint16_t)c->guard_x10_init_frames;
+  if (t > 255u) {
+    t = 255u;
+  }
+  return (uint8_t)t;
+}
+
+static inline void enter_guard_on_from_cliff_end(MslBatch* batch, const MslCommonParams* c,
+                                                  size_t idx) {
+  if (batch == NULL || c == NULL) {
+    return;
+  }
+  // Decomp Wait IASA guard path:
+  // - ftCo_Wait_IASA -> ftCo_80091A4C -> ftCo_800924C0 (GuardOn entry).
+  // - ftCo_800924C0 calls ftAnim_8006EBA4 then post-frame shield states can be no-submotion
+  //   snapshots (animation_index/state_age == -1 lanes in Slippi).
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_80091A4C,ftCo_800924C0}
+  // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
+  batch->state.action_id[idx] = (uint16_t)MSL_ACT_GUARD_ON;
+  batch->state.animation_index[idx] = 0xFFFFFFFFu;
+  msl_anim_timebase_enter_with_policy(batch, idx, 0.0f, 1.0f, MSL_ANIM_ENTER_TICK_IMMEDIATE);
+  msl_anim_timebase_seed(batch, idx, -1.0f,
+                         msl_f32_from_q16_16(batch->state.frame_speed_mul_fp_q16_16[idx]));
+
+  enum { MSL_STATE_FLAGS_221C_INDEX = 3 };
+  enum { MSL_STATE_FLAG_221C_B3 = 0x10 };
+  enum { MSL_STATE_FLAG_221C_B1 = 0x40 };
+  enum { MSL_STATE_FLAG_221C_B2 = 0x20 };
+  const size_t flags_i = idx * (size_t)MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_221C_INDEX;
+  batch->state.state_flags[flags_i] &=
+      (uint8_t) ~(uint8_t)(MSL_STATE_FLAG_221C_B3 | MSL_STATE_FLAG_221C_B1 | MSL_STATE_FLAG_221C_B2);
+  batch->state.guard_release_latched_xc[idx] = 0u;
+  batch->state.guard_x10[idx] = guard_x10_init_u8(c);
+  batch->state.lightshield_amount[idx] = 0.0f;
+}
+
+static inline uint16_t walk_action_from_speed(const MslCommonParams* c, const MslCharParams* ch,
+                                              float gr_vel) {
+  if (c == NULL || ch == NULL) {
+    return (uint16_t)MSL_ACT_WALK_SLOW;
+  }
+  // Decomp: ftWalkCommon_GetWalkType.
+  // refs/melee/src/melee/ft/ftwalkcommon.c::ftWalkCommon_GetWalkType
+  const float v = msl_absf(gr_vel);
+  if (v >= (c->walk_fast_vel_mul * ch->walk_max_vel)) {
+    return (uint16_t)MSL_ACT_WALK_FAST;
+  }
+  if (v >= (c->walk_mid_vel_mul * ch->walk_max_vel)) {
+    return (uint16_t)MSL_ACT_WALK_MIDDLE;
+  }
+  return (uint16_t)MSL_ACT_WALK_SLOW;
+}
+
+static inline uint32_t walk_anim_for_action(uint16_t a) {
+  switch (a) {
+    case (uint16_t)MSL_ACT_WALK_FAST:
+      return (uint32_t)MSL_SM_WALK_FAST;
+    case (uint16_t)MSL_ACT_WALK_MIDDLE:
+      return (uint32_t)MSL_SM_WALK_MIDDLE;
+    case (uint16_t)MSL_ACT_WALK_SLOW:
+    default:
+      return (uint32_t)MSL_SM_WALK_SLOW;
+  }
+}
+
+static inline void try_wait_interrupts_after_cliff_option_end(MslBatch* batch,
+                                                               const MslCommonParams* c,
+                                                               const MslCharParams* ch,
+                                                               size_t idx) {
+  if (batch == NULL || c == NULL) {
+    return;
+  }
+  // Decomp ordering for this callback bridge:
+  // - CliffClimb/Attack/Escape anim end calls ftCommon_8007D92C (grounded Wait-like destination).
+  // - Wait IASA then runs in the same Fighter proc; guard check (ftCo_80091A4C) precedes walk.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffClimb.c::ftCo_CliffClimb_Anim
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
+  if (held_lr_lane(batch, c, idx)) {
+    enter_guard_on_from_cliff_end(batch, c, idx);
+    return;
+  }
+
+  const float stick_x =
+      apply_deadzone(stick_i8_to_unit(batch->state.input_main_x[idx]), c->lstick_deadzone_x);
+  if (msl_absf(stick_x) < c->walk_stick_threshold) {
+    return;
+  }
+  if (ch == NULL) {
+    return;
+  }
+  const uint16_t walk = walk_action_from_speed(c, ch, batch->state.speed_ground_x_self[idx]);
+  batch->state.action_id[idx] = walk;
+  batch->state.animation_index[idx] = walk_anim_for_action(walk);
+  // Decomp: ftCo_Walk_Enter delegates to ftWalkCommon_800DFCA4 which immediately calls
+  // ftAnim_8006EBA4 after Fighter_ChangeMotionState.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Walk.c::ftCo_Walk_Enter
+  // refs/melee/src/melee/ft/ftwalkcommon.c::ftWalkCommon_800DFCA4
+  msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+  msl_anim_timebase_tick_once(batch, idx);
+}
+
 static inline void enter_cliff_wait(MslBatch* batch, size_t idx) {
   if (batch == NULL) {
     return;
@@ -183,7 +343,13 @@ static inline uint8_t enter_cliff_option_quick(MslBatch* batch, int bi, int p, u
   batch->state.animation_index[idx] = (uint32_t)smid;
   batch->state.on_ground[idx] = 0;
   batch->state.fall_fast[idx] = 0;
-  msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+  // Decomp: cliff option entries immediately tick the new motion in the same proc
+  // (Fighter_ChangeMotionState -> ftAnim_8006EBA4).
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffClimb.c::ftCo_8009AB9C
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffAttack.c::ftCo_8009AEA4
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffEscape.c::ftCo_8009B040
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffJump.c::ftCo_8009B1B8
+  msl_anim_timebase_enter_with_policy(batch, idx, 0.0f, 1.0f, MSL_ANIM_ENTER_TICK_IMMEDIATE);
   return 1;
 }
 
@@ -274,10 +440,16 @@ static inline uint8_t ledge_wait_try_attack(MslBatch* batch, int bi, int p) {
   return 0;
 }
 
-static inline uint8_t ledge_wait_try_escape(MslBatch* batch, int bi, int p) {
+static inline uint8_t ledge_wait_try_escape(MslBatch* batch, const MslCommonParams* c, int bi,
+                                            int p) {
   const size_t idx = msl_idx_player(bi, p);
   const uint16_t pressed = batch->state.input_buttons_pressed[idx];
-  if ((pressed & ((uint16_t)MSL_BUTTON_L | (uint16_t)MSL_BUTTON_R)) != 0) {
+  // Decomp: ftCo_8009AFD4 checks fp->input.x668 LR lane and can enter CliffEscape from trigger/Z
+  // synthesized LR-lane edges, not only raw digital L/R button-edge bits.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffAttack.c::ftCo_8009AFD4
+  // refs/melee/src/melee/ft/fighter.c (input lane build at 1868-1890 and x668 edge build at 2078-2086)
+  if ((pressed & ((uint16_t)MSL_BUTTON_L | (uint16_t)MSL_BUTTON_R)) != 0 ||
+      pressed_lr_lane_edge(batch, c, idx)) {
     // Decomp: ftCo_8009AFD4 -> ftCo_8009B040 chooses Quick vs Slow based on percent threshold.
     // refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffAttack.c::ftCo_8009AFD4
     // refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffEscape.c::ftCo_8009B040
@@ -475,7 +647,7 @@ void ledge_update_pre_physics(MslBatch* batch) {
       } else if (a == (uint16_t)MSL_ACT_CLIFF_WAIT) {
         // CliffWait IASA ordering is decomp-defined.
         // refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffWait.c::ftCo_CliffWait_IASA
-        if (ledge_wait_try_attack(batch, bi, p) || ledge_wait_try_escape(batch, bi, p) ||
+        if (ledge_wait_try_attack(batch, bi, p) || ledge_wait_try_escape(batch, c, bi, p) ||
             ledge_wait_try_jump(batch, c, bi, p) || ledge_wait_try_climb_or_drop(batch, c, bi, p)) {
           // State changed; position snap for new hold option is handled by enter helpers.
           a = batch->state.action_id[idx];
@@ -508,7 +680,10 @@ void ledge_update_pre_physics(MslBatch* batch) {
           const float fd = facing_dir(batch->state.facing[idx]);
           batch->state.action_id[idx] = (uint16_t)MSL_ACT_CLIFF_JUMP_QUICK2;
           batch->state.animation_index[idx] = (uint32_t)MSL_SM_CLIFF_JUMP_QUICK2;
-          msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+          // Decomp: ftCo_8009B2F8 enters CliffJump2 and immediately calls ftAnim_8006EBA4.
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffJump.c::ftCo_8009B2F8
+          msl_anim_timebase_enter_with_policy(batch, idx, 0.0f, 1.0f,
+                                              MSL_ANIM_ENTER_TICK_IMMEDIATE);
           batch->state.ledge_side[idx] = -1;
           batch->state.on_ground[idx] = 0;
           batch->state.fall_fast[idx] = 0;
@@ -537,8 +712,18 @@ void ledge_update_pre_physics(MslBatch* batch) {
           //
           // TODO(decomp): ftCommon_8007D92C likely enters a grounded Wait-like state with proper floor
           // clamping and residual velocity handling. For now, enter Wait on stage.
+          const uint16_t cliff_end_action = a;
+          const MslCharParams* ch = msl_char_params(batch->state.char_id[idx]);
           batch->state.ledge_side[idx] = -1;
           enter_wait_on_stage(batch, idx);
+          // Scope-narrowed bridge: keep the ftCommon_8007D92C -> Wait IASA same-proc ownership only
+          // for the attack/escape families validated by strict lock rows in this bundle.
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffClimb.c::ftCo_CliffClimb_Anim
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
+          if (cliff_end_action == (uint16_t)MSL_ACT_CLIFF_ATTACK_QUICK ||
+              cliff_end_action == (uint16_t)MSL_ACT_CLIFF_ESCAPE_QUICK) {
+            try_wait_interrupts_after_cliff_option_end(batch, c, ch, idx);
+          }
           a = batch->state.action_id[idx];
         }
       }

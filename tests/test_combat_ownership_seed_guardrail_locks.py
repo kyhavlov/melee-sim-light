@@ -10,6 +10,10 @@ import pytest
 
 from tools.eval.dataset import COMPARE_DTYPE, read_dataset
 
+MSL_BUTTON_Z = 0x0010
+MSL_BUTTON_R = 0x0020
+MSL_BUTTON_L = 0x0040
+
 
 def _skip_if_required_artifacts_missing(root: Path) -> None:
     required = [
@@ -4421,6 +4425,263 @@ def test_specialairsend_gravity_delay_seed_lock_target_pm1_both_players(
     assert target_delta_vy < 0.0
     assert post_delta_vy < 0.0
     assert target_delta_vy == pytest.approx(post_delta_vy, abs=1e-7)
+
+    for rec in (target_record - 1, target_record, target_record + 1):
+        _, ref_row, out_row = _run_one_step_row(dataset_path, rec, p_target, rng_damage_fly_roll_gate=True)
+        for p in (0, 1):
+            _assert_transition_lock_fields_match_ref(out_row=out_row, ref_row=ref_row, record=rec, p=p)
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    ("dataset_rel", "target_record", "p_target", "seed_action", "ref_action"),
+    [
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
+            "AttachedGoodNaturedGuanaco.msl",
+            6652,
+            1,
+            253,  # CliffWait
+            259,  # CliffEscapeQuick
+        ),
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
+            "GracefulAttachedTurtle.msl",
+            11462,
+            0,
+            253,  # CliffWait
+            259,  # CliffEscapeQuick
+        ),
+    ],
+)
+def test_cliffwait_escape_lr_lane_edge_seed_lock_target_pm1_both_players(
+    dataset_rel: str, target_record: int, p_target: int, seed_action: int, ref_action: int
+) -> None:
+    # Decomp ownership lock for CliffWait -> CliffEscape trigger/Z LR-lane edges:
+    # - CliffWait IASA checks ftCo_8009AFD4, which reads the synthesized input x668 LR lane.
+    # - x668 is built from digital L/R/Z and analog trigger lane edges.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffAttack.c::ftCo_8009AFD4
+    # refs/melee/src/melee/ft/fighter.c (input lane build at 1868-1890 and x668 edge build at 2078-2086)
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+    target = samples[target_record : target_record + 1]
+    common = json.loads((root / "data/common/ft_common_data.json").read_text())
+    trigger_deadzone = float(common["trigger_deadzone"])
+
+    assert int(target["seed_t"]["action_id"][0, p_target]) == int(seed_action)
+    assert int(target["ref_t1"]["action_id"][0, p_target]) == int(ref_action)
+    assert int(target["seed_t"]["on_ground"][0, p_target]) == 0
+    assert int(target["ref_t1"]["on_ground"][0, p_target]) == 0
+
+    prev_buttons = int(target["prev_input_t"][0]["p"]["buttons"][p_target])
+    cur_buttons = int(target["input_t"][0]["p"]["buttons"][p_target])
+    prev_l = int(target["prev_input_t"][0]["p"]["l"][p_target])
+    prev_r = int(target["prev_input_t"][0]["p"]["r"][p_target])
+    cur_l = int(target["input_t"][0]["p"]["l"][p_target])
+    cur_r = int(target["input_t"][0]["p"]["r"][p_target])
+    prev_trigger = max(prev_l, prev_r) / 255.0
+    cur_trigger = max(cur_l, cur_r) / 255.0
+    assert prev_buttons == 0
+    assert cur_buttons == 0
+    assert prev_trigger <= trigger_deadzone
+    assert cur_trigger > trigger_deadzone
+
+    for rec in (target_record - 1, target_record, target_record + 1):
+        _, ref_row, out_row = _run_one_step_row(dataset_path, rec, p_target, rng_damage_fly_roll_gate=True)
+        for p in (0, 1):
+            _assert_transition_lock_fields_match_ref(out_row=out_row, ref_row=ref_row, record=rec, p=p)
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    (
+        "dataset_rel",
+        "target_record",
+        "p_target",
+        "seed_action",
+        "ref_action",
+        "ref_action_frame",
+        "ref_anim",
+        "expect_shield_lane",
+    ),
+    [
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
+            "GracefulAttachedTurtle.msl",
+            2959,
+            1,
+            259,  # CliffEscapeQuick
+            178,  # GuardOn
+            -1,
+            0xFFFFFFFF,
+            True,
+        ),
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
+            "GracefulAttachedTurtle.msl",
+            8253,
+            1,
+            257,  # CliffAttackQuick
+            178,  # GuardOn
+            -1,
+            0xFFFFFFFF,
+            True,
+        ),
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
+            "AttachedGoodNaturedGuanaco.msl",
+            6701,
+            1,
+            259,  # CliffEscapeQuick
+            15,   # WalkSlow
+            1,
+            7,    # ftCo_SM_WalkSlow
+            False,
+        ),
+    ],
+)
+def test_cliff_option_end_wait_iasa_bridge_seed_lock_target_pm1_both_players(
+    dataset_rel: str,
+    target_record: int,
+    p_target: int,
+    seed_action: int,
+    ref_action: int,
+    ref_action_frame: int,
+    ref_anim: int,
+    expect_shield_lane: bool,
+) -> None:
+    # Decomp ownership lock for Cliff option end -> Wait IASA bridge:
+    # - Cliff option Anim end uses ftCommon_8007D92C (grounded destination).
+    # - Wait IASA runs in the same proc; guard admission precedes walk admission.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffClimb.c::ftCo_CliffClimb_Anim
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80091A4C
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+    target = samples[target_record : target_record + 1]
+    common = json.loads((root / "data/common/ft_common_data.json").read_text())
+    trigger_deadzone = float(common["trigger_deadzone"])
+
+    assert int(target["seed_t"]["action_id"][0, p_target]) == int(seed_action)
+    assert int(target["seed_t"]["on_ground"][0, p_target]) == 1
+    assert int(target["ref_t1"]["action_id"][0, p_target]) == int(ref_action)
+    assert int(target["ref_t1"]["action_frame"][0, p_target]) == int(ref_action_frame)
+    assert int(target["ref_t1"]["animation_index"][0, p_target]) == int(ref_anim)
+    assert int(target["ref_t1"]["on_ground"][0, p_target]) == 1
+
+    cur_buttons = int(target["input_t"][0]["p"]["buttons"][p_target])
+    cur_l = int(target["input_t"][0]["p"]["l"][p_target])
+    cur_r = int(target["input_t"][0]["p"]["r"][p_target])
+    cur_trigger = max(cur_l, cur_r) / 255.0
+    shield_lane_held = (
+        ((cur_buttons & (MSL_BUTTON_L | MSL_BUTTON_R | MSL_BUTTON_Z)) != 0) or
+        (cur_trigger > trigger_deadzone)
+    )
+    if expect_shield_lane:
+        assert shield_lane_held
+    else:
+        assert not shield_lane_held
+        cur_main_x = int(target["input_t"][0]["p"]["main_x"][p_target]) / 80.0
+        assert abs(cur_main_x) >= float(common["walk_stick_threshold"])
+
+    for rec in (target_record - 1, target_record, target_record + 1):
+        _, ref_row, out_row = _run_one_step_row(dataset_path, rec, p_target, rng_damage_fly_roll_gate=True)
+        for p in (0, 1):
+            _assert_transition_lock_fields_match_ref(out_row=out_row, ref_row=ref_row, record=rec, p=p)
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    ("dataset_rel", "target_record", "p_target", "seed_action", "ref_action", "ref_action_frame"),
+    [
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
+            "GracefulAttachedTurtle.msl",
+            2910,
+            1,
+            253,  # CliffWait
+            259,  # CliffEscapeQuick
+            1,
+        ),
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
+            "GracefulAttachedTurtle.msl",
+            8195,
+            1,
+            253,  # CliffWait
+            257,  # CliffAttackQuick
+            1,
+        ),
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
+            "QuerulousGrandDinosaur.msl",
+            2943,
+            1,
+            253,  # CliffWait
+            255,  # CliffClimbQuick
+            1,
+        ),
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
+            "QuerulousGrandDinosaur.msl",
+            9027,
+            1,
+            253,  # CliffWait
+            262,  # CliffJumpQuick1
+            1,
+        ),
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
+            "QuerulousGrandDinosaur.msl",
+            9041,
+            1,
+            262,  # CliffJumpQuick1
+            263,  # CliffJumpQuick2
+            1,
+        ),
+    ],
+)
+def test_cliff_option_and_jump2_entry_immediate_tick_seed_lock_target_pm1_both_players(
+    dataset_rel: str,
+    target_record: int,
+    p_target: int,
+    seed_action: int,
+    ref_action: int,
+    ref_action_frame: int,
+) -> None:
+    # Decomp ownership lock for cliff option / jump2 entry timing:
+    # - Cliff option entries use Fighter_ChangeMotionState then ftAnim_8006EBA4 in the same proc.
+    # - CliffJump1 end enters CliffJump2 and immediately ticks via ftAnim_8006EBA4.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffClimb.c::ftCo_8009AB9C
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffAttack.c::ftCo_8009AEA4
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffEscape.c::ftCo_8009B040
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffJump.c::{ftCo_8009B1B8,ftCo_8009B2F8}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+    target = samples[target_record : target_record + 1]
+    assert int(target["seed_t"]["action_id"][0, p_target]) == int(seed_action)
+    assert int(target["ref_t1"]["action_id"][0, p_target]) == int(ref_action)
+    assert int(target["ref_t1"]["action_frame"][0, p_target]) == int(ref_action_frame)
+    assert int(target["seed_t"]["on_ground"][0, p_target]) == 0
+    assert int(target["ref_t1"]["on_ground"][0, p_target]) == 0
 
     for rec in (target_record - 1, target_record, target_record + 1):
         _, ref_row, out_row = _run_one_step_row(dataset_path, rec, p_target, rng_damage_fly_roll_gate=True)
