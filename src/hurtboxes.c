@@ -40,13 +40,10 @@ static inline uint8_t hurtboxes_guard_fallback_submotion(uint16_t action_id, uin
       *out_msid = (uint16_t)MSL_SM_GUARD_DAMAGE;
       return 1u;
     case MSL_ACT_GUARD_REFLECT:
-      // No-submotion GuardReflect snapshots are ordering-sensitive with shield descriptor ownership
-      // (x221B_b0 / ftColl_8007B1B8) and can spuriously admit BODY contacts when we synthesize a
-      // GuardOn timeline from action_id alone. Keep GuardReflect on raw snapshot geometry unless
-      // a decomp-backed seed for this phase is promoted.
-      // refs/melee/src/melee/ft/ftcoll.c::ftColl_8007B1B8
-      // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
-      return 0u;
+      // Decomp motion-state mapping: GuardReflect uses ftCo_SM_GuardOn as its submotion table.
+      // refs/melee/src/melee/ft/ftmotionstates.c::ftCo_MS_GuardReflect
+      *out_msid = (uint16_t)MSL_SM_GUARD_ON;
+      return 1u;
     default:
       return 0u;
   }
@@ -184,6 +181,7 @@ void hurtboxes_refresh(MslBatch* batch) {
       uint8_t final_hurtbox_state = batch->state.colanim_hit_status_x198c[idx];
 
       const uint32_t anim_u32 = batch->state.animation_index[idx];
+      const uint16_t action_id = batch->state.action_id[idx];
 
       // Hurtbox-state composition:
       // - x1988 lane: movescript-derived hit status (opcode 26 / ftColl_8007B62C).
@@ -203,6 +201,20 @@ void hurtboxes_refresh(MslBatch* batch) {
 
       uint16_t msid = 0u;
       if (anim_u32 > 0xFFFFu) {
+        if (action_id == (uint16_t)MSL_ACT_GUARD_REFLECT &&
+            batch->state.action_frame[idx] <= (int16_t)-2) {
+          // GuardReflect no-submotion late-phase snapshots are ordering-sensitive with shield
+          // descriptor ownership (x221B_b0 via ftColl_8007B1B8). Preserve raw snapshot geometry
+          // on Slippi state_age sentinel rows (action_frame=-2) to avoid synthesizing pre-ownership
+          // BODY contacts from action_id-only fallback.
+          // refs/melee/src/melee/ft/ftcoll.c::ftColl_8007B1B8
+          // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
+          if (hit_status != 0) {
+            final_hurtbox_state = hit_status;
+          }
+          batch->state.hurtbox_state[idx] = final_hurtbox_state;
+          continue;
+        }
         // Seed-bridge fallback (guard-family only):
         // Slippi post-frames commonly encode guard-family snapshots with animation_index=-1 while
         // decomp collision still uses the active ftCo submotion timeline. Keep the raw compare
@@ -214,7 +226,7 @@ void hurtboxes_refresh(MslBatch* batch) {
         // shield overlap fails ("shield poke"), so keep fallback hurtcaps available when we can
         // map the current guard-family motion-state to its submotion table.
         // refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007B1B8,ftColl_80076CBC,ftColl_80076ED8}
-        if (!hurtboxes_guard_fallback_submotion(batch->state.action_id[idx], &msid)) {
+        if (!hurtboxes_guard_fallback_submotion(action_id, &msid)) {
           if (hit_status != 0) {
             final_hurtbox_state = hit_status;
           }

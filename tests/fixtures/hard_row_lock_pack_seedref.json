@@ -293,7 +293,7 @@
       "field": "state_flags[3]",
       "seed": 1,
       "ref": 1,
-      "out": 0,
+      "out": 1,
       "cluster_count": 3,
       "base_field": "state_flags"
     },
@@ -359,7 +359,7 @@
       "field": "instance_id",
       "seed": 90,
       "ref": 90,
-      "out": 98,
+      "out": 90,
       "cluster_count": 1,
       "base_field": "instance_id"
     },
@@ -381,7 +381,7 @@
       "field": "instance_id",
       "seed": 354,
       "ref": 354,
-      "out": 355,
+      "out": 354,
       "cluster_count": 1,
       "base_field": "instance_id"
     },
@@ -414,7 +414,7 @@
       "field": "instance_id",
       "seed": 510,
       "ref": 510,
-      "out": 514,
+      "out": 510,
       "cluster_count": 1,
       "base_field": "instance_id"
     },

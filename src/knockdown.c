@@ -520,9 +520,29 @@ static inline uint8_t should_enter_down_attack_from_bound(const MslBatch* batch,
   // Decomp: refs/melee/src/melee/ft/chara/ftCommon/ftCo_Down.c::ftCo_80098400
   // - inlineB0: (x67C < x24C || x67D < x24C)
   // - ftCo_800DF644: cstick up edge at x7F4
-  if ((float)batch->state.x67C[idx] < c->down_attack_button_window_frames ||
-      (float)batch->state.x67D[idx] < c->down_attack_button_window_frames) {
-    return 1u;
+  //
+  // Reseed ownership bridge:
+  // - DownBound entry resets x67C/x67D to 0xFF (ftCo_8009794C), then Fighter input timers run
+  //   causally from that reset point.
+  // - On teacher-forced reseed rows inside DownBound (action_frame > 0), stale pre-entry A/B timer
+  //   values can over-trigger this lane if they were not materialized from the entry-reset history.
+  // - Restrict the timer lane to post-entry presses by requiring timer < action_frame.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownBound.c::ftCo_8009794C
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Down.c::ftCo_80098400
+  const uint8_t x67c_recent =
+      ((float)batch->state.x67C[idx] < c->down_attack_button_window_frames) ? 1u : 0u;
+  const uint8_t x67d_recent =
+      ((float)batch->state.x67D[idx] < c->down_attack_button_window_frames) ? 1u : 0u;
+  if (x67c_recent || x67d_recent) {
+    const int16_t af_i16 = batch->state.action_frame[idx];
+    const uint16_t af = (af_i16 > 0) ? (uint16_t)af_i16 : 0u;
+    const uint8_t x67c_post_entry =
+        (af == 0u || (uint16_t)batch->state.x67C[idx] < af) ? 1u : 0u;
+    const uint8_t x67d_post_entry =
+        (af == 0u || (uint16_t)batch->state.x67D[idx] < af) ? 1u : 0u;
+    if ((x67c_recent && x67c_post_entry) || (x67d_recent && x67d_post_entry)) {
+      return 1u;
+    }
   }
   return cstick_up_edge(batch, c, idx);
 }
