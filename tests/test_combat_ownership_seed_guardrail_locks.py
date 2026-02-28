@@ -3350,6 +3350,64 @@ def test_guard_damage_and_guardreflect_transition_rows_and_adjacent_controls_are
 
 
 @pytest.mark.integration
+@pytest.mark.parametrize(
+    ("rows", "rebound_p"),
+    [
+        ((2734, 2735, 2736), 1),
+        ((2992, 2993, 2994), 1),
+    ],
+)
+def test_reboundstop_anim_callback_rows_and_adjacent_controls_are_replay_exact(
+    rows: tuple[int, int, int], rebound_p: int
+) -> None:
+    # Rebound callback ownership lock for the kept ReboundStop/Rebound lane:
+    # - ReboundStop_Anim immediately calls ftCo_80099E44 and enters Rebound on the first !hitlag callback.
+    # - Keep target±1 windows replay-exact for both players on strict transition fields.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Rebound.c::{
+    #   ftCo_ReboundStop_Anim,ftCo_80099E44
+    # }
+    # refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_rel = (
+        "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
+        "QuerulousGrandDinosaur.msl"
+    )
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+    for rec in rows:
+        assert int(samples.shape[0]) > rec, f"dataset too short for lock row: record={rec}"
+
+    target = rows[1]
+    target_row = samples[target : target + 1]
+    target_seed = target_row["seed_t"][0]
+    target_ref = target_row["ref_t1"][0]
+    assert int(target_seed["action_id"][rebound_p]) == 237  # ReboundStop
+    assert int(target_ref["action_id"][rebound_p]) == 237  # still ReboundStop in target row
+    assert int(target_seed["hitlag"][rebound_p]) > 1
+
+    transition_row = samples[rows[2] : rows[2] + 1]
+    transition_seed = transition_row["seed_t"][0]
+    transition_ref = transition_row["ref_t1"][0]
+    assert int(transition_seed["action_id"][rebound_p]) == 237  # ReboundStop
+    assert int(transition_seed["hitlag"][rebound_p]) == 1
+    assert int(transition_ref["action_id"][rebound_p]) == 238  # Rebound
+    assert int(transition_ref["action_frame"][rebound_p]) == 0
+    assert int(transition_ref["animation_index"][rebound_p]) == 45  # ftCo_SM_Rebound
+
+    for rec in rows:
+        _, ref_row, out_row = _run_one_step_row(dataset_path, rec, rebound_p)
+        for p in (0, 1):
+            _assert_transition_lock_fields_match_ref(
+                out_row=out_row, ref_row=ref_row, record=rec, p=p
+            )
+
+
+@pytest.mark.integration
 def test_damage_ground_airborne_landing_transition_rows_and_adjacent_controls_are_replay_exact() -> None:
     # Damage_Coll landing ownership lock for grounded Damage* actions that are currently airborne:
     # - ftCo_Damage_Coll resolves floor contact and chooses Landing/DownBound/fallback by kb magnitude.

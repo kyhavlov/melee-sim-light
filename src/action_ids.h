@@ -332,6 +332,7 @@ typedef enum MslSubmotionId {
   MSL_SM_ESCAPE_F = 42,      // ftCo_SM_EscapeF
   MSL_SM_ESCAPE_B = 43,      // ftCo_SM_EscapeB
   MSL_SM_ESCAPE_AIR = 44,    // ftCo_SM_EscapeAir
+  MSL_SM_REBOUND = 45,       // ftCo_SM_Rebound
   MSL_SM_ATTACK_11 = 46,     // ftCo_SM_Attack11
   MSL_SM_ATTACK_12 = 47,     // ftCo_SM_Attack12
   MSL_SM_ATTACK_13 = 48,     // ftCo_SM_Attack13

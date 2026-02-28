@@ -613,12 +613,14 @@ static inline void guard_update_grounded_anim_callback_pre_input(MslBatch* batch
 
   const uint16_t a0 = batch->state.action_id[idx];
 
-  // GuardReflect_Anim callback timing (prio 1):
+  // GuardReflect/GuardSetOff anim-callback timing (prio 1):
   // - ftCo_GuardReflect_Anim calls ftCo_80093BC0 (x14/x18 tick + expire clears), then GuardOn_Anim.
+  // - ftCo_GuardSetOff_Anim also calls ftCo_80093BC0 while shieldstun anim owns GuardDesc state.
   // - Fighter_8006A360 runs this under !hitlag.
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_GuardReflect_Anim,ftCo_80093BC0}
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
+  //   ftCo_GuardReflect_Anim,ftCo_GuardSetOff_Anim,ftCo_80093BC0}
   // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
-  if (a0 == (uint16_t)MSL_ACT_GUARD_REFLECT) {
+  if (a0 == (uint16_t)MSL_ACT_GUARD_REFLECT || a0 == (uint16_t)MSL_ACT_GUARD_SET_OFF) {
     if (batch->state.hitlag_started_frame[idx] == 0) {
       uint8_t t14 = batch->state.guard_reflect_timer_x14[idx];
       if (t14 > 0) {
@@ -641,9 +643,50 @@ static inline void guard_update_grounded_anim_callback_pre_input(MslBatch* batch
       }
     }
   } else {
-    // Keep GuardReflect timers strictly action-owned to avoid stale seeded carryover.
+    // Keep GuardReflect timers strictly callback-owner action-scoped to avoid stale seeded carryover.
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
+    //   ftCo_GuardReflect_Anim,ftCo_GuardSetOff_Anim,ftCo_80093BC0}
     batch->state.guard_reflect_timer_x14[idx] = 0;
     batch->state.guard_reflect_timer_x18[idx] = 0;
+  }
+}
+
+static inline void rebound_update_anim_callback_pre_input(MslBatch* batch, size_t idx) {
+  if (batch == NULL) {
+    return;
+  }
+  const uint16_t a0 = batch->state.action_id[idx];
+  if (a0 != (uint16_t)MSL_ACT_REBOUND_STOP && a0 != (uint16_t)MSL_ACT_REBOUND) {
+    return;
+  }
+  if (batch->state.hitlag_started_frame[idx] != 0) {
+    return;
+  }
+
+  if (a0 == (uint16_t)MSL_ACT_REBOUND_STOP) {
+    // ReboundStop_Anim callback ownership:
+    // - ftCo_ReboundStop_Anim immediately calls ftCo_80099E44.
+    // - ftCo_80099E44 enters Rebound through Fighter_ChangeMotionState.
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Rebound.c::{
+    //   ftCo_ReboundStop_Anim,ftCo_80099E44
+    // }
+    // refs/melee/src/melee/ft/chara/ftCommon/forward.h::{
+    //   ftCo_MS_ReboundStop,ftCo_MS_Rebound,ftCo_SM_Rebound
+    // }
+    // refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState
+    batch->state.action_id[idx] = (uint16_t)MSL_ACT_REBOUND;
+    batch->state.animation_index[idx] = (uint32_t)MSL_SM_REBOUND;
+    msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+    return;
+  }
+
+  // Rebound_Anim callback ownership:
+  // - Rebound ends through ft_8008A2BC (Wait enter) when the submotion has no frames remaining.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Rebound.c::ftCo_Rebound_Anim
+  // refs/melee/src/melee/ft/ft_0892.c::ft_8008A2BC
+  const float end_frame = msl_anim_end_frame(batch->state.char_id[idx], (uint16_t)MSL_SM_REBOUND);
+  if (end_frame > 0.0f && (batch->state.anim_frame_f32[idx] >= end_frame)) {
+    escape_enter_wait(batch, idx);
   }
 }
 
@@ -1065,6 +1108,7 @@ void action_update_anim_callbacks_pre_input(MslBatch* batch) {
           }
         }
       }
+      rebound_update_anim_callback_pre_input(batch, idx);
       guard_update_grounded_anim_callback_pre_input(batch, idx);
     }
   }

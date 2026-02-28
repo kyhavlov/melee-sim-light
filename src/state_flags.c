@@ -157,6 +157,7 @@ void state_flags_refresh_post_frame(MslBatch* batch) {
     for (int p = 0; p < num_players; p++) {
       const size_t idx = msl_idx_player(bi, p);
       const uint16_t action_id = batch->state.action_id[idx];
+      const uint16_t prev_action = batch->state.prev_action_id[idx];
 
       // fp+0x2218 bit0 (mask 0x80): allow_interrupt.
       // - Action command opcode handler `ftAction_80071950` sets fp->allow_interrupt = true.
@@ -412,21 +413,28 @@ void state_flags_refresh_post_frame(MslBatch* batch) {
       // refs/melee/src/melee/ft/fighter.c (motion-state reset clears fp->x221F_b1)
       const size_t flags_221f_i = idx * MSL_STATE_FLAGS_STRIDE + (size_t)MSL_STATE_FLAGS_221F_INDEX;
       uint8_t f221f = batch->state.state_flags[flags_221f_i];
-      const uint16_t prev_action = batch->state.prev_action_id[idx];
-      if (action_id == (uint16_t)MSL_ACT_ENTRY_START && prev_action == (uint16_t)MSL_ACT_ENTRY) {
-        f221f |= (uint8_t)MSL_STATE_FLAG_221F_B1;
-      }
+      // Entry->EntryStart runs through Fighter_ChangeMotionState reset paths; keep x221F_b1
+      // transition-owned by explicit dead-flow setup and reset clear points rather than carrying it
+      // across EntryStart snapshots.
+      // refs/melee/src/melee/ft/ft_0C31.c::{ftCo_800C61B0,ftCo_800C6408}
+      // refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState
       if (state_flags_221f_dead_start_action(action_id) &&
           !state_flags_221f_dead_start_action(prev_action)) {
         f221f |= (uint8_t)MSL_STATE_FLAG_221F_B1;
       }
+      if (action_id == (uint16_t)MSL_ACT_ENTRY_START) {
+        // EntryStart snapshots follow Fighter_ChangeMotionState reset ownership; do not carry
+        // seeded dead-flow x221F_b1 into this transition destination.
+        // refs/melee/src/melee/ft/ft_0C31.c::ftCo_800C6408
+        // refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState
+        f221f &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221F_B1;
+      }
       if (action_id == (uint16_t)MSL_ACT_REBIRTH) {
-        if (prev_action == (uint16_t)MSL_ACT_DEAD_UP_STAR) {
-          // DeadUpStar path keeps x221F_b1 on the first Rebirth snapshot in-suite.
-          f221f |= (uint8_t)MSL_STATE_FLAG_221F_B1;
-        } else if (state_flags_221f_dead_start_action(prev_action)) {
-          f221f &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221F_B1;
-        }
+        // Generic motion-state reset owns fp->x221F_b1 clear on Rebirth entry.
+        // refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dead.c
+        (void)prev_action;
+        f221f &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221F_B1;
       }
       batch->state.state_flags[flags_221f_i] = f221f;
     }
