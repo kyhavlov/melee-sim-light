@@ -395,6 +395,36 @@ void anim_timebase_update_pre_input(MslBatch* batch) {
                    batch->state.frame_speed_mul_fp_q16_16[idx] == 0) {
           batch->state.frame_speed_mul_fp_q16_16[idx] =
               batch->state.throw_lw_prev_rate_fp_q16_16[idx];
+        } else if (batch->state.frame_speed_mul_fp_q16_16[idx] == 0) {
+          // ThrowLw attached-victim post-hitlag bridge (seed-visible fallback):
+          // - ThrowLw callback ownership (`ftCo_ThrowLw_Anim` -> `ftCo_800DD724`) consumes throw
+          //   script flags while the victim remains attached.
+          // - Thrown victim Phys/Coll are attachment-driven (`ftCo_Thrown*`), so on the first
+          //   post-hitlag frame the owner/victim timebase can advance together even when the
+          //   thrower reseed snapshot carries frame_speed_mul==0.
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::{ftCo_ThrowLw_Anim,ftCo_800DD724}
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Thrown.c::{ftCo_800DE508,ftCo_ThrownF_Phys,ftCo_ThrownF_Coll}
+          // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A1BC,Fighter_8006A360}
+          for (int v = 0; v < num_players; v++) {
+            if (v == p) {
+              continue;
+            }
+            const size_t vidx = msl_idx_player(bi, v);
+            if (batch->state.grab_owner_port[vidx] != (uint8_t)p) {
+              continue;
+            }
+            if (!msl_action_is_grabbed_victim(batch->state.action_id[vidx])) {
+              continue;
+            }
+            if (!(batch->state.hitlag_pre_timer[vidx] != 0u && batch->state.hitlag[vidx] == 0u)) {
+              continue;
+            }
+            const int32_t victim_rate = batch->state.frame_speed_mul_fp_q16_16[vidx];
+            if (victim_rate > 0) {
+              batch->state.frame_speed_mul_fp_q16_16[idx] = victim_rate;
+            }
+            break;
+          }
         }
       }
 
