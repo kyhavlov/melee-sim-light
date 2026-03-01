@@ -124,6 +124,15 @@ static inline void enter_cliff_catch_immediate(MslBatch* batch, size_t idx) {
   if (batch == NULL) {
     return;
   }
+  const MslCharParams* ch = msl_char_params(batch->state.char_id[idx]);
+  if (ch != NULL) {
+    // Decomp: CliffCatch entry path calls ftCommon_8007D5D4, which sets
+    // fp->x1968_jumpsUsed = 1 on the owning fighter before CliffWait/option processing.
+    // Slippi post-frame uses "jumps left", so jumps_left=max_jumps-1 at catch entry.
+    // refs/melee/src/melee/ft/ftcliffcommon.c::ftCliffCommon_80081370
+    // refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007D5D4
+    batch->state.jumps_left[idx] = (ch->max_jumps > 0u) ? (uint8_t)(ch->max_jumps - 1u) : 0u;
+  }
   // Decomp: ftCliffCommon_80081370 enters CliffCatch, then calls ftAnim_8006EBA4 in the same
   // update before input callbacks run.
   // refs/melee/src/melee/ft/ftcliffcommon.c::ftCliffCommon_80081370

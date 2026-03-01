@@ -3920,17 +3920,28 @@ def test_death_to_rebirth_identity_reset_rows_and_adjacent_controls_are_replay_e
     target_row = samples[target_record : target_record + 1]
     assert int(target_row["seed_t"]["action_id"][0, p]) == int(seed_action)
     assert int(target_row["ref_t1"]["action_id"][0, p]) == int(ref_action)
+    assert int(target_row["seed_t"]["action_frame"][0, p]) == -1
+    assert int(target_row["ref_t1"]["action_frame"][0, p]) == 0
+    assert int(target_row["seed_t"]["animation_index"][0, p]) == 0xFFFFFFFF
+    assert int(target_row["ref_t1"]["animation_index"][0, p]) == 2  # ftCo_SM_Rebirth
+    assert int(target_row["seed_t"]["jumps_left"][0, p]) == 0
+    assert int(target_row["ref_t1"]["jumps_left"][0, p]) == 1
 
     pre_row = samples[controls[0] : controls[0] + 1]
     assert int(pre_row["seed_t"]["action_id"][0, p]) == int(seed_action)
     assert int(pre_row["ref_t1"]["action_id"][0, p]) == int(seed_action)
+    assert int(pre_row["ref_t1"]["jumps_left"][0, p]) == 0
 
     post_row = samples[controls[1] : controls[1] + 1]
     assert int(post_row["seed_t"]["action_id"][0, p]) == int(ref_action)
     assert int(post_row["ref_t1"]["action_id"][0, p]) == int(ref_action)
+    assert int(post_row["seed_t"]["jumps_left"][0, p]) == 1
+    assert int(post_row["ref_t1"]["jumps_left"][0, p]) == 1
 
     for rec in (controls[0], target_record, controls[1]):
         _, ref, out = _run_one_step_row(dataset_path, rec, p)
+        for pp in (0, 1):
+            _assert_transition_lock_fields_match_ref(out_row=out, ref_row=ref, record=rec, p=pp)
         _assert_transition_identity_lock_fields_match_ref(out_row=out, ref_row=ref, record=rec, p=p)
 
 
@@ -4942,6 +4953,77 @@ def test_cliff_option_and_jump2_entry_immediate_tick_seed_lock_target_pm1_both_p
     assert int(target["ref_t1"]["action_frame"][0, p_target]) == int(ref_action_frame)
     assert int(target["seed_t"]["on_ground"][0, p_target]) == 0
     assert int(target["ref_t1"]["on_ground"][0, p_target]) == 0
+
+    for rec in (target_record - 1, target_record, target_record + 1):
+        _, ref_row, out_row = _run_one_step_row(dataset_path, rec, p_target, rng_damage_fly_roll_gate=True)
+        for p in (0, 1):
+            _assert_transition_lock_fields_match_ref(out_row=out_row, ref_row=ref_row, record=rec, p=p)
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    ("dataset_rel", "target_record", "p_target", "seed_action"),
+    [
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
+            "GracefulAttachedTurtle.msl",
+            2959,
+            0,
+            35,  # FallSpecial
+        ),
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
+            "TreasuredBackKangaroo.msl",
+            655,
+            1,
+            28,  # JumpAerialB
+        ),
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
+            "QuerulousGrandDinosaur.msl",
+            2918,
+            1,
+            27,  # JumpAerialF
+        ),
+    ],
+)
+def test_cliffcatch_entry_jumps_used_seed_lock_target_pm1_both_players(
+    dataset_rel: str, target_record: int, p_target: int, seed_action: int
+) -> None:
+    # Decomp ownership lock for CliffCatch entry jump state:
+    # - ftCliffCommon_80081370 calls ftCommon_8007D5D4 before CliffCatch steady processing.
+    # - ftCommon_8007D5D4 sets fp->x1968_jumpsUsed=1; Slippi post-frame `jumps` is jumps-left.
+    # refs/melee/src/melee/ft/ftcliffcommon.c::ftCliffCommon_80081370
+    # refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007D5D4
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+    target = samples[target_record : target_record + 1]
+    pre = samples[target_record - 1 : target_record]
+    post = samples[target_record + 1 : target_record + 2]
+
+    assert int(target["seed_t"]["action_id"][0, p_target]) == int(seed_action)
+    assert int(target["ref_t1"]["action_id"][0, p_target]) == 252  # CliffCatch
+    assert int(target["seed_t"]["on_ground"][0, p_target]) == 0
+    assert int(target["ref_t1"]["on_ground"][0, p_target]) == 0
+    assert int(target["ref_t1"]["action_frame"][0, p_target]) == 1
+    assert int(target["ref_t1"]["animation_index"][0, p_target]) == 216  # ftCo_SM_CliffCatch
+    assert int(target["seed_t"]["jumps_left"][0, p_target]) == 0
+    assert int(target["ref_t1"]["jumps_left"][0, p_target]) == 1
+
+    assert int(pre["seed_t"]["action_id"][0, p_target]) == int(seed_action)
+    assert int(pre["ref_t1"]["action_id"][0, p_target]) == int(seed_action)
+    assert int(pre["ref_t1"]["jumps_left"][0, p_target]) == 0
+
+    assert int(post["seed_t"]["action_id"][0, p_target]) == 252
+    assert int(post["ref_t1"]["action_id"][0, p_target]) == 252
+    assert int(post["seed_t"]["jumps_left"][0, p_target]) == 1
+    assert int(post["ref_t1"]["jumps_left"][0, p_target]) == 1
 
     for rec in (target_record - 1, target_record, target_record + 1):
         _, ref_row, out_row = _run_one_step_row(dataset_path, rec, p_target, rng_damage_fly_roll_gate=True)

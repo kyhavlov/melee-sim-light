@@ -234,6 +234,17 @@ static inline void enter_rebirth(MslBatch* batch, size_t idx, const MslCommonPar
   batch->state.action_id[idx] = (uint16_t)MSL_ACT_REBIRTH;
   batch->state.animation_index[idx] = (uint32_t)MSL_SM_WAIT1_0;
   msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+  {
+    const MslCharParams* ch = msl_char_params(batch->state.char_id[idx]);
+    if (ch != NULL) {
+      // Decomp/asm: Dead*->Rebirth enter path (ftCo_800D4FF4) calls ftCommon_8007D5D4 before the
+      // Rebirth motion callback chain; ftCommon_8007D5D4 sets fp->x1968_jumpsUsed = 1.
+      // Slippi post-frame exposes jumps remaining, so Rebirth entry snapshots max_jumps-1.
+      // refs/melee/build/GALE01/asm/melee/ft/ft_0D31.s::ftCo_800D4FF4
+      // refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007D5D4
+      batch->state.jumps_left[idx] = (ch->max_jumps > 0u) ? (uint8_t)(ch->max_jumps - 1u) : 0u;
+    }
+  }
   // Snapshot-order bridge:
   // - In engine order, dead->rebirth/rebirthwait transition callbacks run in the match-flow update
   //   path, and post-frame `state_age` for the first steady Rebirth lane is observed at 0.
