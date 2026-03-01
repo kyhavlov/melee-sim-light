@@ -1882,7 +1882,14 @@ void locomotion_update_pre(MslBatch* batch) {
             // grounded interrupt checks (typically Wait IASA path).
             // refs/melee/src/melee/ft/chara/ftCommon/{ftCo_AttackDash.c,ftCo_AttackS3.c,ftCo_AttackHi3.c,ftCo_AttackHi4.c,ftCo_AttackLw4.c}
             const uint8_t attackdash_wait_iasa_enabled =
-                (action_id != (uint16_t)MSL_ACT_ATTACK_DASH || stick_y < -c->crouch_stick_threshold)
+                (action_id != (uint16_t)MSL_ACT_ATTACK_DASH ||
+                 stick_y < -c->crouch_stick_threshold ||
+                 // Decomp: AttackDash IASA delegates into Wait_IASA checks, where Turn is a
+                 // regular branch after Squat. Preserve this Turn lane on opposite-stick rows
+                 // even when we keep the narrowed crouch gate for the broader subset.
+                 // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackDash.c::ftCo_AttackDash_IASA
+                 // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
+                 (stick_x * facing_dir) <= c->turn_stick_x_threshold)
                     ? 1u
                     : 0u;
             const uint8_t attackdash_guard_iasa_enabled =

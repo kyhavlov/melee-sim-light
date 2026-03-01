@@ -481,6 +481,61 @@ def test_damage_ground_to_kneebend_transition_rows_and_adjacent_controls_are_rep
 
 
 @pytest.mark.integration
+@pytest.mark.parametrize(
+    ("dataset_rel", "rows", "p_target", "seed_action"),
+    [
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl",
+            (328, 329, 330),
+            0,
+            79,
+        ),
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl",
+            (160, 161, 162),
+            0,
+            78,
+        ),
+    ],
+)
+def test_damage_ground_wait_iasa_kneebend_seed_lock_target_pm1_both_players(
+    dataset_rel: str, rows: tuple[int, int, int], p_target: int, seed_action: int
+) -> None:
+    # Grounded Damage* Wait_IASA ownership lock (target-1/target/target+1):
+    # - ftCo_Damage_IASA delegates into Wait_IASA on grounded rows and can consume jump input.
+    # - Keep strict replay-exact transition fields on both players across the local lane window.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_IASA
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c::ftCo_Jump_CheckInput
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+    for rec in rows:
+        assert int(samples.shape[0]) > rec, f"dataset too short for lock row: record={rec}"
+
+    target_row = samples[rows[1] : rows[1] + 1]
+    assert int(target_row["seed_t"]["action_id"][0, p_target]) == int(seed_action)
+    assert int(target_row["seed_t"]["on_ground"][0, p_target]) != 0
+    assert int(target_row["seed_t"]["hitlag"][0, p_target]) == 0
+    assert int(target_row["seed_t"]["hitstun"][0, p_target]) > 0
+    assert int(target_row["ref_t1"]["action_id"][0, p_target]) == 24  # KneeBend
+    assert int(target_row["ref_t1"]["action_frame"][0, p_target]) == 0
+    assert int(target_row["ref_t1"]["animation_index"][0, p_target]) == 15
+
+    for rec in rows:
+        _, ref_row, out_row = _run_one_step_row(dataset_path, rec, p_target)
+        for p in (0, 1):
+            _assert_transition_lock_fields_match_ref(
+                out_row=out_row, ref_row=ref_row, record=rec, p=p
+            )
+
+
+@pytest.mark.integration
 def test_guardreflect_frozen_powershield_shield_damage_rows_and_adjacent_controls_are_replay_exact() -> None:
     # Lock family for src/combat.c:339 lane:
     # GuardReflect frozen no-submotion snapshot with x14 expired and x18 still set, where
@@ -2538,6 +2593,74 @@ def test_attackdash_guardon_noncrouch_wait_iasa_rows_and_adjacent_controls_are_r
 
 @pytest.mark.integration
 @pytest.mark.parametrize(
+    ("dataset_rel", "rows", "p_target", "target_action_frame"),
+    [
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl",
+            (10228, 10229, 10230),
+            1,
+            36,
+        ),
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/QuerulousGrandDinosaur.msl",
+            (3627, 3628, 3629),
+            1,
+            36,
+        ),
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/TreasuredBackKangaroo.msl",
+            (6348, 6349, 6350),
+            1,
+            38,
+        ),
+    ],
+)
+def test_attackdash_wait_iasa_turn_seed_lock_target_pm1_both_players(
+    dataset_rel: str, rows: tuple[int, int, int], p_target: int, target_action_frame: int
+) -> None:
+    # AttackDash opposite-stick Turn ownership lock (target-1/target/target+1):
+    # - AttackDash IASA delegates into Wait_IASA ordering, where Turn branch is evaluated after Squat.
+    # - Keep strict replay-exact transition fields for both players over the local transition window.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackDash.c::ftCo_AttackDash_IASA
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+    for rec in rows:
+        assert int(samples.shape[0]) > rec, f"dataset too short for lock row: record={rec}"
+
+    target_row = samples[rows[1] : rows[1] + 1]
+    seed_t = target_row["seed_t"][0]
+    ref_t1 = target_row["ref_t1"][0]
+    input_t = target_row["input_t"][0]
+    assert int(seed_t["action_id"][p_target]) == 50  # AttackDash
+    assert int(seed_t["action_frame"][p_target]) == int(target_action_frame)
+    assert int(seed_t["animation_index"][p_target]) == 52
+    assert int(seed_t["hitlag"][p_target]) == 0
+    assert int(seed_t["hitstun"][p_target]) == 0
+    assert int(ref_t1["action_id"][p_target]) == 18  # Turn
+    assert int(ref_t1["action_frame"][p_target]) == 1
+    assert int(ref_t1["animation_index"][p_target]) == 10
+    assert int(input_t["p"][p_target]["main_y"]) >= 0
+
+    facing_dir = 1 if int(seed_t["facing"][p_target]) != 0 else -1
+    assert int(input_t["p"][p_target]["main_x"]) * facing_dir < 0
+
+    for rec in rows:
+        _, ref_row, out_row = _run_one_step_row(dataset_path, rec, p_target)
+        for p in (0, 1):
+            _assert_transition_lock_fields_match_ref(
+                out_row=out_row, ref_row=ref_row, record=rec, p=p
+            )
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
     ("dataset_rel", "rows", "p", "post_ref_action"),
     [
         (
@@ -2990,6 +3113,63 @@ def test_walk_run_timebase_ownership_rows_and_adjacent_controls_are_replay_exact
     for rec in (controls[0], target_record, controls[1]):
         _, ref, out = _run_one_step_row(dataset_path, rec, p)
         _assert_transition_lock_fields_match_ref(out_row=out, ref_row=ref, record=rec, p=p)
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    ("dataset_rel", "target_record", "p_target"),
+    [
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl",
+            3272,
+            1,
+        ),
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/QuerulousGrandDinosaur.msl",
+            4034,
+            1,
+        ),
+    ],
+)
+def test_walkmiddle_midcycle_rate_bridge_seed_lock_target_pm1_both_players(
+    dataset_rel: str, target_record: int, p_target: int
+) -> None:
+    # Decomp ownership lock for WalkMiddle mid-cycle callback rate:
+    # - ftCo_Walk_Anim delegates to ftWalkCommon_800DFDDC, which consumes mv.co.walk.x0.
+    # - In this lane, preserving seeded callback-owned rate on the af=10 steady window avoids
+    #   over-advancing from raw gr_vel recompute when mv.co.walk.x0 diverges.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Walk.c::ftCo_Walk_Anim
+    # refs/melee/src/melee/ft/ftwalkcommon.c::ftWalkCommon_800DFDDC
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+    assert int(samples.shape[0]) > (target_record + 1), f"dataset too short for lock row: record={target_record}"
+
+    target_row = samples[target_record : target_record + 1]
+    # Replay-real preconditions anchoring this family to WalkMiddle mid-cycle ownership.
+    assert int(target_row["seed_t"]["action_id"][0, p_target]) == 16  # WalkMiddle
+    assert int(target_row["seed_t"]["action_frame"][0, p_target]) == 10
+    assert int(target_row["seed_t"]["animation_index"][0, p_target]) == 8  # ftCo_SM_WalkMiddle
+    assert int(target_row["ref_t1"]["action_id"][0, p_target]) == 16
+    assert int(target_row["ref_t1"]["action_frame"][0, p_target]) == 11
+
+    rows = (target_record - 1, target_record, target_record + 1)
+    for rec in rows:
+        assert int(samples.shape[0]) > rec, f"dataset too short for lock row: record={rec}"
+        _, ref_row, out_row = _run_one_step_row(dataset_path, rec, p_target)
+        num_players = int(ds.header["num_players"])
+        for p in range(num_players):
+            _assert_transition_lock_fields_match_ref(
+                out_row=out_row,
+                ref_row=ref_row,
+                record=rec,
+                p=p,
+            )
 
 
 @pytest.mark.integration

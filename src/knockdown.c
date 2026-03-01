@@ -686,10 +686,26 @@ void knockdown_update_pre_physics(MslBatch* batch) {
         }
 
         const uint8_t in_hitstun = (batch->state.hitstun[idx] > 0) ? 1u : 0u;
+        const uint8_t iasa_locked = damage_iasa_lockout_x221c_b6(batch, idx);
         if (in_hitstun && damage_jump_input_from_edges(batch, c, idx)) {
           // Decomp: doIasa snapshots x0 into mv.co.damage.x14 when ftCo_Jump_GetInput succeeds.
           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::doIasa
           batch->state.damage_jump_buffer_x14[idx] = batch->state.hitstun[idx];
+        }
+
+        // Grounded DamageAir* callback ownership:
+        // - Damage_IASA delegates to Wait_IASA on grounded rows when !x221C_b6.
+        // - Wait_IASA then evaluates guard/jump locomotion checks in-order.
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_IASA
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
+        if (batch->state.on_ground[idx] != 0u && !iasa_locked) {
+          guard_update_grounded(batch, c, idx, 1u);
+          if (batch->state.action_id[idx] != a0) {
+            continue;
+          }
+          if (damage_ground_try_enter_kneebend_from_wait_iasa(batch, c, idx)) {
+            continue;
+          }
         }
 
         uint8_t anim_done = 0u;
