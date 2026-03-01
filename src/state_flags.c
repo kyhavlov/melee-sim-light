@@ -85,6 +85,8 @@ void state_flags_refresh_post_frame(MslBatch* batch) {
   enum { MSL_STATE_FLAGS_221C_INDEX = 3 };
   enum { MSL_STATE_FLAGS_221F_INDEX = 4 };
   enum { MSL_STATE_FLAG_2218_ALLOW_INTERRUPT = 0x80 };
+  enum { MSL_STATE_FLAG_2218_B1 = 0x40 };
+  enum { MSL_STATE_FLAG_2218_B2 = 0x20 };
 
   // fp+0x221A:
   // - 0x01 = fp->x221A_b7
@@ -206,6 +208,31 @@ void state_flags_refresh_post_frame(MslBatch* batch) {
           f2218 |= (uint8_t)MSL_STATE_FLAG_2218_ALLOW_INTERRUPT;
         } else {
           f2218 &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_2218_ALLOW_INTERRUPT;
+        }
+      }
+      // Jab command ownership (fp+0x2218 x2218_b1/x2218_b2):
+      // - ftAction_80071AE8 sets x2218_b1 from set_jab_combo script commands.
+      // - ftAction_80071B28 sets x2218_b2 from set_jab_rapid script commands.
+      // refs/melee/src/melee/ft/ftaction.c::{ftAction_80071AE8,ftAction_80071B28}
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack1.c::{checkAttack12,checkAttack13}
+      // data/moves/{fox,falco}.json moves["ftCo_SM_Attack11"]["events"] set_jab_combo
+      // data/moves/{fox,falco}.json moves["ftCo_SM_Attack12"]["events"] set_jab_rapid
+      //
+      // Keep this lane narrow to Attack11/Attack12 where command windows are extracted.
+      if (action_id == (uint16_t)MSL_ACT_ATTACK_11 || action_id == (uint16_t)MSL_ACT_ATTACK_12) {
+        const uint8_t jab_combo_active =
+            move_tables_jab_combo_active(batch->state.char_id[idx], action_id, allow_interrupt_anim_probe);
+        const uint8_t jab_rapid_active =
+            move_tables_jab_rapid_active(batch->state.char_id[idx], action_id, allow_interrupt_anim_probe);
+        if (jab_combo_active) {
+          f2218 |= (uint8_t)MSL_STATE_FLAG_2218_B1;
+        } else {
+          f2218 &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_2218_B1;
+        }
+        if (jab_rapid_active) {
+          f2218 |= (uint8_t)MSL_STATE_FLAG_2218_B2;
+        } else {
+          f2218 &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_2218_B2;
         }
       }
       // AttackDash exit ownership bridge for fp+0x2218 bit0 (0x80):

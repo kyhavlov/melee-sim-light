@@ -1640,6 +1640,23 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
           msl_action_is_grabbed_victim(batch->state.action_id[d_idx])) {
         continue;
       }
+      if (laser_state != 0u && batch->state.action_id[o_idx] == (uint16_t)MSL_ACT_THROW_LW &&
+          batch->state.grab_owner_port[d_idx] == (uint8_t)owner &&
+          msl_action_is_grabbed_victim(batch->state.action_id[d_idx]) &&
+          batch->state.hitlag_pre_timer[d_idx] != 0u) {
+        // Seed-bridge discriminator for ThrowLw attached victim collisions:
+        // - In decomp, thrown victims are attachment-driven (Thrown* Phys/Coll are empty), and
+        //   throw-side projectile pulses are script-time one-shots consumed in ftFx_Throw_Anim.
+        // - On reseeded mid-hitlag snapshots, replay rows can carry victim hitlag>0 at t while
+        //   the consumed throw pulse latch is not exposed by Slippi; re-applying attached BODY
+        //   contact in that window spuriously re-extends hitlag at t+1.
+        // - Gate on seed-visible pre-hitlag only (hitlag_pre_timer) to keep the suppression narrow.
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Thrown.c::{ftCo_800DE508,ftCo_ThrownF_Phys,ftCo_ThrownF_Coll}
+        // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
+        // refs/melee/src/melee/ft/ftaction.c::ftAction_80071974
+        // refs/melee/src/melee/ft/fighter.c::Fighter_8006A1BC
+        continue;
+      }
 
       // BODY contact: attempt to apply an item hit.
       //

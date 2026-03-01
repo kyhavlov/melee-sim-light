@@ -2174,6 +2174,47 @@ def test_throw_release_transition_families_and_adjacent_controls_action_anim_sta
 
 
 @pytest.mark.integration
+def test_throwlw_attached_victim_hitlag_seed_bridge_lock_target_pm1_both_players() -> None:
+    # ThrowLw attached-victim hitlag bridge lock (target-1/target/target+1):
+    # - ftFx_Throw_Anim uses script-time throw_flags_b0 pulses (set by ftAction_80071974).
+    # - Thrown* victim motion is attachment-driven while still grabbed.
+    # - On reseeded mid-hitlag rows, do not re-emit attached BODY contact in this local window.
+    # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
+    # refs/melee/src/melee/ft/ftaction.c::ftAction_80071974
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Thrown.c::{ftCo_800DE508,ftCo_ThrownF_Phys,ftCo_ThrownF_Coll}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_rel = (
+        "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
+        "QuerulousGrandDinosaur.msl"
+    )
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    target_record = 447
+    owner_p = 0
+    victim_p = 1
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+    for rec in (target_record - 1, target_record, target_record + 1):
+        assert int(samples.shape[0]) > rec, f"dataset too short for lock row: record={rec}"
+
+    target = samples[target_record : target_record + 1]
+    assert int(target["seed_t"]["action_id"][0, owner_p]) == 222  # ThrowLw
+    assert int(target["seed_t"]["action_id"][0, victim_p]) == 242  # ThrownLw
+    assert int(target["seed_t"]["grab_owner_port"][0, victim_p]) == owner_p
+    assert int(target["seed_t"]["hitlag"][0, victim_p]) > 0
+    assert int(target["ref_t1"]["hitlag"][0, owner_p]) == 0
+    assert int(target["ref_t1"]["hitlag"][0, victim_p]) == 0
+
+    for rec in (target_record - 1, target_record, target_record + 1):
+        _, ref_row, out_row = _run_one_step_row(dataset_path, rec, owner_p)
+        for p in (0, 1):
+            _assert_transition_lock_fields_match_ref(out_row=out_row, ref_row=ref_row, record=rec, p=p)
+
+
+@pytest.mark.integration
 @pytest.mark.parametrize(
     ("dataset_rel", "target_record", "p", "seed_action", "ref_action"),
     [
@@ -2319,9 +2360,12 @@ def test_attack11_jab_chain_transition_rows_and_adjacent_controls_stay_replay_ex
     assert int(post_row["seed_t"]["action_id"][0, p]) == 45
     assert int(post_row["ref_t1"]["action_id"][0, p]) == 45
 
+    # Strict lock quality for the kept x2218_b1/x2218_b2 jab-command ownership lane:
+    # replay-exact transition fields must match for both players on target±1 rows.
     for rec in (controls[0], target_record, controls[1]):
         _, ref, out = _run_one_step_row(dataset_path, rec, p)
-        _assert_transition_lock_fields_match_ref(out_row=out, ref_row=ref, record=rec, p=p)
+        for q in (0, 1):
+            _assert_transition_lock_fields_match_ref(out_row=out, ref_row=ref, record=rec, p=q)
 
 
 @pytest.mark.integration
