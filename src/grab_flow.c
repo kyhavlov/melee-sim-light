@@ -823,7 +823,35 @@ void grab_flow_update_pre_physics(MslBatch* batch) {
           msl_anim_timebase_tick_once(batch, vidx);
         }
       }
-
+      // Lower-slot follow-up window:
+      // - For owner-later callback order (owner_p > victim_p), replay rows show one additional
+      //   victim CaptureWait tick on the first steady owner CatchWait frame (owner af==2).
+      // - Keep this strictly scoped to target callback ordering + neutral victim state.
+      // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
+      // refs/melee/build/GALE01/asm/melee/ft/chara/ftCommon/ftCo_Attack100.s::{
+      //   ftCo_CatchPull_Anim,fn_800DA1D8,fn_800DB6C8
+      // }
+      if ((oa_seed == (uint16_t)MSL_ACT_CATCH_WAIT || oa_seed == (uint16_t)MSL_ACT_CATCH_ATTACK) &&
+          (oa == (uint16_t)MSL_ACT_CATCH_WAIT || oa == (uint16_t)MSL_ACT_CATCH_ATTACK) &&
+          batch->state.action_frame[oidx] == 2) {
+        for (int victim_p = 0; victim_p < owner_p; victim_p++) {
+          const size_t vidx = msl_idx_player(bi, victim_p);
+          if (batch->state.hitlag_started_frame[vidx] != 0 || batch->state.hitstun[vidx] != 0u) {
+            continue;
+          }
+          if ((int)batch->state.grab_owner_port[vidx] != owner_p) {
+            continue;
+          }
+          const uint16_t va = batch->state.action_id[vidx];
+          if (!is_capture_wait_action(va)) {
+            continue;
+          }
+          if (batch->state.action_frame[vidx] != 2) {
+            continue;
+          }
+          msl_anim_timebase_tick_once(batch, vidx);
+        }
+      }
       if (oa != (uint16_t)MSL_ACT_CATCH_WAIT || c == NULL) {
         continue;
       }

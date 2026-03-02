@@ -65,7 +65,7 @@ rollout.streak_len.p90: 72
 rollout.streak_len.p95: 98
 rollout.streak_len.max: 179
 rollout.first_mismatch_total: 212
-rollout.first_mismatch_seeded_total: 70
+rollout.first_mismatch_seeded_total: 69
 
 == suite summary ==
 overall.rollout.streak_count: 951
@@ -75,4 +75,4 @@ overall.rollout.streak_len.p95: 105
 overall.rollout.streak_len.max: 197
 overall.rollout.best_len.max: 197
 overall.rollout.first_mismatch_total: 956
-overall.rollout.first_mismatch_seeded_total: 338
+overall.rollout.first_mismatch_seeded_total: 337

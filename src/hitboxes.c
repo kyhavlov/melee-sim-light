@@ -80,12 +80,8 @@ static inline uint8_t hitboxes_seed_bridge_is_attackair_owner(uint16_t action_id
     case MSL_ACT_ATTACK_AIR_N:
     case MSL_ACT_ATTACK_AIR_F:
     case MSL_ACT_ATTACK_AIR_B:
-    // narrowed_temporary:
-    // Keep the reseed stale-trim owner map on AttackAirN/F/B/Lw where target-1/target/target+1
-    // strict replay-real controls are currently lockable for this lane.
-    // AttackAirHi remains disabled until we have a clean strict-control family for the same branch
-    // (current hi candidate cluster has adjacent-control mismatches from a separate pre-existing
-    // DamageFlyTop transition lane, so it cannot be pinned as a strict replay-real lock yet).
+    case MSL_ACT_ATTACK_AIR_HI:
+    // Decomp owner map for aerial AttackAir windows in stale hitlist trim bridge.
     // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_Anim
     // refs/melee/src/melee/lb/lbcollision.c::{lbColl_80008A5C,lbColl_8000ACFC}
     case MSL_ACT_ATTACK_AIR_LW:

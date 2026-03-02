@@ -623,6 +623,74 @@ def test_catchpull_capturewait_owner_before_victim_tick_rows_and_adjacent_contro
 
 
 @pytest.mark.integration
+@pytest.mark.parametrize(
+    ("dataset_rel", "target_record", "owner_p", "victim_p"),
+    [
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
+            "AttachedGoodNaturedGuanaco.msl",
+            945,
+            1,
+            0,
+        ),
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
+            "GracefulAttachedTurtle.msl",
+            961,
+            1,
+            0,
+        ),
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
+            "QuerulousGrandDinosaur.msl",
+            8257,
+            1,
+            0,
+        ),
+    ],
+)
+def test_catchwait_lower_slot_followup_tick_seed_lock_target_pm1_both_players(
+    dataset_rel: str, target_record: int, owner_p: int, victim_p: int
+) -> None:
+    # Lower-slot CaptureWait follow-up lock family for src/grab_flow.c:
+    # - CatchWait/CatchAttack callback ownership can apply one additional victim CaptureWait Anim
+    #   tick when owner callback runs later in slot order (victim slot < owner slot).
+    # refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
+    # refs/melee/build/GALE01/asm/melee/ft/chara/ftCommon/ftCo_Attack100.s::{
+    #   ftCo_CatchPull_Anim,fn_800DA1D8,fn_800DB6C8}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+    rows = (target_record - 1, target_record, target_record + 1)
+    for rec in rows:
+        assert int(samples.shape[0]) > rec, f"dataset too short for lock row: record={rec}"
+
+    target = samples[target_record : target_record + 1]
+    seed_t = target["seed_t"][0]
+    ref_t1 = target["ref_t1"][0]
+    assert owner_p > victim_p
+    assert int(seed_t["action_id"][owner_p]) in (0x00D8, 0x00D9)  # CatchWait / CatchAttack
+    assert int(seed_t["action_frame"][owner_p]) == 1
+    assert int(seed_t["grab_owner_port"][victim_p]) == owner_p
+    assert int(seed_t["action_id"][victim_p]) in (0x00E0, 0x00E3)  # CaptureWaitHi / CaptureWaitLw
+    assert int(seed_t["action_frame"][victim_p]) == 1
+    assert int(ref_t1["action_id"][owner_p]) in (0x00D8, 0x00D9)
+    assert int(ref_t1["action_frame"][owner_p]) == 2
+    assert int(ref_t1["action_id"][victim_p]) in (0x00E0, 0x00E3)
+    assert int(ref_t1["action_frame"][victim_p]) == 3
+
+    for rec in rows:
+        _, ref_row, out_row = _run_one_step_row(dataset_path, rec, owner_p)
+        for p in (0, 1):
+            _assert_transition_lock_fields_match_ref(out_row=out_row, ref_row=ref_row, record=rec, p=p)
+
+
+@pytest.mark.integration
 def test_items_guardreflect_no_submotion_shield_sweep_rows_and_adjacent_controls_are_replay_exact() -> None:
     # Lock family for src/items.c:1366 lane:
     # GuardReflect no-submotion snapshots route shield overlap through swept segment + cap gate
@@ -4176,6 +4244,72 @@ def test_attackairfb_early_stale_suppression_trim_rows_and_adjacent_controls_are
             record=rec,
             p=p_victim,
         )
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    ("dataset_rel", "target_record", "p_attacker", "p_victim"),
+    [
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
+            "AttachedGoodNaturedGuanaco.msl",
+            4232,
+            1,
+            0,
+        ),
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
+            "TreasuredBackKangaroo.msl",
+            1556,
+            1,
+            0,
+        ),
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
+            "TreasuredBackKangaroo.msl",
+            5349,
+            1,
+            0,
+        ),
+    ],
+)
+def test_attackairhi_early_stale_suppression_trim_seed_lock_target_pm1_both_players(
+    dataset_rel: str, target_record: int, p_attacker: int, p_victim: int
+) -> None:
+    # Lock family for src/hitboxes.c AttackAirHi stale-suppression owner map:
+    # - Seeded indefinite stale entries can carry incorrect BODY-owner attribution across reseeds.
+    # - In the early AttackAirHi create window, stale entries with mismatched `instance_hit_by`
+    #   must be trimmed so ftColl_80076ED8 ownership can register the real BODY hit.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_Anim
+    # refs/melee/src/melee/ft/ftcoll.c::ftColl_80076ED8
+    # refs/melee/src/melee/lb/lbcollision.c::{lbColl_80008A5C,lbColl_8000ACFC}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+    rows = (target_record - 1, target_record, target_record + 1)
+    for rec in rows:
+        assert int(samples.shape[0]) > rec, f"dataset too short for lock row: record={rec}"
+
+    target = samples[target_record : target_record + 1]
+    seed_t = target["seed_t"][0]
+    ref_t1 = target["ref_t1"][0]
+    assert int(seed_t["action_id"][p_attacker]) == 0x0044  # AttackAirHi
+    assert int(seed_t["on_ground"][p_attacker]) == 0
+    assert int(seed_t["hitlag"][p_attacker]) == 0
+    assert int(seed_t["hitstun"][p_victim]) > 0
+    assert int(seed_t["instance_hit_by"][p_victim]) != int(seed_t["instance_id"][p_attacker])
+    assert int(ref_t1["hitlag"][p_attacker]) > 0
+    assert int(ref_t1["hitlag"][p_victim]) > 0
+
+    for rec in rows:
+        _, ref_row, out_row = _run_one_step_row(dataset_path, rec, p_attacker)
+        for p in (0, 1):
+            _assert_transition_lock_fields_match_ref(out_row=out_row, ref_row=ref_row, record=rec, p=p)
 
 
 @pytest.mark.integration
