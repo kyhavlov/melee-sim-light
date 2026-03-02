@@ -259,9 +259,11 @@ static inline uint8_t action_is_blaster_throw(uint16_t action_id_u16) {
 enum {
   // GALE01 ItKind enum values for spacie laser shots.
   // refs/melee/src/melee/it/forward.h::ItemKind
-  // data/characters/{fox,falco}.json blaster_shot_itkind
+  // data/characters/{fox,falco}.json {blaster_shot_itkind,side_special_illusion_item_kind}
   MSL_IT_KIND_FOX_LASER_SHOT = 54,
   MSL_IT_KIND_FALCO_LASER_SHOT = 55,
+  MSL_IT_KIND_FOX_ILLUSION = 56,
+  MSL_IT_KIND_FALCO_PHANTASM = 57,
 };
 
 enum {
@@ -298,6 +300,149 @@ static inline uint8_t throw_blaster_pulse_is_seed_stale_latch(uint16_t action_id
     return 1u;
   }
   return 0u;
+}
+
+enum {
+  // Fox/Falco side special "main" submotions that can emit cmd_var[2] ghost spawn pulses.
+  // Source mapping:
+  // - data/special_msids/{fox,falco}.json side_ground.main=302, side_air.main=305
+  // - data/moves/{fox,falco}.json specials_by_msid["302"/"305"].events set_cmd_var(idx=2,value=1)
+  MSL_ILLUSION_MAIN_GROUND_MSID = 302,
+  MSL_ILLUSION_MAIN_AIR_MSID = 305,
+  MSL_ILLUSION_CMDVAR2_SPAWN_ON_AF = 2,
+  MSL_ILLUSION_RUNTIME_SPAWN_SKIP_COLL_FLAG = 255,
+};
+
+static inline uint8_t action_is_illusion_dash(uint16_t action_id_u16) {
+  // Ghost article spawn is owned by ftFx_SpecialS_Anim / ftFx_SpecialAirS_Anim
+  // (main dash states), not Start/End states.
+  // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c::{
+  //   ftFx_SpecialS_Anim,ftFx_SpecialAirS_Anim,ftFox_SpecialS_CreateGhostItem}
+  return (action_id_u16 == (uint16_t)MSL_ACT_FX_SPECIAL_S ||
+          action_id_u16 == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_S)
+             ? 1u
+             : 0u;
+}
+
+static inline uint8_t illusion_spawn_pulse_crossed(uint16_t action_id_u16, uint16_t msid,
+                                                   float prev_anim_frame_f32,
+                                                   float cur_anim_frame_f32) {
+  if (!action_is_illusion_dash(action_id_u16)) {
+    return 0u;
+  }
+  // Cmd-var pulse source is extracted from specials_by_msid command events:
+  // - side_ground.main (302): set_cmd_var(idx=2,value=1) at frame=2
+  // - side_air.main    (305): set_cmd_var(idx=2,value=1) at frame=2
+  // data/special_msids/{fox,falco}.json
+  // data/moves/{fox,falco}.json specials_by_msid["302"/"305"].events
+  if (msid != (uint16_t)MSL_ILLUSION_MAIN_GROUND_MSID &&
+      msid != (uint16_t)MSL_ILLUSION_MAIN_AIR_MSID) {
+    return 0u;
+  }
+  const float on = (float)MSL_ILLUSION_CMDVAR2_SPAWN_ON_AF;
+  return (prev_anim_frame_f32 < on && cur_anim_frame_f32 >= on) ? 1u : 0u;
+}
+
+static inline int items_find_illusion_slot(const MslBatch* batch, int bi, int owner,
+                                           uint16_t illusion_itkind) {
+  if (batch == NULL || owner < 0) {
+    return -1;
+  }
+  for (int it = 0; it < MSL_MAX_ITEMS; it++) {
+    const size_t ii = msl_idx_item(bi, it);
+    if (!batch->state.item_exists[ii]) {
+      continue;
+    }
+    if (batch->state.item_type[ii] != illusion_itkind) {
+      continue;
+    }
+    if (batch->state.item_owner[ii] != owner) {
+      continue;
+    }
+    return it;
+  }
+  return -1;
+}
+
+static inline float items_cur_anim_frame_f32(const MslBatch* batch, size_t idx);
+
+static void illusion_spawn_from_fighter(MslBatch* batch, int bi, int owner) {
+  if (batch == NULL) {
+    return;
+  }
+  const size_t o_idx = msl_idx_player(bi, owner);
+  const uint8_t char_id = batch->state.char_id[o_idx];
+  uint16_t illusion_itkind = 0u;
+  // Slippi char IDs: Fox=1, Falco=22 (owner-gated to spacies only).
+  // data/characters/{fox,falco}.json (character payloads and side-special item kinds)
+  // refs/melee/src/melee/it/forward.h::ItemKind
+  if (char_id == 1u) {
+    illusion_itkind = (uint16_t)MSL_IT_KIND_FOX_ILLUSION;
+  } else if (char_id == 22u) {
+    illusion_itkind = (uint16_t)MSL_IT_KIND_FALCO_PHANTASM;
+  } else {
+    return;
+  }
+  if (items_find_illusion_slot(batch, bi, owner, illusion_itkind) >= 0) {
+    return;
+  }
+
+  const uint16_t action_id_u16 = batch->state.action_id[o_idx];
+  const uint32_t anim_u32 = batch->state.animation_index[o_idx];
+  if (anim_u32 > 0xFFFFu) {
+    return;
+  }
+  const uint16_t msid = (uint16_t)anim_u32;
+  const float af = items_cur_anim_frame_f32(batch, o_idx);
+  const int32_t prev_fp =
+      batch->state.anim_frame_fp_q16_16[o_idx] - batch->state.frame_speed_mul_fp_q16_16[o_idx];
+  const float af_prev = msl_anim_frame_sanitize_f32(msl_f32_from_q16_16(prev_fp));
+  if (!illusion_spawn_pulse_crossed(action_id_u16, msid, af_prev, af)) {
+    return;
+  }
+
+  const int slot = items_alloc_slot(batch, bi);
+  if (slot < 0) {
+    return;
+  }
+  const size_t ii = msl_idx_item(bi, slot);
+  item_slot_clear(batch, ii);
+  const MslCharParams* chp = msl_char_params(char_id);
+  if (chp == NULL) {
+    return;
+  }
+
+  batch->state.item_exists[ii] = 1u;
+  batch->state.item_type[ii] = illusion_itkind;
+  batch->state.item_owner[ii] = (int8_t)owner;
+  // Spawn motion state in it_8029CFF0 is chosen by ftLib_800865CC(owner)->ground_or_air:
+  // ground(0)=>state0, air(1)=>state1.
+  // refs/melee/src/melee/it/items/itfoxillusion.c::{it_8029CFF0}
+  // refs/melee/src/melee/ft/ftlib.c::ftLib_800865CC
+  batch->state.item_state[ii] = batch->state.on_ground[o_idx] ? 0u : 1u;
+  batch->state.item_instance_id[ii] = batch->state.instance_id[o_idx];
+  batch->state.item_spawn_id[ii] = items_next_spawn_id(batch, bi);
+  batch->state.item_direction[ii] = batch->state.facing[o_idx] ? 1.0f : -1.0f;
+  batch->state.item_pos_x[ii] = batch->state.pos_x[o_idx];
+  batch->state.item_pos_y[ii] = batch->state.pos_y[o_idx];
+  batch->state.item_vel_x[ii] = 0.0f;
+  batch->state.item_vel_y[ii] = 0.0f;
+  batch->state.item_attack_id[ii] = batch->state.attack_id[o_idx];
+  batch->state.item_attack_instance[ii] = batch->state.attack_instance[o_idx];
+  // Ghost article spawn initializes lifeTimer from special attrs[0].
+  // data/characters/{fox,falco}.json illusion_item_lifetime_state01_frames
+  // refs/melee/src/melee/it/items/itfoxillusion.c::it_8029CFF0
+  batch->state.item_timer[ii] = (float)chp->illusion_item_lifetime_state01_frames;
+  // Spawn-order bridge:
+  // - Item spawn happens in fighter Anim callback (ftFox_SpecialS_CreateGhostItem), while ghost
+  //   positional ring lanes are updated in fighter Phys and consumed by item Phys/Coll callbacks.
+  // - Without seeded ghostEffectPos ownership lanes, skip same-step collision once after runtime
+  //   spawn to avoid callback-order false positives; subsequent frames collide normally.
+  // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c::{
+  //   ftFox_SpecialS_CreateGhostItem,ftFox_SpecialS_SetPhys}
+  // refs/melee/src/melee/it/items/itfoxillusion.c::{
+  //   itFoxillusion_UnkMotion0_Phys,itFoxillusion_UnkMotion0_Coll}
+  batch->state.item_misc0[ii] = (uint8_t)MSL_ILLUSION_RUNTIME_SPAWN_SKIP_COLL_FLAG;
 }
 
 static inline float items_cur_anim_frame_f32(const MslBatch* batch, size_t idx) {
@@ -653,11 +798,6 @@ typedef struct MslIllusionItemHitParams {
   uint8_t element;
   float hitbox_y_offset;
 } MslIllusionItemHitParams;
-
-enum {
-  MSL_IT_KIND_FOX_ILLUSION = 56,
-  MSL_IT_KIND_FALCO_PHANTASM = 57,
-};
 
 enum {
   // Item script extraction uses -128 as the "no shield-damage delta" sentinel for some lanes.
@@ -1065,6 +1205,11 @@ static void illusion_items_update_and_collide(MslBatch* batch, int bi) {
     const MslCharParams* chp = msl_char_params(batch->state.char_id[o_idx]);
     const uint8_t owner_motion_active = illusion_owner_motion_is_active(batch, o_idx);
     if (!illusion_item_anim_step(batch, ii, chp, owner_motion_active)) {
+      continue;
+    }
+    if (batch->state.item_misc0[ii] ==
+        (uint8_t)MSL_ILLUSION_RUNTIME_SPAWN_SKIP_COLL_FLAG) {
+      batch->state.item_misc0[ii] = 0u;
       continue;
     }
     if (batch->state.item_state[ii] >= 2u) {
@@ -1785,6 +1930,20 @@ void items_spawn_pre_physics(MslBatch* batch) {
     // Stack-local per-step/per-batch-row scratch: reset once each row iteration.
     // This does not persist in SoA state across frames/reseed.
     uint8_t gun_spawned_this_frame[MSL_MAX_PLAYERS] = {0};
+
+    // Spawn Illusion/Phantasm ghost article from side-special cmd_var[2] pulse.
+    // Decomp ownership:
+    // - ftFx_SpecialS_Anim / ftFx_SpecialAirS_Anim call ftFox_SpecialS_CreateGhostItem.
+    // - ftFox_SpecialS_CreateGhostItem spawns via it_8029CEB4 when cmd_vars[2]==1.
+    // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c::{
+    //   ftFx_SpecialS_Anim,ftFx_SpecialAirS_Anim,ftFox_SpecialS_CreateGhostItem}
+    for (int p = 0; p < num_players; p++) {
+      const size_t idx = msl_idx_player(bi, p);
+      if (batch->state.hitlag_started_frame[idx] != 0u) {
+        continue;
+      }
+      illusion_spawn_from_fighter(batch, bi, p);
+    }
 
     // Update gun items first so laser spawns can inherit the correct instance_id/spawn_id ordering.
     for (int p = 0; p < num_players; p++) {
