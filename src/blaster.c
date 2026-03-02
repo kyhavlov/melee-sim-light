@@ -163,6 +163,11 @@ static inline void enter_blaster_start(MslBatch* batch, size_t idx, const MslLas
   } else {
     batch->state.action_id[idx] = (uint16_t)MSL_ACT_FX_SPECIAL_AIR_N_START;
     batch->state.animation_index[idx] = (uint32_t)lp->air_start_msid;
+    // Decomp: ftFx_SpecialAirN_Enter calls Fighter_ChangeMotionState(..., flags=0), i.e. no
+    // Ft_MF_KeepFastFall. ChangeMotionState clears fp->fall_fast when KeepFastFall is absent.
+    // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_SpecialAirN_Enter
+    // refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState
+    batch->state.fall_fast[idx] = 0u;
   }
   msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
   // Decomp: both grounded and aerial SpecialN enter paths call ftAnim_8006EBA4 immediately after

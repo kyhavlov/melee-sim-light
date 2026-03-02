@@ -136,6 +136,7 @@ SEED_DTYPE = np.dtype(
         ("tilt_timer_x", _arr("u1", MAX_PLAYERS)),
         ("tilt_timer_y", _arr("u1", MAX_PLAYERS)),
         ("fall_fast", _arr("u1", MAX_PLAYERS)),
+        ("fall_fast_hitlag_exit_owner", _arr("u1", MAX_PLAYERS)),
         ("run_x0", _arr("u1", MAX_PLAYERS)),
         ("dash_x4", _arr("u1", MAX_PLAYERS)),
         ("shine_release_lag", _arr("u1", MAX_PLAYERS)),

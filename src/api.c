@@ -428,17 +428,22 @@ int msl_batch_reseed_seed(MslBatch* batch, const uint8_t* seed_bytes, size_t see
       // bit 0x08 as "isFastFalling".
       // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
       //
-      // Our seed-history pipeline also provides a derived `seed->fall_fast`, but it is not a
-      // first-class Slippi field and can disagree with the raw byte snapshot. Prefer the raw
-      // Slippi snapshot bit when it disagrees; this is teacher-forced reseed output parity
-      // (prefix-invariant/causal), not a replay-fit heuristic.
+      // Seeded ownership model:
+      // - `seed->fall_fast` is the internal fp->fall_fast lane (derived causally in preprocessing).
+      // - `seed->fall_fast_hitlag_exit_owner` marks immediate hitlag-exit rows for fastfall-capable
+      //   actions, where prio-0 hitlag decrement runs before non-hitlag callback ownership.
+      // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A1BC,Fighter_8006A360}
+      // refs/melee/src/melee/ft/ftcommon.c::ftCommon_CheckFallFast
+      //
+      // On those ownership-marked rows, keep the internal seeded lane authoritative; otherwise
+      // use the raw Slippi fp+0x221A isFastFalling bit for teacher-forced reseed parity.
       enum { MSL_STATE_FLAGS_221A_INDEX = 1 };
       enum { MSL_STATE_FLAG_221A_IS_FASTFALL = 0x08 };
       uint8_t fall_fast = seed->fall_fast[p] ? 1u : 0u;
       const uint8_t slippi_fall_fast =
           (seed->state_flags[p][MSL_STATE_FLAGS_221A_INDEX] & MSL_STATE_FLAG_221A_IS_FASTFALL) ? 1u
                                                                                                : 0u;
-      if (slippi_fall_fast != fall_fast) {
+      if (!seed->fall_fast_hitlag_exit_owner[p]) {
         fall_fast = slippi_fall_fast;
       }
       batch->state.fall_fast[idx] = fall_fast;
@@ -447,7 +452,8 @@ int msl_batch_reseed_seed(MslBatch* batch, const uint8_t* seed_bytes, size_t see
       // refs/melee/src/melee/ft/fighter.c (Fighter_ChangeMotionState; clears when (flags & Ft_MF_KeepFastFall)==0)
       // refs/melee/src/melee/ft/forward.h (Ft_MF_KeepFastFall = 1<<0)
       //
-      // Teacher-forced reseed parity: do not override Slippi's raw fp+0x221A fall_fast bit here.
+      // Non-hitlag ownership / state_flags parity after reseed is maintained by the runtime update
+      // path (physics + state_flags writer); do not add extra replay-fit fall_fast rewrites here.
       // fp+0x2340 AttackDash lane (mv.co.attackdash.x0) targeted seed carry:
       // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackDash.c::ftCo_AttackDash_IASA
       // refs/melee/build/GALE01/asm/melee/ft/chara/ftCommon/ftCo_Attack100.s::ftCo_800D8AE0

@@ -3185,11 +3185,15 @@ void locomotion_update_post_collision(MslBatch* batch) {
         } else if (a == (uint16_t)MSL_ACT_FX_SPECIAL_HI_FALL) {
           // Decomp: ftFx_SpecialHiFall_Coll -> ftFx_SpecialHiFall_Enter transitions to
           // SpecialHiLanding with anim_start=13 and immediate anim tick.
+          // ChangeMotionState flags do not include KeepFastFall on this transition, so fall_fast is
+          // cleared at landing entry.
           // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::{
           //   ftFx_SpecialHiFall_Coll,ftFx_SpecialHiFall_Enter
           // }
+          // refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState
           batch->state.action_id[idx] = (uint16_t)MSL_ACT_FX_SPECIAL_HI_LANDING;
           batch->state.animation_index[idx] = (uint32_t)MSL_SM_FX_SPECIAL_HI_LANDING;
+          batch->state.fall_fast[idx] = 0u;
           msl_anim_timebase_enter_with_policy(batch, idx, 13.0f, 1.0f,
                                               MSL_ANIM_ENTER_TICK_IMMEDIATE);
           continue;

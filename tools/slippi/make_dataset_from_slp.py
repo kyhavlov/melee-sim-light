@@ -1490,6 +1490,14 @@ def _main_impl(args) -> None:
         samples["seed_t"]["tilt_timer_x"][:, slot] = tilt_timer_x_post[:-1]
         samples["seed_t"]["tilt_timer_y"][:, slot] = tilt_timer_y_post[:-1]
         samples["seed_t"]["fall_fast"][:, slot] = fall_fast_post[:-1]
+        # Fastfall ownership at immediate hitlag-exit rows (decomp-shaped reseed lane):
+        # - Hitlag is decremented first in Fighter_8006A1BC, then Fighter_8006A360 runs the
+        #   non-hitlag callback/physics lane where ftCommon_CheckFallFast ownership applies.
+        # refs/melee/src/melee/ft/fighter.c::{Fighter_8006A1BC,Fighter_8006A360}
+        # refs/melee/src/melee/ft/ftcommon.c::ftCommon_CheckFallFast
+        samples["seed_t"]["fall_fast_hitlag_exit_owner"][:, slot] = (
+            (post_hitlag[:-1] == np.uint16(1)) & fastfall_ok[:-1]
+        ).astype(np.uint8)
         run_x0 = derive_run_x0(
             action_id=post_state,
             hitlag_u16=post_hitlag,

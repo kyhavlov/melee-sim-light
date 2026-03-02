@@ -275,6 +275,19 @@ typedef struct MslSeed {
   uint8_t tilt_timer_y[MSL_MAX_PLAYERS];  // fp->x671_timer_lstick_tilt_y
   // Decomp: refs/melee/src/melee/ft/ftcommon.c:505-520 (ftCommon_CheckFallFast)
   uint8_t fall_fast[MSL_MAX_PLAYERS];  // fp->fall_fast (bool)
+  // Fastfall ownership bridge at immediate hitlag-exit reseed rows (seeded; decomp-shaped).
+  //
+  // Decomp ordering:
+  // - Fighter_8006A1BC decrements hitlag at proc prio 0.
+  // - Fighter_8006A360 then runs the non-hitlag callback/physics ownership lane.
+  // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A1BC,Fighter_8006A360}
+  // refs/melee/src/melee/ft/ftcommon.c::ftCommon_CheckFallFast
+  //
+  // Seed representation:
+  // - 1: on this seed row, the next step is the immediate hitlag-exit lane for a fastfall-capable
+  //   action, so reseed should keep internal fp->fall_fast ownership from the seeded history lane.
+  // - 0: use the raw Slippi fp+0x221A isFastFalling snapshot bit as authoritative reseed source.
+  uint8_t fall_fast_hitlag_exit_owner[MSL_MAX_PLAYERS];
   // Run IASA lockout countdown (seeded; decomp-shaped).
   //
   // Decomp:
