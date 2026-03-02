@@ -2148,10 +2148,14 @@ void locomotion_update_pre(MslBatch* batch) {
             batch->state.anim_frame_f32[idx] >= (float)ch->landing_lag_frames) {
           // Landing IASA includes grounded attack checks before Jump/Dash/Turn/Walk.
           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::ftCo_Landing_IASA
-          if ((buttons_pressed & (uint16_t)MSL_BUTTON_A) == 0u &&
-              grounded_a_attack_try_enter_from_iasa(batch, c, idx, buttons_pressed, stick_x,
-                                                    stick_y, tilt_timer_x, tilt_timer_y, facing_dir,
-                                                    0, 1)) {
+          // Landing IASA attack admission:
+          // - ftCo_Landing_IASA runs grounded attack checks in the Wait_IASA subset before
+          //   jump/dash/turn/walk.
+          // - A-edge is a valid trigger in that grounded attack check path; do not pre-filter it.
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::ftCo_Landing_IASA
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
+          if (grounded_a_attack_try_enter_from_iasa(batch, c, idx, buttons_pressed, stick_x, stick_y,
+                                                    tilt_timer_x, tilt_timer_y, facing_dir, 0, 1)) {
             action_id = batch->state.action_id[idx];
           } else {
             const MslJumpInput j_in =

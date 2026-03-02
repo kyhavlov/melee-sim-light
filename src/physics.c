@@ -220,6 +220,11 @@ static inline uint8_t physics_action_is_common_ground_friction_only(uint16_t act
   // - refs/melee/src/melee/ft/chara/ftCommon/ftCo_KneeBend.c::ftCo_KneeBend_Phys
   // - refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::ftCo_Landing_Phys
   // - refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_Guard_Phys
+  // - refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackS3.c::ftCo_AttackS3_Phys
+  // - refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackHi3.c::ftCo_AttackHi3_Phys
+  // - refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackLw3.c::ftCo_AttackLw3_Phys
+  // - refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackHi4.c::ftCo_AttackHi4_Phys
+  // - refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackLw4.c::ftCo_AttackLw4_Phys
   switch (action_id) {
     case MSL_ACT_WAIT:
     case MSL_ACT_TURN:
@@ -240,6 +245,15 @@ static inline uint8_t physics_action_is_common_ground_friction_only(uint16_t act
     case MSL_ACT_GUARD_OFF:
     case MSL_ACT_GUARD_SET_OFF:
     case MSL_ACT_GUARD_REFLECT:
+    case MSL_ACT_ATTACK_S3_HI:
+    case MSL_ACT_ATTACK_S3_HI_S:
+    case MSL_ACT_ATTACK_S3_S:
+    case MSL_ACT_ATTACK_S3_LW_S:
+    case MSL_ACT_ATTACK_S3_LW:
+    case MSL_ACT_ATTACK_HI3:
+    case MSL_ACT_ATTACK_LW3:
+    case MSL_ACT_ATTACK_HI4:
+    case MSL_ACT_ATTACK_LW4:
       return 1;
     default:
       return 0;
@@ -828,11 +842,22 @@ void physics_integrate(MslBatch* batch) {
               friction *= c->high_speed_friction_mul;
             }
             float dxyz[3];
+            const uint8_t landing_to_attack11_entry =
+                (action_id == (uint16_t)MSL_ACT_ATTACK_11 &&
+                 prev_action_id == (uint16_t)MSL_ACT_LANDING)
+                    ? 1u
+                    : 0u;
             if (physics_try_get_transn_delta_xyz(ch, batch->state.char_id[idx],
                                                  batch->state.animation_index[idx],
-                                                 batch->state.anim_frame_f32[idx], dxyz)) {
-              // Decomp: ft_80085030 root-motion branch drives to transNOffset.z * facing_dir.
+                                                 batch->state.anim_frame_f32[idx], dxyz) &&
+                !landing_to_attack11_entry) {
+              // Decomp root-motion gate:
+              // - ft_80085030 takes the transN drive branch only when fp->x594_b0 is set.
+              // - this core does not carry x594_b0; keep Landing->Attack11 entry on the friction
+              //   fallback so landing-momentum rows do not spuriously zero `gr_vel` on jab entry.
               // refs/melee/src/melee/ft/ft_081B.c::ft_80085030
+              // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::ftCo_Landing_IASA
+              // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack1.c::ftCo_Attack11_Phys
               gr_vel = dxyz[2] * facing_dir;
             } else {
               gr_vel += ground_friction_step_delta(gr_vel, friction);
