@@ -1873,6 +1873,16 @@ uint8_t move_tables_throw_cmd1_active(uint8_t char_id, uint16_t throw_action_id,
 uint8_t move_tables_throw_should_spawn_projectile(uint8_t char_id, uint16_t throw_action_id,
                                                   float prev_anim_frame_f32,
                                                   float cur_anim_frame_f32) {
+  return move_tables_throw_crossed_projectile_pulse_frame(
+             char_id, throw_action_id, prev_anim_frame_f32, cur_anim_frame_f32, NULL)
+             ? 1u
+             : 0u;
+}
+
+uint8_t move_tables_throw_crossed_projectile_pulse_frame(uint8_t char_id, uint16_t throw_action_id,
+                                                         float prev_anim_frame_f32,
+                                                         float cur_anim_frame_f32,
+                                                         int16_t* out_pulse_frame) {
   const int kind = throw_kind_from_action(throw_action_id);
   if (kind < 0) {
     return 0;
@@ -1887,6 +1897,9 @@ uint8_t move_tables_throw_should_spawn_projectile(uint8_t char_id, uint16_t thro
   for (uint8_t i = 0; i < pulses.count; i++) {
     const float on = (float)pulses.frame[i];
     if (prev_anim_frame_f32 < on && cur_anim_frame_f32 >= on) {
+      if (out_pulse_frame != NULL) {
+        *out_pulse_frame = pulses.frame[i];
+      }
       return 1u;
     }
   }

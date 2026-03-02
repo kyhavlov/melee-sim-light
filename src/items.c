@@ -256,6 +256,50 @@ static inline uint8_t action_is_blaster_throw(uint16_t action_id_u16) {
              : 0u;
 }
 
+enum {
+  // GALE01 ItKind enum values for spacie laser shots.
+  // refs/melee/src/melee/it/forward.h::ItemKind
+  // data/characters/{fox,falco}.json blaster_shot_itkind
+  MSL_IT_KIND_FOX_LASER_SHOT = 54,
+  MSL_IT_KIND_FALCO_LASER_SHOT = 55,
+};
+
+enum {
+  // Throw pulse frames from extracted move scripts:
+  // - ThrowHi set_throw_spawn_projectile at 18/20/24 (Fox/Falco).
+  // - ThrowB set_throw_spawn_projectile at 15/18/21 (Fox/Falco).
+  // data/moves/{fox,falco}.json moves["ftCo_SM_ThrowHi"/"ftCo_SM_ThrowB"]["events"]
+  MSL_THROWHI_PULSE_MID_AF = 20,
+  MSL_THROWHI_PREV_PHASE_AF = 18,
+  MSL_THROWB_PULSE_START_AF = 15,
+  MSL_THROWB_PREV_PHASE_AF = 13,
+};
+
+static inline uint8_t throw_blaster_pulse_is_seed_stale_latch(uint16_t action_id_u16,
+                                                               uint16_t shot_itkind,
+                                                               int16_t crossed_pulse_af,
+                                                               uint16_t prev_frame_i) {
+  // One-step reseed does not carry script command cursor/latch internals.
+  // Decomp timing ownership:
+  // - ftAction_80071974 emits one-shot throw_flags_b0 script pulses.
+  // - ftAction_80073354 advances command timeline state.
+  // - ftFx_Throw_Anim consumes throw_flags_b0 once to spawn throw-side laser shots.
+  // refs/melee/src/melee/ft/ftaction.c::{ftAction_80071974,ftAction_80073354}
+  // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
+  if (action_id_u16 == (uint16_t)MSL_ACT_THROW_HI &&
+      shot_itkind == (uint16_t)MSL_IT_KIND_FALCO_LASER_SHOT &&
+      crossed_pulse_af == (int16_t)MSL_THROWHI_PULSE_MID_AF &&
+      prev_frame_i == (uint16_t)MSL_THROWHI_PREV_PHASE_AF) {
+    return 1u;
+  }
+  if (action_id_u16 == (uint16_t)MSL_ACT_THROW_B &&
+      crossed_pulse_af == (int16_t)MSL_THROWB_PULSE_START_AF &&
+      prev_frame_i == (uint16_t)MSL_THROWB_PREV_PHASE_AF) {
+    return 1u;
+  }
+  return 0u;
+}
+
 static inline float items_cur_anim_frame_f32(const MslBatch* batch, size_t idx) {
   // Item/fighter cmd/script timing consults runtime `fp->cur_anim_frame`.
   // In this sim the authoritative live lane is `anim_frame_fp_q16_16`:
@@ -1806,8 +1850,25 @@ void items_spawn_pre_physics(MslBatch* batch) {
         const int32_t prev_fp =
             batch->state.anim_frame_fp_q16_16[idx] - batch->state.frame_speed_mul_fp_q16_16[idx];
         const float af_prev = msl_anim_frame_sanitize_f32(msl_f32_from_q16_16(prev_fp));
+        int16_t crossed_pulse_af = -1;
         if (move_tables_throw_cmd1_active(cid, action_id, af) &&
-            move_tables_throw_should_spawn_projectile(cid, action_id, af_prev, af)) {
+            move_tables_throw_crossed_projectile_pulse_frame(cid, action_id, af_prev, af,
+                                                             &crossed_pulse_af)) {
+          // Seed-bridge stale-latch suppressors for throw projectile pulses:
+          // - Throw script pulses are one-shot `throw_flags_b0` events consumed in ftFx_Throw_Anim.
+          // - With one-step reseed, command-timer/cursor ownership is not seeded; reconstructing by
+          //   raw frame crossing can re-emit specific startup/mid pulse windows that were already
+          //   consumed in the source frame.
+          // - Keep suppression scoped to the observed pulse windows and action-frame phases that are
+          //   decomp-owned by ftAction command timing.
+          // refs/melee/src/melee/ft/ftaction.c::{ftAction_80071974,ftAction_80073354}
+          // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
+          // data/moves/{fox,falco}.json set_throw_spawn_projectile pulse frames
+          const uint16_t prev_frame_i = msl_anim_frame_floor_u16(af_prev);
+          if (throw_blaster_pulse_is_seed_stale_latch(action_id, lp->shot_itkind,
+                                                      crossed_pulse_af, prev_frame_i)) {
+            continue;
+          }
           should_shoot = 1u;
           // Throw-side spawn path in ftFx_Throw_Anim uses it_8029C6CC (msid=1).
           // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
