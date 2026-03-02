@@ -257,6 +257,25 @@ static inline uint8_t action_is_blaster_throw(uint16_t action_id_u16) {
 }
 
 enum {
+  // Internal runtime marker in item.misc2 for deferred powershield reflect owner transfer.
+  //
+  // Decomp ownership split:
+  // - ftColl_80077464 writes reflect snapshot ownership/multipliers on overlap.
+  // - Item_80269F14 consumes that snapshot in the subsequent item pass.
+  // refs/melee/src/melee/ft/ftcoll.c::ftColl_80077464
+  // refs/melee/src/melee/it/item.c::Item_80269F14
+  MSL_ITEM_MISC2_PENDING_POWERSHIELD_OWNER = 0xFFu,
+};
+
+static inline uint8_t item_encode_pending_owner_port(int owner_port) {
+  // Encode owner ports [0..MSL_MAX_PLAYERS-1] as [1..MSL_MAX_PLAYERS]; 0 means invalid/none.
+  if (owner_port < 0 || owner_port >= MSL_MAX_PLAYERS) {
+    return 0u;
+  }
+  return (uint8_t)(owner_port + 1);
+}
+
+enum {
   // GALE01 ItKind enum values for spacie laser shots.
   // refs/melee/src/melee/it/forward.h::ItemKind
   // data/characters/{fox,falco}.json {blaster_shot_itkind,side_special_illusion_item_kind}
@@ -935,6 +954,14 @@ static inline void item_apply_pending_powershield_reflect_speed(MslBatch* batch,
   if (batch == NULL) {
     return;
   }
+  if (batch->state.item_misc2[ii] == (uint8_t)MSL_ITEM_MISC2_PENDING_POWERSHIELD_OWNER) {
+    const uint8_t enc = batch->state.item_misc3[ii];
+    if (enc > 0u && enc <= (uint8_t)MSL_MAX_PLAYERS) {
+      batch->state.item_owner[ii] = (int8_t)(enc - 1u);
+    }
+    batch->state.item_misc2[ii] = 0u;
+    batch->state.item_misc3[ii] = 0u;
+  }
   // Decomp ownership split:
   // - overlap path can commit reflected orientation (`facing_dir` / angle lane) immediately,
   // - velocity lane is consumed by item logic after reflect snapshot ownership transfer.
@@ -972,7 +999,12 @@ static inline void item_apply_powershield_reflect_snapshot(MslBatch* batch, size
   // refs/melee/src/melee/ft/ftcoll.c::ftColl_80077464
   // - item logic consumes that snapshot in Item_80269F14.
   // refs/melee/src/melee/it/item.c::Item_80269F14
-  batch->state.item_owner[ii] = (int8_t)reflector_port;
+  //
+  // Runtime model: capture pending transfer owner in internal misc lanes and commit ownership in
+  // the next item pass (item_apply_pending_powershield_reflect_speed), matching snapshot->consume
+  // ordering above.
+  batch->state.item_misc2[ii] = (uint8_t)MSL_ITEM_MISC2_PENDING_POWERSHIELD_OWNER;
+  batch->state.item_misc3[ii] = item_encode_pending_owner_port(reflector_port);
 
   const float dmg_mul = (damage_mul > 0.0f) ? damage_mul : 1.0f;
   // Decomp visual reflect lane flips facing/angle on overlap (`it_2725_Logic94_Reflected`) even when
@@ -1053,6 +1085,8 @@ static inline void item_apply_reflect_transfer(MslBatch* batch, size_t ii, size_
   if (batch == NULL) {
     return;
   }
+  batch->state.item_misc2[ii] = 0u;
+  batch->state.item_misc3[ii] = 0u;
   batch->state.item_owner[ii] = (int8_t)reflector_port;
   // Slippi item.instance_id is item->xDA8_short; reflect apply rewrites it from the reflecting
   // fighter snapshot (fp->x2088 / instance_id).

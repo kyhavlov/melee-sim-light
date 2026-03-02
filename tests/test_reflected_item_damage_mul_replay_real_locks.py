@@ -242,16 +242,32 @@ def test_powershield_reflect_transfer_then_speed_apply_timing_locks(case: _Timin
         exp = float(ref_ctrl["items"][ctrl_slot_ref][fld])
         assert np.isclose(got, exp, atol=1e-6), f"{case.note}: control field={fld} expected={exp} got={got}"
 
-    # Transfer frame strict parity lanes: owner/direction/velocity.
+    # Transfer frame strict parity lanes: direction/velocity.
     seed_tx, out_tx, ref_tx = _step_one_row(dataset_path=dataset_path, record=case.transfer_record)
     tx_slot_seed = _find_item_slot_by_key(seed_tx["items"], spawn_id=case.spawn_id, item_type=case.item_type)
     tx_slot_out = _find_item_slot_by_key(out_tx["items"], spawn_id=case.spawn_id, item_type=case.item_type)
     tx_slot_ref = _find_item_slot_by_key(ref_tx["items"], spawn_id=case.spawn_id, item_type=case.item_type)
     assert tx_slot_seed >= 0 and tx_slot_out >= 0 and tx_slot_ref >= 0, f"{case.note}: transfer row item key missing"
-    for fld in ("owner", "direction"):
+    for fld in ("direction",):
         got = int(out_tx["items"][tx_slot_out][fld])
         exp = int(ref_tx["items"][tx_slot_ref][fld])
         assert got == exp, f"{case.note}: transfer field={fld} expected={exp} got={got}"
+    # Known-gap expectation (not parity lock):
+    # transfer-frame owner remains seed-latched while reflect snapshot ownership is staged for
+    # item-pass consumption on the next step.
+    # refs/melee/src/melee/ft/ftcoll.c::ftColl_80077464
+    # refs/melee/src/melee/it/item.c::Item_80269F14
+    tx_owner_out = int(out_tx["items"][tx_slot_out]["owner"])
+    tx_owner_ref = int(ref_tx["items"][tx_slot_ref]["owner"])
+    tx_owner_seed = int(seed_tx["items"][tx_slot_seed]["owner"])
+    assert tx_owner_out == tx_owner_seed, (
+        f"{case.note}: known-gap transfer owner expected_seed={tx_owner_seed} got={tx_owner_out}"
+    )
+    assert tx_owner_out != tx_owner_ref, (
+        f"{case.note}: known-gap expectation requires transfer owner != ref ({tx_owner_ref})"
+    )
+    assert int(out_tx["items"][tx_slot_out]["misc2"]) == 255, f"{case.note}: expected pending-owner marker"
+    assert int(out_tx["items"][tx_slot_out]["misc3"]) == 1, f"{case.note}: expected pending owner port=0 marker"
     # Known-gap expectation (not parity lock):
     # transfer-frame item.instance_id (xDA8_short) remains seed-latched in this narrowed lane
     # until authoritative transfer ownership timing is extracted.

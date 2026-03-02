@@ -175,9 +175,27 @@ def test_reflected_laser_updates_owner_instance_and_staling_identity() -> None:
 
         it0 = cmp0["items"][0]
         assert int(it0["exists"]) == 1
-        assert int(it0["owner"]) == 1
+        # Decomp-split ownership model:
+        # - overlap writes reflect snapshot fields (ftColl_80077464),
+        # - item pass consumes snapshot ownership (Item_80269F14).
+        # In this test harness we observe snapshot staging first, then ownership transfer next step.
+        # refs/melee/src/melee/ft/ftcoll.c::ftColl_80077464
+        # refs/melee/src/melee/it/item.c::Item_80269F14
+        assert int(it0["owner"]) == int(seed2["items"][0, 0]["owner"])
+        assert int(it0["misc2"]) == 255
+        assert int(it0["misc3"]) == 2
         # Spawn-latched staling identity (v1): does not transfer on reflect.
         assert int(it0["attack_id"]) == int(seed2["items"][0, 0]["attack_id"])
         assert int(it0["attack_instance"]) == int(seed2["items"][0, 0]["attack_instance"])
+
+        msl_binding.step_input(handle, prev_inp, inp)
+        out_cmp2 = np.zeros((1, compare_stride), dtype=np.uint8)
+        msl_binding.write_compare(handle, out_cmp2)
+        cmp1 = out_cmp2.view(COMPARE_DTYPE).reshape((1,))[0]
+        it1 = cmp1["items"][0]
+        assert int(it1["exists"]) == 1
+        assert int(it1["owner"]) == 1
+        assert int(it1["misc2"]) == 0
+        assert int(it1["misc3"]) == 0
     finally:
         msl_binding.destroy(handle)

@@ -65,7 +65,7 @@ mismatch.state_flags: 72 / 72950 (0.000987)
 mismatch.item_exists: 2 / 109425 (0.000018)
 mismatch.item_type: 2 / 109425 (0.000018)
 mismatch.item_state: 1 / 109425 (0.000009)
-mismatch.item_owner: 7 / 109425 (0.000064)
+mismatch.item_owner: 4 / 109425 (0.000037)
 mismatch.item_instance_id: 5 / 109425 (0.000046)
 err.pos_x: mae=0.052127 p95=0.261566 max=6.000000
 err.pos_y: mae=0.023517 p95=0.000000 max=8.138262
@@ -80,7 +80,7 @@ err.item_pos_x: mae=0.334303 p95=0.000000 max=38.000000
 err.item_pos_y: mae=0.117609 p95=0.000000 max=26.364082
 err.item_vel_x: mae=0.112977 p95=0.000000 max=10.000000
 err.item_vel_y: mae=0.115190 p95=0.000000 max=6.995885
-overall.discrete_mismatch: 380 / 882695
+overall.discrete_mismatch: 377 / 882695
 overall.float_norm_mae_p95: 0.00329271
 
 == datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl ==
@@ -107,7 +107,7 @@ mismatch.state_flags: 91 / 115290 (0.000789)
 mismatch.item_exists: 16 / 172935 (0.000093)
 mismatch.item_type: 16 / 172935 (0.000093)
 mismatch.item_state: 8 / 172935 (0.000046)
-mismatch.item_owner: 24 / 172935 (0.000139)
+mismatch.item_owner: 18 / 172935 (0.000104)
 mismatch.item_instance_id: 18 / 172935 (0.000104)
 err.pos_x: mae=0.053535 p95=0.220639 max=6.346710
 err.pos_y: mae=0.018510 p95=0.000000 max=8.338652
@@ -122,7 +122,7 @@ err.item_pos_x: mae=0.134682 p95=0.000000 max=71.544670
 err.item_pos_y: mae=0.078728 p95=0.000000 max=26.796017
 err.item_vel_x: mae=0.049210 p95=0.000000 max=7.782612
 err.item_vel_y: mae=0.056726 p95=0.000000 max=6.995885
-overall.discrete_mismatch: 566 / 1395009
+overall.discrete_mismatch: 560 / 1395009
 overall.float_norm_mae_p95: 0.00367225
 
 == datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/QuerulousGrandDinosaur.msl ==
@@ -191,7 +191,7 @@ mismatch.state_flags: 69 / 78370 (0.000880)
 mismatch.item_exists: 10 / 117555 (0.000085)
 mismatch.item_type: 10 / 117555 (0.000085)
 mismatch.item_state: 6 / 117555 (0.000051)
-mismatch.item_owner: 15 / 117555 (0.000128)
+mismatch.item_owner: 11 / 117555 (0.000094)
 mismatch.item_instance_id: 11 / 117555 (0.000094)
 err.pos_x: mae=0.062112 p95=0.299999 max=6.263313
 err.pos_y: mae=0.024138 p95=0.000008 max=7.538332
@@ -206,9 +206,9 @@ err.item_pos_x: mae=0.238832 p95=0.000000 max=118.205734
 err.item_pos_y: mae=0.116187 p95=0.000000 max=31.795383
 err.item_vel_x: mae=0.076660 p95=0.000000 max=7.782612
 err.item_vel_y: mae=0.084671 p95=0.000000 max=6.995885
-overall.discrete_mismatch: 391 / 948277
+overall.discrete_mismatch: 387 / 948277
 overall.float_norm_mae_p95: 0.00406139
 
 == suite summary ==
-overall.discrete_mismatch: 1878 / 4462843
+overall.discrete_mismatch: 1865 / 4462843
 overall.float_norm_mae_p95: 0.00345558
