@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import csv
 import json
+import math
 import os
 from pathlib import Path
 
@@ -14,6 +15,65 @@ MSL_BUTTON_Z = 0x0010
 MSL_BUTTON_R = 0x0020
 MSL_BUTTON_L = 0x0040
 MSL_BUTTON_A = 0x0100
+
+
+def _stick_i8_to_unit(v: int) -> float:
+    return float(v) / 80.0
+
+
+def _apply_deadzone(v: float, deadzone: float) -> float:
+    return 0.0 if abs(v) < deadzone else v
+
+
+def _attackair_cstick_edge_from_inputs(
+    *,
+    common: dict[str, object],
+    prev_input_t: np.void,
+    input_t: np.void,
+    p: int,
+) -> bool:
+    # Runtime parity with src/locomotion.c::attackair_cstick_edge:
+    # - deadzone using ftCommonData x0/x4 lanes,
+    # - edge when crossing attackair deadzone xDC/xE0.
+    # refs/melee/src/melee/ft/ft_0DF1.c::ftCo_800DF478
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_CheckInput
+    deadzone_x = float(common["lstick_deadzone_x"])
+    deadzone_y = float(common["lstick_deadzone_y"])
+    attackair_dz_x = float(common["attackair_stick_deadzone_x"])
+    attackair_dz_y = float(common["attackair_stick_deadzone_y"])
+
+    prev_x = _apply_deadzone(_stick_i8_to_unit(int(prev_input_t["p"]["c_x"][p])), deadzone_x)
+    prev_y = _apply_deadzone(_stick_i8_to_unit(int(prev_input_t["p"]["c_y"][p])), deadzone_y)
+    cur_x = _apply_deadzone(_stick_i8_to_unit(int(input_t["p"]["c_x"][p])), deadzone_x)
+    cur_y = _apply_deadzone(_stick_i8_to_unit(int(input_t["p"]["c_y"][p])), deadzone_y)
+    return ((abs(prev_x) < attackair_dz_x and abs(cur_x) >= attackair_dz_x) or
+            (abs(prev_y) < attackair_dz_y and abs(cur_y) >= attackair_dz_y))
+
+
+def _grounded_cstick_smash_edges_from_inputs(
+    *,
+    common: dict[str, object],
+    prev_input_t: np.void,
+    input_t: np.void,
+    p: int,
+) -> tuple[bool, bool, bool]:
+    # Runtime parity with src/locomotion.c::{cstick_side_smash_edge,cstick_up_smash_edge,cstick_down_smash_edge}.
+    # refs/melee/src/melee/ft/ft_0DF1.c::{ftCo_800DF1C8,ftCo_800DF2D8,ftCo_800DF3A8}
+    prev_x = _stick_i8_to_unit(int(prev_input_t["p"]["c_x"][p]))
+    prev_y = _stick_i8_to_unit(int(prev_input_t["p"]["c_y"][p]))
+    cur_x = _stick_i8_to_unit(int(input_t["p"]["c_x"][p]))
+    cur_y = _stick_i8_to_unit(int(input_t["p"]["c_y"][p]))
+
+    side_edge = abs(prev_x) < float(common["cstick_smash_threshold"]) and abs(cur_x) >= float(
+        common["cstick_smash_threshold"]
+    )
+    up_edge = prev_y < float(common["attack_hi4_stick_threshold_y"]) and cur_y >= float(
+        common["attack_hi4_stick_threshold_y"]
+    )
+    down_edge = prev_y > float(common["attack_lw4_stick_threshold_y"]) and cur_y <= float(
+        common["attack_lw4_stick_threshold_y"]
+    )
+    return side_edge, up_edge, down_edge
 
 
 def _skip_if_required_artifacts_missing(root: Path) -> None:
@@ -3356,6 +3416,249 @@ def test_kneebend_jump_iasa_attackair_seed_lock_target_pm1_both_players(
     cur_buttons = int(target_row["input_t"][0]["p"]["buttons"][p_target])
     a_edge = ((prev_buttons & MSL_BUTTON_A) == 0) and ((cur_buttons & MSL_BUTTON_A) != 0)
     assert a_edge
+
+    for rec in (target_record - 1, target_record, target_record + 1):
+        _, ref_row, out_row = _run_one_step_row(dataset_path, rec, p_target, rng_damage_fly_roll_gate=True)
+        for p in (0, 1):
+            _assert_transition_lock_fields_match_ref(out_row=out_row, ref_row=ref_row, record=rec, p=p)
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    ("dataset_rel", "target_record", "p_target", "ref_action", "edge_kind"),
+    [
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl",
+            2996,
+            1,
+            60,  # AttackHi4
+            "side",
+        ),
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/TreasuredBackKangaroo.msl",
+            1803,
+            1,
+            64,  # AttackLw4
+            "down",
+        ),
+    ],
+)
+def test_landing_iasa_attack_order_cstick_seed_lock_target_pm1_both_players(
+    dataset_rel: str,
+    target_record: int,
+    p_target: int,
+    ref_action: int,
+    edge_kind: str,
+) -> None:
+    # Decomp ownership lock for Landing IASA grounded attack-order lane:
+    # - Landing IASA evaluates grounded A-attack checks before jump/dash/turn/walk checks.
+    # - This strict lock pins C-stick smash-edge attack admission on the first interruptible
+    #   landing window, with no A-edge and no jump-edge on the target row.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::ftCo_Landing_IASA
+    # refs/melee/src/melee/ft/ft_0DF1.c::{ftCo_800DF1C8,ftCo_800DF2D8,ftCo_800DF3A8}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    common = json.loads((root / "data/common/ft_common_data.json").read_text(encoding="utf-8"))
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+    assert int(samples.shape[0]) > (target_record + 1), f"dataset too short for lock row: record={target_record}"
+
+    prev_row = samples[target_record - 1 : target_record]
+    target_row = samples[target_record : target_record + 1]
+    next_row = samples[target_record + 1 : target_record + 2]
+
+    assert int(prev_row["seed_t"]["action_id"][0, p_target]) == 42  # Landing
+    assert int(target_row["seed_t"]["action_id"][0, p_target]) == 42  # Landing
+    assert int(target_row["seed_t"]["on_ground"][0, p_target]) == 1
+    assert int(target_row["ref_t1"]["action_id"][0, p_target]) == int(ref_action)
+    assert int(target_row["ref_t1"]["action_frame"][0, p_target]) == 1
+    assert int(next_row["seed_t"]["action_id"][0, p_target]) == int(ref_action)
+    assert int(next_row["seed_t"]["on_ground"][0, p_target]) == 1
+
+    prev_buttons = int(prev_row["input_t"][0]["p"]["buttons"][p_target])
+    cur_buttons = int(target_row["input_t"][0]["p"]["buttons"][p_target])
+    a_edge = ((prev_buttons & MSL_BUTTON_A) == 0) and ((cur_buttons & MSL_BUTTON_A) != 0)
+    assert not a_edge
+
+    side_edge, up_edge, down_edge = _grounded_cstick_smash_edges_from_inputs(
+        common=common,
+        prev_input_t=samples["input_t"][target_record - 1],
+        input_t=samples["input_t"][target_record],
+        p=p_target,
+    )
+    if edge_kind == "side":
+        assert side_edge and not up_edge and not down_edge
+    elif edge_kind == "down":
+        assert down_edge and not side_edge and not up_edge
+    else:
+        raise AssertionError(f"unsupported edge kind: {edge_kind}")
+
+    cur_main_y = _apply_deadzone(
+        _stick_i8_to_unit(int(target_row["input_t"][0]["p"]["main_y"][p_target])),
+        float(common["lstick_deadzone_y"]),
+    )
+    tap_jump = (
+        cur_main_y >= float(common["tap_jump_threshold"]) and
+        int(target_row["seed_t"]["tilt_timer_y"][0, p_target]) < int(common["tap_jump_tilt_max_frames"])
+    )
+    assert not tap_jump
+
+    for rec in (target_record - 1, target_record, target_record + 1):
+        _, ref_row, out_row = _run_one_step_row(dataset_path, rec, p_target, rng_damage_fly_roll_gate=True)
+        for p in (0, 1):
+            _assert_transition_lock_fields_match_ref(out_row=out_row, ref_row=ref_row, record=rec, p=p)
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    ("dataset_rel", "target_record", "p_target", "ref_action"),
+    [
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/TreasuredBackKangaroo.msl",
+            315,
+            0,
+            69,  # AttackAirLw
+        ),
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/TreasuredBackKangaroo.msl",
+            1194,
+            0,
+            69,  # AttackAirLw
+        ),
+    ],
+)
+def test_kneebend_jump_iasa_full_attackair_cstick_seed_lock_target_pm1_both_players(
+    dataset_rel: str,
+    target_record: int,
+    p_target: int,
+    ref_action: int,
+) -> None:
+    # Decomp ownership lock for KneeBend startup-complete Jump IASA full AttackAir gate:
+    # - Jump IASA admits AttackAir on A-edge OR C-stick edge (ftCo_800DF478).
+    # - This family pins the C-stick-edge branch explicitly (A-edge absent).
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c::ftCo_Jump_IASA
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_CheckInput
+    # refs/melee/src/melee/ft/ft_0DF1.c::ftCo_800DF478
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    common = json.loads((root / "data/common/ft_common_data.json").read_text(encoding="utf-8"))
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+    assert int(samples.shape[0]) > (target_record + 1), f"dataset too short for lock row: record={target_record}"
+
+    prev_row = samples[target_record - 1 : target_record]
+    target_row = samples[target_record : target_record + 1]
+    next_row = samples[target_record + 1 : target_record + 2]
+
+    assert int(prev_row["seed_t"]["action_id"][0, p_target]) == 24  # KneeBend
+    assert int(prev_row["ref_t1"]["action_id"][0, p_target]) == 24
+    assert int(prev_row["seed_t"]["on_ground"][0, p_target]) == 1
+    assert int(prev_row["ref_t1"]["on_ground"][0, p_target]) == 1
+
+    assert int(target_row["seed_t"]["action_id"][0, p_target]) == 24
+    assert int(target_row["seed_t"]["on_ground"][0, p_target]) == 1
+    assert int(target_row["ref_t1"]["action_id"][0, p_target]) == int(ref_action)
+    assert int(target_row["ref_t1"]["action_frame"][0, p_target]) == 1
+    assert int(target_row["ref_t1"]["on_ground"][0, p_target]) == 0
+
+    assert int(next_row["seed_t"]["action_id"][0, p_target]) == int(ref_action)
+    assert int(next_row["seed_t"]["on_ground"][0, p_target]) == 0
+    assert int(next_row["ref_t1"]["action_id"][0, p_target]) == int(ref_action)
+    assert int(next_row["ref_t1"]["on_ground"][0, p_target]) == 0
+
+    prev_buttons = int(prev_row["input_t"][0]["p"]["buttons"][p_target])
+    cur_buttons = int(target_row["input_t"][0]["p"]["buttons"][p_target])
+    a_edge = ((prev_buttons & MSL_BUTTON_A) == 0) and ((cur_buttons & MSL_BUTTON_A) != 0)
+    assert not a_edge
+
+    c_edge = _attackair_cstick_edge_from_inputs(
+        common=common,
+        prev_input_t=samples["input_t"][target_record - 1],
+        input_t=samples["input_t"][target_record],
+        p=p_target,
+    )
+    assert c_edge
+
+    cur_cx = _apply_deadzone(
+        _stick_i8_to_unit(int(target_row["input_t"][0]["p"]["c_x"][p_target])),
+        float(common["lstick_deadzone_x"]),
+    )
+    cur_cy = _apply_deadzone(
+        _stick_i8_to_unit(int(target_row["input_t"][0]["p"]["c_y"][p_target])),
+        float(common["lstick_deadzone_y"]),
+    )
+    assert math.atan2(cur_cy, abs(cur_cx)) < -float(common["attack_angle_threshold_radians"])
+
+    for rec in (target_record - 1, target_record, target_record + 1):
+        _, ref_row, out_row = _run_one_step_row(dataset_path, rec, p_target, rng_damage_fly_roll_gate=True)
+        for p in (0, 1):
+            _assert_transition_lock_fields_match_ref(out_row=out_row, ref_row=ref_row, record=rec, p=p)
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    ("dataset_rel", "target_record", "p_target"),
+    [
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl",
+            4393,
+            1,
+        ),
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl",
+            6778,
+            1,
+        ),
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl",
+            8061,
+            1,
+        ),
+    ],
+)
+def test_walk_iasa_opposite_stick_wait_exit_seed_lock_target_pm1_both_players(
+    dataset_rel: str,
+    target_record: int,
+    p_target: int,
+) -> None:
+    # Decomp ownership lock for Walk IASA opposite-stick Wait exit:
+    # - ft_8008A244 routes Walk -> Wait when (lstick.x * facing_dir < 0) OR |lstick.x| < x24.
+    # - This family pins the opposite-facing branch with |lstick.x| still above walk threshold.
+    # refs/melee/src/melee/ft/ft_0892.c::ft_8008A244
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Walk.c::ftCo_Walk_IASA
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    common = json.loads((root / "data/common/ft_common_data.json").read_text(encoding="utf-8"))
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+    assert int(samples.shape[0]) > (target_record + 1), f"dataset too short for lock row: record={target_record}"
+
+    target_row = samples[target_record : target_record + 1]
+    assert int(target_row["seed_t"]["action_id"][0, p_target]) == 16  # WalkMiddle
+    assert int(target_row["seed_t"]["on_ground"][0, p_target]) == 1
+    assert int(target_row["ref_t1"]["action_id"][0, p_target]) == 14  # Wait
+    assert int(target_row["ref_t1"]["action_frame"][0, p_target]) == 0
+    assert int(target_row["ref_t1"]["animation_index"][0, p_target]) == 2  # Wait1_0
+
+    facing_dir = 1.0 if int(target_row["seed_t"]["facing"][0, p_target]) != 0 else -1.0
+    cur_main_x = _apply_deadzone(
+        _stick_i8_to_unit(int(target_row["input_t"][0]["p"]["main_x"][p_target])),
+        float(common["lstick_deadzone_x"]),
+    )
+    assert (cur_main_x * facing_dir) < 0.0
+    assert abs(cur_main_x) >= float(common["walk_stick_threshold"])
 
     for rec in (target_record - 1, target_record, target_record + 1):
         _, ref_row, out_row = _run_one_step_row(dataset_path, rec, p_target, rng_damage_fly_roll_gate=True)
