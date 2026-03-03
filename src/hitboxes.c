@@ -253,6 +253,7 @@ static void hitboxes_seed_bridge_trim_impossible_indefinite(MslBatch* batch, int
       }
     }
     const uint8_t stale_clear_window = attacker_is_attackair_window ? 1u : early_window;
+    const uint16_t attacker_action = batch->state.action_id[a_idx];
     // Shield-ownership guard for this trim:
     // - ftColl_80078C70 gates shield collision by live ShieldDesc ownership (`fp->x221B_b0`), then
     //   calls lbColl_80007BCC with the shield descriptor.
@@ -271,6 +272,24 @@ static void hitboxes_seed_bridge_trim_impossible_indefinite(MslBatch* batch, int
         batch->state.hitlag[v_idx] == 0u &&
         (attacker_is_attackair_window || batch->state.hitstun[v_idx] == 0u) &&
         batch->state.instance_hit_by[v_idx] != attacker_iid) {
+      hitboxes_seed_bridge_entry_clear(e);
+      continue;
+    }
+
+    // Narrow stale-owner extension for active windows with repeated suite misses:
+    // - AttackAirLw scripts (Fox/Falco) can re-enable same-group hitboxes in-window while dense seed
+    //   hitlists carry stale indefinite victim presence across reseed boundaries.
+    // - Keep this lane scoped to AttackAirLw where extracted multi-create scripts are present.
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_Anim
+    // refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000ACFC,lbColl_80008A5C}
+    // data/moves/{fox,falco}.json::moves.ftCo_SM_AttackAirLw.events.create_hitbox
+    const uint8_t stale_owner_action_lane =
+        (attacker_action == (uint16_t)MSL_ACT_ATTACK_AIR_LW) ? 1u : 0u;
+    if (stale_owner_action_lane && !shield_desc_active &&
+        !hitboxes_seed_bridge_is_guard_transition_owner(v_action) &&
+        batch->state.hitlag[v_idx] == 0u && batch->state.hitstun[v_idx] == 0u &&
+        batch->state.instance_hit_by[v_idx] != attacker_iid &&
+        batch->state.last_hit_by[v_idx] != (uint8_t)attacker) {
       hitboxes_seed_bridge_entry_clear(e);
       continue;
     }
