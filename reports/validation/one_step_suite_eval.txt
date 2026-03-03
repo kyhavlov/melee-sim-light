@@ -134,7 +134,7 @@ mismatch.facing: 24 / 20444 (0.001174)
 mismatch.stocks: 0 / 20444 (0.000000)
 mismatch.jumps_left: 16 / 20444 (0.000783)
 mismatch.is_dead: 0 / 20444 (0.000000)
-mismatch.hitlag: 22 / 20444 (0.001076)
+mismatch.hitlag: 16 / 20444 (0.000783)
 mismatch.hitstun: 10 / 20444 (0.000489)
 mismatch.l_cancel: 0 / 20444 (0.000000)
 mismatch.hurtbox_state: 28 / 20444 (0.001370)
@@ -145,7 +145,7 @@ mismatch.instance_id: 77 / 20444 (0.003766)
 mismatch.last_attack_landed: 12 / 20444 (0.000587)
 mismatch.combo_count: 14 / 20444 (0.000685)
 mismatch.last_hit_by: 36 / 20444 (0.001761)
-mismatch.state_flags: 88 / 102220 (0.000861)
+mismatch.state_flags: 82 / 102220 (0.000802)
 mismatch.item_exists: 3 / 153330 (0.000020)
 mismatch.item_type: 3 / 153330 (0.000020)
 mismatch.item_state: 3 / 153330 (0.000020)
@@ -158,14 +158,14 @@ err.speed_ground_x_self: mae=0.010058 p95=0.000001 max=2.929587
 err.speed_y_self: mae=0.006709 p95=0.000000 max=3.500000
 err.speed_x_attack: mae=0.000751 p95=0.000000 max=1.808650
 err.speed_y_attack: mae=0.002390 p95=0.000000 max=5.618131
-err.percent: mae=0.034817 p95=0.000000 max=162.050003
+err.percent: mae=0.034683 p95=0.000000 max=162.050003
 err.shield_hp: mae=0.001153 p95=0.000000 max=6.299999
 err.item_pos_x: mae=0.214062 p95=0.000000 max=127.472275
 err.item_pos_y: mae=0.096917 p95=0.000000 max=13.353867
 err.item_vel_x: mae=0.038343 p95=0.000000 max=6.413950
 err.item_vel_y: mae=0.045011 p95=0.000000 max=4.999368
-overall.discrete_mismatch: 516 / 1236862
-overall.float_norm_mae_p95: 0.00282040
+overall.discrete_mismatch: 504 / 1236862
+overall.float_norm_mae_p95: 0.00282030
 
 == datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/TreasuredBackKangaroo.msl ==
 Records: 7837  Players/scored per record: 2  Total player-frames: 15674
@@ -210,5 +210,5 @@ overall.discrete_mismatch: 353 / 948277
 overall.float_norm_mae_p95: 0.00402783
 
 == suite summary ==
-overall.discrete_mismatch: 1775 / 4462843
-overall.float_norm_mae_p95: 0.00344225
+overall.discrete_mismatch: 1763 / 4462843
+overall.float_norm_mae_p95: 0.00344222

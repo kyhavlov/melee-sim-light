@@ -289,11 +289,13 @@ enum {
   // Throw pulse frames from extracted move scripts:
   // - ThrowHi set_throw_spawn_projectile at 18/20/24 (Fox/Falco).
   // - ThrowB set_throw_spawn_projectile at 15/18/21 (Fox/Falco).
-  // data/moves/{fox,falco}.json moves["ftCo_SM_ThrowHi"/"ftCo_SM_ThrowB"]["events"]
+  // - ThrowLw set_throw_spawn_projectile at 23/25/28/31 (Fox/Falco).
+  // data/moves/{fox,falco}.json moves["ftCo_SM_ThrowHi"/"ftCo_SM_ThrowB"/"ftCo_SM_ThrowLw"]["events"]
   MSL_THROWHI_PULSE_MID_AF = 20,
   MSL_THROWHI_PREV_PHASE_AF = 18,
   MSL_THROWB_PULSE_START_AF = 15,
   MSL_THROWB_PREV_PHASE_AF = 13,
+  MSL_THROWLW_PULSE_ATTACH_AF = 25,
 };
 
 static inline uint8_t throw_blaster_pulse_is_seed_stale_latch(uint16_t action_id_u16,
@@ -1866,6 +1868,24 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
             break;
           }
         }
+      }
+      if (!hit && laser_state != 0u && batch->state.action_id[o_idx] == (uint16_t)MSL_ACT_THROW_LW &&
+          batch->state.throw_pulse_consumed[o_idx] == 0u &&
+          batch->state.throw_pulse_crossed_prev_frame[o_idx] ==
+              (uint8_t)MSL_THROWLW_PULSE_ATTACH_AF &&
+          batch->state.grab_owner_port[d_idx] == (uint8_t)owner &&
+          batch->state.action_id[d_idx] == (uint16_t)MSL_ACT_THROWN_LW) {
+        // ThrowLw attached-victim pulse bridge (miss-only):
+        // - ThrowLw throw-side pulses are script-owned one-shots (23/25/28/31) consumed in
+        //   ftFx_Throw_Anim; seed lane `throw_pulse_crossed_prev_frame` carries prior-step crossing.
+        // - In attached ThrownLw contexts, missing same-step BODY overlap at the 25-frame pulse
+        //   leaves replay-causal hitlag/state-flags deltas; bridge only when geometry probe missed.
+        // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Thrown.c::ftCo_800DE508
+        // refs/melee/src/melee/ft/ftaction.c::{ftAction_80071974,ftAction_80073354}
+        // data/moves/{fox,falco}.json moves["ftCo_SM_ThrowLw"]["events"]
+        hit = 1;
+        hit_hurt_height = 1u;
       }
 
       if (!hit) {
