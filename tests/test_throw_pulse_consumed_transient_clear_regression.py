@@ -13,6 +13,7 @@ from tools.eval.dataset import INPUT_DTYPE, SEED_DTYPE, read_dataset
 def test_throw_pulse_consumed_clears_after_step_and_does_not_sticky_carry() -> None:
     # Transient ownership contract:
     # - `seed_t.throw_pulse_consumed` bridges one-step throw_flags_b0 consumption ownership.
+    # - `seed_t.throw_pulse_crossed_prev_frame` carries prior-step throw pulse crossing phase.
     # - Runtime may consume it in frame N, but it must clear before frame N+1.
     # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
     # refs/melee/src/melee/ft/ftaction.c::{ftAction_80071974,ftAction_80073354}
@@ -35,6 +36,7 @@ def test_throw_pulse_consumed_clears_after_step_and_does_not_sticky_carry() -> N
     row0 = ds.samples[record]
     row1 = ds.samples[record + 1]
     assert int(row0["seed_t"]["throw_pulse_consumed"][thrower]) == 1
+    assert int(row0["seed_t"]["throw_pulse_crossed_prev_frame"][thrower]) > 0
 
     binding = importlib.import_module("msl_binding")
     sizes = binding.sizes()
@@ -60,6 +62,7 @@ def test_throw_pulse_consumed_clears_after_step_and_does_not_sticky_carry() -> N
             ("instance_identity_last_action_id", ("<u2", (MAX_PLAYERS,))),
             ("instance_id_counter", "<u2"),
             ("throw_pulse_consumed", ("u1", (MAX_PLAYERS,))),
+            ("throw_pulse_crossed_prev_frame", ("u1", (MAX_PLAYERS,))),
         ],
         align=False,
     )
@@ -84,16 +87,20 @@ def test_throw_pulse_consumed_clears_after_step_and_does_not_sticky_carry() -> N
         binding.debug_write_internals(handle, out_int)
         int0 = out_int.view(INTERNALS_DTYPE).reshape((1,))[0].copy()
         assert int(int0["throw_pulse_consumed"][thrower]) == 1
+        assert int(int0["throw_pulse_crossed_prev_frame"][thrower]) == int(
+            row0["seed_t"]["throw_pulse_crossed_prev_frame"][thrower]
+        )
 
         binding.step_input(handle, prev0_bytes, inp0_bytes)
         binding.debug_write_internals(handle, out_int)
         int1 = out_int.view(INTERNALS_DTYPE).reshape((1,))[0].copy()
         assert int(int1["throw_pulse_consumed"][thrower]) == 0
+        assert int(int1["throw_pulse_crossed_prev_frame"][thrower]) == 0
 
         binding.step_input(handle, prev1_bytes, inp1_bytes)
         binding.debug_write_internals(handle, out_int)
         int2 = out_int.view(INTERNALS_DTYPE).reshape((1,))[0].copy()
         assert int(int2["throw_pulse_consumed"][thrower]) == 0
+        assert int(int2["throw_pulse_crossed_prev_frame"][thrower]) == 0
     finally:
         binding.destroy(handle)
-

@@ -410,6 +410,8 @@ int msl_batch_reseed_seed(MslBatch* batch, const uint8_t* seed_bytes, size_t see
       // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
       // refs/melee/src/melee/ft/ftaction.c::{ftAction_80071974,ftAction_80073354}
       batch->state.throw_pulse_consumed[idx] = seed->throw_pulse_consumed[p] ? 1u : 0u;
+      // Previous-step throw pulse crossing lane (strictly causal seed producer).
+      batch->state.throw_pulse_crossed_prev_frame[idx] = seed->throw_pulse_crossed_prev_frame[p];
       batch->state.match_flow_timer[idx] = seed->match_flow_timer[p];
       batch->state.downwait_timer[idx] = seed->downwait_timer[p];
       // Seed deterministic anim timebase from Slippi post-frame `state_age` (fp->cur_anim_frame)
@@ -1140,6 +1142,7 @@ int msl_batch_debug_write_internals(const MslBatch* batch, uint8_t* out_bytes,
       out->instance_id_x2073[p] = batch->state.instance_id_x2073[idx];
       out->instance_identity_last_action_id[p] = batch->state.instance_identity_last_action_id[idx];
       out->throw_pulse_consumed[p] = batch->state.throw_pulse_consumed[idx];
+      out->throw_pulse_crossed_prev_frame[p] = batch->state.throw_pulse_crossed_prev_frame[idx];
     }
   }
 

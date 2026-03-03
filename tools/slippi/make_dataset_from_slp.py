@@ -331,7 +331,7 @@ def _load_throw_pulse_seed_tables(
     return pulse_frames_by_char_action, cmd1_start_by_char_action, shot_itkind_by_char
 
 
-def _derive_throw_pulse_consumed_seed_lane(
+def _derive_throw_pulse_seed_lanes(
     *,
     seed_action_id_u16: np.ndarray,
     seed_char_id_u8: np.ndarray,
@@ -349,9 +349,9 @@ def _derive_throw_pulse_consumed_seed_lane(
     act_throw_hi: int,
     act_damage_fly_top: int,
     falco_char_id: int,
-) -> np.ndarray:
+) -> tuple[np.ndarray, np.ndarray]:
     """
-    Derive `seed_t.throw_pulse_consumed` strictly from seed-visible replay lanes.
+    Derive throw pulse seed lanes strictly from seed-visible replay lanes.
 
     Decomp ownership:
     - Throw-side shots come from one-shot throw_flags_b0 pulses consumed in ftFx_Throw_Anim.
@@ -362,11 +362,15 @@ def _derive_throw_pulse_consumed_seed_lane(
     - Mark rows where one-step throw pulse reconstruction should be suppressed:
       - script timing stale windows from throw move events (ThrowB/ThrowHi pulse crossing windows),
       - and decomp-owned ongoing-damage throw-laser contexts previously gated in runtime C.
+    - Record prior-step pulse crossing frame for future throw command cursor ownership:
+      - 0 means no crossing in (t-1 -> t),
+      - N is the crossed pulse frame from extracted throw move events.
     """
     n_samples = int(seed_action_id_u16.shape[0])
-    out = np.zeros((n_samples, 4), dtype=np.uint8)
+    out_consumed = np.zeros((n_samples, 4), dtype=np.uint8)
+    out_crossed_prev = np.zeros((n_samples, 4), dtype=np.uint8)
     if n_samples == 0:
-        return out
+        return out_consumed, out_crossed_prev
 
     for i in range(n_samples):
         for p in range(int(num_players)):
@@ -388,6 +392,8 @@ def _derive_throw_pulse_consumed_seed_lane(
                     break
             if crossed_pulse < 0:
                 continue
+            if 0 < crossed_pulse <= 255:
+                out_crossed_prev[i, p] = np.uint8(crossed_pulse)
 
             # Data-driven stale-window mirrors of previously hardcoded ThrowB/ThrowHi pulse windows:
             # - ThrowB: crossing first pulse from cmd1-start phase.
@@ -426,9 +432,9 @@ def _derive_throw_pulse_consumed_seed_lane(
                             stale_window = True
                             break
             if stale_window:
-                out[i, p] = np.uint8(1)
+                out_consumed[i, p] = np.uint8(1)
 
-    return out
+    return out_consumed, out_crossed_prev
 
 
 def _team_id_from_start_player(p: dict) -> int:
@@ -1290,6 +1296,7 @@ def _main_impl(args) -> None:
         samples["ref_t1"]["action_frame"][:, slot] = post_state_age[1:]
         # Throw pulse-consume seed lane is filled after item materialization from full seed_t arrays.
         samples["seed_t"]["throw_pulse_consumed"][:, slot] = 0
+        samples["seed_t"]["throw_pulse_crossed_prev_frame"][:, slot] = 0
         # fp+0x2340 AttackDash lane (decomp-backed targeted ownership seed):
         # - mv.co.attackdash.x0 is consumed by ftCo_800D8AE0 during AttackDash IASA.
         # - Slippi emits fp+0x2340 as `misc_as`; AttackDash treats this lane as signed int.
@@ -1883,7 +1890,7 @@ def _main_impl(args) -> None:
     # - runtime consumes this lane in src/items.c throw-side pulse reconstruction suppressor.
     # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
     # refs/melee/src/melee/ft/ftaction.c::{ftAction_80071974,ftAction_80073354}
-    samples["seed_t"]["throw_pulse_consumed"] = _derive_throw_pulse_consumed_seed_lane(
+    throw_pulse_consumed, throw_pulse_crossed_prev = _derive_throw_pulse_seed_lanes(
         seed_action_id_u16=samples["seed_t"]["action_id"],
         seed_char_id_u8=samples["seed_t"]["char_id"],
         seed_anim_frame_f32=samples["seed_t"]["anim_frame_f32"],
@@ -1901,6 +1908,8 @@ def _main_impl(args) -> None:
         act_damage_fly_top=int(act_damage_fly_top),
         falco_char_id=int(char_falco),
     )
+    samples["seed_t"]["throw_pulse_consumed"] = throw_pulse_consumed
+    samples["seed_t"]["throw_pulse_crossed_prev_frame"] = throw_pulse_crossed_prev
     samples["ref_t1"]["items"] = items_fixed[1:]
 
     # is_dead in compare is derived from stocks in the evaluator too, but fill it here for completeness.

@@ -109,6 +109,10 @@ SEED_DTYPE = np.dtype(
         # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
         # refs/melee/src/melee/ft/ftaction.c::{ftAction_80071974,ftAction_80073354}
         ("throw_pulse_consumed", _arr("u1", MAX_PLAYERS)),
+        # Previous-step throw pulse crossing lane (strictly causal):
+        # - 0 means no throw projectile pulse crossing in (t-1 -> t),
+        # - N is the crossed pulse frame from extracted throw move events.
+        ("throw_pulse_crossed_prev_frame", _arr("u1", MAX_PLAYERS)),
         # fp+0x2340 AttackDash lane (targeted seed ownership):
         # - mv.co.attackdash.x0 countdown consumed by ftCo_800D8AE0.
         # refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackDash.c::ftCo_AttackDash_IASA

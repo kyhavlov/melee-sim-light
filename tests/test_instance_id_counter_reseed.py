@@ -25,6 +25,7 @@ INTERNALS_DTYPE = np.dtype(
         ("instance_identity_last_action_id", ("<u2", (MAX_PLAYERS,))),
         ("instance_id_counter", "<u2"),
         ("throw_pulse_consumed", ("u1", (MAX_PLAYERS,))),
+        ("throw_pulse_crossed_prev_frame", ("u1", (MAX_PLAYERS,))),
     ],
     align=False,
 )

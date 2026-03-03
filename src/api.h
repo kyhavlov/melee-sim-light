@@ -183,6 +183,18 @@ typedef struct MslSeed {
   // - owner shot itkind from data/characters/{fox,falco}.json
   // - current seed items owner/type windows
   uint8_t throw_pulse_consumed[MSL_MAX_PLAYERS];
+  // Throw pulse crossing lane for the *previous* replay step (strictly causal).
+  //
+  // Decomp ownership:
+  // - Throw-side projectile pulses are script one-shots in throw_flags_b0, consumed in
+  //   ftFx_Throw_Anim.
+  // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
+  // refs/melee/src/melee/ft/ftaction.c::{ftAction_80071974,ftAction_80073354}
+  //
+  // Producer (tools/slippi/make_dataset_from_slp.py):
+  // - 0: no projectile pulse crossing in (t-1 -> t) for this seed row.
+  // - N: crossed pulse frame number (u8) from data/moves/{fox,falco}.json throw events.
+  uint8_t throw_pulse_crossed_prev_frame[MSL_MAX_PLAYERS];
   // fp+0x2340 AttackDash lane:
   // - mv.co.attackdash.x0 countdown consumed by ftCo_800D8AE0.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackDash.c::ftCo_AttackDash_IASA
@@ -673,6 +685,8 @@ typedef struct MslDebugInternals {
   uint16_t instance_id_counter;
   // One-step seed bridge lane for throw_flags_b0 pulse-consume ownership.
   uint8_t throw_pulse_consumed[MSL_MAX_PLAYERS];
+  // One-step seed bridge lane carrying previous-step throw pulse crossing frame (0 = none).
+  uint8_t throw_pulse_crossed_prev_frame[MSL_MAX_PLAYERS];
 } MslDebugInternals;
 
 // Debug/test-only helper: write per-player stage collision contact metadata.

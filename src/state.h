@@ -99,6 +99,9 @@ typedef struct MslStateSoA {
   // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
   // refs/melee/src/melee/ft/ftaction.c::{ftAction_80071974,ftAction_80073354}
   uint8_t* throw_pulse_consumed;
+  // Throw projectile pulse crossing lane from the previous replay step (0 = none).
+  // Producer is strictly causal in tools/slippi/make_dataset_from_slp.py.
+  uint8_t* throw_pulse_crossed_prev_frame;
   // Internal-only throw flow latch: when a throw release flag fires, we detach the victim during
   // motion-state Anim (pre-physics), then optionally apply the throw hit later in the frame
   // (post-items) if no other hit interrupted the victim.
