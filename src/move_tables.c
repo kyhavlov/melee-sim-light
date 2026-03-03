@@ -1906,6 +1906,29 @@ uint8_t move_tables_throw_crossed_projectile_pulse_frame(uint8_t char_id, uint16
   return 0;
 }
 
+uint8_t move_tables_throw_projectile_first_pulse_frame(uint8_t char_id, uint16_t throw_action_id,
+                                                       int16_t* out_first_pulse_frame) {
+  if (out_first_pulse_frame == NULL) {
+    return 0;
+  }
+  const int kind = throw_kind_from_action(throw_action_id);
+  if (kind < 0) {
+    return 0;
+  }
+  const MslFramePulses pulses = g_throw_spawn_projectile_by_char[char_id][(size_t)kind];
+  if (!pulses.loaded || pulses.count == 0u) {
+    return 0;
+  }
+  int16_t first = pulses.frame[0];
+  for (uint8_t i = 1; i < pulses.count; i++) {
+    if (pulses.frame[i] < first) {
+      first = pulses.frame[i];
+    }
+  }
+  *out_first_pulse_frame = first;
+  return 1u;
+}
+
 uint8_t move_tables_throw_projectile_last_pulse_frame(uint8_t char_id, uint16_t throw_action_id,
                                                       int16_t* out_last_pulse_frame) {
   if (out_last_pulse_frame == NULL) {

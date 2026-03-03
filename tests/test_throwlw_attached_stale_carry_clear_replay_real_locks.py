@@ -59,7 +59,7 @@ def test_throwlw_attached_stale_carry_target_pm1_both_players_strict_lock(case: 
     ref = target["ref_t1"]
 
     # ThrowLw attached context preconditions from src/items.c:
-    # - thrower on ThrowLw frame 22->24 window
+    # - thrower on first ThrowLw projectile pulse crossing window (cmd1 active + crossed pulse=first)
     # - victim still attached in ThrownLw with matching owner
     # - carried item slot 1 absent in seed/ref at t and t+1
     thrower = 0

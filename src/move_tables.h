@@ -167,6 +167,14 @@ uint8_t move_tables_throw_crossed_projectile_pulse_frame(uint8_t char_id, uint16
                                                          float cur_anim_frame_f32,
                                                          int16_t* out_pulse_frame);
 
+// Returns 1 and outputs the earliest throw projectile pulse frame (min frame over
+// `set_throw_spawn_projectile` events) for the throw action.
+//
+// Source of truth:
+// data/moves/{fox,falco}.json moves["ftCo_SM_Throw*"]["events"] set_throw_spawn_projectile.
+uint8_t move_tables_throw_projectile_first_pulse_frame(uint8_t char_id, uint16_t throw_action_id,
+                                                       int16_t* out_first_pulse_frame);
+
 // Returns 1 and outputs the latest throw projectile pulse frame (max frame over
 // `set_throw_spawn_projectile` events) for the throw action.
 //

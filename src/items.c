@@ -1936,8 +1936,9 @@ void items_update(MslBatch* batch) {
 
     // ThrowLw stale-latch carry trim (post-collision, context-narrow):
     // - Throw-side pulses are one-shot throw_flags_b0 events consumed in ftFx_Throw_Anim.
-    // - On one-step reseed at ThrowLw 22->24 while victim is still attached in ThrownLw, the pulse
-    //   can leave a stale carried state1 laser item at t+1 even when replay ref has no item.
+    // - On one-step reseed around the first ThrowLw projectile pulse crossing while victim is still
+    //   attached in ThrownLw, the pulse can leave a stale carried state1 laser item at t+1 even when
+    //   replay ref has no item.
     // - Keep spawn/collision ownership unchanged (to preserve hitlag parity), then clear only this
     //   stale carried state1 item after collision resolution in the same frame.
     // refs/melee/src/melee/ft/ftaction.c::{ftAction_80071974,ftAction_80073354}
@@ -1955,12 +1956,20 @@ void items_update(MslBatch* batch) {
       if (lp == NULL || lp->shot_itkind != (uint16_t)MSL_IT_KIND_FALCO_LASER_SHOT) {
         continue;
       }
-      const uint16_t frame = msl_anim_frame_floor_u16(items_cur_anim_frame_f32(batch, o_idx));
+      const float af_cur = items_cur_anim_frame_f32(batch, o_idx);
       const int32_t prev_fp =
           batch->state.anim_frame_fp_q16_16[o_idx] - batch->state.frame_speed_mul_fp_q16_16[o_idx];
-      const uint16_t prev_frame_i =
-          msl_anim_frame_floor_u16(msl_anim_frame_sanitize_f32(msl_f32_from_q16_16(prev_fp)));
-      if (!(frame == (uint16_t)24u && prev_frame_i == (uint16_t)22u)) {
+      const float af_prev = msl_anim_frame_sanitize_f32(msl_f32_from_q16_16(prev_fp));
+      int16_t crossed_pulse_af = -1;
+      if (!move_tables_throw_cmd1_active(cid, (uint16_t)MSL_ACT_THROW_LW, af_cur) ||
+          !move_tables_throw_crossed_projectile_pulse_frame(cid, (uint16_t)MSL_ACT_THROW_LW, af_prev,
+                                                            af_cur, &crossed_pulse_af)) {
+        continue;
+      }
+      int16_t first_pulse_af = -1;
+      if (!move_tables_throw_projectile_first_pulse_frame(
+              cid, (uint16_t)MSL_ACT_THROW_LW, &first_pulse_af) ||
+          crossed_pulse_af != first_pulse_af) {
         continue;
       }
       uint8_t stale_context = 0u;
