@@ -607,9 +607,13 @@ void grab_flow_on_catch_connect(MslBatch* batch, int bi, int owner_p, int victim
   // refs/melee/build/GALE01/asm/melee/ft/chara/ftCommon/ftCo_Attack100.s::{fn_800DAADC,fn_800DA8E4}
   // refs/melee/src/melee/ft/ftcoll.c::ftColl_80078A2C
   batch->state.instance_hit_by[vidx] = owner_instance_id_pre_connect;
-  // Grounded CapturePulledLw entry should clear stale damage-source attribution.
-  // refs/melee/src/melee/ft/ftcommon.c::ftCommon_800804FC (x18c4_source_ply = 6 on grounded lane)
-  if (batch->state.action_id[vidx] == (uint16_t)MSL_ACT_CAPTURE_PULLED_LW) {
+  // CapturePulled entry is a non-damaging catch-connect ownership lane; clear stale
+  // damage-source attribution on victim entry.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::fn_800DAADC
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::fn_800DA8E4
+  // refs/melee/src/melee/ft/ftcoll.c::ftColl_80078A2C
+  if (batch->state.action_id[vidx] == (uint16_t)MSL_ACT_CAPTURE_PULLED_LW ||
+      batch->state.action_id[vidx] == (uint16_t)MSL_ACT_CAPTURE_PULLED_HI) {
     batch->state.last_hit_by[vidx] = 6u;
   }
   enum { MSL_STATE_FLAGS_221C_INDEX = 3 };
