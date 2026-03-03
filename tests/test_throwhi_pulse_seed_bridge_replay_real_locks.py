@@ -18,6 +18,8 @@ class _ThrowHiPulseBridgeCase:
     dataset_rel: str
     target_record: int
     thrower_port: int
+    expect_last_attack_landed_nonzero: bool
+    expect_thrower_facing_nonzero: bool | None
     note: str
 
 
@@ -29,25 +31,49 @@ class _ThrowHiPulseBridgeCase:
             dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl",
             target_record=583,
             thrower_port=0,
+            expect_last_attack_landed_nonzero=True,
+            expect_thrower_facing_nonzero=None,
             note="ThrowHi pulse bridge family AGG",
         ),
         _ThrowHiPulseBridgeCase(
             dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl",
             target_record=984,
             thrower_port=1,
+            expect_last_attack_landed_nonzero=True,
+            expect_thrower_facing_nonzero=None,
             note="ThrowHi pulse bridge family GAT",
         ),
         _ThrowHiPulseBridgeCase(
             dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/QuerulousGrandDinosaur.msl",
             target_record=3091,
             thrower_port=0,
+            expect_last_attack_landed_nonzero=True,
+            expect_thrower_facing_nonzero=None,
             note="ThrowHi pulse bridge family QGD",
         ),
         _ThrowHiPulseBridgeCase(
             dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/TreasuredBackKangaroo.msl",
             target_record=2137,
             thrower_port=1,
+            expect_last_attack_landed_nonzero=True,
+            expect_thrower_facing_nonzero=None,
             note="ThrowHi pulse bridge family TBK",
+        ),
+        _ThrowHiPulseBridgeCase(
+            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl",
+            target_record=3424,
+            thrower_port=1,
+            expect_last_attack_landed_nonzero=False,
+            expect_thrower_facing_nonzero=False,
+            note="ThrowHi broadened ongoing-hitstun bridge (no damage provenance, left-facing)",
+        ),
+        _ThrowHiPulseBridgeCase(
+            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/TreasuredBackKangaroo.msl",
+            target_record=5087,
+            thrower_port=1,
+            expect_last_attack_landed_nonzero=False,
+            expect_thrower_facing_nonzero=True,
+            note="ThrowHi broadened ongoing-hitstun bridge (no damage provenance, right-facing)",
         ),
     ],
 )
@@ -79,7 +105,7 @@ def test_throwhi_pulse_seed_bridge_target_pm1_both_players_strict_lock(case: _Th
 
     # ThrowHi seed-bridge preconditions from src/items.c:
     # - thrower in ThrowHi with seeded throw_pulse_consumed latch;
-    # - victim in ongoing hitstun from this thrower with nonzero damage provenance;
+    # - victim in ongoing hitstun from this thrower (with or without damage provenance);
     # - seeded owner shot (state1) exists for velocity-direction bridge.
     victim = 1 - thrower
     assert int(seed["action_id"][thrower]) == 221, case.note  # ThrowHi
@@ -87,7 +113,12 @@ def test_throwhi_pulse_seed_bridge_target_pm1_both_players_strict_lock(case: _Th
     assert int(seed["hitlag"][thrower]) == 0, case.note
     assert int(seed["hitstun"][victim]) > 0, case.note
     assert int(seed["last_hit_by"][victim]) == thrower, case.note
-    assert int(seed["last_attack_landed"][victim]) != 0, case.note
+    if case.expect_last_attack_landed_nonzero:
+        assert int(seed["last_attack_landed"][victim]) != 0, case.note
+    else:
+        assert int(seed["last_attack_landed"][victim]) == 0, case.note
+    if case.expect_thrower_facing_nonzero is not None:
+        assert int(seed["facing"][thrower]) == int(case.expect_thrower_facing_nonzero), case.note
 
     owner_state1_count = 0
     for item in seed["items"]:

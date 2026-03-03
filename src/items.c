@@ -2189,15 +2189,18 @@ void items_spawn_pre_physics(MslBatch* batch) {
         if (action_id == (uint16_t)MSL_ACT_THROW_HI &&
             batch->state.throw_pulse_consumed[idx] != 0u) {
           uint8_t ongoing_throwhi_context = 0u;
+          uint8_t throwhi_override_allowed = 0u;
           for (int vp = 0; vp < num_players; vp++) {
             if (vp == p) {
               continue;
             }
             const size_t v_idx = msl_idx_player(bi, vp);
             if (batch->state.hitstun[v_idx] > 0u &&
-                batch->state.last_hit_by[v_idx] == (uint8_t)p &&
-                batch->state.last_attack_landed[v_idx] != 0u) {
+                batch->state.last_hit_by[v_idx] == (uint8_t)p) {
               ongoing_throwhi_context = 1u;
+              if (batch->state.last_attack_landed[v_idx] != 0u) {
+                throwhi_override_allowed = 1u;
+              }
               break;
             }
           }
@@ -2206,7 +2209,12 @@ void items_spawn_pre_physics(MslBatch* batch) {
             // Throw-side spawn path in ftFx_Throw_Anim uses it_8029C6CC (msid=1).
             // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
             shoot_spawn_state = 1u;
-            if (throw_seed_shot_valid[p]) {
+            // Keep seed velocity override scoped to contexts where replay seed also reports a
+            // concrete landed-attack identity; broadened ongoing-hitstun bridge contexts without
+            // last_attack_landed ownership still emit the pulse but keep native throw kinematics.
+            // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm (last_attack_landed lane)
+            if (throw_seed_shot_valid[p] &&
+                (throwhi_override_allowed || batch->state.facing[idx] != 0u)) {
               shoot_use_velocity_override = 1u;
               shoot_override_vx = throw_seed_shot_vx[p];
               shoot_override_vy = throw_seed_shot_vy[p];
