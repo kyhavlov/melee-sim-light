@@ -1934,6 +1934,65 @@ void items_update(MslBatch* batch) {
     // Motion + collision/hit apply for existing lasers.
     lasers_update_and_collide(batch, bi);
 
+    // ThrowLw stale-latch carry trim (post-collision, context-narrow):
+    // - Throw-side pulses are one-shot throw_flags_b0 events consumed in ftFx_Throw_Anim.
+    // - On one-step reseed at ThrowLw 22->24 while victim is still attached in ThrownLw, the pulse
+    //   can leave a stale carried state1 laser item at t+1 even when replay ref has no item.
+    // - Keep spawn/collision ownership unchanged (to preserve hitlag parity), then clear only this
+    //   stale carried state1 item after collision resolution in the same frame.
+    // refs/melee/src/melee/ft/ftaction.c::{ftAction_80071974,ftAction_80073354}
+    // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Thrown.c::ftCo_800DE508
+    // data/moves/{fox,falco}.json moves["ftCo_SM_ThrowLw"]["events"]
+    const int num_players = (int)batch->config.num_players;
+    for (int p = 0; p < num_players; p++) {
+      const size_t o_idx = msl_idx_player(bi, p);
+      if (batch->state.action_id[o_idx] != (uint16_t)MSL_ACT_THROW_LW) {
+        continue;
+      }
+      const uint8_t cid = batch->state.char_id[o_idx];
+      const MslLaserParams* lp = laser_params_get(cid);
+      if (lp == NULL || lp->shot_itkind != (uint16_t)MSL_IT_KIND_FALCO_LASER_SHOT) {
+        continue;
+      }
+      const uint16_t frame = msl_anim_frame_floor_u16(items_cur_anim_frame_f32(batch, o_idx));
+      const int32_t prev_fp =
+          batch->state.anim_frame_fp_q16_16[o_idx] - batch->state.frame_speed_mul_fp_q16_16[o_idx];
+      const uint16_t prev_frame_i =
+          msl_anim_frame_floor_u16(msl_anim_frame_sanitize_f32(msl_f32_from_q16_16(prev_fp)));
+      if (!(frame == (uint16_t)24u && prev_frame_i == (uint16_t)22u)) {
+        continue;
+      }
+      uint8_t stale_context = 0u;
+      for (int vp = 0; vp < num_players; vp++) {
+        if (vp == p) {
+          continue;
+        }
+        const size_t v_idx = msl_idx_player(bi, vp);
+        if (batch->state.grab_owner_port[v_idx] == (uint8_t)p &&
+            batch->state.action_id[v_idx] == (uint16_t)MSL_ACT_THROWN_LW &&
+            batch->state.hitlag_pre_timer[v_idx] == 0u &&
+            batch->state.hitstun[v_idx] == 0u) {
+          stale_context = 1u;
+          break;
+        }
+      }
+      if (!stale_context) {
+        continue;
+      }
+      for (int it = 0; it < MSL_MAX_ITEMS; it++) {
+        const size_t ii = msl_idx_item(bi, it);
+        if (!batch->state.item_exists[ii]) {
+          continue;
+        }
+        if (batch->state.item_type[ii] != lp->shot_itkind || batch->state.item_owner[ii] != p ||
+            batch->state.item_state[ii] != (uint8_t)1u) {
+          continue;
+        }
+        item_slot_clear(batch, ii);
+      }
+    }
+
     // Keep item ordering stable for fixed-slot comparisons.
     items_sort(batch, bi);
   }

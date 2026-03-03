@@ -146,11 +146,11 @@ mismatch.last_attack_landed: 12 / 20444 (0.000587)
 mismatch.combo_count: 14 / 20444 (0.000685)
 mismatch.last_hit_by: 36 / 20444 (0.001761)
 mismatch.state_flags: 88 / 102220 (0.000861)
-mismatch.item_exists: 8 / 153330 (0.000052)
-mismatch.item_type: 8 / 153330 (0.000052)
-mismatch.item_state: 8 / 153330 (0.000052)
-mismatch.item_owner: 8 / 153330 (0.000052)
-mismatch.item_instance_id: 8 / 153330 (0.000052)
+mismatch.item_exists: 5 / 153330 (0.000033)
+mismatch.item_type: 5 / 153330 (0.000033)
+mismatch.item_state: 5 / 153330 (0.000033)
+mismatch.item_owner: 5 / 153330 (0.000033)
+mismatch.item_instance_id: 5 / 153330 (0.000033)
 err.pos_x: mae=0.042341 p95=0.114677 max=6.000000
 err.pos_y: mae=0.026460 p95=0.000000 max=7.946653
 err.speed_air_x_self: mae=0.026633 p95=0.057262 max=3.200001
@@ -164,7 +164,7 @@ err.item_pos_x: mae=0.260805 p95=0.000000 max=127.472275
 err.item_pos_y: mae=0.124379 p95=0.000000 max=26.364080
 err.item_vel_x: mae=0.038597 p95=0.000000 max=6.413950
 err.item_vel_y: mae=0.050268 p95=0.000000 max=4.999368
-overall.discrete_mismatch: 541 / 1236862
+overall.discrete_mismatch: 526 / 1236862
 overall.float_norm_mae_p95: 0.00283415
 
 == datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/TreasuredBackKangaroo.msl ==
@@ -210,5 +210,5 @@ overall.discrete_mismatch: 368 / 948277
 overall.float_norm_mae_p95: 0.00405125
 
 == suite summary ==
-overall.discrete_mismatch: 1830 / 4462843
+overall.discrete_mismatch: 1815 / 4462843
 overall.float_norm_mae_p95: 0.00345340
