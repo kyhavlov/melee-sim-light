@@ -1103,7 +1103,9 @@ static inline void item_apply_reflect_transfer(MslBatch* batch, size_t ii, size_
 }
 
 static void laser_spawn_from_fighter(MslBatch* batch, int bi, int owner, const MslLaserParams* lp,
-                                     uint8_t spawn_state) {
+                                     uint8_t spawn_state, uint8_t use_velocity_override,
+                                     float override_vx, float override_vy,
+                                     uint8_t apply_spawn_motion_step) {
   if (batch == NULL || lp == NULL) {
     return;
   }
@@ -1173,8 +1175,8 @@ static void laser_spawn_from_fighter(MslBatch* batch, int bi, int owner, const M
   ly *= model_scale;
   (void)lz;  // 2.5D: keep stage Z at 0.0f
 
-  const float pos_x = batch->state.pos_x[o_idx] + lx;
-  const float pos_y = batch->state.pos_y[o_idx] + ly;
+  float pos_x = batch->state.pos_x[o_idx] + lx;
+  float pos_y = batch->state.pos_y[o_idx] + ly;
 
   // Launch angle: if facing left, use (pi - base_angle).
   // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_SpecialN_CreateBlasterShot
@@ -1183,8 +1185,34 @@ static void laser_spawn_from_fighter(MslBatch* batch, int bi, int owner, const M
     ang = MSL_PI_F - ang;
   }
   const float spd = lp->blaster_speed;
-  const float vx = spd * cosf(ang);
-  const float vy = spd * sinf(ang);
+  float vx = spd * cosf(ang);
+  float vy = spd * sinf(ang);
+  if (use_velocity_override) {
+    // Throw-side shot vector ownership (decomp-backed + seed bridge):
+    // - ftFx_Throw_Anim launches throw shots from `atan2f(FtHoldJoint - ItHoldJoint)`, not the
+    //   SpecialN constant blaster angle.
+    // - Slippi seed does not expose the gun hold-joint pose/cmd cursor directly; use the latest
+    //   seeded throw-side shot velocity as a narrow deterministic proxy and normalize to authored
+    //   blaster speed.
+    // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
+    // refs/melee/src/melee/it/items/itfoxlaser.c::{it_8029C6A4,it_8029C6CC}
+    const float mag2 = (override_vx * override_vx) + (override_vy * override_vy);
+    if (mag2 > 1e-8f) {
+      const float inv_mag = 1.0f / sqrtf(mag2);
+      vx = spd * (override_vx * inv_mag);
+      vy = spd * (override_vy * inv_mag);
+    }
+  }
+  if (apply_spawn_motion_step) {
+    // Throw-side intra-frame order bridge:
+    // - Throw shots are emitted by ftFx_Throw_Anim and then consume item motion callbacks in-frame.
+    // - For reseeded one-step bridge rows where throw pulse ownership is seed-driven, apply one
+    //   immediate motion tick to align spawned projectile t+1 placement.
+    // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
+    // refs/melee/src/melee/it/items/itfoxlaser.c::itFoxlaser_UnkMotion1_Phys
+    pos_x += vx;
+    pos_y += vy;
+  }
   const float dir = (vx >= 0.0f) ? 1.0f : -1.0f;
 
   batch->state.item_exists[ii] = 1;
@@ -2032,6 +2060,45 @@ void items_spawn_pre_physics(MslBatch* batch) {
     // Stack-local per-step/per-batch-row scratch: reset once each row iteration.
     // This does not persist in SoA state across frames/reseed.
     uint8_t gun_spawned_this_frame[MSL_MAX_PLAYERS] = {0};
+    float throw_seed_shot_vx[MSL_MAX_PLAYERS] = {0.0f};
+    float throw_seed_shot_vy[MSL_MAX_PLAYERS] = {0.0f};
+    uint8_t throw_seed_shot_valid[MSL_MAX_PLAYERS] = {0u};
+
+    // Seed-visible throw-shot vector snapshot (pre-spawn):
+    // - Throw-side shot direction in ftFx_Throw_Anim is gun-joint relative (`atan2f(sp50-sp44)`),
+    //   which is not directly seed-exposed.
+    // - Snapshot latest throw-side (state1) shot velocity per owner as a deterministic bridge for
+    //   narrow throw-pulse reconstruction rows.
+    // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
+    // refs/melee/src/melee/it/items/itfoxlaser.c::it_8029C6CC
+    for (int p = 0; p < num_players; p++) {
+      const size_t p_idx = msl_idx_player(bi, p);
+      const MslLaserParams* p_lp = laser_params_get(batch->state.char_id[p_idx]);
+      if (p_lp == NULL || p_lp->shot_itkind == 0u) {
+        continue;
+      }
+      float best_timer = -1.0f;
+      for (int it = 0; it < MSL_MAX_ITEMS; it++) {
+        const size_t ii = msl_idx_item(bi, it);
+        if (!batch->state.item_exists[ii] || batch->state.item_owner[ii] != (int8_t)p ||
+            batch->state.item_type[ii] != p_lp->shot_itkind ||
+            batch->state.item_state[ii] != (uint8_t)1u) {
+          continue;
+        }
+        const float vx = batch->state.item_vel_x[ii];
+        const float vy = batch->state.item_vel_y[ii];
+        if ((vx * vx) + (vy * vy) <= 1e-8f) {
+          continue;
+        }
+        const float timer = batch->state.item_timer[ii];
+        if (timer > best_timer) {
+          best_timer = timer;
+          throw_seed_shot_vx[p] = vx;
+          throw_seed_shot_vy[p] = vy;
+          throw_seed_shot_valid[p] = 1u;
+        }
+      }
+    }
 
     // Spawn Illusion/Phantasm ghost article from side-special cmd_var[2] pulse.
     // Decomp ownership:
@@ -2077,6 +2144,10 @@ void items_spawn_pre_physics(MslBatch* batch) {
       const uint16_t frame = msl_anim_frame_floor_u16(af);
       uint8_t should_shoot = laser_should_shoot_on_frame(lp, msid, frame);
       uint8_t shoot_spawn_state = 0u;
+      uint8_t shoot_use_velocity_override = 0u;
+      float shoot_override_vx = 0.0f;
+      float shoot_override_vy = 0.0f;
+      uint8_t shoot_apply_motion_step = 0u;
       // Throw-side blaster shots are driven by throw_flags_b0 pulses consumed in ftFx_Throw_Anim,
       // not by SpecialN loop cmd_vars[2].
       // refs/melee/src/melee/ft/ftaction.c::ftAction_80071974
@@ -2108,65 +2179,126 @@ void items_spawn_pre_physics(MslBatch* batch) {
         if (batch->state.hitlag_pre_timer[idx] != 0u) {
           continue;
         }
-        const int32_t prev_fp =
-            batch->state.anim_frame_fp_q16_16[idx] - batch->state.frame_speed_mul_fp_q16_16[idx];
-        const float af_prev = msl_anim_frame_sanitize_f32(msl_f32_from_q16_16(prev_fp));
-        int16_t crossed_pulse_af = -1;
-        if (move_tables_throw_cmd1_active(cid, action_id, af) &&
-            move_tables_throw_crossed_projectile_pulse_frame(cid, action_id, af_prev, af,
-                                                             &crossed_pulse_af)) {
-          const uint16_t prev_frame_i = msl_anim_frame_floor_u16(af_prev);
-          // Throw-side stale-latch suppressors (context-owned, non-record-keyed):
-          // - Throw pulse flags are one-shot script events (`throw_flags_b0`) owned by the command
-          //   timeline and consumed by ftFx_Throw_Anim.
-          // - Under teacher-forced reseed, command cursor ownership is not seeded; in specific
-          //   attached/ongoing-damage contexts, pure frame-crossing can replay a stale pulse that
-          //   does not exist at t+1.
-          // refs/melee/src/melee/ft/ftaction.c::{ftAction_80071974,ftAction_80073354}
-          // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
-          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Thrown.c::ftCo_800DE508
-          // data/moves/{fox,falco}.json set_throw_spawn_projectile pulse frames
-          uint8_t stale_throw_pulse_context = 0u;
+        // Seed-owned ThrowHi pulse reconstruction bridge:
+        // - Seed derivation marks the one-step throw_flags_b0 pulse ownership window.
+        // - For ongoing throw-damage contexts attributed to this thrower, emit the throw-side shot
+        //   directly from seed ownership rather than relying only on anim-frame pulse crossing.
+        // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
+        // refs/melee/src/melee/ft/ftaction.c::{ftAction_80071974,ftAction_80073354}
+        // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm (last_hit_by / hitstun lanes)
+        if (action_id == (uint16_t)MSL_ACT_THROW_HI &&
+            batch->state.throw_pulse_consumed[idx] != 0u) {
+          uint8_t ongoing_throwhi_context = 0u;
           for (int vp = 0; vp < num_players; vp++) {
             if (vp == p) {
               continue;
             }
             const size_t v_idx = msl_idx_player(bi, vp);
-            // ThrowB stale-latch context:
-            // - defender already in ongoing hitstun from this same projectile kind.
-            if (action_id == (uint16_t)MSL_ACT_THROW_B && batch->state.hitstun[v_idx] > 0u &&
-                batch->state.last_attack_landed[v_idx] == lp->shot_itkind) {
-              stale_throw_pulse_context = 1u;
+            if (batch->state.hitstun[v_idx] > 0u &&
+                batch->state.last_hit_by[v_idx] == (uint8_t)p &&
+                batch->state.last_attack_landed[v_idx] != 0u) {
+              ongoing_throwhi_context = 1u;
               break;
             }
           }
-          if (stale_throw_pulse_context) {
-            continue;
+          if (ongoing_throwhi_context) {
+            should_shoot = 1u;
+            // Throw-side spawn path in ftFx_Throw_Anim uses it_8029C6CC (msid=1).
+            // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
+            shoot_spawn_state = 1u;
+            if (throw_seed_shot_valid[p]) {
+              shoot_use_velocity_override = 1u;
+              shoot_override_vx = throw_seed_shot_vx[p];
+              shoot_override_vy = throw_seed_shot_vy[p];
+            }
           }
-          // Seed-bridge stale-latch suppressors for throw projectile pulses:
-          // - Throw script pulses are one-shot `throw_flags_b0` events consumed in ftFx_Throw_Anim.
-          // - With one-step reseed, command-timer/cursor ownership is not seeded; reconstructing by
-          //   raw frame crossing can re-emit specific startup/mid pulse windows that were already
-          //   consumed in the source frame.
-          // - Keep suppression scoped to the observed pulse windows and action-frame phases that are
-          //   decomp-owned by ftAction command timing.
-          // refs/melee/src/melee/ft/ftaction.c::{ftAction_80071974,ftAction_80073354}
-          // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
-          // data/moves/{fox,falco}.json set_throw_spawn_projectile pulse frames
-          if (throw_blaster_pulse_is_seed_stale_latch(action_id, lp->shot_itkind,
-                                                      crossed_pulse_af, prev_frame_i)) {
-            continue;
+        }
+        if (!should_shoot) {
+          const int32_t prev_fp =
+              batch->state.anim_frame_fp_q16_16[idx] - batch->state.frame_speed_mul_fp_q16_16[idx];
+          const float af_prev = msl_anim_frame_sanitize_f32(msl_f32_from_q16_16(prev_fp));
+          int16_t crossed_pulse_af = -1;
+          if (move_tables_throw_cmd1_active(cid, action_id, af) &&
+              move_tables_throw_crossed_projectile_pulse_frame(cid, action_id, af_prev, af,
+                                                               &crossed_pulse_af)) {
+            const uint16_t prev_frame_i = msl_anim_frame_floor_u16(af_prev);
+            // Throw-side stale-latch suppressors (context-owned, non-record-keyed):
+            // - Throw pulse flags are one-shot script events (`throw_flags_b0`) owned by the command
+            //   timeline and consumed by ftFx_Throw_Anim.
+            // - Under teacher-forced reseed, command cursor ownership is not seeded; in specific
+            //   attached/ongoing-damage contexts, pure frame-crossing can replay a stale pulse that
+            //   does not exist at t+1.
+            // refs/melee/src/melee/ft/ftaction.c::{ftAction_80071974,ftAction_80073354}
+            // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
+            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Thrown.c::ftCo_800DE508
+            // data/moves/{fox,falco}.json set_throw_spawn_projectile pulse frames
+            uint8_t stale_throw_pulse_context = 0u;
+            for (int vp = 0; vp < num_players; vp++) {
+              if (vp == p) {
+                continue;
+              }
+              const size_t v_idx = msl_idx_player(bi, vp);
+              // ThrowB stale-latch context:
+              // - defender already in ongoing hitstun from this same projectile kind.
+              if (action_id == (uint16_t)MSL_ACT_THROW_B && batch->state.hitstun[v_idx] > 0u &&
+                  batch->state.last_attack_landed[v_idx] == lp->shot_itkind) {
+                stale_throw_pulse_context = 1u;
+                break;
+              }
+            }
+            if (stale_throw_pulse_context) {
+              continue;
+            }
+            // Seed-owned ThrowB stale pulse suppressor:
+            // - `throw_pulse_consumed` bridges throw_flags_b0 pulse ownership from seed derivation.
+            // - Keep suppression narrow to ongoing-hitstun contexts attributed to this thrower.
+            // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
+            // refs/melee/src/melee/ft/ftaction.c::{ftAction_80071974,ftAction_80073354}
+            // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm (last_hit_by / hitstun lanes)
+            if (action_id == (uint16_t)MSL_ACT_THROW_B &&
+                batch->state.throw_pulse_consumed[idx] != 0u) {
+              uint8_t ongoing_throwb_context = 0u;
+              for (int vp = 0; vp < num_players; vp++) {
+                if (vp == p) {
+                  continue;
+                }
+                const size_t v_idx = msl_idx_player(bi, vp);
+                if (batch->state.hitstun[v_idx] > 0u &&
+                    batch->state.last_hit_by[v_idx] == (uint8_t)p) {
+                  ongoing_throwb_context = 1u;
+                  break;
+                }
+              }
+              if (ongoing_throwb_context) {
+                continue;
+              }
+            }
+            // Seed-bridge stale-latch suppressors for throw projectile pulses:
+            // - Throw script pulses are one-shot `throw_flags_b0` events consumed in ftFx_Throw_Anim.
+            // - With one-step reseed, command-timer/cursor ownership is not seeded; reconstructing by
+            //   raw frame crossing can re-emit specific startup/mid pulse windows that were already
+            //   consumed in the source frame.
+            // - Keep suppression scoped to the observed pulse windows and action-frame phases that are
+            //   decomp-owned by ftAction command timing.
+            // refs/melee/src/melee/ft/ftaction.c::{ftAction_80071974,ftAction_80073354}
+            // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
+            // data/moves/{fox,falco}.json set_throw_spawn_projectile pulse frames
+            if (throw_blaster_pulse_is_seed_stale_latch(action_id, lp->shot_itkind,
+                                                        crossed_pulse_af, prev_frame_i)) {
+              continue;
+            }
+            should_shoot = 1u;
+            // Throw-side spawn path in ftFx_Throw_Anim uses it_8029C6CC (msid=1).
+            // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
+            shoot_spawn_state = 1u;
           }
-          should_shoot = 1u;
-          // Throw-side spawn path in ftFx_Throw_Anim uses it_8029C6CC (msid=1).
-          // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
-          shoot_spawn_state = 1u;
         }
       }
       if (!should_shoot) {
         continue;
       }
-      laser_spawn_from_fighter(batch, bi, p, lp, shoot_spawn_state);
+      laser_spawn_from_fighter(batch, bi, p, lp, shoot_spawn_state, shoot_use_velocity_override,
+                               shoot_override_vx, shoot_override_vy, shoot_apply_motion_step);
     }
 
     // Keep item ordering stable for fixed-slot comparisons.
