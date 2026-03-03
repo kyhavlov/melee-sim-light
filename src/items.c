@@ -2047,6 +2047,34 @@ void items_spawn_pre_physics(MslBatch* batch) {
         if (move_tables_throw_cmd1_active(cid, action_id, af) &&
             move_tables_throw_crossed_projectile_pulse_frame(cid, action_id, af_prev, af,
                                                              &crossed_pulse_af)) {
+          const uint16_t prev_frame_i = msl_anim_frame_floor_u16(af_prev);
+          // Throw-side stale-latch suppressors (context-owned, non-record-keyed):
+          // - Throw pulse flags are one-shot script events (`throw_flags_b0`) owned by the command
+          //   timeline and consumed by ftFx_Throw_Anim.
+          // - Under teacher-forced reseed, command cursor ownership is not seeded; in specific
+          //   attached/ongoing-damage contexts, pure frame-crossing can replay a stale pulse that
+          //   does not exist at t+1.
+          // refs/melee/src/melee/ft/ftaction.c::{ftAction_80071974,ftAction_80073354}
+          // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Thrown.c::ftCo_800DE508
+          // data/moves/{fox,falco}.json set_throw_spawn_projectile pulse frames
+          uint8_t stale_throw_pulse_context = 0u;
+          for (int vp = 0; vp < num_players; vp++) {
+            if (vp == p) {
+              continue;
+            }
+            const size_t v_idx = msl_idx_player(bi, vp);
+            // ThrowB stale-latch context:
+            // - defender already in ongoing hitstun from this same projectile kind.
+            if (action_id == (uint16_t)MSL_ACT_THROW_B && batch->state.hitstun[v_idx] > 0u &&
+                batch->state.last_attack_landed[v_idx] == lp->shot_itkind) {
+              stale_throw_pulse_context = 1u;
+              break;
+            }
+          }
+          if (stale_throw_pulse_context) {
+            continue;
+          }
           // Seed-bridge stale-latch suppressors for throw projectile pulses:
           // - Throw script pulses are one-shot `throw_flags_b0` events consumed in ftFx_Throw_Anim.
           // - With one-step reseed, command-timer/cursor ownership is not seeded; reconstructing by
@@ -2057,7 +2085,6 @@ void items_spawn_pre_physics(MslBatch* batch) {
           // refs/melee/src/melee/ft/ftaction.c::{ftAction_80071974,ftAction_80073354}
           // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
           // data/moves/{fox,falco}.json set_throw_spawn_projectile pulse frames
-          const uint16_t prev_frame_i = msl_anim_frame_floor_u16(af_prev);
           if (throw_blaster_pulse_is_seed_stale_latch(action_id, lp->shot_itkind,
                                                       crossed_pulse_af, prev_frame_i)) {
             continue;

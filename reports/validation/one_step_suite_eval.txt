@@ -104,11 +104,11 @@ mismatch.last_attack_landed: 12 / 23058 (0.000520)
 mismatch.combo_count: 13 / 23058 (0.000564)
 mismatch.last_hit_by: 42 / 23058 (0.001821)
 mismatch.state_flags: 91 / 115290 (0.000789)
-mismatch.item_exists: 16 / 172935 (0.000093)
-mismatch.item_type: 16 / 172935 (0.000093)
-mismatch.item_state: 8 / 172935 (0.000046)
-mismatch.item_owner: 18 / 172935 (0.000104)
-mismatch.item_instance_id: 18 / 172935 (0.000104)
+mismatch.item_exists: 13 / 172935 (0.000075)
+mismatch.item_type: 13 / 172935 (0.000075)
+mismatch.item_state: 5 / 172935 (0.000029)
+mismatch.item_owner: 15 / 172935 (0.000087)
+mismatch.item_instance_id: 15 / 172935 (0.000087)
 err.pos_x: mae=0.053535 p95=0.220639 max=6.346710
 err.pos_y: mae=0.018510 p95=0.000000 max=8.338652
 err.speed_air_x_self: mae=0.038106 p95=0.065991 max=2.929587
@@ -122,7 +122,7 @@ err.item_pos_x: mae=0.134682 p95=0.000000 max=71.544670
 err.item_pos_y: mae=0.078728 p95=0.000000 max=26.796017
 err.item_vel_x: mae=0.049210 p95=0.000000 max=7.782612
 err.item_vel_y: mae=0.056726 p95=0.000000 max=6.995885
-overall.discrete_mismatch: 559 / 1395009
+overall.discrete_mismatch: 544 / 1395009
 overall.float_norm_mae_p95: 0.00367225
 
 == datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/QuerulousGrandDinosaur.msl ==
@@ -210,5 +210,5 @@ overall.discrete_mismatch: 368 / 948277
 overall.float_norm_mae_p95: 0.00405125
 
 == suite summary ==
-overall.discrete_mismatch: 1845 / 4462843
+overall.discrete_mismatch: 1830 / 4462843
 overall.float_norm_mae_p95: 0.00345340
