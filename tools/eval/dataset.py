@@ -105,6 +105,10 @@ SEED_DTYPE = np.dtype(
         ("_pad1", "V1"),
         ("action_id", _arr("<u2", MAX_PLAYERS)),
         ("action_frame", _arr("<i2", MAX_PLAYERS)),
+        # Throw-side projectile pulse consume lane (causal producer in make_dataset_from_slp.py).
+        # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
+        # refs/melee/src/melee/ft/ftaction.c::{ftAction_80071974,ftAction_80073354}
+        ("throw_pulse_consumed", _arr("u1", MAX_PLAYERS)),
         # fp+0x2340 AttackDash lane (targeted seed ownership):
         # - mv.co.attackdash.x0 countdown consumed by ftCo_800D8AE0.
         # refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackDash.c::ftCo_AttackDash_IASA

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 from dataclasses import dataclass
 
 import numpy as np
@@ -285,6 +286,147 @@ def _derive_match_flow_timer(*, action_id_u16: np.ndarray, port0: int, common: d
         if t > 255:
             t = 255
         out[i] = np.uint8(t)
+
+    return out
+
+
+def _load_throw_pulse_seed_tables(
+    *,
+    data_root,
+    throw_action_to_move: dict[int, str],
+) -> tuple[dict[tuple[int, int], tuple[int, ...]], dict[tuple[int, int], int], dict[int, int]]:
+    """
+    Load throw pulse/cmd timing metadata.
+
+    Source of truth:
+    - data/moves/{fox,falco}.json moves["ftCo_SM_Throw*"]["events"]
+      - set_throw_spawn_projectile
+      - set_cmd_var(idx=1,value=1)
+    """
+    pulse_frames_by_char_action: dict[tuple[int, int], tuple[int, ...]] = {}
+    cmd1_start_by_char_action: dict[tuple[int, int], int] = {}
+    shot_itkind_by_char: dict[int, int] = {}
+    for char_id, key in ((1, "fox"), (22, "falco")):
+        moves = json.loads((data_root / "moves" / f"{key}.json").read_text())["moves"]
+        attrs = json.loads((data_root / "characters" / f"{key}.json").read_text())
+        shot_itkind_by_char[int(char_id)] = int(attrs.get("blaster_shot_itkind", 0))
+        for action_id, move_name in throw_action_to_move.items():
+            events = moves.get(move_name, {}).get("events", [])
+            pulses = sorted(
+                int(ev.get("frame", 0))
+                for ev in events
+                if ev.get("kind") == "set_throw_spawn_projectile"
+            )
+            pulse_frames_by_char_action[(int(char_id), int(action_id))] = tuple(pulses)
+            cmd1_set_on = sorted(
+                int(ev.get("frame", 0))
+                for ev in events
+                if ev.get("kind") == "set_cmd_var"
+                and int((ev.get("data") or {}).get("idx", -1)) == 1
+                and int((ev.get("data") or {}).get("value", -1)) == 1
+            )
+            cmd1_start_by_char_action[(int(char_id), int(action_id))] = (
+                int(cmd1_set_on[0]) if cmd1_set_on else -1
+            )
+    return pulse_frames_by_char_action, cmd1_start_by_char_action, shot_itkind_by_char
+
+
+def _derive_throw_pulse_consumed_seed_lane(
+    *,
+    seed_action_id_u16: np.ndarray,
+    seed_char_id_u8: np.ndarray,
+    seed_anim_frame_f32: np.ndarray,
+    seed_frame_speed_mul_f32: np.ndarray,
+    seed_hitstun_u16: np.ndarray,
+    seed_last_attack_landed_u8: np.ndarray,
+    seed_last_hit_by_u8: np.ndarray,
+    seed_items: np.ndarray,
+    num_players: int,
+    pulse_frames_by_char_action: dict[tuple[int, int], tuple[int, ...]],
+    cmd1_start_by_char_action: dict[tuple[int, int], int],
+    shot_itkind_by_char: dict[int, int],
+    act_throw_b: int,
+    act_throw_hi: int,
+    act_damage_fly_top: int,
+    falco_char_id: int,
+) -> np.ndarray:
+    """
+    Derive `seed_t.throw_pulse_consumed` strictly from seed-visible replay lanes.
+
+    Decomp ownership:
+    - Throw-side shots come from one-shot throw_flags_b0 pulses consumed in ftFx_Throw_Anim.
+      refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
+      refs/melee/src/melee/ft/ftaction.c::{ftAction_80071974,ftAction_80073354}
+
+    Seed policy:
+    - Mark rows where one-step throw pulse reconstruction should be suppressed:
+      - script timing stale windows from throw move events (ThrowB/ThrowHi pulse crossing windows),
+      - and decomp-owned ongoing-damage throw-laser contexts previously gated in runtime C.
+    """
+    n_samples = int(seed_action_id_u16.shape[0])
+    out = np.zeros((n_samples, 4), dtype=np.uint8)
+    if n_samples == 0:
+        return out
+
+    for i in range(n_samples):
+        for p in range(int(num_players)):
+            action_id = int(seed_action_id_u16[i, p])
+            char_id = int(seed_char_id_u8[i, p])
+            pulses = pulse_frames_by_char_action.get((char_id, action_id), ())
+            if not pulses:
+                continue
+            af = float(seed_anim_frame_f32[i, p])
+            rate = float(seed_frame_speed_mul_f32[i, p])
+            if not np.isfinite(af) or not np.isfinite(rate) or rate <= 0.0:
+                continue
+            af_prev = af - rate
+            crossed_pulse = -1
+            for pulse_frame in pulses:
+                pulse_f = float(pulse_frame)
+                if af_prev < pulse_f <= af:
+                    crossed_pulse = int(pulse_frame)
+                    break
+            if crossed_pulse < 0:
+                continue
+
+            # Data-driven stale-window mirrors of previously hardcoded ThrowB/ThrowHi pulse windows:
+            # - ThrowB: crossing first pulse from cmd1-start phase.
+            # - ThrowHi(Falco): crossing mid pulse from first-pulse phase.
+            # refs/melee/src/melee/ft/ftaction.c::{ftAction_80071974,ftAction_80073354}
+            # data/moves/{fox,falco}.json moves["ftCo_SM_ThrowB"/"ftCo_SM_ThrowHi"]["events"]
+            prev_frame_i = int(np.floor(np.float32(af_prev)))
+            stale_window = False
+            if action_id == int(act_throw_b) and len(pulses) >= 1:
+                cmd1_start = int(cmd1_start_by_char_action.get((char_id, action_id), -1))
+                first_pulse = int(pulses[0])
+                if cmd1_start >= 0 and crossed_pulse == first_pulse and prev_frame_i == cmd1_start:
+                    stale_window = True
+            elif action_id == int(act_throw_hi) and char_id == int(falco_char_id) and len(pulses) >= 2:
+                first_pulse = int(pulses[0])
+                mid_pulse = int(pulses[1])
+                if crossed_pulse == mid_pulse and prev_frame_i == first_pulse:
+                    stale_window = True
+            # ThrowB ongoing-hitstun stale pulse context (moved from runtime heuristic):
+            # - throw_flags_b0 pulses are one-shot and consumed in ftFx_Throw_Anim.
+            # - if victim is already in ongoing hitstun from this throw-side projectile owner,
+            #   one-step pulse reconstruction should be suppressed.
+            # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
+            # refs/melee/src/melee/ft/ftaction.c::{ftAction_80071974,ftAction_80073354}
+            # refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm (last_hit_by / hitstun lanes)
+            if not stale_window and action_id == int(act_throw_b):
+                shot_itkind = int(shot_itkind_by_char.get(char_id, 0))
+                if shot_itkind != 0:
+                    for vp in range(int(num_players)):
+                        if vp == p:
+                            continue
+                        if (
+                            int(seed_hitstun_u16[i, vp]) > 0
+                            and int(seed_last_attack_landed_u8[i, vp]) == shot_itkind
+                        ):
+                            stale_window = True
+                            break
+            if stale_window:
+                out[i, p] = np.uint8(1)
 
     return out
 
@@ -940,6 +1082,21 @@ def _main_impl(args) -> None:
     act_down_bound_d = 0x00BF
     act_down_wait_d = 0x00C0
     act_escape_air = 0x00EC
+    throw_action_to_move = {
+        int(act_throw_f): "ftCo_SM_ThrowF",
+        int(act_throw_b): "ftCo_SM_ThrowB",
+        int(act_throw_hi): "ftCo_SM_ThrowHi",
+        int(act_throw_lw): "ftCo_SM_ThrowLw",
+    }
+    (
+        throw_pulse_frames_by_char_action,
+        throw_cmd1_start_by_char_action,
+        throw_shot_itkind_by_char,
+    ) = _load_throw_pulse_seed_tables(
+        data_root=data_root,
+        throw_action_to_move=throw_action_to_move,
+    )
+    char_falco = 22
     button_mask_xy = 0x0400 | 0x0800  # HSD_PAD_XY / src/buttons.h::MSL_BUTTON_XY
     button_mask_lr = 0x0040 | 0x0020  # HSD_PAD_L|HSD_PAD_R / src/buttons.h::MSL_BUTTON_{L,R}
     button_mask_z = 0x0010  # HSD_PAD_Z / src/buttons.h::MSL_BUTTON_Z
@@ -1131,6 +1288,8 @@ def _main_impl(args) -> None:
         samples["ref_t1"]["action_id"][:, slot] = post_state[1:]
         samples["seed_t"]["action_frame"][:, slot] = post_state_age[:-1]
         samples["ref_t1"]["action_frame"][:, slot] = post_state_age[1:]
+        # Throw pulse-consume seed lane is filled after item materialization from full seed_t arrays.
+        samples["seed_t"]["throw_pulse_consumed"][:, slot] = 0
         # fp+0x2340 AttackDash lane (decomp-backed targeted ownership seed):
         # - mv.co.attackdash.x0 is consumed by ftCo_800D8AE0 during AttackDash IASA.
         # - Slippi emits fp+0x2340 as `misc_as`; AttackDash treats this lane as signed int.
@@ -1720,6 +1879,28 @@ def _main_impl(args) -> None:
     )
     samples["seed_t"]["item_reflect_damage_mul"] = item_reflect_damage_mul[:-1]
     samples["seed_t"]["items"] = items_seed[:-1]
+    # Throw pulse-consume seed lane (causal producer):
+    # - runtime consumes this lane in src/items.c throw-side pulse reconstruction suppressor.
+    # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
+    # refs/melee/src/melee/ft/ftaction.c::{ftAction_80071974,ftAction_80073354}
+    samples["seed_t"]["throw_pulse_consumed"] = _derive_throw_pulse_consumed_seed_lane(
+        seed_action_id_u16=samples["seed_t"]["action_id"],
+        seed_char_id_u8=samples["seed_t"]["char_id"],
+        seed_anim_frame_f32=samples["seed_t"]["anim_frame_f32"],
+        seed_frame_speed_mul_f32=samples["seed_t"]["frame_speed_mul_f32"],
+        seed_hitstun_u16=samples["seed_t"]["hitstun"],
+        seed_last_attack_landed_u8=samples["seed_t"]["last_attack_landed"],
+        seed_last_hit_by_u8=samples["seed_t"]["last_hit_by"],
+        seed_items=samples["seed_t"]["items"],
+        num_players=num_players,
+        pulse_frames_by_char_action=throw_pulse_frames_by_char_action,
+        cmd1_start_by_char_action=throw_cmd1_start_by_char_action,
+        shot_itkind_by_char=throw_shot_itkind_by_char,
+        act_throw_b=int(act_throw_b),
+        act_throw_hi=int(act_throw_hi),
+        act_damage_fly_top=int(act_damage_fly_top),
+        falco_char_id=int(char_falco),
+    )
     samples["ref_t1"]["items"] = items_fixed[1:]
 
     # is_dead in compare is derived from stocks in the evaluator too, but fill it here for completeness.

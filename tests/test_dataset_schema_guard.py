@@ -9,6 +9,8 @@ def test_seed_schema_includes_staling_fields() -> None:
     assert "stale_move_id" in SEED_DTYPE.fields
     assert "stale_attack_instance" in SEED_DTYPE.fields
     assert "attack_instance" in SEED_DTYPE.fields
+    # Throw-side pulse-latch schema scaffold (future causal ownership wiring).
+    assert "throw_pulse_consumed" in SEED_DTYPE.fields
 
 
 def test_dataset_dtype_sizes_match_c_structs() -> None:

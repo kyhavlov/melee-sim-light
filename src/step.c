@@ -47,6 +47,24 @@ static inline void clear_landing_transients(MslBatch* batch) {
   }
 }
 
+static inline void clear_seed_owned_transients_post_frame(MslBatch* batch) {
+  if (batch == NULL) {
+    return;
+  }
+  const int num_players = (int)batch->config.num_players;
+  for (int bi = 0; bi < batch->batch_size; bi++) {
+    for (int p = 0; p < num_players; p++) {
+      const size_t idx = msl_idx_player(bi, p);
+      // `seed_t.throw_pulse_consumed` is a one-step seed bridge for throw_flags_b0 pulse ownership:
+      // consume within the current simulated frame, then clear so it cannot stale-carry into later
+      // rollout frames.
+      // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
+      // refs/melee/src/melee/ft/ftaction.c::{ftAction_80071974,ftAction_80073354}
+      batch->state.throw_pulse_consumed[idx] = 0u;
+    }
+  }
+}
+
 static inline void cache_prev_action_ids(MslBatch* batch) {
   if (batch == NULL) {
     return;
@@ -236,6 +254,7 @@ static int step_one_frame_core(MslBatch* batch, const uint8_t* prev_input_bytes,
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c
   anim_timebase_apply_deferred_tick_once_post_combat(batch);
   state_flags_refresh_post_frame(batch);
+  clear_seed_owned_transients_post_frame(batch);
 
   combat_rng_trace_end_frame(batch);
   return 0;

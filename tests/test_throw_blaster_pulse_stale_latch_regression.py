@@ -31,6 +31,7 @@ class _PulseStaleLatchCase:
     throw_action: int
     thrower_animf: float
     victim_action: int
+    expected_throw_pulse_consumed: int
     note: str
 
 
@@ -51,22 +52,24 @@ def _assert_strict_transition_fields_match_ref_all_players(*, out_row, ref_row, 
     "case",
     [
         _PulseStaleLatchCase(
-            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl",
-            target_record=983,
-            thrower_port=1,
+            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/QuerulousGrandDinosaur.msl",
+            target_record=3091,
+            thrower_port=0,
             throw_action=221,  # ThrowHi
-            thrower_animf=18.66666603088379,
+            thrower_animf=20.0,
             victim_action=90,  # DamageFlyTop
-            note="ThrowHi pulse20 stale-latch lock",
+            expected_throw_pulse_consumed=1,
+            note="ThrowHi pulse20 carried stale-context lock",
         ),
         _PulseStaleLatchCase(
             dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/QuerulousGrandDinosaur.msl",
-            target_record=8290,
+            target_record=8291,
             thrower_port=1,
             throw_action=220,  # ThrowB
-            thrower_animf=13.750000953674316,
+            thrower_animf=15.000000953674316,
             victim_action=88,  # DamageFlyN
-            note="ThrowB pulse15 startup stale-latch lock",
+            expected_throw_pulse_consumed=1,
+            note="ThrowB pulse15 ongoing-hitstun stale-context lock",
         ),
     ],
 )
@@ -84,6 +87,9 @@ def test_throw_blaster_pulse_stale_latch_target_pm1_both_players(case: _PulseSta
     assert int(target["seed_t"]["action_id"][thrower]) == int(case.throw_action), case.note
     assert int(target["seed_t"]["action_id"][victim]) == int(case.victim_action), case.note
     assert abs(float(target["seed_t"]["anim_frame_f32"][thrower]) - float(case.thrower_animf)) <= 1e-6, case.note
+    assert int(target["seed_t"]["throw_pulse_consumed"][thrower]) == int(
+        case.expected_throw_pulse_consumed
+    ), case.note
 
     # Strict replay-real lock coverage for target-1 / target / target+1 on both players.
     for record in (case.target_record - 1, case.target_record, case.target_record + 1):

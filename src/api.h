@@ -165,6 +165,24 @@ typedef struct MslSeed {
   // State machine
   uint16_t action_id[MSL_MAX_PLAYERS];    // GALE01 action id
   int16_t action_frame[MSL_MAX_PLAYERS];  // action frame (can be negative in pre-start)
+  // Throw projectile pulse-consume seed lane (causal producer; one-step seed ownership).
+  //
+  // Decomp ownership:
+  // - Throw-side blaster shots are one-shot throw_flags_b0 script pulses consumed in
+  //   ftFx_Throw_Anim via ftAction command processing.
+  // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
+  // refs/melee/src/melee/ft/ftaction.c::{ftAction_80071974,ftAction_80073354}
+  //
+  // Producer (tools/slippi/make_dataset_from_slp.py):
+  // - 0: no throw-pulse stale-latch suppression for this one-step seed row.
+  // - 1: pulse was already consumed for this seed-owned throw context (suppress reconstruction).
+  //
+  // Derivation uses only replay-causal lanes + extracted move/character data:
+  // - seed anim_frame_f32 + frame_speed_mul_f32 (upcoming throw pulse crossing)
+  // - throw pulse frames from data/moves/{fox,falco}.json
+  // - owner shot itkind from data/characters/{fox,falco}.json
+  // - current seed items owner/type windows
+  uint8_t throw_pulse_consumed[MSL_MAX_PLAYERS];
   // fp+0x2340 AttackDash lane:
   // - mv.co.attackdash.x0 countdown consumed by ftCo_800D8AE0.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackDash.c::ftCo_AttackDash_IASA
@@ -653,6 +671,8 @@ typedef struct MslDebugInternals {
   uint16_t instance_identity_last_action_id[MSL_MAX_PLAYERS];
   // Per-environment global counter backing plAttack_80037B08 (unk_804D6480).
   uint16_t instance_id_counter;
+  // One-step seed bridge lane for throw_flags_b0 pulse-consume ownership.
+  uint8_t throw_pulse_consumed[MSL_MAX_PLAYERS];
 } MslDebugInternals;
 
 // Debug/test-only helper: write per-player stage collision contact metadata.

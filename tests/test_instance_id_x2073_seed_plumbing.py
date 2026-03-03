@@ -58,6 +58,7 @@ def test_dataset_seeds_instance_id_x2073_and_reseed_respects_it() -> None:
             ("instance_id_x2073", ("u1", (MAX_PLAYERS,))),
             ("instance_identity_last_action_id", ("<u2", (MAX_PLAYERS,))),
             ("instance_id_counter", "<u2"),
+            ("throw_pulse_consumed", ("u1", (MAX_PLAYERS,))),
         ],
         align=False,
     )
@@ -79,4 +80,3 @@ def test_dataset_seeds_instance_id_x2073_and_reseed_respects_it() -> None:
 
     got = out_int.view(INTERNALS_DTYPE).reshape((1,))[0]
     assert int(got["instance_id_x2073"][player]) == 99
-
