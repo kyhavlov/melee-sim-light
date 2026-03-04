@@ -499,7 +499,20 @@ def _derive_source_clear_terminal_phase_seed_lane(
     # GALE01 action ids (ftCommon_MotionState): downed + passive recovery subset.
     # refs/melee/src/melee/ft/chara/ftCommon/forward.h
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c (down/passive recovery ownership flow)
+    #
+    # Also allow a narrow set of immediate grounded recovery followups where the same
+    # callback-owned ownership phase can run through the terminal tick:
+    # - Wait/EscapeF in common motion-state flow.
+    # refs/melee/src/melee/ft/chara/ftCommon/forward.h
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Escape.c
+    #
+    # Fox/Falco side-B end state is included as a character motion-state followup where
+    # terminal source-owner clear can lag by one post-frame in replay rows under this same
+    # strict predicate.
+    # refs/melee/src/melee/ft/chara/ftFox/forward.h::ftFox_MotionState
+    # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c
     DOWN_PASSIVE_RECOVERY_ACTIONS = {
+        0x000E,  # ftCo_MS_Wait
         0x00B7,  # ftCo_MS_DownBoundU
         0x00B8,  # ftCo_MS_DownWaitU
         0x00BA,  # ftCo_MS_DownStandU
@@ -515,6 +528,8 @@ def _derive_source_clear_terminal_phase_seed_lane(
         0x00C7,  # ftCo_MS_Passive
         0x00C8,  # ftCo_MS_PassiveStandF
         0x00C9,  # ftCo_MS_PassiveStandB
+        0x00E9,  # ftCo_MS_EscapeF
+        0x015E,  # ftFx_MS_SpecialSEnd (Fox/Falco shared in suite)
     }
     for i in range(n):
         if i == 0:

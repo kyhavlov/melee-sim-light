@@ -54,6 +54,34 @@ class _SourceClearTerminalPhaseCase:
             expect_owner=0,
             note="ref 0->out 6 residual cleanup (GAT late)",
         ),
+        _SourceClearTerminalPhaseCase(
+            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl",
+            target_record=1905,
+            victim_port=0,
+            expect_owner=1,
+            note="Wait followup terminal cleanup (GAT)",
+        ),
+        _SourceClearTerminalPhaseCase(
+            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/QuerulousGrandDinosaur.msl",
+            target_record=5208,
+            victim_port=0,
+            expect_owner=1,
+            note="EscapeF followup terminal cleanup (QGD)",
+        ),
+        _SourceClearTerminalPhaseCase(
+            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl",
+            target_record=6501,
+            victim_port=0,
+            expect_owner=1,
+            note="SpecialSEnd followup terminal cleanup (AGN)",
+        ),
+        _SourceClearTerminalPhaseCase(
+            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/QuerulousGrandDinosaur.msl",
+            target_record=8198,
+            victim_port=1,
+            expect_owner=0,
+            note="SpecialSEnd followup terminal cleanup (QGD)",
+        ),
     ],
 )
 def test_source_clear_terminal_phase_target_pm1_both_players_strict_lock(
