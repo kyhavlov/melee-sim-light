@@ -2407,6 +2407,24 @@ void items_spawn_pre_physics(MslBatch* batch) {
             // Throw-side spawn path in ftFx_Throw_Anim uses it_8029C6CC (msid=1).
             // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
             shoot_spawn_state = 1u;
+            // ThrowHi pulse-crossing velocity bridge:
+            // - Throw-side launch direction in ftFx_Throw_Anim is hold-joint vector driven
+            //   (`atan2f`), not the fixed SpecialN blaster angle.
+            // - On mid/late ThrowHi pulse crossings, seed-visible latest throw-shot velocity is a
+            //   tighter proxy than the default angle lane; keep this scoped to ThrowHi pulse
+            //   crossings at/after the script mid pulse.
+            // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
+            // refs/melee/src/melee/it/items/itfoxlaser.c::it_8029C6CC
+            // data/moves/{fox,falco}.json moves["ftCo_SM_ThrowHi"]["events"]
+            if (action_id == (uint16_t)MSL_ACT_THROW_HI && !shoot_use_velocity_override &&
+                throw_seed_shot_valid[p] &&
+                batch->state.throw_pulse_crossed_prev_frame[idx] >=
+                    (uint8_t)MSL_THROWHI_PREV_PHASE_AF &&
+                crossed_pulse_af >= (int16_t)MSL_THROWHI_PULSE_MID_AF) {
+              shoot_use_velocity_override = 1u;
+              shoot_override_vx = throw_seed_shot_vx[p];
+              shoot_override_vy = throw_seed_shot_vy[p];
+            }
           }
         }
       }
