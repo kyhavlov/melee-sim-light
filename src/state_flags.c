@@ -406,6 +406,19 @@ void state_flags_refresh_post_frame(MslBatch* batch) {
       } else {
         f221c &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221C_U16_Y_VISIBLE_BIT;
       }
+      if (action_id == (uint16_t)MSL_ACT_WALK_SLOW ||
+          action_id == (uint16_t)MSL_ACT_CATCH_DASH_PULL) {
+        // x221C_u16_y reset ownership on grounded locomotion/catch-pull transitions:
+        // - Fighter_ChangeMotionState clears fp->x221C_u16_y when Ft_MF_Unk24 is not set.
+        // - WalkSlow entry runs with Ft_MF_None (no keep flag), so carry-in opcode-52 state from
+        //   previous motions should be reset on this destination.
+        // - Catch/CatchDash entry path is also ChangeMotionState(..., flags=0); keep CatchDashPull
+        //   aligned with that grounded catch-flow reset ownership in one-step parity.
+        // refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Walk.c::ftCo_Walk_Enter
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_800D8C54
+        f221c &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221C_U16_Y_VISIBLE_BIT;
+      }
 
       // GuardReflect flag parity (x221C_b1 / x221C_b2 / x221C_b3) driven by GuardReflect timers.
       if (batch->state.action_id[idx] == (uint16_t)MSL_ACT_GUARD_REFLECT) {
