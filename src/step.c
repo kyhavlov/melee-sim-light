@@ -66,7 +66,7 @@ static inline void clear_seed_owned_transients_post_frame(MslBatch* batch) {
   }
 }
 
-static inline void cache_prev_action_ids(MslBatch* batch) {
+static inline void cache_prev_action_state(MslBatch* batch) {
   if (batch == NULL) {
     return;
   }
@@ -75,6 +75,7 @@ static inline void cache_prev_action_ids(MslBatch* batch) {
     for (int p = 0; p < num_players; p++) {
       const size_t idx = msl_idx_player(bi, p);
       batch->state.prev_action_id[idx] = batch->state.action_id[idx];
+      batch->state.prev_action_frame[idx] = batch->state.action_frame[idx];
     }
   }
 }
@@ -140,7 +141,7 @@ static int step_one_frame_core(MslBatch* batch, const uint8_t* prev_input_bytes,
   combat_rng_trace_begin_frame(batch);
 
   clear_landing_transients(batch);
-  cache_prev_action_ids(batch);
+  cache_prev_action_state(batch);
   cache_guard_reflect_timer_seed_snapshots(batch);
 
   // The exact ordering here is a major correctness lever. Keep it explicit and easy to reorder.

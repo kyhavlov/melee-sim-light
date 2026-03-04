@@ -93,6 +93,8 @@ typedef struct MslStateSoA {
   // Used for transition-based mechanics that depend on (t -> t+1) action changes while keeping
   // the seed schema minimal for one-step reseeding.
   uint16_t* prev_action_id;
+  // Previous frame's action_frame (captured at step start; internal-only).
+  int16_t* prev_action_frame;
   int16_t* action_frame;
   // Throw projectile pulse-consume seed lane (decomp owner: ftFx_Throw_Anim consumes
   // ftAction throw_flags_b0 one-shot pulses).

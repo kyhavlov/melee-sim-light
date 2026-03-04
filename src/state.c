@@ -81,6 +81,7 @@ int state_alloc(MslStateSoA* state, int batch_size) {
 
   state->action_id = (uint16_t*)alloc_aligned_64(sizeof(uint16_t) * bp);
   state->prev_action_id = (uint16_t*)alloc_aligned_64(sizeof(uint16_t) * bp);
+  state->prev_action_frame = (int16_t*)alloc_aligned_64(sizeof(int16_t) * bp);
   state->action_frame = (int16_t*)alloc_aligned_64(sizeof(int16_t) * bp);
   state->throw_pulse_consumed = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->throw_pulse_crossed_prev_frame = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
@@ -306,7 +307,8 @@ int state_alloc(MslStateSoA* state, int batch_size) {
       !state->wall_kind || !state->ceiling_contact_x || !state->ceiling_contact_y ||
       !state->ceiling_normal_x || !state->ceiling_normal_y || !state->ceiling_id ||
       !state->coll_env_flags || !state->coll_prev_env_flags || !state->action_id ||
-      !state->prev_action_id || !state->action_frame || !state->throw_pending_victim_port ||
+      !state->prev_action_id || !state->prev_action_frame || !state->action_frame ||
+      !state->throw_pending_victim_port ||
       !state->throw_pending_hit_idx || !state->throw_pulse_consumed ||
       !state->throw_pulse_crossed_prev_frame || !state->match_flow_timer || !state->downwait_timer ||
       !state->anim_frame_f32 || !state->anim_frame_fp_q16_16 || !state->frame_speed_mul_fp_q16_16 ||
@@ -449,6 +451,7 @@ void state_free(MslStateSoA* state) {
 
   alloc_free(state->action_id);
   alloc_free(state->prev_action_id);
+  alloc_free(state->prev_action_frame);
   alloc_free(state->action_frame);
   alloc_free(state->throw_pulse_consumed);
   alloc_free(state->throw_pulse_crossed_prev_frame);

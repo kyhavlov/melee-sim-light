@@ -345,6 +345,13 @@ static inline uint8_t action_is_illusion_dash(uint16_t action_id_u16) {
              : 0u;
 }
 
+static inline uint8_t action_is_illusion_end(uint16_t action_id_u16) {
+  return (action_id_u16 == (uint16_t)MSL_ACT_FX_SPECIAL_S_END ||
+          action_id_u16 == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_S_END)
+             ? 1u
+             : 0u;
+}
+
 static inline uint8_t illusion_spawn_pulse_crossed(uint16_t action_id_u16, uint16_t msid,
                                                    float prev_anim_frame_f32,
                                                    float cur_anim_frame_f32) {
@@ -409,6 +416,7 @@ static void illusion_spawn_from_fighter(MslBatch* batch, int bi, int owner) {
   }
 
   const uint16_t action_id_u16 = batch->state.action_id[o_idx];
+  const uint16_t prev_action_id_u16 = batch->state.prev_action_id[o_idx];
   const uint32_t anim_u32 = batch->state.animation_index[o_idx];
   if (anim_u32 > 0xFFFFu) {
     return;
@@ -418,7 +426,30 @@ static void illusion_spawn_from_fighter(MslBatch* batch, int bi, int owner) {
   const int32_t prev_fp =
       batch->state.anim_frame_fp_q16_16[o_idx] - batch->state.frame_speed_mul_fp_q16_16[o_idx];
   const float af_prev = msl_anim_frame_sanitize_f32(msl_f32_from_q16_16(prev_fp));
-  if (!illusion_spawn_pulse_crossed(action_id_u16, msid, af_prev, af)) {
+  uint8_t spawn_pulse = illusion_spawn_pulse_crossed(action_id_u16, msid, af_prev, af);
+  if (!spawn_pulse && action_is_illusion_end(action_id_u16) &&
+      batch->state.action_frame[o_idx] == 0 &&
+      batch->state.prev_action_frame[o_idx] >= 1 &&
+      ((prev_action_id_u16 == (uint16_t)MSL_ACT_FX_SPECIAL_S &&
+        action_id_u16 == (uint16_t)MSL_ACT_FX_SPECIAL_S_END) ||
+       (prev_action_id_u16 == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_S &&
+        action_id_u16 == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_S_END))) {
+    // One-step ordering bridge for side-special ghost spawn:
+    // - ftFx_SpecialS_Anim / ftFx_SpecialAirS_Anim invokes ftFox_SpecialS_CreateGhostItem during
+    //   main dash anim callbacks, while locomotion state progression can advance to End in the same
+    //   step under teacher-forced one-step execution.
+    // - When main->end transition occurs on this frame, preserve the cmd_var[2] spawn pulse
+    //   ownership by accepting end-entry (action_frame==0) if previous action was the matching main
+    //   and the previous action-frame already advanced into the cmd_var[2] pulse-crossing window.
+    // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c::{
+    //   ftFx_SpecialS_Anim,ftFx_SpecialAirS_Anim,ftFox_SpecialS_CreateGhostItem}
+    // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c::{
+    //   ftFx_SpecialSEnd_Anim,ftFx_SpecialAirSEnd_Anim}
+    // data/special_msids/{fox,falco}.json side_ground.main/side_air.main
+    // data/moves/{fox,falco}.json specials_by_msid["302"/"305"].events
+    spawn_pulse = 1u;
+  }
+  if (!spawn_pulse) {
     return;
   }
 
@@ -2128,7 +2159,26 @@ void items_spawn_pre_physics(MslBatch* batch) {
     //   ftFx_SpecialS_Anim,ftFx_SpecialAirS_Anim,ftFox_SpecialS_CreateGhostItem}
     for (int p = 0; p < num_players; p++) {
       const size_t idx = msl_idx_player(bi, p);
-      if (batch->state.hitlag_started_frame[idx] != 0u) {
+      const uint16_t action_id_u16 = batch->state.action_id[idx];
+      const uint16_t prev_action_id_u16 = batch->state.prev_action_id[idx];
+      // Hitlag-start exception for same-step main->end side-special ghost spawn ownership:
+      // - Ghost spawn is driven from main anim callbacks (ftFx_SpecialS_Anim / AirS_Anim).
+      // - Under one-step ordering, main->end transition can occur before this spawn pass; preserve
+      //   the spawn bridge on end-entry even when `hitlag_started_frame` is set, but only when the
+      //   previous action-frame already entered the cmd_var[2] pulse-crossing window.
+      // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c::{
+      //   ftFx_SpecialS_Anim,ftFx_SpecialAirS_Anim,ftFox_SpecialS_CreateGhostItem}
+      // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c::{
+      //   ftFx_SpecialSEnd_Anim,ftFx_SpecialAirSEnd_Anim}
+      const uint8_t illusion_end_entry_bridge =
+          (batch->state.action_frame[idx] == 0 && batch->state.prev_action_frame[idx] >= 1 &&
+           ((prev_action_id_u16 == (uint16_t)MSL_ACT_FX_SPECIAL_S &&
+             action_id_u16 == (uint16_t)MSL_ACT_FX_SPECIAL_S_END) ||
+            (prev_action_id_u16 == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_S &&
+             action_id_u16 == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_S_END)))
+              ? 1u
+              : 0u;
+      if (batch->state.hitlag_started_frame[idx] != 0u && !illusion_end_entry_bridge) {
         continue;
       }
       illusion_spawn_from_fighter(batch, bi, p);

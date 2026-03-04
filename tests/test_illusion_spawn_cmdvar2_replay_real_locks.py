@@ -77,6 +77,30 @@ def _assert_strict_transition_fields_match_ref_all_players(*, out_row, ref_row, 
             item_state=1,  # air spawn state from ftLib_800865CC(owner)->ground_or_air
             note="air side-special cmd_var2 spawn pulse lock",
         ),
+        _IllusionSpawnCase(
+            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/QuerulousGrandDinosaur.msl",
+            target_record=9278,
+            owner_port=0,
+            owner_action=351,  # ftFx_MS_SpecialAirS (transitions to End at t+1)
+            owner_msid=305,  # side_air.main
+            owner_animf=1.0,
+            slot=0,
+            item_type=57,  # Falco Phantasm
+            item_state=1,  # air spawn state from ftLib_800865CC(owner)->ground_or_air
+            note="air side-special end-entry pulse bridge lock (QGD)",
+        ),
+        _IllusionSpawnCase(
+            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/TreasuredBackKangaroo.msl",
+            target_record=6701,
+            owner_port=1,
+            owner_action=351,  # ftFx_MS_SpecialAirS (transitions to End at t+1)
+            owner_msid=305,  # side_air.main
+            owner_animf=1.0,
+            slot=0,
+            item_type=57,  # Falco Phantasm
+            item_state=1,  # air spawn state from ftLib_800865CC(owner)->ground_or_air
+            note="air side-special end-entry pulse bridge lock (TBK)",
+        ),
     ],
 )
 def test_illusion_spawn_cmdvar2_target_pm1_both_players(case: _IllusionSpawnCase) -> None:
