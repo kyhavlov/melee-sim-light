@@ -331,6 +331,51 @@ def _load_throw_pulse_seed_tables(
     return pulse_frames_by_char_action, cmd1_start_by_char_action, shot_itkind_by_char
 
 
+def _load_source_clear_terminal_followup_tables(
+    *, data_root
+) -> tuple[dict[tuple[int, int], int], dict[tuple[int, int], int]]:
+    """Load command-script phase gates for source-clear terminal followups.
+
+    Source of truth:
+    - data/moves/{fox,falco}.json moves["ftCo_SM_*"]["events"]
+      - set_cmd_var(idx=0,value=1/0)
+    - extracted from fighter subaction scripts in Pl*.dat.
+    refs/melee/src/melee/ft/ftaction.c::ftAction_80071974
+    """
+    # GALE01 common action ids for rows where terminal source-owner defer can carry through
+    # immediate followup script ownership phases.
+    action_to_move = {
+        0x0041: "ftCo_SM_AttackAirN",
+        0x0045: "ftCo_SM_AttackAirLw",
+        0x00EC: "ftCo_SM_EscapeAir",
+    }
+    cmd0_on_by_char_action: dict[tuple[int, int], int] = {}
+    cmd0_off_by_char_action: dict[tuple[int, int], int] = {}
+    for char_id, key in ((1, "fox"), (22, "falco")):
+        moves = json.loads((data_root / "moves" / f"{key}.json").read_text())["moves"]
+        for action_id, move_name in action_to_move.items():
+            events = moves.get(move_name, {}).get("events", [])
+            cmd0_on = sorted(
+                int(ev.get("frame", 0))
+                for ev in events
+                if ev.get("kind") == "set_cmd_var"
+                and int((ev.get("data") or {}).get("idx", -1)) == 0
+                and int((ev.get("data") or {}).get("value", -1)) == 1
+            )
+            cmd0_off = sorted(
+                int(ev.get("frame", 0))
+                for ev in events
+                if ev.get("kind") == "set_cmd_var"
+                and int((ev.get("data") or {}).get("idx", -1)) == 0
+                and int((ev.get("data") or {}).get("value", -1)) == 0
+            )
+            cmd0_on_by_char_action[(int(char_id), int(action_id))] = int(cmd0_on[0]) if cmd0_on else -1
+            cmd0_off_by_char_action[(int(char_id), int(action_id))] = (
+                int(cmd0_off[0]) if cmd0_off else -1
+            )
+    return cmd0_on_by_char_action, cmd0_off_by_char_action
+
+
 def _load_action_x9_b1_tables(*, data_root) -> dict[int, np.ndarray]:
     """Load decomp MotionState.x9_b1 tables for supported chars.
 
@@ -434,6 +479,7 @@ def _derive_source_clear_timer_x18c8_seed_lane(
 
 def _derive_source_clear_terminal_phase_seed_lane(
     *,
+    char_id_u8: np.ndarray,
     action_id_u16: np.ndarray,
     action_frame_i16: np.ndarray,
     hitlag_u16: np.ndarray,
@@ -443,6 +489,8 @@ def _derive_source_clear_terminal_phase_seed_lane(
     source_clear_timer_x18c8_u8: np.ndarray,
     state_flags_u8: np.ndarray,
     last_hit_by_u8: np.ndarray,
+    terminal_followup_cmd0_on_by_char_action: dict[tuple[int, int], int],
+    terminal_followup_cmd0_off_by_char_action: dict[tuple[int, int], int],
 ) -> np.ndarray:
     """Derive one-step terminal phase bridge for source-owner clear.
 
@@ -469,6 +517,7 @@ def _derive_source_clear_terminal_phase_seed_lane(
     responsibilities across ftColl combo accounting and Fighter_8006A360 timer ordering.
     refs/melee/src/melee/ft/ftcoll.c::ftColl_800764DC
     """
+    char_id = np.asarray(char_id_u8, dtype=np.uint8).reshape(-1)
     action_id = np.asarray(action_id_u16, dtype=np.uint16).reshape(-1)
     action_frame = np.asarray(action_frame_i16, dtype=np.int16).reshape(-1)
     hitlag = np.asarray(hitlag_u16, dtype=np.uint16).reshape(-1)
@@ -481,6 +530,7 @@ def _derive_source_clear_terminal_phase_seed_lane(
     n = int(timer.shape[0])
     if (
         int(src.shape[0]) != n
+        or int(char_id.shape[0]) != n
         or int(action_id.shape[0]) != n
         or int(action_frame.shape[0]) != n
         or int(hitlag.shape[0]) != n
@@ -511,8 +561,14 @@ def _derive_source_clear_terminal_phase_seed_lane(
     # strict predicate.
     # refs/melee/src/melee/ft/chara/ftFox/forward.h::ftFox_MotionState
     # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c
+    ACT_ATTACK_AIR_N = 0x0041  # ftCo_MS_AttackAirN
+    ACT_ATTACK_AIR_LW = 0x0045  # ftCo_MS_AttackAirLw
+    ACT_GUARD = 0x00B3  # ftCo_MS_Guard
+    ACT_ESCAPE_AIR = 0x00EC  # ftCo_MS_EscapeAir
+    ACT_FOX_FALCO_SPECIAL_AIR_S_START = 0x015E  # ftFx_MS_SpecialAirSStart
     DOWN_PASSIVE_RECOVERY_ACTIONS = {
         0x000E,  # ftCo_MS_Wait
+        ACT_GUARD,
         0x00B7,  # ftCo_MS_DownBoundU
         0x00B8,  # ftCo_MS_DownWaitU
         0x00BA,  # ftCo_MS_DownStandU
@@ -529,7 +585,17 @@ def _derive_source_clear_terminal_phase_seed_lane(
         0x00C8,  # ftCo_MS_PassiveStandF
         0x00C9,  # ftCo_MS_PassiveStandB
         0x00E9,  # ftCo_MS_EscapeF
-        0x015E,  # ftFx_MS_SpecialSEnd (Fox/Falco shared in suite)
+        ACT_FOX_FALCO_SPECIAL_AIR_S_START,
+    }
+    # Causal followup states where decomp callback ownership can keep x18C4 through the terminal
+    # x18C8 tick after down/passive recovery handoff. Keep this narrow and transition-gated.
+    # refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
+    # refs/melee/src/melee/ft/chara/ftCommon/{ftCo_AttackAir.c,ftCo_EscapeAir.c}
+    # data/moves/{fox,falco}.json moves["ftCo_SM_AttackAirN"/"ftCo_SM_AttackAirLw"/"ftCo_SM_EscapeAir"]["events"]
+    TERMINAL_FOLLOWUP_ACTIONS = {
+        ACT_ATTACK_AIR_N,
+        ACT_ATTACK_AIR_LW,
+        ACT_ESCAPE_AIR,
     }
     for i in range(n):
         if i == 0:
@@ -537,31 +603,69 @@ def _derive_source_clear_terminal_phase_seed_lane(
         if int(timer[i]) != 1:
             continue
         act = int(action_id[i])
-        if act not in DOWN_PASSIVE_RECOVERY_ACTIONS:
+        if act not in DOWN_PASSIVE_RECOVERY_ACTIONS and act not in TERMINAL_FOLLOWUP_ACTIONS:
             continue
         owner = int(src[i])
         if owner >= SOURCE_NONE:
             continue
         if int(hitlag[i]) != 0 or int(hitstun[i]) != 0:
             continue
+        # Combo provenance normally guards this bridge to active hit ownership contexts
+        # (ftColl combo counters), but side-B end can keep source-owner continuity through
+        # terminal timer rows even when combo counters are zero in replay snapshots.
+        # refs/melee/src/melee/ft/ftcoll.c::ftColl_800764DC
+        # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c
         if int(combo_count[i]) == 0 or int(last_attack_landed[i]) == 0:
-            continue
+            if act not in (
+                ACT_FOX_FALCO_SPECIAL_AIR_S_START,
+                ACT_ATTACK_AIR_LW,
+            ):
+                continue
         if (int(sf[i, STATE_FLAGS_221F_INDEX]) & STATE_FLAG_221F_B3_MASK) != 0:
             continue
-        if int(sf[i, 1]) != 0 or int(sf[i, 2]) != 0:
+        # Guard hold keeps shield-state bits in 0x221A/0x221B while still running under the same
+        # terminal source-owner tick ordering.
+        # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c
+        if act != ACT_GUARD and (int(sf[i, 1]) != 0 or int(sf[i, 2]) != 0):
             continue
         # Strictly-causal continuity guard (t-1 -> t):
         # - countdown is in terminal progression from 2 to 1
         # - ownership has not changed
-        # - action progression is continuous
+        # - action progression is continuous (with modeled transition exceptions)
         if int(timer[i - 1]) != 2:
             continue
         if int(src[i - 1]) != owner:
             continue
-        if int(action_id[i]) != int(action_id[i - 1]):
+        prev_act = int(action_id[i - 1])
+        cur_af = int(action_frame[i])
+        prev_af = int(action_frame[i - 1])
+        same_action_progress = (act == prev_act and cur_af == prev_af + 1)
+        guard_hold_progress = (act == ACT_GUARD and prev_act == ACT_GUARD and cur_af == -1 and prev_af == -1)
+        if not (same_action_progress or guard_hold_progress):
             continue
-        if int(action_frame[i]) != int(action_frame[i - 1]) + 1:
-            continue
+        # Followup actions use extracted cmd_var[0] script phase gates instead of hardcoded
+        # action-frame windows:
+        # - AttackAirN defer only before first cmd_var[0]=1 startup tick.
+        # - EscapeAir defer only before cmd_var[0]=1 (cmd_skip_decay) is set.
+        # - AttackAirLw defer only before cmd_var[0]=0 clear and under active combo provenance.
+        # refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c
+        # refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::cmd_skip_decay
+        # refs/melee/src/melee/ft/ftaction.c::ftAction_80071974
+        if act in TERMINAL_FOLLOWUP_ACTIONS:
+            cid = int(char_id[i])
+            cmd0_on = int(terminal_followup_cmd0_on_by_char_action.get((cid, act), -1))
+            cmd0_off = int(terminal_followup_cmd0_off_by_char_action.get((cid, act), -1))
+            if act == ACT_ATTACK_AIR_N:
+                if cmd0_on < 0 or cur_af >= cmd0_on:
+                    continue
+            elif act == ACT_ESCAPE_AIR:
+                if cmd0_on < 0 or cur_af >= cmd0_on:
+                    continue
+            elif act == ACT_ATTACK_AIR_LW:
+                if cmd0_off < 0 or cur_af >= cmd0_off:
+                    continue
+                if int(combo_count[i]) != 0:
+                    continue
         out[i] = np.uint8(1)
     return out
 
@@ -1390,6 +1494,12 @@ def _main_impl(args) -> None:
         data_root=data_root,
         throw_action_to_move=throw_action_to_move,
     )
+    (
+        source_clear_followup_cmd0_on_by_char_action,
+        source_clear_followup_cmd0_off_by_char_action,
+    ) = _load_source_clear_terminal_followup_tables(
+        data_root=data_root,
+    )
     action_x9_b1_by_char = _load_action_x9_b1_tables(data_root=data_root)
     # GALE01 p_ftCommonData->x814 initializes fp->dmg.x18C8 in Fighter_ChangeMotionState.
     # refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState
@@ -1690,6 +1800,7 @@ def _main_impl(args) -> None:
         samples["seed_t"]["source_clear_timer_x18c8"][:, slot] = source_clear_timer_x18c8[:-1]
         samples["seed_t"]["source_clear_terminal_phase"][:, slot] = (
             _derive_source_clear_terminal_phase_seed_lane(
+                char_id_u8=post_char,
                 action_id_u16=post_state,
                 action_frame_i16=post_state_age,
                 hitlag_u16=post_hitlag,
@@ -1699,6 +1810,8 @@ def _main_impl(args) -> None:
                 source_clear_timer_x18c8_u8=source_clear_timer_x18c8,
                 state_flags_u8=state_flags,
                 last_hit_by_u8=last_hit_by,
+                terminal_followup_cmd0_on_by_char_action=source_clear_followup_cmd0_on_by_char_action,
+                terminal_followup_cmd0_off_by_char_action=source_clear_followup_cmd0_off_by_char_action,
             )[:-1]
         )
 

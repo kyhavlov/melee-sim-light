@@ -82,6 +82,41 @@ class _SourceClearTerminalPhaseCase:
             expect_owner=0,
             note="SpecialSEnd followup terminal cleanup (QGD)",
         ),
+        _SourceClearTerminalPhaseCase(
+            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/QuerulousGrandDinosaur.msl",
+            target_record=531,
+            victim_port=1,
+            expect_owner=0,
+            note="SpecialSEnd zero-combo terminal cleanup (QGD)",
+        ),
+        _SourceClearTerminalPhaseCase(
+            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl",
+            target_record=1974,
+            victim_port=0,
+            expect_owner=1,
+            note="AttackAirN terminal followup cleanup (GAT)",
+        ),
+        _SourceClearTerminalPhaseCase(
+            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl",
+            target_record=4477,
+            victim_port=0,
+            expect_owner=1,
+            note="AttackAirLw terminal followup cleanup (GAT)",
+        ),
+        _SourceClearTerminalPhaseCase(
+            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl",
+            target_record=5442,
+            victim_port=1,
+            expect_owner=0,
+            note="Guard hold terminal followup cleanup (GAT)",
+        ),
+        _SourceClearTerminalPhaseCase(
+            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/QuerulousGrandDinosaur.msl",
+            target_record=9591,
+            victim_port=1,
+            expect_owner=0,
+            note="EscapeAir terminal followup cleanup (QGD)",
+        ),
     ],
 )
 def test_source_clear_terminal_phase_target_pm1_both_players_strict_lock(

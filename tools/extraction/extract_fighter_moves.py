@@ -659,10 +659,22 @@ def main() -> None:
         # Grounded locomotion: needed for Dash IASA (cmd_var[0] gating) parity.
         # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c::ftCo_Dash_IASA
         "ftCo_SM_Dash",
+        # Grounded->airborne jump transitions:
+        # - ftCo_Jump* scripts own ftcmd var / allow_interrupt timing for jump followups.
+        # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c
+        "ftCo_SM_JumpF",
+        "ftCo_SM_JumpB",
         # Spotdodge (EscapeN) `allow_interrupt` is a command-script lane used by fp->allow_interrupt.
         # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Escape.c::ftCo_EscapeN_Anim
         # refs/melee/src/melee/ft/ftaction.c::ftAction_80071950
         "ftCo_SM_EscapeN",
+        # Air dodge script timing (`allow_interrupt`) for common EscapeAir.
+        # refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Anim
+        # refs/melee/src/melee/ft/ftaction.c::ftAction_80071950
+        "ftCo_SM_EscapeAir",
+        # Guard hold script timing for fp->allow_interrupt ownership.
+        # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c
+        "ftCo_SM_Guard",
         "ftCo_SM_Attack11",
         "ftCo_SM_Attack12",
         "ftCo_SM_Attack13",

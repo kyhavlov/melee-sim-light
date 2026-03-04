@@ -12,6 +12,7 @@ def test_source_clear_terminal_phase_prefix_invariance_suffix_mutation() -> None
     # Use a decomp-defined downed recovery action id that is in the modeled allowlist.
     # refs/melee/src/melee/ft/chara/ftCommon/forward.h (ftCo_MS_DownFowardD = 0x00C4)
     action_id = np.array([0x00C4, 0x00C4, 0x00C4, 0x00C4, 0x00C4, 0x00C4, 0x00C4, 0x00C4], dtype=np.uint16)
+    char_id = np.array([1, 1, 1, 1, 1, 1, 1, 1], dtype=np.uint8)
     action_frame = np.array([5, 6, 7, 8, 9, 10, 11, 12], dtype=np.int16)
     hitlag = np.zeros(n, dtype=np.uint16)
     hitstun = np.zeros(n, dtype=np.uint16)
@@ -22,6 +23,7 @@ def test_source_clear_terminal_phase_prefix_invariance_suffix_mutation() -> None
     last_hit_by = np.array([1, 1, 1, 6, 6, 0, 0, 6], dtype=np.uint8)
 
     base = _derive_source_clear_terminal_phase_seed_lane(
+        char_id_u8=char_id,
         action_id_u16=action_id,
         action_frame_i16=action_frame,
         hitlag_u16=hitlag,
@@ -31,6 +33,8 @@ def test_source_clear_terminal_phase_prefix_invariance_suffix_mutation() -> None
         source_clear_timer_x18c8_u8=source_clear_timer,
         state_flags_u8=state_flags,
         last_hit_by_u8=last_hit_by,
+        terminal_followup_cmd0_on_by_char_action={(1, 0x0041): 4, (1, 0x0045): 5, (1, 0x00EC): 30},
+        terminal_followup_cmd0_off_by_char_action={(1, 0x0041): 37, (1, 0x0045): 31, (1, 0x00EC): -1},
     )
 
     # Mutate only suffix rows [cutoff:].
@@ -56,6 +60,7 @@ def test_source_clear_terminal_phase_prefix_invariance_suffix_mutation() -> None
     mut_last_hit_by[cutoff:] = np.array([0, 0, 6], dtype=np.uint8)
 
     mutated = _derive_source_clear_terminal_phase_seed_lane(
+        char_id_u8=char_id,
         action_id_u16=mut_action_id,
         action_frame_i16=mut_action_frame,
         hitlag_u16=mut_hitlag,
@@ -65,6 +70,8 @@ def test_source_clear_terminal_phase_prefix_invariance_suffix_mutation() -> None
         source_clear_timer_x18c8_u8=mut_source_clear_timer,
         state_flags_u8=mut_state_flags,
         last_hit_by_u8=mut_last_hit_by,
+        terminal_followup_cmd0_on_by_char_action={(1, 0x0041): 4, (1, 0x0045): 5, (1, 0x00EC): 30},
+        terminal_followup_cmd0_off_by_char_action={(1, 0x0041): 37, (1, 0x0045): 31, (1, 0x00EC): -1},
     )
 
     assert int(base[2]) == 1, "expected a modeled terminal-phase row in the prefix"
