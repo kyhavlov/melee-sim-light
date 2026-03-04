@@ -4,6 +4,10 @@
 
 void items_update(MslBatch* batch);
 
+// Post-combat cleanup for item lanes that are owned by motion-state exits caused by combat
+// transitions in the same frame.
+void items_update_post_combat(MslBatch* batch);
+
 // Fighter-driven item spawns (blaster guns + shots) that should use the pre-physics fighter pose/pos
 // snapshot for the frame.
 //

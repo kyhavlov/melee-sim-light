@@ -256,6 +256,32 @@ static inline uint8_t action_is_blaster_throw(uint16_t action_id_u16) {
              : 0u;
 }
 
+static inline uint8_t items_action_is_damage_family(uint16_t action_id_u16) {
+  switch (action_id_u16) {
+    case MSL_ACT_DAMAGE_FALL:
+    case MSL_ACT_DAMAGE_HI_1:
+    case MSL_ACT_DAMAGE_HI_2:
+    case MSL_ACT_DAMAGE_HI_3:
+    case MSL_ACT_DAMAGE_N_1:
+    case MSL_ACT_DAMAGE_N_2:
+    case MSL_ACT_DAMAGE_N_3:
+    case MSL_ACT_DAMAGE_LW_1:
+    case MSL_ACT_DAMAGE_LW_2:
+    case MSL_ACT_DAMAGE_LW_3:
+    case MSL_ACT_DAMAGE_AIR_1:
+    case MSL_ACT_DAMAGE_AIR_2:
+    case MSL_ACT_DAMAGE_AIR_3:
+    case MSL_ACT_DAMAGE_FLY_HI:
+    case MSL_ACT_DAMAGE_FLY_N:
+    case MSL_ACT_DAMAGE_FLY_LW:
+    case MSL_ACT_DAMAGE_FLY_TOP:
+    case MSL_ACT_DAMAGE_FLY_ROLL:
+      return 1u;
+    default:
+      return 0u;
+  }
+}
+
 enum {
   // Internal runtime marker in item.misc2 for deferred powershield reflect owner transfer.
   //
@@ -2082,6 +2108,59 @@ void items_update(MslBatch* batch) {
     }
 
     // Keep item ordering stable for fixed-slot comparisons.
+    items_sort(batch, bi);
+  }
+}
+
+void items_update_post_combat(MslBatch* batch) {
+  if (batch == NULL) {
+    return;
+  }
+
+  const int num_players = (int)batch->config.num_players;
+  for (int bi = 0; bi < batch->batch_size; bi++) {
+    for (int p = 0; p < num_players; p++) {
+      const size_t idx = msl_idx_player(bi, p);
+      const MslLaserParams* lp = laser_params_get(batch->state.char_id[idx]);
+      if (lp == NULL || lp->gun_itkind == 0u) {
+        continue;
+      }
+
+      const int gun_slot = items_find_gun_slot(batch, bi, p, lp->gun_itkind);
+      if (gun_slot < 0) {
+        continue;
+      }
+
+      const uint16_t action_id_u16 = batch->state.action_id[idx];
+      const uint16_t prev_action_id_u16 = batch->state.prev_action_id[idx];
+      const uint8_t prev_requires_gun = (blaster_gun_state_from_action_id(prev_action_id_u16) != 9u) ? 1u : 0u;
+      const uint8_t cur_requires_gun = (blaster_gun_state_from_action_id(action_id_u16) != 9u) ? 1u : 0u;
+
+      if (!prev_requires_gun || cur_requires_gun) {
+        continue;
+      }
+      if (!items_action_is_damage_family(action_id_u16)) {
+        continue;
+      }
+      if (batch->state.on_ground[idx] != 0u) {
+        continue;
+      }
+
+      // Combat-owned blaster gun clear on same-frame damage exits:
+      // - SpecialNEnd linger ownership is specific to non-combat exits where
+      //   ftFx_SpecialNEnd_Anim clears the fighter pointer and item callback consumes it.
+      // - On airborne Fighter_ProcessHit damage entry from SpecialAirN states, the fighter exits the
+      //   blaster action family through damage callbacks (not SpecialNEnd), so this lane should not
+      //   persist as a carried SpecialNEnd linger row.
+      // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_SpecialNEnd_Anim
+      // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::{
+      //   ftFx_SpecialAirNStart_Phys,ftFx_SpecialAirNLoop_Phys,ftFx_SpecialAirNEnd_Phys}
+      // refs/melee/src/melee/it/items/itfoxblaster.c::itFoxblaster_UnkMotion8_Anim
+      // refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
+      const size_t ii = msl_idx_item(bi, gun_slot);
+      item_slot_clear(batch, ii);
+    }
     items_sort(batch, bi);
   }
 }

@@ -247,6 +247,7 @@ static int step_one_frame_core(MslBatch* batch, const uint8_t* prev_input_bytes,
   throw_flow_update_post_items(batch);
   if (run_combat) {
     combat_resolve(batch);
+    items_update_post_combat(batch);
   }
   knockdown_update_post_combat(batch);
   // Decomp parity: some entries call ftAnim_8006EBA4 immediately after ChangeMotionState; we defer
