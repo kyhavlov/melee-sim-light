@@ -31,7 +31,9 @@ class _PulseStaleLatchCase:
     throw_action: int
     thrower_animf: float
     victim_action: int
+    victim_hitstun: int | None
     expected_throw_pulse_consumed: int
+    expected_throw_pulse_crossed_prev_frame: int | None
     note: str
 
 
@@ -58,7 +60,9 @@ def _assert_strict_transition_fields_match_ref_all_players(*, out_row, ref_row, 
             throw_action=221,  # ThrowHi
             thrower_animf=20.0,
             victim_action=90,  # DamageFlyTop
+            victim_hitstun=None,
             expected_throw_pulse_consumed=1,
+            expected_throw_pulse_crossed_prev_frame=None,
             note="ThrowHi pulse20 carried stale-context lock",
         ),
         _PulseStaleLatchCase(
@@ -68,8 +72,22 @@ def _assert_strict_transition_fields_match_ref_all_players(*, out_row, ref_row, 
             throw_action=220,  # ThrowB
             thrower_animf=15.000000953674316,
             victim_action=88,  # DamageFlyN
+            victim_hitstun=None,
             expected_throw_pulse_consumed=1,
+            expected_throw_pulse_crossed_prev_frame=None,
             note="ThrowB pulse15 ongoing-hitstun stale-context lock",
+        ),
+        _PulseStaleLatchCase(
+            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/QuerulousGrandDinosaur.msl",
+            target_record=8293,
+            thrower_port=1,
+            throw_action=220,  # ThrowB
+            thrower_animf=17.500001907348633,
+            victim_action=88,  # DamageFlyN
+            victim_hitstun=32,
+            expected_throw_pulse_consumed=0,
+            expected_throw_pulse_crossed_prev_frame=0,
+            note="ThrowB non-terminal stale-crossing hitstun-window suppressor lock",
         ),
     ],
 )
@@ -86,10 +104,16 @@ def test_throw_blaster_pulse_stale_latch_target_pm1_both_players(case: _PulseSta
     victim = 1 - thrower
     assert int(target["seed_t"]["action_id"][thrower]) == int(case.throw_action), case.note
     assert int(target["seed_t"]["action_id"][victim]) == int(case.victim_action), case.note
+    if case.victim_hitstun is not None:
+        assert int(target["seed_t"]["hitstun"][victim]) == int(case.victim_hitstun), case.note
     assert abs(float(target["seed_t"]["anim_frame_f32"][thrower]) - float(case.thrower_animf)) <= 1e-6, case.note
     assert int(target["seed_t"]["throw_pulse_consumed"][thrower]) == int(
         case.expected_throw_pulse_consumed
     ), case.note
+    if case.expected_throw_pulse_crossed_prev_frame is not None:
+        assert int(target["seed_t"]["throw_pulse_crossed_prev_frame"][thrower]) == int(
+            case.expected_throw_pulse_crossed_prev_frame
+        ), case.note
 
     # Strict replay-real lock coverage for target-1 / target / target+1 on both players.
     for record in (case.target_record - 1, case.target_record, case.target_record + 1):

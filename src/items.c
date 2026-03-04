@@ -2301,6 +2301,44 @@ void items_spawn_pre_physics(MslBatch* batch) {
                 continue;
               }
             }
+            // ThrowB non-terminal stale-crossing suppressor (hitstun-window gated):
+            // - ThrowB projectile pulses are script-owned one-shots (15/18/21 in move data) consumed
+            //   in ftFx_Throw_Anim.
+            // - Under one-step reseed, command consume-latch ownership is absent; in late ongoing
+            //   throw-hitstun windows, non-terminal frame-crossing can replay a stale pulse.
+            // - Gate suppression to non-terminal pulses and only when victim hitstun has already decayed
+            //   below the script-owned pulse-window threshold.
+            // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
+            // refs/melee/src/melee/ft/ftaction.c::{ftAction_80071974,ftAction_80073354}
+            // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm (hitstun / last_hit_by lanes)
+            // data/moves/{fox,falco}.json moves["ftCo_SM_ThrowB"]["events"]
+            if (action_id == (uint16_t)MSL_ACT_THROW_B &&
+                batch->state.throw_pulse_consumed[idx] == 0u &&
+                batch->state.throw_pulse_crossed_prev_frame[idx] == 0u) {
+              int16_t throwb_last_pulse_af = 0;
+              if (move_tables_throw_projectile_last_pulse_frame(cid, action_id,
+                                                                &throwb_last_pulse_af) &&
+                  crossed_pulse_af >= 0 && crossed_pulse_af < throwb_last_pulse_af) {
+                const uint16_t stale_hitstun_thresh =
+                    (uint16_t)(crossed_pulse_af + (int16_t)MSL_THROWB_PULSE_START_AF);
+                uint8_t stale_throwb_context = 0u;
+                for (int vp = 0; vp < num_players; vp++) {
+                  if (vp == p) {
+                    continue;
+                  }
+                  const size_t v_idx = msl_idx_player(bi, vp);
+                  if (batch->state.hitstun[v_idx] > 0u &&
+                      batch->state.last_hit_by[v_idx] == (uint8_t)p &&
+                      batch->state.hitstun[v_idx] < stale_hitstun_thresh) {
+                    stale_throwb_context = 1u;
+                    break;
+                  }
+                }
+                if (stale_throwb_context) {
+                  continue;
+                }
+              }
+            }
             // Seed-bridge stale-latch suppressors for throw projectile pulses:
             // - Throw script pulses are one-shot `throw_flags_b0` events consumed in ftFx_Throw_Anim.
             // - With one-step reseed, command-timer/cursor ownership is not seeded; reconstructing by
