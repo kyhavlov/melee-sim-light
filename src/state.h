@@ -112,6 +112,11 @@ typedef struct MslStateSoA {
   // refs/melee/src/melee/ft/fighter.c::{Fighter_ChangeMotionState,Fighter_8006A360}
   // refs/melee/src/melee/ft/types.h::MotionState (x9_b1)
   uint8_t* source_clear_timer_x18c8;
+  // Terminal clear-phase bridge for source-owner identity (`dmg.x18C4_source_ply`) on
+  // `source_clear_timer_x18c8 == 1` rows. One-step transient lane produced in dataset tooling.
+  // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
+  // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm (last_hit_by lane)
+  uint8_t* source_clear_terminal_phase;
   // Internal-only throw flow latch: when a throw release flag fires, we detach the victim during
   // motion-state Anim (pre-physics), then optionally apply the throw hit later in the frame
   // (post-items) if no other hit interrupted the victim.

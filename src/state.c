@@ -86,6 +86,7 @@ int state_alloc(MslStateSoA* state, int batch_size) {
   state->throw_pulse_consumed = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->throw_pulse_crossed_prev_frame = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->source_clear_timer_x18c8 = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
+  state->source_clear_terminal_phase = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->throw_pending_victim_port = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->throw_pending_hit_idx = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->grab_owner_port = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
@@ -313,6 +314,7 @@ int state_alloc(MslStateSoA* state, int batch_size) {
       !state->throw_pending_victim_port ||
       !state->throw_pending_hit_idx || !state->throw_pulse_consumed ||
       !state->throw_pulse_crossed_prev_frame || !state->source_clear_timer_x18c8 ||
+      !state->source_clear_terminal_phase ||
       !state->match_flow_timer || !state->downwait_timer ||
       !state->anim_frame_f32 || !state->anim_frame_fp_q16_16 || !state->frame_speed_mul_fp_q16_16 ||
       !state->walk_anim_source_vel ||
@@ -461,6 +463,7 @@ void state_free(MslStateSoA* state) {
   alloc_free(state->throw_pulse_consumed);
   alloc_free(state->throw_pulse_crossed_prev_frame);
   alloc_free(state->source_clear_timer_x18c8);
+  alloc_free(state->source_clear_terminal_phase);
   alloc_free(state->throw_pending_victim_port);
   alloc_free(state->throw_pending_hit_idx);
   alloc_free(state->grab_owner_port);

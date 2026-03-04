@@ -329,7 +329,13 @@ void timers_update_post_anim(MslBatch* batch) {
       // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008F744
       // refs/melee/src/melee/ft/ftcoll.c::ftColl_800764DC
       // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm (last_hit_by lane)
-      if (t == 1u && batch->state.hitstun[idx] != 0u) {
+      //
+      // Seed bridge: some terminal x18C8 rows keep source owner one additional post-frame due to
+      // callback-owned ownership phase ordering inside Fighter_8006A360. Defer terminal clear
+      // exactly one frame when producer marked this row.
+      // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
+      if (t == 1u &&
+          (batch->state.hitstun[idx] != 0u || batch->state.source_clear_terminal_phase[idx] != 0u)) {
         continue;
       }
       t--;

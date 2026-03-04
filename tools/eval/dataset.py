@@ -118,6 +118,11 @@ SEED_DTYPE = np.dtype(
         # - N>0: decomp timer value + 1
         # refs/melee/src/melee/ft/fighter.c::{Fighter_ChangeMotionState,Fighter_8006A360}
         ("source_clear_timer_x18c8", _arr("u1", MAX_PLAYERS)),
+        # Terminal source-owner clear phase bridge for `source_clear_timer_x18c8 == 1` rows.
+        # - 0: default terminal-clear behavior
+        # - 1: defer terminal clear one frame
+        # refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
+        ("source_clear_terminal_phase", _arr("u1", MAX_PLAYERS)),
         # fp+0x2340 AttackDash lane (targeted seed ownership):
         # - mv.co.attackdash.x0 countdown consumed by ftCo_800D8AE0.
         # refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackDash.c::ftCo_AttackDash_IASA

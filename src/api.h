@@ -210,6 +210,21 @@ typedef struct MslSeed {
   // - 0: inactive (decomp internal is -1)
   // - N>0: decomp internal countdown value + 1
   uint8_t source_clear_timer_x18c8[MSL_MAX_PLAYERS];
+  // Terminal source-clear phase bridge for `dmg.x18C8 == 0` rows (one-step transient).
+  //
+  // Decomp ownership context:
+  // - Fighter_8006A360 runs timer ownership + callbacks in the same proc-prio-1 phase.
+  // - `dmg.x18C8` expiry clears `dmg.x18C4_source_ply` (Slippi `last_hit_by`) at terminal tick,
+  //   but callback-owned damage/ownership ordering can preserve source-owner identity for one
+  //   post-frame in specific terminal contexts.
+  // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008F744
+  // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm (last_hit_by lane)
+  //
+  // Producer (tools/slippi/make_dataset_from_slp.py):
+  // - 0: default terminal-clear behavior (clear at `source_clear_timer_x18c8 == 1`).
+  // - 1: defer that terminal clear exactly one frame for this seed row.
+  uint8_t source_clear_terminal_phase[MSL_MAX_PLAYERS];
   // fp+0x2340 AttackDash lane:
   // - mv.co.attackdash.x0 countdown consumed by ftCo_800D8AE0.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackDash.c::ftCo_AttackDash_IASA

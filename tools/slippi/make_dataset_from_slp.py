@@ -432,6 +432,125 @@ def _derive_source_clear_timer_x18c8_seed_lane(
     return out
 
 
+def _derive_source_clear_terminal_phase_seed_lane(
+    *,
+    action_id_u16: np.ndarray,
+    action_frame_i16: np.ndarray,
+    hitlag_u16: np.ndarray,
+    hitstun_u16: np.ndarray,
+    combo_count_u8: np.ndarray,
+    last_attack_landed_u8: np.ndarray,
+    source_clear_timer_x18c8_u8: np.ndarray,
+    state_flags_u8: np.ndarray,
+    last_hit_by_u8: np.ndarray,
+) -> np.ndarray:
+    """Derive one-step terminal phase bridge for source-owner clear.
+
+    Decomp ownership:
+    - Fighter_8006A360 owns x18C8 countdown + terminal source-owner clear in proc-prio-1.
+    - Slippi `last_hit_by` mirrors `dmg.x18C4_source_ply` snapshots.
+    refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
+    refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
+
+    Seed representation:
+    - 0: default terminal-clear behavior at `source_clear_timer_x18c8 == 1`.
+    - 1: defer that terminal clear for one frame on this row.
+
+    Producer policy (narrow, replay-causal):
+    - only on terminal timer rows (`t == 1`) under !x221F_b3,
+    - only from present/past lanes (`t` and `t-1`), never future frames,
+    - and only while fighter is in decomp-defined down/passive recovery states,
+    - and only in stable ongoing ownership context:
+      - no active hitlag/hitstun at `t` (runtime already has explicit hitstun defer),
+      - prior row continuity (`timer 2->1`, same owner, same action progression),
+      - active combo provenance (`combo_count > 0 && last_attack_landed > 0`).
+
+    This keeps derivation strict-causal for one-step reseed while matching decomp ownership
+    responsibilities across ftColl combo accounting and Fighter_8006A360 timer ordering.
+    refs/melee/src/melee/ft/ftcoll.c::ftColl_800764DC
+    """
+    action_id = np.asarray(action_id_u16, dtype=np.uint16).reshape(-1)
+    action_frame = np.asarray(action_frame_i16, dtype=np.int16).reshape(-1)
+    hitlag = np.asarray(hitlag_u16, dtype=np.uint16).reshape(-1)
+    hitstun = np.asarray(hitstun_u16, dtype=np.uint16).reshape(-1)
+    combo_count = np.asarray(combo_count_u8, dtype=np.uint8).reshape(-1)
+    last_attack_landed = np.asarray(last_attack_landed_u8, dtype=np.uint8).reshape(-1)
+    timer = np.asarray(source_clear_timer_x18c8_u8, dtype=np.uint8).reshape(-1)
+    sf = np.asarray(state_flags_u8, dtype=np.uint8)
+    src = np.asarray(last_hit_by_u8, dtype=np.uint8).reshape(-1)
+    n = int(timer.shape[0])
+    if (
+        int(src.shape[0]) != n
+        or int(action_id.shape[0]) != n
+        or int(action_frame.shape[0]) != n
+        or int(hitlag.shape[0]) != n
+        or int(hitstun.shape[0]) != n
+        or int(combo_count.shape[0]) != n
+        or int(last_attack_landed.shape[0]) != n
+    ):
+        raise ValueError("source_clear_terminal_phase derivation lanes must have equal lengths")
+    if sf.ndim != 2 or int(sf.shape[0]) != n or int(sf.shape[1]) < 5:
+        raise ValueError("source_clear_terminal_phase derivation requires state_flags_u8 shape [n,5]")
+
+    out = np.zeros(n, dtype=np.uint8)
+    STATE_FLAGS_221F_INDEX = 4
+    STATE_FLAG_221F_B3_MASK = 0x10
+    SOURCE_NONE = 6
+    # GALE01 action ids (ftCommon_MotionState): downed + passive recovery subset.
+    # refs/melee/src/melee/ft/chara/ftCommon/forward.h
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c (down/passive recovery ownership flow)
+    DOWN_PASSIVE_RECOVERY_ACTIONS = {
+        0x00B7,  # ftCo_MS_DownBoundU
+        0x00B8,  # ftCo_MS_DownWaitU
+        0x00BA,  # ftCo_MS_DownStandU
+        0x00BB,  # ftCo_MS_DownAttackU
+        0x00BC,  # ftCo_MS_DownFowardU
+        0x00BD,  # ftCo_MS_DownBackU
+        0x00BF,  # ftCo_MS_DownBoundD
+        0x00C0,  # ftCo_MS_DownWaitD
+        0x00C2,  # ftCo_MS_DownStandD
+        0x00C3,  # ftCo_MS_DownAttackD
+        0x00C4,  # ftCo_MS_DownFowardD
+        0x00C5,  # ftCo_MS_DownBackD
+        0x00C7,  # ftCo_MS_Passive
+        0x00C8,  # ftCo_MS_PassiveStandF
+        0x00C9,  # ftCo_MS_PassiveStandB
+    }
+    for i in range(n):
+        if i == 0:
+            continue
+        if int(timer[i]) != 1:
+            continue
+        act = int(action_id[i])
+        if act not in DOWN_PASSIVE_RECOVERY_ACTIONS:
+            continue
+        owner = int(src[i])
+        if owner >= SOURCE_NONE:
+            continue
+        if int(hitlag[i]) != 0 or int(hitstun[i]) != 0:
+            continue
+        if int(combo_count[i]) == 0 or int(last_attack_landed[i]) == 0:
+            continue
+        if (int(sf[i, STATE_FLAGS_221F_INDEX]) & STATE_FLAG_221F_B3_MASK) != 0:
+            continue
+        if int(sf[i, 1]) != 0 or int(sf[i, 2]) != 0:
+            continue
+        # Strictly-causal continuity guard (t-1 -> t):
+        # - countdown is in terminal progression from 2 to 1
+        # - ownership has not changed
+        # - action progression is continuous
+        if int(timer[i - 1]) != 2:
+            continue
+        if int(src[i - 1]) != owner:
+            continue
+        if int(action_id[i]) != int(action_id[i - 1]):
+            continue
+        if int(action_frame[i]) != int(action_frame[i - 1]) + 1:
+            continue
+        out[i] = np.uint8(1)
+    return out
+
+
 def _derive_throw_pulse_seed_lanes(
     *,
     seed_action_id_u16: np.ndarray,
@@ -1455,6 +1574,7 @@ def _main_impl(args) -> None:
         # Throw pulse-consume seed lane is filled after item materialization from full seed_t arrays.
         samples["seed_t"]["throw_pulse_consumed"][:, slot] = 0
         samples["seed_t"]["throw_pulse_crossed_prev_frame"][:, slot] = 0
+        samples["seed_t"]["source_clear_terminal_phase"][:, slot] = 0
         # fp+0x2340 AttackDash lane (decomp-backed targeted ownership seed):
         # - mv.co.attackdash.x0 is consumed by ftCo_800D8AE0 during AttackDash IASA.
         # - Slippi emits fp+0x2340 as `misc_as`; AttackDash treats this lane as signed int.
@@ -1543,15 +1663,27 @@ def _main_impl(args) -> None:
         samples["ref_t1"]["hitlag"][:, slot] = post_hitlag[1:]
         samples["seed_t"]["hitstun"][:, slot] = post_hitstun[:-1]
         samples["ref_t1"]["hitstun"][:, slot] = post_hitstun[1:]
-        samples["seed_t"]["source_clear_timer_x18c8"][:, slot] = (
-            _derive_source_clear_timer_x18c8_seed_lane(
+        source_clear_timer_x18c8 = _derive_source_clear_timer_x18c8_seed_lane(
+            action_id_u16=post_state,
+            char_id_u8=post_char,
+            on_ground_u8=post_on_ground,
+            state_flags_u8=state_flags,
+            last_hit_by_u8=last_hit_by,
+            x9_b1_by_char=action_x9_b1_by_char,
+            source_clear_init_frames=source_clear_x18c8_init_frames,
+        )
+        samples["seed_t"]["source_clear_timer_x18c8"][:, slot] = source_clear_timer_x18c8[:-1]
+        samples["seed_t"]["source_clear_terminal_phase"][:, slot] = (
+            _derive_source_clear_terminal_phase_seed_lane(
                 action_id_u16=post_state,
-                char_id_u8=post_char,
-                on_ground_u8=post_on_ground,
+                action_frame_i16=post_state_age,
+                hitlag_u16=post_hitlag,
+                hitstun_u16=post_hitstun,
+                combo_count_u8=combo_count,
+                last_attack_landed_u8=last_attack_landed,
+                source_clear_timer_x18c8_u8=source_clear_timer_x18c8,
                 state_flags_u8=state_flags,
                 last_hit_by_u8=last_hit_by,
-                x9_b1_by_char=action_x9_b1_by_char,
-                source_clear_init_frames=source_clear_x18c8_init_frames,
             )[:-1]
         )
 
