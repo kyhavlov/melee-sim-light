@@ -57,3 +57,48 @@ def test_grab_capturepulledhi_source_clear_target_pm1_both_players_strict_lock()
                 record=rec,
                 p=p,
             )
+
+
+@pytest.mark.integration
+def test_source_clear_timer_x18c8_seed_bridge_target_pm1_both_players_strict_lock() -> None:
+    # Replay-real target+/-1 lock for x18C8 source-owner clear countdown -> last_hit_by clear.
+    #
+    # Decomp refs:
+    # - refs/melee/src/melee/ft/fighter.c::{Fighter_ChangeMotionState,Fighter_8006A360}
+    # - refs/melee/src/melee/ft/ftcommon.c::ftCommon_800804FC
+    # - refs/melee/src/melee/ft/types.h (fp+0x221F b3 gate; fp->dmg.x18C8)
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+
+    dataset_rel = (
+        "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
+        "AttachedGoodNaturedGuanaco.msl"
+    )
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    target_record = 868
+    rows = (target_record - 1, target_record, target_record + 1)
+    p_target = 0
+
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+    for rec in rows:
+        assert int(samples.shape[0]) > rec, f"dataset too short for lock row: record={rec}"
+
+    target = samples[target_record]
+    # Seeded x18C8 countdown is active on this row and should clear source-owner identity at t+1.
+    assert int(target["seed_t"]["source_clear_timer_x18c8"][p_target]) == 1
+    assert int(target["seed_t"]["last_hit_by"][p_target]) == 1
+    assert int(target["ref_t1"]["last_hit_by"][p_target]) == 6
+
+    for rec in rows:
+        _, ref_row, out_row = _run_one_step_row(dataset_path, rec, p_target)
+        for p in (0, 1):
+            _assert_transition_lock_fields_match_ref(
+                out_row=out_row,
+                ref_row=ref_row,
+                record=rec,
+                p=p,
+            )

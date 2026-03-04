@@ -104,6 +104,14 @@ typedef struct MslStateSoA {
   // Throw projectile pulse crossing lane from the previous replay step (0 = none).
   // Producer is strictly causal in tools/slippi/make_dataset_from_slp.py.
   uint8_t* throw_pulse_crossed_prev_frame;
+  // Source-owner clear countdown (`fp->dmg.x18C8`) with +1 bias.
+  //
+  // Decomp:
+  // - Fighter_ChangeMotionState seeds x18C8 from p_ftCommonData->x814 under grounded + x9_b1.
+  // - Fighter_8006A360 decrements x18C8 under !hitlag and clears x18C4_source_ply at expiry.
+  // refs/melee/src/melee/ft/fighter.c::{Fighter_ChangeMotionState,Fighter_8006A360}
+  // refs/melee/src/melee/ft/types.h::MotionState (x9_b1)
+  uint8_t* source_clear_timer_x18c8;
   // Internal-only throw flow latch: when a throw release flag fires, we detach the victim during
   // motion-state Anim (pre-physics), then optionally apply the throw hit later in the frame
   // (post-items) if no other hit interrupted the victim.

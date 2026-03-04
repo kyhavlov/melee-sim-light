@@ -412,6 +412,7 @@ int msl_batch_reseed_seed(MslBatch* batch, const uint8_t* seed_bytes, size_t see
       batch->state.throw_pulse_consumed[idx] = seed->throw_pulse_consumed[p] ? 1u : 0u;
       // Previous-step throw pulse crossing lane (strictly causal seed producer).
       batch->state.throw_pulse_crossed_prev_frame[idx] = seed->throw_pulse_crossed_prev_frame[p];
+      batch->state.source_clear_timer_x18c8[idx] = seed->source_clear_timer_x18c8[p];
       batch->state.match_flow_timer[idx] = seed->match_flow_timer[p];
       batch->state.downwait_timer[idx] = seed->downwait_timer[p];
       // Seed deterministic anim timebase from Slippi post-frame `state_age` (fp->cur_anim_frame)

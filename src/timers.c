@@ -240,14 +240,16 @@ void timers_update_post_anim(MslBatch* batch) {
 
   enum { MSL_STATE_FLAGS_STRIDE = MSL_STATE_FLAGS_BYTES };
   enum { MSL_STATE_FLAGS_221C_INDEX = 3 };
+  enum { MSL_STATE_FLAGS_221F_INDEX = 4 };
   enum { MSL_STATE_FLAG_221C_IS_HITSTUN = 0x02 };
+  enum { MSL_STATE_FLAG_221F_B3 = 0x10 };
 
   // Combo timer reset constant (GALE01 p_ftCommonData->x4CC).
   const MslCommonParams* c = msl_common_params();
 
   const int num_players = (int)batch->config.num_players;
   for (int bi = 0; bi < batch->batch_size; bi++) {
-    // Decomp ordering inside Fighter_8006A360 (proc prio 1, under !hitlag gate):
+    // Decomp ordering inside Fighter_8006A360 (proc prio 1, under !fp->x221F_b3 gate):
     // - ftColl_800764DC (combo timer tick + victim clear) runs before per-action anim_cb.
     // - Damage anim_cb calls ftCo_8008F744 (hitstun decrement + end effects).
     // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
@@ -289,6 +291,55 @@ void timers_update_post_anim(MslBatch* batch) {
     }
 
     // Pass 2: combo timer tick + combo-victim clear (ftColl_800764DC family).
+    //
+    // Also consume source-owner clear timer ownership (`fp->dmg.x18C8`) under the same
+    // !fp->x221F_b3 gate:
+    // - Fighter_8006A360 decrements x18C8 once per frame when active.
+    // - On expiry (x18C8 reaches -1), clears source owner x18C4_source_ply to sentinel 6.
+    // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
+    // refs/melee/src/melee/ft/types.h (fp+0x221F bitfields; b3 gate)
+    // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm (last_hit_by lane)
+    //
+    // Seed lane uses +1 bias:
+    // - source_clear_timer_x18c8 == 0 -> inactive (decomp -1)
+    // - source_clear_timer_x18c8 > 0  -> active countdown + 1
+    enum { MSL_LAST_HIT_BY_SOURCE_NONE = 6 };
+    for (int p = 0; p < num_players; p++) {
+      const size_t idx = msl_idx_player(bi, p);
+      const uint8_t flags_221f =
+          batch->state.state_flags[idx * MSL_STATE_FLAGS_STRIDE + MSL_STATE_FLAGS_221F_INDEX];
+      if ((flags_221f & (uint8_t)MSL_STATE_FLAG_221F_B3) != 0u) {
+        continue;
+      }
+      // Decomp reset owner path:
+      // - ftCommon_800804FC clears x18c4_source_ply to 6 and sets x18C8 to -1 on grounded paths.
+      // Keep the seeded countdown inactive when source owner is already cleared.
+      // refs/melee/src/melee/ft/ftcommon.c::ftCommon_800804FC
+      if (batch->state.last_hit_by[idx] == (uint8_t)MSL_LAST_HIT_BY_SOURCE_NONE) {
+        batch->state.source_clear_timer_x18c8[idx] = 0u;
+        continue;
+      }
+      uint8_t t = batch->state.source_clear_timer_x18c8[idx];
+      if (t == 0u) {
+        continue;
+      }
+      // Damage callback ownership in active hitstun can preserve attacker identity lanes
+      // through the current step snapshot; defer the terminal clear tick while hitstun is
+      // still active to avoid premature source clear on Damage-family rows.
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008F744
+      // refs/melee/src/melee/ft/ftcoll.c::ftColl_800764DC
+      // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm (last_hit_by lane)
+      if (t == 1u && batch->state.hitstun[idx] != 0u) {
+        continue;
+      }
+      t--;
+      batch->state.source_clear_timer_x18c8[idx] = t;
+      if (t == 0u) {
+        batch->state.last_hit_by[idx] = (uint8_t)MSL_LAST_HIT_BY_SOURCE_NONE;
+      }
+    }
+
+    // Pass 3: combo timer tick + combo-victim clear (ftColl_800764DC family).
     for (int p = 0; p < num_players; p++) {
       const size_t idx = msl_idx_player(bi, p);
       // Use post-decrement hitlag frames (not hitlag_started_frame) because the hitlag gate
@@ -324,7 +375,7 @@ void timers_update_post_anim(MslBatch* batch) {
       }
     }
 
-    // Pass 3: hitstun decrement + hitstun end effects (ftCo_8008F744 family).
+    // Pass 4: hitstun decrement + hitstun end effects (ftCo_8008F744 family).
     for (int p = 0; p < num_players; p++) {
       const size_t idx = msl_idx_player(bi, p);
       // Use post-decrement hitlag frames (not hitlag_started_frame) because the hitlag gate

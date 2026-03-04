@@ -195,6 +195,21 @@ typedef struct MslSeed {
   // - 0: no projectile pulse crossing in (t-1 -> t) for this seed row.
   // - N: crossed pulse frame number (u8) from data/moves/{fox,falco}.json throw events.
   uint8_t throw_pulse_crossed_prev_frame[MSL_MAX_PLAYERS];
+  // Source-owner clear countdown (`fp->dmg.x18C8`) with +1 bias.
+  //
+  // Decomp ownership:
+  // - Fighter_ChangeMotionState seeds `dmg.x18C8 = p_ftCommonData->x814` when:
+  //     grounded && new_motion_state->x9_b1 && dmg.x18C8 == -1
+  // - Fighter_8006A360 decrements `dmg.x18C8` under !hitlag and clears source owner
+  //   (`dmg.x18C4_source_ply = 6`) when it reaches -1.
+  // refs/melee/src/melee/ft/fighter.c::{Fighter_ChangeMotionState,Fighter_8006A360}
+  // refs/melee/src/melee/ft/types.h::MotionState (x9_b1)
+  // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm (last_hit_by lane)
+  //
+  // Seed representation:
+  // - 0: inactive (decomp internal is -1)
+  // - N>0: decomp internal countdown value + 1
+  uint8_t source_clear_timer_x18c8[MSL_MAX_PLAYERS];
   // fp+0x2340 AttackDash lane:
   // - mv.co.attackdash.x0 countdown consumed by ftCo_800D8AE0.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackDash.c::ftCo_AttackDash_IASA

@@ -331,6 +331,107 @@ def _load_throw_pulse_seed_tables(
     return pulse_frames_by_char_action, cmd1_start_by_char_action, shot_itkind_by_char
 
 
+def _load_action_x9_b1_tables(*, data_root) -> dict[int, np.ndarray]:
+    """Load decomp MotionState.x9_b1 tables for supported chars.
+
+    Source of truth:
+    - data/attack_id/move_id/{fox,falco}.json key `x9_b1`
+    - derived from decomp MotionState initializers.
+    """
+    out: dict[int, np.ndarray] = {}
+    for char_id, key in ((1, "fox"), (22, "falco")):
+        rows = json.loads((data_root / "attack_id" / "move_id" / f"{key}.json").read_text())
+        if not rows:
+            out[int(char_id)] = np.zeros(0, dtype=np.uint8)
+            continue
+        max_action = max(int(k) for k in rows.keys())
+        table = np.zeros(max_action + 1, dtype=np.uint8)
+        for k, v in rows.items():
+            a = int(k)
+            if a < 0 or a >= table.shape[0]:
+                continue
+            table[a] = np.uint8(1 if int((v or {}).get("x9_b1", 0)) != 0 else 0)
+        out[int(char_id)] = table
+    return out
+
+
+def _derive_source_clear_timer_x18c8_seed_lane(
+    *,
+    action_id_u16: np.ndarray,
+    char_id_u8: np.ndarray,
+    on_ground_u8: np.ndarray,
+    state_flags_u8: np.ndarray,
+    last_hit_by_u8: np.ndarray,
+    x9_b1_by_char: dict[int, np.ndarray],
+    source_clear_init_frames: int,
+) -> np.ndarray:
+    """Derive +1-biased `fp->dmg.x18C8` countdown strictly causally.
+
+    Decomp ownership:
+    - Fighter_ChangeMotionState seeds `dmg.x18C8 = p_ftCommonData->x814` iff
+      grounded && new_motion_state->x9_b1 && dmg.x18C8 == -1.
+    - Fighter_8006A360 decrements x18C8 under !fp->x221F_b3; when it reaches -1, clears source owner.
+    refs/melee/src/melee/ft/fighter.c::{Fighter_ChangeMotionState,Fighter_8006A360}
+    refs/melee/src/melee/ft/types.h::MotionState (x9_b1)
+    refs/melee/src/melee/ft/types.h (fp+0x221F bitfields; b3 gate)
+    refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm (state_flags byte at fp+0x221F)
+
+    Seed representation:
+    - 0 => inactive (decomp internal -1)
+    - N>0 => decomp internal countdown + 1
+    """
+    a = np.asarray(action_id_u16, dtype=np.uint16).reshape(-1)
+    c = np.asarray(char_id_u8, dtype=np.uint8).reshape(-1)
+    g = np.asarray(on_ground_u8, dtype=np.uint8).reshape(-1)
+    sf = np.asarray(state_flags_u8, dtype=np.uint8)
+    src = np.asarray(last_hit_by_u8, dtype=np.uint8).reshape(-1)
+    n = int(a.shape[0])
+    if int(c.shape[0]) != n or int(g.shape[0]) != n or int(src.shape[0]) != n:
+        raise ValueError("source_clear_timer derivation lanes must have equal lengths")
+    if sf.ndim != 2 or int(sf.shape[0]) != n or int(sf.shape[1]) < 5:
+        raise ValueError("source_clear_timer derivation requires state_flags_u8 shape [n,5]")
+
+    out = np.zeros(n, dtype=np.uint8)
+    # Decomp uses signed int timer with -1 as inactive sentinel.
+    timer = -1
+    init_frames = int(np.clip(int(source_clear_init_frames), 0, 255))
+    # Slippi packs fp+0x221F at state_flags[..., 4]. Bitfield b3 maps to mask 0x10.
+    # refs/melee/src/melee/ft/types.h (fp+0x221F bit layout)
+    # refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
+    STATE_FLAGS_221F_INDEX = 4
+    STATE_FLAG_221F_B3_MASK = 0x10
+
+    for i in range(n):
+        cur_a = int(a[i])
+        cur_c = int(c[i])
+        cur_grounded = int(g[i]) != 0
+        cur_221f_b3 = (int(sf[i, STATE_FLAGS_221F_INDEX]) & STATE_FLAG_221F_B3_MASK) != 0
+        if i > 0 and cur_a != int(a[i - 1]):
+            x9_b1 = 0
+            tbl = x9_b1_by_char.get(cur_c)
+            if tbl is not None and cur_a >= 0 and cur_a < int(tbl.shape[0]):
+                x9_b1 = int(tbl[cur_a])
+            if cur_grounded and x9_b1 != 0 and timer < 0 and int(src[i]) != 6:
+                timer = init_frames
+
+        # Decomp reset owner path:
+        # - ftCommon_800804FC clears x18c4_source_ply to 6 and sets x18C8 to -1 on grounded paths.
+        # refs/melee/src/melee/ft/ftcommon.c::ftCommon_800804FC
+        if int(src[i]) == 6:
+            timer = -1
+
+        # Fighter_8006A360 ownership is gated by !fp->x221F_b3.
+        if (not cur_221f_b3) and timer >= 0:
+            timer -= 1
+
+        if timer >= 0:
+            out[i] = np.uint8(min(timer + 1, 255))
+        else:
+            out[i] = np.uint8(0)
+
+    return out
+
+
 def _derive_throw_pulse_seed_lanes(
     *,
     seed_action_id_u16: np.ndarray,
@@ -1155,6 +1256,10 @@ def _main_impl(args) -> None:
         data_root=data_root,
         throw_action_to_move=throw_action_to_move,
     )
+    action_x9_b1_by_char = _load_action_x9_b1_tables(data_root=data_root)
+    # GALE01 p_ftCommonData->x814 initializes fp->dmg.x18C8 in Fighter_ChangeMotionState.
+    # refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState
+    source_clear_x18c8_init_frames = 60
     char_falco = 22
     button_mask_xy = 0x0400 | 0x0800  # HSD_PAD_XY / src/buttons.h::MSL_BUTTON_XY
     button_mask_lr = 0x0040 | 0x0020  # HSD_PAD_L|HSD_PAD_R / src/buttons.h::MSL_BUTTON_{L,R}
@@ -1438,6 +1543,17 @@ def _main_impl(args) -> None:
         samples["ref_t1"]["hitlag"][:, slot] = post_hitlag[1:]
         samples["seed_t"]["hitstun"][:, slot] = post_hitstun[:-1]
         samples["ref_t1"]["hitstun"][:, slot] = post_hitstun[1:]
+        samples["seed_t"]["source_clear_timer_x18c8"][:, slot] = (
+            _derive_source_clear_timer_x18c8_seed_lane(
+                action_id_u16=post_state,
+                char_id_u8=post_char,
+                on_ground_u8=post_on_ground,
+                state_flags_u8=state_flags,
+                last_hit_by_u8=last_hit_by,
+                x9_b1_by_char=action_x9_b1_by_char,
+                source_clear_init_frames=source_clear_x18c8_init_frames,
+            )[:-1]
+        )
 
         samples["seed_t"]["l_cancel"][:, slot] = l_cancel[:-1]
         samples["ref_t1"]["l_cancel"][:, slot] = l_cancel[1:]

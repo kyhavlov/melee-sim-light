@@ -113,6 +113,11 @@ SEED_DTYPE = np.dtype(
         # - 0 means no throw projectile pulse crossing in (t-1 -> t),
         # - N is the crossed pulse frame from extracted throw move events.
         ("throw_pulse_crossed_prev_frame", _arr("u1", MAX_PLAYERS)),
+        # Source-owner clear countdown (`fp->dmg.x18C8`) with +1 bias.
+        # - 0: inactive (decomp internal is -1)
+        # - N>0: decomp timer value + 1
+        # refs/melee/src/melee/ft/fighter.c::{Fighter_ChangeMotionState,Fighter_8006A360}
+        ("source_clear_timer_x18c8", _arr("u1", MAX_PLAYERS)),
         # fp+0x2340 AttackDash lane (targeted seed ownership):
         # - mv.co.attackdash.x0 countdown consumed by ftCo_800D8AE0.
         # refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackDash.c::ftCo_AttackDash_IASA
