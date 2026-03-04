@@ -417,6 +417,11 @@ int msl_batch_reseed_seed(MslBatch* batch, const uint8_t* seed_bytes, size_t see
       // Seed deterministic anim timebase from Slippi post-frame `state_age` (fp->cur_anim_frame)
       // plus a strictly-causal derived fp->frame_speed_mul.
       msl_anim_timebase_seed(batch, idx, seed->anim_frame_f32[p], seed->frame_speed_mul_f32[p]);
+      float walk_anim_source_vel = seed->walk_anim_source_vel_f32[p];
+      if (!isfinite(walk_anim_source_vel)) {
+        walk_anim_source_vel = 0.0f;
+      }
+      batch->state.walk_anim_source_vel[idx] = walk_anim_source_vel;
       batch->state.anim_defer_tick_once[idx] = 0;
       batch->state.guard_tilt_x8[idx] = seed->guard_tilt_x8[p];
       batch->state.guard_tilt_x4[idx] = seed->guard_tilt_x4[p];

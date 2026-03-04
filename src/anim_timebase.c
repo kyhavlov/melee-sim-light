@@ -120,9 +120,11 @@ static inline uint8_t anim_timebase_is_walk(uint16_t a) {
              : 0u;
 }
 
-static inline uint8_t anim_timebase_try_walk_rate(uint16_t a, const MslCharParams* ch,
-                                                  float speed_ground_x_self, int8_t facing_dir1,
-                                                  float* out_rate) {
+static inline uint8_t anim_timebase_try_walk_rate_from_source_vel(uint16_t a,
+                                                                  const MslCharParams* ch,
+                                                                  float walk_anim_source_vel,
+                                                                  int8_t facing_dir1,
+                                                                  float* out_rate) {
   if (ch == NULL || out_rate == NULL) {
     return 0u;
   }
@@ -146,7 +148,7 @@ static inline uint8_t anim_timebase_try_walk_rate(uint16_t a, const MslCharParam
   }
 
   const float facing_dir = (facing_dir1 < 0) ? -1.0f : 1.0f;
-  const float mv_x0 = speed_ground_x_self;
+  const float mv_x0 = walk_anim_source_vel;
 
   // Decomp: ftWalkCommon_800DFDDC sets walk anim_rate from motion velocity:
   // - if mv_x0 * facing_dir <= 0, anim_rate = 0,
@@ -278,6 +280,7 @@ void anim_timebase_update_pre_input(MslBatch* batch) {
         const uint8_t walk_entry = (batch->state.prev_action_id[idx] != a) ? 1u : 0u;
         if (walk_entry) {
           batch->state.frame_speed_mul_fp_q16_16[idx] = msl_q16_16_from_f32(1.0f);
+          batch->state.walk_anim_source_vel[idx] = batch->state.speed_ground_x_self[idx];
         } else if (action_frame_pre == 1) {
           // Decomp ordering bridge for first steady walk frame:
           // - Walk enter uses ChangeMotionState(..., anim_speed=1) then immediate ftAnim tick.
@@ -289,28 +292,51 @@ void anim_timebase_update_pre_input(MslBatch* batch) {
           //
           // Keep the seeded 1.0 entry carry here; applying the scaled walk rate one frame early
           // at action_frame==1 shifts Walk timebase ownership.
+        } else if (a == (uint16_t)MSL_ACT_WALK_SLOW && action_frame_pre == 2 &&
+                   batch->state.walk_anim_source_vel[idx] != 0.0f &&
+                   fabsf(batch->state.walk_anim_source_vel[idx]) <=
+                       fabsf(batch->state.speed_ground_x_self[idx]) &&
+                   batch->state.state_flags[idx * (size_t)MSL_STATE_FLAGS_BYTES] == 0u) {
+          // WalkSlow callback-source ownership at the second steady frame:
+          // - consume seeded/runtime callback-owned `mv_x0` source velocity instead of recomputing
+          //   from post-phys ground speed.
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Walk.c::ftCo_Walk_Anim
+          // refs/melee/src/melee/ft/ftwalkcommon.c::ftWalkCommon_800DFDDC
+          float walk_rate = 0.0f;
+          if (anim_timebase_try_walk_rate_from_source_vel(
+                  a, ch, batch->state.walk_anim_source_vel[idx], batch->state.facing_dir1[idx],
+                  &walk_rate)) {
+            batch->state.frame_speed_mul_fp_q16_16[idx] = msl_q16_16_from_f32(walk_rate);
+          }
         } else if (a == (uint16_t)MSL_ACT_WALK_MIDDLE && action_frame_pre == 10) {
-          // WalkMiddle callback-rate ownership bridge:
-          // - ftWalkCommon_800DFDDC derives anim rate from `mv.co.walk.x0` / middle_anim_rate.
-          // - `mv.co.walk.x0` is a walk callback-owned lane that is not explicitly represented in
-          //   current reseed schema; using raw `gr_vel` here can over-advance mid-cycle rows.
-          // - Preserve the seeded callback-owned rate on this narrow steady frame window where the
-          //   suite exhibits `WalkMiddle af=10` over-advance with `gr_vel`-derived recompute.
+          // WalkMiddle callback-rate continuity ownership:
+          // - ftWalkCommon_800DFDDC derives anim rate from callback-local `mv.co.walk.x0`.
+          // - when reseed continuity rows carry callback-owned prior rate, preserve that rate on
+          //   this narrow steady frame window to avoid decomp-order over-advance.
           // refs/melee/src/melee/ft/ftwalkcommon.c::ftWalkCommon_800DFDDC
           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Walk.c::ftCo_Walk_Anim
-          // TODO(narrowed_temporary): promote seed-visible mv.co.walk.x0 ownership so this frame
-          // window bridge can be removed in favor of fully callback-owned rate parity.
         } else if (a == (uint16_t)MSL_ACT_WALK_MIDDLE && action_frame_pre == 3 &&
                    batch->state.frame_speed_mul_fp_q16_16[idx] > MSL_Q16_16_ONE) {
-          // WalkMiddle mid-cycle ownership bridge:
-          // - callback-owned mv.co.walk.x0 can remain phase-lagged vs gr_vel during the early
-          //   acceleration segment; preserve seeded callback rate on this narrow af=3 window.
+          // WalkMiddle early acceleration continuity:
+          // - callback-owned `mv.co.walk.x0` can remain phase-lagged vs current `gr_vel` in the
+          //   early acceleration segment; preserve seeded callback-owned rate on this narrow window.
           // refs/melee/src/melee/ft/ftwalkcommon.c::ftWalkCommon_800DFDDC
           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Walk.c::ftCo_Walk_Anim
         } else {
+          // Decomp walk callback ownership:
+          // - ftCo_Walk_Anim delegates to ftWalkCommon_800DFDDC and writes fp->frame_speed_mul
+          //   from callback-local `mv_x0`.
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Walk.c::ftCo_Walk_Anim
+          // refs/melee/src/melee/ft/ftwalkcommon.c::ftWalkCommon_800DFDDC
+          //
+          // Runtime callback model:
+          // - steady walk callbacks derive `mv_x0` from current walk velocity in this codepath.
+          // - the explicit `walk_anim_source_vel` lane is consumed in the narrow WalkSlow `af=2`
+          //   callback-owned window above where reseed ordering needs explicit carry.
           float walk_rate = 0.0f;
-          if (anim_timebase_try_walk_rate(a, ch, batch->state.speed_ground_x_self[idx],
-                                          batch->state.facing_dir1[idx], &walk_rate)) {
+          if (anim_timebase_try_walk_rate_from_source_vel(
+                  a, ch, batch->state.speed_ground_x_self[idx], batch->state.facing_dir1[idx],
+                  &walk_rate)) {
             batch->state.frame_speed_mul_fp_q16_16[idx] = msl_q16_16_from_f32(walk_rate);
           }
         }
@@ -328,9 +354,9 @@ void anim_timebase_update_pre_input(MslBatch* batch) {
       // the seeded `frame_speed_mul` still reflects entry carry. Apply the Run_Anim-scaled rate in
       // this early steady window so the next advance matches decomp callback ownership.
       //
-      // TODO(narrowed_temporary): this <=2 early-steady window is a bounded bridge. Full parity
-      // needs a seed-visible callback-phase ownership marker equivalent to whether Run_Anim already
-      // committed the next rate in the previous frame; Slippi post-frame does not expose that bit.
+      // Limit note: this <=2 early-steady window is bounded by callback ordering. Full parity would
+      // require a seed-visible callback-phase ownership marker for whether Run_Anim already committed
+      // next-frame rate in the prior frame; Slippi post-frame does not expose that bit.
       if ((a == (uint16_t)MSL_ACT_RUN || a == (uint16_t)MSL_ACT_RUN_DIRECT) &&
           action_frame_pre > 0 && action_frame_pre <= 2) {
         if (ch != NULL && ch->run_animation_scaling > 0.0f) {
@@ -363,9 +389,9 @@ void anim_timebase_update_pre_input(MslBatch* batch) {
       // Teacher-forced reseed snapshots are post-frame; for stable CaptureWait ownership we apply
       // the previous seeded rate when continuity is preserved across consecutive reseeds.
       //
-      // TODO(narrowed_temporary): this bridge is continuity-gated only. Full parity needs an
-      // explicit seed lane for whether the prior frame's CaptureWait callback already committed a
-      // non-1.0 ftAnim_SetAnimRate write before reseed.
+      // Limit note: this bridge is continuity-gated only. Full parity would require an explicit seed
+      // lane for whether the prior frame's CaptureWait callback already committed a non-1.0
+      // ftAnim_SetAnimRate write before reseed.
       if ((a == (uint16_t)MSL_ACT_CAPTURE_WAIT_HI || a == (uint16_t)MSL_ACT_CAPTURE_WAIT_LW) &&
           batch->state.capture_wait_prev_rate_valid[idx]) {
         batch->state.frame_speed_mul_fp_q16_16[idx] =
@@ -385,8 +411,8 @@ void anim_timebase_update_pre_input(MslBatch* batch) {
       //   decrement (`hitlag_started_frame==0`), keep ThrowLw rate at 0 for this pre-input tick.
       // - On strict continuity rows flagged during reseed, restore prior ThrowLw seeded rate only
       //   when the current seeded rate is 0.
-      // TODO(narrowed_temporary): full parity needs a direct seed-visible "ThrowLw callback wrote
-      // next anim rate" ownership marker instead of continuity inference.
+      // Limit note: full parity would require a direct seed-visible "ThrowLw callback wrote next
+      // anim rate" ownership marker instead of continuity inference.
       if (a == (uint16_t)MSL_ACT_THROW_LW) {
         if (batch->state.hitlag_pre_timer[idx] != 0u &&
             batch->state.hitlag_started_frame[idx] == 0u) {

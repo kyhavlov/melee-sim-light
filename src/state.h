@@ -139,6 +139,13 @@ typedef struct MslStateSoA {
   // refs/melee/src/melee/ft/ftanim.c (ftAnim_8006F0FC / ftAnim_SetAnimRate)
   int32_t* anim_frame_fp_q16_16;
   int32_t* frame_speed_mul_fp_q16_16;
+  // Walk Anim callback source velocity (`mv_x0` in ftWalkCommon_800DFDDC).
+  //
+  // Decomp:
+  // - ftWalkCommon_800DFDDC selects `mv_x0` from either fp->mv.co.walk.x0 or fp->gr_vel, then
+  //   writes fp->frame_speed_mul via ftAnim_SetAnimRate.
+  // refs/melee/src/melee/ft/ftwalkcommon.c::ftWalkCommon_800DFDDC
+  float* walk_anim_source_vel;
   // CaptureWait Anim-rate ownership bridge:
   // - ftCo_CaptureWaitHi_Anim updates fp->frame_speed_mul via ftAnim_SetAnimRate in Anim callback.
   // - Fighter_8006A360 advances ftAnim before callback-owned rate writes each frame.

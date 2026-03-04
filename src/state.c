@@ -95,6 +95,7 @@ int state_alloc(MslStateSoA* state, int batch_size) {
   state->anim_frame_f32 = (float*)alloc_aligned_64(sizeof(float) * bp);
   state->anim_frame_fp_q16_16 = (int32_t*)alloc_aligned_64(sizeof(int32_t) * bp);
   state->frame_speed_mul_fp_q16_16 = (int32_t*)alloc_aligned_64(sizeof(int32_t) * bp);
+  state->walk_anim_source_vel = (float*)alloc_aligned_64(sizeof(float) * bp);
   state->capture_wait_prev_rate_fp_q16_16 = (int32_t*)alloc_aligned_64(sizeof(int32_t) * bp);
   state->capture_wait_seed_rate_snapshot_fp_q16_16 =
       (int32_t*)alloc_aligned_64(sizeof(int32_t) * bp);
@@ -312,6 +313,7 @@ int state_alloc(MslStateSoA* state, int batch_size) {
       !state->throw_pending_hit_idx || !state->throw_pulse_consumed ||
       !state->throw_pulse_crossed_prev_frame || !state->match_flow_timer || !state->downwait_timer ||
       !state->anim_frame_f32 || !state->anim_frame_fp_q16_16 || !state->frame_speed_mul_fp_q16_16 ||
+      !state->walk_anim_source_vel ||
       !state->capture_wait_prev_rate_fp_q16_16 ||
       !state->capture_wait_seed_rate_snapshot_fp_q16_16 || !state->capture_wait_prev_rate_valid ||
       !state->throw_lw_prev_rate_fp_q16_16 || !state->throw_lw_prev_rate_valid ||
@@ -382,6 +384,7 @@ int state_alloc(MslStateSoA* state, int batch_size) {
   memset(state->capture_wait_prev_rate_fp_q16_16, 0, sizeof(int32_t) * bp);
   memset(state->capture_wait_seed_rate_snapshot_fp_q16_16, 0, sizeof(int32_t) * bp);
   memset(state->capture_wait_prev_rate_valid, 0, sizeof(uint8_t) * bp);
+  memset(state->walk_anim_source_vel, 0, sizeof(float) * bp);
   memset(state->x2228_b7, 0, sizeof(uint8_t) * bp);
   for (size_t i = 0; i < bph; i++) {
     state->fighter_hitlist_init_gen[i] = 0u;
@@ -465,6 +468,7 @@ void state_free(MslStateSoA* state) {
   alloc_free(state->anim_frame_f32);
   alloc_free(state->anim_frame_fp_q16_16);
   alloc_free(state->frame_speed_mul_fp_q16_16);
+  alloc_free(state->walk_anim_source_vel);
   alloc_free(state->capture_wait_prev_rate_fp_q16_16);
   alloc_free(state->capture_wait_seed_rate_snapshot_fp_q16_16);
   alloc_free(state->capture_wait_prev_rate_valid);

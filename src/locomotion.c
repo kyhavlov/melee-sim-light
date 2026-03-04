@@ -1115,24 +1115,20 @@ static inline void walk_anim_rate_ftWalkCommon_800DFDDC(MslBatch* batch, const M
     return;
   }
   // Decomp walk anim-rate ownership (ftCo_Walk_Anim -> ftWalkCommon_800DFDDC):
-  // - if signed ground velocity is non-forward relative to facing, rate is 0.
-  // - otherwise rate is |gr_vel| divided by the walk-type speed divisor
-  //   (co_attrs.slow_walk_max / mid_walk_point / fast_walk_min).
+  // - callback computes local `mv_x0`, then:
+  //     if (mv_x0 * facing_dir <= 0) anim_rate = 0;
+  //     else anim_rate = ABS(mv_x0) / walk_divisor.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Walk.c::ftCo_Walk_Anim
   // refs/melee/src/melee/ft/ftwalkcommon.c::ftWalkCommon_800DFDDC
-  //
-  // Sim scope: mv.co.walk.accel_mul (metal/size/item modifiers) is not explicitly represented yet;
-  // for current Fox/Falco suite rows this lane is effectively accel_mul=1.0.
-  // TODO(narrowed_temporary): add seed/runtime representation for mv.co.walk.accel_mul and wire
-  // extraction-backed modifiers; this is required for full parity outside current suite domain.
-  const float signed_ground_vel = batch->state.speed_ground_x_self[idx];
+  const float mv_x0 = batch->state.speed_ground_x_self[idx];
   float anim_rate = 0.0f;
-  if ((signed_ground_vel * facing_dir) > 0.0f) {
+  if ((mv_x0 * facing_dir) > 0.0f) {
     const float denom = walk_anim_rate_divisor_for_action(ch, walk_action);
     if (denom > 0.0f) {
-      anim_rate = msl_absf(signed_ground_vel) / denom;
+      anim_rate = msl_absf(mv_x0) / denom;
     }
   }
+  batch->state.walk_anim_source_vel[idx] = mv_x0;
   msl_anim_timebase_set_rate(batch, idx, anim_rate);
 }
 

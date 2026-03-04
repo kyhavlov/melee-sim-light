@@ -130,6 +130,9 @@ SEED_DTYPE = np.dtype(
         ("downwait_timer", _arr("<i2", MAX_PLAYERS)),
         ("anim_frame_f32", _arr("<f4", MAX_PLAYERS)),
         ("frame_speed_mul_f32", _arr("<f4", MAX_PLAYERS)),
+        # Walk callback source velocity lane (`mv_x0` consumed by ftWalkCommon_800DFDDC).
+        # refs/melee/src/melee/ft/ftwalkcommon.c::ftWalkCommon_800DFDDC
+        ("walk_anim_source_vel_f32", _arr("<f4", MAX_PLAYERS)),
         ("guard_tilt_x8", _arr("<u2", MAX_PLAYERS)),
         ("guard_tilt_x4", _arr("<f4", MAX_PLAYERS)),
         ("guard_reflect_timer_x14", _arr("u1", MAX_PLAYERS)),

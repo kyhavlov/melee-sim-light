@@ -12,6 +12,8 @@ def test_seed_schema_includes_staling_fields() -> None:
     # Throw-side pulse-latch schema scaffold (future causal ownership wiring).
     assert "throw_pulse_consumed" in SEED_DTYPE.fields
     assert "throw_pulse_crossed_prev_frame" in SEED_DTYPE.fields
+    # Walk callback-owned source velocity lane (ftWalkCommon_800DFDDC `mv_x0`).
+    assert "walk_anim_source_vel_f32" in SEED_DTYPE.fields
 
 
 def test_dataset_dtype_sizes_match_c_structs() -> None:

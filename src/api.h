@@ -242,6 +242,19 @@ typedef struct MslSeed {
   // - refs/melee/src/melee/ft/fighter.c (Fighter_ChangeMotionState sets fp->frame_speed_mul)
   // - refs/melee/src/melee/ft/ftanim.c (ftAnim_8006F0FC / ftAnim_SetAnimRate)
   float frame_speed_mul_f32[MSL_MAX_PLAYERS];
+  // Walk Anim callback source velocity (`mv_x0` in ftWalkCommon_800DFDDC).
+  //
+  // Decomp ownership:
+  // - ftCo_Walk_Anim delegates to ftWalkCommon_800DFDDC, which computes:
+  //     if (ft_GetGroundFrictionMultiplier(fp) < 1) mv_x0 = fp->mv.co.walk.x0;
+  //     else                                         mv_x0 = fp->gr_vel;
+  //   then sets walk anim rate from `mv_x0`.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Walk.c::ftCo_Walk_Anim
+  // refs/melee/src/melee/ft/ftwalkcommon.c::ftWalkCommon_800DFDDC
+  //
+  // Seed representation:
+  // - Causal callback-owned source velocity carried across one-step reseed boundaries.
+  float walk_anim_source_vel_f32[MSL_MAX_PLAYERS];
   // Guard (shield) tilt pose state (seeded; decomp-shaped).
   // Decomp: refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c
   // - mv.co.guard.x8: "frame-ish" index into the Guard tilt timeline (neutral is 10 in GALE01)

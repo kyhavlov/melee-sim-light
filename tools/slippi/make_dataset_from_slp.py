@@ -437,6 +437,53 @@ def _derive_throw_pulse_seed_lanes(
     return out_consumed, out_crossed_prev
 
 
+def _derive_walk_anim_source_vel_seed_lane(
+    *,
+    action_id_u16: np.ndarray,
+    char_id_u8: np.ndarray,
+    facing_dir1_i8: np.ndarray,
+    frame_speed_mul_f32: np.ndarray,
+    walk_divisors_by_char: dict[int, tuple[float, float, float]],
+) -> np.ndarray:
+    """Derive callback-owned walk `mv_x0` seed lane from seeded walk anim rate.
+
+    Decomp ownership:
+    - ftCo_Walk_Anim delegates to ftWalkCommon_800DFDDC, which computes:
+    -   anim_rate = ABS(mv_x0) / walk_divisor (or 0 when reverse-facing/non-forward)
+    - so mv_x0 can be reconstructed as sign(facing_dir1) * anim_rate * walk_divisor.
+    refs/melee/src/melee/ft/chara/ftCommon/ftCo_Walk.c::ftCo_Walk_Anim
+    refs/melee/src/melee/ft/ftwalkcommon.c::ftWalkCommon_800DFDDC
+    """
+    ACT_WALK_SLOW = 0x000F
+    ACT_WALK_MIDDLE = 0x0010
+    ACT_WALK_FAST = 0x0011
+
+    n = int(action_id_u16.shape[0])
+    out = np.zeros(n, dtype=np.float32)
+    for i in range(n):
+        action = int(action_id_u16[i])
+        if action not in (ACT_WALK_SLOW, ACT_WALK_MIDDLE, ACT_WALK_FAST):
+            continue
+        char_id = int(char_id_u8[i])
+        divs = walk_divisors_by_char.get(char_id)
+        if divs is None:
+            continue
+        if action == ACT_WALK_SLOW:
+            denom = float(divs[0])
+        elif action == ACT_WALK_MIDDLE:
+            denom = float(divs[1])
+        else:
+            denom = float(divs[2])
+        if not np.isfinite(denom) or denom <= 0.0:
+            continue
+        rate = float(frame_speed_mul_f32[i])
+        if not np.isfinite(rate) or rate <= 0.0:
+            continue
+        facing_dir = -1.0 if int(facing_dir1_i8[i]) < 0 else 1.0
+        out[i] = np.float32(facing_dir * rate * denom)
+    return out
+
+
 def _team_id_from_start_player(p: dict) -> int:
     t = p.get("team")
     if t is None:
@@ -1004,6 +1051,7 @@ def _main_impl(args) -> None:
     data_root = Path("data")
     end_frames = load_end_frame_tables(data_root)
     char_landing_air_lag_frames: dict[int, dict[str, int]] = {}
+    char_walk_divisors: dict[int, tuple[float, float, float]] = {}
     for cid in (1, 22):
         key = "fox" if cid == 1 else "falco"
         attrs = json.loads((data_root / "characters" / f"{key}.json").read_text())
@@ -1014,6 +1062,11 @@ def _main_impl(args) -> None:
             "airhi": int(attrs["landing_airhi_lag_frames"]),
             "airlw": int(attrs["landing_airlw_lag_frames"]),
         }
+        char_walk_divisors[int(cid)] = (
+            float(attrs["slow_walk_max"]),
+            float(attrs["mid_walk_point"]),
+            float(attrs["fast_walk_min"]),
+        )
 
     # Guard-tilt table metadata (neutral frame + max frame) for decomp-shaped mv.co.guard.x8.
     shield_meta = load_shield_tilt_table_meta()
@@ -1355,9 +1408,8 @@ def _main_impl(args) -> None:
         samples["seed_t"]["facing"][:, slot] = post_dir[:-1]
         samples["ref_t1"]["facing"][:, slot] = post_dir[1:]
         # fp->facing_dir1 seeded lane (signed).
-        samples["seed_t"]["facing_dir1"][:, slot] = _derive_facing_dir1_sign(
-            facing_u8=post_dir, action_id_u16=post_state
-        )[:-1]
+        facing_dir1_post = _derive_facing_dir1_sign(facing_u8=post_dir, action_id_u16=post_state)
+        samples["seed_t"]["facing_dir1"][:, slot] = facing_dir1_post[:-1]
         # Ground friction multiplier lane used by grounded-KB decay.
         # Decomp source is ft_GetGroundFrictionMultiplier(fp); Slippi currently exposes no direct
         # post-frame lane for this value in-suite, so seed explicit default identity.
@@ -1575,6 +1627,15 @@ def _main_impl(args) -> None:
         # So the stable-segment delta(state_age[t] - state_age[t-1]) is the rate that should be
         # applied on the *next* one-step tick when reseeding at post-frame t.
         samples["seed_t"]["frame_speed_mul_f32"][:, slot] = frame_speed_mul[:-1]
+        # Walk callback-owned source velocity (`mv_x0` in ftWalkCommon_800DFDDC) reconstructed
+        # from the seeded walk anim-rate lane.
+        samples["seed_t"]["walk_anim_source_vel_f32"][:, slot] = _derive_walk_anim_source_vel_seed_lane(
+            action_id_u16=post_state,
+            char_id_u8=post_char,
+            facing_dir1_i8=facing_dir1_post,
+            frame_speed_mul_f32=frame_speed_mul,
+            walk_divisors_by_char=char_walk_divisors,
+        )[:-1]
 
         # Action-entry overrides (decomp):
         # - Dash: refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c:55-71
