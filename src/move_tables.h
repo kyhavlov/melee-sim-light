@@ -46,6 +46,17 @@ uint8_t move_tables_attackair_allow_interrupt(uint8_t char_id, uint16_t attackai
 uint8_t move_tables_grounded_attack_allow_interrupt(uint8_t char_id, uint16_t grounded_action_id,
                                                     float cur_anim_frame_f32);
 
+// Returns whether EscapeN (spotdodge) can be interrupted (IASA) at the given cur_anim_frame.
+//
+// Decomp:
+// - EscapeN timeline is command-driven through ftAction_80071950 (`allow_interrupt` command).
+// refs/melee/src/melee/ft/chara/ftCommon/ftCo_Escape.c::ftCo_EscapeN_Anim
+// refs/melee/src/melee/ft/ftaction.c::ftAction_80071950
+//
+// Source of truth: data/moves/{fox,falco}.json moves["ftCo_SM_EscapeN"]["events"] allow_interrupt.
+uint8_t move_tables_escape_allow_interrupt(uint8_t char_id, uint16_t action_id,
+                                           float cur_anim_frame_f32);
+
 // Returns whether jab combo gate (fp->x2218_b1) is active at the given cur_anim_frame.
 //
 // Decomp:

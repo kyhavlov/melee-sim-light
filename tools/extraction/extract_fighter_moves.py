@@ -659,6 +659,10 @@ def main() -> None:
         # Grounded locomotion: needed for Dash IASA (cmd_var[0] gating) parity.
         # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c::ftCo_Dash_IASA
         "ftCo_SM_Dash",
+        # Spotdodge (EscapeN) `allow_interrupt` is a command-script lane used by fp->allow_interrupt.
+        # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Escape.c::ftCo_EscapeN_Anim
+        # refs/melee/src/melee/ft/ftaction.c::ftAction_80071950
+        "ftCo_SM_EscapeN",
         "ftCo_SM_Attack11",
         "ftCo_SM_Attack12",
         "ftCo_SM_Attack13",

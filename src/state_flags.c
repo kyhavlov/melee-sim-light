@@ -202,6 +202,24 @@ void state_flags_refresh_post_frame(MslBatch* batch) {
         allow_interrupt_known = 1u;
         allow_interrupt = move_tables_grounded_attack_allow_interrupt(
             batch->state.char_id[idx], action_id, allow_interrupt_anim_probe);
+      } else if (action_id == (uint16_t)MSL_ACT_ESCAPE_N) {
+        // EscapeN (spotdodge) `allow_interrupt` lane:
+        // - ftAction command script emits `allow_interrupt` (ftAction_80071950) during EscapeN.
+        // - Slippi state_flags[0] bit 0x80 mirrors fp->allow_interrupt (fp+0x2218 bit0).
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Escape.c::ftCo_EscapeN_Anim
+        // refs/melee/src/melee/ft/ftaction.c::ftAction_80071950
+        // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
+        // data/moves/{fox,falco}.json moves["ftCo_SM_EscapeN"]["events"]
+        // EscapeN script timing is integer-framed in-suite; use action_frame to avoid float-timebase
+        // probe jitter on this lane.
+        //
+        // Keep this as a one-way command write (set-only). EscapeN can inherit a pre-existing
+        // allow_interrupt carry on entry snapshots; do not force-clear that carry when the script
+        // event is inactive.
+        if (move_tables_escape_allow_interrupt(batch->state.char_id[idx], action_id,
+                                               (float)batch->state.action_frame[idx])) {
+          f2218 |= (uint8_t)MSL_STATE_FLAG_2218_ALLOW_INTERRUPT;
+        }
       }
       if (allow_interrupt_known) {
         if (allow_interrupt) {

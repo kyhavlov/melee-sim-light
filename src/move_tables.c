@@ -71,6 +71,7 @@ enum {
   MSL_GROUNDED_ATTACK_KIND_LW4 = 9,
 };
 static MslFrameWindow g_allow_interrupt_by_char_grounded_attack[256][MSL_GROUNDED_ATTACK_KIND_COUNT];
+static MslFrameWindow g_allow_interrupt_by_char_escape_n[256];
 static MslFrameWindow g_jab_combo_by_char_grounded_attack[256][MSL_GROUNDED_ATTACK_KIND_COUNT];
 static MslFrameWindow g_jab_rapid_by_char_grounded_attack[256][MSL_GROUNDED_ATTACK_KIND_COUNT];
 static MslFrameWindow g_cmd0_by_char_dash[256];
@@ -1408,6 +1409,20 @@ static int load_one(const char* data_dir, const char* rel_path, uint8_t char_id)
     g_allow_interrupt_by_char_grounded_attack[char_id][MSL_GROUNDED_ATTACK_KIND_LW4] = win;
   }
 
+  // EscapeN (spotdodge) `allow_interrupt` window.
+  //
+  // Decomp:
+  // - EscapeN motion itself has no explicit IASA callback body, but command-script `allow_interrupt`
+  //   still toggles fp->allow_interrupt via ftAction_80071950 and is exposed in Slippi state_flags.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Escape.c::ftCo_EscapeN_Anim
+  // refs/melee/src/melee/ft/ftaction.c::ftAction_80071950
+  //
+  // Source: data/moves/{fox,falco}.json moves["ftCo_SM_EscapeN"]["events"] allow_interrupt.
+  win = (MslFrameWindow){0};
+  if (parse_allow_interrupt_window(buf, buf_end, "ftCo_SM_EscapeN", &win) == 0) {
+    g_allow_interrupt_by_char_escape_n[char_id] = win;
+  }
+
   // Jab lifecycle command windows (x2218_b1/x2218_b2 ownership).
   //
   // Decomp:
@@ -1671,6 +1686,23 @@ uint8_t move_tables_grounded_attack_allow_interrupt(uint8_t char_id, uint16_t gr
   // Decomp: grounded Attack* input callbacks gate on fp->allow_interrupt.
   // refs/melee/src/melee/ft/chara/ftCommon/{ftCo_AttackDash.c,ftCo_AttackS3.c,ftCo_AttackHi3.c,ftCo_AttackHi4.c,ftCo_AttackLw4.c}
   // Source: command-script `allow_interrupt` events in data/moves/{fox,falco}.json.
+  return (cur_anim_frame_f32 >= (float)win.start_af && cur_anim_frame_f32 < (float)win.end_af) ? 1
+                                                                                               : 0;
+}
+
+uint8_t move_tables_escape_allow_interrupt(uint8_t char_id, uint16_t action_id,
+                                           float cur_anim_frame_f32) {
+  if (action_id != (uint16_t)MSL_ACT_ESCAPE_N) {
+    return 0;
+  }
+
+  const MslFrameWindow win = g_allow_interrupt_by_char_escape_n[char_id];
+  if (!win.loaded) {
+    return 0;
+  }
+
+  // Decomp: command-script allow_interrupt writes fp->allow_interrupt at runtime.
+  // refs/melee/src/melee/ft/ftaction.c::ftAction_80071950
   return (cur_anim_frame_f32 >= (float)win.start_af && cur_anim_frame_f32 < (float)win.end_af) ? 1
                                                                                                : 0;
 }
