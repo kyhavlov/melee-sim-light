@@ -150,6 +150,7 @@ def test_source_clear_terminal_phase_target_pm1_both_players_strict_lock(
 
     # Terminal x18C8 row with modeled defer-phase bridge active.
     assert int(seed["source_clear_timer_x18c8"][victim]) == 1, case.note
+    assert int(seed["source_clear_owner_set_phase"][victim]) == 1, case.note
     assert int(seed["source_clear_terminal_phase"][victim]) == 1, case.note
     assert int(seed["last_hit_by"][victim]) == int(case.expect_owner), case.note
     assert int(ref["last_hit_by"][victim]) == int(case.expect_owner), case.note

@@ -112,6 +112,17 @@ typedef struct MslStateSoA {
   // refs/melee/src/melee/ft/fighter.c::{Fighter_ChangeMotionState,Fighter_8006A360}
   // refs/melee/src/melee/ft/types.h::MotionState (x9_b1)
   uint8_t* source_clear_timer_x18c8;
+  // Source-owner set phase lane for active x18C8 runs (causal seed lane).
+  // 0: active run has no observed source-owner set edge backing.
+  // 1: active run is backed by source-owner set edge context (6 -> owner).
+  // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm (last_hit_by lane)
+  uint8_t* source_clear_owner_set_phase;
+  // Grounded source-owner clear phase bridge (`ftCommon_800804FC` path).
+  // 0: no grounded clear-phase override.
+  // 1: consume grounded clear before x18C8 decrement for this one-step row.
+  // refs/melee/src/melee/ft/ftcommon.c::ftCommon_800804FC
+  // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm (last_hit_by lane)
+  uint8_t* source_clear_grounded_damage_clear_phase;
   // Terminal clear-phase bridge for source-owner identity (`dmg.x18C4_source_ply`) on
   // `source_clear_timer_x18c8 == 1` rows. One-step transient lane produced in dataset tooling.
   // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360

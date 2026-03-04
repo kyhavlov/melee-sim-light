@@ -62,6 +62,10 @@ static inline void clear_seed_owned_transients_post_frame(MslBatch* batch) {
       // refs/melee/src/melee/ft/ftaction.c::{ftAction_80071974,ftAction_80073354}
       batch->state.throw_pulse_consumed[idx] = 0u;
       batch->state.throw_pulse_crossed_prev_frame[idx] = 0u;
+      // `seed_t.source_clear_grounded_damage_clear_phase` is a one-step bridge for grounded
+      // source-owner clear ownership (`ftCommon_800804FC` path). Consume within this frame only.
+      // refs/melee/src/melee/ft/ftcommon.c::ftCommon_800804FC
+      batch->state.source_clear_grounded_damage_clear_phase[idx] = 0u;
       // `seed_t.source_clear_terminal_phase` is also one-step bridge ownership. Consume in
       // timers_update_post_anim(), then clear to prevent sticky carry in rollout frames.
       // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360

@@ -118,6 +118,16 @@ SEED_DTYPE = np.dtype(
         # - N>0: decomp timer value + 1
         # refs/melee/src/melee/ft/fighter.c::{Fighter_ChangeMotionState,Fighter_8006A360}
         ("source_clear_timer_x18c8", _arr("u1", MAX_PLAYERS)),
+        # Source-owner set phase lane for active x18C8 runs (strict-causal, t/t-1 only):
+        # - 0: active run has no observed source-owner set edge backing.
+        # - 1: active run is backed by a source-owner set edge (6 -> owner).
+        # refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm (last_hit_by lane)
+        ("source_clear_owner_set_phase", _arr("u1", MAX_PLAYERS)),
+        # Grounded source-owner clear phase bridge (`ftCommon_800804FC` path).
+        # - 0: no grounded clear-phase override.
+        # - 1: consume grounded clear before x18C8 decrement for this one-step row.
+        # refs/melee/src/melee/ft/ftcommon.c::ftCommon_800804FC
+        ("source_clear_grounded_damage_clear_phase", _arr("u1", MAX_PLAYERS)),
         # Terminal source-owner clear phase bridge for `source_clear_timer_x18c8 == 1` rows.
         # - 0: default terminal-clear behavior
         # - 1: defer terminal clear one frame

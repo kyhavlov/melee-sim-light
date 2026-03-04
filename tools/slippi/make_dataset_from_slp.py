@@ -339,6 +339,7 @@ def _load_source_clear_terminal_followup_tables(
     Source of truth:
     - data/moves/{fox,falco}.json moves["ftCo_SM_*"]["events"]
       - set_cmd_var(idx=0,value=1/0)
+      - clear_hitboxes (for AttackHi3 continuation cutoff)
     - extracted from fighter subaction scripts in Pl*.dat.
     refs/melee/src/melee/ft/ftaction.c::ftAction_80071974
     """
@@ -348,6 +349,7 @@ def _load_source_clear_terminal_followup_tables(
         0x0041: "ftCo_SM_AttackAirN",
         0x0045: "ftCo_SM_AttackAirLw",
         0x00EC: "ftCo_SM_EscapeAir",
+        0x0038: "ftCo_SM_AttackHi3",
     }
     cmd0_on_by_char_action: dict[tuple[int, int], int] = {}
     cmd0_off_by_char_action: dict[tuple[int, int], int] = {}
@@ -369,6 +371,16 @@ def _load_source_clear_terminal_followup_tables(
                 and int((ev.get("data") or {}).get("idx", -1)) == 0
                 and int((ev.get("data") or {}).get("value", -1)) == 0
             )
+            if int(action_id) == 0x0038 and not cmd0_off:
+                # AttackHi3 has no cmd_var[0] phase flags in extracted script events.
+                # Use first clear_hitboxes frame as a data-backed continuation cutoff:
+                # allow terminal defer only before hitbox clear.
+                # data/moves/{fox,falco}.json moves["ftCo_SM_AttackHi3"]["events"]
+                # refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackHi3.c
+                clear_hitboxes = sorted(
+                    int(ev.get("frame", 0)) for ev in events if ev.get("kind") == "clear_hitboxes"
+                )
+                cmd0_off = clear_hitboxes
             cmd0_on_by_char_action[(int(char_id), int(action_id))] = int(cmd0_on[0]) if cmd0_on else -1
             cmd0_off_by_char_action[(int(char_id), int(action_id))] = (
                 int(cmd0_off[0]) if cmd0_off else -1
@@ -400,7 +412,7 @@ def _load_action_x9_b1_tables(*, data_root) -> dict[int, np.ndarray]:
     return out
 
 
-def _derive_source_clear_timer_x18c8_seed_lane(
+def _derive_source_clear_timer_x18c8_and_owner_phase_seed_lanes(
     *,
     action_id_u16: np.ndarray,
     char_id_u8: np.ndarray,
@@ -409,8 +421,8 @@ def _derive_source_clear_timer_x18c8_seed_lane(
     last_hit_by_u8: np.ndarray,
     x9_b1_by_char: dict[int, np.ndarray],
     source_clear_init_frames: int,
-) -> np.ndarray:
-    """Derive +1-biased `fp->dmg.x18C8` countdown strictly causally.
+) -> tuple[np.ndarray, np.ndarray]:
+    """Derive strictly-causal x18C8 countdown + owner-set phase lane.
 
     Decomp ownership:
     - Fighter_ChangeMotionState seeds `dmg.x18C8 = p_ftCommonData->x814` iff
@@ -422,8 +434,20 @@ def _derive_source_clear_timer_x18c8_seed_lane(
     refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm (state_flags byte at fp+0x221F)
 
     Seed representation:
-    - 0 => inactive (decomp internal -1)
-    - N>0 => decomp internal countdown + 1
+    - timer lane:
+      - 0 => inactive (decomp internal -1)
+      - N>0 => decomp internal countdown + 1
+    - owner phase lane:
+      - 0 => current active x18C8 run was not preceded by a causal source-owner set edge.
+      - 1 => current active x18C8 run was preceded by a source-owner set edge (t-1 -> t).
+
+    Owner-set edge model (strictly causal):
+    - Slippi `last_hit_by` mirrors `dmg.x18C4_source_ply` snapshots.
+    - Treat 6 -> owner transitions as source-owner acquire edges.
+    - Carry that edge as pending context until owner is cleared back to 6; when x18C8 starts,
+      mark the active run as edge-backed only if a pending edge exists.
+    refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm (last_hit_by lane)
+    refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState
     """
     a = np.asarray(action_id_u16, dtype=np.uint16).reshape(-1)
     c = np.asarray(char_id_u8, dtype=np.uint8).reshape(-1)
@@ -436,7 +460,8 @@ def _derive_source_clear_timer_x18c8_seed_lane(
     if sf.ndim != 2 or int(sf.shape[0]) != n or int(sf.shape[1]) < 5:
         raise ValueError("source_clear_timer derivation requires state_flags_u8 shape [n,5]")
 
-    out = np.zeros(n, dtype=np.uint8)
+    out_timer = np.zeros(n, dtype=np.uint8)
+    out_owner_phase = np.zeros(n, dtype=np.uint8)
     # Decomp uses signed int timer with -1 as inactive sentinel.
     timer = -1
     init_frames = int(np.clip(int(source_clear_init_frames), 0, 255))
@@ -446,33 +471,153 @@ def _derive_source_clear_timer_x18c8_seed_lane(
     STATE_FLAGS_221F_INDEX = 4
     STATE_FLAG_221F_B3_MASK = 0x10
 
+    owner_set_edge_pending = 0
+    owner_phase_active = 0
     for i in range(n):
         cur_a = int(a[i])
         cur_c = int(c[i])
         cur_grounded = int(g[i]) != 0
         cur_221f_b3 = (int(sf[i, STATE_FLAGS_221F_INDEX]) & STATE_FLAG_221F_B3_MASK) != 0
+        cur_src = int(src[i])
+        source_set_edge = i > 0 and int(src[i - 1]) == 6 and cur_src != 6
+        if source_set_edge:
+            owner_set_edge_pending = 1
+
         if i > 0 and cur_a != int(a[i - 1]):
             x9_b1 = 0
             tbl = x9_b1_by_char.get(cur_c)
             if tbl is not None and cur_a >= 0 and cur_a < int(tbl.shape[0]):
                 x9_b1 = int(tbl[cur_a])
-            if cur_grounded and x9_b1 != 0 and timer < 0 and int(src[i]) != 6:
+            if cur_grounded and x9_b1 != 0 and timer < 0 and cur_src != 6:
                 timer = init_frames
+                owner_phase_active = 1 if owner_set_edge_pending != 0 else 0
 
         # Decomp reset owner path:
         # - ftCommon_800804FC clears x18c4_source_ply to 6 and sets x18C8 to -1 on grounded paths.
         # refs/melee/src/melee/ft/ftcommon.c::ftCommon_800804FC
-        if int(src[i]) == 6:
+        if cur_src == 6:
             timer = -1
+            owner_set_edge_pending = 0
+            owner_phase_active = 0
 
         # Fighter_8006A360 ownership is gated by !fp->x221F_b3.
         if (not cur_221f_b3) and timer >= 0:
             timer -= 1
 
         if timer >= 0:
-            out[i] = np.uint8(min(timer + 1, 255))
+            out_timer[i] = np.uint8(min(timer + 1, 255))
+            out_owner_phase[i] = np.uint8(1 if owner_phase_active != 0 else 0)
         else:
-            out[i] = np.uint8(0)
+            out_timer[i] = np.uint8(0)
+            out_owner_phase[i] = np.uint8(0)
+            owner_phase_active = 0
+
+    return out_timer, out_owner_phase
+
+
+def _derive_source_clear_grounded_damage_clear_phase_seed_lane(
+    *,
+    action_id_u16: np.ndarray,
+    action_frame_i16: np.ndarray,
+    on_ground_u8: np.ndarray,
+    hitlag_u16: np.ndarray,
+    hitstun_u16: np.ndarray,
+    combo_count_u8: np.ndarray,
+    source_clear_timer_x18c8_u8: np.ndarray,
+    source_clear_owner_set_phase_u8: np.ndarray,
+    state_flags_u8: np.ndarray,
+    last_hit_by_u8: np.ndarray,
+) -> np.ndarray:
+    """Derive one-step grounded source-owner clear phase bridge.
+
+    Decomp ownership:
+    - ftCommon_800804FC clears source-owner and disables x18C8 on grounded paths.
+    - Fighter_ProcessHit ownership can invoke that grounded clear path before the next snapshot.
+    refs/melee/src/melee/ft/ftcommon.c::ftCommon_800804FC
+    refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
+    refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm (last_hit_by lane)
+
+    Seed representation:
+    - 0: no grounded clear-phase override.
+    - 1: consume grounded clear before x18C8 decrement for this one-step row.
+
+    Causality:
+    - Strictly causal: uses only t and (t-1 -> t) lanes.
+    """
+    action_id = np.asarray(action_id_u16, dtype=np.uint16).reshape(-1)
+    action_frame = np.asarray(action_frame_i16, dtype=np.int16).reshape(-1)
+    on_ground = np.asarray(on_ground_u8, dtype=np.uint8).reshape(-1)
+    hitlag = np.asarray(hitlag_u16, dtype=np.uint16).reshape(-1)
+    hitstun = np.asarray(hitstun_u16, dtype=np.uint16).reshape(-1)
+    combo_count = np.asarray(combo_count_u8, dtype=np.uint8).reshape(-1)
+    timer = np.asarray(source_clear_timer_x18c8_u8, dtype=np.uint8).reshape(-1)
+    owner_phase = np.asarray(source_clear_owner_set_phase_u8, dtype=np.uint8).reshape(-1)
+    sf = np.asarray(state_flags_u8, dtype=np.uint8)
+    src = np.asarray(last_hit_by_u8, dtype=np.uint8).reshape(-1)
+    n = int(action_id.shape[0])
+    if (
+        int(action_frame.shape[0]) != n
+        or int(on_ground.shape[0]) != n
+        or int(hitlag.shape[0]) != n
+        or int(hitstun.shape[0]) != n
+        or int(combo_count.shape[0]) != n
+        or int(timer.shape[0]) != n
+        or int(owner_phase.shape[0]) != n
+        or int(src.shape[0]) != n
+    ):
+        raise ValueError("source_clear_grounded_damage_clear_phase derivation lanes must have equal lengths")
+    if sf.ndim != 2 or int(sf.shape[0]) != n or int(sf.shape[1]) < 5:
+        raise ValueError(
+            "source_clear_grounded_damage_clear_phase derivation requires state_flags_u8 shape [n,5]"
+        )
+
+    out = np.zeros(n, dtype=np.uint8)
+    STATE_FLAGS_221F_INDEX = 4
+    STATE_FLAG_221F_B3_MASK = 0x10
+    SOURCE_NONE = 6
+    # Grounded locomotion transition subset where source-owner clear can hand off to grounded
+    # ProcessHit ownership in the same frame:
+    # - WalkMiddle -> Wait entry (combo context already ended),
+    # - WalkSlow -> Dash entry at terminal timer tick.
+    # refs/melee/src/melee/ft/chara/ftCommon/{ftCo_Walk.c,ftCo_Dash.c,ftCo_Wait.c}
+    # refs/melee/src/melee/ft/ftcommon.c::ftCommon_800804FC
+    ACT_WAIT = 0x000E  # ftCo_MS_Wait
+    ACT_WALK_SLOW = 0x000F  # ftCo_MS_WalkSlow
+    ACT_WALK_MIDDLE = 0x0010  # ftCo_MS_WalkMiddle
+    ACT_DASH = 0x0014  # ftCo_MS_Dash
+    for i in range(1, n):
+        if int(src[i]) >= SOURCE_NONE:
+            continue
+        if int(timer[i]) == 0 or int(owner_phase[i]) == 0:
+            continue
+        if int(hitlag[i]) != 0 or int(hitstun[i]) != 0:
+            continue
+        if (int(sf[i, STATE_FLAGS_221F_INDEX]) & STATE_FLAG_221F_B3_MASK) != 0:
+            continue
+        if int(on_ground[i]) == 0:
+            continue
+        cur_act = int(action_id[i])
+        prev_act = int(action_id[i - 1])
+        cur_af = int(action_frame[i])
+        # Rule A: WalkMiddle -> Wait grounded handoff after combo context ended.
+        if (
+            prev_act == ACT_WALK_MIDDLE
+            and cur_act == ACT_WAIT
+            and cur_af == 0
+            and int(combo_count[i]) == 0
+            and int(timer[i - 1]) == int(timer[i]) + 1
+        ):
+            out[i] = np.uint8(1)
+            continue
+        # Rule B: WalkSlow -> Dash grounded handoff on terminal timer tick.
+        if (
+            prev_act == ACT_WALK_SLOW
+            and cur_act == ACT_DASH
+            and cur_af == 1
+            and int(timer[i]) == 1
+            and int(timer[i - 1]) == 2
+        ):
+            out[i] = np.uint8(1)
 
     return out
 
@@ -487,6 +632,7 @@ def _derive_source_clear_terminal_phase_seed_lane(
     combo_count_u8: np.ndarray,
     last_attack_landed_u8: np.ndarray,
     source_clear_timer_x18c8_u8: np.ndarray,
+    source_clear_owner_set_phase_u8: np.ndarray,
     state_flags_u8: np.ndarray,
     last_hit_by_u8: np.ndarray,
     terminal_followup_cmd0_on_by_char_action: dict[tuple[int, int], int],
@@ -506,6 +652,7 @@ def _derive_source_clear_terminal_phase_seed_lane(
 
     Producer policy (narrow, replay-causal):
     - only on terminal timer rows (`t == 1`) under !x221F_b3,
+    - only when the active timer run is backed by a causal source-owner set phase edge,
     - only from present/past lanes (`t` and `t-1`), never future frames,
     - and only while fighter is in decomp-defined down/passive recovery states,
     - and only in stable ongoing ownership context:
@@ -525,6 +672,7 @@ def _derive_source_clear_terminal_phase_seed_lane(
     combo_count = np.asarray(combo_count_u8, dtype=np.uint8).reshape(-1)
     last_attack_landed = np.asarray(last_attack_landed_u8, dtype=np.uint8).reshape(-1)
     timer = np.asarray(source_clear_timer_x18c8_u8, dtype=np.uint8).reshape(-1)
+    owner_phase = np.asarray(source_clear_owner_set_phase_u8, dtype=np.uint8).reshape(-1)
     sf = np.asarray(state_flags_u8, dtype=np.uint8)
     src = np.asarray(last_hit_by_u8, dtype=np.uint8).reshape(-1)
     n = int(timer.shape[0])
@@ -537,6 +685,7 @@ def _derive_source_clear_terminal_phase_seed_lane(
         or int(hitstun.shape[0]) != n
         or int(combo_count.shape[0]) != n
         or int(last_attack_landed.shape[0]) != n
+        or int(owner_phase.shape[0]) != n
     ):
         raise ValueError("source_clear_terminal_phase derivation lanes must have equal lengths")
     if sf.ndim != 2 or int(sf.shape[0]) != n or int(sf.shape[1]) < 5:
@@ -566,6 +715,12 @@ def _derive_source_clear_terminal_phase_seed_lane(
     ACT_GUARD = 0x00B3  # ftCo_MS_Guard
     ACT_ESCAPE_AIR = 0x00EC  # ftCo_MS_EscapeAir
     ACT_FOX_FALCO_SPECIAL_AIR_S_START = 0x015E  # ftFx_MS_SpecialAirSStart
+    ACT_TURN = 0x0012  # ftCo_MS_Turn
+    ACT_KNEE_BEND = 0x0018  # ftCo_MS_KneeBend
+    ACT_JUMP_F = 0x0019  # ftCo_MS_JumpF
+    ACT_JUMP_B = 0x001A  # ftCo_MS_JumpB
+    ACT_SQUAT = 0x0027  # ftCo_MS_Squat
+    ACT_ATTACK_HI3 = 0x0038  # ftCo_MS_AttackHi3
     DOWN_PASSIVE_RECOVERY_ACTIONS = {
         0x000E,  # ftCo_MS_Wait
         ACT_GUARD,
@@ -597,14 +752,54 @@ def _derive_source_clear_terminal_phase_seed_lane(
         ACT_ATTACK_AIR_LW,
         ACT_ESCAPE_AIR,
     }
+    # Additional terminal continuation actions reached from grounded common IASA/transition flow
+    # while source-owner clear countdown ownership is still callback-owned.
+    # refs/melee/src/melee/ft/chara/ftCommon/{ftCo_Wait.c,ftCo_Turn.c,ftCo_Jump.c,ftCo_Squat.c,ftCo_AttackHi3.c}
+    # refs/melee/src/melee/ft/chara/ftCommon/forward.h
+    TERMINAL_CONTINUATION_ACTIONS = {
+        ACT_TURN,
+        ACT_KNEE_BEND,
+        ACT_JUMP_F,
+        ACT_JUMP_B,
+        ACT_SQUAT,
+        ACT_ATTACK_HI3,
+    }
     for i in range(n):
         if i == 0:
             continue
         if int(timer[i]) != 1:
             continue
         act = int(action_id[i])
-        if act not in DOWN_PASSIVE_RECOVERY_ACTIONS and act not in TERMINAL_FOLLOWUP_ACTIONS:
+        if (
+            act not in DOWN_PASSIVE_RECOVERY_ACTIONS
+            and act not in TERMINAL_FOLLOWUP_ACTIONS
+            and act not in TERMINAL_CONTINUATION_ACTIONS
+        ):
             continue
+        if act in TERMINAL_CONTINUATION_ACTIONS and int(owner_phase[i]) == 0:
+            continue
+        cur_af = int(action_frame[i])
+        if act == ACT_JUMP_F:
+            # Common jump-forward continuation under callback-owned source-clear phase:
+            # keep only mid-window JumpF progression rows where terminal ownership persistence
+            # is observed in replay-causal rows.
+            # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c::{ftCo_Jump_Anim,ftCo_Jump_IASA}
+            if cur_af < 10 or cur_af > 20:
+                continue
+        elif act == ACT_JUMP_B:
+            # Jump-back continuation appears only in late airborne progression for this lane.
+            # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c::{ftCo_Jump_Anim,ftCo_Jump_IASA}
+            if cur_af < 30:
+                continue
+        elif act == ACT_KNEE_BEND:
+            # Keep KneeBend continuation at takeoff crossover only.
+            # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c::ftCo_KneeBend_Anim
+            if cur_af != 1:
+                continue
+            # fp+0x221E lane carries jump-transition side bits in this crossover snapshot.
+            # refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm (state_flags lane)
+            if (int(sf[i, 3]) & 0x60) == 0:
+                continue
         owner = int(src[i])
         if owner >= SOURCE_NONE:
             continue
@@ -612,21 +807,33 @@ def _derive_source_clear_terminal_phase_seed_lane(
             continue
         # Combo provenance normally guards this bridge to active hit ownership contexts
         # (ftColl combo counters), but side-B end can keep source-owner continuity through
-        # terminal timer rows even when combo counters are zero in replay snapshots.
+        # terminal timer rows even when combo counters are zero in replay snapshots. The same
+        # applies to narrow jump-continuation rows where source-owner set phase ownership is
+        # still active through the terminal countdown tick.
         # refs/melee/src/melee/ft/ftcoll.c::ftColl_800764DC
         # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c
+        # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c::ftCo_Jump_Anim
         if int(combo_count[i]) == 0 or int(last_attack_landed[i]) == 0:
             if act not in (
                 ACT_FOX_FALCO_SPECIAL_AIR_S_START,
                 ACT_ATTACK_AIR_LW,
+                ACT_KNEE_BEND,
+                ACT_JUMP_F,
+                ACT_JUMP_B,
             ):
+                continue
+            if act in (ACT_KNEE_BEND, ACT_JUMP_F, ACT_JUMP_B) and int(last_attack_landed[i]) == 0:
                 continue
         if (int(sf[i, STATE_FLAGS_221F_INDEX]) & STATE_FLAG_221F_B3_MASK) != 0:
             continue
         # Guard hold keeps shield-state bits in 0x221A/0x221B while still running under the same
         # terminal source-owner tick ordering.
         # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c
-        if act != ACT_GUARD and (int(sf[i, 1]) != 0 or int(sf[i, 2]) != 0):
+        if (
+            act != ACT_GUARD
+            and act not in TERMINAL_CONTINUATION_ACTIONS
+            and (int(sf[i, 1]) != 0 or int(sf[i, 2]) != 0)
+        ):
             continue
         # Strictly-causal continuity guard (t-1 -> t):
         # - countdown is in terminal progression from 2 to 1
@@ -637,21 +844,25 @@ def _derive_source_clear_terminal_phase_seed_lane(
         if int(src[i - 1]) != owner:
             continue
         prev_act = int(action_id[i - 1])
-        cur_af = int(action_frame[i])
         prev_af = int(action_frame[i - 1])
         same_action_progress = (act == prev_act and cur_af == prev_af + 1)
         guard_hold_progress = (act == ACT_GUARD and prev_act == ACT_GUARD and cur_af == -1 and prev_af == -1)
-        if not (same_action_progress or guard_hold_progress):
+        continuation_entry_progress = (
+            act in TERMINAL_CONTINUATION_ACTIONS and cur_af == 1 and prev_af >= 0
+        )
+        if not (same_action_progress or guard_hold_progress or continuation_entry_progress):
             continue
-        # Followup actions use extracted cmd_var[0] script phase gates instead of hardcoded
+        # Followup actions use extracted script phase gates instead of hardcoded
         # action-frame windows:
         # - AttackAirN defer only before first cmd_var[0]=1 startup tick.
         # - EscapeAir defer only before cmd_var[0]=1 (cmd_skip_decay) is set.
         # - AttackAirLw defer only before cmd_var[0]=0 clear and under active combo provenance.
+        # - AttackHi3 continuation defer only before extracted clear_hitboxes cutoff.
         # refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c
+        # refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackHi3.c
         # refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::cmd_skip_decay
         # refs/melee/src/melee/ft/ftaction.c::ftAction_80071974
-        if act in TERMINAL_FOLLOWUP_ACTIONS:
+        if act in TERMINAL_FOLLOWUP_ACTIONS or act == ACT_ATTACK_HI3:
             cid = int(char_id[i])
             cmd0_on = int(terminal_followup_cmd0_on_by_char_action.get((cid, act), -1))
             cmd0_off = int(terminal_followup_cmd0_off_by_char_action.get((cid, act), -1))
@@ -665,6 +876,9 @@ def _derive_source_clear_terminal_phase_seed_lane(
                 if cmd0_off < 0 or cur_af >= cmd0_off:
                     continue
                 if int(combo_count[i]) != 0:
+                    continue
+            elif act == ACT_ATTACK_HI3:
+                if cmd0_off < 0 or cur_af >= cmd0_off:
                     continue
         out[i] = np.uint8(1)
     return out
@@ -1699,6 +1913,8 @@ def _main_impl(args) -> None:
         # Throw pulse-consume seed lane is filled after item materialization from full seed_t arrays.
         samples["seed_t"]["throw_pulse_consumed"][:, slot] = 0
         samples["seed_t"]["throw_pulse_crossed_prev_frame"][:, slot] = 0
+        samples["seed_t"]["source_clear_owner_set_phase"][:, slot] = 0
+        samples["seed_t"]["source_clear_grounded_damage_clear_phase"][:, slot] = 0
         samples["seed_t"]["source_clear_terminal_phase"][:, slot] = 0
         # fp+0x2340 AttackDash lane (decomp-backed targeted ownership seed):
         # - mv.co.attackdash.x0 is consumed by ftCo_800D8AE0 during AttackDash IASA.
@@ -1788,16 +2004,33 @@ def _main_impl(args) -> None:
         samples["ref_t1"]["hitlag"][:, slot] = post_hitlag[1:]
         samples["seed_t"]["hitstun"][:, slot] = post_hitstun[:-1]
         samples["ref_t1"]["hitstun"][:, slot] = post_hitstun[1:]
-        source_clear_timer_x18c8 = _derive_source_clear_timer_x18c8_seed_lane(
-            action_id_u16=post_state,
-            char_id_u8=post_char,
-            on_ground_u8=post_on_ground,
-            state_flags_u8=state_flags,
-            last_hit_by_u8=last_hit_by,
-            x9_b1_by_char=action_x9_b1_by_char,
-            source_clear_init_frames=source_clear_x18c8_init_frames,
+        source_clear_timer_x18c8, source_clear_owner_set_phase = (
+            _derive_source_clear_timer_x18c8_and_owner_phase_seed_lanes(
+                action_id_u16=post_state,
+                char_id_u8=post_char,
+                on_ground_u8=post_on_ground,
+                state_flags_u8=state_flags,
+                last_hit_by_u8=last_hit_by,
+                x9_b1_by_char=action_x9_b1_by_char,
+                source_clear_init_frames=source_clear_x18c8_init_frames,
+            )
         )
         samples["seed_t"]["source_clear_timer_x18c8"][:, slot] = source_clear_timer_x18c8[:-1]
+        samples["seed_t"]["source_clear_owner_set_phase"][:, slot] = source_clear_owner_set_phase[:-1]
+        samples["seed_t"]["source_clear_grounded_damage_clear_phase"][:, slot] = (
+            _derive_source_clear_grounded_damage_clear_phase_seed_lane(
+                action_id_u16=post_state,
+                action_frame_i16=post_state_age,
+                on_ground_u8=post_on_ground,
+                hitlag_u16=post_hitlag,
+                hitstun_u16=post_hitstun,
+                combo_count_u8=combo_count,
+                source_clear_timer_x18c8_u8=source_clear_timer_x18c8,
+                source_clear_owner_set_phase_u8=source_clear_owner_set_phase,
+                state_flags_u8=state_flags,
+                last_hit_by_u8=last_hit_by,
+            )[:-1]
+        )
         samples["seed_t"]["source_clear_terminal_phase"][:, slot] = (
             _derive_source_clear_terminal_phase_seed_lane(
                 char_id_u8=post_char,
@@ -1808,6 +2041,7 @@ def _main_impl(args) -> None:
                 combo_count_u8=combo_count,
                 last_attack_landed_u8=last_attack_landed,
                 source_clear_timer_x18c8_u8=source_clear_timer_x18c8,
+                source_clear_owner_set_phase_u8=source_clear_owner_set_phase,
                 state_flags_u8=state_flags,
                 last_hit_by_u8=last_hit_by,
                 terminal_followup_cmd0_on_by_char_action=source_clear_followup_cmd0_on_by_char_action,

@@ -210,6 +210,32 @@ typedef struct MslSeed {
   // - 0: inactive (decomp internal is -1)
   // - N>0: decomp internal countdown value + 1
   uint8_t source_clear_timer_x18c8[MSL_MAX_PLAYERS];
+  // Source-owner set phase lane for active x18C8 runs.
+  //
+  // Causal ownership model:
+  // - Slippi `last_hit_by` mirrors `dmg.x18C4_source_ply`.
+  // - Mark an x18C8 run as phase-backed only when a source-owner acquire edge
+  //   (6 -> owner) has been observed in the causal prefix before that run.
+  // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm (last_hit_by lane)
+  // refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState
+  //
+  // Seed representation:
+  // - 0: active run has no observed owner-set edge backing.
+  // - 1: active run is backed by owner-set edge context.
+  uint8_t source_clear_owner_set_phase[MSL_MAX_PLAYERS];
+  // Grounded damage-clear phase bridge for source-owner clear (`ftCommon_800804FC` path).
+  //
+  // Decomp ownership context:
+  // - ftCommon_800804FC clears source-owner (`dmg.x18C4_source_ply = 6`) and disables x18C8
+  //   countdown (`dmg.x18C8 = -1`) on grounded paths.
+  // refs/melee/src/melee/ft/ftcommon.c::ftCommon_800804FC
+  // refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
+  // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm (last_hit_by lane)
+  //
+  // Producer (tools/slippi/make_dataset_from_slp.py):
+  // - 0: no grounded clear-phase override on this row.
+  // - 1: consume grounded clear before x18C8 decrement for this one-step row.
+  uint8_t source_clear_grounded_damage_clear_phase[MSL_MAX_PLAYERS];
   // Terminal source-clear phase bridge for `dmg.x18C8 == 0` rows (one-step transient).
   //
   // Decomp ownership context:

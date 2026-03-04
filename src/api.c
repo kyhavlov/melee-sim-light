@@ -413,6 +413,9 @@ int msl_batch_reseed_seed(MslBatch* batch, const uint8_t* seed_bytes, size_t see
       // Previous-step throw pulse crossing lane (strictly causal seed producer).
       batch->state.throw_pulse_crossed_prev_frame[idx] = seed->throw_pulse_crossed_prev_frame[p];
       batch->state.source_clear_timer_x18c8[idx] = seed->source_clear_timer_x18c8[p];
+      batch->state.source_clear_owner_set_phase[idx] = seed->source_clear_owner_set_phase[p] ? 1u : 0u;
+      batch->state.source_clear_grounded_damage_clear_phase[idx] =
+          seed->source_clear_grounded_damage_clear_phase[p] ? 1u : 0u;
       batch->state.source_clear_terminal_phase[idx] = seed->source_clear_terminal_phase[p] ? 1u : 0u;
       batch->state.match_flow_timer[idx] = seed->match_flow_timer[p];
       batch->state.downwait_timer[idx] = seed->downwait_timer[p];

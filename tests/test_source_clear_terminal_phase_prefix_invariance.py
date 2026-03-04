@@ -19,6 +19,7 @@ def test_source_clear_terminal_phase_prefix_invariance_suffix_mutation() -> None
     combo_count = np.ones(n, dtype=np.uint8)
     last_attack_landed = np.full(n, 15, dtype=np.uint8)
     source_clear_timer = np.array([3, 2, 1, 0, 0, 2, 1, 0], dtype=np.uint8)
+    source_owner_set_phase = np.array([1, 1, 1, 0, 0, 1, 1, 0], dtype=np.uint8)
     state_flags = np.zeros((n, 5), dtype=np.uint8)
     last_hit_by = np.array([1, 1, 1, 6, 6, 0, 0, 6], dtype=np.uint8)
 
@@ -31,6 +32,7 @@ def test_source_clear_terminal_phase_prefix_invariance_suffix_mutation() -> None
         combo_count_u8=combo_count,
         last_attack_landed_u8=last_attack_landed,
         source_clear_timer_x18c8_u8=source_clear_timer,
+        source_clear_owner_set_phase_u8=source_owner_set_phase,
         state_flags_u8=state_flags,
         last_hit_by_u8=last_hit_by,
         terminal_followup_cmd0_on_by_char_action={(1, 0x0041): 4, (1, 0x0045): 5, (1, 0x00EC): 30},
@@ -46,6 +48,7 @@ def test_source_clear_terminal_phase_prefix_invariance_suffix_mutation() -> None
     mut_combo_count = combo_count.copy()
     mut_last_attack_landed = last_attack_landed.copy()
     mut_source_clear_timer = source_clear_timer.copy()
+    mut_source_owner_set_phase = source_owner_set_phase.copy()
     mut_state_flags = state_flags.copy()
     mut_last_hit_by = last_hit_by.copy()
 
@@ -56,6 +59,7 @@ def test_source_clear_terminal_phase_prefix_invariance_suffix_mutation() -> None
     mut_combo_count[cutoff:] = np.array([1, 0, 1], dtype=np.uint8)
     mut_last_attack_landed[cutoff:] = np.array([12, 0, 12], dtype=np.uint8)
     mut_source_clear_timer[cutoff:] = np.array([2, 1, 0], dtype=np.uint8)
+    mut_source_owner_set_phase[cutoff:] = np.array([1, 1, 0], dtype=np.uint8)
     mut_state_flags[cutoff:, 1] = np.array([0, 8, 0], dtype=np.uint8)
     mut_last_hit_by[cutoff:] = np.array([0, 0, 6], dtype=np.uint8)
 
@@ -68,6 +72,7 @@ def test_source_clear_terminal_phase_prefix_invariance_suffix_mutation() -> None
         combo_count_u8=mut_combo_count,
         last_attack_landed_u8=mut_last_attack_landed,
         source_clear_timer_x18c8_u8=mut_source_clear_timer,
+        source_clear_owner_set_phase_u8=mut_source_owner_set_phase,
         state_flags_u8=mut_state_flags,
         last_hit_by_u8=mut_last_hit_by,
         terminal_followup_cmd0_on_by_char_action={(1, 0x0041): 4, (1, 0x0045): 5, (1, 0x00EC): 30},
