@@ -153,6 +153,52 @@ static inline uint8_t clamp_inc_u8_ff(uint8_t prev) {
   return (uint8_t)t;
 }
 
+int input_apply_pre_input_snapshot(MslBatch* batch, const uint8_t* prev_input_bytes,
+                                   size_t prev_input_stride_bytes) {
+  if (batch == NULL) {
+    return EINVAL;
+  }
+  if (prev_input_bytes == NULL) {
+    return EINVAL;
+  }
+  if (prev_input_stride_bytes < sizeof(MslInput)) {
+    return EINVAL;
+  }
+
+  for (int bi = 0; bi < batch->batch_size; bi++) {
+    const uint8_t* prev_ptr = prev_input_bytes + (size_t)bi * prev_input_stride_bytes;
+    const MslInput* prev = (const MslInput*)prev_ptr;
+
+    for (int p = 0; p < MSL_MAX_PLAYERS; p++) {
+      const size_t idx = msl_idx_player(bi, p);
+      const uint16_t prev_buttons = prev->p[p].buttons;
+
+      // Decomp ownership: prio1 callbacks run before Fighter_procUpdate input_cb (prio3), so
+      // pre-input gameplay should see prior-frame input state.
+      // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A360,Fighter_procUpdate}
+      batch->state.prev_input_buttons[idx] = prev_buttons;
+      batch->state.input_buttons[idx] = prev_buttons;
+      batch->state.input_buttons_pressed[idx] = 0u;
+      batch->state.input_buttons_released[idx] = 0u;
+
+      batch->state.prev_input_main_x[idx] = prev->p[p].main_x;
+      batch->state.prev_input_main_y[idx] = prev->p[p].main_y;
+      batch->state.input_main_x[idx] = prev->p[p].main_x;
+      batch->state.input_main_y[idx] = prev->p[p].main_y;
+      batch->state.prev_input_c_x[idx] = prev->p[p].c_x;
+      batch->state.prev_input_c_y[idx] = prev->p[p].c_y;
+      batch->state.input_c_x[idx] = prev->p[p].c_x;
+      batch->state.input_c_y[idx] = prev->p[p].c_y;
+
+      batch->state.prev_input_l[idx] = prev->p[p].l;
+      batch->state.prev_input_r[idx] = prev->p[p].r;
+      batch->state.input_l[idx] = prev->p[p].l;
+      batch->state.input_r[idx] = prev->p[p].r;
+    }
+  }
+  return 0;
+}
+
 int input_apply(MslBatch* batch, const uint8_t* prev_input_bytes, size_t prev_input_stride_bytes,
                 const uint8_t* input_bytes, size_t input_stride_bytes) {
   if (batch == NULL) {

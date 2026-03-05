@@ -6,6 +6,7 @@
 #include "action_ids.h"
 #include "anim_table.h"
 #include "attack_id_tables.h"
+#include "buttons.h"
 #include "char_params.h"
 #include "combat.h"
 #include "common_params.h"
@@ -370,14 +371,28 @@ void anim_timebase_update_pre_input(MslBatch* batch) {
       // - Smash family hold lanes in GALE01 use A-held gating before the hitbox-onset window.
       // - In the Fox/Falco suite, AttackHi4/AttackLw4 rows with held A can remain at action_frame=2
       //   across consecutive frames before progressing into the startup/hitbox timeline.
+      // - Decomp input ownership: `fp->input.x668` is updated in Fighter_procUpdate (prio3), so
+      //   prio1 Anim callbacks use prior-frame input state.
       // refs/melee/src/melee/ft/ftattacks4combo.c::ftCo_800CECE8
+      // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A360,Fighter_procUpdate}
       // refs/melee/src/melee/ft/chara/ftCommon/{ftCo_AttackHi4.c,ftCo_AttackLw4.c}
       // data/moves/{fox,falco}.json::ftCo_SM_Attack{Hi4,Lw4}
       if ((a == (uint16_t)MSL_ACT_ATTACK_HI4 || a == (uint16_t)MSL_ACT_ATTACK_LW4) &&
           batch->state.on_ground[idx] != 0u && batch->state.hitstun[idx] == 0u &&
-          batch->state.hitlag[idx] == 0u && action_frame_pre == 2 &&
-          batch->state.x67C[idx] != 0u && batch->state.x67C[idx] <= 2u) {
-        batch->state.frame_speed_mul_fp_q16_16[idx] = 0;
+          batch->state.hitlag[idx] == 0u && action_frame_pre == 2) {
+        const uint8_t pre_input_a_held =
+            ((batch->state.input_buttons[idx] & (uint16_t)MSL_BUTTON_A) != 0u) ? 1u : 0u;
+        if (pre_input_a_held != 0u && batch->state.x67C[idx] != 0u && batch->state.x67C[idx] <= 2u) {
+          batch->state.frame_speed_mul_fp_q16_16[idx] = 0;
+        } else if (pre_input_a_held == 0u && batch->state.x67C[idx] > 2u &&
+                   batch->state.frame_speed_mul_fp_q16_16[idx] == 0) {
+          // Release bridge:
+          // - when prior-frame A is no longer held and post-press timer has advanced past the
+          //   initial press window, clear stale seeded hold-rate carry and resume default 1.0.
+          // refs/melee/src/melee/ft/ftattacks4combo.c::ftCo_800CECE8
+          // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A360,Fighter_procUpdate}
+          batch->state.frame_speed_mul_fp_q16_16[idx] = MSL_Q16_16_ONE;
+        }
       }
 
       // CaptureWait Anim-rate ownership bridge:

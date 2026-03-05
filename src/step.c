@@ -145,12 +145,22 @@ static int step_one_frame_core(MslBatch* batch, const uint8_t* prev_input_bytes,
   if (batch == NULL) {
     return EINVAL;
   }
+  int err = 0;
 
   combat_rng_trace_begin_frame(batch);
 
   clear_landing_transients(batch);
   cache_prev_action_state(batch);
   cache_guard_reflect_timer_seed_snapshots(batch);
+
+  // Decomp callback ordering: pre-input anim callbacks (prio1) run before input_cb (prio3), so
+  // snapshot prior-frame inputs for pre-input gameplay ownership.
+  // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A360,Fighter_procUpdate}
+  err = input_apply_pre_input_snapshot(batch, prev_input_bytes, prev_input_stride_bytes);
+  if (err != 0) {
+    combat_rng_trace_end_frame(batch);
+    return err;
+  }
 
   // The exact ordering here is a major correctness lever. Keep it explicit and easy to reorder.
   //
@@ -200,7 +210,6 @@ static int step_one_frame_core(MslBatch* batch, const uint8_t* prev_input_bytes,
   // Decomp-shaped "ProcessHit" consume / cleanup (see combat_processhit_consume for references).
   combat_processhit_consume(batch);
 
-  int err = 0;
   err = input_apply(batch, prev_input_bytes, prev_input_stride_bytes, input_bytes,
                     input_stride_bytes);
   if (err != 0) {
