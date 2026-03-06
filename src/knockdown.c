@@ -712,20 +712,30 @@ void knockdown_update_pre_physics(MslBatch* batch) {
         if (damage_msid_u32 <= 0xFFFFu) {
           anim_done = anim_is_finished(cid, (uint16_t)damage_msid_u32, anim_frame);
         }
-        if (anim_done && !in_hitstun) {
+        if (anim_done && !in_hitstun && !iasa_locked) {
           const uint16_t x14 = batch->state.damage_jump_buffer_x14[idx];
           const uint8_t gate_open =
               (x14 != 0u && (float)x14 <= c->damage_jump_buffer_window_frames) ? 1u : 0u;
           // Decomp: Damage_Anim checks the inlineC0 jump-buffer gate first.
           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_Anim
           if (!(gate_open && damage_air_try_jump_aerial(batch, c, ch, idx, 1u))) {
-            // Decomp: Damage_Anim enters Fall via ftCo_Fall_Enter when anim/hitstun gates clear.
-            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_Anim
-            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_Enter
-            //
-            // ftCo_Fall_Enter does not call ftAnim_8006EBA4, so keep the previous DamageAir pose
-            // for this frame's collision/hurtbox updates and commit Fall animation/timebase later.
-            batch->state.action_id[idx] = (uint16_t)MSL_ACT_FALL;
+            if (batch->state.on_ground[idx] != 0u) {
+              // Decomp grounded branch:
+              // - ftCo_Damage_Anim enters Wait on anim end when ground_or_air == GA_Ground and
+              //   x221C_b6 is clear.
+              // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_Anim
+              // refs/melee/src/melee/ft/ft_0892.c::ft_8008A2BC
+              enter_wait(batch, idx);
+            } else {
+              // Decomp airborne branch:
+              // - ftCo_Damage_Anim enters Fall via ftCo_Fall_Enter when anim/hitstun gates clear.
+              // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_Anim
+              // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_Enter
+              //
+              // ftCo_Fall_Enter does not call ftAnim_8006EBA4, so keep the previous DamageAir pose
+              // for this frame's collision/hurtbox updates and commit Fall animation/timebase later.
+              batch->state.action_id[idx] = (uint16_t)MSL_ACT_FALL;
+            }
           }
         }
         continue;

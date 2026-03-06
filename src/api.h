@@ -1163,6 +1163,15 @@ int msl_batch_debug_step_input_pre_combat(MslBatch* batch, const uint8_t* prev_i
                                           size_t prev_input_stride_bytes,
                                           const uint8_t* input_bytes, size_t input_stride_bytes);
 
+// Debug-only branch-isolation helper: run only the knockdown/damage pre-physics callback slice on
+// the current reseeded state, without timers/input/physics.
+//
+// IMPORTANT CONTRACT:
+// - This is for tests/triage only; do not use for training/rollouts.
+// - It intentionally bypasses earlier timer/state-flag maintenance so branch-local ownership can be
+//   asserted in isolation.
+int msl_batch_debug_knockdown_update_pre_physics(MslBatch* batch);
+
 // Debug-only helper: recompute pose-driven combat geometry from current state (hurtcaps + hitboxes)
 // without advancing frame stages.
 //

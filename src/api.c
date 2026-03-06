@@ -39,6 +39,7 @@
 #include "state.h"
 #include "step.h"
 #include "grab_attachment.h"
+#include "knockdown.h"
 
 static inline uint16_t colanim_timer_remaining_from_action_frame(uint16_t init_frames,
                                                                  int16_t action_frame) {
@@ -1216,6 +1217,16 @@ int msl_batch_debug_step_input_pre_combat(MslBatch* batch, const uint8_t* prev_i
                                           const uint8_t* input_bytes, size_t input_stride_bytes) {
   return step_one_frame_pre_combat(batch, prev_input_bytes, prev_input_stride_bytes, input_bytes,
                                    input_stride_bytes);
+}
+
+int msl_batch_debug_knockdown_update_pre_physics(MslBatch* batch) {
+  if (batch == NULL) {
+    return EINVAL;
+  }
+  // Debug-only branch isolation for Damage/Knockdown Anim ownership tests.
+  // Do not route training/rollout code through this helper.
+  knockdown_update_pre_physics(batch);
+  return 0;
 }
 
 int msl_batch_debug_refresh_combat_geometry(MslBatch* batch) {

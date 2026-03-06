@@ -47,6 +47,26 @@ def _step_one_record(*, binding, row: np.ndarray, num_players: int) -> np.ndarra
         binding.destroy(handle)
 
 
+def _debug_knockdown_pre_physics_once(*, binding, row: np.ndarray, num_players: int) -> np.ndarray:
+    sizes = binding.sizes()
+    seed_stride = int(sizes["seed"])
+    compare_stride = int(sizes["compare"])
+
+    handle = binding.init(batch_size=1, num_players=int(num_players))
+    try:
+        seed_bytes = np.empty((1, seed_stride), dtype=np.uint8)
+        out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
+
+        seed_bytes[:] = np.frombuffer(row["seed_t"].tobytes(order="C"), dtype=np.uint8).reshape(1, seed_stride)
+
+        binding.reseed_seed(handle, seed_bytes)
+        binding.debug_knockdown_update_pre_physics(handle)
+        binding.write_compare(handle, out_compare_bytes)
+        return out_compare_bytes.view(COMPARE_DTYPE).reshape((1,))[0]
+    finally:
+        binding.destroy(handle)
+
+
 @dataclass(frozen=True)
 class _Case:
     dataset_rel: str
@@ -94,6 +114,105 @@ def test_damageair_anim_end_does_not_spuriously_stay_in_damageair(case: _Case) -
 
     assert int(out["action_id"][p]) == int(row["ref_t1"]["action_id"][0, p])
     assert int(out["animation_index"][p]) == int(row["ref_t1"]["animation_index"][0, p])
+
+
+@pytest.mark.integration
+def test_airborne_damageair_anim_end_exits_to_fall_when_x221c_b6_is_clear() -> None:
+    binding = pytest.importorskip("msl_binding")
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_rel = f"{_BASE}/AttachedGoodNaturedGuanaco.msl"
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    record = 5369
+    p = 1
+    samples = ds.samples
+    assert int(samples.shape[0]) > record, f"dataset too short: num_records={int(samples.shape[0])}"
+    row = samples[record : record + 1]
+
+    # Replay-real airborne DamageAir anim-end family:
+    # - ftCo_Damage_Anim gates both the airborne Fall exit and grounded Wait exit on !x221C_b6.
+    # - No replay-real airborne anim-end row with x221C_b6 set exists in this local suite, so this
+    #   lock covers the decomp-backed clear-bit ownership only.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_Anim
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_Enter
+    assert int(row["seed_t"]["action_id"][0, p]) == 84
+    assert int(row["seed_t"]["on_ground"][0, p]) == 0
+    assert int(row["seed_t"]["action_frame"][0, p]) == 11
+    assert int(row["seed_t"]["hitlag"][0, p]) == 0
+    assert int(row["seed_t"]["hitstun"][0, p]) == 0
+    assert (int(row["seed_t"]["state_flags"][0, p, 3]) & 0x02) == 0
+    assert int(row["ref_t1"]["action_id"][0, p]) == 29
+    assert int(row["ref_t1"]["on_ground"][0, p]) == 0
+
+    out = _step_one_record(binding=binding, row=row, num_players=int(ds.header["num_players"]))
+
+    for field in ("action_id", "animation_index", "on_ground", "action_frame"):
+        got = int(out[field][p])
+        exp = int(row["ref_t1"][field][0, p])
+        assert got == exp, f"field={field} expected={exp} got={got}"
+
+
+@pytest.mark.integration
+def test_airborne_damageair_anim_end_x221c_b6_discriminator_blocks_v1_fall_branch() -> None:
+    binding = pytest.importorskip("msl_binding")
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_rel = f"{_BASE}/AttachedGoodNaturedGuanaco.msl"
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    record = 5369
+    p = 1
+    samples = ds.samples
+    assert int(samples.shape[0]) > record, f"dataset too short: num_records={int(samples.shape[0])}"
+    row = samples[record : record + 1].copy()
+
+    # Discriminator setup for V1 vs V2:
+    # - start from the replay-real airborne DamageAir anim-end row,
+    # - set the exported fp+0x221C high-byte bit1 (`x221C_b6`) while keeping hitstun clear,
+    # - run only knockdown_update_pre_physics so the test targets the anim-end branch directly.
+    #
+    # Decomp ownership:
+    # - ftCo_Damage_Anim gates the anim-end branch itself on !x221C_b6 before choosing grounded
+    #   Wait vs airborne Fall.
+    # - Therefore V1 (shared gate) must keep DamageAir here, while V2 (grounded-only gate) would
+    #   incorrectly enter Fall on this constructed airborne row.
+    # refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
+    # refs/melee/src/melee/ft/types.h
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_Anim
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_Enter
+    row["seed_t"]["state_flags"][0, p, 3] = np.uint8(int(row["seed_t"]["state_flags"][0, p, 3]) | 0x02)
+
+    assert int(row["seed_t"]["action_id"][0, p]) == 84
+    assert int(row["seed_t"]["on_ground"][0, p]) == 0
+    assert int(row["seed_t"]["action_frame"][0, p]) == 11
+    assert int(row["seed_t"]["hitstun"][0, p]) == 0
+    assert (int(row["seed_t"]["state_flags"][0, p, 3]) & 0x02) != 0
+
+    # Prove why the debug hook is needed:
+    # - the normal step path runs timers_update_post_anim() before knockdown_update_pre_physics(),
+    # - that pass clears the exported fp+0x221C hitstun bit when hitstun==0,
+    # - so a full step no longer isolates the branch guard at src/knockdown.c:715.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008F744
+    full_step_out = _step_one_record(binding=binding, row=row, num_players=int(ds.header["num_players"]))
+    assert int(full_step_out["action_id"][p]) == 29
+
+    # The debug hook isolates knockdown_update_pre_physics() itself, preserving the constructed
+    # x221C_b6 input so V1 vs V2 branch ownership is directly testable.
+    out = _debug_knockdown_pre_physics_once(binding=binding, row=row, num_players=int(ds.header["num_players"]))
+
+    assert int(out["action_id"][p]) == 84
+    assert int(out["animation_index"][p]) == 174
+    assert int(out["on_ground"][p]) == 0
+    assert int(out["action_frame"][p]) == 11
+    assert int(out["hitstun"][p]) == 0
+    assert (int(out["state_flags"][p, 3]) & 0x02) != 0
 
 
 @pytest.mark.integration
@@ -213,3 +332,45 @@ def test_damageair_same_frame_body_sweep_family_with_adjacent_controls(record: i
 
     got_lasers = _laser_ids(out["items"])
     assert got_lasers == ref_lasers, f"record={record} expected laser_ids={ref_lasers} got={got_lasers}"
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    "case,expected_seed_action",
+    [
+        (_Case(f"{_BASE}/GracefulAttachedTurtle.msl", 1892, 0), 84),
+        (_Case(f"{_BASE}/AttachedGoodNaturedGuanaco.msl", 2289, 1), 85),
+    ],
+)
+def test_grounded_damageair_anim_end_exits_to_wait(case: _Case, expected_seed_action: int) -> None:
+    binding = pytest.importorskip("msl_binding")
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / case.dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {case.dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+    assert int(samples.shape[0]) > int(case.record), f"dataset too short: num_records={int(samples.shape[0])}"
+    row = samples[case.record : case.record + 1]
+    p = int(case.p)
+
+    # Replay-real grounded DamageAir anim-end family:
+    # - ftCo_Damage_Anim enters Wait on anim end when the fighter is grounded and x221C_b6 is clear.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_Anim
+    # refs/melee/src/melee/ft/ft_0892.c::ft_8008A2BC
+    assert int(row["seed_t"]["action_id"][0, p]) == expected_seed_action
+    assert int(row["seed_t"]["on_ground"][0, p]) == 1
+    assert int(row["seed_t"]["hitlag"][0, p]) == 0
+    assert int(row["seed_t"]["hitstun"][0, p]) == 0
+    assert int(row["ref_t1"]["action_id"][0, p]) == 14
+    assert int(row["ref_t1"]["animation_index"][0, p]) == 2
+    assert int(row["ref_t1"]["on_ground"][0, p]) == 1
+
+    out = _step_one_record(binding=binding, row=row, num_players=int(ds.header["num_players"]))
+
+    for field in ("action_id", "animation_index", "on_ground", "action_frame"):
+        got = int(out[field][p])
+        exp = int(row["ref_t1"][field][0, p])
+        assert got == exp, f"field={field} expected={exp} got={got}"
