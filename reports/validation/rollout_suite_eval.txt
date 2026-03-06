@@ -29,50 +29,50 @@ fields: action_id,animation_index,on_ground,hitlag,hitstun,state_flags
 
 == datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl ==
 rollout.best_len: 154
-rollout.streak_count: 186
-rollout.streak_len.median: 29
+rollout.streak_count: 185
+rollout.streak_len.median: 30
 rollout.streak_len.p90: 88
 rollout.streak_len.p95: 95
 rollout.streak_len.max: 154
-rollout.first_mismatch_total: 188
-rollout.first_mismatch_seeded_total: 63
+rollout.first_mismatch_total: 187
+rollout.first_mismatch_seeded_total: 61
 
 == datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl ==
 rollout.best_len: 197
-rollout.streak_count: 284
-rollout.streak_len.median: 32
-rollout.streak_len.p90: 83
+rollout.streak_count: 280
+rollout.streak_len.median: 33
+rollout.streak_len.p90: 89
 rollout.streak_len.p95: 112
 rollout.streak_len.max: 197
-rollout.first_mismatch_total: 283
-rollout.first_mismatch_seeded_total: 91
+rollout.first_mismatch_total: 279
+rollout.first_mismatch_seeded_total: 86
 
 == datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/QuerulousGrandDinosaur.msl ==
 rollout.best_len: 181
-rollout.streak_count: 238
+rollout.streak_count: 236
 rollout.streak_len.median: 31
 rollout.streak_len.p90: 96
-rollout.streak_len.p95: 123
+rollout.streak_len.p95: 127
 rollout.streak_len.max: 181
-rollout.first_mismatch_total: 240
-rollout.first_mismatch_seeded_total: 88
+rollout.first_mismatch_total: 238
+rollout.first_mismatch_seeded_total: 86
 
 == datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/TreasuredBackKangaroo.msl ==
 rollout.best_len: 207
-rollout.streak_count: 203
-rollout.streak_len.median: 27
+rollout.streak_count: 201
+rollout.streak_len.median: 28
 rollout.streak_len.p90: 81
 rollout.streak_len.p95: 98
 rollout.streak_len.max: 207
-rollout.first_mismatch_total: 203
-rollout.first_mismatch_seeded_total: 58
+rollout.first_mismatch_total: 201
+rollout.first_mismatch_seeded_total: 56
 
 == suite summary ==
-overall.rollout.streak_count: 911
+overall.rollout.streak_count: 902
 overall.rollout.streak_len.median: 30
 overall.rollout.streak_len.p90: 89
 overall.rollout.streak_len.p95: 110
 overall.rollout.streak_len.max: 207
 overall.rollout.best_len.max: 207
-overall.rollout.first_mismatch_total: 914
-overall.rollout.first_mismatch_seeded_total: 300
+overall.rollout.first_mismatch_total: 905
+overall.rollout.first_mismatch_seeded_total: 289
