@@ -229,6 +229,81 @@ _CASES = [
 ]
 
 
+@dataclass(frozen=True)
+class _ShieldBounceCase:
+    name: str
+    dataset_rel: str
+    record: int
+    p: int
+    laser_count_seed: int
+    laser_count_ref: int
+    note: str
+
+
+_SHIELD_BOUNCE_CASES = [
+    _ShieldBounceCase(
+        name="gat_existing_laser_bounce_keepalive_guardreflect",
+        dataset_rel=(
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
+            "cardinal_1.0_recent/GracefulAttachedTurtle.msl"
+        ),
+        record=2276,
+        p=0,
+        laser_count_seed=1,
+        laser_count_ref=1,
+        note="Existing laser keeps alive through upper-shield bounce on GuardReflect->GuardSetOff.",
+    ),
+    _ShieldBounceCase(
+        name="gat_existing_laser_bounce_keepalive_shieldstun",
+        dataset_rel=(
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
+            "cardinal_1.0_recent/GracefulAttachedTurtle.msl"
+        ),
+        record=5280,
+        p=0,
+        laser_count_seed=1,
+        laser_count_ref=1,
+        note="Existing laser keeps alive through upper-shield bounce into GuardSetOff hitlag.",
+    ),
+    _ShieldBounceCase(
+        name="gat_spawn_frame_no_bounce_keepalive_control_1163",
+        dataset_rel=(
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
+            "cardinal_1.0_recent/GracefulAttachedTurtle.msl"
+        ),
+        record=1163,
+        p=0,
+        laser_count_seed=0,
+        laser_count_ref=0,
+        note="Gun-only spawn frame must not keep an immediately shielded laser alive.",
+    ),
+    _ShieldBounceCase(
+        name="gat_spawn_frame_no_bounce_keepalive_control_4326",
+        dataset_rel=(
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
+            "cardinal_1.0_recent/GracefulAttachedTurtle.msl"
+        ),
+        record=4326,
+        p=0,
+        laser_count_seed=1,
+        laser_count_ref=1,
+        note="Concurrent long-lived laser + gun spawn row must not retain an extra bounced spawn-frame shot.",
+    ),
+    _ShieldBounceCase(
+        name="gat_spawn_frame_no_bounce_keepalive_control_9412",
+        dataset_rel=(
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
+            "cardinal_1.0_recent/GracefulAttachedTurtle.msl"
+        ),
+        record=9412,
+        p=0,
+        laser_count_seed=1,
+        laser_count_ref=1,
+        note="Late-suite concurrent gun spawn row must still destroy the same-frame shielded shot.",
+    ),
+]
+
+
 @pytest.mark.integration
 @pytest.mark.parametrize("case", _CASES, ids=lambda c: c.name)
 def test_items_collision_space_rows_and_adjacent_controls(case: _Case) -> None:
@@ -357,3 +432,47 @@ def test_items_collision_space_rows_and_adjacent_controls(case: _Case) -> None:
         assert got_shield_bits == exp_shield_bits, (
             f"{case.name}: shield_hp f32 bits expected=0x{exp_shield_bits:08x} got=0x{got_shield_bits:08x}"
         )
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize("case", _SHIELD_BOUNCE_CASES, ids=lambda c: c.name)
+def test_laser_shield_bounce_keepalive_and_spawn_frame_destroy_controls(case: _ShieldBounceCase) -> None:
+    # Replay-real locks for laser shield-bounce keepalive in src/items.c::lasers_update_and_collide.
+    #
+    # Decomp anchors:
+    # - refs/melee/src/melee/it/item.c::Item_80269DC8
+    # - refs/melee/src/melee/it/items/itfoxlaser.c::{
+    #     it_8029C504,itFoxlaser_UnkMotion1_Anim,itFoxLaser_Logic94_ShieldBounced,itFoxLaser_Logic94_HitShield}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_missing_laser_artifacts(root)
+
+    dataset_path = root / case.dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {case.dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+    assert int(samples.shape[0]) > case.record, (
+        f"dataset too short for regression check: record={case.record} path={case.dataset_rel}"
+    )
+    row = samples[case.record : case.record + 1]
+    p = int(case.p)
+
+    seed_lasers = _laser_ids(row["seed_t"]["items"][0])
+    ref_lasers = _laser_ids(row["ref_t1"]["items"][0])
+    assert len(seed_lasers) == case.laser_count_seed, case.note
+    assert len(ref_lasers) == case.laser_count_ref, case.note
+
+    out = _one_step_out_compare(ds=ds, row=row)
+
+    for field in ("action_id", "animation_index", "hitlag", "hitstun"):
+        got = int(out[field][0, p])
+        exp = int(row["ref_t1"][field][0, p])
+        assert got == exp, f"{case.name}: field={field} expected={exp} got={got}"
+
+    got_flags = [int(x) for x in out["state_flags"][0, p]]
+    exp_flags = [int(x) for x in row["ref_t1"]["state_flags"][0, p]]
+    assert got_flags == exp_flags, f"{case.name}: state_flags expected={exp_flags} got={got_flags}"
+
+    got_lasers = _laser_ids(out["items"][0])
+    assert got_lasers == ref_lasers, f"{case.name}: laser_ids expected={ref_lasers} got={got_lasers}"

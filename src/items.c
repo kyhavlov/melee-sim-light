@@ -1139,6 +1139,57 @@ static inline float laser_collision_offset_scale(const MslLaserParams* lp, uint8
   return s;
 }
 
+static inline uint8_t laser_try_shield_bounce_velocity(float vx, float vy, float shield_x,
+                                                       float shield_y, float contact_x,
+                                                       float contact_y, float* out_vx,
+                                                       float* out_vy) {
+  if (out_vx == NULL || out_vy == NULL) {
+    return 0u;
+  }
+
+  const float nx = contact_x - shield_x;
+  const float ny = contact_y - shield_y;
+  const float n2 = (nx * nx) + (ny * ny);
+  if (!(n2 > 0.0f)) {
+    return 0u;
+  }
+
+  const float inv_n = 1.0f / sqrtf(n2);
+  const float unx = nx * inv_n;
+  const float uny = ny * inv_n;
+  if (!(ny > fabsf(nx))) {
+    return 0u;
+  }
+  const float dot = (vx * unx) + (vy * uny);
+  if (!(dot < 0.0f)) {
+    return 0u;
+  }
+
+  const float rvx = vx - (2.0f * dot * unx);
+  const float rvy = vy - (2.0f * dot * uny);
+
+  // Shield-bounce ownership:
+  // - Item_80269DC8 routes eligible shield contacts through the per-item `shield_bounced`
+  //   callback instead of `hit_shield`.
+  // - Fox laser `itFoxLaser_Logic94_ShieldBounced` mirrors velocity over `item->xC58`,
+  //   keeps the projectile alive, and updates the laser angle from the mirrored velocity.
+  // refs/melee/src/melee/it/item.c::Item_80269DC8
+  // refs/melee/src/melee/it/items/itfoxlaser.c::itFoxLaser_Logic94_ShieldBounced
+  //
+  // This lite sim does not yet seed the authoritative `xDCE_flag.b5/xDCE_flag.b4/xC54/xC58`
+  // shield-bounce internals. Narrow approximation: only keep the item alive when the shield-sphere
+  // contact normal is upper-hemisphere dominant and yields an upward mirrored travel vector,
+  // matching the replay-real glancing upper-shield bounce families while leaving front-side
+  // shield hits on the destroy path below.
+  if (!(rvy > 0.0f)) {
+    return 0u;
+  }
+
+  *out_vx = rvx;
+  *out_vy = rvy;
+  return 1u;
+}
+
 static inline void item_apply_reflect_transfer(MslBatch* batch, size_t ii, size_t reflector_idx,
                                                int reflector_port, float damage_mul, float speed_mul) {
   if (batch == NULL) {
@@ -1579,6 +1630,7 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
     // Beam length visual scaling: fox/falco blaster shots ramp model scaleZ over time.
     // refs/melee/src/melee/it/items/itfoxlaser.c::itFoxlaser_UnkMotion1_Anim
     float laser_scale_z = 1.0f;
+    float laser_age_frames = 0.0f;
     {
       const size_t o2_idx = msl_idx_player(bi, owner);
       const uint8_t ocid = batch->state.char_id[o2_idx];
@@ -1591,6 +1643,7 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
       if (age < 0.0f) {
         age = 0.0f;
       }
+      laser_age_frames = age;
 
       float s = (age * speed) /
                 11.25f;  // refs/melee/src/melee/it/items/itfoxlaser.c::itFoxlaser_UnkMotion1_Anim
@@ -1649,6 +1702,11 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
         }
 
         uint8_t shield_hit = 0;
+        uint8_t shield_bounce_contact_found = 0;
+        float shield_hit_contact_x = x;
+        float shield_hit_contact_y = y;
+        float shield_bounce_contact_x = x;
+        float shield_bounce_contact_y = y;
         // No-submotion shield snapshots use a deterministic probe on the
         // (prev_pos -> cur_pos) segment for shield-overlap sampling.
         //
@@ -1703,8 +1761,7 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
             laser_collision_offset_scale(lp, laser_state, laser_scale_z,
                                          MSL_LASER_COLLISION_SPACE_SHIELD, 0u,
                                          shield_cap_enabled);
-        for (uint8_t oi = 0; oi < off_n && oi < (uint8_t)MSL_LASER_MAX_HITBOX_OFFS_X && !shield_hit;
-             oi++) {
+        for (uint8_t oi = 0; oi < off_n && oi < (uint8_t)MSL_LASER_MAX_HITBOX_OFFS_X; oi++) {
           const float off_x =
               (laser_state == 0u) ? lp->hitbox_offsets_x[oi] : lp->state1_hitbox_offsets_x[oi];
           const float s = off_x * laser_offset_scale;
@@ -1712,6 +1769,7 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
           const float sy0 = y0 + (uy * s);
           const float sx = shield_probe_x + (ux * s);
           const float sy = shield_probe_y + (uy * s);
+          uint8_t this_hit = 0u;
           // Decomp (GALE01): shield overlap uses 3D collision (z is not ignored), and item
           // collision callbacks consume prev->cur segment ownership (`it_8029C4D4`).
           // refs/melee/src/melee/ft/ftcoll.c::ftColl_80076CBC (lbColl_80007BCC(..., cur_pos.z))
@@ -1719,10 +1777,28 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
           if (defender_guard_reflect_no_submotion_snapshot) {
             if (item_swept_sphere_sphere_intersects_3d(sx0, sy0, 0.0f, sx, sy, 0.0f, sr, shx, shy,
                                                        shz, shr)) {
-              shield_hit = 1;
+              this_hit = 1u;
             }
           } else if (item_sphere_sphere_intersects_3d(sx, sy, 0.0f, sr, shx, shy, shz, shr)) {
-            shield_hit = 1;
+            this_hit = 1u;
+          }
+          if (!this_hit) {
+            continue;
+          }
+          shield_hit = 1u;
+          if (shield_hit_contact_x == x && shield_hit_contact_y == y) {
+            shield_hit_contact_x = sx;
+            shield_hit_contact_y = sy;
+          }
+          if (!shield_bounce_contact_found) {
+            float trial_bounce_vx = 0.0f;
+            float trial_bounce_vy = 0.0f;
+            if (laser_try_shield_bounce_velocity(vx, vy, shx, shy, sx, sy, &trial_bounce_vx,
+                                                 &trial_bounce_vy)) {
+              shield_bounce_contact_found = 1u;
+              shield_bounce_contact_x = sx;
+              shield_bounce_contact_y = sy;
+            }
           }
         }
         // If no scripted offsets exist, fall back to the projectile origin.
@@ -1730,9 +1806,35 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
           if (defender_guard_reflect_no_submotion_snapshot) {
             shield_hit = item_swept_sphere_sphere_intersects_3d(
                 x0, y0, 0.0f, shield_probe_x, shield_probe_y, 0.0f, sr, shx, shy, shz, shr);
+            if (shield_hit) {
+              shield_hit_contact_x = shield_probe_x;
+              shield_hit_contact_y = shield_probe_y;
+              float trial_bounce_vx = 0.0f;
+              float trial_bounce_vy = 0.0f;
+              if (laser_try_shield_bounce_velocity(vx, vy, shx, shy, shield_probe_x,
+                                                   shield_probe_y, &trial_bounce_vx,
+                                                   &trial_bounce_vy)) {
+                shield_bounce_contact_found = 1u;
+                shield_bounce_contact_x = shield_probe_x;
+                shield_bounce_contact_y = shield_probe_y;
+              }
+            }
           } else {
             shield_hit = item_sphere_sphere_intersects_3d(shield_probe_x, shield_probe_y, 0.0f, sr,
                                                           shx, shy, shz, shr);
+            if (shield_hit) {
+              shield_hit_contact_x = shield_probe_x;
+              shield_hit_contact_y = shield_probe_y;
+              float trial_bounce_vx = 0.0f;
+              float trial_bounce_vy = 0.0f;
+              if (laser_try_shield_bounce_velocity(vx, vy, shx, shy, shield_probe_x,
+                                                   shield_probe_y, &trial_bounce_vx,
+                                                   &trial_bounce_vy)) {
+                shield_bounce_contact_found = 1u;
+                shield_bounce_contact_x = shield_probe_x;
+                shield_bounce_contact_y = shield_probe_y;
+              }
+            }
           }
         }
 
@@ -1806,6 +1908,22 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
             break;
           }
 
+          float shield_bounce_vx = 0.0f;
+          float shield_bounce_vy = 0.0f;
+          // Spawn-frame keepalive gate:
+          // - Laser spawn initializes `scale=0` in it_8029C504 and the same-frame motion callback
+          //   performs the first scale ramp in itFoxlaser_UnkMotion1_Anim before collision.
+          // - Replay-real shield-bounce keepalive rows in-suite are already-aged lasers; same-frame
+          //   gun-spawn shield contacts still resolve through the destroy path until the
+          //   authoritative `xDCE/xC54/xC58` bounce internals are promoted into seed/runtime state.
+          // refs/melee/src/melee/it/items/itfoxlaser.c::{it_8029C504,itFoxlaser_UnkMotion1_Anim}
+          // refs/melee/src/melee/it/item.c::Item_80269DC8
+          const uint8_t can_shield_bounce =
+              shield_bounce_contact_found && laser_age_frames > 1.0f &&
+              laser_try_shield_bounce_velocity(vx, vy, shx, shy, shield_bounce_contact_x,
+                                               shield_bounce_contact_y, &shield_bounce_vx,
+                                               &shield_bounce_vy);
+
           // Regular shield hit: apply defender-side shield effects and despawn the laser.
           float dmg = (laser_state == 0u) ? lp->damage : lp->state1_damage;
           dmg = item_reflected_damage_lane(batch, ii, dmg);
@@ -1817,6 +1935,12 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
           const uint16_t def_iid_post = batch->state.instance_id[d_idx];
           hitlist_register_item_fighter(batch, bi, it, def, def_iid_post,
                                         (int)MSL_LBCOLL_INSERT_FT_SHIELD, 0);
+          if (can_shield_bounce) {
+            batch->state.item_vel_x[ii] = shield_bounce_vx;
+            batch->state.item_vel_y[ii] = shield_bounce_vy;
+            batch->state.item_direction[ii] = (shield_bounce_vx >= 0.0f) ? 1.0f : -1.0f;
+            break;
+          }
           item_slot_clear(batch, ii);
           break;
         }
