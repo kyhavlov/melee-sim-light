@@ -13,6 +13,7 @@
 #include "anim_pose.h"
 #include "action_ids.h"
 #include "batch_internal.h"
+#include "items.h"
 #include "combat.h"
 #include "combat_geom.h"
 #include "char_params.h"
@@ -34,12 +35,48 @@
 #include "shield_tilt_table.h"
 #include "laser_params.h"
 #include "stage_collision.h"
+#include "staling.h"
 #include "staling_tables.h"
 #include "attack_id_tables.h"
 #include "state.h"
 #include "step.h"
 #include "grab_attachment.h"
 #include "knockdown.h"
+
+static inline uint16_t item_seed_bridge_attack_id(const MslBatch* batch, int bi,
+                                                  const MslItem* item) {
+  if (batch == NULL || item == NULL) {
+    return (uint16_t)MSL_FT_MOVE_ID_DEFAULT;
+  }
+  uint16_t attack_id = item->attack_id;
+  if (attack_id != (uint16_t)MSL_FT_MOVE_ID_DEFAULT || !item->exists) {
+    return attack_id;
+  }
+  // Seed bridge for persisted fighter-spawned projectiles/articles:
+  // - Decomp item spawn copies the owner's fighter-side attack id into the article
+  //   (`item->xD88_attackID = fighter->x2068_attackID`) at spawn.
+  // - Slippi item post-frame does not preserve that move-id ownership for persisted Fox/Falco
+  //   blaster shots / illusion articles; teacher-forced reseed commonly snapshots them with
+  //   attack_id==Default, which disables decomp-shaped staling on shield/body contact.
+  // - Recover the move id from the owner's action-move table for the supported projectile/article
+  //   families below.
+  // refs/melee/src/melee/it/it_2725.c::it_8027B070
+  if (item->owner < 0 || item->owner >= (int8_t)batch->config.num_players) {
+    return attack_id;
+  }
+  const size_t owner_idx = msl_idx_player(bi, (int)item->owner);
+  if (laser_params_for_item_type(item->type) != NULL) {
+    // data/attack_id/move_id/{fox,falco}.bin: action 341/342/343 -> move_id 18
+    return attack_id_move_id_from_action(batch->state.char_id[owner_idx],
+                                         (uint16_t)MSL_ACT_FX_SPECIAL_N_LOOP);
+  }
+  if (item_type_is_illusion_article(item->type)) {
+    // data/attack_id/move_id/{fox,falco}.bin: action 347/348/349 -> move_id 19
+    return attack_id_move_id_from_action(batch->state.char_id[owner_idx],
+                                         (uint16_t)MSL_ACT_FX_SPECIAL_S);
+  }
+  return attack_id;
+}
 
 static inline uint16_t colanim_timer_remaining_from_action_frame(uint16_t init_frames,
                                                                  int16_t action_frame) {
@@ -864,7 +901,7 @@ int msl_batch_reseed_seed(MslBatch* batch, const uint8_t* seed_bytes, size_t see
       if (item->instance_id > max_instance_id) {
         max_instance_id = item->instance_id;
       }
-      batch->state.item_attack_id[ii] = item->attack_id;
+      batch->state.item_attack_id[ii] = item_seed_bridge_attack_id(batch, bi, item);
       batch->state.item_attack_instance[ii] = item->attack_instance;
       if (item->attack_instance > max_attack_inst) {
         max_attack_inst = item->attack_instance;

@@ -39,13 +39,13 @@ rollout.first_mismatch_seeded_total: 61
 
 == datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl ==
 rollout.best_len: 197
-rollout.streak_count: 280
+rollout.streak_count: 279
 rollout.streak_len.median: 33
-rollout.streak_len.p90: 89
-rollout.streak_len.p95: 112
+rollout.streak_len.p90: 91
+rollout.streak_len.p95: 113
 rollout.streak_len.max: 197
-rollout.first_mismatch_total: 279
-rollout.first_mismatch_seeded_total: 86
+rollout.first_mismatch_total: 278
+rollout.first_mismatch_seeded_total: 82
 
 == datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/QuerulousGrandDinosaur.msl ==
 rollout.best_len: 181
@@ -59,12 +59,12 @@ rollout.first_mismatch_seeded_total: 86
 
 == datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/TreasuredBackKangaroo.msl ==
 rollout.best_len: 207
-rollout.streak_count: 201
+rollout.streak_count: 202
 rollout.streak_len.median: 28
 rollout.streak_len.p90: 81
 rollout.streak_len.p95: 98
 rollout.streak_len.max: 207
-rollout.first_mismatch_total: 201
+rollout.first_mismatch_total: 202
 rollout.first_mismatch_seeded_total: 56
 
 == suite summary ==
@@ -75,4 +75,4 @@ overall.rollout.streak_len.p95: 110
 overall.rollout.streak_len.max: 207
 overall.rollout.best_len.max: 207
 overall.rollout.first_mismatch_total: 905
-overall.rollout.first_mismatch_seeded_total: 289
+overall.rollout.first_mismatch_seeded_total: 285

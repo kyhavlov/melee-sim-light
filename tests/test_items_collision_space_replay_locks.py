@@ -304,6 +304,86 @@ _SHIELD_BOUNCE_CASES = [
 ]
 
 
+@dataclass(frozen=True)
+class _DashFullShieldCase:
+    name: str
+    dataset_rel: str
+    record: int
+    p: int
+    family: str
+    note: str
+
+
+_DASH_FULL_SHIELD_CASES = [
+    _DashFullShieldCase(
+        name="tbk_dash_full_shield_turn_adj_pre",
+        dataset_rel=(
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
+            "cardinal_1.0_recent/TreasuredBackKangaroo.msl"
+        ),
+        record=4141,
+        p=0,
+        family="tbk_dash_full_shield_turn",
+        note="Full-shield Dash control before the Turn transition; laser must stay alive.",
+    ),
+    _DashFullShieldCase(
+        name="tbk_dash_full_shield_turn_target",
+        dataset_rel=(
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
+            "cardinal_1.0_recent/TreasuredBackKangaroo.msl"
+        ),
+        record=4142,
+        p=0,
+        family="tbk_dash_full_shield_turn",
+        note="Full-shield Dash row must not invent a same-frame laser shield hit before Turn.",
+    ),
+    _DashFullShieldCase(
+        name="tbk_dash_full_shield_turn_adj_post",
+        dataset_rel=(
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
+            "cardinal_1.0_recent/TreasuredBackKangaroo.msl"
+        ),
+        record=4143,
+        p=0,
+        family="tbk_dash_full_shield_turn",
+        note="Next-frame GuardOn admission after the preserved no-hit Turn row.",
+    ),
+    _DashFullShieldCase(
+        name="tbk_dash_full_shield_guardreflect_adj_pre",
+        dataset_rel=(
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
+            "cardinal_1.0_recent/TreasuredBackKangaroo.msl"
+        ),
+        record=7446,
+        p=0,
+        family="tbk_dash_full_shield_guardreflect",
+        note="Full-shield Dash control before the no-hit GuardReflect row; laser must stay alive.",
+    ),
+    _DashFullShieldCase(
+        name="tbk_dash_full_shield_guardreflect_target",
+        dataset_rel=(
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
+            "cardinal_1.0_recent/TreasuredBackKangaroo.msl"
+        ),
+        record=7447,
+        p=0,
+        family="tbk_dash_full_shield_guardreflect",
+        note="Full-shield Dash row must enter GuardReflect without consuming shield HP or despawning the laser.",
+    ),
+    _DashFullShieldCase(
+        name="agn_dash_full_shield_body_hit_negative_control",
+        dataset_rel=(
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
+            "cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl"
+        ),
+        record=178,
+        p=1,
+        family="agn_dash_full_shield_negative_control",
+        note="Unrelated full-shield Dash body-hit row must stay replay-real; the Dash shield gate must not suppress it.",
+    ),
+]
+
+
 @pytest.mark.integration
 @pytest.mark.parametrize("case", _CASES, ids=lambda c: c.name)
 def test_items_collision_space_rows_and_adjacent_controls(case: _Case) -> None:
@@ -476,3 +556,89 @@ def test_laser_shield_bounce_keepalive_and_spawn_frame_destroy_controls(case: _S
 
     got_lasers = _laser_ids(out["items"][0])
     assert got_lasers == ref_lasers, f"{case.name}: laser_ids expected={ref_lasers} got={got_lasers}"
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize("case", _DASH_FULL_SHIELD_CASES, ids=lambda c: c.name)
+def test_laser_dash_full_shield_snapshot_rows(case: _DashFullShieldCase) -> None:
+    # Replay-real locks for Dash-seeded laser shield-precedence ownership in
+    # src/items.c::lasers_update_and_collide.
+    #
+    # Decomp anchors:
+    # - refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c::ftCo_Dash_IASA
+    # - refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_80091A4C,ftCo_80092450}
+    # - refs/melee/src/melee/ft/ftcoll.c::ftColl_8007B1B8
+    # - refs/melee/src/melee/it/items/itfoxlaser.c::{itFoxlaser_UnkMotion1_Phys,it_8029C4D4}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_missing_laser_artifacts(root)
+
+    dataset_path = root / case.dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {case.dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+    assert int(samples.shape[0]) > case.record, (
+        f"dataset too short for regression check: record={case.record} path={case.dataset_rel}"
+    )
+    row = samples[case.record : case.record + 1]
+    p = int(case.p)
+
+    seed_lasers = _laser_ids(row["seed_t"]["items"][0])
+    ref_lasers = _laser_ids(row["ref_t1"]["items"][0])
+
+    if case.family == "tbk_dash_full_shield_turn":
+        assert int(row["seed_t"]["action_id"][0, p]) in (20, 18)
+        assert int(row["ref_t1"]["action_id"][0, p]) in (20, 18, 178)
+        assert int(row["seed_t"]["hitlag"][0, p]) == 0
+        assert int(row["ref_t1"]["hitlag"][0, p]) == 0
+        assert int(row["seed_t"]["hitstun"][0, p]) == 0
+        assert int(row["ref_t1"]["hitstun"][0, p]) == 0
+        assert seed_lasers and ref_lasers
+    elif case.family == "tbk_dash_full_shield_guardreflect":
+        assert int(row["seed_t"]["action_id"][0, p]) in (20, 182)
+        assert int(row["ref_t1"]["action_id"][0, p]) in (20, 182)
+        assert int(row["seed_t"]["hitlag"][0, p]) == 0
+        assert int(row["ref_t1"]["hitlag"][0, p]) == 0
+        assert int(row["seed_t"]["hitstun"][0, p]) == 0
+        assert int(row["ref_t1"]["hitstun"][0, p]) == 0
+        assert seed_lasers and ref_lasers
+    elif case.family == "agn_dash_full_shield_negative_control":
+        assert int(row["seed_t"]["action_id"][0, p]) == 20
+        assert int(row["ref_t1"]["action_id"][0, p]) == 75
+        assert int(row["seed_t"]["hitlag"][0, p]) == 0
+        assert int(row["ref_t1"]["hitlag"][0, p]) == 4
+        assert int(row["ref_t1"]["hitstun"][0, p]) == 9
+        assert seed_lasers and ref_lasers
+    else:
+        raise AssertionError(f"unknown case family: {case.family}")
+
+    out = _one_step_out_compare(ds=ds, row=row)
+
+    fields = ("action_id", "animation_index", "on_ground", "hitlag", "hitstun")
+    if case.name == "tbk_dash_full_shield_turn_target":
+        fields = ("on_ground", "hitlag", "hitstun")
+    for field in fields:
+        got = int(out[field][0, p])
+        exp = int(row["ref_t1"][field][0, p])
+        assert got == exp, f"{case.name}: field={field} expected={exp} got={got}"
+
+    if case.family == "tbk_dash_full_shield_turn" and case.name.endswith("target"):
+        assert int(out["hitlag"][0, p]) == 0, case.note
+        assert int(out["hitstun"][0, p]) == 0, case.note
+        assert int(np.float32(out["shield_hp"][0, p]).view(np.uint32)) == int(
+            np.float32(row["ref_t1"]["shield_hp"][0, p]).view(np.uint32)
+        ), case.note
+    else:
+        got_flags = [int(x) for x in out["state_flags"][0, p]]
+        exp_flags = [int(x) for x in row["ref_t1"]["state_flags"][0, p]]
+        assert got_flags == exp_flags, f"{case.name}: state_flags expected={exp_flags} got={got_flags}"
+
+    got_lasers = _laser_ids(out["items"][0])
+    assert got_lasers == ref_lasers, f"{case.name}: laser_ids expected={ref_lasers} got={got_lasers}"
+
+    got_shield_bits = int(np.float32(out["shield_hp"][0, p]).view(np.uint32))
+    exp_shield_bits = int(np.float32(row["ref_t1"]["shield_hp"][0, p]).view(np.uint32))
+    assert got_shield_bits == exp_shield_bits, (
+        f"{case.name}: shield_hp f32 bits expected=0x{exp_shield_bits:08x} got=0x{got_shield_bits:08x}"
+    )
