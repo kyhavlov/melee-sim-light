@@ -91,6 +91,34 @@ static inline uint8_t hitboxes_seed_bridge_is_attackair_owner(uint16_t action_id
   }
 }
 
+static inline uint8_t hitboxes_seed_bridge_is_damage_or_firefox_launch_victim_action(
+    uint16_t action_id) {
+  switch (action_id) {
+    case MSL_ACT_DAMAGE_HI_1:
+    case MSL_ACT_DAMAGE_HI_2:
+    case MSL_ACT_DAMAGE_HI_3:
+    case MSL_ACT_DAMAGE_N_1:
+    case MSL_ACT_DAMAGE_N_2:
+    case MSL_ACT_DAMAGE_N_3:
+    case MSL_ACT_DAMAGE_LW_1:
+    case MSL_ACT_DAMAGE_LW_2:
+    case MSL_ACT_DAMAGE_LW_3:
+    case MSL_ACT_DAMAGE_AIR_1:
+    case MSL_ACT_DAMAGE_AIR_2:
+    case MSL_ACT_DAMAGE_AIR_3:
+    case MSL_ACT_DAMAGE_FLY_HI:
+    case MSL_ACT_DAMAGE_FLY_N:
+    case MSL_ACT_DAMAGE_FLY_LW:
+    case MSL_ACT_DAMAGE_FLY_TOP:
+    case MSL_ACT_DAMAGE_FLY_ROLL:
+    case MSL_ACT_FX_SPECIAL_HI:
+    case MSL_ACT_FX_SPECIAL_AIR_HI:
+      return 1u;
+    default:
+      return 0u;
+  }
+}
+
 static void hitboxes_seed_bridge_trim_impossible_indefinite(MslBatch* batch, int bi, int attacker,
                                                             int hb_id, const MslHitboxEvent* def,
                                                             uint16_t first_create_frame,
@@ -277,19 +305,29 @@ static void hitboxes_seed_bridge_trim_impossible_indefinite(MslBatch* batch, int
     }
 
     // Narrow stale-owner extension for active windows with repeated suite misses:
-    // - AttackAirLw scripts (Fox/Falco) can re-enable same-group hitboxes in-window while dense seed
-    //   hitlists carry stale indefinite victim presence across reseed boundaries.
+    // - AttackAirLw scripts (Fox/Falco) carry multiple same-group create_hitbox refreshes, and
+    //   ftAction_8007121C/ftColl_800768A0 rewires suppression ownership on those refresh edges.
+    // - Dense seed hitlists carry only victim presence + BODY attribution (`instance_hit_by`), so a
+    //   same-port stale victim from an older attacker instance can survive reseed and suppress the
+    //   live AttackAirLw capsule even when `last_hit_by` still matches the attacker port.
     // - Keep this lane scoped to AttackAirLw where extracted multi-create scripts are present.
     // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_Anim
+    // refs/melee/src/melee/ft/ftaction.c::ftAction_8007121C
+    // refs/melee/src/melee/ft/ftcoll.c::ftColl_800768A0
     // refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000ACFC,lbColl_80008A5C}
     // data/moves/{fox,falco}.json::moves.ftCo_SM_AttackAirLw.events.create_hitbox
     const uint8_t stale_owner_action_lane =
         (attacker_action == (uint16_t)MSL_ACT_ATTACK_AIR_LW) ? 1u : 0u;
     if (stale_owner_action_lane && !shield_desc_active &&
         !hitboxes_seed_bridge_is_guard_transition_owner(v_action) &&
-        batch->state.hitlag[v_idx] == 0u && batch->state.hitstun[v_idx] == 0u &&
-        batch->state.instance_hit_by[v_idx] != attacker_iid &&
-        batch->state.last_hit_by[v_idx] != (uint8_t)attacker) {
+        batch->state.hitlag[v_idx] == 0u &&
+        batch->state.instance_hit_by[v_idx] != attacker_iid) {
+      if (batch->state.hitstun[v_idx] != 0u &&
+          !(batch->state.last_hit_by[v_idx] == (uint8_t)attacker &&
+            hitboxes_seed_bridge_is_damage_or_firefox_launch_victim_action(v_action) &&
+            batch->state.hitstun[v_idx] <= expected_hitlag)) {
+        continue;
+      }
       hitboxes_seed_bridge_entry_clear(e);
       continue;
     }
