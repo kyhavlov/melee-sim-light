@@ -282,6 +282,90 @@ static inline uint8_t items_action_is_damage_family(uint16_t action_id_u16) {
   }
 }
 
+static inline size_t idx_hurtcap(int bi, int p, int cap_i) {
+  return ((size_t)bi * (size_t)MSL_MAX_PLAYERS + (size_t)p) * (size_t)MSL_MAX_HURTCAPS +
+         (size_t)cap_i;
+}
+
+static inline uint8_t laser_grounded_body_uses_sweep(const MslBatch* batch, size_t d_idx,
+                                                     float laser_age_frames) {
+  if (batch == NULL) {
+    return 0u;
+  }
+  (void)laser_age_frames;
+  return (batch->state.on_ground[d_idx] == 0u) ? 1u : 0u;
+}
+
+static inline uint8_t laser_grounded_body_landing_fall_special_aabb_bridge(
+    const MslBatch* batch, int bi, int def, float x0, float y0, float x, float y, float sr,
+    float laser_age_frames, uint8_t* hit_hurt_height) {
+  if (batch == NULL || hit_hurt_height == NULL) {
+    return 0u;
+  }
+  const size_t d_idx = msl_idx_player(bi, def);
+  if (batch->state.prev_action_id[d_idx] != (uint16_t)MSL_ACT_LANDING_FALL_SPECIAL ||
+      batch->state.shield_radius[d_idx] > 0.0f || !(laser_age_frames > 1.0f)) {
+    return 0u;
+  }
+  // Grounded LandingFallSpecial miss-only BODY bridge:
+  // - item BODY contact in it_80272460 consumes the projectile travel segment owned by
+  //   itFoxlaser_UnkMotion1_Phys / it_8029C4D4.
+  // - Our precise grounded probe can still miss replay-real rows in LandingFallSpecial when the
+  //   live hurtcap stack spans the traveled segment but no individual capsule sweep is selected.
+  // - Keep it off the first post-spawn motion tick; freshly emitted lasers already have explicit
+  //   spawn/collision ordering and broadening that window reopens the adjacent no-hit row.
+  // - Reconstruct only that geometric coarse overlap using the defender's currently enabled
+  //   hurtcaps; keep it miss-only and state-scoped so ordinary grounded/catch/shield families stay
+  //   on the precise path.
+  // refs/melee/src/melee/it/itcoll.c::it_80272460
+  // refs/melee/src/melee/it/items/itfoxlaser.c::{itFoxlaser_UnkMotion1_Phys,it_8029C4D4}
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::{
+  //   ftCo_LandingFallSpecial_Enter,ftCo_LandingFallSpecial_Anim}
+  const float seg_min_x = fminf(x0, x) - sr;
+  const float seg_max_x = fmaxf(x0, x) + sr;
+  const float seg_min_y = fminf(y0, y) - sr;
+  const float seg_max_y = fmaxf(y0, y) + sr;
+  const float defender_x = batch->state.pos_x[d_idx];
+  if (defender_x < seg_min_x || defender_x > seg_max_x) {
+    return 0u;
+  }
+  const uint8_t cap_n = batch->state.hurtcap_count[d_idx];
+  for (uint8_t ci = 0; ci < cap_n; ci++) {
+    const size_t hc_idx = idx_hurtcap(bi, def, ci);
+    if (!batch->state.hurtcap_enabled[hc_idx]) {
+      continue;
+    }
+    // Height-class trim:
+    // - The miss-only bridge is only compensating lower/mid BODY overlap that our grounded precise
+    //   probe fails to select. High/head-only capsules still stay on the exact lbColl-shaped path;
+    //   broadening the bridge to height=2 reopens replay-false head contacts in the adjacent GAT
+    //   LandingFallSpecial family.
+    // - Decomp exposes hurt capsule height class on HitCapsule/HurtCapsule (`x43_b2`) and forwards
+    //   it through lbColl_8000805C acceptance.
+    // refs/melee/src/melee/lb/lbcollision.c::lbColl_8000805C
+    // refs/melee/src/melee/it/itcoll.c::it_80272460
+    if (batch->state.hurtcap_height[hc_idx] == (uint8_t)2u) {
+      continue;
+    }
+    const float r = batch->state.hurtcap_radius[hc_idx];
+    const float cap_min_x =
+        fminf(batch->state.hurtcap_a_x[hc_idx], batch->state.hurtcap_b_x[hc_idx]) - r;
+    const float cap_max_x =
+        fmaxf(batch->state.hurtcap_a_x[hc_idx], batch->state.hurtcap_b_x[hc_idx]) + r;
+    const float cap_min_y =
+        fminf(batch->state.hurtcap_a_y[hc_idx], batch->state.hurtcap_b_y[hc_idx]) - r;
+    const float cap_max_y =
+        fmaxf(batch->state.hurtcap_a_y[hc_idx], batch->state.hurtcap_b_y[hc_idx]) + r;
+    if (seg_max_x < cap_min_x || seg_min_x > cap_max_x || seg_max_y < cap_min_y ||
+        seg_min_y > cap_max_y) {
+      continue;
+    }
+    *hit_hurt_height = batch->state.hurtcap_height[hc_idx];
+    return 1u;
+  }
+  return 0u;
+}
+
 enum {
   // Internal runtime marker in item.misc2 for deferred powershield reflect owner transfer.
   //
@@ -2067,12 +2151,15 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
       // Laser BODY overlap parity:
       // - Decomp computes collision over projectile travel in-frame (prev_pos -> cur_pos), so a
       //   current-point-only probe can miss replay-causal same-frame hits.
-      // - Current implementation only applies swept BODY overlap for airborne defenders.
+      // - Current implementation keeps the precise swept probe on the airborne path only; grounded
+      //   replay gaps are handled by the narrow miss-only LandingFallSpecial bridge below.
       // refs/melee/src/melee/it/items/itfoxlaser.c::{itFoxlaser_UnkMotion1_Phys,it_8029C4D4}
-      // TODO(decomp/items-grounded-body-gating): mirror grounded BODY hurt-status/collision gating
-      // from it_80272460 + ftColl callbacks, then remove this temporary airborne-only split.
-      // refs/melee/src/melee/it/items/itfoxlaser.c::{itFoxlaser_UnkMotion1_Phys,it_8029C4D4}
-      const uint8_t use_swept_body = (batch->state.on_ground[d_idx] == 0u) ? 1u : 0u;
+      // TODO(decomp/items-grounded-body-gating): mirror full grounded BODY hurt-status/collision
+      // gating from it_80272460 + ftColl callbacks, then remove the narrow miss-only bridge below.
+      // refs/melee/src/melee/it/itcoll.c::it_80272460
+      // refs/melee/src/melee/ft/ftcoll.c::ftColl_8007B868
+      const uint8_t use_swept_body =
+          laser_grounded_body_uses_sweep(batch, d_idx, laser_age_frames);
       for (uint8_t oi = 0; oi < off_n && oi < (uint8_t)MSL_LASER_MAX_HITBOX_OFFS_X && !hit; oi++) {
         const float off_x =
             (laser_state == 0u) ? lp->hitbox_offsets_x[oi] : lp->state1_hitbox_offsets_x[oi];
@@ -2102,6 +2189,11 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
             break;
           }
         }
+      }
+      if (!hit && laser_grounded_body_landing_fall_special_aabb_bridge(batch, bi, def, x0, y0, x,
+                                                                       y, sr, laser_age_frames,
+                                                                       &hit_hurt_height)) {
+        hit = 1;
       }
       if (!hit && laser_state != 0u && batch->state.action_id[o_idx] == (uint16_t)MSL_ACT_THROW_LW &&
           batch->state.throw_pulse_consumed[o_idx] == 0u &&

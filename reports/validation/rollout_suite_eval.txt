@@ -29,13 +29,13 @@ fields: action_id,animation_index,on_ground,hitlag,hitstun,state_flags
 
 == datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl ==
 rollout.best_len: 154
-rollout.streak_count: 185
-rollout.streak_len.median: 30
+rollout.streak_count: 186
+rollout.streak_len.median: 29
 rollout.streak_len.p90: 88
 rollout.streak_len.p95: 95
 rollout.streak_len.max: 154
-rollout.first_mismatch_total: 187
-rollout.first_mismatch_seeded_total: 60
+rollout.first_mismatch_total: 188
+rollout.first_mismatch_seeded_total: 59
 
 == datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl ==
 rollout.best_len: 197
@@ -68,11 +68,11 @@ rollout.first_mismatch_total: 202
 rollout.first_mismatch_seeded_total: 56
 
 == suite summary ==
-overall.rollout.streak_count: 902
+overall.rollout.streak_count: 903
 overall.rollout.streak_len.median: 30
 overall.rollout.streak_len.p90: 89
 overall.rollout.streak_len.p95: 110
 overall.rollout.streak_len.max: 207
 overall.rollout.best_len.max: 207
-overall.rollout.first_mismatch_total: 905
-overall.rollout.first_mismatch_seeded_total: 284
+overall.rollout.first_mismatch_total: 906
+overall.rollout.first_mismatch_seeded_total: 283
