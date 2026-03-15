@@ -60,6 +60,18 @@ static inline uint8_t action_is_shine_air(uint16_t action_id) {
              : 0;
 }
 
+static inline uint8_t shine_is_dash_flick(const MslCommonParams* c, float stick_x,
+                                          uint8_t tilt_timer_x) {
+  if (c == NULL) {
+    return 0u;
+  }
+  const float ax = msl_absf(stick_x);
+  // Decomp: Dash admission uses `ABS(lstick.x) >= p_ftCommonData->x3C` and
+  // `x670_timer_lstick_tilt_x < p_ftCommonData->x40`.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c::ftCo_Dash_CheckInput
+  return (ax >= c->dash_flick_abs && tilt_timer_x < c->dash_flick_tilt_max_frames) ? 1u : 0u;
+}
+
 static inline uint8_t action_allows_shine_entry_ground(uint16_t action_id) {
   // Decomp: specials (including SpecialLw / shine) are dispatched from per-state IASA callbacks via
   // `ftCo_800D68C0` ("special move input" dispatcher). If a state does not call into that chain,
@@ -356,6 +368,7 @@ void shine_update_pre_physics(MslBatch* batch) {
       uint8_t shine_entered_this_frame = 0u;
       const uint8_t on_ground = batch->state.on_ground[idx] ? 1u : 0u;
       const uint16_t buttons_pressed = batch->state.input_buttons_pressed[idx];
+      const uint8_t tilt_timer_x = batch->state.tilt_timer_x[idx];
       const uint8_t tilt_timer_y = batch->state.tilt_timer_y[idx];
       const float stick_x =
           apply_deadzone(stick_i8_to_unit(batch->state.input_main_x[idx]), c->lstick_deadzone_x);
@@ -592,7 +605,25 @@ void shine_update_pre_physics(MslBatch* batch) {
           } break;
           case MSL_ACT_FX_SPECIAL_LW_END:
             if (anim_finished(cid, ms->speciallw_ground_end, anim_frame_f32)) {
+              // Decomp callback order:
+              // - ftFx_SpecialLwEnd_Anim calls ftCommon_8007DB24 then ftCommon_8007D92C.
+              // - grounded ftCommon_8007D92C resolves to Wait via ft_8008A2BC.
+              // - destination Wait_IASA can then admit Dash on the same frame.
+              // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c::ftFx_SpecialLwEnd_Anim
+              // refs/melee/src/melee/ft/ftcommon.c::{ftCommon_8007DB24,ftCommon_8007D92C}
+              // refs/melee/src/melee/ft/chara/ftCommon/{ftCo_Wait.c,ftCo_Dash.c}
               enter_wait(batch, idx);
+              if (shine_is_dash_flick(c, stick_x, tilt_timer_x) &&
+                  (stick_x * facing_dir) >= 0.0f) {
+                batch->state.action_id[idx] = (uint16_t)MSL_ACT_DASH;
+                batch->state.animation_index[idx] = (uint32_t)MSL_SM_DASH;
+                batch->state.dash_x4[idx] = 1u;
+                msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+                // Decomp: ftCo_Dash_Enter calls ftAnim_8006EBA4 immediately after ChangeMotionState.
+                // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c:59-62
+                msl_anim_timebase_tick_once(batch, idx);
+                batch->state.tilt_timer_x[idx] = 0xFEu;
+              }
             }
             break;
           case MSL_ACT_FX_SPECIAL_AIR_LW_END:
