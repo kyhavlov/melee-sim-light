@@ -398,6 +398,23 @@ typedef struct MslSeed {
   // Seed representation:
   // - Store a reseed-friendly u8 countdown (clamped to 0..255) representing (mv.co.run.x0 > 0).
   uint8_t run_x0[MSL_MAX_PLAYERS];
+  // RunBrake TurnRun gate (`fp->cmd_vars[0]`) seeded from the common submotion script.
+  //
+  // Decomp:
+  // - ftCo_RunBrake_Enter resets fp->cmd_vars[0] = 0.
+  // - ftCo_RunBrake_IASA only reaches fn_800C9CEC (TurnRun enter) when fp->cmd_vars[0] != 0.
+  // - fp->cmd_vars[0] is written by the action script via ftAction_80071820.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_RunBrake.c::{
+  //   ftCo_RunBrake_Enter,ftCo_RunBrake_IASA}
+  // refs/melee/src/melee/ft/ftaction.c::ftAction_80071820
+  //
+  // Source of truth:
+  // - data/moves/{fox,falco}.json moves["ftCo_SM_RunBrake"]["events"] set_cmd_var(idx=0).
+  //
+  // Seed representation:
+  // - 0: cmd_vars[0] disabled on this seeded post-frame.
+  // - 1: cmd_vars[0] enabled on this seeded post-frame.
+  uint8_t runbrake_cmd0[MSL_MAX_PLAYERS];
   // Dash IASA branch latch (seeded; decomp-shaped).
   //
   // Decomp:

@@ -245,6 +245,11 @@ typedef struct MslStateSoA {
   // - Gates TurnRun/RunBrake in Run_IASA.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Run.c::{ftCo_Run_Anim,ftCo_Run_IASA}
   uint8_t* run_x0;  // [batch * players], clamped to 0..255
+  // RunBrake TurnRun gate (`fp->cmd_vars[0]`) derived from the common RunBrake script.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_RunBrake.c::{
+  //   ftCo_RunBrake_Enter,ftCo_RunBrake_IASA}
+  // refs/melee/src/melee/ft/ftaction.c::ftAction_80071820
+  uint8_t* runbrake_cmd0;  // [batch * players], 0/1
   // Dash IASA branch latch (decomp: fp->mv.co.dash.x4).
   // - Set by ftCo_Dash_Enter(arg1).
   // - ftCo_Dash_IASA uses (x4 != 0 && cur_anim_frame <= x44) for early-branch gating.

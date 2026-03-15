@@ -15,6 +15,7 @@
 #include "ledge.h"
 #include "locomotion.h"
 #include "match_flow.h"
+#include "move_tables.h"
 #include "knockdown.h"
 #include "physics.h"
 #include "shields.h"
@@ -70,6 +71,31 @@ static inline void clear_seed_owned_transients_post_frame(MslBatch* batch) {
       // timers_update_post_anim(), then clear to prevent sticky carry in rollout frames.
       // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
       batch->state.source_clear_terminal_phase[idx] = 0u;
+    }
+  }
+}
+
+static inline void sync_runbrake_cmd0_post_frame(MslBatch* batch) {
+  if (batch == NULL) {
+    return;
+  }
+  const int num_players = (int)batch->config.num_players;
+  for (int bi = 0; bi < batch->batch_size; bi++) {
+    for (int p = 0; p < num_players; p++) {
+      const size_t idx = msl_idx_player(bi, p);
+      if (batch->state.action_id[idx] != (uint16_t)MSL_ACT_RUN_BRAKE) {
+        batch->state.runbrake_cmd0[idx] = 0u;
+        continue;
+      }
+      // Decomp: RunBrake cmd_vars[0] is owned by the common RunBrake action script and consumed by
+      // RunBrake_IASA before the TurnRun branch.
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_RunBrake.c::{
+      //   ftCo_RunBrake_Enter,ftCo_RunBrake_IASA}
+      // refs/melee/src/melee/ft/ftaction.c::ftAction_80071820
+      // Source of truth:
+      // - data/moves/{fox,falco}.json moves["ftCo_SM_RunBrake"]["events"] set_cmd_var(idx=0).
+      batch->state.runbrake_cmd0[idx] = move_tables_runbrake_cmd0_active(
+          batch->state.char_id[idx], batch->state.anim_frame_f32[idx]);
     }
   }
 }
@@ -273,6 +299,7 @@ static int step_one_frame_core(MslBatch* batch, const uint8_t* prev_input_bytes,
   // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c
   anim_timebase_apply_deferred_tick_once_post_combat(batch);
+  sync_runbrake_cmd0_post_frame(batch);
   state_flags_refresh_post_frame(batch);
   clear_seed_owned_transients_post_frame(batch);
 

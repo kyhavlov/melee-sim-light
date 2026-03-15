@@ -1207,6 +1207,55 @@ def derive_run_x0(
     return out
 
 
+def derive_runbrake_cmd0(
+    *,
+    action_id_u16: np.ndarray,
+    anim_frame_f32: np.ndarray,
+    char_id_u8: np.ndarray,
+    cmd0_on_by_char: dict[int, int],
+    cmd0_off_by_char: dict[int, int],
+    act_run_brake: int,
+) -> np.ndarray:
+    """
+    Derive RunBrake's `fp->cmd_vars[0]` gate per post-frame, strictly causally.
+
+    Decomp:
+    - ftCo_RunBrake_Enter clears `fp->cmd_vars[0] = 0`.
+      refs/melee/src/melee/ft/chara/ftCommon/ftCo_RunBrake.c::ftCo_RunBrake_Enter
+    - ftCo_RunBrake_IASA only reaches `fn_800C9CEC` (TurnRun path) when `fp->cmd_vars[0] != 0`.
+      refs/melee/src/melee/ft/chara/ftCommon/ftCo_RunBrake.c::ftCo_RunBrake_IASA
+    - The command script writes `cmd_vars[0]` via `set_cmd_var`.
+      refs/melee/src/melee/ft/ftaction.c::ftAction_80071820
+
+    Source of truth:
+    - data/moves/{fox,falco}.json moves["ftCo_SM_RunBrake"]["events"] set_cmd_var(idx=0)
+
+    Representation:
+    - 0: RunBrake TurnRun gate disabled on this post-frame.
+    - 1: RunBrake TurnRun gate enabled on this post-frame.
+    """
+    action_id = np.asarray(action_id_u16, dtype=np.uint16).reshape(-1)
+    anim_frame = np.asarray(anim_frame_f32, dtype=np.float32).reshape(-1)
+    char_id = np.asarray(char_id_u8, dtype=np.uint8).reshape(-1)
+    n = int(action_id.size)
+    if int(anim_frame.size) != n or int(char_id.size) != n:
+        raise ValueError("action_id_u16/anim_frame_f32/char_id_u8 must have the same length")
+
+    out = np.zeros(n, dtype=np.uint8)
+    for i in range(n):
+        if int(action_id[i]) != int(act_run_brake):
+            continue
+        cid = int(char_id[i])
+        start_af = int(cmd0_on_by_char.get(cid, -1))
+        end_af = int(cmd0_off_by_char.get(cid, -1))
+        if start_af < 0 or end_af < 0 or end_af < start_af:
+            continue
+        af = float(anim_frame[i])
+        if np.isfinite(af) and af >= float(start_af) and af < float(end_af):
+            out[i] = np.uint8(1)
+    return out
+
+
 def derive_dash_x4(
     *,
     action_id_u16: np.ndarray,

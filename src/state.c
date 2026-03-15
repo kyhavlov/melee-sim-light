@@ -126,6 +126,7 @@ int state_alloc(MslStateSoA* state, int batch_size) {
   state->attackdash_x0 = (int16_t*)alloc_aligned_64(sizeof(int16_t) * bp);
   state->jab_x0 = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->run_x0 = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
+  state->runbrake_cmd0 = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->dash_x4 = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->shine_release_lag = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->shine_is_release = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
@@ -332,7 +333,8 @@ int state_alloc(MslStateSoA* state, int batch_size) {
       !state->guard_x10 || !state->lightshield_amount || !state->kneebend_jump_input ||
       !state->kneebend_is_short_hop || !state->tilt_timer_x || !state->tilt_timer_y ||
       !state->fall_fast || !state->attackdash_x0 || !state->jab_x0 || !state->run_x0 ||
-      !state->dash_x4 || !state->shine_release_lag || !state->shine_is_release ||
+      !state->runbrake_cmd0 || !state->dash_x4 || !state->shine_release_lag ||
+      !state->shine_is_release ||
       !state->ecb_lock_timer || !state->ledge_side || !state->stage_ledge_occupant_left ||
       !state->stage_ledge_occupant_right || !state->ledge_cooldown || !state->fallspecial_xc ||
       !state->turn_has_turned || !state->turn_frames_to_turn || !state->turn_x8 ||
@@ -506,6 +508,7 @@ void state_free(MslStateSoA* state) {
   alloc_free(state->attackdash_x0);
   alloc_free(state->jab_x0);
   alloc_free(state->run_x0);
+  alloc_free(state->runbrake_cmd0);
   alloc_free(state->dash_x4);
   alloc_free(state->shine_release_lag);
   alloc_free(state->shine_is_release);

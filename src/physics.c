@@ -228,7 +228,6 @@ static inline uint8_t physics_action_is_common_ground_friction_only(uint16_t act
   switch (action_id) {
     case MSL_ACT_WAIT:
     case MSL_ACT_TURN:
-    case MSL_ACT_TURN_RUN:
     case MSL_ACT_KNEE_BEND:
     case MSL_ACT_SQUAT:
     case MSL_ACT_SQUAT_WAIT:
@@ -926,6 +925,41 @@ void physics_integrate(MslBatch* batch) {
             const float friction = ch->gr_friction * c->run_friction_mul;
             gr_vel += ground_accel_step_delta(gr_vel, accel, target, friction,
                                               ch->ground_max_horizontal_velocity);
+          } else if (action_id == (uint16_t)MSL_ACT_TURN_RUN) {
+            const float accel =
+                stick_x * ch->dash_run_acceleration_a +
+                (stick_x > 0.0f ? +ch->dash_run_acceleration_b : -ch->dash_run_acceleration_b);
+            const float target = stick_x * ch->dash_run_terminal_velocity;
+            const float friction = ch->gr_friction * c->run_friction_mul;
+            if (target == 0.0f) {
+              gr_vel += ground_friction_step_delta(gr_vel, friction);
+            } else if ((facing_dir * accel) < 0.0f) {
+              // Decomp: TurnRun_Phys calls getAccelAndTarget, then only applies accel while
+              // `mv.co.turnrun.accel_mul * accel < 0`; otherwise it falls back to grounded friction.
+              // On TurnRun_Enter, accel_mul is initialized from the pre-turn facing_dir and x14 is
+              // cleared.
+              // refs/melee/src/melee/ft/chara/ftCommon/ftCo_TurnRun.c::{
+              //   ftCo_TurnRun_Enter,ftCo_TurnRun_Phys}
+              float accel_step = accel;
+              if (accel_step > 0.0f) {
+                if ((gr_vel + accel_step) > target) {
+                  accel_step -= friction;
+                  if ((gr_vel + accel_step) < target) {
+                    accel_step = target - gr_vel;
+                  }
+                }
+              } else if (accel_step < 0.0f) {
+                if ((gr_vel + accel_step) < target) {
+                  accel_step += friction;
+                  if ((gr_vel + accel_step) > target) {
+                    accel_step = target - gr_vel;
+                  }
+                }
+              }
+              gr_vel += accel_step;
+            } else {
+              gr_vel += ground_friction_step_delta(gr_vel, friction);
+            }
           } else if (action_id == (uint16_t)MSL_ACT_RUN_BRAKE) {
             const float friction = ch->gr_friction * c->run_friction_mul;
             gr_vel += ground_friction_step_delta(gr_vel, friction);

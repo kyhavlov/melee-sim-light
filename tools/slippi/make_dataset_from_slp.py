@@ -331,6 +331,36 @@ def _load_throw_pulse_seed_tables(
     return pulse_frames_by_char_action, cmd1_start_by_char_action, shot_itkind_by_char
 
 
+def _load_runbrake_cmd0_seed_tables(*, data_root) -> tuple[dict[int, int], dict[int, int]]:
+    """Load RunBrake cmd_var[0] timing from extracted move scripts.
+
+    Source of truth:
+    - data/moves/{fox,falco}.json moves["ftCo_SM_RunBrake"]["events"] set_cmd_var(idx=0)
+    """
+    cmd0_on_by_char: dict[int, int] = {}
+    cmd0_off_by_char: dict[int, int] = {}
+    for char_id, key in ((1, "fox"), (22, "falco")):
+        moves = json.loads((data_root / "moves" / f"{key}.json").read_text())["moves"]
+        events = moves.get("ftCo_SM_RunBrake", {}).get("events", [])
+        cmd0_on = sorted(
+            int(ev.get("frame", 0))
+            for ev in events
+            if ev.get("kind") == "set_cmd_var"
+            and int((ev.get("data") or {}).get("idx", -1)) == 0
+            and int((ev.get("data") or {}).get("value", -1)) != 0
+        )
+        cmd0_off = sorted(
+            int(ev.get("frame", 0))
+            for ev in events
+            if ev.get("kind") == "set_cmd_var"
+            and int((ev.get("data") or {}).get("idx", -1)) == 0
+            and int((ev.get("data") or {}).get("value", -1)) == 0
+        )
+        cmd0_on_by_char[int(char_id)] = int(cmd0_on[0]) if cmd0_on else -1
+        cmd0_off_by_char[int(char_id)] = int(cmd0_off[0]) if cmd0_off else -1
+    return cmd0_on_by_char, cmd0_off_by_char
+
+
 def _load_source_clear_terminal_followup_tables(
     *, data_root
 ) -> tuple[dict[tuple[int, int], int], dict[tuple[int, int], int]]:
@@ -1478,6 +1508,7 @@ def _main_impl(args) -> None:
         derive_guard_release_lockout_and_lightshield,
         derive_guard_tilt_state,
         derive_dash_x4,
+        derive_runbrake_cmd0,
         derive_shine_release_state,
         derive_run_x0,
         derive_ecb_lock_timer,
@@ -1635,6 +1666,7 @@ def _main_impl(args) -> None:
     act_dash = 0x0014
     act_run = 0x0015
     act_run_direct = 0x0016
+    act_run_brake = 0x0017
     act_kneebend = 0x0018
     act_jump_f = 0x0019
     act_jump_b = 0x001A
@@ -1707,6 +1739,9 @@ def _main_impl(args) -> None:
     ) = _load_throw_pulse_seed_tables(
         data_root=data_root,
         throw_action_to_move=throw_action_to_move,
+    )
+    runbrake_cmd0_on_by_char, runbrake_cmd0_off_by_char = _load_runbrake_cmd0_seed_tables(
+        data_root=data_root
     )
     (
         source_clear_followup_cmd0_on_by_char_action,
@@ -2344,6 +2379,15 @@ def _main_impl(args) -> None:
             act_turn_run=act_turn_run,
         )
         samples["seed_t"]["run_x0"][:, slot] = run_x0[:-1]
+        runbrake_cmd0 = derive_runbrake_cmd0(
+            action_id_u16=post_state,
+            anim_frame_f32=post_anim_frame_f32,
+            char_id_u8=post_char,
+            cmd0_on_by_char=runbrake_cmd0_on_by_char,
+            cmd0_off_by_char=runbrake_cmd0_off_by_char,
+            act_run_brake=act_run_brake,
+        )
+        samples["seed_t"]["runbrake_cmd0"][:, slot] = runbrake_cmd0[:-1]
         dash_x4 = derive_dash_x4(
             action_id_u16=post_state,
             action_frame_i16=post_state_age,

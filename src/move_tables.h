@@ -90,6 +90,16 @@ uint8_t move_tables_jab_rapid_active(uint8_t char_id, uint16_t grounded_action_i
 // Source of truth: data/moves/{fox,falco}.json moves["ftCo_SM_Dash"]["events"] set_cmd_var(idx=0).
 uint8_t move_tables_dash_cmd0_active(uint8_t char_id, float cur_anim_frame_f32);
 
+// Returns whether cmd_var[0] is set at the given cur_anim_frame for RunBrake.
+//
+// Decomp:
+// - ftCo_RunBrake_IASA only reaches fn_800C9CEC (TurnRun enter) when fp->cmd_vars[0] != 0.
+// refs/melee/src/melee/ft/chara/ftCommon/ftCo_RunBrake.c::ftCo_RunBrake_IASA
+// refs/melee/src/melee/ft/ftaction.c::ftAction_80071820
+//
+// Source of truth: data/moves/{fox,falco}.json moves["ftCo_SM_RunBrake"]["events"] set_cmd_var(idx=0).
+uint8_t move_tables_runbrake_cmd0_active(uint8_t char_id, float cur_anim_frame_f32);
+
 // Returns whether CatchPull/CatchDashPull should enter CatchWait due to the move script setting
 // fp->throw_flags (x2210) via the `set_throw_flags` command.
 //

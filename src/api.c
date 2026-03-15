@@ -518,6 +518,7 @@ int msl_batch_reseed_seed(MslBatch* batch, const uint8_t* seed_bytes, size_t see
       // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm (misc AS variable @ fp+0x2340)
       batch->state.jab_x0[idx] = seed->jab_x0[p] ? 1u : 0u;
       batch->state.run_x0[idx] = seed->run_x0[p];
+      batch->state.runbrake_cmd0[idx] = seed->runbrake_cmd0[p] ? 1u : 0u;
       batch->state.dash_x4[idx] = seed->dash_x4[p];
       batch->state.shine_release_lag[idx] = seed->shine_release_lag[p];
       batch->state.shine_is_release[idx] = seed->shine_is_release[p];

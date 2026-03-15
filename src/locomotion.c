@@ -2531,6 +2531,7 @@ void locomotion_update_pre(MslBatch* batch) {
         // refs/melee/src/melee/ft/chara/ftCommon/ftCo_RunBrake.c::ftCo_RunBrake_IASA
         // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Squat.c::ftCo_800D5FB0
         if (action_id == MSL_ACT_RUN_BRAKE && action_id_start == MSL_ACT_RUN_BRAKE) {
+          const float cur_anim_frame = batch->state.anim_frame_f32[idx];
           const MslJumpInput j_in =
               jump_input_from_edges(c, buttons_pressed, stick_y, tilt_timer_y);
           if (j_in != MSL_JUMP_INPUT_NONE && batch->state.jumps_left[idx] > 0) {
@@ -2540,6 +2541,20 @@ void locomotion_update_pre(MslBatch* batch) {
             batch->state.kneebend_jump_input[idx] = (uint8_t)j_in;
             batch->state.kneebend_is_short_hop[idx] = 0;
             action_id = (uint16_t)MSL_ACT_KNEE_BEND;
+          } else if (batch->state.runbrake_cmd0[idx] != 0u &&
+                     (stick_x * facing_dir) <= c->turn_run_stick_x_threshold) {
+            // Decomp: RunBrake IASA enters TurnRun via fn_800C9CEC only while cmd_vars[0] is enabled
+            // by the RunBrake command script; TurnRun_Enter preserves the current anim frame.
+            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_RunBrake.c::ftCo_RunBrake_IASA
+            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_TurnRun.c::fn_800C9CEC
+            // refs/melee/src/melee/ft/ftaction.c::ftAction_80071820
+            // Source of truth:
+            // - data/moves/{fox,falco}.json moves["ftCo_SM_RunBrake"]["events"] set_cmd_var(idx=0).
+            batch->state.action_id[idx] = (uint16_t)MSL_ACT_TURN_RUN;
+            batch->state.animation_index[idx] = (uint32_t)MSL_SM_TURN_RUN;
+            batch->state.runbrake_cmd0[idx] = 0u;
+            msl_anim_timebase_enter(batch, idx, cur_anim_frame, 1.0f);
+            action_id = (uint16_t)MSL_ACT_TURN_RUN;
           } else if (stick_y < -c->crouch_stick_threshold) {
             enter_squat_immediate(batch, idx);
             action_id = (uint16_t)MSL_ACT_SQUAT;

@@ -75,6 +75,7 @@ static MslFrameWindow g_allow_interrupt_by_char_escape_n[256];
 static MslFrameWindow g_jab_combo_by_char_grounded_attack[256][MSL_GROUNDED_ATTACK_KIND_COUNT];
 static MslFrameWindow g_jab_rapid_by_char_grounded_attack[256][MSL_GROUNDED_ATTACK_KIND_COUNT];
 static MslFrameWindow g_cmd0_by_char_dash[256];
+static MslFrameWindow g_cmd0_by_char_runbrake[256];
 static MslFrameWindow g_throw_flags_by_char_catch[256];
 static MslFrameWindow g_throw_flags_by_char_catchdash[256];
 static MslFrameWindow g_catchattack_grabbed_hit_by_char[256];
@@ -1450,6 +1451,18 @@ static int load_one(const char* data_dir, const char* rel_path, uint8_t char_id)
   if (parse_cmd0_window_open_end(buf, buf_end, "ftCo_SM_Dash", &win) == 0) {
     g_cmd0_by_char_dash[char_id] = win;
   }
+  // RunBrake cmd_var[0] window (used for RunBrake -> TurnRun IASA branch).
+  //
+  // Decomp:
+  // - ftCo_RunBrake_Enter resets fp->cmd_vars[0].
+  // - ftCo_RunBrake_IASA checks fp->cmd_vars[0] before fn_800C9CEC.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_RunBrake.c::{
+  //   ftCo_RunBrake_Enter,ftCo_RunBrake_IASA}
+  // refs/melee/src/melee/ft/ftaction.c::ftAction_80071820
+  win = (MslFrameWindow){0};
+  if (parse_cmd0_window_open_end(buf, buf_end, "ftCo_SM_RunBrake", &win) == 0) {
+    g_cmd0_by_char_runbrake[char_id] = win;
+  }
 
   // Catch/CatchDash set_throw_flags triggers (used by CatchPull_Anim -> CatchWait transition).
   //
@@ -1747,6 +1760,17 @@ uint8_t move_tables_dash_cmd0_active(uint8_t char_id, float cur_anim_frame_f32) 
   }
   // Command-script frame events are evaluated on fp->cur_anim_frame (float).
   // refs/melee/src/melee/ft/ftaction.c::ftAction_80071820 (set_cmd_var)
+  return (cur_anim_frame_f32 >= (float)win.start_af && cur_anim_frame_f32 < (float)win.end_af) ? 1
+                                                                                               : 0;
+}
+
+uint8_t move_tables_runbrake_cmd0_active(uint8_t char_id, float cur_anim_frame_f32) {
+  const MslFrameWindow win = g_cmd0_by_char_runbrake[char_id];
+  if (!win.loaded) {
+    return 0;
+  }
+  // Command-script frame events are evaluated on fp->cur_anim_frame (float).
+  // refs/melee/src/melee/ft/ftaction.c::ftAction_80071820
   return (cur_anim_frame_f32 >= (float)win.start_af && cur_anim_frame_f32 < (float)win.end_af) ? 1
                                                                                                : 0;
 }

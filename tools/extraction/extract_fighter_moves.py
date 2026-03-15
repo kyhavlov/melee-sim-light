@@ -659,6 +659,10 @@ def main() -> None:
         # Grounded locomotion: needed for Dash IASA (cmd_var[0] gating) parity.
         # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c::ftCo_Dash_IASA
         "ftCo_SM_Dash",
+        # RunBrake cmd_var[0] gates the TurnRun branch in RunBrake IASA.
+        # refs/melee/src/melee/ft/chara/ftCommon/ftCo_RunBrake.c::ftCo_RunBrake_IASA
+        # refs/melee/src/melee/ft/ftaction.c::ftAction_80071820
+        "ftCo_SM_RunBrake",
         # Grounded->airborne jump transitions:
         # - ftCo_Jump* scripts own ftcmd var / allow_interrupt timing for jump followups.
         # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c
