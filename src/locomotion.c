@@ -21,6 +21,15 @@
 
 static inline float msl_signf(float x) { return x < 0.0f ? -1.0f : 1.0f; }
 
+// Decomp: refs/melee/src/melee/ft/chara/ftCommon/forward.h
+// - ftCo_MS_Ottotto = 245
+// - ftCo_MS_OttottoWait = 246
+// TODO: Promote these local Ottotto action ids into the shared action-id definitions in a follow-up.
+enum {
+  MSL_ACT_OTTOTTO = 245u,
+  MSL_ACT_OTTOTTO_WAIT = 246u,
+};
+
 static inline uint16_t walk_action_from_speed(const MslCommonParams* c, const MslCharParams* ch,
                                               float speed_ground_x_self);
 static inline uint32_t anim_for_walk_action(uint16_t a);
@@ -2133,6 +2142,28 @@ void locomotion_update_pre(MslBatch* batch) {
               action_id = want;
             }
           }
+        }
+
+        // Ottotto / OttottoWait opposite-flick smash-turn bridge:
+        // - ftCo_Ottotto{,Wait}_IASA routes through ftCo_Dash_CheckInput before Turn/Walk.
+        // - Keep only the opposite-facing dash-flick -> TurnSmash path here; same-facing Dash from
+        //   Ottotto still depends on unmodeled teeter collision ownership and regresses guardrails.
+        // TODO: Model the same-facing Dash path only after teeter ownership parity is represented.
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Ottotto.c::{
+        //   ftCo_Ottotto_IASA,ftCo_OttottoWait_IASA}
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c::ftCo_Dash_CheckInput
+        if ((action_id == (uint16_t)MSL_ACT_OTTOTTO ||
+             action_id == (uint16_t)MSL_ACT_OTTOTTO_WAIT) &&
+            is_dash_flick(c, stick_x, tilt_timer_x) && (stick_x * facing_dir) < 0.0f) {
+          batch->state.turn_has_turned[idx] = 0;
+          batch->state.turn_frames_to_turn[idx] = 0;
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Turn.c::ftCo_Turn_Enter_Smash
+          batch->state.turn_x8[idx] = (int8_t)(facing_dir > 0.0f ? 1 : -1);
+          batch->state.action_id[idx] = (uint16_t)MSL_ACT_TURN;
+          batch->state.animation_index[idx] = (uint32_t)MSL_SM_TURN;
+          msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+          msl_anim_timebase_tick_once(batch, idx);
+          action_id = (uint16_t)MSL_ACT_TURN;
         }
 
         // Landing IASA (minimal): after the landing lag gate, allow the same grounded locomotion
