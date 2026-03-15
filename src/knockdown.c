@@ -1420,6 +1420,34 @@ void knockdown_update_post_collision(MslBatch* batch) {
           continue;
         }
 
+        if (a0 == (uint16_t)MSL_ACT_DAMAGE_FALL) {
+          // DamageFall collision delegates to the same callback ladder as DamageIce:
+          // - ftCo_DamageFall_Coll -> ft_8008370C(..., ftCo_80090984)
+          // - ftCo_80090984 tries PassiveStand, then Passive, then DownBound.
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DamageFall.c::{
+          //   ftCo_DamageFall_Coll,ftCo_80090984
+          // }
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_PassiveStand.c::ftCo_80098928
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownAttack.c::ftCo_8009872C
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownBound.c::ftCo_80097D40
+          if (tech_is_available(batch, c, idx)) {
+            const float stick_x = apply_deadzone(stick_i8_to_unit(batch->state.input_main_x[idx]),
+                                                 c->lstick_deadzone_x);
+            if (msl_absf(stick_x) >= c->tech_roll_stick_threshold) {
+              const float facing_dir = batch->state.facing[idx] ? 1.0f : -1.0f;
+              const uint16_t act = (stick_x * facing_dir) >= 0.0f
+                                       ? (uint16_t)MSL_ACT_PASSIVE_STAND_F
+                                       : (uint16_t)MSL_ACT_PASSIVE_STAND_B;
+              enter_passive_from_damage_land(batch, ch, idx, act, a0);
+              continue;
+            }
+            enter_passive_from_damage_land(batch, ch, idx, (uint16_t)MSL_ACT_PASSIVE, a0);
+            continue;
+          }
+          enter_down_bound_from_damage_land(batch, ch, idx, a0);
+          continue;
+        }
+
         if (is_damage_ground_action(a0)) {
           const float kbx = batch->state.speed_x_attack[idx];
           const float kby = batch->state.speed_y_attack[idx];

@@ -13,6 +13,9 @@
 #include "move_tables.h"
 
 enum { Ft_MF_KeepFastFall = 1 << 0 };
+// Decomp: refs/melee/src/melee/ft/chara/ftCommon/forward.h
+// - ftCo_MS_PassiveWallJump = 203
+enum { MSL_ACT_PASSIVE_WALL_JUMP = 203u };
 
 static inline uint8_t anim_timebase_apply_aobj_loop(MslBatch* batch, size_t idx) {
   // Fighter AObj loop semantics (AOBJ_LOOP) apply a deterministic rewind+wrap when
@@ -262,6 +265,17 @@ void anim_timebase_update_pre_input(MslBatch* batch) {
       // - ISO-extracted `data/characters/{fox,falco}.json` `run_animation_scaling`.
       const int16_t action_frame_pre = batch->state.action_frame[idx];
       const MslCharParams* ch = msl_char_params(batch->state.char_id[idx]);
+
+      // PassiveWallJump entry hold:
+      // - PassiveWall_Anim enters ftCo_MS_PassiveWallJump through inlineA0 using
+      //   Fighter_ChangeMotionState(..., anim_start=fp->cur_anim_frame, anim_speed=1.0f).
+      // - That entry path does not issue a local ftAnim_8006EBA4 tick in the same callback.
+      // - Replay rows in the suite keep PassiveWallJump on action_frame==0 for the first post-entry
+      //   frame before the steady animation advance begins.
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_PassiveWall.c::{inlineA0,ftCo_PassiveWall_Anim}
+      if (a == (uint16_t)MSL_ACT_PASSIVE_WALL_JUMP && action_frame_pre == 0) {
+        batch->state.frame_speed_mul_fp_q16_16[idx] = 0;
+      }
 
       // Decomp: Walk Anim callback (ftCo_Walk_Anim -> ftWalkCommon_800DFDDC) updates anim rate
       // from current walk velocity and facing.

@@ -2988,13 +2988,16 @@ void locomotion_update_pre(MslBatch* batch) {
       } else if (is_air_loco) {
         // Air dodge (EscapeAir) entry from eligible airborne locomotion states.
         //
-        // Decomp entry check: ftCo_80099A58 (L/R press) is called from IASA in many aerial states,
-        // but EscapeAir is not allowed from FallSpecial.
+        // Decomp entry check: ftCo_80099A58 (L/R press) is called from Jump/Fall-family IASA
+        // owners, but not from DamageFall_IASA and not from FallSpecial.
         // refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_80099A58
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c::ftCo_Jump_IASA
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_IASA
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DamageFall.c::ftCo_DamageFall_IASA
         const uint8_t allow_escape_air =
             (action_id == MSL_ACT_JUMP_F || action_id == MSL_ACT_JUMP_B ||
              action_id == MSL_ACT_JUMP_AERIAL_F || action_id == MSL_ACT_JUMP_AERIAL_B ||
-             action_id == MSL_ACT_DAMAGE_FALL || action_is_fall_like(action_id))
+             action_is_fall_like(action_id))
                 ? 1
                 : 0;
         if (allow_escape_air && escape_air_try_enter_from_air_locomotion(batch, c, idx)) {
