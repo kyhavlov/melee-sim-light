@@ -10,6 +10,7 @@
 #include "anim_table.h"
 #include "buttons.h"
 #include "char_params.h"
+#include "coll_env_flags.h"
 #include "common_params.h"
 #include "grab_flow.h"
 #include "input.h"
@@ -24,10 +25,12 @@ static inline float msl_signf(float x) { return x < 0.0f ? -1.0f : 1.0f; }
 // Decomp: refs/melee/src/melee/ft/chara/ftCommon/forward.h
 // - ftCo_MS_Ottotto = 245
 // - ftCo_MS_OttottoWait = 246
+// - ftCo_SM_Ottotto = 210
 // TODO: Promote these local Ottotto action ids into the shared action-id definitions in a follow-up.
 enum {
   MSL_ACT_OTTOTTO = 245u,
   MSL_ACT_OTTOTTO_WAIT = 246u,
+  MSL_SM_OTTOTTO = 210u,
 };
 
 static inline uint16_t walk_action_from_speed(const MslCommonParams* c, const MslCharParams* ch,
@@ -3269,6 +3272,27 @@ void locomotion_update_post_collision(MslBatch* batch) {
           if (a == (uint16_t)MSL_ACT_FX_SPECIAL_HI_LANDING) {
             enter_fall_special_from_specialhi(batch, idx);
           }
+          continue;
+        }
+
+        // Ottotto (teeter) entry on steady Wait walk-off:
+        // - ftCo_8009A3C8 enters Ottotto through ftCo_8009A410 when Collide_Edge is set and the
+        //   fighter is not on the teeter-suppressed branch.
+        // - Keep this restricted to steady Wait ownership (`prev_action_id == Wait`) until the
+        //   teeter suppression internal is explicit; same-frame non-Wait -> Wait carry windows
+        //   regress unrelated edge-loss families.
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Ottotto.c::{ftCo_8009A3C8,ftCo_8009A410}
+        // refs/melee/src/melee/ft/ft_081B.c::ft_80084280
+        if (a == (uint16_t)MSL_ACT_WAIT &&
+            batch->state.prev_action_id[idx] == (uint16_t)MSL_ACT_WAIT &&
+            (batch->state.coll_env_flags[idx] & (uint32_t)MSL_COLLIDE_EDGE) != 0u) {
+          batch->state.on_ground[idx] = 1u;
+          batch->state.action_id[idx] = (uint16_t)MSL_ACT_OTTOTTO;
+          batch->state.animation_index[idx] = (uint32_t)MSL_SM_OTTOTTO;
+          batch->state.speed_air_x_self[idx] = 0.0f;
+          batch->state.speed_ground_x_self[idx] = 0.0f;
+          batch->state.speed_y_self[idx] = 0.0f;
+          msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
           continue;
         }
 

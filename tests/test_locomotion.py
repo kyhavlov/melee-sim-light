@@ -17,6 +17,7 @@ ACT_JUMPF = 0x0019
 ACT_FALL = 0x001D
 ACT_DAMAGEFALL = 0x0026
 ACT_LANDING = 0x002A
+ACT_OTTOTTO = 0x00F5
 
 # Submotion ids (GALE01): refs/melee/src/melee/ft/chara/ftCommon/forward.h
 SM_WAIT1_0 = 2
@@ -26,6 +27,10 @@ SM_RUN = 13
 SM_KNEEBEND = 15
 SM_JUMPF = 16
 SM_FALL = 20
+SM_OTTOTTO = 210
+
+# Collision env flag bits: refs/melee/src/common_structs.h, src/coll_env_flags.h
+MSL_COLLIDE_EDGE = 0x00800000
 
 CHAR_FOX = 1
 STAGE_FD = 32
@@ -46,6 +51,27 @@ INTERNALS_DTYPE = np.dtype(
         ("instance_id_counter", "<u2"),
         ("throw_pulse_consumed", ("u1", (MAX_PLAYERS,))),
         ("throw_pulse_crossed_prev_frame", ("u1", (MAX_PLAYERS,))),
+    ],
+    align=False,
+)
+
+COLLISION_CONTACTS_DTYPE = np.dtype(
+    [
+        ("wall_kind", ("u1", (MAX_PLAYERS,))),
+        ("_pad0", ("u1", (MAX_PLAYERS,))),
+        ("wall_id", ("<u2", (MAX_PLAYERS,))),
+        ("wall_contact_x", ("<f4", (MAX_PLAYERS,))),
+        ("wall_contact_y", ("<f4", (MAX_PLAYERS,))),
+        ("wall_normal_x", ("<f4", (MAX_PLAYERS,))),
+        ("wall_normal_y", ("<f4", (MAX_PLAYERS,))),
+        ("ceiling_id", ("<u2", (MAX_PLAYERS,))),
+        ("_pad1", ("<u2", (MAX_PLAYERS,))),
+        ("ceiling_contact_x", ("<f4", (MAX_PLAYERS,))),
+        ("ceiling_contact_y", ("<f4", (MAX_PLAYERS,))),
+        ("ceiling_normal_x", ("<f4", (MAX_PLAYERS,))),
+        ("ceiling_normal_y", ("<f4", (MAX_PLAYERS,))),
+        ("coll_env_flags", ("<u4", (MAX_PLAYERS,))),
+        ("coll_prev_env_flags", ("<u4", (MAX_PLAYERS,))),
     ],
     align=False,
 )
@@ -193,6 +219,41 @@ def _step_once_with_internals(seed: np.ndarray, prev_inp: np.ndarray, inp: np.nd
         cmp0 = out_cmp.view(COMPARE_DTYPE).reshape((1,))[0].copy()
         int0 = out_int.view(INTERNALS_DTYPE).reshape((1,))[0].copy()
         return cmp0, int0
+    finally:
+        msl_binding.destroy(handle)
+
+
+def _step_once_with_collision_contacts(
+    seed: np.ndarray, prev_inp: np.ndarray, inp: np.ndarray
+) -> tuple[np.ndarray, np.ndarray]:
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    compare_stride = int(sizes["compare"])
+    contacts_stride = int(sizes["collision_contacts"])
+
+    assert seed.dtype == SEED_DTYPE
+    assert seed_stride == SEED_DTYPE.itemsize
+    assert input_stride == INPUT_DTYPE.itemsize
+    assert compare_stride == COMPARE_DTYPE.itemsize
+    assert contacts_stride == COLLISION_CONTACTS_DTYPE.itemsize
+
+    handle = msl_binding.init(batch_size=1, num_players=2)
+    try:
+        seed_bytes = seed.view(np.uint8).reshape((1, seed_stride))
+        out_cmp = np.zeros((1, compare_stride), dtype=np.uint8)
+        out_contacts = np.zeros((1, contacts_stride), dtype=np.uint8)
+
+        msl_binding.reseed_seed(handle, seed_bytes)
+        msl_binding.step_input(handle, prev_inp, inp)
+        msl_binding.write_compare(handle, out_cmp)
+        msl_binding.debug_write_collision_contacts(handle, out_contacts)
+
+        cmp0 = out_cmp.view(COMPARE_DTYPE).reshape((1,))[0].copy()
+        contacts0 = out_contacts.view(COLLISION_CONTACTS_DTYPE).reshape((1,))[0].copy()
+        return cmp0, contacts0
     finally:
         msl_binding.destroy(handle)
 
@@ -566,9 +627,11 @@ def test_walk_off_consumes_ground_jump() -> None:
     seed["pos_x"][0, 0] = np.float32(85.4)  # FD floor edge is at ~85.5657 (data/stages/final_destination.json)
     seed["pos_y"][0, 0] = np.float32(0.0)
     seed["speed_ground_x_self"][0, 0] = np.float32(1.0)  # crosses offstage in one frame
-    seed["action_id"][0, 0] = np.uint16(ACT_WAIT)
+    # Steady Wait at a floor edge now has a dedicated replay-real teeter lock; keep this generic
+    # "walk/run off the stage" guard on a non-teetering locomotion owner.
+    seed["action_id"][0, 0] = np.uint16(ACT_RUN)
     seed["action_frame"][0, 0] = np.int16(0)
-    seed["animation_index"][0, 0] = np.uint32(SM_WAIT1_0)
+    seed["animation_index"][0, 0] = np.uint32(SM_RUN)
     seed["jumps_left"][0, 0] = np.uint8(2)
 
     prev_inp = _mk_input_bytes(1, input_stride)
@@ -577,6 +640,38 @@ def test_walk_off_consumes_ground_jump() -> None:
     assert int(out["on_ground"][0]) == 0
     assert int(out["action_id"][0]) == ACT_FALL
     assert int(out["jumps_left"][0]) == 1
+
+
+def test_wait_walk_off_enters_ottotto_grounded_without_consuming_jump() -> None:
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    input_stride = int(sizes["input"])
+
+    seed = _seed_base()
+    seed["on_ground"][0, 0] = np.uint8(1)
+    seed["pos_x"][0, 0] = np.float32(85.4)  # FD floor edge is at ~85.5657 (data/stages/final_destination.json)
+    seed["pos_y"][0, 0] = np.float32(0.0)
+    seed["speed_ground_x_self"][0, 0] = np.float32(1.0)  # crosses offstage in one frame
+    seed["action_id"][0, 0] = np.uint16(ACT_WAIT)
+    seed["action_frame"][0, 0] = np.int16(0)
+    seed["animation_index"][0, 0] = np.uint32(SM_WAIT1_0)
+    seed["jumps_left"][0, 0] = np.uint8(2)
+
+    prev_inp = _mk_input_bytes(1, input_stride)
+    inp = _mk_input_bytes(1, input_stride)
+    out, contacts = _step_once_with_collision_contacts(seed, prev_inp, inp)
+
+    # Decomp: ftCo_8009A3C8 checks Collide_Edge during steady Wait edge loss and calls
+    # ftCo_8009A410 for grounded Ottotto entry.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Ottotto.c::{ftCo_8009A3C8,ftCo_8009A410}
+    # refs/melee/src/melee/ft/ft_081B.c::ft_80084280
+    assert int(contacts["coll_env_flags"][0]) & MSL_COLLIDE_EDGE
+    assert int(out["action_id"][0]) == ACT_OTTOTTO
+    assert int(out["animation_index"][0]) == SM_OTTOTTO
+    assert int(out["action_frame"][0]) == 0
+    assert int(out["on_ground"][0]) == 1
+    assert int(out["jumps_left"][0]) == 2
 
 
 def test_run_off_does_not_snap_to_floor_edge() -> None:
