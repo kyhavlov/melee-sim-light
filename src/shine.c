@@ -129,7 +129,14 @@ static inline uint8_t action_allows_shine_entry_ground(uint16_t action_id) {
 }
 
 static inline uint8_t action_allows_shine_entry_air(uint16_t action_id) {
-  return msl_action_is_air_locomotion(action_id);
+  if (msl_action_is_air_locomotion(action_id)) {
+    return 1u;
+  }
+  // Decomp: DamageFall IASA delegates to ftCo_SpecialAir_CheckInput, which includes the SpecialLw
+  // dispatch path used by Fox/Falco reflector entry.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DamageFall.c::ftCo_DamageFall_IASA
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_SpecialAir.c::ftCo_SpecialAir_CheckInput
+  return (action_id == (uint16_t)MSL_ACT_DAMAGE_FALL) ? 1u : 0u;
 }
 
 static inline uint8_t anim_finished(uint8_t char_id, uint16_t msid, float anim_frame_f32) {
@@ -242,7 +249,11 @@ static inline void enter_shine_air_start(MslBatch* batch, size_t idx, const MslC
       batch->state.speed_air_x_self[idx] /= ch->reflector_momentum_preserve_x;
     }
   }
-
+  // Decomp: ftFx_SpecialAirLw_Enter uses Fighter_ChangeMotionState without Ft_MF_KeepFastFall, so
+  // fp->fall_fast is cleared on aerial shine entry.
+  // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c::ftFx_SpecialAirLw_Enter
+  // refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState
+  batch->state.fall_fast[idx] = 0u;
   batch->state.action_id[idx] = (uint16_t)MSL_ACT_FX_SPECIAL_AIR_LW_START;
   batch->state.animation_index[idx] = (uint32_t)ms->speciallw_air_start;
   msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
