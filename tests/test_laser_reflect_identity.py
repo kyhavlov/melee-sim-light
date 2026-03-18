@@ -199,3 +199,89 @@ def test_reflected_laser_updates_owner_instance_and_staling_identity() -> None:
         assert int(it1["misc3"]) == 0
     finally:
         msl_binding.destroy(handle)
+
+
+def test_guardreflect_stale_x14_shield_hit_clears_reflect_active_and_destroys_laser() -> None:
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    compare_stride = int(sizes["compare"])
+
+    assert seed_stride == SEED_DTYPE.itemsize
+    assert input_stride == INPUT_DTYPE.itemsize
+    assert compare_stride == COMPARE_DTYPE.itemsize
+
+    shot_itkind, off0 = _load_fox_laser_shot_itkind_and_first_offset_x()
+
+    seed = np.zeros((1,), dtype=SEED_DTYPE)
+    seed["stage_id"][0] = np.uint32(STAGE_FD)
+    seed["num_players"][0] = np.uint8(2)
+    seed["stocks"][0, :2] = np.uint8(4)
+    seed["char_id"][0, :2] = np.uint8(CHAR_FOX)
+    seed["facing"][0, :2] = np.uint8(1)
+    seed["on_ground"][0, :2] = np.uint8(1)
+    seed["ground_id"][0, :2] = np.uint16(0)
+
+    seed["action_id"][0, 0] = np.uint16(ACT_WAIT)
+    seed["animation_index"][0, 0] = np.uint32(2)
+
+    # Decomp-shaped stale-x18 GuardReflect snapshot:
+    # - x14 (+1-bias seed) already expired, so projectile overlap should resolve through the regular
+    #   shield-hit / GuardSetOff path rather than item reflect ownership.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80093BC0
+    # refs/melee/src/melee/ft/ftcoll.c::ftColl_80076CBC
+    seed["action_id"][0, 1] = np.uint16(ACT_GUARD_REFLECT)
+    seed["action_frame"][0, 1] = np.int16(-1)
+    seed["animation_index"][0, 1] = np.uint32(0xFFFFFFFF)
+    seed["guard_reflect_timer_x14"][0, 1] = np.uint8(0)
+    seed["guard_reflect_timer_x18"][0, 1] = np.uint8(1)
+    seed["state_flags"][0, 1, 3] = np.uint8(0x20)
+    seed["shield_hp"][0, 1] = np.float32(_common_attr("start_shield_health"))
+    seed["pos_x"][0, 1] = np.float32(0.0)
+    seed["pos_y"][0, 1] = np.float32(0.0)
+
+    handle = msl_binding.init(batch_size=1, num_players=2)
+    try:
+        prev_inp = _mk_input_bytes(1, input_stride)
+        inp = _mk_input_bytes(1, input_stride)
+        inp_view = inp.view(INPUT_DTYPE).reshape((1,))
+        inp_view["p"]["buttons"][0, 1] = np.uint16(BUTTON_L)
+        inp_view["p"]["l"][0, 1] = TRIGGER_FULL
+
+        # Use the runtime shield bubble center so the synthetic row stays robust to shield-bone data.
+        seed_bytes = seed.view(np.uint8).reshape((1, seed_stride))
+        msl_binding.reseed_seed(handle, seed_bytes)
+        msl_binding.step_input(handle, prev_inp, inp)
+        bubbles = msl_binding.debug_shield_bubbles_world(handle, 0)
+        shx, shy = float(bubbles[1, 0]), float(bubbles[1, 1])
+
+        seed2 = seed.copy()
+        seed2["items"][0, 0]["exists"] = np.uint8(1)
+        seed2["items"][0, 0]["type"] = np.uint16(shot_itkind)
+        seed2["items"][0, 0]["owner"] = np.int8(0)
+        seed2["items"][0, 0]["instance_id"] = np.uint16(999)
+        seed2["items"][0, 0]["direction"] = np.float32(1.0)
+        seed2["items"][0, 0]["vel_x"] = np.float32(5.0)
+        seed2["items"][0, 0]["vel_y"] = np.float32(0.0)
+        seed2["items"][0, 0]["pos_x"] = np.float32(shx - np.float32(off0))
+        seed2["items"][0, 0]["pos_y"] = np.float32(shy)
+        seed2["items"][0, 0]["timer"] = np.float32(10.0)
+        seed2["items"][0, 0]["spawn_id"] = np.uint32(123)
+
+        seed2_bytes = seed2.view(np.uint8).reshape((1, seed_stride))
+        msl_binding.reseed_seed(handle, seed2_bytes)
+        msl_binding.step_input(handle, prev_inp, inp)
+
+        out_cmp = np.zeros((1, compare_stride), dtype=np.uint8)
+        msl_binding.write_compare(handle, out_cmp)
+        cmp0 = out_cmp.view(COMPARE_DTYPE).reshape((1,))[0]
+
+        assert int(cmp0["action_id"][1]) == 181  # GuardSetOff
+        assert int(cmp0["animation_index"][1]) == 40  # GuardDamage
+        assert int(cmp0["hitlag"][1]) == 4
+        assert int(cmp0["state_flags"][1, 1]) == 33
+        assert int(cmp0["items"][0]["exists"]) == 0
+    finally:
+        msl_binding.destroy(handle)

@@ -1991,6 +1991,23 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
               batch->state.guard_reflect_timer_x18_seed[d_idx] != 0u) {
             can_powershield_reflect = 0u;
           }
+          // One-frame-late locomotion->GuardReflect frozen snapshot:
+          // - AttackDash / Wait-style shield admission can enter GuardReflect through ftCo_80091A4C ->
+          //   ftCo_800939B4, and the following frozen action_frame==-1 snapshot can already be on the
+          //   projectile shield-hit / GuardSetOff owner lane rather than the reflect-desc setup lane.
+          // - Keep this restricted to frozen GuardReflect rows whose previous action was not already
+          //   shield-owned; steady GuardReflect rows still use the timer-gated reflect path.
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
+          //   ftCo_80091A4C,ftCo_800939B4,ftCo_8009370C,ftCo_GuardReflect_Anim,ftCo_80093BC0}
+          // refs/melee/src/melee/ft/ftcoll.c::{ftColl_CreateReflectHit,ftColl_80076CBC}
+          if (can_powershield_reflect && defender_guard_reflect_no_submotion_snapshot &&
+              batch->state.action_frame[d_idx] == -1 &&
+              batch->state.prev_action_id[d_idx] != (uint16_t)MSL_ACT_GUARD_ON &&
+              batch->state.prev_action_id[d_idx] != (uint16_t)MSL_ACT_GUARD &&
+              batch->state.prev_action_id[d_idx] != (uint16_t)MSL_ACT_GUARD_REFLECT &&
+              batch->state.prev_action_id[d_idx] != (uint16_t)MSL_ACT_GUARD_SET_OFF) {
+            can_powershield_reflect = 0u;
+          }
           // Fresh locomotion->GuardReflect snapshot bridge:
           // - Grounded guard admission can enter GuardReflect directly from locomotion
           //   (`ftCo_80091A4C -> ftCo_800939B4 -> ftCo_80093A50`) before the first canonical
