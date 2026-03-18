@@ -386,12 +386,17 @@ void shine_update_pre_physics(MslBatch* batch) {
       const float stick_y =
           apply_deadzone(stick_i8_to_unit(batch->state.input_main_y[idx]), c->lstick_deadzone_y);
       const float facing_dir = batch->state.facing[idx] ? 1.0f : -1.0f;
+      const uint8_t landing_specials_open =
+          (a == (uint16_t)MSL_ACT_LANDING &&
+           batch->state.anim_frame_f32[idx] >= (float)ch->landing_lag_frames)
+              ? 1u
+              : 0u;
 
       // Entry (minimal): B press + down stick from basic locomotion.
       if (!action_is_shine(a) && (buttons_pressed & (uint16_t)MSL_BUTTON_B) != 0 &&
           stick_wants_speciallw(c, batch->state.input_main_y[idx])) {
         if (on_ground) {
-          if (action_allows_shine_entry_ground(a)) {
+          if (action_allows_shine_entry_ground(a) || landing_specials_open) {
             shine_release_setvars(batch, idx, ch);
             enter_shine_ground_start(batch, idx, ms);
             shine_entered_this_frame = 1u;
