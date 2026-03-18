@@ -86,7 +86,7 @@ overall.float_norm_mae_p95: 0.00316550
 == datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl ==
 Records: 11529  Players/scored per record: 2  Total player-frames: 23058
 mismatch.action_id: 30 / 23058 (0.001301)
-mismatch.action_frame: 40 / 23058 (0.001735)
+mismatch.action_frame: 39 / 23058 (0.001691)
 mismatch.on_ground: 5 / 23058 (0.000217)
 mismatch.facing: 28 / 23058 (0.001214)
 mismatch.stocks: 0 / 23058 (0.000000)
@@ -122,7 +122,7 @@ err.item_pos_x: mae=0.088034 p95=0.000000 max=71.544670
 err.item_pos_y: mae=0.047432 p95=0.000000 max=26.796017
 err.item_vel_x: mae=0.038854 p95=0.000000 max=6.760003
 err.item_vel_y: mae=0.040118 p95=0.000000 max=6.995885
-overall.discrete_mismatch: 432 / 1395009
+overall.discrete_mismatch: 431 / 1395009
 overall.float_norm_mae_p95: 0.00357585
 
 == datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/QuerulousGrandDinosaur.msl ==
@@ -210,5 +210,5 @@ overall.discrete_mismatch: 311 / 948277
 overall.float_norm_mae_p95: 0.00391618
 
 == suite summary ==
-overall.discrete_mismatch: 1468 / 4462843
+overall.discrete_mismatch: 1467 / 4462843
 overall.float_norm_mae_p95: 0.00336276

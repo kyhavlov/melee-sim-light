@@ -2147,6 +2147,26 @@ void locomotion_update_pre(MslBatch* batch) {
           }
         }
 
+        // Ottotto / OttottoWait jump IASA:
+        // - ftCo_Ottotto{,Wait}_IASA routes through ftCo_Jump_CheckInput before Dash/Turn/Walk.
+        // - Keep this scoped to jump entry only; attack/guard branches from the same IASA chain are
+        //   still blocked on broader teeter ownership / guard parity lanes.
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Ottotto.c::{
+        //   ftCo_Ottotto_IASA,ftCo_OttottoWait_IASA}
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c::ftCo_Jump_CheckInput
+        if (action_id == (uint16_t)MSL_ACT_OTTOTTO ||
+            action_id == (uint16_t)MSL_ACT_OTTOTTO_WAIT) {
+          const MslJumpInput j_in = jump_input_from_edges(c, buttons_pressed, stick_y, tilt_timer_y);
+          if (j_in != MSL_JUMP_INPUT_NONE && batch->state.jumps_left[idx] > 0) {
+            batch->state.action_id[idx] = (uint16_t)MSL_ACT_KNEE_BEND;
+            batch->state.animation_index[idx] = (uint32_t)MSL_SM_KNEE_BEND;
+            msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+            batch->state.kneebend_jump_input[idx] = (uint8_t)j_in;
+            batch->state.kneebend_is_short_hop[idx] = 0;
+            action_id = (uint16_t)MSL_ACT_KNEE_BEND;
+          }
+        }
+
         // Ottotto / OttottoWait opposite-flick smash-turn bridge:
         // - ftCo_Ottotto{,Wait}_IASA routes through ftCo_Dash_CheckInput before Turn/Walk.
         // - Keep only the opposite-facing dash-flick -> TurnSmash path here; same-facing Dash from
