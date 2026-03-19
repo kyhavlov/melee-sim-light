@@ -494,7 +494,7 @@ static inline uint8_t attackair_try_enter_from_air_locomotion(MslBatch* batch,
     return 0;
   }
   const uint16_t a0 = batch->state.action_id[idx];
-  if (!msl_action_is_air_locomotion(a0)) {
+  if (!msl_action_is_air_locomotion(a0) && a0 != (uint16_t)MSL_ACT_DAMAGE_FALL) {
     return 0;
   }
   // Special fall should not be interruptible into aerial attacks.

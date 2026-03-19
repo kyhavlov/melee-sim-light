@@ -19,6 +19,8 @@ ACT_FALL = 0x001D
 ACT_ATTACK_DASH = 0x0032
 ACT_ATTACK_HI3 = 0x0038
 ACT_DAMAGEFALL = 0x0026
+ACT_ATTACK_AIR_N = 0x0041
+ACT_ATTACK_AIR_B = 0x0043
 ACT_LANDING = 0x002A
 ACT_OTTOTTO = 0x00F5
 
@@ -32,6 +34,8 @@ SM_JUMPF = 16
 SM_FALL = 20
 SM_ATTACK_DASH = 52
 SM_ATTACK_HI3 = 58
+SM_ATTACK_AIR_N = 68
+SM_ATTACK_AIR_B = 70
 SM_OTTOTTO = 210
 
 # Collision env flag bits: refs/melee/src/common_structs.h, src/coll_env_flags.h
@@ -438,6 +442,63 @@ def test_wait_flick_forward_enters_dash_with_action_frame_1() -> None:
     assert int(out0["action_id"][0]) == ACT_DASH
     assert int(out0["animation_index"][0]) == SM_DASH
     assert int(out0["action_frame"][0]) == 1
+
+
+def test_damagefall_cstick_back_edge_enters_attackairb() -> None:
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    input_stride = int(sizes["input"])
+
+    seed = _seed_base()
+    seed["on_ground"][0, 0] = np.uint8(0)
+    seed["jumps_left"][0, 0] = np.uint8(1)
+    seed["action_id"][0, 0] = np.uint16(ACT_DAMAGEFALL)
+    seed["action_frame"][0, 0] = np.int16(1)
+    seed["anim_frame_f32"][0, 0] = np.float32(1.0)
+    seed["animation_index"][0, 0] = np.uint32(SM_FALL)
+    seed["facing"][0, 0] = np.uint8(1)
+
+    prev_inp = _mk_input_bytes(1, input_stride)
+    inp = _mk_input_bytes(1, input_stride)
+    cur_view = inp.view(INPUT_DTYPE).reshape((1,))
+    # DamageFall IASA still consults ftCo_AttackAir_CheckInput through the shared airborne
+    # interrupt path, including C-stick edges.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_DamageFall.c::ftCo_DamageFall_IASA
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_CheckInput
+    cur_view["p"]["main_x"][0, 0] = np.int8(-90)
+    cur_view["p"]["c_x"][0, 0] = np.int8(-127)
+
+    out0 = _step_once(seed, prev_inp, inp)
+    assert int(out0["action_id"][0]) == ACT_ATTACK_AIR_B
+    assert int(out0["action_frame"][0]) == 1
+    assert int(out0["animation_index"][0]) == SM_ATTACK_AIR_B
+
+
+def test_damagefall_a_button_enters_attackairn() -> None:
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    input_stride = int(sizes["input"])
+
+    seed = _seed_base()
+    seed["on_ground"][0, 0] = np.uint8(0)
+    seed["jumps_left"][0, 0] = np.uint8(0)
+    seed["action_id"][0, 0] = np.uint16(ACT_DAMAGEFALL)
+    seed["action_frame"][0, 0] = np.int16(14)
+    seed["anim_frame_f32"][0, 0] = np.float32(14.0)
+    seed["animation_index"][0, 0] = np.uint32(SM_FALL)
+    seed["facing"][0, 0] = np.uint8(0)
+
+    prev_inp = _mk_input_bytes(1, input_stride)
+    inp = _mk_input_bytes(1, input_stride)
+    cur_view = inp.view(INPUT_DTYPE).reshape((1,))
+    cur_view["p"]["buttons"][0, 0] = np.uint16(BUTTON_A)
+
+    out0 = _step_once(seed, prev_inp, inp)
+    assert int(out0["action_id"][0]) == ACT_ATTACK_AIR_N
+    assert int(out0["action_frame"][0]) == 1
+    assert int(out0["animation_index"][0]) == SM_ATTACK_AIR_N
 
 
 def test_wait_flick_backward_enters_turn_with_action_frame_1() -> None:
