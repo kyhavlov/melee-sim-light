@@ -1889,13 +1889,25 @@ void locomotion_update_pre(MslBatch* batch) {
             // Decomp: grounded Attack* IASA gates on fp->allow_interrupt before delegating to
             // grounded interrupt checks (typically Wait IASA path).
             // refs/melee/src/melee/ft/chara/ftCommon/{ftCo_AttackDash.c,ftCo_AttackS3.c,ftCo_AttackHi3.c,ftCo_AttackHi4.c,ftCo_AttackLw4.c}
+            const float prev_stick_x_attackdash_wait =
+                apply_deadzone(stick_i8_to_unit(batch->state.prev_input_main_x[idx]),
+                               c->lstick_deadzone_x);
+            const uint8_t attackdash_wait_same_facing_hold =
+                ((stick_x * facing_dir) > 0.0f && (prev_stick_x_attackdash_wait * facing_dir) > 0.0f &&
+                 msl_absf(stick_x) >= c->walk_stick_threshold &&
+                 msl_absf(prev_stick_x_attackdash_wait) >= c->walk_stick_threshold)
+                    ? 1u
+                    : 0u;
             const uint8_t attackdash_wait_iasa_enabled =
                 (action_id != (uint16_t)MSL_ACT_ATTACK_DASH ||
                  (buttons_pressed & (uint16_t)(MSL_BUTTON_A | MSL_BUTTON_B | MSL_BUTTON_XY)) != 0u ||
                  stick_y < -c->crouch_stick_threshold ||
+                 attackdash_wait_same_facing_hold ||
                  // Decomp: AttackDash IASA delegates into Wait_IASA, but keep the current
                  // movement-only narrowing outside explicit button edges so analog-only walk/run
-                 // branches do not spill into unrelated ledge-motion lanes.
+                 // branches do not spill into unrelated ledge-motion lanes. Re-admit the
+                 // sustained same-facing hold subset, which mirrors held-stick Wait_IASA dash/walk
+                 // ownership without reopening fresh dash-entry edge rows.
                  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackDash.c::ftCo_AttackDash_IASA
                  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
                  (stick_x * facing_dir) <= c->turn_stick_x_threshold)

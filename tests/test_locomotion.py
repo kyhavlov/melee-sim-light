@@ -11,6 +11,7 @@ BUTTON_A = 0x0100
 
 # Action ids (GALE01): refs/melee/src/melee/ft/chara/ftCommon/forward.h
 ACT_WAIT = 0x000E
+ACT_WALK_SLOW = 0x000F
 ACT_TURN = 0x0012
 ACT_DASH = 0x0014
 ACT_RUN = 0x0015
@@ -29,6 +30,7 @@ ACT_OTTOTTO = 0x00F5
 
 # Submotion ids (GALE01): refs/melee/src/melee/ft/chara/ftCommon/forward.h
 SM_WAIT1_0 = 2
+SM_WALK_SLOW = 7
 SM_TURN = 10
 SM_DASH = 12
 SM_RUN = 13
@@ -465,6 +467,46 @@ def test_attackdash_iasa_a_button_enters_attackhi3() -> None:
     assert int(out0["action_id"][0]) == ACT_ATTACK_HI3
     assert int(out0["action_frame"][0]) == 1
     assert int(out0["animation_index"][0]) == SM_ATTACK_HI3
+
+
+def test_attackdash_iasa_same_facing_hold_enters_walkslow() -> None:
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    input_stride = int(sizes["input"])
+
+    seed = _seed_base()
+    seed["on_ground"][0, 0] = np.uint8(1)
+    seed["action_id"][0, 0] = np.uint16(ACT_ATTACK_DASH)
+    seed["action_frame"][0, 0] = np.int16(35)
+    seed["anim_frame_f32"][0, 0] = np.float32(35.0)
+    seed["animation_index"][0, 0] = np.uint32(SM_ATTACK_DASH)
+    seed["facing"][0, 0] = np.uint8(0)  # left
+    seed["attackdash_x0"][0, 0] = np.int16(0)
+    seed["ground_id"][0, 0] = np.uint16(1)
+    seed["pos_x"][0, 0] = np.float32(-49.859596)
+    seed["pos_y"][0, 0] = np.float32(1.0e-4)
+    seed["speed_ground_x_self"][0, 0] = np.float32(-0.07242203)
+    seed["tilt_timer_x"][0, 0] = np.uint8(254)
+
+    prev_inp = _mk_input_bytes(1, input_stride)
+    inp = _mk_input_bytes(1, input_stride)
+    prev_view = prev_inp.view(INPUT_DTYPE).reshape((1,))
+    cur_view = inp.view(INPUT_DTYPE).reshape((1,))
+    # Decomp: once AttackDash IASA clears ftCo_800D8AE0 and allow_interrupt is active, it falls
+    # through to ftCo_Wait_IASA. A sustained same-facing stick hold can therefore enter WalkSlow
+    # through ftCo_Walk_CheckInput, not remain in AttackDash.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackDash.c::ftCo_AttackDash_IASA
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Walk.c::ftCo_Walk_CheckInput
+    prev_view["p"]["main_x"][0, 0] = np.int8(-90)
+    cur_view["p"]["main_x"][0, 0] = np.int8(-90)
+
+    out0 = _step_once(seed, prev_inp, inp)
+    assert int(out0["action_id"][0]) == ACT_WALK_SLOW
+    assert int(out0["action_frame"][0]) == 1
+    assert int(out0["animation_index"][0]) == SM_WALK_SLOW
+    assert int(out0["on_ground"][0]) == 1
 
 
 def test_wait_flick_forward_enters_dash_with_action_frame_1() -> None:
