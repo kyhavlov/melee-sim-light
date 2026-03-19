@@ -285,6 +285,43 @@ def test_dash_iasa_opposite_flick_enters_turn_without_same_frame_flip() -> None:
     assert int(out0["facing"][0]) == 1
 
 
+def test_dash_late_iasa_opposite_flick_enters_turn_without_same_frame_flip() -> None:
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    input_stride = int(sizes["input"])
+
+    dash_iasa_x4c = float(_common_attr("dash_iasa_x4c"))
+    assert dash_iasa_x4c > 0.0
+
+    seed = _seed_base()
+    seed["on_ground"][0, 0] = np.uint8(1)
+    seed["action_id"][0, 0] = np.uint16(ACT_DASH)
+    seed["action_frame"][0, 0] = np.int16(int(dash_iasa_x4c) + 1)
+    seed["anim_frame_f32"][0, 0] = np.float32(dash_iasa_x4c + 1.0)
+    seed["animation_index"][0, 0] = np.uint32(SM_DASH)
+    seed["facing"][0, 0] = np.uint8(0)  # left
+    seed["dash_x4"][0, 0] = np.uint8(0)
+
+    prev_inp = _mk_input_bytes(1, input_stride)
+    inp = _mk_input_bytes(1, input_stride)
+    prev_view = prev_inp.view(INPUT_DTYPE).reshape((1,))
+    cur_view = inp.view(INPUT_DTYPE).reshape((1,))
+    # Late Dash IASA still calls ftCo_Dash_CheckInput, so a fresh opposite-facing flick enters Turn.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c::{
+    #   ftCo_Dash_IASA,ftCo_Dash_CheckInput}
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Turn.c::ftCo_Turn_Enter_Smash
+    prev_view["p"]["main_x"][0, 0] = np.int8(0)
+    cur_view["p"]["main_x"][0, 0] = np.int8(100)
+
+    out0 = _step_once(seed, prev_inp, inp)
+    assert int(out0["action_id"][0]) == ACT_TURN
+    assert int(out0["action_frame"][0]) == 1
+    assert int(out0["animation_index"][0]) == SM_TURN
+    # Turn flips later in ftCo_Turn_Anim_Inner; entry frame still keeps original facing.
+    assert int(out0["facing"][0]) == 0
+
+
 def test_wait_jump_enters_kneebend_with_action_frame_0() -> None:
     import msl_binding
 

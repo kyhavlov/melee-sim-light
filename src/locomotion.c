@@ -2670,6 +2670,24 @@ void locomotion_update_pre(MslBatch* batch) {
                   msl_anim_timebase_tick_once(batch, idx);
                   action_id = (uint16_t)MSL_ACT_TURN;
                 }
+              } else if (cur_anim_frame > c->dash_iasa_x4c &&
+                         (stick_x * facing_dir) < 0.0f &&
+                         is_dash_flick(c, stick_x, tilt_timer_x)) {
+                // Late Dash IASA still routes through ftCo_Dash_CheckInput before guard / jump /
+                // run checks. Keep only the opposite-facing smash-turn subset here; same-facing
+                // Dash re-entry remains excluded until its late-window ownership is triaged.
+                // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c::{
+                //   ftCo_Dash_IASA,ftCo_Dash_CheckInput
+                // }
+                // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Turn.c::ftCo_Turn_Enter_Smash
+                batch->state.turn_has_turned[idx] = 0;
+                batch->state.turn_frames_to_turn[idx] = 0;
+                batch->state.turn_x8[idx] = (int8_t)(facing_dir > 0.0f ? 1 : -1);
+                batch->state.action_id[idx] = (uint16_t)MSL_ACT_TURN;
+                batch->state.animation_index[idx] = (uint32_t)MSL_SM_TURN;
+                msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+                msl_anim_timebase_tick_once(batch, idx);
+                action_id = (uint16_t)MSL_ACT_TURN;
               }
 
               // Dash -> Run when cmd_var[0] enables the late IASA chain and stick is held forward.
