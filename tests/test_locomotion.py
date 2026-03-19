@@ -6,6 +6,7 @@ from tools.eval.dataset import COMPARE_DTYPE, INPUT_DTYPE, SEED_DTYPE
 
 
 BUTTON_X = 0x0400
+BUTTON_A = 0x0100
 
 # Action ids (GALE01): refs/melee/src/melee/ft/chara/ftCommon/forward.h
 ACT_WAIT = 0x000E
@@ -15,6 +16,8 @@ ACT_RUN = 0x0015
 ACT_KNEEBEND = 0x0018
 ACT_JUMPF = 0x0019
 ACT_FALL = 0x001D
+ACT_ATTACK_DASH = 0x0032
+ACT_ATTACK_HI3 = 0x0038
 ACT_DAMAGEFALL = 0x0026
 ACT_LANDING = 0x002A
 ACT_OTTOTTO = 0x00F5
@@ -27,6 +30,8 @@ SM_RUN = 13
 SM_KNEEBEND = 15
 SM_JUMPF = 16
 SM_FALL = 20
+SM_ATTACK_DASH = 52
+SM_ATTACK_HI3 = 58
 SM_OTTOTTO = 210
 
 # Collision env flag bits: refs/melee/src/common_structs.h, src/coll_env_flags.h
@@ -346,6 +351,67 @@ def test_wait_jump_enters_kneebend_with_action_frame_0() -> None:
     assert int(out0["action_id"][0]) == ACT_KNEEBEND
     assert int(out0["animation_index"][0]) == SM_KNEEBEND
     assert int(out0["action_frame"][0]) == 0
+
+
+def test_attackdash_iasa_jump_button_enters_kneebend() -> None:
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    input_stride = int(sizes["input"])
+
+    seed = _seed_base()
+    seed["on_ground"][0, 0] = np.uint8(1)
+    seed["jumps_left"][0, 0] = np.uint8(2)
+    seed["action_id"][0, 0] = np.uint16(ACT_ATTACK_DASH)
+    seed["action_frame"][0, 0] = np.int16(37)
+    seed["anim_frame_f32"][0, 0] = np.float32(37.0)
+    seed["animation_index"][0, 0] = np.uint32(SM_ATTACK_DASH)
+    seed["facing"][0, 0] = np.uint8(1)
+    seed["attackdash_x0"][0, 0] = np.int16(0)
+
+    prev_inp = _mk_input_bytes(1, input_stride)
+    inp = _mk_input_bytes(1, input_stride)
+    cur_view = inp.view(INPUT_DTYPE).reshape((1,))
+    # Decomp: once AttackDash IASA clears the x0 pre-gate and allow_interrupt is active, it
+    # delegates into Wait_IASA, so jump button edges still enter KneeBend.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackDash.c::ftCo_AttackDash_IASA
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
+    cur_view["p"]["buttons"][0, 0] = np.uint16(BUTTON_X)
+
+    out0 = _step_once(seed, prev_inp, inp)
+    assert int(out0["action_id"][0]) == ACT_KNEEBEND
+    assert int(out0["action_frame"][0]) == 0
+    assert int(out0["animation_index"][0]) == SM_KNEEBEND
+
+
+def test_attackdash_iasa_a_button_enters_attackhi3() -> None:
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    input_stride = int(sizes["input"])
+
+    seed = _seed_base()
+    seed["on_ground"][0, 0] = np.uint8(1)
+    seed["action_id"][0, 0] = np.uint16(ACT_ATTACK_DASH)
+    seed["action_frame"][0, 0] = np.int16(35)
+    seed["anim_frame_f32"][0, 0] = np.float32(35.0)
+    seed["animation_index"][0, 0] = np.uint32(SM_ATTACK_DASH)
+    seed["facing"][0, 0] = np.uint8(1)
+    seed["attackdash_x0"][0, 0] = np.int16(0)
+
+    prev_inp = _mk_input_bytes(1, input_stride)
+    inp = _mk_input_bytes(1, input_stride)
+    cur_view = inp.view(INPUT_DTYPE).reshape((1,))
+    # Wait_IASA delegation keeps grounded A-attack selection live for AttackDash button edges.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackDash.c::ftCo_AttackDash_IASA
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
+    cur_view["p"]["buttons"][0, 0] = np.uint16(BUTTON_A)
+    cur_view["p"]["main_y"][0, 0] = np.int8(39)
+
+    out0 = _step_once(seed, prev_inp, inp)
+    assert int(out0["action_id"][0]) == ACT_ATTACK_HI3
+    assert int(out0["action_frame"][0]) == 1
+    assert int(out0["animation_index"][0]) == SM_ATTACK_HI3
 
 
 def test_wait_flick_forward_enters_dash_with_action_frame_1() -> None:
