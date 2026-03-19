@@ -2906,8 +2906,7 @@ void locomotion_update_pre(MslBatch* batch) {
                 //   data/common/ft_common_data.json via src/common_params.c.
                 enter_squat_immediate(batch, idx);
                 action_id = (uint16_t)MSL_ACT_SQUAT;
-              } else if (!is_dash_flick(c, stick_x, tilt_timer_x) &&
-                         (stick_x * facing_dir) <= c->turn_stick_x_threshold) {
+              } else if ((stick_x * facing_dir) <= c->turn_stick_x_threshold) {
                 // Decomp ordering: Dash anim-end enters Wait via ft_8008A2BC, and the destination
                 // Wait_IASA then reaches Turn_CheckInput on held opposite-stick windows that are
                 // not dash-flicks.
