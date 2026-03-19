@@ -16,11 +16,13 @@ ACT_RUN = 0x0015
 ACT_KNEEBEND = 0x0018
 ACT_JUMPF = 0x0019
 ACT_FALL = 0x001D
+ACT_SQUAT = 0x0027
 ACT_ATTACK_DASH = 0x0032
 ACT_ATTACK_HI3 = 0x0038
 ACT_DAMAGEFALL = 0x0026
 ACT_ATTACK_AIR_N = 0x0041
 ACT_ATTACK_AIR_B = 0x0043
+ACT_DAMAGE_AIR_2 = 0x0055
 ACT_LANDING = 0x002A
 ACT_OTTOTTO = 0x00F5
 
@@ -32,10 +34,12 @@ SM_RUN = 13
 SM_KNEEBEND = 15
 SM_JUMPF = 16
 SM_FALL = 20
+SM_SQUAT = 30
 SM_ATTACK_DASH = 52
 SM_ATTACK_HI3 = 58
 SM_ATTACK_AIR_N = 68
 SM_ATTACK_AIR_B = 70
+SM_DAMAGE_AIR_2 = 175
 SM_OTTOTTO = 210
 
 # Collision env flag bits: refs/melee/src/common_structs.h, src/coll_env_flags.h
@@ -499,6 +503,39 @@ def test_damagefall_a_button_enters_attackairn() -> None:
     assert int(out0["action_id"][0]) == ACT_ATTACK_AIR_N
     assert int(out0["action_frame"][0]) == 1
     assert int(out0["animation_index"][0]) == SM_ATTACK_AIR_N
+
+
+def test_grounded_damageair2_down_stick_enters_squat() -> None:
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    input_stride = int(sizes["input"])
+
+    seed = _seed_base()
+    seed["on_ground"][0, 0] = np.uint8(1)
+    seed["jumps_left"][0, 0] = np.uint8(2)
+    seed["action_id"][0, 0] = np.uint16(ACT_DAMAGE_AIR_2)
+    seed["action_frame"][0, 0] = np.int16(22)
+    seed["anim_frame_f32"][0, 0] = np.float32(22.0)
+    seed["animation_index"][0, 0] = np.uint32(SM_DAMAGE_AIR_2)
+    seed["facing"][0, 0] = np.uint8(1)
+
+    prev_inp = _mk_input_bytes(1, input_stride)
+    inp = _mk_input_bytes(1, input_stride)
+    cur_view = inp.view(INPUT_DTYPE).reshape((1,))
+    # Grounded Damage_IASA delegates to Wait_IASA when x221C_b6 is clear, and Wait_IASA checks
+    # Squat after guard/jump and before Turn/Walk.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_IASA
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Squat.c::ftCo_Squat_Enter
+    cur_view["p"]["main_y"][0, 0] = np.int8(-80)
+
+    out0 = _step_once(seed, prev_inp, inp)
+    assert int(out0["action_id"][0]) == ACT_SQUAT
+    assert int(out0["action_frame"][0]) == 1
+    assert int(out0["animation_index"][0]) == SM_SQUAT
+    assert int(out0["on_ground"][0]) == 1
+    assert int(out0["jumps_left"][0]) == 2
 
 
 def test_wait_flick_backward_enters_turn_with_action_frame_1() -> None:

@@ -827,6 +827,20 @@ void knockdown_update_pre_physics(MslBatch* batch) {
           if (damage_ground_try_enter_kneebend_from_wait_iasa(batch, c, idx)) {
             continue;
           }
+          {
+            const float stick_y =
+                apply_deadzone(stick_i8_to_unit(batch->state.input_main_y[idx]), c->lstick_deadzone_y);
+            const uint16_t buttons = batch->state.input_buttons[idx];
+            if ((buttons & (uint16_t)MSL_BUTTON_B) == 0u && stick_y < -c->crouch_stick_threshold) {
+              // Decomp: Damage_IASA grounded path delegates to Wait_IASA, and Wait_IASA checks
+              // Squat after guard/jump and before Turn/Walk.
+              // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_IASA
+              // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
+              // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Squat.c::ftCo_Squat_Enter
+              enter_squat(batch, idx);
+              continue;
+            }
+          }
         }
 
         uint8_t anim_done = 0u;
