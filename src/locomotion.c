@@ -2640,6 +2640,25 @@ void locomotion_update_pre(MslBatch* batch) {
             // Decomp: AttackDash input is only checked in Dash IASA while cur_anim_frame <= x4C.
             // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c::ftCo_Dash_IASA
             action_id = batch->state.action_id[idx];
+          } else if (!dash_iasa_early_x4 && cur_anim_frame <= c->dash_iasa_x4c &&
+                     (stick_x * facing_dir) < 0.0f &&
+                     msl_absf(stick_x) >= c->dash_flick_abs &&
+                     tilt_timer_x < c->dash_flick_tilt_max_frames) {
+            // Decomp: the mid Dash IASA branch calls ftCo_Dash_CheckInput before guard/jump, and
+            // its opposite-facing x3C/x40 path enters Turn immediately.
+            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c::{
+            //   ftCo_Dash_IASA,ftCo_Dash_CheckInput
+            // }
+            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Turn.c::ftCo_Turn_Enter_Smash
+            batch->state.turn_has_turned[idx] = 0;
+            batch->state.turn_frames_to_turn[idx] = 0;
+            batch->state.turn_x8[idx] = (int8_t)(facing_dir > 0.0f ? 1 : -1);
+            batch->state.action_id[idx] = (uint16_t)MSL_ACT_TURN;
+            batch->state.animation_index[idx] = (uint32_t)MSL_SM_TURN;
+            msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Turn.c:62-64
+            msl_anim_timebase_tick_once(batch, idx);
+            action_id = (uint16_t)MSL_ACT_TURN;
           } else {
             // Dash -> KneeBend (Jump).
             //

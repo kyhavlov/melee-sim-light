@@ -6,6 +6,7 @@ from tools.eval.dataset import COMPARE_DTYPE, INPUT_DTYPE, SEED_DTYPE
 
 
 BUTTON_X = 0x0400
+BUTTON_Y = 0x0800
 BUTTON_A = 0x0100
 
 # Action ids (GALE01): refs/melee/src/melee/ft/chara/ftCommon/forward.h
@@ -333,6 +334,50 @@ def test_dash_late_iasa_opposite_flick_enters_turn_without_same_frame_flip() -> 
     assert int(out0["animation_index"][0]) == SM_TURN
     # Turn flips later in ftCo_Turn_Anim_Inner; entry frame still keeps original facing.
     assert int(out0["facing"][0]) == 0
+
+
+def test_dash_mid_iasa_opposite_flick_prioritizes_turn_over_jump() -> None:
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    input_stride = int(sizes["input"])
+
+    dash_iasa_x44 = float(_common_attr("dash_iasa_x44"))
+    dash_iasa_x4c = float(_common_attr("dash_iasa_x4c"))
+    dash_flick_abs = float(_common_attr("dash_flick_abs"))
+    assert dash_iasa_x44 > 0.0
+    assert dash_iasa_x4c > dash_iasa_x44
+    assert dash_flick_abs > 0.0
+
+    seed = _seed_base()
+    seed["on_ground"][0, 0] = np.uint8(1)
+    seed["jumps_left"][0, 0] = np.uint8(2)
+    seed["action_id"][0, 0] = np.uint16(ACT_DASH)
+    seed["action_frame"][0, 0] = np.int16(int(dash_iasa_x44) + 1)
+    seed["anim_frame_f32"][0, 0] = np.float32(dash_iasa_x44 + 1.0)
+    seed["animation_index"][0, 0] = np.uint32(SM_DASH)
+    seed["facing"][0, 0] = np.uint8(0)  # left
+    seed["dash_x4"][0, 0] = np.uint8(0)
+
+    prev_inp = _mk_input_bytes(1, input_stride)
+    inp = _mk_input_bytes(1, input_stride)
+    prev_view = prev_inp.view(INPUT_DTYPE).reshape((1,))
+    cur_view = inp.view(INPUT_DTYPE).reshape((1,))
+    # Decomp: the mid Dash IASA branch checks ftCo_Dash_CheckInput before fn_800CAF78, so an
+    # opposite-facing x3C/x40 flick still enters Turn even if Y is newly pressed on the same frame.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c::{
+    #   ftCo_Dash_IASA,ftCo_Dash_CheckInput
+    # }
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Turn.c::ftCo_Turn_Enter_Smash
+    prev_view["p"]["main_x"][0, 0] = np.int8(0)
+    cur_view["p"]["main_x"][0, 0] = np.int8(int(np.ceil(dash_flick_abs * 80.0)))
+    cur_view["p"]["buttons"][0, 0] = np.uint16(BUTTON_Y)
+
+    out0 = _step_once(seed, prev_inp, inp)
+    assert int(out0["action_id"][0]) == ACT_TURN
+    assert int(out0["action_frame"][0]) == 1
+    assert int(out0["animation_index"][0]) == SM_TURN
+    assert int(out0["jumps_left"][0]) == 2
 
 
 def test_wait_jump_enters_kneebend_with_action_frame_0() -> None:
