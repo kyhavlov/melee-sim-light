@@ -338,6 +338,45 @@ def test_dash_late_iasa_opposite_flick_enters_turn_without_same_frame_flip() -> 
     assert int(out0["facing"][0]) == 0
 
 
+def test_dash_anim_end_wait_entry_held_opposite_stick_enters_turn() -> None:
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    input_stride = int(sizes["input"])
+
+    dash_iasa_x4c = float(_common_attr("dash_iasa_x4c"))
+    turn_threshold = float(_common_attr("turn_stick_x_threshold"))
+    dash_flick_abs = float(_common_attr("dash_flick_abs"))
+    tilt_max = int(_common_attr("dash_flick_tilt_max_frames"))
+    assert dash_iasa_x4c > 0.0
+    assert turn_threshold < 0.0
+
+    seed = _seed_base()
+    seed["on_ground"][0, 0] = np.uint8(1)
+    seed["action_id"][0, 0] = np.uint16(ACT_DASH)
+    seed["action_frame"][0, 0] = np.int16(int(dash_iasa_x4c) + 1)
+    seed["anim_frame_f32"][0, 0] = np.float32(dash_iasa_x4c + 1.0)
+    seed["animation_index"][0, 0] = np.uint32(SM_DASH)
+    seed["facing"][0, 0] = np.uint8(1)  # right
+    seed["dash_x4"][0, 0] = np.uint8(0)
+    seed["tilt_timer_x"][0, 0] = np.uint8(tilt_max + 4)
+
+    prev_inp = _mk_input_bytes(1, input_stride)
+    inp = _mk_input_bytes(1, input_stride)
+    prev_view = prev_inp.view(INPUT_DTYPE).reshape((1,))
+    cur_view = inp.view(INPUT_DTYPE).reshape((1,))
+    held_turn = int(-80 * max(dash_flick_abs - 0.2, -turn_threshold + 0.1))
+    prev_view["p"]["main_x"][0, 0] = np.int8(held_turn)
+    cur_view["p"]["main_x"][0, 0] = np.int8(held_turn)
+
+    out0 = _step_once(seed, prev_inp, inp)
+    assert int(out0["action_id"][0]) == ACT_TURN
+    assert int(out0["action_frame"][0]) == 1
+    assert int(out0["animation_index"][0]) == SM_TURN
+    assert int(out0["facing"][0]) == 1
+    assert int(out0["on_ground"][0]) == 1
+
+
 def test_dash_mid_iasa_opposite_flick_prioritizes_turn_over_jump() -> None:
     import msl_binding
 

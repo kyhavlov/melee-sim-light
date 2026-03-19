@@ -2895,6 +2895,22 @@ void locomotion_update_pre(MslBatch* batch) {
                 //   data/common/ft_common_data.json via src/common_params.c.
                 enter_squat_immediate(batch, idx);
                 action_id = (uint16_t)MSL_ACT_SQUAT;
+              } else if (!is_dash_flick(c, stick_x, tilt_timer_x) &&
+                         (stick_x * facing_dir) <= c->turn_stick_x_threshold) {
+                // Decomp ordering: Dash anim-end enters Wait via ft_8008A2BC, and the destination
+                // Wait_IASA then reaches Turn_CheckInput on held opposite-stick windows that are
+                // not dash-flicks.
+                // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c::ftCo_Dash_Anim
+                // refs/melee/src/melee/ft/ft_0892.c::ft_8008A2BC
+                // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
+                // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Turn.c::ftCo_Turn_CheckInput
+                batch->state.action_id[idx] = (uint16_t)MSL_ACT_TURN;
+                batch->state.animation_index[idx] = (uint32_t)MSL_SM_TURN;
+                batch->state.turn_has_turned[idx] = 0;
+                batch->state.turn_frames_to_turn[idx] = ch->turn_frames;
+                msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+                msl_anim_timebase_tick_once(batch, idx);
+                action_id = (uint16_t)MSL_ACT_TURN;
               }
             }
           }
