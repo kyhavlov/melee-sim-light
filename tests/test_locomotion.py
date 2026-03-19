@@ -20,6 +20,7 @@ ACT_JUMPF = 0x0019
 ACT_FALL = 0x001D
 ACT_SQUAT = 0x0027
 ACT_ATTACK_DASH = 0x0032
+ACT_ATTACK_S3_LW = 0x0037
 ACT_ATTACK_HI3 = 0x0038
 ACT_DAMAGEFALL = 0x0026
 ACT_ATTACK_AIR_N = 0x0041
@@ -39,6 +40,7 @@ SM_JUMPF = 16
 SM_FALL = 20
 SM_SQUAT = 30
 SM_ATTACK_DASH = 52
+SM_ATTACK_S3_LW = 57
 SM_ATTACK_HI3 = 58
 SM_ATTACK_AIR_N = 68
 SM_ATTACK_AIR_B = 70
@@ -545,6 +547,44 @@ def test_attackdash_iasa_same_facing_hold_enters_walkslow() -> None:
     assert int(out0["action_id"][0]) == ACT_WALK_SLOW
     assert int(out0["action_frame"][0]) == 1
     assert int(out0["animation_index"][0]) == SM_WALK_SLOW
+    assert int(out0["on_ground"][0]) == 1
+
+
+def test_walkslow_a_press_forward_down_enters_attacks3lw() -> None:
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    input_stride = int(sizes["input"])
+
+    seed = _seed_base()
+    seed["on_ground"][0, 0] = np.uint8(1)
+    seed["action_id"][0, 0] = np.uint16(ACT_WALK_SLOW)
+    seed["action_frame"][0, 0] = np.int16(4)
+    seed["anim_frame_f32"][0, 0] = np.float32(4.0)
+    seed["animation_index"][0, 0] = np.uint32(SM_WALK_SLOW)
+    seed["facing"][0, 0] = np.uint8(0)  # left
+    seed["tilt_timer_x"][0, 0] = np.uint8(10)
+    seed["tilt_timer_y"][0, 0] = np.uint8(10)
+
+    prev_inp = _mk_input_bytes(1, input_stride)
+    inp = _mk_input_bytes(1, input_stride)
+    prev_view = prev_inp.view(INPUT_DTYPE).reshape((1,))
+    cur_view = inp.view(INPUT_DTYPE).reshape((1,))
+    # Decomp: ftCo_AttackS3_CheckInput accepts forward side-tilt intent, then decideAngle routes
+    # downward stick angles into AttackS3Lw rather than neutral AttackS3S.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackS3.c::{
+    #   ftCo_AttackS3_CheckInput,decideAngle
+    # }
+    prev_view["p"]["main_x"][0, 0] = np.int8(-73)
+    prev_view["p"]["main_y"][0, 0] = np.int8(-68)
+    cur_view["p"]["buttons"][0, 0] = np.uint16(BUTTON_A)
+    cur_view["p"]["main_x"][0, 0] = np.int8(-73)
+    cur_view["p"]["main_y"][0, 0] = np.int8(-68)
+
+    out0 = _step_once(seed, prev_inp, inp)
+    assert int(out0["action_id"][0]) == ACT_ATTACK_S3_LW
+    assert int(out0["action_frame"][0]) == 1
+    assert int(out0["animation_index"][0]) == SM_ATTACK_S3_LW
     assert int(out0["on_ground"][0]) == 1
 
 
