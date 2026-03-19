@@ -1524,7 +1524,6 @@ static void illusion_items_update_and_collide(MslBatch* batch, int bi) {
           shy = batch->state.pos_y[d_idx];
           shz = batch->state.pos_z[d_idx];
         }
-
         // Decomp shield overlap helper consumes ShieldDesc radius with the shield bubble.
         // In GALE01 ShieldDesc radius is 1.0f and scales by fighter scale.
         // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c
@@ -1810,6 +1809,7 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
 
         uint8_t shield_hit = 0;
         uint8_t shield_bounce_contact_found = 0;
+        float shield_bounce_best_vy = -INFINITY;
         float shield_hit_contact_x = x;
         float shield_hit_contact_y = y;
         float shield_bounce_contact_x = x;
@@ -1845,6 +1845,43 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
              batch->state.hitlag[d_idx] == 0u && batch->state.hitstun[d_idx] == 0u)
                 ? 1u
                 : 0u;
+        // Keep the early geometry lane ownership-consistent with the later GuardSetOff owner gate by
+        // sharing the same collision-time powershield-active predicate and stale-x18 suppression
+        // before we narrow the late locomotion snapshot.
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
+        //   ftCo_80091A4C,ftCo_800939B4,ftCo_8009370C,ftCo_GuardReflect_Anim,ftCo_80093BC0}
+        // refs/melee/src/melee/ft/ftcoll.c::{ftColl_CreateReflectHit,ftColl_80076CBC}
+        uint8_t guard_reflect_geom_can_powershield_reflect =
+            combat_is_powershield_active_idx(batch, d_idx) ? 1u : 0u;
+        if (guard_reflect_geom_can_powershield_reflect &&
+            defender_guard_reflect_no_submotion_snapshot &&
+            batch->state.guard_reflect_timer_x14_seed[d_idx] == 0u &&
+            batch->state.guard_reflect_timer_x18_seed[d_idx] != 0u) {
+          guard_reflect_geom_can_powershield_reflect = 0u;
+        }
+        const uint8_t defender_guard_reflect_late_locomotion_snapshot_geom =
+            (guard_reflect_geom_can_powershield_reflect &&
+             defender_guard_reflect_no_submotion_snapshot &&
+             batch->state.action_frame[d_idx] == -1 &&
+             batch->state.prev_action_id[d_idx] != (uint16_t)MSL_ACT_GUARD_ON &&
+             batch->state.prev_action_id[d_idx] != (uint16_t)MSL_ACT_GUARD &&
+             batch->state.prev_action_id[d_idx] != (uint16_t)MSL_ACT_GUARD_REFLECT &&
+             batch->state.prev_action_id[d_idx] != (uint16_t)MSL_ACT_GUARD_SET_OFF)
+                ? 1u
+                : 0u;
+        float bounce_shx = shx;
+        float bounce_shy = shy;
+        if (defender_guard_reflect_late_locomotion_snapshot_geom && laser_state == 0u) {
+          // Late locomotion->GuardReflect shield-bounce keepalive:
+          // - overlap still resolves against the live shield bubble,
+          // - but the first frozen state0 snapshot mirrors the shot against the grounded fighter
+          //   origin plus shield radius before the full tilted shield bubble settles.
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
+          //   ftCo_80091A4C,ftCo_800939B4,ftCo_GuardReflect_Anim}
+          // refs/melee/src/melee/it/items/itfoxlaser.c::{it_8029C4D4,itFoxLaser_Logic94_ShieldBounced}
+          bounce_shx = batch->state.pos_x[d_idx];
+          bounce_shy = batch->state.pos_y[d_idx] + shr;
+        }
         float probe_lerp = 1.0f;
         if (defender_no_submotion_snapshot) {
           // Apply the no-submotion rule above: overlap probe uses prev_pos, not cur_pos.
@@ -1860,10 +1897,16 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
             (laser_state == 0u) ? lp->hitbox_offsets_x_count : lp->state1_hitbox_offsets_x_count;
         // Decomp consumes one shared scaleZ transform chain for laser collision spaces
         // (shield/body/reflect) via item collision callbacks. Keep the narrowed shield cap off for
-        // GuardReflect no-submotion snapshots and use the shared scale lane directly there.
+        // steady GuardReflect no-submotion snapshots, but preserve the identity cap for fresh
+        // late-locomotion state0 shots so the first shield-hit sample can still reach the
+        // shield-bounce keepalive normal.
         // refs/melee/src/melee/it/items/itfoxlaser.c::{itFoxlaser_UnkMotion1_Anim,it_8029C4D4}
         // refs/melee/src/melee/it/itcoll.c::it_8027137C
-        const uint8_t shield_cap_enabled = defender_guard_reflect_no_submotion_snapshot ? 0u : 1u;
+        const uint8_t shield_cap_enabled =
+            (defender_guard_reflect_no_submotion_snapshot &&
+             !(defender_guard_reflect_late_locomotion_snapshot_geom && laser_state == 0u))
+                ? 0u
+                : 1u;
         const float laser_offset_scale =
             laser_collision_offset_scale(lp, laser_state, laser_scale_z,
                                          MSL_LASER_COLLISION_SPACE_SHIELD, 0u,
@@ -1897,12 +1940,17 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
             shield_hit_contact_x = sx;
             shield_hit_contact_y = sy;
           }
-          if (!shield_bounce_contact_found) {
+          if (!shield_bounce_contact_found ||
+              (defender_guard_reflect_late_locomotion_snapshot_geom && laser_state == 0u)) {
             float trial_bounce_vx = 0.0f;
             float trial_bounce_vy = 0.0f;
-            if (laser_try_shield_bounce_velocity(vx, vy, shx, shy, sx, sy, &trial_bounce_vx,
-                                                 &trial_bounce_vy)) {
+            if (laser_try_shield_bounce_velocity(vx, vy, bounce_shx, bounce_shy, sx, sy,
+                                                 &trial_bounce_vx, &trial_bounce_vy) &&
+                (!shield_bounce_contact_found ||
+                 !(defender_guard_reflect_late_locomotion_snapshot_geom && laser_state == 0u) ||
+                 trial_bounce_vy > shield_bounce_best_vy)) {
               shield_bounce_contact_found = 1u;
+              shield_bounce_best_vy = trial_bounce_vy;
               shield_bounce_contact_x = sx;
               shield_bounce_contact_y = sy;
             }
@@ -1918,10 +1966,15 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
               shield_hit_contact_y = shield_probe_y;
               float trial_bounce_vx = 0.0f;
               float trial_bounce_vy = 0.0f;
-              if (laser_try_shield_bounce_velocity(vx, vy, shx, shy, shield_probe_x,
+              if (laser_try_shield_bounce_velocity(vx, vy, bounce_shx, bounce_shy, shield_probe_x,
                                                    shield_probe_y, &trial_bounce_vx,
-                                                   &trial_bounce_vy)) {
+                                                   &trial_bounce_vy) &&
+                  (!shield_bounce_contact_found ||
+                   !(defender_guard_reflect_late_locomotion_snapshot_geom &&
+                     laser_state == 0u) ||
+                   trial_bounce_vy > shield_bounce_best_vy)) {
                 shield_bounce_contact_found = 1u;
+                shield_bounce_best_vy = trial_bounce_vy;
                 shield_bounce_contact_x = shield_probe_x;
                 shield_bounce_contact_y = shield_probe_y;
               }
@@ -1934,17 +1987,21 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
               shield_hit_contact_y = shield_probe_y;
               float trial_bounce_vx = 0.0f;
               float trial_bounce_vy = 0.0f;
-              if (laser_try_shield_bounce_velocity(vx, vy, shx, shy, shield_probe_x,
+              if (laser_try_shield_bounce_velocity(vx, vy, bounce_shx, bounce_shy, shield_probe_x,
                                                    shield_probe_y, &trial_bounce_vx,
-                                                   &trial_bounce_vy)) {
+                                                   &trial_bounce_vy) &&
+                  (!shield_bounce_contact_found ||
+                   !(defender_guard_reflect_late_locomotion_snapshot_geom &&
+                     laser_state == 0u) ||
+                   trial_bounce_vy > shield_bounce_best_vy)) {
                 shield_bounce_contact_found = 1u;
+                shield_bounce_best_vy = trial_bounce_vy;
                 shield_bounce_contact_x = shield_probe_x;
                 shield_bounce_contact_y = shield_probe_y;
               }
             }
           }
         }
-
         if (shield_hit) {
           // Powershield reflect: on a reflected hit, reverse the velocity vector and transfer owner.
           //
@@ -2000,12 +2057,16 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
           //   ftCo_80091A4C,ftCo_800939B4,ftCo_8009370C,ftCo_GuardReflect_Anim,ftCo_80093BC0}
           // refs/melee/src/melee/ft/ftcoll.c::{ftColl_CreateReflectHit,ftColl_80076CBC}
-          if (can_powershield_reflect && defender_guard_reflect_no_submotion_snapshot &&
-              batch->state.action_frame[d_idx] == -1 &&
-              batch->state.prev_action_id[d_idx] != (uint16_t)MSL_ACT_GUARD_ON &&
-              batch->state.prev_action_id[d_idx] != (uint16_t)MSL_ACT_GUARD &&
-              batch->state.prev_action_id[d_idx] != (uint16_t)MSL_ACT_GUARD_REFLECT &&
-              batch->state.prev_action_id[d_idx] != (uint16_t)MSL_ACT_GUARD_SET_OFF) {
+          const uint8_t defender_guard_reflect_late_locomotion_snapshot =
+              (can_powershield_reflect && defender_guard_reflect_no_submotion_snapshot &&
+               batch->state.action_frame[d_idx] == -1 &&
+               batch->state.prev_action_id[d_idx] != (uint16_t)MSL_ACT_GUARD_ON &&
+               batch->state.prev_action_id[d_idx] != (uint16_t)MSL_ACT_GUARD &&
+               batch->state.prev_action_id[d_idx] != (uint16_t)MSL_ACT_GUARD_REFLECT &&
+               batch->state.prev_action_id[d_idx] != (uint16_t)MSL_ACT_GUARD_SET_OFF)
+                  ? 1u
+                  : 0u;
+          if (defender_guard_reflect_late_locomotion_snapshot) {
             can_powershield_reflect = 0u;
           }
           // Fresh locomotion->GuardReflect snapshot bridge:
@@ -2073,11 +2134,19 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
           // refs/melee/src/melee/it/items/itfoxlaser.c::{it_8029C504,itFoxlaser_UnkMotion1_Anim}
           // refs/melee/src/melee/it/item.c::Item_80269DC8
           const uint8_t can_shield_bounce =
-              shield_bounce_contact_found && laser_age_frames > 1.0f &&
-              laser_try_shield_bounce_velocity(vx, vy, shx, shy, shield_bounce_contact_x,
+              shield_bounce_contact_found &&
+              // Late locomotion->GuardReflect frozen snapshots can already resolve projectile
+              // contact through the regular shield-hit / GuardSetOff owner lane while the shot is
+              // only one frame old. Allow the normal shield-bounce keepalive there instead of
+              // forcing the generic spawn-frame destroy path.
+              // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
+              //   ftCo_80091A4C,ftCo_800939B4,ftCo_8009370C,ftCo_GuardReflect_Anim}
+              // refs/melee/src/melee/it/items/itfoxlaser.c::{
+              //   it_8029C504,itFoxlaser_UnkMotion1_Anim,itFoxLaser_Logic94_ShieldBounced}
+              (laser_age_frames > 1.0f || defender_guard_reflect_late_locomotion_snapshot) &&
+              laser_try_shield_bounce_velocity(vx, vy, bounce_shx, bounce_shy, shield_bounce_contact_x,
                                                shield_bounce_contact_y, &shield_bounce_vx,
                                                &shield_bounce_vy);
-
           // Regular shield hit: apply defender-side shield effects and despawn the laser.
           float dmg = (laser_state == 0u) ? lp->damage : lp->state1_damage;
           dmg = item_reflected_damage_lane(batch, ii, dmg);

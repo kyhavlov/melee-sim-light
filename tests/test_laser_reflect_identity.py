@@ -17,6 +17,7 @@ ACT_WAIT = 0x000E
 ACT_GUARD_REFLECT = 0x00B6
 
 CHAR_FOX = 1
+CHAR_FALCO = 22
 STAGE_FD = 32
 
 
@@ -28,7 +29,7 @@ def _common_attr(name: str) -> float:
     return float(common[name])
 
 
-def _load_fox_laser_shot_itkind_and_first_offset_x() -> tuple[int, float]:
+def _load_laser_shot_itkind_and_first_offset_x_and_lifetime(char_id_target: int) -> tuple[int, float, int]:
     # data/items/lasers.bin layout: tools/extraction/extract_lasers.py (MSLLASR1 v2/v3).
     path = "data/items/lasers.bin"
     if not Path(path).exists():
@@ -60,15 +61,18 @@ def _load_fox_laser_shot_itkind_and_first_offset_x() -> tuple[int, float]:
         offs0 = off_part2 + 24
         first = float(struct.unpack_from("<f", buf, offs0)[0]) if hitbox_offsets_x_count > 0 else 0.0
 
-        if int(char_id) == CHAR_FOX:
-            return int(shot_itkind), first
+        if int(char_id) == int(char_id_target):
+            lifetime = int(struct.unpack_from("<H", buf, base + 40)[0]) if int(ver) >= 2 else int(
+                struct.unpack_from("<H", buf, base + 32)[0]
+            )
+            return int(shot_itkind), first, lifetime
 
         # Defensive: ensure we don't desync parsing if record size changes.
         off += record_bytes
         if off <= base:
             raise AssertionError("record parse did not advance")
 
-    raise AssertionError("Fox laser record not found in lasers.bin")
+    raise AssertionError(f"laser record not found in lasers.bin for char_id={char_id_target}")
 
 
 def _mk_input_bytes(batch: int, input_stride: int) -> np.ndarray:
@@ -88,7 +92,7 @@ def test_reflected_laser_updates_owner_instance_and_staling_identity() -> None:
     assert input_stride == INPUT_DTYPE.itemsize
     assert compare_stride == COMPARE_DTYPE.itemsize
 
-    shot_itkind, off0 = _load_fox_laser_shot_itkind_and_first_offset_x()
+    shot_itkind, off0, _ = _load_laser_shot_itkind_and_first_offset_x_and_lifetime(CHAR_FOX)
 
     seed = np.zeros((1,), dtype=SEED_DTYPE)
     seed["stage_id"][0] = np.uint32(STAGE_FD)
@@ -213,7 +217,7 @@ def test_guardreflect_stale_x14_shield_hit_clears_reflect_active_and_destroys_la
     assert input_stride == INPUT_DTYPE.itemsize
     assert compare_stride == COMPARE_DTYPE.itemsize
 
-    shot_itkind, off0 = _load_fox_laser_shot_itkind_and_first_offset_x()
+    shot_itkind, off0, _ = _load_laser_shot_itkind_and_first_offset_x_and_lifetime(CHAR_FOX)
 
     seed = np.zeros((1,), dtype=SEED_DTYPE)
     seed["stage_id"][0] = np.uint32(STAGE_FD)
@@ -283,5 +287,98 @@ def test_guardreflect_stale_x14_shield_hit_clears_reflect_active_and_destroys_la
         assert int(cmp0["hitlag"][1]) == 4
         assert int(cmp0["state_flags"][1, 1]) == 33
         assert int(cmp0["items"][0]["exists"]) == 0
+    finally:
+        msl_binding.destroy(handle)
+
+
+def test_guardreflect_late_locomotion_shield_hit_keeps_one_frame_old_laser_alive() -> None:
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    compare_stride = int(sizes["compare"])
+
+    assert seed_stride == SEED_DTYPE.itemsize
+    assert input_stride == INPUT_DTYPE.itemsize
+    assert compare_stride == COMPARE_DTYPE.itemsize
+
+    shot_itkind, _, _ = _load_laser_shot_itkind_and_first_offset_x_and_lifetime(CHAR_FALCO)
+
+    seed = np.zeros((1,), dtype=SEED_DTYPE)
+    seed["stage_id"][0] = np.uint32(STAGE_FD)
+    seed["num_players"][0] = np.uint8(2)
+    seed["stocks"][0, :2] = np.uint8(4)
+    seed["char_id"][0, 0] = np.uint8(CHAR_FALCO)
+    seed["char_id"][0, 1] = np.uint8(CHAR_FOX)
+    seed["facing"][0, :2] = np.uint8(1)
+    seed["on_ground"][0, :2] = np.uint8(1)
+    seed["ground_id"][0, :2] = np.uint16(0)
+
+    seed["action_id"][0, 0] = np.uint16(ACT_WAIT)
+    seed["animation_index"][0, 0] = np.uint32(2)
+
+    # One-frame-late locomotion -> GuardReflect frozen snapshot:
+    # - replay can already resolve the projectile contact through GuardSetOff while keeping the
+    #   one-frame-old laser alive on the shield-bounce path instead of reflecting or despawning it.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
+    #   ftCo_80091A4C,ftCo_800939B4,ftCo_8009370C,ftCo_GuardReflect_Anim}
+    # refs/melee/src/melee/it/items/itfoxlaser.c::{
+    #   it_8029C504,itFoxlaser_UnkMotion1_Anim,itFoxLaser_Logic94_ShieldBounced}
+    seed["action_id"][0, 1] = np.uint16(ACT_GUARD_REFLECT)
+    seed["action_frame"][0, 1] = np.int16(-1)
+    seed["animation_index"][0, 1] = np.uint32(0xFFFFFFFF)
+    seed["guard_reflect_timer_x14"][0, 1] = np.uint8(1)
+    seed["guard_reflect_timer_x18"][0, 1] = np.uint8(1)
+    seed["state_flags"][0, 1, 3] = np.uint8(0x20)
+    seed["shield_hp"][0, 1] = np.float32(_common_attr("start_shield_health"))
+    seed["pos_x"][0, 1] = np.float32(0.0)
+    seed["pos_y"][0, 1] = np.float32(0.0)
+
+    # Row-shaped synthetic from the kept TBK family:
+    # - defender is the grounded Fox on the first shield-admission frame,
+    # - attacker-side Falco laser is one-step before the replay-kept bounce.
+    seed["facing"][0, 0] = np.uint8(1)
+    seed["facing"][0, 1] = np.uint8(0)
+    seed["pos_x"][0, 0] = np.float32(-20.015694)
+    seed["pos_y"][0, 0] = np.float32(0.0001)
+    seed["pos_x"][0, 1] = np.float32(25.920704)
+    seed["pos_y"][0, 1] = np.float32(0.0001)
+
+    handle = msl_binding.init(batch_size=1, num_players=2)
+    try:
+        prev_inp = _mk_input_bytes(1, input_stride)
+        inp = _mk_input_bytes(1, input_stride)
+        inp_view = inp.view(INPUT_DTYPE).reshape((1,))
+        inp_view["p"]["buttons"][0, 1] = np.uint16(BUTTON_L)
+        inp_view["p"]["l"][0, 1] = TRIGGER_FULL
+
+        seed2 = seed.copy()
+        seed2["items"][0, 0]["exists"] = np.uint8(1)
+        seed2["items"][0, 0]["type"] = np.uint16(shot_itkind)
+        seed2["items"][0, 0]["owner"] = np.int8(0)
+        seed2["items"][0, 0]["instance_id"] = np.uint16(999)
+        seed2["items"][0, 0]["direction"] = np.float32(1.0)
+        seed2["items"][0, 0]["vel_x"] = np.float32(5.0)
+        seed2["items"][0, 0]["vel_y"] = np.float32(0.0)
+        seed2["items"][0, 0]["pos_x"] = np.float32(20.115339)
+        seed2["items"][0, 0]["pos_y"] = np.float32(13.752838)
+        seed2["items"][0, 0]["timer"] = np.float32(94.0)
+        seed2["items"][0, 0]["spawn_id"] = np.uint32(123)
+
+        seed2_bytes = seed2.view(np.uint8).reshape((1, seed_stride))
+        msl_binding.reseed_seed(handle, seed2_bytes)
+        msl_binding.step_input(handle, prev_inp, inp)
+
+        out_cmp = np.zeros((1, compare_stride), dtype=np.uint8)
+        msl_binding.write_compare(handle, out_cmp)
+        cmp0 = out_cmp.view(COMPARE_DTYPE).reshape((1,))[0]
+
+        assert int(cmp0["action_id"][1]) == 181  # GuardSetOff
+        assert int(cmp0["animation_index"][1]) == 40  # GuardDamage
+        assert int(cmp0["hitlag"][1]) == 4
+        assert int(cmp0["items"][0]["exists"]) == 1
+        assert int(cmp0["items"][0]["owner"]) == 0
+        assert int(cmp0["items"][0]["instance_id"]) == 999
     finally:
         msl_binding.destroy(handle)

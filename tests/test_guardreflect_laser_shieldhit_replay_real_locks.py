@@ -66,6 +66,8 @@ def test_locomotion_laser_guardsetoff_family_lock(case: _Case) -> None:
     assert int(neg_out["hitlag"][p]) == int(neg_ref["hitlag"][p]) == 0, case.note
     assert int(neg_out["instance_id"][p]) == int(neg_ref["instance_id"][p]), case.note
     assert [int(x) for x in neg_out["state_flags"][p]] == [int(x) for x in neg_ref["state_flags"][p]]
+    for field in ("exists", "type", "owner", "instance_id"):
+        assert int(neg_out["items"][0][field]) == int(neg_ref["items"][0][field]), case.note
 
     for record in (case.target_record - 1, case.target_record, case.target_record + 1):
         seed_t, out_t, ref_t = _step_one_row(dataset_path, record)
@@ -79,6 +81,8 @@ def test_locomotion_laser_guardsetoff_family_lock(case: _Case) -> None:
 
             for field in ("action_id", "action_frame", "animation_index", "hitlag", "instance_id"):
                 assert int(out_t[field][p]) == int(ref_t[field][p]), case.note
+            for field in ("exists", "type", "owner", "instance_id"):
+                assert int(out_t["items"][0][field]) == int(ref_t["items"][0][field]), case.note
 
             # The lane fixes the direct GuardSetOff ownership bundle but leaves the shield-owner
             # state_flags handoff unresolved on this row; keep the residual shape explicit.
@@ -96,3 +100,5 @@ def test_locomotion_laser_guardsetoff_family_lock(case: _Case) -> None:
         assert int(out_t["hitlag"][p]) == int(ref_t["hitlag"][p]), case.note
         assert int(out_t["instance_id"][p]) == int(ref_t["instance_id"][p]), case.note
         assert [int(x) for x in out_t["state_flags"][p]] == [int(x) for x in ref_t["state_flags"][p]]
+        for field in ("exists", "type", "owner", "instance_id"):
+            assert int(out_t["items"][0][field]) == int(ref_t["items"][0][field]), case.note
