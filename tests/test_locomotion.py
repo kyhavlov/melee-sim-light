@@ -8,6 +8,7 @@ from tools.eval.dataset import COMPARE_DTYPE, INPUT_DTYPE, SEED_DTYPE
 BUTTON_X = 0x0400
 BUTTON_Y = 0x0800
 BUTTON_A = 0x0100
+BUTTON_B = 0x0200
 BUTTON_L = 0x0040
 
 # Action ids (GALE01): refs/melee/src/melee/ft/chara/ftCommon/forward.h
@@ -551,6 +552,80 @@ def test_attackdash_iasa_same_facing_hold_enters_walkslow() -> None:
     assert int(out0["action_frame"][0]) == 1
     assert int(out0["animation_index"][0]) == SM_WALK_SLOW
     assert int(out0["on_ground"][0]) == 1
+
+
+def test_attackdash_iasa_held_b_down_enters_squat_when_specials_has_no_x_input() -> None:
+    sizes = __import__("msl_binding").sizes()
+    input_stride = int(sizes["input"])
+
+    seed = _seed_base()
+    seed["on_ground"][0, 0] = np.uint8(1)
+    seed["action_id"][0, 0] = np.uint16(ACT_ATTACK_DASH)
+    seed["action_frame"][0, 0] = np.int16(35)
+    seed["anim_frame_f32"][0, 0] = np.float32(35.0)
+    seed["animation_index"][0, 0] = np.uint32(SM_ATTACK_DASH)
+    seed["facing"][0, 0] = np.uint8(1)
+    seed["attackdash_x0"][0, 0] = np.int16(0)
+
+    prev_inp = _mk_input_bytes(1, input_stride)
+    inp = _mk_input_bytes(1, input_stride)
+    prev_view = prev_inp.view(INPUT_DTYPE).reshape((1,))
+    cur_view = inp.view(INPUT_DTYPE).reshape((1,))
+    # Decomp: AttackDash IASA delegates to Wait_IASA after its pre-gates.
+    # Wait_IASA checks ftCo_SpecialS_CheckInput before Squat, and SpecialS requires B plus
+    # horizontal stick magnitude. Held-B rows with neutral X therefore still fall through to Squat.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackDash.c::ftCo_AttackDash_IASA
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_SpecialS.c::{
+    #   ftCo_SpecialS_CheckInput,ftCo_SpecialS_HasInput}
+    prev_view["p"]["buttons"][0, 0] = np.uint16(BUTTON_B)
+    cur_view["p"]["buttons"][0, 0] = np.uint16(BUTTON_B)
+    prev_view["p"]["main_y"][0, 0] = np.int8(-100)
+    cur_view["p"]["main_y"][0, 0] = np.int8(-100)
+
+    out0 = _step_once(seed, prev_inp, inp)
+    assert int(out0["action_id"][0]) == ACT_SQUAT
+    assert int(out0["action_frame"][0]) == 1
+    assert int(out0["animation_index"][0]) == SM_SQUAT
+    assert int(out0["on_ground"][0]) == 1
+
+
+def test_attackdash_iasa_held_b_down_with_strong_x_does_not_enter_squat() -> None:
+    sizes = __import__("msl_binding").sizes()
+    input_stride = int(sizes["input"])
+
+    seed = _seed_base()
+    seed["on_ground"][0, 0] = np.uint8(1)
+    seed["action_id"][0, 0] = np.uint16(ACT_ATTACK_DASH)
+    seed["action_frame"][0, 0] = np.int16(20)
+    seed["anim_frame_f32"][0, 0] = np.float32(20.0)
+    seed["animation_index"][0, 0] = np.uint32(SM_ATTACK_DASH)
+    seed["facing"][0, 0] = np.uint8(1)
+    seed["attackdash_x0"][0, 0] = np.int16(0)
+
+    prev_inp = _mk_input_bytes(1, input_stride)
+    inp = _mk_input_bytes(1, input_stride)
+    prev_view = prev_inp.view(INPUT_DTYPE).reshape((1,))
+    cur_view = inp.view(INPUT_DTYPE).reshape((1,))
+    # Negative control for the narrowed branch above:
+    # - ftCo_SpecialS_CheckInput consumes held-B rows once ABS(lstick.x) >= p_ftCommonData->x218.
+    # - Therefore the AttackDash crouch fallback must not fire on strong horizontal held-B input.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackDash.c::ftCo_AttackDash_IASA
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_SpecialS.c::{
+    #   ftCo_SpecialS_CheckInput,ftCo_SpecialS_HasInput}
+    prev_view["p"]["buttons"][0, 0] = np.uint16(BUTTON_B)
+    cur_view["p"]["buttons"][0, 0] = np.uint16(BUTTON_B)
+    prev_view["p"]["main_x"][0, 0] = np.int8(70)
+    cur_view["p"]["main_x"][0, 0] = np.int8(70)
+    prev_view["p"]["main_y"][0, 0] = np.int8(-100)
+    cur_view["p"]["main_y"][0, 0] = np.int8(-100)
+
+    out0 = _step_once(seed, prev_inp, inp)
+    assert int(out0["action_id"][0]) != ACT_SQUAT
+    assert int(out0["animation_index"][0]) != SM_SQUAT
+    assert int(out0["action_id"][0]) == ACT_ATTACK_DASH
+    assert int(out0["animation_index"][0]) == SM_ATTACK_DASH
 
 
 def test_walkslow_a_press_forward_down_enters_attacks3lw() -> None:

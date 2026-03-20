@@ -1997,9 +1997,53 @@ void locomotion_update_pre(MslBatch* batch) {
                 }
               }
             }
+            const uint8_t attackdash_specials_has_input =
+                // Decomp ordering for grounded AttackDash IASA delegation:
+                // - ftCo_AttackDash_IASA delegates to ftCo_Wait_IASA after its pre-gates.
+                // - ftCo_Wait_IASA checks ftCo_SpecialS_CheckInput before Squat/Turn/Walk.
+                // - ftCo_SpecialS_CheckInput consumes held-B rows once ABS(lstick.x) >=
+                //   p_ftCommonData->x218.
+                // Keep this scoped to AttackDash until grounded SpecialS delegation is modeled more
+                // broadly across the other grounded-attack callbacks.
+                // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackDash.c::ftCo_AttackDash_IASA
+                // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
+                // refs/melee/src/melee/ft/chara/ftCommon/ftCo_SpecialS.c::{
+                //   ftCo_SpecialS_CheckInput,ftCo_SpecialS_HasInput}
+                // data/common/ft_common_data.json: special_stick_x_threshold_side
+                (action_id == (uint16_t)MSL_ACT_ATTACK_DASH &&
+                 (buttons & (uint16_t)MSL_BUTTON_B) != 0u &&
+                 msl_absf(stick_x) >= c->special_stick_x_threshold_side)
+                    ? 1u
+                    : 0u;
             if (!attackdash_pregate_consumed && !attackdash_guard_iasa_consumed &&
                 !grounded_attack_guard_iasa_consumed &&
-                allow_interrupt && attackdash_wait_iasa_enabled &&
+                allow_interrupt && action_id == (uint16_t)MSL_ACT_ATTACK_DASH &&
+                (buttons_pressed & (uint16_t)MSL_BUTTON_B) == 0u &&
+                (buttons & (uint16_t)MSL_BUTTON_B) != 0u &&
+                !attackdash_specials_has_input &&
+                stick_y < -c->crouch_stick_threshold) {
+              // Decomp ordering for AttackDash IASA:
+              // - ftCo_AttackDash_IASA delegates to ftCo_Wait_IASA after the AttackDash-specific
+              //   pre-gates.
+              // - Wait_IASA routes through ftCo_SpecialS_CheckInput before Squat.
+              // - ftCo_SpecialS_CheckInput requires B plus horizontal stick magnitude (ABS(x) >=
+              //   p_ftCommonData->x218), so only held-B rows below that extracted side-special
+              //   threshold can still fall through to Squat.
+              // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackDash.c::ftCo_AttackDash_IASA
+              // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
+              // refs/melee/src/melee/ft/chara/ftCommon/ftCo_SpecialS.c::{
+              //   ftCo_SpecialS_CheckInput,ftCo_SpecialS_HasInput}
+              // data/common/ft_common_data.json: special_stick_x_threshold_side
+              enter_squat_immediate(batch, idx);
+              action_id = batch->state.action_id[idx];
+              enum { MSL_STATE_FLAGS_2218_INDEX = 0 };
+              enum { MSL_STATE_FLAG_2218_ALLOW_INTERRUPT = 0x80 };
+              const size_t flags_i =
+                  idx * (size_t)MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_2218_INDEX;
+              batch->state.state_flags[flags_i] |= (uint8_t)MSL_STATE_FLAG_2218_ALLOW_INTERRUPT;
+            } else if (!attackdash_pregate_consumed && !attackdash_guard_iasa_consumed &&
+                       !grounded_attack_guard_iasa_consumed &&
+                allow_interrupt && attackdash_wait_iasa_enabled && !attackdash_specials_has_input &&
                 grounded_attack_try_iasa_subset(batch, c, ch, idx, buttons, buttons_pressed,
                                                 stick_x, stick_y, tilt_timer_x, tilt_timer_y,
                                                 facing_dir)) {
