@@ -388,6 +388,16 @@ def main() -> None:
         # refs/melee/src/melee/ft/ftcoll.c::ftColl_8007699C
         # refs/melee/src/melee/ft/types.h (ftCommonData +0x3CC is s32)
         "clank_damage_diff_threshold": int(_i32_be(buf, ft_common_abs + 0x3CC)),
+        # Rebound clank-response constants:
+        # - ftColl inlineA0/inlineA1 derive `fp->dmg.x191C = int_dmg * x3D0 + x3D4` when the clanking
+        #   hitbox requests rebound and the fighter is grounded.
+        # - ftCo_80099D9C then derives rebound ground velocity from `x191C * x3D8 + x3DC`.
+        # refs/melee/src/melee/ft/ftcoll.c::{inlineA0,inlineA1}
+        # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Rebound.c::ftCo_80099D9C
+        "rebound_damage_x191c_mul": float(_f32_be(buf, ft_common_abs + 0x3D0)),
+        "rebound_damage_x191c_base": float(_f32_be(buf, ft_common_abs + 0x3D4)),
+        "rebound_ground_x0_mul": float(_f32_be(buf, ft_common_abs + 0x3D8)),
+        "rebound_ground_x0_base": float(_f32_be(buf, ft_common_abs + 0x3DC)),
         # Air drift overspeed friction (ftCommon_8007CF58 / ftCommon_8007D050): when
         # ABS(self_vel.x) > co_attrs.air_drift_max, the engine uses p_ftCommonData->x1FC as the
         # friction magnitude for the "clamp back toward max drift" step.

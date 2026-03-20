@@ -655,12 +655,34 @@ static inline void rebound_update_anim_callback_pre_input(MslBatch* batch, size_
   if (batch == NULL) {
     return;
   }
+  const MslCommonParams* c = msl_common_params();
+  const MslCharParams* ch = msl_char_params(batch->state.char_id[idx]);
   const uint16_t a0 = batch->state.action_id[idx];
   if (a0 != (uint16_t)MSL_ACT_REBOUND_STOP && a0 != (uint16_t)MSL_ACT_REBOUND) {
     return;
   }
   if (batch->state.hitlag_started_frame[idx] != 0) {
     return;
+  }
+
+  float rebound_anim_speed = 1.0f;
+  if (c != NULL && ch != NULL) {
+    const float rebound_speed_abs = msl_absf(batch->state.speed_ground_x_self[idx]);
+    // Rebound anim-rate ownership:
+    // - ftCo_80099D9C stores `mv.co.rebound.anim_start = (fp->co_attrs.x9C + 0.1f) / fp->dmg.x191C`.
+    // - The rebound ground-speed lane written in the same callback is
+    //   `fp->dmg.x191C * p_ftCommonData->x3D8 + p_ftCommonData->x3DC`.
+    // - On replay-visible ReboundStop/Rebound seeds, we can reconstruct the same x191C from the
+    //   live rebound ground speed before the first Rebound tick.
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Rebound.c::{ftCo_80099D9C,ftCo_80099E44}
+    // refs/melee/src/melee/ft/ftcoll.c::{inlineA0,inlineA1}
+    if (c->rebound_ground_x0_mul > 0.0f && rebound_speed_abs > c->rebound_ground_x0_base) {
+      const float rebound_x191c =
+          (rebound_speed_abs - c->rebound_ground_x0_base) / c->rebound_ground_x0_mul;
+      if (rebound_x191c > 0.0f) {
+        rebound_anim_speed = (ch->rebound_anim_numerator_frames + 0.1f) / rebound_x191c;
+      }
+    }
   }
 
   if (a0 == (uint16_t)MSL_ACT_REBOUND_STOP) {
@@ -676,8 +698,12 @@ static inline void rebound_update_anim_callback_pre_input(MslBatch* batch, size_
     // refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState
     batch->state.action_id[idx] = (uint16_t)MSL_ACT_REBOUND;
     batch->state.animation_index[idx] = (uint32_t)MSL_SM_REBOUND;
-    msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+    msl_anim_timebase_enter(batch, idx, 0.0f, rebound_anim_speed);
     return;
+  }
+
+  if (batch->state.action_frame[idx] == 0 && rebound_anim_speed > 0.0f) {
+    batch->state.frame_speed_mul_fp_q16_16[idx] = msl_q16_16_from_f32(rebound_anim_speed);
   }
 
   // Rebound_Anim callback ownership:

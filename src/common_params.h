@@ -271,6 +271,16 @@ typedef struct MslCommonParams {
   // refs/melee/src/melee/ft/ftcoll.c::ftColl_8007699C
   // refs/melee/src/melee/ft/types.h (ftCommonData +0x3CC)
   int32_t clank_damage_diff_threshold;  // p_ftCommonData->x3CC
+  // Rebound clank-response constants:
+  // - ftColl inlineA0/inlineA1 derive `fp->dmg.x191C = int_dmg * x3D0 + x3D4` on grounded rebound
+  //   clanks.
+  // - ftCo_80099D9C then derives rebound ground velocity from `x191C * x3D8 + x3DC`.
+  // refs/melee/src/melee/ft/ftcoll.c::{inlineA0,inlineA1}
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Rebound.c::ftCo_80099D9C
+  float rebound_damage_x191c_mul;   // p_ftCommonData->x3D0
+  float rebound_damage_x191c_base;  // p_ftCommonData->x3D4
+  float rebound_ground_x0_mul;      // p_ftCommonData->x3D8
+  float rebound_ground_x0_base;     // p_ftCommonData->x3DC
   // Damage hitlag-exit callback (ftCo_Damage_OnExitHitlag) stick-displacement constants.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_OnExitHitlag
   float sdi_radius;    // p_ftCommonData->x4B0 (stick magnitude gate; also used by ftCo_800DF608)

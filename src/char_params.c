@@ -323,6 +323,7 @@ static int load_one(const char* data_dir, const char* rel_path, uint8_t char_id)
       json_get_f32(buf, "ground_max_horizontal_velocity", &out.ground_max_horizontal_velocity) !=
           0 ||
       json_get_u8(buf, "turn_frames", &out.turn_frames) != 0 ||
+      json_get_f32(buf, "rebound_anim_numerator_frames", &out.rebound_anim_numerator_frames) != 0 ||
       json_get_u8(buf, "jump_startup_frames", &out.jump_startup_frames) != 0 ||
       json_get_f32(buf, "jump_h_initial_velocity", &out.jump_h_initial_velocity) != 0 ||
       json_get_f32(buf, "jump_v_initial_velocity", &out.jump_v_initial_velocity) != 0 ||

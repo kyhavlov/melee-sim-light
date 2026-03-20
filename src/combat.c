@@ -2119,6 +2119,31 @@ uint8_t combat_apply_throw_hit(MslBatch* batch, int batch_index, int attacker, i
   return 1;
 }
 
+static inline float combat_rebound_x191c_from_int_dmg(const MslCommonParams* c, int int_dmg) {
+  if (c == NULL || int_dmg <= 0) {
+    return 0.0f;
+  }
+  // Rebound clank setup:
+  // - ftColl inlineA0/inlineA1 write `fp->dmg.x191C = int_dmg * x3D0 + x3D4` for grounded
+  //   rebound-requesting clanks.
+  // refs/melee/src/melee/ft/ftcoll.c::{inlineA0,inlineA1}
+  return (float)int_dmg * c->rebound_damage_x191c_mul + c->rebound_damage_x191c_base;
+}
+
+static inline float combat_rebound_ground_x0_from_int_dmg(const MslCommonParams* c, int int_dmg,
+                                                          float facing_dir) {
+  const float rebound_x191c = combat_rebound_x191c_from_int_dmg(c, int_dmg);
+  if (!(rebound_x191c > 0.0f)) {
+    return 0.0f;
+  }
+  // Rebound ground-velocity ownership:
+  // - ftCo_80099D9C derives `mv.co.rebound.x0 = -facing_dir * (x191C * x3D8 + x3DC)`, then writes
+  //   it through ftCommon_800804A0 on ReboundStop entry.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Rebound.c::ftCo_80099D9C
+  // refs/melee/src/melee/ft/ftcommon.c::ftCommon_800804A0
+  return -facing_dir * (rebound_x191c * c->rebound_ground_x0_mul + c->rebound_ground_x0_base);
+}
+
 void combat_apply_item_shield_hit(MslBatch* batch, int batch_index, int attacker, int defender,
                                   uint16_t item_attack_id, uint16_t item_attack_instance,
                                   float damage, int8_t hitbox_shield_damage) {
@@ -2580,6 +2605,7 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
           // refs/melee/src/melee/ft/types.h (ftCommonData +0x3CC)
           const int clank_damage_diff_threshold = c->clank_damage_diff_threshold;
           int max_int_dmg[2] = {0, 0};
+          int max_rebound_int_dmg[2] = {0, 0};
           uint8_t max_elem[2] = {0, 0};
           uint8_t want_rebound_stop[2] = {0, 0};
           uint8_t did_clank = 0;
@@ -2672,6 +2698,9 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
               }
               if ((f0 & (uint16_t)MSL_HITBOX_FLAG_REBOUND) != 0) {
                 want_rebound_stop[0] = 1u;
+                if (int0 > max_rebound_int_dmg[0]) {
+                  max_rebound_int_dmg[0] = int0;
+                }
               }
 
               const int int1 = combat_get_env_dmg(d1);
@@ -2681,6 +2710,9 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
               }
               if ((f1 & (uint16_t)MSL_HITBOX_FLAG_REBOUND) != 0) {
                 want_rebound_stop[1] = 1u;
+                if (int1 > max_rebound_int_dmg[1]) {
+                  max_rebound_int_dmg[1] = int1;
+                }
               }
             }
           }
@@ -2710,11 +2742,23 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
 
             // ReboundStop transitions for hitboxes that request rebound on clank.
             if (want_rebound_stop[0]) {
+              if (max_rebound_int_dmg[0] > 0) {
+                const float facing_dir =
+                    (batch->state.pos_x[p1_idx] > batch->state.pos_x[p0_idx]) ? 1.0f : -1.0f;
+                batch->state.speed_ground_x_self[p0_idx] =
+                    combat_rebound_ground_x0_from_int_dmg(c, max_rebound_int_dmg[0], facing_dir);
+              }
               batch->state.action_id[p0_idx] = (uint16_t)MSL_ACT_REBOUND_STOP;
               batch->state.animation_index[p0_idx] = 0xFFFFFFFFu;
               msl_anim_timebase_enter(batch, p0_idx, 0.0f, 1.0f);
             }
             if (want_rebound_stop[1]) {
+              if (max_rebound_int_dmg[1] > 0) {
+                const float facing_dir =
+                    (batch->state.pos_x[p0_idx] > batch->state.pos_x[p1_idx]) ? 1.0f : -1.0f;
+                batch->state.speed_ground_x_self[p1_idx] =
+                    combat_rebound_ground_x0_from_int_dmg(c, max_rebound_int_dmg[1], facing_dir);
+              }
               batch->state.action_id[p1_idx] = (uint16_t)MSL_ACT_REBOUND_STOP;
               batch->state.animation_index[p1_idx] = 0xFFFFFFFFu;
               msl_anim_timebase_enter(batch, p1_idx, 0.0f, 1.0f);

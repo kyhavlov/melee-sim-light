@@ -59,6 +59,10 @@ typedef struct MslCharParams {
   uint8_t landing_airlw_lag_frames;
   uint8_t _pad_u8_0[1];
 
+  // Rebound anim-speed numerator from ftCo_80099D9C / ftCo_80099E44.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Rebound.c::{ftCo_80099D9C,ftCo_80099E44}
+  float rebound_anim_numerator_frames;  // fp->co_attrs.x9C
+
   float jump_h_initial_velocity;
   float jump_v_initial_velocity;
   float hop_v_initial_velocity;

@@ -17,6 +17,30 @@ enum { Ft_MF_KeepFastFall = 1 << 0 };
 // - ftCo_MS_PassiveWallJump = 203
 enum { MSL_ACT_PASSIVE_WALL_JUMP = 203u };
 
+static inline uint8_t anim_timebase_try_rebound_anim_speed_from_ground_vel(
+    const MslCommonParams* c, const MslCharParams* ch, float ground_speed_x, float* out_rate) {
+  if (c == NULL || ch == NULL || out_rate == NULL) {
+    return 0u;
+  }
+  const float rebound_speed_abs = fabsf(ground_speed_x);
+  if (!(c->rebound_ground_x0_mul > 0.0f) || rebound_speed_abs <= c->rebound_ground_x0_base) {
+    return 0u;
+  }
+  const float rebound_x191c =
+      (rebound_speed_abs - c->rebound_ground_x0_base) / c->rebound_ground_x0_mul;
+  if (!(rebound_x191c > 0.0f)) {
+    return 0u;
+  }
+  // Rebound anim-speed ownership:
+  // - ftCo_80099D9C stores `mv.co.rebound.anim_start = (fp->co_attrs.x9C + 0.1f) / fp->dmg.x191C`.
+  // - ReboundStop_Anim immediately enters Rebound, and Rebound's first timeline advance should
+  //   already use that callback-owned rate on frame-0 seeds.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Rebound.c::{ftCo_80099D9C,ftCo_80099E44}
+  // refs/melee/src/melee/ft/ftcoll.c::{inlineA0,inlineA1}
+  *out_rate = (ch->rebound_anim_numerator_frames + 0.1f) / rebound_x191c;
+  return 1u;
+}
+
 static inline uint8_t anim_timebase_apply_aobj_loop(MslBatch* batch, size_t idx) {
   // Fighter AObj loop semantics (AOBJ_LOOP) apply a deterministic rewind+wrap when
   // `end_frame <= curr_frame`.
@@ -425,6 +449,14 @@ void anim_timebase_update_pre_input(MslBatch* batch) {
           batch->state.capture_wait_prev_rate_valid[idx]) {
         batch->state.frame_speed_mul_fp_q16_16[idx] =
             batch->state.capture_wait_prev_rate_fp_q16_16[idx];
+      }
+
+      if (a == (uint16_t)MSL_ACT_REBOUND && action_frame_pre == 0) {
+        float rebound_rate = 0.0f;
+        if (anim_timebase_try_rebound_anim_speed_from_ground_vel(
+                c, ch, batch->state.speed_ground_x_self[idx], &rebound_rate)) {
+          batch->state.frame_speed_mul_fp_q16_16[idx] = msl_q16_16_from_f32(rebound_rate);
+        }
       }
 
       // ThrowLw hitlag-release anim-rate ownership bridge:

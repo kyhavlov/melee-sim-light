@@ -224,6 +224,12 @@ def _extract_ftco_dattrs(pl_dat: Path, *, ftdata_symbol: str, extract_fox_blaste
         "pushbox_x": float(_f32_be(buf, pushbox_abs + 0x00)) if pushbox_abs != arc.data_base else 0.0,
         "pushbox_y": float(_f32_be(buf, pushbox_abs + 0x04)) if pushbox_abs != arc.data_base else 0.0,
         "turn_frames": int(max(1, turn_frames)),
+        # Rebound anim-speed numerator (ftCo_80099E44):
+        # - ftCo_80099D9C stores `mv.co.rebound.anim_start = (fp->co_attrs.x9C + 0.1f) / fp->dmg.x191C`.
+        # - ftCo_80099E44 passes that value as Fighter_ChangeMotionState(..., anim_speed, ...).
+        # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Rebound.c::{ftCo_80099D9C,ftCo_80099E44}
+        # refs/melee/src/melee/ft/types.h::ftCo_DatAttrs
+        "rebound_anim_numerator_frames": f(0x9C),
         "landing_lag_frames": int(max(1, landing_lag_frames)),
         "landing_airn_lag_frames": int(max(1, landing_airn_lag_frames)),
         "landing_airf_lag_frames": int(max(1, landing_airf_lag_frames)),
@@ -403,6 +409,7 @@ def _stable_update(existing: dict, extracted: dict) -> dict:
         "gr_friction",
         "ground_max_horizontal_velocity",
         "turn_frames",
+        "rebound_anim_numerator_frames",
         "jump_startup_frames",
         "jump_h_initial_velocity",
         "jump_v_initial_velocity",

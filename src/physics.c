@@ -220,6 +220,7 @@ static inline uint8_t physics_action_is_common_ground_friction_only(uint16_t act
   // - refs/melee/src/melee/ft/chara/ftCommon/ftCo_KneeBend.c::ftCo_KneeBend_Phys
   // - refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::ftCo_Landing_Phys
   // - refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_Guard_Phys
+  // - refs/melee/src/melee/ft/chara/ftCommon/ftCo_Rebound.c::ftCo_Rebound_Phys
   // - refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackS3.c::ftCo_AttackS3_Phys
   // - refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackHi3.c::ftCo_AttackHi3_Phys
   // - refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackLw3.c::ftCo_AttackLw3_Phys
@@ -244,6 +245,7 @@ static inline uint8_t physics_action_is_common_ground_friction_only(uint16_t act
     case MSL_ACT_GUARD_OFF:
     case MSL_ACT_GUARD_SET_OFF:
     case MSL_ACT_GUARD_REFLECT:
+    case MSL_ACT_REBOUND:
     case MSL_ACT_ATTACK_S3_HI:
     case MSL_ACT_ATTACK_S3_HI_S:
     case MSL_ACT_ATTACK_S3_S:
