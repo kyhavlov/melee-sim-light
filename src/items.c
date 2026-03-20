@@ -1782,11 +1782,19 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
       // refs/melee/src/melee/ft/ftcoll.c::ftColl_8007B1B8
       const uint8_t shield_fresh_dash_full_shield_snapshot =
           (batch->state.prev_action_id[d_idx] == (uint16_t)MSL_ACT_DASH &&
-           batch->state.action_id[d_idx] == (uint16_t)MSL_ACT_GUARD_REFLECT &&
            batch->state.action_frame[d_idx] < 0 &&
            batch->state.animation_index[d_idx] == UINT32_MAX &&
-           batch->state.guard_reflect_timer_x14_seed[d_idx] == 0u &&
-           batch->state.guard_reflect_timer_x18_seed[d_idx] == 0u &&
+           // Dash IASA late-branch shield admission can enter GuardOn through
+           // ftCo_80091A4C -> ftCo_800923B4 -> ftCo_800924C0 (analog hold) or GuardReflect through
+           // ftCo_80091A4C -> ftCo_800939B4 -> ftCo_80093A50 (digital powershield path). Keep the
+           // full-shield no-hit snapshot suppression aligned to both fresh entry owners.
+           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c::ftCo_Dash_IASA
+           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
+           //   ftCo_80091A4C,ftCo_800923B4,ftCo_800924C0,ftCo_800939B4,ftCo_80093A50}
+           (batch->state.action_id[d_idx] == (uint16_t)MSL_ACT_GUARD_ON ||
+            (batch->state.action_id[d_idx] == (uint16_t)MSL_ACT_GUARD_REFLECT &&
+             batch->state.guard_reflect_timer_x14_seed[d_idx] == 0u &&
+             batch->state.guard_reflect_timer_x18_seed[d_idx] == 0u)) &&
            common != NULL &&
            batch->state.shield_hp[d_idx] >= common->start_shield_health)
               ? 1u
