@@ -1970,7 +1970,35 @@ void locomotion_update_pre(MslBatch* batch) {
                 }
               }
             }
+            uint8_t grounded_attack_guard_iasa_consumed = 0u;
+            if (!attackdash_pregate_consumed && !attackdash_guard_iasa_consumed && allow_interrupt &&
+                action_id == (uint16_t)MSL_ACT_ATTACK_HI3) {
+              // Decomp ordering for AttackHi3 IASA:
+              // - ftCo_AttackHi3_IASA gates on fp->allow_interrupt then delegates into
+              //   ftCo_Wait_IASA.
+              // - ftCo_Wait_IASA checks guard entry (ftCo_80091A4C) before jump / dash / squat /
+              //   turn / walk.
+              // Keep this scoped to AttackHi3 until the other grounded-attack guard families are
+              // triaged; the broader lane spills into unrelated states.
+              // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackHi3.c::ftCo_AttackHi3_IASA
+              // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
+              // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80091A4C
+              const uint16_t act_before_guard = batch->state.action_id[idx];
+              guard_update_grounded(batch, c, idx, 1u);
+              action_id = batch->state.action_id[idx];
+              if (act_before_guard != action_id) {
+                grounded_attack_guard_iasa_consumed = 1u;
+                if (grounded_attack_wait_iasa_interrupt_dest_action(action_id)) {
+                  enum { MSL_STATE_FLAGS_2218_INDEX = 0 };
+                  enum { MSL_STATE_FLAG_2218_ALLOW_INTERRUPT = 0x80 };
+                  const size_t flags_i =
+                      idx * (size_t)MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_2218_INDEX;
+                  batch->state.state_flags[flags_i] |= (uint8_t)MSL_STATE_FLAG_2218_ALLOW_INTERRUPT;
+                }
+              }
+            }
             if (!attackdash_pregate_consumed && !attackdash_guard_iasa_consumed &&
+                !grounded_attack_guard_iasa_consumed &&
                 allow_interrupt && attackdash_wait_iasa_enabled &&
                 grounded_attack_try_iasa_subset(batch, c, ch, idx, buttons, buttons_pressed,
                                                 stick_x, stick_y, tilt_timer_x, tilt_timer_y,
