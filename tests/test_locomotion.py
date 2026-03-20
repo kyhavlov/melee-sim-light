@@ -632,6 +632,47 @@ def test_attackhi3_allow_interrupt_held_l_enters_guardon() -> None:
     assert int(out0["on_ground"][0]) == 1
 
 
+def test_ottotto_a_press_forward_down_enters_attacks3lw() -> None:
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    input_stride = int(sizes["input"])
+
+    seed = _seed_base()
+    seed["on_ground"][0, 0] = np.uint8(1)
+    seed["action_id"][0, 0] = np.uint16(ACT_OTTOTTO)
+    seed["action_frame"][0, 0] = np.int16(3)
+    seed["anim_frame_f32"][0, 0] = np.float32(3.0)
+    seed["animation_index"][0, 0] = np.uint32(SM_OTTOTTO)
+    seed["facing"][0, 0] = np.uint8(0)  # left
+    seed["pos_x"][0, 0] = np.float32(-85.5657)
+    seed["pos_y"][0, 0] = np.float32(1.0e-4)
+    seed["ground_id"][0, 0] = np.uint16(0)
+    seed["speed_ground_x_self"][0, 0] = np.float32(0.0)
+    seed["tilt_timer_x"][0, 0] = np.uint8(32)
+    seed["tilt_timer_y"][0, 0] = np.uint8(13)
+
+    prev_inp = _mk_input_bytes(1, input_stride)
+    inp = _mk_input_bytes(1, input_stride)
+    cur_view = inp.view(INPUT_DTYPE).reshape((1,))
+    # Decomp: ftCo_Ottotto_IASA checks grounded A-attack inputs before jump/dash/turn/walk, and a
+    # forward+down A press routes through AttackS3_CheckInput into AttackS3Lw.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Ottotto.c::ftCo_Ottotto_IASA
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackS3.c::ftCo_AttackS3_CheckInput
+    cur_view["p"]["buttons"][0, 0] = np.uint16(BUTTON_A)
+    cur_view["p"]["main_x"][0, 0] = np.int8(-45)
+    # Keep the synthetic unit in the forward+down side-tilt band while staying above the stricter
+    # AttackLw4 threshold; the replay-real lock covers the exact QGD row bytes separately.
+    # refs/melee/src/melee/ft/chara/ftCommon/{ftCo_AttackS3.c,ftCo_AttackLw4.c}
+    cur_view["p"]["main_y"][0, 0] = np.int8(-52)
+
+    out0 = _step_once(seed, prev_inp, inp)
+    assert int(out0["action_id"][0]) == ACT_ATTACK_S3_LW
+    assert int(out0["action_frame"][0]) == 1
+    assert int(out0["animation_index"][0]) == SM_ATTACK_S3_LW
+    assert int(out0["on_ground"][0]) == 1
+
+
 def test_wait_flick_forward_enters_dash_with_action_frame_1() -> None:
     import msl_binding
 

@@ -2200,10 +2200,26 @@ void locomotion_update_pre(MslBatch* batch) {
           }
         }
 
+        // Ottotto grounded A-attack IASA:
+        // - ftCo_Ottotto_IASA checks grounded A-attack inputs before guard/jump/dash/turn/walk.
+        // - Keep this scoped to Ottotto only; OttottoWait and the other teeter IASA branches still
+        //   need separate ownership triage.
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Ottotto.c::ftCo_Ottotto_IASA
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackS3.c::ftCo_AttackS3_CheckInput
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackHi3.c::ftCo_AttackHi3_CheckInput
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackLw3.c::ftCo_AttackLw3_CheckInput
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack1.c::ftCo_Attack1_CheckInput
+        if (action_id == (uint16_t)MSL_ACT_OTTOTTO) {
+          if (grounded_a_attack_try_enter_from_iasa(batch, c, idx, buttons_pressed, stick_x, stick_y,
+                                                    tilt_timer_x, tilt_timer_y, facing_dir, 0, 1)) {
+            action_id = batch->state.action_id[idx];
+          }
+        }
+
         // Ottotto / OttottoWait jump IASA:
         // - ftCo_Ottotto{,Wait}_IASA routes through ftCo_Jump_CheckInput before Dash/Turn/Walk.
-        // - Keep this scoped to jump entry only; attack/guard branches from the same IASA chain are
-        //   still blocked on broader teeter ownership / guard parity lanes.
+        // - Keep jump entry independent from the narrower grounded A-attack bridge above; the
+        //   remaining teeter IASA branches are still blocked on broader ownership parity.
         // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Ottotto.c::{
         //   ftCo_Ottotto_IASA,ftCo_OttottoWait_IASA}
         // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c::ftCo_Jump_CheckInput
