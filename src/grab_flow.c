@@ -797,7 +797,13 @@ void grab_flow_update_pre_physics(MslBatch* batch) {
       //
       // TODO(narrowed_temporary): this bridge targets the first steady CaptureWait ownership window
       // only. Full parity needs a seed-visible callback order lane for owner/victim procUpdate
-      // precedence across all capture sub-variants.
+      // precedence across all capture sub-variants; slot order alone is not sufficient because
+      // replay rows still split between:
+      // - owner later-slot, owner af 1->2, victim af 1->2 (no extra tick), and
+      // - owner earlier-slot, owner af 0->1, victim af 1->2 (no extra tick).
+      // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
+      // refs/melee/build/GALE01/asm/melee/ft/chara/ftCommon/ftCo_Attack100.s::{
+      //   ftCo_CatchPull_Anim,fn_800DA1D8,fn_800DB6C8}
       if ((oa_seed == (uint16_t)MSL_ACT_CATCH_WAIT || oa_seed == (uint16_t)MSL_ACT_CATCH_ATTACK) &&
           (oa == (uint16_t)MSL_ACT_CATCH_WAIT || oa == (uint16_t)MSL_ACT_CATCH_ATTACK) &&
           batch->state.action_frame[oidx] <= 1) {
