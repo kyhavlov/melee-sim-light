@@ -2743,8 +2743,11 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
             // ReboundStop transitions for hitboxes that request rebound on clank.
             if (want_rebound_stop[0]) {
               if (max_rebound_int_dmg[0] > 0) {
-                const float facing_dir =
-                    (batch->state.pos_x[p1_idx] > batch->state.pos_x[p0_idx]) ? 1.0f : -1.0f;
+                // Rebound x0 ownership:
+                // - ftCo_80099D9C uses the rebounding fighter's own `fp->facing_dir` when writing
+                //   `mv.co.rebound.x0`; it is not derived from the opponent's relative position.
+                // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Rebound.c::ftCo_80099D9C
+                const float facing_dir = batch->state.facing[p0_idx] ? 1.0f : -1.0f;
                 batch->state.speed_ground_x_self[p0_idx] =
                     combat_rebound_ground_x0_from_int_dmg(c, max_rebound_int_dmg[0], facing_dir);
               }
@@ -2754,8 +2757,11 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
             }
             if (want_rebound_stop[1]) {
               if (max_rebound_int_dmg[1] > 0) {
-                const float facing_dir =
-                    (batch->state.pos_x[p0_idx] > batch->state.pos_x[p1_idx]) ? 1.0f : -1.0f;
+                // Rebound x0 ownership:
+                // - ftCo_80099D9C uses the rebounding fighter's own `fp->facing_dir` when writing
+                //   `mv.co.rebound.x0`; it is not derived from the opponent's relative position.
+                // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Rebound.c::ftCo_80099D9C
+                const float facing_dir = batch->state.facing[p1_idx] ? 1.0f : -1.0f;
                 batch->state.speed_ground_x_self[p1_idx] =
                     combat_rebound_ground_x0_from_int_dmg(c, max_rebound_int_dmg[1], facing_dir);
               }
