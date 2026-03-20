@@ -14,6 +14,8 @@ BUTTON_L = 0x0040
 
 # Action ids (GALE01): refs/melee/src/melee/ft/chara/ftCommon/forward.h
 ACT_WAIT = 0x000E
+ACT_KNEEBEND = 0x0018
+ACT_JUMPF = 0x0019
 ACT_LANDING = 0x002A
 ACT_LANDING_FALL_SPECIAL = 0x002B
 ACT_LANDING_AIR_N = 0x0046
@@ -25,6 +27,7 @@ ACT_FX_SPECIAL_AIR_S_END = 0x0160
 
 # Submotion ids (GALE01): refs/melee/src/melee/ft/chara/ftCommon/forward.h
 SM_WAIT1_0 = 2
+SM_JUMPF = 16
 SM_LANDING = 35
 SM_LANDING_FALL_SPECIAL = 36
 SM_LANDING_AIR_N = 73
@@ -236,6 +239,54 @@ def test_landing_fall_special_entry_uses_illusion_source_lag_when_seed_prev_acti
     assert int(out_escape["animation_index"][0]) == SM_LANDING_FALL_SPECIAL
     assert int(out_escape["action_frame"][0]) == _scaled_anim_inc(end_frame, common_lag)
     assert int(out_escape["action_frame"][0]) > int(out_illusion["action_frame"][0])
+
+
+def test_jumpf_l_press_near_floor_enters_landingfallspecial_same_step() -> None:
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    input_stride = int(sizes["input"])
+
+    seed = _seed_base()
+    seed["on_ground"][0, 0] = np.uint8(0)
+    seed["ground_id"][0, 0] = np.uint16(2)
+    seed["facing"][0, 0] = np.uint8(0)  # left
+    seed["pos_x"][0, 0] = np.float32(78.21233)
+    seed["pos_y"][0, 0] = np.float32(1.9001)
+    seed["speed_air_x_self"][0, 0] = np.float32(0.0)
+    seed["speed_ground_x_self"][0, 0] = np.float32(0.0)
+    seed["speed_y_self"][0, 0] = np.float32(1.9)
+    seed["jumps_left"][0, 0] = np.uint8(1)
+    seed["ecb_lock_timer"][0, 0] = np.uint8(9)
+    seed["action_id"][0, 0] = np.uint16(ACT_JUMPF)
+    seed["action_frame"][0, 0] = np.int16(0)
+    seed["animation_index"][0, 0] = np.uint32(SM_JUMPF)
+    seed["anim_frame_f32"][0, 0] = np.float32(0.0)
+    seed["seed_prev_action_id"][0, 0] = np.uint16(ACT_KNEEBEND)
+    seed["seed_prev_action_frame"][0, 0] = np.int16(4)
+
+    prev_inp = _mk_input_bytes(1, input_stride)
+    inp = _mk_input_bytes(1, input_stride)
+    prev_view = prev_inp.view(INPUT_DTYPE).reshape((1,))
+    cur_view = inp.view(INPUT_DTYPE).reshape((1,))
+    prev_view["p"]["main_x"][0, 0] = np.int8(75)
+    prev_view["p"]["main_y"][0, 0] = np.int8(-73)
+    cur_view["p"]["main_x"][0, 0] = np.int8(75)
+    cur_view["p"]["main_y"][0, 0] = np.int8(-73)
+    cur_view["p"]["buttons"][0, 0] = np.uint16(BUTTON_L)
+
+    # Decomp: Jump IASA can enter EscapeAir via ftCo_80099A58, and EscapeAir_Coll resolves
+    # same-pass landing through ft_80082C74 into LandingFallSpecial. The jump-entry floor handoff
+    # keeps this immediate JumpF family grounded instead of suppressing the ledge-floor landing.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c::ftCo_Jump_IASA
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::{ftCo_80099A58,ftCo_EscapeAir_Coll}
+    # refs/melee/src/melee/ft/ft_081B.c::ft_80082C74
+    out = _step_once(seed, prev_inp, inp)
+    assert int(out["action_id"][0]) == ACT_LANDING_FALL_SPECIAL
+    assert int(out["action_frame"][0]) == 0
+    assert int(out["animation_index"][0]) == SM_LANDING_FALL_SPECIAL
+    assert int(out["on_ground"][0]) == 1
+    assert int(out["jumps_left"][0]) == 2
 
 
 def test_landing_iasa_allows_shield_entry_after_landing_lag_gate() -> None:

@@ -325,6 +325,15 @@ void blaster_update_pre_physics(MslBatch* batch) {
             allow = 1u;
           } else if (a == (uint16_t)MSL_ACT_DAMAGE_FALL) {
             allow = 1u;
+          } else if (a == (uint16_t)MSL_ACT_PASSIVE_WALL_JUMP) {
+            // Decomp: PassiveWall IASA calls ftCo_SpecialAir_CheckInput once
+            // mv.co.passivewall.timer reaches zero. PassiveWall_Anim transitions through inlineA0
+            // into PassiveWallJump with timer cleared, so late PassiveWallJump frames share the
+            // same aerial B-special ownership.
+            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_PassiveWall.c::{
+            //   inlineA0,ftCo_PassiveWall_Anim,ftCo_PassiveWall_IASA}
+            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_SpecialAir.c::ftCo_SpecialAir_CheckInput
+            allow = 1u;
           }
         }
         if (allow) {

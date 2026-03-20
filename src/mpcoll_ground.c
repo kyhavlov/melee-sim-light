@@ -1171,10 +1171,23 @@ void mpcoll_ground_apply(MslBatch* batch) {
                batch->state.action_frame[idx] <= 2)
                   ? 1u
                   : 0u;
+          const uint8_t escapeair_jump_entry_floor_handoff =
+              (escapeair_locked &&
+               // Decomp path: JumpF/JumpB can feed directly into EscapeAir through ftCo_80099A58,
+               // and EscapeAir_Coll still owns same-pass landing via ft_80082C74.
+               // Keep this restricted to the immediate post-entry window after JumpF/JumpB.
+                // refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::{
+                //   ftCo_80099A58,ftCo_EscapeAir_Coll}
+                // refs/melee/src/melee/ft/ft_081B.c::ft_80082C74
+                (prev_action_id == (uint16_t)MSL_ACT_JUMP_F ||
+                prev_action_id == (uint16_t)MSL_ACT_JUMP_B) &&
+               batch->state.action_frame[idx] <= 1)
+                  ? 1u
+                  : 0u;
           const uint8_t suppress_locked_ledge_land =
               (escapeair_locked && !deep_lock_penetration && hit_line_idx >= 0 &&
                g->lines[(size_t)hit_line_idx].is_ledge && !escapeair_sustained_floor_handoff &&
-               !escapeair_kneebend_entry_floor_handoff)
+               !escapeair_kneebend_entry_floor_handoff && !escapeair_jump_entry_floor_handoff)
                   ? 1u
                   : 0u;
           const uint8_t suppress_locked_vertical_af3_land =

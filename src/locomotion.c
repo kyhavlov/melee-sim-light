@@ -17,6 +17,7 @@
 #include "move_tables.h"
 #include "input_axis.h"
 #include "jump_input.h"
+#include "shine.h"
 #include "special_msids.h"
 #include "stage_collision.h"
 
@@ -1933,8 +1934,8 @@ void locomotion_update_pre(MslBatch* batch) {
                  // Decomp: AttackDash IASA delegates into Wait_IASA, but keep the current
                  // movement-only narrowing outside explicit button edges so analog-only walk/run
                  // branches do not spill into unrelated ledge-motion lanes. Re-admit the
-                 // sustained same-facing hold subset, which mirrors held-stick Wait_IASA dash/walk
-                 // ownership without reopening fresh dash-entry edge rows.
+                 // sustained same-facing hold subset, which mirrors Wait_IASA dash/walk ownership
+                 // without reopening fresh dash-entry edge rows.
                  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackDash.c::ftCo_AttackDash_IASA
                  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
                  (stick_x * facing_dir) <= c->turn_stick_x_threshold)
@@ -2031,6 +2032,27 @@ void locomotion_update_pre(MslBatch* batch) {
                     ? 1u
                     : 0u;
             if (!attackdash_pregate_consumed && !attackdash_guard_iasa_consumed &&
+                !grounded_attack_guard_iasa_consumed && allow_interrupt &&
+                action_id == (uint16_t)MSL_ACT_ATTACK_DASH &&
+                shine_char_supports_reflector(cid) &&
+                (buttons_pressed & (uint16_t)MSL_BUTTON_B) != 0u && !attackdash_specials_has_input &&
+                stick_y <= -c->special_stick_y_threshold) {
+              // Decomp AttackDash IASA delegation:
+              // - ftCo_AttackDash_IASA gates on fp->allow_interrupt, then delegates to Wait_IASA.
+              // - Wait_IASA runs ftCo_SpecialS_CheckInput first, then grounded special dispatcher
+              //   ftCo_800D68C0 before catch/guard/jump/dash/squat/turn/walk.
+              // - Reflector entry is owned by ftCo_800D68C0 for grounded Fox/Falco rows only, so
+              //   non-spacies must not consume this branch before the rest of Wait_IASA ordering.
+              // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackDash.c::ftCo_AttackDash_IASA
+              // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
+              // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_800D68C0
+              // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c::ftFx_SpecialLw_Enter
+              // refs/melee/src/melee/ft/chara/ftFalco/ftFc_SpecialLw.c
+              // data/common/ft_common_data.json: special_stick_y_threshold
+              shine_enter_ground_start_from_iasa(batch, idx);
+              action_id = batch->state.action_id[idx];
+            }
+            if (!attackdash_pregate_consumed && !attackdash_guard_iasa_consumed &&
                 !grounded_attack_guard_iasa_consumed &&
                 allow_interrupt && action_id == (uint16_t)MSL_ACT_ATTACK_DASH &&
                 (buttons_pressed & (uint16_t)MSL_BUTTON_B) == 0u &&
@@ -2089,7 +2111,22 @@ void locomotion_update_pre(MslBatch* batch) {
           }
         }
 
-        // Guard core loop (entry/hold/exit). Keep this before locomotion IASA (e.g. Wait->Jump/Dash).
+        // Guard core loop (entry/hold/exit). Keep this before the common grounded locomotion IASA
+        // (e.g. Wait->Jump/Dash), but preserve Dash_IASA's CatchDash ownership before any shield
+        // entry can preempt it on the same frame.
+        //
+        // Decomp ordering:
+        // - ftCo_Dash_IASA calls ftCo_800D8A38 (CatchDash) before any guard-owned path.
+        // - Our shared guard_update_grounded() pass runs earlier than the explicit Dash_IASA block
+        //   below, so replay-real Dash+grab rows need a narrow pre-guard CatchDash bridge here.
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c::ftCo_Dash_IASA
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_800D8A38
+        if (action_id == MSL_ACT_DASH && action_id_start == MSL_ACT_DASH &&
+            grab_flow_try_enter_catchdash_from_iasa(batch, c, idx)) {
+          continue;
+        }
+
+        // Guard core loop (entry/hold/exit).
         // Decomp call site example: refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c:43-66.
         uint8_t allow_guard_entry = 0;
         if (action_id == MSL_ACT_WAIT || action_is_walk(action_id) || action_id == MSL_ACT_TURN ||

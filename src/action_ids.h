@@ -102,6 +102,9 @@ typedef enum MslActionId {
   MSL_ACT_PASSIVE = 0x00C7,          // ftCo_MS_Passive
   MSL_ACT_PASSIVE_STAND_F = 0x00C8,  // ftCo_MS_PassiveStandF
   MSL_ACT_PASSIVE_STAND_B = 0x00C9,  // ftCo_MS_PassiveStandB
+  MSL_ACT_PASSIVE_WALL = 0x00CA,       // ftCo_MS_PassiveWall
+  MSL_ACT_PASSIVE_WALL_JUMP = 0x00CB,  // ftCo_MS_PassiveWallJump
+  MSL_ACT_PASSIVE_CEIL = 0x00CC,       // ftCo_MS_PassiveCeil
 
   // Shield defensive options (grounded).
   // Source of truth: refs/melee/src/melee/ft/chara/ftCommon/forward.h `ftCommon_MotionState`.

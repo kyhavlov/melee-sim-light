@@ -13,9 +13,6 @@
 #include "move_tables.h"
 
 enum { Ft_MF_KeepFastFall = 1 << 0 };
-// Decomp: refs/melee/src/melee/ft/chara/ftCommon/forward.h
-// - ftCo_MS_PassiveWallJump = 203
-enum { MSL_ACT_PASSIVE_WALL_JUMP = 203u };
 
 static inline uint8_t anim_timebase_try_rebound_anim_speed_from_ground_vel(
     const MslCommonParams* c, const MslCharParams* ch, float ground_speed_x, float* out_rate) {

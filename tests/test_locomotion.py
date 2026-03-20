@@ -25,10 +25,17 @@ ACT_ATTACK_DASH = 0x0032
 ACT_ATTACK_S3_LW = 0x0037
 ACT_ATTACK_HI3 = 0x0038
 ACT_DAMAGEFALL = 0x0026
+ACT_LANDING_FALL_SPECIAL = 0x002B
 ACT_GUARD_ON = 0x00B2
 ACT_ATTACK_AIR_N = 0x0041
 ACT_ATTACK_AIR_B = 0x0043
 ACT_DAMAGE_AIR_2 = 0x0055
+ACT_FX_SPECIAL_LW_START = 0x0168
+ACT_FX_SPECIAL_AIR_S_START = 0x015E
+ACT_FX_SPECIAL_AIR_LW_START = 0x016D
+ACT_CATCH_DASH = 0x00D6
+ACT_PASSIVE_WALL_JUMP = 0x00CB
+ACT_ESCAPE_AIR = 0x00EC
 ACT_LANDING = 0x002A
 ACT_OTTOTTO = 0x00F5
 
@@ -50,6 +57,10 @@ SM_ATTACK_AIR_N = 68
 SM_ATTACK_AIR_B = 70
 SM_DAMAGE_AIR_2 = 175
 SM_OTTOTTO = 210
+SM_CATCH_DASH = 243
+SM_LANDING_FALL_SPECIAL = 36
+SM_FX_SPECIAL_AIR_S_START = 304
+SM_FX_SPECIAL_AIR_LW_START = 313
 
 # Collision env flag bits: refs/melee/src/common_structs.h, src/coll_env_flags.h
 MSL_COLLIDE_EDGE = 0x00800000
@@ -626,6 +637,148 @@ def test_attackdash_iasa_held_b_down_with_strong_x_does_not_enter_squat() -> Non
     assert int(out0["animation_index"][0]) != SM_SQUAT
     assert int(out0["action_id"][0]) == ACT_ATTACK_DASH
     assert int(out0["animation_index"][0]) == SM_ATTACK_DASH
+
+
+def test_dash_iasa_a_edge_with_trigger_enters_catchdash_before_guard() -> None:
+    sizes = __import__("msl_binding").sizes()
+    input_stride = int(sizes["input"])
+
+    seed = _seed_base()
+    seed["on_ground"][0, 0] = np.uint8(1)
+    seed["action_id"][0, 0] = np.uint16(ACT_DASH)
+    seed["action_frame"][0, 0] = np.int16(7)
+    seed["anim_frame_f32"][0, 0] = np.float32(7.0)
+    seed["animation_index"][0, 0] = np.uint32(SM_DASH)
+    seed["facing"][0, 0] = np.uint8(0)  # left
+
+    prev_inp = _mk_input_bytes(1, input_stride)
+    inp = _mk_input_bytes(1, input_stride)
+    prev_view = prev_inp.view(INPUT_DTYPE).reshape((1,))
+    cur_view = inp.view(INPUT_DTYPE).reshape((1,))
+    # Decomp: Dash_IASA calls ftCo_800D8A38 (CatchDash) before guard-owned paths. The enter helper
+    # requires held L/R plus a pressed-edge A.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c::ftCo_Dash_IASA
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::{ftCo_800D8A38,ftCo_800D8C54}
+    prev_view["p"]["main_x"][0, 0] = np.int8(-101)
+    cur_view["p"]["main_x"][0, 0] = np.int8(-101)
+    prev_view["p"]["r"][0, 0] = np.uint8(255)
+    cur_view["p"]["r"][0, 0] = np.uint8(255)
+    cur_view["p"]["buttons"][0, 0] = np.uint16(BUTTON_A)
+
+    out0 = _step_once(seed, prev_inp, inp)
+    assert int(out0["action_id"][0]) == ACT_CATCH_DASH
+    assert int(out0["action_frame"][0]) == 0
+    assert int(out0["animation_index"][0]) == SM_CATCH_DASH
+    assert int(out0["on_ground"][0]) == 1
+
+
+def test_attackdash_iasa_b_edge_down_enters_ground_reflector_before_crouch() -> None:
+    sizes = __import__("msl_binding").sizes()
+    input_stride = int(sizes["input"])
+
+    seed = _seed_base()
+    seed["on_ground"][0, 0] = np.uint8(1)
+    seed["action_id"][0, 0] = np.uint16(ACT_ATTACK_DASH)
+    seed["action_frame"][0, 0] = np.int16(35)
+    seed["anim_frame_f32"][0, 0] = np.float32(35.0)
+    seed["animation_index"][0, 0] = np.uint32(SM_ATTACK_DASH)
+    seed["facing"][0, 0] = np.uint8(1)
+    seed["attackdash_x0"][0, 0] = np.int16(0)
+
+    prev_inp = _mk_input_bytes(1, input_stride)
+    inp = _mk_input_bytes(1, input_stride)
+    prev_view = prev_inp.view(INPUT_DTYPE).reshape((1,))
+    cur_view = inp.view(INPUT_DTYPE).reshape((1,))
+    # Decomp: AttackDash_IASA delegates to Wait_IASA, which checks ftCo_SpecialS_CheckInput and
+    # then the grounded special dispatcher (ftCo_800D68C0) before Squat. Neutral-X B-edge + down
+    # should therefore enter grounded reflector rather than crouch.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackDash.c::ftCo_AttackDash_IASA
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_800D68C0
+    # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c::ftFx_SpecialLw_Enter
+    prev_view["p"]["main_y"][0, 0] = np.int8(-99)
+    cur_view["p"]["main_y"][0, 0] = np.int8(-99)
+    cur_view["p"]["buttons"][0, 0] = np.uint16(BUTTON_B)
+
+    out0 = _step_once(seed, prev_inp, inp)
+    assert int(out0["action_id"][0]) == ACT_FX_SPECIAL_LW_START
+    assert int(out0["action_frame"][0]) == 1
+    assert int(out0["animation_index"][0]) == SM_FX_SPECIAL_AIR_LW_START
+    assert int(out0["on_ground"][0]) == 1
+
+
+def test_attackdash_iasa_b_edge_down_non_spacie_does_not_enter_reflector() -> None:
+    sizes = __import__("msl_binding").sizes()
+    input_stride = int(sizes["input"])
+
+    seed = _seed_base()
+    seed["char_id"][0, 0] = np.uint8(2)  # capability-disabled / unsupported non-spacie in v1 data
+    seed["on_ground"][0, 0] = np.uint8(1)
+    seed["action_id"][0, 0] = np.uint16(ACT_ATTACK_DASH)
+    seed["action_frame"][0, 0] = np.int16(35)
+    seed["anim_frame_f32"][0, 0] = np.float32(35.0)
+    seed["animation_index"][0, 0] = np.uint32(SM_ATTACK_DASH)
+    seed["facing"][0, 0] = np.uint8(1)
+    seed["attackdash_x0"][0, 0] = np.int16(0)
+
+    prev_inp = _mk_input_bytes(1, input_stride)
+    inp = _mk_input_bytes(1, input_stride)
+    cur_view = inp.view(INPUT_DTYPE).reshape((1,))
+    # Negative control for the Fox/Falco capability gate above:
+    # - AttackDash -> Wait_IASA may only hand B-edge/down rows to ftCo_800D68C0 for spacies with
+    #   grounded reflector ownership.
+    # - Unsupported/non-spacie rows must not be consumed into SpecialLw by this branch.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackDash.c::ftCo_AttackDash_IASA
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_800D68C0
+    # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c
+    # refs/melee/src/melee/ft/chara/ftFalco/ftFc_SpecialLw.c
+    cur_view["p"]["buttons"][0, 0] = np.uint16(BUTTON_B)
+    cur_view["p"]["main_y"][0, 0] = np.int8(-99)
+
+    out0 = _step_once(seed, prev_inp, inp)
+    assert int(out0["action_id"][0]) != ACT_FX_SPECIAL_LW_START
+    assert int(out0["action_id"][0]) != ACT_FX_SPECIAL_AIR_LW_START
+    assert int(out0["animation_index"][0]) != SM_FX_SPECIAL_AIR_LW_START
+    assert int(out0["action_id"][0]) == ACT_ATTACK_DASH
+    assert int(out0["animation_index"][0]) == SM_ATTACK_DASH
+
+
+def test_passivewalljump_b_edge_side_input_enters_specialairsstart() -> None:
+    sizes = __import__("msl_binding").sizes()
+    input_stride = int(sizes["input"])
+
+    seed = _seed_base()
+    seed["on_ground"][0, 0] = np.uint8(0)
+    seed["ground_id"][0, 0] = np.uint16(2)
+    seed["action_id"][0, 0] = np.uint16(ACT_PASSIVE_WALL_JUMP)
+    seed["action_frame"][0, 0] = np.int16(37)
+    seed["anim_frame_f32"][0, 0] = np.float32(37.0)
+    seed["animation_index"][0, 0] = np.uint32(ACT_PASSIVE_WALL_JUMP)
+    seed["facing"][0, 0] = np.uint8(1)  # right
+    seed["pos_x"][0, 0] = np.float32(46.954742)
+    seed["pos_y"][0, 0] = np.float32(29.421143)
+
+    prev_inp = _mk_input_bytes(1, input_stride)
+    inp = _mk_input_bytes(1, input_stride)
+    prev_view = prev_inp.view(INPUT_DTYPE).reshape((1,))
+    cur_view = inp.view(INPUT_DTYPE).reshape((1,))
+    # Decomp: once mv.co.passivewall.timer reaches zero, PassiveWall_IASA checks
+    # ftCo_SpecialAir_CheckInput first. A strong reverse horizontal B-edge therefore enters
+    # SpecialAirSStart and flips facing through the extracted reverse threshold.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_PassiveWall.c::{
+    #   inlineA0,ftCo_PassiveWall_Anim,ftCo_PassiveWall_IASA}
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_SpecialAir.c::ftCo_SpecialAir_CheckInput
+    prev_view["p"]["main_x"][0, 0] = np.int8(-100)
+    cur_view["p"]["main_x"][0, 0] = np.int8(-100)
+    cur_view["p"]["buttons"][0, 0] = np.uint16(BUTTON_B)
+
+    out0 = _step_once(seed, prev_inp, inp)
+    assert int(out0["action_id"][0]) == ACT_FX_SPECIAL_AIR_S_START
+    assert int(out0["action_frame"][0]) == 1
+    assert int(out0["animation_index"][0]) == SM_FX_SPECIAL_AIR_S_START
+    assert int(out0["on_ground"][0]) == 0
+    assert int(out0["facing"][0]) == 0
 
 
 def test_walkslow_a_press_forward_down_enters_attacks3lw() -> None:

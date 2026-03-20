@@ -24,6 +24,16 @@ static inline uint8_t is_fox_falco(uint8_t char_id) {
   return (char_id == (uint8_t)MSL_CHAR_FOX) || (char_id == (uint8_t)MSL_CHAR_FALCO);
 }
 
+uint8_t shine_char_supports_reflector(uint8_t char_id) {
+  // Decomp authority for the current v1 reflector lane:
+  // - Fox and Falco own the ftFx_/ftFc_ SpecialLw motion-state families.
+  // - The grounded AttackDash -> Wait_IASA -> ftCo_800D68C0 subset below only claims those
+  //   spacie reflector enters, so gate the caller explicitly before any control-flow consume.
+  // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c
+  // refs/melee/src/melee/ft/chara/ftFalco/ftFc_SpecialLw.c
+  return is_fox_falco(char_id);
+}
+
 // Decomp: in ftFx_Init.c, the aerial SpecialAirLw* motion states are a contiguous block following
 // the grounded SpecialLw* block (Start..Turn).
 enum { MSL_FX_SHINE_GROUND_TO_AIR_ACTION_DELTA = 5 };
@@ -284,6 +294,28 @@ static inline void shine_release_setvars(MslBatch* batch, size_t idx, const MslC
   // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c::ftFox_SpecialLw_SetVars
   batch->state.shine_release_lag[idx] = ch->reflector_release_lag_frames;
   batch->state.shine_is_release[idx] = 0u;
+}
+
+void shine_enter_ground_start_from_iasa(MslBatch* batch, size_t idx) {
+  if (batch == NULL) {
+    return;
+  }
+  const uint8_t cid = batch->state.char_id[idx];
+  if (!is_fox_falco(cid)) {
+    return;
+  }
+  const MslCharParams* ch = msl_char_params(cid);
+  const MslSpecialMsids* ms = msl_special_msids(cid);
+  if (ch == NULL || ms == NULL) {
+    return;
+  }
+  // Grounded IASA delegate helper:
+  // - states that route through ftCo_800D68C0 can consume directly into Reflector start.
+  // - use the same decomp-backed entry path as shine_update_pre_physics().
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_800D68C0
+  // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c::ftFx_SpecialLw_Enter
+  shine_release_setvars(batch, idx, ch);
+  enter_shine_ground_start(batch, idx, ms);
 }
 
 static inline void shine_release_latch_anim(MslBatch* batch, size_t idx, uint16_t held) {
