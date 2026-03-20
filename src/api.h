@@ -165,6 +165,10 @@ typedef struct MslSeed {
   // State machine
   uint16_t action_id[MSL_MAX_PLAYERS];    // GALE01 action id
   int16_t action_frame[MSL_MAX_PLAYERS];  // action frame (can be negative in pre-start)
+  // Replay-true previous action snapshot (t-1 -> t), separate from the runtime step cache so
+  // entry-shaped one-step rows can still recover their source motion state.
+  uint16_t seed_prev_action_id[MSL_MAX_PLAYERS];
+  int16_t seed_prev_action_frame[MSL_MAX_PLAYERS];
   // Throw projectile pulse-consume seed lane (causal producer; one-step seed ownership).
   //
   // Decomp ownership:
@@ -609,6 +613,10 @@ typedef struct MslSeed {
   // Teacher-forced one-step reseed wipes pointers, so we seed only the minimal identity needed:
   // - grab_owner_port: player-slot index in [0..3], 0xFF = none.
   uint8_t grab_owner_port[MSL_MAX_PLAYERS];
+  // ftCommon_GrabMash stick-sign latches (`fp->x1A50` / `fp->x1A51`).
+  // refs/melee/src/melee/ft/ftcommon.c::ftCommon_GrabMash
+  int8_t grab_mash_stick_x_sign[MSL_MAX_PLAYERS];
+  int8_t grab_mash_stick_y_sign[MSL_MAX_PLAYERS];
   uint8_t _pad2[1];
   uint8_t state_flags[MSL_MAX_PLAYERS][5];
 

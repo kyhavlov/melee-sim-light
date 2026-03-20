@@ -277,13 +277,17 @@ def _extract_ftco_dattrs(pl_dat: Path, *, ftdata_symbol: str, extract_fox_blaste
         #
         # Decomp:
         # - refs/melee/src/melee/ft/chara/ftFox/types.h (ftFox_DatAttrs):
-        #   x34/x38/x3C/x40 fields
+        #   x34/x38/x3C/x40/x50 fields
         # - refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c::{ftFx_SpecialSEnd_Enter,ftFx_SpecialSEnd_Phys}
         # - refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c::{ftFx_SpecialAirSEnd_Enter,ftFx_SpecialAirSEnd_Phys}
+        # - refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c::ftFx_SpecialAirSEnd_Coll
         out["illusion_ground_end_vel_x"] = float(_f32_be(buf, ext_abs + 0x34))
         out["illusion_ground_friction"] = float(_f32_be(buf, ext_abs + 0x38))
         out["illusion_air_end_vel_x"] = float(_f32_be(buf, ext_abs + 0x3C))
         out["illusion_air_friction"] = float(_f32_be(buf, ext_abs + 0x40))
+        out["illusion_landing_lag_frames"] = int(
+            max(0, min(255, int(round(float(_f32_be(buf, ext_abs + 0x50))))))
+        )
         # Fox/Falco up special HoldAir (Firefox/Firebird charge) physics attrs.
         #
         # Decomp:
@@ -398,6 +402,7 @@ def _stable_update(existing: dict, extracted: dict) -> dict:
     # consumers don't accidentally treat them as part of the contract.
     drop_keys = {
         "ecb_bone_indices",
+        "camera_box_radius",
     }
     ordered_keys = [
         "walk_init_vel",
@@ -445,6 +450,7 @@ def _stable_update(existing: dict, extracted: dict) -> dict:
         "illusion_ground_friction",
         "illusion_air_end_vel_x",
         "illusion_air_friction",
+        "illusion_landing_lag_frames",
         "firefox_hold_gravity_delay_frames",
         "firefox_hold_air_friction",
         "firefox_hold_air_fall_accel",

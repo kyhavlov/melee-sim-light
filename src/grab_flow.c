@@ -109,6 +109,57 @@ static inline uint8_t is_capture_wait_action(uint16_t a) {
                                                                                             : 0u;
 }
 
+static inline uint8_t capturewait_grab_mash_active(MslBatch* batch, const MslCommonParams* c,
+                                                   size_t idx) {
+  if (batch == NULL || c == NULL) {
+    return 0u;
+  }
+
+  const uint16_t buttons = batch->state.input_buttons[idx];
+  const uint16_t prev_buttons = batch->state.prev_input_buttons[idx];
+  uint8_t result =
+      (((buttons | prev_buttons) &
+        (uint16_t)(MSL_BUTTON_A | MSL_BUTTON_B | MSL_BUTTON_X | MSL_BUTTON_Y | MSL_BUTTON_L |
+                   MSL_BUTTON_R)) != 0u)
+                       ? 1u
+                       : 0u;
+  const float stick_x =
+      apply_deadzone(stick_i8_to_unit(batch->state.input_main_x[idx]), c->lstick_deadzone_x);
+  const float stick_y =
+      apply_deadzone(stick_i8_to_unit(batch->state.input_main_y[idx]), c->lstick_deadzone_y);
+  const int8_t prev_x = batch->state.grab_mash_stick_x_sign[idx];
+  const int8_t prev_y = batch->state.grab_mash_stick_y_sign[idx];
+  int8_t next_x = prev_x;
+  int8_t next_y = prev_y;
+  // ftCommon_GrabMash updates x1A50/x1A51 when lstick.{x,y} crosses +/-x308, and mash succeeds on
+  // any sign-latch change even without AB/XY/LR holds.
+  //
+  // Teacher-forced reseed snapshots are post-frame. On the first steady CaptureWait owner frame,
+  // owner callback ordering can still apply the victim extra tick from the prior frame's held
+  // mash buttons, so we keep the AB/XY/LR hold check live across both prev_input_t and input_t.
+  // refs/melee/src/melee/ft/ftcommon.c::ftCommon_GrabMash
+  // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
+  // refs/melee/build/GALE01/asm/melee/ft/chara/ftCommon/ftCo_Attack100.s::{
+  //   ftCo_CatchPull_Anim,fn_800DA1D8,fn_800DB6C8}
+  // data/common/ft_common_data.json: grab_mash_stick_threshold
+  if (stick_x < -c->grab_mash_stick_threshold) {
+    next_x = -1;
+  } else if (stick_x > c->grab_mash_stick_threshold) {
+    next_x = 1;
+  }
+  if (stick_y < -c->grab_mash_stick_threshold) {
+    next_y = -1;
+  } else if (stick_y > c->grab_mash_stick_threshold) {
+    next_y = 1;
+  }
+  if (prev_x != next_x || prev_y != next_y) {
+    result = 1u;
+  }
+  batch->state.grab_mash_stick_x_sign[idx] = next_x;
+  batch->state.grab_mash_stick_y_sign[idx] = next_y;
+  return result;
+}
+
 static inline uint8_t enter_capture_damage_from_wait(MslBatch* batch, size_t vidx) {
   if (batch == NULL) {
     return 0u;
@@ -645,7 +696,6 @@ void grab_flow_update_pre_physics(MslBatch* batch) {
       }
 
       uint16_t oa = batch->state.action_id[oidx];
-      const uint16_t oa_seed = oa;
       uint8_t owner_catch_attack_ended = 0u;
 
       if (oa == (uint16_t)MSL_ACT_WAIT && c != NULL) {
@@ -794,18 +844,7 @@ void grab_flow_update_pre_physics(MslBatch* batch) {
       //   af=1 -> af=3 transition in replay rows.
       // refs/melee/build/GALE01/asm/melee/ft/chara/ftCommon/ftCo_Attack100.s::{ftCo_CatchPull_Anim,fn_800DA1D8,fn_800DB6C8}
       // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
-      //
-      // TODO(narrowed_temporary): this bridge targets the first steady CaptureWait ownership window
-      // only. Full parity needs a seed-visible callback order lane for owner/victim procUpdate
-      // precedence across all capture sub-variants; slot order alone is not sufficient because
-      // replay rows still split between:
-      // - owner later-slot, owner af 1->2, victim af 1->2 (no extra tick), and
-      // - owner earlier-slot, owner af 0->1, victim af 1->2 (no extra tick).
-      // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
-      // refs/melee/build/GALE01/asm/melee/ft/chara/ftCommon/ftCo_Attack100.s::{
-      //   ftCo_CatchPull_Anim,fn_800DA1D8,fn_800DB6C8}
-      if ((oa_seed == (uint16_t)MSL_ACT_CATCH_WAIT || oa_seed == (uint16_t)MSL_ACT_CATCH_ATTACK) &&
-          (oa == (uint16_t)MSL_ACT_CATCH_WAIT || oa == (uint16_t)MSL_ACT_CATCH_ATTACK) &&
+      if ((oa == (uint16_t)MSL_ACT_CATCH_WAIT || oa == (uint16_t)MSL_ACT_CATCH_ATTACK) &&
           batch->state.action_frame[oidx] <= 1) {
         for (int victim_p = 0; victim_p < num_players; victim_p++) {
           if (victim_p == owner_p) {
@@ -825,24 +864,12 @@ void grab_flow_update_pre_physics(MslBatch* batch) {
           if (batch->state.action_frame[vidx] != 2) {
             continue;
           }
-          // Decomp callback ownership runs owner linkage (ftCo_CatchPull_Anim -> fn_800DB6C8) after
-          // victim entry on the first steady CaptureWait frame; keep this bridge keyed to that
-          // single-frame action counter, not to seed-time rate snapshots.
-          // refs/melee/build/GALE01/asm/melee/ft/chara/ftCommon/ftCo_Attack100.s::{ftCo_CatchPull_Anim,fn_800DA1D8,fn_800DB6C8}
-          // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
-          msl_anim_timebase_tick_once(batch, vidx);
+          if (capturewait_grab_mash_active(batch, c, vidx)) {
+            msl_anim_timebase_tick_once(batch, vidx);
+          }
         }
       }
-      // Lower-slot follow-up window:
-      // - For owner-later callback order (owner_p > victim_p), replay rows show one additional
-      //   victim CaptureWait tick on the first steady owner CatchWait frame (owner af==2).
-      // - Keep this strictly scoped to target callback ordering + neutral victim state.
-      // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
-      // refs/melee/build/GALE01/asm/melee/ft/chara/ftCommon/ftCo_Attack100.s::{
-      //   ftCo_CatchPull_Anim,fn_800DA1D8,fn_800DB6C8
-      // }
-      if ((oa_seed == (uint16_t)MSL_ACT_CATCH_WAIT || oa_seed == (uint16_t)MSL_ACT_CATCH_ATTACK) &&
-          (oa == (uint16_t)MSL_ACT_CATCH_WAIT || oa == (uint16_t)MSL_ACT_CATCH_ATTACK) &&
+      if ((oa == (uint16_t)MSL_ACT_CATCH_WAIT || oa == (uint16_t)MSL_ACT_CATCH_ATTACK) &&
           batch->state.action_frame[oidx] == 2) {
         for (int victim_p = 0; victim_p < owner_p; victim_p++) {
           const size_t vidx = msl_idx_player(bi, victim_p);
@@ -859,9 +886,12 @@ void grab_flow_update_pre_physics(MslBatch* batch) {
           if (batch->state.action_frame[vidx] != 2) {
             continue;
           }
-          msl_anim_timebase_tick_once(batch, vidx);
+          if (capturewait_grab_mash_active(batch, c, vidx)) {
+            msl_anim_timebase_tick_once(batch, vidx);
+          }
         }
       }
+
       if (oa != (uint16_t)MSL_ACT_CATCH_WAIT || c == NULL) {
         continue;
       }

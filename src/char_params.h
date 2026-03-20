@@ -122,18 +122,20 @@ typedef struct MslCharParams {
   // Source of truth: ISO-extracted `data/characters/*.json` keys:
   // - illusion_ground_end_vel_x / illusion_ground_friction
   // - illusion_air_end_vel_x / illusion_air_friction
-  // - illusion_gravity_delay_end_frames / illusion_fall_accel_end
+  // - illusion_landing_lag_frames / illusion_gravity_delay_end_frames / illusion_fall_accel_end
   //
   // Decomp:
-  // - refs/melee/src/melee/ft/chara/ftFox/types.h (ftFox_DatAttrs x34/x38/x3C/x40/x44/x48)
+  // - refs/melee/src/melee/ft/chara/ftFox/types.h (ftFox_DatAttrs x34/x38/x3C/x40/x50/x44/x48)
   // - refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c::{ftFx_SpecialSEnd_Enter,ftFx_SpecialSEnd_Phys}
   // - refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c::{ftFx_SpecialAirSEnd_Enter,ftFx_SpecialAirSEnd_Phys}
+  // - refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c::ftFx_SpecialAirSEnd_Coll
   float illusion_ground_end_vel_x;
   float illusion_ground_friction;
   float illusion_air_end_vel_x;
   float illusion_air_friction;
+  uint8_t illusion_landing_lag_frames;
   uint8_t illusion_gravity_delay_end_frames;
-  uint8_t _pad_u8_illusion_0[3];
+  uint8_t _pad_u8_illusion_0[2];
   float illusion_fall_accel_end;
 
   // Fox/Falco side special ghost item (Illusion/Phantasm article) collision attrs.

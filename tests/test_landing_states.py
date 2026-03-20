@@ -17,9 +17,11 @@ ACT_WAIT = 0x000E
 ACT_LANDING = 0x002A
 ACT_LANDING_FALL_SPECIAL = 0x002B
 ACT_LANDING_AIR_N = 0x0046
+ACT_ESCAPE_AIR = 0x00EC
 ACT_GUARD_ON = 0x00B2
 ACT_GUARD = 0x00B3
 ACT_GUARD_REFLECT = 0x00B6
+ACT_FX_SPECIAL_AIR_S_END = 0x0160
 
 # Submotion ids (GALE01): refs/melee/src/melee/ft/chara/ftCommon/forward.h
 SM_WAIT1_0 = 2
@@ -193,6 +195,47 @@ def test_landing_fall_special_exits_to_wait_after_lag_frames() -> None:
     assert int(out["action_id"][0]) == ACT_WAIT
     assert int(out["animation_index"][0]) == SM_WAIT1_0
     assert int(out["action_frame"][0]) == 0
+
+
+def test_landing_fall_special_entry_uses_illusion_source_lag_when_seed_prev_action_is_specialairsend() -> None:
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    input_stride = int(sizes["input"])
+
+    tracks_path = Path("data/anims/fox.tracks.bin")
+    end_frame = _tracks_end_frame(tracks_path, SM_LANDING_FALL_SPECIAL)
+    common_lag = float(_common_attr("landing_fall_special_lag_frames"))
+    illusion_lag = float(_fox_attr("illusion_landing_lag_frames"))
+    assert end_frame > 0.0 and common_lag > 0.0 and illusion_lag > 0.0
+
+    seed = _seed_base()
+    seed["action_id"][0, 0] = np.uint16(ACT_LANDING_FALL_SPECIAL)
+    seed["action_frame"][0, 0] = np.int16(0)
+    seed["anim_frame_f32"][0, 0] = np.float32(0.0)
+    seed["frame_speed_mul_f32"][0, 0] = np.float32(1.0)
+    seed["animation_index"][0, 0] = np.uint32(SM_LANDING_FALL_SPECIAL)
+
+    prev_inp = _mk_input_bytes(1, input_stride)
+    inp = _mk_input_bytes(1, input_stride)
+
+    # Illusion source row: ftFx_SpecialAirSEnd_Coll passes da->x50_FOX_ILLUSION_LANDING_LAG.
+    seed["seed_prev_action_id"][0, 0] = np.uint16(ACT_FX_SPECIAL_AIR_S_END)
+    seed["seed_prev_action_frame"][0, 0] = np.int16(19)
+    out_illusion = _step_once(seed, prev_inp, inp)
+    assert int(out_illusion["action_id"][0]) == ACT_LANDING_FALL_SPECIAL
+    assert int(out_illusion["animation_index"][0]) == SM_LANDING_FALL_SPECIAL
+    assert int(out_illusion["action_frame"][0]) == _scaled_anim_inc(end_frame, illusion_lag)
+    assert int(out_illusion["on_ground"][0]) == 1
+
+    # EscapeAir source remains on the common ftCommonData x344 lag path.
+    seed["seed_prev_action_id"][0, 0] = np.uint16(ACT_ESCAPE_AIR)
+    seed["seed_prev_action_frame"][0, 0] = np.int16(2)
+    out_escape = _step_once(seed, prev_inp, inp)
+    assert int(out_escape["action_id"][0]) == ACT_LANDING_FALL_SPECIAL
+    assert int(out_escape["animation_index"][0]) == SM_LANDING_FALL_SPECIAL
+    assert int(out_escape["action_frame"][0]) == _scaled_anim_inc(end_frame, common_lag)
+    assert int(out_escape["action_frame"][0]) > int(out_illusion["action_frame"][0])
 
 
 def test_landing_iasa_allows_shield_entry_after_landing_lag_gate() -> None:

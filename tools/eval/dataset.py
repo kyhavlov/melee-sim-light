@@ -105,6 +105,10 @@ SEED_DTYPE = np.dtype(
         ("_pad1", "V1"),
         ("action_id", _arr("<u2", MAX_PLAYERS)),
         ("action_frame", _arr("<i2", MAX_PLAYERS)),
+        # Replay-true previous action snapshot (t-1 -> t), kept separate from runtime's per-step
+        # cache so entry-shaped one-step rows can still see their real source motion.
+        ("seed_prev_action_id", _arr("<u2", MAX_PLAYERS)),
+        ("seed_prev_action_frame", _arr("<i2", MAX_PLAYERS)),
         # Throw-side projectile pulse consume lane (causal producer in make_dataset_from_slp.py).
         # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
         # refs/melee/src/melee/ft/ftaction.c::{ftAction_80071974,ftAction_80073354}
@@ -241,6 +245,8 @@ SEED_DTYPE = np.dtype(
         ("combo_timer_x2098", _arr("<u2", MAX_PLAYERS)),
         ("last_hit_by", _arr("u1", MAX_PLAYERS)),
         ("grab_owner_port", _arr("u1", MAX_PLAYERS)),
+        ("grab_mash_stick_x_sign", _arr("i1", MAX_PLAYERS)),
+        ("grab_mash_stick_y_sign", _arr("i1", MAX_PLAYERS)),
         ("_pad2", "V1"),
         ("state_flags", ("u1", (MAX_PLAYERS, 5))),
         ("combat_hitlist_cd", ("<u2", (MAX_PLAYERS, HITLIST_GROUPS, MAX_PLAYERS))),

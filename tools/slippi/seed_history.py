@@ -2546,3 +2546,66 @@ def derive_grab_owner_port_2p(*, action_id_u16_2p: np.ndarray) -> np.ndarray:
     both_victims = is_victim[:, 0] & is_victim[:, 1]
     out[both_victims, :] = np.uint8(0xFF)
     return out
+
+
+def derive_seed_prev_action_post(
+    *, post_action_id_u16: np.ndarray, post_action_frame_i16: np.ndarray
+) -> tuple[np.ndarray, np.ndarray]:
+    """Derive replay-true previous-action seed lanes for one-step rows.
+
+    Output row i corresponds to the seed snapshot built from post-frame row i:
+    - row 0 has no prior replay row inside the dataset window, so it reuses the current seed action
+    - rows i>0 use post-frame row i-1 as the previous-action source
+    """
+    action_id = np.asarray(post_action_id_u16, dtype=np.uint16).reshape(-1)
+    action_frame = np.asarray(post_action_frame_i16, dtype=np.int16).reshape(-1)
+    if action_id.shape != action_frame.shape:
+        raise ValueError(
+            f"post_action_id_u16 and post_action_frame_i16 must match, got "
+            f"{action_id.shape} vs {action_frame.shape}"
+        )
+    if action_id.size == 0:
+        return np.zeros((0,), dtype=np.uint16), np.zeros((0,), dtype=np.int16)
+
+    out_len = max(0, int(action_id.size) - 1)
+    out_action_id = np.empty((out_len,), dtype=np.uint16)
+    out_action_frame = np.empty((out_len,), dtype=np.int16)
+    if out_len == 0:
+      return out_action_id, out_action_frame
+
+    out_action_id[0] = action_id[0]
+    out_action_frame[0] = action_frame[0]
+    if out_len > 1:
+      out_action_id[1:] = action_id[:-2]
+      out_action_frame[1:] = action_frame[:-2]
+    return out_action_id, out_action_frame
+
+
+def derive_grab_mash_stick_sign_post(
+    *,
+    stick_x_unit: np.ndarray,
+    stick_y_unit: np.ndarray,
+    grab_mash_stick_threshold: float,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Derive post-frame ftCommon_GrabMash stick-sign latches (`x1A50` / `x1A51`)."""
+    sx = np.asarray(stick_x_unit, dtype=np.float32).reshape(-1)
+    sy = np.asarray(stick_y_unit, dtype=np.float32).reshape(-1)
+    if sx.shape != sy.shape:
+        raise ValueError(f"stick_x_unit and stick_y_unit must match, got {sx.shape} vs {sy.shape}")
+    thresh = np.float32(float(grab_mash_stick_threshold))
+    out_x = np.zeros(sx.shape[0], dtype=np.int8)
+    out_y = np.zeros(sy.shape[0], dtype=np.int8)
+    latch_x = np.int8(0)
+    latch_y = np.int8(0)
+    for i in range(sx.shape[0]):
+        if sx[i] < -thresh:
+            latch_x = np.int8(-1)
+        elif sx[i] > thresh:
+            latch_x = np.int8(1)
+        if sy[i] < -thresh:
+            latch_y = np.int8(-1)
+        elif sy[i] > thresh:
+            latch_y = np.int8(1)
+        out_x[i] = latch_x
+        out_y[i] = latch_y
+    return out_x, out_y

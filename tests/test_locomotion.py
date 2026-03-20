@@ -864,6 +864,38 @@ def test_grounded_damageair2_down_stick_enters_squat() -> None:
     assert int(out0["jumps_left"][0]) == 2
 
 
+def test_dash_iasa_fn_800caf78_row_shape_enters_kneebend() -> None:
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    input_stride = int(sizes["input"])
+
+    seed = _seed_base()
+    seed["on_ground"][0, 0] = np.uint8(1)
+    seed["jumps_left"][0, 0] = np.uint8(2)
+    seed["action_id"][0, 0] = np.uint16(ACT_DASH)
+    seed["action_frame"][0, 0] = np.int16(1)
+    seed["anim_frame_f32"][0, 0] = np.float32(1.0)
+    seed["animation_index"][0, 0] = np.uint32(SM_DASH)
+    seed["facing"][0, 0] = np.uint8(1)
+    seed["dash_x4"][0, 0] = np.uint8(0)
+
+    prev_inp = _mk_input_bytes(1, input_stride)
+    inp = _mk_input_bytes(1, input_stride)
+    cur_view = inp.view(INPUT_DTYPE).reshape((1,))
+    # Decomp: Dash IASA late-window jump uses fn_800CAF78, which compares lstick.y against
+    # p_ftCommonData->x80 while preserving the same-frame Dash callback ownership.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c::ftCo_Dash_IASA
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c::fn_800CAF78
+    cur_view["p"]["main_x"][0, 0] = np.int8(88)
+    cur_view["p"]["main_y"][0, 0] = np.int8(75)
+
+    out0 = _step_once(seed, prev_inp, inp)
+    assert int(out0["action_id"][0]) == ACT_KNEEBEND
+    assert int(out0["action_frame"][0]) == 0
+    assert int(out0["animation_index"][0]) == SM_KNEEBEND
+
+
 def test_wait_flick_backward_enters_turn_with_action_frame_1() -> None:
     import msl_binding
 

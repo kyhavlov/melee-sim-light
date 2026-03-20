@@ -1216,6 +1216,21 @@ static inline MslJumpInput jump_input_from_edges(const MslCommonParams* c, uint1
   return MSL_JUMP_INPUT_NONE;
 }
 
+static inline MslJumpInput jump_input_from_fn_800CAF78(const MslCommonParams* c,
+                                                       uint16_t buttons_pressed, float stick_y,
+                                                       uint8_t tilt_timer_y) {
+  if (buttons_pressed & (uint16_t)MSL_BUTTON_XY) {
+    return MSL_JUMP_INPUT_XY;
+  }
+  // Dash/Run/RunBrake/TurnRun IASA call fn_800CAF78, not ftCo_Jump_GetInput.
+  // fn_800CAF78 uses p_ftCommonData->x80 for the stick-y threshold.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c::fn_800CAF78
+  return (stick_y >= c->dash_run_jump_stick_y_threshold &&
+          tilt_timer_y < c->tap_jump_tilt_max_frames)
+             ? MSL_JUMP_INPUT_LSTICK
+             : MSL_JUMP_INPUT_NONE;
+}
+
 static inline uint8_t kneebend_try_enter_attack_hi4_from_iasa(MslBatch* batch,
                                                               const MslCommonParams* c, size_t idx,
                                                               uint16_t buttons_pressed,
@@ -2529,8 +2544,7 @@ void locomotion_update_pre(MslBatch* batch) {
         // refs/melee/src/melee/ft/chara/ftCommon/ftCo_TurnRun.c::ftCo_TurnRun_IASA
         // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c::fn_800CAF78
         if (action_id == MSL_ACT_TURN_RUN && action_id_start == MSL_ACT_TURN_RUN) {
-          const MslJumpInput j_in =
-              jump_input_from_edges(c, buttons_pressed, stick_y, tilt_timer_y);
+          const MslJumpInput j_in = jump_input_from_edges(c, buttons_pressed, stick_y, tilt_timer_y);
           if (j_in != MSL_JUMP_INPUT_NONE && batch->state.jumps_left[idx] > 0) {
             batch->state.action_id[idx] = (uint16_t)MSL_ACT_KNEE_BEND;
             batch->state.animation_index[idx] = (uint32_t)MSL_SM_KNEE_BEND;
@@ -2556,8 +2570,7 @@ void locomotion_update_pre(MslBatch* batch) {
                                                     0, 1)) {
             action_id = batch->state.action_id[idx];
           } else {
-            const MslJumpInput j_in =
-                jump_input_from_edges(c, buttons_pressed, stick_y, tilt_timer_y);
+            const MslJumpInput j_in = jump_input_from_edges(c, buttons_pressed, stick_y, tilt_timer_y);
             if (j_in != MSL_JUMP_INPUT_NONE && batch->state.jumps_left[idx] > 0) {
               batch->state.action_id[idx] = (uint16_t)MSL_ACT_KNEE_BEND;
               batch->state.animation_index[idx] = (uint32_t)MSL_SM_KNEE_BEND;
@@ -2643,8 +2656,7 @@ void locomotion_update_pre(MslBatch* batch) {
                                                     1, 0)) {
             action_id = batch->state.action_id[idx];
           } else {
-            const MslJumpInput j_in =
-                jump_input_from_edges(c, buttons_pressed, stick_y, tilt_timer_y);
+            const MslJumpInput j_in = jump_input_from_edges(c, buttons_pressed, stick_y, tilt_timer_y);
             if (j_in != MSL_JUMP_INPUT_NONE && batch->state.jumps_left[idx] > 0) {
               batch->state.action_id[idx] = (uint16_t)MSL_ACT_KNEE_BEND;
               batch->state.animation_index[idx] = (uint32_t)MSL_SM_KNEE_BEND;
@@ -2699,8 +2711,7 @@ void locomotion_update_pre(MslBatch* batch) {
         // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Squat.c::ftCo_800D5FB0
         if (action_id == MSL_ACT_RUN_BRAKE && action_id_start == MSL_ACT_RUN_BRAKE) {
           const float cur_anim_frame = batch->state.anim_frame_f32[idx];
-          const MslJumpInput j_in =
-              jump_input_from_edges(c, buttons_pressed, stick_y, tilt_timer_y);
+          const MslJumpInput j_in = jump_input_from_edges(c, buttons_pressed, stick_y, tilt_timer_y);
           if (j_in != MSL_JUMP_INPUT_NONE && batch->state.jumps_left[idx] > 0) {
             batch->state.action_id[idx] = (uint16_t)MSL_ACT_KNEE_BEND;
             batch->state.animation_index[idx] = (uint32_t)MSL_SM_KNEE_BEND;
@@ -2778,7 +2789,7 @@ void locomotion_update_pre(MslBatch* batch) {
             // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c::ftCo_Dash_IASA
             // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c::fn_800CAF78
             const MslJumpInput j_in =
-                jump_input_from_edges(c, buttons_pressed, stick_y, tilt_timer_y);
+                jump_input_from_fn_800CAF78(c, buttons_pressed, stick_y, tilt_timer_y);
             if (j_in != MSL_JUMP_INPUT_NONE && batch->state.jumps_left[idx] > 0) {
               batch->state.action_id[idx] = (uint16_t)MSL_ACT_KNEE_BEND;
               batch->state.animation_index[idx] = (uint32_t)MSL_SM_KNEE_BEND;

@@ -89,6 +89,10 @@ typedef struct MslStateSoA {
 
   // State machine
   uint16_t* action_id;
+  // Replay-true previous action snapshot (t-1 -> t), seeded from dataset history for entry-shaped
+  // one-step rows. Separate from the runtime cache below.
+  uint16_t* seed_prev_action_id;
+  int16_t* seed_prev_action_frame;
   // Previous frame's action_id (captured at step start; internal-only).
   // Used for transition-based mechanics that depend on (t -> t+1) action changes while keeping
   // the seed schema minimal for one-step reseeding.
@@ -151,6 +155,8 @@ typedef struct MslStateSoA {
   // Simulator representation:
   // - grab_offset_{y,z} store the decomp-shaped fp->x1A70.{y,z} (unscaled) inferred at reseed-time.
   uint8_t* grab_owner_port;  // [batch * players]
+  int8_t* grab_mash_stick_x_sign;  // [batch * players] fp->x1A50
+  int8_t* grab_mash_stick_y_sign;  // [batch * players] fp->x1A51
   float* grab_offset_y;      // [batch * players]
   float* grab_offset_z;      // [batch * players]
   uint8_t* match_flow_timer;

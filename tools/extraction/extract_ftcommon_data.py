@@ -248,6 +248,13 @@ def main() -> None:
         # (lstick.x * facing_dir) > -x78 ? JumpF : JumpB
         "jump_back_x_threshold": float(_f32_be(buf, ft_common_abs + 0x78)),
         "tap_jump_release_threshold": float(_f32_be(buf, ft_common_abs + 0x7C)),
+        # Dash/Run/RunBrake/TurnRun jump gate uses fn_800CAF78, which compares against x80
+        # instead of ftCo_Jump_GetInput's tap_jump_threshold (x70).
+        # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c::fn_800CAF78
+        "dash_run_jump_stick_y_threshold": float(_f32_be(buf, ft_common_abs + 0x80)),
+        # Grab mash updates x1A50/x1A51 when lstick.{x,y} crosses +/-x308.
+        # refs/melee/src/melee/ft/ftcommon.c::ftCommon_GrabMash
+        "grab_mash_stick_threshold": float(_f32_be(buf, ft_common_abs + 0x308)),
         "fastfall_stick_threshold": float(_f32_be(buf, ft_common_abs + 0x88)),
         "fastfall_tilt_max_frames": int(_i32_be(buf, ft_common_abs + 0x8C)),
         # Pass-through platforms (ftCo_80099F1C / mpUpdateFloorSkip)

@@ -327,6 +327,23 @@ static inline uint8_t damage_ground_wait_iasa_is_dash_flick(const MslCommonParam
   return (ax >= c->dash_flick_abs && tilt_timer_x < c->dash_flick_tilt_max_frames) ? 1u : 0u;
 }
 
+static inline uint8_t damage_ground_wait_iasa_specials_has_input(const MslCommonParams* c,
+                                                                 uint16_t buttons, float stick_x) {
+  if (c == NULL) {
+    return 0u;
+  }
+  // Wait_IASA routes through ftCo_SpecialS_CheckInput before Squat. Side-B only consumes grounded
+  // held-B rows once ABS(lstick.x) >= p_ftCommonData->x218.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_SpecialS.c::{
+  //   ftCo_SpecialS_CheckInput,ftCo_SpecialS_HasInput}
+  // data/common/ft_common_data.json: special_stick_x_threshold_side
+  return ((buttons & (uint16_t)MSL_BUTTON_B) != 0u &&
+          msl_absf(stick_x) >= c->special_stick_x_threshold_side)
+             ? 1u
+             : 0u;
+}
+
 static inline uint8_t damage_ground_try_wait_iasa_locomotion_subset(MslBatch* batch,
                                                                     const MslCommonParams* c,
                                                                     const MslCharParams* ch,
@@ -341,6 +358,7 @@ static inline uint8_t damage_ground_try_wait_iasa_locomotion_subset(MslBatch* ba
       apply_deadzone(stick_i8_to_unit(batch->state.input_main_y[idx]), c->lstick_deadzone_y);
   const float facing_dir = batch->state.facing[idx] ? 1.0f : -1.0f;
   const uint16_t buttons = batch->state.input_buttons[idx];
+  const uint8_t specials_has_input = damage_ground_wait_iasa_specials_has_input(c, buttons, stick_x);
 
   if (damage_ground_wait_iasa_is_dash_flick(c, stick_x, batch->state.tilt_timer_x[idx])) {
     if ((stick_x * facing_dir) < 0.0f) {
@@ -365,7 +383,7 @@ static inline uint8_t damage_ground_try_wait_iasa_locomotion_subset(MslBatch* ba
     return 1u;
   }
 
-  if ((buttons & (uint16_t)MSL_BUTTON_B) == 0u && stick_y < -c->crouch_stick_threshold) {
+  if (!specials_has_input && stick_y < -c->crouch_stick_threshold) {
     // Decomp: Wait_IASA checks Squat input after Dash and before Turn/Walk.
     // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
     // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Squat.c::ftCo_Squat_Enter
@@ -828,15 +846,23 @@ void knockdown_update_pre_physics(MslBatch* batch) {
             continue;
           }
           {
+            const float stick_x =
+                apply_deadzone(stick_i8_to_unit(batch->state.input_main_x[idx]), c->lstick_deadzone_x);
             const float stick_y =
                 apply_deadzone(stick_i8_to_unit(batch->state.input_main_y[idx]), c->lstick_deadzone_y);
             const uint16_t buttons = batch->state.input_buttons[idx];
-            if ((buttons & (uint16_t)MSL_BUTTON_B) == 0u && stick_y < -c->crouch_stick_threshold) {
+            const uint8_t specials_has_input =
+                damage_ground_wait_iasa_specials_has_input(c, buttons, stick_x);
+            if (!specials_has_input && stick_y < -c->crouch_stick_threshold) {
               // Decomp: Damage_IASA grounded path delegates to Wait_IASA, and Wait_IASA checks
-              // Squat after guard/jump and before Turn/Walk.
+              // ftCo_SpecialS_CheckInput before Squat. Only held-B rows that fail the extracted
+              // Side-B horizontal gate can still fall through to crouch.
               // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_IASA
               // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
+              // refs/melee/src/melee/ft/chara/ftCommon/ftCo_SpecialS.c::{
+              //   ftCo_SpecialS_CheckInput,ftCo_SpecialS_HasInput}
               // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Squat.c::ftCo_Squat_Enter
+              // data/common/ft_common_data.json: special_stick_x_threshold_side
               enter_squat(batch, idx);
               continue;
             }

@@ -8,7 +8,7 @@
 # preprocess_suite stamp:
 #   path: datasets/fox_falco_fd_ucf084_recent/.preprocess_meta.json
 #   force_used: True  built: 4  skipped: 0
-#   seed_dtype_itemsize: 2272  sample_dtype_itemsize: 3358
+#   seed_dtype_itemsize: 2296  sample_dtype_itemsize: 3382
 #
 # Regenerate gitignored ISO-derived data artifacts (if missing/stale):
 # - Opcode-25 airborne-state timelines (data/airborne_state_events/{fox,falco}.bin):
@@ -29,23 +29,23 @@ fields: action_id,animation_index,on_ground,hitlag,hitstun,state_flags
 
 == datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl ==
 rollout.best_len: 154
-rollout.streak_count: 182
+rollout.streak_count: 181
 rollout.streak_len.median: 30
 rollout.streak_len.p90: 89
 rollout.streak_len.p95: 95
 rollout.streak_len.max: 154
-rollout.first_mismatch_total: 184
+rollout.first_mismatch_total: 183
 rollout.first_mismatch_seeded_total: 53
 
 == datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl ==
 rollout.best_len: 197
 rollout.streak_count: 278
 rollout.streak_len.median: 33
-rollout.streak_len.p90: 91
+rollout.streak_len.p90: 89
 rollout.streak_len.p95: 113
 rollout.streak_len.max: 197
 rollout.first_mismatch_total: 277
-rollout.first_mismatch_seeded_total: 80
+rollout.first_mismatch_seeded_total: 78
 
 == datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/QuerulousGrandDinosaur.msl ==
 rollout.best_len: 181
@@ -59,20 +59,20 @@ rollout.first_mismatch_seeded_total: 72
 
 == datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/TreasuredBackKangaroo.msl ==
 rollout.best_len: 207
-rollout.streak_count: 198
-rollout.streak_len.median: 29
+rollout.streak_count: 196
+rollout.streak_len.median: 32
 rollout.streak_len.p90: 83
 rollout.streak_len.p95: 101
 rollout.streak_len.max: 207
-rollout.first_mismatch_total: 198
-rollout.first_mismatch_seeded_total: 52
+rollout.first_mismatch_total: 196
+rollout.first_mismatch_seeded_total: 51
 
 == suite summary ==
-overall.rollout.streak_count: 883
+overall.rollout.streak_count: 880
 overall.rollout.streak_len.median: 32
 overall.rollout.streak_len.p90: 90
 overall.rollout.streak_len.p95: 111
 overall.rollout.streak_len.max: 207
 overall.rollout.best_len.max: 207
-overall.rollout.first_mismatch_total: 886
-overall.rollout.first_mismatch_seeded_total: 257
+overall.rollout.first_mismatch_total: 883
+overall.rollout.first_mismatch_seeded_total: 254

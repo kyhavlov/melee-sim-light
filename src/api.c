@@ -443,6 +443,8 @@ int msl_batch_reseed_seed(MslBatch* batch, const uint8_t* seed_bytes, size_t see
       batch->state.coll_prev_env_flags[idx] = 0u;
 
       batch->state.action_id[idx] = seed->action_id[p];
+      batch->state.seed_prev_action_id[idx] = seed->seed_prev_action_id[p];
+      batch->state.seed_prev_action_frame[idx] = seed->seed_prev_action_frame[p];
       // Throw pulse-consume seed lane (producer: tools/slippi/make_dataset_from_slp.py).
       // Decomp owner:
       // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
@@ -764,6 +766,8 @@ int msl_batch_reseed_seed(MslBatch* batch, const uint8_t* seed_bytes, size_t see
       batch->state.combo_timer_x2098[idx] = seed->combo_timer_x2098[p];
       batch->state.last_hit_by[idx] = seed->last_hit_by[p];
       batch->state.grab_owner_port[idx] = seed->grab_owner_port[p];
+      batch->state.grab_mash_stick_x_sign[idx] = seed->grab_mash_stick_x_sign[p];
+      batch->state.grab_mash_stick_y_sign[idx] = seed->grab_mash_stick_y_sign[p];
 
       // BODY sweep ownership (x58/x4C) on reseed:
       // - Decomp keeps previous/current HitCapsule centers in ftColl_8007AD18 and BODY overlap

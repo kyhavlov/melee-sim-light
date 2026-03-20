@@ -541,7 +541,21 @@ void anim_timebase_update_pre_input(MslBatch* batch) {
       if (action_frame_pre == 0 && c != NULL) {
         float entry_rate = 0.0f;
         if (a == (uint16_t)MSL_ACT_LANDING_FALL_SPECIAL) {
-          const float lag = c->landing_fall_special_lag_frames;
+          float lag = c->landing_fall_special_lag_frames;
+          const uint16_t source_prev_action =
+              (action_frame_pre == 0) ? batch->state.seed_prev_action_id[idx]
+                                      : batch->state.prev_action_id[idx];
+          if (source_prev_action == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_S_END) {
+            // Decomp source split for LandingFallSpecial entry rate:
+            // - EscapeAir_Coll enters ftCo_LandingFallSpecial_Enter(..., p_ftCommonData->x344).
+            // - Fox/Falco Illusion end collision enters ftCo_LandingFallSpecial_Enter(...,
+            //   da->x50_FOX_ILLUSION_LANDING_LAG).
+            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c
+            // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c::ftFx_SpecialAirSEnd_Coll
+            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::ftCo_LandingFallSpecial_Enter
+            // data/characters/{fox,falco}.json: illusion_landing_lag_frames
+            lag = (float)ch->illusion_landing_lag_frames;
+          }
           const float end_frame =
               msl_anim_end_frame(batch->state.char_id[idx], (uint16_t)MSL_SM_LANDING_FALL_SPECIAL);
           if (lag > 0.0f && end_frame > 0.0f) {

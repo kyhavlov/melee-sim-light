@@ -99,6 +99,12 @@ typedef struct MslCommonParams {
   float tap_jump_threshold;          // p_ftCommonData->tap_jump_threshold (0x70)
   float tap_jump_release_threshold;  // p_ftCommonData->tap_jump_release_threshold (0x7C)
   float jump_back_x_threshold;       // p_ftCommonData->x78
+  // Dash/Run/RunBrake/TurnRun IASA call fn_800CAF78, which compares lstick.y against x80.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c::fn_800CAF78
+  float dash_run_jump_stick_y_threshold;  // p_ftCommonData->x80
+  // Grab mash updates x1A50/x1A51 when lstick.{x,y} crosses +/-x308.
+  // refs/melee/src/melee/ft/ftcommon.c::ftCommon_GrabMash
+  float grab_mash_stick_threshold;       // p_ftCommonData->x308
   float fastfall_stick_threshold;    // p_ftCommonData->x88
   uint8_t fastfall_tilt_max_frames;  // p_ftCommonData->x8C (fastfall_tilt_max_frames)
   // Crouch threshold (Squat entry gate).

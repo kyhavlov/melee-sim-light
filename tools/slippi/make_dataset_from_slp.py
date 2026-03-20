@@ -1502,7 +1502,9 @@ def _main_impl(args) -> None:
         derive_downwait_timer,
         derive_damage_jump_buffer_x14,
         derive_damage_post_hitlag_cb_kind,
+        derive_grab_mash_stick_sign_post,
         derive_grab_owner_port_2p,
+        derive_seed_prev_action_post,
         derive_guard_reflect_timer_x14,
         derive_guard_reflect_timer_x18,
         derive_guard_release_lockout_and_lightshield,
@@ -1625,6 +1627,7 @@ def _main_impl(args) -> None:
     tap_jump_threshold = float(common["tap_jump_threshold"])
     tap_jump_release_threshold = float(common["tap_jump_release_threshold"])
     tap_jump_tilt_max_frames = int(common["tap_jump_tilt_max_frames"])
+    grab_mash_stick_threshold = float(common["grab_mash_stick_threshold"])
     fastfall_stick_threshold = float(common["fastfall_stick_threshold"])
     fastfall_tilt_max_frames = int(common["fastfall_tilt_max_frames"])
     guard_stick_lerp_x44c = float(common["guard_stick_lerp_x44c"])
@@ -1945,6 +1948,12 @@ def _main_impl(args) -> None:
         samples["ref_t1"]["action_id"][:, slot] = post_state[1:]
         samples["seed_t"]["action_frame"][:, slot] = post_state_age[:-1]
         samples["ref_t1"]["action_frame"][:, slot] = post_state_age[1:]
+        seed_prev_action_id, seed_prev_action_frame = derive_seed_prev_action_post(
+            post_action_id_u16=post_state,
+            post_action_frame_i16=post_state_age,
+        )
+        samples["seed_t"]["seed_prev_action_id"][:, slot] = seed_prev_action_id
+        samples["seed_t"]["seed_prev_action_frame"][:, slot] = seed_prev_action_frame
         # Throw pulse-consume seed lane is filled after item materialization from full seed_t arrays.
         samples["seed_t"]["throw_pulse_consumed"][:, slot] = 0
         samples["seed_t"]["throw_pulse_crossed_prev_frame"][:, slot] = 0
@@ -2667,6 +2676,8 @@ def _main_impl(args) -> None:
     post_state_flags = np.zeros((n_frames, 4, 5), dtype=np.uint8)
     post_last_hit_by = np.full((n_frames, 4), 0xFF, dtype=np.uint8)
     pre_buttons = np.zeros((n_frames, 4), dtype=np.uint16)
+    pre_main_x_2d = np.zeros((n_frames, 4), dtype=np.int8)
+    pre_main_y_2d = np.zeros((n_frames, 4), dtype=np.int8)
     pre_l = np.zeros((n_frames, 4), dtype=np.uint8)
     pre_r = np.zeros((n_frames, 4), dtype=np.uint8)
 
@@ -2680,6 +2691,8 @@ def _main_impl(args) -> None:
         post = leader.field("post")
 
         pre_buttons[:, slot] = _to_numpy(pre.field("buttons_physical")).astype(np.uint16)
+        pre_main_x_2d[:, slot] = _to_numpy(pre.field("raw_analog_x")).astype(np.int8)
+        pre_main_y_2d[:, slot] = _to_numpy(pre.field("raw_analog_y")).astype(np.int8)
         pre_l[:, slot] = _u8_from_float01(_to_numpy(pre.field("triggers_physical").field("l")).astype(np.float32))
         pre_r[:, slot] = _u8_from_float01(_to_numpy(pre.field("triggers_physical").field("r")).astype(np.float32))
 
@@ -2731,6 +2744,23 @@ def _main_impl(args) -> None:
     if int(num_players) == 2:
         grab_owner = derive_grab_owner_port_2p(action_id_u16_2p=post_action_id[:, :2])
         samples["seed_t"]["grab_owner_port"][:, :2] = grab_owner[:-1, :]
+
+    for slot in range(num_players):
+        main_x_proc, main_y_proc = ucf_process_stick_i8(
+            pre_main_x_2d[:, slot],
+            pre_main_y_2d[:, slot],
+            ucf_enabled=ucf_enabled,
+            ucf_cardinals_1_0_enabled=ucf_cardinals_1_0_enabled,
+        )
+        stick_x = apply_deadzone(stick_i8_to_unit(main_x_proc), lstick_deadzone_x)
+        stick_y = apply_deadzone(stick_i8_to_unit(main_y_proc), lstick_deadzone_y)
+        mash_x, mash_y = derive_grab_mash_stick_sign_post(
+            stick_x_unit=stick_x,
+            stick_y_unit=stick_y,
+            grab_mash_stick_threshold=grab_mash_stick_threshold,
+        )
+        samples["seed_t"]["grab_mash_stick_x_sign"][:, slot] = mash_x[:-1]
+        samples["seed_t"]["grab_mash_stick_y_sign"][:, slot] = mash_y[:-1]
 
     # Use already-derived replay-causal seed fields for shield bubble placement:
     # - facing (post-frame)

@@ -222,6 +222,7 @@ static int load_one(const char* data_dir, const char* rel_path, uint8_t char_id)
       "illusion_ground_friction",
       "illusion_air_end_vel_x",
       "illusion_air_friction",
+      "illusion_landing_lag_frames",
       "illusion_gravity_delay_end_frames",
       "illusion_fall_accel_end",
       "illusion_item_hitbox_size",
@@ -362,6 +363,7 @@ static int load_one(const char* data_dir, const char* rel_path, uint8_t char_id)
       json_get_f32(buf, "illusion_ground_friction", &out.illusion_ground_friction) != 0 ||
       json_get_f32(buf, "illusion_air_end_vel_x", &out.illusion_air_end_vel_x) != 0 ||
       json_get_f32(buf, "illusion_air_friction", &out.illusion_air_friction) != 0 ||
+      json_get_u8(buf, "illusion_landing_lag_frames", &out.illusion_landing_lag_frames) != 0 ||
       json_get_u8(buf, "illusion_gravity_delay_end_frames",
                   &out.illusion_gravity_delay_end_frames) != 0 ||
       json_get_f32(buf, "illusion_fall_accel_end", &out.illusion_fall_accel_end) != 0 ||

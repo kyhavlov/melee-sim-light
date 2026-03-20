@@ -52,6 +52,14 @@ class _DamageGroundWaitIasaCase:
             note="DamageHi1 grounded Wait_IASA squat branch",
         ),
         _DamageGroundWaitIasaCase(
+            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl",
+            record=4436,
+            player=0,
+            expected_action_id=39,  # Squat
+            expected_animation_index=30,  # ftCo_SM_Squat
+            note="DamageHi1 grounded held-B neutral-X still falls through to Squat",
+        ),
+        _DamageGroundWaitIasaCase(
             dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/QuerulousGrandDinosaur.msl",
             record=8765,
             player=0,
@@ -89,6 +97,10 @@ def test_damage_ground_wait_iasa_replay_real_transition_locks(case: _DamageGroun
     assert int(seed["on_ground"][0, p]) == 1, case.note
     assert int(seed["hitlag"][0, p]) == 0, case.note
     assert int(seed["action_id"][0, p]) in (75, 78, 79), case.note  # DamageHi1 / DamageN1 / DamageN2
+    if record == 4436:
+        assert int(row["input_t"][0]["p"]["buttons"][p]) == 0x0200, case.note
+        assert int(row["input_t"][0]["p"]["main_x"][p]) == 0, case.note
+        assert int(row["input_t"][0]["p"]["main_y"][p]) == -102, case.note
     assert int(ref["action_id"][0, p]) == case.expected_action_id, case.note
     assert int(ref["animation_index"][0, p]) == case.expected_animation_index, case.note
 
