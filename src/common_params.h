@@ -36,6 +36,10 @@ typedef struct MslCommonParams {
   float cstick_smash_threshold;        // p_ftCommonData->x3C (ftCo_800DF1C8 side-smash edge)
   // Grounded A-tilt directional checks (ftCo_AttackS3/Hi3/Lw3 input helpers).
   float attack_s3_stick_threshold_x;   // p_ftCommonData->x98 (attack_s3_stick_threshold_x)
+  float attack_s3_hi_angle_radians;    // p_ftCommonData->x9C (ftCo_AttackS3.c::decideAngle)
+  float attack_s3_hi_s_angle_radians;  // p_ftCommonData->xA0 (ftCo_AttackS3.c::decideAngle)
+  float attack_s3_lw_s_angle_radians;  // p_ftCommonData->xA4 (ftCo_AttackS3.c::decideAngle)
+  float attack_s3_lw_angle_radians;    // p_ftCommonData->xA8 (ftCo_AttackS3.c::decideAngle)
   float attack_hi3_stick_threshold_y;  // p_ftCommonData->attackhi3_stick_threshold_y
   float attack_lw3_stick_threshold_y;  // p_ftCommonData->xB0 (attack_lw3_stick_threshold_y)
   // Throw entry anim-speed weight scalar.

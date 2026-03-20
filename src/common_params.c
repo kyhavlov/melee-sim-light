@@ -179,6 +179,14 @@ int common_params_init(void) {
       json_get_f32(buf, "cstick_smash_threshold", &g_params.cstick_smash_threshold) != 0 ||
       json_get_f32(buf, "attack_s3_stick_threshold_x", &g_params.attack_s3_stick_threshold_x) !=
           0 ||
+      json_get_f32(buf, "attack_s3_hi_angle_radians", &g_params.attack_s3_hi_angle_radians) !=
+          0 ||
+      json_get_f32(buf, "attack_s3_hi_s_angle_radians", &g_params.attack_s3_hi_s_angle_radians) !=
+          0 ||
+      json_get_f32(buf, "attack_s3_lw_s_angle_radians", &g_params.attack_s3_lw_s_angle_radians) !=
+          0 ||
+      json_get_f32(buf, "attack_s3_lw_angle_radians", &g_params.attack_s3_lw_angle_radians) !=
+          0 ||
       json_get_f32(buf, "attack_hi3_stick_threshold_y", &g_params.attack_hi3_stick_threshold_y) !=
           0 ||
       json_get_f32(buf, "attack_lw3_stick_threshold_y", &g_params.attack_lw3_stick_threshold_y) !=

@@ -630,8 +630,9 @@ static inline uint16_t grounded_a_attack_select_action(
       stick_y <= c->attack_lw3_stick_threshold_y && ang < 0.0f) {
     // Decomp: ftCo_AttackS3_CheckInput first gates on forward side-tilt intent, then decideAngle
     // routes downward stick angles into AttackS3Lw / AttackS3LwS instead of neutral AttackS3S.
-    // Keep only the forward+down subset here until the finer xA8/xA4 decideAngle thresholds are
-    // extracted into data/common/ft_common_data.json.
+    // Keep only the forward+down subset here until the finer x9C/xA0/xA4/xA8 decideAngle split is
+    // modeled directly in runtime. Those constants are now extracted via
+    // data/common/ft_common_data.json and loaded by src/common_params.c.
     // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackS3.c::{
     //   ftCo_AttackS3_CheckInput,decideAngle
     // }

@@ -185,6 +185,12 @@ def main() -> None:
         # Ground A-attacks input checks (ftCo_Attack*; ftCommonData offsets).
         "attack_angle_threshold_radians": float(_f32_be(buf, ft_common_abs + 0x20)),
         "attack_s3_stick_threshold_x": float(_f32_be(buf, ft_common_abs + 0x98)),
+        # Side-tilt angle splits used by ftCo_AttackS3.c::decideAngle after the initial
+        # ftCo_AttackS3_CheckInput gate succeeds.
+        "attack_s3_hi_angle_radians": float(_f32_be(buf, ft_common_abs + 0x9C)),
+        "attack_s3_hi_s_angle_radians": float(_f32_be(buf, ft_common_abs + 0xA0)),
+        "attack_s3_lw_s_angle_radians": float(_f32_be(buf, ft_common_abs + 0xA4)),
+        "attack_s3_lw_angle_radians": float(_f32_be(buf, ft_common_abs + 0xA8)),
         "attack_hi3_stick_threshold_y": float(_f32_be(buf, ft_common_abs + 0xAC)),
         "attack_lw3_stick_threshold_y": float(_f32_be(buf, ft_common_abs + 0xB0)),
         # Up smash (ftCo_AttackHi4_CheckInput): y >= xCC and tilt_y_timer < xD0 (float).
