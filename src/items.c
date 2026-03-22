@@ -2307,7 +2307,6 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
         hit = 1;
         hit_hurt_height = 1u;
       }
-
       if (!hit) {
         continue;
       }
@@ -2753,6 +2752,7 @@ void items_spawn_pre_physics(MslBatch* batch) {
             // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Thrown.c::ftCo_800DE508
             // data/moves/{fox,falco}.json set_throw_spawn_projectile pulse frames
             uint8_t stale_throw_pulse_context = 0u;
+            int stale_throw_pulse_victim = -1;
             for (int vp = 0; vp < num_players; vp++) {
               if (vp == p) {
                 continue;
@@ -2763,10 +2763,38 @@ void items_spawn_pre_physics(MslBatch* batch) {
               if (action_id == (uint16_t)MSL_ACT_THROW_B && batch->state.hitstun[v_idx] > 0u &&
                   batch->state.last_attack_landed[v_idx] == lp->shot_itkind) {
                 stale_throw_pulse_context = 1u;
-                break;
+                if (stale_throw_pulse_victim >= 0) {
+                  stale_throw_pulse_victim = -1;
+                  break;
+                }
+                stale_throw_pulse_victim = vp;
               }
             }
             if (stale_throw_pulse_context) {
+              if (action_id == (uint16_t)MSL_ACT_THROW_B && stale_throw_pulse_victim >= 0) {
+                // ThrowB suppressed-pulse combo bookkeeping bridge:
+                // - Throw-side projectile pulses are one-shot script events consumed in
+                //   ftFx_Throw_Anim, and confirmed item hits route combo tracking through the item
+                //   domain variant ftColl_8007646C -> ftColl_800763C0.
+                // - When a stale pulse is suppressed because the victim is already in ongoing
+                //   throw-laser hitstun from this owner, keep the attacker-side combo bookkeeping
+                //   synchronized for the uniquely-owned victim without broadening projectile life.
+                // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
+                // refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007646C,ftColl_800763C0}
+                const size_t v_idx = msl_idx_player(bi, stale_throw_pulse_victim);
+                const uint8_t attack_id_u8 = (uint8_t)batch->state.attack_id[idx];
+                const uint8_t cur_victim = batch->state.combo_victim_port[idx];
+                if ((cur_victim == 0xFFu || cur_victim == (uint8_t)stale_throw_pulse_victim) &&
+                    batch->state.attack_id[idx] != (uint16_t)MSL_FT_MOVE_ID_DEFAULT &&
+                    batch->state.last_attack_landed[idx] == attack_id_u8 &&
+                    batch->state.combo_count[idx] != 0u) {
+                  batch->state.combo_count[idx] = (uint8_t)(batch->state.combo_count[idx] + 1u);
+                  if (cur_victim == 0xFFu) {
+                    batch->state.combo_victim_port[idx] = (uint8_t)stale_throw_pulse_victim;
+                  }
+                  batch->state.combo_victim_instance_id[idx] = batch->state.instance_id[v_idx];
+                }
+              }
               continue;
             }
             // Seed-owned ThrowB stale pulse suppressor:

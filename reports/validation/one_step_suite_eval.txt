@@ -101,7 +101,7 @@ mismatch.animation_index: 25 / 23058 (0.001084)
 mismatch.instance_hit_by: 11 / 23058 (0.000477)
 mismatch.instance_id: 63 / 23058 (0.002732)
 mismatch.last_attack_landed: 7 / 23058 (0.000304)
-mismatch.combo_count: 6 / 23058 (0.000260)
+mismatch.combo_count: 3 / 23058 (0.000130)
 mismatch.last_hit_by: 13 / 23058 (0.000564)
 mismatch.state_flags: 85 / 115290 (0.000737)
 mismatch.item_exists: 5 / 172935 (0.000029)
@@ -122,7 +122,7 @@ err.item_pos_x: mae=0.087430 p95=0.000000 max=71.544670
 err.item_pos_y: mae=0.044663 p95=0.000000 max=26.796017
 err.item_vel_x: mae=0.037782 p95=0.000000 max=6.760003
 err.item_vel_y: mae=0.040118 p95=0.000000 max=6.995885
-overall.discrete_mismatch: 388 / 1395009
+overall.discrete_mismatch: 385 / 1395009
 overall.float_norm_mae_p95: 0.00357173
 
 == datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/QuerulousGrandDinosaur.msl ==
@@ -210,5 +210,5 @@ overall.discrete_mismatch: 273 / 948277
 overall.float_norm_mae_p95: 0.00389978
 
 == suite summary ==
-overall.discrete_mismatch: 1243 / 4462843
+overall.discrete_mismatch: 1240 / 4462843
 overall.float_norm_mae_p95: 0.00334555
