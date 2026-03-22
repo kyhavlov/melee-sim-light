@@ -30,6 +30,7 @@ ACT_GUARD_ON = 0x00B2
 ACT_ATTACK_AIR_N = 0x0041
 ACT_ATTACK_AIR_B = 0x0043
 ACT_DAMAGE_AIR_2 = 0x0055
+ACT_DAMAGE_FLY_N = 0x0058
 ACT_FX_SPECIAL_LW_START = 0x0168
 ACT_FX_SPECIAL_AIR_S_START = 0x015E
 ACT_FX_SPECIAL_AIR_LW_START = 0x016D
@@ -56,6 +57,8 @@ SM_GUARD_ON = 37
 SM_ATTACK_AIR_N = 68
 SM_ATTACK_AIR_B = 70
 SM_DAMAGE_AIR_2 = 175
+SM_DAMAGE_FLY_N = 178
+SM_PASSIVE_WALL_JUMP = 203
 SM_OTTOTTO = 210
 SM_CATCH_DASH = 243
 SM_LANDING_FALL_SPECIAL = 36
@@ -64,8 +67,10 @@ SM_FX_SPECIAL_AIR_LW_START = 313
 
 # Collision env flag bits: refs/melee/src/common_structs.h, src/coll_env_flags.h
 MSL_COLLIDE_EDGE = 0x00800000
+MSL_COLLIDE_RIGHT_WALL_HUG = 0x00000800
 
 CHAR_FOX = 1
+CHAR_FALCO = 22
 STAGE_FD = 32
 MAX_PLAYERS = 4
 
@@ -1437,6 +1442,65 @@ def test_jump_end_enters_fall() -> None:
     assert int(out["action_id"][0]) == ACT_FALL
     assert int(out["action_frame"][0]) == 0
     assert int(out["animation_index"][0]) == SM_FALL
+
+
+def test_damageflyn_wall_tech_enters_passivewalljump_on_right_wall_hug() -> None:
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    input_stride = int(sizes["input"])
+
+    seed = _seed_base()
+    p = 0
+    seed["char_id"][0, p] = np.uint8(CHAR_FALCO)
+    seed["action_id"][0, p] = np.uint16(ACT_DAMAGE_FLY_N)
+    seed["seed_prev_action_id"][0, p] = np.uint16(ACT_DAMAGE_FLY_N)
+    seed["seed_prev_action_frame"][0, p] = np.int16(11)
+    seed["action_frame"][0, p] = np.int16(12)
+    seed["animation_index"][0, p] = np.uint32(SM_DAMAGE_FLY_N)
+    seed["anim_frame_f32"][0, p] = np.float32(12.0)
+    seed["on_ground"][0, p] = np.uint8(0)
+    seed["facing"][0, p] = np.uint8(1)
+    seed["pos_x"][0, p] = np.float32(69.689896)
+    seed["pos_y"][0, p] = np.float32(-41.08169)
+    seed["speed_air_x_self"][0, p] = np.float32(0.0)
+    seed["speed_y_self"][0, p] = np.float32(-1.8699998)
+    seed["speed_x_attack"][0, p] = np.float32(-1.858745)
+    seed["speed_y_attack"][0, p] = np.float32(0.3549526)
+    seed["jumps_left"][0, p] = np.uint8(0)
+    seed["hitstun"][0, p] = np.uint16(21)
+    seed["hurtbox_state"][0, p] = np.uint8(0)
+    seed["colanim_hit_status_x198c"][0, p] = np.uint8(1)
+    seed["colanim_timer_x1994"][0, p] = np.uint16(80)
+    seed["x67E"][0, p] = np.uint8(76)
+    seed["x680"][0, p] = np.uint8(18)
+    seed["x684"][0, p] = np.uint8(119)
+    seed["state_flags"][0, p, 3] = np.uint8(0x02)
+
+    prev_inp = _mk_input_bytes(1, input_stride)
+    inp = _mk_input_bytes(1, input_stride)
+    prev_view = prev_inp.view(INPUT_DTYPE).reshape((1,))
+    cur_view = inp.view(INPUT_DTYPE).reshape((1,))
+    prev_view["p"]["main_x"][0, p] = np.int8(-27)
+    prev_view["p"]["main_y"][0, p] = np.int8(62)
+    prev_view["p"]["buttons"][0, p] = np.uint16(0x0020)
+    cur_view["p"]["main_x"][0, p] = np.int8(-27)
+    cur_view["p"]["main_y"][0, p] = np.int8(62)
+    cur_view["p"]["buttons"][0, p] = np.uint16(0x0020)
+
+    out, contacts = _step_once_with_collision_contacts(seed, prev_inp, inp)
+
+    # Decomp: DamageFly_Coll checks ftCo_800C1D38 before grounded tech / DownBound resolution.
+    # ftCo_800C1D38 enters PassiveWallJump via ftCo_800C1E64 on wall-hug tech rows when
+    # ftCo_800C1E0C is satisfied by fresh up input / tap-jump.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_DamageFly_Coll
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_PassiveWall.c::{ftCo_800C1D38,ftCo_800C1E0C,ftCo_800C1E64}
+    assert int(contacts["coll_env_flags"][p]) & MSL_COLLIDE_RIGHT_WALL_HUG
+    assert int(out["action_id"][p]) == ACT_PASSIVE_WALL_JUMP
+    assert int(out["action_frame"][p]) == 0
+    assert int(out["animation_index"][p]) == SM_PASSIVE_WALL_JUMP
+    assert int(out["hurtbox_state"][p]) == 2
+    assert int(out["hitstun"][p]) == 0
 
 
 def test_turn_reseed_does_not_flip_immediately_when_action_frame_is_0() -> None:

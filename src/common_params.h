@@ -157,7 +157,7 @@ typedef struct MslCommonParams {
   uint16_t colanim_rebirth_fall_x1994_frames;  // p_ftCommonData->0x5D8 (ftColl_8007B7A4 on Fall enter)
   uint16_t entry_start_frames;           // p_ftCommonData->x6BC
   uint16_t entry_end_frames;             // p_ftCommonData->x6C0
-  uint16_t _pad_u16_match_flow_0;
+  uint16_t colanim_passivewall_x1990_frames;  // p_ftCommonData->x764
 
   // Ground friction multiplier when |gr_vel| > walk_max_vel (refs/melee/src/melee/ft/ft_081B.c::ft_80084F3C)
   float high_speed_friction_mul;  // p_ftCommonData->x6C

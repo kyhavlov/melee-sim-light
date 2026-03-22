@@ -11,6 +11,7 @@
 #include "anim_timebase.h"
 #include "buttons.h"
 #include "char_params.h"
+#include "coll_env_flags.h"
 #include "common_params.h"
 #include "input_axis.h"
 #include "jump_input.h"
@@ -1332,6 +1333,58 @@ static inline uint8_t tech_is_available(const MslBatch* batch, const MslCommonPa
              : 0u;
 }
 
+static inline uint8_t passivewall_prefers_jump(const MslBatch* batch, const MslCommonParams* c,
+                                               size_t idx) {
+  const float stick_y =
+      apply_deadzone(stick_i8_to_unit(batch->state.input_main_y[idx]), c->lstick_deadzone_y);
+  // Decomp: ftCo_800C1E0C upgrades PassiveWall entry to PassiveWallJump when either:
+  // - fp->x67E < p_ftCommonData->x250, or
+  // - fp->input.lstick.y >= p_ftCommonData->tap_jump_threshold.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_PassiveWall.c::ftCo_800C1E0C
+  return ((float)batch->state.x67E[idx] < c->tech_window_frames ||
+          stick_y >= c->tap_jump_threshold)
+             ? 1u
+             : 0u;
+}
+
+static inline void enter_passive_walljump_from_damage_air(MslBatch* batch, size_t idx,
+                                                          uint16_t prev_action_id) {
+  const MslCommonParams* c = msl_common_params();
+  if (batch == NULL || c == NULL) {
+    return;
+  }
+  const uint32_t env = batch->state.coll_env_flags[idx];
+  // DamageFly wall-tech ownership:
+  // - ftCo_DamageFly_Coll calls ftCo_800C1D38 before ceiling tech / floor tech ladders.
+  // - ftCo_800C1D38 picks PassiveWallJump when ftCo_800C1E0C is true, then ftCo_800C1E64:
+  //   * flips facing based on wall side,
+  //   * enters ftCo_MS_PassiveWallJump at frame 0,
+  //   * clears damage hitstun ownership,
+  //   * calls ftColl_8007B760(..., p_ftCommonData->x764) so x198C-visible hurt status is 2.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_DamageFly_Coll
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_PassiveWall.c::{ftCo_800C1D38,ftCo_800C1E64}
+  // data/common/ft_common_data.json: colanim_passivewall_x1990_frames
+  (void)prev_action_id;
+  batch->state.action_id[idx] = (uint16_t)MSL_ACT_PASSIVE_WALL_JUMP;
+  batch->state.animation_index[idx] = (uint32_t)MSL_SM_PASSIVE_WALL_JUMP;
+  msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+  batch->state.hitstun[idx] = 0u;
+  batch->state.speed_air_x_self[idx] = 0.0f;
+  batch->state.speed_y_self[idx] = 0.0f;
+  batch->state.colanim_timer_x1990[idx] = c->colanim_passivewall_x1990_frames;
+  batch->state.colanim_hit_status_x198c[idx] = 2u;
+  batch->state.hurtbox_state[idx] = 2u;
+  if ((env & (uint32_t)MSL_COLLIDE_RIGHT_WALL_HUG) != 0u) {
+    batch->state.facing[idx] = 1u;
+  } else if ((env & (uint32_t)MSL_COLLIDE_LEFT_WALL_HUG) != 0u) {
+    batch->state.facing[idx] = 0u;
+  }
+  enum { MSL_STATE_FLAGS_221C_INDEX = 3 };
+  enum { MSL_STATE_FLAG_221C_IS_HITSTUN = 0x02 };
+  const size_t flags_i = idx * (size_t)MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_221C_INDEX;
+  batch->state.state_flags[flags_i] &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221C_IS_HITSTUN;
+}
+
 static inline void enter_passive_from_damage_land(MslBatch* batch, const MslCharParams* ch,
                                                   size_t idx, uint16_t passive_act,
                                                   uint16_t prev_action_id) {
@@ -1428,6 +1481,16 @@ void knockdown_update_post_collision(MslBatch* batch) {
 
       const MslCharParams* ch = msl_char_params(batch->state.char_id[idx]);
       if (ch == NULL) {
+        continue;
+      }
+
+      if (!was_ground && !now_ground && a0 == (uint16_t)MSL_ACT_DAMAGE_FLY_N &&
+          tech_is_available(batch, c, idx) &&
+          (batch->state.coll_env_flags[idx] &
+           ((uint32_t)MSL_COLLIDE_LEFT_WALL_HUG | (uint32_t)MSL_COLLIDE_RIGHT_WALL_HUG)) !=
+              0u &&
+          passivewall_prefers_jump(batch, c, idx)) {
+        enter_passive_walljump_from_damage_air(batch, idx, a0);
         continue;
       }
 

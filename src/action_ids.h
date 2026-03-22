@@ -414,6 +414,9 @@ typedef enum MslSubmotionId {
   MSL_SM_PASSIVE = 199,          // ftCo_SM_Passive
   MSL_SM_PASSIVE_STAND_F = 200,  // ftCo_SM_PassiveStandF
   MSL_SM_PASSIVE_STAND_B = 201,  // ftCo_SM_PassiveStandB
+  MSL_SM_PASSIVE_WALL = 202,     // ftCo_SM_PassiveWall
+  MSL_SM_PASSIVE_WALL_JUMP = 203,  // ftCo_SM_PassiveWallJump
+  MSL_SM_PASSIVE_CEIL = 204,       // ftCo_SM_PassiveCeil
 
   // Grab / throw / capture / thrown (suite-present subset).
   // Source of truth: refs/melee/src/melee/ft/chara/ftCommon/forward.h `ftCo_Submotion`.

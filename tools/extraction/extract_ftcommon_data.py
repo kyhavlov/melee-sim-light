@@ -126,6 +126,10 @@ def main() -> None:
         # - decremented and used for clearing attacker combo victim (fp->x2094):
         #   refs/melee/src/melee/ft/ftcoll.c::ftColl_800764DC
         "combo_timer_post_hitstun_frames": int(max(0, _i32_be(buf, ft_common_abs + 0x4CC))),
+        # PassiveWall / PassiveWallJump entry hurt-status ownership (ftCo_PassiveWall.c).
+        # - ftCo_800C1E64 calls ftColl_8007B760(..., x764) on entry.
+        # refs/melee/src/melee/ft/chara/ftCommon/ftCo_PassiveWall.c::ftCo_800C1E64
+        "colanim_passivewall_x1990_frames": int(max(0, _i32_be(buf, ft_common_abs + 0x764))),
         # Shield / guard (ftCo_Guard.c, fighter.c).
         # - Guard hold drain: shield_health -= x278 * (lightshield_amount*(x2F0-x2EC)+x2EC)
         # - Shield hit depletion: shield_health -= x284 * (shieldDamageTaken*(1 - (lightshield_amount*(x2E0-x2DC)+x2DC))) + x288
