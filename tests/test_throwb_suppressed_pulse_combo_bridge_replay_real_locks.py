@@ -42,6 +42,15 @@ class _Case:
             thrower_p=1,
             note="ThrowB pulse17 suppressed-pulse combo bookkeeping bridge",
         ),
+        _Case(
+            dataset_rel=(
+                "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
+                "QuerulousGrandDinosaur.msl"
+            ),
+            target_record=8293,
+            thrower_p=1,
+            note="ThrowB non-terminal stale-crossing combo bookkeeping bridge",
+        ),
     ],
 )
 def test_throwb_suppressed_pulse_combo_bridge_target_pm1(case: _Case) -> None:

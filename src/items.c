@@ -2846,6 +2846,7 @@ void items_spawn_pre_physics(MslBatch* batch) {
                 const uint16_t stale_hitstun_thresh =
                     (uint16_t)(crossed_pulse_af + (int16_t)MSL_THROWB_PULSE_START_AF);
                 uint8_t stale_throwb_context = 0u;
+                int stale_throwb_victim = -1;
                 for (int vp = 0; vp < num_players; vp++) {
                   if (vp == p) {
                     continue;
@@ -2855,10 +2856,39 @@ void items_spawn_pre_physics(MslBatch* batch) {
                       batch->state.last_hit_by[v_idx] == (uint8_t)p &&
                       batch->state.hitstun[v_idx] < stale_hitstun_thresh) {
                     stale_throwb_context = 1u;
-                    break;
+                    if (stale_throwb_victim >= 0) {
+                      stale_throwb_victim = -1;
+                      break;
+                    }
+                    stale_throwb_victim = vp;
                   }
                 }
                 if (stale_throwb_context) {
+                  if (stale_throwb_victim >= 0) {
+                    // ThrowB non-terminal stale-crossing bookkeeping bridge:
+                    // - This branch already suppresses replay-false non-terminal throw pulses in the
+                    //   late ongoing-hitstun window owned by ftFx_Throw_Anim's one-shot pulse
+                    //   script.
+                    // - When that suppressed pulse belongs to a unique same-owner victim, Melee
+                    //   still advances attacker-side item-domain combo bookkeeping
+                    //   (ftColl_8007646C -> ftColl_800763C0) without a fresh hitlag/hitstun event.
+                    // - Keep the bridge inside the existing hitstun-threshold suppressor only.
+                    // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
+                    // refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007646C,ftColl_800763C0}
+                    const size_t v_idx = msl_idx_player(bi, stale_throwb_victim);
+                    const uint8_t attack_id_u8 = (uint8_t)batch->state.attack_id[idx];
+                    const uint8_t cur_victim = batch->state.combo_victim_port[idx];
+                    if ((cur_victim == 0xFFu || cur_victim == (uint8_t)stale_throwb_victim) &&
+                        batch->state.attack_id[idx] != (uint16_t)MSL_FT_MOVE_ID_DEFAULT &&
+                        batch->state.last_attack_landed[idx] == attack_id_u8 &&
+                        batch->state.combo_count[idx] != 0u) {
+                      batch->state.combo_count[idx] = (uint8_t)(batch->state.combo_count[idx] + 1u);
+                      if (cur_victim == 0xFFu) {
+                        batch->state.combo_victim_port[idx] = (uint8_t)stale_throwb_victim;
+                      }
+                      batch->state.combo_victim_instance_id[idx] = batch->state.instance_id[v_idx];
+                    }
+                  }
                   continue;
                 }
               }
@@ -2875,6 +2905,48 @@ void items_spawn_pre_physics(MslBatch* batch) {
             // data/moves/{fox,falco}.json set_throw_spawn_projectile pulse frames
             if (throw_blaster_pulse_is_seed_stale_latch(action_id, lp->shot_itkind,
                                                         crossed_pulse_af, prev_frame_i)) {
+              if (action_id == (uint16_t)MSL_ACT_THROW_B) {
+                // ThrowB startup stale-latch combo bookkeeping bridge:
+                // - The first throw-side blaster pulse (frame 15) can be suppressed by the
+                //   seed-stale-latch guard when one-step reseed lacks throw_flags_b0 cursor state.
+                // - In Fox startup rows, that suppressed pulse still advances attacker-side combo
+                //   bookkeeping when the victim remains uniquely in same-owner hitstun.
+                // - Keep the bridge on this exact stale-latch suppressor path only; later ThrowB
+                //   pulses remain owned by the existing hitstun-window suppressors above.
+                // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
+                // refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007646C,ftColl_800763C0}
+                int stale_victim_p = -1;
+                for (int vp = 0; vp < num_players; vp++) {
+                  if (vp == p) {
+                    continue;
+                  }
+                  const size_t v_idx = msl_idx_player(bi, vp);
+                  if (batch->state.hitstun[v_idx] == 0u ||
+                      batch->state.last_hit_by[v_idx] != (uint8_t)p) {
+                    continue;
+                  }
+                  if (stale_victim_p >= 0) {
+                    stale_victim_p = -1;
+                    break;
+                  }
+                  stale_victim_p = vp;
+                }
+                if (stale_victim_p >= 0) {
+                  const size_t v_idx = msl_idx_player(bi, stale_victim_p);
+                  const uint8_t attack_id_u8 = (uint8_t)batch->state.attack_id[idx];
+                  const uint8_t cur_victim = batch->state.combo_victim_port[idx];
+                  if ((cur_victim == 0xFFu || cur_victim == (uint8_t)stale_victim_p) &&
+                      batch->state.attack_id[idx] != (uint16_t)MSL_FT_MOVE_ID_DEFAULT &&
+                      batch->state.last_attack_landed[idx] == attack_id_u8 &&
+                      batch->state.combo_count[idx] != 0u) {
+                    batch->state.combo_count[idx] = (uint8_t)(batch->state.combo_count[idx] + 1u);
+                    if (cur_victim == 0xFFu) {
+                      batch->state.combo_victim_port[idx] = (uint8_t)stale_victim_p;
+                    }
+                    batch->state.combo_victim_instance_id[idx] = batch->state.instance_id[v_idx];
+                  }
+                }
+              }
               continue;
             }
             should_shoot = 1u;
