@@ -869,6 +869,36 @@ int msl_batch_reseed_seed(MslBatch* batch, const uint8_t* seed_bytes, size_t see
         }
         inferred_victim_p = victim_p;
       }
+      if (inferred_victim_p < 0) {
+        // Narrow reseed bridge fallback for combo-victim ownership (fp->x2094):
+        // - ftColl_800763C0 continuation only needs the stored victim pointer + attack id.
+        // - ftColl_800764DC / ftCo_8008F744 keep that victim pointer live while the victim remains
+        //   in active combo context (victim hitstun or post-hitstun combo timer).
+        // - Slippi exposes `last_hit_by`, hitstun, and the replay-derived combo timer seed lane,
+        //   but `instance_hit_by` can diverge from the attacker instance on replay-real rows where
+        //   x2094 should still continue the combo.
+        // refs/melee/src/melee/ft/ftcoll.c::{ftColl_800763C0,ftColl_800764DC}
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008F744
+        int fallback_victim_p = -1;
+        for (int victim_p = 0; victim_p < active_players; victim_p++) {
+          if (victim_p == attacker_p) {
+            continue;
+          }
+          const size_t v_idx = msl_idx_player(bi, victim_p);
+          if (batch->state.last_hit_by[v_idx] != (uint8_t)attacker_p) {
+            continue;
+          }
+          if (batch->state.hitstun[v_idx] == 0u && batch->state.combo_timer_x2098[v_idx] == 0u) {
+            continue;
+          }
+          if (fallback_victim_p >= 0) {
+            fallback_victim_p = -1;
+            break;
+          }
+          fallback_victim_p = victim_p;
+        }
+        inferred_victim_p = fallback_victim_p;
+      }
       if (inferred_victim_p >= 0) {
         const size_t v_idx = msl_idx_player(bi, inferred_victim_p);
         batch->state.combo_victim_port[a_idx] = (uint8_t)inferred_victim_p;
