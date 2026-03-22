@@ -2555,6 +2555,7 @@ void items_spawn_pre_physics(MslBatch* batch) {
     float throw_seed_shot_vx[MSL_MAX_PLAYERS] = {0.0f};
     float throw_seed_shot_vy[MSL_MAX_PLAYERS] = {0.0f};
     uint8_t throw_seed_shot_valid[MSL_MAX_PLAYERS] = {0u};
+    uint8_t throw_seed_shot_count[MSL_MAX_PLAYERS] = {0u};
 
     // Seed-visible throw-shot vector snapshot (pre-spawn):
     // - Throw-side shot direction in ftFx_Throw_Anim is gun-joint relative (`atan2f(sp50-sp44)`),
@@ -2576,6 +2577,9 @@ void items_spawn_pre_physics(MslBatch* batch) {
             batch->state.item_type[ii] != p_lp->shot_itkind ||
             batch->state.item_state[ii] != (uint8_t)1u) {
           continue;
+        }
+        if (throw_seed_shot_count[p] < 0xFFu) {
+          throw_seed_shot_count[p]++;
         }
         const float vx = batch->state.item_vel_x[ii];
         const float vy = batch->state.item_vel_y[ii];
@@ -2887,10 +2891,10 @@ void items_spawn_pre_physics(MslBatch* batch) {
             // refs/melee/src/melee/it/items/itfoxlaser.c::it_8029C6CC
             // data/moves/{fox,falco}.json moves["ftCo_SM_ThrowHi"]["events"]
             if (action_id == (uint16_t)MSL_ACT_THROW_HI && !shoot_use_velocity_override &&
-                throw_seed_shot_valid[p] &&
-                batch->state.throw_pulse_crossed_prev_frame[idx] >=
-                    (uint8_t)MSL_THROWHI_PREV_PHASE_AF &&
-                crossed_pulse_af >= (int16_t)MSL_THROWHI_PULSE_MID_AF) {
+                throw_seed_shot_valid[p] && crossed_pulse_af >= (int16_t)MSL_THROWHI_PULSE_MID_AF &&
+                (batch->state.throw_pulse_crossed_prev_frame[idx] >=
+                     (uint8_t)MSL_THROWHI_PREV_PHASE_AF ||
+                 throw_seed_shot_count[p] != 0u)) {
               shoot_use_velocity_override = 1u;
               shoot_override_vx = throw_seed_shot_vx[p];
               shoot_override_vy = throw_seed_shot_vy[p];

@@ -1863,6 +1863,16 @@ MslItemHitResult combat_apply_item_hit(MslBatch* batch, int batch_index, int att
       combat_state_flags_set_is_hitlag(batch, a_idx, a_hl);
     }
 
+    // Attached item-hit bookkeeping:
+    // - Throw-side item hits on an attached victim still feed the attacker-side item-domain stale
+    //   move queue and combo lanes even when victim state entry stays in Thrown*/Capture*.
+    // - Keep the non-Damage* victim suppression above, but preserve ftColl_8007646C ownership for
+    //   last_attack_landed/combo_count in the item attack-id domain.
+    // refs/melee/src/melee/pl/plstale.c::plStale_UpdateStaleMovesFromItem
+    // refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007646C,ftColl_800763C0}
+    staling_queue_update(batch, a_idx, item_attack_id, item_attack_instance);
+    combat_combo_ftColl_800763C0(batch, a_idx, defender, d_idx, item_attack_id);
+
     return MSL_ITEM_HIT_SUPPRESSED_DONT_CONSUME;
   }
 
@@ -1918,6 +1928,24 @@ MslItemHitResult combat_apply_item_hit(MslBatch* batch, int batch_index, int att
   // Stale-move queue update on successful damaging BODY hit (attacker-side).
   // Decomp: refs/melee/src/melee/pl/plstale.c::plStale_UpdateStaleMovesFromItem
   staling_queue_update(batch, a_idx, item_attack_id, item_attack_instance);
+
+  // ThrowLw release-frame combo-victim continuation:
+  // - Throw Anim detaches the victim immediately and defers the throw hit to post-items
+  //   (`throw_pending_victim_port` in this sim), so a same-frame blaster hit can land after
+  //   release while the attacker is still in the throw-laser attack-id domain.
+  // - When fp->x2094 was not seed-visible but the pending released victim matches this item hit,
+  //   preserve ftColl_800763C0 continuation ownership instead of restarting combo_count at 1.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DD724
+  // refs/melee/src/melee/ft/ftcoll.c::{ftColl_800763C0,ftColl_8007646C}
+  if (batch->state.action_id[a_idx] == (uint16_t)MSL_ACT_THROW_LW &&
+      batch->state.throw_pending_victim_port[a_idx] == (uint8_t)defender &&
+      batch->state.combo_victim_port[a_idx] == 0xFFu &&
+      item_attack_id != (uint16_t)MSL_FT_MOVE_ID_DEFAULT &&
+      batch->state.attack_id[a_idx] == item_attack_id && batch->state.combo_count[a_idx] != 0u &&
+      batch->state.last_attack_landed[a_idx] == (uint8_t)item_attack_id) {
+    batch->state.combo_victim_port[a_idx] = (uint8_t)defender;
+    batch->state.combo_victim_instance_id[a_idx] = batch->state.instance_id[d_idx];
+  }
 
   // Combo count + last-attack tracking (attacker-side).
   // Decomp: refs/melee/src/melee/ft/ftcoll.c::ftColl_8007646C -> ftColl_800763C0(item attack id domain).
