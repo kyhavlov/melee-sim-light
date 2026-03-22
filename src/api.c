@@ -888,7 +888,13 @@ int msl_batch_reseed_seed(MslBatch* batch, const uint8_t* seed_bytes, size_t see
           if (batch->state.last_hit_by[v_idx] != (uint8_t)attacker_p) {
             continue;
           }
-          if (batch->state.hitstun[v_idx] == 0u && batch->state.combo_timer_x2098[v_idx] == 0u) {
+          // Terminal combo-timer rows (`x2098 == 1`) are cleared in ftColl_800764DC before combat
+          // ownership applies for the current frame. This simulator mirrors that ordering with
+          // timers_update_post_anim() before combat_resolve(), so only preserve combo-timer-only
+          // ownership when more than one post-hitstun tick remains.
+          // refs/melee/src/melee/ft/ftcoll.c::ftColl_800764DC
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008F744
+          if (batch->state.hitstun[v_idx] == 0u && batch->state.combo_timer_x2098[v_idx] <= 1u) {
             continue;
           }
           if (fallback_victim_p >= 0) {

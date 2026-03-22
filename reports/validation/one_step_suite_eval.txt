@@ -143,7 +143,7 @@ mismatch.animation_index: 18 / 20444 (0.000880)
 mismatch.instance_hit_by: 14 / 20444 (0.000685)
 mismatch.instance_id: 61 / 20444 (0.002984)
 mismatch.last_attack_landed: 11 / 20444 (0.000538)
-mismatch.combo_count: 12 / 20444 (0.000587)
+mismatch.combo_count: 11 / 20444 (0.000538)
 mismatch.last_hit_by: 8 / 20444 (0.000391)
 mismatch.state_flags: 69 / 102220 (0.000675)
 mismatch.item_exists: 0 / 153330 (0.000000)
@@ -164,7 +164,7 @@ err.item_pos_x: mae=0.155347 p95=0.000000 max=18.720001
 err.item_pos_y: mae=0.095842 p95=0.000000 max=13.353867
 err.item_vel_x: mae=0.038343 p95=0.000000 max=6.413950
 err.item_vel_y: mae=0.045011 p95=0.000000 max=4.999368
-overall.discrete_mismatch: 335 / 1236862
+overall.discrete_mismatch: 334 / 1236862
 overall.float_norm_mae_p95: 0.00278874
 
 == datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/TreasuredBackKangaroo.msl ==
@@ -210,5 +210,5 @@ overall.discrete_mismatch: 273 / 948277
 overall.float_norm_mae_p95: 0.00389978
 
 == suite summary ==
-overall.discrete_mismatch: 1244 / 4462843
+overall.discrete_mismatch: 1243 / 4462843
 overall.float_norm_mae_p95: 0.00334555
