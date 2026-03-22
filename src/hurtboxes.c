@@ -276,8 +276,22 @@ void hurtboxes_refresh(MslBatch* batch) {
              cur_action == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_LW_START)
                 ? 1u
                 : 0u;
+        const uint8_t is_passive_tech_entry =
+            (cur_action == (uint16_t)MSL_ACT_PASSIVE ||
+             cur_action == (uint16_t)MSL_ACT_PASSIVE_STAND_F ||
+             cur_action == (uint16_t)MSL_ACT_PASSIVE_STAND_B)
+                ? 1u
+                : 0u;
+        // Passive / PassiveStand entry ownership:
+        // - ftCo_80090184 resolves grounded tech callbacks before the post-frame snapshot.
+        // - Replay-visible entry frame 0 already carries the new motion state's hurt-status table
+        //   on these tech entries, so do not defer the frame-0 table override here.
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_80090184
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Passive.c::ftCo_800987D0
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_PassiveStand.c::ftCo_800989D4
+        // data/hurtbox_states/{fox,falco}.bin
         if (!(frame == 0u && batch->state.prev_action_id[idx] != cur_action &&
-              !is_shine_start_entry)) {
+              !is_shine_start_entry && !is_passive_tech_entry)) {
           final_hurtbox_state = hit_status;
         }
       }
