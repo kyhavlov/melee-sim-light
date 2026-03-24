@@ -1330,7 +1330,8 @@ static inline void combat_mutations_pass1_future_apply_body_hit(MslBatch* batch,
                                                                 size_t d_idx, int attacker,
                                                                 int defender, size_t hb_i,
                                                                 size_t cap_i, int int_dmg,
-                                                                uint16_t attacker_motion_id) {
+                                                                uint16_t attacker_motion_id,
+                                                                uint16_t attacker_attack_id) {
   if (batch == NULL) {
     return;
   }
@@ -1522,7 +1523,7 @@ static inline void combat_mutations_pass1_future_apply_body_hit(MslBatch* batch,
     // Attacker-side staling/combo tracking still updates on the confirmed hit.
     const uint16_t attack_instance = batch->state.attack_instance[a_idx];
     staling_queue_update(batch, a_idx, move_id, attack_instance);
-    combat_combo_ftColl_800763C0(batch, a_idx, defender, d_idx, batch->state.attack_id[a_idx]);
+    combat_combo_ftColl_800763C0(batch, a_idx, defender, d_idx, attacker_attack_id);
     return;
   }
 
@@ -1587,7 +1588,7 @@ static inline void combat_mutations_pass1_future_apply_body_hit(MslBatch* batch,
     // Combo count + last-attack tracking still happens on the collision-confirmed hit, even if the
     // later damage-state path is skipped due to `fp->dmg.kb_applied == 0`.
     // Decomp: refs/melee/src/melee/ft/ftcoll.c::ftColl_80076444 -> ftColl_800763C0(fp->x2068_attackID).
-    combat_combo_ftColl_800763C0(batch, a_idx, defender, d_idx, batch->state.attack_id[a_idx]);
+    combat_combo_ftColl_800763C0(batch, a_idx, defender, d_idx, attacker_attack_id);
     return;
   }
 
@@ -1693,7 +1694,7 @@ static inline void combat_mutations_pass1_future_apply_body_hit(MslBatch* batch,
 
   // Combo count + last-attack tracking (attacker-side).
   // Decomp: refs/melee/src/melee/ft/ftcoll.c::ftColl_80076444 -> ftColl_800763C0(fp->x2068_attackID).
-  combat_combo_ftColl_800763C0(batch, a_idx, defender, d_idx, batch->state.attack_id[a_idx]);
+  combat_combo_ftColl_800763C0(batch, a_idx, defender, d_idx, attacker_attack_id);
 }
 
 MslItemHitResult combat_apply_item_hit(MslBatch* batch, int batch_index, int attacker, int defender,
@@ -2575,6 +2576,17 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
   // refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078C70,ftColl_8007699C}
   uint8_t clank_pair_done[MSL_MAX_PLAYERS][MSL_MAX_PLAYERS] = {{0}};
   uint8_t clank_skip_hb[MSL_MAX_PLAYERS][MSL_MAX_PLAYERS][MSL_MAX_HITBOXES] = {{{0}}};
+  uint16_t pre_combat_attack_id[MSL_MAX_PLAYERS] = {0};
+
+  // Collision attack-id snapshot:
+  // - ftColl_80076444 / ftColl_800763C0 consume the attack id attached to the current collision
+  //   pass, before later same-frame ProcessHit/ChangeMotionState effects can rewrite fp->x2068.
+  // refs/melee/src/melee/ft/ftcoll.c::{ftColl_80076444,ftColl_800763C0}
+  // refs/melee/src/melee/ft/ft_0881.c::ft_800890D0
+  for (int p = 0; p < num_players; p++) {
+    const size_t idx = msl_idx_player(bi, p);
+    pre_combat_attack_id[p] = batch->state.attack_id[idx];
+  }
 
   // Process HitElement_Catch fighter-vs-fighter contacts before shield/body damage selection.
   // Decomp shape: refs/melee/src/melee/ft/ftcoll.c::ftColl_80078A2C
@@ -3176,8 +3188,9 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
             combat_mutations_pass1_future_apply_body_hit_invincible(batch, a_idx, hb_i,
                                                                     a_motion_id);
           } else {
-            combat_mutations_pass1_future_apply_body_hit(batch, a_idx, d_idx, attacker, defender,
-                                                         hb_i, cap_i, int_dmg, a_motion_id);
+            combat_mutations_pass1_future_apply_body_hit(
+                batch, a_idx, d_idx, attacker, defender, hb_i, cap_i, int_dmg, a_motion_id,
+                pre_combat_attack_id[attacker]);
           }
           // Hitlist register: decomp hitlists store a victim pointer inside HitCapsule
           // (HitVictim.victim), so the victim identity is stable across the defender's damage-state
