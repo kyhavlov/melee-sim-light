@@ -11,6 +11,7 @@
 #include "char_params.h"
 #include "input_axis.h"
 #include "locomotion.h"
+#include "move_tables.h"
 #include "trigger_input.h"
 #include "jump_input.h"
 #include "knockdown.h"
@@ -252,6 +253,20 @@ void escape_update_grounded(MslBatch* batch, const MslCommonParams* c, const Msl
     smid = (uint32_t)MSL_SM_ESCAPE_B;
   }
   batch->state.animation_index[idx] = smid;
+
+  if (a == (uint16_t)MSL_ACT_ESCAPE_F &&
+      batch->state.prev_action_id[idx] == (uint16_t)MSL_ACT_ESCAPE_F &&
+      move_tables_escapef_should_flip_facing(
+          batch->state.char_id[idx], batch->state.prev_action_frame[idx],
+          batch->state.action_frame[idx])) {
+    // Decomp: Escape_Anim flips facing when ftCheckThrowB3 consumes the script-owned bit.
+    // The EscapeF script emits set_throw_flags(hit_idx=0) at the extracted action-frame threshold.
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Escape.c::ftCo_Escape_Anim
+    // refs/melee/src/melee/ft/inlines.h::ftCheckThrowB3
+    // refs/melee/src/melee/ft/ftaction.c::ftAction_800718A4
+    // data/moves/{fox,falco}.json moves["ftCo_SM_EscapeF"]["events"] set_throw_flags
+    batch->state.facing[idx] = batch->state.facing[idx] ? 0u : 1u;
+  }
 
   // NOTE: Escape ground velocity updates are a single-writer in physics_integrate().
   // Decomp:

@@ -679,6 +679,8 @@ def main() -> None:
         # Guard hold script timing for fp->allow_interrupt ownership.
         # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c
         "ftCo_SM_Guard",
+        "ftCo_SM_EscapeF",
+        "ftCo_SM_EscapeB",
         "ftCo_SM_Attack11",
         "ftCo_SM_Attack12",
         "ftCo_SM_Attack13",

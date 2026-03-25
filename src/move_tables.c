@@ -72,6 +72,7 @@ enum {
 };
 static MslFrameWindow g_allow_interrupt_by_char_grounded_attack[256][MSL_GROUNDED_ATTACK_KIND_COUNT];
 static MslFrameWindow g_allow_interrupt_by_char_escape_n[256];
+static MslFrameWindow g_throw_flags_by_char_escape_f[256];
 static MslFrameWindow g_jab_combo_by_char_grounded_attack[256][MSL_GROUNDED_ATTACK_KIND_COUNT];
 static MslFrameWindow g_jab_rapid_by_char_grounded_attack[256][MSL_GROUNDED_ATTACK_KIND_COUNT];
 static MslFrameWindow g_cmd0_by_char_dash[256];
@@ -1464,6 +1465,20 @@ static int load_one(const char* data_dir, const char* rel_path, uint8_t char_id)
     g_cmd0_by_char_runbrake[char_id] = win;
   }
 
+  // EscapeF script-facing flip trigger.
+  //
+  // Decomp:
+  // - Escape_Anim consumes ftCheckThrowB3(fp) and flips facing when the bit is set.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Escape.c::ftCo_Escape_Anim
+  // refs/melee/src/melee/ft/inlines.h::ftCheckThrowB3
+  //
+  // Source of truth:
+  // - data/moves/{fox,falco}.json moves["ftCo_SM_EscapeF"]["events"] set_throw_flags(hit_idx=0)
+  win = (MslFrameWindow){0};
+  if (parse_throw_flags_window_open_end(buf, buf_end, "ftCo_SM_EscapeF", &win) == 0) {
+    g_throw_flags_by_char_escape_f[char_id] = win;
+  }
+
   // Catch/CatchDash set_throw_flags triggers (used by CatchPull_Anim -> CatchWait transition).
   //
   // Decomp: CatchPull_Anim tests fp->throw_flags and enters CatchWait (fn_800DA1D8) when set.
@@ -1718,6 +1733,19 @@ uint8_t move_tables_escape_allow_interrupt(uint8_t char_id, uint16_t action_id,
   // refs/melee/src/melee/ft/ftaction.c::ftAction_80071950
   return (cur_anim_frame_f32 >= (float)win.start_af && cur_anim_frame_f32 < (float)win.end_af) ? 1
                                                                                                : 0;
+}
+
+uint8_t move_tables_escapef_should_flip_facing(uint8_t char_id, int16_t prev_action_frame,
+                                               int16_t cur_action_frame) {
+  const MslFrameWindow win = g_throw_flags_by_char_escape_f[char_id];
+  if (!win.loaded) {
+    return 0;
+  }
+  // EscapeF consumes the set_throw_flags(hit_idx=0) bit through ftCheckThrowB3 during Anim.
+  // Model the one-shot consume as an action-frame threshold crossing within the current step.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Escape.c::ftCo_Escape_Anim
+  // refs/melee/src/melee/ft/inlines.h::ftCheckThrowB3
+  return (prev_action_frame < win.start_af && cur_action_frame >= win.start_af) ? 1u : 0u;
 }
 
 uint8_t move_tables_jab_combo_active(uint8_t char_id, uint16_t grounded_action_id,

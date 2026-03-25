@@ -57,6 +57,18 @@ uint8_t move_tables_grounded_attack_allow_interrupt(uint8_t char_id, uint16_t gr
 uint8_t move_tables_escape_allow_interrupt(uint8_t char_id, uint16_t action_id,
                                            float cur_anim_frame_f32);
 
+// Returns whether EscapeF should consume a script-driven facing flip this frame.
+//
+// Decomp:
+// - EscapeF anim callback flips facing when ftCheckThrowB3(fp) consumes the script-owned bit.
+// refs/melee/src/melee/ft/chara/ftCommon/ftCo_Escape.c::ftCo_Escape_Anim
+// refs/melee/src/melee/ft/inlines.h::ftCheckThrowB3
+//
+// Source of truth:
+// - data/moves/{fox,falco}.json moves["ftCo_SM_EscapeF"]["events"] set_throw_flags(hit_idx=0).
+uint8_t move_tables_escapef_should_flip_facing(uint8_t char_id, int16_t prev_action_frame,
+                                               int16_t cur_action_frame);
+
 // Returns whether jab combo gate (fp->x2218_b1) is active at the given cur_anim_frame.
 //
 // Decomp:

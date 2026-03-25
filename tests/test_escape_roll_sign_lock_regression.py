@@ -62,13 +62,17 @@ class _Case:
 
 _BASE = "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent"
 _TARGET_CASES = [
+    _Case("AGG:2040:p0", f"{_BASE}/AttachedGoodNaturedGuanaco.msl", 2040, 0),
     _Case("AGG:1810:p0", f"{_BASE}/AttachedGoodNaturedGuanaco.msl", 1810, 0),
     _Case("AGG:2041:p0", f"{_BASE}/AttachedGoodNaturedGuanaco.msl", 2041, 0),
     _Case("GAT:597:p1", f"{_BASE}/GracefulAttachedTurtle.msl", 597, 1),
+    _Case("TBK:245:p0", f"{_BASE}/TreasuredBackKangaroo.msl", 245, 0),
+    _Case("TBK:748:p1", f"{_BASE}/TreasuredBackKangaroo.msl", 748, 1),
 ]
 _CONTROL_CASES = [
     _Case("AGG:1811:p0", f"{_BASE}/AttachedGoodNaturedGuanaco.msl", 1811, 0),
     _Case("GAT:598:p1", f"{_BASE}/GracefulAttachedTurtle.msl", 598, 1),
+    _Case("TBK:749:p1", f"{_BASE}/TreasuredBackKangaroo.msl", 749, 1),
 ]
 
 
