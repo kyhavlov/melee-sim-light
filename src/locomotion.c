@@ -789,6 +789,20 @@ static inline uint8_t grounded_a_attack_try_enter_from_iasa(
 
   batch->state.action_id[idx] = act;
   batch->state.animation_index[idx] = sm;
+  if (act == (uint16_t)MSL_ACT_ATTACK_S4_HI || act == (uint16_t)MSL_ACT_ATTACK_S4_HI_S ||
+      act == (uint16_t)MSL_ACT_ATTACK_S4_S || act == (uint16_t)MSL_ACT_ATTACK_S4_LW_S ||
+      act == (uint16_t)MSL_ACT_ATTACK_S4_LW) {
+    // Decomp: ftCo_AttackS4_CheckInput / ftCo_AttackS4_8008C114 route through decideFighter,
+    // which assigns `fp->facing_dir = stick_x_sign` before entering the chosen AttackS4* motion.
+    // For A-button entry this sign comes from the current control stick; for C-stick entry it comes
+    // from the current C-stick edge sign.
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackS4.c::{
+    //   ftCo_AttackS4_CheckInput,ftCo_AttackS4_8008C114,decideFighter
+    // }
+    const float smash_stick_x =
+        c_side_edge ? stick_i8_to_unit(batch->state.input_c_x[idx]) : stick_x;
+    batch->state.facing[idx] = (uint8_t)(smash_stick_x >= 0.0f);
+  }
   // AttackDash enter helper clears mv.co.attackdash.x0 on motion-state entry.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackDash.c::doEnter
   if (act == (uint16_t)MSL_ACT_ATTACK_DASH) {
