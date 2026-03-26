@@ -628,6 +628,13 @@ void grab_flow_on_catch_connect(MslBatch* batch, int bi, int owner_p, int victim
     batch->state.action_id[vidx] = (uint16_t)MSL_ACT_CAPTURE_PULLED_HI;
     batch->state.animation_index[vidx] = (uint32_t)MSL_SM_CAPTURE_PULLED_HI;
   }
+  // CapturePulled entry facing ownership:
+  // - fn_800DA8E4 negates the owner's facing_dir and writes it into the victim before
+  //   Fighter_ChangeMotionState installs CapturePulledHi/Lw.
+  // - This is distinct from Thrown* entry, which copies the thrower's facing unchanged.
+  // refs/melee/build/GALE01/asm/melee/ft/chara/ftCommon/ftCo_Attack100.s::fn_800DA8E4
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Thrown.c::ftCo_800DE3FC
+  batch->state.facing[vidx] = batch->state.facing[oidx] ? 0u : 1u;
   msl_anim_timebase_enter(batch, vidx, 0.0f, 1.0f);
   // Decomp: capture-pulled entry helper immediately ticks anim once via ftAnim_8006EBA4.
   // refs/melee/build/GALE01/asm/melee/ft/chara/ftCommon/ftCo_Attack100.s::fn_800DAA10

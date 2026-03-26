@@ -2470,6 +2470,8 @@ void locomotion_update_pre(MslBatch* batch) {
         // Turn IASA (minimal): Jump and Dash.
         //
         // Decomp:
+        // - ftCo_Turn_IASA temporarily flips fp->facing_dir before the grounded attack checks, so
+        //   any consumed Attack* entry inherits `mv.co.turn.facing_after`.
         // - ftCo_Turn_IASA calls ftCo_Jump_CheckInput.
         // - Then it runs a Turn->Dash gate via:
         //   - fn_800C9C2C (sets mv.co.turn.x8 when a dash-flick toward mv.co.turn.facing_after
@@ -2478,13 +2480,20 @@ void locomotion_update_pre(MslBatch* batch) {
         // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Turn.c::ftCo_Turn_IASA
         // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Turn.c::fn_800C9C2C
         if (action_id == MSL_ACT_TURN && action_id_start == MSL_ACT_TURN) {
-          const float turn_attack_facing_dir =
-              batch->state.turn_has_turned[idx] ? facing_dir : -facing_dir;
-          if (grounded_a_attack_try_enter_from_iasa(batch, c, idx, buttons_pressed, stick_x,
-                                                    stick_y, tilt_timer_x, tilt_timer_y,
-                                                    turn_attack_facing_dir, 0, 1)) {
+          uint8_t turn_attack_facing_flipped = 0u;
+          if (!batch->state.turn_has_turned[idx]) {
+            batch->state.facing[idx] = batch->state.facing[idx] ? 0u : 1u;
+            facing_dir = batch->state.facing[idx] ? 1.0f : -1.0f;
+            turn_attack_facing_flipped = 1u;
+          }
+          if (grounded_a_attack_try_enter_from_iasa(batch, c, idx, buttons_pressed, stick_x, stick_y,
+                                                    tilt_timer_x, tilt_timer_y, facing_dir, 0, 1)) {
             action_id = batch->state.action_id[idx];
           } else {
+            if (turn_attack_facing_flipped) {
+              batch->state.facing[idx] = batch->state.facing[idx] ? 0u : 1u;
+              facing_dir = batch->state.facing[idx] ? 1.0f : -1.0f;
+            }
             const MslJumpInput j_in =
                 jump_input_from_edges(c, buttons_pressed, stick_y, tilt_timer_y);
             if (j_in != MSL_JUMP_INPUT_NONE && batch->state.jumps_left[idx] > 0) {
