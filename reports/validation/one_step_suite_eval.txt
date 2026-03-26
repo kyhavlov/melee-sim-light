@@ -88,7 +88,7 @@ Records: 11529  Players/scored per record: 2  Total player-frames: 23058
 mismatch.action_id: 27 / 23058 (0.001171)
 mismatch.action_frame: 32 / 23058 (0.001388)
 mismatch.on_ground: 5 / 23058 (0.000217)
-mismatch.facing: 4 / 23058 (0.000173)
+mismatch.facing: 2 / 23058 (0.000087)
 mismatch.stocks: 0 / 23058 (0.000000)
 mismatch.jumps_left: 10 / 23058 (0.000434)
 mismatch.is_dead: 0 / 23058 (0.000000)
@@ -122,7 +122,7 @@ err.item_pos_x: mae=0.078399 p95=0.000000 max=71.544670
 err.item_pos_y: mae=0.032390 p95=0.000000 max=26.796017
 err.item_vel_x: mae=0.028124 p95=0.000000 max=6.760003
 err.item_vel_y: mae=0.027846 p95=0.000000 max=6.995885
-overall.discrete_mismatch: 357 / 1395009
+overall.discrete_mismatch: 355 / 1395009
 overall.float_norm_mae_p95: 0.00350311
 
 == datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/QuerulousGrandDinosaur.msl ==
@@ -130,7 +130,7 @@ Records: 10222  Players/scored per record: 2  Total player-frames: 20444
 mismatch.action_id: 18 / 20444 (0.000880)
 mismatch.action_frame: 40 / 20444 (0.001957)
 mismatch.on_ground: 6 / 20444 (0.000293)
-mismatch.facing: 10 / 20444 (0.000489)
+mismatch.facing: 8 / 20444 (0.000391)
 mismatch.stocks: 0 / 20444 (0.000000)
 mismatch.jumps_left: 15 / 20444 (0.000734)
 mismatch.is_dead: 0 / 20444 (0.000000)
@@ -164,7 +164,7 @@ err.item_pos_x: mae=0.150515 p95=0.000000 max=18.720001
 err.item_pos_y: mae=0.090571 p95=0.000000 max=13.353867
 err.item_vel_x: mae=0.033511 p95=0.000000 max=6.413950
 err.item_vel_y: mae=0.039740 p95=0.000000 max=4.994216
-overall.discrete_mismatch: 310 / 1236862
+overall.discrete_mismatch: 308 / 1236862
 overall.float_norm_mae_p95: 0.00276844
 
 == datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/TreasuredBackKangaroo.msl ==
@@ -172,7 +172,7 @@ Records: 7837  Players/scored per record: 2  Total player-frames: 15674
 mismatch.action_id: 20 / 15674 (0.001276)
 mismatch.action_frame: 24 / 15674 (0.001531)
 mismatch.on_ground: 2 / 15674 (0.000128)
-mismatch.facing: 8 / 15674 (0.000510)
+mismatch.facing: 7 / 15674 (0.000447)
 mismatch.stocks: 0 / 15674 (0.000000)
 mismatch.jumps_left: 10 / 15674 (0.000638)
 mismatch.is_dead: 0 / 15674 (0.000000)
@@ -206,9 +206,9 @@ err.item_pos_x: mae=0.115658 p95=0.000000 max=73.618073
 err.item_pos_y: mae=0.050499 p95=0.000000 max=31.795383
 err.item_vel_x: mae=0.047115 p95=0.000000 max=7.000000
 err.item_vel_y: mae=0.041694 p95=0.000000 max=6.995885
-overall.discrete_mismatch: 258 / 948277
+overall.discrete_mismatch: 257 / 948277
 overall.float_norm_mae_p95: 0.00382365
 
 == suite summary ==
-overall.discrete_mismatch: 1161 / 4462843
+overall.discrete_mismatch: 1156 / 4462843
 overall.float_norm_mae_p95: 0.00328691

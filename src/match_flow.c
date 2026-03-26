@@ -266,6 +266,19 @@ static inline void enter_rebirth(MslBatch* batch, size_t idx, const MslCommonPar
   batch->state.ground_normal_y[idx] = 1.0f;
   batch->state.ground_contact_x[idx] = 0.0f;
   batch->state.ground_contact_y[idx] = 0.0f;
+  // Decomp reset path reinitializes facing on respawn before Rebirth becomes active:
+  // - Fighter_UnkInitReset_80067C98 loads player coords, then sets `fp->facing_dir =
+  //   Player_GetFacingDirection(fp->player_id)`.
+  // refs/melee/src/melee/ft/fighter.c::Fighter_UnkInitReset_80067C98
+  //
+  // Current extracted stage contract does not expose the per-port facing table directly, but on
+  // Final Destination the respawn points face toward the stage camera midpoint. Reconstruct that
+  // decomp-owned spawn-facing from the extracted camera bounds already loaded for this stage.
+  // data/stages/final_destination.json: cam_bounds_world, respawn_points
+  {
+    const float cam_mid_x = 0.5f * (cam.left + cam.right);
+    batch->state.facing[idx] = (uint8_t)(respawn.x <= cam_mid_x ? 1u : 0u);
+  }
   batch->state.pos_x[idx] = respawn.x;
   batch->state.pos_y[idx] = cam.top;
 
