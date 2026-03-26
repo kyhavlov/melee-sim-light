@@ -429,6 +429,23 @@ static inline void combat_state_flags_set_x221c_b0(MslBatch* batch, size_t idx) 
   batch->state.state_flags[flags_i] |= (uint8_t)MSL_STATE_FLAG_221C_B0;
 }
 
+static inline void combat_state_flags_clear_x221c_b0(MslBatch* batch, size_t idx) {
+  if (batch == NULL) {
+    return;
+  }
+  enum { MSL_STATE_FLAGS_STRIDE = MSL_STATE_FLAGS_BYTES };
+  enum { MSL_STATE_FLAGS_221C_INDEX = 3 };
+  enum { MSL_STATE_FLAG_221C_B0 = 0x80 };
+
+  // Motion-state reset ownership for fp+0x221C_b0:
+  // - Fighter_ChangeMotionState clears fp->x221C_b0 on destination entry.
+  // - Damage state entry uses Fighter_ChangeMotionState via ftCo_8008DCE0 / ftCo_8008EC90.
+  // refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{ftCo_8008DCE0,ftCo_8008EC90}
+  const size_t flags_i = idx * MSL_STATE_FLAGS_STRIDE + (size_t)MSL_STATE_FLAGS_221C_INDEX;
+  batch->state.state_flags[flags_i] &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221C_B0;
+}
+
 static inline void combat_apply_ftCommon_8007D5D4_ground_to_air(MslBatch* batch, size_t idx) {
   if (batch == NULL) {
     return;
@@ -1660,6 +1677,7 @@ static inline void combat_mutations_pass1_future_apply_body_hit(MslBatch* batch,
   const uint16_t hs = combat_damage_hitstun_from_kb(c, kb_applied);
   batch->state.hitstun[d_idx] = hs;
   combat_state_flags_set_is_hitstun(batch, d_idx, hs);
+  combat_state_flags_clear_x221c_b0(batch, d_idx);
   // Decomp: Fighter_ProcessHit can set fp->x221A_b3 alongside hitlag start under KB/damage paths
   // (see `bool2`). The stable latch point we can model without additional hidden state is
   // "hitlag started this frame" (hitlag increased), because x221A_b3 is:
