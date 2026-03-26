@@ -1920,9 +1920,20 @@ MslItemHitResult combat_apply_item_hit(MslBatch* batch, int batch_index, int att
     kb_vel_mag *= c->air_motion_kb_mul;
   }
 
-  // Horizontal sign: away from attacker fighter (owner), consistent with combat BODY apply.
-  const float away = (batch->state.pos_x[d_idx] >= batch->state.pos_x[a_idx]) ? 1.0f : -1.0f;
-  batch->state.speed_x_attack[d_idx] = away * (kb_vel_mag * cosf(kb_angle_rad));
+  // Horizontal sign for item-hit knockback follows the same facing_dir_1 ownership as BODY hits:
+  // collision stores fp->dmg.facing_dir_1 from the relative X ordering between victim and source,
+  // then ftCo_8008DCE0 sets facing from that sign before applying `-x * facing_dir_1`.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
+  // refs/melee/build/GALE01/asm/melee/ft/ftcoll.s::ftColl_8007A06C
+  //
+  // This item path keeps the source lane scoped to the owning fighter transform instead of
+  // reconstructing an unseeded contact point.
+  const float one = combat_damage_ftColl_804D82EC_one();
+  const float defender_facing_dir_1 =
+      (batch->state.pos_x[d_idx] > batch->state.pos_x[a_idx]) ? -one : one;
+  batch->state.facing[d_idx] = (uint8_t)(defender_facing_dir_1 > 0.0f);
+  batch->state.speed_x_attack[d_idx] =
+      -defender_facing_dir_1 * (kb_vel_mag * cosf(kb_angle_rad));
   batch->state.speed_y_attack[d_idx] = kb_vel_mag * sinf(kb_angle_rad);
 
   const uint16_t hs = combat_damage_hitstun_from_kb(c, kb_applied);
