@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from tools.eval.diff_locate import diff_locate_rows
+from tools.eval.facing_residual_blocker_report import FacingResidualRow, build_summary
 from tools.eval.locate_discrete_mismatches import ITEM_FIELD_TO_SUBFIELD
 from tools.eval.locate_tsv import parse_locate_tsv
 from tools.eval.rollout_metrics import diff_rollout_summaries, summarize_rollout_payload, validate_rollout_payload
@@ -196,3 +197,59 @@ def test_rollout_metrics_validate_payload_requires_expected_keys() -> None:
         assert "missing keys" in str(e)
         return
     raise AssertionError("expected ValueError for missing rollout payload keys")
+
+
+def test_facing_residual_blocker_report_groups_seed_visible_context() -> None:
+    rows = [
+        FacingResidualRow(
+            dataset="d.msl",
+            record=10,
+            seed_frame=100,
+            ref_frame=101,
+            p=0,
+            seed_action_id=0x005B,
+            ref_action_id=0x0058,
+            out_action_id=0x005B,
+            prev_action_id=0x0019,
+            on_ground=0,
+            hitlag=0,
+            hitstun=0,
+            seed_facing=1,
+            ref_facing=1,
+            out_facing=0,
+            x2228_b7=0,
+            last_hit_by=0,
+            combo_count=1,
+        ),
+        FacingResidualRow(
+            dataset="d.msl",
+            record=11,
+            seed_frame=101,
+            ref_frame=102,
+            p=0,
+            seed_action_id=0x005B,
+            ref_action_id=0x0058,
+            out_action_id=0x005B,
+            prev_action_id=0x0019,
+            on_ground=0,
+            hitlag=0,
+            hitstun=0,
+            seed_facing=1,
+            ref_facing=1,
+            out_facing=0,
+            x2228_b7=0,
+            last_hit_by=0,
+            combo_count=1,
+        ),
+    ]
+
+    summary = build_summary(
+        rows,
+        action_names={0x005B: "DAMAGE_FLY_ROLL", 0x0058: "DAMAGE_FLY_N", 0x0019: "JUMP_F"},
+        top_n=5,
+    )
+
+    assert summary["row_count"] == 2
+    assert summary["top_ref_out"] == [{"ref_out": "1->0", "count": 2}]
+    assert summary["top_clusters"][0]["seed_action_name"] == "DAMAGE_FLY_ROLL"
+    assert summary["top_clusters"][0]["prev_action_name"] == "JUMP_F"
