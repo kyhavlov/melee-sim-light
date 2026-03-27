@@ -130,7 +130,7 @@ Records: 10222  Players/scored per record: 2  Total player-frames: 20444
 mismatch.action_id: 18 / 20444 (0.000880)
 mismatch.action_frame: 40 / 20444 (0.001957)
 mismatch.on_ground: 6 / 20444 (0.000293)
-mismatch.facing: 8 / 20444 (0.000391)
+mismatch.facing: 7 / 20444 (0.000342)
 mismatch.stocks: 0 / 20444 (0.000000)
 mismatch.jumps_left: 15 / 20444 (0.000734)
 mismatch.is_dead: 0 / 20444 (0.000000)
@@ -164,7 +164,7 @@ err.item_pos_x: mae=0.150515 p95=0.000000 max=18.720001
 err.item_pos_y: mae=0.090571 p95=0.000000 max=13.353867
 err.item_vel_x: mae=0.033511 p95=0.000000 max=6.413950
 err.item_vel_y: mae=0.039740 p95=0.000000 max=4.994216
-overall.discrete_mismatch: 308 / 1236862
+overall.discrete_mismatch: 307 / 1236862
 overall.float_norm_mae_p95: 0.00276844
 
 == datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/TreasuredBackKangaroo.msl ==
@@ -210,5 +210,5 @@ overall.discrete_mismatch: 257 / 948277
 overall.float_norm_mae_p95: 0.00382365
 
 == suite summary ==
-overall.discrete_mismatch: 1156 / 4462843
+overall.discrete_mismatch: 1155 / 4462843
 overall.float_norm_mae_p95: 0.00328691

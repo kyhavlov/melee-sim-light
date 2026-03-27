@@ -429,6 +429,17 @@ void shine_update_pre_physics(MslBatch* batch) {
           stick_wants_speciallw(c, batch->state.input_main_y[idx])) {
         if (on_ground) {
           if (action_allows_shine_entry_ground(a) || landing_specials_open) {
+            // Turn IASA ownership:
+            // - ftCo_Turn_IASA temporarily flips fp->facing_dir to mv.co.turn.facing_after before
+            //   ftCo_800D68C0 consumes grounded special input, then restores it only on the
+            //   fallthrough path.
+            // - Reflector start entered from Turn therefore inherits facing_after on the consume path.
+            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Turn.c::ftCo_Turn_IASA
+            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_800D68C0
+            // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c::ftFx_SpecialLw_Enter
+            if (a == (uint16_t)MSL_ACT_TURN && !batch->state.turn_has_turned[idx]) {
+              batch->state.facing[idx] = batch->state.facing[idx] ? 0u : 1u;
+            }
             shine_release_setvars(batch, idx, ch);
             enter_shine_ground_start(batch, idx, ms);
             shine_entered_this_frame = 1u;
