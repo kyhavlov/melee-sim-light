@@ -1865,7 +1865,27 @@ void locomotion_update_pre(MslBatch* batch) {
         // Turn: decomp `frames_to_turn` countdown + flip on 0 (Anim step).
         // Only tick if Turn was already active at frame start (avoid flip on same-frame entry).
         if (action_id_start == MSL_ACT_TURN) {
+          const int16_t turn_first_steady_postflip_af = (int16_t)(ch->turn_frames + 2);
           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Turn.c:56-88 (ftCo_Turn_Anim_Inner)
+          // Basic-Turn first steady post-flip facing reconstruction:
+          // - ftCo_Turn_Anim_Inner flips facing once `frames_to_turn` expires, and locomotion runs
+          //   after the frame's anim tick has already advanced action_frame/anim_frame.
+          // - On reseeded basic-Turn rows (`x8==0`) that already carry `has_turned=1`, the stale
+          //   facing shows up on the first steady post-flip frame rather than the immediate flip
+          //   tick. Reconstruct only that one-frame lane; smash-turn / dash-latch rows keep their
+          //   native x8 ownership.
+          // - In this sim ordering, that steady post-flip row is `turn_frames + 2`: one tick to
+          //   flip, then one more tick because locomotion observes post-Anim action_frame.
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Turn.c::{
+          //   ftCo_Turn_Enter,ftCo_Turn_Enter_Basic,ftCo_Turn_Anim_Inner,ftCo_Turn_Enter_Smash}
+          // data/characters/{fox,falco}.json turn_frames
+          if (batch->state.turn_has_turned[idx] && batch->state.turn_frames_to_turn[idx] == 0u &&
+              batch->state.turn_x8[idx] == 0 &&
+              batch->state.action_frame[idx] == turn_first_steady_postflip_af &&
+              batch->state.speed_ground_x_self[idx] == 0.0f) {
+            batch->state.facing[idx] = batch->state.facing[idx] ? 0u : 1u;
+            facing_dir = batch->state.facing[idx] ? 1.0f : -1.0f;
+          }
           if (batch->state.turn_frames_to_turn[idx] > 0) {
             batch->state.turn_frames_to_turn[idx]--;
           } else if (!batch->state.turn_has_turned[idx]) {
