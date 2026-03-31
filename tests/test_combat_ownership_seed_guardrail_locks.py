@@ -1407,6 +1407,169 @@ def test_hitboxes_seed_bridge_early_window_owner_mismatch_trim_rows_and_adjacent
 
 
 @pytest.mark.integration
+def test_hitboxes_seed_bridge_create_edge_group_materialization_blocker_families_and_counterexample() -> None:
+    # Blocker evidence for the next create-edge reseed bridge lane:
+    # - four blocker rows share the same first-active-frame shape:
+    #   age-1 enable edge, direct dense hitlist victim present for (attacker, hit_group=0),
+    #   BODY contact present, replay ref stays no-new-hit, and current runtime still misses by
+    #   leaving the new hitbox's victims_1 empty.
+    # - QGD:7173 is a nearby blocker with the same age-1 BODY/no-hit outcome but no direct
+    #   same-attacker dense hitlist entry, proving a direct-group bridge alone is insufficient.
+    # - QGD:6822 is the counterexample that made the broad runtime lane unsafe: an opposite-side
+    #   create-edge hitbox also has a dense hitlist entry in the seed snapshot, yet the row is
+    #   replay-real exact today and broadening materialization there suppresses the real hit.
+    #
+    # Decomp ownership anchors:
+    # - ftColl_800768A0 copies same-hit_group HitCapsule victims_1, else clears via lbColl_80008440.
+    # - teacher-forced reseed stores only a dense group snapshot, so the unresolved blocker is
+    #   separating which create-edge rows legitimately need a bridge from those where the decomp
+    #   clear/copy path must remain untouched.
+    # refs/melee/src/melee/ft/ftcoll.c::ftColl_800768A0
+    # refs/melee/src/melee/lb/lbcollision.c::{lbColl_CopyHitCapsule,lbColl_80008440}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+
+    blocker_rows = [
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl",
+            2221,
+            1,  # attacker
+            1,  # hitbox id
+            0,  # victim
+        ),
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/QuerulousGrandDinosaur.msl",
+            285,
+            0,
+            0,
+            1,
+        ),
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/QuerulousGrandDinosaur.msl",
+            8222,
+            0,
+            0,
+            1,
+        ),
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/TreasuredBackKangaroo.msl",
+            5247,
+            1,
+            0,
+            0,
+        ),
+    ]
+
+    binding = pytest.importorskip("msl_binding")
+    sizes = binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+
+    for dataset_rel, record, attacker, hb_id, victim in blocker_rows:
+        dataset_path = root / dataset_rel
+        if not dataset_path.exists():
+            pytest.skip(f"missing local dataset: {dataset_rel}")
+
+        ds = read_dataset(str(dataset_path))
+        samples = ds.samples
+        assert int(samples.shape[0]) > record, f"dataset too short for lock row: record={record}"
+
+        seed_t = samples["seed_t"][record]
+        ref_t1 = samples["ref_t1"][record]
+
+        # Causal preconditions for the create-edge seed-group bridge.
+        assert int(seed_t["combat_hitlist_cd"][attacker, 0, victim]) == 0xFFFF
+        assert int(ref_t1["hitlag"][victim]) == 0
+
+        _, contacts, _, timing = _run_pre_combat_debug_row(dataset_path, record, attacker, hb_id)
+        assert int(timing["enabled_cur"]) == 1
+        assert int(timing["enabled_prev"]) == 0
+        assert int(timing["enable_edge"]) == 1
+        assert int(timing["pose_frame"]) - int(timing["start_frame"]) + 1 == 1
+        body_hits = [
+            c
+            for c in contacts
+            if int(c["attacker"]) == attacker
+            and int(c["defender"]) == victim
+            and int(c["hitbox_id"]) == hb_id
+            and int(c["contact_kind"]) == 0
+        ]
+        assert body_hits
+
+        row = samples[record : record + 1]
+        seed_bytes = np.frombuffer(row["seed_t"].tobytes(order="C"), dtype=np.uint8).copy().reshape(1, seed_stride)
+        prev_input_bytes = np.frombuffer(row["prev_input_t"].tobytes(order="C"), dtype=np.uint8).copy().reshape(
+            1, input_stride
+        )
+        input_bytes = np.frombuffer(row["input_t"].tobytes(order="C"), dtype=np.uint8).copy().reshape(1, input_stride)
+
+        handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+        try:
+            binding.reseed_seed(handle, seed_bytes)
+            binding.debug_step_input_pre_combat(handle, prev_input_bytes, input_bytes)
+            hitlist_contains = int(binding.debug_hitlist_fighter_contains(handle, 0, attacker, hb_id, victim))
+        finally:
+            binding.destroy(handle)
+
+        assert hitlist_contains == 0
+
+        seed_row, ref_row, out_row = _run_one_step_row(dataset_path, record, victim)
+        assert int(seed_row["combat_hitlist_cd"][attacker, 0, victim]) == 0xFFFF
+        assert (
+            int(out_row["action_id"][victim]) != int(ref_row["action_id"][victim])
+            or int(out_row["hitlag"][victim]) != int(ref_row["hitlag"][victim])
+            or int(out_row["hitstun"][victim]) != int(ref_row["hitstun"][victim])
+            or out_row["state_flags"][victim].tolist() != ref_row["state_flags"][victim].tolist()
+            or int(out_row["instance_id"][victim]) != int(ref_row["instance_id"][victim])
+        )
+
+    # Same create-edge BODY/no-hit blocker, but with no direct same-attacker dense hitlist entry.
+    qgd_7173 = (
+        root
+        / "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/QuerulousGrandDinosaur.msl"
+    )
+    seed_7173, ref_7173, out_7173 = _run_one_step_row(qgd_7173, 7173, 1)
+    assert int(seed_7173["combat_hitlist_cd"][0, 0, 1]) == 0
+    _, contacts_7173, _, timing_7173 = _run_pre_combat_debug_row(qgd_7173, 7173, 0, 0)
+    assert int(timing_7173["enabled_cur"]) == 1
+    assert int(timing_7173["enabled_prev"]) == 0
+    assert int(timing_7173["enable_edge"]) == 1
+    assert int(timing_7173["pose_frame"]) - int(timing_7173["start_frame"]) + 1 == 1
+    assert any(
+        int(c["attacker"]) == 0
+        and int(c["defender"]) == 1
+        and int(c["hitbox_id"]) == 0
+        and int(c["contact_kind"]) == 0
+        for c in contacts_7173
+    )
+    assert int(out_7173["hitlag"][1]) != int(ref_7173["hitlag"][1])
+
+    # Counterexample: opposite-side create-edge dense-hitlist ownership is present, but the row is
+    # replay-real exact today. Any broad materialization lane that touches this side suppresses the
+    # real hit on p1.
+    qgd_6822 = (
+        root
+        / "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/QuerulousGrandDinosaur.msl"
+    )
+    seed_6822, ref_6822, out_6822 = _run_one_step_row(qgd_6822, 6822, 1)
+    assert int(seed_6822["combat_hitlist_cd"][1, 0, 0]) == 0xFFFF
+    _, contacts_6822, _, timing_6822 = _run_pre_combat_debug_row(qgd_6822, 6822, 1, 1)
+    assert int(timing_6822["enabled_cur"]) == 1
+    assert int(timing_6822["enabled_prev"]) == 0
+    assert int(timing_6822["enable_edge"]) == 1
+    assert int(timing_6822["pose_frame"]) - int(timing_6822["start_frame"]) + 1 == 1
+    assert any(
+        int(c["attacker"]) == 1
+        and int(c["defender"]) == 0
+        and int(c["hitbox_id"]) == 1
+        and int(c["contact_kind"]) == 0
+        for c in contacts_6822
+    )
+    for p in (0, 1):
+        _assert_transition_lock_fields_match_ref(out_row=out_6822, ref_row=ref_6822, record=6822, p=p)
+
+
+@pytest.mark.integration
 @pytest.mark.parametrize(
     ("dataset_rel", "record", "p"),
     [
@@ -1770,24 +1933,11 @@ def test_runtime_hitlag_clusters_rows_resolve_to_exact_ref_t1(
             0,
             6,
             0,
-            0x00,
-            0x20,
-        ),
-        (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/QuerulousGrandDinosaur.msl",
-            8222,
-            1,
-            0x002B,  # LandingFallSpecial
-            0x002B,  # LandingFallSpecial
-            0x005A,  # DamageN2
-            0,
-            6,
-            52,
-            0x00,
-            0x30,
-        ),
-    ],
-)
+                0x00,
+                0x20,
+            ),
+        ],
+    )
 def test_runtime_hitlag_clusters_context_rows_keep_current_signatures(
     dataset_rel: str,
     record: int,
