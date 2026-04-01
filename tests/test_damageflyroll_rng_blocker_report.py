@@ -19,11 +19,11 @@ def test_build_summary_identifies_blockers_and_controls() -> None:
             dataset="a.msl",
             record=10,
             p=0,
-            role="blocker",
-            note="blocker",
+            role="resolved_control",
+            note="resolved",
             seed_action_id=67,
             ref_action_id=91,
-            out_action_id=87,
+            out_action_id=91,
             attacker_seed_action_id=67,
             attacker_seed_action_frame=3,
             seed_last_hit_by=1,
@@ -42,15 +42,38 @@ def test_build_summary_identifies_blockers_and_controls() -> None:
             dataset="b.msl",
             record=20,
             p=1,
-            role="positive_control",
-            note="control+",
+            role="blocker",
+            note="blocker",
             seed_action_id=90,
             ref_action_id=91,
-            out_action_id=91,
+            out_action_id=88,
             attacker_seed_action_id=67,
             attacker_seed_action_frame=5,
             seed_last_hit_by=0,
             seed_frame_pre_random_seed=456,
+            site1_count=1,
+            site1_roll=0.26,
+            site1_roll_window=(0.26, 0.74, 0.28, 0.45),
+            phase_advance_to_lt_threshold=2,
+            modeled_pre_gate_site_counts=(0, 0, 0),
+            requires_unmodeled_pre_gate_consumer=True,
+            compatible_fighter_8006cda4_total_consumes=(2,),
+            fighter_8006cda4_compatible_families=("held_item_primary_x418_plus_x197c_x418", "held_item_type3_x418_plus_x41c"),
+            roll_threshold=0.30,
+        ),
+        RngRowObservation(
+            dataset="c.msl",
+            record=21,
+            p=1,
+            role="positive_control",
+            note="control+",
+            seed_action_id=91,
+            ref_action_id=91,
+            out_action_id=91,
+            attacker_seed_action_id=-1,
+            attacker_seed_action_frame=-1,
+            seed_last_hit_by=6,
+            seed_frame_pre_random_seed=789,
             site1_count=1,
             site1_roll=0.26,
             site1_roll_window=(0.26, 0.74, 0.28, 0.45),
@@ -62,8 +85,8 @@ def test_build_summary_identifies_blockers_and_controls() -> None:
             roll_threshold=0.30,
         ),
         RngRowObservation(
-            dataset="c.msl",
-            record=21,
+            dataset="d.msl",
+            record=22,
             p=1,
             role="negative_control",
             note="control-",
@@ -73,7 +96,7 @@ def test_build_summary_identifies_blockers_and_controls() -> None:
             attacker_seed_action_id=-1,
             attacker_seed_action_frame=-1,
             seed_last_hit_by=6,
-            seed_frame_pre_random_seed=789,
+            seed_frame_pre_random_seed=999,
             site1_count=0,
             site1_roll=None,
             site1_roll_window=tuple(),
@@ -86,28 +109,30 @@ def test_build_summary_identifies_blockers_and_controls() -> None:
         ),
     ]
     summary = build_summary(rows)
-    assert summary["case_count"] == 3
+    assert summary["case_count"] == 4
     assert len(summary["blocker_rows"]) == 1
-    assert set(summary["blocker_phase_groups"]) == {"phase_plus_1"}
+    assert set(summary["blocker_phase_groups"]) == {"phase_plus_2"}
     assert len(summary["unmodeled_pre_gate_blockers"]) == 1
+    assert len(summary["resolved_controls"]) == 1
     assert summary["consume_critical_schema_gap_fields"] == [
         "fighter.ftCo_8008E984_guard",
         "fighter.item_gobj_presence",
         "fighter.item_hold_is_nonheavy",
+        "fighter.item_hold_projectile_empty",
+        "fighter.item_hold_subtype3",
         "fighter.x197C_presence",
         "fighter.x2220_b3",
         "fighter.x2220_b4",
         "fighter.x2226_b2",
     ]
     assert summary["consume_side_effect_only_fields"] == ["fighter.x1978_presence"]
-    assert [family["family"] for family in summary["phase_minimal_seed_families"]["phase_plus_1"]] == [
-        "x197c_x418",
-        "held_item_primary_x418",
+    assert [family["family"] for family in summary["phase_minimal_seed_families"]["phase_plus_2"]] == [
+        "held_item_primary_x418_plus_x197c_x418",
+        "held_item_type3_x418_plus_x41c",
     ]
     assert len(summary["positive_controls"]) == 1
     assert len(summary["negative_controls"]) == 1
-    assert "upstream RNG-consumer ownership" in summary["blocker"]
-    assert "different pre-gate phase advances" in summary["blocker"]
+    assert "remaining open blocker is now the DamageFlyTop carry family" in summary["blocker"]
     assert "Fighter_8006CDA4" in summary["blocker"]
     assert "x1978 is side-effect-only" in summary["blocker"]
 
@@ -161,49 +186,44 @@ def test_damageflyroll_rng_blocker_cases_and_controls_match_replay_real_trace_sh
     summary = build_summary(observations)
 
     blocker_keys = {(obs["dataset"], int(obs["record"]), int(obs["p"])) for obs in summary["blocker_rows"]}
-    assert blocker_keys == {
+    assert blocker_keys == {("TreasuredBackKangaroo.msl", 6929, 1)}
+
+    resolved_keys = {(obs["dataset"], int(obs["record"]), int(obs["p"])) for obs in summary["resolved_controls"]}
+    assert resolved_keys == {
         ("AttachedGoodNaturedGuanaco.msl", 2694, 0),
         ("GracefulAttachedTurtle.msl", 5717, 0),
-        ("TreasuredBackKangaroo.msl", 6929, 1),
     }
+
+    for obs in summary["resolved_controls"]:
+        assert int(obs["site1_count"]) == 1, obs["note"]
+        assert int(obs["ref_action_id"]) == int(obs["out_action_id"]) == 91, obs["note"]
+        assert int(obs["phase_advance_to_lt_threshold"]) in (1, 2), obs["note"]
 
     for obs in summary["blocker_rows"]:
         assert int(obs["site1_count"]) == 1, obs["note"]
         assert int(obs["ref_action_id"]) == 91, obs["note"]  # DamageFlyRoll
-        assert int(obs["out_action_id"]) in (87, 88), obs["note"]
+        assert int(obs["out_action_id"]) == 88, obs["note"]
         assert float(obs["site1_roll"]) >= float(obs["roll_threshold"]), obs["note"]
-        assert int(obs["phase_advance_to_lt_threshold"]) in (1, 2), obs["note"]
+        assert int(obs["phase_advance_to_lt_threshold"]) == 2, obs["note"]
         assert len(obs["site1_roll_window"]) == 4, obs["note"]
         assert tuple(obs["modeled_pre_gate_site_counts"]) == (0, 0, 0), obs["note"]
         assert bool(obs["requires_unmodeled_pre_gate_consumer"]), obs["note"]
-        assert tuple(obs["compatible_fighter_8006cda4_total_consumes"]) in {(1,), (2,)}, obs["note"]
-        assert tuple(obs["fighter_8006cda4_compatible_families"]) in {
-            ("x197c_x418", "held_item_primary_x418"),
-            ("held_item_primary_x418_plus_x197c_x418", "held_item_type3_x418_plus_x41c"),
-        }, obs["note"]
+        assert tuple(obs["compatible_fighter_8006cda4_total_consumes"]) == (2,), obs["note"]
+        assert tuple(obs["fighter_8006cda4_compatible_families"]) == (
+            "held_item_primary_x418_plus_x197c_x418",
+            "held_item_type3_x418_plus_x41c",
+        ), obs["note"]
 
     phase_by_key = {
         (obs["dataset"], int(obs["record"]), int(obs["p"])): int(obs["phase_advance_to_lt_threshold"])
         for obs in summary["blocker_rows"]
     }
-    assert phase_by_key == {
-        ("AttachedGoodNaturedGuanaco.msl", 2694, 0): 1,
-        ("GracefulAttachedTurtle.msl", 5717, 0): 2,
-        ("TreasuredBackKangaroo.msl", 6929, 1): 2,
-    }
+    assert phase_by_key == {("TreasuredBackKangaroo.msl", 6929, 1): 2}
     assert {
         (obs["dataset"], int(obs["record"]), int(obs["p"])): tuple(obs["compatible_fighter_8006cda4_total_consumes"])
         for obs in summary["blocker_rows"]
-    } == {
-        ("AttachedGoodNaturedGuanaco.msl", 2694, 0): (1,),
-        ("GracefulAttachedTurtle.msl", 5717, 0): (2,),
-        ("TreasuredBackKangaroo.msl", 6929, 1): (2,),
-    }
-    assert set(summary["blocker_phase_groups"]) == {"phase_plus_1", "phase_plus_2"}
-    assert [family["family"] for family in summary["phase_minimal_seed_families"]["phase_plus_1"]] == [
-        "x197c_x418",
-        "held_item_primary_x418",
-    ]
+    } == {("TreasuredBackKangaroo.msl", 6929, 1): (2,)}
+    assert set(summary["blocker_phase_groups"]) == {"phase_plus_2"}
     assert [family["family"] for family in summary["phase_minimal_seed_families"]["phase_plus_2"]] == [
         "held_item_primary_x418_plus_x197c_x418",
         "held_item_type3_x418_plus_x41c",
@@ -223,7 +243,7 @@ def test_damageflyroll_rng_blocker_cases_and_controls_match_replay_real_trace_sh
     assert {
         (obs["dataset"], int(obs["record"]), int(obs["p"]))
         for obs in summary["unmodeled_pre_gate_blockers"]
-    } == blocker_keys
+    } == {("TreasuredBackKangaroo.msl", 6929, 1)}
 
     assert len(summary["positive_controls"]) == 1
     pos = summary["positive_controls"][0]

@@ -68,16 +68,16 @@ DEFAULT_CASES: tuple[Case, ...] = (
         "AttachedGoodNaturedGuanaco.msl",
         record=2694,
         p=0,
-        role="blocker",
-        note="AttackAirB subset blocker A",
+        role="resolved_control",
+        note="AttackAirB subset resolved by seeded Fighter_8006CDA4 carry",
     ),
     Case(
         dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
         "GracefulAttachedTurtle.msl",
         record=5717,
         p=0,
-        role="blocker",
-        note="fall-admission rollout blocker B",
+        role="resolved_control",
+        note="ThrownF hitlag carry resolved by seeded Fighter_8006CDA4 bridge",
     ),
     Case(
         dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
@@ -444,6 +444,7 @@ def build_summary(observations: list[RngRowObservation]) -> dict:
         for obs in observations
         if obs.role == "blocker"
     ]
+    resolved_controls = [obs for obs in observations if obs.role == "resolved_control"]
     positive_controls = [obs for obs in observations if obs.role == "positive_control"]
     negative_controls = [obs for obs in observations if obs.role == "negative_control"]
     blocker_phase_groups: dict[str, list[dict]] = {}
@@ -486,24 +487,21 @@ def build_summary(observations: list[RngRowObservation]) -> dict:
         "phase_minimal_seed_families": phase_family_details,
         "consume_critical_schema_gap_fields": consume_critical_gap_fields,
         "consume_side_effect_only_fields": side_effect_only_fields,
+        "resolved_controls": [asdict(obs) for obs in resolved_controls],
         "positive_controls": [asdict(obs) for obs in positive_controls],
         "negative_controls": [asdict(obs) for obs in negative_controls],
         "blocker": (
-            "DamageFlyRoll site-1 admission already fires on the blocker rows, but those rows still "
-            "miss because the HSD_Randf sample at ftCo_8008DCE0 block_33 is on the wrong side of "
-            "the x240 threshold. A matching positive-control row consumes the same site-1 gate and "
-            "resolves correctly with a below-threshold roll, so the missing discriminator is "
-            "upstream RNG-consumer ownership before MSL_RNG_SITE_DAMAGE_FLY_ROLL_GATE, not a wider "
-            "pre-action admission subset. The blocker families also require different pre-gate phase "
-            "advances (+1 for one AttackAirB family, +2 for the throw/hitlag-carry families), which "
-            "rules out a single blind extra consume. All currently modeled pre-gate RNG sites stay "
-            "at zero on those blocker rows, so the next runtime lane needs a new upstream consumer "
-            "owner rather than a reorder of already-modeled sites. The first decomp-backed candidate "
-            "is Fighter_8006CDA4. The refined branch model here narrows the consume-critical seed "
-            "gaps to item-gobj ownership/non-heavy gating, subtype-3 projectile-empty gating, "
-            "x197C presence, x2220_b3/x2220_b4, x2226_b2, and the ftCo_8008E984 guard boolean; "
-            "x1978 is side-effect-only for item-drop ownership and does not change the pre-gate "
-            "RNG consume count."
+            "The seeded Fighter_8006CDA4 pre-gate bridge resolves the separated AttackAirB and "
+            "ThrownF-hitlag carry families, and the remaining open blocker is now the DamageFlyTop "
+            "carry family. Site-1 admission still fires on that blocker row, but the HSD_Randf "
+            "sample at ftCo_8008DCE0 block_33 is on the wrong side of the x240 threshold. All "
+            "currently modeled pre-gate RNG sites stay at zero there, so the next runtime lane still "
+            "needs an upstream consumer owner rather than a reorder of already-modeled sites. The "
+            "refined Fighter_8006CDA4 branch model continues to narrow the consume-critical seed gaps "
+            "to item-gobj ownership/non-heavy gating, subtype-3 projectile-empty gating, x197C "
+            "presence, x2220_b3/x2220_b4, x2226_b2, and the ftCo_8008E984 guard boolean; x1978 is "
+            "side-effect-only for item-drop ownership and does not change the pre-gate RNG consume "
+            "count."
         ),
     }
 
@@ -530,6 +528,15 @@ def main() -> None:
             % obs
         )
         print("    roll_window=%s" % ",".join(f"{float(v):.6f}" for v in obs["site1_roll_window"]))
+    print("resolved_controls:")
+    for obs in summary["resolved_controls"]:
+        print(
+            "  %(dataset)s:%(record)d:p%(p)d ref=%(ref_action_id)d out=%(out_action_id)d "
+            "site1=%(site1_count)d phase_lt_threshold=%(phase_advance_to_lt_threshold)s "
+            "fighter_8006cda4_totals=%(compatible_fighter_8006cda4_total_consumes)s "
+            "families=%(fighter_8006cda4_compatible_families)s"
+            % obs
+        )
     print("phase_minimal_seed_families:")
     for phase_key, families in summary["phase_minimal_seed_families"].items():
         print(f"  {phase_key}:")

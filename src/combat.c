@@ -1128,6 +1128,32 @@ static inline uint8_t combat_damageflyroll_rng_subset_allows_pre_action(const Ms
   }
 }
 
+static inline void combat_damageflyroll_consume_fighter_8006cda4_phase_hint(MslBatch* batch, int bi,
+                                                                             size_t d_idx) {
+  if (batch == NULL) {
+    return;
+  }
+  const uint8_t phase_hint = batch->state.damageflyroll_fighter_8006cda4_phase_hint[d_idx];
+  if (phase_hint == 0u) {
+    return;
+  }
+  // Hidden pre-gate RNG ownership bridge:
+  // - Fighter_8006CDA4 runs before the ftCo_8008DCE0 block_33 HSD_Randf gate and can advance the
+  //   same global RNG stream via HSD_Randi calls.
+  // - For the currently separated families, this seeded hint carries only consume count ownership;
+  //   the HSD_Randi return value is not otherwise used in this lite sim, so `max_val=1` is enough
+  //   to model the stream advance without introducing extra gameplay constants.
+  // refs/melee/src/melee/ft/fighter.c::Fighter_8006CDA4
+  // refs/melee/src/sysdolphin/baselib/random.c::HSD_Randi
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
+  (void)combat_rng_consume_randi_site(
+      batch, bi, MSL_RNG_SITE_DAMAGE_FLY_ROLL_PRE_GATE_FIGHTER_8006CDA4_PRIMARY, 1);
+  if (phase_hint >= 2u) {
+    (void)combat_rng_consume_randi_site(
+        batch, bi, MSL_RNG_SITE_DAMAGE_FLY_ROLL_PRE_GATE_FIGHTER_8006CDA4_SECONDARY, 1);
+  }
+}
+
 static inline void combat_damage_enter_state(const MslCommonParams* c, MslBatch* batch, int bi,
                                              size_t d_idx, uint8_t defender_on_ground_before,
                                              uint8_t defender_on_ground_after, uint8_t hurt_height,
@@ -1199,6 +1225,7 @@ static inline void combat_damage_enter_state(const MslCommonParams* c, MslBatch*
             combat_damageflyroll_rng_subset_allows_pre_action(batch, d_idx, pre_action);
         const float percent_cur = batch->state.percent[d_idx] + batch->state.percent_temp[d_idx];
         if (damagefly_roll_rng_subset_ok && percent_cur >= (float)c->damagefly_roll_percent_threshold) {
+          combat_damageflyroll_consume_fighter_8006cda4_phase_hint(batch, bi, d_idx);
           const float roll =
               combat_rng_consume_randf_site(batch, bi, MSL_RNG_SITE_DAMAGE_FLY_ROLL_GATE);
           if (!batch->debug_rng_enable_damage_fly_roll_gate && roll < c->damagefly_roll_prob) {

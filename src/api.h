@@ -239,6 +239,19 @@ typedef struct MslSeed {
   // - 0: no ProcessHit-owned clear override on this row.
   // - 1: consume ProcessHit-owned clear before x18C8 decrement for this one-step row.
   uint8_t source_clear_processhit_damage_pending_phase[MSL_MAX_PLAYERS];
+  // Hidden pre-gate Fighter_8006CDA4 RNG-consume phase bridge for DamageFlyRoll entry.
+  //
+  // Decomp ownership context:
+  // - Fighter_8006CDA4 runs before the HSD_Randf DamageFlyRoll gate in ftCo_8008DCE0 and can
+  //   advance the global RNG stream via HSD_Randi consumes.
+  // refs/melee/src/melee/ft/fighter.c::Fighter_8006CDA4
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
+  //
+  // Producer (tools/slippi/make_dataset_from_slp.py):
+  // - 0: no seeded pre-gate consume ownership on this row.
+  // - 1: consume one pre-gate HSD_Randi before the DamageFlyRoll gate.
+  // - 2: consume two pre-gate HSD_Randi calls before the DamageFlyRoll gate.
+  uint8_t damageflyroll_fighter_8006cda4_phase_hint[MSL_MAX_PLAYERS];
   // Grounded damage-clear phase bridge for source-owner clear (`ftCommon_800804FC` path).
   //
   // Decomp ownership context:

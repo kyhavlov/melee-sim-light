@@ -8,7 +8,7 @@
 # preprocess_suite stamp:
 #   path: datasets/fox_falco_fd_ucf084_recent/.preprocess_meta.json
 #   force_used: True  built: 4  skipped: 0
-#   seed_dtype_itemsize: 2300  sample_dtype_itemsize: 3386
+#   seed_dtype_itemsize: 2304  sample_dtype_itemsize: 3390
 #
 # Regenerate gitignored ISO-derived data artifacts (if missing/stale):
 # - Moves (data/moves/*.json):
@@ -43,7 +43,7 @@ suite: fox_falco_fd_ucf084_recent  datasets: 4  ucf_enabled: True  ucf_cardinals
 
 == datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl ==
 Records: 7295  Players/scored per record: 2  Total player-frames: 14590
-mismatch.action_id: 15 / 14590 (0.001028)
+mismatch.action_id: 14 / 14590 (0.000960)
 mismatch.action_frame: 25 / 14590 (0.001714)
 mismatch.on_ground: 7 / 14590 (0.000480)
 mismatch.facing: 4 / 14590 (0.000274)
@@ -55,7 +55,7 @@ mismatch.hitstun: 7 / 14590 (0.000480)
 mismatch.l_cancel: 0 / 14590 (0.000000)
 mismatch.hurtbox_state: 13 / 14590 (0.000891)
 mismatch.ground_id: 2 / 14590 (0.000137)
-mismatch.animation_index: 15 / 14590 (0.001028)
+mismatch.animation_index: 14 / 14590 (0.000960)
 mismatch.instance_hit_by: 7 / 14590 (0.000480)
 mismatch.instance_id: 43 / 14590 (0.002947)
 mismatch.last_attack_landed: 4 / 14590 (0.000274)
@@ -80,12 +80,12 @@ err.item_pos_x: mae=0.274897 p95=0.000000 max=38.000000
 err.item_pos_y: mae=0.042716 p95=0.000000 max=6.995890
 err.item_vel_x: mae=0.067515 p95=0.000000 max=10.000000
 err.item_vel_y: mae=0.051777 p95=0.000000 max=6.995884
-overall.discrete_mismatch: 236 / 882695
+overall.discrete_mismatch: 234 / 882695
 overall.float_norm_mae_p95: 0.00305773
 
 == datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl ==
 Records: 11529  Players/scored per record: 2  Total player-frames: 23058
-mismatch.action_id: 27 / 23058 (0.001171)
+mismatch.action_id: 26 / 23058 (0.001128)
 mismatch.action_frame: 32 / 23058 (0.001388)
 mismatch.on_ground: 5 / 23058 (0.000217)
 mismatch.facing: 1 / 23058 (0.000043)
@@ -97,7 +97,7 @@ mismatch.hitstun: 13 / 23058 (0.000564)
 mismatch.l_cancel: 0 / 23058 (0.000000)
 mismatch.hurtbox_state: 12 / 23058 (0.000520)
 mismatch.ground_id: 4 / 23058 (0.000173)
-mismatch.animation_index: 25 / 23058 (0.001084)
+mismatch.animation_index: 24 / 23058 (0.001041)
 mismatch.instance_hit_by: 11 / 23058 (0.000477)
 mismatch.instance_id: 63 / 23058 (0.002732)
 mismatch.last_attack_landed: 5 / 23058 (0.000217)
@@ -122,7 +122,7 @@ err.item_pos_x: mae=0.078399 p95=0.000000 max=71.544670
 err.item_pos_y: mae=0.032390 p95=0.000000 max=26.796017
 err.item_vel_x: mae=0.028124 p95=0.000000 max=6.760003
 err.item_vel_y: mae=0.027846 p95=0.000000 max=6.995885
-overall.discrete_mismatch: 354 / 1395009
+overall.discrete_mismatch: 352 / 1395009
 overall.float_norm_mae_p95: 0.00349587
 
 == datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/QuerulousGrandDinosaur.msl ==
@@ -210,5 +210,5 @@ overall.discrete_mismatch: 254 / 948277
 overall.float_norm_mae_p95: 0.00380444
 
 == suite summary ==
-overall.discrete_mismatch: 1149 / 4462843
+overall.discrete_mismatch: 1145 / 4462843
 overall.float_norm_mae_p95: 0.00328046

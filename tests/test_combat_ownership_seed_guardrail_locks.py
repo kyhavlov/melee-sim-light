@@ -5117,10 +5117,11 @@ def test_damageflyroll_fall_admission_rollout_window_rows_and_adjacent_controls_
     fall_seed = samples[5737 : 5738]["seed_t"][0]
     assert int(fall_seed["action_id"][1]) == 14  # ftCo_MS_Fall
 
-    # Causality sanity: one-step at target is still mismatched, so this lock is specifically
-    # a seeded-rollout transition-ownership window (not a one-step row lock).
+    # Causality sanity: the seeded Fighter_8006CDA4 pre-gate bridge now resolves the target one-step
+    # row as well, while the local rollout window must remain replay-exact and keep the same site-1
+    # pulse shape.
     _, target_ref_single, target_out_single = _run_one_step_row(dataset_path, 5717, 0, rng_damage_fly_roll_gate=True)
-    assert int(target_out_single["action_id"][0]) != int(target_ref_single["action_id"][0])
+    assert int(target_out_single["action_id"][0]) == int(target_ref_single["action_id"][0])
 
     trace_on = root / "reports/triage/rng_fall_admission_rollout_window_on.tsv"
     on_rows = _run_rollout_window_rows_with_trace(
