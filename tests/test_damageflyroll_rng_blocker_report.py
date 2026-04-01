@@ -7,6 +7,7 @@ import pytest
 from tools.eval.damageflyroll_rng_blocker_report import (
     DEFAULT_CASES,
     RngRowObservation,
+    _fighter_8006cda4_phase_family_details,
     build_summary,
     observe_case,
 )
@@ -34,6 +35,7 @@ def test_build_summary_identifies_blockers_and_controls() -> None:
             modeled_pre_gate_site_counts=(0, 0, 0),
             requires_unmodeled_pre_gate_consumer=True,
             compatible_fighter_8006cda4_total_consumes=(1,),
+            fighter_8006cda4_compatible_families=("x197c_x418", "held_item_primary_x418"),
             roll_threshold=0.30,
         ),
         RngRowObservation(
@@ -56,6 +58,7 @@ def test_build_summary_identifies_blockers_and_controls() -> None:
             modeled_pre_gate_site_counts=(0, 0, 0),
             requires_unmodeled_pre_gate_consumer=False,
             compatible_fighter_8006cda4_total_consumes=tuple(),
+            fighter_8006cda4_compatible_families=tuple(),
             roll_threshold=0.30,
         ),
         RngRowObservation(
@@ -78,6 +81,7 @@ def test_build_summary_identifies_blockers_and_controls() -> None:
             modeled_pre_gate_site_counts=(0, 0, 0),
             requires_unmodeled_pre_gate_consumer=False,
             compatible_fighter_8006cda4_total_consumes=tuple(),
+            fighter_8006cda4_compatible_families=tuple(),
             roll_threshold=0.30,
         ),
     ]
@@ -86,22 +90,57 @@ def test_build_summary_identifies_blockers_and_controls() -> None:
     assert len(summary["blocker_rows"]) == 1
     assert set(summary["blocker_phase_groups"]) == {"phase_plus_1"}
     assert len(summary["unmodeled_pre_gate_blockers"]) == 1
-    assert summary["schema_gap_fields"] == [
+    assert summary["consume_critical_schema_gap_fields"] == [
+        "fighter.ftCo_8008E984_guard",
         "fighter.item_gobj_presence",
-        "fighter.item_hold_kind",
-        "fighter.item_hold_is_type3_throwable",
-        "fighter.x1978_presence",
+        "fighter.item_hold_is_nonheavy",
         "fighter.x197C_presence",
         "fighter.x2220_b3",
         "fighter.x2220_b4",
-        "fighter.ftCo_8008E984_guard",
+        "fighter.x2226_b2",
+    ]
+    assert summary["consume_side_effect_only_fields"] == ["fighter.x1978_presence"]
+    assert [family["family"] for family in summary["phase_minimal_seed_families"]["phase_plus_1"]] == [
+        "x197c_x418",
+        "held_item_primary_x418",
     ]
     assert len(summary["positive_controls"]) == 1
     assert len(summary["negative_controls"]) == 1
     assert "upstream RNG-consumer ownership" in summary["blocker"]
     assert "different pre-gate phase advances" in summary["blocker"]
-    assert "next runtime lane needs a new upstream consumer owner" in summary["blocker"]
     assert "Fighter_8006CDA4" in summary["blocker"]
+    assert "x1978 is side-effect-only" in summary["blocker"]
+
+
+def test_fighter_8006cda4_phase_family_details_capture_minimal_seed_fields() -> None:
+    phase1 = _fighter_8006cda4_phase_family_details(1)
+    assert [family["family"] for family in phase1] == [
+        "x197c_x418",
+        "held_item_primary_x418",
+    ]
+    assert phase1[0]["consume_count"] == 1
+    assert phase1[0]["consume_critical_fields"] == (
+        "fighter.x197C_presence",
+        "fighter.x2226_b2",
+    )
+    assert phase1[1]["side_effect_only_fields"] == ("fighter.x1978_presence",)
+
+    phase2 = _fighter_8006cda4_phase_family_details(2)
+    assert [family["family"] for family in phase2] == [
+        "held_item_primary_x418_plus_x197c_x418",
+        "held_item_type3_x418_plus_x41c",
+    ]
+    assert phase2[1]["consume_count"] == 2
+    assert phase2[1]["consume_critical_fields"] == (
+        "fighter.item_gobj_presence",
+        "fighter.item_hold_is_nonheavy",
+        "fighter.item_hold_subtype3",
+        "fighter.item_hold_projectile_empty",
+        "fighter.x2220_b3",
+        "fighter.x2220_b4",
+        "fighter.ftCo_8008E984_guard",
+        "fighter.x2226_b2",
+    )
 
 
 @pytest.mark.integration
@@ -138,6 +177,10 @@ def test_damageflyroll_rng_blocker_cases_and_controls_match_replay_real_trace_sh
         assert tuple(obs["modeled_pre_gate_site_counts"]) == (0, 0, 0), obs["note"]
         assert bool(obs["requires_unmodeled_pre_gate_consumer"]), obs["note"]
         assert tuple(obs["compatible_fighter_8006cda4_total_consumes"]) in {(1,), (2,)}, obs["note"]
+        assert tuple(obs["fighter_8006cda4_compatible_families"]) in {
+            ("x197c_x418", "held_item_primary_x418"),
+            ("held_item_primary_x418_plus_x197c_x418", "held_item_type3_x418_plus_x41c"),
+        }, obs["note"]
 
     phase_by_key = {
         (obs["dataset"], int(obs["record"]), int(obs["p"])): int(obs["phase_advance_to_lt_threshold"])
@@ -157,6 +200,26 @@ def test_damageflyroll_rng_blocker_cases_and_controls_match_replay_real_trace_sh
         ("TreasuredBackKangaroo.msl", 6929, 1): (2,),
     }
     assert set(summary["blocker_phase_groups"]) == {"phase_plus_1", "phase_plus_2"}
+    assert [family["family"] for family in summary["phase_minimal_seed_families"]["phase_plus_1"]] == [
+        "x197c_x418",
+        "held_item_primary_x418",
+    ]
+    assert [family["family"] for family in summary["phase_minimal_seed_families"]["phase_plus_2"]] == [
+        "held_item_primary_x418_plus_x197c_x418",
+        "held_item_type3_x418_plus_x41c",
+    ]
+    assert summary["consume_critical_schema_gap_fields"] == [
+        "fighter.ftCo_8008E984_guard",
+        "fighter.item_gobj_presence",
+        "fighter.item_hold_is_nonheavy",
+        "fighter.item_hold_projectile_empty",
+        "fighter.item_hold_subtype3",
+        "fighter.x197C_presence",
+        "fighter.x2220_b3",
+        "fighter.x2220_b4",
+        "fighter.x2226_b2",
+    ]
+    assert summary["consume_side_effect_only_fields"] == ["fighter.x1978_presence"]
     assert {
         (obs["dataset"], int(obs["record"]), int(obs["p"]))
         for obs in summary["unmodeled_pre_gate_blockers"]
@@ -173,6 +236,7 @@ def test_damageflyroll_rng_blocker_cases_and_controls_match_replay_real_trace_sh
     assert tuple(pos["modeled_pre_gate_site_counts"]) == (0, 0, 0)
     assert not bool(pos["requires_unmodeled_pre_gate_consumer"])
     assert tuple(pos["compatible_fighter_8006cda4_total_consumes"]) == tuple()
+    assert tuple(pos["fighter_8006cda4_compatible_families"]) == tuple()
 
     neg_keys = {(obs["dataset"], int(obs["record"]), int(obs["p"])) for obs in summary["negative_controls"]}
     assert neg_keys == {
@@ -191,3 +255,4 @@ def test_damageflyroll_rng_blocker_cases_and_controls_match_replay_real_trace_sh
         assert tuple(obs["modeled_pre_gate_site_counts"]) == (0, 0, 0)
         assert not bool(obs["requires_unmodeled_pre_gate_consumer"])
         assert tuple(obs["compatible_fighter_8006cda4_total_consumes"]) == tuple()
+        assert tuple(obs["fighter_8006cda4_compatible_families"]) == tuple()

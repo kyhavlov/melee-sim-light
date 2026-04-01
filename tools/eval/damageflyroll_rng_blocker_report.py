@@ -43,6 +43,7 @@ class RngRowObservation:
     modeled_pre_gate_site_counts: tuple[int, int, int]
     requires_unmodeled_pre_gate_consumer: bool
     compatible_fighter_8006cda4_total_consumes: tuple[int, ...]
+    fighter_8006cda4_compatible_families: tuple[str, ...]
     roll_threshold: float
 
     @property
@@ -198,6 +199,117 @@ def _compatible_fighter_8006cda4_total_consumes(phase_advance: int | None) -> tu
     return (int(phase_advance),)
 
 
+def _fighter_8006cda4_compatible_families(phase_advance: int | None) -> tuple[str, ...]:
+    # Fighter_8006CDA4 pre-gate RNG families:
+    # - `hold_item_bool` branch always consumes one x418 sample when entered.
+    # - The held-item subtype clause can consume a second x41C sample.
+    # - The x197C branch consumes one x418 sample when present.
+    # refs/melee/src/melee/ft/fighter.c::Fighter_8006CDA4
+    # refs/melee/src/sysdolphin/baselib/random.c::HSD_Randi
+    if phase_advance is None or phase_advance <= 0:
+        return tuple()
+    if phase_advance == 1:
+        return (
+            "x197c_x418",
+            "held_item_primary_x418",
+        )
+    if phase_advance == 2:
+        return (
+            "held_item_primary_x418_plus_x197c_x418",
+            "held_item_type3_x418_plus_x41c",
+        )
+    if phase_advance == 3:
+        return ("held_item_type3_x418_plus_x41c_plus_x197c_x418",)
+    return tuple()
+
+
+def _fighter_8006cda4_family_details() -> dict[str, dict[str, object]]:
+    # Minimal consume-critical seed fields for the decomp-owned branch families in Fighter_8006CDA4.
+    # refs/melee/src/melee/ft/fighter.c::Fighter_8006CDA4
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008E984
+    return {
+        "x197c_x418": {
+            "consume_count": 1,
+            "consume_critical_fields": (
+                "fighter.x197C_presence",
+                "fighter.x2226_b2",
+            ),
+            "side_effect_only_fields": tuple(),
+            "note": "x197C auxiliary item branch consumes one x418 sample when present.",
+        },
+        "held_item_primary_x418": {
+            "consume_count": 1,
+            "consume_critical_fields": (
+                "fighter.item_gobj_presence",
+                "fighter.item_hold_is_nonheavy",
+                "fighter.x2220_b3",
+                "fighter.x2220_b4",
+                "fighter.ftCo_8008E984_guard",
+                "fighter.x2226_b2",
+            ),
+            "side_effect_only_fields": ("fighter.x1978_presence",),
+            "note": "held-item branch entered; first x418 sample decides the drop path.",
+        },
+        "held_item_primary_x418_plus_x197c_x418": {
+            "consume_count": 2,
+            "consume_critical_fields": (
+                "fighter.item_gobj_presence",
+                "fighter.item_hold_is_nonheavy",
+                "fighter.x197C_presence",
+                "fighter.x2220_b3",
+                "fighter.x2220_b4",
+                "fighter.ftCo_8008E984_guard",
+                "fighter.x2226_b2",
+            ),
+            "side_effect_only_fields": ("fighter.x1978_presence",),
+            "note": "held-item primary x418 consume plus the separate x197C x418 consume.",
+        },
+        "held_item_type3_x418_plus_x41c": {
+            "consume_count": 2,
+            "consume_critical_fields": (
+                "fighter.item_gobj_presence",
+                "fighter.item_hold_is_nonheavy",
+                "fighter.item_hold_subtype3",
+                "fighter.item_hold_projectile_empty",
+                "fighter.x2220_b3",
+                "fighter.x2220_b4",
+                "fighter.ftCo_8008E984_guard",
+                "fighter.x2226_b2",
+            ),
+            "side_effect_only_fields": ("fighter.x1978_presence",),
+            "note": "held-item branch consumes x418, then the subtype-3 projectile-empty clause consumes x41C.",
+        },
+        "held_item_type3_x418_plus_x41c_plus_x197c_x418": {
+            "consume_count": 3,
+            "consume_critical_fields": (
+                "fighter.item_gobj_presence",
+                "fighter.item_hold_is_nonheavy",
+                "fighter.item_hold_subtype3",
+                "fighter.item_hold_projectile_empty",
+                "fighter.x197C_presence",
+                "fighter.x2220_b3",
+                "fighter.x2220_b4",
+                "fighter.ftCo_8008E984_guard",
+                "fighter.x2226_b2",
+            ),
+            "side_effect_only_fields": ("fighter.x1978_presence",),
+            "note": "full held-item type-3 path plus the independent x197C consume.",
+        },
+    }
+
+
+def _fighter_8006cda4_phase_family_details(phase_advance: int | None) -> list[dict[str, object]]:
+    families = _fighter_8006cda4_compatible_families(phase_advance)
+    details = _fighter_8006cda4_family_details()
+    return [
+        {
+            "family": family,
+            **details[family],
+        }
+        for family in families
+    ]
+
+
 def observe_case(case: Case, *, datasets_dir: Path = Path("datasets")) -> RngRowObservation:
     binding = _load_binding()
     ds_path = _resolve_dataset_path(case.dataset_rel, datasets_dir)
@@ -320,6 +432,8 @@ def observe_case(case: Case, *, datasets_dir: Path = Path("datasets")) -> RngRow
         ),
         compatible_fighter_8006cda4_total_consumes=
         _compatible_fighter_8006cda4_total_consumes(phase_advance_to_lt_threshold),
+        fighter_8006cda4_compatible_families=
+        _fighter_8006cda4_compatible_families(phase_advance_to_lt_threshold),
         roll_threshold=roll_threshold,
     )
 
@@ -341,21 +455,37 @@ def build_summary(observations: list[RngRowObservation]) -> dict:
         )
         blocker_phase_groups.setdefault(key, []).append(asdict(obs))
     unmodeled_pre_gate_blockers = [asdict(obs) for obs in blockers if obs.requires_unmodeled_pre_gate_consumer]
+    family_details = _fighter_8006cda4_family_details()
+    phase_family_details = {
+        phase_key: _fighter_8006cda4_phase_family_details(int(phase_key.removeprefix("phase_plus_")))
+        for phase_key in blocker_phase_groups
+        if phase_key.startswith("phase_plus_")
+    }
+    consume_critical_gap_fields = sorted(
+        {
+            field
+            for details in phase_family_details.values()
+            for family in details
+            for field in family["consume_critical_fields"]
+        }
+    )
+    side_effect_only_fields = sorted(
+        {
+            field
+            for details in phase_family_details.values()
+            for family in details
+            for field in family["side_effect_only_fields"]
+        }
+    )
     return {
         "case_count": int(len(observations)),
         "blocker_rows": [asdict(obs) for obs in blockers],
         "blocker_phase_groups": blocker_phase_groups,
         "unmodeled_pre_gate_blockers": unmodeled_pre_gate_blockers,
-        "schema_gap_fields": [
-            "fighter.item_gobj_presence",
-            "fighter.item_hold_kind",
-            "fighter.item_hold_is_type3_throwable",
-            "fighter.x1978_presence",
-            "fighter.x197C_presence",
-            "fighter.x2220_b3",
-            "fighter.x2220_b4",
-            "fighter.ftCo_8008E984_guard",
-        ],
+        "fighter_8006cda4_family_details": family_details,
+        "phase_minimal_seed_families": phase_family_details,
+        "consume_critical_schema_gap_fields": consume_critical_gap_fields,
+        "consume_side_effect_only_fields": side_effect_only_fields,
         "positive_controls": [asdict(obs) for obs in positive_controls],
         "negative_controls": [asdict(obs) for obs in negative_controls],
         "blocker": (
@@ -369,9 +499,11 @@ def build_summary(observations: list[RngRowObservation]) -> dict:
             "rules out a single blind extra consume. All currently modeled pre-gate RNG sites stay "
             "at zero on those blocker rows, so the next runtime lane needs a new upstream consumer "
             "owner rather than a reorder of already-modeled sites. The first decomp-backed candidate "
-            "is Fighter_8006CDA4, whose held-item/x1978/x197C branches can contribute exactly the "
-            "observed +1 or +2 pre-gate consumes, but the required item-pointer and guard lanes are "
-            "not exposed in the current seed schema."
+            "is Fighter_8006CDA4. The refined branch model here narrows the consume-critical seed "
+            "gaps to item-gobj ownership/non-heavy gating, subtype-3 projectile-empty gating, "
+            "x197C presence, x2220_b3/x2220_b4, x2226_b2, and the ftCo_8008E984 guard boolean; "
+            "x1978 is side-effect-only for item-drop ownership and does not change the pre-gate "
+            "RNG consume count."
         ),
     }
 
@@ -393,10 +525,22 @@ def main() -> None:
             "out=%(out_action_id)d attacker=%(attacker_seed_action_id)d:%(attacker_seed_action_frame)d "
             "site1=%(site1_count)d roll=%(site1_roll).6f threshold=%(roll_threshold).6f "
             "phase_lt_threshold=%(phase_advance_to_lt_threshold)s modeled_pre_gate=%(modeled_pre_gate_site_counts)s "
-            "needs_new_site=%(requires_unmodeled_pre_gate_consumer)s fighter_8006cda4_totals=%(compatible_fighter_8006cda4_total_consumes)s"
+            "needs_new_site=%(requires_unmodeled_pre_gate_consumer)s fighter_8006cda4_totals=%(compatible_fighter_8006cda4_total_consumes)s "
+            "families=%(fighter_8006cda4_compatible_families)s"
             % obs
         )
         print("    roll_window=%s" % ",".join(f"{float(v):.6f}" for v in obs["site1_roll_window"]))
+    print("phase_minimal_seed_families:")
+    for phase_key, families in summary["phase_minimal_seed_families"].items():
+        print(f"  {phase_key}:")
+        for family in families:
+            print(
+                "    %(family)s consume_count=%(consume_count)s critical=%(consume_critical_fields)s "
+                "side_effect_only=%(side_effect_only_fields)s"
+                % family
+            )
+    print(f"consume_critical_schema_gap_fields={summary['consume_critical_schema_gap_fields']}")
+    print(f"consume_side_effect_only_fields={summary['consume_side_effect_only_fields']}")
     print("positive_controls:")
     for obs in summary["positive_controls"]:
         print(
