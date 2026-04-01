@@ -1,6 +1,7 @@
 """Evaluation/triage CLI package.
 
 Notable CLIs:
+- tools.eval.damageflyroll_rng_blocker_report
 - tools.eval.top_triples
 - tools.eval.diff_locate
 - tools.eval.facing_residual_blocker_report

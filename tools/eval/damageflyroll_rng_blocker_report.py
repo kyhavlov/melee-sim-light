@@ -1,0 +1,319 @@
+from __future__ import annotations
+
+import argparse
+import csv
+import importlib
+import json
+import os
+from dataclasses import asdict, dataclass
+from pathlib import Path
+
+import numpy as np
+
+from tools.eval.dataset import COMPARE_DTYPE, read_dataset
+
+
+@dataclass(frozen=True)
+class Case:
+    dataset_rel: str
+    record: int
+    p: int
+    role: str
+    note: str
+
+
+@dataclass(frozen=True)
+class RngRowObservation:
+    dataset: str
+    record: int
+    p: int
+    role: str
+    note: str
+    seed_action_id: int
+    ref_action_id: int
+    out_action_id: int
+    attacker_seed_action_id: int
+    attacker_seed_action_frame: int
+    seed_last_hit_by: int
+    seed_frame_pre_random_seed: int
+    site1_count: int
+    site1_roll: float | None
+    roll_threshold: float
+
+    @property
+    def matches_ref(self) -> bool:
+        return int(self.out_action_id) == int(self.ref_action_id)
+
+    @property
+    def roll_bucket(self) -> str:
+        if self.site1_roll is None:
+            return "no_pulse"
+        return "lt_threshold" if float(self.site1_roll) < float(self.roll_threshold) else "ge_threshold"
+
+
+DEFAULT_CASES: tuple[Case, ...] = (
+    # Curated replay-real blocker/control rows for the DamageFlyRoll gate site:
+    # - severe airborne damage entry evaluates the HSD_Randf gate in ftCo_8008DCE0 block_33,
+    # - the site-1 trace in this runtime corresponds to that gate.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
+    # refs/melee/src/sysdolphin/baselib/random.c::HSD_Randf
+    Case(
+        dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
+        "AttachedGoodNaturedGuanaco.msl",
+        record=2694,
+        p=0,
+        role="blocker",
+        note="AttackAirB subset blocker A",
+    ),
+    Case(
+        dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
+        "GracefulAttachedTurtle.msl",
+        record=5717,
+        p=0,
+        role="blocker",
+        note="fall-admission rollout blocker B",
+    ),
+    Case(
+        dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
+        "TreasuredBackKangaroo.msl",
+        record=6929,
+        p=1,
+        role="blocker",
+        note="DamageFlyTop carry blocker C",
+    ),
+    Case(
+        dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
+        "AttachedGoodNaturedGuanaco.msl",
+        record=6020,
+        p=0,
+        role="positive_control",
+        note="same site-1 pulse resolves to DamageFlyRoll when roll is below threshold",
+    ),
+    Case(
+        dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
+        "AttachedGoodNaturedGuanaco.msl",
+        record=6019,
+        p=0,
+        role="negative_control",
+        note="adjacent pre-target control stays no-pulse and replay exact",
+    ),
+    Case(
+        dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
+        "AttachedGoodNaturedGuanaco.msl",
+        record=6021,
+        p=0,
+        role="negative_control",
+        note="adjacent post-target control stays no-pulse and replay exact",
+    ),
+    Case(
+        dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
+        "GracefulAttachedTurtle.msl",
+        record=5716,
+        p=0,
+        role="negative_control",
+        note="adjacent pre-target rollout control stays no-pulse and replay exact",
+    ),
+    Case(
+        dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
+        "GracefulAttachedTurtle.msl",
+        record=5718,
+        p=0,
+        role="negative_control",
+        note="adjacent post-target rollout control stays no-pulse and replay exact",
+    ),
+    Case(
+        dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
+        "TreasuredBackKangaroo.msl",
+        record=6928,
+        p=1,
+        role="negative_control",
+        note="adjacent pre-target carry control stays no-pulse and replay exact",
+    ),
+    Case(
+        dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
+        "TreasuredBackKangaroo.msl",
+        record=6930,
+        p=1,
+        role="negative_control",
+        note="adjacent post-target carry control stays no-pulse and replay exact",
+    ),
+)
+
+
+def _load_binding():
+    return importlib.import_module("msl_binding")
+
+
+def _repo_root() -> Path:
+    return Path(__file__).resolve().parents[2]
+
+
+def _resolve_dataset_path(dataset_rel: str, datasets_dir: Path) -> Path:
+    rel = Path(dataset_rel)
+    parts = rel.parts
+    base = datasets_dir if datasets_dir.is_absolute() else (_repo_root() / datasets_dir)
+    if parts and parts[0] == "datasets":
+        return base / Path(*parts[1:])
+    return _repo_root() / rel
+
+
+def _site1_roll_from_seed_in(seed_in: int) -> float:
+    # HSD_Randf consumes one LCG step and returns upper16/65536.0f.
+    # refs/melee/src/sysdolphin/baselib/random.c::HSD_Randf
+    seed = (int(seed_in) * 214013 + 2531011) & 0xFFFFFFFF
+    return float((seed >> 16) & 0xFFFF) * (1.0 / 65536.0)
+
+
+def observe_case(case: Case, *, datasets_dir: Path = Path("datasets")) -> RngRowObservation:
+    binding = _load_binding()
+    ds_path = _resolve_dataset_path(case.dataset_rel, datasets_dir)
+    ds = read_dataset(str(ds_path))
+    row = ds.samples[case.record : case.record + 1]
+    if int(row.shape[0]) != 1:
+        raise ValueError(f"dataset too short for case: {case}")
+
+    sizes = binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    compare_stride = int(sizes["compare"])
+
+    seed_bytes = np.frombuffer(row["seed_t"].tobytes(order="C"), dtype=np.uint8).copy().reshape(1, seed_stride)
+    prev_input_bytes = (
+        np.frombuffer(row["prev_input_t"].tobytes(order="C"), dtype=np.uint8).copy().reshape(1, input_stride)
+    )
+    input_bytes = np.frombuffer(row["input_t"].tobytes(order="C"), dtype=np.uint8).copy().reshape(1, input_stride)
+    out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
+
+    trace_dir = _repo_root() / "reports" / "triage"
+    trace_dir.mkdir(parents=True, exist_ok=True)
+    trace_path = trace_dir / f"damageflyroll_rng_blocker_{ds_path.stem}_{case.record}_{case.p}.tsv"
+
+    prev_trace_env = os.environ.get("MSL_RNG_TRACE_PATH")
+    prev_gate_env = os.environ.get("MSL_RNG_ENABLE_DAMAGE_FLY_ROLL_GATE")
+    os.environ["MSL_RNG_TRACE_PATH"] = str(trace_path)
+    os.environ.pop("MSL_RNG_ENABLE_DAMAGE_FLY_ROLL_GATE", None)
+
+    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    try:
+        binding.reseed_seed(handle, seed_bytes)
+        binding.step_input(handle, prev_input_bytes, input_bytes)
+        binding.write_compare(handle, out_compare_bytes)
+    finally:
+        binding.destroy(handle)
+        if prev_trace_env is None:
+            os.environ.pop("MSL_RNG_TRACE_PATH", None)
+        else:
+            os.environ["MSL_RNG_TRACE_PATH"] = prev_trace_env
+        if prev_gate_env is None:
+            os.environ.pop("MSL_RNG_ENABLE_DAMAGE_FLY_ROLL_GATE", None)
+        else:
+            os.environ["MSL_RNG_ENABLE_DAMAGE_FLY_ROLL_GATE"] = prev_gate_env
+
+    seed = row["seed_t"][0]
+    ref = row["ref_t1"][0]
+    out = out_compare_bytes.view(COMPARE_DTYPE).reshape(-1)[0]
+
+    victim = int(case.p)
+    attacker = int(seed["last_hit_by"][victim])
+    if attacker not in (0, 1):
+        attacker_action = -1
+        attacker_action_frame = -1
+    else:
+        attacker_action = int(seed["action_id"][attacker])
+        attacker_action_frame = int(np.int16(seed["action_frame"][attacker]))
+
+    site1_count = 0
+    site1_seed_in: int | None = None
+    if trace_path.exists():
+        with trace_path.open("r", encoding="utf-8") as fh:
+            reader = csv.DictReader(fh, delimiter="\t")
+            for row_trace in reader:
+                if int(row_trace["site_id"]) != 1:
+                    continue
+                site1_count += int(row_trace["call_count"])
+                if site1_seed_in is None:
+                    site1_seed_in = int(row_trace["seed_in"])
+
+    common = json.loads((_repo_root() / "data/common/ft_common_data.json").read_text())
+    site1_roll = _site1_roll_from_seed_in(site1_seed_in) if site1_seed_in is not None else None
+    return RngRowObservation(
+        dataset=ds_path.name,
+        record=int(case.record),
+        p=victim,
+        role=str(case.role),
+        note=str(case.note),
+        seed_action_id=int(seed["action_id"][victim]),
+        ref_action_id=int(ref["action_id"][victim]),
+        out_action_id=int(out["action_id"][victim]),
+        attacker_seed_action_id=int(attacker_action),
+        attacker_seed_action_frame=int(attacker_action_frame),
+        seed_last_hit_by=int(seed["last_hit_by"][victim]),
+        seed_frame_pre_random_seed=int(seed["frame_pre_random_seed"]),
+        site1_count=int(site1_count),
+        site1_roll=site1_roll,
+        roll_threshold=float(common["damagefly_roll_prob"]),
+    )
+
+
+def build_summary(observations: list[RngRowObservation]) -> dict:
+    blockers = [
+        obs
+        for obs in observations
+        if obs.role == "blocker"
+    ]
+    positive_controls = [obs for obs in observations if obs.role == "positive_control"]
+    negative_controls = [obs for obs in observations if obs.role == "negative_control"]
+    return {
+        "case_count": int(len(observations)),
+        "blocker_rows": [asdict(obs) for obs in blockers],
+        "positive_controls": [asdict(obs) for obs in positive_controls],
+        "negative_controls": [asdict(obs) for obs in negative_controls],
+        "blocker": (
+            "DamageFlyRoll site-1 admission already fires on the blocker rows, but those rows still "
+            "miss because the HSD_Randf sample at ftCo_8008DCE0 block_33 is on the wrong side of "
+            "the x240 threshold. A matching positive-control row consumes the same site-1 gate and "
+            "resolves correctly with a below-threshold roll, so the missing discriminator is "
+            "upstream RNG-consumer ownership before MSL_RNG_SITE_DAMAGE_FLY_ROLL_GATE, not a wider "
+            "pre-action admission subset."
+        ),
+    }
+
+
+def main() -> None:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--datasets-dir", type=Path, default=Path("datasets"))
+    ap.add_argument("--json-out", type=Path, default=None)
+    args = ap.parse_args()
+
+    observations = [observe_case(case, datasets_dir=args.datasets_dir) for case in DEFAULT_CASES]
+    summary = build_summary(observations)
+
+    print(f"cases={summary['case_count']}")
+    print("blocker_rows:")
+    for obs in summary["blocker_rows"]:
+        print(
+            "  %(dataset)s:%(record)d:p%(p)d seed=%(seed_action_id)d ref=%(ref_action_id)d "
+            "out=%(out_action_id)d attacker=%(attacker_seed_action_id)d:%(attacker_seed_action_frame)d "
+            "site1=%(site1_count)d roll=%(site1_roll).6f threshold=%(roll_threshold).6f" % obs
+        )
+    print("positive_controls:")
+    for obs in summary["positive_controls"]:
+        print(
+            "  %(dataset)s:%(record)d:p%(p)d ref=%(ref_action_id)d out=%(out_action_id)d "
+            "site1=%(site1_count)d roll=%(site1_roll).6f threshold=%(roll_threshold).6f" % obs
+        )
+    print("negative_controls:")
+    for obs in summary["negative_controls"]:
+        print(
+            "  %(dataset)s:%(record)d:p%(p)d ref=%(ref_action_id)d out=%(out_action_id)d "
+            "site1=%(site1_count)d" % obs
+        )
+    print(f"blocker: {summary['blocker']}")
+
+    if args.json_out is not None:
+        args.json_out.parent.mkdir(parents=True, exist_ok=True)
+        args.json_out.write_text(json.dumps(summary, indent=2, sort_keys=True))
+
+
+if __name__ == "__main__":
+    main()
