@@ -40,6 +40,8 @@ class RngRowObservation:
     site1_roll: float | None
     site1_roll_window: tuple[float, ...]
     phase_advance_to_lt_threshold: int | None
+    modeled_pre_gate_site_counts: tuple[int, int, int]
+    requires_unmodeled_pre_gate_consumer: bool
     roll_threshold: float
 
     @property
@@ -240,19 +242,21 @@ def observe_case(case: Case, *, datasets_dir: Path = Path("datasets")) -> RngRow
         attacker_action = int(seed["action_id"][attacker])
         attacker_action_frame = int(np.int16(seed["action_frame"][attacker]))
 
-    site1_count = 0
+    site_counts = {1: 0, 2: 0, 3: 0, 4: 0}
     site1_seed_in: int | None = None
     if trace_path.exists():
         with trace_path.open("r", encoding="utf-8") as fh:
             reader = csv.DictReader(fh, delimiter="\t")
             for row_trace in reader:
-                if int(row_trace["site_id"]) != 1:
+                site_id = int(row_trace["site_id"])
+                if site_id not in site_counts:
                     continue
-                site1_count += int(row_trace["call_count"])
-                if site1_seed_in is None:
+                site_counts[site_id] += int(row_trace["call_count"])
+                if site_id == 1 and site1_seed_in is None:
                     site1_seed_in = int(row_trace["seed_in"])
 
     common = json.loads((_repo_root() / "data/common/ft_common_data.json").read_text())
+    site1_count = int(site_counts[1])
     site1_roll = _site1_roll_from_seed_in(site1_seed_in) if site1_count > 0 and site1_seed_in is not None else None
     roll_threshold = float(common["damagefly_roll_prob"])
     site1_roll_window = (
@@ -260,6 +264,22 @@ def observe_case(case: Case, *, datasets_dir: Path = Path("datasets")) -> RngRow
         if site1_count > 0 and site1_seed_in is not None
         else tuple()
     )
+    phase_advance_to_lt_threshold = (
+        _phase_advance_to_lt_threshold(site1_roll_window, roll_threshold)
+        if site1_count > 0 and site1_seed_in is not None
+        else None
+    )
+    # Current runtime-owned pre-gate RNG sites before the DamageFlyRoll gate:
+    # - site 2: electric clank SFX lane
+    #   refs/melee/src/melee/ft/ftcoll.c::ftColl_8007646C
+    #   refs/melee/src/sysdolphin/baselib/random.c::HSD_Randi
+    # - site 3: Wait idle anim variant lane
+    #   refs/melee/src/melee/ft/ftwaitanim.c::{ftCo_8008A7A8,getAnimID}
+    #   refs/melee/src/sysdolphin/baselib/random.c::HSD_Randi
+    # - site 4: action-script pseudo-random SFX command lane
+    #   refs/melee/src/melee/ft/ftaction.c::ftAction_80071FC8
+    #   refs/melee/src/sysdolphin/baselib/random.c::HSD_Randi
+    modeled_pre_gate_site_counts = (int(site_counts[2]), int(site_counts[3]), int(site_counts[4]))
     return RngRowObservation(
         dataset=ds_path.name,
         record=int(case.record),
@@ -276,10 +296,13 @@ def observe_case(case: Case, *, datasets_dir: Path = Path("datasets")) -> RngRow
         site1_count=int(site1_count),
         site1_roll=site1_roll,
         site1_roll_window=site1_roll_window,
-        phase_advance_to_lt_threshold=(
-            _phase_advance_to_lt_threshold(site1_roll_window, roll_threshold)
-            if site1_count > 0 and site1_seed_in is not None
-            else None
+        phase_advance_to_lt_threshold=phase_advance_to_lt_threshold,
+        modeled_pre_gate_site_counts=modeled_pre_gate_site_counts,
+        requires_unmodeled_pre_gate_consumer=(
+            site1_count > 0
+            and phase_advance_to_lt_threshold is not None
+            and phase_advance_to_lt_threshold > 0
+            and sum(modeled_pre_gate_site_counts) == 0
         ),
         roll_threshold=roll_threshold,
     )
@@ -301,10 +324,12 @@ def build_summary(observations: list[RngRowObservation]) -> dict:
             else "unresolved_within_window"
         )
         blocker_phase_groups.setdefault(key, []).append(asdict(obs))
+    unmodeled_pre_gate_blockers = [asdict(obs) for obs in blockers if obs.requires_unmodeled_pre_gate_consumer]
     return {
         "case_count": int(len(observations)),
         "blocker_rows": [asdict(obs) for obs in blockers],
         "blocker_phase_groups": blocker_phase_groups,
+        "unmodeled_pre_gate_blockers": unmodeled_pre_gate_blockers,
         "positive_controls": [asdict(obs) for obs in positive_controls],
         "negative_controls": [asdict(obs) for obs in negative_controls],
         "blocker": (
@@ -315,7 +340,9 @@ def build_summary(observations: list[RngRowObservation]) -> dict:
             "upstream RNG-consumer ownership before MSL_RNG_SITE_DAMAGE_FLY_ROLL_GATE, not a wider "
             "pre-action admission subset. The blocker families also require different pre-gate phase "
             "advances (+1 for one AttackAirB family, +2 for the throw/hitlag-carry families), which "
-            "rules out a single blind extra consume."
+            "rules out a single blind extra consume. All currently modeled pre-gate RNG sites stay "
+            "at zero on those blocker rows, so the next runtime lane needs a new upstream consumer "
+            "owner rather than a reorder of already-modeled sites."
         ),
     }
 
@@ -336,7 +363,8 @@ def main() -> None:
             "  %(dataset)s:%(record)d:p%(p)d seed=%(seed_action_id)d ref=%(ref_action_id)d "
             "out=%(out_action_id)d attacker=%(attacker_seed_action_id)d:%(attacker_seed_action_frame)d "
             "site1=%(site1_count)d roll=%(site1_roll).6f threshold=%(roll_threshold).6f "
-            "phase_lt_threshold=%(phase_advance_to_lt_threshold)s" % obs
+            "phase_lt_threshold=%(phase_advance_to_lt_threshold)s modeled_pre_gate=%(modeled_pre_gate_site_counts)s "
+            "needs_new_site=%(requires_unmodeled_pre_gate_consumer)s" % obs
         )
         print("    roll_window=%s" % ",".join(f"{float(v):.6f}" for v in obs["site1_roll_window"]))
     print("positive_controls:")
@@ -344,14 +372,17 @@ def main() -> None:
         print(
             "  %(dataset)s:%(record)d:p%(p)d ref=%(ref_action_id)d out=%(out_action_id)d "
             "site1=%(site1_count)d roll=%(site1_roll).6f threshold=%(roll_threshold).6f "
-            "phase_lt_threshold=%(phase_advance_to_lt_threshold)s" % obs
+            "phase_lt_threshold=%(phase_advance_to_lt_threshold)s modeled_pre_gate=%(modeled_pre_gate_site_counts)s "
+            "needs_new_site=%(requires_unmodeled_pre_gate_consumer)s" % obs
         )
         print("    roll_window=%s" % ",".join(f"{float(v):.6f}" for v in obs["site1_roll_window"]))
     print("negative_controls:")
     for obs in summary["negative_controls"]:
         print(
             "  %(dataset)s:%(record)d:p%(p)d ref=%(ref_action_id)d out=%(out_action_id)d "
-            "site1=%(site1_count)d phase_lt_threshold=%(phase_advance_to_lt_threshold)s" % obs
+            "site1=%(site1_count)d phase_lt_threshold=%(phase_advance_to_lt_threshold)s "
+            "modeled_pre_gate=%(modeled_pre_gate_site_counts)s needs_new_site=%(requires_unmodeled_pre_gate_consumer)s"
+            % obs
         )
     print(f"blocker: {summary['blocker']}")
 

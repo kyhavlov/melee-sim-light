@@ -31,6 +31,8 @@ def test_build_summary_identifies_blockers_and_controls() -> None:
             site1_roll=0.94,
             site1_roll_window=(0.94, 0.10, 0.01, 0.97),
             phase_advance_to_lt_threshold=1,
+            modeled_pre_gate_site_counts=(0, 0, 0),
+            requires_unmodeled_pre_gate_consumer=True,
             roll_threshold=0.30,
         ),
         RngRowObservation(
@@ -50,6 +52,8 @@ def test_build_summary_identifies_blockers_and_controls() -> None:
             site1_roll=0.26,
             site1_roll_window=(0.26, 0.74, 0.28, 0.45),
             phase_advance_to_lt_threshold=0,
+            modeled_pre_gate_site_counts=(0, 0, 0),
+            requires_unmodeled_pre_gate_consumer=False,
             roll_threshold=0.30,
         ),
         RngRowObservation(
@@ -69,6 +73,8 @@ def test_build_summary_identifies_blockers_and_controls() -> None:
             site1_roll=None,
             site1_roll_window=tuple(),
             phase_advance_to_lt_threshold=None,
+            modeled_pre_gate_site_counts=(0, 0, 0),
+            requires_unmodeled_pre_gate_consumer=False,
             roll_threshold=0.30,
         ),
     ]
@@ -76,10 +82,12 @@ def test_build_summary_identifies_blockers_and_controls() -> None:
     assert summary["case_count"] == 3
     assert len(summary["blocker_rows"]) == 1
     assert set(summary["blocker_phase_groups"]) == {"phase_plus_1"}
+    assert len(summary["unmodeled_pre_gate_blockers"]) == 1
     assert len(summary["positive_controls"]) == 1
     assert len(summary["negative_controls"]) == 1
     assert "upstream RNG-consumer ownership" in summary["blocker"]
     assert "different pre-gate phase advances" in summary["blocker"]
+    assert "next runtime lane needs a new upstream consumer owner" in summary["blocker"]
 
 
 @pytest.mark.integration
@@ -113,6 +121,8 @@ def test_damageflyroll_rng_blocker_cases_and_controls_match_replay_real_trace_sh
         assert float(obs["site1_roll"]) >= float(obs["roll_threshold"]), obs["note"]
         assert int(obs["phase_advance_to_lt_threshold"]) in (1, 2), obs["note"]
         assert len(obs["site1_roll_window"]) == 4, obs["note"]
+        assert tuple(obs["modeled_pre_gate_site_counts"]) == (0, 0, 0), obs["note"]
+        assert bool(obs["requires_unmodeled_pre_gate_consumer"]), obs["note"]
 
     phase_by_key = {
         (obs["dataset"], int(obs["record"]), int(obs["p"])): int(obs["phase_advance_to_lt_threshold"])
@@ -124,6 +134,10 @@ def test_damageflyroll_rng_blocker_cases_and_controls_match_replay_real_trace_sh
         ("TreasuredBackKangaroo.msl", 6929, 1): 2,
     }
     assert set(summary["blocker_phase_groups"]) == {"phase_plus_1", "phase_plus_2"}
+    assert {
+        (obs["dataset"], int(obs["record"]), int(obs["p"]))
+        for obs in summary["unmodeled_pre_gate_blockers"]
+    } == blocker_keys
 
     assert len(summary["positive_controls"]) == 1
     pos = summary["positive_controls"][0]
@@ -133,6 +147,8 @@ def test_damageflyroll_rng_blocker_cases_and_controls_match_replay_real_trace_sh
     assert float(pos["site1_roll"]) < float(pos["roll_threshold"])
     assert int(pos["phase_advance_to_lt_threshold"]) == 0
     assert pos["site1_roll_window"][0] == pytest.approx(0.26458740234375)
+    assert tuple(pos["modeled_pre_gate_site_counts"]) == (0, 0, 0)
+    assert not bool(pos["requires_unmodeled_pre_gate_consumer"])
 
     neg_keys = {(obs["dataset"], int(obs["record"]), int(obs["p"])) for obs in summary["negative_controls"]}
     assert neg_keys == {
@@ -148,3 +164,5 @@ def test_damageflyroll_rng_blocker_cases_and_controls_match_replay_real_trace_sh
         assert int(obs["ref_action_id"]) == int(obs["out_action_id"])
         assert obs["phase_advance_to_lt_threshold"] is None
         assert tuple(obs["site1_roll_window"]) == tuple()
+        assert tuple(obs["modeled_pre_gate_site_counts"]) == (0, 0, 0)
+        assert not bool(obs["requires_unmodeled_pre_gate_consumer"])
