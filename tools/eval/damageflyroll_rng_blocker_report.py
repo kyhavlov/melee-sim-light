@@ -42,6 +42,7 @@ class RngRowObservation:
     phase_advance_to_lt_threshold: int | None
     modeled_pre_gate_site_counts: tuple[int, int, int]
     requires_unmodeled_pre_gate_consumer: bool
+    compatible_fighter_8006cda4_total_consumes: tuple[int, ...]
     roll_threshold: float
 
     @property
@@ -184,6 +185,19 @@ def _phase_advance_to_lt_threshold(roll_window: tuple[float, ...], threshold: fl
     return None
 
 
+def _compatible_fighter_8006cda4_total_consumes(phase_advance: int | None) -> tuple[int, ...]:
+    # Decomp candidate before ftCo_8008DCE0 block_33:
+    # - Fighter_8006CDA4 can consume up to three HSD_Randi calls before the DamageFlyRoll gate:
+    #   * held-item branch always consumes one x418 sample when entered,
+    #   * held-item subtype branch can consume a second x41C sample,
+    #   * x197C branch consumes one x418 sample when present.
+    # refs/melee/src/melee/ft/fighter.c::Fighter_8006CDA4
+    # refs/melee/src/sysdolphin/baselib/random.c::HSD_Randi
+    if phase_advance is None or phase_advance <= 0:
+        return tuple()
+    return (int(phase_advance),)
+
+
 def observe_case(case: Case, *, datasets_dir: Path = Path("datasets")) -> RngRowObservation:
     binding = _load_binding()
     ds_path = _resolve_dataset_path(case.dataset_rel, datasets_dir)
@@ -304,6 +318,8 @@ def observe_case(case: Case, *, datasets_dir: Path = Path("datasets")) -> RngRow
             and phase_advance_to_lt_threshold > 0
             and sum(modeled_pre_gate_site_counts) == 0
         ),
+        compatible_fighter_8006cda4_total_consumes=
+        _compatible_fighter_8006cda4_total_consumes(phase_advance_to_lt_threshold),
         roll_threshold=roll_threshold,
     )
 
@@ -330,6 +346,16 @@ def build_summary(observations: list[RngRowObservation]) -> dict:
         "blocker_rows": [asdict(obs) for obs in blockers],
         "blocker_phase_groups": blocker_phase_groups,
         "unmodeled_pre_gate_blockers": unmodeled_pre_gate_blockers,
+        "schema_gap_fields": [
+            "fighter.item_gobj_presence",
+            "fighter.item_hold_kind",
+            "fighter.item_hold_is_type3_throwable",
+            "fighter.x1978_presence",
+            "fighter.x197C_presence",
+            "fighter.x2220_b3",
+            "fighter.x2220_b4",
+            "fighter.ftCo_8008E984_guard",
+        ],
         "positive_controls": [asdict(obs) for obs in positive_controls],
         "negative_controls": [asdict(obs) for obs in negative_controls],
         "blocker": (
@@ -342,7 +368,10 @@ def build_summary(observations: list[RngRowObservation]) -> dict:
             "advances (+1 for one AttackAirB family, +2 for the throw/hitlag-carry families), which "
             "rules out a single blind extra consume. All currently modeled pre-gate RNG sites stay "
             "at zero on those blocker rows, so the next runtime lane needs a new upstream consumer "
-            "owner rather than a reorder of already-modeled sites."
+            "owner rather than a reorder of already-modeled sites. The first decomp-backed candidate "
+            "is Fighter_8006CDA4, whose held-item/x1978/x197C branches can contribute exactly the "
+            "observed +1 or +2 pre-gate consumes, but the required item-pointer and guard lanes are "
+            "not exposed in the current seed schema."
         ),
     }
 
@@ -364,7 +393,8 @@ def main() -> None:
             "out=%(out_action_id)d attacker=%(attacker_seed_action_id)d:%(attacker_seed_action_frame)d "
             "site1=%(site1_count)d roll=%(site1_roll).6f threshold=%(roll_threshold).6f "
             "phase_lt_threshold=%(phase_advance_to_lt_threshold)s modeled_pre_gate=%(modeled_pre_gate_site_counts)s "
-            "needs_new_site=%(requires_unmodeled_pre_gate_consumer)s" % obs
+            "needs_new_site=%(requires_unmodeled_pre_gate_consumer)s fighter_8006cda4_totals=%(compatible_fighter_8006cda4_total_consumes)s"
+            % obs
         )
         print("    roll_window=%s" % ",".join(f"{float(v):.6f}" for v in obs["site1_roll_window"]))
     print("positive_controls:")
@@ -373,7 +403,8 @@ def main() -> None:
             "  %(dataset)s:%(record)d:p%(p)d ref=%(ref_action_id)d out=%(out_action_id)d "
             "site1=%(site1_count)d roll=%(site1_roll).6f threshold=%(roll_threshold).6f "
             "phase_lt_threshold=%(phase_advance_to_lt_threshold)s modeled_pre_gate=%(modeled_pre_gate_site_counts)s "
-            "needs_new_site=%(requires_unmodeled_pre_gate_consumer)s" % obs
+            "needs_new_site=%(requires_unmodeled_pre_gate_consumer)s fighter_8006cda4_totals=%(compatible_fighter_8006cda4_total_consumes)s"
+            % obs
         )
         print("    roll_window=%s" % ",".join(f"{float(v):.6f}" for v in obs["site1_roll_window"]))
     print("negative_controls:")
@@ -381,7 +412,8 @@ def main() -> None:
         print(
             "  %(dataset)s:%(record)d:p%(p)d ref=%(ref_action_id)d out=%(out_action_id)d "
             "site1=%(site1_count)d phase_lt_threshold=%(phase_advance_to_lt_threshold)s "
-            "modeled_pre_gate=%(modeled_pre_gate_site_counts)s needs_new_site=%(requires_unmodeled_pre_gate_consumer)s"
+            "modeled_pre_gate=%(modeled_pre_gate_site_counts)s needs_new_site=%(requires_unmodeled_pre_gate_consumer)s "
+            "fighter_8006cda4_totals=%(compatible_fighter_8006cda4_total_consumes)s"
             % obs
         )
     print(f"blocker: {summary['blocker']}")
