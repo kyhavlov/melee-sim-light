@@ -14,6 +14,7 @@ def test_seed_schema_includes_staling_fields() -> None:
     assert "throw_pulse_crossed_prev_frame" in SEED_DTYPE.fields
     assert "source_clear_timer_x18c8" in SEED_DTYPE.fields
     assert "source_clear_owner_set_phase" in SEED_DTYPE.fields
+    assert "source_clear_processhit_damage_pending_phase" in SEED_DTYPE.fields
     assert "source_clear_grounded_damage_clear_phase" in SEED_DTYPE.fields
     assert "source_clear_terminal_phase" in SEED_DTYPE.fields
     # Walk callback-owned source velocity lane (ftWalkCommon_800DFDDC `mv_x0`).

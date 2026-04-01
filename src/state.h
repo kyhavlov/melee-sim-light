@@ -121,6 +121,12 @@ typedef struct MslStateSoA {
   // 1: active run is backed by source-owner set edge context (6 -> owner).
   // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm (last_hit_by lane)
   uint8_t* source_clear_owner_set_phase;
+  // One-step hidden ProcessHit damage-pending source-owner clear bridge.
+  // 0: no ProcessHit-owned clear override.
+  // 1: consume source-owner clear before x18C8 decrement for this one-step row.
+  // refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
+  // refs/melee/src/melee/ft/ftcommon.c::ftCommon_800804FC
+  uint8_t* source_clear_processhit_damage_pending_phase;
   // Grounded source-owner clear phase bridge (`ftCommon_800804FC` path).
   // 0: no grounded clear-phase override.
   // 1: consume grounded clear before x18C8 decrement for this one-step row.

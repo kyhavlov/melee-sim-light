@@ -127,6 +127,12 @@ SEED_DTYPE = np.dtype(
         # - 1: active run is backed by a source-owner set edge (6 -> owner).
         # refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm (last_hit_by lane)
         ("source_clear_owner_set_phase", _arr("u1", MAX_PLAYERS)),
+        # Hidden ProcessHit damage-pending source-owner clear bridge (one-step transient).
+        # - 0: no ProcessHit-owned clear override.
+        # - 1: consume source-owner clear at the ProcessHit/ftCommon_800804FC ownership point.
+        # refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
+        # refs/melee/src/melee/ft/ftcommon.c::ftCommon_800804FC
+        ("source_clear_processhit_damage_pending_phase", _arr("u1", MAX_PLAYERS)),
         # Grounded source-owner clear phase bridge (`ftCommon_800804FC` path).
         # - 0: no grounded clear-phase override.
         # - 1: consume grounded clear before x18C8 decrement for this one-step row.

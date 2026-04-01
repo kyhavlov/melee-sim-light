@@ -227,6 +227,18 @@ typedef struct MslSeed {
   // - 0: active run has no observed owner-set edge backing.
   // - 1: active run is backed by owner-set edge context.
   uint8_t source_clear_owner_set_phase[MSL_MAX_PLAYERS];
+  // One-step hidden ProcessHit damage-pending source-owner clear bridge.
+  //
+  // Decomp ownership context:
+  // - Fighter_ProcessHit can route source-owner clear through ftCommon_800804FC before the next
+  //   post-frame snapshot on grounded damage-pending rows.
+  // refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
+  // refs/melee/src/melee/ft/ftcommon.c::ftCommon_800804FC
+  //
+  // Producer (tools/slippi/make_dataset_from_slp.py):
+  // - 0: no ProcessHit-owned clear override on this row.
+  // - 1: consume ProcessHit-owned clear before x18C8 decrement for this one-step row.
+  uint8_t source_clear_processhit_damage_pending_phase[MSL_MAX_PLAYERS];
   // Grounded damage-clear phase bridge for source-owner clear (`ftCommon_800804FC` path).
   //
   // Decomp ownership context:

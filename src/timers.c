@@ -319,6 +319,18 @@ void timers_update_post_anim(MslBatch* batch) {
         batch->state.source_clear_timer_x18c8[idx] = 0u;
         continue;
       }
+      // Hidden ProcessHit damage-pending clear bridge:
+      // - Fighter_ProcessHit can route source-owner clear through ftCommon_800804FC before the
+      //   next post-frame snapshot on grounded damage-pending rows that are not otherwise exposed
+      //   by Slippi seed lanes.
+      // refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
+      // refs/melee/src/melee/ft/ftcommon.c::ftCommon_800804FC
+      if (batch->state.source_clear_processhit_damage_pending_phase[idx] != 0u) {
+        batch->state.last_hit_by[idx] = (uint8_t)MSL_LAST_HIT_BY_SOURCE_NONE;
+        batch->state.source_clear_timer_x18c8[idx] = 0u;
+        batch->state.source_clear_owner_set_phase[idx] = 0u;
+        continue;
+      }
       // Grounded clear-path bridge:
       // - ftCommon_800804FC clears source-owner + disables x18C8 on grounded paths.
       // - Consume this one-step seed-owned phase before timer decrement so the replay-facing

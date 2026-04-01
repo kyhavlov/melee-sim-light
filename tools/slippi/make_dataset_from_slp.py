@@ -652,6 +652,97 @@ def _derive_source_clear_grounded_damage_clear_phase_seed_lane(
     return out
 
 
+def _derive_source_clear_processhit_damage_pending_phase_seed_lane(
+    *,
+    action_id_u16: np.ndarray,
+    action_frame_i16: np.ndarray,
+    on_ground_u8: np.ndarray,
+    hitlag_u16: np.ndarray,
+    hitstun_u16: np.ndarray,
+    combo_count_u8: np.ndarray,
+    last_attack_landed_u8: np.ndarray,
+    source_clear_timer_x18c8_u8: np.ndarray,
+    source_clear_owner_set_phase_u8: np.ndarray,
+    colanim_hit_status_x198c_u8: np.ndarray,
+    state_flags_u8: np.ndarray,
+    last_hit_by_u8: np.ndarray,
+) -> np.ndarray:
+    """Derive one-step hidden ProcessHit damage-pending source-clear bridge.
+
+    Decomp ownership:
+    - Fighter_ProcessHit consumes callback-owned damage state and can route grounded source-owner
+      clear through ftCommon_800804FC before the next post-frame snapshot.
+    refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
+    refs/melee/src/melee/ft/ftcommon.c::ftCommon_800804FC
+    refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm (last_hit_by lane)
+
+    Seed representation:
+    - 0: no ProcessHit-owned clear override.
+    - 1: consume source-owner clear before x18C8 decrement for this one-step row.
+
+    Current producer policy:
+    - Foundational/runtime-neutral only.
+    - Keep the explicit seed lane plumbed end-to-end, but do not materialize positive rows until a
+      generic decomp-causal separator exists for the hidden ownership work at this site.
+    - This avoids replay-shaped row/action/timer fitting in dataset generation.
+
+    Causality:
+    - Strictly causal: validate current-row preconditions only, never future frames.
+    """
+    action_id = np.asarray(action_id_u16, dtype=np.uint16).reshape(-1)
+    action_frame = np.asarray(action_frame_i16, dtype=np.int16).reshape(-1)
+    on_ground = np.asarray(on_ground_u8, dtype=np.uint8).reshape(-1)
+    hitlag = np.asarray(hitlag_u16, dtype=np.uint16).reshape(-1)
+    hitstun = np.asarray(hitstun_u16, dtype=np.uint16).reshape(-1)
+    combo_count = np.asarray(combo_count_u8, dtype=np.uint8).reshape(-1)
+    last_attack_landed = np.asarray(last_attack_landed_u8, dtype=np.uint8).reshape(-1)
+    timer = np.asarray(source_clear_timer_x18c8_u8, dtype=np.uint8).reshape(-1)
+    owner_phase = np.asarray(source_clear_owner_set_phase_u8, dtype=np.uint8).reshape(-1)
+    colanim_hit_status = np.asarray(colanim_hit_status_x198c_u8, dtype=np.uint8).reshape(-1)
+    sf = np.asarray(state_flags_u8, dtype=np.uint8)
+    src = np.asarray(last_hit_by_u8, dtype=np.uint8).reshape(-1)
+    n = int(action_id.shape[0])
+    if (
+        int(action_frame.shape[0]) != n
+        or int(on_ground.shape[0]) != n
+        or int(hitlag.shape[0]) != n
+        or int(hitstun.shape[0]) != n
+        or int(combo_count.shape[0]) != n
+        or int(last_attack_landed.shape[0]) != n
+        or int(timer.shape[0]) != n
+        or int(owner_phase.shape[0]) != n
+        or int(colanim_hit_status.shape[0]) != n
+        or int(src.shape[0]) != n
+    ):
+        raise ValueError("source_clear_processhit_damage_pending_phase derivation lanes must have equal lengths")
+    if sf.ndim != 2 or int(sf.shape[0]) != n or int(sf.shape[1]) < 5:
+        raise ValueError(
+            "source_clear_processhit_damage_pending_phase derivation requires state_flags_u8 shape [n,5]"
+        )
+
+    out = np.zeros(n, dtype=np.uint8)
+    STATE_FLAGS_221F_INDEX = 4
+    STATE_FLAG_221F_B3_MASK = 0x10
+    SOURCE_NONE = 6
+    for i in range(n):
+        # Foundational lane only: validate current-row hidden-source-clear preconditions and keep
+        # the explicit seed inactive until a generic owner-side rule is available.
+        # refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
+        # refs/melee/src/melee/ft/ftcommon.c::ftCommon_800804FC
+        if int(src[i]) >= SOURCE_NONE:
+            continue
+        if int(timer[i]) == 0 or int(owner_phase[i]) == 0:
+            continue
+        if int(hitlag[i]) != 0 or int(hitstun[i]) != 0:
+            continue
+        if int(on_ground[i]) == 0:
+            continue
+        if (int(sf[i, STATE_FLAGS_221F_INDEX]) & STATE_FLAG_221F_B3_MASK) != 0:
+            continue
+
+    return out
+
+
 def _derive_source_clear_terminal_phase_seed_lane(
     *,
     char_id_u8: np.ndarray,
@@ -1958,6 +2049,7 @@ def _main_impl(args) -> None:
         samples["seed_t"]["throw_pulse_consumed"][:, slot] = 0
         samples["seed_t"]["throw_pulse_crossed_prev_frame"][:, slot] = 0
         samples["seed_t"]["source_clear_owner_set_phase"][:, slot] = 0
+        samples["seed_t"]["source_clear_processhit_damage_pending_phase"][:, slot] = 0
         samples["seed_t"]["source_clear_grounded_damage_clear_phase"][:, slot] = 0
         samples["seed_t"]["source_clear_terminal_phase"][:, slot] = 0
         # fp+0x2340 AttackDash lane (decomp-backed targeted ownership seed):
@@ -2583,6 +2675,28 @@ def _main_impl(args) -> None:
         samples["seed_t"]["turn_frames_to_turn"][:, slot] = turn_frames_to_turn[:-1]
         samples["seed_t"]["turn_has_turned"][:, slot] = turn_has_turned[:-1]
         samples["seed_t"]["turn_x8"][:, slot] = turn_x8[:-1]
+
+    # Owner-indexed ProcessHit source-clear bridge depends on current source-owner seed-visible
+    # motion state from the other port, so derive it after all per-port seed arrays are populated.
+    for slot in range(num_players):
+        samples["seed_t"]["source_clear_processhit_damage_pending_phase"][:, slot] = (
+            _derive_source_clear_processhit_damage_pending_phase_seed_lane(
+                action_id_u16=samples["seed_t"]["action_id"][:, slot],
+                action_frame_i16=samples["seed_t"]["action_frame"][:, slot],
+                on_ground_u8=samples["seed_t"]["on_ground"][:, slot],
+                hitlag_u16=samples["seed_t"]["hitlag"][:, slot],
+                hitstun_u16=samples["seed_t"]["hitstun"][:, slot],
+                combo_count_u8=samples["seed_t"]["combo_count"][:, slot],
+                last_attack_landed_u8=samples["seed_t"]["last_attack_landed"][:, slot],
+                source_clear_timer_x18c8_u8=samples["seed_t"]["source_clear_timer_x18c8"][:, slot],
+                source_clear_owner_set_phase_u8=samples["seed_t"]["source_clear_owner_set_phase"][
+                    :, slot
+                ],
+                colanim_hit_status_x198c_u8=samples["seed_t"]["colanim_hit_status_x198c"][:, slot],
+                state_flags_u8=samples["seed_t"]["state_flags"][:, slot, :],
+                last_hit_by_u8=samples["seed_t"]["last_hit_by"][:, slot],
+            )
+        )
 
     # Items are global per frame.
     items_fixed = _fill_items_fixed(frames, n_frames)
