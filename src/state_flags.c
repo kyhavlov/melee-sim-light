@@ -446,6 +446,28 @@ void state_flags_refresh_post_frame(MslBatch* batch) {
         } else {
           f221c &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221C_B3;
         }
+      } else if (batch->state.action_id[idx] == (uint16_t)MSL_ACT_GUARD_SET_OFF &&
+                 prev_action != (uint16_t)MSL_ACT_GUARD_SET_OFF &&
+                 prev_action != (uint16_t)MSL_ACT_GUARD_REFLECT) {
+        const uint8_t t14 = batch->state.guard_reflect_timer_x14[idx];
+        const uint8_t t18 = batch->state.guard_reflect_timer_x18[idx];
+        // Locomotion/grounded shield-admission -> GuardSetOff destination frame:
+        // - shield contact can route straight into GuardSetOff without exposing an intermediate
+        //   GuardReflect post-frame,
+        // - powershield-desc setup (ftCo_80093A50) still writes the GuardReflect timers/flags, and
+        // - the destination GuardSetOff post-frame observes those active x221C_b1/x221C_b2 bits.
+        // Keep this narrow to non-GuardReflect entries so stale-x18 GuardReflect->GuardSetOff
+        // carry lanes remain owned by their existing callback/timer bridges.
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
+        //   ftCo_80091A4C,ftCo_800939B4,ftCo_80093A50,ftCo_GuardSetOff_Anim}
+        // refs/melee/src/melee/ft/ftcoll.c::{ftColl_CreateReflectHit,ftColl_80076CBC}
+        if (t14 != 0) {
+          f221c |= (uint8_t)MSL_STATE_FLAG_221C_B1;
+        }
+        if (t18 != 0) {
+          f221c |= (uint8_t)MSL_STATE_FLAG_221C_B2;
+        }
+        f221c &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221C_B3;
       } else {
         // Decomp: x221C_b3 is the 1-frame GuardReflect-entry latch written on ftCo_8009388C entry
         // and cleared by the next ftCo_80093BC0 callback pass; non-GuardReflect states do not own

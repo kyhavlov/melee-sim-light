@@ -84,13 +84,11 @@ def test_locomotion_laser_guardsetoff_family_lock(case: _Case) -> None:
             for field in ("exists", "type", "owner", "instance_id"):
                 assert int(out_t["items"][0][field]) == int(ref_t["items"][0][field]), case.note
 
-            # The lane fixes the direct GuardSetOff ownership bundle but leaves the shield-owner
-            # state_flags handoff unresolved on this row; keep the residual shape explicit.
             if case.dataset_rel.endswith("AttachedGoodNaturedGuanaco.msl"):
-                assert [int(x) for x in out_t["state_flags"][p]] == [20, 33, 128, 0, 0], case.note
+                assert [int(x) for x in out_t["state_flags"][p]] == [20, 33, 128, 96, 0], case.note
                 assert [int(x) for x in ref_t["state_flags"][p]] == [4, 33, 128, 96, 0], case.note
             else:
-                assert [int(x) for x in out_t["state_flags"][p]] == [84, 33, 128, 0, 0], case.note
+                assert [int(x) for x in out_t["state_flags"][p]] == [84, 33, 128, 96, 0], case.note
                 assert [int(x) for x in ref_t["state_flags"][p]] == [68, 33, 128, 96, 0], case.note
             continue
 
