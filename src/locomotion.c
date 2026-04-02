@@ -40,6 +40,9 @@ static inline uint32_t anim_for_walk_action(uint16_t a);
 static inline uint8_t is_dash_flick(const MslCommonParams* c, float stick_x, uint8_t tilt_timer_x);
 static inline MslJumpInput jump_input_from_edges(const MslCommonParams* c, uint16_t buttons_pressed,
                                                  float stick_y, uint8_t tilt_timer_y);
+static inline uint16_t jump_action_from_stick(const MslCommonParams* c, float stick_x,
+                                              float facing_dir);
+static inline uint32_t submotion_for_action(uint16_t a);
 
 static inline uint8_t anim_finished(uint8_t char_id, uint16_t msid, float anim_frame_f32) {
   const float end = msl_anim_end_frame(char_id, msid);
@@ -747,6 +750,93 @@ static inline uint8_t locomotion_has_opponent_active_catch_connect_window(
     }
   }
   return 0u;
+}
+
+static inline uint8_t locomotion_try_kneebend_startup_complete_jump_prepass(
+    MslBatch* batch, const MslCommonParams* c, const MslCharParams* ch, int bi, int p,
+    int num_players) {
+  if (batch == NULL || c == NULL || ch == NULL) {
+    return 0u;
+  }
+  const size_t idx = msl_idx_player(bi, p);
+  if (batch->state.on_ground[idx] == 0u ||
+      batch->state.action_id[idx] != (uint16_t)MSL_ACT_KNEE_BEND) {
+    return 0u;
+  }
+
+  const uint8_t startup_complete =
+      (batch->state.action_frame[idx] >= (int16_t)ch->jump_startup_frames) ? 1u : 0u;
+  if (!startup_complete ||
+      locomotion_has_opponent_active_catch_connect_window(batch, bi, p, num_players)) {
+    return 0u;
+  }
+
+  const float stick_y =
+      apply_deadzone(stick_i8_to_unit(batch->state.input_main_y[idx]), c->lstick_deadzone_y);
+  const float cstick_y =
+      apply_deadzone(stick_i8_to_unit(batch->state.input_c_y[idx]), c->lstick_deadzone_y);
+  const uint16_t buttons = batch->state.input_buttons[idx];
+  const float facing_dir = batch->state.facing[idx] ? 1.0f : -1.0f;
+
+  // Decomp callback-phase ordering:
+  // - ftCo_KneeBend_Anim consumes the startup-complete Jump enter in the anim callback phase.
+  // - Grounded locomotion IASA chains (Wait/Turn/Dash/Walk) are processed later.
+  // Running this Jump-ready KneeBend subset as a pre-pass keeps same-frame global
+  // Fighter_ChangeMotionState instance_id consumption aligned before later grounded IASA enters.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_KneeBend.c::{ftCo_KneeBend_Anim,ftCo_KneeBend_IASA}
+  // refs/melee/src/melee/ft/chara/ftCommon/{ftCo_Wait.c,ftCo_Turn.c,ftCo_Dash.c,ftCo_Walk.c}
+
+  // Latch short hop state (ftCo_KneeBend_Check_ShortHop).
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_KneeBend.c:46
+  if (!batch->state.kneebend_is_short_hop[idx]) {
+    const uint8_t j_in = batch->state.kneebend_jump_input[idx];
+    if (j_in == (uint8_t)MSL_JUMP_INPUT_XY) {
+      if (!(buttons & (uint16_t)MSL_BUTTON_XY)) {
+        batch->state.kneebend_is_short_hop[idx] = 1;
+      }
+    } else if (j_in == (uint8_t)MSL_JUMP_INPUT_LSTICK) {
+      if (stick_y < c->tap_jump_release_threshold) {
+        batch->state.kneebend_is_short_hop[idx] = 1;
+      }
+    } else if (j_in == (uint8_t)MSL_JUMP_INPUT_CSTICK) {
+      if (cstick_y < c->tap_jump_release_threshold) {
+        batch->state.kneebend_is_short_hop[idx] = 1;
+      }
+    }
+  }
+
+  const uint8_t is_short = batch->state.kneebend_is_short_hop[idx] ? 1u : 0u;
+  const uint8_t full = (uint8_t)(!is_short);
+  const float jump_stick_x = apply_deadzone(
+      stick_i8_to_unit(batch->state.prev_input_main_x[idx]), c->lstick_deadzone_x);
+  const uint16_t jump_act = jump_action_from_stick(c, jump_stick_x, facing_dir);
+  batch->state.action_id[idx] = jump_act;
+  batch->state.animation_index[idx] = (uint32_t)submotion_for_action(jump_act);
+  msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+  batch->state.on_ground[idx] = 0;
+  batch->state.ecb_lock_timer[idx] = 10u;
+
+  const float base_x =
+      batch->state.speed_ground_x_self[idx] * ch->ground_to_air_jump_momentum_multiplier;
+  float h_vel = base_x + jump_stick_x * ch->jump_h_initial_velocity;
+  const float h_max = ch->jump_h_max_velocity;
+  if (msl_absf(h_vel) > h_max) {
+    h_vel = msl_signf(h_vel) * h_max;
+  }
+  batch->state.speed_air_x_self[idx] = h_vel;
+  batch->state.speed_ground_x_self[idx] = 0.0f;
+  batch->state.speed_y_self[idx] =
+      full ? ch->jump_v_initial_velocity : ch->hop_v_initial_velocity;
+  batch->state.tilt_timer_y[idx] = 0xFEu;
+  batch->state.jumps_left[idx] = ch->max_jumps > 0 ? (uint8_t)(ch->max_jumps - 1) : 0;
+
+  if (escape_air_try_enter_from_air_locomotion(batch, c, idx)) {
+    return 1u;
+  }
+  if (attackair_try_enter_from_air_locomotion(batch, c, idx)) {
+    return 1u;
+  }
+  return 1u;
 }
 
 static inline void enter_fall_keep_fastfall_ftco_fall_enter(MslBatch* batch, size_t idx) {
@@ -1570,6 +1660,19 @@ void locomotion_update_pre(MslBatch* batch) {
 
   const int num_players = (int)batch->config.num_players;
   for (int bi = 0; bi < batch->batch_size; bi++) {
+    for (int p = 0; p < num_players; p++) {
+      const size_t idx = msl_idx_player(bi, p);
+      if (batch->state.hitlag_started_frame[idx] != 0) {
+        continue;
+      }
+      const MslCharParams* ch = msl_char_params(batch->state.char_id[idx]);
+      if (ch == NULL) {
+        continue;
+      }
+      (void)locomotion_try_kneebend_startup_complete_jump_prepass(batch, c, ch, bi, p,
+                                                                  num_players);
+    }
+
     for (int p = 0; p < num_players; p++) {
       const size_t idx = msl_idx_player(bi, p);
 
