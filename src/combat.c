@@ -2861,6 +2861,13 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
               batch->state.action_id[p0_idx] = (uint16_t)MSL_ACT_REBOUND_STOP;
               batch->state.animation_index[p0_idx] = 0xFFFFFFFFu;
               msl_anim_timebase_enter(batch, p0_idx, 0.0f, 1.0f);
+              // ReboundStop is suite-observed with no submotion (animation_index=-1, action_frame=-1).
+              // Collision ownership enters ReboundStop before the shared anim pass that would
+              // otherwise advance the newly-entered timebase, so preserve the destination snapshot
+              // shape until ReboundStop_Anim consumes into Rebound on the first !hitlag callback.
+              // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Rebound.c::{
+              //   ftCo_80099D9C,ftCo_ReboundStop_Anim,ftCo_80099E44}
+              msl_anim_timebase_seed(batch, p0_idx, -1.0f, 1.0f);
             }
             if (want_rebound_stop[1]) {
               if (max_rebound_int_dmg[1] > 0) {
@@ -2875,6 +2882,13 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
               batch->state.action_id[p1_idx] = (uint16_t)MSL_ACT_REBOUND_STOP;
               batch->state.animation_index[p1_idx] = 0xFFFFFFFFu;
               msl_anim_timebase_enter(batch, p1_idx, 0.0f, 1.0f);
+              // ReboundStop is suite-observed with no submotion (animation_index=-1, action_frame=-1).
+              // Collision ownership enters ReboundStop before the shared anim pass that would
+              // otherwise advance the newly-entered timebase, so preserve the destination snapshot
+              // shape until ReboundStop_Anim consumes into Rebound on the first !hitlag callback.
+              // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Rebound.c::{
+              //   ftCo_80099D9C,ftCo_ReboundStop_Anim,ftCo_80099E44}
+              msl_anim_timebase_seed(batch, p1_idx, -1.0f, 1.0f);
             }
           }
         }
