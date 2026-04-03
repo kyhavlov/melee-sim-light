@@ -1596,13 +1596,17 @@ void knockdown_update_post_collision(MslBatch* batch) {
             batch->state.action_id[idx] = (uint16_t)MSL_ACT_LANDING;
             batch->state.animation_index[idx] = (uint32_t)MSL_SM_LANDING;
             msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
-            // Conservative ownership for Damage->Landing handoff:
-            // keep x221C_b6-held lanes intact, except DamageAir3 where landing transitions consume
-            // hitstun on entry in this collision lane.
+            // DamageAir -> Landing handoff ownership:
+            // - Damage_Coll enters ftCo_Landing_Enter_Basic on this low-KB aerial landing path.
+            // - Landing_Enter uses Fighter_ChangeMotionState(..., Ft_MF_None), so the destination
+            //   no longer owns the Damage hitstun lane.
             // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{
-            //   ftCo_Damage_Anim,ftCo_Damage_IASA,ftCo_Damage_Coll
+            //   ftCo_Damage_Anim,ftCo_Damage_IASA,ftCo_Damage_Coll,ftCo_Landing_Enter_Basic
             // }
+            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::ftCo_Landing_Enter
+            // refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState
             if (!damage_iasa_lockout_x221c_b6(batch, idx) ||
+                a0 == (uint16_t)MSL_ACT_DAMAGE_AIR_2 ||
                 a0 == (uint16_t)MSL_ACT_DAMAGE_AIR_3) {
               batch->state.hitstun[idx] = 0u;
             }

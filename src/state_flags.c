@@ -139,6 +139,7 @@ void state_flags_refresh_post_frame(MslBatch* batch) {
   enum { MSL_STATE_FLAG_221C_B1 = 0x40 };
   enum { MSL_STATE_FLAG_221C_B2 = 0x20 };
   enum { MSL_STATE_FLAG_221C_B3 = 0x10 };
+  enum { MSL_STATE_FLAG_221F_B0 = 0x80 };
   enum { MSL_STATE_FLAG_221F_B1 = 0x40 };
 
   // Seed/state timer representation uses a +1 bias; derive the entry value from ftCommonData.
@@ -481,6 +482,17 @@ void state_flags_refresh_post_frame(MslBatch* batch) {
         if (action_id == (uint16_t)MSL_ACT_GUARD_ON || action_id == (uint16_t)MSL_ACT_GUARD) {
           f221c &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221C_B1;
         }
+        if (action_id == (uint16_t)MSL_ACT_KNEE_BEND &&
+            prev_action == (uint16_t)MSL_ACT_GUARD_REFLECT && batch->state.action_frame[idx] == 0) {
+          // GuardReflect -> jump-squat transition ownership:
+          // - GuardReflect IASA delegates to the grounded jump check (ftCo_800CB024), which exits
+          //   GuardReflect before the KneeBend destination post-frame.
+          // - On that exit, the reflect-window bit x221C_b1 no longer has an owning callback/timer,
+          //   while the powershield-active lane can still persist.
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_GuardReflect_IASA
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c::ftCo_800CB024
+          f221c &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221C_B1;
+        }
       }
       batch->state.state_flags[flags_221c_i] = f221c;
 
@@ -510,12 +522,35 @@ void state_flags_refresh_post_frame(MslBatch* batch) {
         f221f &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221F_B1;
       }
       if (action_id == (uint16_t)MSL_ACT_REBIRTH) {
+        // Rebirth camera-box visibility lane:
+        // - Rebirth_Cam updates the fighter camera subject after the first steady Rebirth frames.
+        // - ftLib_80086A8C exposes fp->x221F_b0 from that camera subject visibility test.
+        // - In suite-observed Rebirth entry rows, the first steady frame can transition from the
+        //   pre-entry seed carry (0) into the visible camera-box lane (0x80).
+        // refs/melee/src/melee/ft/ft_0D31.c::ftCo_Rebirth_Cam
+        // refs/melee/src/melee/ft/ftlib.c::ftLib_80086A8C
+        if (batch->state.action_frame[idx] <= 2) {
+          f221f |= (uint8_t)MSL_STATE_FLAG_221F_B0;
+        }
         // Generic motion-state reset owns fp->x221F_b1 clear on Rebirth entry.
         // refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState
         // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dead.c
         (void)prev_action;
         f221f &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221F_B1;
       }
+      if (action_id == (uint16_t)MSL_ACT_LANDING &&
+          prev_action == (uint16_t)MSL_ACT_DAMAGE_AIR_2 && batch->state.prev_action_frame[idx] < 8 &&
+          batch->state.action_frame[idx] == 0) {
+        // Early DamageAir2->Landing snapshot carry:
+        // - Damage_Coll can still hand off through Landing_Enter_Basic while the replay-visible
+        //   post-frame retains the x221C_b6 lane on the destination snapshot.
+        // - Keep this restricted to the first Landing frame after the early DamageAir2 handoff so
+        //   the broad late-landing hitstun clear does not create new seed==ref state_flag drift.
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_Coll
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::ftCo_Landing_Enter_Basic
+        f221c |= (uint8_t)MSL_STATE_FLAG_221C_IS_HITSTUN;
+      }
+      batch->state.state_flags[flags_221c_i] = f221c;
       batch->state.state_flags[flags_221f_i] = f221f;
     }
   }
