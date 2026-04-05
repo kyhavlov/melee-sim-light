@@ -160,6 +160,21 @@ void reflector_bubbles_refresh(MslBatch* batch) {
           }
         } else {
           f &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_2218_IS_REFLECT_ACTIVE;
+          if ((prev_a == (uint16_t)MSL_ACT_FX_SPECIAL_LW_START ||
+               prev_a == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_LW_START) &&
+              batch->state.action_frame[idx] == 0) {
+            // Reflector-start direct exit reset:
+            // - SpecialLwStart / SpecialAirLwStart own the transient ReflectDesc.x20_behavior lane
+            //   while the startup reflector bubble is active,
+            // - direct startup exits into common destinations go through Fighter_ChangeMotionState
+            //   without a loop/hit/turn reflector callback to re-own that lane,
+            // - clear the stale fp->x2218_b5 carry on the destination entry snapshot only for this
+            //   start-action exit shape.
+            // refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState
+            // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c::{
+            //   ftFx_SpecialLwStart_Anim,ftFx_SpecialAirLwStart_Anim}
+            f &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_2218_REFLECT_BEHAVIOR;
+          }
         }
         batch->state.state_flags[flags_i] = f;
       } else if (override_guard_reflect) {
