@@ -361,10 +361,22 @@ void state_flags_refresh_post_frame(MslBatch* batch) {
           break;
         }
       }
-      if (any_non_enabled_hurtcap) {
-        f221a |= (uint8_t)MSL_STATE_FLAG_221A_B5;
-      } else {
-        f221a &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221A_B5;
+        if (any_non_enabled_hurtcap) {
+          f221a |= (uint8_t)MSL_STATE_FLAG_221A_B5;
+        } else {
+          f221a &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221A_B5;
+        }
+      if (state_flags_is_damage_action(action_id) && action_id != prev_action &&
+          batch->state.action_frame[idx] == 1 && batch->state.hitlag[idx] > 0u &&
+          batch->state.hitstun[idx] > 0u) {
+        // Fresh Damage* destination entry sets x221A_b3 while hitlag is active:
+        // - Fighter_ProcessHit enables SDI / x221A_b3 on the knockback-owning hitlag start path,
+        // - Fighter_8006A1BC clears x221A_b3 when hitlag ends,
+        // - so the first replay-visible Damage* destination rows with live hitlag/hitstun should
+        //   expose the bit during the new hitlag window.
+        // refs/melee/src/melee/ft/fighter.c::{Fighter_ProcessHit_8006D1EC,Fighter_8006A1BC}
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{ftCo_8008DCE0,ftCo_8008EC90}
+        f221a |= (uint8_t)MSL_STATE_FLAG_221A_B3;
       }
 
       // x221B_b5 ownership (grab-owner latch):
@@ -548,6 +560,24 @@ void state_flags_refresh_post_frame(MslBatch* batch) {
           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_GuardSetOff_Anim,ftCo_80093BC0}
           // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A1BC,Fighter_8006A360}
           f221c &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221C_B1;
+        }
+        if (action_id == (uint16_t)MSL_ACT_GUARD_SET_OFF &&
+            batch->state.hitlag[idx] == 0u && batch->state.prev_action_frame[idx] == 0 &&
+            batch->state.guard_reflect_timer_x14[idx] == 0u &&
+            batch->state.guard_reflect_timer_x18[idx] == 0u &&
+            batch->state.lightshield_amount[idx] >= 0.999f &&
+            batch->state.guard_setoff_hitlag_damage_min[idx] == 1u &&
+            batch->state.guard_x10[idx] == 5u && f221c == (uint8_t)MSL_STATE_FLAG_221C_B2) {
+          // GuardSetOff first-steady powershield-active expiry:
+          // - after prio-0 hitlag decrement, GuardSetOff_Anim / ftCo_80093BC0 owns the first steady
+          //   row,
+          // - x221C_b2 persists only while the powershield-active x18 lane is live, and
+          // - on the narrow full-lightshield, low-damage GuardSetOff rows where x18 is already
+          //   expired and guard.x10 has advanced to the 5-frame steady window, clear the stale
+          //   seeded x221C_b2 carry.
+          // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A1BC,Fighter_8006A360}
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_GuardSetOff_Anim,ftCo_80093BC0}
+          f221c &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221C_B2;
         }
         if (action_id == (uint16_t)MSL_ACT_KNEE_BEND &&
             prev_action == (uint16_t)MSL_ACT_GUARD_REFLECT && batch->state.action_frame[idx] == 0) {
