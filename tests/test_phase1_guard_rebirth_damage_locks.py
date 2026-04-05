@@ -18,6 +18,7 @@ class _Case:
     note: str
     expected_hitstun: int | None = None
     expected_hitlag: int | None = None
+    expected_state_flags_0: int | None = None
     expected_state_flags_3: int | None = None
     expected_state_flags_4: int | None = None
 
@@ -65,6 +66,9 @@ def _step_case(c: _Case) -> None:
         if c.expected_hitlag is not None:
             got = int(out["hitlag"][c.p])
             assert got == c.expected_hitlag == int(ref["hitlag"][c.p]), c.note
+        if c.expected_state_flags_0 is not None:
+            got = int(out["state_flags"][c.p, 0])
+            assert got == c.expected_state_flags_0 == int(ref["state_flags"][c.p, 0]), c.note
         if c.expected_state_flags_3 is not None:
             got = int(out["state_flags"][c.p, 3])
             assert got == c.expected_state_flags_3 == int(ref["state_flags"][c.p, 3]), c.note
@@ -102,6 +106,27 @@ def _step_case(c: _Case) -> None:
         _Case(
             dataset_rel=(
                 "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
+                "cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl"
+            ),
+            record=2390,
+            p=0,
+            note="GuardReflect -> GuardSetOff clears the reflecting lane on the shieldstun destination",
+            expected_state_flags_0=4,
+        ),
+        _Case(
+            dataset_rel=(
+                "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
+                "cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl"
+            ),
+            record=2391,
+            p=0,
+            note="Adjacent GuardSetOff hitlag row keeps the non-reflecting destination shape after entry",
+            expected_state_flags_0=4,
+            expected_state_flags_3=96,
+        ),
+        _Case(
+            dataset_rel=(
+                "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
                 "cardinal_1.0_recent/TreasuredBackKangaroo.msl"
             ),
             record=3599,
@@ -109,6 +134,38 @@ def _step_case(c: _Case) -> None:
             note="DamageAir2 -> Landing consumes hitstun on landing entry",
             expected_hitstun=0,
             expected_state_flags_3=0,
+        ),
+        _Case(
+            dataset_rel=(
+                "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
+                "cardinal_1.0_recent/GracefulAttachedTurtle.msl"
+            ),
+            record=3944,
+            p=1,
+            note="DeadUpStar phase-2 boundary raises x221F_b1 on the delayed dead-flow latch",
+            expected_state_flags_4=64,
+        ),
+        _Case(
+            dataset_rel=(
+                "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
+                "cardinal_1.0_recent/QuerulousGrandDinosaur.msl"
+            ),
+            record=4482,
+            p=0,
+            note="DeadUpStar -> Rebirth transition clears dead-flow carry before steady Rebirth visibility resumes",
+            expected_state_flags_3=0,
+            expected_state_flags_4=0,
+        ),
+        _Case(
+            dataset_rel=(
+                "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
+                "cardinal_1.0_recent/TreasuredBackKangaroo.msl"
+            ),
+            record=4021,
+            p=1,
+            note="DeadLeft -> Rebirth keeps the existing x221F_b0 carry on the transition row",
+            expected_state_flags_3=0,
+            expected_state_flags_4=128,
         ),
     ],
 )
@@ -118,6 +175,9 @@ def test_phase1_guard_rebirth_damage_rows_are_replay_exact(c: _Case) -> None:
     #   refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c::ftCo_800CB024
     # - Rebirth camera-box flag: refs/melee/src/melee/ft/ft_0D31.c::ftCo_Rebirth_Cam
     #   refs/melee/src/melee/ft/ftlib.c::ftLib_80086A8C
+    # - DeadUpStar delayed phase boundary / Rebirth transition:
+    #   refs/melee/build/GALE01/asm/melee/ft/ft_0D31.s::ftCo_DeadUpStar_Anim
+    #   refs/melee/build/GALE01/asm/melee/ft/ft_0D31.s::ftCo_800D4FF4
     # - DamageAir landing handoff: refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_Coll
     #   refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::ftCo_Landing_Enter
     _step_case(c)

@@ -87,6 +87,7 @@ void state_flags_refresh_post_frame(MslBatch* batch) {
   enum { MSL_STATE_FLAG_2218_ALLOW_INTERRUPT = 0x80 };
   enum { MSL_STATE_FLAG_2218_B1 = 0x40 };
   enum { MSL_STATE_FLAG_2218_B2 = 0x20 };
+  enum { MSL_STATE_FLAG_2218_REFLECTING = 0x10 };
 
   // fp+0x221A:
   // - 0x01 = fp->x221A_b7
@@ -270,6 +271,29 @@ void state_flags_refresh_post_frame(MslBatch* batch) {
           (prev_action_2218 == (uint16_t)MSL_ACT_ATTACK_DASH &&
            action_id == (uint16_t)MSL_ACT_GUARD_ON && action_frame_i <= 0)) {
         f2218 |= (uint8_t)MSL_STATE_FLAG_2218_ALLOW_INTERRUPT;
+      }
+      if (action_id == (uint16_t)MSL_ACT_GUARD_REFLECT) {
+        // GuardReflect reflecting-owner lane:
+        // - ftColl_CreateReflectHit sets fp->reflecting = true on GuardReflect admission.
+        // - ftCo_80093BC0 clears fp->reflecting when the x14 reflect window expires.
+        // refs/melee/src/melee/ft/ftcoll.c::ftColl_CreateReflectHit
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80093BC0
+        if (batch->state.guard_reflect_timer_x14[idx] != 0u) {
+          f2218 |= (uint8_t)MSL_STATE_FLAG_2218_REFLECTING;
+        } else {
+          f2218 &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_2218_REFLECTING;
+        }
+      } else if (action_id == (uint16_t)MSL_ACT_GUARD_SET_OFF &&
+                 prev_action_2218 == (uint16_t)MSL_ACT_GUARD_REFLECT) {
+        // GuardReflect -> GuardSetOff handoff:
+        // - shieldstun entry itself still uses Fighter_ChangeMotionState reset ownership, and
+        // - the destination GuardSetOff row no longer owns the live `reflecting` lane from the
+        //   GuardReflect descriptor.
+        // Keep this restricted to true GuardReflect exits; replay-real locomotion-driven
+        // GuardSetOff admission rows can still carry the seeded `reflecting` bit.
+        // refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80092F2C
+        f2218 &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_2218_REFLECTING;
       }
       batch->state.state_flags[flags_2218_i] = f2218;
 
@@ -493,6 +517,20 @@ void state_flags_refresh_post_frame(MslBatch* batch) {
           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c::ftCo_800CB024
           f221c &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221C_B1;
         }
+        if (action_id == (uint16_t)MSL_ACT_REBIRTH &&
+            (prev_action == (uint16_t)MSL_ACT_DEAD_DOWN ||
+             prev_action == (uint16_t)MSL_ACT_DEAD_LEFT ||
+             prev_action == (uint16_t)MSL_ACT_DEAD_RIGHT ||
+             prev_action == (uint16_t)MSL_ACT_DEAD_UP_STAR)) {
+          // Rebirth entry owns the Fighter_ChangeMotionState reset bundle before the Rebirth
+          // callback lane starts.
+          // - Motion-state reset clears fp->x221C_b3 / b1 / b2.
+          // - Death -> Rebirth enter runs through that reset before steady Rebirth callbacks.
+          // refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState
+          // refs/melee/build/GALE01/asm/melee/ft/ft_0D31.s::ftCo_800D4FF4
+          f221c &= (uint8_t) ~(uint8_t)(MSL_STATE_FLAG_221C_B3 | MSL_STATE_FLAG_221C_B1 |
+                                        MSL_STATE_FLAG_221C_B2);
+        }
       }
       batch->state.state_flags[flags_221c_i] = f221c;
 
@@ -514,6 +552,20 @@ void state_flags_refresh_post_frame(MslBatch* batch) {
           !state_flags_221f_dead_start_action(prev_action)) {
         f221f |= (uint8_t)MSL_STATE_FLAG_221F_B1;
       }
+      if (action_id == (uint16_t)MSL_ACT_DEAD_UP_STAR && c != NULL &&
+          batch->state.match_flow_timer[idx] ==
+              (uint8_t)(c->dead_up_star_phase2_frames > 255u ? 255u
+                                                             : c->dead_up_star_phase2_frames)) {
+        // DeadUpStar delayed dead-flow latch:
+        // - the anim callback keeps a two-phase internal countdown (x508/x50C),
+        // - match_flow_update_pre_anim has already decremented the shared countdown for this
+        //   post-frame, and
+        // - replay-visible post-frames pick up the x221F_b1 latch on the first frame with
+        //   `dead_up_star_phase2_frames` remaining.
+        // refs/melee/build/GALE01/asm/melee/ft/ft_0D31.s::ftCo_DeadUpStar_Anim
+        // data/common/ft_common_data.json: dead_up_star_phase2_frames
+        f221f |= (uint8_t)MSL_STATE_FLAG_221F_B1;
+      }
       if (action_id == (uint16_t)MSL_ACT_ENTRY_START) {
         // EntryStart snapshots follow Fighter_ChangeMotionState reset ownership; do not carry
         // seeded dead-flow x221F_b1 into this transition destination.
@@ -531,6 +583,16 @@ void state_flags_refresh_post_frame(MslBatch* batch) {
         // refs/melee/src/melee/ft/ftlib.c::ftLib_80086A8C
         if (batch->state.action_frame[idx] <= 2) {
           f221f |= (uint8_t)MSL_STATE_FLAG_221F_B0;
+        }
+        if (prev_action == (uint16_t)MSL_ACT_DEAD_UP_STAR && batch->state.action_frame[idx] == 0) {
+          // DeadUpStar -> Rebirth transition frame:
+          // - motion-state reset owns the destination snapshot,
+          // - the Rebirth camera callback has not yet reasserted fp->x221F_b0 on this first
+          //   transition post-frame.
+          // refs/melee/build/GALE01/asm/melee/ft/ft_0D31.s::ftCo_DeadUpStar_Anim
+          // refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState
+          // refs/melee/src/melee/ft/ftlib.c::ftLib_80086A8C
+          f221f &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221F_B0;
         }
         // Generic motion-state reset owns fp->x221F_b1 clear on Rebirth entry.
         // refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState

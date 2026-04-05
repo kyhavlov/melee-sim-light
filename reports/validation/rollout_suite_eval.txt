@@ -29,50 +29,50 @@ fields: action_id,animation_index,on_ground,hitlag,hitstun,state_flags
 
 == datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl ==
 rollout.best_len: 154
-rollout.streak_count: 177
+rollout.streak_count: 176
 rollout.streak_len.median: 30
 rollout.streak_len.p90: 92
 rollout.streak_len.p95: 108
 rollout.streak_len.max: 154
-rollout.first_mismatch_total: 178
-rollout.first_mismatch_seeded_total: 50
+rollout.first_mismatch_total: 177
+rollout.first_mismatch_seeded_total: 48
 
 == datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl ==
 rollout.best_len: 197
-rollout.streak_count: 271
+rollout.streak_count: 268
 rollout.streak_len.median: 33
-rollout.streak_len.p90: 94
-rollout.streak_len.p95: 113
+rollout.streak_len.p90: 97
+rollout.streak_len.p95: 115
 rollout.streak_len.max: 197
-rollout.first_mismatch_total: 270
-rollout.first_mismatch_seeded_total: 76
+rollout.first_mismatch_total: 267
+rollout.first_mismatch_seeded_total: 73
 
 == datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/QuerulousGrandDinosaur.msl ==
 rollout.best_len: 181
-rollout.streak_count: 219
+rollout.streak_count: 215
 rollout.streak_len.median: 35
-rollout.streak_len.p90: 105
+rollout.streak_len.p90: 107
 rollout.streak_len.p95: 129
 rollout.streak_len.max: 181
-rollout.first_mismatch_total: 220
-rollout.first_mismatch_seeded_total: 62
+rollout.first_mismatch_total: 216
+rollout.first_mismatch_seeded_total: 58
 
 == datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/TreasuredBackKangaroo.msl ==
 rollout.best_len: 207
-rollout.streak_count: 193
-rollout.streak_len.median: 32
+rollout.streak_count: 191
+rollout.streak_len.median: 33
 rollout.streak_len.p90: 83
 rollout.streak_len.p95: 101
 rollout.streak_len.max: 207
-rollout.first_mismatch_total: 193
-rollout.first_mismatch_seeded_total: 50
+rollout.first_mismatch_total: 191
+rollout.first_mismatch_seeded_total: 48
 
 == suite summary ==
-overall.rollout.streak_count: 860
-overall.rollout.streak_len.median: 32
-overall.rollout.streak_len.p90: 93
-overall.rollout.streak_len.p95: 113
+overall.rollout.streak_count: 850
+overall.rollout.streak_len.median: 33
+overall.rollout.streak_len.p90: 94
+overall.rollout.streak_len.p95: 115
 overall.rollout.streak_len.max: 207
 overall.rollout.best_len.max: 207
-overall.rollout.first_mismatch_total: 861
-overall.rollout.first_mismatch_seeded_total: 238
+overall.rollout.first_mismatch_total: 851
+overall.rollout.first_mismatch_seeded_total: 227
