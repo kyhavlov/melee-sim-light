@@ -92,6 +92,37 @@ _NEGATIVE_CONTROLS = (
     ),
 )
 
+_SECOND_STEADY_B2_TARGETS = (
+    _Case(
+        dataset_rel=(
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
+            "GracefulAttachedTurtle.msl"
+        ),
+        target_record=6319,
+        port=0,
+        note="GAT second steady GuardSetOff self-loop clears stale x221C_b2 once both reflect timers are gone",
+    ),
+    _Case(
+        dataset_rel=(
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
+            "GracefulAttachedTurtle.msl"
+        ),
+        target_record=9483,
+        port=0,
+        note="GAT mirrored second steady GuardSetOff self-loop clears stale x221C_b2 once both reflect timers are gone",
+    ),
+    _Case(
+        dataset_rel=(
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
+            "TreasuredBackKangaroo.msl"
+        ),
+        target_record=2327,
+        port=0,
+        note="TBK second steady GuardSetOff self-loop clears stale x221C_b2 once both reflect timers are gone",
+    ),
+)
+
+
 
 @pytest.mark.integration
 @pytest.mark.parametrize("case", _TARGETS, ids=lambda c: f"{Path(c.dataset_rel).stem}-rec{c.target_record}-p{c.port}")
@@ -185,3 +216,46 @@ def test_guardsetoff_first_steady_gx10_6_controls_keep_b2(case: _Case) -> None:
 
     _, ref_row, out_row = _run_one_step_row(dataset_path, case.target_record, p)
     assert int(out_row["state_flags"][p, 3]) == int(ref_row["state_flags"][p, 3]) == 32, case.note
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    "case", _SECOND_STEADY_B2_TARGETS, ids=lambda c: f"{Path(c.dataset_rel).stem}-rec{c.target_record}-p{c.port}"
+)
+def test_guardsetoff_second_steady_rows_clear_b2_once_x18_owner_is_gone(case: _Case) -> None:
+    # Replay-real lock for the principled late GuardSetOff x221C_b2 lane:
+    # - GuardSetOff entry seeds mv.co.guard.x10 from ftCommonData,
+    # - steady rows are then owned by GuardSetOff_Anim / ftCo_80093BC0, and
+    # - on the second steady tick after the frozen af0 snapshot, stale powershield-active carry
+    #   should be gone once both GuardReflect timers have expired.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
+    #   ftCo_80092F2C,ftCo_GuardSetOff_Anim,ftCo_80093BC0,ftCo_800925A4}
+    # refs/melee/src/melee/ft/fighter.c::{Fighter_8006A1BC,Fighter_8006A360}
+    # data/common/ft_common_data.json: guard_x10_init_frames
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+
+    dataset_path = root / case.dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {case.dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    target = ds.samples[case.target_record]
+    seed = target["seed_t"]
+    p = case.port
+    assert int(seed["action_id"][p]) == 181, case.note
+    assert int(seed["seed_prev_action_id"][p]) == 181, case.note
+    assert int(seed["action_frame"][p]) > 0, case.note
+    assert int(seed["hitlag"][p]) == 0, case.note
+    assert int(seed["guard_reflect_timer_x14"][p]) == 0, case.note
+    assert int(seed["guard_reflect_timer_x18"][p]) == 0, case.note
+    assert int(seed["guard_x10"][p]) == 6, case.note
+    assert int(seed["state_flags"][p, 3]) == 32, case.note
+
+    for rec in (case.target_record - 1, case.target_record, case.target_record + 1):
+        _, ref_row, out_row = _run_one_step_row(dataset_path, rec, p)
+        assert int(out_row["action_id"][p]) == int(ref_row["action_id"][p]), case.note
+        assert int(out_row["action_frame"][p]) == int(ref_row["action_frame"][p]), case.note
+        assert int(out_row["hitlag"][p]) == int(ref_row["hitlag"][p]), case.note
+        assert int(out_row["hitstun"][p]) == int(ref_row["hitstun"][p]), case.note
+        assert [int(x) for x in out_row["state_flags"][p]] == [int(x) for x in ref_row["state_flags"][p]], case.note

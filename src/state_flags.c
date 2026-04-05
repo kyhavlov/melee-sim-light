@@ -176,6 +176,7 @@ void state_flags_refresh_post_frame(MslBatch* batch) {
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c (mv.co.guard.x14 = p_ftCommonData->x2A4)
   const MslCommonParams* c = msl_common_params();
   uint8_t guard_reflect_timer_x14_init = 0;
+  uint8_t guard_x10_init = 0;
   if (c != NULL) {
     uint16_t t = (uint16_t)c->powershield_reflect_frames;
     t = (uint16_t)(t + 1u);
@@ -183,6 +184,11 @@ void state_flags_refresh_post_frame(MslBatch* batch) {
       t = 255u;
     }
     guard_reflect_timer_x14_init = (uint8_t)t;
+    t = (uint16_t)c->guard_x10_init_frames;
+    if (t > 255u) {
+      t = 255u;
+    }
+    guard_x10_init = (uint8_t)t;
   }
 
   const int num_players = (int)batch->config.num_players;
@@ -582,6 +588,29 @@ void state_flags_refresh_post_frame(MslBatch* batch) {
           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80092F2C
           // data/common/ft_common_data.json: guard_x10_init_frames
           f221c &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221C_B1;
+        }
+        if (action_id == (uint16_t)MSL_ACT_GUARD_SET_OFF &&
+            prev_action == (uint16_t)MSL_ACT_GUARD_SET_OFF && batch->state.hitlag[idx] == 0u &&
+            batch->state.prev_action_frame[idx] > 0 && batch->state.action_frame[idx] > 0 &&
+            batch->state.guard_reflect_timer_x14[idx] == 0u &&
+            batch->state.guard_reflect_timer_x18[idx] == 0u &&
+            guard_x10_init != 0u &&
+            (uint16_t)batch->state.guard_x10[idx] + 1u < (uint16_t)guard_x10_init &&
+            f221c == (uint8_t)MSL_STATE_FLAG_221C_B2) {
+          // GuardSetOff second steady powershield-active expiry:
+          // - ftCo_80092F2C seeds mv.co.guard.x10 from ftCommonData on GuardSetOff entry,
+          // - after the initial af0 carry snapshot has already self-looped back into GuardSetOff,
+          //   the next steady callback pass carries a positive prev_action_frame into
+          //   ftCo_GuardSetOff_Anim / ftCo_80093BC0 ownership, and
+          // - the first steady countdown tick after entry is still the x221C_b2 carry lane
+          //   (`guard_x10 == guard_x10_init_frames - 1`), but once the countdown has progressed
+          //   beyond that first steady tick and both GuardReflect timers are already expired,
+          //   x221C_b2 no longer has a live owner and should not persist from the seeded carry row.
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
+          //   ftCo_80092F2C,ftCo_GuardSetOff_Anim,ftCo_80093BC0,ftCo_800925A4}
+          // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A1BC,Fighter_8006A360}
+          // data/common/ft_common_data.json: guard_x10_init_frames
+          f221c &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221C_B2;
         }
         if (action_id == (uint16_t)MSL_ACT_GUARD_SET_OFF &&
             batch->state.hitlag[idx] == 0u && batch->state.prev_action_frame[idx] == 0 &&
