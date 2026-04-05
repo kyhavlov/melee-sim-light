@@ -122,6 +122,57 @@ _SECOND_STEADY_B2_TARGETS = (
     ),
 )
 
+_CARRY_SNAPSHOT_B2_TARGETS = (
+    _Case(
+        dataset_rel=(
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
+            "AttachedGoodNaturedGuanaco.msl"
+        ),
+        target_record=2395,
+        port=0,
+        note="AGN GuardSetOff carry snapshot clears stale x221C_b2 after the prior steady callback pass",
+    ),
+    _Case(
+        dataset_rel=(
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
+            "GracefulAttachedTurtle.msl"
+        ),
+        target_record=4899,
+        port=0,
+        note="GAT GuardSetOff carry snapshot clears stale x221C_b2 after the prior steady callback pass",
+    ),
+)
+
+_CARRY_SNAPSHOT_NEGATIVE_CONTROLS = (
+    _Case(
+        dataset_rel=(
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
+            "AttachedGoodNaturedGuanaco.msl"
+        ),
+        target_record=4049,
+        port=1,
+        note="AGN later carry control keeps x221C_b2 on the next countdown value",
+    ),
+    _Case(
+        dataset_rel=(
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
+            "GracefulAttachedTurtle.msl"
+        ),
+        target_record=852,
+        port=0,
+        note="GAT later carry control keeps x221C_b2 on the next countdown value",
+    ),
+    _Case(
+        dataset_rel=(
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
+            "TreasuredBackKangaroo.msl"
+        ),
+        target_record=3498,
+        port=0,
+        note="TBK later carry control keeps x221C_b2 on the next countdown value",
+    ),
+)
+
 
 
 @pytest.mark.integration
@@ -259,3 +310,66 @@ def test_guardsetoff_second_steady_rows_clear_b2_once_x18_owner_is_gone(case: _C
         assert int(out_row["hitlag"][p]) == int(ref_row["hitlag"][p]), case.note
         assert int(out_row["hitstun"][p]) == int(ref_row["hitstun"][p]), case.note
         assert [int(x) for x in out_row["state_flags"][p]] == [int(x) for x in ref_row["state_flags"][p]], case.note
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    "case", _CARRY_SNAPSHOT_B2_TARGETS, ids=lambda c: f"{Path(c.dataset_rel).stem}-rec{c.target_record}-p{c.port}"
+)
+def test_guardsetoff_carry_snapshot_rows_clear_b2_once_x18_owner_is_gone(case: _Case) -> None:
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+
+    dataset_path = root / case.dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {case.dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    target = ds.samples[case.target_record]
+    seed = target["seed_t"]
+    p = case.port
+    assert int(seed["seed_prev_action_id"][p]) == 181, case.note
+    assert int(seed["seed_prev_action_frame"][p]) > 0, case.note
+    assert int(seed["action_frame"][p]) > 0, case.note
+    assert int(seed["guard_reflect_timer_x14"][p]) == 0, case.note
+    assert int(seed["guard_reflect_timer_x18"][p]) == 0, case.note
+    assert int(seed["guard_x10"][p]) == 7, case.note
+    assert int(seed["state_flags"][p, 3]) == 32, case.note
+
+    for rec in (case.target_record - 1, case.target_record, case.target_record + 1):
+        _, ref_row, out_row = _run_one_step_row(dataset_path, rec, p)
+        assert int(out_row["action_id"][p]) == int(ref_row["action_id"][p]), case.note
+        assert int(out_row["action_frame"][p]) == int(ref_row["action_frame"][p]), case.note
+        assert int(out_row["hitlag"][p]) == int(ref_row["hitlag"][p]), case.note
+        assert int(out_row["hitstun"][p]) == int(ref_row["hitstun"][p]), case.note
+        assert [int(x) for x in out_row["state_flags"][p]] == [int(x) for x in ref_row["state_flags"][p]], case.note
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    "case",
+    _CARRY_SNAPSHOT_NEGATIVE_CONTROLS,
+    ids=lambda c: f"{Path(c.dataset_rel).stem}-rec{c.target_record}-p{c.port}",
+)
+def test_guardsetoff_carry_snapshot_controls_keep_b2(case: _Case) -> None:
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+
+    dataset_path = root / case.dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {case.dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    target = ds.samples[case.target_record]
+    seed = target["seed_t"]
+    p = case.port
+    assert int(seed["seed_prev_action_id"][p]) == 181, case.note
+    assert int(seed["seed_prev_action_frame"][p]) > 0, case.note
+    assert int(seed["action_frame"][p]) > 0, case.note
+    assert int(seed["guard_reflect_timer_x14"][p]) == 0, case.note
+    assert int(seed["guard_reflect_timer_x18"][p]) == 0, case.note
+    assert int(seed["guard_x10"][p]) == 8, case.note
+    assert int(seed["state_flags"][p, 3]) == 32, case.note
+
+    _, ref_row, out_row = _run_one_step_row(dataset_path, case.target_record, p)
+    assert int(out_row["state_flags"][p, 3]) == int(ref_row["state_flags"][p, 3]) == 32, case.note
