@@ -908,6 +908,91 @@ def derive_guard_release_lockout_and_lightshield(
     return out_xc, out_x10, out_light
 
 
+def derive_guard_setoff_hitlag_damage_min(
+    *,
+    action_id: np.ndarray,
+    action_frame_i16: np.ndarray,
+    hitlag: np.ndarray,
+    hitlag_dmg_mul: float,
+    hitlag_base: float,
+    act_guard_set_off: int,
+) -> np.ndarray:
+    """
+    Derive a causal lower-bound bridge for GuardSetOff's hidden x19A4 shield-hit int damage.
+
+    Purpose:
+    - `ftCo_80092F2C` shapes GuardSetOff anim rate from `fp->x19A4`, but Slippi does not expose
+      that field directly.
+    - The shield-hit entry does expose the resulting hitlag countdown. Use the decomp
+      `ftCommon_CalcHitlag` formula to recover the minimum non-negative integer damage consistent
+      with the entry hitlag, then carry that value across the contiguous GuardSetOff segment.
+
+    Causality / prefix-invariance:
+    - Updates only on GuardSetOff segment entry or same-action restart (action_frame drop or
+      hitlag increase).
+    - Depends only on current and previous replay frames.
+
+    Decomp anchors:
+    - refs/melee/src/melee/ft/ftcoll.c::ftColl_80076CBC (writes fp->x19A4 = getEnvDmg(hit0->damage))
+    - refs/melee/src/melee/ft/ftcommon.c::ftCommon_CalcHitlag
+    - refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80092F2C
+    """
+    aid = np.asarray(action_id, dtype=np.uint16).reshape(-1)
+    afr = np.asarray(action_frame_i16, dtype=np.int16).reshape(-1)
+    hl = np.asarray(hitlag, dtype=np.uint16).reshape(-1)
+
+    n = int(aid.size)
+    if int(afr.size) != n or int(hl.size) != n:
+        raise ValueError("action_id/action_frame_i16/hitlag must have the same length")
+
+    out = np.zeros(n, dtype=np.uint8)
+    carried = 0
+    slope = float(hitlag_dmg_mul)
+    base = float(hitlag_base)
+    if not (slope > 0.0):
+        raise ValueError("hitlag_dmg_mul must be > 0")
+
+    def _invert_min_damage(hitlag_frames: int) -> int:
+        if hitlag_frames <= 0:
+            return 0
+        # Find the smallest non-negative integer damage whose decomp hitlag result matches or
+        # exceeds the observed frame count. getEnvDmg returns at least 1 for nonzero float damage,
+        # so clamp positive hitlag to at least 1.
+        dmg = 1
+        while dmg < 0xFF:
+            result = int((float(dmg) * slope) + base)
+            if result >= hitlag_frames:
+                return dmg
+            dmg += 1
+        return 0xFF
+
+    for i in range(n):
+        a = int(aid[i])
+        if a != int(act_guard_set_off):
+            carried = 0
+            out[i] = np.uint8(0)
+            continue
+
+        prev_a = int(aid[i - 1]) if i > 0 else -1
+        prev_afr = int(afr[i - 1]) if i > 0 else 0
+        prev_hl = int(hl[i - 1]) if i > 0 else 0
+        cur_afr = int(afr[i])
+        cur_hl = int(hl[i])
+
+        segment_entry = (
+            i == 0
+            or prev_a != int(act_guard_set_off)
+            or cur_afr < prev_afr
+            or cur_hl > prev_hl
+        )
+        if segment_entry and cur_hl > 0:
+            carried = _invert_min_damage(cur_hl)
+
+        out[i] = np.uint8(carried & 0xFF)
+
+    return out
+
+
 def compute_tilt_timer_y_pre_post_with_fall_fast(
     stick_y_unit: np.ndarray,
     *,

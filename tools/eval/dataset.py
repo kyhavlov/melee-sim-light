@@ -177,6 +177,13 @@ SEED_DTYPE = np.dtype(
         ("guard_release_latched_xc", _arr("u1", MAX_PLAYERS)),
         ("guard_x10", _arr("u1", MAX_PLAYERS)),
         ("lightshield_amount", _arr("<f4", MAX_PLAYERS)),
+        # GuardSetOff hidden shield-hit int-damage lower bound (`fp->x19A4` consumer lane).
+        # - Decomp owner: GuardSetOff entry anim-rate formula reads fp->x19A4.
+        # - Seed bridge stores the minimum non-negative int damage consistent with the segment's
+        #   entry hitlag, carried causally across the contiguous GuardSetOff segment.
+        # refs/melee/src/melee/ft/ftcoll.c::ftColl_80076CBC
+        # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80092F2C
+        ("guard_setoff_hitlag_damage_min", _arr("u1", MAX_PLAYERS)),
         ("jumps_left", _arr("u1", MAX_PLAYERS)),
         ("stocks", _arr("u1", MAX_PLAYERS)),
         ("kneebend_jump_input", _arr("u1", MAX_PLAYERS)),

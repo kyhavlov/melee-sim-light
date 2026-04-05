@@ -20,6 +20,8 @@ def test_seed_schema_includes_staling_fields() -> None:
     assert "source_clear_terminal_phase" in SEED_DTYPE.fields
     # Walk callback-owned source velocity lane (ftWalkCommon_800DFDDC `mv_x0`).
     assert "walk_anim_source_vel_f32" in SEED_DTYPE.fields
+    # GuardSetOff hidden x19A4 lower-bound bridge for F02 blocker rows.
+    assert "guard_setoff_hitlag_damage_min" in SEED_DTYPE.fields
 
 
 def test_dataset_dtype_sizes_match_c_structs() -> None:

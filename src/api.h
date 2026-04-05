@@ -391,6 +391,11 @@ typedef struct MslSeed {
   // Decomp: fp->lightshield_amount and mv.co.guard.x2C in ftCo_800925A4.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_800925A4
   float lightshield_amount[MSL_MAX_PLAYERS];
+  // GuardSetOff shield-hit int-damage lower bound carried across the active shieldstun segment.
+  // Decomp: ftCo_80092F2C reads fp->x19A4 for GuardSetOff anim-rate shaping.
+  // refs/melee/src/melee/ft/ftcoll.c::ftColl_80076CBC
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80092F2C
+  uint8_t guard_setoff_hitlag_damage_min[MSL_MAX_PLAYERS];
   uint8_t jumps_left[MSL_MAX_PLAYERS];
   uint8_t stocks[MSL_MAX_PLAYERS];
 

@@ -1686,6 +1686,7 @@ def _main_impl(args) -> None:
         derive_guard_reflect_timer_x14,
         derive_guard_reflect_timer_x18,
         derive_guard_release_lockout_and_lightshield,
+        derive_guard_setoff_hitlag_damage_min,
         derive_guard_tilt_state,
         derive_dash_x4,
         derive_runbrake_cmd0,
@@ -2407,6 +2408,14 @@ def _main_impl(args) -> None:
         samples["seed_t"]["guard_release_latched_xc"][:, slot] = guard_release_latched_xc[:-1]
         samples["seed_t"]["guard_x10"][:, slot] = guard_x10[:-1]
         samples["seed_t"]["lightshield_amount"][:, slot] = lightshield_amount[:-1]
+        samples["seed_t"]["guard_setoff_hitlag_damage_min"][:, slot] = derive_guard_setoff_hitlag_damage_min(
+            action_id=post_state,
+            action_frame_i16=post_state_age,
+            hitlag=post_hitlag,
+            hitlag_dmg_mul=float(common["hitlag_dmg_mul"]),
+            hitlag_base=float(common["hitlag_base"]),
+            act_guard_set_off=act_guard_set_off,
+        )[:-1]
 
         # x67F input-history timer:
         # - resets on x668 LR-lane edge (digital LR, trigger lane, Z-mapped LR lane),

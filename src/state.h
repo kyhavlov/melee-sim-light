@@ -242,6 +242,9 @@ typedef struct MslStateSoA {
   uint8_t* guard_release_latched_xc;  // mv.co.guard.xC (0/1)
   uint8_t* guard_x10;                 // mv.co.guard.x10 (frames remaining; clamped to 0..255)
   float* lightshield_amount;          // fp->lightshield_amount (0..1)
+  // GuardSetOff shield-hit int-damage lower bound for future GuardSetOff ownership fixes.
+  // Decomp consumer: fp->x19A4 in ftCo_80092F2C.
+  uint8_t* guard_setoff_hitlag_damage_min;
   // Locomotion/input-history internals.
   // - `tilt_timer_*`, `turn_*`, and KneeBend internals are seeded from replay history (MslSeed).
   uint8_t*

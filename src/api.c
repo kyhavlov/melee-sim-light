@@ -479,6 +479,7 @@ int msl_batch_reseed_seed(MslBatch* batch, const uint8_t* seed_bytes, size_t see
       batch->state.guard_release_latched_xc[idx] = seed->guard_release_latched_xc[p] ? 1 : 0;
       batch->state.guard_x10[idx] = seed->guard_x10[p];
       batch->state.lightshield_amount[idx] = seed->lightshield_amount[p];
+      batch->state.guard_setoff_hitlag_damage_min[idx] = seed->guard_setoff_hitlag_damage_min[p];
       batch->state.jumps_left[idx] = seed->jumps_left[p];
       batch->state.stocks[idx] = seed->stocks[p];
       batch->state.kneebend_jump_input[idx] = seed->kneebend_jump_input[p];

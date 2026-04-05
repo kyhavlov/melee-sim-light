@@ -21,6 +21,7 @@ from tools.slippi.seed_history import (
     derive_guard_reflect_timer_x14,
     derive_guard_reflect_timer_x18,
     derive_guard_release_lockout_and_lightshield,
+    derive_guard_setoff_hitlag_damage_min,
     derive_ucf_pad_buffer_state,
     derive_kneebend_internals,
     derive_turn_internals,
@@ -297,6 +298,65 @@ def test_derive_frame_speed_mul_is_prefix_invariant() -> None:
     )
 
     assert np.allclose(out0, out1[: out0.size])
+
+
+def test_derive_guard_setoff_hitlag_damage_min_carries_entry_damage_across_segment() -> None:
+    act_wait = np.uint16(0x000E)
+    act_guard_set_off = np.uint16(0x00B5)
+    action_id = np.array(
+        [act_wait, act_guard_set_off, act_guard_set_off, act_guard_set_off, act_guard_set_off, act_wait],
+        dtype=np.uint16,
+    )
+    action_frame = np.array([-1, 0, 0, 0, 2, -1], dtype=np.int16)
+    hitlag = np.array([0, 6, 5, 1, 0, 0], dtype=np.uint16)
+
+    out = derive_guard_setoff_hitlag_damage_min(
+        action_id=action_id,
+        action_frame_i16=action_frame,
+        hitlag=hitlag,
+        hitlag_dmg_mul=1.0 / 3.0,
+        hitlag_base=3.0,
+        act_guard_set_off=int(act_guard_set_off),
+    )
+
+    assert out.tolist() == [0, 9, 9, 9, 9, 0]
+
+
+def test_derive_guard_setoff_hitlag_damage_min_is_prefix_invariant() -> None:
+    act_wait = np.uint16(0x000E)
+    act_guard_set_off = np.uint16(0x00B5)
+
+    action_id_prefix = np.array(
+        [act_wait, act_guard_set_off, act_guard_set_off, act_guard_set_off],
+        dtype=np.uint16,
+    )
+    action_frame_prefix = np.array([-1, 0, 0, 0], dtype=np.int16)
+    hitlag_prefix = np.array([0, 3, 2, 1], dtype=np.uint16)
+
+    out0 = derive_guard_setoff_hitlag_damage_min(
+        action_id=action_id_prefix,
+        action_frame_i16=action_frame_prefix,
+        hitlag=hitlag_prefix,
+        hitlag_dmg_mul=1.0 / 3.0,
+        hitlag_base=3.0,
+        act_guard_set_off=int(act_guard_set_off),
+    )
+
+    action_id_ext = np.concatenate([action_id_prefix, np.array([act_guard_set_off, act_wait], dtype=np.uint16)])
+    action_frame_ext = np.concatenate([action_frame_prefix, np.array([6, -1], dtype=np.int16)])
+    hitlag_ext = np.concatenate([hitlag_prefix, np.array([0, 0], dtype=np.uint16)])
+
+    out1 = derive_guard_setoff_hitlag_damage_min(
+        action_id=action_id_ext,
+        action_frame_i16=action_frame_ext,
+        hitlag=hitlag_ext,
+        hitlag_dmg_mul=1.0 / 3.0,
+        hitlag_base=3.0,
+        act_guard_set_off=int(act_guard_set_off),
+    )
+
+    assert out0.tolist() == [0, 1, 1, 1]
+    assert out1[: out0.size].tolist() == out0.tolist()
 
 
 def test_derive_guard_release_lightshield_persists_through_guard_set_off() -> None:
