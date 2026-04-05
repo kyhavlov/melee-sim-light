@@ -35,6 +35,31 @@ static inline uint8_t state_flags_2218_allow_interrupt_attackair_action(uint16_t
   }
 }
 
+static inline uint8_t state_flags_is_damage_action(uint16_t action_id) {
+  switch (action_id) {
+    case MSL_ACT_DAMAGE_HI_1:
+    case MSL_ACT_DAMAGE_HI_2:
+    case MSL_ACT_DAMAGE_HI_3:
+    case MSL_ACT_DAMAGE_N_1:
+    case MSL_ACT_DAMAGE_N_2:
+    case MSL_ACT_DAMAGE_N_3:
+    case MSL_ACT_DAMAGE_LW_1:
+    case MSL_ACT_DAMAGE_LW_2:
+    case MSL_ACT_DAMAGE_LW_3:
+    case MSL_ACT_DAMAGE_AIR_1:
+    case MSL_ACT_DAMAGE_AIR_2:
+    case MSL_ACT_DAMAGE_AIR_3:
+    case MSL_ACT_DAMAGE_FLY_HI:
+    case MSL_ACT_DAMAGE_FLY_N:
+    case MSL_ACT_DAMAGE_FLY_LW:
+    case MSL_ACT_DAMAGE_FLY_TOP:
+    case MSL_ACT_DAMAGE_FLY_ROLL:
+      return 1u;
+    default:
+      return 0u;
+  }
+}
+
 static inline uint8_t state_flags_2218_allow_interrupt_grounded_attack_action(uint16_t action_id) {
   switch (action_id) {
     case MSL_ACT_ATTACK_11:
@@ -117,6 +142,10 @@ void state_flags_refresh_post_frame(MslBatch* batch) {
   enum { MSL_STATE_FLAG_221B_B5 = 0x04 };
 
   // fp+0x221C:
+  // - 0x80 = x221C_b0 (damage no-reaction lane)
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::inlineB1
+  // refs/melee/src/melee/ft/types.h (fp+0x221C bitfields)
+  enum { MSL_STATE_FLAG_221C_B0 = 0x80 };
   // - 0x02 = isHitstun
   // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
   // refs/melee/src/melee/ft/types.h (fp+0x221C bitfields)
@@ -530,6 +559,20 @@ void state_flags_refresh_post_frame(MslBatch* batch) {
           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_GuardReflect_IASA
           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c::ftCo_800CB024
           f221c &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221C_B1;
+        }
+        if (state_flags_is_damage_action(action_id) && state_flags_is_damage_action(prev_action) &&
+            action_id != prev_action && batch->state.action_frame[idx] == 1 &&
+            batch->state.hitlag[idx] > 0u && batch->state.hitstun[idx] > 0u &&
+            (f221c & (uint8_t)(MSL_STATE_FLAG_221C_B0 | MSL_STATE_FLAG_221C_IS_HITSTUN)) ==
+                (uint8_t)(MSL_STATE_FLAG_221C_B0 | MSL_STATE_FLAG_221C_IS_HITSTUN)) {
+          // Damage -> different Damage motion-state reset ownership:
+          // - Fighter_ProcessHit can re-enter ftCo_8008DCE0 / ftCo_8008EC90 while already in a
+          //   Damage* state, selecting a new Damage* destination from the fresh hit.
+          // - Fighter_ChangeMotionState reset clears fp->x221C_b0 on that destination entry, while
+          //   hitlag/hitstun for the new damage state remain active.
+          // refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{ftCo_8008DCE0,ftCo_8008EC90}
+          f221c &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221C_B0;
         }
         if (action_id == (uint16_t)MSL_ACT_REBIRTH &&
             (prev_action == (uint16_t)MSL_ACT_DEAD_DOWN ||
