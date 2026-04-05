@@ -565,6 +565,28 @@ void state_flags_refresh_post_frame(MslBatch* batch) {
             batch->state.hitlag[idx] == 0u && batch->state.prev_action_frame[idx] == 0 &&
             batch->state.guard_reflect_timer_x14[idx] == 0u &&
             batch->state.guard_reflect_timer_x18[idx] == 0u &&
+            batch->state.guard_x10[idx] == 7u &&
+            f221c == (uint8_t)(MSL_STATE_FLAG_221C_B1 | MSL_STATE_FLAG_221C_B2)) {
+          // GuardSetOff first-steady reflect-window expiry:
+          // - after prio-0 hitlag decrement, GuardSetOff_Anim / ftCo_80093BC0 owns the first steady
+          //   post-hitlag row,
+          // - the reflect-window bit x221C_b1 is tied to the x14 lane and should be gone once that
+          //   timer has expired,
+          // - keep this restricted to rows where the separate powershield-active x18 lane is also
+          //   expired, so the destination no longer owns either GuardReflect timer,
+          // - and where mv.co.guard.x10 is on the first steady countdown tick after entry.
+          // - so on the first steady GuardSetOff row, clear the stale x221C_b1 carry whenever the
+          //   destination still exposes both bits after both timer owners have ended.
+          // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A1BC,Fighter_8006A360}
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_GuardSetOff_Anim,ftCo_80093BC0}
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80092F2C
+          // data/common/ft_common_data.json: guard_x10_init_frames
+          f221c &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221C_B1;
+        }
+        if (action_id == (uint16_t)MSL_ACT_GUARD_SET_OFF &&
+            batch->state.hitlag[idx] == 0u && batch->state.prev_action_frame[idx] == 0 &&
+            batch->state.guard_reflect_timer_x14[idx] == 0u &&
+            batch->state.guard_reflect_timer_x18[idx] == 0u &&
             batch->state.lightshield_amount[idx] >= 0.999f &&
             batch->state.guard_setoff_hitlag_damage_min[idx] == 1u &&
             batch->state.guard_x10[idx] == 5u && f221c == (uint8_t)MSL_STATE_FLAG_221C_B2) {

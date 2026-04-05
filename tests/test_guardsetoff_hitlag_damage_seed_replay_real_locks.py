@@ -55,9 +55,9 @@ class _Case:
             expected_seed_damage_min=1,
             expected_out_action_frame=10,
             expected_ref_action_frame=6,
-            expected_out_state_flags_3=96,
+            expected_out_state_flags_3=32,
             expected_ref_state_flags_3=32,
-            note="AGN blocker C carries the GuardSetOff entry hitlag-damage lower bound through powershield-active hitlag",
+            note="AGN blocker C still carries the GuardSetOff entry hitlag-damage lower bound through powershield-active hitlag after the x221C_b1 lane is corrected",
         ),
     ],
 )
