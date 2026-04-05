@@ -506,6 +506,20 @@ void state_flags_refresh_post_frame(MslBatch* batch) {
         if (action_id == (uint16_t)MSL_ACT_GUARD_ON || action_id == (uint16_t)MSL_ACT_GUARD) {
           f221c &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221C_B1;
         }
+        if (action_id == (uint16_t)MSL_ACT_GUARD_SET_OFF &&
+            batch->state.hitlag[idx] == 0u && batch->state.prev_action_frame[idx] > 0 &&
+            batch->state.guard_reflect_timer_x14[idx] == 0u &&
+            (f221c & (uint8_t)(MSL_STATE_FLAG_221C_B1 | MSL_STATE_FLAG_221C_B2)) ==
+                (uint8_t)(MSL_STATE_FLAG_221C_B1 | MSL_STATE_FLAG_221C_B2)) {
+          // GuardSetOff stale reflect-window carry on the first steady post-hitlag row:
+          // - the current seeded GuardSetOff snapshot has already advanced off the frozen af0 lane,
+          // - GuardSetOff_Anim/ftCo_80093BC0 owns the steady row, and
+          // - once x14 is expired, ftCo_80093BC0 no longer owns x221C_b1 while x221C_b2 can
+          //   persist independently under its x18 lifetime.
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_GuardSetOff_Anim,ftCo_80093BC0}
+          // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A1BC,Fighter_8006A360}
+          f221c &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221C_B1;
+        }
         if (action_id == (uint16_t)MSL_ACT_KNEE_BEND &&
             prev_action == (uint16_t)MSL_ACT_GUARD_REFLECT && batch->state.action_frame[idx] == 0) {
           // GuardReflect -> jump-squat transition ownership:
