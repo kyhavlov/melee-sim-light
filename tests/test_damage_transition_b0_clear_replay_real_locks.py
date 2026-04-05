@@ -26,6 +26,15 @@ _CASES = (
             "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
             "GracefulAttachedTurtle.msl"
         ),
+        target_record=7824,
+        port=0,
+        note="GAT fresh JumpAerialF -> DamageFlyTop entry clears stale x221C_b0 on the new Damage row",
+    ),
+    _Case(
+        dataset_rel=(
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
+            "GracefulAttachedTurtle.msl"
+        ),
         target_record=2520,
         port=0,
         note="GAT damage-to-damage re-entry clears stale x221C_b0 on the new DamageAir3 row",
@@ -45,8 +54,9 @@ _CASES = (
 @pytest.mark.integration
 @pytest.mark.parametrize("case", _CASES, ids=lambda c: f"{Path(c.dataset_rel).stem}-rec{c.target_record}-p{c.port}")
 def test_damage_to_damage_reentry_rows_and_adjacent_controls_are_replay_exact(case: _Case) -> None:
-    # Replay-real lock for Damage* -> different Damage* transition reset:
-    # - a fresh hit re-enters ftCo_8008DCE0 / ftCo_8008EC90 while already in Damage*,
+    # Replay-real lock for fresh Damage* destination reset:
+    # - a fresh hit enters ftCo_8008DCE0 / ftCo_8008EC90 from a non-Damage state or re-enters a
+    #   different Damage* state while already damaged,
     # - Fighter_ChangeMotionState clears fp->x221C_b0 on the destination entry, and
     # - the new Damage* row still carries hitlag/hitstun from the fresh hit.
     # refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState
@@ -68,10 +78,9 @@ def test_damage_to_damage_reentry_rows_and_adjacent_controls_are_replay_exact(ca
     target = samples[case.target_record]
     seed = target["seed_t"]
     ref = target["ref_t1"]
-    assert 75 <= int(seed["action_id"][p]) <= 91, case.note
     assert 75 <= int(ref["action_id"][p]) <= 91, case.note
     assert int(seed["action_id"][p]) != int(ref["action_id"][p]), case.note
-    assert int(seed["state_flags"][p, 3]) == 130, case.note
+    assert int(seed["state_flags"][p, 3]) in (128, 130), case.note
     assert int(ref["state_flags"][p, 3]) == 2, case.note
     assert int(ref["action_frame"][p]) == 1, case.note
     assert int(ref["hitlag"][p]) > 0, case.note

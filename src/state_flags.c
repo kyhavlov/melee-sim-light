@@ -560,14 +560,14 @@ void state_flags_refresh_post_frame(MslBatch* batch) {
           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c::ftCo_800CB024
           f221c &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221C_B1;
         }
-        if (state_flags_is_damage_action(action_id) && state_flags_is_damage_action(prev_action) &&
-            action_id != prev_action && batch->state.action_frame[idx] == 1 &&
+        if (state_flags_is_damage_action(action_id) && action_id != prev_action &&
+            batch->state.action_frame[idx] == 1 &&
             batch->state.hitlag[idx] > 0u && batch->state.hitstun[idx] > 0u &&
             (f221c & (uint8_t)(MSL_STATE_FLAG_221C_B0 | MSL_STATE_FLAG_221C_IS_HITSTUN)) ==
                 (uint8_t)(MSL_STATE_FLAG_221C_B0 | MSL_STATE_FLAG_221C_IS_HITSTUN)) {
-          // Damage -> different Damage motion-state reset ownership:
-          // - Fighter_ProcessHit can re-enter ftCo_8008DCE0 / ftCo_8008EC90 while already in a
-          //   Damage* state, selecting a new Damage* destination from the fresh hit.
+          // Fresh Damage* destination entry owns fp->x221C_b0 clear:
+          // - Fighter_ProcessHit can enter ftCo_8008DCE0 / ftCo_8008EC90 from non-Damage states or
+          //   re-enter a different Damage* state while already damaged,
           // - Fighter_ChangeMotionState reset clears fp->x221C_b0 on that destination entry, while
           //   hitlag/hitstun for the new damage state remain active.
           // refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState
