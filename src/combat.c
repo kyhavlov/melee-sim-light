@@ -1845,6 +1845,12 @@ MslItemHitResult combat_apply_item_hit(MslBatch* batch, int batch_index, int att
     // truly authoritative decomp/data-owned no-flinch signal once identified.
     batch->state.instance_hit_by[d_idx] = item_instance_id;
     batch->state.last_hit_by[d_idx] = (uint8_t)attacker;
+    // Non-flinch damage still routes through Fighter_ProcessHit's percent-temp consume without a
+    // fresh Damage* entry. Keep fp->x221C_b0 aligned to the same hidden-damage ownership so the
+    // post-frame no-reaction lane does not stale-carry after the item hit is accepted.
+    // refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::inlineB1
+    combat_state_flags_clear_x221c_b0(batch, d_idx);
 
     // Stale-move queue update on successful damaging BODY hit (attacker-side).
     // Decomp: refs/melee/src/melee/pl/plstale.c::plStale_UpdateStaleMovesFromItem
