@@ -1063,6 +1063,21 @@ def derive_rebirth_camera_anchor_y(
 
 
 @functools.lru_cache(maxsize=1)
+def _fd_stage_cam_bounds_world(*, data_dir: str = "data") -> tuple[float, float, float, float]:
+    stage_path = Path(str(data_dir)) / "stages" / "final_destination.json"
+    data = json.loads(stage_path.read_text())
+    cam = data.get("cam_bounds_world")
+    if not isinstance(cam, dict):
+        raise ValueError(f"{stage_path}: missing cam_bounds_world")
+    return (
+        float(cam["left"]),
+        float(cam["right"]),
+        float(cam["bottom"]),
+        float(cam["top"]),
+    )
+
+
+@functools.lru_cache(maxsize=1)
 def _camera_target_seed_tables(*, data_dir: str = "data") -> dict[int, dict[str, object]]:
     from tools.slippi.combat_history import AnimPoseDB
 
@@ -1193,6 +1208,57 @@ def derive_camera_target_world(
         out_radius[i] = np.float32(float(entry["radius"]) * scale)
 
     return out_x, out_y, out_z, out_radius
+
+
+def derive_camera_target_point_inside_stage_cam_bounds(
+    *,
+    stage_id_u32: int,
+    camera_target_world_x_f32: np.ndarray,
+    camera_target_world_y_f32: np.ndarray,
+    camera_box_radius_f32: np.ndarray,
+    data_dir: str = "data",
+) -> np.ndarray:
+    """
+    Derive the current-row Camera_80030CD8-style point-inside-stage-cam predicate.
+
+    Purpose:
+    - F04 mixed-direction rows are owned by the camera-subject point test used by
+      `ftLib_80086A8C` / `Camera_80030CD8`, even when the replay-visible `fp->x221F_b0`
+      outcomes differ.
+    - Promote that point-inside predicate as an explicit seed lane so later runtime work can key on
+      the named decomp branch input rather than recomputing it ad hoc from packed fields.
+
+    Causality / prefix-invariance:
+    - Strictly current-row derivation from the promoted camera target world point plus ISO-derived
+      stage camera bounds. No future frames.
+    - Require a valid camera subject (`camera_box_radius_f32 > 0`) so pre-Rebirth / no-target
+      control rows stay zero instead of treating the placeholder `(0,0)` point as on-screen.
+
+    Decomp / data anchors:
+    - refs/melee/src/melee/ft/ftlib.c::ftLib_80086A8C
+    - refs/melee/src/melee/cm/camera.c::{Camera_80030CD8,Camera_80030BBC}
+    - data/stages/final_destination.json: cam_bounds_world
+    """
+    x = np.asarray(camera_target_world_x_f32, dtype=np.float32).reshape(-1)
+    y = np.asarray(camera_target_world_y_f32, dtype=np.float32).reshape(-1)
+    r = np.asarray(camera_box_radius_f32, dtype=np.float32).reshape(-1)
+    if int(y.size) != int(x.size) or int(r.size) != int(x.size):
+        raise ValueError("camera target point-inside derivation inputs must share length")
+
+    out = np.zeros(x.shape[0], dtype=np.uint8)
+    # Final Destination only in the current suite; unsupported stages remain zero until their
+    # ISO-derived camera bounds are wired.
+    # data/stages/final_destination.json: cam_bounds_world
+    if int(stage_id_u32) != 32:
+        return out
+
+    left, right, bottom, top = _fd_stage_cam_bounds_world(data_dir=str(data_dir))
+    valid = (r > np.float32(0.0)) & np.isfinite(x) & np.isfinite(y)
+    inside = valid & (x >= np.float32(left)) & (x < np.float32(right)) & (y >= np.float32(bottom)) & (
+        y < np.float32(top)
+    )
+    out[inside] = np.uint8(1)
+    return out
 
 
 def compute_tilt_timer_y_pre_post_with_fall_fast(

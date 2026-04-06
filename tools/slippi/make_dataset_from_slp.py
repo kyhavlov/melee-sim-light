@@ -1712,6 +1712,7 @@ def _main_impl(args) -> None:
         derive_damage_jump_buffer_x14,
         derive_damage_post_hitlag_cb_kind,
         derive_camera_box_visible_x221f_b0,
+        derive_camera_target_point_inside_stage_cam_bounds,
         derive_camera_target_world,
         derive_rebirth_camera_anchor_y,
         derive_grab_mash_stick_sign_post,
@@ -2239,6 +2240,14 @@ def _main_impl(args) -> None:
         samples["seed_t"]["camera_target_world_y_f32"][:, slot] = camera_target_world_y[:-1]
         samples["seed_t"]["camera_target_world_z_f32"][:, slot] = camera_target_world_z[:-1]
         samples["seed_t"]["camera_box_radius_f32"][:, slot] = camera_box_radius[:-1]
+        samples["seed_t"]["camera_target_point_inside_stage_cam_bounds_u8"][:, slot] = (
+            derive_camera_target_point_inside_stage_cam_bounds(
+                stage_id_u32=int(stage_id),
+                camera_target_world_x_f32=camera_target_world_x,
+                camera_target_world_y_f32=camera_target_world_y,
+                camera_box_radius_f32=camera_box_radius,
+            )[:-1]
+        )
         samples["seed_t"]["downwait_timer"][:, slot] = derive_downwait_timer(
             action_id_u16=post_state,
             down_wait_frames=int(common["down_wait_frames"]),

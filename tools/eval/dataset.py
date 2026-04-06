@@ -186,6 +186,12 @@ SEED_DTYPE = np.dtype(
         ("camera_target_world_y_f32", _arr("<f4", MAX_PLAYERS)),
         ("camera_target_world_z_f32", _arr("<f4", MAX_PLAYERS)),
         ("camera_box_radius_f32", _arr("<f4", MAX_PLAYERS)),
+        # Current-row Camera_80030CD8-style point-inside-stage-cam predicate, derived from the
+        # promoted camera target point plus ISO stage camera bounds.
+        # refs/melee/src/melee/ft/ftlib.c::ftLib_80086A8C
+        # refs/melee/src/melee/cm/camera.c::{Camera_80030CD8,Camera_80030BBC}
+        # data/stages/final_destination.json: cam_bounds_world
+        ("camera_target_point_inside_stage_cam_bounds_u8", _arr("u1", MAX_PLAYERS)),
         ("downwait_timer", _arr("<i2", MAX_PLAYERS)),
         ("anim_frame_f32", _arr("<f4", MAX_PLAYERS)),
         ("frame_speed_mul_f32", _arr("<f4", MAX_PLAYERS)),

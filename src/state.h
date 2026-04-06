@@ -190,6 +190,11 @@ typedef struct MslStateSoA {
   float* camera_target_world_y_f32;
   float* camera_target_world_z_f32;
   float* camera_box_radius_f32;
+  // Current-row Camera_80030CD8-style point-inside-stage-cam predicate, seeded from the promoted
+  // camera target point plus ISO stage camera bounds.
+  // refs/melee/src/melee/ft/ftlib.c::ftLib_80086A8C
+  // refs/melee/src/melee/cm/camera.c::{Camera_80030CD8,Camera_80030BBC}
+  uint8_t* camera_target_point_inside_stage_cam_bounds_u8;
   int16_t* downwait_timer;  // fp->mv.co.downwait.x0 (seeded; decomp: ftCo_DownWait_Anim)
   float* anim_frame_f32;    // decomp fp->cur_anim_frame (float; Slippi `state_age`)
   // Decomp-shaped internal animation/script timebase with deterministic fractional carry.

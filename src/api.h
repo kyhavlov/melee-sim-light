@@ -343,6 +343,15 @@ typedef struct MslSeed {
   float camera_target_world_y_f32[MSL_MAX_PLAYERS];
   float camera_target_world_z_f32[MSL_MAX_PLAYERS];
   float camera_box_radius_f32[MSL_MAX_PLAYERS];
+  // Current-row Camera_80030CD8-style point-inside-stage-cam predicate.
+  //
+  // Decomp / data anchors:
+  // - ftLib_80086A8C clears fp->x221F_b0 when Camera_80030CD8 reports the subject point is on-screen.
+  // - Camera_80030CD8 delegates to Camera_80030BBC against the active camera bounds.
+  // refs/melee/src/melee/ft/ftlib.c::ftLib_80086A8C
+  // refs/melee/src/melee/cm/camera.c::{Camera_80030CD8,Camera_80030BBC}
+  // data/stages/final_destination.json: cam_bounds_world
+  uint8_t camera_target_point_inside_stage_cam_bounds_u8[MSL_MAX_PLAYERS];
   // DownWait countdown timer (seeded; decomp-shaped).
   //
   // Decomp:

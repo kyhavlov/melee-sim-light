@@ -18,6 +18,7 @@ from tools.slippi.seed_history import (
     compute_x672_trigger_timer_pre_post,
     derive_colanim_internals,
     derive_camera_box_visible_x221f_b0,
+    derive_camera_target_point_inside_stage_cam_bounds,
     derive_camera_target_world,
     derive_rebirth_camera_anchor_y,
     derive_damage_post_hitlag_cb_kind,
@@ -1973,3 +1974,36 @@ def test_derive_camera_target_world_prefix_invariant() -> None:
     )
     for got, expected in zip(ext, full, strict=True):
         np.testing.assert_allclose(got[: char_prefix.shape[0]], expected, atol=1e-5)
+
+
+def test_derive_camera_target_point_inside_stage_cam_bounds_prefix_invariant() -> None:
+    x_prefix = np.array([15.083799, -158.3988, 15.63973, 0.0], dtype=np.float32)
+    y_prefix = np.array([86.3869, 89.15867, 86.5845, 0.0], dtype=np.float32)
+    r_prefix = np.array([11.2, 11.2, 11.2, 0.0], dtype=np.float32)
+
+    full = derive_camera_target_point_inside_stage_cam_bounds(
+        stage_id_u32=np.uint32(32),
+        camera_target_world_x_f32=x_prefix,
+        camera_target_world_y_f32=y_prefix,
+        camera_box_radius_f32=r_prefix,
+    )
+    assert full.tolist() == [1, 1, 1, 0]
+
+    x_ext = np.concatenate([x_prefix, np.array([171.0, -171.0], dtype=np.float32)])
+    y_ext = np.concatenate([y_prefix, np.array([60.0, 60.0], dtype=np.float32)])
+    r_ext = np.concatenate([r_prefix, np.array([11.2, 11.2], dtype=np.float32)])
+    ext = derive_camera_target_point_inside_stage_cam_bounds(
+        stage_id_u32=np.uint32(32),
+        camera_target_world_x_f32=x_ext,
+        camera_target_world_y_f32=y_ext,
+        camera_box_radius_f32=r_ext,
+    )
+    assert np.array_equal(ext[: x_prefix.shape[0]], full)
+
+    unsupported = derive_camera_target_point_inside_stage_cam_bounds(
+        stage_id_u32=np.uint32(31),
+        camera_target_world_x_f32=x_prefix,
+        camera_target_world_y_f32=y_prefix,
+        camera_box_radius_f32=r_prefix,
+    )
+    assert np.array_equal(unsupported, np.zeros(x_prefix.shape[0], dtype=np.uint8))
