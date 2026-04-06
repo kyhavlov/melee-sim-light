@@ -301,6 +301,23 @@ typedef struct MslSeed {
   // exit early via inputs (IASA), and the replay action_id run length may be shorter than the
   // internal timer.
   uint8_t match_flow_timer[MSL_MAX_PLAYERS];
+  // Rebirth / dead-flow camera-box visibility (`fp->x221F_b0`) as an explicit seed lane.
+  //
+  // Decomp / replay anchors:
+  // - ftLib_80086A8C exposes `fp->x221F_b0` from the fighter camera-subject visibility test.
+  // - Rebirth_Cam owns the callback path that updates that visibility during respawn flow.
+  // - Slippi post-frame emits fp+0x221F as `state_flags[...,4]`, which includes the b0 mask.
+  // refs/melee/src/melee/ft/ftlib.c::ftLib_80086A8C
+  // refs/melee/src/melee/ft/ft_0D31.c::ftCo_Rebirth_Cam
+  // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
+  //
+  // Seed representation:
+  // - 0: camera-box visibility clear on the seed row.
+  // - 1: camera-box visibility set on the seed row.
+  //
+  // This duplicates the replay-visible packed state_flags bit as a named semantic lane so future
+  // F04 runtime ownership fixes can key on the decomp meaning directly instead of unpacking bytes.
+  uint8_t camera_box_visible_x221f_b0[MSL_MAX_PLAYERS];
   // DownWait countdown timer (seeded; decomp-shaped).
   //
   // Decomp:

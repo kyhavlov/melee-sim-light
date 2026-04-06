@@ -173,6 +173,11 @@ typedef struct MslStateSoA {
   float* grab_offset_y;      // [batch * players]
   float* grab_offset_z;      // [batch * players]
   uint8_t* match_flow_timer;
+  // Rebirth / dead-flow camera-box visibility (`fp->x221F_b0`) promoted as a named SoA lane for
+  // future F04 ownership fixes. Seeded from replay-visible `state_flags[...,4] & 0x80`.
+  // refs/melee/src/melee/ft/ftlib.c::ftLib_80086A8C
+  // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
+  uint8_t* camera_box_visible_x221f_b0;
   int16_t* downwait_timer;  // fp->mv.co.downwait.x0 (seeded; decomp: ftCo_DownWait_Anim)
   float* anim_frame_f32;    // decomp fp->cur_anim_frame (float; Slippi `state_age`)
   // Decomp-shaped internal animation/script timebase with deterministic fractional carry.

@@ -17,6 +17,7 @@ from tools.slippi.seed_history import (
     compute_tilt_timer_y_pre_post_with_fall_fast,
     compute_x672_trigger_timer_pre_post,
     derive_colanim_internals,
+    derive_camera_box_visible_x221f_b0,
     derive_damage_post_hitlag_cb_kind,
     derive_guard_reflect_timer_x14,
     derive_guard_reflect_timer_x18,
@@ -1849,3 +1850,34 @@ def test_derive_damage_post_hitlag_cb_kind_fresh_hit_reentry_stays_active() -> N
         damage_actions=(int(act_damage_fly_n),),
     )
     assert got.tolist() == [1, 1, 1, 1]
+
+
+def test_derive_camera_box_visible_x221f_b0_prefix_invariant() -> None:
+    state_flags_prefix = np.array(
+        [
+            [0, 0, 0, 0, 0x00],
+            [0, 0, 0, 0, 0x80],
+            [0, 0, 0, 0, 0x80],
+            [0, 0, 0, 0, 0x00],
+        ],
+        dtype=np.uint8,
+    )
+    full = derive_camera_box_visible_x221f_b0(state_flags_u8=state_flags_prefix)
+    assert full.tolist() == [0, 1, 1, 0]
+
+    state_flags_ext = np.concatenate(
+        [
+            state_flags_prefix,
+            np.array(
+                [
+                    [0, 0, 0, 0, 0x00],
+                    [0, 0, 0, 0, 0x80],
+                    [0, 0, 0, 0, 0x00],
+                ],
+                dtype=np.uint8,
+            ),
+        ],
+        axis=0,
+    )
+    ext = derive_camera_box_visible_x221f_b0(state_flags_u8=state_flags_ext)
+    assert np.array_equal(ext[: state_flags_prefix.shape[0]], full)

@@ -101,6 +101,7 @@ int state_alloc(MslStateSoA* state, int batch_size) {
   state->grab_offset_y = (float*)alloc_aligned_64(sizeof(float) * bp);
   state->grab_offset_z = (float*)alloc_aligned_64(sizeof(float) * bp);
   state->match_flow_timer = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
+  state->camera_box_visible_x221f_b0 = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->downwait_timer = (int16_t*)alloc_aligned_64(sizeof(int16_t) * bp);
   state->anim_frame_f32 = (float*)alloc_aligned_64(sizeof(float) * bp);
   state->anim_frame_fp_q16_16 = (int32_t*)alloc_aligned_64(sizeof(int32_t) * bp);
@@ -331,7 +332,7 @@ int state_alloc(MslStateSoA* state, int batch_size) {
       !state->source_clear_grounded_damage_clear_phase ||
       !state->source_clear_terminal_phase ||
       !state->grab_mash_stick_x_sign || !state->grab_mash_stick_y_sign ||
-      !state->match_flow_timer || !state->downwait_timer ||
+      !state->match_flow_timer || !state->camera_box_visible_x221f_b0 || !state->downwait_timer ||
       !state->anim_frame_f32 || !state->anim_frame_fp_q16_16 || !state->frame_speed_mul_fp_q16_16 ||
       !state->walk_anim_source_vel ||
       !state->capture_wait_prev_rate_fp_q16_16 ||
@@ -496,6 +497,7 @@ void state_free(MslStateSoA* state) {
   alloc_free(state->grab_offset_y);
   alloc_free(state->grab_offset_z);
   alloc_free(state->match_flow_timer);
+  alloc_free(state->camera_box_visible_x221f_b0);
   alloc_free(state->downwait_timer);
   alloc_free(state->anim_frame_f32);
   alloc_free(state->anim_frame_fp_q16_16);

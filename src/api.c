@@ -462,6 +462,8 @@ int msl_batch_reseed_seed(MslBatch* batch, const uint8_t* seed_bytes, size_t see
           seed->source_clear_grounded_damage_clear_phase[p] ? 1u : 0u;
       batch->state.source_clear_terminal_phase[idx] = seed->source_clear_terminal_phase[p] ? 1u : 0u;
       batch->state.match_flow_timer[idx] = seed->match_flow_timer[p];
+      batch->state.camera_box_visible_x221f_b0[idx] =
+          seed->camera_box_visible_x221f_b0[p] ? 1u : 0u;
       batch->state.downwait_timer[idx] = seed->downwait_timer[p];
       // Seed deterministic anim timebase from Slippi post-frame `state_age` (fp->cur_anim_frame)
       // plus a strictly-causal derived fp->frame_speed_mul.

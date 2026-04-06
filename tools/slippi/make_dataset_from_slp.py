@@ -1680,6 +1680,7 @@ def _main_impl(args) -> None:
         derive_downwait_timer,
         derive_damage_jump_buffer_x14,
         derive_damage_post_hitlag_cb_kind,
+        derive_camera_box_visible_x221f_b0,
         derive_grab_mash_stick_sign_post,
         derive_grab_owner_port_2p,
         derive_seed_prev_action_post,
@@ -2171,6 +2172,9 @@ def _main_impl(args) -> None:
         port0 = int(src_ports[slot]) - 1
         samples["seed_t"]["match_flow_timer"][:, slot] = _derive_match_flow_timer(
             action_id_u16=post_state, port0=port0, common=common
+        )[:-1]
+        samples["seed_t"]["camera_box_visible_x221f_b0"][:, slot] = derive_camera_box_visible_x221f_b0(
+            state_flags_u8=state_flags
         )[:-1]
         samples["seed_t"]["downwait_timer"][:, slot] = derive_downwait_timer(
             action_id_u16=post_state,

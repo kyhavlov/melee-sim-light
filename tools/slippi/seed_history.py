@@ -993,6 +993,33 @@ def derive_guard_setoff_hitlag_damage_min(
     return out
 
 
+def derive_camera_box_visible_x221f_b0(*, state_flags_u8: np.ndarray) -> np.ndarray:
+    """
+    Extract the replay-visible `fp->x221F_b0` camera-box visibility bit as a named seed lane.
+
+    Purpose:
+    - F04 Rebirth/dead-flow rows mismatch on `state_flags[4]` because the camera callback
+      (`ftCo_Rebirth_Cam`) and `ftLib_80086A8C` own `fp->x221F_b0` visibility outside the current
+      lite sim's explicit state model.
+    - Slippi already exposes fp+0x221F in post-frame `state_flags[...,4]`. Promote the b0 mask as
+      a semantic seed lane so future runtime fixes can key on the decomp meaning directly.
+
+    Causality / prefix-invariance:
+    - Pure current-row extraction from replay-visible post-frame state. No future frames.
+
+    Decomp / replay anchors:
+    - refs/melee/src/melee/ft/ftlib.c::ftLib_80086A8C
+    - refs/melee/src/melee/ft/ft_0D31.c::ftCo_Rebirth_Cam
+    - refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
+    """
+    sf = np.asarray(state_flags_u8, dtype=np.uint8)
+    if sf.ndim != 2 or int(sf.shape[1]) < 5:
+        raise ValueError("camera_box_visible_x221f_b0 requires state_flags_u8 shape [n,5]")
+    state_flags_221f_index = 4
+    state_flag_221f_b0_mask = 0x80
+    return ((sf[:, state_flags_221f_index] & np.uint8(state_flag_221f_b0_mask)) != 0).astype(np.uint8)
+
+
 def compute_tilt_timer_y_pre_post_with_fall_fast(
     stick_y_unit: np.ndarray,
     *,

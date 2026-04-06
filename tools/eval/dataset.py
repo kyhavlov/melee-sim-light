@@ -164,6 +164,12 @@ SEED_DTYPE = np.dtype(
         # refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
         ("jab_x0", _arr("u1", MAX_PLAYERS)),
         ("match_flow_timer", _arr("u1", MAX_PLAYERS)),
+        # Replay-visible camera-box visibility bit (`fp->x221F_b0`) promoted as an explicit seed
+        # lane for F04 Rebirth/dead-flow ownership fixes.
+        # refs/melee/src/melee/ft/ftlib.c::ftLib_80086A8C
+        # refs/melee/src/melee/ft/ft_0D31.c::ftCo_Rebirth_Cam
+        # refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
+        ("camera_box_visible_x221f_b0", _arr("u1", MAX_PLAYERS)),
         ("downwait_timer", _arr("<i2", MAX_PLAYERS)),
         ("anim_frame_f32", _arr("<f4", MAX_PLAYERS)),
         ("frame_speed_mul_f32", _arr("<f4", MAX_PLAYERS)),
