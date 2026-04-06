@@ -60,6 +60,19 @@ static inline uint8_t state_flags_is_damage_action(uint16_t action_id) {
   }
 }
 
+static inline uint8_t state_flags_221a_b5_capture_action(uint16_t action_id) {
+  switch (action_id) {
+    case MSL_ACT_CAPTURE_PULLED_HI:
+    case MSL_ACT_CAPTURE_WAIT_HI:
+    case MSL_ACT_CAPTURE_PULLED_LW:
+    case MSL_ACT_CAPTURE_WAIT_LW:
+    case MSL_ACT_CAPTURE_CUT:
+      return 1u;
+    default:
+      return 0u;
+  }
+}
+
 static inline uint8_t state_flags_2218_allow_interrupt_grounded_attack_action(uint16_t action_id) {
   switch (action_id) {
     case MSL_ACT_ATTACK_11:
@@ -372,9 +385,28 @@ void state_flags_refresh_post_frame(MslBatch* batch) {
         } else {
           f221a &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221A_B5;
         }
+      if (state_flags_221a_b5_capture_action(action_id) && action_id != prev_action) {
+        // Capture destination entries clear stale x221A_b5 carry:
+        // - CapturePulled/Wait/Cut motion states use `ftCo_MF_Capture`,
+        // - that motion-flag set does not include Ft_MF_KeepColAnimHitStatus, so generic
+        //   Fighter_ChangeMotionState reset owns colanim/hurt-status clear on the destination row.
+        // refs/melee/src/melee/ft/chara/ftCommon/forward.h::{ftCo_MF_CatchWait,ftCo_MF_Capture}
+        // refs/melee/src/melee/ft/ftmotionstates.c::{ftCo_MS_CapturePulledHi,ftCo_MS_CaptureWaitHi,
+        //   ftCo_MS_CapturePulledLw,ftCo_MS_CaptureWaitLw,ftCo_MS_CaptureCut}
+        // refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState
+        f221a &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221A_B5;
+      }
       if (state_flags_is_damage_action(action_id) && action_id != prev_action &&
           batch->state.action_frame[idx] == 1 && batch->state.hitlag[idx] > 0u &&
           batch->state.hitstun[idx] > 0u) {
+        // Fresh Damage* destination entry also clears x221A_b5:
+        // - motion-state reset on Fighter_ChangeMotionState restores normal hurt-capsule status on
+        //   the destination before the new damage hitlag window is observed,
+        // - so stale whole-capsule disable carries should not survive onto the first replay-visible
+        //   Damage* destination row with live hitlag/hitstun.
+        // refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState
+        // refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007B0C0,ftColl_8007B128}
+        f221a &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221A_B5;
         // Fresh Damage* destination entry sets x221A_b3 while hitlag is active:
         // - Fighter_ProcessHit enables SDI / x221A_b3 on the knockback-owning hitlag start path,
         // - Fighter_8006A1BC clears x221A_b3 when hitlag ends,
