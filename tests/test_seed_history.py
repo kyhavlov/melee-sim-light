@@ -18,6 +18,7 @@ from tools.slippi.seed_history import (
     compute_x672_trigger_timer_pre_post,
     derive_colanim_internals,
     derive_camera_box_visible_x221f_b0,
+    derive_rebirth_camera_anchor_y,
     derive_damage_post_hitlag_cb_kind,
     derive_guard_reflect_timer_x14,
     derive_guard_reflect_timer_x18,
@@ -1881,3 +1882,28 @@ def test_derive_camera_box_visible_x221f_b0_prefix_invariant() -> None:
     )
     ext = derive_camera_box_visible_x221f_b0(state_flags_u8=state_flags_ext)
     assert np.array_equal(ext[: state_flags_prefix.shape[0]], full)
+
+
+def test_derive_rebirth_camera_anchor_y_prefix_invariant() -> None:
+    action_prefix = np.array([0x0000, 0x000C, 0x000C, 0x000C, 0x0014], dtype=np.uint16)
+    full = derive_rebirth_camera_anchor_y(
+        action_id_u16=action_prefix,
+        stage_id_u32=np.uint32(32),
+        respawn_point_y=45.0,
+    )
+    np.testing.assert_allclose(full, np.array([0.0, 45.0, 45.0, 45.0, 0.0], dtype=np.float32))
+
+    action_ext = np.concatenate([action_prefix, np.array([0x000C, 0x0046, 0x000C], dtype=np.uint16)])
+    ext = derive_rebirth_camera_anchor_y(
+        action_id_u16=action_ext,
+        stage_id_u32=np.uint32(32),
+        respawn_point_y=45.0,
+    )
+    np.testing.assert_allclose(ext[: action_prefix.shape[0]], full)
+
+    unsupported_stage = derive_rebirth_camera_anchor_y(
+        action_id_u16=action_prefix,
+        stage_id_u32=np.uint32(31),
+        respawn_point_y=45.0,
+    )
+    np.testing.assert_allclose(unsupported_stage, np.zeros(action_prefix.shape[0], dtype=np.float32))

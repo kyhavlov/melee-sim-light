@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import argparse
+import functools
 import json
 from dataclasses import dataclass
+from pathlib import Path
 
 import numpy as np
 
@@ -288,6 +290,38 @@ def _derive_match_flow_timer(*, action_id_u16: np.ndarray, port0: int, common: d
         out[i] = np.uint8(t)
 
     return out
+
+
+@functools.lru_cache(maxsize=1)
+def _fd_respawn_points_y(*, data_dir: str = "data") -> np.ndarray:
+    """
+    Load Final Destination respawn-point Y values from the ISO-derived stage artifact.
+
+    data/stages/final_destination.json: respawn_points
+    """
+    stage_path = Path(data_dir) / "stages" / "final_destination.json"
+    data = json.loads(stage_path.read_text())
+    points = data.get("respawn_points")
+    if not isinstance(points, list) or len(points) < 4:
+        raise ValueError(f"{stage_path}: expected 4 respawn_points entries")
+
+    out = np.zeros(4, dtype=np.float32)
+    for port0 in range(4):
+        point = points[port0]
+        if not isinstance(point, dict) or "y" not in point:
+            raise ValueError(f"{stage_path}: respawn_points[{port0}] missing y")
+        out[port0] = np.float32(point["y"])
+    return out
+
+
+def _respawn_point_y_for_stage_port(*, stage_id: int, port0: int, data_dir: str = "data") -> float:
+    # FD-only current suite support. Unsupported stages keep the foundational blocker lane at zero.
+    # data/stages/final_destination.json: respawn_points
+    if int(stage_id) != 32:
+        return 0.0
+    if port0 < 0 or port0 >= 4:
+        raise ValueError(f"port0 must be in [0,3], got {port0}")
+    return float(_fd_respawn_points_y(data_dir=data_dir)[port0])
 
 
 def _load_throw_pulse_seed_tables(
@@ -1663,9 +1697,6 @@ def main() -> None:
     _main_impl(args)
 
 def _main_impl(args) -> None:
-    import json
-    from pathlib import Path
-
     from tools.slippi.combat_history import derive_combat_hitlist_seed_fields
     from tools.slippi.anim_timebase import derive_frame_speed_mul_f32, load_end_frame_tables
     from tools.slippi.seed_history import (
@@ -1681,6 +1712,7 @@ def _main_impl(args) -> None:
         derive_damage_jump_buffer_x14,
         derive_damage_post_hitlag_cb_kind,
         derive_camera_box_visible_x221f_b0,
+        derive_rebirth_camera_anchor_y,
         derive_grab_mash_stick_sign_post,
         derive_grab_owner_port_2p,
         derive_seed_prev_action_post,
@@ -2175,6 +2207,16 @@ def _main_impl(args) -> None:
         )[:-1]
         samples["seed_t"]["camera_box_visible_x221f_b0"][:, slot] = derive_camera_box_visible_x221f_b0(
             state_flags_u8=state_flags
+        )[:-1]
+        # Rebirth camera subject anchor Y (`fp->mv.co.common.x8`) is a hidden match-flow lane owned
+        # by ftCo_Rebirth_Cam. On Final Destination it comes from the stage respawn-point Y rather
+        # than the fighter's replay-visible cur_pos.y.
+        # refs/melee/src/melee/ft/ft_0D31.c::ftCo_Rebirth_Cam
+        # data/stages/final_destination.json: respawn_points
+        samples["seed_t"]["rebirth_camera_anchor_y_f32"][:, slot] = derive_rebirth_camera_anchor_y(
+            action_id_u16=post_state,
+            stage_id_u32=int(stage_id),
+            respawn_point_y=_respawn_point_y_for_stage_port(stage_id=int(stage_id), port0=port0),
         )[:-1]
         samples["seed_t"]["downwait_timer"][:, slot] = derive_downwait_timer(
             action_id_u16=post_state,

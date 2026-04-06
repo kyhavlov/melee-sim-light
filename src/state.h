@@ -178,6 +178,10 @@ typedef struct MslStateSoA {
   // refs/melee/src/melee/ft/ftlib.c::ftLib_80086A8C
   // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
   uint8_t* camera_box_visible_x221f_b0;
+  // Rebirth camera subject anchor Y (`fp->mv.co.common.x8`) seeded from ISO respawn-point data.
+  // refs/melee/src/melee/ft/ft_0D31.c::ftCo_Rebirth_Cam
+  // data/stages/final_destination.json: respawn_points
+  float* rebirth_camera_anchor_y_f32;
   int16_t* downwait_timer;  // fp->mv.co.downwait.x0 (seeded; decomp: ftCo_DownWait_Anim)
   float* anim_frame_f32;    // decomp fp->cur_anim_frame (float; Slippi `state_age`)
   // Decomp-shaped internal animation/script timebase with deterministic fractional carry.

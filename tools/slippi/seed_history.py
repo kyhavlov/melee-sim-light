@@ -1020,6 +1020,47 @@ def derive_camera_box_visible_x221f_b0(*, state_flags_u8: np.ndarray) -> np.ndar
     return ((sf[:, state_flags_221f_index] & np.uint8(state_flag_221f_b0_mask)) != 0).astype(np.uint8)
 
 
+def derive_rebirth_camera_anchor_y(
+    *,
+    action_id_u16: np.ndarray,
+    stage_id_u32: int,
+    respawn_point_y: float,
+) -> np.ndarray:
+    """
+    Derive the hidden Rebirth camera anchor Y (`fp->mv.co.common.x8`) as a seed lane.
+
+    Purpose:
+    - F04 late-Rebirth blocker rows mismatch on `fp->x221F_b0` because `ftCo_Rebirth_Cam` owns the
+      camera subject outside the lite sim's current explicit state model.
+    - The callback writes the camera subject Y from `fp->mv.co.common.x8` plus a camera-data offset;
+      on Final Destination this hidden base lane matches the stage respawn platform Y, not the
+      fighter's replay-visible `cur_pos.y`.
+
+    Causality / prefix-invariance:
+    - Strictly current-row derivation from replay-visible `action_id` plus ISO-derived stage data.
+      No future frames.
+
+    Decomp / data anchors:
+    - refs/melee/src/melee/ft/ft_0D31.c::ftCo_Rebirth_Cam
+    - data/stages/final_destination.json: respawn_points
+    """
+    action = np.asarray(action_id_u16, dtype=np.uint16).reshape(-1)
+    out = np.zeros(action.shape[0], dtype=np.float32)
+
+    # Final Destination only in the current suite; unsupported stages leave the foundational lane
+    # zero until their ISO-derived respawn points are wired.
+    # refs/melee/src/melee/ft/chara/ftCommon/forward.h::ftCo_MS_Rebirth
+    # data/stages/final_destination.json: respawn_points
+    if int(stage_id_u32) != 32:
+        return out
+
+    act_rebirth = 0x000C
+    rebirth_mask = action == np.uint16(act_rebirth)
+    if rebirth_mask.any():
+        out[rebirth_mask] = np.float32(respawn_point_y)
+    return out
+
+
 def compute_tilt_timer_y_pre_post_with_fall_fast(
     stick_y_unit: np.ndarray,
     *,

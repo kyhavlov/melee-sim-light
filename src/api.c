@@ -464,6 +464,11 @@ int msl_batch_reseed_seed(MslBatch* batch, const uint8_t* seed_bytes, size_t see
       batch->state.match_flow_timer[idx] = seed->match_flow_timer[p];
       batch->state.camera_box_visible_x221f_b0[idx] =
           seed->camera_box_visible_x221f_b0[p] ? 1u : 0u;
+      float rebirth_camera_anchor_y = seed->rebirth_camera_anchor_y_f32[p];
+      if (!isfinite(rebirth_camera_anchor_y)) {
+        rebirth_camera_anchor_y = 0.0f;
+      }
+      batch->state.rebirth_camera_anchor_y_f32[idx] = rebirth_camera_anchor_y;
       batch->state.downwait_timer[idx] = seed->downwait_timer[p];
       // Seed deterministic anim timebase from Slippi post-frame `state_age` (fp->cur_anim_frame)
       // plus a strictly-causal derived fp->frame_speed_mul.

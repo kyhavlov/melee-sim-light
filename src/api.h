@@ -318,6 +318,18 @@ typedef struct MslSeed {
   // This duplicates the replay-visible packed state_flags bit as a named semantic lane so future
   // F04 runtime ownership fixes can key on the decomp meaning directly instead of unpacking bytes.
   uint8_t camera_box_visible_x221f_b0[MSL_MAX_PLAYERS];
+  // Rebirth camera subject anchor Y (`fp->mv.co.common.x8`) as an explicit seed lane.
+  //
+  // Decomp / data anchors:
+  // - ftCo_Rebirth_Cam writes camera subject Y from `fp->mv.co.common.x8` plus a camera-data offset.
+  // - On Final Destination that hidden base lane matches the stage respawn-point Y.
+  // refs/melee/src/melee/ft/ft_0D31.c::ftCo_Rebirth_Cam
+  // data/stages/final_destination.json: respawn_points
+  //
+  // Seed representation:
+  // - 0.0f outside Rebirth / unsupported stages.
+  // - FD respawn-point Y on Rebirth seed rows.
+  float rebirth_camera_anchor_y_f32[MSL_MAX_PLAYERS];
   // DownWait countdown timer (seeded; decomp-shaped).
   //
   // Decomp:

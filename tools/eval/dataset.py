@@ -170,6 +170,12 @@ SEED_DTYPE = np.dtype(
         # refs/melee/src/melee/ft/ft_0D31.c::ftCo_Rebirth_Cam
         # refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
         ("camera_box_visible_x221f_b0", _arr("u1", MAX_PLAYERS)),
+        # Hidden Rebirth camera anchor Y (`fp->mv.co.common.x8`) promoted as a foundational seed
+        # lane for F04 ownership work. Derived from current-row Rebirth state plus ISO respawn-point
+        # data; on FD this is the respawn platform Y, not replay-visible fighter cur_pos.y.
+        # refs/melee/src/melee/ft/ft_0D31.c::ftCo_Rebirth_Cam
+        # data/stages/final_destination.json: respawn_points
+        ("rebirth_camera_anchor_y_f32", _arr("<f4", MAX_PLAYERS)),
         ("downwait_timer", _arr("<i2", MAX_PLAYERS)),
         ("anim_frame_f32", _arr("<f4", MAX_PLAYERS)),
         ("frame_speed_mul_f32", _arr("<f4", MAX_PLAYERS)),
