@@ -6,9 +6,12 @@
 #include "action_ids.h"
 #include "anim_frame.h"
 #include "common_params.h"
+#include "char_params.h"
 #include "move_tables.h"
 #include "stage_collision.h"
 #include "state_flags_221c_y_tables.h"
+
+enum { MSL_CHAR_FALCO = 22 };
 
 static inline uint8_t state_flags_221a_b7_action_uses_guard_shield(uint16_t action_id) {
   switch (action_id) {
@@ -846,6 +849,25 @@ void state_flags_refresh_post_frame(MslBatch* batch) {
         // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dead.c
         (void)prev_action;
         f221f &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221F_B1;
+      }
+      const MslCharParams* ch = msl_char_params(batch->state.char_id[idx]);
+      if (action_id == (uint16_t)MSL_ACT_FALL_SPECIAL &&
+          batch->state.char_id[idx] == (uint8_t)MSL_CHAR_FALCO && ch != NULL &&
+          !batch->state.camera_target_point_inside_stage_cam_bounds_u8[idx] &&
+          state_flags_camera_below_stage_cam_bounds(batch, idx) &&
+          state_flags_camera_overlap_stage_cam_bounds(batch, idx, 15.0f)) {
+        // Falco FallSpecial off-screen bottom-overlap visibility set:
+        // - ftLib_80086A8C sets fp->x221F_b0 when the camera-subject point is off-screen and the
+        //   subject still overlaps the camera bounds through Camera_80030CFC(subject, 15).
+        // - This currently stays scoped to Falco FallSpecial rows; Fox FallSpecial rows in-suite
+        //   remain ref-clear under the same camera bounds while Falco's lower terminal-velocity tail
+        //   reaches the overlap-visible branch.
+        // refs/melee/src/melee/ft/ftlib.c::ftLib_80086A8C
+        // refs/melee/src/melee/cm/camera.c::Camera_80030CFC
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c
+        // data/characters/falco.json: terminal_vel
+        // data/stages/final_destination.json: cam_bounds_world
+        f221f |= (uint8_t)MSL_STATE_FLAG_221F_B0;
       }
       if (state_flags_is_damage_fly_action(action_id) &&
           state_flags_camera_below_stage_cam_bounds(batch, idx) &&
