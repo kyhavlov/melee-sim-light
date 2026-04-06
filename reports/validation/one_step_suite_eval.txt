@@ -61,7 +61,7 @@ mismatch.instance_id: 40 / 14590 (0.002742)
 mismatch.last_attack_landed: 4 / 14590 (0.000274)
 mismatch.combo_count: 2 / 14590 (0.000137)
 mismatch.last_hit_by: 2 / 14590 (0.000137)
-mismatch.state_flags: 45 / 72950 (0.000617)
+mismatch.state_flags: 44 / 72950 (0.000603)
 mismatch.item_exists: 0 / 109425 (0.000000)
 mismatch.item_type: 0 / 109425 (0.000000)
 mismatch.item_state: 0 / 109425 (0.000000)
@@ -80,7 +80,7 @@ err.item_pos_x: mae=0.274897 p95=0.000000 max=38.000000
 err.item_pos_y: mae=0.042716 p95=0.000000 max=6.995890
 err.item_vel_x: mae=0.067515 p95=0.000000 max=10.000000
 err.item_vel_y: mae=0.051777 p95=0.000000 max=6.995884
-overall.discrete_mismatch: 216 / 882695
+overall.discrete_mismatch: 215 / 882695
 overall.float_norm_mae_p95: 0.00305773
 
 == datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl ==
@@ -210,5 +210,5 @@ overall.discrete_mismatch: 236 / 948277
 overall.float_norm_mae_p95: 0.00380444
 
 == suite summary ==
-overall.discrete_mismatch: 1065 / 4462843
+overall.discrete_mismatch: 1064 / 4462843
 overall.float_norm_mae_p95: 0.00328046

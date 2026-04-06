@@ -7,6 +7,7 @@
 #include "anim_frame.h"
 #include "common_params.h"
 #include "move_tables.h"
+#include "stage_collision.h"
 #include "state_flags_221c_y_tables.h"
 
 static inline uint8_t state_flags_221a_b7_action_uses_guard_shield(uint16_t action_id) {
@@ -49,6 +50,19 @@ static inline uint8_t state_flags_is_damage_action(uint16_t action_id) {
     case MSL_ACT_DAMAGE_AIR_1:
     case MSL_ACT_DAMAGE_AIR_2:
     case MSL_ACT_DAMAGE_AIR_3:
+    case MSL_ACT_DAMAGE_FLY_HI:
+    case MSL_ACT_DAMAGE_FLY_N:
+    case MSL_ACT_DAMAGE_FLY_LW:
+    case MSL_ACT_DAMAGE_FLY_TOP:
+    case MSL_ACT_DAMAGE_FLY_ROLL:
+      return 1u;
+    default:
+      return 0u;
+  }
+}
+
+static inline uint8_t state_flags_is_damage_fly_action(uint16_t action_id) {
+  switch (action_id) {
     case MSL_ACT_DAMAGE_FLY_HI:
     case MSL_ACT_DAMAGE_FLY_N:
     case MSL_ACT_DAMAGE_FLY_LW:
@@ -106,6 +120,34 @@ static inline uint8_t state_flags_221f_dead_start_action(uint16_t action_id) {
     default:
       return 0u;
   }
+}
+
+static inline uint8_t state_flags_camera_overlap_stage_cam_bounds(const MslBatch* batch,
+                                                                  size_t idx, float tolerance) {
+  if (batch == NULL) {
+    return 0u;
+  }
+  MslStageBounds cam = {0};
+  if (!stage_collision_get_cam_bounds_world(batch->state.stage_id[idx / MSL_MAX_PLAYERS], &cam)) {
+    return 0u;
+  }
+  const float x = batch->state.camera_target_world_x_f32[idx];
+  const float y = batch->state.camera_target_world_y_f32[idx];
+  const float r = batch->state.camera_box_radius_f32[idx] + tolerance;
+  return (uint8_t)(x >= (cam.left - r) && x < (cam.right + r) && y >= (cam.bottom - r) &&
+                   y < (cam.top + r));
+}
+
+static inline uint8_t state_flags_camera_below_stage_cam_bounds(const MslBatch* batch,
+                                                                size_t idx) {
+  if (batch == NULL) {
+    return 0u;
+  }
+  MslStageBounds cam = {0};
+  if (!stage_collision_get_cam_bounds_world(batch->state.stage_id[idx / MSL_MAX_PLAYERS], &cam)) {
+    return 0u;
+  }
+  return (uint8_t)(batch->state.camera_target_world_y_f32[idx] < cam.bottom);
 }
 
 void state_flags_refresh_post_frame(MslBatch* batch) {
@@ -804,6 +846,20 @@ void state_flags_refresh_post_frame(MslBatch* batch) {
         // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dead.c
         (void)prev_action;
         f221f &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221F_B1;
+      }
+      if (state_flags_is_damage_fly_action(action_id) &&
+          state_flags_camera_below_stage_cam_bounds(batch, idx) &&
+          state_flags_camera_overlap_stage_cam_bounds(batch, idx, 15.0f)) {
+        // DamageFly* bottom-overlap visibility set:
+        // - ftLib_80086A8C sets fp->x221F_b0 when the camera target point is off-screen and the
+        //   subject still overlaps the screen through Camera_80030CFC(subject, 15),
+        // - keep this to the airborne DamageFly* family where the seeded camera target is already
+        //   below the bottom camera bound but still within the radius+tolerance overlap window.
+        // refs/melee/src/melee/ft/ftlib.c::ftLib_80086A8C
+        // refs/melee/src/melee/cm/camera.c::Camera_80030CFC
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c
+        // data/stages/final_destination.json: cam_bounds_world
+        f221f |= (uint8_t)MSL_STATE_FLAG_221F_B0;
       }
       if (action_id == (uint16_t)MSL_ACT_LANDING &&
           prev_action == (uint16_t)MSL_ACT_DAMAGE_AIR_2 && batch->state.prev_action_frame[idx] < 8 &&
