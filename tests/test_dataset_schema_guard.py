@@ -26,6 +26,11 @@ def test_seed_schema_includes_staling_fields() -> None:
     assert "camera_box_visible_x221f_b0" in SEED_DTYPE.fields
     # F04 blocker lane: hidden Rebirth camera anchor Y (`fp->mv.co.common.x8`).
     assert "rebirth_camera_anchor_y_f32" in SEED_DTYPE.fields
+    # F04 blocker lane: fighter camera-subject target point (`camera_box->x1C`) and radius.
+    assert "camera_target_world_x_f32" in SEED_DTYPE.fields
+    assert "camera_target_world_y_f32" in SEED_DTYPE.fields
+    assert "camera_target_world_z_f32" in SEED_DTYPE.fields
+    assert "camera_box_radius_f32" in SEED_DTYPE.fields
 
 
 def test_dataset_dtype_sizes_match_c_structs() -> None:

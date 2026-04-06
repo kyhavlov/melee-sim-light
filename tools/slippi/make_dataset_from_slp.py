@@ -1712,6 +1712,7 @@ def _main_impl(args) -> None:
         derive_damage_jump_buffer_x14,
         derive_damage_post_hitlag_cb_kind,
         derive_camera_box_visible_x221f_b0,
+        derive_camera_target_world,
         derive_rebirth_camera_anchor_y,
         derive_grab_mash_stick_sign_post,
         derive_grab_owner_port_2p,
@@ -2113,6 +2114,7 @@ def _main_impl(args) -> None:
         post_jumps = _to_numpy(post.field("jumps")).astype(np.uint8)
         post_airborne = _to_numpy(post.field("airborne")).astype(np.uint8)
         post_on_ground = _airborne_to_on_ground(post_airborne, n_frames)
+        fighter_scale_y = np.full(n_frames, np.float32(scl), dtype=np.float32)
         post_hitlag = _u16_from_float_frames(_to_numpy(post.field("hitlag")).astype(np.float32), n_frames)
         post_misc_as = _to_numpy(post.field("misc_as")).astype(np.float32)
         post_state_age_f32 = _to_numpy(post.field("state_age")).astype(np.float32)
@@ -2218,6 +2220,25 @@ def _main_impl(args) -> None:
             stage_id_u32=int(stage_id),
             respawn_point_y=_respawn_point_y_for_stage_port(stage_id=int(stage_id), port0=port0),
         )[:-1]
+        (
+            camera_target_world_x,
+            camera_target_world_y,
+            camera_target_world_z,
+            camera_box_radius,
+        ) = derive_camera_target_world(
+            char_id_u8=post_char,
+            animation_index_u32=animation_index,
+            anim_frame_f32=post_anim_frame_f32,
+            fighter_scale_y_f32=fighter_scale_y,
+            facing_u8=post_dir,
+            pos_x_f32=post_pos_x,
+            pos_y_f32=post_pos_y,
+            pos_z_f32=post_pos_z,
+        )
+        samples["seed_t"]["camera_target_world_x_f32"][:, slot] = camera_target_world_x[:-1]
+        samples["seed_t"]["camera_target_world_y_f32"][:, slot] = camera_target_world_y[:-1]
+        samples["seed_t"]["camera_target_world_z_f32"][:, slot] = camera_target_world_z[:-1]
+        samples["seed_t"]["camera_box_radius_f32"][:, slot] = camera_box_radius[:-1]
         samples["seed_t"]["downwait_timer"][:, slot] = derive_downwait_timer(
             action_id_u16=post_state,
             down_wait_frames=int(common["down_wait_frames"]),

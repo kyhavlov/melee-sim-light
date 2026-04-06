@@ -182,6 +182,14 @@ typedef struct MslStateSoA {
   // refs/melee/src/melee/ft/ft_0D31.c::ftCo_Rebirth_Cam
   // data/stages/final_destination.json: respawn_points
   float* rebirth_camera_anchor_y_f32;
+  // Fighter camera-subject target point (`camera_box->x1C`) and radius (`camera_box->x34.z`).
+  // Seeded from replay-visible pose plus ISO-derived character camera metadata.
+  // refs/melee/src/melee/ft/ftlib.c::ftLib_800866DC
+  // refs/melee/src/melee/ft/ftcamera.c::ftCamera_80076018
+  float* camera_target_world_x_f32;
+  float* camera_target_world_y_f32;
+  float* camera_target_world_z_f32;
+  float* camera_box_radius_f32;
   int16_t* downwait_timer;  // fp->mv.co.downwait.x0 (seeded; decomp: ftCo_DownWait_Anim)
   float* anim_frame_f32;    // decomp fp->cur_anim_frame (float; Slippi `state_age`)
   // Decomp-shaped internal animation/script timebase with deterministic fractional carry.

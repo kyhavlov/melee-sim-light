@@ -469,6 +469,26 @@ int msl_batch_reseed_seed(MslBatch* batch, const uint8_t* seed_bytes, size_t see
         rebirth_camera_anchor_y = 0.0f;
       }
       batch->state.rebirth_camera_anchor_y_f32[idx] = rebirth_camera_anchor_y;
+      float camera_target_world_x = seed->camera_target_world_x_f32[p];
+      float camera_target_world_y = seed->camera_target_world_y_f32[p];
+      float camera_target_world_z = seed->camera_target_world_z_f32[p];
+      float camera_box_radius = seed->camera_box_radius_f32[p];
+      if (!isfinite(camera_target_world_x)) {
+        camera_target_world_x = 0.0f;
+      }
+      if (!isfinite(camera_target_world_y)) {
+        camera_target_world_y = 0.0f;
+      }
+      if (!isfinite(camera_target_world_z)) {
+        camera_target_world_z = 0.0f;
+      }
+      if (!isfinite(camera_box_radius) || camera_box_radius < 0.0f) {
+        camera_box_radius = 0.0f;
+      }
+      batch->state.camera_target_world_x_f32[idx] = camera_target_world_x;
+      batch->state.camera_target_world_y_f32[idx] = camera_target_world_y;
+      batch->state.camera_target_world_z_f32[idx] = camera_target_world_z;
+      batch->state.camera_box_radius_f32[idx] = camera_box_radius;
       batch->state.downwait_timer[idx] = seed->downwait_timer[p];
       // Seed deterministic anim timebase from Slippi post-frame `state_age` (fp->cur_anim_frame)
       // plus a strictly-causal derived fp->frame_speed_mul.

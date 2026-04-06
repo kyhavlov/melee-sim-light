@@ -103,6 +103,10 @@ int state_alloc(MslStateSoA* state, int batch_size) {
   state->match_flow_timer = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->camera_box_visible_x221f_b0 = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->rebirth_camera_anchor_y_f32 = (float*)alloc_aligned_64(sizeof(float) * bp);
+  state->camera_target_world_x_f32 = (float*)alloc_aligned_64(sizeof(float) * bp);
+  state->camera_target_world_y_f32 = (float*)alloc_aligned_64(sizeof(float) * bp);
+  state->camera_target_world_z_f32 = (float*)alloc_aligned_64(sizeof(float) * bp);
+  state->camera_box_radius_f32 = (float*)alloc_aligned_64(sizeof(float) * bp);
   state->downwait_timer = (int16_t*)alloc_aligned_64(sizeof(int16_t) * bp);
   state->anim_frame_f32 = (float*)alloc_aligned_64(sizeof(float) * bp);
   state->anim_frame_fp_q16_16 = (int32_t*)alloc_aligned_64(sizeof(int32_t) * bp);
@@ -334,7 +338,9 @@ int state_alloc(MslStateSoA* state, int batch_size) {
       !state->source_clear_terminal_phase ||
       !state->grab_mash_stick_x_sign || !state->grab_mash_stick_y_sign ||
       !state->match_flow_timer || !state->camera_box_visible_x221f_b0 ||
-      !state->rebirth_camera_anchor_y_f32 || !state->downwait_timer ||
+      !state->rebirth_camera_anchor_y_f32 || !state->camera_target_world_x_f32 ||
+      !state->camera_target_world_y_f32 || !state->camera_target_world_z_f32 ||
+      !state->camera_box_radius_f32 || !state->downwait_timer ||
       !state->anim_frame_f32 || !state->anim_frame_fp_q16_16 || !state->frame_speed_mul_fp_q16_16 ||
       !state->walk_anim_source_vel ||
       !state->capture_wait_prev_rate_fp_q16_16 ||
@@ -501,6 +507,10 @@ void state_free(MslStateSoA* state) {
   alloc_free(state->match_flow_timer);
   alloc_free(state->camera_box_visible_x221f_b0);
   alloc_free(state->rebirth_camera_anchor_y_f32);
+  alloc_free(state->camera_target_world_x_f32);
+  alloc_free(state->camera_target_world_y_f32);
+  alloc_free(state->camera_target_world_z_f32);
+  alloc_free(state->camera_box_radius_f32);
   alloc_free(state->downwait_timer);
   alloc_free(state->anim_frame_f32);
   alloc_free(state->anim_frame_fp_q16_16);

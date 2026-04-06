@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import functools
+import json
 import struct
 from pathlib import Path
 
@@ -1059,6 +1060,139 @@ def derive_rebirth_camera_anchor_y(
     if rebirth_mask.any():
         out[rebirth_mask] = np.float32(respawn_point_y)
     return out
+
+
+@functools.lru_cache(maxsize=1)
+def _camera_target_seed_tables(*, data_dir: str = "data") -> dict[int, dict[str, object]]:
+    from tools.slippi.combat_history import AnimPoseDB
+
+    base = Path(str(data_dir))
+    out: dict[int, dict[str, object]] = {}
+    for char_id, key in ((1, "fox"), (22, "falco")):
+        meta = json.loads((base / "characters" / f"{key}.json").read_text())
+        out[int(char_id)] = {
+            "pose": AnimPoseDB((base / "anims" / f"{key}.bin").read_bytes()),
+            "bone_part_id": int(meta["camera_zoom_target_bone_part_id"]),
+            "offset": np.asarray(meta["camera_zoom_target_offset"], dtype=np.float32).reshape(3),
+            "radius": float(meta["camera_box_radius"]),
+            "model_scaling": float(meta.get("model_scaling", 1.0)),
+        }
+    return out
+
+
+def derive_camera_target_world(
+    *,
+    char_id_u8: np.ndarray,
+    animation_index_u32: np.ndarray,
+    anim_frame_f32: np.ndarray,
+    fighter_scale_y_f32: np.ndarray,
+    facing_u8: np.ndarray,
+    pos_x_f32: np.ndarray,
+    pos_y_f32: np.ndarray,
+    pos_z_f32: np.ndarray,
+    data_dir: str = "data",
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """
+    Derive the fighter camera-subject target point (`camera_box->x1C`) and radius (`camera_box->x34.z`).
+
+    Purpose:
+    - F04 mixed-direction blockers are owned by `ftLib_80086A8C` camera-subject tests
+      (`Camera_80030CD8` / `Camera_80030CFC`), not just the replay-visible `fp->x221F_b0` bit.
+    - `ftLib_800866DC` writes the subject point from the fighter's camera-zoom target bone plus
+      `co_attrs.x170`, and `ftCamera_80076018` scales the camera-box radius from fighter data.
+    - Promote those hidden camera-target semantics as explicit seed lanes so later runtime work can
+      reason from decomp-backed world-space inputs instead of replay-fit visibility toggles.
+
+    Causality / prefix-invariance:
+    - Strictly current-row derivation from replay-visible pose inputs plus ISO-derived character
+      camera metadata and SSANIM pose data. No future frames.
+
+    Decomp / data anchors:
+    - refs/melee/src/melee/ft/ftlib.c::ftLib_800866DC
+    - refs/melee/src/melee/ft/ftcamera.c::ftCamera_80076018
+    - refs/melee/src/melee/ft/fighter.c (root facing rotation via ftPartSetRotY)
+    - data/characters/{fox,falco}.json: camera_zoom_target_bone_part_id,
+      camera_zoom_target_offset, camera_box_radius, model_scaling
+    - data/anims/{fox,falco}.bin (SSANIM01 v3 pose matrices)
+    """
+    char = np.asarray(char_id_u8, dtype=np.uint8).reshape(-1)
+    anim = np.asarray(animation_index_u32, dtype=np.uint32).reshape(-1)
+    anim_frame = np.asarray(anim_frame_f32, dtype=np.float32).reshape(-1)
+    scale_y = np.asarray(fighter_scale_y_f32, dtype=np.float32).reshape(-1)
+    facing = np.asarray(facing_u8, dtype=np.uint8).reshape(-1)
+    pos_x = np.asarray(pos_x_f32, dtype=np.float32).reshape(-1)
+    pos_y = np.asarray(pos_y_f32, dtype=np.float32).reshape(-1)
+    pos_z = np.asarray(pos_z_f32, dtype=np.float32).reshape(-1)
+    n = int(char.size)
+    if (
+        int(anim.size) != n
+        or int(anim_frame.size) != n
+        or int(scale_y.size) != n
+        or int(facing.size) != n
+        or int(pos_x.size) != n
+        or int(pos_y.size) != n
+        or int(pos_z.size) != n
+    ):
+        raise ValueError("camera target world derivation inputs must share length")
+
+    out_x = np.zeros(n, dtype=np.float32)
+    out_y = np.zeros(n, dtype=np.float32)
+    out_z = np.zeros(n, dtype=np.float32)
+    out_radius = np.zeros(n, dtype=np.float32)
+
+    tables = _camera_target_seed_tables(data_dir=str(data_dir))
+    for i in range(n):
+        entry = tables.get(int(char[i]))
+        if entry is None:
+            continue
+        msid = int(anim[i])
+        if msid < 0 or msid > 0xFFFF:
+            continue
+        frame_f = float(anim_frame[i])
+        if not np.isfinite(frame_f):
+            continue
+        frame = int(np.floor(frame_f))
+        if frame < 0:
+            continue
+
+        pose = entry["pose"]
+        bone_part_id = int(entry["bone_part_id"])
+        m = pose.try_get_matrix(msid=msid, frame=frame, part_id=bone_part_id)
+        if m is None:
+            continue
+
+        off = entry["offset"]
+        lx = float(m[0] * off[0] + m[1] * off[1] + m[2] * off[2] + m[3])
+        ly = float(m[4] * off[0] + m[5] * off[1] + m[6] * off[2] + m[7])
+        lz = float(m[8] * off[0] + m[9] * off[1] + m[10] * off[2] + m[11])
+
+        scale = float(scale_y[i])
+        if not np.isfinite(scale) or scale <= 0.0:
+            scale = 1.0
+        model_scaling = float(entry["model_scaling"])
+        if not np.isfinite(model_scaling) or model_scaling <= 0.0:
+            model_scaling = 1.0
+
+        # Runtime HSD joint matrices used by ftLib_800866DC include fighter scale and the character
+        # model-scaling chain. Our SSANIM pose matrices omit those runtime scalars, so apply the same
+        # scale policy here before the decomp-shaped root facing rotation.
+        # refs/melee/src/melee/ft/ftlib.c::ftLib_800866DC
+        # refs/melee/src/melee/ft/ftparts.c::ftParts_80074B8C
+        pose_scale = scale * model_scaling
+        lx *= pose_scale
+        ly *= pose_scale
+        lz *= pose_scale
+
+        facing_dir = 1.0 if int(facing[i]) else -1.0
+        out_x[i] = np.float32(float(pos_x[i]) + facing_dir * lz)
+        out_y[i] = np.float32(float(pos_y[i]) + ly)
+        out_z[i] = np.float32(float(pos_z[i]) - facing_dir * lx)
+
+        # ftCamera_80076018 scales the camera-box extents from fighter camera data by fp->x34_scale.y.
+        # refs/melee/src/melee/ft/ftcamera.c::ftCamera_80076018
+        out_radius[i] = np.float32(float(entry["radius"]) * scale)
+
+    return out_x, out_y, out_z, out_radius
 
 
 def compute_tilt_timer_y_pre_post_with_fall_fast(

@@ -330,6 +330,19 @@ typedef struct MslSeed {
   // - 0.0f outside Rebirth / unsupported stages.
   // - FD respawn-point Y on Rebirth seed rows.
   float rebirth_camera_anchor_y_f32[MSL_MAX_PLAYERS];
+  // Fighter camera-subject target point (`camera_box->x1C`) and radius (`camera_box->x34.z`).
+  //
+  // Decomp / data anchors:
+  // - ftLib_800866DC writes the subject point from camera_zoom_target_bone + co_attrs.x170.
+  // - ftCamera_80076018 scales camera-box extents by fp->x34_scale.y.
+  // refs/melee/src/melee/ft/ftlib.c::ftLib_800866DC
+  // refs/melee/src/melee/ft/ftcamera.c::ftCamera_80076018
+  // data/characters/{fox,falco}.json: camera_zoom_target_bone_part_id,
+  //   camera_zoom_target_offset, camera_box_radius
+  float camera_target_world_x_f32[MSL_MAX_PLAYERS];
+  float camera_target_world_y_f32[MSL_MAX_PLAYERS];
+  float camera_target_world_z_f32[MSL_MAX_PLAYERS];
+  float camera_box_radius_f32[MSL_MAX_PLAYERS];
   // DownWait countdown timer (seeded; decomp-shaped).
   //
   // Decomp:

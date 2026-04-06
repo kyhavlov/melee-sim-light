@@ -176,6 +176,16 @@ SEED_DTYPE = np.dtype(
         # refs/melee/src/melee/ft/ft_0D31.c::ftCo_Rebirth_Cam
         # data/stages/final_destination.json: respawn_points
         ("rebirth_camera_anchor_y_f32", _arr("<f4", MAX_PLAYERS)),
+        # Hidden fighter camera-subject world target (`camera_box->x1C`) and radius
+        # (`camera_box->x34.z`) promoted as explicit seed lanes for F04 camera-target ownership.
+        # refs/melee/src/melee/ft/ftlib.c::ftLib_800866DC
+        # refs/melee/src/melee/ft/ftcamera.c::ftCamera_80076018
+        # data/characters/{fox,falco}.json: camera_zoom_target_bone_part_id,
+        #   camera_zoom_target_offset, camera_box_radius
+        ("camera_target_world_x_f32", _arr("<f4", MAX_PLAYERS)),
+        ("camera_target_world_y_f32", _arr("<f4", MAX_PLAYERS)),
+        ("camera_target_world_z_f32", _arr("<f4", MAX_PLAYERS)),
+        ("camera_box_radius_f32", _arr("<f4", MAX_PLAYERS)),
         ("downwait_timer", _arr("<i2", MAX_PLAYERS)),
         ("anim_frame_f32", _arr("<f4", MAX_PLAYERS)),
         ("frame_speed_mul_f32", _arr("<f4", MAX_PLAYERS)),

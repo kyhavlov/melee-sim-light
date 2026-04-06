@@ -18,6 +18,7 @@ from tools.slippi.seed_history import (
     compute_x672_trigger_timer_pre_post,
     derive_colanim_internals,
     derive_camera_box_visible_x221f_b0,
+    derive_camera_target_world,
     derive_rebirth_camera_anchor_y,
     derive_damage_post_hitlag_cb_kind,
     derive_guard_reflect_timer_x14,
@@ -1907,3 +1908,68 @@ def test_derive_rebirth_camera_anchor_y_prefix_invariant() -> None:
         respawn_point_y=45.0,
     )
     np.testing.assert_allclose(unsupported_stage, np.zeros(action_prefix.shape[0], dtype=np.float32))
+
+
+def test_derive_camera_target_world_prefix_invariant() -> None:
+    char_prefix = np.array([1, 1, 22, 1], dtype=np.uint8)
+    anim_prefix = np.array([2, 2, 2, 0xFFFFFFFF], dtype=np.uint32)
+    anim_frame_prefix = np.array([30.0, 31.0, 31.0, -1.0], dtype=np.float32)
+    scale_prefix = np.array([1.0, 1.0, 1.0, 1.0], dtype=np.float32)
+    facing_prefix = np.array([1, 0, 0, 1], dtype=np.uint8)
+    pos_x_prefix = np.array([-50.0, 16.0, 16.0, -12.0], dtype=np.float32)
+    pos_y_prefix = np.array([78.34997, 78.34997, 77.19997, 10.0], dtype=np.float32)
+    pos_z_prefix = np.zeros(4, dtype=np.float32)
+
+    full = derive_camera_target_world(
+        char_id_u8=char_prefix,
+        animation_index_u32=anim_prefix,
+        anim_frame_f32=anim_frame_prefix,
+        fighter_scale_y_f32=scale_prefix,
+        facing_u8=facing_prefix,
+        pos_x_f32=pos_x_prefix,
+        pos_y_f32=pos_y_prefix,
+        pos_z_f32=pos_z_prefix,
+    )
+
+    np.testing.assert_allclose(
+        full[0],
+        np.array([-49.639732, 15.665469, 15.083799, 0.0], dtype=np.float32),
+        atol=1e-5,
+    )
+    np.testing.assert_allclose(
+        full[1],
+        np.array([86.5845, 86.56182, 86.3869, 0.0], dtype=np.float32),
+        atol=1e-4,
+    )
+    np.testing.assert_allclose(
+        full[2],
+        np.array([0.07064841, -0.07946108, -0.1099591, 0.0], dtype=np.float32),
+        atol=1e-5,
+    )
+    np.testing.assert_allclose(
+        full[3],
+        np.array([11.2, 11.2, 11.2, 0.0], dtype=np.float32),
+        atol=1e-5,
+    )
+
+    char_ext = np.concatenate([char_prefix, np.array([1, 1], dtype=np.uint8)])
+    anim_ext = np.concatenate([anim_prefix, np.array([177, 178], dtype=np.uint32)])
+    anim_frame_ext = np.concatenate([anim_frame_prefix, np.array([29.0, 29.0], dtype=np.float32)])
+    scale_ext = np.concatenate([scale_prefix, np.array([1.0, 1.0], dtype=np.float32)])
+    facing_ext = np.concatenate([facing_prefix, np.array([1, 1], dtype=np.uint8)])
+    pos_x_ext = np.concatenate([pos_x_prefix, np.array([-157.48572, -168.23122], dtype=np.float32)])
+    pos_y_ext = np.concatenate([pos_y_prefix, np.array([84.70425, 13.72867], dtype=np.float32)])
+    pos_z_ext = np.concatenate([pos_z_prefix, np.zeros(2, dtype=np.float32)])
+
+    ext = derive_camera_target_world(
+        char_id_u8=char_ext,
+        animation_index_u32=anim_ext,
+        anim_frame_f32=anim_frame_ext,
+        fighter_scale_y_f32=scale_ext,
+        facing_u8=facing_ext,
+        pos_x_f32=pos_x_ext,
+        pos_y_f32=pos_y_ext,
+        pos_z_f32=pos_z_ext,
+    )
+    for got, expected in zip(ext, full, strict=True):
+        np.testing.assert_allclose(got[: char_prefix.shape[0]], expected, atol=1e-5)
