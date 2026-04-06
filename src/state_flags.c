@@ -554,6 +554,21 @@ void state_flags_refresh_post_frame(MslBatch* batch) {
           f221c &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221C_B1;
         }
         if (action_id == (uint16_t)MSL_ACT_GUARD_SET_OFF &&
+            batch->state.seed_prev_action_id[idx] == (uint16_t)MSL_ACT_GUARD_REFLECT &&
+            batch->state.action_frame[idx] == 0 && batch->state.hitlag[idx] > 0u &&
+            batch->state.guard_reflect_timer_x14[idx] == 0u &&
+            batch->state.guard_reflect_timer_x18[idx] > 0u &&
+            f221c == (uint8_t)(MSL_STATE_FLAG_221C_B1 | MSL_STATE_FLAG_221C_B2)) {
+          // GuardReflect -> GuardSetOff active-timer handoff:
+          // - the destination GuardSetOff row still observes hitlag, so the powershield-active x18
+          //   lane can remain visible,
+          // - but ftCo_80093BC0 ties x221C_b1 to x14, and once the reflect-window timer has
+          //   expired on the destination row, that bit no longer has a live owner.
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_GuardSetOff_Anim,ftCo_80093BC0}
+          // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A1BC,Fighter_8006A360}
+          f221c &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221C_B1;
+        }
+        if (action_id == (uint16_t)MSL_ACT_GUARD_SET_OFF &&
             batch->state.hitlag[idx] == 0u && batch->state.prev_action_frame[idx] > 0 &&
             batch->state.guard_reflect_timer_x14[idx] == 0u &&
             (f221c & (uint8_t)(MSL_STATE_FLAG_221C_B1 | MSL_STATE_FLAG_221C_B2)) ==

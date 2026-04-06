@@ -62,6 +62,30 @@ _B1_TARGETS = (
     ),
 )
 
+_ACTIVE_TIMER_B1_TARGETS = (
+    _Case(
+        dataset_rel=(
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
+            "GracefulAttachedTurtle.msl"
+        ),
+        target_record=6315,
+        port=0,
+        note="GAT GuardReflect->GuardSetOff hitlag row clears x221C_b1 once x14 has expired while x18 remains active",
+    ),
+)
+
+_ACTIVE_TIMER_B1_NEGATIVE_CONTROLS = (
+    _Case(
+        dataset_rel=(
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
+            "AttachedGoodNaturedGuanaco.msl"
+        ),
+        target_record=2390,
+        port=0,
+        note="AGN active-timer control keeps x221C_b1 while x14 remains live",
+    ),
+)
+
 _NEGATIVE_CONTROLS = (
     _Case(
         dataset_rel=(
@@ -238,6 +262,74 @@ def test_guardsetoff_first_steady_gx10_7_rows_clear_b1_only(case: _Case) -> None
 
     _, ref_row, out_row = _run_one_step_row(dataset_path, case.target_record, p)
     assert int(out_row["state_flags"][p, 3]) == int(ref_row["state_flags"][p, 3]) == 32, case.note
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    "case", _ACTIVE_TIMER_B1_TARGETS, ids=lambda c: f"{Path(c.dataset_rel).stem}-rec{c.target_record}-p{c.port}"
+)
+def test_guardsetoff_active_timer_handoff_rows_clear_b1_only(case: _Case) -> None:
+    # Replay-real lock for the active-timer GuardReflect -> GuardSetOff handoff:
+    # - the destination GuardSetOff row is already in hitlag,
+    # - ftCo_80093BC0 ties x221C_b1 to x14 and x221C_b2 to x18,
+    # - once x14 has expired on the destination row while x18 remains active, only x221C_b1 should
+    #   clear.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_GuardSetOff_Anim,ftCo_80093BC0}
+    # refs/melee/src/melee/ft/fighter.c::{Fighter_8006A1BC,Fighter_8006A360}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+
+    dataset_path = root / case.dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {case.dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    target = ds.samples[case.target_record]
+    seed = target["seed_t"]
+    p = case.port
+    assert int(seed["action_id"][p]) == 182, case.note
+    assert int(seed["seed_prev_action_id"][p]) == 182, case.note
+    assert int(seed["action_frame"][p]) == -1, case.note
+    assert int(seed["hitlag"][p]) == 0, case.note
+    assert int(seed["guard_reflect_timer_x14"][p]) == 1, case.note
+    assert int(seed["guard_reflect_timer_x18"][p]) == 3, case.note
+    assert int(seed["state_flags"][p, 3]) == 96, case.note
+
+    for rec in (case.target_record - 1, case.target_record, case.target_record + 1):
+        _, ref_row, out_row = _run_one_step_row(dataset_path, rec, p)
+        assert int(out_row["action_id"][p]) == int(ref_row["action_id"][p]), case.note
+        assert int(out_row["action_frame"][p]) == int(ref_row["action_frame"][p]), case.note
+        assert int(out_row["hitlag"][p]) == int(ref_row["hitlag"][p]), case.note
+        assert int(out_row["hitstun"][p]) == int(ref_row["hitstun"][p]), case.note
+        assert [int(x) for x in out_row["state_flags"][p]] == [int(x) for x in ref_row["state_flags"][p]], case.note
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    "case",
+    _ACTIVE_TIMER_B1_NEGATIVE_CONTROLS,
+    ids=lambda c: f"{Path(c.dataset_rel).stem}-rec{c.target_record}-p{c.port}",
+)
+def test_guardsetoff_active_timer_controls_keep_b1_while_x14_is_live(case: _Case) -> None:
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+
+    dataset_path = root / case.dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {case.dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    target = ds.samples[case.target_record]
+    seed = target["seed_t"]
+    p = case.port
+    assert int(seed["action_id"][p]) == 182, case.note
+    assert int(seed["action_frame"][p]) == -1, case.note
+    assert int(seed["guard_reflect_timer_x14"][p]) == 2, case.note
+    assert int(seed["guard_reflect_timer_x18"][p]) == 4, case.note
+    assert int(seed["state_flags"][p, 3]) == 112, case.note
+
+    _, ref_row, out_row = _run_one_step_row(dataset_path, case.target_record, p)
+    assert int(out_row["state_flags"][p, 3]) == int(ref_row["state_flags"][p, 3]) == 96, case.note
 
 
 @pytest.mark.integration
