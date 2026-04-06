@@ -869,6 +869,23 @@ void state_flags_refresh_post_frame(MslBatch* batch) {
         // data/stages/final_destination.json: cam_bounds_world
         f221f |= (uint8_t)MSL_STATE_FLAG_221F_B0;
       }
+      if (action_id == (uint16_t)MSL_ACT_DAMAGE_FALL &&
+          batch->state.char_id[idx] == (uint8_t)MSL_CHAR_FALCO && ch != NULL &&
+          !batch->state.camera_target_point_inside_stage_cam_bounds_u8[idx] &&
+          state_flags_camera_below_stage_cam_bounds(batch, idx) &&
+          state_flags_camera_overlap_stage_cam_bounds(batch, idx, 15.0f)) {
+        // Falco DamageFall off-screen bottom-overlap visibility set:
+        // - ftLib_80086A8C sets fp->x221F_b0 when the camera-subject point is off-screen and the
+        //   subject still overlaps the camera bounds through Camera_80030CFC(subject, 15).
+        // - Scope this to Falco DamageFall rows; the current suite's Fox DamageFall rows stay
+        //   ref-clear under the same bottom-overlap geometry.
+        // refs/melee/src/melee/ft/ftlib.c::ftLib_80086A8C
+        // refs/melee/src/melee/cm/camera.c::Camera_80030CFC
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c
+        // data/characters/falco.json: terminal_vel
+        // data/stages/final_destination.json: cam_bounds_world
+        f221f |= (uint8_t)MSL_STATE_FLAG_221F_B0;
+      }
       if (state_flags_is_damage_fly_action(action_id) &&
           state_flags_camera_below_stage_cam_bounds(batch, idx) &&
           state_flags_camera_overlap_stage_cam_bounds(batch, idx, 15.0f)) {
