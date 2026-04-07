@@ -186,8 +186,8 @@ def test_replay_capturepulled_to_capturewait_record_6101_lock() -> None:
     assert int(out["action_id"][0, victim]) == int(ref["action_id"][victim])
     assert int(out["action_frame"][0, victim]) == int(ref["action_frame"][victim])
     assert int(out["animation_index"][0, victim]) == int(ref["animation_index"][victim])
-    assert np.isfinite(float(out["pos_x"][0, victim]))
-    assert np.isfinite(float(out["pos_y"][0, victim]))
+    assert float(out["pos_x"][0, victim]) == pytest.approx(float(ref["pos_x"][victim]), abs=1e-6)
+    assert float(out["pos_y"][0, victim]) == pytest.approx(float(ref["pos_y"][victim]), abs=2e-5)
 
 
 @pytest.mark.integration
@@ -233,6 +233,8 @@ def test_replay_capturepulled_stays_pulled_record_408_negative_lock() -> None:
     assert int(out["action_id"][0, victim]) == int(ref["action_id"][victim])
     assert int(out["action_frame"][0, victim]) == int(ref["action_frame"][victim])
     assert int(out["animation_index"][0, victim]) == int(ref["animation_index"][victim])
+    assert float(out["pos_x"][0, victim]) == pytest.approx(float(ref["pos_x"][victim]), abs=1e-6)
+    assert float(out["pos_y"][0, victim]) == pytest.approx(float(ref["pos_y"][victim]), abs=2e-5)
 
 
 @pytest.mark.integration

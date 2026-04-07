@@ -119,7 +119,7 @@ static inline uint8_t action_is_capture_pulled_wait_victim(uint16_t action_id) {
   }
 }
 
-static inline void capture_victim_delta_apply(MslBatch* batch, int bi, int victim_p, int owner_p) {
+void grab_attachment_apply_capture_delta_now(MslBatch* batch, int bi, int victim_p, int owner_p) {
   if (batch == NULL) {
     return;
   }
@@ -490,7 +490,7 @@ void grab_attachment_update_pre_collision(MslBatch* batch) {
         }
         // Decomp ordering: CapturePulled*/CaptureDamage* runs fn_800DAD18 in Phys, then runs Coll.
         // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::{fn_800DAD18,ftCo_CapturePulledHi_Coll}
-        capture_victim_delta_apply(batch, bi, p, (int)owner);
+        grab_attachment_apply_capture_delta_now(batch, bi, p, (int)owner);
       }
     }
   }

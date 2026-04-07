@@ -86,12 +86,14 @@ typedef enum MslActionId {
   // Source of truth: refs/melee/src/melee/ft/chara/ftCommon/forward.h `ftCommon_MotionState`.
   MSL_ACT_DOWN_BOUND_U = 0x00B7,   // ftCo_MS_DownBoundU
   MSL_ACT_DOWN_WAIT_U = 0x00B8,    // ftCo_MS_DownWaitU
+  MSL_ACT_DOWN_DAMAGE_U = 0x00B9,  // ftCo_MS_DownDamageU
   MSL_ACT_DOWN_STAND_U = 0x00BA,   // ftCo_MS_DownStandU
   MSL_ACT_DOWN_ATTACK_U = 0x00BB,  // ftCo_MS_DownAttackU
   MSL_ACT_DOWN_FOWARD_U = 0x00BC,  // ftCo_MS_DownFowardU
   MSL_ACT_DOWN_BACK_U = 0x00BD,    // ftCo_MS_DownBackU
   MSL_ACT_DOWN_BOUND_D = 0x00BF,   // ftCo_MS_DownBoundD
   MSL_ACT_DOWN_WAIT_D = 0x00C0,    // ftCo_MS_DownWaitD
+  MSL_ACT_DOWN_DAMAGE_D = 0x00C1,  // ftCo_MS_DownDamageD
   MSL_ACT_DOWN_STAND_D = 0x00C2,   // ftCo_MS_DownStandD
   MSL_ACT_DOWN_ATTACK_D = 0x00C3,  // ftCo_MS_DownAttackD
   MSL_ACT_DOWN_FOWARD_D = 0x00C4,  // ftCo_MS_DownFowardD

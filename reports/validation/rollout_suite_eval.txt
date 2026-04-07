@@ -49,22 +49,22 @@ rollout.first_mismatch_seeded_total: 54
 
 == datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/QuerulousGrandDinosaur.msl ==
 rollout.best_len: 182
-rollout.streak_count: 214
+rollout.streak_count: 215
 rollout.streak_len.median: 36
 rollout.streak_len.p90: 106
 rollout.streak_len.p95: 129
 rollout.streak_len.max: 182
-rollout.first_mismatch_total: 215
+rollout.first_mismatch_total: 216
 rollout.first_mismatch_seeded_total: 55
 
 == datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/TreasuredBackKangaroo.msl ==
 rollout.best_len: 207
-rollout.streak_count: 190
+rollout.streak_count: 189
 rollout.streak_len.median: 33
-rollout.streak_len.p90: 83
+rollout.streak_len.p90: 89
 rollout.streak_len.p95: 101
 rollout.streak_len.max: 207
-rollout.first_mismatch_total: 190
+rollout.first_mismatch_total: 189
 rollout.first_mismatch_seeded_total: 42
 
 == suite summary ==

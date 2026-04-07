@@ -14,6 +14,15 @@ void grab_attachment_reseed_init(MslBatch* batch, int batch_index);
 void grab_attachment_recompute_offsets_for_thrown_entry(MslBatch* batch, int batch_index,
                                                         int victim_p, int owner_p);
 
+// Capture victim same-frame delta ownership helper.
+//
+// Decomp-shaped usage:
+// - Catch/CatchWait owner callbacks can transition the victim motion state and still preserve the
+//   current frame's callback-owned capture delta (`fn_800DAD18`) before the new state takes over.
+// refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::fn_800DAD18
+void grab_attachment_apply_capture_delta_now(MslBatch* batch, int batch_index, int victim_p,
+                                             int owner_p);
+
 // CapturePulled*/CaptureWait*/CaptureDamage* victim Phys driver:
 // - Decomp: refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::fn_800DAD18
 // - Applies `cur_pos += (owner(x18) - victim(XRotN))`.
