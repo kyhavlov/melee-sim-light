@@ -132,6 +132,67 @@ static inline uint32_t submotion_for_damage_action(uint16_t a) {
   }
 }
 
+static inline uint8_t damage_landing_action_owns_root_floor_snap(uint16_t a) {
+  switch (a) {
+    case (uint16_t)MSL_ACT_DAMAGE_HI_1:
+    case (uint16_t)MSL_ACT_DAMAGE_HI_2:
+    case (uint16_t)MSL_ACT_DAMAGE_HI_3:
+    case (uint16_t)MSL_ACT_DAMAGE_N_1:
+    case (uint16_t)MSL_ACT_DAMAGE_N_2:
+    case (uint16_t)MSL_ACT_DAMAGE_N_3:
+    case (uint16_t)MSL_ACT_DAMAGE_LW_1:
+    case (uint16_t)MSL_ACT_DAMAGE_LW_2:
+    case (uint16_t)MSL_ACT_DAMAGE_LW_3:
+    case (uint16_t)MSL_ACT_DAMAGE_AIR_1:
+    case (uint16_t)MSL_ACT_DAMAGE_AIR_2:
+    case (uint16_t)MSL_ACT_DAMAGE_AIR_3:
+    case (uint16_t)MSL_ACT_DAMAGE_FLY_HI:
+    case (uint16_t)MSL_ACT_DAMAGE_FLY_N:
+    case (uint16_t)MSL_ACT_DAMAGE_FLY_LW:
+    case (uint16_t)MSL_ACT_DAMAGE_FLY_TOP:
+    case (uint16_t)MSL_ACT_DAMAGE_FLY_ROLL:
+    case (uint16_t)MSL_ACT_DAMAGE_FALL:
+      return 1u;
+    default:
+      return 0u;
+  }
+}
+
+static inline void snap_root_y_to_ground_line_on_damage_land(MslBatch* batch, size_t bi,
+                                                             size_t idx) {
+  if (batch == NULL) {
+    return;
+  }
+  const uint16_t ground_id = batch->state.ground_id[idx];
+  if (ground_id == 0xFFFFu) {
+    return;
+  }
+  const uint32_t stage_id = batch->state.stage_id[bi];
+  const MslStageFloorGraph* g = stage_collision_get_floor_graph(stage_id);
+  const int line_idx = stage_collision_floor_line_index(stage_id, ground_id);
+  if (g == NULL || line_idx < 0 || (size_t)line_idx >= g->line_count) {
+    return;
+  }
+
+  const MslStageFloorLine* line = &g->lines[(size_t)line_idx];
+  const float x = batch->state.pos_x[idx];
+  float y = line->y0;
+  // Decomp/data ownership for grounded root Y on landing:
+  // - Damage/DamageFly collision callbacks resolve floor contact before ftCo_80090184 /
+  //   ftCo_Landing_Enter_Basic choose the grounded destination state for the same frame.
+  // - mpLib_8004DD90_Floor projects onto the owning floor line and applies a +0.0001 bias.
+  // - The floor line itself comes from the ISO-derived stage collision graph loaded into
+  //   stage_collision.{c,h}.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{ftCo_Damage_Coll,ftCo_DamageFly_Coll,ftCo_80090184}
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::ftCo_Landing_Enter_Basic
+  // refs/melee/src/melee/mp/mplib.c::mpLib_8004DD90_Floor
+  // data/stages/final_destination.json: collision.segments
+  if (fabsf(line->x1 - line->x0) > 0.0001f) {
+    y = ((line->y1 - line->y0) * (x - line->x0) / (line->x1 - line->x0)) + line->y0;
+  }
+  batch->state.pos_y[idx] = y + 0.0001f;
+}
+
 static inline uint8_t anim_is_finished(uint8_t cid, uint16_t msid, float anim_frame_f32) {
   const float end = msl_anim_end_frame(cid, msid);
   if (!(end > 0.0f)) {
@@ -1300,7 +1361,8 @@ static inline void enter_damage_fall_from_damage_anim(MslBatch* batch, const Msl
 }
 
 static inline void transfer_air_to_ground_on_land(MslBatch* batch, const MslCharParams* ch,
-                                                  size_t idx, uint16_t prev_action_id) {
+                                                  size_t bi, size_t idx,
+                                                  uint16_t prev_action_id) {
   // Shared with locomotion landing behavior: transfer air X to ground X and refresh jumps.
   // Decomp: refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007D6A4 (jumps refresh on grounding)
   // DamageFly collision callbacks run after ft_80081DD4 floor resolution, so entering
@@ -1308,14 +1370,8 @@ static inline void transfer_air_to_ground_on_land(MslBatch* batch, const MslChar
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{ftCo_DamageFly_Coll,ftCo_80090184}
   // refs/melee/src/melee/ft/ft_081B.c::ft_80081DD4
   // refs/melee/src/melee/mp/mplib.c::mpLib_8004DD90_Floor
-  if (batch->state.on_ground[idx] &&
-      (prev_action_id == (uint16_t)MSL_ACT_DAMAGE_FLY_N ||
-       prev_action_id == (uint16_t)MSL_ACT_DAMAGE_FLY_LW)) {
-    // Narrow runtime ownership slice:
-    // keep floor-contact root Y for DamageFlyN/Lw landing -> DownBound/Passive callback rows.
-    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_DamageFly_Coll
-    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_80090184
-    batch->state.pos_y[idx] = batch->state.ground_contact_y[idx];
+  if (batch->state.on_ground[idx] && damage_landing_action_owns_root_floor_snap(prev_action_id)) {
+    snap_root_y_to_ground_line_on_damage_land(batch, bi, idx);
   }
   batch->state.speed_ground_x_self[idx] = batch->state.speed_air_x_self[idx];
   batch->state.speed_air_x_self[idx] = 0.0f;
@@ -1386,9 +1442,9 @@ static inline void enter_passive_walljump_from_damage_air(MslBatch* batch, size_
 }
 
 static inline void enter_passive_from_damage_land(MslBatch* batch, const MslCharParams* ch,
-                                                  size_t idx, uint16_t passive_act,
+                                                  size_t bi, size_t idx, uint16_t passive_act,
                                                   uint16_t prev_action_id) {
-  transfer_air_to_ground_on_land(batch, ch, idx, prev_action_id);
+  transfer_air_to_ground_on_land(batch, ch, bi, idx, prev_action_id);
   batch->state.action_id[idx] = passive_act;
   batch->state.animation_index[idx] = submotion_for_down_action(passive_act);
   msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
@@ -1438,9 +1494,10 @@ static inline uint16_t pick_downbound_action_from_pose(const MslBatch* batch, si
 }
 
 static inline void enter_down_bound_from_damage_land(MslBatch* batch, const MslCharParams* ch,
-                                                     size_t idx, uint16_t prev_action_id) {
+                                                     size_t bi, size_t idx,
+                                                     uint16_t prev_action_id) {
   const uint16_t bound_act = pick_downbound_action_from_pose(batch, idx, prev_action_id);
-  transfer_air_to_ground_on_land(batch, ch, idx, prev_action_id);
+  transfer_air_to_ground_on_land(batch, ch, bi, idx, prev_action_id);
   batch->state.action_id[idx] = bound_act;
   batch->state.animation_index[idx] = submotion_for_down_action(bound_act);
   msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
@@ -1513,13 +1570,14 @@ void knockdown_update_post_collision(MslBatch* batch) {
               const uint16_t act = (stick_x * facing_dir) >= 0.0f
                                        ? (uint16_t)MSL_ACT_PASSIVE_STAND_F
                                        : (uint16_t)MSL_ACT_PASSIVE_STAND_B;
-              enter_passive_from_damage_land(batch, ch, idx, act, a0);
+              enter_passive_from_damage_land(batch, ch, (size_t)bi, idx, act, a0);
               continue;
             }
-            enter_passive_from_damage_land(batch, ch, idx, (uint16_t)MSL_ACT_PASSIVE, a0);
+            enter_passive_from_damage_land(batch, ch, (size_t)bi, idx,
+                                           (uint16_t)MSL_ACT_PASSIVE, a0);
             continue;
           }
-          enter_down_bound_from_damage_land(batch, ch, idx, a0);
+          enter_down_bound_from_damage_land(batch, ch, (size_t)bi, idx, a0);
           continue;
         }
 
@@ -1541,13 +1599,14 @@ void knockdown_update_post_collision(MslBatch* batch) {
               const uint16_t act = (stick_x * facing_dir) >= 0.0f
                                        ? (uint16_t)MSL_ACT_PASSIVE_STAND_F
                                        : (uint16_t)MSL_ACT_PASSIVE_STAND_B;
-              enter_passive_from_damage_land(batch, ch, idx, act, a0);
+              enter_passive_from_damage_land(batch, ch, (size_t)bi, idx, act, a0);
               continue;
             }
-            enter_passive_from_damage_land(batch, ch, idx, (uint16_t)MSL_ACT_PASSIVE, a0);
+            enter_passive_from_damage_land(batch, ch, (size_t)bi, idx,
+                                           (uint16_t)MSL_ACT_PASSIVE, a0);
             continue;
           }
-          enter_down_bound_from_damage_land(batch, ch, idx, a0);
+          enter_down_bound_from_damage_land(batch, ch, (size_t)bi, idx, a0);
           continue;
         }
 
@@ -1564,11 +1623,11 @@ void knockdown_update_post_collision(MslBatch* batch) {
           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::ftCo_Landing_Enter_Basic
           // refs/melee/src/melee/ft/ftcommon.c::{ftCommon_8007D7FC,ftCommon_8007D6A4}
           if (batch->state.dmg_x2224_b2[idx] || mag >= c->damagefly_downbound_kb_vel_threshold) {
-            enter_down_bound_from_damage_land(batch, ch, idx, a0);
+            enter_down_bound_from_damage_land(batch, ch, (size_t)bi, idx, a0);
             continue;
           }
           if (mag >= c->damagefly_landing_kb_vel_threshold) {
-            transfer_air_to_ground_on_land(batch, ch, idx, a0);
+            transfer_air_to_ground_on_land(batch, ch, (size_t)bi, idx, a0);
             batch->state.action_id[idx] = (uint16_t)MSL_ACT_LANDING;
             batch->state.animation_index[idx] = (uint32_t)MSL_SM_LANDING;
             msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
@@ -1576,7 +1635,7 @@ void knockdown_update_post_collision(MslBatch* batch) {
             continue;
           }
           if (batch->state.hitstun[idx] > 0u) {
-            transfer_air_to_ground_on_land(batch, ch, idx, a0);
+            transfer_air_to_ground_on_land(batch, ch, (size_t)bi, idx, a0);
           }
           continue;
         }
@@ -1586,13 +1645,13 @@ void knockdown_update_post_collision(MslBatch* batch) {
           const float kby = batch->state.speed_y_attack[idx];
           const float mag = sqrtf(kbx * kbx + kby * kby);
           if (mag >= c->damagefly_downbound_kb_vel_threshold) {
-            enter_down_bound_from_damage_land(batch, ch, idx, a0);
+            enter_down_bound_from_damage_land(batch, ch, (size_t)bi, idx, a0);
             continue;
           }
           if (mag >= c->damagefly_landing_kb_vel_threshold) {
             // Decomp: ftCo_Landing_Enter_Basic.
             // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c
-            transfer_air_to_ground_on_land(batch, ch, idx, a0);
+            transfer_air_to_ground_on_land(batch, ch, (size_t)bi, idx, a0);
             batch->state.action_id[idx] = (uint16_t)MSL_ACT_LANDING;
             batch->state.animation_index[idx] = (uint32_t)MSL_SM_LANDING;
             msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
@@ -1617,7 +1676,7 @@ void knockdown_update_post_collision(MslBatch* batch) {
           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_Coll
           // refs/melee/src/melee/ft/ftcommon.c::{ftCommon_8007D7FC,ftCommon_8007D6A4}
           if (batch->state.hitstun[idx] > 0u) {
-            transfer_air_to_ground_on_land(batch, ch, idx, a0);
+            transfer_air_to_ground_on_land(batch, ch, (size_t)bi, idx, a0);
           }
           continue;
         }

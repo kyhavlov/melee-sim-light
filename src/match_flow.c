@@ -215,11 +215,23 @@ static inline void enter_rebirth(MslBatch* batch, size_t idx, const MslCommonPar
   // Decomp: respawn processing calls ft_800890BC (reset to attackID=1, instance=0).
   // and ft_800892D4 (clear instance_id/x2073 gate state) before Rebirth motion-state entry.
   // refs/melee/src/melee/ft/fighter.c::Fighter_UnkProcessDeath_80068354
+  //
+  // Damage reset ownership:
+  // - Fighter_UnkProcessDeath_80068354 calls Fighter_UnkInitReset_80067C98 before Rebirth.
+  // - Fighter_UnkInitReset_80067C98 reloads `fp->dmg.x1830_percent` from Player_GetDamage and
+  //   clears `fp->dmg.x1838_percentTemp`.
+  // - This lite sim does not carry a separate Player_GetDamage lane; within the stock/percent
+  //   target domain the respawn source is 0, so Dead* -> Rebirth must clear both percent lanes.
+  // refs/melee/src/melee/ft/fighter.c::{
+  //   Fighter_UnkProcessDeath_80068354,Fighter_UnkInitReset_80067C98
+  // }
   // refs/melee/src/melee/ft/ft_0881.c::ft_800890BC
   // refs/melee/build/GALE01/asm/melee/ft/ft_0892.s::ft_800892D4
   attack_identity_reset_ft_800890BC(batch, idx);
   match_flow_identity_reset_Fighter_UnkInitReset_80067C98_subset(batch, idx);
   instance_id_reset_ft_800892D4(batch, idx);
+  batch->state.percent[idx] = 0.0f;
+  batch->state.percent_temp[idx] = 0.0f;
   // Seed-bridge (decomp call-chain parity):
   // - Rebirth entry runs Fighter_UnkProcessDeath_80068354 before Fighter_ChangeMotionState(Rebirth).
   // - That call chain includes unmodeled internals (ftCo_800BFFAC / ftCo_800C0074 / ...), and
