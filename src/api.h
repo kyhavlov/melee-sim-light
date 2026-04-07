@@ -447,6 +447,21 @@ typedef struct MslSeed {
   // refs/melee/src/melee/ft/ftcoll.c::ftColl_80076CBC
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80092F2C
   uint8_t guard_setoff_hitlag_damage_min[MSL_MAX_PLAYERS];
+  // GuardSetOff hitlag-exit ownership phase discriminator.
+  //
+  // Phase meaning:
+  // - 0: steady/non-GuardSetOff row
+  // - 1: GuardSetOff hitlag carry row with hitlag > 1
+  // - 2: GuardSetOff last-hitlag row with hitlag == 1
+  // - 3: first non-hitlag GuardSetOff row after a same-segment hitlag row
+  //
+  // Decomp / ownership anchors:
+  // - ftCo_80092F2C shapes GuardSetOff entry anim-rate before the frozen tail.
+  // - Fighter_8006A360 advances ftAnim before ftCo_GuardSetOff_Anim resumes callback-owned rate.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80092F2C
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_GuardSetOff_Anim
+  // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
+  uint8_t guard_setoff_hitlag_exit_phase_u8[MSL_MAX_PLAYERS];
   uint8_t jumps_left[MSL_MAX_PLAYERS];
   uint8_t stocks[MSL_MAX_PLAYERS];
 

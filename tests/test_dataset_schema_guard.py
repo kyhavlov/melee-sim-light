@@ -22,6 +22,8 @@ def test_seed_schema_includes_staling_fields() -> None:
     assert "walk_anim_source_vel_f32" in SEED_DTYPE.fields
     # GuardSetOff hidden x19A4 lower-bound bridge for F02 blocker rows.
     assert "guard_setoff_hitlag_damage_min" in SEED_DTYPE.fields
+    # F02 blocker lane: GuardSetOff hitlag-exit ownership phase.
+    assert "guard_setoff_hitlag_exit_phase_u8" in SEED_DTYPE.fields
     # F04 blocker lane: replay-visible camera-box visibility bit (`fp->x221F_b0`).
     assert "camera_box_visible_x221f_b0" in SEED_DTYPE.fields
     # F04 blocker lane: hidden Rebirth camera anchor Y (`fp->mv.co.common.x8`).

@@ -267,6 +267,10 @@ typedef struct MslStateSoA {
   // GuardSetOff shield-hit int-damage lower bound for future GuardSetOff ownership fixes.
   // Decomp consumer: fp->x19A4 in ftCo_80092F2C.
   uint8_t* guard_setoff_hitlag_damage_min;
+  // GuardSetOff hitlag-exit ownership phase discriminator for future F02 runtime fixes.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_80092F2C,ftCo_GuardSetOff_Anim}
+  // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
+  uint8_t* guard_setoff_hitlag_exit_phase_u8;
   // Locomotion/input-history internals.
   // - `tilt_timer_*`, `turn_*`, and KneeBend internals are seeded from replay history (MslSeed).
   uint8_t*

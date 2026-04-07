@@ -994,6 +994,64 @@ def derive_guard_setoff_hitlag_damage_min(
     return out
 
 
+def derive_guard_setoff_hitlag_exit_phase(
+    *,
+    action_id: np.ndarray,
+    hitlag: np.ndarray,
+    act_guard_set_off: int,
+) -> np.ndarray:
+    """
+    Derive a causal GuardSetOff hitlag-exit ownership phase discriminator.
+
+    Purpose:
+    - GuardSetOff action-frame parity depends on the entry-owned anim rate surviving through the
+      frozen hitlag tail and then resuming on the first non-hitlag row.
+    - Slippi exposes action_id, hitlag, anim_frame, and frame_speed_mul, but not the hidden
+      "which step of the hitlag-exit handoff are we on?" ownership phase.
+    - This lane marks that phase explicitly so runtime work can target the last-hitlag and first
+      post-hitlag rows without replay-fitting broad GuardSetOff behavior.
+
+    Phase encoding:
+    - 0: not GuardSetOff, or GuardSetOff steady row outside the hitlag-exit handoff
+    - 1: GuardSetOff hitlag carry row with `hitlag > 1`
+    - 2: GuardSetOff last-hitlag row with `hitlag == 1`
+    - 3: first non-hitlag GuardSetOff row after a same-segment hitlag row
+
+    Causality / prefix-invariance:
+    - Uses only the current and previous replay rows.
+
+    Decomp anchors:
+    - refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80092F2C
+    - refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_GuardSetOff_Anim
+    - refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
+    """
+    aid = np.asarray(action_id, dtype=np.uint16).reshape(-1)
+    hl = np.asarray(hitlag, dtype=np.uint16).reshape(-1)
+
+    n = int(aid.size)
+    if int(hl.size) != n:
+        raise ValueError("action_id/hitlag must have the same length")
+
+    out = np.zeros(n, dtype=np.uint8)
+    guard_set_off = int(act_guard_set_off)
+    for i in range(n):
+        if int(aid[i]) != guard_set_off:
+            out[i] = np.uint8(0)
+            continue
+        cur_hl = int(hl[i])
+        prev_a = int(aid[i - 1]) if i > 0 else -1
+        prev_hl = int(hl[i - 1]) if i > 0 else 0
+        if cur_hl > 1:
+            out[i] = np.uint8(1)
+        elif cur_hl == 1:
+            out[i] = np.uint8(2)
+        elif prev_a == guard_set_off and prev_hl > 0:
+            out[i] = np.uint8(3)
+        else:
+            out[i] = np.uint8(0)
+    return out
+
+
 def derive_camera_box_visible_x221f_b0(*, state_flags_u8: np.ndarray) -> np.ndarray:
     """
     Extract the replay-visible `fp->x221F_b0` camera-box visibility bit as a named seed lane.

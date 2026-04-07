@@ -212,6 +212,13 @@ SEED_DTYPE = np.dtype(
         # refs/melee/src/melee/ft/ftcoll.c::ftColl_80076CBC
         # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80092F2C
         ("guard_setoff_hitlag_damage_min", _arr("u1", MAX_PLAYERS)),
+        # GuardSetOff hitlag-exit ownership phase discriminator.
+        # - `2` marks the last frozen hitlag row in GuardSetOff.
+        # - `3` marks the first post-hitlag GuardSetOff row where callback-owned anim-rate resumes.
+        # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80092F2C
+        # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_GuardSetOff_Anim
+        # refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
+        ("guard_setoff_hitlag_exit_phase_u8", _arr("u1", MAX_PLAYERS)),
         ("jumps_left", _arr("u1", MAX_PLAYERS)),
         ("stocks", _arr("u1", MAX_PLAYERS)),
         ("kneebend_jump_input", _arr("u1", MAX_PLAYERS)),
