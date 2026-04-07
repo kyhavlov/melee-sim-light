@@ -462,6 +462,19 @@ typedef struct MslSeed {
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_GuardSetOff_Anim
   // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
   uint8_t guard_setoff_hitlag_exit_phase_u8[MSL_MAX_PLAYERS];
+  // GuardSetOff post-hitlag owner discriminator on the last-hitlag / first-post-hitlag rows.
+  //
+  // Meaning:
+  // - 0: not a GuardSetOff post-hitlag handoff row
+  // - 1: normal GuardSetOff handoff (no powershield-active owner)
+  // - 2: powershield-active GuardSetOff handoff (`x221C_b2` still live)
+  //
+  // Decomp / ownership anchors:
+  // - ftCo_GuardSetOff_Anim owns the GuardSetOff handoff after prio-0 hitlag decrement.
+  // - ftCo_80093BC0 still owns the powershield-active x18/x221C_b2 lane when active.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_GuardSetOff_Anim,ftCo_80093BC0}
+  // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A1BC,Fighter_8006A360}
+  uint8_t guard_setoff_post_hitlag_owner_u8[MSL_MAX_PLAYERS];
   uint8_t jumps_left[MSL_MAX_PLAYERS];
   uint8_t stocks[MSL_MAX_PLAYERS];
 

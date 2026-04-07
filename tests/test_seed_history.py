@@ -27,6 +27,7 @@ from tools.slippi.seed_history import (
     derive_guard_release_lockout_and_lightshield,
     derive_guard_setoff_hitlag_damage_min,
     derive_guard_setoff_hitlag_exit_phase,
+    derive_guard_setoff_post_hitlag_owner,
     derive_ucf_pad_buffer_state,
     derive_kneebend_internals,
     derive_turn_internals,
@@ -408,6 +409,66 @@ def test_derive_guard_setoff_hitlag_exit_phase_is_prefix_invariant() -> None:
     )
 
     assert out0.tolist() == [0, 1, 1, 2, 3]
+    assert out1[: out0.size].tolist() == out0.tolist()
+
+
+def test_derive_guard_setoff_post_hitlag_owner_marks_normal_and_powershield_handoffs() -> None:
+    act_wait = np.uint16(0x000E)
+    act_guard_set_off = np.uint16(0x00B5)
+    action_id = np.array(
+        [act_wait, act_guard_set_off, act_guard_set_off, act_guard_set_off, act_guard_set_off, act_wait],
+        dtype=np.uint16,
+    )
+    phase = np.array([0, 1, 2, 3, 0, 0], dtype=np.uint8)
+    flags_221c_normal = np.array([0x00, 0x00, 0x00, 0x00, 0x00, 0x00], dtype=np.uint8)
+    flags_221c_ps = np.array([0x00, 0x60, 0x60, 0x20, 0x20, 0x00], dtype=np.uint8)
+
+    out_normal = derive_guard_setoff_post_hitlag_owner(
+        action_id=action_id,
+        guard_setoff_hitlag_exit_phase_u8=phase,
+        state_flags_221c_u8=flags_221c_normal,
+        act_guard_set_off=int(act_guard_set_off),
+    )
+    out_ps = derive_guard_setoff_post_hitlag_owner(
+        action_id=action_id,
+        guard_setoff_hitlag_exit_phase_u8=phase,
+        state_flags_221c_u8=flags_221c_ps,
+        act_guard_set_off=int(act_guard_set_off),
+    )
+
+    assert out_normal.tolist() == [0, 0, 1, 1, 0, 0]
+    assert out_ps.tolist() == [0, 0, 2, 2, 0, 0]
+
+
+def test_derive_guard_setoff_post_hitlag_owner_is_prefix_invariant() -> None:
+    act_wait = np.uint16(0x000E)
+    act_guard_set_off = np.uint16(0x00B5)
+    action_id_prefix = np.array(
+        [act_wait, act_guard_set_off, act_guard_set_off, act_guard_set_off, act_guard_set_off],
+        dtype=np.uint16,
+    )
+    phase_prefix = np.array([0, 1, 2, 3, 0], dtype=np.uint8)
+    flags_221c_prefix = np.array([0x00, 0x60, 0x60, 0x20, 0x20], dtype=np.uint8)
+
+    out0 = derive_guard_setoff_post_hitlag_owner(
+        action_id=action_id_prefix,
+        guard_setoff_hitlag_exit_phase_u8=phase_prefix,
+        state_flags_221c_u8=flags_221c_prefix,
+        act_guard_set_off=int(act_guard_set_off),
+    )
+
+    action_id_ext = np.concatenate([action_id_prefix, np.array([act_wait], dtype=np.uint16)])
+    phase_ext = np.concatenate([phase_prefix, np.array([0], dtype=np.uint8)])
+    flags_221c_ext = np.concatenate([flags_221c_prefix, np.array([0x00], dtype=np.uint8)])
+
+    out1 = derive_guard_setoff_post_hitlag_owner(
+        action_id=action_id_ext,
+        guard_setoff_hitlag_exit_phase_u8=phase_ext,
+        state_flags_221c_u8=flags_221c_ext,
+        act_guard_set_off=int(act_guard_set_off),
+    )
+
+    assert out0.tolist() == [0, 0, 2, 2, 0]
     assert out1[: out0.size].tolist() == out0.tolist()
 
 

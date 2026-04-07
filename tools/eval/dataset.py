@@ -219,6 +219,12 @@ SEED_DTYPE = np.dtype(
         # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_GuardSetOff_Anim
         # refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
         ("guard_setoff_hitlag_exit_phase_u8", _arr("u1", MAX_PLAYERS)),
+        # GuardSetOff post-hitlag owner discriminator on the handoff rows:
+        # - 1: normal GuardSetOff handoff
+        # - 2: powershield-active GuardSetOff handoff (`x221C_b2` still live)
+        # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_GuardSetOff_Anim,ftCo_80093BC0}
+        # refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
+        ("guard_setoff_post_hitlag_owner_u8", _arr("u1", MAX_PLAYERS)),
         ("jumps_left", _arr("u1", MAX_PLAYERS)),
         ("stocks", _arr("u1", MAX_PLAYERS)),
         ("kneebend_jump_input", _arr("u1", MAX_PLAYERS)),

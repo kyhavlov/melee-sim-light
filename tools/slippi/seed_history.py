@@ -1052,6 +1052,56 @@ def derive_guard_setoff_hitlag_exit_phase(
     return out
 
 
+def derive_guard_setoff_post_hitlag_owner(
+    *,
+    action_id: np.ndarray,
+    guard_setoff_hitlag_exit_phase_u8: np.ndarray,
+    state_flags_221c_u8: np.ndarray,
+    act_guard_set_off: int,
+) -> np.ndarray:
+    """
+    Derive the GuardSetOff post-hitlag ownership discriminator for the handoff rows.
+
+    Meaning:
+    - 0: not a GuardSetOff post-hitlag handoff row
+    - 1: GuardSetOff handoff row with normal (non-powershield) ownership
+    - 2: GuardSetOff handoff row with powershield-active ownership (`x221C_b2` still live)
+
+    Purpose:
+    - The remaining F02 blocker rows all occur on the last-hitlag / first-post-hitlag GuardSetOff
+      handoff, but they split into two ownership shapes:
+    - normal GuardSetOff rows where only ftCo_GuardSetOff_Anim owns the anim-rate handoff, and
+    - powershield-active rows where ftCo_80093BC0 still owns the `x221C_b2` substate while the
+      same GuardSetOff handoff occurs.
+
+    Causality / prefix-invariance:
+    - Uses only the current replay row and the already-causal handoff phase lane.
+
+    Decomp anchors:
+    - refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_GuardSetOff_Anim
+    - refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80093BC0
+    - refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
+    """
+    aid = np.asarray(action_id, dtype=np.uint16).reshape(-1)
+    phase = np.asarray(guard_setoff_hitlag_exit_phase_u8, dtype=np.uint8).reshape(-1)
+    flags_221c = np.asarray(state_flags_221c_u8, dtype=np.uint8).reshape(-1)
+
+    n = int(aid.size)
+    if int(phase.size) != n or int(flags_221c.size) != n:
+      raise ValueError("action_id/phase/state_flags_221c must have the same length")
+
+    out = np.zeros(n, dtype=np.uint8)
+    guard_set_off = int(act_guard_set_off)
+    for i in range(n):
+        if int(aid[i]) != guard_set_off:
+            continue
+        cur_phase = int(phase[i])
+        if cur_phase != 2 and cur_phase != 3:
+            continue
+        out[i] = np.uint8(2 if (int(flags_221c[i]) & 0x20) != 0 else 1)
+    return out
+
+
 def derive_camera_box_visible_x221f_b0(*, state_flags_u8: np.ndarray) -> np.ndarray:
     """
     Extract the replay-visible `fp->x221F_b0` camera-box visibility bit as a named seed lane.

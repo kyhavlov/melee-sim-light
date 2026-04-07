@@ -1723,6 +1723,7 @@ def _main_impl(args) -> None:
         derive_guard_release_lockout_and_lightshield,
         derive_guard_setoff_hitlag_damage_min,
         derive_guard_setoff_hitlag_exit_phase,
+        derive_guard_setoff_post_hitlag_owner,
         derive_guard_tilt_state,
         derive_dash_x4,
         derive_runbrake_cmd0,
@@ -2493,9 +2494,16 @@ def _main_impl(args) -> None:
             hitlag_base=float(common["hitlag_base"]),
             act_guard_set_off=act_guard_set_off,
         )[:-1]
-        samples["seed_t"]["guard_setoff_hitlag_exit_phase_u8"][:, slot] = derive_guard_setoff_hitlag_exit_phase(
+        guard_setoff_hitlag_exit_phase = derive_guard_setoff_hitlag_exit_phase(
             action_id=post_state,
             hitlag=post_hitlag,
+            act_guard_set_off=act_guard_set_off,
+        )
+        samples["seed_t"]["guard_setoff_hitlag_exit_phase_u8"][:, slot] = guard_setoff_hitlag_exit_phase[:-1]
+        samples["seed_t"]["guard_setoff_post_hitlag_owner_u8"][:, slot] = derive_guard_setoff_post_hitlag_owner(
+            action_id=post_state,
+            guard_setoff_hitlag_exit_phase_u8=guard_setoff_hitlag_exit_phase,
+            state_flags_221c_u8=state_flags[:, 3],
             act_guard_set_off=act_guard_set_off,
         )[:-1]
 

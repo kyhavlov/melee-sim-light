@@ -24,6 +24,8 @@ def test_seed_schema_includes_staling_fields() -> None:
     assert "guard_setoff_hitlag_damage_min" in SEED_DTYPE.fields
     # F02 blocker lane: GuardSetOff hitlag-exit ownership phase.
     assert "guard_setoff_hitlag_exit_phase_u8" in SEED_DTYPE.fields
+    # F02 blocker lane: GuardSetOff post-hitlag owner class.
+    assert "guard_setoff_post_hitlag_owner_u8" in SEED_DTYPE.fields
     # F04 blocker lane: replay-visible camera-box visibility bit (`fp->x221F_b0`).
     assert "camera_box_visible_x221f_b0" in SEED_DTYPE.fields
     # F04 blocker lane: hidden Rebirth camera anchor Y (`fp->mv.co.common.x8`).

@@ -271,6 +271,10 @@ typedef struct MslStateSoA {
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_80092F2C,ftCo_GuardSetOff_Anim}
   // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
   uint8_t* guard_setoff_hitlag_exit_phase_u8;
+  // GuardSetOff post-hitlag owner discriminator for future F02 runtime fixes.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_GuardSetOff_Anim,ftCo_80093BC0}
+  // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A1BC,Fighter_8006A360}
+  uint8_t* guard_setoff_post_hitlag_owner_u8;
   // Locomotion/input-history internals.
   // - `tilt_timer_*`, `turn_*`, and KneeBend internals are seeded from replay history (MslSeed).
   uint8_t*
