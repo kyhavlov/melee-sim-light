@@ -411,6 +411,21 @@ static inline uint8_t landing_contact_y_bridge_matches_source(uint16_t source_ac
   return 0u;
 }
 
+static inline uint8_t landing_action_owns_root_floor_snap(uint16_t land_act) {
+  switch (land_act) {
+    case (uint16_t)MSL_ACT_LANDING:
+    case (uint16_t)MSL_ACT_LANDING_FALL_SPECIAL:
+    case (uint16_t)MSL_ACT_LANDING_AIR_N:
+    case (uint16_t)MSL_ACT_LANDING_AIR_F:
+    case (uint16_t)MSL_ACT_LANDING_AIR_B:
+    case (uint16_t)MSL_ACT_LANDING_AIR_HI:
+    case (uint16_t)MSL_ACT_LANDING_AIR_LW:
+      return 1u;
+    default:
+      return 0u;
+  }
+}
+
 static inline uint8_t landing_contact_is_ledge_floor(const MslBatch* batch, size_t idx, size_t bi) {
   if (batch == NULL || !batch->state.on_ground[idx]) {
     return 0u;
@@ -1494,20 +1509,20 @@ static inline void enter_landing_action_from_air(MslBatch* batch, const MslCharP
   const float landing_self_vel_x = batch->state.speed_air_x_self[idx];
   batch->state.speed_ground_x_self[idx] = landing_self_vel_x;
   batch->state.speed_air_x_self[idx] = landing_self_vel_x;
-  // AttackAir landing-entry compatibility bridge:
-  // - AttackAir_Coll resolves floor contact, then transitions through
-  //   ftCo_LandingAir_EnterWithLag / ftCo_Landing_Enter_Basic.
-  // - Keep root Y aligned to the collision floor contact point for this narrow callback family.
+  // Landing-entry root-Y ownership:
+  // - Airborne collision callbacks resolve floor contact before entering Landing / LandingAir* /
+  //   LandingFallSpecial through ftCommon_8007D7FC + Fighter_ChangeMotionState.
+  // - mpLib_8004DD90_Floor projects onto the owning floor line and applies the grounded +0.0001
+  //   bias; replay-visible post-frame rows therefore own the collision floor root position on the
+  //   destination landing state, not the pre-contact airborne root.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_Coll
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_LandingAir.c::ftCo_LandingAir_EnterWithLag
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::{ftCo_Landing_Enter_Basic,ftCo_LandingFallSpecial_Enter}
+  // refs/melee/src/melee/ft/ftcommon.c::{ftCommon_8007D7FC,ftCommon_8007D6A4}
   // refs/melee/src/melee/mp/mplib.c::mpLib_8004DD90_Floor
-  //
-  // TODO(decomp-coll-lane): remove once mpColl ECB interpolation/ownership is fully modeled and
-  // AttackAir landing-entry rows no longer require contact-y reconciliation.
   uint8_t apply_contact_y_bridge =
-      (batch->state.on_ground[idx] &&
-       landing_contact_y_bridge_matches_source(source_act, batch->state.action_frame[idx],
-                                               batch->state.prev_action_id[idx], land_act))
+      (batch->state.on_ground[idx] && landing_action_owns_root_floor_snap(land_act))
           ? 1u
           : 0u;
   if (apply_contact_y_bridge && source_act == (uint16_t)MSL_ACT_FALL &&
@@ -1521,7 +1536,7 @@ static inline void enter_landing_action_from_air(MslBatch* batch, const MslCharP
     apply_contact_y_bridge = 0u;
   }
   if (apply_contact_y_bridge) {
-    batch->state.pos_y[idx] = batch->state.ground_contact_y[idx];
+    batch->state.pos_y[idx] = batch->state.ground_contact_y[idx] + 0.0001f;
   }
 
   batch->state.fall_fast[idx] = 0;
@@ -3578,7 +3593,7 @@ void locomotion_update_post_collision(MslBatch* batch) {
           // Compatibility: some post-collision callback lanes can already be in Landing before this
           // locomotion transition resolver runs. Preserve floor-contact Y for the same decomp-owned
           // Jump/SpecialAirN collision families used by the landing bridge helper above.
-          batch->state.pos_y[idx] = batch->state.ground_contact_y[idx];
+          batch->state.pos_y[idx] = batch->state.ground_contact_y[idx] + 0.0001f;
         }
 
         // Grounding transition: enter landing actions for supported airborne motion states.
