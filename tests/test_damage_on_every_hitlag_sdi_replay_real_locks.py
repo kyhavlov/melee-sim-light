@@ -171,3 +171,46 @@ def test_downdamaged_hitlag_sdi_target_pm1_and_negative_control_are_replay_exact
     assert int(out_neg["action_id"][p]) == int(ref_neg["action_id"][p])
     assert int(out_neg["hitlag"][p]) == int(ref_neg["hitlag"][p])
     assert float(out_neg["pos_x"][p]) == pytest.approx(float(ref_neg["pos_x"][p]), abs=1e-6)
+
+
+@pytest.mark.integration
+def test_damageflyhi_hitlag_sdi_target_pm1_and_negative_control_are_replay_exact() -> None:
+    root = Path(__file__).resolve().parents[1]
+    dataset_rel = (
+        "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
+        "QuerulousGrandDinosaur.msl"
+    )
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+    rows = (4158, 4159, 4160)
+    neg = 4162
+    p = 0
+    for rec in (*rows, neg):
+        assert int(samples.shape[0]) > rec, f"dataset too short for record={rec}"
+
+    target = samples[4159 : 4160]
+    assert int(target["seed_t"]["action_id"][0, p]) == 87
+    assert int(target["seed_t"]["hitlag"][0, p]) == 5
+    assert float(target["seed_t"]["pos_x"][0, p]) == pytest.approx(39.57304000854492, abs=1e-6)
+    assert float(target["ref_t1"]["pos_x"][0, p]) == pytest.approx(37.62303924560547, abs=1e-6)
+    assert float(target["ref_t1"]["pos_y"][0, p]) == pytest.approx(6.16510009765625, abs=1e-6)
+
+    for rec in rows:
+        out, ref = _run_one_step(dataset_path, rec)
+        assert int(out["action_id"][p]) == int(ref["action_id"][p])
+        assert int(out["hitlag"][p]) == int(ref["hitlag"][p])
+        assert int(out["hitstun"][p]) == int(ref["hitstun"][p])
+        assert float(out["pos_x"][p]) == pytest.approx(float(ref["pos_x"][p]), abs=1e-6)
+        assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=1e-6)
+
+    out_neg, ref_neg = _run_one_step(dataset_path, neg)
+    assert int(out_neg["action_id"][p]) == int(ref_neg["action_id"][p])
+    assert int(out_neg["hitlag"][p]) == int(ref_neg["hitlag"][p])
+    assert int(out_neg["hitstun"][p]) == int(ref_neg["hitstun"][p])
+    assert float(out_neg["pos_x"][p]) == pytest.approx(float(ref_neg["pos_x"][p]), abs=1e-6)
+    assert float(out_neg["pos_y"][p]) == pytest.approx(float(ref_neg["pos_y"][p]), abs=1e-6)
+
