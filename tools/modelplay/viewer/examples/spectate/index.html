@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+
+<html>
+  <head>
+    <title>Spectate</title>
+    <script type="text/javascript" src="../../dist/index.js"></script>
+  </head>
+
+  <body>
+    <button onclick="clearViewer()">Clear viewer</button>
+    <slippi-viewer zips-base-url="/public"></slippi-viewer>
+
+    <script>
+      const viewer = document.querySelector("slippi-viewer");
+      viewer.spectate("ws://localhost:4102");
+
+      function clearViewer() {
+        viewer.clear();
+      }
+    </script>
+  </body>
+</html>

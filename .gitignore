@@ -30,6 +30,8 @@ build/
 dist/
 target/
 reports/triage/
+reports/modelplay/
+tools/modelplay/__pycache__/
 __pycache__/
 *.pyc
 *.so

@@ -1,0 +1,41 @@
+{
+  "name": "@gcpreston/slippi-viewer",
+  "description": "View Slippi replays and streams in the browser",
+  "keywords": [
+    "slippi",
+    "project-slippi",
+    "slp",
+    "melee",
+    "ssbm"
+  ],
+  "version": "0.1.16",
+  "author": "Graham Preston",
+  "license": "MIT",
+  "main": "dist/index.js",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "node build.mjs",
+    "clean": "rm -r dist/",
+    "types": "tsc",
+    "format": "prettier -w src/"
+  },
+  "dependencies": {
+    "@shelacek/ubjson": "^1.1.1",
+    "@solid-primitives/raf": "^2.1.4",
+    "fflate": "^0.7.4",
+    "reconnecting-websocket": "^4.4.0",
+    "solid-element": "^1.9.1",
+    "solid-js": "^1.6.3"
+  },
+  "devDependencies": {
+    "autoprefixer": "^10.4.13",
+    "esbuild": "^0.25.2",
+    "esbuild-plugin-solid": "^0.6.0",
+    "prettier": "^2.8.1",
+    "prettier-plugin-tailwindcss": "^0.2.0",
+    "tailwindcss": "^3.2.4",
+    "typescript": "^4.9.3"
+  }
+}

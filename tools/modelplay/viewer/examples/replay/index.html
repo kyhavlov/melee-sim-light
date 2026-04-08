@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+
+<html>
+  <head>
+    <title>Replay upload</title>
+    <script type="text/javascript" src="../../dist/index.js"></script>
+  </head>
+
+  <body>
+    <label for="chose-replay">Choose Slippi replay:</label>
+    <input type="file" id="choose-replay" name="choose-replay" accept=".slp" />
+    <button onclick="clearViewer()">Clear viewer</button>
+    <slippi-viewer zips-base-url="/public"></slippi-viewer>
+
+    <script>
+      const viewer = document.querySelector("slippi-viewer");
+      const input = document.querySelector("#choose-replay");
+
+      input.addEventListener("change", handleFileUpload);
+
+      function clearViewer() {
+        viewer.clear();
+      }
+
+      function handleFileUpload() {
+        const replayFile = input.files[0];
+        if (replayFile) viewer.setReplay(replayFile);
+      }
+    </script>
+  </body>
+</html>
