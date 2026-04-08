@@ -119,6 +119,10 @@ static inline uint8_t action_is_capture_pulled_wait_victim(uint16_t action_id) {
   }
 }
 
+static inline void grabbed_victim_anchor_world(float* out_x, float* out_y, float* out_z,
+                                               const MslBatch* batch, int bi, int victim_p,
+                                               int owner_p);
+
 void grab_attachment_apply_capture_delta_now(MslBatch* batch, int bi, int victim_p, int owner_p) {
   if (batch == NULL) {
     return;
@@ -171,6 +175,41 @@ void grab_attachment_apply_capture_delta_now(MslBatch* batch, int bi, int victim
   batch->state.pos_x[vidx] += ax - vx;
   batch->state.pos_y[vidx] += ay - vy;
   batch->state.pos_z[vidx] += az - vz;
+}
+
+void grab_attachment_apply_thrown_anchor_now(MslBatch* batch, int bi, int victim_p, int owner_p) {
+  if (batch == NULL) {
+    return;
+  }
+  const int num_players = (int)batch->config.num_players;
+  if (victim_p < 0 || victim_p >= num_players || owner_p < 0 || owner_p >= num_players ||
+      victim_p == owner_p) {
+    return;
+  }
+
+  const size_t vidx = msl_idx_player(bi, victim_p);
+  if (!msl_action_is_thrown_victim(batch->state.action_id[vidx])) {
+    return;
+  }
+
+  float ax = 0.0f, ay = 0.0f, az = 0.0f;
+  grabbed_victim_anchor_world(&ax, &ay, &az, batch, bi, victim_p, owner_p);
+  (void)az;
+
+  const float scale_y = pose_model_scale_y(batch, vidx);
+  if (!(scale_y > 0.0f)) {
+    return;
+  }
+  const float facing_dir = batch->state.facing[vidx] ? 1.0f : -1.0f;
+
+  // Decomp-shaped same-frame release ownership:
+  // - throw Anim installs ftCo_800DE508-style thrown positioning before later release/hit
+  //   resolution consumes the attachment for the frame.
+  // - ftCo_800DE508 composes owner anchor world with victim x1A70.{z,y} offsets.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Thrown.c::{ftCo_800DE3FC,ftCo_800DE508}
+  batch->state.pos_x[vidx] = fmaf(batch->state.grab_offset_z[vidx], facing_dir * scale_y, ax);
+  batch->state.pos_y[vidx] = batch->state.grab_offset_y[vidx] * scale_y + ay;
+  batch->state.pos_z[vidx] = 0.0f;
 }
 
 static inline uint8_t action_is_catch_pull_state(uint16_t action_id) {

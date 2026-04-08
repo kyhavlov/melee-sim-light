@@ -23,6 +23,15 @@ void grab_attachment_recompute_offsets_for_thrown_entry(MslBatch* batch, int bat
 void grab_attachment_apply_capture_delta_now(MslBatch* batch, int batch_index, int victim_p,
                                              int owner_p);
 
+// Thrown victim same-frame anchor ownership helper.
+//
+// Decomp-shaped usage:
+// - Throw Anim can release/detach the victim and still use ftCo_800DE508-style owner-anchor world
+//   placement for the current frame before the attachment link is cleared.
+// refs/melee/src/melee/ft/chara/ftCommon/ftCo_Thrown.c::{ftCo_800DE3FC,ftCo_800DE508}
+void grab_attachment_apply_thrown_anchor_now(MslBatch* batch, int batch_index, int victim_p,
+                                             int owner_p);
+
 // CapturePulled*/CaptureWait*/CaptureDamage* victim Phys driver:
 // - Decomp: refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::fn_800DAD18
 // - Applies `cur_pos += (owner(x18) - victim(XRotN))`.

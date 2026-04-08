@@ -304,21 +304,24 @@ static void hitboxes_seed_bridge_trim_impossible_indefinite(MslBatch* batch, int
       continue;
     }
 
-    // Narrow stale-owner extension for active windows with repeated suite misses:
+    // Narrow stale-owner extensions for active windows with repeated suite misses:
     // - AttackAirLw scripts (Fox/Falco) carry multiple same-group create_hitbox refreshes, and
     //   ftAction_8007121C/ftColl_800768A0 rewires suppression ownership on those refresh edges.
+    // - AttackLw3 keeps same-group hitcapsules active across damage followup windows where decomp
+    //   still rewrites BODY attribution through ftColl_80076ED8.
     // - Dense seed hitlists carry only victim presence + BODY attribution (`instance_hit_by`), so a
     //   same-port stale victim from an older attacker instance can survive reseed and suppress the
-    //   live AttackAirLw capsule even when `last_hit_by` still matches the attacker port.
-    // - Keep this lane scoped to AttackAirLw where extracted multi-create scripts are present.
+    //   live capsule even when the current attack should connect.
     // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_Anim
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackLw3.c::ftCo_AttackLw3_Anim
     // refs/melee/src/melee/ft/ftaction.c::ftAction_8007121C
-    // refs/melee/src/melee/ft/ftcoll.c::ftColl_800768A0
+    // refs/melee/src/melee/ft/ftcoll.c::{ftColl_800768A0,ftColl_80076ED8}
     // refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000ACFC,lbColl_80008A5C}
     // data/moves/{fox,falco}.json::moves.ftCo_SM_AttackAirLw.events.create_hitbox
-    const uint8_t stale_owner_action_lane =
+    // data/moves/{fox,falco}.json::moves.ftCo_SM_AttackLw3.events.create_hitbox
+    const uint8_t stale_owner_attackairlw_lane =
         (attacker_action == (uint16_t)MSL_ACT_ATTACK_AIR_LW) ? 1u : 0u;
-    if (stale_owner_action_lane && !shield_desc_active &&
+    if (stale_owner_attackairlw_lane && !shield_desc_active &&
         !hitboxes_seed_bridge_is_guard_transition_owner(v_action) &&
         batch->state.hitlag[v_idx] == 0u &&
         batch->state.instance_hit_by[v_idx] != attacker_iid) {
@@ -328,6 +331,18 @@ static void hitboxes_seed_bridge_trim_impossible_indefinite(MslBatch* batch, int
             batch->state.hitstun[v_idx] <= expected_hitlag)) {
         continue;
       }
+      hitboxes_seed_bridge_entry_clear(e);
+      continue;
+    }
+
+    const uint8_t stale_owner_attacklw3_lane =
+        (attacker_action == (uint16_t)MSL_ACT_ATTACK_LW3) ? 1u : 0u;
+    if (stale_owner_attacklw3_lane && !shield_desc_active &&
+        !hitboxes_seed_bridge_is_guard_transition_owner(v_action) &&
+        batch->state.hitlag[v_idx] == 0u && batch->state.hitstun[v_idx] != 0u &&
+        batch->state.last_hit_by[v_idx] == (uint8_t)attacker &&
+        hitboxes_seed_bridge_is_damage_or_firefox_launch_victim_action(v_action) &&
+        batch->state.instance_hit_by[v_idx] != attacker_iid) {
       hitboxes_seed_bridge_entry_clear(e);
       continue;
     }

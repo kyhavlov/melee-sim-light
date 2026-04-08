@@ -991,6 +991,17 @@ void physics_integrate(MslBatch* batch) {
         // refs/melee/src/melee/ft/ftcommon.c::ftCommon_ApplyGroundMovement
         // refs/melee/src/melee/ft/ft_081B.c::{ft_80084F3C,ft_80085030,ft_800850E0}
         batch->state.speed_air_x_self[idx] = vx_self;
+        // Common grounded friction-only phys callbacks (`ft_80084F3C`) do not advance vertical self
+        // velocity while the fighter remains on the floor. Teacher-forced reseed can carry a stale
+        // airborne `speed_y_self` into these grounded states; clear it before grounded position
+        // integration so the frame stays floor-owned on Y.
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::ftCo_Landing_Phys
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_Guard_Phys
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackLw3.c::ftCo_AttackLw3_Phys
+        // refs/melee/src/melee/ft/ft_081B.c::ft_80084F3C
+        if (physics_action_is_common_ground_friction_only(action_id)) {
+          batch->state.speed_y_self[idx] = 0.0f;
+        }
       }
 
       physics_apply_knockback_decay(batch, idx, msl_char_params(batch->state.char_id[idx]), c,

@@ -145,6 +145,85 @@ def test_throw_release_pending_victim_position_context_shape(record: int) -> Non
 
 
 @pytest.mark.integration
+@pytest.mark.parametrize(
+    ("record", "ref_action_id", "max_pos_x_err", "max_pos_y_err"),
+    [
+        (1456, 88, 0.808, 0.021),
+        (5717, 91, 1.190, 0.307),
+        (7772, 88, 1.345, 0.425),
+    ],
+)
+def test_throw_release_pending_victim_target_rows_keep_replay_real_discrete_and_tight_float_parity(
+    record: int, ref_action_id: int, max_pos_x_err: float, max_pos_y_err: float
+) -> None:
+    # Replay-real target locks for the kept ThrowF release anchor lane:
+    # - release-frame victim stays on the ref action/state shape exactly on the stable discrete
+    #   ownership lanes,
+    # - pos_x/pos_y are still one-step float residuals on the target rows, so keep the lock as a
+    #   tight replay-relative tolerance with exact adjacent controls below.
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_rel = (
+        "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl"
+    )
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    p = 0
+    seed, ref, out = _run_one_step_row(dataset_path, record)
+    assert int(seed["action_id"][p]) == 239
+    assert int(ref["action_id"][p]) == ref_action_id
+    assert int(out["action_id"][p]) == ref_action_id
+    for field in (
+        "action_id",
+        "action_frame",
+        "animation_index",
+        "on_ground",
+        "hitlag",
+        "ground_id",
+        "instance_id",
+        "state_flags",
+    ):
+        if field == "state_flags":
+            got = tuple(int(x) for x in out[field][p].tolist())
+            exp = tuple(int(x) for x in ref[field][p].tolist())
+            assert got == exp, f"record={record} p={p} field={field} expected={exp} got={got}"
+        else:
+            assert int(out[field][p]) == int(ref[field][p]), (
+                f"record={record} p={p} field={field} expected={int(ref[field][p])} "
+                f"got={int(out[field][p])}"
+            )
+    assert abs(float(out["pos_x"][p]) - float(ref["pos_x"][p])) <= max_pos_x_err
+    assert abs(float(out["pos_y"][p]) - float(ref["pos_y"][p])) <= max_pos_y_err
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize("record", [1455, 1457, 5716, 5718, 7771, 7773])
+def test_throw_release_pending_adjacent_negative_controls_stay_replay_exact(record: int) -> None:
+    # Explicit non-target controls for the broadened ThrowF anchor lane:
+    # keep the pre-release ThrownF row and the post-release DamageFly continuation exact.
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_rel = (
+        "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl"
+    )
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    p = 0
+    _, ref, out = _run_one_step_row(dataset_path, record)
+    for field in ("action_id", "action_frame", "animation_index", "hitlag", "on_ground", "instance_id"):
+        assert int(out[field][p]) == int(ref[field][p]), (
+            f"record={record} p={p} field={field} expected={int(ref[field][p])} "
+            f"got={int(out[field][p])}"
+        )
+    assert float(out["pos_x"][p]) == pytest.approx(float(ref["pos_x"][p]), abs=1e-6)
+    assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=1e-6)
+
+
+@pytest.mark.integration
 def test_throw_release_pending_context_controls_adjacent_rows_5716_5718() -> None:
     # Adjacent context controls around the targeted release row:
     # - pre row stays attached-thrown under hitlag

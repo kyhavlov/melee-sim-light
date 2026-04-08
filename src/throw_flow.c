@@ -5,6 +5,7 @@
 #include "anim_table.h"
 #include "anim_timebase.h"
 #include "combat.h"
+#include "grab_attachment.h"
 #include "move_tables.h"
 
 static inline uint8_t is_thrower_action(uint16_t a) {
@@ -277,6 +278,17 @@ void throw_flow_update_pre_physics(MslBatch* batch) {
             break;
           }
 
+          // ThrowF release same-frame attachment ownership:
+          // - Throw Anim consumes set_throw_flags(0), and the victim accessory callback path
+          //   (`ftCo_800DE508`) still owns the thrown-anchor world placement for the current frame
+          //   before the detach/hit resolution turns over.
+          // - Keep this bridge narrow to ThrowF until other release families are proven.
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DD724
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Thrown.c::{ftCo_800DE3FC,ftCo_800DE508}
+          if (owner_act == (uint16_t)MSL_ACT_THROW_F) {
+            grab_attachment_apply_thrown_anchor_now(batch, bi, victim_p, owner_p);
+          }
+
           // Detach immediately. Defer the throw hit to post-items.
           batch->state.grab_owner_port[vidx] = 0xFFu;
           batch->state.throw_pending_victim_port[oidx] = (uint8_t)victim_p;
@@ -411,23 +423,13 @@ void throw_flow_update_post_items(MslBatch* batch) {
         }
         throw_flow_bridge_integrate_deferred_throw_hit_position(batch, oidx, vidx);
         if (throw_action == (uint16_t)MSL_ACT_THROW_F) {
-          // ThrowF release-position ownership (deferred apply bridge):
-          // - ftCo_800DDDE4 resolves thrown release position from thrower-side joints after thrower
-          //   motion callback work for the frame.
-          // - In this simulator, throw-hit apply is deferred to post-items; keep one extra owner
-          //   root-motion term on ThrowF release rows where no deferred anim tick is consumed.
-          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DDDE4
-          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_ThrowF_Anim
-          // refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate
-          // Deferred ThrowF ownership split bridge:
-          // - Carry only the owner-motion overspeed share derived from thrower anim timebase.
-          const int32_t owner_prev_fp =
-              batch->state.anim_frame_fp_q16_16[oidx] - batch->state.frame_speed_mul_fp_q16_16[oidx];
-          const float owner_prev_af = msl_f32_from_q16_16(owner_prev_fp);
-          const float owner_af = batch->state.anim_frame_f32[oidx];
-          const float extra_owner_share = throw_flow_owner_throwf_deferred_extra_share(
-              batch, owner_char, throw_action, owner_prev_af, owner_af, oidx);
-          batch->state.pos_x[vidx] += extra_owner_share * throw_flow_owner_self_dx(batch, oidx, vidx);
+          // ThrowF release-position ownership:
+          // - same-frame owner-anchor placement is already bridged at release consume time
+          //   (ftCo_800DE508-style world placement before detach).
+          // - Keep the older deferred extra-share term disabled here to avoid double-counting owner
+          //   motion on the same release frame.
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DD724
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Thrown.c::ftCo_800DE508
         }
       }
     }
