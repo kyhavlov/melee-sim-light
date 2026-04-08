@@ -621,7 +621,12 @@ void grab_flow_on_catch_connect(MslBatch* batch, int bi, int owner_p, int victim
   // Decomp: fn_800D9CE8 installs CatchPull/CatchDashPull with anim_start=fp->cur_anim_frame
   // (preserve current catch timeline instead of restarting from frame 0).
   // refs/melee/build/GALE01/asm/melee/ft/chara/ftCommon/ftCo_Attack100.s::fn_800D9CE8
+  // Decomp ownership: fn_800D9CE8 writes 0 to fp->gr_vel (offset 0xEC) before
+  // Fighter_ChangeMotionState(CatchPull/CatchDashPull), so grounded catch-connect rows should not
+  // retain pre-connect ground velocity in the post-frame motion state.
+  // refs/melee/build/GALE01/asm/melee/ft/chara/ftCommon/ftCo_Attack100.s::fn_800D9CE8
   msl_anim_timebase_enter(batch, oidx, owner_anim_start, 1.0f);
+  batch->state.speed_ground_x_self[oidx] = 0.0f;
 
   // Catch connect victim entry selects CapturePulled variant from callback-target xE0.
   // Decomp: fn_800DAADC checks xE0 on the callback target gobj and chooses:

@@ -2484,26 +2484,36 @@ void locomotion_update_pre(MslBatch* batch) {
           }
         }
 
-        // Ottotto / OttottoWait opposite-flick smash-turn bridge:
+        // Ottotto / OttottoWait dash-flick bridge:
         // - ftCo_Ottotto{,Wait}_IASA routes through ftCo_Dash_CheckInput before Turn/Walk.
-        // - Keep only the opposite-facing dash-flick -> TurnSmash path here; same-facing Dash from
-        //   Ottotto still depends on unmodeled teeter collision ownership and regresses guardrails.
-        // TODO: Model the same-facing Dash path only after teeter ownership parity is represented.
+        // - ftCo_Dash_CheckInput enters TurnSmash on opposite-facing flicks and Dash on same-facing
+        //   flicks, so keep both branches here once Ottotto admission itself is owned.
         // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Ottotto.c::{
         //   ftCo_Ottotto_IASA,ftCo_OttottoWait_IASA}
         // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c::ftCo_Dash_CheckInput
         if ((action_id == (uint16_t)MSL_ACT_OTTOTTO ||
              action_id == (uint16_t)MSL_ACT_OTTOTTO_WAIT) &&
-            is_dash_flick(c, stick_x, tilt_timer_x) && (stick_x * facing_dir) < 0.0f) {
-          batch->state.turn_has_turned[idx] = 0;
-          batch->state.turn_frames_to_turn[idx] = 0;
-          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Turn.c::ftCo_Turn_Enter_Smash
-          batch->state.turn_x8[idx] = (int8_t)(facing_dir > 0.0f ? 1 : -1);
-          batch->state.action_id[idx] = (uint16_t)MSL_ACT_TURN;
-          batch->state.animation_index[idx] = (uint32_t)MSL_SM_TURN;
-          msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
-          msl_anim_timebase_tick_once(batch, idx);
-          action_id = (uint16_t)MSL_ACT_TURN;
+            is_dash_flick(c, stick_x, tilt_timer_x)) {
+          if ((stick_x * facing_dir) < 0.0f) {
+            batch->state.turn_has_turned[idx] = 0;
+            batch->state.turn_frames_to_turn[idx] = 0;
+            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Turn.c::ftCo_Turn_Enter_Smash
+            batch->state.turn_x8[idx] = (int8_t)(facing_dir > 0.0f ? 1 : -1);
+            batch->state.action_id[idx] = (uint16_t)MSL_ACT_TURN;
+            batch->state.animation_index[idx] = (uint32_t)MSL_SM_TURN;
+            msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+            msl_anim_timebase_tick_once(batch, idx);
+            action_id = (uint16_t)MSL_ACT_TURN;
+          } else {
+            batch->state.action_id[idx] = (uint16_t)MSL_ACT_DASH;
+            batch->state.animation_index[idx] = (uint32_t)MSL_SM_DASH;
+            batch->state.dash_x4[idx] = 1u;
+            msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c:59-62
+            msl_anim_timebase_tick_once(batch, idx);
+            batch->state.tilt_timer_x[idx] = 0xFEu;
+            action_id = (uint16_t)MSL_ACT_DASH;
+          }
         }
 
         // Landing IASA (minimal): after the landing lag gate, allow the same grounded locomotion
@@ -3657,6 +3667,28 @@ void locomotion_update_post_collision(MslBatch* batch) {
       } else if (was_ground && !now_ground) {
         batch->state.fall_fast[idx] = 0;
 
+        // Ottotto (teeter) entry on idle walk-off:
+        // - ftCo_8009A3C8 enters Ottotto through ftCo_8009A410 when Collide_Edge is set and the
+        //   fighter is not on the teeter-suppressed branch.
+        // - On the direct idle-edge handoff, the collision owner is previous grounded Wait state;
+        //   keep the row grounded and restore the pre-integration position before generic fall
+        //   conversion runs.
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Ottotto.c::{ftCo_8009A3C8,ftCo_8009A410}
+        // refs/melee/src/melee/ft/ft_081B.c::ft_80084280
+        if (batch->state.prev_action_id[idx] == (uint16_t)MSL_ACT_WAIT &&
+            batch->state.prev_action_frame[idx] <= 0) {
+          batch->state.on_ground[idx] = 1u;
+          batch->state.action_id[idx] = (uint16_t)MSL_ACT_OTTOTTO;
+          batch->state.animation_index[idx] = (uint32_t)MSL_SM_OTTOTTO;
+          batch->state.pos_x[idx] = batch->state.prev_pos_x[idx];
+          batch->state.pos_y[idx] = batch->state.prev_pos_y[idx];
+          batch->state.speed_air_x_self[idx] = 0.0f;
+          batch->state.speed_ground_x_self[idx] = 0.0f;
+          batch->state.speed_y_self[idx] = 0.0f;
+          msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+          continue;
+        }
+
         // Only force Ground->Air transitions for ground locomotion states for now.
         // Many non-locomotion ground states transition into specific aerial variants (e.g. FallSpecial),
         // which we do not model yet; forcing Fall here causes large action_id regressions.
@@ -3669,24 +3701,22 @@ void locomotion_update_post_collision(MslBatch* batch) {
           continue;
         }
 
-        // Ottotto (teeter) entry on steady Wait walk-off:
-        // - ftCo_8009A3C8 enters Ottotto through ftCo_8009A410 when Collide_Edge is set and the
-        //   fighter is not on the teeter-suppressed branch.
-        // - Keep this restricted to steady Wait ownership (`prev_action_id == Wait`) until the
-        //   teeter suppression internal is explicit; same-frame non-Wait -> Wait carry windows
-        //   regress unrelated edge-loss families.
-        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Ottotto.c::{ftCo_8009A3C8,ftCo_8009A410}
-        // refs/melee/src/melee/ft/ft_081B.c::ft_80084280
-        if (a == (uint16_t)MSL_ACT_WAIT &&
-            batch->state.prev_action_id[idx] == (uint16_t)MSL_ACT_WAIT &&
-            (batch->state.coll_env_flags[idx] & (uint32_t)MSL_COLLIDE_EDGE) != 0u) {
+        // Ottotto->Dash first-frame carry:
+        // - Ottotto_IASA can immediately route into Dash via ftCo_Dash_CheckInput.
+        // - The collision owner still keeps the fighter grounded at the edge on the first
+        //   Ottotto/OttottoWait -> Dash carry row instead of falling off.
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Ottotto.c::{
+        //   ftCo_Ottotto_IASA,ftCo_Ottotto_Coll,ftCo_OttottoWait_Coll}
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c::{ftCo_Dash_CheckInput,ftCo_Dash_Enter}
+        if (a == (uint16_t)MSL_ACT_DASH &&
+            (batch->state.prev_action_id[idx] == (uint16_t)MSL_ACT_OTTOTTO ||
+             batch->state.prev_action_id[idx] == (uint16_t)MSL_ACT_OTTOTTO_WAIT) &&
+            batch->state.action_frame[idx] <= 1) {
           batch->state.on_ground[idx] = 1u;
-          batch->state.action_id[idx] = (uint16_t)MSL_ACT_OTTOTTO;
-          batch->state.animation_index[idx] = (uint32_t)MSL_SM_OTTOTTO;
+          batch->state.pos_x[idx] = batch->state.prev_pos_x[idx];
+          batch->state.pos_y[idx] = batch->state.prev_pos_y[idx];
           batch->state.speed_air_x_self[idx] = 0.0f;
-          batch->state.speed_ground_x_self[idx] = 0.0f;
           batch->state.speed_y_self[idx] = 0.0f;
-          msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
           continue;
         }
 

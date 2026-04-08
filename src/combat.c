@@ -2401,7 +2401,8 @@ void combat_apply_item_shield_hit(MslBatch* batch, int batch_index, int attacker
 static inline void combat_mutations_pass1_future_apply_shield_hit(MslBatch* batch, size_t a_idx,
                                                                   size_t d_idx, int max_int_dmg,
                                                                   int shield_damage_taken,
-                                                                  uint16_t attacker_motion_id) {
+                                                                  uint16_t attacker_motion_id,
+                                                                  uint8_t hit_element) {
   if (batch == NULL) {
     return;
   }
@@ -2494,6 +2495,30 @@ static inline void combat_mutations_pass1_future_apply_shield_hit(MslBatch* batc
     anim_rate = (end_frame + 0.1f) / stun_frames;
   }
   msl_anim_timebase_enter(batch, d_idx, 0.0f, anim_rate);
+
+  // GuardSetOff grounded pushback ownership:
+  // - ftColl_80076CBC stores the shield owner's x19A4 (max int dmg over shield overlaps this frame),
+  //   specialn_facing_dir sign, and x19B0 element before ftCo_80092F2C runs.
+  // - ftCo_80092F2C computes `f = x28C*(x19A4*(1-(light*(x2E8-x2E4)+x2E4))) + x290`,
+  //   then when x19B0 != 10 writes:
+  //     push = clamp(f * x294 * (x221C_b2 ? 1.0f : x2BC), x298)
+  //     gr_vel = (specialn_facing_dir < 0) ? +push : -push
+  // - ASM confirms the final write is `stfs +/-f2, fp->gr_vel` (not the broken decomp line).
+  // refs/melee/src/melee/ft/ftcoll.c::ftColl_80076CBC
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80092F2C
+  // refs/melee/build/GALE01/asm/melee/ft/chara/ftCommon/ftCo_Guard.s:1656-1679
+  if (batch->state.on_ground[d_idx] && hit_element != (uint8_t)MSL_HIT_ELEMENT_GROUND) {
+    float push = stun_frames * c->shield_setoff_push_mul;
+    if (!powershield_active) {
+      push *= c->shield_setoff_push_mul_non_yoshi;
+    }
+    if (push > c->shield_setoff_push_max) {
+      push = c->shield_setoff_push_max;
+    }
+    const float shield_sign =
+        (batch->state.pos_x[d_idx] > batch->state.pos_x[a_idx]) ? 1.0f : -1.0f;
+    batch->state.speed_ground_x_self[d_idx] = shield_sign * push;
+  }
 
   // Hitlag on shield contact uses the same decomp ftCommon_CalcHitlag path as BODY, but with
   // shield-collision inputs:
@@ -3043,6 +3068,7 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
         int max_int_dmg = 0;
         int sel_int_dmg = 0;
         int8_t sel_shield_dmg_s8 = 0;
+        uint8_t sel_element = 0u;
         uint8_t sel_hit_group = 0;
         uint8_t sel_rehit_frames = 0;
 
@@ -3147,6 +3173,7 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
           if (sel_int_dmg == 0) {
             sel_int_dmg = int_dmg;
             sel_shield_dmg_s8 = batch->state.hitbox_shield_damage[hb_i];
+            sel_element = element;
             sel_hit_group = hit_group;
             sel_rehit_frames = hitlist_rehit_frames_from_u16_7(batch->state.hitbox_u16_7[hb_i]);
           }
@@ -3166,7 +3193,7 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
           // refs/melee/src/melee/ft/ftcoll.c::ftColl_80076CBC
           // refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
           combat_mutations_pass1_future_apply_shield_hit(batch, a_idx, d_idx, max_int_dmg, tmp_dmg,
-                                                         a_motion_id);
+                                                         a_motion_id, sel_element);
 
           // Hitlist register: decomp hitlists store a `victim` pointer inside the HitCapsule, so
           // the victim identity is stable across motion-state changes (e.g. GuardSetOff entry).

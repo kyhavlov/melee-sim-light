@@ -39,40 +39,40 @@ rollout.first_mismatch_seeded_total: 36
 
 == datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl ==
 rollout.best_len: 197
-rollout.streak_count: 232
+rollout.streak_count: 230
 rollout.streak_len.median: 39
 rollout.streak_len.p90: 111
 rollout.streak_len.p95: 124
 rollout.streak_len.max: 197
-rollout.first_mismatch_total: 231
+rollout.first_mismatch_total: 229
 rollout.first_mismatch_seeded_total: 54
 
 == datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/QuerulousGrandDinosaur.msl ==
-rollout.best_len: 182
-rollout.streak_count: 193
-rollout.streak_len.median: 41
-rollout.streak_len.p90: 117
+rollout.best_len: 181
+rollout.streak_count: 188
+rollout.streak_len.median: 43
+rollout.streak_len.p90: 119
 rollout.streak_len.p95: 132
-rollout.streak_len.max: 182
-rollout.first_mismatch_total: 194
-rollout.first_mismatch_seeded_total: 53
+rollout.streak_len.max: 181
+rollout.first_mismatch_total: 188
+rollout.first_mismatch_seeded_total: 51
 
 == datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/TreasuredBackKangaroo.msl ==
 rollout.best_len: 229
-rollout.streak_count: 162
-rollout.streak_len.median: 40
+rollout.streak_count: 161
+rollout.streak_len.median: 41
 rollout.streak_len.p90: 93
 rollout.streak_len.p95: 114
 rollout.streak_len.max: 229
-rollout.first_mismatch_total: 162
+rollout.first_mismatch_total: 161
 rollout.first_mismatch_seeded_total: 42
 
 == suite summary ==
-overall.rollout.streak_count: 741
-overall.rollout.streak_len.median: 39
-overall.rollout.streak_len.p90: 106
-overall.rollout.streak_len.p95: 128
+overall.rollout.streak_count: 733
+overall.rollout.streak_len.median: 40
+overall.rollout.streak_len.p90: 107
+overall.rollout.streak_len.p95: 129
 overall.rollout.streak_len.max: 229
 overall.rollout.best_len.max: 229
-overall.rollout.first_mismatch_total: 742
-overall.rollout.first_mismatch_seeded_total: 185
+overall.rollout.first_mismatch_total: 733
+overall.rollout.first_mismatch_seeded_total: 183
