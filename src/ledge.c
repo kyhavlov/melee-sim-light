@@ -442,7 +442,7 @@ static inline void cliff_option_phys_airground(MslBatch* batch, int bi, size_t i
   }
 }
 
-static inline void cliff_catch_phys_snap(MslBatch* batch, int bi, size_t idx) {
+static inline void cliff_hold_phys_snap(MslBatch* batch, int bi, size_t idx, uint16_t smid) {
   if (batch == NULL) {
     return;
   }
@@ -467,14 +467,14 @@ static inline void cliff_catch_phys_snap(MslBatch* batch, int bi, size_t idx) {
   const uint16_t frame =
       msl_anim_frame_floor_u16(msl_anim_frame_sanitize_f32(batch->state.anim_frame_f32[idx]));
   float t[3] = {0};
-  if (anim_pose_get_transn(batch->state.char_id[idx], (uint16_t)MSL_SM_CLIFF_CATCH, frame, t) != 0) {
+  if (anim_pose_get_transn(batch->state.char_id[idx], smid, frame, t) != 0) {
     return;
   }
 
-  // Decomp: ftCo_CliffCatch_Phys snaps every CliffCatch frame to `cliff_point + x68C_transNPos`.
-  // Keep this scoped to CliffCatch only; CliffWait timing has additional owner state and is
-  // replay-sensitive.
+  // Decomp: ftCo_CliffCatch_Phys snaps CliffCatch/CliffWait to `cliff_point + x68C_transNPos`,
+  // and ftCo_CliffWait_Phys is a direct call-through to ftCo_CliffCatch_Phys.
   // refs/melee/src/melee/ft/ftcliffcommon.c::ftCo_CliffCatch_Phys
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffWait.c::ftCo_CliffWait_Phys
   const float fd = facing_dir(batch->state.facing[idx]);
   batch->state.pos_x[idx] = ledge.x + (t[2] * ch->model_scaling * fd);
   batch->state.pos_y[idx] = ledge.y + (t[1] * ch->model_scaling);
@@ -682,7 +682,7 @@ void ledge_update_pre_physics(MslBatch* batch) {
           const float end_frame =
               msl_anim_end_frame(batch->state.char_id[idx], (uint16_t)MSL_SM_CLIFF_CATCH);
           if (!(end_frame > 0.0f) || batch->state.anim_frame_f32[idx] < end_frame) {
-          cliff_catch_phys_snap(batch, bi, idx);
+            cliff_hold_phys_snap(batch, bi, idx, (uint16_t)MSL_SM_CLIFF_CATCH);
           }
         }
       }
@@ -701,6 +701,16 @@ void ledge_update_pre_physics(MslBatch* batch) {
           // refs/melee/src/melee/ft/ftcliffcommon.c::ftCo_CliffCatch_Anim
           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffWait.c::ftCo_8009A804
           enter_cliff_wait(batch, idx);
+          // Decomp ordering:
+          // - ftCo_CliffCatch_Anim enters CliffWait through ftCo_8009A804 during the same fighter
+          //   proc.
+          // - Fighter_procUpdate then runs the new state's Phys callback, and ftCo_CliffWait_Phys
+          //   is a direct call-through to ftCo_CliffCatch_Phys.
+          // Keep the handoff scoped to the anim-end transition row only.
+          // refs/melee/src/melee/ft/ftcliffcommon.c::ftCo_CliffCatch_Anim
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffWait.c::{
+          //   ftCo_8009A804,ftCo_CliffWait_Phys}
+          cliff_hold_phys_snap(batch, bi, idx, (uint16_t)MSL_SM_CLIFF_WAIT);
           a = batch->state.action_id[idx];
         }
       } else if (a == (uint16_t)MSL_ACT_CLIFF_WAIT) {
