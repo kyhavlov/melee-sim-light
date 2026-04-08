@@ -1989,6 +1989,14 @@ MslItemHitResult combat_apply_item_hit(MslBatch* batch, int batch_index, int att
     combat_state_flags_set_x221a_b3(batch, d_idx);
   }
 
+  // Decomp: item/fighter BODY hits still route through Fighter_ProcessHit -> ftCo_8008DCE0 for
+  // damage-state entry, and ftCo_8008DCE0 clears self_vel/gr_vel at block_28 before selecting the
+  // Damage* motion state.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
+  batch->state.speed_air_x_self[d_idx] = 0.0f;
+  batch->state.speed_ground_x_self[d_idx] = 0.0f;
+  batch->state.speed_y_self[d_idx] = 0.0f;
+
   // Decomp: ftCo_8008DCE0 can clear grounded state (ftCommon_8007D5D4) before selecting the
   // damage motion state. Use the post-KB on_ground value for state entry.
   const uint8_t defender_on_ground_after = batch->state.on_ground[d_idx] ? 1u : 0u;

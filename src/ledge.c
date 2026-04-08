@@ -414,7 +414,12 @@ static inline void cliff_option_phys_airground(MslBatch* batch, int bi, size_t i
   if (trans_z >= 0.0f && trans_y >= 0.0f) {
     // Decomp: when airborne CliffClimb reaches non-negative transN.y/z, it writes floor.index to
     // the ledge id and calls ftCommon_8007D7FC (air->ground helper).
+    // Grounding ownership mirrors ftCommon_8007D6A4 / Fighter_procUpdate:
+    // - fp->gr_vel = fp->self_vel.x on air->ground transfer,
+    // - grounded update keeps fp->self_vel.x aligned from fp->gr_vel.
     // refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffClimb.c::ftCo_CliffClimb_Phys
+    // refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007D6A4
+    // refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate
     const MslStageFloorLine* ledge_floor = stage_collision_get_ledge_floor_line(stage_id, side);
     if (ledge_floor != NULL) {
       batch->state.ground_id[idx] = ledge_floor->segment_i;
@@ -428,7 +433,7 @@ static inline void cliff_option_phys_airground(MslBatch* batch, int bi, size_t i
     }
     batch->state.on_ground[idx] = 1;
     batch->state.speed_ground_x_self[idx] = gr;
-    batch->state.speed_air_x_self[idx] = 0.0f;
+    batch->state.speed_air_x_self[idx] = gr;
     batch->state.jumps_left[idx] = ch->max_jumps;
     batch->state.ecb_lock_timer[idx] = 0u;
     // Keep ground normal/contact ownership in the generic map-collision pass. This helper models

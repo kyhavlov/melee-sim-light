@@ -1128,9 +1128,16 @@ void action_update_anim_callbacks_pre_input(MslBatch* batch) {
                   gr = -gmax;
                 }
               }
+              // Common air->ground helper ownership:
+              // - ftAction_80071998 state=0 dispatches ftCommon_8007D7FC / ftCommon_8007D6A4.
+              // - ftCommon_8007D6A4 sets fp->gr_vel = fp->self_vel.x and does not zero self_vel.x.
+              // - grounded Fighter_procUpdate keeps fp->self_vel.x synchronized from fp->gr_vel.
+              // refs/melee/src/melee/ft/ftaction.c::ftAction_80071998
+              // refs/melee/src/melee/ft/ftcommon.c::{ftCommon_8007D7FC,ftCommon_8007D6A4}
+              // refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate
               batch->state.on_ground[idx] = 1u;
               batch->state.speed_ground_x_self[idx] = gr;
-              batch->state.speed_air_x_self[idx] = 0.0f;
+              batch->state.speed_air_x_self[idx] = gr;
               batch->state.jumps_left[idx] = max_jumps;
               batch->state.ecb_lock_timer[idx] = 0u;
             } else if (air_state == 1u) {

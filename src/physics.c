@@ -201,12 +201,22 @@ static inline uint8_t physics_action_uses_ft_80084FA8(uint16_t action_id) {
   // Decomp callback ownership:
   // - ftCo_Attack11/12/13 all use ftCo_Attack11_Phys.
   // - ftCo_Attack11_Phys calls ft_80084FA8.
+  // - PassiveStandF/B Phys calls ft_80084FA8.
+  // - CliffClimb/Attack/Escape quick grounded Phys paths share ftCo_CliffClimb_Phys, which calls
+  //   ft_80084FA8 once the option has reached the stage.
   // refs/melee/src/melee/ft/ftmotionstates.c (Attack11/12/13 entries)
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack1.c::ftCo_Attack11_Phys
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_PassiveStand.c::ftCo_PassiveStand_Phys
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffClimb.c::ftCo_CliffClimb_Phys
   switch (action_id) {
     case MSL_ACT_ATTACK_11:
     case MSL_ACT_ATTACK_12:
     case MSL_ACT_ATTACK_13:
+    case MSL_ACT_PASSIVE_STAND_F:
+    case MSL_ACT_PASSIVE_STAND_B:
+    case MSL_ACT_CLIFF_CLIMB_QUICK:
+    case MSL_ACT_CLIFF_ATTACK_QUICK:
+    case MSL_ACT_CLIFF_ESCAPE_QUICK:
       return 1;
     default:
       return 0;
@@ -833,11 +843,13 @@ void physics_integrate(MslBatch* batch) {
             }
             gr_vel += ground_friction_step_delta(gr_vel, friction);
           } else if (physics_action_uses_ft_80084FA8(action_id)) {
-            // Attack11/12/13 Phys uses ft_80084FA8:
+            // ft_80084FA8 grounded Phys family:
             // - high-speed friction scale gate (walk_max_vel, p_ftCommonData->x6C)
             // - ft_80085030 root-motion branch (transNOffset.z * facing_dir) or friction fallback
             // refs/melee/src/melee/ft/ft_081B.c::{ft_80084FA8,ft_80085030}
             // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack1.c::ftCo_Attack11_Phys
+            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_PassiveStand.c::ftCo_PassiveStand_Phys
+            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffClimb.c::ftCo_CliffClimb_Phys
             float friction = ch->gr_friction;
             if (msl_absf(gr_vel) > ch->walk_max_vel) {
               friction *= c->high_speed_friction_mul;

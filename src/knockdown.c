@@ -1363,8 +1363,13 @@ static inline void enter_damage_fall_from_damage_anim(MslBatch* batch, const Msl
 static inline void transfer_air_to_ground_on_land(MslBatch* batch, const MslCharParams* ch,
                                                   size_t bi, size_t idx,
                                                   uint16_t prev_action_id) {
-  // Shared with locomotion landing behavior: transfer air X to ground X and refresh jumps.
-  // Decomp: refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007D6A4 (jumps refresh on grounding)
+  // Shared with locomotion landing behavior: keep self_vel.x and gr_vel aligned on ground entry.
+  // Decomp:
+  // - ftCommon_8007D6A4 sets fp->gr_vel = fp->self_vel.x and does not zero self_vel.x.
+  // - Fighter_procUpdate keeps fp->self_vel.x synchronized from fp->gr_vel while grounded.
+  // refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007D6A4
+  // refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate
+  // refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007D6A4 (jumps refresh on grounding)
   // DamageFly collision callbacks run after ft_80081DD4 floor resolution, so entering
   // DownBound/Passive from ftCo_80090184 owns a floor-contact root position this frame.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{ftCo_DamageFly_Coll,ftCo_80090184}
@@ -1374,7 +1379,7 @@ static inline void transfer_air_to_ground_on_land(MslBatch* batch, const MslChar
     snap_root_y_to_ground_line_on_damage_land(batch, bi, idx);
   }
   batch->state.speed_ground_x_self[idx] = batch->state.speed_air_x_self[idx];
-  batch->state.speed_air_x_self[idx] = 0.0f;
+  batch->state.speed_air_x_self[idx] = batch->state.speed_ground_x_self[idx];
   batch->state.fall_fast[idx] = 0;
   batch->state.jumps_left[idx] = ch->max_jumps;
 }
