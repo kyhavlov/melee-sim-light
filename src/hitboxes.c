@@ -392,8 +392,25 @@ void hitboxes_refresh(MslBatch* batch) {
   for (int bi = 0; bi < batch->batch_size; bi++) {
     for (int p = 0; p < MSL_MAX_PLAYERS; p++) {
       const size_t idx = msl_idx_player(bi, p);
-      batch->state.hitbox_count[idx] = 0;
       uint8_t x43_b2_prev[MSL_MAX_HITBOXES] = {0};
+      uint8_t preserve_frozen_hitlag_hitboxes = 0u;
+      uint8_t preserved_hitbox_count = 0u;
+
+      // Hitlag freeze ownership:
+      // - Fighter_8006A360 skips ftAnim_8006EBA4 / anim_cb / ftColl_800764DC while x2219_b5
+      //   ("is in hitlag after decrement") is set, so ftAction_8007121C create/clear callbacks do
+      //   not re-run on frozen frames.
+      // - HitCapsule state for an already-active create frame must therefore persist through
+      //   continuing hitlag; replaying pose_frame events here would spuriously clear/copy the
+      //   victim rings and allow illegal same-window re-hits on rehit=0 moves.
+      // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
+      // refs/melee/src/melee/ft/ftaction.c::ftAction_8007121C
+      if (p < num_players && batch->state.hitlag_started_frame[idx] != 0u &&
+          batch->state.hitbox_count[idx] != 0u &&
+          batch->state.hitbox_prev_bootstrap[idx] == 0u &&
+          batch->state.action_id[idx] == batch->state.prev_action_id[idx]) {
+        preserve_frozen_hitlag_hitboxes = 1u;
+      }
 
       // Clear fixed slots for stable debug readback.
       for (int hi = 0; hi < MSL_MAX_HITBOXES; hi++) {
@@ -408,6 +425,13 @@ void hitboxes_refresh(MslBatch* batch) {
         batch->state.hitbox_prev_z[oi] = batch->state.hitbox_z[oi];
         batch->state.hitbox_pose_create[oi] = 0u;
         batch->state.hitbox_enable_edge[oi] = 0u;
+        if (preserve_frozen_hitlag_hitboxes) {
+          batch->state.hitbox_x43_b2[oi] = x43_b2_prev[hi];
+          if (batch->state.hitbox_enabled[oi]) {
+            preserved_hitbox_count = (uint8_t)(preserved_hitbox_count + 1u);
+          }
+          continue;
+        }
         batch->state.hitbox_x43_b2[oi] = 0u;
 
         batch->state.hitbox_enabled[oi] = 0;
@@ -435,6 +459,13 @@ void hitboxes_refresh(MslBatch* batch) {
         batch->state.hitbox_sfx_kind[oi] = 0;
         batch->state.hitbox_flags[oi] = 0;
       }
+
+      if (preserve_frozen_hitlag_hitboxes) {
+        batch->state.hitbox_count[idx] = preserved_hitbox_count;
+        continue;
+      }
+
+      batch->state.hitbox_count[idx] = 0;
 
       if (p >= num_players) {
         continue;

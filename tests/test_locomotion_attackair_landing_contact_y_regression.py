@@ -488,8 +488,8 @@ def test_landing_airf_rows_keep_contact_y_parity_runtime_family(
             71,
             1,
             1,
-            66,  # rollout remains in AttackAirF at this nearby reseed-sensitive row
-            1.0,
+            71,  # rollout now matches one-step after frozen-hitlag hitbox ownership fix
+            0.0,
         ),
     ],
 )
