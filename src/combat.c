@@ -77,6 +77,13 @@ int32_t combat_rng_consume_randi_site(MslBatch* batch, int bi, uint16_t site_id,
   return (int32_t)(((int64_t)max_val * (int64_t)rnd) >> 16);
 }
 
+void combat_rng_consume_step_site(MslBatch* batch, int bi, uint16_t site_id) {
+  // One-step RNG advance helper for sites where gameplay only depends on stream ordering, not on
+  // the sampled value itself.
+  // refs/melee/src/sysdolphin/baselib/random.c::{HSD_Randi,HSD_Randf}
+  (void)combat_hsd_rand_u16_consume_site(batch, bi, site_id);
+}
+
 void combat_rng_trace_begin_frame(MslBatch* batch) {
   if (batch == NULL || batch->debug_rng_shadow_seed == NULL || batch->debug_rng_seed_in == NULL ||
       batch->debug_rng_seed_out == NULL || batch->debug_rng_site_counts == NULL) {
@@ -1072,8 +1079,9 @@ static inline uint8_t combat_damageflyroll_rng_subset_allows_pre_action(const Ms
   // - Includes Fall/Run/AttackAirLw carry windows with replay-exact RNG pulse parity in the
   //   suite's severe-airborne damage transition families.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_Anim
-  // - Keep SpecialHi/Jump/Landing pre-actions excluded until their upstream RNG consumers are
-  //   represented in this runtime.
+  // - Keep the remaining SpecialHi/Landing pre-actions excluded until their upstream RNG
+  //   consumers are represented in this runtime; JumpAerialF/B now have a dedicated
+  //   AttackAirB carry bridge below.
   // refs/melee/src/melee/ft/chara/ftCommon/forward.h::ftCommon_MotionState
   switch (action_id) {
     case (uint16_t)MSL_ACT_DAMAGE_FALL:
@@ -1081,6 +1089,8 @@ static inline uint8_t combat_damageflyroll_rng_subset_allows_pre_action(const Ms
     case (uint16_t)MSL_ACT_DAMAGE_FLY_LW:
     case (uint16_t)MSL_ACT_FALL:
     case (uint16_t)MSL_ACT_RUN:
+    case (uint16_t)MSL_ACT_JUMP_AERIAL_F:
+    case (uint16_t)MSL_ACT_JUMP_AERIAL_B:
     case (uint16_t)MSL_ACT_ATTACK_AIR_LW:
       return 1u;
     case (uint16_t)MSL_ACT_DAMAGE_FLY_TOP: {
@@ -1154,6 +1164,38 @@ static inline void combat_damageflyroll_consume_fighter_8006cda4_phase_hint(MslB
   }
 }
 
+static inline void combat_damageflyroll_consume_jumpaerial_attackairb_carry(MslBatch* batch, int bi,
+                                                                             size_t d_idx) {
+  if (batch == NULL) {
+    return;
+  }
+  const uint16_t pre_action = batch->state.action_id[d_idx];
+  if (pre_action != (uint16_t)MSL_ACT_JUMP_AERIAL_F &&
+      pre_action != (uint16_t)MSL_ACT_JUMP_AERIAL_B) {
+    return;
+  }
+  // Narrow carry bridge for the remaining severe-airborne AttackAirB -> JumpAerialF/B admission
+  // family:
+  // - ftCo_8008DCE0 block_33 evaluates the DamageFlyRoll gate on the defender pre-action while the
+  //   attacker is still in AttackAirB.
+  // - Keep the extra pre-gate advance scoped to the actual damage-entry row and current attacker
+  //   action, avoiding any replay-keyed behavior or broad motion-polish changes.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
+  // refs/melee/src/sysdolphin/baselib/random.c::{HSD_Randi,HSD_Randf}
+  const int num_players = (int)batch->config.num_players;
+  const uint8_t attacker = batch->state.last_hit_by[d_idx];
+  if ((int)attacker >= num_players) {
+    return;
+  }
+  const size_t bi_base = (d_idx / (size_t)MSL_MAX_PLAYERS) * (size_t)MSL_MAX_PLAYERS;
+  const size_t a_idx = bi_base + (size_t)attacker;
+  if (batch->state.action_id[a_idx] != (uint16_t)MSL_ACT_ATTACK_AIR_B) {
+    return;
+  }
+  combat_rng_consume_step_site(batch, bi,
+                               MSL_RNG_SITE_DAMAGE_FLY_ROLL_PRE_GATE_JUMPAERIAL_ATTACKAIRB_CARRY);
+}
+
 static inline void combat_damage_enter_state(const MslCommonParams* c, MslBatch* batch, int bi,
                                              size_t d_idx, uint8_t defender_on_ground_before,
                                              uint8_t defender_on_ground_after, uint8_t hurt_height,
@@ -1225,6 +1267,7 @@ static inline void combat_damage_enter_state(const MslCommonParams* c, MslBatch*
             combat_damageflyroll_rng_subset_allows_pre_action(batch, d_idx, pre_action);
         const float percent_cur = batch->state.percent[d_idx] + batch->state.percent_temp[d_idx];
         if (damagefly_roll_rng_subset_ok && percent_cur >= (float)c->damagefly_roll_percent_threshold) {
+          combat_damageflyroll_consume_jumpaerial_attackairb_carry(batch, bi, d_idx);
           combat_damageflyroll_consume_fighter_8006cda4_phase_hint(batch, bi, d_idx);
           const float roll =
               combat_rng_consume_randf_site(batch, bi, MSL_RNG_SITE_DAMAGE_FLY_ROLL_GATE);
