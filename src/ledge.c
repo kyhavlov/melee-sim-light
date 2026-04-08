@@ -442,6 +442,44 @@ static inline void cliff_option_phys_airground(MslBatch* batch, int bi, size_t i
   }
 }
 
+static inline void cliff_catch_phys_snap(MslBatch* batch, int bi, size_t idx) {
+  if (batch == NULL) {
+    return;
+  }
+  int side = (int)batch->state.ledge_side[idx];
+  if (!(side == 0 || side == 1)) {
+    side = batch->state.facing[idx] ? 0 : 1;
+    batch->state.ledge_side[idx] = (int8_t)side;
+  }
+
+  MslStagePoint2 ledge = {0};
+  if (!stage_collision_get_ledge_point(batch->state.stage_id[bi], side, &ledge)) {
+    enter_fall(batch, idx);
+    batch->state.ledge_side[idx] = -1;
+    return;
+  }
+
+  const MslCharParams* ch = msl_char_params(batch->state.char_id[idx]);
+  if (ch == NULL) {
+    return;
+  }
+
+  const uint16_t frame =
+      msl_anim_frame_floor_u16(msl_anim_frame_sanitize_f32(batch->state.anim_frame_f32[idx]));
+  float t[3] = {0};
+  if (anim_pose_get_transn(batch->state.char_id[idx], (uint16_t)MSL_SM_CLIFF_CATCH, frame, t) != 0) {
+    return;
+  }
+
+  // Decomp: ftCo_CliffCatch_Phys snaps every CliffCatch frame to `cliff_point + x68C_transNPos`.
+  // Keep this scoped to CliffCatch only; CliffWait timing has additional owner state and is
+  // replay-sensitive.
+  // refs/melee/src/melee/ft/ftcliffcommon.c::ftCo_CliffCatch_Phys
+  const float fd = facing_dir(batch->state.facing[idx]);
+  batch->state.pos_x[idx] = ledge.x + (t[2] * ch->model_scaling * fd);
+  batch->state.pos_y[idx] = ledge.y + (t[1] * ch->model_scaling);
+}
+
 static inline uint8_t ledge_wait_try_attack(MslBatch* batch, int bi, int p) {
   const size_t idx = msl_idx_player(bi, p);
   const uint16_t pressed = batch->state.input_buttons_pressed[idx];
@@ -639,6 +677,13 @@ void ledge_update_pre_physics(MslBatch* batch) {
         if (!(side == 0 || side == 1)) {
           // Infer ledge side from facing: on the left ledge the fighter faces right (+).
           batch->state.ledge_side[idx] = batch->state.facing[idx] ? 0 : 1;
+        }
+        if (a == (uint16_t)MSL_ACT_CLIFF_CATCH) {
+          const float end_frame =
+              msl_anim_end_frame(batch->state.char_id[idx], (uint16_t)MSL_SM_CLIFF_CATCH);
+          if (!(end_frame > 0.0f) || batch->state.anim_frame_f32[idx] < end_frame) {
+          cliff_catch_phys_snap(batch, bi, idx);
+          }
         }
       }
 

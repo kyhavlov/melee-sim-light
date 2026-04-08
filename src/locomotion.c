@@ -3731,7 +3731,19 @@ void locomotion_update_post_collision(MslBatch* batch) {
         batch->state.ecb_lock_timer[idx] = 10u;
 
         // Walked/ran off the ground: carry grounded X velocity into air.
-        batch->state.speed_air_x_self[idx] = batch->state.speed_ground_x_self[idx];
+        //
+        // Decomp: ftCo_Fall_Enter calls ftCommon_ClampAirDrift immediately after ChangeMotionState,
+        // so the destination Fall row clamps self_vel.x to the aerial drift cap rather than keeping
+        // an out-of-range grounded speed.
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_Enter
+        // refs/melee/src/melee/ft/ftcommon.c::ftCommon_ClampAirDrift
+        float air_x = batch->state.speed_ground_x_self[idx];
+        if (air_x > ch->air_drift_max) {
+          air_x = ch->air_drift_max;
+        } else if (air_x < -ch->air_drift_max) {
+          air_x = -ch->air_drift_max;
+        }
+        batch->state.speed_air_x_self[idx] = air_x;
         batch->state.speed_ground_x_self[idx] = 0.0f;
 
         // Ground locomotion -> Fall when no longer grounded.
