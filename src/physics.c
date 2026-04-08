@@ -443,9 +443,13 @@ static inline uint8_t physics_action_use_pre_integration_common_air_gravity(uint
   //
   // Until DamageFall's full physics path is modeled (including its interaction with hitstun/KB),
   // keep the ordering fix for locomotion/attackair states but exclude DamageFall here.
-  // Note: DamageFly is handled via its own x221C_b6-gated branch below.
+  // Note:
+  // - Common airborne Damage states (for example DamageAir2) route through ftCo_Damage_Phys,
+  //   which calls ft_80084DB0 when x221C_b6 is clear.
+  // - DamageFly is handled via its own x221C_b6-gated branch below.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_Phys
   if (!msl_action_allows_fastfall(action_id)) {
-    return 0;
+    return (uint8_t)(action_id == (uint16_t)MSL_ACT_DAMAGE_AIR_2);
   }
   return (uint8_t)(action_id != (uint16_t)MSL_ACT_DAMAGE_FALL);
 }
