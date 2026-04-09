@@ -158,12 +158,18 @@ int input_apply_pre_input_snapshot(MslBatch* batch, const uint8_t* prev_input_by
   if (batch == NULL) {
     return EINVAL;
   }
+  if (msl_common_params() == NULL) {
+    return EINVAL;
+  }
   if (prev_input_bytes == NULL) {
     return EINVAL;
   }
   if (prev_input_stride_bytes < sizeof(MslInput)) {
     return EINVAL;
   }
+
+  const uint8_t ucf_enabled = batch->config.ucf_enabled ? 1 : 0;
+  const uint8_t cardinals = batch->config.ucf_cardinals_1_0_enabled ? 1 : 0;
 
   for (int bi = 0; bi < batch->batch_size; bi++) {
     const uint8_t* prev_ptr = prev_input_bytes + (size_t)bi * prev_input_stride_bytes;
@@ -176,19 +182,28 @@ int input_apply_pre_input_snapshot(MslBatch* batch, const uint8_t* prev_input_by
       // Decomp ownership: prio1 callbacks run before Fighter_procUpdate input_cb (prio3), so
       // pre-input gameplay should see prior-frame input state.
       // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A360,Fighter_procUpdate}
+      //
+      // Use the same UCF/legalized stick transform as input_apply():
+      // `prev_input_*` / `input_*` fields are documented as processed stick lanes, and raw replay
+      // bytes can exceed the legal [-80,80] range before UCF/cardinal handling.
+      // refs/ucf/src/pad_buffer/pad_buffer.cpp
+      const MslStickI8 prev_main =
+          ucf_process_stick_i8(prev->p[p].main_x, prev->p[p].main_y, ucf_enabled, cardinals);
+      const MslStickI8 prev_cstick =
+          ucf_process_stick_i8(prev->p[p].c_x, prev->p[p].c_y, ucf_enabled, cardinals);
       batch->state.prev_input_buttons[idx] = prev_buttons;
       batch->state.input_buttons[idx] = prev_buttons;
       batch->state.input_buttons_pressed[idx] = 0u;
       batch->state.input_buttons_released[idx] = 0u;
 
-      batch->state.prev_input_main_x[idx] = prev->p[p].main_x;
-      batch->state.prev_input_main_y[idx] = prev->p[p].main_y;
-      batch->state.input_main_x[idx] = prev->p[p].main_x;
-      batch->state.input_main_y[idx] = prev->p[p].main_y;
-      batch->state.prev_input_c_x[idx] = prev->p[p].c_x;
-      batch->state.prev_input_c_y[idx] = prev->p[p].c_y;
-      batch->state.input_c_x[idx] = prev->p[p].c_x;
-      batch->state.input_c_y[idx] = prev->p[p].c_y;
+      batch->state.prev_input_main_x[idx] = prev_main.x;
+      batch->state.prev_input_main_y[idx] = prev_main.y;
+      batch->state.input_main_x[idx] = prev_main.x;
+      batch->state.input_main_y[idx] = prev_main.y;
+      batch->state.prev_input_c_x[idx] = prev_cstick.x;
+      batch->state.prev_input_c_y[idx] = prev_cstick.y;
+      batch->state.input_c_x[idx] = prev_cstick.x;
+      batch->state.input_c_y[idx] = prev_cstick.y;
 
       batch->state.prev_input_l[idx] = prev->p[p].l;
       batch->state.prev_input_r[idx] = prev->p[p].r;

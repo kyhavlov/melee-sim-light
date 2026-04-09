@@ -356,6 +356,8 @@ static int load_one(const char* data_dir, const char* rel_path, uint8_t char_id)
       json_get_f32(buf, "run_animation_scaling", &out.run_animation_scaling) != 0 ||
       json_get_f32(buf, "initial_shield_size", &out.initial_shield_size) != 0 ||
       json_get_f32(buf, "model_scaling", &out.model_scaling) != 0 ||
+      json_get_f32(buf, "pushbox_x", &out.pushbox_x) != 0 ||
+      json_get_f32(buf, "pushbox_y", &out.pushbox_y) != 0 ||
       json_get_f32(buf, "laser_scale_max", &out.laser_scale_max) != 0 ||
       json_get_u16(buf, "laser_spawn_joint_part_id", &out.laser_spawn_joint_part_id) != 0 ||
       json_get_u16(buf, "grab_capture_anchor_part_id", &out.grab_capture_anchor_part_id) != 0 ||

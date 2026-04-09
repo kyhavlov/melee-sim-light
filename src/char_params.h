@@ -88,6 +88,17 @@ typedef struct MslCharParams {
   // Source of truth: ISO-extracted `data/characters/*.json` `model_scaling`.
   float model_scaling;
 
+  // Grounded player-overlap pushbox extents (`fp->x2C4`).
+  //
+  // Decomp:
+  // - ftCommon_8007DD7C / ftCommon_8007E0E4 use `fp->x2C4.{x,y}` to test grounded fighter overlap
+  //   before accumulating `xF8_playerNudgeVel`.
+  // refs/melee/src/melee/ft/ftcommon.c::{ftCommon_8007DD7C,ftCommon_8007E0E4}
+  //
+  // Source of truth: ISO-extracted `data/characters/*.json` keys `pushbox_x` / `pushbox_y`.
+  float pushbox_x;
+  float pushbox_y;
+
   // Blaster shot scale cap (Fox/Falco laser article special attr `scale`).
   //
   // Decomp: refs/melee/src/melee/it/items/itfoxlaser.c::itFoxlaser_UnkMotion1_Anim

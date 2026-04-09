@@ -175,6 +175,7 @@ static inline uint8_t damage_every_hitlag_sdi_full_2d_action(uint16_t a) {
     // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{
     //   ftCo_8008DCE0,ftCo_Damage_OnEveryHitlag
     // }
+    case MSL_ACT_DAMAGE_AIR_2:
     case MSL_ACT_DAMAGE_FLY_HI:
       return 1u;
     default:
@@ -197,39 +198,16 @@ static inline uint8_t damage_every_hitlag_sdi_timer_window_action(uint16_t a) {
   }
 }
 
-void timers_consume_post_hitlag_callbacks_after_input(MslBatch* batch) {
+void timers_consume_post_hitlag_callbacks_pre_input(MslBatch* batch) {
   if (batch == NULL) {
     return;
   }
-  enum { MSL_STATE_FLAGS_STRIDE = MSL_STATE_FLAGS_BYTES };
-  enum { MSL_STATE_FLAGS_221A_INDEX = 1 };
-  enum { MSL_STATE_FLAG_221A_B3 = 0x10 };
   const MslCommonParams* c = msl_common_params();
   if (c == NULL) {
     return;
   }
 
-  // Decomp callback ownership:
-  // - Damage entry sets `fp->post_hitlag_cb = ftCo_Damage_OnExitHitlag`.
-  //   refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
-  // - Damage hitlag also runs `ftCo_Damage_OnEveryHitlag` while allow_sdi / x221A_b3 is active.
-  //   refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_OnEveryHitlag
-  // - Hitlag exit invokes `post_hitlag_cb`.
-  //   refs/melee/src/melee/ft/fighter.c::Fighter_8006D10C
-  //
-  // Modeled subset in this phase:
-  // - `ftCo_Damage_OnEveryHitlag` SDI stick displacement
-  //   (cur_pos += lstick * p_ftCommonData->x4B8 under x4B0 radius gate and x670/x671 window).
-  //   refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_OnEveryHitlag
-  // - `ftCo_Damage_OnExitHitlag` ASDI stick displacement
-  //   (cur_pos += stick * p_ftCommonData->x4BC under x4B0 radius gate).
-  //   refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_OnExitHitlag
-  //
-  // Ordering note:
-  // - Consume after input_apply() so this callback reads current-frame `fp->input`-equivalent
-  //   lanes, while still occurring before collision ownership decisions.
   const float sdi_radius_sq = c->sdi_radius * c->sdi_radius;
-  const float sdi_step_mul = c->sdi_step_mul;
   const float asdi_step_mul = c->asdi_step_mul;
   const float di_max_radians = c->di_max_deg * 0.017453292519943295f;  // pi / 180
 
@@ -244,9 +222,107 @@ void timers_consume_post_hitlag_callbacks_after_input(MslBatch* batch) {
         continue;
       }
       if (batch->state.damage_post_hitlag_cb_kind[idx] == MSL_DAMAGE_POST_HITLAG_CB_NONE) {
-        // Rollout safety: if callback ownership wasn't explicitly seeded, damage-family actions
-        // still own this callback lane in decomp after damage entry.
+        // Damage-family runtime latch:
+        // - ftCo_8008DCE0 installs `fp->post_hitlag_cb = ftCo_Damage_OnExitHitlag` on damage
+        //   entry, and the callback remains live across the active damage segment unless the
+        //   action exits.
+        // - Teacher-forced replay rows usually seed this lane explicitly, but defensive restore is
+        //   still needed for partial histories and stale local caches that lack the seed field.
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
         batch->state.damage_post_hitlag_cb_kind[idx] = MSL_DAMAGE_POST_HITLAG_CB_DAMAGE_ON_EXIT;
+      }
+
+      // `Fighter_8006D10C` is invoked from `Fighter_8006A1BC` before Fighter_procUpdate input_cb,
+      // so Damage_OnExitHitlag must consume the prior-frame input snapshot.
+      // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A1BC,Fighter_8006D10C,Fighter_procUpdate}
+      const float lstick_x = stick_i8_to_unit(batch->state.prev_input_main_x[idx]);
+      const float lstick_y = stick_i8_to_unit(batch->state.prev_input_main_y[idx]);
+      const float lstick_full_x = apply_deadzone(lstick_x, c->lstick_deadzone_x);
+      const float lstick_full_y = apply_deadzone(lstick_y, c->lstick_deadzone_y);
+      const float cstick_x = stick_i8_to_unit(batch->state.prev_input_c_x[idx]);
+      const float cstick_y = stick_i8_to_unit(batch->state.prev_input_c_y[idx]);
+      const float cstick_full_x = apply_deadzone(cstick_x, c->lstick_deadzone_x);
+      const float cstick_full_y = apply_deadzone(cstick_y, c->lstick_deadzone_y);
+      const float lstick_full_mag_sq = lstick_full_x * lstick_full_x + lstick_full_y * lstick_full_y;
+      const float cstick_full_mag_sq = cstick_full_x * cstick_full_x + cstick_full_y * cstick_full_y;
+
+      if (batch->state.damage_post_hitlag_cb_kind[idx] != MSL_DAMAGE_POST_HITLAG_CB_DAMAGE_ON_EXIT) {
+        continue;
+      }
+      if (!(batch->state.hitlag_pre_timer[idx] != 0u && batch->state.hitlag[idx] == 0u)) {
+        continue;
+      }
+
+      const uint8_t use_cstick = (cstick_full_mag_sq >= sdi_radius_sq) ? 1u : 0u;
+      const uint8_t use_lstick = (lstick_full_mag_sq >= sdi_radius_sq) ? 1u : 0u;
+      if (!use_cstick && !use_lstick) {
+        // DI/LSI still apply on hitlag exit even when ASDI stick displacement does not.
+      } else {
+        const float dx = (use_cstick ? cstick_full_x : lstick_full_x) * asdi_step_mul;
+        const float dy = (use_cstick ? cstick_full_y : lstick_full_y) * asdi_step_mul;
+        batch->state.pos_x[idx] += dx;
+        batch->state.pos_y[idx] += dy;
+      }
+
+      // DI: rotate kb velocity by up to x1A8 degrees based on L-stick and current kb direction.
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008E5A4
+      float kb_x = batch->state.speed_x_attack[idx];
+      float kb_y = batch->state.speed_y_attack[idx];
+      const float kb_mag_sq = kb_x * kb_x + kb_y * kb_y;
+      if (kb_mag_sq >= 0.00001f) {
+        const float kb_neg_x = -kb_x;
+        const float dot = kb_y * lstick_full_x + kb_neg_x * lstick_full_y;
+        float dir = (dot * dot) / kb_mag_sq;
+        const float cross_z = kb_x * lstick_full_y - kb_y * lstick_full_x;
+        if (cross_z < 0.0f) {
+          dir = -dir;
+        }
+        const float kb_angle = atan2f(kb_y, kb_x) + di_max_radians * dir;
+        const float kb_mag = sqrtf(kb_mag_sq);
+        kb_x = kb_mag * cosf(kb_angle);
+        kb_y = kb_mag * sinf(kb_angle);
+
+        // LSI: apply x1AC multiplier when digital L/R is held at hitlag exit.
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_OnExitHitlag
+        if ((batch->state.prev_input_buttons[idx] &
+             ((uint16_t)MSL_BUTTON_L | (uint16_t)MSL_BUTTON_R)) != 0u) {
+          kb_x *= c->lsi_lr_held_mul;
+          kb_y *= c->lsi_lr_held_mul;
+        }
+        batch->state.speed_x_attack[idx] = kb_x;
+        batch->state.speed_y_attack[idx] = kb_y;
+      }
+    }
+  }
+}
+
+void timers_consume_post_hitlag_callbacks_after_input(MslBatch* batch) {
+  if (batch == NULL) {
+    return;
+  }
+  enum { MSL_STATE_FLAGS_STRIDE = MSL_STATE_FLAGS_BYTES };
+  enum { MSL_STATE_FLAGS_221A_INDEX = 1 };
+  enum { MSL_STATE_FLAG_221A_B3 = 0x10 };
+  const MslCommonParams* c = msl_common_params();
+  if (c == NULL) {
+    return;
+  }
+
+  // Decomp callback ownership:
+  // - Damage hitlag also runs `ftCo_Damage_OnEveryHitlag` while allow_sdi / x221A_b3 is active.
+  //   refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_OnEveryHitlag
+  // - `hitlag_cb` executes inside Fighter_procUpdate after current-frame input processing.
+  //   refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate
+  const float sdi_radius_sq = c->sdi_radius * c->sdi_radius;
+  const float sdi_step_mul = c->sdi_step_mul;
+
+  const int num_players = (int)batch->config.num_players;
+  for (int bi = 0; bi < batch->batch_size; bi++) {
+    for (int p = 0; p < num_players; p++) {
+      const size_t idx = msl_idx_player(bi, p);
+      const uint16_t a = batch->state.action_id[idx];
+      if (!damage_post_hitlag_cb_owner_action(a)) {
+        continue;
       }
 
       const float lstick_x = stick_i8_to_unit(batch->state.input_main_x[idx]);
@@ -257,10 +333,7 @@ void timers_consume_post_hitlag_callbacks_after_input(MslBatch* batch) {
       const float lstick_full_y = apply_deadzone(lstick_y, c->lstick_deadzone_y);
       const float prev_lstick_full_x = apply_deadzone(prev_lstick_x, c->lstick_deadzone_x);
       const float prev_lstick_full_y = apply_deadzone(prev_lstick_y, c->lstick_deadzone_y);
-      const float cstick_x = stick_i8_to_unit(batch->state.input_c_x[idx]);
-      const float cstick_y = stick_i8_to_unit(batch->state.input_c_y[idx]);
       const float lstick_mag_sq = lstick_x * lstick_x + lstick_y * lstick_y;
-      const float cstick_mag_sq = cstick_x * cstick_x + cstick_y * cstick_y;
       const size_t flags_i = idx * (size_t)MSL_STATE_FLAGS_STRIDE + (size_t)MSL_STATE_FLAGS_221A_INDEX;
       const uint8_t sdi_edge_x =
           (lstick_x >= c->lstick_tilt_x_thresh && prev_lstick_x < c->lstick_tilt_x_thresh) ||
@@ -292,17 +365,6 @@ void timers_consume_post_hitlag_callbacks_after_input(MslBatch* batch) {
             sdi_tilt_window_x)) &&
           (batch->state.state_flags[flags_i] & (uint8_t)MSL_STATE_FLAG_221A_B3) != 0u &&
           lstick_mag_sq >= sdi_radius_sq) {
-        // Replay-causal per-hitlag SDI pulse:
-        // - Decomp ftCo_Damage_OnEveryHitlag consumes one SDI step while allow_sdi is active and
-        //   the current stick state is inside the x670/x671 timer window (`< x4B4`).
-        // - input_apply() already updates `tilt_timer_x`/`tilt_timer_y` from legalized current-frame
-        //   stick input before this callback runs, matching the decomp input-counter ordering.
-        // - The established subset keeps the historical horizontal-only owner.
-        // - DamageAir2 / DamageFlyHi use the full decomp-shaped 2D cur_pos += lstick(x,y) branch.
-        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_OnEveryHitlag
-        // refs/melee/src/melee/ft/fighter.c::Fighter_Spaghetti_8006AD10
-        // refs/melee/src/melee/ft/fighter.c:1908-2008 (x670/x671 input-counter update)
-        // data/common/ft_common_data.json::sdi_tilt_max_frames
         if (use_full_2d) {
           batch->state.pos_x[idx] += lstick_full_x * sdi_step_mul;
           batch->state.pos_y[idx] += lstick_full_y * sdi_step_mul;
@@ -311,53 +373,6 @@ void timers_consume_post_hitlag_callbacks_after_input(MslBatch* batch) {
         } else {
           batch->state.pos_x[idx] += lstick_x * sdi_step_mul;
         }
-      }
-
-      if (batch->state.damage_post_hitlag_cb_kind[idx] != MSL_DAMAGE_POST_HITLAG_CB_DAMAGE_ON_EXIT) {
-        continue;
-      }
-      if (!(batch->state.hitlag_pre_timer[idx] != 0u && batch->state.hitlag[idx] == 0u)) {
-        continue;
-      }
-
-      const uint8_t use_cstick = (cstick_mag_sq >= sdi_radius_sq) ? 1u : 0u;
-      const uint8_t use_lstick = (lstick_mag_sq >= sdi_radius_sq) ? 1u : 0u;
-      if (!use_cstick && !use_lstick) {
-        // DI/LSI still apply on hitlag exit even when ASDI stick displacement does not.
-      } else {
-        const float dx = (use_cstick ? cstick_x : lstick_x) * asdi_step_mul;
-        const float dy = (use_cstick ? cstick_y : lstick_y) * asdi_step_mul;
-        batch->state.pos_x[idx] += dx;
-        batch->state.pos_y[idx] += dy;
-      }
-
-      // DI: rotate kb velocity by up to x1A8 degrees based on L-stick and current kb direction.
-      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008E5A4
-      float kb_x = batch->state.speed_x_attack[idx];
-      float kb_y = batch->state.speed_y_attack[idx];
-      const float kb_mag_sq = kb_x * kb_x + kb_y * kb_y;
-      if (kb_mag_sq >= 0.00001f) {
-        const float kb_neg_x = -kb_x;
-        const float dot = kb_y * lstick_x + kb_neg_x * lstick_y;
-        float dir = (dot * dot) / kb_mag_sq;
-        const float cross_z = kb_x * lstick_y - kb_y * lstick_x;
-        if (cross_z < 0.0f) {
-          dir = -dir;
-        }
-        const float kb_angle = atan2f(kb_y, kb_x) + di_max_radians * dir;
-        const float kb_mag = sqrtf(kb_mag_sq);
-        kb_x = kb_mag * cosf(kb_angle);
-        kb_y = kb_mag * sinf(kb_angle);
-
-        // LSI: apply x1AC multiplier when digital L/R is held at hitlag exit.
-        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_OnExitHitlag
-        if ((batch->state.input_buttons[idx] & ((uint16_t)MSL_BUTTON_L | (uint16_t)MSL_BUTTON_R)) !=
-            0u) {
-          kb_x *= c->lsi_lr_held_mul;
-          kb_y *= c->lsi_lr_held_mul;
-        }
-        batch->state.speed_x_attack[idx] = kb_x;
-        batch->state.speed_y_attack[idx] = kb_y;
       }
     }
   }

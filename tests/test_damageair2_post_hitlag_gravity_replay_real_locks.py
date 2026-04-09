@@ -34,8 +34,17 @@ def test_damageair2_post_hitlag_gravity_target_pm1_and_negative_are_strict() -> 
 
     p = 1
 
+    _, ref_hitlag, out_hitlag = _run_one_step_row(dataset_path, 9613, p)
+    _assert_branch_identity_match_ref(out_row=out_hitlag, ref_row=ref_hitlag, p=p)
+    assert float(out_hitlag["pos_x"][p]) == pytest.approx(float(ref_hitlag["pos_x"][p]), abs=1e-6)
+    assert float(out_hitlag["pos_y"][p]) == pytest.approx(float(ref_hitlag["pos_y"][p]), abs=1e-6)
+
     _, ref_prev, out_prev = _run_one_step_row(dataset_path, 9614, p)
     _assert_branch_identity_match_ref(out_row=out_prev, ref_row=ref_prev, p=p)
+    assert float(out_prev["pos_x"][p]) == pytest.approx(float(ref_prev["pos_x"][p]), abs=1e-6)
+    assert float(out_prev["pos_y"][p]) == pytest.approx(float(ref_prev["pos_y"][p]), abs=1e-6)
+    assert float(out_prev["speed_x_attack"][p]) == pytest.approx(float(ref_prev["speed_x_attack"][p]), abs=1e-6)
+    assert float(out_prev["speed_y_attack"][p]) == pytest.approx(float(ref_prev["speed_y_attack"][p]), abs=1e-6)
     assert float(out_prev["speed_y_self"][p]) == pytest.approx(float(ref_prev["speed_y_self"][p]), abs=1e-6)
 
     for rec in (9615, 9616):
@@ -44,8 +53,3 @@ def test_damageair2_post_hitlag_gravity_target_pm1_and_negative_are_strict() -> 
         assert float(out_row["pos_x"][p]) == pytest.approx(float(ref_row["pos_x"][p]), abs=1e-6)
         assert float(out_row["pos_y"][p]) == pytest.approx(float(ref_row["pos_y"][p]), abs=1e-6)
         assert float(out_row["speed_y_self"][p]) == pytest.approx(float(ref_row["speed_y_self"][p]), abs=1e-6)
-
-    _, ref_neg, out_neg = _run_one_step_row(dataset_path, 9613, p)
-    _assert_branch_identity_match_ref(out_row=out_neg, ref_row=ref_neg, p=p)
-    assert float(out_neg["speed_y_self"][p]) == pytest.approx(float(ref_neg["speed_y_self"][p]), abs=1e-6)
-

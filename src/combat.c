@@ -1346,6 +1346,11 @@ static inline void combat_damage_enter_state(const MslCommonParams* c, MslBatch*
   // Decomp: ftCo_8008DCE0 clears mv.co.damage.x14 on damage entry.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
   batch->state.damage_jump_buffer_x14[d_idx] = 0;
+  // Decomp: damage entry installs `fp->post_hitlag_cb = ftCo_Damage_OnExitHitlag`.
+  // Mid-hitlag teacher-forced reseed rows carry this lane explicitly from the dataset seed, so
+  // only fresh runtime damage entry should synthesize it.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
+  batch->state.damage_post_hitlag_cb_kind[d_idx] = MSL_DAMAGE_POST_HITLAG_CB_DAMAGE_ON_EXIT;
   // Decomp: ftCo_8008DCE0 performs Fighter_ChangeMotionState then immediate ftAnim_8006EBA4.
   // This call path is inside Fighter_ProcessHit (prio 14), not Fighter_8006A360's `!hitlag`
   // callback gate, so the entry tick is consumed even when hitlag is currently active.

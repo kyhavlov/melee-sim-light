@@ -526,6 +526,25 @@ static inline uint8_t damage_air_try_jump_aerial(MslBatch* batch, const MslCommo
   return 1u;
 }
 
+static inline uint8_t damage_air_hitstun_exit_buffer_is_recent(const MslCommonParams* c,
+                                                               uint16_t damage_jump_buffer_x14) {
+  if (c == NULL || damage_jump_buffer_x14 == 0u) {
+    return 0u;
+  }
+  // Seed-bridge discriminator for airborne Damage_IASA:
+  // - doIasa refreshes mv.co.damage.x14 from the current damage timer every frame that
+  //   ftCo_Jump_GetInput succeeds while x221C_b6 is still set.
+  // - Therefore, on the first post-hitstun IASA frame, a small x14 value means the jump intent was
+  //   refreshed near exit, while a large x14 value indicates an old tap preserved only by the
+  //   replay-visible bridge.
+  // - Keep the airborne DamageAir hitstun-exit subset restricted to recently refreshed x14 values,
+  //   using the same tap-jump tilt window (`p_ftCommonData->x74`) that bounds ftCo_Jump_GetInput's
+  //   stick-source freshness.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::doIasa
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c::ftCo_Jump_GetInput
+  return (uint8_t)((float)damage_jump_buffer_x14 <= (float)c->tap_jump_tilt_max_frames);
+}
+
 static inline uint8_t cstick_up_edge(const MslBatch* batch, const MslCommonParams* c, size_t idx) {
   if (batch == NULL || c == NULL) {
     return 0;
@@ -892,6 +911,26 @@ void knockdown_update_pre_physics(MslBatch* batch) {
           // Decomp: doIasa snapshots x0 into mv.co.damage.x14 when ftCo_Jump_GetInput succeeds.
           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::doIasa
           batch->state.damage_jump_buffer_x14[idx] = batch->state.hitstun[idx];
+        }
+
+        if (!in_hitstun && !iasa_locked && batch->state.on_ground[idx] == 0u) {
+          // Decomp airborne Damage_IASA:
+          // - when x221C_b6 has cleared, Damage_IASA forwards into ftCo_Fall_IASA_Inner,
+          // - if mv.co.damage.x14 is active and within p_ftCommonData->x1D0, it first ORs XY into
+          //   the input lane, and
+          // - ftCo_Fall_IASA_Inner can immediately enter JumpAerial via ftCo_800CB870.
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_IASA
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_IASA_Inner
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::ftCo_800CB870
+          const uint16_t x14 = batch->state.damage_jump_buffer_x14[idx];
+          const uint8_t gate_open =
+              (x14 != 0u && (float)x14 <= c->damage_jump_buffer_window_frames &&
+               damage_air_hitstun_exit_buffer_is_recent(c, x14))
+                  ? 1u
+                  : 0u;
+          if (gate_open && damage_air_try_jump_aerial(batch, c, ch, idx, 1u)) {
+            continue;
+          }
         }
 
         // Grounded DamageAir* callback ownership:

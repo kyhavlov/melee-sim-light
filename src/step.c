@@ -206,6 +206,14 @@ static int step_one_frame_core(MslBatch* batch, const uint8_t* prev_input_bytes,
   // We follow that by updating timers before applying inputs/advancing state.
   timers_update(batch);
 
+  // Damage post-hitlag callback consume (subset) at proc prio 0 before current-frame input.
+  // Decomp:
+  // - Fighter_8006A1BC decrements hitlag and invokes Fighter_8006D10C when hitlag ends,
+  // - damage path uses ftCo_Damage_OnExitHitlag.
+  // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A1BC,Fighter_8006D10C}
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_OnExitHitlag
+  timers_consume_post_hitlag_callbacks_pre_input(batch);
+
   // Match flow (Entry/Death/Rebirth) updates its own timers and can change action state before
   // animation timebase advancement.
   match_flow_update_pre_anim(batch);
@@ -253,12 +261,12 @@ static int step_one_frame_core(MslBatch* batch, const uint8_t* prev_input_bytes,
     return err;
   }
 
-  // Damage post-hitlag callback consume (subset) after input apply and before collision ownership.
+  // Damage hitlag callback consume (subset) after input apply and before collision ownership.
   // Decomp:
-  // - hitlag exit invokes `post_hitlag_cb` (Fighter_8006D10C),
-  // - damage path uses ftCo_Damage_OnExitHitlag.
-  // refs/melee/src/melee/ft/fighter.c::Fighter_8006D10C
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_OnExitHitlag
+  // - hitlag callbacks (`hitlag_cb`) execute during Fighter_procUpdate after current-frame input,
+  // - damage path uses ftCo_Damage_OnEveryHitlag while hitlag is still active.
+  // refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_OnEveryHitlag
   timers_consume_post_hitlag_callbacks_after_input(batch);
 
   // Match flow IASA: certain match-flow states can exit based on current-frame inputs.

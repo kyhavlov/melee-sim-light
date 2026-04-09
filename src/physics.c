@@ -8,6 +8,7 @@
 #include "char_params.h"
 #include "common_params.h"
 #include "input_axis.h"
+#include "stage_collision.h"
 #include "state_flags.h"
 
 static inline uint8_t physics_action_skip_common_air_helper_first_frame(uint16_t action_id,
@@ -460,6 +461,119 @@ static inline uint8_t physics_action_use_post_integration_common_air_gravity(uin
   return (uint8_t)(action_id == (uint16_t)MSL_ACT_DAMAGE_FALL);
 }
 
+static inline uint8_t physics_action_is_guardsetoff_turnover_owner(uint16_t action_id,
+                                                                   uint16_t prev_action_id) {
+  // Narrow grounded-overlap subset for the replay-real GuardSetOff->Escape turnover lane:
+  // - ftCommon_8007E0E4 is a common grounded overlap helper invoked after Anim callbacks and before
+  //   Fighter_procUpdate physics integration.
+  // - Keep this runtime slice to the GuardSetOff steady/turnover window where the missing
+  //   `p_ftCommonData->x450` nudge is directly evidenced.
+  // refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007E0E4
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_GuardSetOff_Anim,ftCo_80093BC0}
+  return (uint8_t)(action_id == (uint16_t)MSL_ACT_GUARD_SET_OFF ||
+                   prev_action_id == (uint16_t)MSL_ACT_GUARD_SET_OFF);
+}
+
+static inline uint8_t physics_floor_lines_adjacent_or_equal(const MslStageFloorGraph* g, int a,
+                                                            int b) {
+  if (g == NULL || a < 0 || b < 0 || (size_t)a >= g->line_count || (size_t)b >= g->line_count) {
+    return 0u;
+  }
+  if (a == b) {
+    return 1u;
+  }
+  const MslStageFloorLine* la = &g->lines[(size_t)a];
+  return (uint8_t)(la->prev == b || la->next == b);
+}
+
+static inline void physics_compute_guardsetoff_turnover_player_nudge(MslBatch* batch, int bi,
+                                                                     float out_nudge_x[MSL_MAX_PLAYERS]) {
+  if (batch == NULL || bi < 0 || bi >= batch->batch_size || out_nudge_x == NULL) {
+    return;
+  }
+
+  // Grounded fighter-overlap nudge constants (`p_ftCommonData->x450` / x454):
+  // - ftCommon_8007DD7C accumulates +/-x450 on horizontal overlap.
+  // - This reduced 2D subset only models the horizontal lane for Fox/Falco FD rollout parity.
+  // refs/melee/src/melee/ft/ftcommon.c::{ftCommon_8007DD7C,ftCommon_8007E0E4}
+  // refs/melee/src/melee/ft/types.h::ftCommonData (+0x450/+0x454)
+  const float player_nudge_x_step = 0.30000001192092896f;
+
+  const uint32_t stage_id = batch->state.stage_id[(size_t)bi];
+  const MslStageFloorGraph* floor_graph = stage_collision_get_floor_graph(stage_id);
+  if (floor_graph == NULL) {
+    return;
+  }
+
+  const int num_players = (int)batch->config.num_players;
+  for (int p = 0; p < MSL_MAX_PLAYERS; p++) {
+    out_nudge_x[p] = 0.0f;
+  }
+
+  for (int p = 0; p < num_players; p++) {
+    const size_t idx = msl_idx_player(bi, p);
+    if (batch->state.stocks[idx] == 0u || batch->state.on_ground[idx] == 0u ||
+        batch->state.hitlag_started_frame[idx] != 0u) {
+      continue;
+    }
+    if (!physics_action_is_guardsetoff_turnover_owner(batch->state.action_id[idx],
+                                                      batch->state.prev_action_id[idx])) {
+      continue;
+    }
+
+    const MslCharParams* self = msl_char_params(batch->state.char_id[idx]);
+    if (self == NULL) {
+      continue;
+    }
+
+    const int self_line =
+        stage_collision_floor_line_index(stage_id, batch->state.ground_id[idx]);
+    if (self_line < 0) {
+      continue;
+    }
+
+    const float self_center_x =
+        batch->state.pos_x[idx] + self->pushbox_x * (float)batch->state.facing_dir1[idx];
+    for (int q = 0; q < num_players; q++) {
+      if (q == p) {
+        continue;
+      }
+      const size_t oidx = msl_idx_player(bi, q);
+      if (batch->state.stocks[oidx] == 0u || batch->state.on_ground[oidx] == 0u) {
+        continue;
+      }
+
+      const MslCharParams* other = msl_char_params(batch->state.char_id[oidx]);
+      if (other == NULL) {
+        continue;
+      }
+
+      const int other_line =
+          stage_collision_floor_line_index(stage_id, batch->state.ground_id[oidx]);
+      if (!physics_floor_lines_adjacent_or_equal(floor_graph, self_line, other_line)) {
+        continue;
+      }
+
+      const float other_center_x =
+          batch->state.pos_x[oidx] + other->pushbox_x * (float)batch->state.facing_dir1[oidx];
+      const float delta_x = self_center_x - other_center_x;
+      if (msl_absf(delta_x) >= self->pushbox_y + other->pushbox_y) {
+        continue;
+      }
+
+      if (delta_x < 0.0f) {
+        out_nudge_x[p] -= player_nudge_x_step;
+      } else if (delta_x > 0.0f) {
+        out_nudge_x[p] += player_nudge_x_step;
+      } else if (q < p) {
+        out_nudge_x[p] -= player_nudge_x_step;
+      } else {
+        out_nudge_x[p] += player_nudge_x_step;
+      }
+    }
+  }
+}
+
 static inline uint8_t physics_is_match_flow_airborne(uint16_t action_id) {
   switch (action_id) {
     case MSL_ACT_DEAD_DOWN:
@@ -521,6 +635,8 @@ void physics_integrate(MslBatch* batch) {
 
   const int num_players = (int)batch->config.num_players;
   for (int bi = 0; bi < batch->batch_size; bi++) {
+    float guardsetoff_turnover_nudge_x[MSL_MAX_PLAYERS] = {0.0f};
+    physics_compute_guardsetoff_turnover_player_nudge(batch, bi, guardsetoff_turnover_nudge_x);
     for (int p = 0; p < num_players; p++) {
       const size_t idx = msl_idx_player(bi, p);
 
@@ -530,6 +646,10 @@ void physics_integrate(MslBatch* batch) {
       batch->state.prev_pos_x[idx] = batch->state.pos_x[idx];
       batch->state.prev_pos_y[idx] = batch->state.pos_y[idx];
       batch->state.prev_on_ground[idx] = batch->state.on_ground[idx] ? 1 : 0;
+
+      if (guardsetoff_turnover_nudge_x[p] != 0.0f) {
+        batch->state.pos_x[idx] += guardsetoff_turnover_nudge_x[p];
+      }
 
       // Hitlag freezes motion/physics advancement:
       // - refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate runs its main integration block only
