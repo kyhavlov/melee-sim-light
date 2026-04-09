@@ -233,17 +233,24 @@ static inline uint8_t physics_action_uses_ft_80084FA8(uint16_t action_id) {
   // Decomp callback ownership:
   // - ftCo_Attack11/12/13 all use ftCo_Attack11_Phys.
   // - ftCo_Attack11_Phys calls ft_80084FA8.
+  // - ftCo_AttackS4_Phys also calls ft_80084FA8 for all AttackS4* variants.
   // - PassiveStandF/B Phys calls ft_80084FA8.
   // - CliffClimb/Attack/Escape quick grounded Phys paths share ftCo_CliffClimb_Phys, which calls
   //   ft_80084FA8 once the option has reached the stage.
   // refs/melee/src/melee/ft/ftmotionstates.c (Attack11/12/13 entries)
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack1.c::ftCo_Attack11_Phys
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackS4.c::ftCo_AttackS4_Phys
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_PassiveStand.c::ftCo_PassiveStand_Phys
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffClimb.c::ftCo_CliffClimb_Phys
   switch (action_id) {
     case MSL_ACT_ATTACK_11:
     case MSL_ACT_ATTACK_12:
     case MSL_ACT_ATTACK_13:
+    case MSL_ACT_ATTACK_S4_HI:
+    case MSL_ACT_ATTACK_S4_HI_S:
+    case MSL_ACT_ATTACK_S4_S:
+    case MSL_ACT_ATTACK_S4_LW_S:
+    case MSL_ACT_ATTACK_S4_LW:
     case MSL_ACT_PASSIVE_STAND_F:
     case MSL_ACT_PASSIVE_STAND_B:
     case MSL_ACT_CLIFF_CLIMB_QUICK:

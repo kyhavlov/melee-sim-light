@@ -209,6 +209,14 @@ static inline void msl_anim_timebase_enter(MslBatch* batch, size_t idx, float an
   // refs/melee/build/GALE01/asm/melee/ft/ft_0892.s::ft_800895E0
   msl_anim_timebase_enter_raw(batch, idx, anim_start_f32, anim_speed_f32);
 
+  if (batch != NULL) {
+    // Decomp: Fighter_UnkInitReset and Fighter_ChangeMotionState copy fp->facing_dir into
+    // fp->facing_dir1 on motion-state entry. Root-motion helpers such as ft_80085030 consume
+    // facing_dir1, so rollout entries must not inherit a stale prior state's sign.
+    // refs/melee/src/melee/ft/fighter.c::{Fighter_UnkInitReset,Fighter_ChangeMotionState}
+    batch->state.facing_dir1[idx] = batch->state.facing[idx] ? (int8_t)1 : (int8_t)-1;
+  }
+
   // Decomp: Fighter_ChangeMotionState clears `fp->fall_fast` when (flags & Ft_MF_KeepFastFall)==0.
   // refs/melee/src/melee/ft/fighter.c (see KeepFastFall gate).
   // refs/melee/src/melee/ft/forward.h (Ft_MF_KeepFastFall = 1<<0).
