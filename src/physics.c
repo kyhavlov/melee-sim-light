@@ -430,15 +430,35 @@ static inline uint8_t physics_action_is_damage_fly(uint16_t action_id) {
   }
 }
 
+static inline uint8_t physics_action_is_common_damage(uint16_t action_id) {
+  switch (action_id) {
+    case MSL_ACT_DAMAGE_HI_1:
+    case MSL_ACT_DAMAGE_HI_2:
+    case MSL_ACT_DAMAGE_HI_3:
+    case MSL_ACT_DAMAGE_N_1:
+    case MSL_ACT_DAMAGE_N_2:
+    case MSL_ACT_DAMAGE_N_3:
+    case MSL_ACT_DAMAGE_LW_1:
+    case MSL_ACT_DAMAGE_LW_2:
+    case MSL_ACT_DAMAGE_LW_3:
+    case MSL_ACT_DAMAGE_AIR_1:
+    case MSL_ACT_DAMAGE_AIR_2:
+    case MSL_ACT_DAMAGE_AIR_3:
+      return 1u;
+    default:
+      return 0u;
+  }
+}
+
 static inline uint8_t physics_damage_iasa_lockout_x221c_b6(const MslBatch* batch, size_t idx) {
   if (batch == NULL) {
     return 0u;
   }
-  // Decomp: DamageFly/DamageFlyRoll Phys callbacks branch on fp->x221C_b6:
+  // Decomp: common Damage and DamageFly/DamageFlyRoll Phys callbacks branch on fp->x221C_b6:
   // - x221C_b6==0: ft_80084DB0 (fall helper + drift)
   // - x221C_b6==1: ft_80084EEC (fall + aerial friction)
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{
-  //   ftCo_DamageFly_Phys,ftCo_DamageFlyRoll_Phys
+  //   ftCo_Damage_Phys,ftCo_DamageFly_Phys,ftCo_DamageFlyRoll_Phys
   // }
   // refs/melee/src/melee/ft/ft_081B.c::{ft_80084DB0,ft_80084EEC}
   //
@@ -698,10 +718,12 @@ void physics_integrate(MslBatch* batch) {
       const float vy_self_pre = batch->state.speed_y_self[idx];
       const int16_t action_frame = batch->state.action_frame[idx];
       const uint8_t is_damage_fly = physics_action_is_damage_fly(action_id);
+      const uint8_t is_common_damage = physics_action_is_common_damage(action_id);
       const uint8_t damage_iasa_lockout =
-          is_damage_fly ? physics_damage_iasa_lockout_x221c_b6(batch, idx) : 0u;
+          (is_damage_fly || is_common_damage) ? physics_damage_iasa_lockout_x221c_b6(batch, idx)
+                                              : 0u;
       const uint8_t damage_uses_common_air_helper =
-          (is_damage_fly && !damage_iasa_lockout) ? 1u : 0u;
+          ((is_damage_fly || is_common_damage) && !damage_iasa_lockout) ? 1u : 0u;
 
       // Thrown victims:
       // - Decomp thrown victim Phys/Coll callbacks are empty, and victim translation is driven by an
@@ -760,17 +782,17 @@ void physics_integrate(MslBatch* batch) {
                                                  &batch->state.speed_y_self[idx]);
               }
             } else if (damage_iasa_lockout) {
-              // DamageFly/DamageFlyRoll x221C_b6 path (`ft_80084EEC`): apply gravity + terminal
-              // clamp and
-              // aerial friction (no fastfall latch, no drift accel from stick).
+              // DamageFly/DamageFlyRoll/common Damage x221C_b6 path (`ft_80084EEC`): apply
+              // gravity + terminal clamp and aerial friction (no fastfall latch, no drift accel
+              // from stick).
               //
               // Decomp scope:
+              // - ftCo_Damage_Phys branches to ft_80084EEC while airborne and x221C_b6 is set,
+              //   regardless of whether the common damage motion is DamageAir* or DamageHi/N/Lw*.
               // - ftCo_DamageFly_Phys and ftCo_DamageFlyRoll_Phys branch to ft_80084EEC when
               //   x221C_b6 is set.
-              // - DamageAir* still routes through the broader Damage state lane and remains
-              //   intentionally out of this runtime-only ownership slice for now.
               // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{
-              //   ftCo_DamageFly_Phys,ftCo_DamageFlyRoll_Phys
+              //   ftCo_Damage_Phys,ftCo_DamageFly_Phys,ftCo_DamageFlyRoll_Phys
               // }
               // refs/melee/src/melee/ft/ft_081B.c::ft_80084EEC
               const MslCharParams* phys = msl_char_params(batch->state.char_id[idx]);
@@ -840,8 +862,11 @@ void physics_integrate(MslBatch* batch) {
                 batch->state.speed_air_x_self[idx] =
                     physics_apply_shine_air_x_clamp(ch, c, batch->state.speed_air_x_self[idx]);
               } else if (damage_iasa_lockout) {
-                // DamageFly/DamageFlyRoll x221C_b6 path (`ft_80084EEC`) uses friction-only x
-                // update.
+                // DamageFly/DamageFlyRoll/common Damage x221C_b6 path (`ft_80084EEC`) uses
+                // friction-only x update.
+                // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{
+                //   ftCo_Damage_Phys,ftCo_DamageFly_Phys,ftCo_DamageFlyRoll_Phys
+                // }
                 // refs/melee/src/melee/ft/ft_081B.c::ft_80084EEC
                 batch->state.speed_air_x_self[idx] = air_apply_friction_step(
                     batch->state.speed_air_x_self[idx], ch->aerial_friction);

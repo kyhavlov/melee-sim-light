@@ -796,6 +796,7 @@ static inline uint8_t should_enter_down_stand_from_wait(const MslBatch* batch,
 static inline uint8_t is_damage_fly_action(uint16_t a);
 static inline uint8_t is_damage_air_action(uint16_t a);
 static inline uint8_t is_damage_ground_action(uint16_t a);
+static inline uint32_t submotion_for_common_damage_action(uint16_t a);
 static inline uint32_t submotion_for_damage_ground_action(uint16_t a);
 static inline void enter_damage_fall_from_damage_anim(MslBatch* batch, const MslCharParams* ch,
                                                       size_t idx);
@@ -819,6 +820,10 @@ void knockdown_update_pre_physics(MslBatch* batch) {
       const uint8_t damage_fly = is_damage_fly_action(a0);
       const uint8_t damage_air = is_damage_air_action(a0);
       const uint8_t damage_ground = is_damage_ground_action(a0);
+      const uint8_t common_damage_airborne =
+          (uint8_t)((damage_air != 0u || damage_ground != 0u) && batch->state.on_ground[idx] == 0u);
+      const uint8_t common_damage_grounded =
+          (uint8_t)((damage_air != 0u || damage_ground != 0u) && batch->state.on_ground[idx] != 0u);
       if (!is_knockdown_any(a0) && !damage_fly && !damage_air && !damage_ground) {
         continue;
       }
@@ -896,8 +901,14 @@ void knockdown_update_pre_physics(MslBatch* batch) {
         continue;
       }
 
-      if (damage_air) {
-        const uint32_t damage_msid_u32 = submotion_for_damage_action(a0);
+      if (common_damage_airborne) {
+        // Decomp: ftCo_Damage_Anim / ftCo_Damage_IASA branch on fp->ground_or_air, not on whether
+        // the current motion id is DamageAir* versus DamageHi/N/Lw*. Once a common damage state is
+        // airborne, it follows the same Air callback ladder until landing or anim-end handoff.
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{
+        //   ftCo_Damage_Anim,ftCo_Damage_IASA,ftCo_Damage_Coll
+        // }
+        const uint32_t damage_msid_u32 = submotion_for_common_damage_action(a0);
         if (damage_msid_u32 <= 0xFFFFu) {
           batch->state.animation_index[idx] = damage_msid_u32;
         }
@@ -930,8 +941,8 @@ void knockdown_update_pre_physics(MslBatch* batch) {
           }
         }
 
-        // Grounded DamageAir* callback ownership:
-        // - Damage_IASA delegates to Wait_IASA on grounded rows when !x221C_b6.
+        // Grounded common-damage callback ownership:
+        // - Damage_IASA delegates to Wait_IASA only on grounded rows when !x221C_b6.
         // - Wait_IASA then evaluates guard/jump locomotion checks in-order.
         // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_IASA
         // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
@@ -1000,14 +1011,14 @@ void knockdown_update_pre_physics(MslBatch* batch) {
         continue;
       }
 
-      if (damage_ground) {
+      if (common_damage_grounded) {
         // Grounded Damage callback parity subset.
         //
         // Decomp:
         // - ftCo_Damage_Anim enters Wait on anim end when !x221C_b6.
         // - ftCo_Damage_IASA delegates to Wait_IASA on ground when !x221C_b6.
         // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{ftCo_Damage_Anim,ftCo_Damage_IASA}
-        const uint32_t damage_msid_u32 = submotion_for_damage_ground_action(a0);
+        const uint32_t damage_msid_u32 = submotion_for_common_damage_action(a0);
         if (damage_msid_u32 <= 0xFFFFu) {
           batch->state.animation_index[idx] = damage_msid_u32;
         }
@@ -1287,6 +1298,13 @@ static inline uint8_t is_damage_ground_action(uint16_t a) {
     default:
       return 0u;
   }
+}
+
+static inline uint32_t submotion_for_common_damage_action(uint16_t a) {
+  if (is_damage_air_action(a)) {
+    return submotion_for_damage_action(a);
+  }
+  return submotion_for_damage_ground_action(a);
 }
 
 static inline uint32_t submotion_for_damage_ground_action(uint16_t a) {
