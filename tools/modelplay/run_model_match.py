@@ -57,6 +57,24 @@ def _static_signature(state: SimFrameState) -> tuple:
     return tuple(players), tuple(items)
 
 
+def _player_static_signature(state: SimFrameState, player_idx: int) -> tuple:
+    return (
+        int(state.action_id[player_idx]),
+        float(state.action_frame[player_idx]),
+        round(float(state.pos_x[player_idx]), 6),
+        round(float(state.pos_y[player_idx]), 6),
+        int(state.facing[player_idx]),
+        int(state.on_ground[player_idx]),
+        int(state.stocks[player_idx]),
+        round(float(state.percent[player_idx]), 6),
+        round(float(state.shield_hp[player_idx]), 6),
+        int(state.hitlag[player_idx]),
+        int(state.hitstun[player_idx]),
+        int(state.jumps_left[player_idx]),
+        int(state.hurtbox_state[player_idx]),
+    )
+
+
 def parse_args() -> argparse.Namespace:
     ap = argparse.ArgumentParser(description="Run a slippi-ai model-vs-model match inside melee-sim-light.")
     ap.add_argument("--slippi-ai-root", type=Path, required=True)
@@ -100,6 +118,15 @@ def main() -> int:
         static_repeat_count = 0
         static_start_frame = 0
         static_failure: dict | None = None
+        global_change_count = 0
+        player_prev_signatures = [
+            _player_static_signature(session.current_frame_state, idx)
+            for idx in range(session.current_frame_state.num_players)
+        ]
+        player_static_repeat_counts = [0 for _ in range(session.current_frame_state.num_players)]
+        player_static_start_frames = [0 for _ in range(session.current_frame_state.num_players)]
+        player_static_start_global_changes = [0 for _ in range(session.current_frame_state.num_players)]
+        player_static_failure: dict | None = None
 
         frames_run = 0
         while frames_run < args.max_frames:
@@ -119,6 +146,17 @@ def main() -> int:
                 prev_signature = signature
                 static_repeat_count = 0
                 static_start_frame = current_frame
+                global_change_count += 1
+
+            for idx in range(state.num_players):
+                player_signature = _player_static_signature(state, idx)
+                if player_signature == player_prev_signatures[idx]:
+                    player_static_repeat_counts[idx] += 1
+                else:
+                    player_prev_signatures[idx] = player_signature
+                    player_static_repeat_counts[idx] = 0
+                    player_static_start_frames[idx] = current_frame
+                    player_static_start_global_changes[idx] = global_change_count
 
             if int(state.stocks[0]) == 0 or int(state.stocks[1]) == 0:
                 break
@@ -132,6 +170,26 @@ def main() -> int:
                     "percent": [float(x) for x in state.percent[: state.num_players]],
                 }
                 break
+            for idx in range(state.num_players):
+                if player_static_repeat_counts[idx] < args.static_frame_threshold:
+                    continue
+                if global_change_count <= player_static_start_global_changes[idx]:
+                    continue
+                player_static_failure = {
+                    "player_index": idx,
+                    "start_frame": player_static_start_frames[idx],
+                    "end_frame": current_frame,
+                    "repeat_count": player_static_repeat_counts[idx] + 1,
+                    "player_action_id": int(state.action_id[idx]),
+                    "player_stocks": int(state.stocks[idx]),
+                    "player_percent": float(state.percent[idx]),
+                    "all_action_ids": [int(x) for x in state.action_id[: state.num_players]],
+                    "all_stocks": [int(x) for x in state.stocks[: state.num_players]],
+                    "all_percent": [float(x) for x in state.percent[: state.num_players]],
+                }
+                break
+            if player_static_failure is not None:
+                break
 
         trace_path = out_dir / "trace.json"
         trace.write_json(trace_path)
@@ -143,6 +201,10 @@ def main() -> int:
             termination_reason = "static_failure"
             trace_to_failure_path = out_dir / "trace_to_failure.json"
             trace.write_json(trace_to_failure_path, frame_limit=static_failure["start_frame"] + 1)
+        elif player_static_failure is not None:
+            termination_reason = "player_static_failure"
+            trace_to_failure_path = out_dir / "trace_to_failure.json"
+            trace.write_json(trace_to_failure_path, frame_limit=player_static_failure["start_frame"] + 1)
 
         summary = {
             "dataset": str(args.dataset),
@@ -154,6 +216,7 @@ def main() -> int:
             "game_over": termination_reason == "game_over",
             "termination_reason": termination_reason,
             "static_failure": static_failure,
+            "player_static_failure": player_static_failure,
             "trace": str(trace_path),
             "trace_to_failure": None if trace_to_failure_path is None else str(trace_to_failure_path),
         }
