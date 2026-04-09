@@ -42,6 +42,9 @@ class ViewerTrace:
             },
         }
 
-    def write_json(self, path: Path) -> None:
+    def write_json(self, path: Path, *, frame_limit: int | None = None) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps(self.to_payload()))
+        payload = self.to_payload()
+        if frame_limit is not None:
+            payload["frames"] = payload["frames"][:frame_limit]
+        path.write_text(json.dumps(payload))

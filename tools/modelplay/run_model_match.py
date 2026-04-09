@@ -7,11 +7,54 @@ from pathlib import Path
 
 from tools.modelplay.sim_env import SimSession
 from tools.modelplay.slippi_ai_bridge import build_model_agent, stop_model_agent
+from tools.modelplay.state_adapter import SimFrameState
 from tools.modelplay.viewer_trace import ViewerTrace
 
 
 def _timestamp() -> str:
     return datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+
+
+def _static_signature(state: SimFrameState) -> tuple:
+    players = []
+    for idx in range(state.num_players):
+        players.append(
+            (
+                int(state.action_id[idx]),
+                float(state.action_frame[idx]),
+                round(float(state.pos_x[idx]), 6),
+                round(float(state.pos_y[idx]), 6),
+                int(state.facing[idx]),
+                int(state.on_ground[idx]),
+                int(state.stocks[idx]),
+                round(float(state.percent[idx]), 6),
+                round(float(state.shield_hp[idx]), 6),
+                int(state.hitlag[idx]),
+                int(state.hitstun[idx]),
+                int(state.jumps_left[idx]),
+                int(state.hurtbox_state[idx]),
+            )
+        )
+
+    items = []
+    for item in state.items:
+        if int(item["exists"]) == 0:
+            continue
+        items.append(
+            (
+                int(item["type"]),
+                int(item["owner"]),
+                int(item["state"]),
+                int(item["spawn_id"]),
+                round(float(item["pos_x"]), 6),
+                round(float(item["pos_y"]), 6),
+                round(float(item["vel_x"]), 6),
+                round(float(item["vel_y"]), 6),
+                round(float(item["timer"]), 6),
+            )
+        )
+
+    return tuple(players), tuple(items)
 
 
 def parse_args() -> argparse.Namespace:
@@ -28,6 +71,12 @@ def parse_args() -> argparse.Namespace:
     )
     ap.add_argument("--start-record", type=int, default=0)
     ap.add_argument("--max-frames", type=int, default=30000)
+    ap.add_argument(
+        "--static-frame-threshold",
+        type=int,
+        default=600,
+        help="stop early if the full state signature repeats this many consecutive frames",
+    )
     ap.add_argument("--out", type=Path, default=Path("reports/triage") / f"{_timestamp()}_modelplay")
     ap.add_argument("--p1-name", default="P1")
     ap.add_argument("--p2-name", default="P2")
@@ -47,6 +96,10 @@ def main() -> int:
     try:
         env_out = session.reset()
         trace.add_frame(session.current_frame_state, session.last_controllers)
+        prev_signature = _static_signature(session.current_frame_state)
+        static_repeat_count = 0
+        static_start_frame = 0
+        static_failure: dict | None = None
 
         frames_run = 0
         while frames_run < args.max_frames:
@@ -58,11 +111,39 @@ def main() -> int:
             trace.add_frame(session.current_frame_state, session.last_controllers)
             frames_run += 1
             state = session.current_frame_state
+            signature = _static_signature(state)
+            current_frame = len(trace.frames) - 1
+            if signature == prev_signature:
+                static_repeat_count += 1
+            else:
+                prev_signature = signature
+                static_repeat_count = 0
+                static_start_frame = current_frame
+
             if int(state.stocks[0]) == 0 or int(state.stocks[1]) == 0:
+                break
+            if static_repeat_count >= args.static_frame_threshold:
+                static_failure = {
+                    "start_frame": static_start_frame,
+                    "end_frame": current_frame,
+                    "repeat_count": static_repeat_count + 1,
+                    "action_ids": [int(x) for x in state.action_id[: state.num_players]],
+                    "stocks": [int(x) for x in state.stocks[: state.num_players]],
+                    "percent": [float(x) for x in state.percent[: state.num_players]],
+                }
                 break
 
         trace_path = out_dir / "trace.json"
         trace.write_json(trace_path)
+        trace_to_failure_path = None
+        termination_reason = "max_frames"
+        if int(session.current_frame_state.stocks[0]) == 0 or int(session.current_frame_state.stocks[1]) == 0:
+            termination_reason = "game_over"
+        elif static_failure is not None:
+            termination_reason = "static_failure"
+            trace_to_failure_path = out_dir / "trace_to_failure.json"
+            trace.write_json(trace_to_failure_path, frame_limit=static_failure["start_frame"] + 1)
+
         summary = {
             "dataset": str(args.dataset),
             "start_record": args.start_record,
@@ -70,11 +151,11 @@ def main() -> int:
             "final_frame_id": session.current_frame_state.frame_id,
             "final_stocks": session.current_frame_state.stocks[:2].tolist(),
             "final_percent": [float(x) for x in session.current_frame_state.percent[:2]],
-            "game_over": bool(
-                int(session.current_frame_state.stocks[0]) == 0
-                or int(session.current_frame_state.stocks[1]) == 0
-            ),
+            "game_over": termination_reason == "game_over",
+            "termination_reason": termination_reason,
+            "static_failure": static_failure,
             "trace": str(trace_path),
+            "trace_to_failure": None if trace_to_failure_path is None else str(trace_to_failure_path),
         }
         (out_dir / "summary.txt").write_text(json.dumps(summary, indent=2) + "\n")
         (out_dir / "config.json").write_text(
@@ -86,6 +167,7 @@ def main() -> int:
                     "dataset": str(args.dataset),
                     "start_record": args.start_record,
                     "max_frames": args.max_frames,
+                    "static_frame_threshold": args.static_frame_threshold,
                     "p1_name": args.p1_name,
                     "p2_name": args.p2_name,
                 },

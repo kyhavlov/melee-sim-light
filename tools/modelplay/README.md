@@ -29,6 +29,11 @@ This writes `trace.json` under `reports/triage/...`.
 The default `--max-frames` is `30000`, so the runner will usually carry the game from match start
 through the final stock without needing extra flags.
 
+The runner also detects sustained static-state failures. If the same state repeats for
+`--static-frame-threshold` consecutive frames (default `600`), it stops early, records
+`termination_reason = "static_failure"` in `summary.txt`, and writes a trimmed
+`trace_to_failure.json` ending at the first repeated bad frame.
+
 Viewer:
 
 ```bash
