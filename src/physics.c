@@ -123,9 +123,39 @@ static inline float ground_accel_step_delta(float gr_vel, float accel, float tar
   return a;
 }
 
+static inline void physics_apply_specialhi_air_reverse_accel(const MslCharParams* ch,
+                                                             uint8_t facing, int16_t action_frame,
+                                                             float* io_vel_x, float* io_vel_y) {
+  if (ch == NULL || io_vel_x == NULL || io_vel_y == NULL) {
+    return;
+  }
+  // Decomp: ftFx_SpecialAirHi_Phys increments `mv.fx.SpecialHi.unk`, then subtracts the x78
+  // reverse-accel vector projected along `rotateModel` once `unk >= x70`.
+  // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::ftFx_SpecialAirHi_Phys
+  //
+  // Inference from source: this core does not persist `rotateModel` separately during launch, so
+  // derive the launch axis from the current self-velocity direction. Across uninterrupted launch
+  // frames, the decomp reverse-accel step remains colinear with that direction.
+  if ((int16_t)(action_frame + 1) < (int16_t)ch->firefox_launch_reverse_accel_start_frames) {
+    return;
+  }
+
+  const float facing_dir = facing ? 1.0f : -1.0f;
+  float dir_x = (*io_vel_x) * facing_dir;
+  float dir_y = *io_vel_y;
+  const float mag = sqrtf(dir_x * dir_x + dir_y * dir_y);
+  if (!(mag > 0.0f)) {
+    return;
+  }
+  dir_x /= mag;
+  dir_y /= mag;
+  *io_vel_x -= facing_dir * (ch->firefox_launch_reverse_accel * dir_x);
+  *io_vel_y -= ch->firefox_launch_reverse_accel * dir_y;
+}
+
 static inline void physics_apply_knockback_decay(MslBatch* batch, size_t idx,
-                                                 const MslCharParams* ch,
-                                                 const MslCommonParams* c, uint8_t on_ground) {
+                                                 const MslCharParams* ch, const MslCommonParams* c,
+                                                 uint8_t on_ground) {
   if (batch == NULL || c == NULL) {
     return;
   }
@@ -486,8 +516,8 @@ static inline uint8_t physics_floor_lines_adjacent_or_equal(const MslStageFloorG
   return (uint8_t)(la->prev == b || la->next == b);
 }
 
-static inline void physics_compute_guardsetoff_turnover_player_nudge(MslBatch* batch, int bi,
-                                                                     float out_nudge_x[MSL_MAX_PLAYERS]) {
+static inline void physics_compute_guardsetoff_turnover_player_nudge(
+    MslBatch* batch, int bi, float out_nudge_x[MSL_MAX_PLAYERS]) {
   if (batch == NULL || bi < 0 || bi >= batch->batch_size || out_nudge_x == NULL) {
     return;
   }
@@ -526,8 +556,7 @@ static inline void physics_compute_guardsetoff_turnover_player_nudge(MslBatch* b
       continue;
     }
 
-    const int self_line =
-        stage_collision_floor_line_index(stage_id, batch->state.ground_id[idx]);
+    const int self_line = stage_collision_floor_line_index(stage_id, batch->state.ground_id[idx]);
     if (self_line < 0) {
       continue;
     }
@@ -758,7 +787,7 @@ void physics_integrate(MslBatch* batch) {
               if (phys != NULL) {
                 const uint8_t allow_fastfall =
                     (msl_action_allows_fastfall(action_id) || damage_uses_common_air_helper) ? 1u
-                                                                                              : 0u;
+                                                                                             : 0u;
 
                 // Fastfall latch (ftCommon_CheckFallFast) uses the pre-gravity `self_vel.y`.
                 // refs/melee/src/melee/ft/ftcommon.c::ftCommon_CheckFallFast
@@ -814,8 +843,8 @@ void physics_integrate(MslBatch* batch) {
                 // DamageFly/DamageFlyRoll x221C_b6 path (`ft_80084EEC`) uses friction-only x
                 // update.
                 // refs/melee/src/melee/ft/ft_081B.c::ft_80084EEC
-                batch->state.speed_air_x_self[idx] =
-                    air_apply_friction_step(batch->state.speed_air_x_self[idx], ch->aerial_friction);
+                batch->state.speed_air_x_self[idx] = air_apply_friction_step(
+                    batch->state.speed_air_x_self[idx], ch->aerial_friction);
               } else if (physics_action_uses_common_air_drift(action_id) ||
                          damage_uses_common_air_helper) {
                 batch->state.speed_air_x_self[idx] = physics_apply_common_air_drift(
@@ -866,6 +895,13 @@ void physics_integrate(MslBatch* batch) {
               }
               batch->state.speed_y_self[idx] = next_vy;
             }
+          }
+        } else if (action_id == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_HI) {
+          const MslCharParams* ch = msl_char_params(batch->state.char_id[idx]);
+          if (ch != NULL) {
+            physics_apply_specialhi_air_reverse_accel(
+                ch, batch->state.facing[idx], batch->state.action_frame[idx],
+                &batch->state.speed_air_x_self[idx], &batch->state.speed_y_self[idx]);
           }
         }
       }
@@ -966,6 +1002,27 @@ void physics_integrate(MslBatch* batch) {
               friction *= c->high_speed_friction_mul;
             }
             gr_vel += ground_friction_step_delta(gr_vel, friction);
+          } else if (action_id == (uint16_t)MSL_ACT_CATCH ||
+                     action_id == (uint16_t)MSL_ACT_CATCH_PULL ||
+                     action_id == (uint16_t)MSL_ACT_CATCH_WAIT ||
+                     action_id == (uint16_t)MSL_ACT_CATCH_ATTACK ||
+                     action_id == (uint16_t)MSL_ACT_CATCH_CUT) {
+            // Decomp: grounded Catch/CatchPull/CatchWait/CatchAttack/CatchCut all use
+            // ftCo_Catch_Phys, which applies p_ftCommonData->x64 * co_attrs.gr_friction before
+            // ftCommon_ApplyGroundMovement.
+            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::{
+            //   ftCo_Catch_Phys,ftCo_CatchPull_Phys,ftCo_CatchWait_Phys,ftCo_CatchAttack_Phys,
+            //   ftCo_CatchCut_Phys
+            // }
+            gr_vel += ground_friction_step_delta(gr_vel, c->catch_friction_mul * ch->gr_friction);
+          } else if (action_id == (uint16_t)MSL_ACT_FX_SPECIAL_HI) {
+            // Decomp: ftFx_SpecialHi_Phys increments `mv.fx.SpecialHi.unk`, then applies ground
+            // reverse friction x78 once `unk >= x70`.
+            // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::ftFx_SpecialHi_Phys
+            if ((int16_t)(batch->state.action_frame[idx] + 1) >=
+                (int16_t)ch->firefox_launch_reverse_accel_start_frames) {
+              gr_vel += ground_friction_step_delta(gr_vel, ch->firefox_launch_reverse_accel);
+            }
           } else if (physics_action_uses_ft_80084FA8(action_id)) {
             // ft_80084FA8 grounded Phys family:
             // - high-speed friction scale gate (walk_max_vel, p_ftCommonData->x6C)
@@ -979,11 +1036,10 @@ void physics_integrate(MslBatch* batch) {
               friction *= c->high_speed_friction_mul;
             }
             float dxyz[3];
-            const uint8_t landing_to_attack11_entry =
-                (action_id == (uint16_t)MSL_ACT_ATTACK_11 &&
-                 prev_action_id == (uint16_t)MSL_ACT_LANDING)
-                    ? 1u
-                    : 0u;
+            const uint8_t landing_to_attack11_entry = (action_id == (uint16_t)MSL_ACT_ATTACK_11 &&
+                                                       prev_action_id == (uint16_t)MSL_ACT_LANDING)
+                                                          ? 1u
+                                                          : 0u;
             if (physics_try_get_transn_delta_xyz(ch, batch->state.char_id[idx],
                                                  batch->state.animation_index[idx],
                                                  batch->state.anim_frame_f32[idx], dxyz) &&
@@ -1169,7 +1225,6 @@ void physics_integrate(MslBatch* batch) {
           batch->state.speed_y_self[idx] = next_vy;
         }
       }
-
     }
   }
 }

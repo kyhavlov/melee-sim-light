@@ -249,8 +249,13 @@ static int load_one(const char* data_dir, const char* rel_path, uint8_t char_id)
       "firefox_hold_air_fall_accel",
       "firefox_direction_stick_range_min",
       "firefox_launch_duration_frames",
+      "firefox_launch_reverse_accel_start_frames",
       "firefox_launch_speed",
+      "firefox_launch_reverse_accel",
+      "firefox_ground_momentum_end",
       "firefox_facing_stick_range_min",
+      "firefox_freefall_mobility",
+      "firefox_landing_lag_frames",
       "grab_capture_anchor_part_id",
       "laser_spawn_joint_part_id",
   };
@@ -403,8 +408,14 @@ static int load_one(const char* data_dir, const char* rel_path, uint8_t char_id)
       json_get_u8(buf, "firefox_launch_duration_frames", &out.firefox_launch_duration_frames) !=
           0 ||
       json_get_f32(buf, "firefox_launch_speed", &out.firefox_launch_speed) != 0 ||
-      json_get_f32(buf, "firefox_facing_stick_range_min",
-                   &out.firefox_facing_stick_range_min) != 0 ||
+      json_get_u8(buf, "firefox_launch_reverse_accel_start_frames",
+                  &out.firefox_launch_reverse_accel_start_frames) != 0 ||
+      json_get_f32(buf, "firefox_launch_reverse_accel", &out.firefox_launch_reverse_accel) != 0 ||
+      json_get_f32(buf, "firefox_ground_momentum_end", &out.firefox_ground_momentum_end) != 0 ||
+      json_get_f32(buf, "firefox_facing_stick_range_min", &out.firefox_facing_stick_range_min) !=
+          0 ||
+      json_get_f32(buf, "firefox_freefall_mobility", &out.firefox_freefall_mobility) != 0 ||
+      json_get_u8(buf, "firefox_landing_lag_frames", &out.firefox_landing_lag_frames) != 0 ||
       json_get_f32(buf, "ledge_jump_horizontal_velocity", &out.ledge_jump_horizontal_velocity) !=
           0 ||
       json_get_f32(buf, "ledge_jump_vertical_velocity", &out.ledge_jump_vertical_velocity) != 0 ||

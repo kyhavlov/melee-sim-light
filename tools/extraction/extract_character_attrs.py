@@ -291,16 +291,29 @@ def _extract_ftco_dattrs(pl_dat: Path, *, ftdata_symbol: str, extract_fox_blaste
         # Fox/Falco up special HoldAir (Firefox/Firebird charge) physics attrs.
         #
         # Decomp:
-        # - refs/melee/src/melee/ft/chara/ftFox/types.h (ftFox_DatAttrs x54/x5C/x60/x64/x74/x88)
+        # - refs/melee/src/melee/ft/chara/ftFox/types.h
         # - refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::{
-        #     ftFx_SpecialHiHoldAir_Phys,ftFx_SpecialAirHi_Enter
+        #     ftFx_SpecialHiHoldAir_Phys,ftFx_SpecialAirHi_Enter,ftFx_SpecialHi_Anim,
+        #     ftFx_SpecialAirHi_Phys,ftFx_SpecialHiLanding_Phys,ftFx_SpecialHiFall_Anim
         #   }
         out["firefox_hold_gravity_delay_frames"] = int(max(0, min(255, int(round(float(_f32_be(buf, ext_abs + 0x54)))))))
         out["firefox_hold_air_friction"] = float(_f32_be(buf, ext_abs + 0x5C))
         out["firefox_hold_air_fall_accel"] = float(_f32_be(buf, ext_abs + 0x60))
         out["firefox_direction_stick_range_min"] = float(_f32_be(buf, ext_abs + 0x64))
+        out["firefox_launch_duration_frames"] = int(
+            max(0, min(255, int(round(float(_f32_be(buf, ext_abs + 0x68))))))
+        )
+        out["firefox_launch_reverse_accel_start_frames"] = int(
+            max(0, min(255, int(round(float(_f32_be(buf, ext_abs + 0x70))))))
+        )
         out["firefox_launch_speed"] = float(_f32_be(buf, ext_abs + 0x74))
+        out["firefox_launch_reverse_accel"] = float(_f32_be(buf, ext_abs + 0x78))
+        out["firefox_ground_momentum_end"] = float(_f32_be(buf, ext_abs + 0x7C))
         out["firefox_facing_stick_range_min"] = float(_f32_be(buf, ext_abs + 0x88))
+        out["firefox_freefall_mobility"] = float(_f32_be(buf, ext_abs + 0x8C))
+        out["firefox_landing_lag_frames"] = int(
+            max(0, min(255, int(round(float(_f32_be(buf, ext_abs + 0x90))))))
+        )
         out["blaster_angle"] = float(_f32_be(buf, ext_abs + 0x10))
         out["blaster_vel"] = float(_f32_be(buf, ext_abs + 0x14))
         out["blaster_shot_itkind"] = int(_u32_be(buf, ext_abs + 0x1C))
@@ -402,7 +415,6 @@ def _stable_update(existing: dict, extracted: dict) -> dict:
     # consumers don't accidentally treat them as part of the contract.
     drop_keys = {
         "ecb_bone_indices",
-        "camera_box_radius",
     }
     ordered_keys = [
         "walk_init_vel",
@@ -455,8 +467,14 @@ def _stable_update(existing: dict, extracted: dict) -> dict:
         "firefox_hold_air_friction",
         "firefox_hold_air_fall_accel",
         "firefox_direction_stick_range_min",
+        "firefox_launch_duration_frames",
+        "firefox_launch_reverse_accel_start_frames",
         "firefox_launch_speed",
+        "firefox_launch_reverse_accel",
+        "firefox_ground_momentum_end",
         "firefox_facing_stick_range_min",
+        "firefox_freefall_mobility",
+        "firefox_landing_lag_frames",
         "blaster_angle",
         "blaster_vel",
         "blaster_shot_itkind",
@@ -492,6 +510,9 @@ def _stable_update(existing: dict, extracted: dict) -> dict:
         "landing_airlw_lag_frames",
         "ledge_jump_horizontal_velocity",
         "ledge_jump_vertical_velocity",
+        "camera_zoom_target_bone_part_id",
+        "camera_zoom_target_offset",
+        "camera_box_radius",
         "ecb_joints",
         "ecb_side_y_offset",
         "ledge_snap_x",

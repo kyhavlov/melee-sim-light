@@ -32,8 +32,8 @@ typedef struct MslCommonParams {
   // Throw direction IASA thresholds (ftCo_800DD1E4 and ftCo_800DF7F4/844/878).
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DD1E4
   // refs/melee/src/melee/ft/ft_0DF1.c::{ftCo_800DF7F4,ftCo_800DF844,ftCo_800DF878}
-  float smash_stick_threshold;         // p_ftCommonData->x7B8 (smash_stick_threshold)
-  float cstick_smash_threshold;        // p_ftCommonData->x3C (ftCo_800DF1C8 side-smash edge)
+  float smash_stick_threshold;   // p_ftCommonData->x7B8 (smash_stick_threshold)
+  float cstick_smash_threshold;  // p_ftCommonData->x3C (ftCo_800DF1C8 side-smash edge)
   // Grounded A-tilt directional checks (ftCo_AttackS3/Hi3/Lw3 input helpers).
   float attack_s3_stick_threshold_x;   // p_ftCommonData->x98 (attack_s3_stick_threshold_x)
   float attack_s3_hi_angle_radians;    // p_ftCommonData->x9C (ftCo_AttackS3.c::decideAngle)
@@ -74,13 +74,13 @@ typedef struct MslCommonParams {
 
   // Special move direction thresholds (B specials).
   // Decomp: refs/melee/src/melee/ft/chara/ftCommon/ftCo_SpecialAir.c::ftCo_SpecialAir_CheckInput
-  float special_stick_x_threshold_side;     // p_ftCommonData->x218
-  float special_stick_y_threshold;          // p_ftCommonData->x21C
-  float special_side_reverse_threshold;     // p_ftCommonData->x220
+  float special_stick_x_threshold_side;  // p_ftCommonData->x218
+  float special_stick_y_threshold;       // p_ftCommonData->x21C
+  float special_side_reverse_threshold;  // p_ftCommonData->x220
   // DamageFall IASA -> Fall gate.
   // Decomp: refs/melee/src/melee/ft/chara/ftCommon/ftCo_DamageFall.c::ftCo_DamageFall_IASA
-  float damagefall_fall_stick_x_threshold;     // p_ftCommonData->x210
-  uint8_t damagefall_fall_tilt_max_frames;     // p_ftCommonData->x214
+  float damagefall_fall_stick_x_threshold;  // p_ftCommonData->x210
+  uint8_t damagefall_fall_tilt_max_frames;  // p_ftCommonData->x214
   uint8_t _pad_u8_damagefall_fall[3];
   float special_neutral_reverse_threshold;  // p_ftCommonData->x224
 
@@ -104,17 +104,17 @@ typedef struct MslCommonParams {
   float dash_run_jump_stick_y_threshold;  // p_ftCommonData->x80
   // Grab mash updates x1A50/x1A51 when lstick.{x,y} crosses +/-x308.
   // refs/melee/src/melee/ft/ftcommon.c::ftCommon_GrabMash
-  float grab_mash_stick_threshold;       // p_ftCommonData->x308
+  float grab_mash_stick_threshold;   // p_ftCommonData->x308
   float fastfall_stick_threshold;    // p_ftCommonData->x88
   uint8_t fastfall_tilt_max_frames;  // p_ftCommonData->x8C (fastfall_tilt_max_frames)
   // Crouch threshold (Squat entry gate).
   // Decomp: refs/melee/src/melee/ft/chara/ftCommon/ftCo_Squat.c::ftCo_Squat_CheckInput (fp->input.lstick.y < -p_ftCommonData->x90)
-  float crouch_stick_threshold;      // p_ftCommonData->x90
+  float crouch_stick_threshold;  // p_ftCommonData->x90
   // SquatRv exit threshold from SquatWait.
   // Decomp: refs/melee/src/melee/ft/chara/ftCommon/ftCo_SquatRv.c::ftCo_SquatRv_CheckInput
   //         (fp->input.lstick.y > -p_ftCommonData->x94)
   float crouch_release_stick_threshold;  // p_ftCommonData->x94
-  uint8_t tap_jump_tilt_max_frames;  // p_ftCommonData->x74 (tap_jump_tilt_max_frames)
+  uint8_t tap_jump_tilt_max_frames;      // p_ftCommonData->x74 (tap_jump_tilt_max_frames)
   uint8_t _pad_u8_1[2];
 
   // Cliff / ledge common behavior (ftCo_Cliff*).
@@ -135,9 +135,9 @@ typedef struct MslCommonParams {
   // - refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffWait.c::ftCo_8009A77C (ftColl_8007B760(..., x49C))
   // - refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_OnExitHitlag
   //   (ftColl_8007B7A4(..., x130))
-  uint16_t colanim_throw_x1994_frames;  // p_ftCommonData->x348
-  uint16_t colanim_cliff_x1990_frames;  // p_ftCommonData->x49C
-  uint16_t colanim_damage_x1994_frames; // p_ftCommonData->x130
+  uint16_t colanim_throw_x1994_frames;   // p_ftCommonData->x348
+  uint16_t colanim_cliff_x1990_frames;   // p_ftCommonData->x49C
+  uint16_t colanim_damage_x1994_frames;  // p_ftCommonData->x130
 
   // Offscreen death / match-flow (ft_0D31.c / ft_0C31.c).
   // Decomp pointers:
@@ -154,13 +154,17 @@ typedef struct MslCommonParams {
   uint16_t dead_up_star_phase2_frames;   // p_ftCommonData->x50C
   uint16_t rebirth_timer_frames;         // p_ftCommonData->0x5D0
   uint16_t rebirth_wait_timer_frames;    // p_ftCommonData->0x5D4
-  uint16_t colanim_rebirth_fall_x1994_frames;  // p_ftCommonData->0x5D8 (ftColl_8007B7A4 on Fall enter)
-  uint16_t entry_start_frames;           // p_ftCommonData->x6BC
-  uint16_t entry_end_frames;             // p_ftCommonData->x6C0
+  uint16_t
+      colanim_rebirth_fall_x1994_frames;  // p_ftCommonData->0x5D8 (ftColl_8007B7A4 on Fall enter)
+  uint16_t entry_start_frames;            // p_ftCommonData->x6BC
+  uint16_t entry_end_frames;              // p_ftCommonData->x6C0
   uint16_t colanim_passivewall_x1990_frames;  // p_ftCommonData->x764
 
   // Ground friction multiplier when |gr_vel| > walk_max_vel (refs/melee/src/melee/ft/ft_081B.c::ft_80084F3C)
   float high_speed_friction_mul;  // p_ftCommonData->x6C
+  // Grab / catch grounded friction scalar.
+  // Decomp: refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_Catch_Phys
+  float catch_friction_mul;  // p_ftCommonData->x64
 
   // Run accel scaling when 0 < (gr_vel/target_vel) < 1 (refs/melee/src/melee/ft/chara/ftCommon/ftCo_Run.c::ftCo_Run_Phys)
   float run_accel_scale_mul;  // p_ftCommonData->run_accel_scale_mul (0x5C)
@@ -290,11 +294,11 @@ typedef struct MslCommonParams {
   // Damage hitlag callbacks (ftCo_Damage_OnEveryHitlag / ftCo_Damage_OnExitHitlag) stick
   // displacement constants.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{ftCo_Damage_OnEveryHitlag,ftCo_Damage_OnExitHitlag}
-  float sdi_radius;    // p_ftCommonData->x4B0 (stick magnitude gate; also used by ftCo_800DF608)
+  float sdi_radius;  // p_ftCommonData->x4B0 (stick magnitude gate; also used by ftCo_800DF608)
   uint8_t sdi_tilt_max_frames;  // p_ftCommonData->x4B4 (x670/x671 timer window)
-  float sdi_step_mul;  // p_ftCommonData->x4B8 (per-hitlag SDI displacement multiplier)
-  float asdi_step_mul; // p_ftCommonData->x4BC (ASDI displacement multiplier)
-  float di_max_deg;    // p_ftCommonData->x1A8 (DI max angle in degrees)
+  float sdi_step_mul;           // p_ftCommonData->x4B8 (per-hitlag SDI displacement multiplier)
+  float asdi_step_mul;          // p_ftCommonData->x4BC (ASDI displacement multiplier)
+  float di_max_deg;             // p_ftCommonData->x1A8 (DI max angle in degrees)
   float lsi_lr_held_mul;  // p_ftCommonData->x1AC (LSI multiplier when L/R held on hitlag exit)
   // Air drift overspeed friction magnitude (used by ftCommon_8007CF58 when |self_vel.x| exceeds
   // co_attrs.air_drift_max).
@@ -314,14 +318,14 @@ typedef struct MslCommonParams {
   // Throw release uses x10C as the ftColl_80079AB0 weight parameter.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DDDE4
   float throw_kb_weight_x10c;  // p_ftCommonData->0x10C
-  float kb_base_term;    // p_ftCommonData->0x110
-  float kb_dmg_mul;      // p_ftCommonData->0x114
-  float kb_wsk_mul;      // p_ftCommonData->0x118
-  float kb_growth_mul;   // p_ftCommonData->0x11C
-  float kb_base_add;     // p_ftCommonData->0x120
-  float kb_vel_mul;      // p_ftCommonData->x100
-  float kb_min;          // p_ftCommonData->x104
-  float kb_squat_mul;    // p_ftCommonData->x124
+  float kb_base_term;          // p_ftCommonData->0x110
+  float kb_dmg_mul;            // p_ftCommonData->0x114
+  float kb_wsk_mul;            // p_ftCommonData->0x118
+  float kb_growth_mul;         // p_ftCommonData->0x11C
+  float kb_base_add;           // p_ftCommonData->0x120
+  float kb_vel_mul;            // p_ftCommonData->x100
+  float kb_min;                // p_ftCommonData->x104
+  float kb_squat_mul;          // p_ftCommonData->x124
   // Damage scalar used by ftColl on a specific "victim_gobj != NULL and != attacker" branch.
   // refs/melee/src/melee/ft/ftcoll.c::ftColl_800765F0
   // refs/melee/src/melee/ft/ftcoll.c::inlineB3

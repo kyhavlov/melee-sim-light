@@ -196,6 +196,7 @@ class SimFrameState:
     stocks: np.ndarray
     percent: np.ndarray
     shield_hp: np.ndarray
+    state_flags: np.ndarray
     hitlag: np.ndarray
     hitstun: np.ndarray
     hurtbox_state: np.ndarray
@@ -222,6 +223,7 @@ def frame_state_from_seed(seed: np.void) -> SimFrameState:
         stocks=np.array(seed["stocks"], copy=True),
         percent=np.array(seed["percent"], copy=True),
         shield_hp=np.array(seed["shield_hp"], copy=True),
+        state_flags=np.array(seed["state_flags"], copy=True),
         hitlag=np.array(seed["hitlag"], copy=True),
         hitstun=np.array(seed["hitstun"], copy=True),
         hurtbox_state=np.array(seed["hurtbox_state"], copy=True),
@@ -248,6 +250,7 @@ def frame_state_from_compare(compare: np.void) -> SimFrameState:
         stocks=np.array(compare["stocks"], copy=True),
         percent=np.array(compare["percent"], copy=True),
         shield_hp=np.array(compare["shield_hp"], copy=True),
+        state_flags=np.array(compare["state_flags"], copy=True),
         hitlag=np.array(compare["hitlag"], copy=True),
         hitstun=np.array(compare["hitstun"], copy=True),
         hurtbox_state=np.array(compare["hurtbox_state"], copy=True),
@@ -375,9 +378,21 @@ def viewer_settings_from_state(state: SimFrameState, *, start_stocks: int = 4, t
 
 
 def viewer_frame_from_state(state: SimFrameState, controllers: Mapping[int, object]) -> dict:
+    # Slippi packs fighter bytes (0x2218,0x221A,0x221B,0x221C,0x221F) into state_flags.
+    # refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
+    # refs/melee/src/melee/ft/types.h
+    state_flag_2218_reflecting = 0x10
+    state_flag_221a_is_fastfall = 0x08
+    state_flag_221b_is_shield_active = 0x80
+    state_flag_221c_is_hitstun = 0x02
+    state_flag_221c_powershield_active = 0x20
     players = []
     for idx in range(state.num_players):
         controller = controllers.get(idx + 1, empty_controller())
+        flags_2218 = int(state.state_flags[idx][0])
+        flags_221a = int(state.state_flags[idx][1])
+        flags_221b = int(state.state_flags[idx][2])
+        flags_221c = int(state.state_flags[idx][3])
         processed = {
             "a": bool(controller.buttons.A),
             "b": bool(controller.buttons.B),
@@ -447,12 +462,12 @@ def viewer_frame_from_state(state: SimFrameState, controllers: Mapping[int, obje
             "attackBasedYSpeed": 0.0,
             "selfInducedGroundXSpeed": 0.0,
             "hitlagRemaining": int(state.hitlag[idx]),
-            "isReflectActive": False,
-            "isFastfalling": False,
-            "isShieldActive": bool(state.shield_hp[idx] > 0.0),
-            "isInHitstun": bool(state.hitstun[idx] > 0),
+            "isReflectActive": bool(flags_2218 & state_flag_2218_reflecting),
+            "isFastfalling": bool(flags_221a & state_flag_221a_is_fastfall),
+            "isShieldActive": bool(flags_221b & state_flag_221b_is_shield_active),
+            "isInHitstun": bool(flags_221c & state_flag_221c_is_hitstun),
             "isHittingShield": False,
-            "isPowershieldActive": False,
+            "isPowershieldActive": bool(flags_221c & state_flag_221c_powershield_active),
             "isDead": bool(state.is_dead[idx]),
             "isOffscreen": False,
         }

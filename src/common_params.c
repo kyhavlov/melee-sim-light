@@ -179,14 +179,12 @@ int common_params_init(void) {
       json_get_f32(buf, "cstick_smash_threshold", &g_params.cstick_smash_threshold) != 0 ||
       json_get_f32(buf, "attack_s3_stick_threshold_x", &g_params.attack_s3_stick_threshold_x) !=
           0 ||
-      json_get_f32(buf, "attack_s3_hi_angle_radians", &g_params.attack_s3_hi_angle_radians) !=
-          0 ||
+      json_get_f32(buf, "attack_s3_hi_angle_radians", &g_params.attack_s3_hi_angle_radians) != 0 ||
       json_get_f32(buf, "attack_s3_hi_s_angle_radians", &g_params.attack_s3_hi_s_angle_radians) !=
           0 ||
       json_get_f32(buf, "attack_s3_lw_s_angle_radians", &g_params.attack_s3_lw_s_angle_radians) !=
           0 ||
-      json_get_f32(buf, "attack_s3_lw_angle_radians", &g_params.attack_s3_lw_angle_radians) !=
-          0 ||
+      json_get_f32(buf, "attack_s3_lw_angle_radians", &g_params.attack_s3_lw_angle_radians) != 0 ||
       json_get_f32(buf, "attack_hi3_stick_threshold_y", &g_params.attack_hi3_stick_threshold_y) !=
           0 ||
       json_get_f32(buf, "attack_lw3_stick_threshold_y", &g_params.attack_lw3_stick_threshold_y) !=
@@ -287,7 +285,8 @@ int common_params_init(void) {
     return -1;
   }
 
-  if (json_get_f32(buf, "high_speed_friction_mul", &g_params.high_speed_friction_mul) != 0 ||
+  if (json_get_f32(buf, "catch_friction_mul", &g_params.catch_friction_mul) != 0 ||
+      json_get_f32(buf, "high_speed_friction_mul", &g_params.high_speed_friction_mul) != 0 ||
       json_get_f32(buf, "run_accel_scale_mul", &g_params.run_accel_scale_mul) != 0 ||
       json_get_f32(buf, "run_friction_mul", &g_params.run_friction_mul) != 0) {
     alloc_free(buf);
@@ -301,8 +300,8 @@ int common_params_init(void) {
       json_get_u8(buf, "powershield_reflect_frames", &g_params.powershield_reflect_frames) != 0 ||
       json_get_f32(buf, "powershield_reflect_damage_mul",
                    &g_params.powershield_reflect_damage_mul) != 0 ||
-      json_get_f32(buf, "powershield_reflect_speed_mul",
-                   &g_params.powershield_reflect_speed_mul) != 0 ||
+      json_get_f32(buf, "powershield_reflect_speed_mul", &g_params.powershield_reflect_speed_mul) !=
+          0 ||
       json_get_u8(buf, "powershield_reflect_total_frames",
                   &g_params.powershield_reflect_total_frames) != 0 ||
       json_get_f32(buf, "spotdodge_stick_y_threshold", &g_params.spotdodge_stick_y_threshold) !=
@@ -353,8 +352,8 @@ int common_params_init(void) {
       json_get_f32(buf, "hitlag_base", &g_params.hitlag_base) != 0 ||
       json_get_f32(buf, "hitlag_squat_mul", &g_params.hitlag_squat_mul) != 0 ||
       json_get_f32(buf, "hitlag_electric_mul", &g_params.hitlag_electric_mul) != 0 ||
-      json_get_i32(buf, "clank_damage_diff_threshold",
-                   &g_params.clank_damage_diff_threshold) != 0 ||
+      json_get_i32(buf, "clank_damage_diff_threshold", &g_params.clank_damage_diff_threshold) !=
+          0 ||
       json_get_f32(buf, "rebound_damage_x191c_mul", &g_params.rebound_damage_x191c_mul) != 0 ||
       json_get_f32(buf, "rebound_damage_x191c_base", &g_params.rebound_damage_x191c_base) != 0 ||
       json_get_f32(buf, "rebound_ground_x0_mul", &g_params.rebound_ground_x0_mul) != 0 ||

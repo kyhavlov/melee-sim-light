@@ -55,6 +55,26 @@ static inline uint8_t is_cliff_hold_action(uint16_t a) {
   }
 }
 
+static inline uint8_t is_grounded_cliff_option_action(uint16_t a, uint8_t on_ground) {
+  if (!on_ground) {
+    return 0u;
+  }
+  // Decomp: grounded CliffClimb/CliffAttack/CliffEscape collision callbacks all delegate to
+  // ftCo_CliffClimb_Coll, whose grounded branch is only `ft_80084104` (floor-loss handling). Wall
+  // and ceiling collision stay owned by the dedicated cliff state callbacks instead.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffClimb.c::ftCo_CliffClimb_Coll
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffAttack.c::ftCo_CliffAttack_Coll
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffEscape.c::ftCo_CliffEscape_Coll
+  switch (a) {
+    case MSL_ACT_CLIFF_CLIMB_QUICK:
+    case MSL_ACT_CLIFF_ATTACK_QUICK:
+    case MSL_ACT_CLIFF_ESCAPE_QUICK:
+      return 1u;
+    default:
+      return 0u;
+  }
+}
+
 static inline uint8_t lines_connected_prev_next(size_t line_count, const int16_t* prev_next_pairs,
                                                 int a, int b) {
   if (a < 0 || b < 0) {
@@ -799,6 +819,18 @@ void mpcoll_wall_ceil_apply(MslBatch* batch) {
         continue;
       }
       if (is_cliff_hold_action(action_id)) {
+        batch->state.wall_kind[idx] = 0;
+        batch->state.ceiling_contact_x[idx] = 0.0f;
+        batch->state.ceiling_contact_y[idx] = 0.0f;
+        batch->state.ceiling_normal_x[idx] = 0.0f;
+        batch->state.ceiling_normal_y[idx] = 0.0f;
+        batch->state.wall_contact_x[idx] = 0.0f;
+        batch->state.wall_contact_y[idx] = 0.0f;
+        batch->state.wall_normal_x[idx] = 0.0f;
+        batch->state.wall_normal_y[idx] = 0.0f;
+        continue;
+      }
+      if (is_grounded_cliff_option_action(action_id, batch->state.on_ground[idx])) {
         batch->state.wall_kind[idx] = 0;
         batch->state.ceiling_contact_x[idx] = 0.0f;
         batch->state.ceiling_contact_y[idx] = 0.0f;
