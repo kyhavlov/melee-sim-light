@@ -177,11 +177,33 @@ void hurtboxes_refresh(MslBatch* batch) {
       }
 
       const uint8_t char_id = batch->state.char_id[idx];
+      const uint16_t action_id = batch->state.action_id[idx];
+      const uint32_t anim_u32 = batch->state.animation_index[idx];
+      const uint16_t prev_action_id = batch->state.prev_action_id[idx];
       hurtboxes_apply_colanim_action_entry(batch, idx);
       uint8_t final_hurtbox_state = batch->state.colanim_hit_status_x198c[idx];
-
-      const uint32_t anim_u32 = batch->state.animation_index[idx];
-      const uint16_t action_id = batch->state.action_id[idx];
+      const uint8_t preserve_visible_downbound_colanim =
+          (((action_id == (uint16_t)MSL_ACT_DOWN_BOUND_U ||
+             action_id == (uint16_t)MSL_ACT_DOWN_BOUND_D) ||
+            ((prev_action_id == (uint16_t)MSL_ACT_DOWN_BOUND_U ||
+              prev_action_id == (uint16_t)MSL_ACT_DOWN_BOUND_D) &&
+             (action_id == (uint16_t)MSL_ACT_DOWN_WAIT_U ||
+              action_id == (uint16_t)MSL_ACT_DOWN_WAIT_D ||
+              action_id == (uint16_t)MSL_ACT_FALL))) &&
+           batch->state.colanim_hit_status_x198c[idx] == 1u &&
+           batch->state.colanim_timer_x1994[idx] != 0u)
+              ? 1u
+              : 0u;
+      if (preserve_visible_downbound_colanim) {
+        // Narrow visible-state bridge for DownBound x198C=1 rows:
+        // - Combat/collision still needs the explicit x198C lane for invincible-contact gating.
+        // - Slippi visible hurtbox_state can remain 0 on these timer-owned rows even while the
+        //   hidden x198C/x1994 internals are active.
+        // Preserve the visible compare lane and let combat read x198C directly.
+        // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
+        // refs/melee/src/melee/ft/ftcoll.c::ftColl_8007B868
+        final_hurtbox_state = batch->state.hurtbox_state[idx];
+      }
 
       // Hurtbox-state composition:
       // - x1988 lane: movescript-derived hit status (opcode 26 / ftColl_8007B62C).
@@ -238,9 +260,25 @@ void hurtboxes_refresh(MslBatch* batch) {
       }
 
       const float anim_frame_f32 = msl_anim_frame_sanitize_f32(batch->state.anim_frame_f32[idx]);
-      const uint16_t frame = msl_anim_frame_floor_u16(anim_frame_f32);
+      uint16_t frame = msl_anim_frame_floor_u16(anim_frame_f32);
+      if ((action_id == (uint16_t)MSL_ACT_DOWN_BOUND_U ||
+           action_id == (uint16_t)MSL_ACT_DOWN_BOUND_D) &&
+          batch->state.on_ground[idx] != 0u && batch->state.colanim_hit_status_x198c[idx] == 1u &&
+          batch->state.colanim_timer_x1994[idx] != 0u) {
+        // Narrow DownBound post-Anim hurtcaps pose bridge:
+        // - DownBound callback ordering is Anim then Coll on the same frame.
+        // - On grounded x198C=1 / x1994>0 bounce rows, pre-combat hurtcaps need the post-Anim pose
+        //   to avoid a replay-false invincible BODY contact against the adjacent AttackDash frame.
+        // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A360,Fighter_procMap}
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownBound.c::{
+        //   ftCo_DownBound_Anim,ftCo_DownBound_Coll
+        // }
+        if (frame != 0xFFFFu) {
+          frame = (uint16_t)(frame + 1u);
+        }
+      }
 
-      if (!have_hit_status_override) {
+      if (!have_hit_status_override && !preserve_visible_downbound_colanim) {
         (void)hit_status_get(char_id, msid, frame, &hit_status);
       }
       if (hit_status != 0) {

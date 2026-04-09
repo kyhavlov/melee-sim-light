@@ -537,6 +537,26 @@ static inline uint8_t physics_floor_lines_adjacent_or_equal(const MslStageFloorG
   return (uint8_t)(la->prev == b || la->next == b);
 }
 
+static inline uint8_t physics_action_is_attackdash_knockdown_overlap_owner(uint16_t action_id,
+                                                                            uint16_t other_action) {
+  const uint8_t other_is_knockdown =
+      (other_action == (uint16_t)MSL_ACT_DOWN_BOUND_U ||
+       other_action == (uint16_t)MSL_ACT_DOWN_BOUND_D ||
+       other_action == (uint16_t)MSL_ACT_DOWN_WAIT_U ||
+       other_action == (uint16_t)MSL_ACT_DOWN_WAIT_D ||
+       other_action == (uint16_t)MSL_ACT_DOWN_STAND_U ||
+       other_action == (uint16_t)MSL_ACT_DOWN_STAND_D ||
+       other_action == (uint16_t)MSL_ACT_DOWN_ATTACK_U ||
+       other_action == (uint16_t)MSL_ACT_DOWN_ATTACK_D ||
+       other_action == (uint16_t)MSL_ACT_DOWN_FOWARD_U ||
+       other_action == (uint16_t)MSL_ACT_DOWN_FOWARD_D ||
+       other_action == (uint16_t)MSL_ACT_DOWN_BACK_U ||
+       other_action == (uint16_t)MSL_ACT_DOWN_BACK_D)
+          ? 1u
+          : 0u;
+  return (uint8_t)(action_id == (uint16_t)MSL_ACT_ATTACK_DASH && other_is_knockdown);
+}
+
 static inline void physics_compute_guardsetoff_turnover_player_nudge(
     MslBatch* batch, int bi, float out_nudge_x[MSL_MAX_PLAYERS]) {
   if (batch == NULL || bi < 0 || bi >= batch->batch_size || out_nudge_x == NULL) {
@@ -620,6 +640,115 @@ static inline void physics_compute_guardsetoff_turnover_player_nudge(
       } else {
         out_nudge_x[p] += player_nudge_x_step;
       }
+    }
+  }
+}
+
+void physics_apply_attackdash_downbound_overlap_nudge_post_collision(MslBatch* batch) {
+  if (batch == NULL) {
+    return;
+  }
+
+  // Grounded fighter-overlap nudge constant (`p_ftCommonData->x450`).
+  // Decomp:
+  // - Fighter_8006A360 runs ftCommon_8007E0E4 before Fighter_procUpdate.
+  // - ftCommon_8007DD7C accumulates +/-x450 on grounded fighter overlap.
+  // - Fighter_procUpdate later applies xF8_playerNudgeVel to position.
+  // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A360,Fighter_procUpdate}
+  // refs/melee/src/melee/ft/ftcommon.c::{ftCommon_8007DD7C,ftCommon_8007E0E4}
+  // refs/melee/src/melee/ft/types.h::ftCommonData (+0x450)
+  //
+  // Seed-bridge note:
+  // - Teacher-forced knockdown rows can reseed with `on_ground=0` or pre-transition knockdown
+  //   action ids even when current-frame floor collision and DownBound->Down* post-collision
+  //   action resolution are visible in post-frame output.
+  // - Apply this narrow AttackDash<->grounded-knockdown subset after stage collision and
+  //   knockdown post-collision resolution so it can observe the current-frame grounded owner
+  //   before pre-combat hurtbox/contact refresh.
+  const float player_nudge_x_step = 0.30000001192092896f;
+
+  const int num_players = (int)batch->config.num_players;
+  for (int bi = 0; bi < batch->batch_size; bi++) {
+    const uint32_t stage_id = batch->state.stage_id[(size_t)bi];
+    const MslStageFloorGraph* floor_graph = stage_collision_get_floor_graph(stage_id);
+    if (floor_graph == NULL) {
+      continue;
+    }
+
+    float nudge_x[MSL_MAX_PLAYERS] = {0.0f};
+    for (int p = 0; p < num_players; p++) {
+      const size_t idx = msl_idx_player(bi, p);
+      if (batch->state.stocks[idx] == 0u || batch->state.on_ground[idx] == 0u ||
+          batch->state.hitlag_started_frame[idx] != 0u) {
+        continue;
+      }
+
+      const int self_line =
+          stage_collision_floor_line_index(stage_id, batch->state.ground_id[idx]);
+      if (self_line < 0) {
+        continue;
+      }
+
+      const MslCharParams* self = msl_char_params(batch->state.char_id[idx]);
+      if (self == NULL) {
+        continue;
+      }
+
+      const float self_center_x =
+          batch->state.prev_pos_x[idx] + self->pushbox_x * (float)batch->state.facing_dir1[idx];
+      for (int q = 0; q < num_players; q++) {
+        if (q == p) {
+          continue;
+        }
+
+        const size_t oidx = msl_idx_player(bi, q);
+        if (batch->state.stocks[oidx] == 0u || batch->state.on_ground[oidx] == 0u ||
+            batch->state.hitlag_started_frame[oidx] != 0u) {
+          continue;
+        }
+        if (!physics_action_is_attackdash_knockdown_overlap_owner(batch->state.action_id[idx],
+                                                                  batch->state.action_id[oidx]) &&
+            !physics_action_is_attackdash_knockdown_overlap_owner(batch->state.action_id[oidx],
+                                                                  batch->state.action_id[idx])) {
+          continue;
+        }
+
+        const int other_line =
+            stage_collision_floor_line_index(stage_id, batch->state.ground_id[oidx]);
+        if (!physics_floor_lines_adjacent_or_equal(floor_graph, self_line, other_line)) {
+          continue;
+        }
+
+        const MslCharParams* other = msl_char_params(batch->state.char_id[oidx]);
+        if (other == NULL) {
+          continue;
+        }
+
+        const float other_center_x =
+            batch->state.prev_pos_x[oidx] + other->pushbox_x * (float)batch->state.facing_dir1[oidx];
+        const float delta_x = self_center_x - other_center_x;
+        if (msl_absf(delta_x) >= self->pushbox_y + other->pushbox_y) {
+          continue;
+        }
+
+        if (delta_x < 0.0f) {
+          nudge_x[p] -= player_nudge_x_step;
+        } else if (delta_x > 0.0f) {
+          nudge_x[p] += player_nudge_x_step;
+        } else if (q < p) {
+          nudge_x[p] -= player_nudge_x_step;
+        } else {
+          nudge_x[p] += player_nudge_x_step;
+        }
+      }
+    }
+
+    for (int p = 0; p < num_players; p++) {
+      if (nudge_x[p] == 0.0f) {
+        continue;
+      }
+      const size_t idx = msl_idx_player(bi, p);
+      batch->state.pos_x[idx] += nudge_x[p];
     }
   }
 }
@@ -1059,6 +1188,20 @@ void physics_integrate(MslBatch* batch) {
               friction *= c->high_speed_friction_mul;
             }
             gr_vel += ground_friction_step_delta(gr_vel, friction);
+          } else if (action_id == (uint16_t)MSL_ACT_ATTACK_DASH) {
+            // Decomp: ftCo_AttackDash_Phys calls ft_80085030 with
+            // p_ftCommonData->x50 * co_attrs.gr_friction and current facing_dir.
+            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackDash.c::ftCo_AttackDash_Phys
+            // refs/melee/src/melee/ft/ft_081B.c::ft_80085030
+            float dxyz[3];
+            if (physics_try_get_transn_delta_xyz(ch, batch->state.char_id[idx],
+                                                 batch->state.animation_index[idx],
+                                                 batch->state.anim_frame_f32[idx], dxyz)) {
+              gr_vel = dxyz[2] * facing_dir;
+            } else {
+              gr_vel += ground_friction_step_delta(gr_vel,
+                                                   c->attackdash_friction_mul * ch->gr_friction);
+            }
           } else if (action_id == (uint16_t)MSL_ACT_CATCH ||
                      action_id == (uint16_t)MSL_ACT_CATCH_PULL ||
                      action_id == (uint16_t)MSL_ACT_CATCH_WAIT ||

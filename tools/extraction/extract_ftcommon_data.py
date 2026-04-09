@@ -215,6 +215,10 @@ def main() -> None:
         # Dash flick (ftCo_Dash_CheckInput)
         "dash_flick_abs": float(_f32_be(buf, ft_common_abs + 0x3C)),
         "dash_flick_tilt_max_frames": int(_i32_be(buf, ft_common_abs + 0x40)),
+        # AttackDash Phys friction multiplier.
+        # Decomp: ftCo_AttackDash_Phys -> ft_80085030(..., p_ftCommonData->x50 * traction, ...).
+        # refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackDash.c::ftCo_AttackDash_Phys
+        "attackdash_friction_mul": float(_f32_be(buf, ft_common_abs + 0x50)),
         # Roll / spotdodge (ftCo_Escape.c)
         # - Roll: ABS(lstick.x) >= x31C and x670_timer_lstick_tilt_x < x320
         # - Spotdodge: lstick.y <= x314 and x671_timer_lstick_tilt_y < x318

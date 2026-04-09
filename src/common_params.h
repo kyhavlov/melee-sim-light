@@ -90,6 +90,7 @@ typedef struct MslCommonParams {
   uint8_t _pad_u8_0[3];
 
   // Dash IASA windows (refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c::ftCo_Dash_IASA)
+  float attackdash_friction_mul;  // p_ftCommonData->x50 (ftCo_AttackDash_Phys -> ft_80085030)
   float dash_iasa_vel_mul;  // p_ftCommonData->dash_iasa_vel_mul (0x54)
   float dash_iasa_x44;      // p_ftCommonData->x44
   float dash_iasa_x48;      // p_ftCommonData->x48

@@ -295,6 +295,7 @@ static int step_one_frame_core(MslBatch* batch, const uint8_t* prev_input_bytes,
   grab_attachment_update_post_collision(batch);
   ledge_try_catch_post_collision(batch);
   knockdown_update_post_collision(batch);
+  physics_apply_attackdash_downbound_overlap_nudge_post_collision(batch);
   match_flow_update_post_physics(batch);
   blaster_update_post_collision(batch);
   locomotion_update_post_collision(batch);

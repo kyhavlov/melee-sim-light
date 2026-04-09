@@ -688,6 +688,24 @@ int msl_batch_reseed_seed(MslBatch* batch, const uint8_t* seed_bytes, size_t see
           batch->state.colanim_timer_x1990[idx] = seed->colanim_timer_x1990[p];
           batch->state.colanim_hit_status_x198c[idx] = 2u;
         }
+        // Narrow explicit x1994/x198C seed bridge:
+        // - Slippi merged hurtbox_state can remain 0 on reseeded rows even when dataset/history
+        //   captured the explicit color-animation immunity lane (`x198C=1`, `x1994>0`).
+        // - Fighter_8006A360 decrements x1994 and keeps x198C=1 until expiry when x1990/x2221 are
+        //   both clear.
+        // - Trust the explicit seeded internals only for this hidden timer-owned immunity shape so
+        //   replay-real DownBound rows preserve invincible-contact semantics without broad x198C
+        //   overrides.
+        // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
+        // refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007B7A4,ftColl_8007B868}
+        if ((seed->action_id[p] == (uint16_t)MSL_ACT_DOWN_BOUND_U ||
+             seed->action_id[p] == (uint16_t)MSL_ACT_DOWN_BOUND_D) &&
+            seed->on_ground[p] != 0u && seed->colanim_hit_status_x198c[p] == 1u &&
+            seed->colanim_timer_x1994[p] != 0u && seed->colanim_timer_x1990[p] == 0u &&
+            seed->colanim_lock_x2221_b0[p] == 0u && seed_hurtbox_state == 0u) {
+          batch->state.colanim_timer_x1994[idx] = seed->colanim_timer_x1994[p];
+          batch->state.colanim_hit_status_x198c[idx] = 1u;
+        }
       }
       if (common != NULL) {
         const uint16_t action = seed->action_id[p];

@@ -210,6 +210,7 @@ int common_params_init(void) {
       json_get_f32(buf, "turn_run_stick_x_threshold", &g_params.turn_run_stick_x_threshold) != 0 ||
       json_get_f32(buf, "run_stick_x_threshold", &g_params.run_stick_x_threshold) != 0 ||
       json_get_f32(buf, "run_x0_init_x430", &g_params.run_x0_init_x430) != 0 ||
+      json_get_f32(buf, "attackdash_friction_mul", &g_params.attackdash_friction_mul) != 0 ||
       json_get_f32(buf, "special_stick_x_threshold_side",
                    &g_params.special_stick_x_threshold_side) != 0 ||
       json_get_f32(buf, "special_stick_y_threshold", &g_params.special_stick_y_threshold) != 0 ||

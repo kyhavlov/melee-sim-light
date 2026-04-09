@@ -48,6 +48,7 @@
   "damagefly_top_angle_min_radians": 1.2217304706573486,
   "dash_flick_abs": 0.800000011920929,
   "dash_flick_tilt_max_frames": 2,
+  "attackdash_friction_mul": 0.625,
   "dash_iasa_vel_mul": 0.75,
   "dash_iasa_x44": 4.0,
   "dash_iasa_x48": 3.0,
