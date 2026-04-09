@@ -409,9 +409,9 @@ enum {
 };
 
 static inline uint8_t throw_blaster_pulse_is_seed_stale_latch(uint16_t action_id_u16,
-                                                               uint16_t shot_itkind,
-                                                               int16_t crossed_pulse_af,
-                                                               uint16_t prev_frame_i) {
+                                                              uint16_t shot_itkind,
+                                                              int16_t crossed_pulse_af,
+                                                              uint16_t prev_frame_i) {
   // One-step reseed does not carry script command cursor/latch internals.
   // Decomp timing ownership:
   // - ftAction_80071974 emits one-shot throw_flags_b0 script pulses.
@@ -538,8 +538,7 @@ static void illusion_spawn_from_fighter(MslBatch* batch, int bi, int owner) {
   const float af_prev = msl_anim_frame_sanitize_f32(msl_f32_from_q16_16(prev_fp));
   uint8_t spawn_pulse = illusion_spawn_pulse_crossed(action_id_u16, msid, af_prev, af);
   if (!spawn_pulse && action_is_illusion_end(action_id_u16) &&
-      batch->state.action_frame[o_idx] == 0 &&
-      batch->state.prev_action_frame[o_idx] >= 1 &&
+      batch->state.action_frame[o_idx] == 0 && batch->state.prev_action_frame[o_idx] >= 1 &&
       ((prev_action_id_u16 == (uint16_t)MSL_ACT_FX_SPECIAL_S &&
         action_id_u16 == (uint16_t)MSL_ACT_FX_SPECIAL_S_END) ||
        (prev_action_id_u16 == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_S &&
@@ -1115,7 +1114,8 @@ static inline void item_apply_pending_powershield_reflect_speed(MslBatch* batch,
     return;
   }
   const float dir = batch->state.item_direction[ii];
-  const uint8_t pending_reflect = ((vx > 0.0f && dir < 0.0f) || (vx < 0.0f && dir > 0.0f)) ? 1u : 0u;
+  const uint8_t pending_reflect =
+      ((vx > 0.0f && dir < 0.0f) || (vx < 0.0f && dir > 0.0f)) ? 1u : 0u;
   if (!pending_reflect) {
     return;
   }
@@ -1275,7 +1275,8 @@ static inline uint8_t laser_try_shield_bounce_velocity(float vx, float vy, float
 }
 
 static inline void item_apply_reflect_transfer(MslBatch* batch, size_t ii, size_t reflector_idx,
-                                               int reflector_port, float damage_mul, float speed_mul) {
+                                               int reflector_port, float damage_mul,
+                                               float speed_mul) {
   if (batch == NULL) {
     return;
   }
@@ -1463,8 +1464,7 @@ static void illusion_items_update_and_collide(MslBatch* batch, int bi) {
     if (!illusion_item_anim_step(batch, ii, chp, owner_motion_active)) {
       continue;
     }
-    if (batch->state.item_misc0[ii] ==
-        (uint8_t)MSL_ILLUSION_RUNTIME_SPAWN_SKIP_COLL_FLAG) {
+    if (batch->state.item_misc0[ii] == (uint8_t)MSL_ILLUSION_RUNTIME_SPAWN_SKIP_COLL_FLAG) {
       batch->state.item_misc0[ii] = 0u;
       continue;
     }
@@ -1568,12 +1568,11 @@ static void illusion_items_update_and_collide(MslBatch* batch, int bi) {
       }
 
       const float dmg = item_reflected_damage_lane(batch, ii, hp.damage);
-      const MslItemHitResult res =
-          combat_apply_item_hit(batch, bi, owner, def, batch->state.item_attack_id[ii],
-                                batch->state.item_attack_instance[ii],
-                                batch->state.item_instance_id[ii], batch->state.item_type[ii],
-                                batch->state.item_state[ii], dmg, hp.angle, hp.kbg, hp.wsk, hp.bkb,
-                                hit_hurt_height, hp.element);
+      const MslItemHitResult res = combat_apply_item_hit(
+          batch, bi, owner, def, batch->state.item_attack_id[ii],
+          batch->state.item_attack_instance[ii], batch->state.item_instance_id[ii],
+          batch->state.item_type[ii], batch->state.item_state[ii], dmg, hp.angle, hp.kbg, hp.wsk,
+          hp.bkb, hit_hurt_height, hp.element);
       if (res == MSL_ITEM_HIT_NONE) {
         continue;
       }
@@ -1795,15 +1794,13 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
             (batch->state.action_id[d_idx] == (uint16_t)MSL_ACT_GUARD_REFLECT &&
              batch->state.guard_reflect_timer_x14_seed[d_idx] == 0u &&
              batch->state.guard_reflect_timer_x18_seed[d_idx] == 0u)) &&
-           common != NULL &&
-           batch->state.shield_hp[d_idx] >= common->start_shield_health)
+           common != NULL && batch->state.shield_hp[d_idx] >= common->start_shield_health)
               ? 1u
               : 0u;
       const uint16_t prev_action = batch->state.prev_action_id[d_idx];
       const uint8_t guard_on_entry_from_landing =
           (guard_on_no_submotion_snapshot && (prev_action == (uint16_t)MSL_ACT_LANDING)) ? 1u : 0u;
-      if (shr > 0.0f && !guard_on_entry_from_landing &&
-          !shield_fresh_dash_full_shield_snapshot) {
+      if (shr > 0.0f && !guard_on_entry_from_landing && !shield_fresh_dash_full_shield_snapshot) {
         // Use derived shield bubble center from shields_refresh() (same geometry used by the
         // fighter-vs-fighter combat pass).
         float shx = batch->state.shield_x[d_idx];
@@ -1917,8 +1914,7 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
                 : 1u;
         const float laser_offset_scale =
             laser_collision_offset_scale(lp, laser_state, laser_scale_z,
-                                         MSL_LASER_COLLISION_SPACE_SHIELD, 0u,
-                                         shield_cap_enabled);
+                                         MSL_LASER_COLLISION_SPACE_SHIELD, 0u, shield_cap_enabled);
         for (uint8_t oi = 0; oi < off_n && oi < (uint8_t)MSL_LASER_MAX_HITBOX_OFFS_X; oi++) {
           const float off_x =
               (laser_state == 0u) ? lp->hitbox_offsets_x[oi] : lp->state1_hitbox_offsets_x[oi];
@@ -1978,8 +1974,7 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
                                                    shield_probe_y, &trial_bounce_vx,
                                                    &trial_bounce_vy) &&
                   (!shield_bounce_contact_found ||
-                   !(defender_guard_reflect_late_locomotion_snapshot_geom &&
-                     laser_state == 0u) ||
+                   !(defender_guard_reflect_late_locomotion_snapshot_geom && laser_state == 0u) ||
                    trial_bounce_vy > shield_bounce_best_vy)) {
                 shield_bounce_contact_found = 1u;
                 shield_bounce_best_vy = trial_bounce_vy;
@@ -1999,8 +1994,7 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
                                                    shield_probe_y, &trial_bounce_vx,
                                                    &trial_bounce_vy) &&
                   (!shield_bounce_contact_found ||
-                   !(defender_guard_reflect_late_locomotion_snapshot_geom &&
-                     laser_state == 0u) ||
+                   !(defender_guard_reflect_late_locomotion_snapshot_geom && laser_state == 0u) ||
                    trial_bounce_vy > shield_bounce_best_vy)) {
                 shield_bounce_contact_found = 1u;
                 shield_bounce_best_vy = trial_bounce_vy;
@@ -2101,8 +2095,8 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
                batch->state.prev_action_id[d_idx] != (uint16_t)MSL_ACT_GUARD_ON &&
                batch->state.prev_action_id[d_idx] != (uint16_t)MSL_ACT_GUARD &&
                batch->state.prev_action_id[d_idx] != (uint16_t)MSL_ACT_GUARD_REFLECT &&
-               batch->state.prev_action_id[d_idx] != (uint16_t)MSL_ACT_GUARD_SET_OFF &&
-               c != NULL && batch->state.shield_hp[d_idx] < c->start_shield_health)
+               batch->state.prev_action_id[d_idx] != (uint16_t)MSL_ACT_GUARD_SET_OFF && c != NULL &&
+               batch->state.shield_hp[d_idx] < c->start_shield_health)
                   ? 1u
                   : 0u;
           if (can_powershield_reflect && defender_guard_reflect_fresh_locomotion_snapshot) {
@@ -2118,10 +2112,9 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
             // - item logic consumes snapshot in Item_80269F14; speed update may be deferred to that
             //   pass via item_apply_pending_powershield_reflect_speed().
             //   refs/melee/src/melee/it/item.c::Item_80269F14
-            const float dmg_mul =
-                (c != NULL && c->powershield_reflect_damage_mul > 0.0f)
-                    ? c->powershield_reflect_damage_mul
-                    : 1.0f;
+            const float dmg_mul = (c != NULL && c->powershield_reflect_damage_mul > 0.0f)
+                                      ? c->powershield_reflect_damage_mul
+                                      : 1.0f;
             item_apply_powershield_reflect_snapshot(batch, ii, def, dmg_mul);
             // TODO(decomp/powershield-reflect-ownership-timing): transfer-frame xDA8_short
             // (Slippi item.instance_id) is intentionally left seed-latched in this lane until the
@@ -2152,9 +2145,9 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
               // refs/melee/src/melee/it/items/itfoxlaser.c::{
               //   it_8029C504,itFoxlaser_UnkMotion1_Anim,itFoxLaser_Logic94_ShieldBounced}
               (laser_age_frames > 1.0f || defender_guard_reflect_late_locomotion_snapshot) &&
-              laser_try_shield_bounce_velocity(vx, vy, bounce_shx, bounce_shy, shield_bounce_contact_x,
-                                               shield_bounce_contact_y, &shield_bounce_vx,
-                                               &shield_bounce_vy);
+              laser_try_shield_bounce_velocity(vx, vy, bounce_shx, bounce_shy,
+                                               shield_bounce_contact_x, shield_bounce_contact_y,
+                                               &shield_bounce_vx, &shield_bounce_vy);
           // Regular shield hit: apply defender-side shield effects and despawn the laser.
           float dmg = (laser_state == 0u) ? lp->damage : lp->state1_damage;
           dmg = item_reflected_damage_lane(batch, ii, dmg);
@@ -2239,9 +2232,8 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
           (laser_state == 0u) ? lp->hitbox_offsets_x_count : lp->state1_hitbox_offsets_x_count;
       const uint8_t cap_n = batch->state.hurtcap_count[d_idx];
       const uint8_t body_shield_adjacent = (batch->state.shield_radius[d_idx] > 0.0f) ? 1u : 0u;
-      const float laser_offset_scale =
-          laser_collision_offset_scale(lp, laser_state, laser_scale_z,
-                                       MSL_LASER_COLLISION_SPACE_BODY, body_shield_adjacent, 1u);
+      const float laser_offset_scale = laser_collision_offset_scale(
+          lp, laser_state, laser_scale_z, MSL_LASER_COLLISION_SPACE_BODY, body_shield_adjacent, 1u);
       // Laser BODY overlap parity:
       // - Decomp computes collision over projectile travel in-frame (prev_pos -> cur_pos), so a
       //   current-point-only probe can miss replay-causal same-frame hits.
@@ -2252,8 +2244,7 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
       // gating from it_80272460 + ftColl callbacks, then remove the narrow miss-only bridge below.
       // refs/melee/src/melee/it/itcoll.c::it_80272460
       // refs/melee/src/melee/ft/ftcoll.c::ftColl_8007B868
-      const uint8_t use_swept_body =
-          laser_grounded_body_uses_sweep(batch, d_idx, laser_age_frames);
+      const uint8_t use_swept_body = laser_grounded_body_uses_sweep(batch, d_idx, laser_age_frames);
       for (uint8_t oi = 0; oi < off_n && oi < (uint8_t)MSL_LASER_MAX_HITBOX_OFFS_X && !hit; oi++) {
         const float off_x =
             (laser_state == 0u) ? lp->hitbox_offsets_x[oi] : lp->state1_hitbox_offsets_x[oi];
@@ -2284,12 +2275,12 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
           }
         }
       }
-      if (!hit && laser_grounded_body_landing_fall_special_aabb_bridge(batch, bi, def, x0, y0, x,
-                                                                       y, sr, laser_age_frames,
-                                                                       &hit_hurt_height)) {
+      if (!hit && laser_grounded_body_landing_fall_special_aabb_bridge(
+                      batch, bi, def, x0, y0, x, y, sr, laser_age_frames, &hit_hurt_height)) {
         hit = 1;
       }
-      if (!hit && laser_state != 0u && batch->state.action_id[o_idx] == (uint16_t)MSL_ACT_THROW_LW &&
+      if (!hit && laser_state != 0u &&
+          batch->state.action_id[o_idx] == (uint16_t)MSL_ACT_THROW_LW &&
           batch->state.throw_pulse_consumed[o_idx] == 0u &&
           batch->state.throw_pulse_crossed_prev_frame[o_idx] ==
               (uint8_t)MSL_THROWLW_PULSE_ATTACH_AF &&
@@ -2368,11 +2359,11 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
       const uint16_t wsk = (laser_state == 0u) ? lp->wsk : lp->state1_wsk;
       const uint16_t bkb = (laser_state == 0u) ? lp->bkb : lp->state1_bkb;
       const uint8_t element = (laser_state == 0u) ? lp->element : lp->state1_element;
-      const MslItemHitResult res = combat_apply_item_hit(
-          batch, bi, owner, def, batch->state.item_attack_id[ii],
-          batch->state.item_attack_instance[ii], batch->state.item_instance_id[ii],
-          batch->state.item_type[ii], laser_state, dmg, angle, kbg, wsk, bkb, hit_hurt_height,
-          element);
+      const MslItemHitResult res =
+          combat_apply_item_hit(batch, bi, owner, def, batch->state.item_attack_id[ii],
+                                batch->state.item_attack_instance[ii],
+                                batch->state.item_instance_id[ii], batch->state.item_type[ii],
+                                laser_state, dmg, angle, kbg, wsk, bkb, hit_hurt_height, element);
       if (res == MSL_ITEM_HIT_NONE) {
         continue;
       }
@@ -2429,13 +2420,13 @@ void items_update(MslBatch* batch) {
       const float af_prev = msl_anim_frame_sanitize_f32(msl_f32_from_q16_16(prev_fp));
       int16_t crossed_pulse_af = -1;
       if (!move_tables_throw_cmd1_active(cid, (uint16_t)MSL_ACT_THROW_LW, af_cur) ||
-          !move_tables_throw_crossed_projectile_pulse_frame(cid, (uint16_t)MSL_ACT_THROW_LW, af_prev,
-                                                            af_cur, &crossed_pulse_af)) {
+          !move_tables_throw_crossed_projectile_pulse_frame(cid, (uint16_t)MSL_ACT_THROW_LW,
+                                                            af_prev, af_cur, &crossed_pulse_af)) {
         continue;
       }
       int16_t first_pulse_af = -1;
-      if (!move_tables_throw_projectile_first_pulse_frame(
-              cid, (uint16_t)MSL_ACT_THROW_LW, &first_pulse_af) ||
+      if (!move_tables_throw_projectile_first_pulse_frame(cid, (uint16_t)MSL_ACT_THROW_LW,
+                                                          &first_pulse_af) ||
           crossed_pulse_af != first_pulse_af) {
         continue;
       }
@@ -2447,8 +2438,7 @@ void items_update(MslBatch* batch) {
         const size_t v_idx = msl_idx_player(bi, vp);
         if (batch->state.grab_owner_port[v_idx] == (uint8_t)p &&
             batch->state.action_id[v_idx] == (uint16_t)MSL_ACT_THROWN_LW &&
-            batch->state.hitlag_pre_timer[v_idx] == 0u &&
-            batch->state.hitstun[v_idx] == 0u) {
+            batch->state.hitlag_pre_timer[v_idx] == 0u && batch->state.hitstun[v_idx] == 0u) {
           stale_context = 1u;
           break;
         }
@@ -2495,8 +2485,10 @@ void items_update_post_combat(MslBatch* batch) {
 
       const uint16_t action_id_u16 = batch->state.action_id[idx];
       const uint16_t prev_action_id_u16 = batch->state.prev_action_id[idx];
-      const uint8_t prev_requires_gun = (blaster_gun_state_from_action_id(prev_action_id_u16) != 9u) ? 1u : 0u;
-      const uint8_t cur_requires_gun = (blaster_gun_state_from_action_id(action_id_u16) != 9u) ? 1u : 0u;
+      const uint8_t prev_requires_gun =
+          (blaster_gun_state_from_action_id(prev_action_id_u16) != 9u) ? 1u : 0u;
+      const uint8_t cur_requires_gun =
+          (blaster_gun_state_from_action_id(action_id_u16) != 9u) ? 1u : 0u;
 
       if (!prev_requires_gun || cur_requires_gun) {
         continue;
@@ -2710,8 +2702,7 @@ void items_spawn_pre_physics(MslBatch* batch) {
               continue;
             }
             const size_t v_idx = msl_idx_player(bi, vp);
-            if (batch->state.hitstun[v_idx] > 0u &&
-                batch->state.last_hit_by[v_idx] == (uint8_t)p) {
+            if (batch->state.hitstun[v_idx] > 0u && batch->state.last_hit_by[v_idx] == (uint8_t)p) {
               ongoing_throwhi_context = 1u;
               if (batch->state.last_attack_landed[v_idx] != 0u) {
                 throwhi_override_allowed = 1u;

@@ -1036,8 +1036,8 @@ void mpcoll_ground_apply(MslBatch* batch) {
           // refs/melee/src/melee/ft/ft_081B.c::ft_80081DD4
           // refs/melee/src/melee/mp/mplib.c::mpLib_8004DD90_Floor
           float y_corr = 0.0f;
-          const int out_line_idx = floor_dd90_project(g, prefer_line_idx, cur_bottom_x, cur_bottom_y,
-                                                      &y_corr, &floor_nx, &floor_ny);
+          const int out_line_idx = floor_dd90_project(g, prefer_line_idx, cur_bottom_x,
+                                                      cur_bottom_y, &y_corr, &floor_nx, &floor_ny);
           if (out_line_idx >= 0 && y_corr >= 0.0f) {
             batch->state.pos_y[idx] += y_corr;
             on_ground = 1;
@@ -1074,10 +1074,9 @@ void mpcoll_ground_apply(MslBatch* batch) {
           damageflyroll_side_y_thresh =
               ecb_world.side_rel_y + ecb_world.bottom_rel_y + k_floor_y_bias;
 
-          damageflyroll_root_proj_line_idx =
-              floor_dd90_project(g, prefer_line_idx, batch->state.pos_x[idx],
-                                 batch->state.pos_y[idx], &damageflyroll_root_proj_y_corr,
-                                 &floor_nx, &floor_ny);
+          damageflyroll_root_proj_line_idx = floor_dd90_project(
+              g, prefer_line_idx, batch->state.pos_x[idx], batch->state.pos_y[idx],
+              &damageflyroll_root_proj_y_corr, &floor_nx, &floor_ny);
           if (damageflyroll_root_proj_line_idx >= 0 && damageflyroll_root_proj_y_corr >= 0.0f) {
             damageflyroll_root_proj_ready = 1u;
             if (damageflyroll_root_proj_y_corr >= damageflyroll_side_y_thresh) {
@@ -1122,8 +1121,8 @@ void mpcoll_ground_apply(MslBatch* batch) {
             // refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll
             // refs/melee/src/melee/mp/mplib.c::mpLib_8004DD90_Floor
             float y_corr = 0.0f;
-            const int out_line_idx = floor_dd90_project(g, prefer_line_idx, cur_bottom_x,
-                                                        cur_bottom_y, &y_corr, &floor_nx, &floor_ny);
+            const int out_line_idx = floor_dd90_project(
+                g, prefer_line_idx, cur_bottom_x, cur_bottom_y, &y_corr, &floor_nx, &floor_ny);
             if (out_line_idx >= 0 && y_corr >= 0.0f) {
               batch->state.pos_y[idx] += y_corr;
               on_ground = 1;
@@ -1167,8 +1166,7 @@ void mpcoll_ground_apply(MslBatch* batch) {
                // refs/melee/src/melee/ft/chara/ftCommon/ftCo_KneeBend.c::ftCo_KneeBend_Anim
                // refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll
                // refs/melee/src/melee/ft/ft_081B.c::ft_80082C74
-               prev_action_id == (uint16_t)MSL_ACT_KNEE_BEND &&
-               batch->state.action_frame[idx] <= 2)
+               prev_action_id == (uint16_t)MSL_ACT_KNEE_BEND && batch->state.action_frame[idx] <= 2)
                   ? 1u
                   : 0u;
           const uint8_t escapeair_jump_entry_floor_handoff =
@@ -1176,10 +1174,10 @@ void mpcoll_ground_apply(MslBatch* batch) {
                // Decomp path: JumpF/JumpB can feed directly into EscapeAir through ftCo_80099A58,
                // and EscapeAir_Coll still owns same-pass landing via ft_80082C74.
                // Keep this restricted to the immediate post-entry window after JumpF/JumpB.
-                // refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::{
-                //   ftCo_80099A58,ftCo_EscapeAir_Coll}
-                // refs/melee/src/melee/ft/ft_081B.c::ft_80082C74
-                (prev_action_id == (uint16_t)MSL_ACT_JUMP_F ||
+               // refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::{
+               //   ftCo_80099A58,ftCo_EscapeAir_Coll}
+               // refs/melee/src/melee/ft/ft_081B.c::ft_80082C74
+               (prev_action_id == (uint16_t)MSL_ACT_JUMP_F ||
                 prev_action_id == (uint16_t)MSL_ACT_JUMP_B) &&
                batch->state.action_frame[idx] <= 1)
                   ? 1u

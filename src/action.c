@@ -256,9 +256,9 @@ void escape_update_grounded(MslBatch* batch, const MslCommonParams* c, const Msl
 
   if (a == (uint16_t)MSL_ACT_ESCAPE_F &&
       batch->state.prev_action_id[idx] == (uint16_t)MSL_ACT_ESCAPE_F &&
-      move_tables_escapef_should_flip_facing(
-          batch->state.char_id[idx], batch->state.prev_action_frame[idx],
-          batch->state.action_frame[idx])) {
+      move_tables_escapef_should_flip_facing(batch->state.char_id[idx],
+                                             batch->state.prev_action_frame[idx],
+                                             batch->state.action_frame[idx])) {
     // Decomp: Escape_Anim flips facing when ftCheckThrowB3 consumes the script-owned bit.
     // The EscapeF script emits set_throw_flags(hit_idx=0) at the extracted action-frame threshold.
     // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Escape.c::ftCo_Escape_Anim
@@ -444,8 +444,8 @@ static inline void enter_guard_on(MslBatch* batch, const MslCommonParams* c, siz
   enum { MSL_STATE_FLAG_221C_B1 = 0x40 };
   enum { MSL_STATE_FLAG_221C_B2 = 0x20 };
   const size_t flags_i = idx * (size_t)MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_221C_INDEX;
-  batch->state.state_flags[flags_i] &=
-      (uint8_t) ~(uint8_t)(MSL_STATE_FLAG_221C_B3 | MSL_STATE_FLAG_221C_B1 | MSL_STATE_FLAG_221C_B2);
+  batch->state.state_flags[flags_i] &= (uint8_t) ~(
+      uint8_t)(MSL_STATE_FLAG_221C_B3 | MSL_STATE_FLAG_221C_B1 | MSL_STATE_FLAG_221C_B2);
   batch->state.guard_release_latched_xc[idx] = 0;
   batch->state.guard_x10[idx] = guard_x10_init_u8(c);
   batch->state.lightshield_amount[idx] = 0.0f;
@@ -652,8 +652,10 @@ static inline void guard_update_grounded_anim_callback_pre_input(MslBatch* batch
           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80093BC0
           enum { MSL_STATE_FLAGS_221C_INDEX = 3 };
           enum { MSL_STATE_FLAG_221C_POWERSHIELD_ACTIVE = 0x20 };
-          const size_t flags_i = idx * (size_t)MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_221C_INDEX;
-          batch->state.state_flags[flags_i] &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221C_POWERSHIELD_ACTIVE;
+          const size_t flags_i =
+              idx * (size_t)MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_221C_INDEX;
+          batch->state.state_flags[flags_i] &=
+              (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221C_POWERSHIELD_ACTIVE;
         }
       }
     }
@@ -860,7 +862,8 @@ void guard_update_grounded(MslBatch* batch, const MslCommonParams* c, size_t idx
       const uint8_t x10_pre = batch->state.guard_x10[idx];
       const uint8_t guard_no_submotion_snapshot =
           (a0 == (uint16_t)MSL_ACT_GUARD && batch->state.action_frame[idx] < 0 &&
-           batch->state.animation_index[idx] == 0xFFFFFFFFu && batch->state.anim_frame_f32[idx] < 0.0f)
+           batch->state.animation_index[idx] == 0xFFFFFFFFu &&
+           batch->state.anim_frame_f32[idx] < 0.0f)
               ? 1u
               : 0u;
       const uint8_t guard_setoff_carry_snapshot =
@@ -888,7 +891,8 @@ void guard_update_grounded(MslBatch* batch, const MslCommonParams* c, size_t idx
 
       // Decomp: Guard IASA exits to GuardOff only once (xC && x10==0).
       // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{inlineC0,ftCo_GuardOn_IASA,ftCo_Guard_IASA}
-      if (!guard_setoff_carry_snapshot && batch->state.guard_release_latched_xc[idx] && x10_pre == 0) {
+      if (!guard_setoff_carry_snapshot && batch->state.guard_release_latched_xc[idx] &&
+          x10_pre == 0) {
         if (a0 == (uint16_t)MSL_ACT_GUARD_ON) {
           // Seed-snapshot bridge for GuardOn no-submotion rows:
           // - GALE01 ordering is GuardOn_Anim then GuardOn_IASA.
@@ -896,10 +900,11 @@ void guard_update_grounded(MslBatch* batch, const MslCommonParams* c, size_t idx
           //   as GuardOn -> Guard -> GuardOff in one frame when release gate fires, consuming two
           //   motion-state entry bundles before the final GuardOff output.
           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_GuardOn_Anim,ftCo_GuardOn_IASA,ftCo_800928CC,ftCo_80092C54}
-          const uint8_t guard_no_submotion_snapshot = (batch->state.animation_index[idx] == 0xFFFFFFFFu &&
-                                                       batch->state.anim_frame_f32[idx] < 0.0f)
-                                                          ? 1u
-                                                          : 0u;
+          const uint8_t guard_no_submotion_snapshot =
+              (batch->state.animation_index[idx] == 0xFFFFFFFFu &&
+               batch->state.anim_frame_f32[idx] < 0.0f)
+                  ? 1u
+                  : 0u;
           if (guard_no_submotion_snapshot && guard_x10_seed == 0) {
             enter_guard_hold(batch, idx);
           }

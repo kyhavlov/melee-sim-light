@@ -1139,7 +1139,7 @@ static inline uint8_t combat_damageflyroll_rng_subset_allows_pre_action(const Ms
 }
 
 static inline void combat_damageflyroll_consume_fighter_8006cda4_phase_hint(MslBatch* batch, int bi,
-                                                                             size_t d_idx) {
+                                                                            size_t d_idx) {
   if (batch == NULL) {
     return;
   }
@@ -1165,7 +1165,7 @@ static inline void combat_damageflyroll_consume_fighter_8006cda4_phase_hint(MslB
 }
 
 static inline void combat_damageflyroll_consume_jumpaerial_attackairb_carry(MslBatch* batch, int bi,
-                                                                             size_t d_idx) {
+                                                                            size_t d_idx) {
   if (batch == NULL) {
     return;
   }
@@ -1266,7 +1266,8 @@ static inline void combat_damage_enter_state(const MslCommonParams* c, MslBatch*
         const uint8_t damagefly_roll_rng_subset_ok =
             combat_damageflyroll_rng_subset_allows_pre_action(batch, d_idx, pre_action);
         const float percent_cur = batch->state.percent[d_idx] + batch->state.percent_temp[d_idx];
-        if (damagefly_roll_rng_subset_ok && percent_cur >= (float)c->damagefly_roll_percent_threshold) {
+        if (damagefly_roll_rng_subset_ok &&
+            percent_cur >= (float)c->damagefly_roll_percent_threshold) {
           combat_damageflyroll_consume_jumpaerial_attackairb_carry(batch, bi, d_idx);
           combat_damageflyroll_consume_fighter_8006cda4_phase_hint(batch, bi, d_idx);
           const float roll =
@@ -1418,12 +1419,9 @@ static inline void combat_mutations_pass1_future_apply_body_hit_invincible(
 // This is the minimal "writeback" set needed for one-step eval:
 // - hitlag via decomp ftCommon_CalcHitlag
 // - attribution fields compared in-suite (instance_hit_by, last_hit_by)
-static inline void combat_mutations_pass1_future_apply_body_hit(MslBatch* batch, size_t a_idx,
-                                                                size_t d_idx, int attacker,
-                                                                int defender, size_t hb_i,
-                                                                size_t cap_i, int int_dmg,
-                                                                uint16_t attacker_motion_id,
-                                                                uint16_t attacker_attack_id) {
+static inline void combat_mutations_pass1_future_apply_body_hit(
+    MslBatch* batch, size_t a_idx, size_t d_idx, int attacker, int defender, size_t hb_i,
+    size_t cap_i, int int_dmg, uint16_t attacker_motion_id, uint16_t attacker_attack_id) {
   if (batch == NULL) {
     return;
   }
@@ -2024,8 +2022,7 @@ MslItemHitResult combat_apply_item_hit(MslBatch* batch, int batch_index, int att
     defender_facing_dir_1 = -thrower_facing_dir;
   }
   batch->state.facing[d_idx] = (uint8_t)(defender_facing_dir_1 > 0.0f);
-  batch->state.speed_x_attack[d_idx] =
-      -defender_facing_dir_1 * (kb_vel_mag * cosf(kb_angle_rad));
+  batch->state.speed_x_attack[d_idx] = -defender_facing_dir_1 * (kb_vel_mag * cosf(kb_angle_rad));
   batch->state.speed_y_attack[d_idx] = kb_vel_mag * sinf(kb_angle_rad);
 
   const uint16_t hs = combat_damage_hitstun_from_kb(c, kb_applied);
@@ -3373,9 +3370,9 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
             combat_mutations_pass1_future_apply_body_hit_invincible(batch, a_idx, hb_i,
                                                                     a_motion_id);
           } else {
-            combat_mutations_pass1_future_apply_body_hit(
-                batch, a_idx, d_idx, attacker, defender, hb_i, cap_i, int_dmg, a_motion_id,
-                pre_combat_attack_id[attacker]);
+            combat_mutations_pass1_future_apply_body_hit(batch, a_idx, d_idx, attacker, defender,
+                                                         hb_i, cap_i, int_dmg, a_motion_id,
+                                                         pre_combat_attack_id[attacker]);
           }
           // Hitlist register: decomp hitlists store a victim pointer inside HitCapsule
           // (HitVictim.victim), so the victim identity is stable across the defender's damage-state

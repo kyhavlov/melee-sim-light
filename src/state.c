@@ -89,9 +89,12 @@ int state_alloc(MslStateSoA* state, int batch_size) {
   state->throw_pulse_crossed_prev_frame = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->source_clear_timer_x18c8 = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->source_clear_owner_set_phase = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
-  state->source_clear_processhit_damage_pending_phase = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
-  state->damageflyroll_fighter_8006cda4_phase_hint = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
-  state->source_clear_grounded_damage_clear_phase = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
+  state->source_clear_processhit_damage_pending_phase =
+      (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
+  state->damageflyroll_fighter_8006cda4_phase_hint =
+      (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
+  state->source_clear_grounded_damage_clear_phase =
+      (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->source_clear_terminal_phase = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->throw_pending_victim_port = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->throw_pending_hit_idx = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
@@ -107,7 +110,8 @@ int state_alloc(MslStateSoA* state, int batch_size) {
   state->camera_target_world_y_f32 = (float*)alloc_aligned_64(sizeof(float) * bp);
   state->camera_target_world_z_f32 = (float*)alloc_aligned_64(sizeof(float) * bp);
   state->camera_box_radius_f32 = (float*)alloc_aligned_64(sizeof(float) * bp);
-  state->camera_target_point_inside_stage_cam_bounds_u8 = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
+  state->camera_target_point_inside_stage_cam_bounds_u8 =
+      (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->downwait_timer = (int16_t*)alloc_aligned_64(sizeof(int16_t) * bp);
   state->anim_frame_f32 = (float*)alloc_aligned_64(sizeof(float) * bp);
   state->anim_frame_fp_q16_16 = (int32_t*)alloc_aligned_64(sizeof(int32_t) * bp);
@@ -330,23 +334,20 @@ int state_alloc(MslStateSoA* state, int batch_size) {
       !state->ceiling_normal_x || !state->ceiling_normal_y || !state->ceiling_id ||
       !state->coll_env_flags || !state->coll_prev_env_flags || !state->action_id ||
       !state->seed_prev_action_id || !state->seed_prev_action_frame || !state->prev_action_id ||
-      !state->prev_action_frame || !state->action_frame ||
-      !state->throw_pending_victim_port ||
+      !state->prev_action_frame || !state->action_frame || !state->throw_pending_victim_port ||
       !state->throw_pending_hit_idx || !state->throw_pulse_consumed ||
       !state->throw_pulse_crossed_prev_frame || !state->source_clear_timer_x18c8 ||
       !state->source_clear_owner_set_phase ||
       !state->source_clear_processhit_damage_pending_phase ||
       !state->damageflyroll_fighter_8006cda4_phase_hint ||
-      !state->source_clear_grounded_damage_clear_phase ||
-      !state->source_clear_terminal_phase ||
+      !state->source_clear_grounded_damage_clear_phase || !state->source_clear_terminal_phase ||
       !state->grab_mash_stick_x_sign || !state->grab_mash_stick_y_sign ||
       !state->match_flow_timer || !state->camera_box_visible_x221f_b0 ||
       !state->rebirth_camera_anchor_y_f32 || !state->camera_target_world_x_f32 ||
       !state->camera_target_world_y_f32 || !state->camera_target_world_z_f32 ||
       !state->camera_box_radius_f32 || !state->camera_target_point_inside_stage_cam_bounds_u8 ||
-      !state->downwait_timer ||
-      !state->anim_frame_f32 || !state->anim_frame_fp_q16_16 || !state->frame_speed_mul_fp_q16_16 ||
-      !state->walk_anim_source_vel ||
+      !state->downwait_timer || !state->anim_frame_f32 || !state->anim_frame_fp_q16_16 ||
+      !state->frame_speed_mul_fp_q16_16 || !state->walk_anim_source_vel ||
       !state->capture_wait_prev_rate_fp_q16_16 ||
       !state->capture_wait_seed_rate_snapshot_fp_q16_16 || !state->capture_wait_prev_rate_valid ||
       !state->throw_lw_prev_rate_fp_q16_16 || !state->throw_lw_prev_rate_valid ||
@@ -356,27 +357,26 @@ int state_alloc(MslStateSoA* state, int batch_size) {
       !state->guard_reflect_timer_x18_seed || !state->guard_release_latched_xc ||
       !state->guard_x10 || !state->lightshield_amount || !state->guard_setoff_hitlag_damage_min ||
       !state->guard_setoff_hitlag_exit_phase_u8 || !state->guard_setoff_post_hitlag_owner_u8 ||
-      !state->kneebend_jump_input ||
-      !state->kneebend_is_short_hop || !state->tilt_timer_x || !state->tilt_timer_y ||
-      !state->fall_fast || !state->attackdash_x0 || !state->jab_x0 || !state->run_x0 ||
-      !state->runbrake_cmd0 || !state->dash_x4 || !state->shine_release_lag ||
-      !state->shine_is_release ||
-      !state->ecb_lock_timer || !state->ledge_side || !state->stage_ledge_occupant_left ||
-      !state->stage_ledge_occupant_right || !state->ledge_cooldown || !state->fallspecial_xc ||
-      !state->turn_has_turned || !state->turn_frames_to_turn || !state->turn_x8 ||
-      !state->lr_press_timer || !state->x672_input_timer || !state->x673 || !state->x674 ||
-      !state->x675 || !state->x676_x || !state->x2228_b7 || !state->x677_y || !state->x678 ||
-      !state->x679_x || !state->x67A_y || !state->x67B || !state->x67C || !state->x67D ||
-      !state->x67E || !state->x680 || !state->x681 || !state->x682 || !state->x683 ||
-      !state->x684 || !state->ucf_padbuf_index || !state->ucf_padbuf_sdrop_up_frames ||
-      !state->ucf_padbuf_stick_x || !state->ucf_padbuf_stick_y || !state->percent ||
-      !state->percent_temp || !state->dmg_x2225_b7 || !state->dmg_x2224_b2 || !state->shield_hp ||
-      !state->hitlag || !state->hitlag_pre_timer || !state->hitlag_started_frame ||
-      !state->hitstun || !state->damage_jump_buffer_x14 || !state->damage_post_hitlag_cb_kind ||
-      !state->l_cancel || !state->hurtbox_state || !state->colanim_hit_status_x198c ||
-      !state->colanim_timer_x1990 || !state->colanim_timer_x1994 || !state->colanim_lock_x2221_b0 ||
-      !state->hurtcap_count || !state->hurtcap_a_x || !state->hurtcap_a_y || !state->hurtcap_a_z ||
-      !state->hurtcap_b_x || !state->hurtcap_b_y || !state->hurtcap_b_z || !state->hurtcap_radius ||
+      !state->kneebend_jump_input || !state->kneebend_is_short_hop || !state->tilt_timer_x ||
+      !state->tilt_timer_y || !state->fall_fast || !state->attackdash_x0 || !state->jab_x0 ||
+      !state->run_x0 || !state->runbrake_cmd0 || !state->dash_x4 || !state->shine_release_lag ||
+      !state->shine_is_release || !state->ecb_lock_timer || !state->ledge_side ||
+      !state->stage_ledge_occupant_left || !state->stage_ledge_occupant_right ||
+      !state->ledge_cooldown || !state->fallspecial_xc || !state->turn_has_turned ||
+      !state->turn_frames_to_turn || !state->turn_x8 || !state->lr_press_timer ||
+      !state->x672_input_timer || !state->x673 || !state->x674 || !state->x675 || !state->x676_x ||
+      !state->x2228_b7 || !state->x677_y || !state->x678 || !state->x679_x || !state->x67A_y ||
+      !state->x67B || !state->x67C || !state->x67D || !state->x67E || !state->x680 ||
+      !state->x681 || !state->x682 || !state->x683 || !state->x684 || !state->ucf_padbuf_index ||
+      !state->ucf_padbuf_sdrop_up_frames || !state->ucf_padbuf_stick_x ||
+      !state->ucf_padbuf_stick_y || !state->percent || !state->percent_temp ||
+      !state->dmg_x2225_b7 || !state->dmg_x2224_b2 || !state->shield_hp || !state->hitlag ||
+      !state->hitlag_pre_timer || !state->hitlag_started_frame || !state->hitstun ||
+      !state->damage_jump_buffer_x14 || !state->damage_post_hitlag_cb_kind || !state->l_cancel ||
+      !state->hurtbox_state || !state->colanim_hit_status_x198c || !state->colanim_timer_x1990 ||
+      !state->colanim_timer_x1994 || !state->colanim_lock_x2221_b0 || !state->hurtcap_count ||
+      !state->hurtcap_a_x || !state->hurtcap_a_y || !state->hurtcap_a_z || !state->hurtcap_b_x ||
+      !state->hurtcap_b_y || !state->hurtcap_b_z || !state->hurtcap_radius ||
       !state->hurtcap_enabled || !state->hurtcap_is_grabbable || !state->hurtcap_height ||
       !state->hitbox_count || !state->hitbox_enabled || !state->hitbox_prev_enabled ||
       !state->hitbox_prev_x || !state->hitbox_prev_y || !state->hitbox_prev_z ||

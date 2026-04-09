@@ -276,12 +276,11 @@ void hurtboxes_refresh(MslBatch* batch) {
              cur_action == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_LW_START)
                 ? 1u
                 : 0u;
-        const uint8_t is_passive_tech_entry =
-            (cur_action == (uint16_t)MSL_ACT_PASSIVE ||
-             cur_action == (uint16_t)MSL_ACT_PASSIVE_STAND_F ||
-             cur_action == (uint16_t)MSL_ACT_PASSIVE_STAND_B)
-                ? 1u
-                : 0u;
+        const uint8_t is_passive_tech_entry = (cur_action == (uint16_t)MSL_ACT_PASSIVE ||
+                                               cur_action == (uint16_t)MSL_ACT_PASSIVE_STAND_F ||
+                                               cur_action == (uint16_t)MSL_ACT_PASSIVE_STAND_B)
+                                                  ? 1u
+                                                  : 0u;
         // Passive / PassiveStand entry ownership:
         // - ftCo_80090184 resolves grounded tech callbacks before the post-frame snapshot.
         // - Replay-visible entry frame 0 already carries the new motion state's hurt-status table

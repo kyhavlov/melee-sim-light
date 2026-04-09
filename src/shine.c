@@ -672,8 +672,7 @@ void shine_update_pre_physics(MslBatch* batch) {
               // refs/melee/src/melee/ft/ftcommon.c::{ftCommon_8007DB24,ftCommon_8007D92C}
               // refs/melee/src/melee/ft/chara/ftCommon/{ftCo_Wait.c,ftCo_Dash.c}
               enter_wait(batch, idx);
-              if (shine_is_dash_flick(c, stick_x, tilt_timer_x) &&
-                  (stick_x * facing_dir) >= 0.0f) {
+              if (shine_is_dash_flick(c, stick_x, tilt_timer_x) && (stick_x * facing_dir) >= 0.0f) {
                 batch->state.action_id[idx] = (uint16_t)MSL_ACT_DASH;
                 batch->state.animation_index[idx] = (uint32_t)MSL_SM_DASH;
                 batch->state.dash_x4[idx] = 1u;

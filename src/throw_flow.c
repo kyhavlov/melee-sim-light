@@ -73,8 +73,8 @@ static inline void throw_flow_bridge_integrate_deferred_throw_hit_position(MslBa
   }
 
   const uint8_t on_ground = batch->state.on_ground[victim_idx] ? 1u : 0u;
-  const float vx_self =
-      on_ground ? batch->state.speed_ground_x_self[victim_idx] : batch->state.speed_air_x_self[victim_idx];
+  const float vx_self = on_ground ? batch->state.speed_ground_x_self[victim_idx]
+                                  : batch->state.speed_air_x_self[victim_idx];
   if (on_ground) {
     // Keep self_vel.x synced with grounded integration velocity, matching ftCommon_ApplyGroundMovement.
     // refs/melee/src/melee/ft/ftcommon.c::ftCommon_ApplyGroundMovement
@@ -125,8 +125,8 @@ static inline float throw_flow_owner_self_dx(const MslBatch* batch, size_t owner
 static inline float throw_flow_owner_throwf_deferred_extra_share(const MslBatch* batch,
                                                                  uint8_t owner_char,
                                                                  uint16_t throw_action,
-                                                                 float owner_prev_af, float owner_af,
-                                                                 size_t owner_idx) {
+                                                                 float owner_prev_af,
+                                                                 float owner_af, size_t owner_idx) {
   if (batch == NULL) {
     return 0.0f;
   }
@@ -140,7 +140,8 @@ static inline float throw_flow_owner_throwf_deferred_extra_share(const MslBatch*
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_ThrowF_Anim
   // refs/melee/src/melee/ft/ftaction.c::ftAction_800718A4 (case 0 set_throw_flags)
   // refs/data/moves/{fox,falco}.json moves["ftCo_SM_ThrowF"]["events"] set_throw_flags
-  const float frame_speed_mul = msl_f32_from_q16_16(batch->state.frame_speed_mul_fp_q16_16[owner_idx]);
+  const float frame_speed_mul =
+      msl_f32_from_q16_16(batch->state.frame_speed_mul_fp_q16_16[owner_idx]);
   if (!(frame_speed_mul > 1.0f)) {
     return 0.0f;
   }
@@ -169,7 +170,7 @@ static inline float throw_flow_owner_throwf_deferred_extra_share(const MslBatch*
 }
 
 static inline void throw_flow_deferred_throwhi_owner_before_victim_hitstun_tick(MslBatch* batch,
-                                                                                 size_t victim_idx) {
+                                                                                size_t victim_idx) {
   if (batch == NULL) {
     return;
   }

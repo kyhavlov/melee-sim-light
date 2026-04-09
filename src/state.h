@@ -167,11 +167,11 @@ typedef struct MslStateSoA {
   //
   // Simulator representation:
   // - grab_offset_{y,z} store the decomp-shaped fp->x1A70.{y,z} (unscaled) inferred at reseed-time.
-  uint8_t* grab_owner_port;  // [batch * players]
+  uint8_t* grab_owner_port;        // [batch * players]
   int8_t* grab_mash_stick_x_sign;  // [batch * players] fp->x1A50
   int8_t* grab_mash_stick_y_sign;  // [batch * players] fp->x1A51
-  float* grab_offset_y;      // [batch * players]
-  float* grab_offset_z;      // [batch * players]
+  float* grab_offset_y;            // [batch * players]
+  float* grab_offset_z;            // [batch * players]
   uint8_t* match_flow_timer;
   // Rebirth / dead-flow camera-box visibility (`fp->x221F_b0`) promoted as a named SoA lane for
   // future F04 ownership fixes. Seeded from replay-visible `state_flags[...,4] & 0x80`.

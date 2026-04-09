@@ -169,9 +169,8 @@ MslBatch* msl_batch_create(int batch_size, int num_players) {
   batch->debug_rng_shadow_seed = (uint32_t*)alloc_malloc((size_t)batch_size * sizeof(uint32_t));
   batch->debug_rng_seed_in = (uint32_t*)alloc_malloc((size_t)batch_size * sizeof(uint32_t));
   batch->debug_rng_seed_out = (uint32_t*)alloc_malloc((size_t)batch_size * sizeof(uint32_t));
-  batch->debug_rng_site_counts = (uint16_t*)alloc_malloc((size_t)batch_size *
-                                                          (size_t)MSL_RNG_SITE_COUNT *
-                                                          sizeof(uint16_t));
+  batch->debug_rng_site_counts =
+      (uint16_t*)alloc_malloc((size_t)batch_size * (size_t)MSL_RNG_SITE_COUNT * sizeof(uint16_t));
   if (batch->debug_rng_shadow_seed == NULL || batch->debug_rng_seed_in == NULL ||
       batch->debug_rng_seed_out == NULL || batch->debug_rng_site_counts == NULL) {
     msl_batch_destroy(batch);
@@ -453,14 +452,16 @@ int msl_batch_reseed_seed(MslBatch* batch, const uint8_t* seed_bytes, size_t see
       // Previous-step throw pulse crossing lane (strictly causal seed producer).
       batch->state.throw_pulse_crossed_prev_frame[idx] = seed->throw_pulse_crossed_prev_frame[p];
       batch->state.source_clear_timer_x18c8[idx] = seed->source_clear_timer_x18c8[p];
-      batch->state.source_clear_owner_set_phase[idx] = seed->source_clear_owner_set_phase[p] ? 1u : 0u;
+      batch->state.source_clear_owner_set_phase[idx] =
+          seed->source_clear_owner_set_phase[p] ? 1u : 0u;
       batch->state.source_clear_processhit_damage_pending_phase[idx] =
           seed->source_clear_processhit_damage_pending_phase[p] ? 1u : 0u;
       batch->state.damageflyroll_fighter_8006cda4_phase_hint[idx] =
           seed->damageflyroll_fighter_8006cda4_phase_hint[p];
       batch->state.source_clear_grounded_damage_clear_phase[idx] =
           seed->source_clear_grounded_damage_clear_phase[p] ? 1u : 0u;
-      batch->state.source_clear_terminal_phase[idx] = seed->source_clear_terminal_phase[p] ? 1u : 0u;
+      batch->state.source_clear_terminal_phase[idx] =
+          seed->source_clear_terminal_phase[p] ? 1u : 0u;
       batch->state.match_flow_timer[idx] = seed->match_flow_timer[p];
       batch->state.camera_box_visible_x221f_b0[idx] =
           seed->camera_box_visible_x221f_b0[p] ? 1u : 0u;
@@ -509,8 +510,10 @@ int msl_batch_reseed_seed(MslBatch* batch, const uint8_t* seed_bytes, size_t see
       batch->state.guard_x10[idx] = seed->guard_x10[p];
       batch->state.lightshield_amount[idx] = seed->lightshield_amount[p];
       batch->state.guard_setoff_hitlag_damage_min[idx] = seed->guard_setoff_hitlag_damage_min[p];
-      batch->state.guard_setoff_hitlag_exit_phase_u8[idx] = seed->guard_setoff_hitlag_exit_phase_u8[p];
-      batch->state.guard_setoff_post_hitlag_owner_u8[idx] = seed->guard_setoff_post_hitlag_owner_u8[p];
+      batch->state.guard_setoff_hitlag_exit_phase_u8[idx] =
+          seed->guard_setoff_hitlag_exit_phase_u8[p];
+      batch->state.guard_setoff_post_hitlag_owner_u8[idx] =
+          seed->guard_setoff_post_hitlag_owner_u8[p];
       batch->state.jumps_left[idx] = seed->jumps_left[p];
       batch->state.stocks[idx] = seed->stocks[p];
       batch->state.kneebend_jump_input[idx] = seed->kneebend_jump_input[p];

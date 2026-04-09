@@ -119,14 +119,10 @@ static inline uint8_t hitboxes_seed_bridge_is_damage_or_firefox_launch_victim_ac
   }
 }
 
-static void hitboxes_seed_bridge_trim_impossible_indefinite(MslBatch* batch, int bi, int attacker,
-                                                            int hb_id, const MslHitboxEvent* def,
-                                                            uint16_t first_create_frame,
-                                                            uint16_t second_create_frame,
-                                                            float first_create_damage,
-                                                            uint16_t pose_frame,
-                                                            uint8_t seed_materialized_now,
-                                                            uint8_t from_prev_active_snapshot) {
+static void hitboxes_seed_bridge_trim_impossible_indefinite(
+    MslBatch* batch, int bi, int attacker, int hb_id, const MslHitboxEvent* def,
+    uint16_t first_create_frame, uint16_t second_create_frame, float first_create_damage,
+    uint16_t pose_frame, uint8_t seed_materialized_now, uint8_t from_prev_active_snapshot) {
   if (batch == NULL || def == NULL) {
     return;
   }
@@ -257,7 +253,8 @@ static void hitboxes_seed_bridge_trim_impossible_indefinite(MslBatch* batch, int
       uint16_t anchor_frame = def->frame;
       uint16_t anchor_hitlag = expected_hitlag;
       if (first_create_frame != 0xFFFFu) {
-        const uint16_t first_hitlag = hitboxes_seed_bridge_shield_hitlag_frames(c, first_create_damage);
+        const uint16_t first_hitlag =
+            hitboxes_seed_bridge_shield_hitlag_frames(c, first_create_damage);
         if (first_hitlag > 0u) {
           anchor_frame = first_create_frame;
           anchor_hitlag = first_hitlag;
@@ -323,8 +320,7 @@ static void hitboxes_seed_bridge_trim_impossible_indefinite(MslBatch* batch, int
         (attacker_action == (uint16_t)MSL_ACT_ATTACK_AIR_LW) ? 1u : 0u;
     if (stale_owner_attackairlw_lane && !shield_desc_active &&
         !hitboxes_seed_bridge_is_guard_transition_owner(v_action) &&
-        batch->state.hitlag[v_idx] == 0u &&
-        batch->state.instance_hit_by[v_idx] != attacker_iid) {
+        batch->state.hitlag[v_idx] == 0u && batch->state.instance_hit_by[v_idx] != attacker_iid) {
       if (batch->state.hitstun[v_idx] != 0u &&
           !(batch->state.last_hit_by[v_idx] == (uint8_t)attacker &&
             hitboxes_seed_bridge_is_damage_or_firefox_launch_victim_action(v_action) &&
@@ -406,8 +402,7 @@ void hitboxes_refresh(MslBatch* batch) {
       // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
       // refs/melee/src/melee/ft/ftaction.c::ftAction_8007121C
       if (p < num_players && batch->state.hitlag_started_frame[idx] != 0u &&
-          batch->state.hitbox_count[idx] != 0u &&
-          batch->state.hitbox_prev_bootstrap[idx] == 0u &&
+          batch->state.hitbox_count[idx] != 0u && batch->state.hitbox_prev_bootstrap[idx] == 0u &&
           batch->state.action_id[idx] == batch->state.prev_action_id[idx]) {
         preserve_frozen_hitlag_hitboxes = 1u;
       }
@@ -602,12 +597,9 @@ void hitboxes_refresh(MslBatch* batch) {
                 const uint8_t seed_materialized_now = 1u;
                 const uint8_t g = hitlist_hit_group_from_u16_7(def[hi].u16_7);
                 hitlist_seed_init_fighter_hitbox_from_group(batch, bi, p, hi, g);
-                hitboxes_seed_bridge_trim_impossible_indefinite(batch, bi, p, hi, &def[hi],
-                                                                first_create_frame[hi],
-                                                                second_create_frame[hi],
-                                                                first_create_damage[hi], pose_frame,
-                                                                seed_materialized_now,
-                                                                1u);
+                hitboxes_seed_bridge_trim_impossible_indefinite(
+                    batch, bi, p, hi, &def[hi], first_create_frame[hi], second_create_frame[hi],
+                    first_create_damage[hi], pose_frame, seed_materialized_now, 1u);
               }
             }
           }
@@ -713,12 +705,9 @@ void hitboxes_refresh(MslBatch* batch) {
               const uint8_t seed_materialized_now = 1u;
               const uint8_t g = hitlist_hit_group_from_u16_7(def[hi].u16_7);
               hitlist_seed_init_fighter_hitbox_from_group(batch, bi, p, hi, g);
-              hitboxes_seed_bridge_trim_impossible_indefinite(batch, bi, p, hi, &def[hi],
-                                                              first_create_frame[hi],
-                                                              second_create_frame[hi],
-                                                              first_create_damage[hi], pose_frame,
-                                                              seed_materialized_now,
-                                                              1u);
+              hitboxes_seed_bridge_trim_impossible_indefinite(
+                  batch, bi, p, hi, &def[hi], first_create_frame[hi], second_create_frame[hi],
+                  first_create_damage[hi], pose_frame, seed_materialized_now, 1u);
             }
           }
         }

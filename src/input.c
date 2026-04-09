@@ -388,8 +388,7 @@ int input_apply(MslBatch* batch, const uint8_t* prev_input_bytes, size_t prev_in
            (prev_trig > com->trigger_deadzone))
               ? 1u
               : 0u;
-      const uint8_t pressed_lr_lane =
-          (held_lr_lane_now != 0u && held_lr_lane_prev == 0u) ? 1u : 0u;
+      const uint8_t pressed_lr_lane = (held_lr_lane_now != 0u && held_lr_lane_prev == 0u) ? 1u : 0u;
       batch->state.lr_press_timer[idx] =
           press_timer_u8_update_edge(batch->state.lr_press_timer[idx], pressed_lr_lane);
 

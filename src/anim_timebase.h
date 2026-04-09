@@ -102,11 +102,13 @@ static inline void msl_anim_timebase_seed(MslBatch* batch, size_t idx, float cur
     const int64_t hi =
         (int64_t)(expect_next_af + 1) * (int64_t)MSL_Q16_16_ONE - 1LL - (int64_t)speed_q;
     if ((int64_t)anim_q < lo) {
-      anim_q = (lo < (int64_t)INT32_MIN) ? INT32_MIN : (lo > (int64_t)INT32_MAX) ? INT32_MAX
-                                                                                    : (int32_t)lo;
+      anim_q = (lo < (int64_t)INT32_MIN)   ? INT32_MIN
+               : (lo > (int64_t)INT32_MAX) ? INT32_MAX
+                                           : (int32_t)lo;
     } else if ((int64_t)anim_q > hi) {
-      anim_q = (hi < (int64_t)INT32_MIN) ? INT32_MIN : (hi > (int64_t)INT32_MAX) ? INT32_MAX
-                                                                                    : (int32_t)hi;
+      anim_q = (hi < (int64_t)INT32_MIN)   ? INT32_MIN
+               : (hi > (int64_t)INT32_MAX) ? INT32_MAX
+                                           : (int32_t)hi;
     }
   }
   batch->state.anim_frame_fp_q16_16[idx] = anim_q;

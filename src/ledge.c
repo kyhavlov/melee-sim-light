@@ -192,10 +192,10 @@ static inline uint8_t pressed_lr_lane_edge(const MslBatch* batch, const MslCommo
   }
   const uint16_t prev_buttons = batch->state.prev_input_buttons[idx];
   const uint16_t cur_buttons = batch->state.input_buttons[idx];
-  const float prev_trigger = trigger_unit_from_input_lane(prev_buttons, batch->state.prev_input_l[idx],
-                                                          batch->state.prev_input_r[idx]);
-  const float cur_trigger =
-      trigger_unit_from_input_lane(cur_buttons, batch->state.input_l[idx], batch->state.input_r[idx]);
+  const float prev_trigger = trigger_unit_from_input_lane(
+      prev_buttons, batch->state.prev_input_l[idx], batch->state.prev_input_r[idx]);
+  const float cur_trigger = trigger_unit_from_input_lane(cur_buttons, batch->state.input_l[idx],
+                                                         batch->state.input_r[idx]);
 
   const uint8_t prev_lr_lane =
       (((prev_buttons & (uint16_t)(MSL_BUTTON_L | MSL_BUTTON_R | MSL_BUTTON_Z)) != 0u) ||
@@ -237,7 +237,7 @@ static inline uint8_t guard_x10_init_u8(const MslCommonParams* c) {
 }
 
 static inline void enter_guard_on_from_cliff_end(MslBatch* batch, const MslCommonParams* c,
-                                                  size_t idx) {
+                                                 size_t idx) {
   if (batch == NULL || c == NULL) {
     return;
   }
@@ -259,8 +259,8 @@ static inline void enter_guard_on_from_cliff_end(MslBatch* batch, const MslCommo
   enum { MSL_STATE_FLAG_221C_B1 = 0x40 };
   enum { MSL_STATE_FLAG_221C_B2 = 0x20 };
   const size_t flags_i = idx * (size_t)MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_221C_INDEX;
-  batch->state.state_flags[flags_i] &=
-      (uint8_t) ~(uint8_t)(MSL_STATE_FLAG_221C_B3 | MSL_STATE_FLAG_221C_B1 | MSL_STATE_FLAG_221C_B2);
+  batch->state.state_flags[flags_i] &= (uint8_t) ~(
+      uint8_t)(MSL_STATE_FLAG_221C_B3 | MSL_STATE_FLAG_221C_B1 | MSL_STATE_FLAG_221C_B2);
   batch->state.guard_release_latched_xc[idx] = 0u;
   batch->state.guard_x10[idx] = guard_x10_init_u8(c);
   batch->state.lightshield_amount[idx] = 0.0f;
@@ -296,9 +296,8 @@ static inline uint32_t walk_anim_for_action(uint16_t a) {
 }
 
 static inline void try_wait_interrupts_after_cliff_option_end(MslBatch* batch,
-                                                               const MslCommonParams* c,
-                                                               const MslCharParams* ch,
-                                                               size_t idx) {
+                                                              const MslCommonParams* c,
+                                                              const MslCharParams* ch, size_t idx) {
   if (batch == NULL || c == NULL) {
     return;
   }

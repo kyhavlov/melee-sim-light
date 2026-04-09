@@ -14,8 +14,10 @@
 
 enum { Ft_MF_KeepFastFall = 1 << 0 };
 
-static inline uint8_t anim_timebase_try_rebound_anim_speed_from_ground_vel(
-    const MslCommonParams* c, const MslCharParams* ch, float ground_speed_x, float* out_rate) {
+static inline uint8_t anim_timebase_try_rebound_anim_speed_from_ground_vel(const MslCommonParams* c,
+                                                                           const MslCharParams* ch,
+                                                                           float ground_speed_x,
+                                                                           float* out_rate) {
   if (c == NULL || ch == NULL || out_rate == NULL) {
     return 0u;
   }
@@ -417,7 +419,8 @@ void anim_timebase_update_pre_input(MslBatch* batch) {
           batch->state.hitlag[idx] == 0u && action_frame_pre == 2) {
         const uint8_t pre_input_a_held =
             ((batch->state.input_buttons[idx] & (uint16_t)MSL_BUTTON_A) != 0u) ? 1u : 0u;
-        if (pre_input_a_held != 0u && batch->state.x67C[idx] != 0u && batch->state.x67C[idx] <= 2u) {
+        if (pre_input_a_held != 0u && batch->state.x67C[idx] != 0u &&
+            batch->state.x67C[idx] <= 2u) {
           batch->state.frame_speed_mul_fp_q16_16[idx] = 0;
         } else if (pre_input_a_held == 0u && batch->state.x67C[idx] > 2u &&
                    batch->state.frame_speed_mul_fp_q16_16[idx] == 0) {
@@ -539,9 +542,9 @@ void anim_timebase_update_pre_input(MslBatch* batch) {
         float entry_rate = 0.0f;
         if (a == (uint16_t)MSL_ACT_LANDING_FALL_SPECIAL) {
           float lag = c->landing_fall_special_lag_frames;
-          const uint16_t source_prev_action =
-              (action_frame_pre == 0) ? batch->state.seed_prev_action_id[idx]
-                                      : batch->state.prev_action_id[idx];
+          const uint16_t source_prev_action = (action_frame_pre == 0)
+                                                  ? batch->state.seed_prev_action_id[idx]
+                                                  : batch->state.prev_action_id[idx];
           if (source_prev_action == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_S_END) {
             // Decomp source split for LandingFallSpecial entry rate:
             // - EscapeAir_Coll enters ftCo_LandingFallSpecial_Enter(..., p_ftCommonData->x344).
@@ -642,9 +645,8 @@ void anim_timebase_update_pre_input(MslBatch* batch) {
           for (uint8_t ri = 0; ri < pulse_n; ri++) {
             const uint8_t rr = random_ranges[ri];
             if (rr > 0u) {
-              (void)combat_rng_consume_randi_site(batch, bi,
-                                                  MSL_RNG_SITE_FTACTION_PSEUDO_RANDOM_SFX_CMD,
-                                                  (uint32_t)rr);
+              (void)combat_rng_consume_randi_site(
+                  batch, bi, MSL_RNG_SITE_FTACTION_PSEUDO_RANDOM_SFX_CMD, (uint32_t)rr);
             }
           }
         }

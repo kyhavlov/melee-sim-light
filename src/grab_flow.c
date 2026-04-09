@@ -128,11 +128,10 @@ static inline uint8_t capturewait_grab_mash_active(MslBatch* batch, const MslCom
   const uint16_t buttons = batch->state.input_buttons[idx];
   const uint16_t prev_buttons = batch->state.prev_input_buttons[idx];
   uint8_t result =
-      (((buttons | prev_buttons) &
-        (uint16_t)(MSL_BUTTON_A | MSL_BUTTON_B | MSL_BUTTON_X | MSL_BUTTON_Y | MSL_BUTTON_L |
-                   MSL_BUTTON_R)) != 0u)
-                       ? 1u
-                       : 0u;
+      (((buttons | prev_buttons) & (uint16_t)(MSL_BUTTON_A | MSL_BUTTON_B | MSL_BUTTON_X |
+                                              MSL_BUTTON_Y | MSL_BUTTON_L | MSL_BUTTON_R)) != 0u)
+          ? 1u
+          : 0u;
   const float stick_x =
       apply_deadzone(stick_i8_to_unit(batch->state.input_main_x[idx]), c->lstick_deadzone_x);
   const float stick_y =

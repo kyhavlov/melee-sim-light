@@ -41,7 +41,7 @@ static inline uint8_t match_flow_is_respawn_action(uint16_t a) {
 }
 
 static inline void match_flow_identity_reset_Fighter_UnkInitReset_80067C98_subset(MslBatch* batch,
-                                                                                   size_t idx) {
+                                                                                  size_t idx) {
   if (batch == NULL) {
     return;
   }

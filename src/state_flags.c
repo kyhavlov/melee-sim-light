@@ -125,8 +125,8 @@ static inline uint8_t state_flags_221f_dead_start_action(uint16_t action_id) {
   }
 }
 
-static inline uint8_t state_flags_camera_overlap_stage_cam_bounds(const MslBatch* batch,
-                                                                  size_t idx, float tolerance) {
+static inline uint8_t state_flags_camera_overlap_stage_cam_bounds(const MslBatch* batch, size_t idx,
+                                                                  float tolerance) {
   if (batch == NULL) {
     return 0u;
   }
@@ -141,8 +141,7 @@ static inline uint8_t state_flags_camera_overlap_stage_cam_bounds(const MslBatch
                    y < (cam.top + r));
 }
 
-static inline uint8_t state_flags_camera_below_stage_cam_bounds(const MslBatch* batch,
-                                                                size_t idx) {
+static inline uint8_t state_flags_camera_below_stage_cam_bounds(const MslBatch* batch, size_t idx) {
   if (batch == NULL) {
     return 0u;
   }
@@ -333,10 +332,10 @@ void state_flags_refresh_post_frame(MslBatch* batch) {
       //
       // Keep this lane narrow to Attack11/Attack12 where command windows are extracted.
       if (action_id == (uint16_t)MSL_ACT_ATTACK_11 || action_id == (uint16_t)MSL_ACT_ATTACK_12) {
-        const uint8_t jab_combo_active =
-            move_tables_jab_combo_active(batch->state.char_id[idx], action_id, allow_interrupt_anim_probe);
-        const uint8_t jab_rapid_active =
-            move_tables_jab_rapid_active(batch->state.char_id[idx], action_id, allow_interrupt_anim_probe);
+        const uint8_t jab_combo_active = move_tables_jab_combo_active(
+            batch->state.char_id[idx], action_id, allow_interrupt_anim_probe);
+        const uint8_t jab_rapid_active = move_tables_jab_rapid_active(
+            batch->state.char_id[idx], action_id, allow_interrupt_anim_probe);
         if (jab_combo_active) {
           f2218 |= (uint8_t)MSL_STATE_FLAG_2218_B1;
         } else {
@@ -425,11 +424,11 @@ void state_flags_refresh_post_frame(MslBatch* batch) {
           break;
         }
       }
-        if (any_non_enabled_hurtcap) {
-          f221a |= (uint8_t)MSL_STATE_FLAG_221A_B5;
-        } else {
-          f221a &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221A_B5;
-        }
+      if (any_non_enabled_hurtcap) {
+        f221a |= (uint8_t)MSL_STATE_FLAG_221A_B5;
+      } else {
+        f221a &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221A_B5;
+      }
       if (state_flags_221a_b5_capture_action(action_id) && action_id != prev_action) {
         // Capture destination entries clear stale x221A_b5 carry:
         // - CapturePulled/Wait/Cut motion states use `ftCo_MF_Capture`,
@@ -645,8 +644,8 @@ void state_flags_refresh_post_frame(MslBatch* batch) {
           // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A1BC,Fighter_8006A360}
           f221c &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221C_B1;
         }
-        if (action_id == (uint16_t)MSL_ACT_GUARD_SET_OFF &&
-            batch->state.hitlag[idx] == 0u && batch->state.prev_action_frame[idx] > 0 &&
+        if (action_id == (uint16_t)MSL_ACT_GUARD_SET_OFF && batch->state.hitlag[idx] == 0u &&
+            batch->state.prev_action_frame[idx] > 0 &&
             batch->state.guard_reflect_timer_x14[idx] == 0u &&
             (f221c & (uint8_t)(MSL_STATE_FLAG_221C_B1 | MSL_STATE_FLAG_221C_B2)) ==
                 (uint8_t)(MSL_STATE_FLAG_221C_B1 | MSL_STATE_FLAG_221C_B2)) {
@@ -659,11 +658,10 @@ void state_flags_refresh_post_frame(MslBatch* batch) {
           // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A1BC,Fighter_8006A360}
           f221c &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221C_B1;
         }
-        if (action_id == (uint16_t)MSL_ACT_GUARD_SET_OFF &&
-            batch->state.hitlag[idx] == 0u && batch->state.prev_action_frame[idx] == 0 &&
+        if (action_id == (uint16_t)MSL_ACT_GUARD_SET_OFF && batch->state.hitlag[idx] == 0u &&
+            batch->state.prev_action_frame[idx] == 0 &&
             batch->state.guard_reflect_timer_x14[idx] == 0u &&
-            batch->state.guard_reflect_timer_x18[idx] == 0u &&
-            batch->state.guard_x10[idx] == 7u &&
+            batch->state.guard_reflect_timer_x18[idx] == 0u && batch->state.guard_x10[idx] == 7u &&
             f221c == (uint8_t)(MSL_STATE_FLAG_221C_B1 | MSL_STATE_FLAG_221C_B2)) {
           // GuardSetOff first-steady reflect-window expiry:
           // - after prio-0 hitlag decrement, GuardSetOff_Anim / ftCo_80093BC0 owns the first steady
@@ -685,8 +683,7 @@ void state_flags_refresh_post_frame(MslBatch* batch) {
             prev_action == (uint16_t)MSL_ACT_GUARD_SET_OFF && batch->state.hitlag[idx] == 0u &&
             batch->state.prev_action_frame[idx] > 0 && batch->state.action_frame[idx] > 0 &&
             batch->state.guard_reflect_timer_x14[idx] == 0u &&
-            batch->state.guard_reflect_timer_x18[idx] == 0u &&
-            guard_x10_init != 0u &&
+            batch->state.guard_reflect_timer_x18[idx] == 0u && guard_x10_init != 0u &&
             (uint16_t)batch->state.guard_x10[idx] + 1u < (uint16_t)guard_x10_init &&
             f221c == (uint8_t)MSL_STATE_FLAG_221C_B2) {
           // GuardSetOff second steady powershield-active expiry:
@@ -707,8 +704,7 @@ void state_flags_refresh_post_frame(MslBatch* batch) {
         if (prev_action == (uint16_t)MSL_ACT_GUARD_SET_OFF &&
             batch->state.prev_action_frame[idx] > 0 && batch->state.action_frame[idx] <= 0 &&
             batch->state.guard_reflect_timer_x14[idx] == 0u &&
-            batch->state.guard_reflect_timer_x18[idx] == 0u &&
-            guard_x10_init != 0u &&
+            batch->state.guard_reflect_timer_x18[idx] == 0u && guard_x10_init != 0u &&
             (uint16_t)batch->state.guard_x10[idx] + 1u == (uint16_t)guard_x10_init &&
             f221c == (uint8_t)MSL_STATE_FLAG_221C_B2) {
           // GuardSetOff carry-snapshot powershield-active expiry:
@@ -724,8 +720,8 @@ void state_flags_refresh_post_frame(MslBatch* batch) {
           // data/common/ft_common_data.json: guard_x10_init_frames
           f221c &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221C_B2;
         }
-        if (action_id == (uint16_t)MSL_ACT_GUARD_SET_OFF &&
-            batch->state.hitlag[idx] == 0u && batch->state.prev_action_frame[idx] == 0 &&
+        if (action_id == (uint16_t)MSL_ACT_GUARD_SET_OFF && batch->state.hitlag[idx] == 0u &&
+            batch->state.prev_action_frame[idx] == 0 &&
             batch->state.guard_reflect_timer_x14[idx] == 0u &&
             batch->state.guard_reflect_timer_x18[idx] == 0u &&
             batch->state.lightshield_amount[idx] >= 0.999f &&
@@ -754,8 +750,8 @@ void state_flags_refresh_post_frame(MslBatch* batch) {
           f221c &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221C_B1;
         }
         if (state_flags_is_damage_action(action_id) && action_id != prev_action &&
-            batch->state.action_frame[idx] == 1 &&
-            batch->state.hitlag[idx] > 0u && batch->state.hitstun[idx] > 0u &&
+            batch->state.action_frame[idx] == 1 && batch->state.hitlag[idx] > 0u &&
+            batch->state.hitstun[idx] > 0u &&
             (f221c & (uint8_t)(MSL_STATE_FLAG_221C_B0 | MSL_STATE_FLAG_221C_IS_HITSTUN)) ==
                 (uint8_t)(MSL_STATE_FLAG_221C_B0 | MSL_STATE_FLAG_221C_IS_HITSTUN)) {
           // Fresh Damage* destination entry owns fp->x221C_b0 clear:
@@ -803,9 +799,9 @@ void state_flags_refresh_post_frame(MslBatch* batch) {
         f221f |= (uint8_t)MSL_STATE_FLAG_221F_B1;
       }
       if (action_id == (uint16_t)MSL_ACT_DEAD_UP_STAR && c != NULL &&
-          batch->state.match_flow_timer[idx] ==
-              (uint8_t)(c->dead_up_star_phase2_frames > 255u ? 255u
-                                                             : c->dead_up_star_phase2_frames)) {
+          batch->state.match_flow_timer[idx] == (uint8_t)(c->dead_up_star_phase2_frames > 255u
+                                                              ? 255u
+                                                              : c->dead_up_star_phase2_frames)) {
         // DeadUpStar delayed dead-flow latch:
         // - the anim callback keeps a two-phase internal countdown (x508/x50C),
         // - match_flow_update_pre_anim has already decremented the shared countdown for this
@@ -900,9 +896,8 @@ void state_flags_refresh_post_frame(MslBatch* batch) {
         // data/stages/final_destination.json: cam_bounds_world
         f221f |= (uint8_t)MSL_STATE_FLAG_221F_B0;
       }
-      if (action_id == (uint16_t)MSL_ACT_LANDING &&
-          prev_action == (uint16_t)MSL_ACT_DAMAGE_AIR_2 && batch->state.prev_action_frame[idx] < 8 &&
-          batch->state.action_frame[idx] == 0) {
+      if (action_id == (uint16_t)MSL_ACT_LANDING && prev_action == (uint16_t)MSL_ACT_DAMAGE_AIR_2 &&
+          batch->state.prev_action_frame[idx] < 8 && batch->state.action_frame[idx] == 0) {
         // Early DamageAir2->Landing snapshot carry:
         // - Damage_Coll can still hand off through Landing_Enter_Basic while the replay-visible
         //   post-frame retains the x221C_b6 lane on the destination snapshot.

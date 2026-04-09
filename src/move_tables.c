@@ -70,7 +70,8 @@ enum {
   MSL_GROUNDED_ATTACK_KIND_HI4 = 8,
   MSL_GROUNDED_ATTACK_KIND_LW4 = 9,
 };
-static MslFrameWindow g_allow_interrupt_by_char_grounded_attack[256][MSL_GROUNDED_ATTACK_KIND_COUNT];
+static MslFrameWindow g_allow_interrupt_by_char_grounded_attack[256]
+                                                               [MSL_GROUNDED_ATTACK_KIND_COUNT];
 static MslFrameWindow g_allow_interrupt_by_char_escape_n[256];
 static MslFrameWindow g_throw_flags_by_char_escape_f[256];
 static MslFrameWindow g_jab_combo_by_char_grounded_attack[256][MSL_GROUNDED_ATTACK_KIND_COUNT];
@@ -99,8 +100,8 @@ typedef struct MslPseudoRandomSfxByMsid {
   MslFramePulses pulses;
   uint8_t random_range[MSL_FRAME_PULSES_MAX];
 } MslPseudoRandomSfxByMsid;
-static MslPseudoRandomSfxByMsid
-    g_special_pseudo_rng_by_char[256][MSL_SPECIAL_PSEUDO_RNG_ENTRIES_MAX];
+static MslPseudoRandomSfxByMsid g_special_pseudo_rng_by_char[256]
+                                                            [MSL_SPECIAL_PSEUDO_RNG_ENTRIES_MAX];
 static uint8_t g_special_pseudo_rng_count_by_char[256];
 static int g_loaded = 0;
 
@@ -1121,7 +1122,8 @@ static int parse_catchattack_grabbed_hit_window(const char* buf, const char* buf
   return 0;
 }
 
-static int parse_special_pseudo_random_sfx_ranges(const char* move_obj_start, const char* move_obj_end,
+static int parse_special_pseudo_random_sfx_ranges(const char* move_obj_start,
+                                                  const char* move_obj_end,
                                                   MslFramePulses* out_pulses,
                                                   uint8_t out_ranges[MSL_FRAME_PULSES_MAX]) {
   if (move_obj_start == NULL || move_obj_end == NULL || out_pulses == NULL || out_ranges == NULL) {
@@ -1207,7 +1209,8 @@ static int parse_specials_by_msid_pseudo_random_sfx(const char* buf, const char*
     if (key_start == NULL || key_start >= obj_end) {
       break;
     }
-    const char* key_end = (const char*)memchr(key_start + 1, '"', (size_t)(obj_end - (key_start + 1)));
+    const char* key_end =
+        (const char*)memchr(key_start + 1, '"', (size_t)(obj_end - (key_start + 1)));
     if (key_end == NULL || key_end >= obj_end) {
       break;
     }
@@ -1246,7 +1249,8 @@ static int parse_specials_by_msid_pseudo_random_sfx(const char* buf, const char*
 
     MslFramePulses pulses = {0};
     uint8_t ranges[MSL_FRAME_PULSES_MAX] = {0};
-    if (parse_special_pseudo_random_sfx_ranges(move_obj_start, move_obj_end, &pulses, ranges) == 0 &&
+    if (parse_special_pseudo_random_sfx_ranges(move_obj_start, move_obj_end, &pulses, ranges) ==
+            0 &&
         pulses.count > 0u && entry_count < (uint8_t)MSL_SPECIAL_PSEUDO_RNG_ENTRIES_MAX) {
       MslPseudoRandomSfxByMsid* ent = &g_special_pseudo_rng_by_char[char_id][entry_count];
       ent->msid = (uint16_t)msid_long;

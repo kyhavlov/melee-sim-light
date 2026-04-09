@@ -1656,8 +1656,8 @@ static PyObject* msl_debug_shield_candidate_decisions_py(PyObject* self, PyObjec
 
   uint16_t count = 0;
   MslDebugShieldCandidateDecision* out = (MslDebugShieldCandidateDecision*)PyArray_DATA(arr);
-  const int err = msl_batch_debug_shield_candidate_decisions(
-      h->batch, batch_index, out, (uint16_t)max_rows, &count);
+  const int err = msl_batch_debug_shield_candidate_decisions(h->batch, batch_index, out,
+                                                             (uint16_t)max_rows, &count);
   if (err != 0) {
     Py_DECREF(arr);
     PyErr_Format(PyExc_ValueError, "msl_batch_debug_shield_candidate_decisions failed: %d", err);
@@ -2499,8 +2499,8 @@ static PyObject* msl_move_tables_throw_cmd1_active_py(PyObject* self, PyObject* 
   if (!PyArg_ParseTuple(args, "iid", &char_id, &throw_action_id, &cur_anim_frame)) {
     return NULL;
   }
-  const uint8_t active = move_tables_throw_cmd1_active(
-      (uint8_t)char_id, (uint16_t)throw_action_id, f32_from_double(cur_anim_frame));
+  const uint8_t active = move_tables_throw_cmd1_active((uint8_t)char_id, (uint16_t)throw_action_id,
+                                                       f32_from_double(cur_anim_frame));
   return PyLong_FromLong((long)active);
 }
 
@@ -2681,8 +2681,8 @@ static PyMethodDef methods[] = {
      "(damage, angle, kbg, wsk, bkb, element, sfx_kind, sfx_severity) or None"},
     {"move_tables_throw_cmd1_active", msl_move_tables_throw_cmd1_active_py, METH_VARARGS,
      "move_tables_throw_cmd1_active(char_id, throw_action_id, cur_anim_frame) -> 0/1"},
-    {"move_tables_throw_should_spawn_projectile",
-     msl_move_tables_throw_should_spawn_projectile_py, METH_VARARGS,
+    {"move_tables_throw_should_spawn_projectile", msl_move_tables_throw_should_spawn_projectile_py,
+     METH_VARARGS,
      "move_tables_throw_should_spawn_projectile(char_id, throw_action_id, prev_anim_frame, "
      "cur_anim_frame) -> 0/1"},
     {"hurtcaps_world", msl_hurtcaps_world_py, METH_VARARGS,

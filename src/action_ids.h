@@ -101,9 +101,9 @@ typedef enum MslActionId {
 
   // Tech / passive (suite-present subset).
   // Source of truth: refs/melee/src/melee/ft/chara/ftCommon/forward.h `ftCommon_MotionState`.
-  MSL_ACT_PASSIVE = 0x00C7,          // ftCo_MS_Passive
-  MSL_ACT_PASSIVE_STAND_F = 0x00C8,  // ftCo_MS_PassiveStandF
-  MSL_ACT_PASSIVE_STAND_B = 0x00C9,  // ftCo_MS_PassiveStandB
+  MSL_ACT_PASSIVE = 0x00C7,            // ftCo_MS_Passive
+  MSL_ACT_PASSIVE_STAND_F = 0x00C8,    // ftCo_MS_PassiveStandF
+  MSL_ACT_PASSIVE_STAND_B = 0x00C9,    // ftCo_MS_PassiveStandB
   MSL_ACT_PASSIVE_WALL = 0x00CA,       // ftCo_MS_PassiveWall
   MSL_ACT_PASSIVE_WALL_JUMP = 0x00CB,  // ftCo_MS_PassiveWallJump
   MSL_ACT_PASSIVE_CEIL = 0x00CC,       // ftCo_MS_PassiveCeil
@@ -413,10 +413,10 @@ typedef enum MslSubmotionId {
 
   // Tech / passive (suite-present subset).
   // Source of truth: refs/melee/src/melee/ft/chara/ftCommon/forward.h `ftCo_Submotion`.
-  MSL_SM_PASSIVE = 199,          // ftCo_SM_Passive
-  MSL_SM_PASSIVE_STAND_F = 200,  // ftCo_SM_PassiveStandF
-  MSL_SM_PASSIVE_STAND_B = 201,  // ftCo_SM_PassiveStandB
-  MSL_SM_PASSIVE_WALL = 202,     // ftCo_SM_PassiveWall
+  MSL_SM_PASSIVE = 199,            // ftCo_SM_Passive
+  MSL_SM_PASSIVE_STAND_F = 200,    // ftCo_SM_PassiveStandF
+  MSL_SM_PASSIVE_STAND_B = 201,    // ftCo_SM_PassiveStandB
+  MSL_SM_PASSIVE_WALL = 202,       // ftCo_SM_PassiveWall
   MSL_SM_PASSIVE_WALL_JUMP = 203,  // ftCo_SM_PassiveWallJump
   MSL_SM_PASSIVE_CEIL = 204,       // ftCo_SM_PassiveCeil
 

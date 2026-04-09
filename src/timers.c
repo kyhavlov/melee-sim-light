@@ -243,10 +243,13 @@ void timers_consume_post_hitlag_callbacks_pre_input(MslBatch* batch) {
       const float cstick_y = stick_i8_to_unit(batch->state.prev_input_c_y[idx]);
       const float cstick_full_x = apply_deadzone(cstick_x, c->lstick_deadzone_x);
       const float cstick_full_y = apply_deadzone(cstick_y, c->lstick_deadzone_y);
-      const float lstick_full_mag_sq = lstick_full_x * lstick_full_x + lstick_full_y * lstick_full_y;
-      const float cstick_full_mag_sq = cstick_full_x * cstick_full_x + cstick_full_y * cstick_full_y;
+      const float lstick_full_mag_sq =
+          lstick_full_x * lstick_full_x + lstick_full_y * lstick_full_y;
+      const float cstick_full_mag_sq =
+          cstick_full_x * cstick_full_x + cstick_full_y * cstick_full_y;
 
-      if (batch->state.damage_post_hitlag_cb_kind[idx] != MSL_DAMAGE_POST_HITLAG_CB_DAMAGE_ON_EXIT) {
+      if (batch->state.damage_post_hitlag_cb_kind[idx] !=
+          MSL_DAMAGE_POST_HITLAG_CB_DAMAGE_ON_EXIT) {
         continue;
       }
       if (!(batch->state.hitlag_pre_timer[idx] != 0u && batch->state.hitlag[idx] == 0u)) {
@@ -334,35 +337,32 @@ void timers_consume_post_hitlag_callbacks_after_input(MslBatch* batch) {
       const float prev_lstick_full_x = apply_deadzone(prev_lstick_x, c->lstick_deadzone_x);
       const float prev_lstick_full_y = apply_deadzone(prev_lstick_y, c->lstick_deadzone_y);
       const float lstick_mag_sq = lstick_x * lstick_x + lstick_y * lstick_y;
-      const size_t flags_i = idx * (size_t)MSL_STATE_FLAGS_STRIDE + (size_t)MSL_STATE_FLAGS_221A_INDEX;
+      const size_t flags_i =
+          idx * (size_t)MSL_STATE_FLAGS_STRIDE + (size_t)MSL_STATE_FLAGS_221A_INDEX;
       const uint8_t sdi_edge_x =
           (lstick_x >= c->lstick_tilt_x_thresh && prev_lstick_x < c->lstick_tilt_x_thresh) ||
-                  (lstick_x <= -c->lstick_tilt_x_thresh &&
-                   prev_lstick_x > -c->lstick_tilt_x_thresh)
+                  (lstick_x <= -c->lstick_tilt_x_thresh && prev_lstick_x > -c->lstick_tilt_x_thresh)
               ? 1u
               : 0u;
-      const uint8_t sdi_full_edge_x =
-          (lstick_full_x >= c->lstick_tilt_x_thresh &&
-           prev_lstick_full_x < c->lstick_tilt_x_thresh) ||
-                  (lstick_full_x <= -c->lstick_tilt_x_thresh &&
-                   prev_lstick_full_x > -c->lstick_tilt_x_thresh)
-              ? 1u
-              : 0u;
-      const uint8_t sdi_full_edge_y =
-          (lstick_full_y >= c->lstick_tilt_y_thresh &&
-           prev_lstick_full_y < c->lstick_tilt_y_thresh) ||
-                  (lstick_full_y <= -c->lstick_tilt_y_thresh &&
-                   prev_lstick_full_y > -c->lstick_tilt_y_thresh)
-              ? 1u
-              : 0u;
+      const uint8_t sdi_full_edge_x = (lstick_full_x >= c->lstick_tilt_x_thresh &&
+                                       prev_lstick_full_x < c->lstick_tilt_x_thresh) ||
+                                              (lstick_full_x <= -c->lstick_tilt_x_thresh &&
+                                               prev_lstick_full_x > -c->lstick_tilt_x_thresh)
+                                          ? 1u
+                                          : 0u;
+      const uint8_t sdi_full_edge_y = (lstick_full_y >= c->lstick_tilt_y_thresh &&
+                                       prev_lstick_full_y < c->lstick_tilt_y_thresh) ||
+                                              (lstick_full_y <= -c->lstick_tilt_y_thresh &&
+                                               prev_lstick_full_y > -c->lstick_tilt_y_thresh)
+                                          ? 1u
+                                          : 0u;
       const uint8_t sdi_tilt_window_x =
           (batch->state.tilt_timer_x[idx] < c->sdi_tilt_max_frames) ? 1u : 0u;
       const uint8_t use_full_2d =
           damage_every_hitlag_sdi_full_2d_action(a) && (sdi_full_edge_x || sdi_full_edge_y);
       if (batch->state.hitlag_pre_timer[idx] != 0u && batch->state.hitlag[idx] != 0u &&
           (use_full_2d || (damage_every_hitlag_sdi_action(a) && sdi_edge_x) ||
-           (damage_every_hitlag_sdi_timer_window_action(a) &&
-            sdi_tilt_window_x)) &&
+           (damage_every_hitlag_sdi_timer_window_action(a) && sdi_tilt_window_x)) &&
           (batch->state.state_flags[flags_i] & (uint8_t)MSL_STATE_FLAG_221A_B3) != 0u &&
           lstick_mag_sq >= sdi_radius_sq) {
         if (use_full_2d) {
@@ -504,8 +504,8 @@ void timers_update_post_anim(MslBatch* batch) {
       // callback-owned ownership phase ordering inside Fighter_8006A360. Defer terminal clear
       // exactly one frame when producer marked this row.
       // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
-      if (t == 1u &&
-          (batch->state.hitstun[idx] != 0u || batch->state.source_clear_terminal_phase[idx] != 0u)) {
+      if (t == 1u && (batch->state.hitstun[idx] != 0u ||
+                      batch->state.source_clear_terminal_phase[idx] != 0u)) {
         continue;
       }
       t--;
