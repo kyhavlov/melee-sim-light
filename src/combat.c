@@ -2787,6 +2787,21 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
         clank_pair_done[p1][p0] = 1u;
         const size_t p0_idx = msl_idx_player(bi, p0);
         const size_t p1_idx = msl_idx_player(bi, p1);
+        // Hitlag gating for the once-per-pair clank approximation:
+        // - Decomp runs fighter-vs-fighter collision through the owner proc at priority 13
+        //   (`Fighter_8006CB94` -> `ftColl_80078C70`), and frozen fighters do not keep re-owning
+        //   that collision work every frame while hitlag is active.
+        // - Our BODY/SHIELD lanes already model the owner-side freeze with `hitlag_started_frame`;
+        //   mirror that here for the unordered clank pair approximation by skipping the pair only
+        //   when both fighters are already frozen at frame start. This preserves the attacker-owned
+        //   "non-hitlag owner vs frozen victim" lane while preventing same-pair hitlag refresh
+        //   loops from overlapping active hitboxes (reported modelplay shine-start deadlock).
+        // refs/melee/src/melee/ft/fighter.c::Fighter_8006CB94
+        // refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078C70,ftColl_8007699C}
+        if (batch->state.hitlag_started_frame[p0_idx] != 0u &&
+            batch->state.hitlag_started_frame[p1_idx] != 0u) {
+          continue;
+        }
         // Decomp: hitbox-vs-hitbox clank check in ftColl_80079AB0 is gated to both fighters being
         // grounded (`this_fp->ground_or_air == GA_Ground && victim_fp->ground_or_air == GA_Ground`).
         // refs/melee/src/melee/ft/ftcoll.c::ftColl_80079AB0
