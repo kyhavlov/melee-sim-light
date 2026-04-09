@@ -151,8 +151,8 @@ mismatch.item_type: 0 / 153330 (0.000000)
 mismatch.item_state: 0 / 153330 (0.000000)
 mismatch.item_owner: 0 / 153330 (0.000000)
 mismatch.item_instance_id: 0 / 153330 (0.000000)
-err.pos_x: mae=0.033906 p95=0.000213 max=6.000000
-err.pos_y: mae=0.012504 p95=0.000000 max=7.347817
+err.pos_x: mae=0.033508 p95=0.000008 max=6.000000
+err.pos_y: mae=0.011870 p95=0.000000 max=7.347817
 err.speed_air_x_self: mae=0.021525 p95=0.000000 max=1.900000
 err.speed_ground_x_self: mae=0.005689 p95=0.000000 max=1.815992
 err.speed_y_self: mae=0.002384 p95=0.000000 max=3.430000
@@ -165,7 +165,7 @@ err.item_pos_y: mae=0.090571 p95=0.000000 max=13.353867
 err.item_vel_x: mae=0.033511 p95=0.000000 max=6.413950
 err.item_vel_y: mae=0.039740 p95=0.000000 max=4.994216
 overall.discrete_mismatch: 274 / 1236862
-overall.float_norm_mae_p95: 0.00201865
+overall.float_norm_mae_p95: 0.00201747
 
 == datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/TreasuredBackKangaroo.msl ==
 Records: 7837  Players/scored per record: 2  Total player-frames: 15674
@@ -211,4 +211,4 @@ overall.float_norm_mae_p95: 0.00320481
 
 == suite summary ==
 overall.discrete_mismatch: 1012 / 4462843
-overall.float_norm_mae_p95: 0.00253828
+overall.float_norm_mae_p95: 0.00253796

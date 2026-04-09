@@ -120,6 +120,8 @@ static inline uint16_t cliff_submotion_for_action(uint16_t a) {
 
 static inline float facing_dir(uint8_t facing) { return facing ? 1.0f : -1.0f; }
 
+static inline void cliff_hold_phys_snap(MslBatch* batch, int bi, size_t idx, uint16_t smid);
+
 static inline void enter_cliff_catch_immediate(MslBatch* batch, size_t idx) {
   if (batch == NULL) {
     return;
@@ -358,6 +360,13 @@ static inline uint8_t enter_cliff_option_quick(MslBatch* batch, int bi, int p, u
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffEscape.c::ftCo_8009B040
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffJump.c::ftCo_8009B1B8
   msl_anim_timebase_enter_with_policy(batch, idx, 0.0f, 1.0f, MSL_ANIM_ENTER_TICK_IMMEDIATE);
+  if (act == (uint16_t)MSL_ACT_CLIFF_JUMP_QUICK1) {
+    // Decomp: ftCo_8009B1B8 enters CliffJump1, immediately ticks the new motion, then runs
+    // ftCo_CliffCatch_Phys in the same proc so Jump1 stays attached to the ledge during the
+    // first frame.
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffJump.c::ftCo_8009B1B8
+    cliff_hold_phys_snap(batch, bi, idx, smid);
+  }
   return 1;
 }
 
@@ -682,6 +691,24 @@ void ledge_update_pre_physics(MslBatch* batch) {
               msl_anim_end_frame(batch->state.char_id[idx], (uint16_t)MSL_SM_CLIFF_CATCH);
           if (!(end_frame > 0.0f) || batch->state.anim_frame_f32[idx] < end_frame) {
             cliff_hold_phys_snap(batch, bi, idx, (uint16_t)MSL_SM_CLIFF_CATCH);
+          }
+        } else if (a == (uint16_t)MSL_ACT_CLIFF_WAIT) {
+          // Decomp: CliffWait_Phys is a direct call-through to ftCo_CliffCatch_Phys and therefore
+          // keeps the fighter snapped to ledge_point + TransNPos on every CliffWait frame.
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffWait.c::ftCo_CliffWait_Phys
+          // refs/melee/src/melee/ft/ftcliffcommon.c::ftCo_CliffCatch_Phys
+          cliff_hold_phys_snap(batch, bi, idx, (uint16_t)MSL_SM_CLIFF_WAIT);
+        } else if (a == (uint16_t)MSL_ACT_CLIFF_JUMP_QUICK1) {
+          const float end_frame =
+              msl_anim_end_frame(batch->state.char_id[idx], (uint16_t)MSL_SM_CLIFF_JUMP_QUICK1);
+          if (!(end_frame > 0.0f) || batch->state.anim_frame_f32[idx] < end_frame) {
+            // Decomp: CliffJump1_Phys is also a direct call-through to ftCo_CliffCatch_Phys while
+            // the fighter remains in Jump1. Do not snap on the terminal Jump1 row because Anim
+            // hands off to Jump2 first, and Jump2 no longer uses the attach snap.
+            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffJump.c::{
+            //   ftCo_CliffJump1_Phys,ftCo_CliffJump1_Anim,ftCo_8009B2F8}
+            // refs/melee/src/melee/ft/ftcliffcommon.c::ftCo_CliffCatch_Phys
+            cliff_hold_phys_snap(batch, bi, idx, (uint16_t)MSL_SM_CLIFF_JUMP_QUICK1);
           }
         }
       }
