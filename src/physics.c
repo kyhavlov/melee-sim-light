@@ -8,6 +8,7 @@
 #include "char_params.h"
 #include "common_params.h"
 #include "input_axis.h"
+#include "move_tables.h"
 #include "stage_collision.h"
 #include "state_flags.h"
 
@@ -767,13 +768,44 @@ void physics_integrate(MslBatch* batch) {
         if (!physics_is_match_flow_airborne(action_id)) {
           if (!physics_action_skip_common_air_helper_first_frame(action_id, action_frame)) {
             if (action_id == (uint16_t)MSL_ACT_ESCAPE_AIR) {
-              // Decomp: EscapeAir_Phys scales `self_vel` by `escapeair_decay` when cmd_skip_decay is
-              // false; otherwise it calls `ft_80084DB0`.
+              // Decomp: EscapeAir_Phys scales `self_vel` by `escapeair_decay` while
+              // cmd_vars[0] (`cmd_skip_decay`) is clear; once the action script sets cmd_vars[0],
+              // EscapeAir_Phys hands motion ownership to `ft_80084DB0`.
               // refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Phys
+              // refs/melee/src/melee/ft/ftaction.c::ftAction_80071820
               //
-              // This sim currently does not model cmd_skip_decay, and always uses the decay path.
-              batch->state.speed_air_x_self[idx] *= c->escapeair_decay;
-              batch->state.speed_y_self[idx] *= c->escapeair_decay;
+              // Source of truth:
+              // - data/moves/{fox,falco}.json moves["ftCo_SM_EscapeAir"]["events"] set_cmd_var(idx=0)
+              if (!move_tables_escapeair_cmd0_active(batch->state.char_id[idx],
+                                                     batch->state.anim_frame_f32[idx])) {
+                batch->state.speed_air_x_self[idx] *= c->escapeair_decay;
+                batch->state.speed_y_self[idx] *= c->escapeair_decay;
+              } else {
+                const MslCharParams* phys = msl_char_params(batch->state.char_id[idx]);
+                if (phys != NULL) {
+                  const float stick_x = apply_deadzone(
+                      stick_i8_to_unit(batch->state.input_main_x[idx]), c->lstick_deadzone_x);
+                  const float stick_y = apply_deadzone(
+                      stick_i8_to_unit(batch->state.input_main_y[idx]), c->lstick_deadzone_y);
+                  const uint8_t allow_fastfall = msl_action_allows_fastfall(action_id);
+                  if (allow_fastfall) {
+                    ftCommon_CheckFallFast(c, stick_y, vy_self_pre, &batch->state.fall_fast[idx],
+                                           &batch->state.tilt_timer_y[idx]);
+                  }
+                  if (allow_fastfall && batch->state.fall_fast[idx]) {
+                    batch->state.speed_y_self[idx] = -phys->fast_fall_velocity;
+                  } else {
+                    float next_vy = vy_self_pre - phys->grav;
+                    if (next_vy < -phys->terminal_vel) {
+                      next_vy = -phys->terminal_vel;
+                    }
+                    batch->state.speed_y_self[idx] = next_vy;
+                  }
+                  batch->state.speed_air_x_self[idx] = physics_apply_common_air_drift(
+                      phys, c, action_id, batch->state.fallspecial_xc[idx], stick_x,
+                      batch->state.speed_air_x_self[idx]);
+                }
+              }
             } else if (action_id == (uint16_t)MSL_ACT_FX_SPECIAL_HI_HOLD_AIR) {
               const MslCharParams* phys = msl_char_params(batch->state.char_id[idx]);
               if (phys != NULL) {

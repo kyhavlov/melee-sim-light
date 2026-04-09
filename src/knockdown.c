@@ -921,7 +921,7 @@ void knockdown_update_pre_physics(MslBatch* batch) {
           batch->state.damage_jump_buffer_x14[idx] = batch->state.hitstun[idx];
         }
 
-        if (!in_hitstun && !iasa_locked && batch->state.on_ground[idx] == 0u) {
+        if (!in_hitstun && !iasa_locked) {
           // Decomp airborne Damage_IASA:
           // - when x221C_b6 has cleared, Damage_IASA forwards into ftCo_Fall_IASA_Inner,
           // - if mv.co.damage.x14 is active and within p_ftCommonData->x1D0, it first ORs XY into
@@ -941,43 +941,6 @@ void knockdown_update_pre_physics(MslBatch* batch) {
           }
         }
 
-        // Grounded common-damage callback ownership:
-        // - Damage_IASA delegates to Wait_IASA only on grounded rows when !x221C_b6.
-        // - Wait_IASA then evaluates guard/jump locomotion checks in-order.
-        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_IASA
-        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
-        if (batch->state.on_ground[idx] != 0u && !iasa_locked) {
-          guard_update_grounded(batch, c, idx, 1u);
-          if (batch->state.action_id[idx] != a0) {
-            continue;
-          }
-          if (damage_ground_try_enter_kneebend_from_wait_iasa(batch, c, idx)) {
-            continue;
-          }
-          {
-            const float stick_x = apply_deadzone(stick_i8_to_unit(batch->state.input_main_x[idx]),
-                                                 c->lstick_deadzone_x);
-            const float stick_y = apply_deadzone(stick_i8_to_unit(batch->state.input_main_y[idx]),
-                                                 c->lstick_deadzone_y);
-            const uint16_t buttons = batch->state.input_buttons[idx];
-            const uint8_t specials_has_input =
-                damage_ground_wait_iasa_specials_has_input(c, buttons, stick_x);
-            if (!specials_has_input && stick_y < -c->crouch_stick_threshold) {
-              // Decomp: Damage_IASA grounded path delegates to Wait_IASA, and Wait_IASA checks
-              // ftCo_SpecialS_CheckInput before Squat. Only held-B rows that fail the extracted
-              // Side-B horizontal gate can still fall through to crouch.
-              // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_IASA
-              // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
-              // refs/melee/src/melee/ft/chara/ftCommon/ftCo_SpecialS.c::{
-              //   ftCo_SpecialS_CheckInput,ftCo_SpecialS_HasInput}
-              // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Squat.c::ftCo_Squat_Enter
-              // data/common/ft_common_data.json: special_stick_x_threshold_side
-              enter_squat(batch, idx);
-              continue;
-            }
-          }
-        }
-
         uint8_t anim_done = 0u;
         if (damage_msid_u32 <= 0xFFFFu) {
           anim_done = anim_is_finished(cid, (uint16_t)damage_msid_u32, anim_frame);
@@ -989,23 +952,16 @@ void knockdown_update_pre_physics(MslBatch* batch) {
           // Decomp: Damage_Anim checks the inlineC0 jump-buffer gate first.
           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_Anim
           if (!(gate_open && damage_air_try_jump_aerial(batch, c, ch, idx, 1u))) {
-            if (batch->state.on_ground[idx] != 0u) {
-              // Decomp grounded branch:
-              // - ftCo_Damage_Anim enters Wait on anim end when ground_or_air == GA_Ground and
-              //   x221C_b6 is clear.
-              // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_Anim
-              // refs/melee/src/melee/ft/ft_0892.c::ft_8008A2BC
-              enter_wait(batch, idx);
-            } else {
-              // Decomp airborne branch:
-              // - ftCo_Damage_Anim enters Fall via ftCo_Fall_Enter when anim/hitstun gates clear.
-              // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_Anim
-              // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_Enter
-              //
-              // ftCo_Fall_Enter does not call ftAnim_8006EBA4, so keep the previous DamageAir pose
-              // for this frame's collision/hurtbox updates and commit Fall animation/timebase later.
-              batch->state.action_id[idx] = (uint16_t)MSL_ACT_FALL;
-            }
+            // `common_damage_airborne` is only entered while on_ground == 0, so the grounded
+            // Damage_Anim -> Wait branch is unreachable here by construction.
+            // Decomp airborne branch:
+            // - ftCo_Damage_Anim enters Fall via ftCo_Fall_Enter when anim/hitstun gates clear.
+            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_Anim
+            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_Enter
+            //
+            // ftCo_Fall_Enter does not call ftAnim_8006EBA4, so keep the previous DamageAir pose
+            // for this frame's collision/hurtbox updates and commit Fall animation/timebase later.
+            batch->state.action_id[idx] = (uint16_t)MSL_ACT_FALL;
           }
         }
         continue;

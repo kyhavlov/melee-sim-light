@@ -57,6 +57,17 @@ uint8_t move_tables_grounded_attack_allow_interrupt(uint8_t char_id, uint16_t gr
 uint8_t move_tables_escape_allow_interrupt(uint8_t char_id, uint16_t action_id,
                                            float cur_anim_frame_f32);
 
+// Returns whether EscapeAir command-script cmd_var[0] is active at the given cur_anim_frame.
+//
+// Decomp:
+// - EscapeAir_Phys uses cmd_vars[0] (`cmd_skip_decay`) to switch from velocity decay to the common
+//   air helper ft_80084DB0.
+// refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Phys
+// refs/melee/src/melee/ft/ftaction.c::ftAction_80071820
+//
+// Source of truth: data/moves/{fox,falco}.json moves["ftCo_SM_EscapeAir"]["events"] set_cmd_var(idx=0).
+uint8_t move_tables_escapeair_cmd0_active(uint8_t char_id, float cur_anim_frame_f32);
+
 // Returns whether EscapeF should consume a script-driven facing flip this frame.
 //
 // Decomp:
