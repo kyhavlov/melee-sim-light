@@ -81,6 +81,61 @@ Instead compare simulator state fields directly (and later optionally compare em
 - `docs/legacy_melee_sim/`: reference docs copied from the old project (do not treat as the lite sim’s contract).
 - `docs/DATA_CONTRACT.md`: what we extract from ISO and where it lives.
 
+## Modelplay Viewer Traces
+
+For visual bug triage, there is a throwaway model-vs-sim playback path under `tools/modelplay/`:
+- `tools/modelplay/run_model_match.py`: runs one or two real `slippi-ai` checkpoints against this sim.
+- `tools/modelplay/sim_env.py`: thin Python session wrapper over `msl_binding`.
+- `tools/modelplay/state_adapter.py` / `tools/modelplay/viewer_trace.py`: convert sim state into a browser-viewable trace.
+- `tools/modelplay/viewer/`: patched `slippi-viewer` fork that consumes trace JSON directly (not `.slp`).
+
+Generated traces live under gitignored `reports/modelplay/`.
+
+Important facts about these traces:
+- They are **not** Slippi replay files. They are JSON objects in the viewer's internal `ReplayData`-like shape.
+- They are generated from the sim's per-frame output, so they reflect sim bugs directly.
+- For current Fox/Falco FD runs, the default seed is `start_record=0` of `datasets/fox_falco_fd_ucf084_recent/.../AttachedGoodNaturedGuanaco.msl`, which is the real 4-stock opening `Entry` state, not a midgame bootstrap row.
+- `frameNumber` in the viewer trace is a sequential viewer frame index (`0..N`), not the sim/dataset `frame_id`.
+
+How to regenerate a trace:
+
+```bash
+uv run python -m tools.modelplay.run_model_match \
+  --slippi-ai-root /media/kyle/Windows/Users/kyleh/git/slippi-ai \
+  --p1-model /path/to/model.pkl \
+  --p2-model /path/to/model.pkl \
+  --out reports/modelplay/<run_name>
+```
+
+How to inspect a trace in the browser:
+
+```bash
+cd tools/modelplay/viewer
+npm install
+npm run build
+python -m http.server 8000
+```
+
+Then open `http://127.0.0.1:8000/examples/sim/` and load `reports/modelplay/<run_name>/trace.json`.
+
+How to inspect a trace without the browser:
+- The trace is plain JSON, so use `uv run python`, `jq`, or a small script to inspect exact frame windows around a reported bug.
+- Useful per-frame fields are under `frames[i].players[p].state`, especially:
+  - `actionStateId`
+  - `actionStateFrameCounter`
+  - `xPosition` / `yPosition`
+  - `percent`
+  - `stocksRemaining`
+  - `isGrounded`
+  - `hitlagRemaining`
+  - `hitstunRemaining`
+- Processed controller inputs are under `frames[i].players[p].inputs.processed`.
+
+When debugging from viewer-reported bugs:
+- Treat the viewer as a symptom-finding surface, not a correctness oracle.
+- Use the viewer frame index first, then inspect the corresponding trace JSON window and relevant sim code paths.
+- If the trace itself goes static for many frames, that usually means the sim stopped progressing in some action/state machine; inspect the action id and surrounding input window first.
+
 ## Python Dependencies (use `uv`, not `pip`)
 
 Use `uv` for Python dependencies and editable installs:
