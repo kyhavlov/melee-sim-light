@@ -122,6 +122,7 @@ def _seed_ground_base() -> np.ndarray:
     seed["char_id"][0, :2] = np.uint8(CHAR_FOX)
     seed["facing"][0, :2] = np.uint8(1)  # right
     seed["pos_x"][0, :2] = np.float32(0.0)
+    seed["pos_x"][0, 1] = np.float32(20.0)
     seed["pos_y"][0, :2] = np.float32(0.0)
     seed["on_ground"][0, :2] = np.uint8(1)
     seed["ground_id"][0, :2] = np.uint16(0)

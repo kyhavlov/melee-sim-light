@@ -323,6 +323,12 @@ def main() -> None:
         # ft_80084F3C scales ground friction by p_ftCommonData->x6C when |gr_vel| > walk_max_vel.
         "high_speed_friction_mul": float(_f32_be(buf, ft_common_abs + 0x6C)),
         "walk_anim_vel_mul": float(_f32_be(buf, ft_common_abs + 0x440)),
+        # Grounded fighter-overlap nudge (ftCommon_8007DD7C / ftCommon_8007E0E4):
+        # - x450 contributes to fp->xF8_playerNudgeVel.x on horizontal pushbox overlap.
+        # - x454 contributes to fp->xF8_playerNudgeVel.y (engine-space Z lane); the lite sim
+        #   currently models only the horizontal x450 lane.
+        "player_nudge_x": float(_f32_be(buf, ft_common_abs + 0x450)),
+        "player_nudge_z": float(_f32_be(buf, ft_common_abs + 0x454)),
         # Guard pose update smoothing (ftCo_Guard.c `ftCo_80091BC4`):
         # - `mv.co.guard.x8 = 10 + normalizeAngle0(normalizeAngle180(deg-offset) * x44C + offset)`
         # - `mv.co.guard.x4 = x44C * (stick_mag - x4) + x4`

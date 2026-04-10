@@ -62,6 +62,9 @@ def _seed_guard(*, facing_p1: int) -> np.ndarray:
     seed["animation_index"][0, 1] = np.uint32(0xFFFF_FFFF)
     seed["shield_hp"][0, :2] = np.float32(_common_attr("start_shield_health"))
     seed["fighter_scale_y"][0, :2] = np.float32(1.0)
+    # P0 is only a dummy opponent for the shield-pose query; keep it out of the common grounded
+    # player-overlap nudge lane so this test isolates shield tilt.
+    seed["pos_x"][0, 0] = np.float32(-20.0)
 
     neutral, _frame_max = load_shield_tilt_table_meta()[CHAR_FOX]
     seed["guard_tilt_x8"][0, :2] = np.uint16(neutral)

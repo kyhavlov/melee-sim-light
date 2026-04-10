@@ -91,10 +91,10 @@ typedef struct MslCommonParams {
 
   // Dash IASA windows (refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c::ftCo_Dash_IASA)
   float attackdash_friction_mul;  // p_ftCommonData->x50 (ftCo_AttackDash_Phys -> ft_80085030)
-  float dash_iasa_vel_mul;  // p_ftCommonData->dash_iasa_vel_mul (0x54)
-  float dash_iasa_x44;      // p_ftCommonData->x44
-  float dash_iasa_x48;      // p_ftCommonData->x48
-  float dash_iasa_x4c;      // p_ftCommonData->x4C
+  float dash_iasa_vel_mul;        // p_ftCommonData->dash_iasa_vel_mul (0x54)
+  float dash_iasa_x44;            // p_ftCommonData->x44
+  float dash_iasa_x48;            // p_ftCommonData->x48
+  float dash_iasa_x4c;            // p_ftCommonData->x4C
 
   // Jump / fastfall thresholds (refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c / ftcommon.c)
   float tap_jump_threshold;          // p_ftCommonData->tap_jump_threshold (0x70)
@@ -166,6 +166,10 @@ typedef struct MslCommonParams {
   // Grab / catch grounded friction scalar.
   // Decomp: refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_Catch_Phys
   float catch_friction_mul;  // p_ftCommonData->x64
+  // Grounded fighter-overlap nudge (`fp->xF8_playerNudgeVel`).
+  // Decomp: refs/melee/src/melee/ft/ftcommon.c::{ftCommon_8007DD7C,ftCommon_8007E0E4}
+  float player_nudge_x;  // p_ftCommonData->x450
+  float player_nudge_z;  // p_ftCommonData->x454
 
   // Run accel scaling when 0 < (gr_vel/target_vel) < 1 (refs/melee/src/melee/ft/chara/ftCommon/ftCo_Run.c::ftCo_Run_Phys)
   float run_accel_scale_mul;  // p_ftCommonData->run_accel_scale_mul (0x5C)

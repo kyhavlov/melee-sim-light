@@ -126,6 +126,8 @@
   "powershield_reflect_total_frames": 3,
   "powershield_reflect_trigger_min": 0.25,
   "powershield_reflect_window_frames": 2,
+  "player_nudge_x": 0.30000001192092896,
+  "player_nudge_z": 0.10000000149011612,
   "rebirth_timer_frames": 60,
   "rebirth_wait_timer_frames": 240,
   "rebound_damage_x191c_base": 3.0,

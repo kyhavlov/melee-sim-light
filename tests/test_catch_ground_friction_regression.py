@@ -64,6 +64,7 @@ def test_catch_grounded_phys_uses_ftcommon_x64_friction() -> None:
     seed["animation_index"][0, 1] = np.uint32(SM_WAIT)
     seed["on_ground"][0, 1] = np.uint8(1)
     seed["ground_id"][0, 1] = np.uint16(0)
+    seed["pos_x"][0, 1] = np.float32(20.0)
     seed["pos_y"][0, 1] = np.float32(0.0001)
 
     sizes = binding.sizes()
