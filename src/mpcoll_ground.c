@@ -155,6 +155,7 @@ static inline uint8_t action_allows_floor_edge_snap(uint16_t a) {
   // ft_800827A0) as their collision callback, including:
   // - Down* (except DownBound, which uses ft_80082708 -> mpColl_8004B108)
   // - Grounded attacks (Attack11..AttackLw4), including AttackDash and AttackS4S.
+  // - PassiveStandF/B tech-roll grounded continuation.
   //
   // Implementation note: we gate by action_id here as a proxy for "this motion state uses the
   // ft_80084104 collision callback chain". We intentionally do not include locomotion states
@@ -172,6 +173,7 @@ static inline uint8_t action_allows_floor_edge_snap(uint16_t a) {
   // - refs/melee/src/melee/mp/mpcoll.c::mpColl_8004B2DC (uses mpColl_8004A45C_Floor)
   // - refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackDash.c::ftCo_AttackDash_Coll
   // - refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackS4.c::ftCo_AttackS4_Coll
+  // - refs/melee/src/melee/ft/chara/ftCommon/ftCo_PassiveStand.c::ftCo_PassiveStand_Coll
   if (a >= (uint16_t)MSL_ACT_ATTACK_11 && a <= (uint16_t)MSL_ACT_ATTACK_LW4) {
     return 1;
   }
@@ -193,6 +195,8 @@ static inline uint8_t action_allows_floor_edge_snap(uint16_t a) {
     case MSL_ACT_DOWN_ATTACK_D:
     case MSL_ACT_DOWN_FOWARD_D:
     case MSL_ACT_DOWN_BACK_D:
+    case MSL_ACT_PASSIVE_STAND_F:
+    case MSL_ACT_PASSIVE_STAND_B:
       return 1;
     default:
       return 0;
