@@ -214,3 +214,37 @@ def test_damageflyhi_hitlag_sdi_target_pm1_and_negative_control_are_replay_exact
     assert float(out_neg["pos_x"][p]) == pytest.approx(float(ref_neg["pos_x"][p]), abs=1e-6)
     assert float(out_neg["pos_y"][p]) == pytest.approx(float(ref_neg["pos_y"][p]), abs=1e-6)
 
+
+@pytest.mark.integration
+def test_damageflytop_hitlag_sdi_target_and_neighbors_are_replay_exact() -> None:
+    root = Path(__file__).resolve().parents[1]
+    dataset_rel = (
+        "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
+        "AttachedGoodNaturedGuanaco.msl"
+    )
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+    rows = (612, 613, 614)
+    p = 1
+    for rec in rows:
+        assert int(samples.shape[0]) > rec, f"dataset too short for record={rec}"
+
+    target = samples[613 : 614]
+    assert int(target["seed_t"]["action_id"][0, p]) == 90
+    assert int(target["seed_t"]["hitlag"][0, p]) == 4
+    assert float(target["seed_t"]["pos_x"][0, p]) == pytest.approx(8.924493789672852, abs=1e-6)
+    assert float(target["seed_t"]["pos_y"][0, p]) == pytest.approx(15.222575187683105, abs=1e-6)
+    assert float(target["ref_t1"]["pos_x"][0, p]) == pytest.approx(12.974493980407715, abs=1e-6)
+    assert float(target["ref_t1"]["pos_y"][0, p]) == pytest.approx(19.572574615478516, abs=1e-6)
+
+    for rec in rows:
+        out, ref = _run_one_step(dataset_path, rec)
+        assert int(out["action_id"][p]) == int(ref["action_id"][p])
+        assert int(out["hitlag"][p]) == int(ref["hitlag"][p])
+        assert int(out["hitstun"][p]) == int(ref["hitstun"][p])
+        assert float(out["pos_x"][p]) == pytest.approx(float(ref["pos_x"][p]), abs=1e-6)
+        assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=1e-6)

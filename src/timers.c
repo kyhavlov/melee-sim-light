@@ -149,49 +149,6 @@ static inline uint8_t damage_post_hitlag_cb_owner_action(uint16_t a) {
   }
 }
 
-static inline uint8_t damage_every_hitlag_sdi_action(uint16_t a) {
-  switch (a) {
-    // Decomp: ftCo_Damage_OnEveryHitlag is installed across common Damage / DamageFly motion
-    // families through the damage entry path; keep the per-hitlag displacement subset explicit at
-    // the callsite so fly-family ownership stays source-backed and auditable.
-    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{
-    //   ftCo_8008DCE0,ftCo_Damage_OnEveryHitlag
-    // }
-    case MSL_ACT_DAMAGE_HI_1:
-    case MSL_ACT_DAMAGE_HI_2:
-    case MSL_ACT_DAMAGE_HI_3:
-    case MSL_ACT_DAMAGE_N_1:
-    case MSL_ACT_DAMAGE_N_2:
-    case MSL_ACT_DAMAGE_N_3:
-    case MSL_ACT_DAMAGE_LW_1:
-    case MSL_ACT_DAMAGE_LW_2:
-    case MSL_ACT_DAMAGE_LW_3:
-    case MSL_ACT_DAMAGE_AIR_1:
-    case MSL_ACT_DAMAGE_AIR_2:
-    case MSL_ACT_DAMAGE_AIR_3:
-    case MSL_ACT_DAMAGE_FLY_LW:
-      return 1u;
-    default:
-      return 0u;
-  }
-}
-
-static inline uint8_t damage_every_hitlag_sdi_full_2d_action(uint16_t a) {
-  switch (a) {
-    // Narrow 2D subset backed by the current replay-real bug family:
-    // keep the existing horizontal owner for the broad common Damage set, and only elevate the
-    // full cur_pos += lstick(x,y) branch where it is directly evidenced this cycle.
-    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{
-    //   ftCo_8008DCE0,ftCo_Damage_OnEveryHitlag
-    // }
-    case MSL_ACT_DAMAGE_AIR_2:
-    case MSL_ACT_DAMAGE_FLY_HI:
-      return 1u;
-    default:
-      return 0u;
-  }
-}
-
 static inline uint8_t damage_every_hitlag_sdi_timer_window_action(uint16_t a) {
   switch (a) {
     // DownDamageD re-enters ftCo_8008DCE0 via ftCo_8009F184 and owns the same per-hitlag SDI
@@ -332,7 +289,9 @@ void timers_consume_post_hitlag_callbacks_after_input(MslBatch* batch) {
   }
 
   // Decomp callback ownership:
-  // - Damage hitlag also runs `ftCo_Damage_OnEveryHitlag` while allow_sdi is active.
+  // - Damage hitlag runs the generic `ftCo_Damage_OnEveryHitlag` callback while allow_sdi is
+  //   active. That callback applies full 2D `cur_pos += lstick * sdi_pos_scale`; it does not
+  //   branch by action family inside the callback.
   //   refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_OnEveryHitlag
   // - `hitlag_cb` executes inside Fighter_procUpdate after current-frame input processing.
   //   refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate
@@ -341,8 +300,8 @@ void timers_consume_post_hitlag_callbacks_after_input(MslBatch* batch) {
   // - We do not yet seed/model `allow_sdi` independently.
   // - The runtime therefore uses the replay-visible fp+0x221A 0x20 lane, which this sim derives
   //   from active hitlag in `timers_update`, as a proxy for allow_sdi.
-  // - This patch only removes the incorrect dependency on x221A_b3; it does not claim to have
-  //   fully separated allow_sdi from hitlag-active ownership.
+  // - This pass replaces the old action-family SDI split with the generic OnEveryHitlag owner
+  //   path. It does not claim to have fully separated allow_sdi from hitlag-active ownership.
   // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
   // refs/melee/src/melee/ft/types.h (fp+221A:2 allow_sdi, fp+221A:3 x221A_b3)
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c:824 (allow_sdi can be set without
@@ -370,11 +329,6 @@ void timers_consume_post_hitlag_callbacks_after_input(MslBatch* batch) {
       const float lstick_mag_sq = lstick_x * lstick_x + lstick_y * lstick_y;
       const size_t flags_i =
           idx * (size_t)MSL_STATE_FLAGS_STRIDE + (size_t)MSL_STATE_FLAGS_221A_INDEX;
-      const uint8_t sdi_edge_x =
-          (lstick_x >= c->lstick_tilt_x_thresh && prev_lstick_x < c->lstick_tilt_x_thresh) ||
-                  (lstick_x <= -c->lstick_tilt_x_thresh && prev_lstick_x > -c->lstick_tilt_x_thresh)
-              ? 1u
-              : 0u;
       const uint8_t sdi_full_edge_x = (lstick_full_x >= c->lstick_tilt_x_thresh &&
                                        prev_lstick_full_x < c->lstick_tilt_x_thresh) ||
                                               (lstick_full_x <= -c->lstick_tilt_x_thresh &&
@@ -389,21 +343,15 @@ void timers_consume_post_hitlag_callbacks_after_input(MslBatch* batch) {
                                           : 0u;
       const uint8_t sdi_tilt_window_x =
           (batch->state.tilt_timer_x[idx] < c->sdi_tilt_max_frames) ? 1u : 0u;
-      const uint8_t use_full_2d =
-          damage_every_hitlag_sdi_full_2d_action(a) && (sdi_full_edge_x || sdi_full_edge_y);
+      const uint8_t use_full_2d = (sdi_full_edge_x || sdi_full_edge_y);
       if (batch->state.hitlag_pre_timer[idx] != 0u && batch->state.hitlag[idx] != 0u &&
-          (use_full_2d || (damage_every_hitlag_sdi_action(a) && sdi_edge_x) ||
-           (damage_every_hitlag_sdi_timer_window_action(a) && sdi_tilt_window_x)) &&
+          (use_full_2d || (damage_every_hitlag_sdi_timer_window_action(a) && sdi_tilt_window_x)) &&
           (batch->state.state_flags[flags_i] & (uint8_t)MSL_STATE_FLAG_221A_IS_HITLAG) != 0u &&
           lstick_mag_sq >= sdi_radius_sq) {
-        if (use_full_2d) {
-          batch->state.pos_x[idx] += lstick_full_x * sdi_step_mul;
-          batch->state.pos_y[idx] += lstick_full_y * sdi_step_mul;
-          batch->state.tilt_timer_x[idx] = 254u;
-          batch->state.tilt_timer_y[idx] = 254u;
-        } else {
-          batch->state.pos_x[idx] += lstick_x * sdi_step_mul;
-        }
+        batch->state.pos_x[idx] += lstick_full_x * sdi_step_mul;
+        batch->state.pos_y[idx] += lstick_full_y * sdi_step_mul;
+        batch->state.tilt_timer_x[idx] = 254u;
+        batch->state.tilt_timer_y[idx] = 254u;
       }
     }
   }
