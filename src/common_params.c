@@ -379,6 +379,8 @@ int common_params_init(void) {
       json_get_f32(buf, "kb_wsk_mul", &g_params.kb_wsk_mul) != 0 ||
       json_get_f32(buf, "kb_growth_mul", &g_params.kb_growth_mul) != 0 ||
       json_get_f32(buf, "kb_base_add", &g_params.kb_base_add) != 0 ||
+      json_get_i32(buf, "kb_vel_merge_since_hit_frames", &g_params.kb_vel_merge_since_hit_frames) !=
+          0 ||
       json_get_f32(buf, "kb_vel_mul", &g_params.kb_vel_mul) != 0 ||
       json_get_f32(buf, "kb_min", &g_params.kb_min) != 0 ||
       json_get_f32(buf, "kb_squat_mul", &g_params.kb_squat_mul) != 0 ||

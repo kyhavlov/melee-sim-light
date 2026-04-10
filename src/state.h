@@ -382,6 +382,15 @@ typedef struct MslStateSoA {
   // - Consumed/reset by Fighter_ProcessHit_8006D1EC each frame.
   //   refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
   float* percent_temp;
+  // Damage KB velocity merge timer (decomp: fp->dmg.x18AC_time_since_hit).
+  //
+  // Decomp:
+  // - Fighter init seeds -1; Damage entry sets 0.
+  // - Fighter_8006A360 increments this once per non-hitlag frame while active.
+  // - ftCo_Damage_CalcVel replaces or merges `x8c_kb_vel` based on p_ftCommonData->xFC.
+  // refs/melee/src/melee/ft/fighter.c::{Fighter_UnkInitReset_80067C98,Fighter_8006A360}
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{ftCo_Damage_CalcVel,ftCo_8008DCE0}
+  int16_t* damage_time_since_hit_x18ac;
   // Damage pipeline gates used by ftColl_80079AB0 (non-WSK else-branch) to select the base term
   // for `s = base + percent_temp`.
   //

@@ -646,6 +646,17 @@ typedef struct MslSeed {
   float shield_hp[MSL_MAX_PLAYERS];
   uint16_t hitlag[MSL_MAX_PLAYERS];
   uint16_t hitstun[MSL_MAX_PLAYERS];
+  // Damage KB velocity merge timer (decomp: fp->dmg.x18AC_time_since_hit).
+  //
+  // Decomp:
+  // - Fighter init sets x18AC = -1.
+  // - Fighter_8006A360 increments x18AC once per non-hitlag frame while active.
+  // - ftCo_8008DCE0 sets x18AC = 0 on Damage entry.
+  // - ftCo_Damage_CalcVel replaces KB velocity while x18AC < p_ftCommonData->xFC; otherwise it
+  //   merges the new KB vector with the existing KB velocity.
+  // refs/melee/src/melee/ft/fighter.c::{Fighter_UnkInitReset_80067C98,Fighter_8006A360}
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{ftCo_Damage_CalcVel,ftCo_8008DCE0}
+  int16_t damage_time_since_hit_x18ac[MSL_MAX_PLAYERS];
   // Damage jump-buffer snapshot (decomp: fp->mv.co.damage.x14).
   // - Cleared on damage entry (ftCo_8008DCE0).
   // - Set to hitstun timer (mv.co.damage.x0) on jump-input detect in doIasa.

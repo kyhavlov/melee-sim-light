@@ -279,6 +279,7 @@ SEED_DTYPE = np.dtype(
         ("shield_hp", _arr("<f4", MAX_PLAYERS)),
         ("hitlag", _arr("<u2", MAX_PLAYERS)),
         ("hitstun", _arr("<u2", MAX_PLAYERS)),
+        ("damage_time_since_hit_x18ac", _arr("<i2", MAX_PLAYERS)),
         ("damage_jump_buffer_x14", _arr("<u2", MAX_PLAYERS)),
         ("l_cancel", _arr("u1", MAX_PLAYERS)),
         ("hurtbox_state", _arr("u1", MAX_PLAYERS)),

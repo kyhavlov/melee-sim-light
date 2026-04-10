@@ -645,6 +645,11 @@ int msl_batch_reseed_seed(MslBatch* batch, const uint8_t* seed_bytes, size_t see
       batch->state.hitlag_pre_timer[idx] = (seed->hitlag[p] != 0u) ? 1u : 0u;
       batch->state.hitlag_started_frame[idx] = 0;
       batch->state.hitstun[idx] = seed->hitstun[p];
+      int16_t x18ac = seed->damage_time_since_hit_x18ac[p];
+      if (x18ac < -1) {
+        x18ac = -1;
+      }
+      batch->state.damage_time_since_hit_x18ac[idx] = x18ac;
       batch->state.damage_jump_buffer_x14[idx] = seed->damage_jump_buffer_x14[p];
       batch->state.damage_post_hitlag_cb_kind[idx] = seed->damage_post_hitlag_cb_kind[p];
       batch->state.throw_pending_victim_port[idx] = 0xFFu;

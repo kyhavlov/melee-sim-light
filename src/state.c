@@ -187,6 +187,7 @@ int state_alloc(MslStateSoA* state, int batch_size) {
 
   state->percent = (float*)alloc_aligned_64(sizeof(float) * bp);
   state->percent_temp = (float*)alloc_aligned_64(sizeof(float) * bp);
+  state->damage_time_since_hit_x18ac = (int16_t*)alloc_aligned_64(sizeof(int16_t) * bp);
   state->dmg_x2225_b7 = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->dmg_x2224_b2 = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->shield_hp = (float*)alloc_aligned_64(sizeof(float) * bp);
@@ -370,10 +371,11 @@ int state_alloc(MslStateSoA* state, int batch_size) {
       !state->x681 || !state->x682 || !state->x683 || !state->x684 || !state->ucf_padbuf_index ||
       !state->ucf_padbuf_sdrop_up_frames || !state->ucf_padbuf_stick_x ||
       !state->ucf_padbuf_stick_y || !state->percent || !state->percent_temp ||
-      !state->dmg_x2225_b7 || !state->dmg_x2224_b2 || !state->shield_hp || !state->hitlag ||
-      !state->hitlag_pre_timer || !state->hitlag_started_frame || !state->hitstun ||
-      !state->damage_jump_buffer_x14 || !state->damage_post_hitlag_cb_kind || !state->l_cancel ||
-      !state->hurtbox_state || !state->colanim_hit_status_x198c || !state->colanim_timer_x1990 ||
+      !state->damage_time_since_hit_x18ac || !state->dmg_x2225_b7 || !state->dmg_x2224_b2 ||
+      !state->shield_hp || !state->hitlag || !state->hitlag_pre_timer ||
+      !state->hitlag_started_frame || !state->hitstun || !state->damage_jump_buffer_x14 ||
+      !state->damage_post_hitlag_cb_kind || !state->l_cancel || !state->hurtbox_state ||
+      !state->colanim_hit_status_x198c || !state->colanim_timer_x1990 ||
       !state->colanim_timer_x1994 || !state->colanim_lock_x2221_b0 || !state->hurtcap_count ||
       !state->hurtcap_a_x || !state->hurtcap_a_y || !state->hurtcap_a_z || !state->hurtcap_b_x ||
       !state->hurtcap_b_y || !state->hurtcap_b_z || !state->hurtcap_radius ||
@@ -591,6 +593,7 @@ void state_free(MslStateSoA* state) {
 
   alloc_free(state->percent);
   alloc_free(state->percent_temp);
+  alloc_free(state->damage_time_since_hit_x18ac);
   alloc_free(state->dmg_x2225_b7);
   alloc_free(state->dmg_x2224_b2);
   alloc_free(state->shield_hp);

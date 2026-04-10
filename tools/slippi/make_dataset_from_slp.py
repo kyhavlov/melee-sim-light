@@ -1698,6 +1698,7 @@ def main() -> None:
 
 def _main_impl(args) -> None:
     from tools.slippi.combat_history import derive_combat_hitlist_seed_fields
+    from tools.slippi.damage_history import derive_damage_time_since_hit_x18ac
     from tools.slippi.anim_timebase import derive_frame_speed_mul_f32, load_end_frame_tables
     from tools.slippi.seed_history import (
         apply_deadzone,
@@ -2307,6 +2308,13 @@ def _main_impl(args) -> None:
         samples["ref_t1"]["hitlag"][:, slot] = post_hitlag[1:]
         samples["seed_t"]["hitstun"][:, slot] = post_hitstun[:-1]
         samples["ref_t1"]["hitstun"][:, slot] = post_hitstun[1:]
+        damage_time_since_hit_x18ac = derive_damage_time_since_hit_x18ac(
+            action_id_u16=post_state,
+            hitlag_u16=post_hitlag,
+            hitstun_u16=post_hitstun,
+            state_flags_u8=state_flags,
+        )
+        samples["seed_t"]["damage_time_since_hit_x18ac"][:, slot] = damage_time_since_hit_x18ac[:-1]
         source_clear_timer_x18c8, source_clear_owner_set_phase = (
             _derive_source_clear_timer_x18c8_and_owner_phase_seed_lanes(
                 action_id_u16=post_state,
