@@ -112,6 +112,45 @@ def test_grounded_rows_sync_self_vel_x_lane_to_ref(dataset_rel: str, record: int
 
 
 @pytest.mark.integration
+def test_dash_entry_xe8_updates_gr_vel_after_self_vel_copy() -> None:
+    # Dash entry uses ftCo_Dash_Enter -> ftCommon_800804A0 to queue xE8_ground_accel_2.
+    # Fighter_procUpdate applies xE8 after Dash_Phys has called ftCommon_ApplyGroundMovement, so
+    # same-frame self_vel.x / position still use the old gr_vel while post-frame gr_vel is updated.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c::{ftCo_Dash_Enter,ftCo_Dash_Phys}
+    # refs/melee/src/melee/ft/ftcommon.c::{ftCommon_800804A0,ftCommon_ApplyGroundMovement}
+    # refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_rel = (
+        "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
+        "AttachedGoodNaturedGuanaco.msl"
+    )
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    record = 397
+    p = 0
+    ds = read_dataset(str(dataset_path))
+    seed = ds.samples[record]["seed_t"]
+    assert int(seed["action_id"][p]) != 20
+    assert int(ds.samples[record]["ref_t1"]["action_id"][p]) == 20  # Dash
+
+    out, ref = _step_one_row(dataset_path, record, p)
+    assert int(out["action_id"][p]) == int(ref["action_id"][p]) == 20
+    assert float(out["pos_x"][p]) == pytest.approx(float(ref["pos_x"][p]), abs=1e-6)
+    assert float(out["speed_air_x_self"][p]) == pytest.approx(
+        float(ref["speed_air_x_self"][p]), abs=2e-6
+    )
+    assert float(out["speed_ground_x_self"][p]) == pytest.approx(
+        float(ref["speed_ground_x_self"][p]), abs=2e-6
+    )
+    assert float(out["speed_air_x_self"][p]) != pytest.approx(
+        float(out["speed_ground_x_self"][p]), abs=1e-3
+    )
+
+
+@pytest.mark.integration
 def test_airborne_negative_control_does_not_get_ground_sync() -> None:
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)

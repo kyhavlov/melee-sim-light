@@ -30,6 +30,7 @@ def _arr(dtype: str, n: int):
 
 MAX_PLAYERS: Final[int] = 4
 MAX_ITEMS: Final[int] = 15
+MAX_HITBOXES: Final[int] = 4
 HITLIST_GROUPS: Final[int] = 8
 STALE_QUEUE_SIZE: Final[int] = 10  # decomp: refs/melee/src/melee/pl/types.h::StaleMoveTable.StaleMoves[10]
 
@@ -279,6 +280,7 @@ SEED_DTYPE = np.dtype(
         ("shield_hp", _arr("<f4", MAX_PLAYERS)),
         ("hitlag", _arr("<u2", MAX_PLAYERS)),
         ("hitstun", _arr("<u2", MAX_PLAYERS)),
+        ("damage_time_since_hit_x18ac", _arr("<i2", MAX_PLAYERS)),
         ("damage_jump_buffer_x14", _arr("<u2", MAX_PLAYERS)),
         ("l_cancel", _arr("u1", MAX_PLAYERS)),
         ("hurtbox_state", _arr("u1", MAX_PLAYERS)),
@@ -312,6 +314,9 @@ SEED_DTYPE = np.dtype(
         ("state_flags", ("u1", (MAX_PLAYERS, 5))),
         ("combat_hitlist_cd", ("<u2", (MAX_PLAYERS, HITLIST_GROUPS, MAX_PLAYERS))),
         ("combat_hitlist_victim_iid", ("<u2", (MAX_PLAYERS, HITLIST_GROUPS, MAX_PLAYERS))),
+        ("combat_hitlist_hb_valid", ("u1", (MAX_PLAYERS, MAX_HITBOXES))),
+        ("combat_hitlist_hb_cd", ("<u2", (MAX_PLAYERS, MAX_HITBOXES, MAX_PLAYERS))),
+        ("combat_hitlist_hb_victim_iid", ("<u2", (MAX_PLAYERS, MAX_HITBOXES, MAX_PLAYERS))),
         ("stale_queue_index", _arr("u1", MAX_PLAYERS)),
         ("stale_move_id", ("<u2", (MAX_PLAYERS, STALE_QUEUE_SIZE))),
         ("stale_attack_instance", ("<u2", (MAX_PLAYERS, STALE_QUEUE_SIZE))),

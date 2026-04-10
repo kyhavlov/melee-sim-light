@@ -21,6 +21,7 @@ _ACT_CATCH = 212
 _ACT_CATCH_PULL = 213
 _ACT_CATCH_DASH = 214
 _ACT_CATCH_DASH_PULL = 215
+_ACT_GUARD_ON = 178
 _ACT_CAPTURE_PULLED_HI = 223
 _ACT_CAPTURE_PULLED_LW = 226
 _SM_WAIT1_0 = 2
@@ -140,6 +141,78 @@ def test_dash_grab_enters_catchdash(dataset_name: str, record: int, attacker: in
 
     out, ref = _run_record(dataset_path, record)
     assert int(out["action_id"][0, attacker]) == int(ref["action_id"][attacker])
+
+
+@pytest.mark.integration
+def test_catch_grabs_shielded_guardon_no_submotion_snapshot() -> None:
+    root = Path(__file__).resolve().parents[1]
+    dataset_rel = f"{_BASE_REL}/GracefulAttachedTurtle.msl"
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+    _skip_if_required_artifacts_missing(root)
+
+    ds = read_dataset(str(dataset_path))
+    record = 10931
+    row = ds.samples[record : record + 1]
+    owner = 0
+    victim = 1
+
+    # Replay-real lock for shielded-fighter catch acquisition:
+    # - owner Catch hitboxes overlap the live ShieldDesc on a GuardOn no-submotion snapshot,
+    # - ref routes Catch -> CatchPull and GuardOn -> CapturePulledLw with no hitlag/hitstun.
+    # Decomp owner: ftColl_80078A2C selects a grabbable fighter victim, then ftGrabDist installs
+    # victim_gobj / x221B_b5 before grab_flow_on_catch_connect mirrors the transition.
+    assert int(row["seed_t"]["action_id"][0, owner]) == _ACT_CATCH
+    assert int(row["seed_t"]["action_frame"][0, owner]) == 5
+    assert int(row["ref_t1"]["action_id"][0, owner]) == _ACT_CATCH_PULL
+    assert int(row["seed_t"]["action_id"][0, victim]) == _ACT_GUARD_ON
+    assert int(row["seed_t"]["animation_index"][0, victim]) == 0xFFFFFFFF
+    assert int(row["seed_t"]["state_flags"][0, victim, 2]) & 0x80
+    assert int(row["ref_t1"]["action_id"][0, victim]) == _ACT_CAPTURE_PULLED_LW
+    assert int(row["ref_t1"]["hitlag"][0, owner]) == 0
+    assert int(row["ref_t1"]["hitstun"][0, owner]) == 0
+    assert int(row["ref_t1"]["hitlag"][0, victim]) == 0
+    assert int(row["ref_t1"]["hitstun"][0, victim]) == 0
+
+    out, ref = _run_record(dataset_path, record)
+    assert int(out["action_id"][0, owner]) == int(ref["action_id"][owner])
+    assert int(out["action_id"][0, victim]) == int(ref["action_id"][victim])
+    assert int(out["state_flags"][0, owner, 2]) == int(ref["state_flags"][owner, 2])
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize("record", [5489, 5490])
+def test_catch_shielddesc_center_fallback_does_not_grab_shield_rim(record: int) -> None:
+    root = Path(__file__).resolve().parents[1]
+    dataset_rel = f"{_BASE_REL}/GracefulAttachedTurtle.msl"
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+    _skip_if_required_artifacts_missing(root)
+
+    ds = read_dataset(str(dataset_path))
+    row = ds.samples[record : record + 1]
+    owner = 0
+    victim = 1
+
+    # Negative lock for the ShieldDesc-center catch fallback:
+    # these rows have shield-rim overlap against a GuardOn no-submotion snapshot, but ref keeps the
+    # owner in Catch. This prevents broadening the fallback into a shield-radius grab approximation.
+    # refs/melee/src/melee/ft/ftcoll.c::ftColl_80078A2C
+    assert int(row["seed_t"]["action_id"][0, owner]) == _ACT_CATCH
+    assert int(row["ref_t1"]["action_id"][0, owner]) == _ACT_CATCH
+    assert int(row["seed_t"]["action_id"][0, victim]) == _ACT_GUARD_ON
+    assert int(row["seed_t"]["animation_index"][0, victim]) == 0xFFFFFFFF
+    assert int(row["seed_t"]["state_flags"][0, victim, 2]) & 0x80
+    assert int(row["ref_t1"]["hitlag"][0, owner]) == 0
+    assert int(row["ref_t1"]["hitstun"][0, owner]) == 0
+    assert int(row["ref_t1"]["hitlag"][0, victim]) == 0
+    assert int(row["ref_t1"]["hitstun"][0, victim]) == 0
+
+    out, ref = _run_record(dataset_path, record)
+    assert int(out["action_id"][0, owner]) == int(ref["action_id"][owner]) == _ACT_CATCH
+    assert int(out["state_flags"][0, owner, 2]) == int(ref["state_flags"][owner, 2])
 
 
 @pytest.mark.integration

@@ -1018,6 +1018,50 @@ static inline float combat_damage_calc_kb_applied(
   return kb;
 }
 
+static inline void combat_damage_calc_vel(MslBatch* batch, size_t d_idx, float x, float y) {
+  if (batch == NULL) {
+    return;
+  }
+  const MslCommonParams* c = msl_common_params();
+  const int16_t time_since_hit = batch->state.damage_time_since_hit_x18ac[d_idx];
+  const int32_t merge_window = (c != NULL) ? c->kb_vel_merge_since_hit_frames : (int32_t)0;
+
+  // Decomp: ftCo_Damage_CalcVel replaces fp->x8c_kb_vel while
+  // `fp->dmg.x18AC_time_since_hit < p_ftCommonData->xFC`; after that window it merges same-axis
+  // vectors by adding opposite signs and keeping the larger same-sign magnitude.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_CalcVel
+  // refs/melee/src/melee/ft/types.h (fp+0x18AC, fp+0x8C)
+  // data/common/ft_common_data.json: kb_vel_merge_since_hit_frames
+  if ((int32_t)time_since_hit < merge_window) {
+    batch->state.speed_x_attack[d_idx] = x;
+    batch->state.speed_y_attack[d_idx] = y;
+    return;
+  }
+
+  const float cur_x = batch->state.speed_x_attack[d_idx];
+  const float cur_y = batch->state.speed_y_attack[d_idx];
+  if (cur_x * x < 0.0f) {
+    batch->state.speed_x_attack[d_idx] = cur_x + x;
+  } else if (fabsf(x) > fabsf(cur_x)) {
+    batch->state.speed_x_attack[d_idx] = x;
+  }
+  if (cur_y * y < 0.0f) {
+    batch->state.speed_y_attack[d_idx] = cur_y + y;
+  } else if (fabsf(y) > fabsf(cur_y)) {
+    batch->state.speed_y_attack[d_idx] = y;
+  }
+}
+
+static inline void combat_damage_mark_entry_time_since_hit(MslBatch* batch, size_t d_idx) {
+  if (batch == NULL) {
+    return;
+  }
+  // Decomp: ftCo_8008DCE0 sets fp->dmg.x18AC_time_since_hit = 0 after installing the Damage
+  // callbacks and x221C_b6 on fresh Damage entry.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
+  batch->state.damage_time_since_hit_x18ac[d_idx] = 0;
+}
+
 static inline uint16_t combat_damage_hitstun_from_kb(const MslCommonParams* c, float kb_applied) {
   // Decomp: hitstun frames left are `mv.co.damage.x0 = (int)(kb_applied * p_ftCommonData->x154)`,
   // with a minimum of 1.
@@ -1724,8 +1768,7 @@ static inline void combat_mutations_pass1_future_apply_body_hit(
   //   - else tumble (sev==3): launches regardless.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0 (blocks 21-28)
   if (!defender_on_ground) {
-    batch->state.speed_x_attack[d_idx] = kb_x;
-    batch->state.speed_y_attack[d_idx] = kb_y;
+    combat_damage_calc_vel(batch, d_idx, kb_x, kb_y);
   } else {
     const float nx = batch->state.ground_normal_x[d_idx];
     const float ny = batch->state.ground_normal_y[d_idx];
@@ -1733,11 +1776,9 @@ static inline void combat_mutations_pass1_future_apply_body_hit(
     const uint8_t sev = combat_damage_severity_u8_from_kb(c, kb_applied);
     if (dot > 0.0f || sev == 3u) {
       combat_apply_ftCommon_8007D5D4_ground_to_air(batch, d_idx);
-      batch->state.speed_x_attack[d_idx] = kb_x;
-      batch->state.speed_y_attack[d_idx] = kb_y;
+      combat_damage_calc_vel(batch, d_idx, kb_x, kb_y);
     } else {
-      batch->state.speed_x_attack[d_idx] = ny * kb_x;
-      batch->state.speed_y_attack[d_idx] = -nx * kb_x;
+      combat_damage_calc_vel(batch, d_idx, ny * kb_x, -nx * kb_x);
     }
   }
 
@@ -1751,6 +1792,7 @@ static inline void combat_mutations_pass1_future_apply_body_hit(
   batch->state.hitstun[d_idx] = hs;
   combat_state_flags_set_is_hitstun(batch, d_idx, hs);
   combat_state_flags_clear_x221c_b0(batch, d_idx);
+  combat_damage_mark_entry_time_since_hit(batch, d_idx);
   // Decomp: Fighter_ProcessHit can set fp->x221A_b3 alongside hitlag start under KB/damage paths
   // (see `bool2`). The stable latch point we can model without additional hidden state is
   // "hitlag started this frame" (hitlag increased), because x221A_b3 is:
@@ -2022,12 +2064,13 @@ MslItemHitResult combat_apply_item_hit(MslBatch* batch, int batch_index, int att
     defender_facing_dir_1 = -thrower_facing_dir;
   }
   batch->state.facing[d_idx] = (uint8_t)(defender_facing_dir_1 > 0.0f);
-  batch->state.speed_x_attack[d_idx] = -defender_facing_dir_1 * (kb_vel_mag * cosf(kb_angle_rad));
-  batch->state.speed_y_attack[d_idx] = kb_vel_mag * sinf(kb_angle_rad);
+  combat_damage_calc_vel(batch, d_idx, -defender_facing_dir_1 * (kb_vel_mag * cosf(kb_angle_rad)),
+                         kb_vel_mag * sinf(kb_angle_rad));
 
   const uint16_t hs = combat_damage_hitstun_from_kb(c, kb_applied);
   batch->state.hitstun[d_idx] = hs;
   combat_state_flags_set_is_hitstun(batch, d_idx, hs);
+  combat_damage_mark_entry_time_since_hit(batch, d_idx);
   // Mirror Fighter_ProcessHit's x221A_b3 update shape (gate on hitlag start).
   // refs/melee/src/melee/ft/fighter.c::{Fighter_ProcessHit_8006D1EC,Fighter_8006A1BC}
   if (d_hl > d_hl_prev) {
@@ -2234,8 +2277,7 @@ uint8_t combat_apply_throw_hit(MslBatch* batch, int batch_index, int attacker, i
   const float kb_x = -x * defender_facing_dir_1;
   const float kb_y = y;
 
-  batch->state.speed_x_attack[d_idx] = kb_x;
-  batch->state.speed_y_attack[d_idx] = kb_y;
+  combat_damage_calc_vel(batch, d_idx, kb_x, kb_y);
 
   // Decomp: after setting KB velocity, ftCo_8008DCE0 clears self velocity (self_vel and gr_vel).
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0 (block_28)
@@ -2246,6 +2288,7 @@ uint8_t combat_apply_throw_hit(MslBatch* batch, int batch_index, int attacker, i
   const uint16_t hs = combat_damage_hitstun_from_kb(c, kb_applied);
   batch->state.hitstun[d_idx] = hs;
   combat_state_flags_set_is_hitstun(batch, d_idx, hs);
+  combat_damage_mark_entry_time_since_hit(batch, d_idx);
   // Throw-release hits do not apply hitlag in the suite (Slippi hitlag stays 0), and `x221A_b3`
   // is observed unset. Do not set it here.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DDDE4
@@ -2653,7 +2696,13 @@ static void combat_select_catch_hits_one_mutating(MslBatch* batch, int bi) {
         uint8_t found_grab_contact = 0u;
         for (uint8_t cap_id = 0; cap_id < hurtcap_count; cap_id++) {
           const size_t cap_i = idx_hurtcap(bi, defender, (int)cap_id);
-          if (!batch->state.hurtcap_enabled[cap_i] || !batch->state.hurtcap_is_grabbable[cap_i]) {
+          // Catch uses grabbability, not the BODY-hit enabled bit:
+          // ftColl_80078A2C checks victim `hurt_capsules[j].is_grabbable` after fighter-wide
+          // x1988/x198C/victim-mask gates. The per-capsule body-hit mask can be disabled on shield
+          // / guard snapshots while grabs are still legal.
+          // refs/melee/src/melee/ft/ftcoll.c::ftColl_80078A2C
+          if (!batch->state.hurtcap_is_grabbable[cap_i] ||
+              !(batch->state.hurtcap_radius[cap_i] > 0.0f)) {
             continue;
           }
           const float ax = batch->state.hurtcap_a_x[cap_i];
@@ -2678,6 +2727,36 @@ static void combat_select_catch_hits_one_mutating(MslBatch* batch, int bi) {
           }
           found_grab_contact = 1u;
           break;
+        }
+        if (!found_grab_contact) {
+          const float shr = batch->state.shield_radius[d_idx];
+          // Guard/shield catch fallback:
+          // - Vanilla grabs shielded fighters; decomp catch selection ultimately records a fighter
+          //   victim (`ftGrabDist` / `victim_gobj`), not a shield-hit event.
+          // - Slippi guard-family rows can expose `animation_index=-1` sentinel pose snapshots while
+          //   the live shield descriptor is still exact. When pose-derived hurtcaps miss, use the
+          //   ShieldDesc world center as a seed-bridge proxy for the shielded fighter's grabbable
+          //   center. Do not use shield-edge overlap here: ftColl_80078A2C grabs the fighter, not
+          //   the shield rim.
+          // refs/melee/src/melee/ft/ftcoll.c::ftColl_80078A2C
+          // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
+          const float shx = batch->state.shield_x[d_idx];
+          const float shy = batch->state.shield_y[d_idx];
+          const float shz = batch->state.shield_z[d_idx];
+          const float dx = shx - hx;
+          const float dy = shy - hy;
+          const float dz = shz - hz;
+          if (shr > 0.0f && (dx * dx + dy * dy + dz * dz) <= (hr * hr)) {
+            const float abs_dx = fabsf(batch->state.pos_x[d_idx] - batch->state.pos_x[a_idx]);
+            if (best_victim < 0 || abs_dx < best_abs_dx ||
+                (abs_dx == best_abs_dx && defender < best_victim)) {
+              best_victim = defender;
+              best_abs_dx = abs_dx;
+              best_hit_group = hit_group;
+              best_rehit_frames = rehit_frames;
+            }
+            found_grab_contact = 1u;
+          }
         }
         if (found_grab_contact) {
           // Decomp shape: after finding a valid grabbable overlap for this defender, advance to the

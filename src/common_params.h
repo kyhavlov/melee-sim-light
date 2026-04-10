@@ -322,15 +322,16 @@ typedef struct MslCommonParams {
   float kb_applied_max;  // p_ftCommonData->0x108
   // Throw release uses x10C as the ftColl_80079AB0 weight parameter.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DDDE4
-  float throw_kb_weight_x10c;  // p_ftCommonData->0x10C
-  float kb_base_term;          // p_ftCommonData->0x110
-  float kb_dmg_mul;            // p_ftCommonData->0x114
-  float kb_wsk_mul;            // p_ftCommonData->0x118
-  float kb_growth_mul;         // p_ftCommonData->0x11C
-  float kb_base_add;           // p_ftCommonData->0x120
-  float kb_vel_mul;            // p_ftCommonData->x100
-  float kb_min;                // p_ftCommonData->x104
-  float kb_squat_mul;          // p_ftCommonData->x124
+  float throw_kb_weight_x10c;             // p_ftCommonData->0x10C
+  float kb_base_term;                     // p_ftCommonData->0x110
+  float kb_dmg_mul;                       // p_ftCommonData->0x114
+  float kb_wsk_mul;                       // p_ftCommonData->0x118
+  float kb_growth_mul;                    // p_ftCommonData->0x11C
+  float kb_base_add;                      // p_ftCommonData->0x120
+  int32_t kb_vel_merge_since_hit_frames;  // p_ftCommonData->xFC
+  float kb_vel_mul;                       // p_ftCommonData->x100
+  float kb_min;                           // p_ftCommonData->x104
+  float kb_squat_mul;                     // p_ftCommonData->x124
   // Damage scalar used by ftColl on a specific "victim_gobj != NULL and != attacker" branch.
   // refs/melee/src/melee/ft/ftcoll.c::ftColl_800765F0
   // refs/melee/src/melee/ft/ftcoll.c::inlineB3

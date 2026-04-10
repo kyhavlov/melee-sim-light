@@ -54,8 +54,8 @@ void hitlist_register_item_fighter(MslBatch* batch, int bi, int item_slot, int v
 uint8_t hitlist_allows_item_fighter(MslBatch* batch, int bi, int item_slot, int victim,
                                     uint16_t victim_iid);
 
-// Seed bridge: initialize an active fighter hitbox's victim list from the seeded dense map for its hit_group.
-// This is a teacher-forced reseed compatibility layer (the seed schema predates full HitCapsule lists).
+// Seed bridge: initialize an active fighter hitbox's victim list from the seeded per-hitbox map,
+// falling back to the legacy dense hit_group map when no per-hitbox seed is marked valid.
 void hitlist_seed_init_fighter_hitbox_from_group(MslBatch* batch, int bi, int attacker, int hb_id,
                                                  uint8_t hit_group);
 

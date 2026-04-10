@@ -128,16 +128,24 @@ def _seed_bridge_trim_indefinite_lanes(
     *,
     hitlist_cd: np.ndarray,
     hitlist_iid: np.ndarray,
+    hitlist_hb_cd: np.ndarray | None = None,
+    hitlist_hb_iid: np.ndarray | None = None,
     fi: int,
     attacker: int,
     defender: int,
 ) -> bool:
     stale_indef_mask = hitlist_cd[fi, attacker, :, defender] == np.uint16(0xFFFF)
-    if not bool(np.any(stale_indef_mask)):
-        return False
-    hitlist_cd[fi, attacker, stale_indef_mask, defender] = np.uint16(0)
-    hitlist_iid[fi, attacker, stale_indef_mask, defender] = np.uint16(0)
-    return True
+    trimmed = bool(np.any(stale_indef_mask))
+    if trimmed:
+        hitlist_cd[fi, attacker, stale_indef_mask, defender] = np.uint16(0)
+        hitlist_iid[fi, attacker, stale_indef_mask, defender] = np.uint16(0)
+    if hitlist_hb_cd is not None and hitlist_hb_iid is not None:
+        stale_hb_mask = hitlist_hb_cd[fi, attacker, :, defender] == np.uint16(0xFFFF)
+        if bool(np.any(stale_hb_mask)):
+            hitlist_hb_cd[fi, attacker, stale_hb_mask, defender] = np.uint16(0)
+            hitlist_hb_iid[fi, attacker, stale_hb_mask, defender] = np.uint16(0)
+            trimmed = True
+    return trimmed
 
 _MATCH_FLOW_ACTION_IDS = {
     # Dead*
@@ -1698,6 +1706,7 @@ def main() -> None:
 
 def _main_impl(args) -> None:
     from tools.slippi.combat_history import derive_combat_hitlist_seed_fields
+    from tools.slippi.damage_history import derive_damage_time_since_hit_x18ac
     from tools.slippi.anim_timebase import derive_frame_speed_mul_f32, load_end_frame_tables
     from tools.slippi.seed_history import (
         apply_deadzone,
@@ -2307,6 +2316,13 @@ def _main_impl(args) -> None:
         samples["ref_t1"]["hitlag"][:, slot] = post_hitlag[1:]
         samples["seed_t"]["hitstun"][:, slot] = post_hitstun[:-1]
         samples["ref_t1"]["hitstun"][:, slot] = post_hitstun[1:]
+        damage_time_since_hit_x18ac = derive_damage_time_since_hit_x18ac(
+            action_id_u16=post_state,
+            hitlag_u16=post_hitlag,
+            hitstun_u16=post_hitstun,
+            state_flags_u8=state_flags,
+        )
+        samples["seed_t"]["damage_time_since_hit_x18ac"][:, slot] = damage_time_since_hit_x18ac[:-1]
         source_clear_timer_x18c8, source_clear_owner_set_phase = (
             _derive_source_clear_timer_x18c8_and_owner_phase_seed_lanes(
                 action_id_u16=post_state,
@@ -3087,7 +3103,7 @@ def _main_impl(args) -> None:
         post_guard_tilt_x4[:-1, :] = samples["seed_t"]["guard_tilt_x4"][:, :]
         post_guard_tilt_x4[-1, :] = post_guard_tilt_x4[-2, :]
 
-    hitlist_cd, hitlist_iid = derive_combat_hitlist_seed_fields(
+    hitlist_cd, hitlist_iid, hitlist_hb_valid, hitlist_hb_cd, hitlist_hb_iid = derive_combat_hitlist_seed_fields(
         num_players=num_players,
         is_teams=bool(is_teams),
         team_id=post_team_id,
@@ -3112,6 +3128,7 @@ def _main_impl(args) -> None:
         input_buttons=pre_buttons,
         input_l=pre_l,
         input_r=pre_r,
+        include_per_hitbox=True,
         data_root="data",
     )
 
@@ -3213,6 +3230,8 @@ def _main_impl(args) -> None:
                 if not _seed_bridge_trim_indefinite_lanes(
                     hitlist_cd=hitlist_cd,
                     hitlist_iid=hitlist_iid,
+                    hitlist_hb_cd=hitlist_hb_cd,
+                    hitlist_hb_iid=hitlist_hb_iid,
                     fi=fi,
                     attacker=attacker,
                     defender=defender,
@@ -3221,6 +3240,9 @@ def _main_impl(args) -> None:
 
     samples["seed_t"]["combat_hitlist_cd"] = hitlist_cd[:-1]
     samples["seed_t"]["combat_hitlist_victim_iid"] = hitlist_iid[:-1]
+    samples["seed_t"]["combat_hitlist_hb_valid"] = hitlist_hb_valid[:-1]
+    samples["seed_t"]["combat_hitlist_hb_cd"] = hitlist_hb_cd[:-1]
+    samples["seed_t"]["combat_hitlist_hb_victim_iid"] = hitlist_hb_iid[:-1]
 
     # -----------------------------
     # Combo victim + combo timer internals (strictly causal)

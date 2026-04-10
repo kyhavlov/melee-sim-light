@@ -1,5 +1,6 @@
 #include "timers.h"
 
+#include <limits.h>
 #include <math.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -400,6 +401,32 @@ void timers_update_post_anim(MslBatch* batch) {
     // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
     // refs/melee/src/melee/ft/ftcoll.c::ftColl_800764DC
     // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008F744
+
+    // Pass 0: Damage time-since-hit timer (fp->dmg.x18AC).
+    //
+    // Decomp:
+    // - Fighter_8006A360 runs under `!fp->x2219_b5` (not in hitlag),
+    // - if x18AC != -1, it increments before ftAnim_8006EBA4, ftColl_800764DC, and anim_cb,
+    // - ftCo_8008DCE0 later resets x18AC to 0 on fresh Damage entry.
+    //
+    // Keep this before the other prio-1 timer/callback owners so current-frame ProcessHit sees the
+    // same pre-collision timer value that ftCo_Damage_CalcVel uses in vanilla.
+    // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{ftCo_Damage_CalcVel,ftCo_8008DCE0}
+    for (int p = 0; p < num_players; p++) {
+      const size_t idx = msl_idx_player(bi, p);
+      if (batch->state.hitlag[idx] != 0u) {
+        continue;
+      }
+      int16_t t = batch->state.damage_time_since_hit_x18ac[idx];
+      if (t < 0) {
+        continue;
+      }
+      if (t < INT16_MAX) {
+        t++;
+      }
+      batch->state.damage_time_since_hit_x18ac[idx] = t;
+    }
 
     // Pass 1: x198C timer ownership (x1990/x1994) before combo/hitstun passes.
     //

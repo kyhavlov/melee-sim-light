@@ -347,6 +347,55 @@ def test_combat_resolve_body_overlap_applies_percent_knockback_hitstun_and_enter
         del handle
 
 
+def test_combat_resolve_damage_calcvel_merges_after_x18ac_window() -> None:
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    seed_stride = int(sizes["seed"])
+    compare_stride = int(sizes["compare"])
+    assert seed_stride == SEED_DTYPE.itemsize
+    assert compare_stride == COMPARE_DTYPE.itemsize
+
+    def run_case(handle, *, x18ac: int, cur_kb_x: float) -> np.ndarray:
+        seed = _seed_base()
+        seed["pos_x"][0, 0] = np.float32(0.0)
+        seed["pos_x"][0, 1] = np.float32(1.0)
+        seed["speed_x_attack"][0, 1] = np.float32(cur_kb_x)
+        seed["damage_time_since_hit_x18ac"][0, 1] = np.int16(x18ac)
+        seed_bytes = seed.view(np.uint8).reshape((1, seed_stride))
+        msl_binding.reseed_seed(handle, seed_bytes)
+
+        msl_binding.debug_clear_hitboxes_world(handle, 0, 0)
+        msl_binding.debug_set_hitbox_world(handle, 0, 0, 0, 1.0, 0.0, 0.0, 1.0, 5.0, 1)
+        msl_binding.debug_set_hitbox_flags(handle, 0, 0, 0, int(HIT_GROUNDED))
+        msl_binding.debug_set_hitbox_kb_params(handle, 0, 0, 0, 0, 0, 0, 20)
+
+        msl_binding.debug_clear_hurtcaps_world(handle, 0, 1)
+        msl_binding.debug_set_hurtcap_world(handle, 0, 1, 0, 0.5, 0.0, 0.0, 1.5, 0.0, 0.0, 0.5)
+        msl_binding.debug_set_hurtcap_height(handle, 0, 1, 0, 1)
+
+        msl_binding.debug_combat_resolve(handle)
+        return _read_compare(handle)
+
+    handle = msl_binding.init(batch_size=1, num_players=2)
+    try:
+        merge_window = int(_common_attr("kb_vel_merge_since_hit_frames"))
+        cur_kb_x = -0.125
+        out_replace = run_case(handle, x18ac=merge_window - 1, cur_kb_x=cur_kb_x)
+        out_merge = run_case(handle, x18ac=merge_window, cur_kb_x=cur_kb_x)
+
+        replace_x = float(out_replace["speed_x_attack"][1])
+        merge_x = float(out_merge["speed_x_attack"][1])
+
+        assert replace_x > 0.0
+        # Decomp ftCo_Damage_CalcVel: after xFC frames, opposite-sign x components add instead of
+        # replacing the existing fp->x8c_kb_vel.x.
+        assert abs(merge_x - (replace_x + cur_kb_x)) < 1e-6
+    finally:
+        msl_binding.destroy(handle)
+        del handle
+
+
 def test_combat_resolve_body_overlap_applies_kb_multiplier_chain_to_velocity_only() -> None:
     import msl_binding
 

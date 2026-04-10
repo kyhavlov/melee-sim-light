@@ -33,6 +33,9 @@ typedef struct MslStateSoA {
   float* pos_z;
   float* prev_pos_x;  // Position at start of current frame (pre-integration).
   float* prev_pos_y;  // Position at start of current frame (pre-integration).
+  // Frame-start Y snapshot for mpColl floor sweeps. Kept separate from prev_pos_* because
+  // existing grounded rollback helpers use prev_pos_* as a pre-physics integration snapshot.
+  float* floor_sweep_prev_pos_y;
   // Collision-stage prev/cur position snapshots used for mpColl-shaped ledge-grab AABB checks.
   //
   // Decomp: the ledge-grab block consumes CollData.prev_pos / CollData.cur_pos as managed inside
@@ -382,6 +385,15 @@ typedef struct MslStateSoA {
   // - Consumed/reset by Fighter_ProcessHit_8006D1EC each frame.
   //   refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
   float* percent_temp;
+  // Damage KB velocity merge timer (decomp: fp->dmg.x18AC_time_since_hit).
+  //
+  // Decomp:
+  // - Fighter init seeds -1; Damage entry sets 0.
+  // - Fighter_8006A360 increments this once per non-hitlag frame while active.
+  // - ftCo_Damage_CalcVel replaces or merges `x8c_kb_vel` based on p_ftCommonData->xFC.
+  // refs/melee/src/melee/ft/fighter.c::{Fighter_UnkInitReset_80067C98,Fighter_8006A360}
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{ftCo_Damage_CalcVel,ftCo_8008DCE0}
+  int16_t* damage_time_since_hit_x18ac;
   // Damage pipeline gates used by ftColl_80079AB0 (non-WSK else-branch) to select the base term
   // for `s = base + percent_temp`.
   //
@@ -574,9 +586,11 @@ typedef struct MslStateSoA {
   // refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000ACFC,lbColl_80008688,lbColl_80008820,lbColl_80008A5C}
   //
   // Seed schema bridge (teacher-forced one-step):
-  // - The seed schema carries a dense (attacker, hit_group, victim_port) cooldown map.
+  // - The seed schema carries an authoritative per-(attacker, hitbox, victim_port) cooldown map
+  //   plus a legacy dense (attacker, hit_group, victim_port) map.
   // - Runtime combat consumes decomp-shaped per-hitbox victim rings (fighter_hitlist).
-  // - On first use after reseed, active hitboxes materialize `victims_1` from this dense map.
+  // - On first use after reseed, active hitboxes materialize `victims_1` from the per-hitbox map
+  //   when valid, else from the legacy group map for synthetic/old seeds.
   //
   // IMPORTANT (rollout contract, v1):
   // - `combat_hitlist_{cd,victim_iid}` are treated as seed-only inputs and are not maintained during
@@ -584,9 +598,15 @@ typedef struct MslStateSoA {
   // - Serializing hitlist state mid-rollout (e.g., exporting to the dense map) is not supported yet.
   //   TODO: add an explicit export path if/when rollout save-states are needed.
   //
-  // Dense map layout: [batch * MSL_MAX_PLAYERS * MSL_HITLIST_GROUPS * MSL_MAX_PLAYERS]
+  // Dense legacy map layout: [batch * MSL_MAX_PLAYERS * MSL_HITLIST_GROUPS * MSL_MAX_PLAYERS]
   uint16_t* combat_hitlist_cd;
   uint16_t* combat_hitlist_victim_iid;
+  // Authoritative per-hitbox seed map layout:
+  // - valid: [batch * MSL_MAX_PLAYERS * MSL_MAX_HITBOXES]
+  // - cd/iid: [batch * MSL_MAX_PLAYERS * MSL_MAX_HITBOXES * MSL_MAX_PLAYERS]
+  uint8_t* combat_hitlist_hb_valid;
+  uint16_t* combat_hitlist_hb_cd;
+  uint16_t* combat_hitlist_hb_victim_iid;
   // Reseed generation counter (incremented on reseed_seed).
   uint32_t* hitlist_reseed_gen;  // [batch]
   // Per fighter hitbox victim rings (x914[4] analogue).

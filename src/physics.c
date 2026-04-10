@@ -987,9 +987,9 @@ void physics_integrate(MslBatch* batch) {
     for (int p = 0; p < num_players; p++) {
       const size_t idx = msl_idx_player(bi, p);
 
-      // Record pre-integration position for collision tests.
-      // Ordering contract: stage_collision_apply() uses prev_pos_* captured here to perform
-      // real "crossing" checks (pre vs post integration) without inferring prior position.
+      // Record pre-integration position for physics/collision rollback helpers.
+      // Floor sweeps that need the frame-start vertical position use floor_sweep_prev_pos_y instead.
+      // refs/melee/src/melee/mp/mpcoll.c::{mpCollPrev,mpCheckFloor}
       batch->state.prev_pos_x[idx] = batch->state.pos_x[idx];
       batch->state.prev_pos_y[idx] = batch->state.pos_y[idx];
       batch->state.prev_on_ground[idx] = batch->state.on_ground[idx] ? 1 : 0;
@@ -1288,6 +1288,8 @@ void physics_integrate(MslBatch* batch) {
         const MslCharParams* ch = msl_char_params(batch->state.char_id[idx]);
         if (ch != NULL) {
           float gr_vel = batch->state.speed_ground_x_self[idx];
+          float grounded_self_vel_for_frame = gr_vel;
+          uint8_t use_grounded_self_vel_for_frame = 0u;
           const float stick_x = apply_deadzone(stick_i8_to_unit(batch->state.input_main_x[idx]),
                                                c->lstick_deadzone_x);
           const float facing_dir = batch->state.facing[idx] ? 1.0f : -1.0f;
@@ -1450,10 +1452,15 @@ void physics_integrate(MslBatch* batch) {
             // - Fighter_procUpdate then applies gr_vel += xE4 + xE8 before position integration.
             // - ftCo_Dash_Phys first frame consumes mv.co.dash.x0 without calling
             //   ftCommon_8007C98C accel.
+            // - ftCo_Dash_Phys still calls ftCommon_ApplyGroundMovement before Fighter_procUpdate
+            //   applies xE8_ground_accel_2, so the entry frame's self_vel/position use the old
+            //   ground speed while the post-frame gr_vel reports the new dash speed.
             // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c::{ftCo_Dash_Enter,ftCo_Dash_Phys}
             // refs/melee/src/melee/ft/ftcommon.c::ftCommon_800804A0
             // refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate
             if (prev_action_id != (uint16_t)MSL_ACT_DASH) {
+              grounded_self_vel_for_frame = gr_vel;
+              use_grounded_self_vel_for_frame = 1u;
               const float init_vel = facing_dir * ch->dash_initial_velocity;
               if ((gr_vel * facing_dir) < 0.0f) {
                 // ftCo_Dash_Enter: if existing ground speed opposes facing, x0 = init_vel and the
@@ -1529,7 +1536,7 @@ void physics_integrate(MslBatch* batch) {
           }
 
           batch->state.speed_ground_x_self[idx] = gr_vel;
-          vx_self = gr_vel;
+          vx_self = use_grounded_self_vel_for_frame ? grounded_self_vel_for_frame : gr_vel;
         }
       }
       if (on_ground) {

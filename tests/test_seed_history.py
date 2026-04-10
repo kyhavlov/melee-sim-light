@@ -1510,6 +1510,56 @@ def test_derive_combat_hitlist_seed_fields_is_causal_wrt_future_frames() -> None
     assert np.array_equal(iid_cd0, iid_cd1[: iid_cd0.shape[0]])
 
 
+def test_derive_combat_hitlist_seed_fields_per_hitbox_schema_shape() -> None:
+    n = 3
+    z_u8 = np.zeros((n, 4), dtype=np.uint8)
+    z_u16 = np.zeros((n, 4), dtype=np.uint16)
+    z_u32 = np.zeros((n, 4), dtype=np.uint32)
+    z_i16 = np.full((n, 4), -1, dtype=np.int16)
+    z_f32 = np.zeros((n, 4), dtype=np.float32)
+    stocks = z_u8.copy()
+    stocks[:, :2] = np.uint8(4)
+    scale = np.ones((n, 4), dtype=np.float32)
+
+    out = derive_combat_hitlist_seed_fields(
+        num_players=2,
+        is_teams=False,
+        team_id=z_u8,
+        char_id=z_u8,
+        action_id=z_u16,
+        action_frame=z_i16,
+        animation_index=z_u32,
+        facing=z_u8,
+        on_ground=z_u8,
+        pos_x=z_f32,
+        pos_y=z_f32,
+        fighter_scale_y=scale,
+        guard_tilt_x8=z_u16,
+        guard_tilt_x4=z_f32,
+        stocks=stocks,
+        shield_hp=z_f32,
+        hurtbox_state=z_u8,
+        instance_id=z_u16,
+        input_buttons=z_u16,
+        input_l=z_u8,
+        input_r=z_u8,
+        include_per_hitbox=True,
+        data_root="data",
+    )
+
+    assert len(out) == 5
+    group_cd, group_iid, hb_valid, hb_cd, hb_iid = out
+    assert group_cd.shape == (n, 4, 8, 4)
+    assert group_iid.shape == (n, 4, 8, 4)
+    assert hb_valid.shape == (n, 4, 4)
+    assert hb_cd.shape == (n, 4, 4, 4)
+    assert hb_iid.shape == (n, 4, 4, 4)
+    assert group_cd.dtype == np.uint16
+    assert hb_valid.dtype == np.uint8
+    assert not bool(np.any(group_cd))
+    assert not bool(np.any(hb_valid))
+
+
 def test_derive_combat_hitlist_seed_fields_is_prefix_invariant_wrt_shield_inputs() -> None:
     """
     Guard against accidental lookahead: adding new inputs to hitlist derivation must not make

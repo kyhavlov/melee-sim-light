@@ -564,8 +564,9 @@ def derive_combat_hitlist_seed_fields(
     input_buttons: np.ndarray,  # [n_frames, MAX_PLAYERS] u16 (pre-frame)
     input_l: np.ndarray,  # [n_frames, MAX_PLAYERS] u8 (pre-frame)
     input_r: np.ndarray,  # [n_frames, MAX_PLAYERS] u8 (pre-frame)
+    include_per_hitbox: bool = False,
     data_root: str | Path = "data",
-) -> tuple[np.ndarray, np.ndarray]:
+) -> tuple[np.ndarray, ...]:
     """
     Derive combat hitlist internals strictly causally from replay prefix history.
 
@@ -626,13 +627,20 @@ def derive_combat_hitlist_seed_fields(
     # Outputs.
     out_cd = np.zeros((n_frames, MAX_PLAYERS, HITLIST_GROUPS, MAX_PLAYERS), dtype=np.uint16)
     out_iid = np.zeros((n_frames, MAX_PLAYERS, HITLIST_GROUPS, MAX_PLAYERS), dtype=np.uint16)
+    out_hb_valid = np.zeros((n_frames, MAX_PLAYERS, MAX_HITBOXES), dtype=np.uint8)
+    out_hb_cd = np.zeros((n_frames, MAX_PLAYERS, MAX_HITBOXES, MAX_PLAYERS), dtype=np.uint16)
+    out_hb_iid = np.zeros((n_frames, MAX_PLAYERS, MAX_HITBOXES, MAX_PLAYERS), dtype=np.uint16)
 
     # Internal state (rollout-causal).
     hitlist_cd = np.zeros((MAX_PLAYERS, HITLIST_GROUPS, MAX_PLAYERS), dtype=np.uint16)
     hitlist_iid = np.zeros((MAX_PLAYERS, HITLIST_GROUPS, MAX_PLAYERS), dtype=np.uint16)
+    hitlist_hb_cd = np.zeros((MAX_PLAYERS, MAX_HITBOXES, MAX_PLAYERS), dtype=np.uint16)
+    hitlist_hb_iid = np.zeros((MAX_PLAYERS, MAX_HITBOXES, MAX_PLAYERS), dtype=np.uint16)
 
     sim_hitlag = np.zeros((MAX_PLAYERS,), dtype=np.uint16)
     prev_group_active = np.zeros((MAX_PLAYERS, HITLIST_GROUPS), dtype=bool)
+    prev_hb_active = np.zeros((MAX_PLAYERS, MAX_HITBOXES), dtype=bool)
+    prev_hb_group = np.zeros((MAX_PLAYERS, MAX_HITBOXES), dtype=np.uint8)
 
     trig_deadzone = float(common["trigger_deadzone"])
     shield_light_min = float(common["shield_size_lightshield_min"])
@@ -654,6 +662,7 @@ def derive_combat_hitlist_seed_fields(
         hitboxes: list[dict[int, dict]] = [dict() for _ in range(MAX_PLAYERS)]
         hurtcaps_world: list[list[dict]] = [[] for _ in range(MAX_PLAYERS)]
         shield_world: list[tuple[float, float, float, float]] = [(0.0, 0.0, 0.0, 0.0) for _ in range(MAX_PLAYERS)]
+        hb_seed_valid_frame = np.zeros((MAX_PLAYERS, MAX_HITBOXES), dtype=np.uint8)
 
         # Refresh hurtcaps/hitboxes/shields for active players only (others remain empty).
         for p in range(num_players):
@@ -803,32 +812,97 @@ def derive_combat_hitlist_seed_fields(
         # Combat resolve (BODY-only selection + hitlist update + simulated hitlag gate).
         for attacker in range(num_players):
             if int(stocks[fi, attacker]) == 0:
+                hitlist_hb_cd[attacker, :, :] = np.uint16(0)
+                hitlist_hb_iid[attacker, :, :] = np.uint16(0)
+                prev_hb_active[attacker, :] = False
+                prev_group_active[attacker, :] = False
                 continue
             a_hitboxes = hitboxes[attacker]
-            if not a_hitboxes:
-                continue
-            # Hitlist clear-on-enable (per hit_group) and decrement finite cooldowns for active groups.
-            group_active = [False] * HITLIST_GROUPS
-            for hb in a_hitboxes.values():
-                g = int(hb.get("hit_group", 0)) & 0x7
-                group_active[g] = True
-            for g in range(HITLIST_GROUPS):
-                if group_active[g] and not bool(prev_group_active[attacker, g]):
-                    hitlist_cd[attacker, g, :] = np.uint16(0)
-                    hitlist_iid[attacker, g, :] = np.uint16(0)
-            for g in range(HITLIST_GROUPS):
-                prev_group_active[attacker, g] = group_active[g]
-            for g in range(HITLIST_GROUPS):
-                if not group_active[g]:
+            if a_hitboxes:
+                # Legacy fallback bridge: preserve the previous group-indexed derivation for old and
+                # synthetic seeds. This intentionally remains coarser than the authoritative
+                # per-hitbox lane below.
+                group_active = [False] * HITLIST_GROUPS
+                for hb in a_hitboxes.values():
+                    g = int(hb.get("hit_group", 0)) & 0x7
+                    group_active[g] = True
+                for g in range(HITLIST_GROUPS):
+                    if group_active[g] and not bool(prev_group_active[attacker, g]):
+                        hitlist_cd[attacker, g, :] = np.uint16(0)
+                        hitlist_iid[attacker, g, :] = np.uint16(0)
+                for g in range(HITLIST_GROUPS):
+                    prev_group_active[attacker, g] = group_active[g]
+                for g in range(HITLIST_GROUPS):
+                    if not group_active[g]:
+                        continue
+                    for victim in range(num_players):
+                        cd = int(hitlist_cd[attacker, g, victim])
+                        if cd == 0 or cd == HITLIST_CD_INDEFINITE:
+                            continue
+                        cd2 = int(cd - 1)
+                        hitlist_cd[attacker, g, victim] = np.uint16(cd2)
+                        if cd2 == 0:
+                            hitlist_iid[attacker, g, victim] = np.uint16(0)
+            # Hitlist clear/copy-on-enable and decrement finite cooldowns per HitCapsule.
+            #
+            # Decomp ownership:
+            # - Each hitbox slot owns a HitCapsule victim list.
+            # - ftColl_800768A0 copies from an already-active same-hit_group capsule on enable edges,
+            #   else clears the new capsule.
+            # - lbColl_80008A5C decrements active capsules.
+            # refs/melee/src/melee/ft/ftcoll.c::ftColl_800768A0
+            # refs/melee/src/melee/lb/lbcollision.c::{lbColl_CopyHitCapsule,lbColl_80008440,lbColl_80008A5C}
+            prev_cd = hitlist_hb_cd[attacker].copy()
+            prev_iid = hitlist_hb_iid[attacker].copy()
+            cur_active = [False] * MAX_HITBOXES
+            cur_group = [0] * MAX_HITBOXES
+            for hb_id, hb in a_hitboxes.items():
+                if 0 <= int(hb_id) < MAX_HITBOXES:
+                    cur_active[int(hb_id)] = True
+                    cur_group[int(hb_id)] = int(hb.get("hit_group", 0)) & 0x7
+            for hb_id in range(MAX_HITBOXES):
+                if not cur_active[hb_id]:
+                    hitlist_hb_cd[attacker, hb_id, :] = np.uint16(0)
+                    hitlist_hb_iid[attacker, hb_id, :] = np.uint16(0)
+                    continue
+                g = cur_group[hb_id]
+                enable_edge = (not bool(prev_hb_active[attacker, hb_id])) or int(prev_hb_group[attacker, hb_id]) != g
+                if enable_edge:
+                    copied = False
+                    for src in range(MAX_HITBOXES):
+                        if src == hb_id:
+                            continue
+                        if not bool(prev_hb_active[attacker, src]):
+                            continue
+                        if int(prev_hb_group[attacker, src]) != g:
+                            continue
+                        hitlist_hb_cd[attacker, hb_id, :] = prev_cd[src, :]
+                        hitlist_hb_iid[attacker, hb_id, :] = prev_iid[src, :]
+                        hb_seed_valid_frame[attacker, hb_id] = np.uint8(1)
+                        copied = True
+                        break
+                    if not copied:
+                        hitlist_hb_cd[attacker, hb_id, :] = np.uint16(0)
+                        hitlist_hb_iid[attacker, hb_id, :] = np.uint16(0)
+                        hb_seed_valid_frame[attacker, hb_id] = np.uint8(0)
+                else:
+                    hb_seed_valid_frame[attacker, hb_id] = np.uint8(1)
+                if int(sim_hitlag[attacker]) != 0:
                     continue
                 for victim in range(num_players):
-                    cd = int(hitlist_cd[attacker, g, victim])
+                    cd = int(hitlist_hb_cd[attacker, hb_id, victim])
                     if cd == 0 or cd == HITLIST_CD_INDEFINITE:
                         continue
                     cd2 = int(cd - 1)
-                    hitlist_cd[attacker, g, victim] = np.uint16(cd2)
+                    hitlist_hb_cd[attacker, hb_id, victim] = np.uint16(cd2)
                     if cd2 == 0:
-                        hitlist_iid[attacker, g, victim] = np.uint16(0)
+                        hitlist_hb_iid[attacker, hb_id, victim] = np.uint16(0)
+            for hb_id in range(MAX_HITBOXES):
+                prev_hb_active[attacker, hb_id] = cur_active[hb_id]
+                prev_hb_group[attacker, hb_id] = np.uint8(cur_group[hb_id])
+
+            if not a_hitboxes:
+                continue
 
             for defender in range(num_players):
                 if defender == attacker:
@@ -875,8 +949,10 @@ def derive_combat_hitlist_seed_fields(
                     hz = float(hb["z"])
                     hr = float(hb["r"])
 
-                    # Rehit suppression (hitlists): suppress repeats while the victim is present in the
-                    # per-(attacker,hit_group) hitlist.
+                    # Rehit suppression (hitlists): the legacy fallback derivation uses the
+                    # group-indexed seed bridge as its acceptance gate. The per-hitbox payload below
+                    # is populated alongside accepted hits, but remains non-authoritative until
+                    # HitCapsule.state can be seeded.
                     #
                     # Decomp trail (GALE01):
                     # - Shield overlap uses geometry only: lbColl_80007BCC(...) has no hitlist logic inside.
@@ -957,6 +1033,17 @@ def derive_combat_hitlist_seed_fields(
                         # Mirror src/combat.c: only treat positive-damage hitboxes as shield hits.
                         if float(hb.get("damage", 0.0)) > 0.0 and defender_hitlag_seen:
                             rehit_frames = int(hb.get("rehit_frames", 0)) & 0xFF
+                            for reg_hb_id, reg_hb in a_hitboxes.items():
+                                if (int(reg_hb.get("hit_group", 0)) & 0x7) != hit_group:
+                                    continue
+                                hitlist_hb_cd[attacker, int(reg_hb_id), defender] = (
+                                    np.uint16(HITLIST_CD_INDEFINITE)
+                                    if rehit_frames == 0
+                                    else np.uint16(rehit_frames)
+                                )
+                                hitlist_hb_iid[attacker, int(reg_hb_id), defender] = np.uint16(
+                                    int(instance_id[fi, defender])
+                                )
                             hitlist_cd[attacker, hit_group, defender] = (
                                 np.uint16(HITLIST_CD_INDEFINITE)
                                 if rehit_frames == 0
@@ -998,6 +1085,15 @@ def derive_combat_hitlist_seed_fields(
                             continue
 
                         rehit_frames = int(hb.get("rehit_frames", 0)) & 0xFF
+                        for reg_hb_id, reg_hb in a_hitboxes.items():
+                            if (int(reg_hb.get("hit_group", 0)) & 0x7) != hit_group:
+                                continue
+                            hitlist_hb_cd[attacker, int(reg_hb_id), defender] = (
+                                np.uint16(HITLIST_CD_INDEFINITE) if rehit_frames == 0 else np.uint16(rehit_frames)
+                            )
+                            hitlist_hb_iid[attacker, int(reg_hb_id), defender] = np.uint16(
+                                int(instance_id[fi, defender])
+                            )
                         hitlist_cd[attacker, hit_group, defender] = (
                             np.uint16(HITLIST_CD_INDEFINITE) if rehit_frames == 0 else np.uint16(rehit_frames)
                         )
@@ -1015,7 +1111,27 @@ def derive_combat_hitlist_seed_fields(
                     if did_hit:
                         break
 
+        for attacker in range(num_players):
+            for hb_id, hb in hitboxes[attacker].items():
+                if not (0 <= int(hb_id) < MAX_HITBOXES):
+                    continue
+                # Keep the per-hitbox payload populated for diagnostics/schema migration, but do
+                # not mark it authoritative yet. Current replay-visible derivation can distinguish
+                # per-HitCapsule carry from coarse group carry, but not every first-active
+                # HitCapsule.state boundary. Runtime therefore continues to fall back to the legacy
+                # group bridge until a row family is backed by an explicit HitCapsule-state source
+                # (Dolphin dump/probe or a replay-visible seed lane).
+                #
+                # Decomp owner needing the missing bit:
+                # refs/melee/src/melee/ft/ftcoll.c::ftColl_800768A0
+                # refs/melee/src/melee/lb/types.h::HitCapsule.state
+                out_hb_valid[fi, attacker, int(hb_id)] = np.uint8(0)
+
         out_cd[fi] = hitlist_cd
         out_iid[fi] = hitlist_iid
+        out_hb_cd[fi] = hitlist_hb_cd
+        out_hb_iid[fi] = hitlist_hb_iid
 
+    if include_per_hitbox:
+        return out_cd, out_iid, out_hb_valid, out_hb_cd, out_hb_iid
     return out_cd, out_iid

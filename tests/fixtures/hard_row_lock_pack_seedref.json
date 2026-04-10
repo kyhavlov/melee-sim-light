@@ -238,7 +238,7 @@
       "field": "state_flags[1]",
       "seed": 0,
       "ref": 0,
-      "out": 1,
+      "out": 0,
       "cluster_count": 4,
       "base_field": "state_flags"
     },
@@ -260,7 +260,7 @@
       "field": "state_flags[2]",
       "seed": 0,
       "ref": 0,
-      "out": 128,
+      "out": 0,
       "cluster_count": 4,
       "base_field": "state_flags"
     },
@@ -458,7 +458,7 @@
       "field": "on_ground",
       "seed": 1,
       "ref": 1,
-      "out": 0,
+      "out": 1,
       "cluster_count": 8,
       "base_field": "on_ground"
     },
@@ -480,7 +480,7 @@
       "field": "on_ground",
       "seed": 1,
       "ref": 1,
-      "out": 0,
+      "out": 1,
       "cluster_count": 8,
       "base_field": "on_ground"
     },
