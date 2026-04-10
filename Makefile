@@ -1,4 +1,4 @@
-.PHONY: build test preprocess validate validate-rollout rollout-capture rollout-summary rollout-diff build_data fmt fmt-check check guardrail-preflight guardrail-preflight-full guardrail-baseline forensic-rows dolphin-engine-dump dolphin-extract dolphin-forensic-row
+.PHONY: build test preprocess validate validate-rollout rollout-capture rollout-summary rollout-diff rollout-locate rollout-locate-summary rollout-locate-diff build_data fmt fmt-check check guardrail-preflight guardrail-preflight-full guardrail-baseline forensic-rows dolphin-engine-dump dolphin-extract dolphin-forensic-row
 
 PY := uv run python
 DATASETS_DIR ?= datasets
@@ -12,6 +12,11 @@ ROLLOUT_AFTER ?= reports/triage/current_rollout_streaks.json
 ROLLOUT_TOP ?= 8
 ROLLOUT_SUMMARY_OUT ?=
 ROLLOUT_DIFF_OUT ?=
+ROLLOUT_LOCATE_TSV ?= reports/triage/current_rollout_desyncs.tsv
+ROLLOUT_LOCATE_BEFORE ?= reports/triage/baseline_rollout_desyncs.tsv
+ROLLOUT_LOCATE_AFTER ?= reports/triage/current_rollout_desyncs.tsv
+ROLLOUT_LOCATE_SUMMARY_JSON ?=
+ROLLOUT_LOCATE_DIFF_JSON ?=
 ARGS ?=
 VERBOSE ?=
 CLANG_FORMAT ?= clang-format
@@ -25,6 +30,12 @@ ROLLOUT_SUMMARY_OUT_ARG := --out $(ROLLOUT_SUMMARY_OUT)
 endif
 ifneq ($(strip $(ROLLOUT_DIFF_OUT)),)
 ROLLOUT_DIFF_OUT_ARG := --out $(ROLLOUT_DIFF_OUT)
+endif
+ifneq ($(strip $(ROLLOUT_LOCATE_SUMMARY_JSON)),)
+ROLLOUT_LOCATE_SUMMARY_JSON_ARG := --json-out $(ROLLOUT_LOCATE_SUMMARY_JSON)
+endif
+ifneq ($(strip $(ROLLOUT_LOCATE_DIFF_JSON)),)
+ROLLOUT_LOCATE_DIFF_JSON_ARG := --json-out $(ROLLOUT_LOCATE_DIFF_JSON)
 endif
 
 ifeq ($(strip $(VERBOSE)),)
@@ -58,6 +69,15 @@ rollout-summary:
 
 rollout-diff:
 	@$(PY) -m tools.eval.diff_rollout_streaks --before "$(ROLLOUT_BEFORE)" --after "$(ROLLOUT_AFTER)" --top "$(ROLLOUT_TOP)" $(ROLLOUT_DIFF_OUT_ARG)
+
+rollout-locate: build
+	@$(PY) -m tools.eval.locate_rollout_desyncs --suite "$(SUITE)" --datasets-dir "$(DATASETS_DIR)" --fields "$(FIELDS)" --out "$(ROLLOUT_LOCATE_TSV)" $(ARGS)
+
+rollout-locate-summary:
+	@$(PY) -m tools.eval.summarize_rollout_locate --in "$(ROLLOUT_LOCATE_TSV)" --top "$(ROLLOUT_TOP)" $(ROLLOUT_LOCATE_SUMMARY_JSON_ARG)
+
+rollout-locate-diff:
+	@$(PY) -m tools.eval.diff_rollout_locate --before "$(ROLLOUT_LOCATE_BEFORE)" --after "$(ROLLOUT_LOCATE_AFTER)" --top "$(ROLLOUT_TOP)" $(ROLLOUT_LOCATE_DIFF_JSON_ARG)
 
 build_data:
 	@$(PY) -m tools.extraction.build_data --iso-dir _iso --stage grnla --chars fox,falco

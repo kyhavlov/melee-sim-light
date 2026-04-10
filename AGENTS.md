@@ -185,6 +185,9 @@ Use `uv` for Python dependencies and editable installs:
 - Rollout streak capture (JSON): `uv run python -m tools.eval.run_longest_rollout_streaks --suite replays/suites/<suite>.json --datasets-dir datasets --fields action_id,animation_index,on_ground,hitlag,hitstun,state_flags --out reports/triage/current_rollout_streaks.json`
 - Rollout summary (headline metrics): `uv run python -m tools.eval.summarize_rollout_streaks --in reports/triage/current_rollout_streaks.json`
 - Rollout diff (before vs after): `uv run python -m tools.eval.diff_rollout_streaks --before reports/triage/baseline_rollout_streaks.json --after reports/triage/current_rollout_streaks.json`
+- Rollout locate rows (TSV first-break catalogue): `uv run python -m tools.eval.locate_rollout_desyncs --suite replays/suites/<suite>.json --datasets-dir datasets --fields action_id,animation_index,on_ground,hitlag,hitstun,state_flags --out reports/triage/current_rollout_desyncs.tsv`
+- Rollout locate summary/ranking: `uv run python -m tools.eval.summarize_rollout_locate --in reports/triage/current_rollout_desyncs.tsv --top 20`
+- Rollout locate diff (before vs after): `uv run python -m tools.eval.diff_rollout_locate --before reports/triage/baseline_rollout_desyncs.tsv --after reports/triage/current_rollout_desyncs.tsv --top 20`
 - Build ISO-derived data artifacts (gitignored): `uv run python -m tools.extraction.build_data --iso-dir _iso --stage grnla --chars fox,falco`
 - Patch a short `.slp` pre-frame window for controlled vanilla playback: `uv run python -m tools.dolphin.patch_slp_preframe_window --slp <src.slp> --patch-spec reports/triage/<run>/patch_spec.json --out reports/triage/<run>/probe.slp`
 - Capture playback engine dump (CLI-only, no libmelee): `uv run python -m tools.dolphin.dolphin_engine_dump --replay <path.slp> --dolphin refs/Ishiiruka/build/Binaries/dolphin-emu-nogui --iso SSBM.iso --start-frame <f0> --end-frame <f1> --out-bin reports/triage/<run>/dump.bin`
@@ -198,6 +201,9 @@ Note: fast locate-triage CLIs live under `tools/eval/`:
 - `uv run python -m tools.eval.top_triples ...` (top `(seed,ref,out)` clusters, per-dataset + suite aggregate)
 - `uv run python -m tools.eval.diff_locate --before <before.tsv> --after <after.tsv> ...` (row-level new/gone/delta diff for locate TSVs)
 - `uv run python -m tools.eval.locate_discrete_mismatches ... --format tsv` (TSV source; columns are `seed,out,ref`)
+- `uv run python -m tools.eval.locate_rollout_desyncs ... --out reports/triage/current_rollout_desyncs.tsv` (rollout first-break TSV; columns are `seed,out,ref` plus streak context and stable cluster key)
+- `uv run python -m tools.eval.summarize_rollout_locate --in <rollout.tsv>` (top rollout desync clusters by frequency, streak-loss proxy, and seeded-break count)
+- `uv run python -m tools.eval.diff_rollout_locate --before <before.tsv> --after <after.tsv>` (cluster-level new/gone/impact delta diff for patch review)
 
 Avoid invoking `pip` directly unless it is being run through `uv` (e.g. `uv pip ...`).
 
@@ -233,6 +239,9 @@ Current guardrails:
 - `make rollout-capture ROLLOUT_JSON=reports/triage/current_rollout_streaks.json`: capture rollout JSON snapshot (gitignored)
 - `make rollout-summary ROLLOUT_JSON=reports/triage/current_rollout_streaks.json`: print suite + per-dataset rollout headline metrics
 - `make rollout-diff ROLLOUT_BEFORE=reports/triage/baseline_rollout_streaks.json ROLLOUT_AFTER=reports/triage/current_rollout_streaks.json`: print rollout metric deltas
+- `make rollout-locate ROLLOUT_LOCATE_TSV=reports/triage/current_rollout_desyncs.tsv`: write row-level rollout first-break TSV (gitignored)
+- `make rollout-locate-summary ROLLOUT_LOCATE_TSV=reports/triage/current_rollout_desyncs.tsv`: rank rollout desync clusters and per-dataset distribution
+- `make rollout-locate-diff ROLLOUT_LOCATE_BEFORE=reports/triage/baseline_rollout_desyncs.tsv ROLLOUT_LOCATE_AFTER=reports/triage/current_rollout_desyncs.tsv`: diff rollout locate TSV clusters
 - `make build_data`: extract ISO-derived `data/` artifacts
 - `make guardrail-preflight`: fast gate (build + hard-row lock pack + seed==ref diff + float top-key diff)
 - `make guardrail-preflight-full`: full suite tests + guardrail diff checks
@@ -266,9 +275,13 @@ Variables:
 - Triage/debug scripts must default outputs under gitignored `reports/triage/` (or print to stdout). Never default to `/tmp`. Never stage files under `reports/triage/`.
 - Rollout-first workflow (recommended when treating rollout as primary):
   1) Capture baseline once: `make rollout-capture ROLLOUT_JSON=reports/triage/baseline_rollout_streaks.json`
-  2) After changes, capture current: `make rollout-capture ROLLOUT_JSON=reports/triage/current_rollout_streaks.json`
-  3) Inspect headline metrics: `make rollout-summary ROLLOUT_JSON=reports/triage/current_rollout_streaks.json`
-  4) Compare before/after: `make rollout-diff ROLLOUT_BEFORE=reports/triage/baseline_rollout_streaks.json ROLLOUT_AFTER=reports/triage/current_rollout_streaks.json`
+  2) Capture row-level baseline once: `make rollout-locate ROLLOUT_LOCATE_TSV=reports/triage/baseline_rollout_desyncs.tsv`
+  3) After changes, capture current: `make rollout-capture ROLLOUT_JSON=reports/triage/current_rollout_streaks.json`
+  4) After changes, capture current row-level locate: `make rollout-locate ROLLOUT_LOCATE_TSV=reports/triage/current_rollout_desyncs.tsv`
+  5) Inspect headline metrics: `make rollout-summary ROLLOUT_JSON=reports/triage/current_rollout_streaks.json`
+  6) Inspect row-level priorities: `make rollout-locate-summary ROLLOUT_LOCATE_TSV=reports/triage/current_rollout_desyncs.tsv`
+  7) Compare before/after headline metrics: `make rollout-diff ROLLOUT_BEFORE=reports/triage/baseline_rollout_streaks.json ROLLOUT_AFTER=reports/triage/current_rollout_streaks.json`
+  8) Compare before/after row-level clusters: `make rollout-locate-diff ROLLOUT_LOCATE_BEFORE=reports/triage/baseline_rollout_desyncs.tsv ROLLOUT_LOCATE_AFTER=reports/triage/current_rollout_desyncs.tsv`
 
 ## Agent Checklist (do this every work chunk)
 
