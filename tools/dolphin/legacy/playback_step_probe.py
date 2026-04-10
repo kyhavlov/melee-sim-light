@@ -169,6 +169,7 @@ def _write_playback_txt(
     end_frame: int,
     real_time: bool,
     block_on_frame: bool,
+    should_resync: bool,
 ) -> Path:
     slippi_dir = user_dir / "Slippi"
     slippi_dir.mkdir(parents=True, exist_ok=True)
@@ -180,7 +181,7 @@ def _write_playback_txt(
         "endFrame": int(end_frame),
         "commandId": str(int(time.time() * 1000)),
         "isRealTimeMode": bool(real_time),
-        "shouldResync": True,
+        "shouldResync": bool(should_resync),
         "rollbackDisplayMethod": "off",
         "blockOnFrame": bool(block_on_frame),
     }
@@ -424,6 +425,11 @@ def main() -> int:
     )
     ap.add_argument("--real-time", action="store_true", help="use real-time playback speed")
     ap.add_argument(
+        "--no-resync",
+        action="store_true",
+        help="set playback shouldResync=false to match rollout/modelplay comparison probes",
+    )
+    ap.add_argument(
         "--emu-speed",
         type=float,
         default=None,
@@ -569,16 +575,29 @@ def main() -> int:
     if not replay.exists():
         raise FileNotFoundError(replay)
 
-    rb = read_replay_bytes(str(replay))
-    sample = canonicalize_slippi_sample_last(peppi_bytes.read_slippi_bytes_sample(rb, 0, False))
-    frames = sample["frame"].astype(np.int32, copy=False)
-    base_frame = int(frames[0])
-    start_frame = base_frame if args.start_frame is None else int(args.start_frame)
-    end_frame = int(frames[-1]) if args.end_frame is None else int(args.end_frame)
+    sample: dict | None = None
+    frames: np.ndarray | None = None
+    base_frame: int | None = None
+    replay_inputs: dict[int, dict[str, np.ndarray]] | None = None
+    replay_parse_error: str | None = None
+    try:
+        rb = read_replay_bytes(str(replay))
+        sample = canonicalize_slippi_sample_last(peppi_bytes.read_slippi_bytes_sample(rb, 0, False))
+        frames = sample["frame"].astype(np.int32, copy=False)
+        base_frame = int(frames[0])
+    except Exception as exc:
+        replay_parse_error = f"{type(exc).__name__}: {exc}"
+        if args.out_bin:
+            raise
+
+    start_frame = (int(base_frame) if base_frame is not None else 0) if args.start_frame is None else int(args.start_frame)
+    end_frame = (int(frames[-1]) if frames is not None else start_frame) if args.end_frame is None else int(args.end_frame)
     if not args.continuous and args.frames <= 0:
         args.frames = max(0, end_frame - start_frame + 1)
 
     def replay_inputs_for_port(port: int) -> dict[str, np.ndarray]:
+        assert sample is not None
+        assert frames is not None
         pfx = f"p{port}"
         out: dict[str, np.ndarray] = {}
         out["stick_x"] = _as_unit_f32(sample[f"{pfx}_main_stick_x"])
@@ -613,7 +632,8 @@ def main() -> int:
         out["d_up"] = _b("d_up")
         return out
 
-    replay_inputs = {1: replay_inputs_for_port(1), 2: replay_inputs_for_port(2)}
+    if sample is not None and frames is not None:
+        replay_inputs = {1: replay_inputs_for_port(1), 2: replay_inputs_for_port(2)}
 
     user_dir = Path(args.user_dir)
     user_dir.mkdir(parents=True, exist_ok=True)
@@ -626,6 +646,7 @@ def main() -> int:
         end_frame=end_frame,
         real_time=args.real_time,
         block_on_frame=use_block,
+        should_resync=not args.no_resync,
     )
 
     dolphin = Path(args.dolphin)
@@ -748,6 +769,11 @@ def main() -> int:
     FIGHTER_STATE_FLAGS_221C_OFF = 0x221C
     FIGHTER_STATE_FLAGS_221F_OFF = 0x221F
     FIGHTER_STATE_FLAGS_2228_OFF = 0x2228
+    # Damage/hitlag owner internals used by ftCo_Damage_OnEveryHitlag / Fighter_8006A1BC.
+    # refs/melee/src/melee/ft/types.h
+    FIGHTER_X670_LSTICK_TILT_X_TIMER_OFF = 0x670
+    FIGHTER_X671_LSTICK_TILT_Y_TIMER_OFF = 0x671
+    FIGHTER_X672_INPUT_TIMER_COUNTER_OFF = 0x672
     FIGHTER_DYN_BONES_OFF = 0x2F0
     FIGHTER_DYN_BONES_COUNT_OFF = 0x3E0
     FIGHTER_HITLAG_OFF = 0x195C
@@ -782,6 +808,16 @@ def main() -> int:
     FIGHTER_COLL_X34_FLAGS_OFF = 0x724
     FIGHTER_COLL_X35_FLAGS_OFF = 0x725
     FIGHTER_COLL_X130_FLAGS_OFF = 0x820
+    FIGHTER_COLL_ENV_FLAGS_OFF = 0x824
+    FIGHTER_COLL_PREV_ENV_FLAGS_OFF = 0x828
+    FIGHTER_COLL_FLOOR_INDEX_OFF = 0x83C
+    FIGHTER_COLL_FLOOR_FLAGS_OFF = 0x840
+    # Fighter callback struct. These raw pointers let us see whether the damage callback family is
+    # actually installed on a given frame even when the visible action/flag lanes match.
+    # refs/melee/src/melee/ft/types.h
+    FIGHTER_HITLAG_CB_OFF = 0x21D0
+    FIGHTER_PRE_HITLAG_CB_OFF = 0x21D4
+    FIGHTER_POST_HITLAG_CB_OFF = 0x21D8
     FIGHTER_HITBOX_BASE_OFF = 0x914
     HITBOX_STRIDE = 0x138
     FIGHTER_HURTBOX_BASE_OFF = 0x11A0
@@ -1374,6 +1410,15 @@ def main() -> int:
                 int(_u8_at(dme, fp1 + FIGHTER_STATE_FLAGS_221F_OFF)),
             ),
             "state_flags_2228": int(_u8_at(dme, fp1 + FIGHTER_STATE_FLAGS_2228_OFF)),
+            "x670_timer_lstick_tilt_x": int(
+                _u8_at(dme, fp1 + FIGHTER_X670_LSTICK_TILT_X_TIMER_OFF)
+            ),
+            "x671_timer_lstick_tilt_y": int(
+                _u8_at(dme, fp1 + FIGHTER_X671_LSTICK_TILT_Y_TIMER_OFF)
+            ),
+            "x672_input_timer_counter": int(
+                _u8_at(dme, fp1 + FIGHTER_X672_INPUT_TIMER_COUNTER_OFF)
+            ),
             "invulnerable": p1_invul,
             "hitlag_left": float(_f32_at(dme, fp1 + FIGHTER_HITLAG_OFF)),
             # NOTE: fp+0x2340 is `misc_as` in engine dumps (not hitstun).
@@ -1392,6 +1437,13 @@ def main() -> int:
             "coll_flags_x34": int(_u8_at(dme, fp1 + FIGHTER_COLL_X34_FLAGS_OFF)),
             "coll_flags_x35": int(_u8_at(dme, fp1 + FIGHTER_COLL_X35_FLAGS_OFF)),
             "coll_x130_flags": int(_u32_at(dme, fp1 + FIGHTER_COLL_X130_FLAGS_OFF)),
+            "coll_env_flags": int(_u32_at(dme, fp1 + FIGHTER_COLL_ENV_FLAGS_OFF)),
+            "coll_prev_env_flags": int(_u32_at(dme, fp1 + FIGHTER_COLL_PREV_ENV_FLAGS_OFF)),
+            "coll_floor_index": int(_u32_to_i32(_u32_at(dme, fp1 + FIGHTER_COLL_FLOOR_INDEX_OFF))),
+            "coll_floor_flags": int(_u32_at(dme, fp1 + FIGHTER_COLL_FLOOR_FLAGS_OFF)),
+            "hitlag_cb_ptr": int(_u32_at(dme, fp1 + FIGHTER_HITLAG_CB_OFF)),
+            "pre_hitlag_cb_ptr": int(_u32_at(dme, fp1 + FIGHTER_PRE_HITLAG_CB_OFF)),
+            "post_hitlag_cb_ptr": int(_u32_at(dme, fp1 + FIGHTER_POST_HITLAG_CB_OFF)),
             "hitboxes": read_hitboxes(fp1),
             "hurtboxes": p1_hurt,
         }
@@ -1539,6 +1591,22 @@ def main() -> int:
             "x38_scale": float(_f32_at(dme, fp2 + FIGHTER_SCALE_X38_OFF)),
             "entry_x28": float(_f32_at(dme, fp2 + FIGHTER_ENTRY_X28_OFF)),
             "entry_x28_bits": int(_u32_at(dme, fp2 + FIGHTER_ENTRY_X28_OFF)),
+            "lstick": (
+                float(_f32_at(dme, fp2 + FIGHTER_LSTICK_X_OFF)),
+                float(_f32_at(dme, fp2 + FIGHTER_LSTICK_Y_OFF)),
+            ),
+            "lstick_bits": (
+                int(_u32_at(dme, fp2 + FIGHTER_LSTICK_X_OFF)),
+                int(_u32_at(dme, fp2 + FIGHTER_LSTICK_Y_OFF)),
+            ),
+            "lstick1": (
+                float(_f32_at(dme, fp2 + FIGHTER_LSTICK1_X_OFF)),
+                float(_f32_at(dme, fp2 + FIGHTER_LSTICK1_Y_OFF)),
+            ),
+            "lstick1_bits": (
+                int(_u32_at(dme, fp2 + FIGHTER_LSTICK1_X_OFF)),
+                int(_u32_at(dme, fp2 + FIGHTER_LSTICK1_Y_OFF)),
+            ),
             "coll_pos": (
                 float(_f32_at(dme, fp2 + FIGHTER_COLL_CUR_POS_OFF + 0x00)),
                 float(_f32_at(dme, fp2 + FIGHTER_COLL_CUR_POS_OFF + 0x04)),
@@ -1568,6 +1636,15 @@ def main() -> int:
                 int(_u8_at(dme, fp2 + FIGHTER_STATE_FLAGS_221F_OFF)),
             ),
             "state_flags_2228": int(_u8_at(dme, fp2 + FIGHTER_STATE_FLAGS_2228_OFF)),
+            "x670_timer_lstick_tilt_x": int(
+                _u8_at(dme, fp2 + FIGHTER_X670_LSTICK_TILT_X_TIMER_OFF)
+            ),
+            "x671_timer_lstick_tilt_y": int(
+                _u8_at(dme, fp2 + FIGHTER_X671_LSTICK_TILT_Y_TIMER_OFF)
+            ),
+            "x672_input_timer_counter": int(
+                _u8_at(dme, fp2 + FIGHTER_X672_INPUT_TIMER_COUNTER_OFF)
+            ),
             "invulnerable": p2_invul,
             "hitlag_left": float(_f32_at(dme, fp2 + FIGHTER_HITLAG_OFF)),
             # NOTE: fp+0x2340 is `misc_as` in engine dumps (not hitstun).
@@ -1586,6 +1663,13 @@ def main() -> int:
             "coll_flags_x34": int(_u8_at(dme, fp2 + FIGHTER_COLL_X34_FLAGS_OFF)),
             "coll_flags_x35": int(_u8_at(dme, fp2 + FIGHTER_COLL_X35_FLAGS_OFF)),
             "coll_x130_flags": int(_u32_at(dme, fp2 + FIGHTER_COLL_X130_FLAGS_OFF)),
+            "coll_env_flags": int(_u32_at(dme, fp2 + FIGHTER_COLL_ENV_FLAGS_OFF)),
+            "coll_prev_env_flags": int(_u32_at(dme, fp2 + FIGHTER_COLL_PREV_ENV_FLAGS_OFF)),
+            "coll_floor_index": int(_u32_to_i32(_u32_at(dme, fp2 + FIGHTER_COLL_FLOOR_INDEX_OFF))),
+            "coll_floor_flags": int(_u32_at(dme, fp2 + FIGHTER_COLL_FLOOR_FLAGS_OFF)),
+            "hitlag_cb_ptr": int(_u32_at(dme, fp2 + FIGHTER_HITLAG_CB_OFF)),
+            "pre_hitlag_cb_ptr": int(_u32_at(dme, fp2 + FIGHTER_PRE_HITLAG_CB_OFF)),
+            "post_hitlag_cb_ptr": int(_u32_at(dme, fp2 + FIGHTER_POST_HITLAG_CB_OFF)),
             "hitboxes": read_hitboxes(fp2),
             "hurtboxes": p2_hurt,
         }
@@ -1688,7 +1772,7 @@ def main() -> int:
         if args.dyn_bones:
             row["lb_804D63B0"] = int(_u32_at(dme, LB_804D63B0_PTR))
         # Add replay fields if we have the frame in range.
-        if cur_frame >= start_frame and cur_frame <= end_frame:
+        if sample is not None and frames is not None and base_frame is not None and cur_frame >= start_frame and cur_frame <= end_frame:
             idx = cur_frame - base_frame
             if 0 <= idx < len(frames) and int(frames[idx]) == cur_frame:
                 row["replay"] = {
@@ -1759,9 +1843,16 @@ def main() -> int:
                 continue
         out_rows = [frame_map[k] for k in sorted(frame_map.keys())]
         if args.out:
-            Path(args.out).write_text(json.dumps({"replay": args.replay, "rows": out_rows}, indent=2))
+            payload = {"replay": args.replay, "rows": out_rows}
+            if replay_parse_error is not None:
+                payload["replay_parse_error"] = replay_parse_error
+            Path(args.out).write_text(json.dumps(payload, indent=2))
             print(f"wrote {len(out_rows)} rows to {args.out}")
         if args.out_bin:
+            assert sample is not None
+            assert frames is not None
+            assert base_frame is not None
+            assert replay_inputs is not None
             _write_engine_dump(
                 Path(args.out_bin),
                 out_rows,
@@ -1941,9 +2032,16 @@ def main() -> int:
                 print("frame", cur, "p1_pos", row["p1"]["pos"][0], row["p1"]["pos"][1], flush=True)
 
     if args.out:
-        Path(args.out).write_text(json.dumps({"replay": args.replay, "rows": out_rows}, indent=2))
+        payload = {"replay": args.replay, "rows": out_rows}
+        if replay_parse_error is not None:
+            payload["replay_parse_error"] = replay_parse_error
+        Path(args.out).write_text(json.dumps(payload, indent=2))
         print(f"wrote {len(out_rows)} rows to {args.out}")
     if args.out_bin:
+        assert sample is not None
+        assert frames is not None
+        assert base_frame is not None
+        assert replay_inputs is not None
         _write_engine_dump(
             Path(args.out_bin),
             out_rows,
