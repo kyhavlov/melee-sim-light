@@ -645,6 +645,27 @@ static inline void enter_wait(MslBatch* batch, size_t idx) {
   msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
 }
 
+static inline uint8_t should_enter_squat_from_wait(const MslBatch* batch, const MslCommonParams* c,
+                                                   size_t idx);
+
+static inline void passive_stand_anim_end_try_enter_squat(MslBatch* batch, const MslCommonParams* c,
+                                                          size_t idx) {
+  if (batch == NULL || c == NULL) {
+    return;
+  }
+  // PassiveStand end -> Wait happens during Anim via ft_8008A2BC. In the rerun11 window the
+  // destination frame immediately admits Squat on held-down input, but letting the full Wait_IASA
+  // chain run here over-consumes shield input before locomotion_update_pre() reaches the normal
+  // GuardOn owner. Keep only the proven crouch admission bridge in this owner.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_PassiveStand.c::ftCo_PassiveStand_Anim
+  // refs/melee/src/melee/ft/ft_0892.c::{ft_8008A2BC,ft_8008A348}
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Squat.c::ftCo_Squat_Enter
+  if (batch->state.action_id[idx] == (uint16_t)MSL_ACT_WAIT &&
+      should_enter_squat_from_wait(batch, c, idx)) {
+    enter_squat(batch, idx);
+  }
+}
+
 static inline void enter_down_wait(MslBatch* batch, size_t idx, uint16_t wait_act) {
   batch->state.action_id[idx] = wait_act;
   batch->state.animation_index[idx] = submotion_for_down_action(wait_act);
@@ -1032,7 +1053,15 @@ void knockdown_update_pre_physics(MslBatch* batch) {
         // refs/melee/src/melee/ft/ftmotionstates.c (ftCo_MS_PassiveStandF / ftCo_MS_PassiveStandB)
         batch->state.animation_index[idx] = (uint32_t)msid;
         if (anim_is_finished(cid, msid, anim_frame)) {
+          // Decomp: ftCo_PassiveStand_Anim ends through ft_8008A2BC, so the destination Wait state
+          // still owns same-frame Wait_IASA/Phys ordering. This is required for held-down input to
+          // enter Squat immediately on the tech-stand end frame.
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_PassiveStand.c::ftCo_PassiveStand_Anim
+          // refs/melee/src/melee/ft/ft_0892.c::{ft_8008A2BC,ft_8008A348}
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
           enter_wait(batch, idx);
+          passive_stand_anim_end_try_enter_squat(batch, c, idx);
+          down_apply_phys_friction(batch, c, ch, idx);
         }
         continue;
       }

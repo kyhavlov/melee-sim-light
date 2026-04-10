@@ -123,7 +123,7 @@ err.item_pos_y: mae=0.019318 p95=0.000000 max=26.796017
 err.item_vel_x: mae=0.014121 p95=0.000000 max=3.037811
 err.item_vel_y: mae=0.006340 p95=0.000000 max=4.999367
 overall.discrete_mismatch: 290 / 1395009
-overall.float_norm_mae_p95: 0.00106509
+overall.float_norm_mae_p95: 0.00106510
 
 == datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/QuerulousGrandDinosaur.msl ==
 Records: 10222  Players/scored per record: 2  Total player-frames: 20444
