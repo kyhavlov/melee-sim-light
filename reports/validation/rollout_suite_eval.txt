@@ -39,40 +39,40 @@ rollout.first_mismatch_seeded_total: 32
 
 == datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl ==
 rollout.best_len: 273
-rollout.streak_count: 154
+rollout.streak_count: 152
 rollout.streak_len.median: 62
-rollout.streak_len.p90: 161
+rollout.streak_len.p90: 162
 rollout.streak_len.p95: 204
 rollout.streak_len.max: 273
-rollout.first_mismatch_total: 153
-rollout.first_mismatch_seeded_total: 53
+rollout.first_mismatch_total: 151
+rollout.first_mismatch_seeded_total: 52
 
 == datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/QuerulousGrandDinosaur.msl ==
-rollout.best_len: 342
-rollout.streak_count: 141
-rollout.streak_len.median: 59
-rollout.streak_len.p90: 152
+rollout.best_len: 397
+rollout.streak_count: 140
+rollout.streak_len.median: 57
+rollout.streak_len.p90: 156
 rollout.streak_len.p95: 216
-rollout.streak_len.max: 342
-rollout.first_mismatch_total: 141
+rollout.streak_len.max: 397
+rollout.first_mismatch_total: 140
 rollout.first_mismatch_seeded_total: 51
 
 == datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/TreasuredBackKangaroo.msl ==
 rollout.best_len: 239
-rollout.streak_count: 112
+rollout.streak_count: 111
 rollout.streak_len.median: 61
 rollout.streak_len.p90: 147
 rollout.streak_len.p95: 171
 rollout.streak_len.max: 239
-rollout.first_mismatch_total: 112
+rollout.first_mismatch_total: 111
 rollout.first_mismatch_seeded_total: 42
 
 == suite summary ==
-overall.rollout.streak_count: 512
-overall.rollout.streak_len.median: 59
-overall.rollout.streak_len.p90: 154
+overall.rollout.streak_count: 508
+overall.rollout.streak_len.median: 58
+overall.rollout.streak_len.p90: 157
 overall.rollout.streak_len.p95: 198
-overall.rollout.streak_len.max: 342
-overall.rollout.best_len.max: 342
-overall.rollout.first_mismatch_total: 512
-overall.rollout.first_mismatch_seeded_total: 178
+overall.rollout.streak_len.max: 397
+overall.rollout.best_len.max: 397
+overall.rollout.first_mismatch_total: 508
+overall.rollout.first_mismatch_seeded_total: 177

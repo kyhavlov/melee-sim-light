@@ -62,6 +62,7 @@ int state_alloc(MslStateSoA* state, int batch_size) {
   state->ground_friction_mul = (float*)alloc_aligned_64(sizeof(float) * bp);
   state->kb_smashcharge_active = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->on_ground = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
+  state->frame_start_on_ground = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->prev_on_ground = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->ground_contact_x = (float*)alloc_aligned_64(sizeof(float) * bp);
   state->ground_contact_y = (float*)alloc_aligned_64(sizeof(float) * bp);
@@ -333,17 +334,17 @@ int state_alloc(MslStateSoA* state, int batch_size) {
       !state->speed_ground_x_self || !state->speed_y_self || !state->speed_x_attack ||
       !state->speed_y_attack || !state->fighter_scale_y || !state->facing || !state->facing_dir1 ||
       !state->ground_friction_mul || !state->kb_smashcharge_active || !state->on_ground ||
-      !state->prev_on_ground || !state->ground_contact_x || !state->ground_contact_y ||
-      !state->ground_normal_x || !state->ground_normal_y || !state->wall_contact_x ||
-      !state->wall_contact_y || !state->wall_normal_x || !state->wall_normal_y || !state->wall_id ||
-      !state->wall_kind || !state->ceiling_contact_x || !state->ceiling_contact_y ||
-      !state->ceiling_normal_x || !state->ceiling_normal_y || !state->ceiling_id ||
-      !state->coll_env_flags || !state->coll_prev_env_flags || !state->action_id ||
-      !state->seed_prev_action_id || !state->seed_prev_action_frame || !state->prev_action_id ||
-      !state->prev_action_frame || !state->action_frame || !state->throw_pending_victim_port ||
-      !state->throw_pending_hit_idx || !state->throw_pulse_consumed ||
-      !state->throw_pulse_crossed_prev_frame || !state->source_clear_timer_x18c8 ||
-      !state->source_clear_owner_set_phase ||
+      !state->frame_start_on_ground || !state->prev_on_ground || !state->ground_contact_x ||
+      !state->ground_contact_y || !state->ground_normal_x || !state->ground_normal_y ||
+      !state->wall_contact_x || !state->wall_contact_y || !state->wall_normal_x ||
+      !state->wall_normal_y || !state->wall_id || !state->wall_kind || !state->ceiling_contact_x ||
+      !state->ceiling_contact_y || !state->ceiling_normal_x || !state->ceiling_normal_y ||
+      !state->ceiling_id || !state->coll_env_flags || !state->coll_prev_env_flags ||
+      !state->action_id || !state->seed_prev_action_id || !state->seed_prev_action_frame ||
+      !state->prev_action_id || !state->prev_action_frame || !state->action_frame ||
+      !state->throw_pending_victim_port || !state->throw_pending_hit_idx ||
+      !state->throw_pulse_consumed || !state->throw_pulse_crossed_prev_frame ||
+      !state->source_clear_timer_x18c8 || !state->source_clear_owner_set_phase ||
       !state->source_clear_processhit_damage_pending_phase ||
       !state->damageflyroll_fighter_8006cda4_phase_hint ||
       !state->source_clear_grounded_damage_clear_phase || !state->source_clear_terminal_phase ||
@@ -479,6 +480,7 @@ void state_free(MslStateSoA* state) {
   alloc_free(state->ground_friction_mul);
   alloc_free(state->kb_smashcharge_active);
   alloc_free(state->on_ground);
+  alloc_free(state->frame_start_on_ground);
   alloc_free(state->prev_on_ground);
   alloc_free(state->ground_contact_x);
   alloc_free(state->ground_contact_y);

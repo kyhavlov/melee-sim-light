@@ -676,6 +676,7 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
       batch->state.ground_friction_mul[idx] = ground_friction_mul;
       batch->state.kb_smashcharge_active[idx] = seed->kb_smashcharge_active[p] ? 1u : 0u;
       batch->state.on_ground[idx] = seed->on_ground[p] ? 1 : 0;
+      batch->state.frame_start_on_ground[idx] = batch->state.on_ground[idx];
       batch->state.ground_contact_x[idx] = 0.0f;
       batch->state.ground_contact_y[idx] = 0.0f;
       batch->state.ground_normal_x[idx] = 0.0f;

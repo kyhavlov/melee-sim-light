@@ -707,9 +707,8 @@ void anim_timebase_apply_deferred_tick_once_post_combat(MslBatch* batch) {
       //
       // Apply it post-combat in this simulator to preserve pre-combat/combat geometry side effects
       // (hitbox refresh + collision/KB resolution) while still matching the decomp entry semantics
-      // seen in ftFx_Special{N,Lw}_Enter and ftCo_AttackAir_EnterFromMsid.
+      // seen in ftFx_SpecialN_Enter and ftCo_AttackAir_EnterFromMsid.
       // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c
-      // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c
       // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c
       //
       // IMPORTANT: do not gate this on `hitlag_started_frame`; hitlag can be started by combat later

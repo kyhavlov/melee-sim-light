@@ -1420,6 +1420,9 @@ This is a living, comprehensive list of Melee-relevant systems. Any time we beco
     - Derive `action_frame` as `floor(cur_anim_frame)` from that accumulator for table lookups and comparisons.
     - On motion-state entry, reset `cur_anim_frame` as `anim_start - frame_speed_mul` (per `Fighter_ChangeMotionState`), so the next
       anim-advance produces `anim_start`.
+  - **Known blocker**: DamageAir hitstun hurtcap pose can diverge from both replay-visible `action_frame` and seeded `anim_frame_f32`.
+    TBK rec=1575 Dolphin forensics show airborne DamageAir2 hurtcaps using a Damage AObj pose clock not represented in the current seed/model.
+    Add an explicit DamageAir AObj pose-clock seed/model so BODY contact uses the correct hurtcap pose without temporary contact suppression.
 
 4) Locomotion + physics core (**PARTIAL**)
 - Ground/air movement, friction/traction, gravity/terminal velocity, fastfall, jumps (incl. double jump).

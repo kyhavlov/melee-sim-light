@@ -144,6 +144,45 @@ static inline float combat_lbColl_804D7A38(void) {
   return 3.0f;
 }
 
+static inline uint8_t combat_shine_start_damageair_hitstun_body_pose_untrusted(
+    const MslBatch* batch, size_t a_idx, size_t d_idx) {
+  if (batch == NULL) {
+    return 0u;
+  }
+  const uint16_t a = batch->state.action_id[a_idx];
+  if (a != (uint16_t)MSL_ACT_FX_SPECIAL_LW_START &&
+      a != (uint16_t)MSL_ACT_FX_SPECIAL_AIR_LW_START) {
+    return 0u;
+  }
+  if (batch->state.hitstun[d_idx] == 0u) {
+    return 0u;
+  }
+  if (batch->state.frame_start_on_ground[d_idx] != 0u) {
+    return 0u;
+  }
+  const uint16_t d = batch->state.action_id[d_idx];
+  if (d != (uint16_t)MSL_ACT_DAMAGE_AIR_2) {
+    return 0u;
+  }
+
+  // Temporary seed/model blocker, not a vanilla gameplay rule:
+  // - Damage entry owns a separate AObj pose clock via Fighter_ChangeMotionState + ftAnim_8006EBA4,
+  //   while Slippi action_frame continues as damage/hitstun time.
+  // - The current seed schema/model does not carry that DamageAir AObj pose-clock ownership, and
+  //   replay-real Dolphin forensics show airborne DamageAir2 hurtcaps can differ materially from
+  //   action_frame-derived pose samples during hitstun (TBK rec=1575 false BODY Shine Start contact).
+  // - Restrict this bridge to Shine Start BODY-only contacts against frame-start-airborne DamageAir2
+  //   hitstun snapshots. It should be removed once the DamageAir AObj pose clock is seeded/modeled.
+  // - Keep grounded-at-frame-start DamageAir2 rows eligible; AGN rec=4782 is a real grounded Shine
+  //   Start BODY hit even though stage collision can move the victim airborne before combat.
+  // - Shield contacts still resolve through the shield path before this BODY-only gate.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{ftCo_8008DCE0,ftCo_Damage_Anim}
+  // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c::{
+  //   ftFx_SpecialLw_Enter,ftFx_SpecialAirLw_Enter}
+  // refs/melee/src/melee/ft/ftanim.c::ftAnim_8006EBA4
+  return 1u;
+}
+
 static inline uint8_t combat_body_overlap_lbColl_80006E58_subset_allows(const MslBatch* batch,
                                                                         size_t hb_i, size_t d_idx) {
   if (batch == NULL) {
@@ -269,7 +308,22 @@ static inline uint8_t combat_shield_overlap_ftcoll_80007bcc(
        (batch->state.hitbox_enable_edge[hb_i] || shield_extent_bridge_active))
           ? 1u
           : 0u;
-  const float shield_extent_scale = shield_extent_bridge_active ? 1.0f : 0.2f;
+  // Enable-edge capsules are exactly the create/copy/clear lane that lbColl_80007BCC receives
+  // after ftAction_8007121C/ftColl_8007AD18 ownership. Use the full ShieldDesc extent term there;
+  // the reduced 0.2 bridge remains only for steady capsules where this sim's shield proxy otherwise
+  // over-accepts broadphase-only grazes.
+  // refs/melee/src/melee/ft/ftaction.c::ftAction_8007121C
+  // refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007AD18,ftColl_80078C70}
+  // refs/melee/src/melee/lb/lbcollision.c::{lbColl_80007BCC,lbColl_80006E58}
+  const size_t a_idx = msl_idx_player(bi, attacker);
+  const uint16_t a_action = batch->state.action_id[a_idx];
+  const uint8_t shine_start_enable_edge = (batch->state.hitbox_enable_edge[hb_i] &&
+                                           (a_action == (uint16_t)MSL_ACT_FX_SPECIAL_LW_START ||
+                                            a_action == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_LW_START))
+                                              ? 1u
+                                              : 0u;
+  const float shield_extent_scale =
+      (shield_extent_bridge_active || shine_start_enable_edge) ? 1.0f : 0.2f;
   const float shield_extent_env_r =
       shield_extent_lane_active ? (shield_desc_world_r * shield_extent_scale) : 0.0f;
   const float rr = hr + shr + shield_desc_term + shield_extent_env_r;
@@ -3401,6 +3455,9 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
         if (int_dmg <= 0) {
           continue;
         }
+        if (combat_shine_start_damageair_hitstun_body_pose_untrusted(batch, a_idx, d_idx)) {
+          continue;
+        }
 
         // Shield precedence (BODY path): if the hitbox intersects the defender shield bubble, do
         // not apply BODY selection for this hitbox. The shield-hit selection above handles
@@ -3578,6 +3635,9 @@ static void combat_select_body_hits_one_debug(MslBatch* batch, int bi,
         const float hdmg = batch->state.hitbox_damage[hb_i];
 
         if (!(hdmg > 0.0f)) {
+          continue;
+        }
+        if (combat_shine_start_damageair_hitstun_body_pose_untrusted(batch, a_idx, d_idx)) {
           continue;
         }
 

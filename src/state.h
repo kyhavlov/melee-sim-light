@@ -67,7 +67,8 @@ typedef struct MslStateSoA {
   // Smash charge lane (decomp: fp->smash_attrs.state == SmashState_Charging).
   uint8_t* kb_smashcharge_active;
   uint8_t* on_ground;
-  uint8_t* prev_on_ground;  // on_ground value before stage_collision_apply().
+  uint8_t* frame_start_on_ground;  // on_ground value captured before current-frame callbacks.
+  uint8_t* prev_on_ground;         // on_ground value before stage_collision_apply().
   // Collision contact metadata owned by mpColl ground contact substrate.
   float* ground_contact_x;
   float* ground_contact_y;
@@ -238,7 +239,7 @@ typedef struct MslStateSoA {
   // Transient: defer a single ftAnim_8006EBA4-shaped timebase tick until after combat resolves.
   //
   // Rationale: some motion-state entry paths in decomp call ftAnim_8006EBA4 immediately after
-  // Fighter_ChangeMotionState (e.g. Shine/Blaster/AttackAir enter). Hits can occur during that
+  // Fighter_ChangeMotionState (e.g. Blaster/AttackAir enter). Hits can occur during that
   // within-frame advance interval even when the post-frame pose_frame is the next integer.
   //
   // This lite sim's hitbox materialization is currently pose_frame-sampled; deferring the tick keeps

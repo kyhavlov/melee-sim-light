@@ -986,6 +986,166 @@ def test_spurious_hitstun_not_applied_shine_start_gracefulattachedturtle_record_
 
 
 @pytest.mark.integration
+def test_spurious_shine_start_body_hit_not_applied_treasuredbackkangaroo_record_1575() -> None:
+    # Negative lock for grounded Shine Start entry geometry:
+    # TBK rec=1575 has Falco entering SpecialLwStart while Fox is in DamageAir2. Vanilla applies
+    # Shine Start's post-frame ground friction but does not connect the active shine body hitbox.
+    # This guards against turning the Shine Start friction fix into a replay-false hit.
+    #
+    # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c::ftFx_SpecialLwStart_Phys
+    # refs/melee/src/melee/ft/ft_081B.c::ft_80084F3C
+    root = Path(__file__).resolve().parents[1]
+    expected_rel = (
+        "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
+        "cardinal_1.0_recent/TreasuredBackKangaroo.msl"
+    )
+    dataset_path = root / expected_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {expected_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+    record = 1575
+    row = samples[record : record + 1]
+
+    assert int(row["seed_t"]["action_id"][0, 0]) == 85
+    assert int(row["seed_t"]["action_id"][0, 1]) == 39
+    assert int(row["ref_t1"]["action_id"][0, 0]) == 85
+    assert int(row["ref_t1"]["action_id"][0, 1]) == 360
+    assert int(row["ref_t1"]["hitlag"][0, 0]) == 0
+    assert int(row["ref_t1"]["hitlag"][0, 1]) == 0
+    assert int(row["ref_t1"]["hitstun"][0, 0]) == 4
+    assert int(row["ref_t1"]["hitstun"][0, 1]) == 0
+
+    binding = importlib.import_module("msl_binding")
+    sizes = binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    compare_stride = int(sizes["compare"])
+
+    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    try:
+        seed_bytes = np.empty((1, seed_stride), dtype=np.uint8)
+        prev_input_bytes = np.empty((1, input_stride), dtype=np.uint8)
+        input_bytes = np.empty((1, input_stride), dtype=np.uint8)
+        out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
+
+        seed_bytes[:] = np.frombuffer(row["seed_t"].tobytes(order="C"), dtype=np.uint8).reshape(
+            1, seed_stride
+        )
+        prev_input_bytes[:] = np.frombuffer(row["prev_input_t"].tobytes(order="C"), dtype=np.uint8).reshape(
+            1, input_stride
+        )
+        input_bytes[:] = np.frombuffer(row["input_t"].tobytes(order="C"), dtype=np.uint8).reshape(
+            1, input_stride
+        )
+
+        binding.reseed_seed(handle, seed_bytes)
+        binding.step_input(handle, prev_input_bytes, input_bytes)
+        binding.write_compare(handle, out_compare_bytes)
+
+        out = out_compare_bytes.view(COMPARE_DTYPE).reshape(-1)
+        assert int(out["action_id"][0, 0]) == int(row["ref_t1"]["action_id"][0, 0])
+        assert int(out["action_id"][0, 1]) == int(row["ref_t1"]["action_id"][0, 1])
+        assert int(out["hitlag"][0, 0]) == 0
+        assert int(out["hitlag"][0, 1]) == 0
+        assert int(out["hitstun"][0, 0]) == int(row["ref_t1"]["hitstun"][0, 0])
+        assert int(out["hitstun"][0, 1]) == int(row["ref_t1"]["hitstun"][0, 1])
+        assert int(out["instance_id"][0, 0]) == int(row["ref_t1"]["instance_id"][0, 0])
+        assert int(out["instance_id"][0, 1]) == int(row["ref_t1"]["instance_id"][0, 1])
+        assert float(out["pos_x"][0, 1]) == pytest.approx(float(row["ref_t1"]["pos_x"][0, 1]), abs=0.001)
+        assert float(out["speed_ground_x_self"][0, 1]) == pytest.approx(
+            float(row["ref_t1"]["speed_ground_x_self"][0, 1]), abs=0.001
+        )
+    finally:
+        binding.destroy(handle)
+
+
+@pytest.mark.integration
+def test_grounded_damageair2_shine_start_body_hit_stays_allowed_attachedgoodguanaco_record_4782() -> None:
+    # Positive lock for the temporary airborne DamageAir2 pose-clock blocker:
+    # AGN rec=4782 has Fox in grounded DamageAir2 hitstun and Falco entering grounded Shine Start.
+    # Vanilla resolves a BODY hit into DamageFlyTop; the blocker must not erase grounded contacts.
+    #
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{ftCo_8008DCE0,ftCo_Damage_Anim}
+    # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c::ftFx_SpecialLw_Enter
+    root = Path(__file__).resolve().parents[1]
+    expected_rel = (
+        "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
+        "cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl"
+    )
+    dataset_path = root / expected_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {expected_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+    record = 4782
+    row = samples[record : record + 1]
+    attacker = 0
+    defender = 1
+
+    assert int(row["seed_t"]["action_id"][0, attacker]) == 39  # SquatWait
+    assert int(row["ref_t1"]["action_id"][0, attacker]) == 360  # SpecialLwStart
+    assert int(row["seed_t"]["action_id"][0, defender]) == 85  # DamageAir2
+    assert int(row["seed_t"]["on_ground"][0, defender]) == 1
+    assert int(row["seed_t"]["hitstun"][0, defender]) > 0
+    assert int(row["ref_t1"]["action_id"][0, defender]) == 90  # DamageFlyTop
+    assert int(row["ref_t1"]["hitlag"][0, defender]) > 0
+    assert int(row["ref_t1"]["hitstun"][0, defender]) > int(row["seed_t"]["hitstun"][0, defender])
+
+    out = _one_step_out_compare(ds=ds, row=row)
+
+    assert int(out["action_id"][0, attacker]) == int(row["ref_t1"]["action_id"][0, attacker])
+    assert int(out["hitlag"][0, attacker]) == int(row["ref_t1"]["hitlag"][0, attacker])
+    assert int(out["action_id"][0, defender]) == int(row["ref_t1"]["action_id"][0, defender])
+    assert int(out["hitlag"][0, defender]) == int(row["ref_t1"]["hitlag"][0, defender])
+    assert int(out["hitstun"][0, defender]) == int(row["ref_t1"]["hitstun"][0, defender])
+    assert int(out["instance_id"][0, defender]) == int(row["ref_t1"]["instance_id"][0, defender])
+    assert int(out["instance_hit_by"][0, defender]) == int(row["ref_t1"]["instance_hit_by"][0, defender])
+
+
+@pytest.mark.integration
+def test_shine_start_shield_contact_resolves_before_body_pose_blocker_tbk_record_5614() -> None:
+    # Shield precedence lock near the same Shine Start owner:
+    # TBK rec=5614 enters grounded Shine Start into an active shield. The shield path must resolve
+    # GuardSetOff + hitlag before any BODY-only pose blocker can matter.
+    #
+    # refs/melee/src/melee/ft/ftcoll.c::ftColl_80078C70
+    # refs/melee/src/melee/lb/lbcollision.c::lbColl_80007BCC
+    root = Path(__file__).resolve().parents[1]
+    expected_rel = (
+        "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
+        "cardinal_1.0_recent/TreasuredBackKangaroo.msl"
+    )
+    dataset_path = root / expected_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {expected_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    row = ds.samples[5614:5615]
+    defender = 0
+    attacker = 1
+
+    assert int(row["seed_t"]["action_id"][0, defender]) == 179  # Guard
+    assert int(row["ref_t1"]["action_id"][0, defender]) == 181  # GuardSetOff
+    assert int(row["ref_t1"]["action_id"][0, attacker]) == 360  # SpecialLwStart
+    assert int(row["ref_t1"]["hitlag"][0, defender]) > 0
+    assert float(row["ref_t1"]["shield_hp"][0, defender]) < float(row["seed_t"]["shield_hp"][0, defender])
+
+    out = _one_step_out_compare(ds=ds, row=row)
+
+    assert int(out["action_id"][0, defender]) == int(row["ref_t1"]["action_id"][0, defender])
+    assert int(out["hitlag"][0, defender]) == int(row["ref_t1"]["hitlag"][0, defender])
+    assert int(out["hitstun"][0, defender]) == 0
+    assert float(out["shield_hp"][0, defender]) == pytest.approx(
+        float(row["ref_t1"]["shield_hp"][0, defender]), abs=0.001
+    )
+    assert int(out["action_id"][0, attacker]) == int(row["ref_t1"]["action_id"][0, attacker])
+    assert int(out["hitlag"][0, attacker]) == int(row["ref_t1"]["hitlag"][0, attacker])
+
+
+@pytest.mark.integration
 def test_spurious_body_hit_not_applied_falco_bair_vs_fox_shine_loop_gracefulattachedturtle_record_4504_p0() -> None:
     # Locks in a seed==ref offender where Falco bair (msid=70) was spuriously connecting against
     # Fox ShineLoop due to incorrect hitbox facing transform (X-mirror vs decomp rotY mixing X/Z),

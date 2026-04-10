@@ -120,6 +120,7 @@ static inline void cache_prev_action_state(MslBatch* batch) {
       const size_t idx = msl_idx_player(bi, p);
       batch->state.prev_action_id[idx] = batch->state.action_id[idx];
       batch->state.prev_action_frame[idx] = batch->state.action_frame[idx];
+      batch->state.frame_start_on_ground[idx] = batch->state.on_ground[idx] ? 1u : 0u;
     }
   }
 }

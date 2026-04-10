@@ -215,11 +215,14 @@ static inline void enter_shine_ground_start(MslBatch* batch, size_t idx,
   batch->state.action_id[idx] = (uint16_t)MSL_ACT_FX_SPECIAL_LW_START;
   batch->state.animation_index[idx] = (uint32_t)ms->speciallw_ground_start;
   msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
-  // Decomp: ftFx_SpecialLw_Enter calls ftAnim_8006EBA4 immediately after ChangeMotionState.
-  // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c::ftFx_SpecialLw_Enter
+  // Decomp: ftFx_SpecialLw_Enter calls ftAnim_8006EBA4 immediately after ChangeMotionState, before
+  // later Phys/Coll/contact passes observe the new motion state's pose.
   //
-  // Defer the tick to post-combat so hitbox evaluation remains on the entry pose_frame.
-  msl_anim_timebase_defer_tick_once(batch, idx);
+  // This is combat-visible: vanilla TBK rec=1575's no-hit Shine Start uses the post-entry frame-1
+  // hitbox pose, while still running frame-0 cmd-script hit-status effects on entry.
+  // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c::ftFx_SpecialLw_Enter
+  // refs/melee/src/melee/ft/ftanim.c::ftAnim_8006EBA4
+  msl_anim_timebase_tick_once(batch, idx);
 
   // Decomp: ftFx_SpecialLw_Enter / ftFx_SpecialAirLw_Enter call Fighter_ChangeMotionState(...)
   // and then immediately call ftAnim_8006EBA4(gobj), which runs the fighter cmd script for the
@@ -267,8 +270,11 @@ static inline void enter_shine_air_start(MslBatch* batch, size_t idx, const MslC
   batch->state.action_id[idx] = (uint16_t)MSL_ACT_FX_SPECIAL_AIR_LW_START;
   batch->state.animation_index[idx] = (uint32_t)ms->speciallw_air_start;
   msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+  // Decomp: ftFx_SpecialAirLw_Enter has the same immediate post-ChangeMotionState animation tick
+  // as grounded Shine Start.
   // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c::ftFx_SpecialAirLw_Enter
-  msl_anim_timebase_defer_tick_once(batch, idx);
+  // refs/melee/src/melee/ft/ftanim.c::ftAnim_8006EBA4
+  msl_anim_timebase_tick_once(batch, idx);
 
   // See enter_shine_ground_start() for the decomp-backed "run cmd script on entry" exception.
   uint8_t hit_status = 0;
