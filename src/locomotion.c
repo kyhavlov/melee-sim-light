@@ -854,6 +854,37 @@ static inline uint8_t locomotion_try_kneebend_startup_complete_jump_prepass(
   return 1u;
 }
 
+static inline void dash_to_kneebend_apply_terminal_handoff(MslBatch* batch, const MslCharParams* ch,
+                                                           size_t idx, float facing_dir) {
+  if (batch == NULL || ch == NULL) {
+    return;
+  }
+
+  // Dash -> KneeBend velocity handoff:
+  // - Dash IASA reaches KneeBend through fn_800CAF78.
+  // - Dash Phys owns the dash/run target velocity through getAccelAndTarget.
+  // - KneeBend entry does not reset `gr_vel`; its Phys callback then applies ft_80084F3C friction.
+  //
+  // Keep Dash's target-speed ownership through the same-frame IASA transition before KneeBend's
+  // grounded friction runs. Engine-dump rollout confirmation:
+  // frame 87->88 of rerun11 enters KneeBend with Dash terminal gr_vel, not the still-super-terminal
+  // burst speed from Dash frame 3. A controlled partial-stick variant of that probe (`joystickX=0.5`
+  // on the jump input frame) still enters KneeBend at the full Dash terminal gr_vel, not at the
+  // stick-scaled Dash Phys target. This is the narrow Dash IASA -> KneeBend bridge; non-Dash
+  // KneeBend entries keep existing speed.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c::{ftCo_Dash_IASA,ftCo_Dash_Phys}
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c::fn_800CAF78
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_KneeBend.c::ftCo_KneeBend_Phys
+  // refs/melee/src/melee/ft/ft_081B.c::ft_80084F3C
+  const float target = ch->dash_run_terminal_velocity;
+  float gr_vel = batch->state.speed_ground_x_self[idx];
+  if ((gr_vel * facing_dir) > target) {
+    gr_vel = target * facing_dir;
+    batch->state.speed_ground_x_self[idx] = gr_vel;
+    batch->state.speed_air_x_self[idx] = gr_vel;
+  }
+}
+
 static inline void enter_fall_keep_fastfall_ftco_fall_enter(MslBatch* batch, size_t idx) {
   if (batch == NULL) {
     return;
@@ -3076,6 +3107,7 @@ void locomotion_update_pre(MslBatch* batch) {
               msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
               batch->state.kneebend_jump_input[idx] = (uint8_t)j_in;
               batch->state.kneebend_is_short_hop[idx] = 0;
+              dash_to_kneebend_apply_terminal_handoff(batch, ch, idx, facing_dir);
               action_id = (uint16_t)MSL_ACT_KNEE_BEND;
             } else {
               if (!dash_iasa_early_x4 && cur_anim_frame <= c->dash_iasa_x4c) {

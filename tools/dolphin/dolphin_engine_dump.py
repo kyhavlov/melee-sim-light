@@ -83,6 +83,7 @@ def _write_playback_txt(
     start_frame: int,
     end_frame: int,
     dump_path: Path,
+    should_resync: bool = True,
 ) -> Path:
     slippi_dir = user_dir / "Slippi"
     slippi_dir.mkdir(parents=True, exist_ok=True)
@@ -94,7 +95,7 @@ def _write_playback_txt(
         "endFrame": int(end_frame),
         "commandId": str(int(time.time() * 1000)),
         "isRealTimeMode": False,
-        "shouldResync": True,
+        "shouldResync": bool(should_resync),
         "rollbackDisplayMethod": "off",
         "engineDumpPath": str(dump_path.resolve()),
     }
@@ -143,6 +144,7 @@ def capture_engine_dump(
     start_frame: int | None = None,
     end_frame: int | None = None,
     timeout: float = 120.0,
+    should_resync: bool = True,
 ) -> tuple[int, Path]:
     replay = Path(replay)
     if not replay.exists():
@@ -165,6 +167,7 @@ def capture_engine_dump(
         start_frame=resolved_start,
         end_frame=resolved_end,
         dump_path=out_bin,
+        should_resync=should_resync,
     )
 
     dolphin = Path(dolphin)
@@ -221,6 +224,11 @@ def main() -> int:
     ap.add_argument("--end-frame", type=int, default=None)
     ap.add_argument("--out-bin", required=True)
     ap.add_argument("--timeout", type=float, default=120.0)
+    ap.add_argument(
+        "--no-resync",
+        action="store_true",
+        help="set playback shouldResync=false for rollout-style patched-input probes",
+    )
     args = ap.parse_args()
 
     rc, out_bin = capture_engine_dump(
@@ -232,6 +240,7 @@ def main() -> int:
         start_frame=args.start_frame,
         end_frame=args.end_frame,
         timeout=float(args.timeout),
+        should_resync=not args.no_resync,
     )
     if rc != 0:
         print(f"engine dump capture failed: {out_bin}")
