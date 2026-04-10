@@ -94,6 +94,12 @@ def parse_args() -> argparse.Namespace:
         ),
     )
     ap.add_argument("--start-record", type=int, default=0)
+    ap.add_argument(
+        "--start-mode",
+        choices=("replay", "sim-init"),
+        default="replay",
+        help="replay restores --dataset/--start-record; sim-init starts from C-owned match init",
+    )
     ap.add_argument("--max-frames", type=int, default=30000)
     ap.add_argument(
         "--static-frame-threshold",
@@ -121,7 +127,12 @@ def main() -> int:
             CHAR_IDS[args.p2_char or "fox"],
         )
 
-    session = SimSession(dataset_path=args.dataset, start_record=args.start_record, char_ids=char_ids)
+    session = SimSession(
+        dataset_path=args.dataset,
+        start_record=args.start_record,
+        char_ids=char_ids,
+        start_mode=args.start_mode,
+    )
     p1 = build_model_agent(slippi_ai_root=args.slippi_ai_root, model_path=args.p1_model, name=args.p1_name)
     p2 = build_model_agent(slippi_ai_root=args.slippi_ai_root, model_path=args.p2_model, name=args.p2_name)
     trace = ViewerTrace()
@@ -224,6 +235,7 @@ def main() -> int:
         summary = {
             "dataset": str(args.dataset),
             "start_record": args.start_record,
+            "start_mode": args.start_mode,
             "frames_run": frames_run,
             "final_frame_id": session.current_frame_state.frame_id,
             "final_stocks": session.current_frame_state.stocks[:2].tolist(),
@@ -244,6 +256,7 @@ def main() -> int:
                     "p2_model": str(args.p2_model),
                     "dataset": str(args.dataset),
                     "start_record": args.start_record,
+                    "start_mode": args.start_mode,
                     "max_frames": args.max_frames,
                     "static_frame_threshold": args.static_frame_threshold,
                     "p1_name": args.p1_name,

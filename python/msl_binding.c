@@ -838,6 +838,45 @@ static PyObject* msl_reseed_seed(PyObject* self, PyObject* args) {
   Py_RETURN_NONE;
 }
 
+static PyObject* msl_init_match(PyObject* self, PyObject* args) {
+  (void)self;
+  PyObject* handle_obj = NULL;
+  PyObject* config_obj = NULL;
+  if (!PyArg_ParseTuple(args, "OO", &handle_obj, &config_obj)) {
+    return NULL;
+  }
+  PyMslHandle* h = unpack_handle(handle_obj);
+  if (h == NULL) {
+    return NULL;
+  }
+
+  PyArrayObject* config = require_contiguous_array(config_obj, NPY_UINT8, 2, "match_config");
+  if (config == NULL) {
+    return NULL;
+  }
+  if (PyArray_DIM(config, 1) < (npy_intp)sizeof(MslMatchConfig)) {
+    PyErr_SetString(PyExc_ValueError, "match_config second dim too small for MslMatchConfig");
+    return NULL;
+  }
+  const int batch_size = msl_batch_batch_size(h->batch);
+  if (PyArray_DIM(config, 0) < (npy_intp)batch_size) {
+    PyErr_Format(PyExc_ValueError, "match_config has too few rows: got %zd, need %d",
+                 (Py_ssize_t)PyArray_DIM(config, 0), batch_size);
+    return NULL;
+  }
+
+  const uint8_t* config_bytes = (const uint8_t*)PyArray_DATA(config);
+  const size_t stride = (size_t)PyArray_STRIDE(config, 0);
+
+  const int err = msl_batch_init_match(h->batch, config_bytes, stride);
+  if (err != 0) {
+    PyErr_Format(PyExc_RuntimeError, "msl_batch_init_match failed: %d", err);
+    return NULL;
+  }
+
+  Py_RETURN_NONE;
+}
+
 static PyObject* msl_step_input(PyObject* self, PyObject* args) {
   (void)self;
   PyObject* handle_obj = NULL;
@@ -1245,10 +1284,11 @@ static PyObject* msl_debug_force_anim_timebase_enter(PyObject* self, PyObject* a
 static PyObject* msl_sizes(PyObject* self, PyObject* args) {
   (void)self;
   (void)args;
-  return Py_BuildValue("{s:i,s:i,s:i,s:i,s:i,s:i,s:i}", "seed", (int)sizeof(MslSeed), "input",
-                       (int)sizeof(MslInput), "compare", (int)sizeof(MslCompare), "sample",
-                       (int)sizeof(MslSample), "processed_input", (int)sizeof(MslProcessedInput),
-                       "internals", (int)sizeof(MslDebugInternals), "collision_contacts",
+  return Py_BuildValue("{s:i,s:i,s:i,s:i,s:i,s:i,s:i,s:i}", "seed", (int)sizeof(MslSeed),
+                       "match_config", (int)sizeof(MslMatchConfig), "input", (int)sizeof(MslInput),
+                       "compare", (int)sizeof(MslCompare), "sample", (int)sizeof(MslSample),
+                       "processed_input", (int)sizeof(MslProcessedInput), "internals",
+                       (int)sizeof(MslDebugInternals), "collision_contacts",
                        (int)sizeof(MslDebugCollisionContacts));
 }
 
@@ -2621,6 +2661,8 @@ static PyMethodDef methods[] = {
      "destroy(handle) -> None (free underlying C batch immediately)"},
     {"reseed_seed", msl_reseed_seed, METH_VARARGS,
      "reseed_seed(handle, seed_bytes[batch, seed_stride])"},
+    {"init_match", msl_init_match, METH_VARARGS,
+     "init_match(handle, match_config_bytes[batch, match_config_stride])"},
     {"step_input", msl_step_input, METH_VARARGS,
      "step_input(handle, prev_input_bytes, input_bytes)"},
     {"debug_step_input_pre_combat", msl_debug_step_input_pre_combat, METH_VARARGS,

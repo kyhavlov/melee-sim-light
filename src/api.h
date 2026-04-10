@@ -48,6 +48,32 @@ typedef struct MslInput {
   MslInputPlayer p[MSL_MAX_PLAYERS];
 } MslInput;
 
+typedef struct MslMatchPlayerConfig {
+  // GALE01/Slippi external character id. v1 validates Fox=1 / Falco=22.
+  uint8_t char_id;
+  uint8_t team_id;
+  // 0 = facing left, 1 = facing right. Match-start facing is caller-owned until the stage
+  // extraction exposes a decomp-backed per-spawn facing lane.
+  uint8_t facing;
+  uint8_t _pad0;
+} MslMatchPlayerConfig;
+
+typedef struct MslMatchConfig {
+  // GALE01/Slippi stage id. v1 validates Final Destination=32.
+  uint32_t stage_id;
+  int32_t frame_id;
+  uint32_t frame_pre_random_seed;
+  // Global match damage ratio (decomp: gm_8016B248 -> StartMeleeRules.x30).
+  float match_damage_ratio;
+
+  uint8_t num_players;  // Must match the batch config for v1.
+  uint8_t is_teams;
+  uint8_t stock_count;
+  uint8_t _pad0;
+
+  MslMatchPlayerConfig players[MSL_MAX_PLAYERS];
+} MslMatchConfig;
+
 typedef struct MslProcessedInputPlayer {
   // Same layout as MslInputPlayer, but stick axes are post-processed (clamped/UCF snapped).
   uint16_t buttons;
@@ -1250,6 +1276,10 @@ int msl_batch_num_players(const MslBatch* batch);
 // Mutate small runtime toggles. Safe to call after create; does not allocate.
 int msl_batch_set_ucf_enabled(MslBatch* batch, int enabled);
 int msl_batch_set_ucf_cardinals_1_0_enabled(MslBatch* batch, int enabled);
+
+// Initialize each environment from a match config, without replay seed data.
+// configs length is batch_size; config_stride_bytes must be >= sizeof(MslMatchConfig).
+int msl_batch_init_match(MslBatch* batch, const uint8_t* config_bytes, size_t config_stride_bytes);
 
 // Reseed from packed MslSeed array of length batch_size.
 // seed_stride_bytes must be >= sizeof(MslSeed).

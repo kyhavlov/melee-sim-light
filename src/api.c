@@ -39,6 +39,7 @@
 #include "staling_tables.h"
 #include "attack_id_tables.h"
 #include "state.h"
+#include "state_flags.h"
 #include "step.h"
 #include "grab_attachment.h"
 #include "knockdown.h"
@@ -152,6 +153,12 @@ MslBatch* msl_batch_create(int batch_size, int num_players) {
   config_default(&batch->config, num_players);
 
   if (state_alloc(&batch->state, batch_size) != 0) {
+    msl_batch_destroy(batch);
+    return NULL;
+  }
+
+  batch->match_init_seed_scratch = (MslSeed*)alloc_malloc(sizeof(MslSeed) * (size_t)batch_size);
+  if (batch->match_init_seed_scratch == NULL) {
     msl_batch_destroy(batch);
     return NULL;
   }
@@ -309,6 +316,7 @@ void msl_batch_destroy(MslBatch* batch) {
   alloc_free(batch->debug_rng_seed_in);
   alloc_free(batch->debug_rng_shadow_seed);
   alloc_free(batch->debug_hit_status_override);
+  alloc_free(batch->match_init_seed_scratch);
   state_free(&batch->state);
   alloc_free(batch);
 }
@@ -332,6 +340,197 @@ int msl_batch_set_ucf_cardinals_1_0_enabled(MslBatch* batch, int enabled) {
     return EINVAL;
   }
   batch->config.ucf_cardinals_1_0_enabled = enabled ? 1 : 0;
+  return 0;
+}
+
+enum {
+  // Source: data/stages/final_destination.json is extracted from _iso/GrNLa.dat and uses
+  // GALE01/Slippi stage id 32 for Final Destination in this simulator's target domain.
+  MSL_STAGE_FINAL_DESTINATION = 32,
+  // Character id mapping follows Slippi post-frame `character` (GALE01):
+  // - Fox   = 1
+  // - Falco = 22
+  MSL_CHAR_FOX = 1,
+  MSL_CHAR_FALCO = 22,
+  // Slippi post-frame sentinel for no animation/submotion.
+  // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
+  MSL_ANIM_NONE_U32 = 0xFFFFFFFFu,
+};
+
+static inline uint8_t msl_match_init_supported_char(uint8_t char_id) {
+  return (uint8_t)(char_id == (uint8_t)MSL_CHAR_FOX || char_id == (uint8_t)MSL_CHAR_FALCO);
+}
+
+static inline uint8_t msl_match_init_point_inside_bounds(const MslStageBounds* b, float x,
+                                                         float y) {
+  if (b == NULL) {
+    return 0u;
+  }
+  return (uint8_t)(x >= b->left && x <= b->right && y >= b->bottom && y <= b->top);
+}
+
+int msl_batch_init_match(MslBatch* batch, const uint8_t* config_bytes, size_t config_stride_bytes) {
+  if (batch == NULL || config_bytes == NULL) {
+    return EINVAL;
+  }
+  if (config_stride_bytes < sizeof(MslMatchConfig)) {
+    return EINVAL;
+  }
+
+  const int active_players = (int)batch->config.num_players;
+  if (!(active_players == 2 || active_players == 4)) {
+    return EINVAL;
+  }
+
+  MslSeed* seeds = batch->match_init_seed_scratch;
+  if (seeds == NULL) {
+    return EINVAL;
+  }
+  memset(seeds, 0, sizeof(MslSeed) * (size_t)batch->batch_size);
+
+  const MslCommonParams* common = msl_common_params();
+  if (common == NULL) {
+    return ENOENT;
+  }
+
+  for (int bi = 0; bi < batch->batch_size; bi++) {
+    const uint8_t* ptr = config_bytes + (size_t)bi * config_stride_bytes;
+    const MslMatchConfig* cfg = (const MslMatchConfig*)ptr;
+    MslSeed* seed = &seeds[bi];
+
+    if (cfg->stage_id != (uint32_t)MSL_STAGE_FINAL_DESTINATION) {
+      return EINVAL;
+    }
+    if ((int)cfg->num_players != active_players) {
+      return EINVAL;
+    }
+    if (cfg->stock_count == 0u) {
+      return EINVAL;
+    }
+    if (!(cfg->match_damage_ratio > 0.0f) || !isfinite(cfg->match_damage_ratio)) {
+      return EINVAL;
+    }
+
+    MslStageBounds cam_bounds = {0};
+    if (!stage_collision_get_cam_bounds_world(cfg->stage_id, &cam_bounds)) {
+      return ENOENT;
+    }
+
+    seed->frame_id = cfg->frame_id;
+    seed->frame_pre_random_seed = cfg->frame_pre_random_seed;
+    seed->stage_id = cfg->stage_id;
+    seed->match_damage_ratio = cfg->match_damage_ratio;
+    seed->num_players = cfg->num_players;
+    seed->is_teams = cfg->is_teams ? 1u : 0u;
+
+    for (int p = 0; p < MSL_MAX_PLAYERS; p++) {
+      seed->grab_owner_port[p] = 0xFFu;
+      seed->combo_victim_port[p] = 0xFFu;
+      // Decomp source-owner sentinel: Fighter_UnkInitReset_80067C98 clears source ply to 6.
+      // refs/melee/src/melee/ft/fighter.c::Fighter_UnkInitReset_80067C98
+      seed->last_hit_by[p] = 6u;
+      seed->fighter_scale_y[p] = 1.0f;
+      // Normal no-handicap per-player ratios:
+      // refs/melee/src/melee/pl/player.c::{Player_GetAttackRatio,Player_GetDefenseRatio}
+      seed->attack_ratio[p] = 1.0f;
+      seed->defense_ratio[p] = 1.0f;
+      // Default grounded KB friction multiplier lane:
+      // refs/melee/src/melee/ft/ft_081B.c::ft_GetGroundFrictionMultiplier
+      seed->ground_friction_mul[p] = 1.0f;
+      // Ground id sentinel used for airborne / no-ground contact snapshots.
+      // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
+      seed->ground_id[p] = 0xFFFFu;
+      seed->animation_index[p] = (uint32_t)MSL_ANIM_NONE_U32;
+      seed->anim_frame_f32[p] = -1.0f;
+      seed->frame_speed_mul_f32[p] = 0.0f;
+      seed->attack_id[p] = (uint16_t)MSL_FT_MOVE_ID_DEFAULT;
+    }
+
+    for (int p = 0; p < active_players; p++) {
+      const MslMatchPlayerConfig* pc = &cfg->players[p];
+      if (!msl_match_init_supported_char(pc->char_id)) {
+        return EINVAL;
+      }
+      if (pc->facing > 1u) {
+        return EINVAL;
+      }
+
+      MslStagePoint2 spawn = {0};
+      MslStagePoint2 respawn = {0};
+      if (!stage_collision_get_spawn_point(cfg->stage_id, p, &spawn) ||
+          !stage_collision_get_respawn_point(cfg->stage_id, p, &respawn)) {
+        return ENOENT;
+      }
+
+      const MslCharParams* ch = msl_char_params(pc->char_id);
+      if (ch == NULL) {
+        return ENOENT;
+      }
+
+      seed->team_id[p] = pc->team_id;
+      seed->char_id[p] = pc->char_id;
+      // Normal no-handicap per-player ratios:
+      // refs/melee/src/melee/pl/player.c::{Player_GetAttackRatio,Player_GetDefenseRatio}
+      seed->attack_ratio[p] = 1.0f;
+      seed->defense_ratio[p] = 1.0f;
+      seed->pos_x[p] = spawn.x;
+      seed->pos_y[p] = spawn.y;
+      // Final Destination singles starts on the 2D plane; spawn_points are 2D stage points.
+      // data/stages/final_destination.json: spawn_points
+      seed->pos_z[p] = 0.0f;
+      // Decomp: fp->x34_scale.y is initialized from Player_GetModelScale.
+      // Source of truth for v1 config-free init: data/characters/{fox,falco}.json `model_scaling`.
+      // refs/melee/src/melee/ft/fighter.c
+      seed->fighter_scale_y[p] = (ch->model_scaling > 0.0f) ? ch->model_scaling : 1.0f;
+      seed->facing[p] = pc->facing ? 1u : 0u;
+      seed->facing_dir1[p] = pc->facing ? (int8_t)1 : (int8_t)-1;
+      // Default grounded KB friction multiplier lane:
+      // refs/melee/src/melee/ft/ft_081B.c::ft_GetGroundFrictionMultiplier
+      seed->ground_friction_mul[p] = 1.0f;
+      seed->on_ground[p] = 0u;
+
+      // Vanilla match start enters the common Entry motion state, with an invisible/no-submotion
+      // timebase and a per-port Player unk4C delay before EntryStart.
+      //
+      // Decomp:
+      // - refs/melee/src/melee/gm/gm_16AE.c::fn_8016D8AC (adds 5, Player_SetUnk4C)
+      // - refs/melee/src/melee/pl/player.c::Player_GetUnk4C
+      // - refs/melee/src/melee/ft/ft_0C31.c::ftCo_800C61B0
+      seed->action_id[p] = (uint16_t)MSL_ACT_ENTRY;
+      // Entry has no submotion; the suite observes frozen action_frame/state_age=-1 for Entry.
+      // refs/melee/src/melee/ft/ft_0C31.c::ftCo_Entry_Anim
+      seed->action_frame[p] = -1;
+      seed->seed_prev_action_id[p] = (uint16_t)MSL_ACT_ENTRY;
+      seed->seed_prev_action_frame[p] = -1;
+      seed->match_flow_timer[p] = (uint8_t)(5 * (p + 1));
+      seed->animation_index[p] = (uint32_t)MSL_ANIM_NONE_U32;
+      seed->anim_frame_f32[p] = -1.0f;
+      seed->frame_speed_mul_f32[p] = 0.0f;
+      seed->jumps_left[p] = ch->max_jumps;
+      seed->stocks[p] = cfg->stock_count;
+      seed->percent[p] = 0.0f;
+      // Source: data/common/ft_common_data.json `start_shield_health`
+      // Decomp: p_ftCommonData->x260, Guard/Fighter shield-health initialization.
+      seed->shield_hp[p] = common->start_shield_health;
+      seed->hurtbox_state[p] = 0u;
+      seed->rebirth_camera_anchor_y_f32[p] = respawn.y;
+      seed->camera_target_world_x_f32[p] = spawn.x;
+      seed->camera_target_world_y_f32[p] = spawn.y;
+      seed->camera_target_world_z_f32[p] = 0.0f;
+      // TODO(data): char_params does not yet expose data/characters/{fox,falco}.json
+      // `camera_box_radius`; leave the promoted seed lane empty until the loader owns that key.
+      seed->camera_box_radius_f32[p] = 0.0f;
+      seed->camera_target_point_inside_stage_cam_bounds_u8[p] =
+          msl_match_init_point_inside_bounds(&cam_bounds, spawn.x, spawn.y);
+    }
+  }
+
+  const int err = msl_batch_reseed_seed(batch, (const uint8_t*)seeds, sizeof(MslSeed));
+  if (err != 0) {
+    return err;
+  }
+
+  state_flags_refresh_post_frame(batch);
   return 0;
 }
 

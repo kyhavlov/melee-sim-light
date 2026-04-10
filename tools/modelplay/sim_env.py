@@ -8,12 +8,41 @@ import numpy as np
 
 from tools.eval.dataset import COMPARE_DTYPE, INPUT_DTYPE, SEED_DTYPE, read_dataset
 from tools.modelplay.state_adapter import (
+    MSL_STAGE_FINAL_DESTINATION,
     SimFrameState,
     build_slippi_ai_game,
     controllers_to_input_array,
     frame_state_from_compare,
     frame_state_from_seed,
     input_array_to_controllers,
+)
+
+CHAR_FOX = 1
+CHAR_FALCO = 22
+
+MATCH_PLAYER_CONFIG_DTYPE = np.dtype(
+    [
+        ("char_id", "u1"),
+        ("team_id", "u1"),
+        ("facing", "u1"),
+        ("_pad0", "V1"),
+    ],
+    align=False,
+)
+
+MATCH_CONFIG_DTYPE = np.dtype(
+    [
+        ("stage_id", "<u4"),
+        ("frame_id", "<i4"),
+        ("frame_pre_random_seed", "<u4"),
+        ("match_damage_ratio", "<f4"),
+        ("num_players", "u1"),
+        ("is_teams", "u1"),
+        ("stock_count", "u1"),
+        ("_pad0", "V1"),
+        ("players", MATCH_PLAYER_CONFIG_DTYPE, (4,)),
+    ],
+    align=False,
 )
 
 
@@ -23,26 +52,91 @@ class EnvOutput:
     needs_reset: bool
 
 
+def build_match_config_array(
+    *,
+    num_players: int = 2,
+    char_ids: Sequence[int] = (CHAR_FALCO, CHAR_FOX),
+    facing: Sequence[int] = (1, 0),
+    stocks: int = 4,
+    stage_id: int = MSL_STAGE_FINAL_DESTINATION,
+    frame_id: int = 0,
+    random_seed: int = 0,
+    match_damage_ratio: float = 1.0,
+    is_teams: bool = False,
+) -> np.ndarray:
+    if num_players not in (2, 4):
+        raise ValueError(f"num_players must be 2 or 4, got {num_players}")
+    if len(char_ids) != num_players:
+        raise ValueError(f"expected {num_players} char ids, got {len(char_ids)}")
+    if len(facing) != num_players:
+        raise ValueError(f"expected {num_players} facing values, got {len(facing)}")
+    if stocks <= 0:
+        raise ValueError(f"stocks must be positive, got {stocks}")
+
+    arr = np.zeros(1, dtype=MATCH_CONFIG_DTYPE)
+    arr[0]["stage_id"] = np.uint32(stage_id)
+    arr[0]["frame_id"] = np.int32(frame_id)
+    arr[0]["frame_pre_random_seed"] = np.uint32(random_seed)
+    arr[0]["match_damage_ratio"] = np.float32(match_damage_ratio)
+    arr[0]["num_players"] = np.uint8(num_players)
+    arr[0]["is_teams"] = np.uint8(1 if is_teams else 0)
+    arr[0]["stock_count"] = np.uint8(stocks)
+    for p in range(num_players):
+        arr[0]["players"][p]["char_id"] = np.uint8(int(char_ids[p]))
+        arr[0]["players"][p]["team_id"] = np.uint8(p)
+        arr[0]["players"][p]["facing"] = np.uint8(1 if int(facing[p]) else 0)
+    return arr
+
+
 class SimSession:
     def __init__(
         self,
         *,
-        dataset_path: Path,
+        dataset_path: Path | None,
         start_record: int = 0,
         char_ids: Sequence[int] | None = None,
+        start_mode: str = "replay",
+        stocks: int = 4,
+        facing: Sequence[int] | None = None,
+        frame_id: int = 0,
+        random_seed: int = 0,
     ):
         import msl_binding  # type: ignore
 
         self._binding = msl_binding
-        self._dataset = read_dataset(str(dataset_path))
-        self._samples = self._dataset.samples
-        if start_record < 0 or start_record >= len(self._samples):
-            raise ValueError(f"start_record out of range: {start_record}")
+        if start_mode not in ("replay", "sim-init"):
+            raise ValueError(f"unknown start_mode: {start_mode}")
+        self._start_mode = start_mode
         self._record = int(start_record)
-        self._num_players = int(self._dataset.header["num_players"])
-        if char_ids is not None and len(char_ids) != self._num_players:
-            raise ValueError(f"expected {self._num_players} char ids, got {len(char_ids)}")
-        self._char_ids = None if char_ids is None else tuple(int(x) for x in char_ids)
+        self._dataset = None
+        self._samples = None
+        if start_mode == "replay":
+            if dataset_path is None:
+                raise ValueError("dataset_path is required for replay start_mode")
+            self._dataset = read_dataset(str(dataset_path))
+            self._samples = self._dataset.samples
+            if start_record < 0 or start_record >= len(self._samples):
+                raise ValueError(f"start_record out of range: {start_record}")
+            self._num_players = int(self._dataset.header["num_players"])
+            if char_ids is not None and len(char_ids) != self._num_players:
+                raise ValueError(f"expected {self._num_players} char ids, got {len(char_ids)}")
+            self._char_ids = None if char_ids is None else tuple(int(x) for x in char_ids)
+            self._match_config = None
+        else:
+            self._num_players = 2 if char_ids is None else len(char_ids)
+            if self._num_players not in (2, 4):
+                raise ValueError(f"num_players must be 2 or 4, got {self._num_players}")
+            init_char_ids = tuple(int(x) for x in (char_ids or (CHAR_FALCO, CHAR_FOX)))
+            init_facing = tuple(int(x) for x in (facing or (1, 0, 1, 0)[: self._num_players]))
+            self._char_ids = init_char_ids
+            self._match_config = build_match_config_array(
+                num_players=self._num_players,
+                char_ids=init_char_ids,
+                facing=init_facing,
+                stocks=stocks,
+                frame_id=frame_id,
+                random_seed=random_seed,
+            )
         self._handle = msl_binding.init(1, self._num_players)
         self._compare = np.zeros(1, dtype=COMPARE_DTYPE)
         self._compare_bytes = self._compare.view(np.uint8).reshape(1, -1)
@@ -56,6 +150,21 @@ class SimSession:
         self._binding.destroy(self._handle)
 
     def reset(self) -> EnvOutput:
+        if self._start_mode == "sim-init":
+            if self._match_config is None:
+                raise RuntimeError("missing sim-init match config")
+            config_bytes = self._match_config.view(np.uint8).reshape(1, -1)
+            self._binding.init_match(self._handle, config_bytes)
+            self._binding.write_compare(self._handle, self._compare_bytes)
+            self._prev_input[...] = np.zeros(1, dtype=INPUT_DTYPE)
+            self._input[...] = np.zeros(1, dtype=INPUT_DTYPE)
+            self._last_controllers = input_array_to_controllers(self._input)
+            self._state = frame_state_from_compare(self._compare[0])
+            self._needs_reset = True
+            return self.current_state()
+
+        if self._samples is None:
+            raise RuntimeError("missing replay dataset samples")
         row = self._samples[self._record]
         seed_arr = np.zeros(1, dtype=SEED_DTYPE)
         seed_arr[0] = row["seed_t"]

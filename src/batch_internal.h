@@ -19,6 +19,10 @@ struct MslBatch {
   MslConfig config;
   MslStateSoA state;
 
+  // Episode/match init scratch, allocated with the batch so `msl_batch_init_match` can remain
+  // allocation-free when used as an RL reset path.
+  MslSeed* match_init_seed_scratch;  // [batch]
+
   // Debug-only per-fighter override for hit status eligibility (opcode 26).
   // Indexed like other per-player state arrays: [batch_size * MSL_MAX_PLAYERS].
   // Value 0xFF means "no override; use table lookup".

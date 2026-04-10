@@ -10,7 +10,7 @@ Current v0 scope:
 
 - singles only
 - Fox/Falco on Final Destination
-- seeded from an existing local `.msl` dataset row
+- can start from an existing local `.msl` dataset row or from C-owned sim match init
 - model inputs/outputs stay in Python
 - default rollout starts from the dataset opening row (`start_record=0`), which is the real 4-stock
   match-start `Entry` state for the sampled game
@@ -25,6 +25,16 @@ uv run python -m tools.modelplay.run_model_match \
 ```
 
 This writes `trace.json` under `reports/triage/...`.
+
+To skip replay seeding and start from the C match-init path:
+
+```bash
+uv run python -m tools.modelplay.run_model_match \
+  --start-mode sim-init \
+  --slippi-ai-root /media/kyle/Windows/Users/kyleh/git/slippi-ai \
+  --p1-model /path/to/model1.pkl \
+  --p2-model /path/to/model2.pkl
+```
 
 The default `--max-frames` is `30000`, so the runner will usually carry the game from match start
 through the final stock without needing extra flags.
