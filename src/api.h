@@ -766,6 +766,23 @@ typedef struct MslSeed {
   // refs/melee/src/melee/lb/lbcollision.c::lbColl_80008688
   uint16_t combat_hitlist_victim_iid[MSL_MAX_PLAYERS][MSL_HITLIST_GROUPS][MSL_MAX_PLAYERS];
 
+  // Authoritative per-HitCapsule seed lane for fighter victims.
+  //
+  // This mirrors the runtime/decomp owner more closely than the dense group bridge above:
+  // - HitCapsule stores victims per hitbox slot, not per hit_group.
+  // - ftColl_800768A0 copies or clears a HitCapsule on enable edges, so preserving the per-hitbox
+  //   source capsule at the reseed boundary lets runtime copy from the right owner.
+  // refs/melee/src/melee/ft/ftcoll.c::ftColl_800768A0
+  // refs/melee/src/melee/lb/types.h::HitCapsule
+  //
+  // Validity:
+  // - combat_hitlist_hb_valid[attacker][hb] == 1 means the per-hitbox list is authoritative for
+  //   this seed snapshot, including the all-zero/empty case.
+  // - valid == 0 falls back to the legacy group map for synthetic tests and older datasets.
+  uint8_t combat_hitlist_hb_valid[MSL_MAX_PLAYERS][MSL_MAX_HITBOXES];
+  uint16_t combat_hitlist_hb_cd[MSL_MAX_PLAYERS][MSL_MAX_HITBOXES][MSL_MAX_PLAYERS];
+  uint16_t combat_hitlist_hb_victim_iid[MSL_MAX_PLAYERS][MSL_MAX_HITBOXES][MSL_MAX_PLAYERS];
+
   // Stale-move (staling) internals (seeded; not causally derivable from a single frame).
   //
   // Decomp shape:

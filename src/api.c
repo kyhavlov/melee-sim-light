@@ -1122,6 +1122,9 @@ int msl_batch_reseed_seed(MslBatch* batch, const uint8_t* seed_bytes, size_t see
     // Combat hitlists are part of the reseed schema (teacher-forced one-step eval).
     const size_t base =
         (size_t)bi * (size_t)MSL_MAX_PLAYERS * (size_t)MSL_HITLIST_GROUPS * (size_t)MSL_MAX_PLAYERS;
+    const size_t hb_base =
+        (size_t)bi * (size_t)MSL_MAX_PLAYERS * (size_t)MSL_MAX_HITBOXES * (size_t)MSL_MAX_PLAYERS;
+    const size_t hb_valid_base = (size_t)bi * (size_t)MSL_MAX_PLAYERS * (size_t)MSL_MAX_HITBOXES;
     for (int attacker = 0; attacker < MSL_MAX_PLAYERS; attacker++) {
       for (int g = 0; g < MSL_HITLIST_GROUPS; g++) {
         for (int victim = 0; victim < MSL_MAX_PLAYERS; victim++) {
@@ -1131,6 +1134,20 @@ int msl_batch_reseed_seed(MslBatch* batch, const uint8_t* seed_bytes, size_t see
           batch->state.combat_hitlist_cd[i] = seed->combat_hitlist_cd[attacker][g][victim];
           batch->state.combat_hitlist_victim_iid[i] =
               seed->combat_hitlist_victim_iid[attacker][g][victim];
+        }
+      }
+      for (int hb = 0; hb < MSL_MAX_HITBOXES; hb++) {
+        const size_t vi =
+            hb_valid_base + ((size_t)attacker * (size_t)MSL_MAX_HITBOXES + (size_t)hb);
+        batch->state.combat_hitlist_hb_valid[vi] =
+            seed->combat_hitlist_hb_valid[attacker][hb] ? 1u : 0u;
+        for (int victim = 0; victim < MSL_MAX_PLAYERS; victim++) {
+          const size_t i = hb_base + (((size_t)attacker * (size_t)MSL_MAX_HITBOXES + (size_t)hb) *
+                                          (size_t)MSL_MAX_PLAYERS +
+                                      (size_t)victim);
+          batch->state.combat_hitlist_hb_cd[i] = seed->combat_hitlist_hb_cd[attacker][hb][victim];
+          batch->state.combat_hitlist_hb_victim_iid[i] =
+              seed->combat_hitlist_hb_victim_iid[attacker][hb][victim];
         }
       }
     }

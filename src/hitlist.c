@@ -362,35 +362,50 @@ void hitlist_seed_init_fighter_hitbox_from_group(MslBatch* batch, int bi, int at
   }
 
   // Seed schema bridge:
-  // - Seed carries a dense cooldown map per (attacker, hit_group, victim_port).
-  // - Decomp stores a HitVictim ring list per HitCapsule.
+  // - Preferred lane: per-(attacker, hitbox, victim_port), which mirrors decomp HitCapsule
+  //   ownership and preserves empty lists as authoritative when valid.
+  // - Fallback lane: legacy dense per-(attacker, hit_group, victim_port) map for synthetic tests
+  //   and older datasets.
   //
   // We materialize a deterministic list ordering (victim port order) into victims_1 and reset ring.
   //
   // NOTE:
   // - seed does not currently carry victims_2; it is cleared here.
-  // - The dense map is seed-only input and is not maintained during rollouts (see src/state.h).
+  // - The seed maps are seed-only inputs and are not maintained during rollouts (see src/state.h).
+  // refs/melee/src/melee/lb/types.h::HitCapsule
+  // refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000ACFC,lbColl_80008688}
   const size_t hl_i = idx_fighter_hitlist(bi, attacker, hb_id);
   MslHitlistCapsule* hit = &batch->state.fighter_hitlist[hl_i];
   hitlist_capsule_clear(hit);
 
-  const size_t base =
-      (size_t)bi * (size_t)MSL_MAX_PLAYERS * (size_t)MSL_HITLIST_GROUPS * (size_t)MSL_MAX_PLAYERS;
   const size_t a = (size_t)attacker;
-  const size_t g = (size_t)hit_group;
+  const size_t hb = (size_t)hb_id;
+  const size_t valid_i = ((size_t)bi * (size_t)MSL_MAX_PLAYERS + a) * (size_t)MSL_MAX_HITBOXES + hb;
+  const uint8_t use_hitbox_seed = batch->state.combat_hitlist_hb_valid[valid_i] ? 1u : 0u;
 
   size_t out_i = 0;
   for (int v = 0; v < (int)batch->config.num_players && out_i < (size_t)MSL_HITLIST_VICTIM_CAP;
        v++) {
-    const size_t i =
-        base + ((a * (size_t)MSL_HITLIST_GROUPS + g) * (size_t)MSL_MAX_PLAYERS + (size_t)v);
-    const uint16_t cd_seed = batch->state.combat_hitlist_cd[i];
+    size_t i;
+    if (use_hitbox_seed) {
+      const size_t hb_base =
+          (size_t)bi * (size_t)MSL_MAX_PLAYERS * (size_t)MSL_MAX_HITBOXES * (size_t)MSL_MAX_PLAYERS;
+      i = hb_base + ((a * (size_t)MSL_MAX_HITBOXES + hb) * (size_t)MSL_MAX_PLAYERS + (size_t)v);
+    } else {
+      const size_t group_base = (size_t)bi * (size_t)MSL_MAX_PLAYERS * (size_t)MSL_HITLIST_GROUPS *
+                                (size_t)MSL_MAX_PLAYERS;
+      const size_t g = (size_t)hit_group;
+      i = group_base + ((a * (size_t)MSL_HITLIST_GROUPS + g) * (size_t)MSL_MAX_PLAYERS + (size_t)v);
+    }
+    const uint16_t cd_seed =
+        use_hitbox_seed ? batch->state.combat_hitlist_hb_cd[i] : batch->state.combat_hitlist_cd[i];
     if (cd_seed == 0) {
       continue;
     }
     MslHitlistVictimEntry* e = &hit->victims_1[out_i++];
     e->id32 = 0;
-    e->id16 = batch->state.combat_hitlist_victim_iid[i];
+    e->id16 = use_hitbox_seed ? batch->state.combat_hitlist_hb_victim_iid[i]
+                              : batch->state.combat_hitlist_victim_iid[i];
     e->kind_slot = hitlist_fighter_key((uint8_t)v);
     // Seed semantics:
     // - 0xFFFF means "indefinite latch" (decomp: present with timer==0).
