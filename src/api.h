@@ -74,6 +74,65 @@ typedef struct MslMatchConfig {
   MslMatchPlayerConfig players[MSL_MAX_PLAYERS];
 } MslMatchConfig;
 
+typedef struct MslRlPlayerObservation {
+  // present=1 for an active source player in this slot. team_relation: 0=self, 1=ally,
+  // 2=opponent. Inactive/unused slots are zero-filled with present=0.
+  uint8_t present;
+  uint8_t source_player;
+  uint8_t team_relation;
+  uint8_t team_id;
+
+  float pos_x;
+  float pos_y;
+  float speed_air_x_self;
+  float speed_ground_x_self;
+  float speed_y_self;
+  float speed_x_attack;
+  float speed_y_attack;
+  float percent;
+  float shield_hp;
+
+  uint16_t action_id;
+  int16_t action_frame;
+  uint16_t hitlag;
+  uint16_t hitstun;
+
+  uint8_t char_id;
+  uint8_t stocks;
+  uint8_t facing;
+  uint8_t on_ground;
+  uint8_t jumps_left;
+  uint8_t hurtbox_state;
+  uint8_t _pad0[2];
+} MslRlPlayerObservation;
+
+typedef struct MslRlObservation {
+  int32_t frame_id;
+  uint32_t frame_pre_random_seed;
+  uint32_t stage_id;
+  uint8_t num_players;
+  // 0-based player index. slots[0] is self; then allies by ascending source player index,
+  // then opponents by ascending source player index; remaining slots are present=0.
+  uint8_t viewpoint_player;
+  uint8_t is_teams;
+  uint8_t _pad0;
+
+  MslRlPlayerObservation slots[MSL_MAX_PLAYERS];
+} MslRlObservation;
+
+typedef struct MslTerminal {
+  int32_t frame_id;
+  uint32_t stage_id;
+  uint8_t done;
+  uint8_t match_ended;
+  uint8_t stockout;
+  uint8_t max_frame_reached;
+  uint8_t alive_count;
+  uint8_t alive_team_count;
+  uint8_t team_alive_mask;
+  uint8_t _pad0;
+} MslTerminal;
+
 typedef struct MslProcessedInputPlayer {
   // Same layout as MslInputPlayer, but stick axes are post-processed (clamped/UCF snapped).
   uint16_t buttons;
@@ -1280,6 +1339,10 @@ int msl_batch_set_ucf_cardinals_1_0_enabled(MslBatch* batch, int enabled);
 // Initialize each environment from a match config, without replay seed data.
 // configs length is batch_size; config_stride_bytes must be >= sizeof(MslMatchConfig).
 int msl_batch_init_match(MslBatch* batch, const uint8_t* config_bytes, size_t config_stride_bytes);
+// Masked variant for vector-env reset. mask entries are uint8_t 0/1; rows with 0 are untouched.
+int msl_batch_init_match_masked(MslBatch* batch, const uint8_t* config_bytes,
+                                size_t config_stride_bytes, const uint8_t* mask_bytes,
+                                size_t mask_stride_bytes);
 
 // Reseed from packed MslSeed array of length batch_size.
 // seed_stride_bytes must be >= sizeof(MslSeed).
@@ -1294,6 +1357,13 @@ int msl_batch_step_input(MslBatch* batch, const uint8_t* prev_input_bytes,
 // Write packed compare outputs (length batch_size).
 // out_stride_bytes must be >= sizeof(MslCompare).
 int msl_batch_write_compare(const MslBatch* batch, uint8_t* out_bytes, size_t out_stride_bytes);
+// Write one compact RL observation per batch row. viewpoint_players are 0-based player indices.
+int msl_batch_write_rl_observation(const MslBatch* batch, const uint8_t* viewpoint_player_bytes,
+                                   size_t viewpoint_player_stride_bytes, uint8_t* out_bytes,
+                                   size_t out_stride_bytes);
+// Write terminal flags. max_frame_id < 0 disables the max-frame done condition.
+int msl_batch_write_terminal(const MslBatch* batch, uint8_t* out_bytes, size_t out_stride_bytes,
+                             int32_t max_frame_id);
 
 // Debug/validation helper: write current processed input values.
 // out_stride_bytes must be >= sizeof(MslProcessedInput).

@@ -162,6 +162,12 @@ MslBatch* msl_batch_create(int batch_size, int num_players) {
     msl_batch_destroy(batch);
     return NULL;
   }
+  batch->rollout_clock_rng_owned = (uint8_t*)alloc_malloc((size_t)batch_size * sizeof(uint8_t));
+  if (batch->rollout_clock_rng_owned == NULL) {
+    msl_batch_destroy(batch);
+    return NULL;
+  }
+  memset(batch->rollout_clock_rng_owned, 0, (size_t)batch_size * sizeof(uint8_t));
 
   // Debug-only per-fighter hit status override table (0xFF = none).
   batch->debug_hit_status_override =
@@ -316,6 +322,7 @@ void msl_batch_destroy(MslBatch* batch) {
   alloc_free(batch->debug_rng_seed_in);
   alloc_free(batch->debug_rng_shadow_seed);
   alloc_free(batch->debug_hit_status_override);
+  alloc_free(batch->rollout_clock_rng_owned);
   alloc_free(batch->match_init_seed_scratch);
   state_free(&batch->state);
   alloc_free(batch);
@@ -369,11 +376,28 @@ static inline uint8_t msl_match_init_point_inside_bounds(const MslStageBounds* b
   return (uint8_t)(x >= b->left && x <= b->right && y >= b->bottom && y <= b->top);
 }
 
-int msl_batch_init_match(MslBatch* batch, const uint8_t* config_bytes, size_t config_stride_bytes) {
+static inline uint8_t msl_mask_row_selected(const uint8_t* mask_bytes, size_t mask_stride_bytes,
+                                            int bi) {
+  if (mask_bytes == NULL) {
+    return 1u;
+  }
+  return mask_bytes[(size_t)bi * mask_stride_bytes] ? 1u : 0u;
+}
+
+static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes,
+                                      size_t seed_stride_bytes, const uint8_t* mask_bytes,
+                                      size_t mask_stride_bytes, uint8_t rollout_owned_after);
+
+static int msl_batch_init_match_impl(MslBatch* batch, const uint8_t* config_bytes,
+                                     size_t config_stride_bytes, const uint8_t* mask_bytes,
+                                     size_t mask_stride_bytes) {
   if (batch == NULL || config_bytes == NULL) {
     return EINVAL;
   }
   if (config_stride_bytes < sizeof(MslMatchConfig)) {
+    return EINVAL;
+  }
+  if (mask_bytes != NULL && mask_stride_bytes < sizeof(uint8_t)) {
     return EINVAL;
   }
 
@@ -394,6 +418,9 @@ int msl_batch_init_match(MslBatch* batch, const uint8_t* config_bytes, size_t co
   }
 
   for (int bi = 0; bi < batch->batch_size; bi++) {
+    if (!msl_mask_row_selected(mask_bytes, mask_stride_bytes, bi)) {
+      continue;
+    }
     const uint8_t* ptr = config_bytes + (size_t)bi * config_stride_bytes;
     const MslMatchConfig* cfg = (const MslMatchConfig*)ptr;
     MslSeed* seed = &seeds[bi];
@@ -525,25 +552,52 @@ int msl_batch_init_match(MslBatch* batch, const uint8_t* config_bytes, size_t co
     }
   }
 
-  const int err = msl_batch_reseed_seed(batch, (const uint8_t*)seeds, sizeof(MslSeed));
+  const int err = msl_batch_reseed_seed_impl(batch, (const uint8_t*)seeds, sizeof(MslSeed),
+                                             mask_bytes, mask_stride_bytes, 1u);
   if (err != 0) {
     return err;
   }
 
-  state_flags_refresh_post_frame(batch);
+  if (mask_bytes == NULL) {
+    state_flags_refresh_post_frame(batch);
+  } else {
+    state_flags_refresh_post_frame_masked(batch, mask_bytes, mask_stride_bytes);
+  }
   return 0;
 }
 
-int msl_batch_reseed_seed(MslBatch* batch, const uint8_t* seed_bytes, size_t seed_stride_bytes) {
+int msl_batch_init_match(MslBatch* batch, const uint8_t* config_bytes, size_t config_stride_bytes) {
+  return msl_batch_init_match_impl(batch, config_bytes, config_stride_bytes, NULL, 0);
+}
+
+int msl_batch_init_match_masked(MslBatch* batch, const uint8_t* config_bytes,
+                                size_t config_stride_bytes, const uint8_t* mask_bytes,
+                                size_t mask_stride_bytes) {
+  if (mask_bytes == NULL) {
+    return EINVAL;
+  }
+  return msl_batch_init_match_impl(batch, config_bytes, config_stride_bytes, mask_bytes,
+                                   mask_stride_bytes);
+}
+
+static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes,
+                                      size_t seed_stride_bytes, const uint8_t* mask_bytes,
+                                      size_t mask_stride_bytes, uint8_t rollout_owned_after) {
   if (batch == NULL || seed_bytes == NULL) {
     return EINVAL;
   }
   if (seed_stride_bytes < sizeof(MslSeed)) {
     return EINVAL;
   }
+  if (mask_bytes != NULL && mask_stride_bytes < sizeof(uint8_t)) {
+    return EINVAL;
+  }
   const MslCommonParams* common = msl_common_params();
 
   for (int bi = 0; bi < batch->batch_size; bi++) {
+    if (!msl_mask_row_selected(mask_bytes, mask_stride_bytes, bi)) {
+      continue;
+    }
     const uint8_t* ptr = seed_bytes + (size_t)bi * seed_stride_bytes;
     const MslSeed* seed = (const MslSeed*)ptr;
     int active_players = (int)batch->config.num_players;
@@ -1328,16 +1382,48 @@ int msl_batch_reseed_seed(MslBatch* batch, const uint8_t* seed_bytes, size_t see
         }
       }
     }
+
+    if (batch->rollout_clock_rng_owned != NULL) {
+      batch->rollout_clock_rng_owned[bi] = rollout_owned_after ? 1u : 0u;
+    }
   }
 
   return 0;
 }
 
+int msl_batch_reseed_seed(MslBatch* batch, const uint8_t* seed_bytes, size_t seed_stride_bytes) {
+  return msl_batch_reseed_seed_impl(batch, seed_bytes, seed_stride_bytes, NULL, 0, 0u);
+}
+
+static void msl_batch_commit_rollout_clock_rng(MslBatch* batch) {
+  if (batch == NULL || batch->rollout_clock_rng_owned == NULL) {
+    return;
+  }
+  for (int bi = 0; bi < batch->batch_size; bi++) {
+    if (!batch->rollout_clock_rng_owned[bi]) {
+      continue;
+    }
+    // Simulator-owned rollout metadata: unlike replay teacher-forced rows, match-init episodes
+    // advance by one simulated frame after each step and carry the global RNG stream after modeled
+    // HSD_Rand/HSD_Randi consumers. Reseed paths overwrite both lanes and clear this ownership bit.
+    // RNG source: refs/melee/src/sysdolphin/baselib/random.c::{HSD_Rand,HSD_Randi,HSD_Randf}
+    batch->state.frame_id[bi] += 1;
+    if (batch->debug_rng_seed_out != NULL) {
+      batch->state.frame_pre_random_seed[bi] = batch->debug_rng_seed_out[(size_t)bi];
+    }
+  }
+}
+
 int msl_batch_step_input(MslBatch* batch, const uint8_t* prev_input_bytes,
                          size_t prev_input_stride_bytes, const uint8_t* input_bytes,
                          size_t input_stride_bytes) {
-  return step_one_frame(batch, prev_input_bytes, prev_input_stride_bytes, input_bytes,
-                        input_stride_bytes);
+  const int err = step_one_frame(batch, prev_input_bytes, prev_input_stride_bytes, input_bytes,
+                                 input_stride_bytes);
+  if (err != 0) {
+    return err;
+  }
+  msl_batch_commit_rollout_clock_rng(batch);
+  return 0;
 }
 
 static uint8_t msl_is_dead_from_stocks(uint8_t stocks) { return stocks == 0 ? 1 : 0; }
@@ -1424,6 +1510,151 @@ int msl_batch_write_compare(const MslBatch* batch, uint8_t* out_bytes, size_t ou
       item->misc2 = batch->state.item_misc2[ii];
       item->misc3 = batch->state.item_misc3[ii];
     }
+  }
+
+  return 0;
+}
+
+static void msl_write_rl_player_observation(const MslBatch* batch, int bi, int p,
+                                            uint8_t team_relation, MslRlPlayerObservation* out) {
+  const size_t idx = msl_idx_player(bi, p);
+  memset(out, 0, sizeof(*out));
+  out->present = 1u;
+  out->source_player = (uint8_t)p;
+  out->team_relation = team_relation;
+  out->team_id = batch->state.team_id[idx];
+  out->pos_x = batch->state.pos_x[idx];
+  out->pos_y = batch->state.pos_y[idx];
+  out->speed_air_x_self = batch->state.speed_air_x_self[idx];
+  out->speed_ground_x_self = batch->state.speed_ground_x_self[idx];
+  out->speed_y_self = batch->state.speed_y_self[idx];
+  out->speed_x_attack = batch->state.speed_x_attack[idx];
+  out->speed_y_attack = batch->state.speed_y_attack[idx];
+  out->percent = batch->state.percent[idx];
+  out->shield_hp = batch->state.shield_hp[idx];
+  out->action_id = batch->state.action_id[idx];
+  out->action_frame = batch->state.action_frame[idx];
+  out->hitlag = batch->state.hitlag[idx];
+  out->hitstun = batch->state.hitstun[idx];
+  out->char_id = batch->state.char_id[idx];
+  out->stocks = batch->state.stocks[idx];
+  out->facing = batch->state.facing[idx] ? 1u : 0u;
+  out->on_ground = batch->state.on_ground[idx] ? 1u : 0u;
+  out->jumps_left = batch->state.jumps_left[idx];
+  out->hurtbox_state = batch->state.hurtbox_state[idx];
+}
+
+int msl_batch_write_rl_observation(const MslBatch* batch, const uint8_t* viewpoint_player_bytes,
+                                   size_t viewpoint_player_stride_bytes, uint8_t* out_bytes,
+                                   size_t out_stride_bytes) {
+  if (batch == NULL || viewpoint_player_bytes == NULL || out_bytes == NULL) {
+    return EINVAL;
+  }
+  if (viewpoint_player_stride_bytes < sizeof(uint8_t) ||
+      out_stride_bytes < sizeof(MslRlObservation)) {
+    return EINVAL;
+  }
+  const int active_players = (int)batch->config.num_players;
+  if (active_players < 1 || active_players > MSL_MAX_PLAYERS) {
+    return EINVAL;
+  }
+
+  for (int bi = 0; bi < batch->batch_size; bi++) {
+    const uint8_t vp = viewpoint_player_bytes[(size_t)bi * viewpoint_player_stride_bytes];
+    if ((int)vp >= active_players) {
+      return EINVAL;
+    }
+    MslRlObservation* out = (MslRlObservation*)(out_bytes + (size_t)bi * out_stride_bytes);
+    memset(out, 0, sizeof(*out));
+    out->frame_id = batch->state.frame_id[bi];
+    out->frame_pre_random_seed = batch->state.frame_pre_random_seed[bi];
+    out->stage_id = batch->state.stage_id[bi];
+    out->num_players = batch->config.num_players;
+    out->is_teams = batch->state.is_teams[bi] ? 1u : 0u;
+    out->viewpoint_player = vp;
+    const size_t vp_idx = msl_idx_player(bi, (int)vp);
+    const uint8_t vp_team = batch->state.team_id[vp_idx];
+    int slot = 0;
+    msl_write_rl_player_observation(batch, bi, (int)vp, 0u, &out->slots[slot++]);
+    if (batch->state.is_teams[bi]) {
+      for (int p = 0; p < active_players && slot < MSL_MAX_PLAYERS; p++) {
+        if (p == (int)vp) {
+          continue;
+        }
+        const size_t idx = msl_idx_player(bi, p);
+        if (batch->state.team_id[idx] == vp_team) {
+          msl_write_rl_player_observation(batch, bi, p, 1u, &out->slots[slot++]);
+        }
+      }
+    }
+    for (int p = 0; p < active_players && slot < MSL_MAX_PLAYERS; p++) {
+      if (p == (int)vp) {
+        continue;
+      }
+      const size_t idx = msl_idx_player(bi, p);
+      if (batch->state.is_teams[bi] && batch->state.team_id[idx] == vp_team) {
+        continue;
+      }
+      msl_write_rl_player_observation(batch, bi, p, 2u, &out->slots[slot++]);
+    }
+  }
+
+  return 0;
+}
+
+int msl_batch_write_terminal(const MslBatch* batch, uint8_t* out_bytes, size_t out_stride_bytes,
+                             int32_t max_frame_id) {
+  if (batch == NULL || out_bytes == NULL) {
+    return EINVAL;
+  }
+  if (out_stride_bytes < sizeof(MslTerminal)) {
+    return EINVAL;
+  }
+  const int active_players = (int)batch->config.num_players;
+  if (active_players < 1 || active_players > MSL_MAX_PLAYERS) {
+    return EINVAL;
+  }
+
+  for (int bi = 0; bi < batch->batch_size; bi++) {
+    uint8_t alive_count = 0u;
+    uint8_t alive_team_count = 0u;
+    uint8_t team_alive_mask = 0u;
+    uint8_t stockout = 0u;
+    for (int p = 0; p < active_players; p++) {
+      const size_t idx = msl_idx_player(bi, p);
+      if (batch->state.stocks[idx] == 0u) {
+        stockout = 1u;
+      } else {
+        alive_count++;
+        uint8_t team_bit = batch->state.team_id[idx];
+        if (team_bit >= 8u) {
+          team_bit = 7u;
+        }
+        team_alive_mask |= (uint8_t)(1u << team_bit);
+      }
+    }
+    for (uint8_t bit = 0u; bit < 8u; bit++) {
+      if ((team_alive_mask & (uint8_t)(1u << bit)) != 0u) {
+        alive_team_count++;
+      }
+    }
+    const uint8_t match_ended = batch->state.is_teams[bi]
+                                    ? (uint8_t)(alive_team_count <= 1u)
+                                    : (uint8_t)(stockout || alive_count <= 1u);
+    const uint8_t max_frame_reached =
+        (uint8_t)(max_frame_id >= 0 && batch->state.frame_id[bi] >= max_frame_id);
+
+    MslTerminal* out = (MslTerminal*)(out_bytes + (size_t)bi * out_stride_bytes);
+    memset(out, 0, sizeof(*out));
+    out->frame_id = batch->state.frame_id[bi];
+    out->stage_id = batch->state.stage_id[bi];
+    out->done = (uint8_t)(match_ended || max_frame_reached);
+    out->match_ended = match_ended;
+    out->stockout = stockout;
+    out->max_frame_reached = max_frame_reached;
+    out->alive_count = alive_count;
+    out->alive_team_count = alive_team_count;
+    out->team_alive_mask = team_alive_mask;
   }
 
   return 0;

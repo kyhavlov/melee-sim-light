@@ -22,6 +22,9 @@ struct MslBatch {
   // Episode/match init scratch, allocated with the batch so `msl_batch_init_match` can remain
   // allocation-free when used as an RL reset path.
   MslSeed* match_init_seed_scratch;  // [batch]
+  // Per-env ownership bit for simulator-created rollouts. `reseed_seed` clears this so replay
+  // teacher-forced validation keeps its existing seed-owned frame/RNG metadata behavior.
+  uint8_t* rollout_clock_rng_owned;  // [batch]
 
   // Debug-only per-fighter override for hit status eligibility (opcode 26).
   // Indexed like other per-player state arrays: [batch_size * MSL_MAX_PLAYERS].

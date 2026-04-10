@@ -877,6 +877,58 @@ static PyObject* msl_init_match(PyObject* self, PyObject* args) {
   Py_RETURN_NONE;
 }
 
+static PyObject* msl_init_match_masked(PyObject* self, PyObject* args) {
+  (void)self;
+  PyObject* handle_obj = NULL;
+  PyObject* config_obj = NULL;
+  PyObject* mask_obj = NULL;
+  if (!PyArg_ParseTuple(args, "OOO", &handle_obj, &config_obj, &mask_obj)) {
+    return NULL;
+  }
+  PyMslHandle* h = unpack_handle(handle_obj);
+  if (h == NULL) {
+    return NULL;
+  }
+
+  PyArrayObject* config = require_contiguous_array(config_obj, NPY_UINT8, 2, "match_config");
+  if (config == NULL) {
+    return NULL;
+  }
+  if (PyArray_DIM(config, 1) < (npy_intp)sizeof(MslMatchConfig)) {
+    PyErr_SetString(PyExc_ValueError, "match_config second dim too small for MslMatchConfig");
+    return NULL;
+  }
+  PyArrayObject* mask = require_contiguous_array(mask_obj, NPY_UINT8, 1, "mask");
+  if (mask == NULL) {
+    return NULL;
+  }
+  const int batch_size = msl_batch_batch_size(h->batch);
+  if (PyArray_DIM(config, 0) < (npy_intp)batch_size) {
+    PyErr_Format(PyExc_ValueError, "match_config has too few rows: got %zd, need %d",
+                 (Py_ssize_t)PyArray_DIM(config, 0), batch_size);
+    return NULL;
+  }
+  if (PyArray_DIM(mask, 0) < (npy_intp)batch_size) {
+    PyErr_Format(PyExc_ValueError, "mask has too few rows: got %zd, need %d",
+                 (Py_ssize_t)PyArray_DIM(mask, 0), batch_size);
+    return NULL;
+  }
+
+  const uint8_t* config_bytes = (const uint8_t*)PyArray_DATA(config);
+  const size_t config_stride = (size_t)PyArray_STRIDE(config, 0);
+  const uint8_t* mask_bytes = (const uint8_t*)PyArray_DATA(mask);
+  const size_t mask_stride = (size_t)PyArray_STRIDE(mask, 0);
+
+  const int err =
+      msl_batch_init_match_masked(h->batch, config_bytes, config_stride, mask_bytes, mask_stride);
+  if (err != 0) {
+    PyErr_Format(PyExc_RuntimeError, "msl_batch_init_match_masked failed: %d", err);
+    return NULL;
+  }
+
+  Py_RETURN_NONE;
+}
+
 static PyObject* msl_step_input(PyObject* self, PyObject* args) {
   (void)self;
   PyObject* handle_obj = NULL;
@@ -1030,6 +1082,98 @@ static PyObject* msl_write_compare(PyObject* self, PyObject* args) {
   const int err = msl_batch_write_compare(h->batch, out_bytes, stride);
   if (err != 0) {
     PyErr_Format(PyExc_RuntimeError, "msl_batch_write_compare failed: %d", err);
+    return NULL;
+  }
+
+  Py_RETURN_NONE;
+}
+
+static PyObject* msl_write_rl_observation(PyObject* self, PyObject* args) {
+  (void)self;
+  PyObject* handle_obj = NULL;
+  PyObject* viewpoint_obj = NULL;
+  PyObject* out_obj = NULL;
+  if (!PyArg_ParseTuple(args, "OOO", &handle_obj, &viewpoint_obj, &out_obj)) {
+    return NULL;
+  }
+  PyMslHandle* h = unpack_handle(handle_obj);
+  if (h == NULL) {
+    return NULL;
+  }
+
+  PyArrayObject* viewpoint = require_contiguous_array(viewpoint_obj, NPY_UINT8, 1, "viewpoint");
+  if (viewpoint == NULL) {
+    return NULL;
+  }
+  PyArrayObject* out = require_contiguous_array(out_obj, NPY_UINT8, 2, "out");
+  if (out == NULL) {
+    return NULL;
+  }
+  const int batch_size = msl_batch_batch_size(h->batch);
+  if (PyArray_DIM(viewpoint, 0) < (npy_intp)batch_size) {
+    PyErr_Format(PyExc_ValueError, "viewpoint has too few rows: got %zd, need %d",
+                 (Py_ssize_t)PyArray_DIM(viewpoint, 0), batch_size);
+    return NULL;
+  }
+  if (PyArray_DIM(out, 0) < (npy_intp)batch_size) {
+    PyErr_Format(PyExc_ValueError, "out has too few rows: got %zd, need %d",
+                 (Py_ssize_t)PyArray_DIM(out, 0), batch_size);
+    return NULL;
+  }
+  if (PyArray_DIM(out, 1) < (npy_intp)sizeof(MslRlObservation)) {
+    PyErr_SetString(PyExc_ValueError, "out second dim too small for MslRlObservation");
+    return NULL;
+  }
+
+  const uint8_t* viewpoint_bytes = (const uint8_t*)PyArray_DATA(viewpoint);
+  const size_t viewpoint_stride = (size_t)PyArray_STRIDE(viewpoint, 0);
+  uint8_t* out_bytes = (uint8_t*)PyArray_DATA(out);
+  const size_t out_stride = (size_t)PyArray_STRIDE(out, 0);
+
+  const int err = msl_batch_write_rl_observation(h->batch, viewpoint_bytes, viewpoint_stride,
+                                                 out_bytes, out_stride);
+  if (err != 0) {
+    PyErr_Format(PyExc_RuntimeError, "msl_batch_write_rl_observation failed: %d", err);
+    return NULL;
+  }
+
+  Py_RETURN_NONE;
+}
+
+static PyObject* msl_write_terminal(PyObject* self, PyObject* args) {
+  (void)self;
+  PyObject* handle_obj = NULL;
+  PyObject* out_obj = NULL;
+  int max_frame_id = -1;
+  if (!PyArg_ParseTuple(args, "OO|i", &handle_obj, &out_obj, &max_frame_id)) {
+    return NULL;
+  }
+  PyMslHandle* h = unpack_handle(handle_obj);
+  if (h == NULL) {
+    return NULL;
+  }
+
+  PyArrayObject* out = require_contiguous_array(out_obj, NPY_UINT8, 2, "out");
+  if (out == NULL) {
+    return NULL;
+  }
+  const int batch_size = msl_batch_batch_size(h->batch);
+  if (PyArray_DIM(out, 0) < (npy_intp)batch_size) {
+    PyErr_Format(PyExc_ValueError, "out has too few rows: got %zd, need %d",
+                 (Py_ssize_t)PyArray_DIM(out, 0), batch_size);
+    return NULL;
+  }
+  if (PyArray_DIM(out, 1) < (npy_intp)sizeof(MslTerminal)) {
+    PyErr_SetString(PyExc_ValueError, "out second dim too small for MslTerminal");
+    return NULL;
+  }
+
+  uint8_t* out_bytes = (uint8_t*)PyArray_DATA(out);
+  const size_t out_stride = (size_t)PyArray_STRIDE(out, 0);
+
+  const int err = msl_batch_write_terminal(h->batch, out_bytes, out_stride, (int32_t)max_frame_id);
+  if (err != 0) {
+    PyErr_Format(PyExc_RuntimeError, "msl_batch_write_terminal failed: %d", err);
     return NULL;
   }
 
@@ -1284,11 +1428,12 @@ static PyObject* msl_debug_force_anim_timebase_enter(PyObject* self, PyObject* a
 static PyObject* msl_sizes(PyObject* self, PyObject* args) {
   (void)self;
   (void)args;
-  return Py_BuildValue("{s:i,s:i,s:i,s:i,s:i,s:i,s:i,s:i}", "seed", (int)sizeof(MslSeed),
+  return Py_BuildValue("{s:i,s:i,s:i,s:i,s:i,s:i,s:i,s:i,s:i,s:i}", "seed", (int)sizeof(MslSeed),
                        "match_config", (int)sizeof(MslMatchConfig), "input", (int)sizeof(MslInput),
                        "compare", (int)sizeof(MslCompare), "sample", (int)sizeof(MslSample),
-                       "processed_input", (int)sizeof(MslProcessedInput), "internals",
-                       (int)sizeof(MslDebugInternals), "collision_contacts",
+                       "rl_observation", (int)sizeof(MslRlObservation), "terminal",
+                       (int)sizeof(MslTerminal), "processed_input", (int)sizeof(MslProcessedInput),
+                       "internals", (int)sizeof(MslDebugInternals), "collision_contacts",
                        (int)sizeof(MslDebugCollisionContacts));
 }
 
@@ -2663,6 +2808,8 @@ static PyMethodDef methods[] = {
      "reseed_seed(handle, seed_bytes[batch, seed_stride])"},
     {"init_match", msl_init_match, METH_VARARGS,
      "init_match(handle, match_config_bytes[batch, match_config_stride])"},
+    {"init_match_masked", msl_init_match_masked, METH_VARARGS,
+     "init_match_masked(handle, match_config_bytes[batch, match_config_stride], mask[batch])"},
     {"step_input", msl_step_input, METH_VARARGS,
      "step_input(handle, prev_input_bytes, input_bytes)"},
     {"debug_step_input_pre_combat", msl_debug_step_input_pre_combat, METH_VARARGS,
@@ -2677,6 +2824,10 @@ static PyMethodDef methods[] = {
      "debug_refresh_combat_geometry(handle) -> DEBUG-ONLY. Recompute hurtcaps/hitboxes from "
      "current state without advancing frame stages."},
     {"write_compare", msl_write_compare, METH_VARARGS, "write_compare(handle, out_bytes)"},
+    {"write_rl_observation", msl_write_rl_observation, METH_VARARGS,
+     "write_rl_observation(handle, viewpoint_players[batch], out_bytes)"},
+    {"write_terminal", msl_write_terminal, METH_VARARGS,
+     "write_terminal(handle, out_bytes, max_frame_id=-1)"},
     {"debug_write_processed_input", msl_debug_write_processed_input, METH_VARARGS,
      "debug_write_processed_input(handle, out_bytes)"},
     {"debug_write_internals", msl_debug_write_internals, METH_VARARGS,

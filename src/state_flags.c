@@ -152,7 +152,8 @@ static inline uint8_t state_flags_camera_below_stage_cam_bounds(const MslBatch* 
   return (uint8_t)(batch->state.camera_target_world_y_f32[idx] < cam.bottom);
 }
 
-void state_flags_refresh_post_frame(MslBatch* batch) {
+static void state_flags_refresh_post_frame_impl(MslBatch* batch, const uint8_t* mask_bytes,
+                                                size_t mask_stride_bytes) {
   if (batch == NULL) {
     return;
   }
@@ -250,6 +251,9 @@ void state_flags_refresh_post_frame(MslBatch* batch) {
 
   const int num_players = (int)batch->config.num_players;
   for (int bi = 0; bi < batch->batch_size; bi++) {
+    if (mask_bytes != NULL && mask_bytes[(size_t)bi * mask_stride_bytes] == 0u) {
+      continue;
+    }
     for (int p = 0; p < num_players; p++) {
       const size_t idx = msl_idx_player(bi, p);
       const uint16_t action_id = batch->state.action_id[idx];
@@ -911,4 +915,16 @@ void state_flags_refresh_post_frame(MslBatch* batch) {
       batch->state.state_flags[flags_221f_i] = f221f;
     }
   }
+}
+
+void state_flags_refresh_post_frame(MslBatch* batch) {
+  state_flags_refresh_post_frame_impl(batch, NULL, 0);
+}
+
+void state_flags_refresh_post_frame_masked(MslBatch* batch, const uint8_t* mask_bytes,
+                                           size_t mask_stride_bytes) {
+  if (mask_bytes == NULL || mask_stride_bytes < sizeof(uint8_t)) {
+    return;
+  }
+  state_flags_refresh_post_frame_impl(batch, mask_bytes, mask_stride_bytes);
 }

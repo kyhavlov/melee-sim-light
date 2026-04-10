@@ -15,6 +15,8 @@
 // This helper intentionally only mutates specific bits and preserves all other bits in each
 // byte, so seed passthrough remains valid for not-yet-modeled fields.
 void state_flags_refresh_post_frame(MslBatch* batch);
+void state_flags_refresh_post_frame_masked(MslBatch* batch, const uint8_t* mask_bytes,
+                                           size_t mask_stride_bytes);
 
 // Slippi packs fp+0x221C into state_flags[..., 3].
 // x221C_b6 is the high-byte bit1 lane (mask 0x02).
