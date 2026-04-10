@@ -437,6 +437,20 @@ typedef struct MslStateSoA {
   // - refs/melee/src/melee/ft/fighter.c::Fighter_8006A360 (update gate on `!fp->x2219_b5`)
   // - refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC (hitlag start)
   uint8_t* hitlag_started_frame;
+  // Runtime-only collision continuation latch for damage hitlag floor-hug handoff.
+  //
+  // Decomp shape:
+  // - allow_sdi rows route through ft_80081DD4 -> mpColl_800477E0, where
+  //   mpColl_80044628_Floor / mpColl_80044948_Floor can raise FloorPush|FloorHug while keeping
+  //   the fighter airborne.
+  // - On the immediate hitlag-exit frame, Damage_Coll / DamageFly_Coll then resolve the
+  //   non-allow_sdi floor handoff via ft_80081DD4 -> mpColl_800473CC.
+  //
+  // This carries only that transient runtime-owned continuation across rollout steps. It is
+  // intentionally not seeded; teacher-forced rows do not expose CollData env state.
+  // refs/melee/src/melee/ft/ft_081B.c::ft_80081DD4
+  // refs/melee/src/melee/mp/mpcoll.c::{mpColl_800477E0,mpColl_80044628_Floor,mpColl_80044948_Floor,mpColl_800473CC}
+  uint8_t* damage_hitlag_floorhug_latch;
   uint16_t* hitstun;
   // Damage jump-buffer snapshot (decomp: fp->mv.co.damage.x14, set from x0 on jump input while in
   // hitstun; used by Damage_Anim inlineC0 gate vs p_ftCommonData->x1D0).

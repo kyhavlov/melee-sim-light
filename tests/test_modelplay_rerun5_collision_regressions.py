@@ -319,10 +319,19 @@ def test_modelplay_rerun5_7582_downbound_does_not_fall_through_main_floor() -> N
     # consume stale vertical self velocity and keep the root floor-clamped instead of falling
     # through the stage.
     assert float(trace["frames"][7599]["players"][0]["state"]["yPosition"]) < -20.0
-    assert float(history[7594]["speed_y_self"][0]) < 0.0
-    assert float(history[7595]["speed_y_self"][0]) == pytest.approx(0.0, abs=0.000001)
+    first_downbound = None
     for frame_i in range(7594, 7600):
         out = history[frame_i]
         assert int(out["action_id"][0]) == ACT_DOWN_BOUND_U
         assert float(out["pos_y"][0]) >= -0.001
         assert int(out["ground_id"][0]) == 1
+    for frame_i in range(7592, 7600):
+        out = history[frame_i]
+        if int(out["action_id"][0]) == ACT_DOWN_BOUND_U:
+            first_downbound = frame_i
+            break
+    assert first_downbound is not None
+    assert float(history[first_downbound]["speed_y_self"][0]) < 0.0
+    assert float(history[first_downbound + 1]["speed_y_self"][0]) == pytest.approx(
+        0.0, abs=0.000001
+    )

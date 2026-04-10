@@ -694,6 +694,7 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
       batch->state.ceiling_id[idx] = 0xFFFFu;
       batch->state.coll_env_flags[idx] = 0u;
       batch->state.coll_prev_env_flags[idx] = 0u;
+      batch->state.damage_hitlag_floorhug_latch[idx] = 0u;
 
       batch->state.action_id[idx] = seed->action_id[p];
       batch->state.seed_prev_action_id[idx] = seed->seed_prev_action_id[p];
