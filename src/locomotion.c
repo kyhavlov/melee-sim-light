@@ -1144,10 +1144,34 @@ static inline uint8_t action_is_ground_locomotion(uint16_t a) {
       a == MSL_ACT_ATTACK_13 || a == MSL_ACT_ATTACK_DASH || action_is_attack_s3_family(a) ||
       a == MSL_ACT_ATTACK_HI3 || a == MSL_ACT_ATTACK_LW3 || a == MSL_ACT_ATTACK_S4_HI ||
       a == MSL_ACT_ATTACK_S4_HI_S || a == MSL_ACT_ATTACK_S4_S || a == MSL_ACT_ATTACK_S4_LW_S ||
-      a == MSL_ACT_ATTACK_S4_LW || a == MSL_ACT_ATTACK_HI4 || a == MSL_ACT_ATTACK_LW4) {
+      a == MSL_ACT_ATTACK_S4_LW || a == MSL_ACT_ATTACK_HI4 || a == MSL_ACT_ATTACK_LW4 ||
+      // GuardSetOff_Coll routes through common grounded collision helpers that enter Fall when
+      // floor ownership is lost.
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_GuardSetOff_Coll
+      // refs/melee/src/melee/ft/ft_081B.c::{ft_80084104,ft_800845B4}
+      a == MSL_ACT_GUARD_SET_OFF) {
     return 1;
   }
   return 0;
+}
+
+static inline uint8_t ottotto_edge_matches_facing(uint32_t stage_id, uint16_t ground_id,
+                                                  uint8_t facing, float pos_x) {
+  const int line_idx = stage_collision_floor_line_index(stage_id, ground_id);
+  if (line_idx < 0) {
+    return 1u;
+  }
+  const MslStageFloorGraph* g = stage_collision_get_floor_graph(stage_id);
+  if (g == NULL || (size_t)line_idx >= g->line_count) {
+    return 1u;
+  }
+  const MslStageFloorLine* line = &g->lines[(size_t)line_idx];
+
+  // Ottotto_Coll chooses the checked floor endpoint from facing_dir: right endpoint when facing
+  // right, left endpoint when facing left. Gate direct edge admission the same way so sliding past
+  // the opposite endpoint while facing away becomes the common Fall path instead of teeter.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Ottotto.c::ftCo_Ottotto_Coll
+  return facing ? (uint8_t)(pos_x >= line->x1) : (uint8_t)(pos_x <= line->x0);
 }
 
 static inline uint8_t action_is_air_locomotion(uint16_t a) {
@@ -3673,7 +3697,10 @@ void locomotion_update_post_collision(MslBatch* batch) {
         // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Ottotto.c::{ftCo_8009A3C8,ftCo_8009A410}
         // refs/melee/src/melee/ft/ft_081B.c::ft_80084280
         if (batch->state.prev_action_id[idx] == (uint16_t)MSL_ACT_WAIT &&
-            batch->state.prev_action_frame[idx] <= 0) {
+            batch->state.prev_action_frame[idx] <= 0 &&
+            ottotto_edge_matches_facing(batch->state.stage_id[(size_t)bi],
+                                        batch->state.ground_id[idx], batch->state.facing[idx],
+                                        batch->state.pos_x[idx])) {
           batch->state.on_ground[idx] = 1u;
           batch->state.action_id[idx] = (uint16_t)MSL_ACT_OTTOTTO;
           batch->state.animation_index[idx] = (uint32_t)MSL_SM_OTTOTTO;

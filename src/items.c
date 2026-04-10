@@ -1373,11 +1373,41 @@ static void laser_spawn_from_fighter(MslBatch* batch, int bi, int owner, const M
   float pos_x = batch->state.pos_x[o_idx] + lx;
   float pos_y = batch->state.pos_y[o_idx] + ly;
 
-  // Launch angle: if facing left, use (pi - base_angle).
-  // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_SpecialN_CreateBlasterShot
   float ang = lp->blaster_angle;
-  if (facing_dir < 0.0f) {
-    ang = MSL_PI_F - ang;
+  if (batch->state.action_id[o_idx] == (uint16_t)MSL_ACT_THROW_HI) {
+    // Throw-side launch angle is owned by ftFx_Throw_Anim:
+    //   atan2f(FtGetHoldJoint.y - ItGetHoldJoint.y,
+    //          FtGetHoldJoint.x - ItGetHoldJoint.x)
+    // rather than the SpecialN constant angle. This lane is currently kept to ThrowHi, where the
+    // modelplay symptom is a visibly horizontal upthrow shot. FtGetHoldJoint uses the extracted
+    // `laser_spawn_joint_part_id` + `lp->spawn_off_xyz`; ItGetHoldJoint uses the same RThumbNb
+    // joint with the decomp-local offset below.
+    // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::{
+    //   ftFx_SpecialN_FtGetHoldJoint,ftFx_SpecialN_ItGetHoldJoint,ftFx_Throw_Anim}
+    // refs/melee/src/melee/it/items/itfoxlaser.c::it_8029C6CC
+    const float it_hold_off_xyz[3] = {
+        0.0f,
+        1.2325000762939453f,
+        0.013600001111626625f,
+    };
+    float ilx = 0.0f, ily = 0.0f, ilz = 0.0f;
+    msl_mtx34_mul_point(m, it_hold_off_xyz, &ilx, &ily, &ilz);
+    const float irx = facing_dir * ilz;
+    const float irz = -facing_dir * ilx;
+    ilx = irx;
+    ilz = irz;
+    (void)ilz;
+    ilx *= model_scale;
+    ily *= model_scale;
+    const float it_hold_x = batch->state.pos_x[o_idx] + ilx;
+    const float it_hold_y = batch->state.pos_y[o_idx] + ily;
+    ang = atan2f(pos_y - it_hold_y, pos_x - it_hold_x);
+  } else {
+    // Launch angle: if facing left, use (pi - base_angle).
+    // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_SpecialN_CreateBlasterShot
+    if (facing_dir < 0.0f) {
+      ang = MSL_PI_F - ang;
+    }
   }
   const float spd = lp->blaster_speed;
   float vx = spd * cosf(ang);

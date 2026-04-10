@@ -276,6 +276,11 @@ static inline uint8_t physics_action_is_common_ground_friction_only(uint16_t act
   // - refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackHi4.c::ftCo_AttackHi4_Phys
   // - refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackLw4.c::ftCo_AttackLw4_Phys
   // - refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownBound.c::ftCo_DownBound_Phys
+  // - refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c::{
+  //     ftFx_SpecialLwLoop_Phys,ftFx_SpecialLwHit_Phys,
+  //     ftFx_SpecialLwTurn_Phys,ftFx_SpecialLwEnd_Phys}
+  //   (Start also calls ft_80084F3C in decomp, but same-frame entry/hitbox ordering in this core
+  //   needs a separate modeled lane; applying Start friction here creates replay-false shine hits.)
   // - refs/melee/src/melee/ft/ft_081B.c::ft_80084F3C
   switch (action_id) {
     case MSL_ACT_WAIT:
@@ -306,6 +311,10 @@ static inline uint8_t physics_action_is_common_ground_friction_only(uint16_t act
     case MSL_ACT_ATTACK_LW3:
     case MSL_ACT_ATTACK_HI4:
     case MSL_ACT_ATTACK_LW4:
+    case MSL_ACT_FX_SPECIAL_LW_LOOP:
+    case MSL_ACT_FX_SPECIAL_LW_HIT:
+    case MSL_ACT_FX_SPECIAL_LW_END:
+    case MSL_ACT_FX_SPECIAL_LW_TURN:
     case MSL_ACT_DOWN_BOUND_U:
     case MSL_ACT_DOWN_BOUND_D:
       return 1;
