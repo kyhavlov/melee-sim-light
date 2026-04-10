@@ -5,6 +5,7 @@ This directory now supports a single playback-only workflow:
 1. Capture an engine dump from playback Dolphin (`dolphin_engine_dump.py`).
 2. Extract deterministic frame rows from that dump (`extract_engine_dump_rows.py`).
 3. For dataset triage rows, run a single command (`forensic_row_dump.py`) that does both.
+4. For controlled vanilla behavior probes, patch short copied replay pre-frame windows first (`patch_slp_preframe_window.py`), then run the same dump/extract flow.
 
 No `libmelee` session control is used by the active tooling. Python only writes playback config,
 launches Dolphin with CLI args, and parses the dump output.
@@ -22,6 +23,21 @@ Outputs are written under `reports/triage/<timestamp>_dolphin_forensic_row/`.
 
 Requires `refs/Ishiiruka@3e676fab03b19faf1a6b00cb63934bd2f6502827` for v7 hitlist provenance lanes.
 
+## Controlled playback probes
+
+Use `patch_slp_preframe_window.py` when a modelplay symptom needs vanilla confirmation but exact state recreation is not available from Slippi post-frames alone. The script edits only 0x37 pre-frame payloads in a copied `.slp`; Dolphin then plays the replay normally. By default it refuses `--out == --slp`; use `--in-place` only when intentionally overwriting a disposable copy. Keep windows short and write all generated specs, patched replays, dumps, and rows under `reports/triage/`.
+
+```bash
+uv run python -m tools.dolphin.patch_slp_preframe_window \
+  --slp replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.slp \
+  --patch-spec reports/triage/<probe>/patch_spec.json \
+  --out reports/triage/<probe>/probe.slp
+```
+
+Patch specs use raw Slippi frame numbers. Parser/viewer frame displays usually add 123, and modelplay `trace.json` frame numbers are sequential trace/viewer indices rather than native `.slp` frame ids.
+
+The rerun7 frame-2124 shield investigation used this workflow: neutral/toward shield produced vanilla `GuardSetOff` with shield HP loss, while facing-away plus down-tilted shield produced vanilla damage with shield HP unchanged. That confirmed the observed hit as a legitimate shield poke, not a shield-release or sim-only bug.
+
 ## Active scripts
 
 - `dolphin_engine_dump.py`: playback CLI wrapper -> `.bin` engine dump.
@@ -29,6 +45,7 @@ Requires `refs/Ishiiruka@3e676fab03b19faf1a6b00cb63934bd2f6502827` for v7 hitlis
 - `extract_engine_dump_rows.py`: deterministic JSON/txt extraction for frame windows (including hitlist provenance lanes when available).
 - `forensic_row_dump.py`: dataset row => frame window => dump + extracted rows.
 - `compare_hitlist_provenance.py`: frame-by-frame comparison of extracted hitlist provenance between two row captures.
+- `patch_slp_preframe_window.py`: copied `.slp` pre-frame patcher for controlled vanilla playback probes.
 
 ## Legacy scripts
 

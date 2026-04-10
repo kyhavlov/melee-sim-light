@@ -136,6 +136,42 @@ When debugging from viewer-reported bugs:
 - Use the viewer frame index first, then inspect the corresponding trace JSON window and relevant sim code paths.
 - If the trace itself goes static for many frames, that usually means the sim stopped progressing in some action/state machine; inspect the action id and surrounding input window first.
 
+## Controlled Vanilla Playback Probes
+
+When Slippi post-frame data is not enough to decide whether a viewer symptom is real vanilla behavior, prefer a short replay-input patch plus playback engine dump:
+
+```bash
+uv run python -m tools.dolphin.patch_slp_preframe_window \
+  --slp replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.slp \
+  --patch-spec reports/triage/<probe>/patch_spec.json \
+  --out reports/triage/<probe>/probe.slp
+
+uv run python -m tools.dolphin.dolphin_engine_dump \
+  --replay reports/triage/<probe>/probe.slp \
+  --dolphin refs/Ishiiruka/build/Binaries/dolphin-emu-nogui \
+  --iso SSBM.iso \
+  --start-frame <f0> --end-frame <f1> \
+  --out-bin reports/triage/<probe>/dump.bin
+
+uv run python -m tools.dolphin.extract_engine_dump_rows \
+  --dump reports/triage/<probe>/dump.bin \
+  --start-frame <f0> --end-frame <f1> \
+  --out-dir reports/triage/<probe>/rows
+```
+
+Use this workflow instead of live memory writes or Gecko-code probes unless there is no playback-based path. It edits only copied `.slp` pre-frame payloads, then vanilla Dolphin consumes the replay normally. `patch_slp_preframe_window` refuses `--out == --slp` unless `--in-place` is passed intentionally.
+
+Frame-numbering rules:
+- `patch_slp_preframe_window` patch specs use raw Slippi frame numbers.
+- Slippi parsers/viewers commonly display `raw_frame + 123`.
+- Modelplay trace `frameNumber` is sequential trace/viewer indexing, not a native `.slp` frame id. If constructing a `.slp` whose parsed frame should display as a modelplay/viewer index, write raw pre-frame `frame = viewer_index - 123`.
+
+Concrete rerun7 shield-poke probe result:
+- Source symptom: `reports/modelplay/20260409_rl_doubles_v27_7000_rerun7/trace.json` around viewer frame 2124, Falco shielding vs Fox getup attack.
+- Sim trace showed Falco still holding shield (`Guard` action 179, shield active, L held), then entering damage on the next frame. This was not shield release.
+- Controlled vanilla probe from `GracefulAttachedTurtle.slp` around raw frames 4644..4685 showed neutral/toward shield entering `GuardSetOff` action 181 with shield HP loss at raw frame 4665.
+- The same vanilla setup with Falco facing away and holding a down-tilted shield entered damage action 87 at raw frame 4665 with shield HP unchanged, confirming a legitimate shield-poke shape for that setup.
+
 ## Python Dependencies (use `uv`, not `pip`)
 
 Use `uv` for Python dependencies and editable installs:
@@ -150,6 +186,7 @@ Use `uv` for Python dependencies and editable installs:
 - Rollout summary (headline metrics): `uv run python -m tools.eval.summarize_rollout_streaks --in reports/triage/current_rollout_streaks.json`
 - Rollout diff (before vs after): `uv run python -m tools.eval.diff_rollout_streaks --before reports/triage/baseline_rollout_streaks.json --after reports/triage/current_rollout_streaks.json`
 - Build ISO-derived data artifacts (gitignored): `uv run python -m tools.extraction.build_data --iso-dir _iso --stage grnla --chars fox,falco`
+- Patch a short `.slp` pre-frame window for controlled vanilla playback: `uv run python -m tools.dolphin.patch_slp_preframe_window --slp <src.slp> --patch-spec reports/triage/<run>/patch_spec.json --out reports/triage/<run>/probe.slp`
 - Capture playback engine dump (CLI-only, no libmelee): `uv run python -m tools.dolphin.dolphin_engine_dump --replay <path.slp> --dolphin refs/Ishiiruka/build/Binaries/dolphin-emu-nogui --iso SSBM.iso --start-frame <f0> --end-frame <f1> --out-bin reports/triage/<run>/dump.bin`
 - Extract frame-window rows from dump: `uv run python -m tools.dolphin.extract_engine_dump_rows --dump reports/triage/<run>/dump.bin --start-frame <f0> --end-frame <f1>`
 - One-row forensic dump from dataset row: `uv run python -m tools.dolphin.forensic_row_dump --row <dataset.msl:record:p> --dolphin refs/Ishiiruka/build/Binaries/dolphin-emu-nogui --iso SSBM.iso`
