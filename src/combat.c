@@ -8,6 +8,7 @@
 
 #include "action_ids.h"
 #include "anim_frame.h"
+#include "anim_pose.h"
 #include "anim_table.h"
 #include "anim_timebase.h"
 #include "buttons.h"
@@ -19,7 +20,10 @@
 #include "hitboxes_tables.h"
 #include "hit_status_tables.h"
 #include "hitlist.h"
+#include "hurtbox_modes_tables.h"
+#include "hurtcaps_tables.h"
 #include "laser_params.h"
+#include "mtx34.h"
 #include "move_tables.h"
 #include "staling.h"
 
@@ -144,8 +148,9 @@ static inline float combat_lbColl_804D7A38(void) {
   return 3.0f;
 }
 
-static inline uint8_t combat_shine_start_damageair_hitstun_body_pose_untrusted(
-    const MslBatch* batch, size_t a_idx, size_t d_idx) {
+static inline uint8_t combat_shine_start_damageair_entry_pose_bridge_applies(const MslBatch* batch,
+                                                                             size_t a_idx,
+                                                                             size_t d_idx) {
   if (batch == NULL) {
     return 0u;
   }
@@ -164,15 +169,25 @@ static inline uint8_t combat_shine_start_damageair_hitstun_body_pose_untrusted(
   if (d != (uint16_t)MSL_ACT_DAMAGE_AIR_2) {
     return 0u;
   }
+  return 1u;
+}
 
+static inline uint8_t combat_shine_start_damageair_entry_pose_allows_body_contact(
+    const MslBatch* batch, size_t a_idx, size_t d_idx, uint8_t cap_id, float hx, float hy, float hz,
+    float hr) {
+  if (!combat_shine_start_damageair_entry_pose_bridge_applies(batch, a_idx, d_idx)) {
+    return 1u;
+  }
   // Temporary seed/model blocker, not a vanilla gameplay rule:
   // - Damage entry owns a separate AObj pose clock via Fighter_ChangeMotionState + ftAnim_8006EBA4,
   //   while Slippi action_frame continues as damage/hitstun time.
   // - The current seed schema/model does not carry that DamageAir AObj pose-clock ownership, and
   //   replay-real Dolphin forensics show airborne DamageAir2 hurtcaps can differ materially from
   //   action_frame-derived pose samples during hitstun (TBK rec=1575 false BODY Shine Start contact).
-  // - Restrict this bridge to Shine Start BODY-only contacts against frame-start-airborne DamageAir2
-  //   hitstun snapshots. It should be removed once the DamageAir AObj pose clock is seeded/modeled.
+  // - Restrict this bridge to the exact Shine Start BODY candidate against frame-start-airborne
+  //   DamageAir2 hitstun: recompute that hurtcap from the DamageAir entry pose and only reject the
+  //   BODY contact when the modeled entry-pose capsule does not overlap.
+  // - This should be removed once the DamageAir AObj pose clock is seeded/modeled.
   // - Keep grounded-at-frame-start DamageAir2 rows eligible; AGN rec=4782 is a real grounded Shine
   //   Start BODY hit even though stage collision can move the victim airborne before combat.
   // - Shield contacts still resolve through the shield path before this BODY-only gate.
@@ -180,7 +195,64 @@ static inline uint8_t combat_shine_start_damageair_hitstun_body_pose_untrusted(
   // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c::{
   //   ftFx_SpecialLw_Enter,ftFx_SpecialAirLw_Enter}
   // refs/melee/src/melee/ft/ftanim.c::ftAnim_8006EBA4
-  return 1u;
+  const uint8_t char_id = batch->state.char_id[d_idx];
+  const MslHurtCap* caps = NULL;
+  uint16_t cap_count_u16 = 0u;
+  // Inside this temporary frame-start-airborne DamageAir2 seed/model blocker, missing entry-pose
+  // data is unsafe: falling back to action-frame-derived DamageAir2 hurtcaps reopens the known
+  // false Shine Start BODY hit. Remove this fail-closed policy with the bridge once the real Damage
+  // AObj pose-clock lane exists.
+  if (hurtcaps_get(char_id, &caps, &cap_count_u16) != 0 || caps == NULL ||
+      cap_id >= cap_count_u16) {
+    return 0u;
+  }
+
+  uint32_t can_hit_mask = 0xFFFFFFFFu;
+  (void)hurtbox_modes_can_hit_mask(char_id, (uint16_t)MSL_SM_DAMAGE_AIR_2, /*frame=*/0u,
+                                   cap_count_u16, &can_hit_mask);
+  if (((can_hit_mask >> cap_id) & 0x1u) == 0u) {
+    return 0u;
+  }
+
+  const MslHurtCap* cap = &caps[cap_id];
+  float m[12];
+  if (anim_pose_get_matrix(char_id, (uint16_t)MSL_SM_DAMAGE_AIR_2, /*frame=*/0u, cap->bone_part_id,
+                           m) != 0) {
+    return 0u;
+  }
+
+  float ax = 0.0f, ay = 0.0f, az = 0.0f;
+  float bx = 0.0f, by = 0.0f, bz = 0.0f;
+  msl_mtx34_mul_point(m, cap->a_offset, &ax, &ay, &az);
+  msl_mtx34_mul_point(m, cap->b_offset, &bx, &by, &bz);
+
+  const float scale_y = batch->state.fighter_scale_y[d_idx];
+  const MslCharParams* chp = msl_char_params(char_id);
+  const float model_scaling = (chp && isfinite(chp->model_scaling) && chp->model_scaling > 0.0f)
+                                  ? chp->model_scaling
+                                  : 1.0f;
+  const float model_scale = scale_y * model_scaling;
+  ax *= model_scale;
+  ay *= model_scale;
+  az *= model_scale;
+  bx *= model_scale;
+  by *= model_scale;
+  bz *= model_scale;
+
+  const float facing_dir = batch->state.facing[d_idx] ? 1.0f : -1.0f;
+  const float ax_rot_x = facing_dir * az;
+  const float ax_rot_z = -facing_dir * ax;
+  const float bx_rot_x = facing_dir * bz;
+  const float bx_rot_z = -facing_dir * bx;
+  ax = ax_rot_x + batch->state.pos_x[d_idx];
+  ay += batch->state.pos_y[d_idx];
+  az = ax_rot_z + batch->state.pos_z[d_idx];
+  bx = bx_rot_x + batch->state.pos_x[d_idx];
+  by += batch->state.pos_y[d_idx];
+  bz = bx_rot_z + batch->state.pos_z[d_idx];
+
+  const float cr = cap->scale * model_scale;
+  return combat_sphere_capsule_intersects(hx, hy, hz, hr, ax, ay, az, bx, by, bz, cr, NULL);
 }
 
 static inline uint8_t combat_body_overlap_lbColl_80006E58_subset_allows(const MslBatch* batch,
@@ -3455,10 +3527,6 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
         if (int_dmg <= 0) {
           continue;
         }
-        if (combat_shine_start_damageair_hitstun_body_pose_untrusted(batch, a_idx, d_idx)) {
-          continue;
-        }
-
         // Shield precedence (BODY path): if the hitbox intersects the defender shield bubble, do
         // not apply BODY selection for this hitbox. The shield-hit selection above handles
         // (hitbox_id)-order shield resolution; this check is a conservative fallback.
@@ -3499,6 +3567,10 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
                 batch->state.fighter_scale_y[d_idx]);
           }
           if (!overlaps) {
+            continue;
+          }
+          if (!combat_shine_start_damageair_entry_pose_allows_body_contact(
+                  batch, a_idx, d_idx, cap_id, hx, hy, hz, hr)) {
             continue;
           }
           // Combat Mutations Pass 1 (BODY-only).
@@ -3637,10 +3709,6 @@ static void combat_select_body_hits_one_debug(MslBatch* batch, int bi,
         if (!(hdmg > 0.0f)) {
           continue;
         }
-        if (combat_shine_start_damageair_hitstun_body_pose_untrusted(batch, a_idx, d_idx)) {
-          continue;
-        }
-
         // SHIELD precedence: if the hitbox intersects the defender shield bubble, treat as shielded
         // and do not apply BODY selection for this hitbox.
         if (shield_active && sphere_sphere_intersects(hx, hy, hz, hr, shx, shy, shz, shr)) {
@@ -3669,6 +3737,10 @@ static void combat_select_body_hits_one_debug(MslBatch* batch, int bi,
           const float cr = batch->state.hurtcap_radius[cap_i];
 
           if (!combat_sphere_capsule_intersects(hx, hy, hz, hr, ax, ay, az, bx, by, bz, cr, NULL)) {
+            continue;
+          }
+          if (!combat_shine_start_damageair_entry_pose_allows_body_contact(
+                  batch, a_idx, d_idx, cap_id, hx, hy, hz, hr)) {
             continue;
           }
 
