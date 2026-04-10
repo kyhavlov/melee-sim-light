@@ -11,6 +11,12 @@ from tools.modelplay.state_adapter import SimFrameState
 from tools.modelplay.viewer_trace import ViewerTrace
 
 
+CHAR_IDS = {
+    "fox": 1,
+    "falco": 22,
+}
+
+
 def _timestamp() -> str:
     return datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
 
@@ -98,6 +104,8 @@ def parse_args() -> argparse.Namespace:
     ap.add_argument("--out", type=Path, default=Path("reports/triage") / f"{_timestamp()}_modelplay")
     ap.add_argument("--p1-name", default="P1")
     ap.add_argument("--p2-name", default="P2")
+    ap.add_argument("--p1-char", choices=sorted(CHAR_IDS), default=None)
+    ap.add_argument("--p2-char", choices=sorted(CHAR_IDS), default=None)
     return ap.parse_args()
 
 
@@ -106,7 +114,14 @@ def main() -> int:
     out_dir = args.out.resolve()
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    session = SimSession(dataset_path=args.dataset, start_record=args.start_record)
+    char_ids = None
+    if args.p1_char is not None or args.p2_char is not None:
+        char_ids = (
+            CHAR_IDS[args.p1_char or "falco"],
+            CHAR_IDS[args.p2_char or "fox"],
+        )
+
+    session = SimSession(dataset_path=args.dataset, start_record=args.start_record, char_ids=char_ids)
     p1 = build_model_agent(slippi_ai_root=args.slippi_ai_root, model_path=args.p1_model, name=args.p1_name)
     p2 = build_model_agent(slippi_ai_root=args.slippi_ai_root, model_path=args.p2_model, name=args.p2_name)
     trace = ViewerTrace()
@@ -233,6 +248,8 @@ def main() -> int:
                     "static_frame_threshold": args.static_frame_threshold,
                     "p1_name": args.p1_name,
                     "p2_name": args.p2_name,
+                    "p1_char": args.p1_char,
+                    "p2_char": args.p2_char,
                 },
                 indent=2,
             )

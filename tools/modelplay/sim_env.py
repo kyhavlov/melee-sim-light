@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Mapping
+from typing import Mapping, Sequence
 
 import numpy as np
 
@@ -29,6 +29,7 @@ class SimSession:
         *,
         dataset_path: Path,
         start_record: int = 0,
+        char_ids: Sequence[int] | None = None,
     ):
         import msl_binding  # type: ignore
 
@@ -39,6 +40,9 @@ class SimSession:
             raise ValueError(f"start_record out of range: {start_record}")
         self._record = int(start_record)
         self._num_players = int(self._dataset.header["num_players"])
+        if char_ids is not None and len(char_ids) != self._num_players:
+            raise ValueError(f"expected {self._num_players} char ids, got {len(char_ids)}")
+        self._char_ids = None if char_ids is None else tuple(int(x) for x in char_ids)
         self._handle = msl_binding.init(1, self._num_players)
         self._compare = np.zeros(1, dtype=COMPARE_DTYPE)
         self._compare_bytes = self._compare.view(np.uint8).reshape(1, -1)
@@ -55,12 +59,15 @@ class SimSession:
         row = self._samples[self._record]
         seed_arr = np.zeros(1, dtype=SEED_DTYPE)
         seed_arr[0] = row["seed_t"]
+        if self._char_ids is not None:
+            for p, char_id in enumerate(self._char_ids):
+                seed_arr[0]["char_id"][p] = np.uint8(char_id)
         seed_bytes = seed_arr.view(np.uint8).reshape(1, -1)
         self._binding.reseed_seed(self._handle, seed_bytes)
         self._prev_input[0] = row["prev_input_t"]
         self._input[0] = row["input_t"]
         self._last_controllers = input_array_to_controllers(self._input)
-        self._state = frame_state_from_seed(row["seed_t"])
+        self._state = frame_state_from_seed(seed_arr[0])
         self._needs_reset = True
         return self.current_state()
 
