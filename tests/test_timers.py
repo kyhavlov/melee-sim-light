@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 
 import numpy as np
+import pytest
 
 from tools.eval.dataset import COMPARE_DTYPE, INPUT_DTYPE, SEED_DTYPE
 
@@ -18,6 +19,8 @@ SM_FALL = 20
 SM_DAMAGE_HI_2 = 166
 MSL_BUTTON_L = 0x0040
 MSL_DAMAGE_POST_HITLAG_CB_DAMAGE_ON_EXIT = 1
+MSL_STATE_FLAG_221A_IS_HITLAG = 0x20
+MSL_STATE_FLAG_221A_B3 = 0x10
 
 
 def _knockback_frame_decay() -> float:
@@ -25,7 +28,9 @@ def _knockback_frame_decay() -> float:
     return float(d["knockback_frame_decay"])
 
 
-def _step_once(seed: np.ndarray, prev_inp: np.ndarray | None = None) -> np.ndarray:
+def _step_once(
+    seed: np.ndarray, prev_inp: np.ndarray | None = None, inp: np.ndarray | None = None
+) -> np.ndarray:
     import msl_binding
 
     sizes = msl_binding.sizes()
@@ -45,7 +50,10 @@ def _step_once(seed: np.ndarray, prev_inp: np.ndarray | None = None) -> np.ndarr
             prev_inp = np.zeros((1, input_stride), dtype=np.uint8)
         else:
             assert prev_inp.shape == (1, input_stride)
-        inp = np.zeros((1, input_stride), dtype=np.uint8)
+        if inp is None:
+            inp = np.zeros((1, input_stride), dtype=np.uint8)
+        else:
+            assert inp.shape == (1, input_stride)
         out = np.zeros((1, compare_stride), dtype=np.uint8)
 
         msl_binding.reseed_seed(handle, seed_bytes)
@@ -185,3 +193,53 @@ def test_grounded_damage_hitlag_exit_preserves_xf0_ground_kb_against_di() -> Non
     assert np.isclose(float(out["pos_x"][0]), np.float32(-0.691), atol=1e-6, rtol=0.0)
     assert np.isclose(float(out["speed_x_attack"][0]), np.float32(-0.691), atol=1e-6, rtol=0.0)
     assert float(out["speed_y_attack"][0]) == np.float32(0.0)
+
+
+def test_damageflyhi_hitlag_sdi_no_longer_requires_x221a_b3() -> None:
+    # Current sim gate lock:
+    # - ftCo_Damage_OnEveryHitlag in vanilla gates on `allow_sdi` (fp+0x221A:2), not x221A_b3.
+    # - DamageFlyHi already lives in the current 2D SDI subset, so this isolates the gate owner
+    #   without broadening any action families.
+    # - This simulator does not yet seed/model allow_sdi independently; it currently derives the
+    #   replay-visible 0x20 lane from active hitlag and uses that as the proxy gate.
+    # - So this test is intentionally narrower: it proves the runtime no longer keys SDI on
+    #   x221A_b3. It does not claim that true allow_sdi ownership is fully modeled yet.
+    # refs/melee/src/melee/ft/types.h (fp+221A:2 allow_sdi, fp+221A:3 x221A_b3)
+    # refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{ftCo_Damage_OnEveryHitlag,ftCo_8008EC90}
+    seed = _seed_base()
+    seed["char_id"][0, 0] = np.uint8(22)  # Falco
+    seed["action_id"][0, 0] = np.uint16(87)  # DamageFlyHi
+    seed["animation_index"][0, 0] = np.uint32(177)
+    seed["action_frame"][0, 0] = np.int16(1)
+    seed["anim_frame_f32"][0, 0] = np.float32(1.0)
+    seed["on_ground"][0, 0] = np.uint8(0)
+    seed["hitlag"][0, 0] = np.uint16(6)
+    seed["hitstun"][0, 0] = np.uint16(50)
+    seed["pos_x"][0, 0] = np.float32(4.770646)
+    seed["pos_y"][0, 0] = np.float32(-1.810438)
+    seed["state_flags"][0, 0, 1] = np.uint8(MSL_STATE_FLAG_221A_B3)
+
+    sizes = INPUT_DTYPE.itemsize
+    prev_inp = np.zeros((1, sizes), dtype=np.uint8)
+    inp = np.zeros((1, sizes), dtype=np.uint8)
+    prev = prev_inp.view(INPUT_DTYPE).reshape((1,))
+    cur = inp.view(INPUT_DTYPE).reshape((1,))
+    prev["p"]["main_x"][0, 0] = np.int8(80)
+    prev["p"]["main_y"][0, 0] = np.int8(0)
+    cur["p"]["main_x"][0, 0] = np.int8(80)
+    cur["p"]["main_y"][0, 0] = np.int8(80)
+
+    out = _step_once(seed, prev_inp=prev_inp, inp=inp)
+
+    assert int(out["hitlag"][0]) == 5
+    assert int(out["action_id"][0]) == 87
+    assert int(out["on_ground"][0]) == 0
+    assert float(out["pos_x"][0]) > float(seed["pos_x"][0, 0])
+    assert float(out["pos_y"][0]) > float(seed["pos_y"][0, 0])
+
+    seed_no_b3 = seed.copy()
+    seed_no_b3["state_flags"][0, 0, 1] = np.uint8(0)
+    out_no_b3 = _step_once(seed_no_b3, prev_inp=prev_inp, inp=inp)
+    assert float(out_no_b3["pos_x"][0]) > float(seed["pos_x"][0, 0])
+    assert float(out_no_b3["pos_y"][0]) > float(seed["pos_y"][0, 0])

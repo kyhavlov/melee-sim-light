@@ -22,6 +22,14 @@ void timers_update(MslBatch* batch) {
   // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
   // Dataset packing/layout reference:
   // tools/slippi/make_dataset_from_slp.py (stack order 0..4 into `state_flags[..., 5]`)
+  // Slippi records fp+0x221A directly. The replay-visible 0x20 bit is the engine's hitlag-active
+  // lane (`x221A_b2` in the decomp comments / Slippi docs), not an independently seeded allow_sdi
+  // bit. This simulator currently derives that 0x20 lane from active hitlag and uses it later as a
+  // proxy for allow_sdi in damage hitlag callbacks because allow_sdi is not yet modeled as its own
+  // internal. Keep the name/comment explicit so we do not overstate this as true allow_sdi
+  // ownership.
+  // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
+  // refs/melee/src/melee/ft/fighter.c::{Fighter_ProcessHit_8006D1EC,Fighter_8006A1BC}
   enum { MSL_STATE_FLAG_221A_IS_HITLAG = 0x20 };
   // fp+0x221A bit 0x10 corresponds to x221A_b3 in decomp (see refs/melee/src/melee/ft/types.h).
   // Fighter_ProcessHit can set it alongside hitlag start, and Fighter_8006A1BC clears it on hitlag end.
@@ -317,17 +325,28 @@ void timers_consume_post_hitlag_callbacks_after_input(MslBatch* batch) {
   }
   enum { MSL_STATE_FLAGS_STRIDE = MSL_STATE_FLAGS_BYTES };
   enum { MSL_STATE_FLAGS_221A_INDEX = 1 };
-  enum { MSL_STATE_FLAG_221A_B3 = 0x10 };
+  enum { MSL_STATE_FLAG_221A_IS_HITLAG = 0x20 };
   const MslCommonParams* c = msl_common_params();
   if (c == NULL) {
     return;
   }
 
   // Decomp callback ownership:
-  // - Damage hitlag also runs `ftCo_Damage_OnEveryHitlag` while allow_sdi / x221A_b3 is active.
+  // - Damage hitlag also runs `ftCo_Damage_OnEveryHitlag` while allow_sdi is active.
   //   refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_OnEveryHitlag
   // - `hitlag_cb` executes inside Fighter_procUpdate after current-frame input processing.
   //   refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate
+  //
+  // Current sim contract:
+  // - We do not yet seed/model `allow_sdi` independently.
+  // - The runtime therefore uses the replay-visible fp+0x221A 0x20 lane, which this sim derives
+  //   from active hitlag in `timers_update`, as a proxy for allow_sdi.
+  // - This patch only removes the incorrect dependency on x221A_b3; it does not claim to have
+  //   fully separated allow_sdi from hitlag-active ownership.
+  // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
+  // refs/melee/src/melee/ft/types.h (fp+221A:2 allow_sdi, fp+221A:3 x221A_b3)
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c:824 (allow_sdi can be set without
+  // x221A_b3 on attached/secondary hitlag paths)
   const float sdi_radius_sq = c->sdi_radius * c->sdi_radius;
   const float sdi_step_mul = c->sdi_step_mul;
 
@@ -375,7 +394,7 @@ void timers_consume_post_hitlag_callbacks_after_input(MslBatch* batch) {
       if (batch->state.hitlag_pre_timer[idx] != 0u && batch->state.hitlag[idx] != 0u &&
           (use_full_2d || (damage_every_hitlag_sdi_action(a) && sdi_edge_x) ||
            (damage_every_hitlag_sdi_timer_window_action(a) && sdi_tilt_window_x)) &&
-          (batch->state.state_flags[flags_i] & (uint8_t)MSL_STATE_FLAG_221A_B3) != 0u &&
+          (batch->state.state_flags[flags_i] & (uint8_t)MSL_STATE_FLAG_221A_IS_HITLAG) != 0u &&
           lstick_mag_sq >= sdi_radius_sq) {
         if (use_full_2d) {
           batch->state.pos_x[idx] += lstick_full_x * sdi_step_mul;
