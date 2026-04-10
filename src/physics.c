@@ -987,9 +987,9 @@ void physics_integrate(MslBatch* batch) {
     for (int p = 0; p < num_players; p++) {
       const size_t idx = msl_idx_player(bi, p);
 
-      // Record pre-integration position for collision tests.
-      // Ordering contract: stage_collision_apply() uses prev_pos_* captured here to perform
-      // real "crossing" checks (pre vs post integration) without inferring prior position.
+      // Record pre-integration position for physics/collision rollback helpers.
+      // Floor sweeps that need the frame-start vertical position use floor_sweep_prev_pos_y instead.
+      // refs/melee/src/melee/mp/mpcoll.c::{mpCollPrev,mpCheckFloor}
       batch->state.prev_pos_x[idx] = batch->state.pos_x[idx];
       batch->state.prev_pos_y[idx] = batch->state.pos_y[idx];
       batch->state.prev_on_ground[idx] = batch->state.on_ground[idx] ? 1 : 0;

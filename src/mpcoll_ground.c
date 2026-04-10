@@ -754,8 +754,13 @@ void mpcoll_ground_apply(MslBatch* batch) {
 
       const float x = batch->state.pos_x[idx];
       const float y = batch->state.pos_y[idx];
+      // Floor sweeps consume the frame-start Y snapshot so pre-collision callbacks such as hitlag
+      // SDI/ASDI remain visible to mpCheckFloor. Keep X on the existing pre-physics snapshot so
+      // horizontal-only hitlag displacement at floor height does not synthesize a landing.
+      // refs/melee/src/melee/mp/mpcoll.c::{mpCollPrev,mpCheckFloor}
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_OnEveryHitlag
       const float prev_x = batch->state.prev_pos_x[idx];
-      const float prev_y = batch->state.prev_pos_y[idx];
+      const float prev_y = batch->state.floor_sweep_prev_pos_y[idx];
 
       // ECB bottom point for floor collision.
       // Decomp: mpLib_8004DD90_Floor and mpCheckFloor consume the ECB bottom point.
@@ -1236,6 +1241,18 @@ void mpcoll_ground_apply(MslBatch* batch) {
                damageflyroll_root_proj_y_corr < damageflyroll_side_y_thresh)
                   ? 1u
                   : 0u;
+          // Active-hitlag damage rows can receive Damage_OnEveryHitlag SDI/ASDI before collision,
+          // but the Damage motion state remains airborne until the hitlag-exit/collision handoff.
+          // Resolve root penetration for visual/collision stability without setting
+          // ground_or_air=Ground during the frozen frame.
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{
+          //   ftCo_Damage_OnEveryHitlag,ftCo_Damage_Coll,ftCo_DamageFly_Coll}
+          // refs/melee/src/melee/mp/mpcoll.c::{mpCollPrev,mpCheckFloor}
+          const uint8_t suppress_active_damage_hitlag_land =
+              (ecb_lock_active && batch->state.hitlag[idx] != 0u &&
+               is_damage_collision_landing_action(action_id))
+                  ? 1u
+                  : 0u;
           if (suppress_locked_ledge_land || suppress_locked_vertical_af3_land ||
               suppress_damageflyroll_shallow_land) {
             floor_write_edge_suppression_flags(batch, idx, stage_id, g, hit_line_idx, char_id, anim,
@@ -1246,10 +1263,12 @@ void mpcoll_ground_apply(MslBatch* batch) {
                                                         &y_corr, NULL, NULL);
             if (out_line_idx >= 0) {
               batch->state.pos_y[idx] += y_corr;
-              on_ground = 1;
-              ground_id = g->lines[(size_t)out_line_idx].segment_i;
-              contact_x = ix;
-              contact_y = iy;
+              if (!suppress_active_damage_hitlag_land) {
+                on_ground = 1;
+                ground_id = g->lines[(size_t)out_line_idx].segment_i;
+                contact_x = ix;
+                contact_y = iy;
+              }
             } else {
               // Sweep saw a floor segment, but projection failed (often an off-end / edge case).
               // Propagate edge suppression bits so mpColl-shaped ledge-grab checks can apply the

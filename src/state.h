@@ -33,6 +33,9 @@ typedef struct MslStateSoA {
   float* pos_z;
   float* prev_pos_x;  // Position at start of current frame (pre-integration).
   float* prev_pos_y;  // Position at start of current frame (pre-integration).
+  // Frame-start Y snapshot for mpColl floor sweeps. Kept separate from prev_pos_* because
+  // existing grounded rollback helpers use prev_pos_* as a pre-physics integration snapshot.
+  float* floor_sweep_prev_pos_y;
   // Collision-stage prev/cur position snapshots used for mpColl-shaped ledge-grab AABB checks.
   //
   // Decomp: the ledge-grab block consumes CollData.prev_pos / CollData.cur_pos as managed inside
