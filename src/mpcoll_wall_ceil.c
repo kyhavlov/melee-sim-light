@@ -39,6 +39,73 @@ enum {
   MSL_WALL_RIGHT = 2,  // mplib CollLine_RightWall
 };
 
+static inline uint8_t point_eq_axis_eps(float ax, float ay, float bx, float by) {
+  return (uint8_t)(fabsf(ax - bx) <= k_line_axis_thresh && fabsf(ay - by) <= k_line_axis_thresh);
+}
+
+static int wall_line_index_connected_to_point(const MslStageWallGraph* g, float x, float y) {
+  if (g == NULL || g->lines == NULL) {
+    return -1;
+  }
+  for (size_t i = 0; i < g->line_count; i++) {
+    const MslStageWallLine* l = &g->lines[i];
+    if (point_eq_axis_eps(l->x0, l->y0, x, y) || point_eq_axis_eps(l->x1, l->y1, x, y)) {
+      return (int)i;
+    }
+  }
+  return -1;
+}
+
+static int grounded_right_wall_floor_adjacent_line_idx(uint32_t stage_id, uint16_t ground_id) {
+  // Grounded right-wall checks exclude the floor-chain wall owners that are connected to the
+  // current floor. Decomp resolves these through mpLib_80053394_Floor / mpLib_800536CC_Floor
+  // before mpColl_80048AB0_RightWall / mpColl_800491C8_RightWall admit bottom-point wall hits.
+  // refs/melee/src/melee/mp/mplib.c::{mpLib_80053394_Floor,mpLib_800536CC_Floor}
+  // refs/melee/src/melee/mp/mpcoll.c::{mpColl_80048AB0_RightWall,mpColl_800491C8_RightWall}
+  const MslStageFloorGraph* fg = stage_collision_get_floor_graph(stage_id);
+  const MslStageWallGraph* rwg = stage_collision_get_right_wall_graph(stage_id);
+  if (fg == NULL || rwg == NULL || fg->lines == NULL || rwg->lines == NULL) {
+    return -1;
+  }
+  int floor_line_idx = stage_collision_floor_line_index(stage_id, ground_id);
+  if (floor_line_idx < 0 || (size_t)floor_line_idx >= fg->line_count) {
+    return -1;
+  }
+  for (size_t i = 0; i < fg->line_count; i++) {
+    const int16_t next = fg->lines[(size_t)floor_line_idx].next;
+    if (next < 0 || (size_t)next >= fg->line_count) {
+      break;
+    }
+    floor_line_idx = (int)next;
+  }
+  const MslStageFloorLine* floor = &fg->lines[(size_t)floor_line_idx];
+  return wall_line_index_connected_to_point(rwg, floor->x1, floor->y1);
+}
+
+static int grounded_left_wall_floor_adjacent_line_idx(uint32_t stage_id, uint16_t ground_id) {
+  // Symmetric grounded floor-chain exclusion for left-wall checks.
+  // refs/melee/src/melee/mp/mplib.c::{mpLib_80053448_Floor,mpLib_800534FC_Floor}
+  // refs/melee/src/melee/mp/mpcoll.c::{mpColl_80049778_LeftWall,mpColl_80049EAC_LeftWall}
+  const MslStageFloorGraph* fg = stage_collision_get_floor_graph(stage_id);
+  const MslStageWallGraph* lwg = stage_collision_get_left_wall_graph(stage_id);
+  if (fg == NULL || lwg == NULL || fg->lines == NULL || lwg->lines == NULL) {
+    return -1;
+  }
+  int floor_line_idx = stage_collision_floor_line_index(stage_id, ground_id);
+  if (floor_line_idx < 0 || (size_t)floor_line_idx >= fg->line_count) {
+    return -1;
+  }
+  for (size_t i = 0; i < fg->line_count; i++) {
+    const int16_t prev = fg->lines[(size_t)floor_line_idx].prev;
+    if (prev < 0 || (size_t)prev >= fg->line_count) {
+      break;
+    }
+    floor_line_idx = (int)prev;
+  }
+  const MslStageFloorLine* floor = &fg->lines[(size_t)floor_line_idx];
+  return wall_line_index_connected_to_point(lwg, floor->x0, floor->y0);
+}
+
 static inline float cross2(float ax, float ay, float bx, float by) { return ax * by - ay * bx; }
 
 static inline uint8_t is_cliff_hold_action(uint16_t a) {
@@ -844,11 +911,20 @@ void mpcoll_wall_ceil_apply(MslBatch* batch) {
       }
 
       const uint8_t was_grounded = batch->state.prev_on_ground[idx] ? 1u : 0u;
+      const uint8_t grounded_now = batch->state.on_ground[idx] ? 1u : 0u;
       const uint8_t char_id = batch->state.char_id[idx];
       const uint32_t anim = batch->state.animation_index[idx];
       const uint16_t ecb_frame =
           msl_ecb_frame_u16_from_anim_frame(batch->state.anim_frame_f32[idx]);
       const uint16_t ecb_frame_prev = msl_ecb_prev_frame_u16(ecb_frame);
+      const int grounded_left_floor_adj_line_idx =
+          grounded_now
+              ? grounded_left_wall_floor_adjacent_line_idx(stage_id, batch->state.ground_id[idx])
+              : -1;
+      const int grounded_right_floor_adj_line_idx =
+          grounded_now
+              ? grounded_right_wall_floor_adjacent_line_idx(stage_id, batch->state.ground_id[idx])
+              : -1;
 
       const float prev_x = batch->state.prev_pos_x[idx];
       const float prev_y = batch->state.prev_pos_y[idx];
@@ -896,7 +972,7 @@ void mpcoll_wall_ceil_apply(MslBatch* batch) {
         // Decomp: CollData.left_facing_wall.index persists; mpLib_8004E398_LeftWall stays attached.
         // refs/melee/src/melee/lb/types.h::CollData
         // refs/melee/src/melee/mp/mplib.c::mpLib_8004E398_LeftWall
-        if (prev_wall_kind == MSL_WALL_LEFT && prefer_line_idx >= 0) {
+        if (!grounded_now && prev_wall_kind == MSL_WALL_LEFT && prefer_line_idx >= 0) {
           float x_corr = 0.0f;
           float nx = -1.0f, ny = 0.0f;
           const int out_line_idx =
@@ -970,7 +1046,8 @@ void mpcoll_wall_ceil_apply(MslBatch* batch) {
           float nx2 = -1.0f, ny2 = 0.0f;
           int hit2 = -1;
           if (wall_sweep_check(lwg, 1, prev_bx, prev_by, cur_bx, cur_by, prefer_line_idx, &hit2,
-                               &ix2, &iy2, &nx2, &ny2)) {
+                               &ix2, &iy2, &nx2, &ny2) &&
+              hit2 != grounded_left_floor_adj_line_idx) {
             float x_corr = 0.0f;
             const int out_line_idx =
                 left_wall_e398_project(lwg, hit2, cur_bx, cur_by, &x_corr, &nx2, &ny2);
@@ -1037,7 +1114,7 @@ void mpcoll_wall_ceil_apply(MslBatch* batch) {
           prefer_line_idx = stage_collision_right_wall_line_index(stage_id, prev_wall_id);
         }
 
-        if (prev_wall_kind == MSL_WALL_RIGHT && prefer_line_idx >= 0) {
+        if (!grounded_now && prev_wall_kind == MSL_WALL_RIGHT && prefer_line_idx >= 0) {
           float x_corr = 0.0f;
           float nx = 1.0f, ny = 0.0f;
           const int out_line_idx =
@@ -1094,7 +1171,8 @@ void mpcoll_wall_ceil_apply(MslBatch* batch) {
           float nx2 = 1.0f, ny2 = 0.0f;
           int hit2 = -1;
           if (wall_sweep_check(rwg, 0, prev_bx, prev_by, cur_bx, cur_by, prefer_line_idx, &hit2,
-                               &ix2, &iy2, &nx2, &ny2)) {
+                               &ix2, &iy2, &nx2, &ny2) &&
+              hit2 != grounded_right_floor_adj_line_idx) {
             float x_corr = 0.0f;
             const int out_line_idx =
                 right_wall_e684_project(rwg, hit2, cur_bx, cur_by, &x_corr, &nx2, &ny2);
