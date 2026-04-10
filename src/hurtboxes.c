@@ -397,7 +397,8 @@ void hurtboxes_refresh(MslBatch* batch) {
         batch->state.hurtcap_is_grabbable[hi] = caps[ci].is_grabbable ? 1 : 0;
         batch->state.hurtcap_height[hi] = caps[ci].height;
 
-        if (((can_hit_mask >> ci) & 0x1u) == 0u) {
+        const uint8_t can_body_hit = (uint8_t)((can_hit_mask >> ci) & 0x1u);
+        if (!can_body_hit && !caps[ci].is_grabbable) {
           continue;
         }
         float m[12];
@@ -435,7 +436,14 @@ void hurtboxes_refresh(MslBatch* batch) {
         by += pos_y;
         bz += pos_z;
 
-        batch->state.hurtcap_enabled[hi] = 1;
+        // Keep BODY-hit enablement separate from catch/grab geometry:
+        // - BODY selection consumes `hurtcap_enabled`, which mirrors movescript hurtbox mode.
+        // - Catch selection in ftColl_80078A2C gates on `hurt_capsules[j].is_grabbable` after the
+        //   fighter-wide x1988/x198C/victim-mask checks; it does not use the body-hit capsule mask.
+        // Populate grabbable capsule world positions even when `can_hit_mask` disables BODY hits,
+        // so grabs can still connect against shield/guard victims.
+        // refs/melee/src/melee/ft/ftcoll.c::ftColl_80078A2C
+        batch->state.hurtcap_enabled[hi] = can_body_hit;
         batch->state.hurtcap_a_x[hi] = ax;
         batch->state.hurtcap_a_y[hi] = ay;
         batch->state.hurtcap_a_z[hi] = az;

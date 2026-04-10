@@ -2696,7 +2696,13 @@ static void combat_select_catch_hits_one_mutating(MslBatch* batch, int bi) {
         uint8_t found_grab_contact = 0u;
         for (uint8_t cap_id = 0; cap_id < hurtcap_count; cap_id++) {
           const size_t cap_i = idx_hurtcap(bi, defender, (int)cap_id);
-          if (!batch->state.hurtcap_enabled[cap_i] || !batch->state.hurtcap_is_grabbable[cap_i]) {
+          // Catch uses grabbability, not the BODY-hit enabled bit:
+          // ftColl_80078A2C checks victim `hurt_capsules[j].is_grabbable` after fighter-wide
+          // x1988/x198C/victim-mask gates. The per-capsule body-hit mask can be disabled on shield
+          // / guard snapshots while grabs are still legal.
+          // refs/melee/src/melee/ft/ftcoll.c::ftColl_80078A2C
+          if (!batch->state.hurtcap_is_grabbable[cap_i] ||
+              !(batch->state.hurtcap_radius[cap_i] > 0.0f)) {
             continue;
           }
           const float ax = batch->state.hurtcap_a_x[cap_i];
@@ -2721,6 +2727,36 @@ static void combat_select_catch_hits_one_mutating(MslBatch* batch, int bi) {
           }
           found_grab_contact = 1u;
           break;
+        }
+        if (!found_grab_contact) {
+          const float shr = batch->state.shield_radius[d_idx];
+          // Guard/shield catch fallback:
+          // - Vanilla grabs shielded fighters; decomp catch selection ultimately records a fighter
+          //   victim (`ftGrabDist` / `victim_gobj`), not a shield-hit event.
+          // - Slippi guard-family rows can expose `animation_index=-1` sentinel pose snapshots while
+          //   the live shield descriptor is still exact. When pose-derived hurtcaps miss, use the
+          //   ShieldDesc world center as a seed-bridge proxy for the shielded fighter's grabbable
+          //   center. Do not use shield-edge overlap here: ftColl_80078A2C grabs the fighter, not
+          //   the shield rim.
+          // refs/melee/src/melee/ft/ftcoll.c::ftColl_80078A2C
+          // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
+          const float shx = batch->state.shield_x[d_idx];
+          const float shy = batch->state.shield_y[d_idx];
+          const float shz = batch->state.shield_z[d_idx];
+          const float dx = shx - hx;
+          const float dy = shy - hy;
+          const float dz = shz - hz;
+          if (shr > 0.0f && (dx * dx + dy * dy + dz * dz) <= (hr * hr)) {
+            const float abs_dx = fabsf(batch->state.pos_x[d_idx] - batch->state.pos_x[a_idx]);
+            if (best_victim < 0 || abs_dx < best_abs_dx ||
+                (abs_dx == best_abs_dx && defender < best_victim)) {
+              best_victim = defender;
+              best_abs_dx = abs_dx;
+              best_hit_group = hit_group;
+              best_rehit_frames = rehit_frames;
+            }
+            found_grab_contact = 1u;
+          }
         }
         if (found_grab_contact) {
           // Decomp shape: after finding a valid grabbable overlap for this defender, advance to the
