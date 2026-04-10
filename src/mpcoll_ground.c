@@ -1112,18 +1112,50 @@ void mpcoll_ground_apply(MslBatch* batch) {
           }
         }
         uint8_t deep_lock_penetration = 0u;
+        if (!on_ground && action_id == (uint16_t)MSL_ACT_ESCAPE_AIR && prefer_line_idx >= 0 &&
+            !g->lines[(size_t)prefer_line_idx].is_ledge &&
+            (prev_action_id == (uint16_t)MSL_ACT_FALL_AERIAL ||
+             prev_action_id == (uint16_t)MSL_ACT_FALL_AERIAL_F ||
+             prev_action_id == (uint16_t)MSL_ACT_FALL_AERIAL_B)) {
+          // Fresh FallAerial -> EscapeAir ECB handoff:
+          // EscapeAir_Coll still owns landing via ft_80082C74 on the entry collision pass, but the
+          // motion-state change can move the sampled previous bottom below the floor before the
+          // generic sweep observes the crossing. Project against the persisted floor.index only for
+          // this fresh, non-ledge entry window, bounded by EscapeAir's own initial ECB bottom height.
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::{ftCo_80099A58,ftCo_EscapeAir_Coll}
+          // refs/melee/src/melee/ft/ft_081B.c::ft_80082C74
+          // refs/melee/src/melee/mp/mplib.c::mpLib_8004DD90_Floor
+          const float bottom_rel0 = msl_ecb_bottom_rel_y(char_id, anim, 0);
+          float y_corr = 0.0f;
+          const int out_line_idx = floor_dd90_project(g, prefer_line_idx, cur_bottom_x,
+                                                      cur_bottom_y, &y_corr, &floor_nx, &floor_ny);
+          if (out_line_idx >= 0 && y_corr >= 0.0f && y_corr <= bottom_rel0) {
+            batch->state.pos_y[idx] += y_corr;
+            on_ground = 1;
+            ground_id = g->lines[(size_t)out_line_idx].segment_i;
+            contact_x = cur_bottom_x;
+            contact_y = cur_bottom_y + y_corr;
+          }
+        }
         if (!on_ground && escapeair_locked && prefer_line_idx >= 0) {
           const float bottom_rel0 = msl_ecb_bottom_rel_y(char_id, anim, 0);
           deep_lock_penetration = (bottom_rel0 > 0.0f && cur_bottom_y <= -bottom_rel0) ? 1u : 0u;
           if (deep_lock_penetration) {
             // Decomp shape: while CollData_X130_Locked is active, EscapeAir_Coll can still resolve
             // against the persisted floor.index via mpLib_8004DD90_Floor-style projection.
+            // Ledge floor caveat: allow shallow ledge-floor contact covered by EscapeAir's initial
+            // ECB bottom plus the current root sweep, but suppress deeper under-ledge projections
+            // that would teleport from below the ledge/floor up onto the stage.
             // refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll
+            // refs/melee/src/melee/mp/mpcoll.c::mpCollInterpolateECB
             // refs/melee/src/melee/mp/mplib.c::mpLib_8004DD90_Floor
             float y_corr = 0.0f;
             const int out_line_idx = floor_dd90_project(
                 g, prefer_line_idx, cur_bottom_x, cur_bottom_y, &y_corr, &floor_nx, &floor_ny);
-            if (out_line_idx >= 0 && y_corr >= 0.0f) {
+            const float ledge_projection_depth_limit = bottom_rel0 + fabsf(y - prev_y);
+            if (out_line_idx >= 0 && y_corr >= 0.0f &&
+                (!g->lines[(size_t)prefer_line_idx].is_ledge ||
+                 y_corr <= ledge_projection_depth_limit)) {
               batch->state.pos_y[idx] += y_corr;
               on_ground = 1;
               ground_id = g->lines[(size_t)out_line_idx].segment_i;

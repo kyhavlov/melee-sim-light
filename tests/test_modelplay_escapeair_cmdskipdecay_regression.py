@@ -37,9 +37,17 @@ def _buttons_mask(processed: dict[str, bool]) -> int:
 
 
 @pytest.mark.integration
-def test_modelplay_escapeair_cmdskipdecay_handoff_prevents_hover_freeze() -> None:
+def test_modelplay_escapeair_cmdskipdecay_window_has_no_hover_freeze() -> None:
     # Regression target from rerun4 viewer frame ~687:
     # an offstage EscapeAir stayed at a fixed y-position indefinitely, then later re-grabbed ledge.
+    # This is symptom-level coverage: regardless of whether the current collision owner keeps the
+    # original late EscapeAir branch or resolves earlier to grounded floor motion, the window must
+    # keep advancing and must not return to the static airborne hover/freeze.
+    #
+    # Owner-specific EscapeAir collision outcomes are covered by:
+    # - tests/test_modelplay_rerun5_collision_regressions.py (FallAerial->EscapeAir landing,
+    #   under-ledge EscapeAir non-projection)
+    # - tests/test_escapeair_ecb_lock_snapshot_regression.py (seed/ref EscapeAir lock rows)
     #
     # Decomp ownership:
     # - EscapeAir enter clears cmd_vars[0] (`cmd_skip_decay`).
@@ -107,10 +115,6 @@ def test_modelplay_escapeair_cmdskipdecay_handoff_prevents_hover_freeze() -> Non
         late_escapeair_i = int(window["late_escapeair_fixture_index"])
         descent_end_i = int(window["descent_check_end_fixture_index"])
         late_escapeair = history[late_escapeair_i]
-        assert int(late_escapeair["action_id"][victim]) == 236
-        assert int(late_escapeair["action_frame"][victim]) == 30
-        assert float(late_escapeair["pos_y"][victim]) < float(history[late_escapeair_i - 1]["pos_y"][victim])
-        assert float(late_escapeair["speed_y_self"][victim]) < 0.0
 
         static_run = 0
         max_static_run = 0
@@ -132,6 +136,21 @@ def test_modelplay_escapeair_cmdskipdecay_handoff_prevents_hover_freeze() -> Non
             prev_state = state
 
         assert max_static_run == 0, f"late EscapeAir re-froze in rerun4 window: max_static_run={max_static_run}"
+        if int(late_escapeair["action_id"][victim]) != 236:
+            # Later collision fixes can resolve the same window before the old late-EscapeAir
+            # checkpoint. That alternate owner is still deterministic: the victim must already be
+            # grounded on the floor and continue moving horizontally through the rest of the window,
+            # not hover in a static airborne state.
+            for frame_i in range(late_escapeair_i, descent_end_i + 1):
+                out = history[frame_i]
+                assert int(out["on_ground"][victim]) == 1
+                assert float(out["pos_y"][victim]) == pytest.approx(0.0001, abs=0.0002)
+            assert float(history[descent_end_i]["pos_x"][victim]) < float(late_escapeair["pos_x"][victim]) - 5.0
+            return
+
+        assert int(late_escapeair["action_frame"][victim]) == 30
+        assert float(late_escapeair["pos_y"][victim]) < float(history[late_escapeair_i - 1]["pos_y"][victim])
+        assert float(late_escapeair["speed_y_self"][victim]) < 0.0
         assert float(history[descent_end_i]["pos_y"][victim]) < float(history[late_escapeair_i]["pos_y"][victim])
     finally:
         binding.destroy(handle)

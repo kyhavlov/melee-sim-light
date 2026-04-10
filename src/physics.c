@@ -275,6 +275,8 @@ static inline uint8_t physics_action_is_common_ground_friction_only(uint16_t act
   // - refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackLw3.c::ftCo_AttackLw3_Phys
   // - refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackHi4.c::ftCo_AttackHi4_Phys
   // - refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackLw4.c::ftCo_AttackLw4_Phys
+  // - refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownBound.c::ftCo_DownBound_Phys
+  // - refs/melee/src/melee/ft/ft_081B.c::ft_80084F3C
   switch (action_id) {
     case MSL_ACT_WAIT:
     case MSL_ACT_TURN:
@@ -304,6 +306,8 @@ static inline uint8_t physics_action_is_common_ground_friction_only(uint16_t act
     case MSL_ACT_ATTACK_LW3:
     case MSL_ACT_ATTACK_HI4:
     case MSL_ACT_ATTACK_LW4:
+    case MSL_ACT_DOWN_BOUND_U:
+    case MSL_ACT_DOWN_BOUND_D:
       return 1;
     default:
       return 0;
