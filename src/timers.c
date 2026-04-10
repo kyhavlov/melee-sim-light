@@ -269,32 +269,43 @@ void timers_consume_post_hitlag_callbacks_pre_input(MslBatch* batch) {
       }
 
       // DI: rotate kb velocity by up to x1A8 degrees based on L-stick and current kb direction.
-      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008E5A4
-      float kb_x = batch->state.speed_x_attack[idx];
-      float kb_y = batch->state.speed_y_attack[idx];
-      const float kb_mag_sq = kb_x * kb_x + kb_y * kb_y;
-      if (kb_mag_sq >= 0.00001f) {
-        const float kb_neg_x = -kb_x;
-        const float dot = kb_y * lstick_full_x + kb_neg_x * lstick_full_y;
-        float dir = (dot * dot) / kb_mag_sq;
-        const float cross_z = kb_x * lstick_full_y - kb_y * lstick_full_x;
-        if (cross_z < 0.0f) {
-          dir = -dir;
-        }
-        const float kb_angle = atan2f(kb_y, kb_x) + di_max_radians * dir;
-        const float kb_mag = sqrtf(kb_mag_sq);
-        kb_x = kb_mag * cosf(kb_angle);
-        kb_y = kb_mag * sinf(kb_angle);
+      //
+      // Grounded Damage note:
+      // - ftCo_Damage_OnExitHitlag mutates fp->x8c_kb_vel through ftCo_8008E5A4.
+      // - Later in the same Fighter_procUpdate, grounded knockback decay consumes
+      //   fp->xF0_ground_kb_vel and rebuilds fp->x8c_kb_vel from that scalar and the floor tangent.
+      // - This simulator currently has only the replay/output knockback velocity lane, not a
+      //   separate xF0 scalar. While grounded, preserve that lane as the xF0-owned value so
+      //   hitlag-exit DI/LSI does not incorrectly change the grounded slide speed.
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{ftCo_Damage_OnExitHitlag,ftCo_8008E5A4}
+      // refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate (ground branch xF0_ground_kb_vel)
+      if (!batch->state.on_ground[idx]) {
+        float kb_x = batch->state.speed_x_attack[idx];
+        float kb_y = batch->state.speed_y_attack[idx];
+        const float kb_mag_sq = kb_x * kb_x + kb_y * kb_y;
+        if (kb_mag_sq >= 0.00001f) {
+          const float kb_neg_x = -kb_x;
+          const float dot = kb_y * lstick_full_x + kb_neg_x * lstick_full_y;
+          float dir = (dot * dot) / kb_mag_sq;
+          const float cross_z = kb_x * lstick_full_y - kb_y * lstick_full_x;
+          if (cross_z < 0.0f) {
+            dir = -dir;
+          }
+          const float kb_angle = atan2f(kb_y, kb_x) + di_max_radians * dir;
+          const float kb_mag = sqrtf(kb_mag_sq);
+          kb_x = kb_mag * cosf(kb_angle);
+          kb_y = kb_mag * sinf(kb_angle);
 
-        // LSI: apply x1AC multiplier when digital L/R is held at hitlag exit.
-        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_OnExitHitlag
-        if ((batch->state.prev_input_buttons[idx] &
-             ((uint16_t)MSL_BUTTON_L | (uint16_t)MSL_BUTTON_R)) != 0u) {
-          kb_x *= c->lsi_lr_held_mul;
-          kb_y *= c->lsi_lr_held_mul;
+          // LSI: apply x1AC multiplier when digital L/R is held at hitlag exit.
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_OnExitHitlag
+          if ((batch->state.prev_input_buttons[idx] &
+               ((uint16_t)MSL_BUTTON_L | (uint16_t)MSL_BUTTON_R)) != 0u) {
+            kb_x *= c->lsi_lr_held_mul;
+            kb_y *= c->lsi_lr_held_mul;
+          }
+          batch->state.speed_x_attack[idx] = kb_x;
+          batch->state.speed_y_attack[idx] = kb_y;
         }
-        batch->state.speed_x_attack[idx] = kb_x;
-        batch->state.speed_y_attack[idx] = kb_y;
       }
     }
   }
