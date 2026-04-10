@@ -14,6 +14,7 @@ from tools.eval.dataset import COMPARE_DTYPE, read_dataset
 
 RERUN11 = "reports/modelplay/20260410_rl_doubles_v27_7000_rerun11/trace.json"
 RERUN11_PASSIVESTAND_INPUT_FIXTURE = "tests/fixtures/modelplay/rerun11_input_prefix_0_289.json"
+RERUN11_DAMAGE_HITLAG_INPUT_FIXTURE = "tests/fixtures/modelplay/rerun11_input_prefix_0_305.json"
 
 ACT_DASH = 20
 ACT_KNEE_BEND = 24
@@ -409,3 +410,71 @@ def test_modelplay_rerun11_passivestandb_end_runs_same_frame_wait_iasa_squat() -
         assert int(out["action_id"][1]) == action_id
         assert int(out["action_frame"][1]) == action_frame
         assert int(out["on_ground"][1]) == 1
+
+
+@pytest.mark.integration
+def test_modelplay_rerun11_grounded_damagehi3_hitlag_sdi_stays_floor_pinned() -> None:
+    # Modelplay-vs-vanilla comparator lock:
+    # - after the PassiveStand end fix, the next gameplay mismatch was grounded DamageHi3 hitlag
+    #   SDI lifting Falco 4.125 units above the floor while vanilla kept the row floor-pinned.
+    # - Decomp keeps grounded Damage_Coll on ft_800848DC -> ft_80082708 -> mpColl_8004B108.
+    # - Damage_OnEveryHitlag still mutates cur_pos before that collision callback, so grounded
+    #   floor resolution must be allowed to snap the row back down to the floor on the same frame.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{
+    #   ftCo_Damage_OnEveryHitlag,ftCo_Damage_Coll
+    # }
+    # refs/melee/src/melee/ft/ft_081B.c::{ft_800848DC,ft_80082708}
+    # refs/melee/src/melee/mp/mpcoll.c::mpColl_8004B108
+    _require_local_data_or_skip()
+    root = _root()
+    rel = (
+        "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
+        "AttachedGoodNaturedGuanaco.msl"
+    )
+    dataset_path = root / rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {rel}")
+    trace_frames = _load_input_fixture(root / RERUN11_DAMAGE_HITLAG_INPUT_FIXTURE)
+
+    binding = importlib.import_module("msl_binding")
+    sizes = binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    compare_stride = int(sizes["compare"])
+
+    ds = read_dataset(str(dataset_path))
+    seed_bytes = np.frombuffer(ds.samples[0:1]["seed_t"].tobytes(order="C"), dtype=np.uint8).copy().reshape(
+        1, seed_stride
+    )
+    out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
+
+    history: dict[int, np.void] = {}
+    handle = binding.init(batch_size=1, num_players=2, ucf_enabled=1, ucf_cardinals_1_0_enabled=1)
+    try:
+        binding.reseed_seed(handle, seed_bytes)
+        prev_input = _input_bytes_from_trace_frame(trace_frames[0], input_stride)
+        for frame_i in range(1, 306):
+            input_t = _input_bytes_from_trace_frame(trace_frames[frame_i], input_stride)
+            binding.step_input(handle, prev_input, input_t)
+            if frame_i >= 293:
+                binding.write_compare(handle, out_compare_bytes)
+                history[frame_i] = out_compare_bytes.view(COMPARE_DTYPE).reshape(-1)[0].copy()
+            prev_input = input_t
+    finally:
+        binding.destroy(handle)
+
+    for frame_i, hitlag in ((293, 4), (294, 3), (295, 2), (296, 1)):
+        out = history[frame_i]
+        assert int(out["action_id"][1]) == 77
+        assert int(out["action_frame"][1]) == 1
+        assert int(out["on_ground"][1]) == 1
+        assert int(out["hitlag"][1]) == hitlag
+        assert float(out["pos_x"][1]) == pytest.approx(81.44209289550781, abs=0.001)
+        assert float(out["pos_y"][1]) == pytest.approx(0.000100, abs=0.001)
+
+    for frame_i, action_frame in ((297, 2), (298, 3), (299, 4), (300, 5), (301, 6), (302, 7), (303, 8)):
+        out = history[frame_i]
+        assert int(out["action_id"][1]) == 77
+        assert int(out["action_frame"][1]) == action_frame
+        assert int(out["on_ground"][1]) == 1
+        assert float(out["pos_y"][1]) == pytest.approx(0.000100, abs=0.001)

@@ -129,6 +129,33 @@ static inline uint8_t damage_hitlag_floorhug_attempts_downward_sdi(const MslBatc
   return (sy < 0.0f) ? 1u : 0u;
 }
 
+static inline uint8_t grounded_damage_hitlag_allows_downward_floor_projection(const MslBatch* batch,
+                                                                              size_t idx,
+                                                                              uint16_t action_id) {
+  if (batch == NULL) {
+    return 0u;
+  }
+  // Grounded damage collision owner:
+  // - `ftCo_Damage_OnEveryHitlag` can move `fp->cur_pos.y` before collision.
+  // - grounded `ftCo_Damage_Coll` then routes through `ft_800848DC -> ft_80082708 ->
+  //   mpColl_8004B108`, which keeps the row floor-owned.
+  // - Keep the downward floor projection on these active-hitlag grounded damage rows so the
+  //   generic grounded anti-snap clamp does not strand a "grounded" fighter several units above
+  //   the stage.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{
+  //   ftCo_Damage_OnEveryHitlag,ftCo_Damage_Coll
+  // }
+  // refs/melee/src/melee/ft/ft_081B.c::{ft_800848DC,ft_80082708}
+  // refs/melee/src/melee/mp/mpcoll.c::mpColl_8004B108
+  if (!is_damage_collision_landing_action(action_id)) {
+    return 0u;
+  }
+  return (batch->state.on_ground[idx] != 0u && batch->state.hitlag_pre_timer[idx] != 0u &&
+          batch->state.hitlag[idx] != 0u)
+             ? 1u
+             : 0u;
+}
+
 static inline void stay_airborne_floor_projection_point(float fighter_x, float fighter_y,
                                                         float bottom_x, float bottom_y,
                                                         float* proj_x_out, float* proj_y_out) {
@@ -901,10 +928,17 @@ void mpcoll_ground_apply(MslBatch* batch) {
         const int out_line_idx = floor_dd90_project(g, prefer_line_idx, cur_bottom_x, cur_bottom_y,
                                                     &y_corr, &floor_nx, &floor_ny);
         if (out_line_idx >= 0) {
+          const uint8_t keep_grounded_damage_hitlag_floor_snap =
+              grounded_damage_hitlag_allows_downward_floor_projection(batch, idx, action_id);
           // mpLib_8004DD90_Floor returns a signed correction; for stable grounded frames we only
           // need to resolve penetration. If we are already above the floor due to upstream
           // approximation drift, avoid snapping down in the collision substrate.
-          if (y_corr < 0.0f) {
+          //
+          // Exception: grounded damage hitlag rows let `ftCo_Damage_OnEveryHitlag` move `cur_pos`
+          // before grounded `ftCo_Damage_Coll` re-pins the fighter to floor through
+          // `ft_800848DC -> ft_80082708 -> mpColl_8004B108`. Keep the downward correction only
+          // for that owner path; the general grounded anti-snap clamp stays in place elsewhere.
+          if (y_corr < 0.0f && !keep_grounded_damage_hitlag_floor_snap) {
             y_corr = 0.0f;
           }
           int resolved_line_idx = out_line_idx;
