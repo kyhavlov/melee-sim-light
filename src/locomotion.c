@@ -1145,14 +1145,23 @@ static inline uint8_t action_is_ground_locomotion(uint16_t a) {
       a == MSL_ACT_ATTACK_HI3 || a == MSL_ACT_ATTACK_LW3 || a == MSL_ACT_ATTACK_S4_HI ||
       a == MSL_ACT_ATTACK_S4_HI_S || a == MSL_ACT_ATTACK_S4_S || a == MSL_ACT_ATTACK_S4_LW_S ||
       a == MSL_ACT_ATTACK_S4_LW || a == MSL_ACT_ATTACK_HI4 || a == MSL_ACT_ATTACK_LW4 ||
-      // GuardSetOff_Coll routes through common grounded collision helpers that enter Fall when
-      // floor ownership is lost.
-      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_GuardSetOff_Coll
+      // Guard-family Coll callbacks route through common grounded collision helpers that leave
+      // shield and enter an airborne state when floor ownership is lost.
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
+      //   ftCo_GuardOn_Coll,ftCo_Guard_Coll,ftCo_GuardOff_Coll,
+      //   ftCo_GuardSetOff_Coll,ftCo_GuardReflect_Coll}
       // refs/melee/src/melee/ft/ft_081B.c::{ft_80084104,ft_800845B4}
-      a == MSL_ACT_GUARD_SET_OFF) {
+      a == MSL_ACT_GUARD_ON || a == MSL_ACT_GUARD || a == MSL_ACT_GUARD_OFF ||
+      a == MSL_ACT_GUARD_SET_OFF || a == MSL_ACT_GUARD_REFLECT) {
     return 1;
   }
   return 0;
+}
+
+static inline uint8_t action_is_grounded_guard_state(uint16_t a) {
+  return (uint8_t)(a == (uint16_t)MSL_ACT_GUARD_ON || a == (uint16_t)MSL_ACT_GUARD ||
+                   a == (uint16_t)MSL_ACT_GUARD_OFF || a == (uint16_t)MSL_ACT_GUARD_SET_OFF ||
+                   a == (uint16_t)MSL_ACT_GUARD_REFLECT);
 }
 
 static inline uint8_t ottotto_edge_matches_facing(uint32_t stage_id, uint16_t ground_id,
@@ -1181,6 +1190,44 @@ static inline uint8_t action_is_air_locomotion(uint16_t a) {
     return 1;
   }
   return 0;
+}
+
+static inline void enter_fall_from_grounded_floor_loss(MslBatch* batch, const MslCharParams* ch,
+                                                       size_t idx) {
+  if (batch == NULL || ch == NULL) {
+    return;
+  }
+
+  // Ground -> Air floor-loss transitions consume the ground jump (jumps_used = 1).
+  //
+  // Decomp:
+  // - ft_80084104 calls ftCo_Fall_Enter when the grounded collision helper reports no floor.
+  // - ft_800845B4 leaves the grounded motion on floor loss, entering MissFoot on ledge-slip flags
+  //   or Fall otherwise. This sim uses the existing Fall fallback for unmodeled MissFoot.
+  // - ftCo_Fall_Enter calls ftCommon_8007D5D4 if starting from GA_Ground. GuardSetOff can also
+  //   route through ft_80084104 while SDI is enabled.
+  // refs/melee/src/melee/ft/ft_081B.c::{ft_80084104,ft_800845B4}
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_Enter
+  // refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007D5D4
+  batch->state.jumps_left[idx] = ch->max_jumps > 0 ? (uint8_t)(ch->max_jumps - 1) : 0;
+  batch->state.ecb_lock_timer[idx] = 10u;
+  batch->state.fall_fast[idx] = 0u;
+
+  // ftCo_Fall_Enter clamps self_vel.x through ftCommon_ClampAirDrift after the motion change.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_Enter
+  // refs/melee/src/melee/ft/ftcommon.c::ftCommon_ClampAirDrift
+  float air_x = batch->state.speed_ground_x_self[idx];
+  if (air_x > ch->air_drift_max) {
+    air_x = ch->air_drift_max;
+  } else if (air_x < -ch->air_drift_max) {
+    air_x = -ch->air_drift_max;
+  }
+  batch->state.speed_air_x_self[idx] = air_x;
+  batch->state.speed_ground_x_self[idx] = 0.0f;
+
+  batch->state.action_id[idx] = (uint16_t)MSL_ACT_FALL;
+  batch->state.animation_index[idx] = (uint32_t)MSL_SM_FALL;
+  msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
 }
 
 static inline uint8_t action_is_attackair(uint16_t a) {
@@ -3616,6 +3663,22 @@ void locomotion_update_post_collision(MslBatch* batch) {
 
       const uint16_t a = batch->state.action_id[idx];
 
+      if (!now_ground && action_is_grounded_guard_state(a)) {
+        // Guard Coll callbacks are grounded owners. If a replay-seeded or continuous rollout state
+        // reaches post-collision with no floor, the shield motion must not persist airborne.
+        //
+        // Decomp:
+        // - GuardOn/Guard/GuardOff/GuardReflect Coll call ft_800845B4.
+        // - GuardSetOff_Coll calls ft_800845B4, or ft_80084104 while shield SDI is allowed.
+        // - Both helpers leave the shield motion on floor loss and enter an airborne state.
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
+        //   ftCo_GuardOn_Coll,ftCo_Guard_Coll,ftCo_GuardOff_Coll,
+        //   ftCo_GuardSetOff_Coll,ftCo_GuardReflect_Coll}
+        // refs/melee/src/melee/ft/ft_081B.c::{ft_80084104,ft_800845B4}
+        enter_fall_from_grounded_floor_loss(batch, ch, idx);
+        continue;
+      }
+
       if (!was_ground && now_ground) {
         if (a == (uint16_t)MSL_ACT_LANDING &&
             landing_contact_y_bridge_matches_source(a, batch->state.action_frame[idx],
@@ -3744,32 +3807,6 @@ void locomotion_update_post_collision(MslBatch* batch) {
           continue;
         }
 
-        // Ground -> Air (walk off / lose ground) consumes the ground jump (jumps_used = 1).
-        //
-        // Decomp:
-        // - Common path for "walk off ledge" transitions: ftCo_Fall_Enter calls ftCommon_8007D5D4 if
-        //   starting from GA_Ground.
-        //   refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c:51-74
-        //   refs/melee/src/melee/ft/ftcommon.c:525-535
-        batch->state.jumps_left[idx] = ch->max_jumps > 0 ? (uint8_t)(ch->max_jumps - 1) : 0;
-        batch->state.ecb_lock_timer[idx] = 10u;
-
-        // Walked/ran off the ground: carry grounded X velocity into air.
-        //
-        // Decomp: ftCo_Fall_Enter calls ftCommon_ClampAirDrift immediately after ChangeMotionState,
-        // so the destination Fall row clamps self_vel.x to the aerial drift cap rather than keeping
-        // an out-of-range grounded speed.
-        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_Enter
-        // refs/melee/src/melee/ft/ftcommon.c::ftCommon_ClampAirDrift
-        float air_x = batch->state.speed_ground_x_self[idx];
-        if (air_x > ch->air_drift_max) {
-          air_x = ch->air_drift_max;
-        } else if (air_x < -ch->air_drift_max) {
-          air_x = -ch->air_drift_max;
-        }
-        batch->state.speed_air_x_self[idx] = air_x;
-        batch->state.speed_ground_x_self[idx] = 0.0f;
-
         // Ground locomotion -> Fall when no longer grounded.
         // Decomp refs for the common collision helpers:
         // - refs/melee/src/melee/ft/ft_081B.c:1066 (`ft_80084280`) (Wait/Walk/etc)
@@ -3777,9 +3814,7 @@ void locomotion_update_post_collision(MslBatch* batch) {
         //   refs/melee/src/melee/ft/chara/ftCommon/ftCo_StopWall.c:20 (`ftCo_8009EDA4`)
         //
         // Note: we don't yet model wall hug / StopWall, so we conservatively enter Fall here.
-        batch->state.action_id[idx] = (uint16_t)MSL_ACT_FALL;
-        batch->state.animation_index[idx] = (uint32_t)MSL_SM_FALL;
-        msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+        enter_fall_from_grounded_floor_loss(batch, ch, idx);
       }
     }
   }
