@@ -347,6 +347,14 @@ static inline uint8_t guard_reflect_timer_x18_init(const MslCommonParams* c) {
 static inline uint8_t guard_x10_init_u8(const MslCommonParams* c) {
   // Decomp: mv.co.guard.x10 is initialized from p_ftCommonData->x268 on GuardOn/GuardReflect entry.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_800921DC
+  //
+  // Runtime representation note:
+  // This sim stores shield states on the Slippi no-submotion post-frame lane (`animation_index=-1`,
+  // negative action_frame). The next replay-visible GuardOn snapshot after entry carries the value
+  // observed after the first ftCo_800925A4 owner tick. Seed/runtime therefore store the same
+  // remaining-frame lane by subtracting that first owner tick from the entry constant; release
+  // gates still use the pre-decrement value within each subsequent frame.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_800921DC,ftCo_800925A4,ftCo_GuardOn_Anim}
   if (c == NULL) {
     return 0;
   }
@@ -354,6 +362,9 @@ static inline uint8_t guard_x10_init_u8(const MslCommonParams* c) {
     return 0;
   }
   uint16_t t = (uint16_t)c->guard_x10_init_frames;
+  if (t > 0u) {
+    t = (uint16_t)(t - 1u);
+  }
   if (t > 255u) {
     t = 255u;
   }
