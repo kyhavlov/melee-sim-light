@@ -505,10 +505,18 @@ static int msl_batch_init_match_impl(MslBatch* batch, const uint8_t* config_byte
       // Final Destination singles starts on the 2D plane; spawn_points are 2D stage points.
       // data/stages/final_destination.json: spawn_points
       seed->pos_z[p] = 0.0f;
-      // Decomp: fp->x34_scale.y is initialized from Player_GetModelScale.
-      // Source of truth for v1 config-free init: data/characters/{fox,falco}.json `model_scaling`.
+      // Decomp: fp->x34_scale.y is initialized from Player_GetModelScale, while
+      // fp->co_attrs.model_scaling is a separate character attr lane applied by specific
+      // subsystems (pose/hurtbox/hitbox scaling, not the base fighter scale itself).
+      //
+      // Normal match start uses the vanilla player model scale of 1.0f:
+      // - player static init sets player->model_scale = 1.0f
+      // - match setup writes Player_SetModelScale(slot, match_info->x20); normal versus/opening
+      //   flow uses the default scale lane, not co_attrs.model_scaling
+      // refs/melee/src/melee/pl/player.c::{Player_GetModelScale,Player_80031EF8}
+      // refs/melee/src/melee/gm/gm_16AE.c::fn_8016D71C
       // refs/melee/src/melee/ft/fighter.c
-      seed->fighter_scale_y[p] = (ch->model_scaling > 0.0f) ? ch->model_scaling : 1.0f;
+      seed->fighter_scale_y[p] = 1.0f;
       seed->facing[p] = pc->facing ? 1u : 0u;
       seed->facing_dir1[p] = pc->facing ? (int8_t)1 : (int8_t)-1;
       // Default grounded KB friction multiplier lane:

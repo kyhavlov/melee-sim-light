@@ -51,6 +51,17 @@ def _fd_spawn_points() -> np.ndarray:
     return np.array([(float(p["x"]), float(p["y"])) for p in points], dtype=np.float32)
 
 
+def _char_trophy_scale_or_skip(char_name: str) -> float:
+    path = Path(f"data/characters/{char_name}.json")
+    if not path.exists():
+        pytest.skip(f"missing local artifact: {path}")
+    data = json.loads(path.read_text(encoding="utf-8"))
+    value = data.get("trophy_scale")
+    if value is None:
+        pytest.skip(f"{path}: missing trophy_scale")
+    return float(value)
+
+
 def test_match_config_dtype_matches_c_size() -> None:
     binding = _binding_or_skip()
     assert int(binding.sizes()["match_config"]) == MATCH_CONFIG_DTYPE.itemsize
@@ -165,6 +176,53 @@ def test_init_match_is_deterministic_after_same_inputs() -> None:
             binding.destroy(handle)
 
     assert outputs[0] == outputs[1]
+
+
+def test_init_match_entrystart_rise_uses_player_model_scale_not_character_model_scaling() -> None:
+    binding = _binding_or_skip()
+    handle = _init_handle_or_skip(binding, batch_size=2)
+    try:
+        row0 = build_match_config_array(
+            num_players=2,
+            char_ids=(CHAR_FOX, CHAR_FOX),
+            facing=(1, 0),
+            stocks=4,
+        )[0]
+        row1 = build_match_config_array(
+            num_players=2,
+            char_ids=(CHAR_FALCO, CHAR_FALCO),
+            facing=(1, 0),
+            stocks=4,
+        )[0]
+        config = np.zeros(2, dtype=MATCH_CONFIG_DTYPE)
+        config[0] = row0
+        config[1] = row1
+        prev_inp = np.zeros((2, INPUT_DTYPE.itemsize), dtype=np.uint8)
+        inp = np.zeros((2, INPUT_DTYPE.itemsize), dtype=np.uint8)
+        out = _compare_bytes(rows=2)
+
+        binding.init_match(handle, _config_bytes(config))
+        for _ in range(5):
+            binding.step_input(handle, prev_inp, inp)
+        binding.write_compare(handle, out)
+        rows = out.view(COMPARE_DTYPE).reshape((2,)).copy()
+    finally:
+        binding.destroy(handle)
+
+    spawn = _fd_spawn_points()
+    entry_start_frames = 30.0
+    fox_expected_y = float(spawn[0, 1]) + (1.497345 * _char_trophy_scale_or_skip("fox") / entry_start_frames)
+    falco_expected_y = (
+        float(spawn[0, 1]) + (1.497345 * _char_trophy_scale_or_skip("falco") / entry_start_frames)
+    )
+
+    assert int(rows[0]["action_id"][0]) == 0x0143
+    assert int(rows[0]["action_frame"][0]) == 0
+    assert float(rows[0]["pos_y"][0]) == pytest.approx(fox_expected_y, abs=0.001)
+
+    assert int(rows[1]["action_id"][0]) == 0x0143
+    assert int(rows[1]["action_frame"][0]) == 0
+    assert float(rows[1]["pos_y"][0]) == pytest.approx(falco_expected_y, abs=0.001)
 
 
 def test_no_allocations_after_match_init_enters_stepping() -> None:

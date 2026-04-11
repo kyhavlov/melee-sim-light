@@ -12,8 +12,17 @@ from typing import Any
 
 from tools.dolphin.dolphin_engine_dump import capture_engine_dump
 from tools.dolphin.engine_dump_io import f32_from_bits, read_engine_dump
-from tools.dolphin.patch_slp_preframe_window import _apply_patches, _load_ubjson_module
+from tools.dolphin.patch_slp_preframe_window import (
+    PRE_FRAME,
+    PRE_FRAME_OFFSETS,
+    _apply_patches,
+    _iter_events,
+    _load_ubjson_module,
+    _parse_event_payload_sizes,
+    _u8,
+)
 from tools.eval.dataset import COMPARE_DTYPE, INPUT_DTYPE, read_dataset
+from tools.modelplay.sim_env import CHAR_FALCO, CHAR_FOX, build_match_config_array
 
 
 DEFAULT_CARRIER_SLP = Path("replays/debug/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slp")
@@ -33,6 +42,16 @@ FLOAT_FIELDS = (
     "hitlag",
 )
 FIELD_ORDER = BOOL_FIELDS + FLOAT_FIELDS
+
+TRACE_INTERNAL_CHAR_NAME = {
+    1: "fox",
+    22: "falco",
+}
+
+CARRIER_START_CHAR_NAME = {
+    2: "fox",
+    20: "falco",
+}
 
 
 def _timestamp() -> str:
@@ -64,6 +83,89 @@ def _load_trace(path: Path) -> dict[int, dict[str, Any]]:
         frame_i = int(frame["frameNumber"])
         out[frame_i] = frame
     return out
+
+
+def _carrier_occupied_ports(path: Path) -> list[int]:
+    ubjson = _load_ubjson_module()
+    with path.open("rb") as f:
+        obj = ubjson.load(f)
+    if not isinstance(obj, dict) or "raw" not in obj:
+        raise ValueError(f"carrier does not look like a Slippi UBJSON raw stream: {path}")
+    raw_obj = obj["raw"]
+    if not isinstance(raw_obj, (bytes, bytearray)):
+        raise ValueError("carrier Slippi raw field is not bytes")
+    raw = bytearray(raw_obj)
+    sizes = _parse_event_payload_sizes(raw)
+    occupied: list[int] = []
+    seen: set[int] = set()
+    for offset, command, _payload_size in _iter_events(raw, sizes):
+        if command != PRE_FRAME:
+            continue
+        player = _u8(raw, offset + PRE_FRAME_OFFSETS["player"])
+        is_follower = bool(_u8(raw, offset + PRE_FRAME_OFFSETS["is_follower"]))
+        if is_follower or player in seen:
+            continue
+        seen.add(player)
+        occupied.append(int(player))
+    return occupied
+
+
+def _carrier_char_ids(path: Path, occupied_ports: list[int]) -> list[int]:
+    try:
+        from peppi_py import _read_slippi
+    except ModuleNotFoundError as exc:
+        raise SystemExit(
+            "Missing Python package 'peppi_py'. Install project dependencies with `uv sync`."
+        ) from exc
+
+    game = _read_slippi(str(path))
+    players = game.start.get("players")
+    if not isinstance(players, list):
+        raise ValueError(f"carrier replay has no start.players list: {path}")
+    if occupied_ports:
+        max_port = max(int(port) for port in occupied_ports)
+        if max_port < len(players):
+            out: list[int] = []
+            for port in occupied_ports:
+                player = players[int(port)]
+                if not isinstance(player, dict):
+                    raise ValueError(f"carrier replay missing start.players[{port}] metadata: {path}")
+                out.append(int(player.get("character", 0)))
+            return out
+    out: list[int] = []
+    for player in players:
+        if not isinstance(player, dict):
+            continue
+        if player.get("character") is None:
+            continue
+        out.append(int(player.get("character", 0)))
+    return out
+
+
+def _trace_char_ids(trace_frames: dict[int, dict[str, Any]]) -> list[int]:
+    if not trace_frames:
+        return []
+    first_frame_i = min(trace_frames)
+    frame = trace_frames[first_frame_i]
+    players = frame.get("players")
+    if not isinstance(players, list):
+        raise ValueError(f"trace frame {first_frame_i} has no players list")
+    out: list[int] = []
+    for player in players:
+        state = player.get("state", {})
+        out.append(int(state.get("internalCharacterId", 0)))
+    return out
+
+
+def _trace_char_names(trace_char_ids: list[int]) -> list[str]:
+    return [TRACE_INTERNAL_CHAR_NAME.get(int(char_id), f"trace:{int(char_id)}") for char_id in trace_char_ids]
+
+
+def _carrier_char_names(carrier_char_ids: list[int]) -> list[str]:
+    return [
+        CARRIER_START_CHAR_NAME.get(int(char_id), f"carrier:{int(char_id)}")
+        for char_id in carrier_char_ids
+    ]
 
 
 def _input_patch_from_processed(processed: dict[str, Any]) -> dict[str, Any]:
@@ -108,6 +210,7 @@ def _build_patch_spec(
     start_frame: int,
     end_frame: int,
     input_raw_frame_offset: int,
+    carrier_player_map: list[int],
 ) -> list[dict[str, Any]]:
     patches: list[dict[str, Any]] = []
     for frame_i in range(start_frame, end_frame + 1):
@@ -115,12 +218,16 @@ def _build_patch_spec(
             raise ValueError(f"trace missing frame {frame_i}")
         frame = trace_frames[frame_i]
         for player, player_payload in enumerate(frame["players"]):
+            if player >= len(carrier_player_map):
+                raise ValueError(
+                    f"trace player {player} has no carrier port mapping; carrier map={carrier_player_map}"
+                )
             processed = player_payload["inputs"]["processed"]
             patches.append(
                 {
                     "note": f"modelplay frame {frame_i} p{player}",
                     "frame": int(frame_i + input_raw_frame_offset),
-                    "player": int(player),
+                    "player": int(carrier_player_map[player]),
                     "input": _input_patch_from_processed(processed),
                 }
             )
@@ -167,7 +274,7 @@ def _patch_slp(*, carrier_slp: Path, patch_spec: list[dict[str, Any]], out_slp: 
 
 
 def _engine_rows_by_frame(
-    dump_path: Path, *, compare_raw_frame_offset: int
+    dump_path: Path, *, compare_raw_frame_offset: int, carrier_player_map: list[int]
 ) -> dict[tuple[int, int], dict[str, Any]]:
     dump = read_engine_dump(dump_path)
     port_count = int(dump.header["port_count"])
@@ -175,8 +282,12 @@ def _engine_rows_by_frame(
     for frame_slot, frame in enumerate(dump.frames):
         raw_frame = int(frame["frame_index"])
         model_frame = raw_frame - compare_raw_frame_offset
-        for player in range(min(2, port_count)):
-            idx = frame_slot * port_count + player
+        for player, carrier_player in enumerate(carrier_player_map):
+            if carrier_player < 0 or carrier_player >= port_count:
+                raise ValueError(
+                    f"carrier port {carrier_player} is outside engine dump port_count={port_count}"
+                )
+            idx = frame_slot * port_count + carrier_player
             fighter = dump.fighters[idx]
             rows[(model_frame, player)] = {
                 "raw_frame": raw_frame,
@@ -298,41 +409,69 @@ def _run_current_sim_rows(
     import msl_binding  # type: ignore
 
     config = _load_modelplay_config(trace_path)
-    dataset_path = Path(str(config["dataset"]))
-    start_record = int(config.get("start_record", 0))
-    ds = read_dataset(str(dataset_path))
-    sample = ds.samples[start_record : start_record + 1]
-
     sizes = msl_binding.sizes()
     seed_stride = int(sizes["seed"])
     input_stride = int(sizes["input"])
     compare_stride = int(sizes["compare"])
-
-    seed_bytes = np.frombuffer(sample["seed_t"].tobytes(order="C"), dtype=np.uint8).copy().reshape(
-        1, seed_stride
-    )
     out_bytes = np.empty((1, compare_stride), dtype=np.uint8)
     out: dict[tuple[int, int], dict[str, Any]] = {}
 
-    handle = msl_binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    start_mode = str(config.get("start_mode", "replay"))
+    if start_mode == "sim-init":
+        char_map = {
+            "fox": CHAR_FOX,
+            "falco": CHAR_FALCO,
+        }
+        p1_char = str(config.get("p1_char", "falco")).lower()
+        p2_char = str(config.get("p2_char", "fox")).lower()
+        if p1_char not in char_map or p2_char not in char_map:
+            raise ValueError(f"unsupported sim-init trace characters: p1={p1_char} p2={p2_char}")
+        match_config = build_match_config_array(
+            num_players=2,
+            char_ids=(char_map[p1_char], char_map[p2_char]),
+            facing=(1, 0),
+            stocks=int(config.get("stocks", 4)),
+            frame_id=0,
+            random_seed=int(config.get("seed", 0)),
+        )
+        config_bytes = match_config.view(np.uint8).reshape((1, -1))
+        num_players = 2
+    else:
+        dataset_path = Path(str(config["dataset"]))
+        start_record = int(config.get("start_record", 0))
+        ds = read_dataset(str(dataset_path))
+        sample = ds.samples[start_record : start_record + 1]
+        seed_bytes = np.frombuffer(sample["seed_t"].tobytes(order="C"), dtype=np.uint8).copy().reshape(
+            1, seed_stride
+        )
+        num_players = int(ds.header["num_players"])
+
+    handle = msl_binding.init(batch_size=1, num_players=num_players)
     try:
-        msl_binding.reseed_seed(handle, seed_bytes)
-        seed_row = sample["seed_t"][0]
-        for p in range(2):
-            out[(0, p)] = {
-                "action_id": int(seed_row["action_id"][p]),
-                "action_frame": float(seed_row["action_frame"][p]),
-                "pos_x": float(seed_row["pos_x"][p]),
-                "pos_y": float(seed_row["pos_y"][p]),
-                "facing": 1.0 if int(seed_row["facing"][p]) else -1.0,
-                "percent": float(seed_row["percent"][p]),
-                "shield_hp": float(seed_row["shield_hp"][p]),
-                "hitlag": float(seed_row["hitlag"][p]),
-                "on_ground": 1 if int(seed_row["on_ground"][p]) else 0,
-                "stocks": int(seed_row["stocks"][p]),
-                "hitstun": int(seed_row["hitstun"][p]),
-                "jumps_left": int(seed_row["jumps_left"][p]),
-            }
+        if start_mode == "sim-init":
+            msl_binding.init_match(handle, config_bytes)
+            msl_binding.write_compare(handle, out_bytes)
+            row = out_bytes.view(COMPARE_DTYPE).reshape(-1)[0].copy()
+            for p in range(2):
+                out[(0, p)] = _compare_row_to_sim(row, p)
+        else:
+            msl_binding.reseed_seed(handle, seed_bytes)
+            seed_row = sample["seed_t"][0]
+            for p in range(2):
+                out[(0, p)] = {
+                    "action_id": int(seed_row["action_id"][p]),
+                    "action_frame": float(seed_row["action_frame"][p]),
+                    "pos_x": float(seed_row["pos_x"][p]),
+                    "pos_y": float(seed_row["pos_y"][p]),
+                    "facing": 1.0 if int(seed_row["facing"][p]) else -1.0,
+                    "percent": float(seed_row["percent"][p]),
+                    "shield_hp": float(seed_row["shield_hp"][p]),
+                    "hitlag": float(seed_row["hitlag"][p]),
+                    "on_ground": 1 if int(seed_row["on_ground"][p]) else 0,
+                    "stocks": int(seed_row["stocks"][p]),
+                    "hitstun": int(seed_row["hitstun"][p]),
+                    "jumps_left": int(seed_row["jumps_left"][p]),
+                }
 
         prev_input = _input_array_from_trace_frame(trace_frames[0], input_stride)
         for frame_i in range(1, end_frame + 1):
@@ -580,11 +719,29 @@ def main() -> int:
         compare_raw_frame_offset = int(args.raw_frame_offset)
 
     trace_frames = _load_trace(args.trace)
+    trace_char_ids = _trace_char_ids(trace_frames)
+    trace_char_names = _trace_char_names(trace_char_ids)
+    carrier_player_map = _carrier_occupied_ports(args.carrier_slp)
+    if len(carrier_player_map) < len(trace_char_ids):
+        raise SystemExit(
+            f"carrier replay only exposes ports {carrier_player_map}, but trace has "
+            f"{len(trace_char_ids)} players"
+        )
+    carrier_player_map = carrier_player_map[: len(trace_char_ids)]
+    carrier_char_ids = _carrier_char_ids(args.carrier_slp, carrier_player_map)
+    carrier_char_names = _carrier_char_names(carrier_char_ids)
+    if trace_char_names and carrier_char_names != trace_char_names:
+        raise SystemExit(
+            "carrier replay character mismatch: "
+            f"trace chars={trace_char_names}, carrier chars={carrier_char_names}, "
+            f"carrier ports={carrier_player_map}"
+        )
     patch_spec = _build_patch_spec(
         trace_frames,
         start_frame=int(args.start_frame),
         end_frame=int(args.end_frame),
         input_raw_frame_offset=input_raw_frame_offset,
+        carrier_player_map=carrier_player_map,
     )
     patch_spec_path = out_dir / "patch_spec.json"
     patch_spec_path.write_text(json.dumps({"patches": patch_spec}, indent=2) + "\n", encoding="utf-8")
@@ -617,7 +774,9 @@ def main() -> int:
         raise SystemExit(f"Dolphin engine dump failed; expected dump at {dump}")
 
     engine_rows = _engine_rows_by_frame(
-        dump_path, compare_raw_frame_offset=compare_raw_frame_offset
+        dump_path,
+        compare_raw_frame_offset=compare_raw_frame_offset,
+        carrier_player_map=carrier_player_map,
     )
     if args.sim_source == "current":
         sim_rows = _run_current_sim_rows(args.trace, trace_frames, end_frame=int(args.end_frame))
@@ -652,6 +811,7 @@ def main() -> int:
         "raw_start": raw_start,
         "raw_end": raw_end,
         "patches": len(patch_spec),
+        "carrier_player_map": carrier_player_map,
         "patch_matches_min": min(matched) if matched else 0,
         "patch_matches_max": max(matched) if matched else 0,
         "engine_dump": str(dump_path),

@@ -9,6 +9,8 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 
+from tools.dolphin.engine_dump_io import read_engine_dump
+
 
 def _timestamp() -> str:
     return datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
@@ -189,9 +191,17 @@ def capture_engine_dump(
     t0 = time.monotonic()
     try:
         while time.monotonic() - t0 < timeout:
+            proc_rc = proc.poll()
             if out_bin.exists():
-                break
-            if proc.poll() is not None:
+                # The dump file may appear before it is complete. Treat a successful parse as the
+                # authoritative completion signal for the engine dump format we consume downstream.
+                try:
+                    read_engine_dump(out_bin)
+                    break
+                except Exception:
+                    if proc_rc is not None:
+                        break
+            elif proc_rc is not None:
                 break
             time.sleep(0.5)
     finally:
@@ -206,6 +216,8 @@ def capture_engine_dump(
                 pass
 
     if not out_bin.exists():
+        return 1, out_bin
+    if out_bin.stat().st_size <= 0:
         return 1, out_bin
     return 0, out_bin
 
