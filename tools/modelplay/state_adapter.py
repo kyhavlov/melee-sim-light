@@ -117,7 +117,12 @@ def _controller_from_input_player(inp: np.void):
     main_y = np.float32((int(inp["main_y"]) + 80) / 160)
     c_x = np.float32((int(inp["c_x"]) + 80) / 160)
     c_y = np.float32((int(inp["c_y"]) + 80) / 160)
-    shoulder = np.float32(int(inp["l"]) / 140.0)
+    # INPUT_DTYPE stores analog triggers in the same 0..255 lane as replay pre-frame inputs.
+    # Keep the modelplay bridge on that contract so current-sim and replay-patched vanilla see the
+    # same held-trigger strength.
+    # refs/slippi-ssbm-asm/Recording/SendGamePreFrame.asm (trigger floats are 0..1 on replay wire)
+    # tools/slippi/make_dataset_from_slp.py::_u8_from_float01 (dataset bridge uses 0..255)
+    shoulder = np.float32(int(inp["l"]) / 255.0)
     return sa_types.Controller(
         main_stick=sa_types.Stick(main_x, main_y),
         c_stick=sa_types.Stick(c_x, c_y),
@@ -165,7 +170,7 @@ def controller_to_input_player(controller) -> np.ndarray:
     out["main_y"] = np.int8(np.clip(np.rint(float(controller.main_stick.y) * 160.0 - 80.0), -80, 80))
     out["c_x"] = np.int8(np.clip(np.rint(float(controller.c_stick.x) * 160.0 - 80.0), -80, 80))
     out["c_y"] = np.int8(np.clip(np.rint(float(controller.c_stick.y) * 160.0 - 80.0), -80, 80))
-    analog = np.uint8(np.clip(np.rint(float(controller.shoulder) * 140.0), 0, 140))
+    analog = np.uint8(np.clip(np.rint(float(controller.shoulder) * 255.0), 0, 255))
     out["l"] = analog
     out["r"] = np.uint8(0)
     return out

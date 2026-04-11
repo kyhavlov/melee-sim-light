@@ -375,7 +375,7 @@ def _input_array_from_trace_frame(frame: dict[str, Any], input_stride: int) -> A
         arr["p"]["main_y"][0, p] = _processed_to_stick_i8(processed.get("joystickY", 0.0))
         arr["p"]["c_x"][0, p] = _processed_to_stick_i8(processed.get("cStickX", 0.0))
         arr["p"]["c_y"][0, p] = _processed_to_stick_i8(processed.get("cStickY", 0.0))
-        arr["p"]["l"][0, p] = int(round(max(0.0, min(1.0, float(processed.get("anyTrigger", 0.0)))) * 140.0))
+        arr["p"]["l"][0, p] = int(round(max(0.0, min(1.0, float(processed.get("anyTrigger", 0.0)))) * 255.0))
         arr["p"]["r"][0, p] = 0
     return arr.view(np.uint8).reshape((1, input_stride)).copy()
 
