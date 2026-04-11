@@ -22,6 +22,7 @@ FIXTURE_168 = Path(__file__).resolve().parents[1] / "tests/fixtures/modelplay/pu
 FIXTURE_207 = Path(__file__).resolve().parents[1] / "tests/fixtures/modelplay/puffer_5b_selfplay_input_prefix_0_207.json"
 FIXTURE_210 = Path(__file__).resolve().parents[1] / "tests/fixtures/modelplay/puffer_5b_selfplay_input_prefix_0_210.json"
 FIXTURE_240 = Path(__file__).resolve().parents[1] / "tests/fixtures/modelplay/puffer_5b_selfplay_input_prefix_0_240.json"
+FIXTURE_260 = Path(__file__).resolve().parents[1] / "tests/fixtures/modelplay/puffer_5b_selfplay_input_prefix_0_260.json"
 FIXTURE_SOURCE = "reports/modelplay/puffer_5b_selfplay_4stock_4min/trace.json"
 
 
@@ -295,3 +296,17 @@ def test_puffer_grounded_specialhi_landing_zeroes_ground_momentum() -> None:
     assert int(rows[240]["action_id"][1]) == 0x0165  # SpecialHiLanding
     assert float(rows[240]["speed_ground_x_self"][1]) == pytest.approx(0.0, abs=1e-5)
     assert float(rows[240]["pos_x"][1] - rows[239]["pos_x"][1]) == pytest.approx(0.0, abs=1e-5)
+
+
+def test_puffer_specialhi_landing_anim_end_wait_handoff_keeps_wait_iasa_catch() -> None:
+    # Regression target from the next puffer comparator owner:
+    # - SpecialHiLanding anim-end enters Wait on the same grounded frame
+    # - Fighter proc order then runs destination Wait_IASA in that same frame
+    # - fresh grab input must still claim Catch before the row falls through to plain Wait
+    #
+    # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::ftFx_SpecialHiLanding_Anim
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_Catch_CheckInput
+    rows = _run_prefix(FIXTURE_260, end_frame=260)
+    assert int(rows[259]["action_id"][1]) == 0x0165  # SpecialHiLanding
+    assert int(rows[260]["action_id"][1]) == ACT_CATCH

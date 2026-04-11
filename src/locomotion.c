@@ -2070,7 +2070,17 @@ void locomotion_update_pre(MslBatch* batch) {
         }
 
         if (spacie_specialhi_update(batch, idx, cid, ms, 1u)) {
-          continue;
+          action_id = batch->state.action_id[idx];
+          // Decomp callback order bridge:
+          // - ftFx_SpecialHiLanding_Anim can enter Wait on anim end.
+          // - Fighter proc order then dispatches the destination state's input callbacks in the
+          //   same frame, so fresh Wait_IASA ownership (including Catch before Guard) must still
+          //   be visible on that handoff row.
+          // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::ftFx_SpecialHiLanding_Anim
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
+          if (action_id != (uint16_t)MSL_ACT_WAIT) {
+            continue;
+          }
         }
 
         // Fox/Falco side special (Illusion/Phantasm): keep animation_index stable and model
