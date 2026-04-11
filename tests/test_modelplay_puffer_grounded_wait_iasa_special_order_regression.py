@@ -21,6 +21,7 @@ ACT_FX_SPECIAL_LW_START = 0x0168
 FIXTURE_168 = Path(__file__).resolve().parents[1] / "tests/fixtures/modelplay/puffer_5b_selfplay_input_prefix_0_168.json"
 FIXTURE_207 = Path(__file__).resolve().parents[1] / "tests/fixtures/modelplay/puffer_5b_selfplay_input_prefix_0_207.json"
 FIXTURE_210 = Path(__file__).resolve().parents[1] / "tests/fixtures/modelplay/puffer_5b_selfplay_input_prefix_0_210.json"
+FIXTURE_240 = Path(__file__).resolve().parents[1] / "tests/fixtures/modelplay/puffer_5b_selfplay_input_prefix_0_240.json"
 FIXTURE_SOURCE = "reports/modelplay/puffer_5b_selfplay_4stock_4min/trace.json"
 
 
@@ -277,3 +278,20 @@ def test_puffer_grounded_specialhi_launch_seeds_ground_momentum() -> None:
     assert int(rows[210]["action_id"][1]) == ACT_FX_SPECIAL_HI
     assert float(rows[210]["speed_ground_x_self"][1]) == pytest.approx(-3.8, abs=1e-5)
     assert float(rows[210]["pos_x"][1] - rows[209]["pos_x"][1]) == pytest.approx(-3.8, abs=1e-5)
+
+
+def test_puffer_grounded_specialhi_landing_zeroes_ground_momentum() -> None:
+    # Regression target from the next puffer comparator owner:
+    # - grounded SpecialHi launch decays to small residual ground momentum before landing
+    # - ftFx_SpecialHiLanding_Phys applies x7C friction immediately on landing entry
+    # - when |gr_vel| < x7C, the first grounded SpecialHiLanding row should move 0 and report 0 gr_vel
+    #
+    # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::{
+    #   ftFx_SpecialHi_Anim,ftFx_SpecialHiLanding_Phys,ftFx_SpecialHiFall_AirToGround
+    # }
+    rows = _run_prefix(FIXTURE_240, end_frame=240)
+    assert int(rows[239]["action_id"][1]) == ACT_FX_SPECIAL_HI
+    assert float(rows[239]["speed_ground_x_self"][1]) == pytest.approx(-1.3000015, abs=1e-5)
+    assert int(rows[240]["action_id"][1]) == 0x0165  # SpecialHiLanding
+    assert float(rows[240]["speed_ground_x_self"][1]) == pytest.approx(0.0, abs=1e-5)
+    assert float(rows[240]["pos_x"][1] - rows[239]["pos_x"][1]) == pytest.approx(0.0, abs=1e-5)

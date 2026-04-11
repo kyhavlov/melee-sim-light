@@ -1393,6 +1393,14 @@ void physics_integrate(MslBatch* batch) {
                 (int16_t)ch->firefox_launch_reverse_accel_start_frames) {
               gr_vel += ground_friction_step_delta(gr_vel, ch->firefox_launch_reverse_accel);
             }
+          } else if (action_id == (uint16_t)MSL_ACT_FX_SPECIAL_HI_LANDING) {
+            // Decomp: ftFx_SpecialHiLanding_Phys applies x7C ground friction, then
+            // ftCommon_ApplyGroundMovement. This landing state is not part of the generic
+            // ft_80084F3C/ft_80084FA8 families, so keep its friction owner explicit here.
+            // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::ftFx_SpecialHiLanding_Phys
+            // refs/melee/src/melee/ft/chara/ftFox/types.h::ftFox_DatAttrs
+            // data/characters/{fox,falco}.json::firefox_ground_momentum_end
+            gr_vel += ground_friction_step_delta(gr_vel, ch->firefox_ground_momentum_end);
           } else if (physics_action_uses_ft_80084FA8(action_id)) {
             // ft_80084FA8 grounded Phys family:
             // - high-speed friction scale gate (walk_max_vel, p_ftCommonData->x6C)
