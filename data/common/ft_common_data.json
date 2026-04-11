@@ -32,7 +32,7 @@
   "colanim_passivewall_x1990_frames": 14,
   "crouch_release_stick_threshold": 0.625,
   "crouch_stick_threshold": 0.6875,
-  "cstick_smash_threshold": 0.5,
+  "cstick_smash_threshold": 0.800000011920929,
   "damage_hitstun_mul": 0.4000000059604645,
   "damage_jump_buffer_window_frames": 20,
   "damage_severity_x158": 10.0,

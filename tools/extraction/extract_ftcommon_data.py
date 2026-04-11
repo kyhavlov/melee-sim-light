@@ -175,9 +175,15 @@ def main() -> None:
         "shield_setoff_push_mul": float(_f32_be(buf, ft_common_abs + 0x294)),
         "shield_setoff_push_max": float(_f32_be(buf, ft_common_abs + 0x298)),
         "shield_setoff_push_mul_non_yoshi": float(_f32_be(buf, ft_common_abs + 0x2BC)),
-        # Smash stick / flick gating (ftCommon_8008031C; types.h: +0x7B8/+0x7BC/+0x7C0)
+        # Smash stick / flick gating.
+        # - Grounded dash / side-smash checks consume p_ftCommonData->x3C/x40.
+        # - Grounded c-stick smash edges in ft_0DF1.c::{ftCo_800DF1C8,ftCo_800DF2D8,ftCo_800DF3A8}
+        #   also compare against the same x3C / xCC / xD4 thresholds.
+        # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c::ftCo_Dash_CheckInput
+        # refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackS4.c::ftCo_AttackS4_CheckInput
+        # refs/melee/src/melee/ft/ft_0DF1.c::{ftCo_800DF1C8,ftCo_800DF2D8,ftCo_800DF3A8}
         "smash_stick_threshold": float(_f32_be(buf, ft_common_abs + 0x7B8)),
-        "cstick_smash_threshold": float(_f32_be(buf, ft_common_abs + 0x7BC)),
+        "cstick_smash_threshold": float(_f32_be(buf, ft_common_abs + 0x3C)),
         "smash_flick_tilt_max_frames": int(round(float(_f32_be(buf, ft_common_abs + 0x7C0)))),
         # Throw entry anim-speed weight scalar.
         #
