@@ -23,6 +23,8 @@ FIXTURE_207 = Path(__file__).resolve().parents[1] / "tests/fixtures/modelplay/pu
 FIXTURE_210 = Path(__file__).resolve().parents[1] / "tests/fixtures/modelplay/puffer_5b_selfplay_input_prefix_0_210.json"
 FIXTURE_240 = Path(__file__).resolve().parents[1] / "tests/fixtures/modelplay/puffer_5b_selfplay_input_prefix_0_240.json"
 FIXTURE_260 = Path(__file__).resolve().parents[1] / "tests/fixtures/modelplay/puffer_5b_selfplay_input_prefix_0_260.json"
+FIXTURE_280 = Path(__file__).resolve().parents[1] / "tests/fixtures/modelplay/puffer_5b_selfplay_input_prefix_0_280.json"
+FIXTURE_290 = Path(__file__).resolve().parents[1] / "tests/fixtures/modelplay/puffer_5b_selfplay_input_prefix_0_290.json"
 FIXTURE_SOURCE = "reports/modelplay/puffer_5b_selfplay_4stock_4min/trace.json"
 
 
@@ -81,7 +83,7 @@ def _input_bytes_from_fixture_frame(
         input_t["p"]["main_y"][0, p] = _processed_to_stick_i8(processed["joystickY"])
         input_t["p"]["c_x"][0, p] = _processed_to_stick_i8(processed["cStickX"])
         input_t["p"]["c_y"][0, p] = _processed_to_stick_i8(processed["cStickY"])
-        input_t["p"]["l"][0, p] = np.uint8(int(round(max(0.0, min(1.0, float(processed["anyTrigger"]))) * 140.0)))
+        input_t["p"]["l"][0, p] = np.uint8(int(round(max(0.0, min(1.0, float(processed["anyTrigger"]))) * 255.0)))
         input_t["p"]["r"][0, p] = np.uint8(0)
     return input_t.view(np.uint8).reshape((1, input_stride)).copy()
 
@@ -139,7 +141,7 @@ def _run_prefix(
                 current_input_arr["p"]["c_x"][0, 0] = _processed_to_stick_i8(processed["cStickX"])
                 current_input_arr["p"]["c_y"][0, 0] = _processed_to_stick_i8(processed["cStickY"])
                 current_input_arr["p"]["l"][0, 0] = np.uint8(
-                    int(round(max(0.0, min(1.0, float(processed["anyTrigger"]))) * 140.0))
+                    int(round(max(0.0, min(1.0, float(processed["anyTrigger"]))) * 255.0))
                 )
                 current_input_arr["p"]["r"][0, 0] = np.uint8(0)
             binding.step_input(handle, prev_input, current_input)
@@ -310,3 +312,31 @@ def test_puffer_specialhi_landing_anim_end_wait_handoff_keeps_wait_iasa_catch() 
     rows = _run_prefix(FIXTURE_260, end_frame=260)
     assert int(rows[259]["action_id"][1]) == 0x0165  # SpecialHiLanding
     assert int(rows[260]["action_id"][1]) == ACT_CATCH
+
+
+def test_puffer_plain_wait_y_upsmash_beats_guard_with_analog_trigger() -> None:
+    # Regression target from the next puffer comparator owner:
+    # - frame 279 p0 is already in steady-state Wait (not a destination-Wait handoff),
+    # - frame 280 has Y + up-smash input plus a held analog trigger,
+    # - decomp Wait_IASA checks grounded attacks before guard, so vanilla enters AttackHi4.
+    #
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackHi4.c::ftCo_AttackHi4_CheckInput
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80091A4C
+    rows = _run_prefix(FIXTURE_280, end_frame=280)
+    assert int(rows[279]["action_id"][0]) == 14  # Wait
+    assert int(rows[280]["action_id"][0]) == ACT_ATTACK_HI4
+
+
+def test_puffer_catch_anim_end_wait_handoff_keeps_wait_iasa_catch() -> None:
+    # Regression target from the next puffer comparator owner:
+    # - Catch anim-end enters Wait on the same grounded frame
+    # - Fighter proc order then dispatches destination Wait_IASA in that same frame
+    # - fresh A + trigger-held grab input must re-enter Catch before grounded attacks
+    #
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_Catch_Anim
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_Catch_CheckInput
+    rows = _run_prefix(FIXTURE_290, end_frame=290)
+    assert int(rows[289]["action_id"][1]) == ACT_CATCH
+    assert int(rows[290]["action_id"][1]) == ACT_CATCH

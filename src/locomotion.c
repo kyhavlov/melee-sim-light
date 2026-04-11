@@ -2524,6 +2524,21 @@ void locomotion_update_pre(MslBatch* batch) {
           continue;
         }
 
+        // Plain Wait_IASA runs grounded attacks before guard.
+        //
+        // Keep this narrow to steady-state Wait rows only:
+        // - generic destination-Wait handoffs (Escape*, Catch, SpecialHiLanding, etc.) still use
+        //   their own localized bridges so we do not re-open the earlier destination-Wait shield
+        //   regression surface.
+        // - plain Wait rows should still honor the decomp ordering where AttackS4/Hi4/Lw4,
+        //   tilts, and jab beat guard on the same frame.
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
+        if (action_id == MSL_ACT_WAIT &&
+            grounded_a_attack_try_enter_from_iasa(batch, c, idx, buttons_pressed, stick_x, stick_y,
+                                                  tilt_timer_x, tilt_timer_y, facing_dir, 0, 1)) {
+          continue;
+        }
+
         // Guard core loop (entry/hold/exit).
         // Decomp call site example: refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c:43-66.
         uint8_t allow_guard_entry = 0;
