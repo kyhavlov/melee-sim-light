@@ -22,6 +22,7 @@ ACT_DASH = 20
 ACT_KNEE_BEND = 24
 ACT_SQUAT_WAIT = 40
 ACT_GUARD_ON = 178
+ACT_GUARD_SET_OFF = 181
 ACT_CATCH = 212
 ACT_FX_SPECIAL_LW_START = 360
 ACT_FX_SPECIAL_AIR_LW_START = 365
@@ -688,6 +689,77 @@ def test_modelplay_rerun11_squatwait_guard_preempts_jump_cancel_catch() -> None:
     assert int(out_661["on_ground"][1]) == 1
     assert float(out_661["shield_hp"][1]) == pytest.approx(59.986000061035156, abs=0.001)
     assert int(out_661["action_id"][1]) != ACT_CATCH
+
+
+@pytest.mark.integration
+def test_modelplay_rerun11_guardon_laser_hits_after_entry_blend_not_on_fresh_frame() -> None:
+    # Modelplay-vs-vanilla lock:
+    # - rerun11's next projectile shield-owner issue is a Falco laser crossing Fox's frozen
+    #   GuardOn entry.
+    # - Decomp GuardOn entry initializes mv.co.guard.{x8,x4}=neutral/0 and then blends the
+    #   shield-bone translation by mv.co.guard.x0 / fp->x2E8 through ftCo_80091E78.
+    # - Frozen Slippi GuardOn rows do not expose x0 in action_frame, so this sim seeds x0
+    #   explicitly; the laser must not hit on the fresh GuardOn frame, but must hit once the entry
+    #   blend advances.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
+    #   ftCo_800921DC,ftCo_GuardOn_Anim,ftCo_80091E78}
+    _require_local_data_or_skip()
+    root = _root()
+    rel = (
+        "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
+        "AttachedGoodNaturedGuanaco.msl"
+    )
+    dataset_path = root / rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {rel}")
+    trace_frames = _load_input_fixture(root / RERUN11_SQUATWAIT_GUARD_INPUT_FIXTURE)
+
+    binding = pytest.importorskip("msl_binding")
+    sizes = binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    compare_stride = int(sizes["compare"])
+
+    ds = read_dataset(str(dataset_path))
+    seed_bytes = np.frombuffer(ds.samples[0:1]["seed_t"].tobytes(order="C"), dtype=np.uint8).copy().reshape(
+        1, seed_stride
+    )
+    out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
+
+    history: dict[int, np.void] = {}
+    handle = binding.init(batch_size=1, num_players=2, ucf_enabled=1, ucf_cardinals_1_0_enabled=1)
+    try:
+        binding.reseed_seed(handle, seed_bytes)
+        prev_input = _input_bytes_from_trace_frame(trace_frames[0], input_stride)
+        for frame_i in range(1, 666):
+            input_t = _input_bytes_from_trace_frame(trace_frames[frame_i], input_stride)
+            binding.step_input(handle, prev_input, input_t)
+            if frame_i >= 660:
+                binding.write_compare(handle, out_compare_bytes)
+                history[frame_i] = out_compare_bytes.view(COMPARE_DTYPE).reshape(-1)[0].copy()
+            prev_input = input_t
+    finally:
+        binding.destroy(handle)
+
+    out_660 = history[660]
+    assert int(out_660["action_id"][1]) == ACT_GUARD_ON
+    assert int(out_660["action_frame"][1]) == -1
+    assert float(out_660["shield_hp"][1]) == pytest.approx(60.0, abs=0.001)
+    assert int(out_660["hitlag"][1]) == 0
+    assert int(out_660["items"][0]["exists"]) == 1
+
+    out_661 = history[661]
+    assert int(out_661["action_id"][1]) == ACT_GUARD_ON
+    assert int(out_661["action_frame"][1]) == -1
+    assert float(out_661["shield_hp"][1]) == pytest.approx(59.986000061035156, abs=0.001)
+    assert int(out_661["hitlag"][1]) == 0
+    assert int(out_661["items"][0]["exists"]) == 1
+
+    out_662 = history[662]
+    assert int(out_662["action_id"][1]) == ACT_GUARD_SET_OFF
+    assert int(out_662["action_frame"][1]) == 0
+    assert float(out_662["shield_hp"][1]) == pytest.approx(57.27199935913086, abs=0.001)
+    assert int(out_662["hitlag"][1]) == 4
 
 
 @pytest.mark.integration

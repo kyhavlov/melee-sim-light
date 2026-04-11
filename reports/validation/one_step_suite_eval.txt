@@ -92,14 +92,14 @@ mismatch.facing: 1 / 23058 (0.000043)
 mismatch.stocks: 0 / 23058 (0.000000)
 mismatch.jumps_left: 7 / 23058 (0.000304)
 mismatch.is_dead: 0 / 23058 (0.000000)
-mismatch.hitlag: 20 / 23058 (0.000867)
+mismatch.hitlag: 19 / 23058 (0.000824)
 mismatch.hitstun: 11 / 23058 (0.000477)
 mismatch.l_cancel: 0 / 23058 (0.000000)
 mismatch.hurtbox_state: 12 / 23058 (0.000520)
 mismatch.ground_id: 3 / 23058 (0.000130)
 mismatch.animation_index: 19 / 23058 (0.000824)
 mismatch.instance_hit_by: 9 / 23058 (0.000390)
-mismatch.instance_id: 58 / 23058 (0.002515)
+mismatch.instance_id: 57 / 23058 (0.002472)
 mismatch.last_attack_landed: 4 / 23058 (0.000173)
 mismatch.combo_count: 3 / 23058 (0.000130)
 mismatch.last_hit_by: 12 / 23058 (0.000520)
@@ -117,13 +117,13 @@ err.speed_y_self: mae=0.000920 p95=0.000000 max=2.200000
 err.speed_x_attack: mae=0.000884 p95=0.000000 max=5.323730
 err.speed_y_attack: mae=0.002241 p95=0.000000 max=4.594820
 err.percent: mae=0.002114 p95=0.000000 max=15.000000
-err.shield_hp: mae=0.000857 p95=0.000000 max=5.599998
-err.item_pos_x: mae=0.072784 p95=0.000000 max=71.544670
-err.item_pos_y: mae=0.019318 p95=0.000000 max=26.796017
-err.item_vel_x: mae=0.014121 p95=0.000000 max=3.037811
-err.item_vel_y: mae=0.006340 p95=0.000000 max=4.999367
-overall.discrete_mismatch: 283 / 1395009
-overall.float_norm_mae_p95: 0.00106387
+err.shield_hp: mae=0.000797 p95=0.000000 max=5.599998
+err.item_pos_x: mae=0.057438 p95=0.000000 max=39.815655
+err.item_pos_y: mae=0.015298 p95=0.000000 max=26.796017
+err.item_vel_x: mae=0.014239 p95=0.000000 max=3.960552
+err.item_vel_y: mae=0.005519 p95=0.000000 max=4.999367
+overall.discrete_mismatch: 281 / 1395009
+overall.float_norm_mae_p95: 0.00105961
 
 == datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/QuerulousGrandDinosaur.msl ==
 Records: 10222  Players/scored per record: 2  Total player-frames: 20444
@@ -210,5 +210,5 @@ overall.discrete_mismatch: 210 / 948277
 overall.float_norm_mae_p95: 0.00148803
 
 == suite summary ==
-overall.discrete_mismatch: 943 / 4462843
-overall.float_norm_mae_p95: 0.00113517
+overall.discrete_mismatch: 941 / 4462843
+overall.float_norm_mae_p95: 0.00113381

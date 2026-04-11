@@ -1,5 +1,6 @@
 #include "shields.h"
 
+#include "anim_table.h"
 #include <math.h>
 #include <stdint.h>
 
@@ -293,7 +294,6 @@ void shields_refresh(MslBatch* batch) {
       batch->state.shield_y[idx] = sy;
       batch->state.shield_z[idx] = sz;
       batch->state.shield_radius[idx] = sr;
-
       // Keep `state_flags` "isShieldActive" in sync with the derived shield bubble.
       //
       // Decomp-first references (GALE01):

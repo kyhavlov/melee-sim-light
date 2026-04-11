@@ -457,6 +457,7 @@ static inline void enter_guard_on(MslBatch* batch, const MslCommonParams* c, siz
   const size_t flags_i = idx * (size_t)MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_221C_INDEX;
   batch->state.state_flags[flags_i] &= (uint8_t) ~(
       uint8_t)(MSL_STATE_FLAG_221C_B3 | MSL_STATE_FLAG_221C_B1 | MSL_STATE_FLAG_221C_B2);
+  batch->state.guard_on_entered_this_frame[idx] = 1u;
   batch->state.guard_release_latched_xc[idx] = 0;
   batch->state.guard_x10[idx] = guard_x10_init_u8(c);
   batch->state.lightshield_amount[idx] = 0.0f;
@@ -1200,6 +1201,15 @@ void action_update_anim_callbacks_pre_input(MslBatch* batch) {
 
 void action_update(MslBatch* batch) {
   const MslCommonParams* c = msl_common_params();
+  if (batch != NULL) {
+    const int num_players = (int)batch->config.num_players;
+    for (int bi = 0; bi < batch->batch_size; bi++) {
+      for (int p = 0; p < num_players; p++) {
+        const size_t idx = msl_idx_player(bi, p);
+        batch->state.guard_on_entered_this_frame[idx] = 0u;
+      }
+    }
+  }
   // Grab/throw Anim-callback-shaped transitions should happen before the grounded locomotion IASA
   // chain (including shield entry). Example: Catch/CatchDash Anim end -> Wait (ft_8008A2BC) should
   // run before the next state's guard entry check (ftCo_80091A4C) so buffered shields can block

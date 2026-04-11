@@ -2474,7 +2474,6 @@ def _main_impl(args) -> None:
         )
         samples["seed_t"]["guard_tilt_x8"][:, slot] = guard_tilt_x8_post[:-1]
         samples["seed_t"]["guard_tilt_x4"][:, slot] = guard_tilt_x4_post[:-1]
-
         prev_buttons = np.concatenate(([np.uint16(0)], pre_buttons_physical[:-1]))
         buttons_pressed = pre_buttons_physical & ~prev_buttons
 

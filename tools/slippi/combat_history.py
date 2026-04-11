@@ -414,7 +414,9 @@ def _load_common_params(data_root: Path) -> dict[str, float]:
 
 
 def _read_shield_tilt_table(*, data_root: Path, key: str) -> _ShieldTiltTable | None:
-    # data/shields/<char>.bin (MSLSHLD1 v1)
+    # data/shields/<char>.bin (MSLSHLD1 v1/v2/v3).
+    # v3 extends the artifact with GuardOn entry/current-pose data used by the fresh GuardOn
+    # projectile-shield precedence bridge.
     p = data_root / "shields" / f"{key}.bin"
     if not p.exists():
         return None
@@ -424,18 +426,22 @@ def _read_shield_tilt_table(*, data_root: Path, key: str) -> _ShieldTiltTable | 
     if buf[:8] != b"MSLSHLD1":
         raise ValueError(f"{p}: bad magic (want MSLSHLD1)")
     ver = int.from_bytes(buf[8:12], "little", signed=False)
-    if ver != 1:
-        raise ValueError(f"{p}: unsupported MSLSHLD1 version={ver} (want 1)")
+    if ver not in (1, 2, 3):
+        raise ValueError(f"{p}: unsupported MSLSHLD1 version={ver} (want 1, 2, or 3)")
     frame_count = int.from_bytes(buf[12:14], "little", signed=False)
     neutral_frame = int.from_bytes(buf[14:16], "little", signed=False)
     if frame_count <= 0:
         raise ValueError(f"{p}: frame_count is 0")
     if neutral_frame < 0 or neutral_frame >= frame_count:
         raise ValueError(f"{p}: neutral_frame out of range (neutral_frame={neutral_frame}, frame_count={frame_count})")
-    want = 8 + 4 + 2 + 2 + frame_count * 3 * 4
+    hdr = 16 if ver == 1 else (28 if ver == 2 else 32)
+    want = hdr + frame_count * 3 * 4
+    if ver == 3:
+        guard_on_frame_count = int.from_bytes(buf[28:30], "little", signed=False)
+        want += guard_on_frame_count * 3 * 4
     if len(buf) != want:
         raise ValueError(f"{p}: size mismatch (got {len(buf)}, want {want})")
-    xyz = np.frombuffer(buf, dtype="<f4", count=frame_count * 3, offset=16).reshape((frame_count, 3))
+    xyz = np.frombuffer(buf, dtype="<f4", count=frame_count * 3, offset=hdr).reshape((frame_count, 3))
     return _ShieldTiltTable(neutral_frame=int(neutral_frame), xyz=xyz)
 
 

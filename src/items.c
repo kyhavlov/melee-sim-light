@@ -16,6 +16,7 @@
 #include "move_tables.h"
 #include "msl_math.h"
 #include "mtx34.h"
+#include "shield_tilt_table.h"
 #include "stage_collision.h"
 #include "staling.h"
 
@@ -919,6 +920,46 @@ static inline uint8_t item_sphere_sphere_intersects_3d(float ax, float ay, float
   const float dz = az - bz;
   const float rr = ar + br;
   return (dx * dx + dy * dy + dz * dz) <= (rr * rr);
+}
+
+static inline uint8_t item_try_guardon_fresh_shield_center(const MslBatch* batch, size_t d_idx,
+                                                           float* out_x, float* out_y,
+                                                           float* out_z) {
+  if (batch == NULL || out_x == NULL || out_y == NULL || out_z == NULL) {
+    return 0u;
+  }
+  if (batch->state.action_id[d_idx] != (uint16_t)MSL_ACT_GUARD_ON ||
+      batch->state.animation_index[d_idx] != 0xFFFFFFFFu || batch->state.action_frame[d_idx] >= 0 ||
+      batch->state.guard_on_entered_this_frame[d_idx] == 0u) {
+    return 0u;
+  }
+
+  // Fresh frozen GuardOn projectile-shield bridge:
+  // - ftCo_800921DC zeroes the shield-joint translate on GuardOn entry,
+  // - ftCo_80091E78(0) preserves that live GuardOn current pose on the first entry frame,
+  // - later teacher-forced frozen GuardOn rows are not the same owner and must keep the stable
+  //   baseline shield bubble path.
+  // Restrict this to same-step GuardOn entry in item shield precedence only; broadening the
+  // current-pose bridge to seeded frozen GuardOn snapshots regresses unrelated guard rows.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_800921DC,ftCo_80091E78}
+  MslShieldTiltTableView tv;
+  if (msl_shield_tilt_table_view(batch->state.char_id[d_idx], &tv) != 0 ||
+      tv.guard_on_xyz == NULL || tv.guard_on_frame_count == 0u) {
+    return 0u;
+  }
+
+  const float scale_y = batch->state.fighter_scale_y[d_idx];
+  const float facing_dir = batch->state.facing[d_idx] ? 1.0f : -1.0f;
+  const float gx = tv.guard_on_xyz[0];
+  const float gy = tv.guard_on_xyz[1];
+  const float gz = tv.guard_on_xyz[2];
+  const float glx = gx * scale_y;
+  const float gly = gy * scale_y;
+  const float glz = gz * scale_y;
+  *out_x = batch->state.pos_x[d_idx] + (facing_dir * glz);
+  *out_y = batch->state.pos_y[d_idx] + gly;
+  *out_z = batch->state.pos_z[d_idx] + (-facing_dir * glx);
+  return 1u;
 }
 
 static inline uint8_t item_swept_sphere_sphere_intersects_3d(float ax0, float ay0, float az0,
@@ -1836,6 +1877,7 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
         float shx = batch->state.shield_x[d_idx];
         float shy = batch->state.shield_y[d_idx];
         float shz = batch->state.shield_z[d_idx];
+        (void)item_try_guardon_fresh_shield_center(batch, d_idx, &shx, &shy, &shz);
         if (!isfinite(shx) || !isfinite(shy) || !isfinite(shz)) {
           shx = batch->state.pos_x[d_idx];
           shy = batch->state.pos_y[d_idx];
@@ -1859,15 +1901,19 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
         // refs/melee/src/melee/it/items/itfoxlaser.c::{
         //   itFoxlaser_UnkMotion1_Phys,it_8029C4D4,it_2725_Logic94_HitShield}
         //
-        // Sim rule for Slippi no-submotion Guard/GuardOn seeds (`animation_index==0xFFFFFFFF`):
-        // when the defender is Guard* with neutral hitlag/hitstun and no submotion timeline, do
-        // not create new shield-hit contacts from the post-motion endpoint this frame. Sample
-        // shield overlap at segment start (`prev_pos`) only.
+        // Sim rule for frozen steady Guard snapshots (`animation_index==0xFFFFFFFF`):
+        // when the defender is already in Guard hold with neutral hitlag/hitstun and no
+        // submotion timeline, do not create new shield-hit contacts from the post-motion endpoint
+        // this frame. Sample shield overlap at segment start (`prev_pos`) only.
+        //
+        // GuardOn entry is different: ftCo_80091E78 owns the shield-entry pose via mv.co.guard.x0
+        // and the fighter-data entry anchor, but item collision still uses the authoritative
+        // laser prev->cur segment.
         // refs/melee/src/melee/ft/ftanim.c::ftAnim_8006E9B4
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80091E78
         //
         const uint8_t defender_no_submotion_snapshot =
-            ((batch->state.action_id[d_idx] == (uint16_t)MSL_ACT_GUARD ||
-              batch->state.action_id[d_idx] == (uint16_t)MSL_ACT_GUARD_ON) &&
+            (batch->state.action_id[d_idx] == (uint16_t)MSL_ACT_GUARD &&
              batch->state.action_frame[d_idx] < 0 &&
              batch->state.animation_index[d_idx] == 0xFFFFFFFFu &&
              batch->state.hitlag[d_idx] == 0u && batch->state.hitstun[d_idx] == 0u)

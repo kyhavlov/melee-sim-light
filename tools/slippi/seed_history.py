@@ -592,8 +592,8 @@ def load_shield_tilt_table_meta(*, data_dir: str = "data") -> dict[int, tuple[in
             raise ValueError(f"{p}: bad magic (want MSLSHLD1)")
 
         ver = struct.unpack_from("<I", buf, 8)[0]
-        if ver != 1:
-            raise ValueError(f"{p}: unsupported MSLSHLD1 version={ver} (want 1)")
+        if ver not in (1, 2, 3):
+            raise ValueError(f"{p}: unsupported MSLSHLD1 version={ver} (want 1, 2, or 3)")
 
         frame_count, neutral_frame = struct.unpack_from("<HH", buf, 12)
         if frame_count == 0:
@@ -603,7 +603,11 @@ def load_shield_tilt_table_meta(*, data_dir: str = "data") -> dict[int, tuple[in
                 f"{p}: neutral_frame out of range (neutral_frame={neutral_frame}, frame_count={frame_count})"
             )
 
-        want = 8 + 4 + 2 + 2 + int(frame_count) * 3 * 4
+        hdr = 16 if ver == 1 else (28 if ver == 2 else 32)
+        want = hdr + int(frame_count) * 3 * 4
+        if ver == 3:
+            guard_on_frame_count = struct.unpack_from("<H", buf, 28)[0]
+            want += int(guard_on_frame_count) * 3 * 4
         if len(buf) != want:
             raise ValueError(f"{p}: size mismatch (got {len(buf)}, want {want})")
 

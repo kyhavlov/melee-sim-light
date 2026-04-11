@@ -255,6 +255,10 @@ typedef struct MslStateSoA {
   uint16_t*
       guard_tilt_x8;     // mv.co.guard.x8 (frame-ish index; neutral is shield table neutral_frame)
   float* guard_tilt_x4;  // mv.co.guard.x4 (stick magnitude smoothing; 0..1)
+  // Runtime-only transient: set when enter_guard_on() runs during the current step so item
+  // projectile shield precedence can distinguish same-step GuardOn entry from teacher-forced
+  // frozen GuardOn seeds that merely replay as `animation_index==-1, action_frame==-1`.
+  uint8_t* guard_on_entered_this_frame;
   // GuardReflect reflect timer (decomp: mv.co.guard.x14; seed uses +1 bias, expires at 0).
   uint8_t* guard_reflect_timer_x14;  // [batch * players]
   // GuardReflect powershield-active timer (decomp: mv.co.guard.x18; +1 bias, expires at 0).

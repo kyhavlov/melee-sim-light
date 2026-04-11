@@ -27,6 +27,50 @@ _CASES = (
 
 
 @pytest.mark.integration
+def test_dash_full_shield_guardsetoff_hitlag_does_not_rehit_same_laser() -> None:
+    # Replay-real lock for the ongoing shield-hit continuation frame:
+    # - the prior Dash -> GuardOn family row already entered GuardSetOff and active shield hitlag,
+    # - the same live laser must not rehurt the same shield again on the next teacher-forced step,
+    # - item HitCapsule shield inserts own this continuation in vanilla; reseed must preserve it.
+    # refs/melee/src/melee/it/itcoll.c::it_8027146C
+    # refs/melee/src/melee/it/items/itfoxlaser.c::it_2725_Logic94_HitShield
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_rel = (
+        "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
+        "cardinal_1.0_recent/GracefulAttachedTurtle.msl"
+    )
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    record = 5281
+    row = ds.samples[record : record + 1]
+    seed = row["seed_t"][0]
+    ref = row["ref_t1"][0]
+
+    assert int(seed["action_id"][0]) == 181
+    assert int(seed["hitlag"][0]) > 0
+    assert int(seed["items"][0]["exists"]) == 1
+    assert int(ref["items"][0]["exists"]) == 1
+    assert float(ref["shield_hp"][0]) == pytest.approx(float(seed["shield_hp"][0]))
+
+    _seed_row, out_row, ref_row = _step_one_row(dataset_path, record)
+
+    for field in ("action_id", "action_frame", "animation_index", "hitlag", "hitstun"):
+        assert int(out_row[field][0]) == int(ref_row[field][0]), (
+            f"record={record} field={field} expected={int(ref_row[field][0])} got={int(out_row[field][0])}"
+        )
+    assert float(out_row["shield_hp"][0]) == pytest.approx(float(ref_row["shield_hp"][0]), abs=1e-3)
+    for field in ("exists", "type", "state", "owner", "instance_id"):
+        assert int(out_row["items"][0][field]) == int(ref_row["items"][0][field]), (
+            f"record={record} item field={field} expected={int(ref_row['items'][0][field])} "
+            f"got={int(out_row['items'][0][field])}"
+        )
+
+
+@pytest.mark.integration
 @pytest.mark.parametrize("case", _CASES, ids=lambda c: f"rec{c.record}")
 def test_dash_full_shield_guardon_family_rows(case: _Case) -> None:
     # Replay-real lock for the fresh Dash -> GuardOn full-shield snapshot suppression:

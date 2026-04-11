@@ -1342,6 +1342,53 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
       }
     }
 
+    // Seed bridge: item->shield hitlists on ongoing GuardSetOff hitlag.
+    //
+    // Decomp/runtime shape:
+    // - laser shield hits register the defender in the per-item HitCapsule victim ring with
+    //   insert type=shield on the collision frame, preventing the same live shot from rehitting
+    //   the same shield on the next callback pass while the item persists.
+    // - teacher-forced reseed does not currently serialize per-item hitlists, so an ongoing
+    //   GuardSetOff hitlag snapshot can incorrectly accept the same live laser again on t+1.
+    // refs/melee/src/melee/it/itcoll.c::it_8027146C
+    // refs/melee/src/melee/it/items/itfoxlaser.c::it_2725_Logic94_HitShield
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80092F2C
+    for (int victim = 0; victim < num_players; victim++) {
+      if (seed->hitlag[victim] == 0u) {
+        continue;
+      }
+      if (seed->action_id[victim] != (uint16_t)MSL_ACT_GUARD_SET_OFF) {
+        continue;
+      }
+      const size_t v_idx = msl_idx_player(bi, victim);
+      const uint16_t victim_iid = batch->state.instance_id[v_idx];
+      int candidate_item = -1;
+      for (int it = 0; it < MSL_MAX_ITEMS; it++) {
+        const size_t ii = msl_idx_item(bi, it);
+        if (!batch->state.item_exists[ii]) {
+          continue;
+        }
+        if (laser_params_for_item_type(batch->state.item_type[ii]) == NULL) {
+          continue;
+        }
+        // Narrow carry:
+        // - seed item->shield carry only when there is exactly one live laser candidate on the
+        //   ongoing GuardSetOff hitlag row,
+        // - if multiple live laser candidates exist, do not guess which one authored the prior
+        //   shield hit; leave that case to the normal runtime hitlist owner instead of suppressing
+        //   untouched shots.
+        if (candidate_item >= 0) {
+          candidate_item = -2;
+          break;
+        }
+        candidate_item = it;
+      }
+      if (candidate_item >= 0) {
+        hitlist_register_item_fighter(batch, bi, candidate_item, victim, victim_iid,
+                                      (int)MSL_LBCOLL_INSERT_FT_SHIELD, 0);
+      }
+    }
+
     // Next value for plStale_IncrementAttackInstance (global counter).
     uint16_t next = (uint16_t)(max_attack_inst + 1u);
     if (next == 0) {
