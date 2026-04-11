@@ -2528,6 +2528,32 @@ void locomotion_update_pre(MslBatch* batch) {
           continue;
         }
 
+        // Catch/CatchDash anim-end -> Wait grounded B-special bridge:
+        // - Catch/CatchDash_Anim can enter Wait before this frame's input callback dispatch.
+        // - Wait_IASA checks SpecialS -> SpecialHi -> SpecialN -> SpecialLw before Catch/Attacks.
+        // - Keep this narrow to Catch/CatchDash destination-Wait rows; the generic steady-state
+        //   Wait ordering is still triaged separately.
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::{
+        //   ftCo_Catch_Anim,ftCo_CatchDash_Anim
+        // }
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::{
+        //   ftCo_SpecialS_CheckInput,ftCo_Attack100_CheckInput,ftCo_800D6824,ftCo_800D68C0
+        // }
+        if ((batch->state.prev_action_id[idx] == (uint16_t)MSL_ACT_CATCH ||
+             batch->state.prev_action_id[idx] == (uint16_t)MSL_ACT_CATCH_DASH) &&
+            action_id == MSL_ACT_WAIT) {
+          if (blaster_try_enter_ground_from_iasa(batch, idx)) {
+            continue;
+          }
+          if (shine_char_supports_reflector(batch->state.char_id[idx]) &&
+              (buttons_pressed & (uint16_t)MSL_BUTTON_B) != 0u &&
+              stick_y <= -c->special_stick_y_threshold) {
+            shine_enter_ground_start_from_iasa(batch, idx);
+            continue;
+          }
+        }
+
         // Catch-before-guard bridge for grounded IASA owners that delegate into Wait ordering.
         //
         // Decomp:

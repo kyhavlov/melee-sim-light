@@ -30,6 +30,7 @@ FIXTURE_290 = Path(__file__).resolve().parents[1] / "tests/fixtures/modelplay/pu
 FIXTURE_320 = Path(__file__).resolve().parents[1] / "tests/fixtures/modelplay/puffer_5b_selfplay_input_prefix_0_320.json"
 FIXTURE_322 = Path(__file__).resolve().parents[1] / "tests/fixtures/modelplay/puffer_5b_selfplay_input_prefix_0_322.json"
 FIXTURE_342 = Path(__file__).resolve().parents[1] / "tests/fixtures/modelplay/puffer_5b_selfplay_input_prefix_0_342.json"
+FIXTURE_354 = Path(__file__).resolve().parents[1] / "tests/fixtures/modelplay/puffer_5b_selfplay_input_prefix_0_354.json"
 FIXTURE_SOURCE = "reports/modelplay/puffer_5b_selfplay_4stock_4min/trace.json"
 
 
@@ -404,3 +405,46 @@ def test_puffer_escape_end_wait_handoff_keeps_wait_iasa_attack_before_guard() ->
     rows = _run_prefix(FIXTURE_342, end_frame=342)
     assert int(rows[341]["action_id"][1]) == ACT_ESCAPE_N
     assert int(rows[342]["action_id"][1]) == ACT_ATTACK_HI4
+
+
+def test_puffer_catch_end_wait_handoff_keeps_wait_iasa_specialn_before_attacks() -> None:
+    # Regression target from the next puffer comparator owner:
+    # - frame 353 p0 is still on the final grounded Catch row,
+    # - frame 354 has fresh B plus a left c-stick smash edge on the Catch -> Wait handoff,
+    # - Wait_IASA checks Side/Up/Neutral-B before Catch/Attacks, so vanilla enters SpecialNStart.
+    #
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::{
+    #   ftCo_Catch_Anim,ftCo_CatchDash_Anim
+    # }
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::{
+    #   ftCo_SpecialS_CheckInput,ftCo_Attack100_CheckInput,ftCo_800D6824,ftCo_800D68C0
+    # }
+    rows = _run_prefix(FIXTURE_354, end_frame=354)
+    assert int(rows[353]["action_id"][0]) == ACT_CATCH
+    assert int(rows[354]["action_id"][0]) == ACT_FX_SPECIAL_N_START
+
+
+def test_puffer_catch_end_wait_handoff_without_b_falls_back_to_attacks4() -> None:
+    rows = _run_prefix(
+        FIXTURE_354,
+        end_frame=354,
+        override_frame=354,
+        override_player=0,
+        override_processed={
+            "a": True,
+            "b": False,
+            "x": False,
+            "y": False,
+            "z": False,
+            "lTriggerDigital": False,
+            "rTriggerDigital": False,
+            "start": False,
+            "joystickX": -0.19999998807907104,
+            "joystickY": -0.5,
+            "cStickX": -1.0,
+            "cStickY": 0.0,
+            "anyTrigger": 0.0,
+        },
+    )
+    assert int(rows[354]["action_id"][0]) == 60  # AttackS4S
