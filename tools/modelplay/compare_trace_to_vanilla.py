@@ -670,8 +670,12 @@ def parse_args() -> argparse.Namespace:
     ap.add_argument(
         "--input-raw-frame-offset",
         type=int,
-        default=-123,
-        help="raw_slippi_pre_frame = modelplay_frame + offset",
+        default=-122,
+        help=(
+            "raw_slippi_pre_frame = modelplay_frame + offset. Modelplay frames store the "
+            "input sample that produced the same indexed post-step state, so this normally "
+            "matches --compare-raw-frame-offset."
+        ),
     )
     ap.add_argument(
         "--compare-raw-frame-offset",
