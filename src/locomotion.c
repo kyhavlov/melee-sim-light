@@ -2406,11 +2406,6 @@ void locomotion_update_pre(MslBatch* batch) {
         guard_update_grounded(batch, c, idx, allow_guard_entry);
         action_id = batch->state.action_id[idx];
 
-        // Shield recharge after guard state updates/entry so we don't recharge on the same frame
-        // we begin shielding (decomp gates on `!fp->x221A_b7`, not on pre-entry action_id).
-        // refs/melee/src/melee/ft/fighter.c:2803-2812.
-        guard_update_shield_recharge(batch, c, idx);
-
         // Escape actions (from shield): friction + end->Wait.
         // If Escape ended this frame, allow the destination state's IASA to run in the same frame.
         // Decomp ordering: Anim callback can change motion state before the frame's input_cb dispatch.
@@ -3372,9 +3367,6 @@ void locomotion_update_pre(MslBatch* batch) {
 
         continue;
       }
-
-      // Air / non-ground: shield recharge can still occur (decomp checks shield-active flag, not ground/air).
-      guard_update_shield_recharge(batch, c, idx);
 
       if (spacie_specialhi_update(batch, idx, cid, ms, 0u)) {
         continue;

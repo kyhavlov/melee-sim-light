@@ -160,3 +160,38 @@ def test_guard_state_does_not_reenter_guard_reflect_on_lr_edge() -> None:
         assert int(got["action_id"][0]) == ACT_GUARD
     finally:
         msl_binding.destroy(handle)
+
+
+def test_active_guard_hitlag_does_not_recharge_shield() -> None:
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    compare_stride = int(sizes["compare"])
+
+    seed = _seed_base()
+    seed["action_id"][0, 0] = np.uint16(ACT_GUARD)
+    seed["action_frame"][0, 0] = np.int16(4)
+    seed["animation_index"][0, 0] = np.uint32(0xFFFFFFFF)
+    seed["anim_frame_f32"][0, 0] = np.float32(-1.0)
+    seed["hitlag"][0, 0] = np.uint8(3)
+    seed["shield_hp"][0, 0] = np.float32(55.0)
+    seed["state_flags"][0, 0, 2] = np.uint8(0x80)  # fp+0x221B isShieldActive
+
+    handle = msl_binding.init(batch_size=1, num_players=2)
+    try:
+        seed_bytes = seed.view(np.uint8).reshape((1, seed_stride))
+        out = np.zeros((1, compare_stride), dtype=np.uint8)
+        neutral = _mk_input_bytes(1, input_stride)
+
+        msl_binding.reseed_seed(handle, seed_bytes)
+        msl_binding.step_input(handle, neutral, neutral)
+        msl_binding.write_compare(handle, out)
+
+        got = out.view(COMPARE_DTYPE).reshape((1,))[0]
+        assert int(got["action_id"][0]) == ACT_GUARD
+        assert int(got["hitlag"][0]) == 2
+        assert float(got["shield_hp"][0]) == np.float32(55.0)
+    finally:
+        msl_binding.destroy(handle)

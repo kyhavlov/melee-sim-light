@@ -21,6 +21,7 @@ ACT_DASH = 20
 ACT_KNEE_BEND = 24
 ACT_SQUAT_WAIT = 40
 ACT_FX_SPECIAL_LW_START = 360
+ACT_FX_SPECIAL_AIR_LW_START = 365
 
 
 def _root() -> Path:
@@ -30,6 +31,13 @@ def _root() -> Path:
 def _load_trace_fixture() -> dict[str, Any]:
     fixture_path = _root() / "tests/fixtures/modelplay/rerun11_dash_kneebend_windows.json"
     return _load_fixture(fixture_path)
+
+
+def _load_rerun11_trace() -> dict[str, Any]:
+    trace_path = _root() / RERUN11
+    if not trace_path.exists():
+        pytest.skip(f"missing local trace: {RERUN11}")
+    return json.loads(trace_path.read_text(encoding="utf-8"))
 
 
 def _load_fixture(fixture_path: Path) -> dict[str, Any]:
@@ -545,3 +553,65 @@ def test_modelplay_rerun11_grounded_damage_wait_iasa_enters_guard_before_escape(
     assert int(out_320["action_frame"][1]) == 1
     assert int(out_320["on_ground"][1]) == 1
     assert float(out_320["pos_y"][1]) == pytest.approx(0.000100, abs=0.001)
+
+
+@pytest.mark.integration
+def test_modelplay_rerun11_shield_recharge_continues_through_air_shine_hitlag() -> None:
+    # Modelplay-vs-vanilla comparator lock:
+    # - after the grounded Damage_IASA / GuardOn owner fix, the next drift was p0 shield HP
+    #   freezing during aerial ReflectorStart hitlag.
+    # - Fighter_ProcessHit_8006D1EC owns shield recharge gated on `!fp->x221A_b7`, so once the
+    #   shield owner is inactive the recharge tick continues even if locomotion is skipped by hitlag.
+    # refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
+    _require_local_data_or_skip()
+    root = _root()
+    rel = (
+        "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
+        "AttachedGoodNaturedGuanaco.msl"
+    )
+    dataset_path = root / rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {rel}")
+    trace = _load_rerun11_trace()
+
+    binding = pytest.importorskip("msl_binding")
+    sizes = binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    compare_stride = int(sizes["compare"])
+
+    ds = read_dataset(str(dataset_path))
+    seed_bytes = np.frombuffer(ds.samples[0:1]["seed_t"].tobytes(order="C"), dtype=np.uint8).copy().reshape(
+        1, seed_stride
+    )
+    out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
+
+    history: dict[int, np.void] = {}
+    handle = binding.init(batch_size=1, num_players=2, ucf_enabled=1, ucf_cardinals_1_0_enabled=1)
+    try:
+        binding.reseed_seed(handle, seed_bytes)
+        prev_input = _input_bytes_from_trace_frame(trace["frames"][0], input_stride)
+        for frame_i in range(1, 342):
+            input_t = _input_bytes_from_trace_frame(trace["frames"][frame_i], input_stride)
+            binding.step_input(handle, prev_input, input_t)
+            if frame_i >= 337:
+                binding.write_compare(handle, out_compare_bytes)
+                history[frame_i] = out_compare_bytes.view(COMPARE_DTYPE).reshape(-1)[0].copy()
+            prev_input = input_t
+    finally:
+        binding.destroy(handle)
+
+    expected = {
+        337: (ACT_FX_SPECIAL_AIR_LW_START, 1, 4, 53.77002716064453),
+        338: (ACT_FX_SPECIAL_AIR_LW_START, 1, 3, 53.84002685546875),
+        339: (ACT_FX_SPECIAL_AIR_LW_START, 1, 2, 53.91002655029297),
+        340: (ACT_FX_SPECIAL_AIR_LW_START, 1, 1, 53.98002624511719),
+        341: (ACT_FX_SPECIAL_AIR_LW_START, 2, 0, 54.050025939941406),
+    }
+    for frame_i, (action_id, action_frame, hitlag, shield_hp) in expected.items():
+        out = history[frame_i]
+        assert int(out["action_id"][0]) == action_id
+        assert int(out["action_frame"][0]) == action_frame
+        assert int(out["hitlag"][0]) == hitlag
+        assert int(out["on_ground"][0]) == 0
+        assert float(out["shield_hp"][0]) == pytest.approx(shield_hp, abs=0.001)

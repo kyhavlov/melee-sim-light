@@ -602,16 +602,12 @@ void guard_update_shield_recharge(MslBatch* batch, const MslCommonParams* c, siz
     return;
   }
 
-  // Decomp:
-  // if (!fp->x221A_b7) {
-  //   if (fp->shield_health < p_ftCommonData->x260_startShieldHealth) {
-  //     fp->shield_health += p_ftCommonData->x27C;
-  //     fp->shield_health = min(fp->shield_health, p_ftCommonData->x260_startShieldHealth);
-  //   }
-  // }
-  // refs/melee/src/melee/ft/fighter.c:2804-2811.
+  // Shield recharge owner:
+  // - Fighter_ProcessHit_8006D1EC runs:
+  //     if (!fp->x221A_b7 && fp->shield_health < start) fp->shield_health += x27C;
+  // - The gate is `!fp->x221A_b7` (shield inactive), not a locomotion-state family test.
+  // refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
   //
-  // Decomp gating is on `!fp->x221A_b7` (shield active), *not* on motion state alone.
   // Empirically (and in replays), shield recharge can happen during GuardOff.
   //
   // Minimal sim approximation: block recharge only during states where the shield bubble is active.
@@ -629,6 +625,21 @@ void guard_update_shield_recharge(MslBatch* batch, const MslCommonParams* c, siz
       hp = c->start_shield_health;
     }
     batch->state.shield_hp[idx] = hp;
+  }
+}
+
+static inline void action_update_shield_recharge_post_state(MslBatch* batch,
+                                                            const MslCommonParams* c) {
+  if (batch == NULL || c == NULL) {
+    return;
+  }
+
+  const int num_players = (int)batch->config.num_players;
+  for (int bi = 0; bi < batch->batch_size; bi++) {
+    for (int p = 0; p < num_players; p++) {
+      const size_t idx = msl_idx_player(bi, p);
+      guard_update_shield_recharge(batch, c, idx);
+    }
   }
 }
 
@@ -1183,6 +1194,7 @@ void action_update_anim_callbacks_pre_input(MslBatch* batch) {
 }
 
 void action_update(MslBatch* batch) {
+  const MslCommonParams* c = msl_common_params();
   // Grab/throw Anim-callback-shaped transitions should happen before the grounded locomotion IASA
   // chain (including shield entry). Example: Catch/CatchDash Anim end -> Wait (ft_8008A2BC) should
   // run before the next state's guard entry check (ftCo_80091A4C) so buffered shields can block
@@ -1202,4 +1214,9 @@ void action_update(MslBatch* batch) {
   // intentionally Neutral/Side/Up-only and relies on this ordering.
   shine_update_pre_physics(batch);
   blaster_update_pre_physics(batch);
+  // Shield recharge is owned by Fighter_ProcessHit_8006D1EC under the `!fp->x221A_b7` gate, not
+  // by locomotion. Run it after the frame's state-entry callbacks so the gate observes the current
+  // state (for example SpecialLwStart after a shine entry), and do not suppress it during hitlag.
+  // refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
+  action_update_shield_recharge_post_state(batch, c);
 }
