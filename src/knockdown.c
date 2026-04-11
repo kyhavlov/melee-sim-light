@@ -15,6 +15,7 @@
 #include "common_params.h"
 #include "input_axis.h"
 #include "jump_input.h"
+#include "locomotion.h"
 #include "msl_math.h"
 #include "stage_collision.h"
 #include "state_flags.h"
@@ -343,6 +344,60 @@ static inline uint8_t damage_ground_try_enter_kneebend_from_wait_iasa(MslBatch* 
   msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
   batch->state.kneebend_jump_input[idx] = jump_input;
   batch->state.kneebend_is_short_hop[idx] = 0u;
+  return 1u;
+}
+
+static inline uint8_t damage_ground_try_enter_guard_from_wait_iasa(MslBatch* batch,
+                                                                   const MslCommonParams* c,
+                                                                   size_t idx) {
+  if (batch == NULL || c == NULL) {
+    return 0u;
+  }
+  const uint16_t buttons = batch->state.input_buttons[idx];
+  if ((buttons & (uint16_t)MSL_BUTTON_Z) == 0u) {
+    return 0u;
+  }
+  if (!(batch->state.shield_hp[idx] > 0.0f)) {
+    return 0u;
+  }
+  // Grounded Damage_IASA parity subset:
+  // - ftCo_Damage_IASA delegates to Wait_IASA on ground when !x221C_b6.
+  // - This narrowed simulator subset does not model Wait_IASA's earlier attack/grab ownership
+  //   lanes, but grounded damage still needs the Z-mapped shield-hold lane to flow into
+  //   `ftCo_80091A4C` and enter GuardOn on the same frame when those earlier owners do not
+  //   consume.
+  // - Keep that bridge local to grounded Damage_IASA so general locomotion guard ownership stays
+  //   on the existing LR/trigger path.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_IASA
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_80091A4C,ftCo_800923B4}
+  batch->state.action_id[idx] = (uint16_t)MSL_ACT_GUARD_ON;
+  batch->state.animation_index[idx] = 0xFFFFFFFFu;
+  // GuardOn entry helper shape:
+  // - ftCo_80091A4C -> ftCo_800923B4 -> ftCo_800924C0
+  // - ftCo_800924C0 calls ftAnim_8006EBA4 immediately and leaves GuardOn on the no-submotion
+  //   Slippi snapshot shape (animation_index=-1, action_frame/state_age=-1).
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_80091A4C,ftCo_800923B4,ftCo_800924C0}
+  // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
+  msl_anim_timebase_enter_with_policy(batch, idx, 0.0f, 1.0f, MSL_ANIM_ENTER_TICK_IMMEDIATE);
+  msl_anim_timebase_seed(batch, idx, -1.0f,
+                         msl_f32_from_q16_16(batch->state.frame_speed_mul_fp_q16_16[idx]));
+  enum { MSL_STATE_FLAGS_221C_INDEX = 3 };
+  enum { MSL_STATE_FLAG_221C_B3 = 0x10 };
+  enum { MSL_STATE_FLAG_221C_B1 = 0x40 };
+  enum { MSL_STATE_FLAG_221C_B2 = 0x20 };
+  const size_t flags_i = idx * (size_t)MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_221C_INDEX;
+  batch->state.state_flags[flags_i] &= (uint8_t) ~(
+      uint8_t)(MSL_STATE_FLAG_221C_B3 | MSL_STATE_FLAG_221C_B1 | MSL_STATE_FLAG_221C_B2);
+  batch->state.guard_release_latched_xc[idx] = 0;
+  {
+    uint16_t t = (uint16_t)c->guard_x10_init_frames;
+    if (t > 255u) {
+      t = 255u;
+    }
+    batch->state.guard_x10[idx] = (uint8_t)t;
+  }
+  batch->state.lightshield_amount[idx] = 0.0f;
   return 1u;
 }
 
@@ -1007,10 +1062,26 @@ void knockdown_update_pre_physics(MslBatch* batch) {
 
         if (!iasa_locked) {
           // Damage_IASA grounded path delegates to Wait_IASA when x221C_b6 is clear.
-          // Keep the grounded subset in decomp order: guard ownership first, then the Wait IASA
-          // locomotion chain (jump, dash, squat, turn, walk).
+          // Keep the grounded subset in decomp order: grounded A-attacks first, then guard
+          // ownership, then the later Wait IASA locomotion chain (jump, dash, squat, turn, walk).
           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_IASA
           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
+          const uint16_t buttons_pressed = batch->state.input_buttons_pressed[idx];
+          const float stick_x = apply_deadzone(stick_i8_to_unit(batch->state.input_main_x[idx]),
+                                               c->lstick_deadzone_x);
+          const float stick_y = apply_deadzone(stick_i8_to_unit(batch->state.input_main_y[idx]),
+                                               c->lstick_deadzone_y);
+          const uint8_t tilt_timer_x = batch->state.tilt_timer_x[idx];
+          const uint8_t tilt_timer_y = batch->state.tilt_timer_y[idx];
+          const float facing_dir = batch->state.facing[idx] ? 1.0f : -1.0f;
+          if (locomotion_grounded_a_attack_try_enter_from_wait_iasa(batch, c, idx, buttons_pressed,
+                                                                    stick_x, stick_y, tilt_timer_x,
+                                                                    tilt_timer_y, facing_dir)) {
+            continue;
+          }
+          if (damage_ground_try_enter_guard_from_wait_iasa(batch, c, idx)) {
+            continue;
+          }
           guard_update_grounded(batch, c, idx, 1);
           if (batch->state.action_id[idx] != a0) {
             continue;

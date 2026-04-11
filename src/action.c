@@ -758,11 +758,15 @@ void guard_update_grounded(MslBatch* batch, const MslCommonParams* c, size_t idx
       // not consume the same input again in that frame.
       // refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate
       // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_80091A4C,ftCo_800924C0,ftCo_GuardOn_IASA}
-      // Scope gate: ftCo_80091A4C checks HSD_PAD_LR (digital hold) before GuardOn entry.
-      // GuardOn entry from a non-shield owner has already consumed this frame's callback lane,
-      // so suppress immediate re-consume regardless of jump-button edge source.
+      // Scope gate: GuardOn entry from a non-shield owner has already consumed this frame's
+      // callback lane, so suppress immediate re-consume regardless of jump-button edge source.
+      //
+      // This now also covers the grounded Damage_IASA Z-bridge in src/knockdown.c; keeping the
+      // broader fresh-entry suppression is decomp-shaped once the earlier Wait_IASA attack owners
+      // are modeled ahead of guard in that grounded damage subset.
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_IASA
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
       (a0 == (uint16_t)MSL_ACT_GUARD_ON && batch->state.action_frame[idx] < 0 &&
-       (batch->state.input_buttons[idx] & (uint16_t)LR) != 0u &&
        batch->state.animation_index[idx] == 0xFFFFFFFFu &&
        !is_shield_active_action(batch->state.prev_action_id[idx]))
           ? 1u

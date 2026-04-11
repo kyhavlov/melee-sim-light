@@ -67,6 +67,14 @@ class _DamageGroundWaitIasaCase:
             expected_animation_index=10,  # ftCo_SM_Turn
             note="DamageN2 grounded Wait_IASA turn branch",
         ),
+        _DamageGroundWaitIasaCase(
+            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/TreasuredBackKangaroo.msl",
+            record=5068,
+            player=0,
+            expected_action_id=64,  # AttackLw4
+            expected_animation_index=67,  # ftCo_SM_AttackLw4
+            note="DamageHi3 grounded Wait_IASA keeps earlier grounded A-attack ownership before guard",
+        ),
     ],
 )
 def test_damage_ground_wait_iasa_replay_real_transition_locks(case: _DamageGroundWaitIasaCase) -> None:
@@ -96,7 +104,7 @@ def test_damage_ground_wait_iasa_replay_real_transition_locks(case: _DamageGroun
 
     assert int(seed["on_ground"][0, p]) == 1, case.note
     assert int(seed["hitlag"][0, p]) == 0, case.note
-    assert int(seed["action_id"][0, p]) in (75, 78, 79), case.note  # DamageHi1 / DamageN1 / DamageN2
+    assert int(seed["action_id"][0, p]) in (75, 77, 78, 79), case.note  # DamageHi1 / DamageHi3 / DamageN1 / DamageN2
     if record == 4436:
         assert int(row["input_t"][0]["p"]["buttons"][p]) == 0x0200, case.note
         assert int(row["input_t"][0]["p"]["main_x"][p]) == 0, case.note

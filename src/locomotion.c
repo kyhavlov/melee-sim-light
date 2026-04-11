@@ -956,6 +956,16 @@ static inline uint8_t grounded_a_attack_try_enter_from_iasa(
   return 1;
 }
 
+uint8_t locomotion_grounded_a_attack_try_enter_from_wait_iasa(
+    MslBatch* batch, const MslCommonParams* c, size_t idx, uint16_t buttons_pressed, float stick_x,
+    float stick_y, uint8_t tilt_timer_x, uint8_t tilt_timer_y, float facing_dir) {
+  // Wait_IASA attack owner subset shared by other grounded callback bridges:
+  // - ftCo_Wait_IASA checks smashes/tilts/jab before guard/jump/dash/squat/turn/walk.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
+  return grounded_a_attack_try_enter_from_iasa(batch, c, idx, buttons_pressed, stick_x, stick_y,
+                                               tilt_timer_x, tilt_timer_y, facing_dir, 0u, 1u);
+}
+
 static inline uint8_t grounded_attack_update(MslBatch* batch, const MslCommonParams* c, size_t idx,
                                              uint8_t char_id, float stick_x, float stick_y,
                                              uint8_t tilt_timer_x, float facing_dir) {
