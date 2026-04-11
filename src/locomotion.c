@@ -8,6 +8,7 @@
 #include "anim_frame.h"
 #include "anim_timebase.h"
 #include "anim_table.h"
+#include "blaster.h"
 #include "buttons.h"
 #include "char_params.h"
 #include "coll_env_flags.h"
@@ -957,9 +958,24 @@ static inline uint8_t grounded_a_attack_try_enter_from_iasa(
 uint8_t locomotion_grounded_a_attack_try_enter_from_wait_iasa(
     MslBatch* batch, const MslCommonParams* c, size_t idx, uint16_t buttons_pressed, float stick_x,
     float stick_y, uint8_t tilt_timer_x, uint8_t tilt_timer_y, float facing_dir) {
-  // Wait_IASA attack owner subset shared by other grounded callback bridges:
-  // - ftCo_Wait_IASA checks smashes/tilts/jab before guard/jump/dash/squat/turn/walk.
+  // Wait_IASA grounded special/attack subset shared by other grounded callback bridges:
+  // - ftCo_Wait_IASA checks SpecialS -> SpecialHi -> SpecialN -> SpecialLw before Catch/Attacks.
+  // - Then Wait_IASA checks smashes/tilts/jab before guard/jump/dash/squat/turn/walk.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::{
+  //   ftCo_SpecialS_CheckInput,ftCo_Attack100_CheckInput,ftCo_800D6824,ftCo_800D68C0
+  // }
+  if (blaster_try_enter_ground_from_iasa(batch, idx)) {
+    return 1u;
+  }
+
+  if (batch != NULL && c != NULL && shine_char_supports_reflector(batch->state.char_id[idx]) &&
+      (buttons_pressed & (uint16_t)MSL_BUTTON_B) != 0u &&
+      stick_y <= -c->special_stick_y_threshold) {
+    shine_enter_ground_start_from_iasa(batch, idx);
+    return 1u;
+  }
+
   return grounded_a_attack_try_enter_from_iasa(batch, c, idx, buttons_pressed, stick_x, stick_y,
                                                tilt_timer_x, tilt_timer_y, facing_dir, 0u, 1u);
 }
@@ -1029,7 +1045,21 @@ static inline uint8_t grounded_attack_try_iasa_subset(MslBatch* batch, const Msl
   // refs/melee/src/melee/ft/chara/ftCommon/{ftCo_AttackDash.c,ftCo_AttackS3.c,ftCo_AttackHi3.c,ftCo_AttackHi4.c,ftCo_AttackLw4.c}
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
   //
-  // Current sim scope: grounded locomotion subset (attacks/jump/squat/dash/turn/walk) only.
+  // Current sim scope:
+  // - grounded spacie B-special subset (Side/Up/Neutral) via blaster.c,
+  // - grounded reflector via shine.c,
+  // - then grounded locomotion subset (attacks/jump/squat/dash/turn/walk).
+  if (blaster_try_enter_ground_from_iasa(batch, idx)) {
+    return 1u;
+  }
+
+  if (shine_char_supports_reflector(batch->state.char_id[idx]) &&
+      (buttons_pressed & (uint16_t)MSL_BUTTON_B) != 0u &&
+      stick_y <= -c->special_stick_y_threshold) {
+    shine_enter_ground_start_from_iasa(batch, idx);
+    return 1u;
+  }
+
   if (grounded_a_attack_try_enter_from_iasa(batch, c, idx, buttons_pressed, stick_x, stick_y,
                                             tilt_timer_x, tilt_timer_y, facing_dir, 0, 1)) {
     return 1u;

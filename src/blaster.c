@@ -241,6 +241,61 @@ static inline void enter_specialhi_hold(MslBatch* batch, size_t idx, const MslSp
   msl_anim_timebase_defer_tick_once(batch, idx);
 }
 
+uint8_t blaster_try_enter_ground_from_iasa(MslBatch* batch, size_t idx) {
+  if (batch == NULL) {
+    return 0u;
+  }
+  const uint8_t cid = batch->state.char_id[idx];
+  if (!is_fox_falco(cid) || batch->state.on_ground[idx] == 0u) {
+    return 0u;
+  }
+
+  const uint16_t pressed = batch->state.input_buttons_pressed[idx];
+  if ((pressed & (uint16_t)MSL_BUTTON_B) == 0u) {
+    return 0u;
+  }
+
+  const MslCommonParams* c = msl_common_params();
+  const MslSpecialMsids* ms = msl_special_msids(cid);
+  const MslLaserParams* lp = laser_params_get(cid);
+  if (c == NULL || ms == NULL) {
+    return 0u;
+  }
+
+  const float stick_x =
+      apply_deadzone(stick_i8_to_unit(batch->state.input_main_x[idx]), c->lstick_deadzone_x);
+  const float stick_y =
+      apply_deadzone(stick_i8_to_unit(batch->state.input_main_y[idx]), c->lstick_deadzone_y);
+
+  // Decomp ordering for grounded states delegating into Wait_IASA:
+  // - Wait_IASA checks SpecialS -> SpecialHi -> SpecialN -> SpecialLw before Catch/Attacks.
+  // - This helper intentionally claims only the Side/Up/Neutral B-special subset; grounded
+  //   reflector entry remains owned by shine.c so the caller can preserve SpecialLw after
+  //   Neutral-B in the same order as ftCo_Wait_IASA.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::{
+  //   ftCo_SpecialS_CheckInput,ftCo_Attack100_CheckInput,ftCo_800D6824,ftCo_800D68C0
+  // }
+  const MslSpacieBSpecialKind kind = resolve_spacie_b_special_kind(c, 1u, stick_x, stick_y);
+  switch (kind) {
+    case MSL_SPACIE_B_SPECIAL_SIDE:
+      enter_side_special_start(batch, idx, c, ms, 1u, stick_x);
+      return 1u;
+    case MSL_SPACIE_B_SPECIAL_UP:
+      enter_specialhi_hold(batch, idx, ms, 1u);
+      return 1u;
+    case MSL_SPACIE_B_SPECIAL_NEUTRAL:
+      if (lp != NULL) {
+        enter_blaster_start(batch, idx, lp, 1u);
+        return 1u;
+      }
+      return 0u;
+    case MSL_SPACIE_B_SPECIAL_NONE:
+    default:
+      return 0u;
+  }
+}
+
 static inline uint8_t anim_finished(uint8_t char_id, uint16_t msid, float anim_frame_f32) {
   const float end = msl_anim_end_frame(char_id, msid);
   if (!(end > 0.0f)) {
