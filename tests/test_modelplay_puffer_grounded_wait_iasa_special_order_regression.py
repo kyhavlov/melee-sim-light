@@ -14,6 +14,7 @@ ACT_ATTACK_HI4 = 0x003F
 ACT_ATTACK_LW4 = 0x0040
 ACT_CATCH = 0x00D4
 ACT_ESCAPE_N = 0x00EB
+ACT_KNEE_BEND = 0x0018
 ACT_FX_SPECIAL_N_START = 0x0155
 ACT_FX_SPECIAL_HI_HOLD = 0x0161
 ACT_FX_SPECIAL_HI = 0x0163
@@ -27,6 +28,7 @@ FIXTURE_260 = Path(__file__).resolve().parents[1] / "tests/fixtures/modelplay/pu
 FIXTURE_280 = Path(__file__).resolve().parents[1] / "tests/fixtures/modelplay/puffer_5b_selfplay_input_prefix_0_280.json"
 FIXTURE_290 = Path(__file__).resolve().parents[1] / "tests/fixtures/modelplay/puffer_5b_selfplay_input_prefix_0_290.json"
 FIXTURE_320 = Path(__file__).resolve().parents[1] / "tests/fixtures/modelplay/puffer_5b_selfplay_input_prefix_0_320.json"
+FIXTURE_322 = Path(__file__).resolve().parents[1] / "tests/fixtures/modelplay/puffer_5b_selfplay_input_prefix_0_322.json"
 FIXTURE_SOURCE = "reports/modelplay/puffer_5b_selfplay_4stock_4min/trace.json"
 
 
@@ -362,3 +364,23 @@ def test_puffer_catch_end_guardon_can_spotdodge_same_frame() -> None:
     rows = _run_prefix(FIXTURE_320, end_frame=320)
     assert int(rows[319]["action_id"][1]) == ACT_CATCH
     assert int(rows[320]["action_id"][1]) == ACT_ESCAPE_N
+
+
+def test_puffer_guard_jump_oos_does_not_rerun_kneebend_iasa_same_frame() -> None:
+    # Regression target from the next puffer comparator owner:
+    # - raw 199 enters GuardOn from a grounded owner,
+    # - raw 200 has fresh jump-out-of-shield input plus up-smash c-stick,
+    # - GuardOn_IASA enters KneeBend through ftCo_800CB024,
+    # - that fresh shield-origin KneeBend row must not also rerun KneeBend_IASA in the same frame.
+    #
+    # Vanilla therefore ends the row in KneeBend, and only later rows may consume KneeBend IASA
+    # follow-ups such as Catch or AttackHi4.
+    #
+    # refs/melee/src/melee/ft/fighter.c::{Fighter_procUpdate,Fighter_procInterrupt}
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_GuardOn_IASA
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c::ftCo_800CB024
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_KneeBend.c::ftCo_KneeBend_IASA
+    rows = _run_prefix(FIXTURE_322, end_frame=322)
+    assert int(rows[321]["action_id"][0]) == 178  # GuardOn
+    assert int(rows[322]["action_id"][0]) == ACT_KNEE_BEND
+    assert float(rows[322]["shield_hp"][0]) == pytest.approx(60.0, abs=1e-6)

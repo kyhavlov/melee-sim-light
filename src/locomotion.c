@@ -1905,6 +1905,10 @@ void locomotion_update_pre(MslBatch* batch) {
       float facing_dir;
       uint16_t action_id;
       uint8_t turn_just_turned = 0;
+      const float shield_hp_start = batch->state.shield_hp[idx];
+      const float lightshield_amount_start = batch->state.lightshield_amount[idx];
+      const uint8_t guard_x10_start = batch->state.guard_x10[idx];
+      uint8_t guard_on_no_submotion_snapshot_start = 0u;
 
       stick_x =
           apply_deadzone(stick_i8_to_unit(batch->state.input_main_x[idx]), c->lstick_deadzone_x);
@@ -1925,6 +1929,23 @@ void locomotion_update_pre(MslBatch* batch) {
 
       action_id = batch->state.action_id[idx];
       const uint16_t action_id_start = action_id;
+      guard_on_no_submotion_snapshot_start =
+          // Snapshot-shaped GuardOn handoffs:
+          // - destination GuardOn rows from grounded callback bridges can carry
+          //   (action_frame<0, animation_index=-1, anim_frame<0) before the first true GuardOn_Anim
+          //   tick owns shield drain / x10 decrement.
+          // - If GuardOn_IASA immediately hands that row off into KneeBend, preserve the shield
+          //   snapshot fields from the frame start; the first real GuardOn_Anim tick never ran.
+          // refs/melee/src/melee/ft/fighter.c::{Fighter_procUpdate,Fighter_procInterrupt}
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
+          //   ftCo_GuardOn_Anim,ftCo_800925A4,ftCo_GuardOn_IASA
+          // }
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c::ftCo_800CB024
+          (action_id == (uint16_t)MSL_ACT_GUARD_ON && batch->state.action_frame[idx] < 0 &&
+           batch->state.animation_index[idx] == 0xFFFFFFFFu &&
+           batch->state.anim_frame_f32[idx] < 0.0f)
+              ? 1u
+              : 0u;
 
       // Deferred throw-release bridge guard:
       // - In this sim, throw release detaches the victim and installs a temporary FALL bridge, then
@@ -3361,6 +3382,34 @@ void locomotion_update_pre(MslBatch* batch) {
               (batch->state.action_frame[idx] >= (int16_t)ch->jump_startup_frames) ? 1u : 0u;
           const uint8_t opponent_active_catch_window =
               locomotion_has_opponent_active_catch_connect_window(batch, bi, p, num_players);
+          const uint8_t kneebend_fresh_entry_from_shield_iasa =
+              // Callback-order owner:
+              // - GuardOn/Guard/GuardReflect/GuardOff IASA can enter KneeBend through
+              //   ftCo_800CB024 during this frame's input callback.
+              // - Fighter proc only dispatches one input callback per fighter per frame, so a fresh
+              //   shield-origin KneeBend row must not immediately rerun KneeBend_IASA in the same
+              //   step; its Catch/AttackHi4/ShortHop checks begin on the next frame.
+              // refs/melee/src/melee/ft/fighter.c::{Fighter_procUpdate,Fighter_procInterrupt}
+              // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
+              //   ftCo_GuardOn_IASA,ftCo_Guard_IASA,ftCo_GuardReflect_IASA,ftCo_GuardOff_IASA
+              // }
+              // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c::ftCo_800CB024
+              // refs/melee/src/melee/ft/chara/ftCommon/ftCo_KneeBend.c::ftCo_KneeBend_IASA
+              (batch->state.action_frame[idx] == 0 &&
+               (action_id_start == (uint16_t)MSL_ACT_GUARD_ON ||
+                action_id_start == (uint16_t)MSL_ACT_GUARD ||
+                action_id_start == (uint16_t)MSL_ACT_GUARD_REFLECT ||
+                action_id_start == (uint16_t)MSL_ACT_GUARD_OFF))
+                  ? 1u
+                  : 0u;
+
+          if (kneebend_fresh_entry_from_shield_iasa && guard_on_no_submotion_snapshot_start &&
+              grounded_attack_submotion_from_action(
+                  batch->state.guard_entry_source_action_id[idx]) != 0xFFFFFFFFu) {
+            batch->state.shield_hp[idx] = shield_hp_start;
+            batch->state.lightshield_amount[idx] = lightshield_amount_start;
+            batch->state.guard_x10[idx] = guard_x10_start;
+          }
 
           // KneeBend IASA catch check (JC grab) before the jump transition.
           //
@@ -3372,7 +3421,8 @@ void locomotion_update_pre(MslBatch* batch) {
           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_KneeBend.c::{
           //   ftCo_KneeBend_Anim,ftCo_KneeBend_IASA
           // }
-          if (!startup_complete || opponent_active_catch_window) {
+          if (!kneebend_fresh_entry_from_shield_iasa &&
+              (!startup_complete || opponent_active_catch_window)) {
             if (grab_flow_try_enter_catch_from_iasa(batch, c, idx)) {
               continue;
             }
@@ -3383,7 +3433,7 @@ void locomotion_update_pre(MslBatch* batch) {
 
           // Latch short hop state (ftCo_KneeBend_Check_ShortHop).
           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_KneeBend.c:46
-          if (!batch->state.kneebend_is_short_hop[idx]) {
+          if (!kneebend_fresh_entry_from_shield_iasa && !batch->state.kneebend_is_short_hop[idx]) {
             const uint8_t j_in = batch->state.kneebend_jump_input[idx];
             if (j_in == (uint8_t)MSL_JUMP_INPUT_XY) {
               if (!(buttons & (uint16_t)MSL_BUTTON_XY)) {

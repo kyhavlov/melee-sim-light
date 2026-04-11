@@ -458,6 +458,7 @@ static inline void enter_guard_on(MslBatch* batch, const MslCommonParams* c, siz
   batch->state.state_flags[flags_i] &= (uint8_t) ~(
       uint8_t)(MSL_STATE_FLAG_221C_B3 | MSL_STATE_FLAG_221C_B1 | MSL_STATE_FLAG_221C_B2);
   batch->state.guard_on_entered_this_frame[idx] = 1u;
+  batch->state.guard_entry_source_action_id[idx] = batch->state.prev_action_id[idx];
   batch->state.guard_release_latched_xc[idx] = 0;
   batch->state.guard_x10[idx] = guard_x10_init_u8(c);
   batch->state.lightshield_amount[idx] = 0.0f;
