@@ -51,6 +51,7 @@ def test_dataset_seeds_instance_id_x2073_and_reseed_respects_it() -> None:
             ("turn_frames_to_turn", ("u1", (MAX_PLAYERS,))),
             ("turn_has_turned", ("u1", (MAX_PLAYERS,))),
             ("guard_reflect_timer_x14", ("u1", (MAX_PLAYERS,))),
+            ("entry_end_fall_lock", ("u1", (MAX_PLAYERS,))),
             ("attack_id", ("<u2", (MAX_PLAYERS,))),
             ("attack_instance", ("<u2", (MAX_PLAYERS,))),
             ("attack_identity_last_action_id", ("<u2", (MAX_PLAYERS,))),
@@ -58,8 +59,8 @@ def test_dataset_seeds_instance_id_x2073_and_reseed_respects_it() -> None:
             ("instance_id_x2073", ("u1", (MAX_PLAYERS,))),
             ("instance_identity_last_action_id", ("<u2", (MAX_PLAYERS,))),
             ("instance_id_counter", "<u2"),
-        ("throw_pulse_consumed", ("u1", (MAX_PLAYERS,))),
-        ("throw_pulse_crossed_prev_frame", ("u1", (MAX_PLAYERS,))),
+            ("throw_pulse_consumed", ("u1", (MAX_PLAYERS,))),
+            ("throw_pulse_crossed_prev_frame", ("u1", (MAX_PLAYERS,))),
         ],
         align=False,
     )
