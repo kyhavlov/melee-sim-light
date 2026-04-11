@@ -68,6 +68,11 @@ void guard_update_grounded(MslBatch* batch, const MslCommonParams* c, size_t idx
 // Returns 1 if an escape action was entered.
 uint8_t escape_try_enter_from_guard(MslBatch* batch, const MslCommonParams* c, size_t idx);
 
+// Spotdodge-only guard IASA helper used by GuardOn/Guard/GuardOff and narrow destination-state
+// callback bridges that only need the EscapeN branch.
+uint8_t escape_try_enter_spotdodge_from_guard(MslBatch* batch, const MslCommonParams* c,
+                                              size_t idx);
+
 // Per-frame grounded escape update (friction + anim-end return-to-Wait).
 void escape_update_grounded(MslBatch* batch, const MslCommonParams* c, const MslCharParams* ch,
                             size_t idx);

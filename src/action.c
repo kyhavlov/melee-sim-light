@@ -172,8 +172,8 @@ static inline uint8_t escape_try_enter_spotdodge_from_guard_y(MslBatch* batch,
   return 1;
 }
 
-static inline uint8_t escape_try_enter_spotdodge_from_guard(MslBatch* batch,
-                                                            const MslCommonParams* c, size_t idx) {
+uint8_t escape_try_enter_spotdodge_from_guard(MslBatch* batch, const MslCommonParams* c,
+                                              size_t idx) {
   if (batch == NULL || c == NULL) {
     return 0;
   }

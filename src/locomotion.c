@@ -2552,6 +2552,28 @@ void locomotion_update_pre(MslBatch* batch) {
         guard_update_grounded(batch, c, idx, allow_guard_entry);
         action_id = batch->state.action_id[idx];
 
+        // Catch/CatchDash anim-end callback bridge:
+        // - Catch/CatchDash_Anim can enter Wait before this frame's input callback dispatch.
+        // - Wait_IASA can then enter GuardOn on the same destination row.
+        // - Vanilla can still consume GuardOn_IASA spotdodge ownership immediately after that
+        //   GuardOn enter (for example Catch -> Wait -> GuardOn -> EscapeN on one frame).
+        // Keep this bridge narrow to Catch/CatchDash-start rows so the broader fresh-GuardOn
+        // suppression in action.c remains intact for other non-shield owners, and only preserve
+        // the EscapeN branch needed by the observed owner.
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::{
+        //   ftCo_Catch_Anim,ftCo_CatchDash_Anim
+        // }
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
+        //   ftCo_800923B4,ftCo_GuardOn_IASA
+        // }
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Escape.c::ftCo_8009980C
+        if ((batch->state.prev_action_id[idx] == (uint16_t)MSL_ACT_CATCH ||
+             batch->state.prev_action_id[idx] == (uint16_t)MSL_ACT_CATCH_DASH) &&
+            action_id == MSL_ACT_GUARD_ON && escape_try_enter_spotdodge_from_guard(batch, c, idx)) {
+          continue;
+        }
+
         // Escape actions (from shield): friction + end->Wait.
         // If Escape ended this frame, allow the destination state's IASA to run in the same frame.
         // Decomp ordering: Anim callback can change motion state before the frame's input_cb dispatch.

@@ -13,6 +13,7 @@ from tools.modelplay.sim_env import CHAR_FOX, SIM_INIT_OPENING_FRAME_ID, build_m
 ACT_ATTACK_HI4 = 0x003F
 ACT_ATTACK_LW4 = 0x0040
 ACT_CATCH = 0x00D4
+ACT_ESCAPE_N = 0x00EB
 ACT_FX_SPECIAL_N_START = 0x0155
 ACT_FX_SPECIAL_HI_HOLD = 0x0161
 ACT_FX_SPECIAL_HI = 0x0163
@@ -25,6 +26,7 @@ FIXTURE_240 = Path(__file__).resolve().parents[1] / "tests/fixtures/modelplay/pu
 FIXTURE_260 = Path(__file__).resolve().parents[1] / "tests/fixtures/modelplay/puffer_5b_selfplay_input_prefix_0_260.json"
 FIXTURE_280 = Path(__file__).resolve().parents[1] / "tests/fixtures/modelplay/puffer_5b_selfplay_input_prefix_0_280.json"
 FIXTURE_290 = Path(__file__).resolve().parents[1] / "tests/fixtures/modelplay/puffer_5b_selfplay_input_prefix_0_290.json"
+FIXTURE_320 = Path(__file__).resolve().parents[1] / "tests/fixtures/modelplay/puffer_5b_selfplay_input_prefix_0_320.json"
 FIXTURE_SOURCE = "reports/modelplay/puffer_5b_selfplay_4stock_4min/trace.json"
 
 
@@ -340,3 +342,23 @@ def test_puffer_catch_anim_end_wait_handoff_keeps_wait_iasa_catch() -> None:
     rows = _run_prefix(FIXTURE_290, end_frame=290)
     assert int(rows[289]["action_id"][1]) == ACT_CATCH
     assert int(rows[290]["action_id"][1]) == ACT_CATCH
+
+
+def test_puffer_catch_end_guardon_can_spotdodge_same_frame() -> None:
+    # Regression target from the next puffer comparator owner:
+    # - frame 319 p1 is still in Catch on its final grounded frame,
+    # - frame 320 has held shield plus downward spotdodge intent,
+    # - vanilla consumes Catch_Anim -> Wait, then Wait_IASA -> GuardOn, then GuardOn_IASA ->
+    #   EscapeN on the same row.
+    #
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::{
+    #   ftCo_Catch_Anim,ftCo_CatchDash_Anim
+    # }
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
+    #   ftCo_800923B4,ftCo_GuardOn_IASA
+    # }
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Escape.c::ftCo_8009980C
+    rows = _run_prefix(FIXTURE_320, end_frame=320)
+    assert int(rows[319]["action_id"][1]) == ACT_CATCH
+    assert int(rows[320]["action_id"][1]) == ACT_ESCAPE_N
