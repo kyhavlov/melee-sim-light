@@ -29,6 +29,7 @@ FIXTURE_280 = Path(__file__).resolve().parents[1] / "tests/fixtures/modelplay/pu
 FIXTURE_290 = Path(__file__).resolve().parents[1] / "tests/fixtures/modelplay/puffer_5b_selfplay_input_prefix_0_290.json"
 FIXTURE_320 = Path(__file__).resolve().parents[1] / "tests/fixtures/modelplay/puffer_5b_selfplay_input_prefix_0_320.json"
 FIXTURE_322 = Path(__file__).resolve().parents[1] / "tests/fixtures/modelplay/puffer_5b_selfplay_input_prefix_0_322.json"
+FIXTURE_342 = Path(__file__).resolve().parents[1] / "tests/fixtures/modelplay/puffer_5b_selfplay_input_prefix_0_342.json"
 FIXTURE_SOURCE = "reports/modelplay/puffer_5b_selfplay_4stock_4min/trace.json"
 
 
@@ -384,3 +385,22 @@ def test_puffer_guard_jump_oos_does_not_rerun_kneebend_iasa_same_frame() -> None
     assert int(rows[321]["action_id"][0]) == 178  # GuardOn
     assert int(rows[322]["action_id"][0]) == ACT_KNEE_BEND
     assert float(rows[322]["shield_hp"][0]) == pytest.approx(60.0, abs=1e-6)
+
+
+def test_puffer_escape_end_wait_handoff_keeps_wait_iasa_attack_before_guard() -> None:
+    # Regression target from the next puffer comparator owner:
+    # - frame 341 p1 is still on the last grounded EscapeN row,
+    # - frame 342 has fresh up-smash input plus held shield on the EscapeN -> Wait handoff,
+    # - Fighter proc order changes to Wait before the destination input callback dispatch,
+    # - Wait_IASA then checks grounded attacks before guard, so vanilla enters AttackHi4.
+    #
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Escape.c::{
+    #   ftCo_Escape_Anim,ftCo_EscapeN_Anim,ftCo_Escape_IASA,ftCo_EscapeN_IASA
+    # }
+    # refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackHi4.c::ftCo_AttackHi4_CheckInput
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80091A4C
+    rows = _run_prefix(FIXTURE_342, end_frame=342)
+    assert int(rows[341]["action_id"][1]) == ACT_ESCAPE_N
+    assert int(rows[342]["action_id"][1]) == ACT_ATTACK_HI4
