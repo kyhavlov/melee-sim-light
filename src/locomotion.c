@@ -1926,6 +1926,13 @@ void locomotion_update_pre(MslBatch* batch) {
                                                     0, 1)) {
             action_id = batch->state.action_id[idx];
           } else {
+            const uint16_t action_before_guard = batch->state.action_id[idx];
+            guard_update_grounded(batch, c, idx, 1u);
+            action_id = batch->state.action_id[idx];
+            if (action_id != action_before_guard) {
+              continue;
+            }
+
             const MslJumpInput j_in =
                 jump_input_from_edges(c, buttons_pressed, stick_y, tilt_timer_y);
             if (j_in != MSL_JUMP_INPUT_NONE && batch->state.jumps_left[idx] > 0) {
@@ -2380,6 +2387,23 @@ void locomotion_update_pre(MslBatch* batch) {
         // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_800D8A38
         if (action_id == MSL_ACT_DASH && action_id_start == MSL_ACT_DASH &&
             grab_flow_try_enter_catchdash_from_iasa(batch, c, idx)) {
+          continue;
+        }
+
+        // Catch-before-guard bridge for grounded IASA owners that delegate into Wait ordering.
+        //
+        // Decomp:
+        // - Wait_IASA checks ftCo_Catch_CheckInput before ftCo_80091A4C.
+        // - Landing_IASA runs the same grounded interrupt subset after the landing-lag gate.
+        // - Squat_IASA checks ftCo_Catch_CheckInput before ftCo_80091A4C, but SquatWait/SquatRv do
+        //   not.
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::ftCo_Landing_IASA
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Squat.c::ftCo_Squat_IASA
+        if ((action_id == MSL_ACT_WAIT || action_id == MSL_ACT_SQUAT ||
+             (action_id == MSL_ACT_LANDING &&
+              batch->state.anim_frame_f32[idx] >= (float)ch->landing_lag_frames)) &&
+            grab_flow_try_enter_catch_from_iasa(batch, c, idx)) {
           continue;
         }
 

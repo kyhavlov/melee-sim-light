@@ -791,13 +791,18 @@ void guard_update_grounded(MslBatch* batch, const MslCommonParams* c, size_t idx
 
   const float trig = msl_trigger_unit_from_input(
       batch->state.input_buttons[idx], batch->state.input_l[idx], batch->state.input_r[idx]);
-  // Decomp uses held_inputs & HSD_PAD_LR for guard-release latch ownership (ftCo_80092BCC).
-  // Use replay-visible held button bits as primary proxy; fall back to trigger deadzone only when
-  // digital LR bits are absent.
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80092BCC
+  // Decomp uses held_inputs & HSD_PAD_LR for guard entry/release ownership.
+  // Keep this aligned with the input owner that builds the sim's LR-held lane:
+  // - digital L/R,
+  // - trigger past the common deadzone,
+  // - Z-mapped LR lane used by input.x668 / held_inputs plumbing.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_80091A4C,ftCo_80092BCC}
+  // refs/melee/src/melee/ft/fighter.c::Fighter_Spaghetti_8006AD10_Inner1
+  // refs/melee/src/melee/ft/fighter.c:1868-1890
   const uint16_t held_buttons = batch->state.input_buttons[idx];
   const uint8_t shield_held_inputs =
-      ((held_buttons & (uint16_t)LR) != 0u) ? 1u : ((trig >= c->trigger_deadzone) ? 1u : 0u);
+      (((held_buttons & (uint16_t)(LR | MSL_BUTTON_Z)) != 0u) || (trig > c->trigger_deadzone)) ? 1u
+                                                                                               : 0u;
   const uint8_t guard_x10_seed = batch->state.guard_x10[idx];
 
   // Guard release lockout (mv.co.guard.xC + mv.co.guard.x10) is modeled explicitly and seeded via

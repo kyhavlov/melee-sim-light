@@ -130,6 +130,35 @@ def test_kneebend_jc_grab_enters_catch(dataset_name: str, record: int, attacker:
 
 
 @pytest.mark.integration
+def test_landing_iasa_z_grab_enters_catch_gracefulattachedturtle_8231() -> None:
+    root = Path(__file__).resolve().parents[1]
+    dataset_rel = f"{_BASE_REL}/GracefulAttachedTurtle.msl"
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+    _skip_if_required_artifacts_missing(root)
+
+    ds = read_dataset(str(dataset_path))
+    row = ds.samples[8231 : 8232]
+    attacker = 0
+
+    # Landing IASA delegates into the grounded Wait subset after the lag gate, and that subset
+    # checks Catch before Guard. Keep Z-grab Landing rows from falling through the shared
+    # guard_update_grounded() pass.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::ftCo_Landing_IASA
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_Catch_CheckInput
+    assert int(row["seed_t"]["action_id"][0, attacker]) == 42
+    assert int(row["ref_t1"]["action_id"][0, attacker]) == 212
+    assert _grab_attempt_edge(row, attacker)
+
+    out, ref = _run_record(dataset_path, 8231)
+    assert int(out["action_id"][0, attacker]) == int(ref["action_id"][attacker])
+    assert int(out["action_frame"][0, attacker]) == int(ref["action_frame"][attacker])
+    assert int(out["on_ground"][0, attacker]) == int(ref["on_ground"][attacker])
+
+
+@pytest.mark.integration
 @pytest.mark.parametrize(
     ("dataset_name", "attacker", "victim", "record_attacker_enter", "record_victim_enter", "record_anim_end"),
     [

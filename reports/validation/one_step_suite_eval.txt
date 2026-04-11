@@ -99,7 +99,7 @@ mismatch.hurtbox_state: 12 / 23058 (0.000520)
 mismatch.ground_id: 3 / 23058 (0.000130)
 mismatch.animation_index: 19 / 23058 (0.000824)
 mismatch.instance_hit_by: 9 / 23058 (0.000390)
-mismatch.instance_id: 59 / 23058 (0.002559)
+mismatch.instance_id: 58 / 23058 (0.002515)
 mismatch.last_attack_landed: 4 / 23058 (0.000173)
 mismatch.combo_count: 3 / 23058 (0.000130)
 mismatch.last_hit_by: 12 / 23058 (0.000520)
@@ -122,7 +122,7 @@ err.item_pos_x: mae=0.072784 p95=0.000000 max=71.544670
 err.item_pos_y: mae=0.019318 p95=0.000000 max=26.796017
 err.item_vel_x: mae=0.014121 p95=0.000000 max=3.037811
 err.item_vel_y: mae=0.006340 p95=0.000000 max=4.999367
-overall.discrete_mismatch: 284 / 1395009
+overall.discrete_mismatch: 283 / 1395009
 overall.float_norm_mae_p95: 0.00106387
 
 == datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/QuerulousGrandDinosaur.msl ==
@@ -169,8 +169,8 @@ overall.float_norm_mae_p95: 0.00098057
 
 == datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/TreasuredBackKangaroo.msl ==
 Records: 7837  Players/scored per record: 2  Total player-frames: 15674
-mismatch.action_id: 17 / 15674 (0.001085)
-mismatch.action_frame: 22 / 15674 (0.001404)
+mismatch.action_id: 16 / 15674 (0.001021)
+mismatch.action_frame: 21 / 15674 (0.001340)
 mismatch.on_ground: 2 / 15674 (0.000128)
 mismatch.facing: 4 / 15674 (0.000255)
 mismatch.stocks: 0 / 15674 (0.000000)
@@ -181,13 +181,13 @@ mismatch.hitstun: 7 / 15674 (0.000447)
 mismatch.l_cancel: 0 / 15674 (0.000000)
 mismatch.hurtbox_state: 6 / 15674 (0.000383)
 mismatch.ground_id: 0 / 15674 (0.000000)
-mismatch.animation_index: 17 / 15674 (0.001085)
+mismatch.animation_index: 16 / 15674 (0.001021)
 mismatch.instance_hit_by: 7 / 15674 (0.000447)
 mismatch.instance_id: 28 / 15674 (0.001786)
 mismatch.last_attack_landed: 4 / 15674 (0.000255)
 mismatch.combo_count: 5 / 15674 (0.000319)
 mismatch.last_hit_by: 5 / 15674 (0.000319)
-mismatch.state_flags: 46 / 78370 (0.000587)
+mismatch.state_flags: 44 / 78370 (0.000561)
 mismatch.item_exists: 5 / 117555 (0.000043)
 mismatch.item_type: 5 / 117555 (0.000043)
 mismatch.item_state: 1 / 117555 (0.000009)
@@ -206,9 +206,9 @@ err.item_pos_x: mae=0.101454 p95=0.000000 max=73.618073
 err.item_pos_y: mae=0.025521 p95=0.000000 max=31.795383
 err.item_vel_x: mae=0.020464 p95=0.000000 max=7.000000
 err.item_vel_y: mae=0.003790 p95=0.000000 max=4.999367
-overall.discrete_mismatch: 215 / 948277
+overall.discrete_mismatch: 210 / 948277
 overall.float_norm_mae_p95: 0.00148803
 
 == suite summary ==
-overall.discrete_mismatch: 949 / 4462843
+overall.discrete_mismatch: 943 / 4462843
 overall.float_norm_mae_p95: 0.00113517
