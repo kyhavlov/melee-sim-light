@@ -615,3 +615,67 @@ def test_modelplay_rerun11_shield_recharge_continues_through_air_shine_hitlag() 
         assert int(out["hitlag"][0]) == hitlag
         assert int(out["on_ground"][0]) == 0
         assert float(out["shield_hp"][0]) == pytest.approx(shield_hp, abs=0.001)
+
+
+@pytest.mark.integration
+def test_modelplay_rerun11_damageflytop_buffered_jump_can_chain_into_dair() -> None:
+    # Modelplay-vs-vanilla comparator lock:
+    # - after the shield recharge owner fix, the next gameplay mismatch was Falco staying in
+    #   DamageFlyTop after hitstun exit while vanilla consumed a buffered jump into AttackAirLw.
+    # - DamageFly_IASA calls doIasa while x221C_b6 is set; once it clears, DamageFly_IASA delegates
+    #   to DamageFall_IASA. A recent mv.co.damage.x14 buffer can still admit JumpAerial before the
+    #   same-frame aerial-attack follow-up consumes the c-stick edge.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{doIasa,ftCo_DamageFly_IASA}
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_DamageFall.c::ftCo_DamageFall_IASA
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::ftCo_800CB870
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_CheckInput
+    _require_local_data_or_skip()
+    root = _root()
+    rel = (
+        "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
+        "AttachedGoodNaturedGuanaco.msl"
+    )
+    dataset_path = root / rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {rel}")
+    trace = _load_rerun11_trace()
+
+    binding = pytest.importorskip("msl_binding")
+    sizes = binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    compare_stride = int(sizes["compare"])
+
+    ds = read_dataset(str(dataset_path))
+    seed_bytes = np.frombuffer(ds.samples[0:1]["seed_t"].tobytes(order="C"), dtype=np.uint8).copy().reshape(
+        1, seed_stride
+    )
+    out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
+
+    history: dict[int, np.void] = {}
+    handle = binding.init(batch_size=1, num_players=2, ucf_enabled=1, ucf_cardinals_1_0_enabled=1)
+    try:
+        binding.reseed_seed(handle, seed_bytes)
+        prev_input = _input_bytes_from_trace_frame(trace["frames"][0], input_stride)
+        for frame_i in range(1, 398):
+            input_t = _input_bytes_from_trace_frame(trace["frames"][frame_i], input_stride)
+            binding.step_input(handle, prev_input, input_t)
+            if frame_i >= 395:
+                binding.write_compare(handle, out_compare_bytes)
+                history[frame_i] = out_compare_bytes.view(COMPARE_DTYPE).reshape(-1)[0].copy()
+            prev_input = input_t
+    finally:
+        binding.destroy(handle)
+
+    expected = {
+        395: (69, 1, 0, 94.95549011230469, 4.236337661743164),
+        396: (69, 2, 0, 94.92276763916016, 2.6512908935546875),
+        397: (69, 3, 0, 94.80474090576172, 1.015521764755249),
+    }
+    for frame_i, (action_id, action_frame, on_ground, pos_x, pos_y) in expected.items():
+        out = history[frame_i]
+        assert int(out["action_id"][1]) == action_id
+        assert int(out["action_frame"][1]) == action_frame
+        assert int(out["on_ground"][1]) == on_ground
+        assert float(out["pos_x"][1]) == pytest.approx(pos_x, abs=0.001)
+        assert float(out["pos_y"][1]) == pytest.approx(pos_y, abs=0.001)

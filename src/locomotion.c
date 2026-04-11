@@ -500,22 +500,20 @@ static inline uint16_t attackair_action_from_stick(const MslCommonParams* c, flo
                                         : (uint16_t)MSL_ACT_ATTACK_AIR_B;
 }
 
-static inline uint8_t attackair_try_enter_from_air_locomotion(MslBatch* batch,
-                                                              const MslCommonParams* c,
-                                                              size_t idx) {
-  // Decomp: ftCo_AttackAir_CheckInput enters AttackAir when either:
-  // - A is pressed-edge this frame, or
-  // - the C-stick crosses its directional threshold this frame (ftCo_800DF478).
-  // It then enters via Fighter_ChangeMotionState(..., Ft_MF_KeepFastFall, ...) and immediately runs
-  // ftAnim_8006EBA4 on the new motion state.
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c
+uint8_t locomotion_attackair_try_enter_from_air_iasa(MslBatch* batch, const MslCommonParams* c,
+                                                     size_t idx) {
+  // Common airborne AttackAir IASA owner:
+  // - ftCo_AttackAir_CheckInput consumes A-pressed or c-stick edge and enters AttackAir directly
+  //   via Fighter_ChangeMotionState(..., Ft_MF_KeepFastFall, ...), preserving airborne momentum.
+  // - This helper is reused by Fall/Jump/JumpAerial callers in locomotion and by DamageFly's
+  //   post-lockout DamageFall_IASA-shaped lane.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::{
+  //   ftCo_AttackAir_CheckItemThrowInput,ftCo_AttackAir_EnterFromMsid
+  // }
   if (batch == NULL || c == NULL) {
     return 0;
   }
   const uint16_t a0 = batch->state.action_id[idx];
-  if (!msl_action_is_air_locomotion(a0) && a0 != (uint16_t)MSL_ACT_DAMAGE_FALL) {
-    return 0;
-  }
   // Special fall should not be interruptible into aerial attacks.
   if (a0 == (uint16_t)MSL_ACT_FALL_SPECIAL || a0 == (uint16_t)MSL_ACT_FALL_SPECIAL_F ||
       a0 == (uint16_t)MSL_ACT_FALL_SPECIAL_B) {
@@ -848,7 +846,7 @@ static inline uint8_t locomotion_try_kneebend_startup_complete_jump_prepass(
   if (escape_air_try_enter_from_air_locomotion(batch, c, idx)) {
     return 1u;
   }
-  if (attackair_try_enter_from_air_locomotion(batch, c, idx)) {
+  if (locomotion_attackair_try_enter_from_air_iasa(batch, c, idx)) {
     return 1u;
   }
   return 1u;
@@ -3292,7 +3290,7 @@ void locomotion_update_pre(MslBatch* batch) {
             if (escape_air_try_enter_from_air_locomotion(batch, c, idx)) {
               continue;
             }
-            if (attackair_try_enter_from_air_locomotion(batch, c, idx)) {
+            if (locomotion_attackair_try_enter_from_air_iasa(batch, c, idx)) {
               continue;
             }
           }
@@ -3519,7 +3517,7 @@ void locomotion_update_pre(MslBatch* batch) {
         // Aerial attack (AttackAir*) entry from eligible air locomotion states.
         // Decomp: ftCo_AttackAir_CheckInput is consulted from IASA in common aerial states.
         // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c
-        if (attackair_try_enter_from_air_locomotion(batch, c, idx)) {
+        if (locomotion_attackair_try_enter_from_air_iasa(batch, c, idx)) {
           continue;
         }
 
