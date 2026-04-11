@@ -2417,14 +2417,6 @@ void locomotion_update_pre(MslBatch* batch) {
             action_id == MSL_ACT_SQUAT_WAIT || action_id == MSL_ACT_SQUAT_RV) {
           allow_guard_entry = 1;
         }
-        // Landing IASA: allow guard only after the landing lag gate.
-        // Decomp: ftCo_Landing_IASA gates interrupts on landing lag frames, then runs the common
-        // grounded interrupt checks (including shield via ftCo_80091A4C).
-        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c
-        if (action_id == MSL_ACT_LANDING &&
-            batch->state.action_frame[idx] >= (int16_t)ch->landing_lag_frames) {
-          allow_guard_entry = 1;
-        }
         guard_update_grounded(batch, c, idx, allow_guard_entry);
         action_id = batch->state.action_id[idx];
 
@@ -2661,6 +2653,18 @@ void locomotion_update_pre(MslBatch* batch) {
                                                     0, 1)) {
             action_id = batch->state.action_id[idx];
           } else {
+            // Landing IASA ordering:
+            // - ftCo_Landing_IASA runs grounded attack checks first, then ftCo_80091A4C (guard),
+            //   then the remaining grounded interrupt subset (jump/dash/turn/walk).
+            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::ftCo_Landing_IASA
+            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80091A4C
+            guard_update_grounded(batch, c, idx, 1u);
+            action_id = batch->state.action_id[idx];
+            if (action_id == MSL_ACT_GUARD_ON || action_id == MSL_ACT_GUARD ||
+                action_id == MSL_ACT_GUARD_REFLECT || action_id == MSL_ACT_GUARD_SET_OFF ||
+                action_id == MSL_ACT_GUARD_OFF) {
+              continue;
+            }
             const MslJumpInput j_in =
                 jump_input_from_edges(c, buttons_pressed, stick_y, tilt_timer_y);
             if (j_in != MSL_JUMP_INPUT_NONE && batch->state.jumps_left[idx] > 0) {

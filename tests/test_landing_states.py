@@ -434,6 +434,67 @@ def test_landing_iasa_allows_shield_entry_after_landing_lag_gate() -> None:
     assert int(out["animation_index"][0]) == 0xFFFFFFFF
 
 
+def test_landing_iasa_prioritizes_attackhi4_before_guard_or_jump() -> None:
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    input_stride = int(sizes["input"])
+
+    lag = int(_fox_attr("landing_lag_frames"))
+    seed = _seed_base()
+    seed["action_id"][0, 0] = np.uint16(ACT_LANDING)
+    seed["action_frame"][0, 0] = np.int16(lag)
+    seed["anim_frame_f32"][0, 0] = np.float32(lag)
+    seed["frame_speed_mul_f32"][0, 0] = np.float32(1.0)
+    seed["animation_index"][0, 0] = np.uint32(SM_LANDING)
+    seed["shield_hp"][0, 0] = np.float32(_common_attr("start_shield_health"))
+
+    prev_inp = _mk_input_bytes(1, input_stride)
+    inp = _mk_input_bytes(1, input_stride)
+    prev_view = prev_inp.view(INPUT_DTYPE).reshape((1,))
+    cur_view = inp.view(INPUT_DTYPE).reshape((1,))
+    prev_view["p"]["buttons"][0, 0] = np.uint16(BUTTON_L)
+    cur_view["p"]["buttons"][0, 0] = np.uint16(BUTTON_L)
+    cur_view["p"]["main_y"][0, 0] = np.int8(80)
+    cur_view["p"]["c_x"][0, 0] = np.int8(57)
+    cur_view["p"]["c_y"][0, 0] = np.int8(57)
+
+    out = _step_once(seed, prev_inp, inp)
+    assert int(out["action_id"][0]) == ACT_ATTACK_HI4
+
+
+def test_landing_iasa_a_up_beats_cstick_diag_side_smash_when_x_below_x3c() -> None:
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    input_stride = int(sizes["input"])
+
+    lag = int(_fox_attr("landing_lag_frames"))
+    seed = _seed_base()
+    seed["action_id"][0, 0] = np.uint16(ACT_LANDING)
+    seed["action_frame"][0, 0] = np.int16(lag)
+    seed["anim_frame_f32"][0, 0] = np.float32(lag)
+    seed["frame_speed_mul_f32"][0, 0] = np.float32(1.0)
+    seed["animation_index"][0, 0] = np.uint32(SM_LANDING)
+    seed["shield_hp"][0, 0] = np.float32(_common_attr("start_shield_health"))
+
+    prev_inp = _mk_input_bytes(1, input_stride)
+    inp = _mk_input_bytes(1, input_stride)
+    cur_view = inp.view(INPUT_DTYPE).reshape((1,))
+    cur_view["p"]["buttons"][0, 0] = np.uint16(BUTTON_A)
+    cur_view["p"]["main_y"][0, 0] = np.int8(80)
+    cur_view["p"]["c_x"][0, 0] = np.int8(57)
+    cur_view["p"]["c_y"][0, 0] = np.int8(-57)
+
+    # Decomp grounded c-stick smash checks compare against p_ftCommonData->x3C. With c-stick x below
+    # that threshold, Landing IASA should still admit the A+up AttackHi4 branch instead of a side
+    # smash path.
+    # refs/melee/src/melee/ft/ft_0DF1.c::ftCo_800DF1C8
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::ftCo_Landing_IASA
+    out = _step_once(seed, prev_inp, inp)
+    assert int(out["action_id"][0]) == ACT_ATTACK_HI4
+
+
 def test_entry_end_landing_lock_blocks_shield_until_opening_unlock() -> None:
     first_landing_frame, interrupt_frame, out = _run_opening_init_match_until_p0_interrupt(buttons=BUTTON_L)
     assert interrupt_frame - first_landing_frame == 10
