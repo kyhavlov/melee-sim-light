@@ -22,7 +22,12 @@ from tools.dolphin.patch_slp_preframe_window import (
     _u8,
 )
 from tools.eval.dataset import COMPARE_DTYPE, INPUT_DTYPE, read_dataset
-from tools.modelplay.sim_env import CHAR_FALCO, CHAR_FOX, build_match_config_array
+from tools.modelplay.sim_env import (
+    CHAR_FALCO,
+    CHAR_FOX,
+    SIM_INIT_OPENING_FRAME_ID,
+    build_match_config_array,
+)
 
 
 DEFAULT_CARRIER_SLP = Path("replays/debug/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slp")
@@ -431,7 +436,7 @@ def _run_current_sim_rows(
             char_ids=(char_map[p1_char], char_map[p2_char]),
             facing=(1, 0),
             stocks=int(config.get("stocks", 4)),
-            frame_id=0,
+            frame_id=SIM_INIT_OPENING_FRAME_ID,
             random_seed=int(config.get("seed", 0)),
         )
         config_bytes = match_config.view(np.uint8).reshape((1, -1))

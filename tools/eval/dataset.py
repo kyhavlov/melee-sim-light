@@ -165,6 +165,14 @@ SEED_DTYPE = np.dtype(
         # refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
         ("jab_x0", _arr("u1", MAX_PLAYERS)),
         ("match_flow_timer", _arr("u1", MAX_PLAYERS)),
+        # Match-start fighter input lock countdown (`fp->x221D_b4`).
+        # refs/melee/src/melee/ft/ftlib.c::{ftLib_800867E8,ftLib_800868A4}
+        # refs/melee/src/melee/ft/fighter.c::{Fighter_procUpdate,Fighter_UnkInitLoad_80068914_Inner1}
+        # refs/melee/src/melee/gm/gm_16AE.c::{gm_8016E934_OnEnter,fn_8016B7F8}
+        # refs/melee/src/melee/if/ifstatus.c::ifStatus_802F6EA4
+        # refs/melee/src/melee/if/if_2F72.c::if_802F73C4
+        # refs/melee-disc/files/IfAll.dat::ScInfCnt_scene_models[3]
+        ("opening_input_lock_timer", _arr("u1", MAX_PLAYERS)),
         # Hidden EntryEnd -> Fall airborne-control lock. Derived causally from replay action /
         # grounding history because the handoff owner is not directly visible in post-frame lanes.
         # refs/melee/src/melee/ft/ft_0C31.c::{ftCo_EntryEnd_Anim,ftCo_EntryEnd_IASA}

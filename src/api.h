@@ -386,18 +386,30 @@ typedef struct MslSeed {
   // exit early via inputs (IASA), and the replay action_id run length may be shorter than the
   // internal timer.
   uint8_t match_flow_timer[MSL_MAX_PLAYERS];
-  // EntryEnd -> Fall airborne handoff lock.
+  // Match-start fighter input lock countdown (`fp->x221D_b4`).
   //
-  // Decomp / playback anchors:
-  // - EntryEnd timer expiry transitions through ftCommon_8007D92C -> ftCo_Fall_Enter.
-  // - EntryEnd has no IASA body of its own, while ordinary Fall would normally admit aerial IASA
-  //   branches and common air drift.
-  // - Controlled vanilla playback of the opening EntryEnd descent keeps those ordinary Fall
-  //   controls suppressed across the airborne handoff until landing; public post-frames do not
-  //   expose a distinct owner lane for that lock.
-  // refs/melee/src/melee/ft/ft_0C31.c::{ftCo_EntryEnd_Anim,ftCo_EntryEnd_IASA}
-  // refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007D92C
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::{ftCo_Fall_IASA,ftCo_Fall_Phys}
+  // Decomp / asset anchors:
+  // - Fighter init sets x221D_b4 via ftLib_800867E8.
+  // - Fighter_procUpdate blanks current input lanes while x221D_b4 remains set.
+  // - VS opening clears x221D_b4 for all fighters from fn_8016B7F8, the ScInfCnt status-overlay
+  //   completion callback scheduled by ifStatus_802F6EA4(3, ...).
+  // - The VS overlay is IfAll.dat::ScInfCnt_scene_models[3] with AObj end_frame 85.0; with the
+  //   standard raw -122 opening seed, that maps to 83 remaining locked simulation steps and
+  //   clears before raw -39 inputs are processed.
+  // refs/melee/src/melee/ft/ftlib.c::{ftLib_800867E8,ftLib_800868A4}
+  // refs/melee/src/melee/ft/fighter.c::{Fighter_procUpdate,Fighter_UnkInitLoad_80068914_Inner1}
+  // refs/melee/src/melee/gm/gm_16AE.c::{gm_8016E934_OnEnter,fn_8016B7F8}
+  // refs/melee/src/melee/if/ifstatus.c::ifStatus_802F6EA4
+  // refs/melee/src/melee/if/if_2F72.c::if_802F73C4
+  // refs/melee-disc/files/IfAll.dat::ScInfCnt_scene_models[3]
+  //
+  // Seed shape:
+  // - Stored per player for dataset/FFI stability, but live runtime aggregates to one batch-global
+  //   countdown because the VS-opening callback clears x221D_b4 for all fighters together.
+  uint8_t opening_input_lock_timer[MSL_MAX_PLAYERS];
+  // Legacy compatibility lane from the earlier EntryEnd->Fall investigation.
+  // The authoritative opening-control owner is now `opening_input_lock_timer` (`fp->x221D_b4`).
+  // This seed lane is retained for dataset/debug compatibility until the old field is pruned.
   uint8_t entry_end_fall_lock[MSL_MAX_PLAYERS];
   // Rebirth / dead-flow camera-box visibility (`fp->x221F_b0`) as an explicit seed lane.
   //

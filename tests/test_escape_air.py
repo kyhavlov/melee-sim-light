@@ -159,7 +159,7 @@ def test_air_locomotion_lr_press_enters_escape_air_next_step() -> None:
     assert int(out["animation_index"][0]) == SM_ESCAPE_AIR
 
 
-def test_entry_end_fall_lock_blocks_escape_air_interrupt() -> None:
+def test_opening_input_lock_blocks_escape_air_interrupt() -> None:
     import msl_binding
 
     sizes = msl_binding.sizes()
@@ -172,7 +172,7 @@ def test_entry_end_fall_lock_blocks_escape_air_interrupt() -> None:
     seed["anim_frame_f32"][0, 0] = np.float32(1.0)
     seed["frame_speed_mul_f32"][0, 0] = np.float32(1.0)
     seed["animation_index"][0, 0] = np.uint32(SM_FALL)
-    seed["entry_end_fall_lock"][0, 0] = np.uint8(1)
+    seed["opening_input_lock_timer"][0, 0] = np.uint8(1)
 
     prev_inp = _mk_input_bytes(1, input_stride)
     inp = _mk_input_bytes(1, input_stride)

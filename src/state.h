@@ -12,6 +12,23 @@ typedef struct MslStateSoA {
   int32_t* frame_id;
   uint32_t* frame_pre_random_seed;
   uint32_t* stage_id;  // [batch]
+  // Match-start fighter input lock (`fp->x221D_b4`) countdown, one per environment.
+  //
+  // Decomp / asset anchors:
+  // - Fighter init sets x221D_b4 via ftLib_800867E8, and Fighter_procUpdate blanks current input
+  //   lanes while that bit remains set.
+  // - VS opening clears x221D_b4 for all fighters from the ScInfCnt status-overlay completion
+  //   callback (gm_16AE.c::fn_8016B7F8), scheduled by ifStatus_802F6EA4(3, ...).
+  // - The VS overlay uses IfAll.dat::ScInfCnt_scene_models[3]; its joint/material AObj end frame
+  //   is 85.0, which maps to 83 remaining locked simulation steps from the standard raw -122
+  //   opening seed until the callback clears the lock before processing raw -39 inputs.
+  // refs/melee/src/melee/ft/ftlib.c::{ftLib_800867E8,ftLib_800868A4}
+  // refs/melee/src/melee/ft/fighter.c::{Fighter_procUpdate,Fighter_UnkInitLoad_80068914_Inner1}
+  // refs/melee/src/melee/gm/gm_16AE.c::{gm_8016E934_OnEnter,fn_8016B7F8}
+  // refs/melee/src/melee/if/ifstatus.c::ifStatus_802F6EA4
+  // refs/melee/src/melee/if/if_2F72.c::if_802F73C4
+  // refs/melee-disc/files/IfAll.dat::ScInfCnt_scene_models[3]
+  uint8_t* opening_input_lock_timer;  // [batch]
   // Global stale-attack-instance counter (decomp: plStale_IncrementAttackInstance).
   // One per environment in the batch (per-match global counter).
   // refs/melee/src/melee/pl/plstale.c::plStale_IncrementAttackInstance
@@ -177,9 +194,8 @@ typedef struct MslStateSoA {
   float* grab_offset_y;            // [batch * players]
   float* grab_offset_z;            // [batch * players]
   uint8_t* match_flow_timer;
-  // Hidden EntryEnd -> Fall airborne-control lock promoted as a named seeded/runtime lane.
-  // refs/melee/src/melee/ft/ft_0C31.c::{ftCo_EntryEnd_Anim,ftCo_EntryEnd_IASA}
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::{ftCo_Fall_IASA,ftCo_Fall_Phys}
+  // Legacy compatibility lane from the earlier EntryEnd->Fall investigation.
+  // The authoritative opening-control owner is now opening_input_lock_timer (`fp->x221D_b4`).
   uint8_t* entry_end_fall_lock;
   // Rebirth / dead-flow camera-box visibility (`fp->x221F_b0`) promoted as a named SoA lane for
   // future F04 ownership fixes. Seeded from replay-visible `state_flags[...,4] & 0x80`.

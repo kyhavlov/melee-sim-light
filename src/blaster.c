@@ -279,10 +279,6 @@ void blaster_update_pre_physics(MslBatch* batch) {
       // Down-B is entered in shine_update_pre_physics() earlier in action_update() ordering.
       const uint16_t pressed = batch->state.input_buttons_pressed[idx];
       if (!action_is_blaster(a) && (pressed & (uint16_t)MSL_BUTTON_B) != 0) {
-        const uint8_t entry_end_fall_lock_active = (!on_ground && a == (uint16_t)MSL_ACT_FALL &&
-                                                    batch->state.entry_end_fall_lock[idx] != 0u)
-                                                       ? 1u
-                                                       : 0u;
         uint8_t allow = 0;
         if (on_ground) {
           // Landing special-case: Landing lag actions should not be interruptible until their IASA
@@ -320,36 +316,25 @@ void blaster_update_pre_physics(MslBatch* batch) {
             }
           }
         } else {
-          // Hidden EntryEnd -> Fall control lock:
-          // - EntryEnd timer expiry transitions through ftCommon_8007D92C -> ftCo_Fall_Enter.
-          // - Ordinary Fall IASA would consult ftCo_SpecialAir_CheckInput first, but controlled
-          //   vanilla playback of the opening EntryEnd descent keeps B-special entry suppressed
-          //   across the airborne handoff until landing.
-          // refs/melee/src/melee/ft/ft_0C31.c::{ftCo_EntryEnd_Anim,ftCo_EntryEnd_IASA}
-          // refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007D92C
+          // Decomp routing: DamageFall IASA delegates directly to ftCo_SpecialAir_CheckInput, so
+          // B-special selection (Neutral/Side/Up) follows the same resolver used by standard air
+          // locomotion once B is pressed.
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DamageFall.c::ftCo_DamageFall_IASA
           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_SpecialAir.c::ftCo_SpecialAir_CheckInput
-          if (entry_end_fall_lock_active) {
-            allow = 0u;
-          } else
-            // Decomp routing: DamageFall IASA delegates directly to ftCo_SpecialAir_CheckInput, so
-            // B-special selection (Neutral/Side/Up) follows the same resolver used by standard air
-            // locomotion once B is pressed.
-            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DamageFall.c::ftCo_DamageFall_IASA
+          if (msl_action_is_air_locomotion(a)) {
+            allow = 1u;
+          } else if (a == (uint16_t)MSL_ACT_DAMAGE_FALL) {
+            allow = 1u;
+          } else if (a == (uint16_t)MSL_ACT_PASSIVE_WALL_JUMP) {
+            // Decomp: PassiveWall IASA calls ftCo_SpecialAir_CheckInput once
+            // mv.co.passivewall.timer reaches zero. PassiveWall_Anim transitions through inlineA0
+            // into PassiveWallJump with timer cleared, so late PassiveWallJump frames share the
+            // same aerial B-special ownership.
+            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_PassiveWall.c::{
+            //   inlineA0,ftCo_PassiveWall_Anim,ftCo_PassiveWall_IASA}
             // refs/melee/src/melee/ft/chara/ftCommon/ftCo_SpecialAir.c::ftCo_SpecialAir_CheckInput
-            if (msl_action_is_air_locomotion(a)) {
-              allow = 1u;
-            } else if (a == (uint16_t)MSL_ACT_DAMAGE_FALL) {
-              allow = 1u;
-            } else if (a == (uint16_t)MSL_ACT_PASSIVE_WALL_JUMP) {
-              // Decomp: PassiveWall IASA calls ftCo_SpecialAir_CheckInput once
-              // mv.co.passivewall.timer reaches zero. PassiveWall_Anim transitions through inlineA0
-              // into PassiveWallJump with timer cleared, so late PassiveWallJump frames share the
-              // same aerial B-special ownership.
-              // refs/melee/src/melee/ft/chara/ftCommon/ftCo_PassiveWall.c::{
-              //   inlineA0,ftCo_PassiveWall_Anim,ftCo_PassiveWall_IASA}
-              // refs/melee/src/melee/ft/chara/ftCommon/ftCo_SpecialAir.c::ftCo_SpecialAir_CheckInput
-              allow = 1u;
-            }
+            allow = 1u;
+          }
         }
         if (allow) {
           const float stick_x = apply_deadzone(stick_i8_to_unit(batch->state.input_main_x[idx]),

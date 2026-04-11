@@ -732,3 +732,29 @@ void match_flow_update_post_physics(MslBatch* batch) {
     }
   }
 }
+enum { MSL_SIM_INIT_OPENING_INPUT_LOCK_TIMER = 83 };
+
+uint8_t match_flow_sim_init_opening_input_lock_timer(void) {
+  // Live init-match helper only:
+  // - replay-seeded teacher-forced/rollout paths seed the same owner through
+  //   MslSeed::opening_input_lock_timer,
+  // - this helper exists only to bridge fresh init_match episodes onto the decomp-backed owner.
+  // Real opening-control owner:
+  // - Fighter init sets fp->x221D_b4 via ftLib_800867E8.
+  // - Fighter_procUpdate blanks current input lanes while x221D_b4 remains set.
+  // - VS opening schedules fn_8016B7F8 as the ScInfCnt status-overlay completion callback, and
+  //   that callback clears x221D_b4 for all fighters via ftLib_800868A4.
+  // refs/melee/src/melee/ft/ftlib.c::{ftLib_800867E8,ftLib_800868A4}
+  // refs/melee/src/melee/ft/fighter.c::{Fighter_procUpdate,Fighter_UnkInitLoad_80068914_Inner1}
+  // refs/melee/src/melee/gm/gm_16AE.c::{gm_8016E934_OnEnter,fn_8016B7F8}
+  // refs/melee/src/melee/if/ifstatus.c::ifStatus_802F6EA4
+  // refs/melee/src/melee/if/if_2F72.c::if_802F73C4
+  //
+  // Timing source:
+  // - VS uses status type 3, backed by IfAll.dat::ScInfCnt_scene_models[3].
+  // - That model's joint/material AObj end frame is 85.0.
+  // - With the standard live init-match opening seed aligned to raw frame -122, the callback
+  //   clears x221D_b4 before processing raw -39 inputs, i.e. after 83 remaining locked steps.
+  // refs/melee-disc/files/IfAll.dat::ScInfCnt_scene_models[3]
+  return (uint8_t)MSL_SIM_INIT_OPENING_INPUT_LOCK_TIMER;
+}

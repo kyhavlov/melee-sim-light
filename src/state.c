@@ -32,6 +32,7 @@ int state_alloc(MslStateSoA* state, int batch_size) {
   state->frame_id = (int32_t*)alloc_aligned_64(sizeof(int32_t) * b);
   state->frame_pre_random_seed = (uint32_t*)alloc_aligned_64(sizeof(uint32_t) * b);
   state->stage_id = (uint32_t*)alloc_aligned_64(sizeof(uint32_t) * b);
+  state->opening_input_lock_timer = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * b);
   state->stale_attack_instance_counter = (uint16_t*)alloc_aligned_64(sizeof(uint16_t) * b);
   state->instance_id_counter = (uint16_t*)alloc_aligned_64(sizeof(uint16_t) * b);
   state->match_damage_ratio = (float*)alloc_aligned_64(sizeof(float) * b);
@@ -328,14 +329,15 @@ int state_alloc(MslStateSoA* state, int batch_size) {
   state->item_hitlist = (MslHitlistCapsule*)alloc_aligned_64(sizeof(MslHitlistCapsule) * bi);
 
   if (!state->frame_id || !state->frame_pre_random_seed || !state->stage_id ||
-      !state->stale_attack_instance_counter || !state->instance_id_counter ||
-      !state->match_damage_ratio || !state->is_teams || !state->team_id || !state->char_id ||
-      !state->attack_ratio || !state->defense_ratio || !state->pos_x || !state->pos_y ||
-      !state->pos_z || !state->prev_pos_x || !state->prev_pos_y || !state->floor_sweep_prev_pos_y ||
-      !state->coll_stage_prev_pos_x || !state->coll_stage_prev_pos_y ||
-      !state->coll_stage_cur_pos_x || !state->coll_stage_cur_pos_y || !state->speed_air_x_self ||
-      !state->speed_ground_x_self || !state->speed_y_self || !state->speed_x_attack ||
-      !state->speed_y_attack || !state->fighter_scale_y || !state->facing || !state->facing_dir1 ||
+      !state->opening_input_lock_timer || !state->stale_attack_instance_counter ||
+      !state->instance_id_counter || !state->match_damage_ratio || !state->is_teams ||
+      !state->team_id || !state->char_id || !state->attack_ratio || !state->defense_ratio ||
+      !state->pos_x || !state->pos_y || !state->pos_z || !state->prev_pos_x || !state->prev_pos_y ||
+      !state->floor_sweep_prev_pos_y || !state->coll_stage_prev_pos_x ||
+      !state->coll_stage_prev_pos_y || !state->coll_stage_cur_pos_x ||
+      !state->coll_stage_cur_pos_y || !state->speed_air_x_self || !state->speed_ground_x_self ||
+      !state->speed_y_self || !state->speed_x_attack || !state->speed_y_attack ||
+      !state->fighter_scale_y || !state->facing || !state->facing_dir1 ||
       !state->ground_friction_mul || !state->kb_smashcharge_active || !state->on_ground ||
       !state->frame_start_on_ground || !state->prev_on_ground || !state->ground_contact_x ||
       !state->ground_contact_y || !state->ground_normal_x || !state->ground_normal_y ||
@@ -455,6 +457,7 @@ void state_free(MslStateSoA* state) {
   alloc_free(state->frame_id);
   alloc_free(state->frame_pre_random_seed);
   alloc_free(state->stage_id);
+  alloc_free(state->opening_input_lock_timer);
   alloc_free(state->stale_attack_instance_counter);
   alloc_free(state->instance_id_counter);
   alloc_free(state->match_damage_ratio);

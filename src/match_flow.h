@@ -1,5 +1,8 @@
 #pragma once
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include "batch_internal.h"
 
 // Match flow: KO/death/respawn/entry state machine glue.
@@ -37,3 +40,7 @@ void match_flow_update_post_physics(MslBatch* batch);
 //   refs/melee/src/melee/ft/ft_0D31.c::ftCo_Rebirth_Coll
 //   refs/melee/src/melee/ft/ft_0C31.c::ftCo_EntryStart_Coll
 uint8_t match_flow_should_stage_collide(uint16_t action_id);
+
+// Match-start fighter input lock (`fp->x221D_b4`) countdown for live init-match episodes only.
+// Replay-seeded rows reconstruct the same owner through MslSeed::opening_input_lock_timer instead.
+uint8_t match_flow_sim_init_opening_input_lock_timer(void);

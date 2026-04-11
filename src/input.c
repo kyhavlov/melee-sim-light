@@ -153,6 +153,57 @@ static inline uint8_t clamp_inc_u8_ff(uint8_t prev) {
   return (uint8_t)t;
 }
 
+static inline void opening_input_lock_apply_Fighter_UnkInitLoad_80068914_Inner1_subset(
+    MslBatch* batch, size_t idx) {
+  if (batch == NULL) {
+    return;
+  }
+  // Decomp: Fighter_procUpdate snapshots the current raw input lanes, then while fp->x221D_b4 is
+  // set it calls Fighter_UnkInitLoad_80068914_Inner1, which blanks current/previous stick lanes,
+  // held/edge button lanes, and the fighter input-history timers/counters consumed by IASA.
+  // refs/melee/src/melee/ft/fighter.c::{Fighter_procUpdate,Fighter_UnkInitLoad_80068914_Inner1}
+  batch->state.input_buttons[idx] = 0u;
+  batch->state.prev_input_buttons[idx] = 0u;
+  batch->state.input_buttons_pressed[idx] = 0u;
+  batch->state.input_buttons_released[idx] = 0u;
+
+  batch->state.input_main_x[idx] = 0;
+  batch->state.input_main_y[idx] = 0;
+  batch->state.prev_input_main_x[idx] = 0;
+  batch->state.prev_input_main_y[idx] = 0;
+  batch->state.input_c_x[idx] = 0;
+  batch->state.input_c_y[idx] = 0;
+  batch->state.prev_input_c_x[idx] = 0;
+  batch->state.prev_input_c_y[idx] = 0;
+  batch->state.input_l[idx] = 0u;
+  batch->state.input_r[idx] = 0u;
+  batch->state.prev_input_l[idx] = 0u;
+  batch->state.prev_input_r[idx] = 0u;
+
+  batch->state.tilt_timer_x[idx] = 0xFEu;
+  batch->state.tilt_timer_y[idx] = 0xFEu;
+  batch->state.x672_input_timer[idx] = 0xFEu;
+  batch->state.x673[idx] = 0xFEu;
+  batch->state.x674[idx] = 0xFEu;
+  batch->state.x675[idx] = 0xFEu;
+  batch->state.x676_x[idx] = 0xFEu;
+  batch->state.x677_y[idx] = 0xFEu;
+  batch->state.x678[idx] = 0xFEu;
+  batch->state.x679_x[idx] = 0xFEu;
+  batch->state.x67A_y[idx] = 0xFEu;
+  batch->state.x67B[idx] = 0xFEu;
+
+  batch->state.x67C[idx] = 0xFFu;
+  batch->state.x67D[idx] = 0xFFu;
+  batch->state.x67E[idx] = 0xFFu;
+  batch->state.x680[idx] = 0xFFu;
+  batch->state.x681[idx] = 0xFFu;
+  batch->state.x682[idx] = 0xFFu;
+  batch->state.x683[idx] = 0xFFu;
+  batch->state.x684[idx] = 0xFFu;
+  batch->state.lr_press_timer[idx] = 0xFFu;
+}
+
 int input_apply_pre_input_snapshot(MslBatch* batch, const uint8_t* prev_input_bytes,
                                    size_t prev_input_stride_bytes) {
   if (batch == NULL) {
@@ -510,6 +561,10 @@ int input_apply(MslBatch* batch, const uint8_t* prev_input_bytes, size_t prev_in
         batch->state.x680[idx] = 0;
       } else {
         batch->state.x680[idx] = clamp_inc_u8_ff(batch->state.x680[idx]);
+      }
+
+      if (batch->state.opening_input_lock_timer[bi] > 0u) {
+        opening_input_lock_apply_Fighter_UnkInitLoad_80068914_Inner1_subset(batch, idx);
       }
     }
   }

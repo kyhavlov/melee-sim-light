@@ -344,6 +344,33 @@ def _derive_entry_end_fall_lock(
     return out
 
 
+def _derive_opening_input_lock_timer(*, frame_id_i32: np.ndarray) -> np.ndarray:
+    """
+    Derive the match-start fighter input lock countdown (`fp->x221D_b4`) from raw frame ids.
+
+    Decomp / asset anchors:
+    - Fighter init sets x221D_b4 via ftLib_800867E8.
+    - Fighter_procUpdate blanks current input lanes while x221D_b4 remains set.
+    - VS opening clears x221D_b4 for all fighters from fn_8016B7F8, the ScInfCnt status-overlay
+      completion callback scheduled by ifStatus_802F6EA4(3, ...).
+    - The VS overlay is IfAll.dat::ScInfCnt_scene_models[3], whose joint/material AObj end frame is
+      85.0. With the standard opening aligned to raw frame -122, that clears before processing raw
+      -39 inputs, i.e. seed rows carry `max(0, -39 - frame_id)` remaining locked steps.
+    refs/melee/src/melee/ft/ftlib.c::{ftLib_800867E8,ftLib_800868A4}
+    refs/melee/src/melee/ft/fighter.c::{Fighter_procUpdate,Fighter_UnkInitLoad_80068914_Inner1}
+    refs/melee/src/melee/gm/gm_16AE.c::{gm_8016E934_OnEnter,fn_8016B7F8}
+    refs/melee/src/melee/if/ifstatus.c::ifStatus_802F6EA4
+    refs/melee/src/melee/if/if_2F72.c::if_802F73C4
+    refs/melee-disc/files/IfAll.dat::ScInfCnt_scene_models[3]
+    """
+    frame_id = np.asarray(frame_id_i32, dtype=np.int32).reshape(-1)
+    out = np.zeros(frame_id.shape[0], dtype=np.uint8)
+    remaining = np.maximum(0, (-39 - frame_id).astype(np.int32))
+    remaining = np.minimum(remaining, 255)
+    out[:] = remaining.astype(np.uint8)
+    return out
+
+
 @functools.lru_cache(maxsize=1)
 def _fd_respawn_points_y(*, data_dir: str = "data") -> np.ndarray:
     """
@@ -2262,6 +2289,9 @@ def _main_impl(args) -> None:
         port0 = int(src_ports[slot]) - 1
         samples["seed_t"]["match_flow_timer"][:, slot] = _derive_match_flow_timer(
             action_id_u16=post_state, port0=port0, common=common
+        )[:-1]
+        samples["seed_t"]["opening_input_lock_timer"][:, slot] = _derive_opening_input_lock_timer(
+            frame_id_i32=frame_ids
         )[:-1]
         samples["seed_t"]["entry_end_fall_lock"][:, slot] = _derive_entry_end_fall_lock(
             action_id_u16=post_state, on_ground_u8=post_on_ground

@@ -21,6 +21,7 @@
 #include "config.h"
 #include "special_msids.h"
 #include "move_tables.h"
+#include "match_flow.h"
 #include "ecb_tables.h"
 #include "hitboxes_tables.h"
 #include "hitlist.h"
@@ -538,6 +539,7 @@ static int msl_batch_init_match_impl(MslBatch* batch, const uint8_t* config_byte
       seed->seed_prev_action_id[p] = (uint16_t)MSL_ACT_ENTRY;
       seed->seed_prev_action_frame[p] = -1;
       seed->match_flow_timer[p] = (uint8_t)(5 * (p + 1));
+      seed->opening_input_lock_timer[p] = match_flow_sim_init_opening_input_lock_timer();
       seed->entry_end_fall_lock[p] = 0u;
       seed->animation_index[p] = (uint32_t)MSL_ANIM_NONE_U32;
       seed->anim_frame_f32[p] = -1.0f;
@@ -565,6 +567,13 @@ static int msl_batch_init_match_impl(MslBatch* batch, const uint8_t* config_byte
                                              mask_bytes, mask_stride_bytes, 1u);
   if (err != 0) {
     return err;
+  }
+
+  for (int bi = 0; bi < batch->batch_size; bi++) {
+    if (!msl_mask_row_selected(mask_bytes, mask_stride_bytes, bi)) {
+      continue;
+    }
+    batch->state.opening_input_lock_timer[bi] = match_flow_sim_init_opening_input_lock_timer();
   }
 
   if (mask_bytes == NULL) {
@@ -628,6 +637,7 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
     batch->state.frame_id[bi] = seed->frame_id;
     batch->state.frame_pre_random_seed[bi] = seed->frame_pre_random_seed;
     batch->state.stage_id[bi] = seed->stage_id;
+    batch->state.opening_input_lock_timer[bi] = 0u;
     float match_damage_ratio = seed->match_damage_ratio;
     if (!(match_damage_ratio > 0.0f)) {
       match_damage_ratio = 1.0f;
@@ -727,6 +737,9 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
       batch->state.source_clear_terminal_phase[idx] =
           seed->source_clear_terminal_phase[p] ? 1u : 0u;
       batch->state.match_flow_timer[idx] = seed->match_flow_timer[p];
+      if (seed->opening_input_lock_timer[p] > batch->state.opening_input_lock_timer[bi]) {
+        batch->state.opening_input_lock_timer[bi] = seed->opening_input_lock_timer[p];
+      }
       batch->state.entry_end_fall_lock[idx] = seed->entry_end_fall_lock[p] ? 1u : 0u;
       batch->state.camera_box_visible_x221f_b0[idx] =
           seed->camera_box_visible_x221f_b0[p] ? 1u : 0u;
@@ -1481,6 +1494,10 @@ static void msl_batch_commit_rollout_clock_rng(MslBatch* batch) {
     return;
   }
   for (int bi = 0; bi < batch->batch_size; bi++) {
+    if (batch->state.opening_input_lock_timer[bi] > 0u) {
+      batch->state.opening_input_lock_timer[bi] =
+          (uint8_t)(batch->state.opening_input_lock_timer[bi] - 1u);
+    }
     if (!batch->rollout_clock_rng_owned[bi]) {
       continue;
     }

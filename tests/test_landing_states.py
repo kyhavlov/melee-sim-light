@@ -7,9 +7,12 @@ from pathlib import Path
 import numpy as np
 
 from tools.eval.dataset import COMPARE_DTYPE, INPUT_DTYPE, SEED_DTYPE
+from tools.modelplay.sim_env import build_match_config_array
 
 
 # Button masks: src/buttons.h (Melee/HSD PAD bits)
+BUTTON_A = 0x0100
+BUTTON_B = 0x0200
 BUTTON_L = 0x0040
 
 # Action ids (GALE01): refs/melee/src/melee/ft/chara/ftCommon/forward.h
@@ -18,12 +21,14 @@ ACT_KNEEBEND = 0x0018
 ACT_JUMPF = 0x0019
 ACT_LANDING = 0x002A
 ACT_LANDING_FALL_SPECIAL = 0x002B
+ACT_ATTACK_HI4 = 0x003F
 ACT_LANDING_AIR_N = 0x0046
 ACT_ESCAPE_AIR = 0x00EC
 ACT_GUARD_ON = 0x00B2
 ACT_GUARD = 0x00B3
 ACT_GUARD_REFLECT = 0x00B6
 ACT_FX_SPECIAL_AIR_S_END = 0x0160
+ACT_FX_SPECIAL_LW_START = 0x0168
 
 # Submotion ids (GALE01): refs/melee/src/melee/ft/chara/ftCommon/forward.h
 SM_WAIT1_0 = 2
@@ -44,6 +49,7 @@ def _fox_attr(name: str) -> float:
 def _common_attr(name: str) -> float:
     common = json.loads(Path("data/common/ft_common_data.json").read_text())
     return float(common[name])
+
 
 def _tracks_end_frame(path: Path, msid: int) -> float:
     import struct
@@ -117,7 +123,6 @@ def _seed_base() -> np.ndarray:
     seed["animation_index"][0, 1] = np.uint32(SM_WAIT1_0)
     return seed
 
-
 def _step_once(seed: np.ndarray, prev_inp: np.ndarray, inp: np.ndarray) -> np.ndarray:
     import msl_binding
 
@@ -142,6 +147,116 @@ def _step_once(seed: np.ndarray, prev_inp: np.ndarray, inp: np.ndarray) -> np.nd
         return out.view(COMPARE_DTYPE).reshape((1,))[0]
     finally:
         msl_binding.destroy(handle)
+
+
+def _run_opening_init_match_until_p0_interrupt(
+    *, buttons: int, main_y: int = 0, pulse: bool = False
+) -> tuple[int, int, np.void]:
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    input_stride = int(sizes["input"])
+    compare_stride = int(sizes["compare"])
+
+    handle = msl_binding.init(batch_size=1, num_players=2)
+    out_bytes = np.empty((1, compare_stride), dtype=np.uint8)
+    prev_inp = _mk_input_bytes(1, input_stride)
+    first_landing_frame: int | None = None
+
+    try:
+        config = build_match_config_array(
+            num_players=2,
+            char_ids=(CHAR_FOX, CHAR_FOX),
+            facing=(1, 0),
+            stocks=4,
+            frame_id=0,
+            random_seed=0,
+        )
+        msl_binding.init_match(handle, config.view(np.uint8).reshape((1, -1)))
+
+        for frame_i in range(1, 120):
+            inp = _mk_input_bytes(1, input_stride)
+            if first_landing_frame is not None:
+                enable_input = True
+                if pulse:
+                    offset = frame_i - first_landing_frame
+                    enable_input = offset >= 2 and (offset % 2 == 0)
+                inp_view = inp.view(INPUT_DTYPE).reshape((1,))
+                inp_view["p"]["buttons"][0, 0] = np.uint16(buttons if enable_input else 0)
+                inp_view["p"]["main_y"][0, 0] = np.int8(main_y if enable_input else 0)
+                if enable_input and (buttons & BUTTON_L) != 0:
+                    inp_view["p"]["l"][0, 0] = np.uint8(140)
+
+            msl_binding.step_input(handle, prev_inp, inp)
+            msl_binding.write_compare(handle, out_bytes)
+            out = out_bytes.view(COMPARE_DTYPE).reshape((1,))[0].copy()
+            p0_action = int(out["action_id"][0])
+
+            if first_landing_frame is None:
+                if p0_action == ACT_LANDING:
+                    first_landing_frame = frame_i
+            else:
+                if p0_action != ACT_LANDING:
+                    return first_landing_frame, frame_i, out
+
+            prev_inp = inp
+    finally:
+        msl_binding.destroy(handle)
+
+    raise AssertionError("p0 never left opening Landing within 120 frames")
+
+
+def _run_opening_init_match_until_both_players_guard() -> tuple[dict[int, int], dict[int, int], dict[int, np.void]]:
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    input_stride = int(sizes["input"])
+    compare_stride = int(sizes["compare"])
+
+    handle = msl_binding.init(batch_size=1, num_players=2)
+    out_bytes = np.empty((1, compare_stride), dtype=np.uint8)
+    prev_inp = _mk_input_bytes(1, input_stride)
+    first_landing_frame: dict[int, int] = {}
+    first_interrupt_frame: dict[int, int] = {}
+    interrupt_rows: dict[int, np.void] = {}
+
+    try:
+        config = build_match_config_array(
+            num_players=2,
+            char_ids=(CHAR_FOX, CHAR_FOX),
+            facing=(1, 0),
+            stocks=4,
+            frame_id=0,
+            random_seed=0,
+        )
+        msl_binding.init_match(handle, config.view(np.uint8).reshape((1, -1)))
+
+        for frame_i in range(1, 120):
+            inp = _mk_input_bytes(1, input_stride)
+            inp_view = inp.view(INPUT_DTYPE).reshape((1,))
+            for p in range(2):
+                if p in first_landing_frame and p not in first_interrupt_frame:
+                    inp_view["p"]["buttons"][0, p] = np.uint16(BUTTON_L)
+                    inp_view["p"]["l"][0, p] = np.uint8(140)
+
+            msl_binding.step_input(handle, prev_inp, inp)
+            msl_binding.write_compare(handle, out_bytes)
+            out = out_bytes.view(COMPARE_DTYPE).reshape((1,))[0].copy()
+            for p in range(2):
+                action = int(out["action_id"][p])
+                if p not in first_landing_frame and action == ACT_LANDING:
+                    first_landing_frame[p] = frame_i
+                elif p in first_landing_frame and p not in first_interrupt_frame and action != ACT_LANDING:
+                    first_interrupt_frame[p] = frame_i
+                    interrupt_rows[p] = out.copy()
+            if len(first_interrupt_frame) == 2:
+                return first_landing_frame, first_interrupt_frame, interrupt_rows
+
+            prev_inp = inp
+    finally:
+        msl_binding.destroy(handle)
+
+    raise AssertionError("both players did not leave opening Landing within 120 frames")
 
 
 def test_landing_air_n_exits_to_wait_after_lag_frames() -> None:
@@ -317,3 +432,60 @@ def test_landing_iasa_allows_shield_entry_after_landing_lag_gate() -> None:
     out = _step_once(seed, hold_l_prev, hold_l)
     assert int(out["action_id"][0]) in (ACT_GUARD_REFLECT, ACT_GUARD_ON, ACT_GUARD)
     assert int(out["animation_index"][0]) == 0xFFFFFFFF
+
+
+def test_entry_end_landing_lock_blocks_shield_until_opening_unlock() -> None:
+    first_landing_frame, interrupt_frame, out = _run_opening_init_match_until_p0_interrupt(buttons=BUTTON_L)
+    assert interrupt_frame - first_landing_frame == 10
+    assert int(out["action_id"][0]) in (ACT_GUARD_REFLECT, ACT_GUARD_ON, ACT_GUARD)
+
+
+def test_entry_end_landing_lock_unlocks_both_players_on_shared_opening_frame() -> None:
+    landing_frames, interrupt_frames, interrupt_rows = _run_opening_init_match_until_both_players_guard()
+    assert landing_frames[0] < landing_frames[1]
+    assert interrupt_frames[0] == interrupt_frames[1]
+    assert interrupt_frames[0] - landing_frames[0] == 10
+    assert interrupt_frames[1] - landing_frames[1] == 5
+    for p in range(2):
+        assert int(interrupt_rows[p]["action_id"][p]) in (ACT_GUARD_REFLECT, ACT_GUARD_ON, ACT_GUARD)
+
+
+def test_entry_end_landing_lock_blocks_grounded_attack_until_opening_unlock() -> None:
+    first_landing_frame, interrupt_frame, out = _run_opening_init_match_until_p0_interrupt(
+        buttons=BUTTON_A, main_y=80, pulse=True
+    )
+    assert interrupt_frame - first_landing_frame == 10
+    assert int(out["action_id"][0]) == ACT_ATTACK_HI4
+
+
+def test_entry_end_landing_lock_blocks_ground_special_until_opening_unlock() -> None:
+    first_landing_frame, interrupt_frame, out = _run_opening_init_match_until_p0_interrupt(
+        buttons=BUTTON_B, main_y=-80, pulse=True
+    )
+    assert interrupt_frame - first_landing_frame == 10
+    assert int(out["action_id"][0]) == ACT_FX_SPECIAL_LW_START
+
+
+def test_negative_frame_landing_without_entry_lock_still_allows_shield() -> None:
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    input_stride = int(sizes["input"])
+
+    lag = int(_fox_attr("landing_lag_frames"))
+    seed = _seed_base()
+    seed["frame_id"][0] = np.int32(-48)
+    seed["action_id"][0, 0] = np.uint16(ACT_LANDING)
+    seed["action_frame"][0, 0] = np.int16(lag)
+    seed["anim_frame_f32"][0, 0] = np.float32(lag)
+    seed["frame_speed_mul_f32"][0, 0] = np.float32(1.0)
+    seed["animation_index"][0, 0] = np.uint32(SM_LANDING)
+    seed["shield_hp"][0, 0] = np.float32(_common_attr("start_shield_health"))
+
+    hold_l_prev = _mk_input_bytes(1, input_stride)
+    hold_l = _mk_input_bytes(1, input_stride)
+    hold_l_prev.view(INPUT_DTYPE).reshape((1,))["p"]["buttons"][0, 0] = np.uint16(BUTTON_L)
+    hold_l.view(INPUT_DTYPE).reshape((1,))["p"]["buttons"][0, 0] = np.uint16(BUTTON_L)
+
+    out = _step_once(seed, hold_l_prev, hold_l)
+    assert int(out["action_id"][0]) in (ACT_GUARD_REFLECT, ACT_GUARD_ON, ACT_GUARD)

@@ -19,6 +19,7 @@ from tools.modelplay.state_adapter import (
 
 CHAR_FOX = 1
 CHAR_FALCO = 22
+SIM_INIT_OPENING_FRAME_ID = -122
 
 MATCH_PLAYER_CONFIG_DTYPE = np.dtype(
     [
