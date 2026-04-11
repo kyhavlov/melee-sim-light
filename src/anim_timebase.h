@@ -236,6 +236,16 @@ static inline void msl_anim_timebase_enter(MslBatch* batch, size_t idx, float an
         batch->state.fall_fast[idx] = 0;
       }
     }
+
+    // Decomp: smash_attrs is motion-owned transient state. Fighter_ChangeMotionState enters a new
+    // motion with smash charge lifecycle cleared unless a later command script seeds it again.
+    // refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState
+    // refs/melee/src/melee/ft/ft_0DF0.c::{ftCo_800DEEA8,ftCo_800DEE84}
+    batch->state.kb_smashcharge_active[idx] = 0u;
+    batch->state.smash_charge_state[idx] = 0u;
+    batch->state.smash_charge_frames[idx] = 0u;
+    batch->state.smash_charge_hold_frames_max[idx] = 0u;
+    batch->state.smash_charge_saved_rate_fp_q16_16[idx] = 0;
   }
 
   attack_identity_on_motion_state_change_ft_800890D0(batch, idx);

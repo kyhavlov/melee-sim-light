@@ -404,30 +404,43 @@ void anim_timebase_update_pre_input(MslBatch* batch) {
         }
       }
 
-      // Grounded smash early-hold ownership bridge:
-      // - Smash family hold lanes in GALE01 use A-held gating before the hitbox-onset window.
-      // - In the Fox/Falco suite, AttackHi4/AttackLw4 rows with held A can remain at action_frame=2
-      //   across consecutive frames before progressing into the startup/hitbox timeline.
+      // Grounded smash early-hold replay bridge:
+      // - The live current-sim owner is opcode 56 / `smash_attrs` in input.c
+      //   (`ftAction_80073008` -> `ftCo_800DEE84` / `ftCo_800DF0D0`).
+      // - Teacher-forced reseed can still start mid-hold on AttackHi4/AttackLw4 af=2 rows without
+      //   the prior frame's live smash_attrs lifecycle, so keep this narrow replay-real bridge for
+      //   those seeded rows.
       // - Decomp input ownership: `fp->input.x668` is updated in Fighter_procUpdate (prio3), so
       //   prio1 Anim callbacks use prior-frame input state.
       // refs/melee/src/melee/ft/ftattacks4combo.c::ftCo_800CECE8
+      // refs/melee/src/melee/ft/ftaction.c::ftAction_80073008
+      // refs/melee/src/melee/ft/ft_0DF0.c::{ftCo_800DEE84,ftCo_800DF0D0}
       // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A360,Fighter_procUpdate}
       // refs/melee/src/melee/ft/chara/ftCommon/{ftCo_AttackHi4.c,ftCo_AttackLw4.c}
       // data/moves/{fox,falco}.json::ftCo_SM_Attack{Hi4,Lw4}
       if ((a == (uint16_t)MSL_ACT_ATTACK_HI4 || a == (uint16_t)MSL_ACT_ATTACK_LW4) &&
           batch->state.on_ground[idx] != 0u && batch->state.hitstun[idx] == 0u &&
           batch->state.hitlag[idx] == 0u && action_frame_pre == 2) {
+        const uint8_t smash_hold_timer_max = (a == (uint16_t)MSL_ACT_ATTACK_HI4)
+                                                 ? c->attack_hi4_tilt_max_frames
+                                                 : c->attack_lw4_tilt_max_frames;
         const uint8_t pre_input_a_held =
             ((batch->state.input_buttons[idx] & (uint16_t)MSL_BUTTON_A) != 0u) ? 1u : 0u;
         if (pre_input_a_held != 0u && batch->state.x67C[idx] != 0u &&
-            batch->state.x67C[idx] <= 2u) {
+            batch->state.x67C[idx] <= smash_hold_timer_max) {
           batch->state.frame_speed_mul_fp_q16_16[idx] = 0;
-        } else if (pre_input_a_held == 0u && batch->state.x67C[idx] > 2u &&
-                   batch->state.frame_speed_mul_fp_q16_16[idx] == 0) {
+        } else if (pre_input_a_held == 0u && batch->state.frame_speed_mul_fp_q16_16[idx] == 0) {
           // Release bridge:
-          // - when prior-frame A is no longer held and post-press timer has advanced past the
-          //   initial press window, clear stale seeded hold-rate carry and resume default 1.0.
-          // refs/melee/src/melee/ft/ftattacks4combo.c::ftCo_800CECE8
+          // - when prior-frame A is no longer held, clear stale seeded hold-rate carry and resume
+          //   default 1.0 on the next advance.
+          // Decomp/data refs:
+          // - AttackHi4/AttackLw4 input checks use p_ftCommonData->xD0/xD8 as their action-specific
+          //   tilt windows for the hold admission side.
+          // - On replay-real seeded af=2 rows, every legitimate continued hold still has prior-frame
+          //   A continuity; rows with prevA==0 resume on the next step regardless of x67C.
+          // refs/melee/src/melee/ft/chara/ftCommon/{ftCo_AttackHi4.c,ftCo_AttackLw4.c}
+          // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A360,Fighter_procUpdate}
+          // data/common/ft_common_data.json::{attack_hi4_tilt_max_frames,attack_lw4_tilt_max_frames}
           // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A360,Fighter_procUpdate}
           batch->state.frame_speed_mul_fp_q16_16[idx] = MSL_Q16_16_ONE;
         }

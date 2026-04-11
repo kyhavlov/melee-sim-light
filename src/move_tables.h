@@ -46,6 +46,23 @@ uint8_t move_tables_attackair_allow_interrupt(uint8_t char_id, uint16_t attackai
 uint8_t move_tables_grounded_attack_allow_interrupt(uint8_t char_id, uint16_t grounded_action_id,
                                                     float cur_anim_frame_f32);
 
+// Returns whether grounded smash charge (opcode 56 -> ftCo_800DEE84) was crossed this frame.
+//
+// Decomp:
+// - grounded smash scripts issue "Start Smash Charge", which seeds fp->smash_attrs.state =
+//   SmashState_PreCharge.
+// - the later fighter input proc promotes PreCharge -> Charging when A is held.
+// refs/melee/src/melee/ft/ftaction.c::ftAction_80073008
+// refs/melee/src/melee/ft/ft_0DF0.c::{ftCo_800DEE84,ftCo_800DF0D0}
+//
+// Source of truth:
+// data/moves/{fox,falco}.json moves["ftCo_SM_AttackS4"/"ftCo_SM_AttackHi4"/"ftCo_SM_AttackLw4"]
+// .events start_smash_charge.
+uint8_t move_tables_grounded_smash_charge_crossed(uint8_t char_id, uint16_t grounded_action_id,
+                                                  float prev_anim_frame_f32,
+                                                  float cur_anim_frame_f32,
+                                                  uint8_t* out_hold_frames);
+
 // Returns whether EscapeN (spotdodge) can be interrupted (IASA) at the given cur_anim_frame.
 //
 // Decomp:

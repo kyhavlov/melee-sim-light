@@ -40,7 +40,7 @@ rollout.first_mismatch_seeded_total: 32
 == datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl ==
 rollout.best_len: 327
 rollout.streak_count: 138
-rollout.streak_len.median: 64
+rollout.streak_len.median: 63
 rollout.streak_len.p90: 187
 rollout.streak_len.p95: 244
 rollout.streak_len.max: 327
@@ -69,7 +69,7 @@ rollout.first_mismatch_seeded_total: 39
 
 == suite summary ==
 overall.rollout.streak_count: 466
-overall.rollout.streak_len.median: 62
+overall.rollout.streak_len.median: 61
 overall.rollout.streak_len.p90: 171
 overall.rollout.streak_len.p95: 220
 overall.rollout.streak_len.max: 631

@@ -20,6 +20,9 @@ class _SmashHoldReleaseCase:
     dataset_rel: str
     target_record: int
     p_target: int
+    expected_ref_action_frame: int
+    expected_cur_a: int
+    expected_prev_a: int
     note: str
 
 
@@ -28,15 +31,39 @@ class _SmashHoldReleaseCase:
     "case",
     [
         _SmashHoldReleaseCase(
+            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl",
+            target_record=3753,
+            p_target=0,
+            expected_ref_action_frame=2,
+            expected_cur_a=1,
+            expected_prev_a=1,
+            note="AttackHi4 af=2 held row (GAT)",
+        ),
+        _SmashHoldReleaseCase(
+            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl",
+            target_record=4544,
+            p_target=1,
+            expected_ref_action_frame=2,
+            expected_cur_a=0,
+            expected_prev_a=1,
+            note="AttackLw4 af=2 release-edge hold row (AGG)",
+        ),
+        _SmashHoldReleaseCase(
             dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl",
             target_record=6819,
             p_target=1,
+            expected_ref_action_frame=3,
+            expected_cur_a=0,
+            expected_prev_a=0,
             note="AttackLw4 af=2 release row (AGG)",
         ),
         _SmashHoldReleaseCase(
             dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/QuerulousGrandDinosaur.msl",
             target_record=2804,
             p_target=1,
+            expected_ref_action_frame=3,
+            expected_cur_a=0,
+            expected_prev_a=0,
             note="AttackHi4 af=2 release row (QGD)",
         ),
     ],
@@ -75,9 +102,9 @@ def test_attackhi4_lw4_smash_hold_preinput_release_target_pm1_both_players_stric
 
     assert int(seed["action_id"][p_target]) in (63, 64), case.note
     assert int(seed["action_frame"][p_target]) == 2, case.note
-    assert int(ref["action_frame"][p_target]) == 3, case.note
-    assert (int(prev_input["buttons"]) & MSL_BUTTON_A) == 0, case.note
-    assert (int(cur_input["buttons"]) & MSL_BUTTON_A) == 0, case.note
+    assert int(ref["action_frame"][p_target]) == int(case.expected_ref_action_frame), case.note
+    assert int((int(prev_input["buttons"]) & MSL_BUTTON_A) != 0) == int(case.expected_prev_a), case.note
+    assert int((int(cur_input["buttons"]) & MSL_BUTTON_A) != 0) == int(case.expected_cur_a), case.note
 
     for rec in rows:
         _, ref_row, out_row = _run_one_step_row(dataset_path, rec, p_target)
@@ -88,4 +115,3 @@ def test_attackhi4_lw4_smash_hold_preinput_release_target_pm1_both_players_stric
                 record=rec,
                 p=p,
             )
-

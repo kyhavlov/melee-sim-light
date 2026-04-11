@@ -39,6 +39,12 @@ typedef struct MslThrowHitbox {
   uint8_t loaded;
 } MslThrowHitbox;
 
+typedef struct MslSmashChargeInfo {
+  int16_t start_af;     // inclusive 0-based command frame
+  uint8_t hold_frames;  // ftCo_800DEE84 arg2 / smash_attrs.x211C_holdFrame
+  uint8_t loaded;
+} MslSmashChargeInfo;
+
 enum { MSL_FRAME_PULSES_MAX = 16 };
 typedef struct MslFramePulses {
   int16_t frame[MSL_FRAME_PULSES_MAX];
@@ -72,6 +78,8 @@ enum {
 };
 static MslFrameWindow g_allow_interrupt_by_char_grounded_attack[256]
                                                                [MSL_GROUNDED_ATTACK_KIND_COUNT];
+static MslSmashChargeInfo g_smash_charge_by_char_grounded_attack[256]
+                                                                [MSL_GROUNDED_ATTACK_KIND_COUNT];
 static MslFrameWindow g_allow_interrupt_by_char_escape_n[256];
 static MslFrameWindow g_throw_flags_by_char_escape_f[256];
 static MslFrameWindow g_jab_combo_by_char_grounded_attack[256][MSL_GROUNDED_ATTACK_KIND_COUNT];
@@ -614,6 +622,74 @@ static int parse_allow_interrupt_window(const char* buf, const char* buf_end, co
   out->end_af = (int16_t)INT16_MAX;
   out->loaded = 1;
   return 0;
+}
+
+static int parse_start_smash_charge_info(const char* buf, const char* buf_end, const char* move_key,
+                                         MslSmashChargeInfo* out) {
+  if (buf == NULL || buf_end == NULL || move_key == NULL || out == NULL) {
+    return -1;
+  }
+
+  char pat[128];
+  const int pn = snprintf(pat, sizeof(pat), "\"%s\"", move_key);
+  if (pn <= 0 || (size_t)pn >= sizeof(pat)) {
+    return -1;
+  }
+
+  const char* key_pos = strstr_range(buf, buf_end, pat);
+  if (key_pos == NULL) {
+    return -1;
+  }
+  const char* obj_start = (const char*)memchr(key_pos, '{', (size_t)(buf_end - key_pos));
+  if (obj_start == NULL) {
+    return -1;
+  }
+  const char* obj_end = json_find_matching_delim(obj_start, buf_end, '{', '}');
+  if (obj_end == NULL) {
+    return -1;
+  }
+
+  const char* events_key = strstr_range(obj_start, obj_end, "\"events\"");
+  if (events_key == NULL) {
+    return -1;
+  }
+  const char* arr_start = (const char*)memchr(events_key, '[', (size_t)(obj_end - events_key));
+  if (arr_start == NULL) {
+    return -1;
+  }
+  const char* arr_end = json_find_matching_delim(arr_start, obj_end, '[', ']');
+  if (arr_end == NULL) {
+    return -1;
+  }
+
+  const char* p = arr_start;
+  while (p && p < arr_end) {
+    const char* ev_start = (const char*)memchr(p, '{', (size_t)(arr_end - p));
+    if (ev_start == NULL) {
+      break;
+    }
+    const char* ev_end = json_find_matching_delim(ev_start, arr_end, '{', '}');
+    if (ev_end == NULL) {
+      break;
+    }
+
+    if (json_get_str_eq_in_range(ev_start, ev_end, "kind", "start_smash_charge")) {
+      int frame = 0;
+      int hold_frames = 0;
+      if (json_get_i32_in_range(ev_start, ev_end, "frame", &frame) == 0 &&
+          json_get_i32_in_range(ev_start, ev_end, "hold_frames", &hold_frames) == 0 &&
+          hold_frames > 0 && hold_frames <= 255) {
+        out->start_af = (int16_t)frame;
+        out->hold_frames = (uint8_t)hold_frames;
+        out->loaded = 1u;
+        return 0;
+      }
+    }
+
+    p = ev_end + 1;
+  }
+
+  return -1;
 }
 
 static int parse_jab_combo_window_open_end(const char* buf, const char* buf_end,
@@ -1407,13 +1483,25 @@ static int load_one(const char* data_dir, const char* rel_path, uint8_t char_id)
   if (parse_allow_interrupt_window(buf, buf_end, "ftCo_SM_AttackS4", &win) == 0) {
     g_allow_interrupt_by_char_grounded_attack[char_id][MSL_GROUNDED_ATTACK_KIND_S4] = win;
   }
+  MslSmashChargeInfo smash_charge = {0};
+  if (parse_start_smash_charge_info(buf, buf_end, "ftCo_SM_AttackS4", &smash_charge) == 0) {
+    g_smash_charge_by_char_grounded_attack[char_id][MSL_GROUNDED_ATTACK_KIND_S4] = smash_charge;
+  }
   win = (MslFrameWindow){0};
   if (parse_allow_interrupt_window(buf, buf_end, "ftCo_SM_AttackHi4", &win) == 0) {
     g_allow_interrupt_by_char_grounded_attack[char_id][MSL_GROUNDED_ATTACK_KIND_HI4] = win;
   }
+  smash_charge = (MslSmashChargeInfo){0};
+  if (parse_start_smash_charge_info(buf, buf_end, "ftCo_SM_AttackHi4", &smash_charge) == 0) {
+    g_smash_charge_by_char_grounded_attack[char_id][MSL_GROUNDED_ATTACK_KIND_HI4] = smash_charge;
+  }
   win = (MslFrameWindow){0};
   if (parse_allow_interrupt_window(buf, buf_end, "ftCo_SM_AttackLw4", &win) == 0) {
     g_allow_interrupt_by_char_grounded_attack[char_id][MSL_GROUNDED_ATTACK_KIND_LW4] = win;
+  }
+  smash_charge = (MslSmashChargeInfo){0};
+  if (parse_start_smash_charge_info(buf, buf_end, "ftCo_SM_AttackLw4", &smash_charge) == 0) {
+    g_smash_charge_by_char_grounded_attack[char_id][MSL_GROUNDED_ATTACK_KIND_LW4] = smash_charge;
   }
 
   // EscapeN (spotdodge) `allow_interrupt` window.
@@ -1735,6 +1823,29 @@ uint8_t move_tables_grounded_attack_allow_interrupt(uint8_t char_id, uint16_t gr
   // Source: command-script `allow_interrupt` events in data/moves/{fox,falco}.json.
   return (cur_anim_frame_f32 >= (float)win.start_af && cur_anim_frame_f32 < (float)win.end_af) ? 1
                                                                                                : 0;
+}
+
+uint8_t move_tables_grounded_smash_charge_crossed(uint8_t char_id, uint16_t grounded_action_id,
+                                                  float prev_anim_frame_f32,
+                                                  float cur_anim_frame_f32,
+                                                  uint8_t* out_hold_frames) {
+  const int kind = grounded_attack_kind_from_action(grounded_action_id);
+  if (kind < 0 || out_hold_frames == NULL) {
+    return 0;
+  }
+  const MslSmashChargeInfo info = g_smash_charge_by_char_grounded_attack[char_id][(size_t)kind];
+  if (!info.loaded) {
+    return 0;
+  }
+
+  // Decomp: ftAction_80073008 runs when the movescript crosses the command frame boundary under
+  // ftAnim_8006EBA4 / ftAction_80073240. Model this as a one-shot threshold crossing in (prev, cur].
+  // refs/melee/src/melee/ft/ftaction.c::{ftAction_80073008,ftAction_80073240}
+  if (!(prev_anim_frame_f32 < (float)info.start_af && cur_anim_frame_f32 >= (float)info.start_af)) {
+    return 0;
+  }
+  *out_hold_frames = info.hold_frames;
+  return 1u;
 }
 
 uint8_t move_tables_escape_allow_interrupt(uint8_t char_id, uint16_t action_id,

@@ -2,11 +2,13 @@
 
 #include <errno.h>
 
+#include "action_ids.h"
 #include "api.h"
 #include "buttons.h"
 #include "common_params.h"
 #include "decomp/lb/lb_00ce.h"
 #include "input_axis.h"
+#include "move_tables.h"
 #include "ucf.h"
 
 // UCF pad buffer: refs/ucf/include/ucf/pad_buffer.h
@@ -151,6 +153,120 @@ static inline uint8_t clamp_inc_u8_ff(uint8_t prev) {
     t++;
   }
   return (uint8_t)t;
+}
+
+static inline float q16_16_to_f32(int32_t x) { return (float)x * (1.0f / 65536.0f); }
+
+static inline uint8_t input_action_is_grounded_smash(uint16_t a) {
+  switch (a) {
+    case MSL_ACT_ATTACK_S4_HI:
+    case MSL_ACT_ATTACK_S4_HI_S:
+    case MSL_ACT_ATTACK_S4_S:
+    case MSL_ACT_ATTACK_S4_LW_S:
+    case MSL_ACT_ATTACK_S4_LW:
+    case MSL_ACT_ATTACK_HI4:
+    case MSL_ACT_ATTACK_LW4:
+      return 1u;
+    default:
+      return 0u;
+  }
+}
+
+static inline void grounded_smash_charge_clear(MslBatch* batch, size_t idx) {
+  if (batch == NULL) {
+    return;
+  }
+  batch->state.kb_smashcharge_active[idx] = 0u;
+  batch->state.smash_charge_state[idx] = 0u;
+  batch->state.smash_charge_frames[idx] = 0u;
+  batch->state.smash_charge_hold_frames_max[idx] = 0u;
+  batch->state.smash_charge_saved_rate_fp_q16_16[idx] = 0;
+}
+
+static inline void grounded_smash_charge_update_ftCo_800DF0D0_subset(MslBatch* batch, size_t idx) {
+  if (batch == NULL) {
+    return;
+  }
+
+  const uint16_t action_id = batch->state.action_id[idx];
+  if (input_action_is_grounded_smash(action_id) == 0u || batch->state.on_ground[idx] == 0u ||
+      batch->state.hitlag[idx] != 0u || batch->state.hitstun[idx] != 0u) {
+    grounded_smash_charge_clear(batch, idx);
+    return;
+  }
+
+  const uint8_t held_a =
+      ((batch->state.input_buttons[idx] & (uint16_t)MSL_BUTTON_A) != 0u) ? 1u : 0u;
+  const uint8_t prev_held_a =
+      ((batch->state.prev_input_buttons[idx] & (uint16_t)MSL_BUTTON_A) != 0u) ? 1u : 0u;
+
+  // Decomp:
+  // - opcode 56 seeds SmashState_PreCharge during the anim/script pass.
+  // - the later fighter input proc (ftCo_800DF0D0) promotes PreCharge -> Charging on held A,
+  //   stores the current anim rate, and freezes the next anim advances at 0.0f.
+  // - while Charging, releasing A restores the saved rate immediately; ftCo_800DEF38 also
+  //   auto-releases when the hold-frame counter reaches x211C_holdFrame.
+  // refs/melee/src/melee/ft/ftaction.c::ftAction_80073008
+  // refs/melee/src/melee/ft/ft_0DF0.c::{ftCo_800DEE84,ftCo_800DEF38,ftCo_800DF0D0}
+  if (batch->state.smash_charge_state[idx] == 2u) {
+    uint8_t frames = batch->state.smash_charge_frames[idx];
+    if (frames < 0xFFu) {
+      frames = (uint8_t)(frames + 1u);
+    }
+    batch->state.smash_charge_frames[idx] = frames;
+    const uint8_t hold_max = batch->state.smash_charge_hold_frames_max[idx];
+    if (held_a == 0u || (hold_max != 0u && frames >= hold_max)) {
+      const int32_t saved_rate = batch->state.smash_charge_saved_rate_fp_q16_16[idx];
+      batch->state.frame_speed_mul_fp_q16_16[idx] = (saved_rate != 0) ? saved_rate : (1 << 16);
+      grounded_smash_charge_clear(batch, idx);
+      return;
+    }
+    batch->state.kb_smashcharge_active[idx] = 1u;
+    batch->state.frame_speed_mul_fp_q16_16[idx] = 0;
+    return;
+  }
+
+  if (batch->state.smash_charge_state[idx] == 1u) {
+    if (held_a == 0u) {
+      grounded_smash_charge_clear(batch, idx);
+      return;
+    }
+    batch->state.smash_charge_state[idx] = 2u;
+    batch->state.smash_charge_frames[idx] = 0u;
+    batch->state.kb_smashcharge_active[idx] = 1u;
+    if (batch->state.smash_charge_saved_rate_fp_q16_16[idx] == 0) {
+      batch->state.smash_charge_saved_rate_fp_q16_16[idx] =
+          batch->state.frame_speed_mul_fp_q16_16[idx];
+    }
+    batch->state.frame_speed_mul_fp_q16_16[idx] = 0;
+    return;
+  }
+
+  const float cur_anim_frame = batch->state.anim_frame_f32[idx];
+  const float prev_anim_frame =
+      cur_anim_frame - q16_16_to_f32(batch->state.frame_speed_mul_fp_q16_16[idx]);
+  uint8_t hold_frames = 0u;
+  if (!move_tables_grounded_smash_charge_crossed(batch->state.char_id[idx], action_id,
+                                                 prev_anim_frame, cur_anim_frame, &hold_frames)) {
+    return;
+  }
+
+  // Current-sim bridge note:
+  // - The visible af=2 hold shows up on rows with prior-frame A continuity in replay-real data.
+  // - Gate the live smash-charge start on held A in both prev/current lanes so a fresh same-row A
+  //   pulse does not over-admit the hidden charge state before the next visible snapshot.
+  // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A360,Fighter_Spaghetti_8006AD10}
+  // refs/melee/src/melee/ft/ft_0DF0.c::ftCo_800DF0D0
+  if (held_a == 0u || prev_held_a == 0u) {
+    return;
+  }
+
+  batch->state.smash_charge_state[idx] = 2u;
+  batch->state.smash_charge_frames[idx] = 0u;
+  batch->state.smash_charge_hold_frames_max[idx] = hold_frames;
+  batch->state.smash_charge_saved_rate_fp_q16_16[idx] = batch->state.frame_speed_mul_fp_q16_16[idx];
+  batch->state.kb_smashcharge_active[idx] = 1u;
+  batch->state.frame_speed_mul_fp_q16_16[idx] = 0;
 }
 
 static inline void opening_input_lock_apply_Fighter_UnkInitLoad_80068914_Inner1_subset(
@@ -566,6 +682,8 @@ int input_apply(MslBatch* batch, const uint8_t* prev_input_bytes, size_t prev_in
       if (batch->state.opening_input_lock_timer[bi] > 0u) {
         opening_input_lock_apply_Fighter_UnkInitLoad_80068914_Inner1_subset(batch, idx);
       }
+
+      grounded_smash_charge_update_ftCo_800DF0D0_subset(batch, idx);
     }
   }
 

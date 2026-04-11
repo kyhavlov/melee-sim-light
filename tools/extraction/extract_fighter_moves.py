@@ -462,6 +462,43 @@ def _parse_subaction_events(
                         data={"flags": int(_u26(w0))},
                     )
                 )
+            elif op == 56:
+                # Start smash charge (ftAction_80073008 -> ftCo_800DEE84).
+                #
+                # Decomp/ASM:
+                # - ftAction_80073008 decodes the command payload and calls
+                #   `ftCo_800DEE84(gobj, color_anim, hold_frames, damage_mul)`.
+                # - ftCo_800DEE84 seeds `fp->smash_attrs.state = SmashState_PreCharge`.
+                # refs/melee/src/melee/ft/ftaction.c::ftAction_80073008
+                # refs/melee/build/GALE01/asm/melee/ft/ftaction.s::ftAction_80073008
+                # refs/melee/src/melee/ft/ft_0DF0.c::ftCo_800DEE84
+                #
+                # Bit layout anchor:
+                # - HSDRawViewer's command_fighter.yml labels opcode 56 as "Start Smash Charge".
+                # refs/HSDLib/HSDRawViewer/Scripts/command_fighter.yml
+                #
+                # GALE01 asm decodes:
+                # - hold_frames: low 10 bits of the upper halfword (word0 bits 16..25)
+                # - damage_mul : lower 16 bits of word0 scaled by 0.01
+                # - color_anim : top byte of word1
+                if n_words < 2:
+                    pc += 4 * n_words
+                    continue
+                w1 = _u32_be(archive.buf, pc + 4)
+                hold_frames = (w0 >> 16) & 0x3FF
+                damage_mul = float(w0 & 0xFFFF) * (1.0 / 100.0)
+                color_anim = (w1 >> 24) & 0xFF
+                out.append(
+                    Event(
+                        frame=frame,
+                        kind="start_smash_charge",
+                        data={
+                            "hold_frames": int(hold_frames),
+                            "damage_mul": float(damage_mul),
+                            "color_anim": int(color_anim),
+                        },
+                    )
+                )
             elif op == 38:
                 # Pseudo-random SFX command (ftAction_80071FC8):
                 # - consumes one HSD_Randi(random_range) per command execution.

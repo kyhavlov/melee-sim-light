@@ -62,6 +62,10 @@ int state_alloc(MslStateSoA* state, int batch_size) {
   state->facing_dir1 = (int8_t*)alloc_aligned_64(sizeof(int8_t) * bp);
   state->ground_friction_mul = (float*)alloc_aligned_64(sizeof(float) * bp);
   state->kb_smashcharge_active = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
+  state->smash_charge_state = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
+  state->smash_charge_frames = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
+  state->smash_charge_hold_frames_max = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
+  state->smash_charge_saved_rate_fp_q16_16 = (int32_t*)alloc_aligned_64(sizeof(int32_t) * bp);
   state->on_ground = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->frame_start_on_ground = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->prev_on_ground = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
@@ -338,7 +342,9 @@ int state_alloc(MslStateSoA* state, int batch_size) {
       !state->coll_stage_cur_pos_y || !state->speed_air_x_self || !state->speed_ground_x_self ||
       !state->speed_y_self || !state->speed_x_attack || !state->speed_y_attack ||
       !state->fighter_scale_y || !state->facing || !state->facing_dir1 ||
-      !state->ground_friction_mul || !state->kb_smashcharge_active || !state->on_ground ||
+      !state->ground_friction_mul || !state->kb_smashcharge_active || !state->smash_charge_state ||
+      !state->smash_charge_frames || !state->smash_charge_hold_frames_max ||
+      !state->smash_charge_saved_rate_fp_q16_16 || !state->on_ground ||
       !state->frame_start_on_ground || !state->prev_on_ground || !state->ground_contact_x ||
       !state->ground_contact_y || !state->ground_normal_x || !state->ground_normal_y ||
       !state->wall_contact_x || !state->wall_contact_y || !state->wall_normal_x ||
@@ -436,6 +442,10 @@ int state_alloc(MslStateSoA* state, int batch_size) {
   memset(state->capture_wait_prev_rate_fp_q16_16, 0, sizeof(int32_t) * bp);
   memset(state->capture_wait_seed_rate_snapshot_fp_q16_16, 0, sizeof(int32_t) * bp);
   memset(state->capture_wait_prev_rate_valid, 0, sizeof(uint8_t) * bp);
+  memset(state->smash_charge_state, 0, sizeof(uint8_t) * bp);
+  memset(state->smash_charge_frames, 0, sizeof(uint8_t) * bp);
+  memset(state->smash_charge_hold_frames_max, 0, sizeof(uint8_t) * bp);
+  memset(state->smash_charge_saved_rate_fp_q16_16, 0, sizeof(int32_t) * bp);
   memset(state->walk_anim_source_vel, 0, sizeof(float) * bp);
   memset(state->x2228_b7, 0, sizeof(uint8_t) * bp);
   memset(state->damage_hitlag_floorhug_latch, 0, sizeof(uint8_t) * bp);
@@ -487,6 +497,10 @@ void state_free(MslStateSoA* state) {
   alloc_free(state->facing_dir1);
   alloc_free(state->ground_friction_mul);
   alloc_free(state->kb_smashcharge_active);
+  alloc_free(state->smash_charge_state);
+  alloc_free(state->smash_charge_frames);
+  alloc_free(state->smash_charge_hold_frames_max);
+  alloc_free(state->smash_charge_saved_rate_fp_q16_16);
   alloc_free(state->on_ground);
   alloc_free(state->frame_start_on_ground);
   alloc_free(state->prev_on_ground);

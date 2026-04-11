@@ -83,6 +83,20 @@ typedef struct MslStateSoA {
   float* ground_friction_mul;
   // Smash charge lane (decomp: fp->smash_attrs.state == SmashState_Charging).
   uint8_t* kb_smashcharge_active;
+  // Live grounded-smash charge internals (`fp->smash_attrs`) for current-sim / rollout ownership.
+  //
+  // Decomp:
+  // - opcode 56 / ftAction_80073008 seeds SmashState_PreCharge via ftCo_800DEE84.
+  // - the later fighter input proc (ftCo_800DF0D0) promotes PreCharge -> Charging on held A and
+  //   restores the saved anim rate on release.
+  // - the anim proc (ftCo_800DEF38) advances the charging frame counter and auto-releases at the
+  //   script-provided hold limit.
+  // refs/melee/src/melee/ft/ftaction.c::ftAction_80073008
+  // refs/melee/src/melee/ft/ft_0DF0.c::{ftCo_800DEE84,ftCo_800DEF38,ftCo_800DF0D0}
+  uint8_t* smash_charge_state;                 // 0=None, 1=PreCharge, 2=Charging
+  uint8_t* smash_charge_frames;                // elapsed Charging frames
+  uint8_t* smash_charge_hold_frames_max;       // ftCo_800DEE84 arg2 / x211C_holdFrame
+  int32_t* smash_charge_saved_rate_fp_q16_16;  // x2124_frameSpeedMul
   uint8_t* on_ground;
   uint8_t* frame_start_on_ground;  // on_ground value captured before current-frame callbacks.
   uint8_t* prev_on_ground;         // on_ground value before stage_collision_apply().
