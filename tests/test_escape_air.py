@@ -16,6 +16,7 @@ ACT_WAIT = 0x000E
 ACT_FALL = 0x001D
 ACT_FALL_SPECIAL = 0x0023
 ACT_ESCAPE_AIR = 0x00EC
+ACT_ENTRY_END = 0x0144
 
 # Submotion ids (GALE01): refs/melee/src/melee/ft/chara/ftCommon/forward.h
 SM_WAIT1_0 = 2
@@ -156,6 +157,31 @@ def test_air_locomotion_lr_press_enters_escape_air_next_step() -> None:
     out = _step_once(seed, prev_inp, inp)
     assert int(out["action_id"][0]) == ACT_ESCAPE_AIR
     assert int(out["animation_index"][0]) == SM_ESCAPE_AIR
+
+
+def test_entry_end_fall_lock_blocks_escape_air_interrupt() -> None:
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    input_stride = int(sizes["input"])
+
+    seed = _seed_air_base()
+    seed["fighter_scale_y"][0, :2] = np.float32(1.0)
+    seed["action_id"][0, 0] = np.uint16(ACT_FALL)
+    seed["action_frame"][0, 0] = np.int16(1)
+    seed["anim_frame_f32"][0, 0] = np.float32(1.0)
+    seed["frame_speed_mul_f32"][0, 0] = np.float32(1.0)
+    seed["animation_index"][0, 0] = np.uint32(SM_FALL)
+    seed["entry_end_fall_lock"][0, 0] = np.uint8(1)
+
+    prev_inp = _mk_input_bytes(1, input_stride)
+    inp = _mk_input_bytes(1, input_stride)
+    inp_view = inp.view(INPUT_DTYPE).reshape((1,))
+    inp_view["p"]["buttons"][0, 0] = np.uint16(BUTTON_L)
+
+    out = _step_once(seed, prev_inp, inp)
+    assert int(out["action_id"][0]) == ACT_FALL
+    assert int(out["animation_index"][0]) == SM_FALL
 
 
 def test_escape_air_entry_velocity_within_deadzone_is_zero() -> None:

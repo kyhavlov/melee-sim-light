@@ -3520,6 +3520,11 @@ void locomotion_update_pre(MslBatch* batch) {
         }
         // Transitioned into an air locomotion state (FallSpecial). Continue with drift below.
       } else if (is_air_loco) {
+        const uint8_t entry_end_fall_lock_active =
+            (action_id == (uint16_t)MSL_ACT_FALL && batch->state.on_ground[idx] == 0u &&
+             batch->state.entry_end_fall_lock[idx] != 0u)
+                ? 1u
+                : 0u;
         // Air dodge (EscapeAir) entry from eligible airborne locomotion states.
         //
         // Decomp entry check: ftCo_80099A58 (L/R press) is called from Jump/Fall-family IASA
@@ -3528,46 +3533,57 @@ void locomotion_update_pre(MslBatch* batch) {
         // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c::ftCo_Jump_IASA
         // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_IASA
         // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DamageFall.c::ftCo_DamageFall_IASA
-        const uint8_t allow_escape_air =
-            (action_id == MSL_ACT_JUMP_F || action_id == MSL_ACT_JUMP_B ||
-             action_id == MSL_ACT_JUMP_AERIAL_F || action_id == MSL_ACT_JUMP_AERIAL_B ||
-             action_is_fall_like(action_id))
-                ? 1
-                : 0;
-        if (allow_escape_air && escape_air_try_enter_from_air_locomotion(batch, c, idx)) {
-          continue;
-        }
+        // Hidden EntryEnd -> Fall control lock:
+        // - EntryEnd has no IASA body, but its timer expiry enters ordinary Fall via
+        //   ftCommon_8007D92C.
+        // - Controlled vanilla playback shows the resulting airborne descent still suppresses the
+        //   ordinary Fall aerial IASA family until landing.
+        // refs/melee/src/melee/ft/ft_0C31.c::{ftCo_EntryEnd_Anim,ftCo_EntryEnd_IASA}
+        // refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007D92C
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_IASA
+        if (!entry_end_fall_lock_active) {
+          const uint8_t allow_escape_air =
+              (action_id == MSL_ACT_JUMP_F || action_id == MSL_ACT_JUMP_B ||
+               action_id == MSL_ACT_JUMP_AERIAL_F || action_id == MSL_ACT_JUMP_AERIAL_B ||
+               action_is_fall_like(action_id))
+                  ? 1
+                  : 0;
+          if (allow_escape_air && escape_air_try_enter_from_air_locomotion(batch, c, idx)) {
+            continue;
+          }
 
-        // Aerial attack (AttackAir*) entry from eligible air locomotion states.
-        // Decomp: ftCo_AttackAir_CheckInput is consulted from IASA in common aerial states.
-        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c
-        if (locomotion_attackair_try_enter_from_air_iasa(batch, c, idx)) {
-          continue;
-        }
+          // Aerial attack (AttackAir*) entry from eligible air locomotion states.
+          // Decomp: ftCo_AttackAir_CheckInput is consulted from IASA in common aerial states.
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c
+          if (locomotion_attackair_try_enter_from_air_iasa(batch, c, idx)) {
+            continue;
+          }
 
-        // Aerial jump (double jump) entry.
-        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::ftCo_JumpAerial_Enter_Basic
-        if ((buttons_pressed & (uint16_t)MSL_BUTTON_XY) || did_tap_jump(c, stick_y, tilt_timer_y)) {
-          if (batch->state.jumps_left[idx] > 0 && action_id != MSL_ACT_JUMP_AERIAL_F &&
-              action_id != MSL_ACT_JUMP_AERIAL_B) {
-            const uint16_t act = jump_aerial_action_from_stick(c, stick_x, facing_dir);
-            batch->state.action_id[idx] = act;
-            batch->state.animation_index[idx] = submotion_for_action(act);
-            msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
-            batch->state.speed_air_x_self[idx] = stick_x * ch->air_jump_h_multiplier;
-            batch->state.speed_y_self[idx] =
-                ch->jump_v_initial_velocity * ch->air_jump_v_multiplier;
-            // Decomp: fp->x671_timer_lstick_tilt_y = 0xFE;
-            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c:152-156
-            batch->state.tilt_timer_y[idx] = 0xFEu;
-            batch->state.fall_fast[idx] = 0;
-            tilt_timer_y = 0xFEu;
-            batch->state.jumps_left[idx]--;
-            // Decomp: ftCo_JumpAerial_Enter_Basic calls ftCommon_8007D5D4.
-            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::ftCo_JumpAerial_Enter_Basic
-            // refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007D5D4
-            batch->state.ecb_lock_timer[idx] = 10u;
-            action_id = act;
+          // Aerial jump (double jump) entry.
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::ftCo_JumpAerial_Enter_Basic
+          if ((buttons_pressed & (uint16_t)MSL_BUTTON_XY) ||
+              did_tap_jump(c, stick_y, tilt_timer_y)) {
+            if (batch->state.jumps_left[idx] > 0 && action_id != MSL_ACT_JUMP_AERIAL_F &&
+                action_id != MSL_ACT_JUMP_AERIAL_B) {
+              const uint16_t act = jump_aerial_action_from_stick(c, stick_x, facing_dir);
+              batch->state.action_id[idx] = act;
+              batch->state.animation_index[idx] = submotion_for_action(act);
+              msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+              batch->state.speed_air_x_self[idx] = stick_x * ch->air_jump_h_multiplier;
+              batch->state.speed_y_self[idx] =
+                  ch->jump_v_initial_velocity * ch->air_jump_v_multiplier;
+              // Decomp: fp->x671_timer_lstick_tilt_y = 0xFE;
+              // refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c:152-156
+              batch->state.tilt_timer_y[idx] = 0xFEu;
+              batch->state.fall_fast[idx] = 0;
+              tilt_timer_y = 0xFEu;
+              batch->state.jumps_left[idx]--;
+              // Decomp: ftCo_JumpAerial_Enter_Basic calls ftCommon_8007D5D4.
+              // refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::ftCo_JumpAerial_Enter_Basic
+              // refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007D5D4
+              batch->state.ecb_lock_timer[idx] = 10u;
+              action_id = act;
+            }
           }
         }
 
@@ -3736,6 +3752,14 @@ void locomotion_update_post_collision(MslBatch* batch) {
       }
 
       if (!was_ground && now_ground) {
+        if (batch->state.entry_end_fall_lock[idx] != 0u) {
+          // EntryEnd -> Fall hidden-control lock lifetime:
+          // - controlled vanilla playback keeps the lock active only across the airborne descent,
+          // - landing ends that hidden ownership before the next frame's ordinary grounded logic.
+          // refs/melee/src/melee/ft/ft_0C31.c::{ftCo_EntryEnd_Anim,ftCo_EntryEnd_IASA}
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_Coll
+          batch->state.entry_end_fall_lock[idx] = 0u;
+        }
         if (a == (uint16_t)MSL_ACT_LANDING &&
             landing_contact_y_bridge_matches_source(a, batch->state.action_frame[idx],
                                                     batch->state.prev_action_id[idx],

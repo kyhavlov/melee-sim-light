@@ -19,6 +19,7 @@ ACT_DASH = 0x0014
 ACT_RUN = 0x0015
 ACT_KNEEBEND = 0x0018
 ACT_JUMPF = 0x0019
+ACT_JUMP_AERIAL_F = 0x001B
 ACT_FALL = 0x001D
 ACT_SQUAT = 0x0027
 ACT_ATTACK_DASH = 0x0032
@@ -39,6 +40,7 @@ ACT_PASSIVE_WALL_JUMP = 0x00CB
 ACT_ESCAPE_AIR = 0x00EC
 ACT_LANDING = 0x002A
 ACT_OTTOTTO = 0x00F5
+ACT_ENTRY_END = 0x0144
 
 # Submotion ids (GALE01): refs/melee/src/melee/ft/chara/ftCommon/forward.h
 SM_WAIT1_0 = 2
@@ -80,6 +82,7 @@ INTERNALS_DTYPE = np.dtype(
         ("turn_frames_to_turn", ("u1", (MAX_PLAYERS,))),
         ("turn_has_turned", ("u1", (MAX_PLAYERS,))),
         ("guard_reflect_timer_x14", ("u1", (MAX_PLAYERS,))),
+        ("entry_end_fall_lock", ("u1", (MAX_PLAYERS,))),
         ("attack_id", ("<u2", (MAX_PLAYERS,))),
         ("attack_instance", ("<u2", (MAX_PLAYERS,))),
         ("attack_identity_last_action_id", ("<u2", (MAX_PLAYERS,))),
@@ -1301,6 +1304,157 @@ def test_air_jump_consumes_jump_and_enters_jump_aerial() -> None:
     assert int(out["action_id"][0]) == 0x001B
     assert int(out["action_frame"][0]) == 0
     assert int(out["jumps_left"][0]) == 0
+
+
+def test_entry_end_fall_lock_blocks_jump_aerial_interrupt() -> None:
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    input_stride = int(sizes["input"])
+
+    seed = _seed_base()
+    seed["fighter_scale_y"][0, :2] = np.float32(1.0)
+    seed["on_ground"][0, 0] = np.uint8(0)
+    seed["pos_y"][0, 0] = np.float32(10.0)
+    seed["action_id"][0, 0] = np.uint16(ACT_FALL)
+    seed["action_frame"][0, 0] = np.int16(1)
+    seed["anim_frame_f32"][0, 0] = np.float32(1.0)
+    seed["frame_speed_mul_f32"][0, 0] = np.float32(1.0)
+    seed["animation_index"][0, 0] = np.uint32(SM_FALL)
+    seed["entry_end_fall_lock"][0, 0] = np.uint8(1)
+    seed["jumps_left"][0, 0] = np.uint8(1)
+
+    prev_inp = _mk_input_bytes(1, input_stride)
+    inp = _mk_input_bytes(1, input_stride)
+    cur_view = inp.view(INPUT_DTYPE).reshape((1,))
+    cur_view["p"]["buttons"][0, 0] = np.uint16(BUTTON_Y)
+    cur_view["p"]["main_x"][0, 0] = np.int8(80)
+
+    out = _step_once(seed, prev_inp, inp)
+    assert int(out["action_id"][0]) == ACT_FALL
+    assert int(out["animation_index"][0]) == SM_FALL
+    assert int(out["jumps_left"][0]) == 1
+
+
+def test_entry_end_fall_lock_blocks_horizontal_air_drift() -> None:
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    input_stride = int(sizes["input"])
+
+    seed = _seed_base()
+    seed["fighter_scale_y"][0, :2] = np.float32(1.0)
+    seed["on_ground"][0, 0] = np.uint8(0)
+    seed["pos_x"][0, 0] = np.float32(-60.0)
+    seed["pos_y"][0, 0] = np.float32(10.0)
+    seed["action_id"][0, 0] = np.uint16(ACT_FALL)
+    seed["action_frame"][0, 0] = np.int16(1)
+    seed["anim_frame_f32"][0, 0] = np.float32(1.0)
+    seed["frame_speed_mul_f32"][0, 0] = np.float32(1.0)
+    seed["animation_index"][0, 0] = np.uint32(SM_FALL)
+    seed["entry_end_fall_lock"][0, 0] = np.uint8(1)
+    seed["speed_air_x_self"][0, 0] = np.float32(0.0)
+
+    prev_inp = _mk_input_bytes(1, input_stride)
+    inp = _mk_input_bytes(1, input_stride)
+    cur_view = inp.view(INPUT_DTYPE).reshape((1,))
+    cur_view["p"]["main_x"][0, 0] = np.int8(80)
+
+    out = _step_once(seed, prev_inp, inp)
+    assert int(out["action_id"][0]) == ACT_FALL
+    assert float(out["pos_x"][0]) == np.float32(-60.0)
+
+
+def test_entry_end_fall_lock_blocks_air_b_special_interrupt() -> None:
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    input_stride = int(sizes["input"])
+
+    seed = _seed_base()
+    seed["fighter_scale_y"][0, :2] = np.float32(1.0)
+    seed["on_ground"][0, 0] = np.uint8(0)
+    seed["pos_x"][0, 0] = np.float32(-60.0)
+    seed["pos_y"][0, 0] = np.float32(10.0)
+    seed["action_id"][0, 0] = np.uint16(ACT_FALL)
+    seed["action_frame"][0, 0] = np.int16(1)
+    seed["anim_frame_f32"][0, 0] = np.float32(1.0)
+    seed["frame_speed_mul_f32"][0, 0] = np.float32(1.0)
+    seed["animation_index"][0, 0] = np.uint32(SM_FALL)
+    seed["entry_end_fall_lock"][0, 0] = np.uint8(1)
+
+    prev_inp = _mk_input_bytes(1, input_stride)
+    inp = _mk_input_bytes(1, input_stride)
+    cur_view = inp.view(INPUT_DTYPE).reshape((1,))
+    cur_view["p"]["buttons"][0, 0] = np.uint16(BUTTON_B)
+    cur_view["p"]["main_x"][0, 0] = np.int8(80)
+
+    out = _step_once(seed, prev_inp, inp)
+    assert int(out["action_id"][0]) == ACT_FALL
+    assert int(out["animation_index"][0]) == SM_FALL
+
+
+def test_plain_fall_b_edge_side_input_enters_specialairsstart() -> None:
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    input_stride = int(sizes["input"])
+
+    seed = _seed_base()
+    seed["fighter_scale_y"][0, :2] = np.float32(1.0)
+    seed["on_ground"][0, 0] = np.uint8(0)
+    seed["pos_x"][0, 0] = np.float32(-60.0)
+    seed["pos_y"][0, 0] = np.float32(10.0)
+    seed["action_id"][0, 0] = np.uint16(ACT_FALL)
+    seed["action_frame"][0, 0] = np.int16(1)
+    seed["anim_frame_f32"][0, 0] = np.float32(1.0)
+    seed["frame_speed_mul_f32"][0, 0] = np.float32(1.0)
+    seed["animation_index"][0, 0] = np.uint32(SM_FALL)
+    seed["facing"][0, 0] = np.uint8(1)
+
+    prev_inp = _mk_input_bytes(1, input_stride)
+    inp = _mk_input_bytes(1, input_stride)
+    cur_view = inp.view(INPUT_DTYPE).reshape((1,))
+    cur_view["p"]["buttons"][0, 0] = np.uint16(BUTTON_B)
+    cur_view["p"]["main_x"][0, 0] = np.int8(-100)
+
+    out = _step_once(seed, prev_inp, inp)
+    assert int(out["action_id"][0]) == ACT_FX_SPECIAL_AIR_S_START
+    assert int(out["action_frame"][0]) == 1
+    assert int(out["animation_index"][0]) == SM_FX_SPECIAL_AIR_S_START
+    assert int(out["on_ground"][0]) == 0
+    assert int(out["facing"][0]) == 0
+
+
+def test_entry_end_fall_lock_clears_on_landing() -> None:
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    input_stride = int(sizes["input"])
+
+    seed = _seed_base()
+    seed["fighter_scale_y"][0, :2] = np.float32(1.0)
+    seed["on_ground"][0, 0] = np.uint8(0)
+    seed["action_id"][0, 0] = np.uint16(ACT_FALL)
+    seed["action_frame"][0, 0] = np.int16(1)
+    seed["anim_frame_f32"][0, 0] = np.float32(1.0)
+    seed["frame_speed_mul_f32"][0, 0] = np.float32(1.0)
+    seed["animation_index"][0, 0] = np.uint32(SM_FALL)
+    seed["entry_end_fall_lock"][0, 0] = np.uint8(1)
+    seed["ground_id"][0, 0] = np.uint16(1)
+    bot0 = _fox_ecb_bottom_rel_y(SM_FALL, 1)
+    seed["pos_y"][0, 0] = np.float32(-bot0 + 0.10)
+    grav = np.float32(_fox_attr("grav"))
+    bot1 = _fox_ecb_bottom_rel_y(SM_FALL, 2)
+    seed["speed_y_self"][0, 0] = np.float32(min(-0.05, -(0.20 + (bot1 - bot0)) + grav))
+
+    prev_inp = _mk_input_bytes(1, input_stride)
+    inp = _mk_input_bytes(1, input_stride)
+
+    out_cmp, out_int = _step_once_with_internals(seed, prev_inp, inp)
+    assert int(out_cmp["on_ground"][0]) == 1
+    assert int(out_cmp["action_id"][0]) == ACT_LANDING
+    assert int(out_int["entry_end_fall_lock"][0]) == 0
 
 
 def test_landing_resets_jumps_and_enters_landing() -> None:

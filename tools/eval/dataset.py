@@ -165,6 +165,11 @@ SEED_DTYPE = np.dtype(
         # refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
         ("jab_x0", _arr("u1", MAX_PLAYERS)),
         ("match_flow_timer", _arr("u1", MAX_PLAYERS)),
+        # Hidden EntryEnd -> Fall airborne-control lock. Derived causally from replay action /
+        # grounding history because the handoff owner is not directly visible in post-frame lanes.
+        # refs/melee/src/melee/ft/ft_0C31.c::{ftCo_EntryEnd_Anim,ftCo_EntryEnd_IASA}
+        # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::{ftCo_Fall_IASA,ftCo_Fall_Phys}
+        ("entry_end_fall_lock", _arr("u1", MAX_PLAYERS)),
         # Replay-visible camera-box visibility bit (`fp->x221F_b0`) promoted as an explicit seed
         # lane for F04 Rebirth/dead-flow ownership fixes.
         # refs/melee/src/melee/ft/ftlib.c::ftLib_80086A8C

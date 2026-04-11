@@ -358,6 +358,11 @@ void match_flow_update_pre_anim(MslBatch* batch) {
       const size_t idx = msl_idx_player(bi, p);
       const uint16_t a = batch->state.action_id[idx];
 
+      if (batch->state.entry_end_fall_lock[idx] != 0u &&
+          (a != (uint16_t)MSL_ACT_FALL || batch->state.on_ground[idx] != 0u)) {
+        batch->state.entry_end_fall_lock[idx] = 0u;
+      }
+
       if (!(match_flow_is_dead_action(a) || match_flow_is_respawn_action(a) ||
             match_flow_is_entry_action(a))) {
         continue;
@@ -414,6 +419,16 @@ void match_flow_update_pre_anim(MslBatch* batch) {
             // Transition to Fall; preserve the current EntryEnd position so Fall physics can take
             // over from the last EntryEnd pose.
             enter_fall(batch, idx);
+            // Hidden EntryEnd -> Fall control lock:
+            // - EntryEnd timer expiry transitions through ftCommon_8007D92C -> ftCo_Fall_Enter.
+            // - Controlled vanilla playback of the opening EntryEnd descent keeps ordinary Fall
+            //   aerial IASA + common air drift suppressed until landing, which is not represented
+            //   in public post-frame state.
+            // Promote that hidden ownership as a dedicated seed/runtime bit.
+            // refs/melee/src/melee/ft/ft_0C31.c::{ftCo_EntryEnd_Anim,ftCo_EntryEnd_IASA}
+            // refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007D92C
+            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::{ftCo_Fall_IASA,ftCo_Fall_Phys}
+            batch->state.entry_end_fall_lock[idx] = 1u;
             // EntryEnd->Fall transition is evaluated here before the shared anim-timebase advance;
             // in decomp this state transition is callback-owned (prio 1), so preserve the first Fall
             // post-frame at action_frame=0 by seeding the pre-tick lane.

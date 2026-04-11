@@ -538,6 +538,7 @@ static int msl_batch_init_match_impl(MslBatch* batch, const uint8_t* config_byte
       seed->seed_prev_action_id[p] = (uint16_t)MSL_ACT_ENTRY;
       seed->seed_prev_action_frame[p] = -1;
       seed->match_flow_timer[p] = (uint8_t)(5 * (p + 1));
+      seed->entry_end_fall_lock[p] = 0u;
       seed->animation_index[p] = (uint32_t)MSL_ANIM_NONE_U32;
       seed->anim_frame_f32[p] = -1.0f;
       seed->frame_speed_mul_f32[p] = 0.0f;
@@ -726,6 +727,7 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
       batch->state.source_clear_terminal_phase[idx] =
           seed->source_clear_terminal_phase[p] ? 1u : 0u;
       batch->state.match_flow_timer[idx] = seed->match_flow_timer[p];
+      batch->state.entry_end_fall_lock[idx] = seed->entry_end_fall_lock[p] ? 1u : 0u;
       batch->state.camera_box_visible_x221f_b0[idx] =
           seed->camera_box_visible_x221f_b0[p] ? 1u : 0u;
       float rebirth_camera_anchor_y = seed->rebirth_camera_anchor_y_f32[p];
@@ -1790,6 +1792,7 @@ int msl_batch_debug_write_internals(const MslBatch* batch, uint8_t* out_bytes,
       out->turn_frames_to_turn[p] = batch->state.turn_frames_to_turn[idx];
       out->turn_has_turned[p] = batch->state.turn_has_turned[idx];
       out->guard_reflect_timer_x14[p] = batch->state.guard_reflect_timer_x14[idx];
+      out->entry_end_fall_lock[p] = batch->state.entry_end_fall_lock[idx];
       out->attack_id[p] = batch->state.attack_id[idx];
       out->attack_instance[p] = batch->state.attack_instance[idx];
       out->attack_identity_last_action_id[p] = batch->state.attack_identity_last_action_id[idx];

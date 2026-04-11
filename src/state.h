@@ -177,6 +177,10 @@ typedef struct MslStateSoA {
   float* grab_offset_y;            // [batch * players]
   float* grab_offset_z;            // [batch * players]
   uint8_t* match_flow_timer;
+  // Hidden EntryEnd -> Fall airborne-control lock promoted as a named seeded/runtime lane.
+  // refs/melee/src/melee/ft/ft_0C31.c::{ftCo_EntryEnd_Anim,ftCo_EntryEnd_IASA}
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::{ftCo_Fall_IASA,ftCo_Fall_Phys}
+  uint8_t* entry_end_fall_lock;
   // Rebirth / dead-flow camera-box visibility (`fp->x221F_b0`) promoted as a named SoA lane for
   // future F04 ownership fixes. Seeded from replay-visible `state_flags[...,4] & 0x80`.
   // refs/melee/src/melee/ft/ftlib.c::ftLib_80086A8C

@@ -300,6 +300,50 @@ def _derive_match_flow_timer(*, action_id_u16: np.ndarray, port0: int, common: d
     return out
 
 
+def _derive_entry_end_fall_lock(
+    *, action_id_u16: np.ndarray, on_ground_u8: np.ndarray, act_entry_end: int = 0x0144, act_fall: int = 0x001D
+) -> np.ndarray:
+    """
+    Derive the hidden EntryEnd -> Fall airborne-control lock from replay history.
+
+    Decomp / playback anchors:
+    - EntryEnd timer expiry transitions through ftCommon_8007D92C -> ftCo_Fall_Enter.
+    - EntryEnd has no IASA body, while ordinary Fall would normally admit aerial IASA/drift.
+    - Controlled vanilla playback of the opening EntryEnd descent keeps those ordinary Fall
+      controls suppressed across the airborne Fall run until landing; that handoff owner is not
+      exposed in public post-frame lanes.
+    refs/melee/src/melee/ft/ft_0C31.c::{ftCo_EntryEnd_Anim,ftCo_EntryEnd_IASA}
+    refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007D92C
+    refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::{ftCo_Fall_IASA,ftCo_Fall_Phys}
+    """
+    action_id = np.asarray(action_id_u16, dtype=np.uint16).reshape(-1)
+    on_ground = np.asarray(on_ground_u8, dtype=np.uint8).reshape(-1)
+    n = int(action_id.size)
+    out = np.zeros(n, dtype=np.uint8)
+    if int(on_ground.size) != n:
+        raise ValueError("on_ground_u8 must match action_id_u16 length")
+
+    act_entry_end_u16 = int(act_entry_end) & 0xFFFF
+    act_fall_u16 = int(act_fall) & 0xFFFF
+    prev_action: int | None = None
+    lock = 0
+    for i in range(n):
+        cur_action = int(action_id[i])
+        grounded = int(on_ground[i]) != 0
+        if cur_action == act_fall_u16 and not grounded:
+            if prev_action == act_entry_end_u16:
+                lock = 1
+            elif lock != 0:
+                lock = 1
+            else:
+                lock = 0
+        else:
+            lock = 0
+        out[i] = np.uint8(lock)
+        prev_action = cur_action
+    return out
+
+
 @functools.lru_cache(maxsize=1)
 def _fd_respawn_points_y(*, data_dir: str = "data") -> np.ndarray:
     """
@@ -2218,6 +2262,9 @@ def _main_impl(args) -> None:
         port0 = int(src_ports[slot]) - 1
         samples["seed_t"]["match_flow_timer"][:, slot] = _derive_match_flow_timer(
             action_id_u16=post_state, port0=port0, common=common
+        )[:-1]
+        samples["seed_t"]["entry_end_fall_lock"][:, slot] = _derive_entry_end_fall_lock(
+            action_id_u16=post_state, on_ground_u8=post_on_ground
         )[:-1]
         samples["seed_t"]["camera_box_visible_x221f_b0"][:, slot] = derive_camera_box_visible_x221f_b0(
             state_flags_u8=state_flags

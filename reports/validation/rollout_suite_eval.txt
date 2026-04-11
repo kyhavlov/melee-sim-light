@@ -8,7 +8,7 @@
 # preprocess_suite stamp:
 #   path: datasets/fox_falco_fd_ucf084_recent/.preprocess_meta.json
 #   force_used: True  built: 4  skipped: 0
-#   seed_dtype_itemsize: 2684  sample_dtype_itemsize: 3770
+#   seed_dtype_itemsize: 2688  sample_dtype_itemsize: 3774
 #
 # Regenerate gitignored ISO-derived data artifacts (if missing/stale):
 # - Opcode-25 airborne-state timelines (data/airborne_state_events/{fox,falco}.bin):

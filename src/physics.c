@@ -1185,6 +1185,11 @@ void physics_integrate(MslBatch* batch) {
             //   refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c::ftFx_SpecialAirLwLoop_Phys
             const MslCharParams* ch = msl_char_params(batch->state.char_id[idx]);
             if (ch != NULL) {
+              const uint8_t entry_end_fall_lock_active =
+                  (action_id == (uint16_t)MSL_ACT_FALL && batch->state.on_ground[idx] == 0u &&
+                   batch->state.entry_end_fall_lock[idx] != 0u)
+                      ? 1u
+                      : 0u;
               const float stick_x = apply_deadzone(stick_i8_to_unit(batch->state.input_main_x[idx]),
                                                    c->lstick_deadzone_x);
               if (physics_action_is_shine_air(action_id)) {
@@ -1201,9 +1206,18 @@ void physics_integrate(MslBatch* batch) {
                     batch->state.speed_air_x_self[idx], ch->aerial_friction);
               } else if (physics_action_uses_common_air_drift(action_id) ||
                          damage_uses_common_air_helper) {
-                batch->state.speed_air_x_self[idx] = physics_apply_common_air_drift(
-                    ch, c, action_id, batch->state.fallspecial_xc[idx], stick_x,
-                    batch->state.speed_air_x_self[idx]);
+                // Hidden EntryEnd -> Fall control lock:
+                // - EntryEnd timer expiry routes through ftCommon_8007D92C into ordinary Fall.
+                // - Controlled vanilla playback of the opening descent keeps vertical fall motion
+                //   but suppresses the common-air horizontal drift helper until landing.
+                // refs/melee/src/melee/ft/ft_0C31.c::{ftCo_EntryEnd_Anim,ftCo_EntryEnd_IASA}
+                // refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007D92C
+                // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_Phys
+                if (!entry_end_fall_lock_active) {
+                  batch->state.speed_air_x_self[idx] = physics_apply_common_air_drift(
+                      ch, c, action_id, batch->state.fallspecial_xc[idx], stick_x,
+                      batch->state.speed_air_x_self[idx]);
+                }
               }
             }
           }

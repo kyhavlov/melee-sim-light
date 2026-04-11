@@ -386,6 +386,19 @@ typedef struct MslSeed {
   // exit early via inputs (IASA), and the replay action_id run length may be shorter than the
   // internal timer.
   uint8_t match_flow_timer[MSL_MAX_PLAYERS];
+  // EntryEnd -> Fall airborne handoff lock.
+  //
+  // Decomp / playback anchors:
+  // - EntryEnd timer expiry transitions through ftCommon_8007D92C -> ftCo_Fall_Enter.
+  // - EntryEnd has no IASA body of its own, while ordinary Fall would normally admit aerial IASA
+  //   branches and common air drift.
+  // - Controlled vanilla playback of the opening EntryEnd descent keeps those ordinary Fall
+  //   controls suppressed across the airborne handoff until landing; public post-frames do not
+  //   expose a distinct owner lane for that lock.
+  // refs/melee/src/melee/ft/ft_0C31.c::{ftCo_EntryEnd_Anim,ftCo_EntryEnd_IASA}
+  // refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007D92C
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::{ftCo_Fall_IASA,ftCo_Fall_Phys}
+  uint8_t entry_end_fall_lock[MSL_MAX_PLAYERS];
   // Rebirth / dead-flow camera-box visibility (`fp->x221F_b0`) as an explicit seed lane.
   //
   // Decomp / replay anchors:
@@ -989,6 +1002,7 @@ typedef struct MslDebugInternals {
   uint8_t turn_frames_to_turn[MSL_MAX_PLAYERS];      // fp->mv.co.turn.frames_to_turn
   uint8_t turn_has_turned[MSL_MAX_PLAYERS];          // fp->mv.co.turn.has_turned
   uint8_t guard_reflect_timer_x14[MSL_MAX_PLAYERS];  // mv.co.guard.x14 (+1 bias; see MslSeed)
+  uint8_t entry_end_fall_lock[MSL_MAX_PLAYERS];  // hidden EntryEnd -> Fall airborne-control lock
   // Fighter attack identity internals (decomp: fp->x2068 / fp->x206C).
   uint16_t attack_id[MSL_MAX_PLAYERS];
   uint16_t attack_instance[MSL_MAX_PLAYERS];
