@@ -12,6 +12,7 @@
 #include "common_params.h"
 #include "input_axis.h"
 #include "laser_params.h"
+#include "shine.h"
 #include "special_msids.h"
 
 // Character id mapping follows Slippi post-frame `character` (GALE01):
@@ -525,6 +526,33 @@ void blaster_update_pre_physics(MslBatch* batch) {
         case MSL_ACT_FX_SPECIAL_N_END:
           if (anim_finished(cid, lp->ground_end_msid, anim_frame_f32)) {
             enter_wait(batch, idx);
+            // Decomp callback order bridge for grounded SpecialNEnd -> Wait:
+            // - ftFx_SpecialNEnd_Anim calls ft_8008A2BC on anim end, which enters Wait.
+            // - Fighter proc then dispatches the destination Wait input callback in that same
+            //   frame, so grounded B-special selection can immediately re-enter SpecialN/SideB/UpB
+            //   before the row falls through to plain Wait.
+            // - Keep this narrow to the grounded SpecialNEnd anim-end handoff; other Wait owners
+            //   still use their own localized bridges.
+            // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_SpecialNEnd_Anim
+            // refs/melee/src/melee/ft/ft_0892.c::ft_8008A2BC
+            // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
+            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
+            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::{
+            //   ftCo_SpecialS_CheckInput,ftCo_Attack100_CheckInput,ftCo_800D6824,ftCo_800D68C0
+            // }
+            if (blaster_try_enter_ground_from_iasa(batch, idx)) {
+              break;
+            }
+            if ((batch->state.input_buttons_pressed[idx] & (uint16_t)MSL_BUTTON_B) != 0u) {
+              const float stick_y = apply_deadzone(stick_i8_to_unit(batch->state.input_main_y[idx]),
+                                                   c->lstick_deadzone_y);
+              if (stick_y <= -c->special_stick_y_threshold) {
+                // Grounded reflector remains ordered after Neutral-B on Wait_IASA rows.
+                // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
+                // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_800D68C0
+                shine_enter_ground_start_from_iasa(batch, idx);
+              }
+            }
           }
           break;
         case MSL_ACT_FX_SPECIAL_AIR_N_START:

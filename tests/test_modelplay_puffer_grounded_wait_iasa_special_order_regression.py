@@ -31,6 +31,7 @@ FIXTURE_320 = Path(__file__).resolve().parents[1] / "tests/fixtures/modelplay/pu
 FIXTURE_322 = Path(__file__).resolve().parents[1] / "tests/fixtures/modelplay/puffer_5b_selfplay_input_prefix_0_322.json"
 FIXTURE_342 = Path(__file__).resolve().parents[1] / "tests/fixtures/modelplay/puffer_5b_selfplay_input_prefix_0_342.json"
 FIXTURE_354 = Path(__file__).resolve().parents[1] / "tests/fixtures/modelplay/puffer_5b_selfplay_input_prefix_0_354.json"
+FIXTURE_394 = Path(__file__).resolve().parents[1] / "tests/fixtures/modelplay/puffer_5b_selfplay_input_prefix_0_394.json"
 FIXTURE_SOURCE = "reports/modelplay/puffer_5b_selfplay_4stock_4min/trace.json"
 
 
@@ -448,3 +449,44 @@ def test_puffer_catch_end_wait_handoff_without_b_falls_back_to_attacks4() -> Non
         },
     )
     assert int(rows[354]["action_id"][0]) == 60  # AttackS4S
+
+
+def test_puffer_specialn_end_wait_handoff_reenters_specialn_same_frame() -> None:
+    # Regression target from the next puffer comparator owner:
+    # - frame 393 p0 is still grounded SpecialNEnd on its final animation frame,
+    # - frame 394 has a fresh B edge,
+    # - ftFx_SpecialNEnd_Anim enters Wait via ft_8008A2BC, and the destination Wait_IASA can
+    #   immediately re-enter grounded B-special selection in the same frame.
+    #
+    # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_SpecialNEnd_Anim
+    # refs/melee/src/melee/ft/ft_0892.c::ft_8008A2BC
+    # refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
+    rows = _run_prefix(FIXTURE_394, end_frame=394)
+    assert int(rows[393]["action_id"][0]) == 343  # SpecialNEnd
+    assert int(rows[394]["action_id"][0]) == ACT_FX_SPECIAL_N_START
+
+
+def test_puffer_specialn_end_wait_handoff_without_b_falls_back_to_wait() -> None:
+    rows = _run_prefix(
+        FIXTURE_394,
+        end_frame=394,
+        override_frame=394,
+        override_player=0,
+        override_processed={
+            "a": False,
+            "b": False,
+            "x": False,
+            "y": False,
+            "z": False,
+            "lTriggerDigital": False,
+            "rTriggerDigital": False,
+            "start": False,
+            "joystickX": 0.2875000238418579,
+            "joystickY": 0.0,
+            "cStickX": 0.0,
+            "cStickY": 0.0,
+            "anyTrigger": 1.0,
+        },
+    )
+    assert int(rows[394]["action_id"][0]) == 14  # Wait
