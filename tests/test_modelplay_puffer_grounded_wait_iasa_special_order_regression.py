@@ -11,16 +11,19 @@ from tools.eval.dataset import COMPARE_DTYPE, INPUT_DTYPE
 from tools.modelplay.sim_env import CHAR_FOX, SIM_INIT_OPENING_FRAME_ID, build_match_config_array
 
 ACT_ATTACK_HI4 = 0x003F
+ACT_ATTACK_LW4 = 0x0040
+ACT_CATCH = 0x00D4
 ACT_FX_SPECIAL_N_START = 0x0155
 ACT_FX_SPECIAL_HI_HOLD = 0x0161
 ACT_FX_SPECIAL_LW_START = 0x0168
 
-FIXTURE = Path(__file__).resolve().parents[1] / "tests/fixtures/modelplay/puffer_5b_selfplay_input_prefix_0_168.json"
+FIXTURE_168 = Path(__file__).resolve().parents[1] / "tests/fixtures/modelplay/puffer_5b_selfplay_input_prefix_0_168.json"
+FIXTURE_207 = Path(__file__).resolve().parents[1] / "tests/fixtures/modelplay/puffer_5b_selfplay_input_prefix_0_207.json"
 FIXTURE_SOURCE = "reports/modelplay/puffer_5b_selfplay_4stock_4min/trace.json"
 
 
-def _load_fixture() -> dict[int, dict[str, Any]]:
-    payload = json.loads(FIXTURE.read_text(encoding="utf-8"))
+def _load_fixture(path: Path) -> dict[int, dict[str, Any]]:
+    payload = json.loads(path.read_text(encoding="utf-8"))
     input_fields = payload["input_fields"]
     frames: dict[int, dict[str, Any]] = {}
     for frame_i, players_raw, source in payload["frames"]:
@@ -79,14 +82,21 @@ def _input_bytes_from_fixture_frame(
     return input_t.view(np.uint8).reshape((1, input_stride)).copy()
 
 
-def _run_prefix(*, override_p1_frame_168: dict[str, Any] | None = None) -> dict[int, np.void]:
+def _run_prefix(
+    fixture_path: Path,
+    *,
+    end_frame: int,
+    override_frame: int | None = None,
+    override_player: int = 1,
+    override_processed: dict[str, Any] | None = None,
+) -> dict[int, np.void]:
     binding = pytest.importorskip("msl_binding")
     sizes = binding.sizes()
     input_stride = int(sizes["input"])
     compare_stride = int(sizes["compare"])
 
-    frames = _load_fixture()
-    assert set(range(169)).issubset(frames.keys())
+    frames = _load_fixture(fixture_path)
+    assert set(range(end_frame + 1)).issubset(frames.keys())
 
     handle = binding.init(batch_size=1, num_players=2)
     out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
@@ -105,12 +115,29 @@ def _run_prefix(*, override_p1_frame_168: dict[str, Any] | None = None) -> dict[
         rows[0] = out_compare_bytes.view(COMPARE_DTYPE).reshape(-1)[0].copy()
 
         prev_input = _input_bytes_from_fixture_frame(frames[0], input_stride)
-        for frame_i in range(1, 169):
+        for frame_i in range(1, end_frame + 1):
             current_input = _input_bytes_from_fixture_frame(
                 frames[frame_i],
                 input_stride,
-                override_p1=override_p1_frame_168 if frame_i == 168 else None,
+                override_p1=(
+                    override_processed
+                    if override_player == 1 and override_frame is not None and frame_i == override_frame
+                    else None
+                ),
             )
+            if override_player == 0 and override_frame is not None and frame_i == override_frame:
+                current_input_arr = current_input.view(INPUT_DTYPE).reshape((1,))
+                processed = dict(frames[frame_i]["players"][0]["inputs"]["processed"])
+                processed.update(override_processed or {})
+                current_input_arr["p"]["buttons"][0, 0] = np.uint16(_buttons_mask(processed))
+                current_input_arr["p"]["main_x"][0, 0] = _processed_to_stick_i8(processed["joystickX"])
+                current_input_arr["p"]["main_y"][0, 0] = _processed_to_stick_i8(processed["joystickY"])
+                current_input_arr["p"]["c_x"][0, 0] = _processed_to_stick_i8(processed["cStickX"])
+                current_input_arr["p"]["c_y"][0, 0] = _processed_to_stick_i8(processed["cStickY"])
+                current_input_arr["p"]["l"][0, 0] = np.uint8(
+                    int(round(max(0.0, min(1.0, float(processed["anyTrigger"]))) * 140.0))
+                )
+                current_input_arr["p"]["r"][0, 0] = np.uint8(0)
             binding.step_input(handle, prev_input, current_input)
             binding.write_compare(handle, out_compare_bytes)
             rows[frame_i] = out_compare_bytes.view(COMPARE_DTYPE).reshape(-1)[0].copy()
@@ -133,7 +160,7 @@ def test_puffer_grounded_wait_iasa_b_up_enters_specialhi_before_attack() -> None
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_Attack100_CheckInput
     # refs/melee/src/melee/ft/chara/ftCommon/{ftCo_AttackDash.c,ftCo_AttackS3.c,ftCo_AttackHi3.c,ftCo_AttackHi4.c,ftCo_AttackLw4.c}
     # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::ftFx_SpecialHi_Enter
-    rows = _run_prefix()
+    rows = _run_prefix(FIXTURE_168, end_frame=168)
     assert int(rows[167]["action_id"][1]) == ACT_ATTACK_HI4
     assert int(rows[168]["action_id"][1]) == ACT_FX_SPECIAL_HI_HOLD
 
@@ -147,7 +174,11 @@ def test_puffer_grounded_wait_iasa_neutralb_stays_before_reflector() -> None:
     #   ftCo_800D6824,ftCo_800D68C0
     # }
     neutral_rows = _run_prefix(
-        override_p1_frame_168={
+        FIXTURE_168,
+        end_frame=168,
+        override_frame=168,
+        override_player=1,
+        override_processed={
             "a": False,
             "b": True,
             "x": False,
@@ -164,7 +195,11 @@ def test_puffer_grounded_wait_iasa_neutralb_stays_before_reflector() -> None:
         }
     )
     down_rows = _run_prefix(
-        override_p1_frame_168={
+        FIXTURE_168,
+        end_frame=168,
+        override_frame=168,
+        override_player=1,
+        override_processed={
             "a": False,
             "b": True,
             "x": False,
@@ -182,3 +217,45 @@ def test_puffer_grounded_wait_iasa_neutralb_stays_before_reflector() -> None:
     )
     assert int(neutral_rows[168]["action_id"][1]) == ACT_FX_SPECIAL_N_START
     assert int(down_rows[168]["action_id"][1]) == ACT_FX_SPECIAL_LW_START
+
+
+def test_puffer_grounded_wait_iasa_catch_beats_attacklw4() -> None:
+    # Regression target from the next puffer comparator owner:
+    # - frame 207 p0 has fresh A plus held trigger on a grounded Wait_IASA-delegating row,
+    # - the same row also has strong down input that would qualify for AttackLw4,
+    # - decomp checks Catch before AttackLw4, so vanilla enters Catch.
+    #
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_Catch_CheckInput
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackLw4.c::ftCo_AttackLw4_CheckInput
+    rows = _run_prefix(FIXTURE_207, end_frame=207)
+    assert int(rows[206]["action_id"][0]) == ACT_ATTACK_HI4
+    assert int(rows[207]["action_id"][0]) == ACT_CATCH
+
+
+def test_puffer_grounded_wait_iasa_attacklw4_when_trigger_removed() -> None:
+    # Control on the same prefix and frame:
+    # - clear the trigger so Catch_CheckInput no longer owns the row,
+    # - the same fresh A + down input should then fall through to AttackLw4.
+    rows = _run_prefix(
+        FIXTURE_207,
+        end_frame=207,
+        override_frame=207,
+        override_player=0,
+        override_processed={
+            "a": True,
+            "b": False,
+            "x": False,
+            "y": False,
+            "z": False,
+            "lTriggerDigital": False,
+            "rTriggerDigital": False,
+            "start": False,
+            "joystickX": -0.10000002384185791,
+            "joystickY": -1.0,
+            "cStickX": 0.0,
+            "cStickY": -1.0,
+            "anyTrigger": 0.0,
+        },
+    )
+    assert int(rows[207]["action_id"][0]) == ACT_ATTACK_LW4

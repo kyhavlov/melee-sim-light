@@ -44,6 +44,7 @@ static inline MslJumpInput jump_input_from_edges(const MslCommonParams* c, uint1
 static inline uint16_t jump_action_from_stick(const MslCommonParams* c, float stick_x,
                                               float facing_dir);
 static inline uint32_t submotion_for_action(uint16_t a);
+static inline uint8_t grounded_attack_anim_end_wait_checks_catch_before_attacks(uint16_t a);
 
 static inline uint8_t anim_finished(uint8_t char_id, uint16_t msid, float anim_frame_f32) {
   const float end = msl_anim_end_frame(char_id, msid);
@@ -738,6 +739,28 @@ static inline uint8_t grounded_attack_wait_iasa_interrupt_dest_action(uint16_t a
     case MSL_ACT_ESCAPE_N:
     case MSL_ACT_CATCH:
     case MSL_ACT_CATCH_DASH:
+      return 1u;
+    default:
+      return 0u;
+  }
+}
+
+static inline uint8_t grounded_attack_anim_end_wait_checks_catch_before_attacks(uint16_t a) {
+  switch (a) {
+    case MSL_ACT_ATTACK_DASH:
+    case MSL_ACT_ATTACK_S3_HI:
+    case MSL_ACT_ATTACK_S3_HI_S:
+    case MSL_ACT_ATTACK_S3_S:
+    case MSL_ACT_ATTACK_S3_LW_S:
+    case MSL_ACT_ATTACK_S3_LW:
+    case MSL_ACT_ATTACK_HI3:
+    case MSL_ACT_ATTACK_S4_HI:
+    case MSL_ACT_ATTACK_S4_HI_S:
+    case MSL_ACT_ATTACK_S4_S:
+    case MSL_ACT_ATTACK_S4_LW_S:
+    case MSL_ACT_ATTACK_S4_LW:
+    case MSL_ACT_ATTACK_HI4:
+    case MSL_ACT_ATTACK_LW4:
       return 1u;
     default:
       return 0u;
@@ -2189,11 +2212,18 @@ void locomotion_update_pre(MslBatch* batch) {
             // Grounded attack anim-end -> Wait destination bridge:
             // - Grounded Attack* _Anim callbacks resolve to Wait on the frame the motion finishes.
             // - Grounded Attack* _IASA delegates into ftCo_Wait_IASA when allow_interrupt is set.
-            // - The destination Wait ordering still checks grounded attacks before
-            //   ftCo_80091A4C (guard), so same-frame attack restarts must be admitted before the
-            //   shared pre-pass guard loop runs later in this frame.
+            // - For Wait_IASA-delegating owners (AttackDash, AttackS3, AttackHi3, AttackHi4,
+            //   AttackLw4) and AttackS4's equivalent IASA path, same-frame destination Wait still
+            //   checks Catch before grounded attacks.
+            // - Jab family (Attack11/12/13) and AttackLw3 do not share that Catch-before-attacks
+            //   ordering, so keep them out of this bridge.
             // refs/melee/src/melee/ft/chara/ftCommon/{ftCo_Attack1.c,ftCo_AttackS3.c,ftCo_AttackHi3.c,ftCo_AttackLw3.c,ftCo_AttackS4.c,ftCo_AttackHi4.c,ftCo_AttackLw4.c,ftCo_AttackDash.c}
             // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
+            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackS4.c::ftCo_AttackS4_IASA
+            if (grounded_attack_anim_end_wait_checks_catch_before_attacks(action_id_start) &&
+                grab_flow_try_enter_catch_from_iasa(batch, c, idx)) {
+              continue;
+            }
             if (locomotion_grounded_a_attack_try_enter_from_wait_iasa(
                     batch, c, idx, buttons_pressed, stick_x, stick_y, tilt_timer_x, tilt_timer_y,
                     facing_dir)) {
