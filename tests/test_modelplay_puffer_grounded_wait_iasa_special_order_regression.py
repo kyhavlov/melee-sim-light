@@ -15,10 +15,12 @@ ACT_ATTACK_LW4 = 0x0040
 ACT_CATCH = 0x00D4
 ACT_FX_SPECIAL_N_START = 0x0155
 ACT_FX_SPECIAL_HI_HOLD = 0x0161
+ACT_FX_SPECIAL_HI = 0x0163
 ACT_FX_SPECIAL_LW_START = 0x0168
 
 FIXTURE_168 = Path(__file__).resolve().parents[1] / "tests/fixtures/modelplay/puffer_5b_selfplay_input_prefix_0_168.json"
 FIXTURE_207 = Path(__file__).resolve().parents[1] / "tests/fixtures/modelplay/puffer_5b_selfplay_input_prefix_0_207.json"
+FIXTURE_210 = Path(__file__).resolve().parents[1] / "tests/fixtures/modelplay/puffer_5b_selfplay_input_prefix_0_210.json"
 FIXTURE_SOURCE = "reports/modelplay/puffer_5b_selfplay_4stock_4min/trace.json"
 
 
@@ -259,3 +261,19 @@ def test_puffer_grounded_wait_iasa_attacklw4_when_trigger_removed() -> None:
         },
     )
     assert int(rows[207]["action_id"][0]) == ACT_ATTACK_LW4
+
+
+def test_puffer_grounded_specialhi_launch_seeds_ground_momentum() -> None:
+    # Regression target from the next puffer comparator owner:
+    # - grounded SpecialHiHold anim-end transitions through ftFx_SpecialAirHi_AirToGround
+    # - that launch enter seeds `fp->gr_vel = x74 * fp->facing_dir` on the same frame
+    # - vanilla therefore moves immediately on the first grounded SpecialHi row
+    #
+    # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::{
+    #   ftFx_SpecialHiHold_Anim,ftFx_SpecialHiHoldAir_Anim,ftFx_SpecialAirHi_AirToGround
+    # }
+    rows = _run_prefix(FIXTURE_210, end_frame=210)
+    assert int(rows[209]["action_id"][1]) == ACT_FX_SPECIAL_HI_HOLD
+    assert int(rows[210]["action_id"][1]) == ACT_FX_SPECIAL_HI
+    assert float(rows[210]["speed_ground_x_self"][1]) == pytest.approx(-3.8, abs=1e-5)
+    assert float(rows[210]["pos_x"][1] - rows[209]["pos_x"][1]) == pytest.approx(-3.8, abs=1e-5)
