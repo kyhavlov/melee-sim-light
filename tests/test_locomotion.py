@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import struct
+from pathlib import Path
+
 import numpy as np
 
 from tools.eval.dataset import COMPARE_DTYPE, INPUT_DTYPE, SEED_DTYPE
@@ -25,6 +28,7 @@ ACT_SQUAT = 0x0027
 ACT_ATTACK_DASH = 0x0032
 ACT_ATTACK_S3_LW = 0x0037
 ACT_ATTACK_HI3 = 0x0038
+ACT_ATTACK_HI4 = 0x003F
 ACT_DAMAGEFALL = 0x0026
 ACT_LANDING_FALL_SPECIAL = 0x002B
 ACT_GUARD_ON = 0x00B2
@@ -55,6 +59,7 @@ SM_SQUAT = 30
 SM_ATTACK_DASH = 52
 SM_ATTACK_S3_LW = 57
 SM_ATTACK_HI3 = 58
+SM_ATTACK_HI4 = 66
 SM_GUARD_ON = 37
 SM_ATTACK_AIR_N = 68
 SM_ATTACK_AIR_B = 70
@@ -152,6 +157,43 @@ def _common_attr(name: str) -> float:
 
     common = json.loads(Path("data/common/ft_common_data.json").read_text())
     return float(common[name])
+
+
+def _tracks_end_frame(path: Path, msid: int) -> float:
+    with path.open("rb") as f:
+        magic = f.read(8)
+        if magic != b"SSANIMT1":
+            raise ValueError(f"bad tracks magic: {magic!r}")
+        (version,) = struct.unpack("<I", f.read(4))
+        if version not in (1, 2):
+            raise ValueError(f"unsupported tracks version: {version}")
+        local_count, anim_count = struct.unpack("<HH", f.read(4))
+        f.read(local_count)
+        f.read(2 * local_count)
+        f.read(4 * local_count)
+
+        for _ in range(anim_count):
+            (mid,) = struct.unpack("<H", f.read(2))
+            (end_frame,) = struct.unpack("<f", f.read(4))
+            if version >= 2:
+                f.read(1)
+            for _lp in range(local_count):
+                part_u8 = f.read(1)
+                if not part_u8:
+                    raise ValueError("unexpected EOF in tracks parts")
+                (n_tracks,) = struct.unpack("<B", f.read(1))
+                for _t in range(n_tracks):
+                    hdr = f.read(8)
+                    if len(hdr) != 8:
+                        raise ValueError("unexpected EOF in tracks header")
+                    (_obj_type, _frac_value, _frac_slope, _pad, _startframe, length) = struct.unpack(
+                        "<BBBBHH", hdr
+                    )
+                    f.read(int(length))
+            if int(mid) == int(msid):
+                return float(end_frame)
+
+    raise KeyError(f"msid {msid} not found in {path}")
 
 
 def _mk_input_bytes(batch: int, input_stride: int) -> np.ndarray:
@@ -1916,3 +1958,35 @@ def test_damage_fall_does_not_force_fall_fast_from_speed_y_self() -> None:
     out = _step_once(seed, prev_inp, inp)
     # A too-broad fall_fast inference (e.g. from speed_y_self alone) would force vy=-fast_fall_v here.
     assert np.isclose(out["speed_y_self"][0], np.float32(-terminal_v))
+
+
+def test_attackhi4_anim_end_wait_destination_keeps_attack_before_guard() -> None:
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    input_stride = int(sizes["input"])
+
+    seed = _seed_base()
+    end_frame = _tracks_end_frame(Path("data/anims/fox.tracks.bin"), SM_ATTACK_HI4)
+    seed["action_id"][0, 0] = np.uint16(ACT_ATTACK_HI4)
+    seed["action_frame"][0, 0] = np.int16(int(end_frame))
+    seed["animation_index"][0, 0] = np.uint32(SM_ATTACK_HI4)
+    seed["anim_frame_f32"][0, 0] = np.float32(end_frame)
+    seed["frame_speed_mul_f32"][0, 0] = np.float32(1.0)
+    seed["shield_hp"][0, 0] = np.float32(_common_attr("start_shield_health"))
+
+    prev_inp = _mk_input_bytes(1, input_stride)
+    inp = _mk_input_bytes(1, input_stride)
+    cur_view = inp.view(INPUT_DTYPE).reshape((1,))
+    cur_view["p"]["buttons"][0, 0] = np.uint16(BUTTON_A | BUTTON_Y)
+    cur_view["p"]["c_x"][0, 0] = np.int8(-57)
+    cur_view["p"]["c_y"][0, 0] = np.int8(57)
+    cur_view["p"]["l"][0, 0] = np.uint8(255)
+
+    # Decomp: AttackHi4_Anim ends through ft_8008A2BC, while AttackHi4_IASA delegates to
+    # ftCo_Wait_IASA when allow_interrupt is set. The destination Wait ordering still checks
+    # AttackHi4 before ftCo_80091A4C, so held shield must not preempt the same-frame restart.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackHi4.c::{ftCo_AttackHi4_Anim,ftCo_AttackHi4_IASA}
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
+    out = _step_once(seed, prev_inp, inp)
+    assert int(out["action_id"][0]) == ACT_ATTACK_HI4
