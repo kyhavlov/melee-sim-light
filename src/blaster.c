@@ -74,13 +74,33 @@ static inline uint8_t action_allows_special_entry_ground(uint16_t action_id) {
   // KneeBend IASA checks Attack100/Catch/AttackHi4 only and does not route into grounded special
   // dispatch.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_KneeBend.c::ftCo_KneeBend_IASA
+  // Grounded Attack* states gate their IASA on fp->allow_interrupt and only then delegate into
+  // ftCo_Wait_IASA. They must not bypass that owner through the generic grounded-special gate here.
+  // Grounded-attack special entry is modeled in localized locomotion callback bridges instead.
+  // refs/melee/src/melee/ft/chara/ftCommon/{ftCo_AttackDash.c,ftCo_AttackS3.c,ftCo_AttackHi3.c,ftCo_AttackHi4.c,ftCo_AttackLw4.c}
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
   //
   // Keep this narrowly scoped: other ground states (including shield) have non-empty IASA callbacks
   // and may allow specials depending on per-state input checks.
-  if (action_id == (uint16_t)MSL_ACT_ESCAPE_N || action_id == (uint16_t)MSL_ACT_KNEE_BEND) {
+  switch (action_id) {
+    case (uint16_t)MSL_ACT_ESCAPE_N:
+    case (uint16_t)MSL_ACT_KNEE_BEND:
+    case (uint16_t)MSL_ACT_ATTACK_DASH:
+    case (uint16_t)MSL_ACT_ATTACK_S3_HI:
+    case (uint16_t)MSL_ACT_ATTACK_S3_HI_S:
+    case (uint16_t)MSL_ACT_ATTACK_S3_S:
+    case (uint16_t)MSL_ACT_ATTACK_S3_LW_S:
+    case (uint16_t)MSL_ACT_ATTACK_S3_LW:
+    case (uint16_t)MSL_ACT_ATTACK_HI3:
+    case (uint16_t)MSL_ACT_ATTACK_LW3:
+      return 0;
+    default:
+      break;
+  }
+  if (!msl_action_is_ground_locomotion(action_id)) {
     return 0;
   }
-  return msl_action_is_ground_locomotion(action_id);
+  return 1;
 }
 
 static inline uint8_t action_allows_special_entry_air(uint16_t action_id) {

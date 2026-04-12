@@ -36,6 +36,7 @@ ACT_ATTACK_AIR_N = 0x0041
 ACT_ATTACK_AIR_B = 0x0043
 ACT_DAMAGE_AIR_2 = 0x0055
 ACT_DAMAGE_FLY_N = 0x0058
+ACT_FX_SPECIAL_S_START = 0x015B
 ACT_FX_SPECIAL_LW_START = 0x0168
 ACT_FX_SPECIAL_AIR_S_START = 0x015E
 ACT_FX_SPECIAL_AIR_LW_START = 0x016D
@@ -908,6 +909,68 @@ def test_attackhi3_allow_interrupt_held_l_enters_guardon() -> None:
     assert int(out0["animation_index"][0]) == 0xFFFFFFFF
     assert int(out0["instance_id"][0]) != int(seed["instance_id"][0, 0])
     assert int(out0["on_ground"][0]) == 1
+
+
+def test_attackhi3_pre_iasa_b_does_not_enter_grounded_side_special() -> None:
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    input_stride = int(sizes["input"])
+
+    seed = _seed_base()
+    seed["on_ground"][0, 0] = np.uint8(1)
+    seed["action_id"][0, 0] = np.uint16(ACT_ATTACK_HI3)
+    seed["action_frame"][0, 0] = np.int16(2)
+    seed["anim_frame_f32"][0, 0] = np.float32(2.0)
+    seed["animation_index"][0, 0] = np.uint32(SM_ATTACK_HI3)
+    seed["facing"][0, 0] = np.uint8(0)  # left
+
+    prev_inp = _mk_input_bytes(1, input_stride)
+    inp = _mk_input_bytes(1, input_stride)
+    cur_view = inp.view(INPUT_DTYPE).reshape((1,))
+    # Decomp:
+    # - ftCo_AttackHi3_IASA only delegates into ftCo_Wait_IASA when fp->allow_interrupt is set.
+    # - The AttackHi3 command script sets allow_interrupt at frame 23, so early AttackHi3 rows must
+    #   not admit grounded SpecialS through the generic grounded-special gate.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackHi3.c::ftCo_AttackHi3_IASA
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
+    # data/moves/fox.json moves["ftCo_SM_AttackHi3"]["events"] allow_interrupt @ frame 23
+    cur_view["p"]["buttons"][0, 0] = np.uint16(BUTTON_B)
+    cur_view["p"]["main_x"][0, 0] = np.int8(-77)
+    cur_view["p"]["main_y"][0, 0] = np.int8(-23)
+    cur_view["p"]["l"][0, 0] = np.uint8(255)
+
+    out0 = _step_once(seed, prev_inp, inp)
+    assert int(out0["action_id"][0]) == ACT_ATTACK_HI3
+    assert int(out0["action_frame"][0]) == 3
+    assert int(out0["animation_index"][0]) == SM_ATTACK_HI3
+
+
+def test_wait_b_left_still_enters_grounded_side_special() -> None:
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    input_stride = int(sizes["input"])
+
+    seed = _seed_base()
+    seed["on_ground"][0, 0] = np.uint8(1)
+    seed["action_id"][0, 0] = np.uint16(ACT_WAIT)
+    seed["action_frame"][0, 0] = np.int16(0)
+    seed["anim_frame_f32"][0, 0] = np.float32(0.0)
+    seed["animation_index"][0, 0] = np.uint32(SM_WAIT1_0)
+    seed["facing"][0, 0] = np.uint8(0)  # left
+
+    prev_inp = _mk_input_bytes(1, input_stride)
+    inp = _mk_input_bytes(1, input_stride)
+    cur_view = inp.view(INPUT_DTYPE).reshape((1,))
+    cur_view["p"]["buttons"][0, 0] = np.uint16(BUTTON_B)
+    cur_view["p"]["main_x"][0, 0] = np.int8(-77)
+    cur_view["p"]["main_y"][0, 0] = np.int8(-23)
+    cur_view["p"]["l"][0, 0] = np.uint8(255)
+
+    out0 = _step_once(seed, prev_inp, inp)
+    assert int(out0["action_id"][0]) == ACT_FX_SPECIAL_S_START
+    assert int(out0["action_frame"][0]) == 1
 
 
 def test_ottotto_a_press_forward_down_enters_attacks3lw() -> None:
