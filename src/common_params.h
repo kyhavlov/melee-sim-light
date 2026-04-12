@@ -352,6 +352,12 @@ typedef struct MslCommonParams {
   float damage_severity_x158;  // p_ftCommonData->0x158
   float damage_severity_x15c;  // p_ftCommonData->0x15C
   float damage_severity_x160;  // p_ftCommonData->0x160
+  // Grounded tumble-only meteor rebound branch in ftCo_8008DCE0:
+  // - if grounded and KB angle vs floor normal exceeds PI/2 + x1E8, vertical KB reflects upward
+  //   with multiplier x1EC instead of keeping the raw downward Y component.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
+  float grounded_tumble_bounce_angle_extra_radians;  // p_ftCommonData->0x1E8
+  float grounded_tumble_bounce_y_mul;                // p_ftCommonData->0x1EC
 
   // Combo timer window after hitstun ends (used by combo victim clear logic).
   // Decomp:

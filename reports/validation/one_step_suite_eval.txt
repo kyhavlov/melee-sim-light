@@ -115,7 +115,7 @@ err.speed_air_x_self: mae=0.007983 p95=0.000000 max=1.840000
 err.speed_ground_x_self: mae=0.006209 p95=0.000000 max=2.620000
 err.speed_y_self: mae=0.000914 p95=0.000000 max=2.200000
 err.speed_x_attack: mae=0.000884 p95=0.000000 max=5.323730
-err.speed_y_attack: mae=0.002241 p95=0.000000 max=4.594820
+err.speed_y_attack: mae=0.002044 p95=0.000000 max=4.594820
 err.percent: mae=0.002114 p95=0.000000 max=15.000000
 err.shield_hp: mae=0.000733 p95=0.000000 max=5.599998
 err.item_pos_x: mae=0.038789 p95=0.000000 max=39.815655
@@ -123,7 +123,7 @@ err.item_pos_y: mae=0.015298 p95=0.000000 max=26.796017
 err.item_vel_x: mae=0.014239 p95=0.000000 max=3.960552
 err.item_vel_y: mae=0.005519 p95=0.000000 max=4.999367
 overall.discrete_mismatch: 280 / 1395009
-overall.float_norm_mae_p95: 0.00104569
+overall.float_norm_mae_p95: 0.00103735
 
 == datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/QuerulousGrandDinosaur.msl ==
 Records: 10222  Players/scored per record: 2  Total player-frames: 20444
@@ -157,7 +157,7 @@ err.speed_air_x_self: mae=0.005540 p95=0.000000 max=1.815992
 err.speed_ground_x_self: mae=0.004721 p95=0.000000 max=1.815992
 err.speed_y_self: mae=0.002371 p95=0.000000 max=3.430000
 err.speed_x_attack: mae=0.000464 p95=0.000000 max=1.808650
-err.speed_y_attack: mae=0.002175 p95=0.000000 max=5.618131
+err.speed_y_attack: mae=0.001931 p95=0.000000 max=5.618131
 err.percent: mae=0.004633 p95=0.000000 max=16.000000
 err.shield_hp: mae=0.000400 p95=0.000000 max=6.299999
 err.item_pos_x: mae=0.080015 p95=0.000000 max=13.584892
@@ -165,7 +165,7 @@ err.item_pos_y: mae=0.087154 p95=0.000000 max=13.353867
 err.item_vel_x: mae=0.028661 p95=0.000000 max=6.413950
 err.item_vel_y: mae=0.034461 p95=0.000000 max=4.990129
 overall.discrete_mismatch: 272 / 1236862
-overall.float_norm_mae_p95: 0.00096154
+overall.float_norm_mae_p95: 0.00095269
 
 == datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/TreasuredBackKangaroo.msl ==
 Records: 7837  Players/scored per record: 2  Total player-frames: 15674
@@ -199,7 +199,7 @@ err.speed_air_x_self: mae=0.011506 p95=0.000000 max=1.815992
 err.speed_ground_x_self: mae=0.010059 p95=0.000000 max=2.485898
 err.speed_y_self: mae=0.001755 p95=0.000000 max=3.100000
 err.speed_x_attack: mae=0.000600 p95=0.000000 max=1.656845
-err.speed_y_attack: mae=0.002036 p95=0.000000 max=7.370053
+err.speed_y_attack: mae=0.001565 p95=0.000000 max=3.971344
 err.percent: mae=0.002576 p95=0.000000 max=8.190002
 err.shield_hp: mae=0.000618 p95=0.000000 max=5.599998
 err.item_pos_x: mae=0.070895 p95=0.000000 max=73.618073
@@ -207,8 +207,8 @@ err.item_pos_y: mae=0.025521 p95=0.000000 max=31.795383
 err.item_vel_x: mae=0.020464 p95=0.000000 max=7.000000
 err.item_vel_y: mae=0.003790 p95=0.000000 max=4.999367
 overall.discrete_mismatch: 210 / 948277
-overall.float_norm_mae_p95: 0.00146356
+overall.float_norm_mae_p95: 0.00144802
 
 == suite summary ==
 overall.discrete_mismatch: 940 / 4462843
-overall.float_norm_mae_p95: 0.00111230
+overall.float_norm_mae_p95: 0.00110389

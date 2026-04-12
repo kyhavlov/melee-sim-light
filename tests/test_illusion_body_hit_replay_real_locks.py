@@ -39,6 +39,17 @@ class _Case:
             item_fields=("exists", "type", "state", "owner", "instance_id"),
             item_float_fields=("pos_x", "pos_y", "timer"),
         ),
+        _Case(
+            dataset_rel="datasets/aggregate_recent/replays/validation/aggregate_recent/PriceyPartialAlbatross.msl",
+            record=6632,
+            attacker_port=1,
+            defender_port=0,
+            note="grounded Falco Phantasm tumble hit rebounds upward off the floor while the article persists",
+            player_fields=("action_id", "action_frame", "animation_index", "hitlag", "hitstun", "on_ground"),
+            player_float_fields=("percent", "speed_x_attack", "speed_y_attack"),
+            item_fields=("exists", "type", "state", "owner", "instance_id"),
+            item_float_fields=("pos_x", "pos_y", "timer"),
+        ),
     ],
 )
 def test_illusion_body_hit_rows_match_replay_real(case: _Case) -> None:

@@ -378,6 +378,10 @@ def main() -> None:
         "damage_severity_x158": float(_f32_be(buf, ft_common_abs + 0x158)),
         "damage_severity_x15c": float(_f32_be(buf, ft_common_abs + 0x15C)),
         "damage_severity_x160": float(_f32_be(buf, ft_common_abs + 0x160)),
+        # Grounded tumble-only meteor rebound branch in ftCo_8008DCE0.
+        # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
+        "grounded_tumble_bounce_angle_extra_radians": float(_f32_be(buf, ft_common_abs + 0x1E8)),
+        "grounded_tumble_bounce_y_mul": float(_f32_be(buf, ft_common_abs + 0x1EC)),
         # DamageFly landings (ftCo_DamageFly_Coll): thresholds on |kb_vel| for DownBound vs Landing.
         "damagefly_downbound_kb_vel_threshold": float(_f32_be(buf, ft_common_abs + 0x1E0)),
         "damagefly_landing_kb_vel_threshold": float(_f32_be(buf, ft_common_abs + 0x1E4)),

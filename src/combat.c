@@ -870,6 +870,8 @@ static inline float combat_deg_to_rad_f32(void) {
   return 0.01745329251994329577f;
 }
 
+static inline float combat_pi_over_two_f32(void) { return 1.57079632679489661923f; }
+
 static inline float combat_damage_sakurai_angle_radians(const MslCommonParams* c,
                                                         uint8_t defender_on_ground,
                                                         float kb_applied) {
@@ -1306,6 +1308,55 @@ static inline uint8_t combat_damageflyroll_rng_subset_allows_pre_action(const Ms
     default:
       return 0u;
   }
+}
+
+static inline float combat_damage_ground_angle_to_floor_radians(float nx, float ny, float vx,
+                                                                float vy) {
+  const float vmag_sq = vx * vx + vy * vy;
+  if (!(vmag_sq > 0.0f)) {
+    return 0.0f;
+  }
+  const float inv_vmag = 1.0f / sqrtf(vmag_sq);
+  float cos_theta = (nx * vx + ny * vy) * inv_vmag;
+  if (cos_theta > 1.0f) {
+    cos_theta = 1.0f;
+  } else if (cos_theta < -1.0f) {
+    cos_theta = -1.0f;
+  }
+  return acosf(cos_theta);
+}
+
+static inline void combat_damage_install_grounded_kb(const MslCommonParams* c, MslBatch* batch,
+                                                     size_t d_idx, float kb_applied, float kb_x,
+                                                     float kb_y) {
+  const float nx = batch->state.ground_normal_x[d_idx];
+  const float ny = batch->state.ground_normal_y[d_idx];
+  const float angle_to_floor = combat_damage_ground_angle_to_floor_radians(nx, ny, kb_x, kb_y);
+  const uint8_t sev = combat_damage_severity_u8_from_kb(c, kb_applied);
+
+  // Grounded KB install owner:
+  // - ftCo_8008DCE0 compares the floor normal to the raw KB vector with lbVector_Angle.
+  // - angle < PI/2 launches immediately with full KB and clears grounded state.
+  // - angle >= PI/2 projects along the floor for low/med severity.
+  // - tumble severity (sev==3) still clears grounded state, and steep downward meteors
+  //   (`angle > PI/2 + x1E8`) reflect their Y component upward with multiplier x1EC.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
+  if (angle_to_floor < combat_pi_over_two_f32()) {
+    combat_apply_ftCommon_8007D5D4_ground_to_air(batch, d_idx);
+    combat_damage_calc_vel(batch, d_idx, kb_x, kb_y);
+    return;
+  }
+  if (sev != 3u) {
+    combat_damage_calc_vel(batch, d_idx, ny * kb_x, -nx * kb_x);
+    return;
+  }
+
+  combat_apply_ftCommon_8007D5D4_ground_to_air(batch, d_idx);
+  if (angle_to_floor > (combat_pi_over_two_f32() + c->grounded_tumble_bounce_angle_extra_radians)) {
+    combat_damage_calc_vel(batch, d_idx, kb_x, -kb_y * c->grounded_tumble_bounce_y_mul);
+    return;
+  }
+  combat_damage_calc_vel(batch, d_idx, kb_x, kb_y);
 }
 
 static inline void combat_damageflyroll_consume_fighter_8006cda4_phase_hint(MslBatch* batch, int bi,
@@ -1896,16 +1947,7 @@ static inline void combat_mutations_pass1_future_apply_body_hit(
   if (!defender_on_ground) {
     combat_damage_calc_vel(batch, d_idx, kb_x, kb_y);
   } else {
-    const float nx = batch->state.ground_normal_x[d_idx];
-    const float ny = batch->state.ground_normal_y[d_idx];
-    const float dot = nx * kb_x + ny * kb_y;
-    const uint8_t sev = combat_damage_severity_u8_from_kb(c, kb_applied);
-    if (dot > 0.0f || sev == 3u) {
-      combat_apply_ftCommon_8007D5D4_ground_to_air(batch, d_idx);
-      combat_damage_calc_vel(batch, d_idx, kb_x, kb_y);
-    } else {
-      combat_damage_calc_vel(batch, d_idx, ny * kb_x, -nx * kb_x);
-    }
+    combat_damage_install_grounded_kb(c, batch, d_idx, kb_applied, kb_x, kb_y);
   }
 
   // Decomp: after setting KB velocity, ftCo_8008DCE0 clears self velocity (self_vel and gr_vel).
@@ -2213,16 +2255,7 @@ MslItemHitResult combat_apply_item_hit(MslBatch* batch, int batch_index, int att
   if (!defender_on_ground) {
     combat_damage_calc_vel(batch, d_idx, kb_x, kb_y);
   } else {
-    const float nx = batch->state.ground_normal_x[d_idx];
-    const float ny = batch->state.ground_normal_y[d_idx];
-    const float dot = nx * kb_x + ny * kb_y;
-    const uint8_t sev = combat_damage_severity_u8_from_kb(c, kb_applied);
-    if (dot > 0.0f || sev == 3u) {
-      combat_apply_ftCommon_8007D5D4_ground_to_air(batch, d_idx);
-      combat_damage_calc_vel(batch, d_idx, kb_x, kb_y);
-    } else {
-      combat_damage_calc_vel(batch, d_idx, ny * kb_x, -nx * kb_x);
-    }
+    combat_damage_install_grounded_kb(c, batch, d_idx, kb_applied, kb_x, kb_y);
   }
 
   const uint16_t hs = combat_damage_hitstun_from_kb(c, kb_applied);
