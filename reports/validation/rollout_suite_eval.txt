@@ -27,7 +27,7 @@
 suite: fox_falco_fd_ucf084_recent  datasets: 4  ucf_enabled: True  ucf_cardinals_1_0_enabled: True
 fields: action_id,animation_index,on_ground,hitlag,hitstun,state_flags
 
-== datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl ==
+== datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl ==
 rollout.best_len: 392
 rollout.streak_count: 99
 rollout.streak_len.median: 57
@@ -37,7 +37,7 @@ rollout.streak_len.max: 392
 rollout.first_mismatch_total: 100
 rollout.first_mismatch_seeded_total: 32
 
-== datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl ==
+== datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.msl ==
 rollout.best_len: 327
 rollout.streak_count: 138
 rollout.streak_len.median: 63
@@ -47,7 +47,7 @@ rollout.streak_len.max: 327
 rollout.first_mismatch_total: 137
 rollout.first_mismatch_seeded_total: 51
 
-== datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/QuerulousGrandDinosaur.msl ==
+== datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/QuerulousGrandDinosaur.msl ==
 rollout.best_len: 631
 rollout.streak_count: 129
 rollout.streak_len.median: 63
@@ -57,7 +57,7 @@ rollout.streak_len.max: 631
 rollout.first_mismatch_total: 129
 rollout.first_mismatch_seeded_total: 51
 
-== datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/TreasuredBackKangaroo.msl ==
+== datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/TreasuredBackKangaroo.msl ==
 rollout.best_len: 303
 rollout.streak_count: 100
 rollout.streak_len.median: 59

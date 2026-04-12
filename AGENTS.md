@@ -233,9 +233,12 @@ Current guardrails:
 - `make build`: build the C extension (`python/setup.py build_ext --inplace`)
 - `make test`: build extension then run `pytest`
 - `make preprocess`: build/update cached `datasets/` for a suite
+- `make preprocess-aggregate`: build/update cached `datasets/` for the broader mixed-FD aggregate suite
 - `make validate`: run one-step suite eval (assumes datasets exist)
 - `make validate OUT=reports/validation/one_step_suite_eval.txt`: write the report to a file (commit this)
+- `make validate-aggregate`: write the aggregate one-step report to `reports/validation/aggregate_recent_one_step_suite_eval.txt`
 - `make validate-rollout OUT=reports/validation/rollout_suite_eval.txt`: write rollout suite report to a file (commit this)
+- `make validate-rollout-aggregate`: write the aggregate rollout report to `reports/validation/aggregate_recent_rollout_suite_eval.txt`
 - `make rollout-capture ROLLOUT_JSON=reports/triage/current_rollout_streaks.json`: capture rollout JSON snapshot (gitignored)
 - `make rollout-summary ROLLOUT_JSON=reports/triage/current_rollout_streaks.json`: print suite + per-dataset rollout headline metrics
 - `make rollout-diff ROLLOUT_BEFORE=reports/triage/baseline_rollout_streaks.json ROLLOUT_AFTER=reports/triage/current_rollout_streaks.json`: print rollout metric deltas
@@ -261,9 +264,12 @@ Validation output snapshots:
 - Commit the latest suite reports under `reports/validation/` whenever you change core sim logic:
   - `reports/validation/one_step_suite_eval.txt`
   - `reports/validation/rollout_suite_eval.txt`
+  - `reports/validation/aggregate_recent_one_step_suite_eval.txt`
+  - `reports/validation/aggregate_recent_rollout_suite_eval.txt`
 
 Variables:
 - `SUITE=replays/suites/fox_falco_fd_ucf084_recent.json`
+- `AGG_SUITE=replays/suites/aggregate_recent.json`
 - `DATASETS_DIR=datasets`
 - `CHUNK=4096`
 

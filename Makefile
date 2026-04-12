@@ -1,11 +1,14 @@
-.PHONY: build test preprocess validate validate-rollout rollout-capture rollout-summary rollout-diff rollout-locate rollout-locate-summary rollout-locate-diff build_data fmt fmt-check check guardrail-preflight guardrail-preflight-full guardrail-baseline forensic-rows dolphin-engine-dump dolphin-extract dolphin-forensic-row
+.PHONY: build test preprocess preprocess-aggregate validate validate-aggregate validate-rollout validate-rollout-aggregate rollout-capture rollout-summary rollout-diff rollout-locate rollout-locate-summary rollout-locate-diff build_data fmt fmt-check check guardrail-preflight guardrail-preflight-full guardrail-baseline forensic-rows dolphin-engine-dump dolphin-extract dolphin-forensic-row
 
 PY := uv run python
 DATASETS_DIR ?= datasets
 SUITE ?= replays/suites/fox_falco_fd_ucf084_recent.json
+AGG_SUITE ?= replays/suites/aggregate_recent.json
 CHUNK ?= 4096
 OUT ?=
 FIELDS ?= action_id,animation_index,on_ground,hitlag,hitstun,state_flags
+AGG_ONE_STEP_OUT ?= reports/validation/aggregate_recent_one_step_suite_eval.txt
+AGG_ROLLOUT_OUT ?= reports/validation/aggregate_recent_rollout_suite_eval.txt
 ROLLOUT_JSON ?= reports/triage/current_rollout_streaks.json
 ROLLOUT_BEFORE ?= reports/triage/rollout_streaks.json
 ROLLOUT_AFTER ?= reports/triage/current_rollout_streaks.json
@@ -53,12 +56,21 @@ test: build
 preprocess:
 	@$(PY) -m tools.slippi.preprocess_suite --suite "$(SUITE)" --datasets-dir "$(DATASETS_DIR)"
 
+preprocess-aggregate:
+	@$(PY) -m tools.slippi.preprocess_suite --suite "$(AGG_SUITE)" --datasets-dir "$(DATASETS_DIR)"
+
 validate: build
 	@$(PY) -m tools.eval.run_one_step_suite_eval --suite "$(SUITE)" --datasets-dir "$(DATASETS_DIR)" --chunk "$(CHUNK)" $(VALIDATE_OUT)
+
+validate-aggregate: build
+	@$(PY) -m tools.eval.run_one_step_suite_eval --suite "$(AGG_SUITE)" --datasets-dir "$(DATASETS_DIR)" --chunk "$(CHUNK)" --out "$(AGG_ONE_STEP_OUT)"
 
 # Rollout text validation report (parallel to make validate); OUT=... controls report path.
 validate-rollout: build
 	@$(PY) -m tools.eval.run_rollout_suite_eval --suite "$(SUITE)" --datasets-dir "$(DATASETS_DIR)" --fields "$(FIELDS)" $(ROLLOUT_OUT)
+
+validate-rollout-aggregate: build
+	@$(PY) -m tools.eval.run_rollout_suite_eval --suite "$(AGG_SUITE)" --datasets-dir "$(DATASETS_DIR)" --fields "$(FIELDS)" --out "$(AGG_ROLLOUT_OUT)"
 
 # Always writes to ROLLOUT_JSON (independent of OUT=...).
 rollout-capture: build
