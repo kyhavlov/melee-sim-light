@@ -45,6 +45,16 @@ static inline uint16_t jump_action_from_stick(const MslCommonParams* c, float st
                                               float facing_dir);
 static inline uint32_t submotion_for_action(uint16_t a);
 
+static inline float clamp_absf(float value, float max_abs) {
+  if (value > max_abs) {
+    return max_abs;
+  }
+  if (value < -max_abs) {
+    return -max_abs;
+  }
+  return value;
+}
+
 static inline uint8_t anim_finished(uint8_t char_id, uint16_t msid, float anim_frame_f32) {
   const float end = msl_anim_end_frame(char_id, msid);
   if (!(end > 0.0f)) {
@@ -2093,9 +2103,14 @@ void locomotion_update_pre(MslBatch* batch) {
               anim_finished(cid, ms->specials_ground_main, batch->state.anim_frame_f32[idx])) {
             batch->state.action_id[idx] = (uint16_t)MSL_ACT_FX_SPECIAL_S_END;
             batch->state.animation_index[idx] = (uint32_t)ms->specials_ground_end;
-            // Decomp: ftFx_SpecialSEnd_Enter sets fp->gr_vel = da->x34 * facing_dir.
+            // Decomp:
+            // - ftFx_SpecialSEnd_Enter writes fp->gr_vel = da->x34 * facing_dir.
+            // - Fighter_ChangeMotionState then clamps gr_vel to co_attrs.dash_run_terminal_velocity
+            //   when the new motion does not carry root-motion ownership (`!fp->x594_b0` path).
             // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c::ftFx_SpecialSEnd_Enter
-            batch->state.speed_ground_x_self[idx] = ch->illusion_ground_end_vel_x * facing_dir;
+            // refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState
+            batch->state.speed_ground_x_self[idx] = clamp_absf(
+                ch->illusion_ground_end_vel_x * facing_dir, ch->dash_run_terminal_velocity);
             msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
             action_id = (uint16_t)MSL_ACT_FX_SPECIAL_S_END;
           }
@@ -2110,7 +2125,9 @@ void locomotion_update_pre(MslBatch* batch) {
             batch->state.action_id[idx] = (uint16_t)MSL_ACT_FX_SPECIAL_S_END;
             batch->state.animation_index[idx] = (uint32_t)ms->specials_ground_end;
             // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c::ftFx_SpecialSEnd_Enter
-            batch->state.speed_ground_x_self[idx] = ch->illusion_ground_end_vel_x * facing_dir;
+            // refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState
+            batch->state.speed_ground_x_self[idx] = clamp_absf(
+                ch->illusion_ground_end_vel_x * facing_dir, ch->dash_run_terminal_velocity);
             msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
             action_id = (uint16_t)MSL_ACT_FX_SPECIAL_S_END;
           }

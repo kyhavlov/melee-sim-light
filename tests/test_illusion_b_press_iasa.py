@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 
 import numpy as np
+import pytest
 
 from tools.eval.dataset import COMPARE_DTYPE, INPUT_DTYPE, SEED_DTYPE
 
@@ -20,6 +21,7 @@ ACT_FX_SPECIAL_AIR_S_END = 0x0160
 
 # Submotion ids (GALE01): data/special_msids/fox.json
 SM_WAIT1_0 = 2
+SM_FX_SPECIAL_S = 302
 SM_FX_SPECIAL_S_END = 303
 SM_FX_SPECIAL_AIR_S_END = 306
 
@@ -134,3 +136,32 @@ def test_illusion_ground_b_pressed_edge_enters_special_s_end_same_step() -> None
     exp = _fox_attr("illusion_ground_end_vel_x")
     got = float(out["speed_ground_x_self"][0])
     assert 0.0 < got <= exp
+
+
+def test_illusion_ground_b_pressed_edge_preserves_main_motion_on_first_end_row() -> None:
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    input_stride = int(sizes["input"])
+
+    seed = _seed_base(p0_on_ground=True)
+    seed["action_id"][0, 0] = np.uint16(ACT_FX_SPECIAL_S)
+    seed["action_frame"][0, 0] = np.int16(1)
+    seed["anim_frame_f32"][0, 0] = np.float32(1.0)
+    seed["animation_index"][0, 0] = np.uint32(SM_FX_SPECIAL_S)
+    seed["facing"][0, 0] = np.uint8(0)  # left
+
+    prev_inp = _mk_input_bytes(1, input_stride)
+    inp = _mk_input_bytes(1, input_stride)
+    inp_view = inp.view(INPUT_DTYPE).reshape((1,))
+    inp_view["p"]["buttons"][0, 0] = np.uint16(BUTTON_B)
+
+    out = _step_once(seed, prev_inp, inp)
+    assert int(out["action_id"][0]) == ACT_FX_SPECIAL_S_END
+    assert int(out["action_frame"][0]) == 0
+    assert int(out["animation_index"][0]) == SM_FX_SPECIAL_S_END
+    # Controlled vanilla playback on the fresh puffer rerun shows the first grounded SpecialSEnd
+    # row moving at -2.1, not the raw x34 attr (4.0) minus friction. Keep the exact entry-row
+    # motion locked here.
+    # reports/triage/puffer_5b_60s_after_e8fbb8f_compare_0_520/vanilla_rows_302_306
+    assert float(out["speed_ground_x_self"][0]) == pytest.approx(-2.1, abs=1e-4)
