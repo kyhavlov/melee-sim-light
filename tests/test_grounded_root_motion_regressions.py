@@ -130,3 +130,37 @@ def test_attacks4s_uses_ft_80084fa8_root_motion() -> None:
         assert float(out["speed_ground_x_self"][0]) < 0.0
     finally:
         msl_binding.destroy(handle)
+
+
+def test_attacks4s_does_not_reapply_root_motion_when_anim_floor_is_frozen() -> None:
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    seed_stride = int(sizes["seed"])
+
+    seed = _seed_base()
+    seed["action_id"][0, 0] = np.uint16(ACT_ATTACK_S4_S)
+    seed["animation_index"][0, 0] = np.uint32(SM_ATTACK_S4)
+    seed["action_frame"][0, 0] = np.int16(7)
+    seed["anim_frame_f32"][0, 0] = np.float32(7.0)
+    seed["frame_speed_mul_f32"][0, 0] = np.float32(0.0)
+    seed["on_ground"][0, 0] = np.uint8(1)
+    seed["pos_x"][0, 0] = np.float32(60.0)
+    seed["pos_y"][0, 0] = np.float32(0.0001)
+    seed["facing"][0, 0] = np.uint8(1)
+    seed["facing_dir1"][0, 0] = np.int8(1)
+
+    handle = msl_binding.init(batch_size=1, num_players=2)
+    try:
+        seed_bytes = seed.view(np.uint8).reshape((1, seed_stride))
+        msl_binding.reseed_seed(handle, seed_bytes)
+
+        neutral = np.zeros((1,), dtype=INPUT_DTYPE)
+        out = _step(handle, neutral, neutral)
+
+        assert int(out["action_id"][0]) == ACT_ATTACK_S4_S
+        assert int(out["animation_index"][0]) == SM_ATTACK_S4
+        assert np.isclose(float(out["pos_x"][0]), 60.0, atol=1e-7)
+        assert np.isclose(float(out["speed_ground_x_self"][0]), 0.0, atol=1e-7)
+    finally:
+        msl_binding.destroy(handle)

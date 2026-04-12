@@ -43,6 +43,8 @@ static inline float air_apply_friction_step(float vel, float friction) {
   return vel + accel;
 }
 
+static inline float physics_q16_16_to_f32(int32_t x) { return (float)x * (1.0f / 65536.0f); }
+
 static inline float air_apply_accel_step(float vel, float accel, float target_vel, float friction,
                                          float air_max_horizontal_velocity) {
   // refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007D174
@@ -322,8 +324,31 @@ static inline uint8_t physics_action_is_common_ground_friction_only(uint16_t act
   }
 }
 
+static inline float physics_cur_anim_frame_f32(const MslBatch* batch, size_t idx) {
+  // Fighter root-motion consumers read the live cur_anim_frame timebase, not the seed snapshot.
+  // - anim_timebase_update_pre_input() advances anim_frame_fp_q16_16 before Phys callbacks.
+  // - anim_frame_f32 is a derived snapshot lane and can be stale mid-step.
+  // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A360,Fighter_procUpdate}
+  if (batch == NULL) {
+    return 0.0f;
+  }
+  return msl_anim_frame_sanitize_f32(physics_q16_16_to_f32(batch->state.anim_frame_fp_q16_16[idx]));
+}
+
+static inline float physics_prev_anim_frame_f32(const MslBatch* batch, size_t idx) {
+  // Use the actual previous cur_anim_frame from the deterministic Q16.16 timebase so root-motion
+  // only advances when the animation crosses a new integer frame.
+  // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A360,Fighter_procUpdate}
+  if (batch == NULL) {
+    return 0.0f;
+  }
+  return msl_anim_frame_sanitize_f32(physics_q16_16_to_f32(
+      batch->state.anim_frame_fp_q16_16[idx] - batch->state.frame_speed_mul_fp_q16_16[idx]));
+}
+
 static inline uint8_t physics_try_get_transn_delta_xyz(const MslCharParams* ch, uint8_t char_id,
-                                                       uint32_t msid_u32, float anim_frame_f32,
+                                                       uint32_t msid_u32, float prev_anim_frame_f32,
+                                                       float anim_frame_f32,
                                                        float out_delta_xyz[3]) {
   if (ch == NULL || out_delta_xyz == NULL) {
     return 0;
@@ -334,11 +359,19 @@ static inline uint8_t physics_try_get_transn_delta_xyz(const MslCharParams* ch, 
   const uint16_t msid = (uint16_t)msid_u32;
 
   // Our ISO-derived SSANIM01 v3 artifacts store per-frame TransN translation as a tail (x,y,z);
-  // approximate the per-frame TransN offset as a finite difference between adjacent frames.
+  // approximate the per-frame TransN offset as a finite difference between the previous and current
+  // animation frames.
   // - tools/extraction/extract_fighter_anims.py (SSANIM01 v3 + per-frame TransN tail)
   // - refs/melee/src/melee/ft/ft_081B.c::ft_80085030 (consumer of fp->x6A4_transNOffset.{y,z})
   const uint16_t f_cur = msl_anim_frame_floor_u16(msl_anim_frame_sanitize_f32(anim_frame_f32));
-  const uint16_t f_prev = (f_cur > 0u) ? (uint16_t)(f_cur - 1u) : 0u;
+  const uint16_t f_prev =
+      msl_anim_frame_floor_u16(msl_anim_frame_sanitize_f32(prev_anim_frame_f32));
+  if (f_cur == f_prev) {
+    out_delta_xyz[0] = 0.0f;
+    out_delta_xyz[1] = 0.0f;
+    out_delta_xyz[2] = 0.0f;
+    return 1;
+  }
 
   float t_cur[3];
   float t_prev[3];
@@ -1220,7 +1253,8 @@ void physics_integrate(MslBatch* batch) {
             float dxyz[3];
             if (physics_try_get_transn_delta_xyz(ch, batch->state.char_id[idx],
                                                  batch->state.animation_index[idx],
-                                                 batch->state.anim_frame_f32[idx], dxyz)) {
+                                                 physics_prev_anim_frame_f32(batch, idx),
+                                                 physics_cur_anim_frame_f32(batch, idx), dxyz)) {
               const float facing_dir = batch->state.facing[idx] ? 1.0f : -1.0f;
               batch->state.speed_air_x_self[idx] = dxyz[2] * facing_dir;
               batch->state.speed_y_self[idx] = dxyz[1];
@@ -1303,7 +1337,8 @@ void physics_integrate(MslBatch* batch) {
             float dxyz[3];
             if (physics_try_get_transn_delta_xyz(ch, batch->state.char_id[idx],
                                                  batch->state.animation_index[idx],
-                                                 batch->state.anim_frame_f32[idx], dxyz)) {
+                                                 physics_prev_anim_frame_f32(batch, idx),
+                                                 physics_cur_anim_frame_f32(batch, idx), dxyz)) {
               gr_vel = dxyz[2] * facing_dir;
             }
           } else if (action_id == (uint16_t)MSL_ACT_FX_SPECIAL_S_END) {
@@ -1330,7 +1365,8 @@ void physics_integrate(MslBatch* batch) {
             float dxyz[3];
             if (physics_try_get_transn_delta_xyz(ch, batch->state.char_id[idx],
                                                  batch->state.animation_index[idx],
-                                                 batch->state.anim_frame_f32[idx], dxyz)) {
+                                                 physics_prev_anim_frame_f32(batch, idx),
+                                                 physics_cur_anim_frame_f32(batch, idx), dxyz)) {
               float facing_dir_roll = (batch->state.facing_dir1[idx] < 0) ? -1.0f : 1.0f;
               // Motion-state entry ownership:
               // - Fighter_ChangeMotionState copies facing_dir -> facing_dir1.
@@ -1366,7 +1402,8 @@ void physics_integrate(MslBatch* batch) {
             float dxyz[3];
             if (physics_try_get_transn_delta_xyz(ch, batch->state.char_id[idx],
                                                  batch->state.animation_index[idx],
-                                                 batch->state.anim_frame_f32[idx], dxyz)) {
+                                                 physics_prev_anim_frame_f32(batch, idx),
+                                                 physics_cur_anim_frame_f32(batch, idx), dxyz)) {
               gr_vel = dxyz[2] * facing_dir;
             } else {
               gr_vel +=
@@ -1412,7 +1449,8 @@ void physics_integrate(MslBatch* batch) {
                                                           : 0u;
             if (physics_try_get_transn_delta_xyz(ch, batch->state.char_id[idx],
                                                  batch->state.animation_index[idx],
-                                                 batch->state.anim_frame_f32[idx], dxyz) &&
+                                                 physics_prev_anim_frame_f32(batch, idx),
+                                                 physics_cur_anim_frame_f32(batch, idx), dxyz) &&
                 !landing_to_attack11_entry) {
               // Decomp root-motion gate:
               // - ft_80085030 takes the transN drive branch only when fp->x594_b0 is set.
