@@ -12,3 +12,10 @@ void blaster_update_pre_physics(MslBatch* batch);
 // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
 uint8_t blaster_try_enter_ground_from_wait_iasa(MslBatch* batch, const struct MslCommonParams* c,
                                                 size_t idx);
+
+// Grounded Wait_IASA B-special subset without the outer Wait/Squat action gate.
+// Used by grounded-attack IASA delegates that route through ftCo_Wait_IASA after their own
+// allow_interrupt gate.
+// refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
+uint8_t blaster_try_enter_ground_from_iasa_subset(MslBatch* batch, const struct MslCommonParams* c,
+                                                  size_t idx);

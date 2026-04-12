@@ -797,6 +797,22 @@ static inline uint8_t action_is_attack_s3_family(uint16_t action_id) {
   }
 }
 
+static inline uint8_t grounded_attack_wait_iasa_specials_action(uint16_t action_id) {
+  switch (action_id) {
+    case MSL_ACT_ATTACK_HI3:
+    case MSL_ACT_ATTACK_HI4:
+    case MSL_ACT_ATTACK_LW4:
+    case MSL_ACT_ATTACK_S4_HI:
+    case MSL_ACT_ATTACK_S4_HI_S:
+    case MSL_ACT_ATTACK_S4_S:
+    case MSL_ACT_ATTACK_S4_LW_S:
+    case MSL_ACT_ATTACK_S4_LW:
+      return 1u;
+    default:
+      return action_is_attack_s3_family(action_id);
+  }
+}
+
 static inline uint8_t grounded_attack_wait_iasa_interrupt_dest_action(uint16_t action_id) {
   switch (action_id) {
     case MSL_ACT_WALK_SLOW:
@@ -1104,12 +1120,22 @@ static inline uint8_t grounded_attack_try_iasa_subset(MslBatch* batch, const Msl
   if (batch == NULL || c == NULL || ch == NULL) {
     return 0u;
   }
+  const uint16_t action_id = batch->state.action_id[idx];
 
+  // Wait_IASA special subset for the grounded-attack families above:
+  // - SpecialS -> SpecialHi -> SpecialN -> SpecialLw are checked before grounded attack restarts.
+  // - Down-B remains owned by shine.c; this helper admits the Neutral/Side/Up subset only.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::{ftCo_800D6824,ftCo_800D68C0}
+  if (grounded_attack_wait_iasa_specials_action(action_id) &&
+      blaster_try_enter_ground_from_iasa_subset(batch, c, idx)) {
+    return 1u;
+  }
   // Decomp shape:
   // - Grounded Attack* input callbacks gate on fp->allow_interrupt.
-  // - After the attack/catch/special subsets, the allowed Interrupt rows can still delegate into
-  //   the Wait_IASA locomotion tail.
-  // refs/melee/src/melee/ft/chara/ftCommon/{ftCo_AttackDash.c,ftCo_AttackS3.c,ftCo_AttackHi3.c,ftCo_AttackHi4.c,ftCo_AttackLw4.c}
+  // - After the grounded special subset above, the same Wait_IASA delegation can still reach the
+  //   grounded attack restarts and then the locomotion tail.
+  // refs/melee/src/melee/ft/chara/ftCommon/{ftCo_AttackS3.c,ftCo_AttackHi3.c,ftCo_AttackS4.c,ftCo_AttackHi4.c,ftCo_AttackLw4.c}
   if (grounded_a_attack_try_enter_from_iasa(batch, c, idx, buttons_pressed, stick_x, stick_y,
                                             tilt_timer_x, tilt_timer_y, facing_dir, 0, 1)) {
     return 1u;
