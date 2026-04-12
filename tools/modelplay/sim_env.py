@@ -46,6 +46,50 @@ MATCH_CONFIG_DTYPE = np.dtype(
     align=False,
 )
 
+RL_PLAYER_OBS_DTYPE = np.dtype(
+    [
+        ("present", "u1"),
+        ("source_player", "u1"),
+        ("team_relation", "u1"),
+        ("team_id", "u1"),
+        ("pos_x", "<f4"),
+        ("pos_y", "<f4"),
+        ("speed_air_x_self", "<f4"),
+        ("speed_ground_x_self", "<f4"),
+        ("speed_y_self", "<f4"),
+        ("speed_x_attack", "<f4"),
+        ("speed_y_attack", "<f4"),
+        ("percent", "<f4"),
+        ("shield_hp", "<f4"),
+        ("action_id", "<u2"),
+        ("action_frame", "<i2"),
+        ("hitlag", "<u2"),
+        ("hitstun", "<u2"),
+        ("char_id", "u1"),
+        ("stocks", "u1"),
+        ("facing", "u1"),
+        ("on_ground", "u1"),
+        ("jumps_left", "u1"),
+        ("hurtbox_state", "u1"),
+        ("_pad0", "V2"),
+    ],
+    align=False,
+)
+
+RL_OBS_DTYPE = np.dtype(
+    [
+        ("frame_id", "<i4"),
+        ("frame_pre_random_seed", "<u4"),
+        ("stage_id", "<u4"),
+        ("num_players", "u1"),
+        ("viewpoint_player", "u1"),
+        ("is_teams", "u1"),
+        ("_pad0", "V1"),
+        ("slots", RL_PLAYER_OBS_DTYPE, (4,)),
+    ],
+    align=False,
+)
+
 
 @dataclass
 class EnvOutput:
@@ -204,6 +248,12 @@ class SimSession:
         out = EnvOutput(gamestates=games, needs_reset=self._needs_reset)
         self._needs_reset = False
         return out
+
+    def current_rl_observation(self, viewpoint_port: int) -> np.void:
+        viewpoint = np.array([viewpoint_port - 1], dtype=np.uint8)
+        out = np.zeros((1, RL_OBS_DTYPE.itemsize), dtype=np.uint8)
+        self._binding.write_rl_observation(self._handle, viewpoint, out)
+        return out.view(RL_OBS_DTYPE).reshape(1)[0]
 
     def step(self, controllers: Mapping[int, object]) -> EnvOutput:
         self._prev_input[...] = self._input
