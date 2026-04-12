@@ -69,8 +69,13 @@ static inline uint8_t specialn_is_blaster_loop_requested(const MslBatch* batch, 
 }
 
 static inline uint8_t action_allows_special_entry_ground(uint16_t action_id) {
-  // Spotdodge (EscapeN) has an empty IASA in decomp, so it cannot be interrupted into SpecialN.
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Escape.c::ftCo_EscapeN_IASA
+  // Spotdodge / roll IASA do not route through grounded special checks in decomp:
+  // - EscapeN_IASA is empty.
+  // - EscapeF_IASA / EscapeB_IASA only call ftCo_8009563C (item-throw family), not grounded
+  //   special dispatch.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Escape.c::{
+  //   ftCo_EscapeN_IASA,ftCo_EscapeF_IASA,ftCo_EscapeB_IASA
+  // }
   // KneeBend IASA checks Attack100/Catch/AttackHi4 only and does not route into grounded special
   // dispatch.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_KneeBend.c::ftCo_KneeBend_IASA
@@ -84,6 +89,8 @@ static inline uint8_t action_allows_special_entry_ground(uint16_t action_id) {
   // and may allow specials depending on per-state input checks.
   switch (action_id) {
     case (uint16_t)MSL_ACT_ESCAPE_N:
+    case (uint16_t)MSL_ACT_ESCAPE_F:
+    case (uint16_t)MSL_ACT_ESCAPE_B:
     case (uint16_t)MSL_ACT_KNEE_BEND:
     case (uint16_t)MSL_ACT_GUARD_ON:
     case (uint16_t)MSL_ACT_GUARD:

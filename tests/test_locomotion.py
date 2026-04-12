@@ -36,6 +36,8 @@ ACT_LANDING_FALL_SPECIAL = 0x002B
 ACT_GUARD_ON = 0x00B2
 ACT_GUARD = 0x00B3
 ACT_GUARD_OFF = 0x00B4
+ACT_ESCAPE_F = 0x00E9
+ACT_ESCAPE_B = 0x00EA
 ACT_ESCAPE_N = 0x00EB
 ACT_CATCH = 0x00D4
 ACT_FX_SPECIAL_N_START = 0x0155
@@ -70,6 +72,7 @@ SM_ATTACK_S3_HI = 53
 SM_ATTACK_HI3 = 58
 SM_ATTACK_HI4 = 66
 SM_GUARD_ON = 37
+SM_ESCAPE_F = 42
 SM_CATCH = 242
 SM_ATTACK_AIR_N = 68
 SM_ATTACK_AIR_B = 70
@@ -1028,6 +1031,41 @@ def test_guard_b_does_not_enter_grounded_neutral_special() -> None:
     cur_view["p"]["l"][0, 0] = np.uint8(89)
 
     out0 = _step_once(seed, prev_inp, inp)
+    assert int(out0["action_id"][0]) != ACT_FX_SPECIAL_N_START
+
+
+def test_escapef_b_does_not_enter_grounded_neutral_special() -> None:
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    input_stride = int(sizes["input"])
+
+    seed = _seed_base()
+    seed["on_ground"][0, 0] = np.uint8(1)
+    seed["action_id"][0, 0] = np.uint16(ACT_ESCAPE_F)
+    seed["action_frame"][0, 0] = np.int16(3)
+    seed["anim_frame_f32"][0, 0] = np.float32(3.0)
+    seed["animation_index"][0, 0] = np.uint32(SM_ESCAPE_F)
+    seed["facing"][0, 0] = np.uint8(0)  # left
+    seed["shield_hp"][0, 0] = np.float32(_common_attr("start_shield_health"))
+
+    prev_inp = _mk_input_bytes(1, input_stride)
+    inp = _mk_input_bytes(1, input_stride)
+    cur_view = inp.view(INPUT_DTYPE).reshape((1,))
+    # Exact seed-46 front-door shape: EscapeF row with held B/trigger and down-left stick.
+    # Decomp:
+    # - ftCo_EscapeF_IASA only calls ftCo_8009563C and never routes into grounded special checks.
+    # - Grounded SpecialN must therefore stay blocked on this roll row.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Escape.c::{
+    #   ftCo_EscapeF_IASA,ftCo_EscapeB_IASA
+    # }
+    cur_view["p"]["buttons"][0, 0] = np.uint16(BUTTON_B)
+    cur_view["p"]["main_x"][0, 0] = np.int8(-16)
+    cur_view["p"]["main_y"][0, 0] = np.int8(-40)
+    cur_view["p"]["l"][0, 0] = np.uint8(255)
+
+    out0 = _step_once(seed, prev_inp, inp)
+    assert int(out0["action_id"][0]) == ACT_ESCAPE_F
     assert int(out0["action_id"][0]) != ACT_FX_SPECIAL_N_START
 
 
