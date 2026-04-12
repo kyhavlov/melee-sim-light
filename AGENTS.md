@@ -182,6 +182,7 @@ Use `uv` for Python dependencies and editable installs:
 - Preprocess a suite (cached, gitignored): `uv run python -m tools.slippi.preprocess_suite --suite replays/suites/<suite>.json --datasets-dir datasets`
 - Validate a preprocessed suite: `uv run python -m tools.eval.run_one_step_suite_eval --suite replays/suites/<suite>.json --datasets-dir datasets`
 - Validate rollout streaks (generator-owned text report): `uv run python -m tools.eval.run_rollout_suite_eval --suite replays/suites/<suite>.json --datasets-dir datasets --fields action_id,animation_index,on_ground,hitlag,hitstun,state_flags --out reports/validation/rollout_suite_eval.txt`
+- Standard full report refresh (build once, write all four committed reports): `make validate-all`
 - Rollout streak capture (JSON): `uv run python -m tools.eval.run_longest_rollout_streaks --suite replays/suites/<suite>.json --datasets-dir datasets --fields action_id,animation_index,on_ground,hitlag,hitstun,state_flags --out reports/triage/current_rollout_streaks.json`
 - Rollout summary (headline metrics): `uv run python -m tools.eval.summarize_rollout_streaks --in reports/triage/current_rollout_streaks.json`
 - Rollout diff (before vs after): `uv run python -m tools.eval.diff_rollout_streaks --before reports/triage/baseline_rollout_streaks.json --after reports/triage/current_rollout_streaks.json`
@@ -239,6 +240,7 @@ Current guardrails:
 - `make validate-aggregate`: write the aggregate one-step report to `reports/validation/aggregate_recent_one_step_suite_eval.txt`
 - `make validate-rollout OUT=reports/validation/rollout_suite_eval.txt`: write rollout suite report to a file (commit this)
 - `make validate-rollout-aggregate`: write the aggregate rollout report to `reports/validation/aggregate_recent_rollout_suite_eval.txt`
+- `make validate-all`: build once, then refresh all four committed validation reports under `reports/validation/`
 - `make rollout-capture ROLLOUT_JSON=reports/triage/current_rollout_streaks.json`: capture rollout JSON snapshot (gitignored)
 - `make rollout-summary ROLLOUT_JSON=reports/triage/current_rollout_streaks.json`: print suite + per-dataset rollout headline metrics
 - `make rollout-diff ROLLOUT_BEFORE=reports/triage/baseline_rollout_streaks.json ROLLOUT_AFTER=reports/triage/current_rollout_streaks.json`: print rollout metric deltas
@@ -266,6 +268,7 @@ Validation output snapshots:
   - `reports/validation/rollout_suite_eval.txt`
   - `reports/validation/aggregate_recent_one_step_suite_eval.txt`
   - `reports/validation/aggregate_recent_rollout_suite_eval.txt`
+  - Standard command: `make validate-all`
 
 Variables:
 - `SUITE=replays/suites/fox_falco_fd_ucf084_recent.json`
@@ -294,7 +297,7 @@ Variables:
 - Do not commit unless the prompt explicitly says to.
 - Any C gameplay change without a nearby decomp/asm/data citation is not reviewable; add the citation or don’t land it.
 - Test-only change: do **not** regenerate `reports/validation/one_step_suite_eval.txt` or `reports/validation/rollout_suite_eval.txt`.
-- Sim-logic change: run `make test`, `make validate OUT=reports/validation/one_step_suite_eval.txt`, and `make validate-rollout OUT=reports/validation/rollout_suite_eval.txt`.
+- Sim-logic change: run `make test` and `make validate-all`.
 - Seed/schema change trigger: if you touch any of:
   - `src/api.h` seed structs, `src/api.c` reseed/write paths
   - `src/state.h`/`src/state.c` (new SoA fields)

@@ -1,4 +1,4 @@
-.PHONY: build test preprocess preprocess-aggregate validate validate-aggregate validate-rollout validate-rollout-aggregate rollout-capture rollout-summary rollout-diff rollout-locate rollout-locate-summary rollout-locate-diff build_data fmt fmt-check check guardrail-preflight guardrail-preflight-full guardrail-baseline forensic-rows dolphin-engine-dump dolphin-extract dolphin-forensic-row
+.PHONY: build test preprocess preprocess-aggregate validate validate-aggregate validate-rollout validate-rollout-aggregate validate-all rollout-capture rollout-summary rollout-diff rollout-locate rollout-locate-summary rollout-locate-diff build_data fmt fmt-check check guardrail-preflight guardrail-preflight-full guardrail-baseline forensic-rows dolphin-engine-dump dolphin-extract dolphin-forensic-row
 
 PY := uv run python
 DATASETS_DIR ?= datasets
@@ -70,6 +70,12 @@ validate-rollout: build
 	@$(PY) -m tools.eval.run_rollout_suite_eval --suite "$(SUITE)" --datasets-dir "$(DATASETS_DIR)" --fields "$(FIELDS)" $(ROLLOUT_OUT)
 
 validate-rollout-aggregate: build
+	@$(PY) -m tools.eval.run_rollout_suite_eval --suite "$(AGG_SUITE)" --datasets-dir "$(DATASETS_DIR)" --fields "$(FIELDS)" --out "$(AGG_ROLLOUT_OUT)"
+
+validate-all: build
+	@$(PY) -m tools.eval.run_one_step_suite_eval --suite "$(SUITE)" --datasets-dir "$(DATASETS_DIR)" --chunk "$(CHUNK)" --out reports/validation/one_step_suite_eval.txt
+	@$(PY) -m tools.eval.run_rollout_suite_eval --suite "$(SUITE)" --datasets-dir "$(DATASETS_DIR)" --fields "$(FIELDS)" --out reports/validation/rollout_suite_eval.txt
+	@$(PY) -m tools.eval.run_one_step_suite_eval --suite "$(AGG_SUITE)" --datasets-dir "$(DATASETS_DIR)" --chunk "$(CHUNK)" --out "$(AGG_ONE_STEP_OUT)"
 	@$(PY) -m tools.eval.run_rollout_suite_eval --suite "$(AGG_SUITE)" --datasets-dir "$(DATASETS_DIR)" --fields "$(FIELDS)" --out "$(AGG_ROLLOUT_OUT)"
 
 # Always writes to ROLLOUT_JSON (independent of OUT=...).
