@@ -276,6 +276,30 @@ Variables:
 - `DATASETS_DIR=datasets`
 - `CHUNK=4096`
 
+## Current Phase: Finish The Sim
+
+We are in last-mile correctness mode.
+
+Default expectation:
+- Do not stop at the first motivating mismatch if the surrounding owner family is clearly still incomplete.
+- Bias toward proving a mechanic complete, not merely making the first mismatch disappear.
+- Completeness is defined per coherent owner family, not per broad feature area.
+- When touching a mechanic, prefer to close the full decomp-backed behavior surface for that family while the context is loaded.
+
+What “go above and beyond” means here:
+- If fixing a state-entry owner, also check the adjacent same-family exit and handoff rows.
+- If fixing a grounded variant, also check the airborne, ground-to-air, and air-to-ground counterparts when decomp suggests shared ownership.
+- If fixing shield/body/item interaction ownership, also check the corresponding persistence, hitlag, consume-vs-persist, and ongoing-contact rows.
+- If fixing a callback bridge into `Wait_IASA` or similar shared input owners, audit the relevant catch / specials / attacks / guard ordering for that exact owner family.
+- Add focused coverage for the family you touched, not only the single row that first exposed it.
+- When claiming a family is complete, prefer focused replay-real locks or short unreseeded rollout windows for the adjacent rows you audited.
+
+Required discipline:
+- Do not broaden fixes speculatively.
+- Do not fit gameplay logic to a single replay row or trace symptom.
+- Keep unrelated owners in separate commits.
+- If the full family cannot be closed cleanly, land the proven subset and explicitly document the remaining blocker.
+
 ## Working Conventions
 
 - Prefer adding new “mechanics we learned about” into `SPEC.md` (Mechanics Inventory) immediately, even if not implemented yet.
@@ -296,6 +320,8 @@ Variables:
 
 - Do not commit unless the prompt explicitly says to.
 - Any C gameplay change without a nearby decomp/asm/data citation is not reviewable; add the citation or don’t land it.
+- In this repo phase, prefer to close the full decomp-backed owner family you are already touching, not just the first mismatch row.
+- When a comparator/modelplay bug exposes a mechanic family, treat it as symptom discovery first; audit adjacent same-family rows before declaring the area done.
 - Test-only change: do **not** regenerate `reports/validation/one_step_suite_eval.txt` or `reports/validation/rollout_suite_eval.txt`.
 - Sim-logic change: run `make test` and `make validate-all`.
 - Seed/schema change trigger: if you touch any of:
