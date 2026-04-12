@@ -12,18 +12,30 @@ from tools.modelplay.compare_trace_to_vanilla import _build_patch_spec
 from tools.modelplay.sim_env import CHAR_FOX, SIM_INIT_OPENING_FRAME_ID, build_match_config_array
 
 
-FIXTURE_394 = Path(__file__).resolve().parents[1] / "tests/fixtures/modelplay/puffer_5b_selfplay_input_prefix_0_394.json"
+TRACE_PATH = Path(
+    "/mnt/nvme0/projects/melee-sim-light_puffer-watch/reports/modelplay/puffer_5b_selfplay_4stock_4min/trace.json"
+)
 
 
 def _load_fixture(path: Path) -> dict[int, dict[str, Any]]:
     payload = json.loads(path.read_text(encoding="utf-8"))
-    input_fields = payload["input_fields"]
+    if "frames" in payload and "input_fields" in payload:
+        input_fields = payload["input_fields"]
+        frames: dict[int, dict[str, Any]] = {}
+        for frame_i, players_raw, _source in payload["frames"]:
+            players = []
+            for input_values in players_raw:
+                players.append({"inputs": {"processed": dict(zip(input_fields, input_values, strict=True))}})
+            frames[int(frame_i)] = {"players": players}
+        return frames
+
     frames: dict[int, dict[str, Any]] = {}
-    for frame_i, players_raw, _source in payload["frames"]:
+    for frame in payload["frames"]:
+        frame_i = int(frame["frameNumber"])
         players = []
-        for input_values in players_raw:
-            players.append({"inputs": {"processed": dict(zip(input_fields, input_values, strict=True))}})
-        frames[int(frame_i)] = {"players": players}
+        for player in frame["players"]:
+            players.append({"inputs": {"processed": dict(player["inputs"]["processed"])}})
+        frames[frame_i] = {"players": players}
     return frames
 
 
@@ -71,7 +83,7 @@ def test_modelplay_patch_spec_aligns_with_sim_init_compare_frame_id() -> None:
     input_stride = int(sizes["input"])
     compare_stride = int(sizes["compare"])
 
-    frames = _load_fixture(FIXTURE_394)
+    frames = _load_fixture(TRACE_PATH)
     end_frame = 394
     assert set(range(end_frame + 1)).issubset(frames.keys())
 

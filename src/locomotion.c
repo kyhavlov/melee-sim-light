@@ -8,7 +8,6 @@
 #include "anim_frame.h"
 #include "anim_timebase.h"
 #include "anim_table.h"
-#include "blaster.h"
 #include "buttons.h"
 #include "char_params.h"
 #include "coll_env_flags.h"
@@ -44,7 +43,6 @@ static inline MslJumpInput jump_input_from_edges(const MslCommonParams* c, uint1
 static inline uint16_t jump_action_from_stick(const MslCommonParams* c, float stick_x,
                                               float facing_dir);
 static inline uint32_t submotion_for_action(uint16_t a);
-static inline uint8_t grounded_attack_anim_end_wait_checks_catch_before_attacks(uint16_t a);
 
 static inline uint8_t anim_finished(uint8_t char_id, uint16_t msid, float anim_frame_f32) {
   const float end = msl_anim_end_frame(char_id, msid);
@@ -172,34 +170,6 @@ static inline void specialhi_apply_air_launch_ownership(MslBatch* batch, size_t 
   batch->state.speed_y_self[idx] = ch->firefox_launch_speed * sinf(launch_angle);
 }
 
-static inline void specialhi_apply_ground_launch_ownership(MslBatch* batch, size_t idx,
-                                                           const MslCharParams* ch) {
-  if (batch == NULL || ch == NULL) {
-    return;
-  }
-  // Decomp grounded launch enter (`ftFx_SpecialAirHi_AirToGround`):
-  // - if (|stick_x| + |stick_y|) >= x64 and |stick_x| > x88, update facing from current stick.
-  // - enter ftFx_MS_SpecialHi and seed `fp->gr_vel = x74 * fp->facing_dir`.
-  // - launch pose angle comes from floor normal, but the immediate ground-motion owner on flat FD
-  //   is the `gr_vel` write itself.
-  // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::ftFx_SpecialAirHi_AirToGround
-  // refs/melee/src/melee/ft/chara/ftFox/types.h::ftFox_DatAttrs
-  // data/characters/{fox,falco}.json:
-  // - firefox_direction_stick_range_min
-  // - firefox_facing_stick_range_min
-  // - firefox_launch_speed
-  const float stick_x = stick_i8_to_unit(batch->state.input_main_x[idx]);
-  const float stick_y = stick_i8_to_unit(batch->state.input_main_y[idx]);
-  const float abs_x = msl_absf(stick_x);
-  const float abs_y = msl_absf(stick_y);
-  if ((abs_x + abs_y) >= ch->firefox_direction_stick_range_min &&
-      abs_x > ch->firefox_facing_stick_range_min) {
-    batch->state.facing[idx] = (uint8_t)(stick_x >= 0.0f);
-  }
-  batch->state.speed_ground_x_self[idx] =
-      (batch->state.facing[idx] ? 1.0f : -1.0f) * ch->firefox_launch_speed;
-}
-
 static inline uint8_t spacie_specialhi_update(MslBatch* batch, size_t idx, uint8_t char_id,
                                               const MslSpecialMsids* ms, uint8_t on_ground) {
   if (batch == NULL || ms == NULL) {
@@ -237,16 +207,14 @@ static inline uint8_t spacie_specialhi_update(MslBatch* batch, size_t idx, uint8
         // derivation TODO-bound to explicit SpecialHi attrs (`x64/x74/x88`) extraction.
         batch->state.action_id[idx] =
             on_ground ? (uint16_t)MSL_ACT_FX_SPECIAL_HI : (uint16_t)MSL_ACT_FX_SPECIAL_AIR_HI;
-        const MslCharParams* ch = msl_char_params(char_id);
-        if (ch != NULL) {
-          if (!on_ground) {
+        if (!on_ground) {
+          const MslCharParams* ch = msl_char_params(char_id);
+          if (ch != NULL) {
             specialhi_apply_air_launch_ownership(batch, idx, ch);
           } else {
-            specialhi_apply_ground_launch_ownership(batch, idx, ch);
+            batch->state.speed_air_x_self[idx] = 0.0f;
+            batch->state.speed_y_self[idx] = 0.0f;
           }
-        } else if (!on_ground) {
-          batch->state.speed_air_x_self[idx] = 0.0f;
-          batch->state.speed_y_self[idx] = 0.0f;
         }
         batch->state.animation_index[idx] = (uint32_t)ms->specialhi_ground_main;
         msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
@@ -257,16 +225,14 @@ static inline uint8_t spacie_specialhi_update(MslBatch* batch, size_t idx, uint8
       if (anim_finished(char_id, ms->specialhi_air_hold, batch->state.anim_frame_f32[idx])) {
         batch->state.action_id[idx] =
             on_ground ? (uint16_t)MSL_ACT_FX_SPECIAL_HI : (uint16_t)MSL_ACT_FX_SPECIAL_AIR_HI;
-        const MslCharParams* ch = msl_char_params(char_id);
-        if (ch != NULL) {
-          if (!on_ground) {
+        if (!on_ground) {
+          const MslCharParams* ch = msl_char_params(char_id);
+          if (ch != NULL) {
             specialhi_apply_air_launch_ownership(batch, idx, ch);
           } else {
-            specialhi_apply_ground_launch_ownership(batch, idx, ch);
+            batch->state.speed_air_x_self[idx] = 0.0f;
+            batch->state.speed_y_self[idx] = 0.0f;
           }
-        } else if (!on_ground) {
-          batch->state.speed_air_x_self[idx] = 0.0f;
-          batch->state.speed_y_self[idx] = 0.0f;
         }
         batch->state.animation_index[idx] = (uint32_t)ms->specialhi_ground_main;
         msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
@@ -777,28 +743,6 @@ static inline uint8_t grounded_attack_wait_iasa_interrupt_dest_action(uint16_t a
   }
 }
 
-static inline uint8_t grounded_attack_anim_end_wait_checks_catch_before_attacks(uint16_t a) {
-  switch (a) {
-    case MSL_ACT_ATTACK_DASH:
-    case MSL_ACT_ATTACK_S3_HI:
-    case MSL_ACT_ATTACK_S3_HI_S:
-    case MSL_ACT_ATTACK_S3_S:
-    case MSL_ACT_ATTACK_S3_LW_S:
-    case MSL_ACT_ATTACK_S3_LW:
-    case MSL_ACT_ATTACK_HI3:
-    case MSL_ACT_ATTACK_S4_HI:
-    case MSL_ACT_ATTACK_S4_HI_S:
-    case MSL_ACT_ATTACK_S4_S:
-    case MSL_ACT_ATTACK_S4_LW_S:
-    case MSL_ACT_ATTACK_S4_LW:
-    case MSL_ACT_ATTACK_HI4:
-    case MSL_ACT_ATTACK_LW4:
-      return 1u;
-    default:
-      return 0u;
-  }
-}
-
 static inline uint8_t locomotion_has_opponent_active_catch_connect_window(const MslBatch* batch,
                                                                           int bi, int self_p,
                                                                           int num_players) {
@@ -1013,24 +957,9 @@ static inline uint8_t grounded_a_attack_try_enter_from_iasa(
 uint8_t locomotion_grounded_a_attack_try_enter_from_wait_iasa(
     MslBatch* batch, const MslCommonParams* c, size_t idx, uint16_t buttons_pressed, float stick_x,
     float stick_y, uint8_t tilt_timer_x, uint8_t tilt_timer_y, float facing_dir) {
-  // Wait_IASA grounded special/attack subset shared by other grounded callback bridges:
-  // - ftCo_Wait_IASA checks SpecialS -> SpecialHi -> SpecialN -> SpecialLw before Catch/Attacks.
-  // - Then Wait_IASA checks smashes/tilts/jab before guard/jump/dash/squat/turn/walk.
+  // Wait_IASA attack owner subset shared by other grounded callback bridges:
+  // - ftCo_Wait_IASA checks smashes/tilts/jab before guard/jump/dash/squat/turn/walk.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::{
-  //   ftCo_SpecialS_CheckInput,ftCo_Attack100_CheckInput,ftCo_800D6824,ftCo_800D68C0
-  // }
-  if (blaster_try_enter_ground_from_iasa(batch, idx)) {
-    return 1u;
-  }
-
-  if (batch != NULL && c != NULL && shine_char_supports_reflector(batch->state.char_id[idx]) &&
-      (buttons_pressed & (uint16_t)MSL_BUTTON_B) != 0u &&
-      stick_y <= -c->special_stick_y_threshold) {
-    shine_enter_ground_start_from_iasa(batch, idx);
-    return 1u;
-  }
-
   return grounded_a_attack_try_enter_from_iasa(batch, c, idx, buttons_pressed, stick_x, stick_y,
                                                tilt_timer_x, tilt_timer_y, facing_dir, 0u, 1u);
 }
@@ -1100,21 +1029,7 @@ static inline uint8_t grounded_attack_try_iasa_subset(MslBatch* batch, const Msl
   // refs/melee/src/melee/ft/chara/ftCommon/{ftCo_AttackDash.c,ftCo_AttackS3.c,ftCo_AttackHi3.c,ftCo_AttackHi4.c,ftCo_AttackLw4.c}
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
   //
-  // Current sim scope:
-  // - grounded spacie B-special subset (Side/Up/Neutral) via blaster.c,
-  // - grounded reflector via shine.c,
-  // - then grounded locomotion subset (attacks/jump/squat/dash/turn/walk).
-  if (blaster_try_enter_ground_from_iasa(batch, idx)) {
-    return 1u;
-  }
-
-  if (shine_char_supports_reflector(batch->state.char_id[idx]) &&
-      (buttons_pressed & (uint16_t)MSL_BUTTON_B) != 0u &&
-      stick_y <= -c->special_stick_y_threshold) {
-    shine_enter_ground_start_from_iasa(batch, idx);
-    return 1u;
-  }
-
+  // Current sim scope: grounded locomotion subset (attacks/jump/squat/dash/turn/walk) only.
   if (grounded_a_attack_try_enter_from_iasa(batch, c, idx, buttons_pressed, stick_x, stick_y,
                                             tilt_timer_x, tilt_timer_y, facing_dir, 0, 1)) {
     return 1u;
@@ -1905,10 +1820,6 @@ void locomotion_update_pre(MslBatch* batch) {
       float facing_dir;
       uint16_t action_id;
       uint8_t turn_just_turned = 0;
-      const float shield_hp_start = batch->state.shield_hp[idx];
-      const float lightshield_amount_start = batch->state.lightshield_amount[idx];
-      const uint8_t guard_x10_start = batch->state.guard_x10[idx];
-      uint8_t guard_on_no_submotion_snapshot_start = 0u;
 
       stick_x =
           apply_deadzone(stick_i8_to_unit(batch->state.input_main_x[idx]), c->lstick_deadzone_x);
@@ -1929,23 +1840,6 @@ void locomotion_update_pre(MslBatch* batch) {
 
       action_id = batch->state.action_id[idx];
       const uint16_t action_id_start = action_id;
-      guard_on_no_submotion_snapshot_start =
-          // Snapshot-shaped GuardOn handoffs:
-          // - destination GuardOn rows from grounded callback bridges can carry
-          //   (action_frame<0, animation_index=-1, anim_frame<0) before the first true GuardOn_Anim
-          //   tick owns shield drain / x10 decrement.
-          // - If GuardOn_IASA immediately hands that row off into KneeBend, preserve the shield
-          //   snapshot fields from the frame start; the first real GuardOn_Anim tick never ran.
-          // refs/melee/src/melee/ft/fighter.c::{Fighter_procUpdate,Fighter_procInterrupt}
-          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
-          //   ftCo_GuardOn_Anim,ftCo_800925A4,ftCo_GuardOn_IASA
-          // }
-          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c::ftCo_800CB024
-          (action_id == (uint16_t)MSL_ACT_GUARD_ON && batch->state.action_frame[idx] < 0 &&
-           batch->state.animation_index[idx] == 0xFFFFFFFFu &&
-           batch->state.anim_frame_f32[idx] < 0.0f)
-              ? 1u
-              : 0u;
 
       // Deferred throw-release bridge guard:
       // - In this sim, throw release detaches the victim and installs a temporary FALL bridge, then
@@ -2091,17 +1985,7 @@ void locomotion_update_pre(MslBatch* batch) {
         }
 
         if (spacie_specialhi_update(batch, idx, cid, ms, 1u)) {
-          action_id = batch->state.action_id[idx];
-          // Decomp callback order bridge:
-          // - ftFx_SpecialHiLanding_Anim can enter Wait on anim end.
-          // - Fighter proc order then dispatches the destination state's input callbacks in the
-          //   same frame, so fresh Wait_IASA ownership (including Catch before Guard) must still
-          //   be visible on that handoff row.
-          // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::ftFx_SpecialHiLanding_Anim
-          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
-          if (action_id != (uint16_t)MSL_ACT_WAIT) {
-            continue;
-          }
+          continue;
         }
 
         // Fox/Falco side special (Illusion/Phantasm): keep animation_index stable and model
@@ -2275,18 +2159,11 @@ void locomotion_update_pre(MslBatch* batch) {
             // Grounded attack anim-end -> Wait destination bridge:
             // - Grounded Attack* _Anim callbacks resolve to Wait on the frame the motion finishes.
             // - Grounded Attack* _IASA delegates into ftCo_Wait_IASA when allow_interrupt is set.
-            // - For Wait_IASA-delegating owners (AttackDash, AttackS3, AttackHi3, AttackHi4,
-            //   AttackLw4) and AttackS4's equivalent IASA path, same-frame destination Wait still
-            //   checks Catch before grounded attacks.
-            // - Jab family (Attack11/12/13) and AttackLw3 do not share that Catch-before-attacks
-            //   ordering, so keep them out of this bridge.
+            // - The destination Wait ordering still checks grounded attacks before
+            //   ftCo_80091A4C (guard), so same-frame attack restarts must be admitted before the
+            //   shared pre-pass guard loop runs later in this frame.
             // refs/melee/src/melee/ft/chara/ftCommon/{ftCo_Attack1.c,ftCo_AttackS3.c,ftCo_AttackHi3.c,ftCo_AttackLw3.c,ftCo_AttackS4.c,ftCo_AttackHi4.c,ftCo_AttackLw4.c,ftCo_AttackDash.c}
             // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
-            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackS4.c::ftCo_AttackS4_IASA
-            if (grounded_attack_anim_end_wait_checks_catch_before_attacks(action_id_start) &&
-                grab_flow_try_enter_catch_from_iasa(batch, c, idx)) {
-              continue;
-            }
             if (locomotion_grounded_a_attack_try_enter_from_wait_iasa(
                     batch, c, idx, buttons_pressed, stick_x, stick_y, tilt_timer_x, tilt_timer_y,
                     facing_dir)) {
@@ -2528,32 +2405,6 @@ void locomotion_update_pre(MslBatch* batch) {
           continue;
         }
 
-        // Catch/CatchDash anim-end -> Wait grounded B-special bridge:
-        // - Catch/CatchDash_Anim can enter Wait before this frame's input callback dispatch.
-        // - Wait_IASA checks SpecialS -> SpecialHi -> SpecialN -> SpecialLw before Catch/Attacks.
-        // - Keep this narrow to Catch/CatchDash destination-Wait rows; the generic steady-state
-        //   Wait ordering is still triaged separately.
-        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::{
-        //   ftCo_Catch_Anim,ftCo_CatchDash_Anim
-        // }
-        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
-        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::{
-        //   ftCo_SpecialS_CheckInput,ftCo_Attack100_CheckInput,ftCo_800D6824,ftCo_800D68C0
-        // }
-        if ((batch->state.prev_action_id[idx] == (uint16_t)MSL_ACT_CATCH ||
-             batch->state.prev_action_id[idx] == (uint16_t)MSL_ACT_CATCH_DASH) &&
-            action_id == MSL_ACT_WAIT) {
-          if (blaster_try_enter_ground_from_iasa(batch, idx)) {
-            continue;
-          }
-          if (shine_char_supports_reflector(batch->state.char_id[idx]) &&
-              (buttons_pressed & (uint16_t)MSL_BUTTON_B) != 0u &&
-              stick_y <= -c->special_stick_y_threshold) {
-            shine_enter_ground_start_from_iasa(batch, idx);
-            continue;
-          }
-        }
-
         // Catch-before-guard bridge for grounded IASA owners that delegate into Wait ordering.
         //
         // Decomp:
@@ -2571,21 +2422,6 @@ void locomotion_update_pre(MslBatch* batch) {
           continue;
         }
 
-        // Plain Wait_IASA runs grounded attacks before guard.
-        //
-        // Keep this narrow to steady-state Wait rows only:
-        // - generic destination-Wait handoffs (Escape*, Catch, SpecialHiLanding, etc.) still use
-        //   their own localized bridges so we do not re-open the earlier destination-Wait shield
-        //   regression surface.
-        // - plain Wait rows should still honor the decomp ordering where AttackS4/Hi4/Lw4,
-        //   tilts, and jab beat guard on the same frame.
-        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
-        if (action_id == MSL_ACT_WAIT &&
-            grounded_a_attack_try_enter_from_iasa(batch, c, idx, buttons_pressed, stick_x, stick_y,
-                                                  tilt_timer_x, tilt_timer_y, facing_dir, 0, 1)) {
-          continue;
-        }
-
         // Guard core loop (entry/hold/exit).
         // Decomp call site example: refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c:43-66.
         uint8_t allow_guard_entry = 0;
@@ -2598,28 +2434,6 @@ void locomotion_update_pre(MslBatch* batch) {
         }
         guard_update_grounded(batch, c, idx, allow_guard_entry);
         action_id = batch->state.action_id[idx];
-
-        // Catch/CatchDash anim-end callback bridge:
-        // - Catch/CatchDash_Anim can enter Wait before this frame's input callback dispatch.
-        // - Wait_IASA can then enter GuardOn on the same destination row.
-        // - Vanilla can still consume GuardOn_IASA spotdodge ownership immediately after that
-        //   GuardOn enter (for example Catch -> Wait -> GuardOn -> EscapeN on one frame).
-        // Keep this bridge narrow to Catch/CatchDash-start rows so the broader fresh-GuardOn
-        // suppression in action.c remains intact for other non-shield owners, and only preserve
-        // the EscapeN branch needed by the observed owner.
-        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::{
-        //   ftCo_Catch_Anim,ftCo_CatchDash_Anim
-        // }
-        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
-        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
-        //   ftCo_800923B4,ftCo_GuardOn_IASA
-        // }
-        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Escape.c::ftCo_8009980C
-        if ((batch->state.prev_action_id[idx] == (uint16_t)MSL_ACT_CATCH ||
-             batch->state.prev_action_id[idx] == (uint16_t)MSL_ACT_CATCH_DASH) &&
-            action_id == MSL_ACT_GUARD_ON && escape_try_enter_spotdodge_from_guard(batch, c, idx)) {
-          continue;
-        }
 
         // Escape actions (from shield): friction + end->Wait.
         // If Escape ended this frame, allow the destination state's IASA to run in the same frame.
@@ -2638,30 +2452,23 @@ void locomotion_update_pre(MslBatch* batch) {
           if (action_id == MSL_ACT_WAIT && stick_y > -c->crouch_stick_threshold) {
             // Decomp callback order bridge for Escape* anim-end -> Wait:
             // - Escape*_Anim can enter Wait before this frame's input callback dispatch.
-            // - Wait_IASA then runs its destination grounded selector in-order on that same row:
-            //   Catch before grounded attacks, then guard, then the later jump/dash/squat/turn/walk
-            //   branches that continue below once Wait is still active.
-            // - ftCo_EscapeN_IASA itself is empty, but the Fighter proc still dispatches the
-            //   destination input callback after the motion change.
-            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Escape.c::{
-            //   ftCo_Escape_Anim,ftCo_EscapeN_Anim,ftCo_Escape_IASA,ftCo_EscapeN_IASA
-            // }
+            // - Wait_IASA then runs guard-check (ftCo_80091A4C) in the destination frame.
+            //   Our main guard_update_grounded() pass already ran while still in Escape*, so rerun
+            //   GuardOn ownership once on the Wait destination to keep this transition parity.
+            // Spotdodge ownership note:
+            // - ftCo_EscapeN_IASA itself is empty, but Wait destination input callbacks still run
+            //   after EscapeN_Anim motion change in Fighter proc order.
+            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Escape.c::{ftCo_Escape_Anim,ftCo_EscapeN_Anim,ftCo_EscapeN_IASA}
+            // Narrowed bridge gate:
+            // - Exclude crouch-intent windows; Escape end rows with downward stick are handled by
+            //   the destination grounded-input chain and should not force same-frame guard entry.
+            // - TODO(narrowed_temporary): promote Escape end callback ordering to run full Wait_IASA
+            //   destination chain on no-submotion snapshot rows; then remove this destination gate.
+            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Escape.c::{ftCo_Escape_Anim,ftCo_EscapeN_Anim}
+            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Escape.c::{ftCo_Escape_IASA,ftCo_EscapeN_IASA}
             // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
             // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
-            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_Catch_CheckInput
             // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80091A4C
-            // Narrowed bridge gate:
-            // - Exclude crouch-intent windows; Escape end rows with downward stick are still
-            //   handled by the destination grounded-input chain below and must not force same-frame
-            //   guard entry.
-            if (grab_flow_try_enter_catch_from_iasa(batch, c, idx)) {
-              continue;
-            }
-            if (locomotion_grounded_a_attack_try_enter_from_wait_iasa(
-                    batch, c, idx, buttons_pressed, stick_x, stick_y, tilt_timer_x, tilt_timer_y,
-                    facing_dir)) {
-              continue;
-            }
             guard_update_grounded(batch, c, idx, 1u);
             action_id = batch->state.action_id[idx];
           }
@@ -3415,34 +3222,6 @@ void locomotion_update_pre(MslBatch* batch) {
               (batch->state.action_frame[idx] >= (int16_t)ch->jump_startup_frames) ? 1u : 0u;
           const uint8_t opponent_active_catch_window =
               locomotion_has_opponent_active_catch_connect_window(batch, bi, p, num_players);
-          const uint8_t kneebend_fresh_entry_from_shield_iasa =
-              // Callback-order owner:
-              // - GuardOn/Guard/GuardReflect/GuardOff IASA can enter KneeBend through
-              //   ftCo_800CB024 during this frame's input callback.
-              // - Fighter proc only dispatches one input callback per fighter per frame, so a fresh
-              //   shield-origin KneeBend row must not immediately rerun KneeBend_IASA in the same
-              //   step; its Catch/AttackHi4/ShortHop checks begin on the next frame.
-              // refs/melee/src/melee/ft/fighter.c::{Fighter_procUpdate,Fighter_procInterrupt}
-              // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
-              //   ftCo_GuardOn_IASA,ftCo_Guard_IASA,ftCo_GuardReflect_IASA,ftCo_GuardOff_IASA
-              // }
-              // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c::ftCo_800CB024
-              // refs/melee/src/melee/ft/chara/ftCommon/ftCo_KneeBend.c::ftCo_KneeBend_IASA
-              (batch->state.action_frame[idx] == 0 &&
-               (action_id_start == (uint16_t)MSL_ACT_GUARD_ON ||
-                action_id_start == (uint16_t)MSL_ACT_GUARD ||
-                action_id_start == (uint16_t)MSL_ACT_GUARD_REFLECT ||
-                action_id_start == (uint16_t)MSL_ACT_GUARD_OFF))
-                  ? 1u
-                  : 0u;
-
-          if (kneebend_fresh_entry_from_shield_iasa && guard_on_no_submotion_snapshot_start &&
-              grounded_attack_submotion_from_action(
-                  batch->state.guard_entry_source_action_id[idx]) != 0xFFFFFFFFu) {
-            batch->state.shield_hp[idx] = shield_hp_start;
-            batch->state.lightshield_amount[idx] = lightshield_amount_start;
-            batch->state.guard_x10[idx] = guard_x10_start;
-          }
 
           // KneeBend IASA catch check (JC grab) before the jump transition.
           //
@@ -3454,8 +3233,7 @@ void locomotion_update_pre(MslBatch* batch) {
           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_KneeBend.c::{
           //   ftCo_KneeBend_Anim,ftCo_KneeBend_IASA
           // }
-          if (!kneebend_fresh_entry_from_shield_iasa &&
-              (!startup_complete || opponent_active_catch_window)) {
+          if (!startup_complete || opponent_active_catch_window) {
             if (grab_flow_try_enter_catch_from_iasa(batch, c, idx)) {
               continue;
             }
@@ -3466,7 +3244,7 @@ void locomotion_update_pre(MslBatch* batch) {
 
           // Latch short hop state (ftCo_KneeBend_Check_ShortHop).
           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_KneeBend.c:46
-          if (!kneebend_fresh_entry_from_shield_iasa && !batch->state.kneebend_is_short_hop[idx]) {
+          if (!batch->state.kneebend_is_short_hop[idx]) {
             const uint8_t j_in = batch->state.kneebend_jump_input[idx];
             if (j_in == (uint8_t)MSL_JUMP_INPUT_XY) {
               if (!(buttons & (uint16_t)MSL_BUTTON_XY)) {

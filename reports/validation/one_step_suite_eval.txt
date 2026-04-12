@@ -151,10 +151,10 @@ mismatch.item_type: 0 / 153330 (0.000000)
 mismatch.item_state: 0 / 153330 (0.000000)
 mismatch.item_owner: 0 / 153330 (0.000000)
 mismatch.item_instance_id: 0 / 153330 (0.000000)
-err.pos_x: mae=0.011843 p95=0.000000 max=5.225872
+err.pos_x: mae=0.012037 p95=0.000000 max=5.225872
 err.pos_y: mae=0.008084 p95=0.000000 max=7.347817
-err.speed_air_x_self: mae=0.005607 p95=0.000000 max=1.815992
-err.speed_ground_x_self: mae=0.004526 p95=0.000000 max=1.815992
+err.speed_air_x_self: mae=0.005802 p95=0.000000 max=1.815992
+err.speed_ground_x_self: mae=0.004721 p95=0.000000 max=1.815992
 err.speed_y_self: mae=0.002384 p95=0.000000 max=3.430000
 err.speed_x_attack: mae=0.000464 p95=0.000000 max=1.808650
 err.speed_y_attack: mae=0.002175 p95=0.000000 max=5.618131
@@ -165,7 +165,7 @@ err.item_pos_y: mae=0.087154 p95=0.000000 max=13.353867
 err.item_vel_x: mae=0.028661 p95=0.000000 max=6.413950
 err.item_vel_y: mae=0.034461 p95=0.000000 max=4.990129
 overall.discrete_mismatch: 272 / 1236862
-overall.float_norm_mae_p95: 0.00095706
+overall.float_norm_mae_p95: 0.00098057
 
 == datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/TreasuredBackKangaroo.msl ==
 Records: 7837  Players/scored per record: 2  Total player-frames: 15674
@@ -193,10 +193,10 @@ mismatch.item_type: 5 / 117555 (0.000043)
 mismatch.item_state: 1 / 117555 (0.000009)
 mismatch.item_owner: 6 / 117555 (0.000051)
 mismatch.item_instance_id: 6 / 117555 (0.000051)
-err.pos_x: mae=0.016636 p95=0.000000 max=6.000000
+err.pos_x: mae=0.016673 p95=0.000000 max=6.000000
 err.pos_y: mae=0.005820 p95=0.000000 max=6.677049
-err.speed_air_x_self: mae=0.011817 p95=0.000000 max=1.815992
-err.speed_ground_x_self: mae=0.010023 p95=0.000000 max=2.485898
+err.speed_air_x_self: mae=0.011854 p95=0.000000 max=1.815992
+err.speed_ground_x_self: mae=0.010059 p95=0.000000 max=2.485898
 err.speed_y_self: mae=0.001776 p95=0.000000 max=3.100000
 err.speed_x_attack: mae=0.000600 p95=0.000000 max=1.656845
 err.speed_y_attack: mae=0.002036 p95=0.000000 max=7.370053
@@ -207,8 +207,8 @@ err.item_pos_y: mae=0.025521 p95=0.000000 max=31.795383
 err.item_vel_x: mae=0.020464 p95=0.000000 max=7.000000
 err.item_vel_y: mae=0.003790 p95=0.000000 max=4.999367
 overall.discrete_mismatch: 210 / 948277
-overall.float_norm_mae_p95: 0.00148269
+overall.float_norm_mae_p95: 0.00148677
 
 == suite summary ==
 overall.discrete_mismatch: 941 / 4462843
-overall.float_norm_mae_p95: 0.00112629
+overall.float_norm_mae_p95: 0.00113354
