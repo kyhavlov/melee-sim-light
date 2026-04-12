@@ -2,6 +2,13 @@
 
 #include "batch_internal.h"
 
+struct MslCommonParams;
+
 // Fox/Falco neutral special (Blaster) minimal motion-state handler.
 // Decomp reference: refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c
 void blaster_update_pre_physics(MslBatch* batch);
+
+// Grounded Wait_IASA B-special subset (Side/Up/Neutral), intentionally excluding reflector.
+// refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
+uint8_t blaster_try_enter_ground_from_wait_iasa(MslBatch* batch, const struct MslCommonParams* c,
+                                                size_t idx);

@@ -334,6 +334,44 @@ static inline uint8_t anim_finished(uint8_t char_id, uint16_t msid, float anim_f
   return msl_anim_frame_sanitize_f32(anim_frame_f32) >= end;
 }
 
+uint8_t blaster_try_enter_ground_from_wait_iasa(MslBatch* batch, const MslCommonParams* c,
+                                                size_t idx) {
+  if (batch == NULL || c == NULL) {
+    return 0u;
+  }
+  const uint8_t cid = batch->state.char_id[idx];
+  if (!is_fox_falco(cid) || !batch->state.on_ground[idx] ||
+      batch->state.action_id[idx] != (uint16_t)MSL_ACT_WAIT) {
+    return 0u;
+  }
+  const uint16_t pressed = batch->state.input_buttons_pressed[idx];
+  if ((pressed & (uint16_t)MSL_BUTTON_B) == 0u) {
+    return 0u;
+  }
+  const MslCharParams* ch = msl_char_params(cid);
+  const MslSpecialMsids* ms = msl_special_msids(cid);
+  if (ch == NULL || ms == NULL) {
+    return 0u;
+  }
+  const float stick_x =
+      apply_deadzone(stick_i8_to_unit(batch->state.input_main_x[idx]), c->lstick_deadzone_x);
+  const float stick_y =
+      apply_deadzone(stick_i8_to_unit(batch->state.input_main_y[idx]), c->lstick_deadzone_y);
+  switch (resolve_spacie_b_special_kind(c, 1u, stick_x, stick_y)) {
+    case MSL_SPACIE_B_SPECIAL_SIDE:
+      enter_side_special_start(batch, idx, c, ms, ch, 1u, stick_x);
+      return 1u;
+    case MSL_SPACIE_B_SPECIAL_UP:
+      enter_specialhi_hold(batch, idx, ms, ch, 1u);
+      return 1u;
+    case MSL_SPACIE_B_SPECIAL_NEUTRAL:
+      enter_blaster_start(batch, idx, laser_params_get(cid), 1u);
+      return 1u;
+    default:
+      return 0u;
+  }
+}
+
 void blaster_update_pre_physics(MslBatch* batch) {
   if (batch == NULL) {
     return;

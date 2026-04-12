@@ -1114,6 +1114,47 @@ def test_wait_attackhi4_beats_guardon_on_up_smash_edge() -> None:
     assert int(out0["animation_index"][0]) == SM_ATTACK_HI4
 
 
+def test_wait_grounded_side_special_beats_guardon_on_exact_trace_inputs() -> None:
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    input_stride = int(sizes["input"])
+
+    seed = _seed_base()
+    seed["on_ground"][0, 0] = np.uint8(1)
+    seed["action_id"][0, 0] = np.uint16(ACT_WAIT)
+    seed["action_frame"][0, 0] = np.int16(0)
+    seed["anim_frame_f32"][0, 0] = np.float32(0.0)
+    seed["animation_index"][0, 0] = np.uint32(SM_WAIT1_0)
+    seed["facing"][0, 0] = np.uint8(0)  # left
+    seed["shield_hp"][0, 0] = np.float32(_common_attr("start_shield_health"))
+
+    prev_inp = _mk_input_bytes(1, input_stride)
+    inp = _mk_input_bytes(1, input_stride)
+    prev_view = prev_inp.view(INPUT_DTYPE).reshape((1,))
+    cur_view = inp.view(INPUT_DTYPE).reshape((1,))
+    # Exact frame-405 modelplay inputs on a steady Wait row:
+    # - previous row has no trigger held and no B edge
+    # - current row presses B with a strong leftward stick and full analog trigger
+    # Decomp:
+    # - ftCo_Wait_IASA checks ftCo_SpecialS_CheckInput before ftCo_80091A4C (GuardOn).
+    # - A grounded Fox/Falco Wait row with B+side input must therefore enter SpecialSStart before
+    #   shield can claim the same frame.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_SpecialS.c::ftCo_SpecialS_CheckInput
+    prev_view["p"]["buttons"][0, 0] = np.uint16(BUTTON_Y)
+    prev_view["p"]["main_y"][0, 0] = np.int8(23)
+    prev_view["p"]["c_y"][0, 0] = np.int8(-23)
+    cur_view["p"]["buttons"][0, 0] = np.uint16(BUTTON_B)
+    cur_view["p"]["main_x"][0, 0] = np.int8(-118)
+    cur_view["p"]["main_y"][0, 0] = np.int8(50)
+    cur_view["p"]["l"][0, 0] = np.uint8(255)
+
+    out0 = _step_once(seed, prev_inp, inp)
+    assert int(out0["action_id"][0]) == ACT_FX_SPECIAL_S_START
+    assert int(out0["action_frame"][0]) == 1
+
+
 def test_attackhi3_allow_interrupt_attackhi4_beats_guardon_on_exact_trace_inputs() -> None:
     import msl_binding
 
