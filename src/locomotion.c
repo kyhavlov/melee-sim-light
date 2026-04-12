@@ -2522,6 +2522,32 @@ void locomotion_update_pre(MslBatch* batch) {
           continue;
         }
 
+        // Steady-state Turn_IASA also runs grounded attacks before guard.
+        //
+        // Decomp:
+        // - ftCo_Turn_IASA temporarily flips fp->facing_dir to mv.co.turn.facing_after before the
+        //   grounded attack checks, then restores it before ftCo_80091A4C when the turn has not
+        //   completed yet.
+        // - Attack* checks therefore still beat guard on the same Turn row.
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Turn.c::ftCo_Turn_IASA
+        if (action_id == MSL_ACT_TURN && action_id_start == MSL_ACT_TURN) {
+          uint8_t turn_attack_facing_flipped = 0u;
+          if (!batch->state.turn_has_turned[idx]) {
+            batch->state.facing[idx] = batch->state.facing[idx] ? 0u : 1u;
+            facing_dir = batch->state.facing[idx] ? 1.0f : -1.0f;
+            turn_attack_facing_flipped = 1u;
+          }
+          if (grounded_a_attack_try_enter_from_iasa(batch, c, idx, buttons_pressed, stick_x,
+                                                    stick_y, tilt_timer_x, tilt_timer_y, facing_dir,
+                                                    0, 1)) {
+            continue;
+          }
+          if (turn_attack_facing_flipped) {
+            batch->state.facing[idx] = batch->state.facing[idx] ? 0u : 1u;
+            facing_dir = batch->state.facing[idx] ? 1.0f : -1.0f;
+          }
+        }
+
         // Guard core loop (entry/hold/exit).
         // Decomp call site example: refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c:43-66.
         uint8_t allow_guard_entry = 0;
