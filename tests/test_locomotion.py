@@ -2037,6 +2037,48 @@ def test_attackhi4_live_smash_charge_holds_on_action_frame_2() -> None:
         msl_binding.destroy(handle)
 
 
+def test_attackhi4_live_smash_charge_starts_from_fresh_a_on_action_frame_2() -> None:
+    sizes = __import__("msl_binding").sizes()
+    input_stride = int(sizes["input"])
+
+    seed = _seed_base()
+    seed["action_id"][0, 0] = np.uint16(ACT_ATTACK_HI4)
+    seed["action_frame"][0, 0] = np.int16(0)
+    seed["animation_index"][0, 0] = np.uint32(SM_ATTACK_HI4)
+    seed["anim_frame_f32"][0, 0] = np.float32(0.0)
+    seed["frame_speed_mul_f32"][0, 0] = np.float32(1.0)
+    seed["on_ground"][0, 0] = np.uint8(1)
+    seed["ground_id"][0, 0] = np.uint16(0)
+
+    neutral = _mk_input_bytes(1, input_stride)
+    hold = _mk_input_bytes(1, input_stride)
+    hold.view(INPUT_DTYPE).reshape((1,))["p"]["buttons"][0, 0] = np.uint16(BUTTON_A)
+
+    # Decomp:
+    # - opcode 56 seeds SmashState_PreCharge when AttackHi4 crosses the start-smash-charge command.
+    # - ftCo_800DF0D0 promotes PreCharge -> Charging using the fighter's current held-A state, so a
+    #   fresh A press on the af=2 admission row is enough to freeze the next advance.
+    # refs/melee/src/melee/ft/ftaction.c::ftAction_80073008
+    # refs/melee/src/melee/ft/ft_0DF0.c::{ftCo_800DEE84,ftCo_800DF0D0}
+    import msl_binding
+
+    seed_stride = int(sizes["seed"])
+    compare_stride = int(sizes["compare"])
+    out_bytes = np.zeros((1, compare_stride), dtype=np.uint8)
+    handle = msl_binding.init(batch_size=1, num_players=2)
+    try:
+        msl_binding.reseed_seed(handle, seed.view(np.uint8).reshape((1, seed_stride)))
+        frames: list[int] = []
+        for prev_inp, inp in ((neutral, neutral), (neutral, hold), (hold, hold)):
+            msl_binding.step_input(handle, prev_inp, inp)
+            msl_binding.write_compare(handle, out_bytes)
+            out = out_bytes.view(COMPARE_DTYPE).reshape((1,))[0]
+            frames.append(int(out["action_frame"][0]))
+        assert frames == [1, 2, 2]
+    finally:
+        msl_binding.destroy(handle)
+
+
 def test_attackhi4_live_smash_charge_release_restores_anim_rate_next_frame() -> None:
     import msl_binding
 

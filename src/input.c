@@ -197,9 +197,6 @@ static inline void grounded_smash_charge_update_ftCo_800DF0D0_subset(MslBatch* b
 
   const uint8_t held_a =
       ((batch->state.input_buttons[idx] & (uint16_t)MSL_BUTTON_A) != 0u) ? 1u : 0u;
-  const uint8_t prev_held_a =
-      ((batch->state.prev_input_buttons[idx] & (uint16_t)MSL_BUTTON_A) != 0u) ? 1u : 0u;
-
   // Decomp:
   // - opcode 56 seeds SmashState_PreCharge during the anim/script pass.
   // - the later fighter input proc (ftCo_800DF0D0) promotes PreCharge -> Charging on held A,
@@ -251,13 +248,14 @@ static inline void grounded_smash_charge_update_ftCo_800DF0D0_subset(MslBatch* b
     return;
   }
 
-  // Current-sim bridge note:
-  // - The visible af=2 hold shows up on rows with prior-frame A continuity in replay-real data.
-  // - Gate the live smash-charge start on held A in both prev/current lanes so a fresh same-row A
-  //   pulse does not over-admit the hidden charge state before the next visible snapshot.
-  // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A360,Fighter_Spaghetti_8006AD10}
+  // Live ownership note:
+  // - ftCo_800DF0D0 consults the fighter's current input snapshot when promoting
+  //   SmashState_PreCharge -> Charging.
+  // - A fresh held-A pulse on the row that reaches af=2 is enough to freeze the next AttackHi4/
+  //   AttackLw4 timeline advance; prior-frame A continuity is not required.
+  // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A360,Fighter_procUpdate}
   // refs/melee/src/melee/ft/ft_0DF0.c::ftCo_800DF0D0
-  if (held_a == 0u || prev_held_a == 0u) {
+  if (held_a == 0u) {
     return;
   }
 
@@ -411,6 +409,7 @@ int input_apply(MslBatch* batch, const uint8_t* prev_input_bytes, size_t prev_in
 
       const uint16_t prev_buttons = prev->p[p].buttons;
       const uint16_t cur_buttons = cur->p[p].buttons;
+
       batch->state.prev_input_buttons[idx] = prev_buttons;
       batch->state.input_buttons[idx] = cur_buttons;
       batch->state.input_buttons_pressed[idx] = (uint16_t)(cur_buttons & (uint16_t)~prev_buttons);

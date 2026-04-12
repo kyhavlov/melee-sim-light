@@ -426,8 +426,7 @@ void anim_timebase_update_pre_input(MslBatch* batch) {
                                                  : c->attack_lw4_tilt_max_frames;
         const uint8_t pre_input_a_held =
             ((batch->state.input_buttons[idx] & (uint16_t)MSL_BUTTON_A) != 0u) ? 1u : 0u;
-        if (pre_input_a_held != 0u && batch->state.x67C[idx] != 0u &&
-            batch->state.x67C[idx] <= smash_hold_timer_max) {
+        if (pre_input_a_held != 0u && batch->state.x67C[idx] <= smash_hold_timer_max) {
           batch->state.frame_speed_mul_fp_q16_16[idx] = 0;
         } else if (pre_input_a_held == 0u && batch->state.frame_speed_mul_fp_q16_16[idx] == 0) {
           // Release bridge:
@@ -436,8 +435,8 @@ void anim_timebase_update_pre_input(MslBatch* batch) {
           // Decomp/data refs:
           // - AttackHi4/AttackLw4 input checks use p_ftCommonData->xD0/xD8 as their action-specific
           //   tilt windows for the hold admission side.
-          // - On replay-real seeded af=2 rows, every legitimate continued hold still has prior-frame
-          //   A continuity; rows with prevA==0 resume on the next step regardless of x67C.
+          // - Fresh held-A admission on the visible af=2 row is legal in live play (`x67C == 0`),
+          //   but rows with prevA==0 still resume on the next step once A is no longer held.
           // refs/melee/src/melee/ft/chara/ftCommon/{ftCo_AttackHi4.c,ftCo_AttackLw4.c}
           // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A360,Fighter_procUpdate}
           // data/common/ft_common_data.json::{attack_hi4_tilt_max_frames,attack_lw4_tilt_max_frames}
