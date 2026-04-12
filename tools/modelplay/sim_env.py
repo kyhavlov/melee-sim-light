@@ -187,6 +187,7 @@ class SimSession:
         self._compare_bytes = self._compare.view(np.uint8).reshape(1, -1)
         self._prev_input = np.zeros(1, dtype=INPUT_DTYPE)
         self._input = np.zeros(1, dtype=INPUT_DTYPE)
+        self._processed_input = np.zeros(1, dtype=INPUT_DTYPE)
         self._last_controllers = {}
         self._state: SimFrameState | None = None
         self._needs_reset = True
@@ -203,7 +204,7 @@ class SimSession:
             self._binding.write_compare(self._handle, self._compare_bytes)
             self._prev_input[...] = np.zeros(1, dtype=INPUT_DTYPE)
             self._input[...] = np.zeros(1, dtype=INPUT_DTYPE)
-            self._last_controllers = input_array_to_controllers(self._input)
+            self._refresh_processed_controllers()
             self._state = frame_state_from_compare(self._compare[0])
             self._needs_reset = True
             return self.current_state()
@@ -220,7 +221,7 @@ class SimSession:
         self._binding.reseed_seed(self._handle, seed_bytes)
         self._prev_input[0] = row["prev_input_t"]
         self._input[0] = row["input_t"]
-        self._last_controllers = input_array_to_controllers(self._input)
+        self._refresh_processed_controllers()
         self._state = frame_state_from_seed(seed_arr[0])
         self._needs_reset = True
         return self.current_state()
@@ -264,7 +265,13 @@ class SimSession:
             self._input.view(np.uint8).reshape(1, -1),
         )
         self._binding.write_compare(self._handle, self._compare_bytes)
-        self._last_controllers = dict(controllers)
+        self._refresh_processed_controllers()
         self._state = frame_state_from_compare(self._compare[0])
         self._record += 1
         return self.current_state()
+
+    def _refresh_processed_controllers(self) -> None:
+        self._binding.debug_write_processed_input(
+            self._handle, self._processed_input.view(np.uint8).reshape(1, -1)
+        )
+        self._last_controllers = input_array_to_controllers(self._processed_input)

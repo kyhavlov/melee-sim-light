@@ -81,3 +81,33 @@ def test_ucf_cardinals_disabled_does_not_snap() -> None:
     assert int(out_view["p"]["main_x"][0, 0]) == 79
     assert int(out_view["p"]["main_y"][0, 0]) == 5
 
+
+def test_ucf_clamp_legalizes_partial_diag_77_neg23_to_76_neg22() -> None:
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    input_stride = int(sizes["input"])
+    processed_stride = int(sizes["processed_input"])
+
+    handle = msl_binding.init(
+        batch_size=1,
+        num_players=2,
+        ucf_enabled=1,
+        ucf_cardinals_1_0_enabled=1,
+    )
+
+    prev_inp = _mk_input_bytes(1, input_stride)
+    inp = _mk_input_bytes(1, input_stride)
+
+    inp_view = inp.view(INPUT_DTYPE).reshape(-1)
+    inp_view["p"]["main_x"][0, 0] = np.int8(77)
+    inp_view["p"]["main_y"][0, 0] = np.int8(-23)
+
+    msl_binding.step_input(handle, prev_inp, inp)
+
+    out = np.empty((1, processed_stride), dtype=np.uint8)
+    msl_binding.debug_write_processed_input(handle, out)
+    out_view = out.view(INPUT_DTYPE).reshape(-1)
+
+    assert int(out_view["p"]["main_x"][0, 0]) == 76
+    assert int(out_view["p"]["main_y"][0, 0]) == -22

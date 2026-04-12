@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from types import SimpleNamespace
 from pathlib import Path
 
 import numpy as np
@@ -295,3 +296,85 @@ def test_modelplay_sim_session_sim_init_reset_without_dataset(monkeypatch: pytes
     assert state.action_id[:2].tolist() == [ACT_ENTRY, ACT_ENTRY]
     assert state.action_frame[:2].tolist() == [-1, -1]
     assert state.char_id[:2].tolist() == [CHAR_FOX, CHAR_FALCO]
+
+
+def test_modelplay_sim_session_uses_processed_controllers_after_step(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "tools.modelplay.sim_env.build_slippi_ai_game",
+        lambda state, controllers, *, viewpoint_port: {
+            "frame_id": state.frame_id,
+            "viewpoint_port": viewpoint_port,
+        },
+    )
+    monkeypatch.setattr(
+        "tools.modelplay.sim_env.input_array_to_controllers",
+        lambda input_arr: {
+            port + 1: (
+                int(input_arr["p"]["main_x"][0, port]),
+                int(input_arr["p"]["main_y"][0, port]),
+            )
+            for port in range(2)
+        },
+    )
+    def _controllers_to_input_array(controllers, *, num_players=2):
+        arr = np.zeros(1, dtype=INPUT_DTYPE)
+        for port in range(num_players):
+            controller = controllers.get(port + 1)
+            arr["p"]["main_x"][0, port] = np.int8(round(float(controller.main_stick.x) * 160.0 - 80.0))
+            arr["p"]["main_y"][0, port] = np.int8(round(float(controller.main_stick.y) * 160.0 - 80.0))
+            arr["p"]["buttons"][0, port] = np.uint16(0x0800 if bool(controller.buttons.Y) else 0)
+        return arr
+
+    monkeypatch.setattr("tools.modelplay.sim_env.controllers_to_input_array", _controllers_to_input_array)
+
+    def _controller(*, main_x: float, main_y: float, y: bool = False):
+        return SimpleNamespace(
+            main_stick=SimpleNamespace(x=np.float32(main_x), y=np.float32(main_y)),
+            c_stick=SimpleNamespace(x=np.float32(0.5), y=np.float32(0.5)),
+            shoulder=np.float32(0.0),
+            buttons=SimpleNamespace(
+                A=np.bool_(False),
+                B=np.bool_(False),
+                X=np.bool_(False),
+                Y=np.bool_(y),
+                Z=np.bool_(False),
+                L=np.bool_(False),
+                R=np.bool_(False),
+                D_UP=np.bool_(False),
+            ),
+        )
+
+    try:
+        session = SimSession(
+            dataset_path=None,
+            start_mode="sim-init",
+            char_ids=(CHAR_FOX, CHAR_FALCO),
+            facing=(1, 0),
+        )
+    except (MemoryError, RuntimeError) as exc:
+        pytest.skip(f"missing local C init artifacts for SimSession processed-input test: {exc}")
+
+    try:
+        try:
+            session.reset()
+        except RuntimeError as exc:
+            pytest.skip(f"missing local C init artifacts for SimSession processed-input step: {exc}")
+        original_debug_write_processed_input = session._binding.debug_write_processed_input
+
+        def _fake_debug_write_processed_input(handle, out):
+            original_debug_write_processed_input(handle, out)
+            out_view = out.view(INPUT_DTYPE).reshape((1,))
+            out_view["p"]["main_x"][0, 0] = np.int8(76)
+            out_view["p"]["main_y"][0, 0] = np.int8(-22)
+
+        monkeypatch.setattr(session._binding, "debug_write_processed_input", _fake_debug_write_processed_input)
+        requested = _controller(main_x=(77 + 80) / 160.0, main_y=(-23 + 80) / 160.0, y=True)
+        idle = _controller(main_x=0.5, main_y=0.5)
+        session.step({1: requested, 2: idle})
+        processed = session.last_controllers[1]
+    finally:
+        session.close()
+
+    assert processed == (76, -22)
