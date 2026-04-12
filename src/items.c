@@ -41,6 +41,7 @@ static inline void item_slot_clear(MslBatch* batch, size_t ii) {
   // refs/melee/src/melee/it/item.c::Item_80269F14
   batch->state.item_reflect_damage_mul[ii] = 1.0f;
   batch->state.item_timer[ii] = 0.0f;
+  batch->state.item_hitlag[ii] = 0u;
   batch->state.item_spawn_id[ii] = 0;
   batch->state.item_misc0[ii] = 0;
   batch->state.item_misc1[ii] = 0;
@@ -76,6 +77,7 @@ static inline void item_slot_swap(MslBatch* batch, size_t a, size_t b) {
   SWAP(uint16_t, batch->state.item_damage);
   SWAP(float, batch->state.item_reflect_damage_mul);
   SWAP(float, batch->state.item_timer);
+  SWAP(uint8_t, batch->state.item_hitlag);
   SWAP(uint32_t, batch->state.item_spawn_id);
   SWAP(uint8_t, batch->state.item_misc0);
   SWAP(uint8_t, batch->state.item_misc1);
@@ -442,7 +444,6 @@ enum {
   MSL_ILLUSION_MAIN_GROUND_MSID = 302,
   MSL_ILLUSION_MAIN_AIR_MSID = 305,
   MSL_ILLUSION_CMDVAR2_SPAWN_ON_AF = 2,
-  MSL_ILLUSION_RUNTIME_SPAWN_SKIP_COLL_FLAG = 255,
 };
 
 static inline uint8_t action_is_illusion_dash(uint16_t action_id_u16) {
@@ -461,6 +462,17 @@ static inline uint8_t action_is_illusion_end(uint16_t action_id_u16) {
           action_id_u16 == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_S_END)
              ? 1u
              : 0u;
+}
+
+static inline uint8_t action_is_illusion_setphys(uint16_t action_id_u16) {
+  // Illusion/Phantasm ghost position is advanced by ftFox_SpecialS_SetPhys, which is called from
+  // the grounded/air main and end Phys callbacks.
+  // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c::{
+  //   ftFx_SpecialS_Phys,ftFx_SpecialAirS_Phys,ftFx_SpecialSEnd_Phys,ftFx_SpecialAirSEnd_Phys,
+  //   ftFox_SpecialS_SetPhys
+  // }
+  return (action_is_illusion_dash(action_id_u16) || action_is_illusion_end(action_id_u16)) ? 1u
+                                                                                           : 0u;
 }
 
 static inline uint8_t illusion_spawn_pulse_crossed(uint16_t action_id_u16, uint16_t msid,
@@ -595,16 +607,6 @@ static void illusion_spawn_from_fighter(MslBatch* batch, int bi, int owner) {
   // data/characters/{fox,falco}.json illusion_item_lifetime_state01_frames
   // refs/melee/src/melee/it/items/itfoxillusion.c::it_8029CFF0
   batch->state.item_timer[ii] = (float)chp->illusion_item_lifetime_state01_frames;
-  // Spawn-order bridge:
-  // - Item spawn happens in fighter Anim callback (ftFox_SpecialS_CreateGhostItem), while ghost
-  //   positional ring lanes are updated in fighter Phys and consumed by item Phys/Coll callbacks.
-  // - Without seeded ghostEffectPos ownership lanes, skip same-step collision once after runtime
-  //   spawn to avoid callback-order false positives; subsequent frames collide normally.
-  // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c::{
-  //   ftFox_SpecialS_CreateGhostItem,ftFox_SpecialS_SetPhys}
-  // refs/melee/src/melee/it/items/itfoxillusion.c::{
-  //   itFoxillusion_UnkMotion0_Phys,itFoxillusion_UnkMotion0_Coll}
-  batch->state.item_misc0[ii] = (uint8_t)MSL_ILLUSION_RUNTIME_SPAWN_SKIP_COLL_FLAG;
 }
 
 static inline float items_cur_anim_frame_f32(const MslBatch* batch, size_t idx) {
@@ -1524,6 +1526,10 @@ static void illusion_items_update_and_collide(MslBatch* batch, int bi) {
     if (!item_type_is_spacie_illusion(type)) {
       continue;
     }
+    if (batch->state.item_hitlag[ii] > 0u) {
+      batch->state.item_hitlag[ii]--;
+      continue;
+    }
 
     const int owner = (int)batch->state.item_owner[ii];
     if (owner < 0 || owner >= num_players) {
@@ -1533,10 +1539,6 @@ static void illusion_items_update_and_collide(MslBatch* batch, int bi) {
     const MslCharParams* chp = msl_char_params(batch->state.char_id[o_idx]);
     const uint8_t owner_motion_active = illusion_owner_motion_is_active(batch, o_idx);
     if (!illusion_item_anim_step(batch, ii, chp, owner_motion_active)) {
-      continue;
-    }
-    if (batch->state.item_misc0[ii] == (uint8_t)MSL_ILLUSION_RUNTIME_SPAWN_SKIP_COLL_FLAG) {
-      batch->state.item_misc0[ii] = 0u;
       continue;
     }
     if (batch->state.item_state[ii] >= 2u) {
@@ -1549,14 +1551,28 @@ static void illusion_items_update_and_collide(MslBatch* batch, int bi) {
 
     // Decomp owner lane for Phys callback:
     // - state0/state1 copy item->pos from owner ghostEffectPos[1].
-    // - this runtime does not synthesize ghostEffectPos from owner displacement in C.
+    // - ghostEffectPos[1] is advanced by ftFox_SpecialS_SetPhys from the prior frame's owner
+    //   world position during SpecialS/SpecialAirS/SpecialSEnd/SpecialAirSEnd Phys.
     // refs/melee/src/melee/it/items/itfoxillusion.c::{
     //   itFoxillusion_UnkMotion0_Phys,itFoxillusion_UnkMotion1_Phys}
-    // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c::ftFx_SpecialS_CopyGhostPosIndexed
+    // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c::{
+    //   ftFx_SpecialS_CopyGhostPosIndexed,ftFox_SpecialS_SetPhys,
+    //   ftFx_SpecialS_Phys,ftFx_SpecialAirS_Phys,ftFx_SpecialSEnd_Phys,ftFx_SpecialAirSEnd_Phys
+    // }
     //
-    // Without promoted ghost-ring seed lanes, keep item position at the seeded runtime value.
-    const float base_x0 = batch->state.item_pos_x[ii];
-    const float base_y0 = batch->state.item_pos_y[ii];
+    // Runtime bridge:
+    // - consume the seeded post-frame `ghostEffectPos[1]` lane for the current step,
+    // - keep the paired `ghostEffectPos[0]` lane in state so rollout can advance the ring as
+    //   `ghost1 = ghost0; ghost0 = cur_pos` instead of clobbering `ghost1` with current position.
+    // tools/slippi/make_dataset_from_slp.py::derive_illusion_ghost_pos01
+    float base_x0 = batch->state.item_pos_x[ii];
+    float base_y0 = batch->state.item_pos_y[ii];
+    if (action_is_illusion_setphys(batch->state.action_id[o_idx])) {
+      base_x0 = batch->state.illusion_ghost_pos1_x[o_idx];
+      base_y0 = batch->state.illusion_ghost_pos1_y[o_idx];
+      batch->state.item_pos_x[ii] = base_x0;
+      batch->state.item_pos_y[ii] = base_y0;
+    }
     const float base_x1 = base_x0;
     const float base_y1 = base_y0;
     const float x0 = base_x0;
@@ -1613,6 +1629,18 @@ static void illusion_items_update_and_collide(MslBatch* batch, int bi) {
           }
           combat_apply_item_shield_hit(batch, bi, owner, def, batch->state.item_attack_id[ii],
                                        batch->state.item_attack_instance[ii], dmg, shield_damage);
+          // Generic item hitlag owner:
+          // - item collision processing raises item->xCBC_hitlagFrames after a successful item
+          //   shield/body contact, and Item_802697D4 skips item Phys/movement while the item
+          //   remains in hitlag (`xDC8_word.flags.x9 != 0`).
+          // - Illusion/Phantasm articles persist through shield hits, so freeze the article at
+          //   the shield contact point for the defender hitlag window instead of continuing to
+          //   consume ghostEffectPos[1].
+          // refs/melee/src/melee/it/item.c::{Item_802697D4,checkHitLag}
+          // refs/melee/src/melee/ft/ftcoll.c::ftColl_80076CBC
+          if (batch->state.hitlag[d_idx] > batch->state.item_hitlag[ii]) {
+            batch->state.item_hitlag[ii] = batch->state.hitlag[d_idx];
+          }
           const uint16_t def_iid_post = batch->state.instance_id[d_idx];
           hitlist_register_item_fighter(batch, bi, it, def, def_iid_post,
                                         (int)MSL_LBCOLL_INSERT_FT_SHIELD, 0);
@@ -2462,6 +2490,8 @@ void items_update(MslBatch* batch) {
   }
 
   for (int bi = 0; bi < batch->batch_size; bi++) {
+    const int num_players = (int)batch->config.num_players;
+
     // Motion + collision/hit apply for Illusion/Phantasm ghost items.
     illusion_items_update_and_collide(batch, bi);
 
@@ -2479,7 +2509,6 @@ void items_update(MslBatch* batch) {
     // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
     // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Thrown.c::ftCo_800DE508
     // data/moves/{fox,falco}.json moves["ftCo_SM_ThrowLw"]["events"]
-    const int num_players = (int)batch->config.num_players;
     for (int p = 0; p < num_players; p++) {
       const size_t o_idx = msl_idx_player(bi, p);
       if (batch->state.action_id[o_idx] != (uint16_t)MSL_ACT_THROW_LW) {
@@ -2533,6 +2562,20 @@ void items_update(MslBatch* batch) {
         }
         item_slot_clear(batch, ii);
       }
+    }
+    // Refresh the seeded `ghostEffectPos[0..1]` gameplay lanes for the next frame.
+    // Decomp: ftFox_SpecialS_SetPhys advances the live ring as
+    // `ghost1 = ghost0; ghost0 = cur_pos`.
+    // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c::ftFox_SpecialS_SetPhys
+    for (int p = 0; p < num_players; p++) {
+      const size_t idx = msl_idx_player(bi, p);
+      if (!action_is_illusion_setphys(batch->state.action_id[idx])) {
+        continue;
+      }
+      batch->state.illusion_ghost_pos1_x[idx] = batch->state.illusion_ghost_pos0_x[idx];
+      batch->state.illusion_ghost_pos1_y[idx] = batch->state.illusion_ghost_pos0_y[idx];
+      batch->state.illusion_ghost_pos0_x[idx] = batch->state.pos_x[idx];
+      batch->state.illusion_ghost_pos0_y[idx] = batch->state.pos_y[idx];
     }
 
     // Keep item ordering stable for fixed-slot comparisons.

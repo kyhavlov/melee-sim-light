@@ -45,6 +45,10 @@ int state_alloc(MslStateSoA* state, int batch_size) {
   state->pos_x = (float*)alloc_aligned_64(sizeof(float) * bp);
   state->pos_y = (float*)alloc_aligned_64(sizeof(float) * bp);
   state->pos_z = (float*)alloc_aligned_64(sizeof(float) * bp);
+  state->illusion_ghost_pos0_x = (float*)alloc_aligned_64(sizeof(float) * bp);
+  state->illusion_ghost_pos0_y = (float*)alloc_aligned_64(sizeof(float) * bp);
+  state->illusion_ghost_pos1_x = (float*)alloc_aligned_64(sizeof(float) * bp);
+  state->illusion_ghost_pos1_y = (float*)alloc_aligned_64(sizeof(float) * bp);
   state->prev_pos_x = (float*)alloc_aligned_64(sizeof(float) * bp);
   state->prev_pos_y = (float*)alloc_aligned_64(sizeof(float) * bp);
   state->floor_sweep_prev_pos_y = (float*)alloc_aligned_64(sizeof(float) * bp);
@@ -327,6 +331,7 @@ int state_alloc(MslStateSoA* state, int batch_size) {
   state->item_damage = (uint16_t*)alloc_aligned_64(sizeof(uint16_t) * bi);
   state->item_reflect_damage_mul = (float*)alloc_aligned_64(sizeof(float) * bi);
   state->item_timer = (float*)alloc_aligned_64(sizeof(float) * bi);
+  state->item_hitlag = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bi);
   state->item_spawn_id = (uint32_t*)alloc_aligned_64(sizeof(uint32_t) * bi);
   state->item_misc0 = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bi);
   state->item_misc1 = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bi);
@@ -338,7 +343,9 @@ int state_alloc(MslStateSoA* state, int batch_size) {
       !state->opening_input_lock_timer || !state->stale_attack_instance_counter ||
       !state->instance_id_counter || !state->match_damage_ratio || !state->is_teams ||
       !state->team_id || !state->char_id || !state->attack_ratio || !state->defense_ratio ||
-      !state->pos_x || !state->pos_y || !state->pos_z || !state->prev_pos_x || !state->prev_pos_y ||
+      !state->pos_x || !state->pos_y || !state->pos_z || !state->illusion_ghost_pos0_x ||
+      !state->illusion_ghost_pos0_y || !state->illusion_ghost_pos1_x ||
+      !state->illusion_ghost_pos1_y || !state->prev_pos_x || !state->prev_pos_y ||
       !state->floor_sweep_prev_pos_y || !state->coll_stage_prev_pos_x ||
       !state->coll_stage_prev_pos_y || !state->coll_stage_cur_pos_x ||
       !state->coll_stage_cur_pos_y || !state->speed_air_x_self || !state->speed_ground_x_self ||
@@ -431,8 +438,8 @@ int state_alloc(MslStateSoA* state, int batch_size) {
       !state->item_instance_id || !state->item_attack_id || !state->item_attack_instance ||
       !state->item_direction || !state->item_vel_x || !state->item_vel_y || !state->item_pos_x ||
       !state->item_pos_y || !state->item_damage || !state->item_reflect_damage_mul ||
-      !state->item_timer || !state->item_spawn_id || !state->item_misc0 || !state->item_misc1 ||
-      !state->item_misc2 || !state->item_misc3 || !state->item_hitlist) {
+      !state->item_timer || !state->item_hitlag || !state->item_spawn_id || !state->item_misc0 ||
+      !state->item_misc1 || !state->item_misc2 || !state->item_misc3 || !state->item_hitlist) {
     return -1;
   }
 
@@ -457,6 +464,7 @@ int state_alloc(MslStateSoA* state, int batch_size) {
     hitlist_capsule_clear(&state->fighter_hitlist[i]);
   }
   for (size_t i = 0; i < bi; i++) {
+    state->item_hitlag[i] = 0u;
     hitlist_capsule_clear(&state->item_hitlist[i]);
   }
 
@@ -483,6 +491,10 @@ void state_free(MslStateSoA* state) {
   alloc_free(state->pos_x);
   alloc_free(state->pos_y);
   alloc_free(state->pos_z);
+  alloc_free(state->illusion_ghost_pos0_x);
+  alloc_free(state->illusion_ghost_pos0_y);
+  alloc_free(state->illusion_ghost_pos1_x);
+  alloc_free(state->illusion_ghost_pos1_y);
   alloc_free(state->prev_pos_x);
   alloc_free(state->prev_pos_y);
   alloc_free(state->floor_sweep_prev_pos_y);
@@ -760,6 +772,7 @@ void state_free(MslStateSoA* state) {
   alloc_free(state->item_damage);
   alloc_free(state->item_reflect_damage_mul);
   alloc_free(state->item_timer);
+  alloc_free(state->item_hitlag);
   alloc_free(state->item_spawn_id);
   alloc_free(state->item_misc0);
   alloc_free(state->item_misc1);

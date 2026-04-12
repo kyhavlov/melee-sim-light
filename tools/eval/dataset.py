@@ -110,6 +110,11 @@ SEED_DTYPE = np.dtype(
         # cache so entry-shaped one-step rows can still see their real source motion.
         ("seed_prev_action_id", _arr("<u2", MAX_PLAYERS)),
         ("seed_prev_action_frame", _arr("<i2", MAX_PLAYERS)),
+        # Hidden side-special ghost article position lanes (`mv.fx.SpecialS.ghostEffectPos[0..1]`).
+        ("illusion_ghost_pos0_x", _arr("<f4", MAX_PLAYERS)),
+        ("illusion_ghost_pos0_y", _arr("<f4", MAX_PLAYERS)),
+        ("illusion_ghost_pos1_x", _arr("<f4", MAX_PLAYERS)),
+        ("illusion_ghost_pos1_y", _arr("<f4", MAX_PLAYERS)),
         # Throw-side projectile pulse consume lane (causal producer in make_dataset_from_slp.py).
         # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
         # refs/melee/src/melee/ft/ftaction.c::{ftAction_80071974,ftAction_80073354}

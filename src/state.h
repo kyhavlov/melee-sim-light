@@ -48,6 +48,10 @@ typedef struct MslStateSoA {
   float* pos_x;
   float* pos_y;
   float* pos_z;
+  float* illusion_ghost_pos0_x;
+  float* illusion_ghost_pos0_y;
+  float* illusion_ghost_pos1_x;
+  float* illusion_ghost_pos1_y;
   float* prev_pos_x;  // Position at start of current frame (pre-integration).
   float* prev_pos_y;  // Position at start of current frame (pre-integration).
   // Frame-start Y snapshot for mpColl floor sweeps. Kept separate from prev_pos_* because
@@ -740,6 +744,7 @@ typedef struct MslStateSoA {
   //   refs/melee/src/melee/it/itcoll.c::it_80272460
   float* item_reflect_damage_mul;  // [batch * MSL_MAX_ITEMS]
   float* item_timer;               // [batch * MSL_MAX_ITEMS]
+  uint8_t* item_hitlag;            // [batch * MSL_MAX_ITEMS]
   uint32_t* item_spawn_id;         // [batch * MSL_MAX_ITEMS]
   uint8_t* item_misc0;             // [batch * MSL_MAX_ITEMS]
   uint8_t* item_misc1;

@@ -722,6 +722,10 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
       batch->state.action_id[idx] = seed->action_id[p];
       batch->state.seed_prev_action_id[idx] = seed->seed_prev_action_id[p];
       batch->state.seed_prev_action_frame[idx] = seed->seed_prev_action_frame[p];
+      batch->state.illusion_ghost_pos0_x[idx] = seed->illusion_ghost_pos0_x[p];
+      batch->state.illusion_ghost_pos0_y[idx] = seed->illusion_ghost_pos0_y[p];
+      batch->state.illusion_ghost_pos1_x[idx] = seed->illusion_ghost_pos1_x[p];
+      batch->state.illusion_ghost_pos1_y[idx] = seed->illusion_ghost_pos1_y[p];
       // Throw pulse-consume seed lane (producer: tools/slippi/make_dataset_from_slp.py).
       // Decomp owner:
       // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
@@ -1303,6 +1307,7 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
       }
       batch->state.item_reflect_damage_mul[ii] = reflect_mul;
       batch->state.item_timer[ii] = item->timer;
+      batch->state.item_hitlag[ii] = 0u;
       batch->state.item_spawn_id[ii] = item->spawn_id;
       batch->state.item_misc0[ii] = item->misc0;
       batch->state.item_misc1[ii] = item->misc1;
@@ -1413,6 +1418,47 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
       if (candidate_item >= 0) {
         hitlist_register_item_fighter(batch, bi, candidate_item, victim, victim_iid,
                                       (int)MSL_LBCOLL_INSERT_FT_SHIELD, 0);
+      }
+    }
+
+    // Seed bridge: Illusion/Phantasm article hitlag on ongoing GuardSetOff shield-hit rows.
+    //
+    // Decomp/runtime shape:
+    // - successful item shield contact enters generic item hitlag (`item->xCBC_hitlagFrames`),
+    //   and Item_802697D4 skips item Phys/movement while the item remains in hitlag
+    //   (`xDC8_word.flags.x9 != 0`).
+    // - teacher-forced reseed does not serialize item hitlag, so ongoing GuardSetOff rows would
+    //   otherwise let the same live Illusion/Phantasm article keep advancing from
+    //   ghostEffectPos[1] instead of staying frozen at the shield-contact point.
+    // - Keep the bridge conservative: only seed article hitlag when there is exactly one live
+    //   Illusion/Phantasm candidate on the ongoing GuardSetOff hitlag row.
+    // refs/melee/src/melee/it/item.c::{Item_802697D4,checkHitLag}
+    // refs/melee/src/melee/ft/ftcoll.c::ftColl_80076CBC
+    for (int victim = 0; victim < num_players; victim++) {
+      if (seed->hitlag[victim] == 0u) {
+        continue;
+      }
+      if (seed->action_id[victim] != (uint16_t)MSL_ACT_GUARD_SET_OFF) {
+        continue;
+      }
+      int candidate_item = -1;
+      for (int it = 0; it < MSL_MAX_ITEMS; it++) {
+        const size_t ii = msl_idx_item(bi, it);
+        if (!batch->state.item_exists[ii]) {
+          continue;
+        }
+        if (!item_type_is_illusion_article(batch->state.item_type[ii])) {
+          continue;
+        }
+        if (candidate_item >= 0) {
+          candidate_item = -2;
+          break;
+        }
+        candidate_item = it;
+      }
+      if (candidate_item >= 0) {
+        const size_t ii = msl_idx_item(bi, candidate_item);
+        batch->state.item_hitlag[ii] = seed->hitlag[victim];
       }
     }
 

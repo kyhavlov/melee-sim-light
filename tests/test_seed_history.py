@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import numpy as np
+import pytest
 
 from tools.slippi.combat_history import derive_combat_hitlist_seed_fields
 from tools.slippi.anim_timebase import EndFrameTables, derive_frame_speed_mul_f32
@@ -32,6 +33,7 @@ from tools.slippi.seed_history import (
     derive_kneebend_internals,
     derive_turn_internals,
 )
+from tools.slippi.make_dataset_from_slp import derive_illusion_ghost_pos01
 
 
 def test_compute_tilt_timer_axis_basic_sequence() -> None:
@@ -127,6 +129,40 @@ def test_derive_instance_id_counter_prefix_invariant() -> None:
             item_instance_id_u16_2d=item_iid[:k],
         )
         assert np.array_equal(got, full[:k])
+
+
+def test_derive_illusion_ghost_pos01_tracks_decomp_ring_order() -> None:
+    # Decomp owner:
+    # - ftFox_SpecialS_SetVars initializes ghostEffectPos[0..3] = cur_pos on main entry.
+    # - ftFox_SpecialS_SetPhys advances the ring as ghost1 = ghost0; ghost0 = cur_pos during
+    #   main/end Phys callbacks.
+    # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c::{
+    #   ftFox_SpecialS_SetVars,ftFox_SpecialS_SetPhys}
+    act_ground_start = 347
+    act_ground_main = 348
+    act_ground_end = 349
+    act_wait = 14
+
+    action = np.array([[act_ground_start], [act_ground_main], [act_ground_main], [act_ground_end], [act_wait]], dtype=np.uint16)
+    action_frame = np.array([[15], [0], [1], [0], [0]], dtype=np.int16)
+    pos_x = np.array([[71.44235], [71.44235], [54.94235], [21.94235], [20.54235]], dtype=np.float32)
+    pos_y = np.array([[0.0001], [0.0001], [0.0001], [0.0001], [0.0001]], dtype=np.float32)
+
+    ghost0_x, ghost0_y, ghost1_x, ghost1_y = derive_illusion_ghost_pos01(
+        post_action_id_u16=action,
+        post_action_frame_i16=action_frame,
+        post_pos_x=pos_x,
+        post_pos_y=pos_y,
+    )
+
+    assert ghost0_x[:, 0].tolist() == pytest.approx(
+        [71.44235, 71.44235, 54.94235, 21.94235, 21.94235], abs=5e-6
+    )
+    assert ghost1_x[:, 0].tolist() == pytest.approx(
+        [71.44235, 71.44235, 71.44235, 54.94235, 54.94235], abs=5e-6
+    )
+    assert ghost0_y[:, 0].tolist() == pytest.approx([0.0001, 0.0001, 0.0001, 0.0001, 0.0001], abs=5e-6)
+    assert ghost1_y[:, 0].tolist() == pytest.approx([0.0001, 0.0001, 0.0001, 0.0001, 0.0001], abs=5e-6)
 
 
 def test_derive_turn_internals_is_causal_wrt_future_frames() -> None:

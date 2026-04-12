@@ -1422,9 +1422,10 @@ def _fill_items_fixed(frames: pa.StructArray, n_frames: int) -> np.ndarray:
 def _materialize_illusion_seed_positions(
     items_fixed: np.ndarray,
     *,
+    illusion_ghost_pos1_x: np.ndarray,
+    illusion_ghost_pos1_y: np.ndarray,
     post_action_id_u16: np.ndarray,
-    post_pos_x: np.ndarray,
-    post_pos_y: np.ndarray,
+    post_hitlag_u8: np.ndarray,
     num_players: int,
 ) -> np.ndarray:
     """Materialize Illusion/Phantasm seed positions causally from replay history.
@@ -1438,11 +1439,8 @@ def _materialize_illusion_seed_positions(
     - Slippi post-frame does not expose mv.fx.SpecialS.ghostEffectPos ring contents directly.
 
     Policy:
-    - Keep gameplay C free of ghost-position proxy bridging.
-    - Materialize a causal Illusion seed position as the owner's prior-frame world position
-      (frame i-1) only while owner is in SpecialS SetPhys callback states at frame i.
-      refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c::{
-        ftFx_SpecialS_Phys,ftFx_SpecialAirS_Phys,ftFx_SpecialSEnd_Phys,ftFx_SpecialAirSEnd_Phys}
+    - Materialize seed item positions from the same causal `ghostEffectPos[1]` lane promoted into
+      seed_t for runtime ownership.
     """
     out = np.array(items_fixed, copy=True)
     n_frames = int(out.shape[0])
@@ -1466,6 +1464,7 @@ def _materialize_illusion_seed_positions(
     ACT_FX_SPECIAL_S_END = 349
     ACT_FX_SPECIAL_AIR_S = 351
     ACT_FX_SPECIAL_AIR_S_END = 352
+    ACT_GUARD_SET_OFF = 181
     setphys_action_ids = (
         ACT_FX_SPECIAL_S,
         ACT_FX_SPECIAL_S_END,
@@ -1483,16 +1482,119 @@ def _materialize_illusion_seed_positions(
             owner = int(it["owner"])
             if owner < 0 or owner >= int(num_players):
                 continue
+            ongoing_guardsetoff_hitlag = False
+            if int(post_action_id_u16[fi, owner]) in setphys_action_ids:
+                candidate_victim = -1
+                for p in range(int(num_players)):
+                    if int(post_hitlag_u8[fi, p]) == 0:
+                        continue
+                    if int(post_action_id_u16[fi, p]) != ACT_GUARD_SET_OFF:
+                        continue
+                    if candidate_victim >= 0:
+                        candidate_victim = -2
+                        break
+                    candidate_victim = p
+                if candidate_victim >= 0:
+                    illusion_candidates = 0
+                    for other_slot in range(out.shape[1]):
+                        other_it = out[fi, other_slot]
+                        if int(other_it["exists"]) == 0:
+                            continue
+                        if int(other_it["type"]) not in illusion_item_kinds:
+                            continue
+                        illusion_candidates += 1
+                        if illusion_candidates > 1:
+                            break
+                    ongoing_guardsetoff_hitlag = illusion_candidates == 1
+            if ongoing_guardsetoff_hitlag:
+                continue
             if int(post_action_id_u16[fi, owner]) not in setphys_action_ids:
                 continue
-            # Materialize ghost index-1 position causally from replay frame (i-1) owner position.
-            # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c::ftFox_SpecialS_SetPhys
-            # TODO(seed/illusion): Replace this temporary prior-frame owner-position materialization
-            # with direct SpecialS ghost ring state promotion/materialization.
-            out[fi, slot]["pos_x"] = np.float32(float(post_pos_x[fi - 1, owner]))
-            out[fi, slot]["pos_y"] = np.float32(float(post_pos_y[fi - 1, owner]))
+            out[fi, slot]["pos_x"] = np.float32(float(illusion_ghost_pos1_x[fi, owner]))
+            out[fi, slot]["pos_y"] = np.float32(float(illusion_ghost_pos1_y[fi, owner]))
 
     return out
+
+
+def derive_illusion_ghost_pos01(
+    *,
+    post_action_id_u16: np.ndarray,
+    post_action_frame_i16: np.ndarray,
+    post_pos_x: np.ndarray,
+    post_pos_y: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """Derive post-frame `mv.fx.SpecialS.ghostEffectPos[0..1]` strictly causally.
+
+    Decomp ownership:
+    - main-state Enter initializes ghostEffectPos[0..3] = cur_pos via ftFox_SpecialS_SetVars.
+    - the main/end Phys callbacks advance the ring through ftFox_SpecialS_SetPhys:
+        ghost3 = ghost2; ghost2 = ghost1; ghost1 = ghost0; ghost0 = cur_pos
+    - item Phys later consumes ghostEffectPos[1] through ftFx_SpecialS_CopyGhostPosIndexed(1).
+    refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c::{
+      ftFox_SpecialS_SetVars,ftFox_SpecialS_SetPhys,ftFx_SpecialS_CopyGhostPosIndexed
+    }
+    refs/melee/src/melee/it/items/itfoxillusion.c::{
+      itFoxillusion_UnkMotion0_Phys,itFoxillusion_UnkMotion1_Phys
+    }
+    """
+    aid = np.asarray(post_action_id_u16, dtype=np.uint16)
+    afr = np.asarray(post_action_frame_i16, dtype=np.int16)
+    px = np.asarray(post_pos_x, dtype=np.float32)
+    py = np.asarray(post_pos_y, dtype=np.float32)
+    n_frames, n_players = aid.shape
+
+    ACT_FX_SPECIAL_S = 348
+    ACT_FX_SPECIAL_S_END = 349
+    ACT_FX_SPECIAL_AIR_S = 351
+    ACT_FX_SPECIAL_AIR_S_END = 352
+    main_actions = {ACT_FX_SPECIAL_S, ACT_FX_SPECIAL_AIR_S}
+    setphys_actions = {
+        ACT_FX_SPECIAL_S,
+        ACT_FX_SPECIAL_S_END,
+        ACT_FX_SPECIAL_AIR_S,
+        ACT_FX_SPECIAL_AIR_S_END,
+    }
+
+    out0_x = np.array(px, copy=True)
+    out0_y = np.array(py, copy=True)
+    out1_x = np.array(px, copy=True)
+    out1_y = np.array(py, copy=True)
+
+    for p in range(n_players):
+        ghost0_x = float(px[0, p])
+        ghost0_y = float(py[0, p])
+        ghost1_x = ghost0_x
+        ghost1_y = ghost0_y
+        for fi in range(n_frames):
+            cur_a = int(aid[fi, p])
+            cur_x = float(px[fi, p])
+            cur_y = float(py[fi, p])
+            entry_main = False
+            if cur_a in main_actions:
+                if fi == 0:
+                    entry_main = True
+                else:
+                    prev_a = int(aid[fi - 1, p])
+                    prev_af = int(afr[fi - 1, p])
+                    cur_af = int(afr[fi, p])
+                    if prev_a != cur_a or cur_af < prev_af:
+                        entry_main = True
+            if entry_main:
+                ghost0_x = cur_x
+                ghost0_y = cur_y
+                ghost1_x = cur_x
+                ghost1_y = cur_y
+            elif cur_a in setphys_actions:
+                ghost1_x = ghost0_x
+                ghost1_y = ghost0_y
+                ghost0_x = cur_x
+                ghost0_y = cur_y
+            out0_x[fi, p] = np.float32(ghost0_x)
+            out0_y[fi, p] = np.float32(ghost0_y)
+            out1_x[fi, p] = np.float32(ghost1_x)
+            out1_y[fi, p] = np.float32(ghost1_y)
+
+    return out0_x, out0_y, out1_x, out1_y
 
 
 def _derive_item_attack_fields(
@@ -2125,9 +2227,11 @@ def _main_impl(args) -> None:
 
     # Fill inputs and per-port post state.
     post_action_id_u16 = np.zeros((n_frames, 4), dtype=np.uint16)
+    post_state_age_all = np.zeros((n_frames, 4), dtype=np.int16)
     post_char_id_u8 = np.zeros((n_frames, 4), dtype=np.uint8)
     post_pos_x_all = np.zeros((n_frames, 4), dtype=np.float32)
     post_pos_y_all = np.zeros((n_frames, 4), dtype=np.float32)
+    post_hitlag_u16_all = np.zeros((n_frames, 4), dtype=np.uint16)
     post_state_flags_u8 = np.zeros((n_frames, 4, 5), dtype=np.uint8)
     ports_struct = frames.field("ports")
     available_ports = set(f.name for f in ports_struct.type)
@@ -2199,9 +2303,11 @@ def _main_impl(args) -> None:
         post_on_ground = _airborne_to_on_ground(post_airborne, n_frames)
         fighter_scale_y = np.full(n_frames, np.float32(scl), dtype=np.float32)
         post_hitlag = _u16_from_float_frames(_to_numpy(post.field("hitlag")).astype(np.float32), n_frames)
+        post_hitlag_u16_all[:, slot] = post_hitlag
         post_misc_as = _to_numpy(post.field("misc_as")).astype(np.float32)
         post_state_age_f32 = _to_numpy(post.field("state_age")).astype(np.float32)
         post_state_age = _i16_from_state_age(post_state_age_f32, n_frames)
+        post_state_age_all[:, slot] = post_state_age
         post_anim_frame_f32 = _f32_from_state_age(post_state_age_f32, n_frames)
 
         hurtbox_state = _to_numpy(post.field("hurtbox_state")).astype(np.uint8)
@@ -2987,6 +3093,23 @@ def _main_impl(args) -> None:
             )
         )
 
+    illusion_ghost_pos0_x, illusion_ghost_pos0_y, illusion_ghost_pos1_x, illusion_ghost_pos1_y = (
+        derive_illusion_ghost_pos01(
+        post_action_id_u16=post_action_id_u16,
+        post_action_frame_i16=post_state_age_all,
+        post_pos_x=post_pos_x_all,
+        post_pos_y=post_pos_y_all,
+        )
+    )
+    samples["seed_t"]["illusion_ghost_pos0_x"][:, :num_players] = illusion_ghost_pos0_x[
+        :-1, :num_players
+    ]
+    samples["seed_t"]["illusion_ghost_pos0_y"][:, :num_players] = illusion_ghost_pos0_y[
+        :-1, :num_players
+    ]
+    samples["seed_t"]["illusion_ghost_pos1_x"][:, :num_players] = illusion_ghost_pos1_x[:-1, :num_players]
+    samples["seed_t"]["illusion_ghost_pos1_y"][:, :num_players] = illusion_ghost_pos1_y[:-1, :num_players]
+
     # Items are global per frame.
     items_fixed = _fill_items_fixed(frames, n_frames)
     _derive_item_attack_fields(
@@ -2997,9 +3120,10 @@ def _main_impl(args) -> None:
     )
     items_seed = _materialize_illusion_seed_positions(
         items_fixed,
+        illusion_ghost_pos1_x=illusion_ghost_pos1_x,
+        illusion_ghost_pos1_y=illusion_ghost_pos1_y,
         post_action_id_u16=post_action_id_u16,
-        post_pos_x=post_pos_x_all,
-        post_pos_y=post_pos_y_all,
+        post_hitlag_u8=post_hitlag_u16_all,
         num_players=num_players,
     )
     item_reflect_damage_mul = _derive_item_reflect_damage_mul(
