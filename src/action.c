@@ -623,6 +623,34 @@ static inline void apply_shield_hold_drain(MslBatch* batch, const MslCommonParam
   batch->state.shield_hp[idx] = hp;
 }
 
+static inline void apply_shield_hold_drain_preserve_drain_refresh_store(MslBatch* batch,
+                                                                        const MslCommonParams* c,
+                                                                        size_t idx,
+                                                                        float trig_unit) {
+  if (batch == NULL || c == NULL) {
+    return;
+  }
+  const float denom = 1.0f - c->trigger_deadzone;
+  const float drain_light = batch->state.lightshield_amount[idx];
+  float store_light = drain_light;
+  if (denom > 0.0f) {
+    const float t = (trig_unit - c->trigger_deadzone) / denom;
+    if (t >= 0.0f) {
+      store_light = clamp01(t);
+    }
+  }
+  batch->state.lightshield_amount[idx] = store_light;
+  const float drain_factor =
+      (drain_light * (c->shield_hold_drain_max - c->shield_hold_drain_base)) +
+      c->shield_hold_drain_base;
+  const float drain = c->shield_hold_drain_mul * drain_factor;
+  float hp = batch->state.shield_hp[idx] - drain;
+  if (hp < 0.0f) {
+    hp = 0.0f;
+  }
+  batch->state.shield_hp[idx] = hp;
+}
+
 void guard_update_shield_recharge(MslBatch* batch, const MslCommonParams* c, size_t idx) {
   if (batch == NULL || c == NULL) {
     return;
@@ -944,16 +972,32 @@ void guard_update_grounded(MslBatch* batch, const MslCommonParams* c, size_t idx
       // the shield is active (fp->x221B_b0). Approximate shield-active as (shield_hp > 0).
       if (batch->state.shield_hp[idx] > 0.0f) {
         const uint8_t guard_jump_pending = guard_jump_oos_has_input(batch, c, idx) ? 1u : 0u;
+        const uint8_t guard_no_submotion_snapshot =
+            (a0 == (uint16_t)MSL_ACT_GUARD_ON && batch->state.animation_index[idx] == 0xFFFFFFFFu &&
+             batch->state.action_frame[idx] < 0)
+                ? 1u
+                : 0u;
+        const uint8_t guard_snapshot_refresh_drain_split =
+            (guard_no_submotion_snapshot && trig > c->trigger_deadzone) ? 1u : 0u;
         // Decomp timing note:
         // - GuardOn/Guard Anim drains shield through ftCo_800925A4 before the same frame's
         //   IASA callback can consume jump OoS via ftCo_800CB024.
+        // - Frozen Slippi GuardOn snapshots do not expose the in-progress `mv.co.guard.x0` raise
+        //   timeline. On a snapshot row with a fresh trigger squeeze, preserve the carried
+        //   lightshield owner for *this row's* drain, but still refresh the stored
+        //   `lightshield_amount` from the current squeeze so the following GuardOn/GuardOff row
+        //   sees the same negative-input latch that vanilla does.
         // - On that jump-consuming row, the drain still uses the pre-row lightshield owner rather
         //   than refreshing from the current trigger squeeze first.
         // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
-        //   ftCo_GuardOn_Anim,ftCo_Guard_Anim,ftCo_GuardOn_IASA,ftCo_Guard_IASA
+        //   ftCo_800921DC,ftCo_800925A4,ftCo_GuardOn_Anim,ftCo_Guard_Anim,ftCo_GuardOn_IASA,ftCo_Guard_IASA
         // }
         // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c::ftCo_800CB024
-        apply_shield_hold_drain(batch, c, idx, trig, guard_jump_pending);
+        if (guard_snapshot_refresh_drain_split) {
+          apply_shield_hold_drain_preserve_drain_refresh_store(batch, c, idx, trig);
+        } else {
+          apply_shield_hold_drain(batch, c, idx, trig, guard_jump_pending);
+        }
       }
 
       // Decomp: Guard IASA exits to GuardOff only once (xC && x10==0).
