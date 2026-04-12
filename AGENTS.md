@@ -280,11 +280,14 @@ Variables:
 
 We are in last-mile correctness mode.
 
+In this phase, a discovered mismatch is usually a triage entry point, not the intended patch boundary.
+
 Default expectation:
 - Do not stop at the first motivating mismatch if the surrounding owner family is clearly still incomplete.
 - Bias toward proving a mechanic complete, not merely making the first mismatch disappear.
 - Completeness is defined per coherent owner family, not per broad feature area.
 - When touching a mechanic, prefer to close the full decomp-backed behavior surface for that family while the context is loaded.
+- Prefer the largest coherent decomp-backed family patch you can justify, not a long sequence of tiny row-by-row fixes.
 
 What “go above and beyond” means here:
 - If fixing a state-entry owner, also check the adjacent same-family exit and handoff rows.
@@ -294,10 +297,16 @@ What “go above and beyond” means here:
 - Add focused coverage for the family you touched, not only the single row that first exposed it.
 - When claiming a family is complete, prefer focused replay-real locks or short unreseeded rollout windows for the adjacent rows you audited.
 
+Examples of the intended default:
+- A Side-B mismatch is reason to audit Side-B start/main/end ownership, article persistence, hitlag persistence, and ground/air transitions.
+- A Guard mismatch is reason to audit the broader Guard / GuardOn / GuardOff / OoS handoff family in the same owner surface.
+- A `Wait_IASA` mismatch is reason to audit the relevant catch / specials / attacks / guard ordering for the related delegate states, not only the motivating row.
+
 Required discipline:
 - Do not broaden fixes speculatively.
 - Do not fit gameplay logic to a single replay row or trace symptom.
 - Keep unrelated owners in separate commits.
+- If you broaden a patch, state explicitly which adjacent owners you audited and why they belong to the same mechanic family.
 - If the full family cannot be closed cleanly, land the proven subset and explicitly document the remaining blocker.
 
 ## Working Conventions
