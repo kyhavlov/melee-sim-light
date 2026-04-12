@@ -2510,6 +2510,18 @@ void locomotion_update_pre(MslBatch* batch) {
           continue;
         }
 
+        // Steady-state Walk_IASA also runs grounded attacks before guard.
+        //
+        // Keep this narrow to walk rows that were already in Walk at frame start:
+        // - walk end/retarget handling stays in the dedicated Walk block later in this function
+        // - destination-Walk handoffs are still owned by their local bridges
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Walk.c::ftCo_Walk_IASA
+        if (action_is_walk(action_id) && action_is_walk(action_id_start) &&
+            grounded_a_attack_try_enter_from_iasa(batch, c, idx, buttons_pressed, stick_x, stick_y,
+                                                  tilt_timer_x, tilt_timer_y, facing_dir, 0, 1)) {
+          continue;
+        }
+
         // Guard core loop (entry/hold/exit).
         // Decomp call site example: refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c:43-66.
         uint8_t allow_guard_entry = 0;
