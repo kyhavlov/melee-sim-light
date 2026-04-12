@@ -946,6 +946,92 @@ def test_attackhi3_pre_iasa_b_does_not_enter_grounded_side_special() -> None:
     assert int(out0["animation_index"][0]) == SM_ATTACK_HI3
 
 
+def test_wait_attackhi4_beats_guardon_on_up_smash_edge() -> None:
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    input_stride = int(sizes["input"])
+
+    seed = _seed_base()
+    seed["on_ground"][0, 0] = np.uint8(1)
+    seed["action_id"][0, 0] = np.uint16(ACT_WAIT)
+    seed["action_frame"][0, 0] = np.int16(0)
+    seed["anim_frame_f32"][0, 0] = np.float32(0.0)
+    seed["animation_index"][0, 0] = np.uint32(SM_WAIT1_0)
+    seed["facing"][0, 0] = np.uint8(0)  # left
+    seed["shield_hp"][0, 0] = np.float32(_common_attr("start_shield_health"))
+
+    prev_inp = _mk_input_bytes(1, input_stride)
+    inp = _mk_input_bytes(1, input_stride)
+    prev_view = prev_inp.view(INPUT_DTYPE).reshape((1,))
+    cur_view = inp.view(INPUT_DTYPE).reshape((1,))
+    # Decomp:
+    # - ftCo_Wait_IASA checks AttackHi4 before ftCo_80091A4C (GuardOn).
+    # - A c-stick up edge on a shield-held Wait row must therefore become AttackHi4, not GuardOn.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
+    prev_view["p"]["buttons"][0, 0] = np.uint16(BUTTON_Y)
+    prev_view["p"]["main_x"][0, 0] = np.int8(-38)
+    prev_view["p"]["main_y"][0, 0] = np.int8(71)
+    prev_view["p"]["c_x"][0, 0] = np.int8(-57)
+    prev_view["p"]["c_y"][0, 0] = np.int8(-57)
+    cur_view["p"]["buttons"][0, 0] = np.uint16(BUTTON_L | BUTTON_Y)
+    cur_view["p"]["main_x"][0, 0] = np.int8(-80)
+    cur_view["p"]["main_y"][0, 0] = np.int8(0)
+    cur_view["p"]["c_x"][0, 0] = np.int8(57)
+    cur_view["p"]["l"][0, 0] = np.uint8(255)
+    cur_view["p"]["c_y"][0, 0] = np.int8(57)
+
+    out0 = _step_once(seed, prev_inp, inp)
+    assert int(out0["action_id"][0]) == ACT_ATTACK_HI4
+    assert int(out0["action_frame"][0]) == 1
+    assert int(out0["animation_index"][0]) == SM_ATTACK_HI4
+
+
+def test_attackhi3_allow_interrupt_attackhi4_beats_guardon_on_exact_trace_inputs() -> None:
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    input_stride = int(sizes["input"])
+
+    seed = _seed_base()
+    seed["on_ground"][0, 0] = np.uint8(1)
+    seed["action_id"][0, 0] = np.uint16(ACT_ATTACK_HI3)
+    seed["action_frame"][0, 0] = np.int16(22)
+    seed["anim_frame_f32"][0, 0] = np.float32(22.0)
+    seed["animation_index"][0, 0] = np.uint32(SM_ATTACK_HI3)
+    seed["facing"][0, 0] = np.uint8(0)  # left
+    seed["shield_hp"][0, 0] = np.float32(_common_attr("start_shield_health"))
+
+    prev_inp = _mk_input_bytes(1, input_stride)
+    inp = _mk_input_bytes(1, input_stride)
+    prev_view = prev_inp.view(INPUT_DTYPE).reshape((1,))
+    cur_view = inp.view(INPUT_DTYPE).reshape((1,))
+    # Exact frame-155 modelplay inputs on the last visible AttackHi3 row:
+    # - previous row holds Y with c-stick down-left
+    # - current row holds digital L + Y and flips c-stick to up-right
+    # Decomp:
+    # - ftCo_AttackHi3_IASA delegates into ftCo_Wait_IASA once allow_interrupt is live.
+    # - ftCo_Wait_IASA checks AttackHi4 before ftCo_80091A4C (GuardOn).
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackHi3.c::ftCo_AttackHi3_IASA
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
+    prev_view["p"]["buttons"][0, 0] = np.uint16(BUTTON_Y)
+    prev_view["p"]["main_x"][0, 0] = np.int8(-38)
+    prev_view["p"]["main_y"][0, 0] = np.int8(71)
+    prev_view["p"]["c_x"][0, 0] = np.int8(-57)
+    prev_view["p"]["c_y"][0, 0] = np.int8(-57)
+    cur_view["p"]["buttons"][0, 0] = np.uint16(BUTTON_L | BUTTON_Y)
+    cur_view["p"]["main_x"][0, 0] = np.int8(-80)
+    cur_view["p"]["main_y"][0, 0] = np.int8(0)
+    cur_view["p"]["c_x"][0, 0] = np.int8(57)
+    cur_view["p"]["c_y"][0, 0] = np.int8(57)
+    cur_view["p"]["l"][0, 0] = np.uint8(255)
+
+    out0 = _step_once(seed, prev_inp, inp)
+    assert int(out0["action_id"][0]) == ACT_ATTACK_HI4
+    assert int(out0["action_frame"][0]) == 1
+    assert int(out0["animation_index"][0]) == SM_ATTACK_HI4
+
+
 def test_wait_b_left_still_enters_grounded_side_special() -> None:
     import msl_binding
 

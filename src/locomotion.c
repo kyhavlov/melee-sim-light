@@ -1011,6 +1011,15 @@ uint8_t locomotion_grounded_a_attack_try_enter_from_wait_iasa(
                                                tilt_timer_x, tilt_timer_y, facing_dir, 0u, 1u);
 }
 
+static inline uint8_t attackhi3_wait_attack_try_enter(MslBatch* batch, const MslCommonParams* c,
+                                                      size_t idx, uint16_t buttons_pressed,
+                                                      float stick_x, float stick_y,
+                                                      uint8_t tilt_timer_x, uint8_t tilt_timer_y,
+                                                      float facing_dir) {
+  return locomotion_grounded_a_attack_try_enter_from_wait_iasa(
+      batch, c, idx, buttons_pressed, stick_x, stick_y, tilt_timer_x, tilt_timer_y, facing_dir);
+}
+
 static inline uint8_t grounded_attack_update(MslBatch* batch, const MslCommonParams* c, size_t idx,
                                              uint8_t char_id, float stick_x, float stick_y,
                                              uint8_t tilt_timer_x, float facing_dir) {
@@ -2320,6 +2329,23 @@ void locomotion_update_pre(MslBatch* batch) {
               // Decomp ordering for AttackHi3 IASA:
               // - ftCo_AttackHi3_IASA gates on fp->allow_interrupt then delegates into
               //   ftCo_Wait_IASA.
+              // - ftCo_Wait_IASA checks smashes/tilts/jab before ftCo_80091A4C (GuardOn).
+              // - Preserve the existing AttackHi3->GuardOn owner only after the attack subset has
+              //   had a chance to consume the row.
+              // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackHi3.c::ftCo_AttackHi3_IASA
+              // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
+              if (attackhi3_wait_attack_try_enter(batch, c, idx, buttons_pressed, stick_x, stick_y,
+                                                  tilt_timer_x, tilt_timer_y, facing_dir)) {
+                action_id = batch->state.action_id[idx];
+                grounded_attack_guard_iasa_consumed = 1u;
+              }
+            }
+            if (!attackdash_pregate_consumed && !attackdash_guard_iasa_consumed &&
+                !grounded_attack_guard_iasa_consumed && allow_interrupt &&
+                action_id == (uint16_t)MSL_ACT_ATTACK_HI3) {
+              // Decomp ordering for AttackHi3 IASA:
+              // - ftCo_AttackHi3_IASA gates on fp->allow_interrupt then delegates into
+              //   ftCo_Wait_IASA.
               // - ftCo_Wait_IASA checks guard entry (ftCo_80091A4C) before jump / dash / squat /
               //   turn / walk.
               // Keep this scoped to AttackHi3 until the other grounded-attack guard families are
@@ -2466,6 +2492,21 @@ void locomotion_update_pre(MslBatch* batch) {
              (action_id == MSL_ACT_LANDING &&
               batch->state.anim_frame_f32[idx] >= (float)ch->landing_lag_frames)) &&
             grab_flow_try_enter_catch_from_iasa(batch, c, idx)) {
+          continue;
+        }
+
+        // Plain Wait_IASA runs grounded attacks before guard.
+        //
+        // Keep this narrow to steady-state Wait rows only:
+        // - generic destination-Wait handoffs (Escape*, Catch, SpecialHiLanding, etc.) still use
+        //   their own localized bridges so we do not re-open the earlier destination-Wait shield
+        //   regression surface.
+        // - plain Wait rows should still honor the decomp ordering where AttackS4/Hi4/Lw4,
+        //   tilts, and jab beat guard on the same frame.
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
+        if (action_id == MSL_ACT_WAIT &&
+            grounded_a_attack_try_enter_from_iasa(batch, c, idx, buttons_pressed, stick_x, stick_y,
+                                                  tilt_timer_x, tilt_timer_y, facing_dir, 0, 1)) {
           continue;
         }
 
