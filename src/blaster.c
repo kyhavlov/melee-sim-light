@@ -71,13 +71,44 @@ static inline uint8_t specialn_is_blaster_loop_requested(const MslBatch* batch, 
 static inline uint8_t action_allows_special_entry_ground(uint16_t action_id) {
   // Spotdodge (EscapeN) has an empty IASA in decomp, so it cannot be interrupted into SpecialN.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Escape.c::ftCo_EscapeN_IASA
+  // KneeBend IASA checks Attack100/Catch/AttackHi4 only and does not route into grounded special
+  // dispatch.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_KneeBend.c::ftCo_KneeBend_IASA
   //
   // Keep this narrowly scoped: other ground states (including shield) have non-empty IASA callbacks
   // and may allow specials depending on per-state input checks.
-  if (action_id == (uint16_t)MSL_ACT_ESCAPE_N) {
+  if (action_id == (uint16_t)MSL_ACT_ESCAPE_N || action_id == (uint16_t)MSL_ACT_KNEE_BEND) {
     return 0;
   }
   return msl_action_is_ground_locomotion(action_id);
+}
+
+static inline uint8_t action_allows_special_entry_air(uint16_t action_id) {
+  // Decomp-special input ownership:
+  // - Jump/Fall-family IASA owners route through ftCo_SpecialAir_CheckInput.
+  // - DamageFall_IASA also routes through ftCo_SpecialAir_CheckInput.
+  // - FallSpecial_IASA does not; it only checks attack/item/jump-owned branches.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c::ftCo_Jump_IASA
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_IASA
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DamageFall.c::ftCo_DamageFall_IASA
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_FallSpecial.c::ftCo_FallSpecial_IASA
+  switch (action_id) {
+    case MSL_ACT_JUMP_F:
+    case MSL_ACT_JUMP_B:
+    case MSL_ACT_JUMP_AERIAL_F:
+    case MSL_ACT_JUMP_AERIAL_B:
+    case MSL_ACT_FALL:
+    case MSL_ACT_FALL_F:
+    case MSL_ACT_FALL_B:
+    case MSL_ACT_FALL_AERIAL:
+    case MSL_ACT_FALL_AERIAL_F:
+    case MSL_ACT_FALL_AERIAL_B:
+    case MSL_ACT_DAMAGE_FALL:
+    case MSL_ACT_PASSIVE_WALL_JUMP:
+      return 1u;
+    default:
+      return 0u;
+  }
 }
 
 typedef enum MslSpacieBSpecialKind {
@@ -321,18 +352,7 @@ void blaster_update_pre_physics(MslBatch* batch) {
           // locomotion once B is pressed.
           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DamageFall.c::ftCo_DamageFall_IASA
           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_SpecialAir.c::ftCo_SpecialAir_CheckInput
-          if (msl_action_is_air_locomotion(a)) {
-            allow = 1u;
-          } else if (a == (uint16_t)MSL_ACT_DAMAGE_FALL) {
-            allow = 1u;
-          } else if (a == (uint16_t)MSL_ACT_PASSIVE_WALL_JUMP) {
-            // Decomp: PassiveWall IASA calls ftCo_SpecialAir_CheckInput once
-            // mv.co.passivewall.timer reaches zero. PassiveWall_Anim transitions through inlineA0
-            // into PassiveWallJump with timer cleared, so late PassiveWallJump frames share the
-            // same aerial B-special ownership.
-            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_PassiveWall.c::{
-            //   inlineA0,ftCo_PassiveWall_Anim,ftCo_PassiveWall_IASA}
-            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_SpecialAir.c::ftCo_SpecialAir_CheckInput
+          if (action_allows_special_entry_air(a)) {
             allow = 1u;
           }
         }

@@ -101,6 +101,9 @@ static inline uint8_t action_allows_shine_entry_ground(uint16_t action_id) {
   // Explicit exclusions (decomp-anchored):
   // - EscapeN/F/B: no ftCo_800D68C0 in IASA (Escape IASA only checks ftCo_8009563C; EscapeN IASA is empty).
   //   refs/melee/src/melee/ft/chara/ftCommon/ftCo_Escape.c::{ftCo_Escape_IASA,ftCo_EscapeN_IASA}
+  // - KneeBend: IASA checks Attack100, Catch, AttackHi4, then short-hop bookkeeping only.
+  //   It does not route through grounded special dispatch.
+  //   refs/melee/src/melee/ft/chara/ftCommon/ftCo_KneeBend.c::ftCo_KneeBend_IASA
   // - LandingAir*: IASA is empty.
   //   refs/melee/src/melee/ft/chara/ftCommon/ftCo_LandingAir.c::ftCo_LandingAir_IASA
   // - Landing / LandingFallSpecial: decomp does allow specials after landing-lag and allow_interrupt gates via
@@ -123,7 +126,6 @@ static inline uint8_t action_allows_shine_entry_ground(uint16_t action_id) {
     case MSL_ACT_RUN:
     case MSL_ACT_RUN_DIRECT:
     case MSL_ACT_RUN_BRAKE:
-    case MSL_ACT_KNEE_BEND:
     case MSL_ACT_SQUAT:
     case MSL_ACT_SQUAT_WAIT:
     case MSL_ACT_SQUAT_RV:
@@ -139,14 +141,30 @@ static inline uint8_t action_allows_shine_entry_ground(uint16_t action_id) {
 }
 
 static inline uint8_t action_allows_shine_entry_air(uint16_t action_id) {
-  if (msl_action_is_air_locomotion(action_id)) {
-    return 1u;
-  }
-  // Decomp: DamageFall IASA delegates to ftCo_SpecialAir_CheckInput, which includes the SpecialLw
-  // dispatch path used by Fox/Falco reflector entry.
+  // Decomp-special input ownership:
+  // - Jump/Fall-family IASA owners route through ftCo_SpecialAir_CheckInput.
+  // - DamageFall_IASA also routes through ftCo_SpecialAir_CheckInput.
+  // - FallSpecial_IASA does not; it only checks attack/item/jump-owned branches.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c::ftCo_Jump_IASA
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_IASA
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DamageFall.c::ftCo_DamageFall_IASA
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_SpecialAir.c::ftCo_SpecialAir_CheckInput
-  return (action_id == (uint16_t)MSL_ACT_DAMAGE_FALL) ? 1u : 0u;
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_FallSpecial.c::ftCo_FallSpecial_IASA
+  switch (action_id) {
+    case MSL_ACT_JUMP_F:
+    case MSL_ACT_JUMP_B:
+    case MSL_ACT_JUMP_AERIAL_F:
+    case MSL_ACT_JUMP_AERIAL_B:
+    case MSL_ACT_FALL:
+    case MSL_ACT_FALL_F:
+    case MSL_ACT_FALL_B:
+    case MSL_ACT_FALL_AERIAL:
+    case MSL_ACT_FALL_AERIAL_F:
+    case MSL_ACT_FALL_AERIAL_B:
+    case MSL_ACT_DAMAGE_FALL:
+      return 1u;
+    default:
+      return 0u;
+  }
 }
 
 static inline uint8_t anim_finished(uint8_t char_id, uint16_t msid, float anim_frame_f32) {
