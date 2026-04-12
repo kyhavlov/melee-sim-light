@@ -3787,6 +3787,7 @@ void locomotion_update_post_collision(MslBatch* batch) {
       const uint8_t now_ground = batch->state.on_ground[idx] ? 1 : 0;
 
       const MslCharParams* ch = msl_char_params(batch->state.char_id[idx]);
+      const MslSpecialMsids* ms = msl_special_msids(batch->state.char_id[idx]);
       if (ch == NULL) {
         continue;
       }
@@ -3910,6 +3911,36 @@ void locomotion_update_post_collision(MslBatch* batch) {
         // Many non-locomotion ground states transition into specific aerial variants (e.g. FallSpecial),
         // which we do not model yet; forcing Fall here causes large action_id regressions.
         if (!action_is_ground_locomotion(a)) {
+          // Decomp: grounded Illusion/Phantasm start/main lose ground through dedicated
+          // GroundToAir callbacks that preserve current animation frame while entering the air
+          // motion-state counterpart.
+          // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c::{
+          //   ftFx_SpecialSStart_GroundToAir,ftFx_SpecialS_GroundToAir
+          // }
+          if (ms != NULL && a == (uint16_t)MSL_ACT_FX_SPECIAL_S_START) {
+            batch->state.action_id[idx] = (uint16_t)MSL_ACT_FX_SPECIAL_AIR_S_START;
+            batch->state.animation_index[idx] = (uint32_t)ms->specials_air_start;
+            batch->state.speed_ground_x_self[idx] = 0.0f;
+            batch->state.speed_air_x_self[idx] = 0.0f;
+            batch->state.speed_y_self[idx] = 0.0f;
+            batch->state.ecb_lock_timer[idx] = 5u;
+            msl_anim_timebase_enter(batch, idx, batch->state.anim_frame_f32[idx], 1.0f);
+            continue;
+          }
+          if (ms != NULL && a == (uint16_t)MSL_ACT_FX_SPECIAL_S) {
+            batch->state.action_id[idx] = (uint16_t)MSL_ACT_FX_SPECIAL_AIR_S;
+            batch->state.animation_index[idx] = (uint32_t)ms->specials_air_main;
+            batch->state.speed_ground_x_self[idx] = 0.0f;
+            batch->state.ecb_lock_timer[idx] = 5u;
+            msl_anim_timebase_enter(batch, idx, batch->state.anim_frame_f32[idx], 1.0f);
+            continue;
+          }
+          // Decomp: grounded SpecialSEnd collision falls directly into Fall when ground is lost.
+          // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c::ftFx_SpecialSEnd_Coll
+          if (a == (uint16_t)MSL_ACT_FX_SPECIAL_S_END) {
+            enter_fall_from_grounded_floor_loss(batch, ch, idx);
+            continue;
+          }
           // Decomp: ftFx_SpecialHiLanding_Coll enters FallSpecial when no longer grounded.
           // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::ftFx_SpecialHiLanding_Coll
           if (a == (uint16_t)MSL_ACT_FX_SPECIAL_HI_LANDING) {

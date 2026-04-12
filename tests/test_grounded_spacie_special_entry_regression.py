@@ -16,6 +16,10 @@ ACT_FX_SPECIAL_S_START = 0x015B
 ACT_FX_SPECIAL_HI_HOLD = 0x0161
 ACT_FX_SPECIAL_AIR_HI = 0x0164
 ACT_FX_SPECIAL_HI = 0x0163
+ACT_FX_SPECIAL_S = 0x015C
+ACT_FX_SPECIAL_AIR_S = 0x015F
+ACT_FX_SPECIAL_S_END = 0x015D
+ACT_FALL = 0x001D
 
 SM_WAIT1_0 = 2
 
@@ -140,6 +144,7 @@ def test_grounded_specialhi_hold_end_on_flat_ground_seeds_ground_launch_speed() 
     out = _step_once(seed, prev_inp, inp)
     assert int(out["action_id"][0]) == ACT_FX_SPECIAL_HI
     assert int(out["on_ground"][0]) == 1
+    assert float(out["pos_x"][0]) < 10.0
     assert abs(float(out["speed_ground_x_self"][0]) + _fox_attr("firefox_launch_speed")) <= 1e-6
     assert float(out["speed_y_self"][0]) == 0.0
 
@@ -161,5 +166,60 @@ def test_grounded_specialhi_hold_end_with_up_input_enters_air_launch() -> None:
     out = _step_once(seed, prev_inp, inp)
     assert int(out["action_id"][0]) == ACT_FX_SPECIAL_AIR_HI
     assert int(out["on_ground"][0]) == 0
+    assert float(out["pos_y"][0]) > 0.0
     assert abs(float(out["speed_air_x_self"][0])) <= 1e-5
     assert abs(float(out["speed_y_self"][0]) - _fox_attr("firefox_launch_speed")) <= 1e-4
+
+
+def _step_twice(seed: np.ndarray, prev0: np.ndarray, inp0: np.ndarray, prev1: np.ndarray, inp1: np.ndarray):
+    binding = pytest.importorskip("msl_binding")
+    sizes = binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    compare_stride = int(sizes["compare"])
+
+    handle = binding.init(batch_size=1, num_players=2)
+    try:
+      seed_bytes = seed.view(np.uint8).reshape((1, seed_stride))
+      out0 = np.zeros((1, compare_stride), dtype=np.uint8)
+      out1 = np.zeros((1, compare_stride), dtype=np.uint8)
+      binding.reseed_seed(handle, seed_bytes)
+      binding.step_input(handle, prev0, inp0)
+      binding.write_compare(handle, out0)
+      binding.step_input(handle, prev1, inp1)
+      binding.write_compare(handle, out1)
+      return out0.view(COMPARE_DTYPE).reshape((1,))[0].copy(), out1.view(COMPARE_DTYPE).reshape((1,))[0].copy()
+    finally:
+      binding.destroy(handle)
+
+
+def test_grounded_side_special_walkoff_promotes_to_air_side_special_next_frame() -> None:
+    seed = _seed_base()
+    seed["action_id"][0, 0] = np.uint16(ACT_FX_SPECIAL_S)
+    seed["animation_index"][0, 0] = np.uint32(_fox_special_msid("side_ground.main.default"))
+    seed["action_frame"][0, 0] = np.int16(1)
+    seed["anim_frame_f32"][0, 0] = np.float32(1.0)
+    seed["pos_x"][0, 0] = np.float32(90.0)
+
+    binding = pytest.importorskip("msl_binding")
+    input_stride = int(binding.sizes()["input"])
+    z = _mk_input_bytes(1, input_stride)
+    out0, out1 = _step_twice(seed, z, z, z, z)
+    assert int(out0["on_ground"][0]) == 0
+    assert int(out1["action_id"][0]) == ACT_FX_SPECIAL_AIR_S
+
+
+def test_grounded_side_special_end_walkoff_falls_next_frame() -> None:
+    seed = _seed_base()
+    seed["action_id"][0, 0] = np.uint16(ACT_FX_SPECIAL_S_END)
+    seed["animation_index"][0, 0] = np.uint32(_fox_special_msid("side_ground.end.default"))
+    seed["action_frame"][0, 0] = np.int16(1)
+    seed["anim_frame_f32"][0, 0] = np.float32(1.0)
+    seed["pos_x"][0, 0] = np.float32(90.0)
+
+    binding = pytest.importorskip("msl_binding")
+    input_stride = int(binding.sizes()["input"])
+    z = _mk_input_bytes(1, input_stride)
+    out0, out1 = _step_twice(seed, z, z, z, z)
+    assert int(out0["on_ground"][0]) == 0
+    assert int(out1["action_id"][0]) == ACT_FALL
