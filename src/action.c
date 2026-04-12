@@ -1002,6 +1002,20 @@ void guard_update_grounded(MslBatch* batch, const MslCommonParams* c, size_t idx
            batch->state.x672_input_timer[idx] == 0xFEu)
               ? 1u
               : 0u;
+      const uint8_t guard_hold_snapshot_with_held_shield =
+          // Guard snapshot bridge:
+          // - GuardOn_Anim can complete into Guard before the replay-visible post-frame, producing
+          //   a frozen Guard snapshot (anim=-1/state_age=-1) with stale `xC` carry from the
+          //   release-latch lane.
+          // - When held shield inputs are already back on that snapshot row, vanilla stays in
+          //   Guard; it does not immediately consume the stale release latch into GuardOff.
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
+          //   ftCo_GuardOn_Anim,ftCo_800928CC,inlineC0,ftCo_Guard_IASA}
+          ((a0 == (uint16_t)MSL_ACT_GUARD) && batch->state.action_frame[idx] < 0 &&
+           batch->state.animation_index[idx] == 0xFFFFFFFFu && shield_held_inputs &&
+           guard_x10_seed == 0u)
+              ? 1u
+              : 0u;
       // Guard release latch ownership (ftCo_80092BCC):
       // - level check: if (!(held_inputs & HSD_PAD_LR)) xC = true.
       // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80092BCC
@@ -1061,7 +1075,7 @@ void guard_update_grounded(MslBatch* batch, const MslCommonParams* c, size_t idx
       // Decomp: Guard IASA exits to GuardOff only once (xC && x10==0).
       // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{inlineC0,ftCo_GuardOn_IASA,ftCo_Guard_IASA}
       if (!guard_setoff_carry_snapshot && batch->state.guard_release_latched_xc[idx] &&
-          x10_pre == 0) {
+          !guard_hold_snapshot_with_held_shield && x10_pre == 0) {
         if (a0 == (uint16_t)MSL_ACT_GUARD_ON) {
           // Seed-snapshot bridge for GuardOn no-submotion rows:
           // - GALE01 ordering is GuardOn_Anim then GuardOn_IASA.

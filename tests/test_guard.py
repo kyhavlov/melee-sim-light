@@ -14,6 +14,7 @@ from tests.test_combat_ownership_seed_guardrail_locks import (
 
 # Button masks: src/buttons.h (Melee/HSD PAD bits)
 BUTTON_L = 0x0040
+BUTTON_Z = 0x0010
 
 # Action ids (GALE01): refs/melee/src/melee/ft/chara/ftCommon/forward.h
 ACT_WAIT = 0x000E
@@ -244,6 +245,74 @@ def test_seeded_kneebend_still_allows_attack_hi4_iasa() -> None:
         msl_binding.destroy(handle)
 
 
+def test_guard_snapshot_with_held_shield_does_not_force_guardoff() -> None:
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    compare_stride = int(sizes["compare"])
+
+    seed = _seed_base()
+    seed["action_id"][0, 0] = np.uint16(ACT_GUARD)
+    seed["action_frame"][0, 0] = np.int16(-1)
+    seed["animation_index"][0, 0] = np.uint32(0xFFFFFFFF)
+    seed["anim_frame_f32"][0, 0] = np.float32(-1.0)
+    seed["guard_x10"][0, 0] = np.uint8(0)
+    seed["guard_release_latched_xc"][0, 0] = np.uint8(1)
+
+    handle = msl_binding.init(batch_size=1, num_players=2)
+    try:
+        seed_bytes = seed.view(np.uint8).reshape((1, seed_stride))
+        out = np.zeros((1, compare_stride), dtype=np.uint8)
+        prev_inp = _mk_input_bytes(1, input_stride)
+        inp = _mk_input_bytes(1, input_stride)
+        cur_view = inp.view(INPUT_DTYPE).reshape((1,))
+        cur_view["p"]["buttons"][0, 0] = np.uint16(BUTTON_L)
+
+        msl_binding.reseed_seed(handle, seed_bytes)
+        msl_binding.step_input(handle, prev_inp, inp)
+        msl_binding.write_compare(handle, out)
+
+        got = out.view(COMPARE_DTYPE).reshape((1,))[0]
+        assert int(got["action_id"][0]) == ACT_GUARD
+    finally:
+        msl_binding.destroy(handle)
+
+
+def test_guard_snapshot_without_held_shield_still_enters_guardoff() -> None:
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    compare_stride = int(sizes["compare"])
+
+    seed = _seed_base()
+    seed["action_id"][0, 0] = np.uint16(ACT_GUARD)
+    seed["action_frame"][0, 0] = np.int16(-1)
+    seed["animation_index"][0, 0] = np.uint32(0xFFFFFFFF)
+    seed["anim_frame_f32"][0, 0] = np.float32(-1.0)
+    seed["guard_x10"][0, 0] = np.uint8(0)
+    seed["guard_release_latched_xc"][0, 0] = np.uint8(1)
+
+    handle = msl_binding.init(batch_size=1, num_players=2)
+    try:
+        seed_bytes = seed.view(np.uint8).reshape((1, seed_stride))
+        out = np.zeros((1, compare_stride), dtype=np.uint8)
+        prev_inp = _mk_input_bytes(1, input_stride)
+        inp = _mk_input_bytes(1, input_stride)
+
+        msl_binding.reseed_seed(handle, seed_bytes)
+        msl_binding.step_input(handle, prev_inp, inp)
+        msl_binding.write_compare(handle, out)
+
+        got = out.view(COMPARE_DTYPE).reshape((1,))[0]
+        assert int(got["action_id"][0]) == ACT_GUARD_OFF
+    finally:
+        msl_binding.destroy(handle)
+
+
 @pytest.mark.integration
 def test_guard_jump_oos_does_not_reconsume_kneebend_iasa_positive_revolving_hyena() -> None:
     root = Path(__file__).resolve().parents[1]
@@ -270,3 +339,23 @@ def test_guard_jump_oos_does_not_reconsume_kneebend_iasa_positive_revolving_hyen
         )
         assert int(out_row["action_frame"][1]) == int(ref_row["action_frame"][1])
         assert int(out_row["animation_index"][1]) == int(ref_row["animation_index"][1])
+
+
+@pytest.mark.integration
+def test_guard_snapshot_held_z_does_not_drop_to_guardoff_putrid_joyous_oryx() -> None:
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+
+    dataset_rel = "datasets/aggregate_recent/replays/validation/aggregate_recent/PutridJoyousOryx.msl"
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    for record in (7475, 7476):
+        _, ref_row, out_row = _run_one_step_row(dataset_path, record, 0)
+        assert int(ref_row["action_id"][0]) == ACT_GUARD
+        assert int(out_row["action_id"][0]) == int(ref_row["action_id"][0]) == ACT_GUARD, (
+            f"record={record} expected_action={int(ref_row['action_id'][0])} "
+            f"got={int(out_row['action_id'][0])}"
+        )
+        assert int(out_row["hitlag"][0]) == int(ref_row["hitlag"][0]) == 0

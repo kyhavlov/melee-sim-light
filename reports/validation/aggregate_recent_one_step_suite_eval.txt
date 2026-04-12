@@ -505,8 +505,8 @@ overall.float_norm_mae_p95: 0.00131073
 
 == datasets/aggregate_recent/replays/validation/aggregate_recent/PutridJoyousOryx.msl ==
 Records: 7543  Players/scored per record: 2  Total player-frames: 15086
-mismatch.action_id: 108 / 15086 (0.007159)
-mismatch.action_frame: 110 / 15086 (0.007292)
+mismatch.action_id: 41 / 15086 (0.002718)
+mismatch.action_frame: 43 / 15086 (0.002850)
 mismatch.on_ground: 8 / 15086 (0.000530)
 mismatch.facing: 3 / 15086 (0.000199)
 mismatch.stocks: 0 / 15086 (0.000000)
@@ -517,13 +517,13 @@ mismatch.hitstun: 7 / 15086 (0.000464)
 mismatch.l_cancel: 0 / 15086 (0.000000)
 mismatch.hurtbox_state: 13 / 15086 (0.000862)
 mismatch.ground_id: 4 / 15086 (0.000265)
-mismatch.animation_index: 107 / 15086 (0.007093)
+mismatch.animation_index: 40 / 15086 (0.002651)
 mismatch.instance_hit_by: 8 / 15086 (0.000530)
-mismatch.instance_id: 125 / 15086 (0.008286)
+mismatch.instance_id: 58 / 15086 (0.003845)
 mismatch.last_attack_landed: 5 / 15086 (0.000331)
 mismatch.combo_count: 17 / 15086 (0.001127)
 mismatch.last_hit_by: 11 / 15086 (0.000729)
-mismatch.state_flags: 205 / 75430 (0.002718)
+mismatch.state_flags: 71 / 75430 (0.000941)
 mismatch.item_exists: 21 / 113145 (0.000186)
 mismatch.item_type: 21 / 113145 (0.000186)
 mismatch.item_state: 20 / 113145 (0.000177)
@@ -537,13 +537,13 @@ err.speed_y_self: mae=0.001721 p95=0.000000 max=3.400000
 err.speed_x_attack: mae=0.000807 p95=0.000000 max=2.569770
 err.speed_y_attack: mae=0.001869 p95=0.000000 max=4.791837
 err.percent: mae=0.004779 p95=0.000000 max=14.000000
-err.shield_hp: mae=0.001639 p95=0.000000 max=7.000000
+err.shield_hp: mae=0.001328 p95=0.000000 max=7.000000
 err.item_pos_x: mae=0.797155 p95=0.000008 max=56.157990
 err.item_pos_y: mae=0.574144 p95=0.000000 max=26.304359
 err.item_vel_x: mae=0.035570 p95=0.000000 max=1.761186
 err.item_vel_y: mae=0.145293 p95=0.000000 max=6.987741
-overall.discrete_mismatch: 862 / 912703
-overall.float_norm_mae_p95: 0.00176493
+overall.discrete_mismatch: 460 / 912703
+overall.float_norm_mae_p95: 0.00176436
 
 == datasets/aggregate_recent/replays/validation/cardinal_1.0_recent/QuerulousGrandDinosaur.msl ==
 Records: 10222  Players/scored per record: 2  Total player-frames: 20444
@@ -672,5 +672,5 @@ overall.discrete_mismatch: 1090 / 1502336
 overall.float_norm_mae_p95: 0.00112688
 
 == suite summary ==
-overall.discrete_mismatch: 9788 / 17965838
-overall.float_norm_mae_p95: 0.00125178
+overall.discrete_mismatch: 9386 / 17965838
+overall.float_norm_mae_p95: 0.00125175
