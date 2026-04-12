@@ -3453,18 +3453,26 @@ void locomotion_update_pre(MslBatch* batch) {
               (batch->state.action_frame[idx] >= (int16_t)ch->jump_startup_frames) ? 1u : 0u;
           const uint8_t opponent_active_catch_window =
               locomotion_has_opponent_active_catch_connect_window(batch, bi, p, num_players);
+          const uint8_t fresh_guard_jump_oos =
+              batch->state.guard_jump_oos_entered_this_frame[idx] ? 1u : 0u;
 
           // KneeBend IASA catch check (JC grab) before the jump transition.
           //
           // Decomp ordering:
           // - ftCo_KneeBend_IASA calls ftCo_Catch_CheckInput before short-hop/jump progression.
           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_KneeBend.c::ftCo_KneeBend_IASA
+          // - Guard/GuardOn/GuardReflect/GuardOff IASA can enter KneeBend through ftCo_800CB024,
+          //   but that same frame is still the Guard input callback; the freshly-entered KneeBend
+          //   must not also consume KneeBend_IASA until the next frame.
+          // refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_GuardOn_IASA,ftCo_Guard_IASA}
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c::ftCo_800CB024
           // On startup-complete frames, allow Anim-first Jump ordering unless an opponent currently
           // owns a Catch/CatchDash connect window (then preserve baseline IASA-before-Jump order).
           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_KneeBend.c::{
           //   ftCo_KneeBend_Anim,ftCo_KneeBend_IASA
           // }
-          if (!startup_complete || opponent_active_catch_window) {
+          if ((!startup_complete || opponent_active_catch_window) && !fresh_guard_jump_oos) {
             if (grab_flow_try_enter_catch_from_iasa(batch, c, idx)) {
               continue;
             }

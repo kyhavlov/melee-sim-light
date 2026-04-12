@@ -306,6 +306,13 @@ typedef struct MslStateSoA {
   // callback handoff. This survives the following frozen GuardOn snapshot row, where
   // prev_action_id no longer identifies the callback source.
   uint8_t* guard_entry_via_wait_callback;
+  // Runtime-only marker for Guard/GuardOn/GuardReflect/GuardOff IASA entering KneeBend through
+  // ftCo_800CB024 in the current step. The decomp input callback runs once per frame, so a fresh
+  // Guard -> KneeBend handoff must not also consume KneeBend_IASA before the next frame.
+  // refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_GuardOn_IASA,ftCo_Guard_IASA}
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c::ftCo_800CB024
+  uint8_t* guard_jump_oos_entered_this_frame;
   // GuardReflect reflect timer (decomp: mv.co.guard.x14; seed uses +1 bias, expires at 0).
   uint8_t* guard_reflect_timer_x14;  // [batch * players]
   // GuardReflect powershield-active timer (decomp: mv.co.guard.x18; +1 bias, expires at 0).

@@ -49,13 +49,13 @@ rollout.first_mismatch_seeded_total: 69
 
 == datasets/aggregate_recent/replays/validation/aggregate_recent/FavorableSuperficialPig.msl ==
 rollout.best_len: 388
-rollout.streak_count: 210
-rollout.streak_len.median: 39
-rollout.streak_len.p90: 127
+rollout.streak_count: 207
+rollout.streak_len.median: 40
+rollout.streak_len.p90: 129
 rollout.streak_len.p95: 159
 rollout.streak_len.max: 388
-rollout.first_mismatch_total: 220
-rollout.first_mismatch_seeded_total: 129
+rollout.first_mismatch_total: 216
+rollout.first_mismatch_seeded_total: 125
 
 == datasets/aggregate_recent/replays/validation/aggregate_recent/HilariousVillainousGiraffe.msl ==
 rollout.best_len: 387
@@ -98,14 +98,14 @@ rollout.first_mismatch_total: 179
 rollout.first_mismatch_seeded_total: 106
 
 == datasets/aggregate_recent/replays/validation/aggregate_recent/PositiveRevolvingHyena.msl ==
-rollout.best_len: 225
-rollout.streak_count: 211
+rollout.best_len: 262
+rollout.streak_count: 198
 rollout.streak_len.median: 37
-rollout.streak_len.p90: 129
-rollout.streak_len.p95: 184
-rollout.streak_len.max: 225
-rollout.first_mismatch_total: 227
-rollout.first_mismatch_seeded_total: 151
+rollout.streak_len.p90: 146
+rollout.streak_len.p95: 187
+rollout.streak_len.max: 262
+rollout.first_mismatch_total: 209
+rollout.first_mismatch_seeded_total: 128
 
 == datasets/aggregate_recent/replays/validation/aggregate_recent/PriceyPartialAlbatross.msl ==
 rollout.best_len: 300
@@ -119,13 +119,13 @@ rollout.first_mismatch_seeded_total: 137
 
 == datasets/aggregate_recent/replays/validation/aggregate_recent/PutridJoyousOryx.msl ==
 rollout.best_len: 248
-rollout.streak_count: 127
+rollout.streak_count: 126
 rollout.streak_len.median: 45
 rollout.streak_len.p90: 125
 rollout.streak_len.p95: 159
 rollout.streak_len.max: 248
-rollout.first_mismatch_total: 183
-rollout.first_mismatch_seeded_total: 117
+rollout.first_mismatch_total: 182
+rollout.first_mismatch_seeded_total: 116
 
 == datasets/aggregate_recent/replays/validation/aggregate_recent/TubbyCurlyHerring.msl ==
 rollout.best_len: 328
@@ -178,11 +178,11 @@ rollout.first_mismatch_total: 95
 rollout.first_mismatch_seeded_total: 39
 
 == suite summary ==
-overall.rollout.streak_count: 2154
+overall.rollout.streak_count: 2137
 overall.rollout.streak_len.median: 51
-overall.rollout.streak_len.p90: 150
+overall.rollout.streak_len.p90: 152
 overall.rollout.streak_len.p95: 191
 overall.rollout.streak_len.max: 631
 overall.rollout.best_len.max: 631
-overall.rollout.first_mismatch_total: 2473
-overall.rollout.first_mismatch_seeded_total: 1469
+overall.rollout.first_mismatch_total: 2450
+overall.rollout.first_mismatch_seeded_total: 1441

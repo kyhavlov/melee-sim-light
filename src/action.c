@@ -583,6 +583,7 @@ static inline uint8_t guard_try_enter_jump_oos(MslBatch* batch, const MslCommonP
   msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
   batch->state.kneebend_jump_input[idx] = (uint8_t)jump_input;
   batch->state.kneebend_is_short_hop[idx] = 0;
+  batch->state.guard_jump_oos_entered_this_frame[idx] = 1u;
   return 1;
 }
 
@@ -1343,6 +1344,7 @@ void action_update(MslBatch* batch) {
       for (int p = 0; p < num_players; p++) {
         const size_t idx = msl_idx_player(bi, p);
         batch->state.guard_on_entered_this_frame[idx] = 0u;
+        batch->state.guard_jump_oos_entered_this_frame[idx] = 0u;
       }
     }
   }

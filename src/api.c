@@ -780,6 +780,7 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
           seed->camera_target_point_inside_stage_cam_bounds_u8[p] ? 1u : 0u;
       batch->state.downwait_timer[idx] = seed->downwait_timer[p];
       batch->state.passivewall_timer[idx] = seed->passivewall_timer[p];
+      batch->state.guard_jump_oos_entered_this_frame[idx] = 0u;
       // Seed deterministic anim timebase from Slippi post-frame `state_age` (fp->cur_anim_frame)
       // plus a strictly-causal derived fp->frame_speed_mul.
       msl_anim_timebase_seed(batch, idx, seed->anim_frame_f32[p], seed->frame_speed_mul_f32[p]);

@@ -1,8 +1,15 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 import numpy as np
+import pytest
 
 from tools.eval.dataset import COMPARE_DTYPE, INPUT_DTYPE, SEED_DTYPE
+from tests.test_combat_ownership_seed_guardrail_locks import (
+    _run_one_step_row,
+    _skip_if_required_artifacts_missing,
+)
 
 
 # Button masks: src/buttons.h (Melee/HSD PAD bits)
@@ -14,12 +21,15 @@ ACT_GUARD_ON = 0x00B2
 ACT_GUARD = 0x00B3
 ACT_GUARD_OFF = 0x00B4
 ACT_GUARD_REFLECT = 0x00B6
+ACT_KNEE_BEND = 0x0018
+ACT_ATTACK_HI4 = 0x003F
 
 # Submotion ids (GALE01): refs/melee/src/melee/ft/chara/ftCommon/forward.h
 SM_WAIT1_0 = 2
 SM_GUARD_ON = 37
 SM_GUARD = 38
 SM_GUARD_OFF = 39
+SM_KNEE_BEND = 11
 
 CHAR_FOX = 1
 STAGE_FD = 32
@@ -195,3 +205,68 @@ def test_active_guard_hitlag_does_not_recharge_shield() -> None:
         assert float(got["shield_hp"][0]) == np.float32(55.0)
     finally:
         msl_binding.destroy(handle)
+
+
+def test_seeded_kneebend_still_allows_attack_hi4_iasa() -> None:
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    compare_stride = int(sizes["compare"])
+
+    seed = _seed_base()
+    seed["action_id"][0, 0] = np.uint16(ACT_KNEE_BEND)
+    seed["action_frame"][0, 0] = np.int16(0)
+    seed["animation_index"][0, 0] = np.uint32(SM_KNEE_BEND)
+    seed["anim_frame_f32"][0, 0] = np.float32(0.0)
+
+    handle = msl_binding.init(batch_size=1, num_players=2)
+    try:
+        seed_bytes = seed.view(np.uint8).reshape((1, seed_stride))
+        out = np.zeros((1, compare_stride), dtype=np.uint8)
+        prev_inp = _mk_input_bytes(1, input_stride)
+        inp = _mk_input_bytes(1, input_stride)
+        cur_view = inp.view(INPUT_DTYPE).reshape((1,))
+        # Decomp: ftCo_KneeBend_IASA still allows AttackHi4 interrupt on a seeded KneeBend row
+        # through ftCo_AttackHi4_CheckInputNoD0 / ftCo_800DF2D8.
+        # refs/melee/src/melee/ft/chara/ftCommon/ftCo_KneeBend.c::ftCo_KneeBend_IASA
+        # refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackHi4.c::ftCo_AttackHi4_CheckInputNoD0
+        cur_view["p"]["c_y"][0, 0] = np.int8(80)
+
+        msl_binding.reseed_seed(handle, seed_bytes)
+        msl_binding.step_input(handle, prev_inp, inp)
+        msl_binding.write_compare(handle, out)
+
+        got = out.view(COMPARE_DTYPE).reshape((1,))[0]
+        assert int(got["action_id"][0]) == ACT_ATTACK_HI4
+    finally:
+        msl_binding.destroy(handle)
+
+
+@pytest.mark.integration
+def test_guard_jump_oos_does_not_reconsume_kneebend_iasa_positive_revolving_hyena() -> None:
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+
+    dataset_rel = "datasets/aggregate_recent/replays/validation/aggregate_recent/PositiveRevolvingHyena.msl"
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    # Replay-real guard jump OoS rows:
+    # - Guard_IASA can enter KneeBend through ftCo_800CB024.
+    # - The same frame is still the Guard input callback; the fresh KneeBend row must not also
+    #   consume KneeBend_IASA into AttackHi4 before the next frame.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_Guard_IASA
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c::ftCo_800CB024
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_KneeBend.c::ftCo_KneeBend_IASA
+    for record in (282, 389):
+        _, ref_row, out_row = _run_one_step_row(dataset_path, record, 1)
+        assert int(ref_row["action_id"][1]) == ACT_KNEE_BEND
+        assert int(out_row["action_id"][1]) == int(ref_row["action_id"][1]), (
+            f"record={record} expected_action={int(ref_row['action_id'][1])} "
+            f"got={int(out_row['action_id'][1])}"
+        )
+        assert int(out_row["action_frame"][1]) == int(ref_row["action_frame"][1])
+        assert int(out_row["animation_index"][1]) == int(ref_row["animation_index"][1])
