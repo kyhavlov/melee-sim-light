@@ -170,6 +170,44 @@ static inline void specialhi_apply_air_launch_ownership(MslBatch* batch, size_t 
   batch->state.speed_y_self[idx] = ch->firefox_launch_speed * sinf(launch_angle);
 }
 
+static inline uint8_t specialhi_try_ground_launch_from_hold(MslBatch* batch, size_t idx,
+                                                            const MslCharParams* ch) {
+  if (batch == NULL || ch == NULL) {
+    return 0u;
+  }
+  const float stick_x = stick_i8_to_unit(batch->state.input_main_x[idx]);
+  const float stick_y = stick_i8_to_unit(batch->state.input_main_y[idx]);
+  const float abs_x = msl_absf(stick_x);
+  const float abs_y = msl_absf(stick_y);
+
+  // Decomp: grounded Hold/HoldAir only takes the grounded launch branch when:
+  // - |stick_x| + |stick_y| >= x64 direction threshold
+  // - angle(floor.normal, stick_vec) >= PI/2
+  // - ftCo_8009A134 (platform pass-through) is false
+  // On Final Destination there are no soft platforms, so the pass-through gate is always false.
+  // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::ftFx_SpecialAirHi_AirToGround
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Pass.c::ftCo_8009A134
+  // data/stages/final_destination.json::segments (no `platform: true` segments)
+  if ((abs_x + abs_y) < ch->firefox_direction_stick_range_min) {
+    return 0u;
+  }
+
+  const float nx = batch->state.ground_normal_x[idx];
+  const float ny = batch->state.ground_normal_y[idx];
+  if ((nx * stick_x + ny * stick_y) > 0.0f) {
+    return 0u;
+  }
+
+  // Decomp: ftCommon_UpdateFacing uses the sign of lstick.x without any additional threshold.
+  // refs/melee/src/melee/ft/ftcommon.c::ftCommon_UpdateFacing
+  batch->state.facing[idx] = (uint8_t)(stick_x >= 0.0f);
+  batch->state.speed_ground_x_self[idx] =
+      ch->firefox_launch_speed * (batch->state.facing[idx] ? 1.0f : -1.0f);
+  batch->state.speed_air_x_self[idx] = 0.0f;
+  batch->state.speed_y_self[idx] = 0.0f;
+  return 1u;
+}
+
 static inline uint8_t spacie_specialhi_update(MslBatch* batch, size_t idx, uint8_t char_id,
                                               const MslSpecialMsids* ms, uint8_t on_ground) {
   if (batch == NULL || ms == NULL) {
@@ -191,23 +229,24 @@ static inline uint8_t spacie_specialhi_update(MslBatch* batch, size_t idx, uint8
     case MSL_ACT_FX_SPECIAL_HI_HOLD:
       batch->state.animation_index[idx] = (uint32_t)ms->specialhi_ground_hold;
       if (anim_finished(char_id, ms->specialhi_ground_hold, batch->state.anim_frame_f32[idx])) {
-        // Decomp: both Hold and HoldAir transition into launch state strictly on anim end.
-        // There is no input-hold gate here (IASA handlers are empty).
+        // Decomp: both Hold and HoldAir transition into launch strictly on anim end. Grounded
+        // launch selection is owned by ftFx_SpecialAirHi_AirToGround; otherwise launch enters via
+        // ftFx_SpecialAirHi_Enter after a ground->air common transition.
         // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::{
-        //   ftFx_SpecialHiHold_Anim,ftFx_SpecialHiHoldAir_Anim,
-        //   ftFx_SpecialHiHold_IASA,ftFx_SpecialHiHoldAir_IASA
+        //   ftFx_SpecialHiHold_Anim,ftFx_SpecialHiHoldAir_Anim,ftFx_SpecialAirHi_AirToGround,
+        //   ftFx_SpecialAirHi_Enter
         // }
-        //
-        // Decomp launch enter (`ftFx_SpecialAirHi_Enter`) overwrites self velocity from
-        // launch parameters/angle; hold-state carry-through velocity is not preserved.
-        // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::ftFx_SpecialAirHi_Enter
-        //
-        // Runtime bridge (narrow): clear hold-air carry velocity on Hold/HoldAir -> launch
-        // transition so launch state does not retain stale downward drift. Keep full launch vector
-        // derivation TODO-bound to explicit SpecialHi attrs (`x64/x74/x88`) extraction.
-        batch->state.action_id[idx] =
-            on_ground ? (uint16_t)MSL_ACT_FX_SPECIAL_HI : (uint16_t)MSL_ACT_FX_SPECIAL_AIR_HI;
-        if (!on_ground) {
+        if (on_ground &&
+            specialhi_try_ground_launch_from_hold(batch, idx, msl_char_params(char_id))) {
+          batch->state.action_id[idx] = (uint16_t)MSL_ACT_FX_SPECIAL_HI;
+        } else {
+          batch->state.action_id[idx] = (uint16_t)MSL_ACT_FX_SPECIAL_AIR_HI;
+          if (on_ground) {
+            batch->state.on_ground[idx] = 0u;
+            batch->state.ground_id[idx] = 0xFFFFu;
+            batch->state.speed_ground_x_self[idx] = 0.0f;
+            batch->state.ecb_lock_timer[idx] = 5u;
+          }
           const MslCharParams* ch = msl_char_params(char_id);
           if (ch != NULL) {
             specialhi_apply_air_launch_ownership(batch, idx, ch);
@@ -223,9 +262,17 @@ static inline uint8_t spacie_specialhi_update(MslBatch* batch, size_t idx, uint8
     case MSL_ACT_FX_SPECIAL_HI_HOLD_AIR:
       batch->state.animation_index[idx] = (uint32_t)ms->specialhi_air_hold;
       if (anim_finished(char_id, ms->specialhi_air_hold, batch->state.anim_frame_f32[idx])) {
-        batch->state.action_id[idx] =
-            on_ground ? (uint16_t)MSL_ACT_FX_SPECIAL_HI : (uint16_t)MSL_ACT_FX_SPECIAL_AIR_HI;
-        if (!on_ground) {
+        if (on_ground &&
+            specialhi_try_ground_launch_from_hold(batch, idx, msl_char_params(char_id))) {
+          batch->state.action_id[idx] = (uint16_t)MSL_ACT_FX_SPECIAL_HI;
+        } else {
+          batch->state.action_id[idx] = (uint16_t)MSL_ACT_FX_SPECIAL_AIR_HI;
+          if (on_ground) {
+            batch->state.on_ground[idx] = 0u;
+            batch->state.ground_id[idx] = 0xFFFFu;
+            batch->state.speed_ground_x_self[idx] = 0.0f;
+            batch->state.ecb_lock_timer[idx] = 5u;
+          }
           const MslCharParams* ch = msl_char_params(char_id);
           if (ch != NULL) {
             specialhi_apply_air_launch_ownership(batch, idx, ch);

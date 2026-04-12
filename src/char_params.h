@@ -131,15 +131,20 @@ typedef struct MslCharParams {
   // Fox/Falco side special (Illusion/Phantasm) end-state velocities + friction.
   //
   // Source of truth: ISO-extracted `data/characters/*.json` keys:
+  // - illusion_ground_vel_x
   // - illusion_ground_end_vel_x / illusion_ground_friction
   // - illusion_air_end_vel_x / illusion_air_friction
   // - illusion_landing_lag_frames / illusion_gravity_delay_end_frames / illusion_fall_accel_end
   //
   // Decomp:
-  // - refs/melee/src/melee/ft/chara/ftFox/types.h (ftFox_DatAttrs x34/x38/x3C/x40/x50/x44/x48)
-  // - refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c::{ftFx_SpecialSEnd_Enter,ftFx_SpecialSEnd_Phys}
+  // - refs/melee/src/melee/ft/chara/ftFox/types.h
+  //   (ftFox_DatAttrs x28/x34/x38/x3C/x40/x50/x44/x48)
+  // - refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c::{
+  //     ftFx_SpecialSStart_Enter,ftFx_SpecialSEnd_Enter,ftFx_SpecialSEnd_Phys
+  //   }
   // - refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c::{ftFx_SpecialAirSEnd_Enter,ftFx_SpecialAirSEnd_Phys}
   // - refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c::ftFx_SpecialAirSEnd_Coll
+  float illusion_ground_vel_x;
   float illusion_ground_end_vel_x;
   float illusion_ground_friction;
   float illusion_air_end_vel_x;
@@ -184,6 +189,7 @@ typedef struct MslCharParams {
   //
   // Source of truth: ISO-extracted `data/characters/*.json` keys:
   // - firefox_hold_gravity_delay_frames
+  // - firefox_hold_vel_x
   // - firefox_hold_air_friction
   // - firefox_hold_air_fall_accel
   // - firefox_direction_stick_range_min
@@ -205,6 +211,7 @@ typedef struct MslCharParams {
   //   }
   uint8_t firefox_hold_gravity_delay_frames;  // ftFox_DatAttrs.x54
   uint8_t _pad_u8_firefox_hold_0[3];
+  float firefox_hold_vel_x;                           // ftFox_DatAttrs.x58
   float firefox_hold_air_friction;                    // ftFox_DatAttrs.x5C
   float firefox_hold_air_fall_accel;                  // ftFox_DatAttrs.x60
   float firefox_direction_stick_range_min;            // ftFox_DatAttrs.x64

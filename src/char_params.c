@@ -245,6 +245,7 @@ static int load_one(const char* data_dir, const char* rel_path, uint8_t char_id)
       "illusion_item_state1_element",
       "illusion_item_state1_hitbox_y_offset",
       "firefox_hold_gravity_delay_frames",
+      "firefox_hold_vel_x",
       "firefox_hold_air_friction",
       "firefox_hold_air_fall_accel",
       "firefox_direction_stick_range_min",
@@ -366,6 +367,7 @@ static int load_one(const char* data_dir, const char* rel_path, uint8_t char_id)
       json_get_f32(buf, "laser_scale_max", &out.laser_scale_max) != 0 ||
       json_get_u16(buf, "laser_spawn_joint_part_id", &out.laser_spawn_joint_part_id) != 0 ||
       json_get_u16(buf, "grab_capture_anchor_part_id", &out.grab_capture_anchor_part_id) != 0 ||
+      json_get_f32(buf, "illusion_ground_vel_x", &out.illusion_ground_vel_x) != 0 ||
       json_get_f32(buf, "illusion_ground_end_vel_x", &out.illusion_ground_end_vel_x) != 0 ||
       json_get_f32(buf, "illusion_ground_friction", &out.illusion_ground_friction) != 0 ||
       json_get_f32(buf, "illusion_air_end_vel_x", &out.illusion_air_end_vel_x) != 0 ||
@@ -401,6 +403,7 @@ static int load_one(const char* data_dir, const char* rel_path, uint8_t char_id)
                    &out.illusion_item_state1_hitbox_y_offset) != 0 ||
       json_get_u8(buf, "firefox_hold_gravity_delay_frames",
                   &out.firefox_hold_gravity_delay_frames) != 0 ||
+      json_get_f32(buf, "firefox_hold_vel_x", &out.firefox_hold_vel_x) != 0 ||
       json_get_f32(buf, "firefox_hold_air_friction", &out.firefox_hold_air_friction) != 0 ||
       json_get_f32(buf, "firefox_hold_air_fall_accel", &out.firefox_hold_air_fall_accel) != 0 ||
       json_get_f32(buf, "firefox_direction_stick_range_min",

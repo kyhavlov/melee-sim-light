@@ -223,9 +223,9 @@ static inline void enter_blaster_start(MslBatch* batch, size_t idx, const MslLas
 }
 
 static inline void enter_side_special_start(MslBatch* batch, size_t idx, const MslCommonParams* c,
-                                            const MslSpecialMsids* ms, uint8_t grounded,
-                                            float stick_x) {
-  if (batch == NULL || c == NULL || ms == NULL) {
+                                            const MslSpecialMsids* ms, const MslCharParams* ch,
+                                            uint8_t grounded, float stick_x) {
+  if (batch == NULL || c == NULL || ms == NULL || ch == NULL) {
     return;
   }
   const float facing_dir = batch->state.facing[idx] ? 1.0f : -1.0f;
@@ -236,9 +236,22 @@ static inline void enter_side_special_start(MslBatch* batch, size_t idx, const M
     batch->state.facing[idx] = batch->state.facing[idx] ? 0u : 1u;
   }
   if (grounded) {
+    // Decomp: grounded Side-B entry preserves existing ground velocity by dividing gr_vel through
+    // `x28_FOX_ILLUSION_GROUND_VEL_X` before entering SpecialSStart.
+    // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c::ftFx_SpecialSStart_Enter
+    // data/characters/{fox,falco}.json::illusion_ground_vel_x
+    if (ch->illusion_ground_vel_x > 0.0f) {
+      batch->state.speed_ground_x_self[idx] /= ch->illusion_ground_vel_x;
+    }
     batch->state.action_id[idx] = (uint16_t)MSL_ACT_FX_SPECIAL_S_START;
     batch->state.animation_index[idx] = (uint32_t)ms->specials_ground_start;
   } else {
+    // Decomp: aerial Side-B entry divides self_vel.x through the same attr before entering.
+    // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c::ftFx_SpecialAirSStart_Enter
+    // data/characters/{fox,falco}.json::illusion_ground_vel_x
+    if (ch->illusion_ground_vel_x > 0.0f) {
+      batch->state.speed_air_x_self[idx] /= ch->illusion_ground_vel_x;
+    }
     batch->state.action_id[idx] = (uint16_t)MSL_ACT_FX_SPECIAL_AIR_S_START;
     batch->state.animation_index[idx] = (uint32_t)ms->specials_air_start;
     // Decomp: ftFx_SpecialAirSStart_Enter zeroes self_vel.y at aerial Side-B entry.
@@ -251,14 +264,27 @@ static inline void enter_side_special_start(MslBatch* batch, size_t idx, const M
 }
 
 static inline void enter_specialhi_hold(MslBatch* batch, size_t idx, const MslSpecialMsids* ms,
-                                        uint8_t grounded) {
-  if (batch == NULL || ms == NULL) {
+                                        const MslCharParams* ch, uint8_t grounded) {
+  if (batch == NULL || ms == NULL || ch == NULL) {
     return;
   }
   if (grounded) {
+    // Decomp: grounded Firefox charge entry preserves gr_vel through `x58_FOX_FIREFOX_VEL_X`.
+    // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::ftFx_SpecialHi_Enter
+    // data/characters/{fox,falco}.json::firefox_hold_vel_x
+    if (ch->firefox_hold_vel_x > 0.0f) {
+      batch->state.speed_ground_x_self[idx] /= ch->firefox_hold_vel_x;
+    }
     batch->state.action_id[idx] = (uint16_t)MSL_ACT_FX_SPECIAL_HI_HOLD;
     batch->state.animation_index[idx] = (uint32_t)ms->specialhi_ground_hold;
   } else {
+    // Decomp: aerial Firefox charge entry divides self_vel.x by the same attr, then zeroes
+    // self_vel.y.
+    // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::ftFx_SpecialAirHiStart_Enter
+    // data/characters/{fox,falco}.json::firefox_hold_vel_x
+    if (ch->firefox_hold_vel_x > 0.0f) {
+      batch->state.speed_air_x_self[idx] /= ch->firefox_hold_vel_x;
+    }
     batch->state.action_id[idx] = (uint16_t)MSL_ACT_FX_SPECIAL_HI_HOLD_AIR;
     batch->state.animation_index[idx] = (uint32_t)ms->specialhi_air_hold;
     // Decomp: ftFx_SpecialAirHiStart_Enter zeroes self_vel.y before entering HoldAir.
@@ -365,10 +391,10 @@ void blaster_update_pre_physics(MslBatch* batch) {
               resolve_spacie_b_special_kind(c, on_ground, stick_x, stick_y);
           switch (kind) {
             case MSL_SPACIE_B_SPECIAL_SIDE:
-              enter_side_special_start(batch, idx, c, ms, on_ground, stick_x);
+              enter_side_special_start(batch, idx, c, ms, ch, on_ground, stick_x);
               break;
             case MSL_SPACIE_B_SPECIAL_UP:
-              enter_specialhi_hold(batch, idx, ms, on_ground);
+              enter_specialhi_hold(batch, idx, ms, ch, on_ground);
               break;
             case MSL_SPACIE_B_SPECIAL_NEUTRAL:
               if (lp != NULL) {

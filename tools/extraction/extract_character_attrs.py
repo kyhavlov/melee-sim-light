@@ -297,6 +297,7 @@ def _extract_ftco_dattrs(pl_dat: Path, *, ftdata_symbol: str, extract_fox_blaste
         #     ftFx_SpecialAirHi_Phys,ftFx_SpecialHiLanding_Phys,ftFx_SpecialHiFall_Anim
         #   }
         out["firefox_hold_gravity_delay_frames"] = int(max(0, min(255, int(round(float(_f32_be(buf, ext_abs + 0x54)))))))
+        out["firefox_hold_vel_x"] = float(_f32_be(buf, ext_abs + 0x58))
         out["firefox_hold_air_friction"] = float(_f32_be(buf, ext_abs + 0x5C))
         out["firefox_hold_air_fall_accel"] = float(_f32_be(buf, ext_abs + 0x60))
         out["firefox_direction_stick_range_min"] = float(_f32_be(buf, ext_abs + 0x64))
@@ -464,6 +465,7 @@ def _stable_update(existing: dict, extracted: dict) -> dict:
         "illusion_air_friction",
         "illusion_landing_lag_frames",
         "firefox_hold_gravity_delay_frames",
+        "firefox_hold_vel_x",
         "firefox_hold_air_friction",
         "firefox_hold_air_fall_accel",
         "firefox_direction_stick_range_min",

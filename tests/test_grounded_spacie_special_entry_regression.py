@@ -1,0 +1,165 @@
+from __future__ import annotations
+
+import json
+from pathlib import Path
+
+import numpy as np
+import pytest
+
+from tools.eval.dataset import COMPARE_DTYPE, INPUT_DTYPE, SEED_DTYPE
+
+
+BUTTON_B = 0x0200
+
+ACT_WAIT = 0x000E
+ACT_FX_SPECIAL_S_START = 0x015B
+ACT_FX_SPECIAL_HI_HOLD = 0x0161
+ACT_FX_SPECIAL_AIR_HI = 0x0164
+ACT_FX_SPECIAL_HI = 0x0163
+
+SM_WAIT1_0 = 2
+
+CHAR_FOX = 1
+STAGE_FD = 32
+
+
+def _fox_attr(name: str) -> float:
+    return float(json.loads(Path("data/characters/fox.json").read_text(encoding="utf-8"))[name])
+
+
+def _fox_special_msid(path: str) -> int:
+    data = json.loads(Path("data/special_msids/fox.json").read_text(encoding="utf-8"))
+    cur = data
+    for key in path.split("."):
+        cur = cur[key]
+    assert cur is not None
+    return int(cur)
+
+
+def _mk_input_bytes(batch: int, input_stride: int) -> np.ndarray:
+    return np.zeros((batch, input_stride), dtype=np.uint8)
+
+
+def _seed_base() -> np.ndarray:
+    seed = np.zeros((1,), dtype=SEED_DTYPE)
+    seed["stage_id"][0] = np.uint32(STAGE_FD)
+    seed["num_players"][0] = np.uint8(2)
+    seed["stocks"][0, :2] = np.uint8(4)
+    seed["char_id"][0, :2] = np.uint8(CHAR_FOX)
+    seed["facing"][0, :2] = np.uint8(1)
+    seed["facing_dir1"][0, :2] = np.int8(1)
+    seed["pos_x"][0, :2] = np.float32(0.0)
+    seed["pos_y"][0, :2] = np.float32(0.0)
+    seed["on_ground"][0, :2] = np.uint8(1)
+    seed["ground_id"][0, :2] = np.uint16(0)
+    seed["frame_speed_mul_f32"][0, :2] = np.float32(1.0)
+    seed["anim_frame_f32"][0, :2] = np.float32(0.0)
+    seed["action_id"][0, :2] = np.uint16(ACT_WAIT)
+    seed["action_frame"][0, :2] = np.int16(0)
+    seed["animation_index"][0, :2] = np.uint32(SM_WAIT1_0)
+    return seed
+
+
+def _step_once(seed: np.ndarray, prev_inp: np.ndarray, inp: np.ndarray) -> np.ndarray:
+    binding = pytest.importorskip("msl_binding")
+
+    sizes = binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    compare_stride = int(sizes["compare"])
+
+    assert seed.dtype == SEED_DTYPE
+    assert seed_stride == SEED_DTYPE.itemsize
+    assert input_stride == INPUT_DTYPE.itemsize
+    assert compare_stride == COMPARE_DTYPE.itemsize
+
+    handle = binding.init(batch_size=1, num_players=2)
+    try:
+        seed_bytes = seed.view(np.uint8).reshape((1, seed_stride))
+        out = np.zeros((1, compare_stride), dtype=np.uint8)
+        binding.reseed_seed(handle, seed_bytes)
+        binding.step_input(handle, prev_inp, inp)
+        binding.write_compare(handle, out)
+        return out.view(COMPARE_DTYPE).reshape((1,))[0].copy()
+    finally:
+        binding.destroy(handle)
+
+
+def test_grounded_side_special_entry_divides_ground_speed_by_illusion_attr() -> None:
+    seed = _seed_base()
+    seed["speed_ground_x_self"][0, 0] = np.float32(1.2)
+
+    binding = pytest.importorskip("msl_binding")
+    input_stride = int(binding.sizes()["input"])
+    prev_inp = _mk_input_bytes(1, input_stride)
+    inp = _mk_input_bytes(1, input_stride)
+    inp_view = inp.view(INPUT_DTYPE).reshape((1,))
+    inp_view["p"]["buttons"][0, 0] = np.uint16(BUTTON_B)
+    inp_view["p"]["main_x"][0, 0] = np.int8(80)
+
+    out = _step_once(seed, prev_inp, inp)
+    assert int(out["action_id"][0]) == ACT_FX_SPECIAL_S_START
+    assert int(out["on_ground"][0]) == 1
+    assert abs(float(out["speed_ground_x_self"][0]) - (1.2 / _fox_attr("illusion_ground_vel_x"))) <= 1e-6
+
+
+def test_grounded_specialhi_hold_entry_divides_ground_speed_by_hold_attr() -> None:
+    seed = _seed_base()
+    seed["speed_ground_x_self"][0, 0] = np.float32(1.6)
+
+    binding = pytest.importorskip("msl_binding")
+    input_stride = int(binding.sizes()["input"])
+    prev_inp = _mk_input_bytes(1, input_stride)
+    inp = _mk_input_bytes(1, input_stride)
+    inp_view = inp.view(INPUT_DTYPE).reshape((1,))
+    inp_view["p"]["buttons"][0, 0] = np.uint16(BUTTON_B)
+    inp_view["p"]["main_y"][0, 0] = np.int8(80)
+
+    out = _step_once(seed, prev_inp, inp)
+    assert int(out["action_id"][0]) == ACT_FX_SPECIAL_HI_HOLD
+    assert int(out["on_ground"][0]) == 1
+    assert abs(float(out["speed_ground_x_self"][0]) - (1.6 / _fox_attr("firefox_hold_vel_x"))) <= 1e-6
+
+
+def test_grounded_specialhi_hold_end_on_flat_ground_seeds_ground_launch_speed() -> None:
+    seed = _seed_base()
+    seed["action_id"][0, 0] = np.uint16(ACT_FX_SPECIAL_HI_HOLD)
+    seed["animation_index"][0, 0] = np.uint32(_fox_special_msid("up_ground.hold.default"))
+    seed["action_frame"][0, 0] = np.int16(99)
+    seed["anim_frame_f32"][0, 0] = np.float32(999.0)
+    seed["facing"][0, 0] = np.uint8(0)
+    seed["facing_dir1"][0, 0] = np.int8(-1)
+
+    binding = pytest.importorskip("msl_binding")
+    input_stride = int(binding.sizes()["input"])
+    prev_inp = _mk_input_bytes(1, input_stride)
+    inp = _mk_input_bytes(1, input_stride)
+    inp_view = inp.view(INPUT_DTYPE).reshape((1,))
+    inp_view["p"]["main_x"][0, 0] = np.int8(-80)
+
+    out = _step_once(seed, prev_inp, inp)
+    assert int(out["action_id"][0]) == ACT_FX_SPECIAL_HI
+    assert int(out["on_ground"][0]) == 1
+    assert abs(float(out["speed_ground_x_self"][0]) + _fox_attr("firefox_launch_speed")) <= 1e-6
+    assert float(out["speed_y_self"][0]) == 0.0
+
+
+def test_grounded_specialhi_hold_end_with_up_input_enters_air_launch() -> None:
+    seed = _seed_base()
+    seed["action_id"][0, 0] = np.uint16(ACT_FX_SPECIAL_HI_HOLD)
+    seed["animation_index"][0, 0] = np.uint32(_fox_special_msid("up_ground.hold.default"))
+    seed["action_frame"][0, 0] = np.int16(99)
+    seed["anim_frame_f32"][0, 0] = np.float32(999.0)
+
+    binding = pytest.importorskip("msl_binding")
+    input_stride = int(binding.sizes()["input"])
+    prev_inp = _mk_input_bytes(1, input_stride)
+    inp = _mk_input_bytes(1, input_stride)
+    inp_view = inp.view(INPUT_DTYPE).reshape((1,))
+    inp_view["p"]["main_y"][0, 0] = np.int8(80)
+
+    out = _step_once(seed, prev_inp, inp)
+    assert int(out["action_id"][0]) == ACT_FX_SPECIAL_AIR_HI
+    assert int(out["on_ground"][0]) == 0
+    assert abs(float(out["speed_air_x_self"][0])) <= 1e-5
+    assert abs(float(out["speed_y_self"][0]) - _fox_attr("firefox_launch_speed")) <= 1e-4
