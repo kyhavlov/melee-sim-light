@@ -172,6 +172,42 @@ static inline uint8_t escape_try_enter_spotdodge_from_guard_y(MslBatch* batch,
   return 1;
 }
 
+static inline uint8_t escape_guard_wants_spotdodge(MslBatch* batch, const MslCommonParams* c,
+                                                   size_t idx) {
+  if (batch == NULL || c == NULL) {
+    return 0;
+  }
+  const float stick_y =
+      apply_deadzone(stick_i8_to_unit(batch->state.input_main_y[idx]), c->lstick_deadzone_y);
+  const float cstick_y =
+      apply_deadzone(stick_i8_to_unit(batch->state.input_c_y[idx]), c->lstick_deadzone_y);
+  const uint8_t tilt_timer_y = batch->state.tilt_timer_y[idx];
+  return ((stick_y <= c->spotdodge_stick_y_threshold &&
+           tilt_timer_y < c->spotdodge_flick_tilt_max_frames) ||
+          (cstick_y <= c->spotdodge_stick_y_threshold))
+             ? 1u
+             : 0u;
+}
+
+static inline uint8_t guard_entry_via_wait_callback_from_current_row(const MslBatch* batch,
+                                                                     size_t idx) {
+  if (batch == NULL) {
+    return 0u;
+  }
+  const uint16_t a0 = batch->state.action_id[idx];
+  const uint16_t prev = batch->state.prev_action_id[idx];
+  // GuardOn can be entered after another state anim callback first promotes into Wait on the same
+  // frame, then Wait_IASA consumes held shield. The next replay-visible GuardOn row is a frozen
+  // snapshot, so preserve just the fact that entry came through that callback bridge.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Escape.c::ftCo_EscapeN_Anim
+  // refs/melee/src/melee/ft/chara/ftCommon/{ftCo_AttackS3.c,ftCo_AttackHi3.c,ftCo_AttackS4.c,ftCo_AttackHi4.c,ftCo_AttackLw4.c}
+  if (a0 == (uint16_t)MSL_ACT_WAIT && prev != (uint16_t)MSL_ACT_WAIT) {
+    return 1u;
+  }
+  return 0u;
+}
+
 static inline uint8_t escape_try_enter_spotdodge_from_guard(MslBatch* batch,
                                                             const MslCommonParams* c, size_t idx) {
   if (batch == NULL || c == NULL) {
@@ -430,7 +466,8 @@ static inline void enter_guard_reflect_from_locomotion(MslBatch* batch, const Ms
                          msl_f32_from_q16_16(batch->state.frame_speed_mul_fp_q16_16[idx]));
 }
 
-static inline void enter_guard_on(MslBatch* batch, const MslCommonParams* c, size_t idx) {
+static inline void enter_guard_on(MslBatch* batch, const MslCommonParams* c, size_t idx,
+                                  uint8_t entered_via_wait_callback) {
   // Decomp entry: ftCo_80091A4C -> ftCo_800923B4 -> ftCo_800924C0.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c:66-69 and :313-327.
   batch->state.action_id[idx] = (uint16_t)MSL_ACT_GUARD_ON;
@@ -458,6 +495,7 @@ static inline void enter_guard_on(MslBatch* batch, const MslCommonParams* c, siz
   batch->state.state_flags[flags_i] &= (uint8_t) ~(
       uint8_t)(MSL_STATE_FLAG_221C_B3 | MSL_STATE_FLAG_221C_B1 | MSL_STATE_FLAG_221C_B2);
   batch->state.guard_on_entered_this_frame[idx] = 1u;
+  batch->state.guard_entry_via_wait_callback[idx] = entered_via_wait_callback ? 1u : 0u;
   batch->state.guard_release_latched_xc[idx] = 0;
   batch->state.guard_x10[idx] = guard_x10_init_u8(c);
   batch->state.lightshield_amount[idx] = 0.0f;
@@ -841,6 +879,7 @@ void guard_update_grounded(MslBatch* batch, const MslCommonParams* c, size_t idx
     batch->state.guard_release_latched_xc[idx] = 0;
     batch->state.guard_x10[idx] = 0;
     batch->state.lightshield_amount[idx] = 0.0f;
+    batch->state.guard_entry_via_wait_callback[idx] = 0u;
   }
 
   const float trig = msl_trigger_unit_from_input(
@@ -977,6 +1016,16 @@ void guard_update_grounded(MslBatch* batch, const MslCommonParams* c, size_t idx
              batch->state.action_frame[idx] < 0)
                 ? 1u
                 : 0u;
+        const uint8_t guard_exit_to_guard_off_pending =
+            (!guard_setoff_carry_snapshot && batch->state.guard_release_latched_xc[idx] &&
+             x10_pre == 0)
+                ? 1u
+                : 0u;
+        const uint8_t guard_snapshot_spotdodge_pending =
+            (guard_no_submotion_snapshot && batch->state.guard_entry_via_wait_callback[idx] &&
+             !guard_exit_to_guard_off_pending && escape_guard_wants_spotdodge(batch, c, idx))
+                ? 1u
+                : 0u;
         const uint8_t guard_snapshot_refresh_drain_split =
             (guard_no_submotion_snapshot && trig > c->trigger_deadzone) ? 1u : 0u;
         // Decomp timing note:
@@ -993,7 +1042,15 @@ void guard_update_grounded(MslBatch* batch, const MslCommonParams* c, size_t idx
         //   ftCo_800921DC,ftCo_800925A4,ftCo_GuardOn_Anim,ftCo_Guard_Anim,ftCo_GuardOn_IASA,ftCo_Guard_IASA
         // }
         // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c::ftCo_800CB024
-        if (guard_snapshot_refresh_drain_split) {
+        // Runtime-only distinction: when a frozen GuardOn snapshot came from a same-frame
+        // `... -> Wait -> GuardOn` callback handoff and immediately spotdodges, vanilla keeps
+        // shield HP unchanged on the first EscapeN frame. Preserve that by skipping the GuardOn
+        // drain on just that handoff family.
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_800924C0,ftCo_800925A4,ftCo_GuardOn_IASA}
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Escape.c::ftCo_8009980C
+        if (guard_snapshot_spotdodge_pending) {
+          // no-op
+        } else if (guard_snapshot_refresh_drain_split) {
           apply_shield_hold_drain_preserve_drain_refresh_store(batch, c, idx, trig);
         } else {
           apply_shield_hold_drain(batch, c, idx, trig, guard_jump_pending);
@@ -1191,7 +1248,7 @@ void guard_update_grounded(MslBatch* batch, const MslCommonParams* c, size_t idx
   }
 
   if (shield_held_inputs && batch->state.shield_hp[idx] > 0.0f) {
-    enter_guard_on(batch, c, idx);
+    enter_guard_on(batch, c, idx, guard_entry_via_wait_callback_from_current_row(batch, idx));
     {
       // Initialize lightshield_amount from the current trigger input (decomp updates this on entry
       // via ftCo_800921DC and then per-frame via ftCo_800925A4).

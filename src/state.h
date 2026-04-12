@@ -293,6 +293,10 @@ typedef struct MslStateSoA {
   // projectile shield precedence can distinguish same-step GuardOn entry from teacher-forced
   // frozen GuardOn seeds that merely replay as `animation_index==-1, action_frame==-1`.
   uint8_t* guard_on_entered_this_frame;
+  // Runtime-only owner bit for GuardOn entered through a same-frame `... -> Wait -> GuardOn`
+  // callback handoff. This survives the following frozen GuardOn snapshot row, where
+  // prev_action_id no longer identifies the callback source.
+  uint8_t* guard_entry_via_wait_callback;
   // GuardReflect reflect timer (decomp: mv.co.guard.x14; seed uses +1 bias, expires at 0).
   uint8_t* guard_reflect_timer_x14;  // [batch * players]
   // GuardReflect powershield-active timer (decomp: mv.co.guard.x18; +1 bias, expires at 0).

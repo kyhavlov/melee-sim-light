@@ -36,6 +36,7 @@ ACT_LANDING_FALL_SPECIAL = 0x002B
 ACT_GUARD_ON = 0x00B2
 ACT_GUARD = 0x00B3
 ACT_GUARD_OFF = 0x00B4
+ACT_ESCAPE_N = 0x00EB
 ACT_CATCH = 0x00D4
 ACT_FX_SPECIAL_N_START = 0x0155
 ACT_ATTACK_AIR_N = 0x0041
@@ -1124,6 +1125,68 @@ def test_guardon_snapshot_preserves_lightshield_drain_on_seed43_prefix_row() -> 
     assert int(out_132["action_id"][1]) == ACT_GUARD_OFF
     assert int(out_132["action_frame"][1]) == 0
     assert float(out_132["shield_hp"][1]) == pytest.approx(59.56161117553711, abs=0.001)
+
+
+def test_guardon_snapshot_spotdodge_handoff_keeps_shield_hp_on_seed44_prefix_row() -> None:
+    import json
+
+    import msl_binding
+
+    from tools.modelplay.sim_env import CHAR_FOX, build_match_config_array
+
+    fixture_path = Path("tests/fixtures/modelplay/puffer_5b_selfplay_60s_seed44_prefix_0_191.json")
+    fixture = json.loads(fixture_path.read_text(encoding="utf-8"))
+    frames = fixture["frames"]
+
+    sizes = msl_binding.sizes()
+    compare_stride = int(sizes["compare"])
+    input_stride = int(sizes["input"])
+
+    config = build_match_config_array(
+        num_players=2,
+        char_ids=(CHAR_FOX, CHAR_FOX),
+        facing=(1, 0),
+        stocks=4,
+    )
+    config_bytes = config.view(np.uint8).reshape((1, -1))
+    out_cmp = np.zeros((1, compare_stride), dtype=np.uint8)
+
+    handle = msl_binding.init(batch_size=1, num_players=2)
+    try:
+        msl_binding.init_match(handle, config_bytes)
+        prev_in = _input_bytes_from_modelplay_prefix_frame(frames[0], input_stride)
+        history: dict[int, np.ndarray] = {}
+        for frame_i in range(1, len(frames)):
+            cur_in = _input_bytes_from_modelplay_prefix_frame(frames[frame_i], input_stride)
+            msl_binding.step_input(handle, prev_in, cur_in)
+            msl_binding.write_compare(handle, out_cmp)
+            history[frame_i] = out_cmp.view(COMPARE_DTYPE).reshape((1,))[0].copy()
+            prev_in = cur_in
+    finally:
+        msl_binding.destroy(handle)
+
+    out_166 = history[166]
+    out_167 = history[167]
+    out_168 = history[168]
+    out_189 = history[189]
+    out_190 = history[190]
+    out_191 = history[191]
+    assert int(out_166["action_id"][1]) == ACT_GUARD_ON
+    assert float(out_166["shield_hp"][1]) == pytest.approx(60.0, abs=0.001)
+    assert int(out_167["action_id"][1]) == ACT_ESCAPE_N
+    assert int(out_167["action_frame"][1]) == 1
+    assert float(out_167["shield_hp"][1]) == pytest.approx(60.0, abs=0.001)
+    assert int(out_168["action_id"][1]) == ACT_ESCAPE_N
+    assert int(out_168["action_frame"][1]) == 2
+    assert float(out_168["shield_hp"][1]) == pytest.approx(60.0, abs=0.001)
+    assert int(out_189["action_id"][1]) == ACT_GUARD_ON
+    assert float(out_189["shield_hp"][1]) == pytest.approx(60.0, abs=0.001)
+    assert int(out_190["action_id"][1]) == ACT_ESCAPE_N
+    assert int(out_190["action_frame"][1]) == 1
+    assert float(out_190["shield_hp"][1]) == pytest.approx(60.0, abs=0.001)
+    assert int(out_191["action_id"][1]) == ACT_ESCAPE_N
+    assert int(out_191["action_frame"][1]) == 2
+    assert float(out_191["shield_hp"][1]) == pytest.approx(60.0, abs=0.001)
 
 
 def test_wait_attackhi4_beats_guardon_on_up_smash_edge() -> None:
