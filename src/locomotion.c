@@ -1998,9 +1998,12 @@ void locomotion_update_pre(MslBatch* batch) {
         // refs/melee/src/melee/ft/chara/ftCommon/ftCo_SquatRv.c::ftCo_SquatRv_IASA
         if (action_id == MSL_ACT_SQUAT || action_id == MSL_ACT_SQUAT_WAIT ||
             action_id == MSL_ACT_SQUAT_RV) {
-          if (grounded_a_attack_try_enter_from_iasa(batch, c, idx, buttons_pressed, stick_x,
-                                                    stick_y, tilt_timer_x, tilt_timer_y, facing_dir,
-                                                    0, 1)) {
+          if (action_id == MSL_ACT_SQUAT &&
+              blaster_try_enter_ground_from_wait_iasa(batch, c, idx)) {
+            action_id = batch->state.action_id[idx];
+          } else if (grounded_a_attack_try_enter_from_iasa(batch, c, idx, buttons_pressed, stick_x,
+                                                           stick_y, tilt_timer_x, tilt_timer_y,
+                                                           facing_dir, 0, 1)) {
             action_id = batch->state.action_id[idx];
           } else {
             const uint16_t action_before_guard = batch->state.action_id[idx];

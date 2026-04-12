@@ -340,8 +340,11 @@ uint8_t blaster_try_enter_ground_from_wait_iasa(MslBatch* batch, const MslCommon
     return 0u;
   }
   const uint8_t cid = batch->state.char_id[idx];
-  if (!is_fox_falco(cid) || !batch->state.on_ground[idx] ||
-      batch->state.action_id[idx] != (uint16_t)MSL_ACT_WAIT) {
+  if (!is_fox_falco(cid) || !batch->state.on_ground[idx]) {
+    return 0u;
+  }
+  const uint16_t action_id = batch->state.action_id[idx];
+  if (action_id != (uint16_t)MSL_ACT_WAIT && action_id != (uint16_t)MSL_ACT_SQUAT) {
     return 0u;
   }
   const uint16_t pressed = batch->state.input_buttons_pressed[idx];
