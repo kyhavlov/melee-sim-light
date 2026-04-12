@@ -429,6 +429,9 @@ static int load_one(const char* data_dir, const char* rel_path, uint8_t char_id)
       json_get_f32(buf, "ledge_jump_horizontal_velocity", &out.ledge_jump_horizontal_velocity) !=
           0 ||
       json_get_f32(buf, "ledge_jump_vertical_velocity", &out.ledge_jump_vertical_velocity) != 0 ||
+      json_get_f32(buf, "passivewall_vel_x", &out.passivewall_vel_x) != 0 ||
+      json_get_f32(buf, "wall_jump_horizontal_velocity", &out.wall_jump_horizontal_velocity) != 0 ||
+      json_get_f32(buf, "wall_jump_vertical_velocity", &out.wall_jump_vertical_velocity) != 0 ||
       json_get_f32(buf, "ecb_side_y_offset", &out.ecb_side_y_offset) != 0 ||
       json_get_f32(buf, "ledge_snap_x", &out.ledge_snap_x) != 0 ||
       json_get_f32(buf, "ledge_snap_y", &out.ledge_snap_y) != 0 ||

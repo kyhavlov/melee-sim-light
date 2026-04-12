@@ -36,6 +36,7 @@ def test_seed_schema_includes_staling_fields() -> None:
     assert "camera_target_world_z_f32" in SEED_DTYPE.fields
     assert "camera_box_radius_f32" in SEED_DTYPE.fields
     assert "camera_target_point_inside_stage_cam_bounds_u8" in SEED_DTYPE.fields
+    assert "passivewall_timer" in SEED_DTYPE.fields
     # Damage KB stacking window (fp->dmg.x18AC_time_since_hit).
     assert "damage_time_since_hit_x18ac" in SEED_DTYPE.fields
     # Side-B hidden ghost ring lanes for end-to-end Illusion/Phantasm ownership.

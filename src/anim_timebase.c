@@ -289,15 +289,25 @@ void anim_timebase_update_pre_input(MslBatch* batch) {
       const int16_t action_frame_pre = batch->state.action_frame[idx];
       const MslCharParams* ch = msl_char_params(batch->state.char_id[idx]);
 
-      // PassiveWallJump entry hold:
-      // - PassiveWall_Anim enters ftCo_MS_PassiveWallJump through inlineA0 using
-      //   Fighter_ChangeMotionState(..., anim_start=fp->cur_anim_frame, anim_speed=1.0f).
-      // - That entry path does not issue a local ftAnim_8006EBA4 tick in the same callback.
-      // - Replay rows in the suite keep PassiveWallJump on action_frame==0 for the first post-entry
-      //   frame before the steady animation advance begins.
-      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_PassiveWall.c::{inlineA0,ftCo_PassiveWall_Anim}
-      if (a == (uint16_t)MSL_ACT_PASSIVE_WALL_JUMP && action_frame_pre == 0) {
+      // PassiveWall / PassiveWallJump startup hold:
+      // - ftCo_800C1E64 seeds `fp->mv.co.passivewall.timer = p_ftCommonData->x760`.
+      // - ftCo_PassiveWall_Anim decrements that hidden timer each non-hitlag frame and keeps the
+      //   animation frozen until it reaches 0, at which point motion/anim advance begins.
+      // - Replay-visible action_frame stays at 0 through the frozen startup, so action_frame alone
+      //   cannot distinguish "still held" from "ready to launch".
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_PassiveWall.c::{ftCo_800C1E64,ftCo_PassiveWall_Anim}
+      if ((a == (uint16_t)MSL_ACT_PASSIVE_WALL || a == (uint16_t)MSL_ACT_PASSIVE_WALL_JUMP) &&
+          batch->state.passivewall_timer[idx] != 0u) {
         batch->state.frame_speed_mul_fp_q16_16[idx] = 0;
+      } else if ((a == (uint16_t)MSL_ACT_PASSIVE_WALL ||
+                  a == (uint16_t)MSL_ACT_PASSIVE_WALL_JUMP) &&
+                 action_frame_pre == 0) {
+        // First post-hold PassiveWall frame:
+        // - when ftCo_PassiveWall_Anim decrements timer->0, it either calls inlineA0
+        //   (ChangeMotionState(..., anim_speed=1)) or ftAnim_SetAnimRate(gobj, 1).
+        // - the next seeded timer==0 / action_frame==0 snapshot therefore advances at rate 1.
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_PassiveWall.c::{inlineA0,ftCo_PassiveWall_Anim}
+        batch->state.frame_speed_mul_fp_q16_16[idx] = MSL_Q16_16_ONE;
       }
 
       // Decomp: Walk Anim callback (ftCo_Walk_Anim -> ftWalkCommon_800DFDDC) updates anim rate

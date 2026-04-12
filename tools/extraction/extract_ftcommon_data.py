@@ -126,6 +126,9 @@ def main() -> None:
         # - decremented and used for clearing attacker combo victim (fp->x2094):
         #   refs/melee/src/melee/ft/ftcoll.c::ftColl_800764DC
         "combo_timer_post_hitstun_frames": int(max(0, _i32_be(buf, ft_common_abs + 0x4CC))),
+        # PassiveWall / PassiveWallJump startup timer (`fp->mv.co.passivewall.timer`).
+        # refs/melee/src/melee/ft/chara/ftCommon/ftCo_PassiveWall.c::{ftCo_800C1D38,ftCo_800C1E64}
+        "passivewall_timer_frames": int(max(0, _i32_be(buf, ft_common_abs + 0x760))),
         # PassiveWall / PassiveWallJump entry hurt-status ownership (ftCo_PassiveWall.c).
         # - ftCo_800C1E64 calls ftColl_8007B760(..., x764) on entry.
         # refs/melee/src/melee/ft/chara/ftCommon/ftCo_PassiveWall.c::ftCo_800C1E64

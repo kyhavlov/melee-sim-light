@@ -16,6 +16,7 @@
 #include "input_axis.h"
 #include "jump_input.h"
 #include "locomotion.h"
+#include "mpcoll_ecb_points.h"
 #include "msl_math.h"
 #include "stage_collision.h"
 #include "state_flags.h"
@@ -55,6 +56,9 @@ static inline uint8_t is_passive_stand(uint16_t a) {
 static inline uint8_t is_knockdown_any(uint16_t a) {
   return (is_down_any(a) || is_passive(a) || is_passive_stand(a)) ? 1u : 0u;
 }
+static inline uint8_t is_passivewall_action(uint16_t a);
+static inline void passivewall_launch_from_timer_expiry(MslBatch* batch, const MslCharParams* ch,
+                                                        size_t idx);
 
 static inline uint16_t down_wait_action_from_bound(uint16_t bound_act) {
   return (bound_act == (uint16_t)MSL_ACT_DOWN_BOUND_U) ? (uint16_t)MSL_ACT_DOWN_WAIT_U
@@ -893,6 +897,7 @@ void knockdown_update_pre_physics(MslBatch* batch) {
     for (int p = 0; p < num_players; p++) {
       const size_t idx = msl_idx_player(bi, p);
       const uint16_t a0 = batch->state.action_id[idx];
+      const uint8_t passivewall = is_passivewall_action(a0);
       const uint8_t damage_fly = is_damage_fly_action(a0);
       const uint8_t damage_air = is_damage_air_action(a0);
       const uint8_t damage_ground = is_damage_ground_action(a0);
@@ -900,7 +905,7 @@ void knockdown_update_pre_physics(MslBatch* batch) {
           (uint8_t)((damage_air != 0u || damage_ground != 0u) && batch->state.on_ground[idx] == 0u);
       const uint8_t common_damage_grounded =
           (uint8_t)((damage_air != 0u || damage_ground != 0u) && batch->state.on_ground[idx] != 0u);
-      if (!is_knockdown_any(a0) && !damage_fly && !damage_air && !damage_ground) {
+      if (!is_knockdown_any(a0) && !passivewall && !damage_fly && !damage_air && !damage_ground) {
         continue;
       }
       const MslCharParams* ch = msl_char_params(batch->state.char_id[idx]);
@@ -919,6 +924,21 @@ void knockdown_update_pre_physics(MslBatch* batch) {
 
       const uint8_t cid = batch->state.char_id[idx];
       const float anim_frame = batch->state.anim_frame_f32[idx];
+
+      if (passivewall) {
+        batch->state.animation_index[idx] =
+            (uint32_t)((a0 == (uint16_t)MSL_ACT_PASSIVE_WALL) ? MSL_SM_PASSIVE_WALL
+                                                              : MSL_SM_PASSIVE_WALL_JUMP);
+        uint8_t timer = batch->state.passivewall_timer[idx];
+        if (timer != 0u) {
+          timer = (uint8_t)(timer - 1u);
+          batch->state.passivewall_timer[idx] = timer;
+          if (timer == 0u) {
+            passivewall_launch_from_timer_expiry(batch, ch, idx);
+          }
+        }
+        continue;
+      }
 
       if (damage_fly) {
         const uint32_t damage_msid_u32 = submotion_for_damage_action(a0);
@@ -1521,6 +1541,63 @@ static inline uint8_t passivewall_prefers_jump(const MslBatch* batch, const MslC
              : 0u;
 }
 
+static inline uint8_t is_passivewall_action(uint16_t a) {
+  return (a == (uint16_t)MSL_ACT_PASSIVE_WALL || a == (uint16_t)MSL_ACT_PASSIVE_WALL_JUMP) ? 1u
+                                                                                           : 0u;
+}
+
+static inline void passivewall_align_entry_x(MslBatch* batch, size_t idx, uint16_t target_msid) {
+  if (batch == NULL) {
+    return;
+  }
+  const uint8_t cid = batch->state.char_id[idx];
+  const uint32_t cur_anim = batch->state.animation_index[idx];
+  if (cur_anim > 0xFFFFu) {
+    return;
+  }
+
+  const uint16_t ecb_frame = msl_ecb_frame_u16_from_anim_frame(batch->state.anim_frame_f32[idx]);
+  const uint8_t fd = batch->state.facing[idx] ? 1u : 0u;
+  MslEcbWorldPoints ecb = {0};
+  msl_ecb_world_points_sample(&ecb, cid, (uint16_t)cur_anim, ecb_frame, fd, batch->state.pos_x[idx],
+                              batch->state.pos_y[idx], 0u);
+
+  float transn[3] = {0.0f, 0.0f, 0.0f};
+  if (anim_pose_get_transn(cid, target_msid, 0u, transn) != 0) {
+    transn[2] = 0.0f;
+  }
+
+  const uint32_t env = batch->state.coll_env_flags[idx];
+  const float facing_dir = batch->state.facing[idx] ? 1.0f : -1.0f;
+  if ((env & (uint32_t)MSL_COLLIDE_RIGHT_WALL_HUG) != 0u) {
+    batch->state.pos_x[idx] = ecb.left_x + transn[2] * facing_dir;
+  } else if ((env & (uint32_t)MSL_COLLIDE_LEFT_WALL_HUG) != 0u) {
+    batch->state.pos_x[idx] = ecb.right_x + transn[2] * facing_dir;
+  }
+}
+
+static inline void passivewall_launch_from_timer_expiry(MslBatch* batch, const MslCharParams* ch,
+                                                        size_t idx) {
+  if (batch == NULL || ch == NULL) {
+    return;
+  }
+  const uint16_t a = batch->state.action_id[idx];
+  const float facing_dir = batch->state.facing[idx] ? 1.0f : -1.0f;
+  if (a == (uint16_t)MSL_ACT_PASSIVE_WALL_JUMP) {
+    float vx = ch->wall_jump_horizontal_velocity;
+    float vy = ch->wall_jump_vertical_velocity;
+    // Decomp owner:
+    // - ftCo_PassiveWall_Anim writes launch from
+    //   fp->co_attrs.{wall_jump_horizontal_velocity,wall_jump_vertical_velocity}.
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_PassiveWall.c::ftCo_PassiveWall_Anim
+    // refs/melee/src/melee/ft/types.h::ftCo_DatAttrs (+0x104/+0x108, fighter fp+0x214/+0x218)
+    batch->state.speed_air_x_self[idx] = facing_dir * vx;
+    batch->state.speed_y_self[idx] = vy;
+  } else if (a == (uint16_t)MSL_ACT_PASSIVE_WALL) {
+    batch->state.speed_air_x_self[idx] = facing_dir * ch->passivewall_vel_x;
+  }
+}
+
 static inline void enter_passive_walljump_from_damage_air(MslBatch* batch, size_t idx,
                                                           uint16_t prev_action_id) {
   const MslCommonParams* c = msl_common_params();
@@ -1545,6 +1622,9 @@ static inline void enter_passive_walljump_from_damage_air(MslBatch* batch, size_
   batch->state.hitstun[idx] = 0u;
   batch->state.speed_air_x_self[idx] = 0.0f;
   batch->state.speed_y_self[idx] = 0.0f;
+  batch->state.passivewall_timer[idx] = (uint8_t)c->passivewall_timer_frames;
+  batch->state.tilt_timer_x[idx] = 0xFEu;
+  batch->state.tilt_timer_y[idx] = 0xFEu;
   batch->state.colanim_timer_x1990[idx] = c->colanim_passivewall_x1990_frames;
   batch->state.colanim_hit_status_x198c[idx] = 2u;
   batch->state.hurtbox_state[idx] = 2u;
@@ -1553,6 +1633,7 @@ static inline void enter_passive_walljump_from_damage_air(MslBatch* batch, size_
   } else if ((env & (uint32_t)MSL_COLLIDE_LEFT_WALL_HUG) != 0u) {
     batch->state.facing[idx] = 0u;
   }
+  passivewall_align_entry_x(batch, idx, (uint16_t)MSL_SM_PASSIVE_WALL_JUMP);
   enum { MSL_STATE_FLAGS_221C_INDEX = 3 };
   enum { MSL_STATE_FLAG_221C_IS_HITSTUN = 0x02 };
   const size_t flags_i = idx * (size_t)MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_221C_INDEX;

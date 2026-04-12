@@ -504,6 +504,13 @@ static inline uint8_t physics_action_is_common_damage(uint16_t action_id) {
   }
 }
 
+static inline uint8_t physics_action_is_passivewall(uint16_t action_id) {
+  return (action_id == (uint16_t)MSL_ACT_PASSIVE_WALL ||
+          action_id == (uint16_t)MSL_ACT_PASSIVE_WALL_JUMP)
+             ? 1u
+             : 0u;
+}
+
 static inline uint8_t physics_damage_iasa_lockout_x221c_b6(const MslBatch* batch, size_t idx) {
   if (batch == NULL) {
     return 0u;
@@ -1049,6 +1056,7 @@ void physics_integrate(MslBatch* batch) {
       const uint16_t action_id = batch->state.action_id[idx];
       const float vy_self_pre = batch->state.speed_y_self[idx];
       const int16_t action_frame = batch->state.action_frame[idx];
+      const uint8_t is_passivewall = physics_action_is_passivewall(action_id);
       const uint8_t is_damage_fly = physics_action_is_damage_fly(action_id);
       const uint8_t is_common_damage = physics_action_is_common_damage(action_id);
       const uint8_t damage_iasa_lockout = (is_damage_fly || is_common_damage)
@@ -1143,6 +1151,31 @@ void physics_integrate(MslBatch* batch) {
                 physics_apply_specialhi_hold_air(phys, action_frame,
                                                  &batch->state.speed_air_x_self[idx],
                                                  &batch->state.speed_y_self[idx]);
+              }
+            } else if (is_passivewall && batch->state.passivewall_timer[idx] == 0u) {
+              // PassiveWall steady Phys:
+              // - once timer reaches 0, PassiveWall_Anim has already written the launch velocity
+              //   for PassiveWallJump (or horizontal push for PassiveWall), and the same step then
+              //   runs PassiveWall_Phys: fastfall/fall + pure aerial friction (target_vel=0).
+              // refs/melee/src/melee/ft/chara/ftCommon/ftCo_PassiveWall.c::ftCo_PassiveWall_Phys
+              // refs/melee/src/melee/ft/chara/ftCommon/ftCo_PassiveWall.c::ftCo_PassiveWall_Anim
+              const MslCharParams* phys = msl_char_params(batch->state.char_id[idx]);
+              if (phys != NULL) {
+                const float stick_y = apply_deadzone(
+                    stick_i8_to_unit(batch->state.input_main_y[idx]), c->lstick_deadzone_y);
+                (void)ftCommon_CheckFallFast(c, stick_y, vy_self_pre, &batch->state.fall_fast[idx],
+                                             &batch->state.tilt_timer_y[idx]);
+                if (batch->state.fall_fast[idx]) {
+                  batch->state.speed_y_self[idx] = -phys->fast_fall_velocity;
+                } else {
+                  float next_vy = vy_self_pre - phys->grav;
+                  if (next_vy < -phys->terminal_vel) {
+                    next_vy = -phys->terminal_vel;
+                  }
+                  batch->state.speed_y_self[idx] = next_vy;
+                }
+                batch->state.speed_air_x_self[idx] = air_apply_friction_step(
+                    batch->state.speed_air_x_self[idx], phys->aerial_friction);
               }
             } else if (damage_iasa_lockout) {
               // DamageFly/DamageFlyRoll/common Damage x221C_b6 path (`ft_80084EEC`): apply

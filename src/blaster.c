@@ -139,6 +139,7 @@ static inline uint8_t action_allows_special_entry_air(uint16_t action_id) {
     case MSL_ACT_FALL_AERIAL_F:
     case MSL_ACT_FALL_AERIAL_B:
     case MSL_ACT_DAMAGE_FALL:
+    case MSL_ACT_PASSIVE_WALL:
     case MSL_ACT_PASSIVE_WALL_JUMP:
       return 1u;
     default:
@@ -466,7 +467,11 @@ void blaster_update_pre_physics(MslBatch* batch) {
           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DamageFall.c::ftCo_DamageFall_IASA
           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_SpecialAir.c::ftCo_SpecialAir_CheckInput
           if (action_allows_special_entry_air(a)) {
-            allow = 1u;
+            allow = ((a == (uint16_t)MSL_ACT_PASSIVE_WALL ||
+                      a == (uint16_t)MSL_ACT_PASSIVE_WALL_JUMP) &&
+                     batch->state.passivewall_timer[idx] != 0u)
+                        ? 0u
+                        : 1u;
           }
         }
         if (allow) {

@@ -212,6 +212,9 @@ SEED_DTYPE = np.dtype(
         # data/stages/final_destination.json: cam_bounds_world
         ("camera_target_point_inside_stage_cam_bounds_u8", _arr("u1", MAX_PLAYERS)),
         ("downwait_timer", _arr("<i2", MAX_PLAYERS)),
+        # PassiveWall / PassiveWallJump hidden startup timer (`fp->mv.co.passivewall.timer`).
+        # refs/melee/src/melee/ft/chara/ftCommon/ftCo_PassiveWall.c::{ftCo_800C1E64,ftCo_PassiveWall_Anim}
+        ("passivewall_timer", _arr("u1", MAX_PLAYERS)),
         ("anim_frame_f32", _arr("<f4", MAX_PLAYERS)),
         ("frame_speed_mul_f32", _arr("<f4", MAX_PLAYERS)),
         # Walk callback source velocity lane (`mv_x0` consumed by ftWalkCommon_800DFDDC).

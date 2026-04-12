@@ -492,6 +492,9 @@ typedef struct MslSeed {
   // Slippi post-frame does not expose fp->mv.* unions, so tooling derives this strictly causally
   // from the post-frame action_id sequence.
   int16_t downwait_timer[MSL_MAX_PLAYERS];
+  // PassiveWall / PassiveWallJump hidden startup timer (`fp->mv.co.passivewall.timer`).
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_PassiveWall.c::{ftCo_800C1E64,ftCo_PassiveWall_Anim}
+  uint8_t passivewall_timer[MSL_MAX_PLAYERS];
   // Decomp-shaped animation/script timebase: fp->cur_anim_frame (float).
   // Slippi post-frame exposes this as `state_age` (float, can be fractional).
   //

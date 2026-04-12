@@ -239,6 +239,12 @@ def _extract_ftco_dattrs(pl_dat: Path, *, ftdata_symbol: str, extract_fox_blaste
 
         "ledge_jump_horizontal_velocity": f(0xA8),
         "ledge_jump_vertical_velocity": f(0xAC),
+        # ft/types.h::ftCo_DatAttrs stores these at struct offsets +0x100/+0x104/+0x108.
+        # The adjacent decomp comments also list fighter-relative offsets fp+0x210/+0x214/+0x218;
+        # use the struct offsets here because `attrs_abs` already points at `ftData->x0`.
+        "passivewall_vel_x": f(0x100),
+        "wall_jump_horizontal_velocity": f(0x104),
+        "wall_jump_vertical_velocity": f(0x108),
 
         # Ledge snap parameters: ftData_x44_t (ft/types.h)
         # struct ftData { ... ftData_x44_t* x44; }
@@ -525,6 +531,9 @@ def _stable_update(existing: dict, extracted: dict) -> dict:
         "landing_airlw_lag_frames",
         "ledge_jump_horizontal_velocity",
         "ledge_jump_vertical_velocity",
+        "passivewall_vel_x",
+        "wall_jump_horizontal_velocity",
+        "wall_jump_vertical_velocity",
         "camera_zoom_target_bone_part_id",
         "camera_zoom_target_offset",
         "camera_box_radius",

@@ -300,6 +300,49 @@ def _derive_match_flow_timer(*, action_id_u16: np.ndarray, port0: int, common: d
     return out
 
 
+def _derive_passivewall_timer(*, action_id_u16: np.ndarray, action_frame_i16: np.ndarray, common: dict) -> np.ndarray:
+    """
+    Derive `fp->mv.co.passivewall.timer` for PassiveWall / PassiveWallJump rows.
+
+    Decomp:
+    - ftCo_800C1E64 seeds `mv.co.passivewall.timer = p_ftCommonData->x760`.
+    - ftCo_PassiveWall_Anim decrements it once per non-hitlag frame and keeps animation frozen
+      while the timer is nonzero.
+    - Replay-visible action_frame stays at 0 across the frozen startup, so action_frame alone is
+      insufficient to distinguish "still held" from "ready to launch".
+    refs/melee/src/melee/ft/chara/ftCommon/ftCo_PassiveWall.c::{ftCo_800C1E64,ftCo_PassiveWall_Anim}
+    """
+    action_id = np.asarray(action_id_u16, dtype=np.uint16).reshape(-1)
+    action_frame = np.asarray(action_frame_i16, dtype=np.int16).reshape(-1)
+    n = int(action_id.shape[0])
+    out = np.zeros(n, dtype=np.uint8)
+    total = int(common["passivewall_timer_frames"])
+    if total <= 0:
+        return out
+
+    prev_ai: int | None = None
+    run_len = 0
+    for i in range(n):
+        ai = int(action_id[i])
+        if ai not in (202, 203) or int(action_frame[i]) != 0:
+            prev_ai = ai
+            run_len = 0
+            continue
+        if prev_ai == ai:
+            run_len += 1
+        else:
+            prev_ai = ai
+            run_len = 1
+        timer = total - run_len + 1
+        if timer < 0:
+            timer = 0
+        if timer > 255:
+            timer = 255
+        out[i] = np.uint8(timer)
+
+    return out
+
+
 def _derive_entry_end_fall_lock(
     *, action_id_u16: np.ndarray, on_ground_u8: np.ndarray, act_entry_end: int = 0x0144, act_fall: int = 0x001D
 ) -> np.ndarray:
@@ -2468,6 +2511,11 @@ def _main_impl(args) -> None:
             down_wait_frames=int(common["down_wait_frames"]),
             act_down_wait_u=act_down_wait_u,
             act_down_wait_d=act_down_wait_d,
+        )[:-1]
+        samples["seed_t"]["passivewall_timer"][:, slot] = _derive_passivewall_timer(
+            action_id_u16=post_state,
+            action_frame_i16=post_state_age,
+            common=common,
         )[:-1]
         samples["seed_t"]["anim_frame_f32"][:, slot] = post_anim_frame_f32[:-1]
 

@@ -122,6 +122,7 @@
   "pass_stick_threshold": 0.6600000262260437,
   "pass_tilt_max_frames": 6,
   "pass_vel_y": -0.5,
+  "passivewall_timer_frames": 5,
   "player_nudge_x": 0.30000001192092896,
   "player_nudge_z": 0.10000000149011612,
   "powershield_reflect_damage_mul": 0.5,

@@ -280,6 +280,7 @@ int common_params_init(void) {
                    &g_params.colanim_rebirth_fall_x1994_frames) != 0 ||
       json_get_u16(buf, "entry_start_frames", &g_params.entry_start_frames) != 0 ||
       json_get_u16(buf, "entry_end_frames", &g_params.entry_end_frames) != 0 ||
+      json_get_u16(buf, "passivewall_timer_frames", &g_params.passivewall_timer_frames) != 0 ||
       json_get_u16(buf, "colanim_passivewall_x1990_frames",
                    &g_params.colanim_passivewall_x1990_frames) != 0) {
     alloc_free(buf);

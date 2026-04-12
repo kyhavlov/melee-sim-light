@@ -34,6 +34,7 @@ from tools.slippi.seed_history import (
     derive_turn_internals,
 )
 from tools.slippi.make_dataset_from_slp import derive_illusion_ghost_pos01
+from tools.slippi.make_dataset_from_slp import _derive_passivewall_timer
 
 
 def test_compute_tilt_timer_axis_basic_sequence() -> None:
@@ -163,6 +164,21 @@ def test_derive_illusion_ghost_pos01_tracks_decomp_ring_order() -> None:
     )
     assert ghost0_y[:, 0].tolist() == pytest.approx([0.0001, 0.0001, 0.0001, 0.0001, 0.0001], abs=5e-6)
     assert ghost1_y[:, 0].tolist() == pytest.approx([0.0001, 0.0001, 0.0001, 0.0001, 0.0001], abs=5e-6)
+
+
+def test_derive_passivewall_timer_tracks_hidden_startup_hold() -> None:
+    common = {"passivewall_timer_frames": 5}
+    action = np.array([88, 203, 203, 203, 203, 203, 203, 203], dtype=np.uint16)
+    action_frame = np.array([12, 0, 0, 0, 0, 0, 1, 2], dtype=np.int16)
+
+    got = _derive_passivewall_timer(
+        action_id_u16=action,
+        action_frame_i16=action_frame,
+        common=common,
+    )
+
+    assert got.dtype == np.uint8
+    assert got.tolist() == [0, 5, 4, 3, 2, 1, 0, 0]
 
 
 def test_derive_turn_internals_is_causal_wrt_future_frames() -> None:

@@ -238,7 +238,12 @@ typedef struct MslStateSoA {
   // refs/melee/src/melee/cm/camera.c::{Camera_80030CD8,Camera_80030BBC}
   uint8_t* camera_target_point_inside_stage_cam_bounds_u8;
   int16_t* downwait_timer;  // fp->mv.co.downwait.x0 (seeded; decomp: ftCo_DownWait_Anim)
-  float* anim_frame_f32;    // decomp fp->cur_anim_frame (float; Slippi `state_age`)
+  // PassiveWall / PassiveWallJump hidden startup timer (`fp->mv.co.passivewall.timer`).
+  // Slippi post-frame keeps action_frame at 0 through the frozen wall-tech startup, so this owner
+  // must be seeded from replay history for one-step parity.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_PassiveWall.c::{ftCo_800C1E64,ftCo_PassiveWall_Anim}
+  uint8_t* passivewall_timer;
+  float* anim_frame_f32;  // decomp fp->cur_anim_frame (float; Slippi `state_age`)
   // Decomp-shaped internal animation/script timebase with deterministic fractional carry.
   // - anim_frame_fp_q16_16 mirrors fp->cur_anim_frame (float) as signed Q16.16 fixed-point.
   // - frame_speed_mul_fp_q16_16 mirrors fp->frame_speed_mul (float) as signed Q16.16 fixed-point.

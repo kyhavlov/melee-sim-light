@@ -126,6 +126,7 @@ int state_alloc(MslStateSoA* state, int batch_size) {
   state->camera_target_point_inside_stage_cam_bounds_u8 =
       (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->downwait_timer = (int16_t*)alloc_aligned_64(sizeof(int16_t) * bp);
+  state->passivewall_timer = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->anim_frame_f32 = (float*)alloc_aligned_64(sizeof(float) * bp);
   state->anim_frame_fp_q16_16 = (int32_t*)alloc_aligned_64(sizeof(int32_t) * bp);
   state->frame_speed_mul_fp_q16_16 = (int32_t*)alloc_aligned_64(sizeof(int32_t) * bp);
@@ -374,8 +375,9 @@ int state_alloc(MslStateSoA* state, int batch_size) {
       !state->camera_target_world_x_f32 || !state->camera_target_world_y_f32 ||
       !state->camera_target_world_z_f32 || !state->camera_box_radius_f32 ||
       !state->camera_target_point_inside_stage_cam_bounds_u8 || !state->downwait_timer ||
-      !state->anim_frame_f32 || !state->anim_frame_fp_q16_16 || !state->frame_speed_mul_fp_q16_16 ||
-      !state->walk_anim_source_vel || !state->capture_wait_prev_rate_fp_q16_16 ||
+      !state->passivewall_timer || !state->anim_frame_f32 || !state->anim_frame_fp_q16_16 ||
+      !state->frame_speed_mul_fp_q16_16 || !state->walk_anim_source_vel ||
+      !state->capture_wait_prev_rate_fp_q16_16 ||
       !state->capture_wait_seed_rate_snapshot_fp_q16_16 || !state->capture_wait_prev_rate_valid ||
       !state->throw_lw_prev_rate_fp_q16_16 || !state->throw_lw_prev_rate_valid ||
       !state->anim_defer_tick_once || !state->jumps_left || !state->stocks ||
@@ -568,6 +570,7 @@ void state_free(MslStateSoA* state) {
   alloc_free(state->camera_box_radius_f32);
   alloc_free(state->camera_target_point_inside_stage_cam_bounds_u8);
   alloc_free(state->downwait_timer);
+  alloc_free(state->passivewall_timer);
   alloc_free(state->anim_frame_f32);
   alloc_free(state->anim_frame_fp_q16_16);
   alloc_free(state->frame_speed_mul_fp_q16_16);
