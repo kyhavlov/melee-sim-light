@@ -32,6 +32,7 @@ ACT_ATTACK_HI4 = 0x003F
 ACT_DAMAGEFALL = 0x0026
 ACT_LANDING_FALL_SPECIAL = 0x002B
 ACT_GUARD_ON = 0x00B2
+ACT_CATCH = 0x00D4
 ACT_ATTACK_AIR_N = 0x0041
 ACT_ATTACK_AIR_B = 0x0043
 ACT_DAMAGE_AIR_2 = 0x0055
@@ -62,6 +63,7 @@ SM_ATTACK_S3_LW = 57
 SM_ATTACK_HI3 = 58
 SM_ATTACK_HI4 = 66
 SM_GUARD_ON = 37
+SM_CATCH = 242
 SM_ATTACK_AIR_N = 68
 SM_ATTACK_AIR_B = 70
 SM_DAMAGE_AIR_2 = 175
@@ -1071,6 +1073,48 @@ def test_walkslow_attackhi4_beats_guardon_on_exact_trace_inputs() -> None:
     assert int(out0["action_id"][0]) == ACT_ATTACK_HI4
     assert int(out0["action_frame"][0]) == 1
     assert int(out0["animation_index"][0]) == SM_ATTACK_HI4
+
+
+def test_attacks3lw_allow_interrupt_catch_beats_attack11_on_exact_trace_inputs() -> None:
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    input_stride = int(sizes["input"])
+
+    seed = _seed_base()
+    seed["on_ground"][0, 0] = np.uint8(1)
+    seed["action_id"][0, 0] = np.uint16(ACT_ATTACK_S3_LW)
+    seed["action_frame"][0, 0] = np.int16(26)
+    seed["anim_frame_f32"][0, 0] = np.float32(26.0)
+    seed["animation_index"][0, 0] = np.uint32(SM_ATTACK_S3_LW)
+    seed["facing"][0, 0] = np.uint8(1)  # right
+    seed["shield_hp"][0, 0] = np.float32(_common_attr("start_shield_health"))
+
+    prev_inp = _mk_input_bytes(1, input_stride)
+    inp = _mk_input_bytes(1, input_stride)
+    prev_view = prev_inp.view(INPUT_DTYPE).reshape((1,))
+    cur_view = inp.view(INPUT_DTYPE).reshape((1,))
+    # Exact frame-319 modelplay inputs on the visible AttackS3Lw anim-end row:
+    # - current row holds fresh A with partial analog trigger
+    # Decomp:
+    # - ftCo_AttackS3_Anim enters Wait on motion end.
+    # - ftCo_Wait_IASA checks ftCo_Catch_CheckInput before attacks.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackS3.c::ftCo_AttackS3_Anim
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
+    prev_view["p"]["main_x"][0, 0] = np.int8(-51)
+    prev_view["p"]["main_y"][0, 0] = np.int8(62)
+    prev_view["p"]["c_y"][0, 0] = np.int8(-80)
+    cur_view["p"]["buttons"][0, 0] = np.uint16(BUTTON_A | BUTTON_L)
+    cur_view["p"]["main_x"][0, 0] = np.int8(-40)
+    cur_view["p"]["main_y"][0, 0] = np.int8(-16)
+    cur_view["p"]["c_x"][0, 0] = np.int8(-57)
+    cur_view["p"]["c_y"][0, 0] = np.int8(-57)
+    cur_view["p"]["l"][0, 0] = np.uint8(89)
+
+    out0 = _step_once(seed, prev_inp, inp)
+    assert int(out0["action_id"][0]) == ACT_CATCH
+    assert int(out0["action_frame"][0]) == 0
+    assert int(out0["animation_index"][0]) == SM_CATCH
 
 
 def test_turn_attackhi4_beats_guardon_on_exact_trace_inputs() -> None:

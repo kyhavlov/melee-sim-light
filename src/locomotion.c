@@ -2214,12 +2214,14 @@ void locomotion_update_pre(MslBatch* batch) {
           if (action_id == (uint16_t)MSL_ACT_WAIT) {
             // Grounded attack anim-end -> Wait destination bridge:
             // - Grounded Attack* _Anim callbacks resolve to Wait on the frame the motion finishes.
-            // - Grounded Attack* _IASA delegates into ftCo_Wait_IASA when allow_interrupt is set.
-            // - The destination Wait ordering still checks grounded attacks before
-            //   ftCo_80091A4C (guard), so same-frame attack restarts must be admitted before the
-            //   shared pre-pass guard loop runs later in this frame.
+            // - The destination Wait ordering checks Catch before grounded attacks and both before
+            //   ftCo_80091A4C (guard), so same-frame Catch/attack restarts must be admitted before
+            //   the shared pre-pass guard loop runs later in this frame.
             // refs/melee/src/melee/ft/chara/ftCommon/{ftCo_Attack1.c,ftCo_AttackS3.c,ftCo_AttackHi3.c,ftCo_AttackLw3.c,ftCo_AttackS4.c,ftCo_AttackHi4.c,ftCo_AttackLw4.c,ftCo_AttackDash.c}
             // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
+            if (grab_flow_try_enter_catch_from_iasa(batch, c, idx)) {
+              continue;
+            }
             if (locomotion_grounded_a_attack_try_enter_from_wait_iasa(
                     batch, c, idx, buttons_pressed, stick_x, stick_y, tilt_timer_x, tilt_timer_y,
                     facing_dir)) {
