@@ -27,6 +27,7 @@ ACT_FALL = 0x001D
 ACT_SQUAT = 0x0027
 ACT_ATTACK_DASH = 0x0032
 ACT_ATTACK_S3_LW = 0x0037
+ACT_ATTACK_S3_HI = 0x0033
 ACT_ATTACK_HI3 = 0x0038
 ACT_ATTACK_HI4 = 0x003F
 ACT_DAMAGEFALL = 0x0026
@@ -60,6 +61,7 @@ SM_FALL = 20
 SM_SQUAT = 30
 SM_ATTACK_DASH = 52
 SM_ATTACK_S3_LW = 57
+SM_ATTACK_S3_HI = 53
 SM_ATTACK_HI3 = 58
 SM_ATTACK_HI4 = 66
 SM_GUARD_ON = 37
@@ -1115,6 +1117,49 @@ def test_attacks3lw_allow_interrupt_catch_beats_attack11_on_exact_trace_inputs()
     assert int(out0["action_id"][0]) == ACT_CATCH
     assert int(out0["action_frame"][0]) == 0
     assert int(out0["animation_index"][0]) == SM_CATCH
+
+
+def test_turn_attacks3hi_uses_decide_angle_hi_branch() -> None:
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    input_stride = int(sizes["input"])
+
+    seed = _seed_base()
+    seed["on_ground"][0, 0] = np.uint8(1)
+    seed["action_id"][0, 0] = np.uint16(ACT_TURN)
+    seed["action_frame"][0, 0] = np.int16(1)
+    seed["anim_frame_f32"][0, 0] = np.float32(1.0)
+    seed["animation_index"][0, 0] = np.uint32(SM_TURN)
+    seed["facing"][0, 0] = np.uint8(1)  # right
+    seed["turn_frames_to_turn"][0, 0] = np.uint8(1)
+    seed["turn_has_turned"][0, 0] = np.uint8(0)
+    seed["tilt_timer_x"][0, 0] = np.uint8(10)
+
+    prev_inp = _mk_input_bytes(1, input_stride)
+    inp = _mk_input_bytes(1, input_stride)
+    prev_view = prev_inp.view(INPUT_DTYPE).reshape((1,))
+    cur_view = inp.view(INPUT_DTYPE).reshape((1,))
+    # Focused Turn+AttackS3 decideAngle row:
+    # - fresh A on a forward/up stick angle above x9C
+    # - no c-stick smash edge, so AttackS3 owns the row directly
+    # Decomp:
+    # - ftCo_Turn_IASA temporarily flips facing to facing_after before AttackS3 checks.
+    # - ftCo_AttackS3_CheckInput/decideAngle choose AttackS3Hi when angle > x9C.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Turn.c::ftCo_Turn_IASA
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackS3.c::{
+    #   ftCo_AttackS3_CheckInput,decideAngle
+    # }
+    prev_view["p"]["main_x"][0, 0] = np.int8(-23)
+    cur_view["p"]["buttons"][0, 0] = np.uint16(BUTTON_A)
+    cur_view["p"]["main_x"][0, 0] = np.int8(-74)
+    cur_view["p"]["main_y"][0, 0] = np.int8(31)
+
+    out0 = _step_once(seed, prev_inp, inp)
+    assert int(out0["action_id"][0]) == ACT_ATTACK_S3_HI
+    assert int(out0["action_frame"][0]) == 1
+    assert int(out0["animation_index"][0]) == SM_ATTACK_S3_HI
+    assert int(out0["facing"][0]) == 0
 
 
 def test_turn_attackhi4_beats_guardon_on_exact_trace_inputs() -> None:

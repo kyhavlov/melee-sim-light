@@ -690,20 +690,30 @@ static inline uint16_t grounded_a_attack_select_action(
 
   const float ang = atan2f(stick_y, msl_absf(stick_x));
   const float stick_f = stick_x * facing_dir;
-  if (stick_f >= c->attack_s3_stick_threshold_x && stick_y <= c->attack_lw3_stick_threshold_y &&
-      ang < 0.0f) {
-    // Decomp: ftCo_AttackS3_CheckInput first gates on forward side-tilt intent, then decideAngle
-    // routes downward stick angles into AttackS3Lw / AttackS3LwS instead of neutral AttackS3S.
-    // Keep only the forward+down subset here until the finer x9C/xA0/xA4/xA8 decideAngle split is
-    // modeled directly in runtime. Those constants are now extracted via
-    // data/common/ft_common_data.json and loaded by src/common_params.c.
+  if (stick_f >= c->attack_s3_stick_threshold_x &&
+      msl_absf(ang) < c->attack_angle_threshold_radians) {
+    // Decomp AttackS3 decideAngle split:
+    // - after the forward+|angle|<x20 gate, decideAngle chooses:
+    //   angle > x9C -> AttackS3Hi
+    //   angle > xA0 -> AttackS3HiS
+    //   angle < xA8 -> AttackS3Lw
+    //   angle < xA4 -> AttackS3LwS
+    //   else AttackS3S
     // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackS3.c::{
     //   ftCo_AttackS3_CheckInput,decideAngle
     // }
-    return (uint16_t)MSL_ACT_ATTACK_S3_LW;
-  }
-  if (stick_f >= c->attack_s3_stick_threshold_x &&
-      msl_absf(ang) < c->attack_angle_threshold_radians) {
+    if (ang > c->attack_s3_hi_angle_radians) {
+      return (uint16_t)MSL_ACT_ATTACK_S3_HI;
+    }
+    if (ang > c->attack_s3_hi_s_angle_radians) {
+      return (uint16_t)MSL_ACT_ATTACK_S3_HI_S;
+    }
+    if (ang < c->attack_s3_lw_angle_radians) {
+      return (uint16_t)MSL_ACT_ATTACK_S3_LW;
+    }
+    if (ang < c->attack_s3_lw_s_angle_radians) {
+      return (uint16_t)MSL_ACT_ATTACK_S3_LW_S;
+    }
     return (uint16_t)MSL_ACT_ATTACK_S3;
   }
   if (stick_y >= c->attack_hi3_stick_threshold_y && ang > c->attack_angle_threshold_radians) {

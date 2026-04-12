@@ -29,33 +29,33 @@ fields: action_id,animation_index,on_ground,hitlag,hitstun,state_flags
 
 == datasets/aggregate_recent/replays/validation/aggregate_recent/BlondHardHippopotamus.msl ==
 rollout.best_len: 256
-rollout.streak_count: 164
+rollout.streak_count: 163
 rollout.streak_len.median: 46
 rollout.streak_len.p90: 147
 rollout.streak_len.p95: 171
 rollout.streak_len.max: 256
-rollout.first_mismatch_total: 185
-rollout.first_mismatch_seeded_total: 100
+rollout.first_mismatch_total: 184
+rollout.first_mismatch_seeded_total: 99
 
 == datasets/aggregate_recent/replays/validation/aggregate_recent/DistinctCaringCobra.msl ==
 rollout.best_len: 271
-rollout.streak_count: 135
+rollout.streak_count: 133
 rollout.streak_len.median: 62
 rollout.streak_len.p90: 146
-rollout.streak_len.p95: 216
+rollout.streak_len.p95: 217
 rollout.streak_len.max: 271
-rollout.first_mismatch_total: 137
-rollout.first_mismatch_seeded_total: 72
+rollout.first_mismatch_total: 135
+rollout.first_mismatch_seeded_total: 70
 
 == datasets/aggregate_recent/replays/validation/aggregate_recent/FavorableSuperficialPig.msl ==
-rollout.best_len: 362
-rollout.streak_count: 215
+rollout.best_len: 388
+rollout.streak_count: 212
 rollout.streak_len.median: 39
 rollout.streak_len.p90: 126
 rollout.streak_len.p95: 159
-rollout.streak_len.max: 362
-rollout.first_mismatch_total: 225
-rollout.first_mismatch_seeded_total: 134
+rollout.streak_len.max: 388
+rollout.first_mismatch_total: 222
+rollout.first_mismatch_seeded_total: 131
 
 == datasets/aggregate_recent/replays/validation/aggregate_recent/HilariousVillainousGiraffe.msl ==
 rollout.best_len: 387
@@ -99,13 +99,13 @@ rollout.first_mismatch_seeded_total: 106
 
 == datasets/aggregate_recent/replays/validation/aggregate_recent/PositiveRevolvingHyena.msl ==
 rollout.best_len: 225
-rollout.streak_count: 214
+rollout.streak_count: 212
 rollout.streak_len.median: 37
 rollout.streak_len.p90: 129
 rollout.streak_len.p95: 184
 rollout.streak_len.max: 225
-rollout.first_mismatch_total: 230
-rollout.first_mismatch_seeded_total: 153
+rollout.first_mismatch_total: 228
+rollout.first_mismatch_seeded_total: 151
 
 == datasets/aggregate_recent/replays/validation/aggregate_recent/PriceyPartialAlbatross.msl ==
 rollout.best_len: 293
@@ -119,13 +119,13 @@ rollout.first_mismatch_seeded_total: 138
 
 == datasets/aggregate_recent/replays/validation/aggregate_recent/PutridJoyousOryx.msl ==
 rollout.best_len: 248
-rollout.streak_count: 128
+rollout.streak_count: 127
 rollout.streak_len.median: 45
 rollout.streak_len.p90: 125
 rollout.streak_len.p95: 159
 rollout.streak_len.max: 248
-rollout.first_mismatch_total: 184
-rollout.first_mismatch_seeded_total: 119
+rollout.first_mismatch_total: 183
+rollout.first_mismatch_seeded_total: 118
 
 == datasets/aggregate_recent/replays/validation/aggregate_recent/TubbyCurlyHerring.msl ==
 rollout.best_len: 328
@@ -178,11 +178,11 @@ rollout.first_mismatch_total: 98
 rollout.first_mismatch_seeded_total: 39
 
 == suite summary ==
-overall.rollout.streak_count: 2206
-overall.rollout.streak_len.median: 49
+overall.rollout.streak_count: 2197
+overall.rollout.streak_len.median: 50
 overall.rollout.streak_len.p90: 148
-overall.rollout.streak_len.p95: 186
+overall.rollout.streak_len.p95: 187
 overall.rollout.streak_len.max: 631
 overall.rollout.best_len.max: 631
-overall.rollout.first_mismatch_total: 2527
-overall.rollout.first_mismatch_seeded_total: 1504
+overall.rollout.first_mismatch_total: 2518
+overall.rollout.first_mismatch_seeded_total: 1495
