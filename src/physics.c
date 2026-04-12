@@ -311,6 +311,7 @@ static inline uint8_t physics_action_is_common_ground_friction_only(uint16_t act
     case MSL_ACT_ATTACK_LW3:
     case MSL_ACT_ATTACK_HI4:
     case MSL_ACT_ATTACK_LW4:
+    case MSL_ACT_FX_SPECIAL_S_START:
     case MSL_ACT_FX_SPECIAL_LW_START:
     case MSL_ACT_FX_SPECIAL_LW_LOOP:
     case MSL_ACT_FX_SPECIAL_LW_HIT:
@@ -1238,6 +1239,29 @@ void physics_integrate(MslBatch* batch) {
                     ch, c, action_id, batch->state.fallspecial_xc[idx], stick_x,
                     batch->state.speed_air_x_self[idx]);
               }
+            }
+          }
+        }
+
+        // Aerial Side-B start uses its own friction + delayed-gravity owner, not the generic
+        // common airborne helper.
+        // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c::ftFx_SpecialAirSStart_Phys
+        // refs/melee/src/melee/ft/ftcommon.c::{ftCommon_Fall,ftCommon_ApplyFrictionAir}
+        // data/characters/{fox,falco}.json::{
+        //   illusion_gravity_delay_start_frames,illusion_air_friction_start,
+        //   illusion_fall_accel_start,terminal_vel
+        // }
+        if (action_id == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_S_START) {
+          const MslCharParams* ch = msl_char_params(batch->state.char_id[idx]);
+          if (ch != NULL) {
+            batch->state.speed_air_x_self[idx] = air_apply_friction_step(
+                batch->state.speed_air_x_self[idx], ch->illusion_air_friction_start);
+            if (batch->state.action_frame[idx] > (int16_t)ch->illusion_gravity_delay_start_frames) {
+              float next_vy = batch->state.speed_y_self[idx] - ch->illusion_fall_accel_start;
+              if (next_vy < -ch->terminal_vel) {
+                next_vy = -ch->terminal_vel;
+              }
+              batch->state.speed_y_self[idx] = next_vy;
             }
           }
         }

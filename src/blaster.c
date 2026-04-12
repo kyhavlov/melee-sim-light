@@ -291,7 +291,10 @@ static inline void enter_side_special_start(MslBatch* batch, size_t idx, const M
     batch->state.animation_index[idx] = (uint32_t)ms->specials_air_start;
     // Decomp: ftFx_SpecialAirSStart_Enter zeroes self_vel.y at aerial Side-B entry.
     // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c::ftFx_SpecialAirSStart_Enter
+    // Decomp: ftFx_SpecialAirSStart_Enter also consumes all jumps via x1968_jumpsUsed=max_jumps.
+    // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c::ftFx_SpecialAirSStart_Enter
     batch->state.speed_y_self[idx] = 0.0f;
+    batch->state.jumps_left[idx] = 0u;
   }
   batch->state.fall_fast[idx] = 0;
   msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);

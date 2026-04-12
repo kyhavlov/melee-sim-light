@@ -218,6 +218,9 @@ static int load_one(const char* data_dir, const char* rel_path, uint8_t char_id)
   }
 
   static const char* k_spacie_required_keys[] = {
+      "illusion_gravity_delay_start_frames",
+      "illusion_air_friction_start",
+      "illusion_fall_accel_start",
       "illusion_ground_end_vel_x",
       "illusion_ground_friction",
       "illusion_air_end_vel_x",
@@ -367,6 +370,10 @@ static int load_one(const char* data_dir, const char* rel_path, uint8_t char_id)
       json_get_f32(buf, "laser_scale_max", &out.laser_scale_max) != 0 ||
       json_get_u16(buf, "laser_spawn_joint_part_id", &out.laser_spawn_joint_part_id) != 0 ||
       json_get_u16(buf, "grab_capture_anchor_part_id", &out.grab_capture_anchor_part_id) != 0 ||
+      json_get_u8(buf, "illusion_gravity_delay_start_frames",
+                  &out.illusion_gravity_delay_start_frames) != 0 ||
+      json_get_f32(buf, "illusion_air_friction_start", &out.illusion_air_friction_start) != 0 ||
+      json_get_f32(buf, "illusion_fall_accel_start", &out.illusion_fall_accel_start) != 0 ||
       json_get_f32(buf, "illusion_ground_vel_x", &out.illusion_ground_vel_x) != 0 ||
       json_get_f32(buf, "illusion_ground_end_vel_x", &out.illusion_ground_end_vel_x) != 0 ||
       json_get_f32(buf, "illusion_ground_friction", &out.illusion_ground_friction) != 0 ||

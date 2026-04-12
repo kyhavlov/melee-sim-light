@@ -263,16 +263,26 @@ def _extract_ftco_dattrs(pl_dat: Path, *, ftdata_symbol: str, extract_fox_blaste
         # struct ftData { ... void* ext_attr; } (ft/types.h +0x4)
         # Fox/Falco ext attrs: struct ftFox_DatAttrs (ft/chara/ftFox/types.h)
         ext_abs = arc.ptr32(ftdata_abs + 0x04)
-        # Fox/Falco side special (Illusion/Phantasm) ground-velocity scaling.
+        # Fox/Falco side special (Illusion/Phantasm) start/end-state parameters.
         #
         # Decomp:
         # - refs/melee/src/melee/ft/chara/ftFox/types.h (ftFox_DatAttrs):
+        #   `x24_FOX_ILLUSION_GRAVITY_DELAY`
         #   `x28_FOX_ILLUSION_GROUND_VEL_X`
+        #   `x2C_FOX_ILLUSION_UNK1`
+        #   `x30_FOX_ILLUSION_UNK2`
         # - refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c::ftFx_SpecialSStart_Enter
         #   `fp->gr_vel /= da->x28_FOX_ILLUSION_GROUND_VEL_X;`
         # - refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c::ftFx_SpecialAirSStart_Enter
         #   divides horizontal self velocity similarly.
+        # - refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c::{
+        #     ftFx_SpecialSStart_Phys,ftFx_SpecialAirSStart_Phys}
+        out["illusion_gravity_delay_start_frames"] = int(
+            max(0, min(255, int(round(float(_f32_be(buf, ext_abs + 0x24))))))
+        )
         out["illusion_ground_vel_x"] = float(_f32_be(buf, ext_abs + 0x28))
+        out["illusion_air_friction_start"] = float(_f32_be(buf, ext_abs + 0x2C))
+        out["illusion_fall_accel_start"] = float(_f32_be(buf, ext_abs + 0x30))
         # End-state velocity + friction parameters (used on main->end transition and in End Phys).
         #
         # Decomp:
@@ -458,6 +468,9 @@ def _stable_update(existing: dict, extracted: dict) -> dict:
         "pushbox_x",
         "pushbox_y",
         "grab_capture_anchor_part_id",
+        "illusion_gravity_delay_start_frames",
+        "illusion_air_friction_start",
+        "illusion_fall_accel_start",
         "illusion_ground_vel_x",
         "illusion_ground_end_vel_x",
         "illusion_ground_friction",

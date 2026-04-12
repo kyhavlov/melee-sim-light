@@ -104,7 +104,13 @@ def test_grounded_side_special_entry_divides_ground_speed_by_illusion_attr() -> 
     out = _step_once(seed, prev_inp, inp)
     assert int(out["action_id"][0]) == ACT_FX_SPECIAL_S_START
     assert int(out["on_ground"][0]) == 1
-    assert abs(float(out["speed_ground_x_self"][0]) - (1.2 / _fox_attr("illusion_ground_vel_x"))) <= 1e-6
+    # Decomp: ftFx_SpecialSStart_Enter divides gr_vel by x28, then the same-step
+    # ftFx_SpecialSStart_Phys callback runs ft_80084F3C grounded friction before the row is
+    # observed.
+    # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c::{
+    #   ftFx_SpecialSStart_Enter,ftFx_SpecialSStart_Phys}
+    expected = (1.2 / _fox_attr("illusion_ground_vel_x")) - _fox_attr("gr_friction")
+    assert abs(float(out["speed_ground_x_self"][0]) - expected) <= 1e-6
 
 
 def test_grounded_specialhi_hold_entry_divides_ground_speed_by_hold_attr() -> None:

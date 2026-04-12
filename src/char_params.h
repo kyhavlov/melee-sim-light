@@ -128,22 +128,29 @@ typedef struct MslCharParams {
   uint16_t grab_capture_anchor_part_id;
   uint16_t _pad_u16_grab_0;
 
-  // Fox/Falco side special (Illusion/Phantasm) end-state velocities + friction.
+  // Fox/Falco side special (Illusion/Phantasm) start/end-state velocities + friction.
   //
   // Source of truth: ISO-extracted `data/characters/*.json` keys:
   // - illusion_ground_vel_x
+  // - illusion_gravity_delay_start_frames / illusion_air_friction_start / illusion_fall_accel_start
   // - illusion_ground_end_vel_x / illusion_ground_friction
   // - illusion_air_end_vel_x / illusion_air_friction
   // - illusion_landing_lag_frames / illusion_gravity_delay_end_frames / illusion_fall_accel_end
   //
   // Decomp:
   // - refs/melee/src/melee/ft/chara/ftFox/types.h
-  //   (ftFox_DatAttrs x28/x34/x38/x3C/x40/x50/x44/x48)
+  //   (ftFox_DatAttrs x24/x28/x2C/x30/x34/x38/x3C/x40/x44/x48/x50)
   // - refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c::{
-  //     ftFx_SpecialSStart_Enter,ftFx_SpecialSEnd_Enter,ftFx_SpecialSEnd_Phys
+  //     ftFx_SpecialSStart_Enter,ftFx_SpecialAirSStart_Enter,
+  //     ftFx_SpecialSStart_Phys,ftFx_SpecialAirSStart_Phys,
+  //     ftFx_SpecialSEnd_Enter,ftFx_SpecialSEnd_Phys
   //   }
   // - refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c::{ftFx_SpecialAirSEnd_Enter,ftFx_SpecialAirSEnd_Phys}
   // - refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c::ftFx_SpecialAirSEnd_Coll
+  uint8_t illusion_gravity_delay_start_frames;
+  uint8_t _pad_u8_illusion_start_0[3];
+  float illusion_air_friction_start;
+  float illusion_fall_accel_start;
   float illusion_ground_vel_x;
   float illusion_ground_end_vel_x;
   float illusion_ground_friction;

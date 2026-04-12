@@ -1565,6 +1565,19 @@ static void illusion_items_update_and_collide(MslBatch* batch, int bi) {
     // - keep the paired `ghostEffectPos[0]` lane in state so rollout can advance the ring as
     //   `ghost1 = ghost0; ghost0 = cur_pos` instead of clobbering `ghost1` with current position.
     // tools/slippi/make_dataset_from_slp.py::derive_illusion_ghost_pos01
+    //
+    // Known remaining Side-B/Illusion decomp lanes not yet modeled here:
+    // - ghostEffectPos[2]/ghostEffectPos[3]
+    // - blendFrames[0..3]
+    // - ghostGObj
+    // - fp->x2222_b2 side effects
+    // Current judgment is that those owners are accessory/ghost-visual oriented rather than part
+    // of the gameplay-critical article position/hit flow, but they remain the next decomp surface
+    // to port if a late ghost-display/state2 Side-B bug shows up.
+    // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c::{
+    //   ftFox_SpecialS_SetPhys,ftFox_SpecialS_SetVars,ftFox_SpecialSEnd_SetVars}
+    // refs/melee/src/melee/it/items/itfoxillusion.c::{
+    //   itFoxillusion_UnkMotion0_Phys,itFoxillusion_UnkMotion1_Phys,itFoxillusion_UnkMotion2_Phys}
     float base_x0 = batch->state.item_pos_x[ii];
     float base_y0 = batch->state.item_pos_y[ii];
     if (action_is_illusion_setphys(batch->state.action_id[o_idx])) {

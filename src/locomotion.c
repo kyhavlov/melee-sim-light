@@ -71,6 +71,78 @@ static inline uint8_t anim_finished(uint8_t char_id, uint16_t msid, float anim_f
   return msl_anim_frame_sanitize_f32(anim_frame_f32) >= end;
 }
 
+static inline void side_special_reset_ghost_ring_on_main_entry(MslBatch* batch, size_t idx) {
+  if (batch == NULL) {
+    return;
+  }
+  // Decomp owner:
+  // - ftFx_SpecialS_Enter / ftFx_SpecialAirS_Enter call ftFox_SpecialS_SetVars on main entry.
+  // - ftFox_SpecialS_SetVars initializes ghostEffectPos[0..3] = cur_pos before the main-state
+  //   Phys callbacks begin advancing the ring.
+  // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c::{
+  //   ftFx_SpecialS_Enter,ftFx_SpecialAirS_Enter,ftFox_SpecialS_SetVars}
+  batch->state.illusion_ghost_pos0_x[idx] = batch->state.pos_x[idx];
+  batch->state.illusion_ghost_pos0_y[idx] = batch->state.pos_y[idx];
+  batch->state.illusion_ghost_pos1_x[idx] = batch->state.pos_x[idx];
+  batch->state.illusion_ghost_pos1_y[idx] = batch->state.pos_y[idx];
+}
+
+static inline void side_special_ground_to_air_transition(MslBatch* batch, const MslSpecialMsids* ms,
+                                                         const MslCharParams* ch, size_t idx,
+                                                         uint16_t grounded_action) {
+  if (batch == NULL || ms == NULL || ch == NULL) {
+    return;
+  }
+  // Decomp owner:
+  // - ftFx_SpecialSStart_GroundToAir / ftFx_SpecialS_GroundToAir call ftCommon_8007D60C before
+  //   preserving the current animation frame in the matching aerial motion-state.
+  // - ftCommon_8007D60C consumes all jumps, clears gr_vel, and sets ecb_lock=5.
+  // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c::{
+  //   ftFx_SpecialSStart_GroundToAir,ftFx_SpecialS_GroundToAir}
+  // refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007D60C
+  batch->state.jumps_left[idx] = 0u;
+  batch->state.speed_ground_x_self[idx] = 0.0f;
+  batch->state.ecb_lock_timer[idx] = 5u;
+  if (grounded_action == (uint16_t)MSL_ACT_FX_SPECIAL_S_START) {
+    batch->state.action_id[idx] = (uint16_t)MSL_ACT_FX_SPECIAL_AIR_S_START;
+    batch->state.animation_index[idx] = (uint32_t)ms->specials_air_start;
+    batch->state.speed_air_x_self[idx] = 0.0f;
+    batch->state.speed_y_self[idx] = 0.0f;
+  } else {
+    batch->state.action_id[idx] = (uint16_t)MSL_ACT_FX_SPECIAL_AIR_S;
+    batch->state.animation_index[idx] = (uint32_t)ms->specials_air_main;
+  }
+  msl_anim_timebase_enter(batch, idx, batch->state.anim_frame_f32[idx], 1.0f);
+}
+
+static inline void side_special_air_to_ground_transition(MslBatch* batch, const MslSpecialMsids* ms,
+                                                         const MslCharParams* ch, size_t idx,
+                                                         uint16_t air_action) {
+  if (batch == NULL || ms == NULL || ch == NULL) {
+    return;
+  }
+  // Decomp owner:
+  // - ftFx_SpecialAirSStart_AirToGround / ftFx_SpecialAirS_AirToGround call ftCommon_8007D7FC
+  //   before preserving the current animation frame in the matching grounded motion-state.
+  // - ftCommon_8007D7FC/ftCommon_8007D6A4 restore grounded jump ownership and copy self_vel.x
+  //   into gr_vel (clamped).
+  // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c::{
+  //   ftFx_SpecialAirSStart_AirToGround,ftFx_SpecialAirS_AirToGround}
+  // refs/melee/src/melee/ft/ftcommon.c::{ftCommon_8007D7FC,ftCommon_8007D6A4}
+  batch->state.jumps_left[idx] = ch->max_jumps;
+  batch->state.fall_fast[idx] = 0u;
+  batch->state.speed_ground_x_self[idx] =
+      clamp_absf(batch->state.speed_air_x_self[idx], ch->ground_max_horizontal_velocity);
+  if (air_action == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_S_START) {
+    batch->state.action_id[idx] = (uint16_t)MSL_ACT_FX_SPECIAL_S_START;
+    batch->state.animation_index[idx] = (uint32_t)ms->specials_ground_start;
+  } else {
+    batch->state.action_id[idx] = (uint16_t)MSL_ACT_FX_SPECIAL_S;
+    batch->state.animation_index[idx] = (uint32_t)ms->specials_ground_main;
+  }
+  msl_anim_timebase_enter(batch, idx, batch->state.anim_frame_f32[idx], 1.0f);
+}
+
 static inline void enter_squat_immediate(MslBatch* batch, size_t idx) {
   if (batch == NULL) {
     return;
@@ -2140,6 +2212,7 @@ void locomotion_update_pre(MslBatch* batch) {
               anim_finished(cid, ms->specials_ground_start, batch->state.anim_frame_f32[idx])) {
             batch->state.action_id[idx] = (uint16_t)MSL_ACT_FX_SPECIAL_S;
             batch->state.animation_index[idx] = (uint32_t)ms->specials_ground_main;
+            side_special_reset_ghost_ring_on_main_entry(batch, idx);
             msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
             action_id = (uint16_t)MSL_ACT_FX_SPECIAL_S;
           }
@@ -3602,6 +3675,7 @@ void locomotion_update_pre(MslBatch* batch) {
               anim_finished(cid, ms->specials_air_start, batch->state.anim_frame_f32[idx])) {
             batch->state.action_id[idx] = (uint16_t)MSL_ACT_FX_SPECIAL_AIR_S;
             batch->state.animation_index[idx] = (uint32_t)ms->specials_air_main;
+            side_special_reset_ghost_ring_on_main_entry(batch, idx);
             msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
             action_id = (uint16_t)MSL_ACT_FX_SPECIAL_AIR_S;
           }
@@ -3952,6 +4026,14 @@ void locomotion_update_post_collision(MslBatch* batch) {
           const uint8_t lag_enabled = move_tables_attackair_cmd0_active(
               batch->state.char_id[idx], a, batch->state.anim_frame_f32[idx]);
           land = lag_enabled ? landing_air_action_from_attackair(a) : (uint16_t)MSL_ACT_LANDING;
+        } else if (ms != NULL && a == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_S_START) {
+          side_special_air_to_ground_transition(batch, ms, ch, idx,
+                                                (uint16_t)MSL_ACT_FX_SPECIAL_AIR_S_START);
+          continue;
+        } else if (ms != NULL && a == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_S) {
+          side_special_air_to_ground_transition(batch, ms, ch, idx,
+                                                (uint16_t)MSL_ACT_FX_SPECIAL_AIR_S);
+          continue;
         } else if (a == (uint16_t)MSL_ACT_ESCAPE_AIR) {
           // EscapeAir: EscapeAir_Coll -> ft_80082C74(..., ftCo_80099D70) -> ftCo_LandingFallSpecial_Enter(..., x344)
           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c
@@ -4029,21 +4111,13 @@ void locomotion_update_post_collision(MslBatch* batch) {
           //   ftFx_SpecialSStart_GroundToAir,ftFx_SpecialS_GroundToAir
           // }
           if (ms != NULL && a == (uint16_t)MSL_ACT_FX_SPECIAL_S_START) {
-            batch->state.action_id[idx] = (uint16_t)MSL_ACT_FX_SPECIAL_AIR_S_START;
-            batch->state.animation_index[idx] = (uint32_t)ms->specials_air_start;
-            batch->state.speed_ground_x_self[idx] = 0.0f;
-            batch->state.speed_air_x_self[idx] = 0.0f;
-            batch->state.speed_y_self[idx] = 0.0f;
-            batch->state.ecb_lock_timer[idx] = 5u;
-            msl_anim_timebase_enter(batch, idx, batch->state.anim_frame_f32[idx], 1.0f);
+            side_special_ground_to_air_transition(batch, ms, ch, idx,
+                                                  (uint16_t)MSL_ACT_FX_SPECIAL_S_START);
             continue;
           }
           if (ms != NULL && a == (uint16_t)MSL_ACT_FX_SPECIAL_S) {
-            batch->state.action_id[idx] = (uint16_t)MSL_ACT_FX_SPECIAL_AIR_S;
-            batch->state.animation_index[idx] = (uint32_t)ms->specials_air_main;
-            batch->state.speed_ground_x_self[idx] = 0.0f;
-            batch->state.ecb_lock_timer[idx] = 5u;
-            msl_anim_timebase_enter(batch, idx, batch->state.anim_frame_f32[idx], 1.0f);
+            side_special_ground_to_air_transition(batch, ms, ch, idx,
+                                                  (uint16_t)MSL_ACT_FX_SPECIAL_S);
             continue;
           }
           // Decomp: grounded SpecialSEnd collision falls directly into Fall when ground is lost.
