@@ -169,6 +169,7 @@ int state_alloc(MslStateSoA* state, int batch_size) {
   state->fallspecial_xc = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->turn_has_turned = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->turn_frames_to_turn = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
+  state->walk_use_raw_input_once = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->turn_x8 = (int8_t*)alloc_aligned_64(sizeof(int8_t) * bp);
   state->lr_press_timer = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->x672_input_timer = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
@@ -383,15 +384,15 @@ int state_alloc(MslStateSoA* state, int batch_size) {
       !state->shine_is_release || !state->ecb_lock_timer || !state->ledge_side ||
       !state->stage_ledge_occupant_left || !state->stage_ledge_occupant_right ||
       !state->ledge_cooldown || !state->fallspecial_xc || !state->turn_has_turned ||
-      !state->turn_frames_to_turn || !state->turn_x8 || !state->lr_press_timer ||
-      !state->x672_input_timer || !state->x673 || !state->x674 || !state->x675 || !state->x676_x ||
-      !state->x2228_b7 || !state->x677_y || !state->x678 || !state->x679_x || !state->x67A_y ||
-      !state->x67B || !state->x67C || !state->x67D || !state->x67E || !state->x680 ||
-      !state->x681 || !state->x682 || !state->x683 || !state->x684 || !state->ucf_padbuf_index ||
-      !state->ucf_padbuf_sdrop_up_frames || !state->ucf_padbuf_stick_x ||
-      !state->ucf_padbuf_stick_y || !state->percent || !state->percent_temp ||
-      !state->damage_time_since_hit_x18ac || !state->dmg_x2225_b7 || !state->dmg_x2224_b2 ||
-      !state->shield_hp || !state->hitlag || !state->hitlag_pre_timer ||
+      !state->turn_frames_to_turn || !state->walk_use_raw_input_once || !state->turn_x8 ||
+      !state->lr_press_timer || !state->x672_input_timer || !state->x673 || !state->x674 ||
+      !state->x675 || !state->x676_x || !state->x2228_b7 || !state->x677_y || !state->x678 ||
+      !state->x679_x || !state->x67A_y || !state->x67B || !state->x67C || !state->x67D ||
+      !state->x67E || !state->x680 || !state->x681 || !state->x682 || !state->x683 ||
+      !state->x684 || !state->ucf_padbuf_index || !state->ucf_padbuf_sdrop_up_frames ||
+      !state->ucf_padbuf_stick_x || !state->ucf_padbuf_stick_y || !state->percent ||
+      !state->percent_temp || !state->damage_time_since_hit_x18ac || !state->dmg_x2225_b7 ||
+      !state->dmg_x2224_b2 || !state->shield_hp || !state->hitlag || !state->hitlag_pre_timer ||
       !state->hitlag_started_frame || !state->damage_hitlag_floorhug_latch || !state->hitstun ||
       !state->damage_jump_buffer_x14 || !state->damage_post_hitlag_cb_kind || !state->l_cancel ||
       !state->hurtbox_state || !state->colanim_hit_status_x198c || !state->colanim_timer_x1990 ||
@@ -448,6 +449,7 @@ int state_alloc(MslStateSoA* state, int batch_size) {
   memset(state->smash_charge_hold_frames_max, 0, sizeof(uint8_t) * bp);
   memset(state->smash_charge_saved_rate_fp_q16_16, 0, sizeof(int32_t) * bp);
   memset(state->walk_anim_source_vel, 0, sizeof(float) * bp);
+  memset(state->walk_use_raw_input_once, 0, sizeof(uint8_t) * bp);
   memset(state->x2228_b7, 0, sizeof(uint8_t) * bp);
   memset(state->damage_hitlag_floorhug_latch, 0, sizeof(uint8_t) * bp);
   for (size_t i = 0; i < bph; i++) {
@@ -600,6 +602,7 @@ void state_free(MslStateSoA* state) {
   alloc_free(state->fallspecial_xc);
   alloc_free(state->turn_has_turned);
   alloc_free(state->turn_frames_to_turn);
+  alloc_free(state->walk_use_raw_input_once);
   alloc_free(state->turn_x8);
   alloc_free(state->lr_press_timer);
   alloc_free(state->x672_input_timer);

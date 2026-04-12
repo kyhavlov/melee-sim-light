@@ -378,6 +378,9 @@ typedef struct MslStateSoA {
   uint8_t* fallspecial_xc;       // fp->mv.co.fallspecial.xC (arg1 to ftCo_80096900)
   uint8_t* turn_has_turned;      // fp->mv.co.turn.has_turned (refs/melee/.../ftCo_Turn.c:39-44)
   uint8_t* turn_frames_to_turn;  // fp->mv.co.turn.frames_to_turn (refs/melee/.../ftCo_Turn.c:39-44)
+  // Runtime-only one-frame walk physics owner for Wait_IASA rows that only reach Walk on the raw
+  // stick lane from ftWalkCommon_800DFC70.
+  uint8_t* walk_use_raw_input_once;
   // Turn dash-out latch (decomp: fp->mv.co.turn.x8).
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Turn.c::{ftCo_Turn_IASA,fn_800C9C2C}
   int8_t* turn_x8;          // -1/0/+1

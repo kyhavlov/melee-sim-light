@@ -1189,6 +1189,50 @@ def test_guardon_snapshot_spotdodge_handoff_keeps_shield_hp_on_seed44_prefix_row
     assert float(out_191["shield_hp"][1]) == pytest.approx(60.0, abs=0.001)
 
 
+def test_grounded_attack_wait_handoff_can_enter_walkslow_on_seed45_prefix_row() -> None:
+    import json
+
+    import msl_binding
+
+    from tools.modelplay.sim_env import CHAR_FOX, build_match_config_array
+
+    fixture_path = Path("tests/fixtures/modelplay/puffer_5b_selfplay_60s_seed45_prefix_0_126.json")
+    fixture = json.loads(fixture_path.read_text(encoding="utf-8"))
+    frames = fixture["frames"]
+
+    sizes = msl_binding.sizes()
+    compare_stride = int(sizes["compare"])
+    input_stride = int(sizes["input"])
+
+    config = build_match_config_array(
+        num_players=2,
+        char_ids=(CHAR_FOX, CHAR_FOX),
+        facing=(1, 0),
+        stocks=4,
+    )
+    config_bytes = config.view(np.uint8).reshape((1, -1))
+    out_cmp = np.zeros((1, compare_stride), dtype=np.uint8)
+
+    handle = msl_binding.init(batch_size=1, num_players=2)
+    try:
+        msl_binding.init_match(handle, config_bytes)
+        prev_in = _input_bytes_from_modelplay_prefix_frame(frames[0], input_stride)
+        history: dict[int, np.ndarray] = {}
+        for frame_i in range(1, len(frames)):
+            cur_in = _input_bytes_from_modelplay_prefix_frame(frames[frame_i], input_stride)
+            msl_binding.step_input(handle, prev_in, cur_in)
+            msl_binding.write_compare(handle, out_cmp)
+            history[frame_i] = out_cmp.view(COMPARE_DTYPE).reshape((1,))[0].copy()
+            prev_in = cur_in
+    finally:
+        msl_binding.destroy(handle)
+
+    out_126 = history[126]
+    assert int(out_126["action_id"][1]) == ACT_WALK_SLOW
+    assert int(out_126["action_frame"][1]) == 1
+    assert float(out_126["pos_x"][1]) == pytest.approx(35.86001205444336, abs=0.001)
+
+
 def test_wait_attackhi4_beats_guardon_on_up_smash_edge() -> None:
     import msl_binding
 

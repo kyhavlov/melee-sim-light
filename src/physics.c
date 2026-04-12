@@ -1433,9 +1433,19 @@ void physics_integrate(MslBatch* batch) {
             gr_vel += ground_friction_step_delta(gr_vel, friction);
           } else if (physics_action_is_walk(action_id)) {
             const float accel_mul = 1.0f;
-            float accel = stick_x * ch->walk_init_vel * accel_mul;
-            accel += (stick_x > 0.0f ? +ch->walk_accel : -ch->walk_accel) * accel_mul;
-            const float target = stick_x * ch->walk_max_vel * accel_mul;
+            float walk_stick_x = stick_x;
+            if (batch->state.walk_use_raw_input_once[idx]) {
+              // Narrow raw-stick owner:
+              // - ftWalkCommon_800E0060 uses raw fp->input.lstick.x.
+              // - keep that scope to Wait_IASA rows that only admitted Walk on the raw-only lane,
+              //   instead of widening every Walk physics tick.
+              // refs/melee/src/melee/ft/ftwalkcommon.c::ftWalkCommon_800E0060
+              walk_stick_x = stick_i8_to_unit(batch->state.input_main_x[idx]);
+              batch->state.walk_use_raw_input_once[idx] = 0u;
+            }
+            float accel = walk_stick_x * ch->walk_init_vel * accel_mul;
+            accel += (walk_stick_x > 0.0f ? +ch->walk_accel : -ch->walk_accel) * accel_mul;
+            const float target = walk_stick_x * ch->walk_max_vel * accel_mul;
             if (target != 0.0f) {
               const float mult = gr_vel / target;
               if (mult > 0.0f && mult < 1.0f) {
