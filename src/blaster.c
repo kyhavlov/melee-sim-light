@@ -85,6 +85,14 @@ static inline uint8_t action_allows_special_entry_ground(uint16_t action_id) {
   switch (action_id) {
     case (uint16_t)MSL_ACT_ESCAPE_N:
     case (uint16_t)MSL_ACT_KNEE_BEND:
+    case (uint16_t)MSL_ACT_GUARD_ON:
+    case (uint16_t)MSL_ACT_GUARD:
+      // Decomp: GuardOn/Guard IASA never route through grounded special checks; they only admit
+      // shield-family options, catch, and jump/spotdodge-style exits.
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
+      //   ftCo_GuardOn_IASA,ftCo_Guard_IASA
+      // }
+      return 0;
     case (uint16_t)MSL_ACT_ATTACK_DASH:
     case (uint16_t)MSL_ACT_ATTACK_S3_HI:
     case (uint16_t)MSL_ACT_ATTACK_S3_HI_S:

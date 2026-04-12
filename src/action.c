@@ -548,6 +548,29 @@ static inline uint8_t guard_try_enter_jump_oos(MslBatch* batch, const MslCommonP
   return 1;
 }
 
+static inline uint8_t guard_jump_oos_has_input(const MslBatch* batch, const MslCommonParams* c,
+                                               size_t idx) {
+  if (batch == NULL || c == NULL) {
+    return 0;
+  }
+  const float stick_y =
+      apply_deadzone(stick_i8_to_unit(batch->state.input_main_y[idx]), c->lstick_deadzone_y);
+  const float cstick_y =
+      apply_deadzone(stick_i8_to_unit(batch->state.input_c_y[idx]), c->lstick_deadzone_y);
+  const uint16_t buttons_pressed = batch->state.input_buttons_pressed[idx];
+  const uint8_t tilt_timer_y = batch->state.tilt_timer_y[idx];
+  if (stick_y >= c->tap_jump_threshold && tilt_timer_y < c->tap_jump_tilt_max_frames) {
+    return 1u;
+  }
+  if ((buttons_pressed & (uint16_t)MSL_BUTTON_XY) != 0) {
+    return 1u;
+  }
+  if (cstick_y >= c->tap_jump_threshold) {
+    return 1u;
+  }
+  return 0u;
+}
+
 static inline uint8_t guard_try_enter_iasa_defense(MslBatch* batch, const MslCommonParams* c,
                                                    size_t idx) {
   if (batch == NULL || c == NULL) {
@@ -572,7 +595,7 @@ static inline uint8_t guard_try_enter_iasa_defense(MslBatch* batch, const MslCom
 }
 
 static inline void apply_shield_hold_drain(MslBatch* batch, const MslCommonParams* c, size_t idx,
-                                           float trig_unit) {
+                                           float trig_unit, uint8_t preserve_lightshield_amount) {
   // Decomp (GALE01): ftCo_800925A4 updates fp->lightshield_amount with a negative-input latch and
   // drains shield HP using the resulting value.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_800925A4
@@ -581,9 +604,11 @@ static inline void apply_shield_hold_drain(MslBatch* batch, const MslCommonParam
     return;
   }
   float light = batch->state.lightshield_amount[idx];
-  const float t = (trig_unit - c->trigger_deadzone) / denom;
-  if (t >= 0.0f) {
-    light = clamp01(t);
+  if (!preserve_lightshield_amount) {
+    const float t = (trig_unit - c->trigger_deadzone) / denom;
+    if (t >= 0.0f) {
+      light = clamp01(t);
+    }
   }
   batch->state.lightshield_amount[idx] = light;
   const float drain_factor =
@@ -918,7 +943,17 @@ void guard_update_grounded(MslBatch* batch, const MslCommonParams* c, size_t idx
       // Decomp: ftCo_800925A4 updates lightshield_amount + drains shield HP + decrements x10 while
       // the shield is active (fp->x221B_b0). Approximate shield-active as (shield_hp > 0).
       if (batch->state.shield_hp[idx] > 0.0f) {
-        apply_shield_hold_drain(batch, c, idx, trig);
+        const uint8_t guard_jump_pending = guard_jump_oos_has_input(batch, c, idx) ? 1u : 0u;
+        // Decomp timing note:
+        // - GuardOn/Guard Anim drains shield through ftCo_800925A4 before the same frame's
+        //   IASA callback can consume jump OoS via ftCo_800CB024.
+        // - On that jump-consuming row, the drain still uses the pre-row lightshield owner rather
+        //   than refreshing from the current trigger squeeze first.
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
+        //   ftCo_GuardOn_Anim,ftCo_Guard_Anim,ftCo_GuardOn_IASA,ftCo_Guard_IASA
+        // }
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c::ftCo_800CB024
+        apply_shield_hold_drain(batch, c, idx, trig, guard_jump_pending);
       }
 
       // Decomp: Guard IASA exits to GuardOff only once (xC && x10==0).

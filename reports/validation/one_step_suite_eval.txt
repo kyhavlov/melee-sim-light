@@ -75,13 +75,13 @@ err.speed_y_self: mae=0.001753 p95=0.000000 max=2.800000
 err.speed_x_attack: mae=0.000943 p95=0.000000 max=2.509946
 err.speed_y_attack: mae=0.001558 p95=0.000000 max=2.941020
 err.percent: mae=0.002835 p95=0.000000 max=12.450001
-err.shield_hp: mae=0.001448 p95=0.000000 max=13.866562
+err.shield_hp: mae=0.001445 p95=0.000000 max=13.866562
 err.item_pos_x: mae=0.262531 p95=0.000000 max=38.000000
 err.item_pos_y: mae=0.012800 p95=0.000000 max=2.033337
 err.item_vel_x: mae=0.036014 p95=0.000000 max=10.000000
 err.item_vel_y: mae=0.003487 p95=0.000000 max=0.347369
 overall.discrete_mismatch: 178 / 882695
-overall.float_norm_mae_p95: 0.00106779
+overall.float_norm_mae_p95: 0.00106778
 
 == datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.msl ==
 Records: 11529  Players/scored per record: 2  Total player-frames: 23058

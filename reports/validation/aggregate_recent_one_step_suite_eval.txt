@@ -75,13 +75,13 @@ err.speed_y_self: mae=0.001753 p95=0.000000 max=2.800000
 err.speed_x_attack: mae=0.000943 p95=0.000000 max=2.509946
 err.speed_y_attack: mae=0.001558 p95=0.000000 max=2.941020
 err.percent: mae=0.002835 p95=0.000000 max=12.450001
-err.shield_hp: mae=0.001448 p95=0.000000 max=13.866562
+err.shield_hp: mae=0.001445 p95=0.000000 max=13.866562
 err.item_pos_x: mae=0.262531 p95=0.000000 max=38.000000
 err.item_pos_y: mae=0.012800 p95=0.000000 max=2.033337
 err.item_vel_x: mae=0.036014 p95=0.000000 max=10.000000
 err.item_vel_y: mae=0.003487 p95=0.000000 max=0.347369
 overall.discrete_mismatch: 178 / 882695
-overall.float_norm_mae_p95: 0.00106779
+overall.float_norm_mae_p95: 0.00106778
 
 == datasets/aggregate_recent/replays/validation/aggregate_recent/BlondHardHippopotamus.msl ==
 Records: 10174  Players/scored per record: 2  Total player-frames: 20348
@@ -169,8 +169,8 @@ overall.float_norm_mae_p95: 0.00145060
 
 == datasets/aggregate_recent/replays/validation/aggregate_recent/FavorableSuperficialPig.msl ==
 Records: 12185  Players/scored per record: 2  Total player-frames: 24370
-mismatch.action_id: 73 / 24370 (0.002995)
-mismatch.action_frame: 121 / 24370 (0.004965)
+mismatch.action_id: 72 / 24370 (0.002954)
+mismatch.action_frame: 120 / 24370 (0.004924)
 mismatch.on_ground: 15 / 24370 (0.000616)
 mismatch.facing: 19 / 24370 (0.000780)
 mismatch.stocks: 0 / 24370 (0.000000)
@@ -181,18 +181,18 @@ mismatch.hitstun: 21 / 24370 (0.000862)
 mismatch.l_cancel: 0 / 24370 (0.000000)
 mismatch.hurtbox_state: 41 / 24370 (0.001682)
 mismatch.ground_id: 5 / 24370 (0.000205)
-mismatch.animation_index: 73 / 24370 (0.002995)
+mismatch.animation_index: 72 / 24370 (0.002954)
 mismatch.instance_hit_by: 16 / 24370 (0.000657)
-mismatch.instance_id: 104 / 24370 (0.004268)
+mismatch.instance_id: 103 / 24370 (0.004227)
 mismatch.last_attack_landed: 12 / 24370 (0.000492)
 mismatch.combo_count: 6 / 24370 (0.000246)
 mismatch.last_hit_by: 33 / 24370 (0.001354)
-mismatch.state_flags: 179 / 121850 (0.001469)
-mismatch.item_exists: 17 / 182775 (0.000093)
-mismatch.item_type: 17 / 182775 (0.000093)
+mismatch.state_flags: 177 / 121850 (0.001453)
+mismatch.item_exists: 16 / 182775 (0.000088)
+mismatch.item_type: 16 / 182775 (0.000088)
 mismatch.item_state: 13 / 182775 (0.000071)
-mismatch.item_owner: 17 / 182775 (0.000093)
-mismatch.item_instance_id: 17 / 182775 (0.000093)
+mismatch.item_owner: 16 / 182775 (0.000088)
+mismatch.item_instance_id: 16 / 182775 (0.000088)
 err.pos_x: mae=0.008995 p95=0.000000 max=6.000000
 err.pos_y: mae=0.007249 p95=0.000000 max=8.052703
 err.speed_air_x_self: mae=0.005498 p95=0.000000 max=2.221981
@@ -201,13 +201,13 @@ err.speed_y_self: mae=0.003954 p95=0.000000 max=6.986000
 err.speed_x_attack: mae=0.001035 p95=0.000000 max=3.877010
 err.speed_y_attack: mae=0.003067 p95=0.000000 max=6.393906
 err.percent: mae=0.005766 p95=0.000000 max=14.000000
-err.shield_hp: mae=0.002584 p95=0.000000 max=9.799999
+err.shield_hp: mae=0.002566 p95=0.000000 max=9.799999
 err.item_pos_x: mae=2.589915 p95=18.719997 max=60.072914
 err.item_pos_y: mae=0.901780 p95=6.699554 max=26.304359
 err.item_vel_x: mae=0.081941 p95=0.414087 max=2.028788
 err.item_vel_y: mae=0.343226 p95=0.224853 max=6.987741
-overall.discrete_mismatch: 876 / 1474385
-overall.float_norm_mae_p95: 0.00114524
+overall.discrete_mismatch: 866 / 1474385
+overall.float_norm_mae_p95: 0.00114521
 
 == datasets/aggregate_recent/replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.msl ==
 Records: 11529  Players/scored per record: 2  Total player-frames: 23058
@@ -537,13 +537,13 @@ err.speed_y_self: mae=0.002030 p95=0.000000 max=3.400000
 err.speed_x_attack: mae=0.000807 p95=0.000000 max=2.569770
 err.speed_y_attack: mae=0.001869 p95=0.000000 max=4.791837
 err.percent: mae=0.004779 p95=0.000000 max=14.000000
-err.shield_hp: mae=0.001706 p95=0.000000 max=7.000000
+err.shield_hp: mae=0.001673 p95=0.000000 max=7.000000
 err.item_pos_x: mae=0.897748 p95=0.064209 max=56.157990
 err.item_pos_y: mae=0.574144 p95=0.000000 max=26.304359
 err.item_vel_x: mae=0.035570 p95=0.000000 max=1.761186
 err.item_vel_y: mae=0.145293 p95=0.000000 max=6.987741
 overall.discrete_mismatch: 869 / 912703
-overall.float_norm_mae_p95: 0.00178673
+overall.float_norm_mae_p95: 0.00178667
 
 == datasets/aggregate_recent/replays/validation/cardinal_1.0_recent/QuerulousGrandDinosaur.msl ==
 Records: 10222  Players/scored per record: 2  Total player-frames: 20444
@@ -663,7 +663,7 @@ err.speed_y_self: mae=0.004207 p95=0.000000 max=6.783999
 err.speed_x_attack: mae=0.001843 p95=0.000000 max=3.111742
 err.speed_y_attack: mae=0.004652 p95=0.000000 max=8.544151
 err.percent: mae=0.010714 p95=0.000000 max=15.000000
-err.shield_hp: mae=0.004656 p95=0.000000 max=9.099998
+err.shield_hp: mae=0.004652 p95=0.000000 max=9.099998
 err.item_pos_x: mae=0.758153 p95=0.000000 max=152.441040
 err.item_pos_y: mae=0.377307 p95=0.000000 max=75.315552
 err.item_vel_x: mae=0.082020 p95=0.000000 max=5.000000
@@ -672,5 +672,5 @@ overall.discrete_mismatch: 4282 / 1502336
 overall.float_norm_mae_p95: 0.00162433
 
 == suite summary ==
-overall.discrete_mismatch: 16197 / 17965838
+overall.discrete_mismatch: 16187 / 17965838
 overall.float_norm_mae_p95: 0.00140145

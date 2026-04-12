@@ -4,6 +4,7 @@ import struct
 from pathlib import Path
 
 import numpy as np
+import pytest
 
 from tools.eval.dataset import COMPARE_DTYPE, INPUT_DTYPE, SEED_DTYPE
 
@@ -33,7 +34,9 @@ ACT_ATTACK_HI4 = 0x003F
 ACT_DAMAGEFALL = 0x0026
 ACT_LANDING_FALL_SPECIAL = 0x002B
 ACT_GUARD_ON = 0x00B2
+ACT_GUARD = 0x00B3
 ACT_CATCH = 0x00D4
+ACT_FX_SPECIAL_N_START = 0x0155
 ACT_ATTACK_AIR_N = 0x0041
 ACT_ATTACK_AIR_B = 0x0043
 ACT_DAMAGE_AIR_2 = 0x0055
@@ -258,6 +261,49 @@ def _step_many(seed: np.ndarray, prev_inp: np.ndarray, inp: np.ndarray, n: int) 
         return outs
     finally:
         msl_binding.destroy(handle)
+
+
+def _processed_to_stick_i8(v: float) -> np.int8:
+    vv = max(-1.0, min(1.0, float(v)))
+    return np.int8(int(np.clip(np.rint(((vv + 1.0) * 0.5) * 160.0 - 80.0), -80, 80)))
+
+
+def _buttons_mask_from_processed(processed: dict[str, object]) -> int:
+    mask = 0
+    if processed.get("a"):
+        mask |= BUTTON_A
+    if processed.get("b"):
+        mask |= BUTTON_B
+    if processed.get("x"):
+        mask |= BUTTON_X
+    if processed.get("y"):
+        mask |= BUTTON_Y
+    if processed.get("z"):
+        mask |= 0x0010
+    if processed.get("lTriggerDigital"):
+        mask |= BUTTON_L
+    if processed.get("rTriggerDigital"):
+        mask |= 0x0020
+    if processed.get("start"):
+        mask |= 0x1000
+    return mask
+
+
+def _input_bytes_from_modelplay_prefix_frame(frame: dict[str, object], input_stride: int) -> np.ndarray:
+    input_t = np.zeros((1,), dtype=INPUT_DTYPE)
+    players = frame["players"]
+    for p in range(2):
+        processed = players[p]
+        input_t["p"]["buttons"][0, p] = np.uint16(_buttons_mask_from_processed(processed))
+        input_t["p"]["main_x"][0, p] = _processed_to_stick_i8(processed["joystickX"])
+        input_t["p"]["main_y"][0, p] = _processed_to_stick_i8(processed["joystickY"])
+        input_t["p"]["c_x"][0, p] = _processed_to_stick_i8(processed["cStickX"])
+        input_t["p"]["c_y"][0, p] = _processed_to_stick_i8(processed["cStickY"])
+        input_t["p"]["l"][0, p] = np.uint8(
+            int(round(max(0.0, min(1.0, float(processed["anyTrigger"]))) * 255.0))
+        )
+        input_t["p"]["r"][0, p] = np.uint8(0)
+    return np.frombuffer(input_t.tobytes(order="C"), dtype=np.uint8).reshape(1, input_stride).copy()
 
 
 def _seed_base() -> np.ndarray:
@@ -948,6 +994,83 @@ def test_attackhi3_pre_iasa_b_does_not_enter_grounded_side_special() -> None:
     assert int(out0["action_id"][0]) == ACT_ATTACK_HI3
     assert int(out0["action_frame"][0]) == 3
     assert int(out0["animation_index"][0]) == SM_ATTACK_HI3
+
+
+def test_guard_b_does_not_enter_grounded_neutral_special() -> None:
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    input_stride = int(sizes["input"])
+
+    seed = _seed_base()
+    seed["on_ground"][0, 0] = np.uint8(1)
+    seed["action_id"][0, 0] = np.uint16(ACT_GUARD)
+    seed["action_frame"][0, 0] = np.int16(-1)
+    seed["anim_frame_f32"][0, 0] = np.float32(0.0)
+    seed["animation_index"][0, 0] = np.uint32(0xFFFFFFFF)
+    seed["facing"][0, 0] = np.uint8(0)  # left
+    seed["shield_hp"][0, 0] = np.float32(59.79)
+
+    prev_inp = _mk_input_bytes(1, input_stride)
+    inp = _mk_input_bytes(1, input_stride)
+    cur_view = inp.view(INPUT_DTYPE).reshape((1,))
+    # Guard/GuardOn IASA does not route through grounded neutral-B.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
+    #   ftCo_GuardOn_IASA,ftCo_Guard_IASA
+    # }
+    cur_view["p"]["buttons"][0, 0] = np.uint16(BUTTON_A | BUTTON_B)
+    cur_view["p"]["main_x"][0, 0] = np.int8(16)
+    cur_view["p"]["main_y"][0, 0] = np.int8(-40)
+    cur_view["p"]["c_x"][0, 0] = np.int8(23)
+    cur_view["p"]["c_y"][0, 0] = np.int8(0)
+    cur_view["p"]["l"][0, 0] = np.uint8(89)
+
+    out0 = _step_once(seed, prev_inp, inp)
+    assert int(out0["action_id"][0]) != ACT_FX_SPECIAL_N_START
+
+
+def test_guard_jump_oos_prefix_matches_vanilla_kneebend_shield_row() -> None:
+    import json
+
+    import msl_binding
+
+    from tools.modelplay.sim_env import CHAR_FOX, build_match_config_array
+
+    fixture_path = Path("tests/fixtures/modelplay/puffer_5b_selfplay_input_prefix_0_381_after_3b9e1b6.json")
+    fixture = json.loads(fixture_path.read_text(encoding="utf-8"))
+    frames = fixture["frames"]
+
+    sizes = msl_binding.sizes()
+    compare_stride = int(sizes["compare"])
+    input_stride = int(sizes["input"])
+
+    config = build_match_config_array(
+        num_players=2,
+        char_ids=(CHAR_FOX, CHAR_FOX),
+        facing=(1, 0),
+        stocks=4,
+    )
+    config_bytes = config.view(np.uint8).reshape((1, -1))
+    out_cmp = np.zeros((1, compare_stride), dtype=np.uint8)
+
+    handle = msl_binding.init(batch_size=1, num_players=2)
+    try:
+        msl_binding.init_match(handle, config_bytes)
+        prev_in = _input_bytes_from_modelplay_prefix_frame(frames[0], input_stride)
+        history: dict[int, np.ndarray] = {}
+        for frame_i in range(1, 382):
+            cur_in = _input_bytes_from_modelplay_prefix_frame(frames[frame_i], input_stride)
+            msl_binding.step_input(handle, prev_in, cur_in)
+            msl_binding.write_compare(handle, out_cmp)
+            history[frame_i] = out_cmp.view(COMPARE_DTYPE).reshape((1,))[0].copy()
+            prev_in = cur_in
+    finally:
+        msl_binding.destroy(handle)
+
+    out_381 = history[381]
+    assert int(out_381["action_id"][1]) == ACT_KNEEBEND
+    assert int(out_381["action_frame"][1]) == 0
+    assert float(out_381["shield_hp"][1]) == pytest.approx(58.670005798339844, abs=0.01)
 
 
 def test_wait_attackhi4_beats_guardon_on_up_smash_edge() -> None:
