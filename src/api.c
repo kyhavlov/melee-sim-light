@@ -1462,6 +1462,44 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
       }
     }
 
+    // Seed bridge: Illusion/Phantasm article hitlag on ongoing BODY-hit rows.
+    //
+    // Decomp/runtime shape:
+    // - successful item BODY contact also raises generic item hitlag (`item->xCBC_hitlagFrames`),
+    //   and Item_802697D4 skips item Phys/movement while the item remains in hitlag.
+    // - Illusion/Phantasm body hits persist (itFoxIllusion_Logic14_DmgDealt returns false), so
+    //   teacher-forced reseed must restore hitlag ownership on ongoing damage-hitlag rows or the
+    //   same article incorrectly keeps advancing from ghostEffectPos[1].
+    // - Use the seeded victim `instance_hit_by` lane to identify the exact responsible article;
+    //   if it does not match a live Illusion/Phantasm item instance, fail open.
+    // refs/melee/src/melee/it/item.c::{Item_802697D4,checkHitLag}
+    // refs/melee/src/melee/it/items/itfoxillusion.c::itFoxIllusion_Logic14_DmgDealt
+    for (int victim = 0; victim < num_players; victim++) {
+      if (seed->hitlag[victim] == 0u) {
+        continue;
+      }
+      const uint16_t hit_iid = seed->instance_hit_by[victim];
+      if (hit_iid == 0u) {
+        continue;
+      }
+      for (int it = 0; it < MSL_MAX_ITEMS; it++) {
+        const size_t ii = msl_idx_item(bi, it);
+        if (!batch->state.item_exists[ii]) {
+          continue;
+        }
+        if (!item_type_is_illusion_article(batch->state.item_type[ii])) {
+          continue;
+        }
+        if (batch->state.item_instance_id[ii] != hit_iid) {
+          continue;
+        }
+        if (seed->hitlag[victim] > batch->state.item_hitlag[ii]) {
+          batch->state.item_hitlag[ii] = seed->hitlag[victim];
+        }
+        break;
+      }
+    }
+
     // Next value for plStale_IncrementAttackInstance (global counter).
     uint16_t next = (uint16_t)(max_attack_inst + 1u);
     if (next == 0) {

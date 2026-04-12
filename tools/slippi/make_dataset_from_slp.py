@@ -1367,12 +1367,18 @@ def _team_id_from_start_player(p: dict) -> int:
     return int(c) if c is not None else 0
 
 
-def _fill_items_fixed(frames: pa.StructArray, n_frames: int) -> np.ndarray:
+def _fill_items_fixed(frames: pa.StructArray, n_frames: int, *, src_ports: list[int]) -> np.ndarray:
     """
     Convert Slippi frame items (list<struct<...>>) into a fixed-length [n_frames, 15]
     array matching the dataset's ITEM dtype, with a stable ordering.
 
     Ordering: sort by (instance_id, spawn_id/id, type).
+
+    Owner lane policy:
+    - Slippi item.owner is emitted in raw 0-based console-port space (P1->0 .. P4->3).
+    - The dataset stores fighters/items in the selected local slot order (`src_ports`), so item
+      owner must be remapped into that local slot domain at preprocessing time.
+    - If the raw owner does not correspond to one of the selected ports, store -1.
     """
     out = np.zeros((n_frames, 15), dtype=SAMPLE_DTYPE["seed_t"]["items"].base)
     out["owner"] = np.int8(-1)
@@ -1391,6 +1397,8 @@ def _fill_items_fixed(frames: pa.StructArray, n_frames: int) -> np.ndarray:
     items_list = frames.field("item")
 
     # Offline preprocessing: simplest correct approach is converting to Python lists.
+    owner_slot_by_raw_port = {int(port) - 1: int(slot) for slot, port in enumerate(src_ports)}
+
     items_py = items_list.to_pylist()
     for fi, lst in enumerate(items_py):
         if not lst:
@@ -1400,7 +1408,8 @@ def _fill_items_fixed(frames: pa.StructArray, n_frames: int) -> np.ndarray:
             out[fi, slot]["exists"] = np.uint8(1)
             out[fi, slot]["state"] = np.uint8(int(it["state"]))
             out[fi, slot]["type"] = np.uint16(int(it["type"]))
-            out[fi, slot]["owner"] = np.int8(int(it.get("owner", -1)))
+            owner_raw = int(it.get("owner", -1))
+            out[fi, slot]["owner"] = np.int8(owner_slot_by_raw_port.get(owner_raw, -1))
             out[fi, slot]["instance_id"] = np.uint16(int(it["instance_id"]))
             out[fi, slot]["direction"] = np.float32(float(it["direction"]))
             out[fi, slot]["vel_x"] = np.float32(float(it["velocity"]["x"]))
@@ -1426,6 +1435,7 @@ def _materialize_illusion_seed_positions(
     illusion_ghost_pos1_y: np.ndarray,
     post_action_id_u16: np.ndarray,
     post_hitlag_u8: np.ndarray,
+    post_instance_hit_by_u16: np.ndarray,
     num_players: int,
 ) -> np.ndarray:
     """Materialize Illusion/Phantasm seed positions causally from replay history.
@@ -1483,6 +1493,7 @@ def _materialize_illusion_seed_positions(
             if owner < 0 or owner >= int(num_players):
                 continue
             ongoing_guardsetoff_hitlag = False
+            ongoing_body_hitlag = False
             if int(post_action_id_u16[fi, owner]) in setphys_action_ids:
                 candidate_victim = -1
                 for p in range(int(num_players)):
@@ -1506,7 +1517,15 @@ def _materialize_illusion_seed_positions(
                         if illusion_candidates > 1:
                             break
                     ongoing_guardsetoff_hitlag = illusion_candidates == 1
-            if ongoing_guardsetoff_hitlag:
+                if not ongoing_guardsetoff_hitlag:
+                    for p in range(int(num_players)):
+                        if int(post_hitlag_u8[fi, p]) == 0:
+                            continue
+                        if int(post_instance_hit_by_u16[fi, p]) != int(it["instance_id"]):
+                            continue
+                        ongoing_body_hitlag = True
+                        break
+            if ongoing_guardsetoff_hitlag or ongoing_body_hitlag:
                 continue
             if int(post_action_id_u16[fi, owner]) not in setphys_action_ids:
                 continue
@@ -2232,6 +2251,7 @@ def _main_impl(args) -> None:
     post_pos_x_all = np.zeros((n_frames, 4), dtype=np.float32)
     post_pos_y_all = np.zeros((n_frames, 4), dtype=np.float32)
     post_hitlag_u16_all = np.zeros((n_frames, 4), dtype=np.uint16)
+    post_instance_hit_by_u16_all = np.zeros((n_frames, 4), dtype=np.uint16)
     post_state_flags_u8 = np.zeros((n_frames, 4, 5), dtype=np.uint8)
     ports_struct = frames.field("ports")
     available_ports = set(f.name for f in ports_struct.type)
@@ -2315,6 +2335,7 @@ def _main_impl(args) -> None:
         ground_id = _to_numpy(post.field("ground")).astype(np.uint16)
         animation_index = _to_numpy(post.field("animation_index")).astype(np.uint32)
         instance_hit_by = _to_numpy(post.field("last_hit_by_instance")).astype(np.uint16)
+        post_instance_hit_by_u16_all[:, slot] = instance_hit_by
         instance_id = _to_numpy(post.field("instance_id")).astype(np.uint16)
         last_attack_landed = _to_numpy(post.field("last_attack_landed")).astype(np.uint8)
         combo_count = _to_numpy(post.field("combo_count")).astype(np.uint8)
@@ -3111,7 +3132,7 @@ def _main_impl(args) -> None:
     samples["seed_t"]["illusion_ghost_pos1_y"][:, :num_players] = illusion_ghost_pos1_y[:-1, :num_players]
 
     # Items are global per frame.
-    items_fixed = _fill_items_fixed(frames, n_frames)
+    items_fixed = _fill_items_fixed(frames, n_frames, src_ports=src_ports)
     _derive_item_attack_fields(
         items_fixed,
         fighter_attack_id=hist.attack_id,
@@ -3124,6 +3145,7 @@ def _main_impl(args) -> None:
         illusion_ghost_pos1_y=illusion_ghost_pos1_y,
         post_action_id_u16=post_action_id_u16,
         post_hitlag_u8=post_hitlag_u16_all,
+        post_instance_hit_by_u16=post_instance_hit_by_u16_all,
         num_players=num_players,
     )
     item_reflect_damage_mul = _derive_item_reflect_damage_mul(

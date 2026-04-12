@@ -1982,6 +1982,15 @@ MslItemHitResult combat_apply_item_hit(MslBatch* batch, int batch_index, int att
     return MSL_ITEM_HIT_NONE;
   }
 
+  enum {
+    MSL_COMBAT_IT_KIND_FOX_ILLUSION = 56,
+    MSL_COMBAT_IT_KIND_FALCO_PHANTASM = 57,
+  };
+  const uint8_t item_is_illusion = (item_type == (uint16_t)MSL_COMBAT_IT_KIND_FOX_ILLUSION ||
+                                    item_type == (uint16_t)MSL_COMBAT_IT_KIND_FALCO_PHANTASM)
+                                       ? 1u
+                                       : 0u;
+
   // Decomp (GALE01): item-vs-fighter BODY apply stores both:
   // - `HitCapsule.unk_count` (raw/base integer lane from it_80272460),
   // - `HitCapsule.damage` (staled/adjusted float lane).
@@ -2190,8 +2199,31 @@ MslItemHitResult combat_apply_item_hit(MslBatch* batch, int batch_index, int att
     defender_facing_dir_1 = -thrower_facing_dir;
   }
   batch->state.facing[d_idx] = (uint8_t)(defender_facing_dir_1 > 0.0f);
-  combat_damage_calc_vel(batch, d_idx, -defender_facing_dir_1 * (kb_vel_mag * cosf(kb_angle_rad)),
-                         kb_vel_mag * sinf(kb_angle_rad));
+
+  const float kb_x = -defender_facing_dir_1 * (kb_vel_mag * cosf(kb_angle_rad));
+  const float kb_y = kb_vel_mag * sinf(kb_angle_rad);
+
+  // Item BODY hits route through Fighter_ProcessHit the same way as fighter BODY hits, so grounded
+  // victims use the same ftCo_8008DCE0 ground-vs-air KB install owner:
+  // - launch with full (kb_x, kb_y) and clear grounded state via ftCommon_8007D5D4 when the floor
+  //   normal dot KB vector is positive or the damage severity is tumble,
+  // - otherwise keep grounded and project along the floor.
+  // refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
+  if (!defender_on_ground) {
+    combat_damage_calc_vel(batch, d_idx, kb_x, kb_y);
+  } else {
+    const float nx = batch->state.ground_normal_x[d_idx];
+    const float ny = batch->state.ground_normal_y[d_idx];
+    const float dot = nx * kb_x + ny * kb_y;
+    const uint8_t sev = combat_damage_severity_u8_from_kb(c, kb_applied);
+    if (dot > 0.0f || sev == 3u) {
+      combat_apply_ftCommon_8007D5D4_ground_to_air(batch, d_idx);
+      combat_damage_calc_vel(batch, d_idx, kb_x, kb_y);
+    } else {
+      combat_damage_calc_vel(batch, d_idx, ny * kb_x, -nx * kb_x);
+    }
+  }
 
   const uint16_t hs = combat_damage_hitstun_from_kb(c, kb_applied);
   batch->state.hitstun[d_idx] = hs;
@@ -2246,6 +2278,12 @@ MslItemHitResult combat_apply_item_hit(MslBatch* batch, int batch_index, int att
   // Combo count + last-attack tracking (attacker-side).
   // Decomp: refs/melee/src/melee/ft/ftcoll.c::ftColl_8007646C -> ftColl_800763C0(item attack id domain).
   combat_combo_ftColl_800763C0(batch, a_idx, defender, d_idx, item_attack_id);
+  // Illusion/Phantasm body hits do not destroy the article on hit; itFoxIllusion_Logic14_DmgDealt
+  // clears an item var and returns false so the article persists through the hitlag window.
+  // refs/melee/src/melee/it/items/itfoxillusion.c::itFoxIllusion_Logic14_DmgDealt
+  if (item_is_illusion) {
+    return MSL_ITEM_HIT_APPLIED_DONT_CONSUME;
+  }
   return MSL_ITEM_HIT_APPLIED_CONSUME_ITEM;
 }
 

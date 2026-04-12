@@ -18,9 +18,11 @@ typedef enum MslItemHitResult {
   MSL_ITEM_HIT_NONE = 0,
   // A real BODY hit was applied and the item should be consumed/despawned (e.g. laser on BODY hit).
   MSL_ITEM_HIT_APPLIED_CONSUME_ITEM = 1,
+  // A real BODY hit was applied and the item should remain alive (e.g. Illusion/Phantasm body hit).
+  MSL_ITEM_HIT_APPLIED_DONT_CONSUME = 2,
   // A collision-confirmed BODY hit was suppressed (e.g. attached Thrown*/Capture* victim),
   // and the item should NOT be consumed/despawned.
-  MSL_ITEM_HIT_SUPPRESSED_DONT_CONSUME = 2,
+  MSL_ITEM_HIT_SUPPRESSED_DONT_CONSUME = 3,
 } MslItemHitResult;
 
 // Apply a throw hit (Throw* -> Thrown* victim), using extracted set_throw_hitbox params and the

@@ -1693,6 +1693,19 @@ static void illusion_items_update_and_collide(MslBatch* batch, int bi) {
         consumed_item = 1u;
         break;
       }
+      if (res == MSL_ITEM_HIT_APPLIED_DONT_CONSUME) {
+        // Generic item hitlag owner:
+        // - successful item BODY contact raises item->xCBC_hitlagFrames, and Item_802697D4 then
+        //   skips item Phys/movement while the item remains in hitlag (`xDC8_word.flags.x9 != 0`).
+        // - Illusion/Phantasm body hits persist (see combat_apply_item_hit), so freeze the article
+        //   at the body-contact point for the defender hitlag window instead of immediately
+        //   continuing to consume ghostEffectPos[1].
+        // refs/melee/src/melee/it/item.c::{Item_802697D4,checkHitLag}
+        // refs/melee/src/melee/it/items/itfoxillusion.c::itFoxIllusion_Logic14_DmgDealt
+        if (batch->state.hitlag[d_idx] > batch->state.item_hitlag[ii]) {
+          batch->state.item_hitlag[ii] = batch->state.hitlag[d_idx];
+        }
+      }
       const uint16_t def_iid_post = batch->state.instance_id[d_idx];
       hitlist_register_item_fighter(batch, bi, it, def, def_iid_post,
                                     (int)MSL_LBCOLL_INSERT_FT_BODY, 0);
