@@ -670,17 +670,17 @@ def parse_args() -> argparse.Namespace:
     ap.add_argument(
         "--input-raw-frame-offset",
         type=int,
-        default=-122,
+        default=SIM_INIT_OPENING_FRAME_ID - 1,
         help=(
             "raw_slippi_pre_frame = modelplay_frame + offset. Modelplay frames store the "
-            "input sample that produced the same indexed post-step state, so this normally "
-            "matches --compare-raw-frame-offset."
+            "input sample that produced the next indexed post-step state, so this is normally "
+            "one raw frame earlier than --compare-raw-frame-offset for sim-init traces."
         ),
     )
     ap.add_argument(
         "--compare-raw-frame-offset",
         type=int,
-        default=-122,
+        default=SIM_INIT_OPENING_FRAME_ID,
         help=(
             "raw_engine_dump_frame = modelplay_frame + offset. Modelplay trace frames are "
             "post-step states, so this is normally one frame after the patched pre-frame input."

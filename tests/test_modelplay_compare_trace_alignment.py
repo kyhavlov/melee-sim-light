@@ -110,15 +110,16 @@ def test_modelplay_patch_spec_aligns_with_sim_init_compare_frame_id() -> None:
     finally:
         binding.destroy(handle)
 
-    expected_raw_frame = SIM_INIT_OPENING_FRAME_ID + end_frame
-    assert int(row["frame_id"]) == expected_raw_frame
+    expected_compare_raw_frame = SIM_INIT_OPENING_FRAME_ID + end_frame
+    expected_input_raw_frame = expected_compare_raw_frame - 1
+    assert int(row["frame_id"]) == expected_compare_raw_frame
 
     patches = _build_patch_spec(
         frames,
         start_frame=end_frame,
         end_frame=end_frame,
-        input_raw_frame_offset=SIM_INIT_OPENING_FRAME_ID,
+        input_raw_frame_offset=SIM_INIT_OPENING_FRAME_ID - 1,
         carrier_player_map=[0, 1],
     )
     assert len(patches) == 2
-    assert {int(p["frame"]) for p in patches} == {expected_raw_frame}
+    assert {int(p["frame"]) for p in patches} == {expected_input_raw_frame}
