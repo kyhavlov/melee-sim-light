@@ -110,6 +110,7 @@ def _collect_rows(dump_path: str | Path, window: Window, ports: list[int]) -> di
                     "pos_y": f32_from_bits(int(fighter["pos_y_bits"])),
                     "self_vel_x": f32_from_bits(int(fighter["self_vel_x_bits"])),
                     "self_vel_y": f32_from_bits(int(fighter["self_vel_y_bits"])),
+                    "gr_vel": f32_from_bits(int(fighter["gr_vel_bits"])),
                     "shield_hp": f32_from_bits(int(fighter["shield_health_bits"])),
                     "hitlag_left_f32": f32_from_bits(int(fighter["hitlag_left_bits"])),
                     "misc_as_bits": int(fighter["misc_as_bits"]),
@@ -139,6 +140,16 @@ def _collect_rows(dump_path: str | Path, window: Window, ports: list[int]) -> di
                     "items": frame_items,
                 }
             )
+            row = rows[-1]
+            if "ecb_lock_timer" in fighter.dtype.names:
+                row["ecb_lock_timer"] = int(fighter["ecb_lock_timer"])
+                row["coll_x130_flags"] = int(fighter["coll_x130_flags"])
+                row["coll_x130_locked"] = 1 if (int(fighter["coll_x130_flags"]) & (1 << 4)) != 0 else 0
+                row["shield_damage_taken"] = int(fighter["shield_damage_taken"])
+                row["shield_int_damage"] = int(fighter["shield_int_damage"])
+                row["shield_attacker_gobj"] = int(fighter["shield_attacker_gobj"])
+                row["specialn_facing_dir"] = f32_from_bits(int(fighter["specialn_facing_dir_bits"]))
+                row["shield_hit_element"] = int(fighter["shield_hit_element"])
 
     rows.sort(key=lambda r: (int(r["frame_index"]), int(r["port"])))
     return {
@@ -174,9 +185,17 @@ def _summary_text(payload: dict[str, object]) -> str:
         lines.append(
             f"frame={r['frame_index']} p={r['port']} action={r['action_id']} anim={r['animation_id']} "
             f"action_f32={r['action_frame_f32']:.3f} hitlag={r['hitlag_left_f32']:.3f} "
-            f"shield={r['shield_hp']:.3f} flags={r['state_flags']} buttons=0x{int(r['input']['buttons']):08x} "
+            f"shield={r['shield_hp']:.3f} gr_vel={r['gr_vel']:.3f} flags={r['state_flags']} "
+            f"buttons=0x{int(r['input']['buttons']):08x} "
             f"{hitlist_summary}"
         )
+        if "ecb_lock_timer" in r:
+            lines[-1] += (
+                f" ecb_lock={r['ecb_lock_timer']} x130=0x{int(r['coll_x130_flags']):08x}"
+                f" locked={r['coll_x130_locked']} x19a0={r['shield_damage_taken']}"
+                f" x19a4={r['shield_int_damage']} x19a8=0x{int(r['shield_attacker_gobj']):08x}"
+                f" x19ac={r['specialn_facing_dir']:.3f} x19b0={r['shield_hit_element']}"
+            )
     return "\n".join(lines).rstrip() + "\n"
 
 

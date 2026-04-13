@@ -8,8 +8,8 @@ import numpy as np
 
 
 ENGINE_DUMP_MAGIC = b"MSIMDMP\0"
-ENGINE_DUMP_VERSION = 7
-ENGINE_DUMP_SUPPORTED_VERSIONS = (6, 7)
+ENGINE_DUMP_VERSION = 8
+ENGINE_DUMP_SUPPORTED_VERSIONS = (6, 7, 8)
 
 HEADER_DTYPE = np.dtype(
     [
@@ -74,7 +74,7 @@ INPUT_DTYPE = np.dtype(
     align=False,
 )
 
-FIGHTER_DTYPE = np.dtype(
+FIGHTER_DTYPE_V7 = np.dtype(
     [
         ("flags", "<u4"),
         ("pos_x_bits", "<u4"),
@@ -120,6 +120,23 @@ FIGHTER_DTYPE = np.dtype(
     ],
     align=False,
 )
+
+FIGHTER_DTYPE_V8 = np.dtype(
+    FIGHTER_DTYPE_V7.descr[:-1]
+    + [
+        ("ecb_lock_timer", "u1"),
+        ("_pad0", "V3"),
+        ("coll_x130_flags", "<u4"),
+        ("shield_damage_taken", "<u4"),
+        ("shield_int_damage", "<u4"),
+        ("shield_attacker_gobj", "<u4"),
+        ("specialn_facing_dir_bits", "<u4"),
+        ("shield_hit_element", "<u4"),
+    ],
+    align=False,
+)
+
+FIGHTER_DTYPE = FIGHTER_DTYPE_V8
 
 ITEM_DTYPE = np.dtype(
     [
@@ -224,7 +241,8 @@ def read_engine_dump(path: str | Path) -> EngineDump:
 
     frames = _read(FRAME_DTYPE, frame_count, int(header["frames_offset"]))
     inputs = _read(INPUT_DTYPE, frame_count * port_count, int(header["inputs_offset"]))
-    fighters = _read(FIGHTER_DTYPE, frame_count * port_count, int(header["fighters_offset"]))
+    fighter_dtype = FIGHTER_DTYPE_V8 if version >= 8 else FIGHTER_DTYPE_V7
+    fighters = _read(fighter_dtype, frame_count * port_count, int(header["fighters_offset"]))
     items = _read(ITEM_DTYPE, total_items, int(header["items_offset"]))
     hitboxes = _read(HITBOX_DTYPE, frame_count * port_count * 4, int(header["hitboxes_offset"]))
     hurtboxes = _read(HURTBOX_DTYPE, frame_count * port_count * 15, int(header["hurtboxes_offset"]))

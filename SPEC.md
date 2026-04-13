@@ -1267,6 +1267,16 @@ update the row rather than re-deriving the same plan again.
 | `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Escape.c::ftCo_80099894` (roll/spotdodge) | `data/anims/{fox,falco}.bin` (escape anim end frames) | `src/action.c` (Escape*), `src/locomotion.c` (root-motion gaps) |
 | `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_GuardDamage_Anim` (GuardSetOff / stun loop) | `data/common/ft_common_data.json` (shieldstun duration rules) | Partial today: `src/combat.c` enters `GuardSetOff`, but per-frame behavior is incomplete |
 
+GuardSetOff grounded motion note:
+- Replay-real laser shield-hit entry rows already expose two live horizontal lanes on the same grounded `GuardSetOff` hitlag frame:
+  - `speed_ground_x_self` is the fresh recoil `gr_vel`,
+  - `speed_air_x_self` is the still-live grounded `self_vel.x` carried from the pre-contact locomotion row.
+- Decomp-backed owner chain:
+  - `refs/melee/src/melee/ft/ftcoll.c::ftColl_80076CBC` stores the shield-hit sign lane in `specialn_facing_dir`,
+  - `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80092F2C` consumes that lane to write `gr_vel`,
+  - `refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate` does not collapse `self_vel.x` onto `gr_vel` on the same frozen entry row.
+- Practical implication: do not fit item shield-hit GuardSetOff motion from replay `speed_ground_x_self` alone. The remaining blocker is the item-side `specialn_facing_dir` sign owner for those rows.
+
 #### Combat geometry (hurtcaps/hitboxes/shields overlap classification)
 
 | Read first (decomp) | Data artifacts (ISO-derived) | Code owner / gaps |
