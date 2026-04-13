@@ -178,6 +178,11 @@ static void hitboxes_seed_bridge_trim_impossible_indefinite(
   // refs/melee/src/melee/ft/ftcoll.c::{ftColl_800768A0,ftColl_80076CBC}
   const size_t a_idx = msl_idx_player(bi, attacker);
   const uint16_t attacker_iid = batch->state.instance_id[a_idx];
+  const size_t hb_valid_i =
+      ((size_t)bi * (size_t)MSL_MAX_PLAYERS + (size_t)attacker) * (size_t)MSL_MAX_HITBOXES +
+      (size_t)hb_id;
+  const uint8_t authoritative_hitbox_seed =
+      batch->state.combat_hitlist_hb_valid[hb_valid_i] ? 1u : 0u;
 
   // Reseed bridge: dense per-group hitlist snapshots can over-latch indefinite (x4==0) entries
   // onto active capsules before the first real hit in a newly active window, because the seed
@@ -360,6 +365,13 @@ static void hitboxes_seed_bridge_trim_impossible_indefinite(
       continue;
     }
     if (batch->state.prev_action_id[v_idx] != (uint16_t)MSL_ACT_GUARD) {
+      continue;
+    }
+    // Authoritative per-HitCapsule seed for the frozen-Guard shield-provenance family must survive
+    // this reseed-only dense stale trim. Keep the legacy dense-fallback trim unchanged.
+    // refs/melee/src/melee/ft/ftcoll.c::{ftColl_800768A0,ftColl_80076CBC}
+    // refs/melee/src/melee/lb/types.h::HitCapsule
+    if (authoritative_hitbox_seed) {
       continue;
     }
     hitboxes_seed_bridge_entry_clear(e);
