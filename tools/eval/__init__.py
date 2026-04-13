@@ -5,6 +5,7 @@ Notable CLIs:
 - tools.eval.top_triples
 - tools.eval.diff_locate
 - tools.eval.locate_rollout_desyncs
+- tools.eval.first_break_impact
 - tools.eval.summarize_rollout_locate
 - tools.eval.diff_rollout_locate
 - tools.eval.facing_residual_blocker_report
