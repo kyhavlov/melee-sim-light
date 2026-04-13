@@ -619,6 +619,43 @@ static inline uint8_t combat_is_guard_reflect_frozen_snapshot_idx(const MslBatch
   return (batch->state.action_frame[idx] <= MSL_GUARD_REFLECT_FROZEN_ACTION_FRAME_MAX) ? 1u : 0u;
 }
 
+static inline uint8_t combat_prev_action_is_guard_reflect_locomotion_source(uint16_t action_id) {
+  switch (action_id) {
+    case (uint16_t)MSL_ACT_WAIT:
+    case (uint16_t)MSL_ACT_WALK_SLOW:
+    case (uint16_t)MSL_ACT_WALK_MIDDLE:
+    case (uint16_t)MSL_ACT_WALK_FAST:
+    case (uint16_t)MSL_ACT_TURN:
+    case (uint16_t)MSL_ACT_DASH:
+    case (uint16_t)MSL_ACT_RUN:
+    case (uint16_t)MSL_ACT_RUN_DIRECT:
+    case (uint16_t)MSL_ACT_SQUAT:
+    case (uint16_t)MSL_ACT_SQUAT_WAIT:
+    case (uint16_t)MSL_ACT_SQUAT_RV:
+      return 1u;
+    default:
+      return 0u;
+  }
+}
+
+static inline uint8_t combat_is_guard_reflect_fresh_locomotion_snapshot_idx(const MslBatch* batch,
+                                                                            size_t idx) {
+  if (batch == NULL) {
+    return 0u;
+  }
+  const uint16_t prev_action = batch->state.prev_action_id[idx];
+  return (batch->state.action_id[idx] == (uint16_t)MSL_ACT_GUARD_REFLECT &&
+          batch->state.action_frame[idx] < 0 && batch->state.animation_index[idx] == UINT32_MAX &&
+          batch->state.guard_reflect_timer_x14_seed[idx] == 0u &&
+          batch->state.guard_reflect_timer_x18_seed[idx] == 0u &&
+          combat_prev_action_is_guard_reflect_locomotion_source(prev_action) &&
+          prev_action != (uint16_t)MSL_ACT_GUARD_ON && prev_action != (uint16_t)MSL_ACT_GUARD &&
+          prev_action != (uint16_t)MSL_ACT_GUARD_REFLECT &&
+          prev_action != (uint16_t)MSL_ACT_GUARD_SET_OFF)
+             ? 1u
+             : 0u;
+}
+
 static inline uint8_t combat_guard_reflect_no_submotion_x14_expired_lane(const MslBatch* batch,
                                                                          size_t idx) {
   if (batch == NULL) {
@@ -655,6 +692,23 @@ static inline uint8_t combat_shield_damage_powershield_suppressed_idx(const MslB
       batch->state.animation_index[idx] == UINT32_MAX &&
       batch->state.guard_reflect_timer_x14[idx] == 0u &&
       batch->state.guard_reflect_timer_x18[idx] != 0u) {
+    powershield_active = 0u;
+  }
+  // Fresh locomotion -> GuardReflect same-frame shield-hit lane:
+  // - grounded guard admission can enter GuardReflect through ftCo_80091A4C -> ftCo_800939B4 ->
+  //   ftCo_80093A50 before the same-frame projectile shield contact is resolved,
+  // - those contact rows still take the regular ftColl_80076CBC shield-hit / GuardSetOff path
+  //   (including shieldDamageTaken depletion), and
+  // - the replay-visible GuardSetOff destination can still expose x221C_b2 later in the same
+  //   frame once ftCo_80093A50 / ftCo_80093BC0-owned carry becomes visible.
+  // For shield-damage accumulation only, keep that fresh locomotion GuardReflect admission out of
+  // the powershield suppression lane; item reflect ownership continues to use
+  // combat_is_powershield_active_idx().
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
+  //   ftCo_80091A4C,ftCo_800939B4,ftCo_80093A50,ftCo_GuardReflect_Anim,ftCo_GuardSetOff_Anim,
+  //   ftCo_80093BC0}
+  // refs/melee/src/melee/ft/ftcoll.c::{ftColl_CreateReflectHit,ftColl_80076CBC}
+  if (powershield_active && combat_is_guard_reflect_fresh_locomotion_snapshot_idx(batch, idx)) {
     powershield_active = 0u;
   }
   return powershield_active;

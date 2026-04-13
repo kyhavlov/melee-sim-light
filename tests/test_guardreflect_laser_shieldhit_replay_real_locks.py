@@ -78,9 +78,11 @@ def test_locomotion_laser_guardsetoff_family_lock(case: _Case) -> None:
             assert int(ref_t["action_frame"][p]) == 0, case.note
             assert int(ref_t["animation_index"][p]) == 40, case.note  # GuardDamage
             assert int(ref_t["hitlag"][p]) == 3, case.note
+            assert float(ref_t["shield_hp"][p]) < float(seed_t["shield_hp"][p]), case.note
 
             for field in ("action_id", "action_frame", "animation_index", "hitlag", "instance_id"):
                 assert int(out_t[field][p]) == int(ref_t[field][p]), case.note
+            assert float(out_t["shield_hp"][p]) == float(ref_t["shield_hp"][p]), case.note
             for field in ("exists", "type", "owner", "instance_id"):
                 assert int(out_t["items"][0][field]) == int(ref_t["items"][0][field]), case.note
 

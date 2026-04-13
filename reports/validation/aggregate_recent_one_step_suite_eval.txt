@@ -75,13 +75,13 @@ err.speed_y_self: mae=0.001730 p95=0.000000 max=2.800000
 err.speed_x_attack: mae=0.000943 p95=0.000000 max=2.509946
 err.speed_y_attack: mae=0.001558 p95=0.000000 max=2.941020
 err.percent: mae=0.002835 p95=0.000000 max=12.450001
-err.shield_hp: mae=0.001434 p95=0.000000 max=13.866562
+err.shield_hp: mae=0.001338 p95=0.000000 max=13.866562
 err.item_pos_x: mae=0.077575 p95=0.000000 max=38.000000
 err.item_pos_y: mae=0.012710 p95=0.000000 max=2.033337
 err.item_vel_x: mae=0.036014 p95=0.000000 max=10.000000
 err.item_vel_y: mae=0.003487 p95=0.000000 max=0.347369
 overall.discrete_mismatch: 178 / 882695
-overall.float_norm_mae_p95: 0.00104222
+overall.float_norm_mae_p95: 0.00104205
 
 == datasets/aggregate_recent/replays/validation/aggregate_recent/BlondHardHippopotamus.msl ==
 Records: 10174  Players/scored per record: 2  Total player-frames: 20348
@@ -243,13 +243,13 @@ err.speed_y_self: mae=0.000914 p95=0.000000 max=2.200000
 err.speed_x_attack: mae=0.000884 p95=0.000000 max=5.323730
 err.speed_y_attack: mae=0.002044 p95=0.000000 max=4.594820
 err.percent: mae=0.002114 p95=0.000000 max=15.000000
-err.shield_hp: mae=0.000733 p95=0.000000 max=5.599998
+err.shield_hp: mae=0.000672 p95=0.000000 max=5.599998
 err.item_pos_x: mae=0.038789 p95=0.000000 max=39.815655
 err.item_pos_y: mae=0.015298 p95=0.000000 max=26.796017
 err.item_vel_x: mae=0.014239 p95=0.000000 max=3.960552
 err.item_vel_y: mae=0.005519 p95=0.000000 max=4.999367
 overall.discrete_mismatch: 280 / 1395009
-overall.float_norm_mae_p95: 0.00103735
+overall.float_norm_mae_p95: 0.00103725
 
 == datasets/aggregate_recent/replays/validation/aggregate_recent/HilariousVillainousGiraffe.msl ==
 Records: 9328  Players/scored per record: 2  Total player-frames: 18656
@@ -411,13 +411,13 @@ err.speed_y_self: mae=0.002202 p95=0.000000 max=3.160000
 err.speed_x_attack: mae=0.000760 p95=0.000000 max=2.549217
 err.speed_y_attack: mae=0.002628 p95=0.000000 max=6.507227
 err.percent: mae=0.003576 p95=0.000000 max=18.550652
-err.shield_hp: mae=0.003005 p95=0.000000 max=11.900002
+err.shield_hp: mae=0.002969 p95=0.000000 max=11.900002
 err.item_pos_x: mae=0.170448 p95=0.000000 max=94.601044
 err.item_pos_y: mae=0.042664 p95=0.000000 max=24.686058
 err.item_vel_x: mae=0.045176 p95=0.000000 max=10.000000
 err.item_vel_y: mae=0.011120 p95=0.000000 max=6.715874
 overall.discrete_mismatch: 640 / 1172369
-overall.float_norm_mae_p95: 0.00152336
+overall.float_norm_mae_p95: 0.00152330
 
 == datasets/aggregate_recent/replays/validation/aggregate_recent/PositiveRevolvingHyena.msl ==
 Records: 11980  Players/scored per record: 2  Total player-frames: 23960
@@ -495,13 +495,13 @@ err.speed_y_self: mae=0.002655 p95=0.000000 max=6.986000
 err.speed_x_attack: mae=0.000925 p95=0.000000 max=2.812247
 err.speed_y_attack: mae=0.002145 p95=0.000000 max=4.763919
 err.percent: mae=0.005686 p95=0.000000 max=14.100000
-err.shield_hp: mae=0.000820 p95=0.000000 max=8.400002
+err.shield_hp: mae=0.000732 p95=0.000000 max=8.400002
 err.item_pos_x: mae=0.109619 p95=0.000000 max=172.822784
 err.item_pos_y: mae=0.043806 p95=0.000000 max=85.774353
 err.item_vel_x: mae=0.022867 p95=0.000000 max=10.000000
 err.item_vel_y: mae=0.000000 p95=0.000000 max=0.000000
 overall.discrete_mismatch: 464 / 960377
-overall.float_norm_mae_p95: 0.00131073
+overall.float_norm_mae_p95: 0.00131058
 
 == datasets/aggregate_recent/replays/validation/aggregate_recent/PutridJoyousOryx.msl ==
 Records: 7543  Players/scored per record: 2  Total player-frames: 15086
@@ -621,13 +621,13 @@ err.speed_y_self: mae=0.001755 p95=0.000000 max=3.100000
 err.speed_x_attack: mae=0.000600 p95=0.000000 max=1.656845
 err.speed_y_attack: mae=0.001565 p95=0.000000 max=3.971344
 err.percent: mae=0.002576 p95=0.000000 max=8.190002
-err.shield_hp: mae=0.000618 p95=0.000000 max=5.599998
+err.shield_hp: mae=0.000529 p95=0.000000 max=5.599998
 err.item_pos_x: mae=0.070895 p95=0.000000 max=73.618073
 err.item_pos_y: mae=0.025521 p95=0.000000 max=31.795383
 err.item_vel_x: mae=0.020464 p95=0.000000 max=7.000000
 err.item_vel_y: mae=0.003790 p95=0.000000 max=4.999367
 overall.discrete_mismatch: 210 / 948277
-overall.float_norm_mae_p95: 0.00144802
+overall.float_norm_mae_p95: 0.00144786
 
 == datasets/aggregate_recent/replays/validation/aggregate_recent/TubbyCurlyHerring.msl ==
 Records: 12416  Players/scored per record: 2  Total player-frames: 24832
@@ -673,4 +673,4 @@ overall.float_norm_mae_p95: 0.00111523
 
 == suite summary ==
 overall.discrete_mismatch: 9033 / 17965838
-overall.float_norm_mae_p95: 0.00124377
+overall.float_norm_mae_p95: 0.00124374
