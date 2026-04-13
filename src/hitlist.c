@@ -255,6 +255,34 @@ uint8_t hitlist_allows_fighter(MslBatch* batch, int bi, int attacker, int hb_id,
   return 1u;
 }
 
+uint8_t hitlist_allows_fighter_v2(MslBatch* batch, int bi, int attacker, int hb_id, int victim,
+                                  uint16_t victim_iid) {
+  if (batch == NULL) {
+    return 0u;
+  }
+  if (bi < 0 || bi >= batch->batch_size) {
+    return 0u;
+  }
+  if (attacker < 0 || attacker >= (int)batch->config.num_players) {
+    return 0u;
+  }
+  if (hb_id < 0 || hb_id >= MSL_MAX_HITBOXES) {
+    return 0u;
+  }
+  if (victim < 0 || victim >= (int)batch->config.num_players) {
+    return 0u;
+  }
+
+  const size_t hb_i = idx_fighter_hitlist(bi, attacker, hb_id);
+  MslHitlistCapsule* hit = &batch->state.fighter_hitlist[hb_i];
+  size_t found = 0;
+  if (hitlist_capsule_find_fighter_entry(batch, bi, hit->victims_2, (size_t)MSL_HITLIST_VICTIM_CAP,
+                                         (uint8_t)victim, victim_iid, &found)) {
+    return 0u;
+  }
+  return 1u;
+}
+
 void hitlist_register_fighter_group(MslBatch* batch, int bi, int attacker, uint8_t hit_group,
                                     int victim, uint16_t victim_iid, int type,
                                     uint8_t rehit_frames) {
@@ -291,6 +319,43 @@ void hitlist_register_fighter_group(MslBatch* batch, int bi, int attacker, uint8
     const size_t hl_i = idx_fighter_hitlist(bi, attacker, hb_id);
     MslHitlistCapsule* hit = &batch->state.fighter_hitlist[hl_i];
     (void)hitlist_insert_victims1(hit, type, &key, rehit_frames);
+  }
+}
+
+void hitlist_register_fighter_group_v2(MslBatch* batch, int bi, int attacker, uint8_t hit_group,
+                                       int victim, uint16_t victim_iid, int type,
+                                       uint8_t rehit_frames) {
+  if (batch == NULL) {
+    return;
+  }
+  if (bi < 0 || bi >= batch->batch_size) {
+    return;
+  }
+  if (attacker < 0 || attacker >= (int)batch->config.num_players) {
+    return;
+  }
+  if (victim < 0 || victim >= (int)batch->config.num_players) {
+    return;
+  }
+  const uint8_t key = hitlist_fighter_key((uint8_t)victim);
+  for (int hb_id = 0; hb_id < MSL_MAX_HITBOXES; hb_id++) {
+    const size_t hb_state_i =
+        ((size_t)bi * (size_t)MSL_MAX_PLAYERS + (size_t)attacker) * (size_t)MSL_MAX_HITBOXES +
+        (size_t)hb_id;
+    if (!batch->state.hitbox_enabled[hb_state_i]) {
+      continue;
+    }
+    const uint8_t group = hitlist_hit_group_from_u16_7(batch->state.hitbox_u16_7[hb_state_i]);
+    if (group != hit_group) {
+      continue;
+    }
+    const size_t hl_i = idx_fighter_hitlist(bi, attacker, hb_id);
+    MslHitlistCapsule* hit = &batch->state.fighter_hitlist[hl_i];
+    MslHitlistVictimEntry victim_key;
+    memset(&victim_key, 0, sizeof(victim_key));
+    victim_key.kind_slot = key;
+    victim_key.id16 = victim_iid;
+    (void)hitlist_insert_victims2(hit, type, &victim_key, rehit_frames);
   }
 }
 

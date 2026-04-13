@@ -38,12 +38,21 @@ void hitlist_tick(MslBatch* batch);
 // Decomp anchor: refs/melee/src/melee/lb/lbcollision.c::lbColl_8000ACFC
 uint8_t hitlist_allows_fighter(MslBatch* batch, int bi, int attacker, int hb_id, int victim,
                                uint16_t victim_iid);
+// Returns 1 if the phantom/tip-log lane (victims_2) does not already contain (victim).
+// Decomp anchor: refs/melee/src/melee/ft/ftcoll.c::checkTipLog
+uint8_t hitlist_allows_fighter_v2(MslBatch* batch, int bi, int attacker, int hb_id, int victim,
+                                  uint16_t victim_iid);
 
 // Registers a hit on (victim) across all enabled hitboxes in the same hit_group.
 // Decomp anchor (share across same x4): refs/melee/src/melee/ft/ftcoll.c::inlineB0 and ::ftColl_80076808
 void hitlist_register_fighter_group(MslBatch* batch, int bi, int attacker, uint8_t hit_group,
                                     int victim, uint16_t victim_iid, int type,
                                     uint8_t rehit_frames);
+// Registers a phantom/tip-log victim across all enabled hitboxes in the same hit_group.
+// Decomp anchor: refs/melee/src/melee/ft/ftcoll.c::{inlineB0,ftColl_80076ED8}
+void hitlist_register_fighter_group_v2(MslBatch* batch, int bi, int attacker, uint8_t hit_group,
+                                       int victim, uint16_t victim_iid, int type,
+                                       uint8_t rehit_frames);
 
 // Registers a fighter victim in an item capsule's victim list (victims_1).
 // Decomp anchor (items): refs/melee/src/melee/it/itcoll.c::it_8026FA2C / it_8026FAC4

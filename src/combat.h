@@ -71,3 +71,9 @@ int combat_debug_select_body_hits(MslBatch* batch, int batch_index,
 int combat_debug_shield_candidate_decisions(MslBatch* batch, int batch_index,
                                             MslDebugShieldCandidateDecision* out_rows,
                                             uint16_t max_rows, uint16_t* out_count);
+
+// Debug/testing helper: compute the exact AttackAirB continuation overlap amount used by the
+// stale-owner/phantom triage lane.
+int combat_debug_attackairb_continuation_overlap(const MslBatch* batch, int batch_index,
+                                                 int attacker, int hb_id, int defender, int cap_id,
+                                                 float* out_overlap);

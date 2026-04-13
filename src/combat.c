@@ -336,6 +336,262 @@ static inline uint8_t combat_body_overlap_lbColl_80006E58_scaffold(
   return (uint8_t)(d2 <= rr * rr);
 }
 
+static inline uint8_t combat_mtx34_inverse_point(const float m[12], float x, float y, float z,
+                                                 float* out_x, float* out_y, float* out_z) {
+  if (m == NULL || out_x == NULL || out_y == NULL || out_z == NULL) {
+    return 0u;
+  }
+  const float a00 = m[0], a01 = m[1], a02 = m[2];
+  const float a10 = m[4], a11 = m[5], a12 = m[6];
+  const float a20 = m[8], a21 = m[9], a22 = m[10];
+  const float tx = m[3], ty = m[7], tz = m[11];
+
+  const float c00 = a11 * a22 - a12 * a21;
+  const float c01 = a02 * a21 - a01 * a22;
+  const float c02 = a01 * a12 - a02 * a11;
+  const float c10 = a12 * a20 - a10 * a22;
+  const float c11 = a00 * a22 - a02 * a20;
+  const float c12 = a02 * a10 - a00 * a12;
+  const float c20 = a10 * a21 - a11 * a20;
+  const float c21 = a01 * a20 - a00 * a21;
+  const float c22 = a00 * a11 - a01 * a10;
+  const float det = a00 * c00 + a01 * c10 + a02 * c20;
+  if (!(fabsf(det) > 1.0e-8f)) {
+    return 0u;
+  }
+  const float inv_det = 1.0f / det;
+  const float rx = x - tx;
+  const float ry = y - ty;
+  const float rz = z - tz;
+  *out_x = inv_det * (c00 * rx + c01 * ry + c02 * rz);
+  *out_y = inv_det * (c10 * rx + c11 * ry + c12 * rz);
+  *out_z = inv_det * (c20 * rx + c21 * ry + c22 * rz);
+  return 1u;
+}
+
+static inline uint8_t combat_is_damage_or_firefox_launch_victim_action(uint16_t action_id) {
+  switch (action_id) {
+    case MSL_ACT_DAMAGE_HI_1:
+    case MSL_ACT_DAMAGE_HI_2:
+    case MSL_ACT_DAMAGE_HI_3:
+    case MSL_ACT_DAMAGE_N_1:
+    case MSL_ACT_DAMAGE_N_2:
+    case MSL_ACT_DAMAGE_N_3:
+    case MSL_ACT_DAMAGE_LW_1:
+    case MSL_ACT_DAMAGE_LW_2:
+    case MSL_ACT_DAMAGE_LW_3:
+    case MSL_ACT_DAMAGE_AIR_1:
+    case MSL_ACT_DAMAGE_AIR_2:
+    case MSL_ACT_DAMAGE_AIR_3:
+    case MSL_ACT_DAMAGE_FLY_HI:
+    case MSL_ACT_DAMAGE_FLY_N:
+    case MSL_ACT_DAMAGE_FLY_LW:
+    case MSL_ACT_DAMAGE_FLY_TOP:
+    case MSL_ACT_DAMAGE_FLY_ROLL:
+    case MSL_ACT_FX_SPECIAL_HI:
+    case MSL_ACT_FX_SPECIAL_AIR_HI:
+      return 1u;
+    default:
+      return 0u;
+  }
+}
+
+static inline uint8_t combat_attackairb_continuation_body_overlap_exact(
+    const MslBatch* batch, int bi, int attacker, int hb_id, int defender, int cap_id, float hx,
+    float hy, float hz, float hr, float ax, float ay, float az, float bx, float by, float bz,
+    float* out_overlap_amount) {
+  if (out_overlap_amount) {
+    *out_overlap_amount = 0.0f;
+  }
+  if (batch == NULL) {
+    return 0u;
+  }
+  const size_t a_idx = msl_idx_player(bi, attacker);
+  const size_t d_idx = msl_idx_player(bi, defender);
+  if (batch->state.action_id[a_idx] != (uint16_t)MSL_ACT_ATTACK_AIR_B) {
+    return 0u;
+  }
+  const uint16_t v_action = batch->state.action_id[d_idx];
+  if (!combat_is_damage_or_firefox_launch_victim_action(v_action)) {
+    return 0u;
+  }
+
+  // AttackAirB continuation BODY geometry owner:
+  // - ftColl_80078C70 routes fighter BODY checks through lbColl_8000805C.
+  // - lbColl_8000805C/lbColl_80006E58 produce `hit->coll_distance`, and ftColl_80076ED8 uses that
+  //   overlap amount to choose full-hit vs phantom.
+  // refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078C70,ftColl_80076ED8}
+  // refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000805C,lbColl_80006E58}
+  const uint8_t char_id = batch->state.char_id[d_idx];
+  const uint32_t anim_u32 = batch->state.animation_index[d_idx];
+  if (anim_u32 > 0xFFFFu) {
+    return 0u;
+  }
+  const uint16_t msid = (uint16_t)anim_u32;
+  const float anim_frame_f32 = msl_anim_frame_sanitize_f32(batch->state.anim_frame_f32[d_idx]);
+  const uint16_t frame = msl_anim_frame_floor_u16(anim_frame_f32);
+
+  const MslHurtCap* caps = NULL;
+  uint16_t cap_count_u16 = 0;
+  if (hurtcaps_get(char_id, &caps, &cap_count_u16) != 0 || caps == NULL) {
+    return 0u;
+  }
+  if (cap_id < 0 || (uint16_t)cap_id >= cap_count_u16) {
+    return 0u;
+  }
+  const MslHurtCap* cap = &caps[cap_id];
+
+  float m[12];
+  if (anim_pose_get_matrix(char_id, msid, frame, cap->bone_part_id, m) != 0) {
+    return 0u;
+  }
+
+  const MslCharParams* chp = msl_char_params(char_id);
+  const float model_scaling = (chp && isfinite(chp->model_scaling) && chp->model_scaling > 0.0f)
+                                  ? chp->model_scaling
+                                  : 1.0f;
+  const float scale_y = batch->state.fighter_scale_y[d_idx];
+  const float model_scale = scale_y * model_scaling;
+  if (!(model_scale > 0.0f)) {
+    return 0u;
+  }
+  const float facing_dir = batch->state.facing[d_idx] ? 1.0f : -1.0f;
+  const float pos_x = batch->state.pos_x[d_idx];
+  const float pos_y = batch->state.pos_y[d_idx];
+  const float pos_z = batch->state.pos_z[d_idx];
+
+  const size_t hb_i = idx_hitbox(bi, attacker, hb_id);
+  float px = hx;
+  float py = hy;
+  float pz = hz;
+  if (batch->state.hitbox_prev_enabled[hb_i]) {
+    px = batch->state.hitbox_prev_x[hb_i];
+    py = batch->state.hitbox_prev_y[hb_i];
+    pz = batch->state.hitbox_prev_z[hb_i];
+  }
+
+  float d2 = 0.0f;
+  float s = 0.0f;
+  float t = 0.0f;
+  combat_segment_segment_dist2(px, py, pz, hx, hy, hz, ax, ay, az, bx, by, bz, &d2, &s, &t);
+  if (!(d2 >= 0.0f)) {
+    return 0u;
+  }
+  const float world_dist = sqrtf(d2);
+  const float hit_cp_x = px + s * (hx - px);
+  const float hit_cp_y = py + s * (hy - py);
+  const float hit_cp_z = pz + s * (hz - pz);
+  const float hurt_cp_x = ax + t * (bx - ax);
+  const float hurt_cp_y = ay + t * (by - ay);
+  const float hurt_cp_z = az + t * (bz - az);
+
+  const float hit_rel_x = hit_cp_x - pos_x;
+  const float hit_rel_y = hit_cp_y - pos_y;
+  const float hit_rel_z = hit_cp_z - pos_z;
+  const float hurt_rel_x = hurt_cp_x - pos_x;
+  const float hurt_rel_y = hurt_cp_y - pos_y;
+  const float hurt_rel_z = hurt_cp_z - pos_z;
+
+  const float hit_pose_x = -facing_dir * hit_rel_z;
+  const float hit_pose_y = hit_rel_y;
+  const float hit_pose_z = facing_dir * hit_rel_x;
+  const float hurt_pose_x = -facing_dir * hurt_rel_z;
+  const float hurt_pose_y = hurt_rel_y;
+  const float hurt_pose_z = facing_dir * hurt_rel_x;
+
+  float hit_local_x = 0.0f, hit_local_y = 0.0f, hit_local_z = 0.0f;
+  float hurt_local_x = 0.0f, hurt_local_y = 0.0f, hurt_local_z = 0.0f;
+  if (!combat_mtx34_inverse_point(m, hit_pose_x / model_scale, hit_pose_y / model_scale,
+                                  hit_pose_z / model_scale, &hit_local_x, &hit_local_y,
+                                  &hit_local_z) ||
+      !combat_mtx34_inverse_point(m, hurt_pose_x / model_scale, hurt_pose_y / model_scale,
+                                  hurt_pose_z / model_scale, &hurt_local_x, &hurt_local_y,
+                                  &hurt_local_z)) {
+    return 0u;
+  }
+
+  const float local_dx = hit_local_x - hurt_local_x;
+  const float local_dy = hit_local_y - hurt_local_y;
+  const float local_dz = hit_local_z - hurt_local_z;
+  const float local_dist = sqrtf(local_dx * local_dx + local_dy * local_dy + local_dz * local_dz);
+  float hurt_radius_world_equiv = cap->scale;
+  if (local_dist > 1.0e-8f && world_dist > 0.0f) {
+    hurt_radius_world_equiv = cap->scale * (world_dist / local_dist);
+  }
+  const float overlap_amount = hr + hurt_radius_world_equiv - world_dist;
+  if (out_overlap_amount) {
+    *out_overlap_amount = overlap_amount;
+  }
+  return (uint8_t)(overlap_amount > 0.0f);
+}
+
+static inline uint8_t combat_attackairb_stale_owner_continuation_candidate(
+    const MslBatch* batch, size_t a_idx, size_t d_idx, uint16_t expected_hitlag) {
+  if (batch == NULL) {
+    return 0u;
+  }
+  if (batch->state.action_id[a_idx] != (uint16_t)MSL_ACT_ATTACK_AIR_B) {
+    return 0u;
+  }
+  if (batch->state.hitlag[d_idx] != 0u || batch->state.hitstun[d_idx] == 0u) {
+    return 0u;
+  }
+  const uint16_t v_action = batch->state.action_id[d_idx];
+  if (v_action != (uint16_t)MSL_ACT_DAMAGE_FLY_TOP) {
+    return 0u;
+  }
+  // Narrow proven stale-owner subset:
+  // - Late AttackAirB continuation rows that still have more than one first-hit horizon of
+  //   remaining DamageFlyTop hitstun are the rows where stale BODY attribution from an older same-
+  //   port attacker instance can suppress a real continuation hit.
+  // - Keep shorter remaining-hitstun rows on the baseline path until the adjacent phantom/geometry
+  //   owner is modeled cleanly.
+  // refs/melee/src/melee/ft/ftcoll.c::ftColl_80076ED8
+  // refs/melee/src/melee/ft/ftcommon.c::ftCommon_CalcHitlag
+  return (batch->state.hitstun[d_idx] > expected_hitlag) ? 1u : 0u;
+}
+
+int combat_debug_attackairb_continuation_overlap(const MslBatch* batch, int batch_index,
+                                                 int attacker, int hb_id, int defender, int cap_id,
+                                                 float* out_overlap) {
+  if (out_overlap == NULL) {
+    return EINVAL;
+  }
+  *out_overlap = 0.0f;
+  if (batch == NULL) {
+    return EINVAL;
+  }
+  if (batch_index < 0 || batch_index >= batch->batch_size) {
+    return EINVAL;
+  }
+  if (attacker < 0 || attacker >= (int)batch->config.num_players || defender < 0 ||
+      defender >= (int)batch->config.num_players || attacker == defender) {
+    return EINVAL;
+  }
+  if (hb_id < 0 || hb_id >= MSL_MAX_HITBOXES || cap_id < 0 || cap_id >= MSL_MAX_HURTCAPS) {
+    return EINVAL;
+  }
+  const size_t hb_i = idx_hitbox(batch_index, attacker, hb_id);
+  const size_t cap_i = idx_hurtcap(batch_index, defender, cap_id);
+  if (!batch->state.hitbox_enabled[hb_i] || !batch->state.hurtcap_enabled[cap_i]) {
+    return 0;
+  }
+  const float hx = batch->state.hitbox_x[hb_i];
+  const float hy = batch->state.hitbox_y[hb_i];
+  const float hz = batch->state.hitbox_z[hb_i];
+  const float hr = batch->state.hitbox_radius[hb_i];
+  const float ax = batch->state.hurtcap_a_x[cap_i];
+  const float ay = batch->state.hurtcap_a_y[cap_i];
+  const float az = batch->state.hurtcap_a_z[cap_i];
+  const float bx = batch->state.hurtcap_b_x[cap_i];
+  const float by = batch->state.hurtcap_b_y[cap_i];
+  const float bz = batch->state.hurtcap_b_z[cap_i];
+  (void)combat_attackairb_continuation_body_overlap_exact(batch, batch_index, attacker, hb_id,
+                                                          defender, cap_id, hx, hy, hz, hr, ax, ay,
+                                                          az, bx, by, bz, out_overlap);
+  return 0;
+}
+
 static inline uint8_t combat_shield_overlap_ftcoll_80007bcc(
     const MslBatch* batch, int bi, int attacker, int hb_id, float hx, float hy, float hz, float hr,
     float shx, float shy, float shz, float shr, float shield_desc_radius,
@@ -2052,6 +2308,45 @@ static inline void combat_mutations_pass1_future_apply_body_hit(
   combat_combo_ftColl_800763C0(batch, a_idx, defender, d_idx, attacker_attack_id);
 }
 
+static inline void combat_mutations_pass1_future_apply_body_phantom_hit(MslBatch* batch,
+                                                                        size_t a_idx, size_t d_idx,
+                                                                        int attacker, float dmg_f,
+                                                                        uint8_t element) {
+  if (batch == NULL) {
+    return;
+  }
+  const MslCommonParams* c = msl_common_params();
+  if (c == NULL) {
+    return;
+  }
+
+  // Fighter phantom-hit lane:
+  // - ftColl_80076ED8 halves the float damage and stores it into fp->dmg.x1840.
+  // - Fighter_ProcessHit consumes x1840 through the x18a0 branch, starting victim hitlag without
+  //   percent/KB/damage-state entry and without attacker hitlag.
+  // refs/melee/src/melee/ft/ftcoll.c::ftColl_80076ED8
+  // refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
+  float phantom_dmg = 0.5f * dmg_f;
+  if (!((int)phantom_dmg) && dmg_f > 0.0f) {
+    phantom_dmg = 1.0f;
+  }
+  const int phantom_dmg_i = combat_get_env_dmg(phantom_dmg);
+  if (phantom_dmg_i <= 0) {
+    return;
+  }
+
+  const uint16_t d_motion_id = batch->state.action_id[d_idx];
+  const float d_hitlag_mul = combat_hitlag_mul_from_element(c, element);
+  const uint16_t d_hl = combat_calc_hitlag_frames(c, phantom_dmg_i, d_motion_id, d_hitlag_mul);
+  if (d_hl > batch->state.hitlag[d_idx]) {
+    batch->state.hitlag[d_idx] = d_hl;
+    combat_state_flags_set_is_hitlag(batch, d_idx, d_hl);
+  }
+
+  batch->state.instance_hit_by[d_idx] = batch->state.instance_id[a_idx];
+  batch->state.last_hit_by[d_idx] = (uint8_t)attacker;
+}
+
 MslItemHitResult combat_apply_item_hit(MslBatch* batch, int batch_index, int attacker, int defender,
                                        uint16_t item_attack_id, uint16_t item_attack_instance,
                                        uint16_t item_instance_id, uint16_t item_type,
@@ -3701,9 +3996,15 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
         // Rehit suppression (hitlists): suppress repeats while the victim is present in the
         // hitbox's victims_1 list (HitCapsule victim rings shared across same hit_group).
         const uint8_t hit_group = hitlist_hit_group_from_u16_7(batch->state.hitbox_u16_7[hb_i]);
-        if (!hitlist_allows_fighter(batch, bi, attacker, hb_id, defender, defender_iid)) {
-          continue;
-        }
+        const uint16_t attacker_iid = batch->state.instance_id[a_idx];
+        const uint8_t attackairb_stale_owner_candidate =
+            combat_attackairb_stale_owner_continuation_candidate(
+                batch, a_idx, d_idx, combat_calc_hitlag_frames(c, int_dmg, a_motion_id, 1.0f)) &&
+                    batch->state.instance_hit_by[d_idx] != attacker_iid
+                ? 1u
+                : 0u;
+        const uint8_t allows_v1 =
+            hitlist_allows_fighter(batch, bi, attacker, hb_id, defender, defender_iid);
         const uint8_t rehit_frames =
             hitlist_rehit_frames_from_u16_7(batch->state.hitbox_u16_7[hb_i]);
 
@@ -3720,6 +4021,7 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
           const float bz = batch->state.hurtcap_b_z[cap_i];
           const float cr = batch->state.hurtcap_radius[cap_i];
 
+          float attackairb_overlap_amount = 0.0f;
           uint8_t overlaps =
               combat_sphere_capsule_intersects(hx, hy, hz, hr, ax, ay, az, bx, by, bz, cr, NULL);
           if (combat_body_overlap_lbColl_80006E58_subset_allows(batch, hb_i, d_idx)) {
@@ -3727,12 +4029,40 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
                 batch, bi, attacker, hb_id, hx, hy, hz, hr, ax, ay, az, bx, by, bz, cr,
                 batch->state.fighter_scale_y[d_idx]);
           }
+          if (attackairb_stale_owner_candidate) {
+            overlaps = combat_attackairb_continuation_body_overlap_exact(
+                batch, bi, attacker, hb_id, defender, (int)cap_id, hx, hy, hz, hr, ax, ay, az, bx,
+                by, bz, &attackairb_overlap_amount);
+          }
           if (!overlaps) {
+            continue;
+          }
+          if (!allows_v1 && !attackairb_stale_owner_candidate) {
             continue;
           }
           if (!combat_shine_start_damageair_entry_pose_allows_body_contact(
                   batch, a_idx, d_idx, cap_id, hx, hy, hz, hr)) {
             continue;
+          }
+          if (attackairb_stale_owner_candidate && !defender_no_damage &&
+              attackairb_overlap_amount > 0.0f &&
+              attackairb_overlap_amount <= c->phantom_overlap_max_x7a8) {
+            // Phantom/tip-log branch for fighter BODY hits:
+            // - ftColl_80076ED8 takes the phantom lane when 0 < coll_distance < x7A8 and the
+            //   victim is not already present in HitCapsule.victims_2.
+            // - That branch starts victim hitlag through Fighter_ProcessHit's x18a0 path without
+            //   percent/KB/damage-state entry.
+            // refs/melee/src/melee/ft/ftcoll.c::{checkTipLog,inlineB1,ftColl_80076ED8}
+            // refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
+            if (!hitlist_allows_fighter_v2(batch, bi, attacker, hb_id, defender, defender_iid)) {
+              continue;
+            }
+            combat_mutations_pass1_future_apply_body_phantom_hit(
+                batch, a_idx, d_idx, attacker, hdmg, batch->state.hitbox_element[hb_i]);
+            hitlist_register_fighter_group_v2(batch, bi, attacker, hit_group, defender,
+                                              defender_iid, (int)MSL_LBCOLL_INSERT_FT_BODY, 0u);
+            did_hit = 1;
+            break;
           }
           // Combat Mutations Pass 1 (BODY-only).
           if (defender_no_damage) {

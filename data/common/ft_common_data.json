@@ -123,6 +123,7 @@
   "pass_tilt_max_frames": 6,
   "pass_vel_y": -0.5,
   "passivewall_timer_frames": 5,
+  "phantom_overlap_max_x7a8": 0.009999999776482582,
   "player_nudge_x": 0.30000001192092896,
   "player_nudge_z": 0.10000000149011612,
   "powershield_reflect_damage_mul": 0.5,

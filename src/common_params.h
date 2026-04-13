@@ -234,6 +234,10 @@ typedef struct MslCommonParams {
   float shield_setoff_push_mul;            // p_ftCommonData->x294
   float shield_setoff_push_max;            // p_ftCommonData->x298
   float shield_setoff_push_mul_non_yoshi;  // p_ftCommonData->x2BC
+  // Phantom-hit overlap cap.
+  // Decomp: refs/melee/src/melee/ft/ftcoll.c::{inlineB1,ftColl_80076ED8}
+  // Datasheet: refs/datasheet/plco_offsets.txt (x7A8 = max overlap amount that still counts as phantom)
+  float phantom_overlap_max_x7a8;  // p_ftCommonData->x7A8
 
   // L-cancel window / lag divisor (refs/melee/src/melee/ft/chara/ftCommon/ftCo_LandingAir.c)
   uint8_t lcancel_window_frames;  // p_ftCommonData->xE4

@@ -693,6 +693,8 @@ Prefer completing these projects in order rather than “patching symptoms” in
      - `refs/melee/src/melee/ft/ftcoll.c::ftColl_80078C70` (fighter-vs-fighter collision pass; adds victims during hit acceptance)
      - `refs/melee/src/melee/ft/ftcoll.c::ftColl_80076808` (share hitlist updates across hitboxes with the same `HitCapsule.x4`)
      - `refs/melee/src/melee/ft/ftcoll.c::ftColl_800768A0` (copy hit capsule victim lists across same-`x4` hitboxes, else clear)
+     - `refs/melee/src/melee/ft/ftcoll.c::{checkTipLog,inlineB1,ftColl_80076ED8}` (fighter phantom-hit path:
+       `victims_2` gate + `coll_distance < p_ftCommonData->x7A8`; starts victim hitlag without percent/KB/state entry)
      - `refs/melee/src/melee/ft/fighter.c::Fighter_8006CB94` (proc that calls `ftColl_80078C70`; priority 13)
      - `refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC` (post-collision consumer; priority 14)
      - `docs/DECOMP_PROC_ORDER.md` (priority schedule; where collision/consume sits relative to hitlag/anim/phys)

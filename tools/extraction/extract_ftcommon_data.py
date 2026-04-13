@@ -178,6 +178,12 @@ def main() -> None:
         "shield_setoff_push_mul": float(_f32_be(buf, ft_common_abs + 0x294)),
         "shield_setoff_push_max": float(_f32_be(buf, ft_common_abs + 0x298)),
         "shield_setoff_push_mul_non_yoshi": float(_f32_be(buf, ft_common_abs + 0x2BC)),
+        # Phantom-hit overlap cap (ftColl_80076ED8).
+        # - `inlineB1(hit)` checks `hit->coll_distance < p_ftCommonData->x7A8`.
+        # - Datasheet labels x7A8 as the max overlap amount that still counts as a phantom hit.
+        # refs/melee/src/melee/ft/ftcoll.c::{inlineB1,ftColl_80076ED8}
+        # refs/datasheet/plco_offsets.txt
+        "phantom_overlap_max_x7a8": float(_f32_be(buf, ft_common_abs + 0x7A8)),
         # Smash stick / flick gating.
         # - Grounded dash / side-smash checks consume p_ftCommonData->x3C/x40.
         # - Grounded c-stick smash edges in ft_0DF1.c::{ftCo_800DF1C8,ftCo_800DF2D8,ftCo_800DF3A8}
