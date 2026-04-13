@@ -288,6 +288,13 @@ Default expectation:
 - Completeness is defined per coherent owner family, not per broad feature area.
 - When touching a mechanic, prefer to close the full decomp-backed behavior surface for that family while the context is loaded.
 - Prefer the largest coherent decomp-backed family patch you can justify, not a long sequence of tiny row-by-row fixes.
+- Larger local work chunks are encouraged when they are converging on a correct mechanic boundary; do not assume the safest iteration is the smallest one.
+- During active investigation, it is acceptable to keep several adjacent same-area lines of work alive locally if that is the fastest path to a clean final patch.
+- “Not yet landable” is not a reason to discard partial progress during an active investigation. Prefer refining, narrowing, or splitting the work in place until the real boundary is understood.
+- Investigation, tooling, extraction, forensic capture, and data/seed-surface work are part of the same task as the gameplay fix. If a mechanic needs more observability before the correct implementation can be written, add that observability and continue.
+- Finding the next needed signal, probe, extractor field, or forensic lane is not a stopping condition; it defines the next task.
+- Own mechanic investigations end-to-end: source tracing, forensic/tooling improvements, proving rows, implementation, focused locks, validation, and only then a review handoff.
+- Do not return mid-investigation with diagnosis-only prose when a credible local next step still exists. The default handoff is a finished, reviewable set of changes and evidence.
 
 What “go above and beyond” means here:
 - If fixing a state-entry owner, also check the adjacent same-family exit and handoff rows.
@@ -303,11 +310,13 @@ Examples of the intended default:
 - A `Wait_IASA` mismatch is reason to audit the relevant catch / specials / attacks / guard ordering for the related delegate states, not only the motivating row.
 
 Required discipline:
-- Do not broaden fixes speculatively.
+- Do not broaden fixes without a concrete source-backed reason, but do broaden aggressively when the evidence says adjacent behavior shares the same owner.
 - Do not fit gameplay logic to a single replay row or trace symptom.
-- Keep unrelated owners in separate commits.
+- Keep unrelated owners separate in commits, but during local investigation you may explore multiple nearby owners together if that materially helps converge on the correct final patch.
 - If you broaden a patch, state explicitly which adjacent owners you audited and why they belong to the same mechanic family.
-- If the full family cannot be closed cleanly, land the proven subset and explicitly document the remaining blocker.
+- If a broadened patch is directionally right but not yet clean, prefer narrowing or refining it in place over fully reverting to a blank slate.
+- Only fully back out an attempted direction when the underlying approach is disproven or clearly creates net-worse behavior, not merely because the first boundary guess was too broad.
+- If the current mechanic needs more data, more extracted state, or more forensic visibility before the correct owner can be implemented, add that support and keep going within the same workstream.
 
 ## Working Conventions
 
@@ -331,6 +340,11 @@ Required discipline:
 - Any C gameplay change without a nearby decomp/asm/data citation is not reviewable; add the citation or don’t land it.
 - In this repo phase, prefer to close the full decomp-backed owner family you are already touching, not just the first mismatch row.
 - When a comparator/modelplay bug exposes a mechanic family, treat it as symptom discovery first; audit adjacent same-family rows before declaring the area done.
+- Prefer preserving promising partial work locally and iterating on it over fully backing out to a pristine tree mid-investigation.
+- When a broad local attempt mixes multiple nearby owners, narrow it to the clean subset rather than discarding the whole line of progress unless the direction itself is wrong.
+- Treat missing observability as implementation work, not as a handoff boundary. If you need a new dump field, extractor lane, seed field, replay patch probe, or debug helper to prove the owner, build it and continue.
+- Do not stop at “I found the missing signal.” Add or obtain that signal, validate it on the proving rows, and keep going toward the final mechanic fix.
+- For autonomous investigations, return only with a good reviewable patchset: code, tests/locks, validation, and evidence. Do not return merely because the task has shifted from gameplay C to tooling/forensics/data work.
 - Test-only change: do **not** regenerate `reports/validation/one_step_suite_eval.txt` or `reports/validation/rollout_suite_eval.txt`.
 - Sim-logic change: run `make test` and `make validate-all`.
 - Seed/schema change trigger: if you touch any of:
