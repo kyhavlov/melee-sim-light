@@ -1302,6 +1302,33 @@ static PyObject* msl_debug_hurtcap_slot_flags_py(PyObject* self, PyObject* args)
   return (PyObject*)arr;
 }
 
+static PyObject* msl_debug_attackairb_continuation_overlap_py(PyObject* self, PyObject* args) {
+  (void)self;
+  PyObject* handle_obj = NULL;
+  int batch_index = 0;
+  int attacker = 0;
+  int hb_id = 0;
+  int defender = 0;
+  int cap_id = 0;
+  if (!PyArg_ParseTuple(args, "Oiiiii", &handle_obj, &batch_index, &attacker, &hb_id, &defender,
+                        &cap_id)) {
+    return NULL;
+  }
+  PyMslHandle* h = unpack_handle(handle_obj);
+  if (h == NULL) {
+    return NULL;
+  }
+  float overlap = 0.0f;
+  const int err = msl_batch_debug_attackairb_continuation_overlap(
+      h->batch, batch_index, attacker, hb_id, defender, cap_id, &overlap);
+  if (err != 0) {
+    PyErr_Format(PyExc_ValueError, "msl_batch_debug_attackairb_continuation_overlap failed: %d",
+                 err);
+    return NULL;
+  }
+  return PyFloat_FromDouble((double)overlap);
+}
+
 static PyObject* msl_debug_write_processed_input(PyObject* self, PyObject* args) {
   (void)self;
   PyObject* handle_obj = NULL;
@@ -2847,6 +2874,10 @@ static PyMethodDef methods[] = {
     {"debug_hurtcap_slot_flags", msl_debug_hurtcap_slot_flags_py, METH_VARARGS,
      "debug_hurtcap_slot_flags(handle, batch_index, player_index, cap_id) -> "
      "bytes[1,sizeof(MslDebugHurtcapSlotFlags)]"},
+    {"debug_attackairb_continuation_overlap", msl_debug_attackairb_continuation_overlap_py,
+     METH_VARARGS,
+     "debug_attackairb_continuation_overlap(handle, batch_index, attacker, hb_id, defender, "
+     "cap_id) -> float"},
     {"sizes", msl_sizes, METH_NOARGS, "sizes() -> dict of struct sizes"},
     {"alloc_reset", msl_alloc_reset, METH_NOARGS,
      "Reset C allocation counters (debug/perf guardrail)."},

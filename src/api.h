@@ -1510,6 +1510,11 @@ int msl_batch_debug_hitbox_sweep_proxy(const MslBatch* batch, int batch_index, i
 // Debug-only helper: inspect one hurtcap slot's runtime eligibility for a fighter on this step.
 int msl_batch_debug_hurtcap_slot_flags(const MslBatch* batch, int batch_index, int player_index,
                                        int cap_id, MslDebugHurtcapSlotFlags* out_flags);
+// Debug/testing helper: return the current exact AttackAirB continuation overlap amount for one
+// attacker hitbox / defender hurtcap pair.
+int msl_batch_debug_attackairb_continuation_overlap(const MslBatch* batch, int batch_index,
+                                                    int attacker, int hb_id, int defender,
+                                                    int cap_id, float* out_overlap);
 
 // Debug/validation helper: read pose-driven world-space hurt capsules for a single fighter.
 // Writes `MSL_MAX_HURTCAPS * 7` floats into out_caps_7 as rows:

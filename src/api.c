@@ -2600,6 +2600,13 @@ int msl_batch_debug_hurtcap_slot_flags(const MslBatch* batch, int batch_index, i
   return 0;
 }
 
+int msl_batch_debug_attackairb_continuation_overlap(const MslBatch* batch, int batch_index,
+                                                    int attacker, int hb_id, int defender,
+                                                    int cap_id, float* out_overlap) {
+  return combat_debug_attackairb_continuation_overlap(batch, batch_index, attacker, hb_id, defender,
+                                                      cap_id, out_overlap);
+}
+
 static inline uint8_t sphere_sphere_intersects(float ax, float ay, float az, float ar, float bx,
                                                float by, float bz, float br) {
   const float dx = ax - bx;
