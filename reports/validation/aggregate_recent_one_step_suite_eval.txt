@@ -379,30 +379,30 @@ overall.float_norm_mae_p95: 0.00094293
 
 == datasets/aggregate_recent/replays/validation/aggregate_recent/MotionlessAggressiveJay.msl ==
 Records: 9689  Players/scored per record: 2  Total player-frames: 19378
-mismatch.action_id: 71 / 19378 (0.003664)
-mismatch.action_frame: 74 / 19378 (0.003819)
+mismatch.action_id: 68 / 19378 (0.003509)
+mismatch.action_frame: 71 / 19378 (0.003664)
 mismatch.on_ground: 7 / 19378 (0.000361)
 mismatch.facing: 5 / 19378 (0.000258)
 mismatch.stocks: 0 / 19378 (0.000000)
 mismatch.jumps_left: 17 / 19378 (0.000877)
 mismatch.is_dead: 0 / 19378 (0.000000)
-mismatch.hitlag: 42 / 19378 (0.002167)
+mismatch.hitlag: 38 / 19378 (0.001961)
 mismatch.hitstun: 11 / 19378 (0.000568)
 mismatch.l_cancel: 0 / 19378 (0.000000)
 mismatch.hurtbox_state: 13 / 19378 (0.000671)
 mismatch.ground_id: 3 / 19378 (0.000155)
-mismatch.animation_index: 72 / 19378 (0.003716)
+mismatch.animation_index: 69 / 19378 (0.003561)
 mismatch.instance_hit_by: 9 / 19378 (0.000464)
-mismatch.instance_id: 85 / 19378 (0.004386)
+mismatch.instance_id: 82 / 19378 (0.004232)
 mismatch.last_attack_landed: 8 / 19378 (0.000413)
 mismatch.combo_count: 5 / 19378 (0.000258)
 mismatch.last_hit_by: 16 / 19378 (0.000826)
-mismatch.state_flags: 131 / 96890 (0.001352)
-mismatch.item_exists: 22 / 145335 (0.000151)
-mismatch.item_type: 24 / 145335 (0.000165)
+mismatch.state_flags: 125 / 96890 (0.001290)
+mismatch.item_exists: 18 / 145335 (0.000124)
+mismatch.item_type: 20 / 145335 (0.000138)
 mismatch.item_state: 7 / 145335 (0.000048)
-mismatch.item_owner: 26 / 145335 (0.000179)
-mismatch.item_instance_id: 30 / 145335 (0.000206)
+mismatch.item_owner: 22 / 145335 (0.000151)
+mismatch.item_instance_id: 26 / 145335 (0.000179)
 err.pos_x: mae=0.021255 p95=0.000000 max=8.931946
 err.pos_y: mae=0.008628 p95=0.000000 max=9.528034
 err.speed_air_x_self: mae=0.009818 p95=0.000000 max=2.905185
@@ -412,12 +412,12 @@ err.speed_x_attack: mae=0.000760 p95=0.000000 max=2.549217
 err.speed_y_attack: mae=0.002628 p95=0.000000 max=6.507227
 err.percent: mae=0.003576 p95=0.000000 max=18.550652
 err.shield_hp: mae=0.003005 p95=0.000000 max=11.900002
-err.item_pos_x: mae=0.205102 p95=0.000000 max=94.601044
-err.item_pos_y: mae=0.056251 p95=0.000000 max=24.686058
-err.item_vel_x: mae=0.051281 p95=0.000000 max=10.000000
+err.item_pos_x: mae=0.170448 p95=0.000000 max=94.601044
+err.item_pos_y: mae=0.042664 p95=0.000000 max=24.686058
+err.item_vel_x: mae=0.045176 p95=0.000000 max=10.000000
 err.item_vel_y: mae=0.011120 p95=0.000000 max=6.715874
-overall.discrete_mismatch: 678 / 1172369
-overall.float_norm_mae_p95: 0.00154876
+overall.discrete_mismatch: 640 / 1172369
+overall.float_norm_mae_p95: 0.00152336
 
 == datasets/aggregate_recent/replays/validation/aggregate_recent/PositiveRevolvingHyena.msl ==
 Records: 11980  Players/scored per record: 2  Total player-frames: 23960
@@ -672,5 +672,5 @@ overall.discrete_mismatch: 1048 / 1502336
 overall.float_norm_mae_p95: 0.00111523
 
 == suite summary ==
-overall.discrete_mismatch: 9071 / 17965838
-overall.float_norm_mae_p95: 0.00124547
+overall.discrete_mismatch: 9033 / 17965838
+overall.float_norm_mae_p95: 0.00124377

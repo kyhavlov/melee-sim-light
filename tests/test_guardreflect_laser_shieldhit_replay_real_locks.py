@@ -100,3 +100,41 @@ def test_locomotion_laser_guardsetoff_family_lock(case: _Case) -> None:
         assert [int(x) for x in out_t["state_flags"][p]] == [int(x) for x in ref_t["state_flags"][p]]
         for field in ("exists", "type", "owner", "instance_id"):
             assert int(out_t["items"][0][field]) == int(ref_t["items"][0][field]), case.note
+
+
+@pytest.mark.integration
+def test_landing_guardreflect_laser_no_contact_row_stays_replay_real() -> None:
+    # Replay-real negative lock for the adjacent Landing -> GuardReflect no-contact family:
+    # - Landing IASA also delegates to ftCo_80091A4C, but this row stays on the GuardReflect
+    #   no-contact lane in replay; the incoming laser must not be forced onto GuardSetOff /
+    #   shield-hit ownership.
+    # - This keeps the fresh GuardReflect item-contact family scoped to true grounded locomotion
+    #   pose owners until a landing-specific shield-pose source is extracted.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::ftCo_Landing_IASA
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_80091A4C,ftCo_800939B4,ftCo_80093A50}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_rel = (
+        "datasets/aggregate_recent/replays/validation/aggregate_recent/HilariousVillainousGiraffe.msl"
+    )
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    record = 132
+    p = 1
+    seed_t, out_t, ref_t = _step_one_row(dataset_path, record)
+
+    assert int(seed_t["action_id"][p]) == 42  # Landing
+    assert int(ref_t["action_id"][p]) == 182  # GuardReflect
+    assert int(ref_t["action_frame"][p]) == -1
+    assert int(ref_t["hitlag"][p]) == 0
+
+    for field in ("action_id", "action_frame", "animation_index", "hitlag", "instance_id"):
+        assert int(out_t[field][p]) == int(ref_t[field][p]), dataset_rel
+
+    for slot in (0, 1):
+        for field in ("exists", "type", "owner", "instance_id"):
+            assert int(out_t["items"][slot][field]) == int(ref_t["items"][slot][field]), (
+                f"{dataset_rel}: slot={slot} field={field}"
+            )

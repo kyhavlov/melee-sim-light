@@ -924,26 +924,70 @@ static inline uint8_t item_sphere_sphere_intersects_3d(float ax, float ay, float
   return (dx * dx + dy * dy + dz * dz) <= (rr * rr);
 }
 
-static inline uint8_t item_try_guardon_fresh_shield_center(const MslBatch* batch, size_t d_idx,
-                                                           float* out_x, float* out_y,
-                                                           float* out_z) {
+static inline uint8_t item_prev_action_is_guard_reflect_locomotion_pose_source(uint16_t action_id) {
+  switch (action_id) {
+    case (uint16_t)MSL_ACT_WAIT:
+    case (uint16_t)MSL_ACT_WALK_SLOW:
+    case (uint16_t)MSL_ACT_WALK_MIDDLE:
+    case (uint16_t)MSL_ACT_WALK_FAST:
+    case (uint16_t)MSL_ACT_TURN:
+    case (uint16_t)MSL_ACT_DASH:
+    case (uint16_t)MSL_ACT_RUN:
+    case (uint16_t)MSL_ACT_RUN_DIRECT:
+    case (uint16_t)MSL_ACT_SQUAT:
+    case (uint16_t)MSL_ACT_SQUAT_WAIT:
+    case (uint16_t)MSL_ACT_SQUAT_RV:
+      return 1u;
+    default:
+      return 0u;
+  }
+}
+
+static inline uint8_t item_try_guard_fresh_shield_center(const MslBatch* batch, size_t d_idx,
+                                                         float* out_x, float* out_y, float* out_z) {
   if (batch == NULL || out_x == NULL || out_y == NULL || out_z == NULL) {
     return 0u;
   }
-  if (batch->state.action_id[d_idx] != (uint16_t)MSL_ACT_GUARD_ON ||
-      batch->state.animation_index[d_idx] != 0xFFFFFFFFu || batch->state.action_frame[d_idx] >= 0 ||
-      batch->state.guard_on_entered_this_frame[d_idx] == 0u) {
+  const uint16_t action_id = batch->state.action_id[d_idx];
+  const uint16_t prev_action_id = batch->state.prev_action_id[d_idx];
+  const uint8_t fresh_guard_on_entry =
+      (action_id == (uint16_t)MSL_ACT_GUARD_ON &&
+       batch->state.animation_index[d_idx] == 0xFFFFFFFFu && batch->state.action_frame[d_idx] < 0 &&
+       batch->state.guard_on_entered_this_frame[d_idx] != 0u)
+          ? 1u
+          : 0u;
+  const uint8_t fresh_locomotion_guard_reflect_entry =
+      (action_id == (uint16_t)MSL_ACT_GUARD_REFLECT &&
+       batch->state.animation_index[d_idx] == 0xFFFFFFFFu && batch->state.action_frame[d_idx] < 0 &&
+       batch->state.guard_reflect_timer_x14_seed[d_idx] == 0u &&
+       batch->state.guard_reflect_timer_x18_seed[d_idx] == 0u &&
+       item_prev_action_is_guard_reflect_locomotion_pose_source(prev_action_id) &&
+       prev_action_id != (uint16_t)MSL_ACT_GUARD_ON && prev_action_id != (uint16_t)MSL_ACT_GUARD &&
+       prev_action_id != (uint16_t)MSL_ACT_GUARD_REFLECT &&
+       prev_action_id != (uint16_t)MSL_ACT_GUARD_SET_OFF)
+          ? 1u
+          : 0u;
+  if (!fresh_guard_on_entry && !fresh_locomotion_guard_reflect_entry) {
     return 0u;
   }
 
-  // Fresh frozen GuardOn projectile-shield bridge:
+  // Fresh frozen GuardOn / locomotion GuardReflect projectile-shield bridge:
   // - ftCo_800921DC zeroes the shield-joint translate on GuardOn entry,
-  // - ftCo_80091E78(0) preserves that live GuardOn current pose on the first entry frame,
-  // - later teacher-forced frozen GuardOn rows are not the same owner and must keep the stable
-  //   baseline shield bubble path.
-  // Restrict this to same-step GuardOn entry in item shield precedence only; broadening the
-  // current-pose bridge to seeded frozen GuardOn snapshots regresses unrelated guard rows.
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_800921DC,ftCo_80091E78}
+  // - locomotion GuardReflect entry (ftCo_80093A50) also calls ftCo_80092450 then ftCo_800921DC,
+  // - ftCo_80091E78(0) preserves that live current pose on the first entry frame,
+  // - later teacher-forced frozen GuardOn / GuardReflect rows are not the same owner and must keep
+  //   the stable baseline shield bubble path.
+  // Scope this to the grounded locomotion states that actually delegate to ftCo_80091A4C before
+  // shield entry and whose pose family matches the extracted GuardOn current-pose table. Landing
+  // IASA also calls ftCo_80091A4C, but the repo only extracts Guard/GuardOn pose ownership in
+  // data/shields/*.bin; applying that GuardOn current-pose table to Landing-origin GuardReflect
+  // rows creates unrelated shield-contact drift.
+  // Restrict this to same-step entry in item shield precedence only; broadening the current-pose
+  // bridge to seeded frozen guard snapshots regresses replay-real shield-hit rows.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_{Wait,Walk,Turn,Dash,Run,RunDirect,Squat,SquatWait,SquatRv,Landing}.c
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
+  //   ftCo_800921DC,ftCo_80091E78,ftCo_800924C0,ftCo_80093A50}
+  // data/shields/{fox,falco}.bin: Guard / GuardOn shield center tables only (MSLSHLD1 v3)
   MslShieldTiltTableView tv;
   if (msl_shield_tilt_table_view(batch->state.char_id[d_idx], &tv) != 0 ||
       tv.guard_on_xyz == NULL || tv.guard_on_frame_count == 0u) {
@@ -1931,7 +1975,7 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
         float shx = batch->state.shield_x[d_idx];
         float shy = batch->state.shield_y[d_idx];
         float shz = batch->state.shield_z[d_idx];
-        (void)item_try_guardon_fresh_shield_center(batch, d_idx, &shx, &shy, &shz);
+        (void)item_try_guard_fresh_shield_center(batch, d_idx, &shx, &shy, &shz);
         if (!isfinite(shx) || !isfinite(shy) || !isfinite(shz)) {
           shx = batch->state.pos_x[d_idx];
           shy = batch->state.pos_y[d_idx];

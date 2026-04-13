@@ -69,7 +69,7 @@ rollout.first_mismatch_seeded_total: 39
 
 == suite summary ==
 overall.rollout.streak_count: 446
-overall.rollout.streak_len.median: 63
+overall.rollout.streak_len.median: 62
 overall.rollout.streak_len.p90: 178
 overall.rollout.streak_len.p95: 237
 overall.rollout.streak_len.max: 631
