@@ -142,6 +142,8 @@ def _collect_rows(dump_path: str | Path, window: Window, ports: list[int]) -> di
             )
             row = rows[-1]
             if "ecb_lock_timer" in fighter.dtype.names:
+                if "lightshield_amount_bits" in fighter.dtype.names:
+                    row["lightshield_amount"] = f32_from_bits(int(fighter["lightshield_amount_bits"]))
                 row["ecb_lock_timer"] = int(fighter["ecb_lock_timer"])
                 row["coll_x130_flags"] = int(fighter["coll_x130_flags"])
                 row["coll_x130_locked"] = 1 if (int(fighter["coll_x130_flags"]) & (1 << 4)) != 0 else 0
@@ -191,6 +193,7 @@ def _summary_text(payload: dict[str, object]) -> str:
         )
         if "ecb_lock_timer" in r:
             lines[-1] += (
+                f" light={r.get('lightshield_amount', 0.0):.3f}"
                 f" ecb_lock={r['ecb_lock_timer']} x130=0x{int(r['coll_x130_flags']):08x}"
                 f" locked={r['coll_x130_locked']} x19a0={r['shield_damage_taken']}"
                 f" x19a4={r['shield_int_damage']} x19a8=0x{int(r['shield_attacker_gobj']):08x}"

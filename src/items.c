@@ -1685,7 +1685,8 @@ static void illusion_items_update_and_collide(MslBatch* batch, int bi) {
             shield_damage = 0;
           }
           combat_apply_item_shield_hit(batch, bi, owner, def, batch->state.item_attack_id[ii],
-                                       batch->state.item_attack_instance[ii], dmg, shield_damage);
+                                       batch->state.item_attack_instance[ii], dmg, shield_damage,
+                                       hp.element, batch->state.item_pos_x[ii]);
           // Generic item hitlag owner:
           // - item collision processing raises item->xCBC_hitlagFrames after a successful item
           //   shield/body contact, and Item_802697D4 skips item Phys/movement while the item
@@ -2293,8 +2294,10 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
           float dmg = (laser_state == 0u) ? lp->damage : lp->state1_damage;
           dmg = item_reflected_damage_lane(batch, ii, dmg);
           const int8_t shd = (laser_state == 0u) ? lp->shield_damage : lp->state1_shield_damage;
+          const uint8_t element = (laser_state == 0u) ? lp->element : lp->state1_element;
           combat_apply_item_shield_hit(batch, bi, owner, def, batch->state.item_attack_id[ii],
-                                       batch->state.item_attack_instance[ii], dmg, shd);
+                                       batch->state.item_attack_instance[ii], dmg, shd, element,
+                                       batch->state.item_pos_x[ii]);
           // Rehit suppression latch for this item: insert the post-mutation victim identity so
           // teacher-forced reseed sees the same proxy at t+1.
           const uint16_t def_iid_post = batch->state.instance_id[d_idx];

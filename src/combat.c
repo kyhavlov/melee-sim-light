@@ -2595,7 +2595,8 @@ static inline float combat_rebound_ground_x0_from_int_dmg(const MslCommonParams*
 
 void combat_apply_item_shield_hit(MslBatch* batch, int batch_index, int attacker, int defender,
                                   uint16_t item_attack_id, uint16_t item_attack_instance,
-                                  float damage, int8_t hitbox_shield_damage) {
+                                  float damage, int8_t hitbox_shield_damage, uint8_t hit_element,
+                                  float item_pos_x) {
   if (batch == NULL) {
     return;
   }
@@ -2637,13 +2638,20 @@ void combat_apply_item_shield_hit(MslBatch* batch, int batch_index, int attacker
   // Fighter_ProcessHit_8006D1EC).
   // refs/melee/src/melee/ft/ftcoll.c::ftColl_80076CBC
   // refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
-  const uint8_t powershield_active = combat_shield_damage_powershield_suppressed_idx(batch, d_idx);
+  const uint8_t powershield_active_shield_damage =
+      combat_shield_damage_powershield_suppressed_idx(batch, d_idx);
+  const uint8_t powershield_active_recoil = combat_is_powershield_active_idx(batch, d_idx);
   int shield_damage_taken =
       (int_dmg + (int)hitbox_shield_damage > 0) ? (int_dmg + (int)hitbox_shield_damage) : 0;
-  if (powershield_active) {
+  if (powershield_active_shield_damage) {
     shield_damage_taken = 0;
   }
 
+  // Guard-owned lightshield transform:
+  // - shield depletion and GuardSetOff stun both consume the current guard lightshield lane,
+  // - ftCo_800921DC / ftCo_800925A4 derive that lane from trigger input (`x650`) via the same
+  //   deadzone/clamp transform mirrored by combat_lightshield_amount().
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_800921DC,ftCo_800925A4,ftCo_80092F2C}
   const float light =
       combat_lightshield_amount(c, batch->state.input_buttons[d_idx], batch->state.input_l[d_idx],
                                 batch->state.input_r[d_idx]);
@@ -2683,6 +2691,34 @@ void combat_apply_item_shield_hit(MslBatch* batch, int batch_index, int attacker
     anim_rate = (end_frame + 0.1f) / stun_frames;
   }
   msl_anim_timebase_enter(batch, d_idx, 0.0f, anim_rate);
+
+  // Item->shield GuardSetOff grounded recoil ownership:
+  // - ftColl_80077688 is the item-specific shield-contact helper that feeds the same GuardSetOff
+  //   x19A4/x19AC/x19B0 lanes later consumed by ftCo_80092F2C.
+  // - When the new max int damage wins, it writes:
+  //     if (fp->cur_pos.x > item->pos.x) specialn_facing_dir = -1.0f; else +1.0f
+  //     x19B0 = hit->element
+  // - ftCo_80092F2C then uses that sign to write GuardSetOff recoil `gr_vel`, while the frozen
+  //   entry row still preserves grounded `self_vel.x` separately.
+  // refs/melee/build/GALE01/asm/melee/ft/ftcoll.s::ftColl_80077688 (0x800778F4..0x80077918)
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80092F2C
+  // refs/melee/build/GALE01/asm/melee/ft/chara/ftCommon/ftCo_Guard.s:1656-1679
+  if (batch->state.on_ground[d_idx] && hit_element != (uint8_t)MSL_HIT_ELEMENT_GROUND) {
+    float push = stun_frames * c->shield_setoff_push_mul;
+    if (!powershield_active_recoil) {
+      push *= c->shield_setoff_push_mul_non_yoshi;
+    }
+    if (push > c->shield_setoff_push_max) {
+      push = c->shield_setoff_push_max;
+    }
+    // Item->shield recoil sign consumption:
+    // - ftColl_80077688 writes `specialn_facing_dir = -1` when defender.x > item.x, else `+1`,
+    // - ftCo_80092F2C then writes `gr_vel = +push` when specialn_facing_dir < 0, else `-push`.
+    // refs/melee/build/GALE01/asm/melee/ft/ftcoll.s::ftColl_80077688 (0x800778F4..0x80077918)
+    // refs/melee/build/GALE01/asm/melee/ft/chara/ftCommon/ftCo_Guard.s:1668-1679
+    const float recoil_sign = (batch->state.pos_x[d_idx] > item_pos_x) ? 1.0f : -1.0f;
+    batch->state.speed_ground_x_self[d_idx] = recoil_sign * push;
+  }
 
   // Hitlag (defender only): the "attacker" for projectiles is the item, not the owning fighter.
   // refs/melee/src/melee/ft/ftcoll.c::ftColl_80076CBC and fighter.c::Fighter_ProcessHit_8006D1EC

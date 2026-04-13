@@ -17,7 +17,7 @@ def _build_dump(path: Path, *, version: int) -> Path:
     frames["frame_index"][0] = -123
 
     inputs = np.zeros((frame_count * port_count,), dtype=io.INPUT_DTYPE)
-    fighter_dtype = io.FIGHTER_DTYPE_V8 if version >= 8 else io.FIGHTER_DTYPE_V7
+    fighter_dtype = io.FIGHTER_DTYPE_V9 if version >= 9 else io.FIGHTER_DTYPE_V8 if version >= 8 else io.FIGHTER_DTYPE_V7
     fighters = np.zeros((frame_count * port_count,), dtype=fighter_dtype)
     hitboxes = np.zeros((frame_count * port_count * 4,), dtype=io.HITBOX_DTYPE)
     hurtboxes = np.zeros((frame_count * port_count * 15,), dtype=io.HURTBOX_DTYPE)
@@ -34,6 +34,8 @@ def _build_dump(path: Path, *, version: int) -> Path:
         hitlists["victims2_cooldown"][0][1] = 4
     if version >= 8:
         fighters["gr_vel_bits"][0] = np.uint32(0x3f800000)
+        if version >= 9:
+            fighters["lightshield_amount_bits"][0] = np.uint32(0x3f000000)
         fighters["ecb_lock_timer"][0] = np.uint8(10)
         fighters["coll_x130_flags"][0] = np.uint32(1 << 4)
         fighters["shield_damage_taken"][0] = np.uint32(3)
@@ -129,3 +131,11 @@ def test_read_engine_dump_v8_guard_recoil_fields(tmp_path: Path) -> None:
     assert int(ft0["shield_attacker_gobj"]) == 0x803F0000
     assert io.f32_from_bits(int(ft0["specialn_facing_dir_bits"])) == pytest.approx(-1.0)
     assert int(ft0["shield_hit_element"]) == 9
+
+
+def test_read_engine_dump_v9_lightshield_field(tmp_path: Path) -> None:
+    dump_path = _build_dump(tmp_path / "v9.bin", version=9)
+    d = io.read_engine_dump(dump_path)
+    assert int(d.header["version"]) == 9
+    ft0 = d.fighters[0]
+    assert io.f32_from_bits(int(ft0["lightshield_amount_bits"])) == pytest.approx(0.5)

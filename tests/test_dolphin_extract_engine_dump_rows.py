@@ -27,3 +27,13 @@ def test_collect_rows_v8_surfaces_guard_recoil_fields(tmp_path: Path) -> None:
     assert "ecb_lock=10" in text
     assert "x19a4=1" in text
     assert "x19ac=-1.000" in text
+
+
+def test_collect_rows_v9_surfaces_lightshield_field(tmp_path: Path) -> None:
+    dump_path = _build_dump(tmp_path / "v9.bin", version=9)
+    payload = _collect_rows(dump_path, Window(-123, -123), [1])
+    row = payload["rows"][0]
+    assert row["lightshield_amount"] == 0.5
+
+    text = _summary_text(payload)
+    assert "light=0.500" in text

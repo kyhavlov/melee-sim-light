@@ -50,7 +50,8 @@ MslItemHitResult combat_apply_item_hit(MslBatch* batch, int batch_index, int att
 // normally take hitlag/deflection in Melee; we apply only defender-side effects.
 void combat_apply_item_shield_hit(MslBatch* batch, int batch_index, int attacker, int defender,
                                   uint16_t item_attack_id, uint16_t item_attack_instance,
-                                  float damage, int8_t hitbox_shield_damage);
+                                  float damage, int8_t hitbox_shield_damage, uint8_t hit_element,
+                                  float item_pos_x);
 
 // Debug/testing helper: run combat pass-1 selection (BODY-only, shield-safe, with rehit
 // suppression) and write selected contacts into `out_contacts`.
