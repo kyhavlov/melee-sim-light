@@ -1945,34 +1945,12 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
         float shield_hit_contact_y = y;
         float shield_bounce_contact_x = x;
         float shield_bounce_contact_y = y;
-        // No-submotion shield snapshots use a deterministic probe on the
-        // (prev_pos -> cur_pos) segment for shield-overlap sampling.
-        //
         // Decomp call-chain anchors:
         // - itFoxlaser_UnkMotion1_Phys snapshots pre-move position (`foxlaser.pos = item->pos`).
         // - it_8029C4D4 runs collision using (prev_pos, cur_pos) and dispatches the hit callback.
         // - it_2725_Logic94_HitShield is the laser shield-hit resolution callback.
         // refs/melee/src/melee/it/items/itfoxlaser.c::{
         //   itFoxlaser_UnkMotion1_Phys,it_8029C4D4,it_2725_Logic94_HitShield}
-        //
-        // Sim rule for frozen steady Guard snapshots (`animation_index==0xFFFFFFFF`):
-        // when the defender is already in Guard hold with neutral hitlag/hitstun and no
-        // submotion timeline, do not create new shield-hit contacts from the post-motion endpoint
-        // this frame. Sample shield overlap at segment start (`prev_pos`) only.
-        //
-        // GuardOn entry is different: ftCo_80091E78 owns the shield-entry pose via mv.co.guard.x0
-        // and the fighter-data entry anchor, but item collision still uses the authoritative
-        // laser prev->cur segment.
-        // refs/melee/src/melee/ft/ftanim.c::ftAnim_8006E9B4
-        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80091E78
-        //
-        const uint8_t defender_no_submotion_snapshot =
-            (batch->state.action_id[d_idx] == (uint16_t)MSL_ACT_GUARD &&
-             batch->state.action_frame[d_idx] < 0 &&
-             batch->state.animation_index[d_idx] == 0xFFFFFFFFu &&
-             batch->state.hitlag[d_idx] == 0u && batch->state.hitstun[d_idx] == 0u)
-                ? 1u
-                : 0u;
         const uint8_t defender_guard_reflect_no_submotion_snapshot =
             (batch->state.action_id[d_idx] == (uint16_t)MSL_ACT_GUARD_REFLECT &&
              batch->state.action_frame[d_idx] < 0 &&
@@ -2017,19 +1995,33 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
           bounce_shx = batch->state.pos_x[d_idx];
           bounce_shy = batch->state.pos_y[d_idx] + shr;
         }
-        float probe_lerp = 1.0f;
-        if (defender_no_submotion_snapshot) {
-          // Apply the no-submotion rule above: overlap probe uses prev_pos, not cur_pos.
-          // refs/melee/src/melee/it/items/itfoxlaser.c::itFoxlaser_UnkMotion1_Phys
-          probe_lerp = 0.0f;
-        }
-        const float shield_probe_x =
-            defender_no_submotion_snapshot ? (x0 + (x - x0) * probe_lerp) : x;
-        const float shield_probe_y =
-            defender_no_submotion_snapshot ? (y0 + (y - y0) * probe_lerp) : y;
+        const uint8_t defender_guard_hold_no_submotion_snapshot =
+            (batch->state.action_id[d_idx] == (uint16_t)MSL_ACT_GUARD &&
+             batch->state.action_frame[d_idx] < 0 &&
+             batch->state.animation_index[d_idx] == UINT32_MAX &&
+             batch->state.prev_action_id[d_idx] == (uint16_t)MSL_ACT_GUARD &&
+             batch->state.hitlag[d_idx] == 0u && batch->state.hitstun[d_idx] == 0u)
+                ? 1u
+                : 0u;
+        // Steady Guard no-submotion snapshot split:
+        // - ftCo_GuardOn_Anim can already have settled into Guard through ftCo_800928CC before the
+        //   replay-visible post-frame, leaving a frozen Guard snapshot (`af=-1`, `anim=-1`) whose
+        //   shield owner is already the settled Guard hold for this step.
+        // - Keep laser shield acceptance on that steady Guard subset on the settled point sample
+        //   rather than inventing a new same-frame sweep across the full prev->cur segment.
+        // - This patch intentionally stays scoped to the steady Guard subset; other GuardOn /
+        //   fresh-entry shield-contact owners remain separate replay-locked work.
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
+        //   ftCo_GuardOn_Anim,ftCo_800928CC,ftCo_Guard_IASA}
+        // refs/melee/src/melee/it/items/itfoxlaser.c::{itFoxlaser_UnkMotion1_Phys,it_8029C4D4}
+        const float shield_probe_x = defender_guard_hold_no_submotion_snapshot ? x0 : x;
+        const float shield_probe_y = defender_guard_hold_no_submotion_snapshot ? y0 : y;
 
-        const uint8_t off_n =
+        uint8_t off_n =
             (laser_state == 0u) ? lp->hitbox_offsets_x_count : lp->state1_hitbox_offsets_x_count;
+        if (defender_guard_hold_no_submotion_snapshot) {
+          off_n = 0u;
+        }
         // Decomp consumes one shared scaleZ transform chain for laser collision spaces
         // (shield/body/reflect) via item collision callbacks. Keep the narrowed shield cap off for
         // steady GuardReflect no-submotion snapshots, but preserve the identity cap for fresh
@@ -2058,12 +2050,8 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
           // collision callbacks consume prev->cur segment ownership (`it_8029C4D4`).
           // refs/melee/src/melee/ft/ftcoll.c::ftColl_80076CBC (lbColl_80007BCC(..., cur_pos.z))
           // refs/melee/src/melee/it/items/itfoxlaser.c::it_8029C4D4
-          if (defender_guard_reflect_no_submotion_snapshot) {
-            if (item_swept_sphere_sphere_intersects_3d(sx0, sy0, 0.0f, sx, sy, 0.0f, sr, shx, shy,
-                                                       shz, shr)) {
-              this_hit = 1u;
-            }
-          } else if (item_sphere_sphere_intersects_3d(sx, sy, 0.0f, sr, shx, shy, shz, shr)) {
+          if (item_swept_sphere_sphere_intersects_3d(sx0, sy0, 0.0f, sx, sy, 0.0f, sr, shx, shy,
+                                                     shz, shr)) {
             this_hit = 1u;
           }
           if (!this_hit) {
@@ -2090,47 +2078,26 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
             }
           }
         }
-        // If no scripted offsets exist, fall back to the projectile origin.
+        // If no scripted offsets exist, fall back to the projectile origin on the same prev->cur
+        // owner segment used by it_8029C4D4.
         if (!shield_hit && off_n == 0) {
-          if (defender_guard_reflect_no_submotion_snapshot) {
-            shield_hit = item_swept_sphere_sphere_intersects_3d(
-                x0, y0, 0.0f, shield_probe_x, shield_probe_y, 0.0f, sr, shx, shy, shz, shr);
-            if (shield_hit) {
-              shield_hit_contact_x = shield_probe_x;
-              shield_hit_contact_y = shield_probe_y;
-              float trial_bounce_vx = 0.0f;
-              float trial_bounce_vy = 0.0f;
-              if (laser_try_shield_bounce_velocity(vx, vy, bounce_shx, bounce_shy, shield_probe_x,
-                                                   shield_probe_y, &trial_bounce_vx,
-                                                   &trial_bounce_vy) &&
-                  (!shield_bounce_contact_found ||
-                   !(defender_guard_reflect_late_locomotion_snapshot_geom && laser_state == 0u) ||
-                   trial_bounce_vy > shield_bounce_best_vy)) {
-                shield_bounce_contact_found = 1u;
-                shield_bounce_best_vy = trial_bounce_vy;
-                shield_bounce_contact_x = shield_probe_x;
-                shield_bounce_contact_y = shield_probe_y;
-              }
-            }
-          } else {
-            shield_hit = item_sphere_sphere_intersects_3d(shield_probe_x, shield_probe_y, 0.0f, sr,
-                                                          shx, shy, shz, shr);
-            if (shield_hit) {
-              shield_hit_contact_x = shield_probe_x;
-              shield_hit_contact_y = shield_probe_y;
-              float trial_bounce_vx = 0.0f;
-              float trial_bounce_vy = 0.0f;
-              if (laser_try_shield_bounce_velocity(vx, vy, bounce_shx, bounce_shy, shield_probe_x,
-                                                   shield_probe_y, &trial_bounce_vx,
-                                                   &trial_bounce_vy) &&
-                  (!shield_bounce_contact_found ||
-                   !(defender_guard_reflect_late_locomotion_snapshot_geom && laser_state == 0u) ||
-                   trial_bounce_vy > shield_bounce_best_vy)) {
-                shield_bounce_contact_found = 1u;
-                shield_bounce_best_vy = trial_bounce_vy;
-                shield_bounce_contact_x = shield_probe_x;
-                shield_bounce_contact_y = shield_probe_y;
-              }
+          shield_hit = item_swept_sphere_sphere_intersects_3d(
+              x0, y0, 0.0f, shield_probe_x, shield_probe_y, 0.0f, sr, shx, shy, shz, shr);
+          if (shield_hit) {
+            shield_hit_contact_x = shield_probe_x;
+            shield_hit_contact_y = shield_probe_y;
+            float trial_bounce_vx = 0.0f;
+            float trial_bounce_vy = 0.0f;
+            if (laser_try_shield_bounce_velocity(vx, vy, bounce_shx, bounce_shy, shield_probe_x,
+                                                 shield_probe_y, &trial_bounce_vx,
+                                                 &trial_bounce_vy) &&
+                (!shield_bounce_contact_found ||
+                 !(defender_guard_reflect_late_locomotion_snapshot_geom && laser_state == 0u) ||
+                 trial_bounce_vy > shield_bounce_best_vy)) {
+              shield_bounce_contact_found = 1u;
+              shield_bounce_best_vy = trial_bounce_vy;
+              shield_bounce_contact_x = shield_probe_x;
+              shield_bounce_contact_y = shield_probe_y;
             }
           }
         }
