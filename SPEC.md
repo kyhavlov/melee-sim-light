@@ -761,10 +761,13 @@ Prefer completing these projects in order rather than “patching symptoms” in
    - AttackAirB jump-entry collision-scale subset:
      - General hitbox placement still uses the extracted pose matrices plus `fighter_scale_y *
        model_scaling`, but the `GAT:2221` front-door slice needs one narrower correction.
-     - For first-active-frame `AttackAirB` BODY checks against jump-entry victims, decomp cancels
+     - For first-active-frame `AttackAirB` BODY checks on the enable-edge slice, decomp cancels
        per-character `model_scaling` on the collision subtree via
        `ftAnim_8006FA58 -> ftCommon_8007F6A4`; a scale_y-only counterfactual is used as the
-       acceptance gate for that owner slice.
+       acceptance gate for the proven subset so far:
+       - jump-entry victims like `GAT:2221`, and
+       - shallow `DamageFlyTop` victims like `QGD:285` where model-scaled hitbox placement creates
+         a one-frame-early false BODY hit before the real follow-on hit lands.
      - Keep the already-proven SpecialAirHi/Firefox launch subtree as a separate local-pose owner;
        that family still needs its dedicated XRotN rotation + scaling path.
      - Decomp anchors: `refs/melee/src/melee/ft/fighter.c::Fighter_UpdateModelScale`,

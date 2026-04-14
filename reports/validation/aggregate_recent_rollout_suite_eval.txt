@@ -35,7 +35,7 @@ rollout.streak_len.p90: 148
 rollout.streak_len.p95: 186
 rollout.streak_len.max: 256
 rollout.first_mismatch_total: 183
-rollout.first_mismatch_seeded_total: 99
+rollout.first_mismatch_seeded_total: 100
 
 == datasets/aggregate_recent/replays/validation/aggregate_recent/DistinctCaringCobra.msl ==
 rollout.best_len: 271
@@ -185,4 +185,4 @@ overall.rollout.streak_len.p95: 196
 overall.rollout.streak_len.max: 631
 overall.rollout.best_len.max: 631
 overall.rollout.first_mismatch_total: 2370
-overall.rollout.first_mismatch_seeded_total: 1366
+overall.rollout.first_mismatch_seeded_total: 1367

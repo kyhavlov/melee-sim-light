@@ -1409,12 +1409,13 @@ def test_hitboxes_seed_bridge_early_window_owner_mismatch_trim_rows_and_adjacent
 @pytest.mark.integration
 def test_attackairb_create_edge_model_scaling_subset_and_adjacent_controls() -> None:
     # Replay-real lock for the AttackAirB create-edge geometry subset:
-    # - GAT:2221 (recent-suite front door) is the narrowed AttackAirB JumpF admission row where the
-    #   current model-scaled hitbox false-positive must be rejected.
+    # - GAT:2221 (JumpF victim) and QGD:285 (DamageFlyTop victim) are the narrowed AttackAirB
+    #   enable-edge admission rows where the current model-scaled hitbox false-positive must be
+    #   rejected.
     # - The live collision skeleton cancels `co_attrs.model_scaling` through
     #   ftAnim_8006FA58 -> ftCommon_8007F6A4, so these hitboxes should scale by fighter scale only.
     # - Keep nearby create-edge controls explicit:
-    #   - QGD:285 / 8222 and TBK:5247 still carry separate BODY-contact owners and remain blockers.
+    #   - QGD:8222 and TBK:5247 still carry separate BODY-contact owners and remain blockers.
     #   - QGD:6822 stays exact as a non-target control.
     #
     # Decomp ownership anchors:
@@ -1435,6 +1436,13 @@ def test_attackairb_create_edge_model_scaling_subset_and_adjacent_controls() -> 
             1,
             1,
             0,
+        ),
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/QuerulousGrandDinosaur.msl",
+            285,
+            0,
+            0,
+            1,
         ),
     ]
 
@@ -1470,16 +1478,6 @@ def test_attackairb_create_edge_model_scaling_subset_and_adjacent_controls() -> 
         _assert_transition_lock_fields_match_ref(out_row=out_row, ref_row=ref_row, record=record, p=victim)
 
     for dataset_rel, record, attacker, hb_id, victim, exp_action, exp_hitlag, exp_hitstun in [
-        (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/QuerulousGrandDinosaur.msl",
-            285,
-            0,
-            0,
-            1,
-            86,
-            8,
-            28,
-        ),
         (
             "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/QuerulousGrandDinosaur.msl",
             8222,

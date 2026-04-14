@@ -255,9 +255,10 @@ static inline uint8_t combat_shine_start_damageair_entry_pose_allows_body_contac
   return combat_sphere_capsule_intersects(hx, hy, hz, hr, ax, ay, az, bx, by, bz, cr, NULL);
 }
 
-static inline uint8_t combat_attackairb_jump_entry_model_scale_allows_body_contact(
+static inline uint8_t combat_attackairb_enable_edge_model_scale_allows_body_contact(
     const MslBatch* batch, size_t a_idx, size_t hb_i, size_t d_idx, float hx, float hy, float hz,
-    float hr, float ax, float ay, float az, float bx, float by, float bz, float cr) {
+    float hr, float ax, float ay, float az, float bx, float by, float bz, float cr,
+    uint16_t expected_hitlag) {
   if (batch == NULL) {
     return 1u;
   }
@@ -265,7 +266,12 @@ static inline uint8_t combat_attackairb_jump_entry_model_scale_allows_body_conta
     return 1u;
   }
   const uint16_t d_action = batch->state.action_id[d_idx];
-  if (d_action != (uint16_t)MSL_ACT_JUMP_F && d_action != (uint16_t)MSL_ACT_JUMP_B) {
+  if (d_action != (uint16_t)MSL_ACT_JUMP_F && d_action != (uint16_t)MSL_ACT_JUMP_B &&
+      d_action != (uint16_t)MSL_ACT_DAMAGE_FLY_TOP) {
+    return 1u;
+  }
+  if (d_action == (uint16_t)MSL_ACT_DAMAGE_FLY_TOP &&
+      (batch->state.hitstun[d_idx] == 0u || batch->state.hitstun[d_idx] > expected_hitlag)) {
     return 1u;
   }
   if (batch->state.hitbox_enable_edge[hb_i] == 0u) {
@@ -282,12 +288,17 @@ static inline uint8_t combat_attackairb_jump_entry_model_scale_allows_body_conta
   // - Fighter_UpdateModelScale applies fighter scale to runtime joints.
   // - ftAnim_8006FA58 applies the inverse per-character model scaling on the collision subtree via
   //   ftCommon_8007F6A4, so the effective collision-space hitbox center uses fighter scale only.
-  // - Keep this narrowed to the current AttackAirB jump-admission owner slice; the broader create-edge
-  //   family still contains separate owners that should not be changed here.
+  // - Keep this narrowed to the current AttackAirB enable-edge owner slice:
+  //   - jump-entry victims (`GAT:2221`) and
+  //   - DamageFlyTop victims on the shallow pre-refresh row (`QGD:285`) where the remaining
+  //     hitstun has already decayed to one first-hit horizon or less.
+  //   Deeper DamageFlyTop continuation rows (e.g. `TBK:6380`) and adjacent BODY-contact owners
+  //   like `QGD:8222` / `TBK:5247` stay outside this subset.
   // refs/melee/src/melee/ft/fighter.c::Fighter_UpdateModelScale
   // refs/melee/src/melee/ft/ftanim.c::ftAnim_8006FA58
   // refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007F6A4
   // refs/melee/src/melee/lb/lb_00B0.c::lb_8000B1CC
+  // refs/melee/src/melee/ft/ftcommon.c::ftCommon_CalcHitlag
   const float inv_model = 1.0f / chp->model_scaling;
   const float alt_hx = batch->state.pos_x[a_idx] + (hx - batch->state.pos_x[a_idx]) * inv_model;
   const float alt_hy = batch->state.pos_y[a_idx] + (hy - batch->state.pos_y[a_idx]) * inv_model;
@@ -4104,8 +4115,9 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
                   batch, a_idx, d_idx, cap_id, hx, hy, hz, hr)) {
             continue;
           }
-          if (!combat_attackairb_jump_entry_model_scale_allows_body_contact(
-                  batch, a_idx, hb_i, d_idx, hx, hy, hz, hr, ax, ay, az, bx, by, bz, cr)) {
+          if (!combat_attackairb_enable_edge_model_scale_allows_body_contact(
+                  batch, a_idx, hb_i, d_idx, hx, hy, hz, hr, ax, ay, az, bx, by, bz, cr,
+                  combat_calc_hitlag_frames(c, int_dmg, a_motion_id, 1.0f))) {
             continue;
           }
           if (attackairb_stale_owner_candidate && !defender_no_damage &&
