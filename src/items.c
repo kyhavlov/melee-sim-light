@@ -1387,7 +1387,8 @@ static inline void item_apply_reflect_transfer(MslBatch* batch, size_t ii, size_
 static void laser_spawn_from_fighter(MslBatch* batch, int bi, int owner, const MslLaserParams* lp,
                                      uint8_t spawn_state, uint8_t use_velocity_override,
                                      float override_vx, float override_vy,
-                                     uint8_t apply_spawn_motion_step) {
+                                     uint8_t apply_spawn_motion_step,
+                                     uint8_t throw_lw_late_pulse_transn_y) {
   if (batch == NULL || lp == NULL) {
     return;
   }
@@ -1459,16 +1460,29 @@ static void laser_spawn_from_fighter(MslBatch* batch, int bi, int owner, const M
 
   float pos_x = batch->state.pos_x[o_idx] + lx;
   float pos_y = batch->state.pos_y[o_idx] + ly;
-
+  if (throw_lw_late_pulse_transn_y) {
+    // ThrowLw later-pulse persistent shot subset:
+    // - SSANIM01 baked joint matrices strip TransN/root translation into the v3 tail.
+    // - The later ThrowLw pulses (after the first non-persistent pulse) keep a live carried state1
+    //   laser article in vanilla, so restore the root Y translation for this persistent subset.
+    // - Keep the first pulse on the existing non-persistent owner path.
+    // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
+    // refs/melee/src/melee/it/items/itfoxlaser.c::{it_8029C504,it_8029C6CC}
+    // data/anims/{fox,falco}.bin SSANIM01 v3 TransN tail, read by anim_pose_get_transn()
+    // data/moves/{fox,falco}.json moves["ftCo_SM_ThrowLw"]["events"]
+    float transn_xyz[3] = {0.0f, 0.0f, 0.0f};
+    if (anim_pose_get_transn(char_id, msid, frame, transn_xyz) == 0) {
+      pos_y += transn_xyz[1];
+    }
+  }
   float ang = lp->blaster_angle;
-  if (batch->state.action_id[o_idx] == (uint16_t)MSL_ACT_THROW_HI) {
-    // Throw-side launch angle is owned by ftFx_Throw_Anim:
+  if (action_is_blaster_throw(batch->state.action_id[o_idx])) {
+    // Throw-side launch angle is owned by ftFx_Throw_Anim for Throw{B,Hi,Lw}:
     //   atan2f(FtGetHoldJoint.y - ItGetHoldJoint.y,
     //          FtGetHoldJoint.x - ItGetHoldJoint.x)
-    // rather than the SpecialN constant angle. This lane is currently kept to ThrowHi, where the
-    // modelplay symptom is a visibly horizontal upthrow shot. FtGetHoldJoint uses the extracted
-    // `laser_spawn_joint_part_id` + `lp->spawn_off_xyz`; ItGetHoldJoint uses the same RThumbNb
-    // joint with the decomp-local offset below.
+    // rather than the SpecialN constant blaster angle.
+    // FtGetHoldJoint uses the extracted `laser_spawn_joint_part_id` + `lp->spawn_off_xyz`;
+    // ItGetHoldJoint uses the same RThumbNb joint with the decomp-local offset below.
     // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::{
     //   ftFx_SpecialN_FtGetHoldJoint,ftFx_SpecialN_ItGetHoldJoint,ftFx_Throw_Anim}
     // refs/melee/src/melee/it/items/itfoxlaser.c::it_8029C6CC
@@ -1487,7 +1501,13 @@ static void laser_spawn_from_fighter(MslBatch* batch, int bi, int owner, const M
     ilx *= model_scale;
     ily *= model_scale;
     const float it_hold_x = batch->state.pos_x[o_idx] + ilx;
-    const float it_hold_y = batch->state.pos_y[o_idx] + ily;
+    float it_hold_y = batch->state.pos_y[o_idx] + ily;
+    if (throw_lw_late_pulse_transn_y) {
+      float transn_xyz[3] = {0.0f, 0.0f, 0.0f};
+      if (anim_pose_get_transn(char_id, msid, frame, transn_xyz) == 0) {
+        it_hold_y += transn_xyz[1];
+      }
+    }
     ang = atan2f(pos_y - it_hold_y, pos_x - it_hold_x);
   } else {
     // Launch angle: if facing left, use (pi - base_angle).
@@ -2814,6 +2834,7 @@ void items_spawn_pre_physics(MslBatch* batch) {
       float shoot_override_vx = 0.0f;
       float shoot_override_vy = 0.0f;
       uint8_t shoot_apply_motion_step = 0u;
+      uint8_t shoot_throw_lw_late_pulse_transn_y = 0u;
       // Throw-side blaster shots are driven by throw_flags_b0 pulses consumed in ftFx_Throw_Anim,
       // not by SpecialN loop cmd_vars[2].
       // refs/melee/src/melee/ft/ftaction.c::ftAction_80071974
@@ -2894,6 +2915,9 @@ void items_spawn_pre_physics(MslBatch* batch) {
           if (move_tables_throw_cmd1_active(cid, action_id, af) &&
               move_tables_throw_crossed_projectile_pulse_frame(cid, action_id, af_prev, af,
                                                                &crossed_pulse_af)) {
+            int16_t first_pulse_af = -1;
+            const uint8_t has_first_pulse =
+                move_tables_throw_projectile_first_pulse_frame(cid, action_id, &first_pulse_af);
             const uint16_t prev_frame_i = msl_anim_frame_floor_u16(af_prev);
             // Throw-side stale-latch suppressors (context-owned, non-record-keyed):
             // - Throw pulse flags are one-shot script events (`throw_flags_b0`) owned by the command
@@ -3099,10 +3123,29 @@ void items_spawn_pre_physics(MslBatch* batch) {
               }
               continue;
             }
+            if (crossed_pulse_af >= 0 && crossed_pulse_af <= 0xFF) {
+              batch->state.throw_pulse_crossed_curr_frame[idx] = (uint8_t)crossed_pulse_af;
+            }
             should_shoot = 1u;
             // Throw-side spawn path in ftFx_Throw_Anim uses it_8029C6CC (msid=1).
             // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
             shoot_spawn_state = 1u;
+            if (action_id == (uint16_t)MSL_ACT_THROW_LW && has_first_pulse &&
+                crossed_pulse_af >= first_pulse_af) {
+              if (crossed_pulse_af == first_pulse_af) {
+                // Common Throw-side intra-frame order:
+                // - ftFx_Throw_Anim spawns the laser during the fighter Anim callback.
+                // - the newly spawned shot can then consume its item motion callback later in the
+                //   same frame before attached-victim collision is evaluated.
+                // - Keep this on the first ThrowLw pulse only; later persistent pulses stay on the
+                //   separate carried state1 owner below.
+                // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
+                // refs/melee/src/melee/it/items/itfoxlaser.c::itFoxlaser_UnkMotion1_Phys
+                shoot_apply_motion_step = 1u;
+              } else {
+                shoot_throw_lw_late_pulse_transn_y = 1u;
+              }
+            }
             // ThrowHi pulse-crossing velocity bridge:
             // - Throw-side launch direction in ftFx_Throw_Anim is hold-joint vector driven
             //   (`atan2f`), not the fixed SpecialN blaster angle.
@@ -3128,7 +3171,8 @@ void items_spawn_pre_physics(MslBatch* batch) {
         continue;
       }
       laser_spawn_from_fighter(batch, bi, p, lp, shoot_spawn_state, shoot_use_velocity_override,
-                               shoot_override_vx, shoot_override_vy, shoot_apply_motion_step);
+                               shoot_override_vx, shoot_override_vy, shoot_apply_motion_step,
+                               shoot_throw_lw_late_pulse_transn_y);
     }
 
     // Keep item ordering stable for fixed-slot comparisons.

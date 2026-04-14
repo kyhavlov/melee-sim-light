@@ -14,6 +14,33 @@
 #include "stage_collision.h"
 #include "input_axis.h"
 
+static inline uint8_t mpcoll_is_pending_throw_release_victim(const MslBatch* batch, int bi, int p) {
+  if (batch == NULL) {
+    return 0u;
+  }
+  const int num_players = (int)batch->config.num_players;
+  if (p < 0 || p >= num_players) {
+    return 0u;
+  }
+  for (int owner = 0; owner < num_players; owner++) {
+    if (owner == p) {
+      continue;
+    }
+    const size_t oidx = msl_idx_player(bi, owner);
+    if (batch->state.throw_pending_victim_port[oidx] == (uint8_t)p &&
+        batch->state.throw_pending_hit_idx[oidx] != 0xFFu) {
+      // Shared release owner:
+      // - ftCo_800DD724 is the common ThrowF/B/Hi/Lw release consume path.
+      // - The victim is detached from the owner link before later damage/item resolution, but that
+      //   same frame is still owned by throw release rather than generic fighter mpColl.
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DD724
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DDDE4
+      return 1u;
+    }
+  }
+  return 0u;
+}
+
 // Decomp constants (mplib.c):
 // - mpLib_8004DD90_Floor clamps small off-end X within ±0.1 before returning -1 (airborne).
 //   refs/melee/src/melee/mp/mplib.c::mpLib_8004DD90_Floor
@@ -777,6 +804,9 @@ void mpcoll_ground_apply(MslBatch* batch) {
           // }
           continue;
         }
+      }
+      if (mpcoll_is_pending_throw_release_victim(batch, bi, p)) {
+        continue;
       }
 
       const uint8_t was_grounded = batch->state.prev_on_ground[idx] ? 1u : 0u;

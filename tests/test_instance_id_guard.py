@@ -7,6 +7,8 @@ from tools.eval.dataset import COMPARE_DTYPE, INPUT_DTYPE, SEED_DTYPE
 
 # Action ids (GALE01): refs/melee/src/melee/ft/chara/ftCommon/forward.h
 ACT_WAIT = 0x000E
+ACT_THROW_LW = 0x00DE
+ACT_THROWN_LW = 0x00F2
 
 # Fox/Falco SpecialN action ids (GALE01):
 # refs/melee/src/melee/ft/chara/ftFox/ftFx_Init.c::ftFx_Init_MotionStateTable (ftFx_MS_SpecialNStart=341)
@@ -35,6 +37,9 @@ INTERNALS_DTYPE = np.dtype(
         ("instance_id_counter", "<u2"),
         ("throw_pulse_consumed", ("u1", (MAX_PLAYERS,))),
         ("throw_pulse_crossed_prev_frame", ("u1", (MAX_PLAYERS,))),
+        ("throw_pending_victim_port", ("u1", (MAX_PLAYERS,))),
+        ("throw_pending_hit_idx", ("u1", (MAX_PLAYERS,))),
+        ("attached_victim_port", ("u1", (MAX_PLAYERS,))),
     ],
     align=False,
 )
@@ -142,6 +147,50 @@ def test_instance_id_bumps_on_action_entry_specialn() -> None:
     cmp0 = out_cmp.view(COMPARE_DTYPE).reshape((1,))[0]
     assert int(cmp0["action_id"][0]) == ACT_FX_SPECIAL_N_START
     assert int(cmp0["instance_id"][0]) != 100
+
+
+def test_attached_victim_port_reseed_uses_lowest_victim_port_deterministically() -> None:
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    seed_stride = int(sizes["seed"])
+    internals_stride = int(sizes["internals"])
+
+    assert seed_stride == SEED_DTYPE.itemsize
+    assert internals_stride == INTERNALS_DTYPE.itemsize
+
+    seed = np.zeros((1,), dtype=SEED_DTYPE)
+    seed["frame_id"][0] = np.int32(0)
+    seed["stage_id"][0] = np.uint32(STAGE_FD)
+    seed["match_damage_ratio"][0] = np.float32(1.0)
+    seed["num_players"][0] = np.uint8(4)
+    seed["stocks"][0, :4] = np.uint8(4)
+    seed["char_id"][0, :4] = np.uint8(CHAR_FOX)
+    seed["attack_ratio"][0, :4] = np.float32(1.0)
+    seed["defense_ratio"][0, :4] = np.float32(1.0)
+    seed["fighter_scale_y"][0, :4] = np.float32(1.0)
+
+    seed["action_id"][0, 0] = np.uint16(ACT_THROW_LW)
+    seed["action_id"][0, 1] = np.uint16(ACT_THROWN_LW)
+    seed["action_id"][0, 2] = np.uint16(ACT_THROWN_LW)
+    seed["action_id"][0, 3] = np.uint16(ACT_WAIT)
+    seed["grab_owner_port"][0, 1] = np.uint8(0)
+    seed["grab_owner_port"][0, 2] = np.uint8(0)
+
+    seed_bytes = seed.view(np.uint8).reshape((1, seed_stride))
+    out_int = np.zeros((1, internals_stride), dtype=np.uint8)
+
+    handle = msl_binding.init(batch_size=1, num_players=4)
+    try:
+        msl_binding.reseed_seed(handle, seed_bytes)
+        msl_binding.debug_write_internals(handle, out_int)
+        internals = out_int.view(INTERNALS_DTYPE).reshape((1,))[0].copy()
+    finally:
+        msl_binding.destroy(handle)
+
+    assert int(internals["attached_victim_port"][0]) == 1
+    assert int(internals["attached_victim_port"][1]) == 0xFF
+    assert int(internals["attached_victim_port"][2]) == 0xFF
 
 
 def test_instance_id_bumps_on_blaster_loop_restart_same_action_id() -> None:

@@ -56,6 +56,9 @@ def test_guard_reflect_timer_counts_down_and_clears_reflect_active_bit() -> None
             ("instance_id_counter", "<u2"),
             ("throw_pulse_consumed", ("u1", (4,))),
             ("throw_pulse_crossed_prev_frame", ("u1", (4,))),
+            ("throw_pending_victim_port", ("u1", (4,))),
+            ("throw_pending_hit_idx", ("u1", (4,))),
+            ("attached_victim_port", ("u1", (4,))),
         ],
         align=False,
     )

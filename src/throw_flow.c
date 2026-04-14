@@ -279,18 +279,16 @@ void throw_flow_update_pre_physics(MslBatch* batch) {
             break;
           }
 
-          // ThrowF release same-frame attachment ownership:
-          // - Throw Anim consumes set_throw_flags(0), and the victim accessory callback path
-          //   (`ftCo_800DE508`) still owns the thrown-anchor world placement for the current frame
-          //   before the detach/hit resolution turns over.
-          // - Keep this bridge narrow to ThrowF until other release families are proven.
-          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DD724
+          // Common release same-frame attachment ownership:
+          // - ftCo_800DD724 is the shared ThrowF/B/Hi/Lw release consume path.
+          // - ftCo_800DDDE4 / ftCo_800DE508 still own the attached victim world placement for the
+          //   current frame before detach and later damage entry.
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::{ftCo_800DD724,ftCo_800DDDE4}
           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Thrown.c::{ftCo_800DE3FC,ftCo_800DE508}
-          if (owner_act == (uint16_t)MSL_ACT_THROW_F) {
-            grab_attachment_apply_thrown_anchor_now(batch, bi, victim_p, owner_p);
-          }
+          grab_attachment_apply_thrown_release_anchor_now(batch, bi, victim_p, owner_p);
 
           // Detach immediately. Defer the throw hit to post-items.
+          batch->state.attached_victim_port[oidx] = 0xFFu;
           batch->state.grab_owner_port[vidx] = 0xFFu;
           batch->state.throw_pending_victim_port[oidx] = (uint8_t)victim_p;
           batch->state.throw_pending_hit_idx[oidx] = rel_hit_idx;
@@ -386,11 +384,10 @@ void throw_flow_update_post_items(MslBatch* batch) {
       }
 
       // If the victim transitioned out of the release state earlier in the frame (e.g. item hit),
-      // do not apply the throw hit.
+      // do not apply the deferred throw hit.
       if (batch->state.action_id[vidx] != (uint16_t)MSL_ACT_FALL) {
         continue;
       }
-
       const uint8_t applied = combat_apply_throw_hit(batch, bi, owner_p, (int)victim_p, &p);
       if (!applied) {
         // Invincible/intangible suppression: the victim stays in FALL (already detached).

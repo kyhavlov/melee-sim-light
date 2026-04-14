@@ -295,21 +295,40 @@ void grab_attachment_apply_thrown_anchor_now(MslBatch* batch, int bi, int victim
   float ax = 0.0f, ay = 0.0f, az = 0.0f;
   grabbed_victim_anchor_world(&ax, &ay, &az, batch, bi, victim_p, owner_p);
   (void)az;
-
   const float scale_y = attachment_offset_scale_y(batch, vidx);
   if (!(scale_y > 0.0f)) {
     return;
   }
   const float facing_dir = batch->state.facing[vidx] ? 1.0f : -1.0f;
-
-  // Decomp-shaped same-frame release ownership:
-  // - throw Anim installs ftCo_800DE508-style thrown positioning before later release/hit
-  //   resolution consumes the attachment for the frame.
-  // - ftCo_800DE508 composes owner anchor world with victim x1A70.{z,y} offsets.
+  // Common thrown-position owner:
+  // - ftCo_800DE508 reads the reparented FtPart_XRotN world, then applies victim-side x1A70
+  //   offsets. This sim keeps the shared reparented-joint owner in runtime and carries the
+  //   victim-side residual in grab_offset_{y,z} until that lane is promoted fully live.
+  // - ftCo_800DD724 release handling consumes that same attached world owner before detach.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Thrown.c::{ftCo_800DE3FC,ftCo_800DE508}
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::{ftCo_800DD724,ftCo_800DDDE4}
   batch->state.pos_x[vidx] = fmaf(batch->state.grab_offset_z[vidx], facing_dir * scale_y, ax);
   batch->state.pos_y[vidx] = batch->state.grab_offset_y[vidx] * scale_y + ay;
   batch->state.pos_z[vidx] = 0.0f;
+}
+
+void grab_attachment_apply_thrown_release_anchor_now(MslBatch* batch, int bi, int victim_p,
+                                                     int owner_p) {
+  if (batch == NULL || bi < 0 || bi >= batch->batch_size) {
+    return;
+  }
+  const int num_players = (int)batch->config.num_players;
+  if (victim_p < 0 || victim_p >= num_players || owner_p < 0 || owner_p >= num_players ||
+      victim_p == owner_p) {
+    return;
+  }
+
+  const size_t vidx = msl_idx_player(bi, victim_p);
+  if (!msl_action_is_thrown_victim(batch->state.action_id[vidx])) {
+    return;
+  }
+
+  grab_attachment_apply_thrown_anchor_now(batch, bi, victim_p, owner_p);
 }
 
 static inline uint8_t action_is_catch_pull_state(uint16_t action_id) {
@@ -382,6 +401,9 @@ static inline void grabbed_victim_anchor_world(float* out_x, float* out_y, float
                                                const MslBatch* batch, int bi, int victim_p,
                                                int owner_p) {
   (void)victim_p;
+  if (out_x == NULL || out_y == NULL || out_z == NULL || batch == NULL) {
+    return;
+  }
   // Approximate the `lb_8000B1CC(fp->parts[ftParts_GetBoneIndex(fp, FtPart_XRotN)].joint)` anchor used by
   // ftCo_Thrown.c::ftCo_800DE508.
   //
@@ -401,9 +423,6 @@ static inline void grabbed_victim_anchor_world(float* out_x, float* out_y, float
   //   reconstruct the full FtPart_XRotN world chain deterministically on their own.
   // - Use owner-anchor world as the thrown proxy and intentionally store the residual in
   //   grab_offset_{y,z} at reseed/entry to avoid double-count drift.
-  if (out_x == NULL || out_y == NULL || out_z == NULL || batch == NULL) {
-    return;
-  }
   const size_t oidx = msl_idx_player(bi, owner_p);
   // Decomp-shaped proxy for ftCo_Thrown.c::ftCo_800DE508:
   // - Read world translation of victim FtPart_XRotN joint (lb_8000B1CC on re-parented joint).
@@ -497,6 +516,10 @@ void grab_attachment_reseed_init(MslBatch* batch, int batch_index) {
       continue;
     }
     if (!msl_action_is_grabbed_victim(batch->state.action_id[vidx])) {
+      const size_t oidx = msl_idx_player(batch_index, (int)owner);
+      if (batch->state.attached_victim_port[oidx] == (uint8_t)p) {
+        batch->state.attached_victim_port[oidx] = 0xFFu;
+      }
       batch->state.grab_owner_port[vidx] = 0xFFu;
       continue;
     }
@@ -538,6 +561,10 @@ void grab_attachment_update_post_collision(MslBatch* batch) {
         continue;
       }
       if (!msl_action_is_grabbed_victim(batch->state.action_id[vidx])) {
+        const size_t oidx = msl_idx_player(bi, (int)owner);
+        if (batch->state.attached_victim_port[oidx] == (uint8_t)p) {
+          batch->state.attached_victim_port[oidx] = 0xFFu;
+        }
         batch->state.grab_owner_port[vidx] = 0xFFu;
         continue;
       }
@@ -547,48 +574,9 @@ void grab_attachment_update_post_collision(MslBatch* batch) {
       }
 
       if (!msl_action_is_capture_pulled_wait_damage_victim(batch->state.action_id[vidx])) {
-        const uint16_t cur_action = batch->state.action_id[vidx];
-        const uint16_t prev_action = batch->state.prev_action_id[vidx];
-        // One-frame reconstruction skip scope:
-        // - Only when transitioning CapturePulled*/CaptureWait* -> Thrown*.
-        // - Decomp anchor: thrown entry installs the accessory-driven victim position callback in
-        //   ftCo_800DE3FC after throw setup; capture victim loops are maintained by fn_800DAD18.
-        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Thrown.c::ftCo_800DE3FC
-        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::fn_800DAD18
-        const uint8_t thrown_entered_from_capture_wait_pulled =
-            (uint8_t)(msl_action_is_thrown_victim(cur_action) &&
-                      action_is_capture_pulled_wait_victim(prev_action));
-        const uint8_t throwlw_entry_reconstruct_now =
-            (uint8_t)(thrown_entered_from_capture_wait_pulled &&
-                      (cur_action == (uint16_t)MSL_ACT_THROWN_LW ||
-                       batch->state.action_id[msl_idx_player(bi, (int)owner)] ==
-                           (uint16_t)MSL_ACT_THROW_LW));
-
-        float ax = 0.0f, ay = 0.0f, az = 0.0f;
-        grabbed_victim_anchor_world(&ax, &ay, &az, batch, bi, p, (int)owner);
-        (void)az;
-
-        const float scale_y = attachment_offset_scale_y(batch, vidx);
-        if (!(scale_y > 0.0f)) {
-          continue;
-        }
-        const float facing_dir = batch->state.facing[vidx] ? 1.0f : -1.0f;
-
-        // Decomp-shaped axis mapping:
-        // - ftCo_Thrown.c::ftCo_800DE508 uses x1A70.z as the "forward" offset term, applied onto
-        //   pos.x with facing_dir, and adds x1A70.y to pos.y.
-        //
-        // Throw-entry exactness:
-        // - On CapturePulled*/CaptureWait* -> Thrown* transition, offsets are recomputed from current
-        //   world position.
-        // - Preserve that world position exactly on the same frame (no float round-trip through
-        //   offset->reconstruct) and start callback-style reconstruction on subsequent frames.
-        if (!thrown_entered_from_capture_wait_pulled || throwlw_entry_reconstruct_now) {
-          batch->state.pos_x[vidx] =
-              fmaf(batch->state.grab_offset_z[vidx], facing_dir * scale_y, ax);
-          batch->state.pos_y[vidx] = batch->state.grab_offset_y[vidx] * scale_y + ay;
-          batch->state.pos_z[vidx] = 0.0f;
-        }
+        // Attached Thrown* world position is now owned pre-collision by the shared callback path;
+        // do not re-run the older post-collision proxy reconstruction here.
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Thrown.c::{ftCo_800DE3FC,ftCo_800DE508}
       }
 
       // Victim velocities:
@@ -623,6 +611,10 @@ void grab_attachment_update_pre_collision(MslBatch* batch) {
         continue;
       }
       if (!msl_action_is_grabbed_victim(batch->state.action_id[vidx])) {
+        const size_t oidx = msl_idx_player(bi, (int)owner);
+        if (batch->state.attached_victim_port[oidx] == (uint8_t)p) {
+          batch->state.attached_victim_port[oidx] = 0xFFu;
+        }
         batch->state.grab_owner_port[vidx] = 0xFFu;
         continue;
       }
@@ -638,6 +630,26 @@ void grab_attachment_update_pre_collision(MslBatch* batch) {
         // Decomp ordering: CapturePulled*/CaptureDamage* runs fn_800DAD18 in Phys, then runs Coll.
         // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::{fn_800DAD18,ftCo_CapturePulledHi_Coll}
         grab_attachment_apply_capture_delta_now(batch, bi, p, (int)owner);
+      } else if (msl_action_is_thrown_victim(batch->state.action_id[vidx])) {
+        const uint16_t cur_action = batch->state.action_id[vidx];
+        const uint16_t prev_action = batch->state.prev_action_id[vidx];
+        const uint8_t thrown_entered_from_capture_wait_pulled =
+            (uint8_t)(msl_action_is_thrown_victim(cur_action) &&
+                      action_is_capture_pulled_wait_victim(prev_action));
+        if (!thrown_entered_from_capture_wait_pulled) {
+          // Common attached Thrown* owner:
+          // - Thrown* Phys/Coll are empty; ftCo_800DE508 owns victim world position during the
+          //   attached window before release consumes the attachment.
+          // - Keep the already-proven low-throw entry handoff slice separate from the broader
+          //   steady attached window; the immediate `CaptureWait* -> Thrown*` row still uses the
+          //   dedicated handoff split in grab_flow.c.
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Thrown.c::{
+          //   ftCo_800DE3FC,ftCo_800DE508,ftCo_ThrownF_Phys,ftCo_ThrownF_Coll,ftCo_ThrownB_Phys,
+          //   ftCo_ThrownB_Coll,ftCo_ThrownHi_Phys,ftCo_ThrownHi_Coll,ftCo_ThrownLw_Phys,
+          //   ftCo_ThrownLw_Coll
+          // }
+          grab_attachment_apply_thrown_anchor_now(batch, bi, p, (int)owner);
+        }
       }
     }
   }

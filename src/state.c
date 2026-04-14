@@ -99,6 +99,7 @@ int state_alloc(MslStateSoA* state, int batch_size) {
   state->action_frame = (int16_t*)alloc_aligned_64(sizeof(int16_t) * bp);
   state->throw_pulse_consumed = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->throw_pulse_crossed_prev_frame = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
+  state->throw_pulse_crossed_curr_frame = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->source_clear_timer_x18c8 = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->source_clear_owner_set_phase = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->source_clear_processhit_damage_pending_phase =
@@ -110,11 +111,14 @@ int state_alloc(MslStateSoA* state, int batch_size) {
   state->source_clear_terminal_phase = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->throw_pending_victim_port = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->throw_pending_hit_idx = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
+  state->attached_victim_port = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->grab_owner_port = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->grab_mash_stick_x_sign = (int8_t*)alloc_aligned_64(sizeof(int8_t) * bp);
   state->grab_mash_stick_y_sign = (int8_t*)alloc_aligned_64(sizeof(int8_t) * bp);
   state->grab_offset_y = (float*)alloc_aligned_64(sizeof(float) * bp);
   state->grab_offset_z = (float*)alloc_aligned_64(sizeof(float) * bp);
+  state->thrown_attached_prev_on_ground = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
+  state->thrown_attached_prev_ground_id = (uint16_t*)alloc_aligned_64(sizeof(uint16_t) * bp);
   state->match_flow_timer = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->entry_end_fall_lock = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->camera_box_visible_x221f_b0 = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
@@ -367,7 +371,8 @@ int state_alloc(MslStateSoA* state, int batch_size) {
       !state->action_id || !state->seed_prev_action_id || !state->seed_prev_action_frame ||
       !state->prev_action_id || !state->prev_action_frame || !state->action_frame ||
       !state->throw_pending_victim_port || !state->throw_pending_hit_idx ||
-      !state->throw_pulse_consumed || !state->throw_pulse_crossed_prev_frame ||
+      !state->attached_victim_port || !state->throw_pulse_consumed ||
+      !state->throw_pulse_crossed_prev_frame || !state->throw_pulse_crossed_curr_frame ||
       !state->source_clear_timer_x18c8 || !state->source_clear_owner_set_phase ||
       !state->source_clear_processhit_damage_pending_phase ||
       !state->damageflyroll_fighter_8006cda4_phase_hint ||
@@ -459,6 +464,7 @@ int state_alloc(MslStateSoA* state, int batch_size) {
   memset(state->capture_wait_seed_rate_snapshot_fp_q16_16, 0, sizeof(int32_t) * bp);
   memset(state->capture_wait_prev_rate_valid, 0, sizeof(uint8_t) * bp);
   memset(state->capture_wait_anim_rate_timer, 0, sizeof(float) * bp);
+  memset(state->throw_pulse_crossed_curr_frame, 0, sizeof(uint8_t) * bp);
   memset(state->smash_charge_state, 0, sizeof(uint8_t) * bp);
   memset(state->smash_charge_frames, 0, sizeof(uint8_t) * bp);
   memset(state->smash_charge_hold_frames_max, 0, sizeof(uint8_t) * bp);
@@ -553,6 +559,7 @@ void state_free(MslStateSoA* state) {
   alloc_free(state->action_frame);
   alloc_free(state->throw_pulse_consumed);
   alloc_free(state->throw_pulse_crossed_prev_frame);
+  alloc_free(state->throw_pulse_crossed_curr_frame);
   alloc_free(state->source_clear_timer_x18c8);
   alloc_free(state->source_clear_owner_set_phase);
   alloc_free(state->source_clear_processhit_damage_pending_phase);
@@ -561,11 +568,14 @@ void state_free(MslStateSoA* state) {
   alloc_free(state->source_clear_terminal_phase);
   alloc_free(state->throw_pending_victim_port);
   alloc_free(state->throw_pending_hit_idx);
+  alloc_free(state->attached_victim_port);
   alloc_free(state->grab_owner_port);
   alloc_free(state->grab_mash_stick_x_sign);
   alloc_free(state->grab_mash_stick_y_sign);
   alloc_free(state->grab_offset_y);
   alloc_free(state->grab_offset_z);
+  alloc_free(state->thrown_attached_prev_on_ground);
+  alloc_free(state->thrown_attached_prev_ground_id);
   alloc_free(state->match_flow_timer);
   alloc_free(state->entry_end_fall_lock);
   alloc_free(state->camera_box_visible_x221f_b0);

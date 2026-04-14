@@ -61,12 +61,15 @@ def test_throw_pulse_consumed_clears_after_step_and_does_not_sticky_carry() -> N
             ("instance_id", ("<u2", (MAX_PLAYERS,))),
             ("instance_id_x2073", ("u1", (MAX_PLAYERS,))),
             ("instance_identity_last_action_id", ("<u2", (MAX_PLAYERS,))),
-            ("instance_id_counter", "<u2"),
-            ("throw_pulse_consumed", ("u1", (MAX_PLAYERS,))),
-            ("throw_pulse_crossed_prev_frame", ("u1", (MAX_PLAYERS,))),
-        ],
-        align=False,
-    )
+                ("instance_id_counter", "<u2"),
+                ("throw_pulse_consumed", ("u1", (MAX_PLAYERS,))),
+                ("throw_pulse_crossed_prev_frame", ("u1", (MAX_PLAYERS,))),
+                ("throw_pending_victim_port", ("u1", (MAX_PLAYERS,))),
+                ("throw_pending_hit_idx", ("u1", (MAX_PLAYERS,))),
+                ("attached_victim_port", ("u1", (MAX_PLAYERS,))),
+            ],
+            align=False,
+        )
     assert int(INTERNALS_DTYPE.itemsize) == internals_stride
 
     seed0 = row0["seed_t"].copy().reshape((1,))

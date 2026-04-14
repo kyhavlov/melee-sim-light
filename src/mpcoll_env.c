@@ -5,11 +5,37 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include "action_ids.h"
 #include "char_params.h"
 #include "coll_env_flags.h"
 #include "common_params.h"
 #include "mpcoll_ecb_points.h"
 #include "stage_collision.h"
+
+static inline uint8_t mpcoll_is_pending_throw_release_victim(const MslBatch* batch, int bi, int p) {
+  if (batch == NULL) {
+    return 0u;
+  }
+  const int num_players = (int)batch->config.num_players;
+  if (p < 0 || p >= num_players) {
+    return 0u;
+  }
+  for (int owner = 0; owner < num_players; owner++) {
+    if (owner == p) {
+      continue;
+    }
+    const size_t oidx = msl_idx_player(bi, owner);
+    if (batch->state.throw_pending_victim_port[oidx] == (uint8_t)p &&
+        batch->state.throw_pending_hit_idx[oidx] != 0xFFu) {
+      // Shared release owner: the common ThrowF/B/Hi/Lw release callback has already consumed the
+      // attachment for this frame, so ledge-grab probing must not take over before later damage
+      // resolution finishes.
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::{ftCo_800DD724,ftCo_800DDDE4}
+      return 1u;
+    }
+  }
+  return 0u;
+}
 
 // Decomp constants / shapes:
 // - mpColl_80044164 / mpColl_800443C4 build a swept AABB using:
@@ -628,6 +654,20 @@ void mpcoll_env_update_ledge_grab(MslBatch* batch) {
 
       // mpColl only writes ledge-grab bits for airborne collision passes.
       if (batch->state.on_ground[idx]) {
+        continue;
+      }
+      if (msl_action_is_thrown_victim(batch->state.action_id[idx])) {
+        const uint8_t owner = batch->state.grab_owner_port[idx];
+        if (owner != 0xFFu && owner < (uint8_t)num_players && owner != (uint8_t)p) {
+          // Attached Thrown* rows do not run mpColl ledge-grab checks in decomp because their Coll
+          // callbacks are empty while the attachment callback owns position.
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Thrown.c::{
+          //   ftCo_ThrownF_Coll,ftCo_ThrownB_Coll,ftCo_ThrownHi_Coll,ftCo_ThrownLw_Coll
+          // }
+          continue;
+        }
+      }
+      if (mpcoll_is_pending_throw_release_victim(batch, bi, p)) {
         continue;
       }
       // Decomp: if fp->x2064_ledgeCooldown is nonzero, fighter collision uses the mpColl variant

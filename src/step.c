@@ -62,7 +62,9 @@ static inline void clear_seed_owned_transients_post_frame(MslBatch* batch) {
       // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
       // refs/melee/src/melee/ft/ftaction.c::{ftAction_80071974,ftAction_80073354}
       batch->state.throw_pulse_consumed[idx] = 0u;
-      batch->state.throw_pulse_crossed_prev_frame[idx] = 0u;
+      batch->state.throw_pulse_crossed_prev_frame[idx] =
+          batch->state.throw_pulse_crossed_curr_frame[idx];
+      batch->state.throw_pulse_crossed_curr_frame[idx] = 0u;
       // `seed_t.source_clear_processhit_damage_pending_phase` is a one-step bridge for hidden
       // ProcessHit-owned source clear. Consume within this frame only.
       // refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC

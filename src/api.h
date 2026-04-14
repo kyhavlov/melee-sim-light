@@ -1062,6 +1062,9 @@ typedef struct MslDebugInternals {
   uint8_t throw_pulse_consumed[MSL_MAX_PLAYERS];
   // One-step seed bridge lane carrying previous-step throw pulse crossing frame (0 = none).
   uint8_t throw_pulse_crossed_prev_frame[MSL_MAX_PLAYERS];
+  uint8_t throw_pending_victim_port[MSL_MAX_PLAYERS];
+  uint8_t throw_pending_hit_idx[MSL_MAX_PLAYERS];
+  uint8_t attached_victim_port[MSL_MAX_PLAYERS];
 } MslDebugInternals;
 
 // Debug/test-only helper: write per-player stage collision contact metadata.

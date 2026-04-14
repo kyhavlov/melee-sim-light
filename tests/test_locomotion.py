@@ -113,6 +113,9 @@ INTERNALS_DTYPE = np.dtype(
         ("instance_id_counter", "<u2"),
         ("throw_pulse_consumed", ("u1", (MAX_PLAYERS,))),
         ("throw_pulse_crossed_prev_frame", ("u1", (MAX_PLAYERS,))),
+        ("throw_pending_victim_port", ("u1", (MAX_PLAYERS,))),
+        ("throw_pending_hit_idx", ("u1", (MAX_PLAYERS,))),
+        ("attached_victim_port", ("u1", (MAX_PLAYERS,))),
     ],
     align=False,
 )

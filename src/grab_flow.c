@@ -758,6 +758,7 @@ void grab_flow_on_catch_connect(MslBatch* batch, int bi, int owner_p, int victim
       batch->state.grab_owner_port[pidx] = 0xFFu;
     }
   }
+  batch->state.attached_victim_port[oidx] = (uint8_t)victim_p;
   batch->state.grab_owner_port[vidx] = (uint8_t)owner_p;
 }
 

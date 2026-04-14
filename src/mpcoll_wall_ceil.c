@@ -11,6 +11,31 @@
 #include "mpcoll_ecb_points.h"
 #include "stage_collision.h"
 
+static inline uint8_t mpcoll_is_pending_throw_release_victim(const MslBatch* batch, int bi, int p) {
+  if (batch == NULL) {
+    return 0u;
+  }
+  const int num_players = (int)batch->config.num_players;
+  if (p < 0 || p >= num_players) {
+    return 0u;
+  }
+  for (int owner = 0; owner < num_players; owner++) {
+    if (owner == p) {
+      continue;
+    }
+    const size_t oidx = msl_idx_player(bi, owner);
+    if (batch->state.throw_pending_victim_port[oidx] == (uint8_t)p &&
+        batch->state.throw_pending_hit_idx[oidx] != 0xFFu) {
+      // Shared ThrowF/B/Hi/Lw release owner:
+      // - release detaches the victim in ftCo_800DD724, but generic wall/ceiling mpColl does not
+      //   own the same frame before throw release / later hit resolution complete.
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::{ftCo_800DD724,ftCo_800DDDE4}
+      return 1u;
+    }
+  }
+  return 0u;
+}
+
 // Decomp constants / shapes:
 // - mpCheckCeiling treats ceilings as horizontal when |y0 - y1| <= 0.0001.
 //   refs/melee/src/melee/mp/mplib.c::mpCheckCeiling
@@ -899,6 +924,42 @@ void mpcoll_wall_ceil_apply(MslBatch* batch) {
       }
       if (is_grounded_cliff_option_action(action_id, batch->state.on_ground[idx])) {
         batch->state.wall_kind[idx] = 0;
+        batch->state.ceiling_contact_x[idx] = 0.0f;
+        batch->state.ceiling_contact_y[idx] = 0.0f;
+        batch->state.ceiling_normal_x[idx] = 0.0f;
+        batch->state.ceiling_normal_y[idx] = 0.0f;
+        batch->state.wall_contact_x[idx] = 0.0f;
+        batch->state.wall_contact_y[idx] = 0.0f;
+        batch->state.wall_normal_x[idx] = 0.0f;
+        batch->state.wall_normal_y[idx] = 0.0f;
+        continue;
+      }
+      if (msl_action_is_thrown_victim(action_id)) {
+        const uint8_t owner = batch->state.grab_owner_port[idx];
+        if (owner != 0xFFu && owner < (uint8_t)num_players && owner != (uint8_t)p) {
+          // Common Thrown* states have empty Coll callbacks while attached, so wall/ceiling/edge
+          // contact metadata is not stage-owned during the attached window.
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Thrown.c::{
+          //   ftCo_ThrownF_Coll,ftCo_ThrownB_Coll,ftCo_ThrownHi_Coll,ftCo_ThrownLw_Coll
+          // }
+          batch->state.wall_kind[idx] = 0;
+          batch->state.wall_id[idx] = 0xFFFFu;
+          batch->state.ceiling_id[idx] = 0xFFFFu;
+          batch->state.ceiling_contact_x[idx] = 0.0f;
+          batch->state.ceiling_contact_y[idx] = 0.0f;
+          batch->state.ceiling_normal_x[idx] = 0.0f;
+          batch->state.ceiling_normal_y[idx] = 0.0f;
+          batch->state.wall_contact_x[idx] = 0.0f;
+          batch->state.wall_contact_y[idx] = 0.0f;
+          batch->state.wall_normal_x[idx] = 0.0f;
+          batch->state.wall_normal_y[idx] = 0.0f;
+          continue;
+        }
+      }
+      if (mpcoll_is_pending_throw_release_victim(batch, bi, p)) {
+        batch->state.wall_kind[idx] = 0;
+        batch->state.wall_id[idx] = 0xFFFFu;
+        batch->state.ceiling_id[idx] = 0xFFFFu;
         batch->state.ceiling_contact_x[idx] = 0.0f;
         batch->state.ceiling_contact_y[idx] = 0.0f;
         batch->state.ceiling_normal_x[idx] = 0.0f;

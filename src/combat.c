@@ -23,6 +23,7 @@
 #include "hurtbox_modes_tables.h"
 #include "hurtcaps_tables.h"
 #include "laser_params.h"
+#include "msl_math.h"
 #include "mtx34.h"
 #include "move_tables.h"
 #include "staling.h"
@@ -2470,10 +2471,16 @@ MslItemHitResult combat_apply_item_hit(MslBatch* batch, int batch_index, int att
   }
 
   const uint16_t d_motion_id = batch->state.action_id[d_idx];
+  const uint8_t throw_release_pending =
+      (batch->state.action_id[a_idx] == (uint16_t)MSL_ACT_THROW_LW &&
+       batch->state.throw_pending_victim_port[a_idx] == (uint8_t)defender &&
+       batch->state.throw_pending_hit_idx[a_idx] != 0xFFu)
+          ? 1u
+          : 0u;
 
   const uint8_t d_grab_owner = batch->state.grab_owner_port[d_idx];
   const uint8_t d_is_attached_grabbed_victim =
-      (d_grab_owner != 0xFFu && d_grab_owner == (uint8_t)attacker &&
+      (!throw_release_pending && d_grab_owner != 0xFFu && d_grab_owner == (uint8_t)attacker &&
        msl_action_is_grabbed_victim(d_motion_id))
           ? 1u
           : 0u;
@@ -2542,6 +2549,31 @@ MslItemHitResult combat_apply_item_hit(MslBatch* batch, int batch_index, int att
   if (d_hl > d_hl_prev) {
     batch->state.hitlag[d_idx] = d_hl;
     combat_state_flags_set_is_hitlag(batch, d_idx, d_hl);
+  }
+
+  if (item_state == (uint8_t)1u && batch->state.action_id[a_idx] == (uint16_t)MSL_ACT_THROW_LW &&
+      batch->state.throw_pending_victim_port[a_idx] == (uint8_t)defender &&
+      batch->state.throw_pending_hit_idx[a_idx] != 0xFFu &&
+      (batch->state.action_id[d_idx] == (uint16_t)MSL_ACT_FALL ||
+       (batch->state.grab_owner_port[d_idx] == (uint8_t)attacker &&
+        msl_action_is_grabbed_victim(batch->state.action_id[d_idx])))) {
+    // ThrowLw release + same-frame blaster ordering bridge:
+    // - ftCo_800DD724 consumes set_throw_flags(0) in ThrowLw Anim and applies the throw release hit
+    //   via ftCo_800DE2A8/ftCo_800DDDE4 before later frame contacts.
+    // - On replay-real one-step rows the pending release victim can still be visible as attached
+    //   `Thrown*` at the item-collision snapshot even though the common release event already
+    //   belongs to this frame.
+    // - Apply the pending release owner before the generic attached-victim suppression path so the
+    //   later throw-side laser stacks onto the released victim instead of suppressing the release.
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::{ftCo_ThrowLw_Anim,ftCo_800DD724,ftCo_800DE2A8,ftCo_800DDDE4}
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Thrown.c::ftCo_800DE7C0
+    // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
+    MslThrowHitboxParams throw_p = {0};
+    if (move_tables_throw_hitbox_params(batch->state.char_id[a_idx], (uint16_t)MSL_ACT_THROW_LW,
+                                        batch->state.throw_pending_hit_idx[a_idx], &throw_p) &&
+        combat_apply_throw_hit_core(batch, batch_index, attacker, defender, &throw_p, 0u)) {
+      combat_throw_release_integrate_position_now(batch, a_idx, d_idx);
+    }
   }
 
   // Grabbed/thrown victims are driven by an attachment joint and have empty Phys/Coll callbacks in
@@ -2613,29 +2645,6 @@ MslItemHitResult combat_apply_item_hit(MslBatch* batch, int batch_index, int att
     return MSL_ITEM_HIT_SUPPRESSED_DONT_CONSUME;
   }
 
-  if (item_state == (uint8_t)1u && batch->state.action_id[a_idx] == (uint16_t)MSL_ACT_THROW_LW &&
-      batch->state.throw_pending_victim_port[a_idx] == (uint8_t)defender &&
-      batch->state.throw_pending_hit_idx[a_idx] != 0xFFu &&
-      batch->state.action_id[d_idx] == (uint16_t)MSL_ACT_FALL) {
-    // ThrowLw release + same-frame blaster ordering bridge:
-    // - ftCo_800DD724 consumes set_throw_flags(0) in ThrowLw Anim and applies the throw release hit
-    //   via ftCo_800DE2A8/ftCo_800DE7C0 before later frame contacts.
-    // - ftFx_Throw_Anim's throw-side laser pulse can then hit the already-released victim later in
-    //   the same frame, overwriting final item-domain attribution/hitlag but not the earlier throw
-    //   damage/launch contribution.
-    // - This sim resolves items before deferred throw release, so install only the proven ThrowLw
-    //   pre-item release hit subset here, without throw-side combo/stale bookkeeping.
-    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::{ftCo_ThrowLw_Anim,ftCo_800DD724,ftCo_800DE2A8,ftCo_800DDDE4}
-    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Thrown.c::ftCo_800DE7C0
-    // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
-    MslThrowHitboxParams throw_p = {0};
-    if (move_tables_throw_hitbox_params(batch->state.char_id[a_idx], (uint16_t)MSL_ACT_THROW_LW,
-                                        batch->state.throw_pending_hit_idx[a_idx], &throw_p) &&
-        combat_apply_throw_hit_core(batch, batch_index, attacker, defender, &throw_p, 0u)) {
-      combat_throw_release_integrate_position_now(batch, a_idx, d_idx);
-    }
-  }
-
   // Knockback velocity + hitstun + damage-state entry (BODY), following the same helper chain as
   // fighter-vs-fighter hits.
   //
@@ -2675,6 +2684,18 @@ MslItemHitResult combat_apply_item_hit(MslBatch* batch, int batch_index, int att
   const float one = combat_damage_ftColl_804D82EC_one();
   float defender_facing_dir_1 =
       (batch->state.pos_x[d_idx] > batch->state.pos_x[a_idx]) ? -one : one;
+  if (lp != NULL && item_state == (uint8_t)1u &&
+      batch->state.action_id[a_idx] == (uint16_t)MSL_ACT_THROW_LW &&
+      batch->state.throw_pending_victim_port[a_idx] == (uint8_t)defender &&
+      batch->state.throw_pending_hit_idx[a_idx] != 0xFFu) {
+    // ThrowLw release + same-frame blaster ordering:
+    // - ftCo_800DD724 / ftCo_800DDDE4 have already installed the released victim's facing lane
+    //   before the later throw-side laser overlap is processed.
+    // - Keep the late pulse on that already-owned left/right sign instead of recomputing from the
+    //   fighter-vs-fighter X ordering used by ordinary item BODY hits.
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::{ftCo_800DD724,ftCo_800DDDE4}
+    defender_facing_dir_1 = batch->state.facing[d_idx] ? one : -one;
+  }
   // Keep ThrowHi's thrower-facing ownership scoped to the initial full state1 refresh. Later
   // top-off overlaps (+1 hitlag frame) stay on the generic BODY facing lane.
   if (lp != NULL && item_state == (uint8_t)1u &&
@@ -2889,6 +2910,23 @@ static inline uint8_t combat_apply_throw_hit_core(MslBatch* batch, int batch_ind
       batch->state.kb_smashcharge_active[d_idx]);
   const float kb_angle_rad =
       combat_damage_calc_angle_radians(c, p->angle, defender_on_ground, kb_applied);
+  float damage_state_angle_rad = kb_angle_rad;
+  {
+    uint16_t throw_action = batch->state.action_id[a_idx];
+    if (throw_action != (uint16_t)MSL_ACT_THROW_F && throw_action != (uint16_t)MSL_ACT_THROW_B &&
+        throw_action != (uint16_t)MSL_ACT_THROW_HI && throw_action != (uint16_t)MSL_ACT_THROW_LW) {
+      throw_action = batch->state.prev_action_id[a_idx];
+    }
+    if (throw_action == (uint16_t)MSL_ACT_THROW_LW) {
+      // Thrown damage-state entry owner for low throw:
+      // - ftCo_800DDDE4 computes damage / knockback from the throw hitbox, then ftCo_800DE7C0
+      //   enters damage with `calcKnockbackAngle(true)`, i.e. 90 degrees, for ThrowLw.
+      // - Keep velocity/KB magnitude from the hitbox-owned throw data, but use the decomp-backed
+      //   low-throw damage-entry angle for action-state selection.
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::{ftCo_800DD724,ftCo_800DDDE4,ftCo_800DE7C0}
+      damage_state_angle_rad = 0.5f * MSL_PI_F;
+    }
+  }
 
   if (kb_applied == 0.0f) {
     batch->state.speed_x_attack[d_idx] = 0.0f;
@@ -2949,7 +2987,7 @@ static inline uint8_t combat_apply_throw_hit_core(MslBatch* batch, int batch_ind
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DDDE4
   const uint8_t hurt_height = 1u;
   combat_damage_enter_state(c, batch, batch_index, d_idx, defender_on_ground, defender_on_ground,
-                            hurt_height, kb_applied, kb_angle_rad);
+                            hurt_height, kb_applied, damage_state_angle_rad);
   // Throw-release ordering:
   // - ftCo_800DDDE4 routes into Fighter_ProcessHit damage entry, and ftCo_8008DCE0 already performs
   //   an immediate ftAnim_8006EBA4 on state change.

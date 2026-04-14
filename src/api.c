@@ -734,6 +734,7 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
       batch->state.throw_pulse_consumed[idx] = seed->throw_pulse_consumed[p] ? 1u : 0u;
       // Previous-step throw pulse crossing lane (strictly causal seed producer).
       batch->state.throw_pulse_crossed_prev_frame[idx] = seed->throw_pulse_crossed_prev_frame[p];
+      batch->state.throw_pulse_crossed_curr_frame[idx] = 0u;
       batch->state.source_clear_timer_x18c8[idx] = seed->source_clear_timer_x18c8[p];
       batch->state.source_clear_owner_set_phase[idx] =
           seed->source_clear_owner_set_phase[p] ? 1u : 0u;
@@ -943,6 +944,7 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
       batch->state.damage_post_hitlag_cb_kind[idx] = seed->damage_post_hitlag_cb_kind[p];
       batch->state.attacker_shield_ground_kb_vel[idx] = seed->attacker_shield_ground_kb_vel[p];
       batch->state.throw_pending_victim_port[idx] = 0xFFu;
+      batch->state.attached_victim_port[idx] = 0xFFu;
       batch->state.l_cancel[idx] = seed->l_cancel[p];
       // Collision hit-status ownership bridge (x1988/x198C):
       // - Slippi post-frame `hurtbox_state` reports x1988 when nonzero, else x198C.
@@ -1327,6 +1329,31 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
       hitlist_capsule_clear(&batch->state.item_hitlist[ii]);
     }
 
+    // Reconstruct the owner-side attached victim pointer (`fp->victim_gobj`) from the seeded
+    // victim-side owner links. Common Throw/Thrown logic keys several shared callbacks off the
+    // thrower's direct victim pointer rather than repeatedly searching from the victim side.
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DD398
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Thrown.c::ftCo_800DE3FC
+    const int num_players = (int)batch->config.num_players;
+    for (int owner = 0; owner < num_players; owner++) {
+      batch->state.attached_victim_port[msl_idx_player(bi, owner)] = 0xFFu;
+    }
+    for (int victim = 0; victim < num_players; victim++) {
+      const size_t v_idx = msl_idx_player(bi, victim);
+      const uint8_t owner = batch->state.grab_owner_port[v_idx];
+      if (owner == 0xFFu || owner >= (uint8_t)num_players) {
+        continue;
+      }
+      if (!msl_action_is_grabbed_victim(batch->state.action_id[v_idx])) {
+        continue;
+      }
+      const size_t o_idx = msl_idx_player(bi, (int)owner);
+      if (batch->state.attached_victim_port[o_idx] == 0xFFu ||
+          (uint8_t)victim < batch->state.attached_victim_port[o_idx]) {
+        batch->state.attached_victim_port[o_idx] = (uint8_t)victim;
+      }
+    }
+
     // Seed bridge: item hitlists (teacher-forced one-step).
     //
     // Decomp shape:
@@ -1344,7 +1371,6 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
     // - If a victim is still attached (grab_owner_port) and still in a grabbed-victim action and
     //   is in hitlag from a prior item hit (seeded), pre-latch the matching laser item(s) into the
     //   per-item hitlist so this step cannot apply an additional BODY hit.
-    const int num_players = (int)batch->config.num_players;
     for (int victim = 0; victim < num_players; victim++) {
       if (seed->hitlag[victim] == 0u) {
         continue;
@@ -1914,6 +1940,9 @@ int msl_batch_debug_write_internals(const MslBatch* batch, uint8_t* out_bytes,
       out->instance_identity_last_action_id[p] = batch->state.instance_identity_last_action_id[idx];
       out->throw_pulse_consumed[p] = batch->state.throw_pulse_consumed[idx];
       out->throw_pulse_crossed_prev_frame[p] = batch->state.throw_pulse_crossed_prev_frame[idx];
+      out->throw_pending_victim_port[p] = batch->state.throw_pending_victim_port[idx];
+      out->throw_pending_hit_idx[p] = batch->state.throw_pending_hit_idx[idx];
+      out->attached_victim_port[p] = batch->state.attached_victim_port[idx];
     }
   }
 

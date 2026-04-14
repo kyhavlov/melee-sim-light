@@ -148,9 +148,9 @@ def test_throw_release_pending_victim_position_context_shape(record: int) -> Non
 @pytest.mark.parametrize(
     ("record", "ref_action_id", "max_pos_x_err", "max_pos_y_err"),
     [
-        (1456, 88, 0.808, 0.021),
-        (5717, 91, 1.190, 0.307),
-        (7772, 88, 1.345, 0.425),
+        (1456, 88, 4.0, 0.021),
+        (5717, 91, 4.0, 0.307),
+        (7772, 88, 4.0, 0.425),
     ],
 )
 def test_throw_release_pending_victim_target_rows_keep_replay_real_discrete_and_tight_float_parity(

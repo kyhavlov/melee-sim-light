@@ -147,6 +147,11 @@ typedef struct MslStateSoA {
   // Throw projectile pulse crossing lane from the previous replay step (0 = none).
   // Producer is strictly causal in tools/slippi/make_dataset_from_slp.py.
   uint8_t* throw_pulse_crossed_prev_frame;
+  // Internal runtime producer for the current frame's throw pulse crossing.
+  // step.c promotes this to `throw_pulse_crossed_prev_frame` at end-of-frame so rollout can carry
+  // the same throw-side pulse ownership that one-step seeds expose directly.
+  // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
+  uint8_t* throw_pulse_crossed_curr_frame;
   // Source-owner clear countdown (`fp->dmg.x18C8`) with +1 bias.
   //
   // Decomp:
@@ -205,12 +210,23 @@ typedef struct MslStateSoA {
   // - grab_owner_port is seeded from replay data as a player-slot index in [0..3], 0xFF = none.
   //
   // Simulator representation:
+  // - attached_victim_port is the owner-side `fp->victim_gobj` analog for the currently attached
+  //   grabbed/thrown victim (0xFF = none).
   // - grab_offset_{y,z} store the decomp-shaped fp->x1A70.{y,z} (unscaled) inferred at reseed-time.
+  uint8_t* attached_victim_port;   // [batch * players]
   uint8_t* grab_owner_port;        // [batch * players]
   int8_t* grab_mash_stick_x_sign;  // [batch * players] fp->x1A50
   int8_t* grab_mash_stick_y_sign;  // [batch * players] fp->x1A51
   float* grab_offset_y;            // [batch * players]
   float* grab_offset_z;            // [batch * players]
+  // Attached Thrown* victims are callback-owned and should not let stage collision/physics mutate
+  // their grounded state during the attached window.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Thrown.c::{
+  //   ftCo_800DE508,ftCo_ThrownF_Phys,ftCo_ThrownF_Coll,ftCo_ThrownB_Phys,ftCo_ThrownB_Coll,
+  //   ftCo_ThrownHi_Phys,ftCo_ThrownHi_Coll,ftCo_ThrownLw_Phys,ftCo_ThrownLw_Coll
+  // }
+  uint8_t* thrown_attached_prev_on_ground;   // [batch * players]
+  uint16_t* thrown_attached_prev_ground_id;  // [batch * players]
   uint8_t* match_flow_timer;
   // Legacy compatibility lane from the earlier EntryEnd->Fall investigation.
   // The authoritative opening-control owner is now opening_input_lock_timer (`fp->x221D_b4`).
