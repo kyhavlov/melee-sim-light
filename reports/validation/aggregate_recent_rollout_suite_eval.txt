@@ -99,13 +99,13 @@ rollout.first_mismatch_seeded_total: 103
 
 == datasets/aggregate_recent/replays/validation/aggregate_recent/PositiveRevolvingHyena.msl ==
 rollout.best_len: 295
-rollout.streak_count: 183
-rollout.streak_len.median: 38
+rollout.streak_count: 181
+rollout.streak_len.median: 41
 rollout.streak_len.p90: 154
-rollout.streak_len.p95: 189
+rollout.streak_len.p95: 191
 rollout.streak_len.max: 295
-rollout.first_mismatch_total: 190
-rollout.first_mismatch_seeded_total: 119
+rollout.first_mismatch_total: 188
+rollout.first_mismatch_seeded_total: 116
 
 == datasets/aggregate_recent/replays/validation/aggregate_recent/PriceyPartialAlbatross.msl ==
 rollout.best_len: 300
@@ -120,21 +120,21 @@ rollout.first_mismatch_seeded_total: 137
 == datasets/aggregate_recent/replays/validation/aggregate_recent/PutridJoyousOryx.msl ==
 rollout.best_len: 248
 rollout.streak_count: 129
-rollout.streak_len.median: 44
+rollout.streak_len.median: 43
 rollout.streak_len.p90: 123
 rollout.streak_len.p95: 159
 rollout.streak_len.max: 248
 rollout.first_mismatch_total: 129
-rollout.first_mismatch_seeded_total: 62
+rollout.first_mismatch_seeded_total: 60
 
 == datasets/aggregate_recent/replays/validation/aggregate_recent/TubbyCurlyHerring.msl ==
 rollout.best_len: 328
-rollout.streak_count: 167
-rollout.streak_len.median: 53
+rollout.streak_count: 166
+rollout.streak_len.median: 56
 rollout.streak_len.p90: 165
-rollout.streak_len.p95: 209
+rollout.streak_len.p95: 202
 rollout.streak_len.max: 328
-rollout.first_mismatch_total: 268
+rollout.first_mismatch_total: 267
 rollout.first_mismatch_seeded_total: 207
 
 == datasets/aggregate_recent/replays/validation/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl ==
@@ -178,11 +178,11 @@ rollout.first_mismatch_total: 96
 rollout.first_mismatch_seeded_total: 39
 
 == suite summary ==
-overall.rollout.streak_count: 2120
+overall.rollout.streak_count: 2117
 overall.rollout.streak_len.median: 51
 overall.rollout.streak_len.p90: 154
 overall.rollout.streak_len.p95: 195
 overall.rollout.streak_len.max: 631
 overall.rollout.best_len.max: 631
-overall.rollout.first_mismatch_total: 2371
-overall.rollout.first_mismatch_seeded_total: 1363
+overall.rollout.first_mismatch_total: 2368
+overall.rollout.first_mismatch_seeded_total: 1358

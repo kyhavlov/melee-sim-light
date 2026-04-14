@@ -31,7 +31,7 @@ class _ThrowLwPulse25Case:
 def test_throwlw_attached_pulse25_seed_bridge_target_pm1_both_players_strict_lock(
     case: _ThrowLwPulse25Case,
 ) -> None:
-    # Replay-real target+/-1 strict lock for src/items.c ThrowLw attached pulse-25 bridge lane.
+    # Replay-real target+/-1 strict lock for the remaining ThrowLw attached pulse-25 per-throw lane.
     #
     # Decomp/data refs for this lane:
     # - refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
@@ -61,7 +61,7 @@ def test_throwlw_attached_pulse25_seed_bridge_target_pm1_both_players_strict_loc
     owner_p = 0
     victim_p = 1
 
-    # ThrowLw pulse-25 bridge preconditions from src/items.c:
+    # ThrowLw pulse-25 per-throw preconditions from src/items.c:
     # - owner in ThrowLw with seeded prior-step pulse crossing at frame 25;
     # - victim is still attached ThrownLw to this owner.
     assert int(seed["action_id"][owner_p]) == 222, case.note  # ThrowLw

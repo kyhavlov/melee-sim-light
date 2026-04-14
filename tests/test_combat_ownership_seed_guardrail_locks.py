@@ -3855,9 +3855,11 @@ def test_throw_deferred_anim_tick_rows_and_adjacent_controls_are_replay_exact(
 ) -> None:
     # Throw deferred anim-rate/tick lock families:
     # - Throw release damage-entry path applies immediate ftAnim_8006EBA4 on Damage* entry.
-    # - Post-items throw-hit apply lane defers one extra victim tick for Throw{Hi,Lw} windows.
+    # - Post-items throw-hit apply restores the same-frame post-release Damage callback phase when
+    #   owner callback order precedes the victim.
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
-    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::{ftCo_ThrowHi_Anim,ftCo_ThrowLw_Anim}
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::{ftCo_ThrowHi_Anim,ftCo_ThrowLw_Anim,ftCo_800DD724}
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008F744
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / dataset_rel
@@ -3900,10 +3902,11 @@ def test_throw_deferred_anim_tick_rows_and_adjacent_controls_are_replay_exact(
 def test_throw_owner_before_victim_deferred_tick_rows_and_adjacent_controls_are_replay_exact(
     dataset_rel: str, target_record: int, owner_p: int, victim_p: int
 ) -> None:
-    # Owner-before-victim ThrowLw deferred tick lock families (causal subset):
-    # - Post-items deferred throw-hit apply adds one victim tick only for Throw{Hi,Lw} when
+    # Owner-before-victim ThrowLw release callback lock families (causal subset):
+    # - Post-items throw-hit apply restores the same-frame post-release Damage callback phase when
     #   thrower callback ownership precedes victim callback in Fighter_procUpdate order.
-    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::{ftCo_ThrowLw_Anim,ftCo_800DD724}
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::{ftCo_ThrowLw_Anim,ftCo_800DD724,ftCo_800DE7C0,ftCo_800DDDE4}
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008F744
     # refs/melee/src/melee/ft/fighter.c::{Fighter_8006A360,Fighter_procUpdate}
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
@@ -3955,10 +3958,10 @@ def test_throw_owner_before_victim_deferred_tick_rows_and_adjacent_controls_are_
 def test_throwhi_owner_before_victim_deferred_hitstun_tick_rows_and_adjacent_controls_are_replay_exact(
     dataset_rel: str, rows: tuple[int, int, int], owner_p: int, victim_p: int
 ) -> None:
-    # ThrowHi owner-before-victim deferred hitstun-tick lock families:
+    # ThrowHi owner-before-victim post-release Damage callback lock families:
     # - ThrowHi release/hit consume runs in thrower Anim callback (ftCo_ThrowHi_Anim -> ftCo_800DD724).
     # - Damage* callback ownership decrements hitstun in ftCo_8008F744.
-    # - Deferred post-items throw-hit apply must preserve same-frame owner-before-victim callback order.
+    # - Post-items throw-hit apply must restore that same-frame owner-before-victim callback order.
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::{ftCo_ThrowHi_Anim,ftCo_800DD724,ftCo_800DE7C0,ftCo_800DDDE4}
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008F744
     # refs/melee/src/melee/ft/fighter.c::{Fighter_8006A360,Fighter_procUpdate}

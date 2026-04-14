@@ -481,58 +481,35 @@ void anim_timebase_update_pre_input(MslBatch* batch) {
         }
       }
 
-      // ThrowLw hitlag-release anim-rate ownership bridge:
-      // - Hitlag decrement runs at Fighter_8006A1BC before Fighter_8006A360 callback work.
-      // - ThrowLw callback ownership (ftCo_ThrowLw_Anim -> ftCo_800DD724) can leave reseeded
-      //   first post-hitlag rows with frame_speed_mul==0 while the prior continuous row had a
-      //   nonzero callback-owned rate.
+      // ThrowLw attached pulse/post-hitlag anim-rate ownership:
+      // - Throw entry computes one shared throw anim-speed via ftCo_800DD4B0, and ftCo_800DD398
+      //   installs it onto both thrower and thrown victim.
+      // - The remaining non-shared slice is specifically ThrowLw's throw-side pulse family:
+      //   ftCo_ThrowLw_Anim runs ftFx_Throw_Anim while the victim remains attached under
+      //   ftCo_800DE508, and on the first post-hitlag pre-input row replay can carry a zeroed
+      //   thrower frame_speed_mul snapshot even though the ThrowLw callback resumes the shared
+      //   throw anim-speed for the attached pulse-25 window.
+      // - This is not generic throw substrate: broadening it to ThrowF/ThrowHi changes real
+      //   release-time ownership outside the ftFx_Throw_Anim family.
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::{ftCo_800DD4B0,ftCo_800DD398,ftCo_ThrowLw_Anim,ftCo_800DD724}
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Thrown.c::ftCo_800DE508
+      // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
       // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A1BC,Fighter_8006A360}
-      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::{ftCo_ThrowLw_Anim,ftCo_800DD724}
-      //
-      // Bridge policy (narrowed):
-      // - On the frame that started in hitlag (`hitlag_pre_timer!=0`) but is no longer frozen after
-      //   decrement (`hitlag_started_frame==0`), keep ThrowLw rate at 0 for this pre-input tick.
-      // - On strict continuity rows flagged during reseed, restore prior ThrowLw seeded rate only
-      //   when the current seeded rate is 0.
-      // Limit note: full parity would require a direct seed-visible "ThrowLw callback wrote next
-      // anim rate" ownership marker instead of continuity inference.
       if (a == (uint16_t)MSL_ACT_THROW_LW) {
         if (batch->state.hitlag_pre_timer[idx] != 0u &&
             batch->state.hitlag_started_frame[idx] == 0u) {
           batch->state.frame_speed_mul_fp_q16_16[idx] = 0;
-        } else if (batch->state.throw_lw_prev_rate_valid[idx] != 0u &&
-                   batch->state.frame_speed_mul_fp_q16_16[idx] == 0) {
-          batch->state.frame_speed_mul_fp_q16_16[idx] =
-              batch->state.throw_lw_prev_rate_fp_q16_16[idx];
         } else if (batch->state.frame_speed_mul_fp_q16_16[idx] == 0) {
-          // ThrowLw attached-victim post-hitlag bridge (seed-visible fallback):
-          // - ThrowLw callback ownership (`ftCo_ThrowLw_Anim` -> `ftCo_800DD724`) consumes throw
-          //   script flags while the victim remains attached.
-          // - Thrown victim Phys/Coll are attachment-driven (`ftCo_Thrown*`), so on the first
-          //   post-hitlag frame the owner/victim timebase can advance together even when the
-          //   thrower reseed snapshot carries frame_speed_mul==0.
-          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::{ftCo_ThrowLw_Anim,ftCo_800DD724}
-          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Thrown.c::{ftCo_800DE508,ftCo_ThrownF_Phys,ftCo_ThrownF_Coll}
-          // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A1BC,Fighter_8006A360}
-          for (int v = 0; v < num_players; v++) {
-            if (v == p) {
-              continue;
+          const int32_t throw_rate_fp = batch->state.throw_anim_rate_fp_q16_16[idx];
+          if (throw_rate_fp > 0) {
+            const uint8_t victim_p = batch->state.attached_victim_port[idx];
+            if (victim_p != 0xFFu && (int)victim_p < num_players && (int)victim_p != p) {
+              const size_t vidx = msl_idx_player(bi, (int)victim_p);
+              if (msl_action_is_grabbed_victim(batch->state.action_id[vidx]) &&
+                  batch->state.hitlag_pre_timer[vidx] != 0u && batch->state.hitlag[vidx] == 0u) {
+                batch->state.frame_speed_mul_fp_q16_16[idx] = throw_rate_fp;
+              }
             }
-            const size_t vidx = msl_idx_player(bi, v);
-            if (batch->state.grab_owner_port[vidx] != (uint8_t)p) {
-              continue;
-            }
-            if (!msl_action_is_grabbed_victim(batch->state.action_id[vidx])) {
-              continue;
-            }
-            if (!(batch->state.hitlag_pre_timer[vidx] != 0u && batch->state.hitlag[vidx] == 0u)) {
-              continue;
-            }
-            const int32_t victim_rate = batch->state.frame_speed_mul_fp_q16_16[vidx];
-            if (victim_rate > 0) {
-              batch->state.frame_speed_mul_fp_q16_16[idx] = victim_rate;
-            }
-            break;
           }
         }
       }

@@ -20,6 +20,32 @@ static inline uint8_t is_thrower_action(uint16_t a) {
   }
 }
 
+static inline uint8_t throw_flow_action_is_damage_family(uint16_t action_id_u16) {
+  switch (action_id_u16) {
+    case MSL_ACT_DAMAGE_FALL:
+    case MSL_ACT_DAMAGE_HI_1:
+    case MSL_ACT_DAMAGE_HI_2:
+    case MSL_ACT_DAMAGE_HI_3:
+    case MSL_ACT_DAMAGE_N_1:
+    case MSL_ACT_DAMAGE_N_2:
+    case MSL_ACT_DAMAGE_N_3:
+    case MSL_ACT_DAMAGE_LW_1:
+    case MSL_ACT_DAMAGE_LW_2:
+    case MSL_ACT_DAMAGE_LW_3:
+    case MSL_ACT_DAMAGE_AIR_1:
+    case MSL_ACT_DAMAGE_AIR_2:
+    case MSL_ACT_DAMAGE_AIR_3:
+    case MSL_ACT_DAMAGE_FLY_HI:
+    case MSL_ACT_DAMAGE_FLY_N:
+    case MSL_ACT_DAMAGE_FLY_LW:
+    case MSL_ACT_DAMAGE_FLY_TOP:
+    case MSL_ACT_DAMAGE_FLY_ROLL:
+      return 1u;
+    default:
+      return 0u;
+  }
+}
+
 static inline uint8_t throw_anim_finished(uint8_t char_id, uint16_t msid, float anim_frame_f32) {
   const float end = msl_anim_end_frame(char_id, msid);
   if (!(end > 0.0f)) {
@@ -112,6 +138,9 @@ static inline void throw_flow_bridge_integrate_deferred_throw_hit_position(MslBa
   batch->state.pos_y[victim_idx] += vy;
 }
 
+static inline void throw_flow_apply_post_release_damage_callback_phase(MslBatch* batch,
+                                                                       size_t victim_idx);
+
 static inline float throw_flow_owner_self_dx(const MslBatch* batch, size_t owner_idx,
                                              size_t victim_idx) {
   if (batch == NULL || owner_idx == victim_idx) {
@@ -120,77 +149,6 @@ static inline float throw_flow_owner_self_dx(const MslBatch* batch, size_t owner
   const uint8_t owner_on_ground = batch->state.on_ground[owner_idx] ? 1u : 0u;
   return owner_on_ground ? batch->state.speed_ground_x_self[owner_idx]
                          : batch->state.speed_air_x_self[owner_idx];
-}
-
-static inline float throw_flow_owner_throwf_deferred_extra_share(const MslBatch* batch,
-                                                                 uint8_t owner_char,
-                                                                 uint16_t throw_action,
-                                                                 float owner_prev_af,
-                                                                 float owner_af, size_t owner_idx) {
-  if (batch == NULL) {
-    return 0.0f;
-  }
-  // Decomp/timebase-backed split for deferred ThrowF release apply:
-  // - Throw release timing is owned by set_throw_flags(0) in ThrowF script events.
-  // - Decomp consumes that release in ThrowF Anim before Phys integration; this sim defers
-  //   throw-hit apply to post-items, so we carry a bounded owner-motion share tied to:
-  //   (a) overspeed contribution from thrower anim-rate, and
-  //   (b) post-release fraction within the current (prev_af -> cur_af) step.
-  // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_ThrowF_Anim
-  // refs/melee/src/melee/ft/ftaction.c::ftAction_800718A4 (case 0 set_throw_flags)
-  // refs/data/moves/{fox,falco}.json moves["ftCo_SM_ThrowF"]["events"] set_throw_flags
-  const float frame_speed_mul =
-      msl_f32_from_q16_16(batch->state.frame_speed_mul_fp_q16_16[owner_idx]);
-  if (!(frame_speed_mul > 1.0f)) {
-    return 0.0f;
-  }
-  const float overspeed_share = frame_speed_mul - 1.0f;
-  float release_af = 0.0f;
-  if (!move_tables_throw_release_frame(owner_char, throw_action, &release_af)) {
-    return overspeed_share;
-  }
-  const float span = owner_af - owner_prev_af;
-  if (!(span > 0.0f)) {
-    return overspeed_share;
-  }
-  const float post_release = owner_af - release_af;
-  if (!(post_release > 0.0f)) {
-    return 0.0f;
-  }
-  float release_share = post_release / span;
-  if (release_share < 0.0f) {
-    release_share = 0.0f;
-  } else if (release_share > 1.0f) {
-    release_share = 1.0f;
-  }
-  // Weight is derived from anim-rate itself (0 at 1.0x; approaches 1 as rate increases).
-  const float weight = 1.0f - (1.0f / frame_speed_mul);
-  return overspeed_share + (release_share - overspeed_share) * weight;
-}
-
-static inline void throw_flow_deferred_throwhi_owner_before_victim_hitstun_tick(MslBatch* batch,
-                                                                                size_t victim_idx) {
-  if (batch == NULL) {
-    return;
-  }
-  // Deferred ThrowHi release apply ownership bridge:
-  // - In decomp, ThrowHi release/hit consume runs in the thrower's Anim callback
-  //   (ftCo_ThrowHi_Anim -> ftCo_800DD724 -> ftCo_800DE7C0/ftCo_800DDDE4).
-  // - Under owner-before-victim callback order, the victim can then execute Damage* callback work
-  //   in the same Fighter_8006A360 pass; hitstun decrement ownership is in ftCo_8008F744.
-  // - This simulator applies throw-hit in post-items, after timers_update_post_anim(), so the
-  //   owner-before-victim ThrowHi lane needs one deferred hitstun tick to preserve callback order.
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::{ftCo_ThrowHi_Anim,ftCo_800DD724,ftCo_800DE7C0,ftCo_800DDDE4}
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008F744
-  // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A360,Fighter_procUpdate}
-  if (batch->state.hitlag[victim_idx] != 0u) {
-    return;
-  }
-  const uint16_t hs = batch->state.hitstun[victim_idx];
-  if (hs > 0u) {
-    batch->state.hitstun[victim_idx] = (uint16_t)(hs - 1u);
-  }
 }
 
 void throw_flow_update_pre_physics(MslBatch* batch) {
@@ -393,31 +351,19 @@ void throw_flow_update_post_items(MslBatch* batch) {
         // Invincible/intangible suppression: the victim stays in FALL (already detached).
         // (No additional transition needed.)
       } else {
-        // Throw-release damage-entry anim advance ownership:
-        // - ftCo_8008DCE0 always performs immediate ftAnim_8006EBA4 on Damage* entry.
-        // - Post-items deferred throw-hit apply in this sim needs a deferred extra tick for the
-        //   Throw{Hi,Lw} lanes; applying it broadly over-advances other throw-release families.
-        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
-        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::{ftCo_ThrowHi_Anim,ftCo_ThrowLw_Anim}
-        //
-        // TODO(narrowed_temporary): subset is intentionally limited to ThrowHi/Lw. Full parity needs
-        // explicit throw-release callback/tick ownership data for ThrowF/ThrowB in this deferred
-        // post-items apply architecture (instead of broad extra-tick policy).
-        if ((throw_action == (uint16_t)MSL_ACT_THROW_HI ||
-             throw_action == (uint16_t)MSL_ACT_THROW_LW) &&
-            owner_p < (int)victim_p) {
-          // Owner-before-victim callback-order bridge (deferred throw-hit apply only):
-          // - In decomp, throw release/hit is consumed in the thrower's Anim callback, and victim
-          //   Anim callback execution order in the same frame depends on Fighter_procUpdate order.
-          // - This simulator defers throw-hit apply to post-items; only the owner-before-victim
-          //   subset needs one deferred victim tick to preserve same-frame callback ownership.
-          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::{ftCo_ThrowHi_Anim,ftCo_ThrowLw_Anim}
-          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DD724
-          // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A360,Fighter_procUpdate}
+        // Throw-release post-damage callback phase:
+        // - ftCo_800DD724 consumes release/hit in the thrower's Anim callback.
+        // - If owner callback order precedes the victim and the victim enters Damage* this frame,
+        //   decomp still gives the victim its same-frame Damage callback work after entry.
+        // - This simulator applies throw-hit in post-items; restore the equivalent post-release
+        //   Damage callback phase here instead of keeping ThrowHi-specific bridge logic.
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::{ftCo_ThrowHi_Anim,ftCo_ThrowLw_Anim,ftCo_800DD724}
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{ftCo_8008DCE0,ftCo_8008F744}
+        // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A360,Fighter_procUpdate}
+        if (owner_p < (int)victim_p &&
+            throw_flow_action_is_damage_family(batch->state.action_id[vidx])) {
           msl_anim_timebase_defer_tick_once(batch, vidx);
-          if (throw_action == (uint16_t)MSL_ACT_THROW_HI) {
-            throw_flow_deferred_throwhi_owner_before_victim_hitstun_tick(batch, vidx);
-          }
+          throw_flow_apply_post_release_damage_callback_phase(batch, vidx);
         }
         throw_flow_bridge_integrate_deferred_throw_hit_position(batch, oidx, vidx);
         if (throw_action == (uint16_t)MSL_ACT_THROW_F) {
@@ -431,5 +377,29 @@ void throw_flow_update_post_items(MslBatch* batch) {
         }
       }
     }
+  }
+}
+static inline void throw_flow_apply_post_release_damage_callback_phase(MslBatch* batch,
+                                                                       size_t victim_idx) {
+  if (batch == NULL) {
+    return;
+  }
+  // Shared post-release Damage callback phase:
+  // - Damage entry from throw release goes through ftCo_8008DCE0, which immediately advances the
+  //   new Damage* motion once via ftAnim_8006EBA4.
+  // - Under owner-before-victim callback order, the victim's Damage callback work (including the
+  //   hitstun decrement in ftCo_8008F744 when not in hitlag) still occurs later in the same
+  //   Fighter_8006A360 pass.
+  // - This simulator applies release damage in post-items, after timers_update_post_anim(); restore
+  //   only the callback-owned work that would have happened after entry on the same frame.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::{ftCo_800DD724,ftCo_800DE7C0,ftCo_800DDDE4}
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008F744
+  // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A360,Fighter_procUpdate}
+  if (batch->state.hitlag[victim_idx] != 0u) {
+    return;
+  }
+  const uint16_t hs = batch->state.hitstun[victim_idx];
+  if (hs > 0u) {
+    batch->state.hitstun[victim_idx] = (uint16_t)(hs - 1u);
   }
 }

@@ -138,6 +138,63 @@ static inline uint16_t colanim_timer_remaining_from_seed_bridge(uint16_t init_fr
   return rem;
 }
 
+static inline int throw_index_from_action_id(uint16_t action_id) {
+  switch (action_id) {
+    case (uint16_t)MSL_ACT_THROW_F:
+      return 0;
+    case (uint16_t)MSL_ACT_THROW_B:
+      return 1;
+    case (uint16_t)MSL_ACT_THROW_HI:
+      return 2;
+    case (uint16_t)MSL_ACT_THROW_LW:
+      return 3;
+    default:
+      return -1;
+  }
+}
+
+static inline uint16_t throw_action_from_thrown_action(uint16_t action_id) {
+  switch (action_id) {
+    case (uint16_t)MSL_ACT_THROWN_F:
+      return (uint16_t)MSL_ACT_THROW_F;
+    case (uint16_t)MSL_ACT_THROWN_B:
+      return (uint16_t)MSL_ACT_THROW_B;
+    case (uint16_t)MSL_ACT_THROWN_HI:
+      return (uint16_t)MSL_ACT_THROW_HI;
+    case (uint16_t)MSL_ACT_THROWN_LW:
+      return (uint16_t)MSL_ACT_THROW_LW;
+    default:
+      return 0xFFFFu;
+  }
+}
+
+static inline int32_t throw_anim_rate_fp_from_pair(const MslBatch* batch, size_t owner_idx,
+                                                   size_t victim_idx, uint16_t throw_action) {
+  if (batch == NULL) {
+    return 0;
+  }
+  const int throw_index = throw_index_from_action_id(throw_action);
+  if (throw_index < 0) {
+    return 0;
+  }
+  float throw_anim_speed = 1.0f;
+  const MslCommonParams* c = msl_common_params();
+  const MslCharParams* owner_ch = msl_char_params(batch->state.char_id[owner_idx]);
+  const MslCharParams* victim_ch = msl_char_params(batch->state.char_id[victim_idx]);
+  const uint8_t weight_independent =
+      (owner_ch != NULL)
+          ? ((owner_ch->weight_independent_throws_mask & (uint8_t)(1u << throw_index)) ? 1u : 0u)
+          : 0u;
+  if (!weight_independent && c != NULL && victim_ch != NULL && victim_ch->weight > 0.0f &&
+      c->throw_anim_speed_weight_mul > 0.0f) {
+    throw_anim_speed = 1.0f / (victim_ch->weight * c->throw_anim_speed_weight_mul);
+    if (!(throw_anim_speed > 0.0f)) {
+      throw_anim_speed = 1.0f;
+    }
+  }
+  return msl_q16_16_from_f32(throw_anim_speed);
+}
+
 MslBatch* msl_batch_create(int batch_size, int num_players) {
   if (batch_size <= 0) {
     return NULL;
@@ -654,7 +711,6 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
       const uint16_t prev_seed_instance_id = batch->state.instance_id[idx];
       const int32_t prev_seed_rate_snapshot_fp =
           batch->state.capture_wait_seed_rate_snapshot_fp_q16_16[idx];
-      const int32_t prev_runtime_rate_fp = batch->state.frame_speed_mul_fp_q16_16[idx];
       batch->state.team_id[idx] = seed->team_id[p];
       batch->state.char_id[idx] = seed->char_id[p];
       float attack_ratio = seed->attack_ratio[p];
@@ -945,6 +1001,7 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
       batch->state.attacker_shield_ground_kb_vel[idx] = seed->attacker_shield_ground_kb_vel[p];
       batch->state.throw_pending_victim_port[idx] = 0xFFu;
       batch->state.attached_victim_port[idx] = 0xFFu;
+      batch->state.throw_anim_rate_fp_q16_16[idx] = 0;
       batch->state.l_cancel[idx] = seed->l_cancel[p];
       // Collision hit-status ownership bridge (x1988/x198C):
       // - Slippi post-frame `hurtbox_state` reports x1988 when nonzero, else x198C.
@@ -1067,25 +1124,6 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
         // TODO(narrowed_temporary): continuity is currently inferred from
         // {frame_id+1,action_id,instance_id}. Full parity needs a direct seedable callback-phase
         // ownership marker from the producer lane (CaptureWait Anim-rate write committed or not).
-
-        // ThrowLw continuity bridge gate (post-hitlag callback-owned rate carry):
-        // - ThrowLw consumes throw script flags in ftCo_ThrowLw_Anim -> ftCo_800DD724 while the
-        //   motion callback runs under Fighter_8006A360 (after Fighter_8006A1BC hitlag decrement).
-        // - Teacher-forced reseed can snapshot the first post-hitlag ThrowLw row with seeded
-        //   frame_speed_mul==0 even when the previous continuous row had a nonzero ThrowLw rate.
-        // - Carry previous runtime-applied rate only on strict continuity and only when current
-        //   seed rate is 0.
-        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::{ftCo_ThrowLw_Anim,ftCo_800DD724}
-        // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A1BC,Fighter_8006A360}
-        const uint8_t throw_lw_continuity =
-            (seeded_action == (uint16_t)MSL_ACT_THROW_LW &&
-             prev_seed_frame_id + 1 == seed->frame_id && prev_seed_action_id == seeded_action &&
-             prev_seed_instance_id == seed->instance_id[p] && seed->instance_id[p] != 0u &&
-             prev_runtime_rate_fp > 0 && seeded_rate_snapshot_fp == 0)
-                ? 1u
-                : 0u;
-        batch->state.throw_lw_prev_rate_valid[idx] = throw_lw_continuity;
-        batch->state.throw_lw_prev_rate_fp_q16_16[idx] = prev_runtime_rate_fp;
       }
       if (seed->instance_id[p] > max_instance_id) {
         max_instance_id = seed->instance_id[p];
@@ -1352,6 +1390,32 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
           (uint8_t)victim < batch->state.attached_victim_port[o_idx]) {
         batch->state.attached_victim_port[o_idx] = (uint8_t)victim;
       }
+    }
+    for (int p = 0; p < num_players; p++) {
+      batch->state.throw_anim_rate_fp_q16_16[msl_idx_player(bi, p)] = 0;
+    }
+    for (int owner = 0; owner < num_players; owner++) {
+      const size_t o_idx = msl_idx_player(bi, owner);
+      const uint8_t victim = batch->state.attached_victim_port[o_idx];
+      if (victim == 0xFFu || victim >= (uint8_t)num_players || victim == (uint8_t)owner) {
+        continue;
+      }
+      const size_t v_idx = msl_idx_player(bi, (int)victim);
+      const uint16_t owner_action = batch->state.action_id[o_idx];
+      const uint16_t victim_action = batch->state.action_id[v_idx];
+      uint16_t throw_action = owner_action;
+      if (throw_index_from_action_id(throw_action) < 0) {
+        throw_action = throw_action_from_thrown_action(victim_action);
+      }
+      if (throw_action == 0xFFFFu) {
+        continue;
+      }
+      const int32_t rate_fp = throw_anim_rate_fp_from_pair(batch, o_idx, v_idx, throw_action);
+      if (rate_fp <= 0) {
+        continue;
+      }
+      batch->state.throw_anim_rate_fp_q16_16[o_idx] = rate_fp;
+      batch->state.throw_anim_rate_fp_q16_16[v_idx] = rate_fp;
     }
 
     // Seed bridge: item hitlists (teacher-forced one-step).
