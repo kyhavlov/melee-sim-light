@@ -1,6 +1,5 @@
 #include "hurtboxes.h"
 
-#include <math.h>
 #include <stdint.h>
 
 #include "action_ids.h"
@@ -382,7 +381,6 @@ void hurtboxes_refresh(MslBatch* batch) {
                                       : 1.0f;
       const float model_scale = scale_y * model_scaling;
       const float facing_dir = batch->state.facing[idx] ? 1.0f : -1.0f;
-
       // Fallback policy: missing pose data for a specific capsule only drops that capsule, keeping
       // the rest usable under partial animation coverage.
       //

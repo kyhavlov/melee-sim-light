@@ -24,3 +24,9 @@ float msl_anim_end_frame(uint8_t char_id, uint16_t submotion_id);
 // - refs/melee/src/melee/ft/types.h::ftData_80085FD4_ret (+0x10 bit1)
 // - refs/melee/src/melee/ft/ftanim.c::ftAnim_8006EBE8 (sets AOBJ_LOOP when fp->x594_b1_loop)
 uint8_t msl_anim_is_looping(uint8_t char_id, uint16_t submotion_id);
+
+// Return 1 if the given FtPart id is inside the extracted FtPart_XRotN subtree for this character.
+//
+// Source of truth: `data/anims/<character>.tracks.bin` header local_parts/local_parent derived from
+// ISO fighter joints in `tools/extraction/extract_fighter_anims.py`.
+uint8_t msl_anim_part_under_xrotn(uint8_t char_id, uint16_t part_id);

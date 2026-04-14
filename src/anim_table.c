@@ -18,6 +18,7 @@ typedef struct {
   float end_frame_by_smid[1024];
   uint8_t loop_by_smid[1024];
   uint8_t have_smid[1024];
+  uint8_t part_under_xrotn[256];
 } MslAnimTable;
 
 static MslAnimTable g_table_by_char[256];
@@ -110,15 +111,45 @@ static int load_tracks_for_char(const char* data_dir, const char* rel_path, uint
   const uint16_t anim_count = read_u16_le(p + 2);
   p += 4;
 
-  // Skip local_parts[u8], local_parent[i16], local_flags[u32]
-  const size_t skip_hdr = (size_t)local_count + (size_t)local_count * 2 + (size_t)local_count * 4;
+  const size_t local_parts_bytes = (size_t)local_count;
+  const size_t local_parent_bytes = (size_t)local_count * 2u;
+  const size_t local_flags_bytes = (size_t)local_count * 4u;
+  const size_t skip_hdr = local_parts_bytes + local_parent_bytes + local_flags_bytes;
   if ((size_t)(end - p) < skip_hdr) {
     alloc_free(buf);
     return -1;
   }
-  p += skip_hdr;
 
   MslAnimTable tbl = {0};
+  int16_t parent_by_part[256];
+  for (int i = 0; i < 256; i++) {
+    parent_by_part[i] = -1;
+  }
+  const uint8_t* local_parts_ptr = p;
+  const uint8_t* local_parent_ptr = p + local_parts_bytes;
+  for (uint16_t li = 0; li < local_count; li++) {
+    const uint8_t part = local_parts_ptr[li];
+    parent_by_part[part] = (int16_t)read_u16_le(local_parent_ptr + (size_t)li * 2u);
+  }
+  for (uint16_t li = 0; li < local_count; li++) {
+    const uint8_t part = local_parts_ptr[li];
+    int steps = 0;
+    int cur = (int)part;
+    while (cur >= 0 && cur < 256 && steps < 256) {
+      if (cur == 2) {  // FtPart_XRotN
+        tbl.part_under_xrotn[part] = 1u;
+        break;
+      }
+      const int next = (int)parent_by_part[cur];
+      if (next == cur) {
+        break;
+      }
+      cur = next;
+      steps++;
+    }
+  }
+  p += skip_hdr;
+
   for (uint16_t ai = 0; ai < anim_count; ai++) {
     if ((size_t)(end - p) < 2 + 4 + (format_version >= 2 ? 1u : 0u)) {
       alloc_free(buf);
@@ -215,4 +246,14 @@ uint8_t msl_anim_is_looping(uint8_t char_id, uint16_t submotion_id) {
     return 0;
   }
   return (uint8_t)(t->loop_by_smid[submotion_id] ? 1 : 0);
+}
+
+uint8_t msl_anim_part_under_xrotn(uint8_t char_id, uint16_t part_id) {
+  if (!g_loaded || !g_have_char[char_id]) {
+    return 0;
+  }
+  if (part_id >= 256) {
+    return 0;
+  }
+  return g_table_by_char[char_id].part_under_xrotn[part_id] ? 1u : 0u;
 }

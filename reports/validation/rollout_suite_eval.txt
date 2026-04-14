@@ -55,7 +55,7 @@ rollout.streak_len.p90: 171
 rollout.streak_len.p95: 227
 rollout.streak_len.max: 631
 rollout.first_mismatch_total: 126
-rollout.first_mismatch_seeded_total: 49
+rollout.first_mismatch_seeded_total: 48
 
 == datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/TreasuredBackKangaroo.msl ==
 rollout.best_len: 303
@@ -75,4 +75,4 @@ overall.rollout.streak_len.p95: 237
 overall.rollout.streak_len.max: 631
 overall.rollout.best_len.max: 631
 overall.rollout.first_mismatch_total: 443
-overall.rollout.first_mismatch_seeded_total: 171
+overall.rollout.first_mismatch_seeded_total: 170

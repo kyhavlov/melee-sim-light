@@ -26,6 +26,7 @@
 #include "hitboxes_tables.h"
 #include "hitlist.h"
 #include "hit_status_tables.h"
+#include "msl_math.h"
 #include "airborne_state_events_tables.h"
 #include "state_flags_221c_y_tables.h"
 #include "hitboxes.h"
@@ -2097,6 +2098,58 @@ static uint8_t debug_sample_hitbox_center_proxy(const MslBatch* batch, size_t id
   cx *= model_scale;
   cy *= model_scale;
   cz *= model_scale;
+
+  if (def->bone_part_id < 256u &&
+      batch->state.action_id[idx] == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_HI &&
+      msl_anim_part_under_xrotn(char_id, def->bone_part_id)) {
+    float xrotn_m[12];
+    if (anim_pose_get_matrix(char_id, msid, pose_frame, 2u, xrotn_m) == 0) {
+      const float vel_x = batch->state.speed_air_x_self[idx];
+      const float vel_y = batch->state.speed_y_self[idx];
+      if (fabsf(vel_x) > 0.0f || fabsf(vel_y) > 0.0f) {
+        float ax0 = 0.0f, ay0 = 0.0f, az0 = 0.0f;
+        float ax1 = 0.0f, ay1 = 0.0f, az1 = 0.0f;
+        const float origin[3] = {0.0f, 0.0f, 0.0f};
+        const float local_x[3] = {1.0f, 0.0f, 0.0f};
+        msl_mtx34_mul_point(xrotn_m, origin, &ax0, &ay0, &az0);
+        msl_mtx34_mul_point(xrotn_m, local_x, &ax1, &ay1, &az1);
+        ax0 *= model_scale;
+        ay0 *= model_scale;
+        az0 *= model_scale;
+        ax1 *= model_scale;
+        ay1 *= model_scale;
+        az1 *= model_scale;
+
+        float axis_x = ax1 - ax0;
+        float axis_y = ay1 - ay0;
+        float axis_z = az1 - az0;
+        const float axis_len = sqrtf(axis_x * axis_x + axis_y * axis_y + axis_z * axis_z);
+        if (axis_len > 0.0f) {
+          axis_x /= axis_len;
+          axis_y /= axis_len;
+          axis_z /= axis_len;
+
+          // Decomp: Firefox/Firebird launch rotates FtPart_XRotN by `2*pi - rotateModel`,
+          // where `rotateModel = atan2f(self_vel.y, self_vel.x * facing_dir)`.
+          // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::{
+          //   ftFox_SpecialHi_RotateModel,ftFx_SpecialAirHi_Enter,ftFx_SpecialAirHi_Coll}
+          const float angle = (2.0f * MSL_PI_F) - atan2f(vel_y, vel_x * facing_dir);
+          const float px = cx - ax0;
+          const float py = cy - ay0;
+          const float pz = cz - az0;
+          const float c = cosf(angle);
+          const float s = sinf(angle);
+          const float dot = axis_x * px + axis_y * py + axis_z * pz;
+          const float cross_x = axis_y * pz - axis_z * py;
+          const float cross_y = axis_z * px - axis_x * pz;
+          const float cross_z = axis_x * py - axis_y * px;
+          cx = ax0 + (px * c) + (cross_x * s) + (axis_x * dot * (1.0f - c));
+          cy = ay0 + (py * c) + (cross_y * s) + (axis_y * dot * (1.0f - c));
+          cz = az0 + (pz * c) + (cross_z * s) + (axis_z * dot * (1.0f - c));
+        }
+      }
+    }
+  }
 
   const float cx_rot_x = facing_dir * cz;
   const float cx_rot_z = -facing_dir * cx;
