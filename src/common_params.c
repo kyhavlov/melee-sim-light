@@ -369,6 +369,12 @@ int common_params_init(void) {
       json_get_f32(buf, "asdi_step_mul", &g_params.asdi_step_mul) != 0 ||
       json_get_f32(buf, "di_max_deg", &g_params.di_max_deg) != 0 ||
       json_get_f32(buf, "lsi_lr_held_mul", &g_params.lsi_lr_held_mul) != 0 ||
+      json_get_f32(buf, "shield_attacker_ground_kb_mul", &g_params.shield_attacker_ground_kb_mul) !=
+          0 ||
+      json_get_f32(buf, "shield_attacker_ground_kb_base",
+                   &g_params.shield_attacker_ground_kb_base) != 0 ||
+      json_get_f32(buf, "shield_attacker_ground_friction_mul",
+                   &g_params.shield_attacker_ground_friction_mul) != 0 ||
       json_get_f32(buf, "ground_kb_friction_mul", &g_params.ground_kb_friction_mul) != 0 ||
       json_get_f32(buf, "knockback_frame_decay", &g_params.knockback_frame_decay) != 0 ||
       json_get_f32(buf, "air_drift_overmax_friction", &g_params.air_drift_overmax_friction) != 0 ||

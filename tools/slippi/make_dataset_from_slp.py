@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import functools
 import json
+import struct
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -2099,9 +2100,38 @@ def _main_impl(args) -> None:
     end_frames = load_end_frame_tables(data_root)
     char_landing_air_lag_frames: dict[int, dict[str, int]] = {}
     char_walk_divisors: dict[int, tuple[float, float, float]] = {}
+    char_gr_friction: dict[int, float] = {}
+    char_active_shield_hit_int_damage: dict[int, dict[int, dict[int, int]]] = {}
+
+    def _get_env_dmg_local(dmg: float) -> int:
+        if float(dmg) == 0.0:
+            return 0
+        i = int(dmg)
+        return i if i != 0 else 1
+
+    def _stale_multiplier_from_seed_queue(queue_index: int, queue_move_ids: np.ndarray, move_id: int) -> float:
+        if move_id in (0xFFFF, 1):
+            return 1.0
+        qi = int(queue_index) if 0 <= int(queue_index) < 10 else 0
+        pos = qi - 1 if qi != 0 else 9
+        mult = 1.0
+        for i in range(9):
+            mid = int(queue_move_ids[pos])
+            if mid == 0:
+                return mult
+            if mid == move_id:
+                mult -= float(stale_weights[i])
+            pos = pos - 1 if pos != 0 else 9
+        return mult
+
+    stale_weights_buf = (data_root / "staling" / "weights.bin").read_bytes()
+    stale_weight_count = int(struct.unpack_from("<H", stale_weights_buf, 12)[0])
+    stale_weights = struct.unpack_from("<" + "f" * stale_weight_count, stale_weights_buf, 20)
+
     for cid in (1, 22):
         key = "fox" if cid == 1 else "falco"
         attrs = json.loads((data_root / "characters" / f"{key}.json").read_text())
+        move_data = json.loads((data_root / "moves" / f"{key}.json").read_text())["moves"]
         char_landing_air_lag_frames[int(cid)] = {
             "airn": int(attrs["landing_airn_lag_frames"]),
             "airf": int(attrs["landing_airf_lag_frames"]),
@@ -2114,6 +2144,28 @@ def _main_impl(args) -> None:
             float(attrs["mid_walk_point"]),
             float(attrs["fast_walk_min"]),
         )
+        char_gr_friction[int(cid)] = float(attrs["gr_friction"])
+        active_int_damage_by_anim: dict[int, dict[int, int]] = {}
+        for move in move_data.values():
+            submotion_id = int(move.get("submotion_id", -1))
+            if submotion_id < 0:
+                continue
+            events = sorted(move.get("events", []), key=lambda ev: (int(ev.get("frame", 0)), ev.get("kind", "")))
+            active_by_hitbox: dict[int, int] = {}
+            frame_damage: dict[int, int] = {}
+            event_frames = sorted({int(ev.get("frame", 0)) for ev in events})
+            for frame in event_frames:
+                for ev in (e for e in events if int(e.get("frame", 0)) == frame):
+                    kind = ev.get("kind")
+                    if kind == "create_hitbox":
+                        hb = ev.get("data", {}).get("hitbox", {})
+                        hb_id = int(hb.get("hitbox_id", 0))
+                        active_by_hitbox[hb_id] = _get_env_dmg_local(float(hb.get("damage", 0.0)))
+                    elif kind == "clear_hitboxes":
+                        active_by_hitbox.clear()
+                frame_damage[frame] = max(active_by_hitbox.values(), default=0)
+            active_int_damage_by_anim[submotion_id] = frame_damage
+        char_active_shield_hit_int_damage[int(cid)] = active_int_damage_by_anim
 
     # Guard-tilt table metadata (neutral frame + max frame) for decomp-shaped mv.co.guard.x8.
     shield_meta = load_shield_tilt_table_meta()
@@ -3178,6 +3230,113 @@ def _main_impl(args) -> None:
     ]
     samples["seed_t"]["illusion_ghost_pos1_x"][:, :num_players] = illusion_ghost_pos1_x[:-1, :num_players]
     samples["seed_t"]["illusion_ghost_pos1_y"][:, :num_players] = illusion_ghost_pos1_y[:-1, :num_players]
+    # Grounded attacker-on-shield knockback scalar (`fp->xF4_ground_attacker_shield_kb_vel`).
+    #
+    # Decomp:
+    # - On shield hit, ftColl_80076CBC stores `attacker.dmg.x1928 = defender.lightshield_amount * int_dmg`
+    #   and a sign in `attacker.dmg.x192C` from relative X positions.
+    # - Fighter_ProcessHit_8006D1EC then shapes grounded attacker shield KB as:
+    #     eval = x1928 * x3E0 + x3E4
+    #     xF4_ground_attacker_shield_kb_vel = +/-eval
+    # - While hitlag is active the main Fighter_procUpdate integration block is skipped, so this
+    #   scalar carries unchanged through the frozen shield-hit segment.
+    # - On each later grounded frame, Fighter_procUpdate decays the scalar through
+    #   `ftCommon_8007CE4C(gr_friction * x3EC)` before projecting it onto the floor tangent.
+    # refs/melee/src/melee/ft/ftcoll.c::ftColl_80076CBC
+    # refs/melee/src/melee/ft/fighter.c::{Fighter_ProcessHit_8006D1EC,Fighter_procUpdate}
+    # refs/melee/src/melee/ft/ftcommon.c::{ftCommon_8007CE4C,ftCommon_8007E2A4}
+    seed_action_id = samples["seed_t"]["action_id"]
+    seed_attack_id = samples["seed_t"]["attack_id"]
+    seed_anim_frame_f32 = samples["seed_t"]["anim_frame_f32"]
+    seed_animation_index = samples["seed_t"]["animation_index"]
+    seed_on_ground = samples["seed_t"]["on_ground"]
+    seed_hitlag = samples["seed_t"]["hitlag"]
+    seed_pos_x = samples["seed_t"]["pos_x"]
+    seed_char_id = samples["seed_t"]["char_id"]
+    seed_ground_friction_mul = samples["seed_t"]["ground_friction_mul"]
+    seed_lightshield_amount = samples["seed_t"]["lightshield_amount"]
+    seed_guard_setoff_hitlag_damage_min = samples["seed_t"]["guard_setoff_hitlag_damage_min"]
+    seed_stale_queue_index = samples["seed_t"]["stale_queue_index"]
+    seed_stale_move_id = samples["seed_t"]["stale_move_id"]
+    attacker_shield_ground_kb_vel = np.zeros((n_samples, 4), dtype=np.float32)
+    shield_kb_mul = float(common["shield_attacker_ground_kb_mul"])
+    shield_kb_base = float(common["shield_attacker_ground_kb_base"])
+    shield_kb_friction_mul = float(common["shield_attacker_ground_friction_mul"])
+    for attacker in range(num_players):
+        kb = np.float32(0.0)
+        for i in range(n_samples):
+            if int(seed_on_ground[i, attacker]) == 0:
+                kb = np.float32(0.0)
+                attacker_shield_ground_kb_vel[i, attacker] = kb
+                continue
+
+            onset_kb: np.float32 | None = None
+            if int(seed_hitlag[i, attacker]) > 0:
+                for defender in range(num_players):
+                    if defender == attacker:
+                        continue
+                    if int(seed_hitlag[i, defender]) == 0:
+                        continue
+                    defender_action = int(seed_action_id[i, defender])
+                    if defender_action not in (act_guard_set_off, act_guard_reflect):
+                        continue
+                    prev_attacker_hitlag = int(seed_hitlag[i - 1, attacker]) if i > 0 else 0
+                    prev_defender_hitlag = int(seed_hitlag[i - 1, defender]) if i > 0 else 0
+                    prev_defender_dmg = int(seed_guard_setoff_hitlag_damage_min[i - 1, defender]) if i > 0 else 0
+                    if prev_attacker_hitlag != 0 and prev_defender_hitlag != 0 and prev_defender_dmg > 0:
+                        continue
+
+                    int_dmg = 0
+                    anim_idx = int(seed_animation_index[i, attacker])
+                    anim_frame = int(np.floor(float(seed_anim_frame_f32[i, attacker])))
+                    if anim_frame < 0:
+                        anim_frame = 0
+                    int_dmg = (
+                        char_active_shield_hit_int_damage.get(int(seed_char_id[i, attacker]), {})
+                        .get(anim_idx, {})
+                        .get(anim_frame, 0)
+                    )
+                    if int_dmg > 0:
+                        move_id = int(seed_attack_id[i, attacker])
+                        stale_mult = _stale_multiplier_from_seed_queue(
+                            int(seed_stale_queue_index[i, attacker]),
+                            seed_stale_move_id[i, attacker],
+                            move_id,
+                        )
+                        int_dmg = _get_env_dmg_local(float(int_dmg) * stale_mult)
+                    if int_dmg <= 0:
+                        int_dmg = int(seed_guard_setoff_hitlag_damage_min[i, defender])
+                    if int_dmg <= 0:
+                        continue
+
+                    eval_kb = (
+                        float(seed_lightshield_amount[i, defender]) * float(int_dmg) * shield_kb_mul
+                        + shield_kb_base
+                    )
+                    onset_kb = np.float32(
+                        -eval_kb if float(seed_pos_x[i, defender]) > float(seed_pos_x[i, attacker]) else eval_kb
+                    )
+                    break
+
+            if onset_kb is not None:
+                kb = onset_kb
+
+            attacker_shield_ground_kb_vel[i, attacker] = kb
+
+            cur_hitlag = int(seed_hitlag[i, attacker])
+            if cur_hitlag > 1 or kb == np.float32(0.0):
+                continue
+
+            gr_friction = char_gr_friction.get(int(seed_char_id[i, attacker]), 0.0)
+            friction = float(seed_ground_friction_mul[i, attacker]) * gr_friction * shield_kb_friction_mul
+            if friction <= 0.0 or abs(friction) >= abs(float(kb)):
+                kb = np.float32(0.0)
+            elif kb < 0.0:
+                kb = np.float32(float(kb) + friction)
+            else:
+                kb = np.float32(float(kb) - friction)
+
+    samples["seed_t"]["attacker_shield_ground_kb_vel"] = attacker_shield_ground_kb_vel
 
     # Items are global per frame.
     items_fixed = _fill_items_fixed(frames, n_frames, src_ports=src_ports)

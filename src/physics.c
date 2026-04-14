@@ -701,12 +701,6 @@ static inline void physics_compute_grounded_player_nudge(MslBatch* batch, int bi
       if (msl_action_is_grabbed_victim(batch->state.action_id[oidx])) {
         continue;
       }
-      if (physics_action_is_guardsetoff_turnover_owner(batch->state.action_id[oidx],
-                                                       batch->state.prev_action_id[oidx]) ||
-          physics_action_is_guardsetoff_turnover_owner(batch->state.action_id[oidx],
-                                                       batch->state.seed_prev_action_id[oidx])) {
-        continue;
-      }
       if (physics_action_is_attackdash_knockdown_overlap_owner(batch->state.action_id[idx],
                                                                batch->state.action_id[oidx]) ||
           physics_action_is_attackdash_knockdown_overlap_owner(batch->state.action_id[oidx],
@@ -1664,6 +1658,47 @@ void physics_integrate(MslBatch* batch) {
         }
       }
 
+      float atk_shield_kb_x = 0.0f;
+      float atk_shield_kb_y = 0.0f;
+      if (on_ground) {
+        // Grounded attacker-on-shield pushback owner:
+        // - Shield hit processing shapes `fp->xF4_ground_attacker_shield_kb_vel` from
+        //   `defender.lightshield_amount * int_dmg`.
+        // - Fighter_procUpdate decays that scalar through ftCommon_8007CE4C using
+        //   `ft_GetGroundFrictionMultiplier(fp) * gr_friction * x3EC`, then projects it onto the
+        //   current floor tangent via `x98_atk_shield_kb`.
+        // - Position integration later adds `x98_atk_shield_kb` after self/KB velocity.
+        // refs/melee/src/melee/ft/ftcoll.c::ftColl_80076CBC
+        // refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate
+        // refs/melee/src/melee/ft/ftcommon.c::{ftCommon_8007CE4C,ftCommon_8007E2A4}
+        const MslCharParams* ch = msl_char_params(batch->state.char_id[idx]);
+        float shield_kb = batch->state.attacker_shield_ground_kb_vel[idx];
+        if (ch != NULL && shield_kb != 0.0f) {
+          const float friction = batch->state.ground_friction_mul[idx] * ch->gr_friction *
+                                 c->shield_attacker_ground_friction_mul;
+          if (shield_kb < 0.0f) {
+            shield_kb += friction;
+            if (shield_kb > 0.0f) {
+              shield_kb = 0.0f;
+            }
+          } else {
+            shield_kb -= friction;
+            if (shield_kb < 0.0f) {
+              shield_kb = 0.0f;
+            }
+          }
+          batch->state.attacker_shield_ground_kb_vel[idx] = shield_kb;
+          const float floor_nx = batch->state.ground_normal_x[idx];
+          const float floor_ny = (batch->state.ground_normal_y[idx] != 0.0f)
+                                     ? batch->state.ground_normal_y[idx]
+                                     : 1.0f;
+          atk_shield_kb_x = floor_ny * shield_kb;
+          atk_shield_kb_y = -floor_nx * shield_kb;
+        }
+      } else {
+        batch->state.attacker_shield_ground_kb_vel[idx] = 0.0f;
+      }
+
       physics_apply_knockback_decay(batch, idx, msl_char_params(batch->state.char_id[idx]), c,
                                     on_ground);
 
@@ -1678,6 +1713,8 @@ void physics_integrate(MslBatch* batch) {
       batch->state.pos_x[idx] += vx_kb;
       batch->state.pos_y[idx] += vy_self;
       batch->state.pos_y[idx] += vy_kb;
+      batch->state.pos_x[idx] += atk_shield_kb_x;
+      batch->state.pos_y[idx] += atk_shield_kb_y;
 
       // Post-integration gravity update for states we intentionally keep "seed-driven" for current
       // frame displacement (notably DamageFall; see helper docs above).

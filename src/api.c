@@ -941,6 +941,7 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
       batch->state.damage_time_since_hit_x18ac[idx] = x18ac;
       batch->state.damage_jump_buffer_x14[idx] = seed->damage_jump_buffer_x14[p];
       batch->state.damage_post_hitlag_cb_kind[idx] = seed->damage_post_hitlag_cb_kind[p];
+      batch->state.attacker_shield_ground_kb_vel[idx] = seed->attacker_shield_ground_kb_vel[p];
       batch->state.throw_pending_victim_port[idx] = 0xFFu;
       batch->state.l_cancel[idx] = seed->l_cancel[p];
       // Collision hit-status ownership bridge (x1988/x198C):

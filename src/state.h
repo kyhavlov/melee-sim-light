@@ -521,6 +521,11 @@ typedef struct MslStateSoA {
   // 0 = none, 1 = ftCo_Damage_OnExitHitlag (decomp: ftCo_8008DCE0 sets callback pointer).
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
   uint8_t* damage_post_hitlag_cb_kind;  // [batch * players]
+  // Grounded attacker-on-shield knockback scalar (`fp->xF4_ground_attacker_shield_kb_vel`).
+  // refs/melee/src/melee/ft/ftcoll.c::ftColl_80076CBC
+  // refs/melee/src/melee/ft/fighter.c::{Fighter_ProcessHit_8006D1EC,Fighter_procUpdate}
+  // refs/melee/src/melee/ft/ftcommon.c::{ftCommon_8007CE4C,ftCommon_8007E2A4}
+  float* attacker_shield_ground_kb_vel;  // [batch * players]
   uint8_t* l_cancel;
   uint8_t* hurtbox_state;
   // Collision hit-status internals (decomp fp->x198C / x1990 / x1994 / x2221_b0).

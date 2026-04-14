@@ -3159,6 +3159,25 @@ static inline void combat_mutations_pass1_future_apply_shield_hit(MslBatch* batc
   batch->state.hitlag[d_idx] = d_hl;
   combat_state_flags_set_is_hitlag(batch, a_idx, a_hl);
   combat_state_flags_set_is_hitlag(batch, d_idx, d_hl);
+
+  if (batch->state.on_ground[a_idx]) {
+    // Grounded attacker shield-pushback onset ownership:
+    // - ftColl_80076CBC stores `attacker.dmg.x1928 = defender.lightshield_amount * int_dmg` and a
+    //   sign in `attacker.dmg.x192C` from relative X positions.
+    // - Fighter_ProcessHit_8006D1EC then writes:
+    //     eval = x1928 * x3E0 + x3E4
+    //     xF4_ground_attacker_shield_kb_vel = +/-eval
+    //   and projects it to `x98_atk_shield_kb` through ftCommon_8007E2A4.
+    // refs/melee/src/melee/ft/ftcoll.c::ftColl_80076CBC
+    // refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
+    // refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007E2A4
+    const float eval = light * (float)max_int_dmg * c->shield_attacker_ground_kb_mul +
+                       c->shield_attacker_ground_kb_base;
+    batch->state.attacker_shield_ground_kb_vel[a_idx] =
+        (batch->state.pos_x[d_idx] > batch->state.pos_x[a_idx]) ? -eval : eval;
+  } else {
+    batch->state.attacker_shield_ground_kb_vel[a_idx] = 0.0f;
+  }
 }
 
 static void combat_select_catch_hits_one_mutating(MslBatch* batch, int bi) {

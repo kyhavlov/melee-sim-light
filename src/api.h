@@ -939,6 +939,17 @@ typedef struct MslSeed {
   // - 0: no callback
   // - 1: ftCo_Damage_OnExitHitlag
   uint8_t damage_post_hitlag_cb_kind[MSL_MAX_PLAYERS];
+  // Grounded attacker-on-shield knockback scalar (`fp->xF4_ground_attacker_shield_kb_vel`).
+  //
+  // Decomp:
+  // - ftColl_80076CBC writes shield-hit internals (`x1928`, `x192C`) on the grounded attacker.
+  // - Fighter_ProcessHit_8006D1EC shapes `xF4_ground_attacker_shield_kb_vel` from those internals.
+  // - Fighter_procUpdate decays that scalar through ftCommon_8007CE4C and projects it onto the
+  //   floor tangent via `x98_atk_shield_kb`.
+  // refs/melee/src/melee/ft/ftcoll.c::ftColl_80076CBC
+  // refs/melee/src/melee/ft/fighter.c::{Fighter_ProcessHit_8006D1EC,Fighter_procUpdate}
+  // refs/melee/src/melee/ft/ftcommon.c::{ftCommon_8007CE4C,ftCommon_8007E2A4}
+  float attacker_shield_ground_kb_vel[MSL_MAX_PLAYERS];
   // Populated by replay-history preprocessing:
   // - tools/slippi/staling_history.py (derive) and tools/slippi/make_dataset_from_slp.py (wire).
   //

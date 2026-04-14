@@ -260,6 +260,23 @@ void hurtboxes_refresh(MslBatch* batch) {
 
       const float anim_frame_f32 = msl_anim_frame_sanitize_f32(batch->state.anim_frame_f32[idx]);
       uint16_t frame = msl_anim_frame_floor_u16(anim_frame_f32);
+      if ((action_id == (uint16_t)MSL_ACT_ATTACK_AIR_N ||
+           action_id == (uint16_t)MSL_ACT_ATTACK_AIR_F ||
+           action_id == (uint16_t)MSL_ACT_ATTACK_AIR_B ||
+           action_id == (uint16_t)MSL_ACT_ATTACK_AIR_HI ||
+           action_id == (uint16_t)MSL_ACT_ATTACK_AIR_LW) &&
+          batch->state.anim_defer_tick_once[idx] != 0u && frame != 0xFFFFu) {
+        // AttackAir entry hurtcaps need the post-ChangeMotionState immediate ftAnim tick.
+        //
+        // Decomp:
+        // - ftCo_AttackAir_EnterFromMsid enters the motion state, then immediately calls
+        //   ftAnim_8006EBA4 before the current frame's collision owner runs.
+        // - The simulator defers that tick globally to preserve entry-pose hitbox timing, but the
+        //   defender-side hurtcaps on the same frame must still sample the post-tick pose.
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_EnterFromMsid
+        // refs/melee/src/melee/ft/ftanim.c::ftAnim_8006EBA4
+        frame = (uint16_t)(frame + 1u);
+      }
       if ((action_id == (uint16_t)MSL_ACT_DOWN_BOUND_U ||
            action_id == (uint16_t)MSL_ACT_DOWN_BOUND_D) &&
           batch->state.on_ground[idx] != 0u && batch->state.colanim_hit_status_x198c[idx] == 1u &&

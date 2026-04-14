@@ -310,6 +310,19 @@ typedef struct MslCommonParams {
   float asdi_step_mul;          // p_ftCommonData->x4BC (ASDI displacement multiplier)
   float di_max_deg;             // p_ftCommonData->x1A8 (DI max angle in degrees)
   float lsi_lr_held_mul;  // p_ftCommonData->x1AC (LSI multiplier when L/R held on hitlag exit)
+  // Grounded attacker-on-shield pushback.
+  // Decomp:
+  // - ftColl_80076CBC stores `fp->dmg.x1928 = defender.lightshield_amount * int_dmg`.
+  // - Fighter_ProcessHit / Fighter_procUpdate shape grounded attacker shield KB as:
+  //     eval = x1928 * x3E0 + x3E4
+  //     xF4_ground_attacker_shield_kb_vel = +/-eval
+  // - Grounded decay uses gr_friction * x3EC through ftCommon_8007CE4C.
+  // refs/melee/src/melee/ft/ftcoll.c::ftColl_80076CBC
+  // refs/melee/src/melee/ft/fighter.c::{Fighter_ProcessHit_8006D1EC,Fighter_procUpdate}
+  // refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007CE4C
+  float shield_attacker_ground_kb_mul;        // p_ftCommonData->x3E0
+  float shield_attacker_ground_kb_base;       // p_ftCommonData->x3E4
+  float shield_attacker_ground_friction_mul;  // p_ftCommonData->x3EC
   // Air drift overspeed friction magnitude (used by ftCommon_8007CF58 when |self_vel.x| exceeds
   // co_attrs.air_drift_max).
   // refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007CF58

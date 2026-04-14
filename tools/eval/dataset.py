@@ -345,6 +345,8 @@ SEED_DTYPE = np.dtype(
         # Slippi does not expose callback pointers; this seeded lane is derived causally from replay
         # history for one-step reseed parity.
         ("damage_post_hitlag_cb_kind", _arr("u1", MAX_PLAYERS)),
+        # Grounded attacker-on-shield knockback scalar (`fp->xF4_ground_attacker_shield_kb_vel`).
+        ("attacker_shield_ground_kb_vel", _arr("<f4", MAX_PLAYERS)),
         ("item_reflect_damage_mul", _arr("<f4", MAX_ITEMS)),
         # NOTE (PP#4): these staling fields are populated by replay-history preprocessing:
         # tools/slippi/staling_history.py (derive) and tools/slippi/make_dataset_from_slp.py (wire).

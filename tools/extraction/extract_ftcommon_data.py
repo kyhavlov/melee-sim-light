@@ -473,6 +473,20 @@ def main() -> None:
         "di_max_deg": float(_f32_be(buf, ft_common_abs + 0x1A8)),
         # LSI (Launch Speed Influence) - kb magnitude multiplier when L/R held at hitlag exit (ftCo_Damage_OnExitHitlag)
         "lsi_lr_held_mul": float(_f32_be(buf, ft_common_abs + 0x1AC)),
+        # Grounded attacker-on-shield pushback.
+        #
+        # Decomp:
+        # - Shield-hit apply stores `fp->dmg.x1928 = defender.lightshield_amount * int_dmg`.
+        # - Fighter post-hit processing shapes grounded attacker shield KB as:
+        #     eval = x1928 * x3E0 + x3E4
+        #     xF4_ground_attacker_shield_kb_vel = +/-eval
+        # - Grounded decay uses gr_friction * x3EC.
+        # refs/melee/src/melee/ft/ftcoll.c::ftColl_80076CBC
+        # refs/melee/src/melee/ft/fighter.c::{Fighter_ProcessHit_8006D1EC,Fighter_procUpdate}
+        # refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007CE4C
+        "shield_attacker_ground_kb_mul": float(_f32_be(buf, ft_common_abs + 0x3E0)),
+        "shield_attacker_ground_kb_base": float(_f32_be(buf, ft_common_abs + 0x3E4)),
+        "shield_attacker_ground_friction_mul": float(_f32_be(buf, ft_common_abs + 0x3EC)),
         # Cliff / ledge common behavior (ftCo_Cliff*)
         "cliff_drop_stick_threshold": float(_f32_be(buf, ft_common_abs + 0x480)),
         "cliff_wait_percent_threshold": float(max(0, _i32_be(buf, ft_common_abs + 0x488))),
