@@ -771,6 +771,15 @@ Prefer completing these projects in order rather than “patching symptoms” in
        `refs/melee/src/melee/ft/ftanim.c::ftAnim_8006FA58`,
        `refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007F6A4`,
        `refs/melee/src/melee/lb/lb_00B0.c::lb_8000B1CC`.
+   - SpecialAirHi victim hurtcap launch rotation:
+     - Firefox/Firebird launch writes `rotateModel = atan2f(self_vel.y, self_vel.x * facing_dir)`
+       and applies it through `ftPartSetRotX(..., FtPart_XRotN)`.
+     - Recent AGN rows show attacker AttackAirLw hitboxes already match live vanilla; the missing
+       owner is the victim `SpecialAirHi` hurtcap pose on that launch family.
+     - Runtime currently applies the launch XRotN local rotation across the SpecialAirHi hurtcap
+       refresh path for Fox/Falco while this family is active.
+     - Decomp anchors: `refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::{
+       ftFox_SpecialHi_RotateModel,ftFx_SpecialAirHi_Enter,ftFx_SpecialAirHi_Coll}`.
    - This does **not** mean PP#3 is “done”: on the current suite, the target mismatch fields did not move yet, and the remaining work is
      primarily about *rehit-rate timers and ordering*.
    - Current conclusion (asm-first): GALE01 fighter-side code does not appear to write `HitCapsule.x40_b4` (the 8-bit rehit countdown

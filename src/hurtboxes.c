@@ -5,12 +5,16 @@
 #include "action_ids.h"
 #include "anim_frame.h"
 #include "anim_pose.h"
+#include "anim_table.h"
 #include "char_params.h"
 #include "common_params.h"
 #include "hit_status_tables.h"
 #include "hurtbox_modes_tables.h"
 #include "hurtcaps_tables.h"
+#include "msl_math.h"
 #include "mtx34.h"
+
+enum { MSL_CHAR_FOX = 1, MSL_CHAR_FALCO = 22 };
 
 static inline size_t idx_hurtcap(int bi, int p, int cap_i) {
   return ((size_t)bi * (size_t)MSL_MAX_PLAYERS + (size_t)p) * (size_t)MSL_MAX_HURTCAPS +
@@ -64,6 +68,90 @@ static inline uint16_t hurtboxes_timer_remaining_from_action_frame(uint16_t init
     rem = 0xFFFF;
   }
   return (uint16_t)rem;
+}
+
+static inline uint8_t hurtboxes_runtime_specialhi_pose_owner(uint8_t char_id, uint16_t action_id) {
+  if (char_id != (uint8_t)MSL_CHAR_FOX && char_id != (uint8_t)MSL_CHAR_FALCO) {
+    return 0u;
+  }
+  switch (action_id) {
+    case MSL_ACT_FX_SPECIAL_HI:
+    case MSL_ACT_FX_SPECIAL_AIR_HI:
+      return 1u;
+    default:
+      return 0u;
+  }
+}
+
+static inline uint8_t hurtboxes_apply_specialhi_local_xrotn(const MslBatch* batch, size_t idx,
+                                                            uint8_t char_id, uint16_t msid,
+                                                            uint16_t pose_frame, uint16_t part_id,
+                                                            float facing_dir, float model_scale,
+                                                            float* io_x, float* io_y, float* io_z) {
+  if (batch == NULL || io_x == NULL || io_y == NULL || io_z == NULL) {
+    return 0u;
+  }
+  const uint16_t action_id = batch->state.action_id[idx];
+  if (!hurtboxes_runtime_specialhi_pose_owner(char_id, action_id)) {
+    return 0u;
+  }
+  (void)part_id;
+
+  float m[12];
+  if (anim_pose_get_matrix(char_id, msid, pose_frame, 2u, m) != 0) {  // FtPart_XRotN
+    return 0u;
+  }
+
+  const float vel_x = batch->state.speed_air_x_self[idx];
+  const float vel_y = batch->state.speed_y_self[idx];
+  if (!(fabsf(vel_x) > 0.0f || fabsf(vel_y) > 0.0f)) {
+    return 0u;
+  }
+
+  float ax0 = 0.0f, ay0 = 0.0f, az0 = 0.0f;
+  float ax1 = 0.0f, ay1 = 0.0f, az1 = 0.0f;
+  const float origin[3] = {0.0f, 0.0f, 0.0f};
+  const float local_x[3] = {1.0f, 0.0f, 0.0f};
+  msl_mtx34_mul_point(m, origin, &ax0, &ay0, &az0);
+  msl_mtx34_mul_point(m, local_x, &ax1, &ay1, &az1);
+  ax0 *= model_scale;
+  ay0 *= model_scale;
+  az0 *= model_scale;
+  ax1 *= model_scale;
+  ay1 *= model_scale;
+  az1 *= model_scale;
+
+  float axis_x = ax1 - ax0;
+  float axis_y = ay1 - ay0;
+  float axis_z = az1 - az0;
+  const float axis_len = sqrtf(axis_x * axis_x + axis_y * axis_y + axis_z * axis_z);
+  if (!(axis_len > 0.0f)) {
+    return 0u;
+  }
+  axis_x /= axis_len;
+  axis_y /= axis_len;
+  axis_z /= axis_len;
+
+  // Decomp: Firefox/Firebird launch writes `rotateModel = atan2f(self_vel.y, self_vel.x * facing_dir)`
+  // and applies it with `ftPartSetRotX(..., 2*pi - rotateModel)` on FtPart_XRotN.
+  // Victim hurtcaps bound under that subtree inherit the same runtime local rotation.
+  // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::{
+  //   ftFox_SpecialHi_RotateModel,ftFx_SpecialAirHi_Enter,ftFx_SpecialAirHi_Coll}
+  const float angle = (2.0f * MSL_PI_F) - atan2f(vel_y, vel_x * facing_dir);
+
+  const float px = *io_x - ax0;
+  const float py = *io_y - ay0;
+  const float pz = *io_z - az0;
+  const float c = cosf(angle);
+  const float s = sinf(angle);
+  const float dot = axis_x * px + axis_y * py + axis_z * pz;
+  const float cross_x = axis_y * pz - axis_z * py;
+  const float cross_y = axis_z * px - axis_x * pz;
+  const float cross_z = axis_x * py - axis_y * px;
+  *io_x = ax0 + (px * c) + (cross_x * s) + (axis_x * dot * (1.0f - c));
+  *io_y = ay0 + (py * c) + (cross_y * s) + (axis_y * dot * (1.0f - c));
+  *io_z = az0 + (pz * c) + (cross_z * s) + (axis_z * dot * (1.0f - c));
+  return 1u;
 }
 
 static inline void hurtboxes_apply_colanim_action_entry(MslBatch* batch, size_t idx) {
@@ -432,6 +520,12 @@ void hurtboxes_refresh(MslBatch* batch) {
         bx *= model_scale;
         by *= model_scale;
         bz *= model_scale;
+        (void)hurtboxes_apply_specialhi_local_xrotn(batch, idx, char_id, msid, frame,
+                                                    caps[ci].bone_part_id, facing_dir, model_scale,
+                                                    &ax, &ay, &az);
+        (void)hurtboxes_apply_specialhi_local_xrotn(batch, idx, char_id, msid, frame,
+                                                    caps[ci].bone_part_id, facing_dir, model_scale,
+                                                    &bx, &by, &bz);
 
         // Decomp: apply root facing rotation (rotY = M_PI_2 * facing_dir), mixing X/Z.
         // refs/melee/src/melee/ft/fighter.c (ftPartSetRotY(fp, 0, (M_PI_2 * fp->facing_dir)))
