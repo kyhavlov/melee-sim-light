@@ -255,6 +255,47 @@ static inline uint8_t combat_shine_start_damageair_entry_pose_allows_body_contac
   return combat_sphere_capsule_intersects(hx, hy, hz, hr, ax, ay, az, bx, by, bz, cr, NULL);
 }
 
+static inline uint8_t combat_attackairb_jump_entry_model_scale_allows_body_contact(
+    const MslBatch* batch, size_t a_idx, size_t hb_i, size_t d_idx, float hx, float hy, float hz,
+    float hr, float ax, float ay, float az, float bx, float by, float bz, float cr) {
+  if (batch == NULL) {
+    return 1u;
+  }
+  if (batch->state.action_id[a_idx] != (uint16_t)MSL_ACT_ATTACK_AIR_B) {
+    return 1u;
+  }
+  const uint16_t d_action = batch->state.action_id[d_idx];
+  if (d_action != (uint16_t)MSL_ACT_JUMP_F && d_action != (uint16_t)MSL_ACT_JUMP_B) {
+    return 1u;
+  }
+  if (batch->state.hitbox_enable_edge[hb_i] == 0u) {
+    return 1u;
+  }
+
+  const MslCharParams* chp = msl_char_params(batch->state.char_id[a_idx]);
+  if (chp == NULL || !isfinite(chp->model_scaling) || chp->model_scaling <= 0.0f ||
+      fabsf(chp->model_scaling - 1.0f) <= 1e-6f) {
+    return 1u;
+  }
+
+  // Collision-skeleton scale cancellation subset:
+  // - Fighter_UpdateModelScale applies fighter scale to runtime joints.
+  // - ftAnim_8006FA58 applies the inverse per-character model scaling on the collision subtree via
+  //   ftCommon_8007F6A4, so the effective collision-space hitbox center uses fighter scale only.
+  // - Keep this narrowed to the current AttackAirB jump-admission owner slice; the broader create-edge
+  //   family still contains separate owners that should not be changed here.
+  // refs/melee/src/melee/ft/fighter.c::Fighter_UpdateModelScale
+  // refs/melee/src/melee/ft/ftanim.c::ftAnim_8006FA58
+  // refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007F6A4
+  // refs/melee/src/melee/lb/lb_00B0.c::lb_8000B1CC
+  const float inv_model = 1.0f / chp->model_scaling;
+  const float alt_hx = batch->state.pos_x[a_idx] + (hx - batch->state.pos_x[a_idx]) * inv_model;
+  const float alt_hy = batch->state.pos_y[a_idx] + (hy - batch->state.pos_y[a_idx]) * inv_model;
+  const float alt_hz = batch->state.pos_z[a_idx] + (hz - batch->state.pos_z[a_idx]) * inv_model;
+  return combat_sphere_capsule_intersects(alt_hx, alt_hy, alt_hz, hr, ax, ay, az, bx, by, bz, cr,
+                                          NULL);
+}
+
 static inline uint8_t combat_body_overlap_lbColl_80006E58_subset_allows(const MslBatch* batch,
                                                                         size_t hb_i, size_t d_idx) {
   if (batch == NULL) {
@@ -4061,6 +4102,10 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
           }
           if (!combat_shine_start_damageair_entry_pose_allows_body_contact(
                   batch, a_idx, d_idx, cap_id, hx, hy, hz, hr)) {
+            continue;
+          }
+          if (!combat_attackairb_jump_entry_model_scale_allows_body_contact(
+                  batch, a_idx, hb_i, d_idx, hx, hy, hz, hr, ax, ay, az, bx, by, bz, cr)) {
             continue;
           }
           if (attackairb_stale_owner_candidate && !defender_no_damage &&

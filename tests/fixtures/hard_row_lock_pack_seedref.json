@@ -40,7 +40,7 @@
       "field": "action_id",
       "seed": 25,
       "ref": 25,
-      "out": 88,
+      "out": 25,
       "cluster_count": 1,
       "base_field": "action_id"
     },
@@ -106,7 +106,7 @@
       "field": "hitlag",
       "seed": 0,
       "ref": 0,
-      "out": 8,
+      "out": 0,
       "cluster_count": 4,
       "base_field": "hitlag"
     },
@@ -205,7 +205,7 @@
       "field": "hitstun",
       "seed": 0,
       "ref": 0,
-      "out": 61,
+      "out": 0,
       "cluster_count": 1,
       "base_field": "hitstun"
     },
@@ -227,7 +227,7 @@
       "field": "state_flags[1]",
       "seed": 0,
       "ref": 0,
-      "out": 48,
+      "out": 0,
       "cluster_count": 5,
       "base_field": "state_flags"
     },
@@ -249,7 +249,7 @@
       "field": "state_flags[1]",
       "seed": 0,
       "ref": 0,
-      "out": 32,
+      "out": 0,
       "cluster_count": 4,
       "base_field": "state_flags"
     },
@@ -282,7 +282,7 @@
       "field": "state_flags[3]",
       "seed": 0,
       "ref": 0,
-      "out": 2,
+      "out": 0,
       "cluster_count": 3,
       "base_field": "state_flags"
     },
@@ -425,7 +425,7 @@
       "field": "instance_id",
       "seed": 545,
       "ref": 545,
-      "out": 548,
+      "out": 545,
       "cluster_count": 1,
       "base_field": "instance_id"
     },

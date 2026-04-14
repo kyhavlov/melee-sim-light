@@ -758,6 +758,19 @@ Prefer completing these projects in order rather than “patching symptoms” in
    **Groundwork landed (PARTIAL)**
    - Replaced the old conservative per-(attacker, defender) latch (`combat_rehit_*`) with a decomp-shaped hitlist map + victim instance
      key + clear-on-enable + per-frame decrement.
+   - AttackAirB jump-entry collision-scale subset:
+     - General hitbox placement still uses the extracted pose matrices plus `fighter_scale_y *
+       model_scaling`, but the `GAT:2221` front-door slice needs one narrower correction.
+     - For first-active-frame `AttackAirB` BODY checks against jump-entry victims, decomp cancels
+       per-character `model_scaling` on the collision subtree via
+       `ftAnim_8006FA58 -> ftCommon_8007F6A4`; a scale_y-only counterfactual is used as the
+       acceptance gate for that owner slice.
+     - Keep the already-proven SpecialAirHi/Firefox launch subtree as a separate local-pose owner;
+       that family still needs its dedicated XRotN rotation + scaling path.
+     - Decomp anchors: `refs/melee/src/melee/ft/fighter.c::Fighter_UpdateModelScale`,
+       `refs/melee/src/melee/ft/ftanim.c::ftAnim_8006FA58`,
+       `refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007F6A4`,
+       `refs/melee/src/melee/lb/lb_00B0.c::lb_8000B1CC`.
    - This does **not** mean PP#3 is “done”: on the current suite, the target mismatch fields did not move yet, and the remaining work is
      primarily about *rehit-rate timers and ordering*.
    - Current conclusion (asm-first): GALE01 fighter-side code does not appear to write `HitCapsule.x40_b4` (the 8-bit rehit countdown
