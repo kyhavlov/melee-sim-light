@@ -96,12 +96,11 @@ def test_specialairhi_hurtcaps_xrotn_adjacent_blockers_stay_separate() -> None:
     samples = ds.samples
     binding = pytest.importorskip("msl_binding")
 
-    # Keep the current family boundary explicit:
-    # - AGN:5611 is still a SpecialAirHi victim row, but the attacker/action surface is different.
-    # - AGN:5482 is the separate AttackAirN -> DamageFlyTop continuation family.
+    # Keep the remaining family boundary explicit:
+    # - AGN:5611 is still a separate SpecialAirHi victim row with a different attacker/action
+    #   surface than the closed AGN:7263 launch family.
     for record, player, exp_action, exp_hitlag in (
         (5611, 1, 356, 0),
-        (5482, 1, 90, 0),
     ):
         row = samples[record : record + 1]
         got = _run_row(binding, row)

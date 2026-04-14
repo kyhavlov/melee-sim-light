@@ -296,9 +296,6 @@ static void hitboxes_seed_bridge_trim_impossible_indefinite(
     if (msl_hitlist_victim_kind(e->kind_slot) != (uint8_t)MSL_HITLIST_VICTIM_KIND_FIGHTER) {
       continue;
     }
-    if (e->cd != 0u) {
-      continue;
-    }
     const uint8_t victim_port = msl_hitlist_victim_slot(e->kind_slot);
     if (victim_port >= (uint8_t)batch->config.num_players || victim_port == (uint8_t)attacker) {
       continue;
@@ -421,6 +418,45 @@ static void hitboxes_seed_bridge_trim_impossible_indefinite(
         continue;
       }
       hitboxes_seed_bridge_entry_clear(e);
+      continue;
+    }
+
+    const uint8_t stale_owner_attackairn_refresh_lane =
+        (attacker_action == (uint16_t)MSL_ACT_ATTACK_AIR_N && second_create_frame != 0xFFFFu &&
+         def->frame == second_create_frame && early_window &&
+         pose_frame > (uint16_t)(second_create_frame + 2u))
+            ? 1u
+            : 0u;
+    if (stale_owner_attackairn_refresh_lane && !shield_desc_active &&
+        !hitboxes_seed_bridge_is_guard_transition_owner(v_action) &&
+        batch->state.hitlag[v_idx] == 0u && batch->state.hitstun[v_idx] != 0u &&
+        batch->state.last_hit_by[v_idx] == (uint8_t)attacker &&
+        hitboxes_seed_bridge_is_damage_or_firefox_launch_victim_action(v_action) &&
+        batch->state.instance_hit_by[v_idx] != attacker_iid) {
+      // AttackAirN continuation refresh bridge:
+      // - Neutral aerial scripts refresh hitcapsules on a later create_hitbox edge (frame 8 in the
+      //   extracted Fox/Falco data) while the victim can still be in DamageFlyTop hitstun from an
+      //   older same-port attacker instance.
+      // - Keep the proven subset on the later refresh-continuity lane only; the shallower
+      //   pre-contact rows in the same refresh segment remain on the baseline owner until that
+      //   adjacent geometry/timing slice is modeled separately.
+      // - ftColl_80076ED8 still owns the fresh BODY contact on that later create window and
+      //   rewrites BODY attribution through Fighter_ProcessHit_8006D1EC.
+      // - Dense reseed hitlists carry only per-hitbox victim presence/cooldown, so the older
+      //   same-port `victims_1` entry can survive here with either an indefinite or finite
+      //   cooldown even though the live continuation hit should re-own the lane on this refresh.
+      // - Clear that stale entry before the generic `cd != 0` gate so lbColl_8000ACFC-style
+      //   suppression can admit the live continuation hit.
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_Anim
+      // refs/melee/src/melee/ft/ftaction.c::ftAction_8007121C
+      // refs/melee/src/melee/ft/ftcoll.c::{ftColl_800768A0,ftColl_80076ED8}
+      // refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000ACFC,lbColl_80008A5C}
+      // data/moves/{fox,falco}.json::moves.ftCo_SM_AttackAirN.events.create_hitbox
+      hitboxes_seed_bridge_entry_clear(e);
+      continue;
+    }
+
+    if (e->cd != 0u) {
       continue;
     }
 

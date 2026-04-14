@@ -1536,3 +1536,16 @@ M5 Special moves + grabs (**TODO/PARTIAL**)
 
 M6 Ledge/tech/knockdown (**PARTIAL**)
 - Add what the suite exercises; broaden as needed for RL plausibility.
+AttackAirN continuation stale-owner bridge:
+- AttackAirN has a later create-hitbox refresh window in the extracted Fox/Falco scripts.
+- On replay-real continuation rows like `AGN:5482`, the victim is still in `DamageFlyTop`
+  hitstun from an older same-port attacker instance when that later refresh lands a new BODY hit.
+- Dense reseed hitlists only carry per-hitbox victim presence, so the older `victims_1` latch
+  must be cleared on this later AttackAirN refresh edge before `ftColl_80076ED8` can admit the
+  live continuation hit and rewrite BODY attribution.
+- Source anchors:
+  - `refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_Anim`
+  - `refs/melee/src/melee/ft/ftaction.c::ftAction_8007121C`
+  - `refs/melee/src/melee/ft/ftcoll.c::{ftColl_800768A0,ftColl_80076ED8}`
+  - `refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000ACFC,lbColl_80008A5C}`
+  - `data/moves/{fox,falco}.json::moves.ftCo_SM_AttackAirN.events.create_hitbox`

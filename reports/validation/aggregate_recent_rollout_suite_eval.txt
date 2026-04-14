@@ -145,7 +145,7 @@ rollout.streak_len.p90: 193
 rollout.streak_len.p95: 249
 rollout.streak_len.max: 392
 rollout.first_mismatch_total: 89
-rollout.first_mismatch_seeded_total: 31
+rollout.first_mismatch_seeded_total: 30
 
 == datasets/aggregate_recent/replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.msl ==
 rollout.best_len: 327
@@ -185,4 +185,4 @@ overall.rollout.streak_len.p95: 196
 overall.rollout.streak_len.max: 631
 overall.rollout.best_len.max: 631
 overall.rollout.first_mismatch_total: 2370
-overall.rollout.first_mismatch_seeded_total: 1367
+overall.rollout.first_mismatch_seeded_total: 1366
