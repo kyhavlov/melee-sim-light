@@ -278,6 +278,15 @@ def main() -> None:
         # Grab mash updates x1A50/x1A51 when lstick.{x,y} crosses +/-x308.
         # refs/melee/src/melee/ft/ftcommon.c::ftCommon_GrabMash
         "grab_mash_stick_threshold": float(_f32_be(buf, ft_common_abs + 0x308)),
+        # CaptureWait anim-rate ownership (ftCo_CaptureWaitHi/Lw_Anim).
+        # - x3A4: per-frame grab timer decrement while captured.
+        # - x3A8: per-mash extra grab_timer damage passed into ftCommon_GrabMash.
+        # - x3B0/x3B4: mash-rate hold timer and boosted anim rate.
+        # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_CaptureWaitHi_Anim
+        "capture_wait_grab_timer_decrement": float(_f32_be(buf, ft_common_abs + 0x3A4)),
+        "capture_wait_grab_mash_damage": float(_f32_be(buf, ft_common_abs + 0x3A8)),
+        "capture_wait_anim_rate_hold_frames": float(_f32_be(buf, ft_common_abs + 0x3B0)),
+        "capture_wait_anim_rate": float(_f32_be(buf, ft_common_abs + 0x3B4)),
         "fastfall_stick_threshold": float(_f32_be(buf, ft_common_abs + 0x88)),
         "fastfall_tilt_max_frames": int(_i32_be(buf, ft_common_abs + 0x8C)),
         # Pass-through platforms (ftCo_80099F1C / mpUpdateFloorSkip)

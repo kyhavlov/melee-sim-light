@@ -1058,6 +1058,10 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
         batch->state.capture_wait_prev_rate_valid[idx] = capture_wait_continuity;
         batch->state.capture_wait_prev_rate_fp_q16_16[idx] = prev_seed_rate_snapshot_fp;
         batch->state.capture_wait_seed_rate_snapshot_fp_q16_16[idx] = seeded_rate_snapshot_fp;
+        batch->state.capture_wait_anim_rate_timer[idx] =
+            ((is_capture_wait_seed && seed->frame_speed_mul_f32[p] > 1.0f)
+                 ? common->capture_wait_anim_rate_hold_frames
+                 : 0.0f);
         // TODO(narrowed_temporary): continuity is currently inferred from
         // {frame_id+1,action_id,instance_id}. Full parity needs a direct seedable callback-phase
         // ownership marker from the producer lane (CaptureWait Anim-rate write committed or not).

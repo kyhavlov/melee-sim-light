@@ -269,6 +269,7 @@ typedef struct MslStateSoA {
   int32_t* capture_wait_prev_rate_fp_q16_16;           // previous seeded frame_speed_mul snapshot
   int32_t* capture_wait_seed_rate_snapshot_fp_q16_16;  // current seeded frame_speed_mul snapshot
   uint8_t* capture_wait_prev_rate_valid;  // 1 when previous snapshot continuity applies
+  float* capture_wait_anim_rate_timer;    // runtime x2344-style hold timer
   // ThrowLw Anim-rate ownership bridge (narrow, continuity-gated):
   // - Throw script flags are consumed in ThrowLw Anim callback (ftCo_800DD724), which runs under
   //   Fighter_8006A360 after prio-0 hitlag decrement in Fighter_8006A1BC.

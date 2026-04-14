@@ -90,6 +90,7 @@ static inline void enter_capture_wait_from_pulled(MslBatch* batch, int bi, int o
   // fn_800DB790/fn_800DBAE4 (Fighter_ChangeMotionState) with no local ftAnim_8006EBA4.
   // refs/melee/build/GALE01/asm/melee/ft/chara/ftCommon/ftCo_Attack100.s::{fn_800DB6C8,fn_800DB790,fn_800DBAE4}
   msl_anim_timebase_enter(batch, vidx, 0.0f, 1.0f);
+  batch->state.capture_wait_anim_rate_timer[vidx] = 0.0f;
   // Decomp call shape for this lane is "ChangeMotionState only" (no local ftAnim_8006EBA4):
   // - fn_800DB6C8 dispatches to fn_800DB790/fn_800DBAE4,
   // - each helper calls Fighter_ChangeMotionState(..., anim_start=0.0f, anim_speed=1.0f),
@@ -169,6 +170,41 @@ static inline uint8_t capturewait_grab_mash_active(MslBatch* batch, const MslCom
   return result;
 }
 
+static inline void capturewait_anim_rate_update_runtime(MslBatch* batch, const MslCommonParams* c,
+                                                        size_t idx) {
+  if (batch == NULL || c == NULL) {
+    return;
+  }
+  const uint16_t a = batch->state.action_id[idx];
+  if (a != (uint16_t)MSL_ACT_CAPTURE_WAIT_HI && a != (uint16_t)MSL_ACT_CAPTURE_WAIT_LW) {
+    return;
+  }
+  if (batch->state.hitlag_started_frame[idx] != 0u) {
+    return;
+  }
+
+  float timer = batch->state.capture_wait_anim_rate_timer[idx];
+  if (timer > 0.0f) {
+    timer -= 1.0f;
+    if (timer < 0.0f) {
+      timer = 0.0f;
+    }
+  }
+
+  const uint8_t mash_active = capturewait_grab_mash_active(batch, c, idx);
+  if (timer <= 0.0f) {
+    if (mash_active) {
+      timer = c->capture_wait_anim_rate_hold_frames;
+      batch->state.frame_speed_mul_fp_q16_16[idx] = msl_q16_16_from_f32(c->capture_wait_anim_rate);
+    } else {
+      batch->state.frame_speed_mul_fp_q16_16[idx] = msl_q16_16_from_f32(1.0f);
+    }
+  } else {
+    batch->state.frame_speed_mul_fp_q16_16[idx] = msl_q16_16_from_f32(c->capture_wait_anim_rate);
+  }
+  batch->state.capture_wait_anim_rate_timer[idx] = timer;
+}
+
 static inline uint8_t enter_capture_damage_from_wait(MslBatch* batch, size_t vidx) {
   if (batch == NULL) {
     return 0u;
@@ -188,6 +224,7 @@ static inline uint8_t enter_capture_damage_from_wait(MslBatch* batch, size_t vid
     return 0u;
   }
   msl_anim_timebase_enter(batch, vidx, 0.0f, 1.0f);
+  batch->state.capture_wait_anim_rate_timer[vidx] = 0.0f;
   return 1u;
 }
 
@@ -210,6 +247,7 @@ static inline uint8_t enter_capture_wait_from_damage(MslBatch* batch, size_t vid
     return 0u;
   }
   msl_anim_timebase_enter(batch, vidx, 0.0f, 1.0f);
+  batch->state.capture_wait_anim_rate_timer[vidx] = 0.0f;
   return 1u;
 }
 
@@ -930,6 +968,24 @@ void grab_flow_update_pre_physics(MslBatch* batch) {
           if (capturewait_grab_mash_active(batch, c, vidx)) {
             msl_anim_timebase_tick_once(batch, vidx);
           }
+        }
+      }
+
+      // CaptureWait anim-rate ownership:
+      // - ftCo_CaptureWaitHi/Lw_Anim writes ftAnim_SetAnimRate after the prio-1 anim advance.
+      // - In this simulator, current-frame inputs are only available after input_apply(), so update
+      //   the callback-owned next-frame rate here in the same grab-owner phase.
+      // - This keeps the runtime CaptureWait mash-rate lane alive in unreseeded rollout while the
+      //   existing reseed bridge in anim_timebase.c preserves one-step continuity.
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_CaptureWaitHi_Anim
+      // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A360,Fighter_procUpdate}
+      if (c != NULL) {
+        for (int victim_p = 0; victim_p < num_players; victim_p++) {
+          const size_t vidx = msl_idx_player(bi, victim_p);
+          if ((int)batch->state.grab_owner_port[vidx] != owner_p) {
+            continue;
+          }
+          capturewait_anim_rate_update_runtime(batch, c, vidx);
         }
       }
 

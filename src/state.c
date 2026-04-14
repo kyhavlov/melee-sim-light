@@ -135,6 +135,7 @@ int state_alloc(MslStateSoA* state, int batch_size) {
   state->capture_wait_seed_rate_snapshot_fp_q16_16 =
       (int32_t*)alloc_aligned_64(sizeof(int32_t) * bp);
   state->capture_wait_prev_rate_valid = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
+  state->capture_wait_anim_rate_timer = (float*)alloc_aligned_64(sizeof(float) * bp);
   state->throw_lw_prev_rate_fp_q16_16 = (int32_t*)alloc_aligned_64(sizeof(int32_t) * bp);
   state->throw_lw_prev_rate_valid = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->anim_defer_tick_once = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
@@ -381,18 +382,18 @@ int state_alloc(MslStateSoA* state, int batch_size) {
       !state->frame_speed_mul_fp_q16_16 || !state->walk_anim_source_vel ||
       !state->capture_wait_prev_rate_fp_q16_16 ||
       !state->capture_wait_seed_rate_snapshot_fp_q16_16 || !state->capture_wait_prev_rate_valid ||
-      !state->throw_lw_prev_rate_fp_q16_16 || !state->throw_lw_prev_rate_valid ||
-      !state->anim_defer_tick_once || !state->jumps_left || !state->stocks ||
-      !state->guard_tilt_x8 || !state->guard_tilt_x4 || !state->guard_on_entered_this_frame ||
-      !state->guard_entry_via_wait_callback || !state->guard_jump_oos_entered_this_frame ||
-      !state->guard_reflect_timer_x14 || !state->guard_reflect_timer_x18 ||
-      !state->guard_reflect_timer_x14_seed || !state->guard_reflect_timer_x18_seed ||
-      !state->guard_release_latched_xc || !state->guard_x10 || !state->lightshield_amount ||
-      !state->guard_setoff_hitlag_damage_min || !state->guard_setoff_hitlag_exit_phase_u8 ||
-      !state->guard_setoff_post_hitlag_owner_u8 || !state->kneebend_jump_input ||
-      !state->kneebend_is_short_hop || !state->tilt_timer_x || !state->tilt_timer_y ||
-      !state->fall_fast || !state->attackdash_x0 || !state->jab_x0 || !state->run_x0 ||
-      !state->runbrake_cmd0 || !state->dash_x4 || !state->shine_release_lag ||
+      !state->capture_wait_anim_rate_timer || !state->throw_lw_prev_rate_fp_q16_16 ||
+      !state->throw_lw_prev_rate_valid || !state->anim_defer_tick_once || !state->jumps_left ||
+      !state->stocks || !state->guard_tilt_x8 || !state->guard_tilt_x4 ||
+      !state->guard_on_entered_this_frame || !state->guard_entry_via_wait_callback ||
+      !state->guard_jump_oos_entered_this_frame || !state->guard_reflect_timer_x14 ||
+      !state->guard_reflect_timer_x18 || !state->guard_reflect_timer_x14_seed ||
+      !state->guard_reflect_timer_x18_seed || !state->guard_release_latched_xc ||
+      !state->guard_x10 || !state->lightshield_amount || !state->guard_setoff_hitlag_damage_min ||
+      !state->guard_setoff_hitlag_exit_phase_u8 || !state->guard_setoff_post_hitlag_owner_u8 ||
+      !state->kneebend_jump_input || !state->kneebend_is_short_hop || !state->tilt_timer_x ||
+      !state->tilt_timer_y || !state->fall_fast || !state->attackdash_x0 || !state->jab_x0 ||
+      !state->run_x0 || !state->runbrake_cmd0 || !state->dash_x4 || !state->shine_release_lag ||
       !state->shine_is_release || !state->ecb_lock_timer || !state->ledge_side ||
       !state->stage_ledge_occupant_left || !state->stage_ledge_occupant_right ||
       !state->ledge_cooldown || !state->fallspecial_xc || !state->turn_has_turned ||
@@ -457,6 +458,7 @@ int state_alloc(MslStateSoA* state, int batch_size) {
   memset(state->capture_wait_prev_rate_fp_q16_16, 0, sizeof(int32_t) * bp);
   memset(state->capture_wait_seed_rate_snapshot_fp_q16_16, 0, sizeof(int32_t) * bp);
   memset(state->capture_wait_prev_rate_valid, 0, sizeof(uint8_t) * bp);
+  memset(state->capture_wait_anim_rate_timer, 0, sizeof(float) * bp);
   memset(state->smash_charge_state, 0, sizeof(uint8_t) * bp);
   memset(state->smash_charge_frames, 0, sizeof(uint8_t) * bp);
   memset(state->smash_charge_hold_frames_max, 0, sizeof(uint8_t) * bp);
@@ -582,6 +584,7 @@ void state_free(MslStateSoA* state) {
   alloc_free(state->capture_wait_prev_rate_fp_q16_16);
   alloc_free(state->capture_wait_seed_rate_snapshot_fp_q16_16);
   alloc_free(state->capture_wait_prev_rate_valid);
+  alloc_free(state->capture_wait_anim_rate_timer);
   alloc_free(state->throw_lw_prev_rate_fp_q16_16);
   alloc_free(state->throw_lw_prev_rate_valid);
   alloc_free(state->anim_defer_tick_once);

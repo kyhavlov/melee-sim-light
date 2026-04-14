@@ -238,6 +238,13 @@ int common_params_init(void) {
       json_get_f32(buf, "dash_run_jump_stick_y_threshold",
                    &g_params.dash_run_jump_stick_y_threshold) != 0 ||
       json_get_f32(buf, "grab_mash_stick_threshold", &g_params.grab_mash_stick_threshold) != 0 ||
+      json_get_f32(buf, "capture_wait_grab_timer_decrement",
+                   &g_params.capture_wait_grab_timer_decrement) != 0 ||
+      json_get_f32(buf, "capture_wait_grab_mash_damage", &g_params.capture_wait_grab_mash_damage) !=
+          0 ||
+      json_get_f32(buf, "capture_wait_anim_rate_hold_frames",
+                   &g_params.capture_wait_anim_rate_hold_frames) != 0 ||
+      json_get_f32(buf, "capture_wait_anim_rate", &g_params.capture_wait_anim_rate) != 0 ||
       json_get_f32(buf, "fastfall_stick_threshold", &g_params.fastfall_stick_threshold) != 0 ||
       json_get_u8(buf, "fastfall_tilt_max_frames", &g_params.fastfall_tilt_max_frames) != 0 ||
       json_get_f32(buf, "crouch_stick_threshold", &g_params.crouch_stick_threshold) != 0 ||

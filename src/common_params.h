@@ -105,9 +105,15 @@ typedef struct MslCommonParams {
   float dash_run_jump_stick_y_threshold;  // p_ftCommonData->x80
   // Grab mash updates x1A50/x1A51 when lstick.{x,y} crosses +/-x308.
   // refs/melee/src/melee/ft/ftcommon.c::ftCommon_GrabMash
-  float grab_mash_stick_threshold;   // p_ftCommonData->x308
-  float fastfall_stick_threshold;    // p_ftCommonData->x88
-  uint8_t fastfall_tilt_max_frames;  // p_ftCommonData->x8C (fastfall_tilt_max_frames)
+  float grab_mash_stick_threshold;  // p_ftCommonData->x308
+  // CaptureWait anim-rate mash window.
+  // Decomp: refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_CaptureWaitHi_Anim
+  float capture_wait_grab_timer_decrement;   // p_ftCommonData->x3A4
+  float capture_wait_grab_mash_damage;       // p_ftCommonData->x3A8
+  float capture_wait_anim_rate_hold_frames;  // p_ftCommonData->x3B0
+  float capture_wait_anim_rate;              // p_ftCommonData->x3B4
+  float fastfall_stick_threshold;            // p_ftCommonData->x88
+  uint8_t fastfall_tilt_max_frames;          // p_ftCommonData->x8C (fastfall_tilt_max_frames)
   // Crouch threshold (Squat entry gate).
   // Decomp: refs/melee/src/melee/ft/chara/ftCommon/ftCo_Squat.c::ftCo_Squat_CheckInput (fp->input.lstick.y < -p_ftCommonData->x90)
   float crouch_stick_threshold;  // p_ftCommonData->x90
