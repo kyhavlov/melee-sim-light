@@ -37,6 +37,13 @@ static inline size_t idx_hurtcap(int bi, int p, int cap_i) {
          (size_t)cap_i;
 }
 
+static inline uint8_t combat_apply_throw_hit_core(MslBatch* batch, int batch_index, int attacker,
+                                                  int defender, const MslThrowHitboxParams* p,
+                                                  uint8_t update_bookkeeping);
+
+static inline void combat_throw_release_integrate_position_now(MslBatch* batch, size_t owner_idx,
+                                                               size_t victim_idx);
+
 static inline uint32_t combat_hsd_rand_step(uint32_t seed) {
   // HSD global RNG LCG step:
   // refs/melee/src/sysdolphin/baselib/random.c::{HSD_Rand,HSD_Randf}
@@ -2419,6 +2426,7 @@ MslItemHitResult combat_apply_item_hit(MslBatch* batch, int batch_index, int att
 
   const size_t a_idx = msl_idx_player(batch_index, attacker);
   const size_t d_idx = msl_idx_player(batch_index, defender);
+  const uint8_t prev_last_hit_by = batch->state.last_hit_by[d_idx];
 
   const MslCommonParams* c = msl_common_params();
   if (c == NULL) {
@@ -2510,7 +2518,7 @@ MslItemHitResult combat_apply_item_hit(MslBatch* batch, int batch_index, int att
     // TODO(decomp/non-flinch-authoritative-signal): replace this KB-triplet-derived lane with a
     // truly authoritative decomp/data-owned no-flinch signal once identified.
     batch->state.instance_hit_by[d_idx] = item_instance_id;
-    batch->state.last_hit_by[d_idx] = (uint8_t)attacker;
+    batch->state.last_hit_by[d_idx] = prev_last_hit_by;
     // Non-flinch damage still routes through Fighter_ProcessHit's percent-temp consume without a
     // fresh Damage* entry. Keep fp->x221C_b0 aligned to the same hidden-damage ownership so the
     // post-frame no-reaction lane does not stale-carry after the item hit is accepted.
@@ -2581,6 +2589,17 @@ MslItemHitResult combat_apply_item_hit(MslBatch* batch, int batch_index, int att
       combat_state_flags_set_is_hitlag(batch, a_idx, a_hl);
     }
 
+    // Attached item-hit attribution:
+    // - Even when the victim stays in Thrown*/Capture* (no Damage* entry), the accepted item hit
+    //   still owns the victim-side item instance lane in post-frame data.
+    // - The source-owner lane (`last_hit_by`) does not take the fresh attacker port on these
+    //   suppressed attached rows; replay keeps the prior owner/sentinel while only
+    //   `instance_hit_by` advances to the live item instance.
+    // refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
+    // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
+    batch->state.instance_hit_by[d_idx] = item_instance_id;
+    batch->state.last_hit_by[d_idx] = prev_last_hit_by;
+
     // Attached item-hit bookkeeping:
     // - Throw-side item hits on an attached victim still feed the attacker-side item-domain stale
     //   move queue and combo lanes even when victim state entry stays in Thrown*/Capture*.
@@ -2592,6 +2611,29 @@ MslItemHitResult combat_apply_item_hit(MslBatch* batch, int batch_index, int att
     combat_combo_ftColl_800763C0(batch, a_idx, defender, d_idx, item_attack_id);
 
     return MSL_ITEM_HIT_SUPPRESSED_DONT_CONSUME;
+  }
+
+  if (item_state == (uint8_t)1u && batch->state.action_id[a_idx] == (uint16_t)MSL_ACT_THROW_LW &&
+      batch->state.throw_pending_victim_port[a_idx] == (uint8_t)defender &&
+      batch->state.throw_pending_hit_idx[a_idx] != 0xFFu &&
+      batch->state.action_id[d_idx] == (uint16_t)MSL_ACT_FALL) {
+    // ThrowLw release + same-frame blaster ordering bridge:
+    // - ftCo_800DD724 consumes set_throw_flags(0) in ThrowLw Anim and applies the throw release hit
+    //   via ftCo_800DE2A8/ftCo_800DE7C0 before later frame contacts.
+    // - ftFx_Throw_Anim's throw-side laser pulse can then hit the already-released victim later in
+    //   the same frame, overwriting final item-domain attribution/hitlag but not the earlier throw
+    //   damage/launch contribution.
+    // - This sim resolves items before deferred throw release, so install only the proven ThrowLw
+    //   pre-item release hit subset here, without throw-side combo/stale bookkeeping.
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::{ftCo_ThrowLw_Anim,ftCo_800DD724,ftCo_800DE2A8,ftCo_800DDDE4}
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Thrown.c::ftCo_800DE7C0
+    // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
+    MslThrowHitboxParams throw_p = {0};
+    if (move_tables_throw_hitbox_params(batch->state.char_id[a_idx], (uint16_t)MSL_ACT_THROW_LW,
+                                        batch->state.throw_pending_hit_idx[a_idx], &throw_p) &&
+        combat_apply_throw_hit_core(batch, batch_index, attacker, defender, &throw_p, 0u)) {
+      combat_throw_release_integrate_position_now(batch, a_idx, d_idx);
+    }
   }
 
   // Knockback velocity + hitstun + damage-state entry (BODY), following the same helper chain as
@@ -2721,8 +2763,9 @@ MslItemHitResult combat_apply_item_hit(MslBatch* batch, int batch_index, int att
   return MSL_ITEM_HIT_APPLIED_CONSUME_ITEM;
 }
 
-uint8_t combat_apply_throw_hit(MslBatch* batch, int batch_index, int attacker, int defender,
-                               const MslThrowHitboxParams* p) {
+static inline uint8_t combat_apply_throw_hit_core(MslBatch* batch, int batch_index, int attacker,
+                                                  int defender, const MslThrowHitboxParams* p,
+                                                  uint8_t update_bookkeeping) {
   if (batch == NULL || p == NULL) {
     return 0;
   }
@@ -2779,8 +2822,17 @@ uint8_t combat_apply_throw_hit(MslBatch* batch, int batch_index, int attacker, i
     return 0;
   }
 
-  // Throws participate in staling (decomp: fp->x2068/x206c are used by ft_80089228).
-  const uint16_t move_id = staling_move_id_from_state(batch, a_idx);
+  // Throw-hit damage ownership:
+  // - set_throw_hitbox writes HitCapsule.damage through ft_80089228(fp->x2068, fp->x206c, raw_damage).
+  // - On ThrowLw release rows in this family, the live attack-id lane is already the throw-laser
+  //   item-domain id (`56`), so use that seeded/runtime identity when present instead of forcing a
+  //   state-based ThrowLw move id.
+  // refs/melee/build/GALE01/asm/melee/ft/ftaction.s::ftAction_80071E04
+  // refs/melee/build/GALE01/asm/melee/ft/ftcoll.s::ftColl_8007ABD0
+  uint16_t move_id = batch->state.attack_id[a_idx];
+  if (move_id == (uint16_t)MSL_FT_MOVE_ID_DEFAULT) {
+    move_id = staling_move_id_from_state(batch, a_idx);
+  }
   const float stale_mult = staling_multiplier_for_move(batch, a_idx, move_id);
 
   float dmg_f = p->damage;
@@ -2846,9 +2898,11 @@ uint8_t combat_apply_throw_hit(MslBatch* batch, int batch_index, int attacker, i
     batch->state.instance_hit_by[d_idx] = batch->state.instance_id[a_idx];
     batch->state.last_hit_by[d_idx] = (uint8_t)attacker;
 
-    const uint16_t attack_instance = batch->state.attack_instance[a_idx];
-    staling_queue_update(batch, a_idx, move_id, attack_instance);
-    combat_combo_ftColl_800763C0(batch, a_idx, defender, d_idx, batch->state.attack_id[a_idx]);
+    if (update_bookkeeping) {
+      const uint16_t attack_instance = batch->state.attack_instance[a_idx];
+      staling_queue_update(batch, a_idx, move_id, attack_instance);
+      combat_combo_ftColl_800763C0(batch, a_idx, defender, d_idx, batch->state.attack_id[a_idx]);
+    }
     return 1;
   }
 
@@ -2908,11 +2962,43 @@ uint8_t combat_apply_throw_hit(MslBatch* batch, int batch_index, int attacker, i
   batch->state.instance_hit_by[d_idx] = batch->state.instance_id[a_idx];
   batch->state.last_hit_by[d_idx] = (uint8_t)attacker;
 
-  const uint16_t attack_instance = batch->state.attack_instance[a_idx];
-  staling_queue_update(batch, a_idx, move_id, attack_instance);
-  combat_combo_ftColl_800763C0(batch, a_idx, defender, d_idx, batch->state.attack_id[a_idx]);
+  if (update_bookkeeping) {
+    const uint16_t attack_instance = batch->state.attack_instance[a_idx];
+    staling_queue_update(batch, a_idx, move_id, attack_instance);
+    combat_combo_ftColl_800763C0(batch, a_idx, defender, d_idx, batch->state.attack_id[a_idx]);
+  }
 
   return 1;
+}
+
+uint8_t combat_apply_throw_hit(MslBatch* batch, int batch_index, int attacker, int defender,
+                               const MslThrowHitboxParams* p) {
+  return combat_apply_throw_hit_core(batch, batch_index, attacker, defender, p, 1u);
+}
+
+static inline void combat_throw_release_integrate_position_now(MslBatch* batch, size_t owner_idx,
+                                                               size_t victim_idx) {
+  if (batch == NULL) {
+    return;
+  }
+  const uint8_t on_ground = batch->state.on_ground[victim_idx] ? 1u : 0u;
+  const float vx_self = on_ground ? batch->state.speed_ground_x_self[victim_idx]
+                                  : batch->state.speed_air_x_self[victim_idx];
+  if (on_ground) {
+    batch->state.speed_air_x_self[victim_idx] = vx_self;
+  }
+  const float vy_self = batch->state.speed_y_self[victim_idx];
+  const float vx = vx_self + batch->state.speed_x_attack[victim_idx];
+  const float vy = vy_self + batch->state.speed_y_attack[victim_idx];
+  float owner_dx = 0.0f;
+  if (owner_idx != victim_idx) {
+    owner_dx = batch->state.on_ground[owner_idx] ? batch->state.speed_ground_x_self[owner_idx]
+                                                 : batch->state.speed_air_x_self[owner_idx];
+  }
+  // ftCo_800DDDE4 resolves throw-release world placement before later same-frame contacts.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DDDE4
+  batch->state.pos_x[victim_idx] += vx + owner_dx;
+  batch->state.pos_y[victim_idx] += vy;
 }
 
 static inline float combat_rebound_x191c_from_int_dmg(const MslCommonParams* c, int int_dmg) {

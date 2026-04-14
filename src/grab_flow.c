@@ -511,6 +511,7 @@ static inline uint8_t enter_throw_from_wait(MslBatch* batch, int bi, int owner_p
   }
 
   const size_t vidx = msl_idx_player(bi, victim_p);
+  const float victim_entry_pos_y = batch->state.pos_y[vidx];
   float throw_anim_speed = 1.0f;
   {
     const MslCommonParams* c = msl_common_params();
@@ -577,7 +578,26 @@ static inline uint8_t enter_throw_from_wait(MslBatch* batch, int bi, int owner_p
   // Fighter_ChangeMotionState.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Thrown.c::ftCo_800DE3FC
   msl_anim_timebase_tick_once(batch, vidx);
-  grab_attachment_recompute_offsets_for_thrown_entry(batch, bi, victim_p, owner_p);
+  if (throw_action == (uint16_t)MSL_ACT_THROW_LW && thrown_action == (uint16_t)MSL_ACT_THROWN_LW) {
+    // ThrowLw/ThrownLw entry split (proven subset):
+    // - ftCo_800DB368 reparents victim FtPart_XRotN under the thrower's FtPart_TransN2 before the
+    //   thrown accessory callback takes over.
+    // - On the immediate low-throw handoff, the forward residual collapses onto the new attached
+    //   joint while the vertical residual remains carried from the pre-entry world.
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_800DB368
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Thrown.c::{ftCo_800DE3FC,ftCo_800DE508}
+    float ax = 0.0f, ay = 0.0f, az = 0.0f;
+    const float scale_y = batch->state.fighter_scale_y[vidx];
+    grab_attachment_query_thrown_anchor_world(&ax, &ay, &az, batch, bi, victim_p, owner_p);
+    (void)ax;
+    (void)az;
+    if (scale_y > 0.0f) {
+      batch->state.grab_offset_y[vidx] = (victim_entry_pos_y - ay) / scale_y;
+    }
+    batch->state.grab_offset_z[vidx] = 0.0f;
+  } else {
+    grab_attachment_recompute_offsets_for_thrown_entry(batch, bi, victim_p, owner_p);
+  }
   return 1u;
 }
 

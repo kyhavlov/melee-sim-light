@@ -28,6 +28,7 @@ static inline int pose_part_origin_world_facing_yrot90(float* out_x, float* out_
   if (anim_u32 > 0xFFFFu) {
     return -1;
   }
+  const float zero[3] = {0.0f, 0.0f, 0.0f};
   const uint16_t msid = (uint16_t)anim_u32;
   const float f = msl_anim_frame_sanitize_f32(anim_frame_f32);
   const float base_f = floorf(f);
@@ -40,7 +41,6 @@ static inline int pose_part_origin_world_facing_yrot90(float* out_x, float* out_
   }
 
   float lx0 = 0.0f, ly0 = 0.0f, lz0 = 0.0f;
-  const float zero[3] = {0.0f, 0.0f, 0.0f};
   msl_mtx34_mul_point(m0, zero, &lx0, &ly0, &lz0);
 
   // Decomp-shaped: animation timebase can advance at fractional rates (ftAnim_SetAnimRate), so
@@ -91,6 +91,93 @@ static inline int pose_part_origin_world_facing_yrot90(float* out_x, float* out_
   return 0;
 }
 
+static inline int pose_part_local_translation(float* out_x, float* out_y, float* out_z,
+                                              uint8_t char_id, uint32_t anim_u32,
+                                              float anim_frame_f32, uint16_t part_id) {
+  if (out_x == NULL || out_y == NULL || out_z == NULL) {
+    return -1;
+  }
+  if (anim_u32 > 0xFFFFu) {
+    return -1;
+  }
+  const uint16_t msid = (uint16_t)anim_u32;
+  const float f = msl_anim_frame_sanitize_f32(anim_frame_f32);
+  const float base_f = floorf(f);
+  const float frac = f - base_f;
+  const uint16_t frame0 = msl_anim_frame_floor_u16(f);
+  float m0[12];
+  if (anim_pose_get_matrix(char_id, msid, frame0, part_id, m0) != 0) {
+    return -1;
+  }
+  float x0 = m0[3], y0 = m0[7], z0 = m0[11];
+  float x1 = x0, y1 = y0, z1 = z0;
+  if (frac > 0.0f) {
+    const uint16_t frame1 = (uint16_t)(frame0 + 1u);
+    if (frame1 != 0) {
+      float m1[12];
+      if (anim_pose_get_matrix(char_id, msid, frame1, part_id, m1) == 0) {
+        x1 = m1[3];
+        y1 = m1[7];
+        z1 = m1[11];
+      }
+    }
+  }
+  const float a = (frac <= 0.0f) ? 0.0f : ((frac >= 1.0f) ? 1.0f : frac);
+  *out_x = x0 + (x1 - x0) * a;
+  *out_y = y0 + (y1 - y0) * a;
+  *out_z = z0 + (z1 - z0) * a;
+  return 0;
+}
+
+static inline int pose_part_local_point_world_facing_yrot90(
+    float* out_x, float* out_y, float* out_z, uint8_t char_id, uint32_t anim_u32,
+    float anim_frame_f32, uint16_t part_id, const float local_point[3], float fighter_pos_x,
+    float fighter_pos_y, float fighter_pos_z, float fighter_scale_y, uint8_t facing_u8) {
+  if (out_x == NULL || out_y == NULL || out_z == NULL || local_point == NULL) {
+    return -1;
+  }
+  if (anim_u32 > 0xFFFFu) {
+    return -1;
+  }
+  const uint16_t msid = (uint16_t)anim_u32;
+  const float f = msl_anim_frame_sanitize_f32(anim_frame_f32);
+  const float base_f = floorf(f);
+  const float frac = f - base_f;
+  const uint16_t frame0 = msl_anim_frame_floor_u16(f);
+  float m0[12];
+  if (anim_pose_get_matrix(char_id, msid, frame0, part_id, m0) != 0) {
+    return -1;
+  }
+  float lx0 = 0.0f, ly0 = 0.0f, lz0 = 0.0f;
+  msl_mtx34_mul_point(m0, local_point, &lx0, &ly0, &lz0);
+  float lx1 = lx0, ly1 = ly0, lz1 = lz0;
+  if (frac > 0.0f) {
+    const uint16_t frame1 = (uint16_t)(frame0 + 1u);
+    if (frame1 != 0) {
+      float m1[12];
+      if (anim_pose_get_matrix(char_id, msid, frame1, part_id, m1) == 0) {
+        msl_mtx34_mul_point(m1, local_point, &lx1, &ly1, &lz1);
+      }
+    }
+  }
+  const float a = (frac <= 0.0f) ? 0.0f : ((frac >= 1.0f) ? 1.0f : frac);
+  float lx = lx0 + (lx1 - lx0) * a;
+  float ly = ly0 + (ly1 - ly0) * a;
+  float lz = lz0 + (lz1 - lz0) * a;
+  const float facing_dir = facing_u8 ? 1.0f : -1.0f;
+  const float rx = facing_dir * lz;
+  const float rz = -facing_dir * lx;
+  lx = rx;
+  lz = rz;
+  lx *= fighter_scale_y;
+  ly *= fighter_scale_y;
+  lz *= fighter_scale_y;
+  *out_x = lx + fighter_pos_x;
+  *out_y = ly + fighter_pos_y;
+  *out_z = lz + fighter_pos_z;
+  return 0;
+}
+
 static inline float pose_model_scale_y(const MslBatch* batch, size_t idx) {
   if (batch == NULL) {
     return 1.0f;
@@ -101,6 +188,13 @@ static inline float pose_model_scale_y(const MslBatch* batch, size_t idx) {
     scale_y *= ch->model_scaling;
   }
   return scale_y;
+}
+
+static inline float attachment_offset_scale_y(const MslBatch* batch, size_t idx) {
+  if (batch == NULL) {
+    return 1.0f;
+  }
+  return batch->state.fighter_scale_y[idx];
 }
 
 static inline uint8_t action_is_capture_pulled_wait_victim(uint16_t action_id) {
@@ -122,6 +216,12 @@ static inline uint8_t action_is_capture_pulled_wait_victim(uint16_t action_id) {
 static inline void grabbed_victim_anchor_world(float* out_x, float* out_y, float* out_z,
                                                const MslBatch* batch, int bi, int victim_p,
                                                int owner_p);
+
+void grab_attachment_query_thrown_anchor_world(float* out_x, float* out_y, float* out_z,
+                                               const MslBatch* batch, int batch_index, int victim_p,
+                                               int owner_p) {
+  grabbed_victim_anchor_world(out_x, out_y, out_z, batch, batch_index, victim_p, owner_p);
+}
 
 void grab_attachment_apply_capture_delta_now(MslBatch* batch, int bi, int victim_p, int owner_p) {
   if (batch == NULL) {
@@ -196,7 +296,7 @@ void grab_attachment_apply_thrown_anchor_now(MslBatch* batch, int bi, int victim
   grabbed_victim_anchor_world(&ax, &ay, &az, batch, bi, victim_p, owner_p);
   (void)az;
 
-  const float scale_y = pose_model_scale_y(batch, vidx);
+  const float scale_y = attachment_offset_scale_y(batch, vidx);
   if (!(scale_y > 0.0f)) {
     return;
   }
@@ -281,6 +381,7 @@ static inline void capture_wait_hi_handoff_bridge_to_lw(MslBatch* batch, int bi,
 static inline void grabbed_victim_anchor_world(float* out_x, float* out_y, float* out_z,
                                                const MslBatch* batch, int bi, int victim_p,
                                                int owner_p) {
+  (void)victim_p;
   // Approximate the `lb_8000B1CC(fp->parts[ftParts_GetBoneIndex(fp, FtPart_XRotN)].joint)` anchor used by
   // ftCo_Thrown.c::ftCo_800DE508.
   //
@@ -304,8 +405,6 @@ static inline void grabbed_victim_anchor_world(float* out_x, float* out_y, float
     return;
   }
   const size_t oidx = msl_idx_player(bi, owner_p);
-  (void)victim_p;
-
   // Decomp-shaped proxy for ftCo_Thrown.c::ftCo_800DE508:
   // - Read world translation of victim FtPart_XRotN joint (lb_8000B1CC on re-parented joint).
   // - Then apply x1A70 offsets separately in caller.
@@ -325,6 +424,10 @@ static inline void grabbed_victim_anchor_world(float* out_x, float* out_y, float
   float ay = batch->state.pos_y[oidx];
   float az = batch->state.pos_z[oidx];
   uint16_t owner_anchor_part = (uint16_t)MSL_FTPART_TRANSN2;
+  // Keep thrown-owner reconstruction on the older anchor proxy until the broader ThrowLw/ThrownLw
+  // attachment family is closed cleanly. The proven current fixes in this area are bookkeeping and
+  // release ordering, not a new attached-world anchor formula.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::fn_800DAD18
   const MslCharParams* och = msl_char_params(batch->state.char_id[oidx]);
   if (och != NULL) {
     owner_anchor_part = och->grab_capture_anchor_part_id;
@@ -360,7 +463,7 @@ void grab_attachment_recompute_offsets_for_thrown_entry(MslBatch* batch, int bat
   }
 
   const size_t vidx = msl_idx_player(batch_index, victim_p);
-  const float scale_y = pose_model_scale_y(batch, vidx);
+  const float scale_y = attachment_offset_scale_y(batch, vidx);
   if (!(scale_y > 0.0f)) {
     return;
   }
@@ -410,7 +513,7 @@ void grab_attachment_reseed_init(MslBatch* batch, int batch_index) {
     grabbed_victim_anchor_world(&ax, &ay, &az, batch, batch_index, p, (int)owner);
     (void)az;
 
-    const float scale_y = pose_model_scale_y(batch, vidx);
+    const float scale_y = attachment_offset_scale_y(batch, vidx);
     if (!(scale_y > 0.0f)) {
       continue;
     }
@@ -455,12 +558,17 @@ void grab_attachment_update_post_collision(MslBatch* batch) {
         const uint8_t thrown_entered_from_capture_wait_pulled =
             (uint8_t)(msl_action_is_thrown_victim(cur_action) &&
                       action_is_capture_pulled_wait_victim(prev_action));
+        const uint8_t throwlw_entry_reconstruct_now =
+            (uint8_t)(thrown_entered_from_capture_wait_pulled &&
+                      (cur_action == (uint16_t)MSL_ACT_THROWN_LW ||
+                       batch->state.action_id[msl_idx_player(bi, (int)owner)] ==
+                           (uint16_t)MSL_ACT_THROW_LW));
 
         float ax = 0.0f, ay = 0.0f, az = 0.0f;
         grabbed_victim_anchor_world(&ax, &ay, &az, batch, bi, p, (int)owner);
         (void)az;
 
-        const float scale_y = pose_model_scale_y(batch, vidx);
+        const float scale_y = attachment_offset_scale_y(batch, vidx);
         if (!(scale_y > 0.0f)) {
           continue;
         }
@@ -475,7 +583,7 @@ void grab_attachment_update_post_collision(MslBatch* batch) {
         //   world position.
         // - Preserve that world position exactly on the same frame (no float round-trip through
         //   offset->reconstruct) and start callback-style reconstruction on subsequent frames.
-        if (!thrown_entered_from_capture_wait_pulled) {
+        if (!thrown_entered_from_capture_wait_pulled || throwlw_entry_reconstruct_now) {
           batch->state.pos_x[vidx] =
               fmaf(batch->state.grab_offset_z[vidx], facing_dir * scale_y, ax);
           batch->state.pos_y[vidx] = batch->state.grab_offset_y[vidx] * scale_y + ay;
