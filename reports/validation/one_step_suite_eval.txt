@@ -102,7 +102,7 @@ mismatch.instance_hit_by: 8 / 23058 (0.000347)
 mismatch.instance_id: 56 / 23058 (0.002429)
 mismatch.last_attack_landed: 3 / 23058 (0.000130)
 mismatch.combo_count: 3 / 23058 (0.000130)
-mismatch.last_hit_by: 11 / 23058 (0.000477)
+mismatch.last_hit_by: 10 / 23058 (0.000434)
 mismatch.state_flags: 46 / 115290 (0.000399)
 mismatch.item_exists: 5 / 172935 (0.000029)
 mismatch.item_type: 5 / 172935 (0.000029)
@@ -122,7 +122,7 @@ err.item_pos_x: mae=0.044743 p95=0.000000 max=39.815655
 err.item_pos_y: mae=0.013793 p95=0.000000 max=26.796017
 err.item_vel_x: mae=0.018981 p95=0.000000 max=8.408197
 err.item_vel_y: mae=0.003829 p95=0.000000 max=4.999367
-overall.discrete_mismatch: 267 / 1395009
+overall.discrete_mismatch: 266 / 1395009
 overall.float_norm_mae_p95: 0.00099650
 
 == datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/QuerulousGrandDinosaur.msl ==
@@ -169,7 +169,7 @@ overall.float_norm_mae_p95: 0.00081342
 
 == datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/TreasuredBackKangaroo.msl ==
 Records: 7837  Players/scored per record: 2  Total player-frames: 15674
-mismatch.action_id: 16 / 15674 (0.001021)
+mismatch.action_id: 15 / 15674 (0.000957)
 mismatch.action_frame: 21 / 15674 (0.001340)
 mismatch.on_ground: 2 / 15674 (0.000128)
 mismatch.facing: 4 / 15674 (0.000255)
@@ -181,7 +181,7 @@ mismatch.hitstun: 7 / 15674 (0.000447)
 mismatch.l_cancel: 0 / 15674 (0.000000)
 mismatch.hurtbox_state: 6 / 15674 (0.000383)
 mismatch.ground_id: 0 / 15674 (0.000000)
-mismatch.animation_index: 16 / 15674 (0.001021)
+mismatch.animation_index: 15 / 15674 (0.000957)
 mismatch.instance_hit_by: 7 / 15674 (0.000447)
 mismatch.instance_id: 28 / 15674 (0.001786)
 mismatch.last_attack_landed: 4 / 15674 (0.000255)
@@ -206,9 +206,9 @@ err.item_pos_x: mae=0.070895 p95=0.000000 max=73.618073
 err.item_pos_y: mae=0.025521 p95=0.000000 max=31.795383
 err.item_vel_x: mae=0.020464 p95=0.000000 max=7.000000
 err.item_vel_y: mae=0.003790 p95=0.000000 max=4.999367
-overall.discrete_mismatch: 211 / 948277
+overall.discrete_mismatch: 209 / 948277
 overall.float_norm_mae_p95: 0.00143057
 
 == suite summary ==
-overall.discrete_mismatch: 843 / 4462843
+overall.discrete_mismatch: 840 / 4462843
 overall.float_norm_mae_p95: 0.00103293

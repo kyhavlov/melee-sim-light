@@ -104,7 +104,7 @@ int state_alloc(MslStateSoA* state, int batch_size) {
   state->source_clear_owner_set_phase = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->source_clear_processhit_damage_pending_phase =
       (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
-  state->damageflyroll_fighter_8006cda4_phase_hint =
+  state->fighter_8006cda4_pre_gate_consume_count =
       (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->source_clear_grounded_damage_clear_phase =
       (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
@@ -374,7 +374,7 @@ int state_alloc(MslStateSoA* state, int batch_size) {
       !state->throw_pulse_crossed_prev_frame || !state->throw_pulse_crossed_curr_frame ||
       !state->source_clear_timer_x18c8 || !state->source_clear_owner_set_phase ||
       !state->source_clear_processhit_damage_pending_phase ||
-      !state->damageflyroll_fighter_8006cda4_phase_hint ||
+      !state->fighter_8006cda4_pre_gate_consume_count ||
       !state->source_clear_grounded_damage_clear_phase || !state->source_clear_terminal_phase ||
       !state->grab_mash_stick_x_sign || !state->grab_mash_stick_y_sign ||
       !state->match_flow_timer || !state->entry_end_fall_lock ||
@@ -563,7 +563,7 @@ void state_free(MslStateSoA* state) {
   alloc_free(state->source_clear_timer_x18c8);
   alloc_free(state->source_clear_owner_set_phase);
   alloc_free(state->source_clear_processhit_damage_pending_phase);
-  alloc_free(state->damageflyroll_fighter_8006cda4_phase_hint);
+  alloc_free(state->fighter_8006cda4_pre_gate_consume_count);
   alloc_free(state->source_clear_grounded_damage_clear_phase);
   alloc_free(state->source_clear_terminal_phase);
   alloc_free(state->throw_pending_victim_port);

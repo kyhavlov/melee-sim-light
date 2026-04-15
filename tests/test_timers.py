@@ -175,7 +175,10 @@ def test_grounded_damage_hitlag_exit_preserves_xf0_ground_kb_against_di() -> Non
     seed["ground_friction_mul"][0, 0] = np.float32(1.0)
     seed["hitlag"][0, 0] = np.uint16(1)
     seed["hitstun"][0, 0] = np.uint16(10)
-    seed["damage_post_hitlag_cb_kind"][0, 0] = np.uint8(MSL_DAMAGE_POST_HITLAG_CB_DAMAGE_ON_EXIT)
+    # Runtime owner: common Damage actions own hitlag-exit callback behavior directly; the
+    # compatibility seed bridge should not be required for this grounded DamageHi2 lock.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
+    seed["damage_post_hitlag_cb_kind"][0, 0] = np.uint8(0)
     seed["state_flags"][0, 0, 3] = np.uint8(0x02)  # 0x221C: isHitstun
     seed["speed_x_attack"][0, 0] = np.float32(-0.771)
     seed["speed_y_attack"][0, 0] = np.float32(0.0)

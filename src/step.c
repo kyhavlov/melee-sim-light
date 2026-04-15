@@ -70,11 +70,11 @@ static inline void clear_seed_owned_transients_post_frame(MslBatch* batch) {
       // refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
       // refs/melee/src/melee/ft/ftcommon.c::ftCommon_800804FC
       batch->state.source_clear_processhit_damage_pending_phase[idx] = 0u;
-      // `seed_t.damageflyroll_fighter_8006cda4_phase_hint` is a one-step hidden RNG-ownership
-      // bridge for Fighter_8006CDA4 pre-gate consumes. Consume within this frame only.
+      // `seed_t.fighter_8006cda4_pre_gate_consume_count` is the explicit one-step pre-gate
+      // consume-count owner for Fighter_8006CDA4. Consume within this frame only.
       // refs/melee/src/melee/ft/fighter.c::Fighter_8006CDA4
       // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
-      batch->state.damageflyroll_fighter_8006cda4_phase_hint[idx] = 0u;
+      batch->state.fighter_8006cda4_pre_gate_consume_count[idx] = 0u;
       // `seed_t.source_clear_grounded_damage_clear_phase` is a one-step bridge for grounded
       // source-owner clear ownership (`ftCommon_800804FC` path). Consume within this frame only.
       // refs/melee/src/melee/ft/ftcommon.c::ftCommon_800804FC

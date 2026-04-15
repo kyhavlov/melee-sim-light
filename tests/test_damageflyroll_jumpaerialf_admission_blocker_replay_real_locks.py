@@ -56,7 +56,7 @@ def test_damageflyroll_jumpaerialf_attackairb_carry_target_and_controls_are_repl
     _skip_if_required_artifacts_missing(root)
 
     dataset_rel = (
-        "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
+        "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/"
         "QuerulousGrandDinosaur.msl"
     )
     dataset_path = root / dataset_rel
@@ -84,7 +84,7 @@ def test_damageflyroll_jumpaerialf_attackairb_carry_target_and_controls_are_repl
     assert int(seed_t["action_id"][attacker]) == 67  # ftCo_MS_AttackAirB
     assert int(seed_t["action_frame"][attacker]) == 13
     assert int(ref_t1["action_id"][victim]) == 91  # ftCo_MS_DamageFlyRoll
-    assert int(seed_t["damageflyroll_fighter_8006cda4_phase_hint"][victim]) == 0
+    assert int(seed_t["fighter_8006cda4_pre_gate_consume_count"][victim]) == 0
 
     prev_trace_env = os.environ.get("MSL_RNG_TRACE_PATH")
     try:
@@ -102,7 +102,7 @@ def test_damageflyroll_jumpaerialf_attackairb_carry_target_and_controls_are_repl
         # Explicit broader-family negative control:
         # - same JumpAerialF <- AttackAirB carry shape, but no damage entry this frame.
         neg_rel = (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
+            "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/"
             "AttachedGoodNaturedGuanaco.msl"
         )
         neg_path = root / neg_rel

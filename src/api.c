@@ -796,8 +796,8 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
           seed->source_clear_owner_set_phase[p] ? 1u : 0u;
       batch->state.source_clear_processhit_damage_pending_phase[idx] =
           seed->source_clear_processhit_damage_pending_phase[p] ? 1u : 0u;
-      batch->state.damageflyroll_fighter_8006cda4_phase_hint[idx] =
-          seed->damageflyroll_fighter_8006cda4_phase_hint[p];
+      batch->state.fighter_8006cda4_pre_gate_consume_count[idx] =
+          seed->fighter_8006cda4_pre_gate_consume_count[p];
       batch->state.source_clear_grounded_damage_clear_phase[idx] =
           seed->source_clear_grounded_damage_clear_phase[p] ? 1u : 0u;
       batch->state.source_clear_terminal_phase[idx] =

@@ -192,7 +192,11 @@ def test_combat_resolve_body_overlap_sets_hitlag_and_attribution() -> None:
         assert int(out["hitlag"][0]) == exp_hl
         assert int(out["hitlag"][1]) == exp_hl
         assert int(out["instance_hit_by"][1]) == 111
-        assert int(out["last_hit_by"][1]) == 0
+        # Grounded percent-only/no-KB ProcessHit runs ftCommon_800804FC after percent add, which
+        # clears source owner instead of preserving the fresh attacker port.
+        # refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
+        # refs/melee/src/melee/ft/ftcommon.c::ftCommon_800804FC
+        assert int(out["last_hit_by"][1]) == 6
         assert int(out["last_attack_landed"][0]) == 0
     finally:
         msl_binding.destroy(handle)

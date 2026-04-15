@@ -1560,6 +1560,40 @@ static inline void combat_damage_mark_entry_time_since_hit(MslBatch* batch, size
   batch->state.damage_time_since_hit_x18ac[d_idx] = 0;
 }
 
+static inline void combat_source_owner_clear_ftCommon_800804FC(MslBatch* batch, size_t d_idx) {
+  if (batch == NULL) {
+    return;
+  }
+  if (batch->state.on_ground[d_idx] == 0u) {
+    return;
+  }
+  // Decomp: grounded `ftCommon_800804FC` clears source owner and disables the x18C8 countdown.
+  // Fighter_ProcessHit calls this in the percent-only/no-KB path after Fighter_UnkTakeDamage.
+  // refs/melee/src/melee/ft/ftcommon.c::ftCommon_800804FC
+  // refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
+  enum { MSL_LAST_HIT_BY_SOURCE_NONE = 6 };
+  batch->state.last_hit_by[d_idx] = (uint8_t)MSL_LAST_HIT_BY_SOURCE_NONE;
+  batch->state.source_clear_timer_x18c8[d_idx] = 0u;
+}
+
+static inline void combat_processhit_commit_source_owner(MslBatch* batch, size_t d_idx,
+                                                         uint8_t source_port) {
+  if (batch == NULL) {
+    return;
+  }
+  // Decomp owner shape:
+  // - collision writes source owner before Fighter_ProcessHit,
+  // - grounded percent-only/no-KB paths then clear it via ftCommon_800804FC,
+  // - airborne rows keep the source owner live.
+  // refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
+  // refs/melee/src/melee/ft/ftcommon.c::ftCommon_800804FC
+  if (batch->state.on_ground[d_idx] != 0u) {
+    combat_source_owner_clear_ftCommon_800804FC(batch, d_idx);
+    return;
+  }
+  batch->state.last_hit_by[d_idx] = source_port;
+}
+
 static inline uint16_t combat_damage_hitstun_from_kb(const MslCommonParams* c, float kb_applied) {
   // Decomp: hitstun frames left are `mv.co.damage.x0 = (int)(kb_applied * p_ftCommonData->x154)`,
   // with a minimum of 1.
@@ -1729,27 +1763,30 @@ static inline void combat_damage_install_grounded_kb(const MslCommonParams* c, M
   combat_damage_calc_vel(batch, d_idx, kb_x, kb_y);
 }
 
-static inline void combat_damageflyroll_consume_fighter_8006cda4_phase_hint(MslBatch* batch, int bi,
-                                                                            size_t d_idx) {
+static inline void combat_damageflyroll_consume_fighter_8006cda4_pre_gate_count(MslBatch* batch,
+                                                                                 int bi,
+                                                                                 size_t d_idx) {
   if (batch == NULL) {
     return;
   }
-  const uint8_t phase_hint = batch->state.damageflyroll_fighter_8006cda4_phase_hint[d_idx];
-  if (phase_hint == 0u) {
+  const uint8_t consume_count = batch->state.fighter_8006cda4_pre_gate_consume_count[d_idx];
+  if (consume_count == 0u) {
     return;
   }
-  // Hidden pre-gate RNG ownership bridge:
+  // Explicit pre-gate RNG consume-count owner:
   // - Fighter_8006CDA4 runs before the ftCo_8008DCE0 block_33 HSD_Randf gate and can advance the
   //   same global RNG stream via HSD_Randi calls.
-  // - For the currently separated families, this seeded hint carries only consume count ownership;
-  //   the HSD_Randi return value is not otherwise used in this lite sim, so `max_val=1` is enough
+  // - Slippi does not expose the hidden held-item/x197C owner inputs directly, so the seed surface
+  //   stores the total pre-gate consume count explicitly.
+  // - The HSD_Randi return value is not otherwise used in this lite sim, so `max_val=1` is enough
   //   to model the stream advance without introducing extra gameplay constants.
   // refs/melee/src/melee/ft/fighter.c::Fighter_8006CDA4
+  // refs/melee/src/melee/ft/types.h
   // refs/melee/src/sysdolphin/baselib/random.c::HSD_Randi
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
   (void)combat_rng_consume_randi_site(
       batch, bi, MSL_RNG_SITE_DAMAGE_FLY_ROLL_PRE_GATE_FIGHTER_8006CDA4_PRIMARY, 1);
-  if (phase_hint >= 2u) {
+  if (consume_count >= 2u) {
     (void)combat_rng_consume_randi_site(
         batch, bi, MSL_RNG_SITE_DAMAGE_FLY_ROLL_PRE_GATE_FIGHTER_8006CDA4_SECONDARY, 1);
   }
@@ -1860,7 +1897,7 @@ static inline void combat_damage_enter_state(const MslCommonParams* c, MslBatch*
         if (damagefly_roll_rng_subset_ok &&
             percent_cur >= (float)c->damagefly_roll_percent_threshold) {
           combat_damageflyroll_consume_jumpaerial_attackairb_carry(batch, bi, d_idx);
-          combat_damageflyroll_consume_fighter_8006cda4_phase_hint(batch, bi, d_idx);
+          combat_damageflyroll_consume_fighter_8006cda4_pre_gate_count(batch, bi, d_idx);
           const float roll =
               combat_rng_consume_randf_site(batch, bi, MSL_RNG_SITE_DAMAGE_FLY_ROLL_GATE);
           if (!batch->debug_rng_enable_damage_fly_roll_gate && roll < c->damagefly_roll_prob) {
@@ -1938,11 +1975,6 @@ static inline void combat_damage_enter_state(const MslCommonParams* c, MslBatch*
   // Decomp: ftCo_8008DCE0 clears mv.co.damage.x14 on damage entry.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
   batch->state.damage_jump_buffer_x14[d_idx] = 0;
-  // Decomp: damage entry installs `fp->post_hitlag_cb = ftCo_Damage_OnExitHitlag`.
-  // Mid-hitlag teacher-forced reseed rows carry this lane explicitly from the dataset seed, so
-  // only fresh runtime damage entry should synthesize it.
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
-  batch->state.damage_post_hitlag_cb_kind[d_idx] = MSL_DAMAGE_POST_HITLAG_CB_DAMAGE_ON_EXIT;
   // Decomp: ftCo_8008DCE0 performs Fighter_ChangeMotionState then immediate ftAnim_8006EBA4.
   // This call path is inside Fighter_ProcessHit (prio 14), not Fighter_8006A360's `!hitlag`
   // callback gate, so the entry tick is consumed even when hitlag is currently active.
@@ -2259,7 +2291,7 @@ static inline void combat_mutations_pass1_future_apply_body_hit(
     batch->state.hitstun[d_idx] = 0;
     combat_state_flags_set_is_hitstun(batch, d_idx, 0);
     batch->state.instance_hit_by[d_idx] = batch->state.instance_id[a_idx];
-    batch->state.last_hit_by[d_idx] = (uint8_t)attacker;
+    combat_processhit_commit_source_owner(batch, d_idx, (uint8_t)attacker);
 
     // Stale-move queue update on successful damaging BODY hit (attacker-side).
     // Decomp: refs/melee/src/melee/pl/plstale.c::plStale_UpdateStaleMovesFromFighter
@@ -2525,7 +2557,7 @@ MslItemHitResult combat_apply_item_hit(MslBatch* batch, int batch_index, int att
     // TODO(decomp/non-flinch-authoritative-signal): replace this KB-triplet-derived lane with a
     // truly authoritative decomp/data-owned no-flinch signal once identified.
     batch->state.instance_hit_by[d_idx] = item_instance_id;
-    batch->state.last_hit_by[d_idx] = prev_last_hit_by;
+    combat_processhit_commit_source_owner(batch, d_idx, (uint8_t)attacker);
     // Non-flinch damage still routes through Fighter_ProcessHit's percent-temp consume without a
     // fresh Damage* entry. Keep fp->x221C_b0 aligned to the same hidden-damage ownership so the
     // post-frame no-reaction lane does not stale-carry after the item hit is accepted.
@@ -2664,6 +2696,26 @@ MslItemHitResult combat_apply_item_hit(MslBatch* batch, int batch_index, int att
       batch->state.kb_smashcharge_active[d_idx]);
   const float kb_angle_rad =
       combat_damage_calc_angle_radians(c, angle, defender_on_ground, kb_applied);
+
+  // Decomp: Fighter_ProcessHit only enters common Damage* state entry when `fp->dmg.kb_applied`
+  // is nonzero. Otherwise the percent-only path consumes Fighter_UnkTakeDamage and grounded
+  // ftCommon_800804FC source-clear ownership without hitstun or Damage* entry.
+  // refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
+  if (kb_applied == 0.0f) {
+    batch->state.speed_x_attack[d_idx] = 0.0f;
+    batch->state.speed_y_attack[d_idx] = 0.0f;
+    batch->state.hitstun[d_idx] = 0u;
+    combat_state_flags_set_is_hitstun(batch, d_idx, 0u);
+    batch->state.instance_hit_by[d_idx] = item_instance_id;
+    combat_processhit_commit_source_owner(batch, d_idx, (uint8_t)attacker);
+
+    staling_queue_update(batch, a_idx, item_attack_id, item_attack_instance);
+    combat_combo_ftColl_800763C0(batch, a_idx, defender, d_idx, item_attack_id);
+    if (item_is_illusion) {
+      return MSL_ITEM_HIT_APPLIED_DONT_CONSUME;
+    }
+    return MSL_ITEM_HIT_APPLIED_CONSUME_ITEM;
+  }
 
   float kb_vel_mag = kb_applied * c->kb_vel_mul;
   if (!defender_on_ground && combat_damage_check_air_motion_kb_mul(c, batch, d_idx)) {

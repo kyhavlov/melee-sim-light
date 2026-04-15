@@ -900,7 +900,7 @@ def _derive_source_clear_processhit_damage_pending_phase_seed_lane(
     return out
 
 
-def _derive_damageflyroll_fighter_8006cda4_phase_hint_seed_lane(
+def _derive_fighter_8006cda4_pre_gate_consume_count_seed_lane(
     *,
     action_id_u16: np.ndarray,
     action_frame_i16: np.ndarray,
@@ -908,8 +908,13 @@ def _derive_damageflyroll_fighter_8006cda4_phase_hint_seed_lane(
     hitlag_u16: np.ndarray,
     hitstun_u16: np.ndarray,
     state_flags_u8: np.ndarray,
+    last_hit_by_u8: np.ndarray,
+    all_action_id_u16: np.ndarray,
+    all_action_frame_i16: np.ndarray,
+    victim_port: int,
+    num_players: int,
 ) -> np.ndarray:
-    """Derive a one-step hidden pre-gate Fighter_8006CDA4 consume-count bridge.
+    """Derive the explicit Fighter_8006CDA4 pre-gate HSD_Randi consume count.
 
     Decomp ownership:
     - Fighter_8006CDA4 runs before ftCo_8008DCE0 block_33 and can advance the global RNG stream
@@ -918,18 +923,28 @@ def _derive_damageflyroll_fighter_8006cda4_phase_hint_seed_lane(
     refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
     refs/melee/src/sysdolphin/baselib/random.c::HSD_Randi
 
+    Why this is an explicit seed lane rather than a replay-visible owner reconstruction:
+    - The decomp branch depends on hidden fighter internals (`item_gobj`, `x1978`, `x197C`,
+      `x2220_b3`, `x2220_b4`, `x2226_b2`, and `ftCo_8008E984(fp)`).
+    - Slippi post-frames do not expose those fighter-owned pointers/booleans directly, so the
+      minimal replay-facing representation is the total pre-gate consume count itself.
+    refs/melee/src/melee/ft/fighter.c::Fighter_8006CDA4
+    refs/melee/src/melee/ft/types.h
+    refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008E984
+    refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
+
     Seed representation:
     - 0: no seeded pre-gate Fighter_8006CDA4 consume ownership on this row.
     - 1: consume one pre-gate HSD_Randi before the DamageFlyRoll gate.
     - 2: consume two pre-gate HSD_Randi calls before the DamageFlyRoll gate.
 
     Current producer policy:
-    - Materialize only the two replay-real families that are currently separable by decomp-backed
-      present-row ownership context without replay-keyed lookup:
+    - Materialize the replay-real families that are currently separable by strict-causal current-row
+      context without replay-keyed lookup:
       * AttackAirB airborne carry -> one consume
       * ThrownF grounded-hitlag carry with x221A_b3 latched -> two consumes
-    - Keep the DamageFlyTop carry family unmaterialized until its consume-critical discriminator is
-      explicit in the seed surface.
+      * DamageFlyTop airborne carry while the live source owner is still in the steady AttackAirB
+        window -> two consumes
 
     Causality:
     - Strictly causal: current-row post-frame lanes only, no future-frame inspection.
@@ -938,18 +953,37 @@ def _derive_damageflyroll_fighter_8006cda4_phase_hint_seed_lane(
     on_ground = np.asarray(on_ground_u8, dtype=np.uint8).reshape(-1)
     hitlag = np.asarray(hitlag_u16, dtype=np.uint16).reshape(-1)
     hitstun = np.asarray(hitstun_u16, dtype=np.uint16).reshape(-1)
+    last_hit_by = np.asarray(last_hit_by_u8, dtype=np.uint8).reshape(-1)
+    all_action_id = np.asarray(all_action_id_u16, dtype=np.uint16)
+    all_action_frame = np.asarray(all_action_frame_i16, dtype=np.int16)
     sf = np.asarray(state_flags_u8, dtype=np.uint8)
     n = int(action_id.shape[0])
     if (
         int(on_ground.shape[0]) != n
         or int(hitlag.shape[0]) != n
         or int(hitstun.shape[0]) != n
+        or int(last_hit_by.shape[0]) != n
     ):
-        raise ValueError("damageflyroll_fighter_8006cda4_phase_hint derivation lanes must have equal lengths")
+        raise ValueError("fighter_8006cda4_pre_gate_consume_count derivation lanes must have equal lengths")
     if sf.ndim != 2 or int(sf.shape[0]) != n or int(sf.shape[1]) < 5:
-        raise ValueError("damageflyroll_fighter_8006cda4_phase_hint requires state_flags_u8 shape [n,5]")
+        raise ValueError("fighter_8006cda4_pre_gate_consume_count requires state_flags_u8 shape [n,5]")
+    if all_action_id.ndim != 2 or int(all_action_id.shape[0]) != n or int(all_action_id.shape[1]) < int(num_players):
+        raise ValueError("fighter_8006cda4_pre_gate_consume_count requires all_action_id_u16 shape [n,num_players]")
+    if (
+        all_action_frame.ndim != 2
+        or int(all_action_frame.shape[0]) != n
+        or int(all_action_frame.shape[1]) < int(num_players)
+    ):
+        raise ValueError(
+            "fighter_8006cda4_pre_gate_consume_count requires all_action_frame_i16 shape [n,num_players]"
+        )
+    if int(victim_port) < 0 or int(victim_port) >= int(num_players):
+        raise ValueError(
+            f"fighter_8006cda4_pre_gate_consume_count victim_port out of range: {victim_port} for num_players={num_players}"
+        )
 
     ACT_ATTACK_AIR_B = np.uint16(67)
+    ACT_DAMAGE_FLY_TOP = np.uint16(90)
     ACT_THROWN_F = np.uint16(239)
     STATE_FLAGS_221A_INDEX = 1
     STATE_FLAG_221A_B3_MASK = 0x10
@@ -983,6 +1017,27 @@ def _derive_damageflyroll_fighter_8006cda4_phase_hint_seed_lane(
             # refs/melee/src/melee/ft/fighter.c::Fighter_8006CDA4
             # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
             out[i] = np.uint8(2)
+            continue
+        if (
+            cur_act == ACT_DAMAGE_FLY_TOP
+            and int(on_ground[i]) == 0
+            and int(hitlag[i]) == 0
+            and int(hitstun[i]) > 0
+        ):
+            attacker = int(last_hit_by[i])
+            if attacker < 0 or attacker >= int(num_players) or attacker == int(victim_port):
+                continue
+            attacker_action = all_action_id[i, attacker]
+            attacker_action_frame = int(all_action_frame[i, attacker])
+            if attacker_action == ACT_ATTACK_AIR_B and attacker_action_frame >= 6:
+                # Replay-real explicit two-consume carry family:
+                # - the hidden `Fighter_8006CDA4` held-item/x197C owner still resolves before the
+                #   same ftCo_8008DCE0 DamageFlyRoll gate, but on these carry rows the current-row
+                #   attacker steady-window context is the minimal causal discriminator available in
+                #   replay-derived seed state.
+                # refs/melee/src/melee/ft/fighter.c::Fighter_8006CDA4
+                # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
+                out[i] = np.uint8(2)
 
     return out
 
@@ -2478,7 +2533,7 @@ def _main_impl(args) -> None:
         samples["seed_t"]["throw_pulse_crossed_prev_frame"][:, slot] = 0
         samples["seed_t"]["source_clear_owner_set_phase"][:, slot] = 0
         samples["seed_t"]["source_clear_processhit_damage_pending_phase"][:, slot] = 0
-        samples["seed_t"]["damageflyroll_fighter_8006cda4_phase_hint"][:, slot] = 0
+        samples["seed_t"]["fighter_8006cda4_pre_gate_consume_count"][:, slot] = 0
         samples["seed_t"]["source_clear_grounded_damage_clear_phase"][:, slot] = 0
         samples["seed_t"]["source_clear_terminal_phase"][:, slot] = 0
         # fp+0x2340 AttackDash lane (decomp-backed targeted ownership seed):
@@ -3203,14 +3258,19 @@ def _main_impl(args) -> None:
                 last_hit_by_u8=samples["seed_t"]["last_hit_by"][:, slot],
             )
         )
-        samples["seed_t"]["damageflyroll_fighter_8006cda4_phase_hint"][:, slot] = (
-            _derive_damageflyroll_fighter_8006cda4_phase_hint_seed_lane(
+        samples["seed_t"]["fighter_8006cda4_pre_gate_consume_count"][:, slot] = (
+            _derive_fighter_8006cda4_pre_gate_consume_count_seed_lane(
                 action_id_u16=samples["seed_t"]["action_id"][:, slot],
                 action_frame_i16=samples["seed_t"]["action_frame"][:, slot],
                 on_ground_u8=samples["seed_t"]["on_ground"][:, slot],
                 hitlag_u16=samples["seed_t"]["hitlag"][:, slot],
                 hitstun_u16=samples["seed_t"]["hitstun"][:, slot],
                 state_flags_u8=samples["seed_t"]["state_flags"][:, slot, :],
+                last_hit_by_u8=samples["seed_t"]["last_hit_by"][:, slot],
+                all_action_id_u16=samples["seed_t"]["action_id"][:, :num_players],
+                all_action_frame_i16=samples["seed_t"]["action_frame"][:, :num_players],
+                victim_port=slot,
+                num_players=num_players,
             )
         )
 

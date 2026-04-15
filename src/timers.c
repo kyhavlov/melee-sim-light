@@ -184,18 +184,7 @@ void timers_consume_post_hitlag_callbacks_pre_input(MslBatch* batch) {
       const uint16_t a = batch->state.action_id[idx];
 
       if (!damage_post_hitlag_cb_owner_action(a)) {
-        batch->state.damage_post_hitlag_cb_kind[idx] = MSL_DAMAGE_POST_HITLAG_CB_NONE;
         continue;
-      }
-      if (batch->state.damage_post_hitlag_cb_kind[idx] == MSL_DAMAGE_POST_HITLAG_CB_NONE) {
-        // Damage-family runtime latch:
-        // - ftCo_8008DCE0 installs `fp->post_hitlag_cb = ftCo_Damage_OnExitHitlag` on damage
-        //   entry, and the callback remains live across the active damage segment unless the
-        //   action exits.
-        // - Teacher-forced replay rows usually seed this lane explicitly, but defensive restore is
-        //   still needed for partial histories and stale local caches that lack the seed field.
-        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
-        batch->state.damage_post_hitlag_cb_kind[idx] = MSL_DAMAGE_POST_HITLAG_CB_DAMAGE_ON_EXIT;
       }
 
       // `Fighter_8006D10C` is invoked from `Fighter_8006A1BC` before Fighter_procUpdate input_cb,
@@ -213,11 +202,6 @@ void timers_consume_post_hitlag_callbacks_pre_input(MslBatch* batch) {
           lstick_full_x * lstick_full_x + lstick_full_y * lstick_full_y;
       const float cstick_full_mag_sq =
           cstick_full_x * cstick_full_x + cstick_full_y * cstick_full_y;
-
-      if (batch->state.damage_post_hitlag_cb_kind[idx] !=
-          MSL_DAMAGE_POST_HITLAG_CB_DAMAGE_ON_EXIT) {
-        continue;
-      }
       if (!(batch->state.hitlag_pre_timer[idx] != 0u && batch->state.hitlag[idx] == 0u)) {
         continue;
       }
@@ -469,18 +453,6 @@ void timers_update_post_anim(MslBatch* batch) {
         batch->state.source_clear_timer_x18c8[idx] = 0u;
         continue;
       }
-      // Hidden ProcessHit damage-pending clear bridge:
-      // - Fighter_ProcessHit can route source-owner clear through ftCommon_800804FC before the
-      //   next post-frame snapshot on grounded damage-pending rows that are not otherwise exposed
-      //   by Slippi seed lanes.
-      // refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
-      // refs/melee/src/melee/ft/ftcommon.c::ftCommon_800804FC
-      if (batch->state.source_clear_processhit_damage_pending_phase[idx] != 0u) {
-        batch->state.last_hit_by[idx] = (uint8_t)MSL_LAST_HIT_BY_SOURCE_NONE;
-        batch->state.source_clear_timer_x18c8[idx] = 0u;
-        batch->state.source_clear_owner_set_phase[idx] = 0u;
-        continue;
-      }
       // Grounded clear-path bridge:
       // - ftCommon_800804FC clears source-owner + disables x18C8 on grounded paths.
       // - Consume this one-step seed-owned phase before timer decrement so the replay-facing
@@ -491,7 +463,6 @@ void timers_update_post_anim(MslBatch* batch) {
       if (batch->state.source_clear_grounded_damage_clear_phase[idx] != 0u) {
         batch->state.last_hit_by[idx] = (uint8_t)MSL_LAST_HIT_BY_SOURCE_NONE;
         batch->state.source_clear_timer_x18c8[idx] = 0u;
-        batch->state.source_clear_owner_set_phase[idx] = 0u;
         continue;
       }
       uint8_t t = batch->state.source_clear_timer_x18c8[idx];

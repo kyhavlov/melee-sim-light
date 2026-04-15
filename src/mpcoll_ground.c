@@ -1134,8 +1134,6 @@ void mpcoll_ground_apply(MslBatch* batch) {
             (action_id == (uint16_t)MSL_ACT_ESCAPE_AIR && ecb_lock_active) ? 1u : 0u;
         const uint8_t damage_hitlag_exit_projection_owner =
             (is_damage_collision_landing_action(action_id) &&
-             batch->state.damage_post_hitlag_cb_kind[idx] ==
-                 (uint8_t)MSL_DAMAGE_POST_HITLAG_CB_DAMAGE_ON_EXIT &&
              batch->state.hitlag_pre_timer[idx] != 0u && batch->state.hitlag[idx] == 0u &&
              batch->state.damage_hitlag_floorhug_latch[idx] != 0u)
                 ? 1u

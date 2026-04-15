@@ -40,7 +40,7 @@ class RngRowObservation:
     site1_roll: float | None
     site1_roll_window: tuple[float, ...]
     phase_advance_to_lt_threshold: int | None
-    modeled_pre_gate_site_counts: tuple[int, int, int]
+    modeled_pre_gate_site_counts: tuple[int, ...]
     requires_unmodeled_pre_gate_consumer: bool
     compatible_fighter_8006cda4_total_consumes: tuple[int, ...]
     fighter_8006cda4_compatible_families: tuple[str, ...]
@@ -58,13 +58,13 @@ class RngRowObservation:
 
 
 DEFAULT_CASES: tuple[Case, ...] = (
-    # Curated replay-real blocker/control rows for the DamageFlyRoll gate site:
+    # Curated replay-real closure/control rows for the DamageFlyRoll gate site:
     # - severe airborne damage entry evaluates the HSD_Randf gate in ftCo_8008DCE0 block_33,
     # - the site-1 trace in this runtime corresponds to that gate.
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
     # refs/melee/src/sysdolphin/baselib/random.c::HSD_Randf
     Case(
-        dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
+        dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/"
         "AttachedGoodNaturedGuanaco.msl",
         record=2694,
         p=0,
@@ -72,23 +72,23 @@ DEFAULT_CASES: tuple[Case, ...] = (
         note="AttackAirB subset resolved by seeded Fighter_8006CDA4 carry",
     ),
     Case(
-        dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
+        dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/"
         "GracefulAttachedTurtle.msl",
         record=5717,
         p=0,
         role="resolved_control",
-        note="ThrownF hitlag carry resolved by seeded Fighter_8006CDA4 bridge",
+        note="ThrownF hitlag carry resolved by explicit Fighter_8006CDA4 consume count",
     ),
     Case(
-        dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
+        dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/"
         "TreasuredBackKangaroo.msl",
         record=6929,
         p=1,
-        role="blocker",
-        note="DamageFlyTop carry blocker C",
+        role="resolved_control",
+        note="DamageFlyTop carry resolved by explicit Fighter_8006CDA4 consume count",
     ),
     Case(
-        dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
+        dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/"
         "AttachedGoodNaturedGuanaco.msl",
         record=6020,
         p=0,
@@ -96,7 +96,7 @@ DEFAULT_CASES: tuple[Case, ...] = (
         note="same site-1 pulse resolves to DamageFlyRoll when roll is below threshold",
     ),
     Case(
-        dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
+        dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/"
         "AttachedGoodNaturedGuanaco.msl",
         record=6019,
         p=0,
@@ -104,7 +104,7 @@ DEFAULT_CASES: tuple[Case, ...] = (
         note="adjacent pre-target control stays no-pulse and replay exact",
     ),
     Case(
-        dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
+        dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/"
         "AttachedGoodNaturedGuanaco.msl",
         record=6021,
         p=0,
@@ -112,7 +112,7 @@ DEFAULT_CASES: tuple[Case, ...] = (
         note="adjacent post-target control stays no-pulse and replay exact",
     ),
     Case(
-        dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
+        dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/"
         "GracefulAttachedTurtle.msl",
         record=5716,
         p=0,
@@ -120,7 +120,7 @@ DEFAULT_CASES: tuple[Case, ...] = (
         note="adjacent pre-target rollout control stays no-pulse and replay exact",
     ),
     Case(
-        dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
+        dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/"
         "GracefulAttachedTurtle.msl",
         record=5718,
         p=0,
@@ -128,7 +128,7 @@ DEFAULT_CASES: tuple[Case, ...] = (
         note="adjacent post-target rollout control stays no-pulse and replay exact",
     ),
     Case(
-        dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
+        dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/"
         "TreasuredBackKangaroo.msl",
         record=6928,
         p=1,
@@ -136,7 +136,7 @@ DEFAULT_CASES: tuple[Case, ...] = (
         note="adjacent pre-target carry control stays no-pulse and replay exact",
     ),
     Case(
-        dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
+        dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/"
         "TreasuredBackKangaroo.msl",
         record=6930,
         p=1,
@@ -368,7 +368,7 @@ def observe_case(case: Case, *, datasets_dir: Path = Path("datasets")) -> RngRow
         attacker_action = int(seed["action_id"][attacker])
         attacker_action_frame = int(np.int16(seed["action_frame"][attacker]))
 
-    site_counts = {1: 0, 2: 0, 3: 0, 4: 0}
+    site_counts = {site_id: 0 for site_id in range(1, 8)}
     site1_seed_in: int | None = None
     if trace_path.exists():
         with trace_path.open("r", encoding="utf-8") as fh:
@@ -405,7 +405,12 @@ def observe_case(case: Case, *, datasets_dir: Path = Path("datasets")) -> RngRow
     # - site 4: action-script pseudo-random SFX command lane
     #   refs/melee/src/melee/ft/ftaction.c::ftAction_80071FC8
     #   refs/melee/src/sysdolphin/baselib/random.c::HSD_Randi
-    modeled_pre_gate_site_counts = (int(site_counts[2]), int(site_counts[3]), int(site_counts[4]))
+    # - site 5: Fighter_8006CDA4 primary pre-gate consume
+    # - site 6: Fighter_8006CDA4 secondary pre-gate consume
+    # - site 7: JumpAerialF/B <- AttackAirB admission carry
+    #   refs/melee/src/melee/ft/fighter.c::Fighter_8006CDA4
+    #   refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
+    modeled_pre_gate_site_counts = tuple(int(site_counts[site_id]) for site_id in (2, 3, 4, 5, 6, 7))
     return RngRowObservation(
         dataset=ds_path.name,
         record=int(case.record),
@@ -457,10 +462,16 @@ def build_summary(observations: list[RngRowObservation]) -> dict:
         blocker_phase_groups.setdefault(key, []).append(asdict(obs))
     unmodeled_pre_gate_blockers = [asdict(obs) for obs in blockers if obs.requires_unmodeled_pre_gate_consumer]
     family_details = _fighter_8006cda4_family_details()
+    observed_phase_keys = sorted(
+        {
+            f"phase_plus_{int(obs.phase_advance_to_lt_threshold)}"
+            for obs in observations
+            if obs.phase_advance_to_lt_threshold is not None and int(obs.phase_advance_to_lt_threshold) > 0
+        }
+    )
     phase_family_details = {
         phase_key: _fighter_8006cda4_phase_family_details(int(phase_key.removeprefix("phase_plus_")))
-        for phase_key in blocker_phase_groups
-        if phase_key.startswith("phase_plus_")
+        for phase_key in observed_phase_keys
     }
     consume_critical_gap_fields = sorted(
         {
@@ -491,17 +502,25 @@ def build_summary(observations: list[RngRowObservation]) -> dict:
         "positive_controls": [asdict(obs) for obs in positive_controls],
         "negative_controls": [asdict(obs) for obs in negative_controls],
         "blocker": (
-            "The seeded Fighter_8006CDA4 pre-gate bridge resolves the separated AttackAirB and "
-            "ThrownF-hitlag carry families, and the remaining open blocker is now the DamageFlyTop "
-            "carry family. Site-1 admission still fires on that blocker row, but the HSD_Randf "
-            "sample at ftCo_8008DCE0 block_33 is on the wrong side of the x240 threshold. All "
-            "currently modeled pre-gate RNG sites stay at zero there, so the next runtime lane still "
-            "needs an upstream consumer owner rather than a reorder of already-modeled sites. The "
-            "refined Fighter_8006CDA4 branch model continues to narrow the consume-critical seed gaps "
-            "to item-gobj ownership/non-heavy gating, subtype-3 projectile-empty gating, x197C "
-            "presence, x2220_b3/x2220_b4, x2226_b2, and the ftCo_8008E984 guard boolean; x1978 is "
-            "side-effect-only for item-drop ownership and does not change the pre-gate RNG consume "
-            "count."
+            "The common damage-owner family is now closed through an explicit "
+            "`fighter_8006cda4_pre_gate_consume_count` seed lane. Decomp shows Fighter_8006CDA4 "
+            "consumes pre-gate HSD_Randi samples from hidden held-item / x197C ownership branches "
+            "before ftCo_8008DCE0 block_33 evaluates the DamageFlyRoll HSD_Randf gate. Those branch "
+            "inputs depend on fighter internals that Slippi post-frames do not expose directly "
+            "(`item_gobj`, subtype-3 projectile-empty gating, x197C presence, x2220_b3/x2220_b4, "
+            "x2226_b2, and the ftCo_8008E984 guard boolean), so the final replay-facing "
+            "representation is the total pre-gate consume count itself rather than a reconstructed "
+            "hidden-pointer owner. x1978 remains side-effect-only for item-drop effects and does not "
+            "change the pre-gate RNG consume count."
+        )
+        if not blockers
+        else (
+            "One Fighter_8006CDA4 pre-gate consumer still remains unmodeled. Site-1 admission "
+            "fires on the blocker row, but the HSD_Randf sample at ftCo_8008DCE0 block_33 is still "
+            "on the wrong side of the x240 threshold after all modeled pre-gate sites. The remaining "
+            "consume-critical hidden fields are item-gobj ownership/non-heavy gating, subtype-3 "
+            "projectile-empty gating, x197C presence, x2220_b3/x2220_b4, x2226_b2, and the "
+            "ftCo_8008E984 guard boolean; x1978 is side-effect-only."
         ),
     }
 

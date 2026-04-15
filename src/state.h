@@ -171,13 +171,14 @@ typedef struct MslStateSoA {
   // refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
   // refs/melee/src/melee/ft/ftcommon.c::ftCommon_800804FC
   uint8_t* source_clear_processhit_damage_pending_phase;
-  // One-step hidden pre-gate Fighter_8006CDA4 RNG-consume bridge for DamageFlyRoll entry.
+  // Explicit Fighter_8006CDA4 pre-gate RNG consume-count seed lane for DamageFlyRoll entry.
   // 0: no seeded pre-gate consume ownership.
   // 1: consume one pre-gate HSD_Randi before ftCo_8008DCE0 block_33.
   // 2: consume two pre-gate HSD_Randi calls before ftCo_8008DCE0 block_33.
   // refs/melee/src/melee/ft/fighter.c::Fighter_8006CDA4
+  // refs/melee/src/melee/ft/types.h
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
-  uint8_t* damageflyroll_fighter_8006cda4_phase_hint;
+  uint8_t* fighter_8006cda4_pre_gate_consume_count;
   // Grounded source-owner clear phase bridge (`ftCommon_800804FC` path).
   // 0: no grounded clear-phase override.
   // 1: consume grounded clear before x18C8 decrement for this one-step row.
