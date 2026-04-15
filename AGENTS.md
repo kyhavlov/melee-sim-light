@@ -4,360 +4,187 @@
 
 Implement a **high-performance, batched, deterministic** SSBM-like simulator for RL.
 
-Initial target domain:
+Current target domain:
 - **Singles (2 players)**, Fox vs Falco, Final Destination, UCF enabled by default.
-- The implementation must be structured so enabling **4 players (2v2)** later is trivial (same code paths; only config changes).
+- The implementation must stay structured so enabling **4 players (2v2)** later is a config/codepath extension, not a rewrite.
 
 ## Hard Requirements
 
 ### Performance
-- **No allocations after initialization** on the hot path (including hidden allocations from logging/formatting, container growth, etc.).
-- Built as a **vectorized env**:
-  - SoA/AoSoA state storage for fields touched every frame.
-  - Fixed-capacity pools for projectiles/transient contacts/events.
-  - Deterministic iteration order and tie-breaking.
+- **No heap allocations after initialization** on any runtime gameplay path.
+- This includes direct allocation calls and hidden allocations from formatting, logging, container growth, helper buffers, or convenience wrappers.
+- Runtime means anything exercised in normal sim execution, especially `reseed_seed`, `step_input`, `write_compare`, and the frame-step passes they call.
+- Debug-only or forensic allocations are acceptable only in clearly non-runtime tooling / debug codepaths and must never run during normal sim execution.
+- Use deterministic iteration order and tie-breaking.
+- Keep hot gameplay state in SoA/AoSoA-style layouts and fixed-capacity pools.
 
 ### Data-driven from game files
-- Stage collision/models/coords are extracted from game files (FD first).
-- Character animation/move/hitbox/hurtbox data are extracted from game files (Fox/Falco first).
-- Manual overrides are allowed only as explicit, small overlays (audited and tracked separately).
+- Stage collision/models/coords should come from extracted game data.
+- Character animation/move/hitbox/hurtbox data should come from extracted game data.
+- Manual overrides are allowed only as explicit, small, audited overlays.
 
-### No “magic numbers” in gameplay logic
-- Do not introduce unexplained constants in C gameplay code (collision extents, gravity, thresholds, timings, etc.).
-- Constants must be sourced from **ISO-extracted `data/` artifacts** and/or **decomp**, even if the full system isn’t implemented yet.
-  - Acceptable: “temporary hardcode” *only* if accompanied by an inline source pointer, e.g. `data/stages/final_destination.json` segment indices, or `data/characters/fox.json` keys.
-  - Not acceptable: choosing constants from replay distributions/heuristics as a convenience.
-- Replay-derived heuristics are an absolute last resort; if used, label them explicitly as such and justify why game data/decomp couldn’t be used.
+### Data / Decomp Discipline
+- Gameplay logic in `src/` must be **decomp-backed or game-data-backed**.
+- Do not add unexplained gameplay constants or replay-fit “magic numbers”.
+- Temporary hardcodes are only acceptable with a nearby source pointer to decomp/asm or extracted `data/...`.
+- Every gameplay logic change in `src/` needs a nearby source pointer:
+  - `refs/melee/src/...`
+  - `refs/melee/build/GALE01/asm/...`
+  - `refs/slippi-ssbm-asm/...`
+  - and/or extracted data in `data/...`
+- If a behavior is not yet decomp-explainable, do **not** fit to a replay row in C. Prefer:
+  - tooling / probes / locks
+  - promoting a minimal explicit internal
+  - documenting the blocker
 
-### Decomp-backed gameplay only
-- **All gameplay logic changes must be decomp-backed or sourced from game code** (melee decomp C, GALE01 ASM, or Slippi ASM where appropriate).
-- Every gameplay logic change in `src/` must include a nearby inline source pointer near the branch/constant being changed:
-  - `refs/melee/src/...` and/or `refs/melee/build/GALE01/asm/...` and/or `refs/slippi-ssbm-asm/...`
-  - Or an extracted data key in `data/...` (cite both if applicable).
-- If something is not currently decomp-explainable, do **not** “fit to the suite” in C. Prefer:
-  - adding triage tooling/tests,
-  - promoting a minimal seedable internal with prefix-invariance, or
-  - documenting it as a blocker.
+### C Core + Thin Python
+- All gameplay / physics / combat logic lives in **C** under `src/`.
+- Python under `python/` is a thin wrapper and tooling layer only.
 
-### C core + dumb Python wrapper
-- All gameplay/physics/combat logic lives in **C** under `src/`.
-- Python under `python/` is a **thin wrapper only**:
-  - passes inputs to C,
-  - receives vectorized outputs from C,
-  - no gameplay logic, no “fixups,” no derived-state recomputation in Python.
+## Validation Model
 
-## Primary Validation Loop (v1)
+Primary validation is **teacher-forced, reseeded one-step** over replay suites:
+1. Build a seed state from replay row `t`
+2. Apply replay inputs for `t`
+3. Run exactly one step
+4. Compare against replay reference at `t+1`
 
-Primary validation is **teacher-forced, reseeded one-step** over a replay suite:
+Full rollout is secondary and used as a stability / regression lens.
 
-For each replay frame `t`:
-1) Construct a **seed state** from replay reference data at frame `t`.
-2) Apply the recorded controller inputs for frame `t`.
-3) Run exactly one `step()` to predict frame `t+1`.
-4) Compare predicted outputs at `t+1` to replay reference at `t+1`.
-5) Aggregate metrics across all frames of the suite.
+## Current RL 1.0 Checklist
 
-Why: full rollouts are expected to diverge in a “light” sim; the one-step test gives a stable coverage signal early.
+Primary tracker:
+- `docs/RL10_COMPLETION_CHECKLIST.md`
 
-### Seed state philosophy (“minimal/data-driven”)
-Keep internal state minimal so reseeding is feasible from Slippi data:
-- Prefer deriving behavior from `(action_id, action_frame, extracted per-action tables)` rather than hidden flags.
-- If a mismatch clearly depends on an unrepresented timer/flag, promote it into the explicit seed schema.
-- If Slippi post-frame data is insufficient for a required internal, use Dolphin engine-dumps/probes as a targeted debugging aid (not the default correctness target).
+Use that file to understand:
+- the comprehensive RL 1.0 mechanic-family inventory
+- which owner families are effectively closed
+- which deep passes are next
+- what counts as a bridge vs a residual
+- what is out of scope for RL 1.0
 
-### What gets compared
-Do **not** make `slippi-ai` model embeddings the primary correctness target initially.
-Instead compare simulator state fields directly (and later optionally compare embedded observations as an additional lens).
+### Current Working Mode
 
-## Repo Layout (intent)
+We are in **finish-the-sim** mode.
 
-- `src/`: C simulator core.
-- `python/`: Python wrapper (FFI + vectorized I/O).
-- `tools/extraction/`: ISO/game-file → extracted data pipeline.
-- `tools/dolphin/`: playback/probe/engine-dump scripts (debugging support).
-- `tools/slippi/`: replay parsing + suite dataset generation.
-- `replays/suites/`: suite definitions (committed).
-- `refs/`, `SSBM.iso`, `_iso/`, Dolphin binaries/user dirs: local-only (gitignored).
-- `docs/legacy_melee_sim/`: reference docs copied from the old project (do not treat as the lite sim’s contract).
-- `docs/DATA_CONTRACT.md`: what we extract from ISO and where it lives.
+Default workflow:
+- identify a **shared owner family**
+- read the decomp boundary first
+- replace bridgey piecemeal logic with the shared owner
+- leave only narrow, decomp-justified residuals
 
-## Modelplay Viewer Traces
+Do **not** default to row-fix iteration when a shared family is still open.
+For major mechanic work, the default task shape is a **deep owner-family closure pass**, not a mismatch-row fix campaign.
 
-For visual bug triage, there is a throwaway model-vs-sim playback path under `tools/modelplay/`:
-- `tools/modelplay/run_model_match.py`: runs one or two real `slippi-ai` checkpoints against this sim.
-- `tools/modelplay/sim_env.py`: thin Python session wrapper over `msl_binding`.
-- `tools/modelplay/state_adapter.py` / `tools/modelplay/viewer_trace.py`: convert sim state into a browser-viewable trace.
-- `tools/modelplay/viewer/`: patched `slippi-viewer` fork that consumes trace JSON directly (not `.slp`).
+## What “Done” Means
 
-Generated traces live under gitignored `reports/modelplay/`.
+### Bridge
+A compensating path that exists because a shared owner is still missing or mis-owned.
 
-Important facts about these traces:
-- They are **not** Slippi replay files. They are JSON objects in the viewer's internal `ReplayData`-like shape.
-- They are generated from the sim's per-frame output, so they reflect sim bugs directly.
-- For current Fox/Falco FD runs, the default seed is `start_record=0` of `datasets/fox_falco_fd_ucf084_recent/.../AttachedGoodNaturedGuanaco.msl`, which is the real 4-stock opening `Entry` state, not a midgame bootstrap row.
-- `frameNumber` in the viewer trace is a sequential viewer frame index (`0..N`), not the sim/dataset `frame_id`.
+### Residual
+A real move-specific or adjacent-family difference that remains after the shared owner is closed.
 
-How to regenerate a trace:
+### Closed Family
+A family is only “closed” when:
+- the shared owner path is in place by default
+- remaining behavior is narrow and decomp-justified
+- the family no longer depends on bridges for its core behavior
 
-```bash
-uv run python -m tools.modelplay.run_model_match \
-  --slippi-ai-root /media/kyle/Windows/Users/kyleh/git/slippi-ai \
-  --p1-model /path/to/model.pkl \
-  --p2-model /path/to/model.pkl \
-  --out reports/modelplay/<run_name>
-```
+## Required Last-Mile Behavior
 
-How to inspect a trace in the browser:
+- Treat a mismatch as a **triage entry point**, not the patch boundary.
+- Prefer closing a full decomp-backed owner family while the context is loaded.
+- Do not stop at the first motivating row if adjacent same-family behavior is still open.
+- Investigation, tooling, extraction, replay probes, seed-surface work, and final gameplay code are all part of the same task.
+- Do not return with diagnosis-only prose if there is still a credible local next step.
 
-```bash
-cd tools/modelplay/viewer
-npm install
-npm run build
-python -m http.server 8000
-```
+When broadening is justified:
+- grounded and airborne variants
+- entry / steady / exit ownership
+- callback ordering
+- item / shield / hitlag / persistence interactions
 
-Then open `http://127.0.0.1:8000/examples/sim/` and load `reports/modelplay/<run_name>/trace.json`.
-
-How to inspect a trace without the browser:
-- The trace is plain JSON, so use `uv run python`, `jq`, or a small script to inspect exact frame windows around a reported bug.
-- Useful per-frame fields are under `frames[i].players[p].state`, especially:
-  - `actionStateId`
-  - `actionStateFrameCounter`
-  - `xPosition` / `yPosition`
-  - `percent`
-  - `stocksRemaining`
-  - `isGrounded`
-  - `hitlagRemaining`
-  - `hitstunRemaining`
-- Processed controller inputs are under `frames[i].players[p].inputs.processed`.
-
-When debugging from viewer-reported bugs:
-- Treat the viewer as a symptom-finding surface, not a correctness oracle.
-- Use the viewer frame index first, then inspect the corresponding trace JSON window and relevant sim code paths.
-- If the trace itself goes static for many frames, that usually means the sim stopped progressing in some action/state machine; inspect the action id and surrounding input window first.
-
-## Controlled Vanilla Playback Probes
-
-When Slippi post-frame data is not enough to decide whether a viewer symptom is real vanilla behavior, prefer a short replay-input patch plus playback engine dump:
-
-```bash
-uv run python -m tools.dolphin.patch_slp_preframe_window \
-  --slp replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.slp \
-  --patch-spec reports/triage/<probe>/patch_spec.json \
-  --out reports/triage/<probe>/probe.slp
-
-uv run python -m tools.dolphin.dolphin_engine_dump \
-  --replay reports/triage/<probe>/probe.slp \
-  --dolphin refs/Ishiiruka/build/Binaries/dolphin-emu-nogui \
-  --iso SSBM.iso \
-  --start-frame <f0> --end-frame <f1> \
-  --out-bin reports/triage/<probe>/dump.bin
-
-uv run python -m tools.dolphin.extract_engine_dump_rows \
-  --dump reports/triage/<probe>/dump.bin \
-  --start-frame <f0> --end-frame <f1> \
-  --out-dir reports/triage/<probe>/rows
-```
-
-Use this workflow instead of live memory writes or Gecko-code probes unless there is no playback-based path. It edits only copied `.slp` pre-frame payloads, then vanilla Dolphin consumes the replay normally. `patch_slp_preframe_window` refuses `--out == --slp` unless `--in-place` is passed intentionally.
-
-Frame-numbering rules:
-- `patch_slp_preframe_window` patch specs use raw Slippi frame numbers.
-- Slippi parsers/viewers commonly display `raw_frame + 123`.
-- Modelplay trace `frameNumber` is sequential trace/viewer indexing, not a native `.slp` frame id. If constructing a `.slp` whose parsed frame should display as a modelplay/viewer index, write raw pre-frame `frame = viewer_index - 123`.
-
-Concrete rerun7 shield-poke probe result:
-- Source symptom: `reports/modelplay/20260409_rl_doubles_v27_7000_rerun7/trace.json` around viewer frame 2124, Falco shielding vs Fox getup attack.
-- Sim trace showed Falco still holding shield (`Guard` action 179, shield active, L held), then entering damage on the next frame. This was not shield release.
-- Controlled vanilla probe from `GracefulAttachedTurtle.slp` around raw frames 4644..4685 showed neutral/toward shield entering `GuardSetOff` action 181 with shield HP loss at raw frame 4665.
-- The same vanilla setup with Falco facing away and holding a down-tilted shield entered damage action 87 at raw frame 4665 with shield HP unchanged, confirming a legitimate shield-poke shape for that setup.
-
-## Python Dependencies (use `uv`, not `pip`)
-
-Use `uv` for Python dependencies and editable installs:
-- Install deps: `uv sync`
-- Install the C extension (editable): `uv pip install -e python`
-- Run tools: `uv run python -m tools.eval.run_one_step_eval --help`
-- Build a dataset from a replay: `uv run python -m tools.slippi.make_dataset_from_slp --slp <path.slp> --out <out.msl> --ports 1,2`
-- Preprocess a suite (cached, gitignored): `uv run python -m tools.slippi.preprocess_suite --suite replays/suites/<suite>.json --datasets-dir datasets`
-- Validate a preprocessed suite: `uv run python -m tools.eval.run_one_step_suite_eval --suite replays/suites/<suite>.json --datasets-dir datasets`
-- Validate rollout streaks (generator-owned text report): `uv run python -m tools.eval.run_rollout_suite_eval --suite replays/suites/<suite>.json --datasets-dir datasets --fields action_id,animation_index,on_ground,hitlag,hitstun,state_flags --out reports/validation/rollout_suite_eval.txt`
-- Standard full report refresh (build once, write all four committed reports): `make validate-all`
-- Rollout streak capture (JSON): `uv run python -m tools.eval.run_longest_rollout_streaks --suite replays/suites/<suite>.json --datasets-dir datasets --fields action_id,animation_index,on_ground,hitlag,hitstun,state_flags --out reports/triage/current_rollout_streaks.json`
-- Rollout summary (headline metrics): `uv run python -m tools.eval.summarize_rollout_streaks --in reports/triage/current_rollout_streaks.json`
-- Rollout diff (before vs after): `uv run python -m tools.eval.diff_rollout_streaks --before reports/triage/baseline_rollout_streaks.json --after reports/triage/current_rollout_streaks.json`
-- Rollout locate rows (TSV first-break catalogue): `uv run python -m tools.eval.locate_rollout_desyncs --suite replays/suites/<suite>.json --datasets-dir datasets --fields action_id,animation_index,on_ground,hitlag,hitstun,state_flags --out reports/triage/current_rollout_desyncs.tsv`
-- Rollout locate summary/ranking: `uv run python -m tools.eval.summarize_rollout_locate --in reports/triage/current_rollout_desyncs.tsv --top 20`
-- Rollout locate diff (before vs after): `uv run python -m tools.eval.diff_rollout_locate --before reports/triage/baseline_rollout_desyncs.tsv --after reports/triage/current_rollout_desyncs.tsv --top 20`
-- Build ISO-derived data artifacts (gitignored): `uv run python -m tools.extraction.build_data --iso-dir _iso --stage grnla --chars fox,falco`
-- Patch a short `.slp` pre-frame window for controlled vanilla playback: `uv run python -m tools.dolphin.patch_slp_preframe_window --slp <src.slp> --patch-spec reports/triage/<run>/patch_spec.json --out reports/triage/<run>/probe.slp`
-- Capture playback engine dump (CLI-only, no libmelee): `uv run python -m tools.dolphin.dolphin_engine_dump --replay <path.slp> --dolphin refs/Ishiiruka/build/Binaries/dolphin-emu-nogui --iso SSBM.iso --start-frame <f0> --end-frame <f1> --out-bin reports/triage/<run>/dump.bin`
-- Extract frame-window rows from dump: `uv run python -m tools.dolphin.extract_engine_dump_rows --dump reports/triage/<run>/dump.bin --start-frame <f0> --end-frame <f1>`
-- One-row forensic dump from dataset row: `uv run python -m tools.dolphin.forensic_row_dump --row <dataset.msl:record:p> --dolphin refs/Ishiiruka/build/Binaries/dolphin-emu-nogui --iso SSBM.iso`
-
-Note: `uv sync` only manages declared dependencies; re-run `uv pip install -e python` after syncing if the extension is missing.
-Note: pass `--force` to `preprocess_suite` after any dataset schema changes (the cache is just for convenience).
-Note: `--chunk` in evaluators is the in-memory batch size for processing; it does **not** limit how many frames/records get evaluated.
-Note: fast locate-triage CLIs live under `tools/eval/`:
-- `uv run python -m tools.eval.top_triples ...` (top `(seed,ref,out)` clusters, per-dataset + suite aggregate)
-- `uv run python -m tools.eval.diff_locate --before <before.tsv> --after <after.tsv> ...` (row-level new/gone/delta diff for locate TSVs)
-- `uv run python -m tools.eval.locate_discrete_mismatches ... --format tsv` (TSV source; columns are `seed,out,ref`)
-- `uv run python -m tools.eval.locate_rollout_desyncs ... --out reports/triage/current_rollout_desyncs.tsv` (rollout first-break TSV; columns are `seed,out,ref` plus streak context and stable cluster key)
-- `uv run python -m tools.eval.summarize_rollout_locate --in <rollout.tsv>` (top rollout desync clusters by frequency, streak-loss proxy, and seeded-break count)
-- `uv run python -m tools.eval.diff_rollout_locate --before <before.tsv> --after <after.tsv>` (cluster-level new/gone/impact delta diff for patch review)
-
-Avoid invoking `pip` directly unless it is being run through `uv` (e.g. `uv pip ...`).
-
-## Tests (fast guardrails)
-
-Default tests are intended to be **very fast** and should not rebuild ISO data or reprocess replays.
-
-- Run unit tests: `uv run pytest`
-- Run integration checks (validate existing local `data/` artifacts): `uv run pytest -m integration`
-- Convenience: `make test`
-- Final validation before committing: `make check` (runs `fmt-check` + `test`)
-Note: `make validate` only reads existing `.msl` datasets; it does **not** rebuild `.slp → .msl`. Rebuild explicitly via `preprocess_suite` (use `--force` after schema/seed derivation changes).
-
-## Formatting (C)
-
-- Apply formatting: `make fmt`
-- Verify formatting (CI-friendly): `make fmt-check`
-
-Current guardrails:
-- `.msl` dataset format roundtrip / corruption detection
-- rollback dedupe policy (“keep last snapshot per frame id”)
-- C-core “no allocations after init” enforced across `reseed_seed` / `step_input` / `write_compare`
-- data contract consistency (moves reference msids that exist in extracted anim tracks)
-
-## Make targets (optional convenience)
-
-- `make build`: build the C extension (`python/setup.py build_ext --inplace`)
-- `make test`: build extension then run `pytest`
-- `make preprocess`: build/update cached `datasets/` for a suite
-- `make preprocess-aggregate`: build/update cached `datasets/` for the broader mixed-FD aggregate suite
-- `make validate`: run one-step suite eval (assumes datasets exist)
-- `make validate OUT=reports/validation/one_step_suite_eval.txt`: write the report to a file (commit this)
-- `make validate-aggregate`: write the aggregate one-step report to `reports/validation/aggregate_recent_one_step_suite_eval.txt`
-- `make validate-rollout OUT=reports/validation/rollout_suite_eval.txt`: write rollout suite report to a file (commit this)
-- `make validate-rollout-aggregate`: write the aggregate rollout report to `reports/validation/aggregate_recent_rollout_suite_eval.txt`
-- `make validate-all`: build once, then refresh all four committed validation reports under `reports/validation/`
-- `make rollout-capture ROLLOUT_JSON=reports/triage/current_rollout_streaks.json`: capture rollout JSON snapshot (gitignored)
-- `make rollout-summary ROLLOUT_JSON=reports/triage/current_rollout_streaks.json`: print suite + per-dataset rollout headline metrics
-- `make rollout-diff ROLLOUT_BEFORE=reports/triage/baseline_rollout_streaks.json ROLLOUT_AFTER=reports/triage/current_rollout_streaks.json`: print rollout metric deltas
-- `make rollout-locate ROLLOUT_LOCATE_TSV=reports/triage/current_rollout_desyncs.tsv`: write row-level rollout first-break TSV (gitignored)
-- `make rollout-locate-summary ROLLOUT_LOCATE_TSV=reports/triage/current_rollout_desyncs.tsv`: rank rollout desync clusters and per-dataset distribution
-- `make rollout-locate-diff ROLLOUT_LOCATE_BEFORE=reports/triage/baseline_rollout_desyncs.tsv ROLLOUT_LOCATE_AFTER=reports/triage/current_rollout_desyncs.tsv`: diff rollout locate TSV clusters
-- `make build_data`: extract ISO-derived `data/` artifacts
-- `make guardrail-preflight`: fast gate (build + hard-row lock pack + seed==ref diff + float top-key diff)
-- `make guardrail-preflight-full`: full suite tests + guardrail diff checks
-- `make guardrail-baseline`: regenerate committed guardrail baseline fixtures under `tests/fixtures/guardrails/current_main/`
-- `make forensic-rows ARGS='--row <dataset>:<record>:<p>'`: deterministic per-row forensic report under `reports/triage/`
-- `make dolphin-engine-dump ARGS='--replay <path.slp> --dolphin refs/Ishiiruka/build/Binaries/dolphin-emu-nogui --iso SSBM.iso --start-frame <f0> --end-frame <f1> --out-bin reports/triage/<run>/dump.bin'`
-- `make dolphin-extract ARGS='--dump reports/triage/<run>/dump.bin --start-frame <f0> --end-frame <f1>'`
-- `make dolphin-forensic-row ARGS='--row <dataset.msl:record:p> --dolphin refs/Ishiiruka/build/Binaries/dolphin-emu-nogui --iso SSBM.iso'`
-
-Notes:
-- Prefer `make build/test/validate` (they run `python/setup.py build_ext --inplace --force` via `uv run`); avoid invoking `python/setup.py` directly.
-- If you touch collision/ledge code, run `tests/test_ledge_grab_treasuredbackkangaroo_regression.py`.
-- `make guardrail-baseline` is for intentional baseline updates only (after a reviewed mainline behavior change). Do not refresh it during normal iteration.
-- Active Dolphin workflow is playback CLI dump + extraction (`tools/dolphin/README.md`). Legacy live probes were moved under `tools/dolphin/legacy/`.
-
-Validation output snapshots:
-- Commit the latest suite reports under `reports/validation/` whenever you change core sim logic:
-  - `reports/validation/one_step_suite_eval.txt`
-  - `reports/validation/rollout_suite_eval.txt`
-  - `reports/validation/aggregate_recent_one_step_suite_eval.txt`
-  - `reports/validation/aggregate_recent_rollout_suite_eval.txt`
-  - Standard command: `make validate-all`
-
-Variables:
-- `SUITE=replays/suites/fox_falco_fd_ucf084_recent.json`
-- `AGG_SUITE=replays/suites/aggregate_recent.json`
-- `DATASETS_DIR=datasets`
-- `CHUNK=4096`
-
-## Current Phase: Finish The Sim
-
-We are in last-mile correctness mode.
-
-In this phase, a discovered mismatch is usually a triage entry point, not the intended patch boundary.
-
-Default expectation:
-- Do not stop at the first motivating mismatch if the surrounding owner family is clearly still incomplete.
-- Bias toward proving a mechanic complete, not merely making the first mismatch disappear.
-- Completeness is defined per coherent owner family, not per broad feature area.
-- When touching a mechanic, prefer to close the full decomp-backed behavior surface for that family while the context is loaded.
-- Prefer the largest coherent decomp-backed family patch you can justify, not a long sequence of tiny row-by-row fixes.
-- Larger local work chunks are encouraged when they are converging on a correct mechanic boundary; do not assume the safest iteration is the smallest one.
-- During active investigation, it is acceptable to keep several adjacent same-area lines of work alive locally if that is the fastest path to a clean final patch.
-- “Not yet landable” is not a reason to discard partial progress during an active investigation. Prefer refining, narrowing, or splitting the work in place until the real boundary is understood.
-- Investigation, tooling, extraction, forensic capture, and data/seed-surface work are part of the same task as the gameplay fix. If a mechanic needs more observability before the correct implementation can be written, add that observability and continue.
-- Finding the next needed signal, probe, extractor field, or forensic lane is not a stopping condition; it defines the next task.
-- Own mechanic investigations end-to-end: source tracing, forensic/tooling improvements, proving rows, implementation, focused locks, validation, and only then a review handoff.
-- Do not return mid-investigation with diagnosis-only prose when a credible local next step still exists. The default handoff is a finished, reviewable set of changes and evidence.
-
-What “go above and beyond” means here:
-- If fixing a state-entry owner, also check the adjacent same-family exit and handoff rows.
-- If fixing a grounded variant, also check the airborne, ground-to-air, and air-to-ground counterparts when decomp suggests shared ownership.
-- If fixing shield/body/item interaction ownership, also check the corresponding persistence, hitlag, consume-vs-persist, and ongoing-contact rows.
-- If fixing a callback bridge into `Wait_IASA` or similar shared input owners, audit the relevant catch / specials / attacks / guard ordering for that exact owner family.
-- Add focused coverage for the family you touched, not only the single row that first exposed it.
-- When claiming a family is complete, prefer focused replay-real locks or short unreseeded rollout windows for the adjacent rows you audited.
-
-Examples of the intended default:
-- A Side-B mismatch is reason to audit Side-B start/main/end ownership, article persistence, hitlag persistence, and ground/air transitions.
-- A Guard mismatch is reason to audit the broader Guard / GuardOn / GuardOff / OoS handoff family in the same owner surface.
-- A `Wait_IASA` mismatch is reason to audit the relevant catch / specials / attacks / guard ordering for the related delegate states, not only the motivating row.
-
-Required discipline:
-- Do not broaden fixes without a concrete source-backed reason, but do broaden aggressively when the evidence says adjacent behavior shares the same owner.
-- Do not fit gameplay logic to a single replay row or trace symptom.
-- Keep unrelated owners separate in commits, but during local investigation you may explore multiple nearby owners together if that materially helps converge on the correct final patch.
-- If you broaden a patch, state explicitly which adjacent owners you audited and why they belong to the same mechanic family.
-- If a broadened patch is directionally right but not yet clean, prefer narrowing or refining it in place over fully reverting to a blank slate.
-- Only fully back out an attempted direction when the underlying approach is disproven or clearly creates net-worse behavior, not merely because the first boundary guess was too broad.
-- If the current mechanic needs more data, more extracted state, or more forensic visibility before the correct owner can be implemented, add that support and keep going within the same workstream.
+When a family is claimed complete:
+- add focused replay-real locks
+- run validation
+- say explicitly what residuals remain and why they are not more bridge debt
 
 ## Working Conventions
 
-- Prefer adding new “mechanics we learned about” into `SPEC.md` (Mechanics Inventory) immediately, even if not implemented yet.
-- Avoid symlinks for tooling/binaries; prefer explicit paths in config.
-- Never hand-edit `reports/validation/one_step_suite_eval.txt` or `reports/validation/rollout_suite_eval.txt` (generator-owned); put extra notes in commits/PR text or separate docs.
-- Triage/debug scripts must default outputs under gitignored `reports/triage/` (or print to stdout). Never default to `/tmp`. Never stage files under `reports/triage/`.
-- Rollout-first workflow (recommended when treating rollout as primary):
-  1) Capture baseline once: `make rollout-capture ROLLOUT_JSON=reports/triage/baseline_rollout_streaks.json`
-  2) Capture row-level baseline once: `make rollout-locate ROLLOUT_LOCATE_TSV=reports/triage/baseline_rollout_desyncs.tsv`
-  3) After changes, capture current: `make rollout-capture ROLLOUT_JSON=reports/triage/current_rollout_streaks.json`
-  4) After changes, capture current row-level locate: `make rollout-locate ROLLOUT_LOCATE_TSV=reports/triage/current_rollout_desyncs.tsv`
-  5) Inspect headline metrics: `make rollout-summary ROLLOUT_JSON=reports/triage/current_rollout_streaks.json`
-  6) Inspect row-level priorities: `make rollout-locate-summary ROLLOUT_LOCATE_TSV=reports/triage/current_rollout_desyncs.tsv`
-  7) Compare before/after headline metrics: `make rollout-diff ROLLOUT_BEFORE=reports/triage/baseline_rollout_streaks.json ROLLOUT_AFTER=reports/triage/current_rollout_streaks.json`
-  8) Compare before/after row-level clusters: `make rollout-locate-diff ROLLOUT_LOCATE_BEFORE=reports/triage/baseline_rollout_desyncs.tsv ROLLOUT_LOCATE_AFTER=reports/triage/current_rollout_desyncs.tsv`
-
-## Agent Checklist (do this every work chunk)
-
 - Do not commit unless the prompt explicitly says to.
-- Any C gameplay change without a nearby decomp/asm/data citation is not reviewable; add the citation or don’t land it.
-- In this repo phase, prefer to close the full decomp-backed owner family you are already touching, not just the first mismatch row.
-- When a comparator/modelplay bug exposes a mechanic family, treat it as symptom discovery first; audit adjacent same-family rows before declaring the area done.
-- Prefer preserving promising partial work locally and iterating on it over fully backing out to a pristine tree mid-investigation.
-- When a broad local attempt mixes multiple nearby owners, narrow it to the clean subset rather than discarding the whole line of progress unless the direction itself is wrong.
-- Treat missing observability as implementation work, not as a handoff boundary. If you need a new dump field, extractor lane, seed field, replay patch probe, or debug helper to prove the owner, build it and continue.
-- Do not stop at “I found the missing signal.” Add or obtain that signal, validate it on the proving rows, and keep going toward the final mechanic fix.
-- For autonomous investigations, return only with a good reviewable patchset: code, tests/locks, validation, and evidence. Do not return merely because the task has shifted from gameplay C to tooling/forensics/data work.
-- Test-only change: do **not** regenerate `reports/validation/one_step_suite_eval.txt` or `reports/validation/rollout_suite_eval.txt`.
-- Sim-logic change: run `make test` and `make validate-all`.
-- Seed/schema change trigger: if you touch any of:
-  - `src/api.h` seed structs, `src/api.c` reseed/write paths
-  - `src/state.h`/`src/state.c` (new SoA fields)
-  - `tools/eval/dataset.py`
-  - `tools/slippi/seed_history.py` or `tools/slippi/make_dataset_from_slp.py`
-  then you must run:
-  - `uv run python -m tools.slippi.preprocess_suite --suite $SUITE --datasets-dir $DATASETS_DIR --force`
-  and ensure the validate header stamp updates.
-- Integration regressions: never mutate `seed_t` / `ref_t1` buffers; assert replay-real preconditions instead. Always:
-  - `pytest.importorskip("msl_binding")`
-  - dataset + artifact skip policy
-  - `binding.destroy(handle)` in `finally`
-- Never key C gameplay behavior on dataset name / record id (record ids belong only in tests/triage).
-- Keep git state clean for review: avoid partial staging (`AM` / `MM`) and include `git status --porcelain` in handoffs.
+- Prefer adding newly learned mechanics to `SPEC.md`.
+- Never hand-edit generator-owned validation reports.
+- Triage/debug outputs default under gitignored `reports/triage/`, not `/tmp`.
+- Never key gameplay behavior on dataset name or record id.
+- Keep review state clean and include `git status --porcelain` in handoffs.
+
+## Validation Requirements
+
+### Tests
+- Unit / fast tests: `make test`
+- Formatting check: `make fmt-check`
+- Core sim logic changes: `make validate-all`
+
+### Seed / Schema Changes
+If you touch any of:
+- `src/api.h`, `src/api.c`
+- `src/state.h`, `src/state.c`
+- `tools/eval/dataset.py`
+- `tools/slippi/seed_history.py`
+- `tools/slippi/make_dataset_from_slp.py`
+
+then also run:
+
+```bash
+uv run python -m tools.slippi.preprocess_suite \
+  --suite replays/suites/fox_falco_fd_ucf084_recent.json \
+  --datasets-dir datasets \
+  --force
+```
+
+### Validation Reports
+- Test-only changes should not refresh committed validation reports.
+- If core sim logic changes, refresh and commit these reports:
+- `reports/validation/one_step_suite_eval.txt`
+- `reports/validation/rollout_suite_eval.txt`
+- `reports/validation/aggregate_recent_one_step_suite_eval.txt`
+- `reports/validation/aggregate_recent_rollout_suite_eval.txt`
+
+## Operational References
+
+Use the docs for detailed workflows instead of expanding this file:
+- Docs index:
+  - `AGENTS.md`: operating contract and repo-phase rules
+  - `docs/RL10_COMPLETION_CHECKLIST.md`: live RL 1.0 execution tracker
+  - `docs/DEVELOPMENT_WORKFLOWS.md`: common commands and operator workflows
+  - `SPEC.md`: mechanics inventory and learned behavior notes
+- RL 1.0 checklist: `docs/RL10_COMPLETION_CHECKLIST.md`
+- Development workflows: `docs/DEVELOPMENT_WORKFLOWS.md`
+- Data contract: `docs/DATA_CONTRACT.md`
+- Architecture: `docs/ARCHITECTURE.md`
+- Mismatch roadmap: `docs/roadmaps/mismatch_roadmap.md`
+- Decomp process ordering: `docs/DECOMP_PROC_ORDER.md`
+- Modelplay viewer workflow: `tools/modelplay/README.md`
+- Dolphin playback / forensic workflow: `tools/dolphin/README.md`
+- Legacy probe notes: `docs/legacy_melee_sim/`
+
+Useful commands:
+
+```bash
+make test
+make fmt-check
+make validate-all
+uv run python -m tools.eval.run_one_step_suite_eval --suite replays/suites/fox_falco_fd_ucf084_recent.json --datasets-dir datasets
+uv run python -m tools.eval.run_rollout_suite_eval --suite replays/suites/fox_falco_fd_ucf084_recent.json --datasets-dir datasets --fields action_id,animation_index,on_ground,hitlag,hitstun,state_flags --out reports/validation/rollout_suite_eval.txt
+```
+
+## Handoff Standard
+
+Every substantial handoff should say:
+- what owner family was targeted
+- whether the family is now closed or still partial
+- which bridges were deleted
+- which residuals remain
+- why each remaining residual is decomp-justified
+- what validation was run
+- `git status --porcelain`

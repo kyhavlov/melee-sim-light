@@ -1,5 +1,9 @@
 # Mismatch Roadmap
 
+Status note:
+- This document is a taxonomy / baseline-analysis artifact, not the live execution tracker.
+- For current RL 1.0 priority order and family-closure status, use `docs/RL10_COMPLETION_CHECKLIST.md`.
+
 Baseline snapshot:
 - Date: 2026-04-01
 - Commit: `ffa903a`
