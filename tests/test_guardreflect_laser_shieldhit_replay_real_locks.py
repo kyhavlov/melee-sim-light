@@ -86,12 +86,7 @@ def test_locomotion_laser_guardsetoff_family_lock(case: _Case) -> None:
             for field in ("exists", "type", "owner", "instance_id"):
                 assert int(out_t["items"][0][field]) == int(ref_t["items"][0][field]), case.note
 
-            if case.dataset_rel.endswith("AttachedGoodNaturedGuanaco.msl"):
-                assert [int(x) for x in out_t["state_flags"][p]] == [20, 33, 128, 96, 0], case.note
-                assert [int(x) for x in ref_t["state_flags"][p]] == [4, 33, 128, 96, 0], case.note
-            else:
-                assert [int(x) for x in out_t["state_flags"][p]] == [84, 33, 128, 96, 0], case.note
-                assert [int(x) for x in ref_t["state_flags"][p]] == [68, 33, 128, 96, 0], case.note
+            assert [int(x) for x in out_t["state_flags"][p]] == [int(x) for x in ref_t["state_flags"][p]], case.note
             continue
 
         assert int(out_t["action_id"][p]) == int(ref_t["action_id"][p]), case.note

@@ -8,7 +8,7 @@
 # preprocess_suite stamp:
 #   path: datasets/aggregate_recent/.preprocess_meta.json
 #   force_used: True  built: 15  skipped: 0
-#   seed_dtype_itemsize: 2836  sample_dtype_itemsize: 3922
+#   seed_dtype_itemsize: 2852  sample_dtype_itemsize: 3938
 #
 # Regenerate gitignored ISO-derived data artifacts (if missing/stale):
 # - Opcode-25 airborne-state timelines (data/airborne_state_events/{fox,falco}.bin):
@@ -49,22 +49,22 @@ rollout.first_mismatch_seeded_total: 68
 
 == datasets/aggregate_recent/replays/validation/aggregate_recent/FavorableSuperficialPig.msl ==
 rollout.best_len: 388
-rollout.streak_count: 207
+rollout.streak_count: 206
 rollout.streak_len.median: 40
 rollout.streak_len.p90: 134
 rollout.streak_len.p95: 162
 rollout.streak_len.max: 388
-rollout.first_mismatch_total: 216
+rollout.first_mismatch_total: 215
 rollout.first_mismatch_seeded_total: 124
 
 == datasets/aggregate_recent/replays/validation/aggregate_recent/HilariousVillainousGiraffe.msl ==
 rollout.best_len: 387
-rollout.streak_count: 118
+rollout.streak_count: 119
 rollout.streak_len.median: 64
 rollout.streak_len.p90: 167
 rollout.streak_len.p95: 210
 rollout.streak_len.max: 387
-rollout.first_mismatch_total: 124
+rollout.first_mismatch_total: 125
 rollout.first_mismatch_seeded_total: 76
 
 == datasets/aggregate_recent/replays/validation/aggregate_recent/HungryImportantSnake.msl ==
@@ -89,22 +89,22 @@ rollout.first_mismatch_seeded_total: 100
 
 == datasets/aggregate_recent/replays/validation/aggregate_recent/MotionlessAggressiveJay.msl ==
 rollout.best_len: 280
-rollout.streak_count: 173
-rollout.streak_len.median: 45
+rollout.streak_count: 171
+rollout.streak_len.median: 47
 rollout.streak_len.p90: 125
 rollout.streak_len.p95: 148
 rollout.streak_len.max: 280
-rollout.first_mismatch_total: 179
-rollout.first_mismatch_seeded_total: 103
+rollout.first_mismatch_total: 177
+rollout.first_mismatch_seeded_total: 98
 
 == datasets/aggregate_recent/replays/validation/aggregate_recent/PositiveRevolvingHyena.msl ==
 rollout.best_len: 295
-rollout.streak_count: 180
-rollout.streak_len.median: 43
-rollout.streak_len.p90: 154
-rollout.streak_len.p95: 202
+rollout.streak_count: 178
+rollout.streak_len.median: 46
+rollout.streak_len.p90: 159
+rollout.streak_len.p95: 204
 rollout.streak_len.max: 295
-rollout.first_mismatch_total: 187
+rollout.first_mismatch_total: 185
 rollout.first_mismatch_seeded_total: 116
 
 == datasets/aggregate_recent/replays/validation/aggregate_recent/PriceyPartialAlbatross.msl ==
@@ -115,7 +115,7 @@ rollout.streak_len.p90: 135
 rollout.streak_len.p95: 222
 rollout.streak_len.max: 496
 rollout.first_mismatch_total: 177
-rollout.first_mismatch_seeded_total: 137
+rollout.first_mismatch_seeded_total: 136
 
 == datasets/aggregate_recent/replays/validation/aggregate_recent/PutridJoyousOryx.msl ==
 rollout.best_len: 248
@@ -139,23 +139,23 @@ rollout.first_mismatch_seeded_total: 207
 
 == datasets/aggregate_recent/replays/validation/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl ==
 rollout.best_len: 392
-rollout.streak_count: 87
-rollout.streak_len.median: 64
+rollout.streak_count: 85
+rollout.streak_len.median: 65
 rollout.streak_len.p90: 193
 rollout.streak_len.p95: 264
 rollout.streak_len.max: 392
-rollout.first_mismatch_total: 88
-rollout.first_mismatch_seeded_total: 30
+rollout.first_mismatch_total: 86
+rollout.first_mismatch_seeded_total: 29
 
 == datasets/aggregate_recent/replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.msl ==
 rollout.best_len: 327
-rollout.streak_count: 130
-rollout.streak_len.median: 65
-rollout.streak_len.p90: 196
+rollout.streak_count: 128
+rollout.streak_len.median: 66
+rollout.streak_len.p90: 203
 rollout.streak_len.p95: 258
 rollout.streak_len.max: 327
-rollout.first_mismatch_total: 129
-rollout.first_mismatch_seeded_total: 50
+rollout.first_mismatch_total: 127
+rollout.first_mismatch_seeded_total: 48
 
 == datasets/aggregate_recent/replays/validation/cardinal_1.0_recent/QuerulousGrandDinosaur.msl ==
 rollout.best_len: 631
@@ -169,20 +169,20 @@ rollout.first_mismatch_seeded_total: 47
 
 == datasets/aggregate_recent/replays/validation/cardinal_1.0_recent/TreasuredBackKangaroo.msl ==
 rollout.best_len: 309
-rollout.streak_count: 94
-rollout.streak_len.median: 61
-rollout.streak_len.p90: 171
+rollout.streak_count: 95
+rollout.streak_len.median: 62
+rollout.streak_len.p90: 170
 rollout.streak_len.p95: 215
 rollout.streak_len.max: 309
-rollout.first_mismatch_total: 94
-rollout.first_mismatch_seeded_total: 38
+rollout.first_mismatch_total: 95
+rollout.first_mismatch_seeded_total: 37
 
 == suite summary ==
-overall.rollout.streak_count: 2097
+overall.rollout.streak_count: 2090
 overall.rollout.streak_len.median: 51
 overall.rollout.streak_len.p90: 156
 overall.rollout.streak_len.p95: 196
 overall.rollout.streak_len.max: 631
 overall.rollout.best_len.max: 631
-overall.rollout.first_mismatch_total: 2348
-overall.rollout.first_mismatch_seeded_total: 1356
+overall.rollout.first_mismatch_total: 2341
+overall.rollout.first_mismatch_seeded_total: 1346

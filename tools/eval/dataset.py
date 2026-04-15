@@ -258,6 +258,13 @@ SEED_DTYPE = np.dtype(
         # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_GuardSetOff_Anim,ftCo_80093BC0}
         # refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
         ("guard_setoff_post_hitlag_owner_u8", _arr("u1", MAX_PLAYERS)),
+        # Narrow GuardSetOff hidden exit-rate reconstruction.
+        # This field may use the first future same-segment non-hitlag GuardSetOff row because the
+        # replay-visible hidden owner only surfaces there. It is deliberately separate from the
+        # strictly causal frame_speed_mul_f32 seed lane.
+        # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_80092F2C,ftCo_GuardSetOff_Anim}
+        # refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
+        ("guard_setoff_exit_frame_speed_mul_f32", _arr("<f4", MAX_PLAYERS)),
         ("jumps_left", _arr("u1", MAX_PLAYERS)),
         ("stocks", _arr("u1", MAX_PLAYERS)),
         ("kneebend_jump_input", _arr("u1", MAX_PLAYERS)),

@@ -838,6 +838,19 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
       // Seed deterministic anim timebase from Slippi post-frame `state_age` (fp->cur_anim_frame)
       // plus a strictly-causal derived fp->frame_speed_mul.
       msl_anim_timebase_seed(batch, idx, seed->anim_frame_f32[p], seed->frame_speed_mul_f32[p]);
+      // Narrow GuardSetOff hidden-rate override:
+      // frame_speed_mul_f32 above remains strictly causal. For GuardSetOff last-hitlag rows,
+      // Slippi exposes the ftCo_80092F2C x19A4/lightshield-owned rate only after hitlag exits, so
+      // preprocessing may seed this explicit GuardSetOff-only lane instead of weakening the general
+      // frame_speed_mul_f32 contract.
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_80092F2C,ftCo_GuardSetOff_Anim}
+      // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
+      const float guard_setoff_exit_rate = seed->guard_setoff_exit_frame_speed_mul_f32[p];
+      if (seed->action_id[p] == (uint16_t)MSL_ACT_GUARD_SET_OFF && seed->hitlag[p] == 1u &&
+          seed->guard_setoff_hitlag_exit_phase_u8[p] == 2u && isfinite(guard_setoff_exit_rate) &&
+          guard_setoff_exit_rate > 0.0f) {
+        batch->state.frame_speed_mul_fp_q16_16[idx] = msl_q16_16_from_f32(guard_setoff_exit_rate);
+      }
       float walk_anim_source_vel = seed->walk_anim_source_vel_f32[p];
       if (!isfinite(walk_anim_source_vel)) {
         walk_anim_source_vel = 0.0f;

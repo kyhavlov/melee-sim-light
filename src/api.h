@@ -634,6 +634,25 @@ typedef struct MslSeed {
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_GuardSetOff_Anim,ftCo_80093BC0}
   // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A1BC,Fighter_8006A360}
   uint8_t guard_setoff_post_hitlag_owner_u8[MSL_MAX_PLAYERS];
+  // GuardSetOff-specific hidden exit anim-rate lane.
+  //
+  // This is intentionally separate from frame_speed_mul_f32. The general frame_speed_mul_f32 seed
+  // remains strictly causal; this field is a narrow replay-facing reconstruction for GuardSetOff
+  // last-hitlag rows where Slippi exposes the hidden ftCo_80092F2C x19A4/lightshield-owned rate
+  // only on the first future non-hitlag GuardSetOff row.
+  //
+  // Seed representation:
+  // - 0.0: no explicit GuardSetOff exit-rate override.
+  // - >0.0: use this rate only when reseeding a GuardSetOff last-hitlag row
+  //   (guard_setoff_hitlag_exit_phase_u8 == 2).
+  //
+  // Decomp / ownership anchors:
+  // - ftCo_80092F2C computes the entry rate from fp->x19A4 and fp->lightshield_amount.
+  // - Fighter_8006A360 advances ftAnim as hitlag exits before ftCo_GuardSetOff_Anim resumes.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80092F2C
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_GuardSetOff_Anim
+  // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
+  float guard_setoff_exit_frame_speed_mul_f32[MSL_MAX_PLAYERS];
   uint8_t jumps_left[MSL_MAX_PLAYERS];
   uint8_t stocks[MSL_MAX_PLAYERS];
 

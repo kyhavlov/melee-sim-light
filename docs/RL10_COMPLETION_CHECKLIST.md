@@ -73,14 +73,23 @@ Recommended sequence for the next deep passes:
 ## Active / Next Deep Passes
 
 ### 2. Guard release / guard timer / guardreflect family
-- Status: `active / next deep pass`
+- Status: `closed / effectively closed`
 - Roadmap families: `F01_guard_release_collision`, `F02_guard_timer_flags`, parts of `F15_guard_item_ownership`
 - Owner boundary: `Guard`, `GuardSetOff`, `GuardReflect`, shield-release ordering, shield-hit followups, reflect timing, timer/state-flag ownership
-- Primary sim files: `src/combat.c`, `src/items.c`, `src/timers.c`, `src/step.c`
-- Acceptance bar:
-  - shield-hit followups owned by one coherent guard family path
-  - timer/state-flag behavior settles at the animation callback boundary
-  - item/laser interactions no longer force broad guard bridges
+- Primary sim files: `src/action.c`, `src/state_flags.c`, `src/shields.c`, `src/combat.c`, `src/items.c`
+- Closed scope:
+  - `F02_guard_timer_flags` post-hitlag timer/state-flag handoff is cleaned up through explicit GuardSetOff handoff owners in `src/state_flags.c`,
+    causal GuardSetOff entry-rate reconstruction, and the narrow non-causal `guard_setoff_exit_frame_speed_mul_f32` lane for hidden last-hitlag
+    `x19A4/lightshield_amount` rates that Slippi only exposes on the first post-hitlag row
+  - `F01_guard_release_collision` shield-release / shield-hit followups now route through the shared GuardOn/GuardReflect callback order:
+    `GuardOn_Anim` drain before `GuardOn_IASA`, GuardReflect active-window shield-hit gating, and GuardReflect BODY-hit followup carry
+  - item/laser handling in this owner family is narrowed to guard-owned predicates
+- Residuals outside the common guard owner:
+  - remaining item-side reflect transfer/speed TODOs stay scoped to item ownership, not Guard / GuardSetOff / GuardReflect callback or timer ownership
+- Locks / validation:
+  - focused locks cover the Dash -> GuardOn -> GuardReflect BODY followup, locomotion -> GuardSetOff laser handoff,
+    GuardSetOff hitlag-exit action-frame parity, the explicit GuardSetOff exit-rate lane, and GuardReflect active-timer handoff rows
+  - full validation is materially better than clean HEAD for both one-step and rollout totals
 
 ### 3. Locomotion / grounded transition / motion-entry timing family
 - Status: `active / next deep pass`

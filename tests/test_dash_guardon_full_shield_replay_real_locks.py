@@ -117,19 +117,18 @@ def test_dash_full_shield_guardon_family_rows(case: _Case) -> None:
     seed_row, out_row, ref_row = _step_one_row(dataset_path, record)
 
     if record == 9343:
-        # Residual row is intentionally kept explicit for this family: the current lane fixes the
-        # fresh GuardOn admission frame, but the follow-up hit-ownership row is not yet corrected.
+        # GuardOn -> GuardReflect followup owner:
+        # - GuardOn_Anim drains shield before GuardOn_IASA consumes the LR edge into GuardReflect,
+        # - the laser then resolves through BODY damage, while guard-reflect timer bits remain
+        #   visible on the damage post-frame.
+        # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
+        #   ftCo_GuardOn_Anim,ftCo_GuardOn_IASA,ftCo_8009388C}
+        # refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
         assert int(seed_row["action_id"][p]) == 178, case.note
         assert int(seed_row["items"][0]["exists"]) == 1, case.note
-        assert int(out_row["action_id"][p]) == 182, case.note
-        assert int(out_row["action_frame"][p]) == -2, case.note
-        assert int(out_row["animation_index"][p]) == 0xFFFFFFFF, case.note
-        assert int(out_row["hitlag"][p]) == 0, case.note
-        assert int(out_row["hitstun"][p]) == 0, case.note
-        assert int(out_row["items"][0]["exists"]) == 1, case.note
-        assert [int(x) for x in out_row["state_flags"][p]] == [52, 0, 0, 112, 0], case.note
-        assert [int(x) for x in ref_row["state_flags"][p]] == [36, 48, 0, 98, 0], case.note
-        return
+        assert int(seed_row["seed_prev_action_id"][p]) == 20, case.note
+        assert int(seed_row["guard_reflect_timer_x14"][p]) == 0, case.note
+        assert int(seed_row["guard_reflect_timer_x18"][p]) == 0, case.note
 
     for field in ("action_id", "action_frame", "animation_index", "hitlag", "instance_id"):
         assert int(out_row[field][p]) == int(ref_row[field][p]), (
@@ -141,6 +140,7 @@ def test_dash_full_shield_guardon_family_rows(case: _Case) -> None:
             f"{case.note}: stable field={field} expected={int(ref_row[field][p])} got={int(out_row[field][p])}"
         )
 
+    assert float(out_row["shield_hp"][p]) == pytest.approx(float(ref_row["shield_hp"][p]), abs=1e-3)
     assert [int(x) for x in out_row["state_flags"][p]] == [int(x) for x in ref_row["state_flags"][p]], case.note
     for field in ("exists", "type", "owner", "instance_id"):
         assert int(out_row["items"][0][field]) == int(ref_row["items"][0][field]), (

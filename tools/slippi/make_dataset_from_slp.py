@@ -2209,16 +2209,29 @@ def _main_impl(args) -> None:
             if submotion_id < 0:
                 continue
             events = sorted(move.get("events", []), key=lambda ev: (int(ev.get("frame", 0)), ev.get("kind", "")))
+            events_by_frame: dict[int, list[dict]] = {}
+            max_frame = 0
+            for ev in events:
+                frame = int(ev.get("frame", 0))
+                events_by_frame.setdefault(frame, []).append(ev)
+                max_frame = max(max_frame, frame)
             active_by_hitbox: dict[int, int] = {}
             frame_damage: dict[int, int] = {}
-            event_frames = sorted({int(ev.get("frame", 0)) for ev in events})
-            for frame in event_frames:
-                for ev in (e for e in events if int(e.get("frame", 0)) == frame):
+            for frame in range(0, max_frame + 2):
+                for ev in events_by_frame.get(frame, []):
                     kind = ev.get("kind")
                     if kind == "create_hitbox":
                         hb = ev.get("data", {}).get("hitbox", {})
                         hb_id = int(hb.get("hitbox_id", 0))
                         active_by_hitbox[hb_id] = _get_env_dmg_local(float(hb.get("damage", 0.0)))
+                    elif kind == "set_hitbox_damage":
+                        hb_id = int(ev.get("data", {}).get("idx", 0))
+                        if hb_id in active_by_hitbox:
+                            active_by_hitbox[hb_id] = _get_env_dmg_local(
+                                float(ev.get("data", {}).get("damage", 0.0))
+                            )
+                    elif kind == "remove_hitbox":
+                        active_by_hitbox.pop(int(ev.get("data", {}).get("idx", 0)), None)
                     elif kind == "clear_hitboxes":
                         active_by_hitbox.clear()
                 frame_damage[frame] = max(active_by_hitbox.values(), default=0)
@@ -2407,6 +2420,9 @@ def _main_impl(args) -> None:
     post_percent_all = np.zeros((n_frames, 4), dtype=np.float32)
     frame_speed_mul_all = np.zeros((n_frames, 4), dtype=np.float32)
     post_hitlag_u16_all = np.zeros((n_frames, 4), dtype=np.uint16)
+    post_shield_f32_all = np.zeros((n_frames, 4), dtype=np.float32)
+    post_animation_index_u32_all = np.zeros((n_frames, 4), dtype=np.uint32)
+    lightshield_amount_all = np.zeros((n_frames, 4), dtype=np.float32)
     post_instance_hit_by_u16_all = np.zeros((n_frames, 4), dtype=np.uint16)
     post_state_flags_u8 = np.zeros((n_frames, 4, 5), dtype=np.uint8)
     ports_struct = frames.field("ports")
@@ -2474,6 +2490,7 @@ def _main_impl(args) -> None:
         post_percent = _to_numpy(post.field("percent")).astype(np.float32)
         post_percent_all[:, slot] = post_percent
         post_shield = _to_numpy(post.field("shield")).astype(np.float32)
+        post_shield_f32_all[:, slot] = post_shield
         post_stocks = _to_numpy(post.field("stocks")).astype(np.uint8)
         post_jumps = _to_numpy(post.field("jumps")).astype(np.uint8)
         post_airborne = _to_numpy(post.field("airborne")).astype(np.uint8)
@@ -2491,6 +2508,7 @@ def _main_impl(args) -> None:
         l_cancel = _to_numpy(post.field("l_cancel")).astype(np.uint8)
         ground_id = _to_numpy(post.field("ground")).astype(np.uint16)
         animation_index = _to_numpy(post.field("animation_index")).astype(np.uint32)
+        post_animation_index_u32_all[:, slot] = animation_index
         instance_hit_by = _to_numpy(post.field("last_hit_by_instance")).astype(np.uint16)
         post_instance_hit_by_u16_all[:, slot] = instance_hit_by
         instance_id = _to_numpy(post.field("instance_id")).astype(np.uint16)
@@ -2868,14 +2886,16 @@ def _main_impl(args) -> None:
         samples["seed_t"]["guard_release_latched_xc"][:, slot] = guard_release_latched_xc[:-1]
         samples["seed_t"]["guard_x10"][:, slot] = guard_x10[:-1]
         samples["seed_t"]["lightshield_amount"][:, slot] = lightshield_amount[:-1]
-        samples["seed_t"]["guard_setoff_hitlag_damage_min"][:, slot] = derive_guard_setoff_hitlag_damage_min(
+        lightshield_amount_all[:, slot] = lightshield_amount
+        guard_setoff_hitlag_damage_min = derive_guard_setoff_hitlag_damage_min(
             action_id=post_state,
             action_frame_i16=post_state_age,
             hitlag=post_hitlag,
             hitlag_dmg_mul=float(common["hitlag_dmg_mul"]),
             hitlag_base=float(common["hitlag_base"]),
             act_guard_set_off=act_guard_set_off,
-        )[:-1]
+        )
+        samples["seed_t"]["guard_setoff_hitlag_damage_min"][:, slot] = guard_setoff_hitlag_damage_min[:-1]
         guard_setoff_hitlag_exit_phase = derive_guard_setoff_hitlag_exit_phase(
             action_id=post_state,
             hitlag=post_hitlag,
@@ -3245,6 +3265,139 @@ def _main_impl(args) -> None:
         samples["seed_t"]["turn_frames_to_turn"][:, slot] = turn_frames_to_turn[:-1]
         samples["seed_t"]["turn_has_turned"][:, slot] = turn_has_turned[:-1]
         samples["seed_t"]["turn_x8"][:, slot] = turn_x8[:-1]
+
+    # GuardSetOff frozen-hitlag frame-speed ownership (strictly causal):
+    # - ftColl_80076CBC writes the defender's hidden x19A4 from the current shield-hit max int
+    #   damage before ftCo_80092F2C enters GuardSetOff.
+    # - ftCo_80092F2C then derives `fp->frame_speed_mul` from x19A4 and the current
+    #   lightshield_amount; Fighter_8006A360 freezes state_age while hitlag is active.
+    # - Slippi does not expose x19A4 directly, so reconstruct the GuardSetOff entry rate from
+    #   current/past replay-visible state: active attacker hitbox damage from extracted move data,
+    #   stale queue state, shield HP drop when it reveals the hidden lightshield lane, and the
+    #   decomp common-params formula. This preserves frame_speed_mul_f32 as a prefix-causal seed.
+    #
+    # Decomp/data anchors:
+    # - refs/melee/src/melee/ft/ftcoll.c::ftColl_80076CBC
+    # - refs/melee/src/melee/ft/ft_0881.c::ft_80089228
+    # - refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80092F2C
+    # - data/moves/{fox,falco}.json create_hitbox damage timelines
+    shield_hit_mul = float(common["shield_hit_damage_mul"])
+    shield_hit_base = float(common["shield_hit_damage_base"])
+    shield_hit_ls_min = float(common["shield_hit_lightshield_min"])
+    shield_hit_ls_max = float(common["shield_hit_lightshield_max"])
+    shield_stun_mul = float(common["shield_stun_mul"])
+    shield_stun_base = float(common["shield_stun_base"])
+    shield_stun_ls_min = float(common["shield_stun_lightshield_min"])
+    shield_stun_ls_max = float(common["shield_stun_lightshield_max"])
+
+    def _guardsetoff_infer_hidden_light(i: int, defender: int, int_dmg: int) -> tuple[bool, float]:
+        light = float(lightshield_amount_all[i, defender])
+        if light > 0.0:
+            return True, min(max(light, 0.0), 1.0)
+        if i <= 0 or int_dmg <= 0 or shield_hit_mul <= 0.0:
+            return False, min(max(light, 0.0), 1.0)
+        shield_drop = float(post_shield_f32_all[i - 1, defender]) - float(post_shield_f32_all[i, defender])
+        if shield_drop <= 0.0:
+            return False, min(max(light, 0.0), 1.0)
+        hit_den = shield_hit_mul * float(int_dmg)
+        if hit_den <= 0.0:
+            return False, min(max(light, 0.0), 1.0)
+        hit_light_term = 1.0 - ((shield_drop - shield_hit_base) / hit_den)
+        if not np.isfinite(hit_light_term):
+            return False, min(max(light, 0.0), 1.0)
+        if shield_hit_ls_max == shield_hit_ls_min:
+            return False, min(max(light, 0.0), 1.0)
+        inferred = (hit_light_term - shield_hit_ls_min) / (shield_hit_ls_max - shield_hit_ls_min)
+        if inferred < -0.001 or inferred > 1.001:
+            return False, min(max(light, 0.0), 1.0)
+        return True, min(max(float(inferred), 0.0), 1.0)
+
+    def _guardsetoff_active_int_damage(i: int, defender: int) -> int:
+        best = 0
+        for attacker in range(num_players):
+            if attacker == defender or int(post_hitlag_u16_all[i, attacker]) == 0:
+                continue
+            anim_idx = int(post_animation_index_u32_all[i, attacker])
+            anim_frame = int(post_state_age_all[i, attacker])
+            if anim_frame < 0:
+                anim_frame = 0
+            int_dmg = (
+                char_active_shield_hit_int_damage.get(int(post_char_id_u8[i, attacker]), {})
+                .get(anim_idx, {})
+                .get(anim_frame, 0)
+            )
+            if int_dmg <= 0:
+                continue
+            move_id = int(hist.attack_id[i, attacker])
+            stale_mult = _stale_multiplier_from_seed_queue(
+                int(hist.stale_queue_index[i, attacker]),
+                hist.stale_move_id[i, attacker],
+                move_id,
+            )
+            int_dmg = _get_env_dmg_local(float(int_dmg) * stale_mult)
+            if int_dmg > best:
+                best = int_dmg
+        return best
+
+    for defender in range(num_players):
+        carry_rate = np.float32(0.0)
+        for i in range(n_frames):
+            if int(post_action_id_u16[i, defender]) != int(act_guard_set_off):
+                carry_rate = np.float32(0.0)
+                continue
+            cur_hl = int(post_hitlag_u16_all[i, defender])
+            prev_action = int(post_action_id_u16[i - 1, defender]) if i > 0 else -1
+            prev_hl = int(post_hitlag_u16_all[i - 1, defender]) if i > 0 else 0
+            prev_af = int(post_state_age_all[i - 1, defender]) if i > 0 else 0
+            cur_af = int(post_state_age_all[i, defender])
+            segment_entry = (
+                i == 0
+                or prev_action != int(act_guard_set_off)
+                or cur_hl > prev_hl
+                or cur_af < prev_af
+            )
+            if segment_entry and cur_hl > 0:
+                int_dmg = _guardsetoff_active_int_damage(i, defender)
+                if int_dmg > 0:
+                    inferred_light_ok, hidden_light = _guardsetoff_infer_hidden_light(i, defender, int_dmg)
+                    powershield_active = (int(post_state_flags_u8[i, defender, 3]) & 0x20) != 0
+                    if not (powershield_active or inferred_light_ok):
+                        carry_rate = np.float32(0.0)
+                        continue
+                    stun_light_term = hidden_light * (shield_stun_ls_max - shield_stun_ls_min) + shield_stun_ls_min
+                    stun_frames = shield_stun_mul * (float(int_dmg) * (1.0 - stun_light_term)) + shield_stun_base
+                    # GuardSetOff uses ftCo_SM_GuardDamage as its submotion.
+                    end_frame = end_frames.by_char_id.get(int(post_char_id_u8[i, defender]), {}).get(40)
+                    if end_frame is not None and stun_frames > 0.0:
+                        carry_rate = np.float32((np.float32(end_frame) + np.float32(0.1)) / np.float32(stun_frames))
+            if cur_hl > 0 and float(carry_rate) > 0.0:
+                frame_speed_mul_all[i, defender] = carry_rate
+        samples["seed_t"]["frame_speed_mul_f32"][:, defender] = frame_speed_mul_all[:-1, defender]
+
+    # GuardSetOff hidden exit-rate reconstruction (intentionally non-causal, explicit lane):
+    # Some GuardSetOff last-hitlag rows do not contain enough current/past replay-visible state to
+    # reconstruct the exact ftCo_80092F2C x19A4/lightshield-owned rate. The first same-segment
+    # non-hitlag GuardSetOff post-frame exposes that hidden rate after hitlag exits, so carry it in a
+    # GuardSetOff-specific seed lane instead of weakening the general frame_speed_mul_f32 contract.
+    #
+    # Runtime consumes this only for GuardSetOff phase-2 rows; 0.0 means no explicit override.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_80092F2C,ftCo_GuardSetOff_Anim}
+    # refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
+    guard_setoff_exit_frame_speed = np.zeros((n_frames, 4), dtype=np.float32)
+    for defender in range(num_players):
+        for i in range(0, max(0, n_frames - 1)):
+            if (
+                int(post_action_id_u16[i, defender]) == int(act_guard_set_off)
+                and int(post_hitlag_u16_all[i, defender]) == 1
+                and int(post_action_id_u16[i + 1, defender]) == int(act_guard_set_off)
+                and int(post_hitlag_u16_all[i + 1, defender]) == 0
+            ):
+                rate = np.float32(frame_speed_mul_all[i + 1, defender])
+                if float(rate) > 0.0 and np.isfinite(float(rate)):
+                    guard_setoff_exit_frame_speed[i, defender] = rate
+        samples["seed_t"]["guard_setoff_exit_frame_speed_mul_f32"][:, defender] = (
+            guard_setoff_exit_frame_speed[:-1, defender]
+        )
 
     # Owner-indexed ProcessHit source-clear bridge depends on current source-owner seed-visible
     # motion state from the other port, so derive it after all per-port seed arrays are populated.

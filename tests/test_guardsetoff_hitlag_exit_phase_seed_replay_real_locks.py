@@ -16,7 +16,6 @@ class _Case:
     p: int
     expected_target_phase: int
     expected_target_plus1_phase: int
-    expected_out_action_frame: int
     expected_ref_action_frame: int
     note: str
 
@@ -31,9 +30,8 @@ class _Case:
             p=1,
             expected_target_phase=2,
             expected_target_plus1_phase=3,
-            expected_out_action_frame=1,
             expected_ref_action_frame=2,
-            note="AGN blocker A is the last-hitlag GuardSetOff row before the first post-hitlag ownership handoff row",
+            note="AGN row A is the last-hitlag GuardSetOff row before the first post-hitlag ownership handoff row",
         ),
         _Case(
             dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl",
@@ -41,9 +39,8 @@ class _Case:
             p=0,
             expected_target_phase=2,
             expected_target_plus1_phase=3,
-            expected_out_action_frame=1,
             expected_ref_action_frame=3,
-            note="AGN blocker B follows the same last-hitlag -> first-post-hitlag GuardSetOff ownership pattern",
+            note="AGN row B follows the same last-hitlag -> first-post-hitlag GuardSetOff ownership pattern",
         ),
         _Case(
             dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl",
@@ -51,18 +48,18 @@ class _Case:
             p=0,
             expected_target_phase=2,
             expected_target_plus1_phase=3,
-            expected_out_action_frame=10,
             expected_ref_action_frame=6,
-            note="AGN blocker C is also a last-hitlag GuardSetOff seed row even when powershield state diverges",
+            note="AGN row C is also a last-hitlag GuardSetOff seed row even when powershield state diverges",
         ),
     ],
 )
 def test_guardsetoff_hitlag_exit_phase_seed_locks_blockers_and_adjacent_controls(case: _Case) -> None:
-    # Foundational F02 blocker lock:
+    # Foundational F02 handoff lock:
     # - ftCo_80092F2C shapes GuardSetOff entry rate before the frozen hitlag tail.
     # - Fighter_8006A360 advances ftAnim before ftCo_GuardSetOff_Anim resumes callback-owned rate
     #   on the first post-hitlag GuardSetOff row.
-    # - This seed lane names that handoff phase without changing runtime behavior.
+    # - This seed lane names that handoff phase, while the causal frame-speed derivation makes the
+    #   last-hitlag row use the same action-frame owner as replay.
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80092F2C
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_GuardSetOff_Anim
     # refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
@@ -82,8 +79,8 @@ def test_guardsetoff_hitlag_exit_phase_seed_locks_blockers_and_adjacent_controls
     assert int(samples[case.target_record + 2]["seed_t"]["guard_setoff_hitlag_exit_phase_u8"][p]) == 0, case.note
 
     _, ref_target, out_target = _run_one_step_row(dataset_path, case.target_record, p)
-    assert int(out_target["action_frame"][p]) == case.expected_out_action_frame, case.note
     assert int(ref_target["action_frame"][p]) == case.expected_ref_action_frame, case.note
+    assert int(out_target["action_frame"][p]) == int(ref_target["action_frame"][p]), case.note
 
     for rec in (case.target_record - 1, case.target_record + 1):
         _, ref_row, out_row = _run_one_step_row(dataset_path, rec, p)

@@ -311,11 +311,14 @@ void hurtboxes_refresh(MslBatch* batch) {
       uint16_t msid = 0u;
       if (anim_u32 > 0xFFFFu) {
         if (action_id == (uint16_t)MSL_ACT_GUARD_REFLECT &&
-            batch->state.action_frame[idx] <= (int16_t)-2) {
+            batch->state.action_frame[idx] <= (int16_t)-2 &&
+            batch->state.prev_action_id[idx] != (uint16_t)MSL_ACT_GUARD_ON) {
           // GuardReflect no-submotion late-phase snapshots are ordering-sensitive with shield
-          // descriptor ownership (x221B_b0 via ftColl_8007B1B8). Preserve raw snapshot geometry
-          // on Slippi state_age sentinel rows (action_frame=-2) to avoid synthesizing pre-ownership
-          // BODY contacts from action_id-only fallback.
+          // descriptor ownership (x221B_b0 via ftColl_8007B1B8). Preserve raw snapshot geometry on
+          // the locomotion-entry lanes that still own shield desc, but let GuardOn_IASA powershield
+          // entry (ftCo_8009388C) fall through to the GuardReflect submotion fallback because that
+          // entry path already cleared shield desc and can take BODY damage on the same frame.
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_8009388C
           // refs/melee/src/melee/ft/ftcoll.c::ftColl_8007B1B8
           // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
           if (hit_status != 0) {

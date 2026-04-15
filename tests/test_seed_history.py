@@ -1113,6 +1113,7 @@ def test_derive_guard_reflect_timer_is_prefix_invariant() -> None:
     )
 
     assert np.array_equal(out0, out1[: out0.size])
+
     out0_18 = derive_guard_reflect_timer_x18(
         action_id_u16=a_prefix,
         hitlag_u16=hl_prefix,
@@ -1126,7 +1127,6 @@ def test_derive_guard_reflect_timer_is_prefix_invariant() -> None:
         reflect_total_frames_x2b4=3,
     )
     assert np.array_equal(out0_18, out1_18[: out0_18.size])
-
 
 def test_fall_fast_and_x671_override_is_causal_wrt_future_frames() -> None:
     # Prefix triggers a fastfall at frame 1 (based on vy_start from frame 0).

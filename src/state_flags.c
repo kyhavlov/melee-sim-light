@@ -114,6 +114,62 @@ static inline uint8_t state_flags_2218_allow_interrupt_grounded_attack_action(ui
   }
 }
 
+static inline uint8_t state_flags_guard_setoff_hitlag_handoff_phase(const MslBatch* batch,
+                                                                    size_t idx) {
+  if (batch == NULL) {
+    return 0u;
+  }
+  return batch->state.guard_setoff_hitlag_exit_phase_u8[idx];
+}
+
+static inline uint8_t state_flags_guard_setoff_post_hitlag_owner(const MslBatch* batch,
+                                                                 size_t idx) {
+  if (batch == NULL) {
+    return 0u;
+  }
+  return batch->state.guard_setoff_post_hitlag_owner_u8[idx];
+}
+
+static inline uint8_t state_flags_guard_setoff_is_post_hitlag_handoff_row(const MslBatch* batch,
+                                                                          size_t idx) {
+  const uint8_t phase = state_flags_guard_setoff_hitlag_handoff_phase(batch, idx);
+  return (uint8_t)(phase == 2u || phase == 3u);
+}
+
+static inline uint8_t state_flags_guard_reflect_window_visible(const MslBatch* batch, size_t idx) {
+  if (batch == NULL) {
+    return 0u;
+  }
+  const uint16_t action_id = batch->state.action_id[idx];
+  if (action_id == (uint16_t)MSL_ACT_GUARD_REFLECT ||
+      action_id == (uint16_t)MSL_ACT_GUARD_SET_OFF) {
+    return (uint8_t)(batch->state.guard_reflect_timer_x14[idx] != 0u);
+  }
+  return 0u;
+}
+
+static inline uint8_t state_flags_guard_powershield_active_visible(const MslBatch* batch,
+                                                                   size_t idx) {
+  if (batch == NULL) {
+    return 0u;
+  }
+  const uint16_t action_id = batch->state.action_id[idx];
+  if (action_id == (uint16_t)MSL_ACT_GUARD_REFLECT) {
+    return (uint8_t)(batch->state.guard_reflect_timer_x18[idx] != 0u);
+  }
+  if (action_id != (uint16_t)MSL_ACT_GUARD_SET_OFF) {
+    return 0u;
+  }
+  if (batch->state.guard_reflect_timer_x18[idx] != 0u) {
+    return 1u;
+  }
+  if (state_flags_guard_setoff_is_post_hitlag_handoff_row(batch, idx) &&
+      state_flags_guard_setoff_post_hitlag_owner(batch, idx) == 2u) {
+    return 1u;
+  }
+  return 0u;
+}
+
 static inline uint8_t state_flags_221f_dead_start_action(uint16_t action_id) {
   switch (action_id) {
     case MSL_ACT_DEAD_DOWN:
@@ -633,6 +689,7 @@ static void state_flags_refresh_post_frame_impl(MslBatch* batch, const uint8_t* 
         if (action_id == (uint16_t)MSL_ACT_GUARD_ON || action_id == (uint16_t)MSL_ACT_GUARD) {
           f221c &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221C_B1;
         }
+
         if (action_id == (uint16_t)MSL_ACT_GUARD_SET_OFF &&
             batch->state.seed_prev_action_id[idx] == (uint16_t)MSL_ACT_GUARD_REFLECT &&
             batch->state.action_frame[idx] == 0 && batch->state.hitlag[idx] > 0u &&
@@ -649,6 +706,8 @@ static void state_flags_refresh_post_frame_impl(MslBatch* batch, const uint8_t* 
           f221c &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221C_B1;
         }
         if (action_id == (uint16_t)MSL_ACT_GUARD_SET_OFF && batch->state.hitlag[idx] == 0u &&
+            state_flags_guard_setoff_hitlag_handoff_phase(batch, idx) == 3u &&
+            state_flags_guard_setoff_post_hitlag_owner(batch, idx) == 2u &&
             batch->state.prev_action_frame[idx] > 0 &&
             batch->state.guard_reflect_timer_x14[idx] == 0u &&
             (f221c & (uint8_t)(MSL_STATE_FLAG_221C_B1 | MSL_STATE_FLAG_221C_B2)) ==
@@ -725,6 +784,8 @@ static void state_flags_refresh_post_frame_impl(MslBatch* batch, const uint8_t* 
           f221c &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221C_B2;
         }
         if (action_id == (uint16_t)MSL_ACT_GUARD_SET_OFF && batch->state.hitlag[idx] == 0u &&
+            state_flags_guard_setoff_hitlag_handoff_phase(batch, idx) == 2u &&
+            state_flags_guard_setoff_post_hitlag_owner(batch, idx) == 2u &&
             batch->state.prev_action_frame[idx] == 0 &&
             batch->state.guard_reflect_timer_x14[idx] == 0u &&
             batch->state.guard_reflect_timer_x18[idx] == 0u &&

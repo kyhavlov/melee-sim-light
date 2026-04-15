@@ -895,6 +895,82 @@ static inline void combat_state_flags_clear_x221c_b0(MslBatch* batch, size_t idx
   batch->state.state_flags[flags_i] &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221C_B0;
 }
 
+static inline void combat_state_flags_clear_guard_reflecting(MslBatch* batch, size_t idx) {
+  if (batch == NULL) {
+    return;
+  }
+  enum { MSL_STATE_FLAGS_STRIDE = MSL_STATE_FLAGS_BYTES };
+  enum { MSL_STATE_FLAGS_2218_INDEX = 0 };
+  enum { MSL_STATE_FLAG_2218_REFLECTING = 0x10 };
+
+  // GuardSetOff destination reset:
+  // - shield-hit transition enters GuardSetOff through Fighter_ChangeMotionState in ftCo_80092F2C,
+  // - that destination does not keep the live `fp->reflecting` owner from the GuardReflect
+  //   descriptor, even when x221C_b1/x221C_b2 timer lanes remain visible on the same row.
+  // refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80092F2C
+  const size_t flags_i = idx * MSL_STATE_FLAGS_STRIDE + (size_t)MSL_STATE_FLAGS_2218_INDEX;
+  batch->state.state_flags[flags_i] &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_2218_REFLECTING;
+}
+
+static inline void combat_state_flags_set_guard_reflect_timer_bits(MslBatch* batch, size_t idx) {
+  if (batch == NULL) {
+    return;
+  }
+  enum { MSL_STATE_FLAGS_STRIDE = MSL_STATE_FLAGS_BYTES };
+  enum { MSL_STATE_FLAGS_221C_INDEX = 3 };
+  enum { MSL_STATE_FLAG_221C_GUARD_REFLECT_X14 = 0x40 };
+  enum { MSL_STATE_FLAG_221C_GUARD_REFLECT_X18 = 0x20 };
+
+  uint8_t bits = 0u;
+  if (batch->state.guard_reflect_timer_x14[idx] != 0u) {
+    bits |= (uint8_t)MSL_STATE_FLAG_221C_GUARD_REFLECT_X14;
+  }
+  if (batch->state.guard_reflect_timer_x18[idx] != 0u) {
+    bits |= (uint8_t)MSL_STATE_FLAG_221C_GUARD_REFLECT_X18;
+  }
+  if (bits == 0u) {
+    return;
+  }
+
+  // ProcessHit ordering after an item BODY hit from GuardReflect:
+  // - GuardReflect entry/timer bits (x221C_b1/x221C_b2) remain visible on the post-frame even
+  //   after the damage-state entry consumes the live reflect descriptor.
+  // - The live reflecting bit itself is cleared separately through fp+0x2218.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_8009388C,ftCo_80093A50,ftCo_80093BC0}
+  // refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
+  const size_t flags_i = idx * MSL_STATE_FLAGS_STRIDE + (size_t)MSL_STATE_FLAGS_221C_INDEX;
+  batch->state.state_flags[flags_i] |= bits;
+}
+
+static inline void combat_apply_guard_reflect_body_hit_followup(const MslCommonParams* c,
+                                                                MslBatch* batch, size_t idx,
+                                                                uint16_t pre_motion_id) {
+  if (c == NULL || batch == NULL || pre_motion_id != (uint16_t)MSL_ACT_GUARD_REFLECT) {
+    return;
+  }
+
+  combat_state_flags_clear_guard_reflecting(batch, idx);
+  combat_state_flags_set_guard_reflect_timer_bits(batch, idx);
+
+  // Fighter_ProcessHit runs after the GuardReflect/GuardOn anim callback. If that callback drained
+  // shield health and the BODY hit then leaves shield ownership, the standard !x221A_b7 recharge
+  // gate can add one recharge tick on the same post-frame.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_GuardReflect_Anim,ftCo_GuardOn_Anim,ftCo_800925A4}
+  // refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
+  if (batch->state.stocks[idx] == 0u) {
+    return;
+  }
+  float hp = batch->state.shield_hp[idx];
+  if (hp < c->start_shield_health) {
+    hp += c->shield_recharge_per_frame;
+    if (hp > c->start_shield_health) {
+      hp = c->start_shield_health;
+    }
+    batch->state.shield_hp[idx] = hp;
+  }
+}
+
 static inline void combat_apply_ftCommon_8007D5D4_ground_to_air(MslBatch* batch, size_t idx) {
   if (batch == NULL) {
     return;
@@ -959,7 +1035,7 @@ static inline uint8_t combat_is_guard_reflect_fresh_locomotion_snapshot_idx(cons
   if (batch == NULL) {
     return 0u;
   }
-  const uint16_t prev_action = batch->state.prev_action_id[idx];
+  const uint16_t prev_action = batch->state.seed_prev_action_id[idx];
   return (batch->state.action_id[idx] == (uint16_t)MSL_ACT_GUARD_REFLECT &&
           batch->state.action_frame[idx] < 0 && batch->state.animation_index[idx] == UINT32_MAX &&
           batch->state.guard_reflect_timer_x14_seed[idx] == 0u &&
@@ -2798,6 +2874,7 @@ MslItemHitResult combat_apply_item_hit(MslBatch* batch, int batch_index, int att
   combat_damage_enter_state(c, batch, batch_index, d_idx, defender_on_ground,
                             defender_on_ground_after, defender_hurt_height, kb_applied,
                             kb_angle_rad);
+  combat_apply_guard_reflect_body_hit_followup(c, batch, d_idx, d_motion_id);
 
   batch->state.instance_hit_by[d_idx] = item_instance_id;
   batch->state.last_hit_by[d_idx] = (uint8_t)attacker;
@@ -3198,6 +3275,7 @@ void combat_apply_item_shield_hit(MslBatch* batch, int batch_index, int attacker
   batch->state.action_id[d_idx] = (uint16_t)MSL_ACT_GUARD_SET_OFF;
   batch->state.animation_index[d_idx] = (uint32_t)MSL_SM_GUARD_DAMAGE;
   batch->state.tilt_timer_x[d_idx] = 0xFEu;
+  combat_state_flags_clear_guard_reflecting(batch, d_idx);
 
   const float ls_stun =
       (light * (c->shield_stun_lightshield_max - c->shield_stun_lightshield_min)) +
@@ -3322,6 +3400,7 @@ static inline void combat_mutations_pass1_future_apply_shield_hit(MslBatch* batc
   // Decomp: GuardSetOff uses ftCo_SM_GuardDamage as its submotion (msid=40).
   // refs/melee/src/melee/ft/ftmotionstates.c (GuardSetOff motion-state entry uses ftCo_SM_GuardDamage)
   batch->state.animation_index[d_idx] = (uint32_t)MSL_SM_GUARD_DAMAGE;
+  combat_state_flags_clear_guard_reflecting(batch, d_idx);
 
   // Decomp: fp->x670_timer_lstick_tilt_x = -2.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80092F2C

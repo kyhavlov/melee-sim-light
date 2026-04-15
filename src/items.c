@@ -949,7 +949,7 @@ static inline uint8_t item_try_guard_fresh_shield_center(const MslBatch* batch, 
     return 0u;
   }
   const uint16_t action_id = batch->state.action_id[d_idx];
-  const uint16_t prev_action_id = batch->state.prev_action_id[d_idx];
+  const uint16_t prev_action_id = batch->state.seed_prev_action_id[d_idx];
   const uint8_t fresh_guard_on_entry =
       (action_id == (uint16_t)MSL_ACT_GUARD_ON &&
        batch->state.animation_index[d_idx] == 0xFFFFFFFFu && batch->state.action_frame[d_idx] < 0 &&
@@ -1959,16 +1959,17 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
               ? 1u
               : 0u;
       const MslCommonParams* common = msl_common_params();
-      // Full-shield Dash snapshot bridge:
+      // Full-shield Dash guard-admission owner gate:
       // - Dash IASA only reaches ftCo_80091A4C / ftCo_80092450 through the late branch after
       //   `cur_anim_frame > x4C`; earlier Dash snapshots can still carry the untouched
       //   `start_shield_health` while no shield descriptor is yet live for item shield precedence.
-      // - Restrict this bridge to the fresh GuardReflect no-submotion admission context that
+      // - Restrict this owner gate to the fresh GuardReflect no-submotion admission context that
       //   teacher-forced reseed exposes on the repaired TBK rows; unrelated Dash rows must still
       //   resolve normal shield precedence.
       // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c::ftCo_Dash_IASA
       // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_80091A4C,ftCo_800939B4,ftCo_80093A50,ftCo_80092450}
       // refs/melee/src/melee/ft/ftcoll.c::ftColl_8007B1B8
+      const uint16_t seed_prev_action = batch->state.seed_prev_action_id[d_idx];
       const uint8_t shield_fresh_dash_full_shield_snapshot =
           (batch->state.prev_action_id[d_idx] == (uint16_t)MSL_ACT_DASH &&
            batch->state.action_frame[d_idx] < 0 &&
@@ -1987,10 +1988,44 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
            common != NULL && batch->state.shield_hp[d_idx] >= common->start_shield_health)
               ? 1u
               : 0u;
-      const uint16_t prev_action = batch->state.prev_action_id[d_idx];
+      // GuardOn_Anim -> GuardOn_IASA -> GuardReflect followup:
+      // - GuardOn_Anim owns shield drain/x10 before the LR edge enters GuardReflect through
+      //   ftCo_8009388C,
+      // - ftCo_8009388C clears shield desc before installing the reflect descriptor,
+      // - if the projectile then misses the reflect descriptor and hits BODY, regular shield
+      //   precedence must not consume the contact first.
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
+      //   ftCo_GuardOn_Anim,ftCo_GuardOn_IASA,ftCo_8009388C,ftCo_8009370C}
+      const uint8_t shield_dash_guardon_followup_guard_reflect_snapshot =
+          (seed_prev_action == (uint16_t)MSL_ACT_DASH &&
+           batch->state.prev_action_id[d_idx] == (uint16_t)MSL_ACT_GUARD_ON &&
+           batch->state.action_id[d_idx] == (uint16_t)MSL_ACT_GUARD_REFLECT &&
+           batch->state.action_frame[d_idx] < 0 &&
+           batch->state.animation_index[d_idx] == UINT32_MAX &&
+           batch->state.guard_reflect_timer_x14_seed[d_idx] == 0u &&
+           batch->state.guard_reflect_timer_x18_seed[d_idx] == 0u)
+              ? 1u
+              : 0u;
+      // Active GuardReflect window:
+      // - ftCo_GuardReflect_Anim ticks x14 before chaining GuardOn_Anim; while the seeded frozen
+      //   snapshot still has more than one x14 tick left, the reflect-window owner has not yet
+      //   handed the row to the regular shield-hit / GuardSetOff path.
+      // - When x14 reaches the final visible tick, the next row can enter GuardSetOff through the
+      //   normal shield-hit owner.
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_GuardReflect_Anim,ftCo_80093BC0,ftCo_80092F2C}
+      const uint8_t guard_reflect_active_window_no_submotion_snapshot =
+          (batch->state.action_id[d_idx] == (uint16_t)MSL_ACT_GUARD_REFLECT &&
+           batch->state.action_frame[d_idx] < 0 &&
+           batch->state.animation_index[d_idx] == UINT32_MAX &&
+           batch->state.guard_reflect_timer_x14_seed[d_idx] > 1u &&
+           batch->state.guard_reflect_timer_x18_seed[d_idx] > 0u)
+              ? 1u
+              : 0u;
+      const uint16_t prev_action = batch->state.seed_prev_action_id[d_idx];
       const uint8_t guard_on_entry_from_landing =
           (guard_on_no_submotion_snapshot && (prev_action == (uint16_t)MSL_ACT_LANDING)) ? 1u : 0u;
-      if (shr > 0.0f && !guard_on_entry_from_landing && !shield_fresh_dash_full_shield_snapshot) {
+      if (shr > 0.0f && !guard_on_entry_from_landing && !shield_fresh_dash_full_shield_snapshot &&
+          !shield_dash_guardon_followup_guard_reflect_snapshot) {
         // Use derived shield bubble center from shields_refresh() (same geometry used by the
         // fighter-vs-fighter combat pass).
         float shx = batch->state.shield_x[d_idx];
@@ -2283,6 +2318,13 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
             // exact authoritative transfer ordering is extracted for non-regressive rollout parity.
             // TODO(decomp/powershield-reflect-speed-mul): validate whether powershield reflect uses
             // ftCommonData x2B0 directly (or identity) for these rows.
+            break;
+          }
+          if (guard_reflect_active_window_no_submotion_snapshot) {
+            // The active reflect window owns this frozen GuardReflect row, but the reflect geometry
+            // above may reject the projectile. In that case do not fall through into regular
+            // GuardSetOff shield-hit ownership until the final x14 handoff tick.
+            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_GuardReflect_Anim,ftCo_80093BC0}
             break;
           }
 

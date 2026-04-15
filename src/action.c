@@ -946,6 +946,7 @@ void guard_update_grounded(MslBatch* batch, const MslCommonParams* c, size_t idx
   if (a0 == MSL_ACT_GUARD_ON || a0 == MSL_ACT_GUARD || a0 == MSL_ACT_GUARD_REFLECT) {
     batch->state.animation_index[idx] = 0xFFFFFFFFu;
     const uint8_t can_update = (batch->state.hitlag_started_frame[idx] == 0) ? 1 : 0;
+    uint8_t guard_reflect_from_guard_pending = 0u;
     if (guard_on_fresh_entry_from_non_shield_snapshot) {
       return;
     }
@@ -973,8 +974,7 @@ void guard_update_grounded(MslBatch* batch, const MslCommonParams* c, size_t idx
           guard_x0 < (uint16_t)c->powershield_reflect_window_frames &&
           (batch->state.input_buttons_pressed[idx] & (uint16_t)LR) != 0 &&
           batch->state.x672_input_timer[idx] < c->powershield_reflect_window_frames) {
-        enter_guard_reflect_from_guard(batch, c, idx);
-        return;
+        guard_reflect_from_guard_pending = 1u;
       }
 
       // Decomp ordering note (GuardOn/Guard discrete cluster):
@@ -1183,6 +1183,16 @@ void guard_update_grounded(MslBatch* batch, const MslCommonParams* c, size_t idx
         }
         enter_guard_hold(batch, idx);
       }
+    }
+
+    if (guard_reflect_from_guard_pending &&
+        batch->state.action_id[idx] == (uint16_t)MSL_ACT_GUARD_ON) {
+      // Decomp callback order is GuardOn_Anim then GuardOn_IASA, so same-frame GuardReflect entry
+      // from GuardOn must observe the already-applied GuardOn drain/x10 owner work before IASA
+      // consumes the LR edge.
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_GuardOn_Anim,ftCo_GuardOn_IASA,ftCo_8009388C}
+      enter_guard_reflect_from_guard(batch, c, idx);
+      return;
     }
 
     // Shield defensive options (grounded).
