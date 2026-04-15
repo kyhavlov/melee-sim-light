@@ -455,24 +455,6 @@ void anim_timebase_update_pre_input(MslBatch* batch) {
         }
       }
 
-      // CaptureWait Anim-rate ownership bridge:
-      // - ftCo_CaptureWaitHi_Anim updates frame_speed_mul via ftAnim_SetAnimRate in Anim callback.
-      // - Fighter_8006A360 advances the AObj timeline before callback-owned rate writes.
-      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_CaptureWaitHi_Anim
-      // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
-      //
-      // Teacher-forced reseed snapshots are post-frame; for stable CaptureWait ownership we apply
-      // the previous seeded rate when continuity is preserved across consecutive reseeds.
-      //
-      // Limit note: this bridge is continuity-gated only. Full parity would require an explicit seed
-      // lane for whether the prior frame's CaptureWait callback already committed a non-1.0
-      // ftAnim_SetAnimRate write before reseed.
-      if ((a == (uint16_t)MSL_ACT_CAPTURE_WAIT_HI || a == (uint16_t)MSL_ACT_CAPTURE_WAIT_LW) &&
-          batch->state.capture_wait_prev_rate_valid[idx]) {
-        batch->state.frame_speed_mul_fp_q16_16[idx] =
-            batch->state.capture_wait_prev_rate_fp_q16_16[idx];
-      }
-
       if (a == (uint16_t)MSL_ACT_REBOUND && action_frame_pre == 0) {
         float rebound_rate = 0.0f;
         if (anim_timebase_try_rebound_anim_speed_from_ground_vel(

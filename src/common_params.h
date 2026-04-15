@@ -108,12 +108,29 @@ typedef struct MslCommonParams {
   float grab_mash_stick_threshold;  // p_ftCommonData->x308
   // CaptureWait anim-rate mash window.
   // Decomp: refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_CaptureWaitHi_Anim
-  float capture_wait_grab_timer_decrement;   // p_ftCommonData->x3A4
-  float capture_wait_grab_mash_damage;       // p_ftCommonData->x3A8
-  float capture_wait_anim_rate_hold_frames;  // p_ftCommonData->x3B0
-  float capture_wait_anim_rate;              // p_ftCommonData->x3B4
-  float fastfall_stick_threshold;            // p_ftCommonData->x88
-  uint8_t fastfall_tilt_max_frames;          // p_ftCommonData->x8C (fastfall_tilt_max_frames)
+  //         refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::fn_800DC014
+  float capture_wait_grab_timer_decrement;      // p_ftCommonData->x3A4
+  float capture_wait_grab_mash_damage;          // p_ftCommonData->x3A8
+  float capture_wait_jump_latch_window_frames;  // p_ftCommonData->x3AC
+  float capture_wait_anim_rate_hold_frames;     // p_ftCommonData->x3B0
+  float capture_wait_anim_rate;                 // p_ftCommonData->x3B4
+  // Common grab/capture breakout timer formula + exit velocities.
+  // Decomp:
+  // - ftCo_800DA824 computes the initial grab timer from x354/x358/x35C/x360/x364/x368.
+  // - ftCo_800DA698 / fn_800DC070 / ftCo_CaptureCut_Enter consume x370/x374/x378.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::{ftCo_800DA824,ftCo_800DA698,fn_800DC070}
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_CaptureCut.c::ftCo_CaptureCut_Enter
+  float capture_grab_timer_base;           // p_ftCommonData->x354
+  float capture_grab_timer_handicap_mul;   // p_ftCommonData->x358
+  float capture_grab_timer_handicap_base;  // p_ftCommonData->x35C
+  float capture_grab_timer_slot_mul;       // p_ftCommonData->x360
+  float capture_grab_timer_slot_base;      // p_ftCommonData->x364
+  float capture_grab_timer_percent_mul;    // p_ftCommonData->x368
+  float capture_cut_escape_speed;          // p_ftCommonData->x370
+  float capture_jump_escape_speed_x;       // p_ftCommonData->x374
+  float capture_jump_escape_speed_y;       // p_ftCommonData->x378
+  float fastfall_stick_threshold;          // p_ftCommonData->x88
+  uint8_t fastfall_tilt_max_frames;        // p_ftCommonData->x8C (fastfall_tilt_max_frames)
   // Crouch threshold (Squat entry gate).
   // Decomp: refs/melee/src/melee/ft/chara/ftCommon/ftCo_Squat.c::ftCo_Squat_CheckInput (fp->input.lstick.y < -p_ftCommonData->x90)
   float crouch_stick_threshold;  // p_ftCommonData->x90

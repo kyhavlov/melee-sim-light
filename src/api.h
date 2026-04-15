@@ -198,6 +198,10 @@ typedef struct MslSeed {
 
   uint8_t team_id[MSL_MAX_PLAYERS];
   uint8_t char_id[MSL_MAX_PLAYERS];
+  // Player handicap for ftCo_800DA824's grab-timer formula.
+  // Decomp: refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_800DA824
+  // Replay source: game-start player block (`players[*].handicap`); default rules use 9.
+  uint8_t handicap[MSL_MAX_PLAYERS];
   // Per-player damage ratios (decomp: Player_GetAttackRatio / Player_GetDefenseRatio).
   // refs/melee/src/melee/pl/player.c::Player_GetAttackRatio
   // refs/melee/src/melee/pl/player.c::Player_GetDefenseRatio
@@ -511,6 +515,28 @@ typedef struct MslSeed {
   // - refs/melee/src/melee/ft/fighter.c (Fighter_ChangeMotionState sets fp->frame_speed_mul)
   // - refs/melee/src/melee/ft/ftanim.c (ftAnim_8006F0FC / ftAnim_SetAnimRate)
   float frame_speed_mul_f32[MSL_MAX_PLAYERS];
+  // Capture/grab hidden owner lanes.
+  //
+  // Decomp ownership:
+  // - ftCo_800DA824 initializes the common grab timer (`fp->grab_timer`).
+  // - ftCo_CaptureWaitHi_Anim / fn_800DB8A4 own the shared CaptureWait/CaptureDamage timer/counter.
+  // - fn_800DC014 owns the deferred XY jump latch (`mv.co.capturewait.xC`).
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::{
+  //   ftCo_800DA824,ftCo_CaptureWaitHi_Anim,fn_800DB8A4,fn_800DC014
+  // }
+  //
+  // Seed representation:
+  // - capture_grab_timer_f32: post-frame `fp->grab_timer` while attached, else 0.
+  // - capture_wait_counter_f32: post-frame `mv.co.capturewait.x0`.
+  // - capture_wait_anim_rate_timer_f32: post-frame `mv.co.capturewait.x4`.
+  // - capture_wait_jump_latch_u8: post-frame `mv.co.capturewait.xC`.
+  // - capture_breakout_pending_u8: explicit current-frame breakout resolve bit for the shared
+  //   CatchWait/CaptureWait owner family.
+  float capture_grab_timer_f32[MSL_MAX_PLAYERS];
+  float capture_wait_counter_f32[MSL_MAX_PLAYERS];
+  float capture_wait_anim_rate_timer_f32[MSL_MAX_PLAYERS];
+  uint8_t capture_wait_jump_latch_u8[MSL_MAX_PLAYERS];
+  uint8_t capture_breakout_pending_u8[MSL_MAX_PLAYERS];
   // Walk Anim callback source velocity (`mv_x0` in ftWalkCommon_800DFDDC).
   //
   // Decomp ownership:

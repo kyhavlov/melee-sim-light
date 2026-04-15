@@ -281,12 +281,30 @@ def main() -> None:
         # CaptureWait anim-rate ownership (ftCo_CaptureWaitHi/Lw_Anim).
         # - x3A4: per-frame grab timer decrement while captured.
         # - x3A8: per-mash extra grab_timer damage passed into ftCommon_GrabMash.
+        # - x3AC: XY jump-latch window (`mv.co.capturewait.x0 < x3AC` in fn_800DC014).
         # - x3B0/x3B4: mash-rate hold timer and boosted anim rate.
         # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_CaptureWaitHi_Anim
+        # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::fn_800DC014
         "capture_wait_grab_timer_decrement": float(_f32_be(buf, ft_common_abs + 0x3A4)),
         "capture_wait_grab_mash_damage": float(_f32_be(buf, ft_common_abs + 0x3A8)),
+        "capture_wait_jump_latch_window_frames": float(_f32_be(buf, ft_common_abs + 0x3AC)),
         "capture_wait_anim_rate_hold_frames": float(_f32_be(buf, ft_common_abs + 0x3B0)),
         "capture_wait_anim_rate": float(_f32_be(buf, ft_common_abs + 0x3B4)),
+        # Common grab/capture breakout timer formula + exit velocities.
+        # Decomp:
+        # - ftCo_800DA824 computes the initial grab timer from x354/x358/x35C/x360/x364/x368.
+        # - ftCo_800DA698 / fn_800DC070 / ftCo_CaptureCut_Enter consume x370/x374/x378.
+        # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::{ftCo_800DA824,ftCo_800DA698,fn_800DC070}
+        # refs/melee/src/melee/ft/chara/ftCommon/ftCo_CaptureCut.c::ftCo_CaptureCut_Enter
+        "capture_grab_timer_base": float(_f32_be(buf, ft_common_abs + 0x354)),
+        "capture_grab_timer_handicap_mul": float(_f32_be(buf, ft_common_abs + 0x358)),
+        "capture_grab_timer_handicap_base": float(_f32_be(buf, ft_common_abs + 0x35C)),
+        "capture_grab_timer_slot_mul": float(_f32_be(buf, ft_common_abs + 0x360)),
+        "capture_grab_timer_slot_base": float(_f32_be(buf, ft_common_abs + 0x364)),
+        "capture_grab_timer_percent_mul": float(_f32_be(buf, ft_common_abs + 0x368)),
+        "capture_cut_escape_speed": float(_f32_be(buf, ft_common_abs + 0x370)),
+        "capture_jump_escape_speed_x": float(_f32_be(buf, ft_common_abs + 0x374)),
+        "capture_jump_escape_speed_y": float(_f32_be(buf, ft_common_abs + 0x378)),
         "fastfall_stick_threshold": float(_f32_be(buf, ft_common_abs + 0x88)),
         "fastfall_tilt_max_frames": int(_i32_be(buf, ft_common_abs + 0x8C)),
         # Pass-through platforms (ftCo_80099F1C / mpUpdateFloorSkip)

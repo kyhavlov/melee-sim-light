@@ -22,16 +22,15 @@ Last updated:
 
 Recommended sequence for the next deep passes:
 
-1. **Capture / grab owner family**
-2. **Guard release / guard timer / guardreflect family**
-3. **Locomotion / grounded transition / motion-entry timing family**
-4. **Knockdown / passive contact owner**
-5. **Core combat followup family**
-6. **Fox/Falco special-move families**
-7. **Ledge / collision-env parity**
-8. **Item-owner seed cleanup + item identity family**
-9. **Match-flow / entry / respawn ownership**
-10. **Mixed-bucket split**
+1. **Guard release / guard timer / guardreflect family**
+2. **Locomotion / grounded transition / motion-entry timing family**
+3. **Knockdown / passive contact owner**
+4. **Core combat followup family**
+5. **Fox/Falco special-move families**
+6. **Ledge / collision-env parity**
+7. **Item-owner seed cleanup + item identity family**
+8. **Match-flow / entry / respawn ownership**
+9. **Mixed-bucket split**
 
 ## Closed / Effectively Closed
 
@@ -59,17 +58,19 @@ Recommended sequence for the next deep passes:
   - `DamageFlyRoll` admission/carry tails
   - adjacent source-clear / match-flow lanes outside this owner boundary
 
-## Active / Next Deep Passes
-
-### 1. Capture / grab owner family
-- Status: `active / next deep pass`
+### Capture / grab owner family
+- Status: `closed / effectively closed`
 - Roadmap families: `F03_capturewait_bridge`
-- Owner boundary: `CatchPull`, `CapturePulled`, `CaptureWait`, attach-point selection, victim callback ordering, pummel / breakout adjacency
-- Primary sim files: `src/grab_flow.c`, `src/grab_attachment.c`, `src/api.*`, `tools/slippi/seed_history.py`, `tools/slippi/make_dataset_from_slp.py`
-- Acceptance bar:
-  - first-steady `CaptureWait` lane is seed-visible when required
-  - replay-shaped victim timer carries are removed
-  - grab victim attach/callback ownership is shared by default
+- Owner boundary: `CatchPull`, `CapturePulled`, `CaptureWait`, `CatchAttack`, breakout / `CaptureCut` adjacency, and shared owner/victim callback ordering for that family
+- Primary sim files: `src/grab_flow.c`, `src/grab_attachment.c`, `src/api.*`, `src/state.*`, `tools/slippi/seed_history.py`, `tools/slippi/make_dataset_from_slp.py`
+- Acceptance bar already met:
+  - first-steady `CaptureWait` ownership no longer depends on cross-row continuity or synthetic phase-bit carry
+  - breakout / `CaptureCut` ownership flows through the shared grab owner path with explicit decomp-backed hidden owner lanes
+  - no remaining core `CaptureWait` callback/timeline repair in `src/grab_flow.c` or `src/anim_timebase.c`
+- Remaining residuals:
+  - none in the targeted `CatchPull -> CapturePulled -> CaptureWait` / `CatchAttack` / breakout owner family
+
+## Active / Next Deep Passes
 
 ### 2. Guard release / guard timer / guardreflect family
 - Status: `active / next deep pass`

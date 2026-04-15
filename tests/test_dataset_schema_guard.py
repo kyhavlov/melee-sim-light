@@ -20,6 +20,13 @@ def test_seed_schema_includes_staling_fields() -> None:
     assert "source_clear_terminal_phase" in SEED_DTYPE.fields
     # Walk callback-owned source velocity lane (ftWalkCommon_800DFDDC `mv_x0`).
     assert "walk_anim_source_vel_f32" in SEED_DTYPE.fields
+    # Capture/grab hidden owner lanes.
+    assert "handicap" in SEED_DTYPE.fields
+    assert "capture_grab_timer_f32" in SEED_DTYPE.fields
+    assert "capture_wait_counter_f32" in SEED_DTYPE.fields
+    assert "capture_wait_anim_rate_timer_f32" in SEED_DTYPE.fields
+    assert "capture_wait_jump_latch_u8" in SEED_DTYPE.fields
+    assert "capture_breakout_pending_u8" in SEED_DTYPE.fields
     # GuardSetOff hidden x19A4 lower-bound bridge for F02 blocker rows.
     assert "guard_setoff_hitlag_damage_min" in SEED_DTYPE.fields
     # F02 blocker lane: GuardSetOff hitlag-exit ownership phase.

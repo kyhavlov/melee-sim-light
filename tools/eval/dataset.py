@@ -87,6 +87,7 @@ SEED_DTYPE = np.dtype(
         ("_pad0", "V2"),
         ("team_id", _arr("u1", MAX_PLAYERS)),
         ("char_id", _arr("u1", MAX_PLAYERS)),
+        ("handicap", _arr("u1", MAX_PLAYERS)),
         ("attack_ratio", _arr("<f4", MAX_PLAYERS)),
         ("defense_ratio", _arr("<f4", MAX_PLAYERS)),
         ("pos_x", _arr("<f4", MAX_PLAYERS)),
@@ -218,6 +219,15 @@ SEED_DTYPE = np.dtype(
         ("passivewall_timer", _arr("u1", MAX_PLAYERS)),
         ("anim_frame_f32", _arr("<f4", MAX_PLAYERS)),
         ("frame_speed_mul_f32", _arr("<f4", MAX_PLAYERS)),
+        # Capture/grab hidden owner lanes.
+        # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::{
+        #   ftCo_800DA824,ftCo_CaptureWaitHi_Anim,fn_800DB8A4,fn_800DC014
+        # }
+        ("capture_grab_timer_f32", _arr("<f4", MAX_PLAYERS)),
+        ("capture_wait_counter_f32", _arr("<f4", MAX_PLAYERS)),
+        ("capture_wait_anim_rate_timer_f32", _arr("<f4", MAX_PLAYERS)),
+        ("capture_wait_jump_latch_u8", _arr("u1", MAX_PLAYERS)),
+        ("capture_breakout_pending_u8", _arr("u1", MAX_PLAYERS)),
         # Walk callback source velocity lane (`mv_x0` consumed by ftWalkCommon_800DFDDC).
         # refs/melee/src/melee/ft/ftwalkcommon.c::ftWalkCommon_800DFDDC
         ("walk_anim_source_vel_f32", _arr("<f4", MAX_PLAYERS)),

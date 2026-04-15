@@ -1764,8 +1764,8 @@ static inline void combat_damage_install_grounded_kb(const MslCommonParams* c, M
 }
 
 static inline void combat_damageflyroll_consume_fighter_8006cda4_pre_gate_count(MslBatch* batch,
-                                                                                 int bi,
-                                                                                 size_t d_idx) {
+                                                                                int bi,
+                                                                                size_t d_idx) {
   if (batch == NULL) {
     return;
   }

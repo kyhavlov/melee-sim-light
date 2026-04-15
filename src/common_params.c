@@ -238,10 +238,28 @@ int common_params_init(void) {
       json_get_f32(buf, "dash_run_jump_stick_y_threshold",
                    &g_params.dash_run_jump_stick_y_threshold) != 0 ||
       json_get_f32(buf, "grab_mash_stick_threshold", &g_params.grab_mash_stick_threshold) != 0 ||
+      json_get_f32(buf, "capture_grab_timer_base", &g_params.capture_grab_timer_base) != 0 ||
+      json_get_f32(buf, "capture_grab_timer_handicap_mul",
+                   &g_params.capture_grab_timer_handicap_mul) != 0 ||
+      json_get_f32(buf, "capture_grab_timer_handicap_base",
+                   &g_params.capture_grab_timer_handicap_base) != 0 ||
+      json_get_f32(buf, "capture_grab_timer_slot_mul", &g_params.capture_grab_timer_slot_mul) !=
+          0 ||
+      json_get_f32(buf, "capture_grab_timer_slot_base", &g_params.capture_grab_timer_slot_base) !=
+          0 ||
+      json_get_f32(buf, "capture_grab_timer_percent_mul",
+                   &g_params.capture_grab_timer_percent_mul) != 0 ||
+      json_get_f32(buf, "capture_cut_escape_speed", &g_params.capture_cut_escape_speed) != 0 ||
+      json_get_f32(buf, "capture_jump_escape_speed_x", &g_params.capture_jump_escape_speed_x) !=
+          0 ||
+      json_get_f32(buf, "capture_jump_escape_speed_y", &g_params.capture_jump_escape_speed_y) !=
+          0 ||
       json_get_f32(buf, "capture_wait_grab_timer_decrement",
                    &g_params.capture_wait_grab_timer_decrement) != 0 ||
       json_get_f32(buf, "capture_wait_grab_mash_damage", &g_params.capture_wait_grab_mash_damage) !=
           0 ||
+      json_get_f32(buf, "capture_wait_jump_latch_window_frames",
+                   &g_params.capture_wait_jump_latch_window_frames) != 0 ||
       json_get_f32(buf, "capture_wait_anim_rate_hold_frames",
                    &g_params.capture_wait_anim_rate_hold_frames) != 0 ||
       json_get_f32(buf, "capture_wait_anim_rate", &g_params.capture_wait_anim_rate) != 0 ||

@@ -39,6 +39,7 @@ int state_alloc(MslStateSoA* state, int batch_size) {
   state->is_teams = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * b);
   state->team_id = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->char_id = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
+  state->handicap = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->attack_ratio = (float*)alloc_aligned_64(sizeof(float) * bp);
   state->defense_ratio = (float*)alloc_aligned_64(sizeof(float) * bp);
 
@@ -104,8 +105,7 @@ int state_alloc(MslStateSoA* state, int batch_size) {
   state->source_clear_owner_set_phase = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->source_clear_processhit_damage_pending_phase =
       (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
-  state->fighter_8006cda4_pre_gate_consume_count =
-      (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
+  state->fighter_8006cda4_pre_gate_consume_count = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->source_clear_grounded_damage_clear_phase =
       (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->source_clear_terminal_phase = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
@@ -135,11 +135,11 @@ int state_alloc(MslStateSoA* state, int batch_size) {
   state->anim_frame_fp_q16_16 = (int32_t*)alloc_aligned_64(sizeof(int32_t) * bp);
   state->frame_speed_mul_fp_q16_16 = (int32_t*)alloc_aligned_64(sizeof(int32_t) * bp);
   state->walk_anim_source_vel = (float*)alloc_aligned_64(sizeof(float) * bp);
-  state->capture_wait_prev_rate_fp_q16_16 = (int32_t*)alloc_aligned_64(sizeof(int32_t) * bp);
-  state->capture_wait_seed_rate_snapshot_fp_q16_16 =
-      (int32_t*)alloc_aligned_64(sizeof(int32_t) * bp);
-  state->capture_wait_prev_rate_valid = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
+  state->capture_grab_timer = (float*)alloc_aligned_64(sizeof(float) * bp);
+  state->capture_wait_counter = (float*)alloc_aligned_64(sizeof(float) * bp);
   state->capture_wait_anim_rate_timer = (float*)alloc_aligned_64(sizeof(float) * bp);
+  state->capture_wait_jump_latch = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
+  state->capture_breakout_pending = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->throw_anim_rate_fp_q16_16 = (int32_t*)alloc_aligned_64(sizeof(int32_t) * bp);
   state->anim_defer_tick_once = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->jumps_left = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
@@ -349,11 +349,11 @@ int state_alloc(MslStateSoA* state, int batch_size) {
   if (!state->frame_id || !state->frame_pre_random_seed || !state->stage_id ||
       !state->opening_input_lock_timer || !state->stale_attack_instance_counter ||
       !state->instance_id_counter || !state->match_damage_ratio || !state->is_teams ||
-      !state->team_id || !state->char_id || !state->attack_ratio || !state->defense_ratio ||
-      !state->pos_x || !state->pos_y || !state->pos_z || !state->illusion_ghost_pos0_x ||
-      !state->illusion_ghost_pos0_y || !state->illusion_ghost_pos1_x ||
-      !state->illusion_ghost_pos1_y || !state->prev_pos_x || !state->prev_pos_y ||
-      !state->floor_sweep_prev_pos_y || !state->coll_stage_prev_pos_x ||
+      !state->team_id || !state->char_id || !state->handicap || !state->attack_ratio ||
+      !state->defense_ratio || !state->pos_x || !state->pos_y || !state->pos_z ||
+      !state->illusion_ghost_pos0_x || !state->illusion_ghost_pos0_y ||
+      !state->illusion_ghost_pos1_x || !state->illusion_ghost_pos1_y || !state->prev_pos_x ||
+      !state->prev_pos_y || !state->floor_sweep_prev_pos_y || !state->coll_stage_prev_pos_x ||
       !state->coll_stage_prev_pos_y || !state->coll_stage_cur_pos_x ||
       !state->coll_stage_cur_pos_y || !state->speed_air_x_self || !state->speed_ground_x_self ||
       !state->speed_y_self || !state->speed_x_attack || !state->speed_y_attack ||
@@ -384,9 +384,9 @@ int state_alloc(MslStateSoA* state, int batch_size) {
       !state->camera_target_point_inside_stage_cam_bounds_u8 || !state->downwait_timer ||
       !state->passivewall_timer || !state->anim_frame_f32 || !state->anim_frame_fp_q16_16 ||
       !state->frame_speed_mul_fp_q16_16 || !state->walk_anim_source_vel ||
-      !state->capture_wait_prev_rate_fp_q16_16 ||
-      !state->capture_wait_seed_rate_snapshot_fp_q16_16 || !state->capture_wait_prev_rate_valid ||
-      !state->capture_wait_anim_rate_timer || !state->throw_anim_rate_fp_q16_16 ||
+      !state->capture_grab_timer || !state->capture_wait_counter ||
+      !state->capture_wait_anim_rate_timer || !state->capture_wait_jump_latch ||
+      !state->capture_breakout_pending || !state->throw_anim_rate_fp_q16_16 ||
       !state->anim_defer_tick_once || !state->jumps_left || !state->stocks ||
       !state->guard_tilt_x8 || !state->guard_tilt_x4 || !state->guard_on_entered_this_frame ||
       !state->guard_entry_via_wait_callback || !state->guard_jump_oos_entered_this_frame ||
@@ -459,10 +459,11 @@ int state_alloc(MslStateSoA* state, int batch_size) {
     state->hitlist_reseed_gen[i] = 1u;
   }
   memset(state->frame_id, 0, sizeof(int32_t) * b);
-  memset(state->capture_wait_prev_rate_fp_q16_16, 0, sizeof(int32_t) * bp);
-  memset(state->capture_wait_seed_rate_snapshot_fp_q16_16, 0, sizeof(int32_t) * bp);
-  memset(state->capture_wait_prev_rate_valid, 0, sizeof(uint8_t) * bp);
+  memset(state->capture_grab_timer, 0, sizeof(float) * bp);
+  memset(state->capture_wait_counter, 0, sizeof(float) * bp);
   memset(state->capture_wait_anim_rate_timer, 0, sizeof(float) * bp);
+  memset(state->capture_wait_jump_latch, 0, sizeof(uint8_t) * bp);
+  memset(state->capture_breakout_pending, 0, sizeof(uint8_t) * bp);
   memset(state->throw_anim_rate_fp_q16_16, 0, sizeof(int32_t) * bp);
   memset(state->throw_pulse_crossed_curr_frame, 0, sizeof(uint8_t) * bp);
   memset(state->smash_charge_state, 0, sizeof(uint8_t) * bp);
@@ -499,6 +500,7 @@ void state_free(MslStateSoA* state) {
   alloc_free(state->is_teams);
   alloc_free(state->team_id);
   alloc_free(state->char_id);
+  alloc_free(state->handicap);
   alloc_free(state->attack_ratio);
   alloc_free(state->defense_ratio);
 
@@ -591,10 +593,11 @@ void state_free(MslStateSoA* state) {
   alloc_free(state->anim_frame_fp_q16_16);
   alloc_free(state->frame_speed_mul_fp_q16_16);
   alloc_free(state->walk_anim_source_vel);
-  alloc_free(state->capture_wait_prev_rate_fp_q16_16);
-  alloc_free(state->capture_wait_seed_rate_snapshot_fp_q16_16);
-  alloc_free(state->capture_wait_prev_rate_valid);
+  alloc_free(state->capture_grab_timer);
+  alloc_free(state->capture_wait_counter);
   alloc_free(state->capture_wait_anim_rate_timer);
+  alloc_free(state->capture_wait_jump_latch);
+  alloc_free(state->capture_breakout_pending);
   alloc_free(state->throw_anim_rate_fp_q16_16);
   alloc_free(state->anim_defer_tick_once);
   alloc_free(state->jumps_left);

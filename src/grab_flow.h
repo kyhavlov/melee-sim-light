@@ -7,6 +7,9 @@
 // Called once per frame before physics.
 void grab_flow_update_pre_physics(MslBatch* batch);
 
+// Decomp-shaped grab/capture Anim-callback ownership before current-frame input.
+void grab_flow_update_anim_callbacks_pre_input(MslBatch* batch);
+
 // Decomp-shaped Catch input check subset used by grounded IASA call sites.
 // Returns 1 if the fighter entered Catch on this call.
 uint8_t grab_flow_try_enter_catch_from_iasa(MslBatch* batch, const MslCommonParams* c, size_t idx);

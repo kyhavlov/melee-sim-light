@@ -21,6 +21,7 @@ from tools.slippi.rollback import finalized_frame_indices
 class PortStatic:
     team_id: int
     char_id: int  # start character; per-frame character comes from post
+    handicap: int
 
 
 def _to_numpy(arr) -> np.ndarray:
@@ -2015,6 +2016,7 @@ def _main_impl(args) -> None:
         derive_camera_target_point_inside_stage_cam_bounds,
         derive_camera_target_world,
         derive_rebirth_camera_anchor_y,
+        derive_capture_grab_hidden_post,
         derive_grab_mash_stick_sign_post,
         derive_grab_owner_port_2p,
         derive_seed_prev_action_post,
@@ -2086,6 +2088,7 @@ def _main_impl(args) -> None:
         static_by_port[port_1based] = PortStatic(
             team_id=_team_id_from_start_player(p),
             char_id=int(p.get("character", 0)),
+            handicap=int(p.get("handicap", 9)),
         )
         ratios_by_port[port_1based] = (
             float(p.get("offense_ratio", 1.0)),
@@ -2385,9 +2388,10 @@ def _main_impl(args) -> None:
 
     # Static team ids from game start (slot order follows src_ports list).
     for slot, port_1based in enumerate(src_ports):
-        st = static_by_port.get(port_1based, PortStatic(team_id=0, char_id=0))
+        st = static_by_port.get(port_1based, PortStatic(team_id=0, char_id=0, handicap=9))
         samples["seed_t"]["team_id"][:, slot] = np.uint8(st.team_id)
         samples["ref_t1"]["team_id"][:, slot] = np.uint8(st.team_id)
+        samples["seed_t"]["handicap"][:, slot] = np.uint8(st.handicap)
         atk, df, scl = ratios_by_port.get(port_1based, (1.0, 1.0, 1.0))
         samples["seed_t"]["attack_ratio"][:, slot] = np.float32(atk)
         samples["seed_t"]["defense_ratio"][:, slot] = np.float32(df)
@@ -2400,6 +2404,8 @@ def _main_impl(args) -> None:
     post_char_id_u8 = np.zeros((n_frames, 4), dtype=np.uint8)
     post_pos_x_all = np.zeros((n_frames, 4), dtype=np.float32)
     post_pos_y_all = np.zeros((n_frames, 4), dtype=np.float32)
+    post_percent_all = np.zeros((n_frames, 4), dtype=np.float32)
+    frame_speed_mul_all = np.zeros((n_frames, 4), dtype=np.float32)
     post_hitlag_u16_all = np.zeros((n_frames, 4), dtype=np.uint16)
     post_instance_hit_by_u16_all = np.zeros((n_frames, 4), dtype=np.uint16)
     post_state_flags_u8 = np.zeros((n_frames, 4, 5), dtype=np.uint8)
@@ -2466,6 +2472,7 @@ def _main_impl(args) -> None:
             post_pos_z = np.zeros(n_frames, dtype=np.float32)
         post_dir = _dir_to_facing(_to_numpy(post.field("direction")).astype(np.float32))
         post_percent = _to_numpy(post.field("percent")).astype(np.float32)
+        post_percent_all[:, slot] = post_percent
         post_shield = _to_numpy(post.field("shield")).astype(np.float32)
         post_stocks = _to_numpy(post.field("stocks")).astype(np.uint8)
         post_jumps = _to_numpy(post.field("jumps")).astype(np.uint8)
@@ -2513,6 +2520,7 @@ def _main_impl(args) -> None:
         speed_x_attack = _to_numpy(vel.field("knockback_x")).astype(np.float32)
         speed_y_attack = _to_numpy(vel.field("knockback_y")).astype(np.float32)
         speed_ground_x_self = _to_numpy(vel.field("self_x_ground")).astype(np.float32)
+        post_instance_id_slot = _to_numpy(post.field("instance_id")).astype(np.uint16)
 
         # Seed uses post at (i), ref uses post at (i+1).
         samples["seed_t"]["char_id"][:, slot] = post_char[:-1]
@@ -2923,6 +2931,7 @@ def _main_impl(args) -> None:
             common_landing_fall_special_lag_frames=landing_fall_special_lag_frames,
             char_landing_air_lag_frames=char_landing_air_lag_frames,
         )
+        frame_speed_mul_all[:, slot] = frame_speed_mul
         # Seed fp->frame_speed_mul (float) for deterministic timebase stepping.
         #
         # Decomp shape:
@@ -3561,6 +3570,10 @@ def _main_impl(args) -> None:
         grab_owner = derive_grab_owner_port_2p(action_id_u16_2p=post_action_id[:, :2])
         samples["seed_t"]["grab_owner_port"][:, :2] = grab_owner[:-1, :]
 
+    pre_stick_x_unit_2d = np.zeros((n_frames, 4), dtype=np.float32)
+    pre_stick_y_unit_2d = np.zeros((n_frames, 4), dtype=np.float32)
+    grab_mash_x_sign_post = np.zeros((n_frames, 4), dtype=np.int8)
+    grab_mash_y_sign_post = np.zeros((n_frames, 4), dtype=np.int8)
     for slot in range(num_players):
         main_x_proc, main_y_proc = ucf_process_stick_i8(
             pre_main_x_2d[:, slot],
@@ -3570,13 +3583,65 @@ def _main_impl(args) -> None:
         )
         stick_x = apply_deadzone(stick_i8_to_unit(main_x_proc), lstick_deadzone_x)
         stick_y = apply_deadzone(stick_i8_to_unit(main_y_proc), lstick_deadzone_y)
+        pre_stick_x_unit_2d[:, slot] = stick_x
+        pre_stick_y_unit_2d[:, slot] = stick_y
         mash_x, mash_y = derive_grab_mash_stick_sign_post(
             stick_x_unit=stick_x,
             stick_y_unit=stick_y,
             grab_mash_stick_threshold=grab_mash_stick_threshold,
         )
+        grab_mash_x_sign_post[:, slot] = mash_x
+        grab_mash_y_sign_post[:, slot] = mash_y
         samples["seed_t"]["grab_mash_stick_x_sign"][:, slot] = mash_x[:-1]
         samples["seed_t"]["grab_mash_stick_y_sign"][:, slot] = mash_y[:-1]
+
+    if int(num_players) == 2:
+        for slot, port_1based in enumerate(src_ports):
+            st = static_by_port.get(port_1based, PortStatic(team_id=0, char_id=0, handicap=9))
+            (
+                capture_grab_timer,
+                capture_wait_counter,
+                capture_wait_anim_timer,
+                capture_wait_jump_latch,
+                capture_breakout_pending,
+            ) = derive_capture_grab_hidden_post(
+                action_id_u16=post_action_id[:, slot],
+                action_frame_i16=post_action_frame[:, slot],
+                grab_owner_port_u8=grab_owner[:, slot],
+                percent_f32=post_percent_all[:, slot],
+                buttons_held_u16=pre_buttons[:, slot],
+                stick_x_unit=pre_stick_x_unit_2d[:, slot],
+                stick_y_unit=pre_stick_y_unit_2d[:, slot],
+                frame_speed_mul_f32=frame_speed_mul_all[:, slot],
+                grab_mash_stick_x_sign_post=grab_mash_x_sign_post[:, slot],
+                grab_mash_stick_y_sign_post=grab_mash_y_sign_post[:, slot],
+                slot_index=slot,
+                handicap=st.handicap,
+                capture_grab_timer_base=float(common["capture_grab_timer_base"]),
+                capture_grab_timer_handicap_mul=float(common["capture_grab_timer_handicap_mul"]),
+                capture_grab_timer_handicap_base=float(common["capture_grab_timer_handicap_base"]),
+                capture_grab_timer_slot_mul=float(common["capture_grab_timer_slot_mul"]),
+                capture_grab_timer_slot_base=float(common["capture_grab_timer_slot_base"]),
+                capture_grab_timer_percent_mul=float(common["capture_grab_timer_percent_mul"]),
+                capture_wait_grab_timer_decrement=float(common["capture_wait_grab_timer_decrement"]),
+                capture_wait_grab_mash_damage=float(common["capture_wait_grab_mash_damage"]),
+                capture_wait_anim_rate_hold_frames=float(common["capture_wait_anim_rate_hold_frames"]),
+                capture_wait_jump_latch_window_frames=float(
+                    common["capture_wait_jump_latch_window_frames"]
+                ),
+                grab_mash_stick_threshold=grab_mash_stick_threshold,
+            )
+            samples["seed_t"]["capture_grab_timer_f32"][:, slot] = capture_grab_timer[:-1]
+            samples["seed_t"]["capture_wait_counter_f32"][:, slot] = capture_wait_counter[:-1]
+            samples["seed_t"]["capture_wait_anim_rate_timer_f32"][:, slot] = (
+                capture_wait_anim_timer[:-1]
+            )
+            samples["seed_t"]["capture_wait_jump_latch_u8"][:, slot] = (
+                capture_wait_jump_latch[:-1]
+            )
+            samples["seed_t"]["capture_breakout_pending_u8"][:, slot] = (
+                capture_breakout_pending[:-1]
+            )
 
     # Use already-derived replay-causal seed fields for shield bubble placement:
     # - facing (post-frame)

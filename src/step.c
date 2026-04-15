@@ -87,6 +87,24 @@ static inline void clear_seed_owned_transients_post_frame(MslBatch* batch) {
   }
 }
 
+static inline void promote_seed_prev_action_snapshot_post_frame(MslBatch* batch) {
+  if (batch == NULL) {
+    return;
+  }
+  const int num_players = (int)batch->config.num_players;
+  for (int bi = 0; bi < batch->batch_size; bi++) {
+    for (int p = 0; p < num_players; p++) {
+      const size_t idx = msl_idx_player(bi, p);
+      // Runtime carry for entry-shaped owner families:
+      // - `seed_prev_action_*` holds the replay-true (t-1 -> t) post-frame snapshot after reseed.
+      // - Preserve the same meaning across rollout by promoting the frame-start action cached in
+      //   `prev_action_*` so the next simulated frame sees the correct prior post-frame motion.
+      batch->state.seed_prev_action_id[idx] = batch->state.prev_action_id[idx];
+      batch->state.seed_prev_action_frame[idx] = batch->state.prev_action_frame[idx];
+    }
+  }
+}
+
 static inline void sync_runbrake_cmd0_post_frame(MslBatch* batch) {
   if (batch == NULL) {
     return;
@@ -348,6 +366,7 @@ static int step_one_frame_core(MslBatch* batch, const uint8_t* prev_input_bytes,
   anim_timebase_apply_deferred_tick_once_post_combat(batch);
   sync_runbrake_cmd0_post_frame(batch);
   state_flags_refresh_post_frame(batch);
+  promote_seed_prev_action_snapshot_post_frame(batch);
   clear_seed_owned_transients_post_frame(batch);
 
   combat_rng_trace_end_frame(batch);

@@ -21,6 +21,7 @@ from tools.slippi.seed_history import (
     derive_camera_box_visible_x221f_b0,
     derive_camera_target_point_inside_stage_cam_bounds,
     derive_camera_target_world,
+    derive_capture_grab_hidden_post,
     derive_rebirth_camera_anchor_y,
     derive_damage_post_hitlag_cb_kind,
     derive_guard_reflect_timer_x14,
@@ -945,6 +946,148 @@ def test_derive_guard_reflect_timer_counts_down_and_expires() -> None:
         reflect_total_frames_x2b4=3,
     )
     assert out18_2.tolist() == [4, 3, 3]
+
+
+def test_derive_capture_grab_hidden_post_tracks_shared_owner_state() -> None:
+    act_capturewait_lw = np.uint16(0x00E3)
+    owner = np.array([0, 0, 0, 0], dtype=np.uint8)
+    action_id = np.array([act_capturewait_lw, act_capturewait_lw, act_capturewait_lw, act_capturewait_lw], dtype=np.uint16)
+    action_frame = np.array([0, 1, 2, 3], dtype=np.int16)
+    percent = np.array([10.0, 10.0, 10.0, 10.0], dtype=np.float32)
+    buttons = np.array([0x0000, 0x0100, 0x0000, 0x0000], dtype=np.uint16)
+    stick_x = np.zeros(4, dtype=np.float32)
+    stick_y = np.zeros(4, dtype=np.float32)
+    frame_speed = np.array([1.0, 1.0, 2.0, 2.0], dtype=np.float32)
+    mash_sign_x = np.zeros(4, dtype=np.int8)
+    mash_sign_y = np.zeros(4, dtype=np.int8)
+
+    (
+        grab_timer,
+        counter,
+        anim_timer,
+        jump_latch,
+        breakout_pending,
+    ) = derive_capture_grab_hidden_post(
+        action_id_u16=action_id,
+        action_frame_i16=action_frame,
+        grab_owner_port_u8=owner,
+        percent_f32=percent,
+        buttons_held_u16=buttons,
+        stick_x_unit=stick_x,
+        stick_y_unit=stick_y,
+        frame_speed_mul_f32=frame_speed,
+        grab_mash_stick_x_sign_post=mash_sign_x,
+        grab_mash_stick_y_sign_post=mash_sign_y,
+        slot_index=1,
+        handicap=9,
+        capture_grab_timer_base=30.0,
+        capture_grab_timer_handicap_mul=8.0,
+        capture_grab_timer_handicap_base=9.0,
+        capture_grab_timer_slot_mul=15.0,
+        capture_grab_timer_slot_base=4.0,
+        capture_grab_timer_percent_mul=1.6,
+        capture_wait_grab_timer_decrement=1.0,
+        capture_wait_grab_mash_damage=6.0,
+        capture_wait_anim_rate_hold_frames=10.0,
+        capture_wait_jump_latch_window_frames=16.0,
+        grab_mash_stick_threshold=0.5,
+    )
+
+    assert grab_timer.tolist() == pytest.approx([76.0, 69.0, 68.0, 67.0])
+    assert counter.tolist() == pytest.approx([0.0, 1.0, 2.0, 3.0])
+    assert anim_timer.tolist() == pytest.approx([0.0, 10.0, 9.0, 8.0])
+    assert jump_latch.tolist() == [0, 0, 0, 0]
+    assert breakout_pending.tolist() == [0, 0, 0, 0]
+
+
+def test_derive_capture_grab_hidden_post_marks_wait_to_breakout_rows() -> None:
+    act_capturewait_lw = np.uint16(0x00E3)
+    act_capturecut = np.uint16(0x00E5)
+    act_capturejump = np.uint16(0x00E6)
+
+    (
+        _grab_timer,
+        _counter,
+        _anim_timer,
+        _jump_latch,
+        breakout_pending,
+    ) = derive_capture_grab_hidden_post(
+        action_id_u16=np.array(
+            [act_capturewait_lw, act_capturecut, act_capturewait_lw, act_capturejump],
+            dtype=np.uint16,
+        ),
+        action_frame_i16=np.array([3, 0, 7, 0], dtype=np.int16),
+        grab_owner_port_u8=np.array([0, 0, 0, 0], dtype=np.uint8),
+        percent_f32=np.array([10.0, 10.0, 10.0, 10.0], dtype=np.float32),
+        buttons_held_u16=np.zeros(4, dtype=np.uint16),
+        stick_x_unit=np.zeros(4, dtype=np.float32),
+        stick_y_unit=np.zeros(4, dtype=np.float32),
+        frame_speed_mul_f32=np.ones(4, dtype=np.float32),
+        grab_mash_stick_x_sign_post=np.zeros(4, dtype=np.int8),
+        grab_mash_stick_y_sign_post=np.zeros(4, dtype=np.int8),
+        slot_index=0,
+        handicap=9,
+        capture_grab_timer_base=30.0,
+        capture_grab_timer_handicap_mul=8.0,
+        capture_grab_timer_handicap_base=9.0,
+        capture_grab_timer_slot_mul=15.0,
+        capture_grab_timer_slot_base=4.0,
+        capture_grab_timer_percent_mul=1.6,
+        capture_wait_grab_timer_decrement=1.0,
+        capture_wait_grab_mash_damage=6.0,
+        capture_wait_anim_rate_hold_frames=10.0,
+        capture_wait_jump_latch_window_frames=16.0,
+        grab_mash_stick_threshold=0.5,
+    )
+
+    assert breakout_pending.tolist() == [1, 0, 1, 0]
+
+
+def test_derive_capture_grab_hidden_post_is_prefix_invariant() -> None:
+    act_capturewait_lw = np.uint16(0x00E3)
+    base_kwargs = dict(
+        action_id_u16=np.array([act_capturewait_lw, act_capturewait_lw, act_capturewait_lw], dtype=np.uint16),
+        action_frame_i16=np.array([0, 1, 2], dtype=np.int16),
+        grab_owner_port_u8=np.array([0, 0, 0], dtype=np.uint8),
+        percent_f32=np.array([10.0, 10.0, 10.0], dtype=np.float32),
+        buttons_held_u16=np.array([0x0000, 0x0C00, 0x0000], dtype=np.uint16),
+        stick_x_unit=np.zeros(3, dtype=np.float32),
+        stick_y_unit=np.zeros(3, dtype=np.float32),
+        frame_speed_mul_f32=np.array([1.0, 1.0, 2.0], dtype=np.float32),
+        grab_mash_stick_x_sign_post=np.zeros(3, dtype=np.int8),
+        grab_mash_stick_y_sign_post=np.zeros(3, dtype=np.int8),
+        slot_index=0,
+        handicap=9,
+        capture_grab_timer_base=30.0,
+        capture_grab_timer_handicap_mul=8.0,
+        capture_grab_timer_handicap_base=9.0,
+        capture_grab_timer_slot_mul=15.0,
+        capture_grab_timer_slot_base=4.0,
+        capture_grab_timer_percent_mul=1.6,
+        capture_wait_grab_timer_decrement=1.0,
+        capture_wait_grab_mash_damage=6.0,
+        capture_wait_anim_rate_hold_frames=10.0,
+        capture_wait_jump_latch_window_frames=16.0,
+        grab_mash_stick_threshold=0.5,
+    )
+    out0 = derive_capture_grab_hidden_post(**base_kwargs)
+    out1 = derive_capture_grab_hidden_post(
+        **{
+            **base_kwargs,
+            "action_id_u16": np.concatenate([base_kwargs["action_id_u16"], np.array([act_capturewait_lw], dtype=np.uint16)]),
+            "action_frame_i16": np.concatenate([base_kwargs["action_frame_i16"], np.array([3], dtype=np.int16)]),
+            "grab_owner_port_u8": np.concatenate([base_kwargs["grab_owner_port_u8"], np.array([0], dtype=np.uint8)]),
+            "percent_f32": np.concatenate([base_kwargs["percent_f32"], np.array([10.0], dtype=np.float32)]),
+            "buttons_held_u16": np.concatenate([base_kwargs["buttons_held_u16"], np.array([0x0000], dtype=np.uint16)]),
+            "stick_x_unit": np.concatenate([base_kwargs["stick_x_unit"], np.array([0.0], dtype=np.float32)]),
+            "stick_y_unit": np.concatenate([base_kwargs["stick_y_unit"], np.array([0.0], dtype=np.float32)]),
+            "frame_speed_mul_f32": np.concatenate([base_kwargs["frame_speed_mul_f32"], np.array([2.0], dtype=np.float32)]),
+            "grab_mash_stick_x_sign_post": np.concatenate([base_kwargs["grab_mash_stick_x_sign_post"], np.array([0], dtype=np.int8)]),
+            "grab_mash_stick_y_sign_post": np.concatenate([base_kwargs["grab_mash_stick_y_sign_post"], np.array([0], dtype=np.int8)]),
+        }
+    )
+    for lhs, rhs in zip(out0, out1):
+        assert np.array_equal(lhs, rhs[: lhs.size])
 
 
 def test_derive_guard_reflect_timer_is_prefix_invariant() -> None:

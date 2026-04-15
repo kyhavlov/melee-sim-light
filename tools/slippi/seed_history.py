@@ -2966,6 +2966,24 @@ _ACT_THROWN_B = np.uint16(0x00F0)  # ftCo_MS_ThrownB (240)
 _ACT_THROWN_HI = np.uint16(0x00F1)  # ftCo_MS_ThrownHi (241)
 _ACT_THROWN_LW = np.uint16(0x00F2)  # ftCo_MS_ThrownLw (242)
 _ACT_THROWN_LW_WOMEN = np.uint16(0x00F3)  # ftCo_MS_ThrownlwWomen (243)
+_BTN_A = np.uint16(0x0100)
+_BTN_B = np.uint16(0x0200)
+_BTN_X = np.uint16(0x0400)
+_BTN_Y = np.uint16(0x0800)
+_BTN_L = np.uint16(0x0040)
+_BTN_R = np.uint16(0x0020)
+_BTN_XY = np.uint16(0x0C00)
+_CAPTURE_ATTACH_ACTIONS = (
+    _ACT_CAPTURE_PULLED_HI,
+    _ACT_CAPTURE_WAIT_HI,
+    _ACT_CAPTURE_DAMAGE_HI,
+    _ACT_CAPTURE_PULLED_LW,
+    _ACT_CAPTURE_WAIT_LW,
+    _ACT_CAPTURE_DAMAGE_LW,
+)
+_CAPTURE_WAIT_ACTIONS = (_ACT_CAPTURE_WAIT_HI, _ACT_CAPTURE_WAIT_LW)
+_CAPTURE_DAMAGE_ACTIONS = (_ACT_CAPTURE_DAMAGE_HI, _ACT_CAPTURE_DAMAGE_LW)
+_CAPTURE_WAIT_OR_DAMAGE_ACTIONS = _CAPTURE_WAIT_ACTIONS + _CAPTURE_DAMAGE_ACTIONS
 
 
 def derive_grab_owner_port_2p(*, action_id_u16_2p: np.ndarray) -> np.ndarray:
@@ -2982,7 +3000,16 @@ def derive_grab_owner_port_2p(*, action_id_u16_2p: np.ndarray) -> np.ndarray:
     if a.ndim != 2 or a.shape[1] != 2:
         raise ValueError(f"action_id_u16_2p must have shape [n,2], got {a.shape}")
 
-    # Captured/thrown victim action ids (common).
+    # Attached captured/thrown victim action ids (common).
+    #
+    # CaptureCut / CaptureJump are not part of the attached owner link any more:
+    # ftCo_CaptureWaitHi_Anim breaks out through ftCo_800DA698 / fn_800DC070, both of which route
+    # through ftCo_800DC920 and clear owner/victim pointers before entering CatchCut/CaptureCut/
+    # CaptureJump.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::{
+    #   ftCo_CaptureWaitHi_Anim,ftCo_800DA698,fn_800DC070
+    # }
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_CaptureCut.c::ftCo_800DC920
     is_victim = (
         (a == _ACT_CAPTURE_PULLED_HI)
         | (a == _ACT_CAPTURE_WAIT_HI)
@@ -2990,8 +3017,6 @@ def derive_grab_owner_port_2p(*, action_id_u16_2p: np.ndarray) -> np.ndarray:
         | (a == _ACT_CAPTURE_PULLED_LW)
         | (a == _ACT_CAPTURE_WAIT_LW)
         | (a == _ACT_CAPTURE_DAMAGE_LW)
-        | (a == _ACT_CAPTURE_CUT)
-        | (a == _ACT_CAPTURE_JUMP)
         | (a == _ACT_CAPTURE_NECK)
         | (a == _ACT_CAPTURE_FOOT)
         | (a == _ACT_THROWN_F)
@@ -3074,3 +3099,194 @@ def derive_grab_mash_stick_sign_post(
         out_x[i] = latch_x
         out_y[i] = latch_y
     return out_x, out_y
+
+
+def derive_capture_grab_hidden_post(
+    *,
+    action_id_u16: np.ndarray,
+    action_frame_i16: np.ndarray,
+    grab_owner_port_u8: np.ndarray,
+    percent_f32: np.ndarray,
+    buttons_held_u16: np.ndarray,
+    stick_x_unit: np.ndarray,
+    stick_y_unit: np.ndarray,
+    frame_speed_mul_f32: np.ndarray,
+    grab_mash_stick_x_sign_post: np.ndarray,
+    grab_mash_stick_y_sign_post: np.ndarray,
+    slot_index: int,
+    handicap: int,
+    capture_grab_timer_base: float,
+    capture_grab_timer_handicap_mul: float,
+    capture_grab_timer_handicap_base: float,
+    capture_grab_timer_slot_mul: float,
+    capture_grab_timer_slot_base: float,
+    capture_grab_timer_percent_mul: float,
+    capture_wait_grab_timer_decrement: float,
+    capture_wait_grab_mash_damage: float,
+    capture_wait_anim_rate_hold_frames: float,
+    capture_wait_jump_latch_window_frames: float,
+    grab_mash_stick_threshold: float,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """Derive explicit CaptureWait/CaptureDamage hidden owner lanes.
+
+    Output row `i` corresponds to the post-frame replay row `i` and is suitable for seeding the
+    next one-step transition from replay row `i` to replay row `i+1`.
+    """
+    action_id = np.asarray(action_id_u16, dtype=np.uint16).reshape(-1)
+    action_frame = np.asarray(action_frame_i16, dtype=np.int16).reshape(-1)
+    owner = np.asarray(grab_owner_port_u8, dtype=np.uint8).reshape(-1)
+    percent = np.asarray(percent_f32, dtype=np.float32).reshape(-1)
+    buttons = np.asarray(buttons_held_u16, dtype=np.uint16).reshape(-1)
+    stick_x = np.asarray(stick_x_unit, dtype=np.float32).reshape(-1)
+    stick_y = np.asarray(stick_y_unit, dtype=np.float32).reshape(-1)
+    frame_speed = np.asarray(frame_speed_mul_f32, dtype=np.float32).reshape(-1)
+    mash_x = np.asarray(grab_mash_stick_x_sign_post, dtype=np.int8).reshape(-1)
+    mash_y = np.asarray(grab_mash_stick_y_sign_post, dtype=np.int8).reshape(-1)
+    if (
+        action_id.shape != action_frame.shape
+        or action_id.shape != owner.shape
+        or action_id.shape != percent.shape
+        or action_id.shape != buttons.shape
+        or action_id.shape != stick_x.shape
+        or action_id.shape != stick_y.shape
+        or action_id.shape != frame_speed.shape
+        or action_id.shape != mash_x.shape
+        or action_id.shape != mash_y.shape
+    ):
+        raise ValueError("capture/grab hidden derivation inputs must all match")
+
+    n = action_id.shape[0]
+    out_grab_timer = np.zeros(n, dtype=np.float32)
+    out_counter = np.zeros(n, dtype=np.float32)
+    out_anim_timer = np.zeros(n, dtype=np.float32)
+    out_jump_latch = np.zeros(n, dtype=np.uint8)
+    out_breakout_pending = np.zeros(n, dtype=np.uint8)
+    if n == 0:
+        return (
+            out_grab_timer,
+            out_counter,
+            out_anim_timer,
+            out_jump_latch,
+            out_breakout_pending,
+        )
+
+    def _is_attach_action(a: np.uint16) -> bool:
+        return int(a) in {int(v) for v in _CAPTURE_ATTACH_ACTIONS}
+
+    def _is_wait_action(a: np.uint16) -> bool:
+        return int(a) in {int(v) for v in _CAPTURE_WAIT_ACTIONS}
+
+    def _is_wait_or_damage_action(a: np.uint16) -> bool:
+        return int(a) in {int(v) for v in _CAPTURE_WAIT_OR_DAMAGE_ACTIONS}
+
+    def _grab_timer_init(i: int) -> np.float32:
+        slot = np.float32(float(slot_index + 1))
+        hcap = np.float32(float(handicap))
+        return np.float32(
+            capture_grab_timer_base
+            + capture_grab_timer_handicap_mul * (capture_grab_timer_handicap_base - hcap)
+            + capture_grab_timer_slot_mul * (capture_grab_timer_slot_base - slot)
+            + percent[i] * capture_grab_timer_percent_mul
+        )
+
+    def _seed_mid_segment_row(i: int) -> tuple[np.float32, np.float32, np.float32, np.uint8]:
+        timer = _grab_timer_init(i)
+        counter = np.float32(0.0)
+        anim_timer = np.float32(0.0)
+        jump_latch = np.uint8(0)
+        # Dataset windows can start mid-capture segment. Use the replay-visible state only to
+        # restore the shared owner lanes, without reintroducing cross-row rate bridges.
+        if _is_wait_or_damage_action(action_id[i]):
+          callbacks = max(0, int(action_frame[i]))
+          if callbacks > 0:
+              counter = np.float32(float(callbacks))
+              timer = np.float32(max(0.0, float(timer) - callbacks * capture_wait_grab_timer_decrement))
+          if frame_speed[i] > np.float32(1.0):
+              anim_timer = np.float32(capture_wait_anim_rate_hold_frames)
+        return timer, counter, anim_timer, jump_latch
+
+    if _is_attach_action(action_id[0]) and owner[0] != np.uint8(0xFF):
+        (
+            out_grab_timer[0],
+            out_counter[0],
+            out_anim_timer[0],
+            out_jump_latch[0],
+        ) = _seed_mid_segment_row(0)
+
+    for i in range(n - 1):
+        timer = float(out_grab_timer[i])
+        counter = float(out_counter[i])
+        anim_timer = float(out_anim_timer[i])
+        jump_latch = int(out_jump_latch[i])
+        next_timer = np.float32(0.0)
+        next_counter = np.float32(0.0)
+        next_anim_timer = np.float32(0.0)
+        next_jump_latch = np.uint8(0)
+        if _is_attach_action(action_id[i]) and owner[i] != np.uint8(0xFF):
+            if _is_wait_or_damage_action(action_id[i]):
+                counter += 1.0
+                timer -= float(capture_wait_grab_timer_decrement)
+
+                held = buttons[i + 1]
+                mash_active = (
+                    held & (_BTN_A | _BTN_B | _BTN_X | _BTN_Y | _BTN_L | _BTN_R)
+                ) != 0
+                next_x = mash_x[i]
+                next_y = mash_y[i]
+                if stick_x[i + 1] < -np.float32(grab_mash_stick_threshold):
+                    next_x = np.int8(-1)
+                elif stick_x[i + 1] > np.float32(grab_mash_stick_threshold):
+                    next_x = np.int8(1)
+                if stick_y[i + 1] < -np.float32(grab_mash_stick_threshold):
+                    next_y = np.int8(-1)
+                elif stick_y[i + 1] > np.float32(grab_mash_stick_threshold):
+                    next_y = np.int8(1)
+                if next_x != mash_x[i] or next_y != mash_y[i]:
+                    mash_active = True
+                if mash_active:
+                    timer -= float(capture_wait_grab_mash_damage)
+
+                if timer > 0.0:
+                    if anim_timer != 0.0:
+                        anim_timer -= 1.0
+                        if anim_timer <= 0.0 and not mash_active:
+                            anim_timer = 0.0
+                    if anim_timer <= 0.0 and mash_active:
+                        anim_timer = float(capture_wait_anim_rate_hold_frames)
+
+            if _is_wait_action(action_id[i]):
+                if counter < float(capture_wait_jump_latch_window_frames) and (
+                    buttons[i + 1] & _BTN_XY
+                ) != 0:
+                    jump_latch = 1
+
+            if _is_wait_action(action_id[i]) and action_id[i + 1] in (
+                _ACT_CAPTURE_CUT,
+                _ACT_CAPTURE_JUMP,
+            ):
+                out_breakout_pending[i] = np.uint8(1)
+
+            if _is_attach_action(action_id[i + 1]) and owner[i + 1] == owner[i]:
+                next_timer = np.float32(max(0.0, timer))
+                next_counter = np.float32(max(0.0, counter))
+                next_anim_timer = np.float32(max(0.0, anim_timer))
+                next_jump_latch = np.uint8(1 if jump_latch else 0)
+                if _is_wait_action(action_id[i]) and action_id[i + 1] in _CAPTURE_DAMAGE_ACTIONS:
+                    next_anim_timer = np.float32(0.0)
+
+        if next_timer == np.float32(0.0) and next_counter == np.float32(0.0) and (
+            _is_attach_action(action_id[i + 1]) and owner[i + 1] != np.uint8(0xFF)
+        ):
+            next_timer, next_counter, next_anim_timer, next_jump_latch = _seed_mid_segment_row(i + 1)
+
+        out_grab_timer[i + 1] = next_timer
+        out_counter[i + 1] = next_counter
+        out_anim_timer[i + 1] = next_anim_timer
+        out_jump_latch[i + 1] = next_jump_latch
+    return (
+        out_grab_timer,
+        out_counter,
+        out_anim_timer,
+        out_jump_latch,
+        out_breakout_pending,
+    )

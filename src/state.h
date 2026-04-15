@@ -41,6 +41,7 @@ typedef struct MslStateSoA {
   uint8_t* is_teams;              // [batch]
   uint8_t* team_id;               // [batch * MSL_MAX_PLAYERS]
   uint8_t* char_id;               // [batch * MSL_MAX_PLAYERS]
+  uint8_t* handicap;              // [batch * MSL_MAX_PLAYERS] (decomp: Player_GetHandicap)
   float* attack_ratio;            // [batch * MSL_MAX_PLAYERS] (decomp: Player_GetAttackRatio)
   float* defense_ratio;           // [batch * MSL_MAX_PLAYERS] (decomp: Player_GetDefenseRatio)
 
@@ -275,18 +276,15 @@ typedef struct MslStateSoA {
   //   writes fp->frame_speed_mul via ftAnim_SetAnimRate.
   // refs/melee/src/melee/ft/ftwalkcommon.c::ftWalkCommon_800DFDDC
   float* walk_anim_source_vel;
-  // CaptureWait Anim-rate ownership bridge:
-  // - ftCo_CaptureWaitHi_Anim updates fp->frame_speed_mul via ftAnim_SetAnimRate in Anim callback.
-  // - Fighter_8006A360 advances ftAnim before callback-owned rate writes each frame.
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_CaptureWaitHi_Anim
-  // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
-  //
-  // Teacher-forced reseed stores post-frame snapshots, so CaptureWait lanes can need a one-frame
-  // prior-rate bridge to preserve callback ownership ordering.
-  int32_t* capture_wait_prev_rate_fp_q16_16;           // previous seeded frame_speed_mul snapshot
-  int32_t* capture_wait_seed_rate_snapshot_fp_q16_16;  // current seeded frame_speed_mul snapshot
-  uint8_t* capture_wait_prev_rate_valid;  // 1 when previous snapshot continuity applies
-  float* capture_wait_anim_rate_timer;    // runtime x2344-style hold timer
+  // Capture/grab hidden owner lanes.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::{
+  //   ftCo_800DA824,ftCo_CaptureWaitHi_Anim,fn_800DB8A4,fn_800DC014
+  // }
+  float* capture_grab_timer;            // fp->grab_timer
+  float* capture_wait_counter;          // mv.co.capturewait.x0
+  float* capture_wait_anim_rate_timer;  // mv.co.capturewait.x4
+  uint8_t* capture_wait_jump_latch;     // mv.co.capturewait.xC
+  uint8_t* capture_breakout_pending;    // explicit CatchWait/CaptureWait breakout resolve bit
   // Shared throw/thrown entry anim-speed cache (`ftCo_800DD4B0` / `ftCo_800DD398`).
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::{ftCo_800DD4B0,ftCo_800DD398}
   int32_t* throw_anim_rate_fp_q16_16;

@@ -438,6 +438,9 @@ typedef enum MslSubmotionId {
   MSL_SM_CAPTURE_WAIT_LW = 255,    // ftCo_SM_CaptureWaitLw
   MSL_SM_CAPTURE_DAMAGE_LW = 256,  // ftCo_SM_CaptureDamageLw
   MSL_SM_CAPTURE_CUT = 257,        // ftCo_SM_CaptureCut
+  MSL_SM_CAPTURE_JUMP = 258,       // ftCo_SM_CaptureJump
+  MSL_SM_CAPTURE_NECK = 259,       // ftCo_SM_CaptureNeck
+  MSL_SM_CAPTURE_FOOT = 260,       // ftCo_SM_CaptureFoot
   MSL_SM_THROWN_F = 262,           // ftCo_SM_ThrownF
   MSL_SM_THROWN_B = 263,           // ftCo_SM_ThrownB
   MSL_SM_THROWN_HI = 264,          // ftCo_SM_ThrownHi
@@ -583,8 +586,6 @@ static inline uint8_t msl_action_is_grabbed_victim(uint16_t action_id) {
     case MSL_ACT_CAPTURE_PULLED_LW:
     case MSL_ACT_CAPTURE_WAIT_LW:
     case MSL_ACT_CAPTURE_DAMAGE_LW:
-    case MSL_ACT_CAPTURE_CUT:
-    case MSL_ACT_CAPTURE_JUMP:
     case MSL_ACT_CAPTURE_NECK:
     case MSL_ACT_CAPTURE_FOOT:
     case MSL_ACT_THROWN_F:
