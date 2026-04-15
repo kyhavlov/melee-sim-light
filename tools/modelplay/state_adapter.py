@@ -140,9 +140,9 @@ def _controller_from_input_player(inp: np.void):
     )
 
 
-def input_array_to_controllers(input_arr: np.ndarray) -> dict[int, object]:
+def input_array_to_controllers(input_arr: np.ndarray, *, num_players: int = 2) -> dict[int, object]:
     row = input_arr[0]["p"]
-    return {port + 1: _controller_from_input_player(row[port]) for port in range(2)}
+    return {port + 1: _controller_from_input_player(row[port]) for port in range(num_players)}
 
 
 def controller_to_input_player(controller) -> np.ndarray:
@@ -188,6 +188,7 @@ class SimFrameState:
     frame_id: int
     stage_id: int
     num_players: int
+    is_teams: bool
     team_id: np.ndarray
     char_id: np.ndarray
     pos_x: np.ndarray
@@ -215,6 +216,7 @@ def frame_state_from_seed(seed: np.void) -> SimFrameState:
         frame_id=int(seed["frame_id"]),
         stage_id=int(seed["stage_id"]),
         num_players=num_players,
+        is_teams=bool(seed["is_teams"]),
         team_id=np.array(seed["team_id"], copy=True),
         char_id=np.array(seed["char_id"], copy=True),
         pos_x=np.array(seed["pos_x"], copy=True),
@@ -242,6 +244,7 @@ def frame_state_from_compare(compare: np.void) -> SimFrameState:
         frame_id=int(compare["frame_id"]),
         stage_id=int(compare["stage_id"]),
         num_players=int(compare["num_players"]),
+        is_teams=bool(compare["is_teams"]),
         team_id=np.array(compare["team_id"], copy=True),
         char_id=np.array(compare["char_id"], copy=True),
         pos_x=np.array(compare["pos_x"], copy=True),
@@ -288,13 +291,9 @@ def _player_from_state(
     )
 
 
-def build_slippi_ai_game(state: SimFrameState, controllers: Mapping[int, object], *, viewpoint_port: int):
+def _empty_player():
     sa_types = _sa_types()
-    if viewpoint_port not in (1, 2):
-        raise ValueError(f"unsupported singles viewpoint_port={viewpoint_port}")
-    self_idx = viewpoint_port - 1
-    opp_idx = 1 - self_idx
-    empty_player = sa_types.Player(
+    return sa_types.Player(
         percent=np.uint16(0),
         facing=np.bool_(False),
         x=np.float32(0.0),
@@ -310,8 +309,41 @@ def build_slippi_ai_game(state: SimFrameState, controllers: Mapping[int, object]
         controller=empty_controller(),
         nana=_empty_nana(),
     )
+
+
+def build_slippi_ai_game(state: SimFrameState, controllers: Mapping[int, object], *, viewpoint_port: int):
+    sa_types = _sa_types()
+    if viewpoint_port < 1 or viewpoint_port > state.num_players:
+        raise ValueError(f"unsupported viewpoint_port={viewpoint_port} for num_players={state.num_players}")
+    self_idx = viewpoint_port - 1
+    empty_player = _empty_player()
+    self_team = int(state.team_id[self_idx])
+
+    if state.is_teams:
+        allies = [
+            idx
+            for idx in range(state.num_players)
+            if idx != self_idx and int(state.team_id[idx]) == self_team
+        ]
+        opponents = [
+            idx
+            for idx in range(state.num_players)
+            if int(state.team_id[idx]) != self_team
+        ]
+    else:
+        allies = []
+        opponents = [idx for idx in range(state.num_players) if idx != self_idx]
+
+    def player_or_empty(indices: list[int], slot: int):
+        if slot >= len(indices):
+            return empty_player
+        idx = indices[slot]
+        return _player_from_state(state, idx, controllers.get(idx + 1, empty_controller()))
+
     p0 = _player_from_state(state, self_idx, controllers.get(viewpoint_port, empty_controller()))
-    p2 = _player_from_state(state, opp_idx, controllers.get(opp_idx + 1, empty_controller()))
+    p1 = player_or_empty(allies, 0)
+    p2 = player_or_empty(opponents, 0)
+    p3 = player_or_empty(opponents, 1)
     items = {
         f"item_{i}": sa_types.Item(
             exists=np.bool_(bool(item["exists"])),
@@ -325,14 +357,14 @@ def build_slippi_ai_game(state: SimFrameState, controllers: Mapping[int, object]
     stage = LIBMELEE_STAGE_FINAL_DESTINATION if state.stage_id == MSL_STAGE_FINAL_DESTINATION else 0
     return sa_types.Game(
         p0=p0,
-        p1=empty_player,
+        p1=p1,
         p2=p2,
-        p3=empty_player,
+        p3=p3,
         stage=np.uint8(stage),
         randall_phase=np.float32(state.frame_id % 1200),
         randall=sa_types.Randall(x=np.float32(0.0), y=np.float32(0.0)),
         items=sa_types.Items(**items),
-        is_teams=np.bool_(False),
+        is_teams=np.bool_(state.is_teams),
     )
 
 
@@ -344,9 +376,22 @@ def _viewer_external_char_id(internal_char_id: int) -> int:
     return int(internal_char_id)
 
 
+def _viewer_team_id(team_id: int) -> int:
+    # The vendored viewer's team palette is indexed red/green/blue, while Slippi start data uses
+    # team color 0/1 for the common red/blue teams. Keep sim team ids unchanged and only remap the
+    # display id in modelplay traces.
+    if team_id == 1:
+        return 2
+    if team_id == 2:
+        return 1
+    return int(team_id)
+
+
 def viewer_settings_from_state(state: SimFrameState, *, start_stocks: int = 4, timer_start: int = 480) -> dict:
     settings = dict(SLIPPI_VIEWER_SETTINGS_TEMPLATE)
     settings["timerStart"] = int(timer_start)
+    settings["isTeams"] = bool(state.is_teams)
+    settings["characterUiPlacesCount"] = int(state.num_players)
     settings["playerSettings"] = []
     for idx in range(state.num_players):
         settings["playerSettings"].append(
@@ -360,7 +405,7 @@ def viewer_settings_from_state(state: SimFrameState, *, start_stocks: int = 4, t
                 "costumeIndex": 0,
                 "teamShade": 0,
                 "handicap": 9,
-                "teamId": int(state.team_id[idx]),
+                "teamId": _viewer_team_id(int(state.team_id[idx])),
                 "staminaMode": False,
                 "silentCharacter": False,
                 "lowGravity": False,

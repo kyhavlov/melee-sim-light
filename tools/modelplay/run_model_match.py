@@ -16,6 +16,10 @@ CHAR_IDS = {
     "falco": 22,
 }
 
+DEFAULT_DOUBLES_CHARS = ("fox", "falco", "fox", "falco")
+DEFAULT_DOUBLES_TEAMS = (0, 0, 1, 1)
+DEFAULT_DOUBLES_FACING = (1, 1, 0, 0)
+
 
 def _timestamp() -> str:
     return datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
@@ -81,11 +85,32 @@ def _player_static_signature(state: SimFrameState, player_idx: int) -> tuple:
     )
 
 
+def _parse_int_tuple(value: str, *, expected_len: int, name: str) -> tuple[int, ...]:
+    out = tuple(int(part.strip()) for part in value.split(",") if part.strip())
+    if len(out) != expected_len:
+        raise ValueError(f"expected {expected_len} comma-separated values for {name}, got {value!r}")
+    return out
+
+
+def _game_over(state: SimFrameState) -> bool:
+    if state.is_teams:
+        teams_with_stocks = {
+            int(state.team_id[idx])
+            for idx in range(state.num_players)
+            if int(state.stocks[idx]) > 0
+        }
+        return len(teams_with_stocks) <= 1
+    alive_count = sum(1 for idx in range(state.num_players) if int(state.stocks[idx]) > 0)
+    return alive_count <= 1 or any(int(state.stocks[idx]) == 0 for idx in range(state.num_players))
+
+
 def parse_args() -> argparse.Namespace:
     ap = argparse.ArgumentParser(description="Run a slippi-ai model-vs-model match inside melee-sim-light.")
     ap.add_argument("--slippi-ai-root", type=Path, required=True)
     ap.add_argument("--p1-model", type=Path, required=True)
     ap.add_argument("--p2-model", type=Path, required=True)
+    ap.add_argument("--p3-model", type=Path, default=None)
+    ap.add_argument("--p4-model", type=Path, default=None)
     ap.add_argument(
         "--dataset",
         type=Path,
@@ -110,8 +135,14 @@ def parse_args() -> argparse.Namespace:
     ap.add_argument("--out", type=Path, default=Path("reports/triage") / f"{_timestamp()}_modelplay")
     ap.add_argument("--p1-name", default="P1")
     ap.add_argument("--p2-name", default="P2")
+    ap.add_argument("--p3-name", default="P3")
+    ap.add_argument("--p4-name", default="P4")
     ap.add_argument("--p1-char", choices=sorted(CHAR_IDS), default=None)
     ap.add_argument("--p2-char", choices=sorted(CHAR_IDS), default=None)
+    ap.add_argument("--p3-char", choices=sorted(CHAR_IDS), default=None)
+    ap.add_argument("--p4-char", choices=sorted(CHAR_IDS), default=None)
+    ap.add_argument("--doubles", action="store_true", help="Run a 4-player 2v2 sim-init game")
+    ap.add_argument("--team-ids", default="0,0,1,1", help="Comma-separated team ids for --doubles")
     return ap.parse_args()
 
 
@@ -120,21 +151,48 @@ def main() -> int:
     out_dir = args.out.resolve()
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    char_ids = None
-    if args.p1_char is not None or args.p2_char is not None:
-        char_ids = (
-            CHAR_IDS[args.p1_char or "falco"],
-            CHAR_IDS[args.p2_char or "fox"],
+    if args.doubles:
+        char_names = (
+            args.p1_char or DEFAULT_DOUBLES_CHARS[0],
+            args.p2_char or DEFAULT_DOUBLES_CHARS[1],
+            args.p3_char or DEFAULT_DOUBLES_CHARS[2],
+            args.p4_char or DEFAULT_DOUBLES_CHARS[3],
         )
+        char_ids = tuple(CHAR_IDS[name] for name in char_names)
+        team_ids = _parse_int_tuple(args.team_ids, expected_len=4, name="--team-ids")
+        facing = DEFAULT_DOUBLES_FACING
+        start_mode = "sim-init" if args.start_mode == "replay" else args.start_mode
+    else:
+        char_ids = None
+        if args.p1_char is not None or args.p2_char is not None:
+            char_ids = (
+                CHAR_IDS[args.p1_char or "falco"],
+                CHAR_IDS[args.p2_char or "fox"],
+            )
+        team_ids = None
+        facing = None
+        start_mode = args.start_mode
 
     session = SimSession(
         dataset_path=args.dataset,
         start_record=args.start_record,
         char_ids=char_ids,
-        start_mode=args.start_mode,
+        team_ids=team_ids,
+        is_teams=args.doubles,
+        start_mode=start_mode,
+        facing=facing,
     )
-    p1 = build_model_agent(slippi_ai_root=args.slippi_ai_root, model_path=args.p1_model, name=args.p1_name)
-    p2 = build_model_agent(slippi_ai_root=args.slippi_ai_root, model_path=args.p2_model, name=args.p2_name)
+    model_specs = {
+        1: (args.p1_model, args.p1_name),
+        2: (args.p2_model, args.p2_name),
+    }
+    if args.doubles:
+        model_specs[3] = (args.p3_model or args.p1_model, args.p3_name)
+        model_specs[4] = (args.p4_model or args.p2_model, args.p4_name)
+    agents = {
+        port: build_model_agent(slippi_ai_root=args.slippi_ai_root, model_path=model_path, name=name)
+        for port, (model_path, name) in model_specs.items()
+    }
     trace = ViewerTrace()
 
     try:
@@ -156,11 +214,11 @@ def main() -> int:
 
         frames_run = 0
         while frames_run < args.max_frames:
-            p1_game = env_out.gamestates[1]
-            p2_game = env_out.gamestates[2]
-            p1_controller = p1.step(p1_game, needs_reset=env_out.needs_reset)
-            p2_controller = p2.step(p2_game, needs_reset=env_out.needs_reset)
-            env_out = session.step({1: p1_controller, 2: p2_controller})
+            controllers = {
+                port: agent.step(env_out.gamestates[port], needs_reset=env_out.needs_reset)
+                for port, agent in agents.items()
+            }
+            env_out = session.step(controllers)
             trace.add_frame(session.current_frame_state, session.last_controllers)
             frames_run += 1
             state = session.current_frame_state
@@ -184,7 +242,7 @@ def main() -> int:
                     player_static_start_frames[idx] = current_frame
                     player_static_start_global_changes[idx] = global_change_count
 
-            if int(state.stocks[0]) == 0 or int(state.stocks[1]) == 0:
+            if _game_over(state):
                 break
             if static_repeat_count >= args.static_frame_threshold:
                 static_failure = {
@@ -221,7 +279,7 @@ def main() -> int:
         trace.write_json(trace_path)
         trace_to_failure_path = None
         termination_reason = "max_frames"
-        if int(session.current_frame_state.stocks[0]) == 0 or int(session.current_frame_state.stocks[1]) == 0:
+        if _game_over(session.current_frame_state):
             termination_reason = "game_over"
         elif static_failure is not None:
             termination_reason = "static_failure"
@@ -235,11 +293,15 @@ def main() -> int:
         summary = {
             "dataset": str(args.dataset),
             "start_record": args.start_record,
-            "start_mode": args.start_mode,
+            "start_mode": start_mode,
+            "doubles": args.doubles,
+            "team_ids": None if team_ids is None else list(team_ids),
             "frames_run": frames_run,
             "final_frame_id": session.current_frame_state.frame_id,
-            "final_stocks": session.current_frame_state.stocks[:2].tolist(),
-            "final_percent": [float(x) for x in session.current_frame_state.percent[:2]],
+            "final_stocks": session.current_frame_state.stocks[: session.current_frame_state.num_players].tolist(),
+            "final_percent": [
+                float(x) for x in session.current_frame_state.percent[: session.current_frame_state.num_players]
+            ],
             "game_over": termination_reason == "game_over",
             "termination_reason": termination_reason,
             "static_failure": static_failure,
@@ -254,15 +316,23 @@ def main() -> int:
                     "slippi_ai_root": str(args.slippi_ai_root),
                     "p1_model": str(args.p1_model),
                     "p2_model": str(args.p2_model),
+                    "p3_model": None if args.p3_model is None else str(args.p3_model),
+                    "p4_model": None if args.p4_model is None else str(args.p4_model),
                     "dataset": str(args.dataset),
                     "start_record": args.start_record,
-                    "start_mode": args.start_mode,
+                    "start_mode": start_mode,
+                    "doubles": args.doubles,
+                    "team_ids": None if team_ids is None else list(team_ids),
                     "max_frames": args.max_frames,
                     "static_frame_threshold": args.static_frame_threshold,
                     "p1_name": args.p1_name,
                     "p2_name": args.p2_name,
+                    "p3_name": args.p3_name,
+                    "p4_name": args.p4_name,
                     "p1_char": args.p1_char,
                     "p2_char": args.p2_char,
+                    "p3_char": args.p3_char,
+                    "p4_char": args.p4_char,
                 },
                 indent=2,
             )
@@ -272,8 +342,8 @@ def main() -> int:
         print(json.dumps(summary, indent=2))
         return 0
     finally:
-        stop_model_agent(p1)
-        stop_model_agent(p2)
+        for agent in agents.values():
+            stop_model_agent(agent)
         session.close()
 
 

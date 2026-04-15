@@ -101,6 +101,7 @@ def build_match_config_array(
     *,
     num_players: int = 2,
     char_ids: Sequence[int] = (CHAR_FALCO, CHAR_FOX),
+    team_ids: Sequence[int] | None = None,
     facing: Sequence[int] = (1, 0),
     stocks: int = 4,
     stage_id: int = MSL_STAGE_FINAL_DESTINATION,
@@ -113,6 +114,8 @@ def build_match_config_array(
         raise ValueError(f"num_players must be 2 or 4, got {num_players}")
     if len(char_ids) != num_players:
         raise ValueError(f"expected {num_players} char ids, got {len(char_ids)}")
+    if team_ids is not None and len(team_ids) != num_players:
+        raise ValueError(f"expected {num_players} team ids, got {len(team_ids)}")
     if len(facing) != num_players:
         raise ValueError(f"expected {num_players} facing values, got {len(facing)}")
     if stocks <= 0:
@@ -128,7 +131,7 @@ def build_match_config_array(
     arr[0]["stock_count"] = np.uint8(stocks)
     for p in range(num_players):
         arr[0]["players"][p]["char_id"] = np.uint8(int(char_ids[p]))
-        arr[0]["players"][p]["team_id"] = np.uint8(p)
+        arr[0]["players"][p]["team_id"] = np.uint8(int(team_ids[p]) if team_ids is not None else p)
         arr[0]["players"][p]["facing"] = np.uint8(1 if int(facing[p]) else 0)
     return arr
 
@@ -140,6 +143,8 @@ class SimSession:
         dataset_path: Path | None,
         start_record: int = 0,
         char_ids: Sequence[int] | None = None,
+        team_ids: Sequence[int] | None = None,
+        is_teams: bool = False,
         start_mode: str = "replay",
         stocks: int = 4,
         facing: Sequence[int] | None = None,
@@ -165,22 +170,31 @@ class SimSession:
             self._num_players = int(self._dataset.header["num_players"])
             if char_ids is not None and len(char_ids) != self._num_players:
                 raise ValueError(f"expected {self._num_players} char ids, got {len(char_ids)}")
+            if team_ids is not None and len(team_ids) != self._num_players:
+                raise ValueError(f"expected {self._num_players} team ids, got {len(team_ids)}")
             self._char_ids = None if char_ids is None else tuple(int(x) for x in char_ids)
+            self._team_ids = None if team_ids is None else tuple(int(x) for x in team_ids)
+            self._is_teams = bool(is_teams)
             self._match_config = None
         else:
             self._num_players = 2 if char_ids is None else len(char_ids)
             if self._num_players not in (2, 4):
                 raise ValueError(f"num_players must be 2 or 4, got {self._num_players}")
             init_char_ids = tuple(int(x) for x in (char_ids or (CHAR_FALCO, CHAR_FOX)))
+            init_team_ids = tuple(int(x) for x in (team_ids or tuple(range(self._num_players))))
             init_facing = tuple(int(x) for x in (facing or (1, 0, 1, 0)[: self._num_players]))
             self._char_ids = init_char_ids
+            self._team_ids = init_team_ids
+            self._is_teams = bool(is_teams)
             self._match_config = build_match_config_array(
                 num_players=self._num_players,
                 char_ids=init_char_ids,
+                team_ids=init_team_ids,
                 facing=init_facing,
                 stocks=stocks,
                 frame_id=frame_id,
                 random_seed=random_seed,
+                is_teams=is_teams,
             )
         self._handle = msl_binding.init(1, self._num_players)
         self._compare = np.zeros(1, dtype=COMPARE_DTYPE)
@@ -217,6 +231,10 @@ class SimSession:
         if self._char_ids is not None:
             for p, char_id in enumerate(self._char_ids):
                 seed_arr[0]["char_id"][p] = np.uint8(char_id)
+        if self._team_ids is not None:
+            seed_arr[0]["is_teams"] = np.uint8(1 if self._is_teams else 0)
+            for p, team_id in enumerate(self._team_ids):
+                seed_arr[0]["team_id"][p] = np.uint8(team_id)
         seed_bytes = seed_arr.view(np.uint8).reshape(1, -1)
         self._binding.reseed_seed(self._handle, seed_bytes)
         self._prev_input[0] = row["prev_input_t"]
@@ -243,8 +261,8 @@ class SimSession:
     def current_state(self) -> EnvOutput:
         state = self.current_frame_state
         games = {
-            1: build_slippi_ai_game(state, self._last_controllers, viewpoint_port=1),
-            2: build_slippi_ai_game(state, self._last_controllers, viewpoint_port=2),
+            port: build_slippi_ai_game(state, self._last_controllers, viewpoint_port=port)
+            for port in range(1, state.num_players + 1)
         }
         out = EnvOutput(gamestates=games, needs_reset=self._needs_reset)
         self._needs_reset = False
@@ -274,4 +292,9 @@ class SimSession:
         self._binding.debug_write_processed_input(
             self._handle, self._processed_input.view(np.uint8).reshape(1, -1)
         )
-        self._last_controllers = input_array_to_controllers(self._processed_input)
+        if self._num_players == 2:
+            self._last_controllers = input_array_to_controllers(self._processed_input)
+        else:
+            self._last_controllers = input_array_to_controllers(
+                self._processed_input, num_players=self._num_players
+            )

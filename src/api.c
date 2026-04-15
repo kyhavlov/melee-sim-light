@@ -435,6 +435,66 @@ static inline uint8_t msl_match_init_point_inside_bounds(const MslStageBounds* b
   return (uint8_t)(x >= b->left && x <= b->right && y >= b->bottom && y <= b->top);
 }
 
+static uint8_t msl_match_init_slippi_neutral_spawn_point(const MslMatchConfig* cfg,
+                                                         int active_players, int player,
+                                                         MslStagePoint2* out, uint8_t* out_facing) {
+  if (cfg == NULL || out == NULL || out_facing == NULL) {
+    return 0u;
+  }
+  if (!cfg->is_teams || active_players != 4 ||
+      cfg->stage_id != (uint32_t)MSL_STAGE_FINAL_DESTINATION) {
+    return 0u;
+  }
+
+  // Slippi neutral-spawn teams mode only applies to 2v2, grouping slots by team id 0..2 and
+  // assigning spawn ids from that grouped order. FD teams coordinates are copied from the patch's
+  // FD `Teams Data` table; facing is then derived from x <= 0 exactly like `SetSpawn_UpdateFacingDirection`.
+  // refs/slippi-ssbm-asm/External/NeutralSpawn/NeutralSpawn.asm::{isTeams,SetSpawn,NeutralSpawnTable}
+  uint8_t team_counts[3] = {0u, 0u, 0u};
+  for (int p = 0; p < active_players; p++) {
+    const uint8_t team_id = cfg->players[p].team_id;
+    if (team_id >= 3u) {
+      return 0u;
+    }
+    team_counts[team_id]++;
+  }
+  for (int team_id = 0; team_id < 3; team_id++) {
+    if (team_counts[team_id] == 1u || team_counts[team_id] > 2u) {
+      return 0u;
+    }
+  }
+
+  uint8_t team_order[MSL_MAX_PLAYERS] = {0u, 0u, 0u, 0u};
+  int team_order_size = 0;
+  for (int team_id = 0; team_id < 3; team_id++) {
+    for (int p = 0; p < active_players; p++) {
+      if (cfg->players[p].team_id == (uint8_t)team_id) {
+        team_order[team_order_size++] = (uint8_t)p;
+      }
+    }
+  }
+  if (team_order_size != active_players) {
+    return 0u;
+  }
+
+  int spawn_id = -1;
+  for (int i = 0; i < team_order_size; i++) {
+    if (team_order[i] == (uint8_t)player) {
+      spawn_id = i;
+      break;
+    }
+  }
+  if (spawn_id < 0) {
+    return 0u;
+  }
+
+  static const MslStagePoint2 fd_teams_spawn_points[MSL_MAX_PLAYERS] = {
+      {-60.0f, 10.0f}, {-20.0f, 10.0f}, {60.0f, 10.0f}, {20.0f, 10.0f}};
+  *out = fd_teams_spawn_points[spawn_id];
+  *out_facing = out->x <= 0.0f ? 1u : 0u;
+  return 1u;
+}
+
 static inline uint8_t msl_mask_row_selected(const uint8_t* mask_bytes, size_t mask_stride_bytes,
                                             int bi) {
   if (mask_bytes == NULL) {
@@ -543,8 +603,13 @@ static int msl_batch_init_match_impl(MslBatch* batch, const uint8_t* config_byte
 
       MslStagePoint2 spawn = {0};
       MslStagePoint2 respawn = {0};
-      if (!stage_collision_get_spawn_point(cfg->stage_id, p, &spawn) ||
-          !stage_collision_get_respawn_point(cfg->stage_id, p, &respawn)) {
+      uint8_t spawn_facing = pc->facing ? 1u : 0u;
+      if (!msl_match_init_slippi_neutral_spawn_point(cfg, active_players, p, &spawn,
+                                                     &spawn_facing) &&
+          !stage_collision_get_spawn_point(cfg->stage_id, p, &spawn)) {
+        return ENOENT;
+      }
+      if (!stage_collision_get_respawn_point(cfg->stage_id, p, &respawn)) {
         return ENOENT;
       }
 
@@ -576,8 +641,8 @@ static int msl_batch_init_match_impl(MslBatch* batch, const uint8_t* config_byte
       // refs/melee/src/melee/gm/gm_16AE.c::fn_8016D71C
       // refs/melee/src/melee/ft/fighter.c
       seed->fighter_scale_y[p] = 1.0f;
-      seed->facing[p] = pc->facing ? 1u : 0u;
-      seed->facing_dir1[p] = pc->facing ? (int8_t)1 : (int8_t)-1;
+      seed->facing[p] = spawn_facing;
+      seed->facing_dir1[p] = spawn_facing ? (int8_t)1 : (int8_t)-1;
       // Default grounded KB friction multiplier lane:
       // refs/melee/src/melee/ft/ft_081B.c::ft_GetGroundFrictionMultiplier
       seed->ground_friction_mul[p] = 1.0f;

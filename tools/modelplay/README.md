@@ -8,8 +8,8 @@ Throwaway pipeline for:
 
 Current v0 scope:
 
-- singles only
-- Fox/Falco on Final Destination
+- singles and experimental 2v2 doubles
+- Fox/Falco on Final Destination, including `fox/falco` vs `fox/falco` doubles
 - can start from an existing local `.msl` dataset row or from C-owned sim match init
 - model inputs/outputs stay in Python
 - default rollout starts from the dataset opening row (`start_record=0`), which is the real 4-stock
@@ -25,6 +25,24 @@ uv run python -m tools.modelplay.run_model_match \
 ```
 
 This writes `trace.json` under `reports/triage/...`.
+
+Doubles uses the C-owned sim-init path and defaults to red `fox/falco` vs blue `fox/falco` on FD:
+
+```bash
+uv run python -m tools.modelplay.run_model_match \
+  --doubles \
+  --slippi-ai-root /media/kyle/Windows/Users/kyleh/git/slippi-ai \
+  --p1-model /path/to/model.pkl \
+  --p2-model /path/to/model.pkl \
+  --p3-model /path/to/model.pkl \
+  --p4-model /path/to/model.pkl \
+  --p1-char fox --p2-char falco --p3-char fox --p4-char falco \
+  --team-ids 0,0,1,1 \
+  --out reports/modelplay/<run_name>
+```
+
+For FD doubles sim-init, the C core applies Slippi's 2v2 neutral-spawn table, so team starts are
+`AA BB` (`[-60, -20, 60, 20]`) rather than vanilla port-order `ABBA`.
 
 To skip replay seeding and start from the C match-init path:
 
