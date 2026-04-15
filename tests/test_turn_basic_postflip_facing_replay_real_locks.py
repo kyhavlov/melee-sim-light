@@ -137,8 +137,14 @@ def test_turn_basic_postflip_facing_replay_real_locks(case: _Case) -> None:
     p = int(case.p)
 
     assert int(seed["action_id"][p]) == 18, case.note  # Turn
-    assert int(seed["turn_has_turned"][p]) == 1, case.note
-    assert int(seed["turn_frames_to_turn"][p]) == 0, case.note
+    # Causal turn internals now preserve the pre-flip countdown through af=5. The runtime
+    # ftCo_Turn_Anim_Inner owner performs the flip on the target row, then seeds has_turned=1 on
+    # the following post-frame.
+    if int(seed["turn_x8"][p]) == 0:
+        if int(seed["action_frame"][p]) >= 6:
+            assert int(seed["turn_has_turned"][p]) == 1, case.note
+        else:
+            assert int(seed["turn_has_turned"][p]) == 0, case.note
     assert int(seed["speed_ground_x_self"][p]) == 0, case.note
 
     out = _step_one_row(ds, row)[0]

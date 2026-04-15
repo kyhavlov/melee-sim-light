@@ -73,10 +73,4 @@ def test_dash_late_iasa_turn_qgd_replay_real_lock(case: _Case) -> None:
             f"got={int(out_row[field][p])}"
         )
 
-    if record == 5968:
-        # The kept lane fixes the Dash->Turn transition bundle but leaves the instance-id handoff
-        # one step behind on the transition row; keep that residual explicit.
-        assert int(out_row["instance_id"][p]) == 1070, case.note
-        assert int(ref_row["instance_id"][p]) == 1071, case.note
-    else:
-        assert int(out_row["instance_id"][p]) == int(ref_row["instance_id"][p]), case.note
+    assert int(out_row["instance_id"][p]) == int(ref_row["instance_id"][p]), case.note

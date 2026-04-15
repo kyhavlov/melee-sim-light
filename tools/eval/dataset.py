@@ -231,6 +231,13 @@ SEED_DTYPE = np.dtype(
         # Walk callback source velocity lane (`mv_x0` consumed by ftWalkCommon_800DFDDC).
         # refs/melee/src/melee/ft/ftwalkcommon.c::ftWalkCommon_800DFDDC
         ("walk_anim_source_vel_f32", _arr("<f4", MAX_PLAYERS)),
+        # Narrow replay-facing Walk type-change source lane for ftWalkCommon_800DFDDC/800DFEC8.
+        ("walk_retarget_tick_source_vel_f32", _arr("<f4", MAX_PLAYERS)),
+        # Run callback source velocity lane (`vel` consumed by ftCo_Run_Anim).
+        # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Run.c::ftCo_Run_Anim
+        ("run_anim_source_vel_f32", _arr("<f4", MAX_PLAYERS)),
+        # Narrow replay-facing Turn->KneeBend hidden-facing owner lane.
+        ("turn_kneebend_facing_override_u8", _arr("u1", MAX_PLAYERS)),
         ("guard_tilt_x8", _arr("<u2", MAX_PLAYERS)),
         ("guard_tilt_x4", _arr("<f4", MAX_PLAYERS)),
         ("guard_reflect_timer_x14", _arr("u1", MAX_PLAYERS)),
@@ -338,6 +345,9 @@ SEED_DTYPE = np.dtype(
         # Seeded next value for plAttack_80037B08 (global instance_id counter).
         # Slippi does not expose this directly; preprocessing derives it causally from replay history.
         ("instance_id_counter", "<u2"),
+        # Narrow replay-facing same-frame fighter-proc order lane for simultaneous instance_id
+        # counter consumers. 0 = no override; nonzero = replay-visible fp->x2088 for this entry.
+        ("motion_entry_instance_id_override_u16", _arr("<u2", MAX_PLAYERS)),
         ("attack_id", _arr("<u2", MAX_PLAYERS)),
         ("attack_instance", _arr("<u2", MAX_PLAYERS)),
         ("last_attack_landed", _arr("u1", MAX_PLAYERS)),

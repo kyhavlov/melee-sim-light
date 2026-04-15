@@ -147,6 +147,22 @@ static inline uint8_t anim_timebase_is_walk(uint16_t a) {
              : 0u;
 }
 
+static inline uint16_t anim_timebase_walk_action_from_speed(const MslCommonParams* c,
+                                                            const MslCharParams* ch, float gr_vel) {
+  if (c == NULL || ch == NULL) {
+    return (uint16_t)MSL_ACT_WALK_SLOW;
+  }
+  // refs/melee/src/melee/ft/ftwalkcommon.c::ftWalkCommon_GetWalkType
+  const float v = fabsf(gr_vel);
+  if (v >= (c->walk_fast_vel_mul * ch->walk_max_vel)) {
+    return (uint16_t)MSL_ACT_WALK_FAST;
+  }
+  if (v >= (c->walk_mid_vel_mul * ch->walk_max_vel)) {
+    return (uint16_t)MSL_ACT_WALK_MIDDLE;
+  }
+  return (uint16_t)MSL_ACT_WALK_SLOW;
+}
+
 static inline uint8_t anim_timebase_try_walk_rate_from_source_vel(uint16_t a,
                                                                   const MslCharParams* ch,
                                                                   float walk_anim_source_vel,
@@ -188,6 +204,26 @@ static inline uint8_t anim_timebase_try_walk_rate_from_source_vel(uint16_t a,
     *out_rate = fabsf(mv_x0) / denom;
   }
 
+  return 1u;
+}
+
+static inline uint8_t anim_timebase_try_run_rate_from_source_vel(const MslCharParams* ch,
+                                                                 float run_anim_source_vel,
+                                                                 int8_t facing_dir1,
+                                                                 float* out_rate) {
+  if (ch == NULL || out_rate == NULL || !(ch->run_animation_scaling > 0.0f)) {
+    return 0u;
+  }
+  const float facing_dir = (facing_dir1 < 0) ? -1.0f : 1.0f;
+  const float vel = run_anim_source_vel;
+  // Decomp: ftCo_Run_Anim sets anim_rate=0 when `vel` is not forward-facing, otherwise
+  // ABS(vel) / run_animation_scaling.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Run.c::ftCo_Run_Anim
+  if (vel * facing_dir <= 0.0f) {
+    *out_rate = 0.0f;
+  } else {
+    *out_rate = fabsf(vel) / ch->run_animation_scaling;
+  }
   return 1u;
 }
 
@@ -340,77 +376,47 @@ void anim_timebase_update_pre_input(MslBatch* batch) {
           //
           // Keep the seeded 1.0 entry carry here; applying the scaled walk rate one frame early
           // at action_frame==1 shifts Walk timebase ownership.
-        } else if (a == (uint16_t)MSL_ACT_WALK_SLOW && action_frame_pre == 2 &&
-                   batch->state.walk_anim_source_vel[idx] != 0.0f &&
-                   fabsf(batch->state.walk_anim_source_vel[idx]) <=
-                       fabsf(batch->state.speed_ground_x_self[idx]) &&
-                   batch->state.state_flags[idx * (size_t)MSL_STATE_FLAGS_BYTES] == 0u) {
-          // WalkSlow callback-source ownership at the second steady frame:
-          // - consume seeded/runtime callback-owned `mv_x0` source velocity instead of recomputing
-          //   from post-phys ground speed.
-          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Walk.c::ftCo_Walk_Anim
-          // refs/melee/src/melee/ft/ftwalkcommon.c::ftWalkCommon_800DFDDC
-          float walk_rate = 0.0f;
-          if (anim_timebase_try_walk_rate_from_source_vel(
-                  a, ch, batch->state.walk_anim_source_vel[idx], batch->state.facing_dir1[idx],
-                  &walk_rate)) {
-            batch->state.frame_speed_mul_fp_q16_16[idx] = msl_q16_16_from_f32(walk_rate);
-          }
-        } else if (a == (uint16_t)MSL_ACT_WALK_MIDDLE && action_frame_pre == 10) {
-          // WalkMiddle callback-rate continuity ownership:
-          // - ftWalkCommon_800DFDDC derives anim rate from callback-local `mv.co.walk.x0`.
-          // - when reseed continuity rows carry callback-owned prior rate, preserve that rate on
-          //   this narrow steady frame window to avoid decomp-order over-advance.
-          // refs/melee/src/melee/ft/ftwalkcommon.c::ftWalkCommon_800DFDDC
-          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Walk.c::ftCo_Walk_Anim
-        } else if (a == (uint16_t)MSL_ACT_WALK_MIDDLE && action_frame_pre == 3 &&
-                   batch->state.frame_speed_mul_fp_q16_16[idx] > MSL_Q16_16_ONE) {
-          // WalkMiddle early acceleration continuity:
-          // - callback-owned `mv.co.walk.x0` can remain phase-lagged vs current `gr_vel` in the
-          //   early acceleration segment; preserve seeded callback-owned rate on this narrow window.
-          // refs/melee/src/melee/ft/ftwalkcommon.c::ftWalkCommon_800DFDDC
-          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Walk.c::ftCo_Walk_Anim
         } else {
-          // Decomp walk callback ownership:
-          // - ftCo_Walk_Anim delegates to ftWalkCommon_800DFDDC and writes fp->frame_speed_mul
-          //   from callback-local `mv_x0`.
+          // Walk callback-source ownership:
+          // - ftCo_Walk_Anim runs after ftAnim advance and writes the rate used by the next frame.
+          // - ftWalkCommon_800DFDDC selects `mv_x0` from either `fp->mv.co.walk.x0` or `fp->gr_vel`
+          //   before converting it to `frame_speed_mul`.
+          // - Under one-step reseed, Slippi exposes the post-callback rate but not that hidden
+          //   source, so `walk_anim_source_vel` is the minimum explicit carry for the same owner.
+          // - Walk type-change rows have one more hidden branch (`ft_GetGroundFrictionMultiplier`)
+          //   deciding whether this tick consumes hidden `mv.co.walk.x0` or current `gr_vel`; the
+          //   narrow retarget lane carries that source only for those replay-reseeded rows.
           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Walk.c::ftCo_Walk_Anim
-          // refs/melee/src/melee/ft/ftwalkcommon.c::ftWalkCommon_800DFDDC
-          //
-          // Runtime callback model:
-          // - steady walk callbacks derive `mv_x0` from current walk velocity in this codepath.
-          // - the explicit `walk_anim_source_vel` lane is consumed in the narrow WalkSlow `af=2`
-          //   callback-owned window above where reseed ordering needs explicit carry.
+          // refs/melee/src/melee/ft/ftwalkcommon.c::{ftWalkCommon_800DFDDC,ftWalkCommon_800DFEC8}
+          float source_vel = batch->state.walk_anim_source_vel[idx];
+          const uint16_t speed_walk_action =
+              anim_timebase_walk_action_from_speed(c, ch, batch->state.speed_ground_x_self[idx]);
+          if (speed_walk_action != a && batch->state.walk_retarget_tick_source_vel[idx] != 0.0f) {
+            source_vel = batch->state.walk_retarget_tick_source_vel[idx];
+          }
           float walk_rate = 0.0f;
           if (anim_timebase_try_walk_rate_from_source_vel(
-                  a, ch, batch->state.speed_ground_x_self[idx], batch->state.facing_dir1[idx],
-                  &walk_rate)) {
+                  a, ch, source_vel, batch->state.facing_dir1[idx], &walk_rate)) {
             batch->state.frame_speed_mul_fp_q16_16[idx] = msl_q16_16_from_f32(walk_rate);
           }
         }
       }
 
-      // Decomp-shaped early-steady bridge (why `action_frame in {1,2}` is not a magic number):
-      // - Run is entered via Fighter_ChangeMotionState(..., anim_start=0, anim_speed=1).
-      //   refs/melee/src/melee/ft/chara/ftCommon/ftCo_Run.c::ftCo_Run_Enter_Full
-      // - Animation advance for the frame happens first (ftAnim_8006EBA4), then the per-motion
-      //   Anim callback runs (Run_Anim), which sets the anim rate for the *next* advance.
-      //   refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
-      //   refs/melee/src/melee/ft/ftanim.c::ftAnim_8006EBA4
-      //
-      // Under teacher-forced reseed, a Run segment can enter with `state_age` already at 1-2 while
-      // the seeded `frame_speed_mul` still reflects entry carry. Apply the Run_Anim-scaled rate in
-      // this early steady window so the next advance matches decomp callback ownership.
-      //
-      // Limit note: this <=2 early-steady window is bounded by callback ordering. Full parity would
-      // require a seed-visible callback-phase ownership marker for whether Run_Anim already committed
-      // next-frame rate in the prior frame; Slippi post-frame does not expose that bit.
+      // Run callback-source ownership:
+      // - ftCo_Run_Anim runs after ftAnim advance and writes the rate used by the next frame.
+      // - Under one-step reseed, Slippi exposes that post-callback rate one row after the anim tick
+      //   that consumed it, so `run_anim_source_vel` is the explicit replay-facing hidden-owner lane.
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Run.c::ftCo_Run_Anim
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_RunDirect.c::ftCo_RunDirect_Anim
       if ((a == (uint16_t)MSL_ACT_RUN || a == (uint16_t)MSL_ACT_RUN_DIRECT) &&
-          action_frame_pre > 0 && action_frame_pre <= 2) {
-        if (ch != NULL && ch->run_animation_scaling > 0.0f) {
-          const float vx = batch->state.speed_ground_x_self[idx];
-          const float rate = fabsf(vx) / ch->run_animation_scaling;
-          batch->state.frame_speed_mul_fp_q16_16[idx] = msl_q16_16_from_f32(rate);
+          action_frame_pre > 0) {
+        float source_vel = batch->state.run_anim_source_vel[idx];
+        if (source_vel != 0.0f) {
+          float rate = 0.0f;
+          if (anim_timebase_try_run_rate_from_source_vel(ch, source_vel,
+                                                         batch->state.facing_dir1[idx], &rate)) {
+            batch->state.frame_speed_mul_fp_q16_16[idx] = msl_q16_16_from_f32(rate);
+          }
         }
       }
 
@@ -428,17 +434,23 @@ void anim_timebase_update_pre_input(MslBatch* batch) {
       // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A360,Fighter_procUpdate}
       // refs/melee/src/melee/ft/chara/ftCommon/{ftCo_AttackHi4.c,ftCo_AttackLw4.c}
       // data/moves/{fox,falco}.json::ftCo_SM_Attack{Hi4,Lw4}
-      if ((a == (uint16_t)MSL_ACT_ATTACK_HI4 || a == (uint16_t)MSL_ACT_ATTACK_LW4) &&
+      if ((a == (uint16_t)MSL_ACT_ATTACK_S4_S || a == (uint16_t)MSL_ACT_ATTACK_HI4 ||
+           a == (uint16_t)MSL_ACT_ATTACK_LW4) &&
           batch->state.on_ground[idx] != 0u && batch->state.hitstun[idx] == 0u &&
-          batch->state.hitlag[idx] == 0u && action_frame_pre == 2) {
-        const uint8_t smash_hold_timer_max = (a == (uint16_t)MSL_ACT_ATTACK_HI4)
-                                                 ? c->attack_hi4_tilt_max_frames
-                                                 : c->attack_lw4_tilt_max_frames;
+          batch->state.hitlag[idx] == 0u &&
+          ((a == (uint16_t)MSL_ACT_ATTACK_S4_S && action_frame_pre == 7) ||
+           (a != (uint16_t)MSL_ACT_ATTACK_S4_S && action_frame_pre == 2))) {
+        const uint8_t smash_hold_timer_max =
+            (a == (uint16_t)MSL_ACT_ATTACK_S4_S)
+                ? 60u
+                : ((a == (uint16_t)MSL_ACT_ATTACK_HI4) ? c->attack_hi4_tilt_max_frames
+                                                       : c->attack_lw4_tilt_max_frames);
         const uint8_t pre_input_a_held =
             ((batch->state.input_buttons[idx] & (uint16_t)MSL_BUTTON_A) != 0u) ? 1u : 0u;
         if (pre_input_a_held != 0u && batch->state.x67C[idx] <= smash_hold_timer_max) {
           batch->state.frame_speed_mul_fp_q16_16[idx] = 0;
-        } else if (pre_input_a_held == 0u && batch->state.frame_speed_mul_fp_q16_16[idx] == 0) {
+        } else if (pre_input_a_held == 0u && batch->state.x67C[idx] > 0u &&
+                   batch->state.frame_speed_mul_fp_q16_16[idx] == 0) {
           // Release bridge:
           // - when prior-frame A is no longer held, clear stale seeded hold-rate carry and resume
           //   default 1.0 on the next advance.

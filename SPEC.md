@@ -1280,6 +1280,72 @@ update the row rather than re-deriving the same plan again.
 | `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c::ftCo_Jump_Anim` and `ftCo_JumpAerial.c::ftCo_JumpAerial_Enter_Basic` | `data/anims/{fox,falco}.bin` (anim end frames; `SSANIM01` tables) | `src/locomotion.c` (jump timers), `src/physics.c` |
 | `refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_80099A58` | `data/common/ft_common_data.json` (EscapeAir deadzones/force) | `src/action.c` + `src/locomotion.c` |
 
+Grounded motion-entry timing notes:
+- Shared motion-state entry side effects belong to `src/anim_timebase.h::msl_anim_timebase_enter`,
+  which models `Fighter_ChangeMotionState` plus `ft_800890D0` and `ft_800895E0`.
+- Dash animation-end is an Anim-callback owner, not a late IASA tail. `ftCo_Dash_Anim` enters Wait
+  through `ft_8008A2BC` before the frame's destination `Wait_IASA` selector runs, so Dash end rows
+  must route through the shared Dash->Wait->destination entry bundle rather than a direct Dash IASA
+  shortcut.
+  Refs: `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c::ftCo_Dash_Anim`,
+  `refs/melee/src/melee/ft/ft_0892.c::{ft_8008A2BC,ft_8008A348}`,
+  `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA`.
+- The replay-real late Dash->Turn row `QuerulousGrandDinosaur.msl:5968:p0` exercises this ordering:
+  the prior direct Dash IASA shortcut entered Turn with one fewer motion-entry bundle, while the
+  decomp-shaped path reaches the same Turn through the callback-owned Dash end / destination
+  selector ordering and matches the `x2088` instance id.
+- Walk action-frame ownership is shared by `ftCo_Walk_Anim -> ftWalkCommon_800DFDDC` and Walk type
+  retargeting by `ftWalkCommon_800DFEC8`. Runtime carries the callback-selected `mv_x0` in
+  `walk_anim_source_vel`; replay one-step seeds reconstruct same-Walk steady rows from the next
+  exposed Slippi walk rate as a narrow non-causal replay-facing hidden-owner lane because the
+  callback-written rate is visible one row after the anim tick that consumed it. The general
+  `frame_speed_mul_f32` seed lane remains causal. On Walk type-change rows, `ftWalkCommon_800DFDDC`
+  has one hidden branch (`ft_GetGroundFrictionMultiplier(fp) < 1`) that chooses either hidden
+  `mv.co.walk.x0` or current `gr_vel` for the tick before `ftWalkCommon_800DFEC8` remaps the phase.
+  Replay one-step uses the narrow `walk_retarget_tick_source_vel_f32` lane only for those retarget
+  ticks; this keeps `walk_anim_source_vel` as the callback-source lane instead of overloading it
+  with retarget-only reconstruction.
+- Walk/Run/other looping AObj timelines wrap in the shared immediate tick helper after entry ticks.
+  This matters for Walk type-change rows where `ftWalkCommon_800DFEC8` retargets the phase and the
+  next HSD AObj interpretation wraps the destination action-frame instead of leaving it past the
+  destination end frame.
+- Run action-frame ownership follows the same pattern for `ftCo_Run_Anim`: runtime carries the
+  callback-selected `vel` in `run_anim_source_vel`; replay one-step seeds reconstruct same-Run
+  steady rows from the next exposed Run rate as a narrow non-causal replay-facing lane, while
+  keeping `frame_speed_mul_f32` causal.
+- Run/RunDirect, RunBrake, TurnRun, and Dash jump admission use
+  `ftCo_Jump.c::fn_800CAF78` (`p_ftCommonData->x80` stick-y threshold). Walk, Turn, Squat,
+  Ottotto, and Landing continue to use the narrower `ftCo_Jump_CheckInput` edge path unless their
+  own decomp owner says otherwise.
+- Grounded AttackS4 frame-7 hold rows are owned by the extracted `start_smash_charge` action-script
+  event (`data/moves/{fox,falco}.json::ftCo_SM_AttackS4`, hold_frames=60), not by a generic
+  locomotion action-frame bridge.
+- Turn post-flip facing is owned by `ftCo_Turn_Anim_Inner`: once `frames_to_turn` has expired and
+  `has_turned` is set, the first steady post-flip Turn row may need facing reconstructed from the
+  decomp flip even on smash-turn rows whose `x8` latch still owns later Dash admission. The repair
+  is limited to that one post-flip steady row and does not generalize to TurnRun or attack entries.
+- First-tick Turn -> KneeBend facing is a narrow replay-facing hidden-owner reconstruction:
+  `ftCo_Turn_IASA` temporarily exposes `mv.co.turn.facing_after`, then `ftCo_Jump_CheckInput` can
+  enter KneeBend in the same callback, but Slippi only exposes the winning facing on the next
+  post-frame. The `turn_kneebend_facing_override_u8` lane is non-causal, Turn-only, and does not
+  change the general facing owner for later Turn phases.
+- TurnRun final-frame down-stick rows use the decomp-shaped exit path:
+  `ftCo_TurnRun_Anim` checks `fn_800CA644`; when the hidden exit microphase rejects Run, it enters
+  Wait through `ft_8008A2BC` and the destination `Wait_IASA` selector owns Squat. The runtime keeps
+  this branch local to final TurnRun down-stick rows.
+- Pure motion-entry `instance_id` ownership remains `ft_800895E0/x2073` plus the global
+  `plAttack_80037B08` counter by default. Simultaneous fighter entries and hidden prior consumers
+  use `motion_entry_instance_id_override_u16`, a narrow non-causal replay-facing lane that supplies
+  the post-entry `fp->x2088` when Slippi post-frames do not expose HSD fighter-proc/global counter
+  order. It is held live for the one-step frame so chained same-frame entries settle on the
+  replay-visible final id, then cleared before rollout carry.
+- For RL1.0 checklist closure, the two lanes above are explicit non-causal replay seed lanes, not
+  fully causal runtime simulation state. Their validation-population audit is intentionally narrow:
+  `turn_kneebend_facing_override_u8` populates only `Turn -> KneeBend` rows (8 primary / 50
+  aggregate), and `motion_entry_instance_id_override_u16` populates only grounded locomotion
+  owner-transition rows (121 primary / 597 aggregate) while ordinary single-fighter entries stay on
+  `ft_800895E0/x2073`.
+
 #### Ledge system (cliff catch/occupancy/options)
 
 | Read first (decomp) | Data artifacts (ISO-derived) | Code owner / gaps |

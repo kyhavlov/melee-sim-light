@@ -6,8 +6,10 @@ decomp-justified residuals, and avoid row-shaped bridge fixes unless the owner
 family is already closed.
 
 Last updated:
-- Date: 2026-04-14
-- Scope baseline: shared throw/thrown substrate and common damage-owner family effectively closed; checklist reflects post-closure RL 1.0 priority ordering.
+- Date: 2026-04-15
+- Scope baseline: shared throw/thrown substrate, guard, and locomotion / grounded transition /
+  motion-entry owner families effectively closed; checklist reflects post-closure RL 1.0 priority
+  ordering.
 
 ## Status Legend
 
@@ -22,15 +24,13 @@ Last updated:
 
 Recommended sequence for the next deep passes:
 
-1. **Guard release / guard timer / guardreflect family**
-2. **Locomotion / grounded transition / motion-entry timing family**
-3. **Knockdown / passive contact owner**
-4. **Core combat followup family**
-5. **Fox/Falco special-move families**
-6. **Ledge / collision-env parity**
-7. **Item-owner seed cleanup + item identity family**
-8. **Match-flow / entry / respawn ownership**
-9. **Mixed-bucket split**
+1. **Knockdown / passive contact owner**
+2. **Core combat followup family**
+3. **Fox/Falco special-move families**
+4. **Ledge / collision-env parity**
+5. **Item-owner seed cleanup + item identity family**
+6. **Match-flow / entry / respawn ownership**
+7. **Mixed-bucket split**
 
 ## Closed / Effectively Closed
 
@@ -92,10 +92,58 @@ Recommended sequence for the next deep passes:
   - full validation is materially better than clean HEAD for both one-step and rollout totals
 
 ### 3. Locomotion / grounded transition / motion-entry timing family
-- Status: `active / next deep pass`
+- Status: `closed / effectively closed`
 - Roadmap families: `F10_grounded_transition_resolution`, `F11_locomotion_action_frame`, `F12_instance_id_transition_only`
 - Owner boundary: Dash / Walk / Turn / KneeBend / motion-entry selector timing, pure motion-entry instance-id bumps, grounded selector timing
 - Primary sim files: `src/anim_timebase.c`, `src/step.c`, `src/match_flow.c`, `src/api.c`
+- Completed in current pass:
+  - Dash animation-end now routes through the shared Anim-callback owner before grounded IASA:
+    `ftCo_Dash_Anim -> ft_8008A2BC -> Wait -> Wait_IASA`, so Dash end rows no longer use a
+    direct late Dash IASA shortcut for destination Turn/Squat timing.
+  - Walk steady callback timing now uses the shared `ftCo_Walk_Anim -> ftWalkCommon_800DFDDC`
+    source lane instead of WalkSlow / WalkMiddle frame-window bridges; Walk type threshold rows
+    route through the same owner plus `ftWalkCommon_800DFEC8`, with a narrow retarget source lane
+    for the hidden `ft_GetGroundFrictionMultiplier` source-choice branch.
+  - Run steady callback timing now has a narrow `ftCo_Run_Anim` source lane, keeping
+    `frame_speed_mul_f32` causal while reconstructing the hidden replay-facing owner for one-step
+    seeds.
+  - The aggregate WalkMiddle -> WalkFast wrap row now uses the shared AObj loop/clamp owner in
+    `msl_anim_timebase_tick_once`; `F11_locomotion_action_frame` is gone from aggregate taxonomy.
+  - Run / RunDirect jump admission now uses the decomp `fn_800CAF78` threshold, closing the
+    remaining Run -> KneeBend selector row without widening Squat/Ottotto/Landing/Walk jump gates.
+  - Grounded AttackS4 charge-frame action-frame rows now use the extracted `start_smash_charge`
+    owner instead of remaining in locomotion action-frame timing.
+  - Turn post-flip facing now follows `ftCo_Turn_Anim_Inner` on the narrow first steady post-flip
+    row, including the smash-turn subset where x8 owns Dash-latch direction but not the facing flip.
+  - `F10` / `F12` taxonomy is split into grounded selector, collision/landing/edge, combat,
+    hurtbox/state-flag, grounded attack, special/appeal/runbrake adjacency, Turn hidden
+    microphase, TurnRun exit microphase, local grounded instance-counter, cross-player
+    instance-counter, and adjacent-family instance-counter buckets so the roadmap no longer hides
+    unrelated rows under one broad locomotion label.
+  - `F10i_turn_hidden_microphase` is closed by a narrow Turn-only
+    `turn_kneebend_facing_override_u8` replay-facing lane for first-tick Turn -> KneeBend entries
+    whose hidden `ftCo_Turn_IASA` temporary-facing owner is only exposed by the next Slippi row.
+  - `F10j_turnrun_exit_microphase` is closed in runtime by letting final TurnRun down-stick rows
+    take the decomp `ftCo_TurnRun_Anim -> ft_8008A2BC -> Wait -> Wait_IASA` path instead of forcing
+    the simplified raw-x Run branch.
+  - `F12a_grounded_instance_counter_order` is closed by the narrow
+    `motion_entry_instance_id_override_u16` lane for same-frame `plAttack_80037B08` order that is
+    hidden from Slippi post-frames. The normal `ft_800895E0/x2073` runtime path remains default;
+    the lane is populated only for simultaneous fighter entries or hidden-prior-consumer rows.
+  - Closure here is not a claim that all hidden state is now causal runtime state. It includes two
+    explicit non-causal replay seed lanes for Slippi-unobservable owner state:
+    `turn_kneebend_facing_override_u8` and `motion_entry_instance_id_override_u16`.
+    Current validation-population audit: Turn-facing lane is 8 primary / 50 aggregate rows, all
+    `Turn -> KneeBend` and no current mismatch family; motion-entry instance lane is 121 primary /
+    597 aggregate rows, all within grounded locomotion owner transitions and with no broad
+    out-of-owner action transitions.
+- Remaining residuals after current pass:
+  - No broad in-scope `F10` / `F11` / `F12a` bucket remains in aggregate taxonomy.
+  - Remaining instance-order rows are split outside the targeted owner as adjacent combat / attack
+    instance order (`F12c`) and adjacent motion-entry tails (`F12b`), not Dash / Walk / Turn /
+    KneeBend selector bridges.
+  - Remaining `F10*` rows are collision/landing/edge, grounded combat/attack, special, runbrake, or
+    appeal adjacency buckets; they are not shared grounded-selector timing debt.
 - Acceptance bar:
   - motion-entry ownership is shared and deterministic
   - pure timing rows are not spread across unrelated guard/combat fixes

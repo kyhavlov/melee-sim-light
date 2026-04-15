@@ -20,6 +20,12 @@ def test_seed_schema_includes_staling_fields() -> None:
     assert "source_clear_terminal_phase" in SEED_DTYPE.fields
     # Walk callback-owned source velocity lane (ftWalkCommon_800DFDDC `mv_x0`).
     assert "walk_anim_source_vel_f32" in SEED_DTYPE.fields
+    # Walk retarget source lane for the hidden ft_GetGroundFrictionMultiplier branch.
+    assert "walk_retarget_tick_source_vel_f32" in SEED_DTYPE.fields
+    # Run callback-owned source velocity lane (ftCo_Run_Anim `vel`).
+    assert "run_anim_source_vel_f32" in SEED_DTYPE.fields
+    # Turn->KneeBend hidden-facing owner lane.
+    assert "turn_kneebend_facing_override_u8" in SEED_DTYPE.fields
     # Capture/grab hidden owner lanes.
     assert "handicap" in SEED_DTYPE.fields
     assert "capture_grab_timer_f32" in SEED_DTYPE.fields
@@ -34,6 +40,8 @@ def test_seed_schema_includes_staling_fields() -> None:
     # F02 blocker lane: GuardSetOff post-hitlag owner class.
     assert "guard_setoff_post_hitlag_owner_u8" in SEED_DTYPE.fields
     assert "guard_setoff_exit_frame_speed_mul_f32" in SEED_DTYPE.fields
+    # Same-frame fighter-proc order lane for plAttack_80037B08 instance_id entries.
+    assert "motion_entry_instance_id_override_u16" in SEED_DTYPE.fields
     # F04 blocker lane: replay-visible camera-box visibility bit (`fp->x221F_b0`).
     assert "camera_box_visible_x221f_b0" in SEED_DTYPE.fields
     # F04 blocker lane: hidden Rebirth camera anchor Y (`fp->mv.co.common.x8`).

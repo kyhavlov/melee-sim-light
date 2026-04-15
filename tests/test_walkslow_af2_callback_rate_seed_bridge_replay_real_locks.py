@@ -14,35 +14,97 @@ from tools.eval.dataset import read_dataset
 
 
 @dataclass(frozen=True)
-class _WalkSlowAf2Case:
+class _WalkCallbackSourceCase:
     dataset_rel: str
     target_record: int
     walker_port: int
+    seed_action_id: int
+    seed_action_frame: int
+    seed_animation_index: int
     note: str
+    expect_retarget_source_nonzero: bool = True
+
+
+_CARDINAL = "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent"
 
 
 @pytest.mark.integration
 @pytest.mark.parametrize(
     "case",
     [
-        _WalkSlowAf2Case(
-            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/QuerulousGrandDinosaur.msl",
+        _WalkCallbackSourceCase(
+            dataset_rel=f"{_CARDINAL}/AttachedGoodNaturedGuanaco.msl",
+            target_record=1142,
+            walker_port=1,
+            seed_action_id=15,
+            seed_action_frame=2,
+            seed_animation_index=7,
+            note="AGN WalkSlow af=2 callback-source family",
+        ),
+        _WalkCallbackSourceCase(
+            dataset_rel=f"{_CARDINAL}/AttachedGoodNaturedGuanaco.msl",
+            target_record=4391,
+            walker_port=1,
+            seed_action_id=16,
+            seed_action_frame=2,
+            seed_animation_index=8,
+            note="AGN WalkMiddle af=2 callback-source family",
+        ),
+        _WalkCallbackSourceCase(
+            dataset_rel=f"{_CARDINAL}/QuerulousGrandDinosaur.msl",
             target_record=3315,
             walker_port=1,
+            seed_action_id=15,
+            seed_action_frame=2,
+            seed_animation_index=7,
             note="QGD WalkSlow af=2 callback-source family (low-rate carry)",
         ),
-        _WalkSlowAf2Case(
-            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/QuerulousGrandDinosaur.msl",
+        _WalkCallbackSourceCase(
+            dataset_rel=f"{_CARDINAL}/QuerulousGrandDinosaur.msl",
+            target_record=3319,
+            walker_port=1,
+            seed_action_id=15,
+            seed_action_frame=8,
+            seed_animation_index=7,
+            note="QGD WalkSlow mid-cycle callback-source family",
+        ),
+        _WalkCallbackSourceCase(
+            dataset_rel=f"{_CARDINAL}/QuerulousGrandDinosaur.msl",
             target_record=3745,
             walker_port=1,
+            seed_action_id=15,
+            seed_action_frame=2,
+            seed_animation_index=7,
             note="QGD WalkSlow af=2 callback-source family (neutral-state facing flip)",
+        ),
+        _WalkCallbackSourceCase(
+            dataset_rel=f"{_CARDINAL}/TreasuredBackKangaroo.msl",
+            target_record=672,
+            walker_port=0,
+            seed_action_id=15,
+            seed_action_frame=7,
+            seed_animation_index=7,
+            note="TBK WalkSlow->WalkMiddle callback-source family",
+        ),
+        _WalkCallbackSourceCase(
+            dataset_rel=(
+                "datasets/aggregate_recent/replays/validation/aggregate_recent/"
+                "MotionlessAggressiveJay.msl"
+            ),
+            target_record=1190,
+            walker_port=0,
+            seed_action_id=16,
+            seed_action_frame=33,
+            seed_animation_index=8,
+            note="MAG WalkMiddle->WalkFast AObj loop-wrap retarget family",
+            expect_retarget_source_nonzero=False,
         ),
     ],
 )
-def test_walkslow_af2_callback_rate_seed_bridge_target_pm1_both_players_strict_lock(
-    case: _WalkSlowAf2Case,
+def test_walk_callback_source_rate_target_pm1_both_players_strict_lock(
+    case: _WalkCallbackSourceCase,
 ) -> None:
-    # Replay-real strict lock for WalkSlow callback-owned source-rate modeling in src/anim_timebase.c.
+    # Replay-real strict lock for shared Walk callback-owned source-rate modeling in src/anim_timebase.c.
     #
     # Decomp/data refs for this lane:
     # - refs/melee/src/melee/ft/chara/ftCommon/ftCo_Walk.c::{ftCo_Walk_Enter,ftCo_Walk_Anim}
@@ -67,16 +129,24 @@ def test_walkslow_af2_callback_rate_seed_bridge_target_pm1_both_players_strict_l
     seed = target["seed_t"]
 
     # Lane preconditions from src/anim_timebase.c:
-    # - WalkSlow steady frame (`action_frame==2`, `animation_index==7`) on ground;
+    # - grounded Walk steady frame;
     # - callback-owned walk source lane is populated for the same seed row;
     # - zero hitlag/hitstun to avoid unrelated pause ownership.
-    assert int(seed["action_id"][walker]) == 15, case.note  # WalkSlow
-    assert int(seed["action_frame"][walker]) == 2, case.note
-    assert int(seed["animation_index"][walker]) == 7, case.note
+    assert int(seed["action_id"][walker]) == case.seed_action_id, case.note
+    assert int(seed["action_frame"][walker]) == case.seed_action_frame, case.note
+    assert int(seed["animation_index"][walker]) == case.seed_animation_index, case.note
     assert int(seed["on_ground"][walker]) == 1, case.note
     assert int(seed["hitlag"][walker]) == 0, case.note
     assert int(seed["hitstun"][walker]) == 0, case.note
     assert abs(float(seed["walk_anim_source_vel_f32"][walker])) > 0.0, case.note
+    if int(target["ref_t1"]["action_id"][walker]) in (15, 16, 17) and int(
+        target["ref_t1"]["action_id"][walker]
+    ) != int(seed["action_id"][walker]):
+        if case.expect_retarget_source_nonzero:
+            assert abs(float(seed["walk_retarget_tick_source_vel_f32"][walker])) > 0.0, case.note
+        # The general frame_speed lane remains the causal post-frame rate; the retarget source is
+        # a separate hidden-owner reconstruction for ftWalkCommon_800DFDDC/800DFEC8.
+        assert float(seed["frame_speed_mul_f32"][walker]) > 0.0, case.note
 
     # Strict transition lock coverage for target-1 / target / target+1 on both players.
     for rec in rows:

@@ -6,6 +6,7 @@
 #include "attack_id_tables.h"
 #include "batch_internal.h"
 #include "action_ids.h"
+#include "anim_table.h"
 
 // Deterministic animation/script timebase helpers.
 //
@@ -164,6 +165,22 @@ static inline void msl_anim_timebase_tick_once(MslBatch* batch, size_t idx) {
     return;
   }
   batch->state.anim_frame_fp_q16_16[idx] += batch->state.frame_speed_mul_fp_q16_16[idx];
+  const uint32_t anim_u32 = batch->state.animation_index[idx];
+  if (anim_u32 <= 0xFFFFu) {
+    const uint16_t smid = (uint16_t)anim_u32;
+    const float end_frame = msl_anim_end_frame(batch->state.char_id[idx], smid);
+    if (end_frame > 0.0f) {
+      const int32_t end_fp = msl_q16_16_from_f32(end_frame);
+      if (end_fp > 0 && batch->state.anim_frame_fp_q16_16[idx] >= end_fp) {
+        if (msl_anim_is_looping(batch->state.char_id[idx], smid)) {
+          batch->state.anim_frame_fp_q16_16[idx] %= end_fp;
+        } else {
+          batch->state.anim_frame_fp_q16_16[idx] = end_fp;
+          batch->state.frame_speed_mul_fp_q16_16[idx] = 0;
+        }
+      }
+    }
+  }
   msl_anim_timebase_recompute_derived(batch, idx);
 }
 

@@ -8,6 +8,7 @@ from tools.eval.mismatch_taxonomy import (
     PlayerRow,
     _classify_item_slot_row,
     _classify_player_row,
+    _split_cross_player_instance_counter_rows,
     _write_audit_samples_tsv,
     _write_family_tsv,
     build_summary,
@@ -104,6 +105,80 @@ def test_classify_player_row_damageflyroll_rng_gate_takes_priority() -> None:
         },
     )
     assert got == "F06_damageflyroll_rng_gate"
+
+
+def test_classify_player_row_splits_turn_hidden_microphase_from_grounded_selector() -> None:
+    row = _player_row(
+        seed_action_id=18,
+        ref_action_id=20,
+        out_action_id=18,
+        prev_action_id=18,
+        fields=("action_id", "action_frame", "animation_index", "facing", "instance_id"),
+    )
+    got = _classify_player_row(row, {18: "TURN", 20: "DASH"})
+    assert got == "F10i_turn_hidden_microphase"
+
+
+def test_classify_player_row_splits_turnrun_exit_microphase_from_grounded_selector() -> None:
+    row = _player_row(
+        seed_action_id=19,
+        ref_action_id=39,
+        out_action_id=21,
+        prev_action_id=19,
+        fields=("action_id", "action_frame", "animation_index", "instance_id"),
+    )
+    got = _classify_player_row(row, {19: "TURN_RUN", 21: "RUN", 39: "SQUAT"})
+    assert got == "F10j_turnrun_exit_microphase"
+
+
+def test_classify_player_row_splits_attack_instance_counter_from_grounded_instance() -> None:
+    row = _player_row(
+        seed_action_id=39,
+        ref_action_id=57,
+        out_action_id=57,
+        prev_action_id=39,
+        fields=("instance_id",),
+    )
+    got = _classify_player_row(row, {39: "SQUAT", 57: "ATTACK_LW3"})
+    assert got == "F12c_attack_instance_counter_order"
+
+
+def test_classify_player_row_splits_squat_escape_instance_counter_from_grounded_instance() -> None:
+    row = _player_row(
+        seed_action_id=234,
+        ref_action_id=15,
+        out_action_id=15,
+        prev_action_id=234,
+        fields=("instance_id",),
+    )
+    got = _classify_player_row(row, {15: "WALK_SLOW", 234: "ESCAPE_B"})
+    assert got == "F12d_squat_escape_instance_counter_order"
+
+
+def test_split_cross_player_instance_counter_rows_uses_peer_adjacent_family() -> None:
+    local = _player_row(
+        p=0,
+        fields=("instance_id",),
+        family_id="F12a_grounded_instance_counter_order",
+        seed_action_id=20,
+        ref_action_id=24,
+        out_action_id=24,
+    )
+    peer = _player_row(
+        p=1,
+        fields=("instance_id",),
+        family_id="F12b_adjacent_instance_counter_order",
+        seed_action_id=70,
+        ref_action_id=20,
+        out_action_id=20,
+    )
+    events = [_event("F12a_grounded_instance_counter_order", "instance_id", subject="p0")]
+    rows = {("d.msl", 10, 0): local, ("d.msl", 10, 1): peer}
+
+    new_events, new_rows = _split_cross_player_instance_counter_rows(events, rows)
+
+    assert new_rows[("d.msl", 10, 0)].family_id == "F12e_cross_player_instance_counter_order"
+    assert new_events[0].family_id == "F12e_cross_player_instance_counter_order"
 
 
 def test_classify_item_slot_row_detects_throwhi_item_lane() -> None:

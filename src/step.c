@@ -83,6 +83,10 @@ static inline void clear_seed_owned_transients_post_frame(MslBatch* batch) {
       // timers_update_post_anim(), then clear to prevent sticky carry in rollout frames.
       // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
       batch->state.source_clear_terminal_phase[idx] = 0u;
+      // One-step replay-facing locomotion / instance-order lanes. Runtime producers update the
+      // causal state directly; seeded overrides are consumed within the current step only.
+      batch->state.turn_kneebend_facing_override[idx] = 0u;
+      batch->state.motion_entry_instance_id_override[idx] = 0u;
     }
   }
 }

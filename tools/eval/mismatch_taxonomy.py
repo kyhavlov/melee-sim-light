@@ -248,6 +248,162 @@ FAMILY_META: dict[str, FamilyMeta] = {
             "refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80091A4C",
         ),
     ),
+    "F10a_grounded_selector_transition": FamilyMeta(
+        label="Grounded Selector Transition",
+        owner_module="locomotion",
+        fix_type="runtime-only",
+        risk="med",
+        confidence="med",
+        hypothesis=(
+            "True grounded selector rows where Wait / Dash / Walk / Turn / KneeBend / grounded "
+            "attack ordering chooses a different motion-entry bundle."
+        ),
+        refs=(
+            "refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA",
+            "refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c::ftCo_Dash_IASA",
+            "refs/melee/src/melee/ft/chara/ftCommon/ftCo_Walk.c::ftCo_Walk_IASA",
+            "refs/melee/src/melee/ft/chara/ftCommon/ftCo_Turn.c::ftCo_Turn_IASA",
+        ),
+    ),
+    "F10b_grounded_combat_adjacency": FamilyMeta(
+        label="Grounded Combat Adjacency",
+        owner_module="combat",
+        fix_type="runtime-only",
+        risk="med",
+        confidence="med",
+        hypothesis=(
+            "Rows initially caught by grounded action names but whose field bundle is combat-owned "
+            "(hitlag, combo, last-hit, or attack-landed state)."
+        ),
+        refs=(
+            "refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC",
+            "refs/melee/src/melee/ft/ftcoll.c",
+        ),
+    ),
+    "F10c_collision_landing_edge_adjacency": FamilyMeta(
+        label="Collision / Landing / Edge Adjacency",
+        owner_module="mpcoll_env",
+        fix_type="runtime-only",
+        risk="med",
+        confidence="med",
+        hypothesis=(
+            "Rows initially caught by grounded action names but whose field bundle is collision, "
+            "landing, cliff/edge, or Ottotto/Fall ownership."
+        ),
+        refs=(
+            "refs/melee/src/melee/mp/mpcoll.c",
+            "refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c",
+            "refs/melee/src/melee/ft/ft_081B.c",
+        ),
+    ),
+    "F10d_hurtbox_stateflag_adjacency": FamilyMeta(
+        label="Hurtbox / State-Flag Adjacency",
+        owner_module="state_flags",
+        fix_type="runtime-only",
+        risk="low",
+        confidence="med",
+        hypothesis=(
+            "Rows initially caught by grounded action names but reduced to hurtbox-state or "
+            "state-flag parity rather than selector timing."
+        ),
+        refs=(
+            "refs/melee/src/melee/ft/fighter.c::Fighter_8006A360",
+            "refs/melee/src/melee/ft/ftmaterial.c",
+        ),
+    ),
+    "F10e_special_move_adjacency": FamilyMeta(
+        label="Grounded Special-Move Adjacency",
+        owner_module="specials",
+        fix_type="split-first",
+        risk="med",
+        confidence="med",
+        hypothesis=(
+            "Rows touching grounded selector names only because a special-move entry or exit is on "
+            "one side of the transition; these are outside the shared Wait/Dash/Walk/Turn owner."
+        ),
+        refs=(
+            "refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c",
+            "refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c",
+        ),
+    ),
+    "F10f_grounded_attack_adjacency": FamilyMeta(
+        label="Grounded Attack-State Adjacency",
+        owner_module="locomotion",
+        fix_type="runtime-only",
+        risk="med",
+        confidence="med",
+        hypothesis=(
+            "Grounded attack action rows whose transition is owned by attack Anim/IASA internals "
+            "rather than the common grounded locomotion selector."
+        ),
+        refs=(
+            "refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack1.c",
+            "refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackHi3.c",
+            "refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackLw3.c",
+        ),
+    ),
+    "F10g_runbrake_adjacency": FamilyMeta(
+        label="RunBrake / Run Exit Adjacency",
+        owner_module="locomotion",
+        fix_type="runtime-only",
+        risk="med",
+        confidence="med",
+        hypothesis=(
+            "RunBrake/Run exit rows adjacent to Wait/Walk/Turn, owned by RunBrake/Run callbacks "
+            "rather than the common grounded selector entry path."
+        ),
+        refs=(
+            "refs/melee/src/melee/ft/chara/ftCommon/ftCo_Run.c",
+            "refs/melee/src/melee/ft/chara/ftCommon/ftCo_RunBrake.c",
+        ),
+    ),
+    "F10h_appeal_adjacency": FamilyMeta(
+        label="Appeal / Taunt Adjacency",
+        owner_module="locomotion",
+        fix_type="split-first",
+        risk="low",
+        confidence="med",
+        hypothesis=(
+            "Wait/Turn rows that touch AppealSR/AppealSL admission through ftCo_800DE9D8; this is "
+            "a separate Wait_IASA command branch, not Dash/Walk/Turn/KneeBend ownership."
+        ),
+        refs=(
+            "refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA",
+            "refs/melee/src/melee/ft/chara/ftCommon/ftCo_AppealS.c",
+        ),
+    ),
+    "F10i_turn_hidden_microphase": FamilyMeta(
+        label="Turn Hidden Microphase",
+        owner_module="locomotion",
+        fix_type="seed/schema + runtime",
+        risk="med",
+        confidence="high",
+        hypothesis=(
+            "Turn rows whose visible mismatch is the hidden ftCo_Turn_Anim_Inner / "
+            "ftCo_Turn_IASA microphase (`has_turned`, `just_turned`, temporary facing) rather than "
+            "the common Wait/Dash/Walk/KneeBend selector owner."
+        ),
+        refs=(
+            "refs/melee/src/melee/ft/chara/ftCommon/ftCo_Turn.c::{ftCo_Turn_Anim_Inner,ftCo_Turn_IASA}",
+            "refs/melee/build/GALE01/asm/melee/ft/chara/ftCommon/ftCo_Turn.s::ftCo_Turn_IASA",
+        ),
+    ),
+    "F10j_turnrun_exit_microphase": FamilyMeta(
+        label="TurnRun Exit Microphase",
+        owner_module="locomotion",
+        fix_type="runtime-only",
+        risk="med",
+        confidence="high",
+        hypothesis=(
+            "TurnRun rows governed by ftCo_TurnRun_Anim's anim-end branch into Run/Wait before any "
+            "destination grounded selector can run; this is TurnRun exit ownership, not shared "
+            "Wait/Dash/Walk/Turn selector timing."
+        ),
+        refs=(
+            "refs/melee/src/melee/ft/chara/ftCommon/ftCo_TurnRun.c::ftCo_TurnRun_Anim",
+            "refs/melee/src/melee/ft/chara/ftCommon/ftCo_Run.c::fn_800CA644",
+        ),
+    ),
     "F11_locomotion_action_frame": FamilyMeta(
         label="Walk / Grounded Action-Frame Rate",
         owner_module="anim_timebase",
@@ -276,6 +432,89 @@ FAMILY_META: dict[str, FamilyMeta] = {
         refs=(
             "refs/melee/build/GALE01/asm/melee/ft/ft_0892.s::ft_800895E0",
             "refs/melee/src/melee/ft/ftmotionstates.c",
+        ),
+    ),
+    "F12a_grounded_instance_counter_order": FamilyMeta(
+        label="Grounded Motion-Entry Instance Counter Order",
+        owner_module="anim_timebase",
+        fix_type="runtime-only",
+        risk="low",
+        confidence="med",
+        hypothesis=(
+            "Instance-id-only rows on grounded locomotion selector entries where ft_800895E0/x2073 "
+            "is wired, but the global plAttack_80037B08 counter ordering differs under simultaneous "
+            "same-frame motion entries."
+        ),
+        refs=(
+            "refs/melee/build/GALE01/asm/melee/ft/ft_0892.s::ft_800895E0",
+            "refs/melee/src/melee/pl/plattack.c::plAttack_80037B08",
+        ),
+    ),
+    "F12b_adjacent_instance_counter_order": FamilyMeta(
+        label="Adjacent-Family Instance Counter Order",
+        owner_module="anim_timebase",
+        fix_type="split-first",
+        risk="med",
+        confidence="med",
+        hypothesis=(
+            "Instance-id-only rows whose visible action transition belongs to special, landing, "
+            "cliff, aerial, or damage families; these affect the same global instance counter but "
+            "are outside the grounded locomotion selector owner."
+        ),
+        refs=(
+            "refs/melee/build/GALE01/asm/melee/ft/ft_0892.s::ft_800895E0",
+            "refs/melee/src/melee/ft/ftmotionstates.c",
+        ),
+    ),
+    "F12c_attack_instance_counter_order": FamilyMeta(
+        label="Attack-State Instance Counter Order",
+        owner_module="combat",
+        fix_type="split-first",
+        risk="med",
+        confidence="high",
+        hypothesis=(
+            "Instance-id-only rows where an attack motion entry/exit consumes the same global "
+            "plAttack_80037B08 counter; these are attack owner rows, not locomotion motion-entry "
+            "x2073 debt."
+        ),
+        refs=(
+            "refs/melee/build/GALE01/asm/melee/ft/ft_0892.s::ft_800895E0",
+            "refs/melee/src/melee/pl/plattack.c::plAttack_80037B08",
+            "refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackLw3.c",
+        ),
+    ),
+    "F12d_squat_escape_instance_counter_order": FamilyMeta(
+        label="Squat / Escape Instance Counter Order",
+        owner_module="locomotion",
+        fix_type="split-first",
+        risk="med",
+        confidence="high",
+        hypothesis=(
+            "Instance-id-only rows whose visible transition is crouch/squat or escape ownership "
+            "adjacent to grounded locomotion. They share the global counter but are outside the "
+            "Dash/Walk/Turn/KneeBend motion-entry owner."
+        ),
+        refs=(
+            "refs/melee/build/GALE01/asm/melee/ft/ft_0892.s::ft_800895E0",
+            "refs/melee/src/melee/ft/chara/ftCommon/ftCo_Squat.c",
+            "refs/melee/src/melee/ft/chara/ftCommon/ftCo_Escape.c",
+        ),
+    ),
+    "F12e_cross_player_instance_counter_order": FamilyMeta(
+        label="Cross-Player Instance Counter Order",
+        owner_module="anim_timebase",
+        fix_type="split-first",
+        risk="med",
+        confidence="high",
+        hypothesis=(
+            "Local grounded instance-id-only rows where the visible actor is a grounded selector "
+            "entry, but another player consumes the same global plAttack_80037B08 counter in the "
+            "same frame through a non-grounded or adjacent-family transition."
+        ),
+        refs=(
+            "refs/melee/build/GALE01/asm/melee/ft/ft_0892.s::ft_800895E0",
+            "refs/melee/src/melee/pl/plattack.c::plAttack_80037B08",
+            "refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate",
         ),
     ),
     "F13_specialhi_landing": FamilyMeta(
@@ -444,6 +683,24 @@ def _load_binding():
 def _action_name(names: dict[int, str], action_id: int | None) -> str:
     if action_id is None:
         return "NONE"
+    if int(action_id) == 245:
+        return "OTTOTTO"
+    if int(action_id) == 246:
+        return "OTTOTTO_WAIT"
+    if int(action_id) == 254:
+        return "CLIFF_CLIMB_SLOW"
+    if int(action_id) == 256:
+        return "CLIFF_ATTACK_SLOW"
+    if int(action_id) == 258:
+        return "CLIFF_ESCAPE_SLOW"
+    if int(action_id) == 260:
+        return "CLIFF_JUMP_SLOW1"
+    if int(action_id) == 261:
+        return "CLIFF_JUMP_SLOW2"
+    if int(action_id) == 264:
+        return "APPEAL_SR"
+    if int(action_id) == 265:
+        return "APPEAL_SL"
     return names.get(action_id, f"UNKNOWN_0x{int(action_id) & 0xFFFF:04X}")
 
 
@@ -491,8 +748,64 @@ def _looks_like_special_hi(name: str) -> bool:
     return "SPECIAL_HI" in name or "FALL_SPECIAL" in name
 
 
+def _looks_like_any_special(name: str) -> bool:
+    return "SPECIAL" in name
+
+
+def _looks_like_landing_cliff_or_fall(name: str) -> bool:
+    return (
+        name.startswith("LANDING")
+        or name.startswith("CLIFF")
+        or name in {"FALL", "OTTOTTO", "OTTOTTO_WAIT"}
+    )
+
+
+def _looks_like_grounded_attack(name: str) -> bool:
+    return name.startswith("ATTACK_") and not name.startswith("ATTACK_AIR")
+
+
+def _looks_like_squat(name: str) -> bool:
+    return name in {"SQUAT", "SQUAT_WAIT", "SQUAT_RV"}
+
+
+def _looks_like_escape(name: str) -> bool:
+    return name.startswith("ESCAPE_")
+
+
+def _looks_like_runbrake(name: str) -> bool:
+    return name == "RUN_BRAKE"
+
+
+def _looks_like_turnrun(name: str) -> bool:
+    return name == "TURN_RUN"
+
+
+def _looks_like_appeal(name: str) -> bool:
+    return name.startswith("APPEAL_")
+
+
 def _looks_like_aerial(name: str) -> bool:
     return name.startswith("ATTACK_AIR") or name.startswith("JUMP_")
+
+
+def _looks_like_grounded_selector(name: str) -> bool:
+    return (
+        name.startswith("WALK_")
+        or name
+        in {
+            "WAIT",
+            "DASH",
+            "TURN",
+            "TURN_RUN",
+            "RUN",
+            "RUN_DIRECT",
+            "RUN_BRAKE",
+            "KNEE_BEND",
+            "SQUAT",
+            "SQUAT_WAIT",
+            "SQUAT_RV",
+        }
+    )
 
 
 def _looks_like_grounded(name: str) -> bool:
@@ -507,7 +820,9 @@ def _classify_player_row(row: PlayerRow, action_names: dict[int, str]) -> str:
     seed_name = _action_name(action_names, row.seed_action_id)
     ref_name = _action_name(action_names, row.ref_action_id)
     out_name = _action_name(action_names, row.out_action_id)
+    prev_name = _action_name(action_names, row.prev_action_id)
     names = (seed_name, ref_name, out_name)
+    context_names = (seed_name, ref_name, out_name, prev_name)
     field_set = {_base_field(field) for field in row.fields}
 
     if (
@@ -532,15 +847,65 @@ def _classify_player_row(row: PlayerRow, action_names: dict[int, str]) -> str:
             return "F07_knockdown_grounding"
         return "F08_damage_resolution_combat"
     if field_set == {"instance_id"}:
+        if any(_looks_like_grounded_attack(name) for name in context_names):
+            return "F12c_attack_instance_counter_order"
+        if any(
+            _looks_like_squat(name) or _looks_like_escape(name) or _looks_like_runbrake(name)
+            for name in context_names
+        ):
+            return "F12d_squat_escape_instance_counter_order"
+        if any(
+            _looks_like_any_special(name)
+            or _looks_like_landing_cliff_or_fall(name)
+            or _looks_like_aerial(name)
+            or _looks_like_damage(name)
+            for name in context_names
+        ):
+            return "F12b_adjacent_instance_counter_order"
+        if any(_looks_like_grounded_selector(name) for name in names):
+            return "F12a_grounded_instance_counter_order"
         return "F12_instance_id_transition_only"
     if field_set == {"action_frame"} and any(_looks_like_grounded(name) for name in names):
         return "F11_locomotion_action_frame"
     if any(_looks_like_special_hi(name) for name in names):
         return "F13_specialhi_landing"
+    if any(_looks_like_any_special(name) for name in names):
+        return "F10e_special_move_adjacency"
     if any(_looks_like_aerial(name) for name in names):
         return "F09_aerial_combat_resolution"
     if any(_looks_like_grounded(name) for name in names):
-        return "F10_grounded_transition_resolution"
+        if any(_looks_like_appeal(name) for name in names):
+            return "F10h_appeal_adjacency"
+        if any(_looks_like_turnrun(name) for name in names):
+            return "F10j_turnrun_exit_microphase"
+        if (
+            "TURN" in names
+            and (field_set == {"facing"} or ("DASH" in names and bool(field_set & {"action_id", "animation_index"})))
+        ):
+            return "F10i_turn_hidden_microphase"
+        if any(_looks_like_runbrake(name) for name in names):
+            return "F10g_runbrake_adjacency"
+        if any(_looks_like_grounded_attack(name) for name in names):
+            return "F10f_grounded_attack_adjacency"
+        if field_set & {
+            "hitlag",
+            "hitstun",
+            "combo_count",
+            "last_attack_landed",
+            "last_hit_by",
+            "instance_hit_by",
+            "state_flags[1]",
+        }:
+            return "F10b_grounded_combat_adjacency"
+        if any(_looks_like_landing_cliff_or_fall(name) for name in names) or field_set & {
+            "ground_id",
+            "on_ground",
+            "jumps_left",
+        }:
+            return "F10c_collision_landing_edge_adjacency"
+        if field_set <= (STATE_FLAG_FIELDS | {"hurtbox_state"}):
+            return "F10d_hurtbox_stateflag_adjacency"
+        return "F10a_grounded_selector_transition"
     return "F99_misc_other"
 
 
@@ -653,12 +1018,82 @@ def _audit_player_row(row: PlayerRow, action_names: dict[int, str]) -> tuple[boo
             )
         )
         return ok, "grounded transition family with motion-entry bundle"
+    if row.family_id == "F10a_grounded_selector_transition":
+        ok = any(_looks_like_grounded_selector(name) or name.startswith("ATTACK_") for name in names) and bool(
+            field_set & {"action_id", "animation_index", "instance_id", "action_frame"}
+        )
+        return ok, "true grounded selector transition row"
+    if row.family_id == "F10b_grounded_combat_adjacency":
+        ok = bool(
+            field_set
+            & {
+                "hitlag",
+                "hitstun",
+                "combo_count",
+                "last_attack_landed",
+                "last_hit_by",
+                "instance_hit_by",
+                "state_flags[1]",
+            }
+        )
+        return ok, "grounded-name row with combat-owned fields"
+    if row.family_id == "F10c_collision_landing_edge_adjacency":
+        ok = any(_looks_like_landing_cliff_or_fall(name) for name in names) or bool(
+            field_set & {"ground_id", "on_ground", "jumps_left"}
+        )
+        return ok, "grounded-name row with collision/landing/edge fields"
+    if row.family_id == "F10d_hurtbox_stateflag_adjacency":
+        ok = field_set <= (STATE_FLAG_FIELDS | {"hurtbox_state"})
+        return ok, "grounded-name row with hurtbox/state-flag-only fields"
+    if row.family_id == "F10e_special_move_adjacency":
+        ok = any(_looks_like_any_special(name) for name in names)
+        return ok, "grounded-name row with special-move entry/exit context"
+    if row.family_id == "F10f_grounded_attack_adjacency":
+        ok = any(_looks_like_grounded_attack(name) for name in names)
+        return ok, "grounded-name row with attack-state transition context"
+    if row.family_id == "F10g_runbrake_adjacency":
+        ok = any(_looks_like_runbrake(name) for name in names)
+        return ok, "grounded-name row with RunBrake/Run exit context"
+    if row.family_id == "F10h_appeal_adjacency":
+        ok = any(_looks_like_appeal(name) for name in names)
+        return ok, "grounded-name row with Appeal/Taunt command context"
+    if row.family_id == "F10i_turn_hidden_microphase":
+        ok = "TURN" in names and (
+            field_set == {"facing"} or ("DASH" in names and bool(field_set & {"action_id", "animation_index"}))
+        )
+        return ok, "Turn hidden has_turned/just_turned/facing microphase"
+    if row.family_id == "F10j_turnrun_exit_microphase":
+        ok = any(_looks_like_turnrun(name) for name in names)
+        return ok, "TurnRun anim-end Run/Wait exit microphase"
     if row.family_id == "F11_locomotion_action_frame":
         ok = field_set == {"action_frame"} and any(_looks_like_grounded(name) for name in names)
         return ok, "grounded callback/timebase action_frame-only row"
     if row.family_id == "F12_instance_id_transition_only":
         ok = field_set == {"instance_id"}
         return ok, "instance_id-only motion entry residual"
+    if row.family_id == "F12a_grounded_instance_counter_order":
+        ok = field_set == {"instance_id"} and any(_looks_like_grounded_selector(name) for name in names)
+        return ok, "grounded selector instance-id counter-order row"
+    if row.family_id == "F12b_adjacent_instance_counter_order":
+        ok = field_set == {"instance_id"} and any(
+            _looks_like_any_special(name)
+            or _looks_like_landing_cliff_or_fall(name)
+            or _looks_like_aerial(name)
+            or _looks_like_damage(name)
+            for name in names
+        )
+        return ok, "adjacent-family instance-id counter-order row"
+    if row.family_id == "F12c_attack_instance_counter_order":
+        ok = field_set == {"instance_id"} and any(_looks_like_grounded_attack(name) for name in names)
+        return ok, "attack-state instance-id counter-order row"
+    if row.family_id == "F12d_squat_escape_instance_counter_order":
+        ok = field_set == {"instance_id"} and any(
+            _looks_like_squat(name) or _looks_like_escape(name) or _looks_like_runbrake(name) for name in names
+        )
+        return ok, "squat/escape instance-id counter-order row"
+    if row.family_id == "F12e_cross_player_instance_counter_order":
+        ok = field_set == {"instance_id"} and any(_looks_like_grounded_selector(name) for name in names)
+        return ok, "cross-player global instance counter-order row"
     if row.family_id == "F13_specialhi_landing":
         ok = any(_looks_like_special_hi(name) for name in names) and bool(
             field_set
@@ -708,6 +1143,64 @@ def _iter_family_rows(
             )
         )
     return family_rows
+
+
+def _split_cross_player_instance_counter_rows(
+    all_events: list[MismatchEvent],
+    player_rows: dict[tuple[str, int, int], PlayerRow],
+) -> tuple[list[MismatchEvent], dict[tuple[str, int, int], PlayerRow]]:
+    cross_player_keys: set[tuple[str, int, int]] = set()
+    rows_by_record: dict[tuple[str, int], list[PlayerRow]] = defaultdict(list)
+    for row in player_rows.values():
+        rows_by_record[(row.dataset, row.record)].append(row)
+
+    adjacent_families = {
+        "F07_knockdown_grounding",
+        "F08_damage_resolution_combat",
+        "F09_aerial_combat_resolution",
+        "F10b_grounded_combat_adjacency",
+        "F10c_collision_landing_edge_adjacency",
+        "F10d_hurtbox_stateflag_adjacency",
+        "F10e_special_move_adjacency",
+        "F10f_grounded_attack_adjacency",
+        "F10g_runbrake_adjacency",
+        "F10h_appeal_adjacency",
+        "F10i_turn_hidden_microphase",
+        "F10j_turnrun_exit_microphase",
+        "F12b_adjacent_instance_counter_order",
+        "F12c_attack_instance_counter_order",
+        "F12d_squat_escape_instance_counter_order",
+        "F13_specialhi_landing",
+        "F14_throw_item_bookkeeping",
+        "F15_guard_item_ownership",
+    }
+    for key, row in player_rows.items():
+        if row.family_id != "F12a_grounded_instance_counter_order":
+            continue
+        peers = [peer for peer in rows_by_record[(row.dataset, row.record)] if peer.p != row.p]
+        if any(peer.family_id in adjacent_families for peer in peers):
+            cross_player_keys.add(key)
+
+    if not cross_player_keys:
+        return all_events, player_rows
+
+    new_player_rows: dict[tuple[str, int, int], PlayerRow] = {}
+    for key, row in player_rows.items():
+        if key in cross_player_keys:
+            row = PlayerRow(**{**asdict(row), "family_id": "F12e_cross_player_instance_counter_order"})
+        new_player_rows[key] = row
+
+    new_events: list[MismatchEvent] = []
+    for ev in all_events:
+        if ev.subject.startswith("p"):
+            try:
+                p = int(ev.subject[1:])
+            except ValueError:
+                p = -1
+            if (ev.dataset, ev.record, p) in cross_player_keys:
+                ev = MismatchEvent(**{**asdict(ev), "family_id": "F12e_cross_player_instance_counter_order"})
+        new_events.append(ev)
+    return new_events, new_player_rows
 
 
 def _sample_rows(rows: list[PlayerRow | ItemSlotRow], sample_n: int) -> list[PlayerRow | ItemSlotRow]:
@@ -991,6 +1484,7 @@ def _iter_suite_events(
         finally:
             binding.destroy(handle)
 
+    all_events, player_rows = _split_cross_player_instance_counter_rows(all_events, player_rows)
     return all_events, player_rows, item_rows
 
 

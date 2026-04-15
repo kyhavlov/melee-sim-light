@@ -135,6 +135,9 @@ int state_alloc(MslStateSoA* state, int batch_size) {
   state->anim_frame_fp_q16_16 = (int32_t*)alloc_aligned_64(sizeof(int32_t) * bp);
   state->frame_speed_mul_fp_q16_16 = (int32_t*)alloc_aligned_64(sizeof(int32_t) * bp);
   state->walk_anim_source_vel = (float*)alloc_aligned_64(sizeof(float) * bp);
+  state->walk_retarget_tick_source_vel = (float*)alloc_aligned_64(sizeof(float) * bp);
+  state->run_anim_source_vel = (float*)alloc_aligned_64(sizeof(float) * bp);
+  state->turn_kneebend_facing_override = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->capture_grab_timer = (float*)alloc_aligned_64(sizeof(float) * bp);
   state->capture_wait_counter = (float*)alloc_aligned_64(sizeof(float) * bp);
   state->capture_wait_anim_rate_timer = (float*)alloc_aligned_64(sizeof(float) * bp);
@@ -283,6 +286,7 @@ int state_alloc(MslStateSoA* state, int batch_size) {
   state->instance_hit_by = (uint16_t*)alloc_aligned_64(sizeof(uint16_t) * bp);
   state->instance_id = (uint16_t*)alloc_aligned_64(sizeof(uint16_t) * bp);
   state->instance_id_x2073 = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
+  state->motion_entry_instance_id_override = (uint16_t*)alloc_aligned_64(sizeof(uint16_t) * bp);
   state->instance_identity_last_action_id = (uint16_t*)alloc_aligned_64(sizeof(uint16_t) * bp);
   state->attack_id = (uint16_t*)alloc_aligned_64(sizeof(uint16_t) * bp);
   state->attack_instance = (uint16_t*)alloc_aligned_64(sizeof(uint16_t) * bp);
@@ -384,20 +388,21 @@ int state_alloc(MslStateSoA* state, int batch_size) {
       !state->camera_target_point_inside_stage_cam_bounds_u8 || !state->downwait_timer ||
       !state->passivewall_timer || !state->anim_frame_f32 || !state->anim_frame_fp_q16_16 ||
       !state->frame_speed_mul_fp_q16_16 || !state->walk_anim_source_vel ||
-      !state->capture_grab_timer || !state->capture_wait_counter ||
-      !state->capture_wait_anim_rate_timer || !state->capture_wait_jump_latch ||
-      !state->capture_breakout_pending || !state->throw_anim_rate_fp_q16_16 ||
-      !state->anim_defer_tick_once || !state->jumps_left || !state->stocks ||
-      !state->guard_tilt_x8 || !state->guard_tilt_x4 || !state->guard_on_entered_this_frame ||
-      !state->guard_entry_via_wait_callback || !state->guard_jump_oos_entered_this_frame ||
-      !state->guard_reflect_timer_x14 || !state->guard_reflect_timer_x18 ||
-      !state->guard_reflect_timer_x14_seed || !state->guard_reflect_timer_x18_seed ||
-      !state->guard_release_latched_xc || !state->guard_x10 || !state->lightshield_amount ||
-      !state->guard_setoff_hitlag_damage_min || !state->guard_setoff_hitlag_exit_phase_u8 ||
-      !state->guard_setoff_post_hitlag_owner_u8 || !state->kneebend_jump_input ||
-      !state->kneebend_is_short_hop || !state->tilt_timer_x || !state->tilt_timer_y ||
-      !state->fall_fast || !state->attackdash_x0 || !state->jab_x0 || !state->run_x0 ||
-      !state->runbrake_cmd0 || !state->dash_x4 || !state->shine_release_lag ||
+      !state->walk_retarget_tick_source_vel || !state->run_anim_source_vel ||
+      !state->turn_kneebend_facing_override || !state->capture_grab_timer ||
+      !state->capture_wait_counter || !state->capture_wait_anim_rate_timer ||
+      !state->capture_wait_jump_latch || !state->capture_breakout_pending ||
+      !state->throw_anim_rate_fp_q16_16 || !state->anim_defer_tick_once || !state->jumps_left ||
+      !state->stocks || !state->guard_tilt_x8 || !state->guard_tilt_x4 ||
+      !state->guard_on_entered_this_frame || !state->guard_entry_via_wait_callback ||
+      !state->guard_jump_oos_entered_this_frame || !state->guard_reflect_timer_x14 ||
+      !state->guard_reflect_timer_x18 || !state->guard_reflect_timer_x14_seed ||
+      !state->guard_reflect_timer_x18_seed || !state->guard_release_latched_xc ||
+      !state->guard_x10 || !state->lightshield_amount || !state->guard_setoff_hitlag_damage_min ||
+      !state->guard_setoff_hitlag_exit_phase_u8 || !state->guard_setoff_post_hitlag_owner_u8 ||
+      !state->kneebend_jump_input || !state->kneebend_is_short_hop || !state->tilt_timer_x ||
+      !state->tilt_timer_y || !state->fall_fast || !state->attackdash_x0 || !state->jab_x0 ||
+      !state->run_x0 || !state->runbrake_cmd0 || !state->dash_x4 || !state->shine_release_lag ||
       !state->shine_is_release || !state->ecb_lock_timer || !state->ledge_side ||
       !state->stage_ledge_occupant_left || !state->stage_ledge_occupant_right ||
       !state->ledge_cooldown || !state->fallspecial_xc || !state->turn_has_turned ||
@@ -432,15 +437,16 @@ int state_alloc(MslStateSoA* state, int batch_size) {
       !state->shield_radius || !state->reflector_x || !state->reflector_y ||
       !state->reflector_radius || !state->ground_id || !state->animation_index ||
       !state->instance_hit_by || !state->instance_id || !state->instance_id_x2073 ||
-      !state->instance_identity_last_action_id || !state->attack_id || !state->attack_instance ||
-      !state->attack_identity_last_action_id || !state->last_attack_landed || !state->combo_count ||
-      !state->combo_victim_port || !state->combo_victim_instance_id || !state->combo_timer_x2098 ||
-      !state->last_hit_by || !state->state_flags || !state->combat_hitlist_cd ||
-      !state->combat_hitlist_victim_iid || !state->combat_hitlist_hb_valid ||
-      !state->combat_hitlist_hb_cd || !state->combat_hitlist_hb_victim_iid ||
-      !state->hitlist_reseed_gen || !state->fighter_hitlist || !state->fighter_hitlist_init_gen ||
-      !state->stale_queue_index || !state->stale_move_id || !state->stale_attack_instance ||
-      !state->input_buttons || !state->prev_input_buttons || !state->input_buttons_pressed ||
+      !state->motion_entry_instance_id_override || !state->instance_identity_last_action_id ||
+      !state->attack_id || !state->attack_instance || !state->attack_identity_last_action_id ||
+      !state->last_attack_landed || !state->combo_count || !state->combo_victim_port ||
+      !state->combo_victim_instance_id || !state->combo_timer_x2098 || !state->last_hit_by ||
+      !state->state_flags || !state->combat_hitlist_cd || !state->combat_hitlist_victim_iid ||
+      !state->combat_hitlist_hb_valid || !state->combat_hitlist_hb_cd ||
+      !state->combat_hitlist_hb_victim_iid || !state->hitlist_reseed_gen ||
+      !state->fighter_hitlist || !state->fighter_hitlist_init_gen || !state->stale_queue_index ||
+      !state->stale_move_id || !state->stale_attack_instance || !state->input_buttons ||
+      !state->prev_input_buttons || !state->input_buttons_pressed ||
       !state->input_buttons_released || !state->input_main_x || !state->input_main_y ||
       !state->prev_input_main_x || !state->prev_input_main_y || !state->input_c_x ||
       !state->input_c_y || !state->prev_input_c_x || !state->prev_input_c_y ||
@@ -471,6 +477,9 @@ int state_alloc(MslStateSoA* state, int batch_size) {
   memset(state->smash_charge_hold_frames_max, 0, sizeof(uint8_t) * bp);
   memset(state->smash_charge_saved_rate_fp_q16_16, 0, sizeof(int32_t) * bp);
   memset(state->walk_anim_source_vel, 0, sizeof(float) * bp);
+  memset(state->walk_retarget_tick_source_vel, 0, sizeof(float) * bp);
+  memset(state->run_anim_source_vel, 0, sizeof(float) * bp);
+  memset(state->turn_kneebend_facing_override, 0, sizeof(uint8_t) * bp);
   memset(state->walk_use_raw_input_once, 0, sizeof(uint8_t) * bp);
   memset(state->x2228_b7, 0, sizeof(uint8_t) * bp);
   memset(state->damage_hitlag_floorhug_latch, 0, sizeof(uint8_t) * bp);
@@ -593,6 +602,9 @@ void state_free(MslStateSoA* state) {
   alloc_free(state->anim_frame_fp_q16_16);
   alloc_free(state->frame_speed_mul_fp_q16_16);
   alloc_free(state->walk_anim_source_vel);
+  alloc_free(state->walk_retarget_tick_source_vel);
+  alloc_free(state->run_anim_source_vel);
+  alloc_free(state->turn_kneebend_facing_override);
   alloc_free(state->capture_grab_timer);
   alloc_free(state->capture_wait_counter);
   alloc_free(state->capture_wait_anim_rate_timer);
@@ -741,6 +753,7 @@ void state_free(MslStateSoA* state) {
   alloc_free(state->instance_hit_by);
   alloc_free(state->instance_id);
   alloc_free(state->instance_id_x2073);
+  alloc_free(state->motion_entry_instance_id_override);
   alloc_free(state->instance_identity_last_action_id);
   alloc_free(state->attack_id);
   alloc_free(state->attack_instance);

@@ -199,9 +199,11 @@ def test_derive_turn_internals_is_causal_wrt_future_frames() -> None:
     stick_x_prefix = np.array([0.0, 0.0, -0.9, 0.0, 0.0, 0.0], dtype=np.float32)
     tilt_timer_x_prefix = np.array([0xFE, 0xFE, 0, 0xFE, 0xFE, 0xFE], dtype=np.uint8)
     turn_frames_prefix = np.full(a_prefix.shape[0], 4, dtype=np.uint8)
+    action_frame_prefix = np.array([0, 1, 1, 2, 3, 0], dtype=np.int16)
 
     f0, h0, x0 = derive_turn_internals(
         action_id=a_prefix,
+        action_frame_i16=action_frame_prefix,
         facing=facing_prefix,
         stick_x_unit=stick_x_prefix,
         tilt_timer_x=tilt_timer_x_prefix,
@@ -219,9 +221,11 @@ def test_derive_turn_internals_is_causal_wrt_future_frames() -> None:
         [tilt_timer_x_prefix, np.array([0xFE, 0xFE, 0xFE, 0xFE], dtype=np.uint8)]
     )
     turn_frames_ext = np.full(a_ext.shape[0], 4, dtype=np.uint8)
+    action_frame_ext = np.concatenate([action_frame_prefix, np.array([1, 1, 2, 0], dtype=np.int16)])
 
     f1, h1, x1 = derive_turn_internals(
         action_id=a_ext,
+        action_frame_i16=action_frame_ext,
         facing=facing_ext,
         stick_x_unit=stick_x_ext,
         tilt_timer_x=tilt_timer_x_ext,

@@ -547,9 +547,38 @@ typedef struct MslSeed {
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Walk.c::ftCo_Walk_Anim
   // refs/melee/src/melee/ft/ftwalkcommon.c::ftWalkCommon_800DFDDC
   //
-  // Seed representation:
-  // - Causal callback-owned source velocity carried across one-step reseed boundaries.
+  // Seed/runtime representation:
+  // - Runtime carries the causal callback-owned source velocity.
+  // - Replay one-step seeds reconstruct the hidden same-Walk callback source from the next exposed
+  //   walk rate when Slippi's post-frame frame-speed lane is one row late for this owner.
   float walk_anim_source_vel_f32[MSL_MAX_PLAYERS];
+  // Walk retarget tick source velocity for ftWalkCommon_800DFDDC -> 800DFEC8 rows.
+  //
+  // This is a narrow non-causal replay-facing lane for the hidden
+  // `ft_GetGroundFrictionMultiplier(fp) < 1` source-selection branch on Walk type-change ticks.
+  // Runtime leaves the general frame_speed_mul_f32 lane causal and normally uses
+  // walk_anim_source_vel_f32; one-step replay seeds fill this only when the Walk retarget row needs
+  // current `gr_vel` rather than hidden `mv.co.walk.x0`.
+  // refs/melee/src/melee/ft/ftwalkcommon.c::{ftWalkCommon_800DFDDC,ftWalkCommon_800DFEC8}
+  float walk_retarget_tick_source_vel_f32[MSL_MAX_PLAYERS];
+  // Run Anim callback source velocity (`vel` in ftCo_Run_Anim).
+  //
+  // Seed/runtime representation mirrors walk_anim_source_vel_f32:
+  // - Runtime carries the causal callback-owned source velocity.
+  // - Replay one-step seeds may reconstruct the hidden same-Run callback source from the next
+  //   exposed Run rate, leaving the general frame_speed_mul_f32 lane causal.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Run.c::ftCo_Run_Anim
+  float run_anim_source_vel_f32[MSL_MAX_PLAYERS];
+  // Narrow replay-facing Turn->KneeBend hidden-facing owner lane.
+  //
+  // Decomp:
+  // - ftCo_Turn_IASA temporarily exposes mv.co.turn.facing_after for early Turn checks, then
+  //   ftCo_Jump_CheckInput can enter KneeBend in the same callback.
+  // - Slippi post-frames do not expose the transient Turn microphase that decides whether the
+  //   KneeBend entry inherits facing_after. Use 0=no override, 1=left, 2=right.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Turn.c::ftCo_Turn_IASA
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c::ftCo_Jump_CheckInput
+  uint8_t turn_kneebend_facing_override_u8[MSL_MAX_PLAYERS];
   // Guard (shield) tilt pose state (seeded; decomp-shaped).
   // Decomp: refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c
   // - mv.co.guard.x8: "frame-ish" index into the Guard tilt timeline (neutral is 10 in GALE01)
@@ -871,6 +900,18 @@ typedef struct MslSeed {
   // from replay-visible instance_id history (fighters + items).
   // refs/melee/src/melee/pl/plattack.c::plAttack_80037B08
   uint16_t instance_id_counter;
+  // Narrow replay-facing same-frame fighter-proc order lane for plAttack_80037B08.
+  //
+  // Decomp:
+  // - Fighter_ChangeMotionState calls ft_800895E0 on motion-state entry, and that may consume the
+  //   global plAttack_80037B08 counter.
+  // - The global counter is shared across fighters/items; Slippi exposes only the post-frame
+  //   per-object ids, not the HSD proc ordering for simultaneous fighter entries. Use 0=no
+  //   override; nonzero is the replay-visible fp->x2088 value for this entry.
+  // refs/melee/src/melee/ft/fighter.c (Fighter_ChangeMotionState)
+  // refs/melee/build/GALE01/asm/melee/ft/ft_0892.s::{ft_800895E0,ft_80089824}
+  // refs/melee/src/melee/pl/plattack.c::plAttack_80037B08
+  uint16_t motion_entry_instance_id_override_u16[MSL_MAX_PLAYERS];
   // Staling "attack id" (GALE01): fp->x2068_attackID.
   // Slippi post-frames do not expose fp->x2068 directly; preprocessing derives it causally from
   // replay history (see tools/slippi/staling_history.py).

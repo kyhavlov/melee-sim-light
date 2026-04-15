@@ -274,8 +274,28 @@ typedef struct MslStateSoA {
   // Decomp:
   // - ftWalkCommon_800DFDDC selects `mv_x0` from either fp->mv.co.walk.x0 or fp->gr_vel, then
   //   writes fp->frame_speed_mul via ftAnim_SetAnimRate.
+  // - Runtime updates this causally from the modeled Walk_Anim callback; replay one-step seeds may
+  //   carry a same-Walk lookahead reconstruction because Slippi exposes that callback-owned rate
+  //   one row after the anim tick that consumed it.
   // refs/melee/src/melee/ft/ftwalkcommon.c::ftWalkCommon_800DFDDC
   float* walk_anim_source_vel;
+  // Replay-facing Walk retarget tick source for the hidden `ft_GetGroundFrictionMultiplier` branch.
+  // This is consumed only on WalkSlow/Middle/Fast type-change rows; runtime normally keeps it zero
+  // and uses the causal walk_anim_source_vel lane.
+  // refs/melee/src/melee/ft/ftwalkcommon.c::{ftWalkCommon_800DFDDC,ftWalkCommon_800DFEC8}
+  float* walk_retarget_tick_source_vel;
+  // Run Anim callback source velocity (`vel` in ftCo_Run_Anim).
+  //
+  // Decomp:
+  // - ftCo_Run_Anim selects `vel` from either fp->mv.co.run.x4 or fp->gr_vel, then writes
+  //   fp->frame_speed_mul via ftAnim_SetAnimRate.
+  // - Runtime updates this causally from the modeled Run_Anim callback; replay one-step seeds may
+  //   carry a same-Run hidden-owner reconstruction without weakening frame_speed_mul_f32.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Run.c::ftCo_Run_Anim
+  float* run_anim_source_vel;
+  // Replay-facing Turn->KneeBend hidden-facing owner lane. 0=no override, 1=left, 2=right.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Turn.c::ftCo_Turn_IASA
+  uint8_t* turn_kneebend_facing_override;  // [batch * players]
   // Capture/grab hidden owner lanes.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::{
   //   ftCo_800DA824,ftCo_CaptureWaitHi_Anim,fn_800DB8A4,fn_800DC014
@@ -636,6 +656,10 @@ typedef struct MslStateSoA {
   // whether to bump fp->x2088 on motion-state change.
   // refs/melee/build/GALE01/asm/melee/ft/ft_0892.s::ft_800895E0 (lbz fp+0x2073; compare to flags)
   uint8_t* instance_id_x2073;  // [batch * players]
+  // Replay-facing same-frame fighter-proc order lane for plAttack_80037B08 consumers.
+  // 0=no override; nonzero is the post-entry fp->x2088 instance_id.
+  // refs/melee/build/GALE01/asm/melee/ft/ft_0892.s::{ft_800895E0,ft_80089824}
+  uint16_t* motion_entry_instance_id_override;  // [batch * players]
   // Internal-only: last action_id for which instance_id update logic ran.
   // Used to avoid bumping fp->x2088 on animation restarts (msl_anim_timebase_enter without
   // a motion-state change).

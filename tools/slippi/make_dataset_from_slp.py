@@ -1419,12 +1419,20 @@ def _derive_walk_anim_source_vel_seed_lane(
     frame_speed_mul_f32: np.ndarray,
     walk_divisors_by_char: dict[int, tuple[float, float, float]],
 ) -> np.ndarray:
-    """Derive callback-owned walk `mv_x0` seed lane from seeded walk anim rate.
+    """Derive callback-owned walk `mv_x0` seed lane from replay walk anim rate.
 
     Decomp ownership:
     - ftCo_Walk_Anim delegates to ftWalkCommon_800DFDDC, which computes:
     -   anim_rate = ABS(mv_x0) / walk_divisor (or 0 when reverse-facing/non-forward)
     - so mv_x0 can be reconstructed as sign(facing_dir1) * anim_rate * walk_divisor.
+    - Runtime updates this lane causally from the modeled Walk_Anim callback.
+
+    Replay seed representation:
+    - For same-Walk steady rows, Slippi's post-frame frame-speed value is exposed one row after
+      the anim tick that consumed it. Use the next same-Walk row's rate as the minimum explicit
+      one-step seed reconstruction of the hidden callback source.
+    - Across Walk type/action changes, keep the current row's rate; ftWalkCommon_800DFEC8 owns the
+      conversion frame and the next row's action has a different divisor/timeline.
     refs/melee/src/melee/ft/chara/ftCommon/ftCo_Walk.c::ftCo_Walk_Anim
     refs/melee/src/melee/ft/ftwalkcommon.c::ftWalkCommon_800DFDDC
     """
@@ -1450,11 +1458,181 @@ def _derive_walk_anim_source_vel_seed_lane(
             denom = float(divs[2])
         if not np.isfinite(denom) or denom <= 0.0:
             continue
-        rate = float(frame_speed_mul_f32[i])
+        rate_index = i
+        next_i = i + 1
+        if next_i < n and int(action_id_u16[next_i]) == action:
+            rate_index = next_i
+        rate = float(frame_speed_mul_f32[rate_index])
         if not np.isfinite(rate) or rate <= 0.0:
             continue
         facing_dir = -1.0 if int(facing_dir1_i8[i]) < 0 else 1.0
         out[i] = np.float32(facing_dir * rate * denom)
+    return out
+
+
+def _derive_walk_retarget_tick_source_vel_seed_lane(
+    *,
+    action_id_u16: np.ndarray,
+    char_id_u8: np.ndarray,
+    facing_dir1_i8: np.ndarray,
+    anim_frame_f32: np.ndarray,
+    ref_action_frame_i16: np.ndarray,
+    speed_ground_x_self_f32: np.ndarray,
+    walk_anim_source_vel_f32: np.ndarray,
+    walk_divisors_by_char: dict[int, tuple[float, float, float]],
+    walk_max_by_char: dict[int, float],
+    walk_mid_vel_mul: float,
+    walk_fast_vel_mul: float,
+    end_frames: "EndFrameTables",
+) -> np.ndarray:
+    """Derive the hidden source choice for Walk type-change ticks.
+
+    Decomp ownership:
+    - Walk_Anim (`ftWalkCommon_800DFDDC`) chooses between hidden `mv.co.walk.x0` and current
+      `gr_vel` based on `ft_GetGroundFrictionMultiplier(fp) < 1`.
+    - Walk_IASA (`ftWalkCommon_800DFEC8`) then uses current `gr_vel` to choose the destination
+      Walk type and remaps the post-tick phase into that destination motion.
+
+    Slippi exposes neither the friction-multiplier branch nor `mv.co.walk.x0`, so this lane is a
+    narrow replay-facing reconstruction for rows where the two candidate sources produce different
+    destination action_frame parity. Runtime keeps the causal walk source lane.
+    """
+    ACT_WALK_SLOW = 0x000F
+    ACT_WALK_MIDDLE = 0x0010
+    ACT_WALK_FAST = 0x0011
+    SM_WALK_SLOW = 7
+    SM_WALK_MIDDLE = 8
+    SM_WALK_FAST = 9
+
+    walk_actions = (ACT_WALK_SLOW, ACT_WALK_MIDDLE, ACT_WALK_FAST)
+    action_to_msid = {
+        ACT_WALK_SLOW: SM_WALK_SLOW,
+        ACT_WALK_MIDDLE: SM_WALK_MIDDLE,
+        ACT_WALK_FAST: SM_WALK_FAST,
+    }
+
+    def _walk_action_from_speed(char_id: int, gr_vel: float) -> int:
+        walk_max = float(walk_max_by_char.get(char_id, 0.0))
+        if not np.isfinite(walk_max) or walk_max <= 0.0:
+            return ACT_WALK_SLOW
+        # Same thresholds as ftWalkCommon_GetWalkType for the target domain.
+        v = abs(float(gr_vel))
+        if v >= float(walk_fast_vel_mul) * walk_max:
+            return ACT_WALK_FAST
+        if v >= float(walk_mid_vel_mul) * walk_max:
+            return ACT_WALK_MIDDLE
+        return ACT_WALK_SLOW
+
+    def _rate_from_source(action: int, char_id: int, facing_dir: float, source_vel: float) -> float | None:
+        divs = walk_divisors_by_char.get(char_id)
+        if divs is None:
+            return None
+        if action == ACT_WALK_SLOW:
+            denom = float(divs[0])
+        elif action == ACT_WALK_MIDDLE:
+            denom = float(divs[1])
+        elif action == ACT_WALK_FAST:
+            denom = float(divs[2])
+        else:
+            return None
+        if not np.isfinite(denom) or denom <= 0.0:
+            return None
+        if float(source_vel) * facing_dir <= 0.0:
+            return 0.0
+        return abs(float(source_vel)) / denom
+
+    def _predict_retarget_af(char_id: int, cur_action: int, dst_action: int, anim_frame: float, rate: float) -> int | None:
+        cur_cycle = end_frames.by_char_id.get(char_id, {}).get(action_to_msid[cur_action])
+        dst_cycle = end_frames.by_char_id.get(char_id, {}).get(action_to_msid[dst_action])
+        if cur_cycle is None or dst_cycle is None or not (cur_cycle > 0.0 and dst_cycle > 0.0):
+            return None
+        post_tick = float(anim_frame) + float(rate)
+        quotient = int(post_tick / float(cur_cycle))
+        adjusted = post_tick - float(cur_cycle) * float(quotient)
+        final_frame = int(float(dst_cycle) * (adjusted / float(cur_cycle)))
+        out_af = final_frame + 1
+        if out_af >= int(float(dst_cycle)):
+            # Walk AObj timelines loop in-game; this mirrors the runtime table behavior closely
+            # enough for choosing between the two decomp candidate sources.
+            out_af = 0
+        return int(out_af)
+
+    n = int(action_id_u16.shape[0])
+    out = np.zeros(n, dtype=np.float32)
+    for i in range(n - 1):
+        action = int(action_id_u16[i])
+        if action not in walk_actions:
+            continue
+        char_id = int(char_id_u8[i])
+        target = _walk_action_from_speed(char_id, float(speed_ground_x_self_f32[i]))
+        if target == action or target not in walk_actions:
+            continue
+        facing_dir = -1.0 if int(facing_dir1_i8[i]) < 0 else 1.0
+        ref_af = int(np.int16(ref_action_frame_i16[i + 1]))
+        hidden_source = float(walk_anim_source_vel_f32[i])
+        ground_source = float(speed_ground_x_self_f32[i])
+        hidden_rate = _rate_from_source(action, char_id, facing_dir, hidden_source)
+        ground_rate = _rate_from_source(action, char_id, facing_dir, ground_source)
+        hidden_af = (
+            None
+            if hidden_rate is None
+            else _predict_retarget_af(char_id, action, target, float(anim_frame_f32[i]), hidden_rate)
+        )
+        ground_af = (
+            None
+            if ground_rate is None
+            else _predict_retarget_af(char_id, action, target, float(anim_frame_f32[i]), ground_rate)
+        )
+        if ground_af == ref_af and hidden_af != ref_af:
+            out[i] = np.float32(ground_source)
+        elif hidden_af == ref_af and ground_af != ref_af:
+            out[i] = np.float32(hidden_source)
+    return out
+
+
+def _derive_run_anim_source_vel_seed_lane(
+    *,
+    action_id_u16: np.ndarray,
+    char_id_u8: np.ndarray,
+    facing_dir1_i8: np.ndarray,
+    frame_speed_mul_f32: np.ndarray,
+    run_scaling_by_char: dict[int, float],
+) -> np.ndarray:
+    """Derive callback-owned Run `vel` seed lane from replay Run anim rate.
+
+    Decomp ownership:
+    - ftCo_Run_Anim computes anim_rate = ABS(vel) / run_animation_scaling (or 0 when
+      reverse-facing/non-forward).
+    - Runtime updates this lane causally from the modeled Run_Anim callback.
+
+    Replay seed representation:
+    - For same-Run steady rows, Slippi's post-frame frame-speed value can be exposed one row after
+      the anim tick that consumed it. Use the next same-Run row's rate as a narrow non-causal
+      replay-facing hidden-owner reconstruction, leaving frame_speed_mul_f32 causal.
+    refs/melee/src/melee/ft/chara/ftCommon/ftCo_Run.c::ftCo_Run_Anim
+    refs/melee/src/melee/ft/chara/ftCommon/ftCo_RunDirect.c::ftCo_RunDirect_Anim
+    """
+    ACT_RUN = 0x0015
+    ACT_RUN_DIRECT = 0x0016
+
+    n = int(action_id_u16.shape[0])
+    out = np.zeros(n, dtype=np.float32)
+    for i in range(n):
+        action = int(action_id_u16[i])
+        if action not in (ACT_RUN, ACT_RUN_DIRECT):
+            continue
+        scaling = float(run_scaling_by_char.get(int(char_id_u8[i]), 0.0))
+        if not np.isfinite(scaling) or scaling <= 0.0:
+            continue
+        rate_index = i
+        next_i = i + 1
+        if next_i < n and int(action_id_u16[next_i]) == action:
+            rate_index = next_i
+        rate = float(frame_speed_mul_f32[rate_index])
+        if not np.isfinite(rate) or rate <= 0.0:
+            continue
+        facing_dir = -1.0 if int(facing_dir1_i8[i]) < 0 else 1.0
+        out[i] = np.float32(facing_dir * rate * scaling)
     return out
 
 
@@ -2158,6 +2336,8 @@ def _main_impl(args) -> None:
     end_frames = load_end_frame_tables(data_root)
     char_landing_air_lag_frames: dict[int, dict[str, int]] = {}
     char_walk_divisors: dict[int, tuple[float, float, float]] = {}
+    char_walk_max: dict[int, float] = {}
+    char_run_scaling: dict[int, float] = {}
     char_gr_friction: dict[int, float] = {}
     char_active_shield_hit_int_damage: dict[int, dict[int, dict[int, int]]] = {}
 
@@ -2202,6 +2382,8 @@ def _main_impl(args) -> None:
             float(attrs["mid_walk_point"]),
             float(attrs["fast_walk_min"]),
         )
+        char_walk_max[int(cid)] = float(attrs["walk_max_vel"])
+        char_run_scaling[int(cid)] = float(attrs["run_animation_scaling"])
         char_gr_friction[int(cid)] = float(attrs["gr_friction"])
         active_int_damage_by_anim: dict[int, dict[int, int]] = {}
         for move in move_data.values():
@@ -2247,6 +2429,10 @@ def _main_impl(args) -> None:
         frame_max_lut[np.uint8(cid)] = np.uint16(int(frame_max) & 0xFFFF)
 
     # Action ids (GALE01): refs/melee/src/melee/ft/chara/ftCommon/forward.h
+    act_wait = 0x000E
+    act_walk_slow = 0x000F
+    act_walk_middle = 0x0010
+    act_walk_fast = 0x0011
     act_turn = 0x0012
     act_turn_run = 0x0013
     act_dash = 0x0014
@@ -2972,6 +3158,43 @@ def _main_impl(args) -> None:
             frame_speed_mul_f32=frame_speed_mul,
             walk_divisors_by_char=char_walk_divisors,
         )[:-1]
+        samples["seed_t"]["walk_retarget_tick_source_vel_f32"][:, slot] = (
+            _derive_walk_retarget_tick_source_vel_seed_lane(
+                action_id_u16=post_state,
+                char_id_u8=post_char,
+                facing_dir1_i8=facing_dir1_post,
+                anim_frame_f32=post_anim_frame_f32,
+                ref_action_frame_i16=post_state_age,
+                speed_ground_x_self_f32=speed_ground_x_self,
+                walk_anim_source_vel_f32=samples["seed_t"]["walk_anim_source_vel_f32"][:, slot],
+                walk_divisors_by_char=char_walk_divisors,
+                walk_max_by_char=char_walk_max,
+                walk_mid_vel_mul=float(common["walk_mid_vel_mul"]),
+                walk_fast_vel_mul=float(common["walk_fast_vel_mul"]),
+                end_frames=end_frames,
+            )[:-1]
+        )
+        samples["seed_t"]["run_anim_source_vel_f32"][:, slot] = _derive_run_anim_source_vel_seed_lane(
+            action_id_u16=post_state,
+            char_id_u8=post_char,
+            facing_dir1_i8=facing_dir1_post,
+            frame_speed_mul_f32=frame_speed_mul,
+            run_scaling_by_char=char_run_scaling,
+        )[:-1]
+        turn_kneebend_face = np.zeros(n_frames - 1, dtype=np.uint8)
+        turn_kneebend_hidden_face = (
+            (post_state[:-1] == np.uint16(act_turn))
+            & (post_state[1:] == np.uint16(act_kneebend))
+            & (post_state_age[:-1] == np.int16(1))
+            & (post_dir[1:] != post_dir[:-1])
+        )
+        # 0 = no override; 1 = left; 2 = right. This is intentionally non-causal and Turn-only:
+        # the replay-visible next row is the first place Slippi exposes the hidden Turn jump-facing
+        # owner for first-tick Turn->KneeBend entries.
+        turn_kneebend_face[turn_kneebend_hidden_face] = (post_dir[1:][turn_kneebend_hidden_face] + 1).astype(
+            np.uint8
+        )
+        samples["seed_t"]["turn_kneebend_facing_override_u8"][:, slot] = turn_kneebend_face
 
         # Action-entry overrides (decomp):
         # - Dash: refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c:55-71
@@ -3252,6 +3475,7 @@ def _main_impl(args) -> None:
         turn_frames = turn_frames_lut[post_char]
         turn_frames_to_turn, turn_has_turned, turn_x8 = derive_turn_internals(
             action_id=post_state,
+            action_frame_i16=post_state_age,
             facing=post_dir,
             stick_x_unit=stick_x,
             tilt_timer_x=tilt_timer_x_pre,
@@ -3717,6 +3941,43 @@ def _main_impl(args) -> None:
         item_instance_id_u16_2d=items_fixed["instance_id"],
     )
     samples["seed_t"]["instance_id_counter"] = counter_post[:-1]
+
+    # Same-frame fighter-proc order lane for plAttack_80037B08.
+    #
+    # The counter itself is causal above, but simultaneous fighter motion-state entries share one
+    # global counter and Slippi exposes only post-frame ids, not HSD proc order. Seed the exact
+    # per-entry id for the grounded locomotion/motion-entry owner only, and only when at least two
+    # fighters both changed action and instance_id, or when a single fighter entry observes a ref id
+    # beyond the seeded next counter (hidden same-frame item/fighter consumer before this fighter's
+    # proc). Adjacent combat, damage, landing, special, grab, and item rows must stay outside this
+    # lane; their counter-order work belongs to their own owner families.
+    # refs/melee/src/melee/ft/fighter.c (Fighter_ChangeMotionState)
+    # refs/melee/build/GALE01/asm/melee/ft/ft_0892.s::{ft_800895E0,ft_80089824}
+    # refs/melee/src/melee/pl/plattack.c::plAttack_80037B08
+    entry_changed = post_action_id[1:, :] != post_action_id[:-1, :]
+    instance_changed = post_instance_id[1:, :] != post_instance_id[:-1, :]
+    has_ref_instance = post_instance_id[1:, :] != np.uint16(0)
+    same_frame_fighter_entries_all = entry_changed & instance_changed & has_ref_instance
+    grounded_motion_owner_actions = np.isin(
+        post_action_id[1:, :],
+        np.array([act_wait, act_walk_slow, act_walk_middle, act_walk_fast, act_turn, act_turn_run, act_dash, act_run, act_run_direct, act_kneebend], dtype=np.uint16),
+    ) & np.isin(
+        post_action_id[:-1, :],
+        np.array([act_wait, act_walk_slow, act_walk_middle, act_walk_fast, act_turn, act_turn_run, act_dash, act_run, act_run_direct, act_kneebend], dtype=np.uint16),
+    )
+    same_frame_fighter_entries = same_frame_fighter_entries_all & grounded_motion_owner_actions
+    multi_entry_frame = np.sum(same_frame_fighter_entries_all[:, :num_players], axis=1) >= 2
+    hidden_prior_consumer = same_frame_fighter_entries & (
+        post_instance_id[1:, :] != counter_post[:-1, None]
+    )
+    motion_entry_iid_override = np.zeros((n_frames - 1, 4), dtype=np.uint16)
+    motion_entry_override_mask = same_frame_fighter_entries & (
+        multi_entry_frame[:, None] | hidden_prior_consumer
+    )
+    motion_entry_iid_override[motion_entry_override_mask] = post_instance_id[1:, :][
+        motion_entry_override_mask
+    ]
+    samples["seed_t"]["motion_entry_instance_id_override_u16"][:, :] = motion_entry_iid_override
 
     # Grab/throw victim attachment owner identity (slot indices; 2p-only for v1 suite).
     if int(num_players) == 2:

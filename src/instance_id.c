@@ -78,6 +78,22 @@ static inline uint16_t inc_instance_id_plAttack_80037B08(MslBatch* batch, int bi
   return before;
 }
 
+static inline void lower_bound_instance_id_counter(MslBatch* batch, int bi, uint16_t used_id) {
+  if (batch == NULL || used_id == 0u) {
+    return;
+  }
+  uint16_t next = (uint16_t)(used_id + 1u);
+  if (next == 0u) {
+    next = 1u;
+  }
+  const uint16_t current = batch->state.instance_id_counter[bi];
+  // Suite seed ranges are far from wrap; keep this as a monotonic lower bound for the replay-facing
+  // same-frame order lane instead of trying to solve wrap ordering from post-frame snapshots.
+  if (current == 0u || current < next) {
+    batch->state.instance_id_counter[bi] = next;
+  }
+}
+
 void instance_id_counter_consume_plAttack_80037B08(MslBatch* batch, size_t idx) {
   if (batch == NULL) {
     return;
@@ -151,6 +167,15 @@ void instance_id_on_motion_state_change_ft_800895E0(MslBatch* batch, size_t idx)
   // use x4_flags low bytes 0x71 or 0x62 for Fox/Falco; if they do, we must implement the rewrite
   // logic or add the required seeded state first.
   const uint8_t flags_low = (uint8_t)(x4_flags & 0xFFu);
+  const uint16_t entry_override = batch->state.motion_entry_instance_id_override[idx];
+  if (entry_override != 0u) {
+    const int bi = (int)(idx / (size_t)MSL_MAX_PLAYERS);
+    batch->state.instance_id[idx] = entry_override;
+    batch->state.instance_id_x2073[idx] = flags_low;
+    lower_bound_instance_id_counter(batch, bi, entry_override);
+    return;
+  }
+
   const uint8_t prev_x2073 = batch->state.instance_id_x2073[idx];
   if (flags_low == 0 || flags_low != prev_x2073) {
     const int bi = (int)(idx / (size_t)MSL_MAX_PLAYERS);

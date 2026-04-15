@@ -216,10 +216,8 @@ def test_ground_attack_selector_regression(
 
 
 @pytest.mark.integration
-def test_attackdash_residual_context_lock_agg_2351_p1() -> None:
-    # Known residual cluster: ref->out 20->50 at AGG rec=2351 p=1.
-    #
-    # Context lock for triage:
+def test_attackdash_wait_iasa_dash_transition_agg_2351_p1() -> None:
+    # Replay-real lock for the closed AttackDash -> Wait_IASA selector row:
     # - seed action is already AttackDash (50), no A-edge.
     # - ref expects Dash (20) at t+1.
     # - extracted Falco AttackDash end_frame (msid=52) is 40.0 while seed anim_frame_f32 is 37.0,
@@ -259,4 +257,5 @@ def test_attackdash_residual_context_lock_agg_2351_p1() -> None:
     assert seed_anim_frame < attackdash_end
 
     out, _ = _run_record(dataset_path, record)
-    assert int(out["action_id"][0, p]) == _ACT_ATTACK_DASH
+    assert int(out["action_id"][0, p]) == int(row["ref_t1"]["action_id"][0, p])
+    assert int(out["animation_index"][0, p]) == int(row["ref_t1"]["animation_index"][0, p])

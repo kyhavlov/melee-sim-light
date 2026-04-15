@@ -856,6 +856,18 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
         walk_anim_source_vel = 0.0f;
       }
       batch->state.walk_anim_source_vel[idx] = walk_anim_source_vel;
+      float walk_retarget_tick_source_vel = seed->walk_retarget_tick_source_vel_f32[p];
+      if (!isfinite(walk_retarget_tick_source_vel)) {
+        walk_retarget_tick_source_vel = 0.0f;
+      }
+      batch->state.walk_retarget_tick_source_vel[idx] = walk_retarget_tick_source_vel;
+      float run_anim_source_vel = seed->run_anim_source_vel_f32[p];
+      if (!isfinite(run_anim_source_vel)) {
+        run_anim_source_vel = 0.0f;
+      }
+      batch->state.run_anim_source_vel[idx] = run_anim_source_vel;
+      const uint8_t turn_kb_face = seed->turn_kneebend_facing_override_u8[p];
+      batch->state.turn_kneebend_facing_override[idx] = (turn_kb_face <= 2u) ? turn_kb_face : 0u;
       batch->state.anim_defer_tick_once[idx] = 0;
       batch->state.guard_tilt_x8[idx] = seed->guard_tilt_x8[p];
       batch->state.guard_tilt_x4[idx] = seed->guard_tilt_x4[p];
@@ -1103,6 +1115,8 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
       batch->state.animation_index[idx] = seed->animation_index[p];
       batch->state.instance_hit_by[idx] = seed->instance_hit_by[p];
       batch->state.instance_id[idx] = seed->instance_id[p];
+      batch->state.motion_entry_instance_id_override[idx] =
+          seed->motion_entry_instance_id_override_u16[p];
       {
         batch->state.capture_grab_timer[idx] = seed->capture_grab_timer_f32[p];
         batch->state.capture_wait_counter[idx] = seed->capture_wait_counter_f32[p];

@@ -1496,6 +1496,7 @@ def compute_tilt_timer_y_pre_post_with_fall_fast(
 def derive_turn_internals(
     *,
     action_id: np.ndarray,
+    action_frame_i16: np.ndarray,
     facing: np.ndarray,
     stick_x_unit: np.ndarray,
     tilt_timer_x: np.ndarray,
@@ -1522,6 +1523,7 @@ def derive_turn_internals(
       (notably KneeBend/jump-squat entry history), rather than being "trained" against outcomes.
     """
     a = np.asarray(action_id, dtype=np.uint16).reshape(-1)
+    afr = np.asarray(action_frame_i16, dtype=np.int16).reshape(-1)
     facing_u8 = np.asarray(facing, dtype=np.uint8).reshape(-1)
     stick_x = np.asarray(stick_x_unit, dtype=np.float32).reshape(-1)
     ttx = np.asarray(tilt_timer_x, dtype=np.uint8).reshape(-1)
@@ -1552,7 +1554,8 @@ def derive_turn_internals(
             prev_in_turn = False
             continue
 
-        if not prev_in_turn:
+        same_action_restart = bool(prev_in_turn and i > 0 and int(afr[i]) < int(afr[i - 1]))
+        if not prev_in_turn or same_action_restart:
             # TURN entry (action transition into TURN).
             #
             # Determine standing turn vs smash turn (dash-flick opposite-facing) using current input
