@@ -107,6 +107,122 @@ def test_classify_player_row_damageflyroll_rng_gate_takes_priority() -> None:
     assert got == "F06_damageflyroll_rng_gate"
 
 
+def test_classify_player_row_keeps_damagefly_grounded_selector_in_f07() -> None:
+    row = _player_row(
+        seed_action_id=88,
+        ref_action_id=183,
+        out_action_id=201,
+        prev_action_id=88,
+        fields=("action_id", "animation_index", "on_ground", "hurtbox_state", "state_flags[3]"),
+        on_ground=1,
+    )
+    got = _classify_player_row(
+        row,
+        {
+            88: "DAMAGE_FLY_N",
+            183: "DOWN_BOUND_U",
+            201: "PASSIVE_STAND_B",
+        },
+    )
+    assert got == "F07_knockdown_grounding"
+
+
+def test_classify_player_row_splits_damagefly_tech_timer_seed_surface() -> None:
+    row = _player_row(
+        seed_action_id=88,
+        ref_action_id=183,
+        out_action_id=201,
+        prev_action_id=88,
+        fields=("action_id", "animation_index", "hurtbox_state", "state_flags[3]"),
+        on_ground=0,
+        hitlag=0,
+    )
+    got = _classify_player_row(
+        row,
+        {
+            88: "DAMAGE_FLY_N",
+            183: "DOWN_BOUND_U",
+            201: "PASSIVE_STAND_B",
+        },
+    )
+    assert got == "F18_damage_tech_timer_seed_surface"
+
+
+def test_classify_player_row_splits_damagefly_contact_timing_to_mpcoll_residual() -> None:
+    row = _player_row(
+        seed_action_id=87,
+        ref_action_id=199,
+        out_action_id=87,
+        prev_action_id=87,
+        fields=("action_id", "animation_index", "on_ground", "jumps_left", "hurtbox_state"),
+    )
+    got = _classify_player_row(
+        row,
+        {
+            87: "DAMAGE_FLY_HI",
+            199: "PASSIVE",
+        },
+    )
+    assert got == "F17_mpcoll_ledge_ecb_residual"
+
+
+def test_classify_player_row_keeps_passivewall_contact_timing_in_mpcoll_residual() -> None:
+    row = _player_row(
+        seed_action_id=27,
+        ref_action_id=203,
+        out_action_id=27,
+        prev_action_id=27,
+        fields=("action_id", "animation_index", "hurtbox_state"),
+        on_ground=0,
+    )
+    got = _classify_player_row(
+        row,
+        {
+            27: "JUMP_AERIAL_F",
+            203: "PASSIVE_WALL_JUMP",
+        },
+    )
+    assert got == "F17_mpcoll_ledge_ecb_residual"
+
+
+def test_classify_player_row_does_not_hide_combat_damage_entry_in_mpcoll_residual() -> None:
+    row = _player_row(
+        seed_action_id=64,
+        ref_action_id=90,
+        out_action_id=64,
+        prev_action_id=64,
+        fields=("action_id", "animation_index", "hitlag", "hitstun", "on_ground", "instance_hit_by"),
+        on_ground=1,
+    )
+    got = _classify_player_row(
+        row,
+        {
+            64: "ATTACK_LW4",
+            90: "DAMAGE_FLY_TOP",
+        },
+    )
+    assert got == "F08_damage_resolution_combat"
+
+
+def test_classify_player_row_does_not_hide_special_adjacency_in_mpcoll_residual() -> None:
+    row = _player_row(
+        seed_action_id=90,
+        ref_action_id=350,
+        out_action_id=90,
+        prev_action_id=90,
+        fields=("action_id", "animation_index", "jumps_left"),
+        on_ground=0,
+    )
+    got = _classify_player_row(
+        row,
+        {
+            90: "DAMAGE_FLY_TOP",
+            350: "FX_SPECIAL_AIR_S_START",
+        },
+    )
+    assert got == "F10e_special_move_adjacency"
+
+
 def test_classify_player_row_splits_turn_hidden_microphase_from_grounded_selector() -> None:
     row = _player_row(
         seed_action_id=18,

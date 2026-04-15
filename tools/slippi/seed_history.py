@@ -2796,6 +2796,7 @@ def compute_fighter_trigger_input_counters(
 def compute_fighter_button_timers(
     *,
     buttons_pressed: np.ndarray,
+    hitlag_frames: np.ndarray | None = None,
     mask_a: int,
     mask_b: int,
     mask_xy: int,
@@ -2817,9 +2818,21 @@ def compute_fighter_button_timers(
 
     Decomp reference: refs/melee/src/melee/ft/fighter.c:2052-2094
     Init values: refs/melee/src/melee/ft/fighter.c:608-691 (reset/init to 0xFF).
+
+    When `hitlag_frames` is provided, model Fighter_Spaghetti_8006AD10_Inner1's x668
+    OR-latch while fp->x2219_b5 remains active. This is causal from Slippi post-frame
+    hitlag: post_hitlag[i] > 0 means the input pass for frame i still ran under the hitlag gate.
+    The latch is especially important for `x680`/`x684`: repeated latched digital L/R frames
+    overwrite x684 with the just-reset x680, satisfying ftCo_800986B0's debounce behavior.
     """
     bp = np.asarray(buttons_pressed, dtype=np.uint16).reshape(-1)
     n = int(bp.size)
+    if hitlag_frames is None:
+        hl = np.zeros(n, dtype=np.uint16)
+    else:
+        hl = np.asarray(hitlag_frames, dtype=np.uint16).reshape(-1)
+        if int(hl.size) != n:
+            raise ValueError("hitlag_frames must match buttons_pressed length")
 
     out_x67C = np.empty(n, dtype=np.uint8)
     out_x67D = np.empty(n, dtype=np.uint8)
@@ -2846,8 +2859,15 @@ def compute_fighter_button_timers(
     x683 = int(start_timer) & 0xFF
     x684 = int(start_timer) & 0xFF
 
+    x668_latched = 0
     for i in range(n):
-        bpi = int(bp[i])
+        raw_bpi = int(bp[i])
+        if int(hl[i]) > 0:
+            x668_latched |= raw_bpi
+            bpi = x668_latched
+        else:
+            x668_latched = raw_bpi
+            bpi = raw_bpi
 
         if (bpi & m_a) != 0:
             x683 = x67C

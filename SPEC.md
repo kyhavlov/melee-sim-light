@@ -558,9 +558,9 @@ Legend:
 | Anim/script timebase (`cur_anim_frame`, `frame_speed_mul`, hitlag freeze) | **DONE** | Q16.16 accumulator + seeded `frame_speed_mul_f32`. |
 | Input pipeline + UCF (legalization, pad buffer, key timers/counters) | **PARTIAL** | Core UCF-on suite behavior is covered; more input-history gates remain as needed. |
 | Locomotion core (walk/dash/run/jumps/landing/fall/airdodge/escapes) | **PARTIAL** | Broad coverage exists; gaps remain in less-common action branches and ordering edge cases. |
-| Stage collision + ECB (FD ground/ledge points, grounding, `ground_id`) | **PARTIAL** | mpColl-shaped FD ground contact is implemented (floor + wall/ceiling passes + persistence); remaining gaps are mpColl substeps/platform lines and residual mismatch clusters. |
+| Stage collision + ECB (FD ground/ledge points, grounding, `ground_id`) | **PARTIAL** | mpColl-shaped FD ground contact is implemented (floor + wall/ceiling passes + persistence); remaining gaps are mpColl substeps/platform lines and residual contact-timing clusters now split under `F17_mpcoll_ledge_ecb_residual`. |
 | Ledge system (Cliff* actions, quick options) | **PARTIAL** | Ledge-grab mask now uses collision-stage prev/cur snapshots; remaining parity needs occupancy/refresh/cooldowns + mpColl substrate. |
-| Knockdown/tech (DownBound/Wait/Stand/Attack + rolls) | **PARTIAL** | Now suite-positive; remaining parity depends on deeper ground-contact semantics. |
+| Knockdown/tech (DownBound/Wait/Stand/Attack + rolls) | **EFFECTIVELY CLOSED FOR SHARED CONTACT OWNER** | `DamageFly*`/`DamageFall` floor contact now shares one decomp-shaped selector for `PassiveStandF/B` -> `Passive` -> `DownBound`; `x680`/`x684` tech timers now model hitlag-latched `x668`, and remaining rows are mpColl/ledge/ECB timing residuals (`F17`). |
 | Combat geometry (hurtcaps/hitboxes/shields pose-driven) | **PARTIAL** | Core data-driven primitives exist; remaining parity depends on exact facing/axis + attachment nuances. |
 | Damage pipeline (BODY + SHIELD, GuardSetOff, hitlag/hitstun/KB states) | **PARTIAL** | Big pieces are in; still missing full rehit/hitlist, stale queue, and many modifiers. |
 | Items/projectiles | **PARTIAL** | Laser/blaster coverage is in and reduces `item_*` mismatches; item system parity is incomplete beyond suite needs. |
@@ -1608,6 +1608,24 @@ M5 Special moves + grabs (**TODO/PARTIAL**)
 
 M6 Ledge/tech/knockdown (**PARTIAL**)
 - Add what the suite exercises; broaden as needed for RL plausibility.
+- Knockdown/passive contact owner: the runtime selector is centralized in `src/knockdown.c`
+  (`enter_damagefly_ground_contact_followup`) and mirrors the decomp ladder:
+  `ftCo_DamageFly_Coll` / `ftCo_80090184` and `ftCo_DamageFall_Coll` / `ftCo_80090984`
+  try `ftCo_80098928` (`PassiveStandF/B`), then `ftCo_8009872C` (`Passive`), then
+  `ftCo_80097D40` (`DownBound`).
+- Tech-timer seed/runtime provenance: `Fighter_Spaghetti_8006AD10_Inner1` OR-latches
+  `input.x668` while `fp->x2219_b5` hitlag remains active. The `x680`/`x684` L/R tech timers
+  consume that latched edge each hitlag frame, so repeated digital L/R hitlag frames can overwrite
+  `x684` with the just-reset `x680` and make `ftCo_800986B0` fail its debounce gate. This is
+  modeled both in runtime input carry and `tools/slippi/seed_history.py::compute_fighter_button_timers`.
+  Decomp refs:
+  `refs/melee/src/melee/ft/fighter.c::{Fighter_Spaghetti_8006AD10_Inner1,Fighter_Spaghetti_8006AD10}`,
+  `refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownAttack.c::ftCo_800986B0`.
+- Current residual label:
+  - `F17_mpcoll_ledge_ecb_residual`: row-level audited contact substrate rows: same-action
+    `ground_id` / `jumps_left` / hurtbox-state drift, DamageFly-vs-Passive one-frame floor-contact
+    timing, and PassiveWallJump wall-contact timing. These are upstream of the shared floor
+    selector and should not be patched in `enter_damagefly_ground_contact_followup`.
 AttackAirN continuation stale-owner bridge:
 - AttackAirN has a later create-hitbox refresh window in the extracted Fox/Falco scripts.
 - On replay-real continuation rows like `AGN:5482`, the victim is still in `DamageFlyTop`

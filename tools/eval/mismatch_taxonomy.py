@@ -580,6 +580,38 @@ FAMILY_META: dict[str, FamilyMeta] = {
             "refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0",
         ),
     ),
+    "F17_mpcoll_ledge_ecb_residual": FamilyMeta(
+        label="mpColl / Ledge / ECB Contact Residual",
+        owner_module="mpcoll_env",
+        fix_type="runtime-only",
+        risk="med",
+        confidence="high",
+        hypothesis=(
+            "Damage-adjacent rows whose remaining mismatch is floor/ledge/ECB contact timing rather "
+            "than the shared Passive / PassiveStand / DownBound selector ladder."
+        ),
+        refs=(
+            "refs/melee/src/melee/mp/mpcoll.c",
+            "refs/melee/src/melee/ft/ft_081B.c::{ft_80081DD4,ft_80082708}",
+            "refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_DamageFly_Coll",
+        ),
+    ),
+    "F18_damage_tech_timer_seed_surface": FamilyMeta(
+        label="Damage Tech Timer Seed Surface",
+        owner_module="seed",
+        fix_type="seed/schema investigation",
+        risk="med",
+        confidence="high",
+        hypothesis=(
+            "DamageFly contact reached the grounded follow-up selector, but replay-derived tech "
+            "timer lanes make ftCo_800986B0 admit PassiveStand while the replay shows DownBound."
+        ),
+        refs=(
+            "refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownAttack.c::ftCo_800986B0",
+            "refs/melee/src/melee/ft/chara/ftCommon/ftCo_PassiveStand.c::ftCo_80098928",
+            "tools/slippi/seed_history.py::compute_fighter_button_timers",
+        ),
+    ),
     "F99_misc_other": FamilyMeta(
         label="Residual Mixed Bucket",
         owner_module="triage",
@@ -744,6 +776,101 @@ def _looks_like_damage(name: str) -> bool:
     return name.startswith("DAMAGE_") or name.startswith("DOWN_") or name.startswith("PASSIVE")
 
 
+def _looks_like_damagefly(name: str) -> bool:
+    return name.startswith("DAMAGE_FLY_")
+
+
+def _looks_like_knockdown_contact_destination(name: str) -> bool:
+    return name in {
+        "PASSIVE",
+        "PASSIVE_STAND_F",
+        "PASSIVE_STAND_B",
+        "DOWN_BOUND_U",
+        "DOWN_BOUND_D",
+    } or _looks_like_damagefly(name)
+
+
+def _looks_like_passive_wall(name: str) -> bool:
+    return name.startswith("PASSIVE_WALL")
+
+
+def _is_knockdown_selector_disagreement(names: tuple[str, str, str]) -> bool:
+    # F07 is now reserved for the shared selector itself: contact is accepted, but the grounded
+    # follow-up differs. DamageFly-vs-grounded disagreements are contact timing residuals.
+    ref_name = names[1]
+    out_name = names[2]
+    grounded_ref = ref_name in {
+        "PASSIVE",
+        "PASSIVE_STAND_F",
+        "PASSIVE_STAND_B",
+        "DOWN_BOUND_U",
+        "DOWN_BOUND_D",
+    }
+    grounded_out = out_name in {
+        "PASSIVE",
+        "PASSIVE_STAND_F",
+        "PASSIVE_STAND_B",
+        "DOWN_BOUND_U",
+        "DOWN_BOUND_D",
+    }
+    return grounded_ref and grounded_out and ref_name != out_name
+
+
+def _is_mpcoll_ledge_ecb_residual(row: PlayerRow, names: tuple[str, str, str], field_set: set[str]) -> bool:
+    contact_fields = {"on_ground", "ground_id", "jumps_left", "hurtbox_state"}
+    if not (field_set & contact_fields):
+        return False
+
+    seed_name, ref_name, out_name = names
+    if seed_name == ref_name == out_name:
+        return True
+
+    # Floor-contact timing: one side accepts DamageFly contact into Passive/DownBound while the
+    # other side continues DamageFly. The Passive/DownBound selector itself is not disagreeing.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_DamageFly_Coll
+    damagefly_vs_grounded_contact = (
+        any(_looks_like_damagefly(name) for name in names)
+        and any(
+            name in {"PASSIVE", "PASSIVE_STAND_F", "PASSIVE_STAND_B", "DOWN_BOUND_U", "DOWN_BOUND_D"}
+            for name in names
+        )
+        and not _is_knockdown_selector_disagreement(names)
+    )
+    if damagefly_vs_grounded_contact:
+        return True
+
+    # Wall-contact timing: PassiveWall* is admitted by the wall/ceiling contact callback surface,
+    # not by the shared floor Passive/PassiveStand/DownBound selector.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_DamageFly_Coll
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_PassiveWall.c
+    if any(_looks_like_passive_wall(name) for name in names):
+        return True
+
+    return False
+
+
+def _is_damage_tech_timer_seed_surface(row: PlayerRow, names: tuple[str, str, str]) -> bool:
+    # This is not a contact-owner miss: both ref/out accepted floor contact and chose a grounded
+    # follow-up, but the visible disagreement is exactly the tech-admission branch. Keep this
+    # separate from F07 so the remaining work is seed/internal provenance, not another runtime
+    # selector patch.
+    ref_name = names[1]
+    out_name = names[2]
+    return (
+        any(_looks_like_damagefly(name) for name in names)
+        and {ref_name, out_name} <= {
+            "PASSIVE",
+            "PASSIVE_STAND_F",
+            "PASSIVE_STAND_B",
+            "DOWN_BOUND_U",
+            "DOWN_BOUND_D",
+        }
+        and ref_name != out_name
+        and row.on_ground == 0
+        and row.hitlag == 0
+    )
+
+
 def _looks_like_special_hi(name: str) -> bool:
     return "SPECIAL_HI" in name or "FALL_SPECIAL" in name
 
@@ -843,8 +970,18 @@ def _classify_player_row(row: PlayerRow, action_names: dict[int, str]) -> str:
     if any(_looks_like_damage(name) for name in names):
         if field_set and field_set <= STATE_FLAG_FIELDS:
             return "F05_damage_state_flags"
-        if field_set & {"on_ground", "ground_id", "jumps_left", "hurtbox_state"}:
+        if _is_damage_tech_timer_seed_surface(row, names):
+            return "F18_damage_tech_timer_seed_surface"
+        if (
+            any(_looks_like_damagefly(name) for name in names)
+            and all(_looks_like_knockdown_contact_destination(name) for name in names)
+            and _is_knockdown_selector_disagreement(names)
+        ):
             return "F07_knockdown_grounding"
+        if _is_mpcoll_ledge_ecb_residual(row, names, field_set):
+            return "F17_mpcoll_ledge_ecb_residual"
+        if any(_looks_like_any_special(name) for name in names):
+            return "F10e_special_move_adjacency"
         return "F08_damage_resolution_combat"
     if field_set == {"instance_id"}:
         if any(_looks_like_grounded_attack(name) for name in context_names):
@@ -974,10 +1111,13 @@ def _audit_player_row(row: PlayerRow, action_names: dict[int, str]) -> tuple[boo
         )
         return ok, "DamageFlyRoll admission/gate context"
     if row.family_id == "F07_knockdown_grounding":
-        ok = any(_looks_like_damage(name) for name in names) and bool(
-            field_set & {"on_ground", "ground_id", "jumps_left", "hurtbox_state"}
+        ok = (
+            any(_looks_like_damagefly(name) for name in names)
+            and all(_looks_like_knockdown_contact_destination(name) for name in names)
+            and _is_knockdown_selector_disagreement(names)
+            and bool(field_set & {"on_ground", "ground_id", "jumps_left", "hurtbox_state"})
         )
-        return ok, "damage family with grounding/tech followup fields"
+        return ok, "DamageFly contact row with grounded follow-up selector disagreement"
     if row.family_id == "F08_damage_resolution_combat":
         ok = any(_looks_like_damage(name) for name in names) and bool(
             field_set & {"action_id", "action_frame", "hitlag", "hitstun", "instance_hit_by", "instance_id"}
@@ -1100,6 +1240,16 @@ def _audit_player_row(row: PlayerRow, action_names: dict[int, str]) -> tuple[boo
             & {"jumps_left", "on_ground", "ground_id", "action_id", "animation_index", "instance_id", "hurtbox_state", "state_flags[4]"}
         )
         return ok, "SpecialHi/FallSpecial landing continuation row"
+    if row.family_id == "F17_mpcoll_ledge_ecb_residual":
+        ok = any(_looks_like_damage(name) for name in names) and bool(
+            field_set & {"on_ground", "ground_id", "jumps_left", "hurtbox_state"}
+        )
+        return ok, "damage-adjacent row with collision/ledge/ECB contact residual fields"
+    if row.family_id == "F18_damage_tech_timer_seed_surface":
+        ok = _is_damage_tech_timer_seed_surface(row, names) and bool(
+            field_set & {"action_id", "animation_index", "hurtbox_state", "state_flags[3]"}
+        )
+        return ok, "grounded DamageFly contact row blocked on tech-timer seed provenance"
     if row.family_id == "F99_misc_other":
         ok = any(
             ("SPECIAL_LW" in name) or (name == "THROWN_LW") or (name == "TURN_RUN")
@@ -1158,6 +1308,8 @@ def _split_cross_player_instance_counter_rows(
         "F07_knockdown_grounding",
         "F08_damage_resolution_combat",
         "F09_aerial_combat_resolution",
+        "F17_mpcoll_ledge_ecb_residual",
+        "F18_damage_tech_timer_seed_surface",
         "F10b_grounded_combat_adjacency",
         "F10c_collision_landing_edge_adjacency",
         "F10d_hurtbox_stateflag_adjacency",

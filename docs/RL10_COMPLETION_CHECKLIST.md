@@ -150,10 +150,24 @@ Recommended sequence for the next deep passes:
   - surviving locomotion tails are narrow residuals only
 
 ### 4. Knockdown / passive contact owner
-- Status: `active / next deep pass`
-- Roadmap families: `F07_knockdown_grounding`
+- Status: `effectively closed`
+- Roadmap families: `F07_knockdown_grounding` eliminated; previous
+  `F18_damage_tech_timer_seed_surface` selector contradiction fixed; remaining contact substrate
+  rows split to `F17_mpcoll_ledge_ecb_residual`
 - Owner boundary: DamageFly contact owner for Passive / PassiveStand / DownBound / landing selection
-- Primary sim files: `src/mpcoll_ground.c`, `src/ledge.c`, `src/locomotion.c`
+- Primary owner files: `src/knockdown.c`, `src/input.c`
+- Seed provenance support: `tools/slippi/seed_history.py`, `tools/slippi/make_dataset_from_slp.py`
+- Adjacent/upstream residual owners: `src/mpcoll_ground.c`, `src/ledge.c`, `src/locomotion.c`
+- Closure note:
+  - `src/knockdown.c::enter_damagefly_ground_contact_followup` is the shared decomp-shaped selector
+    for `DamageFly*` / `DamageFall` floor contact.
+  - `src/input.c` and `tools/slippi/seed_history.py` now model
+    `Fighter_Spaghetti_8006AD10_Inner1` hitlag-latched `input.x668`, so `x680` / `x684` tech
+    debounce provenance matches the DownBound / PassiveStand selector rows.
+  - `F17_mpcoll_ledge_ecb_residual` is row-level audited as upstream contact substrate:
+    same-action `ground_id` / `jumps_left` / hurtbox drift, DamageFly-vs-Passive one-frame
+    floor-contact timing, and PassiveWallJump wall-contact timing. Combat and special-adjacent
+    rows are not hidden in this bucket.
 - Acceptance bar:
   - one damage-fly contact owner chooses grounded outcomes consistently
   - no ledge or ECB regressions

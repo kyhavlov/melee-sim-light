@@ -272,7 +272,7 @@ def test_damagefly_land_to_downbound_passive_rows_keep_contact_y_parity_runtime_
             0,
             88,   # DamageFlyN
             183,  # DownBoundU (reference)
-            201,  # PassiveStandB (current runtime ownership lane)
+            183,  # hitlag-latched x668 makes x684 fail the tech debounce gate.
         ),
     ],
 )
@@ -292,7 +292,20 @@ def test_damagefly_land_to_downbound_passive_context_controls_stay_replay_real(
 
     out, ref, out_roll = _run_one_step_with_rollout(dataset_rel=dataset_rel, record=record, p=p)
 
+    # `GracefulAttachedTurtle:5821/p0` locks the tech-timer seed surface: the L edge happens during
+    # active hitlag, so Fighter_Spaghetti's x668 latch repeatedly resets x680 and overwrites x684.
+    # That makes ftCo_800986B0's x684 debounce gate fail, and the shared DamageFly contact selector
+    # falls through to DownBound rather than PassiveStandB.
+    # refs/melee/src/melee/ft/fighter.c::{
+    #   Fighter_Spaghetti_8006AD10_Inner1,Fighter_Spaghetti_8006AD10
+    # }
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownAttack.c::ftCo_800986B0
+    # tools/slippi/seed_history.py::compute_fighter_button_timers
+    if dataset_rel.endswith("GracefulAttachedTurtle.msl") and record == 5821 and p == 0:
+        assert int(row["seed_t"]["x680"][p]) == 1
+        assert int(row["seed_t"]["x684"][p]) == 0
     assert int(out["action_id"][p]) == int(expected_out_action)
+    assert int(out["action_id"][p]) == int(ref["action_id"][p])
     assert np.isfinite(float(out["pos_y"][p]))
     assert np.isfinite(float(ref["pos_y"][p]))
 

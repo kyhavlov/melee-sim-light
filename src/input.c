@@ -358,8 +358,16 @@ int input_apply_pre_input_snapshot(MslBatch* batch, const uint8_t* prev_input_by
           ucf_process_stick_i8(prev->p[p].c_x, prev->p[p].c_y, ucf_enabled, cardinals);
       batch->state.prev_input_buttons[idx] = prev_buttons;
       batch->state.input_buttons[idx] = prev_buttons;
-      batch->state.input_buttons_pressed[idx] = 0u;
-      batch->state.input_buttons_released[idx] = 0u;
+      // Pre-input callbacks run before Fighter_Spaghetti recomputes x668/x66C. Normal frames should
+      // not expose current-frame edges here, but active hitlag preserves the previous latched edge
+      // until Fighter_Spaghetti_8006AD10_Inner1 ORs in new edges later in the input pass.
+      // refs/melee/src/melee/ft/fighter.c::{
+      //   Fighter_Spaghetti_8006AD10_Inner1,Fighter_Spaghetti_8006AD10
+      // }
+      if (batch->state.hitlag_started_frame[idx] == 0u) {
+        batch->state.input_buttons_pressed[idx] = 0u;
+        batch->state.input_buttons_released[idx] = 0u;
+      }
 
       batch->state.prev_input_main_x[idx] = prev_main.x;
       batch->state.prev_input_main_y[idx] = prev_main.y;
@@ -412,8 +420,26 @@ int input_apply(MslBatch* batch, const uint8_t* prev_input_bytes, size_t prev_in
 
       batch->state.prev_input_buttons[idx] = prev_buttons;
       batch->state.input_buttons[idx] = cur_buttons;
-      batch->state.input_buttons_pressed[idx] = (uint16_t)(cur_buttons & (uint16_t)~prev_buttons);
-      batch->state.input_buttons_released[idx] = (uint16_t)(prev_buttons & (uint16_t)~cur_buttons);
+      const uint16_t raw_pressed = (uint16_t)(cur_buttons & (uint16_t)~prev_buttons);
+      const uint16_t raw_released = (uint16_t)(prev_buttons & (uint16_t)~cur_buttons);
+      // Decomp: Fighter_Spaghetti_8006AD10_Inner1 OR-latches input.x668/x66C while
+      // fp->x2219_b5 is active, then the button-history timer block consumes that latched x668
+      // in the same Fighter_Spaghetti pass. This matters for tech timers: repeated hitlag-latched
+      // digital L/R edges reset x680 and overwrite x684, making the debounce gate in
+      // ftCo_800986B0 fail instead of falsely admitting Passive/PassiveStand.
+      // refs/melee/src/melee/ft/fighter.c::{
+      //   Fighter_Spaghetti_8006AD10_Inner1,Fighter_Spaghetti_8006AD10
+      // }
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownAttack.c::ftCo_800986B0
+      if (batch->state.hitlag_started_frame[idx] != 0u) {
+        batch->state.input_buttons_pressed[idx] =
+            (uint16_t)(batch->state.input_buttons_pressed[idx] | raw_pressed);
+        batch->state.input_buttons_released[idx] =
+            (uint16_t)(batch->state.input_buttons_released[idx] | raw_released);
+      } else {
+        batch->state.input_buttons_pressed[idx] = raw_pressed;
+        batch->state.input_buttons_released[idx] = raw_released;
+      }
 
       // -------------------------------
       // UCF pad buffer + "effective" stick

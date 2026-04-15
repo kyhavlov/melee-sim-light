@@ -3435,6 +3435,7 @@ def _main_impl(args) -> None:
 
         x67C, x67D, x67E, x680, x681, x682, x683, x684 = compute_fighter_button_timers(
             buttons_pressed=buttons_pressed,
+            hitlag_frames=post_hitlag,
             mask_a=button_mask_a,
             mask_b=button_mask_b,
             mask_xy=button_mask_xy,

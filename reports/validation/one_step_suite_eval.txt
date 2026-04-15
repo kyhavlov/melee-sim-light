@@ -85,7 +85,7 @@ overall.float_norm_mae_p95: 0.00095183
 
 == datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.msl ==
 Records: 11529  Players/scored per record: 2  Total player-frames: 23058
-mismatch.action_id: 18 / 23058 (0.000781)
+mismatch.action_id: 17 / 23058 (0.000737)
 mismatch.action_frame: 16 / 23058 (0.000694)
 mismatch.on_ground: 3 / 23058 (0.000130)
 mismatch.facing: 1 / 23058 (0.000043)
@@ -95,15 +95,15 @@ mismatch.is_dead: 0 / 23058 (0.000000)
 mismatch.hitlag: 16 / 23058 (0.000694)
 mismatch.hitstun: 9 / 23058 (0.000390)
 mismatch.l_cancel: 0 / 23058 (0.000000)
-mismatch.hurtbox_state: 12 / 23058 (0.000520)
+mismatch.hurtbox_state: 11 / 23058 (0.000477)
 mismatch.ground_id: 3 / 23058 (0.000130)
-mismatch.animation_index: 17 / 23058 (0.000737)
+mismatch.animation_index: 16 / 23058 (0.000694)
 mismatch.instance_hit_by: 7 / 23058 (0.000304)
 mismatch.instance_id: 53 / 23058 (0.002299)
 mismatch.last_attack_landed: 2 / 23058 (0.000087)
 mismatch.combo_count: 2 / 23058 (0.000087)
 mismatch.last_hit_by: 9 / 23058 (0.000390)
-mismatch.state_flags: 42 / 115290 (0.000364)
+mismatch.state_flags: 41 / 115290 (0.000356)
 mismatch.item_exists: 4 / 172935 (0.000023)
 mismatch.item_type: 4 / 172935 (0.000023)
 mismatch.item_state: 1 / 172935 (0.000006)
@@ -122,7 +122,7 @@ err.item_pos_x: mae=0.044743 p95=0.000000 max=39.815655
 err.item_pos_y: mae=0.013793 p95=0.000000 max=26.796017
 err.item_vel_x: mae=0.018981 p95=0.000000 max=8.408197
 err.item_vel_y: mae=0.003829 p95=0.000000 max=4.999367
-overall.discrete_mismatch: 237 / 1395009
+overall.discrete_mismatch: 233 / 1395009
 overall.float_norm_mae_p95: 0.00099209
 
 == datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/QuerulousGrandDinosaur.msl ==
@@ -210,5 +210,5 @@ overall.discrete_mismatch: 203 / 948277
 overall.float_norm_mae_p95: 0.00143055
 
 == suite summary ==
-overall.discrete_mismatch: 781 / 4462843
+overall.discrete_mismatch: 777 / 4462843
 overall.float_norm_mae_p95: 0.00103041
