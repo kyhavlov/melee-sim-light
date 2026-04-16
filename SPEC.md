@@ -1639,3 +1639,50 @@ AttackAirN continuation stale-owner bridge:
   - `refs/melee/src/melee/ft/ftcoll.c::{ftColl_800768A0,ftColl_80076ED8}`
   - `refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000ACFC,lbColl_80008A5C}`
   - `data/moves/{fox,falco}.json::moves.ftCo_SM_AttackAirN.events.create_hitbox`
+
+AttackAirLw Guard shield-hit admission seed owner:
+- `GAT:3630:p0/p1` proves a real Guard -> GuardSetOff shield-hit followup can be suppressed by
+  dense reseed hitlist state: the seed has `combat_hitlist_cd[attacker][0][defender] == 0xFFFF`,
+  while the reference applies hitlag to both players on the next post-frame.
+- The adjacent `GAT:3629` row must stay suppressed. A broad seed-materialization clear for the
+  late AttackAirLw active window admits that row early, so the fix is the existing
+  per-HitCapsule seed lane: mark active AttackAirLw HitCapsules authoritative-empty only when
+  `t+1` proves a fighter shield hit entered `GuardSetOff` with both fighters in hitlag and shield
+  HP dropping.
+- This lane is explicitly replay-only/non-causal and affects only teacher-forced one-step seeds.
+  Normal rollouts carry HitCapsule victim rings directly through `ftColl_800768A0`; the runtime
+  still consumes `combat_hitlist_hb_valid == 1` as “per-HitCapsule seed is authoritative,
+  including empty victims_1.”
+- Source anchors:
+  - `refs/melee/src/melee/ft/ftcoll.c::{ftColl_800768A0,ftColl_80076CBC}`
+  - `refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000ACFC,lbColl_80008688}`
+  - `data/moves/{fox,falco}.json::moves.ftCo_SM_AttackAirLw.events.create_hitbox`
+
+BODY damage admission seed owner:
+- `QGD:5868`, `GAT:9619`, and `TBK:1848` prove the same dense-hitlist failure mode can suppress
+  real BODY damage hits, not only shield hits. The dense group lane carries `0xFFFF`, while `t+1`
+  proves a fighter BODY damage hit through defender percent increase, both fighters entering
+  hitlag, and source-owner attribution to the current attacker.
+- The repair stays on the per-HitCapsule seed lane and does not clear the dense group latch:
+  active same-group HitCapsules are marked authoritative-empty only for teacher-forced seeds whose
+  next post-frame proves a real BODY damage hit. Phantom/no-percent contacts like `QGD:8638` and
+  extra-contact geometry rows like `TBK:5247` stay outside this lane.
+- Aggregate population audit keeps this lane bounded: rebuilt aggregate validation has `301`
+  BODY authoritative-empty attacker/defender pairs and `9` shield authoritative-empty pairs, with
+  zero authoritative-empty pairs lacking BODY or shield proof. `GAT:3629`, `QGD:8638`, and
+  `TBK:5247` remain unpopulated.
+- Source anchors:
+  - `refs/melee/src/melee/ft/ftcoll.c::{ftColl_80076ED8,ftColl_800768A0}`
+  - `refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000ACFC,lbColl_80008688}`
+
+Reciprocal BODY hit stale/hitlag owner:
+- In reciprocal BODY hits, this simplified pass applies hits sequentially, so an earlier hit can
+  mutate the later attacker into `Damage*` before its own hit is applied. Damage and hitlag must use
+  the pre-combat HitCapsule attack id, not the attacker's live post-mutation motion-state attack id.
+- When a fighter both deals and receives a BODY hit in the same collision frame, `Fighter_ProcessHit`
+  prioritizes the received-KB path (`dmg.x183C_applied`) over deal-hitlag lanes (`dmg.x1914` /
+  `x1924`). The received-hit hitlag therefore overwrites any already-written same-frame deal-hitlag.
+- Source anchors:
+  - `refs/melee/build/GALE01/asm/melee/ft/ftcoll.s::ftColl_8007ABD0`
+  - `refs/melee/src/melee/ft/ft_0881.c::{ft_80089118,ft_80089228}`
+  - `refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC`

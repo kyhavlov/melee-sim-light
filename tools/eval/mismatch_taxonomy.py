@@ -232,6 +232,147 @@ FAMILY_META: dict[str, FamilyMeta] = {
             "refs/melee/src/melee/ft/chara/ftCommon/ftCo_PassiveWall.c::{ftCo_800C1D38,ftCo_800C1E64}",
         ),
     ),
+    "F08a_damage_identity_bookkeeping_residual": FamilyMeta(
+        label="Damage Identity / Source Bookkeeping Residual",
+        owner_module="anim_timebase",
+        fix_type="split-first",
+        risk="med",
+        confidence="med",
+        hypothesis=(
+            "Damage rows where the remaining visible diff is instance/source identity ordering, not "
+            "BODY admission, hitlag, hitstun, or damage-state selection."
+        ),
+        refs=(
+            "refs/melee/build/GALE01/asm/melee/ft/ft_0892.s::ft_800895E0",
+            "refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm",
+        ),
+    ),
+    "F08b_body_contact_geometry_residual": FamilyMeta(
+        label="BODY Contact Geometry / Phantom Residual",
+        owner_module="combat_geom",
+        fix_type="instrumentation first",
+        risk="high",
+        confidence="med",
+        hypothesis=(
+            "Rows where fighter BODY contact selection still differs after the shared hitlist and "
+            "reciprocal-hit owners: extra contacts, phantom/no-percent contacts, or collision-space "
+            "pose/scale residuals."
+        ),
+        refs=(
+            "refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078C70,ftColl_80076ED8}",
+            "refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000805C,lbColl_80006E58}",
+        ),
+    ),
+    "F08c_damage_state_transition_adjacency": FamilyMeta(
+        label="Damage State Transition Adjacency",
+        owner_module="locomotion",
+        fix_type="split-first",
+        risk="med",
+        confidence="med",
+        hypothesis=(
+            "Damage-family rows whose remaining action/action_frame disagreement is a landing, "
+            "turn, Down*, Passive*, or floor/wall continuation owner rather than shared combat "
+            "damage admission."
+        ),
+        refs=(
+            "refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{ftCo_Damage_Anim,ftCo_DamageFly_Coll}",
+            "refs/melee/src/melee/mp/mpcoll.c",
+        ),
+    ),
+    "F08d_damage_timer_scalar_residual": FamilyMeta(
+        label="Damage Timer / Scalar Residual",
+        owner_module="timers",
+        fix_type="runtime-only",
+        risk="med",
+        confidence="med",
+        hypothesis=(
+            "Rows where accepted damage followup is now present but scalar timers or small damage "
+            "bookkeeping values still differ."
+        ),
+        refs=(
+            "refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC",
+            "refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008F744",
+        ),
+    ),
+    "F09a_aerial_stateflag_hurtbox_adjacency": FamilyMeta(
+        label="Aerial State-Flag / Hurtbox Adjacency",
+        owner_module="state_flags",
+        fix_type="runtime-only",
+        risk="low",
+        confidence="med",
+        hypothesis=(
+            "Aerial or jump rows with no fighter contact where the remaining diff is hurtbox or "
+            "state-flag ownership, not combat continuation."
+        ),
+        refs=(
+            "refs/melee/src/melee/ft/ftaction.c::ftAction_80071A14",
+            "refs/melee/src/melee/ft/fighter.c::Fighter_8006A360",
+        ),
+    ),
+    "F09b_aerial_bookkeeping_adjacency": FamilyMeta(
+        label="Aerial Combo / Source Bookkeeping Adjacency",
+        owner_module="combat",
+        fix_type="split-first",
+        risk="med",
+        confidence="med",
+        hypothesis=(
+            "Aerial or jump rows with no fighter contact where only last-hit, combo, or "
+            "last-attack bookkeeping remains visible."
+        ),
+        refs=(
+            "refs/melee/src/melee/ft/ftcoll.c::{ftColl_800763C0,ftColl_800764DC}",
+            "refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm",
+        ),
+    ),
+    "F09c_aerial_action_entry_adjacency": FamilyMeta(
+        label="Aerial Action Entry / Input Adjacency",
+        owner_module="action",
+        fix_type="split-first",
+        risk="med",
+        confidence="med",
+        hypothesis=(
+            "Aerial or jump rows where the remaining mismatch is Jump/KneeBend/CliffJump -> "
+            "AttackAir or JumpAerial selection and motion-entry ordering, with no hitstun or "
+            "damage-owner proof."
+        ),
+        refs=(
+            "refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_Anim",
+            "refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c",
+            "refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState",
+        ),
+    ),
+    "F09d_aerial_contact_hitlag_residual": FamilyMeta(
+        label="Aerial Contact Hitlag Residual",
+        owner_module="combat",
+        fix_type="instrumentation first",
+        risk="med",
+        confidence="med",
+        hypothesis=(
+            "AttackAir rows where action state is already aligned but hitlag or the hitlag state "
+            "flag differs without hitstun/percent evidence; likely shield, item, clank, or "
+            "deal-hitlag lane ownership rather than BODY damage continuation."
+        ),
+        refs=(
+            "refs/melee/src/melee/ft/ftcoll.c::{ftColl_80076444,ftColl_80076CBC}",
+            "refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC",
+            "refs/melee/src/melee/lb/lbcollision.c::lbColl_8000ACFC",
+        ),
+    ),
+    "F09e_aerial_instance_timing_residual": FamilyMeta(
+        label="Aerial Instance / Timing Residual",
+        owner_module="anim_timebase",
+        fix_type="split-first",
+        risk="med",
+        confidence="low",
+        hypothesis=(
+            "Aerial rows left after state-flag, bookkeeping, action-entry, and contact-hitlag "
+            "splits; these need a narrower audit before being treated as combat followup."
+        ),
+        refs=(
+            "refs/melee/src/melee/ft/ft_0881.c::{ft_800890D0,ft_800892A0}",
+            "refs/melee/src/melee/ft/ftanim.c",
+        ),
+    ),
     "F10_grounded_transition_resolution": FamilyMeta(
         label="Grounded Transition / Motion Entry",
         owner_module="locomotion",
@@ -982,7 +1123,19 @@ def _classify_player_row(row: PlayerRow, action_names: dict[int, str]) -> str:
             return "F17_mpcoll_ledge_ecb_residual"
         if any(_looks_like_any_special(name) for name in names):
             return "F10e_special_move_adjacency"
-        return "F08_damage_resolution_combat"
+        if field_set <= {"instance_id", "instance_hit_by", "last_hit_by"}:
+            return "F08a_damage_identity_bookkeeping_residual"
+        if any(_looks_like_landing_cliff_or_fall(name) for name in names) or any(
+            name in {"DASH", "TURN", "KNEE_BEND", "WAIT", "WALK_SLOW"} for name in names
+        ):
+            return "F08c_damage_state_transition_adjacency"
+        if any(name.startswith("DOWN_") or name.startswith("PASSIVE") for name in names):
+            return "F08c_damage_state_transition_adjacency"
+        if field_set & {"action_id", "animation_index", "on_ground", "ground_id", "hurtbox_state"}:
+            return "F08b_body_contact_geometry_residual"
+        if field_set & {"hitlag", "hitstun", "action_frame", "combo_count", "last_attack_landed", "state_flags[1]"}:
+            return "F08d_damage_timer_scalar_residual"
+        return "F08a_damage_identity_bookkeeping_residual"
     if field_set == {"instance_id"}:
         if any(_looks_like_grounded_attack(name) for name in context_names):
             return "F12c_attack_instance_counter_order"
@@ -1009,7 +1162,25 @@ def _classify_player_row(row: PlayerRow, action_names: dict[int, str]) -> str:
     if any(_looks_like_any_special(name) for name in names):
         return "F10e_special_move_adjacency"
     if any(_looks_like_aerial(name) for name in names):
-        return "F09_aerial_combat_resolution"
+        if field_set <= (STATE_FLAG_FIELDS | {"hurtbox_state", "action_frame"}):
+            return "F09a_aerial_stateflag_hurtbox_adjacency"
+        if field_set & {"last_hit_by", "combo_count", "last_attack_landed"}:
+            return "F09b_aerial_bookkeeping_adjacency"
+        if field_set & {"hitlag", "hitstun", "state_flags[1]"} and any(
+            name.startswith("ATTACK_AIR") for name in names
+        ):
+            return "F09d_aerial_contact_hitlag_residual"
+        if field_set & {
+            "action_id",
+            "animation_index",
+            "instance_id",
+            "jumps_left",
+            "on_ground",
+            "l_cancel",
+            "state_flags[0]",
+        } or any(name in {"KNEE_BEND", "JUMP_F", "JUMP_B", "CLIFF_JUMP_QUICK2"} for name in names):
+            return "F09c_aerial_action_entry_adjacency"
+        return "F09e_aerial_instance_timing_residual"
     if any(_looks_like_grounded(name) for name in names):
         if any(_looks_like_appeal(name) for name in names):
             return "F10h_appeal_adjacency"
@@ -1123,6 +1294,30 @@ def _audit_player_row(row: PlayerRow, action_names: dict[int, str]) -> tuple[boo
             field_set & {"action_id", "action_frame", "hitlag", "hitstun", "instance_hit_by", "instance_id"}
         )
         return ok, "damage family with combat followup fields"
+    if row.family_id == "F08a_damage_identity_bookkeeping_residual":
+        ok = any(_looks_like_damage(name) for name in names) and field_set <= {
+            "instance_id",
+            "instance_hit_by",
+            "last_hit_by",
+        }
+        return ok, "damage row reduced to identity/source bookkeeping"
+    if row.family_id == "F08b_body_contact_geometry_residual":
+        ok = any(_looks_like_damage(name) for name in names) and bool(
+            field_set & {"action_id", "animation_index", "on_ground", "ground_id", "hurtbox_state"}
+        )
+        return ok, "damage row with BODY contact geometry or selector-facing fields"
+    if row.family_id == "F08c_damage_state_transition_adjacency":
+        ok = any(_looks_like_damage(name) for name in names) and (
+            any(_looks_like_landing_cliff_or_fall(name) for name in names)
+            or any(name in {"DASH", "TURN", "KNEE_BEND", "WAIT", "WALK_SLOW"} for name in names)
+            or any(name.startswith("DOWN_") or name.startswith("PASSIVE") for name in names)
+        )
+        return ok, "damage row with transition/landing/Down/Passive adjacency"
+    if row.family_id == "F08d_damage_timer_scalar_residual":
+        ok = any(_looks_like_damage(name) for name in names) and bool(
+            field_set & {"hitlag", "hitstun", "action_frame", "combo_count", "last_attack_landed", "state_flags[1]"}
+        )
+        return ok, "damage row with accepted-hit scalar/timer residual fields"
     if row.family_id == "F09_aerial_combat_resolution":
         ok = any(_looks_like_aerial(name) for name in names) and bool(
             field_set
@@ -1140,6 +1335,43 @@ def _audit_player_row(row: PlayerRow, action_names: dict[int, str]) -> tuple[boo
             }
         )
         return ok, "aerial/jump family with combat continuation fields"
+    if row.family_id == "F09a_aerial_stateflag_hurtbox_adjacency":
+        ok = any(_looks_like_aerial(name) for name in names) and field_set <= (
+            STATE_FLAG_FIELDS | {"hurtbox_state", "action_frame"}
+        )
+        return ok, "aerial/jump row with state-flag or hurtbox-only residual"
+    if row.family_id == "F09b_aerial_bookkeeping_adjacency":
+        ok = any(_looks_like_aerial(name) for name in names) and bool(
+            field_set & {"last_hit_by", "combo_count", "last_attack_landed", "hitlag"}
+        )
+        return ok, "aerial/jump row with source/combo bookkeeping residual"
+    if row.family_id == "F09c_aerial_action_entry_adjacency":
+        ok = any(_looks_like_aerial(name) for name in names) and (
+            bool(
+                field_set
+                & {
+                    "action_id",
+                    "animation_index",
+                    "instance_id",
+                    "jumps_left",
+                    "on_ground",
+                    "l_cancel",
+                    "state_flags[0]",
+                }
+            )
+            or any(name in {"KNEE_BEND", "JUMP_F", "JUMP_B", "CLIFF_JUMP_QUICK2"} for name in names)
+        )
+        return ok, "aerial/jump row with action-entry or input-selection residual"
+    if row.family_id == "F09d_aerial_contact_hitlag_residual":
+        ok = (
+            any(name.startswith("ATTACK_AIR") for name in names)
+            and bool(field_set & {"hitlag", "hitstun", "state_flags[1]"})
+            and not any(_looks_like_damage(name) for name in names)
+        )
+        return ok, "AttackAir row with contact hitlag/state-flag residual and no damage state"
+    if row.family_id == "F09e_aerial_instance_timing_residual":
+        ok = any(_looks_like_aerial(name) for name in names)
+        return ok, "aerial/jump residual after finer F09 splits"
     if row.family_id == "F10_grounded_transition_resolution":
         ok = (
             any(_looks_like_grounded(name) for name in names)
@@ -1307,7 +1539,16 @@ def _split_cross_player_instance_counter_rows(
     adjacent_families = {
         "F07_knockdown_grounding",
         "F08_damage_resolution_combat",
+        "F08a_damage_identity_bookkeeping_residual",
+        "F08b_body_contact_geometry_residual",
+        "F08c_damage_state_transition_adjacency",
+        "F08d_damage_timer_scalar_residual",
         "F09_aerial_combat_resolution",
+        "F09a_aerial_stateflag_hurtbox_adjacency",
+        "F09b_aerial_bookkeeping_adjacency",
+        "F09c_aerial_action_entry_adjacency",
+        "F09d_aerial_contact_hitlag_residual",
+        "F09e_aerial_instance_timing_residual",
         "F17_mpcoll_ledge_ecb_residual",
         "F18_damage_tech_timer_seed_surface",
         "F10b_grounded_combat_adjacency",

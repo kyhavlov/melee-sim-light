@@ -4088,6 +4088,7 @@ def _main_impl(args) -> None:
         guard_tilt_x8=post_guard_tilt_x8,
         guard_tilt_x4=post_guard_tilt_x4,
         stocks=post_stocks,
+        percent=post_percent_all,
         shield_hp=post_shield_hp,
         hurtbox_state=post_hurtbox_state,
         hitlag=post_hitlag,
@@ -4098,6 +4099,8 @@ def _main_impl(args) -> None:
         input_l=pre_l,
         input_r=pre_r,
         include_per_hitbox=True,
+        include_replay_only_shield_admission=True,
+        include_replay_only_body_admission=True,
         data_root="data",
     )
 

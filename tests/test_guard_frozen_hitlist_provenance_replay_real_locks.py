@@ -25,7 +25,8 @@ def test_frozen_guard_provenance_generator_rows_match_proving_set() -> None:
     # Frozen-Guard shield-provenance bridge:
     # - authoritative per-HitCapsule lineage is seeded on the first replay-visible GuardSetOff
     #   hitlag row, then carried across the frozen Guard aftermath rows
-    # - QGD clear-required row remains dense-only on the pre-onset Guard row
+    # - QGD pre-onset shield-admission row now uses the replay-only authoritative-empty
+    #   per-HitCapsule lane, while frozen aftermath rows still carry populated provenance
     #
     # refs/melee/src/melee/ft/ftcoll.c::ftColl_80076CBC
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80092F2C
@@ -49,14 +50,14 @@ def test_frozen_guard_provenance_generator_rows_match_proving_set() -> None:
             [0, 1, 0, 0],
             [0, 0xFFFF, 0, 0],
         ),
-        (
-            root / "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/QuerulousGrandDinosaur.msl",
-            (2485,),
-            0,
-            1,
-            [0, 0, 0, 0],
-            [0, 0, 0, 0],
-        ),
+            (
+                root / "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/QuerulousGrandDinosaur.msl",
+                (2485,),
+                0,
+                1,
+                [1, 1, 0, 0],
+                [0, 0, 0, 0],
+            ),
     ]
 
     for ds_path, records, attacker, victim, expect_valid, expect_cd in cases:

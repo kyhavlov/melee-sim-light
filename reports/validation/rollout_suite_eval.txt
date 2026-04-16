@@ -29,13 +29,13 @@ fields: action_id,animation_index,on_ground,hitlag,hitstun,state_flags
 
 == datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl ==
 rollout.best_len: 392
-rollout.streak_count: 85
+rollout.streak_count: 84
 rollout.streak_len.median: 73
 rollout.streak_len.p90: 190
 rollout.streak_len.p95: 249
 rollout.streak_len.max: 392
-rollout.first_mismatch_total: 86
-rollout.first_mismatch_seeded_total: 29
+rollout.first_mismatch_total: 85
+rollout.first_mismatch_seeded_total: 28
 
 == datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.msl ==
 rollout.best_len: 327
@@ -45,17 +45,17 @@ rollout.streak_len.p90: 218
 rollout.streak_len.p95: 258
 rollout.streak_len.max: 327
 rollout.first_mismatch_total: 126
-rollout.first_mismatch_seeded_total: 47
+rollout.first_mismatch_seeded_total: 44
 
 == datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/QuerulousGrandDinosaur.msl ==
 rollout.best_len: 631
-rollout.streak_count: 121
+rollout.streak_count: 120
 rollout.streak_len.median: 66
 rollout.streak_len.p90: 181
 rollout.streak_len.p95: 227
 rollout.streak_len.max: 631
-rollout.first_mismatch_total: 121
-rollout.first_mismatch_seeded_total: 47
+rollout.first_mismatch_total: 120
+rollout.first_mismatch_seeded_total: 46
 
 == datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/TreasuredBackKangaroo.msl ==
 rollout.best_len: 309
@@ -68,11 +68,11 @@ rollout.first_mismatch_total: 95
 rollout.first_mismatch_seeded_total: 37
 
 == suite summary ==
-overall.rollout.streak_count: 428
+overall.rollout.streak_count: 426
 overall.rollout.streak_len.median: 65
 overall.rollout.streak_len.p90: 182
 overall.rollout.streak_len.p95: 244
 overall.rollout.streak_len.max: 631
 overall.rollout.best_len.max: 631
-overall.rollout.first_mismatch_total: 428
-overall.rollout.first_mismatch_seeded_total: 160
+overall.rollout.first_mismatch_total: 426
+overall.rollout.first_mismatch_seeded_total: 155

@@ -2190,7 +2190,17 @@ static inline void combat_mutations_pass1_future_apply_body_hit(
   //
   // Simulator policy: apply staling to the float damage that drives percent/KB, and compute the
   // int damage input for hitlag from the staled float (decomp-shaped).
-  const uint16_t move_id = staling_move_id_from_state(batch, a_idx);
+  //
+  // Use the collision-time HitCapsule attack id, not the attacker's live motion-state field after
+  // another same-frame hit may have already mutated that fighter into Damage*. The caller snapshots
+  // `pre_combat_attack_id` before pass-1 mutations.
+  // Decomp trail:
+  // - ftColl_8007ABD0 builds HitCapsule.damage from fp->x2068 via ft_80089228 before collision,
+  // - Fighter_ProcessHit later consumes the already-staled HitCapsule damage.
+  // refs/melee/build/GALE01/asm/melee/ft/ftcoll.s::ftColl_8007ABD0
+  // refs/melee/src/melee/ft/ft_0881.c::{ft_80089118,ft_80089228}
+  // refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
+  const uint16_t move_id = attacker_attack_id;
   const float stale_mult = staling_multiplier_for_move(batch, a_idx, move_id);
 
   float hb_dmg = batch->state.hitbox_damage[hb_i];
@@ -2440,8 +2450,8 @@ static inline void combat_mutations_pass1_future_apply_body_hit(
   combat_state_flags_clear_x221c_b0(batch, d_idx);
   combat_damage_mark_entry_time_since_hit(batch, d_idx);
   // Decomp: Fighter_ProcessHit can set fp->x221A_b3 alongside hitlag start under KB/damage paths
-  // (see `bool2`). The stable latch point we can model without additional hidden state is
-  // "hitlag started this frame" (hitlag increased), because x221A_b3 is:
+  // (see `bool2`). The stable latch point we model here is the received-hit bool1 path, because
+  // x221A_b3 is:
   // - set at hitlag start by Fighter_ProcessHit_8006D1EC, and
   // - cleared when hitlag ends by Fighter_8006A1BC.
   // refs/melee/src/melee/ft/fighter.c::{Fighter_ProcessHit_8006D1EC,Fighter_8006A1BC}
@@ -2457,7 +2467,13 @@ static inline void combat_mutations_pass1_future_apply_body_hit(
   // - then bool1 drives fp->dmg.x195c_hitlag_frames assignment.
   // refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
-  if (d_hl_increased) {
+  if (d_hl > 0u) {
+    // Fighter_ProcessHit priority for reciprocal BODY hits:
+    // - If this fighter received KB (`forceAppliedOnHit`), bool1 is `dmg.x183C_applied`.
+    // - Deal-hitlag lanes (`dmg.x1914`/`x1924`) are only consulted when no received KB is pending.
+    // Therefore a same-frame outgoing hitlag value already written by this simplified sequential
+    // pass must not keep a larger value than the received-hit `d_hl`.
+    // refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
     batch->state.hitlag[d_idx] = d_hl;
     combat_state_flags_set_is_hitlag(batch, d_idx, d_hl);
     combat_state_flags_set_x221a_b3(batch, d_idx);

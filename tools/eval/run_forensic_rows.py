@@ -147,6 +147,7 @@ _DEBUG_INTERNALS_DTYPE = np.dtype(
         ("turn_frames_to_turn", ("u1", (4,))),
         ("turn_has_turned", ("u1", (4,))),
         ("guard_reflect_timer_x14", ("u1", (4,))),
+        ("entry_end_fall_lock", ("u1", (4,))),
         ("attack_id", ("<u2", (4,))),
         ("attack_instance", ("<u2", (4,))),
         ("attack_identity_last_action_id", ("<u2", (4,))),
@@ -156,6 +157,9 @@ _DEBUG_INTERNALS_DTYPE = np.dtype(
         ("instance_id_counter", "<u2"),
         ("throw_pulse_consumed", ("u1", (4,))),
         ("throw_pulse_crossed_prev_frame", ("u1", (4,))),
+        ("throw_pending_victim_port", ("u1", (4,))),
+        ("throw_pending_hit_idx", ("u1", (4,))),
+        ("attached_victim_port", ("u1", (4,))),
     ],
     align=False,
 )

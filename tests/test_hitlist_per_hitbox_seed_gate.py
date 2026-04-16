@@ -49,14 +49,46 @@ def test_generated_suite_only_marks_per_hitbox_authority_when_payload_exists() -
 
     for rel in _SUITE_DATASETS:
         ds = _read_dataset_or_skip(root / rel)
-        seed_t = ds.samples["seed_t"]
+        samples = ds.samples
+        seed_t = samples["seed_t"]
+        ref_t1 = samples["ref_t1"]
         hb_valid = seed_t["combat_hitlist_hb_valid"]
         hb_cd = seed_t["combat_hitlist_hb_cd"]
         assert hb_valid.dtype == np.uint8
         valid_mask = hb_valid != 0
         if not bool(np.any(valid_mask)):
             continue
-        assert bool(np.all(np.any(hb_cd[np.nonzero(valid_mask)] != 0, axis=1))), rel
+        for rec, attacker, hb in zip(*np.nonzero(valid_mask), strict=False):
+            has_payload = bool(np.any(hb_cd[rec, attacker, hb, :2] != 0))
+            if has_payload:
+                continue
+            # Replay-only admission seeds may intentionally mark an authoritative empty HitCapsule
+            # lane when t+1 proves either a fighter shield hit entered GuardSetOff or a fighter BODY
+            # damage hit was admitted. This keeps dense group fallback from suppressing the
+            # teacher-forced hit while leaving normal rollouts on runtime-carried HitCapsules.
+            #
+            # refs/melee/src/melee/ft/ftcoll.c::{ftColl_800768A0,ftColl_80076CBC,ftColl_80076ED8}
+            # refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000ACFC,lbColl_80008688}
+            defenders = [p for p in range(2) if p != int(attacker)]
+            shield_proof = any(
+                int(seed_t["hitlag"][rec, d]) == 0
+                and int(ref_t1["action_id"][rec, d]) == 181
+                and int(ref_t1["hitlag"][rec, d]) > 0
+                and int(ref_t1["hitlag"][rec, attacker]) > 0
+                and float(ref_t1["shield_hp"][rec, d]) < float(seed_t["shield_hp"][rec, d])
+                for d in defenders
+            )
+            body_proof = any(
+                int(seed_t["hitlag"][rec, d]) == 0
+                and int(seed_t["hitlag"][rec, attacker]) == 0
+                and int(ref_t1["hitlag"][rec, d]) > 0
+                and int(ref_t1["hitlag"][rec, attacker]) > 0
+                and float(ref_t1["percent"][rec, d]) > float(seed_t["percent"][rec, d])
+                and int(ref_t1["last_hit_by"][rec, d]) == int(attacker)
+                and int(ref_t1["instance_hit_by"][rec, d]) == int(seed_t["instance_id"][rec, attacker])
+                for d in defenders
+            )
+            assert shield_proof or body_proof, (rel, int(rec), int(attacker), int(hb))
 
 
 @pytest.mark.integration

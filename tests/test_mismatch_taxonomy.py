@@ -201,7 +201,7 @@ def test_classify_player_row_does_not_hide_combat_damage_entry_in_mpcoll_residua
             90: "DAMAGE_FLY_TOP",
         },
     )
-    assert got == "F08_damage_resolution_combat"
+    assert got == "F08b_body_contact_geometry_residual"
 
 
 def test_classify_player_row_does_not_hide_special_adjacency_in_mpcoll_residual() -> None:

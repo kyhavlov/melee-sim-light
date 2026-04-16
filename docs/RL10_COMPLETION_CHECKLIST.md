@@ -173,13 +173,46 @@ Recommended sequence for the next deep passes:
   - no ledge or ECB regressions
 
 ### 5. Core combat followup family
-- Status: `active / next deep pass`
-- Roadmap families: `F08_damage_resolution_combat`, `F09_aerial_combat_resolution`
+- Status: `active / partial`
+- Roadmap families: broad `F08_damage_resolution_combat` is eliminated from current cardinal/aggregate taxonomy;
+  broad `F09_aerial_combat_resolution` is eliminated after splitting aggregate-only aerial action-entry
+  and contact-hitlag residuals, but those residual owners still need closure/proof before this family can
+  be called complete.
 - Owner boundary: BODY hits, aerial continuation, hitlag/hitstun/continuation ordering after damage admission
 - Primary sim files: `src/combat.c`, `src/timers.c`, `src/items.c`, `src/step.c`
+- Current split:
+  - AttackAirLw -> shield-hit admission seed provenance is closed as a named sub-owner:
+    replay-only authoritative-empty per-HitCapsule seeds are emitted only when `t+1` proves a
+    fighter shield hit entered `GuardSetOff` with both fighters in hitlag and shield HP dropping.
+  - BODY damage admission seed provenance is closed as a named sub-owner:
+    replay-only authoritative-empty per-HitCapsule seeds are emitted only when `t+1` proves a
+    fighter BODY damage hit through percent increase, hitlag on both fighters, and source-owner
+    attribution to the current attacker.
+  - Reciprocal BODY hit stale/hitlag ownership is implemented:
+    damage staling uses the pre-combat HitCapsule attack id and received-KB hitlag takes priority
+    over same-frame deal-hitlag.
+  - Aggregate audit after forced dataset rebuild shows the BODY-admission and reciprocal-hit patches
+    generalize without same-owner churn: aggregate one-step improves from `8488` to `8096` with no
+    per-dataset or per-field regressions against the starting reports.
+  - BODY admission population audit is narrow: aggregate has `301` BODY authoritative-empty
+    attacker/defender pairs, all with percent increase, both fighters in hitlag, and source-owner
+    attribution; phantom/no-percent (`QuerulousGrandDinosaur:8638`) and extra-contact
+    (`TreasuredBackKangaroo:5247`) sentinels remain unpopulated.
+  - Remaining rows are split into precise residual families:
+    `F08a_damage_identity_bookkeeping_residual`,
+    `F08b_body_contact_geometry_residual`,
+    `F08c_damage_state_transition_adjacency`,
+    `F08d_damage_timer_scalar_residual`,
+    `F09a_aerial_stateflag_hurtbox_adjacency`, and
+    `F09b_aerial_bookkeeping_adjacency`,
+    `F09c_aerial_action_entry_adjacency`,
+    `F09d_aerial_contact_hitlag_residual`, and
+    `F09e_aerial_instance_timing_residual`.
 - Acceptance bar:
   - BODY-hit and aerial followup ownership is coherent
   - shared combat continuation paths replace row-shaped followup fixes
+  - remaining timer/scalar, identity/bookkeeping, contact-geometry, and aerial action-entry/contact-hitlag
+    residuals are fixed or proven outside the shared combat followup boundary without aggregate churn
 
 ### 6. Fox/Falco special-move families
 - Status: `active / next deep pass`

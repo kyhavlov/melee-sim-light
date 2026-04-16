@@ -25,6 +25,10 @@ ACT_GUARD_ON = 0x00B2
 ACT_GUARD = 0x00B3
 ACT_GUARD_REFLECT = 0x00B6
 ACT_GUARD_SET_OFF = 0x00B5
+ACT_ATTACK_AIR_LW = 0x0045
+ACT_DAMAGE_FALL = 0x0026
+ACT_DAMAGE_HI_1 = 0x004B
+ACT_DAMAGE_FLY_ROLL = 0x005B
 # Seed-bridge discriminator for early create-order stale carryover rows in current suite:
 # - falco msid=70 create frame 8 (data/hitboxes/falco.bin)
 # - fox   msid=72 create frame 8 (data/hitboxes/fox.bin)
@@ -158,6 +162,11 @@ def _trigger_unit_from_input(buttons: int, l: int, r: int) -> float:
 def _is_shield_active_action(action_id: int) -> bool:
     a = int(action_id)
     return a in (ACT_GUARD_ON, ACT_GUARD, ACT_GUARD_REFLECT, ACT_GUARD_SET_OFF)
+
+
+def _is_damage_destination_action(action_id: int) -> bool:
+    a = int(action_id)
+    return a == ACT_DAMAGE_FALL or ACT_DAMAGE_HI_1 <= a <= ACT_DAMAGE_FLY_ROLL
 
 
 def _is_first_guardsetoff_hitlag_row(
@@ -598,7 +607,10 @@ def derive_combat_hitlist_seed_fields(
     input_buttons: np.ndarray,  # [n_frames, MAX_PLAYERS] u16 (pre-frame)
     input_l: np.ndarray,  # [n_frames, MAX_PLAYERS] u8 (pre-frame)
     input_r: np.ndarray,  # [n_frames, MAX_PLAYERS] u8 (pre-frame)
+    percent: np.ndarray | None = None,  # [n_frames, MAX_PLAYERS] f32
     include_per_hitbox: bool = False,
+    include_replay_only_shield_admission: bool = False,
+    include_replay_only_body_admission: bool = False,
     data_root: str | Path = "data",
 ) -> tuple[np.ndarray, ...]:
     """
@@ -617,6 +629,27 @@ def derive_combat_hitlist_seed_fields(
     - Decomp ownership anchor for hitlag as accepted-hit consequence:
       refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
       refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
+
+    Replay-only shield-admission lane:
+    - `include_replay_only_shield_admission=True` may mark an authoritative empty per-HitCapsule
+      seed for frame `t` when frame `t+1` proves a fighter shield hit happened, but the dense
+      group seed at `t` would suppress the live HitCapsule.
+    - This lane is non-causal and must only be used for teacher-forced replay datasets. It does not
+      create runtime rollout behavior; it only selects the already-existing per-hitbox seed lane for
+      the reseeded frame.
+      refs/melee/src/melee/ft/ftcoll.c::{ftColl_800768A0,ftColl_80076CBC}
+      refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000ACFC,lbColl_80008688}
+
+    Replay-only BODY-admission lane:
+    - `include_replay_only_body_admission=True` may mark an authoritative empty per-HitCapsule
+      seed for frame `t` when frame `t+1` proves a fighter BODY damage hit happened, but the dense
+      group seed at `t` would suppress the live HitCapsule.
+    - The proof is intentionally narrower than "overlap exists": defender percent must increase,
+      both fighters must enter hitlag, and the defender must either enter/increase hitstun or move
+      through a Damage* destination. Phantom/no-damage contacts stay outside this lane.
+    - Like the shield lane, this is non-causal and only for teacher-forced replay datasets.
+      refs/melee/src/melee/ft/ftcoll.c::{ftColl_80076ED8,ftColl_800768A0}
+      refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000ACFC,lbColl_80008688}
     """
     if num_players not in (2, 4):
         raise ValueError(f"num_players must be 2 or 4, got {num_players}")
@@ -657,6 +690,11 @@ def derive_combat_hitlist_seed_fields(
         instance_hit_by_arr = np.asarray(instance_hit_by, dtype=np.uint16)
         if instance_hit_by_arr.shape[0] != n_frames:
             raise ValueError("instance_hit_by must have the same number of frames as action_id")
+    percent_arr: np.ndarray | None = None
+    if percent is not None:
+        percent_arr = np.asarray(percent, dtype=np.float32)
+        if percent_arr.shape[0] != n_frames:
+            raise ValueError("percent must have the same number of frames as action_id")
 
     # Outputs.
     out_cd = np.zeros((n_frames, MAX_PLAYERS, HITLIST_GROUPS, MAX_PLAYERS), dtype=np.uint16)
@@ -698,6 +736,7 @@ def derive_combat_hitlist_seed_fields(
         hurtcaps_world: list[list[dict]] = [[] for _ in range(MAX_PLAYERS)]
         shield_world: list[tuple[float, float, float, float]] = [(0.0, 0.0, 0.0, 0.0) for _ in range(MAX_PLAYERS)]
         hb_seed_valid_frame = np.zeros((MAX_PLAYERS, MAX_HITBOXES), dtype=np.uint8)
+        replay_only_hb_valid_frame = np.zeros((MAX_PLAYERS, MAX_HITBOXES), dtype=np.uint8)
 
         # Refresh hurtcaps/hitboxes/shields for active players only (others remain empty).
         for p in range(num_players):
@@ -1066,30 +1105,101 @@ def derive_combat_hitlist_seed_fields(
                                 hitlist_hb_cd[attacker, reg_hb_i, defender] = seeded_cd
                                 hitlist_hb_iid[attacker, reg_hb_i, defender] = defender_iid
                                 hitlist_hb_authoritative[attacker, reg_hb_i] = np.uint8(1)
-                        # Victim identity key matches decomp `HitVictim.victim` pointer:
-                        # use the Slippi-visible `instance_id` to drop stale entries on respawn.
-                        # refs/melee/src/melee/lb/lbcollision.c::lbColl_80008688
-                        def_iid = int(instance_id[fi, defender])
-                        if int(hitlist_iid[attacker, hit_group, defender]) == def_iid:
-                            if prune_guard_stale_seed_bridge:
+                        if (
+                            include_replay_only_shield_admission
+                            and hitlag_arr is not None
+                            and fi + 1 < n_frames
+                            and int(action_id[fi, attacker]) == ACT_ATTACK_AIR_LW
+                            and float(hb.get("damage", 0.0)) > 0.0
+                            and int(hitlag_arr[fi, defender]) == 0
+                            and int(hitlag_arr[fi, attacker]) == 0
+                            and int(action_id[fi + 1, defender]) == ACT_GUARD_SET_OFF
+                            and int(hitlag_arr[fi + 1, defender]) > 0
+                            and int(hitlag_arr[fi + 1, attacker]) > 0
+                            and float(shield_hp[fi + 1, defender]) < float(shield_hp[fi, defender])
+                        ):
+                            # Replay-only per-HitCapsule provenance bridge:
+                            # - The dense group snapshot says "victim present", but the next
+                            #   Slippi post-frame proves that this exact frame admitted a fighter
+                            #   shield hit into GuardSetOff/hitlag.
+                            # - Mark the active same-group HitCapsules authoritative-empty so
+                            #   teacher-forced one-step reseed uses the decomp-shaped per-HitCapsule
+                            #   lane instead of the coarse group fallback.
+                            # - This is intentionally not a runtime rule; normal rollouts carry
+                            #   HitCapsule victim rings directly through ftColl_800768A0.
+                            # refs/melee/src/melee/ft/ftcoll.c::{ftColl_800768A0,ftColl_80076CBC}
+                            # refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000ACFC,lbColl_80008688}
+                            for reg_hb_id, reg_hb in a_hitboxes.items():
+                                if (int(reg_hb.get("hit_group", 0)) & 0x7) != hit_group:
+                                    continue
+                                reg_hb_i = int(reg_hb_id)
+                                hitlist_hb_cd[attacker, reg_hb_i, defender] = np.uint16(0)
+                                hitlist_hb_iid[attacker, reg_hb_i, defender] = np.uint16(0)
+                                replay_only_hb_valid_frame[attacker, reg_hb_i] = np.uint8(1)
+                        elif (
+                            include_replay_only_body_admission
+                            and hitlag_arr is not None
+                            and percent_arr is not None
+                            and fi + 1 < n_frames
+                            and float(hb.get("damage", 0.0)) > 0.0
+                            and int(hitlag_arr[fi, defender]) == 0
+                            and int(hitlag_arr[fi, attacker]) == 0
+                            and int(hitlag_arr[fi + 1, defender]) > 0
+                            and int(hitlag_arr[fi + 1, attacker]) > 0
+                            and float(percent_arr[fi + 1, defender]) > float(percent_arr[fi, defender])
+                            and (
+                                last_hit_by_arr is None
+                                or int(last_hit_by_arr[fi + 1, defender]) == int(attacker)
+                            )
+                            and (
+                                instance_hit_by_arr is None
+                                or int(instance_hit_by_arr[fi + 1, defender])
+                                == int(instance_id[fi, attacker])
+                            )
+                        ):
+                            # Replay-only per-HitCapsule BODY-admission provenance bridge:
+                            # - The dense group snapshot says "victim present", but the next Slippi
+                            #   post-frame proves a fighter BODY damage hit was admitted from this
+                            #   attacker (percent increase + hitlag on both fighters + source owner).
+                            # - Mark active same-group HitCapsules authoritative-empty for the
+                            #   teacher-forced seed frame, preserving the decomp HitCapsule owner
+                            #   instead of clearing the coarse group latch.
+                            # - Phantom/no-damage contacts remain outside this lane because percent
+                            #   must increase.
+                            # refs/melee/src/melee/ft/ftcoll.c::{ftColl_80076ED8,ftColl_800768A0}
+                            # refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000ACFC,lbColl_80008688}
+                            for reg_hb_id, reg_hb in a_hitboxes.items():
+                                if (int(reg_hb.get("hit_group", 0)) & 0x7) != hit_group:
+                                    continue
+                                reg_hb_i = int(reg_hb_id)
+                                hitlist_hb_cd[attacker, reg_hb_i, defender] = np.uint16(0)
+                                hitlist_hb_iid[attacker, reg_hb_i, defender] = np.uint16(0)
+                                replay_only_hb_valid_frame[attacker, reg_hb_i] = np.uint8(1)
+                        else:
+                            # Victim identity key matches decomp `HitVictim.victim` pointer:
+                            # use the Slippi-visible `instance_id` to drop stale entries on respawn.
+                            # refs/melee/src/melee/lb/lbcollision.c::lbColl_80008688
+                            def_iid = int(instance_id[fi, defender])
+                            if int(hitlist_iid[attacker, hit_group, defender]) == def_iid:
+                                if prune_guard_stale_seed_bridge:
+                                    hitlist_cd[attacker, hit_group, defender] = np.uint16(0)
+                                    hitlist_iid[attacker, hit_group, defender] = np.uint16(0)
+                                else:
+                                    continue
+                            elif prune_guard_stale_seed_bridge:
+                                hitlist_cd[attacker, hit_group, defender] = np.uint16(0)
+                                hitlist_iid[attacker, hit_group, defender] = np.uint16(0)
+                            # Mirror src/hitlist.c: preserve suppression across instance_id changes
+                            # unless the underlying victim pointer may have changed (death/respawn).
+                            elif _hitlist_victim_pointer_may_change(
+                                stocks=int(stocks[fi, defender]),
+                                action_id=int(action_id[fi, defender]),
+                            ):
                                 hitlist_cd[attacker, hit_group, defender] = np.uint16(0)
                                 hitlist_iid[attacker, hit_group, defender] = np.uint16(0)
                             else:
+                                hitlist_iid[attacker, hit_group, defender] = np.uint16(def_iid)
                                 continue
-                        elif prune_guard_stale_seed_bridge:
-                            hitlist_cd[attacker, hit_group, defender] = np.uint16(0)
-                            hitlist_iid[attacker, hit_group, defender] = np.uint16(0)
-                        # Mirror src/hitlist.c: preserve suppression across instance_id changes
-                        # unless the underlying victim pointer may have changed (death/respawn).
-                        elif _hitlist_victim_pointer_may_change(
-                            stocks=int(stocks[fi, defender]),
-                            action_id=int(action_id[fi, defender]),
-                        ):
-                            hitlist_cd[attacker, hit_group, defender] = np.uint16(0)
-                            hitlist_iid[attacker, hit_group, defender] = np.uint16(0)
-                        else:
-                            hitlist_iid[attacker, hit_group, defender] = np.uint16(def_iid)
-                            continue
 
                     # SHIELD precedence: if the hitbox intersects the defender shield bubble, treat as a
                     # shield contact and register hitlist state (so subsequent frames are suppressed).
@@ -1191,6 +1301,9 @@ def derive_combat_hitlist_seed_fields(
                 # refs/melee/src/melee/ft/ftcoll.c::ftColl_800768A0
                 # refs/melee/src/melee/lb/types.h::HitCapsule
                 hb_i = int(hb_id)
+                if int(replay_only_hb_valid_frame[attacker, hb_i]) != 0:
+                    out_hb_valid[fi, attacker, hb_i] = np.uint8(1)
+                    continue
                 authoritative_now = False
                 if int(hitlist_hb_authoritative[attacker, hb_i]) != 0:
                     for victim in range(num_players):
