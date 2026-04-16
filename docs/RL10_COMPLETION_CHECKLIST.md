@@ -173,7 +173,7 @@ Recommended sequence for the next deep passes:
   - no ledge or ECB regressions
 
 ### 5. Core combat followup family
-- Status: `active / partial`
+- Status: `effectively closed for post-admission followup; upstream geometry/pose split active`
 - Roadmap families: broad `F08_damage_resolution_combat` is eliminated from current cardinal/aggregate taxonomy;
   broad `F09_aerial_combat_resolution` is eliminated after splitting aggregate-only aerial action-entry
   and contact-hitlag residuals, but those residual owners still need closure/proof before this family can
@@ -208,6 +208,50 @@ Recommended sequence for the next deep passes:
     `F09c_aerial_action_entry_adjacency`,
     `F09d_aerial_contact_hitlag_residual`, and
     `F09e_aerial_instance_timing_residual`.
+  - `F08b_body_contact_geometry_residual` is split out of shared post-admission combat followup as
+    the named upstream `Combat geometry / HSD pose collision owner`. `BHH:1163` now resolves through
+    the decomp-backed standing
+    Turn internal-facing hurtcap owner (`ftCo_Turn_Enter` / `ftCo_Turn_Anim_Inner` -> `lb_8000B1CC`
+    hurtcap world space). Seed-history now mirrors runtime post-anim pose timing and delayed BODY hitlist
+    registration, so `BHH:1169` and related same-hit followup rows stay suppressed by the
+    HitCapsule victim list after the admitted `BHH:1163` hit. A broadened grounded x58->x4C sweep
+    was tested and rejected because aggregate one-step worsened, so the remaining grounded
+    missed-hit rows need the exact `lbColl_8000805C` / `lbColl_80006E58` predicate rather than a
+    broad helper.
+  - A replay-only per-HitCapsule BODY authority bridge was tested for `BHH:1599` and rejected as a
+    closure path. It improved one-step but admitted through replay proof rather than
+    `lbColl_8000805C` geometry and regressed rollout first-mismatch totals. `BHH:1599` remains the
+    current BODY collision-space proving row for the real runtime owner.
+  - Pre-collision primitive capture for `BHH:1599` now proves the BODY predicate consumes the
+    expected pair (p0 AttackAirN hb1 vs p1 hurtcap 12) and that the hit x58/x4C lane is no longer
+    the blocker. The remaining upstream owner is the defender live HSD JObj/AObj pose feeding
+    `lb_8000B1CC`: vanilla `cur_anim_frame=4.0`, `x898=0`, and no active blend, but the live
+    hurtcap-12 JObj matrix differs from the extracted `SSANIM01` AttackHi3 frame-4 pose even though
+    the FigaTree header and track descriptors match. The selected defender has `dynamics_num=1`;
+    decomp routes this through `ftCo_8009DD94` dynamic bone updates and `ftAnim_8006E7B8` /
+    `ftAnim_8006EED4` subtree animation toggles before `lb_8000B1CC` computes hurtcap endpoints.
+    This is pre-admission collision primitive ownership, not the shared post-hit combat followup
+    owner.
+    A local matrix-primary/AttackHi3 pose-order runtime probe admitted the row but selected the
+    wrong low hurtcap (`DamageFlyLw` vs vanilla `DamageFlyN`), so it was rejected and not kept as a
+    gameplay bridge.
+  - Current stabilized validation map from checkpoint `0f33bb1` after removing the rejected BODY
+    replay bridge: primary/cardinal one-step `717 -> 717`; aggregate one-step `8096 -> 7962`;
+    primary rollout first-mismatch `426 -> 426`; aggregate rollout first-mismatch `2318 -> 2313`.
+    The bridge-enabled probe reached lower one-step totals, but rollout first-mismatch regressed
+    (`426 -> 435` primary, `2318 -> 2340` aggregate), so that bridge is not closure-quality and must
+    not be used to close this checklist item.
+  - Current residual taxonomy (`reports/triage/20260416_core_combat_final_taxonomy`): aggregate
+    `F08b=1036`, `F08a=263`, `F08c=162`, `F08d=67`, `F09a=156`, `F09b=164`,
+    `F09c=131`, `F09d=136`. Cardinal taxonomy (`reports/triage/20260416_core_combat_final_cardinal_taxonomy`):
+    `F08b=52`, `F08a=42`, `F08d=22`, `F08c=18`, `F09a=17`, `F09b=14`.
+  - Remaining `F08a` rows are source/instance recording order (`Fighter_8006A360` / Slippi post-frame
+    identity), not damage admission. Remaining `F08c` rows are Down/Passive/Fall/Landing/mpColl
+    state transitions. Remaining `F08d` rows are a mixture of timer scalar rows and contact
+    over/missed rows already covered by the geometry/pose split. Remaining `F09a/F09c` rows are
+    aerial hurtbox/state-flag or Jump/KneeBend/AttackAir action-entry owners. Remaining `F09b/F09d`
+    rows are deal-hitlag, last-hit/combo, clank/shield/item/contact-adjacent bookkeeping without
+    BODY percent/hitstun proof, not DamageFly continuation after an admitted BODY hit.
 - Acceptance bar:
   - BODY-hit and aerial followup ownership is coherent
   - shared combat continuation paths replace row-shaped followup fixes
@@ -224,6 +268,31 @@ Recommended sequence for the next deep passes:
   - `SpecialHi` landing/fall and `SpecialLw` / `ThrownLw` pulse behavior live in named family work, not misc buckets
 
 ## Remaining Major Owner Families
+
+### Combat geometry / HSD pose collision owner
+- Status: `active / split from core combat followup`
+- Roadmap family: `F08b_body_contact_geometry_residual`
+- Owner boundary: live fighter collision primitives before BODY admission:
+  `ftColl_80078C70` / `ftColl_80076ED8`, `lbColl_8000805C` / `lbColl_80006E58`,
+  `lb_8000B1CC`, and the HSD JObj/AObj/dynamics pose state feeding hurtcap endpoints.
+- Primary sim/tool files: `src/hurtboxes.c`, `src/hitboxes.c`, `src/combat.c`,
+  `tools/extraction/extract_fighter_anims.py`, `tools/dolphin/*`.
+- Proof rows:
+  - `BHH:1599`: vanilla pre-ftColl probe selects p0 `AttackAirN` hb1 against p1 AttackHi3
+    hurt part 18 and enters `DamageFlyN`; current extracted SSANIM hurtcaps miss before combat
+    followup. A matrix-primary/pose-order runtime probe admitted the hit but selected the wrong low
+    hurtcap (`DamageFlyLw`), proving the missing owner is live JObj dynamics pose, not a generic
+    BODY reset or hitlist bridge.
+  - `BHH:1163`: standing Turn internal-facing hurtcaps are implemented and protected.
+  - `BHH:1169`, `TBK:5523`, `TBK:5247`, AGN/body-overlap rows remain negative/adjacent sentinels.
+- Reproducibility:
+  - Main-repo patch artifact `tools/dolphin/patches/ishiiruka_collision_probe.patch` contains the
+    local Dolphin interpreter probe used to capture pre-`ftColl` primitives. Apply it only for
+    local forensics; `refs/Ishiiruka` should remain clean in the review worktree.
+- Acceptance bar:
+  - implement/decomp-port enough HSD JObj/AObj/dynamics pose ownership that BODY contact selection
+    matches vanilla primitives without replay-proof admission bridges;
+  - preserve protected BODY overlap sentinels and aggregate rollout.
 
 ### Ledge / collision-env parity
 - Status: `active`

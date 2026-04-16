@@ -384,7 +384,6 @@ void hurtboxes_refresh(MslBatch* batch) {
           frame = (uint16_t)(frame + 1u);
         }
       }
-
       if (!have_hit_status_override && !preserve_visible_downbound_colanim) {
         (void)hit_status_get(char_id, msid, frame, &hit_status);
       }
@@ -488,7 +487,18 @@ void hurtboxes_refresh(MslBatch* batch) {
                                       ? chp->model_scaling
                                       : 1.0f;
       const float model_scale = scale_y * model_scaling;
-      const float facing_dir = batch->state.facing[idx] ? 1.0f : -1.0f;
+      float facing_dir = batch->state.facing[idx] ? 1.0f : -1.0f;
+      if (action_id == (uint16_t)MSL_ACT_TURN && batch->state.turn_has_turned[idx] != 0u) {
+        // Standing Turn has an internal facing owner that can lead the replay-visible facing lane.
+        // ftCo_Turn_Enter records `facing_after = -fp->facing_dir`; ftCo_Turn_Anim_Inner flips
+        // `fp->facing_dir` and sets `has_turned` once `frames_to_turn` has elapsed. BODY
+        // collision consumes the runtime joint matrices via lb_8000B1CC, so hurtcap world space
+        // must follow that internal `has_turned` orientation, not the stale visible facing byte.
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Turn.c::{
+        //   ftCo_Turn_Enter,ftCo_Turn_Anim_Inner}
+        // refs/melee/src/melee/lb/lb_00B0.c::lb_8000B1CC
+        facing_dir = -facing_dir;
+      }
       // Fallback policy: missing pose data for a specific capsule only drops that capsule, keeping
       // the rest usable under partial animation coverage.
       //

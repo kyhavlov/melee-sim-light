@@ -16,7 +16,7 @@ def _timestamp() -> str:
     return datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
 
 
-def _write_dolphin_ini(user_dir: Path) -> None:
+def _write_dolphin_ini(user_dir: Path, *, force_interpreter: bool = False) -> None:
     cfg_dir = user_dir / "Config"
     cfg_dir.mkdir(parents=True, exist_ok=True)
     ini_path = cfg_dir / "Dolphin.ini"
@@ -33,7 +33,10 @@ def _write_dolphin_ini(user_dir: Path) -> None:
     for ln in lines:
         if ln.strip().startswith("["):
             if in_core:
-                for k, v in (("GFXBackend", "Null"),):
+                required = [("GFXBackend", "Null")]
+                if force_interpreter:
+                    required.append(("CPUCore", "0"))
+                for k, v in required:
                     if k not in seen:
                         out.append(f"{k} = {v}")
                 in_core = False
@@ -43,14 +46,21 @@ def _write_dolphin_ini(user_dir: Path) -> None:
             continue
         if in_core and "=" in ln:
             k = ln.split("=")[0].strip()
-            if k in ("GFXBackend",):
+            if k in ("GFXBackend", "CPUCore"):
                 seen.add(k)
-                out.append("GFXBackend = Null")
+                if k == "GFXBackend":
+                    out.append("GFXBackend = Null")
+                elif force_interpreter:
+                    out.append("CPUCore = 0")
+                else:
+                    out.append(ln)
                 continue
         out.append(ln)
     if in_core:
         if "GFXBackend" not in seen:
             out.append("GFXBackend = Null")
+        if force_interpreter and "CPUCore" not in seen:
+            out.append("CPUCore = 0")
     if "[DSP]" not in out:
         out.append("[DSP]")
         out.append("Backend = NullSound")
@@ -147,6 +157,7 @@ def capture_engine_dump(
     end_frame: int | None = None,
     timeout: float = 120.0,
     should_resync: bool = True,
+    collision_probe_path: str | Path | None = None,
 ) -> tuple[int, Path]:
     replay = Path(replay)
     if not replay.exists():
@@ -157,7 +168,7 @@ def capture_engine_dump(
 
     user_dir = Path(user_dir)
     user_dir.mkdir(parents=True, exist_ok=True)
-    _write_dolphin_ini(user_dir)
+    _write_dolphin_ini(user_dir, force_interpreter=collision_probe_path is not None)
 
     resolved_start, resolved_end = _resolve_frame_window(
         replay=replay, start_frame=start_frame, end_frame=end_frame
@@ -186,6 +197,8 @@ def capture_engine_dump(
         str(playback_txt.resolve()),
     ]
     env = os.environ.copy()
+    if collision_probe_path is not None:
+        env["MSL_COLLISION_PROBE_PATH"] = str(Path(collision_probe_path).resolve())
     proc = subprocess.Popen(proc_args, env=env)
 
     t0 = time.monotonic()
@@ -241,6 +254,12 @@ def main() -> int:
         action="store_true",
         help="set playback shouldResync=false for rollout-style patched-input probes",
     )
+    ap.add_argument(
+        "--collision-probe",
+        type=Path,
+        default=None,
+        help="optional JSONL path for pre-collision primitive probes; forces interpreter CPU core",
+    )
     args = ap.parse_args()
 
     rc, out_bin = capture_engine_dump(
@@ -253,6 +272,7 @@ def main() -> int:
         end_frame=args.end_frame,
         timeout=float(args.timeout),
         should_resync=not args.no_resync,
+        collision_probe_path=args.collision_probe,
     )
     if rc != 0:
         print(f"engine dump capture failed: {out_bin}")

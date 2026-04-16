@@ -204,6 +204,75 @@ def test_classify_player_row_does_not_hide_combat_damage_entry_in_mpcoll_residua
     assert got == "F08b_body_contact_geometry_residual"
 
 
+def test_classify_player_row_routes_grounded_missed_damage_to_body_geometry() -> None:
+    row = _player_row(
+        seed_action_id=18,
+        ref_action_id=76,
+        out_action_id=18,
+        prev_action_id=18,
+        fields=("action_id", "animation_index", "hitlag", "hitstun", "instance_hit_by", "on_ground"),
+        on_ground=1,
+    )
+    got = _classify_player_row(
+        row,
+        {
+            18: "TURN",
+            76: "DAMAGE_HI_2",
+        },
+    )
+    assert got == "F08b_body_contact_geometry_residual"
+    meta = FAMILY_META[got]
+    assert meta.owner_module == "hsd_pose_collision"
+    assert "ftdynamics.c" in "\n".join(meta.refs)
+
+
+def test_classify_player_row_routes_attackairn_attackhi3_pose_miss_to_hsd_pose_collision() -> None:
+    # BHH:1599-shaped row:
+    # - seed p0 AttackAirN hits grounded p1 AttackHi3 in vanilla,
+    # - sim has no pre-combat BODY selection because extracted hurtcaps differ from live HSD JObj
+    #   dynamics pose, so this is upstream collision pose ownership, not post-admission followup.
+    row = _player_row(
+        dataset="BlondHardHippopotamus.msl",
+        record=1599,
+        p=1,
+        seed_action_id=56,
+        ref_action_id=88,
+        out_action_id=56,
+        prev_action_id=56,
+        fields=("action_id", "animation_index", "hitlag", "hitstun", "instance_hit_by", "on_ground"),
+        on_ground=1,
+        hitlag=0,
+        hitstun=0,
+    )
+    got = _classify_player_row(
+        row,
+        {
+            56: "ATTACK_HI3",
+            88: "DAMAGE_FLY_N",
+        },
+    )
+    assert got == "F08b_body_contact_geometry_residual"
+
+
+def test_classify_player_row_keeps_non_damage_down_transition_in_f08c() -> None:
+    row = _player_row(
+        seed_action_id=183,
+        ref_action_id=186,
+        out_action_id=186,
+        prev_action_id=183,
+        fields=("action_frame",),
+        on_ground=1,
+    )
+    got = _classify_player_row(
+        row,
+        {
+            183: "DOWN_BOUND_U",
+            186: "DOWN_STAND_U",
+        },
+    )
+    assert got == "F08c_damage_state_transition_adjacency"
+
+
 def test_classify_player_row_does_not_hide_special_adjacency_in_mpcoll_residual() -> None:
     row = _player_row(
         seed_action_id=90,

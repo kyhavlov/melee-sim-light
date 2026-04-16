@@ -451,6 +451,17 @@ def _parse_subaction_events(
                         data={"state": int(_u26(w0) != 0)},
                     )
                 )
+            elif op == 50:
+                # Toggle Bone Physics (ftAction_80072B94 -> ftCo_8009E318).
+                #
+                # This toggles FighterBone.flags_b0 for the requested Fighter_Part. When set,
+                # ftAnim_8006E7B8 skips HSD_JObjAnim for that part subtree and collision keeps
+                # using the carried live JObj pose. BODY hurtcaps consume that pose through
+                # lb_8000B1CC inside lbColl_8000805C.
+                # refs/melee/src/melee/ft/ftaction.c::ftAction_80072B94
+                # refs/melee/src/melee/ft/ftdynamics.c::ftCo_8009E318
+                # refs/melee/src/melee/ft/ftanim.c::ftAnim_8006E7B8
+                out.append(Event(frame=frame, kind="toggle_bone_physics", data={"bone_id": int(_u26(w0))}))
             elif op == 52:
                 # Set fp->x221C_u16_y flags (ftAction_80072C6C -> ft_8008A1B8).
                 # refs/melee/src/melee/ft/ftaction.c::ftAction_80072C6C

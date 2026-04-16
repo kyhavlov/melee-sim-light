@@ -326,14 +326,14 @@ static inline uint8_t combat_body_overlap_lbColl_80006E58_subset_allows(const Ms
   // using x58/x4C carried by ftColl_8007AD18.
   // refs/melee/src/melee/ft/ftcoll.c::{ftColl_800768A0,ftColl_8007AD18}
   // refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000805C,lbColl_80006E58}
-  // Pre-hit ownership subset: keep defender-in-hitstun lanes on baseline overlap while enabling
-  // decomp-shaped sweep for neutral BODY checks.
+  // Pre-hit ownership subset: keep defender-in-hitstun and grounded-victim lanes on baseline
+  // overlap while enabling the decomp-shaped sweep only for the proven aerial-victim continuity
+  // cases. A broad grounded-victim sweep over-admits adjacent downbound/invincible contacts such as
+  // `TBK:2402`; grounded BODY misses need the live JObj pose owner before this lane can broaden.
   // refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078C70,ftColl_80076ED8}
   if (batch->state.hitstun[d_idx] != 0u) {
     return 0u;
   }
-  // Start with the aerial-victim eligibility branch (x40_b2) from ftColl_80078C70.
-  // refs/melee/src/melee/ft/ftcoll.c::ftColl_80078C70
   if (batch->state.on_ground[d_idx]) {
     return 0u;
   }
@@ -456,7 +456,7 @@ static inline uint8_t combat_is_damage_or_firefox_launch_victim_action(uint16_t 
   }
 }
 
-static inline uint8_t combat_attackairb_continuation_body_overlap_exact(
+static inline uint8_t combat_body_overlap_lbColl_80006E58_matrix_radius(
     const MslBatch* batch, int bi, int attacker, int hb_id, int defender, int cap_id, float hx,
     float hy, float hz, float hr, float ax, float ay, float az, float bx, float by, float bz,
     float* out_overlap_amount) {
@@ -466,20 +466,15 @@ static inline uint8_t combat_attackairb_continuation_body_overlap_exact(
   if (batch == NULL) {
     return 0u;
   }
-  const size_t a_idx = msl_idx_player(bi, attacker);
   const size_t d_idx = msl_idx_player(bi, defender);
-  if (batch->state.action_id[a_idx] != (uint16_t)MSL_ACT_ATTACK_AIR_B) {
-    return 0u;
-  }
-  const uint16_t v_action = batch->state.action_id[d_idx];
-  if (!combat_is_damage_or_firefox_launch_victim_action(v_action)) {
-    return 0u;
-  }
 
-  // AttackAirB continuation BODY geometry owner:
+  // BODY matrix-radius geometry owner:
   // - ftColl_80078C70 routes fighter BODY checks through lbColl_8000805C.
-  // - lbColl_8000805C/lbColl_80006E58 produce `hit->coll_distance`, and ftColl_80076ED8 uses that
-  //   overlap amount to choose full-hit vs phantom.
+  // - lbColl_8000805C/lbColl_80006E58 computes closest points between the HitCapsule x58->x4C
+  //   segment and hurtcap a_pos->b_pos, then derives an effective hurt radius through the hurt
+  //   bone matrix before writing `hit->coll_distance`.
+  // - Use this as a narrow decomp-shaped supplement to the simple world sphere/capsule overlap; it
+  //   does not consult replay proof or row ids.
   // refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078C70,ftColl_80076ED8}
   // refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000805C,lbColl_80006E58}
   const uint8_t char_id = batch->state.char_id[d_idx];
@@ -583,6 +578,30 @@ static inline uint8_t combat_attackairb_continuation_body_overlap_exact(
     *out_overlap_amount = overlap_amount;
   }
   return (uint8_t)(overlap_amount > 0.0f);
+}
+
+static inline uint8_t combat_attackairb_continuation_body_overlap_exact(
+    const MslBatch* batch, int bi, int attacker, int hb_id, int defender, int cap_id, float hx,
+    float hy, float hz, float hr, float ax, float ay, float az, float bx, float by, float bz,
+    float* out_overlap_amount) {
+  if (out_overlap_amount) {
+    *out_overlap_amount = 0.0f;
+  }
+  if (batch == NULL) {
+    return 0u;
+  }
+  const size_t a_idx = msl_idx_player(bi, attacker);
+  const size_t d_idx = msl_idx_player(bi, defender);
+  if (batch->state.action_id[a_idx] != (uint16_t)MSL_ACT_ATTACK_AIR_B) {
+    return 0u;
+  }
+  const uint16_t v_action = batch->state.action_id[d_idx];
+  if (!combat_is_damage_or_firefox_launch_victim_action(v_action)) {
+    return 0u;
+  }
+  return combat_body_overlap_lbColl_80006E58_matrix_radius(batch, bi, attacker, hb_id, defender,
+                                                           cap_id, hx, hy, hz, hr, ax, ay, az, bx,
+                                                           by, bz, out_overlap_amount);
 }
 
 static inline uint8_t combat_attackairb_stale_owner_continuation_candidate(
@@ -4366,10 +4385,12 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
           float attackairb_overlap_amount = 0.0f;
           uint8_t overlaps =
               combat_sphere_capsule_intersects(hx, hy, hz, hr, ax, ay, az, bx, by, bz, cr, NULL);
-          if (combat_body_overlap_lbColl_80006E58_subset_allows(batch, hb_i, d_idx)) {
-            overlaps = combat_body_overlap_lbColl_80006E58_scaffold(
-                batch, bi, attacker, hb_id, hx, hy, hz, hr, ax, ay, az, bx, by, bz, cr,
-                batch->state.fighter_scale_y[d_idx]);
+          if (!overlaps) {
+            if (combat_body_overlap_lbColl_80006E58_subset_allows(batch, hb_i, d_idx)) {
+              overlaps = combat_body_overlap_lbColl_80006E58_scaffold(
+                  batch, bi, attacker, hb_id, hx, hy, hz, hr, ax, ay, az, bx, by, bz, cr,
+                  batch->state.fighter_scale_y[d_idx]);
+            }
           }
           if (attackairb_stale_owner_candidate) {
             overlaps = combat_attackairb_continuation_body_overlap_exact(

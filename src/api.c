@@ -1235,8 +1235,8 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
       // refs/melee/src/melee/ft/ftcoll.c::ftColl_8007AD18
       // refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000805C,lbColl_80006E58}
       //
-      // Teacher-forced one-step reseed does not provide prior-frame x58, so clear stale carried
-      // slots and bootstrap x58 from the first post-reseed hitboxes_refresh() pass.
+      // Teacher-forced one-step reseed now carries the prior-frame x58 lane when preprocessing can
+      // derive it. Older/synthetic seeds keep the translation bootstrap fallback.
       // refs/melee/src/melee/ft/ftcoll.c::ftColl_8007AD18
       // refs/melee/src/melee/lb/lbcollision.c::lbColl_8000805C
       batch->state.hitbox_prev_bootstrap[idx] = 1u;
@@ -1248,10 +1248,18 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
         batch->state.hitbox_x[hb_i] = 0.0f;
         batch->state.hitbox_y[hb_i] = 0.0f;
         batch->state.hitbox_z[hb_i] = 0.0f;
-        batch->state.hitbox_prev_enabled[hb_i] = 0u;
-        batch->state.hitbox_prev_x[hb_i] = 0.0f;
-        batch->state.hitbox_prev_y[hb_i] = 0.0f;
-        batch->state.hitbox_prev_z[hb_i] = 0.0f;
+        if (seed->combat_hitbox_prev_valid[p][hb]) {
+          batch->state.hitbox_prev_bootstrap[idx] = 2u;
+          batch->state.hitbox_prev_enabled[hb_i] = 1u;
+          batch->state.hitbox_prev_x[hb_i] = seed->combat_hitbox_prev_x[p][hb];
+          batch->state.hitbox_prev_y[hb_i] = seed->combat_hitbox_prev_y[p][hb];
+          batch->state.hitbox_prev_z[hb_i] = seed->combat_hitbox_prev_z[p][hb];
+        } else {
+          batch->state.hitbox_prev_enabled[hb_i] = 0u;
+          batch->state.hitbox_prev_x[hb_i] = 0.0f;
+          batch->state.hitbox_prev_y[hb_i] = 0.0f;
+          batch->state.hitbox_prev_z[hb_i] = 0.0f;
+        }
         batch->state.hitbox_pose_create[hb_i] = 0u;
         batch->state.hitbox_enable_edge[hb_i] = 0u;
         // x43_b2 ownership lane: create/reset starts at 0 before any character callback mutation.

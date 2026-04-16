@@ -1002,6 +1002,22 @@ typedef struct MslSeed {
   uint16_t combat_hitlist_hb_cd[MSL_MAX_PLAYERS][MSL_MAX_HITBOXES][MSL_MAX_PLAYERS];
   uint16_t combat_hitlist_hb_victim_iid[MSL_MAX_PLAYERS][MSL_MAX_HITBOXES][MSL_MAX_PLAYERS];
 
+  // HitCapsule x58 seed lane for teacher-forced one-step replay starts.
+  //
+  // Decomp shape:
+  // - ftColl_8007AD18 carries previous/current HitCapsule centers in x58/x4C.
+  // - BODY collision consumes x58->x4C through lbColl_8000805C -> lbColl_80006E58.
+  //
+  // Normal rollouts populate this state by preserving the previous frame's runtime x4C in
+  // src/hitboxes.c. Reseeding wipes that hidden lane, so preprocessing seeds the smallest causal
+  // internal: the previous world center per active fighter HitCapsule slot.
+  // refs/melee/src/melee/ft/ftcoll.c::ftColl_8007AD18
+  // refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000805C,lbColl_80006E58}
+  uint8_t combat_hitbox_prev_valid[MSL_MAX_PLAYERS][MSL_MAX_HITBOXES];
+  float combat_hitbox_prev_x[MSL_MAX_PLAYERS][MSL_MAX_HITBOXES];
+  float combat_hitbox_prev_y[MSL_MAX_PLAYERS][MSL_MAX_HITBOXES];
+  float combat_hitbox_prev_z[MSL_MAX_PLAYERS][MSL_MAX_HITBOXES];
+
   // Stale-move (staling) internals (seeded; not causally derivable from a single frame).
   //
   // Decomp shape:

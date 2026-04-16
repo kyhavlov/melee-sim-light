@@ -2175,7 +2175,10 @@ def main() -> None:
     _main_impl(args)
 
 def _main_impl(args) -> None:
-    from tools.slippi.combat_history import derive_combat_hitlist_seed_fields
+    from tools.slippi.combat_history import (
+        derive_combat_hitlist_seed_fields,
+        derive_hitbox_prev_center_seed_fields,
+    )
     from tools.slippi.damage_history import derive_damage_time_since_hit_x18ac
     from tools.slippi.anim_timebase import derive_frame_speed_mul_f32, load_end_frame_tables
     from tools.slippi.seed_history import (
@@ -2611,6 +2614,7 @@ def _main_impl(args) -> None:
     lightshield_amount_all = np.zeros((n_frames, 4), dtype=np.float32)
     post_instance_hit_by_u16_all = np.zeros((n_frames, 4), dtype=np.uint16)
     post_state_flags_u8 = np.zeros((n_frames, 4, 5), dtype=np.uint8)
+    post_turn_has_turned_u8 = np.zeros((n_frames, 4), dtype=np.uint8)
     ports_struct = frames.field("ports")
     available_ports = set(f.name for f in ports_struct.type)
     for slot, port_name in enumerate(src_port_names):
@@ -3490,6 +3494,7 @@ def _main_impl(args) -> None:
         samples["seed_t"]["turn_frames_to_turn"][:, slot] = turn_frames_to_turn[:-1]
         samples["seed_t"]["turn_has_turned"][:, slot] = turn_has_turned[:-1]
         samples["seed_t"]["turn_x8"][:, slot] = turn_x8[:-1]
+        post_turn_has_turned_u8[:, slot] = turn_has_turned
 
     # GuardSetOff frozen-hitlag frame-speed ownership (strictly causal):
     # - ftColl_80076CBC writes the defender's hidden x19A4 from the current shield-hit max int
@@ -3861,6 +3866,7 @@ def _main_impl(args) -> None:
     post_char_id = np.zeros((n_frames, 4), dtype=np.uint8)
     post_action_id = np.zeros((n_frames, 4), dtype=np.uint16)
     post_action_frame = np.zeros((n_frames, 4), dtype=np.int16)
+    post_anim_frame = np.zeros((n_frames, 4), dtype=np.float32)
     post_animation_index = np.zeros((n_frames, 4), dtype=np.uint32)
     post_facing = np.zeros((n_frames, 4), dtype=np.uint8)
     post_on_ground = np.zeros((n_frames, 4), dtype=np.uint8)
@@ -3902,7 +3908,9 @@ def _main_impl(args) -> None:
         post_team_id[:, slot] = samples["seed_t"]["team_id"][0, slot]
         post_char_id[:, slot] = _to_numpy(post.field("character")).astype(np.uint8)
         post_action_id[:, slot] = _to_numpy(post.field("state")).astype(np.uint16)
-        post_action_frame[:, slot] = _i16_from_state_age(_to_numpy(post.field("state_age")).astype(np.float32), n_frames)
+        post_state_age_f32 = _to_numpy(post.field("state_age")).astype(np.float32)
+        post_action_frame[:, slot] = _i16_from_state_age(post_state_age_f32, n_frames)
+        post_anim_frame[:, slot] = _f32_from_state_age(post_state_age_f32, n_frames)
         post_animation_index[:, slot] = _to_numpy(post.field("animation_index")).astype(np.uint32)
         post_on_ground[:, slot] = _airborne_to_on_ground(_to_numpy(post.field("airborne")).astype(np.uint8), n_frames)
         post_pos_x[:, slot] = _to_numpy(post.field("position").field("x")).astype(np.float32)
@@ -4098,6 +4106,9 @@ def _main_impl(args) -> None:
         input_buttons=pre_buttons,
         input_l=pre_l,
         input_r=pre_r,
+        turn_has_turned=post_turn_has_turned_u8,
+        anim_frame_f32=post_anim_frame,
+        frame_speed_mul_f32=frame_speed_mul_all,
         include_per_hitbox=True,
         include_replay_only_shield_admission=True,
         include_replay_only_body_admission=True,
@@ -4215,6 +4226,29 @@ def _main_impl(args) -> None:
     samples["seed_t"]["combat_hitlist_hb_valid"] = hitlist_hb_valid[:-1]
     samples["seed_t"]["combat_hitlist_hb_cd"] = hitlist_hb_cd[:-1]
     samples["seed_t"]["combat_hitlist_hb_victim_iid"] = hitlist_hb_iid[:-1]
+
+    (
+        hitbox_prev_valid,
+        hitbox_prev_x,
+        hitbox_prev_y,
+        hitbox_prev_z,
+    ) = derive_hitbox_prev_center_seed_fields(
+        num_players=num_players,
+        char_id=post_char_id,
+        animation_index=post_animation_index,
+        action_frame=post_action_frame,
+        anim_frame_f32=post_anim_frame,
+        pos_x=post_pos_x,
+        pos_y=post_pos_y,
+        pos_z=post_pos_z,
+        facing=post_facing,
+        fighter_scale_y=post_scale_y,
+        data_root="data",
+    )
+    samples["seed_t"]["combat_hitbox_prev_valid"] = hitbox_prev_valid[:-1]
+    samples["seed_t"]["combat_hitbox_prev_x"] = hitbox_prev_x[:-1]
+    samples["seed_t"]["combat_hitbox_prev_y"] = hitbox_prev_y[:-1]
+    samples["seed_t"]["combat_hitbox_prev_z"] = hitbox_prev_z[:-1]
 
     # -----------------------------
     # Combo victim + combo timer internals (strictly causal)

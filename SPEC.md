@@ -1686,3 +1686,116 @@ Reciprocal BODY hit stale/hitlag owner:
   - `refs/melee/build/GALE01/asm/melee/ft/ftcoll.s::ftColl_8007ABD0`
   - `refs/melee/src/melee/ft/ft_0881.c::{ft_80089118,ft_80089228}`
   - `refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC`
+
+BODY contact-geometry blocker:
+- After the admission and reciprocal-hit owners, the largest remaining F08 aggregate bucket is
+  contact geometry, not post-hit followup ordering. `BHH:1163:p0->p1` is the canonical missed-hit
+  proving row: replay `t+1` proves an AttackAirB BODY hit by percent increase, both players
+  entering hitlag, and source attribution to the attacker.
+- A broad runtime switch from the current sphere-vs-capsule subset to the existing simplified
+  x58->x4C sweep helper produced no aggregate one-step movement, which means the missing owner is
+  not merely the callsite gate.
+- The `BHH:1163` miss was not a legitimate AttackAirB-specific collision extent. A Dolphin dump for
+  the row showed the attacker's hb2 center matching the sim, while the defender Turn hurtcaps were
+  mirrored in X. The decomp owner is standing Turn's internal facing state: `ftCo_Turn_Enter` records
+  `facing_after = -fp->facing_dir`, and `ftCo_Turn_Anim_Inner` flips `fp->facing_dir` and marks
+  `has_turned` after `frames_to_turn`. BODY collision then consumes runtime joint matrices via
+  `lb_8000B1CC`, so hurtcap world space must follow the seeded internal `turn_has_turned` lane even
+  when the replay-visible facing byte still has the old orientation.
+- With Turn internal-facing hurtcaps, `BHH:1163` admits through the normal BODY overlap path. The
+  negative same-shape `TBK:5523` row remains suppressed because its defender has not internally
+  turned (`turn_has_turned=0`), and the broader `TBK:5247` extra-contact sentinel remains outside
+  this owner.
+- Teacher-forced seed-history must mirror the same pre-combat pose timing as runtime collision:
+  `Fighter_8006A360` advances `anim_frame_f32` before hurtbox/hitbox refresh, and collision consumes
+  the post-advance pose frame unless the fighter is already in hitlag. When replay `t+1` proves a
+  BODY damage hit from frame `t` (percent increase, both fighters entering hitlag, and source
+  attribution), seed-history registers the HitCapsule victim list after emitting the seed snapshot
+  for `t`, so followup rows such as `BHH:1169` are suppressed by `lbColl_8000ACFC` without blocking
+  the first admitted hit at `BHH:1163`.
+- Source anchors:
+  - `refs/melee/src/melee/ft/fighter.c::Fighter_8006A360`
+  - `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Turn.c::{ftCo_Turn_Enter,ftCo_Turn_Anim_Inner}`
+  - `refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078C70,ftColl_80076ED8}`
+  - `refs/melee/src/melee/lb/lb_00B0.c::lb_8000B1CC`
+  - `refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000805C,lbColl_80006E58,lbColl_80008688,lbColl_8000ACFC}`
+
+BODY collision-space residual split and rejected seed bridge:
+- `BHH:1599:p0->p1` proves a second no-baseline BODY admission shape: replay `t+1` has defender
+  percent increase, both fighters in hitlag, and source attribution to the attacker while the
+  simplified pre-combat classified-contact list reports no ordinary sphere/capsule BODY contact.
+  This is still seeded-frame collision-space admission, not post-hit followup.
+- A replay-only per-HitCapsule BODY authority lane can make `BHH:1599` exact in teacher-forced
+  one-step, but that is a seed bridge, not the collision-space owner. It uses replay proof
+  (`combat_hitlist_hb_valid` plus empty per-HitCapsule victim cd) to admit the hit when the runtime
+  geometry has no candidate. That bridge regressed rollout first-mismatch totals and must not be
+  used to claim the BODY geometry owner closed.
+- Do not apply the `lbColl_8000805C` Z-force branch on Final Destination. `ftCommon_8007F804`
+  supplies the matrix only when `fp->x34_scale.z != 1`, and `Fighter_80068E64` sets that Z scale
+  only for stage id `0x1B` (`FLATZONE`); FD is `LAST` in `gr/forward.h`.
+- Remaining `F08b_body_contact_geometry_residual` rows are still active collision/pose owner work:
+  - extra-contact samples such as `HHG:6740` and `IAT:11146` have `combat_hitlist_hb_valid=0` and
+    classified BODY overlaps before `ftColl_80076ED8`, so the residual belongs to collision pose,
+    hitbox extraction, or stale contact geometry;
+  - missed-contact samples such as `BHH:3661` have no selected BODY contact before followup;
+  - wrong DamageFly-direction samples such as `BHH:1709` apply the correct percent/hitlag but pick
+    a different first hurtcap height, making the residual hurtcap ordering/pose ownership.
+- `BHH:1599` has now been narrowed with debug closest-pair instrumentation:
+  - current decomp-shaped x58->x4C sweep proxy is nearly stationary for Fox AttackAirN hb1
+    (`pose_prev=13`, `pose_cur=14`), so the miss is not a missing sweep call;
+  - the nearest current BODY pair is attacker hb1 to defender cap12, margin `-0.329` under the
+    stabilized geometry (`distance=5.380`, `sum_r=5.051`);
+  - a collision-subtree scale-cancellation probe reduced that miss to `-0.107` but still did not
+    admit the hit and regressed primary/cardinal one-step from `717` to `1381`, so it was rejected;
+  - a global matrix-radius/narrow-phase probe using the existing `lbColl_80006E58` approximation
+    still rejected `BHH:1599`, so the remaining blocker is not simply the broad/simple
+    sphere-capsule callsite.
+- Forensic support now decodes active Dolphin engine-dump HitCapsule/HurtCapsule records into
+  extracted row JSON (`tools/dolphin/engine_dump_io.py`, `tools/dolphin/extract_engine_dump_rows.py`)
+  so the next capture can compare engine `x58/x4C`, hurtcap `a_pos/b_pos`, radii, flags, and
+  offsets directly against `tools/eval/run_forensic_rows.py` closest-pair output.
+- `reports/triage/20260416_bhh1599_*_dolphin_primitive_dump` confirms the active playback dump
+  records the correct post-frame primitive payloads, but it is a post-collision snapshot: the frame
+  where the hit appears already has the defender in `DamageFlyN`/hitlag. It can confirm the
+  attacker hb1 world center/size at the hit frame, but it cannot expose the defender's pre-
+  `ftColl_80078C70` AttackHi3 hurtcap endpoints for the collision that caused the transition.
+- The remaining BODY geometry blocker is therefore the exact runtime primitive/pose state consumed
+  by `lbColl_8000805C`/`lbColl_80006E58` for grounded attack hurtcaps near create/steady frames.
+  Current extracted SSANIM pose plus movescript hitbox data leaves the real contact just outside the
+  collision envelope, while local owner-shaped probes that can be derived from current data either
+  do not admit the row or cause same-owner aggregate churn.
+- A pre-`ftColl_80076ED8` interpreter probe for `BHH:1599` captures the actual selected pair:
+  p0 AttackAirN hb1 (`HitCapsule.x58=(16.118845,13.620139,0.388264)`,
+  `x4C=(16.928013,10.219827,0.399950)`, `scale=3.495870`) against p1 hurtcap 12
+  (`bone_idx=18`, `a_pos=(19.932968,8.830592,-2.885571)`,
+  `b_pos=(18.661987,7.971865,-2.966146)`, `scale=1.62`). The hit x58/x4C lane matches the
+  explicit reseed lane; the remaining mismatch is the defender live JObj matrix used by
+  `lb_8000B1CC`.
+- The same probe rules out the earlier suspected scalar owners for this row: defender
+  `cur_anim_frame=4.0`, `x898_unk=0.0`, `x8A4_animBlendFrames=0.0`, and `frame_speed_mul=1.0`.
+  The live `HSD_JObj` for hurtcap 12 has local shoulder rotations that differ from the extracted
+  `SSANIM01` AttackHi3 frame-4 locals even though the FigaTree header and track descriptors match
+  the extracted action. The next implementable owner is therefore the HSD JObj/AObj live-pose state
+  used by `ftAnim_8006E9B4`/`ftAnim_8006E7B8` before collision, not a hitlist or
+  `lbColl_80006E58` distance predicate.
+- A local runtime probe that advanced grounded AttackHi3 hurtcaps and promoted the matrix-space
+  `lbColl_80006E58` predicate into primary BODY selection was rejected: it starts a hit on
+  `BHH:1599`, but selects an earlier low hurtcap (`DamageFlyLw`) while vanilla selects the live
+  hurt part 18 and enters `DamageFlyN`. This proves the remaining work is not just enabling the
+  `lbColl` predicate or shifting the visible animation frame; the missing state is the live
+  HSD_JObj pose/dynamics chain feeding `lb_8000B1CC`.
+- `BHH:1599` also proves why this owner is split from core combat followup: the divergence happens
+  before `ftColl_80076ED8` admits a BODY hit. The defender has `dynamics_num=1`, and decomp updates
+  dynamic bone sets through `ftCo_8009DD94` / `lb_8001044C` while `ftAnim_8006E7B8` skips
+  animation on flagged dynamic subtrees and `ftAnim_8006EED4` can reanimate a toggled subtree from
+  `fp->x590`. The current extracted `SSANIM01` pose tables do not model that live dynamics state,
+  so any C-side BODY admission based on replay proof or simple frame shifts is a bridge.
+- Source anchors:
+  - `refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078C70,ftColl_80076ED8}`
+  - `refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000805C,lbColl_80006E58}`
+  - `refs/melee/src/melee/ft/ftdynamics.c::{ftCo_8009DD94,ftCo_8009E318}`
+  - `refs/melee/src/melee/ft/ftanim.c::{ftAnim_8006E9B4,ftAnim_8006E7B8,ftAnim_8006EED4}`
+  - `refs/melee/src/sysdolphin/baselib/jobj.c::{HSD_JObjAnim,HSD_JObjSetupMatrixSub,HSD_JObjMakeMatrix}`
+  - `refs/melee/src/melee/lb/lb_00B0.c::lb_8000B1CC`
+  - `refs/melee/src/melee/ft/fighter.c::Fighter_80068E64`
+  - `refs/melee/src/melee/gr/forward.h::{FLATZONE,LAST}`

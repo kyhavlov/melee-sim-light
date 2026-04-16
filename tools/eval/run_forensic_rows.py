@@ -15,6 +15,7 @@ Outputs are written under reports/triage/ by default as JSON + text.
 import argparse
 import importlib
 import json
+import math
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -351,6 +352,107 @@ def _body_contacts_from_raw(raw: np.ndarray, count: int) -> list[dict[str, objec
     return out
 
 
+def _point_segment_distance(
+    px: float,
+    py: float,
+    pz: float,
+    ax: float,
+    ay: float,
+    az: float,
+    bx: float,
+    by: float,
+    bz: float,
+) -> tuple[float, float]:
+    vx = bx - ax
+    vy = by - ay
+    vz = bz - az
+    wx = px - ax
+    wy = py - ay
+    wz = pz - az
+    denom = vx * vx + vy * vy + vz * vz
+    if denom <= 0.0:
+        t = 0.0
+    else:
+        t = (wx * vx + wy * vy + wz * vz) / denom
+        if t < 0.0:
+            t = 0.0
+        elif t > 1.0:
+            t = 1.0
+    cx = ax + t * vx
+    cy = ay + t * vy
+    cz = az + t * vz
+    dx = px - cx
+    dy = py - cy
+    dz = pz - cz
+    return math.sqrt(dx * dx + dy * dy + dz * dz), t
+
+
+def _closest_body_pairs(
+    binding: object,
+    handle: object,
+    num_players: int,
+    defender: int,
+    limit: int = 12,
+) -> list[dict[str, object]]:
+    hurtcaps_raw, hurtcap_count = binding.hurtcaps_world(handle, 0, defender)
+    pairs: list[dict[str, object]] = []
+    for attacker in range(num_players):
+        if attacker == defender:
+            continue
+        hitboxes_raw, _hitbox_count = binding.hitboxes_world_full(handle, 0, attacker)
+        for hb_id, hb in enumerate(hitboxes_raw):
+            if int(hb[15]) == 0:
+                continue
+            hx = float(hb[0])
+            hy = float(hb[1])
+            hz = float(hb[2])
+            hr = float(hb[3])
+            for cap_id in range(int(hurtcap_count)):
+                cap = hurtcaps_raw[cap_id]
+                cr = float(cap[6])
+                if cr <= 0.0:
+                    continue
+                dist, t = _point_segment_distance(
+                    hx,
+                    hy,
+                    hz,
+                    float(cap[0]),
+                    float(cap[1]),
+                    float(cap[2]),
+                    float(cap[3]),
+                    float(cap[4]),
+                    float(cap[5]),
+                )
+                margin = hr + cr - dist
+                pairs.append(
+                    {
+                        "attacker": attacker,
+                        "defender": defender,
+                        "hitbox_id": hb_id,
+                        "hurtcap_id": cap_id,
+                        "margin": float(margin),
+                        "distance": float(dist),
+                        "segment_t": float(t),
+                        "hitbox": [hx, hy, hz, hr],
+                        "hurtcap": [
+                            float(cap[0]),
+                            float(cap[1]),
+                            float(cap[2]),
+                            float(cap[3]),
+                            float(cap[4]),
+                            float(cap[5]),
+                            cr,
+                        ],
+                        "element": int(hb[9]),
+                        "hb_flags": int(hb[13]),
+                        "bone_part_id": int(hb[14]),
+                        "damage": float(hb[4]),
+                    }
+                )
+    pairs.sort(key=lambda r: float(r["margin"]), reverse=True)
+    return pairs[:limit]
+
+
 def _shield_candidates_from_raw(raw: np.ndarray, count: int) -> list[dict[str, object]]:
     rows = raw.reshape(-1).view(_DEBUG_SHIELD_CANDIDATE_DTYPE)[: int(count)]
     out: list[dict[str, object]] = []
@@ -495,6 +597,16 @@ def _format_report(payload: dict[str, object]) -> str:
         lines.append(
             f"  defender_shield_candidates={len(row['pre_combat']['defender_shield_candidates'])}"
         )
+        closest = row["pre_combat"].get("closest_body_pairs", [])
+        if closest:
+            lines.append("  closest_body_pairs:")
+            for c in closest[:5]:
+                lines.append(
+                    f"    a{c['attacker']} hb{c['hitbox_id']} -> cap{c['hurtcap_id']} "
+                    f"margin={c['margin']:.3f} dist={c['distance']:.3f} "
+                    f"sum_r={(c['hitbox'][3] + c['hurtcap'][6]):.3f} "
+                    f"element={c['element']} flags=0x{c['hb_flags']:04x}"
+                )
         lines.append("post_step:")
         lines.append(
             f"  out action={row['post_step']['out_player']['action_id']} ref={row['post_step']['ref_player']['action_id']} "
@@ -627,6 +739,7 @@ def main() -> None:
 
             shield_world = binding.debug_shield_bubbles_world(handle, 0)
             hitbox_timing = _collect_hitbox_timing(binding, handle, num_players)
+            closest_body_pairs = _closest_body_pairs(binding, handle, num_players, spec.p)
 
             # Phase 4-5: full step (combat mutations + post timers/state_flags)
             binding.reseed_seed(handle, seed_bytes)
@@ -673,6 +786,7 @@ def main() -> None:
                     "selected_body_contacts": contacts_selected,
                     "shield_candidate_decisions": shield_candidates,
                     "hitbox_timing_active": hitbox_timing,
+                    "closest_body_pairs": closest_body_pairs,
                     "shield_bubbles_world": [
                         [float(v) for v in shield_world[p].tolist()] for p in range(num_players)
                     ],

@@ -525,6 +525,10 @@ void hitboxes_refresh(MslBatch* batch) {
     for (int p = 0; p < MSL_MAX_PLAYERS; p++) {
       const size_t idx = msl_idx_player(bi, p);
       uint8_t x43_b2_prev[MSL_MAX_HITBOXES] = {0};
+      uint8_t seeded_prev_enabled[MSL_MAX_HITBOXES] = {0};
+      float seeded_prev_x[MSL_MAX_HITBOXES] = {0.0f};
+      float seeded_prev_y[MSL_MAX_HITBOXES] = {0.0f};
+      float seeded_prev_z[MSL_MAX_HITBOXES] = {0.0f};
       uint8_t preserve_frozen_hitlag_hitboxes = 0u;
       uint8_t preserved_hitbox_count = 0u;
 
@@ -547,6 +551,12 @@ void hitboxes_refresh(MslBatch* batch) {
       for (int hi = 0; hi < MSL_MAX_HITBOXES; hi++) {
         const size_t oi = idx_hitbox(bi, p, hi);
         x43_b2_prev[hi] = batch->state.hitbox_x43_b2[oi];
+        if (batch->state.hitbox_prev_bootstrap[idx] == 2u && batch->state.hitbox_prev_enabled[oi]) {
+          seeded_prev_enabled[hi] = 1u;
+          seeded_prev_x[hi] = batch->state.hitbox_prev_x[oi];
+          seeded_prev_y[hi] = batch->state.hitbox_prev_y[oi];
+          seeded_prev_z[hi] = batch->state.hitbox_prev_z[oi];
+        }
         // Decomp shape: ftColl_8007AD18 stores previous/current capsule centers in x58/x4C.
         // Preserve the previous frame's world center before refreshing this frame's pose sample.
         // refs/melee/src/melee/ft/ftcoll.c::ftColl_8007AD18
@@ -1075,16 +1085,22 @@ void hitboxes_refresh(MslBatch* batch) {
       if (batch->state.hitbox_prev_bootstrap[idx]) {
         // Teacher-forced reseed bootstrap (first frame only):
         // Decomp keeps previous/current hitcapsule centers (x58/x4C) across frames.
-        // On reseed, we lack persisted x58; bootstrap it from in-frame translation so shield
-        // overlap tests (lbColl_80007BCC) can still use a swept segment on the first stepped frame.
+        // On reseed, use the explicit seed x58 lane when available; otherwise bootstrap from
+        // in-frame translation so older/synthetic seeds still have a deterministic swept segment.
         // refs/melee/src/melee/ft/ftcoll.c::ftColl_8007AD18
-        // refs/melee/src/melee/lb/lbcollision.c::lbColl_80007BCC
+        // refs/melee/src/melee/lb/lbcollision.c::{lbColl_80007BCC,lbColl_8000805C}
         const float dx = batch->state.pos_x[idx] - batch->state.prev_pos_x[idx];
         const float dy = batch->state.pos_y[idx] - batch->state.prev_pos_y[idx];
+        const uint8_t use_seeded_x58 = (batch->state.hitbox_prev_bootstrap[idx] == 2u) ? 1u : 0u;
         for (int hi = 0; hi < MSL_MAX_HITBOXES; hi++) {
           const size_t oi = idx_hitbox(bi, p, hi);
           if (batch->state.hitbox_enabled[oi]) {
-            if (!motion_entered_this_frame || !batch->state.hitbox_prev_enabled[oi]) {
+            if (use_seeded_x58 && seeded_prev_enabled[hi]) {
+              batch->state.hitbox_prev_enabled[oi] = 1u;
+              batch->state.hitbox_prev_x[oi] = seeded_prev_x[hi];
+              batch->state.hitbox_prev_y[oi] = seeded_prev_y[hi];
+              batch->state.hitbox_prev_z[oi] = seeded_prev_z[hi];
+            } else if (!motion_entered_this_frame || !batch->state.hitbox_prev_enabled[oi]) {
               batch->state.hitbox_prev_enabled[oi] = 1u;
               batch->state.hitbox_prev_x[oi] = batch->state.hitbox_x[oi] - dx;
               batch->state.hitbox_prev_y[oi] = batch->state.hitbox_y[oi] - dy;

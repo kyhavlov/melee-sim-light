@@ -553,6 +553,99 @@ def _active_hitboxes_at_frame(events: list[HitboxEvent], frame: int) -> dict[int
     return active
 
 
+def derive_hitbox_prev_center_seed_fields(
+    *,
+    num_players: int,
+    char_id: np.ndarray,
+    animation_index: np.ndarray,
+    action_frame: np.ndarray,
+    anim_frame_f32: np.ndarray,
+    pos_x: np.ndarray,
+    pos_y: np.ndarray,
+    pos_z: np.ndarray | None = None,
+    facing: np.ndarray,
+    fighter_scale_y: np.ndarray,
+    data_root: str | Path = "data",
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """Derive the hidden HitCapsule.x58 seed lane from replay-visible post-frame state.
+
+    The output is indexed by replay post-frame, player, and hitbox slot. For one-step sample i,
+    make_dataset stores row i's post-frame values in seed_t; these fields therefore seed the
+    x58 endpoint that ftColl_8007AD18 would have carried into the next collision step.
+
+    Decomp:
+    - refs/melee/src/melee/ft/ftcoll.c::ftColl_8007AD18
+    - refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000805C,lbColl_80006E58}
+    """
+
+    n_frames = int(char_id.shape[0])
+    valid = np.zeros((n_frames, MAX_PLAYERS, MAX_HITBOXES), dtype=np.uint8)
+    out_x = np.zeros((n_frames, MAX_PLAYERS, MAX_HITBOXES), dtype=np.float32)
+    out_y = np.zeros((n_frames, MAX_PLAYERS, MAX_HITBOXES), dtype=np.float32)
+    out_z = np.zeros((n_frames, MAX_PLAYERS, MAX_HITBOXES), dtype=np.float32)
+
+    data_root = Path(data_root)
+    char_cache: dict[int, _CharCombatData | None] = {}
+
+    def get_char(cid: int) -> _CharCombatData | None:
+        cid = int(cid)
+        if cid not in char_cache:
+            char_cache[cid] = _load_char_data(char_id=cid, data_root=data_root)
+        return char_cache[cid]
+
+    for fi in range(n_frames):
+        for p in range(int(num_players)):
+            ch = get_char(int(char_id[fi, p]))
+            if ch is None:
+                continue
+            if int(action_frame[fi, p]) < 0:
+                continue
+            anim_u32 = int(animation_index[fi, p])
+            if anim_u32 < 0 or anim_u32 > 0xFFFF:
+                continue
+            af = float(anim_frame_f32[fi, p])
+            if not np.isfinite(af) or af < 0.0:
+                continue
+            frame = int(np.floor(af))
+            if frame < 0:
+                continue
+            msid = anim_u32 & 0xFFFF
+            events = ch.hitboxes_by_msid.get(msid)
+            if not events:
+                continue
+            active = _active_hitboxes_at_frame(events, frame)
+            if not active:
+                continue
+            px = float(pos_x[fi, p])
+            py = float(pos_y[fi, p])
+            if pos_z is None:
+                pz = 0.0
+            else:
+                pz_arr = np.asarray(pos_z)
+                pz = float(pz_arr[fi, p]) if pz_arr.ndim >= 2 else float(pz_arr[fi])
+            scale_y = float(fighter_scale_y[fi, p])
+            model_scale = float(np.float32(scale_y) * np.float32(ch.model_scaling))
+            facing_dir = 1.0 if int(facing[fi, p]) != 0 else -1.0
+            for hb_id, ev in sorted(active.items()):
+                if not (0 <= int(hb_id) < MAX_HITBOXES):
+                    continue
+                m = ch.pose.try_get_matrix(msid=msid, frame=frame, part_id=ev.bone_part_id)
+                if m is None:
+                    continue
+                c = _mtx34_mul_point(m, np.array([ev.x, ev.y, ev.z], dtype=np.float32))
+                c = (c * np.float32(model_scale)).astype(np.float32, copy=False)
+                c = _apply_root_facing_rot_y90(c, facing_dir)
+                c[0] = np.float32(c[0] + np.float32(px))
+                c[1] = np.float32(c[1] + np.float32(py))
+                c[2] = np.float32(c[2] + np.float32(pz))
+                valid[fi, p, int(hb_id)] = np.uint8(1)
+                out_x[fi, p, int(hb_id)] = np.float32(c[0])
+                out_y[fi, p, int(hb_id)] = np.float32(c[1])
+                out_z[fi, p, int(hb_id)] = np.float32(c[2])
+
+    return valid, out_x, out_y, out_z
+
+
 def _hitlist_victim_pointer_may_change(*, stocks: int, action_id: int) -> bool:
     """
     Mirror the C runtime's victim-identity boundary handling for hitlist entries.
@@ -607,6 +700,9 @@ def derive_combat_hitlist_seed_fields(
     input_buttons: np.ndarray,  # [n_frames, MAX_PLAYERS] u16 (pre-frame)
     input_l: np.ndarray,  # [n_frames, MAX_PLAYERS] u8 (pre-frame)
     input_r: np.ndarray,  # [n_frames, MAX_PLAYERS] u8 (pre-frame)
+    turn_has_turned: np.ndarray | None = None,  # [n_frames, MAX_PLAYERS] u8
+    anim_frame_f32: np.ndarray | None = None,  # [n_frames, MAX_PLAYERS] f32
+    frame_speed_mul_f32: np.ndarray | None = None,  # [n_frames, MAX_PLAYERS] f32
     percent: np.ndarray | None = None,  # [n_frames, MAX_PLAYERS] f32
     include_per_hitbox: bool = False,
     include_replay_only_shield_admission: bool = False,
@@ -695,6 +791,21 @@ def derive_combat_hitlist_seed_fields(
         percent_arr = np.asarray(percent, dtype=np.float32)
         if percent_arr.shape[0] != n_frames:
             raise ValueError("percent must have the same number of frames as action_id")
+    turn_has_turned_arr: np.ndarray | None = None
+    if turn_has_turned is not None:
+        turn_has_turned_arr = np.asarray(turn_has_turned, dtype=np.uint8)
+        if turn_has_turned_arr.shape[0] != n_frames:
+            raise ValueError("turn_has_turned must have the same number of frames as action_id")
+    anim_frame_arr: np.ndarray | None = None
+    if anim_frame_f32 is not None:
+        anim_frame_arr = np.asarray(anim_frame_f32, dtype=np.float32)
+        if anim_frame_arr.shape[0] != n_frames:
+            raise ValueError("anim_frame_f32 must have the same number of frames as action_id")
+    frame_speed_arr: np.ndarray | None = None
+    if frame_speed_mul_f32 is not None:
+        frame_speed_arr = np.asarray(frame_speed_mul_f32, dtype=np.float32)
+        if frame_speed_arr.shape[0] != n_frames:
+            raise ValueError("frame_speed_mul_f32 must have the same number of frames as action_id")
 
     # Outputs.
     out_cd = np.zeros((n_frames, MAX_PLAYERS, HITLIST_GROUPS, MAX_PLAYERS), dtype=np.uint16)
@@ -746,6 +857,19 @@ def derive_combat_hitlist_seed_fields(
             if af >= 0 and 0 <= anim_u32 <= 0xFFFF and ch is not None:
                 msid = int(anim_u32) & 0xFFFF
                 frame = int(af)
+                if anim_frame_arr is not None:
+                    af_f = float(anim_frame_arr[fi, p])
+                    if np.isfinite(af_f) and af_f >= 0.0:
+                        if (
+                            frame_speed_arr is not None
+                            and (hitlag_arr is None or int(hitlag_arr[fi, p]) == 0)
+                        ):
+                            af_f += float(frame_speed_arr[fi, p])
+                        if af_f < 0.0:
+                            af_f = 0.0
+                        if af_f > 65535.0:
+                            af_f = 65535.0
+                        frame = int(np.floor(af_f))
 
                 # Hurtcaps (pose-driven + scaled).
                 out_caps: list[dict] = []
@@ -754,6 +878,14 @@ def derive_combat_hitlist_seed_fields(
                 px = float(pos_x[fi, p])
                 py = float(pos_y[fi, p])
                 facing_dir = 1.0 if int(facing[fi, p]) != 0 else -1.0
+                if int(action_id[fi, p]) == 18 and turn_has_turned_arr is not None and int(turn_has_turned_arr[fi, p]) != 0:
+                    # Mirror src/hurtboxes.c: ftCo_Turn_Enter records facing_after=-facing_dir,
+                    # then ftCo_Turn_Anim_Inner flips fp->facing_dir and sets has_turned once
+                    # frames_to_turn expires. Pose-driven hurtcaps use that internal facing, not
+                    # the lagging Slippi-facing byte.
+                    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Turn.c::{ftCo_Turn_Enter,ftCo_Turn_Anim_Inner}
+                    # refs/melee/src/melee/lb/lb_00B0.c::lb_8000B1CC
+                    facing_dir = -facing_dir
                 for cap in ch.hurtcaps[:MAX_HURTCAPS]:
                     m = ch.pose.try_get_matrix(msid=msid, frame=frame, part_id=cap.bone_part_id)
                     if m is None:
@@ -884,6 +1016,15 @@ def derive_combat_hitlist_seed_fields(
                 shield_world[p] = (sx, sy, sz, sr)
 
         # Combat resolve (BODY-only selection + hitlist update + simulated hitlag gate).
+        #
+        # A hit accepted during frame `fi` becomes part of the teacher-forced seed for frame
+        # `fi + 1`, not the seed snapshot for `fi`. Runtime registers the HitCapsule victim after
+        # the BODY/shield callback mutates the defender; for replay-derived seed history, keep that
+        # post-output registration delayed by one row when only the next Slippi post-frame proves
+        # the accepted BODY hit.
+        # refs/melee/src/melee/ft/ftcoll.c::ftColl_80076ED8
+        # refs/melee/src/melee/lb/lbcollision.c::{lbColl_80008688,lbColl_8000ACFC}
+        pending_body_registers: list[tuple[int, int, int, int, int, int]] = []
         for attacker in range(num_players):
             if int(stocks[fi, attacker]) == 0:
                 hitlist_hb_cd[attacker, :, :] = np.uint16(0)
@@ -1261,7 +1402,42 @@ def derive_combat_hitlist_seed_fields(
 
                         # Hitlist register (replay-corroborated when hitlag is provided).
                         if not defender_hitlag_seen:
-                            continue
+                            if not (
+                                include_replay_only_body_admission
+                                and hitlag_arr is not None
+                                and percent_arr is not None
+                                and fi + 1 < n_frames
+                                and int(hitlag_arr[fi, defender]) == 0
+                                and int(hitlag_arr[fi, attacker]) == 0
+                                and int(hitlag_arr[fi + 1, defender]) > 0
+                                and int(hitlag_arr[fi + 1, attacker]) > 0
+                                and float(percent_arr[fi + 1, defender]) > float(percent_arr[fi, defender])
+                                and (
+                                    last_hit_by_arr is None
+                                    or int(last_hit_by_arr[fi + 1, defender]) == int(attacker)
+                                )
+                                and (
+                                    instance_hit_by_arr is None
+                                    or int(instance_hit_by_arr[fi + 1, defender])
+                                    == int(instance_id[fi, attacker])
+                                )
+                            ):
+                                continue
+                            rehit_frames = int(hb.get("rehit_frames", 0)) & 0xFF
+                            dmg_i = _get_env_dmg(float(hb["damage"]))
+                            hl = _calc_hitlag_frames(hitlag_dmg_mul, hitlag_base, dmg_i)
+                            pending_body_registers.append(
+                                (
+                                    int(attacker),
+                                    int(hit_group),
+                                    int(defender),
+                                    int(rehit_frames),
+                                    int(instance_id[fi + 1, defender]),
+                                    int(hl),
+                                )
+                            )
+                            did_hit = True
+                            break
 
                         rehit_frames = int(hb.get("rehit_frames", 0)) & 0xFF
                         for reg_hb_id, reg_hb in a_hitboxes.items():
@@ -1322,6 +1498,24 @@ def derive_combat_hitlist_seed_fields(
         out_iid[fi] = hitlist_iid
         out_hb_cd[fi] = hitlist_hb_cd
         out_hb_iid[fi] = hitlist_hb_iid
+
+        for attacker, hit_group, defender, rehit_frames, defender_iid_post, hl in pending_body_registers:
+            seeded_cd = (
+                np.uint16(HITLIST_CD_INDEFINITE)
+                if int(rehit_frames) == 0
+                else np.uint16(int(rehit_frames))
+            )
+            defender_iid_u16 = np.uint16(int(defender_iid_post))
+            for reg_hb_id, reg_hb in hitboxes[attacker].items():
+                if (int(reg_hb.get("hit_group", 0)) & 0x7) != int(hit_group):
+                    continue
+                reg_hb_i = int(reg_hb_id)
+                hitlist_hb_cd[attacker, reg_hb_i, defender] = seeded_cd
+                hitlist_hb_iid[attacker, reg_hb_i, defender] = defender_iid_u16
+            hitlist_cd[attacker, hit_group, defender] = seeded_cd
+            hitlist_iid[attacker, hit_group, defender] = defender_iid_u16
+            sim_hitlag[attacker] = np.uint16(int(hl))
+            sim_hitlag[defender] = np.uint16(int(hl))
 
     if include_per_hitbox:
         return out_cd, out_iid, out_hb_valid, out_hb_cd, out_hb_iid

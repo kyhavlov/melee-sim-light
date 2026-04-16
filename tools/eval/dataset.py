@@ -366,6 +366,13 @@ SEED_DTYPE = np.dtype(
         ("combat_hitlist_hb_valid", ("u1", (MAX_PLAYERS, MAX_HITBOXES))),
         ("combat_hitlist_hb_cd", ("<u2", (MAX_PLAYERS, MAX_HITBOXES, MAX_PLAYERS))),
         ("combat_hitlist_hb_victim_iid", ("<u2", (MAX_PLAYERS, MAX_HITBOXES, MAX_PLAYERS))),
+        # Hidden HitCapsule.x58 seed lane for teacher-forced one-step starts.
+        # refs/melee/src/melee/ft/ftcoll.c::ftColl_8007AD18
+        # refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000805C,lbColl_80006E58}
+        ("combat_hitbox_prev_valid", ("u1", (MAX_PLAYERS, MAX_HITBOXES))),
+        ("combat_hitbox_prev_x", ("<f4", (MAX_PLAYERS, MAX_HITBOXES))),
+        ("combat_hitbox_prev_y", ("<f4", (MAX_PLAYERS, MAX_HITBOXES))),
+        ("combat_hitbox_prev_z", ("<f4", (MAX_PLAYERS, MAX_HITBOXES))),
         ("stale_queue_index", _arr("u1", MAX_PLAYERS)),
         ("stale_move_id", ("<u2", (MAX_PLAYERS, STALE_QUEUE_SIZE))),
         ("stale_attack_instance", ("<u2", (MAX_PLAYERS, STALE_QUEUE_SIZE))),

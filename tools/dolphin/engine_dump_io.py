@@ -177,8 +177,56 @@ ITEM_DTYPE = np.dtype(
     align=False,
 )
 
-HITBOX_DTYPE = np.dtype("V88")
-HURTBOX_DTYPE = np.dtype("V68")
+HITBOX_DTYPE = np.dtype(
+    [
+        ("state", "<u4"),
+        ("group", "<u4"),
+        ("damage", "<u4"),
+        ("damage_stale_bits", "<u4"),
+        ("offset_x_bits", "<u4"),
+        ("offset_y_bits", "<u4"),
+        ("offset_z_bits", "<u4"),
+        ("size_bits", "<u4"),
+        ("angle", "<u4"),
+        ("kbg", "<u4"),
+        ("wsk", "<u4"),
+        ("bkb", "<u4"),
+        ("element", "<u4"),
+        ("shield_damage", "<u4"),
+        ("sfx", "<u4"),
+        ("sfx_kind", "<u4"),
+        ("flags", ("u1", (8,))),
+        ("bone_ptr", "<u4"),
+        ("pos_x_bits", "<u4"),
+        ("pos_y_bits", "<u4"),
+        ("pos_z_bits", "<u4"),
+    ],
+    align=False,
+)
+HURTBOX_DTYPE = np.dtype(
+    [
+        ("state", "<u4"),
+        ("a_offset_x_bits", "<u4"),
+        ("a_offset_y_bits", "<u4"),
+        ("a_offset_z_bits", "<u4"),
+        ("b_offset_x_bits", "<u4"),
+        ("b_offset_y_bits", "<u4"),
+        ("b_offset_z_bits", "<u4"),
+        ("scale_bits", "<u4"),
+        ("a_pos_x_bits", "<u4"),
+        ("a_pos_y_bits", "<u4"),
+        ("a_pos_z_bits", "<u4"),
+        ("b_pos_x_bits", "<u4"),
+        ("b_pos_y_bits", "<u4"),
+        ("b_pos_z_bits", "<u4"),
+        ("bone_idx", "<i4"),
+        ("height", "<u4"),
+        ("is_grabbable", "u1"),
+        ("flags", "u1"),
+        ("_pad0", "V2"),
+    ],
+    align=False,
+)
 HITLIST_DTYPE = np.dtype(
     [
         ("group", "<u4"),

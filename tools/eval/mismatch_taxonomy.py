@@ -248,19 +248,22 @@ FAMILY_META: dict[str, FamilyMeta] = {
         ),
     ),
     "F08b_body_contact_geometry_residual": FamilyMeta(
-        label="BODY Contact Geometry / Phantom Residual",
-        owner_module="combat_geom",
+        label="Combat Geometry / HSD Pose Collision Owner",
+        owner_module="hsd_pose_collision",
         fix_type="instrumentation first",
         risk="high",
-        confidence="med",
+        confidence="high",
         hypothesis=(
-            "Rows where fighter BODY contact selection still differs after the shared hitlist and "
-            "reciprocal-hit owners: extra contacts, phantom/no-percent contacts, or collision-space "
-            "pose/scale residuals."
+            "Rows where fighter BODY contact selection differs before post-admission combat "
+            "followup. Current probes show live HSD JObj/AObj/dynamics pose feeding lb_8000B1CC can "
+            "select different HurtCapsule primitives than the extracted SSANIM pose tables."
         ),
         refs=(
             "refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078C70,ftColl_80076ED8}",
             "refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000805C,lbColl_80006E58}",
+            "refs/melee/src/melee/ft/ftdynamics.c::{ftCo_8009DD94,ftCo_8009E318}",
+            "refs/melee/src/melee/ft/ftanim.c::{ftAnim_8006E7B8,ftAnim_8006EED4}",
+            "refs/melee/src/melee/lb/lb_00B0.c::lb_8000B1CC",
         ),
     ),
     "F08c_damage_state_transition_adjacency": FamilyMeta(
@@ -917,6 +920,30 @@ def _looks_like_damage(name: str) -> bool:
     return name.startswith("DAMAGE_") or name.startswith("DOWN_") or name.startswith("PASSIVE")
 
 
+def _looks_like_damage_admission_disagreement(names: tuple[str, ...], field_set: set[str]) -> bool:
+    # BODY admission disagreements have one side in a Damage* state and the other side still in a
+    # non-damage action. Do not classify pure Down*/Passive selector rows here; those are
+    # knockdown/mpColl adjacency unless an actual Damage* action is present.
+    if not any(name.startswith("DAMAGE_") for name in names):
+        return False
+    if all(name.startswith("DAMAGE_") for name in names):
+        return False
+    return bool(
+        field_set
+        & {
+            "action_id",
+            "animation_index",
+            "hitlag",
+            "hitstun",
+            "instance_hit_by",
+            "last_hit_by",
+            "percent",
+            "on_ground",
+            "jumps_left",
+        }
+    )
+
+
 def _looks_like_damagefly(name: str) -> bool:
     return name.startswith("DAMAGE_FLY_")
 
@@ -1125,6 +1152,8 @@ def _classify_player_row(row: PlayerRow, action_names: dict[int, str]) -> str:
             return "F10e_special_move_adjacency"
         if field_set <= {"instance_id", "instance_hit_by", "last_hit_by"}:
             return "F08a_damage_identity_bookkeeping_residual"
+        if _looks_like_damage_admission_disagreement(names, field_set):
+            return "F08b_body_contact_geometry_residual"
         if any(_looks_like_landing_cliff_or_fall(name) for name in names) or any(
             name in {"DASH", "TURN", "KNEE_BEND", "WAIT", "WALK_SLOW"} for name in names
         ):
@@ -1302,8 +1331,9 @@ def _audit_player_row(row: PlayerRow, action_names: dict[int, str]) -> tuple[boo
         }
         return ok, "damage row reduced to identity/source bookkeeping"
     if row.family_id == "F08b_body_contact_geometry_residual":
-        ok = any(_looks_like_damage(name) for name in names) and bool(
-            field_set & {"action_id", "animation_index", "on_ground", "ground_id", "hurtbox_state"}
+        ok = any(_looks_like_damage(name) for name in names) and (
+            bool(field_set & {"action_id", "animation_index", "on_ground", "ground_id", "hurtbox_state"})
+            or _looks_like_damage_admission_disagreement(names, field_set)
         )
         return ok, "damage row with BODY contact geometry or selector-facing fields"
     if row.family_id == "F08c_damage_state_transition_adjacency":

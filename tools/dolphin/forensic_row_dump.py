@@ -61,6 +61,11 @@ def main() -> int:
     ap.add_argument("--window-after", type=int, default=3, help="frames after max(seed,ref)")
     ap.add_argument("--timeout", type=float, default=120.0)
     ap.add_argument(
+        "--collision-probe",
+        action="store_true",
+        help="also write interpreter pre-collision primitive JSONL beside the dump",
+    )
+    ap.add_argument(
         "--out-dir",
         type=Path,
         default=Path("reports/triage") / f"{_timestamp()}_dolphin_forensic_row",
@@ -93,6 +98,7 @@ def main() -> int:
 
     stem = f"{dataset_path.stem}_rec{spec.record}_p{spec.p}_f{start_frame}_{end_frame}"
     dump_path = out_dir / f"{stem}.bin"
+    collision_probe_path = out_dir / f"{stem}_collision_probe.jsonl" if args.collision_probe else None
     user_dir = out_dir / "dolphin_user"
     rc, _ = capture_engine_dump(
         replay=replay_path,
@@ -103,6 +109,7 @@ def main() -> int:
         start_frame=start_frame,
         end_frame=end_frame,
         timeout=float(args.timeout),
+        collision_probe_path=collision_probe_path,
     )
     if rc != 0:
         raise SystemExit(f"capture failed for replay={replay_path} frame_window={start_frame}..{end_frame}")
@@ -126,6 +133,8 @@ def main() -> int:
         "rows_json": str(json_path.relative_to(root)),
         "rows_txt": str(txt_path.relative_to(root)),
     }
+    if collision_probe_path is not None:
+        summary["collision_probe_jsonl"] = str(collision_probe_path.relative_to(root))
     summary_path = out_dir / "summary.json"
     summary_path.write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 

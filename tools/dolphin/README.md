@@ -23,6 +23,28 @@ Outputs are written under `reports/triage/<timestamp>_dolphin_forensic_row/`.
 
 Requires `refs/Ishiiruka@3e676fab03b19faf1a6b00cb63934bd2f6502827` for v7 hitlist provenance lanes.
 
+## Collision primitive probe
+
+Some BODY-contact investigations need primitives at the pre-`ftColl_80076ED8` phase, before the
+normal engine dump has already observed the post-hit state. The main repo carries that Dolphin hook
+as a patch artifact:
+
+```bash
+git -C refs/Ishiiruka apply ../../tools/dolphin/patches/ishiiruka_collision_probe.patch
+cmake --build refs/Ishiiruka/build_probe --target dolphin-nogui -j2
+```
+
+Then pass `--collision-probe <path.jsonl>` through `forensic_row_dump.py` or
+`dolphin_engine_dump.py`. The wrapper sets `MSL_COLLISION_PROBE_PATH` and forces interpreter mode
+so the patched interpreter hook can record:
+
+- `ftColl_80076ED8`
+- `lbColl_8000805C`
+- `lbColl_80006E58`
+
+The patch is intentionally stored in the main repo instead of leaving `refs/Ishiiruka` dirty. Apply
+it only for local forensics and restore the nested repo afterwards.
+
 ## Controlled playback probes
 
 Use `patch_slp_preframe_window.py` when a modelplay symptom needs vanilla confirmation but exact state recreation is not available from Slippi post-frames alone. The script edits only 0x37 pre-frame payloads in a copied `.slp`; Dolphin then plays the replay normally. By default it refuses `--out == --slp`; use `--in-place` only when intentionally overwriting a disposable copy. Keep windows short and write all generated specs, patched replays, dumps, and rows under `reports/triage/`.

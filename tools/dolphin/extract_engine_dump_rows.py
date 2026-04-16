@@ -25,6 +25,83 @@ class Window:
         return int(self.start) <= int(frame_index) <= int(self.end)
 
 
+def _frame_hitboxes(d: object, frame_slot: int, port_count: int, port: int) -> list[dict[str, object]]:
+    base = (frame_slot * port_count + (port - 1)) * 4
+    rows: list[dict[str, object]] = []
+    for hitbox_id in range(4):
+        hb = d.hitboxes[base + hitbox_id]
+        rows.append(
+            {
+                "hitbox_id": hitbox_id,
+                "state": int(hb["state"]),
+                "group": int(hb["group"]),
+                "damage": int(hb["damage"]),
+                "damage_stale": f32_from_bits(int(hb["damage_stale_bits"])),
+                "offset": [
+                    f32_from_bits(int(hb["offset_x_bits"])),
+                    f32_from_bits(int(hb["offset_y_bits"])),
+                    f32_from_bits(int(hb["offset_z_bits"])),
+                ],
+                "size": f32_from_bits(int(hb["size_bits"])),
+                "angle": int(hb["angle"]),
+                "kbg": int(hb["kbg"]),
+                "wsk": int(hb["wsk"]),
+                "bkb": int(hb["bkb"]),
+                "element": int(hb["element"]),
+                "shield_damage": int(hb["shield_damage"]),
+                "sfx": int(hb["sfx"]),
+                "sfx_kind": int(hb["sfx_kind"]),
+                "flags": [int(v) for v in hb["flags"].tolist()],
+                "bone_ptr": int(hb["bone_ptr"]),
+                "pos": [
+                    f32_from_bits(int(hb["pos_x_bits"])),
+                    f32_from_bits(int(hb["pos_y_bits"])),
+                    f32_from_bits(int(hb["pos_z_bits"])),
+                ],
+            }
+        )
+    return rows
+
+
+def _frame_hurtboxes(d: object, frame_slot: int, port_count: int, port: int) -> list[dict[str, object]]:
+    base = (frame_slot * port_count + (port - 1)) * 15
+    rows: list[dict[str, object]] = []
+    for hurtcap_id in range(15):
+        hb = d.hurtboxes[base + hurtcap_id]
+        rows.append(
+            {
+                "hurtcap_id": hurtcap_id,
+                "state": int(hb["state"]),
+                "a_offset": [
+                    f32_from_bits(int(hb["a_offset_x_bits"])),
+                    f32_from_bits(int(hb["a_offset_y_bits"])),
+                    f32_from_bits(int(hb["a_offset_z_bits"])),
+                ],
+                "b_offset": [
+                    f32_from_bits(int(hb["b_offset_x_bits"])),
+                    f32_from_bits(int(hb["b_offset_y_bits"])),
+                    f32_from_bits(int(hb["b_offset_z_bits"])),
+                ],
+                "scale": f32_from_bits(int(hb["scale_bits"])),
+                "a_pos": [
+                    f32_from_bits(int(hb["a_pos_x_bits"])),
+                    f32_from_bits(int(hb["a_pos_y_bits"])),
+                    f32_from_bits(int(hb["a_pos_z_bits"])),
+                ],
+                "b_pos": [
+                    f32_from_bits(int(hb["b_pos_x_bits"])),
+                    f32_from_bits(int(hb["b_pos_y_bits"])),
+                    f32_from_bits(int(hb["b_pos_z_bits"])),
+                ],
+                "bone_idx": int(hb["bone_idx"]),
+                "height": int(hb["height"]),
+                "is_grabbable": int(hb["is_grabbable"]),
+                "flags": int(hb["flags"]),
+            }
+        )
+    return rows
+
+
 def _collect_rows(dump_path: str | Path, window: Window, ports: list[int]) -> dict[str, object]:
     d = read_engine_dump(dump_path)
     frame_count = int(d.header["frame_count"])
@@ -141,6 +218,8 @@ def _collect_rows(dump_path: str | Path, window: Window, ports: list[int]) -> di
                 }
             )
             row = rows[-1]
+            row["hitboxes"] = _frame_hitboxes(d, frame_slot, port_count, int(port))
+            row["hurtboxes"] = _frame_hurtboxes(d, frame_slot, port_count, int(port))
             if "ecb_lock_timer" in fighter.dtype.names:
                 if "lightshield_amount_bits" in fighter.dtype.names:
                     row["lightshield_amount"] = f32_from_bits(int(fighter["lightshield_amount_bits"]))
