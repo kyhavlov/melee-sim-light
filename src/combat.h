@@ -77,3 +77,9 @@ int combat_debug_shield_candidate_decisions(MslBatch* batch, int batch_index,
 int combat_debug_attackairb_continuation_overlap(const MslBatch* batch, int batch_index,
                                                  int attacker, int hb_id, int defender, int cap_id,
                                                  float* out_overlap);
+
+// Debug-only: compute the current matrix-radius BODY overlap helper for any fighter hitbox/hurtcap
+// pair. This is instrumentation for Dolphin lbColl_8000805C/80006E58 comparisons; it is not a
+// gameplay admission bridge.
+int combat_debug_body_matrix_overlap(const MslBatch* batch, int batch_index, int attacker,
+                                     int hb_id, int defender, int cap_id, float* out_overlap);

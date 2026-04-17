@@ -3,6 +3,7 @@
 #include <errno.h>
 
 #include "action.h"
+#include "anim_pose.h"
 #include "anim_timebase.h"
 #include "combat.h"
 #include "hitboxes.h"
@@ -350,6 +351,11 @@ static int step_one_frame_core(MslBatch* batch, const uint8_t* prev_input_bytes,
   blaster_update_post_collision(batch);
   locomotion_update_post_collision(batch);
   shine_update_post_collision(batch);
+  // Fighter dynamic JObj chains update after animation/physics callbacks and before collision
+  // primitive refresh, matching ftCo_8009DD94 feeding lb_8000B1CC consumers.
+  // refs/melee/src/melee/ft/ftdynamics.c::ftCo_8009DD94
+  // refs/melee/src/melee/lb/lb_00B0.c::lb_8000B1CC
+  anim_pose_update_dynamic_state(batch);
   hurtboxes_refresh(batch);
   hitboxes_refresh(batch);
   hitlist_tick(batch);

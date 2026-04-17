@@ -1268,7 +1268,7 @@ def test_derive_colanim_internals_damage_exit_throw_and_cliff_entry() -> None:
     action_frame = np.array([1, 1, 2, 3, 1, 1, 2, 1], dtype=np.int16)
     hitlag = np.array([0, 3, 2, 0, 0, 0, 0, 0], dtype=np.uint16)
     hitstun = np.array([0, 5, 4, 3, 0, 0, 0, 0], dtype=np.uint16)
-    hurt = np.zeros(action.size, dtype=np.uint8)
+    hurt = np.array([0, 0, 0, 1, 1, 1, 1, 2], dtype=np.uint8)
 
     x198c, x1990, x1994, x2221 = derive_colanim_internals(
         action_id_u16=action,
@@ -1288,6 +1288,106 @@ def test_derive_colanim_internals_damage_exit_throw_and_cliff_entry() -> None:
     assert x1990.tolist() == [0, 0, 0, 0, 0, 0, 0, 30]
     assert x198c.tolist() == [0, 0, 0, 1, 1, 1, 1, 2]
     assert x2221.tolist() == [0] * action.size
+
+
+def test_derive_colanim_internals_visible_vulnerable_clears_stale_x1990() -> None:
+    # Slippi's post-frame hurtbox status is `x1988 != 0 ? x1988 : x198C`. A visible vulnerable
+    # snapshot (0) therefore proves hidden x198C/x1990 are also clear; otherwise replay-derived
+    # cliff invulnerability can stale-carry and incorrectly suppress BODY hits.
+    # refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
+    # refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
+    act_cliff_wait = 0x00FD
+    act_fall = 0x001D
+    action = np.array([act_cliff_wait, act_cliff_wait, act_fall, act_fall], dtype=np.uint16)
+    action_frame = np.array([1, 2, 6, 7], dtype=np.int16)
+    hitlag = np.zeros(action.size, dtype=np.uint16)
+    hitstun = np.zeros(action.size, dtype=np.uint16)
+    hurt = np.array([2, 2, 0, 0], dtype=np.uint8)
+
+    x198c, x1990, x1994, x2221 = derive_colanim_internals(
+        action_id_u16=action,
+        action_frame_i16=action_frame,
+        hitlag_u16=hitlag,
+        hitstun_u16=hitstun,
+        hurtbox_state_u8=hurt,
+        colanim_throw_x1994_frames=8,
+        colanim_cliff_x1990_frames=30,
+        colanim_damage_x1994_frames=5,
+        throw_actions=(),
+        cliff_actions=(act_cliff_wait,),
+        damage_actions=(),
+    )
+
+    assert x198c.tolist() == [2, 2, 0, 0]
+    assert x1990.tolist() == [30, 29, 0, 0]
+    assert x1994.tolist() == [0, 0, 0, 0]
+    assert x2221.tolist() == [0, 0, 0, 0]
+
+
+def test_derive_colanim_internals_preserves_downbound_hidden_x1994_visible_zero() -> None:
+    # DownBound is the narrow suite-proven exception to visible-0 clearing: replay-visible
+    # hurtbox_state can be 0 while hidden x1994/x198C=1 still owns invincible-contact BODY behavior.
+    # refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownBound.c
+    act_damage_n1 = 0x004E
+    act_down_bound_d = 0x00BF
+    action = np.array([act_damage_n1, act_down_bound_d, act_down_bound_d], dtype=np.uint16)
+    action_frame = np.array([1, 1, 2], dtype=np.int16)
+    hitlag = np.array([2, 0, 0], dtype=np.uint16)
+    hitstun = np.array([8, 7, 6], dtype=np.uint16)
+    hurt = np.array([0, 0, 0], dtype=np.uint8)
+
+    x198c, x1990, x1994, x2221 = derive_colanim_internals(
+        action_id_u16=action,
+        action_frame_i16=action_frame,
+        hitlag_u16=hitlag,
+        hitstun_u16=hitstun,
+        hurtbox_state_u8=hurt,
+        colanim_throw_x1994_frames=8,
+        colanim_cliff_x1990_frames=30,
+        colanim_damage_x1994_frames=5,
+        throw_actions=(),
+        cliff_actions=(),
+        damage_actions=(act_damage_n1,),
+    )
+
+    assert x198c.tolist() == [0, 1, 1]
+    assert x1990.tolist() == [0, 0, 0]
+    assert x1994.tolist() == [0, 5, 4]
+    assert x2221.tolist() == [0, 0, 0]
+
+
+def test_derive_colanim_internals_preserves_downbound_hidden_x1990_visible_zero() -> None:
+    # DownBound can inherit hidden timer-owned collision status across a visible vulnerable snapshot;
+    # keep the exception scoped to DownBound so generic Fall/locomotion stale x1990 still clears.
+    # refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownBound.c
+    act_cliff_wait = 0x00FD
+    act_down_bound_d = 0x00BF
+    action = np.array([act_cliff_wait, act_down_bound_d, act_down_bound_d], dtype=np.uint16)
+    action_frame = np.array([1, 1, 2], dtype=np.int16)
+    hitlag = np.zeros(action.size, dtype=np.uint16)
+    hitstun = np.zeros(action.size, dtype=np.uint16)
+    hurt = np.array([2, 0, 0], dtype=np.uint8)
+
+    x198c, x1990, x1994, x2221 = derive_colanim_internals(
+        action_id_u16=action,
+        action_frame_i16=action_frame,
+        hitlag_u16=hitlag,
+        hitstun_u16=hitstun,
+        hurtbox_state_u8=hurt,
+        colanim_throw_x1994_frames=8,
+        colanim_cliff_x1990_frames=30,
+        colanim_damage_x1994_frames=5,
+        throw_actions=(),
+        cliff_actions=(act_cliff_wait,),
+        damage_actions=(),
+    )
+
+    assert x198c.tolist() == [2, 2, 2]
+    assert x1990.tolist() == [30, 29, 28]
+    assert x1994.tolist() == [0, 0, 0]
+    assert x2221.tolist() == [0, 0, 0]
 
 
 def test_derive_colanim_internals_is_causal_wrt_future_frames() -> None:
@@ -1757,6 +1857,43 @@ def test_derive_combat_hitlist_seed_fields_per_hitbox_schema_shape() -> None:
     assert hb_valid.dtype == np.uint8
     assert not bool(np.any(group_cd))
     assert not bool(np.any(hb_valid))
+
+
+def test_seed_bridge_trim_preserves_authoritative_per_hitbox_hitlist() -> None:
+    from tools.slippi.make_dataset_from_slp import _seed_bridge_trim_indefinite_lanes
+
+    group_cd = np.zeros((2, 4, 8, 4), dtype=np.uint16)
+    group_iid = np.zeros((2, 4, 8, 4), dtype=np.uint16)
+    hb_valid = np.zeros((2, 4, 4), dtype=np.uint8)
+    hb_cd = np.zeros((2, 4, 4, 4), dtype=np.uint16)
+    hb_iid = np.zeros((2, 4, 4, 4), dtype=np.uint16)
+
+    group_cd[1, 0, 0, 1] = np.uint16(0xFFFF)
+    group_iid[1, 0, 0, 1] = np.uint16(345)
+    hb_valid[1, 0, 1] = np.uint8(1)
+    hb_cd[1, 0, 1, 1] = np.uint16(0xFFFF)
+    hb_iid[1, 0, 1, 1] = np.uint16(344)
+    hb_cd[1, 0, 2, 1] = np.uint16(0xFFFF)
+    hb_iid[1, 0, 2, 1] = np.uint16(344)
+
+    trimmed = _seed_bridge_trim_indefinite_lanes(
+        hitlist_cd=group_cd,
+        hitlist_iid=group_iid,
+        hitlist_hb_valid=hb_valid,
+        hitlist_hb_cd=hb_cd,
+        hitlist_hb_iid=hb_iid,
+        fi=1,
+        attacker=0,
+        defender=1,
+    )
+
+    assert trimmed
+    assert int(group_cd[1, 0, 0, 1]) == 0
+    assert int(group_iid[1, 0, 0, 1]) == 0
+    assert int(hb_cd[1, 0, 1, 1]) == 0xFFFF
+    assert int(hb_iid[1, 0, 1, 1]) == 344
+    assert int(hb_cd[1, 0, 2, 1]) == 0
+    assert int(hb_iid[1, 0, 2, 1]) == 0
 
 
 def test_derive_combat_hitlist_seed_fields_is_prefix_invariant_wrt_shield_inputs() -> None:

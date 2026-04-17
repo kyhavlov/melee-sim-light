@@ -8,6 +8,7 @@ from tools.eval.mismatch_taxonomy import (
     PlayerRow,
     _classify_item_slot_row,
     _classify_player_row,
+    _family_for_debug_body_contact_residual,
     _split_cross_player_instance_counter_rows,
     _write_audit_samples_tsv,
     _write_family_tsv,
@@ -226,8 +227,8 @@ def test_classify_player_row_routes_grounded_missed_damage_to_body_geometry() ->
     assert "ftdynamics.c" in "\n".join(meta.refs)
 
 
-def test_classify_player_row_routes_attackairn_attackhi3_pose_miss_to_hsd_pose_collision() -> None:
-    # BHH:1599-shaped row:
+def test_classify_player_row_routes_attackairn_attackhi3_pose_surface_to_hsd_pose_collision() -> None:
+    # BHH:1599-shaped live-pose row:
     # - seed p0 AttackAirN hits grounded p1 AttackHi3 in vanilla,
     # - sim has no pre-combat BODY selection because extracted hurtcaps differ from live HSD JObj
     #   dynamics pose, so this is upstream collision pose ownership, not post-admission followup.
@@ -252,6 +253,123 @@ def test_classify_player_row_routes_attackairn_attackhi3_pose_miss_to_hsd_pose_c
         },
     )
     assert got == "F08b_body_contact_geometry_residual"
+
+
+def test_debug_body_contact_split_keeps_only_candidate_rows_in_geometry_owner() -> None:
+    assert (
+        _family_for_debug_body_contact_residual(
+            seed_name="WAIT",
+            ref_name="WAIT",
+            out_name="DAMAGE_FLY_TOP",
+            selected_body_count=1,
+            body_candidate_count=1,
+            filtered_body_candidate_count=1,
+            first_msid=52,
+        )
+        == "F08h_body_selected_false_grounded_attack_pose"
+    )
+    assert (
+        _family_for_debug_body_contact_residual(
+            seed_name="WAIT",
+            ref_name="WAIT",
+            out_name="DAMAGE_FLY_TOP",
+            selected_body_count=1,
+            body_candidate_count=1,
+            filtered_body_candidate_count=1,
+            first_msid=72,
+        )
+        == "F08i_body_selected_false_aerial_attack_pose"
+    )
+    assert (
+        _family_for_debug_body_contact_residual(
+            seed_name="WAIT",
+            ref_name="WAIT",
+            out_name="DAMAGE_FLY_TOP",
+            selected_body_count=1,
+            body_candidate_count=1,
+            filtered_body_candidate_count=1,
+            first_msid=313,
+        )
+        == "F08j_body_selected_false_special_entry_pose"
+    )
+    assert (
+        _family_for_debug_body_contact_residual(
+            seed_name="JUMP_F",
+            ref_name="DAMAGE_FLY_N",
+            out_name="JUMP_F",
+            selected_body_count=0,
+            body_candidate_count=0,
+            filtered_body_candidate_count=0,
+        )
+        == "F08e_body_contact_no_candidate_adjacency"
+    )
+    assert (
+        _family_for_debug_body_contact_residual(
+            seed_name="JUMP_F",
+            ref_name="DAMAGE_FLY_N",
+            out_name="JUMP_F",
+            selected_body_count=0,
+            body_candidate_count=2,
+            filtered_body_candidate_count=1,
+        )
+        == "F08f_body_contact_candidate_filter_residual"
+    )
+    assert (
+        _family_for_debug_body_contact_residual(
+            seed_name="ESCAPE_B",
+            ref_name="DAMAGE_N_3",
+            out_name="DAMAGE_AIR_3",
+            selected_body_count=1,
+            body_candidate_count=1,
+            filtered_body_candidate_count=1,
+        )
+        == "F08g_body_contact_damage_selection_residual"
+    )
+    assert (
+        _family_for_debug_body_contact_residual(
+            seed_name="ATTACK_DASH",
+            ref_name="REBOUND_STOP",
+            out_name="DAMAGE_FLY_TOP",
+            selected_body_count=1,
+            body_candidate_count=1,
+            filtered_body_candidate_count=1,
+            first_msid=58,
+        )
+        == "F08h1_body_selected_false_rebound_clank_residual"
+    )
+    assert (
+        _family_for_debug_body_contact_residual(
+            seed_name="KNEE_BEND",
+            ref_name="ATTACK_HI4",
+            out_name="DAMAGE_N_2",
+            selected_body_count=1,
+            body_candidate_count=1,
+            filtered_body_candidate_count=1,
+            first_msid=70,
+        )
+        == "F08i1_body_selected_false_aerial_timebase_residual"
+    )
+
+
+def test_classify_player_row_splits_prior_damage_exit_from_body_geometry() -> None:
+    row = _player_row(
+        seed_action_id=76,
+        ref_action_id=42,
+        out_action_id=76,
+        prev_action_id=76,
+        fields=("action_id", "animation_index", "on_ground", "hitstun", "instance_id"),
+        on_ground=0,
+        hitlag=0,
+        hitstun=9,
+    )
+    got = _classify_player_row(
+        row,
+        {
+            42: "LANDING",
+            76: "DAMAGE_HI_2",
+        },
+    )
+    assert got == "F08c_damage_state_transition_adjacency"
 
 
 def test_classify_player_row_keeps_non_damage_down_transition_in_f08c() -> None:

@@ -90,3 +90,85 @@ def test_reboundstop_entry_no_submotion_target_pm1_rows_are_replay_exact(
             record=rec,
             p=p,
         )
+
+
+@pytest.mark.integration
+def test_reboundstop_entry_uses_swept_hitbox_hitbox_clank_fsp_5466() -> None:
+    # Replay-real lock for the BODY-geometry clank sub-owner:
+    # - ftColl_80078C70 checks hitbox-vs-hitbox clank before BODY hitbox-vs-hurtcap admission.
+    # - The hitbox-vs-hitbox predicate is lbColl_80007AFC, which consumes swept HitCapsule
+    #   x58->x4C segments, not only current-frame centers.
+    # - FSP:5466 previously fell through to BODY DamageFlyTop because the clank overlap used
+    #   current centers only; vanilla enters ReboundStop with no damage-state entry.
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078C70,ftColl_8007699C}
+    # refs/melee/src/melee/lb/lbcollision.c::{lbColl_80007AFC,lbColl_80006094}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+
+    dataset_rel = "datasets/aggregate_recent/replays/validation/aggregate_recent/FavorableSuperficialPig.msl"
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+    record = 5466
+    p = 1
+    assert int(samples.shape[0]) > record, f"dataset too short for lock row: record={record}"
+
+    seed_t = samples[record]["seed_t"]
+    ref_t1 = samples[record]["ref_t1"]
+    assert int(seed_t["action_id"][p]) == 50  # AttackDash
+    assert int(seed_t["hitlag"][p]) == 0
+    assert int(seed_t["hitstun"][p]) == 0
+    assert int(ref_t1["action_id"][p]) == 237  # ReboundStop
+    assert int(ref_t1["animation_index"][p]) == 0xFFFFFFFF
+    assert int(ref_t1["hitstun"][p]) == 0
+
+    _, ref_row, out_row = _run_one_step_row(dataset_path, record, p)
+    for field in ("action_id", "action_frame", "animation_index", "hitlag", "hitstun"):
+        got = int(out_row[field][p])
+        exp = int(ref_row[field][p])
+        assert got == exp, f"record={record} p={p} field={field} expected={exp} got={got}"
+    got_sf = out_row["state_flags"][p].tolist()
+    exp_sf = ref_row["state_flags"][p].tolist()
+    assert got_sf == exp_sf, f"record={record} p={p} field=state_flags expected={exp_sf} got={got_sf}"
+
+
+@pytest.mark.integration
+def test_reboundstop_entry_clank_precedes_stale_body_hitlist_hhg_8674() -> None:
+    # Replay-real lock for the remaining former-F08h1 collision-order slice:
+    # - p0 AttackDash hb1 carries a seeded BODY victim ring from the prior active window.
+    # - p1 AttackHi3 creates a new same-group clanking hitbox this frame.
+    # - Vanilla still resolves hitbox-vs-hitbox clank/ReboundStop before p1 hb1 can fall through to
+    #   BODY DamageFlyTop on p0.
+    #
+    # This protects the runtime distinction between live HitCapsule clank geometry and dense
+    # replay-reconstructed BODY victim rings.
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078C70,ftColl_8007699C,inlineA0,inlineA1}
+    # refs/melee/src/melee/lb/lbcollision.c::{lbColl_80007AFC,lbColl_80008688}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+
+    dataset_rel = "datasets/aggregate_recent/replays/validation/aggregate_recent/HilariousVillainousGiraffe.msl"
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    record = 8674
+    p = 0
+    assert int(ds.samples.shape[0]) > record, f"dataset too short for lock row: record={record}"
+
+    seed_t = ds.samples[record]["seed_t"]
+    ref_t1 = ds.samples[record]["ref_t1"]
+    assert int(seed_t["action_id"][p]) == 50  # AttackDash
+    assert int(ref_t1["action_id"][p]) == 237  # ReboundStop
+    assert int(ref_t1["hitstun"][p]) == 0
+
+    _, ref_row, out_row = _run_one_step_row(dataset_path, record, p)
+    for field in ("action_id", "action_frame", "animation_index", "hitstun"):
+        got = int(out_row[field][p])
+        exp = int(ref_row[field][p])
+        assert got == exp, f"record={record} p={p} field={field} expected={exp} got={got}"
+    assert int(out_row["hitlag"][p]) > 0

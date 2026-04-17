@@ -518,10 +518,11 @@ void hurtboxes_refresh(MslBatch* batch) {
           continue;
         }
         float m[12];
-        if (anim_pose_get_matrix(char_id, msid, frame, caps[ci].bone_part_id, m) != 0) {
+        (void)action_id;
+        if (anim_pose_get_collision_matrix(batch, idx, msid, frame, caps[ci].bone_part_id, m) !=
+            0) {
           continue;
         }
-
         float ax = 0.0f, ay = 0.0f, az = 0.0f;
         float bx = 0.0f, by = 0.0f, bz = 0.0f;
         msl_mtx34_mul_point(m, caps[ci].a_offset, &ax, &ay, &az);

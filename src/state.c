@@ -28,6 +28,7 @@ int state_alloc(MslStateSoA* state, int batch_size) {
   const size_t bphl = bpp * (size_t)MSL_HITLIST_GROUPS;
   const size_t bphv = bph * (size_t)MSL_MAX_PLAYERS;
   const size_t bpst = bp * (size_t)MSL_STALE_QUEUE_SIZE;
+  const size_t bpdn = bp * (size_t)MSL_MAX_DYNAMIC_NODES;
 
   state->frame_id = (int32_t*)alloc_aligned_64(sizeof(int32_t) * b);
   state->frame_pre_random_seed = (uint32_t*)alloc_aligned_64(sizeof(uint32_t) * b);
@@ -283,6 +284,22 @@ int state_alloc(MslStateSoA* state, int batch_size) {
   state->reflector_radius = (float*)alloc_aligned_64(sizeof(float) * bp);
   state->ground_id = (uint16_t*)alloc_aligned_64(sizeof(uint16_t) * bp);
   state->animation_index = (uint32_t*)alloc_aligned_64(sizeof(uint32_t) * bp);
+  state->dynamic_pose_state_valid = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
+  state->dynamic_pose_apply_collision_matrix = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
+  state->dynamic_pose_node_count = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
+  state->dynamic_pose_char_id = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
+  state->dynamic_pose_msid = (uint16_t*)alloc_aligned_64(sizeof(uint16_t) * bp);
+  state->dynamic_pose_frame = (uint16_t*)alloc_aligned_64(sizeof(uint16_t) * bp);
+  state->dynamic_pose_rot_x = (float*)alloc_aligned_64(sizeof(float) * bpdn);
+  state->dynamic_pose_rot_y = (float*)alloc_aligned_64(sizeof(float) * bpdn);
+  state->dynamic_pose_rot_z = (float*)alloc_aligned_64(sizeof(float) * bpdn);
+  state->dynamic_pose_pos_x = (float*)alloc_aligned_64(sizeof(float) * bpdn);
+  state->dynamic_pose_pos_y = (float*)alloc_aligned_64(sizeof(float) * bpdn);
+  state->dynamic_pose_pos_z = (float*)alloc_aligned_64(sizeof(float) * bpdn);
+  state->dynamic_pose_axis_x = (float*)alloc_aligned_64(sizeof(float) * bpdn);
+  state->dynamic_pose_axis_y = (float*)alloc_aligned_64(sizeof(float) * bpdn);
+  state->dynamic_pose_axis_z = (float*)alloc_aligned_64(sizeof(float) * bpdn);
+  state->dynamic_pose_angle = (float*)alloc_aligned_64(sizeof(float) * bpdn);
   state->instance_hit_by = (uint16_t*)alloc_aligned_64(sizeof(uint16_t) * bp);
   state->instance_id = (uint16_t*)alloc_aligned_64(sizeof(uint16_t) * bp);
   state->instance_id_x2073 = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
@@ -436,6 +453,12 @@ int state_alloc(MslStateSoA* state, int batch_size) {
       !state->hitbox_flags || !state->shield_x || !state->shield_y || !state->shield_z ||
       !state->shield_radius || !state->reflector_x || !state->reflector_y ||
       !state->reflector_radius || !state->ground_id || !state->animation_index ||
+      !state->dynamic_pose_state_valid || !state->dynamic_pose_apply_collision_matrix ||
+      !state->dynamic_pose_node_count || !state->dynamic_pose_char_id ||
+      !state->dynamic_pose_msid || !state->dynamic_pose_frame || !state->dynamic_pose_rot_x ||
+      !state->dynamic_pose_rot_y || !state->dynamic_pose_rot_z || !state->dynamic_pose_pos_x ||
+      !state->dynamic_pose_pos_y || !state->dynamic_pose_pos_z || !state->dynamic_pose_axis_x ||
+      !state->dynamic_pose_axis_y || !state->dynamic_pose_axis_z || !state->dynamic_pose_angle ||
       !state->instance_hit_by || !state->instance_id || !state->instance_id_x2073 ||
       !state->motion_entry_instance_id_override || !state->instance_identity_last_action_id ||
       !state->attack_id || !state->attack_instance || !state->attack_identity_last_action_id ||
@@ -465,6 +488,22 @@ int state_alloc(MslStateSoA* state, int batch_size) {
     state->hitlist_reseed_gen[i] = 1u;
   }
   memset(state->frame_id, 0, sizeof(int32_t) * b);
+  memset(state->dynamic_pose_state_valid, 0, sizeof(uint8_t) * bp);
+  memset(state->dynamic_pose_apply_collision_matrix, 0, sizeof(uint8_t) * bp);
+  memset(state->dynamic_pose_node_count, 0, sizeof(uint8_t) * bp);
+  memset(state->dynamic_pose_char_id, 0, sizeof(uint8_t) * bp);
+  memset(state->dynamic_pose_msid, 0, sizeof(uint16_t) * bp);
+  memset(state->dynamic_pose_frame, 0, sizeof(uint16_t) * bp);
+  memset(state->dynamic_pose_rot_x, 0, sizeof(float) * bpdn);
+  memset(state->dynamic_pose_rot_y, 0, sizeof(float) * bpdn);
+  memset(state->dynamic_pose_rot_z, 0, sizeof(float) * bpdn);
+  memset(state->dynamic_pose_pos_x, 0, sizeof(float) * bpdn);
+  memset(state->dynamic_pose_pos_y, 0, sizeof(float) * bpdn);
+  memset(state->dynamic_pose_pos_z, 0, sizeof(float) * bpdn);
+  memset(state->dynamic_pose_axis_x, 0, sizeof(float) * bpdn);
+  memset(state->dynamic_pose_axis_y, 0, sizeof(float) * bpdn);
+  memset(state->dynamic_pose_axis_z, 0, sizeof(float) * bpdn);
+  memset(state->dynamic_pose_angle, 0, sizeof(float) * bpdn);
   memset(state->capture_grab_timer, 0, sizeof(float) * bp);
   memset(state->capture_wait_counter, 0, sizeof(float) * bp);
   memset(state->capture_wait_anim_rate_timer, 0, sizeof(float) * bp);
@@ -750,6 +789,22 @@ void state_free(MslStateSoA* state) {
   alloc_free(state->reflector_radius);
   alloc_free(state->ground_id);
   alloc_free(state->animation_index);
+  alloc_free(state->dynamic_pose_state_valid);
+  alloc_free(state->dynamic_pose_apply_collision_matrix);
+  alloc_free(state->dynamic_pose_node_count);
+  alloc_free(state->dynamic_pose_char_id);
+  alloc_free(state->dynamic_pose_msid);
+  alloc_free(state->dynamic_pose_frame);
+  alloc_free(state->dynamic_pose_rot_x);
+  alloc_free(state->dynamic_pose_rot_y);
+  alloc_free(state->dynamic_pose_rot_z);
+  alloc_free(state->dynamic_pose_pos_x);
+  alloc_free(state->dynamic_pose_pos_y);
+  alloc_free(state->dynamic_pose_pos_z);
+  alloc_free(state->dynamic_pose_axis_x);
+  alloc_free(state->dynamic_pose_axis_y);
+  alloc_free(state->dynamic_pose_axis_z);
+  alloc_free(state->dynamic_pose_angle);
   alloc_free(state->instance_hit_by);
   alloc_free(state->instance_id);
   alloc_free(state->instance_id_x2073);

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import argparse
-import math
 import struct
 import time
 from dataclasses import dataclass
@@ -964,6 +963,70 @@ def _write_anim_blend_data(character: str, out_dir: Path) -> Path:
     return out_path
 
 
+def _read_fighter_dynamics(character: str) -> list[dict[str, object]]:
+    """Return ftData.x2C dynamic-bone descriptors from the fighter DAT.
+
+    Decomp owner:
+    - refs/melee/src/melee/ft/ftdynamics.c::ftCo_8009CF84
+    - refs/melee/src/melee/ft/ftdynamics.c::ftCo_8009DD94
+    - refs/melee/src/melee/lb/lb_00F9.c::{lb_8000FD48,lb_80011710}
+
+    The raw `BoneDynamicsDesc` carries a root Fighter_Part, a chain count, and per-node
+    lb_00F9 dynamics constants. Unsupported/missing dynamics return an empty list.
+    """
+    prefix = _fighter_prefix(character)
+    base = ISO_DIR / f"{prefix}.dat"
+    arc = parse_hsd_archive(base.read_bytes())
+    ftdata_abs = arc.get_public_offset(_ftdata_symbol(character))
+    if ftdata_abs is None:
+        raise RuntimeError(f"{base.name} missing ftData public symbol")
+
+    dyn_ptr = _u32_be(arc.buf, ftdata_abs + 0x2C)
+    if dyn_ptr == 0:
+        return []
+    dyn_abs = arc.data_base + dyn_ptr
+    if dyn_abs + 0x14 > len(arc.buf):
+        raise RuntimeError(f"{base.name} ftData.x2C out of bounds")
+
+    dyn_count = int(_u32_be(arc.buf, dyn_abs + 0x00))
+    bones_ptr = _u32_be(arc.buf, dyn_abs + 0x04)
+    if dyn_count <= 0 or bones_ptr == 0:
+        return []
+    bones_abs = arc.data_base + bones_ptr
+
+    out: list[dict[str, object]] = []
+    for i in range(dyn_count):
+        # Decomp: BoneDynamicsDesc is `bone_id + DynamicsDesc`, i.e. 0x18 bytes.
+        # refs/melee/src/melee/lb/types.h::{DynamicsDesc,BoneDynamicsDesc}
+        # refs/melee/build/GALE01/asm/melee/ft/ftdynamics.s::ftCo_8009CB40 (mulli index, 0x18)
+        bone_abs = bones_abs + i * 0x18
+        if bone_abs + 0x18 > len(arc.buf):
+            raise RuntimeError(f"{base.name} dynamic bone descriptor truncated: index={i}")
+        root_part = int(_u32_be(arc.buf, bone_abs + 0x00))
+        data_ptr = _u32_be(arc.buf, bone_abs + 0x04)
+        chain_count = int(_u32_be(arc.buf, bone_abs + 0x08))
+        pos = tuple(float(_f32_be(arc.buf, bone_abs + 0x0C + j * 4)) for j in range(3))
+        entries: list[tuple[float, ...]] = []
+        if data_ptr != 0:
+            data_abs = arc.data_base + data_ptr
+            for j in range(max(0, chain_count)):
+                ent_abs = data_abs + j * 0x3C
+                if ent_abs + 0x3C > len(arc.buf):
+                    raise RuntimeError(
+                        f"{base.name} dynamic constants truncated: set={i} entry={j}"
+                    )
+                entries.append(tuple(float(_f32_be(arc.buf, ent_abs + k * 4)) for k in range(15)))
+        out.append(
+            {
+                "root_part": root_part,
+                "chain_count": chain_count,
+                "pos": pos,
+                "entries": entries,
+            }
+        )
+    return out
+
+
 def _default_costume_dat_and_joint(character: str) -> tuple[str, str]:
     """Return (dat_filename, joint_name) for costume 0 (Nr).
 
@@ -1279,6 +1342,115 @@ def _closure_with_ancestors(needed: list[int], parent_part: list[int]) -> list[i
     return sorted(out)
 
 
+def _dynamic_first_child_chain(root: int, count: int, parent_part: list[int]) -> list[int]:
+    """Return the runtime child chain used by lb_8000FD48 for fighter dynamics.
+
+    `lb_8000FD48` starts at the configured root JObj and walks `jobj->child` once per
+    dynamic node. Fighter skeleton data has at most one first-child continuation along
+    Fox's dynamic tail chain, so resolve the same chain in Fighter_Part space.
+    """
+    if root < 0 or count <= 0:
+        return []
+    children: dict[int, list[int]] = {}
+    for part, parent in enumerate(parent_part):
+        if parent >= 0:
+            children.setdefault(int(parent), []).append(int(part))
+    chain: list[int] = []
+    cur = int(root)
+    for _ in range(int(count)):
+        if cur < 0 or cur >= len(parent_part):
+            break
+        chain.append(cur)
+        kids = children.get(cur, [])
+        if not kids:
+            break
+        cur = min(kids)
+    return chain
+
+
+def _write_fighter_dynamics_data(
+    character: str,
+    out_dir: Path,
+    dynamic_sets: list[dict[str, object]],
+    parent_part: list[int],
+    collision_msids: list[int] | None = None,
+) -> Path:
+    """Write extracted ftData.x2C dynamic-chain descriptors for runtime pose ownership.
+
+    Layout `SSDYNN01` v2:
+    - set_count:u16, total_node_count:u16
+    - per set: root_part:u16, node_count:u16, pos:vec3
+    - per node: part:u16, pad:u16, constants[15]:f32
+    - collision_msid_count:u16, reserved:u16, collision_msids:u16[]
+
+    The constants are the raw 0x3C-byte `lb_00F9_UnkDesc1Inner` entries copied by
+    `lb_80011710`; runtime maps them onto the `lb_8001044C` dynamic-node fields. The
+    collision msid index is the audited owner predicate for submotions whose BODY collision
+    matrices consume this dynamic-chain state.
+    """
+    out_dir.mkdir(parents=True, exist_ok=True)
+    out_path = out_dir / f"{character}.dyn.bin"
+    encoded_sets: list[tuple[int, tuple[float, float, float], list[tuple[int, tuple[float, ...]]]]] = []
+    total_nodes = 0
+    for dyn in dynamic_sets:
+        root = int(dyn.get("root_part", -1))
+        count = int(dyn.get("chain_count", 0))
+        chain = _dynamic_first_child_chain(root, count, parent_part)
+        entries = list(dyn.get("entries", []))
+        nodes: list[tuple[int, tuple[float, ...]]] = []
+        for i, part in enumerate(chain):
+            if i >= len(entries):
+                break
+            nodes.append((int(part), tuple(float(x) for x in entries[i])))
+        if nodes:
+            pos_raw = dyn.get("pos", (0.0, 0.0, 0.0))
+            pos = tuple(float(x) for x in pos_raw)  # type: ignore[arg-type]
+            encoded_sets.append((root, (pos[0], pos[1], pos[2]), nodes))
+            total_nodes += len(nodes)
+
+    with out_path.open("wb") as f:
+        f.write(b"SSDYNN01")
+        f.write(struct.pack("<I", 2))
+        f.write(struct.pack("<H", len(encoded_sets)))
+        f.write(struct.pack("<H", total_nodes))
+        for root, pos, nodes in encoded_sets:
+            f.write(struct.pack("<HH3f", int(root) & 0xFFFF, len(nodes), *pos))
+            for part, entry in nodes:
+                if len(entry) != 15:
+                    raise RuntimeError(f"{character}: dynamic node for part {part} has {len(entry)} constants")
+                f.write(struct.pack("<HH15f", int(part) & 0xFFFF, 0, *entry))
+        owner_msids = sorted({int(msid) & 0xFFFF for msid in (collision_msids or [])})
+        f.write(struct.pack("<HH", len(owner_msids), 0))
+        for msid in owner_msids:
+            f.write(struct.pack("<H", msid))
+    return out_path
+
+
+def _dynamic_collision_owner_msids(
+    character: str,
+    moves: dict[str, object],
+    dynamic_sets: list[dict[str, object]],
+) -> list[int]:
+    """Return submotions whose BODY collision matrices consume fighter dynamics state.
+
+    This is deliberately data-owned rather than a C gameplay branch. Fox `AttackHi3` is the
+    currently audited RL1.0 dynamic-chain collision owner: Dolphin pre-`ftColl_80078C70` primitive
+    probes show its live hurtcap endpoints consume `ftData.x2C` / `lb_8001044C`, while broad dynamic
+    matrix application to other Fox common attacks regressed BODY sentinels. Adding another
+    submotion here requires the same owner evidence and keeps the runtime predicate in extracted
+    data instead of hardcoding record ids or cap/frame slices in C.
+    """
+    if character != "fox" or not dynamic_sets:
+        return []
+    move_entry = ((moves.get("moves") or {}) if isinstance(moves, dict) else {}).get("ftCo_SM_AttackHi3")
+    if not isinstance(move_entry, dict):
+        return []
+    msid = move_entry.get("submotion_id")
+    if not isinstance(msid, int) or not (0 <= msid <= 0xFFFF):
+        return []
+    return [int(msid)]
+
+
 def _node_mapping_for_parts(parts_num: int, skip_parts: list[int], fig: _FigaTree) -> tuple[list[int], list[int], list[int]]:
     # Map FigaTree node indices onto part indices by skipping the same parts
     # that are absent from the jobj traversal (ftParts_8007506C placeholders).
@@ -1385,6 +1557,21 @@ def extract_one_character(
     inv_model_scale = 1.0 / model_scaling if abs(model_scaling) > 1.0e-6 else 1.0
     part_to_joint, skip_parts, joint_to_part = _load_parts_table(character)
     parts_num = len(part_to_joint)
+    dynamic_sets = _read_fighter_dynamics(character)
+    moves = json.loads(moves_path.read_text())
+    for dyn in dynamic_sets:
+        for part in _dynamic_first_child_chain(
+            int(dyn.get("root_part", -1)), int(dyn.get("chain_count", 0)), parent_part
+        ):
+            if 0 <= part < 256 and part not in needed_parts:
+                needed_parts.append(part)
+    _write_fighter_dynamics_data(
+        character,
+        out_dir,
+        dynamic_sets,
+        parent_part,
+        collision_msids=_dynamic_collision_owner_msids(character, moves, dynamic_sets),
+    )
 
     # Capture victim alignment anchor (`mv.co.capturedamage.x18`) is set from `ftData.x8->x11`.
     # Decomp: refs/melee/build/GALE01/asm/melee/ft/chara/ftCommon/ftCo_Attack100.s::fn_800D9CE8
@@ -1401,7 +1588,6 @@ def extract_one_character(
     closure_parts = _closure_with_ancestors(needed_parts, parent_part)
 
     # Parse moves file for per-move msid (submotion_id).
-    moves = json.loads(moves_path.read_text())
     msid_by_move = [None] * 13
     for mv_name, entry in moves.get("moves", {}).items():
         mk = _move_key_idx(mv_name)

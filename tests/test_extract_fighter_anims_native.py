@@ -47,7 +47,7 @@ def test_extract_fighter_anims_native_matches_python(tmp_path: Path) -> None:
     _write_anim_blend_data("fox", out_py)
     _write_anim_blend_data("fox", out_native)
 
-    for suffix in (".bin", ".locals.bin", ".tracks.bin", ".blend.bin"):
+    for suffix in (".bin", ".locals.bin", ".tracks.bin", ".blend.bin", ".dyn.bin"):
         a = (out_py / f"fox{suffix}").read_bytes()
         b = (out_native / f"fox{suffix}").read_bytes()
         assert a == b, f"mismatch for {suffix}"

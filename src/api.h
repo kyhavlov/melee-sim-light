@@ -11,6 +11,10 @@ enum { MSL_MAX_PLAYERS = 4 };
 enum { MSL_MAX_ITEMS = 15 };
 enum { MSL_MAX_HURTCAPS = 32 };
 enum { MSL_MAX_HITBOXES = 4 };
+// Current target-domain fighter dynamic chains. Fox's ftData.x2C chain has four nodes; Falco has
+// no fighter dynamics in the extracted target data. Keep fixed capacity for allocation-free
+// runtime ownership while leaving the data loader schema able to reject larger unsupported chains.
+enum { MSL_MAX_DYNAMIC_NODES = 4 };
 enum { MSL_STATE_FLAGS_BYTES = 5 };
 // Decomp: `spawn_hitbox_0.hit_group` is a 3-bit field (0..7).
 // refs/melee/src/melee/lb/types.h::spawn_hitbox_0
@@ -1508,6 +1512,32 @@ typedef struct MslDebugHitboxSweepProxy {
   uint8_t arg3_var_r22_gates_collision;  // 1=decomp says it gates lbColl_8000805C acceptance
   uint8_t _pad2;
 } MslDebugHitboxSweepProxy;
+
+// Debug-only: current dynamic-chain collision pose state for one fighter.
+//
+// This exists to prove the reseed contract for `SSDYNN01`: non-sequential teacher-forced seeds
+// rebuild action-local dynamic state by replaying the deterministic update from frame 0, while
+// normal rollout carries this state frame-to-frame. It is debug/test tooling only.
+typedef struct MslDebugDynamicPoseState {
+  uint8_t player;
+  uint8_t char_id;
+  uint8_t state_valid;
+  uint8_t apply_collision_matrix;
+  uint8_t node_count;
+  uint8_t _pad0[3];
+  uint16_t msid;
+  uint16_t frame;
+  float rot_x[MSL_MAX_DYNAMIC_NODES];
+  float rot_y[MSL_MAX_DYNAMIC_NODES];
+  float rot_z[MSL_MAX_DYNAMIC_NODES];
+  float pos_x[MSL_MAX_DYNAMIC_NODES];
+  float pos_y[MSL_MAX_DYNAMIC_NODES];
+  float pos_z[MSL_MAX_DYNAMIC_NODES];
+  float axis_x[MSL_MAX_DYNAMIC_NODES];
+  float axis_y[MSL_MAX_DYNAMIC_NODES];
+  float axis_z[MSL_MAX_DYNAMIC_NODES];
+  float angle[MSL_MAX_DYNAMIC_NODES];
+} MslDebugDynamicPoseState;
 #pragma pack(pop)
 
 // -------------
@@ -1624,6 +1654,10 @@ int msl_batch_debug_hitbox_event_timing(const MslBatch* batch, int batch_index, 
 int msl_batch_debug_hitbox_sweep_proxy(const MslBatch* batch, int batch_index, int attacker,
                                        int hb_id, MslDebugHitboxSweepProxy* out_proxy);
 
+// Debug-only helper: inspect current dynamic-chain state for reseed/rollout equivalence tests.
+int msl_batch_debug_dynamic_pose_state(const MslBatch* batch, int batch_index, int player_index,
+                                       MslDebugDynamicPoseState* out_state);
+
 // Debug-only helper: inspect one hurtcap slot's runtime eligibility for a fighter on this step.
 int msl_batch_debug_hurtcap_slot_flags(const MslBatch* batch, int batch_index, int player_index,
                                        int cap_id, MslDebugHurtcapSlotFlags* out_flags);
@@ -1632,6 +1666,8 @@ int msl_batch_debug_hurtcap_slot_flags(const MslBatch* batch, int batch_index, i
 int msl_batch_debug_attackairb_continuation_overlap(const MslBatch* batch, int batch_index,
                                                     int attacker, int hb_id, int defender,
                                                     int cap_id, float* out_overlap);
+int msl_batch_debug_body_matrix_overlap(const MslBatch* batch, int batch_index, int attacker,
+                                        int hb_id, int defender, int cap_id, float* out_overlap);
 
 // Debug/validation helper: read pose-driven world-space hurt capsules for a single fighter.
 // Writes `MSL_MAX_HURTCAPS * 7` floats into out_caps_7 as rows:

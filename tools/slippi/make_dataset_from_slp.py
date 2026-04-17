@@ -130,6 +130,7 @@ def _seed_bridge_trim_indefinite_lanes(
     *,
     hitlist_cd: np.ndarray,
     hitlist_iid: np.ndarray,
+    hitlist_hb_valid: np.ndarray | None = None,
     hitlist_hb_cd: np.ndarray | None = None,
     hitlist_hb_iid: np.ndarray | None = None,
     fi: int,
@@ -143,6 +144,13 @@ def _seed_bridge_trim_indefinite_lanes(
         hitlist_iid[fi, attacker, stale_indef_mask, defender] = np.uint16(0)
     if hitlist_hb_cd is not None and hitlist_hb_iid is not None:
         stale_hb_mask = hitlist_hb_cd[fi, attacker, :, defender] == np.uint16(0xFFFF)
+        if hitlist_hb_valid is not None:
+            # Do not trim authoritative per-HitCapsule victims_1 lanes. They are the decomp-owned
+            # hidden HitCapsule state reconstructed from accepted shield/body contact provenance;
+            # the stale-latch cleanup is only allowed to remove coarse fallback lanes.
+            # refs/melee/src/melee/ft/ftcoll.c::{ftColl_800768A0,ftColl_80076CBC,ftColl_80076ED8}
+            # refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000ACFC,lbColl_80008688}
+            stale_hb_mask &= hitlist_hb_valid[fi, attacker, :] == np.uint8(0)
         if bool(np.any(stale_hb_mask)):
             hitlist_hb_cd[fi, attacker, stale_hb_mask, defender] = np.uint16(0)
             hitlist_hb_iid[fi, attacker, stale_hb_mask, defender] = np.uint16(0)
@@ -4213,6 +4221,7 @@ def _main_impl(args) -> None:
                 if not _seed_bridge_trim_indefinite_lanes(
                     hitlist_cd=hitlist_cd,
                     hitlist_iid=hitlist_iid,
+                    hitlist_hb_valid=hitlist_hb_valid,
                     hitlist_hb_cd=hitlist_hb_cd,
                     hitlist_hb_iid=hitlist_hb_iid,
                     fi=fi,

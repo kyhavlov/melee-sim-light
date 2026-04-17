@@ -1,6 +1,9 @@
 #pragma once
 
+#include <stddef.h>
 #include <stdint.h>
+
+typedef struct MslBatch MslBatch;
 
 #ifdef __cplusplus
 extern "C" {
@@ -28,6 +31,22 @@ void anim_pose_reset_for_tests(void);
 // Returns 0 on success; nonzero on missing/invalid inputs.
 int anim_pose_get_matrix(uint8_t char_id, uint16_t msid, uint16_t frame, uint16_t part_id,
                          float out_3x4[12]);
+
+// Collision-pose matrix sampler.
+//
+// This wraps SSANIM01 with the live fighter dynamics owner for dynamic JObj chains that feed
+// BODY hit/hurt primitives before ftColl_80078C70/lbColl_8000805C. It must remain data/decomp
+// backed; unsupported dynamic states fall back to the base SSANIM matrix rather than widening
+// collision geometry.
+//
+// Decomp owner path:
+// - refs/melee/src/melee/ft/ftdynamics.c::{ftCo_8009CF84,ftCo_8009DD94,ftCo_8009E318}
+// - refs/melee/src/melee/lb/lb_00F9.c::{lb_8000FD48,lb_80011710,lb_8001044C}
+// - refs/melee/src/melee/lb/lb_00B0.c::lb_8000B1CC
+void anim_pose_update_dynamic_state(MslBatch* batch);
+
+int anim_pose_get_collision_matrix(const MslBatch* batch, size_t player_idx, uint16_t msid,
+                                   uint16_t frame, uint16_t part_id, float out_3x4[12]);
 
 // Hot-path TransN sampler.
 // Reads the per-frame TransN/root translation tail for (char_id, msid, frame) into out_xyz:

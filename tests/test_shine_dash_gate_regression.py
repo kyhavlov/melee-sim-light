@@ -62,6 +62,7 @@ class _Case:
 
 
 _BASE = "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent"
+_AGG_BASE = "datasets/aggregate_recent/replays/validation/aggregate_recent"
 
 
 @pytest.mark.integration
@@ -70,6 +71,10 @@ _BASE = "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent"
     [
         # Replay-real negative lock: Dash (20) should not directly dispatch to SpecialLwStart.
         _Case(f"{_BASE}/GracefulAttachedTurtle.msl", 4529, 0, 20, 20),
+        # Replay-real negative lock: RunBrake IASA does not route through ftCo_800D68C0, so a
+        # same-frame B+down input must not enter Reflector/shine from RunBrake.
+        # refs/melee/src/melee/ft/chara/ftCommon/ftCo_RunBrake.c::ftCo_RunBrake_IASA
+        _Case(f"{_AGG_BASE}/PutridJoyousOryx.msl", 575, 0, 23, 39),
         # Adjacent positive control: SquatWait (40) still dispatches to SpecialLwStart.
         _Case(f"{_BASE}/GracefulAttachedTurtle.msl", 148, 0, 40, 360),
     ],

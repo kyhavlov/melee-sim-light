@@ -71,6 +71,60 @@ STATE_FLAG_FIELDS: frozenset[str] = frozenset(
     {"state_flags[0]", "state_flags[1]", "state_flags[2]", "state_flags[3]", "state_flags[4]"}
 )
 
+_DEBUG_CONTACT_CLASSIFIED_DTYPE = np.dtype(
+    [
+        ("attacker", "u1"),
+        ("defender", "u1"),
+        ("hitbox_id", "u1"),
+        ("contact_kind", "u1"),  # 0=BODY, 1=SHIELD
+        ("hurtcap_id", "u1"),
+        ("_pad0", "u1", (3,)),
+        ("attacker_msid", "<u2"),
+        ("attacker_action_frame", "<i2"),
+        ("hitbox_x", "<f4"),
+        ("hitbox_y", "<f4"),
+        ("hitbox_z", "<f4"),
+        ("hitbox_radius", "<f4"),
+        ("hitbox_damage", "<f4"),
+        ("hurtcap_ax", "<f4"),
+        ("hurtcap_ay", "<f4"),
+        ("hurtcap_az", "<f4"),
+        ("hurtcap_bx", "<f4"),
+        ("hurtcap_by", "<f4"),
+        ("hurtcap_bz", "<f4"),
+        ("hurtcap_radius", "<f4"),
+        ("shield_x", "<f4"),
+        ("shield_y", "<f4"),
+        ("shield_z", "<f4"),
+        ("shield_radius", "<f4"),
+    ],
+    align=False,
+)
+
+_DEBUG_SELECTED_BODY_DTYPE = np.dtype(
+    [
+        ("attacker", "u1"),
+        ("defender", "u1"),
+        ("hitbox_id", "u1"),
+        ("hurtcap_id", "u1"),
+        ("attacker_msid", "<u2"),
+        ("attacker_action_frame", "<i2"),
+        ("hitbox_x", "<f4"),
+        ("hitbox_y", "<f4"),
+        ("hitbox_z", "<f4"),
+        ("hitbox_radius", "<f4"),
+        ("hitbox_damage", "<f4"),
+        ("hurtcap_ax", "<f4"),
+        ("hurtcap_ay", "<f4"),
+        ("hurtcap_az", "<f4"),
+        ("hurtcap_bx", "<f4"),
+        ("hurtcap_by", "<f4"),
+        ("hurtcap_bz", "<f4"),
+        ("hurtcap_radius", "<f4"),
+    ],
+    align=False,
+)
+
 
 @dataclass(frozen=True)
 class FamilyMeta:
@@ -250,13 +304,18 @@ FAMILY_META: dict[str, FamilyMeta] = {
     "F08b_body_contact_geometry_residual": FamilyMeta(
         label="Combat Geometry / HSD Pose Collision Owner",
         owner_module="hsd_pose_collision",
-        fix_type="instrumentation first",
+        fix_type="active split",
         risk="high",
         confidence="high",
         hypothesis=(
-            "Rows where fighter BODY contact selection differs before post-admission combat "
-            "followup. Current probes show live HSD JObj/AObj/dynamics pose feeding lb_8000B1CC can "
-            "select different HurtCapsule primitives than the extracted SSANIM pose tables."
+            "Rows where current-frame fighter BODY contact selection differs before "
+            "post-admission combat followup. Live HSD JObj/AObj/dynamics pose feeding "
+            "lb_8000B1CC can select different HitCapsule/HurtCapsule primitives than extracted "
+            "SSANIM pose tables. The old broad family is split after the implemented SSDYNN01 "
+            "dynamic-chain, HitCapsule-victim-lineage, GuardSetOff onset, and swept/same-group "
+            "hitbox-vs-hitbox clank sub-owners, but the parent checklist item remains active while "
+            "same-owner BODY candidate, exact lbColl narrowphase, damage-selection, and adjacent "
+            "timebase/special-entry splits remain."
         ),
         refs=(
             "refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078C70,ftColl_80076ED8}",
@@ -264,6 +323,178 @@ FAMILY_META: dict[str, FamilyMeta] = {
             "refs/melee/src/melee/ft/ftdynamics.c::{ftCo_8009DD94,ftCo_8009E318}",
             "refs/melee/src/melee/ft/ftanim.c::{ftAnim_8006E7B8,ftAnim_8006EED4}",
             "refs/melee/src/melee/lb/lb_00B0.c::lb_8000B1CC",
+            "tools/extraction/extract_fighter_anims.py",
+            "reports/triage/20260416_bhh1599_collision_probe11/BlondHardHippopotamus_rec1599_p1_f1473_1480_collision_probe.jsonl",
+        ),
+    ),
+    "F08e_body_contact_no_candidate_adjacency": FamilyMeta(
+        label="Action/Hitbox Timing No-Candidate Adjacency",
+        owner_module="action_timebase",
+        fix_type="split-first",
+        risk="med",
+        confidence="high",
+        hypothesis=(
+            "Rows initially shaped like current-frame BODY admission, but the debug pre-combat "
+            "selector has no BODY candidate for the victim. These are not lb_8000B1CC primitive "
+            "selection rows; they are action-entry, hitbox-enable timing, or adjacent damage "
+            "transition rows until a primitive probe proves otherwise."
+        ),
+        refs=(
+            "src/api.c::msl_batch_debug_step_input_pre_combat",
+            "src/combat.c::combat_resolve",
+            "refs/melee/src/melee/ft/ftaction.c::ftAction_8007121C",
+            "refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078C70,ftColl_80076ED8}",
+        ),
+    ),
+    "F08f_body_contact_candidate_filter_residual": FamilyMeta(
+        label="Special-Move BODY Candidate Filter Residual",
+        owner_module="specials",
+        fix_type="instrumentation first",
+        risk="high",
+        confidence="high",
+        hypothesis=(
+            "Rows where a pre-combat BODY candidate exists but the selected BODY admission still "
+            "differs on a special-move hitbox surface. The refreshed aggregate currently leaves "
+            "this as the Firefox/SpecialHi hold candidate-filter owner, not the shared HSD pose "
+            "collision parent."
+        ),
+        refs=(
+            "src/combat.c::combat_resolve",
+            "data/special_msids/{fox,falco}.json",
+            "refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000ACFC,lbColl_8000805C,lbColl_80006E58}",
+            "refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078C70,ftColl_80076ED8}",
+        ),
+    ),
+    "F08g_body_contact_damage_selection_residual": FamilyMeta(
+        label="BODY Damage Selection Residual",
+        owner_module="damage_selection",
+        fix_type="instrumentation first",
+        risk="high",
+        confidence="high",
+        hypothesis=(
+            "Rows where both sim and vanilla admit BODY damage but choose different damage-state "
+            "classes. The primitive overlap is not a simple hit/no-hit disagreement; remaining "
+            "work is hitbox/hurtcap selection order, collision normal, or damage-state selector "
+            "inputs after the BODY candidate is accepted."
+        ),
+        refs=(
+            "src/combat.c::combat_apply_hit_to_player",
+            "refs/melee/src/melee/ft/ftcoll.c::ftColl_80076ED8",
+            "refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c",
+        ),
+    ),
+    "F08h_body_selected_false_grounded_attack_pose": FamilyMeta(
+        label="Grounded Selected False Positive / Exact lbColl Narrowphase",
+        owner_module="lbcoll_narrowphase",
+        fix_type="new precise owner",
+        risk="high",
+        confidence="high",
+        hypothesis=(
+            "Debug pre-combat selection picks a grounded-attack HitCapsule against a live "
+            "HurtCapsule while vanilla does not enter damage, and the row is not explained by a "
+            "non-damage action transition or ReboundStop expectation. This is now the exact "
+            "lbColl_80006E58 narrowphase/scalar residual owner: the sim's reduced sphere/capsule "
+            "proxy admits a selected primitive that the faithful lbColl path may reject or convert "
+            "to phantom/contact bookkeeping. This remains inside the combat geometry checklist "
+            "until the exact predicate/narrowphase owner is implemented."
+        ),
+        refs=(
+            "src/combat.c::combat_resolve",
+            "refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078C70,ftColl_80076ED8}",
+            "refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000805C,lbColl_80006E58}",
+            "tools/triage/audit_f08b_residuals.py",
+        ),
+    ),
+    "F08i_body_selected_false_aerial_attack_pose": FamilyMeta(
+        label="Aerial Selected False Positive / Exact lbColl Narrowphase",
+        owner_module="lbcoll_narrowphase",
+        fix_type="new precise owner",
+        risk="high",
+        confidence="high",
+        hypothesis=(
+            "Debug pre-combat selection picks an AttackAir HitCapsule against a live HurtCapsule, "
+            "but vanilla does not enter damage. Rows where the victim's post-timebase action is "
+            "already the replay's non-damage destination are the aerial counterpart of the exact "
+            "lbColl_80006E58 narrowphase/scalar residual. This remains inside the combat geometry "
+            "checklist until the exact predicate/narrowphase owner is implemented."
+        ),
+        refs=(
+            "src/combat.c::combat_resolve",
+            "refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_Anim",
+            "refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078C70,ftColl_80076ED8}",
+            "refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000805C,lbColl_80006E58}",
+            "tools/triage/audit_f08b_residuals.py",
+        ),
+    ),
+    "F08h1_body_selected_false_rebound_clank_residual": FamilyMeta(
+        label="Selected False Positive / Rebound-Clank Residual",
+        owner_module="clank_rebound",
+        fix_type="runtime-only",
+        risk="med",
+        confidence="high",
+        hypothesis=(
+            "Debug pre-combat BODY selection exists, but vanilla enters ReboundStop instead of "
+            "damage. These rows are residual hitbox-vs-hitbox clank/rebound ordering after the "
+            "swept lbColl_80007AFC sub-owner, not HSD hurtcap pose rows."
+        ),
+        refs=(
+            "refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007699C,ftColl_80078C70}",
+            "refs/melee/src/melee/lb/lbcollision.c::{lbColl_80007AFC,lbColl_80006094}",
+            "refs/melee/src/melee/ft/chara/ftCommon/ftCo_Rebound.c::{ftCo_80099D9C,ftCo_ReboundStop_Anim}",
+        ),
+    ),
+    "F08h2_body_selected_false_grounded_timebase_residual": FamilyMeta(
+        label="Grounded Selected False Positive / Action-Timebase Residual",
+        owner_module="action_timebase",
+        fix_type="runtime-only",
+        risk="med",
+        confidence="high",
+        hypothesis=(
+            "Debug pre-combat BODY selection exists, but the selected primitive is coupled to a "
+            "same-frame action/timebase divergence between seed and vanilla non-damage destination. "
+            "The owner is action entry/IASA/timebase ordering before BODY, not shared HSD pose."
+        ),
+        refs=(
+            "src/api.c::msl_batch_debug_step_input_pre_combat",
+            "refs/melee/src/melee/ft/ftanim.c::ftAnim_8006EBA4",
+            "refs/melee/src/melee/ft/ftaction.c::ftAction_8007121C",
+        ),
+    ),
+    "F08i1_body_selected_false_aerial_timebase_residual": FamilyMeta(
+        label="Aerial Selected False Positive / Action-Timebase Residual",
+        owner_module="action_timebase",
+        fix_type="runtime-only",
+        risk="med",
+        confidence="high",
+        hypothesis=(
+            "Debug pre-combat BODY selection exists on an aerial HitCapsule, but the victim's "
+            "same-frame action/timebase transition is already diverging into the replay's "
+            "non-damage destination. The owner is aerial/landing/jump action entry timing, not "
+            "shared HSD pose collision."
+        ),
+        refs=(
+            "src/api.c::msl_batch_debug_step_input_pre_combat",
+            "refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_Anim",
+            "refs/melee/src/melee/ft/ftanim.c::ftAnim_8006EBA4",
+        ),
+    ),
+    "F08j_body_selected_false_special_entry_pose": FamilyMeta(
+        label="Special Entry Selected False Positive",
+        owner_module="specials",
+        fix_type="split-first",
+        risk="high",
+        confidence="high",
+        hypothesis=(
+            "Debug pre-combat selection picks a special/action-entry HitCapsule (notably msid 313/308) "
+            "against a live HurtCapsule, but vanilla does not enter damage. The next owner is special "
+            "action-entry pose/hitbox enablement before treating these as shared grounded attack pose."
+        ),
+        refs=(
+            "src/combat.c::combat_resolve",
+            "data/special_msids/{fox,falco}.json",
+            "refs/melee/src/melee/ft/ftaction.c::ftAction_8007121C",
+            "refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078C70,ftColl_80076ED8}",
+            "tools/triage/audit_f08b_residuals.py",
         ),
     ),
     "F08c_damage_state_transition_adjacency": FamilyMeta(
@@ -928,12 +1159,13 @@ def _looks_like_damage_admission_disagreement(names: tuple[str, ...], field_set:
         return False
     if all(name.startswith("DAMAGE_") for name in names):
         return False
+    if names[1] == names[2] and names[1].startswith("DAMAGE_"):
+        return False
     return bool(
         field_set
         & {
             "action_id",
             "animation_index",
-            "hitlag",
             "hitstun",
             "instance_hit_by",
             "last_hit_by",
@@ -942,6 +1174,77 @@ def _looks_like_damage_admission_disagreement(names: tuple[str, ...], field_set:
             "jumps_left",
         }
     )
+
+
+def _looks_like_current_frame_body_admission_disagreement(
+    row: PlayerRow, names: tuple[str, str, str], field_set: set[str]
+) -> bool:
+    # F08b is the pre-admission BODY geometry owner. Keep it scoped to rows where the current
+    # frame can newly admit or suppress BODY damage from a non-damage seed action. Rows already in
+    # Damage*/Down*/Passive are damage continuation, floor contact, tech, or state-transition
+    # ownership unless a focused primitive probe later proves a new BODY hit happened in that state.
+    if not _looks_like_damage_admission_disagreement(names, field_set):
+        return False
+    seed_name, _ref_name, _out_name = names
+    if _looks_like_damage(seed_name):
+        return False
+    if row.hitlag != 0:
+        return False
+    return True
+
+
+def _damage_admission_outcome(ref_name: str, out_name: str) -> str:
+    ref_damage = _looks_like_damage(ref_name)
+    out_damage = _looks_like_damage(out_name)
+    if out_damage and not ref_damage:
+        return "sim_false_body_or_damage"
+    if ref_damage and not out_damage:
+        return "sim_missed_body_or_damage"
+    if ref_damage and out_damage and ref_name != out_name:
+        return "wrong_damage_selection"
+    return "transition_or_scalar"
+
+
+def _family_for_debug_body_contact_residual(
+    *,
+    seed_name: str = "",
+    precombat_name: str = "",
+    ref_name: str,
+    out_name: str,
+    selected_body_count: int,
+    body_candidate_count: int,
+    filtered_body_candidate_count: int,
+    first_msid: int | None = None,
+) -> str:
+    outcome = _damage_admission_outcome(ref_name, out_name)
+
+    if outcome == "wrong_damage_selection":
+        return "F08g_body_contact_damage_selection_residual"
+
+    if body_candidate_count <= 0 and selected_body_count <= 0:
+        return "F08e_body_contact_no_candidate_adjacency"
+
+    if outcome == "sim_missed_body_or_damage":
+        return "F08f_body_contact_candidate_filter_residual"
+
+    if outcome == "sim_false_body_or_damage" and selected_body_count > 0:
+        if first_msid in {46, 52, 55, 58, 59}:
+            if ref_name == "REBOUND_STOP":
+                return "F08h1_body_selected_false_rebound_clank_residual"
+            if (seed_name and seed_name != ref_name) or (precombat_name and precombat_name != ref_name):
+                return "F08h2_body_selected_false_grounded_timebase_residual"
+            return "F08h_body_selected_false_grounded_attack_pose"
+        if first_msid in {68, 70, 71, 72}:
+            if (seed_name and seed_name != ref_name) or (precombat_name and precombat_name != ref_name):
+                return "F08i1_body_selected_false_aerial_timebase_residual"
+            return "F08i_body_selected_false_aerial_attack_pose"
+        if first_msid is not None and first_msid >= 300:
+            return "F08j_body_selected_false_special_entry_pose"
+
+    # The residual still has a pre-combat BODY candidate/selection, but it is not one of the
+    # currently split Fox/Falco RL1.0 current-frame clusters.
+    _ = filtered_body_candidate_count
+    return "F08b_body_contact_geometry_residual"
 
 
 def _looks_like_damagefly(name: str) -> bool:
@@ -1152,7 +1455,7 @@ def _classify_player_row(row: PlayerRow, action_names: dict[int, str]) -> str:
             return "F10e_special_move_adjacency"
         if field_set <= {"instance_id", "instance_hit_by", "last_hit_by"}:
             return "F08a_damage_identity_bookkeeping_residual"
-        if _looks_like_damage_admission_disagreement(names, field_set):
+        if _looks_like_current_frame_body_admission_disagreement(row, names, field_set):
             return "F08b_body_contact_geometry_residual"
         if any(_looks_like_landing_cliff_or_fall(name) for name in names) or any(
             name in {"DASH", "TURN", "KNEE_BEND", "WAIT", "WALK_SLOW"} for name in names
@@ -1161,7 +1464,7 @@ def _classify_player_row(row: PlayerRow, action_names: dict[int, str]) -> str:
         if any(name.startswith("DOWN_") or name.startswith("PASSIVE") for name in names):
             return "F08c_damage_state_transition_adjacency"
         if field_set & {"action_id", "animation_index", "on_ground", "ground_id", "hurtbox_state"}:
-            return "F08b_body_contact_geometry_residual"
+            return "F08c_damage_state_transition_adjacency"
         if field_set & {"hitlag", "hitstun", "action_frame", "combo_count", "last_attack_landed", "state_flags[1]"}:
             return "F08d_damage_timer_scalar_residual"
         return "F08a_damage_identity_bookkeeping_residual"
@@ -1331,11 +1634,30 @@ def _audit_player_row(row: PlayerRow, action_names: dict[int, str]) -> tuple[boo
         }
         return ok, "damage row reduced to identity/source bookkeeping"
     if row.family_id == "F08b_body_contact_geometry_residual":
-        ok = any(_looks_like_damage(name) for name in names) and (
-            bool(field_set & {"action_id", "animation_index", "on_ground", "ground_id", "hurtbox_state"})
-            or _looks_like_damage_admission_disagreement(names, field_set)
+        ok = _looks_like_current_frame_body_admission_disagreement(row, names, set(field_set))
+        return ok, "current-frame BODY admission geometry row"
+    if row.family_id == "F08e_body_contact_no_candidate_adjacency":
+        ok = _looks_like_current_frame_body_admission_disagreement(row, names, set(field_set))
+        return ok, "debug pre-combat BODY selector had no candidate for this admission-shaped row"
+    if row.family_id == "F08f_body_contact_candidate_filter_residual":
+        ok = _looks_like_current_frame_body_admission_disagreement(row, names, set(field_set))
+        return ok, "debug pre-combat BODY candidate exists but admission/filtering differs"
+    if row.family_id == "F08g_body_contact_damage_selection_residual":
+        ok = (
+            any(_looks_like_damage(name) for name in names)
+            and _damage_admission_outcome(names[1], names[2]) == "wrong_damage_selection"
         )
-        return ok, "damage row with BODY contact geometry or selector-facing fields"
+        return ok, "BODY was admitted but damage-state selection differs"
+    if row.family_id in {
+        "F08h_body_selected_false_grounded_attack_pose",
+        "F08i_body_selected_false_aerial_attack_pose",
+        "F08h1_body_selected_false_rebound_clank_residual",
+        "F08h2_body_selected_false_grounded_timebase_residual",
+        "F08i1_body_selected_false_aerial_timebase_residual",
+        "F08j_body_selected_false_special_entry_pose",
+    }:
+        ok = _looks_like_current_frame_body_admission_disagreement(row, names, set(field_set))
+        return ok, "debug pre-combat BODY selector selected a false-positive primitive"
     if row.family_id == "F08c_damage_state_transition_adjacency":
         ok = any(_looks_like_damage(name) for name in names) and (
             any(_looks_like_landing_cliff_or_fall(name) for name in names)
@@ -1573,6 +1895,15 @@ def _split_cross_player_instance_counter_rows(
         "F08b_body_contact_geometry_residual",
         "F08c_damage_state_transition_adjacency",
         "F08d_damage_timer_scalar_residual",
+        "F08e_body_contact_no_candidate_adjacency",
+        "F08f_body_contact_candidate_filter_residual",
+        "F08g_body_contact_damage_selection_residual",
+        "F08h_body_selected_false_grounded_attack_pose",
+        "F08h1_body_selected_false_rebound_clank_residual",
+        "F08h2_body_selected_false_grounded_timebase_residual",
+        "F08i_body_selected_false_aerial_attack_pose",
+        "F08i1_body_selected_false_aerial_timebase_residual",
+        "F08j_body_selected_false_special_entry_pose",
         "F09_aerial_combat_resolution",
         "F09a_aerial_stateflag_hurtbox_adjacency",
         "F09b_aerial_bookkeeping_adjacency",
@@ -1623,6 +1954,120 @@ def _split_cross_player_instance_counter_rows(
             if (ev.dataset, ev.record, p) in cross_player_keys:
                 ev = MismatchEvent(**{**asdict(ev), "family_id": "F12e_cross_player_instance_counter_order"})
         new_events.append(ev)
+    return new_events, new_player_rows
+
+
+def _split_body_contact_debug_residuals(
+    all_events: list[MismatchEvent],
+    player_rows: dict[tuple[str, int, int], PlayerRow],
+    *,
+    dataset_paths: dict[str, Path],
+    action_names: dict[int, str],
+    binding: Any,
+) -> tuple[list[MismatchEvent], dict[tuple[str, int, int], PlayerRow]]:
+    # F08b is the pre-admission primitive owner. Keep only rows that actually have a current
+    # pre-combat BODY candidate/selection in the debug selector; rows with no candidate are action
+    # timing/adjacency until primitive probes prove otherwise.
+    # refs:
+    # - src/api.c::msl_batch_debug_step_input_pre_combat
+    # - src/combat.c::combat_resolve
+    # - refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078C70,ftColl_80076ED8}
+    f08b_keys = [
+        key
+        for key, row in player_rows.items()
+        if row.fields and row.family_id == "F08b_body_contact_geometry_residual"
+    ]
+    if not f08b_keys:
+        return all_events, player_rows
+
+    sizes = binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    compare_stride = int(sizes["compare"])
+
+    datasets: dict[str, Any] = {}
+    family_by_key: dict[tuple[str, int, int], str] = {}
+
+    for dataset_name, record, victim in f08b_keys:
+        ds = datasets.get(dataset_name)
+        if ds is None:
+            ds_path = dataset_paths.get(dataset_name)
+            if ds_path is None:
+                continue
+            ds = read_dataset(str(ds_path))
+            datasets[dataset_name] = ds
+
+        sample = ds.samples[record : record + 1]  # type: ignore[attr-defined]
+        if int(sample.shape[0]) != 1:
+            continue
+
+        seed_bytes = np.frombuffer(sample["seed_t"].tobytes(order="C"), dtype=np.uint8).copy().reshape(1, seed_stride)
+        prev_bytes = np.frombuffer(sample["prev_input_t"].tobytes(order="C"), dtype=np.uint8).copy().reshape(
+            1, input_stride
+        )
+        in_bytes = np.frombuffer(sample["input_t"].tobytes(order="C"), dtype=np.uint8).copy().reshape(1, input_stride)
+        precombat_out = np.empty((1, compare_stride), dtype=np.uint8)
+
+        handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))  # type: ignore[index]
+        try:
+            binding.reseed_seed(handle, seed_bytes)
+            binding.debug_step_input_pre_combat(handle, prev_bytes, in_bytes)
+            binding.write_compare(handle, precombat_out)
+            selected_raw, selected_count = binding.debug_combat_select_body_hits(handle, 0, 256)
+            classified_raw, classified_count = binding.debug_combat_contacts_classified(handle, 0, 256)
+            filtered_raw, filtered_count = binding.debug_combat_contacts_classified_filtered(handle, 0, 256)
+        finally:
+            binding.destroy(handle)
+
+        selected = selected_raw.reshape(-1).view(_DEBUG_SELECTED_BODY_DTYPE)[:selected_count]
+        classified = classified_raw.reshape(-1).view(_DEBUG_CONTACT_CLASSIFIED_DTYPE)[:classified_count]
+        filtered = filtered_raw.reshape(-1).view(_DEBUG_CONTACT_CLASSIFIED_DTYPE)[:filtered_count]
+
+        selected_body = [c for c in selected if int(c["defender"]) == int(victim)]
+        selected_body_count = len(selected_body)
+        body_candidate_count = sum(
+            1 for c in classified if int(c["defender"]) == int(victim) and int(c["contact_kind"]) == 0
+        )
+        filtered_body_candidate_count = sum(
+            1 for c in filtered if int(c["defender"]) == int(victim) and int(c["contact_kind"]) == 0
+        )
+
+        row = player_rows[(dataset_name, record, victim)]
+        precombat_row = precombat_out.view(COMPARE_DTYPE).reshape(-1)[0]
+        precombat_action_id = int(precombat_row["action_id"][victim])
+        family_by_key[(dataset_name, record, victim)] = _family_for_debug_body_contact_residual(
+            seed_name=_action_name(action_names, row.seed_action_id),
+            precombat_name=_action_name(action_names, precombat_action_id),
+            ref_name=_action_name(action_names, row.ref_action_id),
+            out_name=_action_name(action_names, row.out_action_id),
+            selected_body_count=selected_body_count,
+            body_candidate_count=body_candidate_count,
+            filtered_body_candidate_count=filtered_body_candidate_count,
+            first_msid=int(selected_body[0]["attacker_msid"]) if selected_body else None,
+        )
+
+    if not family_by_key:
+        return all_events, player_rows
+
+    new_player_rows: dict[tuple[str, int, int], PlayerRow] = {}
+    for key, row in player_rows.items():
+        family_id = family_by_key.get(key)
+        if family_id is not None and family_id != row.family_id:
+            row = PlayerRow(**{**asdict(row), "family_id": family_id})
+        new_player_rows[key] = row
+
+    new_events: list[MismatchEvent] = []
+    for ev in all_events:
+        if ev.subject.startswith("p"):
+            try:
+                p = int(ev.subject[1:])
+            except ValueError:
+                p = -1
+            family_id = family_by_key.get((ev.dataset, ev.record, p))
+            if family_id is not None and family_id != ev.family_id:
+                ev = MismatchEvent(**{**asdict(ev), "family_id": family_id})
+        new_events.append(ev)
+
     return new_events, new_player_rows
 
 
@@ -1746,6 +2191,7 @@ def _iter_suite_events(
     all_events: list[MismatchEvent] = []
     player_rows: dict[tuple[str, int, int], PlayerRow] = {}
     item_rows: dict[tuple[str, int, int], ItemSlotRow] = {}
+    dataset_paths: dict[str, Path] = {}
 
     for replay in suite.replays:
         ds_path = dataset_path_for_suite_replay(
@@ -1785,6 +2231,7 @@ def _iter_suite_events(
             ref = samples["ref_t1"]
 
             dataset_name = str(Path(ds_path).name)
+            dataset_paths[dataset_name] = ds_path
 
             for i in range(n):
                 for p in range(num_players):
@@ -1907,6 +2354,13 @@ def _iter_suite_events(
         finally:
             binding.destroy(handle)
 
+    all_events, player_rows = _split_body_contact_debug_residuals(
+        all_events,
+        player_rows,
+        dataset_paths=dataset_paths,
+        action_names=action_names,
+        binding=binding,
+    )
     all_events, player_rows = _split_cross_player_instance_counter_rows(all_events, player_rows)
     return all_events, player_rows, item_rows
 

@@ -650,6 +650,29 @@ typedef struct MslStateSoA {
   float* reflector_radius;  // [batch * players]
   uint16_t* ground_id;
   uint32_t* animation_index;
+  // Live fighter dynamic-node pose owner (`ftData.x2C` -> `lb_8001044C`).
+  //
+  // Runtime-only carry state for the dynamic JObj chain that feeds `lb_8000B1CC` collision
+  // primitives. It is initialized from extracted descriptors/local SRT at reseed or on
+  // non-sequential motion, then updated before BODY hit/hurt primitive refresh.
+  // refs/melee/src/melee/ft/ftdynamics.c::{ftCo_8009CF84,ftCo_8009DD94}
+  // refs/melee/src/melee/lb/lb_00F9.c::{lb_8000FD48,lb_80011710,lb_8001044C}
+  uint8_t* dynamic_pose_state_valid;             // [batch * players]
+  uint8_t* dynamic_pose_apply_collision_matrix;  // [batch * players]
+  uint8_t* dynamic_pose_node_count;              // [batch * players]
+  uint8_t* dynamic_pose_char_id;                 // [batch * players]
+  uint16_t* dynamic_pose_msid;                   // [batch * players]
+  uint16_t* dynamic_pose_frame;                  // [batch * players]
+  float* dynamic_pose_rot_x;                     // [batch * players * MSL_MAX_DYNAMIC_NODES]
+  float* dynamic_pose_rot_y;
+  float* dynamic_pose_rot_z;
+  float* dynamic_pose_pos_x;
+  float* dynamic_pose_pos_y;
+  float* dynamic_pose_pos_z;
+  float* dynamic_pose_axis_x;
+  float* dynamic_pose_axis_y;
+  float* dynamic_pose_axis_z;
+  float* dynamic_pose_angle;
   uint16_t* instance_hit_by;
   uint16_t* instance_id;
   // Internal-only: low 8 bits of fp->x2070 (the byte at fp+0x2073) used by ft_800895E0 to decide

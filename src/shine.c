@@ -110,6 +110,10 @@ static inline uint8_t action_allows_shine_entry_ground(uint16_t action_id) {
   //   ftCo_Landing_IASA -> ftCo_800D68C0, but this sim currently models only a minimal Landing IASA (jump/dash/turn/walk)
   //   in src/locomotion.c and does not yet mirror the full special-dispatch chain there.
   //   refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::ftCo_Landing_IASA
+  // - RunBrake: IASA checks fn_800CAF78, cmd_vars[0] turn-run, and ftCo_800D5FB0 only; it does
+  //   not call ftCo_SpecialS_CheckInput or ftCo_800D68C0, so grounded SpecialLw cannot enter from
+  //   RunBrake on the same frame.
+  //   refs/melee/src/melee/ft/chara/ftCommon/ftCo_RunBrake.c::ftCo_RunBrake_IASA
   switch (action_id) {
     case MSL_ACT_WAIT:
     case MSL_ACT_WALK_SLOW:
@@ -125,7 +129,6 @@ static inline uint8_t action_allows_shine_entry_ground(uint16_t action_id) {
     // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_800D68C0
     case MSL_ACT_RUN:
     case MSL_ACT_RUN_DIRECT:
-    case MSL_ACT_RUN_BRAKE:
     case MSL_ACT_SQUAT:
     case MSL_ACT_SQUAT_WAIT:
     case MSL_ACT_SQUAT_RV:
@@ -138,6 +141,37 @@ static inline uint8_t action_allows_shine_entry_ground(uint16_t action_id) {
     default:
       return 0u;
   }
+}
+
+static inline uint8_t shine_entry_blocked_by_runbrake_squat_transition(const MslBatch* batch,
+                                                                       size_t idx,
+                                                                       uint16_t action_id) {
+  if (batch == NULL || action_id != (uint16_t)MSL_ACT_SQUAT) {
+    return 0u;
+  }
+  // Decomp ordering: ftCo_RunBrake_IASA returns immediately after ftCo_800D5FB0 enters Squat.
+  // The destination Squat IASA (`ftCo_800D68C0` special dispatch) does not run again in the same
+  // input callback. This simulator runs shine_update_pre_physics after locomotion_update_pre, so
+  // explicitly prevent the just-entered RunBrake->Squat frame from consuming the same B+down input.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_RunBrake.c::ftCo_RunBrake_IASA
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Squat.c::ftCo_800D5FB0
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Squat.c::ftCo_Squat_IASA
+  return (batch->state.prev_action_id[idx] == (uint16_t)MSL_ACT_RUN_BRAKE) ? 1u : 0u;
+}
+
+static inline uint8_t shine_entry_allowed_by_run_to_runbrake_transition(const MslBatch* batch,
+                                                                        size_t idx,
+                                                                        uint16_t action_id) {
+  if (batch == NULL || action_id != (uint16_t)MSL_ACT_RUN_BRAKE) {
+    return 0u;
+  }
+  // Run IASA checks SpecialS, attacks, ftCo_800D68C0, and other special/catch/guard branches
+  // before the final RunBrake check. Because this sim's locomotion pass can enter RunBrake before
+  // shine_update_pre_physics(), preserve the frame-start Run special-dispatch opportunity here.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Run.c::ftCo_Run_IASA
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_RunBrake.c::ftCo_RunBrake_CheckInput
+  const uint16_t start = batch->state.prev_action_id[idx];
+  return (start == (uint16_t)MSL_ACT_RUN || start == (uint16_t)MSL_ACT_RUN_DIRECT) ? 1u : 0u;
 }
 
 static inline uint8_t action_allows_shine_entry_air(uint16_t action_id) {
@@ -452,7 +486,9 @@ void shine_update_pre_physics(MslBatch* batch) {
       if (!action_is_shine(a) && (buttons_pressed & (uint16_t)MSL_BUTTON_B) != 0 &&
           stick_wants_speciallw(c, batch->state.input_main_y[idx])) {
         if (on_ground) {
-          if (action_allows_shine_entry_ground(a) || landing_specials_open) {
+          if ((action_allows_shine_entry_ground(a) || landing_specials_open ||
+               shine_entry_allowed_by_run_to_runbrake_transition(batch, idx, a)) &&
+              !shine_entry_blocked_by_runbrake_squat_transition(batch, idx, a)) {
             // Turn IASA ownership:
             // - ftCo_Turn_IASA temporarily flips fp->facing_dir to mv.co.turn.facing_after before
             //   ftCo_800D68C0 consumes grounded special input, then restores it only on the

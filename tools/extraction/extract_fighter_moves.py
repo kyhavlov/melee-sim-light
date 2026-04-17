@@ -724,6 +724,13 @@ def main() -> None:
         # refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Anim
         # refs/melee/src/melee/ft/ftaction.c::ftAction_80071950
         "ftCo_SM_EscapeAir",
+        # Ledge getup attacks are common motion states whose HitCapsules are owned by the same
+        # ftAction_8007121C create/clear path as grounded/aerial attacks. Extract for every target
+        # character; do not hide character-specific regressions by omitting real game data.
+        # refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffAttack.c::{
+        #   ftCo_CliffAttack_Anim,ftCo_CliffAttack_Coll}
+        "ftCo_SM_CliffAttackSlow",
+        "ftCo_SM_CliffAttackQuick",
         # Guard hold script timing for fp->allow_interrupt ownership.
         # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c
         "ftCo_SM_Guard",

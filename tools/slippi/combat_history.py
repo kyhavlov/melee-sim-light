@@ -193,6 +193,32 @@ def _is_first_guardsetoff_hitlag_row(
     return int(hitlag_arr[fi - 1, defender]) == 0 and _is_shield_active_action(int(action_id[fi - 1, defender]))
 
 
+def _is_guardsetoff_shield_damage_onset(
+    *,
+    fi: int,
+    defender: int,
+    action_id: np.ndarray,
+    hitlag_arr: np.ndarray | None,
+    shield_hp: np.ndarray,
+) -> bool:
+    # Replay-visible shield-hit consequence:
+    # - ftColl_80076CBC enters GuardSetOff and applies hitlag after a shield hit.
+    # - Some target rows expose a non-Guard visible action immediately before GuardSetOff (for
+    #   example DownStandD), so key the provenance proof on the GuardSetOff hitlag onset plus shield
+    #   HP drop rather than requiring the previous visible action to be Guard*.
+    # refs/melee/src/melee/ft/ftcoll.c::ftColl_80076CBC
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80092F2C
+    if hitlag_arr is None:
+        return False
+    if fi <= 0:
+        return False
+    if int(action_id[fi, defender]) != ACT_GUARD_SET_OFF:
+        return False
+    if int(hitlag_arr[fi, defender]) <= 0 or int(hitlag_arr[fi - 1, defender]) != 0:
+        return False
+    return float(shield_hp[fi, defender]) < float(shield_hp[fi - 1, defender])
+
+
 def _is_frozen_guard_snapshot(*, action_id: int, action_frame: int, animation_index: int) -> bool:
     return int(action_id) == ACT_GUARD and int(action_frame) < 0 and int(animation_index) == 0xFFFFFFFF
 
@@ -1127,8 +1153,10 @@ def derive_combat_hitlist_seed_fields(
                     continue
                 if int(stocks[fi, defender]) == 0:
                     continue
-                if int(hurtbox_state[fi, defender]) != 0:
+                defender_hurt_status = int(hurtbox_state[fi, defender])
+                if defender_hurt_status == 2:
                     continue
+                defender_no_damage = defender_hurt_status != 0
 
                 if is_teams and int(team_id[fi, attacker]) == int(team_id[fi, defender]):
                     continue
@@ -1146,9 +1174,8 @@ def derive_combat_hitlist_seed_fields(
                 # Replay-visible corroboration gate (strictly causal):
                 # only seed a hitlist latch when the defender is in hitlag on this frame.
                 # This trims synthetic stale latches from approximate geometry without using lookahead.
-                defender_hitlag_seen = (
-                    int(hitlag_arr[fi, defender]) > 0 if hitlag_arr is not None else True
-                )
+                defender_hitlag_seen = int(hitlag_arr[fi, defender]) > 0 if hitlag_arr is not None else True
+                attacker_hitlag_seen = int(hitlag_arr[fi, attacker]) > 0 if hitlag_arr is not None else True
 
                 for hb_id in range(MAX_HITBOXES):
                     if hb_id not in a_hitboxes:
@@ -1187,6 +1214,13 @@ def derive_combat_hitlist_seed_fields(
                     first_guardsetoff_hitlag_row = _is_first_guardsetoff_hitlag_row(
                         fi=fi, defender=defender, action_id=action_id, hitlag_arr=hitlag_arr
                     )
+                    guardsetoff_shield_damage_onset = _is_guardsetoff_shield_damage_onset(
+                        fi=fi,
+                        defender=defender,
+                        action_id=action_id,
+                        hitlag_arr=hitlag_arr,
+                        shield_hp=shield_hp,
+                    )
                     if (
                         hitlag_arr is not None
                         and last_hit_by_arr is not None
@@ -1222,16 +1256,15 @@ def derive_combat_hitlist_seed_fields(
                         # - The dense group latch is born too early for this frozen-Guard family, so
                         #   it cannot distinguish which hitbox slots actually own the accepted shield
                         #   contact.
-                        # - On the first replay-visible GuardSetOff hitlag row, stamp authoritative
-                        #   per-hitbox lineage for every currently active slot in the accepted
-                        #   hit_group if any one slot overlaps the shield.
+                        # - On the first replay-visible GuardSetOff hitlag row, the dense group
+                        #   latch plus shield-hitlag state prove a prior shield admission. Stamp
+                        #   authoritative per-hitbox lineage for every currently active slot in
+                        #   the accepted hit_group, matching ftColl_80076808's same-group insert.
                         # - Later frozen rows must carry that onset lineage forward; they must not
                         #   refresh it from overlap again.
                         # refs/melee/src/melee/ft/ftcoll.c::ftColl_80076CBC
                         # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80092F2C
-                        if first_guardsetoff_hitlag_row and shield_active and _sphere_sphere_intersects(
-                            hx, hy, hz, hr, shx, shy, shz, shr
-                        ):
+                        if first_guardsetoff_hitlag_row or guardsetoff_shield_damage_onset:
                             rehit_frames = int(hb.get("rehit_frames", 0)) & 0xFF
                             seeded_cd = (
                                 np.uint16(HITLIST_CD_INDEFINITE)
@@ -1356,14 +1389,16 @@ def derive_combat_hitlist_seed_fields(
                             for reg_hb_id, reg_hb in a_hitboxes.items():
                                 if (int(reg_hb.get("hit_group", 0)) & 0x7) != hit_group:
                                     continue
-                                hitlist_hb_cd[attacker, int(reg_hb_id), defender] = (
+                                reg_hb_i = int(reg_hb_id)
+                                hitlist_hb_cd[attacker, reg_hb_i, defender] = (
                                     np.uint16(HITLIST_CD_INDEFINITE)
                                     if rehit_frames == 0
                                     else np.uint16(rehit_frames)
                                 )
-                                hitlist_hb_iid[attacker, int(reg_hb_id), defender] = np.uint16(
+                                hitlist_hb_iid[attacker, reg_hb_i, defender] = np.uint16(
                                     int(instance_id[fi, defender])
                                 )
+                                hitlist_hb_authoritative[attacker, reg_hb_i] = np.uint8(1)
                             hitlist_cd[attacker, hit_group, defender] = (
                                 np.uint16(HITLIST_CD_INDEFINITE)
                                 if rehit_frames == 0
@@ -1401,7 +1436,18 @@ def derive_combat_hitlist_seed_fields(
                             continue
 
                         # Hitlist register (replay-corroborated when hitlag is provided).
-                        if not defender_hitlag_seen:
+                        #
+                        # Invincible/no-damage BODY contact still writes HitCapsule.victims_1:
+                        # ftColl_80076ED8 calls inlineB0(...lbColl_80008688) before the vulnerable
+                        # damage guard (`x1988 == 0 && x198C == 0 && !x221D_b6 && hurt enabled`).
+                        # Slippi exposes this contact through attacker hitlag while defender damage
+                        # and defender hitlag stay clear, so use current prefix-visible attacker
+                        # hitlag as the no-damage contact corroboration. Intangible defenders were
+                        # filtered above and never reach lbColl_8000805C.
+                        # refs/melee/src/melee/ft/ftcoll.c::ftColl_80076ED8
+                        # refs/melee/src/melee/lb/lbcollision.c::lbColl_80008688
+                        const_no_damage_contact_seen = defender_no_damage and attacker_hitlag_seen
+                        if not defender_hitlag_seen and not const_no_damage_contact_seen:
                             if not (
                                 include_replay_only_body_admission
                                 and hitlag_arr is not None
@@ -1443,12 +1489,14 @@ def derive_combat_hitlist_seed_fields(
                         for reg_hb_id, reg_hb in a_hitboxes.items():
                             if (int(reg_hb.get("hit_group", 0)) & 0x7) != hit_group:
                                 continue
-                            hitlist_hb_cd[attacker, int(reg_hb_id), defender] = (
+                            reg_hb_i = int(reg_hb_id)
+                            hitlist_hb_cd[attacker, reg_hb_i, defender] = (
                                 np.uint16(HITLIST_CD_INDEFINITE) if rehit_frames == 0 else np.uint16(rehit_frames)
                             )
-                            hitlist_hb_iid[attacker, int(reg_hb_id), defender] = np.uint16(
+                            hitlist_hb_iid[attacker, reg_hb_i, defender] = np.uint16(
                                 int(instance_id[fi, defender])
                             )
+                            hitlist_hb_authoritative[attacker, reg_hb_i] = np.uint8(1)
                         hitlist_cd[attacker, hit_group, defender] = (
                             np.uint16(HITLIST_CD_INDEFINITE) if rehit_frames == 0 else np.uint16(rehit_frames)
                         )
@@ -1457,8 +1505,14 @@ def derive_combat_hitlist_seed_fields(
                         # Minimal hitlag simulation for hitlag gating across frames (no replay lookahead).
                         dmg_i = _get_env_dmg(float(hb["damage"]))
                         hl = _calc_hitlag_frames(hitlag_dmg_mul, hitlag_base, dmg_i)
-                        sim_hitlag[attacker] = np.uint16(hl)
-                        sim_hitlag[defender] = np.uint16(hl)
+                        if defender_no_damage:
+                            # The no-damage branch only proves attacker hitlag and hidden
+                            # HitCapsule lineage. Do not synthesize defender hitlag/damage state.
+                            if hitlag_arr is not None:
+                                sim_hitlag[attacker] = np.uint16(int(hitlag_arr[fi, attacker]))
+                        else:
+                            sim_hitlag[attacker] = np.uint16(hl)
+                            sim_hitlag[defender] = np.uint16(hl)
 
                         did_hit = True
                         break
@@ -1470,29 +1524,26 @@ def derive_combat_hitlist_seed_fields(
             for hb_id, hb in hitboxes[attacker].items():
                 if not (0 <= int(hb_id) < MAX_HITBOXES):
                     continue
-                # Authoritative per-HitCapsule seed lane for frozen-Guard shield provenance:
-                # - The onset-row carry above reconstructs exact slot lineage for this family from
-                #   the first GuardSetOff hitlag row, then the per-slot copy/clear path carries it.
-                # - Mark only those slots authoritative whose per-hitbox lineage is actually owned.
+                # Authoritative per-HitCapsule seed lane for accepted shield/body provenance:
+                # - Accepted contacts write HitCapsule.victims_1 on the active same-hit_group
+                #   capsules through ftColl_80076808/inlineB0.
+                # - That hidden list is action-local to the HitCapsule, not to the defender's
+                #   visible motion state; it must survive GuardSetOff -> Guard -> KneeBend and
+                #   related victim instance_id proxy changes until the attacker hitbox is cleared.
+                # - Mark every active authoritative capsule valid so reseed materializes the
+                #   per-HitCapsule list instead of falling back to the coarser group seed. Empty
+                #   authoritative capsules are valid too: they represent a real copied/cleared
+                #   HitCapsule list and prevent stale group fallback from changing ownership.
                 # refs/melee/src/melee/ft/ftcoll.c::ftColl_800768A0
+                # refs/melee/src/melee/ft/ftcoll.c::{ftColl_80076CBC,ftColl_80076ED8}
                 # refs/melee/src/melee/lb/types.h::HitCapsule
                 hb_i = int(hb_id)
                 if int(replay_only_hb_valid_frame[attacker, hb_i]) != 0:
                     out_hb_valid[fi, attacker, hb_i] = np.uint8(1)
                     continue
-                authoritative_now = False
-                if int(hitlist_hb_authoritative[attacker, hb_i]) != 0:
-                    for victim in range(num_players):
-                        if int(hitlist_hb_cd[attacker, hb_i, victim]) == 0:
-                            continue
-                        if _is_frozen_guard_snapshot(
-                            action_id=int(action_id[fi, victim]),
-                            action_frame=int(action_frame[fi, victim]),
-                            animation_index=int(animation_index[fi, victim]),
-                        ):
-                            authoritative_now = True
-                            break
-                out_hb_valid[fi, attacker, hb_i] = np.uint8(1 if authoritative_now else 0)
+                out_hb_valid[fi, attacker, hb_i] = np.uint8(
+                    1 if int(hitlist_hb_authoritative[attacker, hb_i]) != 0 else 0
+                )
 
         out_cd[fi] = hitlist_cd
         out_iid[fi] = hitlist_iid
@@ -1512,6 +1563,7 @@ def derive_combat_hitlist_seed_fields(
                 reg_hb_i = int(reg_hb_id)
                 hitlist_hb_cd[attacker, reg_hb_i, defender] = seeded_cd
                 hitlist_hb_iid[attacker, reg_hb_i, defender] = defender_iid_u16
+                hitlist_hb_authoritative[attacker, reg_hb_i] = np.uint8(1)
             hitlist_cd[attacker, hit_group, defender] = seeded_cd
             hitlist_iid[attacker, hit_group, defender] = defender_iid_u16
             sim_hitlag[attacker] = np.uint16(int(hl))

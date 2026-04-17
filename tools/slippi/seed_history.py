@@ -2446,6 +2446,19 @@ def derive_colanim_internals(
         else:
             x198c = 0
 
+        downbound_hidden_x1990_visible_zero = cur_a in {0x00BE, 0x00BF} and x1990 > 0
+        if int(hurt[i]) == 0 and x1990 > 0 and not downbound_hidden_x1990_visible_zero:
+            # Slippi post-frame emits `x1988` when nonzero, otherwise `x198C`; a replay-visible
+            # hurtbox_state of 0 therefore proves move-induced status and the intangible x1990 lane
+            # are clear at this snapshot. Do not let strictly-causal cliff/ledge x1990 reconstruction
+            # stale-carry past that observable clear. Preserve x1994: DownBound/Damage OnExitHitlag
+            # rows can expose visible 0 while the hidden invincible-contact x1994 lane remains active.
+            # refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
+            # refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
+            x1990 = 0
+            x2221_b0 = 0
+            x198c = 1 if x1994 > 0 else 0
+
         out_x198c[i] = np.uint8(x198c)
         out_x1990[i] = np.uint16(x1990)
         out_x1994[i] = np.uint16(x1994)

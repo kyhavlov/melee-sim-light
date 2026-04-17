@@ -396,6 +396,73 @@ static inline uint8_t combat_body_overlap_lbColl_80006E58_scaffold(
   return (uint8_t)(d2 <= rr * rr);
 }
 
+static inline uint8_t combat_hitbox_hitbox_overlap_lbColl_80007AFC(const MslBatch* batch,
+                                                                   size_t hb0_i, size_t hb1_i) {
+  if (batch == NULL) {
+    return 0u;
+  }
+  // Hitbox-vs-hitbox collision uses swept HitCapsule centers (`x58` -> `x4C`) for both capsules,
+  // not just the current-frame centers. This is the clank/rebound predicate that runs before BODY
+  // hitbox-vs-hurtcap admission in ftColl_80078C70.
+  // refs/melee/src/melee/lb/lbcollision.c::{lbColl_80007AFC,lbColl_80006094}
+  // refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078C70,ftColl_8007699C}
+  float x0a = batch->state.hitbox_x[hb0_i];
+  float y0a = batch->state.hitbox_y[hb0_i];
+  float z0a = batch->state.hitbox_z[hb0_i];
+  if (batch->state.hitbox_prev_enabled[hb0_i]) {
+    x0a = batch->state.hitbox_prev_x[hb0_i];
+    y0a = batch->state.hitbox_prev_y[hb0_i];
+    z0a = batch->state.hitbox_prev_z[hb0_i];
+  }
+  const float x0b = batch->state.hitbox_x[hb0_i];
+  const float y0b = batch->state.hitbox_y[hb0_i];
+  const float z0b = batch->state.hitbox_z[hb0_i];
+
+  float x1a = batch->state.hitbox_x[hb1_i];
+  float y1a = batch->state.hitbox_y[hb1_i];
+  float z1a = batch->state.hitbox_z[hb1_i];
+  if (batch->state.hitbox_prev_enabled[hb1_i]) {
+    x1a = batch->state.hitbox_prev_x[hb1_i];
+    y1a = batch->state.hitbox_prev_y[hb1_i];
+    z1a = batch->state.hitbox_prev_z[hb1_i];
+  }
+  const float x1b = batch->state.hitbox_x[hb1_i];
+  const float y1b = batch->state.hitbox_y[hb1_i];
+  const float z1b = batch->state.hitbox_z[hb1_i];
+
+  float d2 = 0.0f;
+  combat_segment_segment_dist2(x0a, y0a, z0a, x0b, y0b, z0b, x1a, y1a, z1a, x1b, y1b, z1b, &d2,
+                               NULL, NULL);
+  const float rr = batch->state.hitbox_radius[hb0_i] + batch->state.hitbox_radius[hb1_i];
+  return (uint8_t)(d2 <= rr * rr);
+}
+
+static inline void combat_clank_skip_same_hit_group(
+    const MslBatch* batch, int bi, int attacker, int defender, int hb_id,
+    uint8_t clank_skip_hb[MSL_MAX_PLAYERS][MSL_MAX_PLAYERS][MSL_MAX_HITBOXES]) {
+  if (batch == NULL || hb_id < 0 || hb_id >= MSL_MAX_HITBOXES) {
+    return;
+  }
+  const size_t src_i = idx_hitbox(bi, attacker, hb_id);
+  const uint8_t group = hitlist_hit_group_from_u16_7(batch->state.hitbox_u16_7[src_i]);
+  for (int hb = 0; hb < MSL_MAX_HITBOXES; hb++) {
+    if (hb < hb_id) {
+      // ftColl_80078C70 interleaves clank and BODY checks inside the per-HitCapsule loop. A later
+      // same-group clank can register the group for subsequent hitboxes, but it cannot retroactively
+      // suppress earlier hitboxes whose BODY admission would already have run.
+      // refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078C70,ftColl_8007699C,ftColl_80076808}
+      continue;
+    }
+    const size_t cur_i = idx_hitbox(bi, attacker, hb);
+    if (!batch->state.hitbox_enabled[cur_i]) {
+      continue;
+    }
+    if (hitlist_hit_group_from_u16_7(batch->state.hitbox_u16_7[cur_i]) == group) {
+      clank_skip_hb[attacker][defender][hb] = 1u;
+    }
+  }
+}
+
 static inline uint8_t combat_mtx34_inverse_point(const float m[12], float x, float y, float z,
                                                  float* out_x, float* out_y, float* out_z) {
   if (m == NULL || out_x == NULL || out_y == NULL || out_z == NULL) {
@@ -459,9 +526,12 @@ static inline uint8_t combat_is_damage_or_firefox_launch_victim_action(uint16_t 
 static inline uint8_t combat_body_overlap_lbColl_80006E58_matrix_radius(
     const MslBatch* batch, int bi, int attacker, int hb_id, int defender, int cap_id, float hx,
     float hy, float hz, float hr, float ax, float ay, float az, float bx, float by, float bz,
-    float* out_overlap_amount) {
+    float* out_overlap_amount, uint8_t* out_evaluated) {
   if (out_overlap_amount) {
     *out_overlap_amount = 0.0f;
+  }
+  if (out_evaluated) {
+    *out_evaluated = 0u;
   }
   if (batch == NULL) {
     return 0u;
@@ -497,8 +567,11 @@ static inline uint8_t combat_body_overlap_lbColl_80006E58_matrix_radius(
   const MslHurtCap* cap = &caps[cap_id];
 
   float m[12];
-  if (anim_pose_get_matrix(char_id, msid, frame, cap->bone_part_id, m) != 0) {
+  if (anim_pose_get_collision_matrix(batch, d_idx, msid, frame, cap->bone_part_id, m) != 0) {
     return 0u;
+  }
+  if (out_evaluated) {
+    *out_evaluated = 1u;
   }
 
   const MslCharParams* chp = msl_char_params(char_id);
@@ -569,6 +642,7 @@ static inline uint8_t combat_body_overlap_lbColl_80006E58_matrix_radius(
   const float local_dy = hit_local_y - hurt_local_y;
   const float local_dz = hit_local_z - hurt_local_z;
   const float local_dist = sqrtf(local_dx * local_dx + local_dy * local_dy + local_dz * local_dz);
+
   float hurt_radius_world_equiv = cap->scale;
   if (local_dist > 1.0e-8f && world_dist > 0.0f) {
     hurt_radius_world_equiv = cap->scale * (world_dist / local_dist);
@@ -601,7 +675,7 @@ static inline uint8_t combat_attackairb_continuation_body_overlap_exact(
   }
   return combat_body_overlap_lbColl_80006E58_matrix_radius(batch, bi, attacker, hb_id, defender,
                                                            cap_id, hx, hy, hz, hr, ax, ay, az, bx,
-                                                           by, bz, out_overlap_amount);
+                                                           by, bz, out_overlap_amount, NULL);
 }
 
 static inline uint8_t combat_attackairb_stale_owner_continuation_candidate(
@@ -668,6 +742,46 @@ int combat_debug_attackairb_continuation_overlap(const MslBatch* batch, int batc
   (void)combat_attackairb_continuation_body_overlap_exact(batch, batch_index, attacker, hb_id,
                                                           defender, cap_id, hx, hy, hz, hr, ax, ay,
                                                           az, bx, by, bz, out_overlap);
+  return 0;
+}
+
+int combat_debug_body_matrix_overlap(const MslBatch* batch, int batch_index, int attacker,
+                                     int hb_id, int defender, int cap_id, float* out_overlap) {
+  if (out_overlap == NULL) {
+    return EINVAL;
+  }
+  *out_overlap = 0.0f;
+  if (batch == NULL) {
+    return EINVAL;
+  }
+  if (batch_index < 0 || batch_index >= batch->batch_size) {
+    return EINVAL;
+  }
+  if (attacker < 0 || attacker >= (int)batch->config.num_players || defender < 0 ||
+      defender >= (int)batch->config.num_players || attacker == defender) {
+    return EINVAL;
+  }
+  if (hb_id < 0 || hb_id >= MSL_MAX_HITBOXES || cap_id < 0 || cap_id >= MSL_MAX_HURTCAPS) {
+    return EINVAL;
+  }
+  const size_t hb_i = idx_hitbox(batch_index, attacker, hb_id);
+  const size_t cap_i = idx_hurtcap(batch_index, defender, cap_id);
+  if (!batch->state.hitbox_enabled[hb_i] || !batch->state.hurtcap_enabled[cap_i]) {
+    return 0;
+  }
+  const float hx = batch->state.hitbox_x[hb_i];
+  const float hy = batch->state.hitbox_y[hb_i];
+  const float hz = batch->state.hitbox_z[hb_i];
+  const float hr = batch->state.hitbox_radius[hb_i];
+  const float ax = batch->state.hurtcap_a_x[cap_i];
+  const float ay = batch->state.hurtcap_a_y[cap_i];
+  const float az = batch->state.hurtcap_a_z[cap_i];
+  const float bx = batch->state.hurtcap_b_x[cap_i];
+  const float by = batch->state.hurtcap_b_y[cap_i];
+  const float bz = batch->state.hurtcap_b_z[cap_i];
+  (void)combat_body_overlap_lbColl_80006E58_matrix_radius(batch, batch_index, attacker, hb_id,
+                                                          defender, cap_id, hx, hy, hz, hr, ax, ay,
+                                                          az, bx, by, bz, out_overlap, NULL);
   return 0;
 }
 
@@ -3843,14 +3957,10 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
             if (!batch->state.hitbox_enabled[hb0_i]) {
               continue;
             }
-            const uint16_t p1_iid = batch->state.instance_id[p1_idx];
-            // Decomp clank candidate gating includes lbColl_8000ACFC(victim, hitbox)==0 for both
-            // sides before entering ftColl_8007699C.
-            // refs/melee/src/melee/ft/ftcoll.c::ftColl_80078C70
-            // refs/melee/src/melee/lb/lbcollision.c::lbColl_8000ACFC
-            if (!hitlist_allows_fighter(batch, bi, p0, hb0, p1, p1_iid)) {
-              continue;
-            }
+            // Clank is a hitbox-vs-hitbox collision owner. Do not let replay-reconstructed BODY
+            // victim rings suppress the clank predicate before ftColl_8007699C can refresh the
+            // same-group victims for this collision pass.
+            // refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007699C,inlineA0,inlineA1}
             const uint16_t f0 = batch->state.hitbox_flags[hb0_i];
             if ((f0 & (uint16_t)MSL_HITBOX_FLAG_CLANK) == 0) {
               continue;
@@ -3863,20 +3973,13 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
             if (!(d0 > 0.0f)) {
               continue;
             }
-            const float x0 = batch->state.hitbox_x[hb0_i];
-            const float y0 = batch->state.hitbox_y[hb0_i];
-            const float z0 = batch->state.hitbox_z[hb0_i];
-            const float r0 = batch->state.hitbox_radius[hb0_i];
-
             for (int hb1 = 0; hb1 < MSL_MAX_HITBOXES; hb1++) {
               const size_t hb1_i = idx_hitbox(bi, p1, hb1);
               if (!batch->state.hitbox_enabled[hb1_i]) {
                 continue;
               }
-              const uint16_t p0_iid = batch->state.instance_id[p0_idx];
-              if (!hitlist_allows_fighter(batch, bi, p1, hb1, p0, p0_iid)) {
-                continue;
-              }
+              // See the p0-side note above: hitbox-vs-hitbox clank uses live HitCapsule geometry,
+              // then writes victim rings; replay-reconstructed BODY rings are not a safe prefilter.
               const uint16_t f1 = batch->state.hitbox_flags[hb1_i];
               if ((f1 & (uint16_t)MSL_HITBOX_FLAG_CLANK) == 0) {
                 continue;
@@ -3890,11 +3993,7 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
                 continue;
               }
 
-              const float x1 = batch->state.hitbox_x[hb1_i];
-              const float y1 = batch->state.hitbox_y[hb1_i];
-              const float z1 = batch->state.hitbox_z[hb1_i];
-              const float r1 = batch->state.hitbox_radius[hb1_i];
-              if (!sphere_sphere_intersects(x0, y0, z0, r0, x1, y1, z1, r1)) {
+              if (!combat_hitbox_hitbox_overlap_lbColl_80007AFC(batch, hb0_i, hb1_i)) {
                 continue;
               }
               // Decomp clank confirmation requires reciprocal x3CC comparisons.
@@ -3907,8 +4006,15 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
               }
 
               did_clank = 1u;
-              clank_skip_hb[p0][p1][hb0] = 1u;
-              clank_skip_hb[p1][p0][hb1] = 1u;
+              // ftColl_8007699C registers the clank victim into every active HitCapsule sharing
+              // the clanking hit_group (`x4`), via inlineA0/inlineA1 and lbColl_80008688. BODY
+              // admission later consults lbColl_8000ACFC, so the whole same-group cluster is
+              // suppressed for the opponent on this collision pass, not only the exact pair that
+              // overlapped in lbColl_80007AFC.
+              // refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007699C,inlineA0,inlineA1}
+              // refs/melee/src/melee/lb/lbcollision.c::{lbColl_80008688,lbColl_8000ACFC}
+              combat_clank_skip_same_hit_group(batch, bi, p0, p1, hb0, clank_skip_hb);
+              combat_clank_skip_same_hit_group(batch, bi, p1, p0, hb1, clank_skip_hb);
               // Electric-vs-electric clank SFX lane consumes HSD_Randi(3) to pick one of three
               // entries in ftColl_803C0C4C.
               // refs/melee/src/melee/ft/ftcoll.c::ftColl_800784B4
@@ -4382,14 +4488,38 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
           const float bz = batch->state.hurtcap_b_z[cap_i];
           const float cr = batch->state.hurtcap_radius[cap_i];
 
+          float lbcoll_overlap_amount = 0.0f;
+          uint8_t lbcoll_overlap_valid = 0u;
+          uint8_t lbcoll_overlap_evaluated = 0u;
           float attackairb_overlap_amount = 0.0f;
           uint8_t overlaps =
               combat_sphere_capsule_intersects(hx, hy, hz, hr, ax, ay, az, bx, by, bz, cr, NULL);
+          if (overlaps) {
+            lbcoll_overlap_valid = combat_body_overlap_lbColl_80006E58_matrix_radius(
+                batch, bi, attacker, hb_id, defender, (int)cap_id, hx, hy, hz, hr, ax, ay, az, bx,
+                by, bz, &lbcoll_overlap_amount, &lbcoll_overlap_evaluated);
+            // Decomp BODY narrowphase owner:
+            // - ftColl_80078C70 calls lbColl_8000805C for fighter BODY admission.
+            // - lbColl_8000805C forwards to lbColl_80006E58, whose matrix-derived scalar is the
+            //   accept/reject predicate and writes HitCapsule.coll_distance.
+            // - Use simple world sphere/capsule only as a fallback when extracted pose data cannot
+            //   provide the hurt bone matrix; do not let it override an evaluated lbColl reject.
+            // refs/melee/src/melee/ft/ftcoll.c::ftColl_80078C70
+            // refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000805C,lbColl_80006E58}
+            if (lbcoll_overlap_evaluated) {
+              overlaps = lbcoll_overlap_valid;
+            }
+          }
           if (!overlaps) {
             if (combat_body_overlap_lbColl_80006E58_subset_allows(batch, hb_i, d_idx)) {
               overlaps = combat_body_overlap_lbColl_80006E58_scaffold(
                   batch, bi, attacker, hb_id, hx, hy, hz, hr, ax, ay, az, bx, by, bz, cr,
                   batch->state.fighter_scale_y[d_idx]);
+              if (overlaps) {
+                lbcoll_overlap_valid = combat_body_overlap_lbColl_80006E58_matrix_radius(
+                    batch, bi, attacker, hb_id, defender, (int)cap_id, hx, hy, hz, hr, ax, ay, az,
+                    bx, by, bz, &lbcoll_overlap_amount, &lbcoll_overlap_evaluated);
+              }
             }
           }
           if (attackairb_stale_owner_candidate) {
@@ -4411,6 +4541,30 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
                   batch, a_idx, hb_i, d_idx, hx, hy, hz, hr, ax, ay, az, bx, by, bz, cr,
                   combat_calc_hitlag_frames(c, int_dmg, a_motion_id, 1.0f))) {
             continue;
+          }
+          if (!attackairb_stale_owner_candidate && !defender_no_damage &&
+              batch->state.hitstun[d_idx] == 0u && !batch->state.on_ground[d_idx] &&
+              batch->state.hitbox_enable_edge[hb_i] && lbcoll_overlap_valid &&
+              lbcoll_overlap_amount > 0.0f &&
+              lbcoll_overlap_amount <= c->phantom_overlap_max_x7a8) {
+            // General fighter BODY phantom-hit lane:
+            // - lbColl_8000805C writes HitCapsule.coll_distance from lbColl_80006E58.
+            // - ftColl_80076ED8 routes 0 < coll_distance < p_ftCommonData->x7A8 through
+            //   checkTipLog/inlineB1 instead of the percent/KB damage-state path.
+            // - Apply the matrix-radius helper on enable-edge capsules, where ftColl_8007AD18 has
+            //   just initialized x58=x4C for the live HitCapsule. Sustained capsules remain on the
+            //   damage path until the exact lbColl scalar is ported for all edge/non-edge cases.
+            // refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000805C,lbColl_80006E58}
+            // refs/melee/src/melee/ft/ftcoll.c::{checkTipLog,inlineB1,ftColl_80076ED8,ftColl_8007AD18}
+            if (!hitlist_allows_fighter_v2(batch, bi, attacker, hb_id, defender, defender_iid)) {
+              continue;
+            }
+            combat_mutations_pass1_future_apply_body_phantom_hit(
+                batch, a_idx, d_idx, attacker, hdmg, batch->state.hitbox_element[hb_i]);
+            hitlist_register_fighter_group_v2(batch, bi, attacker, hit_group, defender,
+                                              defender_iid, (int)MSL_LBCOLL_INSERT_FT_BODY, 0u);
+            did_hit = 1;
+            break;
           }
           if (attackairb_stale_owner_candidate && !defender_no_damage &&
               attackairb_overlap_amount > 0.0f &&

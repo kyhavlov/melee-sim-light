@@ -1178,6 +1178,26 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
       }
       batch->state.ground_id[idx] = seed->ground_id[p];
       batch->state.animation_index[idx] = seed->animation_index[p];
+      batch->state.dynamic_pose_state_valid[idx] = 0u;
+      batch->state.dynamic_pose_apply_collision_matrix[idx] = 0u;
+      batch->state.dynamic_pose_node_count[idx] = 0u;
+      batch->state.dynamic_pose_char_id[idx] = batch->state.char_id[idx];
+      batch->state.dynamic_pose_msid[idx] = (uint16_t)seed->animation_index[p];
+      batch->state.dynamic_pose_frame[idx] =
+          msl_anim_frame_floor_u16(msl_anim_frame_sanitize_f32(seed->anim_frame_f32[p]));
+      for (uint8_t dn = 0; dn < (uint8_t)MSL_MAX_DYNAMIC_NODES; dn++) {
+        const size_t di = idx * (size_t)MSL_MAX_DYNAMIC_NODES + (size_t)dn;
+        batch->state.dynamic_pose_rot_x[di] = 0.0f;
+        batch->state.dynamic_pose_rot_y[di] = 0.0f;
+        batch->state.dynamic_pose_rot_z[di] = 0.0f;
+        batch->state.dynamic_pose_pos_x[di] = 0.0f;
+        batch->state.dynamic_pose_pos_y[di] = 0.0f;
+        batch->state.dynamic_pose_pos_z[di] = 0.0f;
+        batch->state.dynamic_pose_axis_x[di] = 1.0f;
+        batch->state.dynamic_pose_axis_y[di] = 0.0f;
+        batch->state.dynamic_pose_axis_z[di] = 0.0f;
+        batch->state.dynamic_pose_angle[di] = 0.0f;
+      }
       batch->state.instance_hit_by[idx] = seed->instance_hit_by[p];
       batch->state.instance_id[idx] = seed->instance_id[p];
       batch->state.motion_entry_instance_id_override[idx] =
@@ -2158,8 +2178,50 @@ int msl_batch_debug_refresh_combat_geometry(MslBatch* batch) {
   if (batch == NULL) {
     return EINVAL;
   }
+  anim_pose_update_dynamic_state(batch);
   hurtboxes_refresh(batch);
   hitboxes_refresh(batch);
+  return 0;
+}
+
+int msl_batch_debug_dynamic_pose_state(const MslBatch* batch, int batch_index, int player_index,
+                                       MslDebugDynamicPoseState* out_state) {
+  if (batch == NULL || out_state == NULL) {
+    return EINVAL;
+  }
+  if (batch_index < 0 || batch_index >= batch->batch_size) {
+    return EINVAL;
+  }
+  if (player_index < 0 || player_index >= MSL_MAX_PLAYERS) {
+    return EINVAL;
+  }
+
+  memset(out_state, 0, sizeof(*out_state));
+  if (player_index >= (int)batch->config.num_players) {
+    return 0;
+  }
+
+  const size_t idx = msl_idx_player(batch_index, player_index);
+  out_state->player = (uint8_t)player_index;
+  out_state->char_id = batch->state.dynamic_pose_char_id[idx];
+  out_state->state_valid = batch->state.dynamic_pose_state_valid[idx];
+  out_state->apply_collision_matrix = batch->state.dynamic_pose_apply_collision_matrix[idx];
+  out_state->node_count = batch->state.dynamic_pose_node_count[idx];
+  out_state->msid = batch->state.dynamic_pose_msid[idx];
+  out_state->frame = batch->state.dynamic_pose_frame[idx];
+  for (uint8_t dn = 0; dn < (uint8_t)MSL_MAX_DYNAMIC_NODES; dn++) {
+    const size_t di = idx * (size_t)MSL_MAX_DYNAMIC_NODES + (size_t)dn;
+    out_state->rot_x[dn] = batch->state.dynamic_pose_rot_x[di];
+    out_state->rot_y[dn] = batch->state.dynamic_pose_rot_y[di];
+    out_state->rot_z[dn] = batch->state.dynamic_pose_rot_z[di];
+    out_state->pos_x[dn] = batch->state.dynamic_pose_pos_x[di];
+    out_state->pos_y[dn] = batch->state.dynamic_pose_pos_y[di];
+    out_state->pos_z[dn] = batch->state.dynamic_pose_pos_z[di];
+    out_state->axis_x[dn] = batch->state.dynamic_pose_axis_x[di];
+    out_state->axis_y[dn] = batch->state.dynamic_pose_axis_y[di];
+    out_state->axis_z[dn] = batch->state.dynamic_pose_axis_z[di];
+    out_state->angle[dn] = batch->state.dynamic_pose_angle[di];
+  }
   return 0;
 }
 
@@ -2828,6 +2890,12 @@ int msl_batch_debug_attackairb_continuation_overlap(const MslBatch* batch, int b
                                                     int cap_id, float* out_overlap) {
   return combat_debug_attackairb_continuation_overlap(batch, batch_index, attacker, hb_id, defender,
                                                       cap_id, out_overlap);
+}
+
+int msl_batch_debug_body_matrix_overlap(const MslBatch* batch, int batch_index, int attacker,
+                                        int hb_id, int defender, int cap_id, float* out_overlap) {
+  return combat_debug_body_matrix_overlap(batch, batch_index, attacker, hb_id, defender, cap_id,
+                                          out_overlap);
 }
 
 static inline uint8_t sphere_sphere_intersects(float ax, float ay, float az, float ar, float bx,

@@ -302,6 +302,16 @@ static void hitboxes_seed_bridge_trim_impossible_indefinite(
     }
     const size_t v_idx = msl_idx_player(bi, (int)victim_port);
 
+    // Authoritative per-HitCapsule seed lanes already represent the decomp-owned victims_1 list
+    // for this exact hitbox slot. The stale suppression trim below is only for legacy dense
+    // group fallback materialization, whose provenance is too coarse to distinguish copied/cleared
+    // HitCapsule lists.
+    // refs/melee/src/melee/ft/ftcoll.c::{ftColl_800768A0,ftColl_80076CBC,ftColl_80076ED8}
+    // refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000ACFC,lbColl_80008688}
+    if (authoritative_hitbox_seed) {
+      continue;
+    }
+
     // Seed-bridge stale suppression trim (narrow early-window BODY lane only):
     // - BODY attribution (`instance_hit_by`) is written on ftColl_80076ED8/Fighter_ProcessHit paths.
     // - Shield-only path (`ftColl_80076CBC`) does not own this BODY attribution lane.
@@ -984,32 +994,6 @@ void hitboxes_refresh(MslBatch* batch) {
         cy += pos_y;
         cz += pos_z;
 
-        float prev_cx = cx;
-        float prev_cy = cy;
-        float prev_cz = cz;
-        uint8_t have_motion_entry_prev_center = 0u;
-        if (motion_entered_this_frame && pose_frame > 0u) {
-          float pm[12];
-          if (anim_pose_get_matrix(char_id, msid, (uint16_t)(pose_frame - 1u), def[hi].bone_part_id,
-                                   pm) == 0) {
-            float pcx = 0.0f, pcy = 0.0f, pcz = 0.0f;
-            msl_mtx34_mul_point(pm, off, &pcx, &pcy, &pcz);
-            pcx *= model_scale;
-            pcy *= model_scale;
-            pcz *= model_scale;
-            (void)hitboxes_apply_specialhi_local_xrotn(
-                batch, idx, char_id, msid, (uint16_t)(pose_frame - 1u), def[hi].bone_part_id,
-                facing_dir, model_scale, &pcx, &pcy, &pcz);
-
-            const float pcx_rot_x = facing_dir * pcz;
-            const float pcx_rot_z = -facing_dir * pcx;
-            prev_cx = pcx_rot_x + batch->state.prev_pos_x[idx];
-            prev_cy = pcy + batch->state.prev_pos_y[idx];
-            prev_cz = pcx_rot_z + pos_z;
-            have_motion_entry_prev_center = 1u;
-          }
-        }
-
         float radius = def[hi].radius;
         // Decomp (radius scaling): Hitbox size does not get `co_attrs.model_scaling` applied at
         // creation time (ftAction_8007121C assigns hitbox->scale directly from the movescript).
@@ -1055,20 +1039,15 @@ void hitboxes_refresh(MslBatch* batch) {
         batch->state.hitbox_sfx_severity[oi] = (uint8_t)(def[hi].u16_5 & 0xFFu);
         batch->state.hitbox_sfx_kind[oi] = (uint8_t)((def[hi].u16_5 >> 8) & 0xFFu);
         batch->state.hitbox_flags[oi] = def[hi].u16_6;
-        if (have_motion_entry_prev_center) {
-          // Same-frame entry capsule sweep:
-          // - ftAction_8007121C creates the hitcapsule while the entry cmd script runs.
-          // - ftColl_8007AE80 later refreshes x4C before fighter-vs-fighter collision.
-          // Keep an x58->x4C segment from the create pose to the refreshed pose so shield/body
-          // geometry can consume the same continuity owner as lbColl_80007BCC/8000805C.
-          // refs/melee/src/melee/ft/ftaction.c::ftAction_8007121C
-          // refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007AD18,ftColl_8007AE80}
-          // refs/melee/src/melee/lb/lbcollision.c::{lbColl_80007BCC,lbColl_8000805C}
-          batch->state.hitbox_prev_enabled[oi] = 1u;
-          batch->state.hitbox_prev_x[oi] = prev_cx;
-          batch->state.hitbox_prev_y[oi] = prev_cy;
-          batch->state.hitbox_prev_z[oi] = prev_cz;
-        }
+        // Same-frame entry capsule continuity:
+        // - ftAction_8007121C runs from the fighter anim script at proc priority 1.
+        // - ftColl_8007AE80 refreshes hitcapsules later at priority 9.
+        // - For a newly enabled capsule, ftColl_8007AD18 sets x4C from the current bone pose and
+        //   immediately copies x58 = x4C before BODY/shield collision runs.
+        // Do not synthesize a previous-action x58 for normal same-frame entries; that creates
+        // broad swept BODY contacts that vanilla never tests.
+        // refs/melee/src/melee/ft/ftaction.c::ftAction_8007121C
+        // refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007AD18,ftColl_8007AE80}
         // x43_b2 ownership mapping:
         // - ftAction_8007121C create path initializes x43_b2=0.
         // - ftColl_800768A0 copy/clear transitions preserve per-slot runtime ownership otherwise.
@@ -1095,11 +1074,20 @@ void hitboxes_refresh(MslBatch* batch) {
         for (int hi = 0; hi < MSL_MAX_HITBOXES; hi++) {
           const size_t oi = idx_hitbox(bi, p, hi);
           if (batch->state.hitbox_enabled[oi]) {
-            if (use_seeded_x58 && seeded_prev_enabled[hi]) {
+            if (use_seeded_x58 && seeded_prev_enabled[hi] && !motion_entered_this_frame) {
               batch->state.hitbox_prev_enabled[oi] = 1u;
               batch->state.hitbox_prev_x[oi] = seeded_prev_x[hi];
               batch->state.hitbox_prev_y[oi] = seeded_prev_y[hi];
               batch->state.hitbox_prev_z[oi] = seeded_prev_z[hi];
+            } else if (motion_entered_this_frame) {
+              // Newly enabled capsules enter ftColl_8007AD18 through the HitCapsule_Enabled case,
+              // which sets x58 = x4C at the refreshed current pose. Do not bootstrap a sweep from
+              // the previous action's translation on same-frame entries.
+              // refs/melee/src/melee/ft/ftcoll.c::ftColl_8007AD18
+              batch->state.hitbox_prev_enabled[oi] = 1u;
+              batch->state.hitbox_prev_x[oi] = batch->state.hitbox_x[oi];
+              batch->state.hitbox_prev_y[oi] = batch->state.hitbox_y[oi];
+              batch->state.hitbox_prev_z[oi] = batch->state.hitbox_z[oi];
             } else if (!motion_entered_this_frame || !batch->state.hitbox_prev_enabled[oi]) {
               batch->state.hitbox_prev_enabled[oi] = 1u;
               batch->state.hitbox_prev_x[oi] = batch->state.hitbox_x[oi] - dx;

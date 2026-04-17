@@ -19,7 +19,7 @@ index 49ec3a8..b0d3cff 100644
  #include "Core/PowerPC/PowerPC.h"
  #include "Core/PowerPC/PPCTables.h"
  #include "Core/PowerPC/Interpreter/Interpreter.h"
-@@ -28,6 +31,291 @@
+@@ -28,6 +31,365 @@
  namespace
  {
  u32 last_pc;
@@ -28,6 +28,24 @@ index 49ec3a8..b0d3cff 100644
 +constexpr u32 MSL_FTCOLL_80076ED8 = 0x80076ED8;
 +constexpr u32 MSL_LBCOLL_8000805C = 0x8000805C;
 +constexpr u32 MSL_LBCOLL_80006E58 = 0x80006E58;
++
++struct CollisionProbeCall
++{
++	u32 fn_pc;
++	u32 lr;
++	u32 arg3;
++	u32 arg4;
++	u32 arg5;
++	u32 arg6;
++	u32 arg7;
++	u32 arg8;
++	u32 arg9;
++	u32 arg10;
++	u32 stack_arg8;
++};
++
++CollisionProbeCall g_collision_probe_stack[32];
++u32 g_collision_probe_depth = 0;
 +
 +u32 ReadProbeU32(u32 addr)
 +{
@@ -159,6 +177,12 @@ index 49ec3a8..b0d3cff 100644
 +		DumpProbeVec(out, "cur_pos_bits", fp + 0xB0);
 +		DumpProbeVec(out, "prev_pos_bits", fp + 0xBC);
 +		out << ",\"ground_or_air\":" << ReadProbeU32(fp + 0xE0);
++		out << ",\"dmg_kb_angle\":" << ReadProbeU32(fp + 0x1848);
++		out << ",\"dmg_hurt_height_x184c\":" << ReadProbeU32(fp + 0x184C);
++		out << ",\"hit_status_x1988\":" << ReadProbeU32(fp + 0x1988);
++		out << ",\"colanim_hit_status_x198c\":" << ReadProbeU32(fp + 0x198C);
++		out << ",\"colanim_timer_x1990_bits\":" << ReadProbeU32(fp + 0x1990);
++		out << ",\"colanim_timer_x1994_bits\":" << ReadProbeU32(fp + 0x1994);
 +		out << ",\"dynamics_num\":" << ReadProbeU32(fp + 0x3E0);
 +		const u32 figatree = ReadProbeU32(fp + 0x590);
 +		out << ",\"x590_figatree\":" << figatree;
@@ -242,9 +266,6 @@ index 49ec3a8..b0d3cff 100644
 +
 +void MaybeCaptureCollisionProbe(u32 pc)
 +{
-+	if (pc != MSL_FTCOLL_80076ED8 && pc != MSL_LBCOLL_8000805C && pc != MSL_LBCOLL_80006E58)
-+		return;
-+
 +	static bool initialized = false;
 +	static bool enabled = false;
 +	static std::ofstream out;
@@ -261,10 +282,63 @@ index 49ec3a8..b0d3cff 100644
 +	if (!enabled)
 +		return;
 +
++	if (g_collision_probe_depth > 0 && pc == g_collision_probe_stack[g_collision_probe_depth - 1].lr)
++	{
++		const CollisionProbeCall call = g_collision_probe_stack[g_collision_probe_depth - 1];
++		g_collision_probe_depth--;
++		const char* fn = call.fn_pc == MSL_FTCOLL_80076ED8 ? "ftColl_80076ED8"
++		                 : call.fn_pc == MSL_LBCOLL_8000805C ? "lbColl_8000805C"
++		                                                     : "lbColl_80006E58";
++		out << "{\"pc\":" << pc << ",\"phase\":\"return\",\"fn\":\"" << fn << "\",\"frame\":"
++		    << static_cast<s32>(ReadProbeU32(MSL_FRAME_INDEX_PTR));
++		out << ",\"lr\":" << call.lr;
++		out << ",\"return_r3\":" << PowerPC::ppcState.gpr[3];
++		if (call.fn_pc == MSL_FTCOLL_80076ED8)
++		{
++			DumpProbeHitCapsule(out, "hit", call.arg4);
++			DumpProbeHurtCapsule(out, "hurt", call.arg6);
++		}
++		else if (call.fn_pc == MSL_LBCOLL_8000805C)
++		{
++			DumpProbeHitCapsule(out, "hit", call.arg3);
++			DumpProbeHurtCapsule(out, "hurt", call.arg4);
++		}
++		else
++		{
++			DumpProbeVec(out, "hit_closest_arg4_bits", call.arg7);
++			DumpProbeVec(out, "hurt_closest_arg5_bits", call.arg8);
++			DumpProbeVec(out, "hurt_coll_pos_arg7_bits", call.arg10);
++			out << ",\"coll_distance_ptr\":" << call.stack_arg8;
++			if (call.stack_arg8 != 0)
++				out << ",\"coll_distance_arg8_bits\":" << ReadProbeU32(call.stack_arg8);
++		}
++		out << "}\n";
++	}
++
++	if (pc != MSL_FTCOLL_80076ED8 && pc != MSL_LBCOLL_8000805C && pc != MSL_LBCOLL_80006E58)
++		return;
++
++	if (g_collision_probe_depth < sizeof(g_collision_probe_stack) / sizeof(g_collision_probe_stack[0]))
++	{
++		CollisionProbeCall& call = g_collision_probe_stack[g_collision_probe_depth++];
++		call.fn_pc = pc;
++		call.lr = LR;
++		call.arg3 = PowerPC::ppcState.gpr[3];
++		call.arg4 = PowerPC::ppcState.gpr[4];
++		call.arg5 = PowerPC::ppcState.gpr[5];
++		call.arg6 = PowerPC::ppcState.gpr[6];
++		call.arg7 = PowerPC::ppcState.gpr[7];
++		call.arg8 = PowerPC::ppcState.gpr[8];
++		call.arg9 = PowerPC::ppcState.gpr[9];
++		call.arg10 = PowerPC::ppcState.gpr[10];
++		// GALE01 EABI: lbColl_80006E58 has nine pointer args; arg8 is stack-passed after r10.
++		call.stack_arg8 = ReadProbeU32(PowerPC::ppcState.gpr[1] + 0x08);
++	}
++
 +	const char* fn = pc == MSL_FTCOLL_80076ED8 ? "ftColl_80076ED8"
 +	                 : pc == MSL_LBCOLL_8000805C ? "lbColl_8000805C"
 +	                                             : "lbColl_80006E58";
-+	out << "{\"pc\":" << pc << ",\"fn\":\"" << fn << "\",\"frame\":"
++	out << "{\"pc\":" << pc << ",\"phase\":\"entry\",\"fn\":\"" << fn << "\",\"frame\":"
 +	    << static_cast<s32>(ReadProbeU32(MSL_FRAME_INDEX_PTR));
 +	out << ",\"lr\":" << LR;
 +	out << ",\"gpr\":[";
@@ -311,7 +385,7 @@ index 49ec3a8..b0d3cff 100644
  }
  
  bool Interpreter::m_EndBlock;
-@@ -79,6 +367,7 @@ static void Trace(UGeckoInstruction& instCode)
+@@ -79,6 +441,7 @@ static void Trace(UGeckoInstruction& instCode)
  int Interpreter::SingleStepInner()
  {
  	static UGeckoInstruction instCode;
