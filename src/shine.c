@@ -174,7 +174,43 @@ static inline uint8_t shine_entry_allowed_by_run_to_runbrake_transition(const Ms
   return (start == (uint16_t)MSL_ACT_RUN || start == (uint16_t)MSL_ACT_RUN_DIRECT) ? 1u : 0u;
 }
 
-static inline uint8_t action_allows_shine_entry_air(uint16_t action_id) {
+static inline uint8_t action_is_damage_air_or_fly_special_iasa(uint16_t action_id) {
+  switch (action_id) {
+    case MSL_ACT_DAMAGE_AIR_1:
+    case MSL_ACT_DAMAGE_AIR_2:
+    case MSL_ACT_DAMAGE_AIR_3:
+    case MSL_ACT_DAMAGE_FLY_HI:
+    case MSL_ACT_DAMAGE_FLY_N:
+    case MSL_ACT_DAMAGE_FLY_LW:
+    case MSL_ACT_DAMAGE_FLY_TOP:
+    case MSL_ACT_DAMAGE_FLY_ROLL:
+      return 1u;
+    default:
+      return 0u;
+  }
+}
+
+static inline uint8_t damage_air_or_fly_allows_special_air_iasa(const MslBatch* batch, size_t idx) {
+  if (batch == NULL) {
+    return 0u;
+  }
+  enum { MSL_STATE_FLAGS_221C_INDEX = 3 };
+  enum { MSL_STATE_FLAG_221C_B6_HITSTUN = 0x02 };
+  // Damage/DamageFly IASA split:
+  // - Damage_IASA calls Fall_IASA_Inner only when !fp->x221C_b6.
+  // - DamageFly_IASA calls DamageFall_IASA only when !fp->x221C_b6.
+  // - Fall_IASA_Inner and DamageFall_IASA both route through ftCo_SpecialAir_CheckInput.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{
+  //   ftCo_Damage_IASA,ftCo_DamageFly_IASA}
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DamageFall.c::ftCo_DamageFall_IASA
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_IASA_Inner
+  const uint8_t flags_221c =
+      batch->state.state_flags[idx * MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_221C_INDEX];
+  return ((flags_221c & (uint8_t)MSL_STATE_FLAG_221C_B6_HITSTUN) == 0u) ? 1u : 0u;
+}
+
+static inline uint8_t action_allows_shine_entry_air(const MslBatch* batch, size_t idx,
+                                                    uint16_t action_id) {
   // Decomp-special input ownership:
   // - Jump/Fall-family IASA owners route through ftCo_SpecialAir_CheckInput.
   // - DamageFall_IASA also routes through ftCo_SpecialAir_CheckInput.
@@ -197,8 +233,12 @@ static inline uint8_t action_allows_shine_entry_air(uint16_t action_id) {
     case MSL_ACT_DAMAGE_FALL:
       return 1u;
     default:
-      return 0u;
+      break;
   }
+  if (action_is_damage_air_or_fly_special_iasa(action_id)) {
+    return damage_air_or_fly_allows_special_air_iasa(batch, idx);
+  }
+  return 0u;
 }
 
 static inline uint8_t anim_finished(uint8_t char_id, uint16_t msid, float anim_frame_f32) {
@@ -219,6 +259,70 @@ static inline void enter_fall(MslBatch* batch, size_t idx) {
   batch->state.action_id[idx] = (uint16_t)MSL_ACT_FALL;
   batch->state.animation_index[idx] = (uint32_t)MSL_SM_FALL;
   msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+}
+
+static inline void enter_turn_smash_from_wait_iasa(MslBatch* batch, size_t idx, float facing_dir) {
+  // Decomp: ftCo_Wait_IASA reaches ftCo_Dash_CheckInput before ftCo_Turn_CheckInput; a dash-flick
+  // opposite facing calls ftCo_Turn_Enter_Smash, which initializes Turn with frames_to_turn=0 and
+  // ticks animation immediately.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c::ftCo_Dash_CheckInput
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Turn.c::ftCo_Turn_Enter_Smash
+  batch->state.turn_has_turned[idx] = 0u;
+  batch->state.turn_frames_to_turn[idx] = 0u;
+  batch->state.turn_x8[idx] = (int8_t)(facing_dir > 0.0f ? 1 : -1);
+  batch->state.action_id[idx] = (uint16_t)MSL_ACT_TURN;
+  batch->state.animation_index[idx] = (uint32_t)MSL_SM_TURN;
+  msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+  msl_anim_timebase_tick_once(batch, idx);
+}
+
+static inline void enter_turn_basic_from_wait_iasa(MslBatch* batch, size_t idx,
+                                                   const MslCharParams* ch) {
+  if (batch == NULL || ch == NULL) {
+    return;
+  }
+  // Decomp: if Wait_IASA reaches ftCo_Turn_CheckInput, ftCo_Turn_Enter_Basic keeps
+  // frames_to_turn from character data and ticks animation immediately after ChangeMotionState.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Turn.c::{
+  //   ftCo_Turn_CheckInput,ftCo_Turn_Enter_Basic}
+  // data/characters/{fox,falco}.json::turn_frames
+  batch->state.turn_has_turned[idx] = 0u;
+  batch->state.turn_frames_to_turn[idx] = ch->turn_frames;
+  batch->state.turn_x8[idx] = 0;
+  batch->state.action_id[idx] = (uint16_t)MSL_ACT_TURN;
+  batch->state.animation_index[idx] = (uint32_t)MSL_SM_TURN;
+  msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+  msl_anim_timebase_tick_once(batch, idx);
+}
+
+static inline uint16_t jump_aerial_action_from_stick(const MslCommonParams* c, float stick_x,
+                                                     float facing_dir);
+
+static inline void enter_jump_aerial_basic(MslBatch* batch, size_t idx, const MslCharParams* ch,
+                                           const MslCommonParams* c, float stick_x,
+                                           float facing_dir) {
+  if (batch == NULL || ch == NULL || c == NULL) {
+    return;
+  }
+  const uint16_t act = jump_aerial_action_from_stick(c, stick_x, facing_dir);
+  batch->state.action_id[idx] = act;
+  batch->state.animation_index[idx] = (act == (uint16_t)MSL_ACT_JUMP_AERIAL_F)
+                                          ? (uint32_t)MSL_SM_JUMP_AERIAL_F
+                                          : (uint32_t)MSL_SM_JUMP_AERIAL_B;
+  msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+  batch->state.speed_air_x_self[idx] = stick_x * ch->air_jump_h_multiplier;
+  batch->state.speed_y_self[idx] = ch->jump_v_initial_velocity * ch->air_jump_v_multiplier;
+  // Decomp: fp->x671_timer_lstick_tilt_y = 0xFE.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c:152-156
+  batch->state.tilt_timer_y[idx] = 0xFEu;
+  batch->state.fall_fast[idx] = 0;
+  batch->state.jumps_left[idx]--;
+  // Decomp: ftCo_JumpAerial_Enter_Basic calls ftCommon_8007D5D4 before ChangeMotionState.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::ftCo_JumpAerial_Enter_Basic
+  // refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007D5D4
+  batch->state.ecb_lock_timer[idx] = 10u;
 }
 
 static inline uint8_t did_tap_jump(const MslCommonParams* c, float stick_y, uint8_t tilt_timer_y) {
@@ -486,7 +590,18 @@ void shine_update_pre_physics(MslBatch* batch) {
       if (!action_is_shine(a) && (buttons_pressed & (uint16_t)MSL_BUTTON_B) != 0 &&
           stick_wants_speciallw(c, batch->state.input_main_y[idx])) {
         if (on_ground) {
-          if ((action_allows_shine_entry_ground(a) || landing_specials_open ||
+          const uint8_t grounded_side_special_preempts_down_special =
+              // Grounded special dispatch order checks SpecialS before SpecialLw:
+              // - ftCo_Landing_IASA: SpecialS, Attack100, SpecialHi, SpecialN, then SpecialLw.
+              // - Wait/Turn/Walk/Squat families route through the same Attack100 special helpers.
+              // Therefore a grounded B+side+down diagonal consumes Side-B before Shine; aerial
+              // dispatch keeps its separate Up/Down/Side/Neutral order in ftCo_SpecialAir_CheckInput.
+              // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::ftCo_Landing_IASA
+              // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::{
+              //   ftCo_SpecialS_CheckInput,ftCo_800D68C0}
+              (fabsf(stick_x) >= c->special_stick_x_threshold_side) ? 1u : 0u;
+          if (!grounded_side_special_preempts_down_special &&
+              (action_allows_shine_entry_ground(a) || landing_specials_open ||
                shine_entry_allowed_by_run_to_runbrake_transition(batch, idx, a)) &&
               !shine_entry_blocked_by_runbrake_squat_transition(batch, idx, a)) {
             // Turn IASA ownership:
@@ -505,7 +620,7 @@ void shine_update_pre_physics(MslBatch* batch) {
             shine_entered_this_frame = 1u;
           }
         } else {
-          if (action_allows_shine_entry_air(a)) {
+          if (action_allows_shine_entry_air(batch, idx, a)) {
             shine_release_setvars(batch, idx, ch);
             enter_shine_air_start(batch, idx, ch, ms);
             shine_entered_this_frame = 1u;
@@ -560,7 +675,14 @@ void shine_update_pre_physics(MslBatch* batch) {
       }
 
       const float anim_frame_f32 = batch->state.anim_frame_f32[idx];
-      const uint16_t held = batch->state.input_buttons[idx];
+      // Decomp ordering: SpecialLw Anim callbacks run in Fighter_8006A360 (prio 1) before
+      // Fighter_procUpdate applies current-frame input (prio 3). Latch B-release from the
+      // pre-input snapshot while leaving entry/IASA checks on current input below.
+      // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A360,Fighter_procUpdate}
+      // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c::{
+      //   ftFx_SpecialLwStart_Anim,ftFx_SpecialLwLoop_Anim,ftFx_SpecialLwTurn_Anim,
+      //   ftFx_SpecialLwHit_Anim}
+      const uint16_t held = batch->state.prev_input_buttons[idx];
 
       // Decomp ordering: if an Anim callback transitions into Loop (e.g. Start->Loop or Turn->Loop),
       // the destination state's IASA can run later in the same frame. Allow one follow-up pass.
@@ -648,24 +770,7 @@ void shine_update_pre_physics(MslBatch* batch) {
             if (((buttons_pressed & (uint16_t)MSL_BUTTON_XY) != 0) ||
                 did_tap_jump(c, stick_y, tilt_timer_y)) {
               if (batch->state.jumps_left[idx] > 0) {
-                const uint16_t act = jump_aerial_action_from_stick(c, stick_x, facing_dir);
-                batch->state.action_id[idx] = act;
-                batch->state.animation_index[idx] = (act == (uint16_t)MSL_ACT_JUMP_AERIAL_F)
-                                                        ? (uint32_t)MSL_SM_JUMP_AERIAL_F
-                                                        : (uint32_t)MSL_SM_JUMP_AERIAL_B;
-                msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
-                batch->state.speed_air_x_self[idx] = stick_x * ch->air_jump_h_multiplier;
-                batch->state.speed_y_self[idx] =
-                    ch->jump_v_initial_velocity * ch->air_jump_v_multiplier;
-                // Decomp: fp->x671_timer_lstick_tilt_y = 0xFE;
-                // refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c:152-156
-                batch->state.tilt_timer_y[idx] = 0xFEu;
-                batch->state.fall_fast[idx] = 0;
-                batch->state.jumps_left[idx]--;
-                // Decomp: ftCo_JumpAerial_Enter_Basic calls ftCommon_8007D5D4.
-                // refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::ftCo_JumpAerial_Enter_Basic
-                // refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007D5D4
-                batch->state.ecb_lock_timer[idx] = 10u;
+                enter_jump_aerial_basic(batch, idx, ch, c, stick_x, facing_dir);
                 break;
               }
             }
@@ -727,20 +832,29 @@ void shine_update_pre_physics(MslBatch* batch) {
               // Decomp callback order:
               // - ftFx_SpecialLwEnd_Anim calls ftCommon_8007DB24 then ftCommon_8007D92C.
               // - grounded ftCommon_8007D92C resolves to Wait via ft_8008A2BC.
-              // - destination Wait_IASA can then admit Dash on the same frame.
+              // - destination Wait_IASA can then admit Dash or backward-flick TurnSmash on the
+              //   same frame through ftCo_Dash_CheckInput, or ordinary Turn through
+              //   ftCo_Turn_CheckInput.
               // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c::ftFx_SpecialLwEnd_Anim
               // refs/melee/src/melee/ft/ftcommon.c::{ftCommon_8007DB24,ftCommon_8007D92C}
-              // refs/melee/src/melee/ft/chara/ftCommon/{ftCo_Wait.c,ftCo_Dash.c}
+              // refs/melee/src/melee/ft/chara/ftCommon/{ftCo_Wait.c,ftCo_Dash.c,ftCo_Turn.c}
               enter_wait(batch, idx);
-              if (shine_is_dash_flick(c, stick_x, tilt_timer_x) && (stick_x * facing_dir) >= 0.0f) {
-                batch->state.action_id[idx] = (uint16_t)MSL_ACT_DASH;
-                batch->state.animation_index[idx] = (uint32_t)MSL_SM_DASH;
-                batch->state.dash_x4[idx] = 1u;
-                msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
-                // Decomp: ftCo_Dash_Enter calls ftAnim_8006EBA4 immediately after ChangeMotionState.
-                // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c:59-62
-                msl_anim_timebase_tick_once(batch, idx);
-                batch->state.tilt_timer_x[idx] = 0xFEu;
+              if (shine_is_dash_flick(c, stick_x, tilt_timer_x)) {
+                if ((stick_x * facing_dir) < 0.0f) {
+                  enter_turn_smash_from_wait_iasa(batch, idx, facing_dir);
+                } else {
+                  batch->state.action_id[idx] = (uint16_t)MSL_ACT_DASH;
+                  batch->state.animation_index[idx] = (uint32_t)MSL_SM_DASH;
+                  batch->state.dash_x4[idx] = 1u;
+                  msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+                  // Decomp: ftCo_Dash_Enter calls ftAnim_8006EBA4 immediately after ChangeMotionState.
+                  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c:59-62
+                  msl_anim_timebase_tick_once(batch, idx);
+                  batch->state.tilt_timer_x[idx] = 0xFEu;
+                }
+              } else if (stick_wants_turn(c, batch->state.input_main_x[idx],
+                                          batch->state.facing[idx])) {
+                enter_turn_basic_from_wait_iasa(batch, idx, ch);
               }
             }
             break;
@@ -750,6 +864,18 @@ void shine_update_pre_physics(MslBatch* batch) {
                 enter_wait(batch, idx);
               } else {
                 enter_fall(batch, idx);
+                // Decomp: aerial Shine End also calls ftCommon_8007D92C, which enters Fall; the
+                // destination Fall_IASA can consume double-jump input later in the same fighter proc.
+                // Keep this slice to JumpAerial, the replay-real F20 residual covered here.
+                // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c::ftFx_SpecialAirLwEnd_Anim
+                // refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007D92C
+                // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_IASA_Inner
+                // refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::ftCo_JumpAerial_CheckInput
+                if ((((buttons_pressed & (uint16_t)MSL_BUTTON_XY) != 0) ||
+                     did_tap_jump(c, stick_y, tilt_timer_y)) &&
+                    batch->state.jumps_left[idx] > 0) {
+                  enter_jump_aerial_basic(batch, idx, ch, c, stick_x, facing_dir);
+                }
               }
             }
             break;
@@ -804,6 +930,7 @@ void shine_update_post_collision(MslBatch* batch) {
         msl_anim_timebase_enter(batch, idx, cur_frame, 1.0f);
       } else if (action_is_shine_air(a) && on_ground) {
         // Air -> ground: preserve anim frame.
+        const MslCharParams* ch = msl_char_params(cid);
         batch->state.action_id[idx] =
             (uint16_t)(a - (uint16_t)MSL_FX_SHINE_GROUND_TO_AIR_ACTION_DELTA);
         const uint16_t a2 = batch->state.action_id[idx];
@@ -817,6 +944,16 @@ void shine_update_post_collision(MslBatch* batch) {
           batch->state.animation_index[idx] = (uint32_t)ms->speciallw_ground_end;
         } else if (a2 == (uint16_t)MSL_ACT_FX_SPECIAL_LW_TURN) {
           batch->state.animation_index[idx] = (uint32_t)ms->speciallw_ground_loop;
+        }
+        // Decomp: every SpecialAirLw* AirToGround handler calls ftCommon_8007D7FC before
+        // Fighter_ChangeMotionState, refreshing grounded jump ownership on the landing frame.
+        // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c::{
+        //   ftFx_SpecialAirLwStart_AirToGround,ftFx_SpecialAirLwLoop_AirToGround,
+        //   ftFx_SpecialAirLwHit_AirToGround,ftFx_SpecialAirLwEnd_AirToGround,
+        //   ftFx_SpecialAirLwTurn_AirToGround}
+        // refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007D7FC
+        if (ch != NULL) {
+          batch->state.jumps_left[idx] = ch->max_jumps;
         }
         msl_anim_timebase_enter(batch, idx, cur_frame, 1.0f);
       }

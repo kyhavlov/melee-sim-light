@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import struct
+import json
 from pathlib import Path
 
 import numpy as np
@@ -41,7 +42,16 @@ def test_suite_observed_actions_do_not_require_ft_800895E0_rewrite_paths() -> No
     if not ds_root.exists():
         pytest.skip("missing local preprocessed datasets for suite (datasets/ is gitignored)")
 
-    msl_paths = sorted(ds_root.rglob("*.msl"))
+    suite_path = Path("replays/suites/fox_falco_fd_ucf084_recent.json")
+    if not suite_path.exists():
+        pytest.skip("missing suite manifest: replays/suites/fox_falco_fd_ucf084_recent.json")
+    suite = json.loads(suite_path.read_text(encoding="utf-8"))
+    # Restrict this guard to the actual validation suite. Gitignored debug caches under datasets/
+    # may contain probe windows for unmodeled actions and should be locked by their focused tests.
+    msl_paths = sorted(
+        ds_root / Path(str(entry["replay"])).with_suffix(".msl")
+        for entry in suite.get("replays", [])
+    )
     if not msl_paths:
         pytest.skip("no .msl files found under datasets/fox_falco_fd_ucf084_recent")
 

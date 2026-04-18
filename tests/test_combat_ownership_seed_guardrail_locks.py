@@ -1415,8 +1415,8 @@ def test_attackairb_create_edge_model_scaling_subset_and_adjacent_controls() -> 
     # - The live collision skeleton cancels `co_attrs.model_scaling` through
     #   ftAnim_8006FA58 -> ftCommon_8007F6A4, so these hitboxes should scale by fighter scale only.
     # - Keep nearby create-edge controls explicit:
-    #   - QGD:8222 and TBK:5247 still carry separate BODY-contact owners and remain blockers.
-    #   - QGD:6822 stays exact as a non-target control.
+    #   - TBK:5247 still carries a separate BODY-contact owner and remains a blocker.
+    #   - QGD:8222 and QGD:6822 stay exact as non-target controls.
     #
     # Decomp ownership anchors:
     # - Fighter_UpdateModelScale applies fighter scale to runtime joints.
@@ -1477,17 +1477,26 @@ def test_attackairb_create_edge_model_scaling_subset_and_adjacent_controls() -> 
         _, ref_row, out_row = _run_one_step_row(dataset_path, record, victim)
         _assert_transition_lock_fields_match_ref(out_row=out_row, ref_row=ref_row, record=record, p=victim)
 
+    qgd_8222 = (
+        root
+        / "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/QuerulousGrandDinosaur.msl"
+    )
+    _, contacts_8222, _, timing_8222 = _run_pre_combat_debug_row(qgd_8222, 8222, 0, 0)
+    assert int(timing_8222["enabled_cur"]) == 1
+    assert int(timing_8222["enabled_prev"]) == 0
+    assert int(timing_8222["enable_edge"]) == 1
+    assert not any(
+        int(c["attacker"]) == 0
+        and int(c["defender"]) == 1
+        and int(c["hitbox_id"]) == 0
+        and int(c["contact_kind"]) == 0
+        for c in contacts_8222
+    )
+    _, ref_8222, out_8222 = _run_one_step_row(qgd_8222, 8222, 1)
+    for p in (0, 1):
+        _assert_transition_lock_fields_match_ref(out_row=out_8222, ref_row=ref_8222, record=8222, p=p)
+
     for dataset_rel, record, attacker, hb_id, victim, exp_action, exp_hitlag, exp_hitstun in [
-        (
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/QuerulousGrandDinosaur.msl",
-            8222,
-            0,
-            0,
-            1,
-            90,
-            6,
-            52,
-        ),
         (
             "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/TreasuredBackKangaroo.msl",
             5247,

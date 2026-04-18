@@ -291,7 +291,7 @@ def test_debug_body_contact_split_routes_resolved_geometry_residuals_to_named_ow
             filtered_body_candidate_count=1,
             first_msid=313,
         )
-        == "F10e_special_move_adjacency"
+        == "F20_speciallw_shine_reflector"
     )
     assert (
         _family_for_debug_body_contact_residual(
@@ -434,7 +434,139 @@ def test_classify_player_row_does_not_hide_special_adjacency_in_mpcoll_residual(
             350: "FX_SPECIAL_AIR_S_START",
         },
     )
-    assert got == "F10e_special_move_adjacency"
+    assert got == "F23_special_common_entry_dispatch"
+
+
+def test_classify_player_row_splits_landingfallspecial_special_entry_dispatch() -> None:
+    row = _player_row(
+        seed_action_id=43,
+        ref_action_id=360,
+        out_action_id=43,
+        prev_action_id=43,
+        fields=("action_id", "animation_index", "hitlag"),
+        on_ground=1,
+    )
+    got = _classify_player_row(
+        row,
+        {
+            43: "LANDING_FALL_SPECIAL",
+            360: "FX_SPECIAL_LW_START",
+        },
+    )
+    assert got == "F23_special_common_entry_dispatch"
+
+
+def test_classify_player_row_splits_specialn_blaster_owner() -> None:
+    row = _player_row(
+        seed_action_id=345,
+        ref_action_id=42,
+        out_action_id=346,
+        prev_action_id=345,
+        fields=("action_id", "animation_index", "on_ground"),
+        on_ground=0,
+    )
+    got = _classify_player_row(
+        row,
+        {
+            42: "LANDING",
+            345: "FX_SPECIAL_AIR_N_LOOP",
+            346: "FX_SPECIAL_AIR_N_END",
+        },
+    )
+    assert got == "F19_specialn_blaster_article"
+
+
+def test_classify_player_row_splits_shine_air_ground_owner() -> None:
+    row = _player_row(
+        seed_action_id=366,
+        ref_action_id=361,
+        out_action_id=366,
+        prev_action_id=365,
+        fields=("action_id", "animation_index", "jumps_left", "on_ground"),
+        on_ground=0,
+    )
+    got = _classify_player_row(
+        row,
+        {
+            361: "FX_SPECIAL_LW_LOOP",
+            365: "FX_SPECIAL_AIR_LW_START",
+            366: "FX_SPECIAL_AIR_LW_LOOP",
+        },
+    )
+    assert got == "F20_speciallw_shine_reflector"
+
+
+def test_classify_player_row_splits_firefox_from_common_fallspecial() -> None:
+    firefox = _player_row(
+        seed_action_id=358,
+        ref_action_id=357,
+        out_action_id=357,
+        prev_action_id=358,
+        fields=("jumps_left",),
+        on_ground=0,
+    )
+    assert (
+        _classify_player_row(
+            firefox,
+            {
+                357: "FX_SPECIAL_HI_LANDING",
+                358: "FX_SPECIAL_HI_FALL",
+            },
+        )
+        == "F22_specialhi_firefox_firebird"
+    )
+
+    common = _player_row(
+        seed_action_id=236,
+        ref_action_id=43,
+        out_action_id=236,
+        prev_action_id=25,
+        fields=("action_id", "animation_index", "on_ground"),
+        on_ground=0,
+    )
+    assert (
+        _classify_player_row(
+            common,
+            {
+                25: "JUMP_F",
+                43: "LANDING_FALL_SPECIAL",
+                236: "ESCAPE_AIR",
+            },
+        )
+        == "F13a_common_fallspecial_landing"
+    )
+
+
+def test_classify_player_row_splits_special_instance_order() -> None:
+    row = _player_row(
+        seed_action_id=27,
+        ref_action_id=344,
+        out_action_id=344,
+        prev_action_id=27,
+        fields=("instance_id",),
+        on_ground=0,
+    )
+    got = _classify_player_row(
+        row,
+        {
+            27: "JUMP_AERIAL_F",
+            344: "FX_SPECIAL_AIR_N_START",
+        },
+    )
+    assert got == "F24_special_adjacent_instance_order"
+
+
+def test_classify_player_row_splits_per_throw_pulse_from_misc() -> None:
+    row = _player_row(
+        seed_action_id=222,
+        ref_action_id=222,
+        out_action_id=222,
+        prev_action_id=222,
+        fields=("combo_count",),
+        on_ground=1,
+    )
+    got = _classify_player_row(row, {222: "THROW_LW"})
+    assert got == "F14b_per_throw_pulse_bookkeeping"
 
 
 def test_classify_player_row_splits_turn_hidden_microphase_from_grounded_selector() -> None:

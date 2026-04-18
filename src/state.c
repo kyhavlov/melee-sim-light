@@ -181,6 +181,7 @@ int state_alloc(MslStateSoA* state, int batch_size) {
   state->stage_ledge_occupant_right = (int8_t*)alloc_aligned_64(sizeof(int8_t) * b);
   state->ledge_cooldown = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->fallspecial_xc = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
+  state->landing_fallspecial_allow_interrupt = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->turn_has_turned = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->turn_frames_to_turn = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->walk_use_raw_input_once = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
@@ -313,6 +314,7 @@ int state_alloc(MslStateSoA* state, int batch_size) {
   state->combo_victim_port = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->combo_victim_instance_id = (uint16_t*)alloc_aligned_64(sizeof(uint16_t) * bp);
   state->combo_timer_x2098 = (uint16_t*)alloc_aligned_64(sizeof(uint16_t) * bp);
+  state->source_port0 = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->last_hit_by = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->state_flags = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp * MSL_STATE_FLAGS_BYTES);
   state->combat_hitlist_cd = (uint16_t*)alloc_aligned_64(sizeof(uint16_t) * bphl);
@@ -422,7 +424,8 @@ int state_alloc(MslStateSoA* state, int batch_size) {
       !state->run_x0 || !state->runbrake_cmd0 || !state->dash_x4 || !state->shine_release_lag ||
       !state->shine_is_release || !state->ecb_lock_timer || !state->ledge_side ||
       !state->stage_ledge_occupant_left || !state->stage_ledge_occupant_right ||
-      !state->ledge_cooldown || !state->fallspecial_xc || !state->turn_has_turned ||
+      !state->ledge_cooldown || !state->fallspecial_xc ||
+      !state->landing_fallspecial_allow_interrupt || !state->turn_has_turned ||
       !state->turn_frames_to_turn || !state->walk_use_raw_input_once || !state->turn_x8 ||
       !state->lr_press_timer || !state->x672_input_timer || !state->x673 || !state->x674 ||
       !state->x675 || !state->x676_x || !state->x2228_b7 || !state->x677_y || !state->x678 ||
@@ -463,13 +466,13 @@ int state_alloc(MslStateSoA* state, int batch_size) {
       !state->motion_entry_instance_id_override || !state->instance_identity_last_action_id ||
       !state->attack_id || !state->attack_instance || !state->attack_identity_last_action_id ||
       !state->last_attack_landed || !state->combo_count || !state->combo_victim_port ||
-      !state->combo_victim_instance_id || !state->combo_timer_x2098 || !state->last_hit_by ||
-      !state->state_flags || !state->combat_hitlist_cd || !state->combat_hitlist_victim_iid ||
-      !state->combat_hitlist_hb_valid || !state->combat_hitlist_hb_cd ||
-      !state->combat_hitlist_hb_victim_iid || !state->hitlist_reseed_gen ||
-      !state->fighter_hitlist || !state->fighter_hitlist_init_gen || !state->stale_queue_index ||
-      !state->stale_move_id || !state->stale_attack_instance || !state->input_buttons ||
-      !state->prev_input_buttons || !state->input_buttons_pressed ||
+      !state->combo_victim_instance_id || !state->combo_timer_x2098 || !state->source_port0 ||
+      !state->last_hit_by || !state->state_flags || !state->combat_hitlist_cd ||
+      !state->combat_hitlist_victim_iid || !state->combat_hitlist_hb_valid ||
+      !state->combat_hitlist_hb_cd || !state->combat_hitlist_hb_victim_iid ||
+      !state->hitlist_reseed_gen || !state->fighter_hitlist || !state->fighter_hitlist_init_gen ||
+      !state->stale_queue_index || !state->stale_move_id || !state->stale_attack_instance ||
+      !state->input_buttons || !state->prev_input_buttons || !state->input_buttons_pressed ||
       !state->input_buttons_released || !state->input_main_x || !state->input_main_y ||
       !state->prev_input_main_x || !state->prev_input_main_y || !state->input_c_x ||
       !state->input_c_y || !state->prev_input_c_x || !state->prev_input_c_y ||
@@ -686,6 +689,7 @@ void state_free(MslStateSoA* state) {
   alloc_free(state->stage_ledge_occupant_right);
   alloc_free(state->ledge_cooldown);
   alloc_free(state->fallspecial_xc);
+  alloc_free(state->landing_fallspecial_allow_interrupt);
   alloc_free(state->turn_has_turned);
   alloc_free(state->turn_frames_to_turn);
   alloc_free(state->walk_use_raw_input_once);
@@ -818,6 +822,7 @@ void state_free(MslStateSoA* state) {
   alloc_free(state->combo_victim_port);
   alloc_free(state->combo_victim_instance_id);
   alloc_free(state->combo_timer_x2098);
+  alloc_free(state->source_port0);
   alloc_free(state->last_hit_by);
   alloc_free(state->state_flags);
   alloc_free(state->combat_hitlist_cd);

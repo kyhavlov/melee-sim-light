@@ -782,6 +782,17 @@ typedef struct MslSeed {
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffClimb.c::ftCo_8009AAFC
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffWait.c::ftCo_8009A9AC
   uint8_t ledge_cooldown[MSL_MAX_PLAYERS];  // fp->x2064_ledgeCooldown (clamped to 0..255)
+  // Hidden LandingFallSpecial interrupt permission (`mv.co.landing.allow_interrupt`).
+  //
+  // Decomp:
+  // - EscapeAir_Coll enters LandingFallSpecial with allow_interrupt=false.
+  // - FallSpecial_Coll forwards `mv.co.fallspecial.allow_interrupt`.
+  // - SpecialS/Hi freefall enters FallSpecial with allow_interrupt=true.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::{
+  //   ftCo_LandingFallSpecial_Enter,ftCo_Landing_IASA}
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_FallSpecial.c::ftCo_FallSpecial_Coll
+  uint8_t landing_fallspecial_allow_interrupt[MSL_MAX_PLAYERS];
   // Decomp: refs/melee/src/melee/ft/chara/ftCommon/ftCo_Turn.c:56-88 (ftCo_Turn_Anim_Inner)
   uint8_t turn_frames_to_turn[MSL_MAX_PLAYERS];  // fp->mv.co.turn.frames_to_turn
   uint8_t turn_has_turned[MSL_MAX_PLAYERS];      // fp->mv.co.turn.has_turned
@@ -945,6 +956,16 @@ typedef struct MslSeed {
   uint8_t combo_victim_port[MSL_MAX_PLAYERS];
   uint16_t combo_victim_instance_id[MSL_MAX_PLAYERS];
   uint16_t combo_timer_x2098[MSL_MAX_PLAYERS];
+  // Slippi raw source port for each local dataset/sim slot.
+  //
+  // Decomp/recording boundary:
+  // - `last_hit_by` mirrors `dmg.x18C4_source_ply`, which Slippi exports in the raw 0-based
+  //   controller-port domain, not in the selected local dataset slot order.
+  // - Runtime combo/hitlist ownership still uses local slots; only replay-facing source writes use
+  //   this lane.
+  // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm (last_hit_by lane)
+  // tools/slippi/make_dataset_from_slp.py (`src_ports` selected slot order)
+  uint8_t source_port0[MSL_MAX_PLAYERS];
   uint8_t last_hit_by[MSL_MAX_PLAYERS];
   // Grab/throw victim attachment owner identity (seeded; suite-focused).
   //

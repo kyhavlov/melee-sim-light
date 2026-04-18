@@ -45,6 +45,8 @@ static inline MslJumpInput jump_input_from_edges(const MslCommonParams* c, uint1
 static inline uint16_t jump_action_from_stick(const MslCommonParams* c, float stick_x,
                                               float facing_dir);
 static inline uint32_t submotion_for_action(uint16_t a);
+static inline uint8_t run_iasa_has_spacie_b_special_intent(uint8_t char_id,
+                                                           uint16_t buttons_pressed);
 static inline uint8_t wait_iasa_locomotion_subset_try_enter(
     MslBatch* batch, const MslCommonParams* c, const MslCharParams* ch, size_t idx,
     uint16_t buttons, uint16_t buttons_pressed, float stick_x, float stick_y, uint8_t tilt_timer_x,
@@ -250,10 +252,33 @@ static inline void enter_fall_special_from_specialhi(MslBatch* batch, size_t idx
   //   ftFx_SpecialHiLanding_Coll,ftFx_SpecialHiFall_Anim
   // }
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_FallSpecial.c::ftCo_80096900
+  const uint8_t keep_fastfall = batch->state.fall_fast[idx] ? 1u : 0u;
   batch->state.action_id[idx] = (uint16_t)MSL_ACT_FALL_SPECIAL;
   batch->state.animation_index[idx] = (uint32_t)MSL_SM_FALL_SPECIAL;
   msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+  // ftCo_80096900 enters FallSpecial with Ft_MF_KeepFastFall. The generic motion-table flags do not
+  // encode this callsite-specific flag, so restore the pre-entry fastfall bit after the shared
+  // Fighter_ChangeMotionState bundle.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_FallSpecial.c::inline0
+  // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::{ftFx_SpecialHiFall_Anim,ftFx_SpecialHiBound_Anim}
+  batch->state.fall_fast[idx] = keep_fastfall;
   batch->state.fallspecial_xc[idx] = 1u;
+}
+
+static inline void enter_specialhi_bound_from_airhi_collision(MslBatch* batch, size_t idx) {
+  if (batch == NULL) {
+    return;
+  }
+  // Decomp: SpecialAirHi collision can enter the rebound motion state through
+  // ftFx_SpecialHiBound_Enter. The motion-state handler calls ftAnim_8006EBA4 immediately and does
+  // not convert the fighter to grounded; Bound_Phys/Coll continue to branch on ground_or_air.
+  // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::{
+  //   ftFx_SpecialAirHi_Coll,ftFx_SpecialHiBound_Enter}
+  batch->state.action_id[idx] = (uint16_t)MSL_ACT_FX_SPECIAL_HI_BOUND;
+  batch->state.animation_index[idx] = (uint32_t)MSL_SM_FX_SPECIAL_HI_BOUND;
+  batch->state.on_ground[idx] = 0u;
+  batch->state.fall_fast[idx] = 0u;
+  msl_anim_timebase_enter_with_policy(batch, idx, 0.0f, 1.0f, MSL_ANIM_ENTER_TICK_IMMEDIATE);
 }
 
 static inline void specialhi_apply_air_launch_ownership(MslBatch* batch, size_t idx,
@@ -463,9 +488,16 @@ static inline uint8_t spacie_specialhi_update(MslBatch* batch, size_t idx, uint8
       // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::ftFx_SpecialHiLanding_Anim
       if (anim_finished(char_id, (uint16_t)MSL_SM_FX_SPECIAL_HI_LANDING,
                         batch->state.anim_frame_f32[idx])) {
+        // Decomp ordering: ftFx_SpecialHiLanding_Anim enters Wait during the Anim callback, then the
+        // destination Wait input callback can run later in the same Fighter proc. Return 0 after the
+        // motion change so the grounded locomotion IASA tail below can consume Walk/Squat/Turn.
+        // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::ftFx_SpecialHiLanding_Anim
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
+        // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A360,Fighter_procUpdate}
         batch->state.action_id[idx] = (uint16_t)MSL_ACT_WAIT;
         batch->state.animation_index[idx] = (uint32_t)MSL_SM_WAIT1_0;
         msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+        return 0;
       }
       return 1;
     case MSL_ACT_FX_SPECIAL_HI_FALL:
@@ -475,6 +507,17 @@ static inline uint8_t spacie_specialhi_update(MslBatch* batch, size_t idx, uint8
       if (anim_finished(char_id, (uint16_t)MSL_SM_FX_SPECIAL_HI_FALL,
                         batch->state.anim_frame_f32[idx])) {
         enter_fall_special_from_specialhi(batch, idx);
+      }
+      return 1;
+    case MSL_ACT_FX_SPECIAL_HI_BOUND:
+      batch->state.animation_index[idx] = (uint32_t)MSL_SM_FX_SPECIAL_HI_BOUND;
+      // Decomp: ftFx_SpecialHiBound_Anim enters FallSpecial on anim end while airborne and consumes
+      // all jumps (`x1968_jumpsUsed = max_jumps`).
+      // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::ftFx_SpecialHiBound_Anim
+      if (!on_ground && anim_finished(char_id, (uint16_t)MSL_SM_FX_SPECIAL_HI_BOUND,
+                                      batch->state.anim_frame_f32[idx])) {
+        enter_fall_special_from_specialhi(batch, idx);
+        batch->state.jumps_left[idx] = 0u;
       }
       return 1;
     default:
@@ -1649,6 +1692,14 @@ static inline uint16_t jump_aerial_action_from_stick(const MslCommonParams* c, f
                                                             : MSL_ACT_JUMP_AERIAL_B;
 }
 
+static inline uint8_t run_iasa_has_spacie_b_special_intent(uint8_t char_id,
+                                                           uint16_t buttons_pressed) {
+  if (char_id != 1u && char_id != 22u) {
+    return 0u;
+  }
+  return ((buttons_pressed & (uint16_t)MSL_BUTTON_B) != 0u) ? 1u : 0u;
+}
+
 static inline uint8_t is_dash_flick(const MslCommonParams* c, float stick_x, uint8_t tilt_timer_x) {
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c::ftCo_Dash_CheckInput
   const float ax = msl_absf(stick_x);
@@ -1890,6 +1941,22 @@ static inline void enter_landing_action_from_air(MslBatch* batch, const MslCharP
 
   batch->state.action_id[idx] = land_act;
   batch->state.animation_index[idx] = submotion_for_action(land_act);
+  if (land_act == (uint16_t)MSL_ACT_LANDING_FALL_SPECIAL) {
+    // Decomp: LandingFallSpecial carries mv.co.landing.allow_interrupt from its entry helper.
+    // EscapeAir_Coll passes false; FallSpecial_Coll forwards the FallSpecial source flag. This
+    // runtime path models the suite-owned sources we currently enter explicitly.
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_80099D70
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_FallSpecial.c::ftCo_80096D28
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::ftCo_LandingFallSpecial_Enter
+    batch->state.landing_fallspecial_allow_interrupt[idx] =
+        (source_act == (uint16_t)MSL_ACT_FALL_SPECIAL ||
+         source_act == (uint16_t)MSL_ACT_FALL_SPECIAL_F ||
+         source_act == (uint16_t)MSL_ACT_FALL_SPECIAL_B)
+            ? 1u
+            : 0u;
+  } else {
+    batch->state.landing_fallspecial_allow_interrupt[idx] = 0u;
+  }
 
   // Decomp: Fighter_ChangeMotionState sets:
   // - fp->frame_speed_mul = anim_speed
@@ -1904,8 +1971,20 @@ static inline void enter_landing_action_from_air(MslBatch* batch, const MslCharP
   if (land_act == (uint16_t)MSL_ACT_LANDING_FALL_SPECIAL) {
     const float landing_lag = (c != NULL) ? c->landing_fall_special_lag_frames : 0.0f;
     const float end_frame = msl_anim_end_frame(cid, (uint16_t)MSL_SM_LANDING_FALL_SPECIAL);
-    const float speed =
-        (landing_lag > 0.0f && end_frame > 0.0f) ? ((end_frame + 0.1f) / landing_lag) : 1.0f;
+    float speed = 1.0f;
+    if (source_act == (uint16_t)MSL_ACT_ESCAPE_AIR ||
+        source_act == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_S_END) {
+      // Source-specific LandingFallSpecial rate:
+      // - EscapeAir_Coll enters LandingFallSpecial with p_ftCommonData->x344.
+      // - SpecialAirSEnd_Coll enters LandingFallSpecial with the Illusion/Phantasm landing lag.
+      // - FallSpecial_Coll forwards mv.co.fallspecial.landing_lag; suite FallSpecial sources here
+      //   carry a 1.0 frame-speed lane, so do not apply the EscapeAir x344 rate to them.
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_80099D70
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_FallSpecial.c::ftCo_80096D28
+      // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c::ftFx_SpecialAirSEnd_Coll
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::ftCo_LandingFallSpecial_Enter
+      speed = (landing_lag > 0.0f && end_frame > 0.0f) ? ((end_frame + 0.1f) / landing_lag) : 1.0f;
+    }
     msl_anim_timebase_enter(batch, idx, 0.0f, speed);
   } else {
     // Most motion states enter with anim_speed=1.0 and anim_start=0.0.
@@ -2928,8 +3007,18 @@ void locomotion_update_pre(MslBatch* batch) {
         // options we support from Wait (jump/dash/turn/walk), in the same relative order.
         //
         // Decomp: ftCo_Landing_IASA calls the common grounded interrupt checks after the lag gate.
-        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c
-        if (action_id == MSL_ACT_LANDING &&
+        // LandingFallSpecial shares this IASA callback in the motion-state table, gated by
+        // mv.co.landing.allow_interrupt carried from ftCo_LandingFallSpecial_Enter.
+        // refs/melee/src/melee/ft/ftmotionstates.c::ftCo_MS_LandingFallSpecial
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::{
+        //   ftCo_Landing_IASA,ftCo_LandingFallSpecial_Enter}
+        const uint8_t landing_iasa_owner =
+            (action_id == MSL_ACT_LANDING ||
+             (action_id == MSL_ACT_LANDING_FALL_SPECIAL &&
+              batch->state.landing_fallspecial_allow_interrupt[idx] != 0u))
+                ? 1u
+                : 0u;
+        if (landing_iasa_owner &&
             batch->state.anim_frame_f32[idx] >= (float)ch->landing_lag_frames) {
           // Landing IASA includes grounded attack checks before Jump/Dash/Turn/Walk.
           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::ftCo_Landing_IASA
@@ -3339,7 +3428,15 @@ void locomotion_update_pre(MslBatch* batch) {
         // refs/melee/src/melee/ft/chara/ftCommon/ftCo_RunBrake.c::ftCo_RunBrake_CheckInput
         if ((action_id == MSL_ACT_RUN || action_id == MSL_ACT_RUN_DIRECT) &&
             action_id_start == action_id && batch->state.run_x0[idx] == 0 &&
-            msl_absf(stick_x) < c->run_stick_x_threshold) {
+            msl_absf(stick_x) < c->run_stick_x_threshold &&
+            !run_iasa_has_spacie_b_special_intent(batch->state.char_id[idx], buttons_pressed)) {
+          // Decomp order: ftCo_Run_IASA checks the B-special dispatchers before the terminal
+          // RunBrake check. The simulator runs special handlers after locomotion, so leave Run
+          // intact on a B-special edge and let the later special owner consume without an extra
+          // RunBrake Fighter_ChangeMotionState / ft_800895E0 bump.
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Run.c::ftCo_Run_IASA
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::{ftCo_SpecialS_CheckInput,ftCo_800D68C0}
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_RunBrake.c::ftCo_RunBrake_CheckInput
           batch->state.action_id[idx] = (uint16_t)MSL_ACT_RUN_BRAKE;
           batch->state.animation_index[idx] = (uint32_t)MSL_SM_RUN_BRAKE;
           msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
@@ -4067,17 +4164,29 @@ void locomotion_update_post_collision(MslBatch* batch) {
         } else if (a == (uint16_t)MSL_ACT_FX_SPECIAL_HI_FALL) {
           // Decomp: ftFx_SpecialHiFall_Coll -> ftFx_SpecialHiFall_Enter transitions to
           // SpecialHiLanding with anim_start=13 and immediate anim tick.
+          // ftFx_SpecialHiFall_Enter calls ftCommon_8007D7FC before ChangeMotionState, so the
+          // landing row also refreshes grounded jumps.
           // ChangeMotionState flags do not include KeepFastFall on this transition, so fall_fast is
           // cleared at landing entry.
           // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::{
           //   ftFx_SpecialHiFall_Coll,ftFx_SpecialHiFall_Enter
           // }
+          // refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007D7FC
           // refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState
           batch->state.action_id[idx] = (uint16_t)MSL_ACT_FX_SPECIAL_HI_LANDING;
           batch->state.animation_index[idx] = (uint32_t)MSL_SM_FX_SPECIAL_HI_LANDING;
+          batch->state.jumps_left[idx] = ch->max_jumps;
           batch->state.fall_fast[idx] = 0u;
           msl_anim_timebase_enter_with_policy(batch, idx, 13.0f, 1.0f,
                                               MSL_ANIM_ENTER_TICK_IMMEDIATE);
+          continue;
+        } else if (a == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_HI) {
+          // Decomp: launch collision can enter the rebound state instead of a generic landing.
+          // The rebound state remains airborne on the entry row; Bound collision owns any later
+          // ground/air handling.
+          // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::{
+          //   ftFx_SpecialAirHi_Coll,ftFx_SpecialHiBound_Enter}
+          enter_specialhi_bound_from_airhi_collision(batch, idx);
           continue;
         }
 

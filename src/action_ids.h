@@ -181,19 +181,22 @@ enum {
   MSL_ACT_ESCAPE_AIR = 0x00EC,     // ftCo_MS_EscapeAir
 };
 
-// Fox/Falco up-special submotions needed for SpecialAirHi -> SpecialHiFall/Landing transitions.
+// Fox/Falco up-special submotions needed for SpecialAirHi -> SpecialHiFall/Landing/Bound
+// transitions.
 //
 // Decomp source:
 // - refs/melee/src/melee/ft/chara/ftFox/forward.h::ftFx_Submotion
 //   ftFx_SM_SpecialHi        = ftCo_SM_Count + 14
 //   ftFx_SM_SpecialHiLanding = ftCo_SM_Count + 15
 //   ftFx_SM_SpecialHiFall    = ftCo_SM_Count + 16
+//   ftFx_SM_SpecialHiBound   = ftCo_SM_Count + 17
 // - refs/melee/src/melee/ft/chara/ftCommon/forward.h::ftCo_Submotion
 //   ftCo_SM_Count = 295
 enum {
   MSL_SM_FX_SPECIAL_HI = 309,
   MSL_SM_FX_SPECIAL_HI_LANDING = 310,
   MSL_SM_FX_SPECIAL_HI_FALL = 311,
+  MSL_SM_FX_SPECIAL_HI_BOUND = 312,
 };
 
 // GALE01 common grounded attack action ids (ftCommon_MotionState).

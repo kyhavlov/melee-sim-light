@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import numpy as np
+
 from tools.eval.dataset import SAMPLE_DTYPE, SEED_DTYPE
+from tools.slippi.make_dataset_from_slp import _derive_landing_fallspecial_allow_interrupt_seed_lane
 
 
 def test_seed_schema_includes_staling_fields() -> None:
@@ -42,6 +45,10 @@ def test_seed_schema_includes_staling_fields() -> None:
     assert "guard_setoff_exit_frame_speed_mul_f32" in SEED_DTYPE.fields
     # Same-frame fighter-proc order lane for plAttack_80037B08 instance_id entries.
     assert "motion_entry_instance_id_override_u16" in SEED_DTYPE.fields
+    # Raw Slippi/controller source-owner domain for replay-facing last_hit_by parity.
+    assert "source_port0" in SEED_DTYPE.fields
+    # Hidden FallSpecial -> LandingFallSpecial interrupt carry bit.
+    assert "landing_fallspecial_allow_interrupt" in SEED_DTYPE.fields
     # F04 blocker lane: replay-visible camera-box visibility bit (`fp->x221F_b0`).
     assert "camera_box_visible_x221f_b0" in SEED_DTYPE.fields
     # F04 blocker lane: hidden Rebirth camera anchor Y (`fp->mv.co.common.x8`).
@@ -76,3 +83,16 @@ def test_dataset_dtype_sizes_match_c_structs() -> None:
     sizes = msl_binding.sizes()
     assert int(sizes["seed"]) == SEED_DTYPE.itemsize
     assert int(sizes["sample"]) == SAMPLE_DTYPE.itemsize
+
+
+def test_landing_fallspecial_allow_interrupt_lane_is_prefix_causal() -> None:
+    # Action ids: FallSpecial=35, LandingFallSpecial=43, EscapeAir=236.
+    # EscapeAir-owned freefall enters LandingFallSpecial with allow_interrupt=false, while
+    # non-EscapeAir FallSpecial sources use the common true-carry path.
+    action = np.array([236, 35, 35, 43, 43, 14, 358, 35, 43, 14, 236, 43], dtype=np.uint16)
+    got = _derive_landing_fallspecial_allow_interrupt_seed_lane(action_id_u16=action)
+    assert got.tolist() == [0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0]
+
+    extended = np.concatenate([action, np.array([35, 43, 43], dtype=np.uint16)])
+    got_extended = _derive_landing_fallspecial_allow_interrupt_seed_lane(action_id_u16=extended)
+    np.testing.assert_array_equal(got_extended[: action.shape[0]], got)

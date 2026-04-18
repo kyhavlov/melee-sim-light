@@ -1830,6 +1830,22 @@ static inline void combat_source_owner_clear_ftCommon_800804FC(MslBatch* batch, 
   batch->state.source_clear_timer_x18c8[d_idx] = 0u;
 }
 
+static inline uint8_t combat_source_port0_for_attacker(const MslBatch* batch, size_t a_idx,
+                                                       int attacker) {
+  // Slippi records dmg.x18C4_source_ply in raw controller-port domain; local attacker indices are
+  // compact dataset slots.
+  // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm (last_hit_by lane)
+  // refs/melee/src/melee/ft/ftcoll.c::ftColl_80076ED8
+  if (batch == NULL || attacker < 0 || attacker >= MSL_MAX_PLAYERS) {
+    return 6u;
+  }
+  const uint8_t source_port0 = batch->state.source_port0[a_idx];
+  if (source_port0 < (uint8_t)MSL_MAX_PLAYERS) {
+    return source_port0;
+  }
+  return (uint8_t)attacker;
+}
+
 static inline void combat_processhit_commit_source_owner(MslBatch* batch, size_t d_idx,
                                                          uint8_t source_port) {
   if (batch == NULL) {
@@ -2658,7 +2674,7 @@ static inline void combat_mutations_pass1_future_apply_body_hit(
   }
 
   batch->state.instance_hit_by[d_idx] = batch->state.instance_id[a_idx];
-  batch->state.last_hit_by[d_idx] = (uint8_t)attacker;
+  batch->state.last_hit_by[d_idx] = combat_source_port0_for_attacker(batch, a_idx, attacker);
 
   // Stale-move queue update on successful damaging BODY hit (attacker-side).
   // Decomp: refs/melee/src/melee/pl/plstale.c::plStale_UpdateStaleMovesFromFighter
@@ -2706,7 +2722,7 @@ static inline void combat_mutations_pass1_future_apply_body_phantom_hit(MslBatch
   }
 
   batch->state.instance_hit_by[d_idx] = batch->state.instance_id[a_idx];
-  batch->state.last_hit_by[d_idx] = (uint8_t)attacker;
+  batch->state.last_hit_by[d_idx] = combat_source_port0_for_attacker(batch, a_idx, attacker);
 }
 
 MslItemHitResult combat_apply_item_hit(MslBatch* batch, int batch_index, int attacker, int defender,
@@ -3071,7 +3087,7 @@ MslItemHitResult combat_apply_item_hit(MslBatch* batch, int batch_index, int att
   combat_apply_guard_reflect_body_hit_followup(c, batch, d_idx, d_motion_id);
 
   batch->state.instance_hit_by[d_idx] = item_instance_id;
-  batch->state.last_hit_by[d_idx] = (uint8_t)attacker;
+  batch->state.last_hit_by[d_idx] = combat_source_port0_for_attacker(batch, a_idx, attacker);
 
   // Stale-move queue update on successful damaging BODY hit (attacker-side).
   // Decomp: refs/melee/src/melee/pl/plstale.c::plStale_UpdateStaleMovesFromItem
@@ -3257,7 +3273,7 @@ static inline uint8_t combat_apply_throw_hit_core(MslBatch* batch, int batch_ind
     batch->state.hitstun[d_idx] = 0;
     combat_state_flags_set_is_hitstun(batch, d_idx, 0);
     batch->state.instance_hit_by[d_idx] = batch->state.instance_id[a_idx];
-    batch->state.last_hit_by[d_idx] = (uint8_t)attacker;
+    batch->state.last_hit_by[d_idx] = combat_source_port0_for_attacker(batch, a_idx, attacker);
 
     if (update_bookkeeping) {
       const uint16_t attack_instance = batch->state.attack_instance[a_idx];
@@ -3321,7 +3337,7 @@ static inline uint8_t combat_apply_throw_hit_core(MslBatch* batch, int batch_ind
   // immediate tick here (no extra deferred tick) so release rows do not over-advance action_frame.
 
   batch->state.instance_hit_by[d_idx] = batch->state.instance_id[a_idx];
-  batch->state.last_hit_by[d_idx] = (uint8_t)attacker;
+  batch->state.last_hit_by[d_idx] = combat_source_port0_for_attacker(batch, a_idx, attacker);
 
   if (update_bookkeeping) {
     const uint16_t attack_instance = batch->state.attack_instance[a_idx];

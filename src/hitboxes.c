@@ -93,6 +93,22 @@ static inline uint8_t hitboxes_seed_bridge_is_attackair_owner(uint16_t action_id
   }
 }
 
+static inline uint8_t hitboxes_source_port0_for_attacker(const MslBatch* batch, size_t a_idx,
+                                                         int attacker) {
+  // Slippi records dmg.x18C4_source_ply in raw controller-port domain; hitbox cleanup compares the
+  // replay-facing last_hit_by lane against that raw owner.
+  // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm (last_hit_by lane)
+  // refs/melee/src/melee/ft/ftcoll.c::ftColl_80076ED8
+  if (batch == NULL || attacker < 0 || attacker >= MSL_MAX_PLAYERS) {
+    return 6u;
+  }
+  const uint8_t source_port0 = batch->state.source_port0[a_idx];
+  if (source_port0 < (uint8_t)MSL_MAX_PLAYERS) {
+    return source_port0;
+  }
+  return (uint8_t)attacker;
+}
+
 static inline uint8_t hitboxes_runtime_specialhi_pose_owner(uint8_t char_id, uint16_t action_id) {
   if (!(char_id == 1u || char_id == 22u)) {
     return 0u;
@@ -379,6 +395,8 @@ static void hitboxes_seed_bridge_trim_impossible_indefinite(
     }
     const uint8_t stale_clear_window = attacker_is_attackair_window ? 1u : early_window;
     const uint16_t attacker_action = batch->state.action_id[a_idx];
+    const uint8_t attacker_source_port0 =
+        hitboxes_source_port0_for_attacker(batch, a_idx, attacker);
     // Shield-ownership guard for this trim:
     // - ftColl_80078C70 gates shield collision by live ShieldDesc ownership (`fp->x221B_b0`), then
     //   calls lbColl_80007BCC with the shield descriptor.
@@ -458,7 +476,7 @@ static void hitboxes_seed_bridge_trim_impossible_indefinite(
         !hitboxes_seed_bridge_is_guard_transition_owner(v_action) &&
         batch->state.hitlag[v_idx] == 0u && batch->state.instance_hit_by[v_idx] != attacker_iid) {
       if (batch->state.hitstun[v_idx] != 0u &&
-          !(batch->state.last_hit_by[v_idx] == (uint8_t)attacker &&
+          !(batch->state.last_hit_by[v_idx] == attacker_source_port0 &&
             hitboxes_seed_bridge_is_damage_or_firefox_launch_victim_action(v_action) &&
             batch->state.hitstun[v_idx] <= expected_hitlag)) {
         continue;
@@ -476,7 +494,7 @@ static void hitboxes_seed_bridge_trim_impossible_indefinite(
     if (stale_owner_attackairn_refresh_lane && !shield_desc_active &&
         !hitboxes_seed_bridge_is_guard_transition_owner(v_action) &&
         batch->state.hitlag[v_idx] == 0u && batch->state.hitstun[v_idx] != 0u &&
-        batch->state.last_hit_by[v_idx] == (uint8_t)attacker &&
+        batch->state.last_hit_by[v_idx] == attacker_source_port0 &&
         hitboxes_seed_bridge_is_damage_or_firefox_launch_victim_action(v_action) &&
         batch->state.instance_hit_by[v_idx] != attacker_iid) {
       // AttackAirN continuation refresh bridge:
@@ -511,7 +529,7 @@ static void hitboxes_seed_bridge_trim_impossible_indefinite(
     if (stale_owner_attacklw3_lane && !shield_desc_active &&
         !hitboxes_seed_bridge_is_guard_transition_owner(v_action) &&
         batch->state.hitlag[v_idx] == 0u && batch->state.hitstun[v_idx] != 0u &&
-        batch->state.last_hit_by[v_idx] == (uint8_t)attacker &&
+        batch->state.last_hit_by[v_idx] == attacker_source_port0 &&
         hitboxes_seed_bridge_is_damage_or_firefox_launch_victim_action(v_action) &&
         batch->state.instance_hit_by[v_idx] != attacker_iid) {
       hitboxes_seed_bridge_entry_clear(e);

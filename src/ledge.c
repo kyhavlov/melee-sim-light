@@ -887,6 +887,16 @@ void ledge_try_catch_post_collision(MslBatch* batch) {
       if (grab_mask == 0u) {
         continue;
       }
+      if (a == (uint16_t)MSL_ACT_FX_SPECIAL_HI_FALL && (env & (uint32_t)MSL_COLLIDE_EDGE) != 0u) {
+        // Decomp path: ftFx_SpecialHiFall_Coll calls ft_CheckGroundAndLedge before
+        // ftCliffCommon_80081298. mpColl edge proximity suppresses ledge-grab admission in the
+        // underlying collision result; do not let a simultaneously-carried lite-sim
+        // Collide_LedgeGrabMask schedule CliffCatch for this Firefox fall callback.
+        // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::ftFx_SpecialHiFall_Coll
+        // refs/melee/src/melee/mp/mpcoll.c (Collide_Edge / ledge-grab block)
+        // refs/melee/src/melee/ft/ftcliffcommon.c::ftCliffCommon_80081298
+        continue;
+      }
       // mpColl's on-edge suppression is already modeled in mpcoll_env_update_ledge_grab() when
       // producing Collide_LedgeGrabMask. If ledge-grab bits are set here, treat them as
       // authoritative for ftCliffCommon_80081298 scheduling.

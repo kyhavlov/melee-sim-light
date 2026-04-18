@@ -286,10 +286,99 @@ Recommended sequence for the next deep passes:
     residuals are fixed or proven outside the shared combat followup boundary without aggregate churn
 
 ### 6. Fox/Falco special-move families
-- Status: `active / next deep pass`
+- Status: `active / named special-owner deep pass in progress`
 - Roadmap families: `F13_specialhi_landing` plus mixed special-move slices currently split across `F99`
 - Owner boundary: `SpecialN`, `SpecialS`, `SpecialHi`, `SpecialLw`, `ThrownLw`, and their article/pulse/landing owners
 - Primary sim files: `src/items.c`, `src/combat.c`, `src/anim_timebase.c`, `src/locomotion.c`, character-specific modules
+- Completed so far in current pass:
+  - The broad `F10e_special_move_adjacency` bucket is split into named special owners:
+    `F19_specialn_blaster_article`, `F20_speciallw_shine_reflector`,
+    `F21_specials_illusion_phantasm`, `F22_specialhi_firefox_firebird`,
+    `F23_special_common_entry_dispatch`, and `F24_special_adjacent_instance_order`.
+    `F10e` no longer emits in the refreshed primary or aggregate taxonomy.
+  - `F13_specialhi_landing` is split so common `FallSpecial` / `LandingFallSpecial` /
+    `EscapeAir` rows live in `F13a_common_fallspecial_landing`, while true Firefox rows live in
+    `F22_specialhi_firefox_firebird`.
+  - Throw-side blaster pulse rows are split out as `F14b_per_throw_pulse_bookkeeping` rather than
+    staying in `F99_misc_other` or a B-special bucket.
+  - Shine aerial-loop/end floor contact now uses a narrow locked-bottom collision subset for
+    `SpecialAirLwLoop` / `SpecialAirLwEnd`, matching
+    `ftFx_SpecialAirLw{Loop,End}_Coll -> ft_80081D0C -> AirToGround`. A broader experiment that
+    also included Shine startup grounded too early and was rejected; the kept subset requires the
+    frame-start action to already be Loop/End.
+  - `SpecialAirLw* -> SpecialLw*` air-to-ground handoffs now refresh `jumps_left` through the
+    `ftCommon_8007D7FC` owner. `SpecialHiFall -> SpecialHiLanding` does the same through
+    `ftFx_SpecialHiFall_Enter`.
+  - `SpecialLwEnd` / `SpecialAirLwEnd` anim-end exits now follow the decomp
+    `ftCommon_8007DB24 -> ftCommon_8007D92C` path for the locked same-frame Wait/Fall IASA slices:
+    grounded backward Turn and aerial double-jump. This is still an active F20 owner, not closure.
+  - Shine release-lag latch now reads the pre-input snapshot for Anim-callback ownership, matching
+    `Fighter_8006A360` before `Fighter_procUpdate`; current-frame inputs remain the IASA/entry
+    owner. This fixes the aggregate B-release sentinel without widening SpecialLw entry.
+  - Shine reflector item contact now calls the `ftFx_SpecialLwHit_Enter` callback on reflected
+    laser overlap, transfers reflected item ownership through the item-owned reflect snapshot, and
+    includes the projectile-origin segment for `ftColl_80077464` / `item->pos` overlap on Shine
+    Loop states. `SpecialLwHit` / `SpecialAirLwHit` stay excluded so already-reflected owner
+    projectiles do not re-enter the hit callback from a nearby origin overlap.
+  - Shine Start hitlag rows with explicit replay-derived x1990 provenance preserve x198C=2 through
+    the hitlag-exit frame. Rows with no x1990/x1994 provenance remain active rather than patched
+    from replay reference.
+  - Sustained `EscapeAir` ECB-lock floor-hug rows now stay airborne when vanilla keeps
+    `ground_or_air=Air` while root Y is already at the floor bias. This is backed by Dolphin probe
+    `reports/triage/20260418T081729Z_dolphin_forensic_row` and kept separate from the ordinary
+    jump/air-dodge entry landing path.
+  - `SpecialHiLanding_Anim` now enters Wait and lets destination Wait IASA consume same-proc
+    Walk/Squat/Turn input, matching `Fighter_8006A360` Anim before `Fighter_procUpdate` input
+    callbacks.
+- Current residual taxonomy after forced dataset rebuild, source-port, Run/Dash/damage-air
+  dispatch, Dolphin-backed EscapeAir floor-hug slice, Shine Loop projectile-origin reflector
+  overlap, FallSpecial shallow floor projection, SpecialHiBound rebound ownership, and
+  SpecialHiLanding destination-Wait IASA ownership
+  (`reports/triage/20260418_checkpoint_hardened_primary`,
+  `reports/triage/20260418_checkpoint_hardened_aggregate`):
+  - Primary/cardinal one-step taxonomy: total `664`; special-owned residuals are
+    `F24=23`, `F23=11`, `F20=5`, `F21=5`, `F19=4`, `F22=4`; common `F13a=3`,
+    throw pulse `F14b=2`, and `F10e=0`.
+  - Aggregate one-step taxonomy: total `6222`; named special-owned residuals are
+    `F24=88`, `F23=86`, `F19=76`, `F22=75`, `F20=53`, `F21=28`; common `F13a=235`,
+    throw pulse `F14b=76`, and `F10e=0`.
+  - New owner slices:
+    - Source attribution now carries `source_port0[player]`, because Slippi exports `last_hit_by`
+      in the raw controller-port domain while simulator player arrays are compact local slots.
+    - Common special dispatch now blocks Dash/RunBrake Neutral-B/Up-B while preserving Dash/Walk
+      Side-B ordering. Decomp: `ftCo_Dash_IASA` checks `ftCo_SpecialS_CheckInput`, but not
+      `ftCo_800D6824` / `ftCo_800D68C0`.
+    - DamageAir / DamageFly aerial special dispatch is admitted only when `x221C_b6` is clear,
+      matching `Damage_IASA` / `DamageFly_IASA` delegation into `Fall_IASA_Inner` /
+      `DamageFall_IASA` and then `ftCo_SpecialAir_CheckInput`.
+    - Run/RunDirect now preserves same-frame B-special dispatch before terminal RunBrake, matching
+      `ftCo_Run_IASA` ordering and removing simulator-local RunBrake instance bumps.
+    - `FallSpecial_Coll` shallow floor projection now enters `LandingFallSpecial` on rows owned by
+      `ft_80083090` / `ftCo_80096D28`, while the regressive broad EscapeAir projection experiment
+      remains rejected.
+    - `SpecialAirHi` collision now enters `SpecialHiBound`, and airborne `SpecialHiBound` anim-end
+      enters `FallSpecial` while consuming jumps, matching `ftFx_SpecialHiBound_Enter` /
+      `ftFx_SpecialHiBound_Anim`.
+    - `SpecialHiFall` / `SpecialHiBound` exits into common `FallSpecial` now preserve fastfall across
+      `ftCo_80096900`'s callsite-specific `Ft_MF_KeepFastFall`, fixing the SpecialHiFall ->
+      FallSpecial `state_flags[1]` tail without broad state-flag rewrites.
+- Remaining residuals:
+  - `F20_speciallw_shine_reflector`: still active. Remaining rows are Shine hurtbox-state timing,
+    source-clear / last-hit attribution, special-hit/candidate-filter combat rows, and two
+    replay-visible state-flag rows. The early startup-grounding bridge and broad aerial
+    projectile-origin reflector fallback were rejected and are locked against.
+  - `F23_special_common_entry_dispatch`: common IASA/input special-entry rows, owned by
+    `ftCo_800D68C0`, `ftCo_SpecialS_CheckInput`, and `ftCo_SpecialAir_CheckInput`, not by steady
+    per-special callbacks.
+  - `F22_specialhi_firefox_firebird`: Firefox hold/launch/fall/landing/bound tails, separate from
+    common `FallSpecial` and ledge/collision rows.
+  - `F19` / `F21`: smaller blaster and Illusion/Phantasm article/contact tails.
+  - `F24`: still belongs to special-adjacent `ft_800895E0` / `plAttack_80037B08` ordering work
+    where it appears after checkpoint-safe taxonomy regeneration. The broad motion-entry seed-lane
+    expansion for SpecialN loop restart and direct Landing/JumpF -> Shine Start was rejected from
+    this checkpoint because it hid unfinished special callback ordering.
+  - `F13a`, `F14b`, `F15`, `F16`, and `F17` rows remain assigned to common landing/freefall,
+    per-throw pulse, guard/item, item identity, and collision/ledge owners respectively.
 - Acceptance bar:
   - special moves are grouped by decomp owner, not patched row-by-row
   - `SpecialHi` landing/fall and `SpecialLw` / `ThrownLw` pulse behavior live in named family work, not misc buckets

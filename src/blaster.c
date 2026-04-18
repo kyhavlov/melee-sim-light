@@ -118,7 +118,43 @@ static inline uint8_t action_allows_special_entry_ground(uint16_t action_id) {
   return 1;
 }
 
-static inline uint8_t action_allows_special_entry_air(uint16_t action_id) {
+static inline uint8_t action_is_damage_air_or_fly_special_iasa(uint16_t action_id) {
+  switch (action_id) {
+    case MSL_ACT_DAMAGE_AIR_1:
+    case MSL_ACT_DAMAGE_AIR_2:
+    case MSL_ACT_DAMAGE_AIR_3:
+    case MSL_ACT_DAMAGE_FLY_HI:
+    case MSL_ACT_DAMAGE_FLY_N:
+    case MSL_ACT_DAMAGE_FLY_LW:
+    case MSL_ACT_DAMAGE_FLY_TOP:
+    case MSL_ACT_DAMAGE_FLY_ROLL:
+      return 1u;
+    default:
+      return 0u;
+  }
+}
+
+static inline uint8_t damage_air_or_fly_allows_special_air_iasa(const MslBatch* batch, size_t idx) {
+  if (batch == NULL) {
+    return 0u;
+  }
+  enum { MSL_STATE_FLAGS_221C_INDEX = 3 };
+  enum { MSL_STATE_FLAG_221C_B6_HITSTUN = 0x02 };
+  // Damage/DamageFly IASA split:
+  // - Damage_IASA calls Fall_IASA_Inner only when !fp->x221C_b6.
+  // - DamageFly_IASA calls DamageFall_IASA only when !fp->x221C_b6.
+  // - Fall_IASA_Inner and DamageFall_IASA both route through ftCo_SpecialAir_CheckInput.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{
+  //   ftCo_Damage_IASA,ftCo_DamageFly_IASA}
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DamageFall.c::ftCo_DamageFall_IASA
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_IASA_Inner
+  const uint8_t flags_221c =
+      batch->state.state_flags[idx * MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_221C_INDEX];
+  return ((flags_221c & (uint8_t)MSL_STATE_FLAG_221C_B6_HITSTUN) == 0u) ? 1u : 0u;
+}
+
+static inline uint8_t action_allows_special_entry_air(const MslBatch* batch, size_t idx,
+                                                      uint16_t action_id) {
   // Decomp-special input ownership:
   // - Jump/Fall-family IASA owners route through ftCo_SpecialAir_CheckInput.
   // - DamageFall_IASA also routes through ftCo_SpecialAir_CheckInput.
@@ -143,8 +179,12 @@ static inline uint8_t action_allows_special_entry_air(uint16_t action_id) {
     case MSL_ACT_PASSIVE_WALL_JUMP:
       return 1u;
     default:
-      return 0u;
+      break;
   }
+  if (action_is_damage_air_or_fly_special_iasa(action_id)) {
+    return damage_air_or_fly_allows_special_air_iasa(batch, idx);
+  }
+  return 0u;
 }
 
 typedef enum MslSpacieBSpecialKind {
@@ -168,16 +208,14 @@ static inline MslSpacieBSpecialKind resolve_spacie_b_special_kind(const MslCommo
   //   refs/melee/src/melee/ft/chara/ftCommon/ftCo_SpecialAir.c::ftCo_SpecialAir_CheckInput
   //
   // This resolver is intentionally scoped to Neutral/Side/Up routing; Down-B is owned by shine.c.
-  // If input is in the down-special region, return NONE so Neutral-B does not steal it.
+  // Grounded dispatch checks Side-B before the generic Up/N/Down chain, while aerial dispatch
+  // checks Up -> Down -> Side -> Neutral.
   //
   // Ordering guarantee:
   // - action_update() runs shine_update_pre_physics() before blaster_update_pre_physics().
   // - Shine entry uses the same raw B-edge (`input_buttons_pressed`) and does not consume it.
-  // So a B-edge + down-stick frame enters Shine first; this resolver then sees a Shine action and
-  // does not enter Blaster.
-  if (stick_y <= -c->special_stick_y_threshold) {
-    return MSL_SPACIE_B_SPECIAL_NONE;
-  }
+  // So a grounded B-edge + side+down diagonal first gives Shine a chance to reject because
+  // Side-B preempts Down-B, then this resolver enters Side-B.
   const float abs_x = stick_x < 0.0f ? -stick_x : stick_x;
   if (grounded) {
     if (abs_x >= c->special_stick_x_threshold_side) {
@@ -186,7 +224,13 @@ static inline MslSpacieBSpecialKind resolve_spacie_b_special_kind(const MslCommo
     if (stick_y >= c->special_stick_y_threshold) {
       return MSL_SPACIE_B_SPECIAL_UP;
     }
+    if (stick_y <= -c->special_stick_y_threshold) {
+      return MSL_SPACIE_B_SPECIAL_NONE;
+    }
     return MSL_SPACIE_B_SPECIAL_NEUTRAL;
+  }
+  if (stick_y <= -c->special_stick_y_threshold) {
+    return MSL_SPACIE_B_SPECIAL_NONE;
   }
   if (stick_y >= c->special_stick_y_threshold) {
     return MSL_SPACIE_B_SPECIAL_UP;
@@ -466,7 +510,7 @@ void blaster_update_pre_physics(MslBatch* batch) {
           // locomotion once B is pressed.
           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DamageFall.c::ftCo_DamageFall_IASA
           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_SpecialAir.c::ftCo_SpecialAir_CheckInput
-          if (action_allows_special_entry_air(a)) {
+          if (action_allows_special_entry_air(batch, idx, a)) {
             allow = ((a == (uint16_t)MSL_ACT_PASSIVE_WALL ||
                       a == (uint16_t)MSL_ACT_PASSIVE_WALL_JUMP) &&
                      batch->state.passivewall_timer[idx] != 0u)
@@ -486,10 +530,22 @@ void blaster_update_pre_physics(MslBatch* batch) {
               enter_side_special_start(batch, idx, c, ms, ch, on_ground, stick_x);
               break;
             case MSL_SPACIE_B_SPECIAL_UP:
-              enter_specialhi_hold(batch, idx, ms, ch, on_ground);
+              // Decomp: Dash IASA has a dedicated grounded Side-B branch, but it does not call the
+              // generic Up/Neutral special dispatchers. This simulator runs special dispatch after
+              // locomotion, so frame-start Walk/Wait rows may already have become Dash; keep Side-B
+              // available below, but block Up-B/Neutral-B from the current Dash/RunBrake owner.
+              // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c::ftCo_Dash_IASA
+              // refs/melee/src/melee/ft/chara/ftCommon/ftCo_RunBrake.c::ftCo_RunBrake_IASA
+              if (a != (uint16_t)MSL_ACT_DASH && a != (uint16_t)MSL_ACT_RUN_BRAKE) {
+                enter_specialhi_hold(batch, idx, ms, ch, on_ground);
+              }
               break;
             case MSL_SPACIE_B_SPECIAL_NEUTRAL:
               if (lp != NULL) {
+                if (on_ground &&
+                    (a == (uint16_t)MSL_ACT_DASH || a == (uint16_t)MSL_ACT_RUN_BRAKE)) {
+                  break;
+                }
                 if (!on_ground) {
                   // Decomp aerial neutral-B reversal gate:
                   // - ftCo_SpecialAir_CheckInput flips facing for neutral-B when:

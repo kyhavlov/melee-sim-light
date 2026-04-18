@@ -572,6 +572,7 @@ static int msl_batch_init_match_impl(MslBatch* batch, const uint8_t* config_byte
     for (int p = 0; p < MSL_MAX_PLAYERS; p++) {
       seed->grab_owner_port[p] = 0xFFu;
       seed->combo_victim_port[p] = 0xFFu;
+      seed->source_port0[p] = (uint8_t)p;
       // Decomp source-owner sentinel: Fighter_UnkInitReset_80067C98 clears source ply to 6.
       // refs/melee/src/melee/ft/fighter.c::Fighter_UnkInitReset_80067C98
       seed->last_hit_by[p] = 6u;
@@ -998,6 +999,8 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
       batch->state.ecb_lock_timer[idx] = seed->ecb_lock_timer[p];
       batch->state.ledge_cooldown[idx] = seed->ledge_cooldown[p];
       batch->state.ledge_side[idx] = -1;
+      batch->state.landing_fallspecial_allow_interrupt[idx] =
+          seed->landing_fallspecial_allow_interrupt[p] ? 1u : 0u;
       // FallSpecial xC mode is not exposed by Slippi directly; derive it deterministically from
       // seeded post-frame velocities when possible.
       //
@@ -1122,9 +1125,22 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
         //   clear x198C on the correct frame.
         // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
         // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
-        if (seed->hitlag[p] == 0u && seed->hitstun[p] == 0u &&
+        const uint8_t shine_start_x1990_reseed =
+            ((seed->action_id[p] == (uint16_t)MSL_ACT_FX_SPECIAL_LW_START ||
+              seed->action_id[p] == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_LW_START) &&
+             seed_hurtbox_state == 2u)
+                ? 1u
+                : 0u;
+        if (((seed->hitlag[p] == 0u && seed->hitstun[p] == 0u) || shine_start_x1990_reseed) &&
             seed->colanim_hit_status_x198c[p] == 2u && seed->colanim_timer_x1990[p] != 0u &&
             seed->colanim_timer_x1994[p] == 0u && seed->colanim_lock_x2221_b0[p] == 0u) {
+          // Shine Start hitlag rows can expose an active x1990/x198C lane at the reseed boundary.
+          // Dropping it under the generic hitlag guard clears the visible hurtbox state one frame
+          // early. Keep this scoped to SpecialLw Start/AirStart where decomp enters the state via
+          // ftAnim_8006EBA4 and the replay-history extraction provides explicit x1990 provenance.
+          // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c::{
+          //   ftFx_SpecialLw_Enter,ftFx_SpecialAirLw_Enter}
+          // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
           batch->state.colanim_timer_x1990[idx] = seed->colanim_timer_x1990[p];
           batch->state.colanim_hit_status_x198c[idx] = 2u;
         }
@@ -1244,6 +1260,8 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
       batch->state.combo_victim_port[idx] = seed->combo_victim_port[p];
       batch->state.combo_victim_instance_id[idx] = seed->combo_victim_instance_id[p];
       batch->state.combo_timer_x2098[idx] = seed->combo_timer_x2098[p];
+      batch->state.source_port0[idx] =
+          (seed->source_port0[p] < (uint8_t)MSL_MAX_PLAYERS) ? seed->source_port0[p] : (uint8_t)p;
       batch->state.last_hit_by[idx] = seed->last_hit_by[p];
       batch->state.grab_owner_port[idx] = seed->grab_owner_port[p];
       batch->state.grab_mash_stick_x_sign[idx] = seed->grab_mash_stick_x_sign[p];
@@ -1345,7 +1363,7 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
           continue;
         }
         const size_t v_idx = msl_idx_player(bi, victim_p);
-        if (batch->state.last_hit_by[v_idx] != (uint8_t)attacker_p) {
+        if (batch->state.last_hit_by[v_idx] != batch->state.source_port0[a_idx]) {
           continue;
         }
         if (batch->state.instance_hit_by[v_idx] != attacker_instance) {
@@ -1373,7 +1391,7 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
             continue;
           }
           const size_t v_idx = msl_idx_player(bi, victim_p);
-          if (batch->state.last_hit_by[v_idx] != (uint8_t)attacker_p) {
+          if (batch->state.last_hit_by[v_idx] != batch->state.source_port0[a_idx]) {
             continue;
           }
           // Terminal combo-timer rows (`x2098 == 1`) are cleared in ftColl_800764DC before combat

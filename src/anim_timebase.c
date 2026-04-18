@@ -538,6 +538,12 @@ void anim_timebase_update_pre_input(MslBatch* batch) {
           const uint16_t source_prev_action = (action_frame_pre == 0)
                                                   ? batch->state.seed_prev_action_id[idx]
                                                   : batch->state.prev_action_id[idx];
+          const uint8_t source_is_fallspecial =
+              (source_prev_action == (uint16_t)MSL_ACT_FALL_SPECIAL ||
+               source_prev_action == (uint16_t)MSL_ACT_FALL_SPECIAL_F ||
+               source_prev_action == (uint16_t)MSL_ACT_FALL_SPECIAL_B)
+                  ? 1u
+                  : 0u;
           if (source_prev_action == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_S_END) {
             // Decomp source split for LandingFallSpecial entry rate:
             // - EscapeAir_Coll enters ftCo_LandingFallSpecial_Enter(..., p_ftCommonData->x344).
@@ -549,10 +555,12 @@ void anim_timebase_update_pre_input(MslBatch* batch) {
             // data/characters/{fox,falco}.json: illusion_landing_lag_frames
             lag = (float)ch->illusion_landing_lag_frames;
           }
-          const float end_frame =
-              msl_anim_end_frame(batch->state.char_id[idx], (uint16_t)MSL_SM_LANDING_FALL_SPECIAL);
-          if (lag > 0.0f && end_frame > 0.0f) {
-            entry_rate = (end_frame + 0.1f) / lag;
+          if (!source_is_fallspecial) {
+            const float end_frame = msl_anim_end_frame(batch->state.char_id[idx],
+                                                       (uint16_t)MSL_SM_LANDING_FALL_SPECIAL);
+            if (lag > 0.0f && end_frame > 0.0f) {
+              entry_rate = (end_frame + 0.1f) / lag;
+            }
           }
         } else if (anim_timebase_try_landing_air_rate(a, ch, c, batch->state.char_id[idx],
                                                       batch->state.lr_press_timer[idx],

@@ -53,7 +53,9 @@ def test_shine_reflect_active_bit_is_set_in_loop() -> None:
     try:
         prev_inp = _mk_input_bytes(1, input_stride)
         inp = _mk_input_bytes(1, input_stride)
+        prev_inp_view = prev_inp.view(INPUT_DTYPE).reshape((1,))
         inp_view = inp.view(INPUT_DTYPE).reshape((1,))
+        prev_inp_view["p"]["buttons"][0, 0] = np.uint16(BUTTON_B)
         inp_view["p"]["buttons"][0, 0] = np.uint16(BUTTON_B)
         for cid in (CHAR_FOX, CHAR_FALCO):
             seed = np.zeros((1,), dtype=SEED_DTYPE)
@@ -168,7 +170,9 @@ def test_shine_reflect_active_bit_set_when_turn_transitions_to_loop() -> None:
     try:
         prev_inp = _mk_input_bytes(1, input_stride)
         inp = _mk_input_bytes(1, input_stride)
+        prev_inp_view = prev_inp.view(INPUT_DTYPE).reshape((1,))
         inp_view = inp.view(INPUT_DTYPE).reshape((1,))
+        prev_inp_view["p"]["buttons"][0, 0] = np.uint16(BUTTON_B)
         inp_view["p"]["buttons"][0, 0] = np.uint16(BUTTON_B)
         for cid in (CHAR_FOX, CHAR_FALCO):
             tf = _char_attr(cid, "reflector_turn_frames")

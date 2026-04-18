@@ -17,8 +17,25 @@
 #include "msl_math.h"
 #include "mtx34.h"
 #include "shield_tilt_table.h"
+#include "special_msids.h"
 #include "stage_collision.h"
 #include "staling.h"
+
+static inline uint8_t item_source_port0_for_owner(const MslBatch* batch, size_t owner_idx,
+                                                  int owner_slot) {
+  // Slippi records item/fighter source ownership in raw controller-port domain for last_hit_by;
+  // item ownership arrays still index compact local slots.
+  // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm (last_hit_by lane)
+  // refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
+  if (batch == NULL || owner_slot < 0 || owner_slot >= MSL_MAX_PLAYERS) {
+    return 6u;
+  }
+  const uint8_t source_port0 = batch->state.source_port0[owner_idx];
+  if (source_port0 < (uint8_t)MSL_MAX_PLAYERS) {
+    return source_port0;
+  }
+  return (uint8_t)owner_slot;
+}
 
 static inline void item_slot_clear(MslBatch* batch, size_t ii) {
   if (batch == NULL) {
@@ -1384,6 +1401,63 @@ static inline void item_apply_reflect_transfer(MslBatch* batch, size_t ii, size_
   batch->state.item_direction[ii] = (new_vx >= 0.0f) ? 1.0f : -1.0f;
 }
 
+static inline uint8_t item_reflector_owner_is_shine_callback_state(uint16_t action_id) {
+  switch (action_id) {
+    case MSL_ACT_FX_SPECIAL_LW_LOOP:
+    case MSL_ACT_FX_SPECIAL_LW_HIT:
+    case MSL_ACT_FX_SPECIAL_LW_TURN:
+    case MSL_ACT_FX_SPECIAL_AIR_LW_LOOP:
+    case MSL_ACT_FX_SPECIAL_AIR_LW_HIT:
+    case MSL_ACT_FX_SPECIAL_AIR_LW_TURN:
+      return 1u;
+    default:
+      return 0u;
+  }
+}
+
+static inline void item_apply_shine_reflect_callback(MslBatch* batch, size_t ii,
+                                                     size_t reflector_idx) {
+  if (batch == NULL) {
+    return;
+  }
+  const uint16_t action_id = batch->state.action_id[reflector_idx];
+  if (!item_reflector_owner_is_shine_callback_state(action_id)) {
+    return;
+  }
+  const MslSpecialMsids* ms = msl_special_msids(batch->state.char_id[reflector_idx]);
+  if (ms == NULL) {
+    return;
+  }
+
+  // Decomp reflector callback ownership:
+  // - ftColl_CreateReflectHit stores ftFx_SpecialLwHit_Enter as `fp->reflect_hit_cb`.
+  // - The item reflect-overlap path writes `fp->ReflectAttr.x1A2C_reflectHitDirection` from the
+  //   incoming item velocity sign, and Fighter_ProcessHit later calls `reflect_hit_cb`.
+  // - ftFx_SpecialLwHit_Enter copies that direction to facing and enters grounded/aerial
+  //   SpecialLwHit at frame 0, then reinstalls the reflect callback.
+  // refs/melee/src/melee/ft/ftcoll.c::{ftColl_CreateReflectHit,ftColl_80077464}
+  // refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
+  // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c::ftFx_SpecialLwHit_Enter
+  const float incoming_vx = batch->state.item_vel_x[ii];
+  float reflect_dir = 0.0f;
+  if (incoming_vx > 0.0f) {
+    reflect_dir = -1.0f;
+  } else if (incoming_vx < 0.0f) {
+    reflect_dir = 1.0f;
+  } else {
+    reflect_dir = (batch->state.item_pos_x[ii] > batch->state.pos_x[reflector_idx]) ? -1.0f : 1.0f;
+  }
+  batch->state.facing[reflector_idx] = (uint8_t)(reflect_dir > 0.0f);
+  if (batch->state.on_ground[reflector_idx] != 0u) {
+    batch->state.action_id[reflector_idx] = (uint16_t)MSL_ACT_FX_SPECIAL_LW_HIT;
+    batch->state.animation_index[reflector_idx] = (uint32_t)ms->speciallw_ground_hit;
+  } else {
+    batch->state.action_id[reflector_idx] = (uint16_t)MSL_ACT_FX_SPECIAL_AIR_LW_HIT;
+    batch->state.animation_index[reflector_idx] = (uint32_t)ms->speciallw_air_hit;
+  }
+  msl_anim_timebase_enter(batch, reflector_idx, 0.0f, 1.0f);
+}
+
 static void laser_spawn_from_fighter(MslBatch* batch, int bi, int owner, const MslLaserParams* lp,
                                      uint8_t spawn_state, uint8_t use_velocity_override,
                                      float override_vx, float override_vy,
@@ -2392,8 +2466,16 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
       //   refs/melee/src/melee/ft/ftcoll.c::ftColl_80077464
       // - Item_80269F14 applies reflect by transferring owner/xDA8_short (Slippi item.instance_id):
       //   refs/melee/src/melee/it/item.c::Item_80269F14
+      // - Laser collision callbacks consume the previous-to-current item segment, not just the
+      //   post-motion point.
+      //   refs/melee/src/melee/it/items/itfoxlaser.c::it_8029C4D4
       const float rr = batch->state.reflector_radius[d_idx];
-      if (rr > 0.0f) {
+      // Item ownership filter: once ftColl_80077464 / Item_80269F14 transfer a projectile to the
+      // reflector's owner, later overlap ticks should not re-reflect the owner's own projectile and
+      // re-enter SpecialLwHit.
+      // refs/melee/src/melee/ft/ftcoll.c::ftColl_80077464
+      // refs/melee/src/melee/it/item.c::Item_80269F14
+      if (rr > 0.0f && batch->state.item_owner[ii] != (int8_t)def) {
         const float rx = batch->state.reflector_x[d_idx];
         const float ry = batch->state.reflector_y[d_idx];
         const MslCharParams* rch = msl_char_params(batch->state.char_id[d_idx]);
@@ -2408,15 +2490,31 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
             const float s =
                 off_x * laser_collision_offset_scale(lp, laser_state, laser_scale_z,
                                                      MSL_LASER_COLLISION_SPACE_REFLECT, 0u, 1u);
+            const float sx0 = x0 + (ux * s);
+            const float sy0 = y0 + (uy * s);
             const float sx = x + (ux * s);
             const float sy = y + (uy * s);
-            if (item_sphere_sphere_intersects_2d(sx, sy, sr, rx, ry, rr)) {
+            if (item_swept_sphere_sphere_intersects_3d(sx0, sy0, 0.0f, sx, sy, 0.0f, sr, rx, ry,
+                                                       0.0f, rr)) {
               reflect_hit = 1;
             }
           }
-          // If no scripted offsets exist, fall back to the projectile origin.
-          if (!reflect_hit && off_n == 0) {
-            reflect_hit = item_sphere_sphere_intersects_2d(x, y, sr, rx, ry, rr);
+          // Reflector item overlap is item-owned, not exclusively the laser attack hitbox script:
+          // ftColl_80077464 receives the Item* and uses item->pos for reflect-direction ownership.
+          // Keep the scripted laser offsets above, but also admit the projectile-origin segment for
+          // Shine Loop rows. SpecialLwHit stays excluded so an already-reflected owner projectile
+          // cannot re-enter the hit callback from a nearby origin overlap.
+          // refs/melee/src/melee/ft/ftcoll.c::ftColl_80077464
+          // refs/melee/src/melee/it/items/itfoxlaser.c::{itFoxlaser_UnkMotion1_Phys,it_8029C4D4}
+          const uint16_t reflector_action = batch->state.action_id[d_idx];
+          const uint8_t shine_loop_origin_overlap =
+              (reflector_action == (uint16_t)MSL_ACT_FX_SPECIAL_LW_LOOP ||
+               reflector_action == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_LW_LOOP)
+                  ? 1u
+                  : 0u;
+          if (!reflect_hit && shine_loop_origin_overlap) {
+            reflect_hit = item_swept_sphere_sphere_intersects_3d(x0, y0, 0.0f, x, y, 0.0f, sr, rx,
+                                                                 ry, 0.0f, rr);
           }
 
           if (reflect_hit) {
@@ -2424,6 +2522,7 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
             // - ftColl_CreateReflectHit stores ReflectDesc.damage_mul / speed_mul.
             // - ftColl_80077464 writes both multipliers to item reflect snapshot (`item->xC6C` et al).
             // refs/melee/src/melee/ft/ftcoll.c::{ftColl_CreateReflectHit,ftColl_80077464}
+            item_apply_shine_reflect_callback(batch, ii, d_idx);
             item_apply_reflect_transfer(batch, ii, d_idx, def, rch->reflector_damage_mul,
                                         rch->reflector_speed_mul);
             break;
@@ -2924,7 +3023,8 @@ void items_spawn_pre_physics(MslBatch* batch) {
               continue;
             }
             const size_t v_idx = msl_idx_player(bi, vp);
-            if (batch->state.hitstun[v_idx] > 0u && batch->state.last_hit_by[v_idx] == (uint8_t)p) {
+            if (batch->state.hitstun[v_idx] > 0u &&
+                batch->state.last_hit_by[v_idx] == item_source_port0_for_owner(batch, idx, p)) {
               ongoing_throwhi_context = 1u;
               if (batch->state.last_attack_landed[v_idx] != 0u) {
                 throwhi_override_allowed = 1u;
@@ -3032,7 +3132,7 @@ void items_spawn_pre_physics(MslBatch* batch) {
                 }
                 const size_t v_idx = msl_idx_player(bi, vp);
                 if (batch->state.hitstun[v_idx] > 0u &&
-                    batch->state.last_hit_by[v_idx] == (uint8_t)p) {
+                    batch->state.last_hit_by[v_idx] == item_source_port0_for_owner(batch, idx, p)) {
                   ongoing_throwb_context = 1u;
                   break;
                 }
@@ -3069,7 +3169,8 @@ void items_spawn_pre_physics(MslBatch* batch) {
                   }
                   const size_t v_idx = msl_idx_player(bi, vp);
                   if (batch->state.hitstun[v_idx] > 0u &&
-                      batch->state.last_hit_by[v_idx] == (uint8_t)p &&
+                      batch->state.last_hit_by[v_idx] ==
+                          item_source_port0_for_owner(batch, idx, p) &&
                       batch->state.hitstun[v_idx] < stale_hitstun_thresh) {
                     stale_throwb_context = 1u;
                     if (stale_throwb_victim >= 0) {
@@ -3138,7 +3239,8 @@ void items_spawn_pre_physics(MslBatch* batch) {
                   }
                   const size_t v_idx = msl_idx_player(bi, vp);
                   if (batch->state.hitstun[v_idx] == 0u ||
-                      batch->state.last_hit_by[v_idx] != (uint8_t)p) {
+                      batch->state.last_hit_by[v_idx] !=
+                          item_source_port0_for_owner(batch, idx, p)) {
                     continue;
                   }
                   if (stale_victim_p >= 0) {

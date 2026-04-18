@@ -287,6 +287,7 @@ SEED_DTYPE = np.dtype(
         ("shine_is_release", _arr("u1", MAX_PLAYERS)),
         ("ecb_lock_timer", _arr("u1", MAX_PLAYERS)),
         ("ledge_cooldown", _arr("u1", MAX_PLAYERS)),
+        ("landing_fallspecial_allow_interrupt", _arr("u1", MAX_PLAYERS)),
         ("turn_frames_to_turn", _arr("u1", MAX_PLAYERS)),
         ("turn_has_turned", _arr("u1", MAX_PLAYERS)),
         ("turn_x8", _arr("i1", MAX_PLAYERS)),
@@ -355,6 +356,9 @@ SEED_DTYPE = np.dtype(
         ("combo_victim_port", _arr("u1", MAX_PLAYERS)),
         ("combo_victim_instance_id", _arr("<u2", MAX_PLAYERS)),
         ("combo_timer_x2098", _arr("<u2", MAX_PLAYERS)),
+        # Raw Slippi 0-based controller port for each selected local slot. `last_hit_by` is
+        # recorded in this domain; most other fighter ownership lanes use local slot order.
+        ("source_port0", _arr("u1", MAX_PLAYERS)),
         ("last_hit_by", _arr("u1", MAX_PLAYERS)),
         ("grab_owner_port", _arr("u1", MAX_PLAYERS)),
         ("grab_mash_stick_x_sign", _arr("i1", MAX_PLAYERS)),

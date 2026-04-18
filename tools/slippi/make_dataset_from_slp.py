@@ -1569,6 +1569,58 @@ def _derive_throw_pulse_seed_lanes(
     return out_consumed, out_crossed_prev
 
 
+def _derive_landing_fallspecial_allow_interrupt_seed_lane(*, action_id_u16: np.ndarray) -> np.ndarray:
+    """
+    Derive LandingFallSpecial `mv.co.landing.allow_interrupt` from replay-prefix action history.
+
+    Decomp ownership:
+    - EscapeAir_Coll enters LandingFallSpecial with allow_interrupt=false.
+      refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_80099D70
+    - FallSpecial_Coll forwards `mv.co.fallspecial.allow_interrupt`.
+      refs/melee/src/melee/ft/chara/ftCommon/ftCo_FallSpecial.c::ftCo_80096D28
+    - Fox/Falco SpecialS/Hi freefall enters FallSpecial with allow_interrupt=true.
+      refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c::ftFx_SpecialAirSEnd_Anim
+      refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c
+
+    Seed policy:
+    - Strictly prefix-causal over visible action ids.
+    - Carry the hidden FallSpecial allow bit across a FallSpecial run, then copy it onto the
+      subsequent LandingFallSpecial run.
+    """
+    action = np.asarray(action_id_u16, dtype=np.uint16).reshape(-1)
+    out = np.zeros(int(action.shape[0]), dtype=np.uint8)
+    ACT_FALL_SPECIAL = 0x0023
+    ACT_FALL_SPECIAL_F = 0x0024
+    ACT_FALL_SPECIAL_B = 0x0025
+    ACT_LANDING_FALL_SPECIAL = 0x002B
+    ACT_ESCAPE_AIR = 0x00EC
+    fall_actions = {ACT_FALL_SPECIAL, ACT_FALL_SPECIAL_F, ACT_FALL_SPECIAL_B}
+    fallspecial_allow = 0
+    lfs_allow = 0
+    prev = -1
+    for i, raw in enumerate(action):
+        cur = int(raw)
+        if i == 0 or cur != prev:
+            if cur in fall_actions:
+                # EscapeAir_Anim enters FallSpecial with allow_interrupt=false. Other suite-owned
+                # common/special freefall enters that reach FallSpecial use ftCo_80096900(..., true).
+                fallspecial_allow = 0 if prev == ACT_ESCAPE_AIR else 1
+                lfs_allow = 0
+            elif cur == ACT_LANDING_FALL_SPECIAL:
+                if prev in fall_actions:
+                    lfs_allow = 1 if fallspecial_allow != 0 else 0
+                else:
+                    # Direct EscapeAir_Coll and SpecialAirSEnd_Coll both pass false.
+                    lfs_allow = 0
+            else:
+                fallspecial_allow = 0
+                lfs_allow = 0
+        if cur == ACT_LANDING_FALL_SPECIAL:
+            out[i] = np.uint8(1 if lfs_allow != 0 else 0)
+        prev = cur
+    return out
+
+
 def _derive_walk_anim_source_vel_seed_lane(
     *,
     action_id_u16: np.ndarray,
@@ -3154,6 +3206,7 @@ def _main_impl(args) -> None:
         samples["ref_t1"]["last_attack_landed"][:, slot] = last_attack_landed[1:]
         samples["seed_t"]["combo_count"][:, slot] = combo_count[:-1]
         samples["ref_t1"]["combo_count"][:, slot] = combo_count[1:]
+        samples["seed_t"]["source_port0"][:, slot] = np.uint8(port_1based - 1)
         samples["seed_t"]["last_hit_by"][:, slot] = last_hit_by[:-1]
         samples["ref_t1"]["last_hit_by"][:, slot] = last_hit_by[1:]
 
@@ -3529,6 +3582,9 @@ def _main_impl(args) -> None:
         samples["seed_t"]["damage_post_hitlag_cb_kind"][:, slot] = damage_post_hitlag_cb_kind[:-1]
         ledge_cooldown = _derive_ledge_cooldown(action_id_u16=post_state, hitlag_u16=post_hitlag, common=common)
         samples["seed_t"]["ledge_cooldown"][:, slot] = ledge_cooldown[:-1]
+        samples["seed_t"]["landing_fallspecial_allow_interrupt"][:, slot] = (
+            _derive_landing_fallspecial_allow_interrupt_seed_lane(action_id_u16=post_state)[:-1]
+        )
         samples["seed_t"]["lr_press_timer"][:, slot] = lr_press_timer[:-1]
 
         # x672 input-history timer (analog trigger hold timer) is seeded to support
@@ -4123,11 +4179,11 @@ def _main_impl(args) -> None:
     #
     # The counter itself is causal above, but simultaneous fighter motion-state entries share one
     # global counter and Slippi exposes only post-frame ids, not HSD proc order. Seed the exact
-    # per-entry id for the grounded locomotion/motion-entry owner only, and only when at least two
-    # fighters both changed action and instance_id, or when a single fighter entry observes a ref id
-    # beyond the seeded next counter (hidden same-frame item/fighter consumer before this fighter's
-    # proc). Adjacent combat, damage, landing, special, grab, and item rows must stay outside this
-    # lane; their counter-order work belongs to their own owner families.
+    # per-entry id for checkpoint-safe grounded locomotion motion-entry rows only, and only when at
+    # least two fighters both changed action and instance_id, or when a single fighter entry observes
+    # a ref id beyond the seeded next counter (hidden same-frame item/fighter consumer before this
+    # fighter's proc). Fox/Falco special-boundary same-frame order remains owned by the special
+    # callback/dispatch work instead of this seed lane.
     # refs/melee/src/melee/ft/fighter.c (Fighter_ChangeMotionState)
     # refs/melee/build/GALE01/asm/melee/ft/ft_0892.s::{ft_800895E0,ft_80089824}
     # refs/melee/src/melee/pl/plattack.c::plAttack_80037B08

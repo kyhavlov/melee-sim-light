@@ -420,7 +420,10 @@ typedef struct MslStateSoA {
   uint8_t* ledge_cooldown;             // [batch * players]
   // FallSpecial internals (seeded/derived).
   // Decomp: refs/melee/src/melee/ft/chara/ftCommon/ftCo_FallSpecial.c
-  uint8_t* fallspecial_xc;       // fp->mv.co.fallspecial.xC (arg1 to ftCo_80096900)
+  uint8_t* fallspecial_xc;  // fp->mv.co.fallspecial.xC (arg1 to ftCo_80096900)
+  // LandingFallSpecial carries mv.co.landing.allow_interrupt from ftCo_LandingFallSpecial_Enter.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::ftCo_LandingFallSpecial_Enter
+  uint8_t* landing_fallspecial_allow_interrupt;
   uint8_t* turn_has_turned;      // fp->mv.co.turn.has_turned (refs/melee/.../ftCo_Turn.c:39-44)
   uint8_t* turn_frames_to_turn;  // fp->mv.co.turn.frames_to_turn (refs/melee/.../ftCo_Turn.c:39-44)
   // Runtime-only one-frame walk physics owner for Wait_IASA rows that only reach Walk on the raw
@@ -708,6 +711,10 @@ typedef struct MslStateSoA {
   uint8_t* combo_victim_port;
   uint16_t* combo_victim_instance_id;
   uint16_t* combo_timer_x2098;
+  // Raw Slippi 0-based controller port for each local sim slot. Source-owner compare lanes
+  // (`last_hit_by`) are recorded in this raw-port domain, while gameplay ownership keeps local
+  // slot indices.
+  uint8_t* source_port0;
   uint8_t* last_hit_by;
   uint8_t* state_flags;  // [batch * players * 5]
 

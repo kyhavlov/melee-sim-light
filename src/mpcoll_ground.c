@@ -127,6 +127,38 @@ static inline uint8_t is_damage_fly_collision_action(uint16_t a) {
   }
 }
 
+static inline uint8_t is_spacie_air_special_floor_collision_action(uint16_t a) {
+  // Fox/Falco aerial special collision callbacks can resolve floor contact while carrying an ECB
+  // lock from a preceding jump or ground->air handoff. Use the same locked-bottom floor loading
+  // policy as other air-collision owners that explicitly call ground-contact helpers.
+  //
+  // Decomp anchors:
+  // - SpecialAirLw{Loop,End}_Coll -> ft_80081D0C -> AirToGround.
+  //   Start/Hit/Turn intentionally stay out of this locked-bottom subset. The caller also requires
+  //   the frame-start action to already be Loop/End, because applying this to the same-frame
+  //   SpecialAirLwStart_Anim -> Loop handoff grounds Shine startup too early.
+  //   refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c::{
+  //     ftFx_SpecialAirLwLoop_Coll,ftFx_SpecialAirLwEnd_Coll}
+  switch (a) {
+    case MSL_ACT_FX_SPECIAL_AIR_LW_LOOP:
+    case MSL_ACT_FX_SPECIAL_AIR_LW_END:
+      return 1u;
+    default:
+      return 0u;
+  }
+}
+
+static inline uint8_t is_common_fallspecial_action(uint16_t a) {
+  switch (a) {
+    case MSL_ACT_FALL_SPECIAL:
+    case MSL_ACT_FALL_SPECIAL_F:
+    case MSL_ACT_FALL_SPECIAL_B:
+      return 1u;
+    default:
+      return 0u;
+  }
+}
+
 static inline uint8_t damage_hitlag_floorhug_attempts_downward_sdi(const MslBatch* batch,
                                                                    size_t idx,
                                                                    const MslCommonParams* c) {
@@ -894,18 +926,25 @@ void mpcoll_ground_apply(MslBatch* batch) {
         lock_bottom_to_zero = 0u;
       }
       uint8_t lock_bottom_to_prev_frame = 0u;
+      const uint8_t spacie_air_special_floor_owner =
+          is_spacie_air_special_floor_collision_action(action_id) && prev_action_id == action_id;
       if (!lock_bottom_to_zero && ecb_lock_active &&
           (action_id == (uint16_t)MSL_ACT_ESCAPE_AIR ||
-           is_damage_collision_landing_action(action_id))) {
+           is_damage_collision_landing_action(action_id) || spacie_air_special_floor_owner)) {
         // ECB lock-bottom semantics while CollData_X130_Locked is active:
         // - ftCommon_8007D5D4 sets fp->ecb_lock and CollData_X130_Locked on ground->air transitions.
         // - mpColl_LoadECB_inline preserves desired_ecb.bottom while locked.
-        // - EscapeAir and Damage/DamageFly collision callbacks can resolve grounded contact during
-        //   this lock window.
+        // - EscapeAir, Damage/DamageFly, and the Fox/Falco aerial special callbacks above can
+        //   resolve grounded contact during this lock window.
+        // - Shine narrows this to frame-start SpecialAirLwLoop/End owners; otherwise
+        //   SpecialAirLwStart_Anim can change to Loop before collision and incorrectly inherit
+        //   the loop/end floor-contact policy on the startup handoff frame.
         // refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007D5D4
         // refs/melee/src/melee/mp/mpcoll.c::mpColl_LoadECB_inline
         // refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll
         // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{ftCo_Damage_Coll,ftCo_DamageFly_Coll}
+        // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c::{
+        //   ftFx_SpecialAirLwStart_Anim,ftFx_SpecialAirLwLoop_Coll,ftFx_SpecialAirLwEnd_Coll}
         lock_bottom_to_zero = 1u;
       } else if (!lock_bottom_to_zero && action_id == (uint16_t)MSL_ACT_ESCAPE_AIR &&
                  batch->state.action_frame[idx] >= 0 && batch->state.action_frame[idx] <= 10 &&
@@ -1349,10 +1388,42 @@ void mpcoll_ground_apply(MslBatch* batch) {
             }
           }
         }
+        if (!on_ground && is_common_fallspecial_action(action_id) && prefer_line_idx >= 0 &&
+            batch->state.speed_y_self[idx] < 0.0f && batch->state.prev_action_frame[idx] >= 4) {
+          // FallSpecial_Coll uses ft_80083090 and enters LandingFallSpecial through
+          // ftCo_80096D28 when the floor callback accepts. One-step reseeds lack mpColl's full
+          // previous ECB segment after the freefall entry, so use a root projection for shallow
+          // same-floor penetration on the post-entry landing window. Cap the projection by the
+          // current downward velocity to avoid pulling blast-zone FallSpecial rows up to the stage.
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_FallSpecial.c::{
+          //   ftCo_FallSpecial_Coll,ftCo_80096CC8,ftCo_80096D28}
+          // refs/melee/src/melee/ft/ft_081B.c::ft_80083090
+          // refs/melee/src/melee/mp/mplib.c::mpLib_8004DD90_Floor
+          float y_corr = 0.0f;
+          const int out_line_idx =
+              floor_dd90_project(g, prefer_line_idx, batch->state.pos_x[idx],
+                                 batch->state.pos_y[idx], &y_corr, &floor_nx, &floor_ny);
+          const float max_lift =
+              fabsf(batch->state.speed_y_self[idx]) + (2.0f * k_ecb_vertical_unit);
+          if (out_line_idx >= 0 && y_corr >= 0.0f && y_corr <= max_lift) {
+            batch->state.pos_y[idx] += y_corr;
+            on_ground = 1;
+            ground_id = g->lines[(size_t)out_line_idx].segment_i;
+            contact_x = batch->state.pos_x[idx];
+            contact_y = batch->state.pos_y[idx];
+          }
+        }
         // Decomp: mpCheckFloor's horizontal intersection helper is gated on non-rising segments
         // (`ay >= by`), so upward sweeps should not report a floor crossing.
         // refs/melee/src/melee/mp/mplib.c::mpCheckFloor
         const uint8_t can_sweep = (uint8_t)(cur_bottom_y <= prev_bottom_y);
+        const uint8_t escapeair_locked_floorhug_airborne =
+            (escapeair_locked && prev_action_id == (uint16_t)MSL_ACT_ESCAPE_AIR &&
+             batch->state.action_frame[idx] >= 3 && batch->state.speed_y_self[idx] == 0.0f &&
+             fabsf(batch->state.pos_y[idx] - k_floor_y_bias) <= k_floor_horiz_dy_thresh &&
+             prefer_line_idx >= 0 && !g->lines[(size_t)prefer_line_idx].is_ledge)
+                ? 1u
+                : 0u;
         if (!on_ground && !active_damage_hitlag_airborne_floor_contact && can_sweep &&
             floor_sweep_check(g, prev_bottom_x, prev_bottom_y, cur_bottom_x, cur_bottom_y,
                               prefer_line_idx, &hit_line_idx, &ix, &iy, &floor_nx, &floor_ny)) {
@@ -1415,6 +1486,20 @@ void mpcoll_ground_apply(MslBatch* batch) {
                fabsf(cur_bottom_x - prev_bottom_x) <= (float)k_floor_horiz_dy_thresh)
                   ? 1u
                   : 0u;
+          const uint8_t suppress_fallspecial_entry_af3_land =
+              (is_common_fallspecial_action(action_id) &&
+               batch->state.prev_action_frame[idx] == 3 && batch->state.speed_y_self[idx] < 0.0f)
+                  ? 1u
+                  : 0u;
+          // Sustained EscapeAir floor-hug lock:
+          // - Dolphin probe `reports/triage/20260418T081729Z_dolphin_forensic_row` confirms
+          //   ImpassionedAlarmedTarsier rec=5809 remains `ground_or_air=Air` in EscapeAir while
+          //   root Y is already at the floor bias, speed_y is zero, and the ECB lock is active.
+          // - Keep this limited to sustained EscapeAir on non-ledge floors; jump/air-dodge entry
+          //   and falling-through rows still use the normal ft_80082C74 landing path above.
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll
+          // refs/melee/src/melee/ft/ft_081B.c::ft_80082C74
+          // refs/melee/src/melee/mp/mpcoll.c::mpCollInterpolateECB
           const uint8_t suppress_damageflyroll_shallow_land =
               (damageflyroll_iasa_lockout && !damageflyroll_deep_side_penetration &&
                damageflyroll_root_proj_ready &&
@@ -1434,6 +1519,7 @@ void mpcoll_ground_apply(MslBatch* batch) {
                   ? 1u
                   : 0u;
           if (suppress_locked_ledge_land || suppress_locked_vertical_af3_land ||
+              suppress_fallspecial_entry_af3_land || escapeair_locked_floorhug_airborne ||
               suppress_damageflyroll_shallow_land) {
             floor_write_edge_suppression_flags(batch, idx, stage_id, g, hit_line_idx, char_id, anim,
                                                ecb_frame, was_grounded);
@@ -1472,8 +1558,9 @@ void mpcoll_ground_apply(MslBatch* batch) {
           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{ftCo_Damage_Coll,ftCo_DamageFly_Coll}
           // TODO(decomp-coll-coverage): once DamageFly* per-action Coll callback coverage is fully
           // modeled here, this gate may be relaxed/removed in favor of callback-owned landing flow.
-        } else if (prefer_line_idx >= 0 && batch->state.speed_y_self[idx] == 0.0f &&
-                   batch->state.hitlag[idx] == 0 && batch->state.hitstun[idx] == 0) {
+        } else if (prefer_line_idx >= 0 && !escapeair_locked_floorhug_airborne &&
+                   batch->state.speed_y_self[idx] == 0.0f && batch->state.hitlag[idx] == 0 &&
+                   batch->state.hitstun[idx] == 0) {
           // Decomp: mpLib_8004DD90_Floor can resolve a resting contact even when no crossing sweep is
           // reported (e.g. vy==0 and the ECB bottom is already on the surface).
           // Gate this to "already on the surface" to avoid snapping to the floor from far below.

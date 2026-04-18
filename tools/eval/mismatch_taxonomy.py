@@ -737,6 +737,115 @@ FAMILY_META: dict[str, FamilyMeta] = {
             "refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c",
         ),
     ),
+    "F19_specialn_blaster_article": FamilyMeta(
+        label="SpecialN / Blaster Article",
+        owner_module="specials",
+        fix_type="runtime-only",
+        risk="med",
+        confidence="high",
+        hypothesis=(
+            "Fox/Falco Neutral-B rows owned by the SpecialN Start/Loop/End state machine and its "
+            "blaster gun / laser article callbacks, including aerial landing handoff and combat "
+            "exit bookkeeping."
+        ),
+        refs=(
+            "refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c",
+            "refs/melee/src/melee/it/items/itfoxblaster.c",
+            "refs/melee/src/melee/it/items/itfoxlaser.c",
+            "src/blaster.c",
+            "src/items.c",
+        ),
+    ),
+    "F20_speciallw_shine_reflector": FamilyMeta(
+        label="SpecialLw / Shine Reflector",
+        owner_module="specials",
+        fix_type="runtime-only",
+        risk="med",
+        confidence="high",
+        hypothesis=(
+            "Fox/Falco Shine rows owned by the SpecialLw Start/Loop/Hit/Turn/End state machine, "
+            "release-lag latch, ground-air collision handoff, reflector bubble lifetime, and "
+            "reflect/contact surfaces."
+        ),
+        refs=(
+            "refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c",
+            "refs/melee/src/melee/ft/ftcoll.c::ftColl_CreateReflectHit",
+            "src/shine.c",
+            "src/reflector_bubbles.c",
+            "src/items.c",
+        ),
+    ),
+    "F21_specials_illusion_phantasm": FamilyMeta(
+        label="SpecialS / Illusion-Phantasm",
+        owner_module="specials",
+        fix_type="runtime-only",
+        risk="med",
+        confidence="high",
+        hypothesis=(
+            "Fox/Falco Side-B rows owned by SpecialS Start/Main/End, air-ground collision "
+            "handoffs, LandingFallSpecial source lag, ghost-ring article spawn/position, and "
+            "Illusion/Phantasm contact persistence."
+        ),
+        refs=(
+            "refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c",
+            "refs/melee/src/melee/it/items/itfoxillusion.c",
+            "src/locomotion.c",
+            "src/items.c",
+        ),
+    ),
+    "F22_specialhi_firefox_firebird": FamilyMeta(
+        label="SpecialHi / FireFox-FireBird",
+        owner_module="specials",
+        fix_type="runtime-only",
+        risk="med",
+        confidence="high",
+        hypothesis=(
+            "Fox/Falco Up-B rows owned by SpecialHi hold/launch/fall/landing/bound callbacks, "
+            "XRotN pose rotation, launch travel frames, and SpecialHiFall landing continuation."
+        ),
+        refs=(
+            "refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c",
+            "src/locomotion.c",
+            "src/hitboxes.c",
+            "src/hurtboxes.c",
+        ),
+    ),
+    "F23_special_common_entry_dispatch": FamilyMeta(
+        label="Common Special Entry Dispatch",
+        owner_module="action",
+        fix_type="runtime-only",
+        risk="med",
+        confidence="high",
+        hypothesis=(
+            "Rows where a common IASA/input owner dispatches into a Fox/Falco special start state. "
+            "The boundary is the shared grounded/aerial special-selection chain, not the steady "
+            "per-special state machine."
+        ),
+        refs=(
+            "refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_800D68C0",
+            "refs/melee/src/melee/ft/chara/ftCommon/ftCo_SpecialS.c::ftCo_SpecialS_CheckInput",
+            "refs/melee/src/melee/ft/chara/ftCommon/ftCo_SpecialAir.c::ftCo_SpecialAir_CheckInput",
+            "src/blaster.c",
+            "src/shine.c",
+        ),
+    ),
+    "F24_special_adjacent_instance_order": FamilyMeta(
+        label="Special-Adjacent Instance Counter Order",
+        owner_module="anim_timebase",
+        fix_type="seed/schema + runtime",
+        risk="med",
+        confidence="high",
+        hypothesis=(
+            "Instance-id-only rows where the visible motion entry belongs to Fox/Falco specials. "
+            "They share the global plAttack_80037B08 counter surface but should not remain in the "
+            "generic adjacent instance bucket."
+        ),
+        refs=(
+            "refs/melee/build/GALE01/asm/melee/ft/ft_0892.s::ft_800895E0",
+            "refs/melee/src/melee/pl/plattack.c::plAttack_80037B08",
+            "refs/melee/src/melee/ft/chara/ftFox/ftFx_Init.c",
+        ),
+    ),
     "F10f_grounded_attack_adjacency": FamilyMeta(
         label="Grounded Attack-State Adjacency",
         owner_module="locomotion",
@@ -942,6 +1051,41 @@ FAMILY_META: dict[str, FamilyMeta] = {
             "refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::{ftFx_SpecialHi_Anim,ftFx_SpecialAirHi_Anim}",
             "refs/melee/src/melee/ft/chara/ftFox/types.h::ftFox_DatAttrs",
             "refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c::ftFx_SpecialAirSEnd_Coll",
+        ),
+    ),
+    "F13a_common_fallspecial_landing": FamilyMeta(
+        label="Common FallSpecial / LandingFallSpecial",
+        owner_module="locomotion",
+        fix_type="runtime-only",
+        risk="med",
+        confidence="high",
+        hypothesis=(
+            "FallSpecial, LandingFallSpecial, and EscapeAir landing rows that do not touch Fox/Falco "
+            "SpecialHi state. These are common landing/freefall collision rows, not FireFox-owned "
+            "continuations."
+        ),
+        refs=(
+            "refs/melee/src/melee/ft/chara/ftCommon/ftCo_FallSpecial.c",
+            "refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c",
+            "refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c",
+            "src/locomotion.c",
+        ),
+    ),
+    "F14b_per_throw_pulse_bookkeeping": FamilyMeta(
+        label="Per-Throw Blaster Pulse / Bookkeeping",
+        owner_module="items",
+        fix_type="seed/schema + runtime",
+        risk="med",
+        confidence="high",
+        hypothesis=(
+            "ThrowB/ThrowHi/ThrowLw and ThrownLw rows owned by the per-throw blaster pulse/article "
+            "and combo/source bookkeeping callbacks, not by Fox/Falco B-special state machines."
+        ),
+        refs=(
+            "refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim",
+            "refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c",
+            "src/throw_flow.c",
+            "src/items.c",
         ),
     ),
     "F14_throw_item_bookkeeping": FamilyMeta(
@@ -1264,11 +1408,19 @@ def _family_for_debug_body_contact_residual(
         if active_fighter_hitbox_count <= 0:
             if live_nonvictim_item_count > 0:
                 return "F16_item_identity_residual"
-            if any(_looks_like_any_special(name) for name in (seed_name, precombat_name, ref_name, out_name)):
-                return "F10e_special_move_adjacency"
+            special_family = _special_owner_family_for_names(
+                (seed_name, precombat_name, ref_name, out_name),
+                include_entry_dispatch=False,
+            )
+            if special_family is not None:
+                return special_family
             return "F08c_damage_state_transition_adjacency"
         if active_special_attacker_hitbox_count > 0:
-            return "F10e_special_move_adjacency"
+            special_family = _special_owner_family_for_names(
+                (seed_name, precombat_name, ref_name, out_name),
+                include_entry_dispatch=False,
+            )
+            return special_family or _special_owner_family_for_msid(first_msid) or "F08f_body_contact_candidate_filter_residual"
         return "F10k_body_no_candidate_action_timing"
 
     if outcome == "sim_missed_body_or_damage":
@@ -1291,7 +1443,11 @@ def _family_for_debug_body_contact_residual(
                 return "F10l_body_selected_false_action_timebase"
             return "F08i_body_selected_false_aerial_attack_pose"
         if first_msid is not None and first_msid >= 300:
-            return "F10e_special_move_adjacency"
+            special_family = _special_owner_family_for_names(
+                (seed_name, precombat_name, ref_name, out_name),
+                include_entry_dispatch=False,
+            )
+            return special_family or _special_owner_family_for_msid(first_msid) or "F08j_body_selected_false_special_entry_pose"
 
     # The residual still has a pre-combat BODY candidate/selection, but it is not one of the
     # currently split Fox/Falco RL1.0 current-frame clusters.
@@ -1402,6 +1558,90 @@ def _looks_like_any_special(name: str) -> bool:
     return "SPECIAL" in name
 
 
+def _looks_like_specialn(name: str) -> bool:
+    return "SPECIAL_N" in name or "SPECIAL_AIR_N" in name
+
+
+def _looks_like_speciallw(name: str) -> bool:
+    return "SPECIAL_LW" in name or "SPECIAL_AIR_LW" in name
+
+
+def _looks_like_specials(name: str) -> bool:
+    return "SPECIAL_S" in name or "SPECIAL_AIR_S" in name
+
+
+def _looks_like_firefox(name: str) -> bool:
+    return "SPECIAL_HI" in name
+
+
+def _looks_like_common_fallspecial(name: str) -> bool:
+    return name in {
+        "FALL_SPECIAL",
+        "FALL_SPECIAL_F",
+        "FALL_SPECIAL_B",
+        "LANDING_FALL_SPECIAL",
+        "ESCAPE_AIR",
+    }
+
+
+def _looks_like_throw_or_thrown(name: str) -> bool:
+    return name.startswith("THROW_") or name.startswith("THROWN_")
+
+
+def _looks_like_special_entry(name: str) -> bool:
+    if not _looks_like_any_special(name):
+        return False
+    return name.endswith("_START") or name.endswith("_HOLD") or name.endswith("_HOLD_AIR")
+
+
+def _special_owner_family_for_names(
+    names: tuple[str, ...],
+    *,
+    field_set: set[str] | frozenset[str] | None = None,
+    include_entry_dispatch: bool = True,
+) -> str | None:
+    fields = set(field_set or ())
+    if fields == {"instance_id"} and any(_looks_like_any_special(name) for name in names):
+        return "F24_special_adjacent_instance_order"
+
+    if include_entry_dispatch:
+        any_entry = any(_looks_like_special_entry(name) for name in names)
+        any_non_special_source = any(
+            (_looks_like_common_fallspecial(name) or (not _looks_like_any_special(name) and name != "NONE"))
+            for name in names
+        )
+        if any_entry and any_non_special_source:
+            return "F23_special_common_entry_dispatch"
+
+    if any(_looks_like_specialn(name) for name in names):
+        return "F19_specialn_blaster_article"
+    if any(_looks_like_speciallw(name) for name in names):
+        return "F20_speciallw_shine_reflector"
+    if any(_looks_like_specials(name) for name in names):
+        return "F21_specials_illusion_phantasm"
+    if any(_looks_like_firefox(name) for name in names):
+        return "F22_specialhi_firefox_firebird"
+    if any(_looks_like_common_fallspecial(name) for name in names):
+        return "F13a_common_fallspecial_landing"
+    return None
+
+
+def _special_owner_family_for_msid(msid: int | None) -> str | None:
+    if msid is None:
+        return None
+    # Fox/Falco submotion ids from data/special_msids/{fox,falco}.json and
+    # refs/melee/src/melee/ft/chara/ftFox/forward.h::ftFx_Submotion.
+    if 295 <= int(msid) <= 300:
+        return "F19_specialn_blaster_article"
+    if 301 <= int(msid) <= 306:
+        return "F21_specials_illusion_phantasm"
+    if 307 <= int(msid) <= 312:
+        return "F22_specialhi_firefox_firebird"
+    if 313 <= int(msid) <= 322:
+        return "F20_speciallw_shine_reflector"
+    return None
+
+
 def _looks_like_landing_cliff_or_fall(name: str) -> bool:
     return (
         name.startswith("LANDING")
@@ -1503,8 +1743,9 @@ def _classify_player_row(row: PlayerRow, action_names: dict[int, str]) -> str:
             return "F07_knockdown_grounding"
         if _is_mpcoll_ledge_ecb_residual(row, names, field_set):
             return "F17_mpcoll_ledge_ecb_residual"
-        if any(_looks_like_any_special(name) for name in names):
-            return "F10e_special_move_adjacency"
+        special_family = _special_owner_family_for_names(context_names, field_set=field_set)
+        if special_family is not None:
+            return special_family
         if field_set <= {"instance_id", "instance_hit_by", "last_hit_by"}:
             return "F08a_damage_identity_bookkeeping_residual"
         if _looks_like_current_frame_body_admission_disagreement(row, names, field_set):
@@ -1521,6 +1762,9 @@ def _classify_player_row(row: PlayerRow, action_names: dict[int, str]) -> str:
             return "F08d_damage_timer_scalar_residual"
         return "F08a_damage_identity_bookkeeping_residual"
     if field_set == {"instance_id"}:
+        special_family = _special_owner_family_for_names(context_names, field_set=field_set)
+        if special_family is not None:
+            return special_family
         if any(_looks_like_grounded_attack(name) for name in context_names):
             return "F12c_attack_instance_counter_order"
         if any(
@@ -1541,10 +1785,9 @@ def _classify_player_row(row: PlayerRow, action_names: dict[int, str]) -> str:
         return "F12_instance_id_transition_only"
     if field_set == {"action_frame"} and any(_looks_like_grounded(name) for name in names):
         return "F11_locomotion_action_frame"
-    if any(_looks_like_special_hi(name) for name in names):
-        return "F13_specialhi_landing"
-    if any(_looks_like_any_special(name) for name in names):
-        return "F10e_special_move_adjacency"
+    special_family = _special_owner_family_for_names(context_names, field_set=field_set)
+    if special_family is not None:
+        return special_family
     if any(_looks_like_aerial(name) for name in names):
         if field_set <= (STATE_FLAG_FIELDS | {"hurtbox_state", "action_frame"}):
             return "F09a_aerial_stateflag_hurtbox_adjacency"
@@ -1598,6 +1841,14 @@ def _classify_player_row(row: PlayerRow, action_names: dict[int, str]) -> str:
         if field_set <= (STATE_FLAG_FIELDS | {"hurtbox_state"}):
             return "F10d_hurtbox_stateflag_adjacency"
         return "F10a_grounded_selector_transition"
+    if any(_looks_like_throw_or_thrown(name) for name in context_names):
+        return "F14b_per_throw_pulse_bookkeeping"
+    if any(_looks_like_landing_cliff_or_fall(name) for name in context_names):
+        if any(name.startswith("CLIFF") for name in context_names):
+            return "F17_mpcoll_ledge_ecb_residual"
+        return "F10c_collision_landing_edge_adjacency"
+    if any(_looks_like_turnrun(name) for name in context_names):
+        return "F10j_turnrun_exit_microphase"
     return "F99_misc_other"
 
 
@@ -1824,6 +2075,41 @@ def _audit_player_row(row: PlayerRow, action_names: dict[int, str]) -> tuple[boo
     if row.family_id == "F10e_special_move_adjacency":
         ok = any(_looks_like_any_special(name) for name in names)
         return ok, "grounded-name row with special-move entry/exit context"
+    if row.family_id in {
+        "F19_specialn_blaster_article",
+        "F20_speciallw_shine_reflector",
+        "F21_specials_illusion_phantasm",
+        "F22_specialhi_firefox_firebird",
+        "F23_special_common_entry_dispatch",
+        "F24_special_adjacent_instance_order",
+        "F13a_common_fallspecial_landing",
+    }:
+        context_names = (
+            names[0],
+            names[1],
+            names[2],
+            _action_name(action_names, row.prev_action_id),
+        )
+        if row.family_id == "F19_specialn_blaster_article":
+            ok = any(_looks_like_specialn(name) for name in context_names)
+            return ok, "SpecialN / blaster action or article-adjacent row"
+        if row.family_id == "F20_speciallw_shine_reflector":
+            ok = any(_looks_like_speciallw(name) for name in context_names)
+            return ok, "SpecialLw / shine reflector action row"
+        if row.family_id == "F21_specials_illusion_phantasm":
+            ok = any(_looks_like_specials(name) for name in context_names)
+            return ok, "SpecialS / Illusion-Phantasm action row"
+        if row.family_id == "F22_specialhi_firefox_firebird":
+            ok = any(_looks_like_firefox(name) for name in context_names)
+            return ok, "SpecialHi / Firefox-Firebird action row"
+        if row.family_id == "F23_special_common_entry_dispatch":
+            ok = any(_looks_like_special_entry(name) for name in context_names)
+            return ok, "common IASA/input special-entry dispatch row"
+        if row.family_id == "F24_special_adjacent_instance_order":
+            ok = field_set == {"instance_id"} and any(_looks_like_any_special(name) for name in context_names)
+            return ok, "special-adjacent instance-id counter row"
+        ok = any(_looks_like_common_fallspecial(name) for name in context_names)
+        return ok, "common FallSpecial/LandingFallSpecial row"
     if row.family_id == "F10f_grounded_attack_adjacency":
         ok = any(_looks_like_grounded_attack(name) for name in names)
         return ok, "grounded-name row with attack-state transition context"
@@ -1882,6 +2168,9 @@ def _audit_player_row(row: PlayerRow, action_names: dict[int, str]) -> tuple[boo
             & {"jumps_left", "on_ground", "ground_id", "action_id", "animation_index", "instance_id", "hurtbox_state", "state_flags[4]"}
         )
         return ok, "SpecialHi/FallSpecial landing continuation row"
+    if row.family_id == "F14b_per_throw_pulse_bookkeeping":
+        ok = any(_looks_like_throw_or_thrown(name) for name in names)
+        return ok, "per-throw pulse/bookkeeping residual row"
     if row.family_id == "F17_mpcoll_ledge_ecb_residual":
         ok = any(_looks_like_damage(name) for name in names) and bool(
             field_set & {"on_ground", "ground_id", "jumps_left", "hurtbox_state"}
@@ -1974,6 +2263,12 @@ def _split_cross_player_instance_counter_rows(
         "F10c_collision_landing_edge_adjacency",
         "F10d_hurtbox_stateflag_adjacency",
         "F10e_special_move_adjacency",
+        "F19_specialn_blaster_article",
+        "F20_speciallw_shine_reflector",
+        "F21_specials_illusion_phantasm",
+        "F22_specialhi_firefox_firebird",
+        "F23_special_common_entry_dispatch",
+        "F24_special_adjacent_instance_order",
         "F10f_grounded_attack_adjacency",
         "F10g_runbrake_adjacency",
         "F10h_appeal_adjacency",
@@ -1983,7 +2278,9 @@ def _split_cross_player_instance_counter_rows(
         "F12c_attack_instance_counter_order",
         "F12d_squat_escape_instance_counter_order",
         "F13_specialhi_landing",
+        "F13a_common_fallspecial_landing",
         "F14_throw_item_bookkeeping",
+        "F14b_per_throw_pulse_bookkeeping",
         "F15_guard_item_ownership",
     }
     for key, row in player_rows.items():
@@ -2361,7 +2658,16 @@ def _iter_suite_events(
                             ref_v = int(ref["state_flags"][i, p, sub])
                             out_v = int(out["state_flags"][i, p, sub])
                         else:
-                            seed_v = int(seed[field][i, p])
+                            if field == "is_dead":
+                                # `is_dead` is a compare-only lane derived from stocks in C
+                                # (`msl_is_dead_from_stocks`). Seed rows do not carry a separate
+                                # field; derive the same value here so taxonomy can observe
+                                # death-state mismatches instead of failing when a gameplay change
+                                # exposes one.
+                                # refs: src/api.c::msl_is_dead_from_stocks
+                                seed_v = 1 if int(seed["stocks"][i, p]) == 0 else 0
+                            else:
+                                seed_v = int(seed[field][i, p])
                             ref_v = int(ref[field][i, p])
                             out_v = int(out[field][i, p])
                         all_events.append(
@@ -2553,7 +2859,9 @@ def build_summary(
                 }
             )
 
-        if family_id.startswith("F14") or family_id.startswith("F15") or family_id.startswith("F16"):
+        if (family_id.startswith("F14") or family_id.startswith("F15") or family_id.startswith("F16")) and (
+            unique_rows and unique_rows[0][2].startswith("item")
+        ):
             for dataset, record, subject in unique_rows:
                 slot = int(subject.removeprefix("item"))
                 row = item_rows[(dataset, record, slot)]

@@ -73,7 +73,7 @@
       "field": "action_id",
       "seed": 43,
       "ref": 43,
-      "out": 90,
+      "out": 43,
       "cluster_count": 1,
       "base_field": "action_id"
     },
@@ -161,7 +161,7 @@
       "field": "hitlag",
       "seed": 0,
       "ref": 0,
-      "out": 6,
+      "out": 0,
       "cluster_count": 4,
       "base_field": "hitlag"
     },
@@ -172,7 +172,7 @@
       "field": "hitlag",
       "seed": 0,
       "ref": 0,
-      "out": 6,
+      "out": 0,
       "cluster_count": 4,
       "base_field": "hitlag"
     },
@@ -194,7 +194,7 @@
       "field": "hitstun",
       "seed": 0,
       "ref": 0,
-      "out": 52,
+      "out": 0,
       "cluster_count": 1,
       "base_field": "hitstun"
     },
