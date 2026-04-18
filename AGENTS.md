@@ -49,7 +49,7 @@ Primary validation is **teacher-forced, reseeded one-step** over replay suites:
 3. Run exactly one step
 4. Compare against replay reference at `t+1`
 
-Full rollout is secondary and used as a stability / regression lens.
+Use full rollout as a stability / regression lens.
 
 ## Current RL 1.0 Checklist
 
@@ -67,14 +67,7 @@ Use that file to understand:
 
 We are in **finish-the-sim** mode.
 
-Default workflow:
-- identify a **shared owner family**
-- read the decomp boundary first
-- replace bridgey piecemeal logic with the shared owner
-- leave only narrow, decomp-justified residuals
-
-Do **not** default to row-fix iteration when a shared family is still open.
-For major mechanic work, the default task shape is a **deep owner-family closure pass**, not a mismatch-row fix campaign.
+Do not attempt to do less work just to have a clean win. Some cases will call for fixing multiple issues simultaneously to cleanly close out a system. THIS IS WHAT WE WANT.
 
 ## What “Done” Means
 
@@ -93,21 +86,17 @@ A family is only “closed” when:
 ## Required Last-Mile Behavior
 
 - Treat a mismatch as a **triage entry point**, not the patch boundary.
-- Prefer closing a full decomp-backed owner family while the context is loaded.
-- Do not stop at the first motivating row if adjacent same-family behavior is still open.
+- For assigned multi-item work, the handoff bar applies to the whole list, not the first completed item.
+- Do not stop at the first motivating row or one small owner slice during checklist burn-down.
 - Investigation, tooling, extraction, replay probes, seed-surface work, and final gameplay code are all part of the same task.
-- Do not return with diagnosis-only prose if there is still a credible local next step.
+- Keep working until ALL assigned work is ready for review.
+- Do not return with diagnosis-only prose if implementation, extraction, probes, locks, or validation remain credible local next steps.
 
 When broadening is justified:
 - grounded and airborne variants
 - entry / steady / exit ownership
 - callback ordering
 - item / shield / hitlag / persistence interactions
-
-When a family is claimed complete:
-- add focused replay-real locks
-- run validation
-- say explicitly what residuals remain and why they are not more bridge debt
 
 ## Working Conventions
 
@@ -116,7 +105,7 @@ When a family is claimed complete:
 - Never hand-edit generator-owned validation reports.
 - Triage/debug outputs default under gitignored `reports/triage/`, not `/tmp`.
 - Never key gameplay behavior on dataset name or record id.
-- Keep review state clean and include `git status --porcelain` in handoffs.
+- Keep review state inspectable and include `git status --porcelain` in handoffs; do not revert useful work merely to return a clean tree.
 
 ## Validation Requirements
 
@@ -144,7 +133,7 @@ uv run python -m tools.slippi.preprocess_suite \
 
 ### Validation Reports
 - Test-only changes should not refresh committed validation reports.
-- If core sim logic changes, refresh and commit these reports:
+- If core sim logic changes, refresh these reports:
 - `reports/validation/one_step_suite_eval.txt`
 - `reports/validation/rollout_suite_eval.txt`
 - `reports/validation/aggregate_recent_one_step_suite_eval.txt`
@@ -180,11 +169,11 @@ uv run python -m tools.eval.run_rollout_suite_eval --suite replays/suites/fox_fa
 
 ## Handoff Standard
 
-Every substantial handoff should say:
-- what owner family was targeted
-- whether the family is now closed or still partial
+For active checklist burn-down work, hand off only when the checklist item is closed. A final handoff should say:
+- what owner family or named residual bucket was targeted
+- whether the checklist item is now closed
 - which bridges were deleted
 - which residuals remain
-- why each remaining residual is decomp-justified
+- why each remaining residual is decomp-justified or belongs to another named owner
 - what validation was run
 - `git status --porcelain`
