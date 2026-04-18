@@ -96,6 +96,58 @@ static inline void combat_segment_segment_dist2(float p0x, float p0y, float p0z,
   const float D = a * c - b * b;
   const float EPS = 1.0e-8f;
 
+  // Degenerate swept capsules are common on create/enable edges where ftColl_8007AD18 copies
+  // HitCapsule.x58 = x4C before collision. The segment/segment solver below divides by the second
+  // segment length in the parallel path, so handle point-vs-segment cases explicitly instead of
+  // falling back to an endpoint distance.
+  // refs/melee/src/melee/ft/ftcoll.c::ftColl_8007AD18
+  // refs/melee/src/melee/lb/lbcollision.c::{lbColl_80007AFC,lbColl_80006094,lbColl_80006E58}
+  if (a <= EPS && c <= EPS) {
+    const float dx = p0x - q0x;
+    const float dy = p0y - q0y;
+    const float dz = p0z - q0z;
+    if (out_d2) {
+      *out_d2 = msl_len2_3(dx, dy, dz);
+    }
+    if (out_s) {
+      *out_s = 0.0f;
+    }
+    if (out_t) {
+      *out_t = 0.0f;
+    }
+    return;
+  }
+  if (a <= EPS) {
+    float d2 = 0.0f;
+    float t = 0.0f;
+    combat_point_segment_dist2(p0x, p0y, p0z, q0x, q0y, q0z, q1x, q1y, q1z, &d2, &t);
+    if (out_d2) {
+      *out_d2 = d2;
+    }
+    if (out_s) {
+      *out_s = 0.0f;
+    }
+    if (out_t) {
+      *out_t = t;
+    }
+    return;
+  }
+  if (c <= EPS) {
+    float d2 = 0.0f;
+    float s = 0.0f;
+    combat_point_segment_dist2(q0x, q0y, q0z, p0x, p0y, p0z, p1x, p1y, p1z, &d2, &s);
+    if (out_d2) {
+      *out_d2 = d2;
+    }
+    if (out_s) {
+      *out_s = s;
+    }
+    if (out_t) {
+      *out_t = 0.0f;
+    }
+    return;
+  }
+
   float sN = 0.0f;
   float sD = D;
   float tN = 0.0f;

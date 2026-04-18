@@ -36,6 +36,7 @@ from tools.slippi.seed_history import (
 )
 from tools.slippi.make_dataset_from_slp import derive_illusion_ghost_pos01
 from tools.slippi.make_dataset_from_slp import _derive_passivewall_timer
+from tools.slippi.make_dataset_from_slp import _derive_grounded_overlap_hidden_pos_z
 
 
 def test_compute_tilt_timer_axis_basic_sequence() -> None:
@@ -180,6 +181,86 @@ def test_derive_passivewall_timer_tracks_hidden_startup_hold() -> None:
 
     assert got.dtype == np.uint8
     assert got.tolist() == [0, 5, 4, 3, 2, 1, 0, 0]
+
+
+def test_derive_grounded_overlap_hidden_pos_z_tracks_prefix_depth_lane() -> None:
+    # ftCommon_8007DD7C/8007E0E4 hidden depth lane:
+    # - Two grounded overlapping fighters at visible z=0 accumulate opposite +/-x454 steps.
+    # - The lane is prefix-causal and clamps by x458 without consulting future combat outcomes.
+    # refs/melee/src/melee/ft/ftcommon.c::{ftCommon_8007DD7C,ftCommon_8007E0E4}
+    n = 6
+    char_id = np.zeros((n, 4), dtype=np.uint8)
+    char_id[:, 0] = 1
+    char_id[:, 1] = 22
+    action = np.full((n, 4), 14, dtype=np.uint16)
+    on_ground = np.zeros((n, 4), dtype=np.uint8)
+    on_ground[:, :2] = 1
+    stocks = np.zeros((n, 4), dtype=np.uint8)
+    stocks[:, :2] = 4
+    pos_x = np.zeros((n, 4), dtype=np.float32)
+    pos_x[:, 0] = 0.0
+    pos_x[:, 1] = 0.1
+    pos_z = np.zeros((n, 4), dtype=np.float32)
+    facing = np.ones((n, 4), dtype=np.uint8)
+
+    out = _derive_grounded_overlap_hidden_pos_z(
+        num_players=2,
+        char_id_u8=char_id,
+        action_id_u16=action,
+        on_ground_u8=on_ground,
+        stocks_u8=stocks,
+        pos_x_f32=pos_x,
+        pos_z_f32=pos_z,
+        facing_u8=facing,
+        common={"player_nudge_z": 0.1, "player_nudge_z_max": 0.3},
+    )
+
+    assert out[:, 0].tolist() == pytest.approx([0.0, -0.1, -0.2, -0.3, -0.3, -0.3], abs=1e-6)
+    assert out[:, 1].tolist() == pytest.approx([0.0, 0.1, 0.2, 0.3, 0.3, 0.3], abs=1e-6)
+
+
+def test_derive_grounded_overlap_hidden_pos_z_does_not_leak_outside_grounded_scope() -> None:
+    # The teacher-forced hidden-depth seed is not allowed to carry stale depth through owner
+    # surfaces that are not proven action-local for this lane. Airborne, damage, GuardSetOff,
+    # DownBound, Cliff, throw, and special rows keep replay-visible Slippi pos_z.
+    # refs/melee/src/melee/ft/ftcommon.c::{ftCommon_8007DD7C,ftCommon_8007E0E4}
+    n = 9
+    char_id = np.zeros((n, 4), dtype=np.uint8)
+    char_id[:, 0] = 1
+    char_id[:, 1] = 22
+    action = np.full((n, 4), 14, dtype=np.uint16)
+    action[3, 0] = 90  # DamageFlyTop
+    action[4, 0] = 181  # GuardSetOff
+    action[5, 0] = 191  # DownBoundD
+    action[6, 0] = 253  # CliffWait
+    action[7, 0] = 219  # ThrowF
+    action[8, 0] = 360  # Fox SpecialLw loop
+    on_ground = np.zeros((n, 4), dtype=np.uint8)
+    on_ground[:, :2] = 1
+    on_ground[2, 0] = 0
+    stocks = np.zeros((n, 4), dtype=np.uint8)
+    stocks[:, :2] = 4
+    pos_x = np.zeros((n, 4), dtype=np.float32)
+    pos_x[:, 0] = 0.0
+    pos_x[:, 1] = 0.1
+    pos_z = np.zeros((n, 4), dtype=np.float32)
+    facing = np.ones((n, 4), dtype=np.uint8)
+
+    out = _derive_grounded_overlap_hidden_pos_z(
+        num_players=2,
+        char_id_u8=char_id,
+        action_id_u16=action,
+        on_ground_u8=on_ground,
+        stocks_u8=stocks,
+        pos_x_f32=pos_x,
+        pos_z_f32=pos_z,
+        facing_u8=facing,
+        common={"player_nudge_z": 0.1, "player_nudge_z_max": 0.3},
+    )
+
+    assert out[0, 0] == pytest.approx(0.0)
+    assert out[1, 0] == pytest.approx(-0.1)
+    assert out[2:, 0].tolist() == pytest.approx([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], abs=1e-6)
 
 
 def test_derive_turn_internals_is_causal_wrt_future_frames() -> None:

@@ -367,10 +367,11 @@ def main() -> None:
         "walk_anim_vel_mul": float(_f32_be(buf, ft_common_abs + 0x440)),
         # Grounded fighter-overlap nudge (ftCommon_8007DD7C / ftCommon_8007E0E4):
         # - x450 contributes to fp->xF8_playerNudgeVel.x on horizontal pushbox overlap.
-        # - x454 contributes to fp->xF8_playerNudgeVel.y (engine-space Z lane); the lite sim
-        #   currently models only the horizontal x450 lane.
+        # - x454 contributes to fp->xF8_playerNudgeVel.y (engine-space Z lane).
+        # - x458 clamps the normal (non-x221F_b4) depth lane in ftCommon_8007E0E4.
         "player_nudge_x": float(_f32_be(buf, ft_common_abs + 0x450)),
         "player_nudge_z": float(_f32_be(buf, ft_common_abs + 0x454)),
+        "player_nudge_z_max": float(_f32_be(buf, ft_common_abs + 0x458)),
         # Guard pose update smoothing (ftCo_Guard.c `ftCo_80091BC4`):
         # - `mv.co.guard.x8 = 10 + normalizeAngle0(normalizeAngle180(deg-offset) * x44C + offset)`
         # - `mv.co.guard.x4 = x44C * (stick_mag - x4) + x4`

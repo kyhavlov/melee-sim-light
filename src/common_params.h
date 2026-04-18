@@ -192,8 +192,9 @@ typedef struct MslCommonParams {
   float catch_friction_mul;  // p_ftCommonData->x64
   // Grounded fighter-overlap nudge (`fp->xF8_playerNudgeVel`).
   // Decomp: refs/melee/src/melee/ft/ftcommon.c::{ftCommon_8007DD7C,ftCommon_8007E0E4}
-  float player_nudge_x;  // p_ftCommonData->x450
-  float player_nudge_z;  // p_ftCommonData->x454
+  float player_nudge_x;      // p_ftCommonData->x450
+  float player_nudge_z;      // p_ftCommonData->x454
+  float player_nudge_z_max;  // p_ftCommonData->x458
 
   // Run accel scaling when 0 < (gr_vel/target_vel) < 1 (refs/melee/src/melee/ft/chara/ftCommon/ftCo_Run.c::ftCo_Run_Phys)
   float run_accel_scale_mul;  // p_ftCommonData->run_accel_scale_mul (0x5C)

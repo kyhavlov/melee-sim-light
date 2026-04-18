@@ -127,25 +127,25 @@ overall.float_norm_mae_p95: 0.00099037
 
 == datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/QuerulousGrandDinosaur.msl ==
 Records: 10222  Players/scored per record: 2  Total player-frames: 20444
-mismatch.action_id: 10 / 20444 (0.000489)
-mismatch.action_frame: 23 / 20444 (0.001125)
-mismatch.on_ground: 4 / 20444 (0.000196)
-mismatch.facing: 3 / 20444 (0.000147)
+mismatch.action_id: 8 / 20444 (0.000391)
+mismatch.action_frame: 22 / 20444 (0.001076)
+mismatch.on_ground: 3 / 20444 (0.000147)
+mismatch.facing: 2 / 20444 (0.000098)
 mismatch.stocks: 0 / 20444 (0.000000)
-mismatch.jumps_left: 10 / 20444 (0.000489)
+mismatch.jumps_left: 9 / 20444 (0.000440)
 mismatch.is_dead: 0 / 20444 (0.000000)
-mismatch.hitlag: 9 / 20444 (0.000440)
-mismatch.hitstun: 3 / 20444 (0.000147)
+mismatch.hitlag: 7 / 20444 (0.000342)
+mismatch.hitstun: 2 / 20444 (0.000098)
 mismatch.l_cancel: 0 / 20444 (0.000000)
 mismatch.hurtbox_state: 11 / 20444 (0.000538)
 mismatch.ground_id: 4 / 20444 (0.000196)
-mismatch.animation_index: 10 / 20444 (0.000489)
-mismatch.instance_hit_by: 8 / 20444 (0.000391)
-mismatch.instance_id: 46 / 20444 (0.002250)
-mismatch.last_attack_landed: 3 / 20444 (0.000147)
+mismatch.animation_index: 8 / 20444 (0.000391)
+mismatch.instance_hit_by: 7 / 20444 (0.000342)
+mismatch.instance_id: 45 / 20444 (0.002201)
+mismatch.last_attack_landed: 2 / 20444 (0.000098)
 mismatch.combo_count: 2 / 20444 (0.000098)
 mismatch.last_hit_by: 6 / 20444 (0.000293)
-mismatch.state_flags: 44 / 102220 (0.000430)
+mismatch.state_flags: 41 / 102220 (0.000401)
 mismatch.item_exists: 0 / 153330 (0.000000)
 mismatch.item_type: 0 / 153330 (0.000000)
 mismatch.item_state: 0 / 153330 (0.000000)
@@ -153,19 +153,19 @@ mismatch.item_owner: 0 / 153330 (0.000000)
 mismatch.item_instance_id: 0 / 153330 (0.000000)
 err.pos_x: mae=0.013073 p95=0.000000 max=12.673500
 err.pos_y: mae=0.006894 p95=0.000000 max=7.347817
-err.speed_air_x_self: mae=0.005312 p95=0.000000 max=1.815992
-err.speed_ground_x_self: mae=0.004684 p95=0.000000 max=1.815992
+err.speed_air_x_self: mae=0.005265 p95=0.000000 max=1.815992
+err.speed_ground_x_self: mae=0.004637 p95=0.000000 max=1.815992
 err.speed_y_self: mae=0.001322 p95=0.000000 max=3.060000
-err.speed_x_attack: mae=0.000298 p95=0.000000 max=1.808650
-err.speed_y_attack: mae=0.001367 p95=0.000000 max=3.894751
-err.percent: mae=0.001602 p95=0.000000 max=9.000000
+err.speed_x_attack: mae=0.000275 p95=0.000000 max=1.808650
+err.speed_y_attack: mae=0.001177 p95=0.000000 max=2.821255
+err.percent: mae=0.001162 p95=0.000000 max=9.000000
 err.shield_hp: mae=0.000400 p95=0.000000 max=6.299999
 err.item_pos_x: mae=0.090512 p95=0.000000 max=26.470673
 err.item_pos_y: mae=0.025230 p95=0.000000 max=4.925121
 err.item_vel_x: mae=0.031741 p95=0.000000 max=11.673686
 err.item_vel_y: mae=0.001039 p95=0.000000 max=0.551976
-overall.discrete_mismatch: 196 / 1236862
-overall.float_norm_mae_p95: 0.00080597
+overall.discrete_mismatch: 179 / 1236862
+overall.float_norm_mae_p95: 0.00079132
 
 == datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/TreasuredBackKangaroo.msl ==
 Records: 7837  Players/scored per record: 2  Total player-frames: 15674
@@ -177,7 +177,7 @@ mismatch.stocks: 0 / 15674 (0.000000)
 mismatch.jumps_left: 10 / 15674 (0.000638)
 mismatch.is_dead: 0 / 15674 (0.000000)
 mismatch.hitlag: 8 / 15674 (0.000510)
-mismatch.hitstun: 5 / 15674 (0.000319)
+mismatch.hitstun: 6 / 15674 (0.000383)
 mismatch.l_cancel: 0 / 15674 (0.000000)
 mismatch.hurtbox_state: 6 / 15674 (0.000383)
 mismatch.ground_id: 0 / 15674 (0.000000)
@@ -199,16 +199,16 @@ err.speed_air_x_self: mae=0.011506 p95=0.000000 max=1.815992
 err.speed_ground_x_self: mae=0.009758 p95=0.000000 max=1.815992
 err.speed_y_self: mae=0.001557 p95=0.000000 max=2.940000
 err.speed_x_attack: mae=0.000466 p95=0.000000 max=1.027494
-err.speed_y_attack: mae=0.001504 p95=0.000000 max=3.971344
+err.speed_y_attack: mae=0.001512 p95=0.000000 max=3.971344
 err.percent: mae=0.001946 p95=0.000000 max=8.000000
 err.shield_hp: mae=0.000520 p95=0.000000 max=5.599998
 err.item_pos_x: mae=0.070895 p95=0.000000 max=73.618073
 err.item_pos_y: mae=0.025521 p95=0.000000 max=31.795383
 err.item_vel_x: mae=0.020464 p95=0.000000 max=7.000000
 err.item_vel_y: mae=0.003790 p95=0.000000 max=4.999367
-overall.discrete_mismatch: 186 / 948277
-overall.float_norm_mae_p95: 0.00141271
+overall.discrete_mismatch: 187 / 948277
+overall.float_norm_mae_p95: 0.00141297
 
 == suite summary ==
-overall.discrete_mismatch: 715 / 4462843
-overall.float_norm_mae_p95: 0.00102399
+overall.discrete_mismatch: 699 / 4462843
+overall.float_norm_mae_p95: 0.00102008

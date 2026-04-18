@@ -48,6 +48,20 @@ void anim_pose_update_dynamic_state(MslBatch* batch);
 int anim_pose_get_collision_matrix(const MslBatch* batch, size_t player_idx, uint16_t msid,
                                    uint16_t frame, uint16_t part_id, float out_3x4[12]);
 
+// Float-frame collision-pose matrix sampler.
+//
+// This uses the extracted SSANIMT1 FObj track streams to evaluate the same AObj/JObj local SRT
+// owner used by HSD before lb_8000B1CC samples hit/hurt primitive endpoints. It falls back to the
+// integer SSANIM01 matrix when track data is unavailable.
+//
+// Decomp owner path:
+// - refs/melee/src/sysdolphin/baselib/aobj.c::HSD_AObjInterpretAnim
+// - refs/melee/src/sysdolphin/baselib/fobj.c::HSD_FObjInterpretAnim
+// - refs/melee/src/sysdolphin/baselib/jobj.c::HSD_JObjSetupMatrix
+// - refs/melee/src/melee/lb/lb_00B0.c::lb_8000B1CC
+int anim_pose_get_collision_matrix_f32(const MslBatch* batch, size_t player_idx, uint16_t msid,
+                                       float anim_frame, uint16_t part_id, float out_3x4[12]);
+
 // Hot-path TransN sampler.
 // Reads the per-frame TransN/root translation tail for (char_id, msid, frame) into out_xyz:
 //   (x, y, z)

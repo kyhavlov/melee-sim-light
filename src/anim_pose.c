@@ -79,6 +79,14 @@ typedef struct {
   MslAnimDynSetData dyn_sets[ANIM_DYN_MAX_SETS];
   uint8_t* dyn_collision_have_msid;  // [65536], extracted SSDYNN01 collision-owner index
 
+  uint8_t* track_buf;
+  size_t track_sz;
+  uint16_t track_local_count;
+  uint16_t track_anim_count;
+  uint16_t* track_part_to_index;               // [65536]
+  uint16_t* track_msid_to_anim_index;          // [65536], 0xFFFF if missing
+  uint32_t* track_part_record_off_by_anim_li;  // [track_anim_count * track_local_count]
+
   uint8_t have;
 } MslAnimPoseTable;
 
@@ -103,6 +111,453 @@ static float read_f32_le(const uint8_t* p) {
   return v;
 }
 
+static inline float f32_from_double(double x) { return (float)x; }
+static inline float f32_mul_d(double a, double b) { return (float)(a * b); }
+static inline float f32_madd_d(double a, double b, double c) { return (float)(a * b + c); }
+
+static float spl_get_helmite_f32(float fterm, float time, float p0, float p1, float d0, float d1) {
+  // Exact instruction order from `refs/melee/build/GALE01/asm/sysdolphin/baselib/spline.s`
+  // `splGetHelmite`, shared with the extraction/native bake path.
+  float f1 = f32_from_double(fterm);
+  float f2 = f32_from_double(time);
+  float f3 = f32_from_double(p0);
+  float f4 = f32_from_double(p1);
+  float f5 = f32_from_double(d0);
+  float f6 = f32_from_double(d1);
+
+  float f11 = f32_mul_d((double)f2, (double)f2);
+  float f10 = f32_mul_d((double)f1, (double)f1);
+  float f9 = f32_mul_d((double)f11, (double)f2);
+  float f0 = f32_mul_d(3.0, (double)f11);
+  f11 = f32_mul_d((double)f11, (double)f1);
+  f9 = f32_mul_d((double)f10, (double)f9);
+  f10 = f32_mul_d((double)f0, (double)f10);
+  f0 = f32_mul_d(2.0, (double)f9);
+  f9 = f32_from_double((double)f9 - (double)f11);
+  f1 = f32_mul_d((double)f0, (double)f1);
+  float f8 = f32_from_double((double)f9 - (double)f11);
+  f0 = f32_from_double(-(double)f1);
+  f1 = f32_from_double((double)f1 - (double)f10);
+  f2 = f32_from_double((double)f2 + (double)f8);
+  f0 = f32_from_double((double)f0 + (double)f10);
+  f1 = f32_from_double(1.0 + (double)f1);
+  f0 = f32_mul_d((double)f4, (double)f0);
+  f0 = f32_madd_d((double)f3, (double)f1, (double)f0);
+  f0 = f32_madd_d((double)f5, (double)f2, (double)f0);
+  f1 = f32_madd_d((double)f6, (double)f9, (double)f0);
+  return f32_from_double((double)f1);
+}
+
+enum {
+  HSD_A_OP_CON = 1,
+  HSD_A_OP_LIN = 2,
+  HSD_A_OP_SPL0 = 3,
+  HSD_A_OP_SPL = 4,
+  HSD_A_OP_SLP = 5,
+  HSD_A_OP_KEY = 6,
+};
+
+enum {
+  HSD_A_FRAC_FLOAT = 0 << 5,
+  HSD_A_FRAC_S16 = 1 << 5,
+  HSD_A_FRAC_U16 = 2 << 5,
+  HSD_A_FRAC_S8 = 3 << 5,
+  HSD_A_FRAC_U8 = 4 << 5,
+};
+
+enum {
+  FOBJ_LOAD_DATA0 = 1,
+  FOBJ_LOAD_DATA = 2,
+  FOBJ_LOAD_WAIT = 3,
+};
+
+typedef struct {
+  const uint8_t* ad;
+  int length;
+  int startframe;
+  uint8_t obj_type;
+  uint8_t frac_value;
+  uint8_t frac_slope;
+  int state;
+  int op;
+  int op_intrp;
+  float time;
+  int nb_pack;
+  int fterm;
+  float p0;
+  float p1;
+  float d0;
+  float d1;
+  uint8_t flags_20;
+  uint8_t flags_40;
+  uint8_t flags_80;
+  uint8_t parse_error;
+  int pos;
+} MslFObjEval;
+
+static float fobj_parse_float(const uint8_t* ad, int len, int* pos, uint8_t frac,
+                              uint8_t* parse_error) {
+  const int p = *pos;
+  if ((frac & 0xE0u) == HSD_A_FRAC_FLOAT) {
+    if (p + 4 > len) {
+      if (parse_error != NULL) {
+        *parse_error = 1u;
+      }
+      return 0.0f;
+    }
+    const uint32_t d = (uint32_t)ad[p] | ((uint32_t)ad[p + 1] << 8) | ((uint32_t)ad[p + 2] << 16) |
+                       ((uint32_t)ad[p + 3] << 24);
+    union {
+      uint32_t u;
+      float f;
+    } v;
+    v.u = d;
+    *pos = p + 4;
+    return v.f;
+  }
+
+  const int denom = 1 << (frac & 0x1Fu);
+  const uint8_t kind = frac & 0xE0u;
+  if (kind == HSD_A_FRAC_S8) {
+    if (p + 1 > len) {
+      if (parse_error != NULL) {
+        *parse_error = 1u;
+      }
+      return 0.0f;
+    }
+    const int8_t numer = (int8_t)ad[p];
+    *pos = p + 1;
+    return f32_from_double((double)numer / (double)denom);
+  }
+  if (kind == HSD_A_FRAC_U8) {
+    if (p + 1 > len) {
+      if (parse_error != NULL) {
+        *parse_error = 1u;
+      }
+      return 0.0f;
+    }
+    const uint8_t numer = ad[p];
+    *pos = p + 1;
+    return f32_from_double((double)numer / (double)denom);
+  }
+  if (kind == HSD_A_FRAC_S16) {
+    if (p + 2 > len) {
+      if (parse_error != NULL) {
+        *parse_error = 1u;
+      }
+      return 0.0f;
+    }
+    const int16_t numer = (int16_t)((uint16_t)ad[p] | ((uint16_t)ad[p + 1] << 8));
+    *pos = p + 2;
+    return f32_from_double((double)numer / (double)denom);
+  }
+  if (kind == HSD_A_FRAC_U16) {
+    if (p + 2 > len) {
+      if (parse_error != NULL) {
+        *parse_error = 1u;
+      }
+      return 0.0f;
+    }
+    const uint16_t numer = (uint16_t)ad[p] | ((uint16_t)ad[p + 1] << 8);
+    *pos = p + 2;
+    return f32_from_double((double)numer / (double)denom);
+  }
+  return 0.0f;
+}
+
+static int fobj_parse_pack_info(const uint8_t* ad, int len, int* pos, int* out_nb_pack) {
+  int p = *pos;
+  if (p >= len) {
+    return -1;
+  }
+  int d = (int)ad[p++];
+  int nb_pack = ((d >> 4) & 7) + 1;
+  int shift = 3;
+  if ((d & 0x80) == 0) {
+    *pos = p;
+    *out_nb_pack = nb_pack;
+    return 0;
+  }
+  for (;;) {
+    if (p >= len || shift >= 31) {
+      return -1;
+    }
+    d = (int)ad[p++];
+    nb_pack += (d & 0x7F) << shift;
+    shift += 7;
+    if ((d & 0x80) == 0) {
+      break;
+    }
+  }
+  *pos = p;
+  *out_nb_pack = nb_pack;
+  return 0;
+}
+
+static int fobj_parse_wait(const uint8_t* ad, int len, int* pos, int* out_wait) {
+  int p = *pos;
+  int wait = 0;
+  int shift = 0;
+  for (;;) {
+    if (p >= len || shift >= 31) {
+      return -1;
+    }
+    const int d = (int)ad[p++];
+    wait |= (d & 0x7F) << shift;
+    shift += 7;
+    if ((d & 0x80) == 0) {
+      break;
+    }
+  }
+  *pos = p;
+  *out_wait = wait;
+  return 0;
+}
+
+static void fobj_req_anim(MslFObjEval* fo, float frame) {
+  fo->pos = 0;
+  fo->time = f32_from_double((double)fo->startframe + (double)frame);
+  fo->op = 0;
+  fo->op_intrp = 0;
+  fo->flags_20 = 0u;
+  fo->flags_40 = 0u;
+  fo->flags_80 = 0u;
+  fo->nb_pack = 0;
+  fo->fterm = 0;
+  fo->p0 = 0.0f;
+  fo->p1 = 0.0f;
+  fo->d0 = 0.0f;
+  fo->d1 = 0.0f;
+  fo->state = FOBJ_LOAD_DATA0;
+}
+
+static void fobj_launch_key_data(MslFObjEval* fo) {
+  if (fo->flags_40) {
+    fo->op_intrp = fo->op;
+    fo->flags_40 = 0u;
+    fo->flags_80 = 1u;
+    fo->p0 = fo->p1;
+  }
+}
+
+static int fobj_anim_load(MslFObjEval* fo, int op) {
+  if (op == HSD_A_OP_CON || op == HSD_A_OP_LIN) {
+    fo->p0 = fo->p1;
+    fo->p1 = fobj_parse_float(fo->ad, fo->length, &fo->pos, fo->frac_value, &fo->parse_error);
+    if (fo->op_intrp != HSD_A_OP_SLP) {
+      fo->d0 = fo->d1;
+      fo->d1 = 0.0f;
+    }
+    return (fo->state == FOBJ_LOAD_DATA0) ? FOBJ_LOAD_WAIT : 4;
+  }
+  if (op == HSD_A_OP_SPL0) {
+    fo->p0 = fo->p1;
+    fo->d0 = fo->d1;
+    fo->p1 = fobj_parse_float(fo->ad, fo->length, &fo->pos, fo->frac_value, &fo->parse_error);
+    fo->d1 = 0.0f;
+    return (fo->state == FOBJ_LOAD_DATA0) ? FOBJ_LOAD_WAIT : 4;
+  }
+  if (op == HSD_A_OP_SPL) {
+    fo->p0 = fo->p1;
+    fo->p1 = fobj_parse_float(fo->ad, fo->length, &fo->pos, fo->frac_value, &fo->parse_error);
+    fo->d0 = fo->d1;
+    fo->d1 = fobj_parse_float(fo->ad, fo->length, &fo->pos, fo->frac_slope, &fo->parse_error);
+    return (fo->state == FOBJ_LOAD_DATA0) ? FOBJ_LOAD_WAIT : 4;
+  }
+  if (op == HSD_A_OP_SLP) {
+    fo->d0 = fo->d1;
+    fo->d1 = fobj_parse_float(fo->ad, fo->length, &fo->pos, fo->frac_slope, &fo->parse_error);
+    return fo->state;
+  }
+  if (op == HSD_A_OP_KEY) {
+    fobj_launch_key_data(fo);
+    fo->p1 = fobj_parse_float(fo->ad, fo->length, &fo->pos, fo->frac_value, &fo->parse_error);
+    fo->flags_40 = 1u;
+    return (fo->state == FOBJ_LOAD_DATA0) ? FOBJ_LOAD_WAIT : 4;
+  }
+  return 0;
+}
+
+static int fobj_load_data(MslFObjEval* fo) {
+  if (fo->pos >= fo->length) {
+    return 6;
+  }
+  fo->op_intrp = fo->op;
+  if (fo->nb_pack == 0) {
+    fo->op = (int)(fo->ad[fo->pos] & 0xFu);
+    if (fobj_parse_pack_info(fo->ad, fo->length, &fo->pos, &fo->nb_pack) != 0) {
+      fo->parse_error = 1u;
+      fo->state = 0;
+      return fo->state;
+    }
+  }
+  fo->nb_pack -= 1;
+  fo->state = fobj_anim_load(fo, fo->op);
+  if (fo->parse_error) {
+    fo->state = 0;
+  }
+  return fo->state;
+}
+
+static int fobj_load_wait(MslFObjEval* fo) {
+  if (fo->pos >= fo->length) {
+    fo->state = 6;
+    return fo->state;
+  }
+  if (fobj_parse_wait(fo->ad, fo->length, &fo->pos, &fo->fterm) != 0) {
+    fo->parse_error = 1u;
+    fo->state = 0;
+    return fo->state;
+  }
+  fo->flags_20 = 1u;
+  fo->state = FOBJ_LOAD_DATA;
+  return fo->state;
+}
+
+static uint8_t fobj_update_anim(MslFObjEval* fo, float* out_value) {
+  if (fo->op_intrp == HSD_A_OP_KEY) {
+    if (fo->flags_80) {
+      fo->flags_80 = 0u;
+      *out_value = fo->p0;
+      return 1u;
+    }
+    return 0u;
+  }
+  if (fo->op_intrp == HSD_A_OP_CON) {
+    *out_value = (fo->time >= (float)fo->fterm) ? fo->p1 : fo->p0;
+    return 1u;
+  }
+  if (fo->op_intrp == HSD_A_OP_LIN) {
+    if (fo->flags_20) {
+      fo->flags_20 = 0u;
+      if (fo->fterm != 0) {
+        fo->d0 = f32_from_double(((double)fo->p1 - (double)fo->p0) / (double)fo->fterm);
+      } else {
+        fo->d0 = 0.0f;
+        fo->p0 = fo->p1;
+      }
+    }
+    *out_value = f32_madd_d((double)fo->d0, (double)fo->time, (double)fo->p0);
+    return 1u;
+  }
+  if (fo->op_intrp == HSD_A_OP_SPL0 || fo->op_intrp == HSD_A_OP_SPL ||
+      fo->op_intrp == HSD_A_OP_SLP) {
+    if (fo->fterm == 0) {
+      *out_value = fo->p1;
+      return 1u;
+    }
+    const float inv = f32_from_double(1.0 / (double)fo->fterm);
+    *out_value = spl_get_helmite_f32(inv, fo->time, fo->p0, fo->p1, fo->d0, fo->d1);
+    return 1u;
+  }
+  return 0u;
+}
+
+static uint8_t fobj_interpret(MslFObjEval* fo, float rate, float* out_value) {
+  if (fo->parse_error) {
+    return 0u;
+  }
+  uint8_t any = 0u;
+  float last = 0.0f;
+  if (fo->state == 0) {
+    return 0u;
+  }
+  fo->time = f32_from_double((double)fo->time + (double)rate);
+  if (fo->time < 0.0f) {
+    return 0u;
+  }
+  float fterm = 0.0f;
+  for (int iters = 0; iters < 100000; iters++) {
+    const int st = fo->state;
+    if (st == 6) {
+      fo->time = f32_from_double((double)fo->time + (double)fterm);
+      fobj_launch_key_data(fo);
+      float v = 0.0f;
+      if (fobj_update_anim(fo, &v)) {
+        last = v;
+        any = 1u;
+      }
+      *out_value = last;
+      return any;
+    }
+    if (st == FOBJ_LOAD_DATA0 || st == FOBJ_LOAD_DATA) {
+      (void)fobj_load_data(fo);
+      if (fo->parse_error) {
+        *out_value = last;
+        return any;
+      }
+      continue;
+    }
+    if (st == FOBJ_LOAD_WAIT) {
+      if (fo->flags_80) {
+        float v = 0.0f;
+        if (fobj_update_anim(fo, &v)) {
+          last = v;
+          any = 1u;
+        }
+      }
+      (void)fobj_load_wait(fo);
+      if (fo->parse_error) {
+        *out_value = last;
+        return any;
+      }
+      continue;
+    }
+    if (st == 4) {
+      if ((float)fo->fterm <= fo->time) {
+        fterm = (float)fo->fterm;
+        fo->time = f32_from_double((double)fo->time - (double)fo->fterm);
+        fo->state = FOBJ_LOAD_WAIT;
+        continue;
+      }
+      float v = 0.0f;
+      if (fobj_update_anim(fo, &v)) {
+        last = v;
+        any = 1u;
+      }
+      fo->state = 5;
+      *out_value = last;
+      return any;
+    }
+    if (st == 5) {
+      fo->state = 4;
+      continue;
+    }
+    *out_value = last;
+    return any;
+  }
+  *out_value = last;
+  return any;
+}
+
+static int fobj_validate_payload(uint8_t obj_type, uint8_t frac_value, uint8_t frac_slope,
+                                 uint16_t startframe, const uint8_t* payload, uint16_t length) {
+  if (length == 0u) {
+    return 0;
+  }
+  if (payload == NULL) {
+    return -1;
+  }
+  if (obj_type < 1u || obj_type > 10u) {
+    return 0;
+  }
+  MslFObjEval fo = {
+      .ad = payload,
+      .length = (int)length,
+      .startframe = (int)startframe,
+      .obj_type = obj_type,
+      .frac_value = frac_value,
+      .frac_slope = frac_slope,
+  };
+  // Present SSANIMT1 files are C-core data contract inputs. Parse the payload during init so
+  // truncated variable-length pack/wait records fail before runtime collision-pose sampling.
+  // refs/melee/src/sysdolphin/baselib/fobj.c::HSD_FObjInterpretAnim
+  fobj_req_anim(&fo, 1000000.0f);
+  float v = 0.0f;
+  (void)fobj_interpret(&fo, 0.0f, &v);
+  return fo.parse_error ? -1 : 0;
+}
+
 static void free_table(MslAnimPoseTable* t) {
   if (t == NULL) {
     return;
@@ -119,6 +574,10 @@ static void free_table(MslAnimPoseTable* t) {
   alloc_free(t->local_frame_count_by_msid);
   alloc_free(t->local_base_off_by_msid);
   alloc_free(t->dyn_collision_have_msid);
+  alloc_free(t->track_buf);
+  alloc_free(t->track_part_to_index);
+  alloc_free(t->track_msid_to_anim_index);
+  alloc_free(t->track_part_record_off_by_anim_li);
   alloc_free(t->buf);
   *t = (MslAnimPoseTable){0};
 }
@@ -432,6 +891,196 @@ static int load_dynamics_into_table(const char* data_dir, const char* rel_path,
   return 0;
 }
 
+static int load_tracks_into_table(const char* data_dir, const char* rel_path, MslAnimPoseTable* t) {
+  if (data_dir == NULL || rel_path == NULL || t == NULL) {
+    return -1;
+  }
+
+  char path[512];
+  const int n = snprintf(path, sizeof(path), "%s/%s", data_dir, rel_path);
+  if (n <= 0 || (size_t)n >= sizeof(path)) {
+    return -1;
+  }
+
+  FILE* f = fopen(path, "rb");
+  if (f == NULL) {
+    return 1;
+  }
+  if (fseek(f, 0, SEEK_END) != 0) {
+    fclose(f);
+    return -1;
+  }
+  const long sz_long = ftell(f);
+  if (sz_long <= 0) {
+    fclose(f);
+    return -1;
+  }
+  if (fseek(f, 0, SEEK_SET) != 0) {
+    fclose(f);
+    return -1;
+  }
+
+  const size_t sz = (size_t)sz_long;
+  uint8_t* buf = (uint8_t*)alloc_malloc(sz);
+  if (buf == NULL) {
+    fclose(f);
+    return -1;
+  }
+  const size_t got = fread(buf, 1, sz, f);
+  fclose(f);
+  if (got != sz) {
+    alloc_free(buf);
+    return -1;
+  }
+
+  static const uint8_t track_magic[ANIM_MAGIC_LEN] = {'S', 'S', 'A', 'N', 'I', 'M', 'T', '1'};
+  if (sz < ANIM_HDR_BASE_BYTES || memcmp(buf, track_magic, ANIM_MAGIC_LEN) != 0) {
+    alloc_free(buf);
+    return -1;
+  }
+  const uint32_t ver = read_u32_le(buf + 8);
+  if (ver != 2u) {
+    alloc_free(buf);
+    return -1;
+  }
+  const uint16_t local_count = read_u16_le(buf + 12);
+  const uint16_t anim_count = read_u16_le(buf + 14);
+  if (local_count == 0u || anim_count == 0u) {
+    alloc_free(buf);
+    return -1;
+  }
+  size_t off = ANIM_HDR_BASE_BYTES;
+  const uint64_t header_need = (uint64_t)off + (uint64_t)local_count + (uint64_t)local_count * 2u +
+                               (uint64_t)local_count * 4u;
+  if (header_need > (uint64_t)sz) {
+    alloc_free(buf);
+    return -1;
+  }
+  if (t->local_count != 0u && local_count != t->local_count) {
+    alloc_free(buf);
+    return -1;
+  }
+
+  uint16_t* track_part_to_index = (uint16_t*)alloc_malloc(65536 * sizeof(uint16_t));
+  uint16_t* track_msid_to_anim_index = (uint16_t*)alloc_malloc(65536 * sizeof(uint16_t));
+  uint32_t* record_off_by_anim_li =
+      (uint32_t*)alloc_calloc((size_t)anim_count * (size_t)local_count, sizeof(uint32_t));
+  if (track_part_to_index == NULL || track_msid_to_anim_index == NULL ||
+      record_off_by_anim_li == NULL) {
+    alloc_free(track_part_to_index);
+    alloc_free(track_msid_to_anim_index);
+    alloc_free(record_off_by_anim_li);
+    alloc_free(buf);
+    return -1;
+  }
+  memset(track_part_to_index, 0xFF, 65536 * sizeof(uint16_t));
+  memset(track_msid_to_anim_index, 0xFF, 65536 * sizeof(uint16_t));
+
+  for (uint16_t li = 0; li < local_count; li++) {
+    const uint8_t part = buf[off + (size_t)li];
+    track_part_to_index[(uint16_t)part] = li;
+    if (t->local_part_to_index != NULL && t->local_part_to_index[(uint16_t)part] != li) {
+      alloc_free(track_part_to_index);
+      alloc_free(track_msid_to_anim_index);
+      alloc_free(record_off_by_anim_li);
+      alloc_free(buf);
+      return -1;
+    }
+  }
+  off += (size_t)local_count + (size_t)local_count * 2u + (size_t)local_count * 4u;
+
+  for (uint16_t ai = 0; ai < anim_count; ai++) {
+    if (off + 7u > sz) {
+      alloc_free(track_part_to_index);
+      alloc_free(track_msid_to_anim_index);
+      alloc_free(record_off_by_anim_li);
+      alloc_free(buf);
+      return -1;
+    }
+    const uint16_t msid = read_u16_le(buf + off);
+    off += 2u;
+    off += 4u;  // end_frame
+    off += 1u;  // aobj_loop
+    if (track_msid_to_anim_index[msid] != 0xFFFFu) {
+      alloc_free(track_part_to_index);
+      alloc_free(track_msid_to_anim_index);
+      alloc_free(record_off_by_anim_li);
+      alloc_free(buf);
+      return -1;
+    }
+    track_msid_to_anim_index[msid] = ai;
+
+    for (uint16_t li = 0; li < local_count; li++) {
+      if (off + 2u > sz || off > 0xFFFFFFFFu) {
+        alloc_free(track_part_to_index);
+        alloc_free(track_msid_to_anim_index);
+        alloc_free(record_off_by_anim_li);
+        alloc_free(buf);
+        return -1;
+      }
+      record_off_by_anim_li[(size_t)ai * (size_t)local_count + (size_t)li] = (uint32_t)off;
+      const uint8_t part = buf[off + 0u];
+      const uint8_t n_tracks = buf[off + 1u];
+      if (track_part_to_index[(uint16_t)part] != li) {
+        alloc_free(track_part_to_index);
+        alloc_free(track_msid_to_anim_index);
+        alloc_free(record_off_by_anim_li);
+        alloc_free(buf);
+        return -1;
+      }
+      off += 2u;
+      for (uint8_t ti = 0; ti < n_tracks; ti++) {
+        if (off + 8u > sz) {
+          alloc_free(track_part_to_index);
+          alloc_free(track_msid_to_anim_index);
+          alloc_free(record_off_by_anim_li);
+          alloc_free(buf);
+          return -1;
+        }
+        const uint8_t obj_type = buf[off + 0u];
+        const uint8_t frac_value = buf[off + 1u];
+        const uint8_t frac_slope = buf[off + 2u];
+        const uint16_t startframe = read_u16_le(buf + off + 4u);
+        const uint16_t len = read_u16_le(buf + off + 6u);
+        off += 8u;
+        if (off + (size_t)len > sz) {
+          alloc_free(track_part_to_index);
+          alloc_free(track_msid_to_anim_index);
+          alloc_free(record_off_by_anim_li);
+          alloc_free(buf);
+          return -1;
+        }
+        if (fobj_validate_payload(obj_type, frac_value, frac_slope, startframe, buf + off, len) !=
+            0) {
+          alloc_free(track_part_to_index);
+          alloc_free(track_msid_to_anim_index);
+          alloc_free(record_off_by_anim_li);
+          alloc_free(buf);
+          return -1;
+        }
+        off += (size_t)len;
+      }
+    }
+  }
+
+  if (off != sz) {
+    alloc_free(track_part_to_index);
+    alloc_free(track_msid_to_anim_index);
+    alloc_free(record_off_by_anim_li);
+    alloc_free(buf);
+    return -1;
+  }
+
+  t->track_buf = buf;
+  t->track_sz = sz;
+  t->track_local_count = local_count;
+  t->track_anim_count = anim_count;
+  t->track_part_to_index = track_part_to_index;
+  t->track_msid_to_anim_index = track_msid_to_anim_index;
+  t->track_part_record_off_by_anim_li = record_off_by_anim_li;
+  return 0;
+}
+
 static int load_pose_for_char(const char* data_dir, const char* rel_path, uint8_t char_id) {
   char path[512];
   const int n = snprintf(path, sizeof(path), "%s/%s", data_dir, rel_path);
@@ -617,6 +1266,18 @@ static int load_pose_for_char(const char* data_dir, const char* rel_path, uint8_
       return -1;
     }
   }
+  char tracks_rel[128];
+  if (snprintf(tracks_rel, sizeof(tracks_rel), "anims/%.*s.tracks.bin", stem_len, file) > 0) {
+    // SSANIMT1 is the extracted HSD AObj/FObj stream. It is optional for synthetic pose-only
+    // tests, but present files are a C-core data contract and must parse cleanly.
+    // refs/melee/src/sysdolphin/baselib/aobj.c::HSD_AObjInterpretAnim
+    // refs/melee/src/sysdolphin/baselib/fobj.c::HSD_FObjInterpretAnim
+    const int track_status = load_tracks_into_table(data_dir, tracks_rel, &next);
+    if (track_status < 0) {
+      free_table(&next);
+      return -1;
+    }
+  }
 
   // Replace any existing table for this character.
   if (g_table_by_char[char_id].buf) {
@@ -741,6 +1402,96 @@ static int local_srt_for_part(const MslAnimPoseTable* t, uint16_t msid, uint16_t
   }
   if (out_parent != NULL) {
     *out_parent = t->local_parent_part_by_index[li];
+  }
+  return 0;
+}
+
+static int local_srt_for_part_f32(const MslAnimPoseTable* t, uint16_t msid, float anim_frame,
+                                  uint16_t part_id, float rot[3], float pos[3], float scl[3],
+                                  uint32_t* out_flags, int16_t* out_parent) {
+  if (t == NULL || rot == NULL || pos == NULL || scl == NULL) {
+    return -1;
+  }
+  const uint16_t frame0 = 0u;
+  if (local_srt_for_part(t, msid, frame0, part_id, rot, pos, scl, out_flags, out_parent) != 0) {
+    return -1;
+  }
+  if (t->track_buf == NULL || t->track_msid_to_anim_index == NULL ||
+      t->track_part_to_index == NULL || t->track_part_record_off_by_anim_li == NULL ||
+      !isfinite(anim_frame)) {
+    return 0;
+  }
+
+  const uint16_t ai = t->track_msid_to_anim_index[msid];
+  const uint16_t li = t->track_part_to_index[part_id];
+  if (ai == 0xFFFFu || ai >= t->track_anim_count || li == 0xFFFFu || li >= t->track_local_count) {
+    return 0;
+  }
+
+  const uint32_t rec_off =
+      t->track_part_record_off_by_anim_li[(size_t)ai * (size_t)t->track_local_count + (size_t)li];
+  if ((uint64_t)rec_off + 2u > (uint64_t)t->track_sz) {
+    return -1;
+  }
+  const uint8_t part = t->track_buf[(size_t)rec_off + 0u];
+  const uint8_t n_tracks = t->track_buf[(size_t)rec_off + 1u];
+  if ((uint16_t)part != part_id) {
+    return -1;
+  }
+  size_t off = (size_t)rec_off + 2u;
+  for (uint8_t ti = 0; ti < n_tracks; ti++) {
+    if (off + 8u > t->track_sz) {
+      return -1;
+    }
+    const uint8_t obj_type = t->track_buf[off + 0u];
+    const uint8_t frac_value = t->track_buf[off + 1u];
+    const uint8_t frac_slope = t->track_buf[off + 2u];
+    const uint16_t startframe = read_u16_le(t->track_buf + off + 4u);
+    const uint16_t length = read_u16_le(t->track_buf + off + 6u);
+    off += 8u;
+    if (off + (size_t)length > t->track_sz) {
+      return -1;
+    }
+    if (obj_type >= 1u && obj_type <= 10u) {
+      MslFObjEval fo = {
+          .ad = t->track_buf + off,
+          .length = (int)length,
+          .startframe = (int)startframe,
+          .obj_type = obj_type,
+          .frac_value = frac_value,
+          .frac_slope = frac_slope,
+      };
+      fobj_req_anim(&fo, anim_frame);
+      float v = 0.0f;
+      if (fobj_interpret(&fo, 0.0f, &v)) {
+        if (obj_type == 1u) {
+          rot[0] = v;
+        } else if (obj_type == 2u) {
+          rot[1] = v;
+        } else if (obj_type == 3u) {
+          rot[2] = v;
+        } else if (obj_type == 5u) {
+          pos[0] = v;
+        } else if (obj_type == 6u) {
+          pos[1] = v;
+        } else if (obj_type == 7u) {
+          pos[2] = v;
+        } else if (obj_type == 8u) {
+          const float av = fabsf(v);
+          scl[0] = (av < 1.0e-3f) ? 1.0e-3f : av;
+        } else if (obj_type == 9u) {
+          const float av = fabsf(v);
+          scl[1] = (av < 1.0e-3f) ? 1.0e-3f : av;
+        } else if (obj_type == 10u) {
+          const float av = fabsf(v);
+          scl[2] = (av < 1.0e-3f) ? 1.0e-3f : av;
+        }
+      }
+      if (fo.parse_error) {
+        return -1;
+      }
+    }
+    off += (size_t)length;
   }
   return 0;
 }
@@ -1344,6 +2095,73 @@ static int dynamic_matrix_from_locals(const MslBatch* batch, size_t player_idx,
   return 0;
 }
 
+static int matrix_from_locals_f32(const MslAnimPoseTable* t, uint16_t msid, float anim_frame,
+                                  uint16_t part_id, float out_3x4[12]) {
+  if (t == NULL || out_3x4 == NULL) {
+    return -1;
+  }
+  enum { MAX_PATH = 96 };
+  uint16_t path[MAX_PATH];
+  uint16_t count = 0;
+  uint16_t cur = part_id;
+  for (;;) {
+    if (count >= (uint16_t)MAX_PATH) {
+      return -1;
+    }
+    float rot[3], pos[3], scl[3];
+    int16_t parent = -1;
+    if (local_srt_for_part_f32(t, msid, anim_frame, cur, rot, pos, scl, NULL, &parent) != 0) {
+      return -1;
+    }
+    path[count++] = cur;
+    if (parent < 0) {
+      break;
+    }
+    cur = (uint16_t)parent;
+  }
+
+  float world[12];
+  mtx34_identity(world);
+  float world_scl_by_part[256][3];
+  uint8_t have_scl[256] = {0};
+  for (int i = (int)count - 1; i >= 0; i--) {
+    const uint16_t part = path[i];
+    float rot[3], pos[3], scl[3];
+    uint32_t flags = 0;
+    int16_t parent = -1;
+    if (local_srt_for_part_f32(t, msid, anim_frame, part, rot, pos, scl, &flags, &parent) != 0) {
+      return -1;
+    }
+    const float* parent_scl = NULL;
+    if (parent >= 0 && (uint16_t)parent < 256u && have_scl[(uint16_t)parent]) {
+      parent_scl = world_scl_by_part[(uint16_t)parent];
+    }
+    float local[12];
+    mtx34_srt_simple(rot, pos, scl, parent_scl, local);
+    mtx34_concat(world, local, world);
+
+    if ((flags & 8u) != 0u) {
+      if (parent >= 0 && (uint16_t)parent < 256u && have_scl[(uint16_t)parent]) {
+        memcpy(world_scl_by_part[part], world_scl_by_part[(uint16_t)parent], 3u * sizeof(float));
+        have_scl[part] = 1u;
+      } else {
+        have_scl[part] = 0u;
+      }
+    } else {
+      if (parent >= 0 && (uint16_t)parent < 256u && have_scl[(uint16_t)parent]) {
+        world_scl_by_part[part][0] = scl[0] * world_scl_by_part[(uint16_t)parent][0];
+        world_scl_by_part[part][1] = scl[1] * world_scl_by_part[(uint16_t)parent][1];
+        world_scl_by_part[part][2] = scl[2] * world_scl_by_part[(uint16_t)parent][2];
+      } else {
+        memcpy(world_scl_by_part[part], scl, 3u * sizeof(float));
+      }
+      have_scl[part] = 1u;
+    }
+  }
+  memcpy(out_3x4, world, MAT_BYTES);
+  return 0;
+}
+
 int anim_pose_get_collision_matrix(const MslBatch* batch, size_t player_idx, uint16_t msid,
                                    uint16_t frame, uint16_t part_id, float out_3x4[12]) {
   if (out_3x4 == NULL) {
@@ -1358,6 +2176,51 @@ int anim_pose_get_collision_matrix(const MslBatch* batch, size_t player_idx, uin
   }
   const MslAnimPoseTable* t = table_for_char(char_id);
   if (t == NULL || t->dyn_collision_have_msid == NULL || !t->dyn_collision_have_msid[msid]) {
+    return 0;
+  }
+  const MslAnimDynSetData* set = dynamic_set_for_part(t, part_id);
+  if (set == NULL || !batch->state.dynamic_pose_apply_collision_matrix[player_idx]) {
+    return 0;
+  }
+  if (batch->state.dynamic_pose_char_id[player_idx] != char_id ||
+      batch->state.dynamic_pose_msid[player_idx] != msid) {
+    return 0;
+  }
+  float dyn[12];
+  if (dynamic_matrix_from_locals(batch, player_idx, t, set, msid, frame, part_id, dyn) == 0) {
+    memcpy(out_3x4, dyn, MAT_BYTES);
+  }
+  return 0;
+}
+
+int anim_pose_get_collision_matrix_f32(const MslBatch* batch, size_t player_idx, uint16_t msid,
+                                       float anim_frame, uint16_t part_id, float out_3x4[12]) {
+  if (out_3x4 == NULL || batch == NULL) {
+    return -1;
+  }
+  const uint8_t char_id = batch->state.char_id[player_idx];
+  const float safe_frame = isfinite(anim_frame) ? anim_frame : 0.0f;
+  const uint16_t frame = msl_anim_frame_floor_u16(msl_anim_frame_sanitize_f32(safe_frame));
+  const MslAnimPoseTable* t = table_for_char(char_id);
+  if (t == NULL) {
+    return -1;
+  }
+  if (fabsf(safe_frame - (float)frame) <= 1.0e-6f) {
+    return anim_pose_get_collision_matrix(batch, player_idx, msid, frame, part_id, out_3x4);
+  }
+
+  // HSD_AObjInterpretAnim drives JObj local SRT from float `curr_frame`; lb_8000B1CC then samples
+  // the updated JObj matrix for collision primitives before ftColl admission.
+  // refs/melee/src/sysdolphin/baselib/aobj.c::HSD_AObjInterpretAnim
+  // refs/melee/src/sysdolphin/baselib/fobj.c::HSD_FObjInterpretAnim
+  // refs/melee/src/melee/lb/lb_00B0.c::lb_8000B1CC
+  if (matrix_from_locals_f32(t, msid, safe_frame, part_id, out_3x4) != 0) {
+    if (anim_pose_get_matrix(char_id, msid, frame, part_id, out_3x4) != 0) {
+      return -1;
+    }
+  }
+
+  if (t->dyn_collision_have_msid == NULL || !t->dyn_collision_have_msid[msid]) {
     return 0;
   }
   const MslAnimDynSetData* set = dynamic_set_for_part(t, part_id);

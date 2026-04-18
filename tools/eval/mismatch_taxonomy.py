@@ -365,17 +365,17 @@ FAMILY_META: dict[str, FamilyMeta] = {
             "refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078C70,ftColl_80076ED8}",
         ),
     ),
-    "F08g_body_contact_damage_selection_residual": FamilyMeta(
-        label="BODY Damage Selection Residual",
+    "F05b_damage_hurt_height_selection_residual": FamilyMeta(
+        label="Damage Hurt-Height Selection Residual",
         owner_module="damage_selection",
         fix_type="instrumentation first",
         risk="high",
         confidence="high",
         hypothesis=(
             "Rows where both sim and vanilla admit BODY damage but choose different damage-state "
-            "classes. The primitive overlap is not a simple hit/no-hit disagreement; remaining "
-            "work is hitbox/hurtcap selection order, collision normal, or damage-state selector "
-            "inputs after the BODY candidate is accepted."
+            "classes. The primitive overlap is not a hit/no-hit BODY admission disagreement; "
+            "remaining work is the accepted-hit hurt-height/selected-HurtCapsule value consumed by "
+            "ftCo_8008DCE0 after ftColl_80076ED8 has already accepted the hit."
         ),
         refs=(
             "src/combat.c::combat_apply_hit_to_player",
@@ -495,6 +495,42 @@ FAMILY_META: dict[str, FamilyMeta] = {
             "refs/melee/src/melee/ft/ftaction.c::ftAction_8007121C",
             "refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078C70,ftColl_80076ED8}",
             "tools/triage/audit_f08b_residuals.py",
+        ),
+    ),
+    "F10k_body_no_candidate_action_timing": FamilyMeta(
+        label="BODY No-Candidate Action / Hitbox Timing",
+        owner_module="action_timebase",
+        fix_type="split-first",
+        risk="med",
+        confidence="high",
+        hypothesis=(
+            "Rows that were initially BODY-admission-shaped, but debug pre-combat has no BODY "
+            "candidate and no selected BODY hit for the victim. The current collision primitive "
+            "owner is not reached; remaining work belongs to action-entry, hitbox-enable timing, "
+            "or adjacent damage-transition owners."
+        ),
+        refs=(
+            "src/api.c::msl_batch_debug_step_input_pre_combat",
+            "src/combat.c::combat_resolve",
+            "refs/melee/src/melee/ft/ftaction.c::ftAction_8007121C",
+            "refs/melee/src/melee/ft/ftanim.c::ftAnim_8006EBA4",
+        ),
+    ),
+    "F10l_body_selected_false_action_timebase": FamilyMeta(
+        label="Selected False BODY / Action-Timebase",
+        owner_module="action_timebase",
+        fix_type="runtime-only",
+        risk="med",
+        confidence="high",
+        hypothesis=(
+            "Debug pre-combat BODY selection exists, but the victim's pre-combat or replay "
+            "destination already differs from the seed action. These are action-entry/timebase "
+            "rows whose stale collision primitive is a symptom, not the shared HSD pose owner."
+        ),
+        refs=(
+            "src/api.c::msl_batch_debug_step_input_pre_combat",
+            "refs/melee/src/melee/ft/ftanim.c::ftAnim_8006EBA4",
+            "refs/melee/src/melee/ft/ftaction.c::ftAction_8007121C",
         ),
     ),
     "F08c_damage_state_transition_adjacency": FamilyMeta(
@@ -1214,32 +1250,48 @@ def _family_for_debug_body_contact_residual(
     selected_body_count: int,
     body_candidate_count: int,
     filtered_body_candidate_count: int,
+    active_fighter_hitbox_count: int = 0,
+    active_special_attacker_hitbox_count: int = 0,
+    live_nonvictim_item_count: int = 0,
     first_msid: int | None = None,
 ) -> str:
     outcome = _damage_admission_outcome(ref_name, out_name)
 
     if outcome == "wrong_damage_selection":
-        return "F08g_body_contact_damage_selection_residual"
+        return "F05b_damage_hurt_height_selection_residual"
 
     if body_candidate_count <= 0 and selected_body_count <= 0:
-        return "F08e_body_contact_no_candidate_adjacency"
+        if active_fighter_hitbox_count <= 0:
+            if live_nonvictim_item_count > 0:
+                return "F16_item_identity_residual"
+            if any(_looks_like_any_special(name) for name in (seed_name, precombat_name, ref_name, out_name)):
+                return "F10e_special_move_adjacency"
+            return "F08c_damage_state_transition_adjacency"
+        if active_special_attacker_hitbox_count > 0:
+            return "F10e_special_move_adjacency"
+        return "F10k_body_no_candidate_action_timing"
 
     if outcome == "sim_missed_body_or_damage":
+        _ = first_msid
         return "F08f_body_contact_candidate_filter_residual"
 
     if outcome == "sim_false_body_or_damage" and selected_body_count > 0:
+        has_timebase_divergence = (
+            (precombat_name and precombat_name != ref_name)
+            or (not precombat_name and seed_name and seed_name != ref_name)
+        )
         if first_msid in {46, 52, 55, 58, 59}:
             if ref_name == "REBOUND_STOP":
                 return "F08h1_body_selected_false_rebound_clank_residual"
-            if (seed_name and seed_name != ref_name) or (precombat_name and precombat_name != ref_name):
-                return "F08h2_body_selected_false_grounded_timebase_residual"
+            if has_timebase_divergence:
+                return "F10l_body_selected_false_action_timebase"
             return "F08h_body_selected_false_grounded_attack_pose"
         if first_msid in {68, 70, 71, 72}:
-            if (seed_name and seed_name != ref_name) or (precombat_name and precombat_name != ref_name):
-                return "F08i1_body_selected_false_aerial_timebase_residual"
+            if has_timebase_divergence:
+                return "F10l_body_selected_false_action_timebase"
             return "F08i_body_selected_false_aerial_attack_pose"
         if first_msid is not None and first_msid >= 300:
-            return "F08j_body_selected_false_special_entry_pose"
+            return "F10e_special_move_adjacency"
 
     # The residual still has a pre-combat BODY candidate/selection, but it is not one of the
     # currently split Fox/Falco RL1.0 current-frame clusters.
@@ -1642,7 +1694,7 @@ def _audit_player_row(row: PlayerRow, action_names: dict[int, str]) -> tuple[boo
     if row.family_id == "F08f_body_contact_candidate_filter_residual":
         ok = _looks_like_current_frame_body_admission_disagreement(row, names, set(field_set))
         return ok, "debug pre-combat BODY candidate exists but admission/filtering differs"
-    if row.family_id == "F08g_body_contact_damage_selection_residual":
+    if row.family_id == "F05b_damage_hurt_height_selection_residual":
         ok = (
             any(_looks_like_damage(name) for name in names)
             and _damage_admission_outcome(names[1], names[2]) == "wrong_damage_selection"
@@ -1789,6 +1841,12 @@ def _audit_player_row(row: PlayerRow, action_names: dict[int, str]) -> tuple[boo
     if row.family_id == "F10j_turnrun_exit_microphase":
         ok = any(_looks_like_turnrun(name) for name in names)
         return ok, "TurnRun anim-end Run/Wait exit microphase"
+    if row.family_id == "F10k_body_no_candidate_action_timing":
+        ok = _looks_like_current_frame_body_admission_disagreement(row, names, set(field_set))
+        return ok, "debug pre-combat BODY selector had no candidate; action/hitbox timing owner"
+    if row.family_id == "F10l_body_selected_false_action_timebase":
+        ok = _looks_like_current_frame_body_admission_disagreement(row, names, set(field_set))
+        return ok, "debug pre-combat BODY selector selected a false primitive after action-timebase divergence"
     if row.family_id == "F11_locomotion_action_frame":
         ok = field_set == {"action_frame"} and any(_looks_like_grounded(name) for name in names)
         return ok, "grounded callback/timebase action_frame-only row"
@@ -1897,7 +1955,7 @@ def _split_cross_player_instance_counter_rows(
         "F08d_damage_timer_scalar_residual",
         "F08e_body_contact_no_candidate_adjacency",
         "F08f_body_contact_candidate_filter_residual",
-        "F08g_body_contact_damage_selection_residual",
+        "F05b_damage_hurt_height_selection_residual",
         "F08h_body_selected_false_grounded_attack_pose",
         "F08h1_body_selected_false_rebound_clank_residual",
         "F08h2_body_selected_false_grounded_timebase_residual",
@@ -2007,6 +2065,8 @@ def _split_body_contact_debug_residuals(
         )
         in_bytes = np.frombuffer(sample["input_t"].tobytes(order="C"), dtype=np.uint8).copy().reshape(1, input_stride)
         precombat_out = np.empty((1, compare_stride), dtype=np.uint8)
+        active_fighter_hitbox_count = 0
+        active_special_attacker_hitbox_count = 0
 
         handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))  # type: ignore[index]
         try:
@@ -2016,6 +2076,19 @@ def _split_body_contact_debug_residuals(
             selected_raw, selected_count = binding.debug_combat_select_body_hits(handle, 0, 256)
             classified_raw, classified_count = binding.debug_combat_contacts_classified(handle, 0, 256)
             filtered_raw, filtered_count = binding.debug_combat_contacts_classified_filtered(handle, 0, 256)
+            for attacker in range(int(ds.header["num_players"])):  # type: ignore[index]
+                if attacker == int(victim):
+                    continue
+                hitboxes_raw, _hitbox_count = binding.hitboxes_world_full(handle, 0, attacker)
+                attacker_active = 0
+                for hb in hitboxes_raw:
+                    if int(hb[15]) != 0:
+                        active_fighter_hitbox_count += 1
+                        attacker_active += 1
+                if attacker_active > 0:
+                    precombat_tmp = precombat_out.view(COMPARE_DTYPE).reshape(-1)[0]
+                    if _looks_like_any_special(_action_name(action_names, int(precombat_tmp["action_id"][attacker]))):
+                        active_special_attacker_hitbox_count += attacker_active
         finally:
             binding.destroy(handle)
 
@@ -2025,12 +2098,19 @@ def _split_body_contact_debug_residuals(
 
         selected_body = [c for c in selected if int(c["defender"]) == int(victim)]
         selected_body_count = len(selected_body)
+        filtered_body = [c for c in filtered if int(c["defender"]) == int(victim) and int(c["contact_kind"]) == 0]
         body_candidate_count = sum(
             1 for c in classified if int(c["defender"]) == int(victim) and int(c["contact_kind"]) == 0
         )
-        filtered_body_candidate_count = sum(
-            1 for c in filtered if int(c["defender"]) == int(victim) and int(c["contact_kind"]) == 0
-        )
+        filtered_body_candidate_count = len(filtered_body)
+        seed_row = sample["seed_t"][0]
+        live_nonvictim_item_count = 0
+        for item in seed_row["items"]:
+            if int(item["exists"]) == 0:
+                continue
+            owner = int(item["owner"])
+            if owner != int(victim):
+                live_nonvictim_item_count += 1
 
         row = player_rows[(dataset_name, record, victim)]
         precombat_row = precombat_out.view(COMPARE_DTYPE).reshape(-1)[0]
@@ -2043,7 +2123,12 @@ def _split_body_contact_debug_residuals(
             selected_body_count=selected_body_count,
             body_candidate_count=body_candidate_count,
             filtered_body_candidate_count=filtered_body_candidate_count,
-            first_msid=int(selected_body[0]["attacker_msid"]) if selected_body else None,
+            active_fighter_hitbox_count=active_fighter_hitbox_count,
+            active_special_attacker_hitbox_count=active_special_attacker_hitbox_count,
+            live_nonvictim_item_count=live_nonvictim_item_count,
+            first_msid=int((selected_body or filtered_body)[0]["attacker_msid"])
+            if (selected_body or filtered_body)
+            else None,
         )
 
     if not family_by_key:

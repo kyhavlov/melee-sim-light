@@ -83,6 +83,62 @@ static inline uint8_t hurtboxes_runtime_specialhi_pose_owner(uint8_t char_id, ui
   }
 }
 
+static inline uint8_t hurtboxes_float_aobj_pose_owner(uint16_t action_id) {
+  switch (action_id) {
+    case MSL_ACT_LANDING_AIR_N:
+    case MSL_ACT_LANDING_AIR_F:
+    case MSL_ACT_LANDING_AIR_B:
+    case MSL_ACT_LANDING_AIR_HI:
+    case MSL_ACT_LANDING_AIR_LW:
+      return 1u;
+    default:
+      return 0u;
+  }
+}
+
+static inline uint8_t hurtboxes_common_action_to_msid(uint16_t action_id, uint16_t* out_msid) {
+  if (out_msid == NULL) {
+    return 0u;
+  }
+  switch (action_id) {
+    case MSL_ACT_WAIT:
+      *out_msid = (uint16_t)MSL_SM_WAIT1_0;
+      return 1u;
+    case MSL_ACT_WALK_SLOW:
+      *out_msid = (uint16_t)MSL_SM_WALK_SLOW;
+      return 1u;
+    case MSL_ACT_DASH:
+      *out_msid = (uint16_t)MSL_SM_DASH;
+      return 1u;
+    case MSL_ACT_RUN:
+      *out_msid = (uint16_t)MSL_SM_RUN;
+      return 1u;
+    case MSL_ACT_SQUAT_RV:
+      *out_msid = (uint16_t)MSL_SM_SQUAT_RV;
+      return 1u;
+    case MSL_ACT_ATTACK_DASH:
+      *out_msid = (uint16_t)MSL_SM_ATTACK_DASH;
+      return 1u;
+    default:
+      return 0u;
+  }
+}
+
+static inline uint8_t hurtboxes_action_entry_carries_previous_jobj_pose(uint16_t prev_action,
+                                                                        uint16_t cur_action) {
+  switch (cur_action) {
+    case MSL_ACT_WAIT:
+      return (uint8_t)(prev_action == (uint16_t)MSL_ACT_WALK_SLOW ||
+                       prev_action == (uint16_t)MSL_ACT_ATTACK_DASH);
+    case MSL_ACT_RUN:
+      return (uint8_t)(prev_action == (uint16_t)MSL_ACT_DASH);
+    case MSL_ACT_WALK_SLOW:
+      return (uint8_t)(prev_action == (uint16_t)MSL_ACT_SQUAT_RV);
+    default:
+      return 0u;
+  }
+}
+
 static inline uint8_t hurtboxes_apply_specialhi_local_xrotn(const MslBatch* batch, size_t idx,
                                                             uint8_t char_id, uint16_t msid,
                                                             uint16_t pose_frame, uint16_t part_id,
@@ -351,6 +407,36 @@ void hurtboxes_refresh(MslBatch* batch) {
 
       const float anim_frame_f32 = msl_anim_frame_sanitize_f32(batch->state.anim_frame_f32[idx]);
       uint16_t frame = msl_anim_frame_floor_u16(anim_frame_f32);
+      uint16_t pose_msid = msid;
+      uint16_t pose_frame = frame;
+      if (batch->state.prev_action_id[idx] != action_id &&
+          hurtboxes_action_entry_carries_previous_jobj_pose(batch->state.prev_action_id[idx],
+                                                            action_id)) {
+        uint16_t prev_msid = 0u;
+        if (hurtboxes_common_action_to_msid(batch->state.prev_action_id[idx], &prev_msid)) {
+          uint16_t prev_frame = 0u;
+          if (batch->state.prev_action_frame[idx] >= 0) {
+            prev_frame = (uint16_t)batch->state.prev_action_frame[idx];
+            if (prev_frame != 0xFFFFu) {
+              prev_frame = (uint16_t)(prev_frame + 1u);
+            }
+          }
+          const float end_frame = msl_anim_end_frame(char_id, prev_msid);
+          if (end_frame > 0.0f && (float)prev_frame > end_frame) {
+            prev_frame = msl_anim_frame_floor_u16(end_frame);
+          }
+          // Same-frame locomotion/action entry pose order:
+          // - Fighter_8006A360 interprets the current JObj AObj at proc prio 1.
+          // - Input/IASA/action callbacks can then enter Wait/Run/Walk before collision refresh.
+          // - Unless the entry path calls an immediate ftAnim_8006EBA4 tick, lb_8000B1CC still
+          //   consumes the previous live JObj pose during this collision pass.
+          // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A360,Fighter_procUpdate}
+          // refs/melee/src/melee/ft/ftanim.c::ftAnim_8006EBA4
+          // refs/melee/src/melee/lb/lb_00B0.c::lb_8000B1CC
+          pose_msid = prev_msid;
+          pose_frame = prev_frame;
+        }
+      }
       if ((action_id == (uint16_t)MSL_ACT_ATTACK_AIR_N ||
            action_id == (uint16_t)MSL_ACT_ATTACK_AIR_F ||
            action_id == (uint16_t)MSL_ACT_ATTACK_AIR_B ||
@@ -519,8 +605,17 @@ void hurtboxes_refresh(MslBatch* batch) {
         }
         float m[12];
         (void)action_id;
-        if (anim_pose_get_collision_matrix(batch, idx, msid, frame, caps[ci].bone_part_id, m) !=
-            0) {
+        // HSD_AObjInterpretAnim owns JObj local SRT at float `cur_anim_frame`; landing-aerial
+        // states can run non-integer animation rates, and lb_8000B1CC consumes the live matrix for
+        // hurtcap endpoints before BODY admission. Keep integer SSANIM01 for actions whose
+        // float-frame collision-pose owner has not been proven against replay/probe data.
+        // refs/melee/src/sysdolphin/baselib/aobj.c::HSD_AObjInterpretAnim
+        // refs/melee/src/sysdolphin/baselib/fobj.c::HSD_FObjInterpretAnim
+        // refs/melee/src/melee/lb/lb_00B0.c::lb_8000B1CC
+        const float pose_sample_frame =
+            hurtboxes_float_aobj_pose_owner(action_id) ? anim_frame_f32 : (float)pose_frame;
+        if (anim_pose_get_collision_matrix_f32(batch, idx, pose_msid, pose_sample_frame,
+                                               caps[ci].bone_part_id, m) != 0) {
           continue;
         }
         float ax = 0.0f, ay = 0.0f, az = 0.0f;

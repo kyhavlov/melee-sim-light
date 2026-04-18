@@ -1433,22 +1433,26 @@ def _dynamic_collision_owner_msids(
 ) -> list[int]:
     """Return submotions whose BODY collision matrices consume fighter dynamics state.
 
-    This is deliberately data-owned rather than a C gameplay branch. Fox `AttackHi3` is the
-    currently audited RL1.0 dynamic-chain collision owner: Dolphin pre-`ftColl_80078C70` primitive
-    probes show its live hurtcap endpoints consume `ftData.x2C` / `lb_8001044C`, while broad dynamic
-    matrix application to other Fox common attacks regressed BODY sentinels. Adding another
-    submotion here requires the same owner evidence and keeps the runtime predicate in extracted
-    data instead of hardcoding record ids or cap/frame slices in C.
+    This is deliberately data-owned rather than a C gameplay branch. Fox `AttackHi3` and
+    `AttackDash` are the audited RL1.0 dynamic-chain collision owners: Dolphin
+    pre-`ftColl_80078C70` primitive probes show live hurtcap endpoints on the x2C chain consume
+    `ftData.x2C` / `lb_8001044C`, while broad dynamic matrix application to other Fox common
+    attacks regressed BODY sentinels. Adding another submotion here requires the same owner
+    evidence and keeps the runtime predicate in extracted data instead of hardcoding record ids or
+    cap/frame slices in C.
     """
     if character != "fox" or not dynamic_sets:
         return []
-    move_entry = ((moves.get("moves") or {}) if isinstance(moves, dict) else {}).get("ftCo_SM_AttackHi3")
-    if not isinstance(move_entry, dict):
-        return []
-    msid = move_entry.get("submotion_id")
-    if not isinstance(msid, int) or not (0 <= msid <= 0xFFFF):
-        return []
-    return [int(msid)]
+    move_map = (moves.get("moves") or {}) if isinstance(moves, dict) else {}
+    out: list[int] = []
+    for move_name in ("ftCo_SM_AttackHi3", "ftCo_SM_AttackDash"):
+        move_entry = move_map.get(move_name)
+        if not isinstance(move_entry, dict):
+            continue
+        msid = move_entry.get("submotion_id")
+        if isinstance(msid, int) and 0 <= msid <= 0xFFFF:
+            out.append(int(msid))
+    return out
 
 
 def _node_mapping_for_parts(parts_num: int, skip_parts: list[int], fig: _FigaTree) -> tuple[list[int], list[int], list[int]]:

@@ -172,3 +172,57 @@ def test_reboundstop_entry_clank_precedes_stale_body_hitlist_hhg_8674() -> None:
         exp = int(ref_row[field][p])
         assert got == exp, f"record={record} p={p} field={field} expected={exp} got={got}"
     assert int(out_row["hitlag"][p]) > 0
+
+
+@pytest.mark.integration
+def test_reboundstop_same_group_clank_suppresses_enable_edge_body_fsp_467() -> None:
+    # Replay-real lock for degenerate swept-capsule clank geometry plus same-group clank
+    # registration:
+    # - p1 AttackDash hitboxes are newly enabled, so ftColl_8007AD18 has x58 == x4C.
+    # - lbColl_80007AFC must still test that point capsule against p0's swept AttackHi3 capsule.
+    # - ftColl_8007699C inlineA0/inlineA1 register the clank victim across every active
+    #   HitCapsule with the same hit_group, so p1 remains in ReboundStop instead of being
+    #   overwritten by a BODY DamageHi3 follow-up from an earlier same-group p0 slot.
+    # refs/melee/src/melee/ft/ftcoll.c::{
+    #   ftColl_80078C70,ftColl_8007699C,inlineA0,inlineA1,ftColl_8007AD18}
+    # refs/melee/src/melee/lb/lbcollision.c::{
+    #   lbColl_80007AFC,lbColl_80006094,lbColl_80008688,lbColl_8000ACFC}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+
+    dataset_rel = "datasets/aggregate_recent/replays/validation/aggregate_recent/FavorableSuperficialPig.msl"
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    record = 467
+    p = 1
+    assert int(ds.samples.shape[0]) > record, f"dataset too short for lock row: record={record}"
+
+    seed_t = ds.samples[record]["seed_t"]
+    ref_t1 = ds.samples[record]["ref_t1"]
+    assert int(seed_t["action_id"][0]) == 56  # AttackHi3
+    assert int(seed_t["action_id"][1]) == 50  # AttackDash
+    assert int(ref_t1["action_id"][0]) == 237  # ReboundStop
+    assert int(ref_t1["action_id"][1]) == 237  # ReboundStop
+    assert int(ref_t1["hitstun"][p]) == 0
+
+    _, ref_row, out_row = _run_one_step_row(dataset_path, record, p)
+    for field in (
+        "action_id",
+        "action_frame",
+        "animation_index",
+        "hitlag",
+        "hitstun",
+        "percent",
+        "instance_id",
+        "instance_hit_by",
+        "last_hit_by",
+        "last_attack_landed",
+        "on_ground",
+    ):
+        got = int(out_row[field][p]) if field != "percent" else float(out_row[field][p])
+        exp = int(ref_row[field][p]) if field != "percent" else float(ref_row[field][p])
+        assert got == exp, f"record={record} p={p} field={field} expected={exp} got={got}"
+    assert out_row["state_flags"][p].tolist() == ref_row["state_flags"][p].tolist()

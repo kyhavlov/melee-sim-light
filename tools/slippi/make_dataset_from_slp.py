@@ -46,6 +46,156 @@ def _airborne_to_on_ground(airborne: np.ndarray | None, n: int) -> np.ndarray:
     return (airborne == 0).astype(np.uint8)
 
 
+def _post_position_z(post, n_frames: int) -> np.ndarray:
+    post_pos = post.field("position")
+    if post_pos.type.get_field_index("z") != -1:
+        return _to_numpy(post_pos.field("z")).astype(np.float32)
+    if post.type.get_field_index("position_z") != -1:
+        return _to_numpy(post.field("position_z")).astype(np.float32)
+    if post.type.get_field_index("pos_z") != -1:
+        return _to_numpy(post.field("pos_z")).astype(np.float32)
+    return np.zeros(n_frames, dtype=np.float32)
+
+
+def _derive_grounded_overlap_hidden_pos_z(
+    *,
+    num_players: int,
+    char_id_u8: np.ndarray,
+    action_id_u16: np.ndarray,
+    on_ground_u8: np.ndarray,
+    stocks_u8: np.ndarray,
+    pos_x_f32: np.ndarray,
+    pos_z_f32: np.ndarray,
+    facing_u8: np.ndarray,
+    common: dict,
+    data_dir: str = "data",
+) -> np.ndarray:
+    """Strictly causal hidden depth lane for ftCommon_8007DD7C/ftCommon_8007E0E4.
+
+    Slippi commonly reports fighter `pos_z` as zero even while the engine's grounded fighter-overlap
+    nudge lane carries nonzero depth. This reconstructs that hidden lane from replay prefix state
+    and extracted pushbox/common data, without consulting future combat outcomes.
+
+    Decomp/data anchors:
+    - refs/melee/src/melee/ft/ftcommon.c::{ftCommon_8007DD7C,ftCommon_8007E0E4}
+    - refs/melee/src/melee/ft/fighter.c::{Fighter_8006A360,Fighter_procUpdate}
+    - data/common/ft_common_data.json::{player_nudge_z,player_nudge_z_max}
+    - data/characters/{fox,falco}.json::{pushbox_x,pushbox_y}
+    """
+
+    char = np.asarray(char_id_u8, dtype=np.uint8)
+    action = np.asarray(action_id_u16, dtype=np.uint16)
+    on_ground = np.asarray(on_ground_u8, dtype=np.uint8)
+    stocks = np.asarray(stocks_u8, dtype=np.uint8)
+    pos_x = np.asarray(pos_x_f32, dtype=np.float32)
+    pos_z = np.asarray(pos_z_f32, dtype=np.float32)
+    facing = np.asarray(facing_u8, dtype=np.uint8)
+    if not (
+        char.shape == action.shape == on_ground.shape == stocks.shape == pos_x.shape == pos_z.shape == facing.shape
+    ):
+        raise ValueError("hidden pos_z inputs must have matching shape")
+
+    n_frames = int(char.shape[0])
+    out = np.array(pos_z, dtype=np.float32, copy=True)
+    push_x = np.zeros(256, dtype=np.float32)
+    push_y = np.zeros(256, dtype=np.float32)
+    char_files = {
+        1: "fox",
+        22: "falco",
+    }
+    root = Path(data_dir)
+    for cid, key in char_files.items():
+        path = root / "characters" / f"{key}.json"
+        if not path.exists():
+            continue
+        data = json.loads(path.read_text(encoding="utf-8"))
+        push_x[cid] = np.float32(float(data.get("pushbox_x", 0.0)))
+        push_y[cid] = np.float32(float(data.get("pushbox_y", 0.0)))
+
+    step = np.float32(float(common.get("player_nudge_z", 0.0)))
+    z_max = np.float32(float(common.get("player_nudge_z_max", 0.0)))
+    if not (float(step) > 0.0 and float(z_max) > 0.0):
+        return out
+
+    def action_allows_depth(a: int) -> bool:
+        # Keep this reconstruction on ordinary grounded/current-control states. Damage, downbound,
+        # capture, cliff, guard-setoff turnover, and special-state residuals have separate owner
+        # families and were the source of broad hidden-pos_z regressions during F08b cleanup.
+        if 0x004B <= a <= 0x005B:  # Damage*/DamageFly*
+            return False
+        if a in {0x00B5, 0x00B7, 0x00BF, 0x00FC, 0x00FD}:  # GuardSetOff/DownBound/Cliff
+            return False
+        if 0x00DB <= a <= 0x00E2:  # Throw*
+            return False
+        if a >= 0x012C:  # character specials
+            return False
+        return True
+
+    def slot_allows_depth(fi: int, p: int) -> bool:
+        if int(stocks[fi, p]) == 0 or int(on_ground[fi, p]) == 0:
+            return False
+        if not action_allows_depth(int(action[fi, p])):
+            return False
+        cid = int(char[fi, p])
+        return bool(float(push_y[cid]) > 0.0)
+
+    for fi in range(1, n_frames):
+        # Hidden depth is only written on the proven ordinary grounded-overlap surface. Airborne,
+        # damage, DownBound, Cliff, throw, GuardSetOff, and special rows keep the replay-visible
+        # Slippi pos_z instead of receiving stale hidden-depth carry.
+        out[fi, :] = pos_z[fi, :]
+        z_step = np.zeros(4, dtype=np.float32)
+        for p in range(num_players):
+            if not slot_allows_depth(fi - 1, p) or not slot_allows_depth(fi, p):
+                continue
+            cid = int(char[fi - 1, p])
+            p_push = float(push_y[cid])
+            p_face = 1.0 if int(facing[fi - 1, p]) else -1.0
+            p_center = float(pos_x[fi - 1, p]) + float(push_x[cid]) * p_face
+            for q in range(num_players):
+                if q == p:
+                    continue
+                if not slot_allows_depth(fi - 1, q) or not slot_allows_depth(fi, q):
+                    continue
+                qid = int(char[fi - 1, q])
+                q_push = float(push_y[qid])
+                q_face = 1.0 if int(facing[fi - 1, q]) else -1.0
+                q_center = float(pos_x[fi - 1, q]) + float(push_x[qid]) * q_face
+                delta_x = p_center - q_center
+                if abs(delta_x) >= p_push + q_push:
+                    continue
+                delta_z = float(out[fi - 1, p]) - float(out[fi - 1, q])
+                if delta_z < 0.0:
+                    z_step[p] = np.float32(float(z_step[p]) - float(step))
+                elif delta_z > 0.0:
+                    z_step[p] = np.float32(float(z_step[p]) + float(step))
+                elif delta_x < 0.0:
+                    z_step[p] = np.float32(float(z_step[p]) - float(step))
+                elif delta_x > 0.0:
+                    z_step[p] = np.float32(float(z_step[p]) + float(step))
+                elif q < p:
+                    z_step[p] = np.float32(float(z_step[p]) - float(step))
+                else:
+                    z_step[p] = np.float32(float(z_step[p]) + float(step))
+        for p in range(num_players):
+            if not slot_allows_depth(fi - 1, p) or not slot_allows_depth(fi, p):
+                continue
+            z = float(out[fi - 1, p])
+            dz = float(z_step[p])
+            if dz == 0.0 and z != 0.0:
+                dz = float(step) if z < 0.0 else -float(step)
+            if (dz > 0.0 and z < 0.0 and z + dz >= 0.0) or (
+                dz < 0.0 and z > 0.0 and z + dz <= 0.0
+            ):
+                dz = -z
+            if z + dz > float(z_max):
+                dz = float(z_max) - z
+            elif z + dz < -float(z_max):
+                dz = -float(z_max) - z
+            out[fi, p] = np.float32(z + dz)
+    return out
+
+
 def _u8_from_float01(x: np.ndarray) -> np.ndarray:
     x = np.clip(x, 0.0, 1.0)
     return np.round(x * 255.0).astype(np.uint8)
@@ -2676,14 +2826,7 @@ def _main_impl(args) -> None:
         post_pos_x_all[:, slot] = post_pos_x
         post_pos_y_all[:, slot] = post_pos_y
         # Slippi Z: prefer position.z when present, otherwise fall back to 0 (older schemas are 2D-only).
-        if post_pos.type.get_field_index("z") != -1:
-            post_pos_z = _to_numpy(post_pos.field("z")).astype(np.float32)
-        elif post.type.get_field_index("position_z") != -1:
-            post_pos_z = _to_numpy(post.field("position_z")).astype(np.float32)
-        elif post.type.get_field_index("pos_z") != -1:
-            post_pos_z = _to_numpy(post.field("pos_z")).astype(np.float32)
-        else:
-            post_pos_z = np.zeros(n_frames, dtype=np.float32)
+        post_pos_z = _post_position_z(post, n_frames)
         post_dir = _dir_to_facing(_to_numpy(post.field("direction")).astype(np.float32))
         post_percent = _to_numpy(post.field("percent")).astype(np.float32)
         post_percent_all[:, slot] = post_percent
@@ -3880,6 +4023,7 @@ def _main_impl(args) -> None:
     post_on_ground = np.zeros((n_frames, 4), dtype=np.uint8)
     post_pos_x = np.zeros((n_frames, 4), dtype=np.float32)
     post_pos_y = np.zeros((n_frames, 4), dtype=np.float32)
+    post_pos_z_2d = np.zeros((n_frames, 4), dtype=np.float32)
     post_scale_y = np.ones((n_frames, 4), dtype=np.float32)
     post_guard_tilt_x8 = np.zeros((n_frames, 4), dtype=np.uint16)
     post_guard_tilt_x4 = np.zeros((n_frames, 4), dtype=np.float32)
@@ -3920,9 +4064,11 @@ def _main_impl(args) -> None:
         post_action_frame[:, slot] = _i16_from_state_age(post_state_age_f32, n_frames)
         post_anim_frame[:, slot] = _f32_from_state_age(post_state_age_f32, n_frames)
         post_animation_index[:, slot] = _to_numpy(post.field("animation_index")).astype(np.uint32)
+        post_facing[:, slot] = _dir_to_facing(_to_numpy(post.field("direction")).astype(np.float32))
         post_on_ground[:, slot] = _airborne_to_on_ground(_to_numpy(post.field("airborne")).astype(np.uint8), n_frames)
         post_pos_x[:, slot] = _to_numpy(post.field("position").field("x")).astype(np.float32)
         post_pos_y[:, slot] = _to_numpy(post.field("position").field("y")).astype(np.float32)
+        post_pos_z_2d[:, slot] = _post_position_z(post, n_frames)
         post_stocks[:, slot] = _to_numpy(post.field("stocks")).astype(np.uint8)
         post_shield_hp[:, slot] = _to_numpy(post.field("shield")).astype(np.float32)
         post_hurtbox_state[:, slot] = _to_numpy(post.field("hurtbox_state")).astype(np.uint8)
@@ -3946,6 +4092,20 @@ def _main_impl(args) -> None:
             state_flags3_u8=post_state_flags[:, slot, 3],
             n=n_frames,
         )
+
+    hidden_pos_z = _derive_grounded_overlap_hidden_pos_z(
+        num_players=num_players,
+        char_id_u8=post_char_id,
+        action_id_u16=post_action_id,
+        on_ground_u8=post_on_ground,
+        stocks_u8=post_stocks,
+        pos_x_f32=post_pos_x,
+        pos_z_f32=post_pos_z_2d,
+        facing_u8=post_facing,
+        common=common,
+        data_dir="data",
+    )
+    samples["seed_t"]["pos_z"] = hidden_pos_z[:-1]
 
     # Seed bridge: plAttack_80037B08 global next-id counter (unk_804D6480).
     #
@@ -4249,7 +4409,7 @@ def _main_impl(args) -> None:
         anim_frame_f32=post_anim_frame,
         pos_x=post_pos_x,
         pos_y=post_pos_y,
-        pos_z=post_pos_z,
+        pos_z=hidden_pos_z,
         facing=post_facing,
         fighter_scale_y=post_scale_y,
         data_root="data",

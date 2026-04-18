@@ -680,7 +680,7 @@ void anim_timebase_update_pre_input(MslBatch* batch) {
   }
 }
 
-void anim_timebase_apply_deferred_tick_once_post_combat(MslBatch* batch) {
+void anim_timebase_apply_deferred_tick_once_pre_collision(MslBatch* batch) {
   if (batch == NULL) {
     return;
   }
@@ -693,16 +693,15 @@ void anim_timebase_apply_deferred_tick_once_post_combat(MslBatch* batch) {
       }
       batch->state.anim_defer_tick_once[idx] = 0u;
 
-      // Decomp: some motion-state entry paths call ftAnim_8006EBA4 immediately after
-      // Fighter_ChangeMotionState, before combat/hitlag for this frame is resolved. This deferred
-      // tick is applied post-combat to keep hitbox evaluation on the entry pose_frame while still
-      // matching Slippi post-frame state_age/action_frame.
-      //
-      // Apply it post-combat in this simulator to preserve pre-combat/combat geometry side effects
-      // (hitbox refresh + collision/KB resolution) while still matching the decomp entry semantics
-      // seen in ftFx_SpecialN_Enter and ftCo_AttackAir_EnterFromMsid.
+      // Decomp: these motion-state entry paths call ftAnim_8006EBA4 immediately after
+      // Fighter_ChangeMotionState, before fighter collision primitives are refreshed and before
+      // combat/hitlag for this frame is resolved. Apply the one-shot tick in the pre-collision slot
+      // so lb_8000B1CC / ftColl consumers sample the same entry pose that becomes replay-visible at
+      // t+1.
       // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c
       // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c
+      // refs/melee/src/melee/ft/ftanim.c::ftAnim_8006EBA4
+      // refs/melee/src/melee/lb/lb_00B0.c::lb_8000B1CC
       //
       // IMPORTANT: do not gate this on `hitlag_started_frame`; hitlag can be started by combat later
       // in the frame, after the decomp tick already occurred.
@@ -734,4 +733,14 @@ void anim_timebase_apply_deferred_tick_once_post_combat(MslBatch* batch) {
       msl_anim_timebase_recompute_derived(batch, idx);
     }
   }
+}
+
+void anim_timebase_apply_deferred_tick_once_post_combat(MslBatch* batch) {
+  // Combat can enter a fresh damage or special motion after the pre-collision deferred-tick owner
+  // has already run. Apply any newly requested ftAnim_8006EBA4-equivalent tick here so the
+  // replay-visible post-frame action_frame matches the motion state just installed by collision.
+  // Pre-collision entrants have already consumed their flag and will not double-tick.
+  // refs/melee/src/melee/ft/ftanim.c::ftAnim_8006EBA4
+  // refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState
+  anim_timebase_apply_deferred_tick_once_pre_collision(batch);
 }

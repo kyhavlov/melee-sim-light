@@ -351,6 +351,12 @@ static int step_one_frame_core(MslBatch* batch, const uint8_t* prev_input_bytes,
   blaster_update_post_collision(batch);
   locomotion_update_post_collision(batch);
   shine_update_post_collision(batch);
+  // Motion-state entry owners that request an immediate ftAnim_8006EBA4-equivalent tick must do so
+  // before primitive refresh. Otherwise hurtcaps/hitboxes are built from the entry-start pose while
+  // the post-frame action_frame already reflects the advanced AObj timebase.
+  // refs/melee/src/melee/ft/ftanim.c::ftAnim_8006EBA4
+  // refs/melee/src/melee/lb/lb_00B0.c::lb_8000B1CC
+  anim_timebase_apply_deferred_tick_once_pre_collision(batch);
   // Fighter dynamic JObj chains update after animation/physics callbacks and before collision
   // primitive refresh, matching ftCo_8009DD94 feeding lb_8000B1CC consumers.
   // refs/melee/src/melee/ft/ftdynamics.c::ftCo_8009DD94
@@ -368,11 +374,6 @@ static int step_one_frame_core(MslBatch* batch, const uint8_t* prev_input_bytes,
     items_update_post_combat(batch);
   }
   knockdown_update_post_combat(batch);
-  // Decomp parity: some entries call ftAnim_8006EBA4 immediately after ChangeMotionState; we defer
-  // to post-combat to match action_frame/state_age without perturbing pre-combat/combat geometry.
-  // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c
-  // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c
   anim_timebase_apply_deferred_tick_once_post_combat(batch);
   sync_runbrake_cmd0_post_frame(batch);
   state_flags_refresh_post_frame(batch);

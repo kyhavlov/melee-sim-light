@@ -207,13 +207,9 @@ Recommended sequence for the next deep passes:
     `F08a_damage_identity_bookkeeping_residual`,
     `F08c_damage_state_transition_adjacency`,
     `F08d_damage_timer_scalar_residual`,
-    `F08e_body_contact_no_candidate_adjacency`,
-    `F08g_body_contact_damage_selection_residual`,
-    `F08h_body_selected_false_grounded_attack_pose`,
-    `F08h2_body_selected_false_grounded_timebase_residual`,
-    `F08i_body_selected_false_aerial_attack_pose`,
-    `F08i1_body_selected_false_aerial_timebase_residual`,
-    `F08j_body_selected_false_special_entry_pose`,
+    `F10k_body_no_candidate_action_timing`,
+    `F10l_body_selected_false_action_timebase`,
+    `F05b_damage_hurt_height_selection_residual`,
     `F09a_aerial_stateflag_hurtbox_adjacency`, and
     `F09b_aerial_bookkeeping_adjacency`,
     `F09c_aerial_action_entry_adjacency`,
@@ -226,9 +222,9 @@ Recommended sequence for the next deep passes:
     hurtcap world space). Seed-history now mirrors runtime post-anim pose timing and delayed BODY hitlist
     registration, so `BHH:1169` and related same-hit followup rows stay suppressed by the
     HitCapsule victim list after the admitted `BHH:1163` hit. A broadened grounded x58->x4C sweep
-    was tested and rejected because aggregate one-step worsened, so the remaining grounded
-    missed-hit rows need the exact `lbColl_8000805C` / `lbColl_80006E58` predicate rather than a
-    broad helper.
+    was tested and rejected because aggregate one-step worsened; the retained owner uses the
+    decomp-shaped matrix-first `lbColl_8000805C` / `lbColl_80006E58` predicate plus hidden-depth
+    and HitCapsule lifecycle state instead of a broad helper.
   - A replay-only per-HitCapsule BODY authority bridge was tested for `BHH:1599` and rejected as a
     closure path. It improved one-step but admitted through replay proof rather than
     `lbColl_8000805C` geometry and regressed rollout first-mismatch totals. `BHH:1599` remains the
@@ -259,19 +255,23 @@ Recommended sequence for the next deep passes:
     state. The kept owner is the stateful segment-vector update, not a static action bucket.
   - Current stabilized validation map after the dynamic-chain, HitCapsule lineage, GuardSetOff
     onset, and swept-clank sub-owners:
-    primary/cardinal one-step remains `717`; primary rollout first-mismatch remains `426`;
-    aggregate one-step is now `7048`; aggregate rollout first-mismatch is `2270`.
+    primary/cardinal one-step is now `699`; primary rollout first-mismatch is `423`;
+    aggregate one-step is now `6785`; aggregate rollout first-mismatch is `2262` after the latest
+    hidden-depth seed / matrix-first lbColl / late AttackAirHi latch cleanup.
     The bridge-enabled probe reached lower one-step totals, but rollout first-mismatch regressed
     (`426 -> 435` primary, `2318 -> 2340` aggregate), so that bridge is not closure-quality and must
     not be used to close this checklist item.
-  - Current residual taxonomy (`reports/triage/taxonomy_aggregate_final_current4/`):
-    aggregate has no `F08b` bucket; the former BODY-geometry residual is split into
-    `F08e=205`, `F08g=2`, `F08h-lbColl=37`, `F08h2-timebase=23`,
-    `F08i-lbColl=25`, `F08i1-timebase=67`, and `F08j=22` field rows. `F08f` and `F08h1`
-    no longer emit as separate former-F08b families after the x1990 visible-clear and
-    clank-order passes. Cardinal taxonomy (`reports/triage/taxonomy_cardinal_final_current4/`)
-    also has no `F08b` bucket; it has
-    `F08e=19` and `F08g=2` field rows.
+  - Current residual taxonomy (`reports/triage/final_split_taxonomy3/`):
+    aggregate has no broad `F08b` bucket. After the current x58 enable-edge, grounded-depth,
+    AttackAirN latch, and same-frame entry-pose cleanup
+    (`reports/triage/current_final_taxonomy/`), the remaining
+    former-F08b-shaped rows no longer include a parent-owned collision/pose bucket: `F10k=24`
+    no-candidate action/hitbox timing and `F10l=23` selected-false action-timebase remain outside
+    the primitive owner, while `F05b=8` accepted BODY damage-height rows move to damage selection.
+    `F08h`, `F08i`, `F08f`, and `F08g` no longer emit after the hidden-depth seed,
+    AttackAirN/AttackAirHi HitCapsule-latch, and matrix-first lbColl owners. Former special-entry
+    rows are absorbed by existing `F10e_special_move_adjacency` with row proof. Cardinal taxonomy
+    has `F10k=19` former-F08b-shaped rows and no current `F08h`/`F08i` rows.
   - Remaining `F08a` rows are source/instance recording order (`Fighter_8006A360` / Slippi post-frame
     identity), not damage admission. Remaining `F08c` rows are Down/Passive/Fall/Landing/mpColl
     state transitions. Remaining `F08d` rows are a mixture of timer scalar rows and contact
@@ -297,17 +297,22 @@ Recommended sequence for the next deep passes:
 ## Remaining Major Owner Families
 
 ### Combat geometry / HSD pose collision owner
-- Status: `active; completed sub-owners landed, remaining former-F08b splits still require owner work`
-- Roadmap family: former `F08b_body_contact_geometry_residual` is no longer emitted by the refreshed
-  taxonomy, but that is not parent-owner closure by itself. The remaining former-F08b rows are
-  tracked as explicit active split families rather than hidden under a broad bucket:
-  `F08e_body_contact_no_candidate_adjacency` (action/hitbox timing),
-  `F08g_body_contact_damage_selection_residual` (accepted-hit damage selector),
-  `F08h2_body_selected_false_grounded_timebase_residual` and
-  `F08i1_body_selected_false_aerial_timebase_residual` (action-timebase),
-  `F08h_body_selected_false_grounded_attack_pose` and
-  `F08i_body_selected_false_aerial_attack_pose` (exact `lbColl_80006E58` narrowphase/scalar), and
-  `F08j_body_selected_false_special_entry_pose` (special-entry hitbox enable/pose).
+- Status: `effectively closed; remaining former-F08b-shaped rows moved to action-timebase, damage-selection, or special-entry owners with row-level proof`
+- Roadmap family: former `F08b_body_contact_geometry_residual` no longer emits as one broad bucket
+  in the refreshed taxonomy, and no parent-owned collision/pose residual bucket remains.
+  The implemented runtime/seed sub-owners cover the shared BODY primitive surface: SSDYNN01
+  dynamic-chain collision pose (Fox AttackDash/AttackHi3 owner predicate), Turn internal-facing hurtcaps, per-HitCapsule `victims_1`
+  preservation, GuardSetOff onset lineage, swept/same-group clank, Escape floor-edge pose
+  selection, same-frame/enable-edge HitCapsule x58/x4C continuity, CliffAttack hitbox extraction,
+  enable-edge phantom/tip-log handling, narrowed AttackAirN dense-latch preservation,
+  same-frame common locomotion entry pose carry, matrix-first lbColl BODY admission, and late
+  AttackAirHi HitCapsule-latch preservation, and prefix-causal grounded-overlap hidden-depth seed
+  reconstruction. Remaining former-F08b-shaped rows are assigned outside this parent owner:
+  `F10k_body_no_candidate_action_timing` (24 aggregate field rows; no pre-combat BODY candidate,
+  action/hitbox timing), `F10l_body_selected_false_action_timebase` (23; selected false BODY only
+  after pre-BODY action divergence), `F05b_damage_hurt_height_selection_residual` (8; BODY accepted
+  in replay and sim, but the hurt-height damage-state selector differs), and existing
+  `F10e_special_move_adjacency` for special-entry rows.
 - Owner boundary: live fighter collision primitives before BODY admission:
   `ftColl_80078C70` / `ftColl_80076ED8`, `lbColl_8000805C` / `lbColl_80006E58`,
   `lb_8000B1CC`, and the HSD JObj/AObj/dynamics pose state feeding hurtcap endpoints.
@@ -353,8 +358,8 @@ Recommended sequence for the next deep passes:
   - the Fox AttackHi3 / SSDYNN01 dynamic-chain collision-pose sub-owner covers the target-domain
     one-set data surface without widening BODY
     admission. Refreshed validation for the current local implementation is non-regressing relative
-    to the starting review reports: primary/cardinal one-step `717`, primary rollout `426`,
-    aggregate one-step `7962 -> 7048`, aggregate rollout `2313 -> 2270`;
+    to the starting review reports: primary/cardinal one-step `715 -> 699`, primary rollout
+    `425 -> 423`, aggregate one-step `7962 -> 6785`, aggregate rollout `2313 -> 2262`;
   - hidden HitCapsule shield/body lineage is closed for the observed same-group shield/body
     continuation surface. `PRH:1830..1834`, `IAT:11146..11147`, and `BHH:1803..1804` are
     suppressed by authoritative per-HitCapsule `victims_1` seed lanes, including the GuardSetOff
@@ -362,25 +367,26 @@ Recommended sequence for the next deep passes:
     This is seed preservation for real hidden HitCapsule state, not replay-proof BODY admission.
   - hitbox-vs-hitbox clank overlap now uses the decomp swept HitCapsule predicate
     (`lbColl_80007AFC` -> `lbColl_80006094`) over x58->x4C segments instead of current-center
-    sphere/sphere overlap, then suppresses active same-group HitCapsules at or after the clanking
-    slot as `ftColl_80078C70` / `ftColl_8007699C` does through the per-HitCapsule collision loop
-    and `inlineA0`/`inlineA1`. A later same-group clank cannot retroactively suppress an earlier
-    BODY hitbox. The clank path also ignores
+    sphere/sphere overlap, including degenerate `x58 == x4C` create/enable-edge capsules as
+    point-vs-segment tests. It then suppresses active same-group HitCapsules at or after the
+    clanking slot as `ftColl_80078C70` / `ftColl_8007699C` does through the per-HitCapsule
+    collision loop and `inlineA0`/`inlineA1`. A later same-group clank cannot retroactively
+    suppress an earlier BODY hitbox. The clank path also ignores
     replay-reconstructed BODY victim rings as a prefilter, because those rings are seed
     reconstruction for BODY admission and can otherwise mask a live hitbox-vs-hitbox clank; the
-    HHG:8674 lock protects this distinction. This reduces the ReboundStop/clank split without a
-    BODY admission bridge.
-  - the parent former `F08b_body_contact_geometry_residual` bucket remains active until these split
-    families are fixed or assigned to other checklist owners with proof. Current aggregate split
-    after the current cleanup pass is `F08e=205`, `F08g=2`, `F08h-lbColl=37`,
-    `F08h2-timebase=23`, `F08i-lbColl=25`, `F08i1-timebase=67`, and `F08j-special=22` field rows;
-    `F08f` and `F08h1` no longer emit as separate former-F08b families. Cardinal rows remain
-    `F08e=19`, `F08g=2`. The split
-    evidence is generated by `tools.eval.mismatch_taxonomy` using `debug_step_input_pre_combat`
-    contact counts and replay destination shape; it is a work map, not closure bookkeeping. The
-    parent checklist item is not closed by the disappearance of the old `F08b` label: exact
-    `lbColl` narrowphase/scalar, timebase, candidate-filter, damage-selection, and special-entry
-    split families remain required work until implemented or moved with hard owner evidence.
+    HHG:8674 and FSP:467 locks protect this distinction. This removes the ReboundStop/clank split
+    without a BODY admission bridge, though scalar hitlag residuals remain outside the BODY
+    admission decision.
+  - the parent former `F08b_body_contact_geometry_residual` bucket is split into concrete
+    non-parent owners rather than hidden under new BODY labels. Current aggregate residual map is
+    `F10k=24`, `F10l=23`, and `F05b=8`, with former special-entry rows absorbed by existing
+    `F10e`. The split is generated by `tools.eval.mismatch_taxonomy` using
+    `debug_step_input_pre_combat` contact counts, selected primitive metadata, and replay
+    destination shape. Rows with no pre-combat BODY candidate are action/hitbox timing
+    (`FSP:5765`, `PPA:3182`); rows whose victim/action state already diverges before BODY
+    admission are action-timebase (`FSP:4852`, `HIS:5950`); rows where replay and sim both accept
+    BODY but choose different `DamageFly*` height are damage-selection (`HIS:5029`, `IAT:6288`).
+    `F08h`, `F08i`, `F08f`, and `F08g` no longer emit in the refreshed aggregate taxonomy.
   - Additional completed sub-owners in the current patch:
     - Escape roll floor-edge snap now keeps `EscapeF` / `EscapeB` / `EscapeN` floor-owned through
       the `ftCo_Escape_Coll -> ft_80084104 -> ft_800827A0 -> mpColl_8004B2DC` path before BODY
@@ -388,7 +394,9 @@ Recommended sequence for the next deep passes:
       `DamageAir*` hit).
     - Same-frame motion-entry HitCapsule x58/x4C continuity no longer synthesizes previous-action
       sweeps for newly created capsules; `ftAction_8007121C` plus `ftColl_8007AD18` initialize
-      `x58 = x4C` on the refreshed current pose.
+      `x58 = x4C` on the refreshed current pose. The current pass extends that rule to
+      teacher-forced per-hitbox enable edges without a motion-state transition at the direct
+      pre-combat selector level; `BHH:3661` continues to protect the positive ledge-attack side.
     - CliffAttackSlow/Quick hitboxes are extracted for both Fox and Falco as common motion-state
       data. The fix is not a Fox-only validation gate: `BHH:3661` is covered by real ledge-attack
       HitCapsule extraction, and `GAT:8224` is covered by invincible/no-damage HitCapsule.victims_1
@@ -396,12 +404,35 @@ Recommended sequence for the next deep passes:
     - Enable-edge BODY phantom/tip-log handling now routes airborne-victim newly enabled capsules
       through the decomp `ftColl_80076ED8` `0 < coll_distance < x7A8` lane, using the matrix-radius
       `lbColl_8000805C` helper and preserving sustained near-threshold damage sentinel `QGD:8332`.
+    - The grounded player-overlap Z-depth runtime lane now consumes extracted
+      `p_ftCommonData->x454` / `x458` and mirrors the normal `ftCommon_8007E0E4` step/decay/clamp
+      before collision refresh. `HHG:6740` protects the AttackDash/KneeBend false BODY regression.
+      The retained seed reconstruction is prefix-causal and limited to ordinary grounded overlap
+      frames from current-row action/stocks/facing/position plus extracted `x454`/`x458` and
+      character pushboxes. Airborne, damage, GuardSetOff, DownBound, Cliff, throw, and special
+      rows keep replay-visible `pos_z` with no stale hidden-depth carry, avoiding the rejected
+      broad hidden-depth reconstruction. `TCH:5649` protects the formerly false AttackDash BODY
+      row whose vanilla probe shows hidden Z-depth separation before `lbColl_80006E58`.
     - The taxonomy split records the victim post-timebase/pre-combat action, so rows already in a
       different pre-combat action move to the timebase split instead of the exact lbColl split.
-  - Current aggregate split after those cleanups is `F08e=205`, `F08g=2`,
-    `F08h-lbColl=37`, `F08h2-timebase=23`, `F08i-lbColl=25`, `F08i1-timebase=67`, and
-    `F08j-special=22` field rows. The parent item remains active until the remaining split
-    families are implemented or assigned to other checklist owners with hard evidence.
+    - The narrowed AttackAirN dense-latch owner keeps `HitCapsule.victims_1` suppression only for
+      the Wait entry lane proven by `HIS:2752`, while `HIS:2753` and `HIS:3126` still clear stale
+      dense fallback entries and admit the live late NAir hit. This removes `F08f` without a
+      replay-proof BODY admission path.
+    - Same-frame locomotion entry hurtcaps now carry the previous interpreted JObj pose for BODY
+      collision on WalkSlow->Wait, Dash->Run, and SquatRv->WalkSlow entries when the new state was
+      entered after `Fighter_8006A360` and did not immediately call `ftAnim_8006EBA4`; `DCC:8844`,
+      `IAT:6287`, and `TCH:5842` protect the owner.
+  - Matrix-first lbColl BODY admission now runs `lbColl_8000805C` / `lbColl_80006E58` when
+    hurt-bone pose data is available, leaving the simple sphere/capsule overlap as a missing-data
+    fallback only. `PPA:2614` protects the grounded `AttackAirB` vs `AttackHi3` positive row.
+  - Late AttackAirHi HitCapsule-latch preservation keeps the UpAir late-window victims_1 latch
+    across stale BODY attribution and same-frame Wait instance-id proxy changes. `FSP:7079`
+    protects the former aerial selected-false row.
+  - Current aggregate split after those cleanups is `F10k=24`, `F10l=23`, and `F05b=8` field rows,
+    with former special-entry rows assigned to `F10e`. These remaining rows are outside the parent
+    BODY primitive owner by row-level debug/probe evidence, so the combat geometry / HSD pose
+    collision owner is effectively closed without a replay-proof BODY admission bridge.
 
 ### Ledge / collision-env parity
 - Status: `active`

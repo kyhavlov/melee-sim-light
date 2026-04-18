@@ -296,4 +296,5 @@ static inline void msl_anim_timebase_set_rate(MslBatch* batch, size_t idx, float
 void anim_timebase_update_pre_input(MslBatch* batch);
 
 // Apply deferred "tick once" requests (see MslState::anim_defer_tick_once).
+void anim_timebase_apply_deferred_tick_once_pre_collision(MslBatch* batch);
 void anim_timebase_apply_deferred_tick_once_post_combat(MslBatch* batch);

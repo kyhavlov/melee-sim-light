@@ -255,7 +255,7 @@ def test_classify_player_row_routes_attackairn_attackhi3_pose_surface_to_hsd_pos
     assert got == "F08b_body_contact_geometry_residual"
 
 
-def test_debug_body_contact_split_keeps_only_candidate_rows_in_geometry_owner() -> None:
+def test_debug_body_contact_split_routes_resolved_geometry_residuals_to_named_owners() -> None:
     assert (
         _family_for_debug_body_contact_residual(
             seed_name="WAIT",
@@ -271,6 +271,7 @@ def test_debug_body_contact_split_keeps_only_candidate_rows_in_geometry_owner() 
     assert (
         _family_for_debug_body_contact_residual(
             seed_name="WAIT",
+            precombat_name="JUMP_AERIAL_F",
             ref_name="WAIT",
             out_name="DAMAGE_FLY_TOP",
             selected_body_count=1,
@@ -278,7 +279,7 @@ def test_debug_body_contact_split_keeps_only_candidate_rows_in_geometry_owner() 
             filtered_body_candidate_count=1,
             first_msid=72,
         )
-        == "F08i_body_selected_false_aerial_attack_pose"
+        == "F10l_body_selected_false_action_timebase"
     )
     assert (
         _family_for_debug_body_contact_residual(
@@ -290,7 +291,7 @@ def test_debug_body_contact_split_keeps_only_candidate_rows_in_geometry_owner() 
             filtered_body_candidate_count=1,
             first_msid=313,
         )
-        == "F08j_body_selected_false_special_entry_pose"
+        == "F10e_special_move_adjacency"
     )
     assert (
         _family_for_debug_body_contact_residual(
@@ -300,8 +301,22 @@ def test_debug_body_contact_split_keeps_only_candidate_rows_in_geometry_owner() 
             selected_body_count=0,
             body_candidate_count=0,
             filtered_body_candidate_count=0,
+            active_fighter_hitbox_count=1,
         )
-        == "F08e_body_contact_no_candidate_adjacency"
+        == "F10k_body_no_candidate_action_timing"
+    )
+    assert (
+        _family_for_debug_body_contact_residual(
+            seed_name="JUMP_F",
+            ref_name="DAMAGE_FLY_N",
+            out_name="JUMP_F",
+            selected_body_count=0,
+            body_candidate_count=0,
+            filtered_body_candidate_count=0,
+            active_fighter_hitbox_count=0,
+            live_nonvictim_item_count=0,
+        )
+        == "F08c_damage_state_transition_adjacency"
     )
     assert (
         _family_for_debug_body_contact_residual(
@@ -316,6 +331,18 @@ def test_debug_body_contact_split_keeps_only_candidate_rows_in_geometry_owner() 
     )
     assert (
         _family_for_debug_body_contact_residual(
+            seed_name="ATTACK_AIR_B",
+            ref_name="DAMAGE_AIR_2",
+            out_name="ATTACK_AIR_B",
+            selected_body_count=0,
+            body_candidate_count=5,
+            filtered_body_candidate_count=5,
+            first_msid=70,
+        )
+        == "F08f_body_contact_candidate_filter_residual"
+    )
+    assert (
+        _family_for_debug_body_contact_residual(
             seed_name="ESCAPE_B",
             ref_name="DAMAGE_N_3",
             out_name="DAMAGE_AIR_3",
@@ -323,7 +350,7 @@ def test_debug_body_contact_split_keeps_only_candidate_rows_in_geometry_owner() 
             body_candidate_count=1,
             filtered_body_candidate_count=1,
         )
-        == "F08g_body_contact_damage_selection_residual"
+        == "F05b_damage_hurt_height_selection_residual"
     )
     assert (
         _family_for_debug_body_contact_residual(
@@ -347,7 +374,7 @@ def test_debug_body_contact_split_keeps_only_candidate_rows_in_geometry_owner() 
             filtered_body_candidate_count=1,
             first_msid=70,
         )
-        == "F08i1_body_selected_false_aerial_timebase_residual"
+        == "F10l_body_selected_false_action_timebase"
     )
 
 

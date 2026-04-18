@@ -388,6 +388,42 @@ static void hitboxes_seed_bridge_trim_impossible_indefinite(
     // refs/melee/src/melee/lb/lbcollision.c::lbColl_80007BCC
     const uint8_t shield_desc_active = (batch->state.shield_radius[v_idx] > 0.0f) ? 1u : 0u;
     const uint16_t v_action = batch->state.action_id[v_idx];
+    if (attacker_action == (uint16_t)MSL_ACT_ATTACK_AIR_N && v_action == (uint16_t)MSL_ACT_WAIT &&
+        batch->state.action_frame[v_idx] <= 1 && batch->state.hitlag[v_idx] == 0u &&
+        batch->state.hitstun[v_idx] == 0u && e->id16 == batch->state.instance_id[v_idx]) {
+      // AttackAirN neutral victim latch:
+      // - lbColl_8000ACFC tests HitCapsule.victims_1 by victim object identity; it does not use
+      //   fp->dmg.x18ec_instancehitby as part of the suppression key.
+      // - `instance_hit_by` is BODY damage attribution exported by Slippi from
+      //   Fighter_ProcessHit/ftColl_80076ED8, and can still name an older source while a live
+      //   neutral defender remains present in the HitCapsule victim list.
+      // - Dense seed fallback has no per-HitCapsule owner, but it does carry the victim instance id.
+      //   In the proven Wait entry lane (the action frame has just advanced for pre-combat), keep
+      //   the latch instead of clearing it solely because BODY attribution points elsewhere; later
+      //   Wait frames and JumpF remain eligible for the create-window stale-clear path.
+      // refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000ACFC,lbColl_80008A5C}
+      // refs/melee/src/melee/lb/types.h::HitCapsule
+      // refs/melee/src/melee/ft/ftcoll.c::ftColl_80076ED8
+      // refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
+      continue;
+    }
+    if (attacker_action == (uint16_t)MSL_ACT_ATTACK_AIR_HI && second_create_frame != 0xFFFFu &&
+        pose_frame >= second_create_frame && batch->state.hitlag[v_idx] == 0u &&
+        batch->state.hitstun[v_idx] == 0u) {
+      // AttackAirHi late-window victim latch:
+      // - Fox/Falco UpAir clears the early hitboxes and recreates the same-group late hitboxes
+      //   (data/moves/{fox,falco}.json::moves.ftCo_SM_AttackAirHi frame 10 clear, frame 11
+      //   create). After that recreate edge, lbColl_80008688 owns repeat suppression by the
+      //   HitCapsule victim pointer, not by BODY attribution.
+      // - Slippi's `instance_hit_by` can still name an older source, and the victim's replay
+      //   `instance_id` can advance on a same-frame motion-state entry even though the decomp
+      //   HitVictim pointer is stable. Preserve the current-port latch instead of clearing it as
+      //   stale dense fallback; hitlist.c owns the instance-id proxy rebind boundary.
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_Anim
+      // refs/melee/src/melee/ft/ftaction.c::ftAction_8007121C
+      // refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000ACFC,lbColl_80008688}
+      continue;
+    }
     // Guard-family transitions own shield/GuardSetOff timing lanes in decomp even when snapshot
     // artifacts temporarily expose no-submotion/no-desc windows; do not clear reseed suppression
     // there from BODY attribution mismatch alone.
@@ -1079,16 +1115,19 @@ void hitboxes_refresh(MslBatch* batch) {
               batch->state.hitbox_prev_x[oi] = seeded_prev_x[hi];
               batch->state.hitbox_prev_y[oi] = seeded_prev_y[hi];
               batch->state.hitbox_prev_z[oi] = seeded_prev_z[hi];
-            } else if (motion_entered_this_frame) {
+            } else if (motion_entered_this_frame || batch->state.hitbox_enable_edge[oi] ||
+                       !batch->state.hitbox_prev_enabled[oi]) {
               // Newly enabled capsules enter ftColl_8007AD18 through the HitCapsule_Enabled case,
-              // which sets x58 = x4C at the refreshed current pose. Do not bootstrap a sweep from
-              // the previous action's translation on same-frame entries.
+              // which sets x4C from the refreshed current pose and immediately copies x58 = x4C.
+              // This applies to ordinary same-action create edges as well as motion-entry edges;
+              // do not synthesize a translation sweep for a HitCapsule that did not have a live
+              // previous x58 in vanilla.
               // refs/melee/src/melee/ft/ftcoll.c::ftColl_8007AD18
               batch->state.hitbox_prev_enabled[oi] = 1u;
               batch->state.hitbox_prev_x[oi] = batch->state.hitbox_x[oi];
               batch->state.hitbox_prev_y[oi] = batch->state.hitbox_y[oi];
               batch->state.hitbox_prev_z[oi] = batch->state.hitbox_z[oi];
-            } else if (!motion_entered_this_frame || !batch->state.hitbox_prev_enabled[oi]) {
+            } else {
               batch->state.hitbox_prev_enabled[oi] = 1u;
               batch->state.hitbox_prev_x[oi] = batch->state.hitbox_x[oi] - dx;
               batch->state.hitbox_prev_y[oi] = batch->state.hitbox_y[oi] - dy;

@@ -631,19 +631,22 @@ static inline uint8_t physics_action_is_attackdash_knockdown_overlap_owner(uint1
 }
 
 static inline void physics_compute_grounded_player_nudge(MslBatch* batch, int bi,
-                                                         float out_nudge_x[MSL_MAX_PLAYERS]) {
-  if (batch == NULL || bi < 0 || bi >= batch->batch_size || out_nudge_x == NULL) {
+                                                         float out_nudge_x[MSL_MAX_PLAYERS],
+                                                         float out_nudge_z[MSL_MAX_PLAYERS]) {
+  if (batch == NULL || bi < 0 || bi >= batch->batch_size || out_nudge_x == NULL ||
+      out_nudge_z == NULL) {
     return;
   }
 
-  // Grounded fighter-overlap nudge constants (`p_ftCommonData->x450` / x454):
+  // Grounded fighter-overlap nudge constants (`p_ftCommonData->x450` / x454 / x458):
   // - ftCommon_8007DD7C accumulates +/-x450 on horizontal overlap.
   // - Fighter_8006A360 runs ftCommon_8007E0E4 before Fighter_procUpdate; Fighter_procUpdate then
   //   adds xF8_playerNudgeVel to position before self/KB velocity integration.
-  // - This reduced 2D subset only models the horizontal x450 lane for Fox/Falco FD rollout parity.
+  // - The hidden depth lane uses x454 steps and x458 clamp on the normal non-x221F_b4 path, then
+  //   decays toward z=0 when no overlap writes xF8_playerNudgeVel.y.
   // refs/melee/src/melee/ft/ftcommon.c::{ftCommon_8007DD7C,ftCommon_8007E0E4}
   // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A360,Fighter_procUpdate}
-  // refs/melee/src/melee/ft/types.h::ftCommonData (+0x450/+0x454)
+  // refs/melee/src/melee/ft/types.h::ftCommonData (+0x450/+0x454/+0x458)
   const MslCommonParams* c = msl_common_params();
   if (c == NULL) {
     return;
@@ -659,6 +662,7 @@ static inline void physics_compute_grounded_player_nudge(MslBatch* batch, int bi
   const int num_players = (int)batch->config.num_players;
   for (int p = 0; p < MSL_MAX_PLAYERS; p++) {
     out_nudge_x[p] = 0.0f;
+    out_nudge_z[p] = 0.0f;
   }
 
   for (int p = 0; p < num_players; p++) {
@@ -746,7 +750,55 @@ static inline void physics_compute_grounded_player_nudge(MslBatch* batch, int bi
         continue;
       }
       out_nudge_x[p] += nudge_x;
+
+      // Grounded fighter-overlap depth nudge:
+      // - ftCommon_8007DD7C writes xF8_playerNudgeVel.y from p_ftCommonData->x454.
+      // - If fighters already differ in z, it pushes along that signed depth delta; otherwise it
+      //   uses the same horizontal/tie-break sign as the x450 lane.
+      // - Fighter_procUpdate applies the resulting Vec2 to cur_pos before collision primitives are
+      //   refreshed, so BODY lbColl sees the separated depth lane even though Slippi commonly
+      //   leaves replay seed pos_z at 0.
+      // refs/melee/src/melee/ft/ftcommon.c::{ftCommon_8007DD7C,ftCommon_8007E0E4}
+      // refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate
+      float nudge_z = 0.0f;
+      const float delta_z = batch->state.pos_z[idx] - batch->state.pos_z[oidx];
+      if (delta_z < 0.0f) {
+        nudge_z = -c->player_nudge_z;
+      } else if (delta_z > 0.0f) {
+        nudge_z = c->player_nudge_z;
+      } else if (delta_x < 0.0f) {
+        nudge_z = -c->player_nudge_z;
+      } else if (delta_x > 0.0f) {
+        nudge_z = c->player_nudge_z;
+      } else if (q < p) {
+        nudge_z = -c->player_nudge_z;
+      } else {
+        nudge_z = c->player_nudge_z;
+      }
+      out_nudge_z[p] += nudge_z;
     }
+
+    // ftCommon_8007E0E4 post-processes the depth lane after ftCommon_8007DD7C:
+    // - no overlap and z != 0: step toward z=0 by x454;
+    // - do not cross through zero;
+    // - clamp the resulting normal depth to +/-x458.
+    // refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007E0E4
+    float z_step = out_nudge_z[p];
+    const float z = batch->state.pos_z[idx];
+    if (z_step == 0.0f && z != 0.0f) {
+      z_step = (z < 0.0f) ? c->player_nudge_z : -c->player_nudge_z;
+    }
+    if ((z_step > 0.0f && z < 0.0f && z + z_step >= 0.0f) ||
+        (z_step < 0.0f && z > 0.0f && z + z_step <= 0.0f)) {
+      z_step = -z;
+    }
+    const float z_max = c->player_nudge_z_max;
+    if (z + z_step > z_max) {
+      z_step = z_max - z;
+    } else if (z + z_step < -z_max) {
+      z_step = -z_max - z;
+    }
+    out_nudge_z[p] = z_step;
   }
 }
 
@@ -1015,8 +1067,10 @@ void physics_integrate(MslBatch* batch) {
   const int num_players = (int)batch->config.num_players;
   for (int bi = 0; bi < batch->batch_size; bi++) {
     float grounded_player_nudge_x[MSL_MAX_PLAYERS] = {0.0f};
+    float grounded_player_nudge_z[MSL_MAX_PLAYERS] = {0.0f};
     float guardsetoff_turnover_nudge_x[MSL_MAX_PLAYERS] = {0.0f};
-    physics_compute_grounded_player_nudge(batch, bi, grounded_player_nudge_x);
+    physics_compute_grounded_player_nudge(batch, bi, grounded_player_nudge_x,
+                                          grounded_player_nudge_z);
     physics_compute_guardsetoff_turnover_player_nudge(batch, bi, guardsetoff_turnover_nudge_x);
     for (int p = 0; p < num_players; p++) {
       const size_t idx = msl_idx_player(bi, p);
@@ -1031,6 +1085,9 @@ void physics_integrate(MslBatch* batch) {
       const float player_nudge_x = grounded_player_nudge_x[p] + guardsetoff_turnover_nudge_x[p];
       if (player_nudge_x != 0.0f) {
         batch->state.pos_x[idx] += player_nudge_x;
+      }
+      if (grounded_player_nudge_z[p] != 0.0f) {
+        batch->state.pos_z[idx] += grounded_player_nudge_z[p];
       }
 
       // Hitlag freezes motion/physics advancement:
