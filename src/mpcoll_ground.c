@@ -77,6 +77,7 @@ static inline uint8_t is_cliff_hold_action(uint16_t a) {
   switch (a) {
     case MSL_ACT_CLIFF_CATCH:
     case MSL_ACT_CLIFF_WAIT:
+    case MSL_ACT_CLIFF_JUMP_SLOW1:
     case MSL_ACT_CLIFF_JUMP_QUICK1:
       return 1;
     default:
@@ -301,6 +302,10 @@ static inline uint8_t action_allows_floor_edge_snap(uint16_t a) {
     default:
       return 0;
   }
+}
+
+static inline uint8_t action_is_down_bound(uint16_t a) {
+  return (uint8_t)(a == (uint16_t)MSL_ACT_DOWN_BOUND_U || a == (uint16_t)MSL_ACT_DOWN_BOUND_D);
 }
 
 static inline uint8_t action_uses_landing_floor_release_coll(uint16_t a) {
@@ -1713,6 +1718,21 @@ void mpcoll_ground_apply(MslBatch* batch) {
           batch->state.speed_y_self[idx] = 0.0f;
         }
       } else {
+        if (action_is_down_bound(action_id) && prefer_line_idx >= 0) {
+          // DownBound_Coll uses the allow-ground-to-air mpColl path: the fighter can remain
+          // airborne while CollData's floor.index updates across connected floor seams. Preserve
+          // airborne `ground_or_air`, but refresh the persisted floor id when DD90 projection can
+          // resolve the current bottom point.
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownBound.c::ftCo_DownBound_Coll
+          // refs/melee/src/melee/ft/ft_081B.c::ft_80082708
+          // refs/melee/src/melee/mp/mpcoll.c::mpColl_8004B108
+          // refs/melee/src/melee/mp/mplib.c::mpLib_8004DD90_Floor
+          const int out_line_idx =
+              floor_dd90_project(g, prefer_line_idx, cur_bottom_x, cur_bottom_y, NULL, NULL, NULL);
+          if (out_line_idx >= 0) {
+            ground_id = g->lines[(size_t)out_line_idx].segment_i;
+          }
+        }
         // Keep ground_id stable while airborne (CollData floor.index persists while in air).
         // refs/melee/src/melee/lb/types.h::CollData
         batch->state.ground_id[idx] = ground_id;

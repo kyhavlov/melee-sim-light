@@ -155,6 +155,7 @@ typedef enum MslActionId {
 
   // Cliff / ledge (FD suite-present).
   // Source of truth: refs/melee/src/melee/ft/chara/ftCommon/forward.h `ftCommon_MotionState`.
+  MSL_ACT_MISS_FOOT = 0x00FB,           // ftCo_MS_MissFoot (251)
   MSL_ACT_CLIFF_CATCH = 0x00FC,         // ftCo_MS_CliffCatch (252)
   MSL_ACT_CLIFF_WAIT = 0x00FD,          // ftCo_MS_CliffWait (253)
   MSL_ACT_CLIFF_CLIMB_SLOW = 0x00FE,    // ftCo_MS_CliffClimbSlow (254)
@@ -456,6 +457,7 @@ typedef enum MslSubmotionId {
 
   // Cliff / ledge (subset used by the FD suite).
   // Source of truth: refs/melee/src/melee/ft/chara/ftCommon/forward.h `ftCo_Submotion`.
+  MSL_SM_MISS_FOOT = 215,           // ftCo_SM_MissFoot
   MSL_SM_CLIFF_CATCH = 216,         // ftCo_SM_CliffCatch
   MSL_SM_CLIFF_WAIT = 217,          // ftCo_SM_CliffWait
   MSL_SM_CLIFF_CLIMB_SLOW = 219,    // ftCo_SM_CliffClimbSlow
@@ -571,6 +573,10 @@ static inline uint8_t msl_action_allows_fastfall(uint16_t action_id) {
     case MSL_ACT_ATTACK_AIR_B:
     case MSL_ACT_ATTACK_AIR_HI:
     case MSL_ACT_ATTACK_AIR_LW:
+    // Decomp: MissFoot_Phys calls the common airborne helper.
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_MissFoot.c::ftCo_MissFoot_Phys
+    // refs/melee/src/melee/ft/ft_081B.c::ft_80084DB0
+    case MSL_ACT_MISS_FOOT:
     // Decomp: `ftFx_SpecialAirN{Start,Loop,End}_Phys` call `ft_80084DB0`.
     // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_SpecialAirNStart_Phys
     // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_SpecialAirNLoop_Phys

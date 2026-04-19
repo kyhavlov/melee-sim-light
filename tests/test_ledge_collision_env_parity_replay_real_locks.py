@@ -1,0 +1,278 @@
+from __future__ import annotations
+
+from dataclasses import dataclass
+from pathlib import Path
+
+import pytest
+
+from tests.test_combat_ownership_seed_guardrail_locks import (
+    _run_one_step_row,
+    _skip_if_required_artifacts_missing,
+)
+
+
+@dataclass(frozen=True)
+class _Case:
+    dataset_rel: str
+    record: int
+    p: int
+    seed_action: int
+    ref_action: int
+    ref_anim: int
+
+
+_AGG_DEBUG = "datasets/aggregate_recent/replays/debug/fd_mixed_recent"
+_AGG_VALID = "datasets/aggregate_recent/replays/validation/aggregate_recent"
+_AGG_CARDINAL = "datasets/aggregate_recent/replays/validation/cardinal_1.0_recent"
+
+
+_CASES = [
+    _Case(
+        f"{_AGG_DEBUG}/PriceyPartialAlbatross.msl",
+        2357,
+        0,
+        251,  # MissFoot
+        252,  # CliffCatch
+        216,  # ftCo_SM_CliffCatch
+    ),
+    _Case(
+        f"{_AGG_DEBUG}/TubbyCurlyHerring.msl",
+        6012,
+        0,
+        251,  # MissFoot
+        252,  # CliffCatch
+        216,  # ftCo_SM_CliffCatch
+    ),
+    _Case(
+        f"{_AGG_DEBUG}/BlondHardHippopotamus.msl",
+        4879,
+        0,
+        253,  # CliffWait
+        254,  # CliffClimbSlow
+        219,  # ftCo_SM_CliffClimbSlow
+    ),
+    _Case(
+        f"{_AGG_DEBUG}/PutridJoyousOryx.msl",
+        5254,
+        0,
+        253,  # CliffWait
+        256,  # CliffAttackSlow
+        221,  # ftCo_SM_CliffAttackSlow
+    ),
+    _Case(
+        f"{_AGG_DEBUG}/BlondHardHippopotamus.msl",
+        4931,
+        0,
+        254,  # CliffClimbSlow
+        254,  # CliffClimbSlow grounded handoff
+        219,  # ftCo_SM_CliffClimbSlow
+    ),
+    _Case(
+        f"{_AGG_DEBUG}/DistinctCaringCobra.msl",
+        1791,
+        0,
+        253,  # CliffWait terminal x1990 frame
+        253,  # CliffWait, now vulnerable
+        217,  # ftCo_SM_CliffWait
+    ),
+    _Case(
+        f"{_AGG_DEBUG}/BlondHardHippopotamus.msl",
+        3633,
+        1,
+        252,  # CliffCatch terminal row
+        257,  # CliffAttackQuick via same-proc CliffWait IASA
+        222,  # ftCo_SM_CliffAttackQuick
+    ),
+    _Case(
+        f"{_AGG_DEBUG}/PositiveRevolvingHyena.msl",
+        8079,
+        0,
+        252,  # CliffCatch terminal row
+        260,  # CliffJumpSlow1 via same-proc CliffWait IASA
+        225,  # ftCo_SM_CliffJumpSlow1
+    ),
+    _Case(
+        f"{_AGG_DEBUG}/TubbyCurlyHerring.msl",
+        6337,
+        0,
+        253,  # CliffWait
+        253,  # raw R edge with held analog trigger does not create a fresh LR edge
+        217,  # ftCo_SM_CliffWait
+    ),
+    _Case(
+        f"{_AGG_DEBUG}/PriceyPartialAlbatross.msl",
+        2383,
+        0,
+        253,  # CliffWait
+        257,  # Z maps to A before LR escape priority
+        222,  # ftCo_SM_CliffAttackQuick
+    ),
+    _Case(
+        f"{_AGG_VALID}/PositiveRevolvingHyena.msl",
+        8072,
+        0,
+        29,   # Fall, cooldown terminal seed
+        252,  # CliffCatch after x2064 decrements to zero before map collision
+        216,  # ftCo_SM_CliffCatch
+    ),
+    _Case(
+        f"{_AGG_VALID}/HilariousVillainousGiraffe.msl",
+        6546,
+        0,
+        255,  # CliffClimbQuick terminal
+        15,   # WalkSlow via same-proc Wait IASA
+        7,    # ftCo_SM_WalkSlow
+    ),
+    _Case(
+        f"{_AGG_VALID}/TubbyCurlyHerring.msl",
+        4372,
+        0,
+        255,  # CliffClimbQuick terminal
+        20,   # Dash via same-proc Wait IASA
+        12,   # ftCo_SM_Dash
+    ),
+    _Case(
+        f"{_AGG_VALID}/BlondHardHippopotamus.msl",
+        9786,
+        0,
+        257,  # CliffAttackQuick terminal
+        39,   # Squat via same-proc Wait IASA
+        30,   # ftCo_SM_Squat
+    ),
+    _Case(
+        f"{_AGG_VALID}/DistinctCaringCobra.msl",
+        1843,
+        0,
+        259,  # CliffEscapeQuick terminal
+        39,   # Squat via same-proc Wait IASA
+        30,   # ftCo_SM_Squat
+    ),
+    _Case(
+        f"{_AGG_VALID}/DistinctCaringCobra.msl",
+        3572,
+        1,
+        193,  # DownDamageD floor-contact fallback
+        193,
+        193,  # ftCo_SM_DownDamageD
+    ),
+    _Case(
+        f"{_AGG_CARDINAL}/AttachedGoodNaturedGuanaco.msl",
+        4565,
+        0,
+        183,  # DownBoundU airborne floor-index refresh
+        183,
+        183,  # ftCo_SM_DownBoundU
+    ),
+    _Case(
+        f"{_AGG_CARDINAL}/AttachedGoodNaturedGuanaco.msl",
+        782,
+        0,
+        85,   # DamageAir2 same-action floor contact
+        85,
+        175,  # ftCo_SM_DamageAir2
+    ),
+    _Case(
+        f"{_AGG_CARDINAL}/TreasuredBackKangaroo.msl",
+        4429,
+        1,
+        85,   # DamageAir2 same-action floor contact, fastfall bit must remain visible
+        85,
+        175,  # ftCo_SM_DamageAir2
+    ),
+    _Case(
+        f"{_AGG_CARDINAL}/GracefulAttachedTurtle.msl",
+        8607,
+        0,
+        245,  # Ottotto jump input loses edge floor through KneeBend_Coll -> Fall
+        29,
+        20,   # ftCo_SM_Fall
+    ),
+    _Case(
+        f"{_AGG_CARDINAL}/QuerulousGrandDinosaur.msl",
+        3334,
+        1,
+        16,   # WalkMiddle edge handoff enters Ottotto instead of generic Fall
+        245,
+        210,  # ftCo_SM_Ottotto
+    ),
+    _Case(
+        f"{_AGG_VALID}/HilariousVillainousGiraffe.msl",
+        5095,
+        0,
+        245,  # Ottotto IASA crouch enters Squat through ftCo_800D5FB0
+        39,
+        30,   # ftCo_SM_Squat
+    ),
+    _Case(
+        f"{_AGG_VALID}/TubbyCurlyHerring.msl",
+        10089,
+        1,
+        245,  # Ottotto anim-end enters OttottoWait
+        246,
+        211,  # ftCo_SM_OttottoWait
+    ),
+]
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize("case", _CASES)
+def test_missfoot_and_slow_ledge_options_replay_real_rows_exact(case: _Case) -> None:
+    # Replay-real locks for ledge / collision-env parity:
+    # - MissFoot_Coll routes through ft_80082F28 and can enter CliffCatch through
+    #   ftCliffCommon_80081298 when Collide_LedgeGrabMask is set.
+    # - Cliff option entries choose Quick vs Slow from p_ftCommonData->x488, and slow options share
+    #   the same attach / air-ground ownership as quick options.
+    # - CliffCatch terminal rows run new-state CliffWait IASA options in the same proc.
+    # - Cliff x1990 invulnerability is entry-owned and expires through Fighter_8006A360; steady
+    #   CliffWait refresh must not recreate the terminal timer.
+    # - Z is synthesized into HSD_PAD_A before x668 construction; raw L/R button edges do not bypass
+    #   the synthesized LR lane when analog trigger was already held.
+    # - Reseeded ledge cooldown is aligned to runtime's pre-collision decrement, so terminal
+    #   cooldown rows can still catch when x2064 reaches zero before mpColl.
+    # - Cliff option terminal callbacks enter a Wait-like grounded destination and can consume the
+    #   same-proc Wait IASA locomotion tail.
+    # - DamageAir same-action floor contacts expose the jump refresh while preserving visible
+    #   fastfall state; DownDamage floor-contact fallbacks apply the common air->ground transfer
+    #   helper even when the visible motion state does not change.
+    # - DownBound can remain airborne while CollData's floor.index refreshes across FD floor seams.
+    # - Ottotto edge handoffs cover Walk/Landing-style ft_80084280 teeter admission and the
+    #   immediate L-stick jump-squat edge-loss path through KneeBend_Coll.
+    # - Ottotto IASA crouch uses ftCo_800D5FB0, and Ottotto_Anim enters OttottoWait at anim end.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_MissFoot.c::ftCo_MissFoot_Coll
+    # refs/melee/src/melee/ft/ft_081B.c::ft_80082F28
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffClimb.c::{
+    #   ftCo_8009AB9C,ftCo_CliffClimb_Phys}
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffAttack.c::ftCo_8009AEA4
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_Coll
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownDamage.c
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownBound.c::ftCo_DownBound_Coll
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Ottotto.c::{ftCo_8009A3C8,ftCo_Ottotto_IASA}
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Ottotto.c::{ftCo_Ottotto_Anim,ftCo_8009A6B8}
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Squat.c::ftCo_800D5FB0
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_KneeBend.c::ftCo_KneeBend_Coll
+    # refs/melee/src/melee/ft/fighter.c::{Fighter_8006A360,Fighter_procUpdate}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / case.dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {case.dataset_rel}")
+
+    seed, ref_row, out_row = _run_one_step_row(dataset_path, case.record, case.p)
+    assert int(seed["action_id"][case.p]) == case.seed_action
+    assert int(ref_row["action_id"][case.p]) == case.ref_action
+    assert int(ref_row["animation_index"][case.p]) == case.ref_anim
+
+    for field in (
+        "action_id",
+        "action_frame",
+        "animation_index",
+        "on_ground",
+        "hitlag",
+        "hitstun",
+        "jumps_left",
+        "ground_id",
+    ):
+        assert int(out_row[field][case.p]) == int(ref_row[field][case.p]), field
+    assert [int(x) for x in out_row["state_flags"][case.p].tolist()] == [
+        int(x) for x in ref_row["state_flags"][case.p].tolist()
+    ]

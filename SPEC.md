@@ -534,6 +534,22 @@ This section is the “what is actually done” source of truth for agents. If a
 section or regenerate it; do not rely on stale tables.
 
 Recent deltas to reflect here (do not let these get “lost in chat logs”):
+- Ledge callback parity pass (2026-04-19): MissFoot now participates in the decomp cliff-catch
+  collision wrapper; slow ledge options share quick-option attach / air-to-ground ownership;
+  terminal CliffCatch can consume same-proc CliffWait attack/escape/jump IASA but not climb/drop
+  because `mv.co.cliff.x8` starts false; Cliff x1990 invulnerability is entry-owned; Z maps to
+  CliffAttack before LR-lane escape; and ordinary Fall-family one-step reseeds apply the x2064
+  pre-collision cooldown tick without broadening SpecialHi ledge admission. Replay-real locks:
+  `tests/test_ledge_collision_env_parity_replay_real_locks.py`.
+- Ledge / collision-env continuation (2026-04-19): Cliff option terminal callbacks now reuse the
+  decomp Wait IASA locomotion tail after `ftCommon_8007D92C`; DownDamage same-action floor contacts
+  refresh jumps through the common air->ground helper when mpColl already reports ground; airborne
+  DownBound refreshes persisted `floor.index` across connected FD floor seams; same-action
+  DamageAir floor contact refreshes only the replay-visible jump count while preserving fastfall
+  state; and Ottotto edge ownership now covers Walk/Landing-style `ft_80084280` teeter admission
+  plus the immediate L-stick Ottotto -> KneeBend edge-loss path. Broad EscapeAir ledge projection,
+  full DamageAir transfer, and broad DamageFly root projection experiments were rejected due
+  taxonomy or lock regressions.
 - Ledge-grab mask ordering is now collision-stage prev/cur snapshot based (captured around `stage_collision_apply()` and consumed
   post-collision); regression locked for TreasuredBackKangaroo records 1806/1807 (`tests/test_ledge_grab_treasuredbackkangaroo_regression.py`).
 - Build now forces C extension rebuild to avoid stale `.so` issues (Makefile change).
@@ -558,9 +574,9 @@ Legend:
 | Anim/script timebase (`cur_anim_frame`, `frame_speed_mul`, hitlag freeze) | **DONE** | Q16.16 accumulator + seeded `frame_speed_mul_f32`. |
 | Input pipeline + UCF (legalization, pad buffer, key timers/counters) | **PARTIAL** | Core UCF-on suite behavior is covered; more input-history gates remain as needed. |
 | Locomotion core (walk/dash/run/jumps/landing/fall/airdodge/escapes) | **PARTIAL** | Broad coverage exists; gaps remain in less-common action branches and ordering edge cases. |
-| Stage collision + ECB (FD ground/ledge points, grounding, `ground_id`) | **PARTIAL** | mpColl-shaped FD ground contact is implemented (floor + wall/ceiling passes + persistence); remaining gaps are mpColl substeps/platform lines and residual contact-timing clusters now split under `F17_mpcoll_ledge_ecb_residual`. |
-| Ledge system (Cliff* actions, quick options) | **PARTIAL** | Ledge-grab mask now uses collision-stage prev/cur snapshots; remaining parity needs occupancy/refresh/cooldowns + mpColl substrate. |
-| Knockdown/tech (DownBound/Wait/Stand/Attack + rolls) | **EFFECTIVELY CLOSED FOR SHARED CONTACT OWNER** | `DamageFly*`/`DamageFall` floor contact now shares one decomp-shaped selector for `PassiveStandF/B` -> `Passive` -> `DownBound`; `x680`/`x684` tech timers now model hitlag-latched `x668`, and remaining rows are mpColl/ledge/ECB timing residuals (`F17`). |
+| Stage collision + ECB (FD ground/ledge points, grounding, `ground_id`) | **PARTIAL** | mpColl-shaped FD ground contact is implemented (floor + wall/ceiling passes + persistence); DownBound floor-index persistence across FD seams and narrow Ottotto FD-edge handoffs are modeled. The ledge/collision-env checklist bucket is closed in fresh taxonomy (`F17=0`, `F10c=0`, `F22=0` in primary and aggregate). Remaining row evidence is split to exact adjacent owners: pure `CollData.floor.index` visibility (`F10m`), common Fall/Landing timebase (`F10n`), common Ottotto teeter handoff (`F10o`), and SpecialAirHi/Bound collision callback timing (`F10p`, kept out of `F22`). |
+| Ledge system (Cliff* actions, quick/slow options) | **PARTIAL** | Ledge-grab mask now uses collision-stage prev/cur snapshots; occupancy includes quick/slow option actions; MissFoot can CliffCatch; Cliff option terminal callbacks can consume Wait IASA locomotion tails; Cliff x1990 and x2064 terminal cooldown seed/runtime ownership are narrowed. The generic ledge/collision-env taxonomy buckets are closed (`F17=0`, `F10c=0`). |
+| Knockdown/tech (DownBound/Wait/Stand/Attack + rolls) | **EFFECTIVELY CLOSED FOR SHARED CONTACT OWNER** | `DamageFly*`/`DamageFall` floor contact now shares one decomp-shaped selector for `PassiveStandF/B` -> `Passive` -> `DownBound`; `x680`/`x684` tech timers now model hitlag-latched `x668`; remaining same-action `ground_id` tails are floor-line identity (`F10m`), not knockdown/ledge action ownership. |
 | Combat geometry (hurtcaps/hitboxes/shields pose-driven) | **PARTIAL** | Core data-driven primitives exist; remaining parity depends on exact facing/axis + attachment nuances. |
 | Damage pipeline (BODY + SHIELD, GuardSetOff, hitlag/hitstun/KB states) | **PARTIAL** | Big pieces are in; still missing full rehit/hitlist, stale queue, and many modifiers. |
 | Items/projectiles | **PARTIAL** | Laser/blaster coverage is in and reduces `item_*` mismatches; item system parity is incomplete beyond suite needs. |
@@ -664,8 +680,7 @@ Prefer completing these projects in order rather than “patching symptoms” in
      `src/mpcoll_ground.c`, `src/mpcoll_wall_ceil.c`, and their persistence tests under `tests/`).
    - Any per-action “force airborne” policies added solely to compensate for unstable floor selection (should be deleted when found).
    - Downstream hacks that depend on missing collision-env semantics (still being reduced under Parity Project #2 and the ledge risk register):
-     - “outside-only grab” ledge catch gate (`src/ledge.c:376`).
-     - CliffWait climb/drop “previous-stick neutral reset” latch (`src/ledge.c:190`).
+    - CliffWait climb/drop “previous-stick neutral reset” latch (`src/ledge.c`).
 
    **DONE when**
    - `mismatch.on_ground` and `mismatch.ground_id` become scorecard-compliant **without** any per-action grounding special cases.
@@ -1445,7 +1460,8 @@ Driver shortlist (suite offender clusters as of the committed baseline in `repor
    - Status: **PARTIAL** (collision-stage prev/cur snapshot based ledge-grab mask is implemented and scheduled post-collision).
    - Blocked by: (1) mpColl parity for stable `env_flags`/line identity + occupancy/refresh/cooldowns.
    - Dependencies: (1).
-   - Acceptance checks: reduce remaining ledge mismatch clusters without action-specific hacks; remove remaining “outside-only grab” approximation if still present.
+   - Acceptance checks: reduce remaining ledge mismatch clusters without action-specific hacks; keep
+     `Collide_LedgeGrabMask` generation in the collision-env owner.
 
 3. Hitlists/rehit timers parity (**parity project**)
    - Blocked by: (1) mpColl parity (stable contact/landing frames; consistent “same-frame” ordering).
@@ -1487,9 +1503,8 @@ When a mismatch strongly suggests a missing internal that cannot be reconstructe
   sites like `ft_800892A0`, which can change duplicate suppression in the stale table (see `tools/slippi/staling_history.py`).
 - Ledge occupancy + ledge refresh timer(s) + per-action ledge regrab restrictions.
 - Ledge option `mv.co.cliff.x8` gate is currently approximated via a “previous-stick neutral reset” check for climb/drop on CliffWait
-  (`src/ledge.c:190`); this may need to become an explicit seeded/internal latch for full parity.
-- Ledge catch region is currently approximated with an “outside-only grab” gate when using `ledge_grab_window_ok`
-  (`src/ledge.c:376`), pending a decomp-shaped `Collide_LedgeGrabMask` / collision-env implementation.
+  (`src/ledge.c`); same-proc CliffCatch -> CliffWait IASA intentionally excludes climb/drop because
+  `ftCo_8009A804` initializes `mv.co.cliff.x8 = 0`.
 - Grab state internals: grab attach points, breakouts, throw release frame/timers, and victim constraint mode.
 - SSANIM / ECB axis mapping contract: do not change tz/ty basis mappings in the core sim as an ad-hoc “fix”; treat any axis remap as a
   separate audit project with explicit validation and documentation (see `docs/SSANIM_AXIS_BASIS.md`).
@@ -2008,11 +2023,24 @@ M6 Ledge/tech/knockdown (**PARTIAL**)
   Decomp refs:
   `refs/melee/src/melee/ft/fighter.c::{Fighter_Spaghetti_8006AD10_Inner1,Fighter_Spaghetti_8006AD10}`,
   `refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownAttack.c::ftCo_800986B0`.
-- Current residual label:
-  - `F17_mpcoll_ledge_ecb_residual`: row-level audited contact substrate rows: same-action
-    `ground_id` / `jumps_left` / hurtbox-state drift, DamageFly-vs-Passive one-frame floor-contact
-    timing, and PassiveWallJump wall-contact timing. These are upstream of the shared floor
-    selector and should not be patched in `enter_damagefly_ground_contact_followup`.
+- Current residual labels:
+  - `F17_mpcoll_ledge_ecb_residual`: closed for current primary/aggregate taxonomy. It is no longer
+    used for pure floor-line visibility tails.
+  - `F10m_floor_line_identity`: pure `CollData.floor.index` visibility across connected FD floor
+    seams. Action, ground/air, jump, and hurtbox fields already agree; remaining work belongs to
+    floor-line identity persistence/export, not ledge occupancy or CliffCatch.
+  - `F10n_common_fall_landing_timebase`: generic `Fall` <-> `Landing` one-frame phase rows owned by
+    `ftCo_Fall_Coll` / `ftCo_Landing_Enter_Basic` callback timing.
+  - `F10o_ottotto_teeter_edge_handoff`: common teeter entry vs Fall handoff through
+    `ftCo_8009A3C8`; the safe retained runtime slice covers Ottotto crouch IASA and Ottotto anim-end
+    to OttottoWait, while a broad teeter-entry gate was rejected by walk-off sentinels.
+  - `F10p_specialhi_bound_collision_callback`: `SpecialAirHi` <-> `SpecialHiBound` one-frame
+    collision callback timing. These rows stay outside `F22_specialhi_firefox_firebird` so section 6
+    remains closed.
+  - DamageFly-vs-Passive, DownBound-vs-DamageFly, DownDamage floor-contact, and PassiveWallJump
+    wall-contact action bundles are split to `F08c_damage_state_transition_adjacency`; pure
+    hurtbox/source tails are split to state/combat owners. Same-action DamageAir floor contacts
+    refresh only the visible jump count when mpColl already reports ground.
 AttackAirN continuation stale-owner bridge:
 - AttackAirN has a later create-hitbox refresh window in the extracted Fox/Falco scripts.
 - On replay-real continuation rows like `AGN:5482`, the victim is still in `DamageFlyTop`

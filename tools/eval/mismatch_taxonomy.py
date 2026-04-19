@@ -739,6 +739,71 @@ FAMILY_META: dict[str, FamilyMeta] = {
             "refs/melee/src/melee/ft/ft_081B.c",
         ),
     ),
+    "F10m_floor_line_identity": FamilyMeta(
+        label="Floor-Line Identity Visibility",
+        owner_module="stage_collision",
+        fix_type="runtime-only",
+        risk="low",
+        confidence="high",
+        hypothesis=(
+            "Pure `CollData.floor.index` visibility rows at connected FD floor seams. The action, "
+            "ground/air, jump, and collision-transition decisions already agree; only the exported "
+            "floor line id differs."
+        ),
+        refs=(
+            "refs/melee/src/melee/mp/mpcoll.c::mpColl_8004A45C_Floor",
+            "refs/melee/src/melee/mp/mplib.c::mpLib_8004DD90_Floor",
+            "refs/melee/src/melee/lb/types.h::CollData",
+        ),
+    ),
+    "F10n_common_fall_landing_timebase": FamilyMeta(
+        label="Common Fall / Landing Timebase",
+        owner_module="locomotion",
+        fix_type="runtime-only",
+        risk="med",
+        confidence="high",
+        hypothesis=(
+            "Generic Fall <-> Landing one-frame phase rows owned by common Fall_Coll and "
+            "Landing_Enter callback timing, not ledge occupancy or CliffCatch admission."
+        ),
+        refs=(
+            "refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_Coll",
+            "refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::ftCo_Landing_Enter_Basic",
+            "refs/melee/src/melee/ft/ft_081B.c::{ft_800831CC,ft_80082B1C}",
+        ),
+    ),
+    "F10o_ottotto_teeter_edge_handoff": FamilyMeta(
+        label="Ottotto Teeter Edge Handoff",
+        owner_module="locomotion",
+        fix_type="runtime-only",
+        risk="med",
+        confidence="high",
+        hypothesis=(
+            "Common teeter rows where Wait/Landing/Run-family callbacks disagree between Ottotto "
+            "entry and generic Fall. These are the ftCo_8009A3C8 teeter owner, separate from "
+            "ledge occupancy, ledge grab masks, or CliffCatch."
+        ),
+        refs=(
+            "refs/melee/src/melee/ft/chara/ftCommon/ftCo_Ottotto.c::{ftCo_8009A3C8,ftCo_8009A410,ftCo_Ottotto_Coll}",
+            "refs/melee/src/melee/ft/ft_081B.c::{ft_80084280,ft_800844EC}",
+        ),
+    ),
+    "F10p_specialhi_bound_collision_callback": FamilyMeta(
+        label="SpecialAirHi / Bound Collision Callback Timing",
+        owner_module="mpcoll_env",
+        fix_type="runtime-only",
+        risk="med",
+        confidence="high",
+        hypothesis=(
+            "SpecialAirHi <-> SpecialHiBound one-frame callback timing rows from shared collision "
+            "callback ordering. Keeping this outside F22 preserves the closed Firefox/Firebird "
+            "state-machine owner."
+        ),
+        refs=(
+            "refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::{ftFx_SpecialAirHi_Coll,ftFx_SpecialHiBound_Coll}",
+            "refs/melee/src/melee/mp/mpcoll.c",
+        ),
+    ),
     "F10d_hurtbox_stateflag_adjacency": FamilyMeta(
         label="Hurtbox / State-Flag Adjacency",
         owner_module="state_flags",
@@ -1176,13 +1241,14 @@ FAMILY_META: dict[str, FamilyMeta] = {
         risk="med",
         confidence="high",
         hypothesis=(
-            "Damage-adjacent rows whose remaining mismatch is floor/ledge/ECB contact timing rather "
-            "than the shared Passive / PassiveStand / DownBound selector ladder."
+            "Rows whose remaining mismatch is persistent floor-line identity (`CollData.floor.index`) "
+            "in damage or Cliff option contexts. Damage/passive/wall-tech action bundles are split "
+            "to their damage/action owners rather than kept in the ledge bucket."
         ),
         refs=(
             "refs/melee/src/melee/mp/mpcoll.c",
-            "refs/melee/src/melee/ft/ft_081B.c::{ft_80081DD4,ft_80082708}",
-            "refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_DamageFly_Coll",
+            "refs/melee/src/melee/mp/mplib.c::mpLib_8004DD90_Floor",
+            "refs/melee/src/melee/lb/types.h::CollData",
         ),
     ),
     "F18_damage_tech_timer_seed_surface": FamilyMeta(
@@ -1538,7 +1604,12 @@ def _is_mpcoll_ledge_ecb_residual(row: PlayerRow, names: tuple[str, str, str], f
 
     seed_name, ref_name, out_name = names
     if seed_name == ref_name == out_name:
-        return True
+        # Same-action damage rows with only jump/on-ground/hurtbox drift are visible
+        # damage/knockdown bookkeeping. Keep only persistent floor-line identity (`floor.index`)
+        # in the mpColl/ledge bucket.
+        # refs/melee/src/melee/mp/mplib.c::mpLib_8004DD90_Floor
+        # refs/melee/src/melee/lb/types.h::CollData
+        return "ground_id" in field_set
 
     # Floor-contact timing: one side accepts DamageFly contact into Passive/DownBound while the
     # other side continues DamageFly. The Passive/DownBound selector itself is not disagreeing.
@@ -1552,14 +1623,14 @@ def _is_mpcoll_ledge_ecb_residual(row: PlayerRow, names: tuple[str, str, str], f
         and not _is_knockdown_selector_disagreement(names)
     )
     if damagefly_vs_grounded_contact:
-        return True
+        return False
 
     # Wall-contact timing: PassiveWall* is admitted by the wall/ceiling contact callback surface,
     # not by the shared floor Passive/PassiveStand/DownBound selector.
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_DamageFly_Coll
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_PassiveWall.c
     if any(_looks_like_passive_wall(name) for name in names):
-        return True
+        return False
 
     return False
 
@@ -1733,6 +1804,44 @@ def _looks_like_landing_cliff_or_fall(name: str) -> bool:
     )
 
 
+def _looks_like_landing_air(name: str) -> bool:
+    return name.startswith("LANDING_AIR_")
+
+
+def _is_common_fall_landing_timebase(names: tuple[str, str, str], field_set: set[str]) -> bool:
+    if not set(names) <= {"FALL", "LANDING"}:
+        return False
+    return bool(field_set & {"action_id", "animation_index", "on_ground"}) and field_set <= {
+        "action_id",
+        "action_frame",
+        "animation_index",
+        "instance_id",
+        "jumps_left",
+        "on_ground",
+        "ground_id",
+    }
+
+
+def _is_ottotto_teeter_edge_handoff(names: tuple[str, str, str], field_set: set[str]) -> bool:
+    if "OTTOTTO" not in names and "OTTOTTO_WAIT" not in names:
+        return False
+    if not any(name == "FALL" for name in names):
+        return False
+    if not any(
+        name in {"WAIT", "RUN", "RUN_BRAKE", "LANDING"} or _looks_like_landing_air(name)
+        for name in names
+    ):
+        return False
+    return bool(field_set & {"action_id", "animation_index", "on_ground", "jumps_left"}) and field_set <= {
+        "action_id",
+        "action_frame",
+        "animation_index",
+        "instance_id",
+        "jumps_left",
+        "on_ground",
+    }
+
+
 def _looks_like_grounded_attack(name: str) -> bool:
     return name.startswith("ATTACK_") and not name.startswith("ATTACK_AIR")
 
@@ -1790,7 +1899,7 @@ def _specialhi_hard_moved_family(row: PlayerRow, names: tuple[str, str, str], fi
         # Firefox launch or Bound ownership.
         # refs/melee/src/melee/mp/mpcoll.c::mpColl_8004A45C_Floor
         # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::ftFx_SpecialHiLanding_Coll
-        return "F10c_collision_landing_edge_adjacency"
+        return "F10m_floor_line_identity"
     if (
         any(name == "FX_SPECIAL_AIR_HI" for name in names)
         and any(name == "FX_SPECIAL_HI_BOUND" for name in names)
@@ -1802,7 +1911,7 @@ def _specialhi_hard_moved_family(row: PlayerRow, names: tuple[str, str, str], fi
         # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::{
         #   ftFx_SpecialAirHi_Coll,ftFx_SpecialHiBound_Coll}
         # refs/melee/src/melee/mp/mpcoll.c
-        return "F10c_collision_landing_edge_adjacency"
+        return "F10p_specialhi_bound_collision_callback"
     if all(name == "FX_SPECIAL_HI_BOUND" for name in names) and field_set <= {"jumps_left"}:
         # Pure jumps-left drift inside steady Bound is common jump/bookkeeping visibility. Bound
         # entry and anim-end action rows stay runtime-locked separately; no launch/travel fields
@@ -1983,13 +2092,13 @@ def _common_fallspecial_hard_moved_family(
         # common FallSpecial landing timing.
         # refs/melee/src/melee/mp/mpcoll.c::mpColl_8004A45C_Floor
         # refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll
-        return "F10c_collision_landing_edge_adjacency"
+        return "F10m_floor_line_identity"
     if field_set == {"action_frame"} and all(name == "LANDING_FALL_SPECIAL" for name in names):
         # Pure LandingFallSpecial action-frame drift is common landing-lag/timebase ownership, not
         # Fox/Falco special state-machine ownership.
         # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::ftCo_LandingFallSpecial_Enter_Basic
         # refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState
-        return "F10c_collision_landing_edge_adjacency"
+        return "F13a_common_fallspecial_landing"
     if field_set and field_set <= {
         "action_id",
         "action_frame",
@@ -2002,14 +2111,15 @@ def _common_fallspecial_hard_moved_family(
     } and bool(field_set & {"action_id", "animation_index", "ground_id", "jumps_left", "on_ground"}):
         # The remaining non-damage FallSpecial/LandingFallSpecial/EscapeAir rows are common landing
         # and collision timing: action/on-ground/jump/ground-id bundles around ftCo_FallSpecial_Coll,
-        # ftCo_LandingFallSpecial_Enter, and ftCo_EscapeAir_Coll. They are not Fox/Falco special
-        # move state-machine rows; keep them with the shared mpColl/landing checklist owner.
+        # ftCo_LandingFallSpecial_Enter, and ftCo_EscapeAir_Coll. They are not ledge-family
+        # CliffCatch/edge-suppression rows and they are not Fox/Falco special move state-machine
+        # rows; keep them with the existing common FallSpecial/LandingFallSpecial owner.
         # refs/melee/src/melee/ft/chara/ftCommon/ftCo_FallSpecial.c::{
         #   ftCo_FallSpecial_Coll,ftCo_80096D28}
         # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::ftCo_LandingFallSpecial_Enter_Basic
         # refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll
         # refs/melee/src/melee/ft/ft_081B.c::{ft_80082C74,ft_80083090}
-        return "F10c_collision_landing_edge_adjacency"
+        return "F13a_common_fallspecial_landing"
     if field_set and field_set <= (STATE_FLAG_FIELDS | {"hurtbox_state"}):
         # Pure state-flag/hurtbox tails are shared visible-state composition; keep action/collision
         # bundles in the common FallSpecial owner.
@@ -2061,6 +2171,7 @@ def _throw_hard_moved_family(row: PlayerRow, names: tuple[str, str, str], field_
 def _looks_like_grounded_selector(name: str) -> bool:
     return (
         name.startswith("WALK_")
+        or name.startswith("LANDING_AIR_")
         or name
         in {
             "WAIT",
@@ -2074,6 +2185,10 @@ def _looks_like_grounded_selector(name: str) -> bool:
             "SQUAT",
             "SQUAT_WAIT",
             "SQUAT_RV",
+            "LANDING",
+            "LANDING_FALL_SPECIAL",
+            "OTTOTTO",
+            "OTTOTTO_WAIT",
         }
     )
 
@@ -2134,8 +2249,22 @@ def _classify_player_row(row: PlayerRow, action_names: dict[int, str]) -> str:
     if throw_hard_move is not None:
         return throw_hard_move
     if any(_looks_like_damage(name) for name in names):
+        if field_set == {"ground_id"}:
+            # Pure floor.index visibility in Damage* rows is the floor-line identity owner, not
+            # ledge occupancy/ECB admission. Action, ground/air, jump, and hurtbox fields agree.
+            # refs/melee/src/melee/mp/mplib.c::mpLib_8004DD90_Floor
+            # refs/melee/src/melee/lb/types.h::CollData
+            return "F10m_floor_line_identity"
         if field_set and field_set <= STATE_FLAG_FIELDS:
             return "F05_damage_state_flags"
+        if field_set and field_set <= {"hurtbox_state"} and any(
+            _looks_like_passive_wall(name) for name in names
+        ):
+            # Pure PassiveWall* hit-status visibility is shared visible-state composition. Keep
+            # action/on-ground/jump bundles in F17 where the wall-contact callback itself differs.
+            # refs/melee/src/melee/ft/chara/ftCommon/ftCo_PassiveWall.c
+            # refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
+            return "F09a_aerial_stateflag_hurtbox_adjacency"
         if field_set <= {"instance_id", "instance_hit_by", "last_hit_by"}:
             return "F08a_damage_identity_bookkeeping_residual"
         if _is_damage_tech_timer_seed_surface(row, names):
@@ -2205,6 +2334,8 @@ def _classify_player_row(row: PlayerRow, action_names: dict[int, str]) -> str:
             # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c
             # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Ottotto.c
             # refs/melee/src/melee/mp/mpcoll.c::mpColl_8004A45C_Floor
+            if _is_ottotto_teeter_edge_handoff(names, field_set):
+                return "F10o_ottotto_teeter_edge_handoff"
             return "F10c_collision_landing_edge_adjacency"
     special_family = _special_owner_family_for_names(context_names, field_set=field_set)
     if special_family is not None:
@@ -2230,6 +2361,12 @@ def _classify_player_row(row: PlayerRow, action_names: dict[int, str]) -> str:
             return "F09c_aerial_action_entry_adjacency"
         return "F09e_aerial_instance_timing_residual"
     if any(_looks_like_grounded(name) for name in names):
+        if field_set == {"ground_id"}:
+            # Lone `ground_id` rows are CollData.floor.index visibility across connected FD floor
+            # seams. Keep action/on_ground/jump edge handoff bundles in their action owners.
+            # refs/melee/src/melee/mp/mpcoll.c::mpColl_8004A45C_Floor
+            # refs/melee/src/melee/mp/mplib.c::mpLib_8004DD90_Floor
+            return "F10m_floor_line_identity"
         if any(_looks_like_appeal(name) for name in names):
             return "F10h_appeal_adjacency"
         if any(_looks_like_turnrun(name) for name in names):
@@ -2253,18 +2390,51 @@ def _classify_player_row(row: PlayerRow, action_names: dict[int, str]) -> str:
             "state_flags[1]",
         }:
             return "F10b_grounded_combat_adjacency"
+        if field_set <= (STATE_FLAG_FIELDS | {"hurtbox_state"}):
+            return "F10d_hurtbox_stateflag_adjacency"
+        if _is_common_fall_landing_timebase(names, field_set):
+            # Common Fall_Coll / Landing_Enter one-frame callback timing. These rows have no ledge
+            # grab, CliffCatch, or floor-line identity fields beyond the ordinary landing bundle.
+            # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_Coll
+            # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::ftCo_Landing_Enter_Basic
+            return "F10n_common_fall_landing_timebase"
+        if _is_ottotto_teeter_edge_handoff(names, field_set):
+            # Common teeter entry vs Fall handoff through ftCo_8009A3C8. This is not ledge
+            # occupancy/CliffCatch ownership and is kept out of the generic collision bucket.
+            # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Ottotto.c::{ftCo_8009A3C8,ftCo_8009A410}
+            # refs/melee/src/melee/ft/ft_081B.c::{ft_80084280,ft_800844EC}
+            return "F10o_ottotto_teeter_edge_handoff"
+        if (
+            any(_looks_like_landing_cliff_or_fall(name) for name in names)
+            and field_set <= {"action_id", "action_frame", "animation_index", "instance_id"}
+            and bool(field_set & {"action_id", "animation_index", "action_frame"})
+        ):
+            # Landing/Ottotto action-only tails are grounded IASA/Anim selector ordering. Keep
+            # on_ground/jumps/ground_id edge handoff bundles in F10c.
+            # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::ftCo_Landing_IASA
+            # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Ottotto.c::{
+            #   ftCo_Ottotto_Anim,ftCo_Ottotto_IASA}
+            return "F10a_grounded_selector_transition"
         if any(_looks_like_landing_cliff_or_fall(name) for name in names) or field_set & {
             "ground_id",
             "on_ground",
             "jumps_left",
         }:
             return "F10c_collision_landing_edge_adjacency"
-        if field_set <= (STATE_FLAG_FIELDS | {"hurtbox_state"}):
-            return "F10d_hurtbox_stateflag_adjacency"
         return "F10a_grounded_selector_transition"
     if any(_looks_like_throw_or_thrown(name) for name in context_names):
         return "F14b_per_throw_pulse_bookkeeping"
     if any(_looks_like_landing_cliff_or_fall(name) for name in context_names):
+        if field_set == {"ground_id"}:
+            return "F10m_floor_line_identity"
+        if field_set <= (STATE_FLAG_FIELDS | {"hurtbox_state"}):
+            return "F10d_hurtbox_stateflag_adjacency"
+        if field_set and field_set <= {"last_hit_by", "combo_count", "last_attack_landed"}:
+            if row.on_ground == 0 or any(_looks_like_aerial(name) for name in names):
+                return "F09b_aerial_bookkeeping_adjacency"
+            return "F10b_grounded_combat_adjacency"
+        if field_set == {"action_frame"}:
+            return "F11_locomotion_action_frame"
         if any(name.startswith("CLIFF") for name in context_names):
             return "F17_mpcoll_ledge_ecb_residual"
         return "F10c_collision_landing_edge_adjacency"
@@ -2493,6 +2663,22 @@ def _audit_player_row(row: PlayerRow, action_names: dict[int, str]) -> tuple[boo
             field_set & {"ground_id", "on_ground", "jumps_left"}
         )
         return ok, "grounded-name row with collision/landing/edge fields"
+    if row.family_id == "F10m_floor_line_identity":
+        ok = field_set == {"ground_id"}
+        return ok, "pure CollData.floor.index visibility row"
+    if row.family_id == "F10n_common_fall_landing_timebase":
+        ok = _is_common_fall_landing_timebase(names, set(field_set))
+        return ok, "common Fall/Landing callback timebase row"
+    if row.family_id == "F10o_ottotto_teeter_edge_handoff":
+        ok = _is_ottotto_teeter_edge_handoff(names, set(field_set))
+        return ok, "common Ottotto teeter edge handoff row"
+    if row.family_id == "F10p_specialhi_bound_collision_callback":
+        ok = (
+            any(name == "FX_SPECIAL_AIR_HI" for name in names)
+            and any(name == "FX_SPECIAL_HI_BOUND" for name in names)
+            and field_set <= {"action_id", "action_frame", "animation_index"}
+        )
+        return ok, "SpecialAirHi/Bound collision callback timing row"
     if row.family_id == "F10d_hurtbox_stateflag_adjacency":
         ok = field_set <= (STATE_FLAG_FIELDS | {"hurtbox_state"})
         return ok, "grounded-name row with hurtbox/state-flag-only fields"

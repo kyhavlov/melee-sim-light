@@ -25,6 +25,7 @@ static inline uint8_t physics_action_skip_common_air_helper_first_frame(uint16_t
   switch (action_id) {
     case MSL_ACT_JUMP_F:
     case MSL_ACT_JUMP_B:
+    case MSL_ACT_CLIFF_JUMP_SLOW2:
     case MSL_ACT_CLIFF_JUMP_QUICK2:
       return 1;
     default:
@@ -255,8 +256,11 @@ static inline uint8_t physics_action_uses_ft_80084FA8(uint16_t action_id) {
     case MSL_ACT_ATTACK_S4_LW:
     case MSL_ACT_PASSIVE_STAND_F:
     case MSL_ACT_PASSIVE_STAND_B:
+    case MSL_ACT_CLIFF_CLIMB_SLOW:
     case MSL_ACT_CLIFF_CLIMB_QUICK:
+    case MSL_ACT_CLIFF_ATTACK_SLOW:
     case MSL_ACT_CLIFF_ATTACK_QUICK:
+    case MSL_ACT_CLIFF_ESCAPE_SLOW:
     case MSL_ACT_CLIFF_ESCAPE_QUICK:
       return 1;
     default:
@@ -1020,9 +1024,13 @@ static inline uint8_t physics_is_match_flow_airborne(uint16_t action_id) {
     // generic gravity/fastfall updates in this simplified core.
     case MSL_ACT_CLIFF_CATCH:
     case MSL_ACT_CLIFF_WAIT:
+    case MSL_ACT_CLIFF_CLIMB_SLOW:
     case MSL_ACT_CLIFF_CLIMB_QUICK:
+    case MSL_ACT_CLIFF_ATTACK_SLOW:
     case MSL_ACT_CLIFF_ATTACK_QUICK:
+    case MSL_ACT_CLIFF_ESCAPE_SLOW:
     case MSL_ACT_CLIFF_ESCAPE_QUICK:
+    case MSL_ACT_CLIFF_JUMP_SLOW1:
     case MSL_ACT_CLIFF_JUMP_QUICK1:
       return 1;
     default:

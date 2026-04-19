@@ -1855,12 +1855,33 @@ void knockdown_update_post_collision(MslBatch* batch) {
             continue;
           }
           // Decomp: Damage_Coll fallback while grounded keeps Damage motion-state and applies the
-          // common air->ground transfer helper.
+          // common air->ground transfer helper. Keep this restricted to hitstun-active continuation
+          // rows; grounded DamageAir fastfall visibility is owned separately by the visible
+          // state-flags / fastfall lane.
           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_Coll
           // refs/melee/src/melee/ft/ftcommon.c::{ftCommon_8007D7FC,ftCommon_8007D6A4}
           if (batch->state.hitstun[idx] > 0u) {
             transfer_air_to_ground_on_land(batch, ch, (size_t)bi, idx, a0);
+          } else {
+            // Low-KB DamageAir floor contact can keep the visible DamageAir motion while replay
+            // already exposes the jump refresh from the same grounding helper. Preserve the
+            // visible fastfall/state-flag lane here; full ftCommon_8007D7FC bookkeeping would clear
+            // fastfall on replay-real grounded DamageAir rows where Slippi still reports it.
+            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_Coll
+            // refs/melee/src/melee/ft/ftcommon.c::{ftCommon_8007D7FC,ftCommon_8007D6A4}
+            batch->state.jumps_left[idx] = ch->max_jumps;
           }
+          continue;
+        }
+
+        if (a0 == (uint16_t)MSL_ACT_DOWN_DAMAGE_U || a0 == (uint16_t)MSL_ACT_DOWN_DAMAGE_D) {
+          // DownDamage collision can preserve the downed damage motion while applying the same
+          // ground-transfer bookkeeping as other air->ground contact paths. Keep this scoped to rows
+          // where mpColl has already reported ground; rows that miss `now_ground` remain floor
+          // contact substrate, not a bookkeeping fix.
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownDamage.c
+          // refs/melee/src/melee/ft/ftcommon.c::{ftCommon_8007D7FC,ftCommon_8007D6A4}
+          transfer_air_to_ground_on_land(batch, ch, (size_t)bi, idx, a0);
           continue;
         }
       } else if (!now_ground && is_down_bound(a0) &&

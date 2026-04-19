@@ -1,6 +1,7 @@
 #pragma once
 
 #include "batch_internal.h"
+#include "char_params.h"
 #include "common_params.h"
 
 // Locomotion action-state updates (Fox/Falco, FD).
@@ -27,3 +28,8 @@ void locomotion_update_post_collision(MslBatch* batch);
 uint8_t locomotion_grounded_a_attack_try_enter_from_wait_iasa(
     MslBatch* batch, const MslCommonParams* c, size_t idx, uint16_t buttons_pressed, float stick_x,
     float stick_y, uint8_t tilt_timer_x, uint8_t tilt_timer_y, float facing_dir);
+
+uint8_t locomotion_wait_iasa_locomotion_subset_try_enter(
+    MslBatch* batch, const MslCommonParams* c, const MslCharParams* ch, size_t idx,
+    uint16_t buttons, uint16_t buttons_pressed, float stick_x, float stick_y, uint8_t tilt_timer_x,
+    uint8_t tilt_timer_y, float facing_dir, uint16_t action_id_start);

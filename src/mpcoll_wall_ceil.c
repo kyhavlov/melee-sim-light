@@ -140,6 +140,7 @@ static inline uint8_t is_cliff_hold_action(uint16_t a) {
   switch (a) {
     case MSL_ACT_CLIFF_CATCH:
     case MSL_ACT_CLIFF_WAIT:
+    case MSL_ACT_CLIFF_JUMP_SLOW1:
     case MSL_ACT_CLIFF_JUMP_QUICK1:
       return 1;
     default:
@@ -158,8 +159,11 @@ static inline uint8_t is_grounded_cliff_option_action(uint16_t a, uint8_t on_gro
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffAttack.c::ftCo_CliffAttack_Coll
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffEscape.c::ftCo_CliffEscape_Coll
   switch (a) {
+    case MSL_ACT_CLIFF_CLIMB_SLOW:
     case MSL_ACT_CLIFF_CLIMB_QUICK:
+    case MSL_ACT_CLIFF_ATTACK_SLOW:
     case MSL_ACT_CLIFF_ATTACK_QUICK:
+    case MSL_ACT_CLIFF_ESCAPE_SLOW:
     case MSL_ACT_CLIFF_ESCAPE_QUICK:
       return 1u;
     default:

@@ -46,6 +46,24 @@
 #include "grab_attachment.h"
 #include "knockdown.h"
 
+static inline uint8_t reseed_action_uses_basic_fall_ledge_cooldown_tick(uint16_t action) {
+  switch (action) {
+    case MSL_ACT_FALL:
+    case MSL_ACT_FALL_F:
+    case MSL_ACT_FALL_B:
+    case MSL_ACT_FALL_AERIAL:
+    case MSL_ACT_FALL_AERIAL_F:
+    case MSL_ACT_FALL_AERIAL_B:
+    case MSL_ACT_FALL_SPECIAL:
+    case MSL_ACT_FALL_SPECIAL_F:
+    case MSL_ACT_FALL_SPECIAL_B:
+    case MSL_ACT_DAMAGE_FALL:
+      return 1u;
+    default:
+      return 0u;
+  }
+}
+
 static inline uint16_t item_seed_bridge_attack_id(const MslBatch* batch, int bi,
                                                   const MslItem* item) {
   if (batch == NULL || item == NULL) {
@@ -1033,7 +1051,23 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
       batch->state.shine_release_lag[idx] = seed->shine_release_lag[p];
       batch->state.shine_is_release[idx] = seed->shine_is_release[p];
       batch->state.ecb_lock_timer[idx] = seed->ecb_lock_timer[p];
-      batch->state.ledge_cooldown[idx] = seed->ledge_cooldown[p];
+      {
+        uint8_t ledge_cd = seed->ledge_cooldown[p];
+        if (ledge_cd != 0u &&
+            reseed_action_uses_basic_fall_ledge_cooldown_tick(seed->action_id[p])) {
+          // One-step reseed alignment for x2064:
+          // ordinary Fall-family collision wrappers reach mpColl after Fighter_procUpdate's
+          // non-hitlag x2064 decrement. Slippi gives us the previous post-frame seed, so replay
+          // rows where x2064 reaches zero during this frame must enter the runtime with the
+          // pre-collision countdown one tick closer to zero. Keep this out of Fox/Falco SpecialHi
+          // actions, whose closed owner relies on the explicit seed cooldown to suppress early
+          // CliffCatch.
+          // refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate
+          // refs/melee/src/melee/ft/ft_081B.c::{ft_80083090,ft_800831CC,ft_800835B0}
+          ledge_cd--;
+        }
+        batch->state.ledge_cooldown[idx] = ledge_cd;
+      }
       batch->state.ledge_side[idx] = -1;
       batch->state.landing_fallspecial_allow_interrupt[idx] =
           seed->landing_fallspecial_allow_interrupt[p] ? 1u : 0u;
@@ -1236,9 +1270,17 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
         // Decomp callsite anchor:
         // refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffWait.c::ftCo_8009A77C
         if (action == (uint16_t)MSL_ACT_CLIFF_CATCH || action == (uint16_t)MSL_ACT_CLIFF_WAIT) {
-          const uint16_t rem = colanim_timer_remaining_from_seed_bridge(
-              common->colanim_cliff_x1990_frames, action_frame, seed->anim_frame_f32[p],
-              seed->frame_speed_mul_f32[p]);
+          // Teacher-forced reseed has an explicit replay-history x1990 lane. Trust it over
+          // action-frame inference on steady CliffWait rows so the terminal x1990=1 frame can
+          // expire during this step instead of being recreated after timer decay.
+          // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffWait.c::ftCo_8009A804
+          uint16_t rem = seed->colanim_timer_x1990[p];
+          if (rem == 0u && seed->colanim_hit_status_x198c[p] == 2u && action_frame <= 1) {
+            rem = colanim_timer_remaining_from_seed_bridge(common->colanim_cliff_x1990_frames,
+                                                           action_frame, seed->anim_frame_f32[p],
+                                                           seed->frame_speed_mul_f32[p]);
+          }
           batch->state.colanim_timer_x1990[idx] = rem;
           if (rem != 0u) {
             batch->state.colanim_hit_status_x198c[idx] = 2u;

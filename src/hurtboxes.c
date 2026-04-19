@@ -265,9 +265,13 @@ static inline void hurtboxes_apply_colanim_action_entry(MslBatch* batch, size_t 
   }
 
   // Cliff catch/wait invulnerability timer ownership (x49C -> x1990):
-  // decomp callsite anchor: ftCo_CliffWait path uses ftColl_8007B760(..., x49C).
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffWait.c::ftCo_8009A77C
-  if (action == (uint16_t)MSL_ACT_CLIFF_CATCH || action == (uint16_t)MSL_ACT_CLIFF_WAIT) {
+  // decomp callsite anchor: CliffCatch/CliffWait entry paths set x1990 once via ftColl_8007B760.
+  // Do not recreate the timer on steady CliffWait frames after Fighter_8006A360 expires it.
+  // refs/melee/src/melee/ft/ftcliffcommon.c::ftCliffCommon_80081370
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffWait.c::ftCo_8009A804
+  // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
+  if ((action == (uint16_t)MSL_ACT_CLIFF_CATCH || action == (uint16_t)MSL_ACT_CLIFF_WAIT) &&
+      action_frame <= 1) {
     uint16_t rem =
         hurtboxes_timer_remaining_from_action_frame(c->colanim_cliff_x1990_frames, action_frame);
     if (rem > batch->state.colanim_timer_x1990[idx]) {

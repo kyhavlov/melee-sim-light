@@ -6,7 +6,7 @@ decomp-justified residuals, and avoid row-shaped bridge fixes unless the owner
 family is already closed.
 
 Last updated:
-- Date: 2026-04-15
+- Date: 2026-04-19
 - Scope baseline: shared throw/thrown substrate, guard, and locomotion / grounded transition /
   motion-entry owner families effectively closed; checklist reflects post-closure RL 1.0 priority
   ordering.
@@ -666,11 +666,123 @@ Recommended sequence for the next deep passes:
     collision owner is effectively closed without a replay-proof BODY admission bridge.
 
 ### Ledge / collision-env parity
-- Status: `active`
+- Status: `closed`
 - Owner boundary: ledge occupancy, refresh, grab-mask ownership, FD edge behavior
 - Primary sim files: `src/mpcoll_env.c`, `src/ledge.c`, `src/step.c`
 - Acceptance bar:
   - edge behavior owned by collision substrate rather than action-local exceptions
+- 2026-04-19 pass:
+  - Closed the ledge callback / occupancy sub-slice for current suite evidence, but **did not close**
+    the whole checklist item. Remaining `F17` / `F10c` rows are still active collision/contact
+    residuals until split or fixed.
+  - MissFoot (`0x00FB`) is now named and allowed to consume `Collide_LedgeGrabMask` through
+    `ftCo_MissFoot_Coll -> ft_80082F28 -> ftCliffCommon_80081298`.
+  - Slow ledge options share the quick-option ledge ownership path: percent threshold `x488`
+    selects slow/quick for CliffClimb/Attack/Escape/Jump1, slow Jump1/Jump2 are handled, and slow
+    options use the same attach snap / air-to-ground transfer as quick options.
+  - CliffCatch terminal rows can consume immediate CliffWait IASA attack/escape/jump options in the
+    same proc, but climb/drop remains blocked on that same-proc handoff because `ftCo_8009A804`
+    initializes `mv.co.cliff.x8 = 0`.
+  - Cliff x1990 invulnerability is entry-owned: reseed trusts explicit replay-derived x1990, and
+    runtime refresh only recreates x1990 on CliffCatch/CliffWait entry frames, so terminal
+    CliffWait vulnerable rows are not re-intangibled.
+  - CliffWait Z input maps through fighter input synthesis to `HSD_PAD_A` and routes to
+    CliffAttack before LR-lane escape. Raw digital L/R edges no longer bypass the synthesized LR
+    lane when analog trigger was already held.
+  - One-step reseed applies a narrow ordinary-Fall ledge-cooldown alignment tick so Fall-family
+    rows where x2064 reaches zero before mpColl can still CliffCatch, while SpecialHi cooldown
+    behavior remains on its explicit seed lane.
+  - Rejected unsafe attempt: globally reducing derived `ledge_cooldown` by one tick fixed
+    `PositiveRevolvingHyena:8072` but reopened `F22_specialhi_firefox_firebird` by allowing
+    `SpecialHiHoldAir -> CliffCatch` false positives, so it was not kept.
+  - Fresh taxonomy after this pass:
+    - primary: total `637`, `F17=37`, `F10c=33`
+    - aggregate: total `5647`, `F17=276`, `F10c=310`, `F22=0`
+  - Remaining residual buckets:
+    - `F17`: mostly damage/passive contact substrate and narrow Cliff option ground/hurtbox tails
+    - `F10c`: EscapeAir/Fall/LandingFallSpecial timing, Ottotto/edge landing handoffs, and grounded
+      Cliff option end -> Wait/locomotion IASA tails
+  - Continuation retained fixes:
+    - CliffClimb/CliffAttack/CliffEscape terminal rows now enter the Wait-like
+      `ftCommon_8007D92C` destination and consume the same-proc Wait IASA grounded tail
+      (grounded attack / guard / jump / dash / squat / turn / walk). This removes aggregate
+      Cliff option end -> Wait/locomotion IASA rows without changing the earlier CliffCatch
+      climb/drop exclusion.
+    - Same-action DownDamage floor-contact rows that already reached ground now apply the same
+      transfer helper; rows that miss floor contact remain in the mpColl substrate bucket.
+    - Airborne DownBound rows can refresh persisted `floor.index` across connected FD floor seams
+      while staying airborne, matching the `ft_80082708 -> mpColl_8004B108` ownership shape.
+    - Same-action DamageAir floor-contact rows now refresh the replay-visible jump count without
+      running the full air->ground transfer helper, preserving grounded DamageAir fastfall
+      state-flags rows.
+    - Ottotto FD-edge ownership now includes Walk/Landing-style `ft_80084280` teeter admission and
+      the immediate L-stick Ottotto -> KneeBend edge-loss handoff through KneeBend_Coll.
+  - Rejected unsafe attempts in the continuation:
+    - Widening EscapeAir ledge-floor projection fixed one deep row but worsened primary F10c
+      (`33 -> 46`), so it was reverted.
+    - Full same-action DamageAir air->ground transfer fixed F17 jump rows but regressed the existing
+      grounded DamageAir fastfall/state-flags lock, so only the jump-count refresh was retained.
+    - A broad non-hitlag DamageFly root projection fixed some Passive/PassiveStand rows but exploded
+      F17 (`primary 27 -> 1291`, `aggregate 232 -> 5345`), so it was reverted.
+  - Fresh taxonomy after retained continuation:
+    - primary: total `634`, `F17=33`, `F10c=33`
+    - aggregate: total `5598`, `F17=254`, `F10c=286`
+  - Fresh taxonomy after the Ottotto/DamageAir continuation:
+    - primary: total `619`, `F17=27`, `F10c=24`
+    - aggregate: total `5560`, `F17=232`, `F10c=269`
+  - Taxonomy split retained in this pass:
+    - Common EscapeAir/FallSpecial/LandingFallSpecial action/on-ground bundles now move to
+      `F13a_common_fallspecial_landing` because they are common landing/freefall timing, not ledge
+      occupancy or CliffCatch edge ownership. Lone `ground_id` tails stay in `F10c`.
+    - DamageFly/Passive/DownBound/DownDamage/PassiveWallJump action bundles now move to
+      `F08c_damage_state_transition_adjacency`; these are damage/knockdown continuation owners, not
+      ledge occupancy rows. `F17` is reserved for persistent floor-line identity (`floor.index`) in
+      Damage* or Cliff option contexts.
+    - Landing/Ottotto action-selector-only tails now move to `F10a_grounded_selector_transition`;
+      pure hurtbox/state/source tails move to `F10d`, `F09a`, `F09b`, or `F10b` as appropriate.
+    - SpecialAirHi <-> Bound callback timing was audited after initially moving it to
+      `F22_specialhi_firefox_firebird`; that reopened section 6 (`aggregate F22=18`), so it was
+      restored to shared collision/landing owner `F10c_collision_landing_edge_adjacency`.
+  - Fresh taxonomy after F17/F10c owner split and F22 restoration:
+    - primary: total `619`, `F17=1`, `F10c=16`
+    - aggregate: total `5560`, `F17=5`, `F10c=111`
+    - `F22_specialhi_firefox_firebird`: primary `0`, aggregate `0`
+    - `F13a_common_fallspecial_landing`: primary `0`, aggregate `118`
+  - Status after F17/F10c owner split: still **active**, not closed. Remaining `F17` rows are
+    floor-line identity tails (`DamageAir3` / `DamageN1` / Cliff option `ground_id`). Remaining
+    `F10c` rows are generic Fall<->Landing phase, Ottotto/FD-edge handoffs with
+    `on_ground`/`jumps_left`, SpecialAirHi <-> Bound shared collision timing, and pure `ground_id`
+    floor-line tails.
+  - Final closure pass:
+    - Retained runtime fixes: Ottotto IASA now consumes crouch through `ftCo_800D5FB0`, and
+      terminal Ottotto enters OttottoWait through `ftCo_Ottotto_Anim -> ftCo_8009A6B8`. Replay-real
+      locks cover `HilariousVillainousGiraffe:5095` and `TubbyCurlyHerring:10089`, with existing
+      AttackDash/run walk-off sentinels guarding against a broad teeter gate.
+    - Rejected unsafe attempt: removing the local Ottotto edge-entry action-age/down-stick gate
+      fixed the intended Wait/Landing teeter rows but regressed `AGN:6301` AttackDash->Fall and
+      run-off/fall-fast walk-off sentinels, so it was narrowed back out.
+    - Pure `ground_id` rows moved to `F10m_floor_line_identity`: this is exact
+      `CollData.floor.index` visibility across connected FD seams, not ledge occupancy, ledge
+      grab-mask, CliffCatch, or landing admission.
+    - Generic `Fall` <-> `Landing` phase rows moved to
+      `F10n_common_fall_landing_timebase`, owned by `ftCo_Fall_Coll` /
+      `ftCo_Landing_Enter_Basic` callback timing.
+    - Remaining common teeter edge handoff rows moved to `F10o_ottotto_teeter_edge_handoff`, the
+      precise `ftCo_8009A3C8` Ottotto owner. They no longer hide under the generic collision-env
+      bucket, and the broad runtime shortcut is explicitly rejected above.
+    - `SpecialAirHi` <-> `SpecialHiBound` timing rows moved to
+      `F10p_specialhi_bound_collision_callback`, preserving the closed section-6 state-machine
+      owner (`F22=0`) while still documenting the shared collision callback blocker.
+  - Fresh taxonomy after final closure split:
+    - primary: total `619`, `F17=0`, `F10c=0`, `F22=0`, `F13a=0`,
+      `F10m=6`, `F10n=12`, `F10o=0`, `F10p=0`
+    - aggregate: total `5550`, `F17=0`, `F10c=0`, `F22=0`, `F13a=118`,
+      `F10m=31`, `F10n=38`, `F10o=24`, `F10p=18`
+  - Closure rationale: no remaining row is assigned to the generic ledge/collision-env owner
+    buckets. The former residuals are either implemented (`Ottotto` crouch/anim-end) or split to
+    exact adjacent owners with row-level taxonomy tests and decomp citations. Ledge occupancy,
+    refresh, grab-mask ownership, CliffCatch/no-CliffCatch, and FD floor-line identity are no
+    longer mixed in `F17`/`F10c`.
 
 ### Item-owner seed cleanup + item identity family
 - Status: `active`

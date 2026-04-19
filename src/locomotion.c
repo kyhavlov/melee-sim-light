@@ -29,11 +29,13 @@ static inline float msl_signf(float x) { return x < 0.0f ? -1.0f : 1.0f; }
 // - ftCo_MS_Ottotto = 245
 // - ftCo_MS_OttottoWait = 246
 // - ftCo_SM_Ottotto = 210
+// - ftCo_SM_OttottoWait = 211
 // TODO: Promote these local Ottotto action ids into the shared action-id definitions in a follow-up.
 enum {
   MSL_ACT_OTTOTTO = 245u,
   MSL_ACT_OTTOTTO_WAIT = 246u,
   MSL_SM_OTTOTTO = 210u,
+  MSL_SM_OTTOTTO_WAIT = 211u,
 };
 
 static inline uint16_t walk_action_from_speed(const MslCommonParams* c, const MslCharParams* ch,
@@ -1368,6 +1370,18 @@ static inline uint8_t wait_iasa_locomotion_subset_try_enter(
   return 0u;
 }
 
+uint8_t locomotion_wait_iasa_locomotion_subset_try_enter(
+    MslBatch* batch, const MslCommonParams* c, const MslCharParams* ch, size_t idx,
+    uint16_t buttons, uint16_t buttons_pressed, float stick_x, float stick_y, uint8_t tilt_timer_x,
+    uint8_t tilt_timer_y, float facing_dir, uint16_t action_id_start) {
+  // Public wrapper for same-proc callback bridges that enter Wait-like states before the normal
+  // locomotion pass reaches this helper, e.g. Cliff option anim-end via ftCommon_8007D92C.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
+  return wait_iasa_locomotion_subset_try_enter(batch, c, ch, idx, buttons, buttons_pressed, stick_x,
+                                               stick_y, tilt_timer_x, tilt_timer_y, facing_dir,
+                                               action_id_start);
+}
+
 static inline uint8_t grounded_attack_try_jab_chain_subset(MslBatch* batch, size_t idx,
                                                            uint8_t char_id, uint16_t action_id,
                                                            uint16_t buttons_pressed,
@@ -1490,6 +1504,51 @@ static inline uint8_t ottotto_edge_matches_facing(uint32_t stage_id, uint16_t gr
   // the opposite endpoint while facing away becomes the common Fall path instead of teeter.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Ottotto.c::ftCo_Ottotto_Coll
   return facing ? (uint8_t)(pos_x >= line->x1) : (uint8_t)(pos_x <= line->x0);
+}
+
+static inline uint8_t ottotto_edge_point_for_facing(uint32_t stage_id, uint16_t ground_id,
+                                                    uint8_t facing, float* x_out, float* y_out) {
+  const int line_idx = stage_collision_floor_line_index(stage_id, ground_id);
+  if (line_idx < 0) {
+    return 0u;
+  }
+  const MslStageFloorGraph* g = stage_collision_get_floor_graph(stage_id);
+  if (g == NULL || (size_t)line_idx >= g->line_count) {
+    return 0u;
+  }
+  const MslStageFloorLine* line = &g->lines[(size_t)line_idx];
+  if (facing) {
+    if (x_out != NULL) {
+      *x_out = line->x1;
+    }
+    if (y_out != NULL) {
+      *y_out = line->y1;
+    }
+  } else {
+    if (x_out != NULL) {
+      *x_out = line->x0;
+    }
+    if (y_out != NULL) {
+      *y_out = line->y0;
+    }
+  }
+  return 1u;
+}
+
+static inline uint8_t action_uses_ottotto_edge_callback(uint16_t a) {
+  switch (a) {
+    case MSL_ACT_WALK_SLOW:
+    case MSL_ACT_WALK_MIDDLE:
+    case MSL_ACT_WALK_FAST:
+    case MSL_ACT_LANDING:
+      // These grounded common states use the ft_80084280 family: if the floor helper reports an
+      // edge bit, ftCo_8009A3C8 enters Ottotto before falling.
+      // refs/melee/src/melee/ft/ft_081B.c::ft_80084280
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Ottotto.c::{ftCo_8009A3C8,ftCo_8009A410}
+      return 1u;
+    default:
+      return 0u;
+  }
 }
 
 static inline uint8_t action_is_air_locomotion(uint16_t a) {
@@ -2987,6 +3046,21 @@ void locomotion_update_pre(MslBatch* batch) {
           }
         }
 
+        if ((action_id == (uint16_t)MSL_ACT_OTTOTTO ||
+             action_id == (uint16_t)MSL_ACT_OTTOTTO_WAIT) &&
+            stick_y < -c->crouch_stick_threshold) {
+          // Ottotto / OttottoWait crouch IASA:
+          // - ftCo_Ottotto_IASA runs ftCo_800D5FB0 after Jump and Dash.
+          // - ftCo_800D5FB0 wraps ftCo_Squat_CheckInput, which enters Squat when
+          //   input.lstick.y < -p_ftCommonData->x90.
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Ottotto.c::{
+          //   ftCo_Ottotto_IASA,ftCo_OttottoWait_IASA}
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Squat.c::{
+          //   ftCo_Squat_CheckInput,ftCo_800D5FB0,ftCo_Squat_Enter}
+          enter_squat_immediate(batch, idx);
+          action_id = (uint16_t)MSL_ACT_SQUAT;
+        }
+
         // Ottotto / OttottoWait dash-flick bridge:
         // - ftCo_Ottotto{,Wait}_IASA routes through ftCo_Dash_CheckInput before Turn/Walk.
         // - ftCo_Dash_CheckInput enters TurnSmash on opposite-facing flicks and Dash on same-facing
@@ -3017,6 +3091,21 @@ void locomotion_update_pre(MslBatch* batch) {
             batch->state.tilt_timer_x[idx] = 0xFEu;
             action_id = (uint16_t)MSL_ACT_DASH;
           }
+        }
+
+        if (action_id == (uint16_t)MSL_ACT_OTTOTTO &&
+            anim_finished(batch->state.char_id[idx], (uint16_t)MSL_SM_OTTOTTO,
+                          batch->state.anim_frame_f32[idx])) {
+          // Ottotto Anim callback enters OttottoWait when the teeter animation has no frames
+          // remaining. Fighter proc order runs Anim before IASA, but this late callback still fixes
+          // reseeded one-step rows where the source action is steady Ottotto at the terminal frame.
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Ottotto.c::{
+          //   ftCo_Ottotto_Anim,ftCo_8009A6B8}
+          // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
+          batch->state.action_id[idx] = (uint16_t)MSL_ACT_OTTOTTO_WAIT;
+          batch->state.animation_index[idx] = (uint32_t)MSL_SM_OTTOTTO_WAIT;
+          msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+          action_id = (uint16_t)MSL_ACT_OTTOTTO_WAIT;
         }
 
         // Landing IASA (minimal): after the landing lag gate, allow the same grounded locomotion
@@ -4122,6 +4211,28 @@ void locomotion_update_post_collision(MslBatch* batch) {
 
       const uint16_t a = batch->state.action_id[idx];
 
+      if (was_ground && now_ground && a == (uint16_t)MSL_ACT_KNEE_BEND &&
+          (batch->state.input_buttons[idx] & (uint16_t)MSL_BUTTON_XY) == 0u &&
+          did_tap_jump(c, stick_i8_to_unit(batch->state.input_main_y[idx]),
+                       batch->state.tilt_timer_y[idx]) &&
+          (batch->state.prev_action_id[idx] == (uint16_t)MSL_ACT_OTTOTTO ||
+           batch->state.prev_action_id[idx] == (uint16_t)MSL_ACT_OTTOTTO_WAIT) &&
+          ottotto_edge_matches_facing(batch->state.stage_id[(size_t)bi],
+                                      batch->state.ground_id[idx], batch->state.facing[idx],
+                                      batch->state.pos_x[idx])) {
+        // Ottotto_IASA can enter KneeBend, but the new state's collision callback still owns the
+        // edge floor-loss handoff. KneeBend_Coll calls ft_80083F88, which routes through
+        // ft_80082708 and enters Fall when the allow-ground-to-air helper reports an edge exit.
+        // Keep this scoped to the immediate Ottotto/OttottoWait -> KneeBend edge row so ordinary
+        // grounded jump squat rows still remain grounded.
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Ottotto.c::ftCo_Ottotto_IASA
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_KneeBend.c::ftCo_KneeBend_Coll
+        // refs/melee/src/melee/ft/ft_081B.c::{ft_80083F88,ft_80082708}
+        batch->state.on_ground[idx] = 0u;
+        enter_fall_from_grounded_floor_loss(batch, ch, idx);
+        continue;
+      }
+
       if (!now_ground && action_is_grounded_guard_state(a)) {
         // Guard Coll callbacks are grounded owners. If a replay-seeded or continuous rollout state
         // reaches post-collision with no floor, the shield motion must not persist airborne.
@@ -4230,13 +4341,14 @@ void locomotion_update_post_collision(MslBatch* batch) {
       } else if (was_ground && !now_ground) {
         batch->state.fall_fast[idx] = 0;
 
-        // Ottotto (teeter) entry on idle walk-off:
+        // Ottotto (teeter) entry on common grounded edge walk-off:
         // - ftCo_8009A3C8 enters Ottotto through ftCo_8009A410 when Collide_Edge is set and the
         //   fighter is not on the teeter-suppressed branch.
-        // - On the direct idle-edge handoff, the collision owner is previous grounded Wait state;
-        //   keep the row grounded and restore the pre-integration position before generic fall
-        //   conversion runs.
+        // - ft_80084280 runs the same edge gate for Wait/Walk/Landing-style grounded callbacks
+        //   before generic Fall conversion. Clamp to the facing endpoint selected by
+        //   Ottotto_Coll's `mpFloorGet{Left,Right}` branch.
         // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Ottotto.c::{ftCo_8009A3C8,ftCo_8009A410}
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Ottotto.c::ftCo_Ottotto_Coll
         // refs/melee/src/melee/ft/ft_081B.c::ft_80084280
         if (batch->state.prev_action_id[idx] == (uint16_t)MSL_ACT_WAIT &&
             batch->state.prev_action_frame[idx] <= 0 &&
@@ -4248,6 +4360,31 @@ void locomotion_update_post_collision(MslBatch* batch) {
           batch->state.animation_index[idx] = (uint32_t)MSL_SM_OTTOTTO;
           batch->state.pos_x[idx] = batch->state.prev_pos_x[idx];
           batch->state.pos_y[idx] = batch->state.prev_pos_y[idx];
+          batch->state.speed_air_x_self[idx] = 0.0f;
+          batch->state.speed_ground_x_self[idx] = 0.0f;
+          batch->state.speed_y_self[idx] = 0.0f;
+          msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+          continue;
+        }
+
+        float ottotto_x = 0.0f;
+        float ottotto_y = 0.0f;
+        const float edge_stick_y =
+            apply_deadzone(stick_i8_to_unit(batch->state.input_main_y[idx]), c->lstick_deadzone_y);
+        const uint8_t ottotto_entry_allowed =
+            (uint8_t)(edge_stick_y < 0.0f || batch->state.action_frame[idx] <= 0);
+        if (action_uses_ottotto_edge_callback(a) && ottotto_entry_allowed &&
+            ottotto_edge_matches_facing(batch->state.stage_id[(size_t)bi],
+                                        batch->state.ground_id[idx], batch->state.facing[idx],
+                                        batch->state.pos_x[idx]) &&
+            ottotto_edge_point_for_facing(batch->state.stage_id[(size_t)bi],
+                                          batch->state.ground_id[idx], batch->state.facing[idx],
+                                          &ottotto_x, &ottotto_y)) {
+          batch->state.on_ground[idx] = 1u;
+          batch->state.action_id[idx] = (uint16_t)MSL_ACT_OTTOTTO;
+          batch->state.animation_index[idx] = (uint32_t)MSL_SM_OTTOTTO;
+          batch->state.pos_x[idx] = ottotto_x;
+          batch->state.pos_y[idx] = ottotto_y + 0.0001f;
           batch->state.speed_air_x_self[idx] = 0.0f;
           batch->state.speed_ground_x_self[idx] = 0.0f;
           batch->state.speed_y_self[idx] = 0.0f;
