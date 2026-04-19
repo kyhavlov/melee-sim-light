@@ -159,6 +159,15 @@ static inline uint8_t is_common_fallspecial_action(uint16_t a) {
   }
 }
 
+static inline uint8_t is_just_entered_specialairn_end_from_loop(uint16_t action_id,
+                                                                uint16_t prev_action_id,
+                                                                int16_t action_frame) {
+  return (action_id == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_N_END &&
+          prev_action_id == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_N_LOOP && action_frame == 0)
+             ? 1u
+             : 0u;
+}
+
 static inline uint8_t damage_hitlag_floorhug_attempts_downward_sdi(const MslBatch* batch,
                                                                    size_t idx,
                                                                    const MslCommonParams* c) {
@@ -1452,6 +1461,37 @@ void mpcoll_ground_apply(MslBatch* batch) {
             contact_y = batch->state.pos_y[idx];
           }
         }
+        if (!on_ground &&
+            is_just_entered_specialairn_end_from_loop(action_id, prev_action_id,
+                                                      batch->state.action_frame[idx]) &&
+            prefer_line_idx >= 0 && batch->state.speed_y_self[idx] < 0.0f &&
+            batch->state.pos_y[idx] <= -fabsf(cur_bot.rel_y)) {
+          // SpecialAirNLoop_Anim can enter SpecialAirNEnd during the Anim callback, then the
+          // entered state's collision callback still routes through AirCatchHit_Coll ->
+          // ft_80082B1C -> Landing_Enter_Basic in the same Fighter proc. Teacher-forced one-step
+          // reseeds that begin after the loop frame has already sunk the root below the persisted
+          // floor.index need a callback-owned root projection on the just-entered End frame. Require
+          // the root itself to be deeper than the current ECB-bottom height below the floor so ordinary
+          // shallow Loop->End rows can remain airborne in SpecialAirNEnd.
+          // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::{
+          //   ftFx_SpecialAirNLoop_Anim,ftFx_SpecialAirNEnd_Coll}
+          // refs/melee/src/melee/ft/ft_081B.c::ftCo_AirCatchHit_Coll
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::ftCo_Landing_Enter_Basic
+          // refs/melee/src/melee/mp/mplib.c::mpLib_8004DD90_Floor
+          float y_corr = 0.0f;
+          const int out_line_idx =
+              floor_dd90_project(g, prefer_line_idx, batch->state.pos_x[idx],
+                                 batch->state.pos_y[idx], &y_corr, &floor_nx, &floor_ny);
+          const float max_lift =
+              cur_bot.rel_y + fabsf(batch->state.speed_y_self[idx]) + (2.0f * k_ecb_vertical_unit);
+          if (out_line_idx >= 0 && y_corr >= 0.0f && y_corr <= max_lift) {
+            batch->state.pos_y[idx] += y_corr;
+            on_ground = 1;
+            ground_id = g->lines[(size_t)out_line_idx].segment_i;
+            contact_x = batch->state.pos_x[idx];
+            contact_y = batch->state.pos_y[idx];
+          }
+        }
         // Decomp: mpCheckFloor's horizontal intersection helper is gated on non-rising segments
         // (`ay >= by`), so upward sweeps should not report a floor crossing.
         // refs/melee/src/melee/mp/mplib.c::mpCheckFloor
@@ -1461,6 +1501,17 @@ void mpcoll_ground_apply(MslBatch* batch) {
              batch->state.action_frame[idx] >= 3 && batch->state.speed_y_self[idx] == 0.0f &&
              fabsf(batch->state.pos_y[idx] - k_floor_y_bias) <= k_floor_horiz_dy_thresh &&
              prefer_line_idx >= 0 && !g->lines[(size_t)prefer_line_idx].is_ledge)
+                ? 1u
+                : 0u;
+        const uint8_t specialhi_bound_entry_airborne =
+            (action_id == (uint16_t)MSL_ACT_FX_SPECIAL_HI_BOUND &&
+             // ftFx_SpecialHiBound_Enter changes motion state and ticks anim, but it does not call
+             // ftCommon_8007D7FC. The rebound remains airborne on the entry collision row; later
+             // Bound_Coll owns ground conversion through ft_CheckGroundAndLedge.
+             // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::{
+             //   ftFx_SpecialHiBound_Enter,ftFx_SpecialHiBound_Coll}
+             batch->state.seed_prev_action_id[idx] == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_HI &&
+             batch->state.action_frame[idx] <= 2)
                 ? 1u
                 : 0u;
         if (!on_ground && !active_damage_hitlag_airborne_floor_contact && can_sweep &&
@@ -1571,7 +1622,8 @@ void mpcoll_ground_apply(MslBatch* batch) {
                   : 0u;
           if (suppress_locked_ledge_land || suppress_locked_vertical_af3_land ||
               suppress_escapeair_no_lock_vertical_af3_land || suppress_fallspecial_entry_af3_land ||
-              escapeair_locked_floorhug_airborne || suppress_damageflyroll_shallow_land) {
+              escapeair_locked_floorhug_airborne || specialhi_bound_entry_airborne ||
+              suppress_damageflyroll_shallow_land) {
             floor_write_edge_suppression_flags(batch, idx, stage_id, g, hit_line_idx, char_id, anim,
                                                ecb_frame, was_grounded);
           } else {
@@ -1610,8 +1662,8 @@ void mpcoll_ground_apply(MslBatch* batch) {
           // TODO(decomp-coll-coverage): once DamageFly* per-action Coll callback coverage is fully
           // modeled here, this gate may be relaxed/removed in favor of callback-owned landing flow.
         } else if (prefer_line_idx >= 0 && !escapeair_locked_floorhug_airborne &&
-                   batch->state.speed_y_self[idx] == 0.0f && batch->state.hitlag[idx] == 0 &&
-                   batch->state.hitstun[idx] == 0) {
+                   !specialhi_bound_entry_airborne && batch->state.speed_y_self[idx] == 0.0f &&
+                   batch->state.hitlag[idx] == 0 && batch->state.hitstun[idx] == 0) {
           // Decomp: mpLib_8004DD90_Floor can resolve a resting contact even when no crossing sweep is
           // reported (e.g. vy==0 and the ECB bottom is already on the surface).
           // Gate this to "already on the surface" to avoid snapping to the floor from far below.

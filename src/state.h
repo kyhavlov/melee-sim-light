@@ -342,6 +342,13 @@ typedef struct MslStateSoA {
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_GuardOn_IASA,ftCo_Guard_IASA}
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c::ftCo_800CB024
   uint8_t* guard_jump_oos_entered_this_frame;
+  // Runtime-only marker for SpecialLw Loop/Turn/End IASA entering JumpAerial in the current step.
+  // The decomp input callback does not then run destination JumpAerial/Fall special dispatch again
+  // in the same frame, so the later generic B-special pass must not consume the same B/up edge.
+  // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c::{
+  //   ftFx_SpecialAirLwLoop_IASA,ftFx_SpecialAirLwTurn_IASA,ftFx_SpecialAirLwEnd_Anim}
+  // refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate
+  uint8_t* shine_jump_iasa_entered_this_frame;
   // GuardReflect reflect timer (decomp: mv.co.guard.x14; seed uses +1 bias, expires at 0).
   uint8_t* guard_reflect_timer_x14;  // [batch * players]
   // GuardReflect powershield-active timer (decomp: mv.co.guard.x18; +1 bias, expires at 0).

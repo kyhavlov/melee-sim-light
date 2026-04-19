@@ -437,7 +437,7 @@ def test_classify_player_row_does_not_hide_special_adjacency_in_mpcoll_residual(
     assert got == "F23_special_common_entry_dispatch"
 
 
-def test_classify_player_row_keeps_kneebend_out_of_common_special_dispatch() -> None:
+def test_classify_player_row_moves_kneebend_specialhihold_tail_to_selector_owner() -> None:
     row = _player_row(
         seed_action_id=24,
         ref_action_id=353,
@@ -454,7 +454,7 @@ def test_classify_player_row_keeps_kneebend_out_of_common_special_dispatch() -> 
             353: "FX_SPECIAL_HI_HOLD",
         },
     )
-    assert got == "F22_specialhi_firefox_firebird"
+    assert got == "F10a_grounded_selector_transition"
 
 
 def test_classify_player_row_keeps_landingfallspecial_out_of_common_special_dispatch() -> None:
@@ -610,7 +610,7 @@ def test_classify_player_row_keeps_specialhi_holdair_launch_tail_in_firefox_owne
     assert got == "F22_specialhi_firefox_firebird"
 
 
-def test_classify_player_row_keeps_specialhi_bound_collision_in_firefox_owner() -> None:
+def test_classify_player_row_moves_specialhi_bound_collision_to_mpcoll_owner() -> None:
     row = _player_row(
         seed_action_id=356,
         ref_action_id=359,
@@ -626,7 +626,7 @@ def test_classify_player_row_keeps_specialhi_bound_collision_in_firefox_owner() 
             359: "FX_SPECIAL_HI_BOUND",
         },
     )
-    assert got == "F22_specialhi_firefox_firebird"
+    assert got == "F10c_collision_landing_edge_adjacency"
 
 
 def test_classify_player_row_moves_specialhi_landing_ground_id_to_mpcoll() -> None:
@@ -820,6 +820,26 @@ def test_classify_player_row_moves_pure_aerial_shine_source_bookkeeping_to_aeria
     assert got == "F09b_aerial_bookkeeping_adjacency"
 
 
+def test_classify_player_row_moves_aerial_shine_contact_hitlag_tail_to_aerial_contact() -> None:
+    row = _player_row(
+        seed_action_id=25,
+        ref_action_id=365,
+        out_action_id=365,
+        prev_action_id=24,
+        fields=("hitlag", "state_flags[1]"),
+        on_ground=0,
+    )
+    got = _classify_player_row(
+        row,
+        {
+            24: "KNEE_BEND",
+            25: "JUMP_F",
+            365: "FX_SPECIAL_AIR_LW_START",
+        },
+    )
+    assert got == "F09d_aerial_contact_hitlag_residual"
+
+
 def test_classify_player_row_moves_grounded_shine_contact_bookkeeping_to_combat_owner() -> None:
     row = _player_row(
         seed_action_id=39,
@@ -827,6 +847,25 @@ def test_classify_player_row_moves_grounded_shine_contact_bookkeeping_to_combat_
         out_action_id=360,
         prev_action_id=39,
         fields=("hitlag", "last_attack_landed", "state_flags[1]"),
+        on_ground=1,
+    )
+    got = _classify_player_row(
+        row,
+        {
+            39: "SQUAT",
+            360: "FX_SPECIAL_LW_START",
+        },
+    )
+    assert got == "F10b_grounded_combat_adjacency"
+
+
+def test_classify_player_row_moves_grounded_shine_contact_instance_tail_to_combat_owner() -> None:
+    row = _player_row(
+        seed_action_id=39,
+        ref_action_id=360,
+        out_action_id=360,
+        prev_action_id=39,
+        fields=("hitlag", "instance_id", "last_attack_landed", "state_flags[1]"),
         on_ground=1,
     )
     got = _classify_player_row(
@@ -884,7 +923,7 @@ def test_classify_player_row_moves_pure_landingfallspecial_source_bookkeeping_to
     assert got == "F10b_grounded_combat_adjacency"
 
 
-def test_classify_player_row_keeps_landingfallspecial_collision_bundle_in_common_owner() -> None:
+def test_classify_player_row_moves_landingfallspecial_collision_bundle_to_landing_owner() -> None:
     row = _player_row(
         seed_action_id=236,
         ref_action_id=43,
@@ -900,7 +939,45 @@ def test_classify_player_row_keeps_landingfallspecial_collision_bundle_in_common
             236: "ESCAPE_AIR",
         },
     )
-    assert got == "F13a_common_fallspecial_landing"
+    assert got == "F10c_collision_landing_edge_adjacency"
+
+
+def test_classify_player_row_moves_fallspecial_landing_bundle_to_landing_owner() -> None:
+    row = _player_row(
+        seed_action_id=35,
+        ref_action_id=35,
+        out_action_id=43,
+        prev_action_id=35,
+        fields=("action_id", "action_frame", "animation_index", "jumps_left", "on_ground"),
+        on_ground=0,
+    )
+    got = _classify_player_row(
+        row,
+        {
+            35: "FALL_SPECIAL",
+            43: "LANDING_FALL_SPECIAL",
+        },
+    )
+    assert got == "F10c_collision_landing_edge_adjacency"
+
+
+def test_classify_player_row_moves_pure_landingfallspecial_action_frame_to_landing_owner() -> None:
+    row = _player_row(
+        seed_action_id=43,
+        ref_action_id=43,
+        out_action_id=43,
+        prev_action_id=35,
+        fields=("action_frame",),
+        on_ground=1,
+    )
+    got = _classify_player_row(
+        row,
+        {
+            35: "FALL_SPECIAL",
+            43: "LANDING_FALL_SPECIAL",
+        },
+    )
+    assert got == "F10c_collision_landing_edge_adjacency"
 
 
 def test_classify_player_row_moves_landingfallspecial_damage_scalar_to_damage_owner() -> None:
@@ -1189,8 +1266,60 @@ def test_classify_player_row_splits_firefox_from_common_fallspecial() -> None:
                 236: "ESCAPE_AIR",
             },
         )
-        == "F13a_common_fallspecial_landing"
+        == "F10c_collision_landing_edge_adjacency"
     )
+
+
+def test_classify_player_row_moves_firefox_bound_collision_timing_to_collision_owner() -> None:
+    row = _player_row(
+        seed_action_id=356,
+        ref_action_id=359,
+        out_action_id=356,
+        prev_action_id=356,
+        fields=("action_id", "action_frame", "animation_index"),
+        on_ground=0,
+    )
+    got = _classify_player_row(
+        row,
+        {
+            356: "FX_SPECIAL_AIR_HI",
+            359: "FX_SPECIAL_HI_BOUND",
+        },
+    )
+    assert got == "F10c_collision_landing_edge_adjacency"
+
+
+def test_classify_player_row_moves_steady_bound_jump_bookkeeping_to_aerial_state_owner() -> None:
+    row = _player_row(
+        seed_action_id=359,
+        ref_action_id=359,
+        out_action_id=359,
+        prev_action_id=359,
+        fields=("jumps_left",),
+        on_ground=0,
+    )
+    got = _classify_player_row(row, {359: "FX_SPECIAL_HI_BOUND"})
+    assert got == "F09a_aerial_stateflag_hurtbox_adjacency"
+
+
+def test_classify_player_row_moves_grounded_kneebend_specialhihold_tail_to_selector_owner() -> None:
+    row = _player_row(
+        seed_action_id=24,
+        ref_action_id=353,
+        out_action_id=24,
+        prev_action_id=84,
+        fields=("action_id", "animation_index", "instance_id"),
+        on_ground=1,
+    )
+    got = _classify_player_row(
+        row,
+        {
+            24: "KNEE_BEND",
+            84: "DAMAGE_AIR_1",
+            353: "FX_SPECIAL_HI_HOLD",
+        },
+    )
+    assert got == "F10a_grounded_selector_transition"
 
 
 def test_classify_player_row_moves_direct_special_entry_instance_order_to_generic_owner() -> None:
@@ -1246,7 +1375,7 @@ def test_classify_player_row_moves_pure_throw_score_to_common_throw_bookkeeping(
     assert got == "F14_throw_item_bookkeeping"
 
 
-def test_classify_player_row_keeps_mixed_throw_pulse_in_f14b() -> None:
+def test_classify_player_row_moves_action_aligned_throw_contact_tail_to_common_throw() -> None:
     row = _player_row(
         seed_action_id=222,
         ref_action_id=222,
@@ -1256,7 +1385,20 @@ def test_classify_player_row_keeps_mixed_throw_pulse_in_f14b() -> None:
         on_ground=1,
     )
     got = _classify_player_row(row, {222: "THROW_LW"})
-    assert got == "F14b_per_throw_pulse_bookkeeping"
+    assert got == "F14_throw_item_bookkeeping"
+
+
+def test_classify_player_row_moves_thrownlw_instance_hit_tail_to_common_throw() -> None:
+    row = _player_row(
+        seed_action_id=242,
+        ref_action_id=242,
+        out_action_id=242,
+        prev_action_id=242,
+        fields=("instance_hit_by", "state_flags[3]"),
+        on_ground=1,
+    )
+    got = _classify_player_row(row, {242: "THROWN_LW"})
+    assert got == "F14_throw_item_bookkeeping"
 
 
 def test_classify_player_row_splits_turn_hidden_microphase_from_grounded_selector() -> None:

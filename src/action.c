@@ -1358,6 +1358,7 @@ void action_update_anim_callbacks_pre_input(MslBatch* batch) {
       guard_update_grounded_anim_callback_pre_input(batch, idx);
     }
   }
+  blaster_update_anim_callbacks_pre_input(batch);
   grab_flow_update_anim_callbacks_pre_input(batch);
 }
 
@@ -1370,6 +1371,7 @@ void action_update(MslBatch* batch) {
         const size_t idx = msl_idx_player(bi, p);
         batch->state.guard_on_entered_this_frame[idx] = 0u;
         batch->state.guard_jump_oos_entered_this_frame[idx] = 0u;
+        batch->state.shine_jump_iasa_entered_this_frame[idx] = 0u;
       }
     }
   }

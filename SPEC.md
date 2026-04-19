@@ -1716,14 +1716,15 @@ Fox/Falco special-owner split (2026-04-17):
     instance/damage identity owners, and pure Shine source-bookkeeping movement to
     combat/aerial bookkeeping, AttackLw3 entry instance-callback ownership, AttackDash -> Shine
     allow-interrupt carry, F13a pure source-bookkeeping movement, and SpecialAirNLoop common-Damage
-    scalar movement to `F08d`, pure ThrowHi/ThrowB/ThrowLw score-source movement to common throw
+    scalar movement to `F08d`, SpecialAirNLoop -> End / Landing callback-order fixes, pure
+    ThrowHi/ThrowB/ThrowLw score-source movement to common throw
     bookkeeping, common aerial B-before-A dispatch for JumpAerial / PassiveWallJump rows, and
     prev-special-only generic Landing/Ottotto/Fall and source-bookkeeping tail movement to shared
     mpColl/combat owners, no-lock sustained EscapeAir current-ECB collision narrowing, and slow
     ledge-option occupancy for SpecialHiFall CliffCatch blocking, and F20 BODY/contact bookkeeping
-    boundary hardening, current aggregate taxonomy is
-    total `5967`, with `F13a=118`, `F20=18`, `F24=0`, `F14b=28`, `F19=21`,
-    `F22=26`, `F23=0`, `F21=0`, `F25=373`, and `F10e=0`.
+    boundary hardening plus SpecialLw-owned JumpAerial IASA re-entry suppression and final
+    aggregate-tail owner moves, current aggregate taxonomy is total `5907`, with `F13a=0`,
+    `F20=0`, `F24=0`, `F14b=0`, `F19=0`, `F22=0`, `F23=0`, `F21=0`, `F25=373`, and `F10e=0`.
 - Rejected bridge/experiment:
   - A broad locked-bottom collision rule for all Fox/Falco aerial special callbacks, including
     `SpecialAirLwStart`, fixed some loop rows but grounded Shine startup several frames early and
@@ -1767,9 +1768,10 @@ Fox/Falco special-owner split (2026-04-17):
     hitlag-only rows are taxonomy owned by shared combat/state/contact-hitlag owners
     (`F10b`/`F09b`, `F10d`/`F09a`, or `F09d`), not by the SpecialLw state machine. Grounded
     Shine-entry rows whose only remaining fields are hitlag, Slippi's hitlag state flag, and
-    stale/source bookkeeping also route to `F10b`. Rows where a Shine hitbox is the selected false
-    BODY candidate route to the BODY candidate-filter owner (`F08f`). Mixed Shine contact/action
-    bundles remain in `F20` until their reflector/contact callback owner is implemented.
+    stale/source/instance bookkeeping also route to `F10b`; aerial Shine entry rows whose only
+    fields are hitlag plus Slippi's hitlag state flag route to `F09d`. Rows where a Shine hitbox is
+    the selected false BODY candidate route to the BODY candidate-filter owner (`F08f`). `F20` is
+    zero in the refreshed primary and aggregate special-family taxonomy.
     Sources: `refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007A06C,ftColl_8007BE3C,ftColl_80078C70,ftColl_80076ED8}`,
     `refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000805C,lbColl_80006E58}`,
     and `refs/melee/src/melee/pl/plstale.c::{plStale_UpdateStaleMovesFromFighter,plStale_UpdateStaleMovesFromItem}`.
@@ -1782,17 +1784,49 @@ Fox/Falco special-owner split (2026-04-17):
     Sources: `refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC`,
     `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0`,
     `refs/melee/src/melee/ft/ftcoll.c::ftColl_8007A06C`.
+  - Active SpecialN loop/end handoffs use extracted `cmd_vars[0]` command-window data plus the
+    seeded `x67D` B timer to infer whether the persistent `mv.fx.SpecialN.isBlasterLoop` latch was
+    set by an in-window B edge. Held prior-B rows preserve the existing latch behavior, while stale
+    and current-frame-only B timers enter End. Same-action Loop->Loop instance ordering still uses
+    only the explicit `motion_entry_instance_id_override_u16` seed lane. Deep under-floor
+    `SpecialAirNLoop_Anim -> SpecialAirNEnd` rows run the entered End collision callback through
+    `AirCatchHit_Coll -> Landing_Enter_Basic`, preserving both ground and air self-X lanes on the
+    Landing frame. `F19` is zero in the refreshed primary and aggregate special-family taxonomy.
+    Sources: `refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::{
+    ftFx_SpecialNLoop_Anim,ftFx_SpecialAirNLoop_Anim,ftFx_SpecialAirNEnd_Coll}`,
+    `refs/melee/src/melee/ft/ft_081B.c::ftCo_AirCatchHit_Coll`, and
+    `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::ftCo_Landing_Enter_Basic`.
   - Rows where SpecialN/Shine is only the previous action and the current row is already generic
     Landing/Ottotto/Fall or grounded source bookkeeping route to shared mpColl/combat owners.
-    Active SpecialN loop/end handoff rows and mixed Shine contact/action rows stay in `F19`/`F20`.
+    Active SpecialN loop/end handoff rows and mixed Shine contact/action rows remain eligible for
+    `F19`/`F20` if they reappear, but the refreshed special-family taxonomy has both buckets at
+    zero after the runtime and owner moves above.
     Sources: `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c`,
     `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Ottotto.c`,
     `refs/melee/src/melee/mp/mpcoll.c::mpColl_8004A45C_Floor`,
     `refs/melee/src/melee/ft/ftcoll.c::ftColl_8007BE3C`, and
     `refs/melee/src/melee/pl/plstale.c`.
-  - Common `FallSpecial` / `LandingFallSpecial` rows that have already entered `Damage*` are owned
-    by shared damage/contact resolution, while pure ground-id and pure state/hurtbox tails route to
-    shared mpColl/state owners. The remaining F13a rows are action/on-ground/jump landing timing.
+  - Remaining Firefox/Firebird aggregate tails that carry only SpecialAirHi <-> Bound
+    action-frame/animation timing are shared collision callback ordering (`F10c`); pure steady Bound
+    `jumps_left` rows are shared aerial state/bookkeeping (`F09a`); and the grounded KneeBend ->
+    SpecialHiHold tail after DamageAir is grounded selector adjacency (`F10a`). `F22` is zero in
+    the refreshed primary and aggregate special-family taxonomy.
+    Sources: `refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::{
+    ftFx_SpecialAirHi_Coll,ftFx_SpecialHiBound_Coll,ftFx_SpecialHiBound_Enter,
+    ftFx_SpecialHiBound_Anim}`, `refs/melee/src/melee/mp/mpcoll.c`, and
+    `refs/melee/src/melee/ft/chara/ftCommon/ftCo_KneeBend.c`.
+  - Remaining action-aligned ThrowLw/ThrownLw/ThrowHi hitlag, Slippi contact-bit, hurtbox, and
+    source-id tails are common throw/item/contact bookkeeping (`F14`), not per-throw special-family
+    pulse ownership. The rejected ThrowLw current-pulse bridge remains excluded. `F14b` is zero in
+    the refreshed primary and aggregate special-family taxonomy.
+    Sources: `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c`,
+    `refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim`, and
+    `refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007A06C,ftColl_8007BE3C}`.
+  - Common `FallSpecial` / `LandingFallSpecial` / `EscapeAir` rows that have already entered
+    `Damage*` are owned by shared damage/contact resolution, while pure ground-id, state/hurtbox,
+    action/on-ground/jump landing timing, and pure LandingFallSpecial action-frame tails route to
+    shared mpColl/state/landing owners (`F10c`, `F09a`, or `F10d`). `F13a` is zero in the refreshed
+    primary and aggregate special-family taxonomy.
     Sources: `refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll`,
     `refs/melee/src/melee/ft/chara/ftCommon/ftCo_FallSpecial.c::ftCo_FallSpecial_Coll`,
     `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c`.
@@ -1804,9 +1838,23 @@ Fox/Falco special-owner split (2026-04-17):
     `refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll`.
   - SpecialHi rows that have already entered `Damage*`, plus pure `SpecialHiLanding` ground-id
     tails, route to shared damage/mpColl owners. Launch, Bound, Fall, and CliffCatch rows remain in
-    `F22`.
+    `F22`. Just-entered `SpecialHiBound` rows stay airborne because `ftFx_SpecialHiBound_Enter`
+    does not call `ftCommon_8007D7FC`; later `SpecialHiBound_Coll` owns ground conversion.
     Sources: `refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c`,
     `refs/melee/src/melee/mp/mpcoll.c::mpColl_8004A45C_Floor`.
+  - `LandingFallSpecial` with the hidden `landing.allow_interrupt` lane set can dispatch grounded
+    Shine through `ftCo_Landing_IASA -> ftCo_800D68C0`, matching the shared Landing special chain
+    instead of blocking all LandingFallSpecial specials.
+    Sources: `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::{
+    ftCo_Landing_IASA,ftCo_LandingFallSpecial_Enter}`,
+    `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_800D68C0`.
+  - SpecialLw Loop/Turn/End IASA can consume aerial jump into `JumpAerial*`; that same callback
+    does not then run destination `JumpAerial` special dispatch again on the same B/up input edge.
+    Runtime marks the Shine-owned JumpAerial handoff for the current step so the later generic
+    aerial B-special pass cannot immediately re-enter Firefox.
+    Sources: `refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c::{
+    ftFx_SpecialAirLwLoop_IASA,ftFx_SpecialAirLwTurn_IASA,ftFx_SpecialAirLwEnd_Anim}`,
+    `refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate`.
   - Pure ThrowHi/ThrowB/ThrowLw `combo_count` / source-score rows are common throw/item
     bookkeeping (`F14`), not special-move state-machine residuals. Mixed throw pulse rows with
     hitlag, state flags, hurtbox, article, or item-contact fields remain in `F14b`.

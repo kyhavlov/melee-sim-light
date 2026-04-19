@@ -14,6 +14,7 @@ ACT_THROWN_LW = 0x00F2
 # refs/melee/src/melee/ft/chara/ftFox/ftFx_Init.c::ftFx_Init_MotionStateTable (ftFx_MS_SpecialNStart=341)
 ACT_FX_SPECIAL_N_START = 0x0155
 ACT_FX_SPECIAL_AIR_N_LOOP = 0x0159
+MSID_FX_SPECIAL_AIR_N_LOOP = 299
 
 BUTTON_B = 0x0200
 
@@ -217,18 +218,22 @@ def test_instance_id_bumps_on_blaster_loop_restart_same_action_id() -> None:
     seed["defense_ratio"][0, :2] = np.float32(1.0)
     seed["fighter_scale_y"][0, :2] = np.float32(1.0)
 
-    # Seed directly into SpecialAirNLoop at an end-frame so the sim restarts the loop when B is held.
+    # Seed directly into SpecialAirNLoop at an end-frame so the sim restarts the loop when a prior
+    # B press landed inside the command-script cmd_var[0] window.
     # Decomp:
     # - refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_SpecialAirNLoop_Anim
     #   (when mv.fx.SpecialN.isBlasterLoop is true, sets fp->x21EC=ftFx_SpecialN_OnChangeAction and calls
     #    Fighter_ChangeMotionState to ftFx_MS_SpecialAirNLoop again)
     # - refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_SpecialN_OnChangeAction (calls ft_80089824)
     seed["action_id"][0, 0] = np.uint16(ACT_FX_SPECIAL_AIR_N_LOOP)
-    seed["action_frame"][0, 0] = np.int16(999)
-    seed["anim_frame_f32"][0, 0] = np.float32(999.0)
+    seed["action_frame"][0, 0] = np.int16(15)
+    seed["anim_frame_f32"][0, 0] = np.float32(15.0)
     seed["frame_speed_mul_f32"][0, 0] = np.float32(1.0)
-    # Prevent laser spawn noise: items_update skips per-frame spawns when animation_index is -1.
-    seed["animation_index"][0, 0] = np.uint32(0xFFFFFFFF)
+    seed["animation_index"][0, 0] = np.uint32(MSID_FX_SPECIAL_AIR_N_LOOP)
+    # Fox SpecialAirNLoop data/moves cmd_var[0] window is [0,14). With action_frame advancing to
+    # 16 before Anim callback, x67D=7 means the B edge happened at action-frame 9 and the hidden
+    # mv.fx.SpecialN.isBlasterLoop latch is set.
+    seed["x67D"][0, 0] = np.uint8(7)
 
     # Keep P1 inert so this test isolates P0's SpecialAirNLoop restart path and does not consume
     # plAttack_80037B08 through unrelated match-flow transitions.

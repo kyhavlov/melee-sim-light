@@ -224,6 +224,34 @@ def test_landing_fallspecial_allow_interrupt_seed_lane_replay_real_lock() -> Non
 
 
 @pytest.mark.integration
+def test_landing_fallspecial_without_allow_interrupt_does_not_enter_shine() -> None:
+    # Negative sentinel: LandingFallSpecial shares Landing_IASA only when the hidden
+    # mv.co.landing.allow_interrupt lane is set by the source transition. A B+down row with the lane
+    # clear must stay in LandingFallSpecial rather than reopening broad special dispatch.
+    #
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::{
+    #   ftCo_Landing_IASA,ftCo_LandingFallSpecial_Enter}
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_800D68C0
+    dataset_path = (
+        Path(__file__).resolve().parents[1]
+        / "datasets/aggregate_recent/replays/validation/aggregate_recent/FavorableSuperficialPig.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    record = 9035
+    player = 1
+    seed, ref, out = _run_one_step(dataset_path, record)
+
+    assert int(seed["action_id"][player]) == 43  # LandingFallSpecial
+    assert int(seed["landing_fallspecial_allow_interrupt"][player]) == 0
+    assert int(ref["action_id"][player]) == 43
+    assert int(out["action_id"][player]) == int(ref["action_id"][player])
+    assert int(out["animation_index"][player]) == int(ref["animation_index"][player])
+    assert int(out["on_ground"][player]) == int(ref["on_ground"][player])
+
+
+@pytest.mark.integration
 @pytest.mark.parametrize(
     "case",
     [
@@ -461,6 +489,28 @@ def test_landing_fallspecial_allow_interrupt_seed_lane_replay_real_lock() -> Non
         _Case(
             dataset_rel=(
                 "datasets/aggregate_recent/replays/validation/aggregate_recent/"
+                "ImpassionedAlarmedTarsier.msl"
+            ),
+            record=10513,
+            player=1,
+            seed_action=359,
+            ref_action=359,
+            note="SpecialHiBound entry row remains airborne after rebound Enter",
+        ),
+        _Case(
+            dataset_rel=(
+                "datasets/aggregate_recent/replays/validation/aggregate_recent/"
+                "TubbyCurlyHerring.msl"
+            ),
+            record=840,
+            player=0,
+            seed_action=359,
+            ref_action=359,
+            note="SpecialHiBound mirrored entry row remains airborne after rebound Enter",
+        ),
+        _Case(
+            dataset_rel=(
+                "datasets/aggregate_recent/replays/validation/aggregate_recent/"
                 "DistinctCaringCobra.msl"
             ),
             record=5790,
@@ -529,6 +579,39 @@ def test_landing_fallspecial_allow_interrupt_seed_lane_replay_real_lock() -> Non
                 "datasets/aggregate_recent/replays/validation/aggregate_recent/"
                 "TubbyCurlyHerring.msl"
             ),
+            record=2356,
+            player=1,
+            seed_action=43,
+            ref_action=360,
+            note="LandingFallSpecial allow_interrupt IASA enters grounded Shine Start",
+        ),
+        _Case(
+            dataset_rel=(
+                "datasets/aggregate_recent/replays/validation/aggregate_recent/"
+                "ImpassionedAlarmedTarsier.msl"
+            ),
+            record=4327,
+            player=0,
+            seed_action=369,
+            ref_action=27,
+            note="SpecialAirLwTurn destination JumpAerial IASA does not immediately reconsume B/up as Firefox",
+        ),
+        _Case(
+            dataset_rel=(
+                "datasets/aggregate_recent/replays/validation/aggregate_recent/"
+                "BlondHardHippopotamus.msl"
+            ),
+            record=3014,
+            player=0,
+            seed_action=27,
+            ref_action=354,
+            note="Later JumpAerial B/up row can still enter Firefox after Shine same-frame marker is clear",
+        ),
+        _Case(
+            dataset_rel=(
+                "datasets/aggregate_recent/replays/validation/aggregate_recent/"
+                "TubbyCurlyHerring.msl"
+            ),
             record=7232,
             player=1,
             seed_action=27,
@@ -545,6 +628,72 @@ def test_landing_fallspecial_allow_interrupt_seed_lane_replay_real_lock() -> Non
             seed_action=346,
             ref_action=28,
             note="SpecialAirNEnd anim-end Fall destination consumes same-proc JumpAerialB IASA",
+        ),
+        _Case(
+            dataset_rel=(
+                "datasets/aggregate_recent/replays/validation/aggregate_recent/"
+                "DistinctCaringCobra.msl"
+            ),
+            record=6035,
+            player=1,
+            seed_action=345,
+            ref_action=42,
+            note="SpecialAirNLoop anim-end enters End and same-proc AirCatchHit landing",
+        ),
+        _Case(
+            dataset_rel=(
+                "datasets/aggregate_recent/replays/validation/aggregate_recent/"
+                "TubbyCurlyHerring.msl"
+            ),
+            record=6238,
+            player=1,
+            seed_action=345,
+            ref_action=42,
+            note="SpecialAirNLoop under-floor callback lands through entered End state",
+        ),
+        _Case(
+            dataset_rel=(
+                "datasets/aggregate_recent/replays/validation/aggregate_recent/"
+                "TubbyCurlyHerring.msl"
+            ),
+            record=7430,
+            player=1,
+            seed_action=345,
+            ref_action=42,
+            note="SpecialAirNLoop no-X-velocity row lands through entered End state",
+        ),
+        _Case(
+            dataset_rel=(
+                "datasets/aggregate_recent/replays/validation/aggregate_recent/"
+                "DistinctCaringCobra.msl"
+            ),
+            record=5095,
+            player=1,
+            seed_action=345,
+            ref_action=346,
+            note="SpecialAirNLoop terminal Anim callback observes pre-input loop latch and enters End",
+        ),
+        _Case(
+            dataset_rel=(
+                "datasets/aggregate_recent/replays/validation/aggregate_recent/"
+                "PositiveRevolvingHyena.msl"
+            ),
+            record=4835,
+            player=1,
+            seed_action=342,
+            ref_action=343,
+            note="SpecialNLoop terminal Anim callback observes pre-input loop latch and enters End",
+        ),
+        _Case(
+            dataset_rel=(
+                "datasets/aggregate_recent/replays/validation/aggregate_recent/"
+                "BlondHardHippopotamus.msl"
+            ),
+            record=7876,
+            player=0,
+            seed_action=346,
+            ref_action=346,
+            note="Shallow SpecialAirNEnd row does not take the under-floor Landing projection",
         ),
         _Case(
             dataset_rel=(
@@ -584,6 +733,10 @@ def test_spacie_special_collision_handoff_rows_match_replay(case: _Case) -> None
     #   Fighter_ProcessHit calls ftFx_SpecialLwHit_Enter through reflect_hit_cb. The overlap is
     #   item-owned and includes the projectile-origin segment, not only laser attack offsets.
     # - Shine B-release latch is an Anim-callback side effect and reads the pre-input snapshot.
+    # - LandingFallSpecial shares Landing_IASA; when the hidden allow_interrupt lane is set,
+    #   ftCo_800D68C0 can consume grounded Shine input.
+    # - SpecialAirLw Loop/Turn/End IASA can consume jump into JumpAerial, but that callback does not
+    #   then run destination JumpAerial special dispatch again on the same B/up input edge.
     # - EscapeAir floor-hug lock: Dolphin capture
     #   reports/triage/20260418T081729Z_dolphin_forensic_row confirms vanilla keeps
     #   ground_or_air=Air while root Y is on the floor bias under the active ECB lock.
@@ -594,6 +747,8 @@ def test_spacie_special_collision_handoff_rows_match_replay(case: _Case) -> None
     #   while active-lock rows whose prev ECB bottom is still above the floor remain airborne.
     # - SpecialAirHi_Coll can enter SpecialHiBound, and ftFx_SpecialHiBound_Anim enters FallSpecial
     #   while consuming all jumps on airborne anim end.
+    # - SpecialHiBound_Enter itself does not call ftCommon_8007D7FC, so rebound entry rows remain
+    #   airborne until Bound_Coll owns later ground conversion.
     # - SpecialHiHoldAir_Anim enters ftFx_SpecialAirHi_Enter, whose launch handler consumes all
     #   jumps through x1968_jumpsUsed=max_jumps.
     # - SpecialHiLanding_Anim enters Wait during the Anim callback, then destination Wait_IASA can
@@ -602,6 +757,11 @@ def test_spacie_special_collision_handoff_rows_match_replay(case: _Case) -> None
     #   buttonless forward Dash_CheckInput branch in the same proc.
     # - SpecialAirNEnd_Anim exits through ftCo_Fall_Enter when blaster landing lag is zero; the
     #   destination Fall IASA can consume JumpAerial input later in the same proc.
+    # - SpecialAirNLoop_Anim can enter SpecialAirNEnd, then the entered End collision callback still
+    #   routes through AirCatchHit_Coll -> Landing_Enter_Basic in the same Fighter proc.
+    # - SpecialN Loop Anim callbacks run before current-frame input; the hidden
+    #   mv.fx.SpecialN.isBlasterLoop latch is inferred from the seeded button timer before
+    #   Fighter_procUpdate can reset x67D with a fresh B press.
     # - Ledge occupancy blocks another fighter's CliffCatch through ftCliffCommon_80081298;
     #   slow and quick ledge options both set the occupancy bit, while CliffJump2 no longer uses
     #   the attach snap.
@@ -617,13 +777,18 @@ def test_spacie_special_collision_handoff_rows_match_replay(case: _Case) -> None
     # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::{
     #   ftFx_SpecialHiFall_Coll,ftFx_SpecialHiFall_Enter,ftFx_SpecialAirHi_Coll,
     #   ftFx_SpecialHiBound_Enter,ftFx_SpecialHiBound_Anim,ftFx_SpecialHiLanding_Anim,
-    #   ftFx_SpecialHiHoldAir_Anim,ftFx_SpecialAirHi_Enter}
+    #   ftFx_SpecialHiBound_Coll,ftFx_SpecialHiHoldAir_Anim,ftFx_SpecialAirHi_Enter}
     # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_SpecialNEnd_Anim
-    # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_SpecialAirNEnd_Anim
+    # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::{
+    #   ftFx_SpecialAirNLoop_Anim,ftFx_SpecialAirNEnd_Anim,ftFx_SpecialAirNEnd_Coll}
+    # refs/melee/src/melee/ft/ft_081B.c::ftCo_AirCatchHit_Coll
     # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c::{
     #   ftFx_SpecialLwStart_GroundToAir,ftFx_SpecialLwLoop_GroundToAir,
     #   ftFx_SpecialLwHit_GroundToAir,ftFx_SpecialLwEnd_GroundToAir,
-    #   ftFx_SpecialLwTurn_GroundToAir}
+    #   ftFx_SpecialLwTurn_GroundToAir,ftFx_SpecialAirLwLoop_IASA,
+    #   ftFx_SpecialAirLwTurn_IASA,ftFx_SpecialAirLwEnd_Anim}
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::{
+    #   ftCo_Landing_IASA,ftCo_LandingFallSpecial_Enter}
     # refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007D5D4
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c::ftCo_Dash_CheckInput

@@ -12,6 +12,7 @@
 #include "common_params.h"
 #include "input_axis.h"
 #include "laser_params.h"
+#include "move_tables.h"
 #include "special_msids.h"
 
 // Character id mapping follows Slippi post-frame `character` (GALE01):
@@ -47,11 +48,16 @@ static inline uint8_t specialn_is_blaster_loop_requested(const MslBatch* batch, 
   // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_SpecialAirNStart_IASA
   // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_SpecialAirNLoop_IASA
   //
-  // This simulator does not yet model cmd_vars[0] or mv.fx.SpecialN.isBlasterLoop directly.
-  // However, the seed schema includes fp->x67D ("frames since last B press", saturating at 0xFF)
-  // and action_frame (derived from cur_anim_frame). Use the decomp-shaped condition:
-  // "B was pressed at some point since this motion state was entered".
+  // This simulator does not yet model mv.fx.SpecialN.isBlasterLoop directly. However, extracted
+  // command data gives the cmd_vars[0] window, and the seed schema includes fp->x67D ("frames since
+  // last B press", saturating at 0xFF). Infer the latch only when that B press happened during the
+  // cmd_vars[0] window, rather than anywhere in the motion state.
+  // data/moves/{fox,falco}.json specials_by_msid["<msid>"].events set_cmd_var(idx=0)
   if (batch == NULL) {
+    return 0;
+  }
+  const uint32_t msid_u32 = batch->state.animation_index[idx];
+  if (msid_u32 > 0xFFFFu) {
     return 0;
   }
   const int af = (int)batch->state.action_frame[idx];
@@ -65,7 +71,15 @@ static inline uint8_t specialn_is_blaster_loop_requested(const MslBatch* batch, 
   if (x67d == 0xFF) {
     return 0;
   }
-  return x67d <= af ? 1u : 0u;
+  if (x67d >= af) {
+    return 0;
+  }
+  if ((batch->state.prev_input_buttons[idx] & (uint16_t)MSL_BUTTON_B) != 0u) {
+    return 1u;
+  }
+  const int b_press_af = af - x67d;
+  return move_tables_special_cmd0_active_at_frame(batch->state.char_id[idx], (uint16_t)msid_u32,
+                                                  b_press_af);
 }
 
 static inline uint8_t action_allows_special_entry_ground(uint16_t action_id) {
@@ -540,6 +554,180 @@ uint8_t blaster_try_enter_ground_from_wait_iasa(MslBatch* batch, const MslCommon
   return blaster_try_enter_ground_from_iasa_subset(batch, c, idx);
 }
 
+static inline void blaster_update_active_timeline_player(MslBatch* batch, const MslCommonParams* c,
+                                                         const MslCharParams* ch,
+                                                         const MslLaserParams* lp, size_t idx,
+                                                         uint8_t cid) {
+  if (batch == NULL || c == NULL || ch == NULL || lp == NULL) {
+    return;
+  }
+
+  const uint16_t action_id = batch->state.action_id[idx];
+  if (!action_is_blaster(action_id)) {
+    return;
+  }
+
+  // Ensure SpecialN/SpecialAirN always has a valid msid-backed animation_index.
+  // This keeps the ECB/collision substrate stable under reseed and removes the need for
+  // teacher-forcing guards in post-collision landing logic.
+  switch (action_id) {
+    case MSL_ACT_FX_SPECIAL_N_START:
+      batch->state.animation_index[idx] = (uint32_t)lp->ground_start_msid;
+      break;
+    case MSL_ACT_FX_SPECIAL_N_LOOP:
+      batch->state.animation_index[idx] = (uint32_t)lp->ground_loop_msid;
+      break;
+    case MSL_ACT_FX_SPECIAL_N_END:
+      batch->state.animation_index[idx] = (uint32_t)lp->ground_end_msid;
+      break;
+    case MSL_ACT_FX_SPECIAL_AIR_N_START:
+      batch->state.animation_index[idx] = (uint32_t)lp->air_start_msid;
+      break;
+    case MSL_ACT_FX_SPECIAL_AIR_N_LOOP:
+      batch->state.animation_index[idx] = (uint32_t)lp->air_loop_msid;
+      break;
+    case MSL_ACT_FX_SPECIAL_AIR_N_END:
+      batch->state.animation_index[idx] = (uint32_t)lp->air_end_msid;
+      break;
+    default:
+      break;
+  }
+
+  // Decomp: hitlag freezes animation advancement and blocks Anim/IASA side effects.
+  // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360 (anim gate)
+  if (batch->state.hitlag_started_frame[idx] != 0) {
+    return;
+  }
+
+  const float anim_frame_f32 = batch->state.anim_frame_f32[idx];
+  const uint8_t on_ground = batch->state.on_ground[idx] ? 1u : 0u;
+
+  switch (action_id) {
+    case MSL_ACT_FX_SPECIAL_N_START:
+      if (anim_finished(cid, lp->ground_start_msid, anim_frame_f32)) {
+        const uint8_t had_fastfall = batch->state.fall_fast[idx] ? 1u : 0u;
+        batch->state.action_id[idx] = (uint16_t)MSL_ACT_FX_SPECIAL_N_LOOP;
+        batch->state.animation_index[idx] = (uint32_t)lp->ground_loop_msid;
+        // Decomp: ftFx_SpecialNStart_Anim transitions via Fighter_ChangeMotionState without
+        // Ft_MF_KeepFastFall, so fp->fall_fast is cleared on entry.
+        // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_SpecialNStart_Anim
+        // refs/melee/src/melee/ft/fighter.c (KeepFastFall gate inside ChangeMotionState)
+        batch->state.fall_fast[idx] = 0;
+        if (had_fastfall != 0u) {
+          batch->state.tilt_timer_y[idx] = 0xFEu;
+        }
+        msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+      }
+      break;
+    case MSL_ACT_FX_SPECIAL_N_LOOP:
+      if (anim_finished(cid, lp->ground_loop_msid, anim_frame_f32)) {
+        const uint8_t had_fastfall = batch->state.fall_fast[idx] ? 1u : 0u;
+        if (specialn_is_blaster_loop_requested(batch, idx)) {
+          // Loop -> Loop: request another shot cycle.
+          // Decomp: Loop restarts itself via Fighter_ChangeMotionState without KeepFastFall.
+          // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_SpecialNLoop_Anim
+          batch->state.fall_fast[idx] = 0;
+          if (had_fastfall != 0u) {
+            batch->state.tilt_timer_y[idx] = 0xFEu;
+          }
+          msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+        } else {
+          batch->state.action_id[idx] = (uint16_t)MSL_ACT_FX_SPECIAL_N_END;
+          batch->state.animation_index[idx] = (uint32_t)lp->ground_end_msid;
+          // Decomp: Loop -> End uses Fighter_ChangeMotionState without KeepFastFall.
+          // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_SpecialNLoop_Anim
+          batch->state.fall_fast[idx] = 0;
+          if (had_fastfall != 0u) {
+            batch->state.tilt_timer_y[idx] = 0xFEu;
+          }
+          msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+        }
+      }
+      break;
+    case MSL_ACT_FX_SPECIAL_N_END:
+      if (anim_finished(cid, lp->ground_end_msid, anim_frame_f32)) {
+        enter_wait(batch, idx);
+        (void)specialn_end_try_destination_wait_forward_dash(batch, c, idx);
+      }
+      break;
+    case MSL_ACT_FX_SPECIAL_AIR_N_START:
+      if (anim_finished(cid, lp->air_start_msid, anim_frame_f32)) {
+        const uint8_t had_fastfall = batch->state.fall_fast[idx] ? 1u : 0u;
+        batch->state.action_id[idx] = (uint16_t)MSL_ACT_FX_SPECIAL_AIR_N_LOOP;
+        batch->state.animation_index[idx] = (uint32_t)lp->air_loop_msid;
+        // Decomp: ftFx_SpecialAirNStart_Anim transitions via Fighter_ChangeMotionState without
+        // Ft_MF_KeepFastFall, so fp->fall_fast is cleared on entry.
+        // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_SpecialAirNStart_Anim
+        // refs/melee/src/melee/ft/fighter.c (KeepFastFall gate inside ChangeMotionState)
+        batch->state.fall_fast[idx] = 0;
+        if (had_fastfall != 0u) {
+          batch->state.tilt_timer_y[idx] = 0xFEu;
+        }
+        msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+      }
+      break;
+    case MSL_ACT_FX_SPECIAL_AIR_N_LOOP:
+      if (anim_finished(cid, lp->air_loop_msid, anim_frame_f32)) {
+        const uint8_t had_fastfall = batch->state.fall_fast[idx] ? 1u : 0u;
+        if (specialn_is_blaster_loop_requested(batch, idx)) {
+          // Decomp: Aerial loop restarts itself via Fighter_ChangeMotionState without KeepFastFall.
+          // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_SpecialAirNLoop_Anim
+          batch->state.fall_fast[idx] = 0;
+          if (had_fastfall != 0u) {
+            batch->state.tilt_timer_y[idx] = 0xFEu;
+          }
+          msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+        } else {
+          batch->state.action_id[idx] = (uint16_t)MSL_ACT_FX_SPECIAL_AIR_N_END;
+          batch->state.animation_index[idx] = (uint32_t)lp->air_end_msid;
+          // Decomp: Aerial loop -> end uses Fighter_ChangeMotionState without KeepFastFall.
+          // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_SpecialAirNLoop_Anim
+          batch->state.fall_fast[idx] = 0;
+          if (had_fastfall != 0u) {
+            batch->state.tilt_timer_y[idx] = 0xFEu;
+          }
+          msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+        }
+      }
+      break;
+    case MSL_ACT_FX_SPECIAL_AIR_N_END:
+      if (anim_finished(cid, lp->air_end_msid, anim_frame_f32)) {
+        if (on_ground) {
+          enter_wait(batch, idx);
+        } else {
+          enter_fall(batch, idx);
+          specialn_air_end_try_destination_fall_jump(batch, c, ch, idx);
+        }
+      }
+      break;
+    default:
+      break;
+  }
+}
+
+void blaster_update_anim_callbacks_pre_input(MslBatch* batch) {
+  if (batch == NULL) {
+    return;
+  }
+  const MslCommonParams* c = msl_common_params();
+  if (c == NULL) {
+    return;
+  }
+  const int num_players = (int)batch->config.num_players;
+  for (int bi = 0; bi < batch->batch_size; bi++) {
+    for (int p = 0; p < num_players; p++) {
+      const size_t idx = msl_idx_player(bi, p);
+      const uint8_t cid = batch->state.char_id[idx];
+      if (!is_fox_falco(cid)) {
+        continue;
+      }
+      const MslCharParams* ch = msl_char_params(cid);
+      const MslLaserParams* lp = laser_params_get(cid);
+      blaster_update_active_timeline_player(batch, c, ch, lp, idx, cid);
+    }
+  }
+}
+
 void blaster_update_pre_physics(MslBatch* batch) {
   if (batch == NULL) {
     return;
@@ -607,12 +795,19 @@ void blaster_update_pre_physics(MslBatch* batch) {
             }
           }
         } else {
-          // Decomp routing: DamageFall IASA delegates directly to ftCo_SpecialAir_CheckInput, so
-          // B-special selection (Neutral/Side/Up) follows the same resolver used by standard air
-          // locomotion once B is pressed.
-          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DamageFall.c::ftCo_DamageFall_IASA
-          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_SpecialAir.c::ftCo_SpecialAir_CheckInput
-          if (action_allows_special_entry_air(batch, idx, a)) {
+          // SpecialLw's own IASA can consume a jump into JumpAerial in this same fighter proc.
+          // Decomp does not then run the destination JumpAerial special dispatcher on the same input
+          // edge, so leave B-special routing to the next frame for those Shine-owned handoffs.
+          // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c::{
+          //   ftFx_SpecialAirLwLoop_IASA,ftFx_SpecialAirLwTurn_IASA,ftFx_SpecialAirLwEnd_Anim}
+          // refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate
+          if (batch->state.shine_jump_iasa_entered_this_frame[idx] == 0u &&
+              action_allows_special_entry_air(batch, idx, a)) {
+            // Decomp routing: DamageFall IASA delegates directly to ftCo_SpecialAir_CheckInput, so
+            // B-special selection (Neutral/Side/Up) follows the same resolver used by standard air
+            // locomotion once B is pressed.
+            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DamageFall.c::ftCo_DamageFall_IASA
+            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_SpecialAir.c::ftCo_SpecialAir_CheckInput
             allow = ((a == (uint16_t)MSL_ACT_PASSIVE_WALL ||
                       a == (uint16_t)MSL_ACT_PASSIVE_WALL_JUMP) &&
                      batch->state.passivewall_timer[idx] != 0u)
@@ -874,11 +1069,14 @@ void blaster_update_post_collision(MslBatch* batch) {
       //
       // Policy:
       // - Use plain Landing (not LandingAir*): this matches Landing_Enter_Basic.
-      // - Preserve horizontal momentum by transferring air X -> ground X; clear air X.
+      // - Preserve horizontal momentum by syncing air X -> ground X; ftCommon_8007D6A4 does not
+      //   clear self_vel.x on landing entry, and Slippi exposes both lanes on the destination
+      //   Landing frame.
       // - Refresh jumps on grounded transition (fp->x1968_jumpsUsed = 0).
       //   refs/melee/src/melee/ft/ftcommon.c:556-573
-      batch->state.speed_ground_x_self[idx] = batch->state.speed_air_x_self[idx];
-      batch->state.speed_air_x_self[idx] = 0.0f;
+      const float landing_self_vel_x = batch->state.speed_air_x_self[idx];
+      batch->state.speed_ground_x_self[idx] = landing_self_vel_x;
+      batch->state.speed_air_x_self[idx] = landing_self_vel_x;
       batch->state.fall_fast[idx] = 0;
       batch->state.jumps_left[idx] = ch->max_jumps;
 

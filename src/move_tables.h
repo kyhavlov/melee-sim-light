@@ -85,6 +85,18 @@ uint8_t move_tables_escape_allow_interrupt(uint8_t char_id, uint16_t action_id,
 // Source of truth: data/moves/{fox,falco}.json moves["ftCo_SM_EscapeAir"]["events"] set_cmd_var(idx=0).
 uint8_t move_tables_escapeair_cmd0_active(uint8_t char_id, float cur_anim_frame_f32);
 
+// Returns whether a Special* command-script cmd_var[0] window contains `action_frame`.
+//
+// Decomp:
+// - Fox/Falco SpecialN Loop IASA sets mv.fx.SpecialN.isBlasterLoop only while cmd_vars[0] is set
+//   and B is freshly pressed.
+// refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::{
+//   ftFx_SpecialNLoop_IASA,ftFx_SpecialAirNLoop_IASA}
+// refs/melee/src/melee/ft/ftaction.c::ftAction_80071820
+//
+// Source of truth: data/moves/{fox,falco}.json specials_by_msid["<msid>"].events set_cmd_var(idx=0).
+uint8_t move_tables_special_cmd0_active_at_frame(uint8_t char_id, uint16_t msid, int action_frame);
+
 // Returns whether EscapeF should consume a script-driven facing flip this frame.
 //
 // Decomp:

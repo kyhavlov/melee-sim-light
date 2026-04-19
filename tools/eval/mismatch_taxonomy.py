@@ -1791,6 +1791,35 @@ def _specialhi_hard_moved_family(row: PlayerRow, names: tuple[str, str, str], fi
         # refs/melee/src/melee/mp/mpcoll.c::mpColl_8004A45C_Floor
         # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::ftFx_SpecialHiLanding_Coll
         return "F10c_collision_landing_edge_adjacency"
+    if (
+        any(name == "FX_SPECIAL_AIR_HI" for name in names)
+        and any(name == "FX_SPECIAL_HI_BOUND" for name in names)
+        and field_set <= {"action_id", "action_frame", "animation_index"}
+    ):
+        # Remaining SpecialAirHi <-> Bound rows are one-frame collision callback ordering around
+        # SpecialAirHi_Coll/Bound_Coll. They carry no Hold/launch travel, velocity, ledge, hitbox,
+        # or pose fields, so keep them with shared collision/landing timing ownership.
+        # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::{
+        #   ftFx_SpecialAirHi_Coll,ftFx_SpecialHiBound_Coll}
+        # refs/melee/src/melee/mp/mpcoll.c
+        return "F10c_collision_landing_edge_adjacency"
+    if all(name == "FX_SPECIAL_HI_BOUND" for name in names) and field_set <= {"jumps_left"}:
+        # Pure jumps-left drift inside steady Bound is common jump/bookkeeping visibility. Bound
+        # entry and anim-end action rows stay runtime-locked separately; no launch/travel fields
+        # remain here.
+        # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::{
+        #   ftFx_SpecialHiBound_Enter,ftFx_SpecialHiBound_Anim}
+        return "F09a_aerial_stateflag_hurtbox_adjacency"
+    if (
+        "KNEE_BEND" in names
+        and any(name == "FX_SPECIAL_HI_HOLD" for name in names)
+        and field_set <= {"action_id", "animation_index", "instance_id"}
+    ):
+        # The last grounded KneeBend -> SpecialHiHold row is a common grounded action/dispatch
+        # adjacency after DamageAir, not Firefox launch or Bound travel.
+        # refs/melee/src/melee/ft/chara/ftCommon/ftCo_KneeBend.c::ftCo_KneeBend_IASA
+        # refs/melee/src/melee/ft/chara/ftCommon/ftCo_SpecialS.c::ftCo_800D68C0
+        return "F10a_grounded_selector_transition"
     if all(name == "FX_SPECIAL_HI_HOLD_AIR" for name in names) and field_set <= (
         STATE_FLAG_FIELDS | {"hurtbox_state", "action_frame"}
     ):
@@ -1833,13 +1862,25 @@ def _speciallw_hard_moved_family(row: PlayerRow, names: tuple[str, str, str], fi
         return "F10b_grounded_combat_adjacency"
     if (
         field_set
-        and field_set <= {"hitlag", "state_flags[1]", "last_attack_landed", "combo_count"}
+        and field_set <= {"hitlag", "state_flags[1]"}
+        and any(_looks_like_aerial(name) for name in names)
+    ):
+        # Aerial Shine entry rows with action/on-ground already aligned and only hitlag plus the
+        # Slippi hitlag bit remaining are shared BODY/contact bookkeeping. Keep action/contact-state
+        # bundles in F20; these rows no longer contain a Shine release, turn, Hit/End, or reflector
+        # callback disagreement.
+        # refs/melee/src/melee/ft/ftcoll.c::ftColl_8007A06C
+        # refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
+        return "F09d_aerial_contact_hitlag_residual"
+    if (
+        field_set
+        and field_set <= {"hitlag", "state_flags[1]", "last_attack_landed", "combo_count", "instance_id"}
         and (row.on_ground == 1 or any(_looks_like_grounded(name) for name in names))
     ):
         # Grounded Shine entry rows whose only remaining fields are contact scalar, Slippi hitlag bit,
-        # and stale/source scoreboard values are common combat bookkeeping. The Shine state machine
-        # supplied the hitbox, but it did not choose a release, turn, Hit/End transition, or reflector
-        # callback on these rows.
+        # stale/source scoreboard values, and generic action-instance identity are common combat
+        # bookkeeping. The Shine state machine supplied the hitbox, but it did not choose a release,
+        # turn, Hit/End transition, or reflector callback on these rows.
         # refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007A06C,ftColl_8007BE3C}
         # refs/melee/src/melee/pl/plstale.c::{
         #   plStale_UpdateStaleMovesFromFighter,plStale_UpdateStaleMovesFromItem}
@@ -1943,6 +1984,32 @@ def _common_fallspecial_hard_moved_family(
         # refs/melee/src/melee/mp/mpcoll.c::mpColl_8004A45C_Floor
         # refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll
         return "F10c_collision_landing_edge_adjacency"
+    if field_set == {"action_frame"} and all(name == "LANDING_FALL_SPECIAL" for name in names):
+        # Pure LandingFallSpecial action-frame drift is common landing-lag/timebase ownership, not
+        # Fox/Falco special state-machine ownership.
+        # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::ftCo_LandingFallSpecial_Enter_Basic
+        # refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState
+        return "F10c_collision_landing_edge_adjacency"
+    if field_set and field_set <= {
+        "action_id",
+        "action_frame",
+        "animation_index",
+        "ground_id",
+        "instance_id",
+        "jumps_left",
+        "on_ground",
+        "state_flags[1]",
+    } and bool(field_set & {"action_id", "animation_index", "ground_id", "jumps_left", "on_ground"}):
+        # The remaining non-damage FallSpecial/LandingFallSpecial/EscapeAir rows are common landing
+        # and collision timing: action/on-ground/jump/ground-id bundles around ftCo_FallSpecial_Coll,
+        # ftCo_LandingFallSpecial_Enter, and ftCo_EscapeAir_Coll. They are not Fox/Falco special
+        # move state-machine rows; keep them with the shared mpColl/landing checklist owner.
+        # refs/melee/src/melee/ft/chara/ftCommon/ftCo_FallSpecial.c::{
+        #   ftCo_FallSpecial_Coll,ftCo_80096D28}
+        # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::ftCo_LandingFallSpecial_Enter_Basic
+        # refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll
+        # refs/melee/src/melee/ft/ft_081B.c::{ft_80082C74,ft_80083090}
+        return "F10c_collision_landing_edge_adjacency"
     if field_set and field_set <= (STATE_FLAG_FIELDS | {"hurtbox_state"}):
         # Pure state-flag/hurtbox tails are shared visible-state composition; keep action/collision
         # bundles in the common FallSpecial owner.
@@ -1967,13 +2034,24 @@ def _throw_hard_moved_family(row: PlayerRow, names: tuple[str, str, str], field_
     _ = row
     if not any(_looks_like_throw_or_thrown(name) for name in names):
         return None
-    if field_set and field_set <= {"last_hit_by", "combo_count", "last_attack_landed"}:
-        # Pure throw score/source rows share the common throw/item bookkeeping owner. Keep mixed
-        # hitlag, state-flag, hurtbox, article, and item-pulse bundles in F14b until their per-throw
-        # pulse callback is implemented.
+    if field_set and field_set <= {
+        "hitlag",
+        "state_flags[1]",
+        "state_flags[3]",
+        "hurtbox_state",
+        "instance_hit_by",
+        "last_hit_by",
+        "combo_count",
+        "last_attack_landed",
+    }:
+        # Action-aligned Throw*/Thrown* rows whose only residual fields are hitlag, Slippi contact
+        # bits, hurtbox visibility, or source/scoreboard ids share the common throw/item bookkeeping
+        # owner. Keep action/article/lifetime bundles out of this hard move; the rejected ThrowLw
+        # current-pulse bridge is not restored.
         # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::{
         #   ftCo_ThrowHi_Anim,ftCo_800DD724,ftCo_800DE7C0,ftCo_800DDDE4}
         # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
+        # refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007A06C,ftColl_8007BE3C}
         # refs/melee/src/melee/pl/plstale.c::{
         #   plStale_UpdateStaleMovesFromFighter,plStale_UpdateStaleMovesFromItem}
         return "F14_throw_item_bookkeeping"

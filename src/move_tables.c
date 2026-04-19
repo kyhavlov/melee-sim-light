@@ -109,9 +109,16 @@ typedef struct MslPseudoRandomSfxByMsid {
   MslFramePulses pulses;
   uint8_t random_range[MSL_FRAME_PULSES_MAX];
 } MslPseudoRandomSfxByMsid;
+typedef struct MslSpecialCmd0ByMsid {
+  uint16_t msid;
+  MslFrameWindow window;
+} MslSpecialCmd0ByMsid;
 static MslPseudoRandomSfxByMsid g_special_pseudo_rng_by_char[256]
                                                             [MSL_SPECIAL_PSEUDO_RNG_ENTRIES_MAX];
 static uint8_t g_special_pseudo_rng_count_by_char[256];
+static MslSpecialCmd0ByMsid g_special_cmd0_by_char[256][MSL_SPECIAL_PSEUDO_RNG_ENTRIES_MAX];
+static uint8_t g_special_cmd0_count_by_char[256];
+enum { MSL_SPECIAL_CMD0_LATCH_CLEAR_TAIL_FRAMES = 2 };
 static int g_loaded = 0;
 
 static const char* json_skip_ws(const char* s) {
@@ -1341,6 +1348,145 @@ static int parse_specials_by_msid_pseudo_random_sfx(const char* buf, const char*
   return 0;
 }
 
+static int parse_special_cmd0_window_from_obj(const char* obj_start, const char* obj_end,
+                                              MslFrameWindow* out) {
+  if (obj_start == NULL || obj_end == NULL || out == NULL) {
+    return -1;
+  }
+  const char* events_key = strstr_range(obj_start, obj_end, "\"events\"");
+  if (events_key == NULL) {
+    return -1;
+  }
+  const char* arr_start = (const char*)memchr(events_key, '[', (size_t)(obj_end - events_key));
+  if (arr_start == NULL) {
+    return -1;
+  }
+  const char* arr_end = json_find_matching_delim(arr_start, obj_end, '[', ']');
+  if (arr_end == NULL) {
+    return -1;
+  }
+
+  int on_frame = -1;
+  int off_frame = -1;
+  const char* p = arr_start;
+  while (p && p < arr_end) {
+    const char* ev_start = (const char*)memchr(p, '{', (size_t)(arr_end - p));
+    if (ev_start == NULL) {
+      break;
+    }
+    const char* ev_end = json_find_matching_delim(ev_start, arr_end, '{', '}');
+    if (ev_end == NULL) {
+      break;
+    }
+    if (json_get_str_eq_in_range(ev_start, ev_end, "kind", "set_cmd_var")) {
+      int frame = 0;
+      int idx = 0;
+      int value = 0;
+      if (json_get_i32_in_range(ev_start, ev_end, "frame", &frame) == 0 &&
+          json_get_i32_in_range(ev_start, ev_end, "idx", &idx) == 0 &&
+          json_get_i32_in_range(ev_start, ev_end, "value", &value) == 0 && idx == 0) {
+        if (value != 0 && on_frame < 0) {
+          on_frame = frame;
+        } else if (value == 0 && on_frame >= 0 && off_frame < 0) {
+          off_frame = frame;
+        }
+      }
+    }
+    p = ev_end + 1;
+  }
+
+  if (on_frame < 0) {
+    return -1;
+  }
+  if (off_frame < 0) {
+    off_frame = INT16_MAX;
+  }
+  if (off_frame < on_frame) {
+    return -1;
+  }
+  out->start_af = (int16_t)on_frame;
+  out->end_af = (off_frame > INT16_MAX) ? INT16_MAX : (int16_t)off_frame;
+  out->loaded = 1u;
+  return 0;
+}
+
+static int parse_specials_by_msid_cmd0_windows(const char* buf, const char* buf_end,
+                                               uint8_t char_id) {
+  if (buf == NULL || buf_end == NULL) {
+    return -1;
+  }
+  const char* specials_key = strstr_range(buf, buf_end, "\"specials_by_msid\"");
+  if (specials_key == NULL) {
+    g_special_cmd0_count_by_char[char_id] = 0u;
+    return 0;
+  }
+  const char* obj_start = (const char*)memchr(specials_key, '{', (size_t)(buf_end - specials_key));
+  if (obj_start == NULL) {
+    return -1;
+  }
+  const char* obj_end = json_find_matching_delim(obj_start, buf_end, '{', '}');
+  if (obj_end == NULL) {
+    return -1;
+  }
+
+  uint8_t entry_count = 0u;
+  const char* p = obj_start + 1;
+  while (p && p < obj_end) {
+    const char* key_start = (const char*)memchr(p, '"', (size_t)(obj_end - p));
+    if (key_start == NULL || key_start >= obj_end) {
+      break;
+    }
+    const char* key_end =
+        (const char*)memchr(key_start + 1, '"', (size_t)(obj_end - (key_start + 1)));
+    if (key_end == NULL || key_end >= obj_end) {
+      break;
+    }
+    char key_buf[16];
+    const size_t key_len = (size_t)(key_end - (key_start + 1));
+    if (key_len == 0 || key_len >= sizeof(key_buf)) {
+      p = key_end + 1;
+      continue;
+    }
+    memcpy(key_buf, key_start + 1, key_len);
+    key_buf[key_len] = '\0';
+
+    char* key_parse_end = NULL;
+    errno = 0;
+    long msid_long = strtol(key_buf, &key_parse_end, 10);
+    if (key_parse_end == key_buf || *key_parse_end != '\0' || errno != 0 || msid_long < 0 ||
+        msid_long > 0xFFFFL) {
+      p = key_end + 1;
+      continue;
+    }
+
+    const char* colon = (const char*)memchr(key_end, ':', (size_t)(obj_end - key_end));
+    if (colon == NULL || colon >= obj_end) {
+      break;
+    }
+    const char* move_obj_start = json_skip_ws(colon + 1);
+    if (move_obj_start == NULL || move_obj_start >= obj_end || *move_obj_start != '{') {
+      p = colon + 1;
+      continue;
+    }
+    const char* move_obj_end = json_find_matching_delim(move_obj_start, obj_end, '{', '}');
+    if (move_obj_end == NULL) {
+      break;
+    }
+
+    MslFrameWindow win = {0};
+    if (parse_special_cmd0_window_from_obj(move_obj_start, move_obj_end, &win) == 0 &&
+        entry_count < (uint8_t)MSL_SPECIAL_PSEUDO_RNG_ENTRIES_MAX) {
+      MslSpecialCmd0ByMsid* ent = &g_special_cmd0_by_char[char_id][entry_count];
+      ent->msid = (uint16_t)msid_long;
+      ent->window = win;
+      entry_count = (uint8_t)(entry_count + 1u);
+    }
+    p = move_obj_end + 1;
+  }
+  g_special_cmd0_count_by_char[char_id] = entry_count;
+  return 0;
+}
+
 static int load_one(const char* data_dir, const char* rel_path, uint8_t char_id) {
   if (data_dir == NULL || rel_path == NULL) {
     return -1;
@@ -1673,6 +1819,14 @@ static int load_one(const char* data_dir, const char* rel_path, uint8_t char_id)
     memcpy(g_throw_hitbox_by_char[char_id][MSL_THROW_KIND_LW], hitboxes, sizeof(hitboxes));
   }
 
+  // Special command-script cmd_var[0] windows keyed by msid.
+  // refs/melee/src/melee/ft/ftaction.c::ftAction_80071820
+  // Source: data/moves/{fox,falco}.json specials_by_msid["<msid>"].events set_cmd_var(idx=0).
+  if (parse_specials_by_msid_cmd0_windows(buf, buf_end, char_id) != 0) {
+    alloc_free(buf);
+    return -1;
+  }
+
   // Pseudo-random SFX command (opcode 38) event pulses for specials keyed by msid.
   // refs/melee/src/melee/ft/ftaction.c::ftAction_80071FC8
   if (parse_specials_by_msid_pseudo_random_sfx(buf, buf_end, char_id) != 0) {
@@ -1942,6 +2096,27 @@ uint8_t move_tables_escapeair_cmd0_active(uint8_t char_id, float cur_anim_frame_
   // refs/melee/src/melee/ft/ftaction.c::ftAction_80071820
   return (cur_anim_frame_f32 >= (float)win.start_af && cur_anim_frame_f32 < (float)win.end_af) ? 1
                                                                                                : 0;
+}
+
+uint8_t move_tables_special_cmd0_active_at_frame(uint8_t char_id, uint16_t msid, int action_frame) {
+  const uint8_t count = g_special_cmd0_count_by_char[char_id];
+  for (uint8_t i = 0; i < count; i++) {
+    const MslSpecialCmd0ByMsid* ent = &g_special_cmd0_by_char[char_id][i];
+    if (ent->msid != msid || !ent->window.loaded) {
+      continue;
+    }
+    // Command-script frames are 0-based in extracted data. SpecialN loop-repeat inference asks
+    // whether the B press happened while cmd_var[0] was active, not whether cmd_var[0] is still
+    // active on the terminal Anim callback frame.
+    // refs/melee/src/melee/ft/ftaction.c::ftAction_80071820
+    // SpecialN's IASA writes a persistent mv.fx.SpecialN.isBlasterLoop latch; the command-script
+    // clear frame ends the cmd_var window but does not itself clear a latch set by a nearby B edge.
+    // Keep a narrow terminal tail tied to the extracted clear event, not to replay ids/actions.
+    // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_SpecialNLoop_Anim
+    const int end_tail = (int)ent->window.end_af + MSL_SPECIAL_CMD0_LATCH_CLEAR_TAIL_FRAMES;
+    return (action_frame >= (int)ent->window.start_af && action_frame < end_tail) ? 1u : 0u;
+  }
+  return 0u;
 }
 
 uint8_t move_tables_catchpull_should_enter_wait(uint8_t char_id, uint16_t catch_action_id,

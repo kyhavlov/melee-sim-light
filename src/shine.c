@@ -106,9 +106,9 @@ static inline uint8_t action_allows_shine_entry_ground(uint16_t action_id) {
   //   refs/melee/src/melee/ft/chara/ftCommon/ftCo_KneeBend.c::ftCo_KneeBend_IASA
   // - LandingAir*: IASA is empty.
   //   refs/melee/src/melee/ft/chara/ftCommon/ftCo_LandingAir.c::ftCo_LandingAir_IASA
-  // - Landing / LandingFallSpecial: decomp does allow specials after landing-lag and allow_interrupt gates via
-  //   ftCo_Landing_IASA -> ftCo_800D68C0, but this sim currently models only a minimal Landing IASA (jump/dash/turn/walk)
-  //   in src/locomotion.c and does not yet mirror the full special-dispatch chain there.
+  // - Landing / LandingFallSpecial: decomp does allow specials after landing-lag and allow_interrupt
+  //   gates via ftCo_Landing_IASA -> ftCo_800D68C0. The runtime gate below handles normal Landing
+  //   lag and the hidden LandingFallSpecial allow_interrupt lane explicitly.
   //   refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::ftCo_Landing_IASA
   // - RunBrake: IASA checks fn_800CAF78, cmd_vars[0] turn-run, and ftCo_800D5FB0 only; it does
   //   not call ftCo_SpecialS_CheckInput or ftCo_800D68C0, so grounded SpecialLw cannot enter from
@@ -329,9 +329,14 @@ static inline void enter_jump_aerial_basic(MslBatch* batch, size_t idx, const Ms
   batch->state.fall_fast[idx] = 0;
   batch->state.jumps_left[idx]--;
   // Decomp: ftCo_JumpAerial_Enter_Basic calls ftCommon_8007D5D4 before ChangeMotionState.
+  // When this entry is reached from SpecialAirLw Loop/Turn/End IASA, that same callback owns the
+  // frame's input consumption; destination JumpAerial special dispatch must wait for the next frame.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::ftCo_JumpAerial_Enter_Basic
+  // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c::{
+  //   ftFx_SpecialAirLwLoop_IASA,ftFx_SpecialAirLwTurn_IASA,ftFx_SpecialAirLwEnd_Anim}
   // refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007D5D4
   batch->state.ecb_lock_timer[idx] = 10u;
+  batch->state.shine_jump_iasa_entered_this_frame[idx] = 1u;
 }
 
 static inline uint8_t did_tap_jump(const MslCommonParams* c, float stick_y, uint8_t tilt_timer_y) {
@@ -593,7 +598,10 @@ void shine_update_pre_physics(MslBatch* batch) {
           (a == (uint16_t)MSL_ACT_LANDING &&
            batch->state.anim_frame_f32[idx] >= (float)ch->landing_lag_frames)
               ? 1u
-              : 0u;
+              : ((a == (uint16_t)MSL_ACT_LANDING_FALL_SPECIAL &&
+                  batch->state.landing_fallspecial_allow_interrupt[idx] != 0u)
+                     ? 1u
+                     : 0u);
 
       // Entry (minimal): B press + down stick from basic locomotion.
       if (!action_is_shine(a) && (buttons_pressed & (uint16_t)MSL_BUTTON_B) != 0 &&
