@@ -288,6 +288,8 @@ static inline void specialhi_apply_air_launch_ownership(MslBatch* batch, size_t 
   }
   // Decomp: ftFx_SpecialAirHi_Enter derives launch direction from current stick and
   // ftFox_DatAttrs.{x64,x88}, then overwrites self_vel using x74 launch speed.
+  // It also consumes all jumps through `x1968_jumpsUsed = co_attrs.max_jumps` on aerial launch
+  // entry; Slippi post-frame stores the inverse `jumps_left`, so the sim lane writes zero here.
   // - stickGetDir(..., 0.0f) is used for x64 magnitude gate.
   // - facing updates when |stick_x| > x88 before atan2f.
   // - rotateModel defaults to HALF_PI32 when below direction threshold.
@@ -313,6 +315,7 @@ static inline void specialhi_apply_air_launch_ownership(MslBatch* batch, size_t 
   }
   batch->state.speed_air_x_self[idx] = facing_dir * (ch->firefox_launch_speed * cosf(launch_angle));
   batch->state.speed_y_self[idx] = ch->firefox_launch_speed * sinf(launch_angle);
+  batch->state.jumps_left[idx] = 0u;
 }
 
 static inline uint8_t specialhi_try_ground_launch_from_hold(MslBatch* batch, size_t idx,
@@ -2708,6 +2711,19 @@ void locomotion_update_pre(MslBatch* batch) {
               // data/common/ft_common_data.json: special_stick_y_threshold
               shine_enter_ground_start_from_iasa(batch, idx);
               action_id = batch->state.action_id[idx];
+              // The source AttackDash callback gated on fp+0x2218.allow_interrupt before
+              // delegating through Wait_IASA. Preserve that command-owned bit on the immediate
+              // SpecialLwStart destination, matching the other Attack* -> Wait_IASA destination
+              // carries in this block.
+              // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackDash.c::ftCo_AttackDash_IASA
+              // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
+              // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_800D68C0
+              // refs/melee/src/melee/ft/ftaction.c::ftAction_80071950
+              enum { MSL_STATE_FLAGS_2218_INDEX = 0 };
+              enum { MSL_STATE_FLAG_2218_ALLOW_INTERRUPT = 0x80 };
+              const size_t flags_i =
+                  idx * (size_t)MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_2218_INDEX;
+              batch->state.state_flags[flags_i] |= (uint8_t)MSL_STATE_FLAG_2218_ALLOW_INTERRUPT;
             }
             if (!attackdash_pregate_consumed && !attackdash_guard_iasa_consumed &&
                 !grounded_attack_guard_iasa_consumed && allow_interrupt &&
@@ -3917,9 +3933,17 @@ void locomotion_update_pre(MslBatch* batch) {
         }
 
         // Aerial attack (AttackAir*) entry from eligible air locomotion states.
-        // Decomp: ftCo_AttackAir_CheckInput is consulted from IASA in common aerial states.
-        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c
-        if (locomotion_attackair_try_enter_from_air_iasa(batch, c, idx)) {
+        //
+        // Decomp ordering: common aerial IASA owners check ftCo_SpecialAir_CheckInput before
+        // ftCo_AttackAir_CheckItemThrowInput. This simulator models Fox/Falco B-specials in the
+        // later Shine/Blaster passes, so leave B-edge rows in the source aerial state here and let
+        // those passes consume the same frame.
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_IASA_Inner
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c::ftCo_Jump_IASA
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_PassiveWall.c::ftCo_PassiveWall_IASA
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_SpecialAir.c::ftCo_SpecialAir_CheckInput
+        if ((buttons_pressed & (uint16_t)MSL_BUTTON_B) == 0u &&
+            locomotion_attackair_try_enter_from_air_iasa(batch, c, idx)) {
           continue;
         }
 

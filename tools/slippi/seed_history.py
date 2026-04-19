@@ -2385,6 +2385,7 @@ def derive_colanim_internals(
     x1990 = 0
     x1994 = 0
     x2221_b0 = 0
+    shine_start_masked_x198c = 0
     prev_a = int(aid[0]) if n > 0 else 0
     prev_afr = int(afr[0]) if n > 0 else 0
     prev_hl = int(hl[0]) if n > 0 else 0
@@ -2445,6 +2446,35 @@ def derive_colanim_internals(
             x198c = 1
         else:
             x198c = 0
+
+        shine_entry_masks_x198c = (
+            entered
+            and i > 0
+            and cur_a in {0x0168, 0x016D}
+            and cur_afr == 1
+            and int(hurt[i]) == 2
+            and int(hurt[i - 1]) == 1
+            and x1990 == 0
+            and x1994 == 0
+            and not x2221_b0
+        )
+        if shine_entry_masks_x198c:
+            # Fox/Falco Shine Start entry masks the prior visible x198C=1 lane with the
+            # movescript x1988=2 set by the entry script. Slippi exposes only x1988 while it is
+            # nonzero; when the Shine script clears x1988 on the following frame, replay falls back
+            # to the still-live x198C=1 lane. Preserve only this causal entry-origin shape so
+            # same-action hitlag-frozen Shine starts that clear to vulnerable remain unbridged.
+            # Actions: ftFx_MS_SpecialLwStart=0x168, ftFx_MS_SpecialAirLwStart=0x16D.
+            # refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
+            # refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007B62C,ftColl_8007B868}
+            # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c::{
+            #   ftFx_SpecialLw_Enter,ftFx_SpecialAirLw_Enter}
+            shine_start_masked_x198c = 1
+        elif not (cur_a in {0x0168, 0x016D} and cur_afr == 1 and int(hurt[i]) == 2):
+            shine_start_masked_x198c = 0
+
+        if shine_start_masked_x198c:
+            x198c = 1
 
         downbound_hidden_x1990_visible_zero = cur_a in {0x00BE, 0x00BF} and x1990 > 0
         if int(hurt[i]) == 0 and x1990 > 0 and not downbound_hidden_x1990_visible_zero:

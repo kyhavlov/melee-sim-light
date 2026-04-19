@@ -157,9 +157,14 @@ typedef enum MslActionId {
   // Source of truth: refs/melee/src/melee/ft/chara/ftCommon/forward.h `ftCommon_MotionState`.
   MSL_ACT_CLIFF_CATCH = 0x00FC,         // ftCo_MS_CliffCatch (252)
   MSL_ACT_CLIFF_WAIT = 0x00FD,          // ftCo_MS_CliffWait (253)
+  MSL_ACT_CLIFF_CLIMB_SLOW = 0x00FE,    // ftCo_MS_CliffClimbSlow (254)
   MSL_ACT_CLIFF_CLIMB_QUICK = 0x00FF,   // ftCo_MS_CliffClimbQuick (255)
+  MSL_ACT_CLIFF_ATTACK_SLOW = 0x0100,   // ftCo_MS_CliffAttackSlow (256)
   MSL_ACT_CLIFF_ATTACK_QUICK = 0x0101,  // ftCo_MS_CliffAttackQuick (257)
+  MSL_ACT_CLIFF_ESCAPE_SLOW = 0x0102,   // ftCo_MS_CliffEscapeSlow (258)
   MSL_ACT_CLIFF_ESCAPE_QUICK = 0x0103,  // ftCo_MS_CliffEscapeQuick (259)
+  MSL_ACT_CLIFF_JUMP_SLOW1 = 0x0104,    // ftCo_MS_CliffJumpSlow1 (260)
+  MSL_ACT_CLIFF_JUMP_SLOW2 = 0x0105,    // ftCo_MS_CliffJumpSlow2 (261)
   MSL_ACT_CLIFF_JUMP_QUICK1 = 0x0106,   // ftCo_MS_CliffJumpQuick1 (262)
   MSL_ACT_CLIFF_JUMP_QUICK2 = 0x0107,   // ftCo_MS_CliffJumpQuick2 (263)
 
@@ -453,9 +458,14 @@ typedef enum MslSubmotionId {
   // Source of truth: refs/melee/src/melee/ft/chara/ftCommon/forward.h `ftCo_Submotion`.
   MSL_SM_CLIFF_CATCH = 216,         // ftCo_SM_CliffCatch
   MSL_SM_CLIFF_WAIT = 217,          // ftCo_SM_CliffWait
+  MSL_SM_CLIFF_CLIMB_SLOW = 219,    // ftCo_SM_CliffClimbSlow
   MSL_SM_CLIFF_CLIMB_QUICK = 220,   // ftCo_SM_CliffClimbQuick
+  MSL_SM_CLIFF_ATTACK_SLOW = 221,   // ftCo_SM_CliffAttackSlow
   MSL_SM_CLIFF_ATTACK_QUICK = 222,  // ftCo_SM_CliffAttackQuick
+  MSL_SM_CLIFF_ESCAPE_SLOW = 223,   // ftCo_SM_CliffEscapeSlow
   MSL_SM_CLIFF_ESCAPE_QUICK = 224,  // ftCo_SM_CliffEscapeQuick
+  MSL_SM_CLIFF_JUMP_SLOW1 = 225,    // ftCo_SM_CliffJumpSlow1
+  MSL_SM_CLIFF_JUMP_SLOW2 = 226,    // ftCo_SM_CliffJumpSlow2
   MSL_SM_CLIFF_JUMP_QUICK1 = 227,   // ftCo_SM_CliffJumpQuick1
   MSL_SM_CLIFF_JUMP_QUICK2 = 228,   // ftCo_SM_CliffJumpQuick2
 

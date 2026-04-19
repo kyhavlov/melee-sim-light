@@ -948,11 +948,14 @@ void mpcoll_ground_apply(MslBatch* batch) {
         lock_bottom_to_zero = 1u;
       } else if (!lock_bottom_to_zero && action_id == (uint16_t)MSL_ACT_ESCAPE_AIR &&
                  batch->state.action_frame[idx] >= 0 && batch->state.action_frame[idx] <= 10 &&
-                 batch->state.speed_y_self[idx] <= 0.0f) {
+                 batch->state.speed_y_self[idx] <= 0.0f && prev_action_id != action_id) {
         // Decomp shape: mpColl tracks both `ecb` and `prev_ecb`, and floor checks can resolve from a
         // swept bottom segment while EscapeAir is descending. This lite sim does not carry mpColl's
-        // full interpolation state, so use the previous ECB frame as a deterministic approximation.
+        // full interpolation state, so use the previous ECB frame as a deterministic approximation
+        // for fresh EscapeAir entries. Sustained no-lock EscapeAir rows keep current ECB sampling so
+        // the approximation does not synthesize an extra LandingFallSpecial frame.
         // refs/melee/src/melee/mp/mpcoll.c::mpCollInterpolateECB
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll
         lock_bottom_to_prev_frame = 1u;
       }
       const uint16_t ecb_frame_cur =
@@ -1335,6 +1338,36 @@ void mpcoll_ground_apply(MslBatch* batch) {
             }
           }
         }
+        const float escapeair_frame_start_prev_bottom_y =
+            prev_y + msl_ecb_bottom_rel_y(char_id, anim, (int)ecb_frame_prev);
+        if (!on_ground && action_id == (uint16_t)MSL_ACT_ESCAPE_AIR && prefer_line_idx >= 0 &&
+            prev_y <= k_floor_y_bias && batch->state.speed_y_self[idx] < 0.0f &&
+            escapeair_frame_start_prev_bottom_y <= k_floor_y_bias &&
+            !(ecb_lock_active == 0u && prev_action_id == action_id &&
+              batch->state.action_frame[idx] <= 6)) {
+          // EscapeAir_Coll uses ft_80082C74 and the persisted CollData floor.index. Teacher-forced
+          // one-step reseeds can begin after the full mpColl sweep has already placed root Y below
+          // the floor while vanilla still resolves LandingFallSpecial from that same floor.index.
+          // Keep this bridge limited to frame-start prev-ECB-bottom penetration. Early sustained
+          // no-lock EscapeAir rows stay on the normal sweep path so the previous-ECB approximation
+          // cannot synthesize an extra LandingFallSpecial frame.
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll
+          // refs/melee/src/melee/ft/ft_081B.c::ft_80082C74
+          // refs/melee/src/melee/mp/mplib.c::mpLib_8004DD90_Floor
+          float y_corr = 0.0f;
+          const int out_line_idx =
+              floor_dd90_project(g, prefer_line_idx, batch->state.pos_x[idx],
+                                 batch->state.pos_y[idx], &y_corr, &floor_nx, &floor_ny);
+          const float max_lift =
+              cur_bot.rel_y + fabsf(batch->state.speed_y_self[idx]) + (2.0f * k_ecb_vertical_unit);
+          if (out_line_idx >= 0 && y_corr >= 0.0f && y_corr <= max_lift) {
+            batch->state.pos_y[idx] += y_corr;
+            on_ground = 1;
+            ground_id = g->lines[(size_t)out_line_idx].segment_i;
+            contact_x = batch->state.pos_x[idx];
+            contact_y = batch->state.pos_y[idx];
+          }
+        }
         uint8_t deep_lock_penetration = 0u;
         if (!on_ground && action_id == (uint16_t)MSL_ACT_ESCAPE_AIR && prefer_line_idx >= 0 &&
             !g->lines[(size_t)prefer_line_idx].is_ledge &&
@@ -1363,14 +1396,20 @@ void mpcoll_ground_apply(MslBatch* batch) {
         }
         if (!on_ground && escapeair_locked && prefer_line_idx >= 0) {
           const float bottom_rel0 = msl_ecb_bottom_rel_y(char_id, anim, 0);
-          deep_lock_penetration = (bottom_rel0 > 0.0f && cur_bottom_y <= -bottom_rel0) ? 1u : 0u;
+          deep_lock_penetration = (bottom_rel0 > 0.0f && cur_bottom_y <= -bottom_rel0 &&
+                                   batch->state.speed_y_self[idx] < 0.0f)
+                                      ? 1u
+                                      : 0u;
           if (deep_lock_penetration) {
             // Decomp shape: while CollData_X130_Locked is active, EscapeAir_Coll can still resolve
             // against the persisted floor.index via mpLib_8004DD90_Floor-style projection.
+            // Keep the projection on non-rising rows; mpCheckFloor's floor intersection path is
+            // likewise non-rising (`ay >= by`).
             // Ledge floor caveat: allow shallow ledge-floor contact covered by EscapeAir's initial
             // ECB bottom plus the current root sweep, but suppress deeper under-ledge projections
             // that would teleport from below the ledge/floor up onto the stage.
             // refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll
+            // refs/melee/src/melee/mp/mplib.c::mpCheckFloor
             // refs/melee/src/melee/mp/mpcoll.c::mpCollInterpolateECB
             // refs/melee/src/melee/mp/mplib.c::mpLib_8004DD90_Floor
             float y_corr = 0.0f;
@@ -1486,6 +1525,18 @@ void mpcoll_ground_apply(MslBatch* batch) {
                fabsf(cur_bottom_x - prev_bottom_x) <= (float)k_floor_horiz_dy_thresh)
                   ? 1u
                   : 0u;
+          const uint8_t suppress_escapeair_no_lock_vertical_af3_land =
+              (!escapeair_locked && action_id == (uint16_t)MSL_ACT_ESCAPE_AIR &&
+               prev_action_id == (uint16_t)MSL_ACT_ESCAPE_AIR && hit_line_idx >= 0 &&
+               // Sustained EscapeAir without CollData_X130_Locked should not inherit the previous
+               // ECB approximation. Keep the same vertical-only early-anim gap airborne and let the
+               // following EscapeAir_Coll frame own the landing if replay still reaches the floor.
+               // refs/melee/src/melee/mp/mpcoll.c::mpCollInterpolateECB
+               // refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll
+               batch->state.action_frame[idx] == 3 &&
+               fabsf(cur_bottom_x - prev_bottom_x) <= (float)k_floor_horiz_dy_thresh)
+                  ? 1u
+                  : 0u;
           const uint8_t suppress_fallspecial_entry_af3_land =
               (is_common_fallspecial_action(action_id) &&
                batch->state.prev_action_frame[idx] == 3 && batch->state.speed_y_self[idx] < 0.0f)
@@ -1519,8 +1570,8 @@ void mpcoll_ground_apply(MslBatch* batch) {
                   ? 1u
                   : 0u;
           if (suppress_locked_ledge_land || suppress_locked_vertical_af3_land ||
-              suppress_fallspecial_entry_af3_land || escapeair_locked_floorhug_airborne ||
-              suppress_damageflyroll_shallow_land) {
+              suppress_escapeair_no_lock_vertical_af3_land || suppress_fallspecial_entry_af3_land ||
+              escapeair_locked_floorhug_airborne || suppress_damageflyroll_shallow_land) {
             floor_write_edge_suppression_flags(batch, idx, stage_id, g, hit_line_idx, char_id, anim,
                                                ecb_frame, was_grounded);
           } else {

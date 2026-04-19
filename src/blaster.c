@@ -247,6 +247,44 @@ static inline void enter_wait(MslBatch* batch, size_t idx) {
   msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
 }
 
+static inline uint8_t specialn_end_try_destination_wait_forward_dash(MslBatch* batch,
+                                                                     const MslCommonParams* c,
+                                                                     size_t idx) {
+  if (batch == NULL || c == NULL) {
+    return 0u;
+  }
+  if (batch->state.input_buttons_pressed[idx] != 0u) {
+    return 0u;
+  }
+  const float stick_x =
+      apply_deadzone(stick_i8_to_unit(batch->state.input_main_x[idx]), c->lstick_deadzone_x);
+  const float facing_dir = batch->state.facing_dir1[idx] >= 0 ? 1.0f : -1.0f;
+  const uint8_t tilt_timer_x = batch->state.tilt_timer_x[idx];
+  // Decomp callback order:
+  // - ftFx_SpecialNEnd_Anim removes the blaster and calls ft_8008A2BC.
+  // - The destination Wait_IASA later reaches ftCo_Dash_CheckInput before Squat/Turn/Walk.
+  // - This slice only claims the buttonless forward-dash branch; earlier Wait_IASA button owners
+  //   and the opposite-facing turn-smash branch stay with their own owner families.
+  // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_SpecialNEnd_Anim
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c::ftCo_Dash_CheckInput
+  if ((stick_x * facing_dir) < c->dash_flick_abs) {
+    return 0u;
+  }
+  if (tilt_timer_x >= c->dash_flick_tilt_max_frames) {
+    return 0u;
+  }
+  batch->state.action_id[idx] = (uint16_t)MSL_ACT_DASH;
+  batch->state.animation_index[idx] = (uint32_t)MSL_SM_DASH;
+  batch->state.dash_x4[idx] = 1u;
+  msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+  // Decomp: ftCo_Dash_Enter calls ftAnim_8006EBA4 immediately after ChangeMotionState.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c::ftCo_Dash_Enter
+  msl_anim_timebase_tick_once(batch, idx);
+  batch->state.tilt_timer_x[idx] = 0xFEu;
+  return 1u;
+}
+
 static inline void enter_fall(MslBatch* batch, size_t idx) {
   if (batch == NULL) {
     return;
@@ -261,6 +299,70 @@ static inline void enter_fall(MslBatch* batch, size_t idx) {
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_Enter
   // refs/melee/src/melee/ft/fighter.c (KeepFastFall gate inside Fighter_ChangeMotionState)
   batch->state.fall_fast[idx] = keep_fastfall;
+}
+
+static inline uint8_t specialn_destination_fall_tap_jump(const MslCommonParams* c, float stick_y,
+                                                         uint8_t tilt_timer_y) {
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c::ftCo_Jump_GetInput
+  return (stick_y >= c->tap_jump_threshold && tilt_timer_y < c->tap_jump_tilt_max_frames) ? 1u : 0u;
+}
+
+static inline uint16_t specialn_destination_fall_airjump_action(const MslCommonParams* c,
+                                                                float stick_x, float facing_dir) {
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::ftCo_JumpAerial_Enter_Basic
+  return (stick_x * facing_dir) > -c->jump_back_x_threshold ? MSL_ACT_JUMP_AERIAL_F
+                                                            : MSL_ACT_JUMP_AERIAL_B;
+}
+
+static inline void specialn_air_end_try_destination_fall_jump(MslBatch* batch,
+                                                              const MslCommonParams* c,
+                                                              const MslCharParams* ch, size_t idx) {
+  if (batch == NULL || c == NULL || ch == NULL) {
+    return;
+  }
+  if (batch->state.jumps_left[idx] == 0u) {
+    return;
+  }
+
+  const uint16_t buttons_pressed = batch->state.input_buttons_pressed[idx];
+  const float stick_y =
+      apply_deadzone(stick_i8_to_unit(batch->state.input_main_y[idx]), c->lstick_deadzone_y);
+  const uint8_t has_jump =
+      ((buttons_pressed & (uint16_t)MSL_BUTTON_XY) != 0u ||
+       specialn_destination_fall_tap_jump(c, stick_y, batch->state.tilt_timer_y[idx]) != 0u)
+          ? 1u
+          : 0u;
+  if (has_jump == 0u) {
+    return;
+  }
+
+  const float stick_x =
+      apply_deadzone(stick_i8_to_unit(batch->state.input_main_x[idx]), c->lstick_deadzone_x);
+  const float facing_dir = batch->state.facing_dir1[idx] >= 0 ? 1.0f : -1.0f;
+  const uint16_t act = specialn_destination_fall_airjump_action(c, stick_x, facing_dir);
+
+  // Decomp ordering:
+  // - ftFx_SpecialAirNEnd_Anim exits through ftCo_Fall_Enter when x18 landing lag is zero.
+  // - The destination Fall IASA can run later in the same Fighter proc and consume the
+  //   JumpAerial path.
+  // - ftCo_JumpAerial_Enter_Basic sets aerial-jump velocity, x671=0xFE, decrements jumps left,
+  //   and calls ftCommon_8007D5D4 (ECB lock).
+  // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_SpecialAirNEnd_Anim
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_IASA
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::ftCo_JumpAerial_Enter_Basic
+  // refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007D5D4
+  batch->state.action_id[idx] = act;
+  batch->state.animation_index[idx] = act == (uint16_t)MSL_ACT_JUMP_AERIAL_F
+                                          ? (uint32_t)MSL_SM_JUMP_AERIAL_F
+                                          : (uint32_t)MSL_SM_JUMP_AERIAL_B;
+  batch->state.on_ground[idx] = 0u;
+  batch->state.speed_air_x_self[idx] = stick_x * ch->air_jump_h_multiplier;
+  batch->state.speed_y_self[idx] = ch->jump_v_initial_velocity * ch->air_jump_v_multiplier;
+  batch->state.tilt_timer_y[idx] = 0xFEu;
+  batch->state.fall_fast[idx] = 0u;
+  batch->state.jumps_left[idx]--;
+  batch->state.ecb_lock_timer[idx] = 10u;
+  msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
 }
 
 static inline void enter_blaster_start(MslBatch* batch, size_t idx, const MslLaserParams* lp,
@@ -664,6 +766,7 @@ void blaster_update_pre_physics(MslBatch* batch) {
         case MSL_ACT_FX_SPECIAL_N_END:
           if (anim_finished(cid, lp->ground_end_msid, anim_frame_f32)) {
             enter_wait(batch, idx);
+            (void)specialn_end_try_destination_wait_forward_dash(batch, c, idx);
           }
           break;
         case MSL_ACT_FX_SPECIAL_AIR_N_START:
@@ -713,6 +816,7 @@ void blaster_update_pre_physics(MslBatch* batch) {
               enter_wait(batch, idx);
             } else {
               enter_fall(batch, idx);
+              specialn_air_end_try_destination_fall_jump(batch, c, ch, idx);
             }
           }
           break;

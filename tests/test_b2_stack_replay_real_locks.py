@@ -101,9 +101,10 @@ def test_attackdash_shine_qgd_replay_real_lock() -> None:
     assert int(out_row["on_ground"][p]) == int(ref_row["on_ground"][p]) == 1
     assert int(out_row["facing"][p]) == int(ref_row["facing"][p]) == 1
     assert int(out_row["jumps_left"][p]) == int(ref_row["jumps_left"][p]) == 2
-    # Expected residual: this lane fixes the transition but does not claim broader state_flags parity.
+    # AttackDash_IASA -> Wait_IASA -> ftCo_800D68C0 now preserves the source allow_interrupt bit
+    # on the immediate grounded Shine Start destination.
     assert ref_row["state_flags"][p].tolist() == [160, 0, 0, 0, 0]
-    assert out_row["state_flags"][p].tolist() == [32, 0, 0, 0, 0]
+    assert out_row["state_flags"][p].tolist() == ref_row["state_flags"][p].tolist()
 
 
 @pytest.mark.integration

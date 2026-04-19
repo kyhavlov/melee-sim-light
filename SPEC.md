@@ -1338,14 +1338,16 @@ Grounded motion-entry timing notes:
   use `motion_entry_instance_id_override_u16`, a narrow non-causal replay-facing lane that supplies
   the post-entry `fp->x2088` when Slippi post-frames do not expose HSD fighter-proc/global counter
   order. It is held live for the one-step frame so chained same-frame entries settle on the
-  replay-visible final id, then cleared before rollout carry. The checkpoint-safe population stays
-  limited to grounded locomotion/motion-entry owner rows; Fox/Falco special-boundary same-frame
-  order is left to the special owner work rather than hidden under this lane.
+  replay-visible final id, then cleared before rollout carry. The population stays limited to
+  grounded locomotion ordering rows plus the explicit SpecialN loop-restart `ft_80089824` callback
+  lane; a broader special-boundary hidden-prior / multi-consumer expansion was removed during
+  audit because it depended on `post_*[1:]` / `ref_t1` oracle data.
 - For RL1.0 checklist closure, the two lanes above are explicit non-causal replay seed lanes, not
   fully causal runtime simulation state. Their validation-population audit is intentionally narrow:
   `turn_kneebend_facing_override_u8` populates only `Turn -> KneeBend` rows. The
-  `motion_entry_instance_id_override_u16` lane remains tied to grounded `ft_800895E0` entry-order
-  ownership; ordinary single-fighter entries stay on `ft_800895E0/x2073`.
+  `motion_entry_instance_id_override_u16` lane remains tied to `ft_800895E0` /
+  `ft_80089824` / `plAttack_80037B08` ordering evidence in those scoped lanes; ordinary
+  single-fighter entries and direct special-boundary entries stay on `ft_800895E0/x2073`.
 
 #### Ledge system (cliff catch/occupancy/options)
 
@@ -1523,8 +1525,11 @@ Fox/Falco special-owner split (2026-04-17):
     `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_800D68C0`,
     `refs/melee/src/melee/ft/chara/ftCommon/ftCo_SpecialS.c::ftCo_SpecialS_CheckInput`, and
     `refs/melee/src/melee/ft/chara/ftCommon/ftCo_SpecialAir.c::ftCo_SpecialAir_CheckInput`.
-  - `F24_special_adjacent_instance_order`: special motion-entry instance counter rows sharing
-    `ft_800895E0` / `plAttack_80037B08` ordering.
+  - `F24_special_adjacent_instance_order`: source-backed special motion-entry instance counter
+    rows, currently limited to SpecialN loop restarts that install OnChangeAction and call
+    `ft_80089824`. Direct special-boundary instance-only rows without that callback are generic
+    `ft_800895E0` / `plAttack_80037B08` adjacent instance ordering (`F12b`) or damage identity
+    (`F08a`).
 - `F13_specialhi_landing` is no longer a mixed FireFox/common-freefall label. True FireFox rows
   go to `F22`; common `FallSpecial` / `LandingFallSpecial` / `EscapeAir` rows go to
   `F13a_common_fallspecial_landing`. `ThrowLw` / `ThrownLw` and other throw-side blaster pulse
@@ -1575,6 +1580,15 @@ Fox/Falco special-owner split (2026-04-17):
     on the shallow post-entry floor row, so the runtime adds a bounded root projection only for
     `FallSpecial` rows whose frame-start action frame is already past the entry frame and whose
     lift is within current downward velocity.
+  - `EscapeAir_Coll` uses `ft_80082C74` and can enter `LandingFallSpecial` from the persisted
+    CollData floor index. One-step reseeds can start after the previous ECB bottom has already
+    crossed that floor, so runtime adds a bounded projection only when the frame-start previous ECB
+    bottom is already below the persisted floor. Active-lock rows whose previous ECB bottom is still
+    above floor remain airborne through the existing negative locks; the rejected broad EscapeAir
+    projection is not restored. Sources:
+    `refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll`,
+    `refs/melee/src/melee/ft/ft_081B.c::ft_80082C74`, and
+    `refs/melee/src/melee/mp/mplib.c::mpLib_8004DD90_Floor`.
   - FireFox/FireBird rebound ownership now includes `SpecialAirHi` floor collision into
     `SpecialHiBound` and airborne `SpecialHiBound` anim-end into common `FallSpecial`, consuming
     jumps as `ftFx_SpecialHiBound_Anim` writes `x1968_jumpsUsed = max_jumps`.
@@ -1593,15 +1607,123 @@ Fox/Falco special-owner split (2026-04-17):
     Sources: `refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::ftFx_SpecialHiLanding_Anim`,
     `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA`, and
     `refs/melee/src/melee/ft/fighter.c::{Fighter_8006A360,Fighter_procUpdate}`.
+  - Pure `state_flags[4]` taxonomy rows are now split to `F25_camera_box_visibility_x221f`.
+    Slippi records fp+0x221F for camera-subject visibility; those rows are owned by
+    `ftLib_80086A8C` / `Camera_80030CFC` and stage camera bounds, not by the visible special
+    action. Sources:
+    `refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm`,
+    `refs/melee/src/melee/ft/ftlib.c::ftLib_80086A8C`,
+    `refs/melee/src/melee/cm/camera.c::Camera_80030CFC`, and `src/state_flags.c`.
+  - `SpecialNEnd_Anim` exits through `ft_8008A2BC`; the destination Wait IASA can then consume the
+    buttonless forward `ftCo_Dash_CheckInput` branch in the same fighter proc. The retained runtime
+    slice is limited to that forward Dash branch and does not claim earlier Wait_IASA button owners
+    or the backward turn-smash branch. Sources:
+    `refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_SpecialNEnd_Anim`,
+    `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA`, and
+    `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c::ftCo_Dash_CheckInput`.
+  - `SpecialAirNEnd_Anim` exits through `ftCo_Fall_Enter` when the blaster landing-lag attr is
+    zero; the destination Fall IASA can then consume same-proc JumpAerial input. The retained
+    runtime slice is limited to the destination Fall double-jump path and uses the shared
+    `ftCo_JumpAerial_Enter_Basic` velocity/jump/ECB-lock ownership. Sources:
+    `refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_SpecialAirNEnd_Anim`,
+    `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_IASA`,
+    `refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::ftCo_JumpAerial_Enter_Basic`, and
+    `refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007D5D4`.
+  - Shine Start seed history now preserves the hidden x198C lane when the entry script's x1988=2
+    masks a prior visible x198C=1 row, and carries that provenance through hitlag-frozen frame-1
+    starts. It also trusts explicit x1990+x1994 seed provenance on Cliff/Fall -> SpecialAirLwStart
+    rows instead of dropping both timers under the x1988 mask. Sources:
+    `refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm`,
+    `refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007B62C,ftColl_8007B760,ftColl_8007B7A4,ftColl_8007B868}`,
+    `refs/melee/src/melee/ft/fighter.c::Fighter_8006A360`, and
+    `refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c::{ftFx_SpecialLw_Enter,ftFx_SpecialAirLw_Enter}`.
+  - SpecialN Loop -> Loop restart seed overrides are now populated only for replay-visible same-action
+    loop restarts. The owner is `ftFx_SpecialN_OnChangeAction`, which calls `ft_80089824` and consumes
+    `plAttack_80037B08`; this does not reopen the rejected broad special-boundary instance override.
+    Sources: `refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::{
+    ftFx_SpecialNLoop_Anim,ftFx_SpecialAirNLoop_Anim,ftFx_SpecialN_OnChangeAction}`,
+    `refs/melee/build/GALE01/asm/melee/ft/ft_0892.s::ft_80089824`, and
+    `refs/melee/src/melee/pl/plattack.c::plAttack_80037B08`.
+  - F24 audit result: the attempted broad special-adjacent hidden-prior / multi-consumer
+    `motion_entry_instance_id_override_u16` expansion was removed because it read the next
+    post-frame id (`post_instance_id[1:]`, equivalent to `ref_t1`) and therefore was not
+    prefix-causal. Direct Landing/JumpF -> Shine, SpecialN Start -> Loop, and other direct
+    special-boundary entries remain negative sentinels. Sources:
+    `refs/melee/build/GALE01/asm/melee/ft/ft_0892.s::{ft_800895E0,ft_80089824}` and
+    `refs/melee/src/melee/pl/plattack.c::plAttack_80037B08`.
+  - F24 taxonomy is now limited to source-backed special callbacks such as SpecialN Loop restart
+    `ftFx_SpecialN_OnChangeAction -> ft_80089824`. Direct special-boundary pure `instance_id`
+    rows that do not install x21EC/OnChangeAction are generic adjacent instance ordering (`F12b`)
+    or damage identity (`F08a`) rows, not B-special state-machine residuals.
+    Sources: `refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState`,
+    `refs/melee/build/GALE01/asm/melee/ft/ft_0892.s::{ft_800895E0,ft_80089824}`,
+    `refs/melee/src/melee/pl/plattack.c::plAttack_80037B08`.
+  - `F23_special_common_entry_dispatch` is now source-gated to seed actions whose IASA callbacks
+    actually call the common special dispatchers. `KneeBend`, `LandingFallSpecial`, and active
+    per-special states are excluded from F23; the remaining aggregate F23 rows are
+    `PassiveWallJump` / `JumpAerial` callers that reach `ftCo_SpecialAir_CheckInput`.
+    Sources:
+    `refs/melee/src/melee/ft/chara/ftCommon/ftCo_KneeBend.c::ftCo_KneeBend_IASA`,
+    `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::ftCo_LandingFallSpecial_Enter_Basic`,
+    `refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::ftCo_JumpAerial_IASA`, and
+    `refs/melee/src/melee/ft/chara/ftCommon/ftCo_PassiveWall.c::ftCo_PassiveWall_IASA`.
+  - `F21_specials_illusion_phantasm` is zero after taxonomy hardening: pure aerial Side-B
+    hurtbox-state rows move to `F09a`, Side-B combo/source rows move to `F09b`, and Side-B damage
+    contact rows move to `F08f`. Pure `SpecialHiHoldAir` hurtbox-state rows likewise move to
+    `F09a` because `ftFx_SpecialHiHoldAir_IASA` is empty and those rows have no launch/travel or
+    collision fields; Firefox Bound/Fall/Landing/launch rows remain in `F22`.
+    Source: `refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::ftFx_SpecialHiHoldAir_IASA`.
+  - `ftFx_SpecialAirHi_Enter` consumes all jumps with `fp->x1968_jumpsUsed = ca->max_jumps`.
+    Runtime now writes the equivalent Slippi `jumps_left=0` on `SpecialHiHoldAir` ->
+    `SpecialAirHi` launch entry. Bound/Fall/cliff-catch timing rows remain in `F22`.
+    Source: `refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::ftFx_SpecialAirHi_Enter`.
+  - Ledge occupancy now includes slow ledge options (`CliffClimbSlow`, `CliffAttackSlow`,
+    `CliffEscapeSlow`, `CliffJumpSlow1`) as well as the already-modeled quick variants. This keeps
+    `ftCliffCommon_80081298` from admitting a `SpecialHiFall` CliffCatch onto a ledge already
+    occupied by the other fighter's slow ledge option, while preserving unoccupied
+    `SpecialHiFall -> CliffCatch` rows. `CliffJump*2` remains excluded because it no longer uses
+    the attach snap / occupancy path. Sources:
+    `refs/melee/src/melee/ft/ftcliffcommon.c::{ftCliffCommon_80081298,ftCliffCommon_80081370}`,
+    `refs/melee/src/melee/ft/chara/ftCommon/forward.h`,
+    `refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffClimb.c`, and
+    `refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffJump.c`.
+  - GuardOn/Guard/GuardSetOff/GuardReflect do not route grounded Down-B through `ftCo_800D68C0`;
+    `GuardOff_IASA` is the shield-exit callback that can dispatch specials. Runtime therefore
+    blocks grounded Shine entry from the active shield/shieldstun callbacks while preserving the
+    GuardOff path.
+    Source: `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_GuardOn_IASA,ftCo_Guard_IASA,ftCo_GuardSetOff_IASA,ftCo_GuardReflect_IASA,ftCo_GuardOff_IASA}`.
+  - Shine rows whose replay destination has already entered `Damage*` while the sim remains in the
+    same `SpecialLw*` defender state are shared ProcessHit/damage-transition ownership, not
+    reflector state-machine ownership. These move to `F08c_damage_state_transition_adjacency`.
+    Rows where a Shine hitbox is only the selected false BODY candidate move to
+    `F08f_body_contact_candidate_filter_residual`, and grounded Shine-entry hitlag/source/state-flag
+    bookkeeping moves to `F10b_grounded_combat_adjacency`. Mixed Shine action/contact rows where
+    Shine itself is the active callback remain in `F20`.
+    Sources: `refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC`,
+    `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c`, and
+    `refs/melee/src/melee/ft/ftcoll.c::ftColl_8007A06C`.
 - Status after this pass:
   - The broad `F10e` taxonomy split is complete, but Fox/Falco specials are not closed. Named
-    residual owners remain active, led by `F23_special_common_entry_dispatch`,
-    `F22_specialhi_firefox_firebird`, `F20_speciallw_shine_reflector`,
-    `F19_specialn_blaster_article`, and `F21_specials_illusion_phantasm`. After the forced
+    residual owners remain active, led by `F20_speciallw_shine_reflector`,
+    aggregate-only `F19_specialn_blaster_article`, and `F22_specialhi_firefox_firebird`.
+    `F21_specials_illusion_phantasm` is zero after hard-moving its non-Side-B-owner tails. After the forced
     dataset rebuild, Shine Loop projectile-origin reflector fix, FallSpecial shallow projection,
-    SpecialHiBound owner slice, and SpecialHiLanding destination-Wait IASA slice, checkpoint-hardened
-    aggregate taxonomy is total `6222`, with `F13a=235`, `F24=88`, `F23=86`, `F14b=76`, `F19=76`,
-    `F22=75`, `F20=53`, `F21=28`, and `F10e=0`.
+    EscapeAir prev-ECB-bottom projection, SpecialHiBound owner slice, and SpecialHiLanding
+    destination-Wait IASA slice, camera-visibility split, SpecialNEnd destination-Wait Dash
+    slice, F21/F22/F23 taxonomy boundary hardening, Shine x1988/x198C seed provenance, and
+    SpecialN loop-restart instance ordering, F24 audit narrowing that removed the
+    non-prefix-causal special-boundary override, F24 direct-boundary hard movement to generic
+    instance/damage identity owners, and pure Shine source-bookkeeping movement to
+    combat/aerial bookkeeping, AttackLw3 entry instance-callback ownership, AttackDash -> Shine
+    allow-interrupt carry, F13a pure source-bookkeeping movement, and SpecialAirNLoop common-Damage
+    scalar movement to `F08d`, pure ThrowHi/ThrowB/ThrowLw score-source movement to common throw
+    bookkeeping, common aerial B-before-A dispatch for JumpAerial / PassiveWallJump rows, and
+    prev-special-only generic Landing/Ottotto/Fall and source-bookkeeping tail movement to shared
+    mpColl/combat owners, no-lock sustained EscapeAir current-ECB collision narrowing, and slow
+    ledge-option occupancy for SpecialHiFall CliffCatch blocking, and F20 BODY/contact bookkeeping
+    boundary hardening, current aggregate taxonomy is
+    total `5967`, with `F13a=118`, `F20=18`, `F24=0`, `F14b=28`, `F19=21`,
+    `F22=26`, `F23=0`, `F21=0`, `F25=373`, and `F10e=0`.
 - Rejected bridge/experiment:
   - A broad locked-bottom collision rule for all Fox/Falco aerial special callbacks, including
     `SpecialAirLwStart`, fixed some loop rows but grounded Shine startup several frames early and
@@ -1618,9 +1740,15 @@ Fox/Falco special-owner split (2026-04-17):
     Loop states, where `ftColl_80077464` consumes the projectile `Item*` / `item->pos` overlap.
   - A broad EscapeAir floor-contact/root-projection pass fixed some representative rows but
     regressed primary taxonomy from `633` to `811` and aggregate from `6144` to `6837` by admitting
-    too many new `LandingFallSpecial` rows. The kept F13a slice is limited to the decomp-backed
-    `FallSpecial_Coll` shallow projection; the remaining EscapeAir phase split still needs finer
-    mpColl interpolation evidence.
+    too many new `LandingFallSpecial` rows. The kept F13a slices are limited to decomp-backed
+    `FallSpecial_Coll` shallow projection and the `EscapeAir_Coll` prev-ECB-bottom crossing subset;
+    active-lock EscapeAir rows whose previous ECB bottom is still above floor remain excluded by
+    replay-real negative locks.
+  - A broad SpecialS/SpecialHi hidden-colanim clear based only on missing x1990/x1994 provenance was
+    tested and rejected: the SpecialHiHoldAir variant cleared x198C too early on rows where replay
+    keeps hurtbox_state=2, and the SpecialS-only variant regressed aggregate taxonomy by increasing
+    F21/F23 hurtbox rows. Remaining SpecialS/SpecialHi hurtbox tails need seed-visible x1988/x198C
+    provenance or a narrower decomp-backed owner, not a merged Slippi hurtbox-state clear.
   - DamageAir / DamageFly aerial B-special dispatch now follows the common damage IASA gate:
     `ftCo_Damage_IASA` and `ftCo_DamageFly_IASA` delegate into `Fall_IASA_Inner` /
     `DamageFall_IASA` only when `x221C_b6` is clear, then `ftCo_SpecialAir_CheckInput` owns
@@ -1635,6 +1763,63 @@ Fox/Falco special-owner split (2026-04-17):
     Sources: `refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm`,
     `refs/melee/src/melee/ft/ftcoll.c::ftColl_80076ED8`,
     `refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC`.
+  - Pure Shine-context `last_hit_by`, `last_attack_landed`, `combo_count`, hurtbox/state-flag, and
+    hitlag-only rows are taxonomy owned by shared combat/state/contact-hitlag owners
+    (`F10b`/`F09b`, `F10d`/`F09a`, or `F09d`), not by the SpecialLw state machine. Grounded
+    Shine-entry rows whose only remaining fields are hitlag, Slippi's hitlag state flag, and
+    stale/source bookkeeping also route to `F10b`. Rows where a Shine hitbox is the selected false
+    BODY candidate route to the BODY candidate-filter owner (`F08f`). Mixed Shine contact/action
+    bundles remain in `F20` until their reflector/contact callback owner is implemented.
+    Sources: `refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007A06C,ftColl_8007BE3C,ftColl_80078C70,ftColl_80076ED8}`,
+    `refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000805C,lbColl_80006E58}`,
+    and `refs/melee/src/melee/pl/plstale.c::{plStale_UpdateStaleMovesFromFighter,plStale_UpdateStaleMovesFromItem}`.
+  - SpecialAirNLoop can be the defender context when common BODY damage has already entered
+    `Damage*`. Rows whose remaining fields are damage scalar/contact lanes (`hitlag`, facing,
+    attack speed, or hitlag state flags) are owned by shared damage/contact resolution (`F08d`),
+    not by the SpecialN blaster article state machine. Pure SpecialN hurtbox and source/scoreboard
+    rows are owned by shared aerial state/combat bookkeeping (`F09a`, `F09b`, or `F10b`).
+    SpecialN item/article/action/loop handoff rows stay in `F19`.
+    Sources: `refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC`,
+    `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0`,
+    `refs/melee/src/melee/ft/ftcoll.c::ftColl_8007A06C`.
+  - Rows where SpecialN/Shine is only the previous action and the current row is already generic
+    Landing/Ottotto/Fall or grounded source bookkeeping route to shared mpColl/combat owners.
+    Active SpecialN loop/end handoff rows and mixed Shine contact/action rows stay in `F19`/`F20`.
+    Sources: `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c`,
+    `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Ottotto.c`,
+    `refs/melee/src/melee/mp/mpcoll.c::mpColl_8004A45C_Floor`,
+    `refs/melee/src/melee/ft/ftcoll.c::ftColl_8007BE3C`, and
+    `refs/melee/src/melee/pl/plstale.c`.
+  - Common `FallSpecial` / `LandingFallSpecial` rows that have already entered `Damage*` are owned
+    by shared damage/contact resolution, while pure ground-id and pure state/hurtbox tails route to
+    shared mpColl/state owners. The remaining F13a rows are action/on-ground/jump landing timing.
+    Sources: `refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll`,
+    `refs/melee/src/melee/ft/chara/ftCommon/ftCo_FallSpecial.c::ftCo_FallSpecial_Coll`,
+    `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c`.
+  - Sustained EscapeAir rows that no longer carry CollData_X130_Locked keep current-ECB sampling in
+    the early same-action window instead of using the previous-ECB approximation. This prevents a
+    simulator-only early `LandingFallSpecial` on no-lock vertical crossings while preserving the
+    locked and later prev-bottom landing slices. Sources:
+    `refs/melee/src/melee/mp/mpcoll.c::mpCollInterpolateECB`,
+    `refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll`.
+  - SpecialHi rows that have already entered `Damage*`, plus pure `SpecialHiLanding` ground-id
+    tails, route to shared damage/mpColl owners. Launch, Bound, Fall, and CliffCatch rows remain in
+    `F22`.
+    Sources: `refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c`,
+    `refs/melee/src/melee/mp/mpcoll.c::mpColl_8004A45C_Floor`.
+  - Pure ThrowHi/ThrowB/ThrowLw `combo_count` / source-score rows are common throw/item
+    bookkeeping (`F14`), not special-move state-machine residuals. Mixed throw pulse rows with
+    hitlag, state flags, hurtbox, article, or item-contact fields remain in `F14b`.
+    Sources: `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::{ftCo_ThrowHi_Anim,ftCo_800DD724,ftCo_800DE7C0,ftCo_800DDDE4}`,
+    `refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim`,
+    `refs/melee/src/melee/pl/plstale.c::{plStale_UpdateStaleMovesFromFighter,plStale_UpdateStaleMovesFromItem}`.
+  - Common aerial IASA ordering checks B-special dispatch before aerial attacks. Runtime now leaves
+    JumpAerial / PassiveWallJump B-edge rows for Shine/Blaster before AttackAir, closing the
+    aggregate-only F23 PassiveWallJump / JumpAerial rows.
+    Sources: `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_IASA_Inner`,
+    `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c::ftCo_Jump_IASA`,
+    `refs/melee/src/melee/ft/chara/ftCommon/ftCo_PassiveWall.c::ftCo_PassiveWall_IASA`,
+    `refs/melee/src/melee/ft/chara/ftCommon/ftCo_SpecialAir.c::ftCo_SpecialAir_CheckInput`.
   - Dash special dispatch is split by decomp owner: `ftCo_Dash_IASA` can consume grounded Side-B
     through `ftCo_SpecialS_CheckInput`, but it does not call the Neutral/Down special dispatchers
     `ftCo_800D6824` / `ftCo_800D68C0`. Runtime now blocks Dash/RunBrake Neutral-B/Up-B while

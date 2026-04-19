@@ -2668,6 +2668,8 @@ def _main_impl(args) -> None:
     act_fall_special_b = 0x0025
     act_damage_fall = 0x0026
     act_landing_fall_special = 0x002B
+    act_fx_special_n_loop = 0x0156
+    act_fx_special_air_n_loop = 0x0159
     act_damage_hi_1 = 0x004B
     act_damage_hi_2 = 0x004C
     act_damage_hi_3 = 0x004D
@@ -4193,20 +4195,74 @@ def _main_impl(args) -> None:
     same_frame_fighter_entries_all = entry_changed & instance_changed & has_ref_instance
     grounded_motion_owner_actions = np.isin(
         post_action_id[1:, :],
-        np.array([act_wait, act_walk_slow, act_walk_middle, act_walk_fast, act_turn, act_turn_run, act_dash, act_run, act_run_direct, act_kneebend], dtype=np.uint16),
+        np.array(
+            [
+                act_wait,
+                act_walk_slow,
+                act_walk_middle,
+                act_walk_fast,
+                act_turn,
+                act_turn_run,
+                act_dash,
+                act_run,
+                act_run_direct,
+                act_kneebend,
+            ],
+            dtype=np.uint16,
+        ),
     ) & np.isin(
         post_action_id[:-1, :],
-        np.array([act_wait, act_walk_slow, act_walk_middle, act_walk_fast, act_turn, act_turn_run, act_dash, act_run, act_run_direct, act_kneebend], dtype=np.uint16),
+        np.array(
+            [
+                act_wait,
+                act_walk_slow,
+                act_walk_middle,
+                act_walk_fast,
+                act_turn,
+                act_turn_run,
+                act_dash,
+                act_run,
+                act_run_direct,
+                act_kneebend,
+            ],
+            dtype=np.uint16,
+        ),
     )
     same_frame_fighter_entries = same_frame_fighter_entries_all & grounded_motion_owner_actions
     multi_entry_frame = np.sum(same_frame_fighter_entries_all[:, :num_players], axis=1) >= 2
     hidden_prior_consumer = same_frame_fighter_entries & (
         post_instance_id[1:, :] != counter_post[:-1, None]
     )
+    specialn_loop_restart_owner = (
+        instance_changed
+        & has_ref_instance
+        & (post_action_id[1:, :] == post_action_id[:-1, :])
+        & np.isin(
+            post_action_id[1:, :],
+            np.array([act_fx_special_n_loop, act_fx_special_air_n_loop], dtype=np.uint16),
+        )
+        & (post_action_frame[1:, :] == np.int16(0))
+    )
     motion_entry_iid_override = np.zeros((n_frames - 1, 4), dtype=np.uint16)
+    # Same-frame grounded motion entries share the global plAttack_80037B08 counter. Slippi's
+    # post-frame seed exposes only each fighter's final fp->x2088, not HSD proc order. Keep this
+    # replay-facing lane scoped to grounded locomotion ownership; do not use it for generic special
+    # boundaries.
+    # refs/melee/build/GALE01/asm/melee/ft/ft_0892.s::{ft_800895E0,ft_80089824}
+    # refs/melee/src/melee/pl/plattack.c::plAttack_80037B08
     motion_entry_override_mask = same_frame_fighter_entries & (
         multi_entry_frame[:, None] | hidden_prior_consumer
     )
+    # Fox/Falco SpecialN Loop -> Loop restart owner:
+    # - ftFx_SpecialNLoop_Anim / ftFx_SpecialAirNLoop_Anim install
+    #   ftFx_SpecialN_OnChangeAction only on the loop-restart motion-state change.
+    # - ftFx_SpecialN_OnChangeAction calls ft_80089824, which unconditionally consumes
+    #   plAttack_80037B08. This seed lane is limited to replay-visible same-action Loop restarts,
+    #   not all special entries.
+    # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::{
+    #   ftFx_SpecialNLoop_Anim,ftFx_SpecialAirNLoop_Anim,ftFx_SpecialN_OnChangeAction}
+    # refs/melee/build/GALE01/asm/melee/ft/ft_0892.s::ft_80089824
+    motion_entry_override_mask |= specialn_loop_restart_owner
     motion_entry_iid_override[motion_entry_override_mask] = post_instance_id[1:, :][
         motion_entry_override_mask
     ]

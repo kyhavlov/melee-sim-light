@@ -70,6 +70,20 @@ ACTION_CORE_FIELDS: frozenset[str] = frozenset(
 STATE_FLAG_FIELDS: frozenset[str] = frozenset(
     {"state_flags[0]", "state_flags[1]", "state_flags[2]", "state_flags[3]", "state_flags[4]"}
 )
+SPECIAL_ENTRY_DISPATCH_FIELDS: frozenset[str] = frozenset(
+    {
+        "action_id",
+        "animation_index",
+        "action_frame",
+        "instance_id",
+        "jumps_left",
+        "on_ground",
+        "ground_id",
+        "facing",
+        "state_flags[0]",
+    }
+)
+SPECIAL_ENTRY_ACTION_FIELDS: frozenset[str] = frozenset({"action_id", "animation_index", "action_frame"})
 
 _DEBUG_CONTACT_CLASSIFIED_DTYPE = np.dtype(
     [
@@ -217,6 +231,24 @@ FAMILY_META: dict[str, FamilyMeta] = {
             "refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0",
             "refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{ftCo_Damage_OnExitHitlag,ftCo_DamageFly_Coll}",
             "refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownBound.c::ftCo_DownBound_Coll",
+        ),
+    ),
+    "F25_camera_box_visibility_x221f": FamilyMeta(
+        label="Camera-Box Visibility x221F",
+        owner_module="state_flags",
+        fix_type="runtime-only",
+        risk="low",
+        confidence="high",
+        hypothesis=(
+            "Rows reduced to Slippi state_flags[4] bit ownership are camera-subject visibility "
+            "(`fp+0x221F`) rows, even when the visible action is a special. They are owned by "
+            "ftLib_80086A8C / camera-box overlap, not by the per-special motion callbacks."
+        ),
+        refs=(
+            "refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm",
+            "refs/melee/src/melee/ft/ftlib.c::ftLib_80086A8C",
+            "refs/melee/src/melee/cm/camera.c::Camera_80030CFC",
+            "src/state_flags.c",
         ),
     ),
     "F06_damageflyroll_rng_gate": FamilyMeta(
@@ -836,14 +868,16 @@ FAMILY_META: dict[str, FamilyMeta] = {
         risk="med",
         confidence="high",
         hypothesis=(
-            "Instance-id-only rows where the visible motion entry belongs to Fox/Falco specials. "
-            "They share the global plAttack_80037B08 counter surface but should not remain in the "
-            "generic adjacent instance bucket."
+            "Instance-id-only rows with source-backed Fox/Falco special callback ownership, such "
+            "as SpecialN Loop restarts that install x21EC/OnChangeAction and call ft_80089824. "
+            "Direct special-boundary entries/exits without that callback stay in the generic "
+            "ft_800895E0 / plAttack_80037B08 adjacent instance bucket."
         ),
         refs=(
             "refs/melee/build/GALE01/asm/melee/ft/ft_0892.s::ft_800895E0",
+            "refs/melee/build/GALE01/asm/melee/ft/ft_0892.s::ft_80089824",
             "refs/melee/src/melee/pl/plattack.c::plAttack_80037B08",
-            "refs/melee/src/melee/ft/chara/ftFox/ftFx_Init.c",
+            "refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_SpecialN_OnChangeAction",
         ),
     ),
     "F10f_grounded_attack_adjacency": FamilyMeta(
@@ -1443,11 +1477,13 @@ def _family_for_debug_body_contact_residual(
                 return "F10l_body_selected_false_action_timebase"
             return "F08i_body_selected_false_aerial_attack_pose"
         if first_msid is not None and first_msid >= 300:
-            special_family = _special_owner_family_for_names(
-                (seed_name, precombat_name, ref_name, out_name),
-                include_entry_dispatch=False,
-            )
-            return special_family or _special_owner_family_for_msid(first_msid) or "F08j_body_selected_false_special_entry_pose"
+            # A special hitbox being the current BODY candidate does not by itself make the row a
+            # special state-machine owner. If vanilla did not enter damage but the sim selected a
+            # special BODY candidate, the remaining owner is the candidate filter / narrowphase
+            # selection surface, not the SpecialLw/SpecialN/... Anim/IASA/Coll callback.
+            # refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078C70,ftColl_80076ED8}
+            # refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000805C,lbColl_80006E58}
+            return "F08f_body_contact_candidate_filter_residual"
 
     # The residual still has a pre-combat BODY candidate/selection, but it is not one of the
     # currently split Fox/Falco RL1.0 current-frame clusters.
@@ -1570,6 +1606,10 @@ def _looks_like_specials(name: str) -> bool:
     return "SPECIAL_S" in name or "SPECIAL_AIR_S" in name
 
 
+def _looks_like_special_air_s(name: str) -> bool:
+    return "SPECIAL_AIR_S" in name
+
+
 def _looks_like_firefox(name: str) -> bool:
     return "SPECIAL_HI" in name
 
@@ -1594,6 +1634,42 @@ def _looks_like_special_entry(name: str) -> bool:
     return name.endswith("_START") or name.endswith("_HOLD") or name.endswith("_HOLD_AIR")
 
 
+def _is_common_special_dispatch_source(name: str) -> bool:
+    # Keep F23 scoped to source actions whose IASA owners actually call the common B-special
+    # dispatchers. In particular, KneeBend and LandingFallSpecial do not; assigning those rows to
+    # F23 hides their true per-special or adjacent owner.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_KneeBend.c::ftCo_KneeBend_IASA
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::ftCo_LandingFallSpecial_Enter_Basic
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::ftCo_JumpAerial_IASA
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_PassiveWall.c::ftCo_PassiveWall_IASA
+    if name in {
+        "WAIT",
+        "SQUAT",
+        "SQUAT_WAIT",
+        "SQUAT_RV",
+        "RUN",
+        "RUN_DIRECT",
+        "LANDING",
+        "OTTOTTO",
+        "OTTOTTO_WAIT",
+        "FALL",
+        "FALL_F",
+        "FALL_B",
+        "FALL_AERIAL",
+        "FALL_AERIAL_F",
+        "FALL_AERIAL_B",
+        "DAMAGE_FALL",
+        "PASSIVE_WALL",
+        "PASSIVE_WALL_JUMP",
+    }:
+        return True
+    if name.startswith("WALK_") or name.startswith("JUMP_"):
+        return True
+    if name.startswith("DAMAGE_AIR_") or name.startswith("DAMAGE_FLY_"):
+        return True
+    return False
+
+
 def _special_owner_family_for_names(
     names: tuple[str, ...],
     *,
@@ -1601,16 +1677,23 @@ def _special_owner_family_for_names(
     include_entry_dispatch: bool = True,
 ) -> str | None:
     fields = set(field_set or ())
-    if fields == {"instance_id"} and any(_looks_like_any_special(name) for name in names):
-        return "F24_special_adjacent_instance_order"
 
     if include_entry_dispatch:
-        any_entry = any(_looks_like_special_entry(name) for name in names)
+        current_names = names[:3]
+        seed_name = current_names[0] if current_names else "NONE"
+        any_entry = any(_looks_like_special_entry(name) for name in current_names)
         any_non_special_source = any(
             (_looks_like_common_fallspecial(name) or (not _looks_like_any_special(name) and name != "NONE"))
-            for name in names
+            for name in current_names
         )
-        if any_entry and any_non_special_source:
+        if (
+            _is_common_special_dispatch_source(seed_name)
+            and
+            any_entry
+            and any_non_special_source
+            and bool(fields & SPECIAL_ENTRY_DISPATCH_FIELDS)
+            and bool(fields & SPECIAL_ENTRY_ACTION_FIELDS)
+        ):
             return "F23_special_common_entry_dispatch"
 
     if any(_looks_like_specialn(name) for name in names):
@@ -1675,7 +1758,226 @@ def _looks_like_appeal(name: str) -> bool:
 
 
 def _looks_like_aerial(name: str) -> bool:
-    return name.startswith("ATTACK_AIR") or name.startswith("JUMP_")
+    return name.startswith("ATTACK_AIR") or name.startswith("JUMP_") or name.startswith("FX_SPECIAL_AIR_")
+
+
+def _specials_hard_moved_family(row: PlayerRow, names: tuple[str, str, str], field_set: set[str]) -> str | None:
+    if not any(_looks_like_specials(name) for name in names):
+        return None
+    if _looks_like_current_frame_body_admission_disagreement(row, names, field_set):
+        return "F08f_body_contact_candidate_filter_residual"
+    if any(_looks_like_special_air_s(name) for name in names):
+        if field_set <= (STATE_FLAG_FIELDS | {"hurtbox_state", "action_frame"}):
+            return "F09a_aerial_stateflag_hurtbox_adjacency"
+        if field_set & {"last_hit_by", "combo_count", "last_attack_landed"}:
+            return "F09b_aerial_bookkeeping_adjacency"
+    return None
+
+
+def _specialhi_hard_moved_family(row: PlayerRow, names: tuple[str, str, str], field_set: set[str]) -> str | None:
+    if not any(_looks_like_firefox(name) for name in names):
+        return None
+    if any(_looks_like_damage(name) for name in names):
+        # Damage* context means this row has left Firefox/Firebird launch/travel ownership; remaining
+        # scalar or transition fields are shared damage/locomotion ownership.
+        # refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
+        # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c
+        if field_set & {"hitlag", "hitstun", "facing", "speed_x_attack", "speed_y_attack", "state_flags[1]"}:
+            return "F08d_damage_timer_scalar_residual"
+        return "F08c_damage_state_transition_adjacency"
+    if field_set and field_set <= {"ground_id"}:
+        # A pure ground-id mismatch in SpecialHiLanding is shared mpColl floor-line identity, not
+        # Firefox launch or Bound ownership.
+        # refs/melee/src/melee/mp/mpcoll.c::mpColl_8004A45C_Floor
+        # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::ftFx_SpecialHiLanding_Coll
+        return "F10c_collision_landing_edge_adjacency"
+    if all(name == "FX_SPECIAL_HI_HOLD_AIR" for name in names) and field_set <= (
+        STATE_FLAG_FIELDS | {"hurtbox_state", "action_frame"}
+    ):
+        # HoldAir has an empty IASA and these rows have no launch/travel/collision fields; keep
+        # them with the shared aerial hurtbox/state-flag owner instead of the Firefox movement owner.
+        # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::ftFx_SpecialHiHoldAir_IASA
+        return "F09a_aerial_stateflag_hurtbox_adjacency"
+    return None
+
+
+def _speciallw_hard_moved_family(row: PlayerRow, names: tuple[str, str, str], field_set: set[str]) -> str | None:
+    if not any(_looks_like_speciallw(name) for name in names):
+        return None
+    if _looks_like_damage(names[1]) and names[0] == names[2] and _looks_like_speciallw(names[0]):
+        # A replay Damage* destination while the sim remains in the same SpecialLw state is a missed
+        # shared ProcessHit/damage transition. The Shine state machine did not choose a release,
+        # turn, Hit, End, ground/air handoff, or reflector callback here; it is merely the defender
+        # context when common combat applies damage.
+        # refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
+        # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c
+        # refs/melee/src/melee/ft/ftcoll.c::ftColl_8007A06C
+        return "F08c_damage_state_transition_adjacency"
+    if field_set and field_set <= (STATE_FLAG_FIELDS | {"hurtbox_state", "action_frame"}):
+        # Pure visible hit-status/state-flag tails in Shine context are x1988/x198C composition
+        # or shared state-flag ownership. Keep action/contact/source bundles in F20; move only
+        # rows with no reflector state-machine fields left.
+        # refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
+        # refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007B62C,ftColl_8007B868}
+        if any(_looks_like_aerial(name) for name in names):
+            return "F09a_aerial_stateflag_hurtbox_adjacency"
+        if row.on_ground == 1 or any(_looks_like_grounded(name) for name in names):
+            return "F10d_hurtbox_stateflag_adjacency"
+    if field_set and field_set <= {"hitlag"}:
+        # A lone hitlag scalar with Shine actions already aligned is combat/contact bookkeeping,
+        # not SpecialLw release, turn, collision handoff, or reflector state-machine flow.
+        # refs/melee/src/melee/ft/ftcoll.c::ftColl_8007A06C
+        # refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
+        if any(_looks_like_aerial(name) for name in names):
+            return "F09d_aerial_contact_hitlag_residual"
+        return "F10b_grounded_combat_adjacency"
+    if (
+        field_set
+        and field_set <= {"hitlag", "state_flags[1]", "last_attack_landed", "combo_count"}
+        and (row.on_ground == 1 or any(_looks_like_grounded(name) for name in names))
+    ):
+        # Grounded Shine entry rows whose only remaining fields are contact scalar, Slippi hitlag bit,
+        # and stale/source scoreboard values are common combat bookkeeping. The Shine state machine
+        # supplied the hitbox, but it did not choose a release, turn, Hit/End transition, or reflector
+        # callback on these rows.
+        # refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007A06C,ftColl_8007BE3C}
+        # refs/melee/src/melee/pl/plstale.c::{
+        #   plStale_UpdateStaleMovesFromFighter,plStale_UpdateStaleMovesFromItem}
+        return "F10b_grounded_combat_adjacency"
+    if field_set and field_set <= {"last_hit_by", "combo_count", "last_attack_landed"}:
+        # Pure source/scoreboard rows are owned by combat bookkeeping, even when the current
+        # action context is Shine. Keep mixed hitlag/contact/action/hurtbox bundles in F20 until
+        # their Shine-side callback or reflector-contact owner is proven.
+        # refs/melee/src/melee/ft/ftcoll.c::ftColl_8007BE3C
+        # refs/melee/src/melee/pl/plstale.c::{
+        #   plStale_UpdateStaleMovesFromFighter,plStale_UpdateStaleMovesFromItem}
+        if any(_looks_like_aerial(name) for name in names):
+            return "F09b_aerial_bookkeeping_adjacency"
+        if row.on_ground == 1 or any(_looks_like_grounded(name) for name in names):
+            return "F10b_grounded_combat_adjacency"
+    return None
+
+
+def _specialn_hard_moved_family(row: PlayerRow, names: tuple[str, str, str], field_set: set[str]) -> str | None:
+    if not any(_looks_like_specialn(name) for name in names):
+        return None
+    if any(name.startswith("FX_SPECIAL_AIR_N") for name in names) and any(_looks_like_damage(name) for name in names):
+        if field_set & {"hitlag", "hitstun", "facing", "speed_x_attack", "speed_y_attack", "state_flags[1]"}:
+            # SpecialAirNLoop can be the defender context when ordinary BODY damage is applied.
+            # Hitlag/facing/KB scalar mismatches on the resulting Damage* row are owned by shared
+            # damage/contact resolution, not by SpecialN's blaster article or shot lifecycle.
+            # Keep article/item/source/contact bundles with F19 unless the row has entered Damage*.
+            # refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
+            # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
+            # refs/melee/src/melee/ft/ftcoll.c::ftColl_8007A06C
+            return "F08d_damage_timer_scalar_residual"
+    if any(name.startswith("FX_SPECIAL_AIR_N") for name in names) and field_set <= STATE_FLAG_FIELDS:
+        # SpecialAirN Phys delegates to the shared air physics helper; pure fastfall/state-flag
+        # tails belong with aerial state-flag ownership, not the blaster article/shot owner.
+        # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::{
+        #   ftFx_SpecialAirNStart_Phys,ftFx_SpecialAirNLoop_Phys,ftFx_SpecialAirNEnd_Phys}
+        # refs/melee/src/melee/ft/ft_081B.c::ft_80084DB0
+        return "F09a_aerial_stateflag_hurtbox_adjacency"
+    if any(name.startswith("FX_SPECIAL_AIR_N") for name in names) and field_set <= {"hurtbox_state"}:
+        # Pure visible hurtbox-state tails in aerial SpecialN context are shared x1988/x198C
+        # composition, not laser article or loop/end ownership.
+        # refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
+        # refs/melee/src/melee/ft/ftcoll.c::ftColl_8007B868
+        return "F09a_aerial_stateflag_hurtbox_adjacency"
+    if field_set and field_set <= {"last_hit_by", "combo_count", "last_attack_landed"}:
+        # Pure source/scoreboard rows are shared combat bookkeeping even when SpecialN is the
+        # neighboring action context. Article, item, shot, and loop/end action bundles stay in F19.
+        # refs/melee/src/melee/ft/ftcoll.c::ftColl_8007BE3C
+        # refs/melee/src/melee/pl/plstale.c::{
+        #   plStale_UpdateStaleMovesFromFighter,plStale_UpdateStaleMovesFromItem}
+        if any(_looks_like_aerial(name) for name in names):
+            return "F09b_aerial_bookkeeping_adjacency"
+        return "F10b_grounded_combat_adjacency"
+    return None
+
+
+def _special_instance_callback_family(row: PlayerRow, names: tuple[str, str, str], field_set: set[str]) -> str | None:
+    if field_set != {"instance_id"}:
+        return None
+    seed_name, ref_name, out_name = names
+    if (
+        seed_name in {"FX_SPECIAL_N_LOOP", "FX_SPECIAL_AIR_N_LOOP"}
+        and seed_name == ref_name
+        and ref_name == out_name
+        and row.ref_action_frame == 0
+        and row.seed_action_frame > 0
+    ):
+        # SpecialN Loop -> same Loop restart is a real special callback owner:
+        # the Loop Anim callback installs ftFx_SpecialN_OnChangeAction, which calls ft_80089824.
+        # Direct special-boundary entries/exits do not install that callback and remain generic
+        # ft_800895E0/plAttack adjacent instance rows.
+        # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::{
+        #   ftFx_SpecialNLoop_Anim,ftFx_SpecialAirNLoop_Anim,ftFx_SpecialN_OnChangeAction}
+        # refs/melee/build/GALE01/asm/melee/ft/ft_0892.s::{ft_800895E0,ft_80089824}
+        return "F24_special_adjacent_instance_order"
+    return None
+
+
+def _common_fallspecial_hard_moved_family(
+    row: PlayerRow, names: tuple[str, str, str], field_set: set[str]
+) -> str | None:
+    if not any(_looks_like_common_fallspecial(name) for name in names):
+        return None
+    if any(_looks_like_damage(name) for name in names):
+        # LandingFallSpecial/EscapeAir can be the neighboring context when ordinary BODY damage
+        # resolves or is missed. Once a Damage* state is present, scalar/contact/identity fields are
+        # shared damage/combat ownership rather than common FallSpecial collision ownership.
+        # Keep non-damage EscapeAir/LandingFallSpecial collision bundles in F13a.
+        # refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
+        # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
+        # refs/melee/src/melee/ft/ftcoll.c::ftColl_8007A06C
+        if field_set <= {"instance_id", "instance_hit_by", "last_hit_by"}:
+            return "F08a_damage_identity_bookkeeping_residual"
+        if field_set & {"hitlag", "hitstun", "facing", "speed_x_attack", "speed_y_attack", "state_flags[1]"}:
+            return "F08d_damage_timer_scalar_residual"
+        return "F08c_damage_state_transition_adjacency"
+    if field_set and field_set <= {"ground_id"}:
+        # A lone floor id mismatch in LandingFallSpecial/EscapeAir context is the shared mpColl
+        # floor-line owner. Rows with action/on_ground/jump bundles remain in F13a because they are
+        # common FallSpecial landing timing.
+        # refs/melee/src/melee/mp/mpcoll.c::mpColl_8004A45C_Floor
+        # refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll
+        return "F10c_collision_landing_edge_adjacency"
+    if field_set and field_set <= (STATE_FLAG_FIELDS | {"hurtbox_state"}):
+        # Pure state-flag/hurtbox tails are shared visible-state composition; keep action/collision
+        # bundles in the common FallSpecial owner.
+        # refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
+        # refs/melee/src/melee/ft/ftcoll.c::ftColl_8007B868
+        if row.on_ground == 0 or any(_looks_like_aerial(name) for name in names):
+            return "F09a_aerial_stateflag_hurtbox_adjacency"
+        return "F10d_hurtbox_stateflag_adjacency"
+    if field_set and field_set <= {"last_hit_by", "combo_count", "last_attack_landed"}:
+        # Pure source/scoreboard rows in LandingFallSpecial/FallSpecial/EscapeAir contexts are combat
+        # bookkeeping. Keep collision, landing, action, hurtbox, and mixed contact bundles in F13a.
+        # refs/melee/src/melee/ft/ftcoll.c::ftColl_8007BE3C
+        # refs/melee/src/melee/pl/plstale.c::{
+        #   plStale_UpdateStaleMovesFromFighter,plStale_UpdateStaleMovesFromItem}
+        if row.on_ground == 0 or any(_looks_like_aerial(name) for name in names):
+            return "F09b_aerial_bookkeeping_adjacency"
+        return "F10b_grounded_combat_adjacency"
+    return None
+
+
+def _throw_hard_moved_family(row: PlayerRow, names: tuple[str, str, str], field_set: set[str]) -> str | None:
+    _ = row
+    if not any(_looks_like_throw_or_thrown(name) for name in names):
+        return None
+    if field_set and field_set <= {"last_hit_by", "combo_count", "last_attack_landed"}:
+        # Pure throw score/source rows share the common throw/item bookkeeping owner. Keep mixed
+        # hitlag, state-flag, hurtbox, article, and item-pulse bundles in F14b until their per-throw
+        # pulse callback is implemented.
+        # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::{
+        #   ftCo_ThrowHi_Anim,ftCo_800DD724,ftCo_800DE7C0,ftCo_800DDDE4}
+        # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
+        # refs/melee/src/melee/pl/plstale.c::{
+        #   plStale_UpdateStaleMovesFromFighter,plStale_UpdateStaleMovesFromItem}
+        return "F14_throw_item_bookkeeping"
+    return None
 
 
 def _looks_like_grounded_selector(name: str) -> bool:
@@ -1715,6 +2017,8 @@ def _classify_player_row(row: PlayerRow, action_names: dict[int, str]) -> str:
     context_names = (seed_name, ref_name, out_name, prev_name)
     field_set = {_base_field(field) for field in row.fields}
 
+    if field_set == {"state_flags[4]"}:
+        return "F25_camera_box_visibility_x221f"
     if (
         row.ref_action_id == 91
         or row.out_action_id == 91
@@ -1730,9 +2034,32 @@ def _classify_player_row(row: PlayerRow, action_names: dict[int, str]) -> str:
         return "F01_guard_release_collision"
     if any(_looks_like_capture(name) for name in names):
         return "F03_capturewait_bridge"
+    specials_hard_move = _specials_hard_moved_family(row, names, field_set)
+    if specials_hard_move is not None:
+        return specials_hard_move
+    specialhi_hard_move = _specialhi_hard_moved_family(row, names, field_set)
+    if specialhi_hard_move is not None:
+        return specialhi_hard_move
+    specialn_hard_move = _specialn_hard_moved_family(row, names, field_set)
+    if specialn_hard_move is not None:
+        return specialn_hard_move
+    special_instance_callback = _special_instance_callback_family(row, names, field_set)
+    if special_instance_callback is not None:
+        return special_instance_callback
+    speciallw_hard_move = _speciallw_hard_moved_family(row, names, field_set)
+    if speciallw_hard_move is not None:
+        return speciallw_hard_move
+    common_fallspecial_hard_move = _common_fallspecial_hard_moved_family(row, names, field_set)
+    if common_fallspecial_hard_move is not None:
+        return common_fallspecial_hard_move
+    throw_hard_move = _throw_hard_moved_family(row, names, field_set)
+    if throw_hard_move is not None:
+        return throw_hard_move
     if any(_looks_like_damage(name) for name in names):
         if field_set and field_set <= STATE_FLAG_FIELDS:
             return "F05_damage_state_flags"
+        if field_set <= {"instance_id", "instance_hit_by", "last_hit_by"}:
+            return "F08a_damage_identity_bookkeeping_residual"
         if _is_damage_tech_timer_seed_surface(row, names):
             return "F18_damage_tech_timer_seed_surface"
         if (
@@ -1746,8 +2073,6 @@ def _classify_player_row(row: PlayerRow, action_names: dict[int, str]) -> str:
         special_family = _special_owner_family_for_names(context_names, field_set=field_set)
         if special_family is not None:
             return special_family
-        if field_set <= {"instance_id", "instance_hit_by", "last_hit_by"}:
-            return "F08a_damage_identity_bookkeeping_residual"
         if _looks_like_current_frame_body_admission_disagreement(row, names, field_set):
             return "F08b_body_contact_geometry_residual"
         if any(_looks_like_landing_cliff_or_fall(name) for name in names) or any(
@@ -1762,7 +2087,7 @@ def _classify_player_row(row: PlayerRow, action_names: dict[int, str]) -> str:
             return "F08d_damage_timer_scalar_residual"
         return "F08a_damage_identity_bookkeeping_residual"
     if field_set == {"instance_id"}:
-        special_family = _special_owner_family_for_names(context_names, field_set=field_set)
+        special_family = _special_instance_callback_family(row, names, field_set)
         if special_family is not None:
             return special_family
         if any(_looks_like_grounded_attack(name) for name in context_names):
@@ -1785,6 +2110,24 @@ def _classify_player_row(row: PlayerRow, action_names: dict[int, str]) -> str:
         return "F12_instance_id_transition_only"
     if field_set == {"action_frame"} and any(_looks_like_grounded(name) for name in names):
         return "F11_locomotion_action_frame"
+    if _looks_like_any_special(prev_name) and not any(_looks_like_any_special(name) for name in names):
+        if field_set and field_set <= {"last_hit_by", "combo_count", "last_attack_landed"}:
+            # Once the current row is back in generic grounded/aerial state, a previous SpecialN or
+            # Shine neighbor is just source-bookkeeping context; it is not the article/reflector
+            # state-machine owner. Keep active special current-action bundles in their special family.
+            # refs/melee/src/melee/ft/ftcoll.c::ftColl_8007BE3C
+            # refs/melee/src/melee/pl/plstale.c::{
+            #   plStale_UpdateStaleMovesFromFighter,plStale_UpdateStaleMovesFromItem}
+            if any(_looks_like_aerial(name) for name in names) or row.on_ground == 0:
+                return "F09b_aerial_bookkeeping_adjacency"
+            return "F10b_grounded_combat_adjacency"
+        if any(_looks_like_landing_cliff_or_fall(name) for name in names):
+            # A previous special can explain why the player reached Landing, but the observed
+            # Landing/Ottotto/Fall disagreement itself is the shared collision/edge owner.
+            # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c
+            # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Ottotto.c
+            # refs/melee/src/melee/mp/mpcoll.c::mpColl_8004A45C_Floor
+            return "F10c_collision_landing_edge_adjacency"
     special_family = _special_owner_family_for_names(context_names, field_set=field_set)
     if special_family is not None:
         return special_family
@@ -1908,6 +2251,9 @@ def _audit_player_row(row: PlayerRow, action_names: dict[int, str]) -> tuple[boo
     if row.family_id == "F05_damage_state_flags":
         ok = any(_looks_like_damage(name) for name in names) and field_set <= STATE_FLAG_FIELDS
         return ok, "damage family with state-flag-only bundle"
+    if row.family_id == "F25_camera_box_visibility_x221f":
+        ok = field_set == {"state_flags[4]"}
+        return ok, "camera-box visibility row reduced to fp+0x221F byte"
     if row.family_id == "F06_damageflyroll_rng_gate":
         ok = (
             row.ref_action_id == 91
@@ -2106,8 +2452,8 @@ def _audit_player_row(row: PlayerRow, action_names: dict[int, str]) -> tuple[boo
             ok = any(_looks_like_special_entry(name) for name in context_names)
             return ok, "common IASA/input special-entry dispatch row"
         if row.family_id == "F24_special_adjacent_instance_order":
-            ok = field_set == {"instance_id"} and any(_looks_like_any_special(name) for name in context_names)
-            return ok, "special-adjacent instance-id counter row"
+            ok = _special_instance_callback_family(row, names, field_set) == row.family_id
+            return ok, "source-backed special callback instance-id counter row"
         ok = any(_looks_like_common_fallspecial(name) for name in context_names)
         return ok, "common FallSpecial/LandingFallSpecial row"
     if row.family_id == "F10f_grounded_attack_adjacency":

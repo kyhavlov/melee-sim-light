@@ -138,6 +138,41 @@ static inline uint16_t colanim_timer_remaining_from_seed_bridge(uint16_t init_fr
   return rem;
 }
 
+static inline uint8_t seed_bridge_has_shine_start_x1988_masked_x198c(const MslSeed* seed, int p,
+                                                                     uint8_t seed_hurtbox_state,
+                                                                     uint8_t seed_x1988) {
+  if (seed == NULL) {
+    return 0u;
+  }
+  if (seed->action_id[p] != (uint16_t)MSL_ACT_FX_SPECIAL_LW_START &&
+      seed->action_id[p] != (uint16_t)MSL_ACT_FX_SPECIAL_AIR_LW_START) {
+    return 0u;
+  }
+  if (seed->action_frame[p] != 1 || seed_hurtbox_state != 2u || seed_x1988 != 2u) {
+    return 0u;
+  }
+  if (seed->colanim_hit_status_x198c[p] != 1u || seed->colanim_timer_x1990[p] != 0u ||
+      seed->colanim_timer_x1994[p] != 0u || seed->colanim_lock_x2221_b0[p] != 0u) {
+    return 0u;
+  }
+  // Shine Start frame 1 can be reseeded at the entry-origin boundary while visible Slippi
+  // hurtbox_state is still the movescript x1988=2 value from the entry script. When seed-history
+  // reconstruction proves a hidden x198C=1 lane underneath that x1988 mask, preserve it so the
+  // next cmd-script clear falls back to x198C. Same-action hitlag-frozen Shine starts are admitted
+  // only when seed-history carried that explicit x198C=1 provenance forward from the causal entry
+  // row; controls with x198C=0 still clear to vulnerable.
+  //
+  // Keep this as a seed-surface reconstruction, not a broad hidden-colanim clear:
+  // - data/moves/{fox,falco}.json specials_by_msid["313"/"317"] has set_hit_status 2 at frame 0
+  //   and set_hit_status 0 at frame 2.
+  // - SendGamePostFrame reports x1988 first, then x198C.
+  // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
+  // refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007B62C,ftColl_8007B868}
+  // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c::{
+  //   ftFx_SpecialLw_Enter,ftFx_SpecialAirLw_Enter}
+  return 1u;
+}
+
 static inline int throw_index_from_action_id(uint16_t action_id) {
   switch (action_id) {
     case (uint16_t)MSL_ACT_THROW_F:
@@ -1118,6 +1153,10 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
         if (seed_x1988 != 0u && seed_hurtbox_state == seed_x1988) {
           batch->state.colanim_hit_status_x198c[idx] = 0u;
         }
+        if (seed_bridge_has_shine_start_x1988_masked_x198c(seed, p, seed_hurtbox_state,
+                                                           seed_x1988)) {
+          batch->state.colanim_hit_status_x198c[idx] = 1u;
+        }
         // Narrow seed-bridge for x198C=2 timer ownership:
         // - Slippi exposes merged hurtbox_state but not x1990 remaining.
         // - When x1988 is absent and replay history derivation provides a nonzero x1990 hint
@@ -1142,6 +1181,19 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
           //   ftFx_SpecialLw_Enter,ftFx_SpecialAirLw_Enter}
           // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
           batch->state.colanim_timer_x1990[idx] = seed->colanim_timer_x1990[p];
+          batch->state.colanim_hit_status_x198c[idx] = 2u;
+        }
+        if (shine_start_x1990_reseed && seed->colanim_hit_status_x198c[p] == 2u &&
+            seed->colanim_timer_x1990[p] != 0u && seed->colanim_timer_x1994[p] != 0u &&
+            seed->colanim_lock_x2221_b0[p] == 0u) {
+          // Cliff/Fall -> aerial Shine Start rows can carry both hidden timers: x1990 owns the
+          // visible x198C=2 status while x1994 remains queued underneath. Trust the explicit
+          // seed-history lane for this Shine Start shape instead of dropping both timers because
+          // x1988 currently masks the visible byte.
+          // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
+          // refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007B760,ftColl_8007B7A4}
+          batch->state.colanim_timer_x1990[idx] = seed->colanim_timer_x1990[p];
+          batch->state.colanim_timer_x1994[idx] = seed->colanim_timer_x1994[p];
           batch->state.colanim_hit_status_x198c[idx] = 2u;
         }
         // Narrow explicit x1994/x198C seed bridge:

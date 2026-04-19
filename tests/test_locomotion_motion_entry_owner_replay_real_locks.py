@@ -220,6 +220,83 @@ def test_ordinary_single_motion_entry_uses_x2073_without_instance_override() -> 
     _assert_transition_lock_fields_match_ref(out_row=out_row, ref_row=ref_row, record=record, p=p)
 
 
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    "case",
+    [
+        _Case(
+            dataset_rel=f"{_AGG_CARDINAL}/AttachedGoodNaturedGuanaco.msl",
+            record=609,
+            port=0,
+            note="JumpF -> SpecialAirLwStart stays off the broad special-boundary instance lane",
+        ),
+        _Case(
+            dataset_rel=f"{_AGG_CARDINAL}/GracefulAttachedTurtle.msl",
+            record=6425,
+            port=1,
+            note="Landing -> SpecialLwStart stays off the broad special-boundary instance lane",
+        ),
+        _Case(
+            dataset_rel=f"{_AGG_CARDINAL}/AttachedGoodNaturedGuanaco.msl",
+            record=124,
+            port=0,
+            note="JumpF -> SpecialAirNStart stays off generic special-entry instance overrides",
+        ),
+    ],
+)
+def test_special_boundary_entries_do_not_use_motion_entry_override(case: _Case) -> None:
+    # Negative guard for the rejected broad special-boundary expansion. Direct special entries keep
+    # normal ft_800895E0/x2073 + plAttack_80037B08 runtime ownership unless a specific source-backed
+    # callback lane owns an override, such as SpecialN Loop -> Loop restart below.
+    # refs/melee/build/GALE01/asm/melee/ft/ft_0892.s::ft_800895E0
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / case.dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {case.dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    row = ds.samples[case.record]
+    p = case.port
+    assert int(row["seed_t"]["motion_entry_instance_id_override_u16"][p]) == 0, case.note
+
+
+@pytest.mark.integration
+def test_specialn_loop_restart_uses_only_ft80089824_callback_lane() -> None:
+    # Positive/negative lock for the only special-owned instance override kept here:
+    # SpecialN Loop -> same SpecialN Loop with action_frame reset. This is tied to
+    # ftFx_SpecialNLoop_Anim installing ftFx_SpecialN_OnChangeAction, which calls ft_80089824.
+    # It is not a generic SpecialN Start/End or broad special-entry override.
+    # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::{
+    #   ftFx_SpecialNLoop_Anim,ftFx_SpecialAirNLoop_Anim,ftFx_SpecialN_OnChangeAction}
+    # refs/melee/build/GALE01/asm/melee/ft/ft_0892.s::ft_80089824
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / f"{_AGG_CARDINAL}/AttachedGoodNaturedGuanaco.msl"
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    ds = read_dataset(str(dataset_path))
+    restart = ds.samples[2218]
+    p = 0
+    assert int(restart["seed_t"]["action_id"][p]) == 0x0159
+    assert int(restart["ref_t1"]["action_id"][p]) == 0x0159
+    assert int(restart["ref_t1"]["action_frame"][p]) == 0
+    assert int(restart["seed_t"]["motion_entry_instance_id_override_u16"][p]) == int(
+        restart["ref_t1"]["instance_id"][p]
+    )
+
+    steady_loop = ds.samples[2217]
+    assert int(steady_loop["seed_t"]["action_id"][p]) == 0x0159
+    assert int(steady_loop["ref_t1"]["action_id"][p]) == 0x0159
+    assert int(steady_loop["seed_t"]["motion_entry_instance_id_override_u16"][p]) == 0
+
+    start_to_loop = ds.samples[100]
+    assert int(start_to_loop["seed_t"]["action_id"][p]) == 0x0158
+    assert int(start_to_loop["ref_t1"]["action_id"][p]) == 0x0159
+    assert int(start_to_loop["seed_t"]["motion_entry_instance_id_override_u16"][p]) == 0
+
+
 def test_motion_entry_instance_override_clears_after_one_step() -> None:
     # The override lane is one-step replay-facing state. If it is seeded on a non-entry row, it must
     # clear before a later rollout transition can consume it.
@@ -278,36 +355,67 @@ def test_noncausal_locomotion_lane_population_stays_narrow() -> None:
     _skip_if_required_artifacts_missing(root)
     owner_actions = {14, 15, 16, 17, 18, 19, 20, 21, 22, 24}
 
-    def count_lanes(rel: str) -> tuple[int, int, int, set[tuple[int, int]]]:
-      turn_count = 0
-      motion_count = 0
-      invalid_motion = 0
-      turn_transitions: set[tuple[int, int]] = set()
-      for dataset_path in (root / rel).glob("**/*.msl"):
-        ds = read_dataset(str(dataset_path))
-        for row in ds.samples:
-          for p in range(int(ds.header["num_players"])):
-            if int(row["seed_t"]["turn_kneebend_facing_override_u8"][p]) != 0:
-              turn_count += 1
-              turn_transitions.add((int(row["seed_t"]["action_id"][p]), int(row["ref_t1"]["action_id"][p])))
-            if int(row["seed_t"]["motion_entry_instance_id_override_u16"][p]) != 0:
-              motion_count += 1
-              sa = int(row["seed_t"]["action_id"][p])
-              ra = int(row["ref_t1"]["action_id"][p])
-              if sa not in owner_actions or ra not in owner_actions:
-                invalid_motion += 1
-      return turn_count, motion_count, invalid_motion, turn_transitions
+    specialn_loop_actions = {0x0156, 0x0159}
 
-    primary_turn, primary_motion, primary_invalid, primary_turn_transitions = count_lanes(_PRIMARY_VALID)
-    aggregate_turn, aggregate_motion, aggregate_invalid, aggregate_turn_transitions = count_lanes(
-        "datasets/aggregate_recent/replays/validation"
-    )
+    def count_lanes(rel: str) -> tuple[int, int, int, int, set[tuple[int, int]]]:
+        turn_count = 0
+        motion_count = 0
+        specialn_loop_count = 0
+        invalid_motion = 0
+        turn_transitions: set[tuple[int, int]] = set()
+        for dataset_path in (root / rel).glob("**/*.msl"):
+            ds = read_dataset(str(dataset_path))
+            for row in ds.samples:
+                num_players = int(ds.header["num_players"])
+                for p in range(num_players):
+                    if int(row["seed_t"]["turn_kneebend_facing_override_u8"][p]) != 0:
+                        turn_count += 1
+                        turn_transitions.add(
+                            (int(row["seed_t"]["action_id"][p]), int(row["ref_t1"]["action_id"][p]))
+                        )
+                    if int(row["seed_t"]["motion_entry_instance_id_override_u16"][p]) != 0:
+                        motion_count += 1
+                        sa = int(row["seed_t"]["action_id"][p])
+                        ra = int(row["ref_t1"]["action_id"][p])
+                        raf = int(row["ref_t1"]["action_frame"][p])
+                        is_specialn_loop_restart = sa == ra and ra in specialn_loop_actions and raf == 0
+                        if is_specialn_loop_restart:
+                            specialn_loop_count += 1
+                        if (
+                            not is_specialn_loop_restart
+                            and (sa not in owner_actions or ra not in owner_actions)
+                        ):
+                            invalid_motion += 1
+        return (
+            turn_count,
+            motion_count,
+            specialn_loop_count,
+            invalid_motion,
+            turn_transitions,
+        )
+
+    (
+        primary_turn,
+        primary_motion,
+        primary_specialn,
+        primary_invalid,
+        primary_turn_transitions,
+    ) = count_lanes(_PRIMARY_VALID)
+    (
+        aggregate_turn,
+        aggregate_motion,
+        aggregate_specialn,
+        aggregate_invalid,
+        aggregate_turn_transitions,
+    ) = count_lanes("datasets/aggregate_recent/replays/validation")
 
     assert primary_turn == 8
-    assert primary_motion == 121
+    assert primary_motion == 150
+    assert primary_specialn == 29
     assert primary_invalid == 0
     assert primary_turn_transitions == {(18, 24)}
     assert aggregate_turn == 50
-    assert aggregate_motion == 597
+    assert aggregate_motion == 685
+    assert aggregate_specialn == 88
     assert aggregate_invalid == 0
     assert aggregate_turn_transitions == {(18, 24)}

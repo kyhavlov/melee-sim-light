@@ -91,6 +91,61 @@ def _run_one_step(dataset_path: Path, record: int) -> tuple[np.void, np.void, np
         ),
         _FieldCase(
             dataset_rel=(
+                "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/"
+                "AttachedGoodNaturedGuanaco.msl"
+            ),
+            record=3145,
+            player=0,
+            seed_action=360,
+            field="hurtbox_state",
+            note="grounded Shine Start frame-1 seed preserves hidden x198C after x1988 clears",
+        ),
+        _FieldCase(
+            dataset_rel=(
+                "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/"
+                "AttachedGoodNaturedGuanaco.msl"
+            ),
+            record=3157,
+            player=0,
+            seed_action=365,
+            field="hurtbox_state",
+            note="aerial Shine Start frame-1 seed preserves hidden x198C after x1988 clears",
+        ),
+        _FieldCase(
+            dataset_rel=(
+                "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/"
+                "QuerulousGrandDinosaur.msl"
+            ),
+            record=1091,
+            player=1,
+            seed_action=360,
+            field="hurtbox_state",
+            note="Run-dispatched Shine Start frame-1 seed preserves hidden x198C after x1988 clears",
+        ),
+        _FieldCase(
+            dataset_rel=(
+                "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/"
+                "AttachedGoodNaturedGuanaco.msl"
+            ),
+            record=4602,
+            player=0,
+            seed_action=365,
+            field="hurtbox_state",
+            note="aerial Shine Start preserves explicit x1990/x1994 hidden timer provenance",
+        ),
+        _FieldCase(
+            dataset_rel=(
+                "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/"
+                "QuerulousGrandDinosaur.msl"
+            ),
+            record=9599,
+            player=0,
+            seed_action=50,
+            field="state_flags[0]",
+            note="AttackDash IASA -> grounded Shine preserves source allow_interrupt bit",
+        ),
+        _FieldCase(
+            dataset_rel=(
                 "datasets/aggregate_recent/replays/validation/aggregate_recent/"
                 "BlondHardHippopotamus.msl"
             ),
@@ -318,6 +373,17 @@ def test_landing_fallspecial_allow_interrupt_seed_lane_replay_real_lock() -> Non
         _Case(
             dataset_rel=(
                 "datasets/aggregate_recent/replays/validation/aggregate_recent/"
+                "DistinctCaringCobra.msl"
+            ),
+            record=1568,
+            player=1,
+            seed_action=236,
+            ref_action=236,
+            note="sustained no-lock EscapeAir current-ECB sampling avoids an early LandingFallSpecial",
+        ),
+        _Case(
+            dataset_rel=(
+                "datasets/aggregate_recent/replays/validation/aggregate_recent/"
                 "HungryImportantSnake.msl"
             ),
             record=578,
@@ -325,6 +391,50 @@ def test_landing_fallspecial_allow_interrupt_seed_lane_replay_real_lock() -> Non
             seed_action=35,
             ref_action=43,
             note="FallSpecial shallow root penetration enters LandingFallSpecial on the post-entry floor row",
+        ),
+        _Case(
+            dataset_rel=(
+                "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/"
+                "AttachedGoodNaturedGuanaco.msl"
+            ),
+            record=2378,
+            player=0,
+            seed_action=236,
+            ref_action=43,
+            note="EscapeAir prev-ECB-bottom penetration enters LandingFallSpecial on the persisted floor",
+        ),
+        _Case(
+            dataset_rel=(
+                "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/"
+                "GracefulAttachedTurtle.msl"
+            ),
+            record=5224,
+            player=1,
+            seed_action=236,
+            ref_action=43,
+            note="locked EscapeAir prev-ECB-bottom penetration lands without broad active-lock grounding",
+        ),
+        _Case(
+            dataset_rel=(
+                "datasets/aggregate_recent/replays/validation/aggregate_recent/"
+                "HungryImportantSnake.msl"
+            ),
+            record=1582,
+            player=1,
+            seed_action=354,
+            ref_action=356,
+            note="SpecialHiHoldAir anim-end enters aerial launch and consumes all jumps",
+        ),
+        _Case(
+            dataset_rel=(
+                "datasets/aggregate_recent/replays/validation/aggregate_recent/"
+                "HungryImportantSnake.msl"
+            ),
+            record=1764,
+            player=0,
+            seed_action=354,
+            ref_action=356,
+            note="SpecialHiHoldAir launch jump consumption is replay-exact for the mirrored player",
         ),
         _Case(
             dataset_rel=(
@@ -381,6 +491,83 @@ def test_landing_fallspecial_allow_interrupt_seed_lane_replay_real_lock() -> Non
             ref_action=18,
             note="SpecialHiLanding anim-end Wait destination consumes Turn IASA in the same proc",
         ),
+        _Case(
+            dataset_rel=(
+                "datasets/aggregate_recent/replays/validation/aggregate_recent/"
+                "BlondHardHippopotamus.msl"
+            ),
+            record=666,
+            player=1,
+            seed_action=343,
+            ref_action=20,
+            note="SpecialNEnd anim-end Wait destination consumes buttonless forward Dash IASA",
+        ),
+        _Case(
+            dataset_rel=(
+                "datasets/aggregate_recent/replays/validation/aggregate_recent/"
+                "PriceyPartialAlbatross.msl"
+            ),
+            record=916,
+            player=0,
+            seed_action=203,
+            ref_action=365,
+            note="PassiveWallJump IASA consumes aerial down-B through SpecialAir before AttackAir/item checks",
+        ),
+        _Case(
+            dataset_rel=(
+                "datasets/aggregate_recent/replays/validation/aggregate_recent/"
+                "ImpassionedAlarmedTarsier.msl"
+            ),
+            record=4005,
+            player=0,
+            seed_action=360,
+            ref_action=365,
+            note="SpecialLwStart ground-to-air collision consumes one jump through ftCommon_8007D5D4",
+        ),
+        _Case(
+            dataset_rel=(
+                "datasets/aggregate_recent/replays/validation/aggregate_recent/"
+                "TubbyCurlyHerring.msl"
+            ),
+            record=7232,
+            player=1,
+            seed_action=27,
+            ref_action=344,
+            note="JumpAerialF A+B row consumes SpecialAirN before AttackAirN in common aerial IASA",
+        ),
+        _Case(
+            dataset_rel=(
+                "datasets/aggregate_recent/replays/validation/aggregate_recent/"
+                "ImpassionedAlarmedTarsier.msl"
+            ),
+            record=140,
+            player=1,
+            seed_action=346,
+            ref_action=28,
+            note="SpecialAirNEnd anim-end Fall destination consumes same-proc JumpAerialB IASA",
+        ),
+        _Case(
+            dataset_rel=(
+                "datasets/aggregate_recent/replays/validation/aggregate_recent/"
+                "BlondHardHippopotamus.msl"
+            ),
+            record=4880,
+            player=1,
+            seed_action=358,
+            ref_action=358,
+            note="SpecialHiFall cannot CliffCatch an occupied slow-climb ledge",
+        ),
+        _Case(
+            dataset_rel=(
+                "datasets/aggregate_recent/replays/validation/aggregate_recent/"
+                "TubbyCurlyHerring.msl"
+            ),
+            record=6743,
+            player=1,
+            seed_action=358,
+            ref_action=252,
+            note="SpecialHiFall still CliffCatches an unoccupied ledge",
+        ),
     ],
     ids=lambda c: f"{Path(c.dataset_rel).stem}-rec{c.record}-p{c.player}",
 )
@@ -402,10 +589,26 @@ def test_spacie_special_collision_handoff_rows_match_replay(case: _Case) -> None
     #   ground_or_air=Air while root Y is on the floor bias under the active ECB lock.
     # - FallSpecial_Coll uses ft_80083090 -> ftCo_80096D28 to enter LandingFallSpecial on shallow
     #   same-floor penetration.
+    # - EscapeAir_Coll uses ft_80082C74 with CollData floor.index; one-step reseeds that start
+    #   after prev ECB bottom has already crossed the persisted floor can enter LandingFallSpecial,
+    #   while active-lock rows whose prev ECB bottom is still above the floor remain airborne.
     # - SpecialAirHi_Coll can enter SpecialHiBound, and ftFx_SpecialHiBound_Anim enters FallSpecial
     #   while consuming all jumps on airborne anim end.
+    # - SpecialHiHoldAir_Anim enters ftFx_SpecialAirHi_Enter, whose launch handler consumes all
+    #   jumps through x1968_jumpsUsed=max_jumps.
     # - SpecialHiLanding_Anim enters Wait during the Anim callback, then destination Wait_IASA can
     #   consume grounded locomotion input later in the same proc.
+    # - SpecialNEnd_Anim exits through ft_8008A2BC; the same destination Wait_IASA can consume the
+    #   buttonless forward Dash_CheckInput branch in the same proc.
+    # - SpecialAirNEnd_Anim exits through ftCo_Fall_Enter when blaster landing lag is zero; the
+    #   destination Fall IASA can consume JumpAerial input later in the same proc.
+    # - Ledge occupancy blocks another fighter's CliffCatch through ftCliffCommon_80081298;
+    #   slow and quick ledge options both set the occupancy bit, while CliffJump2 no longer uses
+    #   the attach snap.
+    # - Shine ground->air collision handoffs call ftCommon_8007D5D4 and consume one jump while
+    #   preserving the current Shine phase/frame.
+    # - Common aerial IASA owners run ftCo_SpecialAir_CheckInput before AttackAir/item checks, so
+    #   JumpAerial/PassiveWallJump B-edge rows remain available for Shine/Blaster dispatch.
     # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c::ftFx_SpecialAirLwLoop_Coll
     # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c::{
     #   ftFx_SpecialLwEnd_Anim,ftFx_SpecialAirLwEnd_Anim,ftFx_SpecialLwHit_Enter}
@@ -413,10 +616,29 @@ def test_spacie_special_collision_handoff_rows_match_replay(case: _Case) -> None
     # refs/melee/src/melee/ft/fighter.c::{Fighter_8006A360,Fighter_procUpdate}
     # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::{
     #   ftFx_SpecialHiFall_Coll,ftFx_SpecialHiFall_Enter,ftFx_SpecialAirHi_Coll,
-    #   ftFx_SpecialHiBound_Enter,ftFx_SpecialHiBound_Anim,ftFx_SpecialHiLanding_Anim}
+    #   ftFx_SpecialHiBound_Enter,ftFx_SpecialHiBound_Anim,ftFx_SpecialHiLanding_Anim,
+    #   ftFx_SpecialHiHoldAir_Anim,ftFx_SpecialAirHi_Enter}
+    # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_SpecialNEnd_Anim
+    # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_SpecialAirNEnd_Anim
+    # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c::{
+    #   ftFx_SpecialLwStart_GroundToAir,ftFx_SpecialLwLoop_GroundToAir,
+    #   ftFx_SpecialLwHit_GroundToAir,ftFx_SpecialLwEnd_GroundToAir,
+    #   ftFx_SpecialLwTurn_GroundToAir}
+    # refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007D5D4
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c::ftCo_Dash_CheckInput
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_SpecialAir.c::ftCo_SpecialAir_CheckInput
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c::ftCo_Jump_IASA
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_IASA
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::ftCo_JumpAerial_Enter_Basic
+    # refs/melee/src/melee/ft/ftcliffcommon.c::ftCliffCommon_80081298
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffClimb.c
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffJump.c
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_PassiveWall.c::ftCo_PassiveWall_IASA
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_FallSpecial.c::{
     #   ftCo_FallSpecial_Coll,ftCo_80096D28}
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll
+    # refs/melee/src/melee/ft/ft_081B.c::ft_80082C74
     root = Path(__file__).resolve().parents[1]
     dataset_path = root / case.dataset_rel
     if not dataset_path.exists():

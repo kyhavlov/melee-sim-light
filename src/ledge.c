@@ -31,6 +31,24 @@ static inline uint8_t is_cliff_hold_action(uint16_t a) {
   }
 }
 
+static inline uint8_t is_cliff_occupancy_action(uint16_t a) {
+  switch (a) {
+    case MSL_ACT_CLIFF_CATCH:
+    case MSL_ACT_CLIFF_WAIT:
+    case MSL_ACT_CLIFF_CLIMB_SLOW:
+    case MSL_ACT_CLIFF_CLIMB_QUICK:
+    case MSL_ACT_CLIFF_ATTACK_SLOW:
+    case MSL_ACT_CLIFF_ATTACK_QUICK:
+    case MSL_ACT_CLIFF_ESCAPE_SLOW:
+    case MSL_ACT_CLIFF_ESCAPE_QUICK:
+    case MSL_ACT_CLIFF_JUMP_SLOW1:
+    case MSL_ACT_CLIFF_JUMP_QUICK1:
+      return 1;
+    default:
+      return 0;
+  }
+}
+
 static inline uint8_t is_cliff_action_any(uint16_t a) {
   return (is_cliff_hold_action(a) || a == (uint16_t)MSL_ACT_CLIFF_JUMP_QUICK2) ? 1 : 0;
 }
@@ -606,12 +624,13 @@ static inline void refresh_stage_ledge_occupants(MslBatch* batch) {
     for (int p = 0; p < num_players; p++) {
       const size_t idx = msl_idx_player(bi, p);
       const uint16_t a = batch->state.action_id[idx];
-      if (!is_cliff_hold_action(a)) {
+      if (!is_cliff_occupancy_action(a)) {
         continue;
       }
       // Decomp: ledge occupancy checks use fp->x221D_b7, which is set by CliffCatch entry and by
       // subsequent on-ledge actions (CliffWait/CliffClimb/CliffAttack/CliffEscape/CliffJump1),
-      // not "CliffWait only".
+      // not "CliffWait only". Slow and quick ledge options both occupy the ledge; Jump2 no longer
+      // uses the attach snap and is not an occupancy action.
       // refs/melee/src/melee/ft/ftcliffcommon.c::ftCliffCommon_80081370
       // refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffWait.c
       // refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffClimb.c

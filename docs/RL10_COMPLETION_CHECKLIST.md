@@ -129,7 +129,8 @@ Recommended sequence for the next deep passes:
   - `F12a_grounded_instance_counter_order` is closed by the narrow
     `motion_entry_instance_id_override_u16` lane for same-frame `plAttack_80037B08` order that is
     hidden from Slippi post-frames. The normal `ft_800895E0/x2073` runtime path remains default;
-    the lane is populated only for simultaneous fighter entries or hidden-prior-consumer rows.
+    the lane is populated only for grounded locomotion simultaneous-entry / hidden-prior-consumer
+    rows and the explicit SpecialN loop-restart callback lane.
   - Closure here is not a claim that all hidden state is now causal runtime state. It includes two
     explicit non-causal replay seed lanes for Slippi-unobservable owner state:
     `turn_kneebend_facing_override_u8` and `motion_entry_instance_id_override_u16`.
@@ -327,21 +328,79 @@ Recommended sequence for the next deep passes:
     `ground_or_air=Air` while root Y is already at the floor bias. This is backed by Dolphin probe
     `reports/triage/20260418T081729Z_dolphin_forensic_row` and kept separate from the ordinary
     jump/air-dodge entry landing path.
+  - `EscapeAir_Coll` now has a narrow one-step prev-ECB-bottom projection for rows that begin
+    after the prior ECB bottom has already crossed the persisted floor line. This keeps the
+    decomp `ft_80082C74 -> LandingFallSpecial` owner without restoring the rejected broad
+    active-lock projection; rows whose locked previous ECB bottom is still above floor remain
+    covered by negative replay-real sentinels.
   - `SpecialHiLanding_Anim` now enters Wait and lets destination Wait IASA consume same-proc
     Walk/Squat/Turn input, matching `Fighter_8006A360` Anim before `Fighter_procUpdate` input
     callbacks.
+  - Pure `state_flags[4]` rows are split out to `F25_camera_box_visibility_x221f`; these are
+    Slippi fp+0x221F camera-subject visibility rows owned by `ftLib_80086A8C` /
+    `Camera_80030CFC`, not by the visible special-move action on the row.
+  - `SpecialNEnd_Anim` now exits through Wait and lets the destination Wait IASA consume the
+    buttonless forward Dash_CheckInput branch on the same proc. Earlier Wait_IASA button owners and
+    the backward turn-smash branch remain outside this narrow F19 slice.
+  - `SpecialAirNEnd_Anim` now exits through Fall and lets the destination Fall IASA consume the
+    same-proc JumpAerial path when the blaster landing-lag attr is zero. This is limited to the
+    `ftCo_JumpAerial_Enter_Basic` double-jump owner and does not restore the removed hidden
+    `isBlasterLoop` / `cmd_vars[0]` attempt.
+  - Shine Start x1988/x198C seed provenance is now explicit: seed history preserves hidden x198C=1
+    when the entry script masks it with x1988=2, carries that provenance through hitlag-frozen
+    frame-1 starts, and trusts explicit x1990+x1994 timer lanes on the Cliff/Fall ->
+    SpecialAirLwStart row. Broad hidden-colanim clearing remains rejected.
+  - SpecialN Loop -> Loop restart instance ordering now has a narrow seed override for the
+    `ftFx_SpecialN_OnChangeAction -> ft_80089824 -> plAttack_80037B08` path only.
+  - The audited broad special-adjacent hidden-prior / multi-consumer expansion was removed: it used
+    `post_*[1:]` / `ref_t1` as an oracle and was not prefix-causal. Direct Landing/JumpF -> Shine
+    and SpecialN Start -> Loop remain negative sentinels; only grounded locomotion order rows and
+    SpecialN Loop -> Loop restart populate the override lane.
+  - `F23_special_common_entry_dispatch` now only claims current seed/ref/out special-entry rows
+    whose seed action is a real common special-dispatch caller. `KneeBend`,
+    `LandingFallSpecial`, and active per-special states are excluded with taxonomy locks; the
+    remaining F23 rows are `PassiveWallJump` / `JumpAerial` callers that reach
+    `ftCo_SpecialAir_CheckInput`.
+  - `F21_specials_illusion_phantasm` is closed in the refreshed taxonomy: pure aerial Side-B
+    hurtbox tails move to `F09a`, Side-B combo/source tails move to `F09b`, and Side-B damage
+    contact tails move to `F08f` rather than staying in the steady Side-B owner.
+  - Pure `SpecialHiHoldAir` hurtbox-state tails are split to `F09a` because
+    `ftFx_SpecialHiHoldAir_IASA` is empty and the rows have no launch/travel/collision fields;
+    Firefox/Firebird collision, Bound, Fall, Landing, and launch rows stay in `F22`.
+  - `ftFx_SpecialAirHi_Enter` consumes all jumps by writing `x1968_jumpsUsed = max_jumps`.
+    Runtime now applies the matching `jumps_left=0` on HoldAir -> aerial launch entries; Bound/Fall
+    cliff-catch and collision timing rows remain in `F22`.
+  - Grounded Shine entry no longer dispatches from GuardOn/Guard/GuardSetOff/GuardReflect. Those
+    IASA callbacks do not call `ftCo_800D68C0`; `GuardOff_IASA` remains allowed. This closes the
+    replay-false GuardSetOff -> Shine Start hit cluster without restoring broad hidden-colanim or
+    projectile-origin fallback logic.
+  - Shine defender rows whose replay destination has entered common `Damage*` while the sim stays in
+    the same `SpecialLw*` state now route to `F08c_damage_state_transition_adjacency`. Rows where a
+    Shine hitbox is only the selected false BODY candidate route to `F08f_body_contact_candidate_filter_residual`,
+    and grounded Shine-entry hitlag/source/state-flag bookkeeping routes to `F10b_grounded_combat_adjacency`;
+    remaining F20 rows are active Shine/contact/callback bundles, not ordinary missed ProcessHit entries.
 - Current residual taxonomy after forced dataset rebuild, source-port, Run/Dash/damage-air
   dispatch, Dolphin-backed EscapeAir floor-hug slice, Shine Loop projectile-origin reflector
-  overlap, FallSpecial shallow floor projection, SpecialHiBound rebound ownership, and
-  SpecialHiLanding destination-Wait IASA ownership
-  (`reports/triage/20260418_checkpoint_hardened_primary`,
-  `reports/triage/20260418_checkpoint_hardened_aggregate`):
-  - Primary/cardinal one-step taxonomy: total `664`; special-owned residuals are
-    `F24=23`, `F23=11`, `F20=5`, `F21=5`, `F19=4`, `F22=4`; common `F13a=3`,
-    throw pulse `F14b=2`, and `F10e=0`.
-  - Aggregate one-step taxonomy: total `6222`; named special-owned residuals are
-    `F24=88`, `F23=86`, `F19=76`, `F22=75`, `F20=53`, `F21=28`; common `F13a=235`,
-    throw pulse `F14b=76`, and `F10e=0`.
+  overlap, FallSpecial shallow floor projection, EscapeAir prev-ECB-bottom projection,
+  SpecialHiBound rebound ownership, SpecialHiLanding destination-Wait IASA ownership,
+  camera-visibility taxonomy split, SpecialNEnd destination-Wait Dash ownership, Shine x1988/x198C
+  seed provenance, SpecialN loop-restart instance ordering, the F24 audit narrowing that removed
+  non-prefix-causal special-boundary overrides, F24 direct-boundary hard movement to generic
+  `ft_800895E0` / damage identity owners, the F21/F22/F23 taxonomy boundary hardening, and
+  the pure-Shine source/hurtbox/state-flag/hitlag bookkeeping move to shared combat/state owners, AttackLw3 entry
+  instance-callback ownership, AttackDash -> Shine allow-interrupt carry, F13a pure source
+  hard-move, SpecialAirNLoop damage-scalar hard-move, pure ThrowHi/ThrowB/ThrowLw score-source
+  movement to common throw bookkeeping, and common aerial B-before-A dispatch for JumpAerial /
+  PassiveWallJump rows, GuardSetOff Shine-entry IASA gating, and SpecialHiHoldAir aerial-launch
+  jump consumption
+  (`reports/triage/working_f24_hardmove2_primary`,
+  `reports/triage/working_f24_hardmove2_aggregate`):
+  - Primary/cardinal one-step taxonomy: total `641`; special-owned residuals are
+    `F24=0`, `F20=0`, `F19=0`, `F23=0`, `F22=0`, `F21=0`; common `F13a=0`,
+    throw pulse `F14b=0`, camera visibility `F25=87`, and `F10e=0`.
+  - Aggregate one-step taxonomy: total `5967`; named special-owned residuals are
+    `F24=0`, `F20=18`, `F19=21`, `F22=26`, `F23=0`, `F21=0`; common `F13a=118`,
+    throw pulse `F14b=28`, camera visibility `F25=373`, and `F10e=0`.
   - New owner slices:
     - Source attribution now carries `source_port0[player]`, because Slippi exports `last_hit_by`
       in the raw controller-port domain while simulator player arrays are compact local slots.
@@ -356,29 +415,91 @@ Recommended sequence for the next deep passes:
     - `FallSpecial_Coll` shallow floor projection now enters `LandingFallSpecial` on rows owned by
       `ft_80083090` / `ftCo_80096D28`, while the regressive broad EscapeAir projection experiment
       remains rejected.
+    - `EscapeAir_Coll` prev-ECB-bottom projection now covers the replay-real rows where the
+      teacher-forced seed begins after mpColl's previous ECB bottom already crossed the persisted
+      floor line. The gate deliberately excludes active-lock rows whose previous ECB bottom remains
+      above floor, preserving the locked floor-hug negative rows.
     - `SpecialAirHi` collision now enters `SpecialHiBound`, and airborne `SpecialHiBound` anim-end
       enters `FallSpecial` while consuming jumps, matching `ftFx_SpecialHiBound_Enter` /
       `ftFx_SpecialHiBound_Anim`.
     - `SpecialHiFall` / `SpecialHiBound` exits into common `FallSpecial` now preserve fastfall across
       `ftCo_80096900`'s callsite-specific `Ft_MF_KeepFastFall`, fixing the SpecialHiFall ->
       FallSpecial `state_flags[1]` tail without broad state-flag rewrites.
+    - Shine Start seed history preserves hidden x198C only when row history proves it is masked by
+      x1988, and C reseed consumes that explicit lane without guessing from merged Slippi state.
+    - Pure Shine-context `last_hit_by` / `last_attack_landed` / `combo_count`, hurtbox/state-flag,
+      and hitlag-only rows now route to combat/aerial bookkeeping (`F10b`/`F09b`), shared
+      state-flag owners (`F10d`/`F09a`), or contact-hitlag ownership (`F09d`) instead of the
+      SpecialLw state machine. Grounded Shine-entry hitlag/source/state-flag bookkeeping also
+      routes to `F10b`, and selected false BODY candidates from Shine hitboxes route to `F08f`.
+      Mixed Shine contact/action bundles stay in `F20`.
+    - SpecialAirNLoop rows that have already entered common `Damage*` and differ only on damage
+      scalar/contact lanes now route to the shared damage timer/scalar owner (`F08d`) instead of
+      `F19`; SpecialN article, item, shot, and loop/end handoff rows stay in `F19`.
+    - Common FallSpecial/LandingFallSpecial rows that have already entered `Damage*`, plus pure
+      ground-id and pure state/hurtbox tails, now route to shared damage/mpColl/state owners.
+      Action/on-ground/jump landing bundles stay in `F13a`.
+    - Sustained no-lock EscapeAir now keeps current-ECB sampling in the early same-action window,
+      avoiding simulator-only early `LandingFallSpecial` while preserving the locked and later
+      prev-bottom landing slices.
+    - SpecialHi rows that have already entered `Damage*`, plus pure `SpecialHiLanding` ground-id
+      tails, now route to shared damage/mpColl owners. Launch, Bound, Fall, and CliffCatch rows
+      stay in `F22`.
+    - `SpecialHiHoldAir` launch into `SpecialAirHi` consumes all jumps, matching
+      `ftFx_SpecialAirHi_Enter`'s `x1968_jumpsUsed=max_jumps` write. Remaining F22 rows are
+      collision, Bound/Fall, and cliff-catch timing.
+    - Slow ledge options now refresh ledge occupancy, so `SpecialHiFall` cannot CliffCatch an
+      already occupied ledge when the other fighter is in `CliffClimbSlow` / `CliffAttackSlow` /
+      `CliffEscapeSlow` / `CliffJumpSlow1`. Unoccupied `SpecialHiFall -> CliffCatch` rows remain
+      covered by positive replay-real locks.
+    - GuardOn/Guard/GuardSetOff/GuardReflect no longer admit grounded Shine entry because their
+      IASA callbacks do not call `ftCo_800D68C0`; `GuardOff_IASA` remains the shield-exit branch
+      that can dispatch specials. This removed the replay-false GuardSetOff -> Shine contact row
+      cluster while preserving rejected broad hidden-colanim and projectile-origin exclusions.
+    - Pure SpecialN hurtbox and source/scoreboard rows now route to shared aerial state/combat
+      owners (`F09a` / `F09b` / `F10b`); action, article, shot, and loop/end bundles stay in `F19`.
+    - Rows where SpecialN/Shine is only the previous action and the current row is generic
+      Landing/Ottotto/Fall or grounded source bookkeeping now route to shared mpColl/combat owners;
+      active SpecialN loop/end handoff rows and mixed Shine contact/action rows stay in
+      `F19`/`F20`.
+    - Pure ThrowHi/ThrowB/ThrowLw score/source rows now route to common throw/item bookkeeping
+      (`F14`), while mixed hitlag/state-flag/hurtbox/article pulse bundles remain in `F14b`.
+    - Common aerial IASA ordering now leaves B-edge rows for Shine/Blaster before AttackAir,
+      matching `ftCo_SpecialAir_CheckInput` before `ftCo_AttackAir_CheckItemThrowInput`; this
+      closes the aggregate-only `F23` PassiveWallJump / JumpAerial rows.
+    - SpecialN Loop -> Loop restart instance rows use a narrow `ft_80089824` seed override keyed to
+      same-action loop restarts with action-frame reset.
+    - F24 audit narrowing removed the broad special-adjacent multi-consumer / hidden-prior
+      override path because it depended on `ref_t1` post-frame ids. The kept seed lane is scoped to
+      the prior grounded locomotion ordering owner plus the SpecialN loop-restart callback owner.
+    - Direct special-boundary pure `instance_id` rows are no longer assigned to F24 unless a
+      source-backed special callback is visible. They move to generic adjacent instance ordering
+      (`F12b`) or damage identity (`F08a`) because the owner is the shared
+      `ft_800895E0` / `plAttack_80037B08` counter surface, not a B-special state-machine callback.
 - Remaining residuals:
-  - `F20_speciallw_shine_reflector`: still active. Remaining rows are Shine hurtbox-state timing,
-    source-clear / last-hit attribution, special-hit/candidate-filter combat rows, and two
-    replay-visible state-flag rows. The early startup-grounding bridge and broad aerial
+  - `F20_speciallw_shine_reflector`: primary is zero after pure source, pure hurtbox/state-flag,
+    hitlag-only, grounded Shine-entry contact bookkeeping, and selected false BODY-candidate tails
+    moved to shared combat/contact owners. Aggregate remains active for mixed Shine
+    contact/action bundles and reflector callback tails. The early startup-grounding bridge and broad aerial
     projectile-origin reflector fallback were rejected and are locked against.
-  - `F23_special_common_entry_dispatch`: common IASA/input special-entry rows, owned by
-    `ftCo_800D68C0`, `ftCo_SpecialS_CheckInput`, and `ftCo_SpecialAir_CheckInput`, not by steady
-    per-special callbacks.
-  - `F22_specialhi_firefox_firebird`: Firefox hold/launch/fall/landing/bound tails, separate from
-    common `FallSpecial` and ledge/collision rows.
-  - `F19` / `F21`: smaller blaster and Illusion/Phantasm article/contact tails.
-  - `F24`: still belongs to special-adjacent `ft_800895E0` / `plAttack_80037B08` ordering work
-    where it appears after checkpoint-safe taxonomy regeneration. The broad motion-entry seed-lane
-    expansion for SpecialN loop restart and direct Landing/JumpF -> Shine Start was rejected from
-    this checkpoint because it hid unfinished special callback ordering.
-  - `F13a`, `F14b`, `F15`, `F16`, and `F17` rows remain assigned to common landing/freefall,
-    per-throw pulse, guard/item, item identity, and collision/ledge owners respectively.
+  - `F23_special_common_entry_dispatch`: zero after common aerial B-before-A dispatch; `KneeBend`,
+    `LandingFallSpecial`, and active special states remain excluded by tests.
+  - `F22_specialhi_firefox_firebird`: Firefox hold/launch/fall/landing/bound and CliffCatch tails
+    remain active, separate from common `FallSpecial`, pure HoldAir hurtbox-state, damage, and
+    ground-id rows. The occupied-ledge `SpecialHiFall -> CliffCatch` false-positive cluster is
+    closed by slow ledge-option occupancy.
+  - `F19`: primary is zero after SpecialAirNLoop -> Damage scalar rows moved to `F08d`; aggregate
+    still has blaster article/action loop/end tails. Pure SpecialN hurtbox/source tails moved to
+    shared state/combat owners. `F21` is zero in the refreshed taxonomy after
+    Side-B hurtbox/bookkeeping/contact tails were hard-moved to their shared non-Side-B owners.
+  - `F24`: zero after hardening. Source-backed special callback rows stay eligible for F24, but
+    the remaining direct special-boundary pure instance rows are generic instance-order or damage
+    identity owners; the non-prefix-causal broad special-boundary override remains rejected.
+  - `F13a`, `F14b`, `F15`, `F16`, and `F17` rows remain assigned to common landing/freefall action
+    timing, mixed per-throw pulse, guard/item, item identity, and collision/ledge owners
+    respectively.
+  - Pure `F25_camera_box_visibility_x221f` rows are not special-move residuals; they are kept under
+    the state-flag/camera owner until that owner is closed.
 - Acceptance bar:
   - special moves are grouped by decomp owner, not patched row-by-row
   - `SpecialHi` landing/fall and `SpecialLw` / `ThrownLw` pulse behavior live in named family work, not misc buckets

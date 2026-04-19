@@ -14,9 +14,9 @@ def test_instance_id_does_not_bump_on_specialairnstart_to_loop_record_108() -> N
     # Regression lock: entering SpecialAirNLoop from SpecialAirNStart should not bump Slippi-visible
     # action-state instance_id (fp->x2088).
     #
-    # Root cause fixed in src/instance_id.c: ft_80089824 is called by x21EC OnChangeAction hooks tied
-    # to the *action being left*, not the action being entered; SpecialAirNStart -> Loop does not
-    # install x21EC in decomp.
+    # Root cause fixed in src/instance_id.c: Fox/Falco SpecialN's ft_80089824 writer is called by
+    # x21EC OnChangeAction only on loop-restart hooks; SpecialAirNStart -> Loop does not install
+    # x21EC in decomp.
     #
     # refs/melee/build/GALE01/asm/melee/ft/ft_0892.s::ft_800895E0
     # refs/melee/build/GALE01/asm/melee/ft/ft_0892.s::ft_80089824
@@ -80,3 +80,56 @@ def test_instance_id_does_not_bump_on_specialairnstart_to_loop_record_108() -> N
     finally:
         binding.destroy(handle)
 
+
+@pytest.mark.integration
+def test_attacklw3_entry_consumes_x21ec_instance_writer_replay_real_lock() -> None:
+    # AttackLw3's doEnter installs x21EC=callUnk before Fighter_ChangeMotionState(AttackLw3).
+    # fighter.c calls x21EC after ft_800895E0 in the same entry bundle, and callUnk calls
+    # ft_80089824, consuming one additional plAttack_80037B08 id.
+    #
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackLw3.c::{doEnter,callUnk}
+    # refs/melee/src/melee/ft/fighter.c (x21EC call after ft_800895E0)
+    # refs/melee/build/GALE01/asm/melee/ft/ft_0892.s::{ft_800895E0,ft_80089824}
+    root = Path(__file__).resolve().parents[1]
+    expected_rel = (
+        "datasets/fox_falco_fd_ucf084_recent/replays/validation/"
+        "cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl"
+    )
+    dataset_path = root / expected_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {expected_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    record = 1464
+    row = ds.samples[record : record + 1]
+    p = 1
+    assert int(row["seed_t"]["action_id"][0, p]) == 43  # LandingFallSpecial
+    assert int(row["ref_t1"]["action_id"][0, p]) == 57  # AttackLw3
+    assert int(row["seed_t"]["motion_entry_instance_id_override_u16"][0, p]) == 0
+
+    binding = importlib.import_module("msl_binding")
+    sizes = binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    compare_stride = int(sizes["compare"])
+
+    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    try:
+        seed_bytes = np.frombuffer(row["seed_t"].tobytes(order="C"), dtype=np.uint8).reshape(1, seed_stride).copy()
+        prev_input_bytes = np.frombuffer(row["prev_input_t"].tobytes(order="C"), dtype=np.uint8).reshape(
+            1, input_stride
+        ).copy()
+        input_bytes = np.frombuffer(row["input_t"].tobytes(order="C"), dtype=np.uint8).reshape(
+            1, input_stride
+        ).copy()
+        out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
+
+        binding.reseed_seed(handle, seed_bytes)
+        binding.step_input(handle, prev_input_bytes, input_bytes)
+        binding.write_compare(handle, out_compare_bytes)
+
+        out = out_compare_bytes.view(COMPARE_DTYPE).reshape(-1)
+        assert int(out["action_id"][0, p]) == int(row["ref_t1"]["action_id"][0, p])
+        assert int(out["instance_id"][0, p]) == int(row["ref_t1"]["instance_id"][0, p])
+    finally:
+        binding.destroy(handle)

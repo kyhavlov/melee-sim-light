@@ -291,7 +291,7 @@ def test_debug_body_contact_split_routes_resolved_geometry_residuals_to_named_ow
             filtered_body_candidate_count=1,
             first_msid=313,
         )
-        == "F20_speciallw_shine_reflector"
+        == "F08f_body_contact_candidate_filter_residual"
     )
     assert (
         _family_for_debug_body_contact_residual(
@@ -437,7 +437,27 @@ def test_classify_player_row_does_not_hide_special_adjacency_in_mpcoll_residual(
     assert got == "F23_special_common_entry_dispatch"
 
 
-def test_classify_player_row_splits_landingfallspecial_special_entry_dispatch() -> None:
+def test_classify_player_row_keeps_kneebend_out_of_common_special_dispatch() -> None:
+    row = _player_row(
+        seed_action_id=24,
+        ref_action_id=353,
+        out_action_id=24,
+        prev_action_id=84,
+        fields=("action_id", "animation_index", "instance_id"),
+        on_ground=1,
+    )
+    got = _classify_player_row(
+        row,
+        {
+            24: "KNEE_BEND",
+            84: "DAMAGE_AIR_1",
+            353: "FX_SPECIAL_HI_HOLD",
+        },
+    )
+    assert got == "F22_specialhi_firefox_firebird"
+
+
+def test_classify_player_row_keeps_landingfallspecial_out_of_common_special_dispatch() -> None:
     row = _player_row(
         seed_action_id=43,
         ref_action_id=360,
@@ -453,7 +473,509 @@ def test_classify_player_row_splits_landingfallspecial_special_entry_dispatch() 
             360: "FX_SPECIAL_LW_START",
         },
     )
+    assert got == "F20_speciallw_shine_reflector"
+
+
+def test_classify_player_row_keeps_active_special_out_of_common_special_dispatch() -> None:
+    row = _player_row(
+        seed_action_id=369,
+        ref_action_id=27,
+        out_action_id=354,
+        prev_action_id=369,
+        fields=("action_id", "animation_index", "action_frame", "instance_id"),
+        on_ground=0,
+    )
+    got = _classify_player_row(
+        row,
+        {
+            27: "JUMP_AERIAL_F",
+            354: "FX_SPECIAL_HI_HOLD_AIR",
+            369: "FX_SPECIAL_AIR_LW_TURN",
+        },
+    )
+    assert got == "F20_speciallw_shine_reflector"
+
+
+def test_classify_player_row_keeps_jumpaerial_special_entry_in_common_dispatch() -> None:
+    row = _player_row(
+        seed_action_id=27,
+        ref_action_id=344,
+        out_action_id=65,
+        prev_action_id=27,
+        fields=("action_id", "animation_index"),
+        on_ground=0,
+    )
+    got = _classify_player_row(
+        row,
+        {
+            27: "JUMP_AERIAL_F",
+            65: "ATTACK_AIR_N",
+            344: "FX_SPECIAL_AIR_N_START",
+        },
+    )
     assert got == "F23_special_common_entry_dispatch"
+
+
+def test_classify_player_row_hard_moves_specials_hurtbox_tail_to_aerial_stateflag() -> None:
+    row = _player_row(
+        seed_action_id=350,
+        ref_action_id=350,
+        out_action_id=350,
+        prev_action_id=350,
+        fields=("hurtbox_state",),
+        on_ground=0,
+    )
+    got = _classify_player_row(
+        row,
+        {
+            350: "FX_SPECIAL_AIR_S_START",
+        },
+    )
+    assert got == "F09a_aerial_stateflag_hurtbox_adjacency"
+
+
+def test_classify_player_row_hard_moves_specials_bookkeeping_tail_to_aerial_bookkeeping() -> None:
+    row = _player_row(
+        seed_action_id=352,
+        ref_action_id=352,
+        out_action_id=352,
+        prev_action_id=351,
+        fields=("combo_count", "last_attack_landed"),
+        on_ground=0,
+    )
+    got = _classify_player_row(
+        row,
+        {
+            351: "FX_SPECIAL_AIR_S",
+            352: "FX_SPECIAL_AIR_S_END",
+        },
+    )
+    assert got == "F09b_aerial_bookkeeping_adjacency"
+
+
+def test_classify_player_row_hard_moves_specials_contact_tail_to_body_filter() -> None:
+    row = _player_row(
+        seed_action_id=352,
+        ref_action_id=90,
+        out_action_id=352,
+        prev_action_id=352,
+        fields=("action_id", "animation_index", "hitlag", "hitstun", "instance_hit_by", "state_flags[1]"),
+        on_ground=0,
+        hitlag=0,
+    )
+    got = _classify_player_row(
+        row,
+        {
+            90: "DAMAGE_FLY_TOP",
+            352: "FX_SPECIAL_AIR_S_END",
+        },
+    )
+    assert got == "F08f_body_contact_candidate_filter_residual"
+
+
+def test_classify_player_row_hard_moves_specialhi_holdair_hurtbox_tail_to_aerial_stateflag() -> None:
+    row = _player_row(
+        seed_action_id=354,
+        ref_action_id=354,
+        out_action_id=354,
+        prev_action_id=354,
+        fields=("hurtbox_state",),
+        on_ground=0,
+    )
+    got = _classify_player_row(
+        row,
+        {
+            354: "FX_SPECIAL_HI_HOLD_AIR",
+        },
+    )
+    assert got == "F09a_aerial_stateflag_hurtbox_adjacency"
+
+
+def test_classify_player_row_keeps_specialhi_holdair_launch_tail_in_firefox_owner() -> None:
+    row = _player_row(
+        seed_action_id=354,
+        ref_action_id=356,
+        out_action_id=356,
+        prev_action_id=354,
+        fields=("jumps_left",),
+        on_ground=0,
+    )
+    got = _classify_player_row(
+        row,
+        {
+            354: "FX_SPECIAL_HI_HOLD_AIR",
+            356: "FX_SPECIAL_AIR_HI",
+        },
+    )
+    assert got == "F22_specialhi_firefox_firebird"
+
+
+def test_classify_player_row_keeps_specialhi_bound_collision_in_firefox_owner() -> None:
+    row = _player_row(
+        seed_action_id=356,
+        ref_action_id=359,
+        out_action_id=356,
+        prev_action_id=356,
+        fields=("action_id", "animation_index", "action_frame"),
+        on_ground=0,
+    )
+    got = _classify_player_row(
+        row,
+        {
+            356: "FX_SPECIAL_AIR_HI",
+            359: "FX_SPECIAL_HI_BOUND",
+        },
+    )
+    assert got == "F22_specialhi_firefox_firebird"
+
+
+def test_classify_player_row_moves_specialhi_landing_ground_id_to_mpcoll() -> None:
+    row = _player_row(
+        seed_action_id=357,
+        ref_action_id=357,
+        out_action_id=357,
+        prev_action_id=357,
+        fields=("ground_id",),
+        on_ground=1,
+    )
+    got = _classify_player_row(
+        row,
+        {
+            357: "FX_SPECIAL_HI_LANDING",
+        },
+    )
+    assert got == "F10c_collision_landing_edge_adjacency"
+
+
+def test_classify_player_row_moves_specialhi_damage_tail_to_damage_owner() -> None:
+    row = _player_row(
+        seed_action_id=359,
+        ref_action_id=90,
+        out_action_id=90,
+        prev_action_id=359,
+        fields=("jumps_left",),
+        on_ground=0,
+    )
+    got = _classify_player_row(
+        row,
+        {
+            90: "DAMAGE_FLY_TOP",
+            359: "FX_SPECIAL_HI_BOUND",
+        },
+    )
+    assert got == "F08c_damage_state_transition_adjacency"
+
+
+def test_classify_player_row_splits_passivewalljump_special_entry_dispatch() -> None:
+    row = _player_row(
+        seed_action_id=203,
+        ref_action_id=365,
+        out_action_id=203,
+        prev_action_id=203,
+        fields=("action_id", "animation_index", "action_frame", "instance_id"),
+        on_ground=0,
+    )
+    got = _classify_player_row(
+        row,
+        {
+            203: "PASSIVE_WALL_JUMP",
+            365: "FX_SPECIAL_AIR_LW_START",
+        },
+    )
+    assert got == "F23_special_common_entry_dispatch"
+
+
+def test_classify_player_row_moves_pure_grounded_shine_hurtbox_tail_to_stateflag_owner() -> None:
+    row = _player_row(
+        seed_action_id=360,
+        ref_action_id=360,
+        out_action_id=360,
+        prev_action_id=40,
+        fields=("hurtbox_state",),
+        on_ground=1,
+    )
+    got = _classify_player_row(
+        row,
+        {
+            40: "SQUAT_WAIT",
+            360: "FX_SPECIAL_LW_START",
+        },
+    )
+    assert got == "F10d_hurtbox_stateflag_adjacency"
+
+
+def test_classify_player_row_keeps_prior_special_entry_contact_out_of_common_dispatch() -> None:
+    row = _player_row(
+        seed_action_id=361,
+        ref_action_id=361,
+        out_action_id=90,
+        prev_action_id=360,
+        fields=("action_id", "animation_index", "hitlag", "hitstun", "state_flags[1]"),
+        on_ground=1,
+    )
+    got = _classify_player_row(
+        row,
+        {
+            90: "DAMAGE_FLY_TOP",
+            360: "FX_SPECIAL_LW_START",
+            361: "FX_SPECIAL_LW_LOOP",
+        },
+    )
+    assert got == "F20_speciallw_shine_reflector"
+
+
+def test_classify_player_row_moves_pure_grounded_shine_stateflag_tail_to_stateflag_owner() -> None:
+    row = _player_row(
+        seed_action_id=50,
+        ref_action_id=360,
+        out_action_id=360,
+        prev_action_id=50,
+        fields=("state_flags[0]",),
+        on_ground=1,
+    )
+    got = _classify_player_row(
+        row,
+        {
+            50: "ATTACK_DASH",
+            360: "FX_SPECIAL_LW_START",
+        },
+    )
+    assert got == "F10d_hurtbox_stateflag_adjacency"
+
+
+def test_classify_player_row_moves_pure_aerial_shine_hurtbox_tail_to_aerial_stateflag() -> None:
+    row = _player_row(
+        seed_action_id=366,
+        ref_action_id=366,
+        out_action_id=366,
+        prev_action_id=366,
+        fields=("hurtbox_state",),
+        on_ground=0,
+    )
+    got = _classify_player_row(
+        row,
+        {
+            366: "FX_SPECIAL_AIR_LW_LOOP",
+        },
+    )
+    assert got == "F09a_aerial_stateflag_hurtbox_adjacency"
+
+
+def test_classify_player_row_moves_pure_grounded_shine_hitlag_scalar_to_combat() -> None:
+    row = _player_row(
+        seed_action_id=39,
+        ref_action_id=360,
+        out_action_id=360,
+        prev_action_id=199,
+        fields=("hitlag",),
+        on_ground=1,
+    )
+    got = _classify_player_row(
+        row,
+        {
+            39: "SQUAT",
+            199: "PASSIVE",
+            360: "FX_SPECIAL_LW_START",
+        },
+    )
+    assert got == "F10b_grounded_combat_adjacency"
+
+
+def test_classify_player_row_moves_pure_grounded_shine_source_bookkeeping_to_combat() -> None:
+    row = _player_row(
+        seed_action_id=360,
+        ref_action_id=361,
+        out_action_id=361,
+        prev_action_id=360,
+        fields=("last_hit_by",),
+        on_ground=1,
+    )
+    got = _classify_player_row(
+        row,
+        {
+            360: "FX_SPECIAL_LW_START",
+            361: "FX_SPECIAL_LW_LOOP",
+        },
+    )
+    assert got == "F10b_grounded_combat_adjacency"
+
+
+def test_classify_player_row_moves_pure_aerial_shine_source_bookkeeping_to_aerial_combat() -> None:
+    row = _player_row(
+        seed_action_id=25,
+        ref_action_id=365,
+        out_action_id=365,
+        prev_action_id=24,
+        fields=("last_attack_landed",),
+        on_ground=0,
+    )
+    got = _classify_player_row(
+        row,
+        {
+            24: "KNEE_BEND",
+            25: "JUMP_F",
+            365: "FX_SPECIAL_AIR_LW_START",
+        },
+    )
+    assert got == "F09b_aerial_bookkeeping_adjacency"
+
+
+def test_classify_player_row_moves_grounded_shine_contact_bookkeeping_to_combat_owner() -> None:
+    row = _player_row(
+        seed_action_id=39,
+        ref_action_id=360,
+        out_action_id=360,
+        prev_action_id=39,
+        fields=("hitlag", "last_attack_landed", "state_flags[1]"),
+        on_ground=1,
+    )
+    got = _classify_player_row(
+        row,
+        {
+            39: "SQUAT",
+            360: "FX_SPECIAL_LW_START",
+        },
+    )
+    assert got == "F10b_grounded_combat_adjacency"
+
+
+def test_classify_player_row_moves_missed_damage_from_shine_defender_to_damage_owner() -> None:
+    row = _player_row(
+        seed_action_id=363,
+        ref_action_id=76,
+        out_action_id=363,
+        prev_action_id=363,
+        fields=(
+            "action_id",
+            "animation_index",
+            "hitlag",
+            "hitstun",
+            "instance_id",
+            "on_ground",
+            "state_flags[1]",
+        ),
+        on_ground=1,
+    )
+    got = _classify_player_row(
+        row,
+        {
+            76: "DAMAGE_HI_2",
+            363: "FX_SPECIAL_LW_END",
+        },
+    )
+    assert got == "F08c_damage_state_transition_adjacency"
+
+
+def test_classify_player_row_moves_pure_landingfallspecial_source_bookkeeping_to_combat() -> None:
+    row = _player_row(
+        seed_action_id=43,
+        ref_action_id=43,
+        out_action_id=43,
+        prev_action_id=43,
+        fields=("last_hit_by",),
+        on_ground=1,
+    )
+    got = _classify_player_row(
+        row,
+        {
+            43: "LANDING_FALL_SPECIAL",
+        },
+    )
+    assert got == "F10b_grounded_combat_adjacency"
+
+
+def test_classify_player_row_keeps_landingfallspecial_collision_bundle_in_common_owner() -> None:
+    row = _player_row(
+        seed_action_id=236,
+        ref_action_id=43,
+        out_action_id=236,
+        prev_action_id=236,
+        fields=("action_id", "animation_index", "on_ground"),
+        on_ground=0,
+    )
+    got = _classify_player_row(
+        row,
+        {
+            43: "LANDING_FALL_SPECIAL",
+            236: "ESCAPE_AIR",
+        },
+    )
+    assert got == "F13a_common_fallspecial_landing"
+
+
+def test_classify_player_row_moves_landingfallspecial_damage_scalar_to_damage_owner() -> None:
+    row = _player_row(
+        seed_action_id=43,
+        ref_action_id=80,
+        out_action_id=43,
+        prev_action_id=43,
+        fields=("action_id", "animation_index", "hitlag", "hitstun", "state_flags[1]"),
+        on_ground=1,
+    )
+    got = _classify_player_row(
+        row,
+        {
+            43: "LANDING_FALL_SPECIAL",
+            80: "DAMAGE_N_3",
+        },
+    )
+    assert got == "F08d_damage_timer_scalar_residual"
+
+
+def test_classify_player_row_moves_escapeair_damage_transition_to_damage_owner() -> None:
+    row = _player_row(
+        seed_action_id=84,
+        ref_action_id=236,
+        out_action_id=84,
+        prev_action_id=84,
+        fields=("action_id", "animation_index", "state_flags[1]"),
+        on_ground=0,
+    )
+    got = _classify_player_row(
+        row,
+        {
+            84: "DAMAGE_AIR_1",
+            236: "ESCAPE_AIR",
+        },
+    )
+    assert got == "F08d_damage_timer_scalar_residual"
+
+
+def test_classify_player_row_moves_landingfallspecial_ground_id_tail_to_mpcoll() -> None:
+    row = _player_row(
+        seed_action_id=43,
+        ref_action_id=43,
+        out_action_id=43,
+        prev_action_id=43,
+        fields=("ground_id",),
+        on_ground=1,
+    )
+    got = _classify_player_row(
+        row,
+        {
+            43: "LANDING_FALL_SPECIAL",
+        },
+    )
+    assert got == "F10c_collision_landing_edge_adjacency"
+
+
+def test_classify_player_row_moves_escapeair_stateflag_tail_to_aerial_stateflag() -> None:
+    row = _player_row(
+        seed_action_id=236,
+        ref_action_id=35,
+        out_action_id=35,
+        prev_action_id=236,
+        fields=("state_flags[1]",),
+        on_ground=0,
+    )
+    got = _classify_player_row(
+        row,
+        {
+            35: "FALL_SPECIAL",
+            236: "ESCAPE_AIR",
+        },
+    )
+    assert got == "F09a_aerial_stateflag_hurtbox_adjacency"
 
 
 def test_classify_player_row_splits_specialn_blaster_owner() -> None:
@@ -474,6 +996,140 @@ def test_classify_player_row_splits_specialn_blaster_owner() -> None:
         },
     )
     assert got == "F19_specialn_blaster_article"
+
+
+def test_classify_player_row_moves_pure_specialairn_stateflag_to_aerial_stateflag_owner() -> None:
+    row = _player_row(
+        seed_action_id=345,
+        ref_action_id=345,
+        out_action_id=345,
+        prev_action_id=344,
+        fields=("state_flags[1]",),
+        on_ground=0,
+    )
+    got = _classify_player_row(
+        row,
+        {
+            344: "FX_SPECIAL_AIR_N_START",
+            345: "FX_SPECIAL_AIR_N_LOOP",
+        },
+    )
+    assert got == "F09a_aerial_stateflag_hurtbox_adjacency"
+
+
+def test_classify_player_row_moves_pure_specialairn_hurtbox_to_aerial_stateflag_owner() -> None:
+    row = _player_row(
+        seed_action_id=345,
+        ref_action_id=345,
+        out_action_id=345,
+        prev_action_id=345,
+        fields=("hurtbox_state",),
+        on_ground=0,
+    )
+    got = _classify_player_row(
+        row,
+        {
+            345: "FX_SPECIAL_AIR_N_LOOP",
+        },
+    )
+    assert got == "F09a_aerial_stateflag_hurtbox_adjacency"
+
+
+def test_classify_player_row_moves_pure_specialn_source_to_combat_bookkeeping() -> None:
+    row = _player_row(
+        seed_action_id=342,
+        ref_action_id=342,
+        out_action_id=342,
+        prev_action_id=342,
+        fields=("combo_count", "last_attack_landed"),
+        on_ground=1,
+    )
+    got = _classify_player_row(
+        row,
+        {
+            342: "FX_SPECIAL_N_LOOP",
+        },
+    )
+    assert got == "F10b_grounded_combat_adjacency"
+
+
+def test_classify_player_row_moves_prev_specialn_landing_ottotto_tail_to_mpcoll() -> None:
+    row = _player_row(
+        seed_action_id=42,
+        ref_action_id=245,
+        out_action_id=29,
+        prev_action_id=345,
+        fields=("action_id", "animation_index", "jumps_left", "on_ground"),
+        on_ground=1,
+    )
+    got = _classify_player_row(
+        row,
+        {
+            29: "FALL",
+            42: "LANDING",
+            245: "OTTOTTO",
+            345: "FX_SPECIAL_AIR_N_LOOP",
+        },
+    )
+    assert got == "F10c_collision_landing_edge_adjacency"
+
+
+def test_classify_player_row_moves_prev_speciallw_grounded_source_to_combat_bookkeeping() -> None:
+    row = _player_row(
+        seed_action_id=24,
+        ref_action_id=24,
+        out_action_id=24,
+        prev_action_id=361,
+        fields=("last_hit_by",),
+        on_ground=1,
+    )
+    got = _classify_player_row(
+        row,
+        {
+            24: "KNEE_BEND",
+            361: "FX_SPECIAL_LW_LOOP",
+        },
+    )
+    assert got == "F10b_grounded_combat_adjacency"
+
+
+def test_classify_player_row_keeps_active_specialn_landing_handoff_in_specialn() -> None:
+    row = _player_row(
+        seed_action_id=345,
+        ref_action_id=42,
+        out_action_id=346,
+        prev_action_id=345,
+        fields=("action_id", "animation_index", "instance_id", "jumps_left", "on_ground"),
+        on_ground=0,
+    )
+    got = _classify_player_row(
+        row,
+        {
+            42: "LANDING",
+            345: "FX_SPECIAL_AIR_N_LOOP",
+            346: "FX_SPECIAL_AIR_N_END",
+        },
+    )
+    assert got == "F19_specialn_blaster_article"
+
+
+def test_classify_player_row_moves_specialairn_damage_scalar_to_damage_owner() -> None:
+    row = _player_row(
+        seed_action_id=345,
+        ref_action_id=75,
+        out_action_id=75,
+        prev_action_id=345,
+        fields=("facing", "hitlag"),
+        on_ground=0,
+    )
+    got = _classify_player_row(
+        row,
+        {
+            75: "DAMAGE_HI_1",
+            345: "FX_SPECIAL_AIR_N_LOOP",
+        },
+    )
+    assert got == "F08d_damage_timer_scalar_residual"
 
 
 def test_classify_player_row_splits_shine_air_ground_owner() -> None:
@@ -537,7 +1193,7 @@ def test_classify_player_row_splits_firefox_from_common_fallspecial() -> None:
     )
 
 
-def test_classify_player_row_splits_special_instance_order() -> None:
+def test_classify_player_row_moves_direct_special_entry_instance_order_to_generic_owner() -> None:
     row = _player_row(
         seed_action_id=27,
         ref_action_id=344,
@@ -553,16 +1209,50 @@ def test_classify_player_row_splits_special_instance_order() -> None:
             344: "FX_SPECIAL_AIR_N_START",
         },
     )
+    assert got == "F12b_adjacent_instance_counter_order"
+
+
+def test_classify_player_row_keeps_specialn_loop_restart_instance_order_in_f24() -> None:
+    row = _player_row(
+        seed_action_id=345,
+        ref_action_id=345,
+        out_action_id=345,
+        prev_action_id=345,
+        seed_action_frame=11,
+        ref_action_frame=0,
+        out_action_frame=0,
+        fields=("instance_id",),
+        on_ground=0,
+    )
+    got = _classify_player_row(
+        row,
+        {
+            345: "FX_SPECIAL_AIR_N_LOOP",
+        },
+    )
     assert got == "F24_special_adjacent_instance_order"
 
 
-def test_classify_player_row_splits_per_throw_pulse_from_misc() -> None:
+def test_classify_player_row_moves_pure_throw_score_to_common_throw_bookkeeping() -> None:
     row = _player_row(
         seed_action_id=222,
         ref_action_id=222,
         out_action_id=222,
         prev_action_id=222,
         fields=("combo_count",),
+        on_ground=1,
+    )
+    got = _classify_player_row(row, {222: "THROW_LW"})
+    assert got == "F14_throw_item_bookkeeping"
+
+
+def test_classify_player_row_keeps_mixed_throw_pulse_in_f14b() -> None:
+    row = _player_row(
+        seed_action_id=222,
+        ref_action_id=222,
+        out_action_id=222,
+        prev_action_id=222,
+        fields=("hitlag", "state_flags[1]"),
         on_ground=1,
     )
     got = _classify_player_row(row, {222: "THROW_LW"})

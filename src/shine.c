@@ -114,6 +114,11 @@ static inline uint8_t action_allows_shine_entry_ground(uint16_t action_id) {
   //   not call ftCo_SpecialS_CheckInput or ftCo_800D68C0, so grounded SpecialLw cannot enter from
   //   RunBrake on the same frame.
   //   refs/melee/src/melee/ft/chara/ftCommon/ftCo_RunBrake.c::ftCo_RunBrake_IASA
+  // - GuardOn / Guard / GuardReflect do not route through ftCo_800D68C0, and GuardSetOff_IASA is
+  //   empty. GuardOff is the shield-family state whose IASA can call ftCo_800D68C0.
+  //   refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
+  //     ftCo_GuardOn_IASA,ftCo_Guard_IASA,ftCo_GuardSetOff_IASA,ftCo_GuardReflect_IASA,
+  //     ftCo_GuardOff_IASA}
   switch (action_id) {
     case MSL_ACT_WAIT:
     case MSL_ACT_WALK_SLOW:
@@ -132,11 +137,7 @@ static inline uint8_t action_allows_shine_entry_ground(uint16_t action_id) {
     case MSL_ACT_SQUAT:
     case MSL_ACT_SQUAT_WAIT:
     case MSL_ACT_SQUAT_RV:
-    case MSL_ACT_GUARD_ON:
-    case MSL_ACT_GUARD:
     case MSL_ACT_GUARD_OFF:
-    case MSL_ACT_GUARD_SET_OFF:
-    case MSL_ACT_GUARD_REFLECT:
       return 1u;
     default:
       return 0u;
@@ -232,6 +233,14 @@ static inline uint8_t action_allows_shine_entry_air(const MslBatch* batch, size_
     case MSL_ACT_FALL_AERIAL_B:
     case MSL_ACT_DAMAGE_FALL:
       return 1u;
+    case MSL_ACT_PASSIVE_WALL:
+    case MSL_ACT_PASSIVE_WALL_JUMP:
+      // PassiveWall IASA checks ftCo_SpecialAir_CheckInput before AttackAir/item branches once
+      // mv.co.passivewall.timer has expired.
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_PassiveWall.c::{
+      //   ftCo_PassiveWall_IASA,inlineA0}
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_SpecialAir.c::ftCo_SpecialAir_CheckInput
+      return (batch->state.passivewall_timer[idx] == 0u) ? 1u : 0u;
     default:
       break;
   }
@@ -926,6 +935,18 @@ void shine_update_post_collision(MslBatch* batch) {
           batch->state.animation_index[idx] = (uint32_t)ms->speciallw_air_end;
         } else if (a2 == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_LW_TURN) {
           batch->state.animation_index[idx] = (uint32_t)ms->speciallw_air_loop;
+        }
+        // Decomp: every grounded Shine ground->air collision handler calls ftCommon_8007D5D4
+        // before Fighter_ChangeMotionState. That helper sets x1968_jumpsUsed=1; Slippi exposes
+        // the inverse jumps-left lane, so preserve max_jumps-1 across this handoff.
+        // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c::{
+        //   ftFx_SpecialLwStart_GroundToAir,ftFx_SpecialLwLoop_GroundToAir,
+        //   ftFx_SpecialLwHit_GroundToAir,ftFx_SpecialLwEnd_GroundToAir,
+        //   ftFx_SpecialLwTurn_GroundToAir}
+        // refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007D5D4
+        const MslCharParams* ch = msl_char_params(cid);
+        if (ch != NULL) {
+          batch->state.jumps_left[idx] = (ch->max_jumps > 0u) ? (uint8_t)(ch->max_jumps - 1u) : 0u;
         }
         msl_anim_timebase_enter(batch, idx, cur_frame, 1.0f);
       } else if (action_is_shine_air(a) && on_ground) {

@@ -75,6 +75,10 @@ _AGG_BASE = "datasets/aggregate_recent/replays/validation/aggregate_recent"
         # same-frame B+down input must not enter Reflector/shine from RunBrake.
         # refs/melee/src/melee/ft/chara/ftCommon/ftCo_RunBrake.c::ftCo_RunBrake_IASA
         _Case(f"{_AGG_BASE}/PutridJoyousOryx.msl", 575, 0, 23, 39),
+        # Replay-real negative lock: GuardSetOff_IASA is empty, so a B+down row must not enter
+        # Reflector/shine from GuardSetOff and create a replay-false Shine Start hit.
+        # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_GuardSetOff_IASA
+        _Case(f"{_AGG_BASE}/PositiveRevolvingHyena.msl", 4884, 1, 181, 181),
         # Adjacent positive control: SquatWait (40) still dispatches to SpecialLwStart.
         _Case(f"{_BASE}/GracefulAttachedTurtle.msl", 148, 0, 40, 360),
     ],
