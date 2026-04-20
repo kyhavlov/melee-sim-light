@@ -104,11 +104,11 @@ mismatch.last_attack_landed: 2 / 23058 (0.000087)
 mismatch.combo_count: 1 / 23058 (0.000043)
 mismatch.last_hit_by: 9 / 23058 (0.000390)
 mismatch.state_flags: 35 / 115290 (0.000304)
-mismatch.item_exists: 4 / 172935 (0.000023)
-mismatch.item_type: 4 / 172935 (0.000023)
+mismatch.item_exists: 3 / 172935 (0.000017)
+mismatch.item_type: 3 / 172935 (0.000017)
 mismatch.item_state: 1 / 172935 (0.000006)
-mismatch.item_owner: 6 / 172935 (0.000035)
-mismatch.item_instance_id: 6 / 172935 (0.000035)
+mismatch.item_owner: 5 / 172935 (0.000029)
+mismatch.item_instance_id: 5 / 172935 (0.000029)
 err.pos_x: mae=0.014103 p95=0.000001 max=14.919506
 err.pos_y: mae=0.003299 p95=0.000000 max=7.826638
 err.speed_air_x_self: mae=0.005796 p95=0.000000 max=1.840000
@@ -122,7 +122,7 @@ err.item_pos_x: mae=0.044743 p95=0.000000 max=39.815655
 err.item_pos_y: mae=0.013793 p95=0.000000 max=26.796017
 err.item_vel_x: mae=0.018981 p95=0.000000 max=8.408197
 err.item_vel_y: mae=0.003829 p95=0.000000 max=4.999367
-overall.discrete_mismatch: 196 / 1395009
+overall.discrete_mismatch: 192 / 1395009
 overall.float_norm_mae_p95: 0.00087550
 
 == datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/QuerulousGrandDinosaur.msl ==
@@ -188,11 +188,11 @@ mismatch.last_attack_landed: 4 / 15674 (0.000255)
 mismatch.combo_count: 3 / 15674 (0.000191)
 mismatch.last_hit_by: 6 / 15674 (0.000383)
 mismatch.state_flags: 39 / 78370 (0.000498)
-mismatch.item_exists: 5 / 117555 (0.000043)
-mismatch.item_type: 5 / 117555 (0.000043)
+mismatch.item_exists: 4 / 117555 (0.000034)
+mismatch.item_type: 4 / 117555 (0.000034)
 mismatch.item_state: 1 / 117555 (0.000009)
-mismatch.item_owner: 6 / 117555 (0.000051)
-mismatch.item_instance_id: 6 / 117555 (0.000051)
+mismatch.item_owner: 5 / 117555 (0.000043)
+mismatch.item_instance_id: 5 / 117555 (0.000043)
 err.pos_x: mae=0.015551 p95=0.000000 max=6.000000
 err.pos_y: mae=0.005703 p95=0.000000 max=6.677049
 err.speed_air_x_self: mae=0.009703 p95=0.000000 max=1.815992
@@ -206,9 +206,9 @@ err.item_pos_x: mae=0.070895 p95=0.000000 max=73.618073
 err.item_pos_y: mae=0.025521 p95=0.000000 max=31.795383
 err.item_vel_x: mae=0.020464 p95=0.000000 max=7.000000
 err.item_vel_y: mae=0.003790 p95=0.000000 max=4.999367
-overall.discrete_mismatch: 171 / 948277
+overall.discrete_mismatch: 167 / 948277
 overall.float_norm_mae_p95: 0.00130806
 
 == suite summary ==
-overall.discrete_mismatch: 619 / 4462843
+overall.discrete_mismatch: 611 / 4462843
 overall.float_norm_mae_p95: 0.00093100

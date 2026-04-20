@@ -49,12 +49,12 @@ def test_modelplay_fox_fox_sideb_body_hit_launches_victim_instead_of_freezing() 
     # - Fox Illusion body hit in the fox_fox_2 trace used to leave the victim effectively frozen
     #   in DamageFly on the floor.
     # - The clean owner split is:
-    #   1) Side-B BODY hits persist the Illusion article through item hitlag instead of consuming it
-    #      (`itFoxIllusion_Logic14_DmgDealt` returns false),
+    #   1) Side-B BODY hits persist the Illusion article without generic item hitlag instead of
+    #      consuming it (`itFoxIllusion_Logic14_DmgDealt` returns false and clears xCA8),
     #   2) item BODY hits use the same ftCo_8008DCE0 grounded-vs-airborne knockback install as
     #      fighter BODY hits.
     # refs/melee/src/melee/it/items/itfoxillusion.c::itFoxIllusion_Logic14_DmgDealt
-    # refs/melee/src/melee/it/item.c::{Item_802697D4,checkHitLag}
+    # refs/melee/src/melee/it/item.c::{OnGiveDamageThink,checkHitLag}
     # refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
     _require_local_data_or_skip()

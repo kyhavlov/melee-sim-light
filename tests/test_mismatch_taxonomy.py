@@ -1553,7 +1553,7 @@ def test_classify_player_row_moves_pure_throw_score_to_common_throw_bookkeeping(
         on_ground=1,
     )
     got = _classify_player_row(row, {222: "THROW_LW"})
-    assert got == "F14_throw_item_bookkeeping"
+    assert got == "F14d_throw_source_scoreboard"
 
 
 def test_classify_player_row_moves_action_aligned_throw_contact_tail_to_common_throw() -> None:
@@ -1566,7 +1566,7 @@ def test_classify_player_row_moves_action_aligned_throw_contact_tail_to_common_t
         on_ground=1,
     )
     got = _classify_player_row(row, {222: "THROW_LW"})
-    assert got == "F14_throw_item_bookkeeping"
+    assert got == "F14d_throw_source_scoreboard"
 
 
 def test_classify_player_row_moves_thrownlw_instance_hit_tail_to_common_throw() -> None:
@@ -1579,7 +1579,7 @@ def test_classify_player_row_moves_thrownlw_instance_hit_tail_to_common_throw() 
         on_ground=1,
     )
     got = _classify_player_row(row, {242: "THROWN_LW"})
-    assert got == "F14_throw_item_bookkeeping"
+    assert got == "F14d_throw_source_scoreboard"
 
 
 def test_classify_player_row_splits_turn_hidden_microphase_from_grounded_selector() -> None:
@@ -1670,7 +1670,27 @@ def test_classify_item_slot_row_detects_throwhi_item_lane() -> None:
         family_id="F99_misc_other",
     )
     got = _classify_item_slot_row(row, {90: "DAMAGE_FLY_TOP", 221: "THROW_HI", 241: "THROWN_HI"})
-    assert got == "F14_throw_item_bookkeeping"
+    assert got == "F14c_throw_article_lifetime"
+
+
+def test_classify_item_slot_row_moves_pure_blaster_gun_xda8_to_instance_owner() -> None:
+    row = ItemSlotRow(
+        dataset="BlondHardHippopotamus.msl",
+        record=94,
+        slot=0,
+        seed_frame=-29,
+        ref_frame=-28,
+        player_actions=(25, 18),
+        ref_actions=(344, 20),
+        out_actions=(344, 20),
+        fields=("item_instance_id",),
+        family_id="F99_misc_other",
+        seed_item_type=0,
+        ref_item_type=74,
+        out_item_type=74,
+    )
+    got = _classify_item_slot_row(row, {18: "WAIT", 20: "DASH", 25: "JUMP_F", 344: "FX_SPECIAL_AIR_N_START"})
+    assert got == "F12b_adjacent_instance_counter_order"
 
 
 def test_build_summary_aggregates_family_counts_and_nearby_controls() -> None:

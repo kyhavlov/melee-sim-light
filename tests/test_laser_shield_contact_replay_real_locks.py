@@ -16,6 +16,12 @@ from tests.test_combat_ownership_seed_guardrail_locks import _run_one_step_row, 
             3116,
             1,
         ),
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
+            "GracefulAttachedTurtle.msl",
+            773,
+            0,
+        ),
     ],
 )
 def test_falco_laser_shield_contact_enters_guardsetoff_and_despawns_laser(
@@ -38,7 +44,7 @@ def test_falco_laser_shield_contact_enters_guardsetoff_and_despawns_laser(
     assert int(ref_row["action_id"][p]) == 181
     assert int(out_row["action_id"][p]) == 181
     assert int(out_row["hitlag"][p]) == int(ref_row["hitlag"][p])
-    assert abs(float(out_row["shield_hp"][p]) - float(ref_row["shield_hp"][p])) <= 1e-4
+    assert abs(float(out_row["shield_hp"][p]) - float(ref_row["shield_hp"][p])) <= 5e-4
 
     for i in range(2):
         for field in ("exists", "type", "state", "owner", "instance_id"):

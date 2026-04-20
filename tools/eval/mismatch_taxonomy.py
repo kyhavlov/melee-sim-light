@@ -1203,6 +1203,38 @@ FAMILY_META: dict[str, FamilyMeta] = {
             "data/moves/fox.json moves[\"ftCo_SM_ThrowHi\"]",
         ),
     ),
+    "F14c_throw_article_lifetime": FamilyMeta(
+        label="Throw Article Pulse / Lifetime",
+        owner_module="items",
+        fix_type="seed/schema + runtime",
+        risk="med",
+        confidence="high",
+        hypothesis=(
+            "Throw-side blaster article rows where the remaining residual is item spawn, despawn, "
+            "slot, or xDA8 identity for set_throw_spawn_projectile pulses."
+        ),
+        refs=(
+            "refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim",
+            "refs/melee/src/melee/ft/ftaction.c::{ftAction_80071974,ftAction_80073354}",
+            "data/moves/{fox,falco}.json set_throw_spawn_projectile events",
+        ),
+    ),
+    "F14d_throw_source_scoreboard": FamilyMeta(
+        label="Throw Item Source / Scoreboard Bookkeeping",
+        owner_module="items",
+        fix_type="seed/schema + runtime",
+        risk="med",
+        confidence="high",
+        hypothesis=(
+            "Action-aligned Throw*/Thrown* player rows whose remaining fields are source, contact, "
+            "hitlag, or combo bookkeeping from item-domain throw hits rather than item slot life."
+        ),
+        refs=(
+            "refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c",
+            "refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007646C,ftColl_800763C0}",
+            "refs/melee/src/melee/pl/plstale.c::plStale_UpdateStaleMovesFromItem",
+        ),
+    ),
     "F15_guard_item_ownership": FamilyMeta(
         label="Guard / Reflect Item Ownership",
         owner_module="items",
@@ -1219,6 +1251,37 @@ FAMILY_META: dict[str, FamilyMeta] = {
             "refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0",
         ),
     ),
+    "F15a_reflect_owner_transfer": FamilyMeta(
+        label="Reflect Owner / xDA8 Transfer",
+        owner_module="items",
+        fix_type="seed/schema + runtime",
+        risk="med",
+        confidence="high",
+        hypothesis=(
+            "GuardReflect item rows reduced to reflected owner and xDA8_short transfer timing."
+        ),
+        refs=(
+            "refs/melee/src/melee/ft/ftcoll.c::ftColl_80077464",
+            "refs/melee/src/melee/it/item.c::Item_80269F14",
+            "refs/slippi-ssbm-asm/Recording/SendItemInfo.s",
+        ),
+    ),
+    "F15b_guard_laser_lifetime": FamilyMeta(
+        label="Guard Laser Shield-Bounce / Lifetime",
+        owner_module="items",
+        fix_type="runtime-only",
+        risk="med",
+        confidence="high",
+        hypothesis=(
+            "Guard / GuardSetOff item rows where shield hit, shield bounce, or despawn lifetime "
+            "differs while fighter-side guard ownership is already separate."
+        ),
+        refs=(
+            "refs/melee/src/melee/it/item.c::Item_80269DC8",
+            "refs/melee/src/melee/it/items/itfoxlaser.c::{it_2725_Logic94_HitShield,itFoxLaser_Logic94_ShieldBounced}",
+            "refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80092F2C",
+        ),
+    ),
     "F16_item_identity_residual": FamilyMeta(
         label="Item Identity / Ownership Residual",
         owner_module="items",
@@ -1232,6 +1295,66 @@ FAMILY_META: dict[str, FamilyMeta] = {
         refs=(
             "refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim",
             "refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0",
+        ),
+    ),
+    "F16a_item_slot_compaction_identity": FamilyMeta(
+        label="Item Slot / Compaction Identity",
+        owner_module="items",
+        fix_type="seed/schema + runtime",
+        risk="low",
+        confidence="high",
+        hypothesis=(
+            "Item-only rows where the same live item key is compacted into a different fixed compare "
+            "slot after spawn/despawn ordering."
+        ),
+        refs=(
+            "tools/slippi/make_dataset_from_slp.py::_fill_items_fixed",
+            "refs/slippi-ssbm-asm/Recording/SendItemInfo.s",
+        ),
+    ),
+    "F16b_blaster_article_identity": FamilyMeta(
+        label="Blaster Gun / Shot Identity",
+        owner_module="items",
+        fix_type="runtime-only",
+        risk="med",
+        confidence="high",
+        hypothesis=(
+            "Neutral-B blaster gun and shot item identity/lifetime rows outside throw or guard contexts."
+        ),
+        refs=(
+            "refs/melee/src/melee/it/items/itfoxblaster.c",
+            "refs/melee/src/melee/it/items/itfoxlaser.c",
+            "refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c",
+        ),
+    ),
+    "F16c_illusion_phantasm_lifetime": FamilyMeta(
+        label="Illusion / Phantasm Article Lifetime",
+        owner_module="items",
+        fix_type="runtime-only",
+        risk="med",
+        confidence="high",
+        hypothesis=(
+            "Side-B ghost article item state/despawn rows for Fox Illusion / Falco Phantasm."
+        ),
+        refs=(
+            "refs/melee/src/melee/it/items/itfoxillusion.c",
+            "refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c",
+        ),
+    ),
+    "F16d_item_body_lifetime": FamilyMeta(
+        label="Item BODY Hit / Lifetime",
+        owner_module="items",
+        fix_type="runtime-only",
+        risk="med",
+        confidence="high",
+        hypothesis=(
+            "Item projectile BODY-hit admission/lifetime rows where an item persists, despawns, or "
+            "misses despawn outside guard and throw contexts."
+        ),
+        refs=(
+            "refs/melee/src/melee/it/itcoll.c::it_80272460",
+            "refs/melee/src/melee/it/items/itfoxlaser.c::it_8029C4D4",
+            "refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC",
         ),
     ),
     "F17_mpcoll_ledge_ecb_residual": FamilyMeta(
@@ -1320,6 +1443,9 @@ class ItemSlotRow:
     out_actions: tuple[int, ...]
     fields: tuple[str, ...]
     family_id: str
+    seed_item_type: int = 0
+    ref_item_type: int = 0
+    out_item_type: int = 0
 
 
 @dataclass(frozen=True)
@@ -1507,7 +1633,7 @@ def _family_for_debug_body_contact_residual(
     if body_candidate_count <= 0 and selected_body_count <= 0:
         if active_fighter_hitbox_count <= 0:
             if live_nonvictim_item_count > 0:
-                return "F16_item_identity_residual"
+                return "F16d_item_body_lifetime"
             special_family = _special_owner_family_for_names(
                 (seed_name, precombat_name, ref_name, out_name),
                 include_entry_dispatch=False,
@@ -2164,7 +2290,7 @@ def _throw_hard_moved_family(row: PlayerRow, names: tuple[str, str, str], field_
         # refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007A06C,ftColl_8007BE3C}
         # refs/melee/src/melee/pl/plstale.c::{
         #   plStale_UpdateStaleMovesFromFighter,plStale_UpdateStaleMovesFromItem}
-        return "F14_throw_item_bookkeeping"
+        return "F14d_throw_source_scoreboard"
     return None
 
 
@@ -2450,10 +2576,28 @@ def _classify_item_slot_row(row: ItemSlotRow, action_names: dict[int, str]) -> s
         for action_id in triplet
     ]
     if any(name.startswith("THROW_") or name.startswith("THROWN_") or _looks_like_capture(name) for name in names):
-        return "F14_throw_item_bookkeeping"
+        return "F14c_throw_article_lifetime"
     if any(_looks_like_guard(name) for name in names):
-        return "F15_guard_item_ownership"
-    return "F16_item_identity_residual"
+        field_set = _row_fields(row)
+        if field_set and field_set <= {"item_owner", "item_instance_id"}:
+            return "F15a_reflect_owner_transfer"
+        return "F15b_guard_laser_lifetime"
+    item_types = {int(row.seed_item_type), int(row.ref_item_type), int(row.out_item_type)}
+    field_set = _row_fields(row)
+    if field_set and field_set <= {"item_instance_id"} and item_types & {74, 75}:
+        # Blaster gun `item.instance_id` is Slippi's item->xDA8_short. For fighter-parent spawns,
+        # the generic item spawn path copies the owner's fp->x2088 into xDA8, so pure gun xDA8
+        # rows are adjacent fighter instance-counter order, not item lifetime/ownership.
+        # refs/melee/src/melee/it/it_2725.c::it_8027B070
+        # refs/slippi-ssbm-asm/Recording/SendItemInfo.s
+        return "F12b_adjacent_instance_counter_order"
+    if item_types & {74, 75}:
+        return "F16b_blaster_article_identity"
+    if item_types & {56, 57}:
+        return "F16c_illusion_phantasm_lifetime"
+    if field_set and field_set <= {"item_instance_id"}:
+        return "F16a_item_slot_compaction_identity"
+    return "F16d_item_body_lifetime"
 
 
 def _row_fields(row: PlayerRow | ItemSlotRow) -> frozenset[str]:
@@ -2781,6 +2925,9 @@ def _audit_player_row(row: PlayerRow, action_names: dict[int, str]) -> tuple[boo
     if row.family_id == "F14b_per_throw_pulse_bookkeeping":
         ok = any(_looks_like_throw_or_thrown(name) for name in names)
         return ok, "per-throw pulse/bookkeeping residual row"
+    if row.family_id == "F14d_throw_source_scoreboard":
+        ok = any(_looks_like_throw_or_thrown(name) for name in names)
+        return ok, "throw item source/scoreboard residual row"
     if row.family_id == "F17_mpcoll_ledge_ecb_residual":
         ok = any(_looks_like_damage(name) for name in names) and bool(
             field_set & {"on_ground", "ground_id", "jumps_left", "hurtbox_state"}
@@ -2802,13 +2949,19 @@ def _audit_player_row(row: PlayerRow, action_names: dict[int, str]) -> tuple[boo
 
 def _audit_item_row(row: ItemSlotRow, action_names: dict[int, str]) -> tuple[bool, str]:
     names = _item_names(row, action_names)
-    if row.family_id == "F14_throw_item_bookkeeping":
+    if row.family_id in {"F14_throw_item_bookkeeping", "F14c_throw_article_lifetime"}:
         ok = any(name.startswith("THROW_") or name.startswith("THROWN_") or _looks_like_capture(name) for name in names)
-        return ok, "throw/capture context item row"
-    if row.family_id == "F15_guard_item_ownership":
+        return ok, "throw/capture article lifetime item row"
+    if row.family_id in {"F15_guard_item_ownership", "F15a_reflect_owner_transfer", "F15b_guard_laser_lifetime"}:
         ok = any(_looks_like_guard(name) for name in names)
         return ok, "guard/reflect context item row"
-    if row.family_id == "F16_item_identity_residual":
+    if row.family_id in {
+        "F16_item_identity_residual",
+        "F16a_item_slot_compaction_identity",
+        "F16b_blaster_article_identity",
+        "F16c_illusion_phantasm_lifetime",
+        "F16d_item_body_lifetime",
+    }:
         ok = not any(name.startswith("THROW_") or name.startswith("THROWN_") or _looks_like_capture(name) or _looks_like_guard(name) for name in names)
         return ok, "non-guard/non-throw item identity row"
     return False, "unhandled item family"
@@ -3321,6 +3474,9 @@ def _iter_suite_events(
                         out_actions=tuple(int(out["action_id"][i, p]) for p in range(num_players)),
                         fields=tuple(sorted(slot_fields)),
                         family_id="F99_misc_other",
+                        seed_item_type=int(seed["items"]["type"][i, slot]),
+                        ref_item_type=int(ref["items"]["type"][i, slot]),
+                        out_item_type=int(out["items"]["type"][i, slot]),
                     )
                     family_id = _classify_item_slot_row(slot_row, action_names)
                     slot_row = ItemSlotRow(**{**asdict(slot_row), "family_id": family_id})

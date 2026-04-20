@@ -2725,6 +2725,56 @@ static inline void combat_mutations_pass1_future_apply_body_phantom_hit(MslBatch
   batch->state.last_hit_by[d_idx] = combat_source_port0_for_attacker(batch, a_idx, attacker);
 }
 
+void combat_apply_item_phantom_hit(MslBatch* batch, int batch_index, int attacker, int defender,
+                                   uint16_t item_attack_id, uint16_t item_instance_id, float damage,
+                                   uint8_t element) {
+  if (batch == NULL) {
+    return;
+  }
+  const int num_players = (int)batch->config.num_players;
+  if (batch_index < 0 || batch_index >= batch->batch_size || attacker < 0 ||
+      attacker >= num_players || defender < 0 || defender >= num_players || attacker == defender) {
+    return;
+  }
+  const MslCommonParams* c = msl_common_params();
+  if (c == NULL) {
+    return;
+  }
+  const size_t a_idx = msl_idx_player(batch_index, attacker);
+  const size_t d_idx = msl_idx_player(batch_index, defender);
+
+  // Item phantom-hit lane:
+  // - Fighter BODY phantom hits route through `checkTipLog` when HitCapsule.coll_distance is below
+  //   p_ftCommonData->x7A8; Fighter_ProcessHit then consumes x1840 as victim hitlag without
+  //   percent/KB/damage-state entry.
+  // - Item hitboxes are still normalized by it_80272460 before the same hitlag calculation.
+  // refs/melee/src/melee/ft/ftcoll.c::{checkTipLog,inlineB1,ftColl_80076ED8}
+  // refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
+  // refs/melee/src/melee/it/itcoll.c::it_80272460
+  float dmg_f = damage;
+  const float stale_mult = staling_multiplier_for_move(batch, a_idx, item_attack_id);
+  if (stale_mult != 1.0f) {
+    dmg_f *= stale_mult;
+  }
+  float phantom_dmg = 0.5f * dmg_f;
+  if (!((int)phantom_dmg) && dmg_f > 0.0f) {
+    phantom_dmg = 1.0f;
+  }
+  const int phantom_dmg_i = combat_get_env_dmg(phantom_dmg);
+  if (phantom_dmg_i <= 0) {
+    return;
+  }
+  const float d_hitlag_mul = combat_hitlag_mul_from_element(c, element);
+  const uint16_t d_hl =
+      combat_calc_hitlag_frames(c, phantom_dmg_i, batch->state.action_id[d_idx], d_hitlag_mul);
+  if (d_hl > batch->state.hitlag[d_idx]) {
+    batch->state.hitlag[d_idx] = d_hl;
+    combat_state_flags_set_is_hitlag(batch, d_idx, d_hl);
+  }
+  batch->state.instance_hit_by[d_idx] = item_instance_id;
+  batch->state.last_hit_by[d_idx] = combat_source_port0_for_attacker(batch, a_idx, attacker);
+}
+
 MslItemHitResult combat_apply_item_hit(MslBatch* batch, int batch_index, int attacker, int defender,
                                        uint16_t item_attack_id, uint16_t item_attack_instance,
                                        uint16_t item_instance_id, uint16_t item_type,

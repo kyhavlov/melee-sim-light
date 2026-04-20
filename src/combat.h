@@ -44,6 +44,12 @@ MslItemHitResult combat_apply_item_hit(MslBatch* batch, int batch_index, int att
                                        uint16_t kbg, uint16_t wsk, uint16_t bkb,
                                        uint8_t defender_hurt_height, uint8_t element);
 
+// Apply an item/fighter phantom BODY contact: victim hitlag and source attribution only; no
+// percent, KB, damage-state entry, stale queue, or item consume.
+void combat_apply_item_phantom_hit(MslBatch* batch, int batch_index, int attacker, int defender,
+                                   uint16_t item_attack_id, uint16_t item_instance_id, float damage,
+                                   uint8_t element);
+
 // Apply an item->fighter SHIELD hit (shield HP depletion + GuardSetOff + defender hitlag).
 //
 // Intended for simple projectiles (e.g. Fox/Falco blaster lasers) where the item itself would

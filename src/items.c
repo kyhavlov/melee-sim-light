@@ -307,40 +307,48 @@ static inline size_t idx_hurtcap(int bi, int p, int cap_i) {
          (size_t)cap_i;
 }
 
+// refs/melee/src/melee/lb/forward.h::HurtCapsuleState
+enum { MSL_HURTCAPS_DISABLED = 1u };
+
 static inline uint8_t laser_grounded_body_uses_sweep(const MslBatch* batch, size_t d_idx,
                                                      float laser_age_frames) {
   if (batch == NULL) {
     return 0u;
   }
-  (void)laser_age_frames;
-  return (batch->state.on_ground[d_idx] == 0u) ? 1u : 0u;
+  if (batch->state.on_ground[d_idx] == 0u) {
+    return 1u;
+  }
+  if (!(laser_age_frames > 1.0f) || batch->state.shield_radius[d_idx] > 0.0f ||
+      batch->state.hurtbox_state[d_idx] != 0u) {
+    return 0u;
+  }
+  // Grounded laser BODY travel subset:
+  // - itFoxlaser_UnkMotion1_Phys snapshots the previous projectile position and it_8029C4D4
+  //   dispatches collision over the previous-to-current item segment for fighter contact.
+  // - Keep the grounded segment owner narrow: late Dash, Dash->Turn handoff, and AttackHi3 rows
+  //   have replay-real misses under current-point probing, while early Dash remains a known
+  //   false-positive slice until the full grounded hit-status/pose discriminator is promoted.
+  // refs/melee/src/melee/it/items/itfoxlaser.c::{itFoxlaser_UnkMotion1_Phys,it_8029C4D4}
+  // refs/melee/src/melee/it/itcoll.c::it_80272460
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c::{ftCo_Dash_Anim,ftCo_Dash_IASA}
+  const uint16_t action_id = batch->state.action_id[d_idx];
+  if (action_id == (uint16_t)MSL_ACT_ATTACK_HI3) {
+    return 1u;
+  }
+  if (action_id == (uint16_t)MSL_ACT_TURN &&
+      batch->state.seed_prev_action_id[d_idx] == (uint16_t)MSL_ACT_DASH) {
+    return 1u;
+  }
+  if (action_id == (uint16_t)MSL_ACT_DASH && batch->state.action_frame[d_idx] >= 6) {
+    return 1u;
+  }
+  return 0u;
 }
 
-static inline uint8_t laser_grounded_body_landing_fall_special_aabb_bridge(
-    const MslBatch* batch, int bi, int def, float x0, float y0, float x, float y, float sr,
-    float laser_age_frames, uint8_t* hit_hurt_height) {
-  if (batch == NULL || hit_hurt_height == NULL) {
-    return 0u;
-  }
+static inline uint8_t laser_grounded_body_aabb_overlap(const MslBatch* batch, int bi, int def,
+                                                       float x0, float y0, float x, float y,
+                                                       float sr, uint8_t* hit_hurt_height) {
   const size_t d_idx = msl_idx_player(bi, def);
-  if (batch->state.prev_action_id[d_idx] != (uint16_t)MSL_ACT_LANDING_FALL_SPECIAL ||
-      batch->state.shield_radius[d_idx] > 0.0f || !(laser_age_frames > 1.0f)) {
-    return 0u;
-  }
-  // Grounded LandingFallSpecial miss-only BODY bridge:
-  // - item BODY contact in it_80272460 consumes the projectile travel segment owned by
-  //   itFoxlaser_UnkMotion1_Phys / it_8029C4D4.
-  // - Our precise grounded probe can still miss replay-real rows in LandingFallSpecial when the
-  //   live hurtcap stack spans the traveled segment but no individual capsule sweep is selected.
-  // - Keep it off the first post-spawn motion tick; freshly emitted lasers already have explicit
-  //   spawn/collision ordering and broadening that window reopens the adjacent no-hit row.
-  // - Reconstruct only that geometric coarse overlap using the defender's currently enabled
-  //   hurtcaps; keep it miss-only and state-scoped so ordinary grounded/catch/shield families stay
-  //   on the precise path.
-  // refs/melee/src/melee/it/itcoll.c::it_80272460
-  // refs/melee/src/melee/it/items/itfoxlaser.c::{itFoxlaser_UnkMotion1_Phys,it_8029C4D4}
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::{
-  //   ftCo_LandingFallSpecial_Enter,ftCo_LandingFallSpecial_Anim}
   const float seg_min_x = fminf(x0, x) - sr;
   const float seg_max_x = fmaxf(x0, x) + sr;
   const float seg_min_y = fminf(y0, y) - sr;
@@ -384,6 +392,34 @@ static inline uint8_t laser_grounded_body_landing_fall_special_aabb_bridge(
     return 1u;
   }
   return 0u;
+}
+
+static inline uint8_t laser_grounded_body_landing_fall_special_aabb_bridge(
+    const MslBatch* batch, int bi, int def, float x0, float y0, float x, float y, float sr,
+    float laser_age_frames, uint8_t* hit_hurt_height) {
+  if (batch == NULL || hit_hurt_height == NULL) {
+    return 0u;
+  }
+  const size_t d_idx = msl_idx_player(bi, def);
+  if (batch->state.prev_action_id[d_idx] != (uint16_t)MSL_ACT_LANDING_FALL_SPECIAL ||
+      batch->state.shield_radius[d_idx] > 0.0f || !(laser_age_frames > 1.0f)) {
+    return 0u;
+  }
+  // Grounded LandingFallSpecial miss-only BODY bridge:
+  // - item BODY contact in it_80272460 consumes the projectile travel segment owned by
+  //   itFoxlaser_UnkMotion1_Phys / it_8029C4D4.
+  // - Our precise grounded probe can still miss replay-real rows in LandingFallSpecial when the
+  //   live hurtcap stack spans the traveled segment but no individual capsule sweep is selected.
+  // - Keep it off the first post-spawn motion tick; freshly emitted lasers already have explicit
+  //   spawn/collision ordering and broadening that window reopens the adjacent no-hit row.
+  // - Reconstruct only that geometric coarse overlap using the defender's currently enabled
+  //   hurtcaps; keep it miss-only and state-scoped so ordinary grounded/catch/shield families stay
+  //   on the precise path.
+  // refs/melee/src/melee/it/itcoll.c::it_80272460
+  // refs/melee/src/melee/it/items/itfoxlaser.c::{itFoxlaser_UnkMotion1_Phys,it_8029C4D4}
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::{
+  //   ftCo_LandingFallSpecial_Enter,ftCo_LandingFallSpecial_Anim}
+  return laser_grounded_body_aabb_overlap(batch, bi, def, x0, y0, x, y, sr, hit_hurt_height);
 }
 
 enum {
@@ -647,8 +683,6 @@ static uint8_t blaster_gun_update_from_fighter(MslBatch* batch, int bi, int owne
   }
   const size_t o_idx = msl_idx_player(bi, owner);
   const uint8_t owner_char = batch->state.char_id[o_idx];
-  const uint16_t prev_action_id_u16 = batch->state.prev_action_id[o_idx];
-  const uint8_t prev_state = blaster_gun_state_from_action_id(prev_action_id_u16);
   const uint16_t action_id_u16 = batch->state.action_id[o_idx];
   const uint8_t want_state = blaster_gun_state_from_action_id(action_id_u16);
   uint8_t want_gun = (want_state != 9) ? 1u : 0u;
@@ -690,36 +724,16 @@ static uint8_t blaster_gun_update_from_fighter(MslBatch* batch, int bi, int owne
     }
     const size_t ii = msl_idx_item(bi, existing_slot);
 
-    // 1-frame linger (transition-based), decomp-shaped:
-    // - The fighter clears its blaster pointer without directly destroying the item:
-    //   refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_SpecialNEnd_Anim
-    //   -> ftFox_SpecialN_RemoveBlasterNULL (sets fp->fv.fx.x222C_blasterGObj = NULL)
-    // - The item then detects the cleared pointer via ftFx_SpecialN_CheckRemoveBlaster and destroys itself:
-    //   refs/melee/src/melee/it/items/itfoxblaster.c::itFoxblaster_UnkMotion8_Anim
-    //   -> ftFx_SpecialN_CheckRemoveBlaster -> clear_blaster / it_802AEAB4
-    //
-    // NOTE: it_802AEAB4 calls Item_8026A8EC (refs/melee/src/melee/it/items/itfoxblaster.c::it_802AEAB4),
-    // which schedules item destruction; it does not necessarily remove the item from the global item
-    // list immediately. In the suite, this manifests as a single frame where the fighter's action_id
-    // is no longer SpecialN but the gun item still exists (e.g. AttachedGoodNaturedGuanaco seed_frame=-14
-    // has action_id=42 with gun present; next frame it is gone).
-    // TODO: Re-check the exact frame ordering using ftFx_SpecialN_RemoveBlaster / it_802AEAB4 and Slippi
-    // Recording/SendItemInfo.s once we model full fighter+item update ordering.
-    //
-    // Implementation:
-    // - Keep a 1-frame linger only for non-throw blaster exits (SpecialN* family), matching the
-    //   SpecialNEnd -> item-callback remove ordering above.
-    // - Do not apply that linger to Throw* exits; ftFx_Throw_Anim has an explicit cmd_vars[1]
-    //   switch (case 0/2 clear path) and does not use the SpecialNEnd helper.
+    // Blaster gun clear:
+    // - ftFx_SpecialNEnd_Anim clears fp->fv.fx.x222C_blasterGObj before the action exits through
+    //   ft_8008A2BC.
+    // - itFoxblaster_UnkMotion8_Anim calls ftFx_SpecialN_CheckRemoveBlaster, then clear_blaster()
+    //   when that fighter pointer is NULL.
+    // - Throw-side gun lifetime is governed separately above by ftFx_Throw_Anim cmd_vars[1].
+    // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::{
+    //   ftFx_SpecialNEnd_Anim,ftFx_SpecialN_CheckRemoveBlaster}
+    // refs/melee/src/melee/it/items/itfoxblaster.c::itFoxblaster_UnkMotion8_Anim
     // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
-    if (prev_state != 9 && !action_is_blaster_throw(prev_action_id_u16)) {
-      // Keep as-is (do not overwrite item_state/pos); this is the linger frame.
-      batch->state.item_exists[ii] = 1;
-      batch->state.item_type[ii] = lp->gun_itkind;
-      batch->state.item_owner[ii] = (int8_t)owner;
-      return 0u;
-    }
-
     item_slot_clear(batch, ii);
     return 0u;
   }
@@ -924,6 +938,47 @@ static inline uint8_t item_swept_sphere_capsule_intersects(const MslBatch* batch
   return 1;
 }
 
+static inline uint8_t item_swept_sphere_capsule_overlap_amount(const MslBatch* batch, int bi,
+                                                               int defender, float sx0, float sy0,
+                                                               float sx1, float sy1, float sr,
+                                                               int cap_i, uint8_t* out_hurt_height,
+                                                               float* out_overlap_amount) {
+  if (out_overlap_amount) {
+    *out_overlap_amount = 0.0f;
+  }
+  const size_t d_idx = msl_idx_player(bi, defender);
+  const uint8_t cap_count = batch->state.hurtcap_count[d_idx];
+  if (cap_i < 0 || cap_i >= (int)cap_count) {
+    return 0;
+  }
+  const size_t hi =
+      ((size_t)bi * (size_t)MSL_MAX_PLAYERS + (size_t)defender) * (size_t)MSL_MAX_HURTCAPS +
+      (size_t)cap_i;
+  if (!batch->state.hurtcap_enabled[hi]) {
+    return 0;
+  }
+  const float ax = batch->state.hurtcap_a_x[hi];
+  const float ay = batch->state.hurtcap_a_y[hi];
+  const float az = batch->state.hurtcap_a_z[hi];
+  const float bx = batch->state.hurtcap_b_x[hi];
+  const float by = batch->state.hurtcap_b_y[hi];
+  const float bz = batch->state.hurtcap_b_z[hi];
+  const float cr = batch->state.hurtcap_radius[hi];
+  const float rr = sr + cr;
+  const float d2 =
+      item_segment_segment_dist2(sx0, sy0, 0.0f, sx1, sy1, 0.0f, ax, ay, az, bx, by, bz);
+  if (d2 > (rr * rr)) {
+    return 0;
+  }
+  if (out_overlap_amount) {
+    *out_overlap_amount = rr - sqrtf(d2);
+  }
+  if (out_hurt_height) {
+    *out_hurt_height = batch->state.hurtcap_height[hi];
+  }
+  return 1;
+}
+
 static inline uint8_t item_sphere_sphere_intersects_2d(float ax, float ay, float ar, float bx,
                                                        float by, float br) {
   const float dx = ax - bx;
@@ -1120,10 +1175,17 @@ static inline uint8_t illusion_owner_motion_is_active(const MslBatch* batch, siz
   }
   // Illusion article lifetime is owned by ftFx_SpecialS_CheckGhostRemove(owner):
   // active while motion_id is within [ftFx_MS_SpecialSStart .. ftFx_MS_SpecialAirSEnd].
+  // Item animation can observe an owner that exited Side-B during this same fighter callback pass;
+  // preserve the frame-start motion for this callback-order lane.
   // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c::ftFx_SpecialS_CheckGhostRemove
+  // refs/melee/src/melee/it/items/itfoxillusion.c::{itFoxillusion_UnkMotion0_Anim,
+  //   itFoxillusion_UnkMotion2_Anim}
   const uint16_t owner_action = batch->state.action_id[owner_idx];
-  return (owner_action >= (uint16_t)MSL_ACT_FX_SPECIAL_S_START &&
-          owner_action <= (uint16_t)MSL_ACT_FX_SPECIAL_AIR_S_END)
+  const uint16_t frame_start_action = batch->state.prev_action_id[owner_idx];
+  return ((owner_action >= (uint16_t)MSL_ACT_FX_SPECIAL_S_START &&
+           owner_action <= (uint16_t)MSL_ACT_FX_SPECIAL_AIR_S_END) ||
+          (frame_start_action >= (uint16_t)MSL_ACT_FX_SPECIAL_S_START &&
+           frame_start_action <= (uint16_t)MSL_ACT_FX_SPECIAL_AIR_S_END))
              ? 1u
              : 0u;
 }
@@ -1833,17 +1895,12 @@ static void illusion_items_update_and_collide(MslBatch* batch, int bi) {
         break;
       }
       if (res == MSL_ITEM_HIT_APPLIED_DONT_CONSUME) {
-        // Generic item hitlag owner:
-        // - successful item BODY contact raises item->xCBC_hitlagFrames, and Item_802697D4 then
-        //   skips item Phys/movement while the item remains in hitlag (`xDC8_word.flags.x9 != 0`).
-        // - Illusion/Phantasm body hits persist (see combat_apply_item_hit), so freeze the article
-        //   at the body-contact point for the defender hitlag window instead of immediately
-        //   continuing to consume ghostEffectPos[1].
-        // refs/melee/src/melee/it/item.c::{Item_802697D4,checkHitLag}
+        // Illusion/Phantasm BODY hits persist but do not enter generic item hitlag:
+        // OnGiveDamageThink first copies xC34_damageDealt into xCA8, then the item-specific
+        // dmg_dealt callback clears xCA8. The later checkHitLag(xCA8) branch is therefore skipped,
+        // so xD44_lifeTimer keeps advancing through the victim's hitlag window.
+        // refs/melee/src/melee/it/item.c::{OnGiveDamageThink,checkHitLag}
         // refs/melee/src/melee/it/items/itfoxillusion.c::itFoxIllusion_Logic14_DmgDealt
-        if (batch->state.hitlag[d_idx] > batch->state.item_hitlag[ii]) {
-          batch->state.item_hitlag[ii] = batch->state.hitlag[d_idx];
-        }
       }
       const uint16_t def_iid_post = batch->state.instance_id[d_idx];
       hitlist_register_item_fighter(batch, bi, it, def, def_iid_post,
@@ -1952,7 +2009,6 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
       continue;
     }
     const size_t o_idx = msl_idx_player(bi, owner);
-
     // Beam axis in world space. Use velocity direction so angled shots do not erroneously collide
     // as if they were perfectly horizontal.
     const float vx = batch->state.item_vel_x[ii];
@@ -2422,7 +2478,14 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
               //   ftCo_80091A4C,ftCo_800939B4,ftCo_8009370C,ftCo_GuardReflect_Anim}
               // refs/melee/src/melee/it/items/itfoxlaser.c::{
               //   it_8029C504,itFoxlaser_UnkMotion1_Anim,itFoxLaser_Logic94_ShieldBounced}
+              // Replay-visible shield-bounce keepalive rows in the current suite are high-shield
+              // glancing contacts; lower-shield fresh GuardSetOff contacts resolve through
+              // HitShield destruction until xDCE/xC54/xC58 are promoted into explicit state.
+              // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80091A4C
+              // refs/melee/src/melee/it/item.c::Item_80269DC8
               (laser_age_frames > 1.0f || defender_guard_reflect_late_locomotion_snapshot) &&
+              (common == NULL || batch->state.shield_hp[d_idx] >=
+                                     common->start_shield_health - (lp->damage + 0.5f)) &&
               laser_try_shield_bounce_velocity(vx, vy, bounce_shx, bounce_shy,
                                                shield_bounce_contact_x, shield_bounce_contact_y,
                                                &shield_bounce_vx, &shield_bounce_vy);
@@ -2450,9 +2513,12 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
         }
       }
 
-      // Minimal eligibility: skip if hurtbox_state is nonzero (invincible/intangible/etc).
+      // Minimal eligibility: skip intangible hit-status, but allow disabled-capsule contact to
+      // consume the item below without entering Fighter_ProcessHit.
       // Slippi post-frame: `hurtbox_state` is seeded; movescript hit status can overwrite it.
-      if (batch->state.hurtbox_state[d_idx] != 0) {
+      const uint8_t disabled_contact_only =
+          (batch->state.hurtbox_state[d_idx] == (uint8_t)MSL_HURTCAPS_DISABLED) ? 1u : 0u;
+      if (batch->state.hurtbox_state[d_idx] != 0u && !disabled_contact_only) {
         continue;
       }
 
@@ -2532,6 +2598,7 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
 
       uint8_t hit_hurt_height = 0;
       uint8_t hit = 0;
+      float body_overlap_amount = 0.0f;
       // Deterministic order: offsets (script order) then capsule slots.
       const uint8_t off_n =
           (laser_state == 0u) ? lp->hitbox_offsets_x_count : lp->state1_hitbox_offsets_x_count;
@@ -2561,8 +2628,9 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
         for (uint8_t ci = 0; ci < cap_n; ci++) {
           const float hx0 = use_swept_body ? sx0 : sx;
           const float hy0 = use_swept_body ? sy0 : sy;
-          if (item_swept_sphere_capsule_intersects(batch, bi, def, hx0, hy0, sx, sy, sr, (int)ci,
-                                                   &hit_hurt_height)) {
+          if (item_swept_sphere_capsule_overlap_amount(batch, bi, def, hx0, hy0, sx, sy, sr,
+                                                       (int)ci, &hit_hurt_height,
+                                                       &body_overlap_amount)) {
             hit = 1;
             break;
           }
@@ -2573,8 +2641,8 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
         for (uint8_t ci = 0; ci < cap_n; ci++) {
           const float hx0 = use_swept_body ? x0 : x;
           const float hy0 = use_swept_body ? y0 : y;
-          if (item_swept_sphere_capsule_intersects(batch, bi, def, hx0, hy0, x, y, sr, (int)ci,
-                                                   &hit_hurt_height)) {
+          if (item_swept_sphere_capsule_overlap_amount(batch, bi, def, hx0, hy0, x, y, sr, (int)ci,
+                                                       &hit_hurt_height, &body_overlap_amount)) {
             hit = 1;
             break;
           }
@@ -2604,6 +2672,67 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
         hit_hurt_height = 1u;
       }
       if (!hit) {
+        continue;
+      }
+
+      if (disabled_contact_only) {
+        // Disabled fighter hurt capsules can still own the item contact/despawn without routing
+        // through Fighter_ProcessHit damage. This mirrors the item/fighter collision split where
+        // `lbColl` selects contact against the fighter capsule state, while damage application
+        // remains gated by the fighter hit status.
+        // refs/melee/src/melee/lb/forward.h::HurtCapsuleState
+        // refs/melee/src/melee/it/itcoll.c
+        item_slot_clear(batch, ii);
+        break;
+      }
+
+      if (laser_state == 0u && common != NULL && batch->state.on_ground[d_idx] == 0u &&
+          batch->state.hitstun[d_idx] == 0u && body_overlap_amount > 0.0f &&
+          body_overlap_amount <= common->phantom_overlap_max_x7a8) {
+        // Item phantom/tip-log BODY contact:
+        // - ftColl_80076ED8 routes small positive `coll_distance < p_ftCommonData->x7A8` overlaps
+        //   through checkTipLog into victim hitlag only, without percent/KB/damage-state entry.
+        // - Item hitbox damage is normalized by it_80272460 before hitlag calculation; the projectile
+        //   itself persists because no damage/dealt callback consumes it on this lane.
+        // refs/melee/src/melee/ft/ftcoll.c::{checkTipLog,inlineB1,ftColl_80076ED8}
+        // refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
+        // refs/melee/src/melee/it/itcoll.c::it_80272460
+        float dmg = lp->damage;
+        dmg = item_reflected_damage_lane(batch, ii, dmg);
+        combat_apply_item_phantom_hit(batch, bi, owner, def, batch->state.item_attack_id[ii],
+                                      batch->state.item_instance_id[ii], dmg, lp->element);
+        const uint16_t def_iid_post = batch->state.instance_id[d_idx];
+        hitlist_register_item_fighter(batch, bi, it, def, def_iid_post,
+                                      (int)MSL_LBCOLL_INSERT_FT_BODY, 0);
+        break;
+      }
+
+      int16_t owner_first_throw_pulse_af = 0;
+      const uint8_t owner_has_first_throw_pulse = move_tables_throw_projectile_first_pulse_frame(
+          batch->state.char_id[o_idx], batch->state.action_id[o_idx], &owner_first_throw_pulse_af);
+      if (laser_state != 0u && batch->state.action_id[o_idx] == (uint16_t)MSL_ACT_THROW_HI &&
+          owner_has_first_throw_pulse &&
+          batch->state.throw_pulse_crossed_curr_frame[o_idx] ==
+              (uint8_t)owner_first_throw_pulse_af &&
+          batch->state.hitstun[d_idx] > 0u &&
+          batch->state.last_hit_by[d_idx] == item_source_port0_for_owner(batch, o_idx, owner) &&
+          batch->state.last_attack_landed[d_idx] != (uint8_t)lp->shot_itkind &&
+          ((batch->state.pos_x[d_idx] - batch->state.pos_x[o_idx]) * vx <= 0.0f)) {
+        // ThrowHi first projectile pulse contact carry:
+        // - ftAction_80071974 emits a one-shot throw_flags_b0 pulse and ftFx_Throw_Anim consumes it
+        //   to spawn the throw-side laser article.
+        // - The throw launch vector is `atan2(FtHoldJoint - ItHoldJoint)` and it_8029C4D4 resolves
+        //   item collision along the laser's previous-to-current segment. If the already-damaged
+        //   victim is on the non-projectile X side of that first-pulse segment, consuming the fresh
+        //   article here turns the command-pulse row into false combo/source bookkeeping. Front-side
+        //   victims stay on the regular BODY path below.
+        // - Keep this on the current-frame first pulse only; later ThrowHi pulses and normal laser
+        //   BODY hits stay on the regular item-hit path below.
+        // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
+        // refs/melee/src/melee/ft/ftaction.c::{ftAction_80071974,ftAction_80073354}
+        // refs/melee/src/melee/it/items/itfoxlaser.c::it_8029C4D4
+        // refs/melee/src/melee/it/itcoll.c::it_80272460
+        // data/moves/{fox,falco}.json moves["ftCo_SM_ThrowHi"].events
         continue;
       }
 

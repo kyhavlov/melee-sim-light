@@ -792,6 +792,161 @@ Recommended sequence for the next deep passes:
 - Acceptance bar:
   - item rows stop masquerading as combat/guard rows
   - remaining item identity behavior is deterministic residual cleanup
+- Retained item-owner slices:
+  - Item-owner taxonomy split:
+    - Coarse `F14/F15/F16` no longer emit in refreshed taxonomy. They are split into:
+      `F14c_throw_article_lifetime`, `F14d_throw_source_scoreboard`,
+      `F15a_reflect_owner_transfer`, `F15b_guard_laser_lifetime`,
+      `F16a_item_slot_compaction_identity`, `F16b_blaster_article_identity`,
+      `F16c_illusion_phantasm_lifetime`, and `F16d_item_body_lifetime`.
+    - Fresh taxonomy after split:
+      - primary: total `619`; old `F14=0`, `F15=0`, `F16=0`;
+        `F14c=14`, `F14d=2`, `F15a=11`, `F15b=12`, `F16a=0`,
+        `F16b=0`, `F16c=0`, `F16d=31`
+      - aggregate: total `5550`; old `F14=0`, `F15=0`, `F16=0`;
+        `F14c=484`, `F14d=76`, `F15a=21`, `F15b=130`, `F16a=2`,
+        `F16b=100`, `F16c=58`, `F16d=221`
+    - Section-6 and ledge/collision-env closures remain closed in the refreshed split:
+      old `F17/F10c/F19/F20/F21/F22/F23/F24/F10e` do not emit in primary or aggregate.
+  - Guard laser shield-bounce gate now keeps `shield_bounced` only for already-aged high-shield
+    glancing contacts while lower-shield fresh GuardSetOff contacts take `HitShield` destruction.
+    `GAT:773` is locked in `tests/test_laser_shield_contact_replay_real_locks.py`; existing
+    bounce keepalive controls `GAT:2276` and `GAT:5280` stay live.
+    - Primary taxonomy after this runtime slice: total `615`; `F15b=8` (down from `12`), while
+      `F14c=14`, `F14d=2`, `F15a=11`, `F16d=31` are unchanged. Aggregate remains total `5550`;
+      `F15b=130` and the other named item subfamilies are unchanged.
+  - Illusion/Phantasm article lifetime now advances through BODY-hit victim hitlag and preserves
+    the frame-start Side-B owner for same-step exit lifetime ticks. Aggregate taxonomy after this
+    runtime/seed slice: total `5492` (down from `5550`); `F16c=0` (down from `58`) while
+    `F14c=484`, `F14d=76`, `F15a=21`, `F15b=130`, `F16a=2`, `F16b=100`, and `F16d=221` are
+    unchanged. Primary remains total `615`; the named primary item buckets are unchanged from the
+    shield-bounce slice. Replay-real locks live in
+    `tests/test_illusion_body_hit_replay_real_locks.py` for `DCC:4762`, `DCC:4764`, `HVG:6975`,
+    and `IAT:7712`.
+  - Blaster gun lifetime now clears stale SpecialNEnd gun articles when the owner leaves the
+    SpecialN family. Decomp owner: `ftFx_SpecialNEnd_Anim` clears
+    `fp->fv.fx.x222C_blasterGObj`; `itFoxblaster_UnkMotion8_Anim` observes that NULL pointer with
+    `ftFx_SpecialN_CheckRemoveBlaster` and clears the item. Throw-side gun lifetime remains under
+    `ftFx_Throw_Anim` `cmd_vars[1]`. Aggregate taxonomy after this slice: total `5425` (down from
+    `5492`); `F16b=52` (down from `100`), `F16d=209` (down from `221`), `F15b=124` (down from
+    `130`), `F16a=1` (down from `2`), while `F14c=484`, `F14d=76`, `F15a=21`, and `F16c=0` are
+    unchanged. Primary remains total `615`; item buckets remain `F14c=14`, `F14d=2`,
+    `F15a=11`, `F15b=8`, `F16a=0`, `F16b=0`, `F16c=0`, `F16d=31`.
+    Replay-real locks live in
+    `tests/test_blaster_gun_damage_exit_stale_clear_replay_real_locks.py` for `BHH:666`,
+    `PRH:8222`, `PRH:2460`, and `IAT:140`.
+  - Laser BODY disabled-contact ownership now lets hit-status `1`
+    (`HurtCapsule_Disabled`) consume the projectile without applying fighter damage. Runtime
+    admits the BODY geometry path for disabled hurtcaps, then clears the laser before
+    `Fighter_ProcessHit` bookkeeping. Replay-real locks live in
+    `tests/test_laser_disabled_contact_replay_real_locks.py` for `PRH:4757`, `PRH:4778`, plus
+    vulnerable non-flinch negative control `TBK:197`.
+    Fresh taxonomy after this slice:
+    primary total `611`; `F14c=10`, `F14d=2`, `F15a=11`, `F15b=8`, `F16a=0`, `F16b=0`,
+    `F16c=0`, `F16d=31`.
+    Aggregate total `5401`; `F14c=480`, `F14d=76`, `F15a=21`, `F15b=124`, `F16a=2`,
+    `F16b=35`, `F16c=0`, `F16d=205`.
+    Section 6 and ledge/collision-env remain closed:
+    `F17/F10c/F19/F20/F21/F22/F23/F24/F10e=0`.
+  - Pure blaster-gun `item_instance_id` rows are now hard-moved out of the item-owner bucket when
+    the item article identity already matches. Source owner: item `xDA8_short` is copied from the
+    owner fighter's `fp->x2088` in the generic item spawn path, so pure gun xDA8 rows belong to
+    adjacent fighter instance-counter ordering (`F12b`), not `F16b` blaster article lifetime.
+    Replay row evidence: `BHH:94`, `HIS:3056`, `IAT:2847`, `MAJ:5759`, `PRH:2441`, and
+    `TCH:7410`. Fresh aggregate taxonomy after this hard move keeps total `5401` but moves 9
+    pure-xDA8 rows from `F16b` to `F12b`: `F16b=26` (down from `35`), while primary remains
+    total `611` and primary `F16b=0`.
+  - ThrowHi first-pulse BODY carry is now narrowed to the current-frame first
+    `set_throw_spawn_projectile` pulse when the already-damaged victim is on the non-projectile
+    X side of the first-pulse laser segment. This preserves the fresh throw article and prevents
+    false combo/source bookkeeping, while front-side victims still consume through the normal
+    BODY path. The gate is tied to the throw-side laser velocity produced by the decomp
+    hold-joint launch vector, not replay row identity.
+    Replay-real locks live in
+    `tests/test_throwhi_first_pulse_body_carry_replay_real_locks.py` for `BHH:527`,
+    `BHH:1206`, front-side negative control `BHH:480`, and mid-pulse negative control
+    `BHH:937`.
+    Fresh taxonomy after this slice: primary total `611`; `F14c=10`, `F14d=2`, `F15a=11`,
+    `F15b=8`, `F16a=0`, `F16b=0`, `F16c=0`, `F16d=31`. Aggregate total `5393`;
+    `F14c=475`, `F14d=75`, `F15a=21`, `F15b=124`, `F16a=2`, `F16b=26`, `F16c=0`,
+    `F16d=205`. Section 6 and ledge/collision-env remain closed:
+    `F17/F10c/F19/F20/F21/F22/F23/F24/F10e=0`.
+  - Grounded laser BODY segment ownership now uses the decomp previous-to-current projectile
+    segment for replay-proven grounded late-Dash, Dash-to-Turn, and AttackHi3 item BODY rows.
+    Early Dash stays excluded because it remains a known false-positive slice. Replay-real locks
+    live in `tests/test_laser_grounded_body_segment_replay_real_locks.py` for positive rows
+    `DCC:7619`, `BHH:5148`, and `HVG:1024`, with adjacent no-hit controls `DCC:7618`,
+    `BHH:5147`, and `HVG:1023`.
+    Fresh taxonomy after this slice: primary total `611`; `F14c=10`, `F14d=2`, `F15a=11`,
+    `F15b=8`, `F16a=0`, `F16b=0`, `F16c=0`, `F16d=31`. Aggregate total `5342`;
+    `F14c=475`, `F14d=75`, `F15a=21`, `F15b=124`, `F16a=2`, `F16b=22`, `F16c=0`,
+    `F16d=161`. Section 6 and ledge/collision-env remain closed:
+    `F17/F10c/F19/F20/F21/F22/F23/F24/F10e=0`.
+  - Laser item phantom / tip-log BODY ownership now routes small positive item overlaps through
+    victim hitlag and item attribution without percent, KB, damage-state entry, stale update, or
+    projectile consume. Replay-real locks live in
+    `tests/test_laser_item_phantom_body_replay_real_locks.py` for positive rows `TCH:8969` and
+    `IAT:1580`, adjacent no-contact controls `TCH:8968` / `IAT:1579`, and following full
+    BODY-hit controls `TCH:8970` / `IAT:1581`.
+    Fresh taxonomy after this slice: primary total `611`; `F14c=10`, `F14d=2`, `F15a=11`,
+    `F15b=8`, `F16a=0`, `F16b=0`, `F16c=0`, `F16d=31`. Aggregate total `5310`;
+    `F14c=475`, `F14d=75`, `F15a=21`, `F15b=124`, `F16a=2`, `F16b=13`, `F16c=0`,
+    `F16d=146`. Section 6 and ledge/collision-env remain closed:
+    `F17/F10c/F19/F20/F21/F22/F23/F24/F10e=0`.
+- Rejected item-owner experiments:
+  - Committing powershield reflect owner/xDA8 transfer on the same post-frame fixed `GAT:4828`,
+    `GAT:6207`, and `TBK:7448` transfer rows and passed focused reflect locks, but it introduced
+    new GuardReflect identity rows (`GAT:2274`, `GAT:2275`, `GAT:9479`) and raised aggregate `F15`
+    from `151` to `155`. The change was reverted; these rows stay in `F15a/F15b` until the exact
+    `ftColl_80077464` / `Item_80269F14` transfer-vs-bounce discriminator is modeled.
+  - ThrowHi first-tick hidden-victim-ring suppression fixed inspected `BHH:527/1206` style rows
+    but increased aggregate `F14c` from `484` to `629`; reverted.
+  - Routing all ThrowB/ThrowHi/ThrowLw projectile creation away from `laser_should_shoot_on_frame`
+    and through throw-pulse reconstruction broke the existing `QGD:3095` ThrowHi velocity lock;
+    reverted.
+  - ThrowHi crossed-prev mid-pulse reconstruction and Fox-wide mid-pulse stale-latch suppression
+    were retested after rebuild. They reduced some inspected source/article rows but regressed
+    aggregate `F14c` (`544` and `614` respectively), so both were reverted.
+  - Broad grounded laser BODY sweep was tested against aggregate because decomp laser collision
+    uses the item previous-to-current segment (`itFoxlaser_UnkMotion1_Phys` / `it_8029C4D4`), but
+    the unconditional widening regressed aggregate total to `5628` with `F14c=503`, `F16d=238`,
+    and `F15b=134`; reverted. The remaining grounded BODY rows need the exact hurt-status /
+    hitlist discriminator, not a generic sweep.
+  - A Dash/Turn coarse AABB miss-only extension for the remaining `GAT:7215` row did not move the
+    target after runtime refresh, so it was dropped. A DownBound hidden-colanim suppressor for
+    `BHH:641` likewise did not move the false-consume row and was not retained.
+  - Throw-side item-hitlist carry keyed on `instance_hit_by == item.xDA8` was tested as a direct
+    F14c owner. It regressed aggregate to `7087` mismatches (`F14c=1755`, `F14d=309`), so xDA8
+    attribution alone is not the hidden item hitlist/cursor owner; reverted.
+  - Hidden `x198C` BODY suppression and stale-submotion SpecialN loop shot gating were also tested
+    after the disabled-contact slice; neither moved aggregate beyond the retained branch, so both
+    were dropped.
+  - Throw state-1 fresh-article collision deferral was tested both alone and paired with an
+    already-attributed victim clear. Both variants regressed aggregate to `5546` with
+    `F14c=600` and `F14d=106`; rejected. The remaining F14c mass needs the exact command-cursor /
+    `throw_flags_b0` consumed state, not another spawn/despawn heuristic.
+  - Removing the lower-bound counter update from `motion_entry_instance_id_override_u16` was tested
+    for the pure blaster-gun xDA8 rows. It regressed aggregate to `5533` and `F16b=41`; rejected.
+    The rows were moved to the adjacent instance owner instead.
+  - A GuardReflect no-submotion origin-centered shield fallback was tested for F15b destroy rows.
+    It regressed primary to `637` and primary `F15b=16`; rejected until the real
+    `Item_80269DC8` shield-bounce-vs-HitShield discriminator is promoted.
+  - Fox throw article victim-attribution heuristics were retested after the xDA8 hard move.
+    A Fox-only fresh/clear pair keyed on `instance_hit_by == item.xDA8` regressed primary to
+    `2626` and aggregate to `9879` (`F14c=4750`); rejected.
+  - An intangible-hurtcap BODY contact extension was tested as a possible F16d sibling to the
+    retained disabled-contact slice. It regressed primary to `791` (`F16d=159`) and aggregate to
+    `5868` (`F16d=545`, `F16b=145`); rejected.
+  - Blaster gun `misc0` / `xDD7` cursor evidence was inspected for F14c. A Fox ThrowHi mid-pulse
+    suppressor keyed on gun `misc0==2` regressed primary to `741` and aggregate to `5517`
+    (`F14c=610`); rejected. The row evidence still points to missing full throw command cursor /
+    `throw_flags_b0` consumed state rather than a single replay-visible gun misc byte.
+  - A stricter ThrowHi frame-20 command-boundary deferral plus crossed-prev replay was tested with
+    existing prefix-causal lanes. It improved aggregate (`F14c=465`, `F14d=55`) but regressed
+    primary to `741` with `F14c=140`; rejected until the full command cursor / consumed-pulse
+    state is exposed.
+- Status rationale: the coarse owner bucket is split and inspectable, but this checklist item is
+  **not closed** because the named item owners still contain real runtime residuals.
 
 ### Match-flow / entry / respawn ownership
 - Status: `active`

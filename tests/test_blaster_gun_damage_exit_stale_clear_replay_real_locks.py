@@ -21,6 +21,15 @@ class _BlasterGunDamageExitCase:
     note: str
 
 
+@dataclass(frozen=True)
+class _BlasterGunLifetimeCase:
+    dataset_rel: str
+    record: int
+    owner_port: int
+    expect_gun: bool
+    note: str
+
+
 def _count_owner_gun_items(row, owner_port: int) -> int:
     count = 0
     for item in row["items"]:
@@ -32,6 +41,19 @@ def _count_owner_gun_items(row, owner_port: int) -> int:
             continue
         count += 1
     return count
+
+
+def _owner_gun_item_keys(row, owner_port: int) -> list[tuple[int, int, int]]:
+    keys: list[tuple[int, int, int]] = []
+    for item in row["items"]:
+        if int(item["exists"]) == 0:
+            continue
+        if int(item["owner"]) != owner_port:
+            continue
+        if int(item["type"]) not in (74, 75):
+            continue
+        keys.append((int(item["type"]), int(item["state"]), int(item["instance_id"])))
+    return keys
 
 
 def _is_damage_action(action_id: int) -> bool:
@@ -55,6 +77,81 @@ def _is_damage_action(action_id: int) -> bool:
         0x5A,
         0x5B,
     }
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    "case",
+    [
+        _BlasterGunLifetimeCase(
+            dataset_rel=(
+                "datasets/aggregate_recent/replays/validation/aggregate_recent/"
+                "BlondHardHippopotamus.msl"
+            ),
+            record=666,
+            owner_port=1,
+            expect_gun=False,
+            note="BHH SpecialNEnd->Dash clears the stale Fox blaster gun article.",
+        ),
+        _BlasterGunLifetimeCase(
+            dataset_rel=(
+                "datasets/aggregate_recent/replays/validation/aggregate_recent/"
+                "PositiveRevolvingHyena.msl"
+            ),
+            record=8222,
+            owner_port=1,
+            expect_gun=False,
+            note="PRH SpecialNEnd->Wait clears the stale Falco blaster gun article.",
+        ),
+        _BlasterGunLifetimeCase(
+            dataset_rel=(
+                "datasets/aggregate_recent/replays/validation/aggregate_recent/"
+                "PositiveRevolvingHyena.msl"
+            ),
+            record=2460,
+            owner_port=1,
+            expect_gun=True,
+            note="PRH active SpecialAirNLoop keeps the Falco blaster gun article.",
+        ),
+        _BlasterGunLifetimeCase(
+            dataset_rel=(
+                "datasets/aggregate_recent/replays/validation/aggregate_recent/"
+                "ImpassionedAlarmedTarsier.msl"
+            ),
+            record=140,
+            owner_port=0,
+            expect_gun=True,
+            note="IAT active SpecialAirNLoop gun remains while the other stale end gun clears.",
+        ),
+    ],
+    ids=lambda c: c.note.split()[0].lower() + "_" + ("keep" if c.expect_gun else "clear"),
+)
+def test_blaster_gun_lifetime_replay_real_item_rows(case: _BlasterGunLifetimeCase) -> None:
+    # Replay-real locks for src/items.c blaster gun lifetime/identity:
+    # - ftFx_SpecialNEnd_Anim clears fp->fv.fx.x222C_blasterGObj before leaving SpecialNEnd.
+    # - itFoxblaster_UnkMotion8_Anim then clears the item when
+    #   ftFx_SpecialN_CheckRemoveBlaster observes the NULL fighter pointer.
+    # - Active Start/Loop gun rows must remain attached.
+    # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::{
+    #   ftFx_SpecialNEnd_Anim,ftFx_SpecialN_CheckRemoveBlaster}
+    # refs/melee/src/melee/it/items/itfoxblaster.c::itFoxblaster_UnkMotion8_Anim
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+
+    dataset_path = root / case.dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {case.dataset_rel}")
+
+    seed, ref, out = _run_one_step_row(dataset_path, int(case.record), int(case.owner_port))
+    owner = int(case.owner_port)
+
+    assert _count_owner_gun_items(seed, owner) >= 1, case.note
+    if case.expect_gun:
+        assert _count_owner_gun_items(ref, owner) >= 1, case.note
+        assert _owner_gun_item_keys(out, owner) == _owner_gun_item_keys(ref, owner), case.note
+    else:
+        assert _count_owner_gun_items(ref, owner) == 0, case.note
+        assert _count_owner_gun_items(out, owner) == 0, case.note
 
 
 @pytest.mark.integration
