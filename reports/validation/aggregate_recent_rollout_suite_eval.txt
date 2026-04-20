@@ -8,7 +8,7 @@
 # preprocess_suite stamp:
 #   path: datasets/aggregate_recent/.preprocess_meta.json
 #   force_used: True  built: 15  skipped: 0
-#   seed_dtype_itemsize: 3112  sample_dtype_itemsize: 4198
+#   seed_dtype_itemsize: 3144  sample_dtype_itemsize: 4230
 #
 # Regenerate gitignored ISO-derived data artifacts (if missing/stale):
 # - Opcode-25 airborne-state timelines (data/airborne_state_events/{fox,falco}.bin):
@@ -39,13 +39,13 @@ rollout.first_mismatch_seeded_total: 54
 
 == datasets/aggregate_recent/replays/validation/aggregate_recent/DistinctCaringCobra.msl ==
 rollout.best_len: 381
-rollout.streak_count: 119
+rollout.streak_count: 118
 rollout.streak_len.median: 64
 rollout.streak_len.p90: 195
 rollout.streak_len.p95: 248
 rollout.streak_len.max: 381
-rollout.first_mismatch_total: 119
-rollout.first_mismatch_seeded_total: 51
+rollout.first_mismatch_total: 118
+rollout.first_mismatch_seeded_total: 50
 
 == datasets/aggregate_recent/replays/validation/aggregate_recent/FavorableSuperficialPig.msl ==
 rollout.best_len: 384
@@ -79,13 +79,13 @@ rollout.first_mismatch_seeded_total: 70
 
 == datasets/aggregate_recent/replays/validation/aggregate_recent/ImpassionedAlarmedTarsier.msl ==
 rollout.best_len: 407
-rollout.streak_count: 127
-rollout.streak_len.median: 59
+rollout.streak_count: 126
+rollout.streak_len.median: 60
 rollout.streak_len.p90: 199
 rollout.streak_len.p95: 330
 rollout.streak_len.max: 407
-rollout.first_mismatch_total: 133
-rollout.first_mismatch_seeded_total: 80
+rollout.first_mismatch_total: 132
+rollout.first_mismatch_seeded_total: 79
 
 == datasets/aggregate_recent/replays/validation/aggregate_recent/MotionlessAggressiveJay.msl ==
 rollout.best_len: 287
@@ -178,11 +178,11 @@ rollout.first_mismatch_total: 94
 rollout.first_mismatch_seeded_total: 37
 
 == suite summary ==
-overall.rollout.streak_count: 1932
+overall.rollout.streak_count: 1930
 overall.rollout.streak_len.median: 56
 overall.rollout.streak_len.p90: 170
 overall.rollout.streak_len.p95: 218
 overall.rollout.streak_len.max: 631
 overall.rollout.best_len.max: 631
-overall.rollout.first_mismatch_total: 2129
-overall.rollout.first_mismatch_seeded_total: 1103
+overall.rollout.first_mismatch_total: 2127
+overall.rollout.first_mismatch_seeded_total: 1101

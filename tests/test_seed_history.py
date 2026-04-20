@@ -34,7 +34,7 @@ from tools.slippi.seed_history import (
     derive_kneebend_internals,
     derive_turn_internals,
 )
-from tools.slippi.make_dataset_from_slp import derive_illusion_ghost_pos01
+from tools.slippi.make_dataset_from_slp import derive_illusion_ghost_pos01, derive_illusion_ghost_pos012
 from tools.slippi.make_dataset_from_slp import _derive_passivewall_timer
 from tools.slippi.make_dataset_from_slp import _derive_grounded_overlap_hidden_pos_z
 
@@ -166,6 +166,36 @@ def test_derive_illusion_ghost_pos01_tracks_decomp_ring_order() -> None:
     )
     assert ghost0_y[:, 0].tolist() == pytest.approx([0.0001, 0.0001, 0.0001, 0.0001, 0.0001], abs=5e-6)
     assert ghost1_y[:, 0].tolist() == pytest.approx([0.0001, 0.0001, 0.0001, 0.0001, 0.0001], abs=5e-6)
+
+
+def test_derive_illusion_ghost_pos012_tracks_previous_hitcapsule_endpoint() -> None:
+    # Decomp owner:
+    # - ftFox_SpecialS_SetPhys advances ghostEffectPos[2] from the previous ghostEffectPos[1].
+    # - Illusion item collision keeps the previous HitCapsule endpoint in x58, so the seed lane
+    #   needs ghostEffectPos[2] for replay rows that seed after Phys but before the next BODY
+    #   contact has been applied.
+    # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c::ftFox_SpecialS_SetPhys
+    # refs/melee/src/melee/it/itcoll.c::it_8027137C
+    act_ground_start = 347
+    act_ground_main = 348
+    act_ground_end = 349
+
+    action = np.array([[act_ground_start], [act_ground_main], [act_ground_main], [act_ground_end]], dtype=np.uint16)
+    action_frame = np.array([[15], [0], [1], [0]], dtype=np.int16)
+    pos_x = np.array([[100.0], [100.0], [80.0], [60.0]], dtype=np.float32)
+    pos_y = np.array([[5.0], [5.0], [5.0], [5.0]], dtype=np.float32)
+
+    ghost0_x, _ghost0_y, ghost1_x, _ghost1_y, ghost2_x, ghost2_y = derive_illusion_ghost_pos012(
+        post_action_id_u16=action,
+        post_action_frame_i16=action_frame,
+        post_pos_x=pos_x,
+        post_pos_y=pos_y,
+    )
+
+    assert ghost0_x[:, 0].tolist() == pytest.approx([100.0, 100.0, 80.0, 60.0], abs=5e-6)
+    assert ghost1_x[:, 0].tolist() == pytest.approx([100.0, 100.0, 100.0, 80.0], abs=5e-6)
+    assert ghost2_x[:, 0].tolist() == pytest.approx([100.0, 100.0, 100.0, 100.0], abs=5e-6)
+    assert ghost2_y[:, 0].tolist() == pytest.approx([5.0, 5.0, 5.0, 5.0], abs=5e-6)
 
 
 def test_derive_passivewall_timer_tracks_hidden_startup_hold() -> None:

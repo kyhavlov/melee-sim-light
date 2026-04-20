@@ -2575,15 +2575,30 @@ def _classify_item_slot_row(row: ItemSlotRow, action_names: dict[int, str]) -> s
         for triplet in (row.player_actions, row.ref_actions, row.out_actions)
         for action_id in triplet
     ]
+    item_types = {int(row.seed_item_type), int(row.ref_item_type), int(row.out_item_type)}
+    field_set = _row_fields(row)
+    if (
+        item_types & {74, 75}
+        and any(name.startswith("REBIRTH") for name in names)
+        and any(_looks_like_specialn(name) for name in names)
+        and field_set
+        & {"item_exists", "item_type", "item_owner", "item_state"}
+    ):
+        return "F04_match_flow_rebirth"
+    if (
+        item_types & {74, 75}
+        and any(_looks_like_aerial(name) for name in names)
+        and any(_looks_like_damage(name) for name in names)
+        and field_set
+        & {"item_exists", "item_type", "item_owner", "item_state"}
+    ):
+        return "F09c_aerial_action_entry_adjacency"
     if any(name.startswith("THROW_") or name.startswith("THROWN_") or _looks_like_capture(name) for name in names):
         return "F14c_throw_article_lifetime"
     if any(_looks_like_guard(name) for name in names):
-        field_set = _row_fields(row)
         if field_set and field_set <= {"item_owner", "item_instance_id"}:
             return "F15a_reflect_owner_transfer"
         return "F15b_guard_laser_lifetime"
-    item_types = {int(row.seed_item_type), int(row.ref_item_type), int(row.out_item_type)}
-    field_set = _row_fields(row)
     if field_set and field_set <= {"item_instance_id"} and item_types & {74, 75}:
         # Blaster gun `item.instance_id` is Slippi's item->xDA8_short. For fighter-parent spawns,
         # the generic item spawn path copies the owner's fp->x2088 into xDA8, so pure gun xDA8
@@ -2591,6 +2606,8 @@ def _classify_item_slot_row(row: ItemSlotRow, action_names: dict[int, str]) -> s
         # refs/melee/src/melee/it/it_2725.c::it_8027B070
         # refs/slippi-ssbm-asm/Recording/SendItemInfo.s
         return "F12b_adjacent_instance_counter_order"
+    if field_set and field_set <= {"item_instance_id"} and item_types & {54, 55}:
+        return "F16d_item_body_lifetime"
     if item_types & {74, 75}:
         return "F16b_blaster_article_identity"
     if item_types & {56, 57}:

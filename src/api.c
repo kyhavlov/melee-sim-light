@@ -898,6 +898,8 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
       batch->state.illusion_ghost_pos0_y[idx] = seed->illusion_ghost_pos0_y[p];
       batch->state.illusion_ghost_pos1_x[idx] = seed->illusion_ghost_pos1_x[p];
       batch->state.illusion_ghost_pos1_y[idx] = seed->illusion_ghost_pos1_y[p];
+      batch->state.illusion_ghost_pos2_x[idx] = seed->illusion_ghost_pos2_x[p];
+      batch->state.illusion_ghost_pos2_y[idx] = seed->illusion_ghost_pos2_y[p];
       // Throw pulse-consume seed lane (producer: tools/slippi/make_dataset_from_slp.py).
       // Decomp owner:
       // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim

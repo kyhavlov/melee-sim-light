@@ -893,6 +893,59 @@ Recommended sequence for the next deep passes:
     `F14c=475`, `F14d=75`, `F15a=21`, `F15b=124`, `F16a=2`, `F16b=13`, `F16c=0`,
     `F16d=146`. Section 6 and ledge/collision-env remain closed:
     `F17/F10c/F19/F20/F21/F22/F23/F24/F10e=0`.
+  - Laser HitCapsule x58/x4C scale ownership now uses the previous post-frame laser scale for
+    x58 and the current post-anim scale for x4C. Decomp owner: `it_8027137C` copies x4C into x58
+    before rebuilding current x4C, while `itFoxlaser_UnkMotion1_Anim` advances the laser scale once
+    per item anim update. Replay-real locks live in
+    `tests/test_laser_hitcap_prev_scale_replay_real_locks.py` for positive false-consume rows
+    `BHH:641` and `IAT:1792`, adjacent alive controls `BHH:640` / `IAT:1791`, following full-hit
+    control `IAT:1793`, and rejected-unscaled-fallback sentinel `GAT:7215`.
+    The forensic row runner now includes `item_laser_probes` for scaled/unscaled laser segments,
+    hurtcap flags, margins, age/scale, and seed/ref/out item deltas.
+    Fresh taxonomy after this slice: primary total `611`; `F14c=10`, `F14d=2`, `F15a=11`,
+    `F15b=8`, `F16a=0`, `F16b=0`, `F16c=0`, `F16d=31`. Aggregate total `5281`;
+    `F14c=475`, `F14d=75`, `F15a=21`, `F15b=124`, `F16a=0`, `F16b=0`, `F16c=0`,
+    `F16d=126`. Section 6 and ledge/collision-env remain closed:
+    `F17/F10c/F19/F20/F21/F22/F23/F24/F10e=0`.
+  - Fox Illusion end-state BODY sweep now promotes `ghostEffectPos[2]` as the prefix-causal
+    previous hitcapsule endpoint. Decomp owner: `ftFox_SpecialS_SetPhys` advances
+    `ghost2 = ghost1; ghost1 = ghost0; ghost0 = cur_pos`, `itFoxillusion_UnkMotion{0,1}_Phys`
+    copies ghost[1] into the article position, and `it_8027137C` preserves the previous x4C endpoint
+    in x58. Runtime keeps main-state Illusion/Phantasm rows on the prior ghost[1] point owner until
+    the remaining hitlist/callback discriminator is exposed, and only admits ghost[2]->ghost[1] for
+    Fox Illusion end-state rows. Replay-real locks: `DCC:4761` positive BODY hit and adjacent
+    `DCC:4760` no-hit control; seed-history coverage proves `derive_illusion_ghost_pos012` carries
+    ghost[2] from the previous ghost[1].
+    Fresh taxonomy after this slice: primary total `611`; `F14c=10`, `F14d=2`, `F15a=11`,
+    `F15b=8`, `F16a=0`, `F16b=0`, `F16c=0`, `F16d=31`. Aggregate total `5269`;
+    `F14c=475`, `F14d=75`, `F15a=21`, `F15b=124`, `F16a=0`, `F16b=0`, `F16c=0`,
+    `F16d=116`. Section 6 and ledge/collision-env remain closed:
+    `F17/F10c/F19/F20/F21/F22/F23/F24/F10e=0`.
+  - Blaster gun Dead* exit lifetime now clears a stale SpecialN/SpecialAirN gun when the owner
+    crosses directly into common Dead* states. Decomp owner: Dead* states are outside
+    `ftFx_SpecialN_GetBlasterAction`, so `itFoxblaster_UnkMotion8_Anim` reaches the
+    `blaster_action == 9` clear path. Replay-real locks live in
+    `tests/test_blaster_gun_damage_exit_stale_clear_replay_real_locks.py` for positive row
+    `PPA:1185` and adjacent keep-gun control `PPA:1184`.
+  - Rebirth blaster-gun spawn fallout is hard-moved out of `F16b` when the item row is caused by
+    RebirthWait action dispatch, not blaster article identity. Row evidence: `TCH:3062` has ref
+    `RebirthWait -> SpecialAirNStart` and out remains in RebirthWait, so the missing gun spawn
+    belongs to `F04_match_flow_rebirth`. The taxonomy rule is narrowed to blaster-gun rows with
+    Rebirth/RebirthWait plus SpecialN context; generic Dead*/entry item rows are not hidden by
+    match-flow precedence.
+  - The remaining `F16b` cluster `DCC:546` is hard-moved to
+    `F09c_aerial_action_entry_adjacency`: pre-combat debug shows the sim briefly enters
+    `SpecialAirNStart` and spawns the Falco gun before combat switches the player to
+    `DamageAir2`, while ref goes straight to `DamageAir2` with no gun. This is action-entry /
+    combat-order fallout, not blaster article identity.
+  - The remaining `F16a` rows `HIS:6603` and `PJO:2235` are pure laser `item_instance_id` echoes
+    from neighboring old-laser consume/keepalive disagreements, so they fold into
+    `F16d_item_body_lifetime` rather than remaining a separate slot-compaction identity bucket.
+    Fresh taxonomy after these hard moves: primary total `611`; `F14c=10`, `F14d=2`, `F15a=11`,
+    `F15b=8`, `F16a=0`, `F16b=0`, `F16c=0`, `F16d=31`. Aggregate total `5303`;
+    `F14c=475`, `F14d=75`, `F15a=21`, `F15b=124`, `F16a=0`, `F16b=0`, `F16c=0`,
+    `F16d=144`. Section 6 and ledge/collision-env remain closed:
+    `F17/F10c/F19/F20/F21/F22/F23/F24/F10e=0`.
 - Rejected item-owner experiments:
   - Committing powershield reflect owner/xDA8 transfer on the same post-frame fixed `GAT:4828`,
     `GAT:6207`, and `TBK:7448` transfer rows and passed focused reflect locks, but it introduced
@@ -937,6 +990,24 @@ Recommended sequence for the next deep passes:
   - An intangible-hurtcap BODY contact extension was tested as a possible F16d sibling to the
     retained disabled-contact slice. It regressed primary to `791` (`F16d=159`) and aggregate to
     `5868` (`F16d=545`, `F16b=145`); rejected.
+  - Hidden `x198C`/colanim hit-status substitution for item BODY eligibility produced no taxonomy
+    movement (`F16d` stayed `31` primary / `146` aggregate); rejected.
+  - Broad post-callback blaster-gun clear for any owner that no longer required a gun regressed
+    primary to `1699` and aggregate to `8668` with large `F16d/F16b/F15b` regressions; rejected.
+  - Miss-only unscaled BODY-offset fallback regressed primary to `767` (`F16d=148`) and aggregate
+    to `5710` (`F16d=417`); rejected.
+  - Replacing laser BODY sweeps with current-point probes after adding the x58/x4C scale split
+    broke the retained `IAT:1580` phantom/tip-log BODY lock; rejected. The retained fix corrects
+    previous/current endpoint scale without removing decomp-shaped sweeps.
+  - A non-disabled `x198C` item-BODY skip was tested for the remaining false-consume rows. After
+    narrowing around the retained disabled-contact slice it passed focused controls, but it still
+    did not fix `HIS:6544`, `PPA:5141`, or `PRH:8137` once runtime timers refreshed; rejected.
+  - Broad Illusion/Phantasm ghost[2] sweeps were tested after exposing the prefix-causal
+    `ghostEffectPos[2]` lane. Applying ghost[2]->ghost[1] to all SetPhys rows created false
+    Phantasm main-state BODY hits and worsened aggregate to `5291`; using seeded item position
+    to ghost[1] as the default segment rose to `5325`. The retained slice keeps the old ghost[1]
+    point owner by default and limits ghost[2] to the Fox Illusion end-state row shape proven by
+    `DCC:4761`.
   - Blaster gun `misc0` / `xDD7` cursor evidence was inspected for F14c. A Fox ThrowHi mid-pulse
     suppressor keyed on gun `misc0==2` regressed primary to `741` and aggregate to `5517`
     (`F14c=610`); rejected. The row evidence still points to missing full throw command cursor /

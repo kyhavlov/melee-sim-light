@@ -51,6 +51,8 @@ int state_alloc(MslStateSoA* state, int batch_size) {
   state->illusion_ghost_pos0_y = (float*)alloc_aligned_64(sizeof(float) * bp);
   state->illusion_ghost_pos1_x = (float*)alloc_aligned_64(sizeof(float) * bp);
   state->illusion_ghost_pos1_y = (float*)alloc_aligned_64(sizeof(float) * bp);
+  state->illusion_ghost_pos2_x = (float*)alloc_aligned_64(sizeof(float) * bp);
+  state->illusion_ghost_pos2_y = (float*)alloc_aligned_64(sizeof(float) * bp);
   state->prev_pos_x = (float*)alloc_aligned_64(sizeof(float) * bp);
   state->prev_pos_y = (float*)alloc_aligned_64(sizeof(float) * bp);
   state->floor_sweep_prev_pos_y = (float*)alloc_aligned_64(sizeof(float) * bp);
@@ -376,7 +378,8 @@ int state_alloc(MslStateSoA* state, int batch_size) {
       !state->team_id || !state->char_id || !state->handicap || !state->attack_ratio ||
       !state->defense_ratio || !state->pos_x || !state->pos_y || !state->pos_z ||
       !state->illusion_ghost_pos0_x || !state->illusion_ghost_pos0_y ||
-      !state->illusion_ghost_pos1_x || !state->illusion_ghost_pos1_y || !state->prev_pos_x ||
+      !state->illusion_ghost_pos1_x || !state->illusion_ghost_pos1_y ||
+      !state->illusion_ghost_pos2_x || !state->illusion_ghost_pos2_y || !state->prev_pos_x ||
       !state->prev_pos_y || !state->floor_sweep_prev_pos_y || !state->coll_stage_prev_pos_x ||
       !state->coll_stage_prev_pos_y || !state->coll_stage_cur_pos_x ||
       !state->coll_stage_cur_pos_y || !state->speed_air_x_self || !state->speed_ground_x_self ||
@@ -564,6 +567,8 @@ void state_free(MslStateSoA* state) {
   alloc_free(state->illusion_ghost_pos0_y);
   alloc_free(state->illusion_ghost_pos1_x);
   alloc_free(state->illusion_ghost_pos1_y);
+  alloc_free(state->illusion_ghost_pos2_x);
+  alloc_free(state->illusion_ghost_pos2_y);
   alloc_free(state->prev_pos_x);
   alloc_free(state->prev_pos_y);
   alloc_free(state->floor_sweep_prev_pos_y);

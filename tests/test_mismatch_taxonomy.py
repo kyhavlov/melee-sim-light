@@ -1693,6 +1693,126 @@ def test_classify_item_slot_row_moves_pure_blaster_gun_xda8_to_instance_owner() 
     assert got == "F12b_adjacent_instance_counter_order"
 
 
+def test_classify_item_slot_row_moves_rebirth_gun_spawn_fallout_to_match_flow() -> None:
+    row = ItemSlotRow(
+        dataset="TubbyCurlyHerring.msl",
+        record=3062,
+        slot=0,
+        seed_frame=0,
+        ref_frame=1,
+        player_actions=(13, 25),
+        ref_actions=(344, 25),
+        out_actions=(13, 25),
+        fields=("item_exists", "item_type", "item_owner", "item_state", "item_instance_id"),
+        family_id="F99_misc_other",
+        seed_item_type=0,
+        ref_item_type=75,
+        out_item_type=0,
+    )
+    got = _classify_item_slot_row(
+        row,
+        {
+            13: "REBIRTH_WAIT",
+            25: "JUMP_F",
+            344: "FX_SPECIAL_AIR_N_START",
+        },
+    )
+    assert got == "F04_match_flow_rebirth"
+
+
+def test_classify_item_slot_row_keeps_dead_context_blaster_rows_in_item_identity() -> None:
+    row = ItemSlotRow(
+        dataset="d.msl",
+        record=20,
+        slot=0,
+        seed_frame=0,
+        ref_frame=1,
+        player_actions=(0, 14),
+        ref_actions=(0, 14),
+        out_actions=(0, 14),
+        fields=("item_exists", "item_type", "item_owner"),
+        family_id="F99_misc_other",
+        seed_item_type=75,
+        ref_item_type=0,
+        out_item_type=75,
+    )
+    got = _classify_item_slot_row(row, {0: "DEAD_DOWN", 14: "WAIT"})
+    assert got == "F16b_blaster_article_identity"
+
+
+def test_classify_item_slot_row_moves_false_aerial_blaster_entry_to_action_owner() -> None:
+    row = ItemSlotRow(
+        dataset="DistinctCaringCobra.msl",
+        record=546,
+        slot=0,
+        seed_frame=0,
+        ref_frame=1,
+        player_actions=(69, 25),
+        ref_actions=(69, 85),
+        out_actions=(69, 85),
+        fields=("item_exists", "item_type", "item_owner", "item_state", "item_instance_id"),
+        family_id="F99_misc_other",
+        seed_item_type=0,
+        ref_item_type=0,
+        out_item_type=75,
+    )
+    got = _classify_item_slot_row(
+        row,
+        {
+            25: "JUMP_F",
+            69: "ATTACK_AIR_B",
+            85: "DAMAGE_AIR_2",
+        },
+    )
+    assert got == "F09c_aerial_action_entry_adjacency"
+
+
+def test_classify_item_slot_row_moves_pure_laser_instance_echo_to_body_lifetime() -> None:
+    for dataset, record, player_actions, ref_actions, out_actions, action_names in (
+        (
+            "HungryImportantSnake.msl",
+            6603,
+            (345, 25),
+            (42, 25),
+            (42, 25),
+            {
+                25: "JUMP_F",
+                42: "LANDING",
+                345: "FX_SPECIAL_AIR_N_LOOP",
+            },
+        ),
+        (
+            "PutridJoyousOryx.msl",
+            2235,
+            (345, 38),
+            (42, 38),
+            (42, 38),
+            {
+                38: "DAMAGE_FALL",
+                42: "LANDING",
+                345: "FX_SPECIAL_AIR_N_LOOP",
+            },
+        ),
+    ):
+        row = ItemSlotRow(
+            dataset=dataset,
+            record=record,
+            slot=1,
+            seed_frame=0,
+            ref_frame=1,
+            player_actions=player_actions,
+            ref_actions=ref_actions,
+            out_actions=out_actions,
+            fields=("item_instance_id",),
+            family_id="F99_misc_other",
+            seed_item_type=54,
+            ref_item_type=54,
+            out_item_type=54,
+        )
+        got = _classify_item_slot_row(row, action_names)
+        assert got == "F16d_item_body_lifetime"
+
+
 def test_build_summary_aggregates_family_counts_and_nearby_controls() -> None:
     player_rows = {
         ("d.msl", 9, 0): _player_row(record=9, seed_frame=99, ref_frame=100, fields=(), family_id="F99_misc_other"),

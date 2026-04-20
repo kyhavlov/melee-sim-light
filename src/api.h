@@ -263,13 +263,14 @@ typedef struct MslSeed {
   uint16_t seed_prev_action_id[MSL_MAX_PLAYERS];
   int16_t seed_prev_action_frame[MSL_MAX_PLAYERS];
   // Hidden Fox/Falco side-special ghost article position lanes
-  // (`mv.fx.SpecialS.ghostEffectPos[0..1]`).
+  // (`mv.fx.SpecialS.ghostEffectPos[0..2]`).
   //
   // Decomp ownership:
   // - itFoxillusion_UnkMotion{0,1}_Phys copies the item position from
   //   ftFx_SpecialS_CopyGhostPosIndexed(index=1).
   // - ftFox_SpecialS_SetPhys advances that ring during SpecialS/SpecialAirS/SpecialSEnd/
-  //   SpecialAirSEnd Phys callbacks as `ghost1 = ghost0; ghost0 = cur_pos`.
+  //   SpecialAirSEnd Phys callbacks as
+  //     `ghost2 = ghost1; ghost1 = ghost0; ghost0 = cur_pos`.
   // refs/melee/src/melee/it/items/itfoxillusion.c::{
   //   itFoxillusion_UnkMotion0_Phys,itFoxillusion_UnkMotion1_Phys
   // }
@@ -281,6 +282,8 @@ typedef struct MslSeed {
   float illusion_ghost_pos0_y[MSL_MAX_PLAYERS];
   float illusion_ghost_pos1_x[MSL_MAX_PLAYERS];
   float illusion_ghost_pos1_y[MSL_MAX_PLAYERS];
+  float illusion_ghost_pos2_x[MSL_MAX_PLAYERS];
+  float illusion_ghost_pos2_y[MSL_MAX_PLAYERS];
   // Throw projectile pulse-consume seed lane (causal producer; one-step seed ownership).
   //
   // Decomp ownership:

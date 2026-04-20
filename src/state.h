@@ -53,6 +53,8 @@ typedef struct MslStateSoA {
   float* illusion_ghost_pos0_y;
   float* illusion_ghost_pos1_x;
   float* illusion_ghost_pos1_y;
+  float* illusion_ghost_pos2_x;
+  float* illusion_ghost_pos2_y;
   float* prev_pos_x;  // Position at start of current frame (pre-integration).
   float* prev_pos_y;  // Position at start of current frame (pre-integration).
   // Frame-start Y snapshot for mpColl floor sweeps. Kept separate from prev_pos_* because

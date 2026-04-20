@@ -2023,23 +2023,26 @@ def _materialize_illusion_seed_positions(
     return out
 
 
-def derive_illusion_ghost_pos01(
+def derive_illusion_ghost_pos012(
     *,
     post_action_id_u16: np.ndarray,
     post_action_frame_i16: np.ndarray,
     post_pos_x: np.ndarray,
     post_pos_y: np.ndarray,
-) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
-    """Derive post-frame `mv.fx.SpecialS.ghostEffectPos[0..1]` strictly causally.
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """Derive post-frame `mv.fx.SpecialS.ghostEffectPos[0..2]` strictly causally.
 
     Decomp ownership:
     - main-state Enter initializes ghostEffectPos[0..3] = cur_pos via ftFox_SpecialS_SetVars.
     - the main/end Phys callbacks advance the ring through ftFox_SpecialS_SetPhys:
         ghost3 = ghost2; ghost2 = ghost1; ghost1 = ghost0; ghost0 = cur_pos
     - item Phys later consumes ghostEffectPos[1] through ftFx_SpecialS_CopyGhostPosIndexed(1).
+    - item collision preserves the previous HitCapsule endpoint in x58; at a replay seed boundary
+      for an active Illusion/Phantasm article, that endpoint is ghostEffectPos[2].
     refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c::{
       ftFox_SpecialS_SetVars,ftFox_SpecialS_SetPhys,ftFx_SpecialS_CopyGhostPosIndexed
     }
+    refs/melee/src/melee/it/itcoll.c::it_8027137C
     refs/melee/src/melee/it/items/itfoxillusion.c::{
       itFoxillusion_UnkMotion0_Phys,itFoxillusion_UnkMotion1_Phys
     }
@@ -2066,12 +2069,16 @@ def derive_illusion_ghost_pos01(
     out0_y = np.array(py, copy=True)
     out1_x = np.array(px, copy=True)
     out1_y = np.array(py, copy=True)
+    out2_x = np.array(px, copy=True)
+    out2_y = np.array(py, copy=True)
 
     for p in range(n_players):
         ghost0_x = float(px[0, p])
         ghost0_y = float(py[0, p])
         ghost1_x = ghost0_x
         ghost1_y = ghost0_y
+        ghost2_x = ghost0_x
+        ghost2_y = ghost0_y
         for fi in range(n_frames):
             cur_a = int(aid[fi, p])
             cur_x = float(px[fi, p])
@@ -2091,7 +2098,11 @@ def derive_illusion_ghost_pos01(
                 ghost0_y = cur_y
                 ghost1_x = cur_x
                 ghost1_y = cur_y
+                ghost2_x = cur_x
+                ghost2_y = cur_y
             elif cur_a in setphys_actions:
+                ghost2_x = ghost1_x
+                ghost2_y = ghost1_y
                 ghost1_x = ghost0_x
                 ghost1_y = ghost0_y
                 ghost0_x = cur_x
@@ -2100,7 +2111,26 @@ def derive_illusion_ghost_pos01(
             out0_y[fi, p] = np.float32(ghost0_y)
             out1_x[fi, p] = np.float32(ghost1_x)
             out1_y[fi, p] = np.float32(ghost1_y)
+            out2_x[fi, p] = np.float32(ghost2_x)
+            out2_y[fi, p] = np.float32(ghost2_y)
 
+    return out0_x, out0_y, out1_x, out1_y, out2_x, out2_y
+
+
+def derive_illusion_ghost_pos01(
+    *,
+    post_action_id_u16: np.ndarray,
+    post_action_frame_i16: np.ndarray,
+    post_pos_x: np.ndarray,
+    post_pos_y: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """Backward-compatible helper for callers that only need ghostEffectPos[0..1]."""
+    out0_x, out0_y, out1_x, out1_y, _out2_x, _out2_y = derive_illusion_ghost_pos012(
+        post_action_id_u16=post_action_id_u16,
+        post_action_frame_i16=post_action_frame_i16,
+        post_pos_x=post_pos_x,
+        post_pos_y=post_pos_y,
+    )
     return out0_x, out0_y, out1_x, out1_y
 
 
@@ -3875,13 +3905,18 @@ def _main_impl(args) -> None:
             )
         )
 
-    illusion_ghost_pos0_x, illusion_ghost_pos0_y, illusion_ghost_pos1_x, illusion_ghost_pos1_y = (
-        derive_illusion_ghost_pos01(
+    (
+        illusion_ghost_pos0_x,
+        illusion_ghost_pos0_y,
+        illusion_ghost_pos1_x,
+        illusion_ghost_pos1_y,
+        illusion_ghost_pos2_x,
+        illusion_ghost_pos2_y,
+    ) = derive_illusion_ghost_pos012(
         post_action_id_u16=post_action_id_u16,
         post_action_frame_i16=post_state_age_all,
         post_pos_x=post_pos_x_all,
         post_pos_y=post_pos_y_all,
-        )
     )
     samples["seed_t"]["illusion_ghost_pos0_x"][:, :num_players] = illusion_ghost_pos0_x[
         :-1, :num_players
@@ -3891,6 +3926,8 @@ def _main_impl(args) -> None:
     ]
     samples["seed_t"]["illusion_ghost_pos1_x"][:, :num_players] = illusion_ghost_pos1_x[:-1, :num_players]
     samples["seed_t"]["illusion_ghost_pos1_y"][:, :num_players] = illusion_ghost_pos1_y[:-1, :num_players]
+    samples["seed_t"]["illusion_ghost_pos2_x"][:, :num_players] = illusion_ghost_pos2_x[:-1, :num_players]
+    samples["seed_t"]["illusion_ghost_pos2_y"][:, :num_players] = illusion_ghost_pos2_y[:-1, :num_players]
     # Grounded attacker-on-shield knockback scalar (`fp->xF4_ground_attacker_shield_kb_vel`).
     #
     # Decomp:

@@ -69,6 +69,8 @@ def test_seed_schema_includes_staling_fields() -> None:
     assert "illusion_ghost_pos0_y" in SEED_DTYPE.fields
     assert "illusion_ghost_pos1_x" in SEED_DTYPE.fields
     assert "illusion_ghost_pos1_y" in SEED_DTYPE.fields
+    assert "illusion_ghost_pos2_x" in SEED_DTYPE.fields
+    assert "illusion_ghost_pos2_y" in SEED_DTYPE.fields
     # Combat hitbox x58/x4C continuity seed lanes for BODY collision-space followup.
     assert "combat_hitbox_prev_valid" in SEED_DTYPE.fields
     assert "combat_hitbox_prev_x" in SEED_DTYPE.fields

@@ -29,6 +29,17 @@ class _Case:
     "case",
     [
         _Case(
+            dataset_rel="datasets/aggregate_recent/replays/validation/aggregate_recent/DistinctCaringCobra.msl",
+            record=4761,
+            attacker_port=0,
+            defender_port=1,
+            note="airborne Fox Illusion BODY uses ghostEffectPos[2]->ghostEffectPos[1] hitcapsule sweep",
+            player_fields=("action_id", "action_frame", "animation_index", "hitlag", "hitstun"),
+            player_float_fields=("percent", "speed_x_attack", "speed_y_attack"),
+            item_fields=("exists", "type", "state", "owner", "instance_id"),
+            item_float_fields=("pos_x", "pos_y", "timer"),
+        ),
+        _Case(
             dataset_rel="datasets/aggregate_recent/replays/validation/aggregate_recent/HilariousVillainousGiraffe.msl",
             record=528,
             attacker_port=0,
@@ -90,6 +101,30 @@ def test_illusion_body_hit_rows_match_replay_real(case: _Case) -> None:
             assert float(out["items"][0][field]) == pytest.approx(float(ref["items"][0][field]), abs=1e-6), (
                 f"{case.note}: item field={field}"
             )
+
+
+@pytest.mark.integration
+def test_illusion_ghost2_sweep_does_not_hit_adjacent_attackair_entry_row() -> None:
+    # Negative control for the ghostEffectPos[2] BODY-sweep lane: the preceding AttackAir entry row
+    # keeps the article alive without applying the Illusion hit. The retained lane starts from the
+    # previous hitcapsule endpoint but must still require actual swept capsule overlap.
+    # refs/melee/src/melee/it/itcoll.c::it_8027137C
+    # refs/melee/src/melee/it/items/itfoxillusion.c::itFoxillusion_UnkMotion1_Phys
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = (
+        root / "datasets/aggregate_recent/replays/validation/aggregate_recent/DistinctCaringCobra.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    seed, out, ref = _step_one_row(dataset_path, 4760)
+    victim = 1
+    assert int(seed["items"][0]["type"]) == 56
+    assert int(out["action_id"][victim]) == int(ref["action_id"][victim]) == 67
+    assert int(out["hitlag"][victim]) == int(ref["hitlag"][victim]) == 0
+    assert float(out["percent"][victim]) == pytest.approx(float(ref["percent"][victim]), abs=1e-6)
+    assert int(out["items"][0]["exists"]) == int(ref["items"][0]["exists"]) == 1
 
 
 @pytest.mark.integration

@@ -302,6 +302,13 @@ static inline uint8_t items_action_is_damage_family(uint16_t action_id_u16) {
   }
 }
 
+static inline uint8_t items_action_is_dead_family(uint16_t action_id_u16) {
+  // Common Dead* MotionState ids are contiguous at ftCo_MS_DeadDown..DeadUpFallHitCameraIce.
+  // refs/melee/src/melee/ft/ftmotionstates.c
+  // refs/melee/src/melee/ft/chara/ftCommon/forward.h::ftCommon_MotionState
+  return (action_id_u16 <= (uint16_t)10u) ? 1u : 0u;
+}
+
 static inline size_t idx_hurtcap(int bi, int p, int cap_i) {
   return ((size_t)bi * (size_t)MSL_MAX_PLAYERS + (size_t)p) * (size_t)MSL_MAX_HURTCAPS +
          (size_t)cap_i;
@@ -1762,12 +1769,13 @@ static void illusion_items_update_and_collide(MslBatch* batch, int bi) {
     //
     // Runtime bridge:
     // - consume the seeded post-frame `ghostEffectPos[1]` lane for the current step,
-    // - keep the paired `ghostEffectPos[0]` lane in state so rollout can advance the ring as
-    //   `ghost1 = ghost0; ghost0 = cur_pos` instead of clobbering `ghost1` with current position.
-    // tools/slippi/make_dataset_from_slp.py::derive_illusion_ghost_pos01
+    // - keep the paired `ghostEffectPos[0..2]` lanes in state so rollout can advance the ring as
+    //   `ghost2 = ghost1; ghost1 = ghost0; ghost0 = cur_pos` instead of clobbering previous
+    //   hitcapsule endpoints with current position.
+    // tools/slippi/make_dataset_from_slp.py::derive_illusion_ghost_pos012
     //
     // Known remaining Side-B/Illusion decomp lanes not yet modeled here:
-    // - ghostEffectPos[2]/ghostEffectPos[3]
+    // - ghostEffectPos[3]
     // - blendFrames[0..3]
     // - ghostGObj
     // - fp->x2222_b2 side effects
@@ -1780,14 +1788,28 @@ static void illusion_items_update_and_collide(MslBatch* batch, int bi) {
     //   itFoxillusion_UnkMotion0_Phys,itFoxillusion_UnkMotion1_Phys,itFoxillusion_UnkMotion2_Phys}
     float base_x0 = batch->state.item_pos_x[ii];
     float base_y0 = batch->state.item_pos_y[ii];
+    float base_x1 = base_x0;
+    float base_y1 = base_y0;
     if (action_is_illusion_setphys(batch->state.action_id[o_idx])) {
-      base_x0 = batch->state.illusion_ghost_pos1_x[o_idx];
-      base_y0 = batch->state.illusion_ghost_pos1_y[o_idx];
-      batch->state.item_pos_x[ii] = base_x0;
-      batch->state.item_pos_y[ii] = base_y0;
+      // Item collision carries the previous-to-current HitCapsule segment. The current endpoint
+      // is the decomp-owned `ghostEffectPos[1]` item position. End-state seed rows can enter with
+      // the previous x58 endpoint already shifted to `ghostEffectPos[2]`; main-state rows keep the
+      // narrower seeded item position until their remaining hitlist/callback owners are exposed.
+      // refs/melee/src/melee/it/itcoll.c::it_8027137C
+      // refs/melee/src/melee/it/items/itfoxillusion.c::{
+      //   itFoxillusion_UnkMotion0_Phys,itFoxillusion_UnkMotion1_Phys}
+      base_x1 = batch->state.illusion_ghost_pos1_x[o_idx];
+      base_y1 = batch->state.illusion_ghost_pos1_y[o_idx];
+      base_x0 = base_x1;
+      base_y0 = base_y1;
+      if (type == (uint16_t)MSL_IT_KIND_FOX_ILLUSION &&
+          action_is_illusion_end(batch->state.action_id[o_idx])) {
+        base_x0 = batch->state.illusion_ghost_pos2_x[o_idx];
+        base_y0 = batch->state.illusion_ghost_pos2_y[o_idx];
+      }
+      batch->state.item_pos_x[ii] = base_x1;
+      batch->state.item_pos_y[ii] = base_y1;
     }
-    const float base_x1 = base_x0;
-    const float base_y1 = base_y0;
     const float x0 = base_x0;
     const float y0 = base_y0 + hp.hitbox_y_offset;
     const float x1 = base_x1;
@@ -2032,6 +2054,7 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
     // Beam length visual scaling: fox/falco blaster shots ramp model scaleZ over time.
     // refs/melee/src/melee/it/items/itfoxlaser.c::itFoxlaser_UnkMotion1_Anim
     float laser_scale_z = 1.0f;
+    float laser_prev_scale_z = 1.0f;
     float laser_age_frames = 0.0f;
     {
       const size_t o2_idx = msl_idx_player(bi, owner);
@@ -2057,6 +2080,28 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
         s = 1e-3f;
       }
       laser_scale_z = s;
+
+      // HitCapsule x58/x4C ownership:
+      // - item collision refresh carries previous x4C into x58, then rebuilds current x4C from the
+      //   current JObj transform.
+      // - Laser anim increments `foxlaser.scale` once per item anim update. For a reseeded
+      //   one-step, x58 therefore belongs to the previous post-frame scale while x4C belongs to
+      //   the current post-anim scale; using the current scale for both ends over-extends trailing
+      //   laser BODY segments.
+      // refs/melee/src/melee/it/itcoll.c::it_8027137C
+      // refs/melee/src/melee/it/items/itfoxlaser.c::itFoxlaser_UnkMotion1_Anim
+      float prev_age = age - 1.0f;
+      if (prev_age < 0.0f) {
+        prev_age = 0.0f;
+      }
+      float prev_s = (prev_age * speed) / 11.25f;
+      if (prev_s > cap) {
+        prev_s = cap;
+      }
+      if (prev_s < 1e-5f) {
+        prev_s = 1e-3f;
+      }
+      laser_prev_scale_z = prev_s;
     }
     (void)laser_scale_z;
 
@@ -2606,6 +2651,9 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
       const uint8_t body_shield_adjacent = (batch->state.shield_radius[d_idx] > 0.0f) ? 1u : 0u;
       const float laser_offset_scale = laser_collision_offset_scale(
           lp, laser_state, laser_scale_z, MSL_LASER_COLLISION_SPACE_BODY, body_shield_adjacent, 1u);
+      const float laser_prev_offset_scale =
+          laser_collision_offset_scale(lp, laser_state, laser_prev_scale_z,
+                                       MSL_LASER_COLLISION_SPACE_BODY, body_shield_adjacent, 1u);
       // Laser BODY overlap parity:
       // - Decomp computes collision over projectile travel in-frame (prev_pos -> cur_pos), so a
       //   current-point-only probe can miss replay-causal same-frame hits.
@@ -2620,11 +2668,12 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
       for (uint8_t oi = 0; oi < off_n && oi < (uint8_t)MSL_LASER_MAX_HITBOX_OFFS_X && !hit; oi++) {
         const float off_x =
             (laser_state == 0u) ? lp->hitbox_offsets_x[oi] : lp->state1_hitbox_offsets_x[oi];
-        const float s = off_x * laser_offset_scale;
-        const float sx0 = x0 + (ux * s);
-        const float sy0 = y0 + (uy * s);
-        const float sx = x + (ux * s);
-        const float sy = y + (uy * s);
+        const float s0 = off_x * laser_prev_offset_scale;
+        const float s1 = off_x * laser_offset_scale;
+        const float sx0 = x0 + (ux * s0);
+        const float sy0 = y0 + (uy * s0);
+        const float sx = x + (ux * s1);
+        const float sy = y + (uy * s1);
         for (uint8_t ci = 0; ci < cap_n; ci++) {
           const float hx0 = use_swept_body ? sx0 : sx;
           const float hy0 = use_swept_body ? sy0 : sy;
@@ -2893,15 +2942,17 @@ void items_update(MslBatch* batch) {
         item_slot_clear(batch, ii);
       }
     }
-    // Refresh the seeded `ghostEffectPos[0..1]` gameplay lanes for the next frame.
+    // Refresh the seeded `ghostEffectPos[0..2]` gameplay lanes for the next frame.
     // Decomp: ftFox_SpecialS_SetPhys advances the live ring as
-    // `ghost1 = ghost0; ghost0 = cur_pos`.
+    // `ghost2 = ghost1; ghost1 = ghost0; ghost0 = cur_pos`.
     // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c::ftFox_SpecialS_SetPhys
     for (int p = 0; p < num_players; p++) {
       const size_t idx = msl_idx_player(bi, p);
       if (!action_is_illusion_setphys(batch->state.action_id[idx])) {
         continue;
       }
+      batch->state.illusion_ghost_pos2_x[idx] = batch->state.illusion_ghost_pos1_x[idx];
+      batch->state.illusion_ghost_pos2_y[idx] = batch->state.illusion_ghost_pos1_y[idx];
       batch->state.illusion_ghost_pos1_x[idx] = batch->state.illusion_ghost_pos0_x[idx];
       batch->state.illusion_ghost_pos1_y[idx] = batch->state.illusion_ghost_pos0_y[idx];
       batch->state.illusion_ghost_pos0_x[idx] = batch->state.pos_x[idx];
@@ -2942,10 +2993,12 @@ void items_update_post_combat(MslBatch* batch) {
       if (!prev_requires_gun || cur_requires_gun) {
         continue;
       }
-      if (!items_action_is_damage_family(action_id_u16)) {
+      const uint8_t is_damage_exit = items_action_is_damage_family(action_id_u16);
+      const uint8_t is_dead_exit = items_action_is_dead_family(action_id_u16);
+      if (!is_damage_exit && !is_dead_exit) {
         continue;
       }
-      if (batch->state.on_ground[idx] != 0u) {
+      if (is_damage_exit && batch->state.on_ground[idx] != 0u) {
         continue;
       }
 
@@ -2955,12 +3008,17 @@ void items_update_post_combat(MslBatch* batch) {
       // - On airborne Fighter_ProcessHit damage entry from SpecialAirN states, the fighter exits the
       //   blaster action family through damage callbacks (not SpecialNEnd), so this lane should not
       //   persist as a carried SpecialNEnd linger row.
+      // - Dead* motion states are common non-blaster states (ftCo_MF_Dead); when a SpecialN owner
+      //   crosses the blast line, the blaster item's UnkMotion8_Anim sees blaster_action==9 and
+      //   clear_blaster consumes the stale gun while preserving already-spawned shots.
       // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_SpecialNEnd_Anim
+      // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_SpecialN_GetBlasterAction
       // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::{
       //   ftFx_SpecialAirNStart_Phys,ftFx_SpecialAirNLoop_Phys,ftFx_SpecialAirNEnd_Phys}
       // refs/melee/src/melee/it/items/itfoxblaster.c::itFoxblaster_UnkMotion8_Anim
       // refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
       // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
+      // refs/melee/src/melee/ft/ftmotionstates.c
       const size_t ii = msl_idx_item(bi, gun_slot);
       item_slot_clear(batch, ii);
     }

@@ -2029,6 +2029,88 @@ Fox/Falco special-owner split (2026-04-17):
     Sources: `refs/melee/src/melee/ft/ftcoll.c::{checkTipLog,inlineB1,ftColl_80076ED8}`,
     `refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC`,
     `refs/melee/src/melee/it/itcoll.c::it_80272460`.
+  - Laser HitCapsule x58/x4C scale ownership:
+    - Item hitcapsules carry `x58 -> x4C` across `it_8027137C`: the previous post-frame x4C is
+      copied into x58, then current x4C is rebuilt from the current JObj transform. Fox/Falco laser
+      anim advances `foxlaser.scale` once per item anim update, so BODY sweeps must use the
+      previous post-frame scale for x58 and the current post-anim scale for x4C. Using the current
+      scale for both ends over-extends trailing laser BODY segments and creates false consumes.
+    - Replay-real locks: `BlondHardHippopotamus.msl:641` and
+      `ImpassionedAlarmedTarsier.msl:1792` cover false trailing BODY consumes that now stay alive;
+      adjacent controls `BHH:640` and `IAT:1791` stay alive, and `IAT:1793` still performs the
+      following full BODY hit. `GracefulAttachedTurtle.msl:7215` is a negative sentinel proving this
+      is not the rejected unscaled-offset fallback.
+    - The forensic row runner now emits `item_laser_probes` with scaled/unscaled laser segments,
+      hurtcap flags, margins, age, scale, and item/ref/out deltas for targeted item BODY rows.
+    - Fresh taxonomy after this slice: primary total `611` unchanged;
+      `F14c=10`, `F14d=2`, `F15a=11`, `F15b=8`, `F16a=0`, `F16b=0`, `F16c=0`, `F16d=31`.
+      Aggregate total `5281` (down from `5303`); `F14c=475`, `F14d=75`, `F15a=21`,
+      `F15b=124`, `F16a=0`, `F16b=0`, `F16c=0`, `F16d=126` (down from `144`).
+      Section-6 and ledge/collision-env families remain closed
+      (`F17/F10c/F19/F20/F21/F22/F23/F24/F10e=0`).
+    Sources: `refs/melee/src/melee/it/itcoll.c::it_8027137C`,
+    `refs/melee/src/melee/it/items/itfoxlaser.c::itFoxlaser_UnkMotion1_Anim`,
+    `refs/melee/src/melee/lb/lbcollision.c::lbColl_8000805C`.
+  - Fox Illusion end-state BODY sweep now promotes `ghostEffectPos[2]` as the prefix-causal
+    previous hitcapsule endpoint. Decomp owner: `ftFox_SpecialS_SetPhys` advances the ghost ring as
+    `ghost2 = ghost1; ghost1 = ghost0; ghost0 = cur_pos`, `itFoxillusion_UnkMotion{0,1}_Phys`
+    copies `ghostEffectPos[1]` into the article position, and `it_8027137C` preserves the previous
+    x4C endpoint in x58 before rebuilding current collision state. Runtime keeps main-state rows on
+    the existing ghost[1] point owner until their remaining hitlist/callback discriminator is
+    exposed, and only admits the ghost[2]->ghost[1] sweep for Fox Illusion end-state rows.
+    Replay-real locks: `DistinctCaringCobra.msl:4761` covers the missing Fox Illusion BODY hit, and
+    adjacent `DCC:4760` proves the lane does not hit the preceding AttackAir entry row. Seed-history
+    coverage proves `derive_illusion_ghost_pos012` carries ghost[2] from the previous ghost[1].
+    Fresh taxonomy after this slice: primary total `611` unchanged;
+    `F14c=10`, `F14d=2`, `F15a=11`, `F15b=8`, `F16a=0`, `F16b=0`, `F16c=0`, `F16d=31`.
+    Aggregate total `5269` (down from `5281`); `F14c=475`, `F14d=75`, `F15a=21`,
+    `F15b=124`, `F16a=0`, `F16b=0`, `F16c=0`, `F16d=116` (down from `126`).
+    Section-6 and ledge/collision-env families remain closed
+    (`F17/F10c/F19/F20/F21/F22/F23/F24/F10e=0`).
+    Sources: `refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c::ftFox_SpecialS_SetPhys`,
+    `refs/melee/src/melee/it/items/itfoxillusion.c::{
+    itFoxillusion_UnkMotion0_Phys,itFoxillusion_UnkMotion1_Phys}`,
+    `refs/melee/src/melee/it/itcoll.c::it_8027137C`.
+  - Blaster gun Dead* exit lifetime slice:
+    - When a SpecialN/SpecialAirN blaster owner crosses directly into a common Dead* state, the
+      blaster gun article does not persist as a SpecialNEnd linger. Dead* states are outside
+      `ftFx_SpecialN_GetBlasterAction`; `itFoxblaster_UnkMotion8_Anim` therefore reaches the
+      `blaster_action == 9` clear path and consumes the stale gun while preserving already-spawned
+      laser shots.
+    - Replay-real locks: `PriceyPartialAlbatross.msl:1185` covers `SpecialAirNEnd -> DeadDown`
+      stale-gun clear with the live laser compacted into slot 0, and adjacent row
+      `PriceyPartialAlbatross.msl:1184` keeps the pre-death SpecialAirNEnd gun alive.
+    Sources: `refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::{
+    ftFx_SpecialN_GetBlasterAction,ftFx_SpecialN_CheckRemoveBlaster}`,
+    `refs/melee/src/melee/it/items/itfoxblaster.c::itFoxblaster_UnkMotion8_Anim`,
+    `refs/melee/src/melee/ft/ftmotionstates.c`,
+    `refs/melee/src/melee/ft/chara/ftCommon/forward.h::ftCommon_MotionState`.
+  - Rebirth blaster-gun spawn fallout hard move:
+    - `TubbyCurlyHerring.msl:3062` has an item-slot gun mismatch only because the reference exits
+      RebirthWait into `SpecialAirNStart` while the simulator remains in RebirthWait. The item row is
+      therefore match-flow / rebirth action dispatch fallout, not a blaster article identity owner.
+      Taxonomy routes only blaster-gun rows with Rebirth/RebirthWait plus SpecialN context to
+      `F04_match_flow_rebirth` before the blaster article split; Dead*/generic match-flow item rows
+      remain in their item owner unless separately proven.
+    - `DistinctCaringCobra.msl:546` is also not a blaster article identity owner: a pre-combat debug
+      step enters `FX_SPECIAL_AIR_N_START` and spawns the Falco gun, then combat moves the player to
+      `DamageAir2`; the reference goes straight to `DamageAir2` with no gun. That false-gun row is
+      action-entry / combat-order fallout and routes to `F09c_aerial_action_entry_adjacency`.
+    - Pure laser `item_instance_id` echoes at `HungryImportantSnake.msl:6603` and
+      `PutridJoyousOryx.msl:2235` are not independent slot-compaction owners. In both rows the
+      mismatching slot is explained by the neighboring old-laser consume/keepalive disagreement, so
+      these pure laser instance rows route to `F16d_item_body_lifetime`.
+    - Fresh taxonomy after the Dead* lifetime slice plus these hard moves: primary total `611`;
+      `F14c=10`, `F14d=2`, `F15a=11`, `F15b=8`, `F16a=0`, `F16b=0`, `F16c=0`, `F16d=31`.
+      Aggregate total `5303`; `F14c=475`, `F14d=75`, `F15a=21`, `F15b=124`, `F16a=2`,
+      `F16b=5` (down from `13`), `F16c=0`, `F16d=142` (down from `146`). Section-6 and
+      ledge/collision-env families remain closed (`F17/F10c/F19/F20/F21/F22/F23/F24/F10e=0`).
+      After folding the two pure laser instance echoes into `F16d`, aggregate remains `5303` with
+      `F16a=0`, `F16b=0`, and `F16d=144`.
+    Sources: `refs/melee/src/melee/ft/chara/ftCommon/forward.h::ftCommon_MotionState`,
+    `refs/melee/src/melee/ft/ftmotionstates.c`,
+    `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c::ftCo_Jump_IASA`,
+    `refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState`.
   - Rejected item-owner experiments:
     - Broad same-frame powershield owner/xDA8 transfer fixed a few `F15a` rows but regressed
       adjacent GuardReflect identity rows, so it remains rejected until the exact
@@ -2076,6 +2158,31 @@ Fox/Falco special-owner split (2026-04-17):
       retained disabled-contact slice. It regressed primary to `791` (`F16d=159`) and aggregate to
       `5868` (`F16d=545`, `F16b=145`), so `HurtCapsule_Intangible` remains excluded from the
       disabled-contact owner.
+    - Hidden `x198C`/colanim hit-status substitution for item BODY eligibility was tested after the
+      checkpoint and produced no taxonomy movement (`F16d` stayed `31` primary / `146` aggregate),
+      so visible hurtbox state remains authoritative until a narrower collision-state lane is
+      promoted.
+    - A broad post-callback blaster-gun clear for every owner that no longer required a gun was
+      tested against the aggregate suite and was rejected: primary rose to `1699`, aggregate to
+      `8668`, with large `F16d/F16b/F15b` regressions. The retained Dead* slice remains limited to
+      previous-SpecialN owners exiting into common Dead* states.
+    - A miss-only unscaled BODY-offset fallback was tested for the remaining laser BODY rows. It
+      regressed primary to `767` (`F16d=148`) and aggregate to `5710` (`F16d=417`), so the remaining
+      BODY mass still needs the exact item hitlist / pose / damage-callback discriminator rather
+      than broader geometry.
+    - Replacing laser BODY sweeps with current-point probes after adding the x58/x4C scale split
+      was tested as a possible stricter interpretation of the hitcapsule state machine. It broke the
+      retained `IAT:1580` phantom/tip-log BODY lock, so the retained change keeps decomp-shaped
+      sweeps and only corrects the previous-vs-current scale used by the segment endpoints.
+    - A non-disabled `x198C` item-BODY skip was tested after the x58/x4C scale fix for the remaining
+      false-consume rows. It can be narrowed to preserve the disabled-contact locks, but after
+      runtime timer refresh it still did not fix `HIS:6544`, `PPA:5141`, or `PRH:8137`; rejected.
+    - Broad Illusion/Phantasm ghost[2] sweeps were tested after exposing the prefix-causal
+      `ghostEffectPos[2]` lane. Applying the ghost[2]->ghost[1] segment to all SetPhys rows created
+      false Phantasm main-state BODY hits and worsened aggregate to `5291`; using a seeded-item
+      position-to-ghost[1] default was also wrong and rose to `5325`. The retained slice keeps the
+      old ghost[1] point owner by default and limits ghost[2] to the source-backed Fox end-state row
+      shape proven by `DCC:4761`.
     - The blaster gun `misc0` / `xDD7` cursor was inspected as a source-backed clue for F14c. A
       Fox ThrowHi mid-pulse suppressor keyed on gun `misc0==2` regressed primary to `741` and
       aggregate to `5517` (`F14c=610`). The gun cursor is useful forensic visibility, but it is not

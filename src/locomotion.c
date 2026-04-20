@@ -121,6 +121,8 @@ static inline void side_special_reset_ghost_ring_on_main_entry(MslBatch* batch, 
   batch->state.illusion_ghost_pos0_y[idx] = batch->state.pos_y[idx];
   batch->state.illusion_ghost_pos1_x[idx] = batch->state.pos_x[idx];
   batch->state.illusion_ghost_pos1_y[idx] = batch->state.pos_y[idx];
+  batch->state.illusion_ghost_pos2_x[idx] = batch->state.pos_x[idx];
+  batch->state.illusion_ghost_pos2_y[idx] = batch->state.pos_y[idx];
 }
 
 static inline void side_special_ground_to_air_transition(MslBatch* batch, const MslSpecialMsids* ms,

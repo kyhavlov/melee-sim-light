@@ -165,6 +165,26 @@ _DEBUG_INTERNALS_DTYPE = np.dtype(
     align=False,
 )
 
+_DEBUG_HURTCAP_SLOT_FLAGS_DTYPE = np.dtype(
+    [
+        ("enabled", "u1"),
+        ("height", "u1"),
+        ("is_grabbable", "u1"),
+        ("mode_can_hit_bit", "u1"),
+        ("char_id", "u1"),
+        ("_pad0", "u1"),
+        ("msid", "<u2"),
+        ("frame", "<u2"),
+        ("cap_id", "<u2"),
+        ("can_hit_mask", "<u4"),
+    ],
+    align=False,
+)
+
+_LASER_ACTION_TURN = 0x0012
+_LASER_ACTION_DASH = 0x0014
+_LASER_ACTION_ATTACK_HI3 = 0x0038
+
 
 @dataclass(frozen=True)
 class RowSpec:
@@ -267,6 +287,63 @@ def _player_compare(cmp_row: np.ndarray, p: int) -> dict[str, object]:
         "shield_hp": float(cmp_row["shield_hp"][p]),
         "percent": float(cmp_row["percent"][p]),
     }
+
+
+def _item_row(row: np.ndarray, slot: int) -> dict[str, object]:
+    it = row["items"][slot]
+    return {
+        "slot": slot,
+        "exists": int(it["exists"]),
+        "state": int(it["state"]),
+        "type": int(it["type"]),
+        "owner": int(it["owner"]),
+        "instance_id": int(it["instance_id"]),
+        "attack_id": int(it["attack_id"]),
+        "attack_instance": int(it["attack_instance"]),
+        "direction": float(it["direction"]),
+        "vel_x": float(it["vel_x"]),
+        "vel_y": float(it["vel_y"]),
+        "pos_x": float(it["pos_x"]),
+        "pos_y": float(it["pos_y"]),
+        "damage": int(it["damage"]),
+        "timer": float(it["timer"]),
+        "spawn_id": int(it["spawn_id"]),
+        "misc": [int(it[f"misc{i}"]) for i in range(4)],
+    }
+
+
+def _item_diffs(seed: np.ndarray, ref: np.ndarray, out: np.ndarray, slot: int) -> dict[str, object]:
+    diffs: dict[str, object] = {}
+    for f in (
+        "exists",
+        "state",
+        "type",
+        "owner",
+        "instance_id",
+        "attack_id",
+        "attack_instance",
+        "direction",
+        "vel_x",
+        "vel_y",
+        "pos_x",
+        "pos_y",
+        "damage",
+        "timer",
+        "spawn_id",
+        "misc0",
+        "misc1",
+        "misc2",
+        "misc3",
+    ):
+        sv = seed["items"][slot][f]
+        rv = ref["items"][slot][f]
+        ov = out["items"][slot][f]
+        if ov != rv:
+            if np.issubdtype(np.asarray(ov).dtype, np.floating):
+                diffs[f] = {"seed": float(sv), "ref": float(rv), "out": float(ov)}
+            else:
+                diffs[f] = {"seed": int(sv), "ref": int(rv), "out": int(ov)}
+    return diffs
 
 
 def _timebase_rows(tb: np.ndarray, num_players: int) -> list[dict[str, object]]:
@@ -385,6 +462,300 @@ def _point_segment_distance(
     dy = py - cy
     dz = pz - cz
     return math.sqrt(dx * dx + dy * dy + dz * dz), t
+
+
+def _segment_segment_distance(
+    p0: tuple[float, float, float],
+    p1: tuple[float, float, float],
+    q0: tuple[float, float, float],
+    q1: tuple[float, float, float],
+) -> float:
+    ux = p1[0] - p0[0]
+    uy = p1[1] - p0[1]
+    uz = p1[2] - p0[2]
+    vx = q1[0] - q0[0]
+    vy = q1[1] - q0[1]
+    vz = q1[2] - q0[2]
+    wx = p0[0] - q0[0]
+    wy = p0[1] - q0[1]
+    wz = p0[2] - q0[2]
+
+    a = ux * ux + uy * uy + uz * uz
+    b = ux * vx + uy * vy + uz * vz
+    c = vx * vx + vy * vy + vz * vz
+    d = ux * wx + uy * wy + uz * wz
+    e = vx * wx + vy * wy + vz * wz
+    det = a * c - b * b
+    eps = 1.0e-8
+
+    s_n = 0.0
+    s_d = det
+    t_n = 0.0
+    t_d = det
+
+    if det < eps:
+        s_n = 0.0
+        s_d = 1.0
+        t_n = e
+        t_d = c
+    else:
+        s_n = b * e - c * d
+        t_n = a * e - b * d
+        if s_n < 0.0:
+            s_n = 0.0
+            t_n = e
+            t_d = c
+        elif s_n > s_d:
+            s_n = s_d
+            t_n = e + b
+            t_d = c
+
+    if t_n < 0.0:
+        t_n = 0.0
+        if -d < 0.0:
+            s_n = 0.0
+        elif -d > a:
+            s_n = s_d
+        else:
+            s_n = -d
+            s_d = a
+    elif t_n > t_d:
+        t_n = t_d
+        if (-d + b) < 0.0:
+            s_n = 0.0
+        elif (-d + b) > a:
+            s_n = s_d
+        else:
+            s_n = -d + b
+            s_d = a
+
+    sc = 0.0 if abs(s_n) < eps else s_n / s_d
+    tc = 0.0 if abs(t_n) < eps else t_n / t_d
+    dx = wx + sc * ux - tc * vx
+    dy = wy + sc * uy - tc * vy
+    dz = wz + sc * uz - tc * vz
+    return math.sqrt(dx * dx + dy * dy + dz * dz)
+
+
+def _load_laser_probe_params(root: Path) -> dict[int, dict[str, object]]:
+    out: dict[int, dict[str, object]] = {}
+    for name, lifetime_default in (("fox", 35), ("falco", 100)):
+        path = root / "data" / "characters" / f"{name}.json"
+        data = json.loads(path.read_text(encoding="utf-8"))
+        item_type = int(data["blaster_shot_itkind"])
+        out[item_type] = {
+            "name": name,
+            "lifetime": int(data.get("laser_lifetime_frames", lifetime_default)),
+            "size": float(data["laser_size"]),
+            "scale_max": float(data.get("laser_scale_max", 1.0)),
+            "offsets": [float(x) for x in data.get("laser_hitbox_offsets_x", [])],
+            "state1_offsets": [
+                float(x)
+                for x in (
+                    data.get("laser_state1_hitbox_offsets_x")
+                    or data.get("laser_hitbox_offsets_x", [])
+                )
+            ],
+        }
+    return out
+
+
+def _laser_uses_swept_body(
+    player: dict[str, object],
+    seed_prev_action_id: int,
+    shield_radius: float,
+    laser_age_frames: float,
+) -> bool:
+    if int(player["on_ground"]) == 0:
+        return True
+    if not (laser_age_frames > 1.0) or shield_radius > 0.0 or int(player["hurtbox_state"]) != 0:
+        return False
+    action_id = int(player["action_id"])
+    if action_id == _LASER_ACTION_ATTACK_HI3:
+        return True
+    if action_id == _LASER_ACTION_TURN and seed_prev_action_id == _LASER_ACTION_DASH:
+        return True
+    if action_id == _LASER_ACTION_DASH and int(player["action_frame"]) >= 6:
+        return True
+    return False
+
+
+def _collect_item_laser_probes(
+    binding: object,
+    handle: object,
+    seed: np.ndarray,
+    ref: np.ndarray,
+    out_cmp: np.ndarray,
+    post_timebase: list[dict[str, object]],
+    defender: int,
+    num_players: int,
+    root: Path,
+    limit: int = 8,
+) -> list[dict[str, object]]:
+    laser_params = _load_laser_probe_params(root)
+    hurtcaps_raw, hurtcap_count = binding.hurtcaps_world(handle, 0, defender)
+    shield_world = binding.debug_shield_bubbles_world(handle, 0)
+    shield_radius = float(shield_world[defender][3])
+    player = post_timebase[defender]
+    use_timebase_player = {
+        **player,
+        "on_ground": int(seed["on_ground"][defender]),
+    }
+
+    cap_flags: list[dict[str, object]] = []
+    for cap_id in range(int(hurtcap_count)):
+        raw = binding.debug_hurtcap_slot_flags(handle, 0, defender, cap_id)
+        flags = raw.reshape(-1).view(_DEBUG_HURTCAP_SLOT_FLAGS_DTYPE)[0]
+        cap_flags.append(
+            {
+                "enabled": int(flags["enabled"]),
+                "height": int(flags["height"]),
+                "is_grabbable": int(flags["is_grabbable"]),
+                "mode_can_hit_bit": int(flags["mode_can_hit_bit"]),
+                "can_hit_mask": int(flags["can_hit_mask"]),
+            }
+        )
+
+    probes: list[dict[str, object]] = []
+    for slot, it in enumerate(seed["items"]):
+        if int(it["exists"]) == 0:
+            continue
+        item_type = int(it["type"])
+        params = laser_params.get(item_type)
+        if params is None:
+            continue
+        owner = int(it["owner"])
+        if owner < 0 or owner >= num_players:
+            continue
+        if owner == defender:
+            continue
+
+        vx = float(it["vel_x"])
+        vy = float(it["vel_y"])
+        speed = math.sqrt(vx * vx + vy * vy)
+        if speed > 0.0:
+            ux = vx / speed
+            uy = vy / speed
+        else:
+            ux = 1.0 if float(it["direction"]) >= 0.0 else -1.0
+            uy = 0.0
+
+        x0 = float(it["pos_x"])
+        y0 = float(it["pos_y"])
+        x = x0 + vx
+        y = y0 + vy
+        timer_after = float(it["timer"]) - 1.0
+        lifetime = float(params["lifetime"])
+        age = max(0.0, lifetime - timer_after)
+        scale_z = age * speed / 11.25
+        scale_z = min(scale_z, float(params["scale_max"]))
+        if scale_z < 1.0e-5:
+            scale_z = 1.0e-3
+        prev_age = max(0.0, age - 1.0)
+        prev_scale_z = prev_age * speed / 11.25
+        prev_scale_z = min(prev_scale_z, float(params["scale_max"]))
+        if prev_scale_z < 1.0e-5:
+            prev_scale_z = 1.0e-3
+        state = 1 if int(it["state"]) != 0 else 0
+        offsets = params["state1_offsets"] if state else params["offsets"]
+        body_shield_adjacent = shield_radius > 0.0
+        offset_scale = 1.0 if body_shield_adjacent and scale_z > 1.0 else scale_z
+        prev_offset_scale = 1.0 if body_shield_adjacent and prev_scale_z > 1.0 else prev_scale_z
+        use_swept = _laser_uses_swept_body(
+            use_timebase_player, int(seed["seed_prev_action_id"][defender]), shield_radius, age
+        )
+
+        candidates: list[dict[str, object]] = []
+        for oi, off_x in enumerate(offsets):
+            scaled0 = float(off_x) * prev_offset_scale
+            scaled1 = float(off_x) * offset_scale
+            unscaled = float(off_x)
+            for label, off0, off1 in (
+                ("scaled", scaled0, scaled1),
+                ("unscaled", unscaled, unscaled),
+            ):
+                sx0 = x0 + ux * off0
+                sy0 = y0 + uy * off0
+                sx1 = x + ux * off1
+                sy1 = y + uy * off1
+                hx0 = sx0 if use_swept else sx1
+                hy0 = sy0 if use_swept else sy1
+                for cap_id in range(int(hurtcap_count)):
+                    cap = hurtcaps_raw[cap_id]
+                    cr = float(cap[6])
+                    if cr <= 0.0:
+                        continue
+                    sr = float(params["size"])
+                    dist = _segment_segment_distance(
+                        (hx0, hy0, 0.0),
+                        (sx1, sy1, 0.0),
+                        (float(cap[0]), float(cap[1]), float(cap[2])),
+                        (float(cap[3]), float(cap[4]), float(cap[5])),
+                    )
+                    margin = sr + cr - dist
+                    candidates.append(
+                        {
+                            "space": label,
+                            "offset_index": oi,
+                            "offset_x": float(off_x),
+                            "offset_applied_prev": float(off0),
+                            "offset_applied_cur": float(off1),
+                            "cap_id": cap_id,
+                            "margin": float(margin),
+                            "distance": float(dist),
+                            "sphere_radius": sr,
+                            "cap_radius": cr,
+                            "cap_flags": cap_flags[cap_id],
+                            "segment": [float(hx0), float(hy0), float(sx1), float(sy1)],
+                            "hurtcap": [float(v) for v in cap.tolist()],
+                        }
+                    )
+        candidates.sort(key=lambda r: float(r["margin"]), reverse=True)
+        sim_hits = [
+            c
+            for c in candidates
+            if c["space"] == "scaled"
+            and bool(c["cap_flags"]["enabled"])
+            and float(c["margin"]) >= 0.0
+        ]
+        probes.append(
+            {
+                "slot": slot,
+                "seed_item": _item_row(seed, slot),
+                "ref_item": _item_row(ref, slot),
+                "out_item": _item_row(out_cmp, slot),
+                "item_diffs": _item_diffs(seed, ref, out_cmp, slot),
+                "owner_char": params["name"],
+                "laser_state": state,
+                "motion": {
+                    "x0": x0,
+                    "y0": y0,
+                    "x": x,
+                    "y": y,
+                    "vx": vx,
+                    "vy": vy,
+                    "speed": speed,
+                    "timer_after": timer_after,
+                    "age_frames": age,
+                    "scale_z": scale_z,
+                    "prev_scale_z": prev_scale_z,
+                    "offset_scale_body": offset_scale,
+                    "prev_offset_scale_body": prev_offset_scale,
+                    "use_swept_body": use_swept,
+                    "shield_radius": shield_radius,
+                },
+                "defender": {
+                    "action_id": int(player["action_id"]),
+                    "action_frame": int(player["action_frame"]),
+                    "hurtbox_state": int(player["hurtbox_state"]),
+                    "on_ground_seed": int(seed["on_ground"][defender]),
+                    "seed_prev_action_id": int(seed["seed_prev_action_id"][defender]),
+                },
+                "sim_scaled_hit_count": len(sim_hits),
+                "best_candidates": candidates[:limit],
+            }
+        )
+    return probes
 
 
 def _closest_body_pairs(
@@ -605,8 +976,30 @@ def _format_report(payload: dict[str, object]) -> str:
                     f"    a{c['attacker']} hb{c['hitbox_id']} -> cap{c['hurtcap_id']} "
                     f"margin={c['margin']:.3f} dist={c['distance']:.3f} "
                     f"sum_r={(c['hitbox'][3] + c['hurtcap'][6]):.3f} "
-                    f"element={c['element']} flags=0x{c['hb_flags']:04x}"
+                        f"element={c['element']} flags=0x{c['hb_flags']:04x}"
                 )
+        probes = row["pre_combat"].get("item_laser_probes", [])
+        if probes:
+            lines.append("  item_laser_probes:")
+            for p in probes:
+                motion = p["motion"]
+                diffs = p["item_diffs"]
+                best = p["best_candidates"][0] if p["best_candidates"] else None
+                lines.append(
+                    f"    slot{p['slot']} type={p['seed_item']['type']} owner={p['seed_item']['owner']} "
+                    f"iid={p['seed_item']['instance_id']} state={p['laser_state']} "
+                    f"hits={p['sim_scaled_hit_count']} swept={int(motion['use_swept_body'])} "
+                    f"age={motion['age_frames']:.3f} scale={motion['prev_scale_z']:.3f}->{motion['scale_z']:.3f} "
+                    f"diffs={','.join(sorted(diffs.keys())) if diffs else '-'}"
+                )
+                if best:
+                    flags = best["cap_flags"]
+                    lines.append(
+                        f"      best {best['space']} off{best['offset_index']} cap{best['cap_id']} "
+                        f"margin={best['margin']:.3f} dist={best['distance']:.3f} "
+                        f"height={flags['height']} enabled={flags['enabled']} "
+                        f"mode_hit={flags['mode_can_hit_bit']} grabbable={flags['is_grabbable']}"
+                    )
         lines.append("post_step:")
         lines.append(
             f"  out action={row['post_step']['out_player']['action_id']} ref={row['post_step']['ref_player']['action_id']} "
@@ -748,6 +1141,23 @@ def main() -> None:
             binding.step_input(handle, prev_input_bytes, input_bytes)
             binding.write_compare(handle, out_compare_bytes)
             binding.debug_write_internals(handle, out_internals)
+
+            # Re-enter the debug pre-combat state after producing full-step output. Item-laser
+            # forensics need the collision-time hurtcaps, but also include ref/out item deltas.
+            out_cmp_probe = out_compare_bytes.view(COMPARE_DTYPE).reshape((1,))[0]
+            binding.reseed_seed(handle, seed_bytes)
+            binding.debug_step_input_pre_combat(handle, prev_input_bytes, input_bytes)
+            item_laser_probes = _collect_item_laser_probes(
+                binding,
+                handle,
+                row["seed_t"][0],
+                row["ref_t1"][0],
+                out_cmp_probe,
+                _timebase_rows(timebase, num_players),
+                spec.p,
+                num_players,
+                root,
+            )
         finally:
             binding.destroy(handle)
 
@@ -790,6 +1200,7 @@ def main() -> None:
                     "shield_bubbles_world": [
                         [float(v) for v in shield_world[p].tolist()] for p in range(num_players)
                     ],
+                    "item_laser_probes": item_laser_probes,
                 },
                 "post_step": {
                     "ref_player": ref_player,

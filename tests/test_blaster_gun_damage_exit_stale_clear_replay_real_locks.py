@@ -123,6 +123,26 @@ def _is_damage_action(action_id: int) -> bool:
             expect_gun=True,
             note="IAT active SpecialAirNLoop gun remains while the other stale end gun clears.",
         ),
+        _BlasterGunLifetimeCase(
+            dataset_rel=(
+                "datasets/aggregate_recent/replays/validation/aggregate_recent/"
+                "PriceyPartialAlbatross.msl"
+            ),
+            record=1184,
+            owner_port=0,
+            expect_gun=True,
+            note="PPA adjacent SpecialAirNEnd fall keeps the gun before DeadDown.",
+        ),
+        _BlasterGunLifetimeCase(
+            dataset_rel=(
+                "datasets/aggregate_recent/replays/validation/aggregate_recent/"
+                "PriceyPartialAlbatross.msl"
+            ),
+            record=1185,
+            owner_port=0,
+            expect_gun=False,
+            note="PPA SpecialAirNEnd->DeadDown clears the stale blaster gun only.",
+        ),
     ],
     ids=lambda c: c.note.split()[0].lower() + "_" + ("keep" if c.expect_gun else "clear"),
 )
@@ -130,11 +150,13 @@ def test_blaster_gun_lifetime_replay_real_item_rows(case: _BlasterGunLifetimeCas
     # Replay-real locks for src/items.c blaster gun lifetime/identity:
     # - ftFx_SpecialNEnd_Anim clears fp->fv.fx.x222C_blasterGObj before leaving SpecialNEnd.
     # - itFoxblaster_UnkMotion8_Anim then clears the item when
-    #   ftFx_SpecialN_CheckRemoveBlaster observes the NULL fighter pointer.
+    #   ftFx_SpecialN_CheckRemoveBlaster observes the NULL fighter pointer or when
+    #   ftFx_SpecialN_GetBlasterAction reports a non-blaster Dead* state.
     # - Active Start/Loop gun rows must remain attached.
     # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::{
-    #   ftFx_SpecialNEnd_Anim,ftFx_SpecialN_CheckRemoveBlaster}
+    #   ftFx_SpecialNEnd_Anim,ftFx_SpecialN_CheckRemoveBlaster,ftFx_SpecialN_GetBlasterAction}
     # refs/melee/src/melee/it/items/itfoxblaster.c::itFoxblaster_UnkMotion8_Anim
+    # refs/melee/src/melee/ft/ftmotionstates.c
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
 
