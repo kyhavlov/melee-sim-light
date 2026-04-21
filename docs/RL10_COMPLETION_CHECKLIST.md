@@ -1083,11 +1083,28 @@ Recommended sequence for the next deep passes:
     `hurtbox_state` can clear for Slippi t+1 while `ftColl_8007925C` still observes the terminal
     collision-status gate for the item BODY pass. Replay-real locks: positive `HIS:6544`,
     disabled-contact negative `PRH:4757`.
-    Fresh taxonomy after the aggregate-only slices in this pass: primary total `528`; all primary
-    item-owner families remain closed (`F14c/F14d/F15a/F15b/F16a/F16b/F16c/F16d=0`). Aggregate
-    total `5083`; remaining aggregate item rows are `F14c=400`, `F14d=66`, `F15a=10`,
-    `F15b=104`, `F16d=56`, with `F16a/F16b/F16c=0`. Section 6 and ledge/collision-env remain
-    closed: `F17/F10c/F19/F20/F21/F22/F23/F24/F10e=0`.
+  - Terminal x1990+x1994 hidden-colanim item BODY carry trusts explicit prefix-causal paired timer
+    lanes outside Shine Start: when `Fighter_8006A360` expires `x1990` from 1 while `x1994`
+    remains live, `x198C` becomes 1, and `ftColl_8007925C` no longer blocks item BODY on
+    collision-status value 2. Runtime marker value `2` admits the ordinary item BODY lifetime path
+    instead of treating stale merged `hurtbox_state=2` as intangible. Replay-real locks: positive
+    `PRH:8054`, adjacent non-terminal negative `PRH:8053`.
+    Fresh taxonomy after this aggregate-only slice: primary total `528`; all primary item-owner
+    families remain closed (`F14c/F14d/F15a/F15b/F16a/F16b/F16c/F16d=0`). Aggregate total `5079`;
+    remaining aggregate item rows are `F14c=400`, `F14d=66`, `F15a=10`, `F15b=104`, `F16d=52`,
+    with `F16a/F16b/F16c=0`. Section 6 and ledge/collision-env remain closed:
+    `F17/F10c/F19/F20/F21/F22/F23/F24/F10e=0`. The checklist item remains active.
+  - Previous-action SpecialN landing slot-echo taxonomy hard move carries `seed_prev_action_id`
+    context into item-slot rows, so SpecialN Loop/AirLoop -> Landing/Fall slot echoes no longer
+    hide under `F15b_guard_laser_lifetime` or `F16d_item_body_lifetime` after the current visible
+    action has left SpecialN. This is a row-owner split only, not a gameplay branch; it extends the
+    accepted `HIS:6603` / `PJO:2235` SpecialN landing slot-echo owner to adjacent rows such as
+    `HIS:6604` while keeping non-SpecialN laser instance echoes in `F16d`.
+    Fresh taxonomy after this split: primary total `528`; all primary item-owner families remain
+    closed (`F14c/F14d/F15a/F15b/F16a/F16b/F16c/F16d=0`). Aggregate total `5079`; remaining
+    aggregate item rows are `F14c=400`, `F14d=66`, `F15a=10`, `F15b=96`, `F16d=48`, with
+    `F16a/F16b/F16c=0`. Section 6 and ledge/collision-env remain closed:
+    `F17/F10c/F19/F20/F21/F22/F23/F24/F10e=0`. The checklist item remains active.
   - `powershield_reflect_size` is now extracted from `p_ftCommonData->x2A8`, matching
     `ftCo_8009370C`'s GuardReflect `ReflectDesc.x14_size`. This is retained as source visibility
     only, not F15 closure: probing the small reflect capsule showed that same-frame owner/xDA8
@@ -1103,6 +1120,11 @@ Recommended sequence for the next deep passes:
     `GAT:4894` HitShield destroy row after rebuild, but rejected accepted reflect rows (`AGG:428`,
     `GAT:4828`) and regressed primary total to `632`; reverted. The extracted size remains
     visibility only until the missing GuardReflect bone/`xDCE/xC54/xC58` state is promoted.
+  - A source-shaped GuardReflect ReflectDesc laser-offset overlap gate was tested against remaining
+    aggregate `F15a/F15b` proving rows (`DCC:352`, `MAJ:118/294/1994/1995/5586/5587`,
+    `PPA:2342`). It did not move those rows after rebuild, so it was reverted rather than retained
+    as dead complexity; the missing owner remains hidden `ftColl_80077464` /
+    `Item_80269DC8` transfer-vs-HitShield state.
   - Powershield reflect final-tick gates were tested as a possible `F15a/F15b` discriminator.
     Runtime-timer gating broke existing powershield reflect locks; seed-snapshot gating improved
     aggregate total through adjacent guard-release movement but doubled primary `F15b` and did not

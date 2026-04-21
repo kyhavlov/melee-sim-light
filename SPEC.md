@@ -2335,13 +2335,41 @@ Fox/Falco special-owner split (2026-04-17):
       the laser alive while visible `hurtbox_state` clears. Replay-real locks are in
       `tests/test_laser_body_colanim_terminal_replay_real_locks.py`: positive `HIS:6544` and a
       disabled-contact negative `PRH:4757`.
-    - Fresh taxonomy after the retained aggregate-only slices in this pass: primary total `528`;
-      primary item-owner families remain closed (`F14c/F14d/F15a/F15b/F16a/F16b/F16c/F16d=0`).
-      Aggregate total `5083`; remaining aggregate item rows are `F14c=400`, `F14d=66`,
-      `F15a=10`, `F15b=104`, `F16d=56`, with `F16a/F16b/F16c=0`. Section-6 and
-      ledge/collision-env families remain closed (`F17/F10c/F19/F20/F21/F22/F23/F24/F10e=0`).
     Sources: `refs/melee/src/melee/ft/fighter.c::Fighter_8006A360`,
     `refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007925C,ftColl_8007B868}`.
+  - Terminal x1990+x1994 hidden-colanim item BODY carry:
+    - Explicit prefix-causal seed lanes can carry both `x1990` and `x1994` outside Shine Start.
+      When `x1990` expires from 1 while `x1994` remains live, `Fighter_8006A360` sets `x198C=1`;
+      `ftColl_8007925C` only blocks item BODY on collision-status value 2, so the same item pass
+      must not treat the stale merged `hurtbox_state=2` seed snapshot as intangible.
+    - Runtime splits the terminal marker: value `1` keeps the existing no-`x1994` guard, while
+      value `2` admits the ordinary BODY/item-lifetime path. Replay-real locks are in
+      `tests/test_laser_body_colanim_terminal_replay_real_locks.py`: positive `PRH:8054` and
+      adjacent non-terminal negative `PRH:8053`.
+    - Fresh taxonomy after this aggregate-only slice: primary total `528`; primary item-owner
+      families remain closed (`F14c/F14d/F15a/F15b/F16a/F16b/F16c/F16d=0`). Aggregate total
+      `5079`; remaining aggregate item rows are `F14c=400`, `F14d=66`, `F15a=10`, `F15b=104`,
+      `F16d=52`, with `F16a/F16b/F16c=0`. Section-6 and ledge/collision-env families remain
+      closed (`F17/F10c/F19/F20/F21/F22/F23/F24/F10e=0`). The checklist item remains active.
+    Sources: `refs/melee/src/melee/ft/fighter.c::Fighter_8006A360`,
+    `refs/melee/src/melee/ft/ftcoll.c::ftColl_8007925C`.
+  - Previous-action SpecialN landing slot-echo taxonomy hard move:
+    - Item-slot taxonomy now carries `seed_prev_action_id` context for item rows, so slot echoes
+      whose current visible action has already entered Landing/Fall but whose prefix-causal owner is
+      SpecialN Loop/AirLoop stay under `F09c_aerial_action_entry_adjacency` instead of
+      `F15b_guard_laser_lifetime` or `F16d_item_body_lifetime`.
+    - This is a row-owner split, not a gameplay branch: it covers the same accepted SpecialN
+      landing/gun-shot slot echo owner as `HIS:6603` / `PJO:2235`, and adds adjacent rows such as
+      `HIS:6604` where the current action no longer names SpecialN but the previous action does.
+      Non-SpecialN laser instance echoes remain in `F16d`.
+    - Fresh taxonomy after this split: primary total `528`; primary item-owner families remain
+      closed (`F14c/F14d/F15a/F15b/F16a/F16b/F16c/F16d=0`). Aggregate total `5079`; remaining
+      aggregate item rows are `F14c=400`, `F14d=66`, `F15a=10`, `F15b=96`, `F16d=48`, with
+      `F16a/F16b/F16c=0`. Section-6 and ledge/collision-env families remain closed
+      (`F17/F10c/F19/F20/F21/F22/F23/F24/F10e=0`). The checklist item remains active.
+    Sources: `refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::{
+    ftFx_SpecialNLoop_Anim,ftFx_SpecialAirNLoop_Anim,ftFx_SpecialNEnd_Anim}`,
+    `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::ftCo_Landing_Enter_Basic`.
   - Powershield reflect-size source visibility:
     - `p_ftCommonData->x2A8` is extracted as `powershield_reflect_size`, matching
       `ftCo_8009370C`'s GuardReflect `ReflectDesc.x14_size`. This is retained only as source/data
@@ -2360,6 +2388,11 @@ Fox/Falco special-owner split (2026-04-17):
       but rejected accepted reflect rows (`AGG:428`, `GAT:4828`) and inflated primary total to
       `632`; reverted. The extracted size remains visibility only until the actual GuardReflect
       bone/`xDCE/xC54/xC58` shield-vs-reflect state is promoted.
+    - A source-shaped GuardReflect ReflectDesc laser-offset overlap gate was tested against the
+      remaining aggregate `F15a/F15b` rows. It did not move the proving rows (`DCC:352`,
+      `MAJ:118/294/1994/1995/5586/5587`, `PPA:2342`) after rebuild, so it was reverted rather
+      than retained as dead complexity; the missing owner remains the hidden
+      `ftColl_80077464` / `Item_80269DC8` transfer-vs-HitShield state.
     - A seed-timer final-tick powershield reflect gate was tested to split `F15b` destroy rows from
       `F15a` transfer rows. Runtime-timer gating broke existing powershield reflect locks, and
       seed-snapshot gating doubled primary `F15b` while leaving aggregate `F15` unchanged, so both

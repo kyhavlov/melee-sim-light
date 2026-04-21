@@ -263,7 +263,7 @@ mismatch.is_dead: 0 / 18656 (0.000000)
 mismatch.hitlag: 24 / 18656 (0.001286)
 mismatch.hitstun: 5 / 18656 (0.000268)
 mismatch.l_cancel: 0 / 18656 (0.000000)
-mismatch.hurtbox_state: 11 / 18656 (0.000590)
+mismatch.hurtbox_state: 10 / 18656 (0.000536)
 mismatch.ground_id: 4 / 18656 (0.000214)
 mismatch.animation_index: 28 / 18656 (0.001501)
 mismatch.instance_hit_by: 7 / 18656 (0.000375)
@@ -290,7 +290,7 @@ err.item_pos_x: mae=0.122026 p95=0.000000 max=55.080002
 err.item_pos_y: mae=0.030489 p95=0.000000 max=26.565500
 err.item_vel_x: mae=0.005703 p95=0.000000 max=5.000000
 err.item_vel_y: mae=0.005734 p95=0.000000 max=4.995895
-overall.discrete_mismatch: 319 / 1128688
+overall.discrete_mismatch: 318 / 1128688
 overall.float_norm_mae_p95: 0.00054562
 
 == datasets/aggregate_recent/replays/validation/aggregate_recent/HungryImportantSnake.msl ==
@@ -431,7 +431,7 @@ mismatch.is_dead: 0 / 23960 (0.000000)
 mismatch.hitlag: 47 / 23960 (0.001962)
 mismatch.hitstun: 15 / 23960 (0.000626)
 mismatch.l_cancel: 2 / 23960 (0.000083)
-mismatch.hurtbox_state: 13 / 23960 (0.000543)
+mismatch.hurtbox_state: 15 / 23960 (0.000626)
 mismatch.ground_id: 1 / 23960 (0.000042)
 mismatch.animation_index: 59 / 23960 (0.002462)
 mismatch.instance_hit_by: 10 / 23960 (0.000417)
@@ -440,11 +440,11 @@ mismatch.last_attack_landed: 8 / 23960 (0.000334)
 mismatch.combo_count: 2 / 23960 (0.000083)
 mismatch.last_hit_by: 13 / 23960 (0.000543)
 mismatch.state_flags: 134 / 119800 (0.001119)
-mismatch.item_exists: 12 / 179700 (0.000067)
-mismatch.item_type: 12 / 179700 (0.000067)
+mismatch.item_exists: 11 / 179700 (0.000061)
+mismatch.item_type: 11 / 179700 (0.000061)
 mismatch.item_state: 5 / 179700 (0.000028)
-mismatch.item_owner: 12 / 179700 (0.000067)
-mismatch.item_instance_id: 14 / 179700 (0.000078)
+mismatch.item_owner: 11 / 179700 (0.000061)
+mismatch.item_instance_id: 13 / 179700 (0.000072)
 err.pos_x: mae=0.010046 p95=0.000000 max=14.015713
 err.pos_y: mae=0.007721 p95=0.000000 max=12.224156
 err.speed_air_x_self: mae=0.002910 p95=0.000000 max=1.815992
@@ -458,7 +458,7 @@ err.item_pos_x: mae=0.186718 p95=0.000000 max=88.298080
 err.item_pos_y: mae=0.049488 p95=0.000000 max=26.565502
 err.item_vel_x: mae=0.012371 p95=0.000000 max=8.356724
 err.item_vel_y: mae=0.005448 p95=0.000000 max=4.995895
-overall.discrete_mismatch: 571 / 1449580
+overall.discrete_mismatch: 569 / 1449580
 overall.float_norm_mae_p95: 0.00079052
 
 == datasets/aggregate_recent/replays/validation/aggregate_recent/PriceyPartialAlbatross.msl ==
@@ -473,7 +473,7 @@ mismatch.is_dead: 0 / 15874 (0.000000)
 mismatch.hitlag: 13 / 15874 (0.000819)
 mismatch.hitstun: 10 / 15874 (0.000630)
 mismatch.l_cancel: 0 / 15874 (0.000000)
-mismatch.hurtbox_state: 13 / 15874 (0.000819)
+mismatch.hurtbox_state: 12 / 15874 (0.000756)
 mismatch.ground_id: 5 / 15874 (0.000315)
 mismatch.animation_index: 28 / 15874 (0.001764)
 mismatch.instance_hit_by: 9 / 15874 (0.000567)
@@ -500,7 +500,7 @@ err.item_pos_x: mae=0.033620 p95=0.000000 max=43.620678
 err.item_pos_y: mae=0.006086 p95=0.000000 max=13.752838
 err.item_vel_x: mae=0.024186 p95=0.000000 max=10.000000
 err.item_vel_y: mae=0.000000 p95=0.000000 max=0.000000
-overall.discrete_mismatch: 345 / 960377
+overall.discrete_mismatch: 344 / 960377
 overall.float_norm_mae_p95: 0.00110055
 
 == datasets/aggregate_recent/replays/validation/aggregate_recent/PutridJoyousOryx.msl ==
@@ -672,5 +672,5 @@ overall.discrete_mismatch: 470 / 1502336
 overall.float_norm_mae_p95: 0.00072674
 
 == suite summary ==
-overall.discrete_mismatch: 5083 / 17965838
+overall.discrete_mismatch: 5079 / 17965838
 overall.float_norm_mae_p95: 0.00099124

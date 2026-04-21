@@ -1446,6 +1446,7 @@ class ItemSlotRow:
     seed_item_type: int = 0
     ref_item_type: int = 0
     out_item_type: int = 0
+    prev_actions: tuple[int, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -2575,6 +2576,11 @@ def _classify_item_slot_row(row: ItemSlotRow, action_names: dict[int, str]) -> s
         for triplet in (row.player_actions, row.ref_actions, row.out_actions)
         for action_id in triplet
     ]
+    context_names = [
+        _action_name(action_names, action_id)
+        for triplet in (row.player_actions, row.ref_actions, row.out_actions, row.prev_actions)
+        for action_id in triplet
+    ]
     item_types = {int(row.seed_item_type), int(row.ref_item_type), int(row.out_item_type)}
     field_set = _row_fields(row)
     if (
@@ -2595,7 +2601,7 @@ def _classify_item_slot_row(row: ItemSlotRow, action_names: dict[int, str]) -> s
         return "F09c_aerial_action_entry_adjacency"
     if (
         item_types & {54, 55, 74, 75}
-        and any(_looks_like_specialn(name) for name in names)
+        and any(_looks_like_specialn(name) for name in context_names)
         and any(_looks_like_landing_cliff_or_fall(name) for name in names)
         and field_set
         & {"item_exists", "item_type", "item_owner", "item_state", "item_instance_id"}
@@ -3505,6 +3511,7 @@ def _iter_suite_events(
                         player_actions=tuple(int(seed["action_id"][i, p]) for p in range(num_players)),
                         ref_actions=tuple(int(ref["action_id"][i, p]) for p in range(num_players)),
                         out_actions=tuple(int(out["action_id"][i, p]) for p in range(num_players)),
+                        prev_actions=tuple(int(seed["seed_prev_action_id"][i, p]) for p in range(num_players)),
                         fields=tuple(sorted(slot_fields)),
                         family_id="F99_misc_other",
                         seed_item_type=int(seed["items"]["type"][i, slot]),

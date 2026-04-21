@@ -1036,8 +1036,7 @@ static inline uint8_t item_prev_action_is_guard_reflect_locomotion_pose_source(u
 }
 
 static inline uint8_t laser_grounded_body_uses_lbcoll_hurt_radius(const MslBatch* batch,
-                                                                  size_t d_idx,
-                                                                  uint8_t laser_state,
+                                                                  size_t d_idx, uint8_t laser_state,
                                                                   float laser_age_frames,
                                                                   uint16_t item_type) {
   if (batch == NULL) {
@@ -2856,20 +2855,29 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
       // Slippi post-frame: `hurtbox_state` is seeded; movescript hit status can overwrite it.
       const uint8_t disabled_contact_only =
           (batch->state.hurtbox_state[d_idx] == (uint8_t)MSL_HURTCAPS_DISABLED) ? 1u : 0u;
-      if (batch->state.hurtbox_state[d_idx] != 0u && !disabled_contact_only) {
-        continue;
-      }
-      if (batch->state.colanim_terminal_x1990_item_body_guard[d_idx] != 0u) {
+      const uint8_t terminal_x1990_body =
+          batch->state.colanim_terminal_x1990_item_body_guard[d_idx];
+      if (terminal_x1990_body == 1u) {
         // Terminal x1990 item BODY guard:
         // - Fighter_8006A360 decrements x1990 and can clear visible x198C before Slippi t+1.
         // - The same frame's item BODY pass still follows ftColl_8007925C's collision-status gate
         //   (`if fp->x1988 == 2 || fp->x198C == 2 continue`) before hurtcap testing.
-        // - Scope is terminal x1990 with no x1994 carry; x1994-backed rows remain on the ordinary
-        //   BODY path because their replay locks require normal laser consume.
+        // - Scope value 1 is terminal x1990 with no x1994 carry, so x198C fully clears after the
+        //   item pass and the laser remains alive.
         // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
         // refs/melee/src/melee/ft/ftcoll.c::ftColl_8007925C
         continue;
       }
+      if (batch->state.hurtbox_state[d_idx] != 0u && !disabled_contact_only &&
+          terminal_x1990_body != 2u) {
+        continue;
+      }
+      // Terminal x1990 + x1994 carry:
+      // Fighter_8006A360 sets x198C to 1 when x1990 expires while x1994 remains live. The item
+      // BODY path only blocks collision-status value 2, so allow the ordinary BODY hit instead of
+      // treating the stale replay-visible hurtbox_state=2 as intangible for this pass.
+      // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
+      // refs/melee/src/melee/ft/ftcoll.c::ftColl_8007925C
 
       // Special-move reflector bubble (Shine): if the item intersects the reflector bubble, reflect
       // it and do not take the BODY path.

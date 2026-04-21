@@ -1796,13 +1796,14 @@ def test_classify_item_slot_row_moves_false_aerial_blaster_entry_to_action_owner
 
 
 def test_classify_item_slot_row_moves_specialn_landing_slot_echo_to_action_owner() -> None:
-    for dataset, record, player_actions, ref_actions, out_actions, action_names in (
+    for dataset, record, player_actions, ref_actions, out_actions, prev_actions, action_names in (
         (
             "HungryImportantSnake.msl",
             6603,
             (345, 25),
             (42, 25),
             (42, 25),
+            (),
             {
                 25: "JUMP_F",
                 42: "LANDING",
@@ -1815,8 +1816,22 @@ def test_classify_item_slot_row_moves_specialn_landing_slot_echo_to_action_owner
             (345, 38),
             (42, 38),
             (42, 38),
+            (),
             {
                 38: "DAMAGE_FALL",
+                42: "LANDING",
+                345: "FX_SPECIAL_AIR_N_LOOP",
+            },
+        ),
+        (
+            "HungryImportantSnake.msl",
+            6604,
+            (42, 25),
+            (42, 25),
+            (42, 25),
+            (345, 25),
+            {
+                25: "JUMP_F",
                 42: "LANDING",
                 345: "FX_SPECIAL_AIR_N_LOOP",
             },
@@ -1831,6 +1846,7 @@ def test_classify_item_slot_row_moves_specialn_landing_slot_echo_to_action_owner
             player_actions=player_actions,
             ref_actions=ref_actions,
             out_actions=out_actions,
+            prev_actions=prev_actions,
             fields=("item_instance_id",),
             family_id="F99_misc_other",
             seed_item_type=54,

@@ -1221,13 +1221,13 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
           batch->state.colanim_timer_x1990[idx] = seed->colanim_timer_x1990[p];
           batch->state.colanim_hit_status_x198c[idx] = 2u;
         }
-        if (shine_start_x1990_reseed && seed->colanim_hit_status_x198c[p] == 2u &&
-            seed->colanim_timer_x1990[p] != 0u && seed->colanim_timer_x1994[p] != 0u &&
-            seed->colanim_lock_x2221_b0[p] == 0u) {
-          // Cliff/Fall -> aerial Shine Start rows can carry both hidden timers: x1990 owns the
-          // visible x198C=2 status while x1994 remains queued underneath. Trust the explicit
-          // seed-history lane for this Shine Start shape instead of dropping both timers because
-          // x1988 currently masks the visible byte.
+        if (((seed->hitlag[p] == 0u && seed->hitstun[p] == 0u) || shine_start_x1990_reseed) &&
+            seed->colanim_hit_status_x198c[p] == 2u && seed->colanim_timer_x1990[p] != 0u &&
+            seed->colanim_timer_x1994[p] != 0u && seed->colanim_lock_x2221_b0[p] == 0u) {
+          // Paired hidden timers: x1990 owns the visible x198C=2 status while x1994 remains queued
+          // underneath. Trust the explicit seed-history lane on non-hitlag rows so
+          // Fighter_8006A360 can expire x1990 to x198C=1 before the same frame's BODY pass; keep
+          // Shine Start hitlag rows covered by the existing entry exception.
           // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
           // refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007B760,ftColl_8007B7A4}
           batch->state.colanim_timer_x1990[idx] = seed->colanim_timer_x1990[p];
