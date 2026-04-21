@@ -1175,6 +1175,7 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
       batch->state.colanim_timer_x1990[idx] = 0u;
       batch->state.colanim_timer_x1994[idx] = 0u;
       batch->state.colanim_lock_x2221_b0[idx] = 0u;
+      batch->state.colanim_terminal_x1990_item_body_guard[idx] = 0u;
       {
         // Seed-bridge inference: if the movescript table reports a nonzero x1988 at the seeded
         // (msid, frame) and it matches the seeded merged value, treat the x198C lane as 0.

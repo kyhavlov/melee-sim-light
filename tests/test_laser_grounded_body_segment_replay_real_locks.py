@@ -104,6 +104,15 @@ _AGG = "datasets/aggregate_recent/replays/validation/aggregate_recent"
             note="AttackHi3 grounded laser segment admits BODY hit",
         ),
         _Case(
+            dataset_rel=f"{_AGG}/HilariousVillainousGiraffe.msl",
+            record=9169,
+            player=0,
+            seed_action=233,  # EscapeF, first vulnerable post-script frame before BODY
+            ref_action=78,  # DamageN1
+            expect_item_clear=True,
+            note="EscapeF frame-20 Falco laser uses lbColl hurt-radius BODY lane",
+        ),
+        _Case(
             dataset_rel=f"{_AGG}/DistinctCaringCobra.msl",
             record=7618,
             player=0,
@@ -149,6 +158,15 @@ _AGG = "datasets/aggregate_recent/replays/validation/aggregate_recent"
             ref_action=56,
             expect_item_clear=False,
             note="adjacent AttackHi3 negative keeps laser alive",
+        ),
+        _Case(
+            dataset_rel=f"{_AGG}/HilariousVillainousGiraffe.msl",
+            record=9168,
+            player=0,
+            seed_action=233,  # EscapeF still protected by script hit-status
+            ref_action=233,
+            expect_item_clear=False,
+            note="adjacent EscapeF frame before lbColl radius lane keeps laser alive",
         ),
     ],
     ids=lambda case: case.note,

@@ -1073,6 +1073,21 @@ Recommended sequence for the next deep passes:
     `F16c=0`, `F16d=0`. Aggregate total `5106`; `F14c=400`, `F14d=66`, `F15a=10`, `F15b=104`,
     `F16a=0`, `F16b=0`, `F16c=0`, `F16d=75`. Section 6 and ledge/collision-env remain closed:
     `F17/F10c/F19/F20/F21/F22/F23/F24/F10e=0`.
+  - Grounded EscapeF frame-20 Falco-laser BODY `lbColl` hurt-radius lane keeps the same
+    `ftColl_8007925C -> lbColl_8000805C -> lbColl_80006E58` source owner but applies it to the
+    aggregate-only first-vulnerable EscapeF row after the extracted script hit-status window. The
+    retained branch is state0 Falco laser, shieldless vulnerable EscapeF frame 20, lower/mid
+    hurtcaps only. Replay-real locks: positive `HVG:9169`, adjacent no-hit `HVG:9168`.
+  - Terminal x1990 hidden-colanim item BODY guard carries one internal frame of item BODY
+    eligibility when `x198C=2`, `x1990=1`, `x1994=0`, and `x2221_b0=0`: visible
+    `hurtbox_state` can clear for Slippi t+1 while `ftColl_8007925C` still observes the terminal
+    collision-status gate for the item BODY pass. Replay-real locks: positive `HIS:6544`,
+    disabled-contact negative `PRH:4757`.
+    Fresh taxonomy after the aggregate-only slices in this pass: primary total `528`; all primary
+    item-owner families remain closed (`F14c/F14d/F15a/F15b/F16a/F16b/F16c/F16d=0`). Aggregate
+    total `5083`; remaining aggregate item rows are `F14c=400`, `F14d=66`, `F15a=10`,
+    `F15b=104`, `F16d=56`, with `F16a/F16b/F16c=0`. Section 6 and ledge/collision-env remain
+    closed: `F17/F10c/F19/F20/F21/F22/F23/F24/F10e=0`.
   - `powershield_reflect_size` is now extracted from `p_ftCommonData->x2A8`, matching
     `ftCo_8009370C`'s GuardReflect `ReflectDesc.x14_size`. This is retained as source visibility
     only, not F15 closure: probing the small reflect capsule showed that same-frame owner/xDA8
@@ -1112,6 +1127,12 @@ Recommended sequence for the next deep passes:
   - A broad grounded `lbColl_8000805C` hurt-radius promotion for all Dash-to-Turn Falco-laser BODY
     caps closed `GAT:7215`, but false-consumed the high/head-only `TBK:4136` row. The retained lane
     is limited to lower/mid hurtcaps until the remaining high-cap pose/filter owner is source-backed.
+  - A grabbable-hurtcap-only item BODY filter was tested against the remaining false-consume rows.
+    It broke accepted airborne Fall and disabled-contact laser locks, proving the extracted
+    Fox/Falco laser hitcaps should not use that broad filter.
+  - A LandingFallSpecial high-cap `lbColl_8000805C` hurt-radius expansion fixed the local
+    `MAJ:5001` shape but reopened primary item rows (`F16d=28`, `F16b=8`) and inflated aggregate
+    `F16d` to `128`; reverted. The high-cap pose/filter owner remains unresolved.
   - A broader Passive hidden-colanim item BODY guard for all laser types fixed the primary
     Fox-laser row but regressed aggregate total to `5219` and `F16d` to `114` by preserving Falco
     type-55 Passive contacts that replay consumes. It was rejected in favor of the retained

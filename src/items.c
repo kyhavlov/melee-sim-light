@@ -1035,11 +1035,11 @@ static inline uint8_t item_prev_action_is_guard_reflect_locomotion_pose_source(u
   }
 }
 
-static inline uint8_t laser_grounded_turn_body_uses_lbcoll_hurt_radius(const MslBatch* batch,
-                                                                       size_t d_idx,
-                                                                       uint8_t laser_state,
-                                                                       float laser_age_frames,
-                                                                       uint16_t item_type) {
+static inline uint8_t laser_grounded_body_uses_lbcoll_hurt_radius(const MslBatch* batch,
+                                                                  size_t d_idx,
+                                                                  uint8_t laser_state,
+                                                                  float laser_age_frames,
+                                                                  uint16_t item_type) {
   if (batch == NULL) {
     return 0u;
   }
@@ -1049,23 +1049,32 @@ static inline uint8_t laser_grounded_turn_body_uses_lbcoll_hurt_radius(const Msl
   }
   if (batch->state.action_id[d_idx] != (uint16_t)MSL_ACT_TURN ||
       batch->state.seed_prev_action_id[d_idx] != (uint16_t)MSL_ACT_DASH ||
-      batch->state.action_frame[d_idx] != 1 || batch->state.shield_radius[d_idx] > 0.0f ||
-      batch->state.hurtbox_state[d_idx] != 0u) {
+      batch->state.action_frame[d_idx] != 1) {
+    if (batch->state.action_id[d_idx] != (uint16_t)MSL_ACT_ESCAPE_F ||
+        batch->state.seed_prev_action_id[d_idx] != (uint16_t)MSL_ACT_ESCAPE_F ||
+        batch->state.action_frame[d_idx] != 20) {
+      return 0u;
+    }
+  }
+  if (batch->state.shield_radius[d_idx] > 0.0f || batch->state.hurtbox_state[d_idx] != 0u) {
     return 0u;
   }
-  // Narrow grounded Dash->Turn laser BODY radius owner:
+  // Narrow grounded laser BODY radius owner:
   // - ftColl_8007925C reaches the item BODY loop after reflect/absorb/shield and calls
   //   lbColl_8000805C for each fighter hurt capsule.
   // - lbColl_8000805C forwards `arg1->scale` and `lbColl_804D7A38 * fp->x34_scale.y` to
   //   lbColl_80006E58, which computes the broad-phase/effective radius as
   //   `hit_radius + hurt_radius * arg11`.
-  // - Keep this promoted radius only on the replay-proven lower/mid Falco-laser Dash->Turn handoff.
-  //   High/head-only caps remain on the exact path; broad grounded widening is still blocked by
-  //   unresolved hit-status/pose filters and previously regressed primary/aggregate rows.
+  // - Keep this promoted radius only on replay-proven lower/mid Falco-laser grounded handoffs:
+  //   Dash->Turn frame 1 and EscapeF frame 20, the first vulnerable frame after the extracted
+  //   EscapeF script hit-status window. High/head-only caps remain on the exact path; broad
+  //   grounded widening is still blocked by unresolved hit-status/pose filters and previously
+  //   regressed primary/aggregate rows.
   // refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007925C,ftColl_80077C60}
   // refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000805C,lbColl_80006E58}
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c::ftCo_Dash_IASA
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Turn.c::ftCo_Turn_Enter_Smash
+  // data/hit_status/{fox,falco}.bin (EscapeF script hit-status clears before frame 20)
   return 1u;
 }
 
@@ -2850,6 +2859,17 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
       if (batch->state.hurtbox_state[d_idx] != 0u && !disabled_contact_only) {
         continue;
       }
+      if (batch->state.colanim_terminal_x1990_item_body_guard[d_idx] != 0u) {
+        // Terminal x1990 item BODY guard:
+        // - Fighter_8006A360 decrements x1990 and can clear visible x198C before Slippi t+1.
+        // - The same frame's item BODY pass still follows ftColl_8007925C's collision-status gate
+        //   (`if fp->x1988 == 2 || fp->x198C == 2 continue`) before hurtcap testing.
+        // - Scope is terminal x1990 with no x1994 carry; x1994-backed rows remain on the ordinary
+        //   BODY path because their replay locks require normal laser consume.
+        // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
+        // refs/melee/src/melee/ft/ftcoll.c::ftColl_8007925C
+        continue;
+      }
 
       // Special-move reflector bubble (Shine): if the item intersects the reflector bubble, reflect
       // it and do not take the BODY path.
@@ -3003,9 +3023,8 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
           }
         }
       }
-      if (!hit && use_swept_body &&
-          laser_grounded_turn_body_uses_lbcoll_hurt_radius(
-              batch, d_idx, laser_state, laser_age_frames, batch->state.item_type[ii])) {
+      if (!hit && laser_grounded_body_uses_lbcoll_hurt_radius(
+                      batch, d_idx, laser_state, laser_age_frames, batch->state.item_type[ii])) {
         const float body_hurt_radius_mul = item_lbColl_804D7A38_hurt_radius_mul();
         for (uint8_t oi = 0; oi < off_n && oi < (uint8_t)MSL_LASER_MAX_HITBOX_OFFS_X && !hit;
              oi++) {

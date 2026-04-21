@@ -401,6 +401,12 @@ void timers_update_post_anim(MslBatch* batch) {
       const size_t idx = msl_idx_player(bi, p);
 
       uint16_t x1990 = batch->state.colanim_timer_x1990[idx];
+      batch->state.colanim_terminal_x1990_item_body_guard[idx] =
+          (x1990 == 1u && batch->state.colanim_timer_x1994[idx] == 0u &&
+           batch->state.colanim_hit_status_x198c[idx] == 2u &&
+           batch->state.colanim_lock_x2221_b0[idx] == 0u)
+              ? 1u
+              : 0u;
       if (x1990 != 0u) {
         x1990--;
         batch->state.colanim_timer_x1990[idx] = x1990;

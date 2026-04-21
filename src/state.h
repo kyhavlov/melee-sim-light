@@ -576,6 +576,10 @@ typedef struct MslStateSoA {
   uint16_t* colanim_timer_x1990;      // [batch * players]
   uint16_t* colanim_timer_x1994;      // [batch * players]
   uint8_t* colanim_lock_x2221_b0;     // [batch * players] (0/1)
+  // One-frame item BODY guard for terminal x1990 expiry:
+  // Fighter_8006A360 decrements x1990 and may clear visible x198C before the later item BODY pass;
+  // ftColl_8007925C still gates BODY on x1988/x198C collision status for the frame's item pass.
+  uint8_t* colanim_terminal_x1990_item_body_guard;  // [batch * players] (0/1)
   // Pose-driven world-space hurt capsule endpoints (computed each frame in hurtboxes_refresh).
   uint8_t* hurtcap_count;  // [batch * players]
   float* hurtcap_a_x;      // [batch * players * caps]

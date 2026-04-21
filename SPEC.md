@@ -2314,6 +2314,34 @@ Fox/Falco special-owner split (2026-04-17):
     `refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000805C,lbColl_80006E58}`,
     `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c::ftCo_Dash_IASA`,
     `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Turn.c::ftCo_Turn_Enter_Smash`.
+  - Grounded EscapeF frame-20 Falco-laser BODY `lbColl` hurt-radius lane:
+    - The same `ftColl_8007925C -> lbColl_8000805C -> lbColl_80006E58` hurt-radius owner also
+      covers the aggregate-only `HVG:9169` EscapeF row: script hit-status is still active on the
+      adjacent frame, then frame 20 is the first vulnerable item BODY frame and uses
+      `lbColl_804D7A38 * fp->x34_scale.y` rather than the simplified hurt radius.
+    - Runtime keeps this as a sibling of the Dash-to-Turn lane: state0 Falco laser, shieldless
+      vulnerable EscapeF frame 20, lower/mid hurtcaps only. Replay-real locks are in
+      `tests/test_laser_grounded_body_segment_replay_real_locks.py`: positive `HVG:9169` and
+      adjacent no-hit `HVG:9168`.
+    Sources: `refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007925C,ftColl_80077C60}`,
+    `refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000805C,lbColl_80006E58}`,
+    `data/hit_status/{fox,falco}.bin`.
+  - Terminal x1990 hidden-colanim item BODY guard:
+    - `Fighter_8006A360` decrements `x1990` and can clear visible `x198C` for Slippi t+1 before
+      the item slot compare, but the same frame's item BODY pass still follows
+      `ftColl_8007925C`'s `x1988 == 2 || x198C == 2` collision-status gate.
+    - Runtime now carries a one-frame internal `colanim_terminal_x1990_item_body_guard` when
+      `x198C=2`, `x1990=1`, `x1994=0`, and `x2221_b0=0`, so terminal hidden-status rows can keep
+      the laser alive while visible `hurtbox_state` clears. Replay-real locks are in
+      `tests/test_laser_body_colanim_terminal_replay_real_locks.py`: positive `HIS:6544` and a
+      disabled-contact negative `PRH:4757`.
+    - Fresh taxonomy after the retained aggregate-only slices in this pass: primary total `528`;
+      primary item-owner families remain closed (`F14c/F14d/F15a/F15b/F16a/F16b/F16c/F16d=0`).
+      Aggregate total `5083`; remaining aggregate item rows are `F14c=400`, `F14d=66`,
+      `F15a=10`, `F15b=104`, `F16d=56`, with `F16a/F16b/F16c=0`. Section-6 and
+      ledge/collision-env families remain closed (`F17/F10c/F19/F20/F21/F22/F23/F24/F10e=0`).
+    Sources: `refs/melee/src/melee/ft/fighter.c::Fighter_8006A360`,
+    `refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007925C,ftColl_8007B868}`.
   - Powershield reflect-size source visibility:
     - `p_ftCommonData->x2A8` is extracted as `powershield_reflect_size`, matching
       `ftCo_8009370C`'s GuardReflect `ReflectDesc.x14_size`. This is retained only as source/data
@@ -2361,6 +2389,14 @@ Fox/Falco special-owner split (2026-04-17):
       caps closed `GAT:7215` but false-consumed the high/head-only `TBK:4136` row. The retained lane
       is therefore limited to lower/mid hurtcaps until the remaining high-cap pose/filter owner is
       source-backed.
+    - A grabbable-hurtcap-only item BODY filter was tested against the remaining low-cap false
+      consume rows. Although `ftColl_8007925C` has a grabbable predicate when the item HitCapsule
+      carries the matching bit, applying it to Fox/Falco lasers broke accepted airborne Fall and
+      disabled-contact laser locks, proving the extracted laser hitcaps should not use that broad
+      filter.
+    - A LandingFallSpecial high-cap `lbColl_8000805C` hurt-radius expansion fixed the local
+      `MAJ:5001` shape but reopened primary item rows (`F16d=28`, `F16b=8`) and inflated aggregate
+      `F16d` to `128`; reverted. The high-cap pose/filter owner remains unresolved.
     - A broader Passive hidden-colanim item BODY guard was tested for all laser types. It fixed the
       primary Fox-laser row but regressed aggregate total to `5219` and `F16d` to `114` by keeping
       Falco type-55 Passive contacts alive; rejected in favor of the retained type-54-only slice.
