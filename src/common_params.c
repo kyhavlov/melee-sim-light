@@ -328,6 +328,7 @@ int common_params_init(void) {
       json_get_u8(buf, "powershield_reflect_window_frames",
                   &g_params.powershield_reflect_window_frames) != 0 ||
       json_get_u8(buf, "powershield_reflect_frames", &g_params.powershield_reflect_frames) != 0 ||
+      json_get_f32(buf, "powershield_reflect_size", &g_params.powershield_reflect_size) != 0 ||
       json_get_f32(buf, "powershield_reflect_damage_mul",
                    &g_params.powershield_reflect_damage_mul) != 0 ||
       json_get_f32(buf, "powershield_reflect_speed_mul", &g_params.powershield_reflect_speed_mul) !=

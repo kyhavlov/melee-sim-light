@@ -171,6 +171,7 @@ def main() -> None:
         # - `ftCo_8009370C`: reflect desc uses x2A8 size, x2AC damage mul, x2B0 speed mul.
         "powershield_reflect_window_frames": int(max(0, _i32_be(buf, ft_common_abs + 0x2A0))),
         "powershield_reflect_frames": int(round(float(_f32_be(buf, ft_common_abs + 0x2A4)))),
+        "powershield_reflect_size": float(_f32_be(buf, ft_common_abs + 0x2A8)),
         "powershield_reflect_damage_mul": float(_f32_be(buf, ft_common_abs + 0x2AC)),
         "powershield_reflect_speed_mul": float(_f32_be(buf, ft_common_abs + 0x2B0)),
         "powershield_reflect_total_frames": int(round(float(_f32_be(buf, ft_common_abs + 0x2B4)))),

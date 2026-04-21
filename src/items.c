@@ -452,6 +452,7 @@ enum {
   // GALE01 ItKind enum values for spacie laser shots.
   // refs/melee/src/melee/it/forward.h::ItemKind
   // data/characters/{fox,falco}.json {blaster_shot_itkind,side_special_illusion_item_kind}
+  MSL_CHAR_FALCO = 22,
   MSL_IT_KIND_FOX_LASER_SHOT = 54,
   MSL_IT_KIND_FALCO_LASER_SHOT = 55,
   MSL_IT_KIND_FOX_ILLUSION = 56,
@@ -2785,6 +2786,30 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
         continue;
       }
 
+      if (laser_state != 0u && batch->state.char_id[o_idx] == (uint8_t)MSL_CHAR_FALCO &&
+          batch->state.action_id[o_idx] == (uint16_t)MSL_ACT_THROW_HI &&
+          (batch->state.throw_pulse_crossed_curr_frame[o_idx] == 24u ||
+           batch->state.throw_pulse_crossed_prev_frame[o_idx] == 24u) &&
+          batch->state.hitlag[d_idx] > 1u &&
+          batch->state.last_hit_by[d_idx] == item_source_port0_for_owner(batch, o_idx, owner) &&
+          batch->state.last_attack_landed[d_idx] == 0u) {
+        // Falco ThrowHi late-pulse carried BODY contact:
+        // - ThrowHi owns three one-shot throw_flags_b0 projectile pulses (18/20/24) consumed in
+        //   ftFx_Throw_Anim.
+        // - On the final Falco pulse, replay snapshots can carry an already-hit victim in hitlag
+        //   while the command cursor emits or carries the fresh state1 article; re-consuming the
+        //   same hitlag victim as a new BODY hit falsely clears the carried article and bumps
+        //   item-domain combo/source bookkeeping.
+        // - Keep this on the frame-24 pulse's high-hitlag phase only and require cleared replay
+        //   damage provenance (`last_attack_landed==0`) so the next lower-hitlag carry/consume
+        //   handoff row and active damage rows stay on the normal BODY path.
+        // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
+        // refs/melee/src/melee/ft/ftaction.c::{ftAction_80071974,ftAction_80073354}
+        // refs/melee/src/melee/it/items/itfoxlaser.c::it_8029C4D4
+        // data/moves/falco.json moves["ftCo_SM_ThrowHi"].events
+        continue;
+      }
+
       // Seed-bridge approximation for ThrowLw late blaster pulses:
       // - ftFx_Throw_Anim emits multiple throw_flags_b0 pulses during ThrowLw (data/moves
       //   set_throw_spawn_projectile @ 23/25/28/31) and spawns with it_8029C6CC (msid=1).
@@ -3234,6 +3259,24 @@ void items_spawn_pre_physics(MslBatch* batch) {
               shoot_override_vx = throw_seed_shot_vx[p];
               shoot_override_vy = throw_seed_shot_vy[p];
             }
+          }
+        }
+        if (!should_shoot) {
+          if (action_id == (uint16_t)MSL_ACT_THROW_HI &&
+              batch->state.throw_pulse_crossed_prev_frame[idx] == 20u &&
+              throw_seed_shot_count[p] == 0u) {
+            // ThrowHi crossed-prev command pulse reconstruction:
+            // - ftAction_80073354 can execute the frame-20 set_throw_spawn_projectile command and
+            //   ftFx_Throw_Anim consumes throw_flags_b0 in the source frame before the next
+            //   teacher-forced seed. Slippi does not expose that command cursor/consumed latch.
+            // - The prefix-causal `throw_pulse_crossed_prev_frame` lane records that frame-20
+            //   command crossing. Re-emit only when no owner state1 throw shot is already present,
+            //   leaving mid-pulse carry/despawn rows on the existing lifetime owner.
+            // refs/melee/src/melee/ft/ftaction.c::{ftAction_80071974,ftAction_80073354}
+            // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
+            // data/moves/{fox,falco}.json moves["ftCo_SM_ThrowHi"].events
+            should_shoot = 1u;
+            shoot_spawn_state = 1u;
           }
         }
         if (!should_shoot) {

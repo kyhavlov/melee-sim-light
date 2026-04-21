@@ -1693,6 +1693,34 @@ def test_classify_item_slot_row_moves_pure_blaster_gun_xda8_to_instance_owner() 
     assert got == "F12b_adjacent_instance_counter_order"
 
 
+def test_classify_item_slot_row_moves_guard_context_pure_blaster_gun_xda8_to_instance_owner() -> None:
+    row = ItemSlotRow(
+        dataset="AttachedGoodNaturedGuanaco.msl",
+        record=124,
+        slot=0,
+        seed_frame=0,
+        ref_frame=1,
+        player_actions=(25, 179),
+        ref_actions=(344, 234),
+        out_actions=(344, 234),
+        fields=("item_instance_id",),
+        family_id="F99_misc_other",
+        seed_item_type=0,
+        ref_item_type=75,
+        out_item_type=75,
+    )
+    got = _classify_item_slot_row(
+        row,
+        {
+            25: "JUMP_F",
+            179: "GUARD",
+            234: "ESCAPE_B",
+            344: "FX_SPECIAL_AIR_N_START",
+        },
+    )
+    assert got == "F12b_adjacent_instance_counter_order"
+
+
 def test_classify_item_slot_row_moves_rebirth_gun_spawn_fallout_to_match_flow() -> None:
     row = ItemSlotRow(
         dataset="TubbyCurlyHerring.msl",
@@ -1767,7 +1795,7 @@ def test_classify_item_slot_row_moves_false_aerial_blaster_entry_to_action_owner
     assert got == "F09c_aerial_action_entry_adjacency"
 
 
-def test_classify_item_slot_row_moves_pure_laser_instance_echo_to_body_lifetime() -> None:
+def test_classify_item_slot_row_moves_specialn_landing_slot_echo_to_action_owner() -> None:
     for dataset, record, player_actions, ref_actions, out_actions, action_names in (
         (
             "HungryImportantSnake.msl",
@@ -1810,7 +1838,27 @@ def test_classify_item_slot_row_moves_pure_laser_instance_echo_to_body_lifetime(
             out_item_type=54,
         )
         got = _classify_item_slot_row(row, action_names)
-        assert got == "F16d_item_body_lifetime"
+        assert got == "F09c_aerial_action_entry_adjacency"
+
+
+def test_classify_item_slot_row_keeps_non_specialn_laser_instance_echo_in_body_lifetime() -> None:
+    row = ItemSlotRow(
+        dataset="TreasuredBackKangaroo.msl",
+        record=6197,
+        slot=0,
+        seed_frame=0,
+        ref_frame=1,
+        player_actions=(199, 14),
+        ref_actions=(199, 14),
+        out_actions=(199, 14),
+        fields=("item_instance_id",),
+        family_id="F99_misc_other",
+        seed_item_type=54,
+        ref_item_type=54,
+        out_item_type=54,
+    )
+    got = _classify_item_slot_row(row, {14: "WAIT", 199: "PASSIVE"})
+    assert got == "F16d_item_body_lifetime"
 
 
 def test_build_summary_aggregates_family_counts_and_nearby_controls() -> None:

@@ -2593,19 +2593,35 @@ def _classify_item_slot_row(row: ItemSlotRow, action_names: dict[int, str]) -> s
         & {"item_exists", "item_type", "item_owner", "item_state"}
     ):
         return "F09c_aerial_action_entry_adjacency"
+    if (
+        item_types & {54, 55, 74, 75}
+        and any(_looks_like_specialn(name) for name in names)
+        and any(_looks_like_landing_cliff_or_fall(name) for name in names)
+        and field_set
+        & {"item_exists", "item_type", "item_owner", "item_state", "item_instance_id"}
+    ):
+        # SpecialN Loop/AirLoop -> Landing can reshuffle the blaster gun and shot slots during the
+        # action-entry handoff. Rows like HIS:6603/6604 and PJO:2235 have gun/shot identity echoes,
+        # not an independent item BODY consume-vs-persist owner.
+        # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::{
+        #   ftFx_SpecialNLoop_Anim,ftFx_SpecialAirNLoop_Anim,ftFx_SpecialNEnd_Anim}
+        # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::ftCo_Landing_Enter_Basic
+        return "F09c_aerial_action_entry_adjacency"
     if any(name.startswith("THROW_") or name.startswith("THROWN_") or _looks_like_capture(name) for name in names):
         return "F14c_throw_article_lifetime"
+    if field_set and field_set <= {"item_instance_id"} and item_types & {74, 75}:
+        # Blaster gun `item.instance_id` is Slippi's item->xDA8_short. For fighter-parent spawns,
+        # the generic item spawn path copies the owner's fp->x2088 into xDA8, so pure gun xDA8
+        # rows are adjacent fighter instance-counter order, not item lifetime/ownership. Keep this
+        # before guard routing so pure Guard/GuardReflect gun xDA8 echoes do not masquerade as
+        # reflect owner-transfer rows.
+        # refs/melee/src/melee/it/it_2725.c::it_8027B070
+        # refs/slippi-ssbm-asm/Recording/SendItemInfo.s
+        return "F12b_adjacent_instance_counter_order"
     if any(_looks_like_guard(name) for name in names):
         if field_set and field_set <= {"item_owner", "item_instance_id"}:
             return "F15a_reflect_owner_transfer"
         return "F15b_guard_laser_lifetime"
-    if field_set and field_set <= {"item_instance_id"} and item_types & {74, 75}:
-        # Blaster gun `item.instance_id` is Slippi's item->xDA8_short. For fighter-parent spawns,
-        # the generic item spawn path copies the owner's fp->x2088 into xDA8, so pure gun xDA8
-        # rows are adjacent fighter instance-counter order, not item lifetime/ownership.
-        # refs/melee/src/melee/it/it_2725.c::it_8027B070
-        # refs/slippi-ssbm-asm/Recording/SendItemInfo.s
-        return "F12b_adjacent_instance_counter_order"
     if field_set and field_set <= {"item_instance_id"} and item_types & {54, 55}:
         return "F16d_item_body_lifetime"
     if item_types & {74, 75}:
@@ -3642,9 +3658,7 @@ def build_summary(
                 }
             )
 
-        if (family_id.startswith("F14") or family_id.startswith("F15") or family_id.startswith("F16")) and (
-            unique_rows and unique_rows[0][2].startswith("item")
-        ):
+        if unique_rows and unique_rows[0][2].startswith("item"):
             for dataset, record, subject in unique_rows:
                 slot = int(subject.removeprefix("item"))
                 row = item_rows[(dataset, record, slot)]

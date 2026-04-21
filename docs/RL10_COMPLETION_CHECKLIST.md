@@ -871,6 +871,36 @@ Recommended sequence for the next deep passes:
     `F14c=475`, `F14d=75`, `F15a=21`, `F15b=124`, `F16a=2`, `F16b=26`, `F16c=0`,
     `F16d=205`. Section 6 and ledge/collision-env remain closed:
     `F17/F10c/F19/F20/F21/F22/F23/F24/F10e=0`.
+  - ThrowHi crossed-prev frame-20 article spawn now reconstructs the missing command-cursor
+    ownership for a narrow ThrowHi slice. `ftAction_80073354` can advance across the frame-20
+    `set_throw_spawn_projectile` command and `ftFx_Throw_Anim` can consume `throw_flags_b0` in the
+    source frame; Slippi does not expose that consumed cursor, but the prefix-causal
+    `throw_pulse_crossed_prev_frame` lane records the frame-20 crossing. Runtime re-emits only when
+    the owner has no live state1 throw shot, leaving existing carry/despawn rows on the normal
+    lifetime owner.
+    Replay-real locks live in `tests/test_throwhi_pulse_seed_bridge_replay_real_locks.py` for
+    positive rows `BHH:938`, `BHH:1673`, `BHH:4337`, with negative controls `BHH:937` and
+    `BHH:1208`.
+    Fresh taxonomy after this slice: primary total `611`; `F14c=10`, `F14d=2`, `F15a=11`,
+    `F15b=8`, `F16a=0`, `F16b=0`, `F16c=0`, `F16d=31`. Aggregate total `5192`;
+    `F14c=405`, `F14d=67`, `F15a=21`, `F15b=124`, `F16a=0`, `F16b=0`, `F16c=0`,
+    `F16d=116`. Section 6 and ledge/collision-env remain closed:
+    `F17/F10c/F19/F20/F21/F22/F23/F24/F10e=0`.
+  - Falco ThrowHi frame-24 carried BODY contact is now suppressed only for state1 ThrowHi lasers
+    on current or crossed-prev frame 24 during the high-hitlag carry phase, with replay damage
+    provenance already cleared (`last_attack_landed==0`). This keeps the final Falco throw pulse
+    from falsely clearing the carried article or advancing combo/source bookkeeping, while the
+    lower-hitlag handoff, Fox frame-18/frame-20, and active damage-provenance rows stay on the
+    normal BODY owner.
+    Replay-real locks live in `tests/test_throwhi_pulse_seed_bridge_replay_real_locks.py` for
+    positives `GAT:3426` and `TBK:5090`, lower-hitlag handoff `GAT:3427`, and negative controls
+    `BHH:937` / `BHH:1208`.
+    Fresh taxonomy after this slice and handoff refinement: primary total `595`; `F14c=0`,
+    `F14d=0`, `F15a=11`, `F15b=8`, `F16a=0`, `F16b=0`, `F16c=0`, `F16d=31`.
+    Aggregate total `5184`; `F14c=400`, `F14d=66`, `F15a=21`, `F15b=112`, `F16a=0`,
+    `F16b=0`, `F16c=0`,
+    `F16d=106`. Section 6 and ledge/collision-env remain closed:
+    `F17/F10c/F19/F20/F21/F22/F23/F24/F10e=0`.
   - Grounded laser BODY segment ownership now uses the decomp previous-to-current projectile
     segment for replay-proven grounded late-Dash, Dash-to-Turn, and AttackHi3 item BODY rows.
     Early Dash stays excluded because it remains a known false-positive slice. Replay-real locks
@@ -946,12 +976,55 @@ Recommended sequence for the next deep passes:
     `F14c=475`, `F14d=75`, `F15a=21`, `F15b=124`, `F16a=0`, `F16b=0`, `F16c=0`,
     `F16d=144`. Section 6 and ledge/collision-env remain closed:
     `F17/F10c/F19/F20/F21/F22/F23/F24/F10e=0`.
+  - SpecialN landing gun/shot slot echoes are hard-moved out of item BODY lifetime when row evidence
+    shows the mismatch belongs to action-entry slot churn instead of BODY consume-vs-persist:
+    `HIS:6603/6604` and `PJO:2235` are SpecialN Loop/AirLoop -> Landing rows with a live gun and
+    laser identity echoing across neighboring item slots. These route to
+    `F09c_aerial_action_entry_adjacency`. Negative controls `TBK:6197`, `HIS:6544`,
+    `PPA:5141`, and `PRH:8137` stay in `F16d_item_body_lifetime` because they lack the SpecialN
+    landing slot-echo shape and remain true item BODY lifetime rows.
+    Fresh taxonomy after this hard move: primary total `611`; `F14c=10`, `F14d=2`, `F15a=11`,
+    `F15b=8`, `F16a=0`, `F16b=0`, `F16c=0`, `F16d=31`. Aggregate total `5192`;
+    `F14c=405`, `F14d=67`, `F15a=21`, `F15b=112`, `F16a=0`, `F16b=0`, `F16c=0`,
+    `F16d=106`. Section 6 and ledge/collision-env remain closed:
+    `F17/F10c/F19/F20/F21/F22/F23/F24/F10e=0`.
+  - Guard-context pure blaster-gun xDA8 rows are hard-moved before guard/reflect routing. Row
+    evidence: `AGG:124` has a type-75 blaster gun with matching existence/type/state/owner and only
+    `item_instance_id` (`item->xDA8_short`) mismatching while the peer guard context is adjacent.
+    This is generic fighter-parent item xDA8 / instance-counter order, not reflect owner transfer.
+    Fresh taxonomy after this hard move: primary total `595`; `F14c=0`, `F14d=0`, `F15a=10`,
+    `F15b=8`, `F16a=0`, `F16b=0`, `F16c=0`, `F16d=31`. Aggregate total `5184`;
+    `F14c=400`, `F14d=66`, `F15a=18`, `F15b=112`, `F16a=0`, `F16b=0`, `F16c=0`,
+    `F16d=106`. Section 6 and ledge/collision-env remain closed:
+    `F17/F10c/F19/F20/F21/F22/F23/F24/F10e=0`.
+  - `powershield_reflect_size` is now extracted from `p_ftCommonData->x2A8`, matching
+    `ftCo_8009370C`'s GuardReflect `ReflectDesc.x14_size`. This is retained as source visibility
+    only, not F15 closure: probing the small reflect capsule showed that same-frame owner/xDA8
+    transfer still over-transfers adjacent GuardReflect keepalive rows unless the hidden item
+    collision branch (`ftColl_80077464` versus `Item_80269DC8`) is modeled.
 - Rejected item-owner experiments:
   - Committing powershield reflect owner/xDA8 transfer on the same post-frame fixed `GAT:4828`,
     `GAT:6207`, and `TBK:7448` transfer rows and passed focused reflect locks, but it introduced
     new GuardReflect identity rows (`GAT:2274`, `GAT:2275`, `GAT:9479`) and raised aggregate `F15`
     from `151` to `155`. The change was reverted; these rows stay in `F15a/F15b` until the exact
     `ftColl_80077464` / `Item_80269F14` transfer-vs-bounce discriminator is modeled.
+  - Powershield reflect final-tick gates were tested as a possible `F15a/F15b` discriminator.
+    Runtime-timer gating broke existing powershield reflect locks; seed-snapshot gating improved
+    aggregate total through adjacent guard-release movement but doubled primary `F15b` and did not
+    reduce aggregate `F15`, so both were rejected.
+  - Reseeding item victim rings from visible `instance_hit_by == item.instance_id` plus same-owner
+    hitlag/source fields was tested as a direct item HitCapsule owner. The visible proxy regressed
+    primary to `630`, inflated `F14c/F14d`, and mis-owned active ThrowHi damage-provenance rows, so
+    it was reverted. Remaining BODY false-consume rows need actual item hitlist/callback state or a
+    narrower prefix-causal lane.
+  - A GuardReflect early-setup HitShield gate keyed on no-submotion `action_frame < -1` or
+    `x14 >= 2` passed focused shield/reflect locks but regressed primary from `611` to `615` and
+    aggregate `F15b` from `124` to `128`; rejected because the visible timer/action-frame lanes are
+    not the hidden `Item_80269DC8` `xDCE/xC54/xC58` discriminator.
+  - Early grounded Dash laser BODY suppressors were tested for remaining `F16d` false consumes.
+    General age gating broke the accepted AttackHi3 BODY lock, and Dash-only gating regressed
+    aggregate `F16d` from `116` to `248`. Targeted Dolphin hitlist dumps for `HIS:6544` timed out
+    locally, so no hitlist/callback state could be retained from that probe.
   - ThrowHi first-tick hidden-victim-ring suppression fixed inspected `BHH:527/1206` style rows
     but increased aggregate `F14c` from `484` to `629`; reverted.
   - Routing all ThrowB/ThrowHi/ThrowLw projectile creation away from `laser_should_shoot_on_frame`
@@ -960,6 +1033,14 @@ Recommended sequence for the next deep passes:
   - ThrowHi crossed-prev mid-pulse reconstruction and Fox-wide mid-pulse stale-latch suppression
     were retested after rebuild. They reduced some inspected source/article rows but regressed
     aggregate `F14c` (`544` and `614` respectively), so both were reverted.
+  - Extending the accepted ThrowHi frame-20 crossed-prev spawn to allow one live owner state1 shot
+    (`throw_seed_shot_count <= 1`) passed focused throw locks but regressed primary to `636`
+    (`F14c=35`) and aggregate to `5204` (`F14c=415`, `F14d=68`); rejected.
+  - Fox ThrowHi frame-18 first-pulse suppression broke the retained first-pulse BODY locks
+    (`BHH:527`, `BHH:1206`, `BHH:480`). A miss-only front-side BODY consume bridge also passed
+    focused locks but regressed primary to `702` (`F14c=55`, `F14d=11`), so the first-pulse split
+    still needs the real command cursor / collision-consume state instead of visible segment
+    direction.
   - Broad grounded laser BODY sweep was tested against aggregate because decomp laser collision
     uses the item previous-to-current segment (`itFoxlaser_UnkMotion1_Phys` / `it_8029C4D4`), but
     the unconditional widening regressed aggregate total to `5628` with `F14c=503`, `F16d=238`,

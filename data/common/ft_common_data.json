@@ -143,6 +143,7 @@
   "player_nudge_z_max": 1.399999976158142,
   "powershield_reflect_damage_mul": 0.5,
   "powershield_reflect_frames": 1,
+  "powershield_reflect_size": 0.75,
   "powershield_reflect_speed_mul": 0.699999988079071,
   "powershield_reflect_total_frames": 3,
   "powershield_reflect_trigger_min": 0.25,
