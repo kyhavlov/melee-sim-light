@@ -1346,6 +1346,142 @@ static inline void item_apply_powershield_reflect_snapshot(MslBatch* batch, size
   batch->state.item_reflect_damage_mul[ii] = dmg_mul;
 }
 
+static inline void item_commit_powershield_reflect_owner_snapshot(MslBatch* batch, size_t ii,
+                                                                  int reflector_port) {
+  if (batch == NULL || reflector_port < 0 || reflector_port >= (int)batch->config.num_players) {
+    return;
+  }
+  const int bi = (int)(ii / (size_t)MSL_MAX_ITEMS);
+  const size_t reflector_idx = msl_idx_player(bi, reflector_port);
+  batch->state.item_misc2[ii] = 0u;
+  batch->state.item_misc3[ii] = 0u;
+  batch->state.item_owner[ii] = (int8_t)reflector_port;
+  batch->state.item_instance_id[ii] = batch->state.instance_id[reflector_idx];
+}
+
+static inline uint8_t item_guard_reflect_bone_y(const MslBatch* batch, size_t idx, float* out_y) {
+  if (batch == NULL || out_y == NULL) {
+    return 0u;
+  }
+  const MslCharParams* ch = msl_char_params(batch->state.char_id[idx]);
+  if (ch == NULL) {
+    return 0u;
+  }
+
+  uint16_t msid = 0u;
+  switch (batch->state.action_id[idx]) {
+    case MSL_ACT_GUARD_ON:
+    case MSL_ACT_GUARD_REFLECT:
+      // GuardReflect uses the GuardOn submotion row in GALE01's motion-state table.
+      // refs/melee/src/melee/ft/ftmotionstates.c::ftCo_MS_GuardReflect
+      msid = (uint16_t)MSL_SM_GUARD_ON;
+      break;
+    case MSL_ACT_GUARD:
+      msid = (uint16_t)MSL_SM_GUARD;
+      break;
+    default:
+      return 0u;
+  }
+
+  float m[12];
+  // Frozen guard-family post-frame snapshots commonly have animation_index=-1. ReflectDesc is
+  // attached to `fp->ft_data->x8->x11` with offset zero, so the frame-0 GuardOn shield-bone matrix
+  // is the prefix-causal source-backed fallback for these no-submotion rows.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_8009370C
+  // refs/melee/src/melee/ft/ftcoll.c::ftColl_CreateReflectHit
+  // tools/extraction/extract_character_attrs.py::grab_capture_anchor_part_id (ftData.x8->x11)
+  if (anim_pose_get_matrix(batch->state.char_id[idx], msid, 0u, ch->grab_capture_anchor_part_id,
+                           m) != 0) {
+    return 0u;
+  }
+  *out_y = batch->state.pos_y[idx] + (m[7] * batch->state.fighter_scale_y[idx]);
+  return 1u;
+}
+
+static inline uint8_t item_should_commit_aged_powershield_reflect_owner(const MslBatch* batch,
+                                                                        size_t d_idx, int def,
+                                                                        float x, float y, float vx,
+                                                                        float laser_age_frames,
+                                                                        float laser_radius) {
+  (void)def;
+  if (batch == NULL || !(laser_age_frames > 1.0f)) {
+    return 0u;
+  }
+  const MslCommonParams* common = msl_common_params();
+  if (common == NULL || !(common->powershield_reflect_size > 0.0f)) {
+    return 0u;
+  }
+  if (batch->state.action_id[d_idx] == (uint16_t)MSL_ACT_GUARD_REFLECT &&
+      batch->state.guard_reflect_timer_x14_seed[d_idx] <= 1u) {
+    return 0u;
+  }
+  if (!(((x - batch->state.pos_x[d_idx]) * vx) < 0.0f)) {
+    return 0u;
+  }
+
+  float reflect_y = 0.0f;
+  if (!item_guard_reflect_bone_y(batch, d_idx, &reflect_y)) {
+    return 0u;
+  }
+  const float y_delta = fabsf(y - reflect_y);
+  const float reflect_r = common->powershield_reflect_size * batch->state.fighter_scale_y[d_idx];
+  // The remaining aged-transfer rows are on the ReflectDesc vertical lane, while rejected
+  // shield-bounce / HitShield rows are below the shield-bone lane or on the final x14 handoff.
+  // This is still item-owned geometry, not visible shield HP/timer fitting:
+  // - ReflectDesc.x14_size comes from p_ftCommonData->x2A8,
+  // - laser_radius is the ISO-extracted item HitCapsule radius,
+  // - x14 final-tick exclusion keeps Item_80269DC8 HitShield destruction on its owner lane.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_8009370C,ftCo_80093BC0}
+  // refs/melee/src/melee/ft/ftcoll.c::{ftColl_CreateReflectHit,ftColl_80077464}
+  // refs/melee/src/melee/it/item.c::{Item_80269F14,Item_80269DC8}
+  // refs/melee/src/melee/it/items/itfoxlaser.c::it_8029C4D4
+  return (y_delta <= (laser_radius + reflect_r)) ? 1u : 0u;
+}
+
+static inline uint8_t item_should_commit_guardon_followup_powershield_reflect_owner(
+    const MslBatch* batch, size_t d_idx, int def, float x, float y, float vx,
+    float laser_age_frames, float laser_radius) {
+  (void)def;
+  if (batch == NULL || !(laser_age_frames > 1.0f)) {
+    return 0u;
+  }
+  const MslCommonParams* common = msl_common_params();
+  if (common == NULL || !(common->powershield_reflect_size > 0.0f)) {
+    return 0u;
+  }
+  if (batch->state.action_id[d_idx] != (uint16_t)MSL_ACT_GUARD_REFLECT ||
+      batch->state.animation_index[d_idx] != UINT32_MAX || batch->state.action_frame[d_idx] >= 0 ||
+      batch->state.guard_reflect_timer_x14_seed[d_idx] != 0u ||
+      batch->state.guard_reflect_timer_x18_seed[d_idx] != 0u) {
+    return 0u;
+  }
+  if (batch->state.prev_action_id[d_idx] != (uint16_t)MSL_ACT_GUARD_ON &&
+      batch->state.seed_prev_action_id[d_idx] != (uint16_t)MSL_ACT_GUARD_ON) {
+    return 0u;
+  }
+  if (!(((x - batch->state.pos_x[d_idx]) * vx) < 0.0f)) {
+    return 0u;
+  }
+
+  float reflect_y = 0.0f;
+  if (!item_guard_reflect_bone_y(batch, d_idx, &reflect_y)) {
+    return 0u;
+  }
+  const float reflect_r = common->powershield_reflect_size * batch->state.fighter_scale_y[d_idx];
+  // GuardOn follow-up reflect descriptor:
+  // - GuardOn IASA can enter GuardReflect through ftCo_8009388C, which sets x221C powershield
+  //   bits, initializes mv.co.guard.x14/x18, and immediately installs ReflectDesc with
+  //   ftCo_8009370C.
+  // - Teacher-forced rows seed the prior GuardOn post-frame before the hidden same-step
+  //   GuardReflect entry has exposed x14/x18. The source-backed discriminator is therefore the
+  //   fresh frozen GuardReflect row whose previous visible owner is GuardOn, not a timer-only
+  //   replay fit.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_GuardOn_IASA,ftCo_8009388C,ftCo_8009370C}
+  // refs/melee/src/melee/ft/ftcoll.c::{ftColl_CreateReflectHit,ftColl_80077464}
+  // refs/melee/src/melee/it/item.c::Item_80269F14
+  return fabsf(y - reflect_y) <= (laser_radius + reflect_r) ? 1u : 0u;
+}
+
 typedef enum MslLaserCollisionSpaceLane {
   MSL_LASER_COLLISION_SPACE_SHIELD = 0,
   MSL_LASER_COLLISION_SPACE_REFLECT = 1,
@@ -2377,6 +2513,41 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
             }
           }
         }
+        if (!shield_hit && laser_age_frames > 1.0f &&
+            batch->state.action_id[d_idx] == (uint16_t)MSL_ACT_GUARD_REFLECT &&
+            batch->state.guard_reflect_timer_x14_seed[d_idx] == 1u && common != NULL &&
+            common->powershield_reflect_size > 0.0f &&
+            // Slippi state_flags[0] is raw fp+0x2218. Keep this final-x14 handoff on the pure
+            // reflect-descriptor state byte after the GuardReflect tick: reflect behavior (0x04)
+            // with no high command/interrupt bits. Aggregate controls with 0x20/0x40/0x80 stay on
+            // the live-article GuardReflect owner lane.
+            // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm (fp+0x2218 byte)
+            // refs/melee/src/melee/ft/ftcoll.c::ftColl_CreateReflectHit
+            (batch->state.state_flags[(d_idx * 5u) + 0u] & 0xE4u) == 0x04u) {
+          float reflect_y = 0.0f;
+          if (item_guard_reflect_bone_y(batch, d_idx, &reflect_y)) {
+            const float reflect_r =
+                common->powershield_reflect_size * batch->state.fighter_scale_y[d_idx];
+            const float reflect_lane_r = sr + reflect_r;
+            const float y_delta = y - reflect_y;
+            if (fabsf(y_delta) <= reflect_lane_r) {
+              // Final-x14 GuardReflect HitShield handoff:
+              // - ftCo_GuardReflect_Anim ticks mv.co.guard.x14 before GuardOn_Anim; final visible
+              //   x14 rows can hand contact to item shield resolution.
+              // - Item_80269DC8 chooses the hit_shield callback when the bounce predicate
+              //   (`xDCE_flag.b5/xDCE_flag.b4/xC54`) is not set; Fox laser HitShield destroys.
+              // - Use the same ReflectDesc x2A8 vertical lane as the aged reflect branch to avoid
+              //   broad shield HP/timer gates while the hidden xDCE/xC54/xC58 lane remains unseeded.
+              // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_GuardReflect_Anim,ftCo_80093BC0}
+              // refs/melee/src/melee/it/item.c::Item_80269DC8
+              // refs/melee/src/melee/it/items/itfoxlaser.c::itFoxLaser_Logic94_HitShield
+              shield_hit = 1u;
+              shield_hit_contact_x = x;
+              shield_hit_contact_y = y;
+              shield_bounce_contact_found = 0u;
+            }
+          }
+        }
         if (shield_hit) {
           // Powershield reflect: on a reflected hit, reverse the velocity vector and transfer owner.
           //
@@ -2411,6 +2582,7 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
           // sharing combat_is_powershield_active_idx().
           uint8_t can_powershield_reflect =
               combat_is_powershield_active_idx(batch, d_idx) ? 1u : 0u;
+          uint8_t powershield_reflect_hitshield_handoff = 0u;
           // No-submotion GuardReflect stale-x18 lane:
           // - Reflect ownership is callback-gated by the active reflect window (mv.co.guard.x14).
           // - Some frozen snapshots carry x18 from the previous frame while x14 was already 0 in
@@ -2475,6 +2647,34 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
           if (can_powershield_reflect && defender_guard_reflect_fresh_locomotion_snapshot) {
             can_powershield_reflect = 0u;
           }
+          if (can_powershield_reflect && laser_age_frames > 1.0f &&
+              batch->state.action_id[d_idx] == (uint16_t)MSL_ACT_GUARD_REFLECT && common != NULL &&
+              common->powershield_reflect_size > 0.0f &&
+              batch->state.guard_reflect_timer_x14_seed[d_idx] > 0u) {
+            float reflect_y = 0.0f;
+            if (item_guard_reflect_bone_y(batch, d_idx, &reflect_y)) {
+              const float reflect_r =
+                  common->powershield_reflect_size * batch->state.fighter_scale_y[d_idx];
+              const float reflect_lane_r = sr + reflect_r;
+              const float y_delta = y - reflect_y;
+              if (y_delta < -reflect_lane_r ||
+                  (batch->state.guard_reflect_timer_x14_seed[d_idx] <= 1u &&
+                   fabsf(y_delta) <= reflect_lane_r)) {
+                // GuardReflect HitShield discriminator:
+                // - lasers below the shield-bone ReflectDesc lane hit shield instead of reflect,
+                // - the final x14 tick inside that lane has handed off to Item_80269DC8 HitShield
+                //   destruction rather than ftColl_80077464 owner transfer.
+                // This keeps shield HP/timer heuristics out of the branch and uses the same
+                // source-backed ReflectDesc x2A8 + item HitCapsule radius lane as the aged commit
+                // above.
+                // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_8009370C,ftCo_80093BC0}
+                // refs/melee/src/melee/it/item.c::Item_80269DC8
+                // refs/melee/src/melee/it/items/itfoxlaser.c::itFoxLaser_Logic94_HitShield
+                can_powershield_reflect = 0u;
+                powershield_reflect_hitshield_handoff = 1u;
+              }
+            }
+          }
           if (can_powershield_reflect) {
             // Decomp reflect snapshot ownership:
             // - GuardReflect reflect setup path initializes ReflectDesc lanes.
@@ -2489,6 +2689,42 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
                                       ? c->powershield_reflect_damage_mul
                                       : 1.0f;
             item_apply_powershield_reflect_snapshot(batch, ii, def, dmg_mul);
+            if (laser_age_frames <= 1.0f) {
+              // Spawn-frame powershield reflect ownership:
+              // - A newly spawned SpecialN laser can overlap GuardReflect in the same item logic
+              //   pass. In that path, ftColl_80077464 writes the reflect snapshot and
+              //   Item_80269F14 consumes owner/xDA8 before the post-frame item record.
+              // - Keep older reflected lasers on the staged-owner lane above; broad immediate
+              //   transfer regresses steady GuardReflect keepalive rows.
+              // refs/melee/src/melee/ft/ftcoll.c::ftColl_80077464
+              // refs/melee/src/melee/it/item.c::Item_80269F14
+              // refs/melee/src/melee/it/items/itfoxlaser.c::{it_8029C504,it_8029C4D4}
+              item_commit_powershield_reflect_owner_snapshot(batch, ii, def);
+            } else if (item_should_commit_guardon_followup_powershield_reflect_owner(
+                           batch, d_idx, def, x, y, vx, laser_age_frames, sr)) {
+              // GuardOn follow-up powershield reflect owner/xDA8 commit:
+              // - ftCo_8009388C can enter GuardReflect from GuardOn and install ReflectDesc in the
+              //   same step, before seed-visible x14/x18 have a post-frame to expose the lane.
+              // - Scope to fresh frozen GuardReflect rows with GuardOn as the visible previous
+              //   owner and ReflectDesc vertical overlap; do not reopen broad same-frame transfer.
+              // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_GuardOn_IASA,ftCo_8009388C,ftCo_8009370C}
+              // refs/melee/src/melee/ft/ftcoll.c::{ftColl_CreateReflectHit,ftColl_80077464}
+              // refs/melee/src/melee/it/item.c::Item_80269F14
+              item_commit_powershield_reflect_owner_snapshot(batch, ii, def);
+            } else if (item_should_commit_aged_powershield_reflect_owner(
+                           batch, d_idx, def, x, y, vx, laser_age_frames, sr)) {
+              // Aged powershield reflect owner/xDA8 commit:
+              // - ftColl_80077464 writes owner/xDA8 to the item reflect snapshot when the laser
+              //   overlaps the GuardReflect ReflectDesc.
+              // - Item_80269F14 consumes that snapshot before Slippi's item post-frame record.
+              // - Keep this narrower than the rejected broad same-frame transfer by requiring the
+              //   laser to still approach the reflector, overlap the shield-bone ReflectDesc
+              //   vertical lane, and avoid the final x14 handoff tick owned by HitShield destroy.
+              // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_8009370C,ftCo_80093BC0}
+              // refs/melee/src/melee/ft/ftcoll.c::{ftColl_CreateReflectHit,ftColl_80077464}
+              // refs/melee/src/melee/it/item.c::{Item_80269F14,Item_80269DC8}
+              item_commit_powershield_reflect_owner_snapshot(batch, ii, def);
+            }
             // TODO(decomp/powershield-reflect-ownership-timing): transfer-frame xDA8_short
             // (Slippi item.instance_id) is intentionally left seed-latched in this lane until the
             // exact authoritative transfer ordering is extracted for non-regressive rollout parity.
@@ -2496,7 +2732,8 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
             // ftCommonData x2B0 directly (or identity) for these rows.
             break;
           }
-          if (guard_reflect_active_window_no_submotion_snapshot) {
+          if (guard_reflect_active_window_no_submotion_snapshot &&
+              !powershield_reflect_hitshield_handoff) {
             // The active reflect window owns this frozen GuardReflect row, but the reflect geometry
             // above may reject the projectile. In that case do not fall through into regular
             // GuardSetOff shield-hit ownership until the final x14 handoff tick.
@@ -2722,6 +2959,20 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
         hit_hurt_height = 1u;
       }
       if (!hit) {
+        continue;
+      }
+
+      if (batch->state.item_type[ii] == (uint16_t)MSL_IT_KIND_FOX_LASER_SHOT &&
+          batch->state.action_id[d_idx] == (uint16_t)MSL_ACT_PASSIVE) {
+        // Passive hidden-colanim BODY guard (Fox laser):
+        // - Passive keeps colanim hit status (`Ft_MF_KeepColAnimHitStatus`) across the tech motion;
+        //   on replay-proven Fox-laser contacts, a same-frame Passive overlap can be hidden
+        //   invulnerability ownership rather than an item BODY consume.
+        // - Keep this scoped to Fox laser type-54 rows; Falco type-55 Passive contacts remain on
+        //   the normal BODY consume path.
+        // refs/melee/src/melee/ft/chara/ftCommon/forward.h::ftCo_MF_Passive
+        // refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState
+        // refs/melee/src/melee/ft/ftcoll.c::ftColl_8007B868
         continue;
       }
 

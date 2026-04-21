@@ -91,3 +91,57 @@ def test_vulnerable_nonflinch_laser_body_hit_still_applies_damage() -> None:
     assert float(out["percent"][p]) == pytest.approx(float(ref["percent"][p]), abs=1e-6)
     assert int(out["hitlag"][p]) == int(ref["hitlag"][p]) == 0
     assert int(out["hitstun"][p]) == int(ref["hitstun"][p]) == 0
+
+
+def test_passive_hidden_colanim_keeps_fox_laser_alive_without_damage() -> None:
+    # Replay-real lock for the narrow Passive hidden-colanim item BODY guard:
+    # - Passive uses Ft_MF_KeepColAnimHitStatus, so hidden collision status can still reject item
+    #   BODY contact while Slippi's visible hurtbox_state is transitioning.
+    # - This retained slice is Fox-laser-only; Falco-laser Passive contacts are covered by the
+    #   negative sentinel below and remain on the normal consume path.
+    # refs/melee/src/melee/ft/chara/ftCommon/forward.h::ftCo_MF_Passive
+    # refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState
+    # refs/melee/src/melee/ft/ftcoll.c::ftColl_8007B868
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_rel = (
+        "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
+        "TreasuredBackKangaroo.msl"
+    )
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    seed, ref, out = _run_one_step_row(dataset_path, 6197, 1)
+    p = 1
+    slot = 0
+
+    assert int(seed["action_id"][p]) == 199  # Passive
+    assert int(seed["hurtbox_state"][p]) == 2
+    assert int(seed["items"][slot]["type"]) == 54  # Fox laser
+    for field in ("exists", "type", "state", "owner", "instance_id"):
+        assert int(out["items"][slot][field]) == int(ref["items"][slot][field]), field
+    assert int(out["combo_count"][0]) == int(ref["combo_count"][0])
+    assert int(out["last_attack_landed"][0]) == int(ref["last_attack_landed"][0])
+    assert int(out["instance_hit_by"][p]) == int(ref["instance_hit_by"][p])
+    assert int(out["last_hit_by"][p]) == int(ref["last_hit_by"][p])
+
+
+def test_passive_hidden_colanim_guard_does_not_keep_falco_laser_alive() -> None:
+    # Negative sentinel: the Passive hidden-colanim guard is intentionally scoped away from Falco
+    # type-55 lasers, whose replay rows still consume normally.
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_rel = "datasets/aggregate_recent/replays/validation/aggregate_recent/PositiveRevolvingHyena.msl"
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    seed, ref, out = _run_one_step_row(dataset_path, 3886, 1)
+    p = 1
+    slot = 0
+
+    assert int(seed["action_id"][p]) == 199  # Passive
+    assert int(seed["items"][slot]["type"]) == 55  # Falco laser
+    assert int(ref["items"][slot]["exists"]) == 0
+    assert int(out["items"][slot]["exists"]) == 0

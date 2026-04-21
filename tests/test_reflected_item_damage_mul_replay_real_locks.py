@@ -91,6 +91,7 @@ class _TimingCase:
     apply_record: int
     spawn_id: int
     item_type: int
+    transfer_commits_owner: bool
     note: str
 
 
@@ -184,6 +185,7 @@ def test_reflected_laser_transfer_rows_match_replay_real_item_identity(case: _Tr
             apply_record=4829,
             spawn_id=125,
             item_type=55,
+            transfer_commits_owner=True,
             note="powershield timing lane A",
         ),
         _TimingCase(
@@ -193,6 +195,7 @@ def test_reflected_laser_transfer_rows_match_replay_real_item_identity(case: _Tr
             apply_record=6208,
             spawn_id=149,
             item_type=55,
+            transfer_commits_owner=True,
             note="powershield timing lane B",
         ),
         _TimingCase(
@@ -202,6 +205,7 @@ def test_reflected_laser_transfer_rows_match_replay_real_item_identity(case: _Tr
             apply_record=7449,
             spawn_id=142,
             item_type=55,
+            transfer_commits_owner=True,
             note="powershield timing lane C",
         ),
     ],
@@ -252,32 +256,46 @@ def test_powershield_reflect_transfer_then_speed_apply_timing_locks(case: _Timin
         got = int(out_tx["items"][tx_slot_out][fld])
         exp = int(ref_tx["items"][tx_slot_ref][fld])
         assert got == exp, f"{case.note}: transfer field={fld} expected={exp} got={got}"
-    # Known-gap expectation (not parity lock):
-    # transfer-frame owner remains seed-latched while reflect snapshot ownership is staged for
-    # item-pass consumption on the next step.
-    # refs/melee/src/melee/ft/ftcoll.c::ftColl_80077464
-    # refs/melee/src/melee/it/item.c::Item_80269F14
     tx_owner_out = int(out_tx["items"][tx_slot_out]["owner"])
     tx_owner_ref = int(ref_tx["items"][tx_slot_ref]["owner"])
     tx_owner_seed = int(seed_tx["items"][tx_slot_seed]["owner"])
-    assert tx_owner_out == tx_owner_seed, (
-        f"{case.note}: known-gap transfer owner expected_seed={tx_owner_seed} got={tx_owner_out}"
-    )
-    assert tx_owner_out != tx_owner_ref, (
-        f"{case.note}: known-gap expectation requires transfer owner != ref ({tx_owner_ref})"
-    )
-    assert int(out_tx["items"][tx_slot_out]["misc2"]) == 255, f"{case.note}: expected pending-owner marker"
-    assert int(out_tx["items"][tx_slot_out]["misc3"]) == 1, f"{case.note}: expected pending owner port=0 marker"
-    # Known-gap expectation (not parity lock):
-    # transfer-frame item.instance_id (xDA8_short) remains seed-latched in this narrowed lane
-    # until authoritative transfer ownership timing is extracted.
-    # refs/melee/src/melee/ft/ftcoll.c::ftColl_80077464
-    # refs/melee/src/melee/it/item.c::Item_80269F14
     tx_iid_out = int(out_tx["items"][tx_slot_out]["instance_id"])
     tx_iid_ref = int(ref_tx["items"][tx_slot_ref]["instance_id"])
     tx_iid_seed = int(seed_tx["items"][tx_slot_seed]["instance_id"])
-    assert tx_iid_out == tx_iid_seed, f"{case.note}: known-gap transfer instance_id expected_seed={tx_iid_seed} got={tx_iid_out}"
-    assert tx_iid_out != tx_iid_ref, f"{case.note}: known-gap expectation requires transfer instance_id != ref ({tx_iid_ref})"
+    if case.transfer_commits_owner:
+        # Retained ReflectDesc rows commit owner/xDA8 on the overlap frame when the
+        # still-approaching laser is inside the shield-bone ReflectDesc vertical lane. This covers
+        # both aged GuardReflect rows and the GuardOn -> GuardReflect follow-up row whose x14/x18
+        # setup is source-owned but not seed-visible until after this step.
+        # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_8009370C
+        # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_8009388C
+        # refs/melee/src/melee/ft/ftcoll.c::ftColl_CreateReflectHit
+        # refs/melee/src/melee/ft/ftcoll.c::ftColl_80077464
+        # refs/melee/src/melee/it/item.c::Item_80269F14
+        assert tx_owner_out == tx_owner_ref, f"{case.note}: transfer owner expected_ref={tx_owner_ref} got={tx_owner_out}"
+        assert tx_iid_out == tx_iid_ref, f"{case.note}: transfer instance_id expected_ref={tx_iid_ref} got={tx_iid_out}"
+        assert int(out_tx["items"][tx_slot_out]["misc2"]) == 0, f"{case.note}: committed owner must clear pending marker"
+        assert int(out_tx["items"][tx_slot_out]["misc3"]) == 0, f"{case.note}: committed owner must clear pending port marker"
+    else:
+        # Known-gap expectation (not parity lock): rows outside the retained ReflectDesc commit
+        # lanes keep owner/xDA8 seed-latched while the reflect snapshot is staged for the next item
+        # pass.
+        # refs/melee/src/melee/ft/ftcoll.c::ftColl_80077464
+        # refs/melee/src/melee/it/item.c::Item_80269F14
+        assert tx_owner_out == tx_owner_seed, (
+            f"{case.note}: known-gap transfer owner expected_seed={tx_owner_seed} got={tx_owner_out}"
+        )
+        assert tx_owner_out != tx_owner_ref, (
+            f"{case.note}: known-gap expectation requires transfer owner != ref ({tx_owner_ref})"
+        )
+        assert int(out_tx["items"][tx_slot_out]["misc2"]) == 255, f"{case.note}: expected pending-owner marker"
+        assert int(out_tx["items"][tx_slot_out]["misc3"]) == 1, f"{case.note}: expected pending owner port=0 marker"
+        assert tx_iid_out == tx_iid_seed, (
+            f"{case.note}: known-gap transfer instance_id expected_seed={tx_iid_seed} got={tx_iid_out}"
+        )
+        assert tx_iid_out != tx_iid_ref, (
+            f"{case.note}: known-gap expectation requires transfer instance_id != ref ({tx_iid_ref})"
+        )
     for fld in ("vel_x", "vel_y"):
         got = float(out_tx["items"][tx_slot_out][fld])
         exp = float(ref_tx["items"][tx_slot_ref][fld])

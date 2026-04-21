@@ -2093,6 +2093,26 @@ Fox/Falco special-owner split (2026-04-17):
     Sources: `refs/melee/src/melee/it/itcoll.c::it_8027137C`,
     `refs/melee/src/melee/it/items/itfoxlaser.c::itFoxlaser_UnkMotion1_Anim`,
     `refs/melee/src/melee/lb/lbcollision.c::lbColl_8000805C`.
+  - Passive hidden-colanim Fox-laser BODY guard:
+    - Passive keeps the system colanim hit-status lane across motion entry
+      (`ftCo_MF_Passive | Ft_MF_KeepColAnimHitStatus`). On the replay-proven Fox-laser Passive
+      row, visible hurtbox/contact geometry can admit an item BODY overlap while the hidden
+      colanim owner still rejects damage and item consume. Runtime now keeps type-54 Fox lasers
+      alive on Passive BODY overlap and leaves fighter source/combo fields untouched.
+    - This slice is deliberately not a generic Passive or hit-status shortcut: Falco type-55
+      Passive laser contacts remain on the normal BODY consume path.
+    - Replay-real locks: `TreasuredBackKangaroo.msl:6197` covers the Fox-laser keepalive; the
+      negative sentinel `PositiveRevolvingHyena.msl:3886` proves Falco-laser Passive contact still
+      consumes.
+    - Fresh taxonomy after this slice: primary total `587` (down from `595`);
+      `F14c=0`, `F14d=0`, `F15a=10`, `F15b=8`, `F16a=0`, `F16b=0`, `F16c=0`,
+      `F16d=27` (down from `31`). Aggregate total `5176` (down from `5184`);
+      `F14c=400`, `F14d=66`, `F15a=18`, `F15b=112`, `F16a=0`, `F16b=0`,
+      `F16c=0`, `F16d=102` (down from `106`). Section-6 and ledge/collision-env families
+      remain closed (`F17/F10c/F19/F20/F21/F22/F23/F24/F10e=0`).
+    Sources: `refs/melee/src/melee/ft/chara/ftCommon/forward.h::ftCo_MF_Passive`,
+    `refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState`,
+    `refs/melee/src/melee/ft/ftcoll.c::ftColl_8007B868`.
   - Fox Illusion end-state BODY sweep now promotes `ghostEffectPos[2]` as the prefix-causal
     previous hitcapsule endpoint. Decomp owner: `ftFox_SpecialS_SetPhys` advances the ghost ring as
     `ghost2 = ghost1; ghost1 = ghost0; ghost0 = cur_pos`, `itFoxillusion_UnkMotion{0,1}_Phys`
@@ -2185,6 +2205,71 @@ Fox/Falco special-owner split (2026-04-17):
       ledge/collision-env families remain closed (`F17/F10c/F19/F20/F21/F22/F23/F24/F10e=0`).
     Sources: `refs/melee/src/melee/it/it_2725.c::it_8027B070`,
     `refs/slippi-ssbm-asm/Recording/SendItemInfo.s`.
+  - Spawn-frame powershield reflect owner/xDA8 commit:
+    - Newly spawned SpecialN lasers can overlap GuardReflect in the same item logic pass. For that
+      spawn-frame-only path, runtime now commits the replay-visible owner and `xDA8_short`
+      (`item_instance_id`) when the powershield reflect snapshot is staged, matching
+      `ftColl_80077464` -> `Item_80269F14` before Slippi's item post-frame record.
+    - Older reflected lasers outside the retained GuardOn-follow-up / aged ReflectDesc lanes remain
+      on the staged-owner lane; the broad same-frame transfer is still rejected because it
+      over-transfers steady GuardReflect keepalive rows.
+    - Replay-real locks: `AttachedGoodNaturedGuanaco.msl:428` and `AGG:3345` cover the positive
+      spawn-frame transfer rows.
+    - Fresh taxonomy after this slice: primary total `583` (down from `587`);
+      `F14c=0`, `F14d=0`, `F15a=6` (down from `10`), `F15b=8`, `F16a=0`, `F16b=0`,
+      `F16c=0`, `F16d=27`. Aggregate total `5174` (down from `5176`);
+      `F14c=400`, `F14d=66`, `F15a=16` (down from `18`), `F15b=112`, `F16a=0`,
+      `F16b=0`, `F16c=0`, `F16d=102`. Section-6 and ledge/collision-env families remain closed
+      (`F17/F10c/F19/F20/F21/F22/F23/F24/F10e=0`).
+    Sources: `refs/melee/src/melee/ft/ftcoll.c::ftColl_80077464`,
+    `refs/melee/src/melee/it/item.c::Item_80269F14`,
+    `refs/melee/src/melee/it/items/itfoxlaser.c::{it_8029C504,it_8029C4D4}`.
+  - Aged GuardReflect ReflectDesc owner/xDA8 and HitShield handoff:
+    - Aged Falco lasers now commit owner/xDA8 when they are still approaching the reflector, overlap
+      the vertical lane of the GuardReflect shield-bone `ReflectDesc`, and are not on the final x14
+      handoff tick. This closes `GAT:4828` and `TBK:7448` without reopening the rejected broad
+      transfer rows.
+    - Aged GuardReflect lasers below that shield-bone lane, or inside it on the final seeded x14
+      tick, route to `Item_80269DC8` / `itFoxLaser_Logic94_HitShield` destruction rather than the
+      reflect transfer path.
+    - Replay-real locks: positives `GAT:4828` and `TBK:7448`, plus broad-transfer negatives
+      `GAT:2274`, `GAT:2275`, `GAT:9479`.
+    - Fresh taxonomy after this slice: primary total `568` (down from `583`);
+      `F14c=0`, `F14d=0`, `F15a=2` (down from `6`), `F15b=4` (down from `8`),
+      `F16a=0`, `F16b=0`, `F16c=0`, `F16d=27`. Aggregate total `5144` (down from
+      `5174`); `F14c=400`, `F14d=66`, `F15a=10` (down from `16`), `F15b=108`
+      (down from `112`), `F16a=0`, `F16b=0`, `F16c=0`, `F16d=102`. Section-6 and
+      ledge/collision-env families remain closed (`F17/F10c/F19/F20/F21/F22/F23/F24/F10e=0`).
+    Sources: `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_8009370C,ftCo_80093BC0}`,
+    `refs/melee/src/melee/ft/ftcoll.c::{ftColl_CreateReflectHit,ftColl_80077464}`,
+    `refs/melee/src/melee/it/item.c::{Item_80269F14,Item_80269DC8}`,
+    `refs/melee/src/melee/it/items/itfoxlaser.c::{it_8029C4D4,itFoxLaser_Logic94_HitShield}`.
+  - GuardOn-follow-up ReflectDesc owner/xDA8 and pure-state final-x14 HitShield handoff:
+    - Latest decomp refresh (`refs/melee` `4e62f34a`) confirms `ftCo_8009388C` can enter
+      GuardReflect from GuardOn and immediately call `ftCo_8009370C` to install ReflectDesc before
+      the next seed-visible x14/x18 post-frame. Runtime now commits owner/xDA8 for fresh frozen
+      GuardReflect rows whose visible previous owner is GuardOn, the aged laser is still approaching,
+      and the laser overlaps the shield-bone ReflectDesc vertical lane. This closes primary
+      `GAT:6207`.
+    - Final seeded x14 HitShield handoff is retained only for the pure reflect-descriptor
+      `fp+0x2218` state byte after the GuardReflect tick (`0x04`, with no high
+      command/interrupt bits). This closes primary `TBK:2323` while aggregate controls with
+      `0x20/0x40/0x80` high bits remain live GuardReflect articles instead of false HitShield
+      destroys.
+    - Replay-real locks: GuardOn-follow-up positive `GAT:6207`, final-x14 HitShield positive
+      `TBK:2323`, adjacent keepalive control `TBK:2322`, aged positives `GAT:4828`/`TBK:7448`,
+      and broad-transfer negatives `GAT:2274`/`GAT:2275`/`GAT:9479`.
+    - Fresh taxonomy after this slice: primary total `556` (down from `568`);
+      `F14c=0`, `F14d=0`, `F15a=0` (down from `2`), `F15b=0` (down from `4`),
+      `F16a=0`, `F16b=0`, `F16c=0`, `F16d=27`. Aggregate total `5134` (down from
+      `5144`); `F14c=400`, `F14d=66`, `F15a=10`, `F15b=104` (down from `108`),
+      `F16a=0`, `F16b=0`, `F16c=0`, `F16d=102`. Section-6 and ledge/collision-env families remain
+      closed (`F17/F10c/F19/F20/F21/F22/F23/F24/F10e=0`).
+    Sources: `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_GuardOn_IASA,ftCo_8009388C,ftCo_8009370C,ftCo_GuardReflect_Anim,ftCo_80093BC0}`,
+    `refs/melee/src/melee/ft/ftcoll.c::{ftColl_CreateReflectHit,ftColl_80077464}`,
+    `refs/melee/src/melee/it/item.c::{Item_80269F14,Item_80269DC8}`,
+    `refs/melee/src/melee/it/items/itfoxlaser.c::itFoxLaser_Logic94_HitShield`,
+    `refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm`.
   - Powershield reflect-size source visibility:
     - `p_ftCommonData->x2A8` is extracted as `powershield_reflect_size`, matching
       `ftCo_8009370C`'s GuardReflect `ReflectDesc.x14_size`. This is retained only as source/data
@@ -2198,6 +2283,11 @@ Fox/Falco special-owner split (2026-04-17):
     - Broad same-frame powershield owner/xDA8 transfer fixed a few `F15a` rows but regressed
       adjacent GuardReflect identity rows, so it remains rejected until the exact
       `ftColl_80077464` / `Item_80269F14` transfer-vs-bounce discriminator is modeled.
+    - A hard `powershield_reflect_size` overlap gate using `p_ftCommonData->x2A8` was tested after
+      the spawn-frame slice. Rebuilt row checks showed it fixed the `GAT:4894` HitShield destroy row
+      but rejected accepted reflect rows (`AGG:428`, `GAT:4828`) and inflated primary total to
+      `632`; reverted. The extracted size remains visibility only until the actual GuardReflect
+      bone/`xDCE/xC54/xC58` shield-vs-reflect state is promoted.
     - A seed-timer final-tick powershield reflect gate was tested to split `F15b` destroy rows from
       `F15a` transfer rows. Runtime-timer gating broke existing powershield reflect locks, and
       seed-snapshot gating doubled primary `F15b` while leaving aggregate `F15` unchanged, so both
@@ -2219,6 +2309,9 @@ Fox/Falco special-owner split (2026-04-17):
       Dash-only gating regressed aggregate `F16d` from `116` to `248`; the remaining false consumes
       still need item hitlist/callback state, not an age/action shortcut. Targeted Dolphin hitlist
       dumps for `HIS:6544` timed out locally without producing rows.
+    - A broader Passive hidden-colanim item BODY guard was tested for all laser types. It fixed the
+      primary Fox-laser row but regressed aggregate total to `5219` and `F16d` to `114` by keeping
+      Falco type-55 Passive contacts alive; rejected in favor of the retained type-54-only slice.
     - ThrowHi hidden-victim-ring and throw-pulse routing experiments fixed individual inspected
       ThrowHi article/source rows but either increased aggregate `F14c` or broke an existing
       ThrowHi velocity lock (`QGD:3095`), so no throw runtime change was retained in this slice.

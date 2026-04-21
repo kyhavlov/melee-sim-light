@@ -937,6 +937,17 @@ Recommended sequence for the next deep passes:
     `F14c=475`, `F14d=75`, `F15a=21`, `F15b=124`, `F16a=0`, `F16b=0`, `F16c=0`,
     `F16d=126`. Section 6 and ledge/collision-env remain closed:
     `F17/F10c/F19/F20/F21/F22/F23/F24/F10e=0`.
+  - Passive hidden-colanim Fox-laser BODY guard keeps type-54 Fox lasers alive on Passive BODY
+    overlap while the hidden colanim owner still rejects damage/item consume. This is source-backed
+    by `ftCo_MF_Passive | Ft_MF_KeepColAnimHitStatus`, `Fighter_ChangeMotionState`, and
+    `ftColl_8007B868`; it is intentionally scoped away from Falco type-55 Passive contacts.
+    Replay-real locks live in `tests/test_laser_disabled_contact_replay_real_locks.py` for
+    positive row `TBK:6197` and negative sentinel `PRH:3886`.
+    Fresh taxonomy after this slice: primary total `587`; `F14c=0`, `F14d=0`, `F15a=10`,
+    `F15b=8`, `F16a=0`, `F16b=0`, `F16c=0`, `F16d=27`. Aggregate total `5176`;
+    `F14c=400`, `F14d=66`, `F15a=18`, `F15b=112`, `F16a=0`, `F16b=0`, `F16c=0`,
+    `F16d=102`. Section 6 and ledge/collision-env remain closed:
+    `F17/F10c/F19/F20/F21/F22/F23/F24/F10e=0`.
   - Fox Illusion end-state BODY sweep now promotes `ghostEffectPos[2]` as the prefix-causal
     previous hitcapsule endpoint. Decomp owner: `ftFox_SpecialS_SetPhys` advances
     `ghost2 = ghost1; ghost1 = ghost0; ghost0 = cur_pos`, `itFoxillusion_UnkMotion{0,1}_Phys`
@@ -997,6 +1008,46 @@ Recommended sequence for the next deep passes:
     `F14c=400`, `F14d=66`, `F15a=18`, `F15b=112`, `F16a=0`, `F16b=0`, `F16c=0`,
     `F16d=106`. Section 6 and ledge/collision-env remain closed:
     `F17/F10c/F19/F20/F21/F22/F23/F24/F10e=0`.
+  - Spawn-frame powershield reflect owner/xDA8 commits only for newly spawned SpecialN lasers that
+    overlap GuardReflect in the same item logic pass. This models `ftColl_80077464` staging followed
+    by `Item_80269F14` owner/xDA8 consumption before Slippi's item post-frame record, while older
+    reflected lasers outside the retained GuardOn-follow-up / aged ReflectDesc lanes remain on the
+    staged-owner lane.
+    Replay-real locks live in `tests/test_powershield_reflect_owner_timing_replay_real_locks.py`
+    for positive rows `AGG:428` and `AGG:3345`.
+    Fresh taxonomy after this slice: primary total `583`; `F14c=0`, `F14d=0`, `F15a=6`,
+    `F15b=8`, `F16a=0`, `F16b=0`, `F16c=0`, `F16d=27`. Aggregate total `5174`;
+    `F14c=400`, `F14d=66`, `F15a=16`, `F15b=112`, `F16a=0`, `F16b=0`, `F16c=0`,
+    `F16d=102`. Section 6 and ledge/collision-env remain closed:
+    `F17/F10c/F19/F20/F21/F22/F23/F24/F10e=0`.
+  - Aged GuardReflect ReflectDesc owner/xDA8 and HitShield handoff commits owner/xDA8 only when an
+    aged Falco laser is still approaching the reflector, overlaps the vertical lane of the
+    GuardReflect shield-bone `ReflectDesc`, and is not on the final x14 handoff tick. The paired
+    HitShield handoff sends aged lasers below that lane, or inside it on the final seeded x14 tick,
+    through `Item_80269DC8` / `itFoxLaser_Logic94_HitShield` destruction instead of reflect
+    transfer. Replay-real locks cover positives `GAT:4828` and `TBK:7448`, and broad-transfer
+    negatives `GAT:2274`, `GAT:2275`, `GAT:9479`.
+    Fresh taxonomy after this slice: primary total `568`; `F14c=0`, `F14d=0`, `F15a=2`,
+    `F15b=4`, `F16a=0`, `F16b=0`, `F16c=0`, `F16d=27`. Aggregate total `5144`;
+    `F14c=400`, `F14d=66`, `F15a=10`, `F15b=108`, `F16a=0`, `F16b=0`, `F16c=0`,
+    `F16d=102`. Section 6 and ledge/collision-env remain closed:
+    `F17/F10c/F19/F20/F21/F22/F23/F24/F10e=0`.
+  - GuardOn-follow-up ReflectDesc owner/xDA8 and pure-state final-x14 HitShield handoff:
+    latest `refs/melee` (`4e62f34a`) confirms `ftCo_8009388C` can enter GuardReflect from GuardOn
+    and immediately install ReflectDesc via `ftCo_8009370C`, before the next seed-visible x14/x18
+    post-frame. Runtime now commits owner/xDA8 for fresh frozen GuardReflect rows whose previous
+    visible owner is GuardOn, whose aged laser is still approaching, and whose laser overlaps the
+    shield-bone ReflectDesc vertical lane. Final seeded x14 HitShield destruction is retained only
+    on the pure reflect-descriptor `fp+0x2218` post-tick byte (`0x04`, no high command/interrupt
+    bits), so aggregate controls with `0x20/0x40/0x80` high bits remain live articles.
+    Replay-real locks cover `GAT:6207`, `TBK:2323`, adjacent keepalive control `TBK:2322`, aged
+    positives `GAT:4828`/`TBK:7448`, and broad-transfer negatives
+    `GAT:2274`/`GAT:2275`/`GAT:9479`.
+    Fresh taxonomy after this slice: primary total `556`; `F14c=0`, `F14d=0`, `F15a=0`,
+    `F15b=0`, `F16a=0`, `F16b=0`, `F16c=0`, `F16d=27`. Aggregate total `5134`;
+    `F14c=400`, `F14d=66`, `F15a=10`, `F15b=104`, `F16a=0`, `F16b=0`, `F16c=0`,
+    `F16d=102`. Section 6 and ledge/collision-env remain closed:
+    `F17/F10c/F19/F20/F21/F22/F23/F24/F10e=0`.
   - `powershield_reflect_size` is now extracted from `p_ftCommonData->x2A8`, matching
     `ftCo_8009370C`'s GuardReflect `ReflectDesc.x14_size`. This is retained as source visibility
     only, not F15 closure: probing the small reflect capsule showed that same-frame owner/xDA8
@@ -1008,6 +1059,10 @@ Recommended sequence for the next deep passes:
     new GuardReflect identity rows (`GAT:2274`, `GAT:2275`, `GAT:9479`) and raised aggregate `F15`
     from `151` to `155`. The change was reverted; these rows stay in `F15a/F15b` until the exact
     `ftColl_80077464` / `Item_80269F14` transfer-vs-bounce discriminator is modeled.
+  - A hard `powershield_reflect_size` overlap gate using `p_ftCommonData->x2A8` fixed the
+    `GAT:4894` HitShield destroy row after rebuild, but rejected accepted reflect rows (`AGG:428`,
+    `GAT:4828`) and regressed primary total to `632`; reverted. The extracted size remains
+    visibility only until the missing GuardReflect bone/`xDCE/xC54/xC58` state is promoted.
   - Powershield reflect final-tick gates were tested as a possible `F15a/F15b` discriminator.
     Runtime-timer gating broke existing powershield reflect locks; seed-snapshot gating improved
     aggregate total through adjacent guard-release movement but doubled primary `F15b` and did not
@@ -1025,6 +1080,10 @@ Recommended sequence for the next deep passes:
     General age gating broke the accepted AttackHi3 BODY lock, and Dash-only gating regressed
     aggregate `F16d` from `116` to `248`. Targeted Dolphin hitlist dumps for `HIS:6544` timed out
     locally, so no hitlist/callback state could be retained from that probe.
+  - A broader Passive hidden-colanim item BODY guard for all laser types fixed the primary
+    Fox-laser row but regressed aggregate total to `5219` and `F16d` to `114` by preserving Falco
+    type-55 Passive contacts that replay consumes. It was rejected in favor of the retained
+    type-54-only slice.
   - ThrowHi first-tick hidden-victim-ring suppression fixed inspected `BHH:527/1206` style rows
     but increased aggregate `F14c` from `484` to `629`; reverted.
   - Routing all ThrowB/ThrowHi/ThrowLw projectile creation away from `laser_should_shoot_on_frame`
