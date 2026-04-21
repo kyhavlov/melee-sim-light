@@ -140,9 +140,9 @@ def test_laser_hitcap_prev_scale_replay_rows(case: _ParityCase) -> None:
 
 
 def test_laser_hitcap_prev_scale_does_not_enable_rejected_unscaled_offset_fallback() -> None:
-    # Negative control for the rejected F16d unscaled-offset fallback. GAT:7215 still needs a
-    # separate item-hitcapsule transform owner; the x58 previous-scale fix must not admit that
-    # row through a broad unscaled BODY offset.
+    # Negative control for the rejected F16d unscaled-offset fallback. The previous-scale fix must
+    # not admit adjacent GAT laser rows through a broad unscaled BODY offset; the later GAT:7215
+    # consume is covered by the separate lbColl hurt-radius lane.
     root = Path(__file__).resolve().parents[1]
     dataset_path = (
         root
@@ -151,11 +151,11 @@ def test_laser_hitcap_prev_scale_does_not_enable_rejected_unscaled_offset_fallba
     if not dataset_path.exists():
         pytest.skip(f"missing local dataset: {dataset_path}")
 
-    seed, out, ref = _one_step(dataset_path, 7215)
+    seed, out, ref = _one_step(dataset_path, 7214)
     p = 0
     slot = 0
     assert int(seed["action_id"][p]) == 20  # Dash
     assert int(seed["items"][slot]["type"]) == 55
-    assert int(ref["items"][slot]["exists"]) == 0
+    assert int(ref["items"][slot]["exists"]) == 1
     assert int(out["items"][slot]["exists"]) == 1
-    assert int(out["action_id"][p]) != int(ref["action_id"][p])
+    assert int(out["action_id"][p]) == int(ref["action_id"][p]) == 20

@@ -129,13 +129,13 @@ rollout.first_mismatch_seeded_total: 53
 
 == datasets/aggregate_recent/replays/validation/aggregate_recent/TubbyCurlyHerring.msl ==
 rollout.best_len: 328
-rollout.streak_count: 145
+rollout.streak_count: 144
 rollout.streak_len.median: 66
 rollout.streak_len.p90: 192
 rollout.streak_len.p95: 226
 rollout.streak_len.max: 328
-rollout.first_mismatch_total: 235
-rollout.first_mismatch_seeded_total: 165
+rollout.first_mismatch_total: 234
+rollout.first_mismatch_seeded_total: 164
 
 == datasets/aggregate_recent/replays/validation/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl ==
 rollout.best_len: 392
@@ -155,7 +155,7 @@ rollout.streak_len.p90: 218
 rollout.streak_len.p95: 258
 rollout.streak_len.max: 327
 rollout.first_mismatch_total: 125
-rollout.first_mismatch_seeded_total: 40
+rollout.first_mismatch_seeded_total: 39
 
 == datasets/aggregate_recent/replays/validation/cardinal_1.0_recent/QuerulousGrandDinosaur.msl ==
 rollout.best_len: 631
@@ -169,20 +169,20 @@ rollout.first_mismatch_seeded_total: 43
 
 == datasets/aggregate_recent/replays/validation/cardinal_1.0_recent/TreasuredBackKangaroo.msl ==
 rollout.best_len: 309
-rollout.streak_count: 91
+rollout.streak_count: 90
 rollout.streak_len.median: 63
-rollout.streak_len.p90: 170
-rollout.streak_len.p95: 223
+rollout.streak_len.p90: 175
+rollout.streak_len.p95: 253
 rollout.streak_len.max: 309
-rollout.first_mismatch_total: 92
-rollout.first_mismatch_seeded_total: 35
+rollout.first_mismatch_total: 91
+rollout.first_mismatch_seeded_total: 34
 
 == suite summary ==
-overall.rollout.streak_count: 1930
+overall.rollout.streak_count: 1928
 overall.rollout.streak_len.median: 56
-overall.rollout.streak_len.p90: 170
-overall.rollout.streak_len.p95: 219
+overall.rollout.streak_len.p90: 171
+overall.rollout.streak_len.p95: 220
 overall.rollout.streak_len.max: 631
 overall.rollout.best_len.max: 631
-overall.rollout.first_mismatch_total: 2127
-overall.rollout.first_mismatch_seeded_total: 1097
+overall.rollout.first_mismatch_total: 2125
+overall.rollout.first_mismatch_seeded_total: 1094

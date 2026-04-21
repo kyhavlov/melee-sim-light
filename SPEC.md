@@ -2270,6 +2270,50 @@ Fox/Falco special-owner split (2026-04-17):
     `refs/melee/src/melee/it/item.c::{Item_80269F14,Item_80269DC8}`,
     `refs/melee/src/melee/it/items/itfoxlaser.c::itFoxLaser_Logic94_HitShield`,
     `refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm`.
+  - Airborne Fall Falco-laser BODY hurtcap-Z lane:
+    - `ftColl_8007925C` routes item BODY through `lbColl_8000805C`, passing
+      `ftCommon_8007F804(fp)` and `fp->cur_pos.z`; `lbColl_8000805C` rewrites both hurt capsule
+      endpoint Z values before the segment/capsule test. Runtime now mirrors that flattened-Z
+      source lane for state0 Falco lasers hitting vulnerable airborne `Fall` rows.
+    - The retained branch is guarded by the item victim-ring surface: if the defender already
+      carries the same owner attack id (`last_attack_landed == item_attack_id`), the row stays on
+      the existing keepalive path, matching `it_8026FAC4` / `lbColl_80008688` victim-list
+      ownership instead of creating a fresh BODY consume.
+    - Replay-real locks: `TreasuredBackKangaroo.msl:2901` covers the positive BODY hit and laser
+      consume; adjacent `TBK:2900` stays alive; `PriceyPartialAlbatross.msl:4124` protects the
+      same-attack victim-ring negative.
+    - Fresh taxonomy after this slice: primary total `543` (down from `556`);
+      `F14c=0`, `F14d=0`, `F15a=0`, `F15b=0`, `F16a=0`, `F16b=0`, `F16c=0`,
+      `F16d=14` (down from `27`). Aggregate total `5121` (down from `5134`);
+      `F14c=400`, `F14d=66`, `F15a=10`, `F15b=104`, `F16a=0`, `F16b=0`,
+      `F16c=0`, `F16d=89` (down from `102`). Section-6 and ledge/collision-env families remain
+      closed (`F17/F10c/F19/F20/F21/F22/F23/F24/F10e=0`).
+    Sources: `refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007925C,ftColl_80077C60}`,
+    `refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000805C,lbColl_80008688}`,
+    `refs/melee/src/melee/it/itcoll.c::{it_8026FAC4,it_8026FA2C}`.
+  - Grounded Dash-to-Turn Falco-laser BODY `lbColl` hurt-radius lane:
+    - `ftColl_8007925C` reaches item BODY only after reflect/absorb/shield, then calls
+      `lbColl_8000805C`; `lbColl_8000805C` forwards `arg1->scale` and
+      `lbColl_804D7A38 * fp->x34_scale.y` to `lbColl_80006E58`, whose broad/effective radius is
+      `hit_radius + hurt_radius * arg11`. Runtime now promotes that decomp radius only for the
+      lower/mid hurtcap Falco-laser Dash->Turn handoff left after the grounded segment slice.
+    - The retained branch stays on scaled laser hitcap positions and does not revive the rejected
+      unscaled-offset fallback. High/head-only caps remain on the exact path after `TBK:4136`
+      proved broad all-cap radius promotion is a false consume.
+    - Replay-real locks: `GracefulAttachedTurtle.msl:7215` is the positive BODY consume; adjacent
+      `GAT:7214` stays alive; high-cap negative `TreasuredBackKangaroo.msl:4136` stays on Turn with
+      the laser alive; the previous-scale test now keeps `GAT:7214` as the unscaled-fallback
+      sentinel.
+    - Fresh taxonomy after this slice: primary total `528` (down from `543`);
+      `F14c=0`, `F14d=0`, `F15a=0`, `F15b=0`, `F16a=0`, `F16b=0`, `F16c=0`,
+      `F16d=0` (down from `14`). Aggregate total `5106` (down from `5121`);
+      `F14c=400`, `F14d=66`, `F15a=10`, `F15b=104`, `F16a=0`, `F16b=0`,
+      `F16c=0`, `F16d=75` (down from `89`). Section-6 and ledge/collision-env families remain
+      closed (`F17/F10c/F19/F20/F21/F22/F23/F24/F10e=0`).
+    Sources: `refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007925C,ftColl_80077C60}`,
+    `refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000805C,lbColl_80006E58}`,
+    `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c::ftCo_Dash_IASA`,
+    `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Turn.c::ftCo_Turn_Enter_Smash`.
   - Powershield reflect-size source visibility:
     - `p_ftCommonData->x2A8` is extracted as `powershield_reflect_size`, matching
       `ftCo_8009370C`'s GuardReflect `ReflectDesc.x14_size`. This is retained only as source/data
@@ -2309,6 +2353,14 @@ Fox/Falco special-owner split (2026-04-17):
       Dash-only gating regressed aggregate `F16d` from `116` to `248`; the remaining false consumes
       still need item hitlist/callback state, not an age/action shortcut. Targeted Dolphin hitlist
       dumps for `HIS:6544` timed out locally without producing rows.
+    - A broad item BODY hurtcap-Z flatten (mirroring `lbColl_8000805C` for every item/fighter BODY
+      check) closed `TBK:2901` but reopened primary throw rows (`F14c=45`, `F14d=9`) and inflated
+      aggregate total to `5729` (`F16d=253`). It was rejected in favor of the retained airborne
+      Fall/Falco-laser lane plus the same-attack victim-ring negative.
+    - A broad grounded `lbColl_8000805C` hurt-radius promotion for all Dash-to-Turn Falco-laser BODY
+      caps closed `GAT:7215` but false-consumed the high/head-only `TBK:4136` row. The retained lane
+      is therefore limited to lower/mid hurtcaps until the remaining high-cap pose/filter owner is
+      source-backed.
     - A broader Passive hidden-colanim item BODY guard was tested for all laser types. It fixed the
       primary Fox-laser row but regressed aggregate total to `5219` and `F16d` to `114` by keeping
       Falco type-55 Passive contacts alive; rejected in favor of the retained type-54-only slice.

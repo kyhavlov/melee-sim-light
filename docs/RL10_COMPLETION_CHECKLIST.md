@@ -1048,6 +1048,31 @@ Recommended sequence for the next deep passes:
     `F14c=400`, `F14d=66`, `F15a=10`, `F15b=104`, `F16a=0`, `F16b=0`, `F16c=0`,
     `F16d=102`. Section 6 and ledge/collision-env remain closed:
     `F17/F10c/F19/F20/F21/F22/F23/F24/F10e=0`.
+  - Airborne Fall Falco-laser BODY hurtcap-Z lane mirrors `ftColl_8007925C ->
+    lbColl_8000805C`: item BODY passes `ftCommon_8007F804(fp)` and `fp->cur_pos.z`, and
+    `lbColl_8000805C` rewrites hurtcap endpoint Z before collision. Runtime now uses that lane only
+    for state0 Falco lasers against vulnerable airborne `Fall`, and excludes same-attack carry rows
+    (`last_attack_landed == item_attack_id`) as item victim-ring/callback ownership
+    (`it_8026FAC4` / `lbColl_80008688`). Replay-real locks live in
+    `tests/test_laser_body_hurtcap_z_replay_real_locks.py`: positive `TBK:2901`, adjacent no-hit
+    `TBK:2900`, and same-attack negative `PPA:4124`.
+    Fresh taxonomy after this slice: primary total `543`; `F14c=0`, `F14d=0`, `F15a=0`,
+    `F15b=0`, `F16a=0`, `F16b=0`, `F16c=0`, `F16d=14`. Aggregate total `5121`;
+    `F14c=400`, `F14d=66`, `F15a=10`, `F15b=104`, `F16a=0`, `F16b=0`, `F16c=0`,
+    `F16d=89`. Section 6 and ledge/collision-env remain closed:
+    `F17/F10c/F19/F20/F21/F22/F23/F24/F10e=0`.
+  - Grounded Dash-to-Turn Falco-laser BODY `lbColl` hurt-radius lane mirrors
+    `ftColl_8007925C -> lbColl_8000805C -> lbColl_80006E58`: item BODY uses
+    `hit_radius + hurt_radius * (lbColl_804D7A38 * fp->x34_scale.y)` after reflect/absorb/shield
+    miss. Runtime now promotes that radius only for lower/mid hurtcaps on the Falco-laser
+    Dash->Turn handoff; it keeps scaled laser hitcap positions and does not reopen the rejected
+    unscaled-offset fallback. Replay-real locks live in
+    `tests/test_laser_grounded_body_segment_replay_real_locks.py`: positive `GAT:7215`, adjacent
+    pre-Turn negative `GAT:7214`, and high-cap negative `TBK:4136`. Fresh taxonomy after this
+    slice: primary total `528`; `F14c=0`, `F14d=0`, `F15a=0`, `F15b=0`, `F16a=0`, `F16b=0`,
+    `F16c=0`, `F16d=0`. Aggregate total `5106`; `F14c=400`, `F14d=66`, `F15a=10`, `F15b=104`,
+    `F16a=0`, `F16b=0`, `F16c=0`, `F16d=75`. Section 6 and ledge/collision-env remain closed:
+    `F17/F10c/F19/F20/F21/F22/F23/F24/F10e=0`.
   - `powershield_reflect_size` is now extracted from `p_ftCommonData->x2A8`, matching
     `ftCo_8009370C`'s GuardReflect `ReflectDesc.x14_size`. This is retained as source visibility
     only, not F15 closure: probing the small reflect capsule showed that same-frame owner/xDA8
@@ -1080,6 +1105,13 @@ Recommended sequence for the next deep passes:
     General age gating broke the accepted AttackHi3 BODY lock, and Dash-only gating regressed
     aggregate `F16d` from `116` to `248`. Targeted Dolphin hitlist dumps for `HIS:6544` timed out
     locally, so no hitlist/callback state could be retained from that probe.
+  - A broad item BODY hurtcap-Z flatten (mirroring `lbColl_8000805C` for every item/fighter BODY
+    check) closed `TBK:2901`, but reopened primary throw rows (`F14c=45`, `F14d=9`) and inflated
+    aggregate total to `5729` (`F16d=253`). It was rejected in favor of the retained airborne
+    Fall/Falco-laser lane plus same-attack victim-ring negative.
+  - A broad grounded `lbColl_8000805C` hurt-radius promotion for all Dash-to-Turn Falco-laser BODY
+    caps closed `GAT:7215`, but false-consumed the high/head-only `TBK:4136` row. The retained lane
+    is limited to lower/mid hurtcaps until the remaining high-cap pose/filter owner is source-backed.
   - A broader Passive hidden-colanim item BODY guard for all laser types fixed the primary
     Fox-laser row but regressed aggregate total to `5219` and `F16d` to `114` by preserving Falco
     type-55 Passive contacts that replay consumes. It was rejected in favor of the retained

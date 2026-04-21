@@ -183,6 +183,7 @@ _DEBUG_HURTCAP_SLOT_FLAGS_DTYPE = np.dtype(
 
 _LASER_ACTION_TURN = 0x0012
 _LASER_ACTION_DASH = 0x0014
+_LASER_ACTION_FALL = 0x001D
 _LASER_ACTION_ATTACK_HI3 = 0x0038
 
 
@@ -597,6 +598,9 @@ def _collect_item_laser_probes(
     shield_world = binding.debug_shield_bubbles_world(handle, 0)
     shield_radius = float(shield_world[defender][3])
     player = post_timebase[defender]
+    # Singles FD suites keep fighter cur_pos.z on the gameplay plane; the public compare/seed row
+    # does not expose pos_z, but lbColl_8000805C's item BODY path flattens hurtcaps to cur_pos.z.
+    defender_pos_z = 0.0
     use_timebase_player = {
         **player,
         "on_ground": int(seed["on_ground"][defender]),
@@ -659,6 +663,15 @@ def _collect_item_laser_probes(
         state = 1 if int(it["state"]) != 0 else 0
         offsets = params["state1_offsets"] if state else params["offsets"]
         body_shield_adjacent = shield_radius > 0.0
+        flatten_body_hurt_z = (
+            state == 0
+            and int(seed["on_ground"][defender]) == 0
+            and int(player["action_id"]) == _LASER_ACTION_FALL
+            and int(player["hurtbox_state"]) == 0
+            and shield_radius <= 0.0
+            and item_type == 55
+            and int(seed["last_attack_landed"][defender]) != int(it["attack_id"])
+        )
         offset_scale = 1.0 if body_shield_adjacent and scale_z > 1.0 else scale_z
         prev_offset_scale = 1.0 if body_shield_adjacent and prev_scale_z > 1.0 else prev_scale_z
         use_swept = _laser_uses_swept_body(
@@ -686,11 +699,16 @@ def _collect_item_laser_probes(
                     if cr <= 0.0:
                         continue
                     sr = float(params["size"])
+                    # Narrow runtime parity lane: item BODY collision calls ftColl_8007925C ->
+                    # lbColl_8000805C, passing fp->cur_pos.z; for the promoted Falco-laser/Fall
+                    # slice, lbColl's hurtcap-Z rewrite is mirrored here.
+                    hurt_z0 = defender_pos_z if flatten_body_hurt_z else float(cap[2])
+                    hurt_z1 = defender_pos_z if flatten_body_hurt_z else float(cap[5])
                     dist = _segment_segment_distance(
                         (hx0, hy0, 0.0),
                         (sx1, sy1, 0.0),
-                        (float(cap[0]), float(cap[1]), float(cap[2])),
-                        (float(cap[3]), float(cap[4]), float(cap[5])),
+                        (float(cap[0]), float(cap[1]), hurt_z0),
+                        (float(cap[3]), float(cap[4]), hurt_z1),
                     )
                     margin = sr + cr - dist
                     candidates.append(
@@ -707,7 +725,16 @@ def _collect_item_laser_probes(
                             "cap_radius": cr,
                             "cap_flags": cap_flags[cap_id],
                             "segment": [float(hx0), float(hy0), float(sx1), float(sy1)],
-                            "hurtcap": [float(v) for v in cap.tolist()],
+                            "hurtcap": [
+                                float(cap[0]),
+                                float(cap[1]),
+                                hurt_z0,
+                                float(cap[3]),
+                                float(cap[4]),
+                                hurt_z1,
+                                cr,
+                            ],
+                            "hurtcap_raw": [float(v) for v in cap.tolist()],
                         }
                     )
         candidates.sort(key=lambda r: float(r["margin"]), reverse=True)

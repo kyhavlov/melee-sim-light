@@ -317,6 +317,13 @@ static inline size_t idx_hurtcap(int bi, int p, int cap_i) {
 // refs/melee/src/melee/lb/forward.h::HurtCapsuleState
 enum { MSL_HURTCAPS_DISABLED = 1u };
 
+static inline float item_lbColl_804D7A38_hurt_radius_mul(void) {
+  // lbColl_8000805C forwards `lbColl_804D7A38 * hurt_scl_y` as the hurt radius multiplier
+  // consumed by lbColl_80006E58 for hit-vs-hurt capsule BODY checks.
+  // refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000805C,lbColl_80006E58}
+  return 3.0f;
+}
+
 static inline uint8_t laser_grounded_body_uses_sweep(const MslBatch* batch, size_t d_idx,
                                                      float laser_age_frames) {
   if (batch == NULL) {
@@ -946,11 +953,10 @@ static inline uint8_t item_swept_sphere_capsule_intersects(const MslBatch* batch
   return 1;
 }
 
-static inline uint8_t item_swept_sphere_capsule_overlap_amount(const MslBatch* batch, int bi,
-                                                               int defender, float sx0, float sy0,
-                                                               float sx1, float sy1, float sr,
-                                                               int cap_i, uint8_t* out_hurt_height,
-                                                               float* out_overlap_amount) {
+static inline uint8_t item_swept_sphere_capsule_overlap_amount(
+    const MslBatch* batch, int bi, int defender, float sx0, float sy0, float sx1, float sy1,
+    float sr, int cap_i, uint8_t* out_hurt_height, float* out_overlap_amount,
+    uint8_t flatten_hurt_z, float hurt_radius_mul) {
   if (out_overlap_amount) {
     *out_overlap_amount = 0.0f;
   }
@@ -967,11 +973,17 @@ static inline uint8_t item_swept_sphere_capsule_overlap_amount(const MslBatch* b
   }
   const float ax = batch->state.hurtcap_a_x[hi];
   const float ay = batch->state.hurtcap_a_y[hi];
-  const float az = batch->state.hurtcap_a_z[hi];
+  // The default path consumes seed-visible hurt capsule endpoints. A narrow laser BODY lane below
+  // can request lbColl's flattened hurtcap Z when its source-owned filters are present.
+  const float hurt_z = batch->state.pos_z[d_idx];
+  const float az = flatten_hurt_z ? hurt_z : batch->state.hurtcap_a_z[hi];
   const float bx = batch->state.hurtcap_b_x[hi];
   const float by = batch->state.hurtcap_b_y[hi];
-  const float bz = batch->state.hurtcap_b_z[hi];
-  const float cr = batch->state.hurtcap_radius[hi];
+  const float bz = flatten_hurt_z ? hurt_z : batch->state.hurtcap_b_z[hi];
+  float cr = batch->state.hurtcap_radius[hi];
+  if (hurt_radius_mul > 0.0f) {
+    cr *= hurt_radius_mul;
+  }
   const float rr = sr + cr;
   const float d2 =
       item_segment_segment_dist2(sx0, sy0, 0.0f, sx1, sy1, 0.0f, ax, ay, az, bx, by, bz);
@@ -1021,6 +1033,40 @@ static inline uint8_t item_prev_action_is_guard_reflect_locomotion_pose_source(u
     default:
       return 0u;
   }
+}
+
+static inline uint8_t laser_grounded_turn_body_uses_lbcoll_hurt_radius(const MslBatch* batch,
+                                                                       size_t d_idx,
+                                                                       uint8_t laser_state,
+                                                                       float laser_age_frames,
+                                                                       uint16_t item_type) {
+  if (batch == NULL) {
+    return 0u;
+  }
+  if (laser_state != 0u || item_type != (uint16_t)MSL_IT_KIND_FALCO_LASER_SHOT ||
+      !(laser_age_frames > 1.0f)) {
+    return 0u;
+  }
+  if (batch->state.action_id[d_idx] != (uint16_t)MSL_ACT_TURN ||
+      batch->state.seed_prev_action_id[d_idx] != (uint16_t)MSL_ACT_DASH ||
+      batch->state.action_frame[d_idx] != 1 || batch->state.shield_radius[d_idx] > 0.0f ||
+      batch->state.hurtbox_state[d_idx] != 0u) {
+    return 0u;
+  }
+  // Narrow grounded Dash->Turn laser BODY radius owner:
+  // - ftColl_8007925C reaches the item BODY loop after reflect/absorb/shield and calls
+  //   lbColl_8000805C for each fighter hurt capsule.
+  // - lbColl_8000805C forwards `arg1->scale` and `lbColl_804D7A38 * fp->x34_scale.y` to
+  //   lbColl_80006E58, which computes the broad-phase/effective radius as
+  //   `hit_radius + hurt_radius * arg11`.
+  // - Keep this promoted radius only on the replay-proven lower/mid Falco-laser Dash->Turn handoff.
+  //   High/head-only caps remain on the exact path; broad grounded widening is still blocked by
+  //   unresolved hit-status/pose filters and previously regressed primary/aggregate rows.
+  // refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007925C,ftColl_80077C60}
+  // refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000805C,lbColl_80006E58}
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c::ftCo_Dash_IASA
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Turn.c::ftCo_Turn_Enter_Smash
+  return 1u;
 }
 
 static inline uint8_t item_try_guard_fresh_shield_center(const MslBatch* batch, size_t d_idx,
@@ -2892,6 +2938,27 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
       const float laser_prev_offset_scale =
           laser_collision_offset_scale(lp, laser_state, laser_prev_scale_z,
                                        MSL_LASER_COLLISION_SPACE_BODY, body_shield_adjacent, 1u);
+      // Airborne Fall Falco-laser BODY Z lane:
+      // - ftColl_8007925C routes item BODY through lbColl_8000805C with ftCommon_8007F804(fp)
+      //   and fp->cur_pos.z; lbColl rewrites hurt capsule endpoint Z before collision.
+      // - Keep the promoted lane on state0 Falco laser vs vulnerable airborne Fall without shield.
+      //   Broader Z flattening reopens throw and item false-consume rows while their owner filters
+      //   remain incomplete, so those stay on the existing seed-visible endpoint path.
+      // - Exclude same-owner/same-attack carry rows: decomp updates item victim rings through
+      //   it_8026FAC4 / lbColl_80008688, and replay-visible `last_attack_landed` is sufficient to
+      //   reject the observed stale same-shot Fall carry without admitting a new BODY consume.
+      // refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007925C,ftColl_80077C60}
+      // refs/melee/src/melee/lb/lbcollision.c::lbColl_8000805C
+      // refs/melee/src/melee/it/itcoll.c::{it_8026FAC4,it_8026FA2C}
+      // refs/melee/src/melee/lb/lbcollision.c::lbColl_80008688
+      const uint8_t flatten_body_hurt_z =
+          (laser_state == 0u && batch->state.on_ground[d_idx] == 0u &&
+           batch->state.action_id[d_idx] == (uint16_t)MSL_ACT_FALL &&
+           batch->state.hurtbox_state[d_idx] == 0u && batch->state.shield_radius[d_idx] <= 0.0f &&
+           batch->state.item_type[ii] == (uint16_t)MSL_IT_KIND_FALCO_LASER_SHOT &&
+           batch->state.last_attack_landed[d_idx] != batch->state.item_attack_id[ii])
+              ? 1u
+              : 0u;
       // Laser BODY overlap parity:
       // - Decomp computes collision over projectile travel in-frame (prev_pos -> cur_pos), so a
       //   current-point-only probe can miss replay-causal same-frame hits.
@@ -2915,9 +2982,9 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
         for (uint8_t ci = 0; ci < cap_n; ci++) {
           const float hx0 = use_swept_body ? sx0 : sx;
           const float hy0 = use_swept_body ? sy0 : sy;
-          if (item_swept_sphere_capsule_overlap_amount(batch, bi, def, hx0, hy0, sx, sy, sr,
-                                                       (int)ci, &hit_hurt_height,
-                                                       &body_overlap_amount)) {
+          if (item_swept_sphere_capsule_overlap_amount(
+                  batch, bi, def, hx0, hy0, sx, sy, sr, (int)ci, &hit_hurt_height,
+                  &body_overlap_amount, flatten_body_hurt_z, 1.0f)) {
             hit = 1;
             break;
           }
@@ -2929,9 +2996,38 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
           const float hx0 = use_swept_body ? x0 : x;
           const float hy0 = use_swept_body ? y0 : y;
           if (item_swept_sphere_capsule_overlap_amount(batch, bi, def, hx0, hy0, x, y, sr, (int)ci,
-                                                       &hit_hurt_height, &body_overlap_amount)) {
+                                                       &hit_hurt_height, &body_overlap_amount,
+                                                       flatten_body_hurt_z, 1.0f)) {
             hit = 1;
             break;
+          }
+        }
+      }
+      if (!hit && use_swept_body &&
+          laser_grounded_turn_body_uses_lbcoll_hurt_radius(
+              batch, d_idx, laser_state, laser_age_frames, batch->state.item_type[ii])) {
+        const float body_hurt_radius_mul = item_lbColl_804D7A38_hurt_radius_mul();
+        for (uint8_t oi = 0; oi < off_n && oi < (uint8_t)MSL_LASER_MAX_HITBOX_OFFS_X && !hit;
+             oi++) {
+          const float off_x =
+              (laser_state == 0u) ? lp->hitbox_offsets_x[oi] : lp->state1_hitbox_offsets_x[oi];
+          const float s0 = off_x * laser_prev_offset_scale;
+          const float s1 = off_x * laser_offset_scale;
+          const float sx0 = x0 + (ux * s0);
+          const float sy0 = y0 + (uy * s0);
+          const float sx = x + (ux * s1);
+          const float sy = y + (uy * s1);
+          for (uint8_t ci = 0; ci < cap_n; ci++) {
+            const size_t hc_idx = idx_hurtcap(bi, def, (int)ci);
+            if (batch->state.hurtcap_height[hc_idx] == (uint8_t)2u) {
+              continue;
+            }
+            if (item_swept_sphere_capsule_overlap_amount(
+                    batch, bi, def, sx0, sy0, sx, sy, sr, (int)ci, &hit_hurt_height,
+                    &body_overlap_amount, flatten_body_hurt_z, body_hurt_radius_mul)) {
+              hit = 1;
+              break;
+            }
           }
         }
       }

@@ -85,6 +85,16 @@ _AGG = "datasets/aggregate_recent/replays/validation/aggregate_recent"
             note="Dash-to-Turn grounded laser segment clears item without damage entry",
         ),
         _Case(
+            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/validation/"
+            "cardinal_1.0_recent/GracefulAttachedTurtle.msl",
+            record=7215,
+            player=0,
+            seed_action=20,  # Dash, then Turn before item BODY collision
+            ref_action=78,  # DamageN1
+            expect_item_clear=True,
+            note="Dash-to-Turn Falco laser uses lbColl hurt-radius BODY lane",
+        ),
+        _Case(
             dataset_rel=f"{_AGG}/HilariousVillainousGiraffe.msl",
             record=1024,
             player=1,
@@ -110,6 +120,26 @@ _AGG = "datasets/aggregate_recent/replays/validation/aggregate_recent"
             ref_action=20,
             expect_item_clear=False,
             note="adjacent Dash-to-Turn negative keeps laser alive",
+        ),
+        _Case(
+            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/validation/"
+            "cardinal_1.0_recent/GracefulAttachedTurtle.msl",
+            record=7214,
+            player=0,
+            seed_action=20,  # adjacent pre-Turn Dash frame
+            ref_action=20,
+            expect_item_clear=False,
+            note="adjacent Dash frame keeps Falco laser alive before lbColl radius lane",
+        ),
+        _Case(
+            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/validation/"
+            "cardinal_1.0_recent/TreasuredBackKangaroo.msl",
+            record=4136,
+            player=0,
+            seed_action=20,  # adjacent high-cap Dash-to-Turn no-hit
+            ref_action=18,
+            expect_item_clear=False,
+            note="high-cap Dash-to-Turn Falco laser stays outside lbColl radius lane",
         ),
         _Case(
             dataset_rel=f"{_AGG}/HilariousVillainousGiraffe.msl",
