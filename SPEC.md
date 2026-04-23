@@ -2743,6 +2743,25 @@ Fox/Falco special-owner split (2026-04-17):
     `refs/melee/src/melee/it/items/itfoxlaser.c::{it_8029C6CC,it_8029C4D4}`,
     `refs/melee/src/melee/it/itcoll.c::{it_8026FA2C,it_8026FAC4,it_80272460}`,
     `tools/dolphin/patches/ishiiruka_throw_laser_event_probe.patch`.
+  - GuardReflect ShieldBounced keepalive:
+    - Established GuardReflect snapshots bypass the temporary high-shield HP guard in the laser
+      shield-bounce path. `Item_80269DC8` owns this branch through hidden item bounce internals
+      (`xDCE_flag.b5/xDCE_flag.b4/xC54/xC58`), not shield health. The retained runtime still keeps
+      fresh non-shield-owned admissions on the destroy-safe HP gate, preserving `GAT:773`, while
+      `MAJ:6337` now follows `ShieldBounced` keepalive and leaves the laser live after GuardSetOff.
+    - v10 Dolphin evidence for `MAJ:6337` shows the surviving item has per-item HitCapsule
+      victim-ring entries after shield contact; broad HP-gate removal was rejected because it turns
+      `GAT:773` into a false keepalive.
+    - Replay-real lock:
+      `tests/test_laser_shield_contact_replay_real_locks.py::test_guardreflect_shield_bounce_keepalive_uses_hidden_item_bounce_owner`.
+      Fresh taxonomy after `make build`: primary total `528`; all primary item-owner families remain
+      closed. Aggregate total `4627`; remaining aggregate item rows are `F14c=20`, `F14d=0`,
+      `F15a=10`, `F15b=28`, `F16d=38`. Protected families remain zero. The checklist item remains
+      active.
+    Sources: `refs/melee/src/melee/it/item.c::Item_80269DC8`,
+    `refs/melee/src/melee/it/items/itfoxlaser.c::itFoxLaser_Logic94_ShieldBounced`,
+    `tools/dolphin/patches/ishiiruka_engine_dump_item_hitlist_v10.patch`,
+    `reports/triage/current_f15b_keepalive_dolphin_maj6337/rows/engine_dump_rows.json`.
   - Remaining F14c callback-combo blocker:
     - The four remaining aggregate F14c clusters (`DCC:1053`, `PRH:8385`, `PJO:305`, `TCH:270`)
       are no longer pure item article lifetime. Each is coupled to item BODY callback bookkeeping:
@@ -2766,6 +2785,49 @@ Fox/Falco special-owner split (2026-04-17):
       state before it can replace the existing staged bridge.
     Sources: `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_8009370C`,
     `refs/melee/src/melee/ft/ftcommon.h::p_ftCommonData`.
+  - Laser shield/reflect event probe:
+    - Reviewable intra-frame instrumentation now exists at
+      `tools/dolphin/patches/ishiiruka_laser_shield_reflect_event_probe.patch`, with parser
+      `tools/dolphin/laser_shield_reflect_event_dump.py` and wrapper support in
+      `tools/dolphin/{dolphin_engine_dump.py,forensic_row_dump.py}`. It logs
+      `ftColl_80077688`, `ftColl_80077464`, `Item_80269DC8`, `Item_80269F14`,
+      `itFoxLaser_Logic94_ShieldBounced`, `itFoxLaser_Logic94_HitShield`, and destroy entry/return
+      together with `xC54`, `xC58`, `xDCC`, `xDCE`, pending reflect owner/xDA8, fighter
+      `0x2218/0x221B`, and shield/reflect capsule flags at decision time.
+    - Opposite-outcome F15b pair evidence now shows the remaining split is genuinely in hidden
+      same-frame shield state, not replay-visible HP/geometry state: both `DCC:2905` and
+      `GAT:773` enter `ftColl_80077688`, leave with populated `xC54/xC58/xDCE`, then route through
+      `Item_80269DC8 -> itFoxLaser_Logic94_HitShield -> Item_8026A8EC`, while `MAJ:6337` leaves
+      the same shield helper with populated `xC54/xC58/xDCE` but instead routes through
+      `Item_80269DC8 -> itFoxLaser_Logic94_ShieldBounced` and keeps the laser alive. That proves
+      the retained visible-proxy lanes are exhausted; the remaining owner is the hidden
+      `ftColl_80077688` / `Item_80269DC8` branch state.
+    - Opposite-outcome F15a pair evidence shows the same result for reflect transfer: positive
+      rows (`MAJ:118`, primary `AGG:428`) follow
+      `ftColl_80077464 -> Item_80269F14`, where the helper writes pending reflect owner/xDA8
+      (`xC64_reflectGObj`, `xC8C`) and `Item_80269F14` consumes them before post-frame, while the
+      false-transfer row `DCC:352` never enters the reflect path at all and instead follows the
+      shield-destroy branch above. The missing discriminator is therefore the hidden same-frame
+      shield-vs-reflect callback order, not another broad owner/xDA8 proxy.
+    - A refreshed target-frame probe for remaining `F15b` row `DCC:2905` shows the row is not a
+      direct `Item_80269DC8` predicate miss at the mismatch frame. The real engine first runs
+      `ftColl_80077464 -> Item_80269F14` on frame 2782 and commits owner/xDA8 (`xC64` port 1,
+      `xC8C=648`); on frame 2783 the item is destroyed from `Item_8026A294`'s OnGiveDamage branch
+      (`Item_8026A8EC` caller LR `0x8026A454`) with `xC34=2` and populated item HitCapsule
+      victim-ring entries. This proves the retained runtime still lacks the hidden reflect-transfer
+      plus item hitlist/`xC34` carry surface needed for this F15b subset.
+    - Outcome: F15 remains actionable only by promoting the hidden same-frame shield/reflect lane
+      itself; further replay-visible proxy fixes are blocked and should stay rejected by default.
+    Sources: `refs/melee/src/melee/ft/ftcoll.c::{ftColl_80077464,ftColl_80077688}`,
+    `refs/melee/src/melee/it/item.c::{Item_80269DC8,Item_80269F14}`,
+    `refs/melee/src/melee/it/items/itfoxlaser.c::{itFoxLaser_Logic94_ShieldBounced,itFoxLaser_Logic94_HitShield}`,
+    `tools/dolphin/patches/ishiiruka_laser_shield_reflect_event_probe.patch`,
+    `reports/triage/current_f15_probe_dcc2905/DistinctCaringCobra_rec2905_p0_f2780_2785_laser_shield_reflect_events.jsonl`,
+    `reports/triage/current_f15_probe_maj6337/MotionlessAggressiveJay_rec6337_p1_f6212_6217_laser_shield_reflect_events.jsonl`,
+    `reports/triage/current_f15_probe_maj118/MotionlessAggressiveJay_rec118_p1_f-7_-2_laser_shield_reflect_events.jsonl`,
+    `reports/triage/current_f15_probe_dcc352/DistinctCaringCobra_rec352_p0_f227_232_laser_shield_reflect_events.jsonl`,
+    `reports/triage/current_f15_probe_agg428/AttachedGoodNaturedGuanaco_rec428_p1_f303_308_laser_shield_reflect_events.jsonl`,
+    `reports/triage/current_f15_probe_refresh_dcc2905/DistinctCaringCobra_rec2905_p0_f2780_2785_laser_shield_reflect_events.jsonl`.
   - Rejected item-owner experiments:
     - Broad same-frame powershield owner/xDA8 transfer fixed a few `F15a` rows but regressed
       adjacent GuardReflect identity rows, so it remains rejected until the exact

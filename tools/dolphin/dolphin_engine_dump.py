@@ -159,6 +159,7 @@ def capture_engine_dump(
     should_resync: bool = True,
     collision_probe_path: str | Path | None = None,
     throw_laser_event_probe_path: str | Path | None = None,
+    laser_shield_reflect_event_probe_path: str | Path | None = None,
 ) -> tuple[int, Path]:
     replay = Path(replay)
     if not replay.exists():
@@ -172,7 +173,8 @@ def capture_engine_dump(
     _write_dolphin_ini(
         user_dir,
         force_interpreter=collision_probe_path is not None
-        or throw_laser_event_probe_path is not None,
+        or throw_laser_event_probe_path is not None
+        or laser_shield_reflect_event_probe_path is not None,
     )
 
     resolved_start, resolved_end = _resolve_frame_window(
@@ -207,6 +209,10 @@ def capture_engine_dump(
     if throw_laser_event_probe_path is not None:
         env["MSL_THROW_LASER_EVENT_PROBE_PATH"] = str(
             Path(throw_laser_event_probe_path).resolve()
+        )
+    if laser_shield_reflect_event_probe_path is not None:
+        env["MSL_LASER_SHIELD_REFLECT_EVENT_PROBE_PATH"] = str(
+            Path(laser_shield_reflect_event_probe_path).resolve()
         )
     proc = subprocess.Popen(proc_args, env=env)
 
@@ -275,6 +281,12 @@ def main() -> int:
         default=None,
         help="optional JSONL path for throw-laser item spawn/body/damage/delete events; forces interpreter CPU core",
     )
+    ap.add_argument(
+        "--laser-shield-reflect-event-probe",
+        type=Path,
+        default=None,
+        help="optional JSONL path for laser shield/reflect branch events; forces interpreter CPU core",
+    )
     args = ap.parse_args()
 
     rc, out_bin = capture_engine_dump(
@@ -289,6 +301,7 @@ def main() -> int:
         should_resync=not args.no_resync,
         collision_probe_path=args.collision_probe,
         throw_laser_event_probe_path=args.throw_laser_event_probe,
+        laser_shield_reflect_event_probe_path=args.laser_shield_reflect_event_probe,
     )
     if rc != 0:
         print(f"engine dump capture failed: {out_bin}")

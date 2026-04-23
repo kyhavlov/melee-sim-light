@@ -1325,6 +1325,18 @@ Recommended sequence for the next deep passes:
     closed. Aggregate total `4631`; remaining aggregate item rows are `F14c=20`, `F14d=0`,
     `F15a=10`, `F15b=32`, `F16d=38`, with `F16a/F16b/F16c=0`. Protected families remain zero. The
     checklist item remains active.
+  - GuardReflect ShieldBounced keepalive no longer uses shield HP as the discriminator on
+    established GuardReflect snapshots. `Item_80269DC8` owns the shield-bounce split through
+    item internals (`xDCE_flag.b5/xDCE_flag.b4/xC54/xC58`), and the v10 Dolphin dump for
+    `MAJ:6337` shows a surviving laser with item HitCapsule victim-ring entries after the shield
+    callback. Runtime now lets only seeded/frozen GuardReflect snapshots bypass the temporary
+    high-shield HP guard; fresh non-shield-owned admissions such as `GAT:773` stay on HitShield
+    destruction. Replay-real lock:
+    `tests/test_laser_shield_contact_replay_real_locks.py::test_guardreflect_shield_bounce_keepalive_uses_hidden_item_bounce_owner`.
+    Fresh taxonomy after `make build`: primary total `528`; all primary item-owner families remain
+    closed. Aggregate total `4627`; remaining aggregate item rows are `F14c=20`, `F14d=0`,
+    `F15a=10`, `F15b=28`, `F16d=38`, with `F16a/F16b/F16c=0`. Protected families remain zero. The
+    checklist item remains active.
   - The remaining `F14c=20` rows are documented as callback-combo blockers, not pure article
     lifetime rows. `DCC:1053`, `PRH:8385`, `PJO:305`, and `TCH:270` all couple throw-laser article
     lifetime with owner combo, hitlag, or instance bookkeeping. Existing event probes prove the
@@ -1337,6 +1349,30 @@ Recommended sequence for the next deep passes:
     only, not F15 closure: probing the small reflect capsule showed that same-frame owner/xDA8
     transfer still over-transfers adjacent GuardReflect keepalive rows unless the hidden item
     collision branch (`ftColl_80077464` versus `Item_80269DC8`) is modeled.
+  - Reviewable intra-frame laser shield/reflect instrumentation now exists at
+    `tools/dolphin/patches/ishiiruka_laser_shield_reflect_event_probe.patch`, with parser
+    `tools/dolphin/laser_shield_reflect_event_dump.py` and wrapper support in
+    `tools/dolphin/{dolphin_engine_dump.py,forensic_row_dump.py}`.
+  - Event-pair evidence confirms the remaining F15 split is hidden same-frame shield/reflect
+    callback state, not another replay-visible proxy:
+    - `DCC:2905` and primary `GAT:773` both follow
+      `ftColl_80077688 -> Item_80269DC8 -> itFoxLaser_Logic94_HitShield -> Item_8026A8EC` after
+      `ftColl_80077688` populates `xC54/xC58/xDCE`.
+    - `MAJ:6337` follows `ftColl_80077688 -> Item_80269DC8 -> itFoxLaser_Logic94_ShieldBounced`
+      with the same hidden item fields populated and keeps the laser alive.
+    - `MAJ:118` and primary `AGG:428` follow
+      `ftColl_80077464 -> Item_80269F14`, where pending reflect owner/xDA8 (`xC64`, `xC8C`) are
+      written and then consumed before post-frame.
+    - `DCC:352` never enters the reflect-owner path at all; it goes down the shield destroy branch
+      instead, which is why broad owner/xDA8 transfer remains rejected.
+    - A refreshed target-frame probe for remaining `DCC:2905` shows that row's current miss is
+      reflect-transfer plus item hitlist carry, not the direct shield predicate: frame 2782 commits
+      `ftColl_80077464 -> Item_80269F14` (`xC64` port 1, `xC8C=648`), then frame 2783 destroys
+      from the OnGiveDamage branch (`Item_8026A8EC` caller LR `0x8026A454`) with `xC34=2` and
+      populated item HitCapsule victim-ring entries.
+  - Outcome: the remaining `F15a/F15b` work is now blocked on promoting the hidden same-frame
+    shield/reflect lane plus its item hitlist/`xC34` carry surface. Do not spend more passes on
+    visible-proxy `F15` fixes without that lane.
 - Rejected item-owner experiments:
   - Committing powershield reflect owner/xDA8 transfer on the same post-frame fixed `GAT:4828`,
     `GAT:6207`, and `TBK:7448` transfer rows and passed focused reflect locks, but it introduced

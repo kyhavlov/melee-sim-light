@@ -3073,6 +3073,17 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
           //   authoritative `xDCE/xC54/xC58` bounce internals are promoted into seed/runtime state.
           // refs/melee/src/melee/it/items/itfoxlaser.c::{it_8029C504,itFoxlaser_UnkMotion1_Anim}
           // refs/melee/src/melee/it/item.c::Item_80269DC8
+          const uint8_t guard_reflect_seeded_snapshot =
+              (batch->state.action_id[d_idx] == (uint16_t)MSL_ACT_GUARD_REFLECT ||
+               batch->state.prev_action_id[d_idx] == (uint16_t)MSL_ACT_GUARD_REFLECT ||
+               batch->state.seed_prev_action_id[d_idx] == (uint16_t)MSL_ACT_GUARD_REFLECT)
+                  ? 1u
+                  : 0u;
+          const uint8_t shield_bounce_hp_allows =
+              (guard_reflect_seeded_snapshot || common == NULL ||
+               batch->state.shield_hp[d_idx] >= common->start_shield_health - (lp->damage + 0.5f))
+                  ? 1u
+                  : 0u;
           const uint8_t can_shield_bounce =
               shield_bounce_contact_found && !guard_reflect_pure_final_x14_hitshield &&
               // Late locomotion->GuardReflect frozen snapshots can already resolve projectile
@@ -3083,14 +3094,14 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
               //   ftCo_80091A4C,ftCo_800939B4,ftCo_8009370C,ftCo_GuardReflect_Anim}
               // refs/melee/src/melee/it/items/itfoxlaser.c::{
               //   it_8029C504,itFoxlaser_UnkMotion1_Anim,itFoxLaser_Logic94_ShieldBounced}
-              // Replay-visible shield-bounce keepalive rows in the current suite are high-shield
-              // glancing contacts; lower-shield fresh GuardSetOff contacts resolve through
-              // HitShield destruction until xDCE/xC54/xC58 are promoted into explicit state.
-              // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80091A4C
+              // Shield-bounce keepalive is owned by Item_80269DC8's bounce predicate
+              // (`xDCE_flag.b5/xDCE_flag.b4/xC54/xC58`), not by shield HP. Until those internals
+              // are seed-visible, only established GuardReflect snapshots can bypass the temporary
+              // HP guard; fresh non-shield-owned admissions keep the older destroy-safe gate.
               // refs/melee/src/melee/it/item.c::Item_80269DC8
+              // refs/melee/src/melee/it/items/itfoxlaser.c::itFoxLaser_Logic94_ShieldBounced
               (laser_age_frames > 1.0f || defender_guard_reflect_late_locomotion_snapshot) &&
-              (common == NULL || batch->state.shield_hp[d_idx] >=
-                                     common->start_shield_health - (lp->damage + 0.5f)) &&
+              shield_bounce_hp_allows &&
               laser_try_shield_bounce_velocity(vx, vy, bounce_shx, bounce_shy,
                                                shield_bounce_contact_x, shield_bounce_contact_y,
                                                &shield_bounce_vx, &shield_bounce_vy);

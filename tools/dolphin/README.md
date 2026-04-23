@@ -89,6 +89,42 @@ uv run python -m tools.dolphin.throw_laser_event_dump reports/triage/<probe>/eve
 Keep this patch reviewable under `tools/dolphin/patches/`; do not leave a local-only
 `refs/Ishiiruka` interpreter diff in handoffs.
 
+## Laser shield/reflect intra-frame event probe
+
+The remaining `F15` item-owner rows are on the hidden same-frame shield/reflect branch through
+`ftColl_80077464`, `ftColl_80077688`, `Item_80269DC8`, and `Item_80269F14`. The post-frame v10
+item dump shows the surviving state, but not the exact callback order or branch selection. Apply
+the shield/reflect event probe on top of the throw-laser probe:
+
+```bash
+git -C refs/Ishiiruka apply ../../tools/dolphin/patches/ishiiruka_throw_laser_event_probe.patch
+git -C refs/Ishiiruka apply ../../tools/dolphin/patches/ishiiruka_laser_shield_reflect_event_probe.patch
+cmake --build refs/Ishiiruka/build_probe --target dolphin-nogui -j2
+```
+
+Then pass `--laser-shield-reflect-event-probe <path.jsonl>` through `dolphin_engine_dump.py`, or
+use `forensic_row_dump.py --laser-shield-reflect-event-probe`. The wrapper sets
+`MSL_LASER_SHIELD_REFLECT_EVENT_PROBE_PATH` and forces interpreter mode. The probe records JSONL
+events for:
+
+- `ftColl_80077688` shield-collision entry
+- `ftColl_80077464` reflect-collision entry
+- `Item_80269DC8` shield branch entry/return
+- `itFoxLaser_Logic94_ShieldBounced`
+- `itFoxLaser_Logic94_HitShield`
+- `Item_80269F14` reflect owner/xDA8 apply
+- `Item_8026A8EC` destroy entry/return
+
+Each event includes the laser item's owner/xDA8 state plus hidden shield/reflect branch fields
+(`xC54`, `xC58`, `xDCC`, `xDCE`, pending reflect owner/xDA8, fighter `0x2218/0x221B`, and capsule
+flags/distance) at decision time.
+
+Parse or summarize the JSONL with:
+
+```bash
+uv run python -m tools.dolphin.laser_shield_reflect_event_dump reports/triage/<probe>/events.jsonl
+```
+
 ## Controlled playback probes
 
 Use `patch_slp_preframe_window.py` when a modelplay symptom needs vanilla confirmation but exact state recreation is not available from Slippi post-frames alone. The script edits only 0x37 pre-frame payloads in a copied `.slp`; Dolphin then plays the replay normally. By default it refuses `--out == --slp`; use `--in-place` only when intentionally overwriting a disposable copy. Keep windows short and write all generated specs, patched replays, dumps, and rows under `reports/triage/`.
@@ -111,6 +147,7 @@ The rerun7 frame-2124 shield investigation used this workflow: neutral/toward sh
 - `extract_engine_dump_rows.py`: deterministic JSON/txt extraction for frame windows (including item/fighter hitlist provenance lanes when available).
 - `forensic_row_dump.py`: dataset row => frame window => dump + extracted rows.
 - `throw_laser_event_dump.py`: read/summarize throw-laser intra-frame event JSONL probes.
+- `laser_shield_reflect_event_dump.py`: read/summarize laser shield/reflect event JSONL probes.
 - `compare_hitlist_provenance.py`: frame-by-frame comparison of extracted hitlist provenance between two row captures.
 - `patch_slp_preframe_window.py`: copied `.slp` pre-frame patcher for controlled vanilla playback probes.
 

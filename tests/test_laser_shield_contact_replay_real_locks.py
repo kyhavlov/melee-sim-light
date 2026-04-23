@@ -64,6 +64,43 @@ def test_falco_laser_shield_contact_enters_guardsetoff_and_despawns_laser(
 
 
 @pytest.mark.integration
+def test_guardreflect_shield_bounce_keepalive_uses_hidden_item_bounce_owner() -> None:
+    # Replay-real lock for Item_80269DC8 ShieldBounced keepalive on an established GuardReflect
+    # snapshot: the laser enters GuardSetOff shield hitlag but remains live with reflected velocity.
+    # v10 Dolphin dump for MAJ:6337 shows the item survives the shield callback with per-item
+    # HitCapsule victim-ring entries, so shield HP must not be the keepalive discriminator here.
+    # refs/melee/src/melee/it/item.c::Item_80269DC8
+    # refs/melee/src/melee/it/items/itfoxlaser.c::itFoxLaser_Logic94_ShieldBounced
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = (
+        root
+        / "datasets/aggregate_recent/replays/validation/aggregate_recent/MotionlessAggressiveJay.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    p = 1
+    seed_row, ref_row, out_row = _run_one_step_row(dataset_path, 6337, p)
+
+    assert int(seed_row["action_id"][p]) == 182
+    assert int(seed_row["guard_reflect_timer_x14"][p]) == 1
+    assert int(ref_row["action_id"][p]) == 181
+    assert int(out_row["action_id"][p]) == 181
+    assert int(out_row["hitlag"][p]) == int(ref_row["hitlag"][p])
+    assert abs(float(out_row["shield_hp"][p]) - float(ref_row["shield_hp"][p])) <= 5e-4
+
+    # The blaster gun slot is adjacent state, but the laser slot must survive rather than taking
+    # the HitShield destroy path.
+    for field in ("exists", "type", "state", "owner", "instance_id"):
+        assert int(out_row["items"][1][field]) == int(ref_row["items"][1][field]), (
+            f"field={field} expected={int(ref_row['items'][1][field])} "
+            f"got={int(out_row['items'][1][field])}"
+        )
+    assert float(out_row["items"][1]["vel_y"]) > 0.0
+
+
+@pytest.mark.integration
 @pytest.mark.parametrize(
     ("dataset_rel", "record", "p"),
     [
