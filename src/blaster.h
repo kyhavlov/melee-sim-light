@@ -20,3 +20,11 @@ uint8_t blaster_try_enter_ground_from_wait_iasa(MslBatch* batch, const struct Ms
 // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
 uint8_t blaster_try_enter_ground_from_iasa_subset(MslBatch* batch, const struct MslCommonParams* c,
                                                   size_t idx);
+
+// Aerial B-special subset without the ordinary Fall/Jump/Damage action gate.
+// Used by RebirthWait_IASA, which calls ftCo_SpecialAir_CheckInput directly before its Fall-enter
+// fallback.
+// refs/melee/src/melee/ft/ft_0D4D.c::ftCo_RebirthWait_IASA
+// refs/melee/src/melee/ft/chara/ftCommon/ftCo_SpecialAir.c::ftCo_SpecialAir_CheckInput
+uint8_t blaster_try_enter_air_from_iasa_subset(MslBatch* batch, const struct MslCommonParams* c,
+                                               size_t idx);

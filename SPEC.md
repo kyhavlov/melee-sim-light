@@ -1283,8 +1283,20 @@ update the row rather than re-deriving the same plan again.
 |---|---|---|
 | `refs/melee/src/melee/ft/fighter.c::Fighter_UnkProcessDeath_80068354` | `data/stages/final_destination.json` (collision segments; includes `unit_scale`) | `src/match_flow.c` (new), `src/stage_collision.c` |
 | `refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState` | `data/common/ft_common_data.json` (common timers/constants; see `docs/DATA_CONTRACT.md`) | `src/action.c` (state transitions), `src/timers.c` |
-| `refs/melee/src/melee/ft/chara/ftCommon/ftCo_DemoCallback0.c::ftCo_800C6150` (Rebirth entry) | (Need) spawn/respawn positions extracted from stage DAT (currently not represented explicitly in `data/stages/final_destination.json`) | Implemented for suite; remaining gap is making spawn/respawn positioning fully data-driven from extracted stage artifacts. |
+| `refs/melee/src/melee/ft/ft_0D4D.c::ftCo_800D4FF4` (Rebirth entry) | `data/stages/final_destination.json` (`respawn_points`, `cam_bounds_world`) plus replay raw player slot (`seed_t.source_port0`) | `src/match_flow.c` |
 | `refs/melee/src/melee/mp/mplib.c::mpLib_DrawZones` (blast/camera zone sources) | (Need) explicit blast zone rect for FD extracted into `data/stages/final_destination.json` (or a `data/stages/*.bin` v2) | Implemented for suite; remaining gap is extracting and consuming the canonical blastzone rect(s) from stage data. |
+
+Match-flow closure notes:
+- `Player_GetSpawnPlatformPos` and `Player_GetFacingDirection` are player-slot keyed. The sim's
+  compact local p0/p1 index is not always the raw replay player slot in aggregate suites, so
+  Rebirth respawn position/facing uses `seed_t.source_port0` before falling back to local player
+  index. This is locked by `tests/test_match_flow_rebirth_owner_replay_real_locks.py`.
+- `ftCo_RebirthWait_IASA` runs priority aerial special checks before fallback Fall-style exits and
+  still applies `ftColl_8007B7A4(gobj, p_ftCommonData->x5D8)` on exit. That x1994/x198C write is
+  visible as Slippi `hurtbox_state=1` on RebirthWait -> SpecialAirNStart rows.
+- DeadUpStar can keep `dmg.x18C4_source_ply` through the terminal x18C8 tick before the Rebirth
+  reset. This uses the existing `source_clear_terminal_phase` seed lane rather than a separate
+  match-flow timer repair.
 
 #### Locomotion core (ground/air, jumps, fastfall, landing, airdodge/escapes)
 
@@ -2148,13 +2160,12 @@ Fox/Falco special-owner split (2026-04-17):
     `refs/melee/src/melee/it/items/itfoxblaster.c::itFoxblaster_UnkMotion8_Anim`,
     `refs/melee/src/melee/ft/ftmotionstates.c`,
     `refs/melee/src/melee/ft/chara/ftCommon/forward.h::ftCommon_MotionState`.
-  - Rebirth blaster-gun spawn fallout hard move:
-    - `TubbyCurlyHerring.msl:3062` has an item-slot gun mismatch only because the reference exits
-      RebirthWait into `SpecialAirNStart` while the simulator remains in RebirthWait. The item row is
-      therefore match-flow / rebirth action dispatch fallout, not a blaster article identity owner.
-      Taxonomy routes only blaster-gun rows with Rebirth/RebirthWait plus SpecialN context to
-      `F04_match_flow_rebirth` before the blaster article split; Dead*/generic match-flow item rows
-      remain in their item owner unless separately proven.
+  - Rebirth blaster-gun spawn fallout:
+    - `TubbyCurlyHerring.msl:3062` was closed by the match-flow owner: RebirthWait IASA now enters
+      `SpecialAirNStart` through the priority aerial-special branch and applies the RebirthWait
+      exit x1994/x198C colanim write before the destination row. The remaining blaster-gun article
+      state/animation details are no longer routed through `F04_match_flow_rebirth`; future gun
+      state-machine parity belongs to `F19_specialn_blaster_article`.
     - `DistinctCaringCobra.msl:546` is also not a blaster article identity owner: a pre-combat debug
       step enters `FX_SPECIAL_AIR_N_START` and spawns the Falco gun, then combat moves the player to
       `DamageAir2`; the reference goes straight to `DamageAir2` with no gun. That false-gun row is

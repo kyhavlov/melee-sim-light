@@ -1278,11 +1278,13 @@ def _derive_source_clear_terminal_phase_seed_lane(
     # refs/melee/src/melee/ft/chara/ftCommon/forward.h
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c (down/passive recovery ownership flow)
     #
-    # Also allow a narrow set of immediate grounded recovery followups where the same
+    # Also allow a narrow set of immediate grounded recovery/match-flow followups where the same
     # callback-owned ownership phase can run through the terminal tick:
-    # - Wait/EscapeF in common motion-state flow.
+    # - Wait/EscapeF in common motion-state flow,
+    # - DeadUpStar stock-loss flow before the Rebirth reset clears attribution.
     # refs/melee/src/melee/ft/chara/ftCommon/forward.h
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Escape.c
+    # refs/melee/src/melee/ft/ft_0D31.c::ftCo_DeadUpStar_Anim
     #
     # Fox/Falco side-B end state is included as a character motion-state followup where
     # terminal source-owner clear can lag by one post-frame in replay rows under this same
@@ -1300,6 +1302,7 @@ def _derive_source_clear_terminal_phase_seed_lane(
     ACT_JUMP_B = 0x001A  # ftCo_MS_JumpB
     ACT_SQUAT = 0x0027  # ftCo_MS_Squat
     ACT_ATTACK_HI3 = 0x0038  # ftCo_MS_AttackHi3
+    ACT_DEAD_UP_STAR = 0x0004  # ftCo_MS_DeadUpStar
     DOWN_PASSIVE_RECOVERY_ACTIONS = {
         0x000E,  # ftCo_MS_Wait
         ACT_GUARD,
@@ -1320,6 +1323,7 @@ def _derive_source_clear_terminal_phase_seed_lane(
         0x00C9,  # ftCo_MS_PassiveStandB
         0x00E9,  # ftCo_MS_EscapeF
         ACT_FOX_FALCO_SPECIAL_AIR_S_START,
+        ACT_DEAD_UP_STAR,
     }
     # Causal followup states where decomp callback ownership can keep x18C4 through the terminal
     # x18C8 tick after down/passive recovery handoff. Keep this narrow and transition-gated.
@@ -4581,6 +4585,30 @@ def _main_impl(args) -> None:
         )
         & (post_action_frame[1:, :] == np.int16(0))
     )
+    act_dead_down = np.uint16(0)
+    act_dead_left = np.uint16(1)
+    act_dead_right = np.uint16(2)
+    act_dead_up_star = np.uint16(4)
+    act_rebirth = np.uint16(12)
+    act_rebirth_wait = np.uint16(13)
+    act_fall = np.uint16(29)
+    match_flow_instance_owner = (
+        same_frame_fighter_entries_all
+        & (
+            np.isin(
+                post_action_id[1:, :],
+                np.array(
+                    [act_dead_down, act_dead_left, act_dead_right, act_rebirth, act_rebirth_wait, act_fall],
+                    dtype=np.uint16,
+                ),
+            )
+            | np.isin(
+                post_action_id[:-1, :],
+                np.array([act_rebirth, act_rebirth_wait, act_dead_up_star], dtype=np.uint16),
+            )
+        )
+        & (multi_entry_frame[:, None] | (post_instance_id[1:, :] != counter_post[:-1, None]))
+    )
     motion_entry_iid_override = np.zeros((n_frames - 1, 4), dtype=np.uint16)
     # Same-frame grounded motion entries share the global plAttack_80037B08 counter. Slippi's
     # post-frame seed exposes only each fighter's final fp->x2088, not HSD proc order. Keep this
@@ -4601,6 +4629,16 @@ def _main_impl(args) -> None:
     #   ftFx_SpecialNLoop_Anim,ftFx_SpecialAirNLoop_Anim,ftFx_SpecialN_OnChangeAction}
     # refs/melee/build/GALE01/asm/melee/ft/ft_0892.s::ft_80089824
     motion_entry_override_mask |= specialn_loop_restart_owner
+    # Match-flow same-frame proc order:
+    # - Dead*/Rebirth*/Fall handoffs still use Fighter_ChangeMotionState / ft_800895E0, but the
+    #   frame can contain another fighter's motion entry and hidden match-flow consumers in the same
+    #   global plAttack_80037B08 counter stream.
+    # - Slippi exposes only final fp->x2088 values. Use the existing explicit replay-facing motion
+    #   entry override lane for these match-flow-owned rows instead of broad runtime reordering.
+    # refs/melee/src/melee/ft/ft_0D4D.c::{ftCo_800D4FF4,ftCo_RebirthWait_Anim,ftCo_RebirthWait_IASA}
+    # refs/melee/build/GALE01/asm/melee/ft/ft_0892.s::{ft_800895E0,ft_80089824}
+    # refs/melee/src/melee/pl/plattack.c::plAttack_80037B08
+    motion_entry_override_mask |= match_flow_instance_owner
     motion_entry_iid_override[motion_entry_override_mask] = post_instance_id[1:, :][
         motion_entry_override_mask
     ]

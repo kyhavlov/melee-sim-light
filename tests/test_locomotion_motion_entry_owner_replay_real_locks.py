@@ -348,7 +348,7 @@ def test_motion_entry_instance_override_clears_after_one_step() -> None:
 
 
 def test_noncausal_locomotion_lane_population_stays_narrow() -> None:
-    # Population guard for the two non-causal replay-facing lanes introduced by this owner pass.
+    # Population guard for the non-causal replay-facing lanes introduced by these owner passes.
     # These counts are over validation datasets only; debug datasets are regenerated for test
     # compatibility but are not part of the acceptance audit.
     root = Path(__file__).resolve().parents[1]
@@ -356,11 +356,14 @@ def test_noncausal_locomotion_lane_population_stays_narrow() -> None:
     owner_actions = {14, 15, 16, 17, 18, 19, 20, 21, 22, 24}
 
     specialn_loop_actions = {0x0156, 0x0159}
+    match_flow_entry_actions = {0, 1, 2, 12, 13, 29}
+    match_flow_source_actions = {4, 12, 13}
 
-    def count_lanes(rel: str) -> tuple[int, int, int, int, set[tuple[int, int]]]:
+    def count_lanes(rel: str) -> tuple[int, int, int, int, int, set[tuple[int, int]]]:
         turn_count = 0
-        motion_count = 0
+        locomotion_motion_count = 0
         specialn_loop_count = 0
+        match_flow_count = 0
         invalid_motion = 0
         turn_transitions: set[tuple[int, int]] = set()
         for dataset_path in (root / rel).glob("**/*.msl"):
@@ -374,48 +377,70 @@ def test_noncausal_locomotion_lane_population_stays_narrow() -> None:
                             (int(row["seed_t"]["action_id"][p]), int(row["ref_t1"]["action_id"][p]))
                         )
                     if int(row["seed_t"]["motion_entry_instance_id_override_u16"][p]) != 0:
-                        motion_count += 1
                         sa = int(row["seed_t"]["action_id"][p])
                         ra = int(row["ref_t1"]["action_id"][p])
                         raf = int(row["ref_t1"]["action_frame"][p])
                         is_specialn_loop_restart = sa == ra and ra in specialn_loop_actions and raf == 0
+                        is_locomotion_entry = (
+                            not is_specialn_loop_restart
+                            and sa in owner_actions
+                            and ra in owner_actions
+                        )
+                        # Match-flow entry/exit states consume the same plAttack_80037B08 stream.
+                        # Keep this classification tied to decomp-defined Dead/Rebirth/Fall
+                        # motion-state handoffs, not to arbitrary action boundaries.
+                        # refs/melee/src/melee/ft/ft_0D4D.c::{
+                        #   ftCo_800D4FF4,ftCo_RebirthWait_Anim,ftCo_RebirthWait_IASA}
+                        # refs/melee/build/GALE01/asm/melee/ft/ft_0892.s::{
+                        #   ft_800895E0,ft_80089824}
+                        is_match_flow_entry = (
+                            not is_specialn_loop_restart
+                            and not is_locomotion_entry
+                            and (ra in match_flow_entry_actions or sa in match_flow_source_actions)
+                        )
                         if is_specialn_loop_restart:
                             specialn_loop_count += 1
-                        if (
-                            not is_specialn_loop_restart
-                            and (sa not in owner_actions or ra not in owner_actions)
-                        ):
+                        elif is_locomotion_entry:
+                            locomotion_motion_count += 1
+                        elif is_match_flow_entry:
+                            match_flow_count += 1
+                        else:
                             invalid_motion += 1
         return (
             turn_count,
-            motion_count,
+            locomotion_motion_count,
             specialn_loop_count,
+            match_flow_count,
             invalid_motion,
             turn_transitions,
         )
 
     (
         primary_turn,
-        primary_motion,
+        primary_locomotion_motion,
         primary_specialn,
+        primary_match_flow,
         primary_invalid,
         primary_turn_transitions,
     ) = count_lanes(_PRIMARY_VALID)
     (
         aggregate_turn,
-        aggregate_motion,
+        aggregate_locomotion_motion,
         aggregate_specialn,
+        aggregate_match_flow,
         aggregate_invalid,
         aggregate_turn_transitions,
     ) = count_lanes("datasets/aggregate_recent/replays/validation")
 
     assert primary_turn == 8
-    assert primary_motion == 150
+    assert primary_locomotion_motion == 121
     assert primary_specialn == 29
+    assert primary_match_flow == 54
     assert primary_invalid == 0
     assert primary_turn_transitions == {(18, 24)}
     assert aggregate_turn == 50
-    assert aggregate_motion == 685
+    assert aggregate_locomotion_motion == 597
     assert aggregate_specialn == 88
+    assert aggregate_match_flow == 196
     assert aggregate_invalid == 0
     assert aggregate_turn_transitions == {(18, 24)}

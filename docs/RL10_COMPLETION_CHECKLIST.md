@@ -7,9 +7,9 @@ family is already closed.
 
 Last updated:
 - Date: 2026-04-23
-- Scope baseline: shared throw/thrown substrate, guard, and locomotion / grounded transition /
-  motion-entry owner families effectively closed; checklist reflects post-closure RL 1.0 priority
-  ordering.
+- Scope baseline: shared throw/thrown substrate, guard, locomotion / grounded transition /
+  motion-entry, item-owner identity, and match-flow / respawn owner families effectively closed;
+  checklist reflects post-closure RL 1.0 priority ordering.
 
 ## Status Legend
 
@@ -29,8 +29,7 @@ Recommended sequence for the next deep passes:
 3. **Fox/Falco special-move families**
 4. **Ledge / collision-env parity**
 5. **Item-owner seed cleanup + item identity family**
-6. **Match-flow / entry / respawn ownership**
-7. **Mixed-bucket split**
+6. **Mixed-bucket split**
 
 ## Closed / Effectively Closed
 
@@ -1684,17 +1683,34 @@ Recommended sequence for the next deep passes:
     state1 article was tested after the retained command/hitlist ordinal gate. It reopened primary
     to `658` (`F14c=130`) while leaving aggregate at `4958` / `F14c=295`, so command-boundary
     equality is not retained as the missing hitlist/body discriminator.
-- Status rationale: the coarse owner bucket is split and inspectable, but this checklist item is
-  **not closed** because the named item owners still contain real runtime residuals.
+- Status rationale: the coarse owner bucket is split and the named item-owner families are closed;
+  former item-shaped rows now live under decomp-backed adjacent owners.
 
 ### Match-flow / entry / respawn ownership
-- Status: `active`
+- Status: `closed`
 - Roadmap families: `F04_match_flow_rebirth`, adjacent identity-reset rows
 - Owner boundary: entry, respawn, stock reset, rebirth, identity reset, match-flow state flags
 - Primary sim files: `src/match_flow.c`, `src/api.c`, `src/timers.c`
 - Acceptance bar:
   - respawn/entry ownership is grouped as one family
   - rebirth parity no longer depends on scattered timer repairs
+- Closure notes:
+  - Rebirth respawn platform/facing now keys `Player_GetSpawnPlatformPos` /
+    `Player_GetFacingDirection` from the replay raw player slot (`seed_t.source_port0`), not the
+    compact local sim player index. This closes aggregate-only respawn rows where local p0/p1 map
+    to raw ports 1/2.
+  - RebirthWait IASA now includes the priority aerial SpecialN path before the fallback Fall exit
+    and applies the shared `ftColl_8007B7A4(..., p_ftCommonData->x5D8)` x1994/x198C colanim write
+    on every RebirthWait exit.
+  - DeadUpStar terminal source-owner carry is represented through the existing x18C8
+    `source_clear_terminal_phase` seed lane, covering the pre-Rebirth stock-loss flow before
+    `Fighter_UnkInitReset_80067C98` clears attribution.
+  - Fresh taxonomy after forced preprocess and `make build`: primary total `525` with
+    `F04_match_flow_rebirth=0`; aggregate total `4470` with `F04_match_flow_rebirth=0`.
+  - Pure `F25_camera_box_visibility_x221f` rows remain under the camera-subject visibility owner
+    (`ftLib_80086A8C` / `Camera_80030CFC`), not match-flow. The seeded
+    `camera_target_point_inside_stage_cam_bounds_u8` lane is not by itself sufficient to close F25
+    because opposite-outcome rows exist with the same inside-stage predicate shape.
 
 ## Residual Cleanup Families
 

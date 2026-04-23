@@ -4,6 +4,7 @@
 #include "anim_table.h"
 #include "anim_timebase.h"
 #include "attack_identity.h"
+#include "blaster.h"
 #include "char_params.h"
 #include "common_params.h"
 #include "input_axis.h"
@@ -341,6 +342,36 @@ static inline void enter_rebirth_wait(MslBatch* batch, size_t idx, uint32_t stag
   batch->state.match_flow_timer[idx] = (uint8_t)(frames > 0 ? (frames > 255 ? 255 : frames) : 0);
 }
 
+static inline int match_flow_respawn_port0(const MslBatch* batch, size_t idx, int fallback_port0) {
+  if (batch == NULL) {
+    return fallback_port0;
+  }
+  const uint8_t source_port0 = batch->state.source_port0[idx];
+  return (source_port0 < (uint8_t)MSL_MAX_PLAYERS) ? (int)source_port0 : fallback_port0;
+}
+
+static inline void rebirth_wait_apply_exit_colanim(MslBatch* batch, size_t idx,
+                                                   const MslCommonParams* c) {
+  if (batch == NULL || c == NULL) {
+    return;
+  }
+  const uint16_t frames = c->colanim_rebirth_fall_x1994_frames;
+  if (frames == 0u) {
+    return;
+  }
+  // RebirthWait exits, including priority IASA exits into aerial specials, call
+  // ftColl_8007B7A4(gobj, p_ftCommonData->x5D8) before the destination motion is visible.
+  // This writes x1994/x198C, and Slippi reports x198C through `hurtbox_state` when x1988 is clear.
+  // refs/melee/src/melee/ft/ft_0D4D.c::ftCo_RebirthWait_IASA
+  // refs/melee/src/melee/ft/ftcoll.c::ftColl_8007B7A4
+  // data/common/ft_common_data.json: colanim_rebirth_fall_x1994_frames
+  if (frames > batch->state.colanim_timer_x1994[idx]) {
+    batch->state.colanim_timer_x1994[idx] = frames;
+  }
+  batch->state.colanim_hit_status_x198c[idx] =
+      (batch->state.colanim_timer_x1990[idx] != 0u) ? 2u : 1u;
+}
+
 void match_flow_update_pre_anim(MslBatch* batch) {
   if (batch == NULL) {
     return;
@@ -476,12 +507,12 @@ void match_flow_update_pre_anim(MslBatch* batch) {
           batch->state.speed_y_attack[idx] = 0.0f;
         }
         if (t == 0) {
-          enter_rebirth(batch, idx, c, stage_id, p);
+          enter_rebirth(batch, idx, c, stage_id, match_flow_respawn_port0(batch, idx, p));
         }
       } else if (a == (uint16_t)MSL_ACT_REBIRTH) {
         // Rebirth -> RebirthWait.
         if (t == 0) {
-          enter_rebirth_wait(batch, idx, stage_id, p);
+          enter_rebirth_wait(batch, idx, stage_id, match_flow_respawn_port0(batch, idx, p));
         }
       } else if (a == (uint16_t)MSL_ACT_REBIRTH_WAIT) {
         // RebirthWait -> Fall.
@@ -491,6 +522,7 @@ void match_flow_update_pre_anim(MslBatch* batch) {
         batch->state.speed_x_attack[idx] = 0.0f;
         batch->state.speed_y_attack[idx] = 0.0f;
         if (t == 0) {
+          rebirth_wait_apply_exit_colanim(batch, idx, c);
           enter_fall(batch, idx);
           batch->state.match_flow_timer[idx] = 0;
         }
@@ -579,9 +611,24 @@ void match_flow_update_post_input(MslBatch* batch) {
                     (stick_f <= c->turn_stick_x_threshold) || (stick_f >= c->walk_stick_threshold));
 
       if (!want_fall) {
+        // RebirthWait priority IASA can still enter aerial specials before the fallback Fall
+        // branches. The common helper checks SpecialAir before Fall/guard/walk-like exits.
+        // refs/melee/src/melee/ft/ft_0D4D.c::ftCo_RebirthWait_IASA
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_SpecialAir.c::ftCo_SpecialAir_CheckInput
+        if (blaster_try_enter_air_from_iasa_subset(batch, c, idx) != 0u) {
+          rebirth_wait_apply_exit_colanim(batch, idx, c);
+          batch->state.match_flow_timer[idx] = 0;
+        }
         continue;
       }
 
+      if (blaster_try_enter_air_from_iasa_subset(batch, c, idx) != 0u) {
+        rebirth_wait_apply_exit_colanim(batch, idx, c);
+        batch->state.match_flow_timer[idx] = 0;
+        continue;
+      }
+
+      rebirth_wait_apply_exit_colanim(batch, idx, c);
       enter_fall(batch, idx);
       batch->state.match_flow_timer[idx] = 0;
     }

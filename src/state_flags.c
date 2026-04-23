@@ -181,6 +181,11 @@ static inline uint8_t state_flags_221f_dead_start_action(uint16_t action_id) {
   }
 }
 
+static inline uint8_t state_flags_match_flow_respawn_action(uint16_t action_id) {
+  return (uint8_t)(action_id == (uint16_t)MSL_ACT_REBIRTH ||
+                   action_id == (uint16_t)MSL_ACT_REBIRTH_WAIT);
+}
+
 static inline uint8_t state_flags_camera_overlap_stage_cam_bounds(const MslBatch* batch, size_t idx,
                                                                   float tolerance) {
   if (batch == NULL) {
@@ -519,6 +524,15 @@ static void state_flags_refresh_post_frame_impl(MslBatch* batch, const uint8_t* 
         // refs/melee/src/melee/ft/fighter.c::{Fighter_ProcessHit_8006D1EC,Fighter_8006A1BC}
         // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{ftCo_8008DCE0,ftCo_8008EC90}
         f221a |= (uint8_t)MSL_STATE_FLAG_221A_B3;
+      }
+      if (state_flags_match_flow_respawn_action(action_id)) {
+        // Rebirth/RebirthWait set dedicated match-flow visibility/intangibility bits, but they do
+        // not own the whole-capsule x221A_b5 lane through the generic hurtcap status path.
+        // Decomp writes x221E_b2, x221E_b1, x221D_b5 on Rebirth/RebirthWait entry; x221A_b5 is not
+        // part of the respawn platform setup.
+        // refs/melee/src/melee/ft/ft_0D4D.c::{ftCo_800D4FF4,ftCo_800D5600}
+        // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm (fp+0x221A -> state_flags[1])
+        f221a &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221A_B5;
       }
 
       // x221B_b5 ownership (grab-owner latch):
