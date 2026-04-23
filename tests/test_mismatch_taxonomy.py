@@ -1543,7 +1543,7 @@ def test_classify_player_row_keeps_specialn_loop_restart_instance_order_in_f24()
     assert got == "F24_special_adjacent_instance_order"
 
 
-def test_classify_player_row_moves_pure_throw_score_to_common_throw_bookkeeping() -> None:
+def test_classify_player_row_moves_pure_throw_score_to_grounded_combat_bookkeeping() -> None:
     row = _player_row(
         seed_action_id=222,
         ref_action_id=222,
@@ -1553,10 +1553,10 @@ def test_classify_player_row_moves_pure_throw_score_to_common_throw_bookkeeping(
         on_ground=1,
     )
     got = _classify_player_row(row, {222: "THROW_LW"})
-    assert got == "F14d_throw_source_scoreboard"
+    assert got == "F10b_grounded_combat_adjacency"
 
 
-def test_classify_player_row_moves_action_aligned_throw_contact_tail_to_common_throw() -> None:
+def test_classify_player_row_moves_action_aligned_throw_contact_tail_to_grounded_combat() -> None:
     row = _player_row(
         seed_action_id=222,
         ref_action_id=222,
@@ -1566,10 +1566,10 @@ def test_classify_player_row_moves_action_aligned_throw_contact_tail_to_common_t
         on_ground=1,
     )
     got = _classify_player_row(row, {222: "THROW_LW"})
-    assert got == "F14d_throw_source_scoreboard"
+    assert got == "F10b_grounded_combat_adjacency"
 
 
-def test_classify_player_row_moves_thrownlw_instance_hit_tail_to_common_throw() -> None:
+def test_classify_player_row_moves_thrownlw_instance_hit_tail_to_grounded_combat() -> None:
     row = _player_row(
         seed_action_id=242,
         ref_action_id=242,
@@ -1579,7 +1579,7 @@ def test_classify_player_row_moves_thrownlw_instance_hit_tail_to_common_throw() 
         on_ground=1,
     )
     got = _classify_player_row(row, {242: "THROWN_LW"})
-    assert got == "F14d_throw_source_scoreboard"
+    assert got == "F10b_grounded_combat_adjacency"
 
 
 def test_classify_player_row_splits_turn_hidden_microphase_from_grounded_selector() -> None:
@@ -1875,6 +1875,53 @@ def test_classify_item_slot_row_keeps_non_specialn_laser_instance_echo_in_body_l
     )
     got = _classify_item_slot_row(row, {14: "WAIT", 199: "PASSIVE"})
     assert got == "F16d_item_body_lifetime"
+
+
+def test_classify_item_slot_row_moves_guard_action_divergence_to_guard_owner() -> None:
+    row = ItemSlotRow(
+        dataset="MotionlessAggressiveJay.msl",
+        record=702,
+        slot=0,
+        seed_frame=579,
+        ref_frame=580,
+        player_actions=(20, 182),
+        ref_actions=(20, 182),
+        out_actions=(20, 181),
+        fields=("item_exists", "item_type", "item_owner", "item_instance_id"),
+        family_id="F99_misc_other",
+        seed_item_type=55,
+        ref_item_type=55,
+        out_item_type=0,
+    )
+    got = _classify_item_slot_row(
+        row,
+        {
+            20: "DASH",
+            181: "GUARD_SET_OFF",
+            182: "GUARD_REFLECT",
+        },
+    )
+    assert got == "F01_guard_release_collision"
+
+
+def test_classify_item_slot_row_keeps_same_guard_action_lifetime_in_f15() -> None:
+    row = ItemSlotRow(
+        dataset="DistinctCaringCobra.msl",
+        record=2905,
+        slot=0,
+        seed_frame=2782,
+        ref_frame=2783,
+        player_actions=(182, 20),
+        ref_actions=(182, 20),
+        out_actions=(182, 20),
+        fields=("item_exists", "item_type", "item_owner", "item_instance_id"),
+        family_id="F99_misc_other",
+        seed_item_type=55,
+        ref_item_type=0,
+        out_item_type=55,
+    )
+    got = _classify_item_slot_row(row, {20: "DASH", 182: "GUARD_REFLECT"})
+    assert got == "F15b_guard_laser_lifetime"
 
 
 def test_build_summary_aggregates_family_counts_and_nearby_controls() -> None:

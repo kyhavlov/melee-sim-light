@@ -8,8 +8,8 @@ import numpy as np
 
 
 ENGINE_DUMP_MAGIC = b"MSIMDMP\0"
-ENGINE_DUMP_VERSION = 9
-ENGINE_DUMP_SUPPORTED_VERSIONS = (6, 7, 8, 9)
+ENGINE_DUMP_VERSION = 10
+ENGINE_DUMP_SUPPORTED_VERSIONS = (6, 7, 8, 9, 10)
 
 HEADER_DTYPE = np.dtype(
     [
@@ -28,9 +28,11 @@ HEADER_DTYPE = np.dtype(
         ("hitboxes_offset", "<u4"),
         ("hurtboxes_offset", "<u4"),
         ("total_items", "<u4"),
-        # v7+: offset of hitlist-provenance section (v6 keeps this 0 in padding).
+        # v7+: offset of fighter hitlist-provenance section (v6 keeps this 0 in padding).
         ("hitlists_offset", "<u4"),
-        ("_pad1", "V7"),
+        # v10+: offset of item hitbox hitlist/callback section (older dumps keep this 0 in padding).
+        ("item_hitlists_offset", "<u4"),
+        ("_pad1", "V3"),
     ],
     align=False,
 )
@@ -173,6 +175,22 @@ ITEM_DTYPE = np.dtype(
         ("anim_frame_bits", "<u4"),
         ("lifetime_bits", "<u4"),
         ("damage", "<u4"),
+        ("xC34_damage_dealt", "<i4"),
+        ("xC48_clank_damage", "<i4"),
+        ("xC4C_reflect_damage", "<i4"),
+        ("xC50_shield_damage", "<i4"),
+        ("xCA8_callback_damage", "<i4"),
+        ("xCBC_hitlag_bits", "<u4"),
+        ("xCC0_hitlag_min_bits", "<u4"),
+        ("xDA8_short", "<u2"),
+        ("xDC8_word", "<u4"),
+        ("xDCE_flags", "u1"),
+        ("xDD4_laser_scale_bits", "<u4"),
+        ("xDD8_laser_angle_bits", "<u4"),
+        ("xDDC_laser_speed_bits", "<u4"),
+        ("xDE0_laser_pos_x_bits", "<u4"),
+        ("xDE4_laser_pos_y_bits", "<u4"),
+        ("xDE8_laser_pos_z_bits", "<u4"),
     ],
     align=False,
 )
@@ -254,6 +272,7 @@ class EngineDump:
     hitboxes: np.ndarray
     hurtboxes: np.ndarray
     hitlists: np.ndarray
+    item_hitlists: np.ndarray
 
 
 def _f32_from_bits(bits: int) -> float:
@@ -305,15 +324,32 @@ def read_engine_dump(path: str | Path) -> EngineDump:
 
     frames = _read(FRAME_DTYPE, frame_count, int(header["frames_offset"]))
     inputs = _read(INPUT_DTYPE, frame_count * port_count, int(header["inputs_offset"]))
-    fighter_dtype = FIGHTER_DTYPE_V9 if version >= 9 else FIGHTER_DTYPE_V8 if version >= 8 else FIGHTER_DTYPE_V7
+    # v10 is a targeted item-hitlist/callback extension built on the v7 fighter record layout.
+    fighter_dtype = (
+        FIGHTER_DTYPE_V7
+        if version == 10
+        else FIGHTER_DTYPE_V9
+        if version >= 9
+        else FIGHTER_DTYPE_V8
+        if version >= 8
+        else FIGHTER_DTYPE_V7
+    )
     fighters = _read(fighter_dtype, frame_count * port_count, int(header["fighters_offset"]))
-    items = _read(ITEM_DTYPE, total_items, int(header["items_offset"]))
+    if version >= 10:
+        item_dtype = ITEM_DTYPE
+    else:
+        item_dtype = np.dtype(ITEM_DTYPE.descr[:17], align=False)
+    items = _read(item_dtype, total_items, int(header["items_offset"]))
     hitboxes = _read(HITBOX_DTYPE, frame_count * port_count * 4, int(header["hitboxes_offset"]))
     hurtboxes = _read(HURTBOX_DTYPE, frame_count * port_count * 15, int(header["hurtboxes_offset"]))
     if version >= 7 and int(header["hitlists_offset"]) > 0:
         hitlists = _read(HITLIST_DTYPE, frame_count * port_count * 4, int(header["hitlists_offset"]))
     else:
         hitlists = np.empty((0,), dtype=HITLIST_DTYPE)
+    if version >= 10 and int(header["item_hitlists_offset"]) > 0:
+        item_hitlists = _read(HITLIST_DTYPE, total_items * 4, int(header["item_hitlists_offset"]))
+    else:
+        item_hitlists = np.empty((0,), dtype=HITLIST_DTYPE)
 
     return EngineDump(
         path=dump_path,
@@ -325,4 +361,5 @@ def read_engine_dump(path: str | Path) -> EngineDump:
         hitboxes=hitboxes,
         hurtboxes=hurtboxes,
         hitlists=hitlists,
+        item_hitlists=item_hitlists,
     )

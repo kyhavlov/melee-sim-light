@@ -22,6 +22,11 @@ from tests.test_combat_ownership_seed_guardrail_locks import _run_one_step_row, 
             773,
             0,
         ),
+        (
+            "datasets/aggregate_recent/replays/validation/aggregate_recent/MotionlessAggressiveJay.msl",
+            202,
+            1,
+        ),
     ],
 )
 def test_falco_laser_shield_contact_enters_guardsetoff_and_despawns_laser(
@@ -31,8 +36,12 @@ def test_falco_laser_shield_contact_enters_guardsetoff_and_despawns_laser(
     # - itFoxlaser_UnkMotion1_Phys snapshots the previous laser position.
     # - it_8029C4D4 resolves collision over the authoritative prev->cur segment.
     # - itFoxLaser_Logic94_HitShield consumes the projectile and enters GuardSetOff on shield hit.
+    # - MAJ:202 covers the final-x14 GuardReflect handoff where a normal shield overlap is already
+    #   selected; the pure reflect-descriptor x2218 byte must still disable ShieldBounced keepalive.
     # refs/melee/src/melee/it/items/itfoxlaser.c::{
     #   itFoxlaser_UnkMotion1_Phys,it_8029C4D4,itFoxLaser_Logic94_HitShield}
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_GuardReflect_Anim
+    # refs/melee/src/melee/it/item.c::Item_80269DC8
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / dataset_rel

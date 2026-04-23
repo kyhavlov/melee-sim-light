@@ -879,8 +879,8 @@ Recommended sequence for the next deep passes:
     the owner has no live state1 throw shot, leaving existing carry/despawn rows on the normal
     lifetime owner.
     Replay-real locks live in `tests/test_throwhi_pulse_seed_bridge_replay_real_locks.py` for
-    positive rows `BHH:938`, `BHH:1673`, `BHH:4337`, with negative controls `BHH:937` and
-    `BHH:1208`.
+    positive rows `BHH:938`, `BHH:1673`, `BHH:4337`, with negative control `BHH:1208`;
+    `BHH:937` moved to the later same-character item callback phase.
     Fresh taxonomy after this slice: primary total `611`; `F14c=10`, `F14d=2`, `F15a=11`,
     `F15b=8`, `F16a=0`, `F16b=0`, `F16c=0`, `F16d=31`. Aggregate total `5192`;
     `F14c=405`, `F14d=67`, `F15a=21`, `F15b=124`, `F16a=0`, `F16b=0`, `F16c=0`,
@@ -893,8 +893,8 @@ Recommended sequence for the next deep passes:
     lower-hitlag handoff, Fox frame-18/frame-20, and active damage-provenance rows stay on the
     normal BODY owner.
     Replay-real locks live in `tests/test_throwhi_pulse_seed_bridge_replay_real_locks.py` for
-    positives `GAT:3426` and `TBK:5090`, lower-hitlag handoff `GAT:3427`, and negative controls
-    `BHH:937` / `BHH:1208`.
+    positives `GAT:3426` and `TBK:5090`, lower-hitlag handoff `GAT:3427`, and negative control
+    `BHH:1208`; `BHH:937` moved to the later same-character item callback phase.
     Fresh taxonomy after this slice and handoff refinement: primary total `595`; `F14c=0`,
     `F14d=0`, `F15a=11`, `F15b=8`, `F16a=0`, `F16b=0`, `F16c=0`, `F16d=31`.
     Aggregate total `5184`; `F14c=400`, `F14d=66`, `F15a=21`, `F15b=112`, `F16a=0`,
@@ -1105,6 +1105,204 @@ Recommended sequence for the next deep passes:
     aggregate item rows are `F14c=400`, `F14d=66`, `F15a=10`, `F15b=96`, `F16d=48`, with
     `F16a/F16b/F16c=0`. Section 6 and ledge/collision-env remain closed:
     `F17/F10c/F19/F20/F21/F22/F23/F24/F10e=0`. The checklist item remains active.
+  - Guard-action-divergence item slot fallout hard move routes laser/article slot rows to
+    `F01_guard_release_collision` when the defender's guard action itself diverges between ref and
+    sim (`Guard`/`GuardReflect` vs `GuardSetOff`). Same-action shield rows stay in
+    `F15b_guard_laser_lifetime`, so true `HitShield` vs `ShieldBounced` and hidden
+    `xDCE/xC54/xC58` ownership remains visible.
+    Fresh taxonomy after this split: primary total `528`; all primary item-owner families remain
+    closed (`F14c/F14d/F15a/F15b/F16a/F16b/F16c/F16d=0`). Aggregate total `5079`; remaining
+    aggregate item rows are `F14c=400`, `F14d=66`, `F15a=10`, `F15b=36`, `F16d=48`, with
+    `F16a/F16b/F16c=0`. Section 6 and ledge/collision-env remain closed:
+    `F17/F10c/F19/F20/F21/F22/F23/F24/F10e=0`. The checklist item remains active.
+  - Terminal `x1990+x1994` item BODY damage handoff now lets
+    `colanim_terminal_x1990_item_body_guard=2` bypass disabled-contact-only clearing after
+    `Fighter_8006A360` expires x1990 to hidden `x198C=1`. This sends the row through ordinary
+    BODY damage/`Fighter_ProcessHit` ownership instead of clearing the laser without player damage.
+    Replay-real locks cover positive `PRH:8054` and nonterminal keepalive control `PRH:8053`.
+  - Final-x14 GuardReflect HitShield no-bounce handoff now disables `ShieldBounced` keepalive on
+    the pure final-x14 `fp+0x2218` state even when the ordinary shield probe already selected the
+    shield hit. This keeps the row on `Item_80269DC8` / `itFoxLaser_Logic94_HitShield` destruction.
+    Replay-real lock `MAJ:202` covers the positive; existing reflect/keepalive negatives remain.
+    Fresh taxonomy after these runtime slices: primary total `528`; all primary item-owner
+    families remain closed. Aggregate total `5066`; remaining aggregate item rows are
+    `F14c=400`, `F14d=66`, `F15a=10`, `F15b=32`, `F16d=38`, with `F16a/F16b/F16c=0`.
+    Section 6 and ledge/collision-env remain closed:
+    `F17/F10c/F19/F20/F21/F22/F23/F24/F10e=0`. The checklist item remains active.
+  - Falco ThrowHi consumed-pulse article count guard now prevents the frame-20 consumed-pulse
+    bridge from emitting a third state1 article when the seed already carries both frame-18 and
+    frame-20 ThrowHi shots. This keeps `ftFx_Throw_Anim` parity with one `throw_flags_b0` consume
+    per command pulse while preserving the existing `QGD:3091` second-shot negative sentinel.
+    Replay-real positives: `HVG:2963`, `PRH:6738`, `PRH:10860`, `TCH:267`, `TCH:11819`.
+    Fresh taxonomy after this runtime slice: primary total `528`; all primary item-owner families
+    remain closed. Aggregate total `5041`; remaining aggregate item rows are `F14c=375`,
+    `F14d=66`, `F15a=10`, `F15b=32`, `F16d=38`, with `F16a/F16b/F16c=0`. Section 6 and
+    ledge/collision-env remain closed: `F17/F10c/F19/F20/F21/F22/F23/F24/F10e=0`.
+    The checklist item remains active.
+  - ThrowLw first attached-pulse BODY/source bridge now extends the retained attached-victim pulse
+    owner from the 25-frame carried pulse to the first `ThrowLw` projectile pulse when the current
+    source step crosses the first `set_throw_spawn_projectile`, the victim is still attached in
+    same-owner `ThrownLw`, and ordinary geometry did not already select a BODY hit. This follows
+    `ftAction_80071974` / `ftFx_Throw_Anim` one-shot `throw_flags_b0` ownership and
+    `ftCo_800DE508` attached victim ordering. Replay-real lock `FSP:9177` covers item lifetime,
+    attacker `last_attack_landed`, victim source/state flags, and adjacent target +/-1 rows.
+    Fresh taxonomy after this slice: primary total `528`; all primary item-owner families remain
+    closed. Aggregate total `5033`; remaining aggregate item rows are `F14c=370`, `F14d=63`,
+    `F15a=10`, `F15b=32`, `F16d=38`, with `F16a/F16b/F16c=0`. Section 6 and ledge/collision-env
+    remain closed: `F17/F10c/F19/F20/F21/F22/F23/F24/F10e=0`. The checklist item remains active.
+  - Throw command pending-pulse seed/runtime lane is now exposed as
+    `throw_command_pending_pulse_frame`.
+    It models `ftAction_80073354` command-timer deltas and the single bool `throw_flags_b0` consumed
+    by `ftFx_Throw_Anim`, instead of raw visible frame crossing. Replay-real lane locks cover BHH
+    Fox `ThrowHi` (`4335` pending frame 18, `1250` no frame-20 pending, `1251` pending frame 20)
+    and FSP `ThrowLw` first/mid/terminal pulses (`9177`, `9182`, `9185`). Runtime consumes this lane
+    only for source-complete first-pulse article emission, stale ThrowB victim-ring scoreboard
+    suppression, and the existing Falco ThrowHi final-pulse live-article cap. Later ordinals still
+    defer to the retained hitlist/lifetime bridges because the command lane alone cannot distinguish
+    BODY consume/carry state. Fresh taxonomy with this narrow runtime authority: primary total `528`;
+    all primary item-owner families remain closed. Aggregate total `5033`; remaining aggregate item
+    rows are `F14c=370`, `F14d=63`, `F15a=10`, `F15b=32`, `F16d=38`, with `F16a/F16b/F16c=0`.
+    Section 6 and ledge/collision-env remain closed: `F17/F10c/F19/F20/F21/F22/F23/F24/F10e=0`.
+    The checklist item remains active.
+  - ThrowHi frame-20 command/hitlist ordinal gate now emits the second ThrowHi article from
+    `throw_command_pending_pulse_frame==20` only when seed carries exactly one live state1 throw
+    shot and item-domain combo bookkeeping has not advanced past the first projectile ordinal.
+    `combo_count` is the replay-visible source/bookkeeping output of the item BODY path
+    (`ftColl_8007646C -> ftColl_800763C0`), keeping primary controls where `combo_count>=2`
+    already represents the pulse on the carry/suppress lane. Replay-real locks: `BHH:1251`
+    positive second article and `GAT:464` primary negative.
+    Fresh taxonomy after this slice: primary total `528`; all primary item-owner families remain
+    closed. Aggregate total `4958`; remaining aggregate item rows are `F14c=295`, `F14d=63`,
+    `F15a=10`, `F15b=32`, `F16d=38`, with `F16a/F16b/F16c=0`. Section 6 and ledge/collision-env
+    remain closed: `F17/F10c/F19/F20/F21/F22/F23/F24/F10e=0`. The checklist item remains active.
+  - ThrowHi frame-18 state1 BODY callback-clear slice now clears the narrow `BHH:9419` aggregate
+    article without false combo/source bookkeeping. The runtime path is limited to ThrowHi,
+    crossed-prev frame 18, state1 laser BODY overlap with authored state1 offsets, same-owner
+    hitstun, and `last_hit_by` source parity; it clears the item slot without entering the damage
+    bookkeeping path. Replay-real locks cover `BHH:9419` positive, with `BHH:937` and `BHH:480`
+    adjacent negatives. Fresh taxonomy after this slice: primary total `528`; all primary
+    item-owner families remain closed. Aggregate total `4953`; remaining aggregate item rows are
+    `F14c=290`, `F14d=63`, `F15a=10`, `F15b=32`, `F16d=38`, with `F16a/F16b/F16c=0`. Protected
+    families remain zero. The checklist item remains active.
+  - Dolphin item HitCapsule/callback forensic visibility is now available for throw-laser rows.
+    The v10 engine-dump extension records item `xC34_damageDealt`, `xCA8`, `xCBC`, `xCC0`,
+    `xDA8`, `xDC8`, `xDCE`, laser `xDD4` vars, and per-item HitCapsule victims_1/victims_2
+    cursors, entries, and cooldowns. Dumps for `BHH:9419`, `BHH:4335`, `FSP:9180`, `PRH:6737`,
+    `PJO:4135`, and `IAT:2121` are retained under `reports/triage/f14_item_hitlist_dump_*`.
+    They prove `instance_hit_by/xDA8` is only a partial visible proxy: `BHH:9419`, `BHH:4335`,
+    `FSP:9180`, and `PRH:6737` carry item victims_1 cooldown entries on throw-laser hitcaps,
+    whereas `BHH:937` does not, even though visible command timing is similar. The next F14
+    implementation should promote or derive this item victim-ring/callback state prefix-causally;
+    visible timing or xDA8 alone is unsafe.
+  - Throw-laser item HitCapsule victims_1 seed lane now seeds compact per-item/per-HitCapsule
+    `item_hitlist_victim_{port,cd,hitbox_mask,iid}` entries and materializes them into runtime
+    `batch->state.item_hitlist` at reseed. Scope is state1 Fox laser article (kind 54), throw
+    owner, attached grabbed/thrown victim, and `instance_hit_by == item.instance_id`; this covers
+    the replay-real `FSP:9180` ThrowLw attached-pulse carry shape while keeping `BHH:937` empty as
+    a non-attached negative. Falco kind-55 attached rows seed only hitboxes 2/3, matching v10 dumps
+    where those lanes carry victims_1 while hitboxes 0/1 remain BODY-eligible for the next callback
+    phase. The runtime stores one item hitlist capsule per item hitbox, while conservative
+    item-level rehit suppression remains in place outside source-backed single-hitbox lanes. Fresh
+    taxonomy after this seed/runtime slice: primary total `528`; all primary
+    item-owner families remain closed. Aggregate total `4943`; remaining aggregate item rows are
+    `F14c=280`, `F14d=63`, `F15a=10`, `F15b=32`, `F16d=38`, with `F16a/F16b/F16c=0`. Protected
+    families remain zero. The checklist item remains active.
+  - ThrowHi pending-spawn item HitCapsule carry now seeds the newly spawned state1 throw laser's
+    hitbox-2 victim ring on first-pulse command-pending rows with a unique non-attached same-source
+    throw-laser victim (`instance_hit_by == thrower instance/xDA8`). `throw_command_pending_pulse_frame`
+    supplies only command-cursor evidence; item HitCapsule victim-ring state owns the carry/consume
+    split. Replay-real locks cover `BHH:4335` and `FSP:9282` positives plus `BHH:1208` as an
+    adjacent negative; `BHH:937` moved to the later same-character item callback phase. The same
+    branch closes `MAJ:1497` and `PJO:1289`. Fresh taxonomy:
+    primary total `528`; all primary item-owner families remain closed. Aggregate total `4918`
+    (down from `4943`); remaining aggregate item rows are `F14c=260`, `F14d=59`, `F15a=10`,
+    `F15b=32`, `F16d=38`, with `F16a/F16b/F16c=0`. Protected families remain zero. The checklist
+    item remains active.
+  - Falco ThrowLw frame-28 callback-phase split now treats kind-55 item victims_1 seed masks as
+    per-HitCapsule state in the BODY prefilter: hb2/3 entries do not suppress hb0/1. A narrow
+    spawn-time BODY callback is retained only for the frame-28 pending command, no live seeded
+    state1 shot, attached `ThrownLw` victim, and no seed-start victim hitlag. This matches the
+    PRH:533/5637 dump evidence while keeping QGD primary controls (`447`, `4098`, `8115`) from
+    applying the callback one step early. Fresh taxonomy after this slice: primary total `528`; all
+    primary item-owner families remain closed. Aggregate total `4910` (down from `4918`); remaining
+    aggregate item rows are `F14c=260`, `F14d=51` (down from `59`), `F15a=10`, `F15b=32`,
+    `F16d=38`, with `F16a/F16b/F16c=0`. Protected families remain zero. The checklist item remains
+    active.
+  - ThrowHi same-character item callback phase now keeps command timing as input and lets item
+    callback state own same-character Fox first-pulse lifetime. Front-side Fox/Fox first-pulse
+    articles consume through BODY callback when v10 dump evidence shows no carried victims_1 entry;
+    the fallback frame-crossing path also avoids duplicating a frame-20 article when a live
+    first-pulse article and same-character victim already represent that callback phase. Cross-
+    character primary controls stay on the regular carry / frame-20 command paths, and Falco
+    same-character rows remain excluded until their hb2/3 versus hb0/1 callback phase is modeled.
+    Replay-real locks cover `BHH:937`, `BHH:1250`, `AGG:998`, and `GAT:463`. Fresh taxonomy:
+    primary total `528`; all primary item-owner families remain closed. Aggregate total `4785`
+    (down from `4910`); remaining aggregate item rows are `F14c=140` (down from `260`), `F14d=46`
+    (down from `51`), `F15a=10`, `F15b=32`, `F16d=38`, with `F16a/F16b/F16c=0`. Protected
+    families remain zero. The checklist item remains active.
+  - ThrowB callback-phase owner now splits Fox startup consume, Falco startup carry, and terminal
+    consume through item callback/source state instead of raw command timing alone. Falco startup
+    rows past the early DamageFly callback phase carry the article with per-HitCapsule victim-ring
+    suppression; terminal rows in the consume phase suppress the live article and advance only
+    item-domain combo bookkeeping. Replay-real locks cover `PJO:3287`, `IAT:2121`, `PRH:8380`, and
+    primary control `GAT:2522`. Fresh taxonomy: primary total `528`; all primary item-owner
+    families remain closed. Aggregate total `4767` (down from `4785`); remaining aggregate item
+    rows are `F14c=125` (down from `140`), `F14d=43` (down from `46`), `F15a=10`, `F15b=32`,
+    `F16d=38`, with `F16a/F16b/F16c=0`. Protected families remain zero. The checklist item remains
+    active.
+  - Throw source/scoreboard residual split: remaining `F14d` player-only rows were checked against
+    v10 callback latch evidence. The representative state1 throw-laser dumps keep
+    `xC34_damageDealt`, `xCA8`, `xCBC`, and `xCC0` at zero with constant `xDC8`, so these rows are
+    not item callback-latch/article identity rows. They now classify under the existing grounded
+    combat adjacency owner (`ftColl_8007646C -> ftColl_800763C0`), while item-slot article lifetime
+    rows stay in `F14c`. Fresh taxonomy: primary total `528`; all primary item-owner families
+    remain closed. Aggregate total `4767`; remaining aggregate item rows are `F14c=125`,
+    `F14d=0`, `F15a=10`, `F15b=32`, `F16d=38`, with `F16a/F16b/F16c=0`. Protected families remain
+    zero. The checklist item remains active.
+  - Crossed-prev ThrowHi first-pulse carry now extends the accepted first-pulse item BODY/callback
+    owner to the one-step-later frame-18 state1 article. `throw_pulse_crossed_prev_frame==18`
+    supplies command context, but the branch only carries when the same-source victim is on the
+    non-projectile side of the throw-shot segment; front-side `BHH:937` remains BODY-eligible.
+    v10 dump evidence for `BHH:9419` shows the carried phase has item victims_1 state, while
+    `BHH:937` does not. Replay-real locks cover `BHH:9419` positive and `BHH:937` negative. Fresh
+    taxonomy after forced rebuild and `make build`: primary total `528`; all primary item-owner
+    families remain closed. Aggregate total `4762`; remaining aggregate item rows are `F14c=120`,
+    `F14d=0`, `F15a=10`, `F15b=32`, `F16d=38`, with `F16a/F16b/F16c=0`. Protected families remain
+    zero. The checklist item remains active.
+  - Throw-laser intra-frame event probe is now reviewable at
+    `tools/dolphin/patches/ishiiruka_throw_laser_event_probe.patch`, with parser
+    `tools/dolphin/throw_laser_event_dump.py` and wrapper support in `forensic_row_dump.py`.
+    It records playback JSONL events for `it_8029C6CC`, `it_8029C4D4`, `it_8026FAC4`,
+    `it_80272460`, `Item_8026A294`, and `Item_8026A8EC`. This is needed because remaining
+    `F14c` rows can spawn and delete a throw-laser article before Slippi post-frame item
+    serialization.
+  - The first event-pair result is `BHH:4335` versus `BHH:4266`: both have the frame-18
+    `it_8029C6CC` spawn request, but `BHH:4335` carries the article through post-frame while
+    `BHH:4266` runs hb0 BODY/give-damage/destroy in that same frame and leaves no post-frame
+    article. Post-frame v10 item-hitlist dumps cannot see the deleted no-article row.
+  - Same-frame state1 throw-laser lifecycle is now retained as the runtime owner for the largest
+    pending first-pulse F14c group. Throw-side laser spawns use the float-frame collision-pose
+    sampler for the live hold-joint pose sampled by `ftFx_Throw_Anim` before `it_8029C6CC`. The
+    laser BODY prefilter now respects per-HitCapsule victims_1 state: hb2 can carry a prior
+    victim-ring entry while hb0 stays eligible for same-frame BODY/give-damage/destroy. Event
+    probes for `BHH:4266` and `BHH:8123` show spawn_request -> hb0 body_hitlist -> give_damage ->
+    destroy before post-frame serialization, while `BHH:4335` carries and QGD primary controls
+    remain distinct.
+  - Fresh taxonomy after `make build`: primary total `528`; all primary item-owner families remain
+    closed. Aggregate total `4715` (down from `4762`); remaining aggregate item rows are
+    `F14c=80` (down from `120`), `F14d=0`, `F15a=10`, `F15b=32`, `F16d=38`, with
+    `F16a/F16b/F16c=0`. Protected families remain zero. The checklist item remains active.
+  - Falco ThrowHi crossed-prev frame-18 second article is now command-cadence gated. Event probe
+    `PRH:6737` shows a seed with one live state1 Falco ThrowHi article, crossed-prev frame 18, and
+    1.25x command cadence; vanilla emits a second `it_8029C6CC` article in the target frame and
+    carries it post-frame. Primary controls with the same visible crossed-prev/live-shot shape use
+    1.333x cadence and do not serialize that next article until a later callback. Runtime now emits
+    only for Falco, crossed-prev frame 18, exactly one live state1 shot, 1.25x frame speed, and
+    same-source victim provenance. Replay-real locks cover `PRH:6737`, `HVG:2962`, and `TCH:266`.
+  - Fresh taxonomy after `make build`: primary total `528`; all primary item-owner families remain
+    closed. Aggregate total `4690` (down from `4715`); remaining aggregate item rows are
+    `F14c=55` (down from `80`), `F14d=0`, `F15a=10`, `F15b=32`, `F16d=38`, with
+    `F16a/F16b/F16c=0`. Protected families remain zero. The checklist item remains active.
   - `powershield_reflect_size` is now extracted from `p_ftCommonData->x2A8`, matching
     `ftCo_8009370C`'s GuardReflect `ReflectDesc.x14_size`. This is retained as source visibility
     only, not F15 closure: probing the small reflect capsule showed that same-frame owner/xDA8
@@ -1121,10 +1319,49 @@ Recommended sequence for the next deep passes:
     `GAT:4828`) and regressed primary total to `632`; reverted. The extracted size remains
     visibility only until the missing GuardReflect bone/`xDCE/xC54/xC58` state is promoted.
   - A source-shaped GuardReflect ReflectDesc laser-offset overlap gate was tested against remaining
-    aggregate `F15a/F15b` proving rows (`DCC:352`, `MAJ:118/294/1994/1995/5586/5587`,
-    `PPA:2342`). It did not move those rows after rebuild, so it was reverted rather than retained
-    as dead complexity; the missing owner remains hidden `ftColl_80077464` /
-    `Item_80269DC8` transfer-vs-HitShield state.
+    aggregate `F15a/F15b` proving rows. The tighter `lbColl_80007BCC`-style offset check regressed
+    accepted primary reflect timing locks (`GAT:4828`, `GAT:6207`, `TBK:7448`), so it was reverted;
+    the missing owner remains hidden `ftColl_80077464` / `Item_80269DC8`
+    transfer-vs-HitShield state.
+  - Removing the temporary shield-HP guard from the `ShieldBounced` keepalive path matches the
+    absence of an HP check in `Item_80269DC8`, but without hidden `xDCE/xC54/xC58` state it
+    incorrectly kept the `GAT:773` HitShield destroy lock alive. The HP guard remains temporary.
+  - A broader non-attached ThrowHi victims_1 seed derivation was tested from v10 hb2/hb2-3 evidence
+    (`BHH:9419`, `PRH:6737`). The first version reopened primary (`F14c=10`, `F14d=2`); narrowing
+    by victim combo latch restored primary but worsened aggregate to `F14c=160`, `F14d=51`.
+    Reverted. The dump evidence is real, but visible combo/position is not the missing
+    prefix-causal discriminator.
+  - A later non-attached ThrowHi victims_1 derivation using victim DamageHi action-frame phase
+    (`action_frame >= 10`) was tested from the BHH:9419/BHH:937 dump contrast. It reopened primary
+    to total `868` with `F14c=275`; reverted. Visible damage-action phase is not the hidden item
+    victim-ring discriminator.
+  - Spawn-time ThrowHi first-pulse BODY probes over still-eligible hb0/hb1 lanes, and then over all
+    still-eligible state1 hitboxes, kept primary closed but produced no aggregate movement, so they
+    were removed as dead gameplay complexity.
+  - A ThrowLw attached-victim timer carry based on seeded item-hitlist masks reopened primary to
+    total `558` with `F14c=30`; reverted. Timer expiry still needs direct callback/lifetime state,
+    not an item-wide victim-ring proxy.
+  - A same-owner GuardReflect shield-hit allowance was tested against remaining F15 rows. It
+    destroyed an already-reflected laser in the focused reflect identity lock, so it was reverted;
+    the missing source-backed owner remains the hidden same-owner gate in `ftColl_8007925C`, not a
+    broad visible GuardReflect action check.
+  - An item HitCapsule `x42_b6`/non-grabbable hurtcap filter was probed from the laser article
+    create-hitbox words. Mapping the shared parser's low `sfx_kind` bit to `x42_b6` regressed
+    accepted airborne Fall and disabled-contact laser BODY locks, proving that byte/bit mapping is
+    not the authoritative item command lane; the runtime change and MSLLASR1 v5 probe were
+    reverted.
+  - A terminal `x1990+x1994` lbColl hurtcap-Z sibling for `PRH:8054` and a narrower active
+    ReflectDesc exception for late-locomotion GuardReflect owner transfer both passed focused locks
+    but produced no aggregate taxonomy movement after rebuild, so they were reverted as dead
+    complexity.
+  - A disabled-hurtcap lbColl hurt-radius expansion for `PPA:6414` fixed that local item clear but
+    introduced a new false consume at `PRH:4777`, leaving aggregate total and `F16d` unchanged
+    (`5066` / `38`). It was reverted; disabled-contact keepalive still needs the narrower item
+    hitlist/callback owner.
+  - A hidden `x1994/x198C=1` item BODY guard for vulnerable-looking Fall/Dash rows fixed local
+    false-consume locks (`PRH:8137`, `PPA:5141`) but regressed aggregate total to `5112` and raised
+    `F16d` to `69`; reverted. The remaining false consumes still need the exact hidden item
+    hitlist/callback discriminator rather than a broad visible-action seed trust.
   - Powershield reflect final-tick gates were tested as a possible `F15a/F15b` discriminator.
     Runtime-timer gating broke existing powershield reflect locks; seed-snapshot gating improved
     aggregate total through adjacent guard-release movement but doubled primary `F15b` and did not
@@ -1175,6 +1412,41 @@ Recommended sequence for the next deep passes:
     focused locks but regressed primary to `702` (`F14c=55`, `F14d=11`), so the first-pulse split
     still needs the real command cursor / collision-consume state instead of visible segment
     direction.
+  - A source-shaped direct-current-frame reroute for all throw-side blaster shots plus a same-pulse
+    `throw_pulse_crossed_prev_frame` suppressor preserved primary closure but produced no aggregate
+    movement (`5033`, `F14c=370`, `F14d=63`), so it was reverted as dead complexity.
+  - A generalized throw pulse-ordinal guard using live state1 shot counts also produced no aggregate
+    movement (`5041`, `F14c=375`, `F14d=66`) before the retained ThrowLw first-pulse slice, so it was
+    dropped.
+  - Promoting ThrowHi state1 BODY checks through the generic `lbColl` hurt-radius path for airborne
+    `DamageFlyTop` victims reopened primary badly (`1128`, `F14c=415`, `F14d=81`), so it remains
+    rejected until the exact item/cursor state is exposed.
+  - A Fox ThrowHi fresh first-shot timer/command suppressor regressed primary to `658` (`F14c=130`)
+    and aggregate to `5166` (`F14c=505`); item timer/shot count alone cannot distinguish fresh
+    command ownership from replay-visible collision consumption.
+  - Broad `throw_command_pending_pulse_frame` runtime authority was tested in strict zero-pending,
+    pending-only, pulse-ordinal live-shot-count, and stale-current suppressor forms. Strict authority
+    reopened primary to `1278` (`F14c=740`, `F14d=8`) and aggregate to `6601` (`F14c=1915`);
+    pending-only authority reopened primary to `899` (`F14c=370`) and aggregate to `5928`
+    (`F14c=1255`); pulse-ordinal authority reopened primary to `702` (`F14c=170`, `F14d=4`) and
+    aggregate to `5490` (`F14c=810`, `F14d=79`); stale-current suppression reopened primary to `667`
+    (`F14c=135`) and aggregate to `5157` (`F14c=500`). The retained runtime scope is limited to
+    first-pulse/ThrowB/final-pulse states whose matching hitlist or live-article owner is already
+    replay-visible.
+  - A broad live-state1 `instance_hit_by == item_instance_id` suppressor for raw throw pulse
+    frame-crossings was tested as a visible proxy for item HitCapsule victim-ring ownership. It
+    reopened primary to `786` with `F14c=255` and raised aggregate to `5373` with `F14c=715`, proving
+    that replay-visible `instance_hit_by` alone cannot distinguish rows that still need the next
+    throw article from rows whose item callback already consumed the pulse. Reverted.
+  - A Falco-only ThrowHi crossed-prev frame-18 second-article spawn was tested using the new
+    item-hitlist dumps (`PRH:6737` / `TCH:266` show two live state1 lasers with victims_1 entries).
+    The visible gate still reopened primary to `568` (`F14c=40`) and worsened aggregate to `4968`
+    (`F14c=305`), so character/frame timing remains insufficient without the direct item
+    victim-ring/callback discriminator. Reverted.
+  - A broad version of the new item-hitlist seed lane that included Falco kind-55 attached ThrowLw
+    rows seeded QGD primary Falco lasers and reopened primary to `590` (`F14c=15`, `F14d=27`) while
+    worsening aggregate to `5005` (`F14c=295`, `F14d=90`). The retained lane stays Fox-kind-54 only
+    until Falco's item callback/victim-ring discriminator is captured separately.
   - Broad grounded laser BODY sweep was tested against aggregate because decomp laser collision
     uses the item previous-to-current segment (`itFoxlaser_UnkMotion1_Phys` / `it_8029C4D4`), but
     the unconditional widening regressed aggregate total to `5628` with `F14c=503`, `F16d=238`,
@@ -1186,6 +1458,21 @@ Recommended sequence for the next deep passes:
   - Throw-side item-hitlist carry keyed on `instance_hit_by == item.xDA8` was tested as a direct
     F14c owner. It regressed aggregate to `7087` mismatches (`F14c=1755`, `F14d=309`), so xDA8
     attribution alone is not the hidden item hitlist/cursor owner; reverted.
+  - Broad ThrowHi/ThrowB callback-phase visible proxies were rejected. Same-character first-pending
+    ThrowHi consume worsened aggregate to `4881` (`F14c=220`, `F14d=62`), and unconditional ThrowB
+    terminal consume reopened primary (`F14c=20`, `F14d=4`). The retained ThrowB branch stays on the
+    terminal hitlag/action-frame callback phase and explicit startup carry/consume split.
+  - Falco kind-55 attached ThrowLw hitbox-mask seeding was first tested as an item-wide latch after
+    v10 dumps showed initial victim entries on hitboxes 2/3. That reopened primary F14d on
+    `QGD:443/4094/8111` because the BODY callback still needs hitboxes 0/1 eligible in the next
+    phase. The retained version represents that callback phase explicitly: hb2/3 seed as victims_1,
+    hb0/1 remain eligible, and only the frame-28 no-pre-hitlag spawn callback is admitted.
+  - Broad ThrowHi live-article authority and all-character front-side consume were rejected during
+    the same-character callback pass. Suppressing every live first-pulse frame-20 fallback reopened
+    primary to `773` (`F14c=245`) and aggregate to `5295` (`F14c=650`); consuming all front-side
+    first-pulse articles reopened primary to `583` (`F14c=55`). The retained rule is limited to
+    same-character Fox callback rows and keeps cross-character and Falco phases on their existing
+    owners.
   - Hidden `x198C` BODY suppression and stale-submotion SpecialN loop shot gating were also tested
     after the disabled-contact slice; neither moved aggregate beyond the retained branch, so both
     were dropped.
@@ -1231,6 +1518,14 @@ Recommended sequence for the next deep passes:
     existing prefix-causal lanes. It improved aggregate (`F14c=465`, `F14d=55`) but regressed
     primary to `741` with `F14c=140`; rejected until the full command cursor / consumed-pulse
     state is exposed.
+  - Removing the Falco ThrowHi frame-20 stale-latch suppressor after adding the consumed-pulse
+    count guard reopened primary item-owner rows (`primary total=568`, `F14c=40`), so it was
+    reverted. A Fox ThrowHi mid-pulse live-shot suppressor likewise reopened primary
+    (`primary total=658`, `F14c=130`) and worsened aggregate (`5166`, `F14c=505`); reverted.
+  - A ThrowHi exact-boundary first/mid-pulse suppressor using live anim-frame equality and one live
+    state1 article was tested after the retained command/hitlist ordinal gate. It reopened primary
+    to `658` (`F14c=130`) while leaving aggregate at `4958` / `F14c=295`, so command-boundary
+    equality is not retained as the missing hitlist/body discriminator.
 - Status rationale: the coarse owner bucket is split and inspectable, but this checklist item is
   **not closed** because the named item owners still contain real runtime residuals.
 

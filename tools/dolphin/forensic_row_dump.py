@@ -66,6 +66,11 @@ def main() -> int:
         help="also write interpreter pre-collision primitive JSONL beside the dump",
     )
     ap.add_argument(
+        "--throw-laser-event-probe",
+        action="store_true",
+        help="also write interpreter throw-laser item event JSONL beside the dump",
+    )
+    ap.add_argument(
         "--out-dir",
         type=Path,
         default=Path("reports/triage") / f"{_timestamp()}_dolphin_forensic_row",
@@ -99,6 +104,9 @@ def main() -> int:
     stem = f"{dataset_path.stem}_rec{spec.record}_p{spec.p}_f{start_frame}_{end_frame}"
     dump_path = out_dir / f"{stem}.bin"
     collision_probe_path = out_dir / f"{stem}_collision_probe.jsonl" if args.collision_probe else None
+    throw_laser_event_probe_path = (
+        out_dir / f"{stem}_throw_laser_events.jsonl" if args.throw_laser_event_probe else None
+    )
     user_dir = out_dir / "dolphin_user"
     rc, _ = capture_engine_dump(
         replay=replay_path,
@@ -110,6 +118,7 @@ def main() -> int:
         end_frame=end_frame,
         timeout=float(args.timeout),
         collision_probe_path=collision_probe_path,
+        throw_laser_event_probe_path=throw_laser_event_probe_path,
     )
     if rc != 0:
         raise SystemExit(f"capture failed for replay={replay_path} frame_window={start_frame}..{end_frame}")
@@ -135,6 +144,10 @@ def main() -> int:
     }
     if collision_probe_path is not None:
         summary["collision_probe_jsonl"] = str(collision_probe_path.relative_to(root))
+    if throw_laser_event_probe_path is not None:
+        summary["throw_laser_event_probe_jsonl"] = str(
+            throw_laser_event_probe_path.relative_to(root)
+        )
     summary_path = out_dir / "summary.json"
     summary_path.write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 

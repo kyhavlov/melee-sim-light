@@ -15,6 +15,11 @@ def test_seed_schema_includes_staling_fields() -> None:
     # Throw-side pulse-latch schema scaffold (future causal ownership wiring).
     assert "throw_pulse_consumed" in SEED_DTYPE.fields
     assert "throw_pulse_crossed_prev_frame" in SEED_DTYPE.fields
+    assert "throw_command_pending_pulse_frame" in SEED_DTYPE.fields
+    assert "item_hitlist_victim_port" in SEED_DTYPE.fields
+    assert "item_hitlist_victim_cd" in SEED_DTYPE.fields
+    assert "item_hitlist_victim_hitbox_mask" in SEED_DTYPE.fields
+    assert "item_hitlist_victim_iid" in SEED_DTYPE.fields
     assert "source_clear_timer_x18c8" in SEED_DTYPE.fields
     assert "source_clear_owner_set_phase" in SEED_DTYPE.fields
     assert "source_clear_processhit_damage_pending_phase" in SEED_DTYPE.fields

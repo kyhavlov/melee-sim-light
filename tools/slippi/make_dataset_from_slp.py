@@ -767,7 +767,7 @@ def _derive_source_clear_timer_x18c8_and_owner_phase_seed_lanes(
     last_hit_by_u8: np.ndarray,
     x9_b1_by_char: dict[int, np.ndarray],
     source_clear_init_frames: int,
-) -> tuple[np.ndarray, np.ndarray]:
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Derive strictly-causal x18C8 countdown + owner-set phase lane.
 
     Decomp ownership:
@@ -1481,7 +1481,7 @@ def _derive_throw_pulse_seed_lanes(
     act_throw_hi: int,
     act_damage_fly_top: int,
     falco_char_id: int,
-) -> tuple[np.ndarray, np.ndarray]:
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
     Derive throw pulse seed lanes strictly from seed-visible replay lanes.
 
@@ -1501,8 +1501,25 @@ def _derive_throw_pulse_seed_lanes(
     n_samples = int(seed_action_id_u16.shape[0])
     out_consumed = np.zeros((n_samples, 4), dtype=np.uint8)
     out_crossed_prev = np.zeros((n_samples, 4), dtype=np.uint8)
+    out_pending = np.zeros((n_samples, 4), dtype=np.uint8)
     if n_samples == 0:
-        return out_consumed, out_crossed_prev
+        return out_consumed, out_crossed_prev, out_pending
+
+    # Prefix-causal throw command cursor model:
+    # - ftAction_80073354 subtracts frame_speed_mul from the command timer and executes command
+    #   events when that timer reaches <=0.
+    # - ftAction_80071974 writes a bool throw_flags_b0, and ftFx_Throw_Anim consumes at most one
+    #   such bool in the same Anim callback, so multiple projectile commands crossed by one large
+    #   visual frame advance collapse to a single pending shot.
+    # - This stateful cursor avoids treating visible post-frame action_frame crossings as fresh
+    #   commands when the command timer still has a positive delta to the next event.
+    # refs/melee/src/melee/ft/ftaction.c::{ftAction_80071974,ftAction_80073354}
+    # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
+    cursor_char = [-1, -1, -1, -1]
+    cursor_action = [-1, -1, -1, -1]
+    cursor_next_idx = [0, 0, 0, 0]
+    cursor_timer = [0.0, 0.0, 0.0, 0.0]
+    cursor_active = [False, False, False, False]
 
     for i in range(n_samples):
         for p in range(int(num_players)):
@@ -1510,11 +1527,51 @@ def _derive_throw_pulse_seed_lanes(
             char_id = int(seed_char_id_u8[i, p])
             pulses = pulse_frames_by_char_action.get((char_id, action_id), ())
             if not pulses:
+                cursor_active[p] = False
+                cursor_char[p] = char_id
+                cursor_action[p] = action_id
                 continue
             af = float(seed_anim_frame_f32[i, p])
             rate = float(seed_frame_speed_mul_f32[i, p])
             if not np.isfinite(af) or not np.isfinite(rate) or rate <= 0.0:
+                cursor_active[p] = False
                 continue
+
+            if (
+                not cursor_active[p]
+                or cursor_char[p] != char_id
+                or cursor_action[p] != action_id
+                or (i > 0 and float(seed_anim_frame_f32[i - 1, p]) > af)
+            ):
+                cursor_char[p] = char_id
+                cursor_action[p] = action_id
+                cursor_active[p] = True
+                next_idx = 0
+                while next_idx < len(pulses) and float(pulses[next_idx]) <= af:
+                    next_idx += 1
+                cursor_next_idx[p] = next_idx
+                if next_idx < len(pulses):
+                    cursor_timer[p] = max(float(pulses[next_idx]) - af, 0.0)
+                else:
+                    cursor_timer[p] = float("inf")
+
+            if cursor_active[p] and cursor_next_idx[p] < len(pulses):
+                timer_after = cursor_timer[p] - rate
+                if timer_after <= 1.0e-4:
+                    pulse = int(pulses[cursor_next_idx[p]])
+                    if 0 < pulse <= 255:
+                        out_pending[i, p] = np.uint8(pulse)
+                    cursor_next_idx[p] += 1
+                    if cursor_next_idx[p] < len(pulses):
+                        # Command timers are relative deltas between command events. Do not carry
+                        # the overshoot into the next command; the bool throw_flags_b0 consume is
+                        # the one-shot output for this Anim callback.
+                        cursor_timer[p] = float(pulses[cursor_next_idx[p]] - pulse)
+                    else:
+                        cursor_timer[p] = float("inf")
+                else:
+                    cursor_timer[p] = timer_after
+
             af_prev = af - rate
             crossed_pulse = -1
             for pulse_frame in pulses:
@@ -1566,7 +1623,125 @@ def _derive_throw_pulse_seed_lanes(
             if stale_window:
                 out_consumed[i, p] = np.uint8(1)
 
-    return out_consumed, out_crossed_prev
+    return out_consumed, out_crossed_prev, out_pending
+
+
+def _derive_throw_laser_item_hitlist_seed_lanes(
+    *,
+    seed_action_id_u16: np.ndarray,
+    seed_grab_owner_port_u8: np.ndarray,
+    seed_instance_hit_by_u16: np.ndarray,
+    seed_instance_id_u16: np.ndarray,
+    seed_items: np.ndarray,
+    num_players: int,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """
+    Derive a compact per-item victims_1 seed lane for throw-side laser articles.
+
+    Decomp ownership:
+    - Item BODY collision inserts fighter victims into HitCapsule.victims_1 through
+      it_8026FAC4 / it_8026FA2C -> lbColl_80008688 before it_80272460 damage callbacks.
+    - Throw-side laser articles are spawned by ftFx_Throw_Anim through it_8029C6CC, but their
+      BODY rehit/carry decision is item HitCapsule state, not command timing alone.
+
+    Producer policy:
+    - Keep the lane prefix-causal and narrow: only state1 throw laser items whose seeded xDA8
+      identity (`item.instance_id`) matches an attached grabbed/thrown victim's
+      `instance_hit_by`.
+    - Dolphin v10 dumps show the authoritative state is per item HitCapsule, not per item: Fox
+      ThrowLw attached rows populate hitboxes 0/1, while Falco rows can populate 2/3 while 0/1
+      remain BODY-eligible. The seed lane therefore carries a compact hitbox mask instead of an
+      item-wide latch; Falco production remains disabled until terminal clear/callback phase is
+      explicitly represented.
+    - This covers replay-real attached-pulse carry rows without broadening to ordinary ThrowHi
+      hitstun rows such as BHH:937 where the dump showed no relevant item hitlist entry.
+
+    refs/melee/src/melee/it/itcoll.c::{it_8026FAC4,it_8026FA2C,it_80272460}
+    refs/melee/src/melee/lb/lbcollision.c::lbColl_80008688
+    refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
+    tools/dolphin/patches/ishiiruka_engine_dump_item_hitlist_v10.patch
+    """
+    n_samples = int(seed_action_id_u16.shape[0])
+    victim_port = np.full((n_samples, 15), 0xFF, dtype=np.uint8)
+    victim_cd = np.zeros((n_samples, 15), dtype=np.uint8)
+    victim_hitbox_mask = np.zeros((n_samples, 15), dtype=np.uint8)
+    victim_iid = np.zeros((n_samples, 15), dtype=np.uint16)
+    if n_samples == 0:
+        return victim_port, victim_cd, victim_hitbox_mask, victim_iid
+
+    act_throw_lw = 222
+    throw_actions = {219, 220, 221, act_throw_lw}
+    grabbed_victim_actions = {
+        223,
+        224,
+        225,
+        226,
+        227,
+        228,
+        231,
+        232,
+        239,
+        240,
+        241,
+        242,
+        243,
+    }
+    # Reviewable v10 dump evidence:
+    # - Fox kind 54 attached ThrowLw (FSP:9182/9185): populated victims_1 entries on hitboxes 0/1.
+    # - Falco kind 55 attached ThrowLw controls/positives (QGD:443/454, PRH:527/533/539): victims_1
+    #   entries on hitboxes 2/3 coexist with still-eligible BODY callbacks on hitboxes 0/1. Runtime
+    #   therefore treats the hitbox mask as a per-HitCapsule suppressor, not an item-wide latch.
+    laser_hitbox_masks = {
+        54: np.uint8(0x03),
+        55: np.uint8(0x0C),
+    }
+    # Replay-real item hitlist dumps for throw lasers show x40_b4 cooldown 16 on populated
+    # victims_1 entries. The exact remaining value is not gameplay-critical for one-step reseed,
+    # but a nonzero decomp-shaped cooldown preserves tick semantics across the current frame.
+    throw_laser_rehit_cd = np.uint8(16)
+
+    for i in range(n_samples):
+        for it in range(min(15, int(seed_items.shape[1]))):
+            item = seed_items[i, it]
+            if int(item["exists"]) == 0:
+                continue
+            if int(item["state"]) != 1:
+                continue
+            item_type = int(item["type"])
+            if item_type not in laser_hitbox_masks:
+                continue
+            owner = int(item["owner"])
+            if owner < 0 or owner >= int(num_players):
+                continue
+            if int(seed_action_id_u16[i, owner]) not in throw_actions:
+                continue
+            item_iid = int(item["instance_id"])
+            if item_iid == 0:
+                continue
+
+            candidate = -1
+            for victim in range(int(num_players)):
+                if victim == owner:
+                    continue
+                if int(seed_grab_owner_port_u8[i, victim]) != owner:
+                    continue
+                if int(seed_action_id_u16[i, victim]) not in grabbed_victim_actions:
+                    continue
+                if int(seed_instance_hit_by_u16[i, victim]) != item_iid:
+                    continue
+                if candidate >= 0:
+                    candidate = -1
+                    break
+                candidate = victim
+            if candidate < 0:
+                continue
+
+            victim_port[i, it] = np.uint8(candidate)
+            victim_cd[i, it] = throw_laser_rehit_cd
+            victim_hitbox_mask[i, it] = laser_hitbox_masks[item_type]
+            victim_iid[i, it] = np.uint16(seed_instance_id_u16[i, candidate])
+
+    return victim_port, victim_cd, victim_hitbox_mask, victim_iid
 
 
 def _derive_landing_fallspecial_allow_interrupt_seed_lane(*, action_id_u16: np.ndarray) -> np.ndarray:
@@ -2982,6 +3157,7 @@ def _main_impl(args) -> None:
         # Throw pulse-consume seed lane is filled after item materialization from full seed_t arrays.
         samples["seed_t"]["throw_pulse_consumed"][:, slot] = 0
         samples["seed_t"]["throw_pulse_crossed_prev_frame"][:, slot] = 0
+        samples["seed_t"]["throw_command_pending_pulse_frame"][:, slot] = 0
         samples["seed_t"]["source_clear_owner_set_phase"][:, slot] = 0
         samples["seed_t"]["source_clear_processhit_damage_pending_phase"][:, slot] = 0
         samples["seed_t"]["fighter_8006cda4_pre_gate_consume_count"][:, slot] = 0
@@ -4068,7 +4244,11 @@ def _main_impl(args) -> None:
     # - runtime consumes this lane in src/items.c throw-side pulse reconstruction suppressor.
     # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
     # refs/melee/src/melee/ft/ftaction.c::{ftAction_80071974,ftAction_80073354}
-    throw_pulse_consumed, throw_pulse_crossed_prev = _derive_throw_pulse_seed_lanes(
+    (
+        throw_pulse_consumed,
+        throw_pulse_crossed_prev,
+        throw_command_pending_pulse_frame,
+    ) = _derive_throw_pulse_seed_lanes(
         seed_action_id_u16=samples["seed_t"]["action_id"],
         seed_char_id_u8=samples["seed_t"]["char_id"],
         seed_anim_frame_f32=samples["seed_t"]["anim_frame_f32"],
@@ -4088,6 +4268,7 @@ def _main_impl(args) -> None:
     )
     samples["seed_t"]["throw_pulse_consumed"] = throw_pulse_consumed
     samples["seed_t"]["throw_pulse_crossed_prev_frame"] = throw_pulse_crossed_prev
+    samples["seed_t"]["throw_command_pending_pulse_frame"] = throw_command_pending_pulse_frame
     samples["ref_t1"]["items"] = items_fixed[1:]
 
     # is_dead in compare is derived from stocks in the evaluator too, but fill it here for completeness.
@@ -4309,6 +4490,24 @@ def _main_impl(args) -> None:
     if int(num_players) == 2:
         grab_owner = derive_grab_owner_port_2p(action_id_u16_2p=post_action_id[:, :2])
         samples["seed_t"]["grab_owner_port"][:, :2] = grab_owner[:-1, :]
+
+    (
+        item_hitlist_victim_port,
+        item_hitlist_victim_cd,
+        item_hitlist_victim_hitbox_mask,
+        item_hitlist_victim_iid,
+    ) = _derive_throw_laser_item_hitlist_seed_lanes(
+        seed_action_id_u16=samples["seed_t"]["action_id"],
+        seed_grab_owner_port_u8=samples["seed_t"]["grab_owner_port"],
+        seed_instance_hit_by_u16=samples["seed_t"]["instance_hit_by"],
+        seed_instance_id_u16=samples["seed_t"]["instance_id"],
+        seed_items=samples["seed_t"]["items"],
+        num_players=num_players,
+    )
+    samples["seed_t"]["item_hitlist_victim_port"] = item_hitlist_victim_port
+    samples["seed_t"]["item_hitlist_victim_cd"] = item_hitlist_victim_cd
+    samples["seed_t"]["item_hitlist_victim_hitbox_mask"] = item_hitlist_victim_hitbox_mask
+    samples["seed_t"]["item_hitlist_victim_iid"] = item_hitlist_victim_iid
 
     pre_stick_x_unit_2d = np.zeros((n_frames, 4), dtype=np.float32)
     pre_stick_y_unit_2d = np.zeros((n_frames, 4), dtype=np.float32)

@@ -129,20 +129,68 @@ def _collect_rows(dump_path: str | Path, window: Window, ports: list[int]) -> di
         frame_items = []
         for ii in range(items_start, items_end):
             it = d.items[ii]
-            frame_items.append(
-                {
-                    "item_id": int(it["item_id"]),
-                    "kind": int(it["kind"]),
-                    "state": int(it["state"]),
-                    "owner_port": int(it["owner_port_i8"]),
-                    "anim_id": int(it["anim_id"]),
-                    "damage": int(it["damage"]),
-                    "pos_x": f32_from_bits(int(it["pos_x_bits"])),
-                    "pos_y": f32_from_bits(int(it["pos_y_bits"])),
-                    "vel_x": f32_from_bits(int(it["vel_x_bits"])),
-                    "vel_y": f32_from_bits(int(it["vel_y_bits"])),
-                }
-            )
+            item_row = {
+                "item_index": ii,
+                "item_id": int(it["item_id"]),
+                "kind": int(it["kind"]),
+                "state": int(it["state"]),
+                "owner_port": int(it["owner_port_i8"]),
+                "anim_id": int(it["anim_id"]),
+                "damage": int(it["damage"]),
+                "pos_x": f32_from_bits(int(it["pos_x_bits"])),
+                "pos_y": f32_from_bits(int(it["pos_y_bits"])),
+                "vel_x": f32_from_bits(int(it["vel_x_bits"])),
+                "vel_y": f32_from_bits(int(it["vel_y_bits"])),
+            }
+            if "xC34_damage_dealt" in it.dtype.names:
+                item_row.update(
+                    {
+                        "xC34_damage_dealt": int(it["xC34_damage_dealt"]),
+                        "xC48_clank_damage": int(it["xC48_clank_damage"]),
+                        "xC4C_reflect_damage": int(it["xC4C_reflect_damage"]),
+                        "xC50_shield_damage": int(it["xC50_shield_damage"]),
+                        "xCA8_callback_damage": int(it["xCA8_callback_damage"]),
+                        "xCBC_hitlag": f32_from_bits(int(it["xCBC_hitlag_bits"])),
+                        "xCC0_hitlag_min": f32_from_bits(int(it["xCC0_hitlag_min_bits"])),
+                        "xDA8_short": int(it["xDA8_short"]),
+                        "xDC8_word": int(it["xDC8_word"]),
+                        "xDCE_flags": int(it["xDCE_flags"]),
+                        "laser_scale": f32_from_bits(int(it["xDD4_laser_scale_bits"])),
+                        "laser_angle": f32_from_bits(int(it["xDD8_laser_angle_bits"])),
+                        "laser_speed": f32_from_bits(int(it["xDDC_laser_speed_bits"])),
+                        "laser_pos": [
+                            f32_from_bits(int(it["xDE0_laser_pos_x_bits"])),
+                            f32_from_bits(int(it["xDE4_laser_pos_y_bits"])),
+                            f32_from_bits(int(it["xDE8_laser_pos_z_bits"])),
+                        ],
+                    }
+                )
+            if d.item_hitlists.size != 0:
+                item_hitlists = []
+                hitlist_base = ii * 4
+                for hb_id in range(4):
+                    hl = d.item_hitlists[hitlist_base + hb_id]
+                    v1_ptr = [int(x) for x in hl["victims1_ptr"].tolist()]
+                    v1_cd = [int(x) for x in hl["victims1_cooldown"].tolist()]
+                    v2_ptr = [int(x) for x in hl["victims2_ptr"].tolist()]
+                    v2_cd = [int(x) for x in hl["victims2_cooldown"].tolist()]
+                    item_hitlists.append(
+                        {
+                            "hitbox_id": hb_id,
+                            "group": int(hl["group"]),
+                            "victims1_cursor": int(hl["victims1_cursor"]),
+                            "victims2_cursor": int(hl["victims2_cursor"]),
+                            "owner_gobj": int(hl["owner_gobj"]),
+                            "victims1_ptr": v1_ptr,
+                            "victims1_cooldown": v1_cd,
+                            "victims2_ptr": v2_ptr,
+                            "victims2_cooldown": v2_cd,
+                            "victims1_active_slots": [i for i, ptr in enumerate(v1_ptr) if ptr != 0],
+                            "victims2_active_slots": [i for i, ptr in enumerate(v2_ptr) if ptr != 0],
+                        }
+                    )
+                item_row["hitlist_provenance"] = item_hitlists
+            frame_items.append(item_row)
 
         for port in ports:
             idx = frame_slot * port_count + (port - 1)
@@ -278,6 +326,28 @@ def _summary_text(payload: dict[str, object]) -> str:
                 f" x19a4={r['shield_int_damage']} x19a8=0x{int(r['shield_attacker_gobj']):08x}"
                 f" x19ac={r['specialn_facing_dir']:.3f} x19b0={r['shield_hit_element']}"
             )
+        if r["items"]:
+            item_bits = []
+            for it in r["items"]:
+                desc = (
+                    f"it{it['item_index']} kind={it['kind']} st={it['state']} own={it['owner_port']} "
+                    f"xDA8={it.get('xDA8_short', 0)} dmg={it.get('xC34_damage_dealt', 0)} "
+                    f"xCA8={it.get('xCA8_callback_damage', 0)}"
+                )
+                if "hitlist_provenance" in it:
+                    compact = []
+                    for hb in it["hitlist_provenance"]:
+                        v1n = len(hb["victims1_active_slots"])
+                        v2n = len(hb["victims2_active_slots"])
+                        if v1n or v2n or hb["victims1_cursor"] or hb["victims2_cursor"]:
+                            compact.append(
+                                f"hb{hb['hitbox_id']}[g={hb['group']} c={hb['victims1_cursor']}/"
+                                f"{hb['victims2_cursor']} a={v1n}/{v2n}]"
+                            )
+                    if compact:
+                        desc += " " + " ".join(compact)
+                item_bits.append(desc)
+            lines.append("  items: " + " | ".join(item_bits))
     return "\n".join(lines).rstrip() + "\n"
 
 

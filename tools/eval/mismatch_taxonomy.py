@@ -2282,16 +2282,20 @@ def _throw_hard_moved_family(row: PlayerRow, names: tuple[str, str, str], field_
         "last_attack_landed",
     }:
         # Action-aligned Throw*/Thrown* rows whose only residual fields are hitlag, Slippi contact
-        # bits, hurtbox visibility, or source/scoreboard ids share the common throw/item bookkeeping
-        # owner. Keep action/article/lifetime bundles out of this hard move; the rejected ThrowLw
-        # current-pulse bridge is not restored.
+        # bits, hurtbox visibility, or source/scoreboard ids are combat/source bookkeeping, not item
+        # article identity. Dolphin v10 throw-laser dumps show state1 throw items keep
+        # xC34/xCA8/xCBC/xCC0 at zero in the remaining F14d shapes, so the retained item owner is
+        # the item-slot/article lifetime rows (F14c), while these player-only rows belong to the
+        # existing grounded/aerial combat adjacency owners.
         # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::{
         #   ftCo_ThrowHi_Anim,ftCo_800DD724,ftCo_800DE7C0,ftCo_800DDDE4}
         # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
-        # refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007A06C,ftColl_8007BE3C}
+        # refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007646C,ftColl_800763C0,ftColl_8007A06C,ftColl_8007BE3C}
         # refs/melee/src/melee/pl/plstale.c::{
         #   plStale_UpdateStaleMovesFromFighter,plStale_UpdateStaleMovesFromItem}
-        return "F14d_throw_source_scoreboard"
+        if row.on_ground == 0 or any(_looks_like_aerial(name) for name in names):
+            return "F09b_aerial_bookkeeping_adjacency"
+        return "F10b_grounded_combat_adjacency"
     return None
 
 
@@ -2624,6 +2628,20 @@ def _classify_item_slot_row(row: ItemSlotRow, action_names: dict[int, str]) -> s
         # refs/melee/src/melee/it/it_2725.c::it_8027B070
         # refs/slippi-ssbm-asm/Recording/SendItemInfo.s
         return "F12b_adjacent_instance_counter_order"
+    if (
+        item_types & {54, 55, 74, 75}
+        and any(_looks_like_guard(name) for name in names)
+        and row.ref_actions != row.out_actions
+        and field_set
+        & {"item_exists", "item_type", "item_owner", "item_state", "item_instance_id"}
+    ):
+        # If the guard action state itself diverges, item slot differences are fallout from the
+        # shield-hit/GuardSetOff callback ordering owner rather than independent laser lifetime.
+        # Keep same-action shield lifetime rows in F15 so real HitShield vs ShieldBounced ownership
+        # stays visible.
+        # refs/melee/src/melee/ft/ftcoll.c::{ftColl_80077688,ftColl_8007925C}
+        # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_80092F2C,ftCo_80093BC0}
+        return "F01_guard_release_collision"
     if any(_looks_like_guard(name) for name in names):
         if field_set and field_set <= {"item_owner", "item_instance_id"}:
             return "F15a_reflect_owner_transfer"

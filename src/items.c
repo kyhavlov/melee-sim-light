@@ -37,6 +37,79 @@ static inline uint8_t item_source_port0_for_owner(const MslBatch* batch, size_t 
   return (uint8_t)owner_slot;
 }
 
+static inline uint8_t item_any_hitbox_allows_fighter(MslBatch* batch, int bi, int item_slot,
+                                                     int victim, uint16_t victim_iid) {
+  // Item BODY collision iterates item HitCapsules; a populated victims_1 ring suppresses that
+  // HitCapsule, not the whole item. Dolphin v10 Falco ThrowLw dumps show hitboxes 2/3 can already
+  // carry an attached victim while hitboxes 0/1 remain BODY-eligible for the next callback phase.
+  // Keep the cheap item-level prefilter as "any hitbox may hit"; the narrowphase loop below still
+  // checks the exact hitbox before testing geometry.
+  // refs/melee/src/melee/it/itcoll.c::{it_8026FA2C,it_8026FAC4,it_80272460}
+  // refs/melee/src/melee/lb/lbcollision.c::lbColl_80008688
+  for (int hb = 0; hb < MSL_MAX_HITBOXES; hb++) {
+    if (hitlist_allows_item_hitbox_fighter(batch, bi, item_slot, hb, victim, victim_iid)) {
+      return 1u;
+    }
+  }
+  return 0u;
+}
+
+static inline uint8_t item_all_hitboxes_allow_fighter(MslBatch* batch, int bi, int item_slot,
+                                                      int victim, uint16_t victim_iid) {
+  for (int hb = 0; hb < MSL_MAX_HITBOXES; hb++) {
+    if (!hitlist_allows_item_hitbox_fighter(batch, bi, item_slot, hb, victim, victim_iid)) {
+      return 0u;
+    }
+  }
+  return 1u;
+}
+
+static int throw_laser_unique_same_source_victim(const MslBatch* batch, int bi, int owner) {
+  if (batch == NULL || owner < 0 || owner >= (int)batch->config.num_players) {
+    return -1;
+  }
+  const size_t o_idx = msl_idx_player(bi, owner);
+  const uint8_t source_port = item_source_port0_for_owner(batch, o_idx, owner);
+  int candidate = -1;
+  for (int vp = 0; vp < (int)batch->config.num_players; vp++) {
+    if (vp == owner) {
+      continue;
+    }
+    const size_t v_idx = msl_idx_player(bi, vp);
+    if (batch->state.hitstun[v_idx] == 0u || batch->state.last_hit_by[v_idx] != source_port ||
+        batch->state.instance_hit_by[v_idx] != batch->state.instance_id[o_idx]) {
+      continue;
+    }
+    if (candidate >= 0) {
+      return -1;
+    }
+    candidate = vp;
+  }
+  return candidate;
+}
+
+static void throw_laser_advance_combo_bookkeeping(MslBatch* batch, int bi, int owner, int victim) {
+  if (batch == NULL || owner < 0 || victim < 0 || owner >= (int)batch->config.num_players ||
+      victim >= (int)batch->config.num_players) {
+    return;
+  }
+  const size_t o_idx = msl_idx_player(bi, owner);
+  const size_t v_idx = msl_idx_player(bi, victim);
+  const uint8_t attack_id_u8 = (uint8_t)batch->state.attack_id[o_idx];
+  const uint8_t cur_victim = batch->state.combo_victim_port[o_idx];
+  if (batch->state.attack_id[o_idx] == (uint16_t)MSL_FT_MOVE_ID_DEFAULT ||
+      batch->state.last_attack_landed[o_idx] != attack_id_u8 ||
+      batch->state.combo_count[o_idx] == 0u ||
+      (cur_victim != 0xFFu && cur_victim != (uint8_t)victim)) {
+    return;
+  }
+  batch->state.combo_count[o_idx] = (uint8_t)(batch->state.combo_count[o_idx] + 1u);
+  if (cur_victim == 0xFFu) {
+    batch->state.combo_victim_port[o_idx] = (uint8_t)victim;
+  }
+  batch->state.combo_victim_instance_id[o_idx] = batch->state.instance_id[v_idx];
+}
+
 static inline void item_slot_clear(MslBatch* batch, size_t ii) {
   if (batch == NULL) {
     return;
@@ -65,8 +138,13 @@ static inline void item_slot_clear(MslBatch* batch, size_t ii) {
   batch->state.item_misc2[ii] = 0;
   batch->state.item_misc3[ii] = 0;
 
-  // Clear per-item victim rings (hitlist).
-  hitlist_capsule_clear(&batch->state.item_hitlist[ii]);
+  // Clear per-item/per-HitCapsule victim rings (hitlist).
+  // Items own one HitCapsule victim ring per article hitbox:
+  // refs/melee/src/melee/it/itcoll.c::{it_8026FA2C,it_8026FAC4}
+  const size_t hitlist_base = ii * (size_t)MSL_MAX_HITBOXES;
+  for (size_t hb = 0; hb < (size_t)MSL_MAX_HITBOXES; hb++) {
+    hitlist_capsule_clear(&batch->state.item_hitlist[hitlist_base + hb]);
+  }
 }
 
 static inline void item_slot_swap(MslBatch* batch, size_t a, size_t b) {
@@ -102,11 +180,15 @@ static inline void item_slot_swap(MslBatch* batch, size_t a, size_t b) {
   SWAP(uint8_t, batch->state.item_misc3);
 #undef SWAP
 
-  // Swap per-item hitlist lanes to preserve deterministic item ordering invariants.
+  // Swap per-item/per-HitCapsule hitlist lanes to preserve deterministic item ordering invariants.
   {
-    const MslHitlistCapsule tmp = batch->state.item_hitlist[a];
-    batch->state.item_hitlist[a] = batch->state.item_hitlist[b];
-    batch->state.item_hitlist[b] = tmp;
+    const size_t a_base = a * (size_t)MSL_MAX_HITBOXES;
+    const size_t b_base = b * (size_t)MSL_MAX_HITBOXES;
+    for (size_t hb = 0; hb < (size_t)MSL_MAX_HITBOXES; hb++) {
+      const MslHitlistCapsule tmp = batch->state.item_hitlist[a_base + hb];
+      batch->state.item_hitlist[a_base + hb] = batch->state.item_hitlist[b_base + hb];
+      batch->state.item_hitlist[b_base + hb] = tmp;
+    }
   }
 }
 
@@ -1718,17 +1800,18 @@ static inline void item_apply_shine_reflect_callback(MslBatch* batch, size_t ii,
   msl_anim_timebase_enter(batch, reflector_idx, 0.0f, 1.0f);
 }
 
-static void laser_spawn_from_fighter(MslBatch* batch, int bi, int owner, const MslLaserParams* lp,
-                                     uint8_t spawn_state, uint8_t use_velocity_override,
-                                     float override_vx, float override_vy,
-                                     uint8_t apply_spawn_motion_step,
-                                     uint8_t throw_lw_late_pulse_transn_y) {
+static int laser_spawn_from_fighter(MslBatch* batch, int bi, int owner, const MslLaserParams* lp,
+                                    uint8_t spawn_state, uint8_t use_velocity_override,
+                                    float override_vx, float override_vy,
+                                    uint8_t apply_spawn_motion_step,
+                                    uint8_t throw_lw_late_pulse_transn_y, int seed_hitlist_victim,
+                                    uint16_t seed_hitlist_victim_iid, uint8_t seed_hitlist_mask) {
   if (batch == NULL || lp == NULL) {
-    return;
+    return -1;
   }
   const int slot = items_alloc_slot(batch, bi);
   if (slot < 0) {
-    return;
+    return -1;
   }
   const size_t ii = msl_idx_item(bi, slot);
   item_slot_clear(batch, ii);
@@ -1737,7 +1820,7 @@ static void laser_spawn_from_fighter(MslBatch* batch, int bi, int owner, const M
   const uint8_t char_id = batch->state.char_id[o_idx];
   const uint32_t anim_u32 = batch->state.animation_index[o_idx];
   if (anim_u32 > 0xFFFFu) {
-    return;
+    return -1;
   }
   const uint16_t msid = (uint16_t)anim_u32;
   const float anim_frame_f32 = items_cur_anim_frame_f32(batch, o_idx);
@@ -1762,8 +1845,26 @@ static void laser_spawn_from_fighter(MslBatch* batch, int bi, int owner, const M
     spawn_part_id = chp->laser_spawn_joint_part_id;
   }
   float m[12];
-  if (anim_pose_get_matrix(char_id, msid, frame, spawn_part_id, m) != 0) {
-    return;
+  int matrix_ok = -1;
+  if (action_is_blaster_throw(batch->state.action_id[o_idx])) {
+    // Throw laser hold-joint pose:
+    // - ftFx_Throw_Anim samples ftFx_SpecialN_FtGetHoldJoint / ItGetHoldJoint from live JObj
+    //   matrices in the Anim callback, then calls it_8029C6CC.
+    // - HSD_AObjInterpretAnim owns float-frame local SRT before lb_8000B1CC samples the joint.
+    // - Use the float collision-pose sampler for throw-side lasers instead of integer SSANIM01
+    //   frames; integer sampling was observed to use a later ThrowHi hold-joint vector on
+    //   transient first-pulse spawn/delete rows.
+    // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
+    // refs/melee/src/sysdolphin/baselib/aobj.c::HSD_AObjInterpretAnim
+    // refs/melee/src/melee/lb/lb_00B0.c::lb_8000B1CC
+    // refs/melee/src/melee/it/items/itfoxlaser.c::it_8029C6CC
+    matrix_ok =
+        anim_pose_get_collision_matrix_f32(batch, o_idx, msid, anim_frame_f32, spawn_part_id, m);
+  } else {
+    matrix_ok = anim_pose_get_matrix(char_id, msid, frame, spawn_part_id, m);
+  }
+  if (matrix_ok != 0) {
+    return -1;
   }
   float lx = 0.0f, ly = 0.0f, lz = 0.0f;
   msl_mtx34_mul_point(m, lp->spawn_off_xyz, &lx, &ly, &lz);
@@ -1907,6 +2008,103 @@ static void laser_spawn_from_fighter(MslBatch* batch, int bi, int owner, const M
   batch->state.item_pos_x[ii] = pos_x;
   batch->state.item_pos_y[ii] = pos_y;
   batch->state.item_timer[ii] = (float)lp->lifetime_frames;
+  if (seed_hitlist_victim >= 0) {
+    // Throw-laser pending-spawn item HitCapsule seed:
+    // - ftFx_Throw_Anim spawns throw-side state1 lasers through it_8029C6CC, then item BODY
+    //   collision uses per-HitCapsule victim rings via it_8026FAC4 / lbColl_80008688.
+    // - Dolphin v10 dumps for BHH:4335 show the newly spawned first ThrowHi pulse carrying the
+    //   same victim in item hitbox 2 before the next Slippi item post-frame. Seed that ring at
+    //   spawn so the BODY callback does not immediately consume the replay-carried article.
+    // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
+    // refs/melee/src/melee/it/items/itfoxlaser.c::it_8029C6CC
+    // refs/melee/src/melee/it/itcoll.c::{it_8026FA2C,it_8026FAC4,it_80272460}
+    // refs/melee/src/melee/lb/lbcollision.c::lbColl_80008688
+    for (int hb = 0; hb < MSL_MAX_HITBOXES; hb++) {
+      if ((seed_hitlist_mask & (uint8_t)(1u << (uint8_t)hb)) == 0u) {
+        continue;
+      }
+      hitlist_register_item_hitbox_fighter(batch, bi, slot, hb, seed_hitlist_victim,
+                                           seed_hitlist_victim_iid, (int)MSL_LBCOLL_INSERT_FT_BODY,
+                                           16u);
+    }
+  }
+  return slot;
+}
+
+static int throwlw_attached_victim_for_owner(const MslBatch* batch, int bi, int owner) {
+  if (batch == NULL) {
+    return -1;
+  }
+  const int num_players = (int)batch->config.num_players;
+  int candidate = -1;
+  for (int vp = 0; vp < num_players; vp++) {
+    if (vp == owner) {
+      continue;
+    }
+    const size_t v_idx = msl_idx_player(bi, vp);
+    if (batch->state.grab_owner_port[v_idx] != (uint8_t)owner ||
+        batch->state.action_id[v_idx] != (uint16_t)MSL_ACT_THROWN_LW) {
+      continue;
+    }
+    if (candidate >= 0) {
+      return -1;
+    }
+    candidate = vp;
+  }
+  return candidate;
+}
+
+static void laser_spawn_apply_throwlw_attached_body_callback(MslBatch* batch, int bi, int owner,
+                                                             int slot, const MslLaserParams* lp) {
+  if (batch == NULL || lp == NULL || slot < 0) {
+    return;
+  }
+  const size_t o_idx = msl_idx_player(bi, owner);
+  if (batch->state.action_id[o_idx] != (uint16_t)MSL_ACT_THROW_LW) {
+    return;
+  }
+  const int victim = throwlw_attached_victim_for_owner(batch, bi, owner);
+  if (victim < 0) {
+    return;
+  }
+  const size_t v_idx = msl_idx_player(bi, victim);
+  if (batch->state.hitlag_pre_timer[v_idx] != 0u) {
+    return;
+  }
+  const size_t ii = msl_idx_item(bi, slot);
+  if (batch->state.item_exists[ii] == 0u || batch->state.item_state[ii] != 1u ||
+      batch->state.item_owner[ii] != (int8_t)owner) {
+    return;
+  }
+
+  // ThrowLw spawn-time attached BODY callback, frame-28 command phase:
+  // - ftAction_80073354 / ftAction_80071974 execute one set_throw_spawn_projectile command into
+  //   throw_flags_b0, and ftFx_Throw_Anim spawns the state1 laser through it_8029C6CC before item
+  //   BODY callbacks.
+  // - v10 PRH:533/5637 dumps show no live state1 shot in seed, a pending frame-28 command, then a
+  //   freshly spawned Falco shot whose BODY callback applies attached-victim hitlag/bookkeeping.
+  // - First/terminal Falco phases need separate callback state and stay excluded by caller gates.
+  // refs/melee/src/melee/ft/ftaction.c::{ftAction_80071974,ftAction_80073354}
+  // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
+  // refs/melee/src/melee/it/items/itfoxlaser.c::it_8029C6CC
+  // refs/melee/src/melee/it/itcoll.c::{it_8026FAC4,it_80272460}
+  // refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007646C,ftColl_800763C0}
+  const MslItemHitResult res = combat_apply_item_hit(
+      batch, bi, owner, victim, batch->state.item_attack_id[ii],
+      batch->state.item_attack_instance[ii], batch->state.item_instance_id[ii],
+      batch->state.item_type[ii], batch->state.item_state[ii], lp->state1_damage, lp->state1_angle,
+      lp->state1_kbg, lp->state1_wsk, lp->state1_bkb, 1u, lp->state1_element);
+  if (res == MSL_ITEM_HIT_APPLIED_CONSUME_ITEM) {
+    item_slot_clear(batch, ii);
+    return;
+  }
+  if (res != MSL_ITEM_HIT_NONE) {
+    const uint16_t victim_iid = batch->state.instance_id[v_idx];
+    hitlist_register_item_hitbox_fighter(batch, bi, slot, 0, victim, victim_iid,
+                                         (int)MSL_LBCOLL_INSERT_FT_BODY, 0);
+    hitlist_register_item_hitbox_fighter(batch, bi, slot, 1, victim, victim_iid,
+                                         (int)MSL_LBCOLL_INSERT_FT_BODY, 0);
+  }
 }
 
 static void illusion_items_update_and_collide(MslBatch* batch, int bi) {
@@ -2020,7 +2218,7 @@ static void illusion_items_update_and_collide(MslBatch* batch, int bi) {
         continue;
       }
       const uint16_t def_iid = batch->state.instance_id[d_idx];
-      if (!hitlist_allows_item_fighter(batch, bi, it, def, def_iid)) {
+      if (!hitlist_allows_item_hitbox_fighter(batch, bi, it, 0, def, def_iid)) {
         continue;
       }
 
@@ -2069,8 +2267,8 @@ static void illusion_items_update_and_collide(MslBatch* batch, int bi) {
             batch->state.item_hitlag[ii] = batch->state.hitlag[d_idx];
           }
           const uint16_t def_iid_post = batch->state.instance_id[d_idx];
-          hitlist_register_item_fighter(batch, bi, it, def, def_iid_post,
-                                        (int)MSL_LBCOLL_INSERT_FT_SHIELD, 0);
+          hitlist_register_item_hitbox_fighter(batch, bi, it, 0, def, def_iid_post,
+                                               (int)MSL_LBCOLL_INSERT_FT_SHIELD, 0);
           break;
         }
       }
@@ -2116,8 +2314,8 @@ static void illusion_items_update_and_collide(MslBatch* batch, int bi) {
         // refs/melee/src/melee/it/items/itfoxillusion.c::itFoxIllusion_Logic14_DmgDealt
       }
       const uint16_t def_iid_post = batch->state.instance_id[d_idx];
-      hitlist_register_item_fighter(batch, bi, it, def, def_iid_post,
-                                    (int)MSL_LBCOLL_INSERT_FT_BODY, 0);
+      hitlist_register_item_hitbox_fighter(batch, bi, it, 0, def, def_iid_post,
+                                           (int)MSL_LBCOLL_INSERT_FT_BODY, 0);
       break;
     }
 
@@ -2306,7 +2504,18 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
       const uint16_t def_iid = batch->state.instance_id[d_idx];
       // Rehit suppression (HitCapsule victim rings): do not rehurt the same fighter repeatedly
       // while the item persists.
-      if (!hitlist_allows_item_fighter(batch, bi, it, def, def_iid)) {
+      // Item HitCapsule victim rings are per hitbox, not item-wide:
+      // - it_8026FA2C / it_8026FAC4 propagate victim-ring writes by HitCapsule group,
+      //   and lbColl_80008688 checks the selected HitCapsule's victims_1 ring.
+      // - v10 event probes for BHH:4266 show a Fox state1 throw laser can carry hb2 victim-ring
+      //   state while hb0 remains eligible for same-frame BODY/give-damage/destroy.
+      // Keep this prefilter as "any hitbox remains eligible"; the narrowphase loop below still
+      // tests the exact hitbox ring before probing geometry.
+      // refs/melee/src/melee/it/itcoll.c::{it_8026FA2C,it_8026FAC4,it_80272460}
+      // refs/melee/src/melee/lb/lbcollision.c::lbColl_80008688
+      const uint8_t item_hitlist_prefilter_allows =
+          item_any_hitbox_allows_fighter(batch, bi, it, def, def_iid);
+      if (!item_hitlist_prefilter_allows) {
         continue;
       }
 
@@ -2567,17 +2776,20 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
             }
           }
         }
-        if (!shield_hit && laser_age_frames > 1.0f &&
-            batch->state.action_id[d_idx] == (uint16_t)MSL_ACT_GUARD_REFLECT &&
-            batch->state.guard_reflect_timer_x14_seed[d_idx] == 1u && common != NULL &&
-            common->powershield_reflect_size > 0.0f &&
-            // Slippi state_flags[0] is raw fp+0x2218. Keep this final-x14 handoff on the pure
-            // reflect-descriptor state byte after the GuardReflect tick: reflect behavior (0x04)
-            // with no high command/interrupt bits. Aggregate controls with 0x20/0x40/0x80 stay on
-            // the live-article GuardReflect owner lane.
-            // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm (fp+0x2218 byte)
-            // refs/melee/src/melee/ft/ftcoll.c::ftColl_CreateReflectHit
-            (batch->state.state_flags[(d_idx * 5u) + 0u] & 0xE4u) == 0x04u) {
+        // Slippi state_flags[0] is raw fp+0x2218. Keep this final-x14 handoff on the pure
+        // reflect-descriptor state byte after the GuardReflect tick: reflect behavior (0x04)
+        // with no high command/interrupt bits. Aggregate controls with 0x20/0x40/0x80 stay on
+        // the live-article GuardReflect owner lane.
+        // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm (fp+0x2218 byte)
+        // refs/melee/src/melee/ft/ftcoll.c::ftColl_CreateReflectHit
+        const uint8_t guard_reflect_pure_final_x14_hitshield =
+            (batch->state.action_id[d_idx] == (uint16_t)MSL_ACT_GUARD_REFLECT &&
+             batch->state.guard_reflect_timer_x14_seed[d_idx] == 1u &&
+             (batch->state.state_flags[(d_idx * 5u) + 0u] & 0xE4u) == 0x04u)
+                ? 1u
+                : 0u;
+        if (!shield_hit && laser_age_frames > 1.0f && guard_reflect_pure_final_x14_hitshield &&
+            common != NULL && common->powershield_reflect_size > 0.0f) {
           float reflect_y = 0.0f;
           if (item_guard_reflect_bone_y(batch, d_idx, &reflect_y)) {
             const float reflect_r =
@@ -2806,7 +3018,7 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
           // refs/melee/src/melee/it/items/itfoxlaser.c::{it_8029C504,itFoxlaser_UnkMotion1_Anim}
           // refs/melee/src/melee/it/item.c::Item_80269DC8
           const uint8_t can_shield_bounce =
-              shield_bounce_contact_found &&
+              shield_bounce_contact_found && !guard_reflect_pure_final_x14_hitshield &&
               // Late locomotion->GuardReflect frozen snapshots can already resolve projectile
               // contact through the regular shield-hit / GuardSetOff owner lane while the shot is
               // only one frame old. Allow the normal shield-bounce keepalive there instead of
@@ -2853,10 +3065,13 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
       // Minimal eligibility: skip intangible hit-status, but allow disabled-capsule contact to
       // consume the item below without entering Fighter_ProcessHit.
       // Slippi post-frame: `hurtbox_state` is seeded; movescript hit status can overwrite it.
-      const uint8_t disabled_contact_only =
-          (batch->state.hurtbox_state[d_idx] == (uint8_t)MSL_HURTCAPS_DISABLED) ? 1u : 0u;
       const uint8_t terminal_x1990_body =
           batch->state.colanim_terminal_x1990_item_body_guard[d_idx];
+      const uint8_t disabled_contact_only =
+          (batch->state.hurtbox_state[d_idx] == (uint8_t)MSL_HURTCAPS_DISABLED &&
+           terminal_x1990_body != 2u)
+              ? 1u
+              : 0u;
       if (terminal_x1990_body == 1u) {
         // Terminal x1990 item BODY guard:
         // - Fighter_8006A360 decrements x1990 and can clear visible x198C before Slippi t+1.
@@ -2875,7 +3090,9 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
       // Terminal x1990 + x1994 carry:
       // Fighter_8006A360 sets x198C to 1 when x1990 expires while x1994 remains live. The item
       // BODY path only blocks collision-status value 2, so allow the ordinary BODY hit instead of
-      // treating the stale replay-visible hurtbox_state=2 as intangible for this pass.
+      // treating the stale replay-visible hurtbox_state=2 as intangible for this pass; value 2
+      // also bypasses the disabled-contact-only clear path above so Fighter_ProcessHit receives
+      // the BODY damage owner.
       // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
       // refs/melee/src/melee/ft/ftcoll.c::ftColl_8007925C
 
@@ -2955,6 +3172,7 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
 
       uint8_t hit_hurt_height = 0;
       uint8_t hit = 0;
+      uint8_t hit_hb_id = 0xFFu;
       float body_overlap_amount = 0.0f;
       // Deterministic order: offsets (script order) then capsule slots.
       const uint8_t off_n =
@@ -2999,6 +3217,9 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
       // refs/melee/src/melee/ft/ftcoll.c::ftColl_8007B868
       const uint8_t use_swept_body = laser_grounded_body_uses_sweep(batch, d_idx, laser_age_frames);
       for (uint8_t oi = 0; oi < off_n && oi < (uint8_t)MSL_LASER_MAX_HITBOX_OFFS_X && !hit; oi++) {
+        if (!hitlist_allows_item_hitbox_fighter(batch, bi, it, (int)oi, def, def_iid)) {
+          continue;
+        }
         const float off_x =
             (laser_state == 0u) ? lp->hitbox_offsets_x[oi] : lp->state1_hitbox_offsets_x[oi];
         const float s0 = off_x * laser_prev_offset_scale;
@@ -3014,20 +3235,24 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
                   batch, bi, def, hx0, hy0, sx, sy, sr, (int)ci, &hit_hurt_height,
                   &body_overlap_amount, flatten_body_hurt_z, 1.0f)) {
             hit = 1;
+            hit_hb_id = oi;
             break;
           }
         }
       }
       // If no scripted offsets exist, fall back to the projectile origin.
       if (!hit && cap_n > 0 && off_n == 0) {
-        for (uint8_t ci = 0; ci < cap_n; ci++) {
-          const float hx0 = use_swept_body ? x0 : x;
-          const float hy0 = use_swept_body ? y0 : y;
-          if (item_swept_sphere_capsule_overlap_amount(batch, bi, def, hx0, hy0, x, y, sr, (int)ci,
-                                                       &hit_hurt_height, &body_overlap_amount,
-                                                       flatten_body_hurt_z, 1.0f)) {
-            hit = 1;
-            break;
+        if (hitlist_allows_item_hitbox_fighter(batch, bi, it, 0, def, def_iid)) {
+          for (uint8_t ci = 0; ci < cap_n; ci++) {
+            const float hx0 = use_swept_body ? x0 : x;
+            const float hy0 = use_swept_body ? y0 : y;
+            if (item_swept_sphere_capsule_overlap_amount(
+                    batch, bi, def, hx0, hy0, x, y, sr, (int)ci, &hit_hurt_height,
+                    &body_overlap_amount, flatten_body_hurt_z, 1.0f)) {
+              hit = 1;
+              hit_hb_id = 0u;
+              break;
+            }
           }
         }
       }
@@ -3036,6 +3261,9 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
         const float body_hurt_radius_mul = item_lbColl_804D7A38_hurt_radius_mul();
         for (uint8_t oi = 0; oi < off_n && oi < (uint8_t)MSL_LASER_MAX_HITBOX_OFFS_X && !hit;
              oi++) {
+          if (!hitlist_allows_item_hitbox_fighter(batch, bi, it, (int)oi, def, def_iid)) {
+            continue;
+          }
           const float off_x =
               (laser_state == 0u) ? lp->hitbox_offsets_x[oi] : lp->state1_hitbox_offsets_x[oi];
           const float s0 = off_x * laser_prev_offset_scale;
@@ -3053,6 +3281,7 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
                     batch, bi, def, sx0, sy0, sx, sy, sr, (int)ci, &hit_hurt_height,
                     &body_overlap_amount, flatten_body_hurt_z, body_hurt_radius_mul)) {
               hit = 1;
+              hit_hb_id = oi;
               break;
             }
           }
@@ -3061,24 +3290,153 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
       if (!hit && laser_grounded_body_landing_fall_special_aabb_bridge(
                       batch, bi, def, x0, y0, x, y, sr, laser_age_frames, &hit_hurt_height)) {
         hit = 1;
+        hit_hb_id = 0xFFu;
+      }
+      if (!hit && laser_state != 0u &&
+          batch->state.action_id[o_idx] == (uint16_t)MSL_ACT_THROW_HI &&
+          batch->state.throw_pulse_crossed_prev_frame[o_idx] ==
+              (uint8_t)MSL_THROWHI_PREV_PHASE_AF &&
+          batch->state.hitstun[d_idx] > 0u &&
+          batch->state.last_hit_by[d_idx] == item_source_port0_for_owner(batch, o_idx, owner)) {
+        if (((batch->state.pos_x[d_idx] - batch->state.pos_x[o_idx]) * vx) <= 0.0f) {
+          // Crossed-prev ThrowHi first-pulse callback carry:
+          // - The retained current-frame first-pulse carry uses the throw-shot segment direction to
+          //   avoid replaying a BODY callback on a victim that has already been represented by the
+          //   throw laser's item HitCapsule victim ring.
+          // - The same owner applies when teacher-forced seed starts one post-frame later with
+          //   `throw_pulse_crossed_prev_frame` carrying the frame-18 command and a live state1
+          //   article. v10 dumps for BHH:9419 show a populated item victims_1 entry in this phase,
+          //   while front-side BHH:937 remains BODY-eligible and is left on the clear path below.
+          // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
+          // refs/melee/src/melee/it/items/itfoxlaser.c::{it_8029C6CC,it_8029C4D4}
+          // refs/melee/src/melee/it/itcoll.c::{it_8026FA2C,it_8026FAC4,it_80272460}
+          // refs/melee/src/melee/lb/lbcollision.c::lbColl_80008688
+          continue;
+        }
+        uint8_t throwhi_first_pulse_callback_clear = 0u;
+        // ThrowHi first-pulse BODY narrowphase:
+        // - Throw-side state1 lasers are spawned by ftFx_Throw_Anim through it_8029C6CC, then
+        //   it_8029C4D4 tests the item hitcapsule against prev_pos->pos in the item collision pass.
+        // - Replayed frame-18 rows can seed the state1 article after the frame-18 command, but the
+        //   item hitcap's model scaleZ history is not replay-visible. Use the authored state1
+        //   hitbox offsets without the visual scale ramp only for this crossed-prev first-pulse
+        //   BODY path. The broader unscaled fallback is intentionally not restored.
+        // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
+        // refs/melee/src/melee/it/items/itfoxlaser.c::{it_8029C6CC,itFoxlaser_UnkMotion1_Phys,it_8029C4D4}
+        // refs/melee/src/melee/it/itcoll.c::{it_8026FAC4,it_80272460}
+        // data/moves/{fox,falco}.json moves["ftCo_SM_ThrowHi"].events
+        for (uint8_t oi = 0; oi < off_n && oi < (uint8_t)MSL_LASER_MAX_HITBOX_OFFS_X && !hit;
+             oi++) {
+          if (!hitlist_allows_item_hitbox_fighter(batch, bi, it, (int)oi, def, def_iid)) {
+            continue;
+          }
+          const float off_x = lp->state1_hitbox_offsets_x[oi];
+          const float sx0 = x0 + (ux * off_x);
+          const float sy0 = y0 + (uy * off_x);
+          const float sx = x + (ux * off_x);
+          const float sy = y + (uy * off_x);
+          for (uint8_t ci = 0; ci < cap_n; ci++) {
+            if (item_swept_sphere_capsule_overlap_amount(
+                    batch, bi, def, sx0, sy0, sx, sy, sr, (int)ci, &hit_hurt_height,
+                    &body_overlap_amount, flatten_body_hurt_z, 1.0f)) {
+              throwhi_first_pulse_callback_clear = 1u;
+              hit_hb_id = oi;
+              break;
+            }
+          }
+        }
+        if (!throwhi_first_pulse_callback_clear &&
+            batch->state.item_type[ii] == (uint16_t)MSL_IT_KIND_FOX_LASER_SHOT &&
+            batch->state.char_id[d_idx] == batch->state.char_id[o_idx] &&
+            ((batch->state.pos_x[d_idx] - batch->state.pos_x[o_idx]) * vx > 0.0f)) {
+          // ThrowHi first-pulse front-side BODY callback consume:
+          // - The retained behind-direction slice preserves fresh articles when the already-hit
+          //   victim is on the non-projectile side of the first-pulse segment.
+          // - v10 item-hitlist/callback dumps for BHH:937 show the front-side first-pulse Fox
+          //   article has no relevant victims_1 entry after spawn and is destroyed by the item
+          //   BODY callback in the next post-frame, while replay-real AGG/QGD controls on the
+          //   behind side carry the first pulse and emit later command articles.
+          // - Keep this as a consume-only callback owner; do not synthesize combo/source fields
+          //   here, because those stay owned by ftColl_8007646C / ftColl_800763C0 when BODY
+          //   damage is actually replay-visible.
+          // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
+          // refs/melee/src/melee/it/items/itfoxlaser.c::{it_8029C6CC,it_8029C4D4}
+          // refs/melee/src/melee/it/itcoll.c::{it_8026FA2C,it_8026FAC4,it_80272460}
+          // reports/triage/f14_item_hitlist_dump_bhh937/rows/engine_dump_rows.json
+          throwhi_first_pulse_callback_clear = 1u;
+        }
+        if (throwhi_first_pulse_callback_clear) {
+          item_slot_clear(batch, ii);
+          break;
+        }
       }
       if (!hit && laser_state != 0u &&
           batch->state.action_id[o_idx] == (uint16_t)MSL_ACT_THROW_LW &&
           batch->state.throw_pulse_consumed[o_idx] == 0u &&
-          batch->state.throw_pulse_crossed_prev_frame[o_idx] ==
-              (uint8_t)MSL_THROWLW_PULSE_ATTACH_AF &&
           batch->state.grab_owner_port[d_idx] == (uint8_t)owner &&
           batch->state.action_id[d_idx] == (uint16_t)MSL_ACT_THROWN_LW) {
+        int16_t owner_first_throwlw_pulse_af = 0;
+        const uint8_t owner_has_first_throwlw_pulse =
+            move_tables_throw_projectile_first_pulse_frame(batch->state.char_id[o_idx],
+                                                           batch->state.action_id[o_idx],
+                                                           &owner_first_throwlw_pulse_af);
+        const uint8_t throwlw_attached_pulse =
+            (batch->state.throw_pulse_crossed_prev_frame[o_idx] ==
+             (uint8_t)MSL_THROWLW_PULSE_ATTACH_AF)
+                ? 1u
+                : ((owner_has_first_throwlw_pulse &&
+                    batch->state.throw_pulse_crossed_curr_frame[o_idx] ==
+                        (uint8_t)owner_first_throwlw_pulse_af)
+                       ? 1u
+                       : 0u);
+        const uint8_t throwlw_first_visible_attached_pulse =
+            (owner_has_first_throwlw_pulse &&
+             batch->state.action_frame[o_idx] == (int16_t)owner_first_throwlw_pulse_af &&
+             batch->state.throw_command_pending_pulse_frame[o_idx] == 0u &&
+             batch->state.throw_pulse_crossed_prev_frame[o_idx] == 0u &&
+             batch->state.hitlag_pre_timer[d_idx] != 0u)
+                ? 1u
+                : 0u;
+        if (!throwlw_attached_pulse && !throwlw_first_visible_attached_pulse) {
+          continue;
+        }
+        uint8_t throwlw_victim_ring_blocks = 0u;
+        if (batch->state.item_type[ii] == (uint16_t)MSL_IT_KIND_FALCO_LASER_SHOT) {
+          // Falco ThrowLw callback-phase split:
+          // v10 dumps show kind-55 attached rows can carry victims_1 on hitboxes 2/3 while the
+          // next BODY callback still uses hitboxes 0/1. Do not let hb2/3 suppress the miss bridge;
+          // only block when both BODY-phase lanes are already in the victim ring.
+          // refs/melee/src/melee/it/itcoll.c::{it_8026FAC4,it_80272460}
+          // refs/melee/src/melee/lb/lbcollision.c::lbColl_80008688
+          const uint8_t hb0_allows =
+              hitlist_allows_item_hitbox_fighter(batch, bi, it, 0, def, def_iid);
+          const uint8_t hb1_allows =
+              hitlist_allows_item_hitbox_fighter(batch, bi, it, 1, def, def_iid);
+          throwlw_victim_ring_blocks = (hb0_allows || hb1_allows) ? 0u : 1u;
+        } else {
+          for (int hb = 0; hb < MSL_MAX_HITBOXES; hb++) {
+            if (!hitlist_allows_item_hitbox_fighter(batch, bi, it, hb, def, def_iid)) {
+              throwlw_victim_ring_blocks = 1u;
+              break;
+            }
+          }
+        }
+        if (throwlw_victim_ring_blocks) {
+          continue;
+        }
         // ThrowLw attached-victim pulse bridge (miss-only):
         // - ThrowLw throw-side pulses are script-owned one-shots (23/25/28/31) consumed in
         //   ftFx_Throw_Anim; seed lane `throw_pulse_crossed_prev_frame` carries prior-step crossing.
-        // - In attached ThrownLw contexts, missing same-step BODY overlap at the 25-frame pulse
-        //   leaves replay-causal hitlag/state-flags deltas; bridge only when geometry probe missed.
+        // - In attached ThrownLw contexts, missing same-step BODY overlap at the first visible
+        //   pulse, first current-frame pulse, or the 25-frame carried pulse leaves replay-causal
+        //   pulse, first current-frame pulse, or the 25-frame carried pulse leaves replay-causal
+        //   hitlag/state-flags deltas; bridge only when geometry probe missed.
         // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
         // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Thrown.c::ftCo_800DE508
         // refs/melee/src/melee/ft/ftaction.c::{ftAction_80071974,ftAction_80073354}
         // data/moves/{fox,falco}.json moves["ftCo_SM_ThrowLw"]["events"]
         hit = 1;
+        hit_hb_id = 0xFFu;
         hit_hurt_height = 1u;
       }
       if (!hit) {
@@ -3126,8 +3484,13 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
         combat_apply_item_phantom_hit(batch, bi, owner, def, batch->state.item_attack_id[ii],
                                       batch->state.item_instance_id[ii], dmg, lp->element);
         const uint16_t def_iid_post = batch->state.instance_id[d_idx];
-        hitlist_register_item_fighter(batch, bi, it, def, def_iid_post,
-                                      (int)MSL_LBCOLL_INSERT_FT_BODY, 0);
+        if (hit_hb_id != 0xFFu) {
+          hitlist_register_item_hitbox_fighter(batch, bi, it, (int)hit_hb_id, def, def_iid_post,
+                                               (int)MSL_LBCOLL_INSERT_FT_BODY, 0);
+        } else {
+          hitlist_register_item_fighter(batch, bi, it, def, def_iid_post,
+                                        (int)MSL_LBCOLL_INSERT_FT_BODY, 0);
+        }
         break;
       }
 
@@ -3138,7 +3501,7 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
           owner_has_first_throw_pulse &&
           batch->state.throw_pulse_crossed_curr_frame[o_idx] ==
               (uint8_t)owner_first_throw_pulse_af &&
-          batch->state.hitstun[d_idx] > 0u &&
+          body_overlap_amount <= 0.0f && batch->state.hitstun[d_idx] > 0u &&
           batch->state.last_hit_by[d_idx] == item_source_port0_for_owner(batch, o_idx, owner) &&
           batch->state.last_attack_landed[d_idx] != (uint8_t)lp->shot_itkind &&
           ((batch->state.pos_x[d_idx] - batch->state.pos_x[o_idx]) * vx <= 0.0f)) {
@@ -3146,10 +3509,9 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
         // - ftAction_80071974 emits a one-shot throw_flags_b0 pulse and ftFx_Throw_Anim consumes it
         //   to spawn the throw-side laser article.
         // - The throw launch vector is `atan2(FtHoldJoint - ItHoldJoint)` and it_8029C4D4 resolves
-        //   item collision along the laser's previous-to-current segment. If the already-damaged
-        //   victim is on the non-projectile X side of that first-pulse segment, consuming the fresh
-        //   article here turns the command-pulse row into false combo/source bookkeeping. Front-side
-        //   victims stay on the regular BODY path below.
+        //   item collision along the laser's previous-to-current segment. Keep the carry only when
+        //   the BODY probe did not produce positive penetration; event probes for BHH:4266 show
+        //   positive hb0 same-frame BODY/give-damage/destroy must fall through to the callback path.
         // - Keep this on the current-frame first pulse only; later ThrowHi pulses and normal laser
         //   BODY hits stay on the regular item-hit path below.
         // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
@@ -3255,8 +3617,13 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
       }
       // Rehit suppression latch for this item (runtime): insert the post-mutation victim identity.
       const uint16_t def_iid_post = batch->state.instance_id[d_idx];
-      hitlist_register_item_fighter(batch, bi, it, def, def_iid_post,
-                                    (int)MSL_LBCOLL_INSERT_FT_BODY, 0);
+      if (hit_hb_id != 0xFFu) {
+        hitlist_register_item_hitbox_fighter(batch, bi, it, (int)hit_hb_id, def, def_iid_post,
+                                             (int)MSL_LBCOLL_INSERT_FT_BODY, 0);
+      } else {
+        hitlist_register_item_fighter(batch, bi, it, def, def_iid_post,
+                                      (int)MSL_LBCOLL_INSERT_FT_BODY, 0);
+      }
       break;
     }
   }
@@ -3562,6 +3929,9 @@ void items_spawn_pre_physics(MslBatch* batch) {
       float shoot_override_vy = 0.0f;
       uint8_t shoot_apply_motion_step = 0u;
       uint8_t shoot_throw_lw_late_pulse_transn_y = 0u;
+      int shoot_seed_hitlist_victim = -1;
+      uint16_t shoot_seed_hitlist_victim_iid = 0u;
+      uint8_t shoot_seed_hitlist_mask = 0u;
       // Throw-side blaster shots are driven by throw_flags_b0 pulses consumed in ftFx_Throw_Anim,
       // not by SpecialN loop cmd_vars[2].
       // refs/melee/src/melee/ft/ftaction.c::ftAction_80071974
@@ -3578,6 +3948,182 @@ void items_spawn_pre_physics(MslBatch* batch) {
         if (items_find_gun_slot(batch, bi, p, lp->gun_itkind) < 0) {
           continue;
         }
+      }
+      uint8_t throw_command_authoritative = 0u;
+      if (is_blaster_throw && batch->state.throw_command_pending_seed_valid[idx] != 0u) {
+        // Throw actions do not use the SpecialN loop shoot table directly. Start from the explicit
+        // command lane and fall back to legacy frame-crossing reconstruction only for pulse phases
+        // whose consume/hitlist owner is not fully represented by `throw_command_pending_pulse_frame`.
+        should_shoot = 0u;
+        const uint8_t pending_pulse_af = batch->state.throw_command_pending_pulse_frame[idx];
+        uint8_t pending_pulse_ordinal = 0u;
+        if (pending_pulse_af != 0u && batch->state.hitlag_pre_timer[idx] == 0u &&
+            move_tables_throw_projectile_pulse_ordinal(cid, action_id, (int16_t)pending_pulse_af,
+                                                       &pending_pulse_ordinal)) {
+          // Command-pending throw article authority:
+          // - ftAction_80073354 owns command-timer advancement and can execute only one
+          //   `set_throw_spawn_projectile` command into the bool `throw_flags_b0` consumed by
+          //   ftFx_Throw_Anim in this callback.
+          // - `throw_command_pending_pulse_frame` is the prefix-causal seed lane for that command.
+          // - Existing live state1 throw shots can already represent earlier command ordinals; emit
+          //   the pending command only when the live count is still below this pulse ordinal.
+          // refs/melee/src/melee/ft/ftaction.c::{ftAction_80071974,ftAction_80073354}
+          // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
+          // refs/melee/src/melee/it/items/itfoxlaser.c::it_8029C6CC
+          // data/moves/{fox,falco}.json moves["ftCo_SM_ThrowB"/"ftCo_SM_ThrowHi"/"ftCo_SM_ThrowLw"].events
+          uint8_t suppress_pending_article = 0u;
+          if (action_id == (uint16_t)MSL_ACT_THROW_B) {
+            int stale_victim_p = -1;
+            int16_t first_throwb_pulse_af = -1;
+            const uint8_t is_first_throwb_pending =
+                (move_tables_throw_projectile_first_pulse_frame(cid, action_id,
+                                                                &first_throwb_pulse_af) &&
+                 (int16_t)pending_pulse_af == first_throwb_pulse_af)
+                    ? 1u
+                    : 0u;
+            for (int vp = 0; vp < num_players; vp++) {
+              if (vp == p) {
+                continue;
+              }
+              const size_t v_idx = msl_idx_player(bi, vp);
+              if (batch->state.hitstun[v_idx] == 0u ||
+                  batch->state.last_hit_by[v_idx] != item_source_port0_for_owner(batch, idx, p)) {
+                continue;
+              }
+              if (batch->state.throw_pulse_consumed[idx] == 0u &&
+                  batch->state.last_attack_landed[v_idx] != (uint8_t)lp->shot_itkind) {
+                continue;
+              }
+              if (stale_victim_p >= 0) {
+                stale_victim_p = -1;
+                break;
+              }
+              stale_victim_p = vp;
+            }
+            if (stale_victim_p >= 0) {
+              // ThrowB pending command / stale victim-ring split:
+              // - The command lane proves a throw_flags_b0 pulse is pending, but the unique victim is
+              //   already in same-owner throw-laser hitstun. In this path Melee carries item-domain
+              //   combo bookkeeping without emitting a new live article.
+              // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
+              // refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007646C,ftColl_800763C0}
+              if (is_first_throwb_pending && batch->state.throw_pulse_consumed[idx] == 0u) {
+                const size_t v_idx = msl_idx_player(bi, stale_victim_p);
+                const uint8_t attack_id_u8 = (uint8_t)batch->state.attack_id[idx];
+                const uint8_t cur_victim = batch->state.combo_victim_port[idx];
+                if ((cur_victim == 0xFFu || cur_victim == (uint8_t)stale_victim_p) &&
+                    batch->state.attack_id[idx] != (uint16_t)MSL_FT_MOVE_ID_DEFAULT &&
+                    batch->state.last_attack_landed[idx] == attack_id_u8 &&
+                    batch->state.combo_count[idx] != 0u) {
+                  batch->state.combo_count[idx] = (uint8_t)(batch->state.combo_count[idx] + 1u);
+                  if (cur_victim == 0xFFu) {
+                    batch->state.combo_victim_port[idx] = (uint8_t)stale_victim_p;
+                  }
+                  batch->state.combo_victim_instance_id[idx] = batch->state.instance_id[v_idx];
+                }
+              }
+              suppress_pending_article = 1u;
+              throw_command_authoritative = 1u;
+            }
+            if (!suppress_pending_article && is_first_throwb_pending &&
+                lp->shot_itkind == (uint16_t)MSL_IT_KIND_FOX_LASER_SHOT) {
+              const int callback_victim = throw_laser_unique_same_source_victim(batch, bi, p);
+              if (callback_victim >= 0) {
+                // ThrowB first-command callback consume:
+                // - The command lane proves the first ThrowB projectile pulse is pending, but the
+                //   unique victim is already in the same throw-laser callback/source phase.
+                // - In this Fox startup shape, Melee advances item-domain combo bookkeeping through
+                //   ftColl_8007646C / ftColl_800763C0 without leaving a live state1 article.
+                // refs/melee/src/melee/ft/ftaction.c::{ftAction_80071974,ftAction_80073354}
+                // refs/melee/src/melee/ft/chara/ftFox/ftFx_Throw_Anim
+                // refs/melee/src/melee/it/items/itfoxlaser.c::{it_8029C6CC,it_8029C4D4}
+                // refs/melee/src/melee/it/itcoll.c::{it_8026FA2C,it_8026FAC4,it_80272460}
+                // refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007646C,ftColl_800763C0}
+                throw_laser_advance_combo_bookkeeping(batch, bi, p, callback_victim);
+                suppress_pending_article = 1u;
+                throw_command_authoritative = 1u;
+              }
+            }
+          }
+          if (action_id == (uint16_t)MSL_ACT_THROW_HI && cid == (uint8_t)MSL_CHAR_FALCO &&
+              pending_pulse_af == 24u && throw_seed_shot_count[p] >= 2u) {
+            // Falco ThrowHi final-pulse live-article cap:
+            // - The frame-24 command can be represented in the replay seed by two live state1
+            //   throw-side laser articles plus the following BODY consume/carry handoff.
+            // - Do not emit a third state1 article from the command-pending lane; the existing
+            //   BODY path below owns the consume-vs-carry split for this victim phase.
+            // refs/melee/src/melee/ft/ftaction.c::{ftAction_80071974,ftAction_80073354}
+            // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
+            // data/moves/falco.json moves["ftCo_SM_ThrowHi"].events
+            suppress_pending_article = 1u;
+            throw_command_authoritative = 1u;
+          }
+          const uint8_t pending_throwhi_mid_pulse_needs_article =
+              (!suppress_pending_article && action_id == (uint16_t)MSL_ACT_THROW_HI &&
+               pending_pulse_ordinal == 2u && throw_seed_shot_count[p] == 1u &&
+               batch->state.combo_count[idx] < pending_pulse_ordinal)
+                  ? 1u
+                  : 0u;
+          const uint8_t pending_throwlw_mid_attached_spawn_callback =
+              (!suppress_pending_article && action_id == (uint16_t)MSL_ACT_THROW_LW &&
+               lp->shot_itkind == (uint16_t)MSL_IT_KIND_FALCO_LASER_SHOT &&
+               pending_pulse_af == 28u && throw_seed_shot_count[p] == 0u &&
+               throwlw_attached_victim_for_owner(batch, bi, p) >= 0)
+                  ? 1u
+                  : 0u;
+          if (!suppress_pending_article &&
+              (pending_pulse_ordinal == 1u || pending_throwhi_mid_pulse_needs_article ||
+               pending_throwlw_mid_attached_spawn_callback)) {
+            throw_command_authoritative = 1u;
+            if (throw_seed_shot_count[p] == 0u || pending_throwhi_mid_pulse_needs_article) {
+              should_shoot = 1u;
+              shoot_spawn_state = 1u;
+              batch->state.throw_pulse_crossed_curr_frame[idx] = pending_pulse_af;
+              if (pending_throwhi_mid_pulse_needs_article) {
+                // ThrowHi frame-20 command authority:
+                // - ftAction_80071974 emits one throw_flags_b0 pulse per
+                //   set_throw_spawn_projectile command; ftFx_Throw_Anim consumes exactly one pending
+                //   bool and spawns the state1 laser through it_8029C6CC.
+                // - Replayed seed can already contain the first state1 throw shot. Emit the second
+                //   command only while item-domain combo bookkeeping has not advanced past that
+                //   ordinal; otherwise primary frame-20/24 carry rows have already represented the
+                //   pulse through the item BODY hitlist/ftColl_8007646C owner.
+                // refs/melee/src/melee/ft/ftaction.c::{ftAction_80071974,ftAction_80073354}
+                // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
+                // refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007646C,ftColl_800763C0}
+                // refs/melee/src/melee/it/items/itfoxlaser.c::it_8029C6CC
+                // data/moves/{fox,falco}.json moves["ftCo_SM_ThrowHi"].events
+              }
+              int16_t first_pulse_af = -1;
+              const uint8_t has_first_pulse =
+                  move_tables_throw_projectile_first_pulse_frame(cid, action_id, &first_pulse_af);
+              if (action_id == (uint16_t)MSL_ACT_THROW_LW && has_first_pulse &&
+                  (int16_t)pending_pulse_af >= first_pulse_af) {
+                if ((int16_t)pending_pulse_af == first_pulse_af) {
+                  shoot_apply_motion_step = 1u;
+                } else {
+                  shoot_throw_lw_late_pulse_transn_y = 1u;
+                }
+              }
+              if (action_id == (uint16_t)MSL_ACT_THROW_HI && throw_seed_shot_valid[p] &&
+                  (int16_t)pending_pulse_af >= (int16_t)MSL_THROWHI_PULSE_MID_AF &&
+                  (batch->state.throw_pulse_crossed_prev_frame[idx] >=
+                       (uint8_t)MSL_THROWHI_PREV_PHASE_AF ||
+                   throw_seed_shot_count[p] != 0u)) {
+                shoot_use_velocity_override = 1u;
+                shoot_override_vx = throw_seed_shot_vx[p];
+                shoot_override_vy = throw_seed_shot_vy[p];
+              }
+            } else {
+              should_shoot = 0u;
+            }
+          } else if (suppress_pending_article) {
+            should_shoot = 0u;
+          }
+        }
+      }
+      if (is_blaster_throw && throw_command_authoritative && !should_shoot) {
+        continue;
       }
       if (!should_shoot && is_blaster_throw) {
         // Seed-bridge guard for one-shot throw_flags_b0 reconstruction:
@@ -3604,6 +4150,20 @@ void items_spawn_pre_physics(MslBatch* batch) {
             batch->state.throw_pulse_consumed[idx] != 0u) {
           uint8_t ongoing_throwhi_context = 0u;
           uint8_t throwhi_override_allowed = 0u;
+          // Command-cursor shot count guard:
+          // - ftAction_80071974 emits one throw_flags_b0 pulse per set_throw_spawn_projectile
+          //   command, and ftFx_Throw_Anim consumes at most one pulse per Anim callback.
+          // - When reseed already carries both frame-18 and frame-20 state1 ThrowHi articles,
+          //   the consumed frame-20 seed lane represents already-owned command state; do not emit
+          //   a third article from the same pulse.
+          // refs/melee/src/melee/ft/ftaction.c::{ftAction_80071974,ftAction_80073354}
+          // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
+          // data/moves/{fox,falco}.json moves["ftCo_SM_ThrowHi"].events
+          uint8_t max_consumed_pulse_shots = 1u;
+          if (batch->state.throw_pulse_crossed_prev_frame[idx] >=
+              (uint8_t)MSL_THROWHI_PULSE_MID_AF) {
+            max_consumed_pulse_shots = 2u;
+          }
           for (int vp = 0; vp < num_players; vp++) {
             if (vp == p) {
               continue;
@@ -3618,7 +4178,7 @@ void items_spawn_pre_physics(MslBatch* batch) {
               break;
             }
           }
-          if (ongoing_throwhi_context) {
+          if (ongoing_throwhi_context && throw_seed_shot_count[p] < max_consumed_pulse_shots) {
             should_shoot = 1u;
             // Throw-side spawn path in ftFx_Throw_Anim uses it_8029C6CC (msid=1).
             // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
@@ -3632,6 +4192,48 @@ void items_spawn_pre_physics(MslBatch* batch) {
               shoot_use_velocity_override = 1u;
               shoot_override_vx = throw_seed_shot_vx[p];
               shoot_override_vy = throw_seed_shot_vy[p];
+            }
+          }
+        }
+        if (!should_shoot) {
+          if (action_id == (uint16_t)MSL_ACT_THROW_HI && cid == (uint8_t)MSL_CHAR_FALCO &&
+              lp->shot_itkind == (uint16_t)MSL_IT_KIND_FALCO_LASER_SHOT &&
+              batch->state.throw_pulse_crossed_prev_frame[idx] ==
+                  (uint8_t)MSL_THROWHI_PREV_PHASE_AF &&
+              throw_seed_shot_count[p] == 1u &&
+              batch->state.frame_speed_mul_fp_q16_16[idx] <= (int32_t)81920) {
+            uint8_t falco_prev18_second_article = 0u;
+            for (int vp = 0; vp < num_players; vp++) {
+              if (vp == p) {
+                continue;
+              }
+              const size_t v_idx = msl_idx_player(bi, vp);
+              if (batch->state.hitstun[v_idx] > 0u &&
+                  batch->state.last_hit_by[v_idx] == item_source_port0_for_owner(batch, idx, p) &&
+                  batch->state.instance_hit_by[v_idx] == batch->state.instance_id[idx] &&
+                  batch->state.last_attack_landed[idx] == (uint8_t)lp->shot_itkind) {
+                falco_prev18_second_article = 1u;
+                break;
+              }
+            }
+            if (falco_prev18_second_article) {
+              // Falco ThrowHi crossed-prev frame-18 second article:
+              // - Event probes for PRH:6737 show a replay seed with one live state1 Falco throw
+              //   laser and `throw_pulse_crossed_prev_frame==18`; vanilla emits another
+              //   it_8029C6CC spawn request in the next frame and carries it through post-frame.
+              // - Keep this narrower than the rejected broad Falco second-shot bridge by requiring
+              //   the first-pulse crossed-prev lane, exactly one live state1 throw shot, and the
+              //   seed-visible command cadence that the event probes separate: PRH/HVG/TCH are on
+              //   the 1.25x ThrowHi command phase and carry the next article; QGD/GAT/TBK primary
+              //   controls are on the 1.333x phase and do not serialize the next article until a
+              //   later callback. The per-hitbox BODY path below remains responsible for immediate
+              //   hb0 destroy rows.
+              // refs/melee/src/melee/ft/ftaction.c::{ftAction_80071974,ftAction_80073354}
+              // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
+              // refs/melee/src/melee/it/items/itfoxlaser.c::{it_8029C6CC,it_8029C4D4}
+              // refs/melee/src/melee/it/itcoll.c::{it_8026FA2C,it_8026FAC4,it_80272460}
+              should_shoot = 1u;
+              shoot_spawn_state = 1u;
             }
           }
         }
@@ -3814,6 +4416,40 @@ void items_spawn_pre_physics(MslBatch* batch) {
                 }
               }
             }
+            if (action_id == (uint16_t)MSL_ACT_THROW_B) {
+              int16_t throwb_last_pulse_af = 0;
+              if (move_tables_throw_projectile_last_pulse_frame(cid, action_id,
+                                                                &throwb_last_pulse_af) &&
+                  crossed_pulse_af == throwb_last_pulse_af) {
+                const int callback_victim = throw_laser_unique_same_source_victim(batch, bi, p);
+                uint8_t terminal_callback_phase = 0u;
+                if (callback_victim >= 0) {
+                  const size_t v_idx = msl_idx_player(bi, callback_victim);
+                  terminal_callback_phase =
+                      (batch->state.hitlag[v_idx] > 0u && batch->state.hitlag[v_idx] <= 2u)
+                          ? 1u
+                          : ((batch->state.hitlag[v_idx] == 0u &&
+                              batch->state.action_frame[v_idx] >= 11)
+                                 ? 1u
+                                 : 0u);
+                }
+                if (callback_victim >= 0 && terminal_callback_phase) {
+                  // ThrowB terminal-pulse callback consume:
+                  // - The final ThrowB projectile command is still a one-shot throw_flags_b0 pulse
+                  //   owned by ftAction/ftFx_Throw_Anim.
+                  // - In terminal ongoing-hitstun rows, item BODY callback/source bookkeeping is
+                  //   represented without a live article at t+1. Suppress replaying the terminal
+                  //   article and advance only item-domain combo bookkeeping.
+                  // refs/melee/src/melee/ft/ftaction.c::{ftAction_80071974,ftAction_80073354}
+                  // refs/melee/src/melee/ft/chara/ftFox/ftFx_Throw_Anim
+                  // refs/melee/src/melee/it/items/itfoxlaser.c::{it_8029C6CC,it_8029C4D4}
+                  // refs/melee/src/melee/it/itcoll.c::{it_8026FA2C,it_8026FAC4,it_80272460}
+                  // refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007646C,ftColl_800763C0}
+                  throw_laser_advance_combo_bookkeeping(batch, bi, p, callback_victim);
+                  continue;
+                }
+              }
+            }
             // Seed-bridge stale-latch suppressors for throw projectile pulses:
             // - Throw script pulses are one-shot `throw_flags_b0` events consumed in ftFx_Throw_Anim.
             // - With one-step reseed, command-timer/cursor ownership is not seeded; reconstructing by
@@ -3824,8 +4460,21 @@ void items_spawn_pre_physics(MslBatch* batch) {
             // refs/melee/src/melee/ft/ftaction.c::{ftAction_80071974,ftAction_80073354}
             // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
             // data/moves/{fox,falco}.json set_throw_spawn_projectile pulse frames
+            const int throwb_startup_carry_victim =
+                (action_id == (uint16_t)MSL_ACT_THROW_B && cid == (uint8_t)MSL_CHAR_FALCO &&
+                 has_first_pulse && crossed_pulse_af == first_pulse_af)
+                    ? throw_laser_unique_same_source_victim(batch, bi, p)
+                    : -1;
+            const uint8_t throwb_startup_carry =
+                (throwb_startup_carry_victim >= 0 &&
+                 batch->state.last_attack_landed[msl_idx_player(bi, throwb_startup_carry_victim)] !=
+                     0u &&
+                 batch->state.action_frame[msl_idx_player(bi, throwb_startup_carry_victim)] > 4)
+                    ? 1u
+                    : 0u;
             if (throw_blaster_pulse_is_seed_stale_latch(action_id, lp->shot_itkind,
-                                                        crossed_pulse_af, prev_frame_i)) {
+                                                        crossed_pulse_af, prev_frame_i) &&
+                !throwb_startup_carry) {
               if (action_id == (uint16_t)MSL_ACT_THROW_B) {
                 // ThrowB startup stale-latch combo bookkeeping bridge:
                 // - The first throw-side blaster pulse (frame 15) can be suppressed by the
@@ -3874,6 +4523,41 @@ void items_spawn_pre_physics(MslBatch* batch) {
             if (crossed_pulse_af >= 0 && crossed_pulse_af <= 0xFF) {
               batch->state.throw_pulse_crossed_curr_frame[idx] = (uint8_t)crossed_pulse_af;
             }
+            if (action_id == (uint16_t)MSL_ACT_THROW_HI &&
+                crossed_pulse_af == (int16_t)MSL_THROWHI_PULSE_MID_AF &&
+                batch->state.throw_command_pending_pulse_frame[idx] == 0u &&
+                throw_seed_shot_count[p] == 1u &&
+                lp->shot_itkind == (uint16_t)MSL_IT_KIND_FOX_LASER_SHOT) {
+              uint8_t same_character_first_pulse_carry = 0u;
+              for (int vp = 0; vp < num_players; vp++) {
+                if (vp == p) {
+                  continue;
+                }
+                const size_t v_idx = msl_idx_player(bi, vp);
+                if (batch->state.char_id[v_idx] == batch->state.char_id[idx] &&
+                    batch->state.hitstun[v_idx] > 0u &&
+                    batch->state.last_hit_by[v_idx] == item_source_port0_for_owner(batch, idx, p) &&
+                    batch->state.instance_hit_by[v_idx] == batch->state.instance_id[idx]) {
+                  same_character_first_pulse_carry = 1u;
+                  break;
+                }
+              }
+              if (same_character_first_pulse_carry) {
+                // ThrowHi same-character first-pulse callback carry:
+                // - In same-character mirror rows, the first state1 laser can already represent the
+                //   callback/body phase when the fallback anim-frame crossing reaches frame 20.
+                //   Without the explicit command-pending lane, replaying that frame crossing emits
+                //   a duplicate second article.
+                // - Cross-character primary controls remain eligible for the frame-20 command path;
+                //   those rows have different item hitcapsule/hurtcapsule callback phase evidence
+                //   and are protected by replay-real locks.
+                // refs/melee/src/melee/ft/ftaction.c::{ftAction_80071974,ftAction_80073354}
+                // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
+                // refs/melee/src/melee/it/items/itfoxlaser.c::{it_8029C6CC,it_8029C4D4}
+                // refs/melee/src/melee/it/itcoll.c::{it_8026FA2C,it_8026FAC4,it_80272460}
+                continue;
+              }
+            }
             should_shoot = 1u;
             // Throw-side spawn path in ftFx_Throw_Anim uses it_8029C6CC (msid=1).
             // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
@@ -3918,9 +4602,89 @@ void items_spawn_pre_physics(MslBatch* batch) {
       if (!should_shoot) {
         continue;
       }
-      laser_spawn_from_fighter(batch, bi, p, lp, shoot_spawn_state, shoot_use_velocity_override,
-                               shoot_override_vx, shoot_override_vy, shoot_apply_motion_step,
-                               shoot_throw_lw_late_pulse_transn_y);
+      if (is_blaster_throw && action_id == (uint16_t)MSL_ACT_THROW_HI && shoot_spawn_state == 1u) {
+        int16_t first_throwhi_pulse_af = -1;
+        const uint8_t first_throwhi_spawn =
+            (move_tables_throw_projectile_first_pulse_frame(cid, action_id,
+                                                            &first_throwhi_pulse_af) &&
+             batch->state.throw_pulse_crossed_curr_frame[idx] == (uint8_t)first_throwhi_pulse_af)
+                ? 1u
+                : 0u;
+        int candidate = -1;
+        if (first_throwhi_spawn) {
+          for (int vp = 0; vp < num_players; vp++) {
+            if (vp == p) {
+              continue;
+            }
+            const size_t v_idx = msl_idx_player(bi, vp);
+            if (batch->state.grab_owner_port[v_idx] == (uint8_t)p) {
+              continue;
+            }
+            if (batch->state.hitstun[v_idx] == 0u ||
+                batch->state.last_hit_by[v_idx] != item_source_port0_for_owner(batch, idx, p) ||
+                batch->state.instance_hit_by[v_idx] != batch->state.instance_id[idx] ||
+                batch->state.last_attack_landed[v_idx] == 0u) {
+              continue;
+            }
+            if (candidate >= 0) {
+              candidate = -1;
+              break;
+            }
+            candidate = vp;
+          }
+        }
+        if (candidate >= 0) {
+          // Pending ThrowHi first-pulse hitlist carry:
+          // - The command lane proves this Anim callback emitted the first throw_flags_b0 pulse.
+          // - The unique non-attached victim is already in same-owner throw-laser hitstun with
+          //   instance_hit_by equal to the owner's x2088/xDA8 seed. v10 dumps for this shape show the
+          //   newly spawned item HitCapsule victims_1 entry on hitbox 2, so seed that hitbox instead
+          //   of letting command timing alone own the consume/carry split.
+          // refs/melee/src/melee/ft/ftaction.c::{ftAction_80071974,ftAction_80073354}
+          // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
+          // refs/melee/src/melee/it/items/itfoxlaser.c::it_8029C6CC
+          // refs/melee/src/melee/it/itcoll.c::{it_8026FA2C,it_8026FAC4}
+          shoot_seed_hitlist_victim = candidate;
+          shoot_seed_hitlist_victim_iid = batch->state.instance_id[msl_idx_player(bi, candidate)];
+          shoot_seed_hitlist_mask = 0x04u;
+        }
+      }
+      if (is_blaster_throw && action_id == (uint16_t)MSL_ACT_THROW_B &&
+          lp->shot_itkind == (uint16_t)MSL_IT_KIND_FALCO_LASER_SHOT && shoot_spawn_state == 1u) {
+        int16_t first_throwb_pulse_af = -1;
+        if (move_tables_throw_projectile_first_pulse_frame(cid, action_id,
+                                                           &first_throwb_pulse_af) &&
+            batch->state.throw_pulse_crossed_curr_frame[idx] == (uint8_t)first_throwb_pulse_af) {
+          const int callback_victim = throw_laser_unique_same_source_victim(batch, bi, p);
+          if (callback_victim >= 0) {
+            // Falco ThrowB startup item HitCapsule carry:
+            // - The first ThrowB pulse is command-owned by ftAction/ftFx_Throw_Anim, but the
+            //   carry-vs-callback decision is per item HitCapsule just like the retained Falco
+            //   ThrowLw hb2/3 split.
+            // - Seed the Falco state1 hb2/3 victim lanes for startup carry rows so the article
+            //   persists without replaying a false combo/source callback.
+            // refs/melee/src/melee/ft/ftaction.c::{ftAction_80071974,ftAction_80073354}
+            // refs/melee/src/melee/ft/chara/ftFox/ftFx_Throw_Anim
+            // refs/melee/src/melee/it/items/itfoxlaser.c::{it_8029C6CC,it_8029C4D4}
+            // refs/melee/src/melee/it/itcoll.c::{it_8026FA2C,it_8026FAC4,it_80272460}
+            shoot_seed_hitlist_victim = callback_victim;
+            shoot_seed_hitlist_victim_iid =
+                batch->state.instance_id[msl_idx_player(bi, callback_victim)];
+            shoot_seed_hitlist_mask = 0x0Cu;
+          }
+        }
+      }
+      const int spawned_slot = laser_spawn_from_fighter(
+          batch, bi, p, lp, shoot_spawn_state, shoot_use_velocity_override, shoot_override_vx,
+          shoot_override_vy, shoot_apply_motion_step, shoot_throw_lw_late_pulse_transn_y,
+          shoot_seed_hitlist_victim, shoot_seed_hitlist_victim_iid, shoot_seed_hitlist_mask);
+      (void)spawned_slot;
+      if (is_blaster_throw && action_id == (uint16_t)MSL_ACT_THROW_LW &&
+          lp->shot_itkind == (uint16_t)MSL_IT_KIND_FALCO_LASER_SHOT &&
+          batch->state.throw_pulse_crossed_curr_frame[idx] == 28u &&
+          throw_seed_shot_count[p] == 0u) {
+        laser_spawn_apply_throwlw_attached_body_callback(batch, bi, p, spawned_slot, lp);
+      }
     }
 
     // Keep item ordering stable for fixed-slot comparisons.

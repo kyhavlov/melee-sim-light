@@ -20,6 +20,15 @@ class _Case:
     note: str
 
 
+@dataclass(frozen=True)
+class _ThrowBCallbackCase:
+    dataset_rel: str
+    target_record: int
+    thrower_p: int
+    item_slot: int
+    note: str
+
+
 @pytest.mark.integration
 @pytest.mark.parametrize(
     "case",
@@ -91,3 +100,72 @@ def test_throwb_suppressed_pulse_combo_bridge_target_pm1(case: _Case) -> None:
                 f"{case.note}: record={rec} field={field} "
                 f"expected={int(ref_row[field][thrower])} got={int(out_row[field][thrower])}"
             )
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    "case",
+    [
+        _ThrowBCallbackCase(
+            dataset_rel="datasets/aggregate_recent/replays/validation/aggregate_recent/PutridJoyousOryx.msl",
+            target_record=3287,
+            thrower_p=0,
+            item_slot=1,
+            note="Fox ThrowB first-command callback consumes article and advances combo",
+        ),
+        _ThrowBCallbackCase(
+            dataset_rel="datasets/aggregate_recent/replays/validation/aggregate_recent/ImpassionedAlarmedTarsier.msl",
+            target_record=2121,
+            thrower_p=1,
+            item_slot=1,
+            note="Falco ThrowB terminal callback consumes article and advances combo",
+        ),
+        _ThrowBCallbackCase(
+            dataset_rel="datasets/aggregate_recent/replays/validation/aggregate_recent/PositiveRevolvingHyena.msl",
+            target_record=8380,
+            thrower_p=0,
+            item_slot=1,
+            note="Falco ThrowB startup carry keeps article BODY-eligible",
+        ),
+        _ThrowBCallbackCase(
+            dataset_rel=(
+                "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
+                "GracefulAttachedTurtle.msl"
+            ),
+            target_record=2522,
+            thrower_p=1,
+            item_slot=1,
+            note="primary terminal control remains before ThrowB callback consume phase",
+        ),
+    ],
+)
+def test_throwb_callback_phase_item_and_scoreboard_locks(case: _ThrowBCallbackCase) -> None:
+    # Replay-real locks for the ThrowB callback-phase owner:
+    # - ftAction emits one throw_flags_b0 pulse and ftFx_Throw_Anim spawns via it_8029C6CC.
+    # - Item BODY callback/source bookkeeping is owned by it_8026FAC4 / it_80272460 plus
+    #   ftColl_8007646C -> ftColl_800763C0.
+    # - Startup carry rows seed per-HitCapsule victim state; terminal consume rows suppress the
+    #   live article and advance only item-domain combo bookkeeping.
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / case.dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {case.dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+    target = int(case.target_record)
+    assert int(samples.shape[0]) > target, f"dataset too short for lock row: record={target}"
+
+    seed = samples[target]["seed_t"]
+    thrower = int(case.thrower_p)
+    assert int(seed["action_id"][thrower]) == 220, case.note  # ThrowB
+
+    _, ref_row, out_row = _run_one_step_row(dataset_path, target, thrower)
+    assert int(out_row["combo_count"][thrower]) == int(ref_row["combo_count"][thrower]), case.note
+    slot = int(case.item_slot)
+    for field in ("exists", "type", "state", "owner", "instance_id"):
+        assert int(out_row["items"][slot][field]) == int(ref_row["items"][slot][field]), (
+            f"{case.note}: item{slot}.{field} expected={int(ref_row['items'][slot][field])} "
+            f"got={int(out_row['items'][slot][field])}"
+        )

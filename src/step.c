@@ -65,6 +65,8 @@ static inline void clear_seed_owned_transients_post_frame(MslBatch* batch) {
       batch->state.throw_pulse_consumed[idx] = 0u;
       batch->state.throw_pulse_crossed_prev_frame[idx] =
           batch->state.throw_pulse_crossed_curr_frame[idx];
+      batch->state.throw_command_pending_pulse_frame[idx] = 0u;
+      batch->state.throw_command_pending_seed_valid[idx] = 0u;
       batch->state.throw_pulse_crossed_curr_frame[idx] = 0u;
       // `seed_t.source_clear_processhit_damage_pending_phase` is a one-step bridge for hidden
       // ProcessHit-owned source clear. Consume within this frame only.

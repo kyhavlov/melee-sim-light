@@ -158,6 +158,7 @@ def capture_engine_dump(
     timeout: float = 120.0,
     should_resync: bool = True,
     collision_probe_path: str | Path | None = None,
+    throw_laser_event_probe_path: str | Path | None = None,
 ) -> tuple[int, Path]:
     replay = Path(replay)
     if not replay.exists():
@@ -168,7 +169,11 @@ def capture_engine_dump(
 
     user_dir = Path(user_dir)
     user_dir.mkdir(parents=True, exist_ok=True)
-    _write_dolphin_ini(user_dir, force_interpreter=collision_probe_path is not None)
+    _write_dolphin_ini(
+        user_dir,
+        force_interpreter=collision_probe_path is not None
+        or throw_laser_event_probe_path is not None,
+    )
 
     resolved_start, resolved_end = _resolve_frame_window(
         replay=replay, start_frame=start_frame, end_frame=end_frame
@@ -199,6 +204,10 @@ def capture_engine_dump(
     env = os.environ.copy()
     if collision_probe_path is not None:
         env["MSL_COLLISION_PROBE_PATH"] = str(Path(collision_probe_path).resolve())
+    if throw_laser_event_probe_path is not None:
+        env["MSL_THROW_LASER_EVENT_PROBE_PATH"] = str(
+            Path(throw_laser_event_probe_path).resolve()
+        )
     proc = subprocess.Popen(proc_args, env=env)
 
     t0 = time.monotonic()
@@ -260,6 +269,12 @@ def main() -> int:
         default=None,
         help="optional JSONL path for pre-collision primitive probes; forces interpreter CPU core",
     )
+    ap.add_argument(
+        "--throw-laser-event-probe",
+        type=Path,
+        default=None,
+        help="optional JSONL path for throw-laser item spawn/body/damage/delete events; forces interpreter CPU core",
+    )
     args = ap.parse_args()
 
     rc, out_bin = capture_engine_dump(
@@ -273,6 +288,7 @@ def main() -> int:
         timeout=float(args.timeout),
         should_resync=not args.no_resync,
         collision_probe_path=args.collision_probe,
+        throw_laser_event_probe_path=args.throw_laser_event_probe,
     )
     if rc != 0:
         print(f"engine dump capture failed: {out_bin}")

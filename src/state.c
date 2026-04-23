@@ -103,6 +103,8 @@ int state_alloc(MslStateSoA* state, int batch_size) {
   state->action_frame = (int16_t*)alloc_aligned_64(sizeof(int16_t) * bp);
   state->throw_pulse_consumed = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->throw_pulse_crossed_prev_frame = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
+  state->throw_command_pending_pulse_frame = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
+  state->throw_command_pending_seed_valid = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->throw_pulse_crossed_curr_frame = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->source_clear_timer_x18c8 = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->source_clear_owner_set_phase = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
@@ -371,7 +373,8 @@ int state_alloc(MslStateSoA* state, int batch_size) {
   state->item_misc1 = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bi);
   state->item_misc2 = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bi);
   state->item_misc3 = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bi);
-  state->item_hitlist = (MslHitlistCapsule*)alloc_aligned_64(sizeof(MslHitlistCapsule) * bi);
+  state->item_hitlist = (MslHitlistCapsule*)alloc_aligned_64(sizeof(MslHitlistCapsule) * bi *
+                                                             (size_t)MSL_MAX_HITBOXES);
 
   if (!state->frame_id || !state->frame_pre_random_seed || !state->stage_id ||
       !state->opening_input_lock_timer || !state->stale_attack_instance_counter ||
@@ -399,7 +402,8 @@ int state_alloc(MslStateSoA* state, int batch_size) {
       !state->prev_action_id || !state->prev_action_frame || !state->action_frame ||
       !state->throw_pending_victim_port || !state->throw_pending_hit_idx ||
       !state->attached_victim_port || !state->throw_pulse_consumed ||
-      !state->throw_pulse_crossed_prev_frame || !state->throw_pulse_crossed_curr_frame ||
+      !state->throw_pulse_crossed_prev_frame || !state->throw_command_pending_pulse_frame ||
+      !state->throw_command_pending_seed_valid || !state->throw_pulse_crossed_curr_frame ||
       !state->source_clear_timer_x18c8 || !state->source_clear_owner_set_phase ||
       !state->source_clear_processhit_damage_pending_phase ||
       !state->fighter_8006cda4_pre_gate_consume_count ||
@@ -520,6 +524,8 @@ int state_alloc(MslStateSoA* state, int batch_size) {
   memset(state->capture_wait_jump_latch, 0, sizeof(uint8_t) * bp);
   memset(state->capture_breakout_pending, 0, sizeof(uint8_t) * bp);
   memset(state->throw_anim_rate_fp_q16_16, 0, sizeof(int32_t) * bp);
+  memset(state->throw_command_pending_pulse_frame, 0, sizeof(uint8_t) * bp);
+  memset(state->throw_command_pending_seed_valid, 0, sizeof(uint8_t) * bp);
   memset(state->throw_pulse_crossed_curr_frame, 0, sizeof(uint8_t) * bp);
   memset(state->smash_charge_state, 0, sizeof(uint8_t) * bp);
   memset(state->smash_charge_frames, 0, sizeof(uint8_t) * bp);
@@ -538,6 +544,8 @@ int state_alloc(MslStateSoA* state, int batch_size) {
   }
   for (size_t i = 0; i < bi; i++) {
     state->item_hitlag[i] = 0u;
+  }
+  for (size_t i = 0; i < bi * (size_t)MSL_MAX_HITBOXES; i++) {
     hitlist_capsule_clear(&state->item_hitlist[i]);
   }
 
@@ -621,6 +629,8 @@ void state_free(MslStateSoA* state) {
   alloc_free(state->action_frame);
   alloc_free(state->throw_pulse_consumed);
   alloc_free(state->throw_pulse_crossed_prev_frame);
+  alloc_free(state->throw_command_pending_pulse_frame);
+  alloc_free(state->throw_command_pending_seed_valid);
   alloc_free(state->throw_pulse_crossed_curr_frame);
   alloc_free(state->source_clear_timer_x18c8);
   alloc_free(state->source_clear_owner_set_phase);

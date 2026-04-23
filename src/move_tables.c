@@ -2352,6 +2352,32 @@ uint8_t move_tables_throw_projectile_last_pulse_frame(uint8_t char_id, uint16_t 
   return 1u;
 }
 
+uint8_t move_tables_throw_projectile_pulse_ordinal(uint8_t char_id, uint16_t throw_action_id,
+                                                   int16_t pulse_frame, uint8_t* out_ordinal) {
+  if (out_ordinal == NULL) {
+    return 0;
+  }
+  const int kind = throw_kind_from_action(throw_action_id);
+  if (kind < 0) {
+    return 0;
+  }
+  const MslFramePulses pulses = g_throw_spawn_projectile_by_char[char_id][(size_t)kind];
+  if (!pulses.loaded || pulses.count == 0u) {
+    return 0;
+  }
+  uint8_t ordinal = 0u;
+  for (uint8_t i = 0; i < pulses.count; i++) {
+    if (pulses.frame[i] <= pulse_frame) {
+      ordinal++;
+    }
+    if (pulses.frame[i] == pulse_frame) {
+      *out_ordinal = ordinal;
+      return 1u;
+    }
+  }
+  return 0;
+}
+
 uint8_t move_tables_special_pseudo_random_sfx_ranges_crossed(uint8_t char_id, uint16_t msid,
                                                              float prev_anim_frame_f32,
                                                              float cur_anim_frame_f32,

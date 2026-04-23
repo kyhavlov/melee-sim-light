@@ -256,6 +256,13 @@ uint8_t move_tables_throw_projectile_first_pulse_frame(uint8_t char_id, uint16_t
 uint8_t move_tables_throw_projectile_last_pulse_frame(uint8_t char_id, uint16_t throw_action_id,
                                                       int16_t* out_last_pulse_frame);
 
+// Returns the 1-based ordinal of a throw projectile pulse frame for this throw action.
+//
+// Source of truth:
+// data/moves/{fox,falco}.json moves["ftCo_SM_Throw*"]["events"] set_throw_spawn_projectile.
+uint8_t move_tables_throw_projectile_pulse_ordinal(uint8_t char_id, uint16_t throw_action_id,
+                                                   int16_t pulse_frame, uint8_t* out_ordinal);
+
 // Emits pseudo-random SFX command HSD_Randi(random_range) pulses crossed this frame for a specific
 // submotion id.
 //

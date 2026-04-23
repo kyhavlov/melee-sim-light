@@ -150,6 +150,11 @@ typedef struct MslStateSoA {
   // Throw projectile pulse crossing lane from the previous replay step (0 = none).
   // Producer is strictly causal in tools/slippi/make_dataset_from_slp.py.
   uint8_t* throw_pulse_crossed_prev_frame;
+  // Current teacher-forced step's command-timer pending throw projectile pulse (0 = none).
+  // This seed-owned lane is authoritative for one step after reseed; rollout falls back to runtime
+  // frame-crossing after `throw_command_pending_seed_valid` is cleared at end-of-frame.
+  uint8_t* throw_command_pending_pulse_frame;
+  uint8_t* throw_command_pending_seed_valid;
   // Internal runtime producer for the current frame's throw pulse crossing.
   // step.c promotes this to `throw_pulse_crossed_prev_frame` at end-of-frame so rollout can carry
   // the same throw-side pulse ownership that one-step seeds expose directly.
@@ -845,9 +850,9 @@ typedef struct MslStateSoA {
   uint8_t* item_misc2;
   uint8_t* item_misc3;
 
-  // Item hitbox victim rings (HitCapsule victim lists per item slot).
+  // Item hitbox victim rings (HitCapsule victim lists per item slot and hitbox).
   // Decomp anchor (tick): refs/melee/src/melee/it/itcoll.c::it_8027146C
-  // Layout: [batch * MSL_MAX_ITEMS]
+  // Layout: [batch * MSL_MAX_ITEMS * MSL_MAX_HITBOXES]
   MslHitlistCapsule* item_hitlist;
 } MslStateSoA;
 

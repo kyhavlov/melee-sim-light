@@ -314,6 +314,20 @@ typedef struct MslSeed {
   // - 0: no projectile pulse crossing in (t-1 -> t) for this seed row.
   // - N: crossed pulse frame number (u8) from data/moves/{fox,falco}.json throw events.
   uint8_t throw_pulse_crossed_prev_frame[MSL_MAX_PLAYERS];
+  // Throw command cursor pending pulse for the current teacher-forced step.
+  //
+  // Decomp ownership:
+  // - ftAction_80073354 subtracts frame_speed_mul from the command timer, executes command events
+  //   when their timer reaches <=0, and clears `throw_flags` before processing the command list.
+  // - ftFx_Throw_Anim then consumes at most one bool `throw_flags_b0` in that Anim callback.
+  //
+  // Producer (tools/slippi/make_dataset_from_slp.py):
+  // - 0: no command-timer `set_throw_spawn_projectile` pulse should be emitted this step.
+  // - N: the command pulse frame that should become the single `throw_flags_b0` consume this step.
+  // This is prefix-causal over replay history and extracted command timing.
+  // refs/melee/src/melee/ft/ftaction.c::{ftAction_80071974,ftAction_80073354}
+  // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
+  uint8_t throw_command_pending_pulse_frame[MSL_MAX_PLAYERS];
   // Source-owner clear countdown (`fp->dmg.x18C8`) with +1 bias.
   //
   // Decomp ownership:
@@ -1103,6 +1117,26 @@ typedef struct MslSeed {
   // - Strictly-causal per-item value aligned to fixed item slots in `items`.
   // - Runtime reseed sanitizes invalid/non-positive values back to 1.0f.
   float item_reflect_damage_mul[MSL_MAX_ITEMS];
+  // Item HitCapsule victims_1 seed lane for throw-side laser articles.
+  //
+  // Decomp ownership:
+  // - Item-vs-fighter BODY collision routes through it_8026FAC4 / it_8026FA2C and inserts fighter
+  //   victims into the item's HitCapsule victims_1 list via lbColl_80008688.
+  // - The dump probe patch in tools/dolphin/patches/ishiiruka_engine_dump_item_hitlist_v10.patch
+  //   confirms throw-laser xDA8 and victims_1 cooldown state on replay-real F14 rows.
+  //
+  // Seed representation:
+  // - port 0..3: one fighter victim to pre-latch into the item hitlist at reseed.
+  // - port 0xFF: no seeded victim for this item slot.
+  // - cooldown stores the HitVictim.x4 value to insert, clamped to u8.
+  // - hitbox_mask selects which item HitCapsules receive the seeded victim. Dolphin v10 dumps show
+  //   throw-laser victims_1 entries are per hitbox, so a per-item collapse is not authoritative.
+  // refs/melee/src/melee/it/itcoll.c::{it_8026FAC4,it_8026FA2C,it_80272460}
+  // refs/melee/src/melee/lb/lbcollision.c::lbColl_80008688
+  uint8_t item_hitlist_victim_port[MSL_MAX_ITEMS];
+  uint8_t item_hitlist_victim_cd[MSL_MAX_ITEMS];
+  uint8_t item_hitlist_victim_hitbox_mask[MSL_MAX_ITEMS];
+  uint16_t item_hitlist_victim_iid[MSL_MAX_ITEMS];
 
   MslItem items[MSL_MAX_ITEMS];
 } MslSeed;

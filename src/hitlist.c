@@ -35,7 +35,11 @@ static inline size_t idx_fighter_hitlist(int bi, int p, int hb_id) {
 }
 
 static inline size_t idx_item_hitlist(int bi, int item_slot) {
-  return (size_t)bi * (size_t)MSL_MAX_ITEMS + (size_t)item_slot;
+  return ((size_t)bi * (size_t)MSL_MAX_ITEMS + (size_t)item_slot) * (size_t)MSL_MAX_HITBOXES;
+}
+
+static inline size_t idx_item_hitlist_hb(int bi, int item_slot, int hb_id) {
+  return idx_item_hitlist(bi, item_slot) + (size_t)hb_id;
 }
 
 static inline uint8_t entry_is_empty(const MslHitlistVictimEntry* e) {
@@ -359,8 +363,8 @@ void hitlist_register_fighter_group_v2(MslBatch* batch, int bi, int attacker, ui
   }
 }
 
-uint8_t hitlist_allows_item_fighter(MslBatch* batch, int bi, int item_slot, int victim,
-                                    uint16_t victim_iid) {
+uint8_t hitlist_allows_item_hitbox_fighter(MslBatch* batch, int bi, int item_slot, int hitbox_id,
+                                           int victim, uint16_t victim_iid) {
   if (batch == NULL) {
     return 0u;
   }
@@ -370,11 +374,14 @@ uint8_t hitlist_allows_item_fighter(MslBatch* batch, int bi, int item_slot, int 
   if (item_slot < 0 || item_slot >= MSL_MAX_ITEMS) {
     return 0u;
   }
+  if (hitbox_id < 0 || hitbox_id >= MSL_MAX_HITBOXES) {
+    return 0u;
+  }
   if (victim < 0 || victim >= (int)batch->config.num_players) {
     return 0u;
   }
 
-  const size_t ii = idx_item_hitlist(bi, item_slot);
+  const size_t ii = idx_item_hitlist_hb(bi, item_slot, hitbox_id);
   MslHitlistCapsule* hit = &batch->state.item_hitlist[ii];
   size_t found = 0;
   if (hitlist_capsule_find_fighter_entry(batch, bi, hit->victims_1, (size_t)MSL_HITLIST_VICTIM_CAP,
@@ -384,8 +391,9 @@ uint8_t hitlist_allows_item_fighter(MslBatch* batch, int bi, int item_slot, int 
   return 1u;
 }
 
-void hitlist_register_item_fighter(MslBatch* batch, int bi, int item_slot, int victim,
-                                   uint16_t victim_iid, int type, uint8_t rehit_frames) {
+void hitlist_register_item_hitbox_fighter(MslBatch* batch, int bi, int item_slot, int hitbox_id,
+                                          int victim, uint16_t victim_iid, int type,
+                                          uint8_t rehit_frames) {
   if (batch == NULL) {
     return;
   }
@@ -395,17 +403,28 @@ void hitlist_register_item_fighter(MslBatch* batch, int bi, int item_slot, int v
   if (item_slot < 0 || item_slot >= MSL_MAX_ITEMS) {
     return;
   }
+  if (hitbox_id < 0 || hitbox_id >= MSL_MAX_HITBOXES) {
+    return;
+  }
   if (victim < 0 || victim >= (int)batch->config.num_players) {
     return;
   }
 
-  const size_t ii = idx_item_hitlist(bi, item_slot);
+  const size_t ii = idx_item_hitlist_hb(bi, item_slot, hitbox_id);
   MslHitlistCapsule* hit = &batch->state.item_hitlist[ii];
   MslHitlistVictimEntry key;
   memset(&key, 0, sizeof(key));
   key.kind_slot = hitlist_fighter_key((uint8_t)victim);
   key.id16 = victim_iid;
   (void)hitlist_insert_victims1(hit, type, &key, rehit_frames);
+}
+
+void hitlist_register_item_fighter(MslBatch* batch, int bi, int item_slot, int victim,
+                                   uint16_t victim_iid, int type, uint8_t rehit_frames) {
+  for (int hb_id = 0; hb_id < MSL_MAX_HITBOXES; hb_id++) {
+    hitlist_register_item_hitbox_fighter(batch, bi, item_slot, hb_id, victim, victim_iid, type,
+                                         rehit_frames);
+  }
 }
 
 void hitlist_seed_init_fighter_hitbox_from_group(MslBatch* batch, int bi, int attacker, int hb_id,
@@ -567,7 +586,10 @@ void hitlist_tick(MslBatch* batch) {
       if (!batch->state.item_exists[ii]) {
         continue;
       }
-      hitlist_capsule_tick_one(&batch->state.item_hitlist[ii]);
+      const size_t base = idx_item_hitlist(bi, it);
+      for (int hb_id = 0; hb_id < MSL_MAX_HITBOXES; hb_id++) {
+        hitlist_capsule_tick_one(&batch->state.item_hitlist[base + (size_t)hb_id]);
+      }
     }
   }
 }

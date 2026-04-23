@@ -54,14 +54,19 @@ void hitlist_register_fighter_group_v2(MslBatch* batch, int bi, int attacker, ui
                                        int victim, uint16_t victim_iid, int type,
                                        uint8_t rehit_frames);
 
-// Registers a fighter victim in an item capsule's victim list (victims_1).
+// Registers a fighter victim in one item hitbox capsule's victim list (victims_1).
 // Decomp anchor (items): refs/melee/src/melee/it/itcoll.c::it_8026FA2C / it_8026FAC4
+void hitlist_register_item_hitbox_fighter(MslBatch* batch, int bi, int item_slot, int hitbox_id,
+                                          int victim, uint16_t victim_iid, int type,
+                                          uint8_t rehit_frames);
+
+// Convenience wrapper: register a fighter victim across all item hitboxes.
 void hitlist_register_item_fighter(MslBatch* batch, int bi, int item_slot, int victim,
                                    uint16_t victim_iid, int type, uint8_t rehit_frames);
 
-// Returns 1 if (item_slot) can hit (victim) this frame, else 0.
-uint8_t hitlist_allows_item_fighter(MslBatch* batch, int bi, int item_slot, int victim,
-                                    uint16_t victim_iid);
+// Returns 1 if (item_slot, hitbox_id) can hit (victim) this frame, else 0.
+uint8_t hitlist_allows_item_hitbox_fighter(MslBatch* batch, int bi, int item_slot, int hitbox_id,
+                                           int victim, uint16_t victim_iid);
 
 // Seed bridge: initialize an active fighter hitbox's victim list from the seeded per-hitbox map,
 // falling back to the legacy dense hit_group map when no per-hitbox seed is marked valid.

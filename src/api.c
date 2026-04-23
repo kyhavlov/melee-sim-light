@@ -907,6 +907,14 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
       batch->state.throw_pulse_consumed[idx] = seed->throw_pulse_consumed[p] ? 1u : 0u;
       // Previous-step throw pulse crossing lane (strictly causal seed producer).
       batch->state.throw_pulse_crossed_prev_frame[idx] = seed->throw_pulse_crossed_prev_frame[p];
+      // Command-timer pending pulse lane for this teacher-forced step. This is seed-authoritative
+      // only for the current one-step row; clear_seed_owned_transients_post_frame() drops validity
+      // so rollout can fall back to runtime frame-crossing.
+      // refs/melee/src/melee/ft/ftaction.c::{ftAction_80071974,ftAction_80073354}
+      // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
+      batch->state.throw_command_pending_pulse_frame[idx] =
+          seed->throw_command_pending_pulse_frame[p];
+      batch->state.throw_command_pending_seed_valid[idx] = 1u;
       batch->state.throw_pulse_crossed_curr_frame[idx] = 0u;
       batch->state.source_clear_timer_x18c8[idx] = seed->source_clear_timer_x18c8[p];
       batch->state.source_clear_owner_set_phase[idx] =
@@ -1570,9 +1578,35 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
       batch->state.item_misc2[ii] = item->misc2;
       batch->state.item_misc3[ii] = item->misc3;
 
-      // Item hitlists are derived (not seeded): clear on reseed so reused item slots don't
-      // inherit stale victim rings.
-      hitlist_capsule_clear(&batch->state.item_hitlist[ii]);
+      // Item hitlists are explicit runtime state. Clear on reseed so reused item slots do not
+      // inherit stale victim rings; seed bridges below re-materialize selected victims_1 entries.
+      const size_t item_hitlist_base = ii * (size_t)MSL_MAX_HITBOXES;
+      for (size_t hb = 0; hb < (size_t)MSL_MAX_HITBOXES; hb++) {
+        hitlist_capsule_clear(&batch->state.item_hitlist[item_hitlist_base + hb]);
+      }
+      const uint8_t seed_victim = seed->item_hitlist_victim_port[it];
+      if (seed_victim < (uint8_t)batch->config.num_players) {
+        // Prefix-causal item HitCapsule seed lane for throw-laser victim rings:
+        // - item BODY callbacks insert fighter victims through it_8026FAC4 / it_8026FA2C into
+        //   HitCapsule.victims_1 using lbColl_80008688.
+        // - Dolphin dump v10 patch captures matching throw-laser victims_1 entries/cooldowns for
+        //   F14 rows; preprocessing derives the compact replay seed and per-hitbox mask from prior
+        //   item identity and attached-victim source lanes. The mask is required because hitbox
+        //   victims_1 state can differ across the same item article.
+        // refs/melee/src/melee/it/itcoll.c::{it_8026FAC4,it_8026FA2C,it_80272460}
+        // refs/melee/src/melee/lb/lbcollision.c::lbColl_80008688
+        const uint8_t cd = seed->item_hitlist_victim_cd[it];
+        uint8_t mask = seed->item_hitlist_victim_hitbox_mask[it];
+        mask &= (uint8_t)((1u << (uint8_t)MSL_MAX_HITBOXES) - 1u);
+        for (int hb = 0; hb < MSL_MAX_HITBOXES; hb++) {
+          if ((mask & (uint8_t)(1u << (uint8_t)hb)) == 0u) {
+            continue;
+          }
+          hitlist_register_item_hitbox_fighter(batch, bi, it, hb, (int)seed_victim,
+                                               seed->item_hitlist_victim_iid[it],
+                                               (int)MSL_LBCOLL_INSERT_FT_BODY, cd);
+        }
+      }
     }
 
     // Reconstruct the owner-side attached victim pointer (`fp->victim_gobj`) from the seeded

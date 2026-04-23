@@ -126,6 +126,10 @@ SEED_DTYPE = np.dtype(
         # - 0 means no throw projectile pulse crossing in (t-1 -> t),
         # - N is the crossed pulse frame from extracted throw move events.
         ("throw_pulse_crossed_prev_frame", _arr("u1", MAX_PLAYERS)),
+        # Current-step command-timer pending pulse lane for throw-side projectile commands.
+        # - 0 means no set_throw_spawn_projectile command should emit this one-step row.
+        # - N is the command pulse frame that should become the single throw_flags_b0 consume.
+        ("throw_command_pending_pulse_frame", _arr("u1", MAX_PLAYERS)),
         # Source-owner clear countdown (`fp->dmg.x18C8`) with +1 bias.
         # - 0: inactive (decomp internal is -1)
         # - N>0: decomp timer value + 1
@@ -389,6 +393,13 @@ SEED_DTYPE = np.dtype(
         # Grounded attacker-on-shield knockback scalar (`fp->xF4_ground_attacker_shield_kb_vel`).
         ("attacker_shield_ground_kb_vel", _arr("<f4", MAX_PLAYERS)),
         ("item_reflect_damage_mul", _arr("<f4", MAX_ITEMS)),
+        # Item HitCapsule victims_1 seed lane for throw-side laser articles.
+        # refs/melee/src/melee/it/itcoll.c::{it_8026FAC4,it_8026FA2C,it_80272460}
+        # refs/melee/src/melee/lb/lbcollision.c::lbColl_80008688
+        ("item_hitlist_victim_port", _arr("u1", MAX_ITEMS)),
+        ("item_hitlist_victim_cd", _arr("u1", MAX_ITEMS)),
+        ("item_hitlist_victim_hitbox_mask", _arr("u1", MAX_ITEMS)),
+        ("item_hitlist_victim_iid", _arr("<u2", MAX_ITEMS)),
         # NOTE (PP#4): these staling fields are populated by replay-history preprocessing:
         # tools/slippi/staling_history.py (derive) and tools/slippi/make_dataset_from_slp.py (wire).
         # They seed the per-player `StaleMoveTable` ring buffer and `attack_instance`.

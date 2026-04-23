@@ -22,6 +22,17 @@ uv run python -m tools.dolphin.forensic_row_dump \
 Outputs are written under `reports/triage/<timestamp>_dolphin_forensic_row/`.
 
 Requires `refs/Ishiiruka@3e676fab03b19faf1a6b00cb63934bd2f6502827` for v7 hitlist provenance lanes.
+For item HitCapsule/callback probes, apply the v10 item extension patch first:
+
+```bash
+git -C refs/Ishiiruka apply ../../tools/dolphin/patches/ishiiruka_engine_dump_item_hitlist_v10.patch
+cmake --build refs/Ishiiruka/build_probe --target dolphin-nogui -j2
+```
+
+The v10 patch records item callback/damage latches (`xC34`, `xCA8`, `xCBC`, `xCC0`), laser misc
+fields, `xDA8`, and per-item HitCapsule victims_1/victims_2 entries. It is required for throw-laser
+item hitlist/callback F14 probes and is stored in the main repo so local `refs/Ishiiruka` changes
+are reviewable.
 
 ## Collision primitive probe
 
@@ -45,6 +56,39 @@ so the patched interpreter hook can record:
 The patch is intentionally stored in the main repo instead of leaving `refs/Ishiiruka` dirty. Apply
 it only for local forensics and restore the nested repo afterwards.
 
+## Throw-laser intra-frame event probe
+
+Some throw-laser F14 article rows spawn and delete an item within one engine frame, before Slippi
+post-frame item serialization. The v10 post-frame item-hitlist dump cannot observe those no-article
+rows after deletion. For that surface, apply the throw-laser event probe:
+
+```bash
+git -C refs/Ishiiruka apply ../../tools/dolphin/patches/ishiiruka_throw_laser_event_probe.patch
+cmake --build refs/Ishiiruka/build_probe --target dolphin-nogui -j2
+```
+
+Then pass `--throw-laser-event-probe <path.jsonl>` through `dolphin_engine_dump.py`, or use
+`forensic_row_dump.py --throw-laser-event-probe`. The wrapper sets
+`MSL_THROW_LASER_EVENT_PROBE_PATH` and forces interpreter mode. The probe records JSONL events for
+Fox/Falco throw-laser item spawn, BODY hitlist propagation, damage callback, hitlag/give-damage,
+and destroy paths:
+
+- `it_8029C6CC`
+- `it_8029C4D4`
+- `it_8026FAC4`
+- `it_80272460`
+- `Item_8026A294`
+- `Item_8026A8EC`
+
+Parse or summarize the JSONL with:
+
+```bash
+uv run python -m tools.dolphin.throw_laser_event_dump reports/triage/<probe>/events.jsonl
+```
+
+Keep this patch reviewable under `tools/dolphin/patches/`; do not leave a local-only
+`refs/Ishiiruka` interpreter diff in handoffs.
+
 ## Controlled playback probes
 
 Use `patch_slp_preframe_window.py` when a modelplay symptom needs vanilla confirmation but exact state recreation is not available from Slippi post-frames alone. The script edits only 0x37 pre-frame payloads in a copied `.slp`; Dolphin then plays the replay normally. By default it refuses `--out == --slp`; use `--in-place` only when intentionally overwriting a disposable copy. Keep windows short and write all generated specs, patched replays, dumps, and rows under `reports/triage/`.
@@ -63,9 +107,10 @@ The rerun7 frame-2124 shield investigation used this workflow: neutral/toward sh
 ## Active scripts
 
 - `dolphin_engine_dump.py`: playback CLI wrapper -> `.bin` engine dump.
-- `engine_dump_io.py`: v6/v7 dump parser (schema + typed readers, including v7 hitlist provenance).
-- `extract_engine_dump_rows.py`: deterministic JSON/txt extraction for frame windows (including hitlist provenance lanes when available).
+- `engine_dump_io.py`: v6/v7/v10 dump parser (schema + typed readers, including fighter and item hitlist provenance).
+- `extract_engine_dump_rows.py`: deterministic JSON/txt extraction for frame windows (including item/fighter hitlist provenance lanes when available).
 - `forensic_row_dump.py`: dataset row => frame window => dump + extracted rows.
+- `throw_laser_event_dump.py`: read/summarize throw-laser intra-frame event JSONL probes.
 - `compare_hitlist_provenance.py`: frame-by-frame comparison of extracted hitlist provenance between two row captures.
 - `patch_slp_preframe_window.py`: copied `.slp` pre-frame patcher for controlled vanilla playback probes.
 

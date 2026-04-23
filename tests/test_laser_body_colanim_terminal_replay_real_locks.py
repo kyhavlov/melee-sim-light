@@ -36,6 +36,8 @@ def test_terminal_x1990_colanim_guard_keeps_fox_laser_alive() -> None:
 
     for field in ("exists", "type", "owner", "instance_id"):
         assert int(out["items"][slot][field]) == int(ref["items"][slot][field]), field
+    for field in ("action_id", "animation_index", "hitlag", "hitstun", "instance_hit_by"):
+        assert int(out[field][p]) == int(ref[field][p]), field
     assert int(out["action_id"][p]) == int(ref["action_id"][p]) == 20  # Dash
     assert int(out["hitlag"][p]) == int(ref["hitlag"][p]) == 0
     assert int(out["hitstun"][p]) == int(ref["hitstun"][p]) == 0
@@ -87,6 +89,8 @@ def test_terminal_x1990_x1994_carry_allows_falco_laser_body_item_consume() -> No
 
     for field in ("exists", "type", "owner", "instance_id"):
         assert int(out["items"][slot][field]) == int(ref["items"][slot][field]), field
+    for field in ("action_id", "animation_index", "hitlag", "hitstun", "instance_hit_by"):
+        assert int(out[field][p]) == int(ref[field][p]), field
 
 
 def test_nonterminal_x1990_x1994_carry_keeps_falco_laser_alive() -> None:
