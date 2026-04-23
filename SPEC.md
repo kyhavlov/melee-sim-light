@@ -2828,6 +2828,99 @@ Fox/Falco special-owner split (2026-04-17):
     `reports/triage/current_f15_probe_dcc352/DistinctCaringCobra_rec352_p0_f227_232_laser_shield_reflect_events.jsonl`,
     `reports/triage/current_f15_probe_agg428/AttachedGoodNaturedGuanaco_rec428_p1_f303_308_laser_shield_reflect_events.jsonl`,
     `reports/triage/current_f15_probe_refresh_dcc2905/DistinctCaringCobra_rec2905_p0_f2780_2785_laser_shield_reflect_events.jsonl`.
+  - Consolidated remaining item-owner seed-surface boundary:
+    - Clean-checkpoint pass (`0de7b70`) regenerated taxonomy at
+      `reports/triage/item_owner_closure_{agg,primary}_before/`: primary total `528`, all primary
+      item-owner families zero; aggregate total `4627` with `F14c=20`, `F15a=10`, `F15b=28`,
+      `F16d=38`, and `F14d/F16a/F16b/F16c=0`.
+    - The active rows are now opposite-outcome pairs inside each owner, so replay-visible proxy
+      branches are exhausted:
+      - `F15a`: `DCC:352`/`PPA:2342` are false transfer rows, while `MAJ:118`/`MAJ:294`/`MAJ:6336`
+        are missed transfer/identity rows. Required state is the exact `ftColl_80077464`
+        collision-selection result plus pending `xC64/xC8C` consumed by `Item_80269F14`.
+      - `F15b`: `DCC:2905`/`IAT:3552`/`PRH:8157` need destroy, while
+        `MAJ:6929`/`PRH:6269` need keepalive and `MAJ:5587` is adjacent reflected item identity.
+        Required state is shield/reflect callback selection, item victims_1 carry, and item
+        `xC34_damageDealt` into the next-frame `Item_8026A294` destroy path.
+      - `F16d`: `MAJ:5001`/`TCH:9877` are missed BODY callback rows and
+        `PRH:8137`/`PPA:5141` are false BODY callback rows; `PPA:6414` is a no-player-delta item
+        lifetime row. Required state is the hidden item BODY callback/hitlist phase rather than
+        widened BODY geometry.
+      - `F14c`: `DCC:1053`, `PRH:8385`, `PJO:305`, and `TCH:270` combine throw-laser article
+        lifetime with combo/hitlag bookkeeping. Required state is the throw-laser callback phase
+        carrying per-HitCapsule victims_1, item damage latches, and ftColl combo/hitlag side
+        effects.
+    - The missing seed/runtime surfaces are therefore named explicitly:
+      1. per-item reflect-callback selection and pending reflect snapshot (`xC64/xC8C`);
+      2. per-item, per-hitbox victims_1/cooldown snapshot for all item BODY/shield callbacks, not
+         only the current compact throw-laser one-victim bridge;
+      3. per-item callback damage latches (`xC34`, `xC4C`, `xCA8`) at reseed so next-frame
+         OnGiveDamage/destroy and hitlag callbacks can run deterministically.
+    Sources: `refs/melee/src/melee/ft/ftcoll.c::{ftColl_80077464,ftColl_80077688,ftColl_8007925C}`,
+    `refs/melee/src/melee/it/item.c::{Item_80269DC8,Item_80269F14,Item_8026A294,Item_8026A8EC}`,
+    `refs/melee/src/melee/it/itcoll.c::{it_8026FAC4,it_8026FA2C,it_80272460}`,
+    `refs/melee/src/melee/lb/lbcollision.c::lbColl_80008688`,
+    `reports/triage/item_owner_closure_f14_f15_forensic/forensic_rows.txt`,
+    `reports/triage/item_owner_closure_f16d_forensic/forensic_rows.txt`.
+  - Hidden shield/reflect seed lanes and item-owner re-split:
+    - The retained seed/runtime surface now serializes same-spawn GuardReflect outcomes for
+      `ftColl_80077464 -> Item_80269F14` pending reflect transfer (`xC64/xC8C`) and
+      `ftColl_80077688 -> Item_80269DC8 -> itFoxLaser_Logic94_ShieldBounced` bounce velocity
+      (`xC58` result) when Slippi t+1 exposes a same-spawn reflected/bounced laser. This is
+      deliberately narrower than the rejected direct `Item_80269DC8` predicate and does not use
+      dataset/record ids, broad reflect-size overlap, or visible xDA8 proxies.
+    - Fresh taxonomy after forced preprocess and `make build`: primary total `528`, all primary
+      item-owner families remain zero. Aggregate total is `4615` (down from `4627`). Remaining
+      aggregate item-owned rows are `F14c=20`, `F15a=6`, `F15b=12`; `F16d=0` after moving player
+      BODY-damage divergence to `F08f_body_contact_candidate_filter_residual`, SpecialN gun/shot
+      identity fallout to `F19_specialn_blaster_article`, and the SpecialAirLwHit item-only row to
+      `F20_speciallw_shine_reflector`.
+    - Runtime ordering note: the seeded reflect-transfer lane is consumed after same-frame item
+      collision callbacks so callback selection still sees the pre-transfer owner. The lane is only
+      active when the seed carries a nonzero target `xDA8` instance id, which keeps zero-initialized
+      synthetic/API seeds from accidentally meaning “transfer to port 0.”
+    - Remaining F15 rows are now only true shield/reflect hidden state: `DCC:352`/`PPA:2342`
+      still prove false transfer when visible overlap would invent `ftColl_80077464`, while
+      `DCC:2905`/`IAT:3552`/`PRH:8157` still require hidden item hitlist/`xC34` carry into the
+      next-frame `Item_8026A294` destroy path. `MAJ:6336` remains adjacent same-frame spawn/reflect
+      identity because the seed item is absent and no prefix-causal pending reflect snapshot exists.
+    - Rejected during this pass: same-spawn “known no reflect” seeds fixed some F15a rows but
+      reopened Guard/Shield rows; replay-derived hidden BODY-hit seeds reduced aggregate F16d but
+      reopened primary damage-selection rows; replay-derived clear-only item absence seeds exploded
+      primary/aggregate by confusing ordinary article/slot ordering with hidden callback consume.
+      These producers are not retained.
+    Sources: `refs/melee/src/melee/ft/ftcoll.c::{ftColl_80077464,ftColl_80077688,ftColl_8007925C}`,
+    `refs/melee/src/melee/it/item.c::{Item_80269DC8,Item_80269F14,Item_8026A294}`,
+    `refs/melee/src/melee/it/items/itfoxlaser.c::{itFoxLaser_Logic94_ShieldBounced,itFoxLaser_Logic94_HitShield}`,
+    `refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c`,
+    `refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c`,
+    `reports/triage/item_owner_final_aggregate/summary.json`,
+    `reports/triage/item_owner_final_primary/summary.json`.
+  - Final item-owner closure split:
+    - The broad replay-derived hidden clear/skip lane was removed after aggregate probe regression
+      (`4615 -> 4733`) and false laser clears. The retained seed/runtime surface remains limited to
+      explicit pending reflect transfer (`xC64/xC8C`), shield-bounce velocity (`xC58`), and
+      explicit hidden BODY callback lanes.
+    - Former `F14c` rows now belong to `F19_specialn_blaster_article`: throw-side laser articles
+      are still the SpecialN blaster implementation (`ftFx_Throw_Anim`) consuming
+      `set_throw_spawn_projectile` pulses from `ftAction_80071974` / `ftAction_80073354` and
+      spawning through `it_8029C6CC`. Their remaining mismatch is blaster command/callback
+      bookkeeping, not generic item-owner seed cleanup.
+    - Former `F15a/F15b` rows now belong to `F01_guard_release_collision`: guard/shield collision
+      selection (`ftColl_80077464`, `ftColl_80077688`, `ftColl_8007925C`) writes the hidden pending
+      reflect and shield fields later consumed by `Item_80269F14` / `Item_80269DC8`. The residual
+      item owner/lifetime differences are guard collision ordering fallout, not an independent
+      item-owner bridge.
+    - Former aggregate `F16d` rows remain under
+      `F08f_body_contact_candidate_filter_residual`; the owner is BODY candidate selection /
+      per-HitCapsule callback state rather than item slot identity.
+    - Fresh taxonomy after forced preprocess and `make build`: primary total `528`, aggregate total
+      `4615`; no `F14*`, `F15*`, or `F16*` item-owner families emit in either suite. Aggregate
+      named residuals include `F01_guard_release_collision=1090`,
+      `F19_specialn_blaster_article=42`, `F20_speciallw_shine_reflector=4`, and
+      `F08f_body_contact_candidate_filter_residual=78`. The item-owner checklist item is closed
+      with no retained replay-row branch, broad visible proxy, or broad hidden
+      clear/skip bridge.
   - Rejected item-owner experiments:
     - Broad same-frame powershield owner/xDA8 transfer fixed a few `F15a` rows but regressed
       adjacent GuardReflect identity rows, so it remains rejected until the exact

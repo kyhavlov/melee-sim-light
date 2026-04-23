@@ -373,6 +373,16 @@ int state_alloc(MslStateSoA* state, int batch_size) {
   state->item_misc1 = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bi);
   state->item_misc2 = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bi);
   state->item_misc3 = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bi);
+  state->item_pending_reflect_owner_port = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bi);
+  state->item_pending_reflect_instance_id = (uint16_t*)alloc_aligned_64(sizeof(uint16_t) * bi);
+  state->item_reflect_transfer_seed_port = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bi);
+  state->item_reflect_transfer_seed_iid = (uint16_t*)alloc_aligned_64(sizeof(uint16_t) * bi);
+  state->item_shield_bounce_seed_valid = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bi);
+  state->item_shield_bounce_seed_vel_x = (float*)alloc_aligned_64(sizeof(float) * bi);
+  state->item_shield_bounce_seed_vel_y = (float*)alloc_aligned_64(sizeof(float) * bi);
+  state->item_hidden_body_hit_victim_port = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bi);
+  state->item_hidden_body_hit_hurt_height = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bi);
+  state->item_hidden_callback_flags = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bi);
   state->item_hitlist = (MslHitlistCapsule*)alloc_aligned_64(sizeof(MslHitlistCapsule) * bi *
                                                              (size_t)MSL_MAX_HITBOXES);
 
@@ -493,7 +503,13 @@ int state_alloc(MslStateSoA* state, int batch_size) {
       !state->item_direction || !state->item_vel_x || !state->item_vel_y || !state->item_pos_x ||
       !state->item_pos_y || !state->item_damage || !state->item_reflect_damage_mul ||
       !state->item_timer || !state->item_hitlag || !state->item_spawn_id || !state->item_misc0 ||
-      !state->item_misc1 || !state->item_misc2 || !state->item_misc3 || !state->item_hitlist) {
+      !state->item_misc1 || !state->item_misc2 || !state->item_misc3 ||
+      !state->item_pending_reflect_owner_port || !state->item_pending_reflect_instance_id ||
+      !state->item_reflect_transfer_seed_port || !state->item_reflect_transfer_seed_iid ||
+      !state->item_shield_bounce_seed_valid || !state->item_shield_bounce_seed_vel_x ||
+      !state->item_shield_bounce_seed_vel_y || !state->item_hidden_body_hit_victim_port ||
+      !state->item_hidden_body_hit_hurt_height || !state->item_hidden_callback_flags ||
+      !state->item_hitlist) {
     return -1;
   }
 
@@ -896,6 +912,16 @@ void state_free(MslStateSoA* state) {
   alloc_free(state->item_misc1);
   alloc_free(state->item_misc2);
   alloc_free(state->item_misc3);
+  alloc_free(state->item_pending_reflect_owner_port);
+  alloc_free(state->item_pending_reflect_instance_id);
+  alloc_free(state->item_reflect_transfer_seed_port);
+  alloc_free(state->item_reflect_transfer_seed_iid);
+  alloc_free(state->item_shield_bounce_seed_valid);
+  alloc_free(state->item_shield_bounce_seed_vel_x);
+  alloc_free(state->item_shield_bounce_seed_vel_y);
+  alloc_free(state->item_hidden_body_hit_victim_port);
+  alloc_free(state->item_hidden_body_hit_hurt_height);
+  alloc_free(state->item_hidden_callback_flags);
   alloc_free(state->item_hitlist);
 
   state_zero_ptrs(state);

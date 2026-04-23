@@ -1137,6 +1137,36 @@ typedef struct MslSeed {
   uint8_t item_hitlist_victim_cd[MSL_MAX_ITEMS];
   uint8_t item_hitlist_victim_hitbox_mask[MSL_MAX_ITEMS];
   uint16_t item_hitlist_victim_iid[MSL_MAX_ITEMS];
+  // Hidden item callback/collision seed lanes for teacher-forced one-step reseed.
+  //
+  // Decomp ownership:
+  // - ftColl_80077464 writes pending reflect owner/xDA8 into item->xC64/xC8C and Item_80269F14
+  //   consumes it before Slippi item post-frame can expose an explicit pending lane.
+  // - ftColl_80077688 writes shield-bounce internals item->xC54/xC58/xDCE, then Item_80269DC8
+  //   chooses HitShield destroy versus ShieldBounced keepalive.
+  // - item BODY callbacks write item->xC34_damageDealt and HitCapsule victims_1; Item_8026A294
+  //   consumes xC34 in OnGiveDamageThink on the next item callback phase.
+  //
+  // Replay seed representation:
+  // - reflect_transfer_port: 0..3 forces the pending Item_80269F14 owner transfer, 0xFE means the
+  //   seed row is known not to have a pending reflect transfer, 0xFF means unknown/no seed.
+  // - shield_bounce_valid plus vx/vy reconstruct the hidden xC58 ShieldBounced result when the
+  //   current post-frame exposes only the surviving bounced laser.
+  // - hidden_body_hit_victim_port: 0..3 applies a hidden xC34 BODY callback hit before normal item
+  //   collision for this one-step seed; 0xFF means no hidden BODY hit.
+  // - hidden_callback_flags bit0 clears the item via the seeded OnGiveDamage/dmg_dealt phase.
+  // refs/melee/src/melee/ft/ftcoll.c::{ftColl_80077464,ftColl_80077688,ftColl_80077C60}
+  // refs/melee/src/melee/it/item.c::{Item_80269F14,Item_80269DC8,Item_8026A294}
+  // refs/melee/src/melee/it/items/itfoxlaser.c::{
+  //   itFoxLaser_Logic94_ShieldBounced,itFoxLaser_Logic94_HitShield}
+  uint8_t item_reflect_transfer_port[MSL_MAX_ITEMS];
+  uint16_t item_reflect_transfer_iid[MSL_MAX_ITEMS];
+  uint8_t item_shield_bounce_valid[MSL_MAX_ITEMS];
+  float item_shield_bounce_vel_x[MSL_MAX_ITEMS];
+  float item_shield_bounce_vel_y[MSL_MAX_ITEMS];
+  uint8_t item_hidden_body_hit_victim_port[MSL_MAX_ITEMS];
+  uint8_t item_hidden_body_hit_hurt_height[MSL_MAX_ITEMS];
+  uint8_t item_hidden_callback_flags[MSL_MAX_ITEMS];
 
   MslItem items[MSL_MAX_ITEMS];
 } MslSeed;

@@ -400,6 +400,17 @@ SEED_DTYPE = np.dtype(
         ("item_hitlist_victim_cd", _arr("u1", MAX_ITEMS)),
         ("item_hitlist_victim_hitbox_mask", _arr("u1", MAX_ITEMS)),
         ("item_hitlist_victim_iid", _arr("<u2", MAX_ITEMS)),
+        # Hidden item callback/collision seed lanes consumed only by teacher-forced reseed.
+        # refs/melee/src/melee/ft/ftcoll.c::{ftColl_80077464,ftColl_80077688,ftColl_80077C60}
+        # refs/melee/src/melee/it/item.c::{Item_80269F14,Item_80269DC8,Item_8026A294}
+        ("item_reflect_transfer_port", _arr("u1", MAX_ITEMS)),
+        ("item_reflect_transfer_iid", _arr("<u2", MAX_ITEMS)),
+        ("item_shield_bounce_valid", _arr("u1", MAX_ITEMS)),
+        ("item_shield_bounce_vel_x", _arr("<f4", MAX_ITEMS)),
+        ("item_shield_bounce_vel_y", _arr("<f4", MAX_ITEMS)),
+        ("item_hidden_body_hit_victim_port", _arr("u1", MAX_ITEMS)),
+        ("item_hidden_body_hit_hurt_height", _arr("u1", MAX_ITEMS)),
+        ("item_hidden_callback_flags", _arr("u1", MAX_ITEMS)),
         # NOTE (PP#4): these staling fields are populated by replay-history preprocessing:
         # tools/slippi/staling_history.py (derive) and tools/slippi/make_dataset_from_slp.py (wire).
         # They seed the per-player `StaleMoveTable` ring buffer and `attack_instance`.

@@ -1577,6 +1577,18 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
       batch->state.item_misc1[ii] = item->misc1;
       batch->state.item_misc2[ii] = item->misc2;
       batch->state.item_misc3[ii] = item->misc3;
+      batch->state.item_pending_reflect_owner_port[ii] = 0xFFu;
+      batch->state.item_pending_reflect_instance_id[ii] = 0u;
+      batch->state.item_reflect_transfer_seed_port[ii] = seed->item_reflect_transfer_port[it];
+      batch->state.item_reflect_transfer_seed_iid[ii] = seed->item_reflect_transfer_iid[it];
+      batch->state.item_shield_bounce_seed_valid[ii] = seed->item_shield_bounce_valid[it] ? 1u : 0u;
+      batch->state.item_shield_bounce_seed_vel_x[ii] = seed->item_shield_bounce_vel_x[it];
+      batch->state.item_shield_bounce_seed_vel_y[ii] = seed->item_shield_bounce_vel_y[it];
+      batch->state.item_hidden_body_hit_victim_port[ii] =
+          seed->item_hidden_body_hit_victim_port[it];
+      batch->state.item_hidden_body_hit_hurt_height[ii] =
+          seed->item_hidden_body_hit_hurt_height[it];
+      batch->state.item_hidden_callback_flags[ii] = seed->item_hidden_callback_flags[it];
 
       // Item hitlists are explicit runtime state. Clear on reseed so reused item slots do not
       // inherit stale victim rings; seed bridges below re-materialize selected victims_1 entries.

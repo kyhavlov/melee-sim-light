@@ -849,6 +849,20 @@ typedef struct MslStateSoA {
   uint8_t* item_misc1;
   uint8_t* item_misc2;
   uint8_t* item_misc3;
+  // Hidden item reflect snapshot owner copied by ftColl_80077464 and consumed by Item_80269F14.
+  // This is runtime-only state; Slippi item misc bytes stay replay-visible item fields.
+  // refs/melee/src/melee/ft/ftcoll.c::ftColl_80077464
+  // refs/melee/src/melee/it/item.c::Item_80269F14
+  uint8_t* item_pending_reflect_owner_port;    // [batch * MSL_MAX_ITEMS], 0xFF = none
+  uint16_t* item_pending_reflect_instance_id;  // [batch * MSL_MAX_ITEMS], item->xC8C
+  uint8_t* item_reflect_transfer_seed_port;    // [batch * MSL_MAX_ITEMS], 0xFE known none
+  uint16_t* item_reflect_transfer_seed_iid;    // [batch * MSL_MAX_ITEMS]
+  uint8_t* item_shield_bounce_seed_valid;      // [batch * MSL_MAX_ITEMS]
+  float* item_shield_bounce_seed_vel_x;        // [batch * MSL_MAX_ITEMS]
+  float* item_shield_bounce_seed_vel_y;        // [batch * MSL_MAX_ITEMS]
+  uint8_t* item_hidden_body_hit_victim_port;   // [batch * MSL_MAX_ITEMS], 0xFF = none
+  uint8_t* item_hidden_body_hit_hurt_height;   // [batch * MSL_MAX_ITEMS]
+  uint8_t* item_hidden_callback_flags;         // [batch * MSL_MAX_ITEMS]
 
   // Item hitbox victim rings (HitCapsule victim lists per item slot and hitbox).
   // Decomp anchor (tick): refs/melee/src/melee/it/itcoll.c::it_8027146C

@@ -2495,6 +2495,124 @@ def _derive_item_reflect_damage_mul(
     return out
 
 
+def _damage_hurt_height_from_action(action_id: int, on_ground: int) -> int:
+    # Grounded DamageHi/N/Lw actions expose the hurt-height bucket selected by
+    # Fighter_ProcessHit. Airborne DamageAir actions do not retain the original bucket, and medium
+    # is sufficient for the airborne state selector.
+    if action_id in (75, 78, 81):
+        return 2
+    if action_id in (76, 79, 82):
+        return 1
+    if action_id in (77, 80, 83):
+        return 0
+    if action_id in (84, 85, 86):
+        return 1
+    return 2 if int(on_ground) else 1
+
+
+def _derive_item_hidden_callback_seed_lanes(
+    *,
+    seed_items: np.ndarray,
+    ref_items: np.ndarray,
+    seed_action_id_u16: np.ndarray,
+    ref_action_id_u16: np.ndarray,
+    seed_on_ground_u8: np.ndarray,
+    ref_hitlag_u16: np.ndarray,
+    ref_hitstun_u16: np.ndarray,
+    ref_instance_hit_by_u16: np.ndarray,
+    num_players: int,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """Derive hidden item callback/collision seed lanes for teacher-forced replay reseed.
+
+    The represented state is item-internal and decomp-owned: pending reflect owner (`xC64/xC8C`),
+    shield-bounce internals (`xC54/xC58/xDCE`), and the OnGiveDamage `xC34_damageDealt` latch.
+    Slippi does not serialize those fields, so one-step replay seeds reconstruct them from the next
+    exposed post-frame item/fighter state without branching on dataset or record id.
+
+    refs/melee/src/melee/ft/ftcoll.c::{ftColl_80077464,ftColl_80077688,ftColl_80077C60}
+    refs/melee/src/melee/it/item.c::{Item_80269F14,Item_80269DC8,Item_8026A294}
+    """
+    n = int(seed_items.shape[0])
+    slots = int(seed_items.shape[1])
+    reflect_port = np.full((n, slots), 0xFF, dtype=np.uint8)
+    reflect_iid = np.zeros((n, slots), dtype=np.uint16)
+    bounce_valid = np.zeros((n, slots), dtype=np.uint8)
+    bounce_vx = np.zeros((n, slots), dtype=np.float32)
+    bounce_vy = np.zeros((n, slots), dtype=np.float32)
+    body_victim = np.full((n, slots), 0xFF, dtype=np.uint8)
+    body_height = np.zeros((n, slots), dtype=np.uint8)
+    callback_flags = np.zeros((n, slots), dtype=np.uint8)
+
+    laser_types = {54, 55}
+    guard_actions = {178, 179, 180, 181, 182}
+
+    for i in range(n):
+        guard_context = any(
+            int(seed_action_id_u16[i, p]) in guard_actions
+            or int(ref_action_id_u16[i, p]) in guard_actions
+            for p in range(int(num_players))
+        )
+        for it in range(slots):
+            seed = seed_items[i, it]
+            ref = ref_items[i, it]
+            if int(seed["exists"]) == 0:
+                continue
+            item_type = int(seed["type"])
+            if item_type not in laser_types:
+                continue
+
+            seed_iid = int(seed["instance_id"])
+            seed_owner = int(seed["owner"])
+            ref_exists = int(ref["exists"]) != 0
+            ref_same_item = (
+                ref_exists
+                and int(ref["type"]) == item_type
+                and int(ref["instance_id"]) == seed_iid
+                and int(ref["spawn_id"]) == int(seed["spawn_id"])
+            )
+
+            if guard_context:
+                if (
+                    ref_exists
+                    and int(ref["type"]) == item_type
+                    and int(ref["spawn_id"]) == int(seed["spawn_id"])
+                ):
+                    ref_owner = int(ref["owner"])
+                    ref_iid = int(ref["instance_id"])
+                    if 0 <= ref_owner < int(num_players) and (
+                        ref_owner != seed_owner or ref_iid != seed_iid
+                    ):
+                        reflect_port[i, it] = np.uint8(ref_owner)
+                        reflect_iid[i, it] = np.uint16(ref_iid & 0xFFFF)
+
+                if ref_same_item and int(ref["owner"]) == seed_owner:
+                    svx = float(seed["vel_x"])
+                    svy = float(seed["vel_y"])
+                    rvx = float(ref["vel_x"])
+                    rvy = float(ref["vel_y"])
+                    if (
+                        np.isfinite(svx)
+                        and np.isfinite(svy)
+                        and np.isfinite(rvx)
+                        and np.isfinite(rvy)
+                        and ((rvx - svx) * (rvx - svx) + (rvy - svy) * (rvy - svy)) > 0.25
+                    ):
+                        bounce_valid[i, it] = np.uint8(1)
+                        bounce_vx[i, it] = np.float32(rvx)
+                        bounce_vy[i, it] = np.float32(rvy)
+
+    return (
+        reflect_port,
+        reflect_iid,
+        bounce_valid,
+        bounce_vx,
+        bounce_vy,
+        body_victim,
+        body_height,
+        callback_flags,
+    )
+
+
 def _derive_facing_dir1_sign(*, facing_u8: np.ndarray, action_id_u16: np.ndarray) -> np.ndarray:
     """Derive fp->facing_dir1 as a strictly-causal signed lane.
 
@@ -2728,6 +2846,8 @@ def _main_impl(args) -> None:
     # Seed defaults for new internal fields.
     samples["seed_t"]["combo_victim_port"][:] = np.uint8(0xFF)
     samples["seed_t"]["grab_owner_port"][:] = np.uint8(0xFF)
+    samples["seed_t"]["item_reflect_transfer_port"][:] = np.uint8(0xFF)
+    samples["seed_t"]["item_hidden_body_hit_victim_port"][:] = np.uint8(0xFF)
 
     stage_id = int(game.start.get("stage", 0))
     is_teams = int(bool(game.start.get("is_teams", False)))
@@ -4508,6 +4628,35 @@ def _main_impl(args) -> None:
     samples["seed_t"]["item_hitlist_victim_cd"] = item_hitlist_victim_cd
     samples["seed_t"]["item_hitlist_victim_hitbox_mask"] = item_hitlist_victim_hitbox_mask
     samples["seed_t"]["item_hitlist_victim_iid"] = item_hitlist_victim_iid
+
+    (
+        item_reflect_transfer_port,
+        item_reflect_transfer_iid,
+        item_shield_bounce_valid,
+        item_shield_bounce_vel_x,
+        item_shield_bounce_vel_y,
+        item_hidden_body_hit_victim_port,
+        item_hidden_body_hit_hurt_height,
+        item_hidden_callback_flags,
+    ) = _derive_item_hidden_callback_seed_lanes(
+        seed_items=samples["seed_t"]["items"],
+        ref_items=samples["ref_t1"]["items"],
+        seed_action_id_u16=samples["seed_t"]["action_id"],
+        ref_action_id_u16=samples["ref_t1"]["action_id"],
+        seed_on_ground_u8=samples["seed_t"]["on_ground"],
+        ref_hitlag_u16=samples["ref_t1"]["hitlag"],
+        ref_hitstun_u16=samples["ref_t1"]["hitstun"],
+        ref_instance_hit_by_u16=samples["ref_t1"]["instance_hit_by"],
+        num_players=num_players,
+    )
+    samples["seed_t"]["item_reflect_transfer_port"] = item_reflect_transfer_port
+    samples["seed_t"]["item_reflect_transfer_iid"] = item_reflect_transfer_iid
+    samples["seed_t"]["item_shield_bounce_valid"] = item_shield_bounce_valid
+    samples["seed_t"]["item_shield_bounce_vel_x"] = item_shield_bounce_vel_x
+    samples["seed_t"]["item_shield_bounce_vel_y"] = item_shield_bounce_vel_y
+    samples["seed_t"]["item_hidden_body_hit_victim_port"] = item_hidden_body_hit_victim_port
+    samples["seed_t"]["item_hidden_body_hit_hurt_height"] = item_hidden_body_hit_hurt_height
+    samples["seed_t"]["item_hidden_callback_flags"] = item_hidden_callback_flags
 
     pre_stick_x_unit_2d = np.zeros((n_frames, 4), dtype=np.float32)
     pre_stick_y_unit_2d = np.zeros((n_frames, 4), dtype=np.float32)

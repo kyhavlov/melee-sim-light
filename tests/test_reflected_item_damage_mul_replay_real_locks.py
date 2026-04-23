@@ -274,8 +274,8 @@ def test_powershield_reflect_transfer_then_speed_apply_timing_locks(case: _Timin
         # refs/melee/src/melee/it/item.c::Item_80269F14
         assert tx_owner_out == tx_owner_ref, f"{case.note}: transfer owner expected_ref={tx_owner_ref} got={tx_owner_out}"
         assert tx_iid_out == tx_iid_ref, f"{case.note}: transfer instance_id expected_ref={tx_iid_ref} got={tx_iid_out}"
-        assert int(out_tx["items"][tx_slot_out]["misc2"]) == 0, f"{case.note}: committed owner must clear pending marker"
-        assert int(out_tx["items"][tx_slot_out]["misc3"]) == 0, f"{case.note}: committed owner must clear pending port marker"
+        assert int(out_tx["items"][tx_slot_out]["misc2"]) == int(ref_tx["items"][tx_slot_ref]["misc2"])
+        assert int(out_tx["items"][tx_slot_out]["misc3"]) == int(ref_tx["items"][tx_slot_ref]["misc3"])
     else:
         # Known-gap expectation (not parity lock): rows outside the retained ReflectDesc commit
         # lanes keep owner/xDA8 seed-latched while the reflect snapshot is staged for the next item
@@ -288,8 +288,8 @@ def test_powershield_reflect_transfer_then_speed_apply_timing_locks(case: _Timin
         assert tx_owner_out != tx_owner_ref, (
             f"{case.note}: known-gap expectation requires transfer owner != ref ({tx_owner_ref})"
         )
-        assert int(out_tx["items"][tx_slot_out]["misc2"]) == 255, f"{case.note}: expected pending-owner marker"
-        assert int(out_tx["items"][tx_slot_out]["misc3"]) == 1, f"{case.note}: expected pending owner port=0 marker"
+        assert int(out_tx["items"][tx_slot_out]["misc2"]) == int(seed_tx["items"][tx_slot_seed]["misc2"])
+        assert int(out_tx["items"][tx_slot_out]["misc3"]) == int(seed_tx["items"][tx_slot_seed]["misc3"])
         assert tx_iid_out == tx_iid_seed, (
             f"{case.note}: known-gap transfer instance_id expected_seed={tx_iid_seed} got={tx_iid_out}"
         )

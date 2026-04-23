@@ -8,7 +8,7 @@
 # preprocess_suite stamp:
 #   path: datasets/aggregate_recent/.preprocess_meta.json
 #   force_used: True  built: 15  skipped: 0
-#   seed_dtype_itemsize: 3223  sample_dtype_itemsize: 4309
+#   seed_dtype_itemsize: 3448  sample_dtype_itemsize: 4534
 #
 # Regenerate gitignored ISO-derived data artifacts (if missing/stale):
 # - Moves (data/moves/*.json):
@@ -398,11 +398,11 @@ mismatch.last_attack_landed: 1 / 19378 (0.000052)
 mismatch.combo_count: 0 / 19378 (0.000000)
 mismatch.last_hit_by: 15 / 19378 (0.000774)
 mismatch.state_flags: 108 / 96890 (0.001115)
-mismatch.item_exists: 14 / 145335 (0.000096)
-mismatch.item_type: 16 / 145335 (0.000110)
+mismatch.item_exists: 13 / 145335 (0.000089)
+mismatch.item_type: 15 / 145335 (0.000103)
 mismatch.item_state: 4 / 145335 (0.000028)
-mismatch.item_owner: 17 / 145335 (0.000117)
-mismatch.item_instance_id: 21 / 145335 (0.000144)
+mismatch.item_owner: 14 / 145335 (0.000096)
+mismatch.item_instance_id: 18 / 145335 (0.000124)
 err.pos_x: mae=0.019852 p95=0.000000 max=8.931946
 err.pos_y: mae=0.007780 p95=0.000000 max=9.528034
 err.speed_air_x_self: mae=0.007903 p95=0.000000 max=1.584866
@@ -412,12 +412,12 @@ err.speed_x_attack: mae=0.000430 p95=0.000000 max=1.829593
 err.speed_y_attack: mae=0.001575 p95=0.000000 max=3.667733
 err.percent: mae=0.000391 p95=0.000000 max=3.000000
 err.shield_hp: mae=0.003005 p95=0.000000 max=11.900002
-err.item_pos_x: mae=0.147129 p95=0.000000 max=94.601044
-err.item_pos_y: mae=0.027880 p95=0.000000 max=13.752838
-err.item_vel_x: mae=0.040525 p95=0.000000 max=10.000000
-err.item_vel_y: mae=0.007772 p95=0.000000 max=4.970191
-overall.discrete_mismatch: 492 / 1172369
-overall.float_norm_mae_p95: 0.00126630
+err.item_pos_x: mae=0.137039 p95=0.000000 max=94.601044
+err.item_pos_y: mae=0.023682 p95=0.000000 max=13.752838
+err.item_vel_x: mae=0.039666 p95=0.000000 max=10.000000
+err.item_vel_y: mae=0.006510 p95=0.000000 max=4.970191
+overall.discrete_mismatch: 484 / 1172369
+overall.float_norm_mae_p95: 0.00125893
 
 == datasets/aggregate_recent/replays/validation/aggregate_recent/PositiveRevolvingHyena.msl ==
 Records: 11980  Players/scored per record: 2  Total player-frames: 23960
@@ -440,11 +440,11 @@ mismatch.last_attack_landed: 8 / 23960 (0.000334)
 mismatch.combo_count: 2 / 23960 (0.000083)
 mismatch.last_hit_by: 13 / 23960 (0.000543)
 mismatch.state_flags: 128 / 119800 (0.001068)
-mismatch.item_exists: 7 / 179700 (0.000039)
-mismatch.item_type: 7 / 179700 (0.000039)
+mismatch.item_exists: 6 / 179700 (0.000033)
+mismatch.item_type: 6 / 179700 (0.000033)
 mismatch.item_state: 1 / 179700 (0.000006)
-mismatch.item_owner: 7 / 179700 (0.000039)
-mismatch.item_instance_id: 9 / 179700 (0.000050)
+mismatch.item_owner: 6 / 179700 (0.000033)
+mismatch.item_instance_id: 8 / 179700 (0.000045)
 err.pos_x: mae=0.010046 p95=0.000000 max=14.015713
 err.pos_y: mae=0.007721 p95=0.000000 max=12.224156
 err.speed_air_x_self: mae=0.002910 p95=0.000000 max=1.815992
@@ -454,12 +454,12 @@ err.speed_x_attack: mae=0.000531 p95=0.000000 max=2.530158
 err.speed_y_attack: mae=0.002723 p95=0.000000 max=5.322919
 err.percent: mae=0.003361 p95=0.000000 max=12.000000
 err.shield_hp: mae=0.004910 p95=0.000000 max=23.349995
-err.item_pos_x: mae=0.157817 p95=0.000000 max=88.298080
-err.item_pos_y: mae=0.050851 p95=0.000000 max=16.942844
-err.item_vel_x: mae=0.011799 p95=0.000000 max=8.713739
-err.item_vel_y: mae=0.002299 p95=0.000000 max=4.680069
-overall.discrete_mismatch: 532 / 1449580
-overall.float_norm_mae_p95: 0.00077135
+err.item_pos_x: mae=0.156016 p95=0.000000 max=88.298080
+err.item_pos_y: mae=0.047714 p95=0.000000 max=16.942844
+err.item_vel_x: mae=0.011281 p95=0.000000 max=8.713739
+err.item_vel_y: mae=0.000867 p95=0.000000 max=2.799234
+overall.discrete_mismatch: 528 / 1449580
+overall.float_norm_mae_p95: 0.00076400
 
 == datasets/aggregate_recent/replays/validation/aggregate_recent/PriceyPartialAlbatross.msl ==
 Records: 7937  Players/scored per record: 2  Total player-frames: 15874
@@ -672,5 +672,5 @@ overall.discrete_mismatch: 431 / 1502336
 overall.float_norm_mae_p95: 0.00066564
 
 == suite summary ==
-overall.discrete_mismatch: 4627 / 17965838
-overall.float_norm_mae_p95: 0.00095929
+overall.discrete_mismatch: 4615 / 17965838
+overall.float_norm_mae_p95: 0.00095820

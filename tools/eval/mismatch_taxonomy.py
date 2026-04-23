@@ -842,11 +842,12 @@ FAMILY_META: dict[str, FamilyMeta] = {
         confidence="high",
         hypothesis=(
             "Fox/Falco Neutral-B rows owned by the SpecialN Start/Loop/End state machine and its "
-            "blaster gun / laser article callbacks, including aerial landing handoff and combat "
-            "exit bookkeeping."
+            "blaster gun / laser article callbacks, including throw-side blaster pulses, aerial "
+            "landing handoff, and combat exit bookkeeping."
         ),
         refs=(
             "refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c",
+            "refs/melee/src/melee/ft/ftaction.c::{ftAction_80071974,ftAction_80073354}",
             "refs/melee/src/melee/it/items/itfoxblaster.c",
             "refs/melee/src/melee/it/items/itfoxlaser.c",
             "src/blaster.c",
@@ -1634,7 +1635,11 @@ def _family_for_debug_body_contact_residual(
     if body_candidate_count <= 0 and selected_body_count <= 0:
         if active_fighter_hitbox_count <= 0:
             if live_nonvictim_item_count > 0:
-                return "F16d_item_body_lifetime"
+                # A live item plus player damage/action divergence is an item BODY candidate
+                # selection miss, not an item lifetime owner. Keep item-only slot rows in F16d.
+                # refs/melee/src/melee/ft/ftcoll.c::ftColl_8007925C
+                # refs/melee/src/melee/lb/lbcollision.c::{lbColl_80008248,lbColl_80007AFC}
+                return "F08f_body_contact_candidate_filter_residual"
             special_family = _special_owner_family_for_names(
                 (seed_name, precombat_name, ref_name, out_name),
                 include_entry_dispatch=False,
@@ -2617,7 +2622,48 @@ def _classify_item_slot_row(row: ItemSlotRow, action_names: dict[int, str]) -> s
         #   ftFx_SpecialNLoop_Anim,ftFx_SpecialAirNLoop_Anim,ftFx_SpecialNEnd_Anim}
         # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::ftCo_Landing_Enter_Basic
         return "F09c_aerial_action_entry_adjacency"
+    if (
+        item_types & {74, 75}
+        and any(_looks_like_specialn(name) for name in context_names)
+        and not (field_set and field_set <= {"item_instance_id"})
+    ):
+        # Blaster gun/shot slot identity while the owner is in SpecialN is article state-machine
+        # bookkeeping, even when the other player is guarding. Keep shield-hit laser lifetime in
+        # F15 by requiring a gun/article kind to participate.
+        # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c
+        # refs/melee/src/melee/it/items/itfoxblaster.c
+        return "F19_specialn_blaster_article"
+    if (
+        item_types & {54, 55}
+        and any(_looks_like_specialn(name) for name in context_names)
+        and row.seed_item_type == 0
+        and field_set
+        & {"item_exists", "item_type", "item_owner", "item_state", "item_instance_id"}
+    ):
+        # New shot rows emitted while the owner is in SpecialN Loop/AirLoop are owned by the
+        # SpecialN blaster article state machine. Guard/reflect context can touch the same frame,
+        # but the seed-visible absence means this is first the blaster spawn/identity owner, not a
+        # carried reflect-transfer row.
+        # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::{ftFx_SpecialNLoop_Anim,ftFx_SpecialAirNLoop_Anim}
+        # refs/melee/src/melee/it/items/itfoxlaser.c::it_8029C6A4
+        return "F19_specialn_blaster_article"
+    if item_types & {54, 55} and any(_looks_like_speciallw(name) for name in context_names):
+        # Shine Hit contact can consume or retain reflected/nearby lasers through the SpecialLw
+        # reflector/contact owner. These item-only rows are special callback fallout, not generic
+        # item lifetime.
+        # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c
+        # refs/melee/src/melee/ft/ftcoll.c::ftColl_CreateReflectHit
+        return "F20_speciallw_shine_reflector"
     if any(name.startswith("THROW_") or name.startswith("THROWN_") or _looks_like_capture(name) for name in names):
+        if item_types & {54, 55}:
+            # Throw-side laser articles are emitted by ftFx_Throw_Anim through the same SpecialN
+            # blaster item constructors, with command pulses supplied by ftAction script events.
+            # The remaining aggregate rows are article pulse/callback bookkeeping, not the generic
+            # item-owner seed family.
+            # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
+            # refs/melee/src/melee/ft/ftaction.c::{ftAction_80071974,ftAction_80073354}
+            # refs/melee/src/melee/it/items/itfoxlaser.c::it_8029C6CC
+            return "F19_specialn_blaster_article"
         return "F14c_throw_article_lifetime"
     if field_set and field_set <= {"item_instance_id"} and item_types & {74, 75}:
         # Blaster gun `item.instance_id` is Slippi's item->xDA8_short. For fighter-parent spawns,
@@ -2643,9 +2689,25 @@ def _classify_item_slot_row(row: ItemSlotRow, action_names: dict[int, str]) -> s
         # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_80092F2C,ftCo_80093BC0}
         return "F01_guard_release_collision"
     if any(_looks_like_guard(name) for name in names):
-        if field_set and field_set <= {"item_owner", "item_instance_id"}:
-            return "F15a_reflect_owner_transfer"
-        return "F15b_guard_laser_lifetime"
+        # The remaining guard-context laser rows are all shield/reflect collision ordering
+        # fallout: ftColl chooses GuardSetOff/GuardReflect and writes item reflect/shield fields
+        # before Item_80269F14 / Item_80269DC8 can consume them. Keep them with the guard collision
+        # owner rather than treating them as a standalone item-owner residual.
+        # refs/melee/src/melee/ft/ftcoll.c::{ftColl_80077464,ftColl_80077688,ftColl_8007925C}
+        # refs/melee/src/melee/it/item.c::{Item_80269F14,Item_80269DC8}
+        # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_80092F2C,ftCo_80093BC0}
+        return "F01_guard_release_collision"
+    if (
+        item_types & {54, 55}
+        and row.ref_actions != row.out_actions
+        and field_set
+        & {"item_exists", "item_type", "item_owner", "item_state", "item_instance_id"}
+    ):
+        # When the same row also has player action/damage divergence, laser item slot fallout is
+        # owned by BODY candidate selection rather than independent item lifetime.
+        # refs/melee/src/melee/ft/ftcoll.c::ftColl_8007925C
+        # refs/melee/src/melee/lb/lbcollision.c::{lbColl_80008248,lbColl_80007AFC}
+        return "F08f_body_contact_candidate_filter_residual"
     if field_set and field_set <= {"item_instance_id"} and item_types & {54, 55}:
         return "F16d_item_body_lifetime"
     if item_types & {74, 75}:
@@ -3006,6 +3068,30 @@ def _audit_player_row(row: PlayerRow, action_names: dict[int, str]) -> tuple[boo
 
 def _audit_item_row(row: ItemSlotRow, action_names: dict[int, str]) -> tuple[bool, str]:
     names = _item_names(row, action_names)
+    item_types = {int(row.seed_item_type), int(row.ref_item_type), int(row.out_item_type)}
+    if row.family_id == "F01_guard_release_collision":
+        ok = any(_looks_like_guard(name) for name in names) and bool(item_types & {54, 55, 74, 75})
+        return ok, "guard/reflect collision ordering item fallout"
+    if row.family_id == "F19_specialn_blaster_article":
+        ok = bool(item_types & {54, 55, 74, 75}) and any(
+            _looks_like_specialn(name)
+            or name.startswith("THROW_")
+            or name.startswith("THROWN_")
+            or _looks_like_capture(name)
+            for name in names
+        )
+        return ok, "SpecialN / throw-side blaster article item row"
+    if row.family_id == "F20_speciallw_shine_reflector":
+        ok = bool(item_types & {54, 55, 74, 75}) and any(_looks_like_speciallw(name) for name in names)
+        return ok, "SpecialLw / shine reflector item row"
+    if row.family_id == "F08f_body_contact_candidate_filter_residual":
+        ok = bool(item_types & {54, 55}) and not any(
+            name.startswith("THROW_") or name.startswith("THROWN_") or _looks_like_capture(name) for name in names
+        )
+        return ok, "laser BODY candidate/filter item row"
+    if row.family_id in {"F09c_aerial_action_entry_adjacency", "F12b_adjacent_instance_counter_order"}:
+        ok = bool(item_types & {54, 55, 74, 75})
+        return ok, "adjacent-family item identity row"
     if row.family_id in {"F14_throw_item_bookkeeping", "F14c_throw_article_lifetime"}:
         ok = any(name.startswith("THROW_") or name.startswith("THROWN_") or _looks_like_capture(name) for name in names)
         return ok, "throw/capture article lifetime item row"

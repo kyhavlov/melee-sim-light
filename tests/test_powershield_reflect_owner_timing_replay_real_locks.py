@@ -120,8 +120,8 @@ def test_guardon_followup_powershield_reflect_commits_owner_xda8_target_pm1_both
     assert owner_out == owner_ref, f"{case.note}: target owner expected ref={owner_ref}, got {owner_out}"
     assert int(out_t["items"][slot_out]["instance_id"]) == int(ref_t["items"][slot_ref]["instance_id"])
 
-    assert int(out_t["items"][slot_out]["misc2"]) == 0, f"{case.note}: committed owner should clear marker"
-    assert int(out_t["items"][slot_out]["misc3"]) == 0, f"{case.note}: committed owner should clear port marker"
+    assert int(out_t["items"][slot_out]["misc2"]) == int(ref_t["items"][slot_ref]["misc2"])
+    assert int(out_t["items"][slot_out]["misc3"]) == int(ref_t["items"][slot_ref]["misc3"])
 
 
 @pytest.mark.integration

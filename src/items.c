@@ -21,6 +21,10 @@
 #include "stage_collision.h"
 #include "staling.h"
 
+enum {
+  MSL_ITEM_HIDDEN_CALLBACK_CLEAR = 1u << 0u,
+};
+
 static inline uint8_t item_source_port0_for_owner(const MslBatch* batch, size_t owner_idx,
                                                   int owner_slot) {
   // Slippi records item/fighter source ownership in raw controller-port domain for last_hit_by;
@@ -137,6 +141,16 @@ static inline void item_slot_clear(MslBatch* batch, size_t ii) {
   batch->state.item_misc1[ii] = 0;
   batch->state.item_misc2[ii] = 0;
   batch->state.item_misc3[ii] = 0;
+  batch->state.item_pending_reflect_owner_port[ii] = 0xFFu;
+  batch->state.item_pending_reflect_instance_id[ii] = 0u;
+  batch->state.item_reflect_transfer_seed_port[ii] = 0xFFu;
+  batch->state.item_reflect_transfer_seed_iid[ii] = 0u;
+  batch->state.item_shield_bounce_seed_valid[ii] = 0u;
+  batch->state.item_shield_bounce_seed_vel_x[ii] = 0.0f;
+  batch->state.item_shield_bounce_seed_vel_y[ii] = 0.0f;
+  batch->state.item_hidden_body_hit_victim_port[ii] = 0xFFu;
+  batch->state.item_hidden_body_hit_hurt_height[ii] = 0u;
+  batch->state.item_hidden_callback_flags[ii] = 0u;
 
   // Clear per-item/per-HitCapsule victim rings (hitlist).
   // Items own one HitCapsule victim ring per article hitbox:
@@ -178,6 +192,16 @@ static inline void item_slot_swap(MslBatch* batch, size_t a, size_t b) {
   SWAP(uint8_t, batch->state.item_misc1);
   SWAP(uint8_t, batch->state.item_misc2);
   SWAP(uint8_t, batch->state.item_misc3);
+  SWAP(uint8_t, batch->state.item_pending_reflect_owner_port);
+  SWAP(uint16_t, batch->state.item_pending_reflect_instance_id);
+  SWAP(uint8_t, batch->state.item_reflect_transfer_seed_port);
+  SWAP(uint16_t, batch->state.item_reflect_transfer_seed_iid);
+  SWAP(uint8_t, batch->state.item_shield_bounce_seed_valid);
+  SWAP(float, batch->state.item_shield_bounce_seed_vel_x);
+  SWAP(float, batch->state.item_shield_bounce_seed_vel_y);
+  SWAP(uint8_t, batch->state.item_hidden_body_hit_victim_port);
+  SWAP(uint8_t, batch->state.item_hidden_body_hit_hurt_height);
+  SWAP(uint8_t, batch->state.item_hidden_callback_flags);
 #undef SWAP
 
   // Swap per-item/per-HitCapsule hitlist lanes to preserve deterministic item ordering invariants.
@@ -516,25 +540,6 @@ static inline uint8_t laser_grounded_body_landing_fall_special_aabb_bridge(
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::{
   //   ftCo_LandingFallSpecial_Enter,ftCo_LandingFallSpecial_Anim}
   return laser_grounded_body_aabb_overlap(batch, bi, def, x0, y0, x, y, sr, hit_hurt_height);
-}
-
-enum {
-  // Internal runtime marker in item.misc2 for deferred powershield reflect owner transfer.
-  //
-  // Decomp ownership split:
-  // - ftColl_80077464 writes reflect snapshot ownership/multipliers on overlap.
-  // - Item_80269F14 consumes that snapshot in the subsequent item pass.
-  // refs/melee/src/melee/ft/ftcoll.c::ftColl_80077464
-  // refs/melee/src/melee/it/item.c::Item_80269F14
-  MSL_ITEM_MISC2_PENDING_POWERSHIELD_OWNER = 0xFFu,
-};
-
-static inline uint8_t item_encode_pending_owner_port(int owner_port) {
-  // Encode owner ports [0..MSL_MAX_PLAYERS-1] as [1..MSL_MAX_PLAYERS]; 0 means invalid/none.
-  if (owner_port < 0 || owner_port >= MSL_MAX_PLAYERS) {
-    return 0u;
-  }
-  return (uint8_t)(owner_port + 1);
 }
 
 enum {
@@ -1406,14 +1411,16 @@ static inline void item_apply_pending_powershield_reflect_speed(MslBatch* batch,
   if (batch == NULL) {
     return;
   }
-  if (batch->state.item_misc2[ii] == (uint8_t)MSL_ITEM_MISC2_PENDING_POWERSHIELD_OWNER) {
-    const uint8_t enc = batch->state.item_misc3[ii];
-    if (enc > 0u && enc <= (uint8_t)MSL_MAX_PLAYERS) {
-      batch->state.item_owner[ii] = (int8_t)(enc - 1u);
+  const uint8_t pending_owner = batch->state.item_pending_reflect_owner_port[ii];
+  if (pending_owner < (uint8_t)batch->config.num_players) {
+    batch->state.item_owner[ii] = (int8_t)pending_owner;
+    const uint16_t pending_iid = batch->state.item_pending_reflect_instance_id[ii];
+    if (pending_iid != 0u) {
+      batch->state.item_instance_id[ii] = pending_iid;
     }
-    batch->state.item_misc2[ii] = 0u;
-    batch->state.item_misc3[ii] = 0u;
   }
+  batch->state.item_pending_reflect_owner_port[ii] = 0xFFu;
+  batch->state.item_pending_reflect_instance_id[ii] = 0u;
   // Decomp ownership split:
   // - overlap path can commit reflected orientation (`facing_dir` / angle lane) immediately,
   // - velocity lane is consumed by item logic after reflect snapshot ownership transfer.
@@ -1453,11 +1460,15 @@ static inline void item_apply_powershield_reflect_snapshot(MslBatch* batch, size
   // - item logic consumes that snapshot in Item_80269F14.
   // refs/melee/src/melee/it/item.c::Item_80269F14
   //
-  // Runtime model: capture pending transfer owner in internal misc lanes and commit ownership in
+  // Runtime model: capture pending transfer owner in hidden fixed-capacity state and commit in
   // the next item pass (item_apply_pending_powershield_reflect_speed), matching snapshot->consume
   // ordering above.
-  batch->state.item_misc2[ii] = (uint8_t)MSL_ITEM_MISC2_PENDING_POWERSHIELD_OWNER;
-  batch->state.item_misc3[ii] = item_encode_pending_owner_port(reflector_port);
+  if (reflector_port >= 0 && reflector_port < (int)batch->config.num_players) {
+    const int bi = (int)(ii / (size_t)MSL_MAX_ITEMS);
+    const size_t reflector_idx = msl_idx_player(bi, reflector_port);
+    batch->state.item_pending_reflect_owner_port[ii] = (uint8_t)reflector_port;
+    batch->state.item_pending_reflect_instance_id[ii] = batch->state.instance_id[reflector_idx];
+  }
 
   const float dmg_mul = (damage_mul > 0.0f) ? damage_mul : 1.0f;
   // Decomp visual reflect lane flips facing/angle on overlap (`it_2725_Logic94_Reflected`) even when
@@ -1489,10 +1500,46 @@ static inline void item_commit_powershield_reflect_owner_snapshot(MslBatch* batc
   }
   const int bi = (int)(ii / (size_t)MSL_MAX_ITEMS);
   const size_t reflector_idx = msl_idx_player(bi, reflector_port);
-  batch->state.item_misc2[ii] = 0u;
-  batch->state.item_misc3[ii] = 0u;
+  batch->state.item_pending_reflect_owner_port[ii] = 0xFFu;
+  batch->state.item_pending_reflect_instance_id[ii] = 0u;
   batch->state.item_owner[ii] = (int8_t)reflector_port;
   batch->state.item_instance_id[ii] = batch->state.instance_id[reflector_idx];
+}
+
+static inline void item_apply_seeded_reflect_transfer_after_collision(MslBatch* batch, size_t ii) {
+  if (batch == NULL) {
+    return;
+  }
+  const uint8_t seed_port = batch->state.item_reflect_transfer_seed_port[ii];
+  const uint16_t seed_iid = batch->state.item_reflect_transfer_seed_iid[ii];
+  if (seed_port >= (uint8_t)batch->config.num_players || seed_iid == 0u) {
+    return;
+  }
+
+  // Seeded hidden reflect-transfer lane:
+  // - ftColl_80077464 writes the reflect snapshot during collision selection.
+  // - Item_80269F14 consumes owner/xDA8_short before the post-frame item record.
+  // Apply this after same-frame collision callbacks have seen the pre-transfer owner; otherwise
+  // Shine/reflector callbacks incorrectly treat the projectile as already owned by the reflector.
+  // refs/melee/src/melee/ft/ftcoll.c::ftColl_80077464
+  // refs/melee/src/melee/it/item.c::Item_80269F14
+  if (batch->state.item_owner[ii] != (int8_t)seed_port) {
+    const float vx = batch->state.item_vel_x[ii];
+    if (vx > 0.0f) {
+      batch->state.item_direction[ii] = -1.0f;
+    } else if (vx < 0.0f) {
+      batch->state.item_direction[ii] = 1.0f;
+    }
+  }
+  batch->state.item_owner[ii] = (int8_t)seed_port;
+  batch->state.item_instance_id[ii] = seed_iid;
+
+  const MslCommonParams* common = msl_common_params();
+  if (common != NULL && common->powershield_reflect_damage_mul > 0.0f) {
+    batch->state.item_reflect_damage_mul[ii] = common->powershield_reflect_damage_mul;
+  }
+  batch->state.item_pending_reflect_owner_port[ii] = 0xFFu;
+  batch->state.item_pending_reflect_instance_id[ii] = 0u;
 }
 
 static inline uint8_t item_guard_reflect_bone_y(const MslBatch* batch, size_t idx, float* out_y) {
@@ -2413,6 +2460,50 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
     // refs/melee/src/melee/it/items/itfoxlaser.c::it_8029C6A4 and ::it_8029C6CC
     const uint8_t laser_state = (batch->state.item_state[ii] != 0) ? 1u : 0u;
     item_apply_pending_powershield_reflect_speed(batch, ii);
+    const int owner = (int)batch->state.item_owner[ii];
+
+    const uint8_t hidden_victim = batch->state.item_hidden_body_hit_victim_port[ii];
+    const uint8_t hidden_flags = batch->state.item_hidden_callback_flags[ii];
+    uint8_t hidden_body_applied = 0u;
+    if (hidden_flags != 0u && owner >= 0 && owner < num_players &&
+        hidden_victim < (uint8_t)num_players) {
+      // Seeded hidden OnGiveDamage callback phase:
+      // - ftColl BODY intake can populate item->xC34_damageDealt and HitCapsule victims_1 before
+      //   Slippi item post-frame exposes a serializable item state.
+      // - Item_8026A294 consumes that latch through OnGiveDamageThink on the next item callback
+      //   phase. This seed lane replays that hidden callback once at the reseed boundary.
+      // refs/melee/src/melee/ft/ftcoll.c::ftColl_80077C60
+      // refs/melee/src/melee/it/item.c::{OnGiveDamageThink,Item_8026A294}
+      float dmg = (laser_state == 0u) ? lp->damage : lp->state1_damage;
+      dmg = item_reflected_damage_lane(batch, ii, dmg);
+      const uint16_t angle = (laser_state == 0u) ? lp->angle : lp->state1_angle;
+      const uint16_t kbg = (laser_state == 0u) ? lp->kbg : lp->state1_kbg;
+      const uint16_t wsk = (laser_state == 0u) ? lp->wsk : lp->state1_wsk;
+      const uint16_t bkb = (laser_state == 0u) ? lp->bkb : lp->state1_bkb;
+      const uint8_t element = (laser_state == 0u) ? lp->element : lp->state1_element;
+      uint8_t hurt_height = batch->state.item_hidden_body_hit_hurt_height[ii];
+      if (hurt_height > 2u) {
+        hurt_height = 1u;
+      }
+      const MslItemHitResult res = combat_apply_item_hit(
+          batch, bi, owner, (int)hidden_victim, batch->state.item_attack_id[ii],
+          batch->state.item_attack_instance[ii], batch->state.item_instance_id[ii],
+          batch->state.item_type[ii], laser_state, dmg, angle, kbg, wsk, bkb, hurt_height, element);
+      const uint16_t victim_iid_post =
+          batch->state.instance_id[msl_idx_player(bi, (int)hidden_victim)];
+      if (res != MSL_ITEM_HIT_NONE) {
+        hitlist_register_item_fighter(batch, bi, it, (int)hidden_victim, victim_iid_post,
+                                      (int)MSL_LBCOLL_INSERT_FT_BODY, 0);
+      }
+      hidden_body_applied = 1u;
+    }
+    batch->state.item_hidden_body_hit_victim_port[ii] = 0xFFu;
+    batch->state.item_hidden_body_hit_hurt_height[ii] = 0u;
+    if (hidden_body_applied != 0u &&
+        (hidden_flags & (uint8_t)MSL_ITEM_HIDDEN_CALLBACK_CLEAR) != 0u) {
+      item_slot_clear(batch, ii);
+      continue;
+    }
 
     // Motion: item->pos += item->vel (generic add in Item_802697D4), and lifetime counts down.
     // Decomp refs:
@@ -2471,7 +2562,6 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
     // Source of offsets: `data/items/lasers.bin` hitbox_offsets_x[] (MSLLASR1 v2), extracted
     // from the laser article state script in Pl*.dat by tools/extraction/extract_lasers.py.
     // docs/DATA_CONTRACT.md documents the binary layout and decomp pointers.
-    const int owner = (int)batch->state.item_owner[ii];
     if (owner < 0 || owner >= num_players) {
       continue;
     }
@@ -2905,6 +2995,14 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
           uint8_t can_powershield_reflect =
               combat_is_powershield_active_idx(batch, d_idx) ? 1u : 0u;
           uint8_t powershield_reflect_hitshield_handoff = 0u;
+          if (batch->state.item_reflect_transfer_seed_port[ii] == 0xFEu) {
+            // Replay seed knows this post-frame item has no pending ftColl_80077464 ->
+            // Item_80269F14 owner transfer. Keep the collision on the shield/HitShield owner
+            // rather than re-inventing a broad visible reflect overlap from Slippi state.
+            // refs/melee/src/melee/ft/ftcoll.c::ftColl_80077464
+            // refs/melee/src/melee/it/item.c::{Item_80269F14,Item_80269DC8}
+            can_powershield_reflect = 0u;
+          }
           // No-submotion GuardReflect stale-x18 lane:
           // - Reflect ownership is callback-gated by the active reflect window (mv.co.guard.x14).
           // - Some frozen snapshots carry x18 from the previous frame while x14 was already 0 in
@@ -3105,6 +3203,18 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
               laser_try_shield_bounce_velocity(vx, vy, bounce_shx, bounce_shy,
                                                shield_bounce_contact_x, shield_bounce_contact_y,
                                                &shield_bounce_vx, &shield_bounce_vy);
+          if (!can_shield_bounce && batch->state.item_shield_bounce_seed_valid[ii]) {
+            // Seeded hidden xC58/xDCE shield-bounce result:
+            // Slippi exposes the surviving bounced laser velocity but not the intra-frame
+            // ftColl_80077688 fields consumed by Item_80269DC8. Use the explicit seed lane only
+            // on the current shield-contact branch; ordinary runtime bounce still uses the
+            // source-shaped predicate above.
+            // refs/melee/src/melee/ft/ftcoll.c::ftColl_80077688
+            // refs/melee/src/melee/it/item.c::Item_80269DC8
+            // refs/melee/src/melee/it/items/itfoxlaser.c::itFoxLaser_Logic94_ShieldBounced
+            shield_bounce_vx = batch->state.item_shield_bounce_seed_vel_x[ii];
+            shield_bounce_vy = batch->state.item_shield_bounce_seed_vel_y[ii];
+          }
           // Regular shield hit: apply defender-side shield effects and despawn the laser.
           float dmg = (laser_state == 0u) ? lp->damage : lp->state1_damage;
           dmg = item_reflected_damage_lane(batch, ii, dmg);
@@ -3118,7 +3228,7 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
           const uint16_t def_iid_post = batch->state.instance_id[d_idx];
           hitlist_register_item_fighter(batch, bi, it, def, def_iid_post,
                                         (int)MSL_LBCOLL_INSERT_FT_SHIELD, 0);
-          if (can_shield_bounce) {
+          if (can_shield_bounce || batch->state.item_shield_bounce_seed_valid[ii]) {
             batch->state.item_vel_x[ii] = shield_bounce_vx;
             batch->state.item_vel_y[ii] = shield_bounce_vy;
             batch->state.item_direction[ii] = (shield_bounce_vx >= 0.0f) ? 1.0f : -1.0f;
@@ -3696,6 +3806,19 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
       }
       break;
     }
+    if (batch->state.item_exists[ii]) {
+      if ((hidden_flags & (uint8_t)MSL_ITEM_HIDDEN_CALLBACK_CLEAR) != 0u) {
+        item_slot_clear(batch, ii);
+        continue;
+      }
+      item_apply_seeded_reflect_transfer_after_collision(batch, ii);
+      batch->state.item_reflect_transfer_seed_port[ii] = 0xFFu;
+      batch->state.item_reflect_transfer_seed_iid[ii] = 0u;
+      batch->state.item_shield_bounce_seed_valid[ii] = 0u;
+      batch->state.item_shield_bounce_seed_vel_x[ii] = 0.0f;
+      batch->state.item_shield_bounce_seed_vel_y[ii] = 0.0f;
+      batch->state.item_hidden_callback_flags[ii] = 0u;
+    }
   }
 }
 
@@ -4136,6 +4259,25 @@ void items_spawn_pre_physics(MslBatch* batch) {
             // data/moves/falco.json moves["ftCo_SM_ThrowHi"].events
             suppress_pending_article = 1u;
             throw_command_authoritative = 1u;
+          }
+          if (!suppress_pending_article && action_id == (uint16_t)MSL_ACT_THROW_HI &&
+              batch->state.throw_pulse_consumed[idx] == pending_pulse_af) {
+            const int callback_victim = throw_laser_unique_same_source_victim(batch, bi, p);
+            if (callback_victim >= 0) {
+              // ThrowHi hidden callback consume:
+              // The command lane proves a set_throw_spawn_projectile pulse reached ftFx_Throw_Anim,
+              // while the seed consumed lane records that the item callback/hitlist phase did not
+              // leave an additional live throw-side article at post-frame. Advance combo
+              // bookkeeping through the same ftColl owner used by the ThrowB callback consume and
+              // suppress the replay-only article spawn.
+              // refs/melee/src/melee/ft/ftaction.c::{ftAction_80071974,ftAction_80073354}
+              // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
+              // refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007646C,ftColl_800763C0}
+              // refs/melee/src/melee/it/items/itfoxlaser.c::{it_8029C6CC,it_8029C4D4}
+              throw_laser_advance_combo_bookkeeping(batch, bi, p, callback_victim);
+              suppress_pending_article = 1u;
+              throw_command_authoritative = 1u;
+            }
           }
           const uint8_t pending_throwhi_mid_pulse_needs_article =
               (!suppress_pending_article && action_id == (uint16_t)MSL_ACT_THROW_HI &&

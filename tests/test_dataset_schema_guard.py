@@ -20,6 +20,11 @@ def test_seed_schema_includes_staling_fields() -> None:
     assert "item_hitlist_victim_cd" in SEED_DTYPE.fields
     assert "item_hitlist_victim_hitbox_mask" in SEED_DTYPE.fields
     assert "item_hitlist_victim_iid" in SEED_DTYPE.fields
+    assert "item_reflect_transfer_port" in SEED_DTYPE.fields
+    assert "item_reflect_transfer_iid" in SEED_DTYPE.fields
+    assert "item_shield_bounce_valid" in SEED_DTYPE.fields
+    assert "item_hidden_body_hit_victim_port" in SEED_DTYPE.fields
+    assert "item_hidden_callback_flags" in SEED_DTYPE.fields
     assert "source_clear_timer_x18c8" in SEED_DTYPE.fields
     assert "source_clear_owner_set_phase" in SEED_DTYPE.fields
     assert "source_clear_processhit_damage_pending_phase" in SEED_DTYPE.fields

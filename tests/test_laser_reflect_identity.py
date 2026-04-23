@@ -360,12 +360,13 @@ def test_reflected_laser_updates_owner_instance_and_staling_identity() -> None:
         # Decomp-split ownership model:
         # - overlap writes reflect snapshot fields (ftColl_80077464),
         # - item pass consumes snapshot ownership (Item_80269F14).
-        # In this test harness we observe snapshot staging first, then ownership transfer next step.
+        # The pending owner snapshot is now hidden fixed-capacity runtime state rather than a
+        # user-visible misc2/misc3 marker; ownership transfer is still observed on the next step.
         # refs/melee/src/melee/ft/ftcoll.c::ftColl_80077464
         # refs/melee/src/melee/it/item.c::Item_80269F14
         assert int(it0["owner"]) == int(seed2["items"][0, 0]["owner"])
-        assert int(it0["misc2"]) == 255
-        assert int(it0["misc3"]) == 2
+        assert int(it0["misc2"]) == int(seed2["items"][0, 0]["misc2"])
+        assert int(it0["misc3"]) == int(seed2["items"][0, 0]["misc3"])
         # Spawn-latched staling identity (v1): does not transfer on reflect.
         assert int(it0["attack_id"]) == int(seed2["items"][0, 0]["attack_id"])
         assert int(it0["attack_instance"]) == int(seed2["items"][0, 0]["attack_instance"])

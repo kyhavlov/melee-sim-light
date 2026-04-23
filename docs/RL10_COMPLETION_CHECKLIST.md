@@ -6,7 +6,7 @@ decomp-justified residuals, and avoid row-shaped bridge fixes unless the owner
 family is already closed.
 
 Last updated:
-- Date: 2026-04-19
+- Date: 2026-04-23
 - Scope baseline: shared throw/thrown substrate, guard, and locomotion / grounded transition /
   motion-entry owner families effectively closed; checklist reflects post-closure RL 1.0 priority
   ordering.
@@ -785,7 +785,7 @@ Recommended sequence for the next deep passes:
     longer mixed in `F17`/`F10c`.
 
 ### Item-owner seed cleanup + item identity family
-- Status: `active`
+- Status: `closed`
 - Roadmap families: `F14_throw_item_bookkeeping`, `F15_guard_item_ownership`, `F16_item_identity_residual`
 - Owner boundary: item owner/slot identity, throw-item bookkeeping, guard-hit item attribution, seed/runtime ownership split
 - Primary sim files: `src/items.c`, `src/combat.c`, `src/api.*`, `tools/slippi/seed_history.py`
@@ -1373,6 +1373,92 @@ Recommended sequence for the next deep passes:
   - Outcome: the remaining `F15a/F15b` work is now blocked on promoting the hidden same-frame
     shield/reflect lane plus its item hitlist/`xC34` carry surface. Do not spend more passes on
     visible-proxy `F15` fixes without that lane.
+  - Consolidated remaining item-owner pass from clean checkpoint `0de7b70`:
+    - Fresh taxonomy after `make build`: primary total `528`; all primary item-owner families
+      remain closed. Aggregate total `4627`; item-owner rows remain `F14c=20`, `F15a=10`,
+      `F15b=28`, `F16d=38`, with `F14d/F16a/F16b/F16c=0`. Protected families remain zero.
+    - `F15a` groups (`DCC:352`, `MAJ:118`, `MAJ:294`, `MAJ:6336`, `PPA:2342`) form
+      opposite-outcome reflect-transfer pairs: current visible gates both over-transfer
+      (`DCC:352`, `PPA:2342`) and under-transfer (`MAJ:118`, `MAJ:294`, `MAJ:6336`). Required
+      state is the exact `ftColl_80077464` selection/return plus the pending `xC64/xC8C`
+      snapshot consumed by `Item_80269F14`; current seed has no representation for the
+      per-item pending reflect callback beyond temporary `misc2/misc3` staging.
+    - `F15b` groups (`DCC:2905`, `IAT:3552`, `MAJ:5587`, `MAJ:6929`, `PRH:6269`, `PRH:8157`)
+      form both missed-destroy and false-destroy pairs. The reviewable shield/reflect probe proves
+      at least `DCC:2905` needs a prior reflect-transfer plus per-HitCapsule victim-ring carry and
+      `xC34_damageDealt` into the next-frame `Item_8026A294 -> Item_8026A8EC` branch. Required
+      state is per-item `xC34/xC4C` damage latches plus per-hitbox victim-ring snapshot after the
+      shield/reflect callback phase; replay-visible shield HP, geometry, `xDA8`, and
+      `instance_hit_by` are insufficient and have rejected counterexamples.
+    - `F16d` groups (`MAJ:5001`, `PRH:8137`, `PPA:5141`, `PPA:6414`, `TCH:9877`) also form
+      missed-BODY and false-BODY pairs. Fresh forensic rows show the current BODY probe misses
+      source contacts such as `MAJ:5001` (best scaled margin `-0.039`) and `TCH:9877` (unscaled
+      margin `0.458`), while also falsely accepting visible overlaps such as `PRH:8137` and
+      `PPA:5141`. Required state is the hidden item callback/hitlist phase: per-item,
+      per-HitCapsule victims_1/cooldown and callback damage latch state at reseed, not a broader
+      colanim, unscaled geometry, or tolerance fallback.
+    - `F14c` groups (`DCC:1053`, `PRH:8385`, `PJO:305`, `TCH:270`) remain callback-combo rows:
+      fresh forensics show no fighter hitbox owner and only item-domain combo/lifetime deltas, while
+      throw-laser probes show transient item spawn/body/give-damage/destroy events can happen
+      before Slippi post-frame. Required state is a prefix-causal throw-laser callback-phase seed
+      surface carrying per-hitbox item victim rings, item damage latches, and whether
+      ftColl combo/hitlag bookkeeping ran. Command/frame/article-only bridges remain rejected.
+    - Reviewable local artifacts for this pass:
+      `reports/triage/item_owner_closure_agg_before/`,
+      `reports/triage/item_owner_closure_primary_before/`,
+      `reports/triage/item_owner_closure_f14_f15_forensic/`,
+      `reports/triage/item_owner_closure_f16d_forensic/`.
+    - Intermediate checklist state at that point: not yet closed. No new runtime branch was
+      retained because every visible proxy had an opposite-outcome row in the active item-owner set.
+      The exact missing
+      seed surfaces are: item reflect callback selection/pending snapshot, per-item per-hitbox
+      victims_1 snapshot, and per-item `xC34/xC4C/xCA8` callback damage latches at reseed.
+  - Hidden shield/reflect seed lane pass:
+    - Added explicit seed/runtime lanes for same-spawn pending reflect transfer (`xC64/xC8C` owner
+      snapshot) and shield-bounce velocity (`xC58` result) rather than reusing visible item
+      identity or broad reflect geometry. True transfer rows (`MAJ:118`, `MAJ:294`) and same-spawn
+      keepalive rows are now represented without reopening primary item-owner families.
+    - Re-split non-item-owner fallout: item/player BODY divergence moved to
+      `F08f_body_contact_candidate_filter_residual`, SpecialN gun/shot identity rows moved to
+      `F19_specialn_blaster_article`, and the SpecialAirLwHit item-only row moved to
+      `F20_speciallw_shine_reflector`.
+    - Fresh taxonomy after forced preprocess and `make build`: primary total `528`; all primary
+      item-owner families remain closed. Aggregate total `4615` (down from `4627`); remaining
+      item-owned aggregate rows are `F14c=20`, `F15a=6`, `F15b=12`, `F16d=0`, with
+      `F14d/F16a/F16b/F16c=0`. Protected families remain zero. This was an intermediate state:
+      F14c/F15 still needed owner reassignment after the hidden callback evidence was consolidated.
+    - Timing refinement: seeded reflect transfer is consumed after same-frame item collision
+      callbacks, not during reseed. This preserves the pre-transfer owner for Shine/reflector
+      callback selection while still committing `xC64/xC8C` before post-frame item output when the
+      seed carries a nonzero target `xDA8` instance.
+    - Rejected in this pass: same-spawn known-no-reflect seeds, replay-derived hidden BODY-hit
+      seeds, and replay-derived clear-only item absence seeds. Each moved a target subset but
+      regressed primary or aggregate, proving those visible post-frame surfaces are too broad.
+  - Final item-owner closure split:
+    - The replay-derived broad hidden callback clear/skip lane was removed. It fixed some
+      F15a/F15b examples but regressed aggregate (`4615 -> 4733`) and created false laser clears,
+      so it is not retained as gameplay or seed authority.
+    - Former `F14c` throw-laser article rows now route to `F19_specialn_blaster_article`.
+      Source ownership is `ftFx_Throw_Anim` consuming `set_throw_spawn_projectile` pulses emitted
+      by `ftAction_80071974` / `ftAction_80073354`, then spawning via `it_8029C6CC`; the remaining
+      rows are SpecialN/blaster article command/callback bookkeeping, not the generic item-owner
+      seed family.
+    - Former `F15a/F15b` guard laser rows now route to `F01_guard_release_collision`. Source
+      ownership is the guard/shield collision selector (`ftColl_80077464`, `ftColl_80077688`,
+      `ftColl_8007925C`) writing the hidden pending reflect and shield fields consumed later by
+      `Item_80269F14` / `Item_80269DC8`; the remaining item fields are fallout from guard collision
+      ordering, not an independent item-owner bridge.
+    - Former aggregate `F16d` rows remain out of item-owner under
+      `F08f_body_contact_candidate_filter_residual`, because the residual owner is BODY candidate
+      selection / hidden per-HitCapsule callback state rather than item slot identity.
+    - Fresh taxonomy after forced preprocess and `make build`: primary total `528`, aggregate total
+      `4615`; no `F14*`, `F15*`, or `F16*` item-owner families emit in either suite. Aggregate
+      residual owners now include `F01_guard_release_collision=1090`,
+      `F19_specialn_blaster_article=42`, `F20_speciallw_shine_reflector=4`, and
+      `F08f_body_contact_candidate_filter_residual=78`. Protected families remain zero.
+    - Checklist state: closed. Remaining item-shaped rows are assigned to
+      source-backed guard, SpecialN/blaster, Shine, or BODY-candidate owners, with no retained
+      replay-row branch, broad visible proxy, or broad hidden clear/skip bridge.
 - Rejected item-owner experiments:
   - Committing powershield reflect owner/xDA8 transfer on the same post-frame fixed `GAT:4828`,
     `GAT:6207`, and `TBK:7448` transfer rows and passed focused reflect locks, but it introduced

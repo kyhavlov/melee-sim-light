@@ -342,6 +342,19 @@ def test_debug_body_contact_split_routes_resolved_geometry_residuals_to_named_ow
             ref_name="DAMAGE_FLY_N",
             out_name="JUMP_F",
             selected_body_count=0,
+            body_candidate_count=0,
+            filtered_body_candidate_count=0,
+            active_fighter_hitbox_count=0,
+            live_nonvictim_item_count=1,
+        )
+        == "F08f_body_contact_candidate_filter_residual"
+    )
+    assert (
+        _family_for_debug_body_contact_residual(
+            seed_name="JUMP_F",
+            ref_name="DAMAGE_FLY_N",
+            out_name="JUMP_F",
+            selected_body_count=0,
             body_candidate_count=2,
             filtered_body_candidate_count=1,
         )
@@ -1656,7 +1669,7 @@ def test_split_cross_player_instance_counter_rows_uses_peer_adjacent_family() ->
     assert new_events[0].family_id == "F12e_cross_player_instance_counter_order"
 
 
-def test_classify_item_slot_row_detects_throwhi_item_lane() -> None:
+def test_classify_item_slot_row_moves_throw_laser_article_to_specialn_owner() -> None:
     row = ItemSlotRow(
         dataset="d.msl",
         record=10,
@@ -1668,9 +1681,12 @@ def test_classify_item_slot_row_detects_throwhi_item_lane() -> None:
         out_actions=(221, 90),
         fields=("item_exists", "item_owner", "item_instance_id"),
         family_id="F99_misc_other",
+        seed_item_type=54,
+        ref_item_type=54,
+        out_item_type=0,
     )
     got = _classify_item_slot_row(row, {90: "DAMAGE_FLY_TOP", 221: "THROW_HI", 241: "THROWN_HI"})
-    assert got == "F14c_throw_article_lifetime"
+    assert got == "F19_specialn_blaster_article"
 
 
 def test_classify_item_slot_row_moves_pure_blaster_gun_xda8_to_instance_owner() -> None:
@@ -1877,6 +1893,92 @@ def test_classify_item_slot_row_keeps_non_specialn_laser_instance_echo_in_body_l
     assert got == "F16d_item_body_lifetime"
 
 
+def test_classify_item_slot_row_moves_laser_player_damage_divergence_to_body_filter() -> None:
+    row = ItemSlotRow(
+        dataset="PositiveRevolvingHyena.msl",
+        record=8137,
+        slot=1,
+        seed_frame=8014,
+        ref_frame=8015,
+        player_actions=(29, 24),
+        ref_actions=(29, 25),
+        out_actions=(84, 25),
+        fields=("item_exists", "item_type", "item_owner", "item_instance_id"),
+        family_id="F99_misc_other",
+        seed_item_type=55,
+        ref_item_type=55,
+        out_item_type=0,
+    )
+    got = _classify_item_slot_row(row, {24: "KNEE_BEND", 25: "JUMP_F", 29: "FALL", 84: "DAMAGE_AIR_1"})
+    assert got == "F08f_body_contact_candidate_filter_residual"
+
+
+def test_classify_item_slot_row_moves_specialn_gun_identity_before_guard_owner() -> None:
+    row = ItemSlotRow(
+        dataset="MotionlessAggressiveJay.msl",
+        record=5587,
+        slot=1,
+        seed_frame=5464,
+        ref_frame=5465,
+        player_actions=(345, 182),
+        ref_actions=(345, 181),
+        out_actions=(345, 182),
+        fields=("item_exists", "item_type", "item_owner", "item_state", "item_instance_id"),
+        family_id="F99_misc_other",
+        seed_item_type=75,
+        ref_item_type=0,
+        out_item_type=75,
+    )
+    got = _classify_item_slot_row(
+        row,
+        {181: "GUARD_SET_OFF", 182: "GUARD_REFLECT", 345: "FX_SPECIAL_AIR_N_LOOP"},
+    )
+    assert got == "F19_specialn_blaster_article"
+
+
+def test_classify_item_slot_row_moves_specialn_new_shot_identity_before_guard_owner() -> None:
+    row = ItemSlotRow(
+        dataset="MotionlessAggressiveJay.msl",
+        record=6336,
+        slot=1,
+        seed_frame=6213,
+        ref_frame=6214,
+        player_actions=(345, 182),
+        ref_actions=(345, 182),
+        out_actions=(345, 182),
+        fields=("item_owner", "item_instance_id"),
+        family_id="F99_misc_other",
+        seed_item_type=0,
+        ref_item_type=55,
+        out_item_type=55,
+    )
+    got = _classify_item_slot_row(
+        row,
+        {182: "GUARD_REFLECT", 345: "FX_SPECIAL_AIR_N_LOOP"},
+    )
+    assert got == "F19_specialn_blaster_article"
+
+
+def test_classify_item_slot_row_moves_speciallw_laser_lifetime_to_shine_owner() -> None:
+    row = ItemSlotRow(
+        dataset="PriceyPartialAlbatross.msl",
+        record=6414,
+        slot=1,
+        seed_frame=6291,
+        ref_frame=6292,
+        player_actions=(367, 24),
+        ref_actions=(367, 24),
+        out_actions=(367, 24),
+        fields=("item_exists", "item_type", "item_owner", "item_instance_id"),
+        family_id="F99_misc_other",
+        seed_item_type=55,
+        ref_item_type=0,
+        out_item_type=55,
+    )
+    got = _classify_item_slot_row(row, {24: "KNEE_BEND", 367: "FX_SPECIAL_AIR_LW_HIT"})
+    assert got == "F20_speciallw_shine_reflector"
+
+
 def test_classify_item_slot_row_moves_guard_action_divergence_to_guard_owner() -> None:
     row = ItemSlotRow(
         dataset="MotionlessAggressiveJay.msl",
@@ -1904,7 +2006,7 @@ def test_classify_item_slot_row_moves_guard_action_divergence_to_guard_owner() -
     assert got == "F01_guard_release_collision"
 
 
-def test_classify_item_slot_row_keeps_same_guard_action_lifetime_in_f15() -> None:
+def test_classify_item_slot_row_moves_same_guard_action_lifetime_to_guard_owner() -> None:
     row = ItemSlotRow(
         dataset="DistinctCaringCobra.msl",
         record=2905,
@@ -1921,7 +2023,7 @@ def test_classify_item_slot_row_keeps_same_guard_action_lifetime_in_f15() -> Non
         out_item_type=55,
     )
     got = _classify_item_slot_row(row, {20: "DASH", 182: "GUARD_REFLECT"})
-    assert got == "F15b_guard_laser_lifetime"
+    assert got == "F01_guard_release_collision"
 
 
 def test_build_summary_aggregates_family_counts_and_nearby_controls() -> None:
