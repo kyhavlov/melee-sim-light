@@ -1303,6 +1303,35 @@ Recommended sequence for the next deep passes:
     closed. Aggregate total `4690` (down from `4715`); remaining aggregate item rows are
     `F14c=55` (down from `80`), `F14d=0`, `F15a=10`, `F15b=32`, `F16d=38`, with
     `F16a/F16b/F16c=0`. Protected families remain zero. The checklist item remains active.
+  - Falco ThrowB startup same-frame callback now models the event-proven state1 throw-laser
+    spawn -> hb0 BODY/give_damage -> destroy lifecycle for early damage callback rows. This closes
+    the IAT/TCH extra-article startup shape while preserving the `PRH:8380` hb2/3 startup carry and
+    primary ThrowB controls.
+  - Fox/Fox crossed-prev ThrowHi frame-18 front-side consume is narrowed to the first-hit callback
+    identity. `BHH:937` remains a destroy row, while `HIS:2428/HIS:7337` carry because event evidence
+    shows later hitbox victim-ring state instead of a fresh hb0 destroy callback.
+  - Fresh taxonomy after `make build`: primary total `528`; all primary item-owner families remain
+    closed. Aggregate total `4652` (down from `4690`); remaining aggregate item rows are
+    `F14c=35`, `F14d=0`, `F15a=10`, `F15b=32`, `F16d=38`, with `F16a/F16b/F16c=0`. Protected
+    families remain zero. The checklist item remains active.
+  - Fox ThrowLw late attached replacement spawn now uses the pending command lane plus an expiring
+    live state1 article (`item_timer <= 1`) to refresh the throw-side state1 article on frame-28/31
+    attached rows. The replacement article seeds only the attached victim's hb0/1 item-hitlist lanes,
+    matching v10 evidence that Fox state1 throw-laser BODY lanes in this phase are hb0/1.
+  - Falco ThrowB startup same-frame destroy is narrowed to the early prior-laser hitbox identity
+    (`last_attack_landed >= 17`), preserving the `TCH:9499` startup carry row while keeping the
+    `IAT/TCH:5094` hb0 destroy positives.
+  - Fresh taxonomy after `make build`: primary total `528`; all primary item-owner families remain
+    closed. Aggregate total `4631`; remaining aggregate item rows are `F14c=20`, `F14d=0`,
+    `F15a=10`, `F15b=32`, `F16d=38`, with `F16a/F16b/F16c=0`. Protected families remain zero. The
+    checklist item remains active.
+  - The remaining `F14c=20` rows are documented as callback-combo blockers, not pure article
+    lifetime rows. `DCC:1053`, `PRH:8385`, `PJO:305`, and `TCH:270` all couple throw-laser article
+    lifetime with owner combo, hitlag, or instance bookkeeping. Existing event probes prove the
+    transient spawn/body/give-damage/destroy ordering, but the safe owner now needs a prefix-causal
+    item callback phase lane that records per-hitbox/victim callback consumption and combo/hitlag
+    bookkeeping effect. Article-only command/frame bridges stay rejected because they reopened
+    primary or widened aggregate `F14c`.
   - `powershield_reflect_size` is now extracted from `p_ftCommonData->x2A8`, matching
     `ftCo_8009370C`'s GuardReflect `ReflectDesc.x14_size`. This is retained as source visibility
     only, not F15 closure: probing the small reflect capsule showed that same-frame owner/xDA8
@@ -1473,6 +1502,13 @@ Recommended sequence for the next deep passes:
     first-pulse articles reopened primary to `583` (`F14c=55`). The retained rule is limited to
     same-character Fox callback rows and keeps cross-character and Falco phases on their existing
     owners.
+  - A same-character ThrowHi empty-`last_attack_landed` same-frame hb0 destroy helper was tested from
+    PJO/TCH event evidence. Without a hidden phase field it destroyed adjacent carry rows and raised
+    aggregate F14c to `70`; adding the current geometry predicate missed the motivating rows. It was
+    reverted pending a direct phase/pose discriminator.
+  - A no-hitlag Falco ThrowB terminal carry narrowing fixed `PRH:8385` but over-advanced combo on the
+    primary `GAT:2522` terminal control, so the existing terminal suppressor remains until source
+    evidence separates article serialization from combo/source bookkeeping.
   - Hidden `x198C` BODY suppression and stale-submotion SpecialN loop shot gating were also tested
     after the disabled-contact slice; neither moved aggregate beyond the retained branch, so both
     were dropped.

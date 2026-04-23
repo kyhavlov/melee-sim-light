@@ -396,6 +396,22 @@ def test_throwhi_pending_spawn_hitlist_carries_first_pulse_article(
             note="Fox/Fox ThrowHi frame-18 front-side first-pulse callback consumes article",
         ),
         _ThrowHiSameCharacterCallbackCase(
+            dataset_rel="datasets/aggregate_recent/replays/validation/aggregate_recent/HungryImportantSnake.msl",
+            target_record=2428,
+            thrower_port=0,
+            item_slot=1,
+            expect_exists=True,
+            note="Fox/Fox ThrowHi frame-18 later-hitbox victim-ring phase carries article",
+        ),
+        _ThrowHiSameCharacterCallbackCase(
+            dataset_rel="datasets/aggregate_recent/replays/validation/aggregate_recent/HungryImportantSnake.msl",
+            target_record=7337,
+            thrower_port=1,
+            item_slot=1,
+            expect_exists=True,
+            note="Fox/Fox ThrowHi frame-18 alternate later-hitbox victim-ring phase carries article",
+        ),
+        _ThrowHiSameCharacterCallbackCase(
             dataset_rel="datasets/aggregate_recent/replays/validation/aggregate_recent/BlondHardHippopotamus.msl",
             target_record=1250,
             thrower_port=0,
@@ -434,6 +450,8 @@ def test_throwhi_same_character_callback_phase_locks(
     # - Same-character Fox/Fox rows expose two outcomes from the same first-pulse callback owner:
     #   front-side first-pulse BODY callback consumes the carried article, while frame-20 fallback
     #   command crossing must not duplicate an already-live first-pulse article.
+    # - Later-hitbox victim-ring phases with a different last_attack_landed identity carry the article
+    #   instead of re-running the hb0 destroy callback.
     # - Cross-character controls stay eligible for the existing carry / frame-20 command paths.
     # - This is intentionally scoped to item lifetime fields; gun misc/cmd_vars[1] bookkeeping is a
     #   separate throw-gun cursor surface.

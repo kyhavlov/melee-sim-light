@@ -129,6 +129,40 @@ def test_throwb_suppressed_pulse_combo_bridge_target_pm1(case: _Case) -> None:
         ),
         _ThrowBCallbackCase(
             dataset_rel=(
+                "datasets/aggregate_recent/replays/validation/aggregate_recent/"
+                "ImpassionedAlarmedTarsier.msl"
+            ),
+            target_record=2116,
+            thrower_p=1,
+            item_slot=1,
+            note="Falco ThrowB startup same-frame hb0 callback destroys article",
+        ),
+        _ThrowBCallbackCase(
+            dataset_rel=(
+                "datasets/aggregate_recent/replays/validation/aggregate_recent/"
+                "ImpassionedAlarmedTarsier.msl"
+            ),
+            target_record=8093,
+            thrower_p=1,
+            item_slot=1,
+            note="Falco ThrowB startup same-frame hb0 callback destroys later article",
+        ),
+        _ThrowBCallbackCase(
+            dataset_rel="datasets/aggregate_recent/replays/validation/aggregate_recent/TubbyCurlyHerring.msl",
+            target_record=5094,
+            thrower_p=1,
+            item_slot=1,
+            note="Falco ThrowB startup same-frame hb0 callback destroys TCH article",
+        ),
+        _ThrowBCallbackCase(
+            dataset_rel="datasets/aggregate_recent/replays/validation/aggregate_recent/TubbyCurlyHerring.msl",
+            target_record=9499,
+            thrower_p=1,
+            item_slot=1,
+            note="Falco ThrowB startup non-laser-body landed identity carries article",
+        ),
+        _ThrowBCallbackCase(
+            dataset_rel=(
                 "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
                 "GracefulAttachedTurtle.msl"
             ),
@@ -145,7 +179,8 @@ def test_throwb_callback_phase_item_and_scoreboard_locks(case: _ThrowBCallbackCa
     # - Item BODY callback/source bookkeeping is owned by it_8026FAC4 / it_80272460 plus
     #   ftColl_8007646C -> ftColl_800763C0.
     # - Startup carry rows seed per-HitCapsule victim state; terminal consume rows suppress the
-    #   live article and advance only item-domain combo bookkeeping.
+    #   live article and advance only item-domain combo bookkeeping. Startup same-frame callback rows
+    #   run hb0 BODY/give_damage/destroy before post-frame serialization.
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / case.dataset_rel

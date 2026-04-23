@@ -2702,11 +2702,61 @@ Fox/Falco special-owner split (2026-04-17):
     `refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim`,
     `refs/melee/src/melee/it/items/itfoxlaser.c::{it_8029C6CC,it_8029C4D4}`,
     `tools/dolphin/patches/ishiiruka_throw_laser_event_probe.patch`.
-    Sources: `tools/dolphin/patches/ishiiruka_throw_laser_event_probe.patch`,
+  - Falco ThrowB startup same-frame callback and Fox/Fox ThrowHi later-hitbox carry:
+    - Falco ThrowB frame-15 startup rows now run the same-frame state1 throw-laser
+      spawn -> hb0 BODY/give_damage -> destroy lifecycle when the unique same-source victim is still
+      in the early damage callback phase. This fixes the extra post-frame article shape without
+      broad command authority; the existing `PRH:8380` startup carry control remains on the hb2/3
+      item-hitlist lane.
+    - Fox/Fox crossed-prev ThrowHi frame-18 front-side consume is narrowed to the first-hit callback
+      identity. `BHH:937` still destroys, while `HIS:2428/HIS:7337` carry because event evidence
+      shows later hitbox victim-ring state rather than a fresh hb0 destroy callback.
+    - Replay-real locks cover `IAT:2116`, `IAT:8093`, `TCH:5094`, `HIS:2428`, and `HIS:7337`,
+      with `BHH:937`, `BHH:9419`, `PRH:8380`, and primary ThrowB controls retained as negatives.
+      Fresh taxonomy after `make build`: primary total `528`; all primary item-owner families closed.
+      Aggregate total `4652` (down from `4690`); remaining aggregate item rows are `F14c=35`,
+      `F14d=0`, `F15a=10`, `F15b=32`, `F16d=38`. Protected families remain zero. The checklist
+      item remains active.
+    Sources: `refs/melee/src/melee/ft/ftaction.c::{ftAction_80071974,ftAction_80073354}`,
     `refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim`,
     `refs/melee/src/melee/it/items/itfoxlaser.c::{it_8029C6CC,it_8029C4D4}`,
-    `refs/melee/src/melee/it/itcoll.c::{it_8026FAC4,it_80272460}`,
-    `refs/melee/src/melee/it/item.c::{OnGiveDamageThink,Item_8026A294}`.
+    `refs/melee/src/melee/it/itcoll.c::{it_8026FA2C,it_8026FAC4,it_80272460}`,
+    `refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007646C,ftColl_800763C0}`,
+    `tools/dolphin/patches/ishiiruka_throw_laser_event_probe.patch`.
+  - ThrowLw late attached replacement spawn and narrowed Falco ThrowB startup callback:
+    - Fox ThrowLw rows with a pending frame-28/31 command, attached ThrownLw victim, exactly one
+      expiring state1 article (`item_timer <= 1`), and hb0/1 victim-ring evidence now emit the
+      replacement state1 article through the throw-side command lane. This closes `FSP:9182` and
+      `FSP:9185` without item-wide suppression: the new article seeds only the attached victim's
+      hb0/1 lanes, matching the v10 dump where Fox state1 throw-laser BODY hitcapsules are hb0/1.
+    - The retained Falco ThrowB startup same-frame destroy is tightened to the early prior-laser
+      hitbox identity (`last_attack_landed >= 17`) so `TCH:9499` remains on the startup carry path
+      instead of being destroyed by the hb0 callback branch.
+    - Replay-real locks cover `FSP:9182`, `FSP:9185`, and `TCH:9499`, while the previous destroy
+      positives (`IAT:2116`, `IAT:8093`, `TCH:5094`) and primary controls remain locked. Fresh
+      taxonomy after `make build`: primary total `528`; all primary item-owner families remain
+      closed. Aggregate total `4631`; remaining aggregate item rows are `F14c=20`, `F14d=0`,
+      `F15a=10`, `F15b=32`, `F16d=38`. Protected families remain zero. The checklist item remains
+      active.
+    Sources: `refs/melee/src/melee/ft/ftaction.c::{ftAction_80071974,ftAction_80073354}`,
+    `refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim`,
+    `refs/melee/src/melee/it/items/itfoxlaser.c::{it_8029C6CC,it_8029C4D4}`,
+    `refs/melee/src/melee/it/itcoll.c::{it_8026FA2C,it_8026FAC4,it_80272460}`,
+    `tools/dolphin/patches/ishiiruka_throw_laser_event_probe.patch`.
+  - Remaining F14c callback-combo blocker:
+    - The four remaining aggregate F14c clusters (`DCC:1053`, `PRH:8385`, `PJO:305`, `TCH:270`)
+      are no longer pure item article lifetime. Each is coupled to item BODY callback bookkeeping:
+      `DCC:1053` and `PRH:8385` have owner combo over-advance when the article lifetime is wrong,
+      `PJO:305` needs the owner combo advance while suppressing the transient article, and
+      `TCH:270` couples the extra article with hitlag/instance/combo fallout. Prior article-only
+      fixes regressed primary or widened aggregate F14c, so the next retained fix needs a
+      prefix-causal item callback phase lane (for example, per item/hitbox/victim
+      callback-consumed-this-step plus combo/hitlag bookkeeping effect) rather than another
+      command/frame bridge.
+    Sources: `refs/melee/src/melee/it/itcoll.c::{it_8026FA2C,it_8026FAC4,it_80272460}`,
+    `refs/melee/src/melee/it/item.c::{OnGiveDamageThink,Item_8026A294,checkHitLag}`,
+    `refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007646C,ftColl_800763C0}`,
+    `tools/dolphin/patches/ishiiruka_throw_laser_event_probe.patch`.
   - Powershield reflect-size source visibility:
     - `p_ftCommonData->x2A8` is extracted as `powershield_reflect_size`, matching
       `ftCo_8009370C`'s GuardReflect `ReflectDesc.x14_size`. This is retained only as source/data
@@ -2748,6 +2798,13 @@ Fox/Falco special-owner split (2026-04-17):
       all still-eligible state1 hitboxes, were tested after the BHH:4335/BHH:4266
       opposite-outcome pair. They kept primary closed but produced no aggregate movement, so they
       were removed rather than retaining dead gameplay paths.
+    - A same-character ThrowHi empty-`last_attack_landed` same-frame hb0 destroy helper was tested
+      from PJO/TCH event evidence. Without a hidden phase field it destroyed adjacent carry rows and
+      raised aggregate F14c to `70`; adding the current geometry predicate missed the motivating
+      rows. It was reverted pending direct phase/pose ownership.
+    - A no-hitlag Falco ThrowB terminal carry narrowing fixed `PRH:8385` but over-advanced combo on
+      the primary `GAT:2522` terminal control. The existing terminal suppressor remains until source
+      evidence separates article serialization from combo/source bookkeeping.
     - A ThrowLw attached-victim timer carry based on seeded item hitlist masks fixed no shared
       owner and reopened primary to total `558` with `F14c=30`; it was reverted. Timer expiry still
       needs the direct callback/lifetime state rather than an item-wide victim-ring proxy.

@@ -1,5 +1,5 @@
 diff --git a/Source/Core/Core/PowerPC/Interpreter/Interpreter.cpp b/Source/Core/Core/PowerPC/Interpreter/Interpreter.cpp
-index 49ec3a8..0d5f40a 100644
+index 49ec3a8..505378e 100644
 --- a/Source/Core/Core/PowerPC/Interpreter/Interpreter.cpp
 +++ b/Source/Core/Core/PowerPC/Interpreter/Interpreter.cpp
 @@ -4,6 +4,8 @@
@@ -423,7 +423,7 @@ index 49ec3a8..0d5f40a 100644
  }
  
  bool Interpreter::m_EndBlock;
-@@ -79,6 +476,7 @@ static void Trace(UGeckoInstruction& instCode)
+@@ -79,6 +479,7 @@ static void Trace(UGeckoInstruction& instCode)
  int Interpreter::SingleStepInner()
  {
  	static UGeckoInstruction instCode;

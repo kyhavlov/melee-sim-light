@@ -2,11 +2,22 @@ from __future__ import annotations
 
 import importlib
 from pathlib import Path
+from dataclasses import dataclass
 
 import numpy as np
 import pytest
 
 from tools.eval.dataset import COMPARE_DTYPE, read_dataset
+
+
+@dataclass(frozen=True)
+class _ThrowLwArticleCase:
+    dataset_rel: str
+    record: int
+    attacker: int
+    victim: int
+    item_slot: int
+    note: str
 
 
 def _run_record(dataset_path: Path, record: int) -> np.ndarray:
@@ -130,3 +141,59 @@ def test_thrownlw_victim_hit_by_attached_laser_stays_thrownlw(record: int) -> No
     assert got_laser_type == expected_laser_type
     assert got_laser_owner == expected_laser_owner
     assert got_laser_iid == expected_laser_iid
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    "case",
+    [
+        _ThrowLwArticleCase(
+            dataset_rel="datasets/aggregate_recent/replays/validation/aggregate_recent/FavorableSuperficialPig.msl",
+            record=9182,
+            attacker=0,
+            victim=1,
+            item_slot=1,
+            note="Fox ThrowLw frame-28 command refreshes expiring attached state1 article",
+        ),
+        _ThrowLwArticleCase(
+            dataset_rel="datasets/aggregate_recent/replays/validation/aggregate_recent/FavorableSuperficialPig.msl",
+            record=9185,
+            attacker=0,
+            victim=1,
+            item_slot=1,
+            note="Fox ThrowLw frame-31 command refreshes expiring attached state1 article",
+        ),
+    ],
+)
+def test_throwlw_late_attached_replacement_article_locks(case: _ThrowLwArticleCase) -> None:
+    # Replay-real locks for the late attached ThrowLw replacement-spawn owner:
+    # - ftAction/ftFx_Throw_Anim emit a later set_throw_spawn_projectile pulse while the attached
+    #   victim is still in ThrownLw.
+    # - The seed-visible state1 article is at lifetime 1; vanilla refreshes the throw-side state1
+    #   article and carries it through item serialization with the attached victim in hb0/1
+    #   victims_1 state.
+    # refs/melee/src/melee/ft/ftaction.c::{ftAction_80071974,ftAction_80073354}
+    # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
+    # refs/melee/src/melee/it/items/itfoxlaser.c::{it_8029C6CC,it_8029C4D4}
+    # refs/melee/src/melee/it/itcoll.c::{it_8026FA2C,it_8026FAC4}
+    root = Path(__file__).resolve().parents[1]
+    dataset_path = root / case.dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {case.dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    seed = ds.samples[case.record]["seed_t"]
+    ref = ds.samples[case.record]["ref_t1"]
+    assert int(seed["action_id"][case.attacker]) == 0x00DE, case.note  # ThrowLw
+    assert int(seed["action_id"][case.victim]) == 0x00F2, case.note  # ThrownLw
+    assert int(seed["grab_owner_port"][case.victim]) == case.attacker, case.note
+    assert int(seed["throw_command_pending_pulse_frame"][case.attacker]) in (28, 31), case.note
+    assert int(seed["items"][case.item_slot]["exists"]) == 1, case.note
+    assert float(seed["items"][case.item_slot]["timer"]) <= 1.0, case.note
+    assert int(ref["items"][case.item_slot]["exists"]) == 1, case.note
+
+    out = _run_record(dataset_path, case.record)
+    for field in ("exists", "type", "state", "owner", "instance_id"):
+        got = int(out["items"][0, case.item_slot][field])
+        exp = int(ref["items"][case.item_slot][field])
+        assert got == exp, f"{case.note}: item_{field} expected={exp} got={got}"
