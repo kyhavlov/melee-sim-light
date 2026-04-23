@@ -55,7 +55,7 @@ rollout.streak_len.p90: 134
 rollout.streak_len.p95: 162
 rollout.streak_len.max: 384
 rollout.first_mismatch_total: 208
-rollout.first_mismatch_seeded_total: 112
+rollout.first_mismatch_seeded_total: 111
 
 == datasets/aggregate_recent/replays/validation/aggregate_recent/HilariousVillainousGiraffe.msl ==
 rollout.best_len: 410
@@ -75,7 +75,7 @@ rollout.streak_len.p90: 151
 rollout.streak_len.p95: 182
 rollout.streak_len.max: 235
 rollout.first_mismatch_total: 140
-rollout.first_mismatch_seeded_total: 70
+rollout.first_mismatch_seeded_total: 69
 
 == datasets/aggregate_recent/replays/validation/aggregate_recent/ImpassionedAlarmedTarsier.msl ==
 rollout.best_len: 407
@@ -185,4 +185,4 @@ overall.rollout.streak_len.p95: 222
 overall.rollout.streak_len.max: 631
 overall.rollout.best_len.max: 631
 overall.rollout.first_mismatch_total: 2002
-overall.rollout.first_mismatch_seeded_total: 978
+overall.rollout.first_mismatch_seeded_total: 976

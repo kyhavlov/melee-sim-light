@@ -2865,8 +2865,9 @@ def compute_fighter_button_timers(
     When `hitlag_frames` is provided, model Fighter_Spaghetti_8006AD10_Inner1's x668
     OR-latch while fp->x2219_b5 remains active. This is causal from Slippi post-frame
     hitlag: post_hitlag[i] > 0 means the input pass for frame i still ran under the hitlag gate.
-    The latch is especially important for `x680`/`x684`: repeated latched digital L/R frames
-    overwrite x684 with the just-reset x680, satisfying ftCo_800986B0's debounce behavior.
+    The latch starts from edges observed while the fighter is already in hitlag; a pre-hitlag L/R
+    press keeps its first x684 debounce value for later DamageFly floor tech callbacks instead of
+    being replay-latched into every subsequent hitlag frame.
     """
     bp = np.asarray(buttons_pressed, dtype=np.uint16).reshape(-1)
     n = int(bp.size)
@@ -2909,7 +2910,7 @@ def compute_fighter_button_timers(
             x668_latched |= raw_bpi
             bpi = x668_latched
         else:
-            x668_latched = raw_bpi
+            x668_latched = 0
             bpi = raw_bpi
 
         if (bpi & m_a) != 0:

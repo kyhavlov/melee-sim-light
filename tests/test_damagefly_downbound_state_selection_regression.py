@@ -151,7 +151,7 @@ def test_downboundu_stays_downboundu_attachedgoodnaturedguanaco_record_2101_p0()
     assert int(row["ref_t1"]["hitlag"][p]) == 0
     assert int(row["ref_t1"]["hitstun"][p]) == 0
 
-    out, ref = _run_one_step(dataset_rel=dataset_rel, record=record, p=p)
+    out, ref, out_roll = _run_one_step_with_rollout(dataset_rel=dataset_rel, record=record, p=p)
     assert int(out["action_id"][p]) == int(ref["action_id"][p])
     assert int(out["animation_index"][p]) == int(ref["animation_index"][p])
     assert int(out["on_ground"][p]) == int(ref["on_ground"][p])
@@ -179,7 +179,7 @@ def test_downboundu_stays_downboundu_gracefulattachedturtle_record_2317_p1() -> 
     assert int(row["ref_t1"]["hitlag"][p]) == 0
     assert int(row["ref_t1"]["hitstun"][p]) == 0
 
-    out, ref = _run_one_step(dataset_rel=dataset_rel, record=record, p=p)
+    out, ref, out_roll = _run_one_step_with_rollout(dataset_rel=dataset_rel, record=record, p=p)
     assert int(out["action_id"][p]) == int(ref["action_id"][p])
     assert int(out["animation_index"][p]) == int(ref["animation_index"][p])
     assert int(out["on_ground"][p]) == int(ref["on_ground"][p])
@@ -312,6 +312,70 @@ def test_damagefly_land_to_downbound_passive_context_controls_stay_replay_real(
     assert int(out_roll["action_id"][p]) == int(out["action_id"][p])
     assert int(out_roll["on_ground"][p]) == int(out["on_ground"][p])
     assert abs(float(out_roll["pos_y"][p]) - float(out["pos_y"][p])) <= 1e-4
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    ("dataset_rel", "record", "p", "expected_x680", "expected_x684", "expected_ref_action"),
+    [
+        (
+            "datasets/aggregate_recent/replays/validation/aggregate_recent/HungryImportantSnake.msl",
+            3956,
+            1,
+            6,
+            110,
+            199,  # Passive
+        ),
+        (
+            "datasets/aggregate_recent/replays/validation/aggregate_recent/HungryImportantSnake.msl",
+            8165,
+            1,
+            6,
+            49,
+            201,  # PassiveStandB
+        ),
+        (
+            "datasets/aggregate_recent/replays/validation/aggregate_recent/ImpassionedAlarmedTarsier.msl",
+            5781,
+            1,
+            15,
+            47,
+            200,  # PassiveStandF
+        ),
+    ],
+)
+def test_damagefly_pre_hitlag_lr_tech_seed_preserves_passive_selector_replay_real(
+    dataset_rel: str, record: int, p: int, expected_x680: int, expected_x684: int, expected_ref_action: int
+) -> None:
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    row = ds.samples[record]
+    assert int(row["seed_t"]["action_id"][p]) == 88  # DamageFlyN
+    assert int(row["seed_t"]["x680"][p]) == expected_x680
+    assert int(row["seed_t"]["x684"][p]) == expected_x684
+    assert expected_x680 < 20
+    assert expected_x684 >= 40
+    assert int(row["ref_t1"]["action_id"][p]) == expected_ref_action
+
+    out, ref = _run_one_step(dataset_rel=dataset_rel, record=record, p=p)
+
+    # Decomp ownership:
+    # - ftCo_800986B0 admits floor tech when x680 < x250 and x684 >= x1C.
+    # - ftCo_80090184 then routes to PassiveStandF/B before Passive, then DownBound.
+    # - Pre-hitlag L/R edges preserve their first x684 debounce capture for this floor-contact
+    #   callback; edges first pressed during active hitlag remain covered by the DownBound control.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownAttack.c::ftCo_800986B0
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_80090184
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_PassiveStand.c::ftCo_80098928
+    # tools/slippi/seed_history.py::compute_fighter_button_timers
+    assert int(out["action_id"][p]) == int(ref["action_id"][p]) == expected_ref_action
+    assert int(out["on_ground"][p]) == int(ref["on_ground"][p]) == 1
+    assert int(out["hitstun"][p]) == int(ref["hitstun"][p]) == 0
 
 
 @pytest.mark.integration

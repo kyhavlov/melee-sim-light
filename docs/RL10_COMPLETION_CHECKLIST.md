@@ -8,8 +8,8 @@ family is already closed.
 Last updated:
 - Date: 2026-04-23
 - Scope baseline: shared throw/thrown substrate, guard, locomotion / grounded transition /
-  motion-entry, item-owner identity, and match-flow / respawn owner families effectively closed;
-  checklist reflects post-closure RL 1.0 priority ordering.
+  motion-entry, item-owner identity, match-flow / respawn, and knockdown / passive contact owner
+  families closed; checklist reflects post-closure RL 1.0 priority ordering.
 
 ## Status Legend
 
@@ -24,12 +24,11 @@ Last updated:
 
 Recommended sequence for the next deep passes:
 
-1. **Knockdown / passive contact owner**
-2. **Core combat followup family**
-3. **Fox/Falco special-move families**
-4. **Ledge / collision-env parity**
-5. **Item-owner seed cleanup + item identity family**
-6. **Mixed-bucket split**
+1. **Core combat followup family**
+2. **Fox/Falco special-move families**
+3. **Ledge / collision-env parity**
+4. **Item-owner seed cleanup + item identity family**
+5. **Mixed-bucket split**
 
 ## Closed / Effectively Closed
 
@@ -150,24 +149,29 @@ Recommended sequence for the next deep passes:
   - surviving locomotion tails are narrow residuals only
 
 ### 4. Knockdown / passive contact owner
-- Status: `effectively closed`
-- Roadmap families: `F07_knockdown_grounding` eliminated; previous
-  `F18_damage_tech_timer_seed_surface` selector contradiction fixed; remaining contact substrate
-  rows split to `F17_mpcoll_ledge_ecb_residual`
-- Owner boundary: DamageFly contact owner for Passive / PassiveStand / DownBound / landing selection
+- Status: `closed`
+- Closure scope: shared Passive / PassiveStand / DownBound selector ownership only; this does not
+  claim the whole damage/down/passive transition surface is gone.
+- Roadmap families: `F07_knockdown_grounding=0` and
+  `F18_damage_tech_timer_seed_surface=0` in fresh primary and aggregate taxonomy. Remaining
+  damage/down/passive-shaped rows are source-owned adjacent residuals (`F08c`, `F06`, `F08f`,
+  `F10m`), not shared Passive / PassiveStand / DownBound selector debt.
+- Owner boundary: DamageFly/DamageFall floor-contact tech owner for Passive / PassiveStand /
+  DownBound selection.
 - Primary owner files: `src/knockdown.c`, `src/input.c`
 - Seed provenance support: `tools/slippi/seed_history.py`, `tools/slippi/make_dataset_from_slp.py`
 - Adjacent/upstream residual owners: `src/mpcoll_ground.c`, `src/ledge.c`, `src/locomotion.c`
 - Closure note:
   - `src/knockdown.c::enter_damagefly_ground_contact_followup` is the shared decomp-shaped selector
     for `DamageFly*` / `DamageFall` floor contact.
-  - `src/input.c` and `tools/slippi/seed_history.py` now model
-    `Fighter_Spaghetti_8006AD10_Inner1` hitlag-latched `input.x668`, so `x680` / `x684` tech
-    debounce provenance matches the DownBound / PassiveStand selector rows.
-  - `F17_mpcoll_ledge_ecb_residual` is row-level audited as upstream contact substrate:
-    same-action `ground_id` / `jumps_left` / hurtbox drift, DamageFly-vs-Passive one-frame
-    floor-contact timing, and PassiveWallJump wall-contact timing. Combat and special-adjacent
-    rows are not hidden in this bucket.
+  - `src/input.c` and `tools/slippi/seed_history.py` now model the tech-timer provenance needed by
+    `ftCo_800986B0`: L/R first pressed during active hitlag stays hitlag-latched and can fail the
+    `x684` debounce gate, while L/R pressed before hitlag preserves the first `x684` debounce capture
+    for the later `ftCo_80090184` floor-contact callback.
+  - Remaining `F08c_damage_state_transition_adjacency` rows are Down/Passive/Fall/Landing/mpColl
+    timing adjacency, not the shared contact selector. `F06_damageflyroll_rng_gate` remains the
+    common-damage `ftCo_8008DCE0` DamageFlyRoll RNG/admission owner, and
+    `F08f_body_contact_candidate_filter_residual` remains BODY candidate selection.
 - Acceptance bar:
   - one damage-fly contact owner chooses grounded outcomes consistently
   - no ledge or ECB regressions

@@ -576,7 +576,7 @@ Legend:
 | Locomotion core (walk/dash/run/jumps/landing/fall/airdodge/escapes) | **PARTIAL** | Broad coverage exists; gaps remain in less-common action branches and ordering edge cases. |
 | Stage collision + ECB (FD ground/ledge points, grounding, `ground_id`) | **PARTIAL** | mpColl-shaped FD ground contact is implemented (floor + wall/ceiling passes + persistence); DownBound floor-index persistence across FD seams and narrow Ottotto FD-edge handoffs are modeled. The ledge/collision-env checklist bucket is closed in fresh taxonomy (`F17=0`, `F10c=0`, `F22=0` in primary and aggregate). Remaining row evidence is split to exact adjacent owners: pure `CollData.floor.index` visibility (`F10m`), common Fall/Landing timebase (`F10n`), common Ottotto teeter handoff (`F10o`), and SpecialAirHi/Bound collision callback timing (`F10p`, kept out of `F22`). |
 | Ledge system (Cliff* actions, quick/slow options) | **PARTIAL** | Ledge-grab mask now uses collision-stage prev/cur snapshots; occupancy includes quick/slow option actions; MissFoot can CliffCatch; Cliff option terminal callbacks can consume Wait IASA locomotion tails; Cliff x1990 and x2064 terminal cooldown seed/runtime ownership are narrowed. The generic ledge/collision-env taxonomy buckets are closed (`F17=0`, `F10c=0`). |
-| Knockdown/tech (DownBound/Wait/Stand/Attack + rolls) | **EFFECTIVELY CLOSED FOR SHARED CONTACT OWNER** | `DamageFly*`/`DamageFall` floor contact now shares one decomp-shaped selector for `PassiveStandF/B` -> `Passive` -> `DownBound`; `x680`/`x684` tech timers now model hitlag-latched `x668`; remaining same-action `ground_id` tails are floor-line identity (`F10m`), not knockdown/ledge action ownership. |
+| Knockdown/tech (DownBound/Wait/Stand/Attack + rolls) | **CLOSED FOR SHARED PASSIVE/DOWNBOUND SELECTOR** | `DamageFly*`/`DamageFall` floor contact shares one decomp-shaped selector for `PassiveStandF/B` -> `Passive` -> `DownBound`; `x680`/`x684` tech timers now distinguish pre-hitlag L/R tech presses from hitlag-active latched presses. Fresh primary and aggregate taxonomy have `F07_knockdown_grounding=0` and `F18_damage_tech_timer_seed_surface=0`. Remaining damage/down/passive-shaped rows are still real residual cleanup under adjacent owners (`F08c`, `F06`, `F08f`, `F10m`), not shared Passive / PassiveStand / DownBound selector debt. |
 | Combat geometry (hurtcaps/hitboxes/shields pose-driven) | **PARTIAL** | Core data-driven primitives exist; remaining parity depends on exact facing/axis + attachment nuances. |
 | Damage pipeline (BODY + SHIELD, GuardSetOff, hitlag/hitstun/KB states) | **PARTIAL** | Big pieces are in; still missing full rehit/hitlist, stale queue, and many modifiers. |
 | Items/projectiles | **PARTIAL** | Laser/blaster coverage is in and reduces `item_*` mismatches; item system parity is incomplete beyond suite needs. |
@@ -3325,9 +3325,11 @@ M6 Ledge/tech/knockdown (**PARTIAL**)
   `ftCo_80097D40` (`DownBound`).
 - Tech-timer seed/runtime provenance: `Fighter_Spaghetti_8006AD10_Inner1` OR-latches
   `input.x668` while `fp->x2219_b5` hitlag remains active. The `x680`/`x684` L/R tech timers
-  consume that latched edge each hitlag frame, so repeated digital L/R hitlag frames can overwrite
-  `x684` with the just-reset `x680` and make `ftCo_800986B0` fail its debounce gate. This is
-  modeled both in runtime input carry and `tools/slippi/seed_history.py::compute_fighter_button_timers`.
+  consume hitlag-active latched edges each hitlag frame, so digital L/R first pressed during active
+  hitlag can overwrite `x684` with the just-reset `x680` and make `ftCo_800986B0` fail its debounce
+  gate. L/R pressed before hitlag keeps its first `x684` debounce capture for the later
+  `ftCo_80090184` floor-contact tech callback. This is modeled in runtime input carry and
+  `tools/slippi/seed_history.py::compute_fighter_button_timers`.
   Decomp refs:
   `refs/melee/src/melee/ft/fighter.c::{Fighter_Spaghetti_8006AD10_Inner1,Fighter_Spaghetti_8006AD10}`,
   `refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownAttack.c::ftCo_800986B0`.

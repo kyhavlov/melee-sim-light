@@ -2334,10 +2334,10 @@ def test_fighter_button_timers_latch_x668_during_hitlag_for_tech_debounce() -> N
     D_DOWN = np.uint16(0x0004)
     LR = np.uint16(L | R)
 
-    # Digital L during active hitlag is OR-latched in Fighter_Spaghetti_8006AD10_Inner1.
-    # The latched x668 bit is then consumed by the same button-timer block on each still-hitlag
-    # frame. For techs this means later hitlag frames overwrite x684 with the just-reset x680,
-    # keeping ftCo_800986B0's debounce gate closed.
+    # Digital L pressed during active hitlag is OR-latched in
+    # Fighter_Spaghetti_8006AD10_Inner1. The latched x668 bit is then consumed by the same
+    # button-timer block on each still-hitlag frame. For techs this means later hitlag frames
+    # overwrite x684 with the just-reset x680, keeping ftCo_800986B0's debounce gate closed.
     # refs/melee/src/melee/ft/fighter.c::{
     #   Fighter_Spaghetti_8006AD10_Inner1,Fighter_Spaghetti_8006AD10
     # }
@@ -2359,6 +2359,39 @@ def test_fighter_button_timers_latch_x668_during_hitlag_for_tech_debounce() -> N
 
     assert [int(v) for v in x680] == [0xFF, 0, 0, 0, 1, 2]
     assert [int(v) for v in x684] == [0xFF, 0xFF, 0, 0, 0, 0]
+
+
+def test_fighter_button_timers_preserve_pre_hitlag_lr_debounce_for_floor_tech() -> None:
+    L = np.uint16(0x0040)
+    A = np.uint16(0x0100)
+    XY = np.uint16(0x0C00)
+    D_UP = np.uint16(0x0008)
+    D_DOWN = np.uint16(0x0004)
+
+    # When the L/R edge happens before hitlag starts, the DamageFly floor-contact tech callback
+    # still observes the first debounce capture rather than a hitlag-latched replay edge. This keeps
+    # ftCo_800986B0's x684 gate open for legitimate pre-hitlag tech inputs.
+    # refs/melee/src/melee/ft/fighter.c::{
+    #   Fighter_Spaghetti_8006AD10_Inner1,Fighter_Spaghetti_8006AD10
+    # }
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownAttack.c::ftCo_800986B0
+    buttons_pressed = np.array([0, L, 0, 0, 0, 0], dtype=np.uint16)
+    hitlag = np.array([0, 0, 3, 2, 1, 0], dtype=np.uint16)
+
+    _, _, _, x680, _, _, _, x684 = compute_fighter_button_timers(
+        buttons_pressed=buttons_pressed,
+        hitlag_frames=hitlag,
+        mask_a=int(A),
+        mask_b=0x0200,
+        mask_xy=int(XY),
+        mask_dpad_up=int(D_UP),
+        mask_dpad_down=int(D_DOWN),
+        mask_lr=int(L),
+        start_timer=0x2F,
+    )
+
+    assert [int(v) for v in x680] == [0x30, 0, 1, 2, 3, 4]
+    assert [int(v) for v in x684] == [0x2F, 0x30, 0x30, 0x30, 0x30, 0x30]
 
 
 def test_jump_to_jump_aerial_entry_clears_fall_fast_and_overrides_x671() -> None:
