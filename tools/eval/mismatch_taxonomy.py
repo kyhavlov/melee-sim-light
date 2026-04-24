@@ -258,9 +258,10 @@ FAMILY_META: dict[str, FamilyMeta] = {
         risk="high",
         confidence="high",
         hypothesis=(
-            "The remaining DamageFlyTop -> DamageFlyRoll admission blocker still depends on an "
-            "unmodeled pre-gate Fighter_8006CDA4 RNG consumer family, so instrumentation/seed work "
-            "should land before another runtime branch."
+            "DamageFlyRoll admission rows are owned by ftCo_8008DCE0's RNG gate plus any pre-gate "
+            "Fighter_8006CDA4 random consumers. The known hidden consume-count families are seeded; "
+            "remaining rows are mixed exact RNG/admission carry and adjacent DamageFlyRoll transition "
+            "residuals, so new branches need source/probe evidence rather than broad pre-action gates."
         ),
         refs=(
             "refs/melee/src/melee/ft/fighter.c::Fighter_8006CDA4",

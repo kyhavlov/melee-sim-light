@@ -35,7 +35,7 @@ rollout.streak_len.p90: 171
 rollout.streak_len.p95: 212
 rollout.streak_len.max: 384
 rollout.first_mismatch_total: 140
-rollout.first_mismatch_seeded_total: 52
+rollout.first_mismatch_seeded_total: 51
 
 == datasets/aggregate_recent/replays/validation/aggregate_recent/DistinctCaringCobra.msl ==
 rollout.best_len: 381
@@ -49,13 +49,13 @@ rollout.first_mismatch_seeded_total: 42
 
 == datasets/aggregate_recent/replays/validation/aggregate_recent/FavorableSuperficialPig.msl ==
 rollout.best_len: 384
-rollout.streak_count: 195
+rollout.streak_count: 196
 rollout.streak_len.median: 49
-rollout.streak_len.p90: 135
-rollout.streak_len.p95: 164
+rollout.streak_len.p90: 134
+rollout.streak_len.p95: 162
 rollout.streak_len.max: 384
-rollout.first_mismatch_total: 203
-rollout.first_mismatch_seeded_total: 107
+rollout.first_mismatch_total: 204
+rollout.first_mismatch_seeded_total: 105
 
 == datasets/aggregate_recent/replays/validation/aggregate_recent/HilariousVillainousGiraffe.msl ==
 rollout.best_len: 422
@@ -115,7 +115,7 @@ rollout.streak_len.p90: 195
 rollout.streak_len.p95: 245
 rollout.streak_len.max: 367
 rollout.first_mismatch_total: 138
-rollout.first_mismatch_seeded_total: 91
+rollout.first_mismatch_seeded_total: 90
 
 == datasets/aggregate_recent/replays/validation/aggregate_recent/PutridJoyousOryx.msl ==
 rollout.best_len: 261
@@ -149,13 +149,13 @@ rollout.first_mismatch_seeded_total: 26
 
 == datasets/aggregate_recent/replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.msl ==
 rollout.best_len: 364
-rollout.streak_count: 119
+rollout.streak_count: 118
 rollout.streak_len.median: 70
 rollout.streak_len.p90: 225
 rollout.streak_len.p95: 272
 rollout.streak_len.max: 364
-rollout.first_mismatch_total: 118
-rollout.first_mismatch_seeded_total: 38
+rollout.first_mismatch_total: 117
+rollout.first_mismatch_seeded_total: 37
 
 == datasets/aggregate_recent/replays/validation/cardinal_1.0_recent/QuerulousGrandDinosaur.msl ==
 rollout.best_len: 631
@@ -185,4 +185,4 @@ overall.rollout.streak_len.p95: 226
 overall.rollout.streak_len.max: 631
 overall.rollout.best_len.max: 631
 overall.rollout.first_mismatch_total: 1941
-overall.rollout.first_mismatch_seeded_total: 927
+overall.rollout.first_mismatch_seeded_total: 922

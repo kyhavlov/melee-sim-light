@@ -1900,15 +1900,16 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
     //   still in the shield-hit hitlag segment.
     //
     // Seed reality:
-    // - Older replay seeds can carry the hidden GuardSetOff hitlag-damage lane
+    // - Older replay seeds can carry the hidden GuardSetOff damage lane
     //   (`guard_setoff_hitlag_damage_min`) without carrying the corresponding fighter hitlist.
-    // - On a last-hitlag reseed row, that missing latch lets the same aerial hitbox re-enter
-    //   ftColl_80076CBC and restart shield hitlag.
+    // - On last-hitlag and immediate post-hitlag reseed rows, that missing latch lets the same
+    //   aerial hitbox re-enter ftColl_80076CBC and restart shield hitlag.
     //
     // Minimal prefix-causal bridge:
-    // - Only seed when the defender is visibly in GuardSetOff hitlag, the explicit hidden
-    //   GuardSetOff damage lane is present, and exactly one opponent is an airborne attack in the
-    //   same hitlag segment.
+    // - Only seed when the defender is visibly in GuardSetOff, the explicit hidden GuardSetOff
+    //   damage lane is present, and exactly one opponent is an airborne attack. The lane spans the
+    //   hitlag tail because ftColl_80076808's victims_1 latch is part of the HitCapsule, not the
+    //   fighter's hitlag scalar.
     // - Use the suite/data-observed common AttackAir hit_group 0 dense fallback; authoritative
     //   per-HitCapsule seeds still win when present.
     // refs/melee/src/melee/ft/ftcoll.c::{ftColl_80076CBC,ftColl_80076808}
@@ -1919,7 +1920,7 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
       if (seed->action_id[victim] != (uint16_t)MSL_ACT_GUARD_SET_OFF) {
         continue;
       }
-      if (seed->hitlag[victim] == 0u || seed->guard_setoff_hitlag_damage_min[victim] == 0u) {
+      if (seed->guard_setoff_hitlag_damage_min[victim] == 0u) {
         continue;
       }
       int candidate_attacker = -1;
@@ -1931,9 +1932,6 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
           continue;
         }
         if (!reseed_action_is_attackair(seed->action_id[attacker])) {
-          continue;
-        }
-        if (seed->hitlag[attacker] != seed->hitlag[victim]) {
           continue;
         }
         if (candidate_attacker >= 0) {

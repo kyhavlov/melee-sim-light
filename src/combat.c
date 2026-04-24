@@ -1963,14 +1963,18 @@ static inline uint8_t combat_damageflyroll_rng_subset_allows_pre_action(const Ms
     case (uint16_t)MSL_ACT_RUN:
     case (uint16_t)MSL_ACT_JUMP_AERIAL_F:
     case (uint16_t)MSL_ACT_JUMP_AERIAL_B:
+    case (uint16_t)MSL_ACT_LANDING_AIR_LW:
+    case (uint16_t)MSL_ACT_ATTACK_HI4:
+    case (uint16_t)MSL_ACT_ATTACK_LW3:
+    case (uint16_t)MSL_ACT_FX_SPECIAL_LW_END:
     case (uint16_t)MSL_ACT_ATTACK_AIR_LW:
       return 1u;
     case (uint16_t)MSL_ACT_DAMAGE_FLY_TOP: {
       // narrowed_temporary:
       // - ftCo_8008DCE0 evaluates the DamageFlyRoll RNG gate before entering a new damage
       //   motion state, so `action_id` here is the defender pre-action from the prior frame.
-      // - In the currently modeled stream, only AttackAirB steady windows after the
-      //   create/edge frames show causal parity gains for this pre-action carry lane.
+      // - In the currently modeled stream, AttackAirB create-window carry rows use an explicit
+      //   Fighter_8006CDA4 pre-gate consume-count seed lane before this gate is evaluated.
       // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
       // refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
       // data/moves/{fox,falco}.json moves["ftCo_SM_AttackAirB"].events create_hitbox frame=4
@@ -1986,10 +1990,12 @@ static inline uint8_t combat_damageflyroll_rng_subset_allows_pre_action(const Ms
       const size_t a_idx = bi * (size_t)MSL_MAX_PLAYERS + (size_t)attacker;
       const uint16_t a_action = batch->state.action_id[a_idx];
       const int16_t a_af = batch->state.action_frame[a_idx];
-      // narrowed_temporary threshold:
+      // Create-window threshold:
       // - create_hitbox starts at frame 4, and this runtime checks the pre-action gate after the
-      //   same-frame fighter tick. Keep only post-create steady frames (>=6) to avoid early-edge
-      //   windows until their upstream RNG consumers are represented.
+      //   same-frame fighter tick. Existing replay-real early stale-suppression controls at
+      //   action_frame 4 still resolve to DamageFlyHi after the same-frame tick, so keep the
+      //   DamageFlyRoll carry at the first replay-visible post-create steady row that remains
+      //   post-edge after the tick (action_frame >=6).
       // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_Anim
       if (a_action == (uint16_t)MSL_ACT_ATTACK_AIR_B && a_af >= 6) {
         return 1u;

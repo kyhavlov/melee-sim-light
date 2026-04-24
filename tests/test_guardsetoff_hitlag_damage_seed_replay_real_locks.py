@@ -87,3 +87,35 @@ def test_guardsetoff_hitlag_damage_seed_lane_locks_blockers_and_adjacent_control
         assert int(out_row["action_id"][p]) == int(ref_row["action_id"][p]), case.note
         assert int(out_row["action_frame"][p]) == int(ref_row["action_frame"][p]), case.note
         assert [int(x) for x in out_row["state_flags"][p]] == [int(x) for x in ref_row["state_flags"][p]], case.note
+
+
+@pytest.mark.integration
+def test_guardsetoff_damage_lane_seeds_post_hitlag_attackair_rehit_suppression() -> None:
+    # Replay-real aggregate lock for the GuardSetOff damage lane's fighter-hitlist bridge:
+    # - ftColl_80076CBC / ftColl_80076808 latch the accepted same-group shield victim in the
+    #   HitCapsule, not just while the defender's visible hitlag scalar is nonzero.
+    # - A reseed on the first post-hitlag GuardSetOff row still needs that hidden victims_1 carry
+    #   to prevent the active AttackAirN hitbox from immediately re-entering shield hitlag.
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_80076CBC,ftColl_80076808}
+    # refs/melee/src/melee/lb/lbcollision.c::lbColl_8000ACFC
+    root = Path(__file__).resolve().parents[1]
+    dataset_rel = "datasets/aggregate_recent/replays/validation/aggregate_recent/ImpassionedAlarmedTarsier.msl"
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    record = 10271
+    defender = 0
+    attacker = 1
+    ds = read_dataset(str(dataset_path))
+    seed = ds.samples[record]["seed_t"]
+    assert int(seed["action_id"][defender]) == 181  # GuardSetOff
+    assert int(seed["hitlag"][defender]) == 0
+    assert int(seed["guard_setoff_hitlag_damage_min"][defender]) == 9
+    assert int(seed["action_id"][attacker]) == 65  # AttackAirN
+    assert int(seed["hitlag"][attacker]) == 0
+
+    _, ref_attacker, out_attacker = _run_one_step_row(dataset_path, record, attacker)
+    assert int(ref_attacker["hitlag"][attacker]) == 0
+    assert int(out_attacker["hitlag"][attacker]) == 0
+    assert int(out_attacker["state_flags"][attacker, 1]) == int(ref_attacker["state_flags"][attacker, 1])

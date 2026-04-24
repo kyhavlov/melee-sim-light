@@ -200,9 +200,17 @@ Recommended sequence for the next deep passes:
     `guard_setoff_hitlag_damage_min`.
   - Replay locks:
     `tests/test_core_combat_damage_contact_followup_replay_real_locks.py`.
-  - Fresh taxonomy after this pass:
+  - Fresh taxonomy after this pass and followup consume-count refinement:
     primary total `501` (`F08c=55`, `F06=27`, `F08f=0`, `F09d=0`);
-    aggregate total `4088` (`F08c=394`, `F06=158`, `F08f=68`, `F09d=80`).
+    aggregate total `4060` (`F08c=394`, `F06=148`, `F08f=68`, `F09d=74`).
+  - Continued retained cleanup after the initial broad audit:
+    `GuardSetOff` post-hitlag rows now seed the fighter shield-hitlist carry from
+    `guard_setoff_hitlag_damage_min` beyond the visible hitlag tail; `AttackAirB` DamageFlyRoll
+    carry stays on the replay-visible frame-6 post-create steady surface; and the
+    explicit `fighter_8006cda4_pre_gate_consume_count` seed lane now covers observed
+    `LandingAirLw`, `AttackLw3`, and Fox `SpecialLwEnd` consume-count splits while admitting the
+    `AttackHi4` row without an extra pre-gate consume. The broad frame-3 AttackAirB widening
+    failed the GAT:2635 guardrail and is not retained.
   - Retained same-frame BODY pose cleanup:
     Fox/Falco Side-B End hurtcaps use the pre-Anim collision pose for `ftColl_80076ED8` BODY
     selection, matching the PPA:892 Dolphin collision probe and reducing aggregate `F08f` by 10
@@ -211,13 +219,16 @@ Recommended sequence for the next deep passes:
     broad DamageFly root floor projection, broad grounded matrix-only BODY rejection, broad
     x1994/x198C hidden-colanim promotion, broad `DamageAir` x14 buffer admission, and broad
     AttackAirB DamageFlyRoll gate widening all either failed focused locks or worsened primary /
-    aggregate taxonomy. Later broad grounded Shine source-order suppression and replay-derived
-    hidden item-callback seed inference also worsened taxonomy. None is retained.
+    aggregate taxonomy. Later broad grounded Shine source-order suppression, replay-derived hidden
+    item-callback seed inference, broad JumpF DamageFlyRoll admission, and generic walljump runtime
+    entry without the hidden walljump timer / persisted CollData wall seed surface also failed to
+    move or worsened taxonomy. None is retained.
   - Remaining combat/contact residuals are not hidden under this pass:
     `F06_damageflyroll_rng_gate` is the exact `ftCo_8008DCE0` DamageFlyRoll RNG/admission carry
     owner; the explicit `fighter_8006cda4_pre_gate_consume_count` seed lane covers the known
-    hidden pre-gate `Fighter_8006CDA4` consumes, and the remaining rows are broader
-    DamageFlyRoll-admission/carry transitions. `F08f_body_contact_candidate_filter_residual` is
+    hidden pre-gate `Fighter_8006CDA4` consumes, and the remaining rows are mixed exact
+    DamageFlyRoll RNG/admission carry plus adjacent DamageFlyRoll transition residuals.
+    `F08f_body_contact_candidate_filter_residual` is
     still exact BODY candidate ordering / `lbColl_80006E58` pose evidence plus item-laser candidate
     phase; `F09d_aerial_contact_hitlag_residual` is shield HitCapsule-victim provenance /
     ShieldDesc geometry evidence; and remaining `F08c` rows are downed hidden timers

@@ -1109,6 +1109,7 @@ def _derive_fighter_8006cda4_pre_gate_consume_count_seed_lane(
     - Strictly causal: current-row post-frame lanes only, no future-frame inspection.
     """
     action_id = np.asarray(action_id_u16, dtype=np.uint16).reshape(-1)
+    action_frame = np.asarray(action_frame_i16, dtype=np.int16).reshape(-1)
     on_ground = np.asarray(on_ground_u8, dtype=np.uint8).reshape(-1)
     hitlag = np.asarray(hitlag_u16, dtype=np.uint16).reshape(-1)
     hitstun = np.asarray(hitstun_u16, dtype=np.uint16).reshape(-1)
@@ -1119,6 +1120,7 @@ def _derive_fighter_8006cda4_pre_gate_consume_count_seed_lane(
     n = int(action_id.shape[0])
     if (
         int(on_ground.shape[0]) != n
+        or int(action_frame.shape[0]) != n
         or int(hitlag.shape[0]) != n
         or int(hitstun.shape[0]) != n
         or int(last_hit_by.shape[0]) != n
@@ -1142,7 +1144,10 @@ def _derive_fighter_8006cda4_pre_gate_consume_count_seed_lane(
         )
 
     ACT_ATTACK_AIR_B = np.uint16(67)
+    ACT_LANDING_AIR_LW = np.uint16(74)
+    ACT_ATTACK_LW3 = np.uint16(57)
     ACT_DAMAGE_FLY_TOP = np.uint16(90)
+    ACT_FX_SPECIAL_LW_END = np.uint16(363)
     ACT_THROWN_F = np.uint16(239)
     STATE_FLAGS_221A_INDEX = 1
     STATE_FLAG_221A_B3_MASK = 0x10
@@ -1150,6 +1155,39 @@ def _derive_fighter_8006cda4_pre_gate_consume_count_seed_lane(
     out = np.zeros(n, dtype=np.uint8)
     for i in range(n):
         cur_act = action_id[i]
+        if cur_act == ACT_LANDING_AIR_LW:
+            # Replay-real consume-count split:
+            # - LandingAirLw rows at entry and late landing lag can reach ftCo_8008DCE0 after two
+            #   hidden Fighter_8006CDA4 random consumers; early steady landing-lag controls keep
+            #   the single-consume lane.
+            # - The hidden consume-critical owner is still the same held-item/x197C state surfaced
+            #   by the explicit seed count; action_frame only bounds the decomp callback window that
+            #   Slippi exposes.
+            # refs/melee/src/melee/ft/fighter.c::Fighter_8006CDA4
+            # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
+            out[i] = np.uint8(2 if int(action_frame[i]) == 0 or int(action_frame[i]) >= 16 else 1)
+            continue
+        if cur_act == ACT_FX_SPECIAL_LW_END:
+            # Replay-real consume-count split:
+            # - Fox/Falco SpecialLwEnd entry rows can reach the damage gate before the hidden
+            #   Fighter_8006CDA4 consume site has fired; later exit rows carry the single consume.
+            # refs/melee/src/melee/ft/fighter.c::Fighter_8006CDA4
+            # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
+            if int(action_frame[i]) > 3:
+                out[i] = np.uint8(1)
+            continue
+        if cur_act == ACT_ATTACK_LW3:
+            # Replay-real single-consume carry family:
+            # - these current-row pre-actions reach the same ftCo_8008DCE0 DamageFlyRoll gate
+            #   after Fighter_8006CDA4's hidden held-item/x197C owner can advance the RNG stream
+            #   once.
+            # - The seed lane remains explicit because the consume-critical hidden fields are not
+            #   exported by Slippi; the visible action only identifies the causal damage-entry
+            #   window where the hidden owner was observed.
+            # refs/melee/src/melee/ft/fighter.c::Fighter_8006CDA4
+            # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
+            out[i] = np.uint8(1)
+            continue
         if (
             cur_act == ACT_ATTACK_AIR_B
             and int(on_ground[i]) == 0
@@ -1194,8 +1232,13 @@ def _derive_fighter_8006cda4_pre_gate_consume_count_seed_lane(
                 #   same ftCo_8008DCE0 DamageFlyRoll gate, but on these carry rows the current-row
                 #   attacker steady-window context is the minimal causal discriminator available in
                 #   replay-derived seed state.
+                # - AttackAirB creates hitcapsules at script frame 4, but replay-real early
+                #   stale-suppression controls at action_frame 4 still resolve outside
+                #   DamageFlyRoll after the same-frame tick. Keep the explicit carry on the first
+                #   replay-visible post-create steady row that remains post-edge after that tick.
                 # refs/melee/src/melee/ft/fighter.c::Fighter_8006CDA4
                 # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
+                # data/moves/{fox,falco}.json: moves.ftCo_SM_AttackAirB.events.create_hitbox
                 out[i] = np.uint8(2)
 
     return out

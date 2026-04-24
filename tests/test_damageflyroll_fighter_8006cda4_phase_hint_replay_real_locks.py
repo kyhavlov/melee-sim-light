@@ -49,7 +49,7 @@ class _DamageFlyRoll8006CDA4Case:
             victim_port=0,
             expect_seed_count=0,
             expect_action_id=91,
-            note="positive control already matched without seeded Fighter_8006CDA4 phase (AGG)",
+            note="DamageFlyTop <- AttackAirB positive control remains DamageFlyRoll without early create-window carry (AGG)",
         ),
         _DamageFlyRoll8006CDA4Case(
             dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/TreasuredBackKangaroo.msl",
@@ -58,6 +58,62 @@ class _DamageFlyRoll8006CDA4Case:
             expect_seed_count=2,
             expect_action_id=91,
             note="double-consume DamageFlyTop <- AttackAirB carry now lands DamageFlyRoll (TBK)",
+        ),
+        _DamageFlyRoll8006CDA4Case(
+            dataset_rel="datasets/aggregate_recent/replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.msl",
+            target_record=11134,
+            victim_port=1,
+            expect_seed_count=1,
+            expect_action_id=91,
+            note="single-consume LandingAirLw carry now lands DamageFlyRoll (GAT aggregate)",
+        ),
+        _DamageFlyRoll8006CDA4Case(
+            dataset_rel="datasets/aggregate_recent/replays/validation/aggregate_recent/FavorableSuperficialPig.msl",
+            target_record=5391,
+            victim_port=0,
+            expect_seed_count=1,
+            expect_action_id=91,
+            note="single-consume AttackLw3 carry now lands DamageFlyRoll (FSP aggregate)",
+        ),
+        _DamageFlyRoll8006CDA4Case(
+            dataset_rel="datasets/aggregate_recent/replays/validation/aggregate_recent/FavorableSuperficialPig.msl",
+            target_record=1338,
+            victim_port=0,
+            expect_seed_count=1,
+            expect_action_id=91,
+            note="single-consume Fox SpecialLwEnd carry now lands DamageFlyRoll (FSP aggregate)",
+        ),
+        _DamageFlyRoll8006CDA4Case(
+            dataset_rel="datasets/aggregate_recent/replays/validation/aggregate_recent/FavorableSuperficialPig.msl",
+            target_record=2933,
+            victim_port=0,
+            expect_seed_count=0,
+            expect_action_id=87,
+            note="SpecialLwEnd entry control does not consume before the DamageFlyHi branch (FSP aggregate)",
+        ),
+        _DamageFlyRoll8006CDA4Case(
+            dataset_rel="datasets/aggregate_recent/replays/validation/aggregate_recent/ImpassionedAlarmedTarsier.msl",
+            target_record=11154,
+            victim_port=0,
+            expect_seed_count=2,
+            expect_action_id=87,
+            note="late LandingAirLw double-consume carry now lands DamageFlyHi (IAT aggregate)",
+        ),
+        _DamageFlyRoll8006CDA4Case(
+            dataset_rel="datasets/aggregate_recent/replays/validation/aggregate_recent/PriceyPartialAlbatross.msl",
+            target_record=6002,
+            victim_port=1,
+            expect_seed_count=2,
+            expect_action_id=91,
+            note="LandingAirLw entry double-consume carry now lands DamageFlyRoll (PPA aggregate)",
+        ),
+        _DamageFlyRoll8006CDA4Case(
+            dataset_rel="datasets/aggregate_recent/replays/validation/aggregate_recent/BlondHardHippopotamus.msl",
+            target_record=4065,
+            victim_port=0,
+            expect_seed_count=0,
+            expect_action_id=91,
+            note="AttackHi4 carry is admitted without an extra Fighter_8006CDA4 consume (BHH aggregate)",
         ),
     ],
 )
@@ -87,10 +143,8 @@ def test_fighter_8006cda4_pre_gate_consume_count_replay_real_locks(
     ), case.note
 
     if int(case.expect_seed_count) == 1:
-        assert int(seed["action_id"][victim]) == 67, case.note  # AttackAirB
+        assert int(seed["action_id"][victim]) in {57, 67, 74, 363}, case.note
         assert int(seed["hitlag"][victim]) == 0, case.note
-        assert int(seed["hitstun"][victim]) == 0, case.note
-        assert int(seed["on_ground"][victim]) == 0, case.note
     if int(case.expect_seed_count) == 2 and int(seed["action_id"][victim]) == 239:
         assert int(seed["action_id"][victim]) == 239, case.note  # ThrownF
         assert int(seed["hitlag"][victim]) > 0, case.note
