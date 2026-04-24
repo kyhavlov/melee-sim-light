@@ -463,7 +463,9 @@ int common_params_init(void) {
                    &g_params.down_attack_cstick_up_threshold) != 0 ||
       json_get_u16(buf, "combo_timer_post_hitstun_frames",
                    &g_params.combo_timer_post_hitstun_frames) != 0 ||
-      json_get_f32(buf, "down_wait_frames", &g_params.down_wait_frames) != 0) {
+      json_get_f32(buf, "down_wait_frames", &g_params.down_wait_frames) != 0 ||
+      json_get_i32(buf, "down_damage_percent_threshold", &g_params.down_damage_percent_threshold) !=
+          0) {
     alloc_free(buf);
     return -1;
   }

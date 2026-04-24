@@ -237,6 +237,36 @@ def _collect_rows(dump_path: str | Path, window: Window, ports: list[int]) -> di
                     "self_vel_y": f32_from_bits(int(fighter["self_vel_y_bits"])),
                     "gr_vel": f32_from_bits(int(fighter["gr_vel_bits"])),
                     "shield_hp": f32_from_bits(int(fighter["shield_health_bits"])),
+                    "ecb": {
+                        "top": [
+                            f32_from_bits(int(fighter["ecb_top_x_bits"])),
+                            f32_from_bits(int(fighter["ecb_top_y_bits"])),
+                        ],
+                        "bottom": [
+                            f32_from_bits(int(fighter["ecb_bottom_x_bits"])),
+                            f32_from_bits(int(fighter["ecb_bottom_y_bits"])),
+                        ],
+                        "left": [
+                            f32_from_bits(int(fighter["ecb_left_x_bits"])),
+                            f32_from_bits(int(fighter["ecb_left_y_bits"])),
+                        ],
+                        "right": [
+                            f32_from_bits(int(fighter["ecb_right_x_bits"])),
+                            f32_from_bits(int(fighter["ecb_right_y_bits"])),
+                        ],
+                    },
+                    "floor_normal": [
+                        f32_from_bits(int(fighter["floor_normal_x_bits"])),
+                        f32_from_bits(int(fighter["floor_normal_y_bits"])),
+                    ],
+                    "ground_accel": [
+                        f32_from_bits(int(fighter["ground_accel_1_bits"])),
+                        f32_from_bits(int(fighter["ground_accel_2_bits"])),
+                    ],
+                    "anim_vel": [
+                        f32_from_bits(int(fighter["anim_vel_x_bits"])),
+                        f32_from_bits(int(fighter["anim_vel_y_bits"])),
+                    ],
                     "hitlag_left_f32": f32_from_bits(int(fighter["hitlag_left_bits"])),
                     "misc_as_bits": int(fighter["misc_as_bits"]),
                     "ground_or_air": int(fighter["ground_or_air"]),
@@ -319,7 +349,11 @@ def _summary_text(payload: dict[str, object]) -> str:
             f"{hitlist_summary}"
         )
         if "ecb_lock_timer" in r:
+            ecb = r["ecb"]
             lines[-1] += (
+                f" ecb_b=({ecb['bottom'][0]:.3f},{ecb['bottom'][1]:.3f})"
+                f" ecb_t=({ecb['top'][0]:.3f},{ecb['top'][1]:.3f})"
+                f" floor_n=({r['floor_normal'][0]:.3f},{r['floor_normal'][1]:.3f})"
                 f" light={r.get('lightshield_amount', 0.0):.3f}"
                 f" ecb_lock={r['ecb_lock_timer']} x130=0x{int(r['coll_x130_flags']):08x}"
                 f" locked={r['coll_x130_locked']} x19a0={r['shield_damage_taken']}"

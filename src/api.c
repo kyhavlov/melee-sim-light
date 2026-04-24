@@ -64,6 +64,19 @@ static inline uint8_t reseed_action_uses_basic_fall_ledge_cooldown_tick(uint16_t
   }
 }
 
+static inline uint8_t reseed_action_is_attackair(uint16_t action) {
+  switch (action) {
+    case MSL_ACT_ATTACK_AIR_N:
+    case MSL_ACT_ATTACK_AIR_F:
+    case MSL_ACT_ATTACK_AIR_B:
+    case MSL_ACT_ATTACK_AIR_HI:
+    case MSL_ACT_ATTACK_AIR_LW:
+      return 1u;
+    default:
+      return 0u;
+  }
+}
+
 static inline uint16_t item_seed_bridge_attack_id(const MslBatch* batch, int bi,
                                                   const MslItem* item) {
   if (batch == NULL || item == NULL) {
@@ -1242,23 +1255,22 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
           batch->state.colanim_timer_x1994[idx] = seed->colanim_timer_x1994[p];
           batch->state.colanim_hit_status_x198c[idx] = 2u;
         }
-        // Narrow explicit x1994/x198C seed bridge:
+        // Narrow explicit DownBound x1994 seed bridge:
         // - Slippi merged hurtbox_state can remain 0 on reseeded rows even when dataset/history
-        //   captured the explicit color-animation immunity lane (`x198C=1`, `x1994>0`).
-        // - Fighter_8006A360 decrements x1994 and keeps x198C=1 until expiry when x1990/x2221 are
-        //   both clear.
-        // - Trust the explicit seeded internals only for this hidden timer-owned immunity shape so
-        //   replay-real DownBound rows preserve invincible-contact semantics without broad x198C
-        //   overrides.
+        //   captured an x1994 timer.
+        // - The replay-proven owner using this hidden timer is the adjacent AttackDash
+        //   DownBound-colanim reject in combat_downbound_hidden_colanim_rejects_attackdash_body_contact;
+        //   do not globally raise x198C here, because other DownBound BODY contacts in the same
+        //   timer window can still be damage-eligible through ftColl_80078C70/Fighter_ProcessHit.
         // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
-        // refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007B7A4,ftColl_8007B868}
+        // refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078C70,ftColl_8007B7A4,ftColl_8007B868}
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownBound.c::{ftCo_DownBound_Anim,ftCo_DownBound_Coll}
         if ((seed->action_id[p] == (uint16_t)MSL_ACT_DOWN_BOUND_U ||
              seed->action_id[p] == (uint16_t)MSL_ACT_DOWN_BOUND_D) &&
             seed->on_ground[p] != 0u && seed->colanim_hit_status_x198c[p] == 1u &&
             seed->colanim_timer_x1994[p] != 0u && seed->colanim_timer_x1990[p] == 0u &&
             seed->colanim_lock_x2221_b0[p] == 0u && seed_hurtbox_state == 0u) {
           batch->state.colanim_timer_x1994[idx] = seed->colanim_timer_x1994[p];
-          batch->state.colanim_hit_status_x198c[idx] = 1u;
         }
       }
       if (common != NULL) {
@@ -1876,6 +1888,82 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
           batch->state.combat_hitlist_hb_victim_iid[i] =
               seed->combat_hitlist_hb_victim_iid[attacker][hb][victim];
         }
+      }
+    }
+
+    // Seed bridge: fighter->shield HitCapsule victim carry during ongoing GuardSetOff hitlag.
+    //
+    // Decomp/runtime shape:
+    // - Accepted fighter shield hits call ftColl_80076CBC, which inserts the shield owner into the
+    //   attacker's same-hit_group HitCapsule victims_1 list via ftColl_80076808(..., type=1, ...).
+    // - The inserted victims_1 latch suppresses re-hitting the same shield while both fighters are
+    //   still in the shield-hit hitlag segment.
+    //
+    // Seed reality:
+    // - Older replay seeds can carry the hidden GuardSetOff hitlag-damage lane
+    //   (`guard_setoff_hitlag_damage_min`) without carrying the corresponding fighter hitlist.
+    // - On a last-hitlag reseed row, that missing latch lets the same aerial hitbox re-enter
+    //   ftColl_80076CBC and restart shield hitlag.
+    //
+    // Minimal prefix-causal bridge:
+    // - Only seed when the defender is visibly in GuardSetOff hitlag, the explicit hidden
+    //   GuardSetOff damage lane is present, and exactly one opponent is an airborne attack in the
+    //   same hitlag segment.
+    // - Use the suite/data-observed common AttackAir hit_group 0 dense fallback; authoritative
+    //   per-HitCapsule seeds still win when present.
+    // refs/melee/src/melee/ft/ftcoll.c::{ftColl_80076CBC,ftColl_80076808}
+    // refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000ACFC,lbColl_80008688}
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80092F2C
+    // data/hitboxes/{fox,falco}.bin: common AttackAir hit_group 0 shield-hit lanes.
+    for (int victim = 0; victim < num_players; victim++) {
+      if (seed->action_id[victim] != (uint16_t)MSL_ACT_GUARD_SET_OFF) {
+        continue;
+      }
+      if (seed->hitlag[victim] == 0u || seed->guard_setoff_hitlag_damage_min[victim] == 0u) {
+        continue;
+      }
+      int candidate_attacker = -1;
+      for (int attacker = 0; attacker < num_players; attacker++) {
+        if (attacker == victim) {
+          continue;
+        }
+        if (seed->stocks[attacker] == 0u) {
+          continue;
+        }
+        if (!reseed_action_is_attackair(seed->action_id[attacker])) {
+          continue;
+        }
+        if (seed->hitlag[attacker] != seed->hitlag[victim]) {
+          continue;
+        }
+        if (candidate_attacker >= 0) {
+          candidate_attacker = -2;
+          break;
+        }
+        candidate_attacker = attacker;
+      }
+      if (candidate_attacker < 0) {
+        continue;
+      }
+      uint8_t has_authoritative_hb_seed = 0u;
+      for (int hb = 0; hb < MSL_MAX_HITBOXES; hb++) {
+        const size_t vi =
+            hb_valid_base + ((size_t)candidate_attacker * (size_t)MSL_MAX_HITBOXES + (size_t)hb);
+        if (batch->state.combat_hitlist_hb_valid[vi]) {
+          has_authoritative_hb_seed = 1u;
+          break;
+        }
+      }
+      if (has_authoritative_hb_seed) {
+        continue;
+      }
+      const size_t i = base + (((size_t)candidate_attacker * (size_t)MSL_HITLIST_GROUPS + 0u) *
+                                   (size_t)MSL_MAX_PLAYERS +
+                               (size_t)victim);
+      if (batch->state.combat_hitlist_cd[i] == 0u) {
+        const size_t v_idx = msl_idx_player(bi, victim);
+        batch->state.combat_hitlist_cd[i] = 0xFFFFu;
+        batch->state.combat_hitlist_victim_iid[i] = batch->state.instance_id[v_idx];
       }
     }
 

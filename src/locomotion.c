@@ -4068,32 +4068,24 @@ void locomotion_update_pre(MslBatch* batch) {
         if (action_id == (uint16_t)MSL_ACT_DAMAGE_FALL) {
           const float prev_stick_x = apply_deadzone(
               stick_i8_to_unit(batch->state.prev_input_main_x[idx]), c->lstick_deadzone_x);
-          // DamageFall_IASA consumes fp->x670_timer_lstick_tilt_x before the fighter input-history
-          // updater (Fighter_Spaghetti_8006AD10) runs for the frame:
-          // - proc order: Fighter_8006A360 (prio 1), Fighter_8006ABA0 (prio 2),
-          //   Fighter_Spaghetti_8006AD10 (prio 3).
-          // - x670 update logic lives in Fighter_Spaghetti_8006AD10.
-          // refs/melee/src/melee/ft/fighter.c:903-906
-          // refs/melee/src/melee/ft/fighter.c:1903-1955
+          // DamageFall_IASA is reached from Fighter_procUpdate after the input-history proc, but
+          // teacher-forced seeds can begin with an already-held X stick whose current-row update
+          // has advanced x670 one tick past the value vanilla's callback observes in the local
+          // DamageFall handoff. Reconstruct that pre-increment value only for held-stick rows;
+          // fresh X-direction entries keep the current x670=0 edge from Fighter_Spaghetti.
+          // refs/melee/src/melee/ft/fighter.c::{Fighter_Spaghetti_8006AD10,Fighter_procUpdate}
           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DamageFall.c::ftCo_DamageFall_IASA
-          //
-          // This sim updates x670 in input_apply() before locomotion callbacks. Reconstruct the
-          // pre-Spaghetti value for this IASA gate only from the decomp x670 recurrence.
           if (stick_x >= c->lstick_tilt_x_thresh) {
             if (prev_stick_x >= c->lstick_tilt_x_thresh) {
               if (damagefall_x670_timer_for_iasa > 0u && damagefall_x670_timer_for_iasa < 0xFEu) {
                 damagefall_x670_timer_for_iasa = (uint8_t)(damagefall_x670_timer_for_iasa - 1u);
               }
-            } else {
-              damagefall_x670_timer_for_iasa = 0xFEu;
             }
           } else if (stick_x <= -c->lstick_tilt_x_thresh) {
             if (prev_stick_x <= -c->lstick_tilt_x_thresh) {
               if (damagefall_x670_timer_for_iasa > 0u && damagefall_x670_timer_for_iasa < 0xFEu) {
                 damagefall_x670_timer_for_iasa = (uint8_t)(damagefall_x670_timer_for_iasa - 1u);
               }
-            } else {
-              damagefall_x670_timer_for_iasa = 0xFEu;
             }
           }
         }

@@ -13,6 +13,7 @@
 #include "hitlist.h"
 #include "msl_math.h"
 #include "mtx34.h"
+#include "trigger_input.h"
 
 static inline size_t idx_hitbox(int bi, int p, int hb_i) {
   return ((size_t)bi * (size_t)MSL_MAX_PLAYERS + (size_t)p) * (size_t)MSL_MAX_HITBOXES +
@@ -87,6 +88,40 @@ static inline uint8_t hitboxes_seed_bridge_is_attackair_owner(uint16_t action_id
     // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_Anim
     // refs/melee/src/melee/lb/lbcollision.c::{lbColl_80008A5C,lbColl_8000ACFC}
     case MSL_ACT_ATTACK_AIR_LW:
+      return 1u;
+    default:
+      return 0u;
+  }
+}
+
+static inline uint8_t hitboxes_seed_bridge_is_attackair_guard_shield_reentry_owner(
+    uint16_t action_id) {
+  switch (action_id) {
+    case MSL_ACT_ATTACK_AIR_N:
+    case MSL_ACT_ATTACK_AIR_B:
+      return 1u;
+    default:
+      return 0u;
+  }
+}
+
+static inline uint8_t hitboxes_seed_bridge_is_guard_admission_source(uint16_t action_id) {
+  switch (action_id) {
+    case MSL_ACT_WAIT:
+    case MSL_ACT_WALK_SLOW:
+    case MSL_ACT_WALK_MIDDLE:
+    case MSL_ACT_WALK_FAST:
+    case MSL_ACT_TURN:
+    case MSL_ACT_TURN_RUN:
+    case MSL_ACT_DASH:
+    case MSL_ACT_RUN:
+    case MSL_ACT_RUN_DIRECT:
+    case MSL_ACT_RUN_BRAKE:
+    case MSL_ACT_SQUAT:
+    case MSL_ACT_SQUAT_WAIT:
+    case MSL_ACT_SQUAT_RV:
+    case MSL_ACT_LANDING:
+    case MSL_ACT_LANDING_FALL_SPECIAL:
       return 1u;
     default:
       return 0u;
@@ -406,6 +441,18 @@ static void hitboxes_seed_bridge_trim_impossible_indefinite(
     // refs/melee/src/melee/lb/lbcollision.c::lbColl_80007BCC
     const uint8_t shield_desc_active = (batch->state.shield_radius[v_idx] > 0.0f) ? 1u : 0u;
     const uint16_t v_action = batch->state.action_id[v_idx];
+    const float v_trigger_unit =
+        msl_trigger_unit_from_input(batch->state.input_buttons[v_idx], batch->state.input_l[v_idx],
+                                    batch->state.input_r[v_idx]);
+    const uint8_t shield_input_held = (v_trigger_unit > c->trigger_deadzone) ? 1u : 0u;
+    const uint8_t guard_admission_pending =
+        (!shield_desc_active && batch->state.on_ground[v_idx] && shield_input_held &&
+         hitboxes_seed_bridge_is_guard_admission_source(v_action))
+            ? 1u
+            : 0u;
+    const uint8_t guard_entry_desc_pending =
+        (!shield_desc_active && v_action == (uint16_t)MSL_ACT_GUARD_ON && shield_input_held) ? 1u
+                                                                                             : 0u;
     if (attacker_action == (uint16_t)MSL_ACT_ATTACK_AIR_N && v_action == (uint16_t)MSL_ACT_WAIT &&
         batch->state.action_frame[v_idx] <= 1 && batch->state.hitlag[v_idx] == 0u &&
         batch->state.hitstun[v_idx] == 0u && e->id16 == batch->state.instance_id[v_idx]) {
@@ -451,6 +498,33 @@ static void hitboxes_seed_bridge_trim_impossible_indefinite(
         batch->state.hitlag[v_idx] == 0u &&
         (attacker_is_attackair_window || batch->state.hitstun[v_idx] == 0u) &&
         batch->state.instance_hit_by[v_idx] != attacker_iid) {
+      hitboxes_seed_bridge_entry_clear(e);
+      continue;
+    }
+
+    if (((shield_desc_active && hitboxes_seed_bridge_is_guard_transition_owner(v_action)) ||
+         guard_admission_pending || guard_entry_desc_pending) &&
+        hitboxes_seed_bridge_is_attackair_guard_shield_reentry_owner(attacker_action) &&
+        batch->state.hitlag[a_idx] == 0u && batch->state.hitlag[v_idx] == 0u &&
+        batch->state.hitstun[a_idx] == 0u && batch->state.hitstun[v_idx] == 0u && e->cd == 0u) {
+      // Reseed-only dense shield re-entry trim:
+      // - ftColl_80078C70 checks lbColl_8000ACFC(victim_fp, hitcapsule) before the shield
+      //   overlap branch and then calls ftColl_80076CBC for the accepted shield hit.
+      // - ftColl_80076CBC inserts the shield owner into the exact HitCapsule victims_1 list
+      //   through ftColl_80076808(..., type=1, ...).
+      // - Legacy dense hitlist seed lanes are keyed by hit_group/victim and cannot encode the
+      //   per-HitCapsule clear/copy provenance from ftColl_800768A0, so an indefinite dense entry
+      //   can suppress a newly admitted shield hit on the same pre-combat GuardOn/GuardSetOff
+      //   re-entry frame.
+      //
+      // Keep this bridge out of authoritative per-HitCapsule seeds (guarded above) and out of
+      // active hitlag/hitstun rows; real prior shield contact would still carry shield-hit hitlag
+      // through Fighter_ProcessHit.
+      // refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078C70,ftColl_80076CBC,ftColl_80076808}
+      // refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000ACFC,lbColl_80008688}
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80091A4C
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80092450
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::ftCo_Landing_IASA
       hitboxes_seed_bridge_entry_clear(e);
       continue;
     }

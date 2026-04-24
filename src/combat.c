@@ -192,8 +192,7 @@ static inline uint8_t combat_downbound_hidden_colanim_rejects_attackdash_body_co
   if (d_action != (uint16_t)MSL_ACT_DOWN_BOUND_U && d_action != (uint16_t)MSL_ACT_DOWN_BOUND_D) {
     return 0u;
   }
-  if (batch->state.colanim_hit_status_x198c[d_idx] != 1u ||
-      batch->state.colanim_timer_x1994[d_idx] == 0u || batch->state.hurtbox_state[d_idx] != 0u) {
+  if (batch->state.colanim_timer_x1994[d_idx] == 0u || batch->state.hurtbox_state[d_idx] != 0u) {
     return 0u;
   }
   // DownBound hidden colanim contact guard:
@@ -549,6 +548,33 @@ static inline uint8_t combat_is_damage_or_firefox_launch_victim_action(uint16_t 
     default:
       return 0u;
   }
+}
+
+static inline uint8_t combat_is_downed_damage_contact_action(uint16_t action_id) {
+  switch (action_id) {
+    case (uint16_t)MSL_ACT_DOWN_BOUND_U:
+    case (uint16_t)MSL_ACT_DOWN_WAIT_U:
+    case (uint16_t)MSL_ACT_DOWN_DAMAGE_U:
+    case (uint16_t)MSL_ACT_DOWN_BOUND_D:
+    case (uint16_t)MSL_ACT_DOWN_WAIT_D:
+    case (uint16_t)MSL_ACT_DOWN_DAMAGE_D:
+      return 1u;
+    default:
+      return 0u;
+  }
+}
+
+static inline uint16_t combat_down_damage_action_from_source(uint16_t action_id) {
+  // Decomp: ftCo_8009F184 selects DownDamageU only from DownWaitU; other downed source motions
+  // route to DownDamageD.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownDamage.c::ftCo_8009F184
+  return (action_id == (uint16_t)MSL_ACT_DOWN_WAIT_U) ? (uint16_t)MSL_ACT_DOWN_DAMAGE_U
+                                                      : (uint16_t)MSL_ACT_DOWN_DAMAGE_D;
+}
+
+static inline uint32_t combat_down_damage_submotion_from_action(uint16_t action_id) {
+  return (action_id == (uint16_t)MSL_ACT_DOWN_DAMAGE_U) ? (uint32_t)MSL_SM_DOWN_DAMAGE_U
+                                                        : (uint32_t)MSL_SM_DOWN_DAMAGE_D;
 }
 
 static inline uint8_t combat_float_aobj_hurtcap_pose_owner(uint16_t action_id) {
@@ -2111,7 +2137,22 @@ static inline void combat_damage_enter_state(const MslCommonParams* c, MslBatch*
   uint16_t act = (uint16_t)MSL_ACT_WAIT;
   uint32_t sm = (uint32_t)MSL_SM_WAIT1_0;
 
-  if (sev == 3u) {
+  const uint16_t pre_damage_action = batch->state.action_id[d_idx];
+  const uint8_t downed_damage_contact =
+      (uint8_t)(combat_is_downed_damage_contact_action(pre_damage_action) &&
+                (batch->state.dmg_x2224_b2[d_idx] ||
+                 batch->state.percent_temp[d_idx] < (float)c->down_damage_percent_threshold));
+
+  if (downed_damage_contact) {
+    // Downed contact damage override:
+    // - ftCo_8009F0F0 intercepts DownBound/DownWait/DownDamage before the generic damage-state
+    //   result when `x2224_b2` is set or same-frame percentTemp is below p_ftCommonData->x428.
+    // - ftCo_8009F184 re-enters ftCo_8008DCE0 with an explicit DownDamage motion id.
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownDamage.c::{
+    //   ftCo_8009F0F0,ftCo_8009F184}
+    act = combat_down_damage_action_from_source(pre_damage_action);
+    sm = combat_down_damage_submotion_from_action(act);
+  } else if (sev == 3u) {
     // High-knockback / tumble-style damage states.
     //
     // Decomp: ftCo_8008DCE0 chooses DamageFly* for var_r28==3 and later conditionally overrides
@@ -2612,9 +2653,19 @@ static inline void combat_mutations_pass1_future_apply_body_hit(
   // - If victim_pos.x > src_pos.x => facing_dir_1 = -1
   // - Else                        => facing_dir_1 = +1
   // refs/melee/build/GALE01/asm/melee/ft/ftcoll.s::ftColl_8007A06C (0x8007A74C..0x8007A77C sets f24)
+  const uint16_t pre_damage_action = batch->state.action_id[d_idx];
+  const uint8_t downed_damage_contact_facing_owner =
+      (uint8_t)(combat_is_downed_damage_contact_action(pre_damage_action) &&
+                (batch->state.dmg_x2224_b2[d_idx] ||
+                 batch->state.percent_temp[d_idx] < (float)c->down_damage_percent_threshold));
   const float one = combat_damage_ftColl_804D82EC_one();
   const float defender_facing_dir_1 =
-      (batch->state.pos_x[d_idx] > batch->state.pos_x[a_idx]) ? -one : one;
+      downed_damage_contact_facing_owner
+          ? (batch->state.facing[d_idx] ? one : -one)
+          : ((batch->state.pos_x[d_idx] > batch->state.pos_x[a_idx]) ? -one : one);
+  // DownDamage contact entry is a narrow exception to collision-derived facing:
+  // ftCo_8009F184 forwards the fighter's current `fp->facing_dir` into ftCo_8008DCE0.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownDamage.c::ftCo_8009F184
   batch->state.facing[d_idx] = (uint8_t)(defender_facing_dir_1 > 0.0f);
 
   const float kb_x = -x * defender_facing_dir_1;
@@ -4728,6 +4779,7 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
                                          rehit_frames);
 
           did_hit = 1;
+
           break;
         }
       }

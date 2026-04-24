@@ -118,6 +118,11 @@ def main() -> None:
         "down_attack_button_window_frames": float(_f32_be(buf, ft_common_abs + 0x24C)),
         "down_attack_cstick_up_threshold": float(_f32_be(buf, ft_common_abs + 0x7F4)),
         "down_wait_frames": float(_f32_be(buf, ft_common_abs + 0x424)),
+        # Downed low-damage contact gate:
+        # - ftCo_8009F0F0 routes DownBound/DownWait/DownDamage into DownDamage when
+        #   `fp->x2224_b2 || fp->dmg.x1838_percentTemp < p_ftCommonData->x428`.
+        # refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownDamage.c::ftCo_8009F0F0
+        "down_damage_percent_threshold": int(max(0, _i32_be(buf, ft_common_abs + 0x428))),
         # Combo timer window after hitstun ends (GALE01 fp->x2098 reset).
         #
         # Decomp trail:

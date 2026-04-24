@@ -76,6 +76,7 @@
   "di_max_deg": 18.0,
   "down_attack_button_window_frames": 60.0,
   "down_attack_cstick_up_threshold": 0.6625000238418579,
+  "down_damage_percent_threshold": 7,
   "down_stand_stick_y_threshold": 0.20000000298023224,
   "down_stick_x_threshold": 0.20000000298023224,
   "down_wait_frames": 220.0,

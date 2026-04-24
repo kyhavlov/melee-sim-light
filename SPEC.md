@@ -534,6 +534,26 @@ This section is the “what is actually done” source of truth for agents. If a
 section or regenerate it; do not rely on stale tables.
 
 Recent deltas to reflect here (do not let these get “lost in chat logs”):
+- Core combat/contact followup pass (2026-04-23): retained decomp-backed cleanup for shared
+  followup and contact lanes. `DamageFall_IASA` reconstructs the held-stick x670 gate value for
+  local teacher-forced handoffs; airborne `DownDamage_Anim` exits to `Fall` when x2224_b2 is clear;
+  common airborne `Damage_IASA` delegates through `Fall_IASA_Inner` AttackAir then JumpAerial
+  selection once x221C_b6 is clear; `DownDamage_Coll` participates in the damage floor-contact
+  owner; DownDamage contact entry preserves `fp->facing_dir` through `ftCo_8009F184`; and grounded
+  Damage ledge-slip floor loss enters MissFoot through the `ft_800848DC -> ftCo_8009F39C` path.
+  The same pass also keeps two shield/contact seed bridges: dense AttackAirN/B shield re-entry
+  hitlist trim on same-frame Guard admission, and ongoing GuardSetOff shield-hit hitlist carry
+  from the explicit hidden hitlag-damage lane. A followup BODY-pose lock keeps Fox/Falco Side-B
+  End hurtcaps on the pre-Anim collision pose for same-frame `ftColl_80076ED8` BODY selection,
+  matching the PPA:892 Dolphin collision probe.
+  Replay locks: `tests/test_core_combat_damage_contact_followup_replay_real_locks.py`. Fresh
+  taxonomy: primary `501` (`F08c=55`, `F06=27`, `F08f=0`, `F09d=0`) and aggregate `4088`
+  (`F08c=394`, `F06=158`, `F08f=68`, `F09d=80`). Remaining `F06/F08f/F09d/F08c` rows are explicit
+  residual owners, not hidden by this pass: `Fighter_8006CDA4` / `ftCo_8008DCE0` DamageFlyRoll
+  RNG/admission carry, BODY candidate ordering and exact `lbColl_80006E58` pose, shield
+  HitCapsule-victim provenance / ShieldDesc geometry, and mpColl contact-callback phase. Rejected
+  followup trials include broad grounded Shine source-order suppression and replay-derived hidden
+  item-callback seed inference; both worsened primary/aggregate taxonomy and are not retained.
 - Ledge callback parity pass (2026-04-19): MissFoot now participates in the decomp cliff-catch
   collision wrapper; slow ledge options share quick-option attach / air-to-ground ownership;
   terminal CliffCatch can consume same-proc CliffWait attack/escape/jump IASA but not climb/drop
@@ -578,7 +598,7 @@ Legend:
 | Ledge system (Cliff* actions, quick/slow options) | **PARTIAL** | Ledge-grab mask now uses collision-stage prev/cur snapshots; occupancy includes quick/slow option actions; MissFoot can CliffCatch; Cliff option terminal callbacks can consume Wait IASA locomotion tails; Cliff x1990 and x2064 terminal cooldown seed/runtime ownership are narrowed. The generic ledge/collision-env taxonomy buckets are closed (`F17=0`, `F10c=0`). |
 | Knockdown/tech (DownBound/Wait/Stand/Attack + rolls) | **CLOSED FOR SHARED PASSIVE/DOWNBOUND SELECTOR** | `DamageFly*`/`DamageFall` floor contact shares one decomp-shaped selector for `PassiveStandF/B` -> `Passive` -> `DownBound`; `x680`/`x684` tech timers now distinguish pre-hitlag L/R tech presses from hitlag-active latched presses. Fresh primary and aggregate taxonomy have `F07_knockdown_grounding=0` and `F18_damage_tech_timer_seed_surface=0`. Remaining damage/down/passive-shaped rows are still real residual cleanup under adjacent owners (`F08c`, `F06`, `F08f`, `F10m`), not shared Passive / PassiveStand / DownBound selector debt. |
 | Combat geometry (hurtcaps/hitboxes/shields pose-driven) | **PARTIAL** | Core data-driven primitives exist; remaining parity depends on exact facing/axis + attachment nuances. |
-| Damage pipeline (BODY + SHIELD, GuardSetOff, hitlag/hitstun/KB states) | **PARTIAL** | Big pieces are in; still missing full rehit/hitlist, stale queue, and many modifiers. |
+| Damage pipeline (BODY + SHIELD, GuardSetOff, hitlag/hitstun/KB states) | **PARTIAL** | Core damage admission and several followup lanes are in. The latest pass added `DamageFall_IASA` x670 handoff parity, airborne `DownDamage_Anim` -> `Fall`, common airborne `Damage_IASA` AttackAir/JumpAerial dispatch, `DownDamage_Coll` floor-contact participation, DownDamage contact facing parity, and grounded Damage ledge-slip MissFoot. Remaining aggregate residuals are exact `DamageFlyRoll` RNG/carry (`F06`), BODY candidate selection (`F08f`), shield/contact hitlag (`F09d`), and Down/Passive/mpColl transition adjacency (`F08c`). |
 | Items/projectiles | **PARTIAL** | Laser/blaster coverage is in and reduces `item_*` mismatches; item system parity is incomplete beyond suite needs. |
 | Grabs/throws | **PARTIAL** | Attachment substrate exists and throw release/detach + throw-hit apply are implemented (data-driven). Remaining gaps: capture point selection/coverage, pummel/breakout rules, and suite-needed action coverage beyond release frames. |
 

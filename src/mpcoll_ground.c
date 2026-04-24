@@ -89,7 +89,9 @@ static inline uint8_t is_damage_collision_landing_action(uint16_t a) {
   // Damage collision callbacks can resolve grounded contact while hitstun remains active:
   // - ftCo_Damage_Coll
   // - ftCo_DamageFly_Coll
+  // - ftCo_DownDamage_Coll (air path calls ft_80081DD4 before downed follow-up handling)
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{ftCo_Damage_Coll,ftCo_DamageFly_Coll}
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownDamage.c::ftCo_DownDamage_Coll
   switch (a) {
     case MSL_ACT_DAMAGE_HI_1:
     case MSL_ACT_DAMAGE_HI_2:
@@ -109,6 +111,8 @@ static inline uint8_t is_damage_collision_landing_action(uint16_t a) {
     case MSL_ACT_DAMAGE_FLY_TOP:
     case MSL_ACT_DAMAGE_FLY_ROLL:
     case MSL_ACT_DAMAGE_FALL:
+    case MSL_ACT_DOWN_DAMAGE_U:
+    case MSL_ACT_DOWN_DAMAGE_D:
       return 1;
     default:
       return 0;

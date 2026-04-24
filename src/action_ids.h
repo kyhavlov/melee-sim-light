@@ -409,12 +409,14 @@ typedef enum MslSubmotionId {
   // Source of truth: refs/melee/src/melee/ft/chara/ftCommon/forward.h `ftCo_Submotion`.
   MSL_SM_DOWN_BOUND_U = 183,   // ftCo_SM_DownBoundU
   MSL_SM_DOWN_WAIT_U = 184,    // ftCo_SM_DownWaitU
+  MSL_SM_DOWN_DAMAGE_U = 185,  // ftCo_SM_DownDamageU
   MSL_SM_DOWN_STAND_U = 186,   // ftCo_SM_DownStandU
   MSL_SM_DOWN_ATTACK_U = 187,  // ftCo_SM_DownAttackU
   MSL_SM_DOWN_FOWARD_U = 188,  // ftCo_SM_DownFowardU
   MSL_SM_DOWN_BACK_U = 189,    // ftCo_SM_DownBackU
   MSL_SM_DOWN_BOUND_D = 191,   // ftCo_SM_DownBoundD
   MSL_SM_DOWN_WAIT_D = 192,    // ftCo_SM_DownWaitD
+  MSL_SM_DOWN_DAMAGE_D = 193,  // ftCo_SM_DownDamageD
   MSL_SM_DOWN_STAND_D = 194,   // ftCo_SM_DownStandD
   MSL_SM_DOWN_ATTACK_D = 195,  // ftCo_SM_DownAttackD
   MSL_SM_DOWN_FOWARD_D = 196,  // ftCo_SM_DownFowardD

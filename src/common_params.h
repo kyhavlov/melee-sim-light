@@ -451,6 +451,7 @@ typedef struct MslCommonParams {
   float down_attack_button_window_frames;  // p_ftCommonData->x24C
   float down_attack_cstick_up_threshold;   // p_ftCommonData->x7F4
   float down_wait_frames;                  // p_ftCommonData->x424
+  int32_t down_damage_percent_threshold;   // p_ftCommonData->x428
 } MslCommonParams;
 
 int common_params_init(void);

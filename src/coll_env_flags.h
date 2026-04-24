@@ -47,4 +47,9 @@ enum {
   MSL_COLLIDE_LEFT_LEDGE_GRAB = 0x01000000u,   // Collide_LeftLedgeGrab
   MSL_COLLIDE_RIGHT_LEDGE_GRAB = 0x02000000u,  // Collide_RightLedgeGrab
   MSL_COLLIDE_LEDGE_GRAB_MASK = (0x01000000u | 0x02000000u),
+
+  // Grounded floor-loss ledge slip.
+  // refs/melee/src/common_structs.h
+  MSL_COLLIDE_LEFT_LEDGE_SLIP = 0x10000000u,   // Collide_LeftLedgeSlip
+  MSL_COLLIDE_RIGHT_LEDGE_SLIP = 0x20000000u,  // Collide_RightLedgeSlip
 };

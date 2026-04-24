@@ -96,6 +96,15 @@ static inline uint8_t hurtboxes_float_aobj_pose_owner(uint16_t action_id) {
   }
 }
 
+static inline uint8_t hurtboxes_side_special_end_uses_pre_anim_collision_pose(uint8_t char_id,
+                                                                              uint16_t action_id) {
+  if (char_id != (uint8_t)MSL_CHAR_FOX && char_id != (uint8_t)MSL_CHAR_FALCO) {
+    return 0u;
+  }
+  return (uint8_t)(action_id == (uint16_t)MSL_ACT_FX_SPECIAL_S_END ||
+                   action_id == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_S_END);
+}
+
 static inline uint8_t hurtboxes_common_action_to_msid(uint16_t action_id, uint16_t* out_msid) {
   if (out_msid == NULL) {
     return 0u;
@@ -474,6 +483,23 @@ void hurtboxes_refresh(MslBatch* batch) {
           frame = (uint16_t)(frame + 1u);
         }
       }
+      if (hurtboxes_side_special_end_uses_pre_anim_collision_pose(char_id, action_id) &&
+          pose_frame > 0u && pose_frame != 0xFFFFu) {
+        // Fox/Falco Side-B End collision-pose ownership:
+        // - Replay-real ftColl probe evidence on SpecialAirSEnd shows ftColl_80076ED8 consuming
+        //   the live hurt capsule pose from the same frame's pre-Anim JObj when Shine Start BODY
+        //   contact is selected. Advancing to the post-Anim SSANIM frame moves the limb capsule
+        //   out of the accepted lbColl_8000805C/80006E58 narrowphase boundary.
+        // - Keep this to Side-B End, whose decomp callbacks do not call an immediate
+        //   ftAnim_8006EBA4 on this steady-state row; generic actions continue to use the normal
+        //   post-Anim collision pose.
+        // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c::{
+        //   ftFx_SpecialSEnd_Anim,ftFx_SpecialAirSEnd_Anim,ftFx_SpecialSEnd_Coll,
+        //   ftFx_SpecialAirSEnd_Coll}
+        // refs/melee/src/melee/ft/ftcoll.c::ftColl_80076ED8
+        // refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000805C,lbColl_80006E58}
+        pose_frame = (uint16_t)(pose_frame - 1u);
+      }
       if (!have_hit_status_override && !preserve_visible_downbound_colanim) {
         (void)hit_status_get(char_id, msid, frame, &hit_status);
       }
@@ -515,6 +541,10 @@ void hurtboxes_refresh(MslBatch* batch) {
                                                cur_action == (uint16_t)MSL_ACT_PASSIVE_STAND_B)
                                                   ? 1u
                                                   : 0u;
+        const uint8_t is_down_stand_entry = (cur_action == (uint16_t)MSL_ACT_DOWN_STAND_U ||
+                                             cur_action == (uint16_t)MSL_ACT_DOWN_STAND_D)
+                                                ? 1u
+                                                : 0u;
         // Passive / PassiveStand entry ownership:
         // - ftCo_80090184 resolves grounded tech callbacks before the post-frame snapshot.
         // - Replay-visible entry frame 0 already carries the new motion state's hurt-status table
@@ -523,8 +553,13 @@ void hurtboxes_refresh(MslBatch* batch) {
         // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Passive.c::ftCo_800987D0
         // refs/melee/src/melee/ft/chara/ftCommon/ftCo_PassiveStand.c::ftCo_800989D4
         // data/hurtbox_states/{fox,falco}.bin
+        // DownStand entry from DownDamage/DownWait has the same entry-frame visibility property:
+        // ftCo_80098160 enters the getup submotion before post-frame capture, and the extracted
+        // hit-status table owns the entry hurtbox_state.
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownStand.c::ftCo_80098160
+        // data/hurtbox_states/{fox,falco}.bin
         if (!(frame == 0u && batch->state.prev_action_id[idx] != cur_action &&
-              !is_shine_start_entry && !is_passive_tech_entry)) {
+              !is_shine_start_entry && !is_passive_tech_entry && !is_down_stand_entry)) {
           final_hurtbox_state = hit_status;
         }
       }

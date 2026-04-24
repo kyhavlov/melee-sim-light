@@ -35,6 +35,9 @@ static inline uint8_t is_down_stand(uint16_t a) {
 static inline uint8_t is_down_attack(uint16_t a) {
   return (a == (uint16_t)MSL_ACT_DOWN_ATTACK_U || a == (uint16_t)MSL_ACT_DOWN_ATTACK_D) ? 1u : 0u;
 }
+static inline uint8_t is_down_damage(uint16_t a) {
+  return (a == (uint16_t)MSL_ACT_DOWN_DAMAGE_U || a == (uint16_t)MSL_ACT_DOWN_DAMAGE_D) ? 1u : 0u;
+}
 static inline uint8_t is_down_roll(uint16_t a) {
   return (a == (uint16_t)MSL_ACT_DOWN_FOWARD_U || a == (uint16_t)MSL_ACT_DOWN_BACK_U ||
           a == (uint16_t)MSL_ACT_DOWN_FOWARD_D || a == (uint16_t)MSL_ACT_DOWN_BACK_D)
@@ -65,6 +68,11 @@ static inline uint16_t down_wait_action_from_bound(uint16_t bound_act) {
                                                        : (uint16_t)MSL_ACT_DOWN_WAIT_D;
 }
 
+static inline uint16_t down_wait_action_from_damage(uint16_t damage_act) {
+  return (damage_act == (uint16_t)MSL_ACT_DOWN_DAMAGE_U) ? (uint16_t)MSL_ACT_DOWN_WAIT_U
+                                                         : (uint16_t)MSL_ACT_DOWN_WAIT_D;
+}
+
 static inline uint16_t down_stand_action_from_wait(uint16_t wait_act) {
   return (wait_act == (uint16_t)MSL_ACT_DOWN_WAIT_U) ? (uint16_t)MSL_ACT_DOWN_STAND_U
                                                      : (uint16_t)MSL_ACT_DOWN_STAND_D;
@@ -81,6 +89,8 @@ static inline uint32_t submotion_for_down_action(uint16_t a) {
       return (uint32_t)MSL_SM_DOWN_BOUND_U;
     case (uint16_t)MSL_ACT_DOWN_WAIT_U:
       return (uint32_t)MSL_SM_DOWN_WAIT_U;
+    case (uint16_t)MSL_ACT_DOWN_DAMAGE_U:
+      return (uint32_t)MSL_SM_DOWN_DAMAGE_U;
     case (uint16_t)MSL_ACT_DOWN_STAND_U:
       return (uint32_t)MSL_SM_DOWN_STAND_U;
     case (uint16_t)MSL_ACT_DOWN_ATTACK_U:
@@ -93,6 +103,8 @@ static inline uint32_t submotion_for_down_action(uint16_t a) {
       return (uint32_t)MSL_SM_DOWN_BOUND_D;
     case (uint16_t)MSL_ACT_DOWN_WAIT_D:
       return (uint32_t)MSL_SM_DOWN_WAIT_D;
+    case (uint16_t)MSL_ACT_DOWN_DAMAGE_D:
+      return (uint32_t)MSL_SM_DOWN_DAMAGE_D;
     case (uint16_t)MSL_ACT_DOWN_STAND_D:
       return (uint32_t)MSL_SM_DOWN_STAND_D;
     case (uint16_t)MSL_ACT_DOWN_ATTACK_D:
@@ -747,11 +759,13 @@ static inline void enter_down_stand(MslBatch* batch, size_t idx, uint16_t wait_a
   const uint16_t stand_act = down_stand_action_from_wait(wait_act);
   batch->state.action_id[idx] = stand_act;
   batch->state.animation_index[idx] = submotion_for_down_action(stand_act);
+  // Decomp: DownStand entry uses ftCo_80098160, which only calls Fighter_ChangeMotionState.
+  // Unlike ftCo_80097E8C (DownWait) and ftCo_80098324 (DownFoward/DownBack), it does not call
+  // ftAnim_8006EBA4 on the entry frame.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownStand.c::ftCo_80098160
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownBound.c::{
+  //   ftCo_DownWait_Anim,ftCo_DownWait_IASA}
   msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
-  if (batch->state.hitlag_started_frame[idx] == 0) {
-    batch->state.anim_frame_fp_q16_16[idx] += batch->state.frame_speed_mul_fp_q16_16[idx];
-  }
-  msl_anim_timebase_recompute_derived(batch, idx);
 }
 
 static inline void enter_down_attack(MslBatch* batch, size_t idx, uint16_t wait_or_bound_act) {
@@ -878,9 +892,22 @@ static inline uint8_t is_damage_air_action(uint16_t a);
 static inline uint8_t is_damage_ground_action(uint16_t a);
 static inline uint32_t submotion_for_common_damage_action(uint16_t a);
 static inline uint32_t submotion_for_damage_ground_action(uint16_t a);
+static inline uint8_t knockdown_anim_finished(uint8_t char_id, uint16_t msid, float anim_frame_f32);
 static inline void enter_damage_fall_from_damage_anim(MslBatch* batch, const MslCharParams* ch,
                                                       size_t idx);
+static inline void enter_fall_from_downdamage_anim(MslBatch* batch, size_t idx);
+static inline void enter_fall_from_damagefall_iasa(MslBatch* batch, size_t idx);
+static inline void enter_down_stand_from_downdamage_anim(MslBatch* batch, size_t idx,
+                                                         uint16_t down_damage_act);
+static inline void clear_downed_damage_state(MslBatch* batch, size_t idx);
+static inline uint8_t damage_ground_floor_loss_should_missfoot(const MslBatch* batch, size_t idx,
+                                                               uint32_t stage_id);
+static inline void enter_missfoot_from_damage_floor_loss(MslBatch* batch, const MslCharParams* ch,
+                                                         size_t idx);
+static inline uint8_t damagefall_iasa_try_stick_fall(MslBatch* batch, const MslCommonParams* c,
+                                                     size_t idx);
 static inline uint8_t is_damage_air_submotion(uint32_t smid);
+static inline uint8_t is_damage_fly_submotion(uint32_t smid);
 static inline uint8_t damage_iasa_lockout_x221c_b6(const MslBatch* batch, size_t idx);
 
 void knockdown_update_pre_physics(MslBatch* batch) {
@@ -898,6 +925,7 @@ void knockdown_update_pre_physics(MslBatch* batch) {
       const size_t idx = msl_idx_player(bi, p);
       const uint16_t a0 = batch->state.action_id[idx];
       const uint8_t passivewall = is_passivewall_action(a0);
+      const uint8_t down_damage = is_down_damage(a0);
       const uint8_t damage_fly = is_damage_fly_action(a0);
       const uint8_t damage_air = is_damage_air_action(a0);
       const uint8_t damage_ground = is_damage_ground_action(a0);
@@ -905,7 +933,8 @@ void knockdown_update_pre_physics(MslBatch* batch) {
           (uint8_t)((damage_air != 0u || damage_ground != 0u) && batch->state.on_ground[idx] == 0u);
       const uint8_t common_damage_grounded =
           (uint8_t)((damage_air != 0u || damage_ground != 0u) && batch->state.on_ground[idx] != 0u);
-      if (!is_knockdown_any(a0) && !passivewall && !damage_fly && !damage_air && !damage_ground) {
+      if (!is_knockdown_any(a0) && !down_damage && !passivewall && !damage_fly && !damage_air &&
+          !damage_ground) {
         continue;
       }
       const MslCharParams* ch = msl_char_params(batch->state.char_id[idx]);
@@ -924,6 +953,50 @@ void knockdown_update_pre_physics(MslBatch* batch) {
 
       const uint8_t cid = batch->state.char_id[idx];
       const float anim_frame = batch->state.anim_frame_f32[idx];
+
+      if (down_damage) {
+        const uint32_t smid = submotion_for_down_action(a0);
+        batch->state.animation_index[idx] = smid;
+        if (smid <= 0xFFFFu && knockdown_anim_finished(cid, (uint16_t)smid, anim_frame)) {
+          // Decomp: DownDamage_Anim decrements mv.co.downdamage.x0 while x2224_b2 is clear. On
+          // animation end, airborne rows enter DamageFall/Fall, while grounded rows with the hidden
+          // x0 timer expired enter DownStandU/D through ftCo_80098160.
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownDamage.c::ftCo_DownDamage_Anim
+          if (!batch->state.on_ground[idx] && batch->state.dmg_x2224_b2[idx]) {
+            enter_damage_fall_from_damage_anim(batch, ch, idx);
+          } else if (!batch->state.on_ground[idx]) {
+            enter_fall_from_downdamage_anim(batch, idx);
+          } else if (!batch->state.dmg_x2224_b2[idx]) {
+            if (batch->state.hitstun[idx] == 0u) {
+              enter_down_stand_from_downdamage_anim(batch, idx, a0);
+            } else {
+              // Hidden timer continuation:
+              // ftCo_DownDamage_Anim decrements mv.co.downdamage.x0 and, when the animation ends
+              // while that timer is still positive, enters DownWaitU/D through ftCo_80097F38.
+              // Fighter proc ordering then runs the newly-entered DownWait IASA in the same frame,
+              // allowing buffered down-roll/getup options without waiting another replay row.
+              // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownDamage.c::ftCo_DownDamage_Anim
+              // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownBound.c::{
+              //   ftCo_80097F38,ftCo_DownWait_IASA}
+              clear_downed_damage_state(batch, idx);
+              enter_down_wait(batch, idx, down_wait_action_from_damage(a0));
+              if (should_enter_down_attack_from_wait(batch, c, idx)) {
+                enter_down_attack(batch, idx, batch->state.action_id[idx]);
+              } else {
+                const uint16_t roll_act =
+                    down_roll_action_from_input(batch, c, idx, batch->state.action_id[idx]);
+                if (roll_act != 0u) {
+                  enter_down_roll(batch, idx, roll_act);
+                  down_roll_apply_phys_transn(batch, c, ch, idx);
+                } else if (should_enter_down_stand_from_wait(batch, c, idx)) {
+                  enter_down_stand(batch, idx, batch->state.action_id[idx]);
+                }
+              }
+            }
+          }
+        }
+        continue;
+      }
 
       if (passivewall) {
         batch->state.animation_index[idx] =
@@ -947,6 +1020,7 @@ void knockdown_update_pre_physics(MslBatch* batch) {
         }
 
         const uint8_t in_hitstun = (batch->state.hitstun[idx] > 0) ? 1u : 0u;
+        const uint8_t iasa_locked = damage_iasa_lockout_x221c_b6(batch, idx);
         uint8_t anim_done = 0u;
         if (damage_msid_u32 <= 0xFFFFu) {
           anim_done = anim_is_finished(cid, (uint16_t)damage_msid_u32, anim_frame);
@@ -963,7 +1037,8 @@ void knockdown_update_pre_physics(MslBatch* batch) {
         //   matching fighter update ordering for anim callbacks.
         const uint8_t fly_roll = (a0 == (uint16_t)MSL_ACT_DAMAGE_FLY_ROLL) ? 1u : 0u;
         const uint8_t should_enter_damage_fall =
-            fly_roll ? (uint8_t)!in_hitstun : (uint8_t)(!in_hitstun && anim_done);
+            fly_roll ? (uint8_t)(!in_hitstun && !iasa_locked)
+                     : (uint8_t)(!in_hitstun && !iasa_locked && anim_done);
         if (should_enter_damage_fall) {
           if (!fly_roll) {
             // Decomp IASA ordering (not collision/physics):
@@ -982,7 +1057,7 @@ void knockdown_update_pre_physics(MslBatch* batch) {
             }
           }
           enter_damage_fall_from_damage_anim(batch, ch, idx);
-        } else if (!in_hitstun) {
+        } else if (!in_hitstun && !iasa_locked) {
           // DamageFly IASA parity: when hitstun has ended, DamageFly_IASA delegates to
           // DamageFall_IASA even before DamageFly_Anim enters DamageFall. In that airborne IASA
           // chain, the shared direct AttackAir owner runs before the later JumpAerial fallback.
@@ -997,7 +1072,12 @@ void knockdown_update_pre_physics(MslBatch* batch) {
           if (locomotion_attackair_try_enter_from_air_iasa(batch, c, idx)) {
             continue;
           }
-          (void)damage_air_try_jump_aerial(batch, c, ch, idx, 0u);
+          if (damage_air_try_jump_aerial(batch, c, ch, idx, 0u)) {
+            continue;
+          }
+          if (damagefall_iasa_try_stick_fall(batch, c, idx)) {
+            continue;
+          }
         }
         continue;
       }
@@ -1038,6 +1118,23 @@ void knockdown_update_pre_physics(MslBatch* batch) {
                   ? 1u
                   : 0u;
           if (gate_open && damage_air_try_jump_aerial(batch, c, ch, idx, 1u)) {
+            continue;
+          }
+          // Fall_IASA_Inner checks aerial attacks before its later JumpAerial fallback. Keep B-edge
+          // rows available for the SpecialAir dispatcher modeled by the dedicated spacie passes.
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_IASA
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_IASA_Inner
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_CheckItemThrowInput
+          if ((batch->state.input_buttons_pressed[idx] & (uint16_t)MSL_BUTTON_B) == 0u &&
+              locomotion_attackair_try_enter_from_air_iasa(batch, c, idx)) {
+            continue;
+          }
+          // The injected x14 path is only the buffered-input half of Damage_IASA. Once x221C_b6 is
+          // clear, the same Fall_IASA_Inner delegate can also consume a current-frame jump input.
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_IASA
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_IASA_Inner
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::ftCo_800CB870
+          if (damage_air_try_jump_aerial(batch, c, ch, idx, 0u)) {
             continue;
           }
         }
@@ -1325,14 +1422,16 @@ void knockdown_update_post_combat(MslBatch* batch) {
       if (a0 != (uint16_t)MSL_ACT_FALL) {
         continue;
       }
-      if (!is_damage_air_submotion(batch->state.animation_index[idx])) {
+      if (!is_damage_air_submotion(batch->state.animation_index[idx]) &&
+          !is_damage_fly_submotion(batch->state.animation_index[idx])) {
         continue;
       }
 
       // Decomp ordering:
-      // - Damage_Anim runs before Fighter_ProcessHit_8006D1EC.
-      // - A same-frame hit can overwrite the pending DamageAir->Fall result.
+      // - Damage_Anim / DamageFly_IASA run before Fighter_ProcessHit_8006D1EC.
+      // - A same-frame hit can overwrite the pending DamageAir/DamageFly->Fall result.
       // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_Anim
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_DamageFly_IASA
       // refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
       if (batch->state.hitlag[idx] != 0u || batch->state.hitstun[idx] != 0u) {
         continue;
@@ -1459,9 +1558,203 @@ static inline uint8_t damage_iasa_lockout_x221c_b6(const MslBatch* batch, size_t
   return msl_state_flags_221c_b6_at(batch->state.state_flags, idx);
 }
 
+static inline uint8_t knockdown_anim_finished(uint8_t char_id, uint16_t msid,
+                                              float anim_frame_f32) {
+  const float end = msl_anim_end_frame(char_id, msid);
+  if (!(end > 0.0f)) {
+    return 0u;
+  }
+  // Decomp gates on ftAnim_IsFramesRemaining from Anim callbacks.
+  // refs/melee/src/melee/ft/ftanim.c::ftAnim_IsFramesRemaining
+  return msl_anim_frame_sanitize_f32(anim_frame_f32) >= end ? 1u : 0u;
+}
+
+static inline void enter_fall_from_downdamage_anim(MslBatch* batch, size_t idx) {
+  if (batch == NULL) {
+    return;
+  }
+  // Decomp: ftCo_DownDamage_Anim calls ftCo_Fall_Enter when airborne, animation-ended, and
+  // x2224_b2 is clear. This leaves the damage motion-var lane, so visible hitstun clears.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownDamage.c::ftCo_DownDamage_Anim
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_Enter
+  batch->state.action_id[idx] = (uint16_t)MSL_ACT_FALL;
+  batch->state.animation_index[idx] = (uint32_t)MSL_SM_FALL;
+  msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+  batch->state.hitstun[idx] = 0u;
+  enum { MSL_STATE_FLAGS_221C_INDEX = 3 };
+  enum { MSL_STATE_FLAG_221C_IS_HITSTUN = 0x02 };
+  const size_t flags_i = idx * (size_t)MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_221C_INDEX;
+  batch->state.state_flags[flags_i] &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221C_IS_HITSTUN;
+}
+
+static inline void clear_downed_damage_state(MslBatch* batch, size_t idx) {
+  if (batch == NULL) {
+    return;
+  }
+  batch->state.hitstun[idx] = 0u;
+  enum { MSL_STATE_FLAGS_221C_INDEX = 3 };
+  enum { MSL_STATE_FLAG_221C_IS_HITSTUN = 0x02 };
+  enum { MSL_STATE_FLAG_221C_IN_DAMAGE = 0x01 };
+  const size_t flags_i = idx * (size_t)MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_221C_INDEX;
+  batch->state.state_flags[flags_i] &=
+      (uint8_t) ~(uint8_t)(MSL_STATE_FLAG_221C_IS_HITSTUN | MSL_STATE_FLAG_221C_IN_DAMAGE);
+}
+
+static inline void enter_fall_from_damagefall_iasa(MslBatch* batch, size_t idx) {
+  if (batch == NULL) {
+    return;
+  }
+  // DamageFall_IASA's terminal X-stick gate enters Fall through ftCo_Fall_Enter. This is reached
+  // directly from DamageFall and indirectly from DamageFly_IASA when x221C_b6 is clear.
+  //
+  // The DamageFly caller runs before same-frame collision. Match the existing DamageAir_Anim
+  // ordering model by publishing the Fall action for collision, but deferring Fall identity/timebase
+  // until knockdown_update_post_combat if ProcessHit did not overwrite the state.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_DamageFly_IASA
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DamageFall.c::ftCo_DamageFall_IASA
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_Enter
+  batch->state.action_id[idx] = (uint16_t)MSL_ACT_FALL;
+}
+
+static inline uint8_t damagefall_iasa_try_stick_fall(MslBatch* batch, const MslCommonParams* c,
+                                                     size_t idx) {
+  if (batch == NULL || c == NULL) {
+    return 0u;
+  }
+  const float stick_x =
+      apply_deadzone(stick_i8_to_unit(batch->state.input_main_x[idx]), c->lstick_deadzone_x);
+  uint8_t x670_for_iasa = batch->state.tilt_timer_x[idx];
+  const float prev_stick_x =
+      apply_deadzone(stick_i8_to_unit(batch->state.prev_input_main_x[idx]), c->lstick_deadzone_x);
+
+  // This simulator applies the current-row input-history update before IASA callbacks. Reconstruct
+  // the callback-visible x670 value for held same-direction X stick, matching the DamageFall path
+  // in locomotion_update_pre().
+  // refs/melee/src/melee/ft/fighter.c::{Fighter_Spaghetti_8006AD10,Fighter_procUpdate}
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DamageFall.c::ftCo_DamageFall_IASA
+  if (stick_x >= c->lstick_tilt_x_thresh) {
+    if (prev_stick_x >= c->lstick_tilt_x_thresh && x670_for_iasa > 0u && x670_for_iasa < 0xFEu) {
+      x670_for_iasa = (uint8_t)(x670_for_iasa - 1u);
+    }
+  } else if (stick_x <= -c->lstick_tilt_x_thresh) {
+    if (prev_stick_x <= -c->lstick_tilt_x_thresh && x670_for_iasa > 0u && x670_for_iasa < 0xFEu) {
+      x670_for_iasa = (uint8_t)(x670_for_iasa - 1u);
+    }
+  }
+
+  if (msl_absf(stick_x) >= c->damagefall_fall_stick_x_threshold &&
+      x670_for_iasa < c->damagefall_fall_tilt_max_frames) {
+    enter_fall_from_damagefall_iasa(batch, idx);
+    return 1u;
+  }
+  return 0u;
+}
+
+static inline void enter_down_stand_from_downdamage_anim(MslBatch* batch, size_t idx,
+                                                         uint16_t down_damage_act) {
+  if (batch == NULL) {
+    return;
+  }
+  const uint16_t stand_act = (down_damage_act == (uint16_t)MSL_ACT_DOWN_DAMAGE_U)
+                                 ? (uint16_t)MSL_ACT_DOWN_STAND_U
+                                 : (uint16_t)MSL_ACT_DOWN_STAND_D;
+  // Grounded DownDamage_Anim exit:
+  // - ftCo_DownDamage_Anim routes to ftCo_80098160(DownStandU/D) when the hidden
+  //   mv.co.downdamage.x0 timer has expired.
+  // - This runtime does not carry x0 separately yet; the replay-visible expired subset has no
+  //   remaining hitstun after Fighter_8006A360/timer ownership, so keep the handoff scoped to
+  //   hitstun==0 rather than guessing on active damage-timer rows.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownDamage.c::ftCo_DownDamage_Anim
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownStand.c::ftCo_80098160
+  batch->state.action_id[idx] = stand_act;
+  batch->state.animation_index[idx] = submotion_for_down_action(stand_act);
+  msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+  clear_downed_damage_state(batch, idx);
+  // DownStand entry starts in the downed getup hit-status window; Slippi reports the merged
+  // x1988/x198C value as hurtbox_state=2 on replay-real entry frames.
+  // data/hurtbox_states/{fox,falco}.bin
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownStand.c::ftCo_80098160
+  // refs/melee/src/melee/ft/ftaction.c::ftAction_80071A14
+  batch->state.hurtbox_state[idx] = 2u;
+}
+
+static inline uint8_t damage_ground_floor_loss_should_missfoot(const MslBatch* batch, size_t idx,
+                                                               uint32_t stage_id) {
+  if (batch == NULL) {
+    return 0u;
+  }
+  const uint16_t ground_id = batch->state.ground_id[idx];
+  if (ground_id == 0xFFFFu) {
+    return 0u;
+  }
+  const MslStageFloorGraph* g = stage_collision_get_floor_graph(stage_id);
+  const int line_idx = stage_collision_floor_line_index(stage_id, ground_id);
+  if (g == NULL || line_idx < 0 || (size_t)line_idx >= g->line_count) {
+    return 0u;
+  }
+  const MslStageFloorLine* line = &g->lines[(size_t)line_idx];
+  const float left = (line->x0 < line->x1) ? line->x0 : line->x1;
+  const float right = (line->x0 > line->x1) ? line->x0 : line->x1;
+  const float x = batch->state.pos_x[idx];
+  const uint8_t facing_right = batch->state.facing[idx] ? 1u : 0u;
+  // Decomp: grounded Damage_Coll calls ft_800848DC. When mpColl_8004B108 reports floor loss past
+  // an open endpoint, it sets Left/RightLedgeSlip; ft_800848DC enters MissFoot only for the
+  // facing/side pair shown below, otherwise it calls the supplied air-transfer callback.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_Coll
+  // refs/melee/src/melee/ft/ft_081B.c::ft_800848DC
+  // refs/melee/src/melee/mp/mpcoll.c::mpColl_8004B108
+  if (x < left && facing_right) {
+    return 1u;
+  }
+  if (x > right && !facing_right) {
+    return 1u;
+  }
+  return 0u;
+}
+
+static inline void enter_missfoot_from_damage_floor_loss(MslBatch* batch, const MslCharParams* ch,
+                                                         size_t idx) {
+  if (batch == NULL || ch == NULL) {
+    return;
+  }
+  // MissFoot entry from grounded Damage floor loss:
+  // - ft_800848DC routes ledge-slip floor loss to ftCo_8009F39C.
+  // - ftCo_8009F39C zeros vertical KB, changes to MissFoot, clamps air drift, and leaves the
+  //   fighter airborne through ftCommon_8007D5D4 when needed.
+  // refs/melee/src/melee/ft/ft_081B.c::ft_800848DC
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_MissFoot.c::ftCo_8009F39C
+  batch->state.action_id[idx] = (uint16_t)MSL_ACT_MISS_FOOT;
+  batch->state.animation_index[idx] = (uint32_t)MSL_SM_MISS_FOOT;
+  msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+  batch->state.on_ground[idx] = 0u;
+  batch->state.jumps_left[idx] = ch->max_jumps > 0 ? (uint8_t)(ch->max_jumps - 1) : 0u;
+  batch->state.speed_y_attack[idx] = 0.0f;
+  if (batch->state.speed_air_x_self[idx] > ch->air_drift_max) {
+    batch->state.speed_air_x_self[idx] = ch->air_drift_max;
+  } else if (batch->state.speed_air_x_self[idx] < -ch->air_drift_max) {
+    batch->state.speed_air_x_self[idx] = -ch->air_drift_max;
+  }
+  batch->state.speed_ground_x_self[idx] = 0.0f;
+  batch->state.hitstun[idx] = 0u;
+  enum { MSL_STATE_FLAGS_221C_INDEX = 3 };
+  enum { MSL_STATE_FLAG_221C_IS_HITSTUN = 0x02 };
+  enum { MSL_STATE_FLAG_221C_IN_DAMAGE = 0x01 };
+  const size_t flags_i = idx * (size_t)MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_221C_INDEX;
+  batch->state.state_flags[flags_i] &=
+      (uint8_t) ~(uint8_t)(MSL_STATE_FLAG_221C_IS_HITSTUN | MSL_STATE_FLAG_221C_IN_DAMAGE);
+}
+
 static inline uint8_t is_damage_air_submotion(uint32_t smid) {
   return (smid == (uint32_t)MSL_SM_DAMAGE_AIR_1 || smid == (uint32_t)MSL_SM_DAMAGE_AIR_2 ||
           smid == (uint32_t)MSL_SM_DAMAGE_AIR_3)
+             ? 1u
+             : 0u;
+}
+
+static inline uint8_t is_damage_fly_submotion(uint32_t smid) {
+  return (smid == (uint32_t)MSL_SM_DAMAGE_FLY_HI || smid == (uint32_t)MSL_SM_DAMAGE_FLY_N ||
+          smid == (uint32_t)MSL_SM_DAMAGE_FLY_LW || smid == (uint32_t)MSL_SM_DAMAGE_FLY_TOP ||
+          smid == (uint32_t)MSL_SM_DAMAGE_FLY_ROLL)
              ? 1u
              : 0u;
 }
@@ -1769,7 +2062,7 @@ void knockdown_update_post_collision(MslBatch* batch) {
         continue;
       }
 
-      if (!was_ground && !now_ground && a0 == (uint16_t)MSL_ACT_DAMAGE_FLY_N &&
+      if (!was_ground && !now_ground && is_damage_fly_action(a0) &&
           tech_is_available(batch, c, idx) &&
           (batch->state.coll_env_flags[idx] &
            ((uint32_t)MSL_COLLIDE_LEFT_WALL_HUG | (uint32_t)MSL_COLLIDE_RIGHT_WALL_HUG)) != 0u &&
@@ -1898,6 +2191,12 @@ void knockdown_update_post_collision(MslBatch* batch) {
         batch->state.animation_index[idx] = (uint32_t)MSL_SM_FALL;
         msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
       } else if (was_ground && !now_ground) {
+        if (is_damage_ground_action(a0) &&
+            damage_ground_floor_loss_should_missfoot(batch, idx, stage_id)) {
+          enter_missfoot_from_damage_floor_loss(batch, ch, idx);
+          continue;
+        }
+
         // Downed ground -> air fallback: enter Fall.
         // Decomp: DownBound_Coll/DownStand_Coll/DownWait_Coll/DownAttack_Coll select common ground
         // collision helpers which transition into Fall when no longer grounded.
