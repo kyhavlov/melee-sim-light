@@ -2078,13 +2078,13 @@ def derive_damage_jump_buffer_x14(
 
         if int(hs[i]) > 0 and jump_input:
             x14 = int(hs[i])
-        elif int(hs[i]) > 0 and x14 > int(hs[i]):
-            # `mv.co.damage.x14` is compared against the live damage timer during Damage_IASA.
-            # Clamp the replay seed to the current remaining hitstun so a prefix-causal XY edge
-            # remains available on the terminal hitstun-exit row without overextending beyond the
-            # decomp damage timer that owns the gate.
-            # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{doIasa,ftCo_Damage_IASA}
-            x14 = int(hs[i])
+        # `mv.co.damage.x14` is a snapshot of `mv.co.damage.x0` taken by doIasa when the jump
+        # input is seen. ftCo_8008F744 decrements x0, but the decomp never decrements x14; the
+        # later inlineC0 / Damage_IASA gates compare the original snapshot against
+        # p_ftCommonData->x1D0. Keeping the snapshot fixed prevents old high-hitstun XY presses
+        # from turning into terminal-frame JumpAerial entries just because visible hitstun counted
+        # down to a small value.
+        # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{doIasa,ftCo_8008F744,inlineC0}
 
         out[i] = np.uint16(max(0, min(x14, 0xFFFF)))
 

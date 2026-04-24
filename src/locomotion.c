@@ -4279,9 +4279,16 @@ void locomotion_update_pre(MslBatch* batch) {
           }
 
           // Aerial jump (double jump) entry.
+          //
+          // AttackAir DO_IASA checks special-air dispatch before JumpAerial. Shine/Blaster run
+          // later in this sim's action_update(), so a B-edge must stay in AttackAir through this
+          // local JumpAerial branch for those owners to consume it in decomp order.
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::DO_IASA
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_SpecialAir.c::ftCo_SpecialAir_CheckInput
           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::ftCo_JumpAerial_Enter_Basic
-          if ((buttons_pressed & (uint16_t)MSL_BUTTON_XY) ||
-              did_tap_jump(c, stick_y, tilt_timer_y)) {
+          if ((buttons_pressed & (uint16_t)MSL_BUTTON_B) == 0u &&
+              ((buttons_pressed & (uint16_t)MSL_BUTTON_XY) ||
+               did_tap_jump(c, stick_y, tilt_timer_y))) {
             if (batch->state.jumps_left[idx] > 0) {
               const uint16_t act = jump_aerial_action_from_stick(c, stick_x, facing_dir);
               batch->state.action_id[idx] = act;

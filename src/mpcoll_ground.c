@@ -1445,6 +1445,36 @@ void mpcoll_ground_apply(MslBatch* batch) {
             }
           }
         }
+        if (!on_ground && escapeair_locked && prefer_line_idx >= 0 &&
+            (batch->state.seed_prev_action_id[idx] == (uint16_t)MSL_ACT_JUMP_F ||
+             batch->state.seed_prev_action_id[idx] == (uint16_t)MSL_ACT_JUMP_B) &&
+            batch->state.action_frame[idx] <= 2 && batch->state.speed_y_self[idx] < 0.0f) {
+          // Fresh JumpF/JumpB -> EscapeAir floor handoff:
+          // - ftCo_80099A58 changes to EscapeAir during IASA, then EscapeAir_Coll runs in the
+          //   same Fighter proc and delegates floor handling to ft_80082C74.
+          // - CollData.floor.index can traverse connected floor seams during mpLib_8004DD90_Floor;
+          //   a teacher-forced seed that begins on a ledge floor can therefore land on the adjacent
+          //   center floor in the same callback pass.
+          // - Keep this off JumpAerial entry rows; those use the standard sweep/ledge suppression
+          //   below and include replay-real controls that remain airborne past the right ledge.
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::{
+          //   ftCo_80099A58,ftCo_EscapeAir_Coll}
+          // refs/melee/src/melee/ft/ft_081B.c::ft_80082C74
+          // refs/melee/src/melee/mp/mplib.c::mpLib_8004DD90_Floor
+          float y_corr = 0.0f;
+          const int out_line_idx =
+              floor_dd90_project(g, prefer_line_idx, batch->state.pos_x[idx],
+                                 batch->state.pos_y[idx], &y_corr, &floor_nx, &floor_ny);
+          const float max_lift =
+              fabsf(batch->state.speed_y_self[idx]) + (2.0f * k_ecb_vertical_unit);
+          if (out_line_idx >= 0 && y_corr >= 0.0f && y_corr <= max_lift) {
+            batch->state.pos_y[idx] += y_corr;
+            on_ground = 1;
+            ground_id = g->lines[(size_t)out_line_idx].segment_i;
+            contact_x = batch->state.pos_x[idx];
+            contact_y = batch->state.pos_y[idx];
+          }
+        }
         if (!on_ground && is_common_fallspecial_action(action_id) && prefer_line_idx >= 0 &&
             batch->state.speed_y_self[idx] < 0.0f && batch->state.prev_action_frame[idx] >= 4) {
           // FallSpecial_Coll uses ft_80083090 and enters LandingFallSpecial through

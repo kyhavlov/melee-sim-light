@@ -932,6 +932,19 @@ void guard_update_grounded(MslBatch* batch, const MslCommonParams* c, size_t idx
       // Shieldstun over -> return to Guard (hold).
       enter_guard_hold(batch, idx);
       // IASA for the newly-entered Guard state in the same frame.
+      //
+      // GuardSetOff_Anim runs in Fighter_8006A360 (prio 1). If it enters Guard, the later
+      // Fighter_procUpdate input callback dispatches Guard_IASA in the destination state. Guard_IASA
+      // first calls inlineC0, which latches mv.co.guard.xC from current held_inputs and exits to
+      // GuardOff when x10 is already clear.
+      // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A360,Fighter_procUpdate}
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
+      //   ftCo_GuardSetOff_Anim,ftCo_800928CC,ftCo_Guard_IASA,inlineC0,ftCo_80092BCC}
+      if (!shield_held_inputs && batch->state.guard_x10[idx] == 0u) {
+        batch->state.guard_release_latched_xc[idx] = 1u;
+        enter_guard_off(batch, idx);
+        return;
+      }
       if (guard_try_enter_iasa_defense(batch, c, idx)) {
         return;
       }
@@ -1143,6 +1156,15 @@ void guard_update_grounded(MslBatch* batch, const MslCommonParams* c, size_t idx
             : 0u;
     const uint8_t guard_reflect_snapshot_neg_lane_x10_one =
         (guard_reflect_snapshot_neg_lane && guard_x10_seed == 1u) ? 1u : 0u;
+    const uint8_t guard_reflect_released_terminal_hold_snapshot =
+        // Replay-visible GuardReflect snapshots can sit on the terminal no-submotion frame with
+        // reflect timers expired and mv.co.guard.x10 about to clear. GALE01 exposes this as a
+        // Guard post-frame before the following GuardOff; consuming destination Guard_IASA in the
+        // same snapshot row exits one frame too early.
+        //
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
+        //   ftCo_GuardReflect_Anim,ftCo_80093BC0,ftCo_GuardOn_Anim,ftCo_800928CC}
+        (guard_reflect_snapshot_neg_lane && guard_x10_seed == 1u && !shield_held_inputs) ? 1u : 0u;
     const uint8_t guard_snapshot_hold_fallback =
         (guard_no_submotion_snapshot && shield_held_inputs &&
          ((a0 == (uint16_t)MSL_ACT_GUARD_ON && guard_x10_seed == 0) ||
@@ -1150,6 +1172,13 @@ void guard_update_grounded(MslBatch* batch, const MslCommonParams* c, size_t idx
            (guard_x10_seed == 0 || guard_reflect_snapshot_neg_lane_x10_one))))
             ? 1u
             : 0u;
+    if (batch->state.hitlag_started_frame[idx] == 0 &&
+        guard_reflect_released_terminal_hold_snapshot) {
+      batch->state.guard_reflect_timer_x14[idx] = 0;
+      batch->state.guard_reflect_timer_x18[idx] = 0;
+      enter_guard_hold(batch, idx);
+      return;
+    }
     if (batch->state.hitlag_started_frame[idx] == 0 && guard_snapshot_hold_fallback) {
       // Decomp ordering: GuardReflect_Anim can transition to Guard before input callback dispatch,
       // and the destination Guard_IASA still consumes OoS options in the same frame.
