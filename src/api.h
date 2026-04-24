@@ -216,6 +216,20 @@ typedef struct MslSeed {
   float pos_x[MSL_MAX_PLAYERS];
   float pos_y[MSL_MAX_PLAYERS];
   float pos_z[MSL_MAX_PLAYERS];
+  // Teacher-forced mpColl floor-sweep previous Y.
+  //
+  // Decomp:
+  // - CollData carries prev_pos/cur_pos through mpColl_80043754.
+  // - Floor collision checks such as mpCheckFloor consume the segment from prev_pos.y to cur_pos.y,
+  //   not just the current post-frame position exposed by Slippi.
+  //
+  // Normal rollouts use the frame-start live position. One-step reseeds set valid=1 and seed the
+  // previous replay post-frame Y so DamageFly/Fall floor contact can reproduce the engine's sweep.
+  // refs/melee/src/melee/mp/mpcoll.c::{mpCollPrev,mpColl_80043754,mpCheckFloor}
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{
+  //   ftCo_Damage_Coll,ftCo_DamageFly_Coll}
+  float floor_sweep_prev_pos_y_f32[MSL_MAX_PLAYERS];
+  uint8_t floor_sweep_prev_pos_valid_u8[MSL_MAX_PLAYERS];
   // Velocities as recorded by Slippi post-frame (when available).
   float speed_air_x_self[MSL_MAX_PLAYERS];
   float speed_ground_x_self[MSL_MAX_PLAYERS];
@@ -1043,6 +1057,39 @@ typedef struct MslSeed {
   uint8_t combat_hitlist_hb_valid[MSL_MAX_PLAYERS][MSL_MAX_HITBOXES];
   uint16_t combat_hitlist_hb_cd[MSL_MAX_PLAYERS][MSL_MAX_HITBOXES][MSL_MAX_PLAYERS];
   uint16_t combat_hitlist_hb_victim_iid[MSL_MAX_PLAYERS][MSL_MAX_HITBOXES][MSL_MAX_PLAYERS];
+
+  // Teacher-forced per-HitCapsule shield-contact result.
+  //
+  // Decomp:
+  // - ftColl_80078C70 reaches the fighter shield path through lbColl_80007BCC, with the current
+  //   HitCapsule and defender ShieldDesc deciding whether ftColl_80076CBC runs.
+  // - That ShieldDesc/narrowphase state is hidden at a one-step reseed boundary; replay-visible
+  //   GuardSetOff + hitlag proves accepted contacts, and stable non-hitlag shield rows prove misses.
+  //
+  // Encoding:
+  // - 0: unknown; use runtime geometry.
+  // - 1: force no shield contact for this attacker/hitbox/defender.
+  // - 2: force shield contact for this attacker/hitbox/defender.
+  //
+  // This is a teacher-forced seed surface only. Normal rollouts leave it zero and use the live
+  // ShieldDesc geometry path.
+  // refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078C70,ftColl_80076CBC}
+  // refs/melee/src/melee/lb/lbcollision.c::lbColl_80007BCC
+  uint8_t combat_shield_contact_hb_kind[MSL_MAX_PLAYERS][MSL_MAX_HITBOXES][MSL_MAX_PLAYERS];
+
+  // Teacher-forced shield-hit max integer damage (`fp->x19A4`) for accepted GuardSetOff entries.
+  //
+  // Decomp:
+  // - ftColl_80076CBC writes the defender's hidden x19A4 from the max getEnvDmg(hit0->damage)
+  //   over accepted shield contacts before ftCo_80092F2C consumes it for GuardSetOff hitlag and
+  //   shieldstun rate.
+  // - One-step reseed may know shield contact occurred without being able to reconstruct the exact
+  //   HitCapsule ordering that produced the max; this lane carries that hidden integer owner.
+  //
+  // Encoding: 0 unknown/use runtime max; N>0 authoritative x19A4 max int damage for this defender.
+  // refs/melee/src/melee/ft/ftcoll.c::ftColl_80076CBC
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80092F2C
+  uint8_t combat_shield_hit_int_damage[MSL_MAX_PLAYERS];
 
   // HitCapsule x58 seed lane for teacher-forced one-step replay starts.
   //

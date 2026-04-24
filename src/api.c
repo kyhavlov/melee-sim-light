@@ -855,6 +855,11 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
       batch->state.pos_x[idx] = seed->pos_x[p];
       batch->state.pos_y[idx] = seed->pos_y[p];
       batch->state.pos_z[idx] = seed->pos_z[p];
+      batch->state.floor_sweep_seed_prev_pos_y[idx] = seed->floor_sweep_prev_pos_y_f32[p];
+      batch->state.floor_sweep_seed_prev_valid[idx] =
+          (seed->floor_sweep_prev_pos_valid_u8[p] && isfinite(seed->floor_sweep_prev_pos_y_f32[p]))
+              ? 1u
+              : 0u;
       batch->state.speed_air_x_self[idx] = seed->speed_air_x_self[p];
       batch->state.speed_ground_x_self[idx] = seed->speed_ground_x_self[p];
       batch->state.speed_y_self[idx] = seed->speed_y_self[p];
@@ -1020,6 +1025,7 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
       batch->state.guard_x10[idx] = seed->guard_x10[p];
       batch->state.lightshield_amount[idx] = seed->lightshield_amount[p];
       batch->state.guard_setoff_hitlag_damage_min[idx] = seed->guard_setoff_hitlag_damage_min[p];
+      batch->state.combat_shield_hit_int_damage[idx] = seed->combat_shield_hit_int_damage[p];
       batch->state.guard_setoff_hitlag_exit_phase_u8[idx] =
           seed->guard_setoff_hitlag_exit_phase_u8[p];
       batch->state.guard_setoff_post_hitlag_owner_u8[idx] =
@@ -1887,6 +1893,10 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
           batch->state.combat_hitlist_hb_cd[i] = seed->combat_hitlist_hb_cd[attacker][hb][victim];
           batch->state.combat_hitlist_hb_victim_iid[i] =
               seed->combat_hitlist_hb_victim_iid[attacker][hb][victim];
+          {
+            uint8_t kind = seed->combat_shield_contact_hb_kind[attacker][hb][victim];
+            batch->state.combat_shield_contact_hb_kind[i] = kind <= 2u ? kind : 0u;
+          }
         }
       }
     }

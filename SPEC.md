@@ -3361,7 +3361,7 @@ M6 Ledge/tech/knockdown (**PARTIAL**)
   Decomp refs:
   `refs/melee/src/melee/ft/fighter.c::{Fighter_Spaghetti_8006AD10_Inner1,Fighter_Spaghetti_8006AD10}`,
   `refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownAttack.c::ftCo_800986B0`.
-- Current residual labels:
+Current residual labels:
   - `F17_mpcoll_ledge_ecb_residual`: closed for current primary/aggregate taxonomy. It is no longer
     used for pure floor-line visibility tails.
   - `F10m_floor_line_identity`: pure `CollData.floor.index` visibility across connected FD floor
@@ -3376,9 +3376,37 @@ M6 Ledge/tech/knockdown (**PARTIAL**)
     collision callback timing. These rows stay outside `F22_specialhi_firefox_firebird` so section 6
     remains closed.
   - DamageFly-vs-Passive, DownBound-vs-DamageFly, DownDamage floor-contact, and PassiveWallJump
-    wall-contact action bundles are split to `F08c_damage_state_transition_adjacency`; pure
-    hurtbox/source tails are split to state/combat owners. Same-action DamageAir floor contacts
-    refresh only the visible jump count when mpColl already reports ground.
+    wall-contact action bundles are now split out of the old broad
+    `F08c_damage_state_transition_adjacency` bucket into exact callback-phase owners:
+    `F27a_damagefly_floor_contact_callback_phase`,
+    `F27b_damage_air_landing_action_callback_phase`,
+    `F27c_passivewall_contact_callback_phase`, and
+    `F27d_down_damage_hidden_timer_phase`. Pure hurtbox/source tails are split to state/combat
+    owners. Same-action DamageAir floor contacts refresh only the visible jump count when mpColl
+    already reports ground.
+
+Core combat/contact residual cleanup diagnostic split:
+- The broad cleanup buckets `F06_damageflyroll_rng_gate`,
+  `F08c_damage_state_transition_adjacency`,
+  `F08f_body_contact_candidate_filter_residual`, and
+  `F09d_aerial_contact_hitlag_residual` are zero in fresh primary/aggregate taxonomy after the
+  rebuilt split audit. This is not by itself simulator progress; it is a map for the remaining
+  runtime/seed/probe work.
+- Retained seed behavior movement: common AttackAir replay-only shield-admission seeds now mark
+  authoritative-empty per-HitCapsule state when `t+1` proves `GuardSetOff` plus both-fighter hitlag,
+  even without shield HP loss. That no-HP-loss case is decomp-backed by `ftColl_80076CBC` skipping
+  normal `x19A0_shieldDamageTaken` accumulation on the powershield-active `x221C_b2` branch. This
+  is teacher-forced seed materialization only. Current measured totals are primary `499` and
+  aggregate `4018`; the checklist remains active.
+- Former `F06` rows are `F26_damageflyroll_rng_stream_seed_surface`: the exact
+  `ftCo_8008DCE0` DamageFlyRoll RNG draw and hidden pre-gate `Fighter_8006CDA4` stream position,
+  after explicit visible-action consume-count lanes and rejected broad gates.
+- Former `F08f` rows are `F28_body_contact_candidate_narrowphase_owner`: candidate ordering and
+  exact `lbColl_8000805C` / `lbColl_80006E58` narrowphase, with laser item-slot fallout only when
+  player damage/action divergence proves BODY candidate ownership.
+- Former `F09d` rows are `F29_aerial_contact_hitlag_provenance`: aerial HitCapsule
+  victim-provenance / contact-hitlag carry, mostly shield descriptor provenance through
+  `ftColl_80076CBC` / `ftColl_80076808`, plus narrow aerial Shine contact-hitlag handoffs.
 AttackAirN continuation stale-owner bridge:
 - AttackAirN has a later create-hitbox refresh window in the extracted Fox/Falco scripts.
 - On replay-real continuation rows like `AGN:5482`, the victim is still in `DamageFlyTop`

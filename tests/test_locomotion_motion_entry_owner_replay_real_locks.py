@@ -358,12 +358,14 @@ def test_noncausal_locomotion_lane_population_stays_narrow() -> None:
     specialn_loop_actions = {0x0156, 0x0159}
     match_flow_entry_actions = {0, 1, 2, 12, 13, 29}
     match_flow_source_actions = {4, 12, 13}
+    guard_collision_actions = {178, 179, 180, 181, 182}
 
-    def count_lanes(rel: str) -> tuple[int, int, int, int, int, set[tuple[int, int]]]:
+    def count_lanes(rel: str) -> tuple[int, int, int, int, int, int, set[tuple[int, int]]]:
         turn_count = 0
         locomotion_motion_count = 0
         specialn_loop_count = 0
         match_flow_count = 0
+        guard_collision_count = 0
         invalid_motion = 0
         turn_transitions: set[tuple[int, int]] = set()
         for dataset_path in (root / rel).glob("**/*.msl"):
@@ -398,12 +400,28 @@ def test_noncausal_locomotion_lane_population_stays_narrow() -> None:
                             and not is_locomotion_entry
                             and (ra in match_flow_entry_actions or sa in match_flow_source_actions)
                         )
+                        # Guard collision rows use the same explicit replay-facing instance-id lane:
+                        # shield hits enter GuardSetOff through ftCo_80092F2C, and Guard/GuardOn/
+                        # GuardReflect/GuardOff handoffs use Fighter_ChangeMotionState in the same
+                        # global plAttack_80037B08 stream as the opponent's same-frame entry.
+                        # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
+                        #   ftCo_80092F2C,ftCo_Guard_Anim}
+                        # refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState
+                        # refs/melee/src/melee/pl/plattack.c::plAttack_80037B08
+                        is_guard_collision_entry = (
+                            not is_specialn_loop_restart
+                            and not is_locomotion_entry
+                            and not is_match_flow_entry
+                            and (sa in guard_collision_actions or ra in guard_collision_actions)
+                        )
                         if is_specialn_loop_restart:
                             specialn_loop_count += 1
                         elif is_locomotion_entry:
                             locomotion_motion_count += 1
                         elif is_match_flow_entry:
                             match_flow_count += 1
+                        elif is_guard_collision_entry:
+                            guard_collision_count += 1
                         else:
                             invalid_motion += 1
         return (
@@ -411,6 +429,7 @@ def test_noncausal_locomotion_lane_population_stays_narrow() -> None:
             locomotion_motion_count,
             specialn_loop_count,
             match_flow_count,
+            guard_collision_count,
             invalid_motion,
             turn_transitions,
         )
@@ -420,6 +439,7 @@ def test_noncausal_locomotion_lane_population_stays_narrow() -> None:
         primary_locomotion_motion,
         primary_specialn,
         primary_match_flow,
+        primary_guard_collision,
         primary_invalid,
         primary_turn_transitions,
     ) = count_lanes(_PRIMARY_VALID)
@@ -428,6 +448,7 @@ def test_noncausal_locomotion_lane_population_stays_narrow() -> None:
         aggregate_locomotion_motion,
         aggregate_specialn,
         aggregate_match_flow,
+        aggregate_guard_collision,
         aggregate_invalid,
         aggregate_turn_transitions,
     ) = count_lanes("datasets/aggregate_recent/replays/validation")
@@ -436,11 +457,13 @@ def test_noncausal_locomotion_lane_population_stays_narrow() -> None:
     assert primary_locomotion_motion == 121
     assert primary_specialn == 29
     assert primary_match_flow == 54
+    assert primary_guard_collision == 164
     assert primary_invalid == 0
     assert primary_turn_transitions == {(18, 24)}
     assert aggregate_turn == 50
     assert aggregate_locomotion_motion == 597
     assert aggregate_specialn == 88
     assert aggregate_match_flow == 196
+    assert aggregate_guard_collision == 609
     assert aggregate_invalid == 0
     assert aggregate_turn_transitions == {(18, 24)}

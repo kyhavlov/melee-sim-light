@@ -3042,6 +3042,16 @@ def _main_impl(args) -> None:
     act_landing_fall_special = 0x002B
     act_fx_special_n_loop = 0x0156
     act_fx_special_air_n_loop = 0x0159
+    act_fx_special_lw_start = 0x0168
+    act_fx_special_lw_loop = 0x0169
+    act_fx_special_lw_hit = 0x016A
+    act_fx_special_lw_end = 0x016B
+    act_fx_special_lw_turn = 0x016C
+    act_fx_special_air_lw_start = 0x016D
+    act_fx_special_air_lw_loop = 0x016E
+    act_fx_special_air_lw_hit = 0x016F
+    act_fx_special_air_lw_end = 0x0170
+    act_fx_special_air_lw_turn = 0x0171
     act_damage_hi_1 = 0x004B
     act_damage_hi_2 = 0x004C
     act_damage_hi_3 = 0x004D
@@ -3425,6 +3435,20 @@ def _main_impl(args) -> None:
         samples["seed_t"]["pos_y"][:, slot] = post_pos_y[:-1]
         samples["ref_t1"]["pos_y"][:, slot] = post_pos_y[1:]
         samples["seed_t"]["pos_z"][:, slot] = post_pos_z[:-1]
+        # mpColl floor sweeps consume CollData.prev_pos.y -> cur_pos.y. On a teacher-forced
+        # one-step reseed, the frame-start visible position is replay frame t, but the engine's
+        # CollData previous Y for rows already crossing/under the floor comes from replay history.
+        # Seed that previous post-frame Y explicitly; runtime rollouts leave valid=0 and use the
+        # live frame-start snapshot.
+        # refs/melee/src/melee/mp/mpcoll.c::{mpCollPrev,mpColl_80043754,mpCheckFloor}
+        # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{
+        #   ftCo_Damage_Coll,ftCo_DamageFly_Coll}
+        floor_prev_y = np.empty_like(post_pos_y[:-1])
+        floor_prev_y[0] = post_pos_y[0]
+        if floor_prev_y.shape[0] > 1:
+            floor_prev_y[1:] = post_pos_y[:-2]
+        samples["seed_t"]["floor_sweep_prev_pos_y_f32"][:, slot] = floor_prev_y
+        samples["seed_t"]["floor_sweep_prev_pos_valid_u8"][:, slot] = np.uint8(1)
         samples["seed_t"]["speed_air_x_self"][:, slot] = speed_air_x_self[:-1]
         samples["ref_t1"]["speed_air_x_self"][:, slot] = speed_air_x_self[1:]
         samples["seed_t"]["speed_ground_x_self"][:, slot] = speed_ground_x_self[:-1]
@@ -4652,6 +4676,26 @@ def _main_impl(args) -> None:
         )
         & (multi_entry_frame[:, None] | (post_instance_id[1:, :] != counter_post[:-1, None]))
     )
+    guard_collision_instance_owner = (
+        same_frame_fighter_entries_all
+        & (
+            np.isin(
+                post_action_id[1:, :],
+                np.array(
+                    [act_guard_on, act_guard, act_guard_off, act_guard_set_off, act_guard_reflect],
+                    dtype=np.uint16,
+                ),
+            )
+            | np.isin(
+                post_action_id[:-1, :],
+                np.array(
+                    [act_guard_on, act_guard, act_guard_off, act_guard_set_off, act_guard_reflect],
+                    dtype=np.uint16,
+                ),
+            )
+        )
+        & (multi_entry_frame[:, None] | (post_instance_id[1:, :] != counter_post[:-1, None]))
+    )
     motion_entry_iid_override = np.zeros((n_frames - 1, 4), dtype=np.uint16)
     # Same-frame grounded motion entries share the global plAttack_80037B08 counter. Slippi's
     # post-frame seed exposes only each fighter's final fp->x2088, not HSD proc order. Keep this
@@ -4682,6 +4726,17 @@ def _main_impl(args) -> None:
     # refs/melee/build/GALE01/asm/melee/ft/ft_0892.s::{ft_800895E0,ft_80089824}
     # refs/melee/src/melee/pl/plattack.c::plAttack_80037B08
     motion_entry_override_mask |= match_flow_instance_owner
+    # Guard collision same-frame proc order:
+    # - Shield hits enter GuardSetOff through ftCo_80092F2C, GuardReflect/Guard/GuardOff handoffs
+    #   use Fighter_ChangeMotionState, and collision callbacks can share the global
+    #   plAttack_80037B08 stream with the opponent's same-frame action entry.
+    # - Slippi exposes only final fp->x2088. Keep this explicit seed lane scoped to rows where the
+    #   visible entry is in or out of the Guard family and the replay id cannot be obtained from the
+    #   frame-start counter alone.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_80092F2C,ftCo_Guard_Anim}
+    # refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState
+    # refs/melee/src/melee/pl/plattack.c::plAttack_80037B08
+    motion_entry_override_mask |= guard_collision_instance_owner
     motion_entry_iid_override[motion_entry_override_mask] = post_instance_id[1:, :][
         motion_entry_override_mask
     ]
@@ -4826,7 +4881,14 @@ def _main_impl(args) -> None:
         post_guard_tilt_x4[:-1, :] = samples["seed_t"]["guard_tilt_x4"][:, :]
         post_guard_tilt_x4[-1, :] = post_guard_tilt_x4[-2, :]
 
-    hitlist_cd, hitlist_iid, hitlist_hb_valid, hitlist_hb_cd, hitlist_hb_iid = derive_combat_hitlist_seed_fields(
+    (
+        hitlist_cd,
+        hitlist_iid,
+        hitlist_hb_valid,
+        hitlist_hb_cd,
+        hitlist_hb_iid,
+        shield_contact_hb_kind,
+    ) = derive_combat_hitlist_seed_fields(
         num_players=num_players,
         is_teams=bool(is_teams),
         team_id=post_team_id,
@@ -4973,6 +5035,121 @@ def _main_impl(args) -> None:
     samples["seed_t"]["combat_hitlist_hb_valid"] = hitlist_hb_valid[:-1]
     samples["seed_t"]["combat_hitlist_hb_cd"] = hitlist_hb_cd[:-1]
     samples["seed_t"]["combat_hitlist_hb_victim_iid"] = hitlist_hb_iid[:-1]
+    # Replay-visible shield-contact result for common aerials:
+    # - The pose-local combat_history derivation only emits this lane when it can reconstruct the
+    #   active HitCapsule. Some GuardReflect/AttackAir rows still rely on runtime action-frame
+    #   ownership and expose no Python-local capsule even though C's ftColl-shaped hitbox pass has
+    #   an active candidate.
+    # - For those rows, use the replay-visible next-frame GuardSetOff/hitlag outcome to seed the
+    #   hidden lbColl_80007BCC ShieldDesc result for every possible HitCapsule slot; runtime only
+    #   consumes slots that are actually active.
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078C70,ftColl_80076CBC}
+    # refs/melee/src/melee/lb/lbcollision.c::lbColl_80007BCC
+    guard_family_actions = np.array(
+        [act_guard_on, act_guard, act_guard_off, act_guard_set_off, act_guard_reflect],
+        dtype=np.uint16,
+    )
+    attack_contact_actions = np.arange(int(act_attack_11), int(act_attack_air_lw) + 1, dtype=np.uint16)
+    same_frame_contact_entry_actions = np.concatenate(
+        (
+            attack_contact_actions,
+            np.array(
+                [
+                    act_fx_special_lw_start,
+                    act_fx_special_lw_loop,
+                    act_fx_special_lw_hit,
+                    act_fx_special_lw_turn,
+                    act_fx_special_air_lw_start,
+                    act_fx_special_air_lw_loop,
+                    act_fx_special_air_lw_hit,
+                    act_fx_special_air_lw_turn,
+                ],
+                dtype=np.uint16,
+            ),
+        )
+    )
+    shield_hit_int_damage = np.zeros(
+        (n_frames, samples["seed_t"]["combat_shield_hit_int_damage"].shape[1]), dtype=np.uint8
+    )
+
+    def _invert_hitlag_min_damage_for_seed(hitlag_frames: int) -> int:
+        if hitlag_frames <= 0:
+            return 0
+        dmg = 1
+        slope = float(common["hitlag_dmg_mul"])
+        base = float(common["hitlag_base"])
+        while dmg < 0xFF:
+            if int((float(dmg) * slope) + base) >= hitlag_frames:
+                return dmg
+            dmg += 1
+        return 0xFF
+
+    def _attacker_has_same_frame_shield_contact_owner(frame_i: int, attacker: int) -> bool:
+        cur_action = post_action_id[frame_i, attacker]
+        next_action = post_action_id[frame_i + 1, attacker]
+        # Same-frame shield contact can be produced by:
+        # - an already-visible attack action at seed t, or
+        # - a post-input motion entry that creates/activates a HitCapsule before ftColl runs.
+        #
+        # Keep this seed bridge to actions with decomp-backed same-frame contact callbacks. Fox/Falco
+        # reflector start/loop/hit/turn install reflect-hit callbacks and create reflector hitboxes
+        # in their action callbacks; End is deliberately excluded because it clears reflector
+        # ownership instead of creating a fresh contact candidate.
+        # refs/melee/src/melee/ft/fighter.c::{Fighter_ChangeMotionState,Fighter_procUpdate}
+        # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c::{
+        #   ftFx_SpecialLw_Enter,ftFx_SpecialAirLw_Enter,ftFx_SpecialLw_CreateReflectHit,
+        #   ftFx_SpecialLwHit_Enter,ftFx_SpecialLwEnd_Anim}
+        # refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078C70,ftColl_80076CBC}
+        return bool(
+            np.isin(cur_action, attack_contact_actions)
+            or np.isin(next_action, same_frame_contact_entry_actions)
+        )
+
+    for i in range(max(0, n_frames - 1)):
+        for defender in range(num_players):
+            defender_guard_now = post_action_id[i, defender] in guard_family_actions
+            defender_guard_next = post_action_id[i + 1, defender] in guard_family_actions
+            if not (defender_guard_now or defender_guard_next):
+                continue
+            if int(post_hitlag[i, defender]) != 0:
+                continue
+            for attacker in range(num_players):
+                if attacker == defender:
+                    continue
+                if not _attacker_has_same_frame_shield_contact_owner(i, attacker):
+                    continue
+                if int(post_hitlag[i, attacker]) != 0:
+                    continue
+                if (
+                    int(post_action_id[i + 1, defender]) == int(act_guard_set_off)
+                    and int(post_hitlag[i + 1, defender]) > 0
+                    and int(post_hitlag[i + 1, attacker]) > 0
+                ):
+                    # Guard admission can be the same collision frame as the shield hit: at the
+                    # seed boundary the defender may still be Landing/Wait/etc., while t+1 exposes
+                    # GuardSetOff + both-fighter hitlag. That replay-visible outcome proves the
+                    # hidden lbColl_80007BCC ShieldDesc contact for teacher-forced one-step.
+                    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80091A4C
+                    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078C70,ftColl_80076CBC}
+                    shield_contact_hb_kind[i, attacker, :, defender] = np.uint8(2)
+                    active_int_dmg = _guardsetoff_active_int_damage(i + 1, defender)
+                    if active_int_dmg <= 0:
+                        active_int_dmg = _invert_hitlag_min_damage_for_seed(
+                            int(post_hitlag[i + 1, defender])
+                        )
+                    shield_hit_int_damage[i, defender] = np.uint8(
+                        max(int(shield_hit_int_damage[i, defender]), active_int_dmg)
+                    )
+                elif int(post_hitlag[i + 1, defender]) == 0 and int(post_hitlag[i + 1, attacker]) == 0:
+                    # Conversely, a same-frame GuardOn/Guard handoff with no t+1 hitlag proves
+                    # the hidden ShieldDesc path did not accept this attacker's live HitCapsule.
+                    # This keeps the dense hitlist seed from being trimmed into a false shield hit
+                    # on guard-admission rows where the defender was not yet visibly Guard at t.
+                    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80091A4C
+                    # refs/melee/src/melee/ft/ftcoll.c::ftColl_80078C70
+                    shield_contact_hb_kind[i, attacker, :, defender] = np.uint8(1)
+    samples["seed_t"]["combat_shield_contact_hb_kind"] = shield_contact_hb_kind[:-1]
+    samples["seed_t"]["combat_shield_hit_int_damage"] = shield_hit_int_damage[:-1]
 
     (
         hitbox_prev_valid,

@@ -56,6 +56,8 @@ int state_alloc(MslStateSoA* state, int batch_size) {
   state->prev_pos_x = (float*)alloc_aligned_64(sizeof(float) * bp);
   state->prev_pos_y = (float*)alloc_aligned_64(sizeof(float) * bp);
   state->floor_sweep_prev_pos_y = (float*)alloc_aligned_64(sizeof(float) * bp);
+  state->floor_sweep_seed_prev_pos_y = (float*)alloc_aligned_64(sizeof(float) * bp);
+  state->floor_sweep_seed_prev_valid = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->coll_stage_prev_pos_x = (float*)alloc_aligned_64(sizeof(float) * bp);
   state->coll_stage_prev_pos_y = (float*)alloc_aligned_64(sizeof(float) * bp);
   state->coll_stage_cur_pos_x = (float*)alloc_aligned_64(sizeof(float) * bp);
@@ -166,6 +168,7 @@ int state_alloc(MslStateSoA* state, int batch_size) {
   state->guard_x10 = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->lightshield_amount = (float*)alloc_aligned_64(sizeof(float) * bp);
   state->guard_setoff_hitlag_damage_min = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
+  state->combat_shield_hit_int_damage = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->guard_setoff_hitlag_exit_phase_u8 = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->guard_setoff_post_hitlag_owner_u8 = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->kneebend_jump_input = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
@@ -328,6 +331,7 @@ int state_alloc(MslStateSoA* state, int batch_size) {
   state->combat_hitlist_hb_valid = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bph);
   state->combat_hitlist_hb_cd = (uint16_t*)alloc_aligned_64(sizeof(uint16_t) * bphv);
   state->combat_hitlist_hb_victim_iid = (uint16_t*)alloc_aligned_64(sizeof(uint16_t) * bphv);
+  state->combat_shield_contact_hb_kind = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bphv);
   state->hitlist_reseed_gen = (uint32_t*)alloc_aligned_64(sizeof(uint32_t) * b);
   state->fighter_hitlist = (MslHitlistCapsule*)alloc_aligned_64(sizeof(MslHitlistCapsule) * bph);
   state->fighter_hitlist_init_gen = (uint32_t*)alloc_aligned_64(sizeof(uint32_t) * bph);
@@ -394,7 +398,8 @@ int state_alloc(MslStateSoA* state, int batch_size) {
       !state->illusion_ghost_pos0_x || !state->illusion_ghost_pos0_y ||
       !state->illusion_ghost_pos1_x || !state->illusion_ghost_pos1_y ||
       !state->illusion_ghost_pos2_x || !state->illusion_ghost_pos2_y || !state->prev_pos_x ||
-      !state->prev_pos_y || !state->floor_sweep_prev_pos_y || !state->coll_stage_prev_pos_x ||
+      !state->prev_pos_y || !state->floor_sweep_prev_pos_y || !state->floor_sweep_seed_prev_pos_y ||
+      !state->floor_sweep_seed_prev_valid || !state->coll_stage_prev_pos_x ||
       !state->coll_stage_prev_pos_y || !state->coll_stage_cur_pos_x ||
       !state->coll_stage_cur_pos_y || !state->speed_air_x_self || !state->speed_ground_x_self ||
       !state->speed_y_self || !state->speed_x_attack || !state->speed_y_attack ||
@@ -491,6 +496,7 @@ int state_alloc(MslStateSoA* state, int batch_size) {
       !state->last_hit_by || !state->state_flags || !state->combat_hitlist_cd ||
       !state->combat_hitlist_victim_iid || !state->combat_hitlist_hb_valid ||
       !state->combat_hitlist_hb_cd || !state->combat_hitlist_hb_victim_iid ||
+      !state->combat_shield_contact_hb_kind || !state->combat_shield_hit_int_damage ||
       !state->hitlist_reseed_gen || !state->fighter_hitlist || !state->fighter_hitlist_init_gen ||
       !state->stale_queue_index || !state->stale_move_id || !state->stale_attack_instance ||
       !state->input_buttons || !state->prev_input_buttons || !state->input_buttons_pressed ||
@@ -598,6 +604,8 @@ void state_free(MslStateSoA* state) {
   alloc_free(state->prev_pos_x);
   alloc_free(state->prev_pos_y);
   alloc_free(state->floor_sweep_prev_pos_y);
+  alloc_free(state->floor_sweep_seed_prev_pos_y);
+  alloc_free(state->floor_sweep_seed_prev_valid);
   alloc_free(state->coll_stage_prev_pos_x);
   alloc_free(state->coll_stage_prev_pos_y);
   alloc_free(state->coll_stage_cur_pos_x);
@@ -867,6 +875,8 @@ void state_free(MslStateSoA* state) {
   alloc_free(state->combat_hitlist_hb_valid);
   alloc_free(state->combat_hitlist_hb_cd);
   alloc_free(state->combat_hitlist_hb_victim_iid);
+  alloc_free(state->combat_shield_contact_hb_kind);
+  alloc_free(state->combat_shield_hit_int_damage);
   alloc_free(state->hitlist_reseed_gen);
   alloc_free(state->fighter_hitlist);
   alloc_free(state->fighter_hitlist_init_gen);

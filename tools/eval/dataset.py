@@ -93,6 +93,10 @@ SEED_DTYPE = np.dtype(
         ("pos_x", _arr("<f4", MAX_PLAYERS)),
         ("pos_y", _arr("<f4", MAX_PLAYERS)),
         ("pos_z", _arr("<f4", MAX_PLAYERS)),
+        # Teacher-forced mpColl floor-sweep previous Y. valid=0 keeps runtime frame-start snapshot.
+        # refs/melee/src/melee/mp/mpcoll.c::{mpCollPrev,mpColl_80043754,mpCheckFloor}
+        ("floor_sweep_prev_pos_y_f32", _arr("<f4", MAX_PLAYERS)),
+        ("floor_sweep_prev_pos_valid_u8", _arr("u1", MAX_PLAYERS)),
         ("speed_air_x_self", _arr("<f4", MAX_PLAYERS)),
         ("speed_ground_x_self", _arr("<f4", MAX_PLAYERS)),
         ("speed_y_self", _arr("<f4", MAX_PLAYERS)),
@@ -376,6 +380,12 @@ SEED_DTYPE = np.dtype(
         ("combat_hitlist_hb_valid", ("u1", (MAX_PLAYERS, MAX_HITBOXES))),
         ("combat_hitlist_hb_cd", ("<u2", (MAX_PLAYERS, MAX_HITBOXES, MAX_PLAYERS))),
         ("combat_hitlist_hb_victim_iid", ("<u2", (MAX_PLAYERS, MAX_HITBOXES, MAX_PLAYERS))),
+        # Teacher-forced per-HitCapsule shield-contact result:
+        # 0 unknown/use runtime geometry, 1 force no shield contact, 2 force shield contact.
+        ("combat_shield_contact_hb_kind", ("u1", (MAX_PLAYERS, MAX_HITBOXES, MAX_PLAYERS))),
+        # Teacher-forced shield-hit max integer damage (`fp->x19A4`) for accepted GuardSetOff
+        # entries whose exact ShieldDesc/HitCapsule ordering is hidden at the seed boundary.
+        ("combat_shield_hit_int_damage", _arr("u1", MAX_PLAYERS)),
         # Hidden HitCapsule.x58 seed lane for teacher-forced one-step starts.
         # refs/melee/src/melee/ft/ftcoll.c::ftColl_8007AD18
         # refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000805C,lbColl_80006E58}

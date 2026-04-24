@@ -25,6 +25,10 @@ ACT_GUARD_ON = 0x00B2
 ACT_GUARD = 0x00B3
 ACT_GUARD_REFLECT = 0x00B6
 ACT_GUARD_SET_OFF = 0x00B5
+ACT_ATTACK_AIR_N = 0x0041
+ACT_ATTACK_AIR_F = 0x0042
+ACT_ATTACK_AIR_B = 0x0043
+ACT_ATTACK_AIR_HI = 0x0044
 ACT_ATTACK_AIR_LW = 0x0045
 ACT_DAMAGE_FALL = 0x0026
 ACT_DAMAGE_HI_1 = 0x004B
@@ -167,6 +171,11 @@ def _is_shield_active_action(action_id: int) -> bool:
 def _is_damage_destination_action(action_id: int) -> bool:
     a = int(action_id)
     return a == ACT_DAMAGE_FALL or ACT_DAMAGE_HI_1 <= a <= ACT_DAMAGE_FLY_ROLL
+
+
+def _is_attackair_action(action_id: int) -> bool:
+    a = int(action_id)
+    return ACT_ATTACK_AIR_N <= a <= ACT_ATTACK_AIR_LW
 
 
 def _is_first_guardsetoff_hitlag_row(
@@ -756,11 +765,28 @@ def derive_combat_hitlist_seed_fields(
     - `include_replay_only_shield_admission=True` may mark an authoritative empty per-HitCapsule
       seed for frame `t` when frame `t+1` proves a fighter shield hit happened, but the dense
       group seed at `t` would suppress the live HitCapsule.
+    - Scope is the common AttackAir action family: the exact owner is still per-HitCapsule
+      clear/copy + shield-hit insertion, but these are the currently proven aerial shield-reentry
+      rows where replay-visible GuardSetOff/hitlag establishes that stale dense fallback is wrong.
+      The proof is the GuardSetOff hitlag transition itself; shield HP loss is not required because
+      `ftColl_80076CBC` takes the powershield branch when `x221C_b2` is live and skips the normal
+      `x19A0_shieldDamageTaken` accumulation.
     - This lane is non-causal and must only be used for teacher-forced replay datasets. It does not
       create runtime rollout behavior; it only selects the already-existing per-hitbox seed lane for
       the reseeded frame.
       refs/melee/src/melee/ft/ftcoll.c::{ftColl_800768A0,ftColl_80076CBC}
       refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000ACFC,lbColl_80008688}
+
+    Replay-only shield-contact lane:
+    - The per-HitCapsule contact tri-state carries the hidden `lbColl_80007BCC` ShieldDesc
+      result at the one-step reseed boundary. A visible pose+shield proxy is not exact enough for
+      the remaining aerial shield rows: opposite-outcome pairs show both false accepts and false
+      misses near the shield rim.
+    - `2` is emitted when frame `t+1` proves an accepted shield hit through GuardSetOff plus
+      attacker/defender hitlag. `1` is emitted for common AttackAir shield candidates when frame
+      `t+1` proves no shield hitlag transition. Normal rollouts leave this seed surface zero.
+      refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078C70,ftColl_80076CBC}
+      refs/melee/src/melee/lb/lbcollision.c::lbColl_80007BCC
 
     Replay-only BODY-admission lane:
     - `include_replay_only_body_admission=True` may mark an authoritative empty per-HitCapsule
@@ -772,6 +798,7 @@ def derive_combat_hitlist_seed_fields(
     - Like the shield lane, this is non-causal and only for teacher-forced replay datasets.
       refs/melee/src/melee/ft/ftcoll.c::{ftColl_80076ED8,ftColl_800768A0}
       refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000ACFC,lbColl_80008688}
+
     """
     if num_players not in (2, 4):
         raise ValueError(f"num_players must be 2 or 4, got {num_players}")
@@ -839,6 +866,9 @@ def derive_combat_hitlist_seed_fields(
     out_hb_valid = np.zeros((n_frames, MAX_PLAYERS, MAX_HITBOXES), dtype=np.uint8)
     out_hb_cd = np.zeros((n_frames, MAX_PLAYERS, MAX_HITBOXES, MAX_PLAYERS), dtype=np.uint16)
     out_hb_iid = np.zeros((n_frames, MAX_PLAYERS, MAX_HITBOXES, MAX_PLAYERS), dtype=np.uint16)
+    out_shield_contact_kind = np.zeros(
+        (n_frames, MAX_PLAYERS, MAX_HITBOXES, MAX_PLAYERS), dtype=np.uint8
+    )
 
     # Internal state (rollout-causal).
     hitlist_cd = np.zeros((MAX_PLAYERS, HITLIST_GROUPS, MAX_PLAYERS), dtype=np.uint16)
@@ -1193,6 +1223,29 @@ def derive_combat_hitlist_seed_fields(
                     hy = float(hb["y"])
                     hz = float(hb["z"])
                     hr = float(hb["r"])
+                    shield_contact_seed_kind = 0
+                    if (
+                        include_replay_only_shield_admission
+                        and shield_active
+                        and hitlag_arr is not None
+                        and fi + 1 < n_frames
+                        and _is_attackair_action(int(action_id[fi, attacker]))
+                        and float(hb.get("damage", 0.0)) > 0.0
+                        and int(hitlag_arr[fi, defender]) == 0
+                        and int(hitlag_arr[fi, attacker]) == 0
+                    ):
+                        if (
+                            int(action_id[fi + 1, defender]) == ACT_GUARD_SET_OFF
+                            and int(hitlag_arr[fi + 1, defender]) > 0
+                            and int(hitlag_arr[fi + 1, attacker]) > 0
+                        ):
+                            shield_contact_seed_kind = 2
+                        elif int(hitlag_arr[fi + 1, defender]) == 0 and int(hitlag_arr[fi + 1, attacker]) == 0:
+                            shield_contact_seed_kind = 1
+                    if shield_contact_seed_kind:
+                        out_shield_contact_kind[fi, attacker, hb_id, defender] = np.uint8(
+                            shield_contact_seed_kind
+                        )
 
                     # Rehit suppression (hitlists): the legacy fallback derivation uses the
                     # group-indexed seed bridge as its acceptance gate. The per-hitbox payload below
@@ -1283,19 +1336,22 @@ def derive_combat_hitlist_seed_fields(
                             include_replay_only_shield_admission
                             and hitlag_arr is not None
                             and fi + 1 < n_frames
-                            and int(action_id[fi, attacker]) == ACT_ATTACK_AIR_LW
+                            and _is_attackair_action(int(action_id[fi, attacker]))
                             and float(hb.get("damage", 0.0)) > 0.0
                             and int(hitlag_arr[fi, defender]) == 0
                             and int(hitlag_arr[fi, attacker]) == 0
                             and int(action_id[fi + 1, defender]) == ACT_GUARD_SET_OFF
                             and int(hitlag_arr[fi + 1, defender]) > 0
                             and int(hitlag_arr[fi + 1, attacker]) > 0
-                            and float(shield_hp[fi + 1, defender]) < float(shield_hp[fi, defender])
                         ):
                             # Replay-only per-HitCapsule provenance bridge:
                             # - The dense group snapshot says "victim present", but the next
                             #   Slippi post-frame proves that this exact frame admitted a fighter
                             #   shield hit into GuardSetOff/hitlag.
+                            # - Do not require replay-visible shield HP loss here: decomp
+                            #   `ftColl_80076CBC` skips the normal shield-damage accumulator on
+                            #   the powershield-active `x221C_b2` branch while still accepting the
+                            #   shield hit and entering GuardSetOff/hitlag.
                             # - Mark the active same-group HitCapsules authoritative-empty so
                             #   teacher-forced one-step reseed uses the decomp-shaped per-HitCapsule
                             #   lane instead of the coarse group fallback.
@@ -1382,7 +1438,14 @@ def derive_combat_hitlist_seed_fields(
                     # followed by shield hit handling (ftColl_80076CBC), with rehit gating already
                     # applied by lbColl_8000ACFC in the predicate.
                     # refs/melee/src/melee/ft/ftcoll.c (shield branch around lbColl_80007BCC + ftColl_80076CBC)
-                    if shield_active and _sphere_sphere_intersects(hx, hy, hz, hr, shx, shy, shz, shr):
+                    shield_contact = shield_active and (
+                        shield_contact_seed_kind == 2
+                        or (
+                            shield_contact_seed_kind != 1
+                            and _sphere_sphere_intersects(hx, hy, hz, hr, shx, shy, shz, shr)
+                        )
+                    )
+                    if shield_contact:
                         # Mirror src/combat.c: only treat positive-damage hitboxes as shield hits.
                         if float(hb.get("damage", 0.0)) > 0.0 and defender_hitlag_seen:
                             rehit_frames = int(hb.get("rehit_frames", 0)) & 0xFF
@@ -1570,5 +1633,5 @@ def derive_combat_hitlist_seed_fields(
             sim_hitlag[defender] = np.uint16(int(hl))
 
     if include_per_hitbox:
-        return out_cd, out_iid, out_hb_valid, out_hb_cd, out_hb_iid
+        return out_cd, out_iid, out_hb_valid, out_hb_cd, out_hb_iid, out_shield_contact_kind
     return out_cd, out_iid

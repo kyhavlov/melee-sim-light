@@ -179,9 +179,10 @@ Recommended sequence for the next deep passes:
 ### 5. Core combat followup family
 - Status: `residual cleanup active`
 - Roadmap families: broad `F08_damage_resolution_combat` is eliminated from current cardinal/aggregate taxonomy;
-  broad `F09_aerial_combat_resolution` is eliminated after splitting aggregate-only aerial action-entry
-  and contact-hitlag residuals, but those residual owners still need closure/proof before this family can
-  be called complete.
+  broad `F09_aerial_combat_resolution` is eliminated, but the followup residual cleanup remains
+  active until the remaining F06/F08c/F08f/F09d-equivalent rows either move through simulator/seed
+  behavior or are proven by exact source/probe evidence to belong to another owner. Taxonomy splits
+  are diagnostic and do not count as closure by themselves.
 - Owner boundary: BODY hits, aerial continuation, hitlag/hitstun/continuation ordering after damage admission
 - Primary sim files: `src/combat.c`, `src/timers.c`, `src/items.c`, `src/step.c`
 - Current followup pass (2026-04-23):
@@ -223,17 +224,43 @@ Recommended sequence for the next deep passes:
     item-callback seed inference, broad JumpF DamageFlyRoll admission, and generic walljump runtime
     entry without the hidden walljump timer / persisted CollData wall seed surface also failed to
     move or worsened taxonomy. None is retained.
-  - Remaining combat/contact residuals are not hidden under this pass:
-    `F06_damageflyroll_rng_gate` is the exact `ftCo_8008DCE0` DamageFlyRoll RNG/admission carry
-    owner; the explicit `fighter_8006cda4_pre_gate_consume_count` seed lane covers the known
-    hidden pre-gate `Fighter_8006CDA4` consumes, and the remaining rows are mixed exact
-    DamageFlyRoll RNG/admission carry plus adjacent DamageFlyRoll transition residuals.
-    `F08f_body_contact_candidate_filter_residual` is
-    still exact BODY candidate ordering / `lbColl_80006E58` pose evidence plus item-laser candidate
-    phase; `F09d_aerial_contact_hitlag_residual` is shield HitCapsule-victim provenance /
-    ShieldDesc geometry evidence; and remaining `F08c` rows are downed hidden timers
-    (`mv.co.downdamage.x0`), mpColl floor projection/contact callback phase, PassiveWall contact,
-    DownFoward/DownBack hidden downed input timing, and adjacent special/landing handoffs.
+  - Current residual cleanup split:
+    the old `F06_damageflyroll_rng_gate`, `F08c_damage_state_transition_adjacency`,
+    `F08f_body_contact_candidate_filter_residual`, and `F09d_aerial_contact_hitlag_residual`
+    buckets have been split into narrower diagnostic owners:
+    `F26_damageflyroll_rng_stream_seed_surface`, `F27a_damagefly_floor_contact_callback_phase`,
+    `F27b_damage_air_landing_action_callback_phase`, `F27c_passivewall_contact_callback_phase`,
+    `F27d_down_damage_hidden_timer_phase`, `F28_body_contact_candidate_narrowphase_owner`, and
+    `F29_aerial_contact_hitlag_provenance`.
+  - The new owners are not a closure claim. They are the current implementation map: `F26` is the exact
+    `ftCo_8008DCE0` DamageFlyRoll RNG stream / hidden pre-gate `Fighter_8006CDA4` seed surface;
+    `F27*` are damage/Down/Passive/mpColl callback phase owners; `F28` is exact
+    `ftColl_80078C70` / `ftColl_80076ED8` candidate ordering and `lbColl_80006E58` narrowphase;
+    `F29` is aerial HitCapsule victim-provenance / contact-hitlag carry, including ShieldDesc
+    and narrow aerial Shine contact rows.
+  - Current retained seed movement:
+    common AttackAir replay-only shield-admission seeds now mark authoritative-empty
+    per-HitCapsule state when `t+1` proves a stale dense group latch suppressed a live
+    `GuardSetOff` + both-fighter-hitlag shield hit. The proof no longer requires shield HP loss:
+    `ftColl_80076CBC` skips normal `x19A0_shieldDamageTaken` accumulation on the powershield-active
+    `x221C_b2` branch while still accepting the shield hit. This is teacher-forced seed
+    materialization only, not rollout runtime behavior. It reduces aggregate one-step
+    `4052 -> 4018` and aggregate taxonomy `4060 -> 4018`; primary stays `499`.
+  - Fresh split taxonomy after the retained seed movement:
+    primary total `499`; aggregate total `4018`. This split is diagnostic only; it is not a
+    closure claim unless paired with real simulator behavior movement or exact blocker proof.
+    Protected and item-owner families remain zero.
+  - Remaining current-map blockers:
+    `F26=148` aggregate rows still require exact `ftCo_8008DCE0` RNG stream / hidden
+    `Fighter_8006CDA4` consume-state representation beyond the visible-action consume-count seed
+    lanes; broad SpecialAirHi/JumpF gates were rejected because they worsen suite totals.
+    `F27a/F27b/F27c/F27d=110/171/44/69` are CollData/ECB floor/wall callback phase and downed
+    hidden timer/input phase rows; broad root-below-floor and broad DownBound callback reorders were
+    rejected by existing replay locks.
+    `F28=68` remains exact BODY candidate ordering / narrowphase (`lbColl_8000805C` /
+    `lbColl_80006E58`) plus item-slot fallout from those selected candidates.
+    `F29=64` remains shield descriptor geometry / contact-hitlag provenance after the common
+    AttackAir shield-admission seed lane.
 - Current split:
   - AttackAirLw -> shield-hit admission seed provenance is closed as a named sub-owner:
     replay-only authoritative-empty per-HitCapsule seeds are emitted only when `t+1` proves a

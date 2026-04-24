@@ -114,6 +114,37 @@ static inline uint8_t state_flags_2218_allow_interrupt_grounded_attack_action(ui
   }
 }
 
+static inline uint8_t state_flags_2218_attack12_allow_interrupt_action(uint16_t action_id) {
+  return (uint8_t)(action_id == (uint16_t)MSL_ACT_ATTACK_12);
+}
+
+static inline uint8_t state_flags_2218_attack_s3_action(uint16_t action_id) {
+  switch (action_id) {
+    case MSL_ACT_ATTACK_S3_HI:
+    case MSL_ACT_ATTACK_S3_HI_S:
+    case MSL_ACT_ATTACK_S3_S:
+    case MSL_ACT_ATTACK_S3_LW_S:
+    case MSL_ACT_ATTACK_S3_LW:
+      return 1u;
+    default:
+      return 0u;
+  }
+}
+
+static inline uint8_t state_flags_2218_wait_iasa_grounded_destination(uint16_t action_id) {
+  switch (action_id) {
+    case MSL_ACT_WAIT:
+    case MSL_ACT_WALK_SLOW:
+    case MSL_ACT_WALK_MIDDLE:
+    case MSL_ACT_WALK_FAST:
+    case MSL_ACT_DASH:
+    case MSL_ACT_TURN:
+      return 1u;
+    default:
+      return 0u;
+  }
+}
+
 static inline uint8_t state_flags_guard_setoff_hitlag_handoff_phase(const MslBatch* batch,
                                                                     size_t idx) {
   if (batch == NULL) {
@@ -361,6 +392,20 @@ static void state_flags_refresh_post_frame_impl(MslBatch* batch, const uint8_t* 
         allow_interrupt_known = 1u;
         allow_interrupt = move_tables_grounded_attack_allow_interrupt(
             batch->state.char_id[idx], action_id, allow_interrupt_anim_probe);
+      } else if (state_flags_2218_attack12_allow_interrupt_action(action_id)) {
+        // Attack12 command ownership for fp+0x2218 bit0:
+        // - Attack12_Anim is script driven and Attack12_IASA can continue through the same
+        //   allow_interrupt lane as Attack11/S3/etc.
+        // - Keep this lane set-only until full Attack12 command-bit seeding is modeled; clearing
+        //   from a replay-seeded Attack12 snapshot loses unrelated x2218_b1/b2 history.
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack1.c::{
+        //   ftCo_Attack12_Anim,ftCo_Attack12_IASA,checkAttack13}
+        // refs/melee/src/melee/ft/ftaction.c::ftAction_80071950
+        // data/moves/{fox,falco}.json moves["ftCo_SM_Attack12"]["events"]
+        if (move_tables_grounded_attack_allow_interrupt(batch->state.char_id[idx], action_id,
+                                                        allow_interrupt_anim_probe)) {
+          f2218 |= (uint8_t)MSL_STATE_FLAG_2218_ALLOW_INTERRUPT;
+        }
       } else if (action_id == (uint16_t)MSL_ACT_ESCAPE_N) {
         // EscapeN (spotdodge) `allow_interrupt` lane:
         // - ftAction command script emits `allow_interrupt` (ftAction_80071950) during EscapeN.
@@ -427,6 +472,18 @@ static void state_flags_refresh_post_frame_impl(MslBatch* batch, const uint8_t* 
            action_id == (uint16_t)MSL_ACT_SQUAT && action_frame_i <= 1) ||
           (prev_action_2218 == (uint16_t)MSL_ACT_ATTACK_DASH &&
            action_id == (uint16_t)MSL_ACT_GUARD_ON && action_frame_i <= 0)) {
+        f2218 |= (uint8_t)MSL_STATE_FLAG_2218_ALLOW_INTERRUPT;
+      }
+      if (state_flags_2218_attack_s3_action(prev_action_2218) &&
+          state_flags_2218_wait_iasa_grounded_destination(action_id) && action_frame_i <= 1) {
+        // AttackS3 IASA delegates directly to Wait_IASA while fp->allow_interrupt is already set.
+        // The destination state's post-frame can therefore still expose x2218_b0 even though the
+        // live motion has become Wait/Walk/Dash/Turn. This is not a generic "previous attack"
+        // carry: restrict it to AttackS3's decomp path, which is a single
+        // `if (allow_interrupt) ftCo_Wait_IASA(gobj);` tail.
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackS3.c::ftCo_AttackS3_IASA
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
+        // refs/melee/src/melee/ft/ftaction.c::ftAction_80071950
         f2218 |= (uint8_t)MSL_STATE_FLAG_2218_ALLOW_INTERRUPT;
       }
       if (action_id == (uint16_t)MSL_ACT_GUARD_REFLECT) {

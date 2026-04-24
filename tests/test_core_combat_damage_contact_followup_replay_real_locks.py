@@ -261,7 +261,15 @@ def test_core_damage_contact_followup_rows_are_replay_exact(case: _DamageContact
 
 @pytest.mark.integration
 @pytest.mark.parametrize(
-    ("dataset_rel", "record", "attacker", "defender", "attacker_action", "ref_hitlag"),
+    (
+        "dataset_rel",
+        "record",
+        "attacker",
+        "defender",
+        "attacker_action",
+        "ref_hitlag",
+        "expect_hb_authoritative_empty",
+    ),
     [
         (
             "datasets/aggregate_recent/replays/validation/aggregate_recent/BlondHardHippopotamus.msl",
@@ -270,6 +278,7 @@ def test_core_damage_contact_followup_rows_are_replay_exact(case: _DamageContact
             0,
             0x0043,  # AttackAirB
             8,
+            False,
         ),
         (
             "datasets/aggregate_recent/replays/validation/aggregate_recent/HungryImportantSnake.msl",
@@ -278,22 +287,34 @@ def test_core_damage_contact_followup_rows_are_replay_exact(case: _DamageContact
             0,
             0x0041,  # AttackAirN
             6,
+            True,
+        ),
+        (
+            "datasets/aggregate_recent/replays/validation/aggregate_recent/MotionlessAggressiveJay.msl",
+            2217,
+            0,
+            1,
+            0x0043,  # AttackAirB
+            5,
+            True,
         ),
     ],
 )
-def test_attackair_guard_reentry_dense_shield_hitlist_rows_are_replay_exact(
+def test_attackair_guard_reentry_shield_hitlist_rows_are_replay_exact(
     dataset_rel: str,
     record: int,
     attacker: int,
     defender: int,
     attacker_action: int,
     ref_hitlag: int,
+    expect_hb_authoritative_empty: bool,
 ) -> None:
-    # Dense shield re-entry hitlist trim:
-    # - the seed carries only group-level combat_hitlist_cd/victim_iid, not authoritative
-    #   per-HitCapsule shield provenance,
-    # - the defender admits GuardOn/GuardSetOff before combat in the same frame,
-    # - ftColl_80078C70 should see a fresh shield contact and call ftColl_80076CBC.
+    # Shield re-entry HitCapsule provenance:
+    # - legacy dense fallback rows carry only group-level combat_hitlist_cd/victim_iid,
+    # - the replay-only authoritative-empty per-HitCapsule lane is used when t+1 proves the stale
+    #   dense fallback would suppress a live AttackAir shield hit,
+    # - the t+1 proof is GuardSetOff + both-fighter hitlag; shield HP loss is not required because
+    #   ftColl_80076CBC's powershield-active x221C_b2 branch skips normal shield-damage accumulation.
     # refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078C70,ftColl_80076CBC,ftColl_80076808}
     # refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000ACFC,lbColl_80008688}
     root = Path(__file__).resolve().parents[1]
@@ -313,11 +334,16 @@ def test_attackair_guard_reentry_dense_shield_hitlist_rows_are_replay_exact(
     assert int(seed_t["hitstun"][attacker]) == 0
     assert int(seed_t["hitstun"][defender]) == 0
     assert int(seed_t["combat_hitlist_cd"][attacker, 0, defender]) == 0xFFFF
-    assert not any(int(x) for x in seed_t["combat_hitlist_hb_valid"][attacker].tolist())
+    hb_valid = [int(x) for x in seed_t["combat_hitlist_hb_valid"][attacker].tolist()]
+    hb_cd = [int(x) for x in seed_t["combat_hitlist_hb_cd"][attacker, :, defender].tolist()]
+    if expect_hb_authoritative_empty:
+        assert any(hb_valid)
+        assert all(cd == 0 for cd in hb_cd)
+    else:
+        assert not any(hb_valid)
     assert int(ref_t1["action_id"][defender]) == 0x00B5  # GuardSetOff
     assert int(ref_t1["hitlag"][defender]) == int(ref_hitlag)
     assert int(ref_t1["hitlag"][attacker]) == int(ref_hitlag)
-    assert float(ref_t1["shield_hp"][defender]) < float(seed_t["shield_hp"][defender])
 
     _, ref_row, out_row = _run_one_step_row(dataset_path, record, defender)
     for p in (0, 1):

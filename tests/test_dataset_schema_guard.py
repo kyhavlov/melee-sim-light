@@ -74,6 +74,10 @@ def test_seed_schema_includes_staling_fields() -> None:
     assert "damage_time_since_hit_x18ac" in SEED_DTYPE.fields
     # Grounded attacker shield-pushback scalar (`fp->xF4_ground_attacker_shield_kb_vel`).
     assert "attacker_shield_ground_kb_vel" in SEED_DTYPE.fields
+    assert "combat_shield_contact_hb_kind" in SEED_DTYPE.fields
+    assert "combat_shield_hit_int_damage" in SEED_DTYPE.fields
+    assert "floor_sweep_prev_pos_y_f32" in SEED_DTYPE.fields
+    assert "floor_sweep_prev_pos_valid_u8" in SEED_DTYPE.fields
     # Side-B hidden ghost ring lanes for end-to-end Illusion/Phantasm ownership.
     assert "illusion_ghost_pos0_x" in SEED_DTYPE.fields
     assert "illusion_ghost_pos0_y" in SEED_DTYPE.fields

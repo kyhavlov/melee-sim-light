@@ -105,7 +105,7 @@ def test_classify_player_row_damageflyroll_rng_gate_takes_priority() -> None:
             91: "DAMAGE_FLY_ROLL",
         },
     )
-    assert got == "F06_damageflyroll_rng_gate"
+    assert got == "F26_damageflyroll_rng_stream_seed_surface"
 
 
 def test_classify_player_row_keeps_damagefly_grounded_selector_in_f07() -> None:
@@ -164,7 +164,7 @@ def test_classify_player_row_moves_damagefly_passive_contact_timing_to_damage_tr
             199: "PASSIVE",
         },
     )
-    assert got == "F08c_damage_state_transition_adjacency"
+    assert got == "F27a_damagefly_floor_contact_callback_phase"
 
 
 def test_classify_player_row_moves_passivewall_contact_timing_to_damage_transition_owner() -> None:
@@ -183,7 +183,7 @@ def test_classify_player_row_moves_passivewall_contact_timing_to_damage_transiti
             203: "PASSIVE_WALL_JUMP",
         },
     )
-    assert got == "F08c_damage_state_transition_adjacency"
+    assert got == "F27c_passivewall_contact_callback_phase"
 
 
 def test_classify_player_row_moves_damage_ground_id_to_floor_line_identity() -> None:
@@ -309,7 +309,7 @@ def test_debug_body_contact_split_routes_resolved_geometry_residuals_to_named_ow
             filtered_body_candidate_count=1,
             first_msid=313,
         )
-        == "F08f_body_contact_candidate_filter_residual"
+        == "F28_body_contact_candidate_narrowphase_owner"
     )
     assert (
         _family_for_debug_body_contact_residual(
@@ -334,7 +334,7 @@ def test_debug_body_contact_split_routes_resolved_geometry_residuals_to_named_ow
             active_fighter_hitbox_count=0,
             live_nonvictim_item_count=0,
         )
-        == "F08c_damage_state_transition_adjacency"
+        == "F27b_damage_air_landing_action_callback_phase"
     )
     assert (
         _family_for_debug_body_contact_residual(
@@ -347,7 +347,7 @@ def test_debug_body_contact_split_routes_resolved_geometry_residuals_to_named_ow
             active_fighter_hitbox_count=0,
             live_nonvictim_item_count=1,
         )
-        == "F08f_body_contact_candidate_filter_residual"
+        == "F28_body_contact_candidate_narrowphase_owner"
     )
     assert (
         _family_for_debug_body_contact_residual(
@@ -358,7 +358,7 @@ def test_debug_body_contact_split_routes_resolved_geometry_residuals_to_named_ow
             body_candidate_count=2,
             filtered_body_candidate_count=1,
         )
-        == "F08f_body_contact_candidate_filter_residual"
+        == "F28_body_contact_candidate_narrowphase_owner"
     )
     assert (
         _family_for_debug_body_contact_residual(
@@ -370,7 +370,7 @@ def test_debug_body_contact_split_routes_resolved_geometry_residuals_to_named_ow
             filtered_body_candidate_count=5,
             first_msid=70,
         )
-        == "F08f_body_contact_candidate_filter_residual"
+        == "F28_body_contact_candidate_narrowphase_owner"
     )
     assert (
         _family_for_debug_body_contact_residual(
@@ -427,7 +427,7 @@ def test_classify_player_row_splits_prior_damage_exit_from_body_geometry() -> No
             76: "DAMAGE_HI_2",
         },
     )
-    assert got == "F08c_damage_state_transition_adjacency"
+    assert got == "F27b_damage_air_landing_action_callback_phase"
 
 
 def test_classify_player_row_keeps_non_damage_down_transition_in_f08c() -> None:
@@ -446,7 +446,7 @@ def test_classify_player_row_keeps_non_damage_down_transition_in_f08c() -> None:
             186: "DOWN_STAND_U",
         },
     )
-    assert got == "F08c_damage_state_transition_adjacency"
+    assert got == "F27d_down_damage_hidden_timer_phase"
 
 
 def test_classify_player_row_does_not_hide_special_adjacency_in_mpcoll_residual() -> None:
@@ -601,7 +601,7 @@ def test_classify_player_row_hard_moves_specials_contact_tail_to_body_filter() -
             352: "FX_SPECIAL_AIR_S_END",
         },
     )
-    assert got == "F08f_body_contact_candidate_filter_residual"
+    assert got == "F28_body_contact_candidate_narrowphase_owner"
 
 
 def test_classify_player_row_hard_moves_specialhi_holdair_hurtbox_tail_to_aerial_stateflag() -> None:
@@ -694,7 +694,7 @@ def test_classify_player_row_moves_specialhi_damage_tail_to_damage_owner() -> No
             359: "FX_SPECIAL_HI_BOUND",
         },
     )
-    assert got == "F08c_damage_state_transition_adjacency"
+    assert got == "F27b_damage_air_landing_action_callback_phase"
 
 
 def test_classify_player_row_splits_passivewalljump_special_entry_dispatch() -> None:
@@ -868,7 +868,7 @@ def test_classify_player_row_moves_aerial_shine_contact_hitlag_tail_to_aerial_co
             365: "FX_SPECIAL_AIR_LW_START",
         },
     )
-    assert got == "F09d_aerial_contact_hitlag_residual"
+    assert got == "F29_aerial_contact_hitlag_provenance"
 
 
 def test_classify_player_row_moves_grounded_shine_contact_bookkeeping_to_combat_owner() -> None:
@@ -933,7 +933,7 @@ def test_classify_player_row_moves_missed_damage_from_shine_defender_to_damage_o
             363: "FX_SPECIAL_LW_END",
         },
     )
-    assert got == "F08c_damage_state_transition_adjacency"
+    assert got == "F27b_damage_air_landing_action_callback_phase"
 
 
 def test_classify_player_row_moves_pure_landingfallspecial_source_bookkeeping_to_combat() -> None:
@@ -1910,7 +1910,7 @@ def test_classify_item_slot_row_moves_laser_player_damage_divergence_to_body_fil
         out_item_type=0,
     )
     got = _classify_item_slot_row(row, {24: "KNEE_BEND", 25: "JUMP_F", 29: "FALL", 84: "DAMAGE_AIR_1"})
-    assert got == "F08f_body_contact_candidate_filter_residual"
+    assert got == "F28_body_contact_candidate_narrowphase_owner"
 
 
 def test_classify_item_slot_row_moves_specialn_gun_identity_before_guard_owner() -> None:

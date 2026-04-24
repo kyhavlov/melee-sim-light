@@ -1539,10 +1539,18 @@ void mpcoll_ground_apply(MslBatch* batch) {
                // Callback ordering is Anim then Coll (Fighter_procMap/Fighter_8006A360). Require a
                // sustained EscapeAir ownership window (already EscapeAir at frame start) and post-
                // entry anim age before handing ledge-floor sweeps to floor projection.
+               // On ledge floor segments this same handoff is also bounded by the fresh
+               // CollData_X130_Locked window. Late-lock EscapeAir rows still carry a persisted
+               // floor.index, but replay-real rows remain airborne over the ledge floor until a
+               // later callback phase; letting those low-x130 frames resolve here grounds air dodge
+               // several frames early.
                // refs/melee/src/melee/ft/fighter.c::{Fighter_procMap,Fighter_8006A360}
                // refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll
+               // refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007D5D4
                prev_action_id == (uint16_t)MSL_ACT_ESCAPE_AIR &&
-               batch->state.action_frame[idx] >= 3)
+               batch->state.action_frame[idx] >= 3 &&
+               (hit_line_idx < 0 || !g->lines[(size_t)hit_line_idx].is_ledge ||
+                ecb_lock_timer >= 5u))
                   ? 1u
                   : 0u;
           const uint8_t escapeair_kneebend_entry_floor_handoff =

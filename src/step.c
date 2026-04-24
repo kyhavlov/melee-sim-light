@@ -90,6 +90,23 @@ static inline void clear_seed_owned_transients_post_frame(MslBatch* batch) {
       // causal state directly; seeded overrides are consumed within the current step only.
       batch->state.turn_kneebend_facing_override[idx] = 0u;
       batch->state.motion_entry_instance_id_override[idx] = 0u;
+      batch->state.combat_shield_hit_int_damage[idx] = 0u;
+    }
+    // Teacher-forced shield-contact lanes are one-step reseed surfaces. Normal rollouts must
+    // return to live shield geometry / collision ordering after the seeded frame.
+    // refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078C70,ftColl_80076CBC}
+    const size_t shield_base =
+        ((size_t)bi * (size_t)MSL_MAX_PLAYERS * (size_t)MSL_MAX_HITBOXES * (size_t)MSL_MAX_PLAYERS);
+    for (int attacker = 0; attacker < num_players; attacker++) {
+      for (int hb = 0; hb < MSL_MAX_HITBOXES; hb++) {
+        for (int victim = 0; victim < num_players; victim++) {
+          const size_t si =
+              shield_base + (((size_t)attacker * (size_t)MSL_MAX_HITBOXES + (size_t)hb) *
+                                 (size_t)MSL_MAX_PLAYERS +
+                             (size_t)victim);
+          batch->state.combat_shield_contact_hb_kind[si] = 0u;
+        }
+      }
     }
   }
 }
@@ -171,7 +188,12 @@ static inline void cache_floor_sweep_prev_y(MslBatch* batch) {
   for (int bi = 0; bi < batch->batch_size; bi++) {
     for (int p = 0; p < num_players; p++) {
       const size_t idx = msl_idx_player(bi, p);
-      batch->state.floor_sweep_prev_pos_y[idx] = batch->state.pos_y[idx];
+      if (batch->state.floor_sweep_seed_prev_valid[idx]) {
+        batch->state.floor_sweep_prev_pos_y[idx] = batch->state.floor_sweep_seed_prev_pos_y[idx];
+        batch->state.floor_sweep_seed_prev_valid[idx] = 0u;
+      } else {
+        batch->state.floor_sweep_prev_pos_y[idx] = batch->state.pos_y[idx];
+      }
     }
   }
 }

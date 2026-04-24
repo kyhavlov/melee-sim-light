@@ -1957,17 +1957,20 @@ def test_derive_combat_hitlist_seed_fields_per_hitbox_schema_shape() -> None:
         data_root="data",
     )
 
-    assert len(out) == 5
-    group_cd, group_iid, hb_valid, hb_cd, hb_iid = out
+    assert len(out) == 6
+    group_cd, group_iid, hb_valid, hb_cd, hb_iid, shield_contact_kind = out
     assert group_cd.shape == (n, 4, 8, 4)
     assert group_iid.shape == (n, 4, 8, 4)
     assert hb_valid.shape == (n, 4, 4)
     assert hb_cd.shape == (n, 4, 4, 4)
     assert hb_iid.shape == (n, 4, 4, 4)
+    assert shield_contact_kind.shape == (n, 4, 4, 4)
     assert group_cd.dtype == np.uint16
     assert hb_valid.dtype == np.uint8
+    assert shield_contact_kind.dtype == np.uint8
     assert not bool(np.any(group_cd))
     assert not bool(np.any(hb_valid))
+    assert not bool(np.any(shield_contact_kind))
 
 
 def test_seed_bridge_trim_preserves_authoritative_per_hitbox_hitlist() -> None:

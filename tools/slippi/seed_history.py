@@ -846,6 +846,14 @@ def derive_guard_release_lockout_and_lightshield(
             light = np.float32(0.0)
 
         if in_guard_set_off:
+            # GuardSetOff exit is owned by the hidden mv.co.guard.xC latch:
+            # ftCo_GuardSetOff_Anim reads xC directly when the GuardDamage animation completes.
+            # Slippi post-frames do not expose that move-var, and GuardSetOff_IASA is empty, so
+            # visible LR release during shieldstun must not synthesize a new xC latch. Preserve only
+            # the latch value that existed before GuardSetOff entry.
+            # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
+            #   ftCo_GuardSetOff_Anim,ftCo_GuardSetOff_IASA,ftCo_80092BCC}
+
             if prev_a != int(act_guard_set_off) and not prev_in_guard and x10 == 0:
                 # Snapshot bridge: replay post-frames can show direct non-guard -> GuardSetOff
                 # boundaries when the preceding GuardOn/Guard/GuardReflect context is absent.
@@ -2019,6 +2027,10 @@ def derive_damage_jump_buffer_x14(
     - Resets on causal entry into the configured damage-action family.
     - Resets on in-family fresh-hit boundaries (`hitstun` increase), matching that
       ftCo_8008DCE0 clears x14 on damage re-entry.
+    - Slippi exposes replay-visible stick timers, not the callback-local hidden `x671` value that
+      `ftCo_Jump_GetInput` observes inside hitstun. Replay-real DamageAir controls show old
+      tap-jump tilts can remain visible while the hidden damage x14 lane is not live; XY edges are
+      the reliable prefix-causal producer for this seed surface.
     """
     a = np.asarray(action_id, dtype=np.uint16).reshape(-1)
     hs = np.asarray(hitstun_u16, dtype=np.uint16).reshape(-1)
@@ -2059,10 +2071,19 @@ def derive_damage_jump_buffer_x14(
         jump_input = False
         if (int(bp[i]) & xy) != 0:
             jump_input = True
-        elif sy[i] >= tap_thr and int(tty[i]) < tilt_max:
-            jump_input = True
+        # Do not seed x14 from replay-visible tap-jump tilt alone. The decomp callback samples the
+        # hidden input-timer lane in `ftCo_Jump_GetInput`; Slippi's visible post-frame tilt timer
+        # over-approximates that owner and creates stale post-hitstun JumpAerial entries.
+        # Runtime still supports tap-jump through the live `damage_jump_input_from_edges` path.
 
         if int(hs[i]) > 0 and jump_input:
+            x14 = int(hs[i])
+        elif int(hs[i]) > 0 and x14 > int(hs[i]):
+            # `mv.co.damage.x14` is compared against the live damage timer during Damage_IASA.
+            # Clamp the replay seed to the current remaining hitstun so a prefix-causal XY edge
+            # remains available on the terminal hitstun-exit row without overextending beyond the
+            # decomp damage timer that owns the gate.
+            # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{doIasa,ftCo_Damage_IASA}
             x14 = int(hs[i])
 
         out[i] = np.uint16(max(0, min(x14, 0xFFFF)))

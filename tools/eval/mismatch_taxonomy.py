@@ -269,6 +269,25 @@ FAMILY_META: dict[str, FamilyMeta] = {
             "refs/melee/src/sysdolphin/baselib/random.c::HSD_Randf",
         ),
     ),
+    "F26_damageflyroll_rng_stream_seed_surface": FamilyMeta(
+        label="DamageFlyRoll RNG Stream / Seed Surface",
+        owner_module="combat",
+        fix_type="seed surface",
+        risk="high",
+        confidence="high",
+        hypothesis=(
+            "Remaining DamageFlyRoll rows are not the shared damage/contact followup owner. They "
+            "are the exact ftCo_8008DCE0 DamageFlyRoll RNG draw and hidden pre-gate RNG stream "
+            "position, after the known Fighter_8006CDA4 visible-action consume-count seed lanes "
+            "were modeled and broad visible-action gates were rejected."
+        ),
+        refs=(
+            "refs/melee/src/melee/ft/fighter.c::Fighter_8006CDA4",
+            "refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0",
+            "refs/melee/src/sysdolphin/baselib/random.c::HSD_Randf",
+            "tools/eval/damageflyroll_rng_blocker_report.py",
+        ),
+    ),
     "F07_knockdown_grounding": FamilyMeta(
         label="DamageFly / Passive / DownBound Grounding",
         owner_module="locomotion",
@@ -396,6 +415,25 @@ FAMILY_META: dict[str, FamilyMeta] = {
             "data/special_msids/{fox,falco}.json",
             "refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000ACFC,lbColl_8000805C,lbColl_80006E58}",
             "refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078C70,ftColl_80076ED8}",
+        ),
+    ),
+    "F28_body_contact_candidate_narrowphase_owner": FamilyMeta(
+        label="BODY Candidate / Exact Narrowphase Owner",
+        owner_module="lbcoll_narrowphase",
+        fix_type="instrumentation first",
+        risk="high",
+        confidence="high",
+        hypothesis=(
+            "Rows where the pre-combat candidate/selected BODY surface exists, but vanilla either "
+            "rejects that selected primitive or admits a different BODY contact. This is the exact "
+            "ftColl_80078C70 / ftColl_80076ED8 candidate ordering and lbColl_80006E58 / "
+            "lbColl_8000805C narrowphase surface, not shared post-admission combat followup."
+        ),
+        refs=(
+            "src/api.c::msl_batch_debug_step_input_pre_combat",
+            "src/combat.c::combat_resolve",
+            "refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078C70,ftColl_80076ED8}",
+            "refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000805C,lbColl_80006E58,lbColl_80008248}",
         ),
     ),
     "F05b_damage_hurt_height_selection_residual": FamilyMeta(
@@ -582,6 +620,74 @@ FAMILY_META: dict[str, FamilyMeta] = {
             "refs/melee/src/melee/mp/mpcoll.c",
         ),
     ),
+    "F27a_damagefly_floor_contact_callback_phase": FamilyMeta(
+        label="DamageFly Floor-Contact Callback Phase",
+        owner_module="locomotion",
+        fix_type="runtime-only",
+        risk="med",
+        confidence="high",
+        hypothesis=(
+            "DamageFly* rows whose remaining disagreement is the frame on which "
+            "ftCo_DamageFly_Coll / ftCo_80090184 reaches floor-contact followup, not the already "
+            "closed Passive / PassiveStand / DownBound selector."
+        ),
+        refs=(
+            "refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{ftCo_DamageFly_Coll,ftCo_80090184}",
+            "refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownBound.c::ftCo_DownBound_Coll",
+            "refs/melee/src/melee/mp/mpcoll.c",
+        ),
+    ),
+    "F27b_damage_air_landing_action_callback_phase": FamilyMeta(
+        label="Damage/Aerial Landing Action Callback Phase",
+        owner_module="locomotion",
+        fix_type="runtime-only",
+        risk="med",
+        confidence="high",
+        hypothesis=(
+            "DamageAir/DamageFall/DamageHi rows whose remaining disagreement is the same-frame "
+            "Anim/IASA/Coll transition into Fall, Landing, KneeBend, Turn, Dash, or a special "
+            "dispatcher. The BODY hit has either already resolved or is absent."
+        ),
+        refs=(
+            "refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{ftCo_Damage_Anim,ftCo_DamageFall_Coll}",
+            "refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::{ftCo_Fall_IASA,ftCo_Fall_Coll}",
+            "refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c",
+            "refs/melee/src/melee/mp/mpcoll.c",
+        ),
+    ),
+    "F27c_passivewall_contact_callback_phase": FamilyMeta(
+        label="PassiveWall Contact Callback Phase",
+        owner_module="locomotion",
+        fix_type="runtime-only",
+        risk="med",
+        confidence="high",
+        hypothesis=(
+            "PassiveWall/PassiveWallJump rows are wall-contact callback and walljump input phase "
+            "ownership. They do not share the floor Passive / PassiveStand / DownBound selector."
+        ),
+        refs=(
+            "refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_DamageFly_Coll",
+            "refs/melee/src/melee/ft/chara/ftCommon/ftCo_PassiveWall.c",
+            "refs/melee/src/melee/mp/mpcoll.c",
+        ),
+    ),
+    "F27d_down_damage_hidden_timer_phase": FamilyMeta(
+        label="Down/DownDamage Hidden Timer Phase",
+        owner_module="knockdown",
+        fix_type="seed surface",
+        risk="med",
+        confidence="high",
+        hypothesis=(
+            "Down*, DownDamage*, and Passive rows whose visible disagreement is the hidden downed "
+            "state timer/input phase, including mv.co.downdamage.x0 and DownFoward/DownBack/"
+            "DownAttack callback ordering, after the shared contact selector is closed."
+        ),
+        refs=(
+            "refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownDamage.c",
+            "refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownBound.c",
+            "refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownAttack.c",
+        ),
+    ),
     "F08d_damage_timer_scalar_residual": FamilyMeta(
         label="Damage Timer / Scalar Residual",
         owner_module="timers",
@@ -659,6 +765,26 @@ FAMILY_META: dict[str, FamilyMeta] = {
             "refs/melee/src/melee/ft/ftcoll.c::{ftColl_80076444,ftColl_80076CBC}",
             "refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC",
             "refs/melee/src/melee/lb/lbcollision.c::lbColl_8000ACFC",
+        ),
+    ),
+    "F29_aerial_contact_hitlag_provenance": FamilyMeta(
+        label="Aerial Contact-Hitlag Provenance",
+        owner_module="combat",
+        fix_type="seed surface",
+        risk="med",
+        confidence="high",
+        hypothesis=(
+            "Aerial rows with aligned action state but hitlag / hitlag-bit disagreement are "
+            "HitCapsule victim-provenance rows: mostly shield HitCapsule / ShieldDesc geometry, "
+            "plus narrow aerial Shine contact-hitlag handoff rows. They require the hidden "
+            "ftColl latch / descriptor provenance surface rather than another BODY damage "
+            "continuation branch."
+        ),
+        refs=(
+            "refs/melee/src/melee/ft/ftcoll.c::{ftColl_80076CBC,ftColl_80076808,ftColl_80078C70}",
+            "refs/melee/src/melee/lb/lbcollision.c::{lbColl_80007BCC,lbColl_8000ACFC}",
+            "src/api.c",
+            "src/hitboxes.c",
         ),
     ),
     "F09e_aerial_instance_timing_residual": FamilyMeta(
@@ -1640,25 +1766,25 @@ def _family_for_debug_body_contact_residual(
                 # selection miss, not an item lifetime owner. Keep item-only slot rows in F16d.
                 # refs/melee/src/melee/ft/ftcoll.c::ftColl_8007925C
                 # refs/melee/src/melee/lb/lbcollision.c::{lbColl_80008248,lbColl_80007AFC}
-                return "F08f_body_contact_candidate_filter_residual"
+                return "F28_body_contact_candidate_narrowphase_owner"
             special_family = _special_owner_family_for_names(
                 (seed_name, precombat_name, ref_name, out_name),
                 include_entry_dispatch=False,
             )
             if special_family is not None:
                 return special_family
-            return "F08c_damage_state_transition_adjacency"
+            return _damage_transition_callback_family((seed_name, ref_name, out_name))
         if active_special_attacker_hitbox_count > 0:
             special_family = _special_owner_family_for_names(
                 (seed_name, precombat_name, ref_name, out_name),
                 include_entry_dispatch=False,
             )
-            return special_family or _special_owner_family_for_msid(first_msid) or "F08f_body_contact_candidate_filter_residual"
+            return special_family or _special_owner_family_for_msid(first_msid) or "F28_body_contact_candidate_narrowphase_owner"
         return "F10k_body_no_candidate_action_timing"
 
     if outcome == "sim_missed_body_or_damage":
         _ = first_msid
-        return "F08f_body_contact_candidate_filter_residual"
+        return "F28_body_contact_candidate_narrowphase_owner"
 
     if outcome == "sim_false_body_or_damage" and selected_body_count > 0:
         has_timebase_divergence = (
@@ -1682,7 +1808,7 @@ def _family_for_debug_body_contact_residual(
             # selection surface, not the SpecialLw/SpecialN/... Anim/IASA/Coll callback.
             # refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078C70,ftColl_80076ED8}
             # refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000805C,lbColl_80006E58}
-            return "F08f_body_contact_candidate_filter_residual"
+            return "F28_body_contact_candidate_narrowphase_owner"
 
     # The residual still has a pre-combat BODY candidate/selection, but it is not one of the
     # currently split Fox/Falco RL1.0 current-frame clusters.
@@ -1706,6 +1832,35 @@ def _looks_like_knockdown_contact_destination(name: str) -> bool:
 
 def _looks_like_passive_wall(name: str) -> bool:
     return name.startswith("PASSIVE_WALL")
+
+
+def _damage_transition_callback_family(names: tuple[str, str, str]) -> str:
+    # These rows have already left the shared post-admission combat owner. Keep them split by the
+    # source callback that still owns the frame boundary instead of hiding them in one broad
+    # damage-transition residual.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{ftCo_Damage_Anim,ftCo_DamageFly_Coll}
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_PassiveWall.c
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownDamage.c
+    if any(_looks_like_passive_wall(name) for name in names):
+        return "F27c_passivewall_contact_callback_phase"
+    if (
+        any(_looks_like_damagefly(name) for name in names)
+        and any(
+            name
+            in {
+                "PASSIVE",
+                "PASSIVE_STAND_F",
+                "PASSIVE_STAND_B",
+                "DOWN_BOUND_U",
+                "DOWN_BOUND_D",
+            }
+            for name in names
+        )
+    ):
+        return "F27a_damagefly_floor_contact_callback_phase"
+    if any(name.startswith("DOWN_") or name == "PASSIVE" for name in names):
+        return "F27d_down_damage_hidden_timer_phase"
+    return "F27b_damage_air_landing_action_callback_phase"
 
 
 def _is_knockdown_selector_disagreement(names: tuple[str, str, str]) -> bool:
@@ -2007,7 +2162,7 @@ def _specials_hard_moved_family(row: PlayerRow, names: tuple[str, str, str], fie
     if not any(_looks_like_specials(name) for name in names):
         return None
     if _looks_like_current_frame_body_admission_disagreement(row, names, field_set):
-        return "F08f_body_contact_candidate_filter_residual"
+        return "F28_body_contact_candidate_narrowphase_owner"
     if any(_looks_like_special_air_s(name) for name in names):
         if field_set <= (STATE_FLAG_FIELDS | {"hurtbox_state", "action_frame"}):
             return "F09a_aerial_stateflag_hurtbox_adjacency"
@@ -2026,7 +2181,7 @@ def _specialhi_hard_moved_family(row: PlayerRow, names: tuple[str, str, str], fi
         # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c
         if field_set & {"hitlag", "hitstun", "facing", "speed_x_attack", "speed_y_attack", "state_flags[1]"}:
             return "F08d_damage_timer_scalar_residual"
-        return "F08c_damage_state_transition_adjacency"
+        return _damage_transition_callback_family(names)
     if field_set and field_set <= {"ground_id"}:
         # A pure ground-id mismatch in SpecialHiLanding is shared mpColl floor-line identity, not
         # Firefox launch or Bound ownership.
@@ -2083,7 +2238,7 @@ def _speciallw_hard_moved_family(row: PlayerRow, names: tuple[str, str, str], fi
         # refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
         # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c
         # refs/melee/src/melee/ft/ftcoll.c::ftColl_8007A06C
-        return "F08c_damage_state_transition_adjacency"
+        return _damage_transition_callback_family(names)
     if field_set and field_set <= (STATE_FLAG_FIELDS | {"hurtbox_state", "action_frame"}):
         # Pure visible hit-status/state-flag tails in Shine context are x1988/x198C composition
         # or shared state-flag ownership. Keep action/contact/source bundles in F20; move only
@@ -2100,7 +2255,7 @@ def _speciallw_hard_moved_family(row: PlayerRow, names: tuple[str, str, str], fi
         # refs/melee/src/melee/ft/ftcoll.c::ftColl_8007A06C
         # refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
         if any(_looks_like_aerial(name) for name in names):
-            return "F09d_aerial_contact_hitlag_residual"
+            return "F29_aerial_contact_hitlag_provenance"
         return "F10b_grounded_combat_adjacency"
     if (
         field_set
@@ -2113,7 +2268,7 @@ def _speciallw_hard_moved_family(row: PlayerRow, names: tuple[str, str, str], fi
         # callback disagreement.
         # refs/melee/src/melee/ft/ftcoll.c::ftColl_8007A06C
         # refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
-        return "F09d_aerial_contact_hitlag_residual"
+        return "F29_aerial_contact_hitlag_provenance"
     if (
         field_set
         and field_set <= {"hitlag", "state_flags[1]", "last_attack_landed", "combo_count", "instance_id"}
@@ -2218,7 +2373,7 @@ def _common_fallspecial_hard_moved_family(
             return "F08a_damage_identity_bookkeeping_residual"
         if field_set & {"hitlag", "hitstun", "facing", "speed_x_attack", "speed_y_attack", "state_flags[1]"}:
             return "F08d_damage_timer_scalar_residual"
-        return "F08c_damage_state_transition_adjacency"
+        return _damage_transition_callback_family(names)
     if field_set and field_set <= {"ground_id"}:
         # A lone floor id mismatch in LandingFallSpecial/EscapeAir context is the shared mpColl
         # floor-line owner. Rows with action/on_ground/jump bundles remain in F13a because they are
@@ -2355,7 +2510,7 @@ def _classify_player_row(row: PlayerRow, action_names: dict[int, str]) -> str:
         or row.seed_action_id == 91
         or (row.seed_action_id == 90 and row.ref_action_id == 91)
     ):
-        return "F06_damageflyroll_rng_gate"
+        return "F26_damageflyroll_rng_stream_seed_surface"
     if any(_looks_like_match_flow(name) for name in names):
         return "F04_match_flow_rebirth"
     if any(_looks_like_guard(name) for name in names):
@@ -2422,11 +2577,11 @@ def _classify_player_row(row: PlayerRow, action_names: dict[int, str]) -> str:
         if any(_looks_like_landing_cliff_or_fall(name) for name in names) or any(
             name in {"DASH", "TURN", "KNEE_BEND", "WAIT", "WALK_SLOW"} for name in names
         ):
-            return "F08c_damage_state_transition_adjacency"
+            return _damage_transition_callback_family(names)
         if any(name.startswith("DOWN_") or name.startswith("PASSIVE") for name in names):
-            return "F08c_damage_state_transition_adjacency"
+            return _damage_transition_callback_family(names)
         if field_set & {"action_id", "animation_index", "on_ground", "ground_id", "hurtbox_state"}:
-            return "F08c_damage_state_transition_adjacency"
+            return _damage_transition_callback_family(names)
         if field_set & {"hitlag", "hitstun", "action_frame", "combo_count", "last_attack_landed", "state_flags[1]"}:
             return "F08d_damage_timer_scalar_residual"
         return "F08a_damage_identity_bookkeeping_residual"
@@ -2485,7 +2640,7 @@ def _classify_player_row(row: PlayerRow, action_names: dict[int, str]) -> str:
         if field_set & {"hitlag", "hitstun", "state_flags[1]"} and any(
             name.startswith("ATTACK_AIR") for name in names
         ):
-            return "F09d_aerial_contact_hitlag_residual"
+            return "F29_aerial_contact_hitlag_provenance"
         if field_set & {
             "action_id",
             "animation_index",
@@ -2708,7 +2863,7 @@ def _classify_item_slot_row(row: ItemSlotRow, action_names: dict[int, str]) -> s
         # owned by BODY candidate selection rather than independent item lifetime.
         # refs/melee/src/melee/ft/ftcoll.c::ftColl_8007925C
         # refs/melee/src/melee/lb/lbcollision.c::{lbColl_80008248,lbColl_80007AFC}
-        return "F08f_body_contact_candidate_filter_residual"
+        return "F28_body_contact_candidate_narrowphase_owner"
     if field_set and field_set <= {"item_instance_id"} and item_types & {54, 55}:
         return "F16d_item_body_lifetime"
     if item_types & {74, 75}:
@@ -2774,6 +2929,14 @@ def _audit_player_row(row: PlayerRow, action_names: dict[int, str]) -> tuple[boo
             or (row.seed_action_id == 90 and row.ref_action_id == 91)
         )
         return ok, "DamageFlyRoll admission/gate context"
+    if row.family_id == "F26_damageflyroll_rng_stream_seed_surface":
+        ok = (
+            row.ref_action_id == 91
+            or row.out_action_id == 91
+            or row.seed_action_id == 91
+            or (row.seed_action_id == 90 and row.ref_action_id == 91)
+        )
+        return ok, "DamageFlyRoll RNG stream / seed-surface context"
     if row.family_id == "F07_knockdown_grounding":
         ok = (
             any(_looks_like_damagefly(name) for name in names)
@@ -2803,6 +2966,9 @@ def _audit_player_row(row: PlayerRow, action_names: dict[int, str]) -> tuple[boo
     if row.family_id == "F08f_body_contact_candidate_filter_residual":
         ok = _looks_like_current_frame_body_admission_disagreement(row, names, set(field_set))
         return ok, "debug pre-combat BODY candidate exists but admission/filtering differs"
+    if row.family_id == "F28_body_contact_candidate_narrowphase_owner":
+        ok = _looks_like_current_frame_body_admission_disagreement(row, names, set(field_set))
+        return ok, "BODY candidate / exact narrowphase owner"
     if row.family_id == "F05b_damage_hurt_height_selection_residual":
         ok = (
             any(_looks_like_damage(name) for name in names)
@@ -2826,6 +2992,31 @@ def _audit_player_row(row: PlayerRow, action_names: dict[int, str]) -> tuple[boo
             or any(name.startswith("DOWN_") or name.startswith("PASSIVE") for name in names)
         )
         return ok, "damage row with transition/landing/Down/Passive adjacency"
+    if row.family_id == "F27a_damagefly_floor_contact_callback_phase":
+        ok = (
+            any(_looks_like_damagefly(name) for name in names)
+            and any(
+                name
+                in {
+                    "PASSIVE",
+                    "PASSIVE_STAND_F",
+                    "PASSIVE_STAND_B",
+                    "DOWN_BOUND_U",
+                    "DOWN_BOUND_D",
+                }
+                for name in names
+            )
+        )
+        return ok, "DamageFly floor-contact callback phase"
+    if row.family_id == "F27b_damage_air_landing_action_callback_phase":
+        ok = any(_looks_like_damage(name) for name in names) and _damage_transition_callback_family(names) == row.family_id
+        return ok, "Damage/Aerial landing or action callback phase"
+    if row.family_id == "F27c_passivewall_contact_callback_phase":
+        ok = any(_looks_like_passive_wall(name) for name in names)
+        return ok, "PassiveWall contact callback phase"
+    if row.family_id == "F27d_down_damage_hidden_timer_phase":
+        ok = any(name.startswith("DOWN_") or name == "PASSIVE" for name in names)
+        return ok, "Down/DownDamage hidden timer phase"
     if row.family_id == "F08d_damage_timer_scalar_residual":
         ok = any(_looks_like_damage(name) for name in names) and bool(
             field_set & {"hitlag", "hitstun", "action_frame", "combo_count", "last_attack_landed", "state_flags[1]"}
@@ -2882,6 +3073,13 @@ def _audit_player_row(row: PlayerRow, action_names: dict[int, str]) -> tuple[boo
             and not any(_looks_like_damage(name) for name in names)
         )
         return ok, "AttackAir row with contact hitlag/state-flag residual and no damage state"
+    if row.family_id == "F29_aerial_contact_hitlag_provenance":
+        ok = (
+            any(_looks_like_aerial(name) for name in names)
+            and bool(field_set & {"hitlag", "hitstun", "state_flags[1]"})
+            and not any(_looks_like_damage(name) for name in names)
+        )
+        return ok, "aerial contact-hitlag provenance row"
     if row.family_id == "F09e_aerial_instance_timing_residual":
         ok = any(_looks_like_aerial(name) for name in names)
         return ok, "aerial/jump residual after finer F09 splits"
@@ -3090,6 +3288,11 @@ def _audit_item_row(row: ItemSlotRow, action_names: dict[int, str]) -> tuple[boo
             name.startswith("THROW_") or name.startswith("THROWN_") or _looks_like_capture(name) for name in names
         )
         return ok, "laser BODY candidate/filter item row"
+    if row.family_id == "F28_body_contact_candidate_narrowphase_owner":
+        ok = bool(item_types & {54, 55}) and not any(
+            name.startswith("THROW_") or name.startswith("THROWN_") or _looks_like_capture(name) for name in names
+        )
+        return ok, "laser BODY candidate / exact narrowphase item fallout"
     if row.family_id in {"F09c_aerial_action_entry_adjacency", "F12b_adjacent_instance_counter_order"}:
         ok = bool(item_types & {54, 55, 74, 75})
         return ok, "adjacent-family item identity row"

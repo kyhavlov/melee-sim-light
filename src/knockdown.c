@@ -62,6 +62,8 @@ static inline uint8_t is_knockdown_any(uint16_t a) {
 static inline uint8_t is_passivewall_action(uint16_t a);
 static inline void passivewall_launch_from_timer_expiry(MslBatch* batch, const MslCharParams* ch,
                                                         size_t idx);
+static inline uint8_t passivewall_iasa_try_air_options(MslBatch* batch, const MslCommonParams* c,
+                                                       const MslCharParams* ch, size_t idx);
 
 static inline uint16_t down_wait_action_from_bound(uint16_t bound_act) {
   return (bound_act == (uint16_t)MSL_ACT_DOWN_BOUND_U) ? (uint16_t)MSL_ACT_DOWN_WAIT_U
@@ -363,11 +365,45 @@ static inline uint8_t damage_ground_try_enter_kneebend_from_wait_iasa(MslBatch* 
   return 1u;
 }
 
+static inline uint8_t wait_iasa_try_enter_spotdodge_before_guard(MslBatch* batch,
+                                                                 const MslCommonParams* c,
+                                                                 size_t idx) {
+  if (batch == NULL || c == NULL) {
+    return 0u;
+  }
+  // Wait_IASA checks ftCo_80099794 before ftCo_80091A4C guard entry. This helper is used at
+  // knockdown/damage Anim-callback handoffs where the sim has just entered Wait in this same frame;
+  // steady Wait ownership remains in locomotion.c.
+  //
+  // ftCo_80099794 is narrower than Guard IASA's ftCo_8009980C: it requires held LR and the
+  // `inlineB0` down-stick gate, and it does not consume the c-stick spotdodge helper.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Escape.c::{
+  //   ftCo_80099794,ftCo_80099894,ftCo_800998EC}
+  const uint16_t lr = (uint16_t)(MSL_BUTTON_L | MSL_BUTTON_R);
+  if ((batch->state.input_buttons[idx] & lr) == 0u) {
+    return 0u;
+  }
+  const float stick_y =
+      apply_deadzone(stick_i8_to_unit(batch->state.input_main_y[idx]), c->lstick_deadzone_y);
+  if (!(stick_y <= c->spotdodge_stick_y_threshold &&
+        batch->state.tilt_timer_y[idx] < c->spotdodge_flick_tilt_max_frames)) {
+    return 0u;
+  }
+  batch->state.action_id[idx] = (uint16_t)MSL_ACT_ESCAPE_N;
+  batch->state.animation_index[idx] = (uint32_t)MSL_SM_ESCAPE_N;
+  msl_anim_timebase_enter_with_policy(batch, idx, 0.0f, 1.0f, MSL_ANIM_ENTER_TICK_IMMEDIATE);
+  return 1u;
+}
+
 static inline uint8_t damage_ground_try_enter_guard_from_wait_iasa(MslBatch* batch,
                                                                    const MslCommonParams* c,
                                                                    size_t idx) {
   if (batch == NULL || c == NULL) {
     return 0u;
+  }
+  if (wait_iasa_try_enter_spotdodge_before_guard(batch, c, idx)) {
+    return 1u;
   }
   const uint16_t buttons = batch->state.input_buttons[idx];
   if ((buttons & (uint16_t)MSL_BUTTON_Z) == 0u) {
@@ -732,6 +768,10 @@ static inline void passive_stand_anim_end_try_enter_squat(MslBatch* batch, const
   // refs/melee/src/melee/ft/ft_0892.c::{ft_8008A2BC,ft_8008A348}
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Squat.c::ftCo_Squat_Enter
   if (batch->state.action_id[idx] == (uint16_t)MSL_ACT_WAIT &&
+      wait_iasa_try_enter_spotdodge_before_guard(batch, c, idx)) {
+    return;
+  }
+  if (batch->state.action_id[idx] == (uint16_t)MSL_ACT_WAIT &&
       should_enter_squat_from_wait(batch, c, idx)) {
     enter_squat(batch, idx);
   }
@@ -1008,7 +1048,12 @@ void knockdown_update_pre_physics(MslBatch* batch) {
           batch->state.passivewall_timer[idx] = timer;
           if (timer == 0u) {
             passivewall_launch_from_timer_expiry(batch, ch, idx);
+            if (passivewall_iasa_try_air_options(batch, c, ch, idx)) {
+              continue;
+            }
           }
+        } else if (passivewall_iasa_try_air_options(batch, c, ch, idx)) {
+          continue;
         }
         continue;
       }
@@ -1274,9 +1319,13 @@ void knockdown_update_pre_physics(MslBatch* batch) {
           enter_wait(batch, idx);
 
           // Same-frame Wait IASA subset after roll end (decomp-shaped ordering).
-          // Wait IASA includes guard entry (ftCo_80091A4C) and squat entry (ftCo_800D5FB0).
+          // Wait IASA includes pre-guard held-shield spotdodge (ftCo_80099794), guard entry
+          // (ftCo_80091A4C), and squat entry (ftCo_800D5FB0).
           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
-          guard_update_grounded(batch, c, idx, 1);
+          const uint8_t wait_spotdodge = wait_iasa_try_enter_spotdodge_before_guard(batch, c, idx);
+          if (!wait_spotdodge) {
+            guard_update_grounded(batch, c, idx, 1);
+          }
           if (batch->state.action_id[idx] == (uint16_t)MSL_ACT_WAIT &&
               should_enter_squat_from_wait(batch, c, idx)) {
             enter_squat(batch, idx);
@@ -1891,8 +1940,35 @@ static inline void passivewall_launch_from_timer_expiry(MslBatch* batch, const M
   }
 }
 
-static inline void enter_passive_walljump_from_damage_air(MslBatch* batch, size_t idx,
-                                                          uint16_t prev_action_id) {
+static inline uint8_t passivewall_iasa_try_air_options(MslBatch* batch, const MslCommonParams* c,
+                                                       const MslCharParams* ch, size_t idx) {
+  if (batch == NULL || c == NULL || ch == NULL) {
+    return 0u;
+  }
+  if (batch->state.passivewall_timer[idx] != 0u) {
+    return 0u;
+  }
+  // Decomp: after mv.co.passivewall.timer reaches zero, PassiveWall_IASA runs the common aerial
+  // option ladder. Fox/Falco B-specials are owned by the dedicated Shine/Blaster passes, so keep
+  // B-edge rows in PassiveWall here; the retained subset covers the later AttackAir and
+  // JumpAerial entries in source order.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_PassiveWall.c::ftCo_PassiveWall_IASA
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_CheckItemThrowInput
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::ftCo_800CB870
+  if ((batch->state.input_buttons_pressed[idx] & (uint16_t)MSL_BUTTON_B) == 0u &&
+      locomotion_attackair_try_enter_from_air_iasa(batch, c, idx)) {
+    return 1u;
+  }
+  if ((batch->state.input_buttons_pressed[idx] & (uint16_t)MSL_BUTTON_B) == 0u &&
+      damage_air_try_jump_aerial(batch, c, ch, idx, 0u)) {
+    return 1u;
+  }
+  return 0u;
+}
+
+static inline void enter_passive_wall_from_damage_air(MslBatch* batch, size_t idx,
+                                                      uint16_t prev_action_id,
+                                                      uint16_t wall_action_id) {
   const MslCommonParams* c = msl_common_params();
   if (batch == NULL || c == NULL) {
     return;
@@ -1900,17 +1976,24 @@ static inline void enter_passive_walljump_from_damage_air(MslBatch* batch, size_
   const uint32_t env = batch->state.coll_env_flags[idx];
   // DamageFly wall-tech ownership:
   // - ftCo_DamageFly_Coll calls ftCo_800C1D38 before ceiling tech / floor tech ladders.
-  // - ftCo_800C1D38 picks PassiveWallJump when ftCo_800C1E0C is true, then ftCo_800C1E64:
+  // - ftCo_800C1D38 picks PassiveWallJump when ftCo_800C1E0C is true, otherwise PassiveWall, then
+  //   ftCo_800C1E64:
   //   * flips facing based on wall side,
-  //   * enters ftCo_MS_PassiveWallJump at frame 0,
+  //   * enters ftCo_MS_PassiveWall{Jump} at frame 0,
   //   * clears damage hitstun ownership,
   //   * calls ftColl_8007B760(..., p_ftCommonData->x764) so x198C-visible hurt status is 2.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_DamageFly_Coll
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_PassiveWall.c::{ftCo_800C1D38,ftCo_800C1E64}
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_PassiveWall.c::{
+  //   ftCo_800C1D38,ftCo_800C1E0C,ftCo_800C1E64}
   // data/common/ft_common_data.json: colanim_passivewall_x1990_frames
   (void)prev_action_id;
-  batch->state.action_id[idx] = (uint16_t)MSL_ACT_PASSIVE_WALL_JUMP;
-  batch->state.animation_index[idx] = (uint32_t)MSL_SM_PASSIVE_WALL_JUMP;
+  const uint16_t target_action = (wall_action_id == (uint16_t)MSL_ACT_PASSIVE_WALL)
+                                     ? (uint16_t)MSL_ACT_PASSIVE_WALL
+                                     : (uint16_t)MSL_ACT_PASSIVE_WALL_JUMP;
+  batch->state.action_id[idx] = target_action;
+  batch->state.animation_index[idx] = (target_action == (uint16_t)MSL_ACT_PASSIVE_WALL)
+                                          ? (uint32_t)MSL_SM_PASSIVE_WALL
+                                          : (uint32_t)MSL_SM_PASSIVE_WALL_JUMP;
   msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
   batch->state.hitstun[idx] = 0u;
   batch->state.speed_air_x_self[idx] = 0.0f;
@@ -1926,7 +2009,7 @@ static inline void enter_passive_walljump_from_damage_air(MslBatch* batch, size_
   } else if ((env & (uint32_t)MSL_COLLIDE_LEFT_WALL_HUG) != 0u) {
     batch->state.facing[idx] = 0u;
   }
-  passivewall_align_entry_x(batch, idx, (uint16_t)MSL_SM_PASSIVE_WALL_JUMP);
+  passivewall_align_entry_x(batch, idx, (uint16_t)batch->state.animation_index[idx]);
   enum { MSL_STATE_FLAGS_221C_INDEX = 3 };
   enum { MSL_STATE_FLAG_221C_IS_HITSTUN = 0x02 };
   const size_t flags_i = idx * (size_t)MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_221C_INDEX;
@@ -1979,9 +2062,26 @@ static inline uint16_t pick_downbound_action_from_pose(const MslBatch* batch, si
     return (uint16_t)MSL_ACT_DOWN_BOUND_U;
   }
 
-  // Decomp: ftCo_80097570 uses the Hip joint matrix and returns true when a chosen element is > 0.
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownBound.c::ftCo_80097570
-  const float f = m[5];  // m11 (row 1, col 1) when using the "x2226_b0 == 0" axis selection.
+  // Decomp: ftCo_80097570 uses the live Hip joint matrix and returns true when a chosen element
+  // is > 0. DamageFlyRoll is not a plain SSANIM pose: its Anim/Phys callbacks call doFlyRoll,
+  // which writes a runtime XRotN rotation from the current self+KB velocity before collision
+  // followup can enter DownBound. Apply the same parent X-axis rotation to the sampled Hip matrix
+  // for this selector; otherwise static DamageFlyRoll matrices choose DownBoundU for rows where
+  // the engine's live XRotN transform chooses DownBoundD.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownBound.c::{
+  //   ftCo_80097570,ftCo_8009794C}
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{
+  //   doFlyRoll,ftCo_DamageFlyRoll_Anim,ftCo_DamageFlyRoll_Phys,ftCo_DamageFlyRoll_Coll}
+  float f = m[5];  // m11 (row 1, col 1) when using the "x2226_b0 == 0" axis selection.
+  if (cur_action_id == (uint16_t)MSL_ACT_DAMAGE_FLY_ROLL) {
+    const float facing_dir = batch->state.facing[idx] ? 1.0f : -1.0f;
+    const float vel_x = batch->state.speed_air_x_self[idx] + batch->state.speed_x_attack[idx];
+    const float vel_y = batch->state.speed_y_self[idx] + batch->state.speed_y_attack[idx];
+    const float trajectory = facing_dir * atan2f(vel_x, vel_y);
+    const float c = cosf(trajectory);
+    const float s = sinf(trajectory);
+    f = c * m[5] - s * m[9];
+  }
   return (f > 0.0f) ? (uint16_t)MSL_ACT_DOWN_BOUND_U : (uint16_t)MSL_ACT_DOWN_BOUND_D;
 }
 
@@ -2065,9 +2165,11 @@ void knockdown_update_post_collision(MslBatch* batch) {
       if (!was_ground && !now_ground && is_damage_fly_action(a0) &&
           tech_is_available(batch, c, idx) &&
           (batch->state.coll_env_flags[idx] &
-           ((uint32_t)MSL_COLLIDE_LEFT_WALL_HUG | (uint32_t)MSL_COLLIDE_RIGHT_WALL_HUG)) != 0u &&
-          passivewall_prefers_jump(batch, c, idx)) {
-        enter_passive_walljump_from_damage_air(batch, idx, a0);
+           ((uint32_t)MSL_COLLIDE_LEFT_WALL_HUG | (uint32_t)MSL_COLLIDE_RIGHT_WALL_HUG)) != 0u) {
+        const uint16_t wall_action = passivewall_prefers_jump(batch, c, idx)
+                                         ? (uint16_t)MSL_ACT_PASSIVE_WALL_JUMP
+                                         : (uint16_t)MSL_ACT_PASSIVE_WALL;
+        enter_passive_wall_from_damage_air(batch, idx, a0, wall_action);
         continue;
       }
 

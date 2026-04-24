@@ -27,7 +27,9 @@ def test_damage_jump_buffer_x14_derivation_is_prefix_invariant() -> None:
         dtype=np.uint16,
     )
     hitstun = np.array([0, 0, 4, 3, 2, 1, 0, 0, 0], dtype=np.uint16)
-    # Press XY on frame 3 (x14=3), then tap-jump on frame 5 after the action switch (x14=1).
+    # Press XY on frame 3 (x14=3, then clamped by the remaining hitstun timer). Replay-visible
+    # tap-jump tilt alone is not a reliable seed producer for the hidden damage x14 lane, so the
+    # frame-5 tap does not replace the XY seed.
     buttons_pressed = np.array([0, 0, 0, 0x0C00, 0, 0, 0, 0, 0], dtype=np.uint16)
     stick_y = np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.8, 0.0, 0.0, 0.0], dtype=np.float32)
     tilt_timer_y = np.array([0xFE, 0xFE, 0, 0, 0, 0, 0, 0xFE, 0xFE], dtype=np.uint8)
@@ -47,7 +49,7 @@ def test_damage_jump_buffer_x14_derivation_is_prefix_invariant() -> None:
     # Smoke-check key transitions.
     assert int(full[2]) == 0
     assert int(full[3]) == 3
-    assert int(full[4]) == 3
+    assert int(full[4]) == 2
     assert int(full[5]) == 1
     assert int(full[7]) == 0
 
@@ -77,8 +79,8 @@ def test_damage_jump_buffer_x14_persists_across_damagefly_to_damagefall() -> Non
         [
             act_wait,
             act_damage_fly_n,  # damage entry: x14 reset
-            act_damage_fly_n,  # XY press while in hitstun: x14 <- hitstun
-            act_damage_fall,  # same damage family transition: preserve x14
+            act_damage_fly_n,  # XY press while in hitstun: x14 <- hitstun, then timer-clamped
+            act_damage_fall,  # same damage family transition: preserve the clamped x14
             act_damage_fall,
             act_fall,  # outside damage family: x14 cleared
         ],
@@ -101,7 +103,7 @@ def test_damage_jump_buffer_x14_persists_across_damagefly_to_damagefall() -> Non
         damage_actions=(act_damage_fly_n, act_damage_fall),
     )
 
-    assert [int(x) for x in full] == [0, 3, 3, 3, 3, 0]
+    assert [int(x) for x in full] == [0, 3, 2, 1, 1, 0]
 
     for k in (1, 2, 3, 4, 5, int(action_id.size)):
         got = derive_damage_jump_buffer_x14(
@@ -129,8 +131,8 @@ def test_damage_jump_buffer_x14_prefix_invariant_across_damagefly_family_action_
         [
             act_wait,
             act_damage_fly_n,  # damage entry
-            act_damage_fly_n,  # set x14 from jump input
-            act_damage_fly_top,  # in-family action change: keep x14 lane
+            act_damage_fly_n,  # set x14 from jump input, then clamp to remaining hitstun
+            act_damage_fly_top,  # in-family action change: keep the clamped x14 lane
             act_damage_fly_top,
             act_damage_fall,  # still in damage-family lane
             act_damage_fall,  # fresh hit boundary (hitstun rises): reset x14
@@ -155,7 +157,7 @@ def test_damage_jump_buffer_x14_prefix_invariant_across_damagefly_family_action_
         damage_actions=(act_damage_fly_n, act_damage_fly_top, act_damage_fall),
     )
 
-    assert [int(x) for x in full] == [0, 5, 5, 5, 5, 5, 0, 5]
+    assert [int(x) for x in full] == [0, 5, 4, 3, 2, 1, 0, 5]
 
     for k in (1, 2, 3, 4, 5, 6, 7, int(action_id.size)):
         got = derive_damage_jump_buffer_x14(

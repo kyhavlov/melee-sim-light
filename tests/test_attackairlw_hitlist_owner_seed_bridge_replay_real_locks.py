@@ -27,7 +27,7 @@ def test_attackairlw_hitlist_owner_seed_bridge_target_pm1_both_players_strict_lo
     _skip_if_required_artifacts_missing(root)
 
     dataset_rel = (
-        "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
+        "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/"
         "TreasuredBackKangaroo.msl"
     )
     dataset_path = root / dataset_rel
@@ -84,9 +84,17 @@ def test_attackairlw_hitlist_owner_seed_bridge_target_pm1_both_players_strict_lo
             1,
             69,  # AttackAirLw
         ),
+        (
+            "datasets/aggregate_recent/replays/validation/aggregate_recent/"
+            "HilariousVillainousGiraffe.msl",
+            3276,
+            0,
+            1,
+            67,  # AttackAirB
+        ),
     ],
 )
-def test_attackairlw_replay_only_shield_admission_valid_empty_hitcapsule_locks(
+def test_attackair_replay_only_shield_admission_valid_empty_hitcapsule_locks(
     dataset_rel: str, record: int, p_attacker: int, p_defender: int, attacker_action: int
 ) -> None:
     # Replay-real locks for the non-causal per-HitCapsule shield-admission seed lane:
@@ -99,7 +107,7 @@ def test_attackairlw_replay_only_shield_admission_valid_empty_hitcapsule_locks(
     #   HitCapsule rings directly.
     # refs/melee/src/melee/ft/ftcoll.c::{ftColl_800768A0,ftColl_80076CBC}
     # refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000ACFC,lbColl_80008688}
-    # data/moves/falco.json::moves.ftCo_SM_AttackAirLw.events.create_hitbox
+    # data/moves/{fox,falco}.json::moves.ftCo_SM_AttackAir*.events.create_hitbox
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / dataset_rel
@@ -163,6 +171,45 @@ def test_attackairlw_guard_shield_admission_negative_neighbor_stays_suppressed()
     assert int(seed_t["combat_hitlist_cd"][p_attacker, 0, p_defender]) == 0xFFFF
     assert all(int(v) == 0 for v in seed_t["combat_hitlist_hb_valid"][p_attacker])
     assert int(ref_t1["action_id"][p_defender]) == 178  # GuardOn stays held
+    assert int(ref_t1["hitlag"][p_defender]) == 0
+    assert int(ref_t1["hitlag"][p_attacker]) == 0
+
+    _, ref_row, out_row = _run_one_step_row(dataset_path, record, p_defender)
+    for p in (p_attacker, p_defender):
+        _assert_transition_identity_lock_fields_match_ref(
+            out_row=out_row,
+            ref_row=ref_row,
+            record=record,
+            p=p,
+        )
+
+
+@pytest.mark.integration
+def test_attackairb_guard_shield_admission_negative_neighbor_stays_suppressed() -> None:
+    # Negative adjacent lock for HVG:3275:
+    # - AttackAirB carries the same stale dense hitlist shape as HVG:3276, but the replay-visible
+    #   next row does not enter GuardSetOff/hitlag.
+    # - The replay-only authoritative-empty per-HitCapsule lane must therefore stay off.
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_rel = (
+        "datasets/aggregate_recent/replays/validation/aggregate_recent/"
+        "HilariousVillainousGiraffe.msl"
+    )
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    record = 3275
+    p_attacker = 0
+    p_defender = 1
+    ds = read_dataset(str(dataset_path))
+    seed_t = ds.samples[record]["seed_t"]
+    ref_t1 = ds.samples[record]["ref_t1"]
+    assert int(seed_t["action_id"][p_attacker]) == 67  # AttackAirB
+    assert int(seed_t["combat_hitlist_cd"][p_attacker, 0, p_defender]) == 0xFFFF
+    assert all(int(v) == 0 for v in seed_t["combat_hitlist_hb_valid"][p_attacker])
+    assert int(ref_t1["action_id"][p_defender]) == 179  # Guard stays held
     assert int(ref_t1["hitlag"][p_defender]) == 0
     assert int(ref_t1["hitlag"][p_attacker]) == 0
 

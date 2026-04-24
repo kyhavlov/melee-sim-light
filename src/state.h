@@ -60,6 +60,11 @@ typedef struct MslStateSoA {
   // Frame-start Y snapshot for mpColl floor sweeps. Kept separate from prev_pos_* because
   // existing grounded rollback helpers use prev_pos_* as a pre-physics integration snapshot.
   float* floor_sweep_prev_pos_y;
+  // Seed-only override for the first floor-sweep snapshot after reseed. Normal rollouts clear the
+  // valid bit and cache frame-start pos_y into floor_sweep_prev_pos_y.
+  // refs/melee/src/melee/mp/mpcoll.c::{mpCollPrev,mpColl_80043754,mpCheckFloor}
+  float* floor_sweep_seed_prev_pos_y;
+  uint8_t* floor_sweep_seed_prev_valid;
   // Collision-stage prev/cur position snapshots used for mpColl-shaped ledge-grab AABB checks.
   //
   // Decomp: the ledge-grab block consumes CollData.prev_pos / CollData.cur_pos as managed inside
@@ -372,6 +377,9 @@ typedef struct MslStateSoA {
   // GuardSetOff shield-hit int-damage lower bound for future GuardSetOff ownership fixes.
   // Decomp consumer: fp->x19A4 in ftCo_80092F2C.
   uint8_t* guard_setoff_hitlag_damage_min;
+  // Per-defender teacher-forced shield-hit x19A4 max int damage for accepted GuardSetOff entries.
+  // refs/melee/src/melee/ft/ftcoll.c::ftColl_80076CBC
+  uint8_t* combat_shield_hit_int_damage;
   // GuardSetOff hitlag-exit ownership phase discriminator for future F02 runtime fixes.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_80092F2C,ftCo_GuardSetOff_Anim}
   // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
@@ -770,6 +778,9 @@ typedef struct MslStateSoA {
   uint8_t* combat_hitlist_hb_valid;
   uint16_t* combat_hitlist_hb_cd;
   uint16_t* combat_hitlist_hb_victim_iid;
+  // Teacher-forced per-HitCapsule shield-contact tri-state.
+  // Layout: [batch * MSL_MAX_PLAYERS * MSL_MAX_HITBOXES * MSL_MAX_PLAYERS]
+  uint8_t* combat_shield_contact_hb_kind;
   // Reseed generation counter (incremented on reseed_seed).
   uint32_t* hitlist_reseed_gen;  // [batch]
   // Per fighter hitbox victim rings (x914[4] analogue).
