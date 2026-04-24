@@ -187,30 +187,40 @@ Recommended sequence for the next deep passes:
 - Primary sim files: `src/combat.c`, `src/timers.c`, `src/items.c`, `src/step.c`
 - Current continuation pass (2026-04-24):
   - Retained decomp-backed runtime/seed cleanup across the next residual block:
-    common airborne `Damage_IASA` now uses the live `mv.co.damage.x14` jump-buffer snapshot without
-    an extra replay-visible recent-tap gate (`ftCo_8008F744`, `ftCo_Damage_IASA`); AttackAir
+    common airborne `Damage_IASA` now uses the live `mv.co.damage.x14` jump-buffer snapshot with
+    XY and hitlag-gated tap-jump seed producers (`ftCo_8008F744`, `ftCo_Damage_IASA`,
+    `ftCo_Jump_GetInput`); AttackAir
     same-frame IASA checks aerial B-special admission before JumpAerial (`ftCo_AttackAir.c::DO_IASA`,
     `ftCo_SpecialAir.c::ftCo_SpecialAir_CheckInput`); JumpF/JumpB -> EscapeAir floor handoff projects
     through the decomp floor wrapper (`ftCo_EscapeAir_Coll`, `ft_80082C74`,
     `mpLib_8004DD90_Floor`); `GuardSetOff_Anim` may enter Guard and then same-frame GuardOff through
-    the normal Guard IASA release path; and terminal `GuardReflect_Anim` with an expired timer can
-    snapshot into Guard before release consumption.
+    the normal Guard IASA release path; terminal `GuardReflect_Anim` with an expired timer can
+    snapshot into Guard before release consumption; and common-air FD walljump rows promote the
+    hidden `wall_jump_input_timer` / `x2110_walljumpWallSide` phase from prefix-causal replay
+    history, then runtime applies ISO-derived `co_attrs.x148` plus ftCommonData x768/x76C/x770/x774
+    rather than a generic visible wall-hug branch.
   - Replay locks:
     `tests/test_core_combat_damage_contact_followup_replay_real_locks.py`,
     `tests/test_damageair_hitstun_exit_jumpbuffer_replay_real_locks.py`,
     `tests/test_locomotion_attackair_landing_contact_y_regression.py`,
-    `tests/test_locomotion.py`, and
-    `tests/test_guard_callback_order_replay_real_locks.py`.
-  - Fresh taxonomy from regenerated primary and aggregate datasets:
-    primary total `456`; aggregate total `3253`. Current target-family counts are:
-    primary `F01=50`, `F08a=36`, `F10b=22`, `F13a=7`, `F26=23`, `F27a=9`,
-    `F27b=28`, `F27c=6`, `F27d=6`; aggregate `F01=567`, `F08a=133`,
-    `F10b=206`, `F13a=88`, `F26=137`, `F27a=101`, `F27b=161`, `F27c=39`,
-    `F27d=62`, `F28=68`, `F29=26`.
+    `tests/test_locomotion.py`,
+    `tests/test_guard_callback_order_replay_real_locks.py`, and
+    `tests/test_damagefly_passivewalljump_replay_real_locks.py`.
+  - Fresh taxonomy from regenerated primary and aggregate datasets after the current continuation:
+    primary total `441`; aggregate total `3168`. Current target-family counts are:
+    primary `F01=50`, `F08a=35`, `F10b=22`, `F13a=7`, `F26=23`, `F27a=9`,
+    `F27b=25`, `F27c=0`, `F27d=0`; aggregate `F01=567`, `F08a=130`,
+    `F10b=205`, `F13a=88`, `F26=137`, `F27a=101`, `F27b=128`, `F27c=15`,
+    `F27d=39`, `F28=68`, `F29=26`.
   - Movement from the `fe3dd74` checkpoint is real simulator/seed behavior, not taxonomy-only:
-    primary `468 -> 456`, aggregate `3392 -> 3253`, aggregate `F01 631 -> 567`,
-    aggregate `F13a 122 -> 88`, aggregate `F27b 201 -> 161`, and aggregate
-    `F08a 134 -> 133`. `F26`, `F27a`, `F27c`, `F27d`, `F28`, and `F29` remain
+    primary `468 -> 441`, aggregate `3392 -> 3168`, aggregate `F01 631 -> 567`,
+    aggregate `F13a 122 -> 88`, aggregate `F27b 201 -> 128`, aggregate
+    `F27c 39 -> 15`, aggregate `F27d 62 -> 39`, aggregate `F29 27 -> 26`,
+    and aggregate `F08a 134 -> 130`.
+    Movement from the `ee0095b` checkpoint is primary `456 -> 441`, aggregate
+    `3253 -> 3168`, aggregate `F27b 161 -> 128`, aggregate `F27c 39 -> 15`, and
+    aggregate `F27d 62 -> 39`.
+    `F26`, `F27a`, `F27c`, `F27d`, `F28`, and `F29` remain
     active residual owners.
   - The diagnostic owners remain an implementation map, not a closure claim:
     `F26` is the exact `ftCo_8008DCE0` DamageFlyRoll RNG stream / hidden pre-gate
@@ -221,14 +231,14 @@ Recommended sequence for the next deep passes:
   - Rejected experiments in this continuation:
     generic walljump runtime entry without the hidden walljump timer / persisted CollData wall seed
     surface, broad `DamageFall` terminal IASA suppression, broad EscapeAir steady floor projection,
-    terminal damage ECB locked-bottom expansion, and broad fresh JumpAerial -> EscapeAir
-    locked-bottom exclusion all failed focused locks or worsened primary / aggregate taxonomy. None
-    is retained.
+    terminal damage ECB locked-bottom expansion, broad fresh/late JumpAerial -> EscapeAir floor
+    projection, generic DamageFly root projection, and visible DamageFlyTop wall-hug recovery all
+    failed focused locks or worsened primary / aggregate taxonomy. None is retained.
   - Remaining current-map blockers:
     `F01=567` aggregate rows remain mixed GuardReflect/Guard/GuardSetOff collision candidate
     ordering and shield-hit outcome phase, not a single release timer; `F26=137` aggregate rows
     still require exact `ftCo_8008DCE0` RNG stream / hidden `Fighter_8006CDA4` consume-state
-    representation; `F27a/F27b/F27c/F27d=101/161/39/62` remain CollData/ECB floor/wall callback
+    representation; `F27a/F27b/F27c/F27d=101/128/15/39` remain CollData/ECB floor/wall callback
     phase and downed hidden timer/input phase rows; `F28=68` remains exact BODY candidate ordering /
     narrowphase (`lbColl_8000805C` / `lbColl_80006E58`); `F29=26` remains shield descriptor geometry
     / contact-hitlag provenance. Protected and item-owner families remain zero.

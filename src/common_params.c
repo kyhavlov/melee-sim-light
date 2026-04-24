@@ -307,7 +307,13 @@ int common_params_init(void) {
       json_get_u16(buf, "entry_end_frames", &g_params.entry_end_frames) != 0 ||
       json_get_u16(buf, "passivewall_timer_frames", &g_params.passivewall_timer_frames) != 0 ||
       json_get_u16(buf, "colanim_passivewall_x1990_frames",
-                   &g_params.colanim_passivewall_x1990_frames) != 0) {
+                   &g_params.colanim_passivewall_x1990_frames) != 0 ||
+      json_get_f32(buf, "walljump_input_window_frames", &g_params.walljump_input_window_frames) !=
+          0 ||
+      json_get_f32(buf, "walljump_stick_x_threshold", &g_params.walljump_stick_x_threshold) != 0 ||
+      json_get_f32(buf, "walljump_tilt_x_max_frames", &g_params.walljump_tilt_x_max_frames) != 0 ||
+      json_get_u16(buf, "walljump_startup_timer_frames", &g_params.walljump_startup_timer_frames) !=
+          0) {
     alloc_free(buf);
     return -1;
   }

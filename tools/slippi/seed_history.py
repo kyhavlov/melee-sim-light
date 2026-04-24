@@ -1999,6 +1999,7 @@ def derive_damage_jump_buffer_x14(
     buttons_pressed: np.ndarray,
     stick_y_unit: np.ndarray,
     tilt_timer_y: np.ndarray,
+    hitlag_u16: np.ndarray | None = None,
     tap_jump_threshold: float,
     tap_jump_tilt_max_frames: int,
     button_mask_xy: int,
@@ -2028,17 +2029,29 @@ def derive_damage_jump_buffer_x14(
     - Resets on in-family fresh-hit boundaries (`hitstun` increase), matching that
       ftCo_8008DCE0 clears x14 on damage re-entry.
     - Slippi exposes replay-visible stick timers, not the callback-local hidden `x671` value that
-      `ftCo_Jump_GetInput` observes inside hitstun. Replay-real DamageAir controls show old
-      tap-jump tilts can remain visible while the hidden damage x14 lane is not live; XY edges are
-      the reliable prefix-causal producer for this seed surface.
+      `ftCo_Jump_GetInput` observes inside hitstun. Treat tap-jump as authoritative only on the
+      same replay-visible threshold edge (`x671 == 0`) used by the normal jump gate, and only outside
+      hitlag because Fighter_8006A360 / Fighter_procUpdate skip Anim/IASA callbacks while
+      fp->x2219_b5 is set. Stale held tilts are not seed producers.
     """
     a = np.asarray(action_id, dtype=np.uint16).reshape(-1)
     hs = np.asarray(hitstun_u16, dtype=np.uint16).reshape(-1)
+    hl = (
+        np.zeros_like(hs, dtype=np.uint16)
+        if hitlag_u16 is None
+        else np.asarray(hitlag_u16, dtype=np.uint16).reshape(-1)
+    )
     bp = np.asarray(buttons_pressed, dtype=np.uint16).reshape(-1)
     sy = np.asarray(stick_y_unit, dtype=np.float32).reshape(-1)
     tty = np.asarray(tilt_timer_y, dtype=np.uint8).reshape(-1)
     n = int(a.size)
-    if int(hs.size) != n or int(bp.size) != n or int(sy.size) != n or int(tty.size) != n:
+    if (
+        int(hs.size) != n
+        or int(hl.size) != n
+        or int(bp.size) != n
+        or int(sy.size) != n
+        or int(tty.size) != n
+    ):
         raise ValueError("all derive_damage_jump_buffer_x14 inputs must have the same length")
 
     out = np.zeros(n, dtype=np.uint16)
@@ -2071,12 +2084,16 @@ def derive_damage_jump_buffer_x14(
         jump_input = False
         if (int(bp[i]) & xy) != 0:
             jump_input = True
-        # Do not seed x14 from replay-visible tap-jump tilt alone. The decomp callback samples the
-        # hidden input-timer lane in `ftCo_Jump_GetInput`; Slippi's visible post-frame tilt timer
-        # over-approximates that owner and creates stale post-hitstun JumpAerial entries.
-        # Runtime still supports tap-jump through the live `damage_jump_input_from_edges` path.
+        # Decomp: doIasa calls ftCo_Jump_GetInput, which accepts both XY and tap-jump. Keep the
+        # seed bridge prefix-causal by using only the current replay-visible stick/timer sample, and
+        # require the timer to be on the threshold edge so old held-up values do not refresh
+        # the hidden damage x14 lane.
+        # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::doIasa
+        # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c::ftCo_Jump_GetInput
+        if float(sy[i]) >= float(tap_thr) and int(tty[i]) == 0:
+            jump_input = True
 
-        if int(hs[i]) > 0 and jump_input:
+        if int(hl[i]) == 0 and int(hs[i]) > 0 and jump_input:
             x14 = int(hs[i])
         # `mv.co.damage.x14` is a snapshot of `mv.co.damage.x0` taken by doIasa when the jump
         # input is seen. ftCo_8008F744 decrements x0, but the decomp never decrements x14; the
@@ -2981,31 +2998,50 @@ def compute_fighter_button_timers(
 def derive_downwait_timer(
     *,
     action_id_u16: np.ndarray,
+    hitstun_u16: np.ndarray | None = None,
     down_wait_frames: int,
+    act_down_damage_u: int | None = None,
+    act_down_damage_d: int | None = None,
     act_down_wait_u: int,
     act_down_wait_d: int,
 ) -> np.ndarray:
     """
-    Derive fp->mv.co.downwait.x0 (DownWait timer), strictly causally from action_id.
+    Derive fp->mv.co.downwait.x0 (DownWait timer), strictly causally from replay history.
 
     Decomp:
     - init on DownBound->DownWait:
       refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownBound.c::ftCo_80097E8C
         fp->mv.co.downwait.x0 = p_ftCommonData->x424;
+    - DownDamage->DownWait:
+      refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
+        fp->mv.co.damage.x0 = max(1, (int)(kb_applied * p_ftCommonData->x154));
+      refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownDamage.c::ftCo_DownDamage_Anim
+        fp->mv.co.downdamage.x0 -= 1;
+      refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownBound.c::ftCo_80097F38
+        changes to DownWaitU/D without resetting fp->mv.co.downwait.x0.
     - decrement each DownWait frame unless fp->x2224_b2:
       refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownBound.c::ftCo_DownWait_Anim
 
     Slippi post-frame does not expose fp->mv.* union fields, so teacher-forced reseeding requires
     deriving this internal from replay state history. For v1 suite, fp->x2224_b2 is not exposed by
     Slippi either, so this derivation assumes the common case (x2224_b2 == 0) and counts down once
-    per contiguous DownWait frame after entry.
+    per contiguous DownWait frame after entry. When DownWait is entered through DownDamage, the
+    previous replay row's visible hitstun is the prefix-causal exposed countdown paired with
+    `mv.co.damage.x0`; the entered DownWait seed receives that timer after the entering Anim tick.
     """
     aid = np.asarray(action_id_u16, dtype=np.uint16).reshape(-1)
     n = int(aid.size)
+    hitstun = None
+    if hitstun_u16 is not None:
+        hitstun = np.asarray(hitstun_u16, dtype=np.uint16).reshape(-1)
+        if int(hitstun.size) != n:
+            raise ValueError("hitstun_u16 must match action_id_u16 length")
     out = np.zeros(n, dtype=np.int16)
 
     dw_u = np.uint16(int(act_down_wait_u) & 0xFFFF)
     dw_d = np.uint16(int(act_down_wait_d) & 0xFFFF)
+    dd_u = np.uint16(int(act_down_damage_u) & 0xFFFF) if act_down_damage_u is not None else None
+    dd_d = np.uint16(int(act_down_damage_d) & 0xFFFF) if act_down_damage_d is not None else None
     start = int(down_wait_frames)
     if start < 0:
         start = 0
@@ -3023,7 +3059,23 @@ def derive_downwait_timer(
             continue
 
         if not prev_is_dw:
-            timer = start
+            prev_a = aid[i - 1] if i > 0 else np.uint16(0)
+            prev_was_down_damage = (
+                i > 0
+                and dd_u is not None
+                and dd_d is not None
+                and (prev_a == dd_u or prev_a == dd_d)
+            )
+            if prev_was_down_damage and hitstun is not None:
+                # `ftCo_DownDamage_Anim` has already consumed the entering-frame tick before
+                # `ftCo_80097F38` exposes DownWait in the next post-frame row.
+                timer = int(hitstun[i - 1]) - 1
+                if timer < 1:
+                    timer = 1
+                if timer > start:
+                    timer = start
+            else:
+                timer = start
         else:
             if timer > 0:
                 timer -= 1

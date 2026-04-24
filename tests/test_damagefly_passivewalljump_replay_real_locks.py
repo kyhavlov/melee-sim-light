@@ -143,3 +143,53 @@ def test_passivewall_timer_allows_specialairs_after_hold_distinctcaringcobra_loc
             f"record={record} p=1 expected_action_frame={int(ref_row['action_frame'][1])} "
             f"got={int(out_row['action_frame'][1])}"
         )
+
+
+@pytest.mark.integration
+def test_common_air_walljump_hidden_phase_seed_qgd_replay_real_lock() -> None:
+    # Replay-real positive/negative controls for the common-air walljump hidden phase seed:
+    # - Slippi exposes neither `fp->wall_jump_input_timer` nor `fp->x2110_walljumpWallSide`.
+    # - The seed lane reconstructs only the late FD wall/underside hidden timer phase; runtime still
+    #   requires ftWallJump stick-away and x670 freshness before entering PassiveWallJump.
+    # - Earlier generic wall-hug rows keep sentinel seed state and must not be admitted broadly.
+    # refs/melee/src/melee/ft/ftwalljump.c::ftWallJump_8008169C
+    # refs/melee/src/melee/ft/ft_081B.c::{ft_800831CC,ft_800835B0}
+    # data/stages/final_destination.json
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+
+    dataset_rel = (
+        "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
+        "cardinal_1.0_recent/QuerulousGrandDinosaur.msl"
+    )
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+    p = 0
+    target = 9218
+    for record in (627, 635, target):
+        assert int(samples.shape[0]) > record, f"dataset too short for lock row: record={record}"
+
+    seed = samples[target]["seed_t"]
+    ref = samples[target]["ref_t1"]
+    assert int(seed["action_id"][p]) == 27  # JumpAerialF
+    assert int(seed["action_frame"][p]) == 17
+    assert int(seed["walljump_input_timer"][p]) == 9
+    assert int(seed["walljump_wall_side_i8"][p]) == -1
+    assert int(ref["action_id"][p]) == 203  # PassiveWallJump
+
+    _, ref_row, out_row = _run_one_step_row(dataset_path, target, p)
+    assert int(out_row["action_id"][p]) == int(ref_row["action_id"][p]) == 203
+    assert int(out_row["animation_index"][p]) == int(ref_row["animation_index"][p]) == 203
+
+    for record in (627, 635):
+        seed = samples[record]["seed_t"]
+        assert int(seed["action_id"][p]) == 29  # Fall
+        assert int(seed["walljump_input_timer"][p]) == 254
+        assert int(seed["walljump_wall_side_i8"][p]) == 0
+        _, ref_row, out_row = _run_one_step_row(dataset_path, record, p)
+        assert int(ref_row["action_id"][p]) != 203
+        assert int(out_row["action_id"][p]) == int(ref_row["action_id"][p])

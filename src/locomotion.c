@@ -6,6 +6,7 @@
 #include "action_ids.h"
 #include "action.h"
 #include "anim_frame.h"
+#include "anim_pose.h"
 #include "anim_timebase.h"
 #include "anim_table.h"
 #include "buttons.h"
@@ -18,6 +19,7 @@
 #include "input_axis.h"
 #include "jump_input.h"
 #include "move_tables.h"
+#include "mpcoll_ecb_points.h"
 #include "shine.h"
 #include "special_msids.h"
 #include "stage_collision.h"
@@ -659,6 +661,139 @@ static inline uint8_t landing_contact_is_ledge_floor(const MslBatch* batch, size
     return 0u;
   }
   return g->lines[(size_t)line_idx].is_ledge ? 1u : 0u;
+}
+
+static inline uint8_t action_uses_common_air_walljump_callback(uint16_t a) {
+  // These common air states route their Coll callbacks through ft_081B helpers that call
+  // ftWallJump_8008169C after the floor callback declines.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_Coll
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c::ftCo_Jump_Coll
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::ftCo_JumpAerial_Coll
+  // refs/melee/src/melee/ft/ft_081B.c::{ft_800831CC,ft_800835B0}
+  switch (a) {
+    case (uint16_t)MSL_ACT_JUMP_F:
+    case (uint16_t)MSL_ACT_JUMP_B:
+    case (uint16_t)MSL_ACT_JUMP_AERIAL_F:
+    case (uint16_t)MSL_ACT_JUMP_AERIAL_B:
+    case (uint16_t)MSL_ACT_FALL:
+    case (uint16_t)MSL_ACT_FALL_F:
+    case (uint16_t)MSL_ACT_FALL_B:
+    case (uint16_t)MSL_ACT_FALL_AERIAL:
+    case (uint16_t)MSL_ACT_FALL_AERIAL_F:
+    case (uint16_t)MSL_ACT_FALL_AERIAL_B:
+      return 1u;
+    default:
+      return 0u;
+  }
+}
+
+static inline void align_passivewalljump_entry_x(MslBatch* batch, size_t idx) {
+  if (batch == NULL) {
+    return;
+  }
+  const uint8_t cid = batch->state.char_id[idx];
+  const uint16_t ecb_frame = msl_ecb_frame_u16_from_anim_frame(batch->state.anim_frame_f32[idx]);
+  const float facing_dir = batch->state.facing[idx] ? 1.0f : -1.0f;
+  MslEcbWorldPoints ecb = {0};
+  msl_ecb_world_points_sample(&ecb, cid, batch->state.animation_index[idx], ecb_frame, facing_dir,
+                              batch->state.pos_x[idx], batch->state.pos_y[idx], 0u);
+
+  float transn[3] = {0.0f, 0.0f, 0.0f};
+  if (anim_pose_get_transn(cid, (uint16_t)MSL_SM_PASSIVE_WALL_JUMP, 0u, transn) != 0) {
+    transn[2] = 0.0f;
+  }
+
+  const uint32_t env = batch->state.coll_env_flags[idx];
+  if ((env & (uint32_t)MSL_COLLIDE_RIGHT_WALL_HUG) != 0u) {
+    batch->state.pos_x[idx] = ecb.left_x + transn[2] * facing_dir;
+  } else if ((env & (uint32_t)MSL_COLLIDE_LEFT_WALL_HUG) != 0u) {
+    batch->state.pos_x[idx] = ecb.right_x + transn[2] * facing_dir;
+  }
+}
+
+static inline uint8_t try_common_air_walljump_post_collision(MslBatch* batch,
+                                                             const MslCommonParams* c,
+                                                             const MslCharParams* ch, size_t idx,
+                                                             uint16_t a) {
+  if (batch == NULL || c == NULL || ch == NULL) {
+    return 0u;
+  }
+  if (!action_uses_common_air_walljump_callback(a)) {
+    return 0u;
+  }
+  const uint32_t env = batch->state.coll_env_flags[idx];
+  uint8_t right_hug = (env & (uint32_t)MSL_COLLIDE_RIGHT_WALL_HUG) ? 1u : 0u;
+  uint8_t left_hug = (env & (uint32_t)MSL_COLLIDE_LEFT_WALL_HUG) ? 1u : 0u;
+  const int8_t seeded_wall_side = batch->state.walljump_wall_side_i8[idx];
+  if (!right_hug && !left_hug && batch->state.walljump_input_timer[idx] < 254u) {
+    if (seeded_wall_side < 0) {
+      right_hug = 1u;
+    } else if (seeded_wall_side > 0) {
+      left_hug = 1u;
+    }
+  }
+  if (!right_hug && !left_hug) {
+    batch->state.walljump_input_timer[idx] = 254u;
+    return 0u;
+  }
+  if (!(ch->walljump_setup_x_delta_threshold > 0.0f) || !(c->walljump_input_window_frames > 0.0f)) {
+    return 0u;
+  }
+
+  // Immediate ftWallJump setup branch:
+  // - when the wall-side changed or the hidden timer is stale, ftWallJump measures
+  //   ABS(fp->pos_delta.x - wall_pos.x) against fp->co_attrs.x148 and seeds
+  //   wall_jump_input_timer=0 for this same callback.
+  // - The final branch then requires stick-away and x670 freshness before entering
+  //   PassiveWallJump through ftCo_800C1E64(..., p_ftCommonData->x774, ...).
+  // Reseeds can carry the hidden multi-frame timer/side when Slippi-visible history proves it;
+  // otherwise runtime starts the timer only from the immediate decomp setup branch above.
+  // refs/melee/src/melee/ft/ftwalljump.c::ftWallJump_8008169C
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_PassiveWall.c::ftCo_800C1E64
+  // refs/melee/src/melee/ft/types.h (co_attrs.x148, x670_timer_lstick_tilt_x)
+  const int8_t wall_side = right_hug ? (int8_t)-1 : (int8_t)1;
+  uint8_t input_timer = batch->state.walljump_input_timer[idx];
+  if (input_timer < 254u && seeded_wall_side == wall_side) {
+    input_timer = (input_timer < 253u) ? (uint8_t)(input_timer + 1u) : 254u;
+  } else {
+    const float pos_delta_x = batch->state.pos_x[idx] - batch->state.prev_pos_x[idx];
+    if (!(fabsf(pos_delta_x) > ch->walljump_setup_x_delta_threshold)) {
+      batch->state.walljump_input_timer[idx] = 254u;
+      return 0u;
+    }
+    input_timer = 0u;
+    batch->state.walljump_wall_side_i8[idx] = wall_side;
+  }
+  batch->state.walljump_input_timer[idx] = input_timer;
+  const float stick_x =
+      apply_deadzone(stick_i8_to_unit(batch->state.input_main_x[idx]), c->lstick_deadzone_x);
+  const uint8_t stick_away = right_hug ? (uint8_t)(stick_x >= c->walljump_stick_x_threshold)
+                                       : (uint8_t)(stick_x <= -c->walljump_stick_x_threshold);
+  if (!(input_timer < (uint8_t)c->walljump_input_window_frames) || !stick_away ||
+      !((float)batch->state.tilt_timer_x[idx] < c->walljump_tilt_x_max_frames)) {
+    return 0u;
+  }
+
+  batch->state.action_id[idx] = (uint16_t)MSL_ACT_PASSIVE_WALL_JUMP;
+  batch->state.animation_index[idx] = (uint32_t)MSL_SM_PASSIVE_WALL_JUMP;
+  msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+  batch->state.hitstun[idx] = 0u;
+  batch->state.speed_air_x_self[idx] = 0.0f;
+  batch->state.speed_y_self[idx] = 0.0f;
+  batch->state.passivewall_timer[idx] = (uint8_t)c->walljump_startup_timer_frames;
+  batch->state.tilt_timer_x[idx] = 0xFEu;
+  batch->state.tilt_timer_y[idx] = 0xFEu;
+  batch->state.colanim_timer_x1990[idx] = c->colanim_passivewall_x1990_frames;
+  batch->state.colanim_hit_status_x198c[idx] = 2u;
+  batch->state.hurtbox_state[idx] = 2u;
+  if (right_hug) {
+    batch->state.facing[idx] = 1u;
+  } else {
+    batch->state.facing[idx] = 0u;
+  }
+  batch->state.walljump_input_timer[idx] = 254u;
+  align_passivewalljump_entry_x(batch, idx);
+  return 1u;
 }
 
 static inline uint8_t attackair_cstick_edge(const MslCommonParams* c, int8_t prev_cx,
@@ -4372,6 +4507,10 @@ void locomotion_update_post_collision(MslBatch* batch) {
       }
 
       const uint16_t a = batch->state.action_id[idx];
+
+      if (!now_ground && try_common_air_walljump_post_collision(batch, c, ch, idx, a)) {
+        continue;
+      }
 
       if (was_ground && now_ground && a == (uint16_t)MSL_ACT_KNEE_BEND &&
           (batch->state.input_buttons[idx] & (uint16_t)MSL_BUTTON_XY) == 0u &&

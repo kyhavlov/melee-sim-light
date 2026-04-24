@@ -138,6 +138,12 @@ def main() -> None:
         # - ftCo_800C1E64 calls ftColl_8007B760(..., x764) on entry.
         # refs/melee/src/melee/ft/chara/ftCommon/ftCo_PassiveWall.c::ftCo_800C1E64
         "colanim_passivewall_x1990_frames": int(max(0, _i32_be(buf, ft_common_abs + 0x764))),
+        # Generic wall-jump interrupt constants (ftWallJump_8008169C).
+        # refs/melee/src/melee/ft/ftwalljump.c::ftWallJump_8008169C
+        "walljump_input_window_frames": float(_f32_be(buf, ft_common_abs + 0x768)),
+        "walljump_stick_x_threshold": float(_f32_be(buf, ft_common_abs + 0x76C)),
+        "walljump_tilt_x_max_frames": float(_f32_be(buf, ft_common_abs + 0x770)),
+        "walljump_startup_timer_frames": int(max(0, _i32_be(buf, ft_common_abs + 0x774))),
         # Shield / guard (ftCo_Guard.c, fighter.c).
         # - Guard hold drain: shield_health -= x278 * (lightshield_amount*(x2F0-x2EC)+x2EC)
         # - Shield hit depletion: shield_health -= x284 * (shieldDamageTaken*(1 - (lightshield_amount*(x2E0-x2DC)+x2DC))) + x288

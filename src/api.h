@@ -535,6 +535,12 @@ typedef struct MslSeed {
   // PassiveWall / PassiveWallJump hidden startup timer (`fp->mv.co.passivewall.timer`).
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_PassiveWall.c::{ftCo_800C1E64,ftCo_PassiveWall_Anim}
   uint8_t passivewall_timer[MSL_MAX_PLAYERS];
+  // Generic wall-jump hidden input phase (`fp->wall_jump_input_timer` and
+  // `fp->x2110_walljumpWallSide`). Slippi does not expose CollData's persisted walljump phase, so
+  // preprocessing seeds the minimal phase needed by ftWallJump_8008169C on one-step rows.
+  // refs/melee/src/melee/ft/ftwalljump.c::ftWallJump_8008169C
+  uint8_t walljump_input_timer[MSL_MAX_PLAYERS];
+  int8_t walljump_wall_side_i8[MSL_MAX_PLAYERS];
   // Decomp-shaped animation/script timebase: fp->cur_anim_frame (float).
   // Slippi post-frame exposes this as `state_age` (float, can be fractional).
   //

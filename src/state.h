@@ -273,6 +273,10 @@ typedef struct MslStateSoA {
   // must be seeded from replay history for one-step parity.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_PassiveWall.c::{ftCo_800C1E64,ftCo_PassiveWall_Anim}
   uint8_t* passivewall_timer;
+  // Generic wall-jump hidden input phase (`fp->wall_jump_input_timer`, `fp->x2110_walljumpWallSide`).
+  // refs/melee/src/melee/ft/ftwalljump.c::ftWallJump_8008169C
+  uint8_t* walljump_input_timer;
+  int8_t* walljump_wall_side_i8;
   float* anim_frame_f32;  // decomp fp->cur_anim_frame (float; Slippi `state_age`)
   // Decomp-shaped internal animation/script timebase with deterministic fractional carry.
   // - anim_frame_fp_q16_16 mirrors fp->cur_anim_frame (float) as signed Q16.16 fixed-point.

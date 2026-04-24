@@ -212,5 +212,9 @@
   "walk_anim_vel_mul": 1.2999999523162842,
   "walk_fast_vel_mul": 0.800000011920929,
   "walk_mid_vel_mul": 0.4000000059604645,
-  "walk_stick_threshold": 0.18000000715255737
+  "walk_stick_threshold": 0.18000000715255737,
+  "walljump_input_window_frames": 130.0,
+  "walljump_startup_timer_frames": 5,
+  "walljump_stick_x_threshold": 0.800000011920929,
+  "walljump_tilt_x_max_frames": 3.0
 }

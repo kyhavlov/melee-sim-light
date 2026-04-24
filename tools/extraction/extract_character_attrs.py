@@ -245,6 +245,11 @@ def _extract_ftco_dattrs(pl_dat: Path, *, ftdata_symbol: str, extract_fox_blaste
         "passivewall_vel_x": f(0x100),
         "wall_jump_horizontal_velocity": f(0x104),
         "wall_jump_vertical_velocity": f(0x108),
+        # ftWallJump_8008169C compares ABS(fp->pos_delta.x - wall_pos.x) against
+        # fp->co_attrs.x148 before starting the hidden wall-jump input timer.
+        # refs/melee/src/melee/ft/ftwalljump.c::ftWallJump_8008169C
+        # refs/melee/src/melee/ft/types.h::ftCo_DatAttrs (+0x148)
+        "walljump_setup_x_delta_threshold": f(0x148),
 
         # Ledge snap parameters: ftData_x44_t (ft/types.h)
         # struct ftData { ... ftData_x44_t* x44; }
@@ -534,6 +539,7 @@ def _stable_update(existing: dict, extracted: dict) -> dict:
         "passivewall_vel_x",
         "wall_jump_horizontal_velocity",
         "wall_jump_vertical_velocity",
+        "walljump_setup_x_delta_threshold",
         "camera_zoom_target_bone_part_id",
         "camera_zoom_target_offset",
         "camera_box_radius",

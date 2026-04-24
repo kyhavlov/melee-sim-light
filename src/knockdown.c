@@ -44,6 +44,7 @@ static inline uint8_t is_down_roll(uint16_t a) {
              ? 1u
              : 0u;
 }
+
 static inline uint8_t is_down_any(uint16_t a) {
   return (is_down_bound(a) || is_down_wait(a) || is_down_stand(a) || is_down_attack(a) ||
           is_down_roll(a))
@@ -718,6 +719,31 @@ static inline uint16_t down_roll_action_from_input(const MslBatch* batch, const 
   return forward ? (uint16_t)MSL_ACT_DOWN_FOWARD_D : (uint16_t)MSL_ACT_DOWN_BACK_D;
 }
 
+static inline uint16_t down_roll_action_from_prev_input_for_bound(const MslBatch* batch,
+                                                                  const MslCommonParams* c,
+                                                                  size_t idx,
+                                                                  uint16_t cur_down_act) {
+  const float stick_x =
+      apply_deadzone(stick_i8_to_unit(batch->state.prev_input_main_x[idx]), c->lstick_deadzone_x);
+  const float stick_y =
+      apply_deadzone(stick_i8_to_unit(batch->state.prev_input_main_y[idx]), c->lstick_deadzone_y);
+  if (!(msl_absf(stick_x) >= c->down_stick_x_threshold)) {
+    return 0;
+  }
+  const float ang = stick_angle_y_over_abs_x(stick_x, stick_y);
+  if (!(ang < c->attack_angle_threshold_radians)) {
+    return 0;
+  }
+
+  const float facing_dir = batch->state.facing[idx] ? 1.0f : -1.0f;
+  const uint8_t forward = ((stick_x * facing_dir) >= 0.0f) ? 1u : 0u;
+  const uint8_t use_u = (cur_down_act == (uint16_t)MSL_ACT_DOWN_WAIT_U) ? 1u : 0u;
+  if (use_u) {
+    return forward ? (uint16_t)MSL_ACT_DOWN_FOWARD_U : (uint16_t)MSL_ACT_DOWN_BACK_U;
+  }
+  return forward ? (uint16_t)MSL_ACT_DOWN_FOWARD_D : (uint16_t)MSL_ACT_DOWN_BACK_D;
+}
+
 static inline void enter_wait(MslBatch* batch, size_t idx) {
   // Decomp: ft_8008A2BC (common "enter Wait").
   // refs/melee/src/melee/ft/ft_0892.c::ft_8008A2BC
@@ -867,11 +893,27 @@ static inline uint8_t should_enter_down_attack_from_bound(const MslBatch* batch,
       ((float)batch->state.x67C[idx] < c->down_attack_button_window_frames) ? 1u : 0u;
   const uint8_t x67d_recent =
       ((float)batch->state.x67D[idx] < c->down_attack_button_window_frames) ? 1u : 0u;
+  const uint8_t ab_pressed_now =
+      ((batch->state.input_buttons_pressed[idx] &
+        (uint16_t)((uint16_t)MSL_BUTTON_A | (uint16_t)MSL_BUTTON_B)) != 0u)
+          ? 1u
+          : 0u;
   if (x67c_recent || x67d_recent) {
     const int16_t af_i16 = batch->state.action_frame[idx];
     const uint16_t af = (af_i16 > 0) ? (uint16_t)af_i16 : 0u;
-    const uint8_t x67c_post_entry = (af == 0u || (uint16_t)batch->state.x67C[idx] < af) ? 1u : 0u;
-    const uint8_t x67d_post_entry = (af == 0u || (uint16_t)batch->state.x67D[idx] < af) ? 1u : 0u;
+    // DownBound_Anim runs in Fighter_8006A360 before Fighter_procUpdate input processing.
+    // This simulator executes the downed Anim owner after input, so a current-frame A/B edge can
+    // transiently zero x67C/x67D too early. Exclude only that same-frame edge; prior post-entry
+    // timer values remain valid DownBound attack inputs.
+    // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A360,Fighter_procUpdate}
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownBound.c::ftCo_DownBound_Anim
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Down.c::ftCo_80098400
+    const uint8_t x67c_same_frame_edge = (ab_pressed_now && batch->state.x67C[idx] == 0u) ? 1u : 0u;
+    const uint8_t x67d_same_frame_edge = (ab_pressed_now && batch->state.x67D[idx] == 0u) ? 1u : 0u;
+    const uint8_t x67c_post_entry =
+        (!x67c_same_frame_edge && (af == 0u || (uint16_t)batch->state.x67C[idx] < af)) ? 1u : 0u;
+    const uint8_t x67d_post_entry =
+        (!x67d_same_frame_edge && (af == 0u || (uint16_t)batch->state.x67D[idx] < af)) ? 1u : 0u;
     if ((x67c_recent && x67c_post_entry) || (x67d_recent && x67d_post_entry)) {
       return 1u;
     }
@@ -1335,7 +1377,14 @@ void knockdown_update_pre_physics(MslBatch* batch) {
           if (should_enter_down_attack_from_bound(batch, c, idx)) {
             enter_down_attack(batch, idx, a0);
           } else {
-            const uint16_t roll_act = down_roll_action_from_input(batch, c, idx, a0);
+            // DownBound_Anim runs before Fighter_procUpdate refreshes current-frame inputs. The
+            // direct ftCo_Down_CheckInput call therefore sees the pre-input stick lane; if that
+            // lane does not roll, ftCo_80097E8C enters DownWait and the newly entered DownWait IASA
+            // can consume the current-frame stick later in this same simulator step.
+            // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A360,Fighter_procUpdate}
+            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownBound.c::ftCo_DownBound_Anim
+            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Down.c::ftCo_Down_CheckInput
+            const uint16_t roll_act = down_roll_action_from_prev_input_for_bound(batch, c, idx, a0);
             if (roll_act != 0) {
               enter_down_roll(batch, idx, roll_act);
               // Decomp ordering: when an Anim callback changes the motion state, the new state's

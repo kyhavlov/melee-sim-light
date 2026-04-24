@@ -166,6 +166,14 @@ def _assert_transition_fields_match_ref(*, out_row, ref_row, record: int, p: int
             note="DownBoundD getup into DownStandD does not immediate-tick DownStand entry",
         ),
         _DamageContactCase(
+            dataset_rel="datasets/aggregate_recent/replays/validation/aggregate_recent/DistinctCaringCobra.msl",
+            record=2060,
+            port=0,
+            seed_action=183,
+            ref_action=197,
+            note="DownBoundU Anim uses pre-input x67C/x67D before same-frame A edge can force DownAttack",
+        ),
+        _DamageContactCase(
             dataset_rel="datasets/aggregate_recent/replays/validation/aggregate_recent/HungryImportantSnake.msl",
             record=4229,
             port=0,
@@ -219,6 +227,8 @@ def test_core_damage_contact_followup_rows_are_replay_exact(case: _DamageContact
     # - Downed contact damage runs ftCo_8009F0F0 / ftCo_8009F184 before generic damage selection.
     # - DownStand entry through ftCo_80098160 does not do the immediate ftAnim tick used by
     #   DownWait/DownFoward/DownBack entry helpers.
+    # - DownBound_Anim runs before current-frame input, so a same-frame A/B edge does not rewrite
+    #   x67C/x67D early enough to preempt Down_CheckInput on the finished bound frame.
     # - Damage_IASA delegates to Fall_IASA_Inner, whose order admits SpecialAir, AttackAir, then
     #   JumpAerial on common airborne Damage rows once x221C_b6 is clear.
     # - DamageFly_Coll uses the shared wall-tech callback for all DamageFly variants, not only
@@ -232,6 +242,9 @@ def test_core_damage_contact_followup_rows_are_replay_exact(case: _DamageContact
     #   ftCo_80097F38,ftCo_DownWait_IASA}
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownDamage.c::{ftCo_8009F0F0,ftCo_8009F184}
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownStand.c::ftCo_80098160
+    # refs/melee/src/melee/ft/fighter.c::{Fighter_8006A360,Fighter_procUpdate}
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownBound.c::ftCo_DownBound_Anim
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Down.c::ftCo_80098400
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_IASA
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_IASA_Inner
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_DamageFly_Coll

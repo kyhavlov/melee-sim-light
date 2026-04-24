@@ -503,6 +503,106 @@ def _derive_passivewall_timer(*, action_id_u16: np.ndarray, action_frame_i16: np
     return out
 
 
+def _derive_walljump_phase_seed_lanes(
+    *,
+    action_id_u16: np.ndarray,
+    action_frame_i16: np.ndarray,
+    pos_x_f32: np.ndarray,
+    pos_y_f32: np.ndarray,
+    raw_main_x_i8: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Derive the hidden `ftWallJump_8008169C` input phase for one-step reseeds.
+
+    Slippi does not expose `fp->wall_jump_input_timer`, `fp->x2110_walljumpWallSide`, or CollData's
+    persisted wall-hug side. Keep this seed lane restricted to common airborne walljump callbacks
+    in Final Destination wall/underside neighborhoods. This is a teacher-forced one-step seed for
+    the hidden timer/side only: runtime still requires the current stick-away input and x670
+    freshness before entering PassiveWallJump.
+
+    The reconstruction is prefix-causal in sample space: for seed row `i`, `raw_main_x[i]` is the
+    previous input lane and `raw_main_x[i + 1]` is the current one-step input copied to
+    `samples["input_t"]`. It does not read the next post-frame reference state. The terminal output
+    row is unused because datasets store `walljump_*[:-1]`. The FD gates are stage-data backed:
+    - main floor is y=0, while the underside wall cluster starts below y=-10.5 and reaches inner
+      wall x around +/-61.42 to +/-65.84; y<-5 and |x|>=60 select that wall/underside region
+      without relying on a future collision callback.
+    - raw stick +/-64 is the controller-side away-input threshold corresponding to
+      p_ftCommonData->x76C once normalized by runtime deadzone handling.
+    - action-frame 17/19/20 boundaries and timer=action_frame-8 reconstruct the hidden
+      ftWallJump_8008169C timer phase from the replay history of common-air FD wall-hug rows; they
+      are seed-only provenance, and normal rollout rows leave these lanes at their sentinel.
+
+    refs/melee/src/melee/ft/ftwalljump.c::ftWallJump_8008169C
+    refs/melee/src/melee/ft/ft_081B.c::{ft_800831CC,ft_800835B0}
+    data/stages/final_destination.json
+    """
+    action_id = np.asarray(action_id_u16, dtype=np.uint16).reshape(-1)
+    action_frame = np.asarray(action_frame_i16, dtype=np.int16).reshape(-1)
+    pos_x = np.asarray(pos_x_f32, dtype=np.float32).reshape(-1)
+    pos_y = np.asarray(pos_y_f32, dtype=np.float32).reshape(-1)
+    raw_main_x = np.asarray(raw_main_x_i8, dtype=np.int8).reshape(-1)
+    n = int(action_id.shape[0])
+    if (
+        int(action_frame.shape[0]) != n
+        or int(pos_x.shape[0]) != n
+        or int(pos_y.shape[0]) != n
+        or int(raw_main_x.shape[0]) != n
+    ):
+        raise ValueError("walljump phase derivation lanes must have equal lengths")
+
+    common_air_walljump_actions = {
+        27,  # JumpAerialF
+        28,  # JumpAerialB
+        29,  # Fall
+        30,  # FallF
+        31,  # FallB
+        32,  # FallAerial
+        33,  # FallAerialF
+        34,  # FallAerialB
+    }
+    timer = np.full(n, 254, dtype=np.uint8)
+    side = np.zeros(n, dtype=np.int8)
+    fd_wall_neighborhood_abs_x = 60.0
+    fd_wall_neighborhood_max_y = -5.0
+    stick_away_i8 = 64
+    left_edge_min_action_frame = 19
+    right_edge_min_action_frame = 17
+    mature_hold_min_action_frame = 20
+    hidden_timer_action_frame_bias = 8
+    for i in range(n):
+        if int(action_id[i]) not in common_air_walljump_actions:
+            continue
+        if int(action_frame[i]) < 12:
+            continue
+        x = float(pos_x[i])
+        y = float(pos_y[i])
+        if not np.isfinite(x) or not np.isfinite(y) or y >= fd_wall_neighborhood_max_y:
+            continue
+        cur_x = int(raw_main_x[i + 1]) if (i + 1) < n else int(raw_main_x[i])
+        prev_x = int(raw_main_x[i])
+        af = int(action_frame[i])
+        if x <= -fd_wall_neighborhood_abs_x:
+            # Left wall side (+1): the replay-real common-air rows enter only after either a
+            # mature stick-away hold or the first leftward stick-away edge in the late setup window.
+            # Earlier left-wall holds remain covered by the ordinary CollData wall-hug callback.
+            if not (
+                (af >= mature_hold_min_action_frame and cur_x <= -stick_away_i8)
+                or (af >= left_edge_min_action_frame and prev_x > -stick_away_i8 and cur_x <= -stick_away_i8)
+            ):
+                continue
+            timer[i] = np.uint8(min(max(af - hidden_timer_action_frame_bias, 0), 120))
+            side[i] = np.int8(1)
+        elif x >= fd_wall_neighborhood_abs_x:
+            if not (
+                (af >= mature_hold_min_action_frame and cur_x >= stick_away_i8)
+                or (af >= right_edge_min_action_frame and prev_x < stick_away_i8 and cur_x >= stick_away_i8)
+            ):
+                continue
+            timer[i] = np.uint8(min(max(af - hidden_timer_action_frame_bias, 0), 120))
+            side[i] = np.int8(-1)
+    return timer, side
+
+
 def _derive_entry_end_fall_lock(
     *, action_id_u16: np.ndarray, on_ground_u8: np.ndarray, act_entry_end: int = 0x0144, act_fall: int = 0x001D
 ) -> np.ndarray:
@@ -3419,7 +3519,10 @@ def _main_impl(args) -> None:
         )
         samples["seed_t"]["downwait_timer"][:, slot] = derive_downwait_timer(
             action_id_u16=post_state,
+            hitstun_u16=post_hitstun,
             down_wait_frames=int(common["down_wait_frames"]),
+            act_down_damage_u=0x00B9,
+            act_down_damage_d=0x00C1,
             act_down_wait_u=act_down_wait_u,
             act_down_wait_d=act_down_wait_d,
         )[:-1]
@@ -3428,6 +3531,15 @@ def _main_impl(args) -> None:
             action_frame_i16=post_state_age,
             common=common,
         )[:-1]
+        walljump_timer, walljump_side = _derive_walljump_phase_seed_lanes(
+            action_id_u16=post_state,
+            action_frame_i16=post_state_age,
+            pos_x_f32=post_pos_x,
+            pos_y_f32=post_pos_y,
+            raw_main_x_i8=pre_main_x,
+        )
+        samples["seed_t"]["walljump_input_timer"][:, slot] = walljump_timer[:-1]
+        samples["seed_t"]["walljump_wall_side_i8"][:, slot] = walljump_side[:-1]
         samples["seed_t"]["anim_frame_f32"][:, slot] = post_anim_frame_f32[:-1]
 
         samples["seed_t"]["pos_x"][:, slot] = post_pos_x[:-1]
@@ -3938,6 +4050,7 @@ def _main_impl(args) -> None:
         damage_jump_buffer_x14 = derive_damage_jump_buffer_x14(
             action_id=post_state,
             hitstun_u16=post_hitstun,
+            hitlag_u16=post_hitlag,
             buttons_pressed=buttons_pressed,
             stick_y_unit=stick_y,
             tilt_timer_y=tilt_timer_y_pre,

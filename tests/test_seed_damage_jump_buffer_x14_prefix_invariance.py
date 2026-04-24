@@ -28,8 +28,8 @@ def test_damage_jump_buffer_x14_derivation_is_prefix_invariant() -> None:
     )
     hitstun = np.array([0, 0, 4, 3, 2, 1, 0, 0, 0], dtype=np.uint16)
     # Press XY on frame 3 (x14 snapshots the current damage timer and does not decrement with
-    # remaining hitstun). Replay-visible tap-jump tilt alone is not a reliable seed producer for
-    # the hidden damage x14 lane, so the frame-5 tap does not replace the XY seed.
+    # remaining hitstun). A later replay-visible tap-jump edge also goes through
+    # ftCo_Jump_GetInput and refreshes the hidden x14 snapshot.
     buttons_pressed = np.array([0, 0, 0, 0x0C00, 0, 0, 0, 0, 0], dtype=np.uint16)
     stick_y = np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.8, 0.0, 0.0, 0.0], dtype=np.float32)
     tilt_timer_y = np.array([0xFE, 0xFE, 0, 0, 0, 0, 0, 0xFE, 0xFE], dtype=np.uint8)
@@ -50,7 +50,7 @@ def test_damage_jump_buffer_x14_derivation_is_prefix_invariant() -> None:
     assert int(full[2]) == 0
     assert int(full[3]) == 3
     assert int(full[4]) == 3
-    assert int(full[5]) == 3
+    assert int(full[5]) == 1
     assert int(full[7]) == 0
 
     for k in (1, 2, 3, 4, 5, 6, 7, int(action_id.size)):

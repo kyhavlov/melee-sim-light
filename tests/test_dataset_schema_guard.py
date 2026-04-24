@@ -1,9 +1,15 @@
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
 import numpy as np
 
 from tools.eval.dataset import SAMPLE_DTYPE, SEED_DTYPE
-from tools.slippi.make_dataset_from_slp import _derive_landing_fallspecial_allow_interrupt_seed_lane
+from tools.slippi.make_dataset_from_slp import (
+    _derive_landing_fallspecial_allow_interrupt_seed_lane,
+    _derive_walljump_phase_seed_lanes,
+)
 
 
 def test_seed_schema_includes_staling_fields() -> None:
@@ -70,6 +76,8 @@ def test_seed_schema_includes_staling_fields() -> None:
     assert "camera_box_radius_f32" in SEED_DTYPE.fields
     assert "camera_target_point_inside_stage_cam_bounds_u8" in SEED_DTYPE.fields
     assert "passivewall_timer" in SEED_DTYPE.fields
+    assert "walljump_input_timer" in SEED_DTYPE.fields
+    assert "walljump_wall_side_i8" in SEED_DTYPE.fields
     # Damage KB stacking window (fp->dmg.x18AC_time_since_hit).
     assert "damage_time_since_hit_x18ac" in SEED_DTYPE.fields
     # Grounded attacker shield-pushback scalar (`fp->xF4_ground_attacker_shield_kb_vel`).
@@ -112,3 +120,66 @@ def test_landing_fallspecial_allow_interrupt_lane_is_prefix_causal() -> None:
     extended = np.concatenate([action, np.array([35, 43, 43], dtype=np.uint16)])
     got_extended = _derive_landing_fallspecial_allow_interrupt_seed_lane(action_id_u16=extended)
     np.testing.assert_array_equal(got_extended[: action.shape[0]], got)
+
+
+def test_character_attrs_include_ordered_walljump_setup_threshold() -> None:
+    root = Path(__file__).resolve().parents[1]
+    for character in ("fox", "falco"):
+        data = json.loads((root / "data" / "characters" / f"{character}.json").read_text())
+        keys = list(data.keys())
+        assert data["walljump_setup_x_delta_threshold"] == 0.5
+        assert keys.index("wall_jump_vertical_velocity") < keys.index("walljump_setup_x_delta_threshold")
+        assert keys.index("walljump_setup_x_delta_threshold") < keys.index("camera_zoom_target_bone_part_id")
+
+
+def test_walljump_phase_seed_lane_is_prefix_causal() -> None:
+    action = np.array([27, 27, 27, 27, 27, 27, 27], dtype=np.uint16)
+    action_frame = np.array([15, 16, 17, 18, 19, 20, 21], dtype=np.int16)
+    pos_x = np.array([87.0, 87.0, 87.0, 87.0, -87.0, -87.0, -87.0], dtype=np.float32)
+    pos_y = np.full(action.shape, -9.0, dtype=np.float32)
+    # `raw_main_x[i + 1]` is the sample's current one-step input_t for seed row i; this is not
+    # future reference state. The final reconstruction row is unused by dataset emission.
+    raw_main_x = np.array([0, 0, 0, 84, 0, -84, -84], dtype=np.int8)
+
+    timer, side = _derive_walljump_phase_seed_lanes(
+        action_id_u16=action,
+        action_frame_i16=action_frame,
+        pos_x_f32=pos_x,
+        pos_y_f32=pos_y,
+        raw_main_x_i8=raw_main_x,
+    )
+    assert timer.tolist() == [254, 254, 9, 254, 11, 12, 13]
+    assert side.tolist() == [0, 0, -1, 0, 1, 1, 1]
+
+    for end in range(2, action.shape[0] + 1):
+        prefix_timer, prefix_side = _derive_walljump_phase_seed_lanes(
+            action_id_u16=action[:end],
+            action_frame_i16=action_frame[:end],
+            pos_x_f32=pos_x[:end],
+            pos_y_f32=pos_y[:end],
+            raw_main_x_i8=raw_main_x[:end],
+        )
+        np.testing.assert_array_equal(prefix_timer[:-1], timer[: end - 1])
+        np.testing.assert_array_equal(prefix_side[:-1], side[: end - 1])
+
+
+def test_walljump_phase_seed_lane_rejects_generic_wall_hug_rows() -> None:
+    # These are seed-lane guardrails, not gameplay admission tests:
+    # - early common-air wall hugs remain sentinel until the hidden timer phase is reconstructable;
+    # - floor/ledge-near rows and non-common-air rows do not get generic walljump authority;
+    # - wrong-way or neutral stick rows leave runtime CollData as the owner.
+    action = np.array([27, 27, 88, 27, 27, 27, 0], dtype=np.uint16)
+    action_frame = np.array([7, 18, 18, 18, 20, 20, 20], dtype=np.int16)
+    pos_x = np.array([87.0, 87.0, 87.0, 50.0, 87.0, -87.0, -87.0], dtype=np.float32)
+    pos_y = np.array([-9.0, -2.0, -9.0, -9.0, -9.0, -9.0, -9.0], dtype=np.float32)
+    raw_main_x = np.array([84, 84, 84, 84, 0, -84, 84], dtype=np.int8)
+
+    timer, side = _derive_walljump_phase_seed_lanes(
+        action_id_u16=action,
+        action_frame_i16=action_frame,
+        pos_x_f32=pos_x,
+        pos_y_f32=pos_y,
+        raw_main_x_i8=raw_main_x,
+    )
+    assert timer.tolist() == [254, 254, 254, 254, 254, 254, 254]
+    assert side.tolist() == [0, 0, 0, 0, 0, 0, 0]

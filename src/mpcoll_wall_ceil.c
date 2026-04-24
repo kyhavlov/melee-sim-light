@@ -1080,6 +1080,47 @@ void mpcoll_wall_ceil_apply(MslBatch* batch) {
             batch->state.coll_env_flags[idx] |= (uint32_t)MSL_COLLIDE_LEFT_WALL_MASK;
           }
         }
+        if (batch->state.wall_kind[idx] == 0 && !grounded_now) {
+          // Teacher-forced CollData persistence recovery:
+          // - In-engine CollData can enter this frame with a persisted wall index from the prior
+          //   mpColl step. One-step reseeds expose position/velocity but not that hidden index.
+          // - If the current side point is already infinitesimally inside the wall, recover the
+          //   same mpLib_8004E398 projection before bottom/top fallback ordering. The 0.1 bound is
+          //   the decomp endpoint clamp used by mpLineIntersectionV / mpLib wall traversal.
+          // refs/melee/src/melee/lb/types.h::CollData
+          // refs/melee/src/melee/mp/mplib.c::{mpLib_8004E398_LeftWall,mpLineIntersectionV}
+          float best_corr = 0.0f;
+          float best_nx = -1.0f, best_ny = 0.0f;
+          int best_line_idx = -1;
+          for (size_t li = 0; li < lwg->line_count; li++) {
+            float x_corr = 0.0f;
+            float cand_nx = -1.0f, cand_ny = 0.0f;
+            const int out_line_idx =
+                left_wall_e398_project(lwg, (int)li, cur_rx, cur_ry, &x_corr, &cand_nx, &cand_ny);
+            if (out_line_idx < 0 || x_corr > 0.0f || fabsf(x_corr) > k_line_end_clamp) {
+              continue;
+            }
+            if (best_line_idx < 0 || fabsf(x_corr) < fabsf(best_corr) ||
+                (fabsf(x_corr) == fabsf(best_corr) &&
+                 lwg->lines[(size_t)out_line_idx].segment_i <
+                     lwg->lines[(size_t)best_line_idx].segment_i)) {
+              best_line_idx = out_line_idx;
+              best_corr = x_corr;
+              best_nx = cand_nx;
+              best_ny = cand_ny;
+            }
+          }
+          if (best_line_idx >= 0) {
+            batch->state.pos_x[idx] += best_corr;
+            batch->state.wall_kind[idx] = MSL_WALL_LEFT;
+            batch->state.wall_id[idx] = lwg->lines[(size_t)best_line_idx].segment_i;
+            batch->state.wall_contact_x[idx] = cur_rx + best_corr;
+            batch->state.wall_contact_y[idx] = cur_ry;
+            batch->state.wall_normal_x[idx] = best_nx;
+            batch->state.wall_normal_y[idx] = best_ny;
+            batch->state.coll_env_flags[idx] |= (uint32_t)MSL_COLLIDE_LEFT_WALL_MASK;
+          }
+        }
 
         // Airborne wall checks in-engine consider more than just the ECB side point.
         //
@@ -1219,6 +1260,42 @@ void mpcoll_wall_ceil_apply(MslBatch* batch) {
             batch->state.wall_contact_y[idx] = iy;
             batch->state.wall_normal_x[idx] = nx;
             batch->state.wall_normal_y[idx] = ny;
+            batch->state.coll_env_flags[idx] |= (uint32_t)MSL_COLLIDE_RIGHT_WALL_MASK;
+          }
+        }
+        if (batch->state.wall_kind[idx] == 0 && !grounded_now) {
+          // Symmetric persisted-index recovery for right walls.
+          // refs/melee/src/melee/lb/types.h::CollData
+          // refs/melee/src/melee/mp/mplib.c::{mpLib_8004E684_RightWall,mpLineIntersectionV}
+          float best_corr = 0.0f;
+          float best_nx = 1.0f, best_ny = 0.0f;
+          int best_line_idx = -1;
+          for (size_t li = 0; li < rwg->line_count; li++) {
+            float x_corr = 0.0f;
+            float cand_nx = 1.0f, cand_ny = 0.0f;
+            const int out_line_idx =
+                right_wall_e684_project(rwg, (int)li, cur_lx, cur_ly, &x_corr, &cand_nx, &cand_ny);
+            if (out_line_idx < 0 || x_corr < 0.0f || fabsf(x_corr) > k_line_end_clamp) {
+              continue;
+            }
+            if (best_line_idx < 0 || fabsf(x_corr) < fabsf(best_corr) ||
+                (fabsf(x_corr) == fabsf(best_corr) &&
+                 rwg->lines[(size_t)out_line_idx].segment_i <
+                     rwg->lines[(size_t)best_line_idx].segment_i)) {
+              best_line_idx = out_line_idx;
+              best_corr = x_corr;
+              best_nx = cand_nx;
+              best_ny = cand_ny;
+            }
+          }
+          if (best_line_idx >= 0) {
+            batch->state.pos_x[idx] += best_corr;
+            batch->state.wall_kind[idx] = MSL_WALL_RIGHT;
+            batch->state.wall_id[idx] = rwg->lines[(size_t)best_line_idx].segment_i;
+            batch->state.wall_contact_x[idx] = cur_lx + best_corr;
+            batch->state.wall_contact_y[idx] = cur_ly;
+            batch->state.wall_normal_x[idx] = best_nx;
+            batch->state.wall_normal_y[idx] = best_ny;
             batch->state.coll_env_flags[idx] |= (uint32_t)MSL_COLLIDE_RIGHT_WALL_MASK;
           }
         }

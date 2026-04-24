@@ -184,6 +184,10 @@ typedef struct MslCommonParams {
   uint16_t entry_end_frames;              // p_ftCommonData->x6C0
   uint16_t passivewall_timer_frames;      // p_ftCommonData->x760
   uint16_t colanim_passivewall_x1990_frames;  // p_ftCommonData->x764
+  float walljump_input_window_frames;         // p_ftCommonData->x768
+  float walljump_stick_x_threshold;           // p_ftCommonData->x76C
+  float walljump_tilt_x_max_frames;           // p_ftCommonData->x770
+  uint16_t walljump_startup_timer_frames;     // p_ftCommonData->x774
 
   // Ground friction multiplier when |gr_vel| > walk_max_vel (refs/melee/src/melee/ft/ft_081B.c::ft_80084F3C)
   float high_speed_friction_mul;  // p_ftCommonData->x6C
