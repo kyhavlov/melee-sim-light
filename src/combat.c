@@ -1487,6 +1487,27 @@ static inline uint16_t combat_calc_hitlag_frames(const MslCommonParams* c, int d
   return (uint16_t)result_i;
 }
 
+static inline uint8_t combat_received_kb_hitlag_owns_over_deal_hitlag(const MslBatch* batch,
+                                                                      size_t idx) {
+  if (batch == NULL) {
+    return 0u;
+  }
+  if (batch->state.hitlag[idx] == 0u || batch->state.hitstun[idx] == 0u) {
+    return 0u;
+  }
+  if (!combat_is_damage_or_firefox_launch_victim_action(batch->state.action_id[idx])) {
+    return 0u;
+  }
+  // Reciprocal BODY hit priority:
+  // - Fighter_ProcessHit consumes received-KB hitlag from `dmg.x183C_applied` before deal-hitlag
+  //   lanes (`dmg.x1914` / `x1924`).
+  // - This simplified pass applies BODY contacts sequentially, so a later outgoing hit from a
+  //   fighter already mutated into Damage* must not overwrite the received-hitlag value.
+  // refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
+  // refs/melee/build/GALE01/asm/melee/ft/ftcoll.s::ftColl_8007ABD0
+  return 1u;
+}
+
 static inline int combat_get_env_dmg(float dmg) {
   // Decomp (GALE01): "getEnvDmg" pattern used by collision when turning a hitbox's float damage into
   // the integer damage used for shield interactions and hitlag inputs.
@@ -2399,7 +2420,8 @@ static inline void combat_mutations_pass1_future_apply_body_hit_invincible(
   // refs/melee/build/GALE01/asm/melee/ft/ftcoll.s::ftColl_8007A06C (stfs ... 0x1960(r25))
   // refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC (ftCommon_CalcHitlag(..., x1960))
   const uint16_t a_hl = combat_calc_hitlag_frames(c, dmg_i, attacker_motion_id, 1.0f);
-  if (a_hl > batch->state.hitlag[a_idx]) {
+  if (!combat_received_kb_hitlag_owns_over_deal_hitlag(batch, a_idx) &&
+      a_hl > batch->state.hitlag[a_idx]) {
     batch->state.hitlag[a_idx] = a_hl;
     combat_state_flags_set_is_hitlag(batch, a_idx, a_hl);
   }
@@ -2558,7 +2580,8 @@ static inline void combat_mutations_pass1_future_apply_body_hit(
   const float d_hitlag_mul = combat_hitlag_mul_from_element(c, element);
   const uint16_t a_hl = combat_calc_hitlag_frames(c, dmg_i, attacker_motion_id, 1.0f);
   const uint16_t d_hl = combat_calc_hitlag_frames(c, dmg_i, d_motion_id, d_hitlag_mul);
-  if (a_hl > batch->state.hitlag[a_idx]) {
+  if (!combat_received_kb_hitlag_owns_over_deal_hitlag(batch, a_idx) &&
+      a_hl > batch->state.hitlag[a_idx]) {
     batch->state.hitlag[a_idx] = a_hl;
     combat_state_flags_set_is_hitlag(batch, a_idx, a_hl);
   }

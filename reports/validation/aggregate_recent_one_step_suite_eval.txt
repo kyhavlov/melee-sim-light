@@ -134,7 +134,7 @@ mismatch.facing: 3 / 19712 (0.000152)
 mismatch.stocks: 0 / 19712 (0.000000)
 mismatch.jumps_left: 11 / 19712 (0.000558)
 mismatch.is_dead: 0 / 19712 (0.000000)
-mismatch.hitlag: 11 / 19712 (0.000558)
+mismatch.hitlag: 10 / 19712 (0.000507)
 mismatch.hitstun: 6 / 19712 (0.000304)
 mismatch.l_cancel: 0 / 19712 (0.000000)
 mismatch.hurtbox_state: 9 / 19712 (0.000457)
@@ -164,7 +164,7 @@ err.item_pos_x: mae=0.063551 p95=0.000000 max=43.625328
 err.item_pos_y: mae=0.022773 p95=0.000000 max=39.553974
 err.item_vel_x: mae=0.019435 p95=0.000000 max=2.756703
 err.item_vel_y: mae=0.005364 p95=0.000000 max=6.995884
-overall.discrete_mismatch: 200 / 1192576
+overall.discrete_mismatch: 199 / 1192576
 overall.float_norm_mae_p95: 0.00107931
 
 == datasets/aggregate_recent/replays/validation/aggregate_recent/FavorableSuperficialPig.msl ==
@@ -344,7 +344,7 @@ mismatch.facing: 4 / 23516 (0.000170)
 mismatch.stocks: 0 / 23516 (0.000000)
 mismatch.jumps_left: 8 / 23516 (0.000340)
 mismatch.is_dead: 0 / 23516 (0.000000)
-mismatch.hitlag: 11 / 23516 (0.000468)
+mismatch.hitlag: 9 / 23516 (0.000383)
 mismatch.hitstun: 4 / 23516 (0.000170)
 mismatch.l_cancel: 0 / 23516 (0.000000)
 mismatch.hurtbox_state: 14 / 23516 (0.000595)
@@ -374,7 +374,7 @@ err.item_pos_x: mae=0.009063 p95=0.000000 max=3.790001
 err.item_pos_y: mae=0.000000 p95=0.000000 max=0.000004
 err.item_vel_x: mae=0.000000 p95=0.000000 max=0.000000
 err.item_vel_y: mae=0.000000 p95=0.000000 max=0.000000
-overall.discrete_mismatch: 234 / 1422718
+overall.discrete_mismatch: 232 / 1422718
 overall.float_norm_mae_p95: 0.00046944
 
 == datasets/aggregate_recent/replays/validation/aggregate_recent/MotionlessAggressiveJay.msl ==
@@ -554,7 +554,7 @@ mismatch.facing: 1 / 20444 (0.000049)
 mismatch.stocks: 0 / 20444 (0.000000)
 mismatch.jumps_left: 2 / 20444 (0.000098)
 mismatch.is_dead: 0 / 20444 (0.000000)
-mismatch.hitlag: 5 / 20444 (0.000245)
+mismatch.hitlag: 4 / 20444 (0.000196)
 mismatch.hitstun: 2 / 20444 (0.000098)
 mismatch.l_cancel: 0 / 20444 (0.000000)
 mismatch.hurtbox_state: 7 / 20444 (0.000342)
@@ -584,7 +584,7 @@ err.item_pos_x: mae=0.086250 p95=0.000000 max=26.093185
 err.item_pos_y: mae=0.044276 p95=0.000000 max=14.904242
 err.item_vel_x: mae=0.030200 p95=0.000000 max=11.575811
 err.item_vel_y: mae=0.000033 p95=0.000000 max=0.018209
-overall.discrete_mismatch: 115 / 1236862
+overall.discrete_mismatch: 114 / 1236862
 overall.float_norm_mae_p95: 0.00070776
 
 == datasets/aggregate_recent/replays/validation/cardinal_1.0_recent/TreasuredBackKangaroo.msl ==
@@ -596,7 +596,7 @@ mismatch.facing: 3 / 15674 (0.000191)
 mismatch.stocks: 0 / 15674 (0.000000)
 mismatch.jumps_left: 4 / 15674 (0.000255)
 mismatch.is_dead: 0 / 15674 (0.000000)
-mismatch.hitlag: 5 / 15674 (0.000319)
+mismatch.hitlag: 4 / 15674 (0.000255)
 mismatch.hitstun: 4 / 15674 (0.000255)
 mismatch.l_cancel: 0 / 15674 (0.000000)
 mismatch.hurtbox_state: 4 / 15674 (0.000255)
@@ -626,7 +626,7 @@ err.item_pos_x: mae=0.019382 p95=0.000000 max=3.790001
 err.item_pos_y: mae=0.001103 p95=0.000000 max=0.280016
 err.item_vel_x: mae=0.011704 p95=0.000000 max=2.756703
 err.item_vel_y: mae=0.001124 p95=0.000000 max=0.280011
-overall.discrete_mismatch: 109 / 948277
+overall.discrete_mismatch: 108 / 948277
 overall.float_norm_mae_p95: 0.00126893
 
 == datasets/aggregate_recent/replays/validation/aggregate_recent/TubbyCurlyHerring.msl ==
@@ -638,7 +638,7 @@ mismatch.facing: 4 / 24832 (0.000161)
 mismatch.stocks: 0 / 24832 (0.000000)
 mismatch.jumps_left: 7 / 24832 (0.000282)
 mismatch.is_dead: 0 / 24832 (0.000000)
-mismatch.hitlag: 12 / 24832 (0.000483)
+mismatch.hitlag: 8 / 24832 (0.000322)
 mismatch.hitstun: 3 / 24832 (0.000121)
 mismatch.l_cancel: 0 / 24832 (0.000000)
 mismatch.hurtbox_state: 9 / 24832 (0.000362)
@@ -668,9 +668,9 @@ err.item_pos_x: mae=0.025846 p95=0.000000 max=25.872602
 err.item_pos_y: mae=0.007306 p95=0.000000 max=21.128674
 err.item_vel_x: mae=0.008987 p95=0.000000 max=8.713741
 err.item_vel_y: mae=0.000004 p95=0.000000 max=0.006372
-overall.discrete_mismatch: 236 / 1502336
+overall.discrete_mismatch: 232 / 1502336
 overall.float_norm_mae_p95: 0.00062150
 
 == suite summary ==
-overall.discrete_mismatch: 3078 / 17965838
+overall.discrete_mismatch: 3069 / 17965838
 overall.float_norm_mae_p95: 0.00092396

@@ -129,13 +129,13 @@ rollout.first_mismatch_seeded_total: 50
 
 == datasets/aggregate_recent/replays/validation/aggregate_recent/TubbyCurlyHerring.msl ==
 rollout.best_len: 489
-rollout.streak_count: 134
-rollout.streak_len.median: 76
-rollout.streak_len.p90: 209
-rollout.streak_len.p95: 257
+rollout.streak_count: 132
+rollout.streak_len.median: 73
+rollout.streak_len.p90: 222
+rollout.streak_len.p95: 269
 rollout.streak_len.max: 489
-rollout.first_mismatch_total: 137
-rollout.first_mismatch_seeded_total: 62
+rollout.first_mismatch_total: 135
+rollout.first_mismatch_seeded_total: 59
 
 == datasets/aggregate_recent/replays/validation/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl ==
 rollout.best_len: 424
@@ -159,30 +159,30 @@ rollout.first_mismatch_seeded_total: 34
 
 == datasets/aggregate_recent/replays/validation/cardinal_1.0_recent/QuerulousGrandDinosaur.msl ==
 rollout.best_len: 631
-rollout.streak_count: 109
+rollout.streak_count: 108
 rollout.streak_len.median: 73
 rollout.streak_len.p90: 196
 rollout.streak_len.p95: 244
 rollout.streak_len.max: 631
-rollout.first_mismatch_total: 108
-rollout.first_mismatch_seeded_total: 35
+rollout.first_mismatch_total: 107
+rollout.first_mismatch_seeded_total: 34
 
 == datasets/aggregate_recent/replays/validation/cardinal_1.0_recent/TreasuredBackKangaroo.msl ==
 rollout.best_len: 335
-rollout.streak_count: 87
+rollout.streak_count: 86
 rollout.streak_len.median: 65
 rollout.streak_len.p90: 179
 rollout.streak_len.p95: 235
 rollout.streak_len.max: 335
-rollout.first_mismatch_total: 88
-rollout.first_mismatch_seeded_total: 31
+rollout.first_mismatch_total: 87
+rollout.first_mismatch_seeded_total: 30
 
 == suite summary ==
-overall.rollout.streak_count: 1764
+overall.rollout.streak_count: 1760
 overall.rollout.streak_len.median: 61
 overall.rollout.streak_len.p90: 187
 overall.rollout.streak_len.p95: 244
 overall.rollout.streak_len.max: 631
 overall.rollout.best_len.max: 631
-overall.rollout.first_mismatch_total: 1826
-overall.rollout.first_mismatch_seeded_total: 749
+overall.rollout.first_mismatch_total: 1822
+overall.rollout.first_mismatch_seeded_total: 744
