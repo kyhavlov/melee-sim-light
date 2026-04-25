@@ -214,32 +214,42 @@ static inline uint8_t combat_downbound_hidden_colanim_rejects_attackdash_body_co
   return 1u;
 }
 
-static inline uint8_t combat_attackairlw_invincible_mirror_rejects_body_hitlag(
+static inline uint8_t combat_attackairlw_invincible_contact_rejects_body_hitlag(
     const MslBatch* batch, size_t a_idx, size_t d_idx) {
   if (batch == NULL) {
     return 0u;
   }
-  if (batch->state.action_id[a_idx] != (uint16_t)MSL_ACT_ATTACK_AIR_LW ||
-      batch->state.action_id[d_idx] != (uint16_t)MSL_ACT_ATTACK_AIR_LW) {
+  if (batch->state.action_id[a_idx] != (uint16_t)MSL_ACT_ATTACK_AIR_LW) {
     return 0u;
   }
-  if (batch->state.on_ground[a_idx] != 0u || batch->state.on_ground[d_idx] != 0u) {
+  const uint16_t d_action = batch->state.action_id[d_idx];
+  if (d_action != (uint16_t)MSL_ACT_ATTACK_AIR_LW && d_action != (uint16_t)MSL_ACT_ATTACK_HI3) {
+    return 0u;
+  }
+  if (batch->state.on_ground[a_idx] != 0u) {
+    return 0u;
+  }
+  if (d_action == (uint16_t)MSL_ACT_ATTACK_AIR_LW && batch->state.on_ground[d_idx] != 0u) {
+    return 0u;
+  }
+  if (d_action == (uint16_t)MSL_ACT_ATTACK_HI3 && batch->state.on_ground[d_idx] == 0u) {
     return 0u;
   }
   if (batch->state.hurtbox_state[d_idx] != 1u) {
     return 0u;
   }
-  // Narrow AttackAirLw mirror-contact bridge:
+  // Narrow AttackAirLw invincible-contact bridge:
   // - ftColl_80078C70 runs BODY narrowphase only when the defender is not intangible
   //   (`x1988 != 2 && x198C != 2`), then ftColl_80076ED8 decides whether that accepted
   //   contact contributes attacker-side hitlag or defender damage from the defender collision
   //   status and hurt capsule state.
-  // - Replay-real simultaneous-dair rows can expose the defender as visible
-  //   `hurtbox_state=1` while vanilla still rejects this mirror BODY contact until a later
-  //   vulnerable contact frame. Keep this as an explicitly scoped seed/provenance bridge rather
-  //   than weakening the generic invincible-contact owner.
+  // - Replay-real AttackAirLw overlap rows can expose the defender as visible `hurtbox_state=1`
+  //   while vanilla still rejects this BODY contact until a later vulnerable contact frame. Keep
+  //   this as an explicitly scoped seed/provenance bridge rather than weakening the generic
+  //   invincible-contact owner.
   // refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078C70,ftColl_80076ED8}
   // data/moves/{fox,falco}.json moves["ftCo_SM_AttackAirLw"].events
+  // data/moves/{fox,falco}.json moves["ftCo_SM_AttackHi3"].events
   return 1u;
 }
 
@@ -4785,7 +4795,7 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
                                                                               d_idx)) {
             continue;
           }
-          if (combat_attackairlw_invincible_mirror_rejects_body_hitlag(batch, a_idx, d_idx)) {
+          if (combat_attackairlw_invincible_contact_rejects_body_hitlag(batch, a_idx, d_idx)) {
             continue;
           }
           if (!allows_v1 && !attackairb_stale_owner_candidate) {

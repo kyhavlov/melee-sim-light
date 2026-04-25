@@ -344,7 +344,7 @@ mismatch.facing: 4 / 23516 (0.000170)
 mismatch.stocks: 0 / 23516 (0.000000)
 mismatch.jumps_left: 8 / 23516 (0.000340)
 mismatch.is_dead: 0 / 23516 (0.000000)
-mismatch.hitlag: 17 / 23516 (0.000723)
+mismatch.hitlag: 12 / 23516 (0.000510)
 mismatch.hitstun: 4 / 23516 (0.000170)
 mismatch.l_cancel: 0 / 23516 (0.000000)
 mismatch.hurtbox_state: 14 / 23516 (0.000595)
@@ -355,7 +355,7 @@ mismatch.instance_id: 41 / 23516 (0.001743)
 mismatch.last_attack_landed: 1 / 23516 (0.000043)
 mismatch.combo_count: 0 / 23516 (0.000000)
 mismatch.last_hit_by: 18 / 23516 (0.000765)
-mismatch.state_flags: 51 / 117580 (0.000434)
+mismatch.state_flags: 46 / 117580 (0.000391)
 mismatch.item_exists: 1 / 176370 (0.000006)
 mismatch.item_type: 1 / 176370 (0.000006)
 mismatch.item_state: 0 / 176370 (0.000000)
@@ -374,7 +374,7 @@ err.item_pos_x: mae=0.009063 p95=0.000000 max=3.790001
 err.item_pos_y: mae=0.000000 p95=0.000000 max=0.000004
 err.item_vel_x: mae=0.000000 p95=0.000000 max=0.000000
 err.item_vel_y: mae=0.000000 p95=0.000000 max=0.000000
-overall.discrete_mismatch: 246 / 1422718
+overall.discrete_mismatch: 236 / 1422718
 overall.float_norm_mae_p95: 0.00046944
 
 == datasets/aggregate_recent/replays/validation/aggregate_recent/MotionlessAggressiveJay.msl ==
@@ -672,5 +672,5 @@ overall.discrete_mismatch: 236 / 1502336
 overall.float_norm_mae_p95: 0.00062150
 
 == suite summary ==
-overall.discrete_mismatch: 3090 / 17965838
+overall.discrete_mismatch: 3080 / 17965838
 overall.float_norm_mae_p95: 0.00092396
