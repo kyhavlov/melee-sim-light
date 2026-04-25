@@ -64,6 +64,26 @@ enum {
   MSL_WALL_RIGHT = 2,  // mplib CollLine_RightWall
 };
 
+// Wall env-flag split mirrors mpColl: every wall hit sets Push, but only the ECB side-point
+// branch sets Hug. ftWallJump_8008169C and PassiveWall entry intentionally test the Hug bit, so
+// bottom/top fallback contacts must not promote to walljump/tech authority.
+// refs/melee/src/melee/mp/mpcoll.c::{
+//   mpColl_80044E10_RightWall,mpColl_80045B74_LeftWall,mpColl_80048AB0_RightWall}
+// refs/melee/src/melee/ft/ftwalljump.c::ftWallJump_8008169C
+static inline void mark_left_wall_contact(MslBatch* batch, size_t idx, uint8_t hug) {
+  batch->state.coll_env_flags[idx] |= (uint32_t)MSL_COLLIDE_LEFT_WALL_PUSH;
+  if (hug) {
+    batch->state.coll_env_flags[idx] |= (uint32_t)MSL_COLLIDE_LEFT_WALL_HUG;
+  }
+}
+
+static inline void mark_right_wall_contact(MslBatch* batch, size_t idx, uint8_t hug) {
+  batch->state.coll_env_flags[idx] |= (uint32_t)MSL_COLLIDE_RIGHT_WALL_PUSH;
+  if (hug) {
+    batch->state.coll_env_flags[idx] |= (uint32_t)MSL_COLLIDE_RIGHT_WALL_HUG;
+  }
+}
+
 static inline uint8_t point_eq_axis_eps(float ax, float ay, float bx, float by) {
   return (uint8_t)(fabsf(ax - bx) <= k_line_axis_thresh && fabsf(ay - by) <= k_line_axis_thresh);
 }
@@ -1053,7 +1073,7 @@ void mpcoll_wall_ceil_apply(MslBatch* batch) {
             batch->state.wall_contact_y[idx] = cur_ry;
             batch->state.wall_normal_x[idx] = nx;
             batch->state.wall_normal_y[idx] = ny;
-            batch->state.coll_env_flags[idx] |= (uint32_t)MSL_COLLIDE_LEFT_WALL_MASK;
+            mark_left_wall_contact(batch, idx, 1u);
           }
         }
 
@@ -1077,7 +1097,7 @@ void mpcoll_wall_ceil_apply(MslBatch* batch) {
             batch->state.wall_contact_y[idx] = iy;
             batch->state.wall_normal_x[idx] = nx;
             batch->state.wall_normal_y[idx] = ny;
-            batch->state.coll_env_flags[idx] |= (uint32_t)MSL_COLLIDE_LEFT_WALL_MASK;
+            mark_left_wall_contact(batch, idx, 1u);
           }
         }
         if (batch->state.wall_kind[idx] == 0 && !grounded_now) {
@@ -1118,7 +1138,7 @@ void mpcoll_wall_ceil_apply(MslBatch* batch) {
             batch->state.wall_contact_y[idx] = cur_ry;
             batch->state.wall_normal_x[idx] = best_nx;
             batch->state.wall_normal_y[idx] = best_ny;
-            batch->state.coll_env_flags[idx] |= (uint32_t)MSL_COLLIDE_LEFT_WALL_MASK;
+            mark_left_wall_contact(batch, idx, 1u);
           }
         }
 
@@ -1168,7 +1188,7 @@ void mpcoll_wall_ceil_apply(MslBatch* batch) {
               batch->state.wall_contact_y[idx] = iy2;
               batch->state.wall_normal_x[idx] = nx2;
               batch->state.wall_normal_y[idx] = ny2;
-              batch->state.coll_env_flags[idx] |= (uint32_t)MSL_COLLIDE_LEFT_WALL_MASK;
+              mark_left_wall_contact(batch, idx, 0u);
             }
           }
         }
@@ -1198,7 +1218,7 @@ void mpcoll_wall_ceil_apply(MslBatch* batch) {
               batch->state.wall_contact_y[idx] = iy2;
               batch->state.wall_normal_x[idx] = nx2;
               batch->state.wall_normal_y[idx] = ny2;
-              batch->state.coll_env_flags[idx] |= (uint32_t)MSL_COLLIDE_LEFT_WALL_MASK;
+              mark_left_wall_contact(batch, idx, 0u);
             }
           }
         }
@@ -1236,7 +1256,7 @@ void mpcoll_wall_ceil_apply(MslBatch* batch) {
             batch->state.wall_contact_y[idx] = cur_ly;
             batch->state.wall_normal_x[idx] = nx;
             batch->state.wall_normal_y[idx] = ny;
-            batch->state.coll_env_flags[idx] |= (uint32_t)MSL_COLLIDE_RIGHT_WALL_MASK;
+            mark_right_wall_contact(batch, idx, 1u);
           }
         }
 
@@ -1260,7 +1280,7 @@ void mpcoll_wall_ceil_apply(MslBatch* batch) {
             batch->state.wall_contact_y[idx] = iy;
             batch->state.wall_normal_x[idx] = nx;
             batch->state.wall_normal_y[idx] = ny;
-            batch->state.coll_env_flags[idx] |= (uint32_t)MSL_COLLIDE_RIGHT_WALL_MASK;
+            mark_right_wall_contact(batch, idx, 1u);
           }
         }
         if (batch->state.wall_kind[idx] == 0 && !grounded_now) {
@@ -1296,7 +1316,7 @@ void mpcoll_wall_ceil_apply(MslBatch* batch) {
             batch->state.wall_contact_y[idx] = cur_ly;
             batch->state.wall_normal_x[idx] = best_nx;
             batch->state.wall_normal_y[idx] = best_ny;
-            batch->state.coll_env_flags[idx] |= (uint32_t)MSL_COLLIDE_RIGHT_WALL_MASK;
+            mark_right_wall_contact(batch, idx, 1u);
           }
         }
 
@@ -1329,7 +1349,7 @@ void mpcoll_wall_ceil_apply(MslBatch* batch) {
               batch->state.wall_contact_y[idx] = iy2;
               batch->state.wall_normal_x[idx] = nx2;
               batch->state.wall_normal_y[idx] = ny2;
-              batch->state.coll_env_flags[idx] |= (uint32_t)MSL_COLLIDE_RIGHT_WALL_MASK;
+              mark_right_wall_contact(batch, idx, 0u);
             }
           }
         }
@@ -1359,7 +1379,7 @@ void mpcoll_wall_ceil_apply(MslBatch* batch) {
               batch->state.wall_contact_y[idx] = iy2;
               batch->state.wall_normal_x[idx] = nx2;
               batch->state.wall_normal_y[idx] = ny2;
-              batch->state.coll_env_flags[idx] |= (uint32_t)MSL_COLLIDE_RIGHT_WALL_MASK;
+              mark_right_wall_contact(batch, idx, 0u);
             }
           }
         }

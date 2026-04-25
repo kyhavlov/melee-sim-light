@@ -725,7 +725,11 @@ static inline uint8_t try_common_air_walljump_post_collision(MslBatch* batch,
   uint8_t right_hug = (env & (uint32_t)MSL_COLLIDE_RIGHT_WALL_HUG) ? 1u : 0u;
   uint8_t left_hug = (env & (uint32_t)MSL_COLLIDE_LEFT_WALL_HUG) ? 1u : 0u;
   const int8_t seeded_wall_side = batch->state.walljump_wall_side_i8[idx];
-  if (!right_hug && !left_hug && batch->state.walljump_input_timer[idx] < 254u) {
+  if (!right_hug && !left_hug && batch->state.walljump_seed_phase_valid[idx]) {
+    // One-step replay bridge only: Slippi exposes the hidden walljump timer/side but not all
+    // CollData wall-hug phase needed by the target callback. clear_seed_owned_transients_post_frame
+    // drops this authority after the reseeded step, so rollout carry still requires live WallHug.
+    // refs/melee/src/melee/ft/ftwalljump.c::ftWallJump_8008169C
     if (seeded_wall_side < 0) {
       right_hug = 1u;
     } else if (seeded_wall_side > 0) {
@@ -733,6 +737,9 @@ static inline uint8_t try_common_air_walljump_post_collision(MslBatch* batch,
     }
   }
   if (!right_hug && !left_hug) {
+    // Decomp: ftWallJump_8008169C's outer gate is the current CollData WallHug bit. Hidden timer
+    // state may satisfy the later timer/side checks, but it must not synthesize current wall hug.
+    // refs/melee/src/melee/ft/ftwalljump.c::ftWallJump_8008169C
     batch->state.walljump_input_timer[idx] = 254u;
     return 0u;
   }

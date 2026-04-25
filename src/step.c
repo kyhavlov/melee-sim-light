@@ -91,6 +91,10 @@ static inline void clear_seed_owned_transients_post_frame(MslBatch* batch) {
       batch->state.turn_kneebend_facing_override[idx] = 0u;
       batch->state.motion_entry_instance_id_override[idx] = 0u;
       batch->state.combat_shield_hit_int_damage[idx] = 0u;
+      // `seed_t.walljump_*` can bridge a hidden CollData WallHug phase for one-step replay rows.
+      // Runtime after that step must require live mpColl WallHug bits again.
+      // refs/melee/src/melee/ft/ftwalljump.c::ftWallJump_8008169C
+      batch->state.walljump_seed_phase_valid[idx] = 0u;
     }
     // Teacher-forced shield-contact lanes are one-step reseed surfaces. Normal rollouts must
     // return to live shield geometry / collision ordering after the seeded frame.

@@ -142,6 +142,7 @@ int state_alloc(MslStateSoA* state, int batch_size) {
   state->passivewall_timer = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->walljump_input_timer = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->walljump_wall_side_i8 = (int8_t*)alloc_aligned_64(sizeof(int8_t) * bp);
+  state->walljump_seed_phase_valid = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->anim_frame_f32 = (float*)alloc_aligned_64(sizeof(float) * bp);
   state->anim_frame_fp_q16_16 = (int32_t*)alloc_aligned_64(sizeof(int32_t) * bp);
   state->frame_speed_mul_fp_q16_16 = (int32_t*)alloc_aligned_64(sizeof(int32_t) * bp);
@@ -435,23 +436,24 @@ int state_alloc(MslStateSoA* state, int batch_size) {
       !state->camera_target_world_z_f32 || !state->camera_box_radius_f32 ||
       !state->camera_target_point_inside_stage_cam_bounds_u8 || !state->downwait_timer ||
       !state->passivewall_timer || !state->walljump_input_timer || !state->walljump_wall_side_i8 ||
-      !state->anim_frame_f32 || !state->anim_frame_fp_q16_16 || !state->frame_speed_mul_fp_q16_16 ||
-      !state->walk_anim_source_vel || !state->walk_retarget_tick_source_vel ||
-      !state->run_anim_source_vel || !state->turn_kneebend_facing_override ||
-      !state->capture_grab_timer || !state->capture_wait_counter ||
-      !state->capture_wait_anim_rate_timer || !state->capture_wait_jump_latch ||
-      !state->capture_breakout_pending || !state->throw_anim_rate_fp_q16_16 ||
-      !state->anim_defer_tick_once || !state->jumps_left || !state->stocks ||
-      !state->guard_tilt_x8 || !state->guard_tilt_x4 || !state->guard_on_entered_this_frame ||
-      !state->guard_entry_via_wait_callback || !state->guard_jump_oos_entered_this_frame ||
-      !state->shine_jump_iasa_entered_this_frame || !state->guard_reflect_timer_x14 ||
-      !state->guard_reflect_timer_x18 || !state->guard_reflect_timer_x14_seed ||
-      !state->guard_reflect_timer_x18_seed || !state->guard_release_latched_xc ||
-      !state->guard_x10 || !state->lightshield_amount || !state->guard_setoff_hitlag_damage_min ||
-      !state->guard_setoff_hitlag_exit_phase_u8 || !state->guard_setoff_post_hitlag_owner_u8 ||
-      !state->kneebend_jump_input || !state->kneebend_is_short_hop || !state->tilt_timer_x ||
-      !state->tilt_timer_y || !state->fall_fast || !state->attackdash_x0 || !state->jab_x0 ||
-      !state->run_x0 || !state->runbrake_cmd0 || !state->dash_x4 || !state->shine_release_lag ||
+      !state->walljump_seed_phase_valid || !state->anim_frame_f32 || !state->anim_frame_fp_q16_16 ||
+      !state->frame_speed_mul_fp_q16_16 || !state->walk_anim_source_vel ||
+      !state->walk_retarget_tick_source_vel || !state->run_anim_source_vel ||
+      !state->turn_kneebend_facing_override || !state->capture_grab_timer ||
+      !state->capture_wait_counter || !state->capture_wait_anim_rate_timer ||
+      !state->capture_wait_jump_latch || !state->capture_breakout_pending ||
+      !state->throw_anim_rate_fp_q16_16 || !state->anim_defer_tick_once || !state->jumps_left ||
+      !state->stocks || !state->guard_tilt_x8 || !state->guard_tilt_x4 ||
+      !state->guard_on_entered_this_frame || !state->guard_entry_via_wait_callback ||
+      !state->guard_jump_oos_entered_this_frame || !state->shine_jump_iasa_entered_this_frame ||
+      !state->guard_reflect_timer_x14 || !state->guard_reflect_timer_x18 ||
+      !state->guard_reflect_timer_x14_seed || !state->guard_reflect_timer_x18_seed ||
+      !state->guard_release_latched_xc || !state->guard_x10 || !state->lightshield_amount ||
+      !state->guard_setoff_hitlag_damage_min || !state->guard_setoff_hitlag_exit_phase_u8 ||
+      !state->guard_setoff_post_hitlag_owner_u8 || !state->kneebend_jump_input ||
+      !state->kneebend_is_short_hop || !state->tilt_timer_x || !state->tilt_timer_y ||
+      !state->fall_fast || !state->attackdash_x0 || !state->jab_x0 || !state->run_x0 ||
+      !state->runbrake_cmd0 || !state->dash_x4 || !state->shine_release_lag ||
       !state->shine_is_release || !state->ecb_lock_timer || !state->ledge_side ||
       !state->stage_ledge_occupant_left || !state->stage_ledge_occupant_right ||
       !state->ledge_cooldown || !state->fallspecial_xc ||
@@ -558,6 +560,7 @@ int state_alloc(MslStateSoA* state, int batch_size) {
   memset(state->smash_charge_frames, 0, sizeof(uint8_t) * bp);
   memset(state->smash_charge_hold_frames_max, 0, sizeof(uint8_t) * bp);
   memset(state->smash_charge_saved_rate_fp_q16_16, 0, sizeof(int32_t) * bp);
+  memset(state->walljump_seed_phase_valid, 0, sizeof(uint8_t) * bp);
   memset(state->walk_anim_source_vel, 0, sizeof(float) * bp);
   memset(state->walk_retarget_tick_source_vel, 0, sizeof(float) * bp);
   memset(state->run_anim_source_vel, 0, sizeof(float) * bp);
@@ -692,6 +695,7 @@ void state_free(MslStateSoA* state) {
   alloc_free(state->passivewall_timer);
   alloc_free(state->walljump_input_timer);
   alloc_free(state->walljump_wall_side_i8);
+  alloc_free(state->walljump_seed_phase_valid);
   alloc_free(state->anim_frame_f32);
   alloc_free(state->anim_frame_fp_q16_16);
   alloc_free(state->frame_speed_mul_fp_q16_16);

@@ -279,6 +279,10 @@ typedef struct MslStateSoA {
   // refs/melee/src/melee/ft/ftwalljump.c::ftWallJump_8008169C
   uint8_t* walljump_input_timer;
   int8_t* walljump_wall_side_i8;
+  // One-step replay bridge for CollData wall-hug phase hidden from Slippi. Runtime clears this
+  // after the seeded step; live rollouts must use current mpColl WallHug bits.
+  // refs/melee/src/melee/ft/ftwalljump.c::ftWallJump_8008169C
+  uint8_t* walljump_seed_phase_valid;
   float* anim_frame_f32;  // decomp fp->cur_anim_frame (float; Slippi `state_age`)
   // Decomp-shaped internal animation/script timebase with deterministic fractional carry.
   // - anim_frame_fp_q16_16 mirrors fp->cur_anim_frame (float) as signed Q16.16 fixed-point.

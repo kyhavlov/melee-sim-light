@@ -6,10 +6,16 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tools.eval.dataset import INPUT_DTYPE, SEED_DTYPE
+from tools.eval.dataset import COMPARE_DTYPE, INPUT_DTYPE, SEED_DTYPE
 
 # Action ids (GALE01): refs/melee/src/melee/ft/chara/ftCommon/forward.h
 ACT_WAIT = 0x000E
+ACT_FALL = 0x001D
+ACT_PASSIVE_WALL_JUMP = 0x00CB
+SM_FALL = 20
+CHAR_FALCO = 22
+MSL_COLLIDE_RIGHT_WALL_PUSH = 0x00000040
+MSL_COLLIDE_RIGHT_WALL_HUG = 0x00000800
 
 
 def _ecb_side_y_offset_for_char_id(char_id: int) -> float:
@@ -375,6 +381,115 @@ def test_wall_contact_triggers_on_ecb_side_crossing_not_root_on_fd() -> None:
         assert int(c0["wall_id"][0]) == wall_i
     finally:
         msl_binding.destroy(handle)
+
+
+def test_bottom_wall_push_does_not_promote_common_air_walljump_on_fd() -> None:
+    # Decomp: mpColl marks Collide_RightWallHug only when the ECB side point hits the wall; bottom
+    # and top fallback hits mark Collide_RightWallPush. ftWallJump_8008169C checks the Hug bit, so
+    # a bottom-only contact must not start the walljump input phase even with stick-away input.
+    # refs/melee/src/melee/mp/mpcoll.c::mpColl_80044E10_RightWall
+    # refs/melee/src/melee/ft/ftwalljump.c::ftWallJump_8008169C
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    compare_stride = int(sizes["compare"])
+    contacts_stride = int(sizes["collision_contacts"])
+
+    assert seed_stride == SEED_DTYPE.itemsize
+    assert input_stride == INPUT_DTYPE.itemsize
+    assert compare_stride == COMPARE_DTYPE.itemsize
+
+    try:
+        wall_i, wx0, wy0, wx1, wy1 = _fd_pick_right_wall_segment()
+    except AssertionError as e:
+        pytest.skip(str(e))
+
+    contacts_dtype = np.dtype(
+        [
+            ("wall_kind", ("u1", (4,))),
+            ("_pad0", ("u1", (4,))),
+            ("wall_id", ("<u2", (4,))),
+            ("wall_contact_x", ("<f4", (4,))),
+            ("wall_contact_y", ("<f4", (4,))),
+            ("wall_normal_x", ("<f4", (4,))),
+            ("wall_normal_y", ("<f4", (4,))),
+            ("ceiling_id", ("<u2", (4,))),
+            ("_pad1", ("<u2", (4,))),
+            ("ceiling_contact_x", ("<f4", (4,))),
+            ("ceiling_contact_y", ("<f4", (4,))),
+            ("ceiling_normal_x", ("<f4", (4,))),
+            ("ceiling_normal_y", ("<f4", (4,))),
+            ("coll_env_flags", ("<u4", (4,))),
+            ("coll_prev_env_flags", ("<u4", (4,))),
+        ],
+        align=False,
+    )
+    assert int(contacts_dtype.itemsize) == contacts_stride
+
+    af = 0
+    min_x, _max_x, _min_y, max_y = msl_binding.ecb_extents_rel(CHAR_FALCO, SM_FALL, af)
+    bottom_y = float(msl_binding.ecb_bottom_rel_y(CHAR_FALCO, SM_FALL, af))
+    side_y = _ecb_side_y_offset_for_char_id(CHAR_FALCO) + 0.5 * (float(max_y) + bottom_y)
+    wall_x_mid = 0.5 * (float(wx0) + float(wx1))
+    wall_y_mid = 0.5 * (float(wy0) + float(wy1))
+    if abs(float(min_x)) < 0.5:
+        pytest.skip("Falco Fall ECB left extent too small for bottom-only wall contact")
+    if min(float(wy0), float(wy1)) <= wall_y_mid + (side_y - bottom_y) <= max(float(wy0), float(wy1)):
+        pytest.skip("Falco Fall side point still overlaps selected wall segment")
+
+    seed = np.zeros((1,), dtype=SEED_DTYPE)
+    seed["stage_id"][0] = np.uint32(32)
+    seed["num_players"][0] = np.uint8(2)
+    seed["stocks"][0, :2] = np.uint8(4)
+    seed["frame_speed_mul_f32"][0, :2] = np.float32(1.0)
+    seed["fighter_scale_y"][0, :2] = np.float32(1.0)
+    seed["attack_ratio"][0, :2] = np.float32(1.0)
+    seed["defense_ratio"][0, :2] = np.float32(1.0)
+    seed["ground_friction_mul"][0, :2] = np.float32(1.0)
+    seed["char_id"][0, 0] = np.uint8(CHAR_FALCO)
+    seed["action_id"][0, 0] = np.uint16(ACT_FALL)
+    seed["animation_index"][0, 0] = np.uint32(SM_FALL)
+    seed["action_frame"][0, 0] = np.int16(af)
+    seed["anim_frame_f32"][0, 0] = np.float32(float(af))
+    seed["on_ground"][0, 0] = np.uint8(0)
+    seed["ground_id"][0, 0] = np.uint16(0xFFFF)
+    seed["facing"][0, 0] = np.uint8(1)
+    seed["pos_x"][0, 0] = np.float32(wall_x_mid + 0.05)
+    seed["pos_y"][0, 0] = np.float32(wall_y_mid - bottom_y)
+    seed["speed_air_x_self"][0, 0] = np.float32(-2.0)
+    seed["speed_y_self"][0, 0] = np.float32(0.0)
+    seed["jumps_left"][0, 0] = np.uint8(1)
+    seed["tilt_timer_x"][0, 0] = np.uint8(0)
+    seed["walljump_input_timer"][0, 0] = np.uint8(254)
+    seed["walljump_wall_side_i8"][0, 0] = np.int8(0)
+
+    input_t = np.zeros((1,), dtype=INPUT_DTYPE)
+    input_t["p"]["main_x"][0, 0] = np.int8(80)
+    prev_input = input_t.copy()
+    input_bytes = input_t.view(np.uint8).reshape((1, input_stride))
+    prev_input_bytes = prev_input.view(np.uint8).reshape((1, input_stride))
+
+    out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
+    out_contacts = np.zeros((1, contacts_stride), dtype=np.uint8)
+
+    handle = msl_binding.init(batch_size=1, num_players=2)
+    try:
+        msl_binding.reseed_seed(handle, seed.view(np.uint8).reshape((1, seed_stride)))
+        msl_binding.step_input(handle, prev_input_bytes, input_bytes)
+        msl_binding.write_compare(handle, out_compare_bytes)
+        msl_binding.debug_write_collision_contacts(handle, out_contacts)
+    finally:
+        msl_binding.destroy(handle)
+
+    out = out_compare_bytes.view(COMPARE_DTYPE).reshape((1,))[0]
+    contacts = out_contacts.view(contacts_dtype).reshape((1,))[0]
+    flags = int(contacts["coll_env_flags"][0])
+    assert int(contacts["wall_id"][0]) == wall_i
+    assert flags & MSL_COLLIDE_RIGHT_WALL_PUSH
+    assert (flags & MSL_COLLIDE_RIGHT_WALL_HUG) == 0
+    assert int(out["action_id"][0]) != ACT_PASSIVE_WALL_JUMP
 
 
 def test_ceiling_contact_triggers_on_ecb_top_crossing_not_root_on_fd() -> None:

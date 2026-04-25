@@ -28,20 +28,20 @@ suite: fox_falco_fd_ucf084_recent  datasets: 4  ucf_enabled: True  ucf_cardinals
 fields: action_id,animation_index,on_ground,hitlag,hitstun,state_flags
 
 == datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl ==
-rollout.best_len: 370
-rollout.streak_count: 80
+rollout.best_len: 424
+rollout.streak_count: 79
 rollout.streak_len.median: 73
-rollout.streak_len.p90: 220
-rollout.streak_len.p95: 262
-rollout.streak_len.max: 370
-rollout.first_mismatch_total: 80
+rollout.streak_len.p90: 231
+rollout.streak_len.p95: 264
+rollout.streak_len.max: 424
+rollout.first_mismatch_total: 79
 rollout.first_mismatch_seeded_total: 23
 
 == datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.msl ==
 rollout.best_len: 364
 rollout.streak_count: 116
 rollout.streak_len.median: 73
-rollout.streak_len.p90: 203
+rollout.streak_len.p90: 225
 rollout.streak_len.p95: 273
 rollout.streak_len.max: 364
 rollout.first_mismatch_total: 115
@@ -68,11 +68,11 @@ rollout.first_mismatch_total: 88
 rollout.first_mismatch_seeded_total: 31
 
 == suite summary ==
-overall.rollout.streak_count: 392
+overall.rollout.streak_count: 391
 overall.rollout.streak_len.median: 72
 overall.rollout.streak_len.p90: 196
 overall.rollout.streak_len.p95: 264
 overall.rollout.streak_len.max: 631
 overall.rollout.best_len.max: 631
-overall.rollout.first_mismatch_total: 391
+overall.rollout.first_mismatch_total: 390
 overall.rollout.first_mismatch_seeded_total: 123

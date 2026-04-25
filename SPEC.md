@@ -582,6 +582,15 @@ Recent deltas to reflect here (do not let these get “lost in chat logs”):
   The later taxonomy owner split is separate: it moves `F13a/F27a/F27b/F27c/F27d` to zero by
   re-owning remaining rows into `F18`/`F10n`/`F08d`/`F08c`/`F09c`/`F10a`/`F10b`/`F20`/`F28`/`F29`
   without changing the total mismatch counts.
+- Walljump env-flag precision (2026-04-25): `mpColl` wall fallback contacts set
+  `Collide_*WallPush`, but only ECB side-point contact sets `Collide_*WallHug`; common-air
+  `ftWallJump_8008169C` must consume `WallHug`, not the whole wall mask. The replay seed bridge
+  for hidden `wall_jump_input_timer` / `x2110_walljumpWallSide` is now explicitly one-step-owned
+  and cleared after the reseeded frame, so rollouts require live `WallHug` again. This removes the
+  modelplay rerun17 false `PassiveWallJump` entries while preserving the replay-real one-step
+  walljump seed lock. Sources: `refs/melee/src/melee/mp/mpcoll.c::mpColl_80044E10_RightWall`,
+  `refs/melee/src/melee/mp/mpcoll.c::mpColl_80045B74_LeftWall`,
+  `refs/melee/src/melee/ft/ftwalljump.c::ftWallJump_8008169C`.
   Rejected followup trials include generic walljump runtime entry without the hidden walljump timer
   / persisted CollData wall seed surface, broad `DamageFall` terminal IASA suppression, broad
   EscapeAir steady floor projection, terminal damage ECB locked-bottom expansion, broad fresh/late
