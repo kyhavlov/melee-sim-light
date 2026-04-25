@@ -235,6 +235,9 @@ static inline uint8_t combat_attackairlw_invincible_contact_rejects_body_hitlag(
   if (d_action == (uint16_t)MSL_ACT_ATTACK_HI3 && batch->state.on_ground[d_idx] == 0u) {
     return 0u;
   }
+  if (d_action == (uint16_t)MSL_ACT_ATTACK_AIR_LW && batch->state.action_frame[d_idx] < 10) {
+    return 0u;
+  }
   if (batch->state.hurtbox_state[d_idx] != 1u) {
     return 0u;
   }
@@ -247,6 +250,8 @@ static inline uint8_t combat_attackairlw_invincible_contact_rejects_body_hitlag(
   //   while vanilla still rejects this BODY contact until a later vulnerable contact frame. Keep
   //   this as an explicitly scoped seed/provenance bridge rather than weakening the generic
   //   invincible-contact owner.
+  // - Earlier AttackAirLw-vs-AttackAirLw rows remain on the invincible-contact path because replay
+  //   shows attacker-side hitlag before this later-body rejection window.
   // refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078C70,ftColl_80076ED8}
   // data/moves/{fox,falco}.json moves["ftCo_SM_AttackAirLw"].events
   // data/moves/{fox,falco}.json moves["ftCo_SM_AttackHi3"].events
