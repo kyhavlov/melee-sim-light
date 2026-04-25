@@ -564,3 +564,49 @@ def test_damageflyhi_stays_damageflyhi_attachedgoodnaturedguanaco_record_1695_p1
     assert int(out["action_id"][p]) == int(ref["action_id"][p])
     assert int(out["animation_index"][p]) == int(ref["animation_index"][p])
     assert int(out["on_ground"][p]) == int(ref["on_ground"][p])
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    ("dataset_rel", "record", "p", "action_id"),
+    [
+        (
+            "datasets/aggregate_recent/replays/validation/aggregate_recent/"
+            "FavorableSuperficialPig.msl",
+            6082,
+            0,
+            183,  # DownBoundU
+        ),
+        (
+            "datasets/aggregate_recent/replays/validation/aggregate_recent/"
+            "TubbyCurlyHerring.msl",
+            12266,
+            0,
+            191,  # DownBoundD
+        ),
+    ],
+)
+def test_downbound_floor_endpoint_clamp_keeps_airborne_edge_rows_in_downbound(
+    dataset_rel: str, record: int, p: int, action_id: int
+) -> None:
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+    ds = read_dataset(str(dataset_path))
+    row = ds.samples[record]
+    assert int(row["seed_t"]["action_id"][p]) == int(action_id)
+    assert int(row["ref_t1"]["action_id"][p]) == int(action_id)
+    assert int(row["ref_t1"]["on_ground"][p]) == 0
+
+    out, ref = _run_one_step(dataset_rel=dataset_rel, record=record, p=p)
+
+    # DownBound uses ft_80082708 -> mpColl_8004B108. Its allow-ground-to-air edge exit should not
+    # fire while mpLib_8004DD90_Floor would still clamp the floor endpoint by the decomp +0.1 range.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownBound.c::ftCo_DownBound_Coll
+    # refs/melee/src/melee/ft/ft_081B.c::ft_80082708
+    # refs/melee/src/melee/mp/mpcoll.c::mpColl_8004B108
+    # refs/melee/src/melee/mp/mplib.c::mpLib_8004DD90_Floor
+    assert int(out["action_id"][p]) == int(ref["action_id"][p]) == int(action_id)
+    assert int(out["on_ground"][p]) == int(ref["on_ground"][p]) == 0

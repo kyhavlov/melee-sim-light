@@ -1408,8 +1408,9 @@ def test_action_frame_attackair_entry_rate_resets_to_one() -> None:
     # Decomp: ftCo_AttackAir_EnterFromMsid -> Fighter_ChangeMotionState(..., anim_speed=1.0f)
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_EnterFromMsid
     #
-    # Regression target: AGG rec 285 p0 (AttackAirLw -> AttackAirLw), where ref action_frame is 2
-    # but the sim previously advanced to 3 due stale frame_speed_mul.
+    # Regression target: AGG rec 285 p0 (AttackAirLw -> AttackAirLw), where ref action_frame is 2.
+    # Current preprocessing also strips the old stale Landing* rate from this seed; runtime still
+    # has to preserve the decomp 1.0 AttackAir rate through the first steady frame.
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_rel = (
@@ -1437,7 +1438,7 @@ def test_action_frame_attackair_entry_rate_resets_to_one() -> None:
     assert int(row["ref_t1"]["hitlag"][0, p]) == 0
     assert int(row["seed_t"]["hitstun"][0, p]) == 0
     assert int(row["ref_t1"]["hitstun"][0, p]) == 0
-    assert float(row["seed_t"]["frame_speed_mul_f32"][0, p]) == pytest.approx(2.505, rel=1e-6)
+    assert float(row["seed_t"]["frame_speed_mul_f32"][0, p]) == pytest.approx(1.0, rel=1e-6)
 
     binding = pytest.importorskip("msl_binding")
     sizes = binding.sizes()

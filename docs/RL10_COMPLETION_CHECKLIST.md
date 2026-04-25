@@ -206,22 +206,32 @@ Recommended sequence for the next deep passes:
     `tests/test_locomotion.py`,
     `tests/test_guard_callback_order_replay_real_locks.py`, and
     `tests/test_damagefly_passivewalljump_replay_real_locks.py`.
+  - Retained 2026-04-24 callback followup: DownBound allow-ground-to-air ledge exit now honors
+    the `mpLib_8004DD90_Floor` endpoint clamp before entering Fall, and
+    the narrow FD `DamageFlyTop` wall-contact seed persists CollData wall side/index for the
+    PassiveWall callback phase. `LandingFallSpecial` seed timebase now derives source-specific
+    landing lag for EscapeAir (`p_ftCommonData->x344`), Illusion/Phantasm (`da->x50`), and
+    Firefox/Firebird (`da->x90`).
+    Replay locks live in `tests/test_damagefly_downbound_state_selection_regression.py`,
+    `tests/test_locomotion_attackair_landing_contact_y_regression.py`, and
+    `tests/test_seed_history.py`.
   - Fresh taxonomy from regenerated primary and aggregate datasets after the current continuation:
-    primary total `441`; aggregate total `3168`. Current target-family counts are:
+    primary total `441`; aggregate total `3141`. Current target-family counts are:
     primary `F01=50`, `F08a=35`, `F10b=22`, `F13a=7`, `F26=23`, `F27a=9`,
     `F27b=25`, `F27c=0`, `F27d=0`; aggregate `F01=567`, `F08a=130`,
-    `F10b=205`, `F13a=88`, `F26=137`, `F27a=101`, `F27b=128`, `F27c=15`,
-    `F27d=39`, `F28=68`, `F29=26`.
+    `F10b=205`, `F13a=86`, `F26=137`, `F27a=101`, `F27b=128`, `F27c=0`,
+    `F27d=29`, `F28=68`, `F29=26`.
   - Movement from the `fe3dd74` checkpoint is real simulator/seed behavior, not taxonomy-only:
-    primary `468 -> 441`, aggregate `3392 -> 3168`, aggregate `F01 631 -> 567`,
-    aggregate `F13a 122 -> 88`, aggregate `F27b 201 -> 128`, aggregate
-    `F27c 39 -> 15`, aggregate `F27d 62 -> 39`, aggregate `F29 27 -> 26`,
+    primary `468 -> 441`, aggregate `3392 -> 3141`, aggregate `F01 631 -> 567`,
+    aggregate `F13a 122 -> 86`, aggregate `F27b 201 -> 128`, aggregate
+    `F27c 39 -> 0`, aggregate `F27d 62 -> 29`, aggregate `F29 27 -> 26`,
     and aggregate `F08a 134 -> 130`.
     Movement from the `ee0095b` checkpoint is primary `456 -> 441`, aggregate
-    `3253 -> 3168`, aggregate `F27b 161 -> 128`, aggregate `F27c 39 -> 15`, and
-    aggregate `F27d 62 -> 39`.
-    `F26`, `F27a`, `F27c`, `F27d`, `F28`, and `F29` remain
-    active residual owners.
+    `3253 -> 3141`, aggregate `F13a 122 -> 86`, aggregate `F27b 161 -> 128`,
+    aggregate `F27c 39 -> 0`, and aggregate `F27d 62 -> 29`.
+    Additional movement in this uncommitted followup is aggregate `3168 -> 3141`,
+    `F13a 88 -> 86`, `F27c 15 -> 0`, and `F27d 39 -> 29`; primary remains `441`.
+    `F26`, `F27a`, `F27b`, `F27d`, `F28`, and `F29` remain active residual owners.
   - The diagnostic owners remain an implementation map, not a closure claim:
     `F26` is the exact `ftCo_8008DCE0` DamageFlyRoll RNG stream / hidden pre-gate
     `Fighter_8006CDA4` seed surface; `F27*` are damage/Down/Passive/mpColl callback phase owners;
@@ -232,13 +242,15 @@ Recommended sequence for the next deep passes:
     generic walljump runtime entry without the hidden walljump timer / persisted CollData wall seed
     surface, broad `DamageFall` terminal IASA suppression, broad EscapeAir steady floor projection,
     terminal damage ECB locked-bottom expansion, broad fresh/late JumpAerial -> EscapeAir floor
-    projection, generic DamageFly root projection, and visible DamageFlyTop wall-hug recovery all
-    failed focused locks or worsened primary / aggregate taxonomy. None is retained.
+    projection, generic DamageFly root projection, visible DamageFlyTop wall-hug recovery, ordinary
+    Fall early floor-sweep suppression, frame-start ECB-lock consumption, and JumpAerial-entry
+    EscapeAir floor suppression all failed focused locks or worsened primary / aggregate taxonomy.
+    None is retained.
   - Remaining current-map blockers:
     `F01=567` aggregate rows remain mixed GuardReflect/Guard/GuardSetOff collision candidate
     ordering and shield-hit outcome phase, not a single release timer; `F26=137` aggregate rows
     still require exact `ftCo_8008DCE0` RNG stream / hidden `Fighter_8006CDA4` consume-state
-    representation; `F27a/F27b/F27c/F27d=101/128/15/39` remain CollData/ECB floor/wall callback
+    representation; `F27a/F27b/F27d=101/128/29` remain CollData/ECB floor/wall callback
     phase and downed hidden timer/input phase rows; `F28=68` remains exact BODY candidate ordering /
     narrowphase (`lbColl_8000805C` / `lbColl_80006E58`); `F29=26` remains shield descriptor geometry
     / contact-hitlag provenance. Protected and item-owner families remain zero.

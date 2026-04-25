@@ -553,20 +553,27 @@ Recent deltas to reflect here (do not let these get “lost in chat logs”):
   `tests/test_locomotion_attackair_landing_contact_y_regression.py`, `tests/test_locomotion.py`,
   `tests/test_guard_callback_order_replay_real_locks.py`, and
   `tests/test_damagefly_passivewalljump_replay_real_locks.py`. Fresh taxonomy from regenerated
-  primary and aggregate datasets after the current continuation: primary `441`, aggregate `3168`.
+  primary and aggregate datasets after the current continuation: primary `441`, aggregate `3141`.
+  The latest retained callback followup models the DownBound `mpLib_8004DD90_Floor` endpoint clamp
+  before allow-ground-to-air Fall exit, seeds the narrow FD `DamageFlyTop` persisted CollData
+  wall-side/index lane, and seeds `LandingFallSpecial` frame speed from the source landing-lag
+  scalar: EscapeAir common `x344`, Illusion/Phantasm `da->x50`, and Firefox/Firebird `da->x90`.
   Current target-family counts:
   primary `F01=50`, `F08a=35`, `F10b=22`, `F13a=7`, `F26=23`, `F27a=9`,
   `F27b=25`, `F27c=0`, `F27d=0`; aggregate `F01=567`, `F08a=130`,
-  `F10b=205`, `F13a=88`, `F26=137`, `F27a=101`, `F27b=128`, `F27c=15`,
-  `F27d=39`, `F28=68`, `F29=26`. Movement from checkpoint `fe3dd74` is simulator/seed behavior,
-  not taxonomy-only: primary `468 -> 441`, aggregate `3392 -> 3168`. Movement from checkpoint
-  `ee0095b` is primary `456 -> 441`, aggregate `3253 -> 3168`, aggregate `F27b 161 -> 128`,
-  aggregate `F27c 39 -> 15`, and aggregate `F27d 62 -> 39`.
+  `F10b=205`, `F13a=86`, `F26=137`, `F27a=101`, `F27b=128`, `F27c=0`,
+  `F27d=29`, `F28=68`, `F29=26`. Movement from checkpoint `fe3dd74` is simulator/seed behavior,
+  not taxonomy-only: primary `468 -> 441`, aggregate `3392 -> 3141`. Movement from checkpoint
+  `ee0095b` is primary `456 -> 441`, aggregate `3253 -> 3141`, aggregate `F13a 122 -> 86`,
+  aggregate `F27b 161 -> 128`, aggregate `F27c 39 -> 0`, and aggregate `F27d 62 -> 29`.
+  Latest uncommitted movement is aggregate `3168 -> 3141`, `F13a 88 -> 86`, `F27c 15 -> 0`,
+  and `F27d 39 -> 29`.
   Rejected followup trials include generic walljump runtime entry without the hidden walljump timer
   / persisted CollData wall seed surface, broad `DamageFall` terminal IASA suppression, broad
   EscapeAir steady floor projection, terminal damage ECB locked-bottom expansion, broad fresh/late
-  JumpAerial -> EscapeAir floor projection, generic DamageFly root projection, and visible
-  DamageFlyTop wall-hug recovery; none is retained.
+  JumpAerial -> EscapeAir floor projection, generic DamageFly root projection, visible
+  DamageFlyTop wall-hug recovery, ordinary Fall early floor-sweep suppression, frame-start ECB-lock
+  consumption, and JumpAerial-entry EscapeAir floor suppression; none is retained.
 - Ledge callback parity pass (2026-04-19): MissFoot now participates in the decomp cliff-catch
   collision wrapper; slow ledge options share quick-option attach / air-to-ground ownership;
   terminal CliffCatch can consume same-proc CliffWait attack/escape/jump IASA but not climb/drop
@@ -3401,9 +3408,10 @@ Core combat/contact residual cleanup diagnostic split:
   the 2026-04-24 runtime/seed continuation: live `mv.co.damage.x14` snapshot seeding and runtime
   admission, AttackAir DO_IASA B-special-before-JumpAerial ordering, JumpF/JumpB -> EscapeAir floor
   handoff through the decomp floor wrapper, `GuardSetOff_Anim` -> Guard -> same-frame GuardOff
-  release ordering, and terminal expired `GuardReflect_Anim` -> Guard snapshot ordering. Current
-  measured totals from regenerated datasets are primary `441` and aggregate `3168`; the checklist
-  remains active.
+  release ordering, terminal expired `GuardReflect_Anim` -> Guard snapshot ordering, DownBound
+  endpoint-clamped floor exit, narrow FD `DamageFlyTop` persisted CollData wall-side/index seeding,
+  and source-specific `LandingFallSpecial` frame-speed seeding. Current measured totals from
+  regenerated datasets are primary `441` and aggregate `3141`; the checklist remains active.
 - Former `F06` rows are `F26_damageflyroll_rng_stream_seed_surface`: the exact
   `ftCo_8008DCE0` DamageFlyRoll RNG draw and hidden pre-gate `Fighter_8006CDA4` stream position,
   after explicit visible-action consume-count lanes and rejected broad gates.
@@ -3415,14 +3423,15 @@ Core combat/contact residual cleanup diagnostic split:
   `ftColl_80076CBC` / `ftColl_80076808`, plus narrow aerial Shine contact-hitlag handoffs.
 - Current residual counts in the active map are: primary `F01=50`, `F08a=35`, `F10b=22`,
   `F13a=7`, `F26=23`, `F27a=9`, `F27b=25`, `F27c=0`, `F27d=0`; aggregate
-  `F01=567`, `F08a=130`, `F10b=205`, `F13a=88`, `F26=137`, `F27a=101`,
-  `F27b=128`, `F27c=15`, `F27d=39`, `F28=68`, `F29=26`.
+  `F01=567`, `F08a=130`, `F10b=205`, `F13a=86`, `F26=137`, `F27a=101`,
+  `F27b=128`, `F27c=0`, `F27d=29`, `F28=68`, `F29=26`.
 - Rejected continuation experiments are recorded as negative evidence, not hidden closure:
   generic walljump runtime entry without the hidden walljump timer / persisted CollData wall seed
   surface, broad `DamageFall` terminal IASA suppression, broad EscapeAir steady floor projection,
   terminal damage ECB locked-bottom expansion, broad fresh/late JumpAerial -> EscapeAir floor
-  projection, generic DamageFly root projection, and visible DamageFlyTop wall-hug recovery all
-  failed focused locks or worsened primary / aggregate taxonomy.
+  projection, generic DamageFly root projection, visible DamageFlyTop wall-hug recovery, ordinary
+  Fall early floor-sweep suppression, frame-start ECB-lock consumption, and JumpAerial-entry
+  EscapeAir floor suppression all failed focused locks or worsened primary / aggregate taxonomy.
 AttackAirN continuation stale-owner bridge:
 - AttackAirN has a later create-hitbox refresh window in the extracted Fox/Falco scripts.
 - On replay-real continuation rows like `AGN:5482`, the victim is still in `DamageFlyTop`

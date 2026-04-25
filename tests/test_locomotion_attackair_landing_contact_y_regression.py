@@ -563,6 +563,149 @@ def test_landing_basic_contact_y_context_controls_remain_outside_bridge_scope(
 
 @pytest.mark.integration
 @pytest.mark.parametrize(
+    ("dataset_rel", "record", "p", "expected_seed_rate", "expected_ref_frame"),
+    [
+        (
+            "datasets/aggregate_recent/replays/validation/aggregate_recent/"
+            "FavorableSuperficialPig.msl",
+            9898,
+            1,
+            3.01,
+            3,
+        ),
+        (
+            "datasets/aggregate_recent/replays/validation/aggregate_recent/"
+            "TubbyCurlyHerring.msl",
+            6133,
+            0,
+            3.01,
+            3,
+        ),
+        (
+            "datasets/aggregate_recent/replays/validation/aggregate_recent/"
+            "DistinctCaringCobra.msl",
+            8773,
+            1,
+            1.6722223,
+            1,
+        ),
+        (
+            "datasets/aggregate_recent/replays/validation/aggregate_recent/"
+            "FavorableSuperficialPig.msl",
+            1540,
+            0,
+            1.6722223,
+            1,
+        ),
+    ],
+)
+def test_landing_fallspecial_origin_specific_frame_speed_replay_real_locks(
+    dataset_rel: str, record: int, p: int, expected_seed_rate: float, expected_ref_frame: int
+) -> None:
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    seed, out, ref = _step_one_row(dataset_path, record, p)
+
+    # Decomp owner:
+    # - LandingFallSpecial entry speed uses the landing-lag scalar supplied by the source action.
+    # - EscapeAir sources use common x344 and advance to frame 3 on the seeded step.
+    # - Firefox/Firebird sources use the character x90 landing lag and advance to frame 1.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_80099D70
+    # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::{
+    #   ftFx_SpecialHiFall_Anim,ftFx_SpecialHiBound_Anim}
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::ftCo_LandingFallSpecial_Enter
+    assert int(seed["action_id"][p]) == 43  # LandingFallSpecial
+    assert float(seed["frame_speed_mul_f32"][p]) == pytest.approx(expected_seed_rate, abs=2e-5)
+    assert int(ref["action_id"][p]) == 43
+    assert int(ref["action_frame"][p]) == int(expected_ref_frame)
+    assert int(out["action_id"][p]) == int(ref["action_id"][p])
+    assert int(out["action_frame"][p]) == int(ref["action_frame"][p])
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    (
+        "dataset_rel",
+        "record",
+        "p",
+        "expected_ref_action",
+        "expected_ref_ground",
+        "expected_ref_ground_id",
+        "expected_out_action",
+        "expected_out_ground",
+        "expected_out_ground_id",
+    ),
+    [
+        (
+            "datasets/aggregate_recent/replays/validation/aggregate_recent/"
+            "HungryImportantSnake.msl",
+            577,
+            1,
+            35,  # FallSpecial stays airborne on the main floor at af3.
+            0,
+            1,
+            35,
+            0,
+            1,
+        ),
+        (
+            "datasets/aggregate_recent/replays/validation/aggregate_recent/"
+            "PositiveRevolvingHyena.msl",
+            4321,
+            1,
+            43,  # FallSpecial lands on the adjacent ledge/seam floor at af3.
+            1,
+            2,
+            35,  # Residual F13a: do not retain a broad FallSpecial seam-floor handoff.
+            0,
+            1,
+        ),
+    ],
+)
+def test_fallspecial_af3_floor_callback_keeps_unmodeled_seam_handoff_residual(
+    dataset_rel: str,
+    record: int,
+    p: int,
+    expected_ref_action: int,
+    expected_ref_ground: int,
+    expected_ref_ground_id: int,
+    expected_out_action: int,
+    expected_out_ground: int,
+    expected_out_ground_id: int,
+) -> None:
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    seed, out, ref = _step_one_row(dataset_path, record, p)
+
+    # FallSpecial_Coll uses ft_80083090 -> ftCo_80096D28. The main-floor negative is modeled, but
+    # the adjacent ledge/seam handoff remains an F13a residual until the exact mpColl floor callback
+    # owner is implemented; do not hide it behind a broad visible FallSpecial floor crossing gate.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_FallSpecial.c::{
+    #   ftCo_FallSpecial_Coll,ftCo_80096CC8,ftCo_80096D28}
+    # refs/melee/src/melee/ft/ft_081B.c::ft_80083090
+    # refs/melee/src/melee/mp/mpcoll.c::{mpColl_8004A45C_Floor,mpColl_8004B108}
+    assert int(seed["action_id"][p]) == 35
+    assert int(seed["action_frame"][p]) == 3
+    assert int(seed["on_ground"][p]) == 0
+    assert int(ref["action_id"][p]) == int(expected_ref_action)
+    assert int(ref["on_ground"][p]) == int(expected_ref_ground)
+    assert int(ref["ground_id"][p]) == int(expected_ref_ground_id)
+
+    assert int(out["action_id"][p]) == int(expected_out_action)
+    assert int(out["on_ground"][p]) == int(expected_out_ground)
+    assert int(out["ground_id"][p]) == int(expected_out_ground_id)
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
     ("dataset_rel", "record", "p", "seed_action", "ref_action"),
     [
         (

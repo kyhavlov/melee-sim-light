@@ -603,6 +603,142 @@ def _derive_walljump_phase_seed_lanes(
     return timer, side
 
 
+def _derive_mpcoll_wall_seed_lanes(
+    *,
+    action_id_u16: np.ndarray,
+    action_frame_i16: np.ndarray,
+    hitlag_u16: np.ndarray,
+    hitstun_u16: np.ndarray,
+    pos_x_f32: np.ndarray,
+    pos_y_f32: np.ndarray,
+    stage_id_u32: int,
+    stage_segments: list[dict],
+) -> tuple[np.ndarray, np.ndarray]:
+    """Derive one-step CollData wall side/index seed lanes from replay-prefix position.
+
+    Decomp owner:
+    - mpColl owns persisted `CollData.{left,right}_facing_wall.index` and writes
+      `Collide_*WallHug`.
+    - DamageFly_Coll and DownDamage_Coll then consume those env flags to enter PassiveWall /
+      PassiveWallJump before other damage-collision followups.
+
+    Public Slippi post-frames do not expose the persisted wall index. This reconstruction is
+    prefix-causal and seed-only: it uses only current replay-visible action/position/hitstun plus
+    extracted FD wall segments. Normal rollouts keep these lanes zero and carry `wall_kind/wall_id`
+    through runtime mpColl.
+
+    The scope is intentionally narrow to airborne damage-collision rows already outside a concrete
+    FD wall surface. It is not a generic wall proximity/contact heuristic.
+
+    refs/melee/src/melee/lb/types.h::CollData
+    refs/melee/src/melee/mp/mplib.c::{mpLib_8004E398_LeftWall,mpLib_8004E684_RightWall}
+    refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_DamageFly_Coll
+    refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownDamage.c::ftCo_DownDamage_Coll
+    data/stages/final_destination.json
+    """
+    action_id = np.asarray(action_id_u16, dtype=np.uint16).reshape(-1)
+    action_frame = np.asarray(action_frame_i16, dtype=np.int16).reshape(-1)
+    hitlag = np.asarray(hitlag_u16, dtype=np.uint16).reshape(-1)
+    hitstun = np.asarray(hitstun_u16, dtype=np.uint16).reshape(-1)
+    pos_x = np.asarray(pos_x_f32, dtype=np.float32).reshape(-1)
+    pos_y = np.asarray(pos_y_f32, dtype=np.float32).reshape(-1)
+    n = int(action_id.shape[0])
+    if (
+        int(action_frame.shape[0]) != n
+        or int(hitlag.shape[0]) != n
+        or int(hitstun.shape[0]) != n
+        or int(pos_x.shape[0]) != n
+        or int(pos_y.shape[0]) != n
+    ):
+        raise ValueError("mpcoll wall seed derivation lanes must have equal lengths")
+
+    kind = np.zeros(n, dtype=np.uint8)
+    wall_id = np.full(n, 0xFFFF, dtype=np.uint16)
+    if int(stage_id_u32) != 32:
+        return kind, wall_id
+
+    # Current decomp-backed seed surface is only the observed DamageFlyTop wall-tech callback
+    # phase. DamageFlyHi/N/Lw and DownDamage wall rows have adjacent negative controls where
+    # visible wall proximity is insufficient, so leave those on runtime mpColl until a hidden
+    # CollData provenance lane is available for them too.
+    damage_wall_actions = {
+        90,  # DamageFlyTop
+    }
+    left_segments = [seg for seg in stage_segments if seg.get("kind") == "left_wall"]
+    right_segments = [seg for seg in stage_segments if seg.get("kind") == "right_wall"]
+    # FD DamageFly/DownDamage wall-tech rows can carry a root several units outside the wall after
+    # mpColl projection and PassiveWall entry alignment. Keep this seed-only window smaller than
+    # fighter width and require the point to be outside a concrete wall segment, not merely near it.
+    max_outside_delta = 6.0
+    y_endpoint_clamp = 0.25
+    vertical_wall_lower_endpoint_window = 1.0
+
+    def _segment_x_at_y(seg: dict, y: float) -> float | None:
+        y0 = float(seg["y0"])
+        y1 = float(seg["y1"])
+        if abs(float(seg["x1"]) - float(seg["x0"])) < 1e-6:
+            # Upper FD side-wall rows do not all own a same-frame wall hug; vanilla waits until the
+            # collision path reaches the lower endpoint neighborhood before this persisted-index
+            # seed is authoritative. Angled lower wall segments remain handled by their own y-range.
+            if y > min(y0, y1) + vertical_wall_lower_endpoint_window:
+                return None
+        lo = min(y0, y1) - y_endpoint_clamp
+        hi = max(y0, y1) + y_endpoint_clamp
+        if y < lo or y > hi:
+            return None
+        if abs(y1 - y0) < 1e-6:
+            return float(seg["x0"])
+        t = (y - y0) / (y1 - y0)
+        if t < 0.0:
+            t = 0.0
+        elif t > 1.0:
+            t = 1.0
+        return float(seg["x0"]) + (float(seg["x1"]) - float(seg["x0"])) * t
+
+    for i in range(n):
+        if int(action_id[i]) not in damage_wall_actions:
+            continue
+        if int(hitlag[i]) != 0 or int(hitstun[i]) == 0:
+            continue
+        if int(action_frame[i]) < 10:
+            continue
+        x = float(pos_x[i])
+        y = float(pos_y[i])
+        if not np.isfinite(x) or not np.isfinite(y):
+            continue
+
+        best_kind = 0
+        best_id = 0xFFFF
+        best_delta = max_outside_delta + 1.0
+        for seg in left_segments:
+            sx = _segment_x_at_y(seg, y)
+            if sx is None:
+                continue
+            delta = sx - x
+            if delta < 0.0 or delta > max_outside_delta:
+                continue
+            if delta < best_delta:
+                best_kind = 1
+                best_id = int(seg["i"])
+                best_delta = delta
+        for seg in right_segments:
+            sx = _segment_x_at_y(seg, y)
+            if sx is None:
+                continue
+            delta = x - sx
+            if delta < 0.0 or delta > max_outside_delta:
+                continue
+            if delta < best_delta:
+                best_kind = 2
+                best_id = int(seg["i"])
+                best_delta = delta
+        if best_kind != 0:
+            kind[i] = np.uint8(best_kind)
+            wall_id[i] = np.uint16(best_id)
+
+    return kind, wall_id
+
+
 def _derive_entry_end_fall_lock(
     *, action_id_u16: np.ndarray, on_ground_u8: np.ndarray, act_entry_end: int = 0x0144, act_fall: int = 0x001D
 ) -> np.ndarray:
@@ -3019,7 +3155,12 @@ def _main_impl(args) -> None:
 
     data_root = Path("data")
     end_frames = load_end_frame_tables(data_root)
+    stage_segments: list[dict] = []
+    stage_path = data_root / "stages" / "final_destination.json"
+    if stage_path.exists():
+        stage_segments = list(json.loads(stage_path.read_text()).get("segments", []))
     char_landing_air_lag_frames: dict[int, dict[str, int]] = {}
+    char_fallspecial_landing_lag_frames: dict[int, dict[str, int]] = {}
     char_walk_divisors: dict[int, tuple[float, float, float]] = {}
     char_walk_max: dict[int, float] = {}
     char_run_scaling: dict[int, float] = {}
@@ -3061,6 +3202,10 @@ def _main_impl(args) -> None:
             "airb": int(attrs["landing_airb_lag_frames"]),
             "airhi": int(attrs["landing_airhi_lag_frames"]),
             "airlw": int(attrs["landing_airlw_lag_frames"]),
+        }
+        char_fallspecial_landing_lag_frames[int(cid)] = {
+            "illusion": int(attrs["illusion_landing_lag_frames"]),
+            "firefox": int(attrs["firefox_landing_lag_frames"]),
         }
         char_walk_divisors[int(cid)] = (
             float(attrs["slow_walk_max"]),
@@ -3540,6 +3685,18 @@ def _main_impl(args) -> None:
         )
         samples["seed_t"]["walljump_input_timer"][:, slot] = walljump_timer[:-1]
         samples["seed_t"]["walljump_wall_side_i8"][:, slot] = walljump_side[:-1]
+        wall_kind_seed, wall_id_seed = _derive_mpcoll_wall_seed_lanes(
+            action_id_u16=post_state,
+            action_frame_i16=post_state_age,
+            hitlag_u16=post_hitlag,
+            hitstun_u16=post_hitstun,
+            pos_x_f32=post_pos_x,
+            pos_y_f32=post_pos_y,
+            stage_id_u32=int(stage_id),
+            stage_segments=stage_segments,
+        )
+        samples["seed_t"]["mpcoll_wall_kind_seed_u8"][:, slot] = wall_kind_seed[:-1]
+        samples["seed_t"]["mpcoll_wall_id_seed_u16"][:, slot] = wall_id_seed[:-1]
         samples["seed_t"]["anim_frame_f32"][:, slot] = post_anim_frame_f32[:-1]
 
         samples["seed_t"]["pos_x"][:, slot] = post_pos_x[:-1]
@@ -3855,6 +4012,7 @@ def _main_impl(args) -> None:
             common_lcancel_lag_div=lcancel_lag_div,
             common_landing_fall_special_lag_frames=landing_fall_special_lag_frames,
             char_landing_air_lag_frames=char_landing_air_lag_frames,
+            char_fallspecial_landing_lag_frames=char_fallspecial_landing_lag_frames,
         )
         frame_speed_mul_all[:, slot] = frame_speed_mul
         # Seed fp->frame_speed_mul (float) for deterministic timebase stepping.

@@ -113,6 +113,7 @@ def derive_frame_speed_mul_f32(
     common_lcancel_lag_div: float,
     common_landing_fall_special_lag_frames: float,
     char_landing_air_lag_frames: dict[int, dict[str, int]],  # char_id -> {"airn":..,"airf":..,...}
+    char_fallspecial_landing_lag_frames: dict[int, dict[str, int]] | None = None,
 ) -> np.ndarray:
     """
     Strictly-causal derivation of fp->frame_speed_mul (float).
@@ -171,13 +172,60 @@ def derive_frame_speed_mul_f32(
 
     # Action ids (GALE01) for suite-relevant landing states.
     # These are stable identifiers, not heuristics.
-    ACT_LANDING_AIR_N = np.uint16(0x0043)
-    ACT_LANDING_AIR_F = np.uint16(0x0044)
-    ACT_LANDING_AIR_B = np.uint16(0x0045)
-    ACT_LANDING_AIR_HI = np.uint16(0x0046)
-    ACT_LANDING_AIR_LW = np.uint16(0x0047)
-    ACT_LANDING_FALL_SPECIAL = np.uint16(0x0048)
+    ACT_LANDING_AIR_N = np.uint16(0x0046)
+    ACT_LANDING_AIR_F = np.uint16(0x0047)
+    ACT_LANDING_AIR_B = np.uint16(0x0048)
+    ACT_LANDING_AIR_HI = np.uint16(0x0049)
+    ACT_LANDING_AIR_LW = np.uint16(0x004A)
+    ACT_LANDING_FALL_SPECIAL = np.uint16(0x002B)
+    ACT_FALL_SPECIAL = np.uint16(0x0023)
+    ACT_FALL_SPECIAL_F = np.uint16(0x0024)
+    ACT_FALL_SPECIAL_B = np.uint16(0x0025)
+    ACT_ESCAPE_AIR = np.uint16(0x00EC)
+    ACT_FX_SPECIAL_AIR_S_END = np.uint16(0x0160)
+    ACT_FX_SPECIAL_AIR_HI = np.uint16(0x0164)
+    ACT_FX_SPECIAL_HI_FALL = np.uint16(0x0166)
+    ACT_FX_SPECIAL_HI_BOUND = np.uint16(0x0167)
     ACT_GUARD_SET_OFF = np.uint16(0x00B5)
+    fall_special_actions = {int(ACT_FALL_SPECIAL), int(ACT_FALL_SPECIAL_F), int(ACT_FALL_SPECIAL_B)}
+    firefox_origin_actions = {
+        int(ACT_FX_SPECIAL_AIR_HI),
+        int(ACT_FX_SPECIAL_HI_FALL),
+        int(ACT_FX_SPECIAL_HI_BOUND),
+    }
+
+    def landing_fall_special_lag_for_entry(i: int, cid: int) -> float:
+        if i <= 0:
+            return float(common_landing_fall_special_lag_frames)
+        prev_action = int(action_id[i - 1])
+        origin_action = prev_action
+        if prev_action in fall_special_actions:
+            j = i - 1
+            while j > 0 and int(action_id[j - 1]) in fall_special_actions:
+                j -= 1
+            origin_action = int(action_id[j - 1]) if j > 0 else prev_action
+
+        if origin_action == int(ACT_ESCAPE_AIR):
+            # EscapeAir_Anim and EscapeAir_Coll both use p_ftCommonData->x344 as the FallSpecial /
+            # LandingFallSpecial landing lag.
+            # refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::{
+            #   ftCo_EscapeAir_Anim,ftCo_80099D70}
+            return float(common_landing_fall_special_lag_frames)
+
+        lag_map = {} if char_fallspecial_landing_lag_frames is None else char_fallspecial_landing_lag_frames.get(cid, {})
+        if origin_action == int(ACT_FX_SPECIAL_AIR_S_END):
+            # Illusion/Phantasm freefall stores da->x50_FOX_ILLUSION_LANDING_LAG in
+            # mv.co.fallspecial.landing_lag; direct SpecialAirSEnd_Coll does the same.
+            # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c::{
+            #   ftFx_SpecialAirSEnd_Anim,ftFx_SpecialAirSEnd_Coll}
+            return float(lag_map.get("illusion", common_landing_fall_special_lag_frames))
+        if origin_action in firefox_origin_actions:
+            # Firefox/Firebird rebound/fall freefall stores da->x90_FOX_FIREFOX_LANDING_LAG.
+            # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::{
+            #   ftFx_SpecialHiFall_Anim,ftFx_SpecialHiBound_Anim}
+            return float(lag_map.get("firefox", common_landing_fall_special_lag_frames))
+
+        return float(common_landing_fall_special_lag_frames)
 
     for i in range(1, n):
         changed = (
@@ -217,12 +265,14 @@ def derive_frame_speed_mul_f32(
 
         a = np.uint16(action_id[i])
 
-        if a == ACT_LANDING_FALL_SPECIAL and end_frame is not None and common_landing_fall_special_lag_frames > 0.0:
+        if a == ACT_LANDING_FALL_SPECIAL and end_frame is not None:
             # Decomp: ftCo_LandingFallSpecial_Enter uses (0.1 + fp->x2EC) / landing_lag.
             # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::ftCo_LandingFallSpecial_Enter
-            last = np.float32((np.float32(end_frame) + np.float32(0.1)) / np.float32(common_landing_fall_special_lag_frames))
-            out[i] = last
-            continue
+            lag = landing_fall_special_lag_for_entry(i, cid)
+            if lag > 0.0:
+                last = np.float32((np.float32(end_frame) + np.float32(0.1)) / np.float32(lag))
+                out[i] = last
+                continue
 
         if a in (ACT_LANDING_AIR_N, ACT_LANDING_AIR_F, ACT_LANDING_AIR_B, ACT_LANDING_AIR_HI, ACT_LANDING_AIR_LW):
             # Decomp:

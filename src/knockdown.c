@@ -1621,7 +1621,14 @@ static inline uint8_t down_bound_airborne_ledge_cross_to_fall(const MslBatch* ba
   // horizontal velocity to match the mpColl allow-ground-to-air floor-edge test shape.
   // refs/melee/src/melee/mp/mpcoll.c::mpColl_8004B108
   const float next_x = batch->state.prev_pos_x[idx] + vx;
-  return (side == 1) ? (next_x >= edge_x ? 1u : 0u) : (next_x <= edge_x ? 1u : 0u);
+  // mpLib floor projection keeps a small endpoint clamp before reporting off-floor. DownBound uses
+  // the allow-ground-to-air mpColl path, so preserve DownBound while the motion endpoint is still
+  // inside that clamp instead of immediately entering Fall at the mathematical edge.
+  // refs/melee/src/melee/mp/mplib.c::mpLib_8004DD90_Floor
+  enum { MSL_DOWNBOUND_FLOOR_ENDPOINT_CLAMP_MILLI = 100 };
+  const float endpoint_clamp = (float)MSL_DOWNBOUND_FLOOR_ENDPOINT_CLAMP_MILLI * 0.001f;
+  return (side == 1) ? (next_x > edge_x + endpoint_clamp ? 1u : 0u)
+                     : (next_x < edge_x - endpoint_clamp ? 1u : 0u);
 }
 
 static inline uint8_t damage_iasa_lockout_x221c_b6(const MslBatch* batch, size_t idx) {

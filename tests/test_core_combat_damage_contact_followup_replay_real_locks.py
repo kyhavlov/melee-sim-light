@@ -405,3 +405,75 @@ def test_ongoing_guardsetoff_hitlag_seeds_fighter_shield_hitlist_carry() -> None
     _, ref_row, out_row = _run_one_step_row(dataset_path, target, 0)
     for p in (0, 1):
         _assert_transition_fields_match_ref(out_row=out_row, ref_row=ref_row, record=target, p=p)
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    ("dataset_rel", "record", "p", "seed_wall_kind", "seed_wall_id", "ref_action"),
+    [
+        (
+            "datasets/aggregate_recent/replays/validation/aggregate_recent/DistinctCaringCobra.msl",
+            4809,
+            1,
+            0,
+            0xFFFF,
+            90,  # DamageFlyTop adjacent non-wall-callback control
+        ),
+        (
+            "datasets/aggregate_recent/replays/validation/aggregate_recent/DistinctCaringCobra.msl",
+            4810,
+            1,
+            1,
+            13,
+            202,  # PassiveWall
+        ),
+        (
+            "datasets/aggregate_recent/replays/validation/aggregate_recent/HungryImportantSnake.msl",
+            1788,
+            1,
+            2,
+            10,
+            90,  # DamageFlyTop adjacent non-walljump control
+        ),
+        (
+            "datasets/aggregate_recent/replays/validation/aggregate_recent/HungryImportantSnake.msl",
+            1789,
+            1,
+            2,
+            9,
+            203,  # PassiveWallJump
+        ),
+    ],
+)
+def test_damageflytop_wall_callback_coll_data_seed_locks(
+    dataset_rel: str, record: int, p: int, seed_wall_kind: int, seed_wall_id: int, ref_action: int
+) -> None:
+    # Persisted CollData wall side/index seed:
+    # - DamageFly_Coll consumes mpColl wall-hug env flags and persisted side/index after the
+    #   collision callback phase.
+    # - Public replay rows do not expose the wall index, so one-step reseeds reconstruct it from
+    #   prefix position plus the extracted FD wall graph.
+    # - The DCC/HIS adjacent controls prove the lane is not broad visible wall proximity.
+    # refs/melee/src/melee/lb/types.h::CollData
+    # refs/melee/src/melee/mp/mplib.c::{mpLib_8004E398_LeftWall,mpLib_8004E684_RightWall}
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_DamageFly_Coll
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_PassiveWall.c::{ftCo_800C1D38,ftCo_800C1E0C}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    row = ds.samples[record]
+    seed_t = row["seed_t"]
+    ref_t1 = row["ref_t1"]
+    assert int(seed_t["action_id"][p]) == 90
+    assert int(seed_t["hitlag"][p]) == 0
+    assert int(seed_t["hitstun"][p]) > 0
+    assert int(seed_t["mpcoll_wall_kind_seed_u8"][p]) == int(seed_wall_kind)
+    assert int(seed_t["mpcoll_wall_id_seed_u16"][p]) == int(seed_wall_id)
+    assert int(ref_t1["action_id"][p]) == int(ref_action)
+
+    _, ref_row, out_row = _run_one_step_row(dataset_path, record, p)
+    _assert_transition_fields_match_ref(out_row=out_row, ref_row=ref_row, record=record, p=p)

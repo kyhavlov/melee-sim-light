@@ -86,6 +86,9 @@ def test_seed_schema_includes_staling_fields() -> None:
     assert "combat_shield_hit_int_damage" in SEED_DTYPE.fields
     assert "floor_sweep_prev_pos_y_f32" in SEED_DTYPE.fields
     assert "floor_sweep_prev_pos_valid_u8" in SEED_DTYPE.fields
+    # mpColl persisted wall-side/index callback state for narrow DamageFlyTop wall contact rows.
+    assert "mpcoll_wall_kind_seed_u8" in SEED_DTYPE.fields
+    assert "mpcoll_wall_id_seed_u16" in SEED_DTYPE.fields
     # Side-B hidden ghost ring lanes for end-to-end Illusion/Phantasm ownership.
     assert "illusion_ghost_pos0_x" in SEED_DTYPE.fields
     assert "illusion_ghost_pos0_y" in SEED_DTYPE.fields

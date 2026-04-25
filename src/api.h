@@ -541,6 +541,19 @@ typedef struct MslSeed {
   // refs/melee/src/melee/ft/ftwalljump.c::ftWallJump_8008169C
   uint8_t walljump_input_timer[MSL_MAX_PLAYERS];
   int8_t walljump_wall_side_i8[MSL_MAX_PLAYERS];
+  // Teacher-forced CollData wall side/index for one-step reseeds.
+  //
+  // Decomp:
+  // - DamageFly_Coll / DownDamage_Coll consume CollData.env_flags after mpColl wall callbacks.
+  // - CollData keeps left/right wall indices across callback phases; public Slippi rows do not
+  //   expose those indices directly, so preprocessing may seed the persisted side/index from
+  //   replay-prefix position plus extracted stage wall graph.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_DamageFly_Coll
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownDamage.c::ftCo_DownDamage_Coll
+  // refs/melee/src/melee/lb/types.h::CollData
+  // data/stages/final_destination.json
+  uint8_t mpcoll_wall_kind_seed_u8[MSL_MAX_PLAYERS];  // 0 none, 1 left, 2 right
+  uint16_t mpcoll_wall_id_seed_u16[MSL_MAX_PLAYERS];  // ISO segment id, 0xFFFF none
   // Decomp-shaped animation/script timebase: fp->cur_anim_frame (float).
   // Slippi post-frame exposes this as `state_age` (float, can be fractional).
   //

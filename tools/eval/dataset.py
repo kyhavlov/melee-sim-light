@@ -231,6 +231,12 @@ SEED_DTYPE = np.dtype(
         # `fp->x2110_walljumpWallSide`) consumed by ftWallJump_8008169C.
         ("walljump_input_timer", _arr("u1", MAX_PLAYERS)),
         ("walljump_wall_side_i8", _arr("i1", MAX_PLAYERS)),
+        # Teacher-forced CollData wall-index seed for one-step reseeds near FD wall callbacks.
+        # Runtime rollouts carry state.wall_kind/wall_id normally; public replay rows expose only
+        # fighter position, so preprocessing reconstructs the persisted wall side/index from the
+        # replay-prefix position and extracted stage wall graph.
+        ("mpcoll_wall_kind_seed_u8", _arr("u1", MAX_PLAYERS)),
+        ("mpcoll_wall_id_seed_u16", _arr("<u2", MAX_PLAYERS)),
         ("anim_frame_f32", _arr("<f4", MAX_PLAYERS)),
         ("frame_speed_mul_f32", _arr("<f4", MAX_PLAYERS)),
         # Capture/grab hidden owner lanes.

@@ -35,6 +35,7 @@ from tools.slippi.seed_history import (
     derive_turn_internals,
 )
 from tools.slippi.make_dataset_from_slp import derive_illusion_ghost_pos01, derive_illusion_ghost_pos012
+from tools.slippi.make_dataset_from_slp import _derive_mpcoll_wall_seed_lanes
 from tools.slippi.make_dataset_from_slp import _derive_passivewall_timer
 from tools.slippi.make_dataset_from_slp import _derive_grounded_overlap_hidden_pos_z
 
@@ -211,6 +212,42 @@ def test_derive_passivewall_timer_tracks_hidden_startup_hold() -> None:
 
     assert got.dtype == np.uint8
     assert got.tolist() == [0, 5, 4, 3, 2, 1, 0, 0]
+
+
+def test_derive_mpcoll_wall_seed_lanes_are_fd_segment_and_phase_scoped() -> None:
+    # Teacher-forced DamageFlyTop wall callback seed:
+    # - DCC 4809 is visibly near the left vertical wall but has no vanilla wall callback yet.
+    # - DCC 4810 has reached FD left lower wall segment 13 and enters PassiveWall.
+    # - HIS 1788 carries a right-wall index but does not enter PassiveWallJump yet.
+    # - HIS 1789 reaches right lower wall segment 9 and enters PassiveWallJump.
+    # The lane is prefix-causal from replay-visible position/action/hitstun plus extracted FD
+    # collision segments; non-DamageFlyTop actions remain unseeded even at the same coordinates.
+    # refs/melee/src/melee/mp/mplib.c::{mpLib_8004E398_LeftWall,mpLib_8004E684_RightWall}
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_DamageFly_Coll
+    import json
+
+    root = Path(__file__).resolve().parents[1]
+    stage_segments = json.loads((root / "data/stages/final_destination.json").read_text())["segments"]
+    action = np.array([90, 90, 90, 90, 88], dtype=np.uint16)
+    action_frame = np.array([44, 45, 18, 19, 45], dtype=np.int16)
+    hitlag = np.zeros(5, dtype=np.uint16)
+    hitstun = np.array([4, 3, 46, 45, 3], dtype=np.uint16)
+    pos_x = np.array([-87.799850, -88.956474, 88.924614, 88.382698, -88.956474], dtype=np.float32)
+    pos_y = np.array([-9.026546, -10.818257, -10.997328, -9.983515, -10.818257], dtype=np.float32)
+
+    kind, wall_id = _derive_mpcoll_wall_seed_lanes(
+        action_id_u16=action,
+        action_frame_i16=action_frame,
+        hitlag_u16=hitlag,
+        hitstun_u16=hitstun,
+        pos_x_f32=pos_x,
+        pos_y_f32=pos_y,
+        stage_id_u32=32,
+        stage_segments=stage_segments,
+    )
+
+    assert kind.tolist() == [0, 1, 2, 2, 0]
+    assert wall_id.tolist() == [0xFFFF, 13, 10, 9, 0xFFFF]
 
 
 def test_derive_grounded_overlap_hidden_pos_z_tracks_prefix_depth_lane() -> None:
@@ -422,7 +459,7 @@ def test_derive_frame_speed_mul_is_prefix_invariant() -> None:
     #
     # Action ids (GALE01): refs/melee/src/melee/ft/chara/ftCommon/forward.h
     act_attack_air_f = np.uint16(0x0042)
-    act_landing_air_f = np.uint16(0x0044)
+    act_landing_air_f = np.uint16(0x0047)
 
     # Construct a prefix where frame 1 enters LandingAirF and state_age resets.
     state_age_prefix = np.array([5.0, -1.0, 0.8272727], dtype=np.float32)
@@ -472,6 +509,79 @@ def test_derive_frame_speed_mul_is_prefix_invariant() -> None:
     )
 
     assert np.allclose(out0, out1[: out0.size])
+
+
+def test_derive_frame_speed_mul_landing_fallspecial_origin_specific_lag() -> None:
+    # LandingFallSpecial entry speed is source-owned:
+    # - EscapeAir_Coll passes common x344 landing lag.
+    # - Illusion/Phantasm SpecialAirSEnd uses da->x50.
+    # - Firefox/Firebird rebound/fall uses da->x90.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_80099D70
+    # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c::ftFx_SpecialAirSEnd_Coll
+    # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::{
+    #   ftFx_SpecialHiFall_Anim,ftFx_SpecialHiBound_Anim}
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::ftCo_LandingFallSpecial_Enter
+    act_escape_air = np.uint16(0x00EC)
+    act_special_air_s_end = np.uint16(0x0160)
+    act_special_hi_fall = np.uint16(0x0166)
+    act_fall_special = np.uint16(0x0023)
+    act_landing_fall_special = np.uint16(0x002B)
+    sm_landing_fall_special = np.uint32(36)
+
+    action_id = np.array(
+        [
+            act_escape_air,
+            act_landing_fall_special,
+            act_special_air_s_end,
+            act_landing_fall_special,
+            act_special_hi_fall,
+            act_fall_special,
+            act_landing_fall_special,
+        ],
+        dtype=np.uint16,
+    )
+    state_age = np.array([1.0, -1.0, 20.0, -1.0, 3.0, 4.0, -1.0], dtype=np.float32)
+    hitlag = np.zeros(action_id.shape[0], dtype=np.uint16)
+    char_id = np.full(action_id.shape[0], 1, dtype=np.uint8)
+    animation_index = np.array([44, 36, 350, 36, 356, 26, 36], dtype=np.uint32)
+    lr_press_timer = np.full(action_id.shape[0], 0xFF, dtype=np.uint8)
+    end_frames = EndFrameTables(by_char_id={1: {int(sm_landing_fall_special): 30.0}})
+
+    got = derive_frame_speed_mul_f32(
+        state_age_f32=state_age,
+        action_id=action_id,
+        hitlag=hitlag,
+        char_id=char_id,
+        animation_index=animation_index,
+        lr_press_timer=lr_press_timer,
+        end_frames=end_frames,
+        common_lcancel_window_frames=7,
+        common_lcancel_lag_div=2.0,
+        common_landing_fall_special_lag_frames=10.0,
+        char_landing_air_lag_frames={1: {"airn": 15, "airf": 22, "airb": 20, "airhi": 18, "airlw": 18}},
+        char_fallspecial_landing_lag_frames={1: {"illusion": 20, "firefox": 18}},
+    )
+
+    assert float(got[1]) == pytest.approx(3.01, abs=1e-6)
+    assert float(got[3]) == pytest.approx(1.505, abs=1e-6)
+    assert float(got[6]) == pytest.approx(1.6722223, abs=1e-6)
+
+    extended = np.concatenate([action_id, np.array([0x000E, 0x000E], dtype=np.uint16)])
+    got_extended = derive_frame_speed_mul_f32(
+        state_age_f32=np.concatenate([state_age, np.array([0.0, 1.0], dtype=np.float32)]),
+        action_id=extended,
+        hitlag=np.zeros(extended.shape[0], dtype=np.uint16),
+        char_id=np.full(extended.shape[0], 1, dtype=np.uint8),
+        animation_index=np.concatenate([animation_index, np.array([0, 0], dtype=np.uint32)]),
+        lr_press_timer=np.full(extended.shape[0], 0xFF, dtype=np.uint8),
+        end_frames=end_frames,
+        common_lcancel_window_frames=7,
+        common_lcancel_lag_div=2.0,
+        common_landing_fall_special_lag_frames=10.0,
+        char_landing_air_lag_frames={1: {"airn": 15, "airf": 22, "airb": 20, "airhi": 18, "airlw": 18}},
+        char_fallspecial_landing_lag_frames={1: {"illusion": 20, "firefox": 18}},
+    )
+    assert np.allclose(got, got_extended[: got.size])
 
 
 def test_derive_guard_setoff_hitlag_damage_min_carries_entry_damage_across_segment() -> None:

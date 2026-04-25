@@ -983,6 +983,10 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
       batch->state.passivewall_timer[idx] = seed->passivewall_timer[p];
       batch->state.walljump_input_timer[idx] = seed->walljump_input_timer[p];
       batch->state.walljump_wall_side_i8[idx] = seed->walljump_wall_side_i8[p];
+      if (seed->mpcoll_wall_kind_seed_u8[p] == 1u || seed->mpcoll_wall_kind_seed_u8[p] == 2u) {
+        batch->state.wall_kind[idx] = seed->mpcoll_wall_kind_seed_u8[p];
+        batch->state.wall_id[idx] = seed->mpcoll_wall_id_seed_u16[p];
+      }
       batch->state.guard_jump_oos_entered_this_frame[idx] = 0u;
       batch->state.shine_jump_iasa_entered_this_frame[idx] = 0u;
       // Seed deterministic anim timebase from Slippi post-frame `state_age` (fp->cur_anim_frame)
