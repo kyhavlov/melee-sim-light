@@ -855,9 +855,12 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
       batch->state.pos_x[idx] = seed->pos_x[p];
       batch->state.pos_y[idx] = seed->pos_y[p];
       batch->state.pos_z[idx] = seed->pos_z[p];
+      batch->state.floor_sweep_seed_prev_pos_x[idx] = seed->floor_sweep_prev_pos_x_f32[p];
       batch->state.floor_sweep_seed_prev_pos_y[idx] = seed->floor_sweep_prev_pos_y_f32[p];
       batch->state.floor_sweep_seed_prev_valid[idx] =
-          (seed->floor_sweep_prev_pos_valid_u8[p] && isfinite(seed->floor_sweep_prev_pos_y_f32[p]))
+          (seed->floor_sweep_prev_pos_valid_u8[p] &&
+           isfinite(seed->floor_sweep_prev_pos_x_f32[p]) &&
+           isfinite(seed->floor_sweep_prev_pos_y_f32[p]))
               ? 1u
               : 0u;
       batch->state.speed_air_x_self[idx] = seed->speed_air_x_self[p];

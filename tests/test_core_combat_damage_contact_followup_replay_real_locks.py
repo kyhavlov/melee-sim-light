@@ -150,6 +150,24 @@ def _assert_transition_fields_match_ref(*, out_row, ref_row, record: int, p: int
             note="grounded DownDamageD anim-end with live hidden x0 enters DownWaitD then DownFowardD IASA",
         ),
         _DamageContactCase(
+            dataset_rel="datasets/aggregate_recent/replays/validation/aggregate_recent/PriceyPartialAlbatross.msl",
+            record=1516,
+            port=1,
+            seed_action=193,
+            ref_action=193,
+            note="active-hitlag DownDamageD resting floor contact grounds through ft_80081DD4",
+            expected_seed_hitlag=1,
+        ),
+        _DamageContactCase(
+            dataset_rel="datasets/aggregate_recent/replays/validation/aggregate_recent/FavorableSuperficialPig.msl",
+            record=3721,
+            port=0,
+            seed_action=193,
+            ref_action=193,
+            note="downward-KB DownDamageD hitlag floor contact roots through ft_80081DD4",
+            expected_seed_hitlag=1,
+        ),
+        _DamageContactCase(
             dataset_rel="datasets/aggregate_recent/replays/validation/aggregate_recent/BlondHardHippopotamus.msl",
             record=430,
             port=0,
@@ -190,6 +208,14 @@ def _assert_transition_fields_match_ref(*, out_row, ref_row, record: int, p: int
             note="DamageAir1 IASA consumes current-frame jump into JumpAerialF",
         ),
         _DamageContactCase(
+            dataset_rel="datasets/aggregate_recent/replays/validation/aggregate_recent/DistinctCaringCobra.msl",
+            record=9171,
+            port=0,
+            seed_action=84,
+            ref_action=65,
+            note="DamageAir1 IASA enters AttackAirN without same-frame floor landing",
+        ),
+        _DamageContactCase(
             dataset_rel="datasets/aggregate_recent/replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.msl",
             record=4187,
             port=0,
@@ -215,6 +241,38 @@ def _assert_transition_fields_match_ref(*, out_row, ref_row, record: int, p: int
             note="SpecialAirSEnd pre-Anim collision pose is hittable by same-frame aerial Shine Start BODY",
             require_ref_hitlag_zero=False,
         ),
+        _DamageContactCase(
+            dataset_rel="datasets/aggregate_recent/replays/validation/aggregate_recent/BlondHardHippopotamus.msl",
+            record=1172,
+            port=1,
+            seed_action=76,
+            ref_action=42,
+            note="DamageHi2 seeded final ECB-lock frame lands through ft_80081DD4 locked-bottom floor callback",
+        ),
+        _DamageContactCase(
+            dataset_rel="datasets/aggregate_recent/replays/validation/aggregate_recent/HungryImportantSnake.msl",
+            record=427,
+            port=1,
+            seed_action=76,
+            ref_action=42,
+            note="DamageHi2 mirrored seeded final ECB-lock frame lands through common Damage_Coll",
+        ),
+        _DamageContactCase(
+            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/QuerulousGrandDinosaur.msl",
+            record=4114,
+            port=1,
+            seed_action=85,
+            ref_action=85,
+            note="DamageAir2 seeded final ECB-lock frame stays airborne; common Damage_Coll lock-bottom bridge must not apply",
+        ),
+        _DamageContactCase(
+            dataset_rel="datasets/aggregate_recent/replays/validation/aggregate_recent/MotionlessAggressiveJay.msl",
+            record=385,
+            port=1,
+            seed_action=84,
+            ref_action=42,
+            note="DamageAir1 Landing_Enter_Basic clears hitstun even when seed x221C_b6 lockout is live",
+        ),
     ],
 )
 def test_core_damage_contact_followup_rows_are_replay_exact(case: _DamageContactCase) -> None:
@@ -225,33 +283,47 @@ def test_core_damage_contact_followup_rows_are_replay_exact(case: _DamageContact
     # - Grounded DownDamage_Anim enters DownWaitU/D while hidden mv.co.downdamage.x0 remains live,
     #   and the newly-entered DownWait can run IASA later in the same frame.
     # - Downed contact damage runs ftCo_8009F0F0 / ftCo_8009F184 before generic damage selection.
+    # - Active-hitlag DownDamage rows can still resolve resting floor contact through
+    #   DownDamage_Coll's ft_80081DD4 callback while carrying the Damage hitstun lane.
     # - DownStand entry through ftCo_80098160 does not do the immediate ftAnim tick used by
     #   DownWait/DownFoward/DownBack entry helpers.
     # - DownBound_Anim runs before current-frame input, so a same-frame A/B edge does not rewrite
     #   x67C/x67D early enough to preempt Down_CheckInput on the finished bound frame.
     # - Damage_IASA delegates to Fall_IASA_Inner, whose order admits SpecialAir, AttackAir, then
     #   JumpAerial on common airborne Damage rows once x221C_b6 is clear.
+    # - A DamageAir -> AttackAir IASA entry does not immediately consume the old DamageAir floor
+    #   sweep into AttackAir landing on the entry frame.
     # - DamageFly_Coll uses the shared wall-tech callback for all DamageFly variants, not only
     #   DamageFlyN.
     # - Side-B End steady-state hurtcaps can still be consumed from the pre-Anim collision pose by
     #   same-frame BODY selection; PPA rec=892 is locked by ftColl_80076ED8 probe evidence.
+    # - Common Damage_Coll rows with a seeded final ECB-lock frame use the locked-bottom
+    #   mpColl_800473CC floor callback, while DamageAir/DamageFly remain on their separate timing.
+    # - DamageAir -> Landing enters ftCo_Landing_Enter_Basic, whose motion-state reset clears the
+    #   replay-facing hitstun lane on the destination Landing row.
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_DamageFall.c::ftCo_DamageFall_IASA
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_DamageFly_IASA
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownDamage.c::ftCo_DownDamage_Anim
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownBound.c::{
     #   ftCo_80097F38,ftCo_DownWait_IASA}
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownDamage.c::{ftCo_8009F0F0,ftCo_8009F184}
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownDamage.c::ftCo_DownDamage_Coll
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownStand.c::ftCo_80098160
     # refs/melee/src/melee/ft/fighter.c::{Fighter_8006A360,Fighter_procUpdate}
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownBound.c::ftCo_DownBound_Anim
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Down.c::ftCo_80098400
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_IASA
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_IASA_Inner
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_Coll
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_DamageFly_Coll
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_PassiveWall.c::{ftCo_800C1D38,ftCo_800C1E64}
     # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c::{
     #   ftFx_SpecialAirSEnd_Anim,ftFx_SpecialAirSEnd_Coll}
     # refs/melee/src/melee/ft/ftcoll.c::ftColl_80076ED8
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_Coll
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::ftCo_Landing_Enter_Basic
+    # refs/melee/src/melee/ft/ft_081B.c::ft_80081DD4
+    # refs/melee/src/melee/mp/mpcoll.c::mpColl_800473CC
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / case.dataset_rel

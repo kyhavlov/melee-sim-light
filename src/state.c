@@ -55,7 +55,9 @@ int state_alloc(MslStateSoA* state, int batch_size) {
   state->illusion_ghost_pos2_y = (float*)alloc_aligned_64(sizeof(float) * bp);
   state->prev_pos_x = (float*)alloc_aligned_64(sizeof(float) * bp);
   state->prev_pos_y = (float*)alloc_aligned_64(sizeof(float) * bp);
+  state->floor_sweep_prev_pos_x = (float*)alloc_aligned_64(sizeof(float) * bp);
   state->floor_sweep_prev_pos_y = (float*)alloc_aligned_64(sizeof(float) * bp);
+  state->floor_sweep_seed_prev_pos_x = (float*)alloc_aligned_64(sizeof(float) * bp);
   state->floor_sweep_seed_prev_pos_y = (float*)alloc_aligned_64(sizeof(float) * bp);
   state->floor_sweep_seed_prev_valid = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->coll_stage_prev_pos_x = (float*)alloc_aligned_64(sizeof(float) * bp);
@@ -400,7 +402,8 @@ int state_alloc(MslStateSoA* state, int batch_size) {
       !state->illusion_ghost_pos0_x || !state->illusion_ghost_pos0_y ||
       !state->illusion_ghost_pos1_x || !state->illusion_ghost_pos1_y ||
       !state->illusion_ghost_pos2_x || !state->illusion_ghost_pos2_y || !state->prev_pos_x ||
-      !state->prev_pos_y || !state->floor_sweep_prev_pos_y || !state->floor_sweep_seed_prev_pos_y ||
+      !state->prev_pos_y || !state->floor_sweep_prev_pos_x || !state->floor_sweep_prev_pos_y ||
+      !state->floor_sweep_seed_prev_pos_x || !state->floor_sweep_seed_prev_pos_y ||
       !state->floor_sweep_seed_prev_valid || !state->coll_stage_prev_pos_x ||
       !state->coll_stage_prev_pos_y || !state->coll_stage_cur_pos_x ||
       !state->coll_stage_cur_pos_y || !state->speed_air_x_self || !state->speed_ground_x_self ||
@@ -605,7 +608,9 @@ void state_free(MslStateSoA* state) {
   alloc_free(state->illusion_ghost_pos2_y);
   alloc_free(state->prev_pos_x);
   alloc_free(state->prev_pos_y);
+  alloc_free(state->floor_sweep_prev_pos_x);
   alloc_free(state->floor_sweep_prev_pos_y);
+  alloc_free(state->floor_sweep_seed_prev_pos_x);
   alloc_free(state->floor_sweep_seed_prev_pos_y);
   alloc_free(state->floor_sweep_seed_prev_valid);
   alloc_free(state->coll_stage_prev_pos_x);

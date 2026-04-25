@@ -152,10 +152,11 @@ Recommended sequence for the next deep passes:
 - Status: `closed`
 - Closure scope: shared Passive / PassiveStand / DownBound selector ownership only; this does not
   claim the whole damage/down/passive transition surface is gone.
-- Roadmap families: `F07_knockdown_grounding=0` and
-  `F18_damage_tech_timer_seed_surface=0` in fresh primary and aggregate taxonomy. Remaining
-  damage/down/passive-shaped rows are source-owned adjacent residuals (`F08c`, `F06`, `F08f`,
-  `F10m`), not shared Passive / PassiveStand / DownBound selector debt.
+- Roadmap families: `F07_knockdown_grounding=0` in fresh primary and aggregate taxonomy. `F18` is
+  active again after the floor/landing split as a narrower DamageFly floor-contact / hidden
+  CollData seed-surface owner; it is not shared Passive / PassiveStand / DownBound selector debt.
+  Remaining damage/down/passive-shaped rows are source-owned adjacent residuals (`F08c`, `F18`,
+  `F10m`, `F28`), not shared selector debt.
 - Owner boundary: DamageFly/DamageFall floor-contact tech owner for Passive / PassiveStand /
   DownBound selection.
 - Primary owner files: `src/knockdown.c`, `src/input.c`
@@ -216,26 +217,30 @@ Recommended sequence for the next deep passes:
     `tests/test_locomotion_attackair_landing_contact_y_regression.py`, and
     `tests/test_seed_history.py`.
   - Fresh taxonomy from regenerated primary and aggregate datasets after the current continuation:
-    primary total `441`; aggregate total `3141`. Current target-family counts are:
-    primary `F01=50`, `F08a=35`, `F10b=22`, `F13a=7`, `F26=23`, `F27a=9`,
-    `F27b=25`, `F27c=0`, `F27d=0`; aggregate `F01=567`, `F08a=130`,
-    `F10b=205`, `F13a=86`, `F26=137`, `F27a=101`, `F27b=128`, `F27c=0`,
-    `F27d=29`, `F28=68`, `F29=26`.
-  - Movement from the `fe3dd74` checkpoint is real simulator/seed behavior, not taxonomy-only:
-    primary `468 -> 441`, aggregate `3392 -> 3141`, aggregate `F01 631 -> 567`,
-    aggregate `F13a 122 -> 86`, aggregate `F27b 201 -> 128`, aggregate
-    `F27c 39 -> 0`, aggregate `F27d 62 -> 29`, aggregate `F29 27 -> 26`,
-    and aggregate `F08a 134 -> 130`.
-    Movement from the `ee0095b` checkpoint is primary `456 -> 441`, aggregate
-    `3253 -> 3141`, aggregate `F13a 122 -> 86`, aggregate `F27b 161 -> 128`,
-    aggregate `F27c 39 -> 0`, and aggregate `F27d 62 -> 29`.
-    Additional movement in this uncommitted followup is aggregate `3168 -> 3141`,
-    `F13a 88 -> 86`, `F27c 15 -> 0`, and `F27d 39 -> 29`; primary remains `441`.
-    `F26`, `F27a`, `F27b`, `F27d`, `F28`, and `F29` remain active residual owners.
+    primary total `441`; aggregate total `3113`. The assigned floor/landing callback labels are
+    now closed in the active taxonomy: primary and aggregate `F13a=0`, `F27a=0`, `F27b=0`,
+    `F27c=0`, and `F27d=0`. Former rows were split to narrower owners:
+    `F10n_common_fall_landing_timebase` for EscapeAir/FallSpecial/LandingFallSpecial phase rows,
+    `F18_damage_tech_timer_seed_surface` for DamageFly floor-contact / tech / hidden CollData
+    provenance, `F08d`/`F08c` for damage timer/transition adjacency, `F09c`/`F10a` for aerial and
+    grounded action-entry adjacency, and `F10b`/`F20`/`F28`/`F29` for combat-contact fallout.
+  - Runtime/seed movement and taxonomy owner movement are tracked separately. The retained
+    floor/landing callback pass adds the common `Damage_Coll` seeded final
+    CollData_X130_Locked locked-bottom callback path, `DamageAir -> Landing` hitstun clear,
+    same-frame `DamageAir -> AttackAir` entry floor suppression, and narrow active-hitlag
+    `DownDamage_Coll` resting/downward-KB floor contact. It moves aggregate `3141 -> 3113`,
+    `F27b 128 -> 104`, and `F27d 29 -> 25`; primary remains `441`.
+    The final owner split closes `F13a/F27a/F27b/F27c/F27d` at zero without changing total
+    mismatch counts; remaining rows move to `F18`/`F10n`/`F08d`/`F08c`/`F09c`/`F10a`/`F10b`/`F20`/
+    `F28`/`F29`.
+    Active aggregate heads are `F01=567`, `F25=373`, `F10b=209`, `F09c=193`, `F12b=148`,
+    `F26=137`, `F03=135`, `F08a=131`, `F09a=114`, `F18=110`, `F10n=105`, `F08d=104`,
+    `F09b=98`, `F10f=79`, `F28=68`, `F10d=67`, `F29=64`, `F10a=48`, `F19=42`, and `F10j=38`.
   - The diagnostic owners remain an implementation map, not a closure claim:
     `F26` is the exact `ftCo_8008DCE0` DamageFlyRoll RNG stream / hidden pre-gate
-    `Fighter_8006CDA4` seed surface; `F27*` are damage/Down/Passive/mpColl callback phase owners;
-    `F28` is exact `ftColl_80078C70` / `ftColl_80076ED8` candidate ordering and
+    `Fighter_8006CDA4` seed surface; the retired `F27*` labels are zero in the active taxonomy,
+    with their former rows represented by narrower seed/timebase/contact owners; `F28` is exact
+    `ftColl_80078C70` / `ftColl_80076ED8` candidate ordering and
     `lbColl_80006E58` narrowphase; `F29` is aerial HitCapsule victim-provenance /
     contact-hitlag carry, including ShieldDesc and narrow aerial Shine contact rows.
   - Rejected experiments in this continuation:
@@ -243,16 +248,35 @@ Recommended sequence for the next deep passes:
     surface, broad `DamageFall` terminal IASA suppression, broad EscapeAir steady floor projection,
     terminal damage ECB locked-bottom expansion, broad fresh/late JumpAerial -> EscapeAir floor
     projection, generic DamageFly root projection, visible DamageFlyTop wall-hug recovery, ordinary
-    Fall early floor-sweep suppression, frame-start ECB-lock consumption, and JumpAerial-entry
-    EscapeAir floor suppression all failed focused locks or worsened primary / aggregate taxonomy.
-    None is retained.
+    Fall early floor-sweep suppression, frame-start ECB-lock consumption, JumpAerial-entry
+    EscapeAir floor suppression, sustained early-lock EscapeAir `action_frame<=4` landing
+    suppression, root-below-floor guarded early-lock EscapeAir suppression, and generic airborne
+    DownBound floor-sweep/resting-contact suppression, visible late DamageFlyN root projection,
+    x67C/x67D/x67E-gated DamageFlyN projection, broad continued DownDamage projection, and
+    JumpAerial -> EscapeAir immediate-entry landing suppression, and terminal airborne DownBound
+    ledge-floor Fall conversion all failed focused locks or worsened primary / aggregate taxonomy.
+    None is retained. A broad final-lock-bottom experiment for all
+    DamageAir/DamageFly/Damage ground rows worsened taxonomy (`primary F27b 25 -> 32`, aggregate
+    `F27b 128 -> 135`); the retained subset is common Damage_Coll only. The latest floor/landing
+    callback pass previously confirmed target counts primary `F13a/F27a/F27b/F27d=7/9/25/0` and
+    aggregate `F13a/F27a/F27b/F27d=86/101/104/25`, with `F27c=0`; the final owner split now
+    closes all five assigned labels at zero. Visible DamageFlyN projection
+    worsened `F27a` (`primary 9 -> 35`, aggregate `101 -> 455`), x67 timer context still worsened
+    aggregate `F27a 101 -> 429`, and broad DownDamage projection worsened `F27d`
+    (`primary 0 -> 16`, aggregate `29 -> 149`). Terminal airborne DownBound Fall conversion
+    worsened `F27d` (`primary 0 -> 66`, aggregate `25 -> 175`). The broad EscapeAir variant
+    worsened to primary `F13a=31` and aggregate `F13a=298`, while the narrower root-guard variant
+    only swapped `QuerulousGrandDinosaur:157` for `QuerulousGrandDinosaur:2102`.
+    A narrower `DamageFlyHi` upward-KB floor suppression also failed (`primary 441 -> 492`,
+    `F27a 9 -> 60`). Adding the missing teacher-forced `CollData.prev_pos.x` seed lane is retained
+    as decomp-backed seed surface, but it did not move the target counts by itself.
   - Remaining current-map blockers:
     `F01=567` aggregate rows remain mixed GuardReflect/Guard/GuardSetOff collision candidate
     ordering and shield-hit outcome phase, not a single release timer; `F26=137` aggregate rows
     still require exact `ftCo_8008DCE0` RNG stream / hidden `Fighter_8006CDA4` consume-state
-    representation; `F27a/F27b/F27d=101/128/29` remain CollData/ECB floor/wall callback
-    phase and downed hidden timer/input phase rows; `F28=68` remains exact BODY candidate ordering /
-    narrowphase (`lbColl_8000805C` / `lbColl_80006E58`); `F29=26` remains shield descriptor geometry
+    representation; the former `F27a/F27b/F27d` rows are now represented by narrower
+    `F18`/`F08d`/`F08c`/`F09c`/`F10a`/`F10b`/`F20` owners; `F28=68` remains exact BODY candidate ordering /
+    narrowphase (`lbColl_8000805C` / `lbColl_80006E58`); `F29=64` remains shield descriptor geometry
     / contact-hitlag provenance. Protected and item-owner families remain zero.
 - Current split:
   - AttackAirLw -> shield-hit admission seed provenance is closed as a named sub-owner:
@@ -511,7 +535,8 @@ Recommended sequence for the next deep passes:
       `F19`; SpecialN article, item, shot, and loop/end handoff rows stay in `F19`.
     - Common FallSpecial/LandingFallSpecial rows that have already entered `Damage*`, plus pure
       ground-id and pure state/hurtbox tails, now route to shared damage/mpColl/state owners.
-      Action/on-ground/jump landing bundles stay in `F13a`.
+      Action/on-ground/jump landing bundles now route to `F10n_common_fall_landing_timebase` in
+      the active taxonomy.
     - Sustained no-lock EscapeAir now keeps current-ECB sampling in the early same-action window,
       avoiding simulator-only early `LandingFallSpecial` while preserving the locked and later
       prev-bottom landing slices.
@@ -804,9 +829,10 @@ Recommended sequence for the next deep passes:
     - primary: total `619`, `F17=27`, `F10c=24`
     - aggregate: total `5560`, `F17=232`, `F10c=269`
   - Taxonomy split retained in this pass:
-    - Common EscapeAir/FallSpecial/LandingFallSpecial action/on-ground bundles now move to
-      `F13a_common_fallspecial_landing` because they are common landing/freefall timing, not ledge
-      occupancy or CliffCatch edge ownership. Lone `ground_id` tails stay in `F10c`.
+    - Historical split note: Common EscapeAir/FallSpecial/LandingFallSpecial action/on-ground
+      bundles moved out of ledge ownership because they are common landing/freefall timing, not
+      ledge occupancy or CliffCatch edge ownership. In the active taxonomy these rows now live in
+      `F10n_common_fall_landing_timebase`. Lone `ground_id` tails stay in `F10m`.
     - DamageFly/Passive/DownBound/DownDamage/PassiveWallJump action bundles now move to
       `F08c_damage_state_transition_adjacency`; these are damage/knockdown continuation owners, not
       ledge occupancy rows. `F17` is reserved for persistent floor-line identity (`floor.index`) in

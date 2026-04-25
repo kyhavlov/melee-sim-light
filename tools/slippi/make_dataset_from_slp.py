@@ -3704,18 +3704,23 @@ def _main_impl(args) -> None:
         samples["seed_t"]["pos_y"][:, slot] = post_pos_y[:-1]
         samples["ref_t1"]["pos_y"][:, slot] = post_pos_y[1:]
         samples["seed_t"]["pos_z"][:, slot] = post_pos_z[:-1]
-        # mpColl floor sweeps consume CollData.prev_pos.y -> cur_pos.y. On a teacher-forced
+        # mpColl floor sweeps consume CollData.prev_pos -> cur_pos. On a teacher-forced
         # one-step reseed, the frame-start visible position is replay frame t, but the engine's
-        # CollData previous Y for rows already crossing/under the floor comes from replay history.
-        # Seed that previous post-frame Y explicitly; runtime rollouts leave valid=0 and use the
-        # live frame-start snapshot.
+        # CollData previous position for rows already crossing/under the floor comes from replay
+        # history. Seed that previous post-frame position explicitly; runtime rollouts leave
+        # valid=0 and use the live frame-start snapshot.
         # refs/melee/src/melee/mp/mpcoll.c::{mpCollPrev,mpColl_80043754,mpCheckFloor}
         # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{
         #   ftCo_Damage_Coll,ftCo_DamageFly_Coll}
+        floor_prev_x = np.empty_like(post_pos_x[:-1])
+        floor_prev_x[0] = post_pos_x[0]
+        if floor_prev_x.shape[0] > 1:
+            floor_prev_x[1:] = post_pos_x[:-2]
         floor_prev_y = np.empty_like(post_pos_y[:-1])
         floor_prev_y[0] = post_pos_y[0]
         if floor_prev_y.shape[0] > 1:
             floor_prev_y[1:] = post_pos_y[:-2]
+        samples["seed_t"]["floor_sweep_prev_pos_x_f32"][:, slot] = floor_prev_x
         samples["seed_t"]["floor_sweep_prev_pos_y_f32"][:, slot] = floor_prev_y
         samples["seed_t"]["floor_sweep_prev_pos_valid_u8"][:, slot] = np.uint8(1)
         samples["seed_t"]["speed_air_x_self"][:, slot] = speed_air_x_self[:-1]

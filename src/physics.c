@@ -1084,7 +1084,7 @@ void physics_integrate(MslBatch* batch) {
       const size_t idx = msl_idx_player(bi, p);
 
       // Record pre-integration position for physics/collision rollback helpers.
-      // Floor sweeps that need the frame-start vertical position use floor_sweep_prev_pos_y instead.
+      // Floor sweeps that need the frame-start CollData.prev_pos use floor_sweep_prev_pos_*.
       // refs/melee/src/melee/mp/mpcoll.c::{mpCollPrev,mpCheckFloor}
       batch->state.prev_pos_x[idx] = batch->state.pos_x[idx];
       batch->state.prev_pos_y[idx] = batch->state.pos_y[idx];

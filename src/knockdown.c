@@ -2277,10 +2277,10 @@ void knockdown_update_post_collision(MslBatch* batch) {
             // }
             // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::ftCo_Landing_Enter
             // refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState
-            if (!damage_iasa_lockout_x221c_b6(batch, idx) || a0 == (uint16_t)MSL_ACT_DAMAGE_AIR_2 ||
-                a0 == (uint16_t)MSL_ACT_DAMAGE_AIR_3) {
-              batch->state.hitstun[idx] = 0u;
-            }
+            // Replay lock: MotionlessAggressiveJay rec=385 keeps the DamageAir1 IASA lockout flag
+            // live on seed but Landing_Enter_Basic has already cleared the replay-facing hitstun
+            // lane on the destination row.
+            batch->state.hitstun[idx] = 0u;
             continue;
           }
           // Decomp: Damage_Coll fallback while grounded keeps Damage motion-state and applies the

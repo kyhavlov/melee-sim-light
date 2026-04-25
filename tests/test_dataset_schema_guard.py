@@ -84,6 +84,7 @@ def test_seed_schema_includes_staling_fields() -> None:
     assert "attacker_shield_ground_kb_vel" in SEED_DTYPE.fields
     assert "combat_shield_contact_hb_kind" in SEED_DTYPE.fields
     assert "combat_shield_hit_int_damage" in SEED_DTYPE.fields
+    assert "floor_sweep_prev_pos_x_f32" in SEED_DTYPE.fields
     assert "floor_sweep_prev_pos_y_f32" in SEED_DTYPE.fields
     assert "floor_sweep_prev_pos_valid_u8" in SEED_DTYPE.fields
     # mpColl persisted wall-side/index callback state for narrow DamageFlyTop wall contact rows.

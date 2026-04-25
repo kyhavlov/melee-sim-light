@@ -169,18 +169,19 @@ static inline void cache_prev_action_state(MslBatch* batch) {
   }
 }
 
-static inline void cache_floor_sweep_prev_y(MslBatch* batch) {
+static inline void cache_floor_sweep_prev_pos(MslBatch* batch) {
   if (batch == NULL) {
     return;
   }
 
   // Decomp: CollData carries `prev_pos`/`cur_pos` through mpColl so map callbacks can sweep the
-  // full frame's vertical movement segment, including pre-physics callbacks such as
-  // Damage_OnEveryHitlag SDI/ASDI that mutate `cur_pos` before collision.
+  // full frame's movement segment, including pre-physics callbacks such as Damage_OnEveryHitlag
+  // SDI/ASDI that mutate `cur_pos` before collision.
   //
   // Keep this snapshot at frame start. If we refresh it after SDI or other pre-collision position
   // writes, mpCheckFloor-style sweeps can see an already-below-floor zero-length segment and miss
-  // the crossing.
+  // the crossing. Horizontal-only active-hitlag floor-height rows are locked separately so the
+  // full x/y segment does not synthesize a false Landing/FloorPush.
   // refs/melee/src/melee/mp/mpcoll.c::{mpCollPrev,mpColl_80043754,mpCheckFloor}
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{
   //   ftCo_Damage_OnEveryHitlag,ftCo_Damage_Coll,ftCo_DamageFly_Coll}
@@ -189,9 +190,11 @@ static inline void cache_floor_sweep_prev_y(MslBatch* batch) {
     for (int p = 0; p < num_players; p++) {
       const size_t idx = msl_idx_player(bi, p);
       if (batch->state.floor_sweep_seed_prev_valid[idx]) {
+        batch->state.floor_sweep_prev_pos_x[idx] = batch->state.floor_sweep_seed_prev_pos_x[idx];
         batch->state.floor_sweep_prev_pos_y[idx] = batch->state.floor_sweep_seed_prev_pos_y[idx];
         batch->state.floor_sweep_seed_prev_valid[idx] = 0u;
       } else {
+        batch->state.floor_sweep_prev_pos_x[idx] = batch->state.pos_x[idx];
         batch->state.floor_sweep_prev_pos_y[idx] = batch->state.pos_y[idx];
       }
     }
@@ -261,7 +264,7 @@ static int step_one_frame_core(MslBatch* batch, const uint8_t* prev_input_bytes,
 
   clear_landing_transients(batch);
   cache_prev_action_state(batch);
-  cache_floor_sweep_prev_y(batch);
+  cache_floor_sweep_prev_pos(batch);
   cache_guard_reflect_timer_seed_snapshots(batch);
 
   // Decomp callback ordering: pre-input anim callbacks (prio1) run before input_cb (prio3), so

@@ -164,7 +164,26 @@ def test_classify_player_row_moves_damagefly_passive_contact_timing_to_damage_tr
             199: "PASSIVE",
         },
     )
-    assert got == "F27a_damagefly_floor_contact_callback_phase"
+    assert got == "F18_damage_tech_timer_seed_surface"
+
+
+def test_classify_player_row_keeps_damagefly_floor_contact_reowner_narrow() -> None:
+    row = _player_row(
+        seed_action_id=87,
+        ref_action_id=199,
+        out_action_id=87,
+        prev_action_id=87,
+        fields=("action_id", "animation_index", "on_ground", "jumps_left", "hurtbox_state"),
+        on_ground=0,
+    )
+    got = _classify_player_row(
+        row,
+        {
+            87: "DAMAGE_FLY_HI",
+            199: "PASSIVE",
+        },
+    )
+    assert got == "F18_damage_tech_timer_seed_surface"
 
 
 def test_classify_player_row_moves_passivewall_contact_timing_to_damage_transition_owner() -> None:
@@ -334,7 +353,7 @@ def test_debug_body_contact_split_routes_resolved_geometry_residuals_to_named_ow
             active_fighter_hitbox_count=0,
             live_nonvictim_item_count=0,
         )
-        == "F27b_damage_air_landing_action_callback_phase"
+        == "F08e_body_contact_no_candidate_adjacency"
     )
     assert (
         _family_for_debug_body_contact_residual(
@@ -427,7 +446,26 @@ def test_classify_player_row_splits_prior_damage_exit_from_body_geometry() -> No
             76: "DAMAGE_HI_2",
         },
     )
-    assert got == "F27b_damage_air_landing_action_callback_phase"
+    assert got == "F08d_damage_timer_scalar_residual"
+
+
+def test_classify_player_row_moves_damageair_jumpaerial_entry_to_aerial_entry_owner() -> None:
+    row = _player_row(
+        seed_action_id=84,
+        ref_action_id=27,
+        out_action_id=84,
+        prev_action_id=84,
+        fields=("action_id", "animation_index", "jumps_left"),
+        on_ground=0,
+    )
+    got = _classify_player_row(
+        row,
+        {
+            27: "JUMP_AERIAL_F",
+            84: "DAMAGE_AIR_1",
+        },
+    )
+    assert got == "F09c_aerial_action_entry_adjacency"
 
 
 def test_classify_player_row_keeps_non_damage_down_transition_in_f08c() -> None:
@@ -446,7 +484,27 @@ def test_classify_player_row_keeps_non_damage_down_transition_in_f08c() -> None:
             186: "DOWN_STAND_U",
         },
     )
-    assert got == "F27d_down_damage_hidden_timer_phase"
+    assert got == "F08c_damage_state_transition_adjacency"
+
+
+def test_classify_player_row_moves_downdamage_hitlag_tail_to_grounded_combat_owner() -> None:
+    row = _player_row(
+        seed_action_id=193,
+        ref_action_id=193,
+        out_action_id=193,
+        prev_action_id=191,
+        fields=("hitlag", "combo_count", "last_attack_landed", "state_flags[1]"),
+        on_ground=1,
+        hitlag=1,
+    )
+    got = _classify_player_row(
+        row,
+        {
+            191: "DOWN_WAIT_D",
+            193: "DOWN_DAMAGE_D",
+        },
+    )
+    assert got == "F10b_grounded_combat_adjacency"
 
 
 def test_classify_player_row_does_not_hide_special_adjacency_in_mpcoll_residual() -> None:
@@ -694,7 +752,7 @@ def test_classify_player_row_moves_specialhi_damage_tail_to_damage_owner() -> No
             359: "FX_SPECIAL_HI_BOUND",
         },
     )
-    assert got == "F27b_damage_air_landing_action_callback_phase"
+    assert got == "F09a_aerial_stateflag_hurtbox_adjacency"
 
 
 def test_classify_player_row_splits_passivewalljump_special_entry_dispatch() -> None:
@@ -933,7 +991,7 @@ def test_classify_player_row_moves_missed_damage_from_shine_defender_to_damage_o
             363: "FX_SPECIAL_LW_END",
         },
     )
-    assert got == "F27b_damage_air_landing_action_callback_phase"
+    assert got == "F20_speciallw_shine_reflector"
 
 
 def test_classify_player_row_moves_pure_landingfallspecial_source_bookkeeping_to_combat() -> None:
@@ -970,7 +1028,7 @@ def test_classify_player_row_moves_landingfallspecial_collision_bundle_to_landin
             236: "ESCAPE_AIR",
         },
     )
-    assert got == "F13a_common_fallspecial_landing"
+    assert got == "F10n_common_fall_landing_timebase"
 
 
 def test_classify_player_row_moves_fallspecial_landing_bundle_to_landing_owner() -> None:
@@ -989,7 +1047,7 @@ def test_classify_player_row_moves_fallspecial_landing_bundle_to_landing_owner()
             43: "LANDING_FALL_SPECIAL",
         },
     )
-    assert got == "F13a_common_fallspecial_landing"
+    assert got == "F10n_common_fall_landing_timebase"
 
 
 def test_classify_player_row_moves_pure_landingfallspecial_action_frame_to_landing_owner() -> None:
@@ -1008,7 +1066,7 @@ def test_classify_player_row_moves_pure_landingfallspecial_action_frame_to_landi
             43: "LANDING_FALL_SPECIAL",
         },
     )
-    assert got == "F13a_common_fallspecial_landing"
+    assert got == "F10n_common_fall_landing_timebase"
 
 
 def test_classify_player_row_moves_landingfallspecial_damage_scalar_to_damage_owner() -> None:
@@ -1460,7 +1518,7 @@ def test_classify_player_row_splits_firefox_from_common_fallspecial() -> None:
                 236: "ESCAPE_AIR",
             },
         )
-        == "F13a_common_fallspecial_landing"
+        == "F10n_common_fall_landing_timebase"
     )
 
 

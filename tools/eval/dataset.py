@@ -93,8 +93,9 @@ SEED_DTYPE = np.dtype(
         ("pos_x", _arr("<f4", MAX_PLAYERS)),
         ("pos_y", _arr("<f4", MAX_PLAYERS)),
         ("pos_z", _arr("<f4", MAX_PLAYERS)),
-        # Teacher-forced mpColl floor-sweep previous Y. valid=0 keeps runtime frame-start snapshot.
+        # Teacher-forced mpColl floor-sweep previous position. valid=0 keeps runtime frame-start snapshot.
         # refs/melee/src/melee/mp/mpcoll.c::{mpCollPrev,mpColl_80043754,mpCheckFloor}
+        ("floor_sweep_prev_pos_x_f32", _arr("<f4", MAX_PLAYERS)),
         ("floor_sweep_prev_pos_y_f32", _arr("<f4", MAX_PLAYERS)),
         ("floor_sweep_prev_pos_valid_u8", _arr("u1", MAX_PLAYERS)),
         ("speed_air_x_self", _arr("<f4", MAX_PLAYERS)),

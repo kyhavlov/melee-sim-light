@@ -216,18 +216,21 @@ typedef struct MslSeed {
   float pos_x[MSL_MAX_PLAYERS];
   float pos_y[MSL_MAX_PLAYERS];
   float pos_z[MSL_MAX_PLAYERS];
-  // Teacher-forced mpColl floor-sweep previous Y.
+  // Teacher-forced mpColl floor-sweep previous position.
   //
   // Decomp:
   // - CollData carries prev_pos/cur_pos through mpColl_80043754.
-  // - Floor collision checks such as mpCheckFloor consume the segment from prev_pos.y to cur_pos.y,
+  // - Floor collision checks such as mpCheckFloor consume the segment from prev_pos to cur_pos,
   //   not just the current post-frame position exposed by Slippi.
   //
   // Normal rollouts use the frame-start live position. One-step reseeds set valid=1 and seed the
-  // previous replay post-frame Y so DamageFly/Fall floor contact can reproduce the engine's sweep.
+  // previous replay post-frame position so DamageFly/Fall floor contact can reproduce the engine's
+  // sweep. Active-hitlag horizontal-only floor-height rows must still remain airborne unless their
+  // decomp callback raises floor contact; see the floorhug negative replay locks.
   // refs/melee/src/melee/mp/mpcoll.c::{mpCollPrev,mpColl_80043754,mpCheckFloor}
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{
   //   ftCo_Damage_Coll,ftCo_DamageFly_Coll}
+  float floor_sweep_prev_pos_x_f32[MSL_MAX_PLAYERS];
   float floor_sweep_prev_pos_y_f32[MSL_MAX_PLAYERS];
   uint8_t floor_sweep_prev_pos_valid_u8[MSL_MAX_PLAYERS];
   // Velocities as recorded by Slippi post-frame (when available).

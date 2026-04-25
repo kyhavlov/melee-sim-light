@@ -1503,14 +1503,15 @@ FAMILY_META: dict[str, FamilyMeta] = {
         ),
     ),
     "F18_damage_tech_timer_seed_surface": FamilyMeta(
-        label="Damage Tech Timer Seed Surface",
+        label="Damage Tech / Floor-Contact Seed Surface",
         owner_module="seed",
         fix_type="seed/schema investigation",
         risk="med",
         confidence="high",
         hypothesis=(
-            "DamageFly contact reached the grounded follow-up selector, but replay-derived tech "
-            "timer lanes make ftCo_800986B0 admit PassiveStand while the replay shows DownBound."
+            "DamageFly contact reached or missed the grounded follow-up selector based on hidden "
+            "tech timer / CollData floor-contact phase state. These rows need a smaller seed "
+            "surface than visible action/on_ground fields, not another broad DamageFly projection."
         ),
         refs=(
             "refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownAttack.c::ftCo_800986B0",
@@ -1728,6 +1729,42 @@ def _looks_like_current_frame_body_admission_disagreement(
     return True
 
 
+def _looks_like_damage_contact_or_hitlag_admission_residual(
+    row: PlayerRow, names: tuple[str, str, str], field_set: set[str]
+) -> bool:
+    # Damage*/special rows whose visible disagreement includes same-frame hitlag, hitstun,
+    # source-instance, or hit status changes are still contact/admission provenance until a floor
+    # callback field bundle proves otherwise. This keeps BODY and contact-hitlag rows from falling
+    # through to the DamageAir landing callback owner only because a Damage* action appears on one
+    # side of the row.
+    #
+    # refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078C70,ftColl_80076ED8,ftColl_80076CBC}
+    if not any(name.startswith("DAMAGE_") for name in names):
+        return False
+    if any(name.startswith("DOWN_") or name.startswith("PASSIVE") for name in names):
+        return False
+    if any(_looks_like_landing_cliff_or_fall(name) for name in names):
+        return False
+    if any(name in {"DASH", "TURN", "KNEE_BEND", "WAIT", "WALK_SLOW"} for name in names):
+        return False
+    if row.hitlag != 0:
+        return False
+    return bool(
+        field_set
+        & {
+            "hitlag",
+            "hitstun",
+            "instance_hit_by",
+            "last_hit_by",
+            "last_attack_landed",
+            "combo_count",
+            "state_flags[1]",
+            "state_flags[3]",
+        }
+    )
+
+
 def _damage_admission_outcome(ref_name: str, out_name: str) -> str:
     ref_damage = _looks_like_damage(ref_name)
     out_damage = _looks_like_damage(out_name)
@@ -1773,7 +1810,7 @@ def _family_for_debug_body_contact_residual(
             )
             if special_family is not None:
                 return special_family
-            return _damage_transition_callback_family((seed_name, ref_name, out_name))
+            return "F08e_body_contact_no_candidate_adjacency"
         if active_special_attacker_hitbox_count > 0:
             special_family = _special_owner_family_for_names(
                 (seed_name, precombat_name, ref_name, out_name),
@@ -1945,6 +1982,18 @@ def _is_damage_tech_timer_seed_surface(row: PlayerRow, names: tuple[str, str, st
     )
 
 
+def _is_damagefly_floor_contact_seed_surface(names: tuple[str, str, str]) -> bool:
+    grounded = {"PASSIVE", "PASSIVE_STAND_F", "PASSIVE_STAND_B", "DOWN_BOUND_U", "DOWN_BOUND_D"}
+    ref_name = names[1]
+    out_name = names[2]
+    if {ref_name, out_name} <= grounded and ref_name != out_name:
+        return False
+    return (
+        any(_looks_like_damagefly(name) for name in names)
+        and any(name in grounded for name in names)
+    )
+
+
 def _looks_like_special_hi(name: str) -> bool:
     return "SPECIAL_HI" in name or "FALL_SPECIAL" in name
 
@@ -2064,7 +2113,7 @@ def _special_owner_family_for_names(
     if any(_looks_like_firefox(name) for name in names):
         return "F22_specialhi_firefox_firebird"
     if any(_looks_like_common_fallspecial(name) for name in names):
-        return "F13a_common_fallspecial_landing"
+        return "F10n_common_fall_landing_timebase"
     return None
 
 
@@ -2174,11 +2223,15 @@ def _specials_hard_moved_family(row: PlayerRow, names: tuple[str, str, str], fie
 def _specialhi_hard_moved_family(row: PlayerRow, names: tuple[str, str, str], field_set: set[str]) -> str | None:
     if not any(_looks_like_firefox(name) for name in names):
         return None
-    if any(_looks_like_damage(name) for name in names):
+    if any(name.startswith("DAMAGE_") for name in names):
         # Damage* context means this row has left Firefox/Firebird launch/travel ownership; remaining
         # scalar or transition fields are shared damage/locomotion ownership.
         # refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
         # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c
+        if field_set <= {"instance_id", "instance_hit_by", "last_hit_by"}:
+            return "F08a_damage_identity_bookkeeping_residual"
+        if field_set <= {"jumps_left"}:
+            return "F09a_aerial_stateflag_hurtbox_adjacency"
         if field_set & {"hitlag", "hitstun", "facing", "speed_x_attack", "speed_y_attack", "state_flags[1]"}:
             return "F08d_damage_timer_scalar_residual"
         return _damage_transition_callback_family(names)
@@ -2238,6 +2291,8 @@ def _speciallw_hard_moved_family(row: PlayerRow, names: tuple[str, str, str], fi
         # refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
         # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c
         # refs/melee/src/melee/ft/ftcoll.c::ftColl_8007A06C
+        if field_set & {"action_id", "animation_index", "hitlag", "hitstun", "state_flags[1]"}:
+            return "F20_speciallw_shine_reflector"
         return _damage_transition_callback_family(names)
     if field_set and field_set <= (STATE_FLAG_FIELDS | {"hurtbox_state", "action_frame"}):
         # Pure visible hit-status/state-flag tails in Shine context are x1988/x198C composition
@@ -2282,6 +2337,15 @@ def _speciallw_hard_moved_family(row: PlayerRow, names: tuple[str, str, str], fi
         # refs/melee/src/melee/pl/plstale.c::{
         #   plStale_UpdateStaleMovesFromFighter,plStale_UpdateStaleMovesFromItem}
         return "F10b_grounded_combat_adjacency"
+    if any(name.startswith("DAMAGE_") for name in names):
+        # Mixed Shine/Damage action-contact bundles are still owned by the Shine/contact surface,
+        # not the common DamageAir landing callback. The special state supplied the hitbox and the
+        # remaining action/contact bundle needs SpecialLw-side provenance before it can move to a
+        # shared BODY owner.
+        # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c
+        # refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078C70,ftColl_80076ED8}
+        if field_set & {"action_id", "animation_index", "hitlag", "hitstun", "state_flags[1]"}:
+            return "F20_speciallw_shine_reflector"
     if field_set and field_set <= {"last_hit_by", "combo_count", "last_attack_landed"}:
         # Pure source/scoreboard rows are owned by combat bookkeeping, even when the current
         # action context is Shine. Keep mixed hitlag/contact/action/hurtbox bundles in F20 until
@@ -2365,7 +2429,8 @@ def _common_fallspecial_hard_moved_family(
         # LandingFallSpecial/EscapeAir can be the neighboring context when ordinary BODY damage
         # resolves or is missed. Once a Damage* state is present, scalar/contact/identity fields are
         # shared damage/combat ownership rather than common FallSpecial collision ownership.
-        # Keep non-damage EscapeAir/LandingFallSpecial collision bundles in F13a.
+        # Non-damage EscapeAir/LandingFallSpecial collision bundles now route to the shared
+        # Fall/Landing timebase owner below, not to the retired F13a holding bucket.
         # refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
         # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
         # refs/melee/src/melee/ft/ftcoll.c::ftColl_8007A06C
@@ -2376,8 +2441,8 @@ def _common_fallspecial_hard_moved_family(
         return _damage_transition_callback_family(names)
     if field_set and field_set <= {"ground_id"}:
         # A lone floor id mismatch in LandingFallSpecial/EscapeAir context is the shared mpColl
-        # floor-line owner. Rows with action/on_ground/jump bundles remain in F13a because they are
-        # common FallSpecial landing timing.
+        # floor-line owner. Rows with action/on_ground/jump bundles remain in the common
+        # Fall/Landing timebase owner because they are common FallSpecial landing timing.
         # refs/melee/src/melee/mp/mpcoll.c::mpColl_8004A45C_Floor
         # refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll
         return "F10m_floor_line_identity"
@@ -2386,7 +2451,7 @@ def _common_fallspecial_hard_moved_family(
         # Fox/Falco special state-machine ownership.
         # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::ftCo_LandingFallSpecial_Enter_Basic
         # refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState
-        return "F13a_common_fallspecial_landing"
+        return "F10n_common_fall_landing_timebase"
     if field_set and field_set <= {
         "action_id",
         "action_frame",
@@ -2407,10 +2472,10 @@ def _common_fallspecial_hard_moved_family(
         # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::ftCo_LandingFallSpecial_Enter_Basic
         # refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll
         # refs/melee/src/melee/ft/ft_081B.c::{ft_80082C74,ft_80083090}
-        return "F13a_common_fallspecial_landing"
+        return "F10n_common_fall_landing_timebase"
     if field_set and field_set <= (STATE_FLAG_FIELDS | {"hurtbox_state"}):
         # Pure state-flag/hurtbox tails are shared visible-state composition; keep action/collision
-        # bundles in the common FallSpecial owner.
+        # bundles in the common Fall/Landing timebase owner.
         # refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
         # refs/melee/src/melee/ft/ftcoll.c::ftColl_8007B868
         if row.on_ground == 0 or any(_looks_like_aerial(name) for name in names):
@@ -2418,7 +2483,8 @@ def _common_fallspecial_hard_moved_family(
         return "F10d_hurtbox_stateflag_adjacency"
     if field_set and field_set <= {"last_hit_by", "combo_count", "last_attack_landed"}:
         # Pure source/scoreboard rows in LandingFallSpecial/FallSpecial/EscapeAir contexts are combat
-        # bookkeeping. Keep collision, landing, action, hurtbox, and mixed contact bundles in F13a.
+        # bookkeeping. Keep collision, landing, action, hurtbox, and mixed contact bundles in the
+        # common Fall/Landing timebase owner.
         # refs/melee/src/melee/ft/ftcoll.c::ftColl_8007BE3C
         # refs/melee/src/melee/pl/plstale.c::{
         #   plStale_UpdateStaleMovesFromFighter,plStale_UpdateStaleMovesFromItem}
@@ -2561,6 +2627,8 @@ def _classify_player_row(row: PlayerRow, action_names: dict[int, str]) -> str:
             return "F08a_damage_identity_bookkeeping_residual"
         if _is_damage_tech_timer_seed_surface(row, names):
             return "F18_damage_tech_timer_seed_surface"
+        if _is_damagefly_floor_contact_seed_surface(names):
+            return "F18_damage_tech_timer_seed_surface"
         if (
             any(_looks_like_damagefly(name) for name in names)
             and all(_looks_like_knockdown_contact_destination(name) for name in names)
@@ -2569,17 +2637,47 @@ def _classify_player_row(row: PlayerRow, action_names: dict[int, str]) -> str:
             return "F07_knockdown_grounding"
         if _is_mpcoll_ledge_ecb_residual(row, names, field_set):
             return "F17_mpcoll_ledge_ecb_residual"
+        if _looks_like_current_frame_body_admission_disagreement(row, names, field_set):
+            return "F08b_body_contact_geometry_residual"
+        if _looks_like_damage_contact_or_hitlag_admission_residual(row, names, field_set):
+            if field_set & {"hitlag", "state_flags[1]"} and row.ref_action_id == row.out_action_id:
+                return "F29_aerial_contact_hitlag_provenance"
+            return "F08d_damage_timer_scalar_residual"
         special_family = _special_owner_family_for_names(context_names, field_set=field_set)
         if special_family is not None:
             return special_family
-        if _looks_like_current_frame_body_admission_disagreement(row, names, field_set):
-            return "F08b_body_contact_geometry_residual"
+        # These branches are the explicit owner split that prevents the retired F27* buckets from
+        # acting as a broad "anything damage-adjacent" fallback. Each predicate is keyed to the
+        # visible action/field surface that points at another named owner.
+        if any(_looks_like_passive_wall(name) for name in names):
+            return "F27c_passivewall_contact_callback_phase"
+        if any(name.startswith("JUMP_AERIAL") for name in names):
+            return "F09c_aerial_action_entry_adjacency"
+        if any(name in {"DASH", "TURN", "KNEE_BEND", "WAIT", "WALK_SLOW"} for name in names):
+            return "F10a_grounded_selector_transition"
+        if any(_looks_like_landing_cliff_or_fall(name) for name in names):
+            if field_set & {"hitlag", "hitstun", "state_flags[1]", "instance_hit_by"}:
+                return "F08d_damage_timer_scalar_residual"
+            return "F08c_damage_state_transition_adjacency"
+        if all(name.startswith("DAMAGE_") for name in names):
+            return "F08d_damage_timer_scalar_residual"
         if any(_looks_like_landing_cliff_or_fall(name) for name in names) or any(
             name in {"DASH", "TURN", "KNEE_BEND", "WAIT", "WALK_SLOW"} for name in names
         ):
             return _damage_transition_callback_family(names)
         if any(name.startswith("DOWN_") or name.startswith("PASSIVE") for name in names):
-            return _damage_transition_callback_family(names)
+            if field_set & {"hitlag", "combo_count", "last_attack_landed", "state_flags[1]"}:
+                return "F10b_grounded_combat_adjacency"
+            if any(_looks_like_damagefly(name) for name in names):
+                return "F08d_damage_timer_scalar_residual"
+            if any(
+                name.startswith("DOWN_ATTACK")
+                or name.startswith("DOWN_WAIT")
+                or name in {"SQUAT", "WAIT"}
+                for name in names
+            ):
+                return "F10a_grounded_selector_transition"
+            return "F08c_damage_state_transition_adjacency"
         if field_set & {"action_id", "animation_index", "on_ground", "ground_id", "hurtbox_state"}:
             return _damage_transition_callback_family(names)
         if field_set & {"hitlag", "hitstun", "action_frame", "combo_count", "last_attack_landed", "state_flags[1]"}:
@@ -3252,10 +3350,20 @@ def _audit_player_row(row: PlayerRow, action_names: dict[int, str]) -> tuple[boo
         )
         return ok, "damage-adjacent row with collision/ledge/ECB contact residual fields"
     if row.family_id == "F18_damage_tech_timer_seed_surface":
-        ok = _is_damage_tech_timer_seed_surface(row, names) and bool(
-            field_set & {"action_id", "animation_index", "hurtbox_state", "state_flags[3]"}
+        ok = (_is_damage_tech_timer_seed_surface(row, names) or _is_damagefly_floor_contact_seed_surface(names)) and bool(
+            field_set
+            & {
+                "action_id",
+                "animation_index",
+                "hurtbox_state",
+                "state_flags[3]",
+                "on_ground",
+                "jumps_left",
+                "hitstun",
+                "instance_id",
+            }
         )
-        return ok, "grounded DamageFly contact row blocked on tech-timer seed provenance"
+        return ok, "DamageFly floor-contact row blocked on tech/CollData seed provenance"
     if row.family_id == "F99_misc_other":
         ok = any(
             ("SPECIAL_LW" in name) or (name == "THROWN_LW") or (name == "TURN_RUN")

@@ -177,3 +177,51 @@ def test_damageflytop_active_hitlag_floorhug_does_not_snap_to_ledge_floor_agn_48
     assert int(out["ground_id"][p]) == int(ref["ground_id"][p]) == 1
     assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=1e-6)
     assert (int(contacts["coll_env_flags"][p]) & MSL_COLLIDE_FLOOR_MASK) == 0
+
+
+@pytest.mark.integration
+def test_horizontal_only_hitlag_sdi_at_floor_height_does_not_false_land_maj_3612() -> None:
+    # Negative lock for the teacher-forced full CollData.prev_pos x/y floor-sweep lane.
+    # This row has active hitlag DamageN2 at FD floor height and same-Y horizontal SDI/ASDI
+    # displacement. mpCheckFloor is allowed to see the full prev_pos -> cur_pos segment, but the
+    # Damage hitlag callback must not synthesize a grounded Landing/FloorPush result from a
+    # horizontal-only floor-height sweep.
+    # refs/melee/src/melee/mp/mpcoll.c::{mpCollPrev,mpColl_80043754,mpCheckFloor}
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_OnEveryHitlag
+    root = Path(__file__).resolve().parents[1]
+    dataset_rel = (
+        "datasets/aggregate_recent/replays/validation/aggregate_recent/"
+        "MotionlessAggressiveJay.msl"
+    )
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    row = ds.samples[3612:3613]
+    p = 1
+
+    assert int(row["seed_t"]["action_id"][0, p]) == 79
+    assert int(row["seed_t"]["hitlag"][0, p]) == 5
+    assert int(row["seed_t"]["on_ground"][0, p]) == 0
+    assert int(row["ref_t1"]["on_ground"][0, p]) == 0
+    assert float(row["seed_t"]["pos_y"][0, p]) == pytest.approx(0.0001, abs=1e-6)
+    assert float(row["ref_t1"]["pos_y"][0, p]) == pytest.approx(
+        float(row["seed_t"]["pos_y"][0, p]), abs=1e-6
+    )
+    assert float(row["seed_t"]["floor_sweep_prev_pos_x_f32"][0, p]) == pytest.approx(
+        float(row["seed_t"]["pos_x"][0, p]), abs=1e-6
+    )
+    assert float(row["seed_t"]["floor_sweep_prev_pos_y_f32"][0, p]) == pytest.approx(
+        float(row["seed_t"]["pos_y"][0, p]), abs=1e-6
+    )
+    assert abs(float(row["ref_t1"]["pos_x"][0, p]) - float(row["seed_t"]["pos_x"][0, p])) > 5.9
+
+    out, ref, contacts = _run_one_step_with_contacts(dataset_path, 3612)
+
+    assert int(out["action_id"][p]) == int(ref["action_id"][p]) == 79
+    assert int(out["hitlag"][p]) == int(ref["hitlag"][p]) == 4
+    assert int(out["on_ground"][p]) == int(ref["on_ground"][p]) == 0
+    assert float(out["pos_x"][p]) == pytest.approx(float(ref["pos_x"][p]), abs=1e-6)
+    assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=1e-6)
+    assert (int(contacts["coll_env_flags"][p]) & MSL_COLLIDE_FLOOR_MASK) == 0
