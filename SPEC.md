@@ -1445,19 +1445,21 @@ Grounded motion-entry timing notes:
   this branch local to final TurnRun down-stick rows.
 - Pure motion-entry `instance_id` ownership remains `ft_800895E0/x2073` plus the global
   `plAttack_80037B08` counter by default. Simultaneous fighter entries and hidden prior consumers
-  use `motion_entry_instance_id_override_u16`, a narrow non-causal replay-facing lane that supplies
-  the post-entry `fp->x2088` when Slippi post-frames do not expose HSD fighter-proc/global counter
-  order. It is held live for the one-step frame so chained same-frame entries settle on the
-  replay-visible final id, then cleared before rollout carry. The population stays limited to
-  grounded locomotion ordering rows plus the explicit SpecialN loop-restart `ft_80089824` callback
-  lane; a broader special-boundary hidden-prior / multi-consumer expansion was removed during
-  audit because it depended on `post_*[1:]` / `ref_t1` oracle data.
+  use `motion_entry_instance_id_override_u16`, a non-causal teacher-forced replay seed lane that
+  supplies the post-entry `fp->x2088` when Slippi post-frames do not expose HSD fighter-proc/global
+  counter order. It may be derived from replay `t+1` / post-frame state (`ref_t1`), so it is not
+  prefix-causal engine truth. It is held live for the one-step frame so chained same-frame entries
+  settle on the replay-visible final id, then cleared before rollout carry. Rollout/live runtime must
+  not rely on this lane except for states explicitly reseeded from replay. Source-owned extra writers
+  already modeled in runtime stay excluded from the teacher-forced hidden-order lane; currently that
+  means AttackLw3's `x21EC -> ft_80089824` path, while SpecialN loop restarts remain in their
+  explicit callback lane.
 - For RL1.0 checklist closure, the two lanes above are explicit non-causal replay seed lanes, not
   fully causal runtime simulation state. Their validation-population audit is intentionally narrow:
   `turn_kneebend_facing_override_u8` populates only `Turn -> KneeBend` rows. The
   `motion_entry_instance_id_override_u16` lane remains tied to `ft_800895E0` /
-  `ft_80089824` / `plAttack_80037B08` ordering evidence in those scoped lanes; ordinary
-  single-fighter entries and direct special-boundary entries stay on `ft_800895E0/x2073`.
+  `ft_80089824` / `plAttack_80037B08` ordering evidence and is audited by action-family/action-id
+  population tables so it cannot silently become an unreviewed catch-all.
 
 #### Ledge system (cliff catch/occupancy/options)
 
@@ -1754,11 +1756,11 @@ Fox/Falco special-owner split (2026-04-17):
     ftFx_SpecialNLoop_Anim,ftFx_SpecialAirNLoop_Anim,ftFx_SpecialN_OnChangeAction}`,
     `refs/melee/build/GALE01/asm/melee/ft/ft_0892.s::ft_80089824`, and
     `refs/melee/src/melee/pl/plattack.c::plAttack_80037B08`.
-  - F24 audit result: the attempted broad special-adjacent hidden-prior / multi-consumer
-    `motion_entry_instance_id_override_u16` expansion was removed because it read the next
-    post-frame id (`post_instance_id[1:]`, equivalent to `ref_t1`) and therefore was not
-    prefix-causal. Direct Landing/JumpF -> Shine, SpecialN Start -> Loop, and other direct
-    special-boundary entries remain negative sentinels. Sources:
+  - F24 audit result: direct special-boundary `motion_entry_instance_id_override_u16` rows that only
+    depend on hidden same-frame counter order are now treated as teacher-forced seed-surface rows,
+    not special gameplay/runtime behavior. The lane may read the next post-frame id
+    (`post_instance_id[1:]`, equivalent to `ref_t1`) and is therefore non-causal; it is valid only
+    when a replay row is reseeded for one-step evaluation. Sources:
     `refs/melee/build/GALE01/asm/melee/ft/ft_0892.s::{ft_800895E0,ft_80089824}` and
     `refs/melee/src/melee/pl/plattack.c::plAttack_80037B08`.
   - F24 taxonomy is now limited to source-backed special callbacks such as SpecialN Loop restart

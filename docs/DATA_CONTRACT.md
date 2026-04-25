@@ -81,14 +81,24 @@ Runtime default:
   seeded `instance_id_x2073` compare lane.
 - The override is consumed only by `msl_anim_timebase_enter()` through
   `instance_id_on_motion_state_change_ft_800895E0`, then cleared at the end of the step.
+- This lane is non-causal teacher-forced seed state. Rollout/live runtime must not depend on it
+  except for a one-step state that was explicitly reseeded from replay.
 
 Seed generation:
 - `tools/slippi/make_dataset_from_slp.py` derives the global next counter from replay-visible
   fighter and item instance history.
-- The checkpoint-safe override lane is populated only for grounded locomotion/motion-entry owner
-  cases: simultaneous grounded motion entries, or grounded motion entries with a hidden prior
-  same-frame consumer before that fighter's proc. Fox/Falco special-boundary rows are intentionally
-  outside this lane until their runtime owners are completed.
+- The checkpoint-safe override lane is populated for replay-visible action entries where the
+  frame has simultaneous fighter instance-id entries, or the fighter's post-frame id proves a hidden
+  same-frame counter consumer before that fighter's proc.
+- This derivation may read replay `t+1` / post-frame instance ids (`ref_t1` in one-step datasets).
+  It is therefore not prefix-causal and is valid only for teacher-forced replay reseed, not as
+  standalone simulation state.
+- Source-owned extra writers that are already modeled in runtime, such as AttackLw3's
+  `x21EC -> ft_80089824` callback, remain outside the lane so the runtime path stays exercised.
+  Current Fox/Falco audit found no other runtime-modeled action-entry extra `fp->x2088` writer to
+  exclude beyond AttackLw3 and the explicit SpecialN loop-restart callback lane; other decomp
+  `ft_80089824` callsites are non-Fox/Falco, item/rapid paths not modeled as Fox/Falco action-entry
+  extra writers, or separately owned match-flow/guard counter consumers.
 
 Decomp contract:
 - `refs/melee/build/GALE01/asm/melee/ft/ft_0892.s::{ft_800895E0,ft_80089824}`.

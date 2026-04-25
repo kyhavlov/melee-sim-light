@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -228,27 +229,22 @@ def test_ordinary_single_motion_entry_uses_x2073_without_instance_override() -> 
             dataset_rel=f"{_AGG_CARDINAL}/AttachedGoodNaturedGuanaco.msl",
             record=609,
             port=0,
-            note="JumpF -> SpecialAirLwStart stays off the broad special-boundary instance lane",
-        ),
-        _Case(
-            dataset_rel=f"{_AGG_CARDINAL}/GracefulAttachedTurtle.msl",
-            record=6425,
-            port=1,
-            note="Landing -> SpecialLwStart stays off the broad special-boundary instance lane",
+            note="JumpF -> SpecialAirLwStart keeps hidden same-frame instance order",
         ),
         _Case(
             dataset_rel=f"{_AGG_CARDINAL}/AttachedGoodNaturedGuanaco.msl",
             record=124,
             port=0,
-            note="JumpF -> SpecialAirNStart stays off generic special-entry instance overrides",
+            note="JumpF -> SpecialAirNStart keeps hidden same-frame instance order",
         ),
     ],
 )
-def test_special_boundary_entries_do_not_use_motion_entry_override(case: _Case) -> None:
-    # Negative guard for the rejected broad special-boundary expansion. Direct special entries keep
-    # normal ft_800895E0/x2073 + plAttack_80037B08 runtime ownership unless a specific source-backed
-    # callback lane owns an override, such as SpecialN Loop -> Loop restart below.
-    # refs/melee/build/GALE01/asm/melee/ft/ft_0892.s::ft_800895E0
+def test_special_boundary_entries_keep_hidden_same_frame_instance_order(case: _Case) -> None:
+    # Replay-real lock for the seed-only same-frame plAttack_80037B08 order lane. Direct special
+    # entries still use runtime ft_800895E0/x2073 ownership, but when the replay-visible post-frame id
+    # proves a hidden same-frame counter order, the seed lane supplies that final fp->x2088 value.
+    # refs/melee/build/GALE01/asm/melee/ft/ft_0892.s::{ft_800895E0,ft_80089824}
+    # refs/melee/src/melee/pl/plattack.c::plAttack_80037B08
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / case.dataset_rel
@@ -258,7 +254,9 @@ def test_special_boundary_entries_do_not_use_motion_entry_override(case: _Case) 
     ds = read_dataset(str(dataset_path))
     row = ds.samples[case.record]
     p = case.port
-    assert int(row["seed_t"]["motion_entry_instance_id_override_u16"][p]) == 0, case.note
+    assert int(row["seed_t"]["motion_entry_instance_id_override_u16"][p]) == int(
+        row["ref_t1"]["instance_id"][p]
+    ), case.note
 
 
 @pytest.mark.integration
@@ -360,13 +358,48 @@ def test_noncausal_locomotion_lane_population_stays_narrow() -> None:
     match_flow_source_actions = {4, 12, 13}
     guard_collision_actions = {178, 179, 180, 181, 182}
 
-    def count_lanes(rel: str) -> tuple[int, int, int, int, int, int, set[tuple[int, int]]]:
+    def hidden_order_family(action_id: int) -> str:
+        if 14 <= action_id <= 24:
+            return "locomotion"
+        if 25 <= action_id <= 43:
+            return "jump_landing"
+        if 44 <= action_id <= 69:
+            return "attack"
+        if 75 <= action_id <= 91:
+            return "damage"
+        if 178 <= action_id <= 182:
+            return "guard"
+        if 212 <= action_id <= 227:
+            return "grab_capture"
+        if 235 <= action_id <= 255:
+            return "cliff"
+        if 344 <= action_id <= 369:
+            return "fox_falco_special"
+        return "other"
+
+    def count_lanes(
+        rel: str,
+    ) -> tuple[
+        int,
+        int,
+        int,
+        int,
+        int,
+        int,
+        int,
+        Counter[str],
+        Counter[int],
+        set[tuple[int, int]],
+    ]:
         turn_count = 0
         locomotion_motion_count = 0
         specialn_loop_count = 0
         match_flow_count = 0
         guard_collision_count = 0
-        invalid_motion = 0
+        hidden_order_count = 0
+        attacklw3_runtime_count = 0
+        hidden_order_families: Counter[str] = Counter()
+        hidden_order_ref_actions: Counter[int] = Counter()
         turn_transitions: set[tuple[int, int]] = set()
         for dataset_path in (root / rel).glob("**/*.msl"):
             ds = read_dataset(str(dataset_path))
@@ -422,15 +455,28 @@ def test_noncausal_locomotion_lane_population_stays_narrow() -> None:
                             match_flow_count += 1
                         elif is_guard_collision_entry:
                             guard_collision_count += 1
+                        elif ra == 57:
+                            attacklw3_runtime_count += 1
                         else:
-                            invalid_motion += 1
+                            # General hidden same-frame counter order lane: Slippi exposes the t+1
+                            # post-frame fp->x2088 value, but not HSD proc order or hidden
+                            # same-frame counter consumers. This is a non-causal teacher-forced
+                            # seed surface, not a live-runtime gameplay rule.
+                            # refs/melee/build/GALE01/asm/melee/ft/ft_0892.s::{ft_800895E0,ft_80089824}
+                            # refs/melee/src/melee/pl/plattack.c::plAttack_80037B08
+                            hidden_order_count += 1
+                            hidden_order_families[hidden_order_family(ra)] += 1
+                            hidden_order_ref_actions[ra] += 1
         return (
             turn_count,
             locomotion_motion_count,
             specialn_loop_count,
             match_flow_count,
             guard_collision_count,
-            invalid_motion,
+            hidden_order_count,
+            attacklw3_runtime_count,
+            hidden_order_families,
+            hidden_order_ref_actions,
             turn_transitions,
         )
 
@@ -440,7 +486,10 @@ def test_noncausal_locomotion_lane_population_stays_narrow() -> None:
         primary_specialn,
         primary_match_flow,
         primary_guard_collision,
-        primary_invalid,
+        primary_hidden_order,
+        primary_attacklw3_runtime,
+        primary_hidden_order_families,
+        primary_hidden_order_ref_actions,
         primary_turn_transitions,
     ) = count_lanes(_PRIMARY_VALID)
     (
@@ -449,7 +498,10 @@ def test_noncausal_locomotion_lane_population_stays_narrow() -> None:
         aggregate_specialn,
         aggregate_match_flow,
         aggregate_guard_collision,
-        aggregate_invalid,
+        aggregate_hidden_order,
+        aggregate_attacklw3_runtime,
+        aggregate_hidden_order_families,
+        aggregate_hidden_order_ref_actions,
         aggregate_turn_transitions,
     ) = count_lanes("datasets/aggregate_recent/replays/validation")
 
@@ -458,12 +510,88 @@ def test_noncausal_locomotion_lane_population_stays_narrow() -> None:
     assert primary_specialn == 29
     assert primary_match_flow == 54
     assert primary_guard_collision == 164
-    assert primary_invalid == 0
+    assert primary_hidden_order == 1034
+    assert primary_attacklw3_runtime == 0
+    assert primary_hidden_order_families == {
+        "attack": 33,
+        "cliff": 67,
+        "damage": 103,
+        "fox_falco_special": 105,
+        "grab_capture": 257,
+        "jump_landing": 256,
+        "locomotion": 199,
+        "other": 14,
+    }
+    assert dict(primary_hidden_order_ref_actions.most_common(25)) == {
+        43: 91,
+        360: 69,
+        39: 63,
+        227: 60,
+        216: 60,
+        20: 59,
+        18: 57,
+        213: 44,
+        42: 40,
+        90: 35,
+        221: 34,
+        241: 34,
+        25: 32,
+        226: 29,
+        14: 25,
+        15: 23,
+        88: 19,
+        16: 18,
+        365: 17,
+        24: 14,
+        69: 13,
+        27: 12,
+        344: 10,
+        26: 10,
+        67: 8,
+    }
     assert primary_turn_transitions == {(18, 24)}
     assert aggregate_turn == 50
     assert aggregate_locomotion_motion == 597
     assert aggregate_specialn == 88
     assert aggregate_match_flow == 196
     assert aggregate_guard_collision == 609
-    assert aggregate_invalid == 0
+    assert aggregate_hidden_order == 3935
+    assert aggregate_attacklw3_runtime == 0
+    assert aggregate_hidden_order_families == {
+        "attack": 203,
+        "cliff": 218,
+        "damage": 360,
+        "fox_falco_special": 402,
+        "grab_capture": 684,
+        "jump_landing": 1224,
+        "locomotion": 785,
+        "other": 59,
+    }
+    assert dict(aggregate_hidden_order_ref_actions.most_common(25)) == {
+        43: 468,
+        39: 322,
+        360: 249,
+        18: 226,
+        20: 202,
+        25: 148,
+        42: 146,
+        216: 136,
+        90: 135,
+        213: 131,
+        227: 130,
+        241: 108,
+        221: 108,
+        15: 96,
+        14: 90,
+        226: 86,
+        24: 85,
+        88: 71,
+        365: 66,
+        27: 66,
+        16: 64,
+        69: 53,
+        344: 51,
+        65: 38,
+        26: 37,
+    }
     assert aggregate_turn_transitions == {(18, 24)}

@@ -3318,6 +3318,7 @@ def _main_impl(args) -> None:
     act_attack_12 = 0x002D
     act_attack_13 = 0x002E
     act_attack_dash = 0x0032
+    act_attack_lw3 = 0x0039
     act_attack_air_n = 0x0041
     act_attack_air_f = 0x0042
     act_attack_air_b = 0x0043
@@ -4866,11 +4867,12 @@ def _main_impl(args) -> None:
     #
     # The counter itself is causal above, but simultaneous fighter motion-state entries share one
     # global counter and Slippi exposes only post-frame ids, not HSD proc order. Seed the exact
-    # per-entry id for checkpoint-safe grounded locomotion motion-entry rows only, and only when at
-    # least two fighters both changed action and instance_id, or when a single fighter entry observes
-    # a ref id beyond the seeded next counter (hidden same-frame item/fighter consumer before this
-    # fighter's proc). Fox/Falco special-boundary same-frame order remains owned by the special
-    # callback/dispatch work instead of this seed lane.
+    # per-entry id when at least two fighters both changed action and instance_id, or when a single
+    # fighter entry observes a t+1/ref id beyond the seeded next counter (hidden same-frame
+    # item/fighter consumer before this fighter's proc). This lane is non-causal teacher-forced
+    # replay seed state only; runtime still owns the normal ft_800895E0/x2073 path. Known
+    # source-owned extra writers such as AttackLw3's x21EC -> ft_80089824 callback stay off this lane
+    # so the runtime lock remains exercised.
     # refs/melee/src/melee/ft/fighter.c (Fighter_ChangeMotionState)
     # refs/melee/build/GALE01/asm/melee/ft/ft_0892.s::{ft_800895E0,ft_80089824}
     # refs/melee/src/melee/pl/plattack.c::plAttack_80037B08
@@ -4878,46 +4880,15 @@ def _main_impl(args) -> None:
     instance_changed = post_instance_id[1:, :] != post_instance_id[:-1, :]
     has_ref_instance = post_instance_id[1:, :] != np.uint16(0)
     same_frame_fighter_entries_all = entry_changed & instance_changed & has_ref_instance
-    grounded_motion_owner_actions = np.isin(
-        post_action_id[1:, :],
-        np.array(
-            [
-                act_wait,
-                act_walk_slow,
-                act_walk_middle,
-                act_walk_fast,
-                act_turn,
-                act_turn_run,
-                act_dash,
-                act_run,
-                act_run_direct,
-                act_kneebend,
-            ],
-            dtype=np.uint16,
-        ),
-    ) & np.isin(
-        post_action_id[:-1, :],
-        np.array(
-            [
-                act_wait,
-                act_walk_slow,
-                act_walk_middle,
-                act_walk_fast,
-                act_turn,
-                act_turn_run,
-                act_dash,
-                act_run,
-                act_run_direct,
-                act_kneebend,
-            ],
-            dtype=np.uint16,
-        ),
-    )
-    same_frame_fighter_entries = same_frame_fighter_entries_all & grounded_motion_owner_actions
     multi_entry_frame = np.sum(same_frame_fighter_entries_all[:, :num_players], axis=1) >= 2
-    hidden_prior_consumer = same_frame_fighter_entries & (
-        post_instance_id[1:, :] != counter_post[:-1, None]
+    hidden_same_frame_entry_order_owner = same_frame_fighter_entries_all & (
+        multi_entry_frame[:, None] | (post_instance_id[1:, :] != counter_post[:-1, None])
     )
+    # ftCo_AttackLw3::doEnter installs x21EC=callUnk, and Fighter_ChangeMotionState calls that
+    # callback after ft_800895E0; the runtime ft_80089824 writer must remain observable to tests.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackLw3.c::{doEnter,callUnk}
+    # refs/melee/build/GALE01/asm/melee/ft/ft_0892.s::ft_80089824
+    hidden_same_frame_entry_order_owner &= post_action_id[1:, :] != np.uint16(act_attack_lw3)
     specialn_loop_restart_owner = (
         instance_changed
         & has_ref_instance
@@ -4973,15 +4944,13 @@ def _main_impl(args) -> None:
         & (multi_entry_frame[:, None] | (post_instance_id[1:, :] != counter_post[:-1, None]))
     )
     motion_entry_iid_override = np.zeros((n_frames - 1, 4), dtype=np.uint16)
-    # Same-frame grounded motion entries share the global plAttack_80037B08 counter. Slippi's
-    # post-frame seed exposes only each fighter's final fp->x2088, not HSD proc order. Keep this
-    # replay-facing lane scoped to grounded locomotion ownership; do not use it for generic special
-    # boundaries.
+    # Same-frame motion entries share the global plAttack_80037B08 counter. Slippi's post-frame seed
+    # exposes only each fighter's final fp->x2088, not HSD proc order. Preserve the replay-facing
+    # order lane for entries whose post-frame id cannot be reproduced from the frame-start counter
+    # alone.
     # refs/melee/build/GALE01/asm/melee/ft/ft_0892.s::{ft_800895E0,ft_80089824}
     # refs/melee/src/melee/pl/plattack.c::plAttack_80037B08
-    motion_entry_override_mask = same_frame_fighter_entries & (
-        multi_entry_frame[:, None] | hidden_prior_consumer
-    )
+    motion_entry_override_mask = hidden_same_frame_entry_order_owner
     # Fox/Falco SpecialN Loop -> Loop restart owner:
     # - ftFx_SpecialNLoop_Anim / ftFx_SpecialAirNLoop_Anim install
     #   ftFx_SpecialN_OnChangeAction only on the loop-restart motion-state change.
