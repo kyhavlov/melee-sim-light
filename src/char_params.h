@@ -78,6 +78,19 @@ typedef struct MslCharParams {
   float aerial_drift_base;
   float air_drift_max;
   float aerial_friction;
+  // Fighter camera subject (`fp->x890_cameraBox`) metadata.
+  //
+  // Source of truth: ISO-extracted `data/characters/*.json` keys:
+  // - camera_zoom_target_bone_part_id, camera_zoom_target_offset, camera_box_radius
+  // Decomp:
+  // - refs/melee/src/melee/ft/ftcamera.c::ftCamera_UpdateCameraBox
+  // - refs/melee/src/melee/ft/ftlib.c::ftLib_800866DC
+  uint16_t camera_zoom_target_bone_part_id;
+  uint16_t _pad_u16_camera_0;
+  float camera_zoom_target_offset_x;
+  float camera_zoom_target_offset_y;
+  float camera_zoom_target_offset_z;
+  float camera_box_radius;
   float air_jump_v_multiplier;
   float air_jump_h_multiplier;
 

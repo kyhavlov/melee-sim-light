@@ -135,16 +135,16 @@ rollout.streak_len.p90: 222
 rollout.streak_len.p95: 269
 rollout.streak_len.max: 489
 rollout.first_mismatch_total: 135
-rollout.first_mismatch_seeded_total: 59
+rollout.first_mismatch_seeded_total: 60
 
 == datasets/aggregate_recent/replays/validation/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl ==
 rollout.best_len: 424
-rollout.streak_count: 79
+rollout.streak_count: 78
 rollout.streak_len.median: 73
 rollout.streak_len.p90: 231
 rollout.streak_len.p95: 264
 rollout.streak_len.max: 424
-rollout.first_mismatch_total: 79
+rollout.first_mismatch_total: 78
 rollout.first_mismatch_seeded_total: 23
 
 == datasets/aggregate_recent/replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.msl ==
@@ -178,11 +178,11 @@ rollout.first_mismatch_total: 87
 rollout.first_mismatch_seeded_total: 30
 
 == suite summary ==
-overall.rollout.streak_count: 1760
+overall.rollout.streak_count: 1759
 overall.rollout.streak_len.median: 61
 overall.rollout.streak_len.p90: 187
 overall.rollout.streak_len.p95: 244
 overall.rollout.streak_len.max: 631
 overall.rollout.best_len.max: 631
-overall.rollout.first_mismatch_total: 1822
-overall.rollout.first_mismatch_seeded_total: 744
+overall.rollout.first_mismatch_total: 1821
+overall.rollout.first_mismatch_seeded_total: 745

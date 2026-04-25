@@ -17,6 +17,7 @@
 void state_flags_refresh_post_frame(MslBatch* batch);
 void state_flags_refresh_post_frame_masked(MslBatch* batch, const uint8_t* mask_bytes,
                                            size_t mask_stride_bytes);
+void state_flags_refresh_camera_targets_pre_physics(MslBatch* batch);
 
 // Slippi packs fp+0x221C into state_flags[..., 3].
 // x221C_b6 is the high-byte bit1 lane (mask 0x02).

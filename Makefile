@@ -1,4 +1,4 @@
-.PHONY: build test preprocess preprocess-aggregate validate validate-aggregate validate-rollout validate-rollout-aggregate validate-all rollout-capture rollout-summary rollout-diff rollout-locate rollout-locate-summary rollout-locate-diff build_data fmt fmt-check check guardrail-preflight guardrail-preflight-full guardrail-baseline forensic-rows dolphin-engine-dump dolphin-extract dolphin-forensic-row
+.PHONY: build test preprocess preprocess-aggregate validate validate-aggregate validate-rollout validate-rollout-aggregate validate-all rollout-capture rollout-summary rollout-diff rollout-locate rollout-locate-summary rollout-locate-diff rollout-disruptive build_data fmt fmt-check check guardrail-preflight guardrail-preflight-full guardrail-baseline forensic-rows dolphin-engine-dump dolphin-extract dolphin-forensic-row
 
 PY := uv run python
 DATASETS_DIR ?= datasets
@@ -20,6 +20,8 @@ ROLLOUT_LOCATE_BEFORE ?= reports/triage/baseline_rollout_desyncs.tsv
 ROLLOUT_LOCATE_AFTER ?= reports/triage/current_rollout_desyncs.tsv
 ROLLOUT_LOCATE_SUMMARY_JSON ?=
 ROLLOUT_LOCATE_DIFF_JSON ?=
+DISRUPTIVE_OUT_DIR ?= reports/triage/disruptive_rollout_desyncs
+DISRUPTIVE_HORIZONS ?= 10,20,60
 ARGS ?=
 VERBOSE ?=
 CLANG_FORMAT ?= clang-format
@@ -96,6 +98,9 @@ rollout-locate-summary:
 
 rollout-locate-diff:
 	@$(PY) -m tools.eval.diff_rollout_locate --before "$(ROLLOUT_LOCATE_BEFORE)" --after "$(ROLLOUT_LOCATE_AFTER)" --top "$(ROLLOUT_TOP)" $(ROLLOUT_LOCATE_DIFF_JSON_ARG)
+
+rollout-disruptive: build
+	@$(PY) -m tools.eval.disruptive_rollout_desyncs --suite "$(SUITE)" --datasets-dir "$(DATASETS_DIR)" --horizons "$(DISRUPTIVE_HORIZONS)" --out-dir "$(DISRUPTIVE_OUT_DIR)" --top "$(ROLLOUT_TOP)" $(ARGS)
 
 build_data:
 	@$(PY) -m tools.extraction.build_data --iso-dir _iso --stage grnla --chars fox,falco

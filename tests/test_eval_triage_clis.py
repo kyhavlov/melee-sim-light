@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import json
+import sys
 from pathlib import Path
 
 from tools.eval.diff_locate import diff_locate_rows
 from tools.eval.diff_rollout_locate import diff_rollout_locate_rows
+from tools.eval.disruptive_rollout_desyncs import main as disruptive_rollout_desyncs_main
 from tools.eval.facing_residual_blocker_report import FacingResidualRow, build_summary
 from tools.eval.locate_discrete_mismatches import ITEM_FIELD_TO_SUBFIELD
 from tools.eval.locate_rollout_desyncs import FirstMismatch, _scan_rollout_desync_rows
@@ -365,6 +368,46 @@ def test_rollout_locate_scan_fixture_emits_unseeded_and_seeded_break_rows() -> N
     assert rows[1].record == 1
     assert rows[1].streak_len == 0
     assert rows[1].seeded_break
+
+
+def test_disruptive_rollout_desyncs_cli_smoke_writes_outputs(tmp_path: Path, monkeypatch) -> None:
+    out_dir = tmp_path / "disruptive_smoke"
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "disruptive_rollout_desyncs",
+            "--suite",
+            "replays/suites/fox_falco_fd_ucf084_recent.json",
+            "--datasets-dir",
+            "datasets",
+            "--dataset-filter",
+            "AttachedGoodNaturedGuanaco.msl",
+            "--horizons",
+            "1",
+            "--max-records",
+            "2",
+            "--out-dir",
+            str(out_dir),
+            "--top",
+            "1",
+        ],
+    )
+
+    disruptive_rollout_desyncs_main()
+
+    rows_path = out_dir / "rows.tsv"
+    clusters_path = out_dir / "clusters.tsv"
+    summary_path = out_dir / "summary.json"
+    assert rows_path.exists()
+    assert clusters_path.exists()
+    assert summary_path.exists()
+    assert rows_path.read_text(encoding="utf-8").startswith("suite\tdataset\trecord\t")
+    assert clusters_path.read_text(encoding="utf-8").startswith("cluster_key\tsuite\thorizon\t")
+    summary = json.loads(summary_path.read_text(encoding="utf-8"))
+    assert summary["suite"] == "fox_falco_fd_ucf084_recent"
+    assert summary["horizons"] == [1]
+    assert summary["max_records"] == 2
 
 
 def test_facing_residual_blocker_report_groups_seed_visible_context() -> None:

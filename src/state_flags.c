@@ -5,6 +5,7 @@
 
 #include "action_ids.h"
 #include "anim_frame.h"
+#include "anim_pose.h"
 #include "common_params.h"
 #include "char_params.h"
 #include "move_tables.h"
@@ -217,6 +218,12 @@ static inline uint8_t state_flags_match_flow_respawn_action(uint16_t action_id) 
                    action_id == (uint16_t)MSL_ACT_REBIRTH_WAIT);
 }
 
+static inline uint8_t state_flags_camera_target_live_pose_action(uint16_t action_id) {
+  return (uint8_t)(state_flags_221f_dead_start_action(action_id) != 0u ||
+                   action_id == (uint16_t)MSL_ACT_DEAD_UP_STAR ||
+                   state_flags_match_flow_respawn_action(action_id) != 0u);
+}
+
 static inline uint8_t state_flags_camera_overlap_stage_cam_bounds(const MslBatch* batch, size_t idx,
                                                                   float tolerance) {
   if (batch == NULL) {
@@ -242,6 +249,77 @@ static inline uint8_t state_flags_camera_below_stage_cam_bounds(const MslBatch* 
     return 0u;
   }
   return (uint8_t)(batch->state.camera_target_world_y_f32[idx] < cam.bottom);
+}
+
+static inline void state_flags_refresh_camera_target_from_pose(MslBatch* batch, size_t idx) {
+  if (batch == NULL) {
+    return;
+  }
+  const MslCharParams* ch = msl_char_params(batch->state.char_id[idx]);
+  if (ch == NULL || ch->camera_box_radius <= 0.0f) {
+    return;
+  }
+  const uint32_t msid_u32 = batch->state.animation_index[idx];
+  if (msid_u32 > 0xFFFFu) {
+    return;
+  }
+  float m[12];
+  const uint16_t msid = (uint16_t)msid_u32;
+  const uint16_t frame = msl_anim_frame_floor_u16(batch->state.anim_frame_f32[idx]);
+  if (anim_pose_get_matrix(batch->state.char_id[idx], msid, frame,
+                           ch->camera_zoom_target_bone_part_id, m) != 0) {
+    return;
+  }
+
+  const float off_x = ch->camera_zoom_target_offset_x;
+  const float off_y = ch->camera_zoom_target_offset_y;
+  const float off_z = ch->camera_zoom_target_offset_z;
+  float lx = m[0] * off_x + m[1] * off_y + m[2] * off_z + m[3];
+  float ly = m[4] * off_x + m[5] * off_y + m[6] * off_z + m[7];
+  float lz = m[8] * off_x + m[9] * off_y + m[10] * off_z + m[11];
+  float scale = batch->state.fighter_scale_y[idx];
+  if (!(scale > 0.0f)) {
+    scale = 1.0f;
+  }
+  const float model_scaling = (ch->model_scaling > 0.0f) ? ch->model_scaling : 1.0f;
+  scale *= model_scaling;
+  lx *= scale;
+  ly *= scale;
+  lz *= scale;
+  const float facing_dir = batch->state.facing[idx] ? 1.0f : -1.0f;
+
+  // Runtime camera target ownership:
+  // - ftCamera_UpdateCameraBox refreshes `camera_box->x1C` from the camera target bone each frame,
+  // - ftLib_800866DC applies the live joint matrix plus root facing rotation,
+  // - ftLib_80086A8C consumes that subject point for the x221F_b0 visibility branch.
+  // refs/melee/src/melee/ft/ftcamera.c::ftCamera_UpdateCameraBox
+  // refs/melee/src/melee/ft/ftlib.c::{ftLib_800866DC,ftLib_80086A8C}
+  // data/characters/{fox,falco}.json: camera_zoom_target_bone_part_id,
+  //   camera_zoom_target_offset, camera_box_radius, model_scaling
+  // data/anims/{fox,falco}.bin: SSANIM01 pose matrices
+  batch->state.camera_target_world_x_f32[idx] = batch->state.pos_x[idx] + facing_dir * lz;
+  batch->state.camera_target_world_y_f32[idx] = batch->state.pos_y[idx] + ly;
+  batch->state.camera_target_world_z_f32[idx] = batch->state.pos_z[idx] - facing_dir * lx;
+  batch->state.camera_box_radius_f32[idx] =
+      ch->camera_box_radius * batch->state.fighter_scale_y[idx];
+}
+
+void state_flags_refresh_camera_targets_pre_physics(MslBatch* batch) {
+  if (batch == NULL) {
+    return;
+  }
+  const int num_players = (int)batch->config.num_players;
+  for (int bi = 0; bi < batch->batch_size; bi++) {
+    for (int p = 0; p < num_players; p++) {
+      const size_t idx = msl_idx_player(bi, p);
+      // ftCamera_UpdateCameraBox is a live fighter-camera subject refresh, not a seed-only
+      // replay surface. Run it before physics so x221F visibility checks later in the frame do not
+      // compare against stale teacher-forced camera points from rollout start.
+      // refs/melee/src/melee/ft/ftcamera.c::ftCamera_UpdateCameraBox
+      // refs/melee/src/melee/ft/ftlib.c::{ftLib_800866DC,ftLib_80086A8C}
+      state_flags_refresh_camera_target_from_pose(batch, idx);
+    }
+  }
 }
 
 static void state_flags_refresh_post_frame_impl(MslBatch* batch, const uint8_t* mask_bytes,
@@ -924,6 +1002,15 @@ static void state_flags_refresh_post_frame_impl(MslBatch* batch, const uint8_t* 
       // refs/melee/src/melee/ft/ft_0C31.c::ftCo_800C61B0
       // refs/melee/src/melee/ft/fighter.c (motion-state reset clears fp->x221F_b1)
       const size_t flags_221f_i = idx * MSL_STATE_FLAGS_STRIDE + (size_t)MSL_STATE_FLAGS_221F_INDEX;
+      if (state_flags_camera_target_live_pose_action(action_id) != 0u) {
+        // Match-flow/dead-flow camera target owner:
+        // - this is the F04/F25 lane where stale seeded camera subjects produce rollout-visible
+        //   x221F_b0 drift,
+        // - DamageFly* bottom-overlap timing is handled by its narrower existing owner below.
+        // refs/melee/src/melee/ft/ftcamera.c::ftCamera_UpdateCameraBox
+        // refs/melee/src/melee/ft/ftlib.c::{ftLib_800866DC,ftLib_80086A8C}
+        state_flags_refresh_camera_target_from_pose(batch, idx);
+      }
       uint8_t f221f = batch->state.state_flags[flags_221f_i];
       // Entry->EntryStart runs through Fighter_ChangeMotionState reset paths; keep x221F_b1
       // transition-owned by explicit dead-flow setup and reset clear points rather than carrying it

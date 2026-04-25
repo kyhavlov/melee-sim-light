@@ -105,6 +105,26 @@ uv run python -m tools.eval.locate_discrete_mismatches --help
 uv run python -m tools.eval.locate_rollout_desyncs --help
 ```
 
+Rank fixed-horizon rollout-disruptive desyncs:
+
+```bash
+make rollout-disruptive \
+  SUITE=replays/suites/fox_falco_fd_ucf084_recent.json \
+  DISRUPTIVE_OUT_DIR=reports/triage/disruptive_rollout_desyncs_primary
+
+make rollout-disruptive \
+  SUITE=replays/suites/aggregate_recent.json \
+  DISRUPTIVE_OUT_DIR=reports/triage/disruptive_rollout_desyncs_aggregate
+```
+
+This reseeds at replay record `t`, advances with replay inputs without reseeding,
+scores the horizon compare row at horizons `10,20,60`, records the first
+mismatching frame/field in the window, and writes `rows.tsv`, `clusters.tsv`, and
+`summary.json` under the selected `reports/triage/` directory. The score is a
+weighted sum over action/grounding/combat discrete fields, position/velocity/
+percent/shield float deltas, and item identity/position differences; the exact
+weights are recorded in `summary.json`.
+
 ## Modelplay Viewer Traces
 
 Primary doc:

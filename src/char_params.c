@@ -322,6 +322,7 @@ static int load_one(const char* data_dir, const char* rel_path, uint8_t char_id)
 
   MslCharParams out = {0};
   float refl_off[3] = {0};
+  float camera_off[3] = {0};
   if (json_get_f32(buf, "weight", &out.weight) != 0 ||
       json_get_u8_or_default(buf, "weight_independent_throws_mask", 0,
                              &out.weight_independent_throws_mask) != 0 ||
@@ -356,6 +357,10 @@ static int load_one(const char* data_dir, const char* rel_path, uint8_t char_id)
       json_get_f32(buf, "aerial_drift_base", &out.aerial_drift_base) != 0 ||
       json_get_f32(buf, "air_drift_max", &out.air_drift_max) != 0 ||
       json_get_f32(buf, "aerial_friction", &out.aerial_friction) != 0 ||
+      json_get_u16(buf, "camera_zoom_target_bone_part_id", &out.camera_zoom_target_bone_part_id) !=
+          0 ||
+      json_get_f32_array3(buf, "camera_zoom_target_offset", camera_off) != 0 ||
+      json_get_f32(buf, "camera_box_radius", &out.camera_box_radius) != 0 ||
       json_get_f32(buf, "air_jump_v_multiplier", &out.air_jump_v_multiplier) != 0 ||
       json_get_f32(buf, "air_jump_h_multiplier", &out.air_jump_h_multiplier) != 0 ||
       json_get_f32(buf, "dash_initial_velocity", &out.dash_initial_velocity) != 0 ||
@@ -470,6 +475,9 @@ static int load_one(const char* data_dir, const char* rel_path, uint8_t char_id)
   out.reflector_offset_x = refl_off[0];
   out.reflector_offset_y = refl_off[1];
   out.reflector_offset_z = refl_off[2];
+  out.camera_zoom_target_offset_x = camera_off[0];
+  out.camera_zoom_target_offset_y = camera_off[1];
+  out.camera_zoom_target_offset_z = camera_off[2];
 
   alloc_free(buf);
   g_params_by_char[char_id] = out;
