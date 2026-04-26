@@ -209,12 +209,21 @@ static inline void cache_guard_reflect_timer_seed_snapshots(MslBatch* batch) {
   if (batch == NULL) {
     return;
   }
+  enum { MSL_STATE_FLAGS_221B_INDEX = 2 };
+  enum { MSL_STATE_FLAG_221B_IS_SHIELD_ACTIVE = 0x80 };
   const int num_players = (int)batch->config.num_players;
   for (int bi = 0; bi < batch->batch_size; bi++) {
     for (int p = 0; p < num_players; p++) {
       const size_t idx = msl_idx_player(bi, p);
       batch->state.guard_reflect_timer_x14_seed[idx] = batch->state.guard_reflect_timer_x14[idx];
       batch->state.guard_reflect_timer_x18_seed[idx] = batch->state.guard_reflect_timer_x18[idx];
+      const size_t flags_221b_i =
+          idx * (size_t)MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_221B_INDEX;
+      batch->state.guard_seed_shield_desc_active[idx] =
+          ((batch->state.state_flags[flags_221b_i] &
+            (uint8_t)MSL_STATE_FLAG_221B_IS_SHIELD_ACTIVE) != 0u)
+              ? 1u
+              : 0u;
     }
   }
 }

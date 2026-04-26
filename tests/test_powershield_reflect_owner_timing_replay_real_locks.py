@@ -215,11 +215,37 @@ def test_aged_powershield_reflect_commits_owner_xda8(case: _AgedCommitCase) -> N
             item_type=55,
             note="aged powershield no-transfer shield-bounce lane",
         ),
+        _Case(
+            dataset_rel=(
+                "datasets/aggregate_recent/replays/validation/aggregate_recent/"
+                "DistinctCaringCobra.msl"
+            ),
+            target_record=352,
+            spawn_id=11,
+            item_type=55,
+            note="aged GuardReflect timer carry without x221B shield descriptor does not transfer A",
+        ),
+        _Case(
+            dataset_rel=(
+                "datasets/aggregate_recent/replays/validation/aggregate_recent/"
+                "TubbyCurlyHerring.msl"
+            ),
+            target_record=10921,
+            spawn_id=125,
+            item_type=55,
+            note="aged GuardReflect timer carry without x221B shield descriptor does not transfer B",
+        ),
     ],
 )
 def test_aged_powershield_reflect_does_not_broad_transfer_controls(case: _Case) -> None:
-    # Negative sentinels for the rejected broad same-frame transfer. These GuardReflect rows keep
-    # the original item owner in replay and must not take the aged owner/xDA8 commit path.
+    # Negative sentinels for the rejected broad same-frame/aged transfer. These GuardReflect rows
+    # keep the original item owner in replay and must not take the aged owner/xDA8 commit path.
+    # Decomp owner:
+    # - `fp+0x221B_b0` is the live ShieldDesc bit; ftColl only checks shield collision while that
+    #   descriptor is active.
+    # - DCC/TCH rows carry GuardReflect timer bits but not the shield descriptor, so they remain on
+    #   item shield/hit ownership instead of `ftColl_80077464` reflect-owner transfer.
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007B1B8,ftColl_80077464}
     # refs/melee/src/melee/it/item.c::{Item_80269F14,Item_80269DC8}
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)

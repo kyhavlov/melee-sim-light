@@ -302,6 +302,10 @@ def test_reflected_laser_updates_owner_instance_and_staling_identity() -> None:
     # Slippi fp+0x221C powershield-active bit (0x20).
     # refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
     seed["state_flags"][0, 1, 3] = np.uint8(0x20)
+    # Slippi fp+0x221B_b0 shield descriptor bit. Aged GuardReflect item reflect ownership is
+    # source-gated by the live descriptor, not only by the x14/x18 timer carry.
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007B1B8,ftColl_80077464}
+    seed["state_flags"][0, 1, 2] = np.uint8(0x80)
 
     # Distinct identities so the test can assert the transfer.
     seed["instance_id"][0, 0] = np.uint16(100)

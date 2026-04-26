@@ -301,6 +301,18 @@ _SHIELD_BOUNCE_CASES = [
         laser_count_ref=1,
         note="Late-suite concurrent gun spawn row must still destroy the same-frame shielded shot.",
     ),
+    _ShieldBounceCase(
+        name="iat_landingfallspecial_high_shield_no_bounce_seed_destroy",
+        dataset_rel=(
+            "datasets/aggregate_recent/replays/validation/aggregate_recent/"
+            "ImpassionedAlarmedTarsier.msl"
+        ),
+        record=3552,
+        p=1,
+        laser_count_seed=2,
+        laser_count_ref=1,
+        note="Normal GuardSetOff shield contact without hidden ShieldBounced seed must destroy the high laser.",
+    ),
 ]
 
 

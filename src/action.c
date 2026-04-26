@@ -467,17 +467,20 @@ static inline void enter_guard_reflect_from_locomotion(MslBatch* batch, const Ms
                          msl_f32_from_q16_16(batch->state.frame_speed_mul_fp_q16_16[idx]));
 }
 
-static inline uint8_t dash_iasa_guard_admission_reaches_terminal_scalar(const MslBatch* batch,
-                                                                        const MslCommonParams* c,
-                                                                        size_t idx,
-                                                                        uint16_t action_id_start) {
+static inline uint8_t dash_iasa_guard_admission_reaches_terminal_scalar(
+    const MslBatch* batch, const MslCommonParams* c, size_t idx, uint16_t action_id_start,
+    float action_anim_frame_start) {
   if (batch == NULL || c == NULL || action_id_start != (uint16_t)MSL_ACT_DASH) {
     return 0u;
   }
   // Dash IASA's early x4 branch checks SpecialS/item/catchdash/AttackS4/EscapeF and then jumps to
-  // block_42; guard admission helpers are only called from the mid/late branches.
+  // block_42; guard admission helpers are only called from the mid/late branches. Fighter
+  // callbacks see `cur_anim_frame` after the Anim callback has advanced the timebase for the
+  // current frame, so compare the callback-time frame rather than the seed post-frame value.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c::ftCo_Dash_IASA
-  if (batch->state.dash_x4[idx] != 0u && batch->state.anim_frame_f32[idx] <= c->dash_iasa_x44) {
+  const float frame_step = msl_f32_from_q16_16(batch->state.frame_speed_mul_fp_q16_16[idx]);
+  const float callback_anim_frame = action_anim_frame_start + frame_step;
+  if (batch->state.dash_x4[idx] != 0u && callback_anim_frame <= c->dash_iasa_x44) {
     return 0u;
   }
   return 1u;
@@ -872,6 +875,7 @@ void guard_update_grounded(MslBatch* batch, const MslCommonParams* c, size_t idx
   }
 
   const uint16_t a0 = batch->state.action_id[idx];
+  const float a0_anim_frame = batch->state.anim_frame_f32[idx];
   enum { LR = (uint16_t)MSL_BUTTON_L | (uint16_t)MSL_BUTTON_R };
   const uint8_t guard_on_fresh_entry_from_non_shield_snapshot =
       // Decomp ownership: input callbacks run once per fighter per frame (Fighter_procUpdate).
@@ -899,6 +903,7 @@ void guard_update_grounded(MslBatch* batch, const MslCommonParams* c, size_t idx
     batch->state.lightshield_amount[idx] = 0.0f;
     batch->state.guard_entry_via_wait_callback[idx] = 0u;
   }
+  batch->state.guard_reflect_entry_dash_terminal_scalar[idx] = 0u;
 
   const float trig = msl_trigger_unit_from_input(
       batch->state.input_buttons[idx], batch->state.input_l[idx], batch->state.input_r[idx]);
@@ -1316,8 +1321,12 @@ void guard_update_grounded(MslBatch* batch, const MslCommonParams* c, size_t idx
   if ((pressed & (uint16_t)LR) != 0 &&
       batch->state.x672_input_timer[idx] < c->powershield_reflect_window_frames) {
     enter_guard_reflect_from_locomotion(batch, c, idx);
-    if (dash_iasa_guard_admission_reaches_terminal_scalar(batch, c, idx, a0)) {
+    if (dash_iasa_guard_admission_reaches_terminal_scalar(batch, c, idx, a0, a0_anim_frame)) {
       dash_iasa_apply_terminal_velocity_scalar(batch, c, idx);
+      const float frame_step = msl_f32_from_q16_16(batch->state.frame_speed_mul_fp_q16_16[idx]);
+      batch->state.guard_reflect_entry_dash_terminal_scalar[idx] =
+          (a0 == (uint16_t)MSL_ACT_DASH && a0_anim_frame <= (c->dash_iasa_x44 + frame_step)) ? 1u
+                                                                                             : 0u;
     }
     return;
   }
@@ -1332,7 +1341,7 @@ void guard_update_grounded(MslBatch* batch, const MslCommonParams* c, size_t idx
         batch->state.lightshield_amount[idx] = clamp01((trig - c->trigger_deadzone) / denom);
       }
     }
-    if (dash_iasa_guard_admission_reaches_terminal_scalar(batch, c, idx, a0)) {
+    if (dash_iasa_guard_admission_reaches_terminal_scalar(batch, c, idx, a0, a0_anim_frame)) {
       dash_iasa_apply_terminal_velocity_scalar(batch, c, idx);
     }
     return;
@@ -1424,6 +1433,7 @@ void action_update(MslBatch* batch) {
         const size_t idx = msl_idx_player(bi, p);
         batch->state.guard_on_entered_this_frame[idx] = 0u;
         batch->state.guard_jump_oos_entered_this_frame[idx] = 0u;
+        batch->state.guard_reflect_entry_dash_terminal_scalar[idx] = 0u;
         batch->state.shine_jump_iasa_entered_this_frame[idx] = 0u;
       }
     }

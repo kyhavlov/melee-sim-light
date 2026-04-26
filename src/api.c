@@ -993,6 +993,14 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
         batch->state.wall_id[idx] = seed->mpcoll_wall_id_seed_u16[p];
       }
       batch->state.guard_jump_oos_entered_this_frame[idx] = 0u;
+      batch->state.guard_reflect_entry_dash_terminal_scalar[idx] = 0u;
+      enum { MSL_STATE_FLAGS_221B_INDEX = 2 };
+      enum { MSL_STATE_FLAG_221B_IS_SHIELD_ACTIVE = 0x80 };
+      batch->state.guard_seed_shield_desc_active[idx] =
+          ((seed->state_flags[p][MSL_STATE_FLAGS_221B_INDEX] &
+            (uint8_t)MSL_STATE_FLAG_221B_IS_SHIELD_ACTIVE) != 0u)
+              ? 1u
+              : 0u;
       batch->state.shine_jump_iasa_entered_this_frame[idx] = 0u;
       // Seed deterministic anim timebase from Slippi post-frame `state_age` (fp->cur_anim_frame)
       // plus a strictly-causal derived fp->frame_speed_mul.

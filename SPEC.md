@@ -1427,6 +1427,15 @@ Grounded motion-entry timing notes:
   Refs: `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c::ftCo_Dash_Anim`,
   `refs/melee/src/melee/ft/ft_0892.c::{ft_8008A2BC,ft_8008A348}`,
   `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA`.
+- Dash IASA terminal friction is a callback-phase owner, not an action-id shortcut. When
+  `ftCo_Dash_IASA` reaches the terminal branch (`mv.co.dash.x4 != 0` and the consumed callback
+  anim frame crosses `mv.co.dash.x44`), it applies `p_ftCommonData->x298` to `self_vel.x` before
+  changing into the destination grounded state. This includes GuardOn and GuardReflect entries from
+  Dash; rows whose callback frame has not crossed the branch must keep the ordinary Dash carry. The
+  terminal-scalar marker is transient within the current step and exists only to preserve the
+  callback ordering into same-frame GuardReflect item collision.
+  Refs: `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c::ftCo_Dash_IASA`,
+  `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_GuardOn_Enter,ftCo_80091A4C,ftCo_GuardReflect_Enter}`.
 - The replay-real late Dash->Turn row `QuerulousGrandDinosaur.msl:5968:p0` exercises this ordering:
   the prior direct Dash IASA shortcut entered Turn with one fewer motion-entry bundle, while the
   decomp-shaped path reaches the same Turn through the callback-owned Dash end / destination
@@ -2431,6 +2440,27 @@ Fox/Falco special-owner split (2026-04-17):
     `refs/melee/src/melee/it/item.c::{Item_80269F14,Item_80269DC8}`,
     `refs/melee/src/melee/it/items/itfoxlaser.c::itFoxLaser_Logic94_HitShield`,
     `refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm`.
+  - Dash-terminal same-frame GuardReflect owner/xDA8 transfer and aged ShieldDesc boundary:
+    - Dash -> GuardReflect can reach the `ftCo_Dash_IASA` terminal scalar branch before the guard
+      entry installs `ReflectDesc`. When a same-frame SpecialN laser then collides with that fresh
+      GuardReflect descriptor, runtime commits the replay-visible owner and `xDA8_short`
+      immediately, matching `ftColl_80077464 -> Item_80269F14`. The speed/orientation update is
+      still consumed by the item callback, so the immediate transfer defers the same-owner speed
+      write instead of applying a broad velocity rewrite.
+    - Aged GuardReflect owner/xDA8 transfer requires the frame-start shield descriptor active bit
+      (`fp+0x221B_b0`, Slippi `state_flags[2] & 0x80`) in addition to the existing x14/x18 timer
+      and ReflectDesc geometry checks. GuardReflect timer carry without that descriptor bit follows
+      the shield-hit/destruction branch and must not stage a reflect snapshot. This is a minimal
+      seed/runtime lane for the descriptor provenance consumed by the shield/reflect callbacks; it
+      is not a character, replay, or stale-state proxy.
+    - Replay-real locks cover the same-frame Dash-terminal transfer, a later Dash/GuardReflect
+      shield-hit negative, retained aged transfer positives, and aged false-transfer negatives whose
+      visible geometry is reflect-like but whose frame-start ShieldDesc bit is absent.
+    Sources: `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c::ftCo_Dash_IASA`,
+    `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_80091A4C,ftCo_800939B4,ftCo_80093A50,ftCo_8009370C,ftCo_GuardReflect_Anim,ftCo_80093BC0}`,
+    `refs/melee/src/melee/ft/ftcoll.c::{ftColl_CreateReflectHit,ftColl_80077464}`,
+    `refs/melee/src/melee/it/item.c::Item_80269F14`,
+    `refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm`.
   - Airborne Fall Falco-laser BODY hurtcap-Z lane:
     - `ftColl_8007925C` routes item BODY through `lbColl_8000805C`, passing
       `ftCommon_8007F804(fp)` and `fp->cur_pos.z`; `lbColl_8000805C` rewrites both hurt capsule
@@ -2921,6 +2951,11 @@ Fox/Falco special-owner split (2026-04-17):
       (`xDCE_flag.b5/xDCE_flag.b4/xC54/xC58`), not shield health. The retained runtime still keeps
       fresh non-shield-owned admissions on the destroy-safe HP gate, preserving `GAT:773`, while
       `MAJ:6337` now follows `ShieldBounced` keepalive and leaves the laser live after GuardSetOff.
+    - General non-GuardReflect shield-bounce keepalive is represented by the explicit
+      `item_shield_bounce_valid` seed lane. A normal `GuardSetOff` contact with no seeded
+      `Item_80269DC8` bounce result takes `itFoxLaser_Logic94_HitShield` destruction even when the
+      visible shield bubble/HP geometry looks bounce-like; `IAT:3552` locks this high-shield false
+      keepalive boundary.
     - v10 Dolphin evidence for `MAJ:6337` shows the surviving item has per-item HitCapsule
       victim-ring entries after shield contact; broad HP-gate removal was rejected because it turns
       `GAT:773` into a false keepalive.

@@ -357,6 +357,18 @@ typedef struct MslStateSoA {
   // callback handoff. This survives the following frozen GuardOn snapshot row, where
   // prev_action_id no longer identifies the callback source.
   uint8_t* guard_entry_via_wait_callback;
+  // Runtime-only marker for the Dash IASA locomotion -> GuardReflect entry slice that also reaches
+  // Dash's terminal gr_vel scalar in the same callback. Item reflect ownership uses this to keep
+  // same-frame xDA8 transfer on the source callback phase that exposed it, without replay ids.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c::ftCo_Dash_IASA
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_80091AD8,ftCo_80093A50}
+  uint8_t* guard_reflect_entry_dash_terminal_scalar;
+  // Seed snapshot of `fp+0x221B_b0` / Slippi `isShieldActive` before current-step shield
+  // descriptor callbacks mutate state_flags. Item GuardReflect ownership uses this to distinguish
+  // aged descriptor-present rows from timer carry rows without replay ids.
+  // refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007B1B8,ftColl_80077464}
+  // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
+  uint8_t* guard_seed_shield_desc_active;
   // Runtime-only marker for Guard/GuardOn/GuardReflect/GuardOff IASA entering KneeBend through
   // ftCo_800CB024 in the current step. The decomp input callback runs once per frame, so a fresh
   // Guard -> KneeBend handoff must not also consume KneeBend_IASA before the next frame.

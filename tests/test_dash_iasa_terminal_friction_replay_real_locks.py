@@ -126,3 +126,151 @@ def test_dash_iasa_guardreflect_terminal_friction_bhh_lock() -> None:
         float(ref_row["speed_air_x_self"][p]), abs=1e-6
     )
     assert float(out_row["pos_x"][p]) == pytest.approx(float(ref_row["pos_x"][p]), abs=1e-6)
+
+
+def test_dash_iasa_analog_guardon_terminal_friction_agn_lock() -> None:
+    # Same Dash IASA terminal scalar for the analog-held GuardOn admission path:
+    # ftCo_Dash_IASA -> ftCo_80091A4C -> ftCo_800923B4 -> ftCo_800924C0 still uses the
+    # pre-entry Dash frame for the x44 early-branch predicate, then falls through to
+    # `gr_vel -= gr_vel * p_ftCommonData->x54 * ft_GetGroundFrictionMultiplier(fp)`.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c::ftCo_Dash_IASA
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_80091A4C,ftCo_800924C0}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+
+    dataset_path = (
+        root
+        / "datasets/aggregate_recent/replays/validation/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path.relative_to(root)}")
+
+    record = 3177
+    p = 1
+    samples = read_dataset(str(dataset_path)).samples
+    seed = samples[record]["seed_t"]
+    ref = samples[record]["ref_t1"]
+    assert int(seed["action_id"][p]) == 20  # Dash
+    assert int(seed["action_frame"][p]) == 9
+    assert int(ref["action_id"][p]) == 178  # GuardOn
+
+    _, ref_row, out_row = _run_one_step_row(dataset_path, record, p)
+    _assert_transition_lock_fields_match_ref(out_row=out_row, ref_row=ref_row, record=record, p=p)
+    assert float(out_row["speed_ground_x_self"][p]) == pytest.approx(
+        float(ref_row["speed_ground_x_self"][p]), abs=1e-6
+    )
+    assert float(out_row["speed_air_x_self"][p]) == pytest.approx(
+        float(ref_row["speed_air_x_self"][p]), abs=1e-6
+    )
+    assert float(out_row["pos_x"][p]) == pytest.approx(float(ref_row["pos_x"][p]), abs=1e-6)
+
+
+def test_run_to_guardon_does_not_use_dash_iasa_terminal_scalar_agn_lock() -> None:
+    # Negative/control: Run also enters GuardOn through ftCo_80091A4C, but the Dash IASA terminal
+    # scalar is not part of the Run callback. Its GuardOn frame keeps only ordinary ft_80084F3C
+    # ground friction.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Run.c::ftCo_Run_IASA
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_80091A4C,ftCo_800924C0}
+    # refs/melee/src/melee/ft/ft_081B.c::ft_80084F3C
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+
+    dataset_path = (
+        root
+        / "datasets/aggregate_recent/replays/validation/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path.relative_to(root)}")
+
+    record = 111
+    p = 1
+    samples = read_dataset(str(dataset_path)).samples
+    seed = samples[record]["seed_t"]
+    ref = samples[record]["ref_t1"]
+    assert int(seed["action_id"][p]) == 21  # Run
+    assert int(ref["action_id"][p]) == 178  # GuardOn
+
+    _, ref_row, out_row = _run_one_step_row(dataset_path, record, p)
+    _assert_transition_lock_fields_match_ref(out_row=out_row, ref_row=ref_row, record=record, p=p)
+    assert float(out_row["speed_ground_x_self"][p]) == pytest.approx(
+        float(ref_row["speed_ground_x_self"][p]), abs=1e-6
+    )
+    assert float(out_row["pos_x"][p]) == pytest.approx(float(ref_row["pos_x"][p]), abs=1e-6)
+
+
+def _laser_owner_iids(row) -> list[tuple[int, int, int]]:
+    out: list[tuple[int, int, int]] = []
+    for it in row["items"]:
+        if int(it["exists"]) and int(it["type"]) in (54, 55):
+            out.append((int(it["type"]), int(it["owner"]), int(it["instance_id"])))
+    out.sort()
+    return out
+
+
+def test_dash_iasa_terminal_scalar_same_frame_reflect_transfer_mja_lock() -> None:
+    # Boundary lock for the same Dash IASA callback slice:
+    # - the Dash -> GuardReflect admission that crosses the x44 branch boundary and reaches the
+    #   terminal gr_vel scalar can install GuardReflect's ReflectDesc before laser collision,
+    # - ftColl_80077464 transfers owner/xDA8 this frame, while Item_80269F14 leaves speed for the
+    #   item callback lane.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c::ftCo_Dash_IASA
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_80091AD8,ftCo_80093A50}
+    # refs/melee/src/melee/ft/ftcoll.c::ftColl_80077464
+    # refs/melee/src/melee/it/item.c::Item_80269F14
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+
+    dataset_path = (
+        root / "datasets/aggregate_recent/replays/validation/aggregate_recent/MotionlessAggressiveJay.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path.relative_to(root)}")
+
+    record = 6274
+    p = 1
+    samples = read_dataset(str(dataset_path)).samples
+    seed = samples[record]["seed_t"]
+    ref = samples[record]["ref_t1"]
+    assert int(seed["action_id"][p]) == 20  # Dash
+    assert int(seed["action_frame"][p]) == 4
+    assert int(ref["action_id"][p]) == 182  # GuardReflect
+
+    _, ref_row, out_row = _run_one_step_row(dataset_path, record, p)
+    _assert_transition_lock_fields_match_ref(out_row=out_row, ref_row=ref_row, record=record, p=p)
+    assert float(out_row["shield_hp"][p]) == pytest.approx(float(ref_row["shield_hp"][p]), abs=1e-6)
+    assert float(out_row["speed_ground_x_self"][p]) == pytest.approx(
+        float(ref_row["speed_ground_x_self"][p]), abs=1e-6
+    )
+    assert _laser_owner_iids(out_row) == _laser_owner_iids(ref_row)
+
+
+def test_dash_iasa_later_guardreflect_shield_hit_gat_negative_lock() -> None:
+    # Negative/control: a later Dash -> GuardReflect-looking entry is not the same x44 boundary
+    # source phase. The laser stays on normal shield-hit / GuardSetOff ownership rather than a broad
+    # same-frame reflect-transfer suppressor.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c::ftCo_Dash_IASA
+    # refs/melee/src/melee/it/item.c::Item_80269DC8
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+
+    dataset_path = (
+        root
+        / "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/"
+        "GracefulAttachedTurtle.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path.relative_to(root)}")
+
+    record = 847
+    p = 0
+    samples = read_dataset(str(dataset_path)).samples
+    seed = samples[record]["seed_t"]
+    ref = samples[record]["ref_t1"]
+    assert int(seed["action_id"][p]) == 20  # Dash
+    assert int(seed["action_frame"][p]) == 6
+    assert int(ref["action_id"][p]) == 181  # GuardSetOff
+
+    _, ref_row, out_row = _run_one_step_row(dataset_path, record, p)
+    _assert_transition_lock_fields_match_ref(out_row=out_row, ref_row=ref_row, record=record, p=p)
+    assert float(out_row["shield_hp"][p]) == pytest.approx(float(ref_row["shield_hp"][p]), abs=1e-6)
+    assert _laser_owner_iids(out_row) == _laser_owner_iids(ref_row)
