@@ -1,4 +1,4 @@
-.PHONY: build test preprocess preprocess-aggregate validate validate-aggregate validate-rollout validate-rollout-aggregate validate-all rollout-capture rollout-summary rollout-diff rollout-locate rollout-locate-summary rollout-locate-diff rollout-disruptive build_data fmt fmt-check check guardrail-preflight guardrail-preflight-full guardrail-baseline forensic-rows dolphin-engine-dump dolphin-extract dolphin-forensic-row
+.PHONY: build test preprocess preprocess-aggregate validate validate-aggregate validate-rollout validate-rollout-aggregate validate-all rollout-capture rollout-summary rollout-diff rollout-locate rollout-locate-summary rollout-locate-diff rollout-disruptive build_data fmt fmt-check check guardrail-preflight guardrail-preflight-full guardrail-baseline forensic-rows dolphin-engine-dump dolphin-extract dolphin-forensic-row build-bench-sim bench-sim
 
 PY := uv run python
 DATASETS_DIR ?= datasets
@@ -25,6 +25,10 @@ DISRUPTIVE_HORIZONS ?= 10,20,60
 ARGS ?=
 VERBOSE ?=
 CLANG_FORMAT ?= clang-format
+CC ?= cc
+CFLAGS ?= -O3 -Wall -Wextra -std=c11 -ffp-contract=off
+BENCH_SIM ?= build/bench/bench_sim
+BENCH_SIM_SRCS := $(wildcard src/*.c) src/decomp/lb/lb_00ce.c tools/bench/bench_sim.c
 
 ifneq ($(strip $(OUT)),)
 VALIDATE_OUT := --out $(OUT)
@@ -135,3 +139,10 @@ dolphin-extract:
 
 dolphin-forensic-row:
 	@$(PY) -m tools.dolphin.forensic_row_dump $(ARGS)
+
+build-bench-sim:
+	@mkdir -p build/bench
+	@$(CC) $(CFLAGS) -Isrc $(BENCH_SIM_SRCS) -lm -o "$(BENCH_SIM)"
+
+bench-sim: build-bench-sim
+	@"$(BENCH_SIM)" $(ARGS)

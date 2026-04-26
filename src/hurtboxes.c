@@ -310,7 +310,7 @@ void hurtboxes_refresh(MslBatch* batch) {
 
   const int num_players = (int)batch->config.num_players;
   for (int bi = 0; bi < batch->batch_size; bi++) {
-    for (int p = 0; p < MSL_MAX_PLAYERS; p++) {
+    for (int p = 0; p < num_players; p++) {
       const size_t idx = msl_idx_player(bi, p);
       batch->state.hurtcap_count[idx] = 0;
       // Clear fixed slots for stable debug readback (and to avoid stale values when pose lookups
@@ -327,9 +327,6 @@ void hurtboxes_refresh(MslBatch* batch) {
         batch->state.hurtcap_radius[hi] = 0.0f;
         batch->state.hurtcap_is_grabbable[hi] = 0;
         batch->state.hurtcap_height[hi] = 0;
-      }
-      if (p >= num_players) {
-        continue;
       }
 
       const uint8_t char_id = batch->state.char_id[idx];

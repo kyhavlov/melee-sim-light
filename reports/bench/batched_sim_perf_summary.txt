@@ -1,0 +1,44 @@
+batched sim perf summary
+branch: perf/batched-sim-benchmark
+date: 2026-04-26
+
+Benchmark tool:
+- build: make build-bench-sim
+- run: make bench-sim ARGS="--batch 1024 --frames 4000 --warmup 400 --mode rollout"
+- modes:
+  - rollout: msl_batch_step_input only
+  - rollout_compare: msl_batch_step_input plus msl_batch_write_compare
+- input source: deterministic precomputed random input ring, so timed loops do not generate random
+  numbers.
+
+Environment note:
+- The machine may have unrelated CPU-heavy agent work running. Treat exact numbers as noisy.
+- Best comparison is adjacent old-source vs final optimized runs in this directory.
+
+Baseline, initial branch state (reports/bench/batched_sim_baseline.txt):
+- rollout, batch 512, 12000 frames: 3087.593 ns/env-step
+- rollout, batch 1024, 12000 frames: 3095.924 ns/env-step
+- rollout_compare, batch 512, 12000 frames: 3172.693 ns/env-step
+- rollout_compare, batch 1024, 12000 frames: 3182.686 ns/env-step
+
+Adjacent old-source comparison, same 4000-frame sweep (reports/bench/batched_sim_oldsrc_adjacent.txt):
+- rollout, batch 512 median: 2956.706 ns/env-step
+- rollout, batch 1024 median: 2996.027 ns/env-step
+
+Final optimized sweep (reports/bench/batched_sim_after_input_shield_active_players.txt):
+- rollout, batch 512 median: 2722.302 ns/env-step
+- rollout, batch 1024 median: 2769.845 ns/env-step
+- rollout_compare, batch 512 median: 2809.311 ns/env-step
+- rollout_compare, batch 1024 median: 2870.535 ns/env-step
+
+Observed adjacent rollout delta:
+- batch 512: 2956.706 -> 2722.302 ns/env-step, about 7.9% faster
+- batch 1024: 2996.027 -> 2769.845 ns/env-step, about 7.5% faster
+
+Implemented wins:
+- Added a native C benchmark binary under tools/bench.
+- Narrowed singles hot loops in input, shield, hitbox, and hurtbox refreshes to active players
+  instead of clearing/processing all 4 player slots every frame.
+- Reduced dynamic collision matrix scratch work by carrying only the current parent scale along the
+  root-to-part chain.
+- Skipped dynamic collision table lookup work when no dynamic collision override is active.

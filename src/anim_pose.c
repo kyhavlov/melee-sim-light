@@ -2019,8 +2019,8 @@ static int dynamic_matrix_from_locals(const MslBatch* batch, size_t player_idx,
 
   float world[12];
   mtx34_identity(world);
-  float world_scl_by_part[256][3];
-  uint8_t have_scl[256] = {0};
+  float parent_world_scl[3] = {0.0f, 0.0f, 0.0f};
+  uint8_t have_parent_scl = 0u;
   for (int i = (int)count - 1; i >= 0; i--) {
     const uint16_t part = path[i];
     float rot[3], pos[3], scl[3];
@@ -2032,8 +2032,8 @@ static int dynamic_matrix_from_locals(const MslBatch* batch, size_t player_idx,
     const int dyn_i = dynamic_set_node_index_for_part(set, part);
 
     const float* parent_scl = NULL;
-    if (parent >= 0 && (uint16_t)parent < 256u && have_scl[(uint16_t)parent]) {
-      parent_scl = world_scl_by_part[(uint16_t)parent];
+    if (parent >= 0 && have_parent_scl) {
+      parent_scl = parent_world_scl;
     }
     float local[12];
     mtx34_srt_simple(rot, pos, scl, parent_scl, local);
@@ -2074,21 +2074,22 @@ static int dynamic_matrix_from_locals(const MslBatch* batch, size_t player_idx,
     }
 
     if ((flags & 8u) != 0u) {
-      if (parent >= 0 && (uint16_t)parent < 256u && have_scl[(uint16_t)parent]) {
-        memcpy(world_scl_by_part[part], world_scl_by_part[(uint16_t)parent], 3u * sizeof(float));
-        have_scl[part] = 1u;
+      if (parent >= 0 && have_parent_scl) {
+        // The path is a single root-to-part chain, so the only future scale consumer is this
+        // node's direct child in the same chain.
+        have_parent_scl = 1u;
       } else {
-        have_scl[part] = 0u;
+        have_parent_scl = 0u;
       }
     } else {
-      if (parent >= 0 && (uint16_t)parent < 256u && have_scl[(uint16_t)parent]) {
-        world_scl_by_part[part][0] = scl[0] * world_scl_by_part[(uint16_t)parent][0];
-        world_scl_by_part[part][1] = scl[1] * world_scl_by_part[(uint16_t)parent][1];
-        world_scl_by_part[part][2] = scl[2] * world_scl_by_part[(uint16_t)parent][2];
+      if (parent >= 0 && have_parent_scl) {
+        parent_world_scl[0] *= scl[0];
+        parent_world_scl[1] *= scl[1];
+        parent_world_scl[2] *= scl[2];
       } else {
-        memcpy(world_scl_by_part[part], scl, 3u * sizeof(float));
+        memcpy(parent_world_scl, scl, 3u * sizeof(float));
       }
-      have_scl[part] = 1u;
+      have_parent_scl = 1u;
     }
   }
   memcpy(out_3x4, world, MAT_BYTES);
@@ -2122,8 +2123,8 @@ static int matrix_from_locals_f32(const MslAnimPoseTable* t, uint16_t msid, floa
 
   float world[12];
   mtx34_identity(world);
-  float world_scl_by_part[256][3];
-  uint8_t have_scl[256] = {0};
+  float parent_world_scl[3] = {0.0f, 0.0f, 0.0f};
+  uint8_t have_parent_scl = 0u;
   for (int i = (int)count - 1; i >= 0; i--) {
     const uint16_t part = path[i];
     float rot[3], pos[3], scl[3];
@@ -2133,29 +2134,28 @@ static int matrix_from_locals_f32(const MslAnimPoseTable* t, uint16_t msid, floa
       return -1;
     }
     const float* parent_scl = NULL;
-    if (parent >= 0 && (uint16_t)parent < 256u && have_scl[(uint16_t)parent]) {
-      parent_scl = world_scl_by_part[(uint16_t)parent];
+    if (parent >= 0 && have_parent_scl) {
+      parent_scl = parent_world_scl;
     }
     float local[12];
     mtx34_srt_simple(rot, pos, scl, parent_scl, local);
     mtx34_concat(world, local, world);
 
     if ((flags & 8u) != 0u) {
-      if (parent >= 0 && (uint16_t)parent < 256u && have_scl[(uint16_t)parent]) {
-        memcpy(world_scl_by_part[part], world_scl_by_part[(uint16_t)parent], 3u * sizeof(float));
-        have_scl[part] = 1u;
+      if (parent >= 0 && have_parent_scl) {
+        have_parent_scl = 1u;
       } else {
-        have_scl[part] = 0u;
+        have_parent_scl = 0u;
       }
     } else {
-      if (parent >= 0 && (uint16_t)parent < 256u && have_scl[(uint16_t)parent]) {
-        world_scl_by_part[part][0] = scl[0] * world_scl_by_part[(uint16_t)parent][0];
-        world_scl_by_part[part][1] = scl[1] * world_scl_by_part[(uint16_t)parent][1];
-        world_scl_by_part[part][2] = scl[2] * world_scl_by_part[(uint16_t)parent][2];
+      if (parent >= 0 && have_parent_scl) {
+        parent_world_scl[0] *= scl[0];
+        parent_world_scl[1] *= scl[1];
+        parent_world_scl[2] *= scl[2];
       } else {
-        memcpy(world_scl_by_part[part], scl, 3u * sizeof(float));
+        memcpy(parent_world_scl, scl, 3u * sizeof(float));
       }
-      have_scl[part] = 1u;
+      have_parent_scl = 1u;
     }
   }
   memcpy(out_3x4, world, MAT_BYTES);
@@ -2174,12 +2174,15 @@ int anim_pose_get_collision_matrix(const MslBatch* batch, size_t player_idx, uin
   if (anim_pose_get_matrix(char_id, msid, frame, part_id, out_3x4) != 0) {
     return -1;
   }
+  if (!batch->state.dynamic_pose_apply_collision_matrix[player_idx]) {
+    return 0;
+  }
   const MslAnimPoseTable* t = table_for_char(char_id);
   if (t == NULL || t->dyn_collision_have_msid == NULL || !t->dyn_collision_have_msid[msid]) {
     return 0;
   }
   const MslAnimDynSetData* set = dynamic_set_for_part(t, part_id);
-  if (set == NULL || !batch->state.dynamic_pose_apply_collision_matrix[player_idx]) {
+  if (set == NULL) {
     return 0;
   }
   if (batch->state.dynamic_pose_char_id[player_idx] != char_id ||
@@ -2220,11 +2223,14 @@ int anim_pose_get_collision_matrix_f32(const MslBatch* batch, size_t player_idx,
     }
   }
 
+  if (!batch->state.dynamic_pose_apply_collision_matrix[player_idx]) {
+    return 0;
+  }
   if (t->dyn_collision_have_msid == NULL || !t->dyn_collision_have_msid[msid]) {
     return 0;
   }
   const MslAnimDynSetData* set = dynamic_set_for_part(t, part_id);
-  if (set == NULL || !batch->state.dynamic_pose_apply_collision_matrix[player_idx]) {
+  if (set == NULL) {
     return 0;
   }
   if (batch->state.dynamic_pose_char_id[player_idx] != char_id ||

@@ -660,7 +660,7 @@ void hitboxes_refresh(MslBatch* batch) {
 
   const int num_players = (int)batch->config.num_players;
   for (int bi = 0; bi < batch->batch_size; bi++) {
-    for (int p = 0; p < MSL_MAX_PLAYERS; p++) {
+    for (int p = 0; p < num_players; p++) {
       const size_t idx = msl_idx_player(bi, p);
       uint8_t x43_b2_prev[MSL_MAX_HITBOXES] = {0};
       uint8_t seeded_prev_enabled[MSL_MAX_HITBOXES] = {0};
@@ -679,8 +679,8 @@ void hitboxes_refresh(MslBatch* batch) {
       //   victim rings and allow illegal same-window re-hits on rehit=0 moves.
       // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
       // refs/melee/src/melee/ft/ftaction.c::ftAction_8007121C
-      if (p < num_players && batch->state.hitlag_started_frame[idx] != 0u &&
-          batch->state.hitbox_count[idx] != 0u && batch->state.hitbox_prev_bootstrap[idx] == 0u &&
+      if (batch->state.hitlag_started_frame[idx] != 0u && batch->state.hitbox_count[idx] != 0u &&
+          batch->state.hitbox_prev_bootstrap[idx] == 0u &&
           batch->state.action_id[idx] == batch->state.prev_action_id[idx]) {
         preserve_frozen_hitlag_hitboxes = 1u;
       }
@@ -745,10 +745,6 @@ void hitboxes_refresh(MslBatch* batch) {
       }
 
       batch->state.hitbox_count[idx] = 0;
-
-      if (p >= num_players) {
-        continue;
-      }
 
       // Same-frame motion-state entry ownership:
       // - Entry paths such as ftFx_SpecialLw_Enter call ftAnim_8006EBA4 after

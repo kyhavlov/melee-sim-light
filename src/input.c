@@ -335,12 +335,13 @@ int input_apply_pre_input_snapshot(MslBatch* batch, const uint8_t* prev_input_by
 
   const uint8_t ucf_enabled = batch->config.ucf_enabled ? 1 : 0;
   const uint8_t cardinals = batch->config.ucf_cardinals_1_0_enabled ? 1 : 0;
+  const int num_players = (int)batch->config.num_players;
 
   for (int bi = 0; bi < batch->batch_size; bi++) {
     const uint8_t* prev_ptr = prev_input_bytes + (size_t)bi * prev_input_stride_bytes;
     const MslInput* prev = (const MslInput*)prev_ptr;
 
-    for (int p = 0; p < MSL_MAX_PLAYERS; p++) {
+    for (int p = 0; p < num_players; p++) {
       const size_t idx = msl_idx_player(bi, p);
       const uint16_t prev_buttons = prev->p[p].buttons;
 
@@ -405,6 +406,7 @@ int input_apply(MslBatch* batch, const uint8_t* prev_input_bytes, size_t prev_in
 
   const uint8_t ucf_enabled = batch->config.ucf_enabled ? 1 : 0;
   const uint8_t cardinals = batch->config.ucf_cardinals_1_0_enabled ? 1 : 0;
+  const int num_players = (int)batch->config.num_players;
 
   for (int bi = 0; bi < batch->batch_size; bi++) {
     const uint8_t* prev_ptr = prev_input_bytes + (size_t)bi * prev_input_stride_bytes;
@@ -412,7 +414,7 @@ int input_apply(MslBatch* batch, const uint8_t* prev_input_bytes, size_t prev_in
     const MslInput* prev = (const MslInput*)prev_ptr;
     const MslInput* cur = (const MslInput*)cur_ptr;
 
-    for (int p = 0; p < MSL_MAX_PLAYERS; p++) {
+    for (int p = 0; p < num_players; p++) {
       const size_t idx = msl_idx_player(bi, p);
 
       const uint16_t prev_buttons = prev->p[p].buttons;

@@ -124,169 +124,161 @@ void shields_refresh(MslBatch* batch) {
   const float denom = 1.0f - c->trigger_deadzone;
   const int num_players = (int)batch->config.num_players;
   for (int bi = 0; bi < batch->batch_size; bi++) {
-    for (int p = 0; p < MSL_MAX_PLAYERS; p++) {
+    for (int p = 0; p < num_players; p++) {
       const size_t idx = msl_idx_player(bi, p);
 
-      float sx = 0.0f;
-      float sy = 0.0f;
-      float sz = 0.0f;
+      // Default center approximation: fighter world position; z=0 in our current 2D stage model.
+      // If guard tilt data is available and the shield is active, we override this below.
+      const float pos_x = batch->state.pos_x[idx];
+      const float pos_y = batch->state.pos_y[idx];
+      const float pos_z = batch->state.pos_z[idx];
+      float sx = pos_x;
+      float sy = pos_y;
+      float sz = pos_z;
       float sr = 0.0f;
 
-      if (p < num_players) {
-        // Default center approximation: fighter world position; z=0 in our current 2D stage model.
-        // If guard tilt data is available and the shield is active, we override this below.
-        const float pos_x = batch->state.pos_x[idx];
-        const float pos_y = batch->state.pos_y[idx];
-        const float pos_z = batch->state.pos_z[idx];
-        sx = pos_x;
-        sy = pos_y;
-        sz = pos_z;
+      const uint8_t stocks = batch->state.stocks[idx];
+      if (stocks != 0 && is_shield_active_action(batch->state.action_id[idx]) &&
+          batch->state.shield_hp[idx] > 0.0f && c->start_shield_health > 0.0f) {
+        const MslCharParams* ca = msl_char_params(batch->state.char_id[idx]);
+        if (ca != NULL) {
+          const float scale_y = batch->state.fighter_scale_y[idx];
 
-        const uint8_t stocks = batch->state.stocks[idx];
-        if (stocks != 0 && is_shield_active_action(batch->state.action_id[idx]) &&
-            batch->state.shield_hp[idx] > 0.0f && c->start_shield_health > 0.0f) {
-          const MslCharParams* ca = msl_char_params(batch->state.char_id[idx]);
-          if (ca != NULL) {
-            const float scale_y = batch->state.fighter_scale_y[idx];
+          // Guard-tilt shield bubble center (decomp-shaped):
+          // - Sample the ISO-derived msid=38 ("Guard") tilt timeline in data/shields/<char>.bin.
+          // - Use stick direction (main stick) and facing to choose an angle frame.
+          // - Blend towards that angled center based on inertial stick magnitude state (x4; 0..1).
+          //
+          // NOTE (model_scaling): In-engine applies per-character model scaling at the model root
+          // (ftCommon_GetModelScale(fp)), but then cancels `model_scaling` for the collision skeleton
+          // subtree by applying an inverse scale at part `fp->ft_data->x8->x10` during animation
+          // updates (ftAnim_8006FA58/ftAnim_8006FB88 call ftCommon_8007F6A4).
+          //
+          // Our `data/shields/*.bin` tables are extracted in the same "collision-subtree" space
+          // (see tools/extraction/extract_shield_tilt_table.py applying inv_model_scale), so we
+          // apply only `fighter_scale_y` here.
+          //
+          // Decomp refs:
+          // - refs/melee/src/melee/ft/ftcommon.c::ftCommon_GetModelScale
+          // - refs/melee/src/melee/ft/ftanim.c::ftAnim_8006FA58 and ::ftAnim_8006FB88 (inv-scale part x10)
+          // - refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007F6A4 (inverse model_scaling application)
+          // - refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c (shield bone `fp->ft_data->x8->x11`)
+          MslShieldTiltTableView tv;
+          const uint8_t has_tv = (msl_shield_tilt_table_view(batch->state.char_id[idx], &tv) == 0 &&
+                                  tv.xyz != NULL && tv.frame_count > 0)
+                                     ? 1
+                                     : 0;
 
-            // Guard-tilt shield bubble center (decomp-shaped):
-            // - Sample the ISO-derived msid=38 ("Guard") tilt timeline in data/shields/<char>.bin.
-            // - Use stick direction (main stick) and facing to choose an angle frame.
-            // - Blend towards that angled center based on inertial stick magnitude state (x4; 0..1).
-            //
-            // NOTE (model_scaling): In-engine applies per-character model scaling at the model root
-            // (ftCommon_GetModelScale(fp)), but then cancels `model_scaling` for the collision skeleton
-            // subtree by applying an inverse scale at part `fp->ft_data->x8->x10` during animation
-            // updates (ftAnim_8006FA58/ftAnim_8006FB88 call ftCommon_8007F6A4).
-            //
-            // Our `data/shields/*.bin` tables are extracted in the same "collision-subtree" space
-            // (see tools/extraction/extract_shield_tilt_table.py applying inv_model_scale), so we
-            // apply only `fighter_scale_y` here.
-            //
-            // Decomp refs:
-            // - refs/melee/src/melee/ft/ftcommon.c::ftCommon_GetModelScale
-            // - refs/melee/src/melee/ft/ftanim.c::ftAnim_8006FA58 and ::ftAnim_8006FB88 (inv-scale part x10)
-            // - refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007F6A4 (inverse model_scaling application)
-            // - refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c (shield bone `fp->ft_data->x8->x11`)
-            MslShieldTiltTableView tv;
-            const uint8_t has_tv =
-                (msl_shield_tilt_table_view(batch->state.char_id[idx], &tv) == 0 &&
-                 tv.xyz != NULL && tv.frame_count > 0)
-                    ? 1
-                    : 0;
+          // Guard tilt state update (independent of whether a shield table exists for this character).
+          const float facing_dir = batch->state.facing[idx] ? 1.0f : -1.0f;
+          // Decomp uses fp->input.lstick.{x,y} which are post-UCF and deadzoned floats.
+          // Match preprocessing derivation (tools/slippi/seed_history.py) by applying the ftCommonData
+          // per-axis deadzones here before ftCo_80091BC4 math.
+          float stick_x_unit = (float)batch->state.input_main_x[idx] * (1.0f / 80.0f);
+          float stick_y_unit = (float)batch->state.input_main_y[idx] * (1.0f / 80.0f);
+          stick_x_unit = apply_deadzone_f32(stick_x_unit, c->lstick_deadzone_x);
+          stick_y_unit = apply_deadzone_f32(stick_y_unit, c->lstick_deadzone_y);
 
-            // Guard tilt state update (independent of whether a shield table exists for this character).
-            const float facing_dir = batch->state.facing[idx] ? 1.0f : -1.0f;
-            // Decomp uses fp->input.lstick.{x,y} which are post-UCF and deadzoned floats.
-            // Match preprocessing derivation (tools/slippi/seed_history.py) by applying the ftCommonData
-            // per-axis deadzones here before ftCo_80091BC4 math.
-            float stick_x_unit = (float)batch->state.input_main_x[idx] * (1.0f / 80.0f);
-            float stick_y_unit = (float)batch->state.input_main_y[idx] * (1.0f / 80.0f);
-            stick_x_unit = apply_deadzone_f32(stick_x_unit, c->lstick_deadzone_x);
-            stick_y_unit = apply_deadzone_f32(stick_y_unit, c->lstick_deadzone_y);
-
-            // Decomp: ftCo_800921DC initializes mv.co.guard.x8 = 10 and x4 = 0 on GuardOn entry.
-            // Our shield tables expose the neutral frame explicitly; fall back to GALE01's 10 if missing.
-            uint16_t neutral = 10;
-            uint16_t frame_max = (uint16_t)(neutral + 360u);  // decomp: x8 is neutral + [0..360]
-            if (has_tv) {
-              neutral = tv.neutral_frame;
-              frame_max = (uint16_t)(tv.frame_count - 1);
-            }
-
-            // Decomp init on GuardOn entry.
-            if (batch->state.action_id[idx] == (uint16_t)MSL_ACT_GUARD_ON &&
-                batch->state.action_frame[idx] == 0) {
-              batch->state.guard_tilt_x8[idx] = neutral;
-              batch->state.guard_tilt_x4[idx] = 0.0f;
-            }
-
-            if (is_guard_tilt_action(batch->state.action_id[idx])) {
-              const float x = stick_x_unit * facing_dir;
-              const float y = stick_y_unit;
-
-              float rad = atan2f(y, x);
-              if (rad < 0.0f) {
-                rad += 2.0f * MSL_PI_F;
-              }
-              float deg = rad * (180.0f / MSL_PI_F);
-              // Decomp: ftCo_80091BC4 clamps lstick_deg to [0, 359].
-              if (deg < 0.0f) {
-                deg = 0.0f;
-              }
-              if (deg > 359.0f) {
-                deg = 359.0f;
-              }
-
-              const float offset = (float)batch->state.guard_tilt_x8[idx] - (float)neutral;
-              const float delta = normalize_angle_180(deg - offset);
-              const float lerp = c->guard_stick_lerp_x44c;
-              const float next_offset = normalize_angle_0(delta * lerp + offset);
-              const float next_x8_f = (float)neutral + next_offset;
-              batch->state.guard_tilt_x8[idx] = clamp_u16((uint16_t)next_x8_f, 0, frame_max);
-
-              float mag = sqrtf(stick_x_unit * stick_x_unit + stick_y_unit * stick_y_unit);
-              if (mag > 1.0f) {
-                mag = 1.0f;
-              }
-              if (mag < 0.0f) {
-                mag = 0.0f;
-              }
-              const float x4 = batch->state.guard_tilt_x4[idx];
-              batch->state.guard_tilt_x4[idx] = (lerp * (mag - x4)) + x4;
-            }
-
-            if (has_tv) {
-              const uint16_t f = clamp_u16(batch->state.guard_tilt_x8[idx], 0, frame_max);
-              const float mag = clamp01(batch->state.guard_tilt_x4[idx]);
-
-              const size_t n_i = (size_t)neutral * 3u;
-              const size_t f_i = (size_t)f * 3u;
-              const float nx = tv.xyz[n_i + 0];
-              const float ny = tv.xyz[n_i + 1];
-              const float nz = tv.xyz[n_i + 2];
-              const float fx = tv.xyz[f_i + 0];
-              const float fy = tv.xyz[f_i + 1];
-              const float fz = tv.xyz[f_i + 2];
-
-              const float dx = nx + mag * (fx - nx);
-              const float dy = ny + mag * (fy - ny);
-              const float dz = nz + mag * (fz - nz);
-
-              // Match hurtcaps scaling policy: SSANIM-derived offsets are extracted without per-fighter
-              // runtime scale (fp->x34_scale.y), so apply fighter_scale_y uniformly.
-              //
-              // Facing parity: same as hurtcaps_refresh() / in-engine root part rotY = (M_PI_2 * fp->facing_dir),
-              // which mixes X/Z in world space.
-              // refs/melee/src/melee/ft/fighter.c (ftPartSetRotY(fp, 0, (M_PI_2 * fp->facing_dir)))
-              const float lx = dx * scale_y;
-              const float ly = dy * scale_y;
-              const float lz = dz * scale_y;
-              const float off_x = facing_dir * lz;
-              const float off_z = -facing_dir * lx;
-              sx = pos_x + off_x;
-              sy = pos_y + ly;
-              sz = pos_z + off_z;
-            }
-
-            const float trig =
-                trigger_unit_from_input(batch->state.input_buttons[idx], batch->state.input_l[idx],
-                                        batch->state.input_r[idx]);
-            const float light =
-                (denom > 0.0f) ? clamp01((trig - c->trigger_deadzone) / denom) : 0.0f;
-            const float hp_ratio = clamp01(batch->state.shield_hp[idx] / c->start_shield_health);
-            const float light_scale =
-                (light * (c->shield_size_lightshield_max - c->shield_size_lightshield_min)) +
-                c->shield_size_lightshield_min;
-            const float n1 = hp_ratio * light_scale;
-            const float n2 = 1.0f - c->shield_size_min_scale;
-            const float scale = (n2 * n1) + c->shield_size_min_scale;
-
-            // NOTE (shield radius): In-engine shield collision uses joint transforms + a separate
-            // radius term; our debug/approx shield bubble keeps the prior scaling policy (only the
-            // per-fighter fp->x34_scale.y) to avoid global mismatch shifts.
-            sr = scale * ca->initial_shield_size * scale_y;
+          // Decomp: ftCo_800921DC initializes mv.co.guard.x8 = 10 and x4 = 0 on GuardOn entry.
+          // Our shield tables expose the neutral frame explicitly; fall back to GALE01's 10 if missing.
+          uint16_t neutral = 10;
+          uint16_t frame_max = (uint16_t)(neutral + 360u);  // decomp: x8 is neutral + [0..360]
+          if (has_tv) {
+            neutral = tv.neutral_frame;
+            frame_max = (uint16_t)(tv.frame_count - 1);
           }
+
+          // Decomp init on GuardOn entry.
+          if (batch->state.action_id[idx] == (uint16_t)MSL_ACT_GUARD_ON &&
+              batch->state.action_frame[idx] == 0) {
+            batch->state.guard_tilt_x8[idx] = neutral;
+            batch->state.guard_tilt_x4[idx] = 0.0f;
+          }
+
+          if (is_guard_tilt_action(batch->state.action_id[idx])) {
+            const float x = stick_x_unit * facing_dir;
+            const float y = stick_y_unit;
+
+            float rad = atan2f(y, x);
+            if (rad < 0.0f) {
+              rad += 2.0f * MSL_PI_F;
+            }
+            float deg = rad * (180.0f / MSL_PI_F);
+            // Decomp: ftCo_80091BC4 clamps lstick_deg to [0, 359].
+            if (deg < 0.0f) {
+              deg = 0.0f;
+            }
+            if (deg > 359.0f) {
+              deg = 359.0f;
+            }
+
+            const float offset = (float)batch->state.guard_tilt_x8[idx] - (float)neutral;
+            const float delta = normalize_angle_180(deg - offset);
+            const float lerp = c->guard_stick_lerp_x44c;
+            const float next_offset = normalize_angle_0(delta * lerp + offset);
+            const float next_x8_f = (float)neutral + next_offset;
+            batch->state.guard_tilt_x8[idx] = clamp_u16((uint16_t)next_x8_f, 0, frame_max);
+
+            float mag = sqrtf(stick_x_unit * stick_x_unit + stick_y_unit * stick_y_unit);
+            if (mag > 1.0f) {
+              mag = 1.0f;
+            }
+            if (mag < 0.0f) {
+              mag = 0.0f;
+            }
+            const float x4 = batch->state.guard_tilt_x4[idx];
+            batch->state.guard_tilt_x4[idx] = (lerp * (mag - x4)) + x4;
+          }
+
+          if (has_tv) {
+            const uint16_t f = clamp_u16(batch->state.guard_tilt_x8[idx], 0, frame_max);
+            const float mag = clamp01(batch->state.guard_tilt_x4[idx]);
+
+            const size_t n_i = (size_t)neutral * 3u;
+            const size_t f_i = (size_t)f * 3u;
+            const float nx = tv.xyz[n_i + 0];
+            const float ny = tv.xyz[n_i + 1];
+            const float nz = tv.xyz[n_i + 2];
+            const float fx = tv.xyz[f_i + 0];
+            const float fy = tv.xyz[f_i + 1];
+            const float fz = tv.xyz[f_i + 2];
+
+            const float dx = nx + mag * (fx - nx);
+            const float dy = ny + mag * (fy - ny);
+            const float dz = nz + mag * (fz - nz);
+
+            // Match hurtcaps scaling policy: SSANIM-derived offsets are extracted without per-fighter
+            // runtime scale (fp->x34_scale.y), so apply fighter_scale_y uniformly.
+            //
+            // Facing parity: same as hurtcaps_refresh() / in-engine root part rotY = (M_PI_2 * fp->facing_dir),
+            // which mixes X/Z in world space.
+            // refs/melee/src/melee/ft/fighter.c (ftPartSetRotY(fp, 0, (M_PI_2 * fp->facing_dir)))
+            const float lx = dx * scale_y;
+            const float ly = dy * scale_y;
+            const float lz = dz * scale_y;
+            const float off_x = facing_dir * lz;
+            const float off_z = -facing_dir * lx;
+            sx = pos_x + off_x;
+            sy = pos_y + ly;
+            sz = pos_z + off_z;
+          }
+
+          const float trig =
+              trigger_unit_from_input(batch->state.input_buttons[idx], batch->state.input_l[idx],
+                                      batch->state.input_r[idx]);
+          const float light = (denom > 0.0f) ? clamp01((trig - c->trigger_deadzone) / denom) : 0.0f;
+          const float hp_ratio = clamp01(batch->state.shield_hp[idx] / c->start_shield_health);
+          const float light_scale =
+              (light * (c->shield_size_lightshield_max - c->shield_size_lightshield_min)) +
+              c->shield_size_lightshield_min;
+          const float n1 = hp_ratio * light_scale;
+          const float n2 = 1.0f - c->shield_size_min_scale;
+          const float scale = (n2 * n1) + c->shield_size_min_scale;
+
+          // NOTE (shield radius): In-engine shield collision uses joint transforms + a separate
+          // radius term; our debug/approx shield bubble keeps the prior scaling policy (only the
+          // per-fighter fp->x34_scale.y) to avoid global mismatch shifts.
+          sr = scale * ca->initial_shield_size * scale_y;
         }
       }
 
