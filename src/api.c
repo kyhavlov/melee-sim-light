@@ -46,6 +46,33 @@
 #include "grab_attachment.h"
 #include "knockdown.h"
 
+static inline uint8_t reseed_action_is_damage_or_firefox_launch_victim(uint16_t action) {
+  switch (action) {
+    case MSL_ACT_DAMAGE_HI_1:
+    case MSL_ACT_DAMAGE_HI_2:
+    case MSL_ACT_DAMAGE_HI_3:
+    case MSL_ACT_DAMAGE_N_1:
+    case MSL_ACT_DAMAGE_N_2:
+    case MSL_ACT_DAMAGE_N_3:
+    case MSL_ACT_DAMAGE_LW_1:
+    case MSL_ACT_DAMAGE_LW_2:
+    case MSL_ACT_DAMAGE_LW_3:
+    case MSL_ACT_DAMAGE_AIR_1:
+    case MSL_ACT_DAMAGE_AIR_2:
+    case MSL_ACT_DAMAGE_AIR_3:
+    case MSL_ACT_DAMAGE_FLY_HI:
+    case MSL_ACT_DAMAGE_FLY_N:
+    case MSL_ACT_DAMAGE_FLY_LW:
+    case MSL_ACT_DAMAGE_FLY_TOP:
+    case MSL_ACT_DAMAGE_FLY_ROLL:
+    case MSL_ACT_FX_SPECIAL_HI:
+    case MSL_ACT_FX_SPECIAL_AIR_HI:
+      return 1u;
+    default:
+      return 0u;
+  }
+}
+
 static inline uint8_t reseed_action_uses_basic_fall_ledge_cooldown_tick(uint16_t action) {
   switch (action) {
     case MSL_ACT_FALL:
@@ -1221,6 +1248,7 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
       batch->state.colanim_timer_x1990[idx] = 0u;
       batch->state.colanim_timer_x1994[idx] = 0u;
       batch->state.colanim_lock_x2221_b0[idx] = 0u;
+      batch->state.colanim_hitstun_x198c1_seed[idx] = 0u;
       batch->state.colanim_terminal_x1990_item_body_guard[idx] = 0u;
       {
         // Seed-bridge inference: if the movescript table reports a nonzero x1988 at the seeded
@@ -1279,6 +1307,21 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
           batch->state.colanim_timer_x1990[idx] = seed->colanim_timer_x1990[p];
           batch->state.colanim_timer_x1994[idx] = seed->colanim_timer_x1994[p];
           batch->state.colanim_hit_status_x198c[idx] = 2u;
+        }
+        if (seed->hitlag[p] == 0u && seed->hitstun[p] != 0u &&
+            seed->colanim_hit_status_x198c[p] == 1u && seed->colanim_timer_x1994[p] != 0u &&
+            seed->colanim_timer_x1990[p] == 0u && seed->colanim_lock_x2221_b0[p] == 0u &&
+            reseed_action_is_damage_or_firefox_launch_victim(seed->action_id[p])) {
+          // Explicit seed-only x198C=1 hitstun proof:
+          // - Slippi's merged hurtbox_state can be 0 while replay-history extraction carries the
+          //   hidden color-animation status (`fp->x198C`) and x1994 timer.
+          // - Do not raise generic colanim_hit_status_x198c here; invincible BODY contact has
+          //   broader hitlag semantics and regresses unrelated rows. Preserve only a proof bit for
+          //   narrow consumers that also require an explicit HitCapsule victim-list seed.
+          // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
+          // refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007B7A4,ftColl_8007B868,ftColl_80076ED8}
+          // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
+          batch->state.colanim_hitstun_x198c1_seed[idx] = 1u;
         }
         // Narrow explicit DownBound x1994 seed bridge:
         // - Slippi merged hurtbox_state can remain 0 on reseeded rows even when dataset/history

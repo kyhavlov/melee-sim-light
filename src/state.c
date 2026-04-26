@@ -248,6 +248,7 @@ int state_alloc(MslStateSoA* state, int batch_size) {
   state->colanim_timer_x1990 = (uint16_t*)alloc_aligned_64(sizeof(uint16_t) * bp);
   state->colanim_timer_x1994 = (uint16_t*)alloc_aligned_64(sizeof(uint16_t) * bp);
   state->colanim_lock_x2221_b0 = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
+  state->colanim_hitstun_x198c1_seed = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->colanim_terminal_x1990_item_body_guard = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->hurtcap_count = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->hurtcap_a_x = (float*)alloc_aligned_64(sizeof(float) * bpc);
@@ -476,9 +477,9 @@ int state_alloc(MslStateSoA* state, int batch_size) {
       !state->attacker_shield_ground_kb_vel || !state->l_cancel || !state->hurtbox_state ||
       !state->colanim_hit_status_x198c || !state->colanim_timer_x1990 ||
       !state->colanim_timer_x1994 || !state->colanim_lock_x2221_b0 ||
-      !state->colanim_terminal_x1990_item_body_guard || !state->hurtcap_count ||
-      !state->hurtcap_a_x || !state->hurtcap_a_y || !state->hurtcap_a_z || !state->hurtcap_b_x ||
-      !state->hurtcap_b_y || !state->hurtcap_b_z || !state->hurtcap_radius ||
+      !state->colanim_hitstun_x198c1_seed || !state->colanim_terminal_x1990_item_body_guard ||
+      !state->hurtcap_count || !state->hurtcap_a_x || !state->hurtcap_a_y || !state->hurtcap_a_z ||
+      !state->hurtcap_b_x || !state->hurtcap_b_y || !state->hurtcap_b_z || !state->hurtcap_radius ||
       !state->hurtcap_enabled || !state->hurtcap_is_grabbable || !state->hurtcap_height ||
       !state->hitbox_count || !state->hitbox_enabled || !state->hitbox_prev_enabled ||
       !state->hitbox_prev_x || !state->hitbox_prev_y || !state->hitbox_prev_z ||
@@ -805,6 +806,7 @@ void state_free(MslStateSoA* state) {
   alloc_free(state->colanim_timer_x1990);
   alloc_free(state->colanim_timer_x1994);
   alloc_free(state->colanim_lock_x2221_b0);
+  alloc_free(state->colanim_hitstun_x198c1_seed);
   alloc_free(state->colanim_terminal_x1990_item_body_guard);
   alloc_free(state->hurtcap_count);
   alloc_free(state->hurtcap_a_x);

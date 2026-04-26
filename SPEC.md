@@ -903,7 +903,7 @@ Prefer completing these projects in order rather than “patching symptoms” in
    - Current conclusion (asm-first): GALE01 fighter-side code does not appear to write `HitCapsule.x40_b4` (the 8-bit rehit countdown
      field). Rehit behavior for fighters appears driven by hitbox enable/disable + `hit_group` (`HitCapsule.x4`) sharing/clears, while
      items/projectiles do write `x40_b4` in at least some paths.
-   - Create-frame post-contact hitlag seed boundary: teacher-forced Slippi rows can start inside
+  - Create-frame post-contact hitlag seed boundary: teacher-forced Slippi rows can start inside
      the hitlag window from a BODY hit that was accepted on the same hitbox create pose frame.
      Runtime must first apply the normal `ftAction_8007121C -> ftColl_800768A0` enable-edge
      clear/copy, then materialize the replay-derived `lbColl_80008688` victims_1 state only when
@@ -915,6 +915,36 @@ Prefer completing these projects in order rather than “patching symptoms” in
      `refs/melee/src/melee/ft/ftcoll.c::{ftColl_800768A0,ftColl_80076ED8}`,
      `refs/melee/src/melee/lb/lbcollision.c::lbColl_80008688`,
      `refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC`.
+   - DownAttackU/DownAttackD -> late LandingFallSpecial dense-hitlist BODY boundary:
+     legacy dense `combat_hitlist_cd` can prove a carried `HitCapsule.victims_1` entry on late
+     LandingFallSpecial frames even when the reconstructed attacker hitbox reaches a same-pose
+     `ftColl_800768A0` clear lane. Combat selection consumes this dense fallback only after the
+     phantom/tip-log (`checkTipLog` / `victims_2`) branch and only to suppress full BODY damage.
+     Because decomp `HitVictim` keys are fighter pointers, not Slippi instance ids, stale
+     `combat_hitlist_victim_iid` proxies rebind while the victim fighter object is alive; death/rebirth
+     remains the pointer-change boundary, matching `src/hitlist.c`.
+     Same-frame victim action-entry rows are excluded because the dense fallback lacks per-HitCapsule
+     clear/copy provenance for the new victim action frame. Replay locks:
+     `PutridJoyousOryx.msl:4092` is the late LandingFallSpecial positive; `HungryImportantSnake.msl:7485`
+     is the same dense-seed shape on LandingFallSpecial entry and must still admit BODY hitlag.
+     Source anchors:
+     `refs/melee/src/melee/ft/ftcoll.c::{ftColl_800768A0,ftColl_80076ED8}`,
+     `refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000ACFC,lbColl_80008688}`.
+   - Grounded SpecialLwStart -> terminal DamageFlyTop dense-hitlist boundary:
+     a grounded Shine entry can overlap a terminal same-port DamageFlyTop victim while the replay
+     seed still carries three hidden proofs: dense group-0 `HitCapsule.victims_1`, explicit
+     x198C=1/x1994 colanim provenance, and an older same-port `instance_hit_by` proxy. In that
+     narrow lane, combat consumes the dense seed after phantom/tip-log handling to suppress the
+     immediate stale BODY rehit. The x198C proof is stored as a seed-only internal bit and does not
+     raise generic BODY hit-status, because broad x198C=1 hitstun reseeding regresses unrelated
+     contacts. Aerial SpecialLwStart remains excluded; `QuerulousGrandDinosaur.msl:235` proves the
+     same dense/x198C shape can still be a real aerial Shine hit. Positive lock:
+     `DistinctCaringCobra.msl:6431`.
+     Source anchors:
+     `refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c::ftFx_SpecialLw_Enter`,
+     `refs/melee/src/melee/ft/ftcoll.c::{ftColl_800768A0,ftColl_80076ED8}`,
+     `refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000ACFC,lbColl_80008688}`,
+     `refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm`.
 
    **DONE when (tie directly to RL 1.0 scorecard keys)**
    - `mismatch.instance_hit_by`, `mismatch.last_hit_by`, `mismatch.last_attack_landed`, `mismatch.combo_count` are scorecard-compliant

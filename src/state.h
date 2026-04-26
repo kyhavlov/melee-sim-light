@@ -611,6 +611,13 @@ typedef struct MslStateSoA {
   uint16_t* colanim_timer_x1990;      // [batch * players]
   uint16_t* colanim_timer_x1994;      // [batch * players]
   uint8_t* colanim_lock_x2221_b0;     // [batch * players] (0/1)
+  // Explicit seed-only proof that replay-history extraction saw x198C=1/x1994 under active
+  // hitstun while the visible merged hurtbox_state stayed vulnerable. This is consumed only by
+  // narrow collision-owner bridges that need the hidden provenance; it must not raise generic
+  // BODY hit-status on its own.
+  // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
+  // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
+  uint8_t* colanim_hitstun_x198c1_seed;  // [batch * players] (0/1)
   // One-frame item BODY ownership for terminal x1990 expiry:
   // Fighter_8006A360 decrements x1990 and may clear visible x198C before the later item BODY pass;
   // ftColl_8007925C still gates BODY on x1988/x198C collision status for the frame's item pass.

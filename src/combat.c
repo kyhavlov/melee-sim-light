@@ -604,6 +604,22 @@ static inline uint8_t combat_is_damage_or_firefox_launch_victim_action(uint16_t 
   }
 }
 
+static inline uint8_t combat_hitlist_victim_pointer_may_change(uint8_t stocks, uint16_t action_id) {
+  // Decomp hitlists store a victim pointer inside HitVictim; the simulator uses Slippi instance_id as
+  // a proxy and only treats mismatches as a new victim when the object pointer can actually change.
+  // Keep this policy aligned with src/hitlist.c::hitlist_capsule_find_fighter_entry.
+  // refs/melee/src/melee/lb/lbcollision.c::lbColl_80008688
+  if (stocks == 0u) {
+    return 1u;
+  }
+  return (action_id == (uint16_t)MSL_ACT_DEAD_DOWN || action_id == (uint16_t)MSL_ACT_DEAD_LEFT ||
+          action_id == (uint16_t)MSL_ACT_DEAD_RIGHT ||
+          action_id == (uint16_t)MSL_ACT_DEAD_UP_STAR || action_id == (uint16_t)MSL_ACT_REBIRTH ||
+          action_id == (uint16_t)MSL_ACT_REBIRTH_WAIT)
+             ? 1u
+             : 0u;
+}
+
 static inline uint8_t combat_is_downed_damage_contact_action(uint16_t action_id) {
   switch (action_id) {
     case (uint16_t)MSL_ACT_DOWN_BOUND_U:
@@ -827,6 +843,123 @@ static inline uint8_t combat_attackairb_stale_owner_continuation_candidate(
   // refs/melee/src/melee/ft/ftcoll.c::ftColl_80076ED8
   // refs/melee/src/melee/ft/ftcommon.c::ftCommon_CalcHitlag
   return (batch->state.hitstun[d_idx] > expected_hitlag) ? 1u : 0u;
+}
+
+static inline uint8_t combat_enable_edge_dense_seed_suppresses_body(const MslBatch* batch, int bi,
+                                                                    int attacker, int hb_id,
+                                                                    int defender,
+                                                                    uint16_t defender_iid,
+                                                                    uint16_t expected_hitlag) {
+  if (batch == NULL || bi < 0 || attacker < 0 || attacker >= (int)MSL_MAX_PLAYERS || hb_id < 0 ||
+      hb_id >= MSL_MAX_HITBOXES || defender < 0 || defender >= (int)MSL_MAX_PLAYERS ||
+      attacker == defender) {
+    return 0u;
+  }
+  const size_t hb_i = idx_hitbox(bi, attacker, hb_id);
+  const size_t a_idx = msl_idx_player(bi, attacker);
+  const uint16_t attacker_action = batch->state.action_id[a_idx];
+  const uint8_t down_attack_dense_lane = (attacker_action == (uint16_t)MSL_ACT_DOWN_ATTACK_U ||
+                                          attacker_action == (uint16_t)MSL_ACT_DOWN_ATTACK_D)
+                                             ? 1u
+                                             : 0u;
+  const uint8_t shine_start_dense_lane =
+      (attacker_action == (uint16_t)MSL_ACT_FX_SPECIAL_LW_START) ? 1u : 0u;
+  if (!down_attack_dense_lane && !shine_start_dense_lane) {
+    return 0u;
+  }
+  if (!batch->state.hitbox_enable_edge[hb_i] && !shine_start_dense_lane) {
+    return 0u;
+  }
+
+  const size_t valid_i =
+      ((size_t)bi * (size_t)MSL_MAX_PLAYERS + (size_t)attacker) * (size_t)MSL_MAX_HITBOXES +
+      (size_t)hb_id;
+  if (batch->state.combat_hitlist_hb_valid[valid_i]) {
+    return 0u;
+  }
+
+  const size_t d_idx = msl_idx_player(bi, defender);
+  if (down_attack_dense_lane) {
+    if (batch->state.action_id[d_idx] != (uint16_t)MSL_ACT_LANDING_FALL_SPECIAL) {
+      return 0u;
+    }
+    if (batch->state.seed_prev_action_id[d_idx] != batch->state.action_id[d_idx] ||
+        batch->state.action_frame[d_idx] == 0) {
+      return 0u;
+    }
+    if (batch->state.hitlag[a_idx] != 0u || batch->state.hitstun[a_idx] != 0u ||
+        batch->state.hitlag[d_idx] != 0u || batch->state.hitstun[d_idx] != 0u ||
+        combat_is_damage_or_firefox_launch_victim_action(batch->state.action_id[d_idx])) {
+      return 0u;
+    }
+  } else {
+    if (batch->state.hitlag[a_idx] != 0u || batch->state.hitstun[a_idx] != 0u ||
+        batch->state.hitlag[d_idx] != 0u || batch->state.hitstun[d_idx] == 0u) {
+      return 0u;
+    }
+    if (batch->state.action_id[d_idx] != (uint16_t)MSL_ACT_DAMAGE_FLY_TOP) {
+      return 0u;
+    }
+    if (batch->state.colanim_hitstun_x198c1_seed[d_idx] == 0u) {
+      return 0u;
+    }
+    if (batch->state.last_hit_by[d_idx] != batch->state.source_port0[a_idx]) {
+      return 0u;
+    }
+    if (batch->state.instance_hit_by[d_idx] == batch->state.instance_id[a_idx]) {
+      return 0u;
+    }
+    (void)expected_hitlag;
+    if (batch->state.hitstun[d_idx] > 1u) {
+      return 0u;
+    }
+  }
+
+  const uint8_t hit_group = hitlist_hit_group_from_u16_7(batch->state.hitbox_u16_7[hb_i]);
+  if (hit_group >= (uint8_t)MSL_HITLIST_GROUPS) {
+    return 0u;
+  }
+  const size_t group_base =
+      (size_t)bi * (size_t)MSL_MAX_PLAYERS * (size_t)MSL_HITLIST_GROUPS * (size_t)MSL_MAX_PLAYERS;
+  const size_t cd_i =
+      group_base + (((size_t)attacker * (size_t)MSL_HITLIST_GROUPS + (size_t)hit_group) *
+                        (size_t)MSL_MAX_PLAYERS +
+                    (size_t)defender);
+  const uint16_t dense_cd = batch->state.combat_hitlist_cd[cd_i];
+  if (dense_cd == 0u) {
+    return 0u;
+  }
+  if (shine_start_dense_lane && dense_cd != 0xFFFFu) {
+    return 0u;
+  }
+  const uint16_t seed_iid = batch->state.combat_hitlist_victim_iid[cd_i];
+  if (seed_iid != 0u && seed_iid != defender_iid) {
+    if (combat_hitlist_victim_pointer_may_change(batch->state.stocks[d_idx],
+                                                 batch->state.action_id[d_idx])) {
+      return 0u;
+    }
+  }
+
+  // Teacher-forced dense HitCapsule bridge for enable-edge BODY damage:
+  // - The dense seed can prove victims_1 already contains a live victim on narrow carry frames
+  //   even when our movescript reconstruction reaches ftColl_800768A0's clear lane on the same
+  //   pose frame.
+  // - Proven lanes:
+  //   * DownAttack -> LandingFallSpecial carry frames.
+  //   * SpecialLwStart same-port DamageFly continuations, where replay-history extraction carries
+  //     the prior HitCapsule victim pointer through the terminal hitstun window and vanilla
+  //     lbColl_8000ACFC suppresses the immediate Shine Start BODY rehit.
+  // - Do not materialize this into the HitCapsule before collision: legacy dense victims_1 is too
+  //   coarse for the separate checkTipLog/victims_2 phantom path. Combat selection uses this only
+  //   after phantom/tip-log handling, and only to suppress full BODY damage.
+  // - Same-frame victim action-entry rows stay out of this bridge because the dense fallback lacks
+  //   per-HitCapsule clear/copy provenance for the new victim action frame.
+  // - Fighter victim identity follows the decomp victim-pointer policy used by hitlist.c: a stale
+  //   Slippi instance_id proxy may rebind while the fighter object is alive, but death/rebirth clears
+  //   the suppression proof.
+  // refs/melee/src/melee/ft/ftcoll.c::{ftColl_800768A0,ftColl_80076ED8}
+  // refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000ACFC,lbColl_80008688}
+  return 1u;
 }
 
 int combat_debug_attackairb_continuation_overlap(const MslBatch* batch, int batch_index,
@@ -4816,6 +4949,9 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
                 : 0u;
         const uint8_t allows_v1 =
             hitlist_allows_fighter(batch, bi, attacker, hb_id, defender, defender_iid);
+        const uint8_t dense_seed_suppresses_body = combat_enable_edge_dense_seed_suppresses_body(
+            batch, bi, attacker, hb_id, defender, defender_iid,
+            combat_calc_hitlag_frames(c, int_dmg, a_motion_id, 1.0f));
         const uint8_t rehit_frames =
             hitlist_rehit_frames_from_u16_7(batch->state.hitbox_u16_7[hb_i]);
 
@@ -4933,6 +5069,9 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
                                               defender_iid, (int)MSL_LBCOLL_INSERT_FT_BODY, 0u);
             did_hit = 1;
             break;
+          }
+          if (dense_seed_suppresses_body) {
+            continue;
           }
           // Combat Mutations Pass 1 (BODY-only).
           if (defender_no_damage) {
