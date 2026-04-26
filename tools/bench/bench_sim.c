@@ -206,6 +206,30 @@ static int run_steps(MslBatch* batch, const MslInput* inputs, MslCompare* compar
   return 0;
 }
 
+static uint64_t checksum_mix_u64(uint64_t h, uint64_t v) {
+  h ^= v;
+  h *= 1099511628211ull;
+  return h;
+}
+
+static uint64_t checksum_compares(const MslCompare* compares, int batch_size) {
+  uint64_t h = 1469598103934665603ull;
+  for (int bi = 0; bi < batch_size; bi++) {
+    const MslCompare* row = &compares[bi];
+    h = checksum_mix_u64(h, (uint64_t)(uint32_t)row->frame_id);
+    h = checksum_mix_u64(h, (uint64_t)row->frame_pre_random_seed);
+    h = checksum_mix_u64(h, (uint64_t)row->stage_id);
+    h = checksum_mix_u64(h, (uint64_t)row->num_players);
+    for (int p = 0; p < MSL_MAX_PLAYERS; p++) {
+      h = checksum_mix_u64(h, (uint64_t)row->action_id[p]);
+      h = checksum_mix_u64(h, (uint64_t)(uint16_t)row->action_frame[p]);
+      h = checksum_mix_u64(h, (uint64_t)row->animation_index[p]);
+      h = checksum_mix_u64(h, (uint64_t)row->stocks[p]);
+    }
+  }
+  return h;
+}
+
 int main(int argc, char** argv) {
   BenchConfig cfg;
   const int parse = parse_args(argc, argv, &cfg);
@@ -279,15 +303,21 @@ int main(int argc, char** argv) {
     return 1;
   }
 
+  err = msl_batch_write_compare(batch, (uint8_t*)compares, sizeof(MslCompare));
+  if (err != 0) {
+    fprintf(stderr, "msl_batch_write_compare failed after timed run: %d\n", err);
+    msl_batch_destroy(batch);
+    free(compares);
+    free(inputs);
+    free(match_configs);
+    return 1;
+  }
+
   const double seconds = (double)elapsed_ns / 1000000000.0;
   const double env_steps = (double)cfg.frames * (double)cfg.batch_size;
   const double env_steps_per_sec = env_steps / seconds;
   const double ns_per_env_step = (double)elapsed_ns / env_steps;
-  volatile uint64_t checksum = 0;
-  for (int bi = 0; bi < cfg.batch_size; bi++) {
-    checksum += (uint64_t)compares[bi].frame_id;
-    checksum += (uint64_t)compares[bi].action_id[0] + (uint64_t)compares[bi].action_id[1];
-  }
+  const uint64_t checksum = checksum_compares(compares, cfg.batch_size);
 
   printf("mode=%s batch=%d frames=%d warmup=%d input_ring=%d\n", mode_name(cfg.mode),
          cfg.batch_size, cfg.frames, cfg.warmup_frames, cfg.input_ring);

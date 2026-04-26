@@ -1,0 +1,69 @@
+batched sim adjacent pinned rollout comparison
+branch=perf/batched-sim-benchmark
+optimized_source_commit=36d509b
+baseline_source_commit=a06fe5e
+date_utc=2026-04-26T10:07:50Z
+compiler=cc (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0
+pinned_cpu=7
+note=old/new rollout runs are interleaved to reduce drift from background CPU load
+
+rep=1 source=old
+mode=rollout batch=512 frames=4000 warmup=400 input_ring=256
+elapsed_sec=5.938818838 env_steps=2048000 env_steps_per_sec=344849.718 ns_per_env_step=2899.814
+checksum=1312223460470549805
+
+rep=1 source=optimized
+mode=rollout batch=512 frames=4000 warmup=400 input_ring=256
+elapsed_sec=5.801033867 env_steps=2048000 env_steps_per_sec=353040.518 ns_per_env_step=2832.536
+checksum=1312223460470549805
+
+rep=1 source=old
+mode=rollout batch=1024 frames=4000 warmup=400 input_ring=256
+elapsed_sec=12.081274686 env_steps=4096000 env_steps_per_sec=339037.072 ns_per_env_step=2949.530
+checksum=311148578837385193
+
+rep=1 source=optimized
+mode=rollout batch=1024 frames=4000 warmup=400 input_ring=256
+elapsed_sec=11.662385671 env_steps=4096000 env_steps_per_sec=351214.590 ns_per_env_step=2847.262
+checksum=311148578837385193
+
+rep=2 source=old
+mode=rollout batch=512 frames=4000 warmup=400 input_ring=256
+elapsed_sec=6.096597647 env_steps=2048000 env_steps_per_sec=335925.071 ns_per_env_step=2976.854
+checksum=1312223460470549805
+
+rep=2 source=optimized
+mode=rollout batch=512 frames=4000 warmup=400 input_ring=256
+elapsed_sec=5.859783239 env_steps=2048000 env_steps_per_sec=349500.983 ns_per_env_step=2861.222
+checksum=1312223460470549805
+
+rep=2 source=old
+mode=rollout batch=1024 frames=4000 warmup=400 input_ring=256
+elapsed_sec=12.149502202 env_steps=4096000 env_steps_per_sec=337133.154 ns_per_env_step=2966.187
+checksum=311148578837385193
+
+rep=2 source=optimized
+mode=rollout batch=1024 frames=4000 warmup=400 input_ring=256
+elapsed_sec=11.585626582 env_steps=4096000 env_steps_per_sec=353541.517 ns_per_env_step=2828.522
+checksum=311148578837385193
+
+rep=3 source=old
+mode=rollout batch=512 frames=4000 warmup=400 input_ring=256
+elapsed_sec=5.970413933 env_steps=2048000 env_steps_per_sec=343024.792 ns_per_env_step=2915.241
+checksum=1312223460470549805
+
+rep=3 source=optimized
+mode=rollout batch=512 frames=4000 warmup=400 input_ring=256
+elapsed_sec=5.746007771 env_steps=2048000 env_steps_per_sec=356421.377 ns_per_env_step=2805.668
+checksum=1312223460470549805
+
+rep=3 source=old
+mode=rollout batch=1024 frames=4000 warmup=400 input_ring=256
+elapsed_sec=12.061825927 env_steps=4096000 env_steps_per_sec=339583.743 ns_per_env_step=2944.782
+checksum=311148578837385193
+
+rep=3 source=optimized
+mode=rollout batch=1024 frames=4000 warmup=400 input_ring=256
+elapsed_sec=11.590385425 env_steps=4096000 env_steps_per_sec=353396.358 ns_per_env_step=2829.684
+checksum=311148578837385193
+

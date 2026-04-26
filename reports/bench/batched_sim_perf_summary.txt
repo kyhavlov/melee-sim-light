@@ -1,39 +1,57 @@
 batched sim perf summary
 branch: perf/batched-sim-benchmark
+optimized source commit: 36d509b
+baseline source commit: a06fe5e
 date: 2026-04-26
 
 Benchmark tool:
 - build: make build-bench-sim
 - run: make bench-sim ARGS="--batch 1024 --frames 4000 --warmup 400 --mode rollout"
 - modes:
-  - rollout: msl_batch_step_input only
-  - rollout_compare: msl_batch_step_input plus msl_batch_write_compare
+  - rollout: timed msl_batch_step_input only, then one untimed final msl_batch_write_compare for checksum
+  - rollout_compare: timed msl_batch_step_input plus msl_batch_write_compare each frame
 - input source: deterministic precomputed random input ring, so timed loops do not generate random
   numbers.
 
 Environment note:
-- The machine may have unrelated CPU-heavy agent work running. Treat exact numbers as noisy.
-- Best comparison is adjacent old-source vs final optimized runs in this directory.
+- The machine had unrelated CPU-heavy work running during review cleanup, including Dolphin.
+- Treat exact timings as noisy. The clearest current comparison is the pinned, interleaved
+  old/new rollout sweep in reports/bench/batched_sim_adjacent_pinned.txt.
 
-Baseline, initial branch state (reports/bench/batched_sim_baseline.txt):
-- rollout, batch 512, 12000 frames: 3087.593 ns/env-step
-- rollout, batch 1024, 12000 frames: 3095.924 ns/env-step
-- rollout_compare, batch 512, 12000 frames: 3172.693 ns/env-step
-- rollout_compare, batch 1024, 12000 frames: 3182.686 ns/env-step
+Baseline, pre-optimization parent source (reports/bench/batched_sim_baseline.txt):
+- rollout, batch 128, 4000 frames: 2871.638 ns/env-step
+- rollout, batch 512, 4000 frames: 3076.127 ns/env-step
+- rollout, batch 1024, 4000 frames: 3254.698 ns/env-step
+- rollout_compare, batch 128, 4000 frames: 2910.789 ns/env-step
+- rollout_compare, batch 512, 4000 frames: 3245.229 ns/env-step
+- rollout_compare, batch 1024, 4000 frames: 3436.559 ns/env-step
 
-Adjacent old-source comparison, same 4000-frame sweep (reports/bench/batched_sim_oldsrc_adjacent.txt):
-- rollout, batch 512 median: 2956.706 ns/env-step
-- rollout, batch 1024 median: 2996.027 ns/env-step
+Adjacent old-source comparison, unpinned 4000-frame sweep
+(reports/bench/batched_sim_oldsrc_adjacent.txt):
+- rollout, batch 512 median: 3073.739 ns/env-step
+- rollout, batch 1024 median: 3280.632 ns/env-step
 
-Final optimized sweep (reports/bench/batched_sim_after_input_shield_active_players.txt):
-- rollout, batch 512 median: 2722.302 ns/env-step
-- rollout, batch 1024 median: 2769.845 ns/env-step
-- rollout_compare, batch 512 median: 2809.311 ns/env-step
-- rollout_compare, batch 1024 median: 2870.535 ns/env-step
+Optimized sweep, unpinned 4000-frame sweep
+(reports/bench/batched_sim_after_input_shield_active_players.txt):
+- rollout, batch 512 median: 3008.556 ns/env-step
+- rollout, batch 1024 median: 3230.545 ns/env-step
+- rollout_compare, batch 512 median: 3081.565 ns/env-step
+- rollout_compare, batch 1024 median: 3258.792 ns/env-step
 
-Observed adjacent rollout delta:
-- batch 512: 2956.706 -> 2722.302 ns/env-step, about 7.9% faster
-- batch 1024: 2996.027 -> 2769.845 ns/env-step, about 7.5% faster
+Observed unpinned adjacent rollout delta:
+- batch 512: 3073.739 -> 3008.556 ns/env-step, about 2.1% faster
+- batch 1024: 3280.632 -> 3230.545 ns/env-step, about 1.5% faster
+
+Pinned interleaved adjacent rollout comparison, CPU 7
+(reports/bench/batched_sim_adjacent_pinned.txt):
+- old source, batch 512 median: 2915.241 ns/env-step
+- optimized, batch 512 median: 2832.536 ns/env-step
+- old source, batch 1024 median: 2949.530 ns/env-step
+- optimized, batch 1024 median: 2829.684 ns/env-step
+
+Observed pinned adjacent rollout delta:
+- batch 512: 2915.241 -> 2832.536 ns/env-step, about 2.8% faster
+- batch 1024: 2949.530 -> 2829.684 ns/env-step, about 4.1% faster
 
 Implemented wins:
 - Added a native C benchmark binary under tools/bench.
@@ -42,3 +60,8 @@ Implemented wins:
 - Reduced dynamic collision matrix scratch work by carrying only the current parent scale along the
   root-to-part chain.
 - Skipped dynamic collision table lookup work when no dynamic collision override is active.
+
+Review cleanup:
+- Regenerated reports with branch/source metadata.
+- Added a nonzero final-state checksum for rollout mode as well as rollout_compare.
+- Added a 4-player regression guard to ensure active-player refresh loops still process slot 3.

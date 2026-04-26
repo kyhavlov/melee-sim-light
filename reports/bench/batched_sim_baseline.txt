@@ -1,31 +1,32 @@
-batched sim baseline
+batched sim baseline (pre-optimization parent)
 branch=perf/batched-sim-benchmark
-commit=a06fe5e
-date_utc=2026-04-26T09:32:02Z
+baseline_source_commit=a06fe5e
+optimized_branch_head_at_generation=36d509b
+date_utc=2026-04-26T10:02:41Z
 compiler=cc (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0
-note=bench binary from perf worktree; cwd uses main checkout extracted data artifacts
+note=old-source binary links src/ from baseline_source_commit with current benchmark harness
 
-mode=rollout batch=128 frames=12000 warmup=1200 input_ring=256
-elapsed_sec=4.368083296 env_steps=1536000 env_steps_per_sec=351641.646 ns_per_env_step=2843.804
-checksum=0
+mode=rollout batch=128 frames=4000 warmup=400 input_ring=256
+elapsed_sec=1.470278582 env_steps=512000 env_steps_per_sec=348233.325 ns_per_env_step=2871.638
+checksum=14699264707808680461
 
-mode=rollout_compare batch=128 frames=12000 warmup=1200 input_ring=256
-elapsed_sec=4.514851344 env_steps=1536000 env_steps_per_sec=340210.537 ns_per_env_step=2939.356
-checksum=1566467
+mode=rollout_compare batch=128 frames=4000 warmup=400 input_ring=256
+elapsed_sec=1.490324179 env_steps=512000 env_steps_per_sec=343549.415 ns_per_env_step=2910.789
+checksum=14699264707808680461
 
-mode=rollout batch=512 frames=12000 warmup=1200 input_ring=256
-elapsed_sec=18.970173056 env_steps=6144000 env_steps_per_sec=323876.856 ns_per_env_step=3087.593
-checksum=0
+mode=rollout batch=512 frames=4000 warmup=400 input_ring=256
+elapsed_sec=6.299907216 env_steps=2048000 env_steps_per_sec=325084.153 ns_per_env_step=3076.127
+checksum=1312223460470549805
 
-mode=rollout_compare batch=512 frames=12000 warmup=1200 input_ring=256
-elapsed_sec=19.493023347 env_steps=6144000 env_steps_per_sec=315189.691 ns_per_env_step=3172.693
-checksum=6271500
+mode=rollout_compare batch=512 frames=4000 warmup=400 input_ring=256
+elapsed_sec=6.646228946 env_steps=2048000 env_steps_per_sec=308144.666 ns_per_env_step=3245.229
+checksum=1312223460470549805
 
-mode=rollout batch=1024 frames=12000 warmup=1200 input_ring=256
-elapsed_sec=38.042716861 env_steps=12288000 env_steps_per_sec=323005.322 ns_per_env_step=3095.924
-checksum=0
+mode=rollout batch=1024 frames=4000 warmup=400 input_ring=256
+elapsed_sec=13.331242791 env_steps=4096000 env_steps_per_sec=307248.174 ns_per_env_step=3254.698
+checksum=311148578837385193
 
-mode=rollout_compare batch=1024 frames=12000 warmup=1200 input_ring=256
-elapsed_sec=39.108843762 env_steps=12288000 env_steps_per_sec=314200.033 ns_per_env_step=3182.686
-checksum=12546371
+mode=rollout_compare batch=1024 frames=4000 warmup=400 input_ring=256
+elapsed_sec=14.076144007 env_steps=4096000 env_steps_per_sec=290988.782 ns_per_env_step=3436.559
+checksum=311148578837385193
 

@@ -1,27 +1,38 @@
 batched sim old source adjacent comparison
-date_utc=2026-04-26T09:39:07Z
+branch=perf/batched-sim-benchmark
+baseline_source_commit=a06fe5e
+optimized_branch_head_at_generation=36d509b
+date_utc=2026-04-26T10:02:41Z
+compiler=cc (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0
+note=3 adjacent rollout reps; old-source binary links src/ from baseline_source_commit
 
+rep=1
 mode=rollout batch=512 frames=4000 warmup=400 input_ring=256
-elapsed_sec=6.090537448 env_steps=2048000 env_steps_per_sec=336259.323 ns_per_env_step=2973.895
-checksum=0
+elapsed_sec=5.856058560 env_steps=2048000 env_steps_per_sec=349723.279 ns_per_env_step=2859.404
+checksum=1312223460470549805
 
+rep=2
 mode=rollout batch=512 frames=4000 warmup=400 input_ring=256
-elapsed_sec=6.053320715 env_steps=2048000 env_steps_per_sec=338326.696 ns_per_env_step=2955.723
-checksum=0
+elapsed_sec=6.295017197 env_steps=2048000 env_steps_per_sec=325336.681 ns_per_env_step=3073.739
+checksum=1312223460470549805
 
+rep=3
 mode=rollout batch=512 frames=4000 warmup=400 input_ring=256
-elapsed_sec=6.055332949 env_steps=2048000 env_steps_per_sec=338214.268 ns_per_env_step=2956.706
-checksum=0
+elapsed_sec=6.366859296 env_steps=2048000 env_steps_per_sec=321665.660 ns_per_env_step=3108.818
+checksum=1312223460470549805
 
+rep=1
 mode=rollout batch=1024 frames=4000 warmup=400 input_ring=256
-elapsed_sec=12.271726749 env_steps=4096000 env_steps_per_sec=333775.359 ns_per_env_step=2996.027
-checksum=0
+elapsed_sec=13.564118789 env_steps=4096000 env_steps_per_sec=301973.174 ns_per_env_step=3311.552
+checksum=311148578837385193
 
+rep=2
 mode=rollout batch=1024 frames=4000 warmup=400 input_ring=256
-elapsed_sec=12.248752012 env_steps=4096000 env_steps_per_sec=334401.415 ns_per_env_step=2990.418
-checksum=0
+elapsed_sec=13.437469955 env_steps=4096000 env_steps_per_sec=304819.286 ns_per_env_step=3280.632
+checksum=311148578837385193
 
+rep=3
 mode=rollout batch=1024 frames=4000 warmup=400 input_ring=256
-elapsed_sec=12.277670039 env_steps=4096000 env_steps_per_sec=333613.787 ns_per_env_step=2997.478
-checksum=0
+elapsed_sec=13.360075728 env_steps=4096000 env_steps_per_sec=306585.089 ns_per_env_step=3261.737
+checksum=311148578837385193
 
