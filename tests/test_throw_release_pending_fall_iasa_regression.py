@@ -96,6 +96,45 @@ def _run_one_step_row_with_current_buttons(
     return seed, ref, out
 
 
+def _run_one_step_row_with_current_stick(
+    dataset_path: Path, record: int, player: int, main_x: int, main_y: int
+) -> tuple[np.void, np.void, np.void]:
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+    assert int(samples.shape[0]) > record, f"dataset too short for lock row: record={record}"
+
+    row = samples[record : record + 1]
+    seed = row["seed_t"][0]
+    ref = row["ref_t1"][0]
+
+    binding = pytest.importorskip("msl_binding")
+    sizes = binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    compare_stride = int(sizes["compare"])
+
+    seed_bytes = np.frombuffer(row["seed_t"].tobytes(order="C"), dtype=np.uint8).copy().reshape(1, seed_stride)
+    prev_input_bytes = np.frombuffer(row["prev_input_t"].tobytes(order="C"), dtype=np.uint8).copy().reshape(
+        1, input_stride
+    )
+    input_t = row["input_t"].copy()
+    input_t["p"][0, player]["main_x"] = np.int8(main_x)
+    input_t["p"][0, player]["main_y"] = np.int8(main_y)
+    input_bytes = np.frombuffer(input_t.tobytes(order="C"), dtype=np.uint8).copy().reshape(1, input_stride)
+    out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
+
+    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    try:
+        binding.reseed_seed(handle, seed_bytes)
+        binding.step_input(handle, prev_input_bytes, input_bytes)
+        binding.write_compare(handle, out_compare_bytes)
+    finally:
+        binding.destroy(handle)
+
+    out = out_compare_bytes.view(COMPARE_DTYPE).reshape(-1)[0].copy()
+    return seed, ref, out
+
+
 def _run_rollout_records(
     dataset_path: Path, start_record: int, records: tuple[int, ...]
 ) -> dict[int, tuple[np.void, np.void]]:
@@ -282,9 +321,9 @@ def test_throw_release_pending_victim_target_rows_keep_replay_real_discrete_and_
 @pytest.mark.integration
 def test_throw_release_immediate_di_does_not_apply_lr_lsi_multiplier() -> None:
     # Boundary lock for the no-hitlag throw-release path:
-    # ftCo_800DE7C0 calls ftCo_8008E5A4, which applies current-frame DI from stick direction. The
-    # L/R x1AC multiplier belongs to ftCo_Damage_OnExitHitlag, so holding L/R must not scale the
-    # immediate throw-release KB magnitude.
+    # ftCo_800DE7C0 calls ftCo_8008E5A4, which applies DI from the Throw Anim callback's pre-input
+    # stick direction. The L/R x1AC multiplier belongs to ftCo_Damage_OnExitHitlag, so holding L/R
+    # must not scale the immediate throw-release KB magnitude.
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_rel = (
@@ -310,6 +349,56 @@ def test_throw_release_immediate_di_does_not_apply_lr_lsi_multiplier() -> None:
     assert lr_mag == pytest.approx(no_lr_mag, abs=1e-6)
     assert float(lr_out["speed_x_attack"][p]) == pytest.approx(float(no_lr_out["speed_x_attack"][p]), abs=1e-6)
     assert float(lr_out["speed_y_attack"][p]) == pytest.approx(float(no_lr_out["speed_y_attack"][p]), abs=1e-6)
+
+
+@pytest.mark.integration
+def test_throwhi_release_di_uses_pre_input_stick_lane() -> None:
+    # Replay-real boundary for the GAT CaptureDamageLw -> ThrowHi release chain:
+    # - ftCo_800DD724 runs as the Throw Anim callback before Fighter_procUpdate installs current
+    #   input, then ftCo_800DE7C0 calls ftCo_8008E5A4 immediately.
+    # - This simulator defers throw-hit application until post-items, so the DI source must remain
+    #   the pre-input stick lane, not the already-applied current input_t lane.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DD724
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Thrown.c::ftCo_800DE7C0
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008E5A4
+    # refs/melee/src/melee/ft/fighter.c::{Fighter_8006A360,Fighter_procUpdate}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_rel = (
+        "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl"
+    )
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    record = 8412
+    p = 1
+    row = ds.samples[record]
+    assert int(row["seed_t"]["action_id"][p]) == 241  # ThrownHi
+    assert int(row["seed_t"]["action_frame"][p]) == 7
+    assert int(row["ref_t1"]["action_id"][p]) == 90  # DamageFlyTop
+    assert int(row["prev_input_t"]["p"]["main_x"][p]) == int(row["input_t"]["p"]["main_x"][p])
+    assert int(row["prev_input_t"]["p"]["main_y"][p]) != int(row["input_t"]["p"]["main_y"][p])
+
+    _, ref, out = _run_one_step_row(dataset_path, record)
+    assert float(out["speed_x_attack"][p]) == pytest.approx(float(ref["speed_x_attack"][p]), abs=1e-5)
+    assert float(out["speed_y_attack"][p]) == pytest.approx(float(ref["speed_y_attack"][p]), abs=1e-5)
+
+    rollout = _run_rollout_records(dataset_path, 8395, (record,))
+    rollout_out, rollout_ref = rollout[record]
+    assert float(rollout_out["speed_x_attack"][p]) == pytest.approx(
+        float(rollout_ref["speed_x_attack"][p]), abs=1e-5
+    )
+    assert float(rollout_out["speed_y_attack"][p]) == pytest.approx(
+        float(rollout_ref["speed_y_attack"][p]), abs=1e-5
+    )
+    assert abs(float(rollout_out["pos_x"][p]) - float(rollout_ref["pos_x"][p])) <= 0.055
+    assert abs(float(rollout_out["pos_y"][p]) - float(rollout_ref["pos_y"][p])) <= 0.005
+
+    _, _, overridden = _run_one_step_row_with_current_stick(dataset_path, record, p, 0, 80)
+    assert float(overridden["speed_x_attack"][p]) == pytest.approx(float(out["speed_x_attack"][p]), abs=1e-6)
+    assert float(overridden["speed_y_attack"][p]) == pytest.approx(float(out["speed_y_attack"][p]), abs=1e-6)
 
 
 @pytest.mark.integration

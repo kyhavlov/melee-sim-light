@@ -39,22 +39,22 @@ rollout.first_mismatch_seeded_total: 33
 
 == datasets/aggregate_recent/replays/validation/aggregate_recent/DistinctCaringCobra.msl ==
 rollout.best_len: 732
-rollout.streak_count: 82
+rollout.streak_count: 79
 rollout.streak_len.median: 92
-rollout.streak_len.p90: 244
-rollout.streak_len.p95: 340
+rollout.streak_len.p90: 282
+rollout.streak_len.p95: 415
 rollout.streak_len.max: 732
-rollout.first_mismatch_total: 81
+rollout.first_mismatch_total: 78
 rollout.first_mismatch_seeded_total: 35
 
 == datasets/aggregate_recent/replays/validation/aggregate_recent/FavorableSuperficialPig.msl ==
 rollout.best_len: 385
-rollout.streak_count: 176
-rollout.streak_len.median: 51
+rollout.streak_count: 175
+rollout.streak_len.median: 52
 rollout.streak_len.p90: 149
 rollout.streak_len.p95: 191
 rollout.streak_len.max: 385
-rollout.first_mismatch_total: 179
+rollout.first_mismatch_total: 178
 rollout.first_mismatch_seeded_total: 75
 
 == datasets/aggregate_recent/replays/validation/aggregate_recent/HilariousVillainousGiraffe.msl ==
@@ -119,12 +119,12 @@ rollout.first_mismatch_seeded_total: 85
 
 == datasets/aggregate_recent/replays/validation/aggregate_recent/PutridJoyousOryx.msl ==
 rollout.best_len: 319
-rollout.streak_count: 86
-rollout.streak_len.median: 75
+rollout.streak_count: 83
+rollout.streak_len.median: 83
 rollout.streak_len.p90: 204
 rollout.streak_len.p95: 230
 rollout.streak_len.max: 319
-rollout.first_mismatch_total: 86
+rollout.first_mismatch_total: 83
 rollout.first_mismatch_seeded_total: 41
 
 == datasets/aggregate_recent/replays/validation/aggregate_recent/TubbyCurlyHerring.msl ==
@@ -160,7 +160,7 @@ rollout.first_mismatch_seeded_total: 34
 == datasets/aggregate_recent/replays/validation/cardinal_1.0_recent/QuerulousGrandDinosaur.msl ==
 rollout.best_len: 631
 rollout.streak_count: 98
-rollout.streak_len.median: 93
+rollout.streak_len.median: 87
 rollout.streak_len.p90: 227
 rollout.streak_len.p95: 256
 rollout.streak_len.max: 631
@@ -178,11 +178,11 @@ rollout.first_mismatch_total: 63
 rollout.first_mismatch_seeded_total: 30
 
 == suite summary ==
-overall.rollout.streak_count: 1471
+overall.rollout.streak_count: 1464
 overall.rollout.streak_len.median: 74
 overall.rollout.streak_len.p90: 231
-overall.rollout.streak_len.p95: 299
+overall.rollout.streak_len.p95: 300
 overall.rollout.streak_len.max: 959
 overall.rollout.best_len.max: 959
-overall.rollout.first_mismatch_total: 1533
+overall.rollout.first_mismatch_total: 1526
 overall.rollout.first_mismatch_seeded_total: 719

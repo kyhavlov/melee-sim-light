@@ -50,7 +50,7 @@ rollout.first_mismatch_seeded_total: 34
 == datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/QuerulousGrandDinosaur.msl ==
 rollout.best_len: 631
 rollout.streak_count: 98
-rollout.streak_len.median: 93
+rollout.streak_len.median: 87
 rollout.streak_len.p90: 227
 rollout.streak_len.p95: 256
 rollout.streak_len.max: 631

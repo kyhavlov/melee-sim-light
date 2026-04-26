@@ -3575,12 +3575,14 @@ static inline void combat_throw_release_apply_immediate_di(MslBatch* batch, size
   // Throw-release damage entry has no hitlag in the replay-visible Fox/Falco slice, but decomp still
   // runs the same DI velocity mutator immediately after ftCo_8008DCE0 installs throw KB:
   //   ftCo_800DD724 -> ftCo_800DDDE4 -> ftCo_800DE7C0 -> ftCo_8008E5A4
-  // Unlike Damage_OnExitHitlag, this occurs inside the current motion callback after input has been
-  // applied, so consume the current-frame stick instead of the prior input snapshot. The L/R x1AC
-  // multiplier belongs to ftCo_Damage_OnExitHitlag and is intentionally not applied here.
+  // ftCo_800DD724 is the Throw Anim callback path, which runs before Fighter_procUpdate's
+  // current-input install. This sim defers the throw hit until post-items, so read the pre-input
+  // stick lane preserved in prev_input_main_* rather than the already-applied current input. The
+  // L/R x1AC multiplier belongs to ftCo_Damage_OnExitHitlag and is intentionally not applied here.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DD724
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Thrown.c::ftCo_800DE7C0
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008E5A4
+  // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A360,Fighter_procUpdate}
   float kb_x = batch->state.speed_x_attack[victim_idx];
   float kb_y = batch->state.speed_y_attack[victim_idx];
   const float kb_mag_sq = kb_x * kb_x + kb_y * kb_y;
@@ -3588,8 +3590,8 @@ static inline void combat_throw_release_apply_immediate_di(MslBatch* batch, size
     return;
   }
 
-  const float lstick_x = stick_i8_to_unit(batch->state.input_main_x[victim_idx]);
-  const float lstick_y = stick_i8_to_unit(batch->state.input_main_y[victim_idx]);
+  const float lstick_x = stick_i8_to_unit(batch->state.prev_input_main_x[victim_idx]);
+  const float lstick_y = stick_i8_to_unit(batch->state.prev_input_main_y[victim_idx]);
   const float lstick_full_x = apply_deadzone(lstick_x, c->lstick_deadzone_x);
   const float lstick_full_y = apply_deadzone(lstick_y, c->lstick_deadzone_y);
   const float kb_neg_x = -kb_x;
