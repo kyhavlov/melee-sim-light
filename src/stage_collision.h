@@ -52,6 +52,10 @@ typedef struct MslStageCeilingLine {
 typedef struct MslStageCeilingGraph {
   const MslStageCeilingLine* lines;
   size_t line_count;
+  float min_x;
+  float max_x;
+  float min_y;
+  float max_y;
 } MslStageCeilingGraph;
 
 typedef struct MslStageWallLine {
@@ -73,6 +77,10 @@ typedef struct MslStageWallLine {
 typedef struct MslStageWallGraph {
   const MslStageWallLine* lines;
   size_t line_count;
+  float min_x;
+  float max_x;
+  float min_y;
+  float max_y;
 } MslStageWallGraph;
 
 typedef struct MslStageBounds {

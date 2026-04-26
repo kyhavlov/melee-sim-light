@@ -161,6 +161,19 @@ static inline void item_slot_clear(MslBatch* batch, size_t ii) {
   }
 }
 
+static inline uint8_t items_row_has_any(const MslBatch* batch, int bi) {
+  if (batch == NULL) {
+    return 0u;
+  }
+  for (int it = 0; it < MSL_MAX_ITEMS; it++) {
+    const size_t ii = msl_idx_item(bi, it);
+    if (batch->state.item_exists[ii]) {
+      return 1u;
+    }
+  }
+  return 0u;
+}
+
 static inline void item_slot_swap(MslBatch* batch, size_t a, size_t b) {
   if (batch == NULL || a == b) {
     return;
@@ -3920,12 +3933,15 @@ void items_update(MslBatch* batch) {
 
   for (int bi = 0; bi < batch->batch_size; bi++) {
     const int num_players = (int)batch->config.num_players;
+    const uint8_t row_had_items = items_row_has_any(batch, bi);
 
-    // Motion + collision/hit apply for Illusion/Phantasm ghost items.
-    illusion_items_update_and_collide(batch, bi);
+    if (row_had_items != 0u) {
+      // Motion + collision/hit apply for Illusion/Phantasm ghost items.
+      illusion_items_update_and_collide(batch, bi);
 
-    // Motion + collision/hit apply for existing lasers.
-    lasers_update_and_collide(batch, bi);
+      // Motion + collision/hit apply for existing lasers.
+      lasers_update_and_collide(batch, bi);
+    }
 
     // ThrowLw stale-latch carry trim (post-collision, context-narrow):
     // - Throw-side pulses are one-shot throw_flags_b0 events consumed in ftFx_Throw_Anim.
@@ -3938,58 +3954,60 @@ void items_update(MslBatch* batch) {
     // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
     // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Thrown.c::ftCo_800DE508
     // data/moves/{fox,falco}.json moves["ftCo_SM_ThrowLw"]["events"]
-    for (int p = 0; p < num_players; p++) {
-      const size_t o_idx = msl_idx_player(bi, p);
-      if (batch->state.action_id[o_idx] != (uint16_t)MSL_ACT_THROW_LW) {
-        continue;
-      }
-      const uint8_t cid = batch->state.char_id[o_idx];
-      const MslLaserParams* lp = laser_params_get(cid);
-      if (lp == NULL || lp->shot_itkind != (uint16_t)MSL_IT_KIND_FALCO_LASER_SHOT) {
-        continue;
-      }
-      const float af_cur = items_cur_anim_frame_f32(batch, o_idx);
-      const int32_t prev_fp =
-          batch->state.anim_frame_fp_q16_16[o_idx] - batch->state.frame_speed_mul_fp_q16_16[o_idx];
-      const float af_prev = msl_anim_frame_sanitize_f32(msl_f32_from_q16_16(prev_fp));
-      int16_t crossed_pulse_af = -1;
-      if (!move_tables_throw_cmd1_active(cid, (uint16_t)MSL_ACT_THROW_LW, af_cur) ||
-          !move_tables_throw_crossed_projectile_pulse_frame(cid, (uint16_t)MSL_ACT_THROW_LW,
-                                                            af_prev, af_cur, &crossed_pulse_af)) {
-        continue;
-      }
-      int16_t first_pulse_af = -1;
-      if (!move_tables_throw_projectile_first_pulse_frame(cid, (uint16_t)MSL_ACT_THROW_LW,
-                                                          &first_pulse_af) ||
-          crossed_pulse_af != first_pulse_af) {
-        continue;
-      }
-      uint8_t stale_context = 0u;
-      for (int vp = 0; vp < num_players; vp++) {
-        if (vp == p) {
+    if (row_had_items != 0u) {
+      for (int p = 0; p < num_players; p++) {
+        const size_t o_idx = msl_idx_player(bi, p);
+        if (batch->state.action_id[o_idx] != (uint16_t)MSL_ACT_THROW_LW) {
           continue;
         }
-        const size_t v_idx = msl_idx_player(bi, vp);
-        if (batch->state.grab_owner_port[v_idx] == (uint8_t)p &&
-            batch->state.action_id[v_idx] == (uint16_t)MSL_ACT_THROWN_LW &&
-            batch->state.hitlag_pre_timer[v_idx] == 0u && batch->state.hitstun[v_idx] == 0u) {
-          stale_context = 1u;
-          break;
-        }
-      }
-      if (!stale_context) {
-        continue;
-      }
-      for (int it = 0; it < MSL_MAX_ITEMS; it++) {
-        const size_t ii = msl_idx_item(bi, it);
-        if (!batch->state.item_exists[ii]) {
+        const uint8_t cid = batch->state.char_id[o_idx];
+        const MslLaserParams* lp = laser_params_get(cid);
+        if (lp == NULL || lp->shot_itkind != (uint16_t)MSL_IT_KIND_FALCO_LASER_SHOT) {
           continue;
         }
-        if (batch->state.item_type[ii] != lp->shot_itkind || batch->state.item_owner[ii] != p ||
-            batch->state.item_state[ii] != (uint8_t)1u) {
+        const float af_cur = items_cur_anim_frame_f32(batch, o_idx);
+        const int32_t prev_fp = batch->state.anim_frame_fp_q16_16[o_idx] -
+                                batch->state.frame_speed_mul_fp_q16_16[o_idx];
+        const float af_prev = msl_anim_frame_sanitize_f32(msl_f32_from_q16_16(prev_fp));
+        int16_t crossed_pulse_af = -1;
+        if (!move_tables_throw_cmd1_active(cid, (uint16_t)MSL_ACT_THROW_LW, af_cur) ||
+            !move_tables_throw_crossed_projectile_pulse_frame(cid, (uint16_t)MSL_ACT_THROW_LW,
+                                                              af_prev, af_cur, &crossed_pulse_af)) {
           continue;
         }
-        item_slot_clear(batch, ii);
+        int16_t first_pulse_af = -1;
+        if (!move_tables_throw_projectile_first_pulse_frame(cid, (uint16_t)MSL_ACT_THROW_LW,
+                                                            &first_pulse_af) ||
+            crossed_pulse_af != first_pulse_af) {
+          continue;
+        }
+        uint8_t stale_context = 0u;
+        for (int vp = 0; vp < num_players; vp++) {
+          if (vp == p) {
+            continue;
+          }
+          const size_t v_idx = msl_idx_player(bi, vp);
+          if (batch->state.grab_owner_port[v_idx] == (uint8_t)p &&
+              batch->state.action_id[v_idx] == (uint16_t)MSL_ACT_THROWN_LW &&
+              batch->state.hitlag_pre_timer[v_idx] == 0u && batch->state.hitstun[v_idx] == 0u) {
+            stale_context = 1u;
+            break;
+          }
+        }
+        if (!stale_context) {
+          continue;
+        }
+        for (int it = 0; it < MSL_MAX_ITEMS; it++) {
+          const size_t ii = msl_idx_item(bi, it);
+          if (!batch->state.item_exists[ii]) {
+            continue;
+          }
+          if (batch->state.item_type[ii] != lp->shot_itkind || batch->state.item_owner[ii] != p ||
+              batch->state.item_state[ii] != (uint8_t)1u) {
+            continue;
+          }
+          item_slot_clear(batch, ii);
+        }
       }
     }
     // Refresh the seeded `ghostEffectPos[0..2]` gameplay lanes for the next frame.
@@ -4009,8 +4027,10 @@ void items_update(MslBatch* batch) {
       batch->state.illusion_ghost_pos0_y[idx] = batch->state.pos_y[idx];
     }
 
-    // Keep item ordering stable for fixed-slot comparisons.
-    items_sort(batch, bi);
+    if (row_had_items != 0u) {
+      // Keep item ordering stable for fixed-slot comparisons.
+      items_sort(batch, bi);
+    }
   }
 }
 
@@ -4021,6 +4041,9 @@ void items_update_post_combat(MslBatch* batch) {
 
   const int num_players = (int)batch->config.num_players;
   for (int bi = 0; bi < batch->batch_size; bi++) {
+    if (items_row_has_any(batch, bi) == 0u) {
+      continue;
+    }
     for (int p = 0; p < num_players; p++) {
       const size_t idx = msl_idx_player(bi, p);
       const MslLaserParams* lp = laser_params_get(batch->state.char_id[idx]);
@@ -4098,6 +4121,8 @@ void items_spawn_pre_physics(MslBatch* batch) {
   // cmd_vars[2] pulses.
   const int num_players = (int)batch->config.num_players;
   for (int bi = 0; bi < batch->batch_size; bi++) {
+    const uint8_t row_had_items = items_row_has_any(batch, bi);
+
     // Stack-local per-step/per-batch-row scratch: reset once each row iteration.
     // This does not persist in SoA state across frames/reseed.
     uint8_t gun_spawned_this_frame[MSL_MAX_PLAYERS] = {0};
@@ -4113,34 +4138,36 @@ void items_spawn_pre_physics(MslBatch* batch) {
     //   narrow throw-pulse reconstruction rows.
     // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
     // refs/melee/src/melee/it/items/itfoxlaser.c::it_8029C6CC
-    for (int p = 0; p < num_players; p++) {
-      const size_t p_idx = msl_idx_player(bi, p);
-      const MslLaserParams* p_lp = laser_params_get(batch->state.char_id[p_idx]);
-      if (p_lp == NULL || p_lp->shot_itkind == 0u) {
-        continue;
-      }
-      float best_timer = -1.0f;
-      for (int it = 0; it < MSL_MAX_ITEMS; it++) {
-        const size_t ii = msl_idx_item(bi, it);
-        if (!batch->state.item_exists[ii] || batch->state.item_owner[ii] != (int8_t)p ||
-            batch->state.item_type[ii] != p_lp->shot_itkind ||
-            batch->state.item_state[ii] != (uint8_t)1u) {
+    if (row_had_items != 0u) {
+      for (int p = 0; p < num_players; p++) {
+        const size_t p_idx = msl_idx_player(bi, p);
+        const MslLaserParams* p_lp = laser_params_get(batch->state.char_id[p_idx]);
+        if (p_lp == NULL || p_lp->shot_itkind == 0u) {
           continue;
         }
-        if (throw_seed_shot_count[p] < 0xFFu) {
-          throw_seed_shot_count[p]++;
-        }
-        const float vx = batch->state.item_vel_x[ii];
-        const float vy = batch->state.item_vel_y[ii];
-        if ((vx * vx) + (vy * vy) <= 1e-8f) {
-          continue;
-        }
-        const float timer = batch->state.item_timer[ii];
-        if (timer > best_timer) {
-          best_timer = timer;
-          throw_seed_shot_vx[p] = vx;
-          throw_seed_shot_vy[p] = vy;
-          throw_seed_shot_valid[p] = 1u;
+        float best_timer = -1.0f;
+        for (int it = 0; it < MSL_MAX_ITEMS; it++) {
+          const size_t ii = msl_idx_item(bi, it);
+          if (!batch->state.item_exists[ii] || batch->state.item_owner[ii] != (int8_t)p ||
+              batch->state.item_type[ii] != p_lp->shot_itkind ||
+              batch->state.item_state[ii] != (uint8_t)1u) {
+            continue;
+          }
+          if (throw_seed_shot_count[p] < 0xFFu) {
+            throw_seed_shot_count[p]++;
+          }
+          const float vx = batch->state.item_vel_x[ii];
+          const float vy = batch->state.item_vel_y[ii];
+          if ((vx * vx) + (vy * vy) <= 1e-8f) {
+            continue;
+          }
+          const float timer = batch->state.item_timer[ii];
+          if (timer > best_timer) {
+            best_timer = timer;
+            throw_seed_shot_vx[p] = vx;
+            throw_seed_shot_vy[p] = vy;
+            throw_seed_shot_valid[p] = 1u;
+          }
         }
       }
     }
@@ -5079,7 +5106,9 @@ void items_spawn_pre_physics(MslBatch* batch) {
       }
     }
 
-    // Keep item ordering stable for fixed-slot comparisons.
-    items_sort(batch, bi);
+    if (row_had_items != 0u || items_row_has_any(batch, bi) != 0u) {
+      // Keep item ordering stable for fixed-slot comparisons.
+      items_sort(batch, bi);
+    }
   }
 }

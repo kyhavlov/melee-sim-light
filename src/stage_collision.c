@@ -58,6 +58,94 @@ static MslStagePoint2 g_fd_ledge_points[2];
 static uint8_t g_fd_have_ledge_points[2];
 static int16_t g_fd_ledge_floor_line_idx[2];
 
+static void fd_stage_bounds_reset(float* min_x, float* max_x, float* min_y, float* max_y) {
+  if (min_x) {
+    *min_x = FLT_MAX;
+  }
+  if (max_x) {
+    *max_x = -FLT_MAX;
+  }
+  if (min_y) {
+    *min_y = FLT_MAX;
+  }
+  if (max_y) {
+    *max_y = -FLT_MAX;
+  }
+}
+
+static void fd_stage_bounds_include(float x, float y, float* min_x, float* max_x, float* min_y,
+                                    float* max_y) {
+  if (min_x && x < *min_x) {
+    *min_x = x;
+  }
+  if (max_x && x > *max_x) {
+    *max_x = x;
+  }
+  if (min_y && y < *min_y) {
+    *min_y = y;
+  }
+  if (max_y && y > *max_y) {
+    *max_y = y;
+  }
+}
+
+static void fd_stage_set_empty_bounds(float* min_x, float* max_x, float* min_y, float* max_y) {
+  if (min_x) {
+    *min_x = 1.0f;
+  }
+  if (max_x) {
+    *max_x = -1.0f;
+  }
+  if (min_y) {
+    *min_y = 1.0f;
+  }
+  if (max_y) {
+    *max_y = -1.0f;
+  }
+}
+
+static void fd_stage_ceiling_graph_set_bounds(MslStageCeilingGraph* g) {
+  if (g == NULL || g->lines == NULL || g->line_count == 0u) {
+    if (g != NULL) {
+      fd_stage_set_empty_bounds(&g->min_x, &g->max_x, &g->min_y, &g->max_y);
+    }
+    return;
+  }
+  fd_stage_bounds_reset(&g->min_x, &g->max_x, &g->min_y, &g->max_y);
+  for (size_t i = 0; i < g->line_count; i++) {
+    fd_stage_bounds_include(g->lines[i].x0, g->lines[i].y0, &g->min_x, &g->max_x, &g->min_y,
+                            &g->max_y);
+    fd_stage_bounds_include(g->lines[i].x1, g->lines[i].y1, &g->min_x, &g->max_x, &g->min_y,
+                            &g->max_y);
+  }
+  // mpLib endpoint extension can push query endpoints one unit past linked segment ends.
+  g->min_x -= 2.0f;
+  g->max_x += 2.0f;
+  g->min_y -= 2.0f;
+  g->max_y += 2.0f;
+}
+
+static void fd_stage_wall_graph_set_bounds(MslStageWallGraph* g) {
+  if (g == NULL || g->lines == NULL || g->line_count == 0u) {
+    if (g != NULL) {
+      fd_stage_set_empty_bounds(&g->min_x, &g->max_x, &g->min_y, &g->max_y);
+    }
+    return;
+  }
+  fd_stage_bounds_reset(&g->min_x, &g->max_x, &g->min_y, &g->max_y);
+  for (size_t i = 0; i < g->line_count; i++) {
+    fd_stage_bounds_include(g->lines[i].x0, g->lines[i].y0, &g->min_x, &g->max_x, &g->min_y,
+                            &g->max_y);
+    fd_stage_bounds_include(g->lines[i].x1, g->lines[i].y1, &g->min_x, &g->max_x, &g->min_y,
+                            &g->max_y);
+  }
+  // mpLib endpoint extension can push query endpoints one unit past linked segment ends.
+  g->min_x -= 2.0f;
+  g->max_x += 2.0f;
+  g->min_y -= 2.0f;
+  g->max_y += 2.0f;
+}
+
 static const char* json_skip_ws(const char* s) {
   while (s && *s && isspace((unsigned char)*s)) {
     s++;
@@ -1173,10 +1261,13 @@ static int fd_load_floor_lines_from_json(const char* json) {
   g_fd_floor_graph.line_count = g_fd_floor_line_count;
   g_fd_ceiling_graph.lines = g_fd_ceiling_lines;
   g_fd_ceiling_graph.line_count = g_fd_ceiling_line_count;
+  fd_stage_ceiling_graph_set_bounds(&g_fd_ceiling_graph);
   g_fd_left_wall_graph.lines = g_fd_left_wall_lines;
   g_fd_left_wall_graph.line_count = g_fd_left_wall_line_count;
+  fd_stage_wall_graph_set_bounds(&g_fd_left_wall_graph);
   g_fd_right_wall_graph.lines = g_fd_right_wall_lines;
   g_fd_right_wall_graph.line_count = g_fd_right_wall_line_count;
+  fd_stage_wall_graph_set_bounds(&g_fd_right_wall_graph);
 
   alloc_free(seg_tmp);
   return 0;

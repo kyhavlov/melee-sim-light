@@ -630,6 +630,24 @@ void hurtboxes_refresh(MslBatch* batch) {
       //   their original slot but marked `hurtcap_enabled=0` and given radius=0.
       uint32_t can_hit_mask = 0xFFFFFFFFu;
       (void)hurtbox_modes_can_hit_mask(char_id, msid, frame, cap_count, &can_hit_mask);
+
+      uint16_t cap_part_ids[MSL_MAX_HURTCAPS];
+      float cap_mats[MSL_MAX_HURTCAPS * 12u];
+      uint8_t cap_mat_ok[MSL_MAX_HURTCAPS];
+      for (uint16_t ci = 0; ci < cap_count; ci++) {
+        cap_part_ids[ci] = caps[ci].bone_part_id;
+      }
+      // HSD_AObjInterpretAnim owns JObj local SRT at float `cur_anim_frame`; landing-aerial
+      // states can run non-integer animation rates, and lb_8000B1CC consumes the live matrix for
+      // hurtcap endpoints before BODY admission. Keep integer SSANIM01 for actions whose
+      // float-frame collision-pose owner has not been proven against replay/probe data.
+      // refs/melee/src/sysdolphin/baselib/aobj.c::HSD_AObjInterpretAnim
+      // refs/melee/src/sysdolphin/baselib/fobj.c::HSD_FObjInterpretAnim
+      // refs/melee/src/melee/lb/lb_00B0.c::lb_8000B1CC
+      const float pose_sample_frame =
+          hurtboxes_float_aobj_pose_owner(action_id) ? anim_frame_f32 : (float)pose_frame;
+      (void)anim_pose_get_collision_matrices_f32(batch, idx, pose_msid, pose_sample_frame,
+                                                 cap_part_ids, cap_count, cap_mats, cap_mat_ok);
       for (uint16_t ci = 0; ci < cap_count; ci++) {
         const size_t hi = idx_hurtcap(bi, p, (int)ci);
         batch->state.hurtcap_is_grabbable[hi] = caps[ci].is_grabbable ? 1 : 0;
@@ -639,21 +657,10 @@ void hurtboxes_refresh(MslBatch* batch) {
         if (!can_body_hit && !caps[ci].is_grabbable) {
           continue;
         }
-        float m[12];
-        (void)action_id;
-        // HSD_AObjInterpretAnim owns JObj local SRT at float `cur_anim_frame`; landing-aerial
-        // states can run non-integer animation rates, and lb_8000B1CC consumes the live matrix for
-        // hurtcap endpoints before BODY admission. Keep integer SSANIM01 for actions whose
-        // float-frame collision-pose owner has not been proven against replay/probe data.
-        // refs/melee/src/sysdolphin/baselib/aobj.c::HSD_AObjInterpretAnim
-        // refs/melee/src/sysdolphin/baselib/fobj.c::HSD_FObjInterpretAnim
-        // refs/melee/src/melee/lb/lb_00B0.c::lb_8000B1CC
-        const float pose_sample_frame =
-            hurtboxes_float_aobj_pose_owner(action_id) ? anim_frame_f32 : (float)pose_frame;
-        if (anim_pose_get_collision_matrix_f32(batch, idx, pose_msid, pose_sample_frame,
-                                               caps[ci].bone_part_id, m) != 0) {
+        if (cap_mat_ok[ci] == 0u) {
           continue;
         }
+        const float* m = &cap_mats[(size_t)ci * 12u];
         float ax = 0.0f, ay = 0.0f, az = 0.0f;
         float bx = 0.0f, by = 0.0f, bz = 0.0f;
         msl_mtx34_mul_point(m, caps[ci].a_offset, &ax, &ay, &az);

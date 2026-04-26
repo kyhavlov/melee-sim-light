@@ -1970,6 +1970,11 @@ void anim_pose_update_dynamic_state(MslBatch* batch) {
         batch->state.dynamic_pose_apply_collision_matrix[idx] = 0u;
         continue;
       }
+      if (t->dyn_collision_have_msid == NULL || !t->dyn_collision_have_msid[msid]) {
+        batch->state.dynamic_pose_state_valid[idx] = 0u;
+        batch->state.dynamic_pose_apply_collision_matrix[idx] = 0u;
+        continue;
+      }
 
       const uint8_t sequential = batch->state.dynamic_pose_state_valid[idx] &&
                                  batch->state.dynamic_pose_char_id[idx] == char_id &&
@@ -2240,6 +2245,85 @@ int anim_pose_get_collision_matrix_f32(const MslBatch* batch, size_t player_idx,
   float dyn[12];
   if (dynamic_matrix_from_locals(batch, player_idx, t, set, msid, frame, part_id, dyn) == 0) {
     memcpy(out_3x4, dyn, MAT_BYTES);
+  }
+  return 0;
+}
+
+int anim_pose_get_collision_matrices_f32(const MslBatch* batch, size_t player_idx, uint16_t msid,
+                                         float anim_frame, const uint16_t* part_ids, uint16_t count,
+                                         float* out_mats_12, uint8_t* out_ok) {
+  if (out_ok != NULL) {
+    for (uint16_t i = 0; i < count; i++) {
+      out_ok[i] = 0u;
+    }
+  }
+  if (batch == NULL || part_ids == NULL || out_mats_12 == NULL || out_ok == NULL) {
+    return -1;
+  }
+  if (count == 0u) {
+    return 0;
+  }
+
+  const uint8_t char_id = batch->state.char_id[player_idx];
+  const float safe_frame = isfinite(anim_frame) ? anim_frame : 0.0f;
+  const uint16_t frame = msl_anim_frame_floor_u16(msl_anim_frame_sanitize_f32(safe_frame));
+  const MslAnimPoseTable* t = table_for_char(char_id);
+  if (t == NULL || !t->have_msid[msid]) {
+    return -1;
+  }
+  const uint16_t frame_count = t->frame_count_by_msid[msid];
+  if (frame >= frame_count) {
+    return -1;
+  }
+
+  const uint8_t integer_frame = (fabsf(safe_frame - (float)frame) <= 1.0e-6f) ? 1u : 0u;
+  const uint8_t dynamic_collision_pose =
+      (batch->state.dynamic_pose_apply_collision_matrix[player_idx] != 0u &&
+       t->dyn_collision_have_msid != NULL && t->dyn_collision_have_msid[msid] &&
+       batch->state.dynamic_pose_char_id[player_idx] == char_id &&
+       batch->state.dynamic_pose_msid[player_idx] == msid)
+          ? 1u
+          : 0u;
+
+  if (integer_frame != 0u && dynamic_collision_pose == 0u) {
+    const uint32_t base_off = t->base_off_by_msid[msid];
+    const uint64_t joint_count_u = (uint64_t)t->joint_count;
+    const uint64_t frame_u = (uint64_t)frame;
+    const uint64_t frame_base_u =
+        (uint64_t)base_off + frame_u * joint_count_u * (uint64_t)MAT_BYTES;
+    if (frame_base_u + joint_count_u * (uint64_t)MAT_BYTES > (uint64_t)t->sz) {
+      return -1;
+    }
+    for (uint16_t i = 0; i < count; i++) {
+      const uint16_t joint_index = t->part_to_joint_index[part_ids[i]];
+      if (joint_index == 0xFFFFu || joint_index >= t->joint_count) {
+        continue;
+      }
+      const uint64_t mat_off_u = frame_base_u + (uint64_t)joint_index * (uint64_t)MAT_BYTES;
+      memcpy(&out_mats_12[(size_t)i * 12u], t->buf + (size_t)mat_off_u, (size_t)MAT_BYTES);
+      out_ok[i] = 1u;
+    }
+    return 0;
+  }
+
+  if (dynamic_collision_pose == 0u) {
+    for (uint16_t i = 0; i < count; i++) {
+      float* out = &out_mats_12[(size_t)i * 12u];
+      if (matrix_from_locals_f32(t, msid, safe_frame, part_ids[i], out) != 0) {
+        if (anim_pose_get_matrix(char_id, msid, frame, part_ids[i], out) != 0) {
+          continue;
+        }
+      }
+      out_ok[i] = 1u;
+    }
+    return 0;
+  }
+
+  for (uint16_t i = 0; i < count; i++) {
+    if (anim_pose_get_collision_matrix_f32(batch, player_idx, msid, safe_frame, part_ids[i],
+                                           &out_mats_12[(size_t)i * 12u]) == 0) {
+      out_ok[i] = 1u;
+    }
   }
   return 0;
 }

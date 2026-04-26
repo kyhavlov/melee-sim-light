@@ -191,19 +191,18 @@ static inline uint8_t is_grounded_cliff_option_action(uint16_t a, uint8_t on_gro
   }
 }
 
-static inline uint8_t lines_connected_prev_next(size_t line_count, const int16_t* prev_next_pairs,
-                                                int a, int b) {
-  if (a < 0 || b < 0) {
+static inline uint8_t ceiling_lines_connected_prev_next(const MslStageCeilingGraph* g, int a,
+                                                        int b) {
+  if (g == NULL || a < 0 || b < 0 || (size_t)a >= g->line_count || (size_t)b >= g->line_count) {
     return 0;
   }
   if (a == b) {
     return 1;
   }
-  // Bounded prev/next walk (FD-only graphs are small; keep deterministic).
   int cur = a;
-  for (size_t i = 0; i < line_count; i++) {
-    const int16_t next = prev_next_pairs[(size_t)cur * 2u + 1u];
-    if (next < 0) {
+  for (size_t i = 0; i < g->line_count; i++) {
+    const int16_t next = g->lines[(size_t)cur].next;
+    if (next < 0 || (size_t)next >= g->line_count) {
       break;
     }
     if (next == b) {
@@ -212,9 +211,41 @@ static inline uint8_t lines_connected_prev_next(size_t line_count, const int16_t
     cur = (int)next;
   }
   cur = a;
-  for (size_t i = 0; i < line_count; i++) {
-    const int16_t prev = prev_next_pairs[(size_t)cur * 2u + 0u];
-    if (prev < 0) {
+  for (size_t i = 0; i < g->line_count; i++) {
+    const int16_t prev = g->lines[(size_t)cur].prev;
+    if (prev < 0 || (size_t)prev >= g->line_count) {
+      break;
+    }
+    if (prev == b) {
+      return 1;
+    }
+    cur = (int)prev;
+  }
+  return 0;
+}
+
+static inline uint8_t wall_lines_connected_prev_next(const MslStageWallGraph* g, int a, int b) {
+  if (g == NULL || a < 0 || b < 0 || (size_t)a >= g->line_count || (size_t)b >= g->line_count) {
+    return 0;
+  }
+  if (a == b) {
+    return 1;
+  }
+  int cur = a;
+  for (size_t i = 0; i < g->line_count; i++) {
+    const int16_t next = g->lines[(size_t)cur].next;
+    if (next < 0 || (size_t)next >= g->line_count) {
+      break;
+    }
+    if (next == b) {
+      return 1;
+    }
+    cur = (int)next;
+  }
+  cur = a;
+  for (size_t i = 0; i < g->line_count; i++) {
+    const int16_t prev = g->lines[(size_t)cur].prev;
+    if (prev < 0 || (size_t)prev >= g->line_count) {
       break;
     }
     if (prev == b) {
@@ -611,22 +642,20 @@ static uint8_t ceiling_sweep_check(const MslStageCeilingGraph* g, float ax, floa
   if (g == NULL || out_line_idx == NULL) {
     return 0;
   }
+  const float sweep_min_x = (ax < bx) ? ax : bx;
+  const float sweep_max_x = (ax > bx) ? ax : bx;
+  const float sweep_min_y = (ay < by) ? ay : by;
+  const float sweep_max_y = (ay > by) ? ay : by;
+  if (sweep_max_x < g->min_x || sweep_min_x > g->max_x || sweep_max_y < g->min_y ||
+      sweep_min_y > g->max_y) {
+    return 0;
+  }
   uint8_t found = 0;
   float best_dist2 = FLT_MAX;
   int best_idx = -1;
   int best_pref = -1;
   float best_ix = 0.0f, best_iy = 0.0f;
   float best_nx = 0.0f, best_ny = -1.0f;
-
-  // Build a compact prev/next pair array view (stack) for connectivity preference.
-  // Deterministic: line_count is tiny (FD=3 ceiling lines).
-  int16_t prev_next[128];
-  if (g->line_count * 2u <= (sizeof(prev_next) / sizeof(prev_next[0]))) {
-    for (size_t i = 0; i < g->line_count; i++) {
-      prev_next[i * 2u + 0u] = g->lines[i].prev;
-      prev_next[i * 2u + 1u] = g->lines[i].next;
-    }
-  }
 
   for (size_t li = 0; li < g->line_count; li++) {
     const MslStageCeilingLine* l = &g->lines[li];
@@ -651,10 +680,10 @@ static uint8_t ceiling_sweep_check(const MslStageCeilingGraph* g, float ax, floa
     const float dist2 = dx * dx + dy2 * dy2;
 
     int pref = 0;
-    if (prefer_line_idx >= 0 && g->line_count * 2u <= (sizeof(prev_next) / sizeof(prev_next[0]))) {
+    if (prefer_line_idx >= 0) {
       if ((int)li == prefer_line_idx) {
         pref = 2;
-      } else if (lines_connected_prev_next(g->line_count, prev_next, prefer_line_idx, (int)li)) {
+      } else if (ceiling_lines_connected_prev_next(g, prefer_line_idx, (int)li)) {
         pref = 1;
       }
     }
@@ -703,6 +732,14 @@ static uint8_t wall_sweep_check(const MslStageWallGraph* g, uint8_t is_left_wall
   if (g == NULL || out_line_idx == NULL) {
     return 0;
   }
+  const float sweep_min_x = (ax < bx) ? ax : bx;
+  const float sweep_max_x = (ax > bx) ? ax : bx;
+  const float sweep_min_y = (ay < by) ? ay : by;
+  const float sweep_max_y = (ay > by) ? ay : by;
+  if (sweep_max_x < g->min_x || sweep_min_x > g->max_x || sweep_max_y < g->min_y ||
+      sweep_min_y > g->max_y) {
+    return 0;
+  }
   uint8_t found = 0;
   float best_dist2 = FLT_MAX;
   int best_idx = -1;
@@ -710,14 +747,6 @@ static uint8_t wall_sweep_check(const MslStageWallGraph* g, uint8_t is_left_wall
   float best_ix = 0.0f, best_iy = 0.0f;
   float best_nx = is_left_wall ? -1.0f : 1.0f;
   float best_ny = 0.0f;
-
-  int16_t prev_next[256];
-  if (g->line_count * 2u <= (sizeof(prev_next) / sizeof(prev_next[0]))) {
-    for (size_t i = 0; i < g->line_count; i++) {
-      prev_next[i * 2u + 0u] = g->lines[i].prev;
-      prev_next[i * 2u + 1u] = g->lines[i].next;
-    }
-  }
 
   for (size_t li = 0; li < g->line_count; li++) {
     const MslStageWallLine* l = &g->lines[li];
@@ -741,10 +770,10 @@ static uint8_t wall_sweep_check(const MslStageWallGraph* g, uint8_t is_left_wall
     const float dist2 = dx * dx + dy * dy;
 
     int pref = 0;
-    if (prefer_line_idx >= 0 && g->line_count * 2u <= (sizeof(prev_next) / sizeof(prev_next[0]))) {
+    if (prefer_line_idx >= 0) {
       if ((int)li == prefer_line_idx) {
         pref = 2;
-      } else if (lines_connected_prev_next(g->line_count, prev_next, prefer_line_idx, (int)li)) {
+      } else if (wall_lines_connected_prev_next(g, prefer_line_idx, (int)li)) {
         pref = 1;
       }
     }
