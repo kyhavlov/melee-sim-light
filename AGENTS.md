@@ -142,6 +142,14 @@ uv run python -m tools.slippi.preprocess_suite \
 - `reports/validation/aggregate_recent_one_step_suite_eval.txt`
 - `reports/validation/aggregate_recent_rollout_suite_eval.txt`
 
+### Modelplay Regression Fixtures
+
+- Tests must not depend on full `reports/modelplay/**/trace.json` artifacts at runtime.
+- For modelplay-visible regressions, extract the minimal relevant replay window into
+  `tests/fixtures/modelplay/` and load that compact fixture in the test.
+- Keep the original trace path as fixture metadata/source context only; the test should pass when
+  the large local trace artifact is absent.
+
 ## Operational References
 
 Use the docs for detailed workflows instead of expanding this file:

@@ -1837,6 +1837,10 @@ static inline uint8_t action_is_air_locomotion(uint16_t a) {
   return 0;
 }
 
+static inline uint8_t action_is_catch_start_floor_loss(uint16_t a) {
+  return (a == (uint16_t)MSL_ACT_CATCH || a == (uint16_t)MSL_ACT_CATCH_DASH) ? 1u : 0u;
+}
+
 static inline void enter_fall_from_grounded_floor_loss(MslBatch* batch, const MslCharParams* ch,
                                                        size_t idx) {
   if (batch == NULL || ch == NULL) {
@@ -4576,6 +4580,18 @@ void locomotion_update_post_collision(MslBatch* batch) {
         //   ftCo_GuardOn_Coll,ftCo_Guard_Coll,ftCo_GuardOff_Coll,
         //   ftCo_GuardSetOff_Coll,ftCo_GuardReflect_Coll}
         // refs/melee/src/melee/ft/ft_081B.c::{ft_80084104,ft_800845B4}
+        enter_fall_from_grounded_floor_loss(batch, ch, idx);
+        continue;
+      }
+
+      if (was_ground && !now_ground && action_is_catch_start_floor_loss(a)) {
+        // Catch/CatchDash collision callbacks are grounded owners. On floor loss they call the
+        // common floor-loss helper with fn_800D8E30, which performs catch cleanup and enters Fall.
+        // Without this callback the action can stay in Catch until Anim finishes, then become
+        // airborne Wait while still carrying its pre-grab ground slide.
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::{
+        //   ftCo_Catch_Coll,ftCo_CatchDash_Coll,fn_800D8E30}
+        // refs/melee/src/melee/ft/ft_081B.c::ft_800841B8
         enter_fall_from_grounded_floor_loss(batch, ch, idx);
         continue;
       }

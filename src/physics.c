@@ -1547,6 +1547,15 @@ void physics_integrate(MslBatch* batch) {
               gr_vel +=
                   ground_friction_step_delta(gr_vel, c->attackdash_friction_mul * ch->gr_friction);
             }
+          } else if (action_id == (uint16_t)MSL_ACT_CATCH_DASH) {
+            // Decomp: ftCo_CatchDash_Phys calls ft_80085030 with p_ftCommonData->x64
+            // * co_attrs.gr_friction. ISO motion-state data for ftCo_SM_CatchDash has
+            // x10_animCurrFlags bit0 clear, so ft_80085030 takes its friction fallback instead of
+            // the TransN root-motion branch (`fp->x594_b0 == false`).
+            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_CatchDash_Phys
+            // refs/melee/src/melee/ft/ft_081B.c::ft_80085030
+            // data/anims/{fox,falco}.tracks.bin ftCo_SM_CatchDash / Pl{Fx,Fc}.dat msid flag 0x00
+            gr_vel += ground_friction_step_delta(gr_vel, c->catch_friction_mul * ch->gr_friction);
           } else if (action_id == (uint16_t)MSL_ACT_CATCH ||
                      action_id == (uint16_t)MSL_ACT_CATCH_PULL ||
                      action_id == (uint16_t)MSL_ACT_CATCH_WAIT ||
