@@ -11,6 +11,7 @@
 #include "common_params.h"
 #include "grab_attachment.h"
 #include "input_axis.h"
+#include "mpcoll_ground.h"
 #include "move_tables.h"
 #include "trigger_input.h"
 
@@ -142,29 +143,41 @@ static inline void maybe_enter_capture_wait_lw_grounded_handoff(MslBatch* batch,
     if ((int)batch->state.grab_owner_port[vidx] != owner_p ||
         batch->state.action_id[vidx] != (uint16_t)MSL_ACT_CAPTURE_WAIT_HI ||
         batch->state.prev_action_id[vidx] != (uint16_t)MSL_ACT_CAPTURE_PULLED_HI ||
-        batch->state.hitlag_started_frame[vidx] != 0u || batch->state.ground_id[vidx] == 0xFFFFu) {
+        batch->state.hitlag_started_frame[vidx] != 0u) {
+      continue;
+    }
+
+    MslMpcollFloorMaskResult floor_result = {0xFFFFu, batch->state.pos_y[vidx]};
+    if (!mpcoll_800477e0_floor_mask_probe(batch, vidx, &floor_result)) {
       continue;
     }
 
     // Grounded CatchPull -> CatchWait handoff:
     // - fn_800DA1D8 drives victim fn_800DB6C8 into CaptureWaitHi/Lw in the owner callback.
-    // - On grounded contact rows, the same callback chain can immediately route through
-    //   CaptureWaitHi_Coll -> fn_800DBAC4 -> fn_800DBBF8, keeping the current anim frame while
-    //   swapping the victim to CaptureWaitLw.
-    // - Model that handoff in the owner family rather than patching it later in attachment cleanup.
+    // - CaptureWaitHi_Coll calls ft_80083C00, which runs ft_80082578/mpColl_800477E0 and only
+    //   invokes fn_800DBAC4 -> fn_800DBBF8 when CollData.env_flags has a floor-mask result.
+    // - fn_800DBBF8 calls ftCommon_8007D7FC before entering CaptureWaitLw, so the same owned
+    //   handoff also refreshes x1968_jumpsUsed (Slippi jumps_left=max_jumps).
     // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::{
     //   fn_800DA1D8,ftCo_CaptureWaitHi_Coll,fn_800DBAC4,fn_800DBBF8
     // }
+    // refs/melee/src/melee/ft/ft_081B.c::{ft_80083C00,ft_80082578}
+    // refs/melee/src/melee/mp/mpcoll.c::mpColl_800477E0
+    // refs/melee/src/melee/ft/ftcommon.c::{ftCommon_8007D7FC,ftCommon_8007D6A4}
     const float cur_anim = batch->state.anim_frame_f32[vidx];
     const float cur_rate = msl_f32_from_q16_16(batch->state.frame_speed_mul_fp_q16_16[vidx]);
     batch->state.action_id[vidx] = (uint16_t)MSL_ACT_CAPTURE_WAIT_LW;
     batch->state.animation_index[vidx] = (uint32_t)MSL_SM_CAPTURE_WAIT_LW;
     msl_anim_timebase_enter(batch, vidx, cur_anim, cur_rate);
     batch->state.on_ground[vidx] = 1u;
-    if (batch->state.ground_id[oidx] != 0xFFFFu) {
-      batch->state.ground_id[vidx] = batch->state.ground_id[oidx];
+    if (floor_result.ground_id != 0xFFFFu) {
+      batch->state.ground_id[vidx] = floor_result.ground_id;
     }
-    batch->state.pos_y[vidx] = batch->state.pos_y[oidx];
+    batch->state.pos_y[vidx] = floor_result.corrected_pos_y;
+    const MslCharParams* ch = msl_char_params(batch->state.char_id[vidx]);
+    if (ch != NULL) {
+      batch->state.jumps_left[vidx] = ch->max_jumps;
+    }
   }
 }
 

@@ -12,3 +12,13 @@
 // - ECB prev/current and floor persistence live in CollData:
 //   refs/melee/src/melee/lb/types.h::CollData.
 void mpcoll_ground_apply(MslBatch* batch);
+
+typedef struct MslMpcollFloorMaskResult {
+  uint16_t ground_id;
+  float corrected_pos_y;
+} MslMpcollFloorMaskResult;
+
+// Narrow `mpColl_800477E0` floor-mask predicate for callbacks that need the floor result before
+// the generic stage-collision pass mutates fighter state.
+uint8_t mpcoll_800477e0_floor_mask_probe(const MslBatch* batch, size_t idx,
+                                         MslMpcollFloorMaskResult* out);

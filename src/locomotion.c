@@ -1823,11 +1823,15 @@ static inline uint8_t action_uses_ottotto_edge_callback(uint16_t a) {
     case MSL_ACT_WALK_SLOW:
     case MSL_ACT_WALK_MIDDLE:
     case MSL_ACT_WALK_FAST:
+    case MSL_ACT_RUN_BRAKE:
     case MSL_ACT_LANDING:
       // These grounded common states use the ft_80084280 family: if the floor helper reports an
       // edge bit, ftCo_8009A3C8 enters Ottotto before falling.
+      // Run can enter RunBrake in IASA before collision, so the same frame's collision callback is
+      // RunBrake_Coll -> ft_80084280 rather than Run_Coll's ft_800844EC path.
       // refs/melee/src/melee/ft/ft_081B.c::ft_80084280
       // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Ottotto.c::{ftCo_8009A3C8,ftCo_8009A410}
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_RunBrake.c::ftCo_RunBrake_Coll
       return 1u;
     default:
       return 0u;

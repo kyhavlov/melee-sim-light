@@ -841,6 +841,83 @@ static uint8_t floor_sweep_check(const MslStageFloorGraph* g, float ax, float ay
   return 1;
 }
 
+uint8_t mpcoll_800477e0_floor_mask_probe(const MslBatch* batch, size_t idx,
+                                         MslMpcollFloorMaskResult* out) {
+  if (batch == NULL) {
+    return 0u;
+  }
+  const uint32_t stage_id = batch->state.stage_id[idx / (size_t)MSL_MAX_PLAYERS];
+  const MslStageFloorGraph* g = stage_collision_get_floor_graph(stage_id);
+  if (g == NULL) {
+    return 0u;
+  }
+
+  // ft_80082578 sets CollData.cur_pos from fp->cur_pos, then mpColl_800477E0 runs
+  // mpCollPrev + mpColl_LoadECB_inline(flags=6) and reports `env_flags & Collide_FloorMask`.
+  // Reconstruct only that floor-mask decision here; callers decide whether and how to apply the
+  // owning motion-state callback.
+  // refs/melee/src/melee/ft/ft_081B.c::{ft_80082578,ft_80083C00}
+  // refs/melee/src/melee/mp/mpcoll.c::mpColl_800477E0
+  const uint8_t char_id = batch->state.char_id[idx];
+  const uint32_t anim = batch->state.animation_index[idx];
+  const uint16_t ecb_frame = msl_ecb_frame_u16_from_anim_frame(batch->state.anim_frame_f32[idx]);
+  const uint16_t ecb_frame_prev = msl_ecb_prev_frame_u16(ecb_frame);
+
+  MslEcbBottomWorldPoint cur_bot = {0};
+  MslEcbBottomWorldPoint prev_bot = {0};
+  msl_ecb_bottom_world_point_sample(&cur_bot, char_id, anim, ecb_frame, batch->state.pos_x[idx],
+                                    batch->state.pos_y[idx], 0u);
+  msl_ecb_bottom_world_point_sample(&prev_bot, char_id, anim, ecb_frame_prev,
+                                    batch->state.floor_sweep_prev_pos_x[idx],
+                                    batch->state.floor_sweep_prev_pos_y[idx], 0u);
+
+  int line_idx = -1;
+  float ix = 0.0f;
+  float iy = 0.0f;
+  if (cur_bot.y <= prev_bot.y && floor_sweep_check(g, prev_bot.x, prev_bot.y, cur_bot.x, cur_bot.y,
+                                                   -1, &line_idx, &ix, &iy, NULL, NULL)) {
+    float y_corr = 0.0f;
+    const int out_line_idx = floor_dd90_project(g, line_idx, ix, cur_bot.y, &y_corr, NULL, NULL);
+    if (out_line_idx >= 0) {
+      if (out != NULL) {
+        out->ground_id = g->lines[(size_t)out_line_idx].segment_i;
+        out->corrected_pos_y = batch->state.pos_y[idx] + y_corr;
+      }
+      return 1u;
+    }
+    if (out != NULL) {
+      out->ground_id = g->lines[(size_t)line_idx].segment_i;
+      out->corrected_pos_y = batch->state.pos_y[idx] + (iy - cur_bot.y) + k_floor_y_bias;
+    }
+    return 1u;
+  }
+
+  {
+    uint8_t found = 0u;
+    float best_y_corr = FLT_MAX;
+    int best_line_idx = -1;
+    float y_corr = 0.0f;
+    for (size_t li = 0; li < g->line_count; li++) {
+      const int out_line_idx =
+          floor_dd90_project(g, (int)li, cur_bot.x, cur_bot.y, &y_corr, NULL, NULL);
+      if (out_line_idx >= 0 && y_corr >= 0.0f && (!found || y_corr < best_y_corr)) {
+        found = 1u;
+        best_y_corr = y_corr;
+        best_line_idx = out_line_idx;
+      }
+    }
+    if (found && best_line_idx >= 0) {
+      if (out != NULL) {
+        out->ground_id = g->lines[(size_t)best_line_idx].segment_i;
+        out->corrected_pos_y = batch->state.pos_y[idx] + best_y_corr;
+      }
+      return 1u;
+    }
+  }
+
+  return 0u;
+}
+
 void mpcoll_ground_apply(MslBatch* batch) {
   if (batch == NULL) {
     return;

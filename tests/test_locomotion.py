@@ -2418,6 +2418,7 @@ def test_walk_off_consumes_ground_jump() -> None:
 
     prev_inp = _mk_input_bytes(1, input_stride)
     inp = _mk_input_bytes(1, input_stride)
+    inp.view(INPUT_DTYPE).reshape(1)["p"]["main_x"][0, 0] = np.int8(127)
     out = _step_once(seed, prev_inp, inp)
     assert int(out["on_ground"][0]) == 0
     assert int(out["action_id"][0]) == ACT_FALL
@@ -2477,6 +2478,7 @@ def test_run_off_does_not_snap_to_floor_edge() -> None:
 
     prev_inp = _mk_input_bytes(1, input_stride)
     inp = _mk_input_bytes(1, input_stride)
+    inp.view(INPUT_DTYPE).reshape(1)["p"]["main_x"][0, 0] = np.int8(127)
     out = _step_once(seed, prev_inp, inp)
     assert int(out["on_ground"][0]) == 0
     assert int(out["action_id"][0]) == ACT_FALL

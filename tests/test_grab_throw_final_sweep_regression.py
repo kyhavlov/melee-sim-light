@@ -9,6 +9,7 @@ from tools.eval.dataset import COMPARE_DTYPE, read_dataset
 
 
 _BASE_REL = "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent"
+_AGG_REL = "datasets/aggregate_recent/replays/validation/aggregate_recent"
 _BUTTON_Z = 0x0010
 _REQUIRED_ARTIFACTS = (
     "data/moves/fox.json",
@@ -279,6 +280,7 @@ def test_replay_capturepulledhi_grounded_handoff_enters_capturewaitlw_strict_loc
     assert int(row["ref_t1"]["action_frame"][0, victim]) == 1
     assert int(row["ref_t1"]["animation_index"][0, victim]) == 255
     assert int(row["ref_t1"]["on_ground"][0, victim]) == 1
+    assert int(row["ref_t1"]["jumps_left"][0, victim]) == 2
 
     out, ref = _run_record(dataset_path, record)
 
@@ -297,12 +299,109 @@ def test_replay_capturepulledhi_grounded_handoff_enters_capturewaitlw_strict_loc
             f"expected={int(ref[field][victim])} got={int(out[field][0, victim])}"
         )
 
+    # The floor-mask handoff owns both the low capture state and ftCommon_8007D7FC's jump reset.
+    assert int(out["jumps_left"][0, victim]) == int(ref["jumps_left"][victim])
+
     got_flags = tuple(int(x) for x in out["state_flags"][0, victim].tolist())
     exp_flags = tuple(int(x) for x in ref["state_flags"][victim].tolist())
     assert got_flags == exp_flags
 
     assert float(out["pos_x"][0, victim]) == pytest.approx(float(ref["pos_x"][victim]), abs=1e-4)
     assert float(out["pos_y"][0, victim]) == pytest.approx(float(ref["pos_y"][victim]), abs=2e-4)
+
+
+@pytest.mark.integration
+def test_replay_capturepulledhi_grounded_handoff_resets_jump_count_from_floor_mask() -> None:
+    root = Path(__file__).resolve().parents[1]
+    dataset_rel = f"{_AGG_REL}/MotionlessAggressiveJay.msl"
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+    _skip_if_required_artifacts_missing(root)
+
+    owner = 1
+    victim = 0
+    record = 6470
+    ds = read_dataset(str(dataset_path))
+    row = ds.samples[record : record + 1]
+
+    # Top disruptive rollout entry point: airborne CapturePulledHi still has one jump left in
+    # seed, while the replay's grounded CaptureWaitLw result has two. The reset is owned by
+    # CaptureWaitHi_Coll -> ft_80083C00 -> ft_80082578 -> mpColl_800477E0's floor result before
+    # fn_800DBBF8 calls ftCommon_8007D7FC.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::{
+    #   ftCo_CaptureWaitHi_Coll,fn_800DBAC4,fn_800DBBF8
+    # }
+    # refs/melee/src/melee/ft/ft_081B.c::{ft_80083C00,ft_80082578}
+    assert int(row["seed_t"]["action_id"][0, owner]) == 213
+    assert int(row["seed_t"]["action_frame"][0, owner]) == 7
+    assert int(row["seed_t"]["on_ground"][0, owner]) == 1
+    assert int(row["seed_t"]["action_id"][0, victim]) == 223
+    assert int(row["seed_t"]["action_frame"][0, victim]) == 2
+    assert int(row["seed_t"]["on_ground"][0, victim]) == 0
+    assert int(row["seed_t"]["jumps_left"][0, victim]) == 1
+    assert int(row["ref_t1"]["action_id"][0, victim]) == 227
+    assert int(row["ref_t1"]["action_frame"][0, victim]) == 0
+    assert int(row["ref_t1"]["on_ground"][0, victim]) == 1
+    assert int(row["ref_t1"]["jumps_left"][0, victim]) == 2
+
+    out, ref = _run_record(dataset_path, record)
+    for field in (
+        "action_id",
+        "action_frame",
+        "animation_index",
+        "on_ground",
+        "hitlag",
+        "hitstun",
+        "ground_id",
+    ):
+        assert int(out[field][0, victim]) == int(ref[field][victim]), (
+            f"MotionlessAggressiveJay rec={record} victim={victim} field={field} "
+            f"expected={int(ref[field][victim])} got={int(out[field][0, victim])}"
+        )
+
+    assert int(out["jumps_left"][0, victim]) == int(ref["jumps_left"][victim])
+    assert float(out["pos_x"][0, victim]) == pytest.approx(float(ref["pos_x"][victim]), abs=1e-4)
+    assert float(out["pos_y"][0, victim]) == pytest.approx(float(ref["pos_y"][victim]), abs=2e-4)
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    "dataset_name,record,victim",
+    [
+        ("BlondHardHippopotamus.msl", 508, 0),
+        ("BlondHardHippopotamus.msl", 557, 0),
+        ("BlondHardHippopotamus.msl", 1235, 1),
+        ("BlondHardHippopotamus.msl", 1278, 1),
+        ("BlondHardHippopotamus.msl", 4366, 1),
+        ("PutridJoyousOryx.msl", 290, 0),
+    ],
+)
+def test_replay_capturepulledhi_fox_without_floor_mask_stays_capturewaithi(
+    dataset_name: str, record: int, victim: int
+) -> None:
+    root = Path(__file__).resolve().parents[1]
+    dataset_rel = f"{_AGG_REL}/{dataset_name}"
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+    _skip_if_required_artifacts_missing(root)
+
+    ds = read_dataset(str(dataset_path))
+    row = ds.samples[record : record + 1]
+
+    # These Fox rows exposed the old broad prior-ground shortcut: stale ground_id existed, but the
+    # true mpColl_800477E0 floor-mask path does not fire, so the victim remains airborne
+    # CaptureWaitHi and must not receive the ftCommon_8007D7FC jump reset.
+    assert int(row["seed_t"]["char_id"][0, victim]) == 1
+    assert int(row["seed_t"]["action_id"][0, victim]) == 223
+    assert int(row["ref_t1"]["action_id"][0, victim]) == 224
+    assert int(row["ref_t1"]["on_ground"][0, victim]) == 0
+
+    out, ref = _run_record(dataset_path, record)
+    assert int(out["action_id"][0, victim]) == int(ref["action_id"][victim])
+    assert int(out["on_ground"][0, victim]) == int(ref["on_ground"][victim])
+    assert int(out["jumps_left"][0, victim]) == int(ref["jumps_left"][victim])
 
 
 @pytest.mark.integration

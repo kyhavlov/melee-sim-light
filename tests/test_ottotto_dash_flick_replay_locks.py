@@ -111,3 +111,60 @@ def test_ottotto_dash_flick_rows_match_replay(case: _Case) -> None:
             got = int(got)
             exp = int(exp)
         assert got == exp, f"{Path(case.dataset_rel).name} rec{case.record} p{p}: {field} {got} != {exp}"
+
+
+@pytest.mark.integration
+def test_runbrake_edge_collision_enters_ottotto_replay_lock() -> None:
+    # Replay-real lock for Run -> RunBrake IASA followed by RunBrake_Coll edge teeter:
+    # - ftCo_Run_IASA can enter RunBrake when stick.x is released.
+    # - ftCo_RunBrake_Coll calls ft_80084280, which runs ftCo_8009A3C8 before generic Fall.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Run.c::ftCo_Run_IASA
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_RunBrake.c::ftCo_RunBrake_Coll
+    # refs/melee/src/melee/ft/ft_081B.c::ft_80084280
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Ottotto.c::{ftCo_8009A3C8,ftCo_8009A410}
+    root = Path(__file__).resolve().parents[1]
+    dataset_rel = "datasets/aggregate_recent/replays/validation/aggregate_recent/ImpassionedAlarmedTarsier.msl"
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    record = 7625
+    p = 1
+    row = ds.samples[record : record + 1]
+    seed = row["seed_t"][0]
+    ref = row["ref_t1"][0]
+
+    assert int(seed["action_id"][p]) == 21  # ftCo_MS_Run
+    assert int(seed["action_frame"][p]) == 2
+    assert int(row["input_t"]["p"][0, p]["main_x"]) == 0
+    assert int(row["input_t"]["p"][0, p]["main_y"]) < 0
+    assert int(ref["action_id"][p]) == 245  # ftCo_MS_Ottotto
+    assert int(ref["animation_index"][p]) == 210  # ftCo_SM_Ottotto
+
+    out = _one_step_out_compare(ds=ds, row=row)[0]
+    for field in (
+        "action_id",
+        "action_frame",
+        "animation_index",
+        "on_ground",
+        "facing",
+        "hitlag",
+        "hitstun",
+        "jumps_left",
+        "ground_id",
+        "instance_id",
+        "state_flags",
+    ):
+        got = out[field][p]
+        exp = ref[field][p]
+        if hasattr(got, "tolist"):
+            got = got.tolist()
+            exp = exp.tolist()
+        else:
+            got = int(got)
+            exp = int(exp)
+        assert got == exp, f"ImpassionedAlarmedTarsier rec{record} p{p}: {field} {got} != {exp}"
+
+    assert float(out["pos_x"][p]) == pytest.approx(float(ref["pos_x"][p]), abs=1e-4)
+    assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=1e-4)

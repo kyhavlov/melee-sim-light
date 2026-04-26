@@ -36,6 +36,9 @@ Current target domain:
   - tooling / probes / locks
   - promoting a minimal explicit internal
   - documenting the blocker
+- Core/shared systems must not branch on character id as a proxy for missing collision, timer, or callback state.
+  Character-specific branches are allowed only for actual character-specific mechanics or data-table lookups, with nearby
+  decomp or extracted-data backing.
 
 ### C Core + Thin Python
 - All gameplay / physics / combat logic lives in **C** under `src/`.
