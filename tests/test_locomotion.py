@@ -1998,7 +1998,37 @@ def test_wait_press_jump_enters_kneebend() -> None:
     assert int(out["on_ground"][0]) == 1
 
 
-def test_kneebend_release_jump_short_hops() -> None:
+def test_kneebend_release_before_takeoff_short_hops() -> None:
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    input_stride = int(sizes["input"])
+
+    seed = _seed_base()
+    seed["on_ground"][0, 0] = np.uint8(1)
+    seed["action_id"][0, 0] = np.uint16(ACT_KNEEBEND)
+    seed["action_frame"][0, 0] = np.int16(1)  # One frame before the Anim-owned takeoff boundary.
+    seed["anim_frame_f32"][0, 0] = np.float32(1.0)
+    seed["animation_index"][0, 0] = np.uint32(SM_KNEEBEND)
+    seed["jumps_left"][0, 0] = np.uint8(2)
+    seed["kneebend_jump_input"][0, 0] = np.uint8(3)  # JumpInput_XY
+
+    prev_inp = _mk_input_bytes(1, input_stride)
+    inp = _mk_input_bytes(1, input_stride)
+    prev_view = prev_inp.view(INPUT_DTYPE).reshape((1,))
+    cur_view = inp.view(INPUT_DTYPE).reshape((1,))
+    # Release X before the takeoff frame so KneeBend_IASA can latch the short-hop bit.
+    prev_view["p"]["buttons"][0, 0] = np.uint16(BUTTON_X)
+    cur_view["p"]["buttons"][0, 0] = np.uint16(0)
+
+    out = _step_many(seed, prev_inp, inp, 2)[-1]
+    assert int(out["action_id"][0]) == ACT_JUMPF
+    assert int(out["action_frame"][0]) == 0
+    expected_vy = np.float32(_fox_attr("hop_v_initial_velocity"))
+    assert np.isclose(out["speed_y_self"][0], expected_vy)
+
+
+def test_kneebend_takeoff_frame_xy_release_stays_full_jump() -> None:
     import msl_binding
 
     sizes = msl_binding.sizes()
@@ -2017,14 +2047,17 @@ def test_kneebend_release_jump_short_hops() -> None:
     inp = _mk_input_bytes(1, input_stride)
     prev_view = prev_inp.view(INPUT_DTYPE).reshape((1,))
     cur_view = inp.view(INPUT_DTYPE).reshape((1,))
-    # Release X on takeoff frame.
+    # ftCo_KneeBend_Anim enters Jump before ftCo_KneeBend_IASA can observe this release.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_KneeBend.c::{
+    #   ftCo_KneeBend_Anim,ftCo_KneeBend_IASA,ftCo_KneeBend_Check_ShortHop
+    # }
     prev_view["p"]["buttons"][0, 0] = np.uint16(BUTTON_X)
     cur_view["p"]["buttons"][0, 0] = np.uint16(0)
 
     out = _step_once(seed, prev_inp, inp)
     assert int(out["action_id"][0]) == ACT_JUMPF
     assert int(out["action_frame"][0]) == 0
-    expected_vy = np.float32(_fox_attr("hop_v_initial_velocity"))
+    expected_vy = np.float32(_fox_attr("jump_v_initial_velocity"))
     assert np.isclose(out["speed_y_self"][0], expected_vy)
 
 
@@ -2037,8 +2070,8 @@ def test_kneebend_seeded_jump_input_lstick_short_hops_even_if_xy_held() -> None:
     seed = _seed_base()
     seed["on_ground"][0, 0] = np.uint8(1)
     seed["action_id"][0, 0] = np.uint16(ACT_KNEEBEND)
-    seed["action_frame"][0, 0] = np.int16(2)  # Fox jump_startup_frames=3, so +1 triggers takeoff.
-    seed["anim_frame_f32"][0, 0] = np.float32(2.0)
+    seed["action_frame"][0, 0] = np.int16(1)  # One frame before the Anim-owned takeoff boundary.
+    seed["anim_frame_f32"][0, 0] = np.float32(1.0)
     seed["animation_index"][0, 0] = np.uint32(SM_KNEEBEND)
     seed["jumps_left"][0, 0] = np.uint8(2)
     seed["kneebend_jump_input"][0, 0] = np.uint8(1)  # JumpInput_LStick
@@ -2047,12 +2080,13 @@ def test_kneebend_seeded_jump_input_lstick_short_hops_even_if_xy_held() -> None:
     inp = _mk_input_bytes(1, input_stride)
     prev_view = prev_inp.view(INPUT_DTYPE).reshape((1,))
     cur_view = inp.view(INPUT_DTYPE).reshape((1,))
-    # Hold X, but keep stick released below tap_jump_release_threshold.
+    # Hold X, but release tap-jump before takeoff below tap_jump_release_threshold.
     prev_view["p"]["buttons"][0, 0] = np.uint16(BUTTON_X)
     cur_view["p"]["buttons"][0, 0] = np.uint16(BUTTON_X)
+    prev_view["p"]["main_y"][0, 0] = np.int8(80)
     cur_view["p"]["main_y"][0, 0] = np.int8(0)
 
-    out = _step_once(seed, prev_inp, inp)
+    out = _step_many(seed, prev_inp, inp, 2)[-1]
     assert int(out["action_id"][0]) == ACT_JUMPF
     expected_vy = np.float32(_fox_attr("hop_v_initial_velocity"))
     assert np.isclose(out["speed_y_self"][0], expected_vy)

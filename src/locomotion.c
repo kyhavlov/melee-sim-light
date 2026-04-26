@@ -1223,11 +1223,6 @@ static inline uint8_t locomotion_try_kneebend_startup_complete_jump_prepass(
     return 0u;
   }
 
-  const float stick_y =
-      apply_deadzone(stick_i8_to_unit(batch->state.input_main_y[idx]), c->lstick_deadzone_y);
-  const float cstick_y =
-      apply_deadzone(stick_i8_to_unit(batch->state.input_c_y[idx]), c->lstick_deadzone_y);
-  const uint16_t buttons = batch->state.input_buttons[idx];
   const float facing_dir = batch->state.facing[idx] ? 1.0f : -1.0f;
 
   // Decomp callback-phase ordering:
@@ -1237,25 +1232,6 @@ static inline uint8_t locomotion_try_kneebend_startup_complete_jump_prepass(
   // Fighter_ChangeMotionState instance_id consumption aligned before later grounded IASA enters.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_KneeBend.c::{ftCo_KneeBend_Anim,ftCo_KneeBend_IASA}
   // refs/melee/src/melee/ft/chara/ftCommon/{ftCo_Wait.c,ftCo_Turn.c,ftCo_Dash.c,ftCo_Walk.c}
-
-  // Latch short hop state (ftCo_KneeBend_Check_ShortHop).
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_KneeBend.c:46
-  if (!batch->state.kneebend_is_short_hop[idx]) {
-    const uint8_t j_in = batch->state.kneebend_jump_input[idx];
-    if (j_in == (uint8_t)MSL_JUMP_INPUT_XY) {
-      if (!(buttons & (uint16_t)MSL_BUTTON_XY)) {
-        batch->state.kneebend_is_short_hop[idx] = 1;
-      }
-    } else if (j_in == (uint8_t)MSL_JUMP_INPUT_LSTICK) {
-      if (stick_y < c->tap_jump_release_threshold) {
-        batch->state.kneebend_is_short_hop[idx] = 1;
-      }
-    } else if (j_in == (uint8_t)MSL_JUMP_INPUT_CSTICK) {
-      if (cstick_y < c->tap_jump_release_threshold) {
-        batch->state.kneebend_is_short_hop[idx] = 1;
-      }
-    }
-  }
 
   const uint8_t is_short = batch->state.kneebend_is_short_hop[idx] ? 1u : 0u;
   const uint8_t full = (uint8_t)(!is_short);
@@ -4085,8 +4061,17 @@ void locomotion_update_pre(MslBatch* batch) {
           }
 
           // Latch short hop state (ftCo_KneeBend_Check_ShortHop).
-          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_KneeBend.c:46
-          if (!batch->state.kneebend_is_short_hop[idx]) {
+          //
+          // Source ordering:
+          // - ftCo_KneeBend_Anim enters JumpF/B as soon as `cur_anim_frame >= jump_startup_time`.
+          // - ftCo_KneeBend_IASA only calls ftCo_KneeBend_Check_ShortHop while the fighter is still
+          //   in KneeBend after Anim. A release observed on the same frame as Anim-owned Jump entry
+          //   is therefore too late to create a short hop; the latched bit must come from an earlier
+          //   KneeBend IASA frame or from the replay seed.
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_KneeBend.c::{
+          //   ftCo_KneeBend_Anim,ftCo_KneeBend_IASA,ftCo_KneeBend_Check_ShortHop
+          // }
+          if (!startup_complete && !batch->state.kneebend_is_short_hop[idx]) {
             const uint8_t j_in = batch->state.kneebend_jump_input[idx];
             if (j_in == (uint8_t)MSL_JUMP_INPUT_XY) {
               if (!(buttons & (uint16_t)MSL_BUTTON_XY)) {

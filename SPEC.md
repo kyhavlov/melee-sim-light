@@ -1454,6 +1454,13 @@ Grounded motion-entry timing notes:
   `ftCo_Jump.c::fn_800CAF78` (`p_ftCommonData->x80` stick-y threshold). Walk, Turn, Squat,
   Ottotto, and Landing continue to use the narrower `ftCo_Jump_CheckInput` edge path unless their
   own decomp owner says otherwise.
+- KneeBend short-hop ownership follows callback phase order. `ftCo_KneeBend_Anim` enters JumpF/B
+  when `cur_anim_frame >= jump_startup_time`; `ftCo_KneeBend_IASA` calls
+  `ftCo_KneeBend_Check_ShortHop` only while the state remains KneeBend after Anim. A jump-button or
+  tap-jump release observed on the same frame as the Anim-owned takeoff is too late to set
+  `mv.co.kneebend.is_short_hop`; runtime must use only an earlier latched bit or the replay seed
+  on that takeoff frame. Source: `refs/melee/src/melee/ft/chara/ftCommon/ftCo_KneeBend.c::{
+  ftCo_KneeBend_Anim,ftCo_KneeBend_IASA,ftCo_KneeBend_Check_ShortHop}`.
 - Grounded AttackS4 frame-7 hold rows are owned by the extracted `start_smash_charge` action-script
   event (`data/moves/{fox,falco}.json::ftCo_SM_AttackS4`, hold_frames=60), not by a generic
   locomotion action-frame bridge.
