@@ -95,6 +95,49 @@ static inline int pose_part_origin_world_facing_yrot90(float* out_x, float* out_
   return 0;
 }
 
+static inline int pose_part_origin_world_f32_facing_yrot90(
+    float* out_x, float* out_y, float* out_z, const MslBatch* batch, size_t player_idx,
+    uint32_t anim_u32, float anim_frame_f32, uint16_t part_id, float fighter_pos_x,
+    float fighter_pos_y, float fighter_pos_z, float fighter_scale_y, uint8_t facing_u8) {
+  if (out_x == NULL || out_y == NULL || out_z == NULL || batch == NULL) {
+    return -1;
+  }
+  if (anim_u32 > 0xFFFFu) {
+    return -1;
+  }
+
+  float m[12];
+  if (anim_pose_get_collision_matrix_f32(batch, player_idx, (uint16_t)anim_u32, anim_frame_f32,
+                                         part_id, m) != 0) {
+    return -1;
+  }
+
+  const float zero[3] = {0.0f, 0.0f, 0.0f};
+  float lx = 0.0f, ly = 0.0f, lz = 0.0f;
+  msl_mtx34_mul_point(m, zero, &lx, &ly, &lz);
+
+  // Decomp-shaped facing/root application mirrors pose_part_origin_world_facing_yrot90(), but the
+  // local JObj matrix comes from the float AObj track owner instead of integer SSANIM01
+  // interpolation.
+  // refs/melee/src/sysdolphin/baselib/aobj.c::HSD_AObjInterpretAnim
+  // refs/melee/src/sysdolphin/baselib/fobj.c::HSD_FObjInterpretAnim
+  // refs/melee/src/melee/lb/lb_00B0.c::lb_8000B1CC
+  const float facing_dir = facing_u8 ? 1.0f : -1.0f;
+  const float rx = facing_dir * lz;
+  const float rz = -facing_dir * lx;
+  lx = rx;
+  lz = rz;
+
+  lx *= fighter_scale_y;
+  ly *= fighter_scale_y;
+  lz *= fighter_scale_y;
+
+  *out_x = lx + fighter_pos_x;
+  *out_y = ly + fighter_pos_y;
+  *out_z = lz + fighter_pos_z;
+  return 0;
+}
+
 static inline int pose_part_local_translation(float* out_x, float* out_y, float* out_z,
                                               uint8_t char_id, uint32_t anim_u32,
                                               float anim_frame_f32, uint16_t part_id) {
@@ -210,6 +253,12 @@ static inline uint8_t thrownlw_attached_to_throwlw(const MslBatch* batch, int bi
   const size_t oidx = msl_idx_player(bi, owner_p);
   return (uint8_t)(batch->state.action_id[vidx] == (uint16_t)MSL_ACT_THROWN_LW &&
                    batch->state.action_id[oidx] == (uint16_t)MSL_ACT_THROW_LW);
+}
+
+static inline uint8_t action_is_nonlow_thrown(uint16_t action_id) {
+  return (uint8_t)(action_id == (uint16_t)MSL_ACT_THROWN_F ||
+                   action_id == (uint16_t)MSL_ACT_THROWN_B ||
+                   action_id == (uint16_t)MSL_ACT_THROWN_HI);
 }
 
 static inline int32_t throwlw_anim_rate_fp_from_chars(uint8_t owner_char_id,
@@ -480,7 +529,6 @@ void grab_attachment_apply_thrown_release_anchor_now(MslBatch* batch, int bi, in
 static inline void grabbed_victim_anchor_world(float* out_x, float* out_y, float* out_z,
                                                const MslBatch* batch, int bi, int victim_p,
                                                int owner_p) {
-  (void)victim_p;
   if (out_x == NULL || out_y == NULL || out_z == NULL || batch == NULL) {
     return;
   }
@@ -532,11 +580,28 @@ static inline void grabbed_victim_anchor_world(float* out_x, float* out_y, float
     owner_anchor_part = och->grab_capture_anchor_part_id;
   }
   const float owner_scale_y = pose_model_scale_y(batch, oidx);
-  if (pose_part_origin_world_facing_yrot90(
-          &ax, &ay, &az, batch->state.char_id[oidx], batch->state.animation_index[oidx],
-          batch->state.anim_frame_f32[oidx], owner_anchor_part, batch->state.pos_x[oidx],
-          batch->state.pos_y[oidx], batch->state.pos_z[oidx], owner_scale_y,
-          batch->state.facing[oidx]) != 0) {
+  const size_t vidx = msl_idx_player(bi, victim_p);
+  const uint8_t use_float_track_anchor = action_is_nonlow_thrown(batch->state.action_id[vidx]);
+  int pose_status = -1;
+  if (use_float_track_anchor) {
+    // ThrownF/B/Hi attachment samples the live HSD AObj/JObj owner. Keep CaptureWait/Pulled and
+    // ThrownLw on their separate proven paths; broadening this float-track anchor into low throw
+    // moves replay-real contact timing before the retained frame-25 TransN2/x1A70 slice.
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Thrown.c::ftCo_800DE508
+    // refs/melee/src/sysdolphin/baselib/aobj.c::HSD_AObjInterpretAnim
+    pose_status = pose_part_origin_world_f32_facing_yrot90(
+        &ax, &ay, &az, batch, oidx, batch->state.animation_index[oidx],
+        batch->state.anim_frame_f32[oidx], owner_anchor_part, batch->state.pos_x[oidx],
+        batch->state.pos_y[oidx], batch->state.pos_z[oidx], owner_scale_y,
+        batch->state.facing[oidx]);
+  } else {
+    pose_status = pose_part_origin_world_facing_yrot90(
+        &ax, &ay, &az, batch->state.char_id[oidx], batch->state.animation_index[oidx],
+        batch->state.anim_frame_f32[oidx], owner_anchor_part, batch->state.pos_x[oidx],
+        batch->state.pos_y[oidx], batch->state.pos_z[oidx], owner_scale_y,
+        batch->state.facing[oidx]);
+  }
+  if (pose_status != 0) {
     ax = batch->state.pos_x[oidx];
     ay = batch->state.pos_y[oidx];
     az = batch->state.pos_z[oidx];

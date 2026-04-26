@@ -152,6 +152,55 @@ def test_capturewait_to_nonlow_thrown_entry_uses_static_attachment_offsets(
 
 
 @pytest.mark.integration
+def test_throwhi_attached_rollout_uses_float_aobj_anchor() -> None:
+    # Replay-real positive for non-low thrown attachment:
+    # - ftCo_800DE508 samples the live XRotN JObj through lb_8000B1CC.
+    # - HSD_AObjInterpretAnim owns the fractional ThrowHi joint path; integer SSANIM01 interpolation
+    #   drifts on the frame-6/7 attached window and carries into release placement.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Thrown.c::ftCo_800DE508
+    # refs/melee/src/sysdolphin/baselib/aobj.c::HSD_AObjInterpretAnim
+    root = Path(__file__).resolve().parents[1]
+    dataset_rel = (
+        "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
+        "GracefulAttachedTurtle.msl"
+    )
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    out_by_record = _run_rollout_records(dataset_path, 8392, (8407, 8408, 8411))
+    for record, (out, ref) in out_by_record.items():
+        assert int(out["action_id"][1]) == int(ref["action_id"][1]) == 241, record  # ThrownHi
+        assert int(out["animation_index"][1]) == int(ref["animation_index"][1])
+        assert abs(float(out["pos_x"][1]) - float(ref["pos_x"][1])) <= 1.0e-4
+        assert abs(float(out["pos_y"][1]) - float(ref["pos_y"][1])) <= 1.0e-4
+
+
+@pytest.mark.integration
+def test_throwlw_low_throw_keeps_existing_attachment_anchor_boundary() -> None:
+    # Replay-real negative for the non-low float-AObj anchor:
+    # - ThrownLw has a separate retained low-throw attachment owner around the frame-25 TransN2
+    #   vertical handoff. Broadening the non-low float anchor into this slice moved contact/hitlag
+    #   earlier in rollout.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_800DB368
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Thrown.c::ftCo_800DE508
+    root = Path(__file__).resolve().parents[1]
+    dataset_rel = (
+        "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
+        "QuerulousGrandDinosaur.msl"
+    )
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    out_by_record = _run_rollout_records(dataset_path, 8116, (8121,))
+    out, ref = out_by_record[8121]
+    assert int(out["action_id"][1]) == int(ref["action_id"][1]) == 242  # ThrownLw
+    assert int(out["hitlag"][0]) == int(ref["hitlag"][0]) == 0
+    assert int(out["hitlag"][1]) == int(ref["hitlag"][1]) == 0
+
+
+@pytest.mark.integration
 def test_throwhi_release_rollout_applies_current_frame_di_and_damage_gravity() -> None:
     root = Path(__file__).resolve().parents[1]
     dataset_rel = (
