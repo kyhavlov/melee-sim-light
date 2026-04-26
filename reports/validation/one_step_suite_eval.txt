@@ -67,8 +67,8 @@ mismatch.item_type: 0 / 109425 (0.000000)
 mismatch.item_state: 0 / 109425 (0.000000)
 mismatch.item_owner: 0 / 109425 (0.000000)
 mismatch.item_instance_id: 0 / 109425 (0.000000)
-err.pos_x: mae=0.014035 p95=0.000000 max=6.000000
-err.pos_y: mae=0.003503 p95=0.000000 max=3.629393
+err.pos_x: mae=0.013803 p95=0.000000 max=6.000000
+err.pos_y: mae=0.003750 p95=0.000000 max=5.364812
 err.speed_air_x_self: mae=0.005684 p95=0.000000 max=2.316823
 err.speed_ground_x_self: mae=0.005498 p95=0.000000 max=1.815992
 err.speed_y_self: mae=0.001167 p95=0.000000 max=2.510000
@@ -81,7 +81,7 @@ err.item_pos_y: mae=0.001851 p95=0.000000 max=0.280014
 err.item_vel_x: mae=0.026661 p95=0.000000 max=10.000000
 err.item_vel_y: mae=0.002094 p95=0.000000 max=0.347369
 overall.discrete_mismatch: 65 / 882695
-overall.float_norm_mae_p95: 0.00086371
+overall.float_norm_mae_p95: 0.00086390
 
 == datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.msl ==
 Records: 11529  Players/scored per record: 2  Total player-frames: 23058
@@ -109,8 +109,8 @@ mismatch.item_type: 0 / 172935 (0.000000)
 mismatch.item_state: 0 / 172935 (0.000000)
 mismatch.item_owner: 0 / 172935 (0.000000)
 mismatch.item_instance_id: 0 / 172935 (0.000000)
-err.pos_x: mae=0.014077 p95=0.000001 max=14.919506
-err.pos_y: mae=0.003299 p95=0.000000 max=7.826638
+err.pos_x: mae=0.014064 p95=0.000001 max=14.919506
+err.pos_y: mae=0.003101 p95=0.000000 max=7.826638
 err.speed_air_x_self: mae=0.005682 p95=0.000000 max=1.815992
 err.speed_ground_x_self: mae=0.005607 p95=0.000000 max=1.815992
 err.speed_y_self: mae=0.000780 p95=0.000000 max=2.200000
@@ -123,7 +123,7 @@ err.item_pos_y: mae=0.001188 p95=0.000000 max=1.350348
 err.item_vel_x: mae=0.014862 p95=0.000000 max=8.353741
 err.item_vel_y: mae=0.002045 p95=0.000000 max=2.488326
 overall.discrete_mismatch: 96 / 1395009
-overall.float_norm_mae_p95: 0.00083624
+overall.float_norm_mae_p95: 0.00083593
 
 == datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/QuerulousGrandDinosaur.msl ==
 Records: 10222  Players/scored per record: 2  Total player-frames: 20444
@@ -193,8 +193,8 @@ mismatch.item_type: 0 / 117555 (0.000000)
 mismatch.item_state: 0 / 117555 (0.000000)
 mismatch.item_owner: 0 / 117555 (0.000000)
 mismatch.item_instance_id: 0 / 117555 (0.000000)
-err.pos_x: mae=0.015493 p95=0.000000 max=6.000000
-err.pos_y: mae=0.005703 p95=0.000000 max=6.677049
+err.pos_x: mae=0.014936 p95=0.000000 max=6.000000
+err.pos_y: mae=0.004210 p95=0.000000 max=4.050635
 err.speed_air_x_self: mae=0.009603 p95=0.000000 max=1.815992
 err.speed_ground_x_self: mae=0.009678 p95=0.000000 max=1.815992
 err.speed_y_self: mae=0.001246 p95=0.000000 max=2.940000
@@ -207,8 +207,8 @@ err.item_pos_y: mae=0.001103 p95=0.000000 max=0.280016
 err.item_vel_x: mae=0.011704 p95=0.000000 max=2.756703
 err.item_vel_y: mae=0.001124 p95=0.000000 max=0.280011
 overall.discrete_mismatch: 96 / 948277
-overall.float_norm_mae_p95: 0.00126893
+overall.float_norm_mae_p95: 0.00126607
 
 == suite summary ==
 overall.discrete_mismatch: 352 / 4462843
-overall.float_norm_mae_p95: 0.00090003
+overall.float_norm_mae_p95: 0.00089935

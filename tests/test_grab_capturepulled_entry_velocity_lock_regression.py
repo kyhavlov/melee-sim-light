@@ -132,3 +132,35 @@ def test_replay_capturepulledhi_entry_adjacent_context_controls_records_2690_269
     assert float(out_after["speed_air_x_self"][0, victim]) == pytest.approx(
         float(ref_after["speed_air_x_self"][victim]), abs=1e-6
     )
+
+
+@pytest.mark.integration
+def test_replay_capturepulledhi_entry_applies_airborne_capture_delta_record_6468_lock() -> None:
+    root = Path(__file__).resolve().parents[1]
+    dataset_rel = "datasets/aggregate_recent/replays/validation/aggregate_recent/MotionlessAggressiveJay.msl"
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+    _skip_if_required_artifacts_missing(root)
+
+    victim = 0
+    owner = 1
+    record = 6468
+    ds = read_dataset(str(dataset_path))
+    row = ds.samples[record : record + 1]
+
+    # Replay-real lock: Catch -> CatchPull connects against an airborne DamageFlyTop victim and
+    # fn_800DAADC immediately applies the capture-anchor minus victim-XRotN delta after
+    # CapturePulledHi entry.
+    # refs/melee/build/GALE01/asm/melee/ft/chara/ftCommon/ftCo_Attack100.s::{
+    #   fn_800DAADC,fn_800DAC78}
+    assert int(row["seed_t"]["action_id"][0, owner]) == 212
+    assert int(row["seed_t"]["action_id"][0, victim]) == 90
+    assert int(row["ref_t1"]["action_id"][0, owner]) == 213
+    assert int(row["ref_t1"]["action_id"][0, victim]) == 223
+
+    out, ref = _run_record(dataset_path, record)
+
+    assert int(out["action_id"][0, victim]) == int(ref["action_id"][victim])
+    assert float(out["pos_x"][0, victim]) == pytest.approx(float(ref["pos_x"][victim]), abs=1e-5)
+    assert float(out["pos_y"][0, victim]) == pytest.approx(float(ref["pos_y"][victim]), abs=1e-5)

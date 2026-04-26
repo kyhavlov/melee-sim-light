@@ -11,6 +11,7 @@ from tools.eval.dataset import COMPARE_DTYPE, read_dataset
 
 _STICK_MAX = 80.0
 _BUTTON_A = 0x0100
+_BUTTON_Z = 0x0010
 
 
 def _stick_unit(v: int) -> float:
@@ -69,6 +70,7 @@ class _Case:
 
 
 _BASE = "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent"
+_AGG_BASE = "datasets/aggregate_recent/replays/validation/aggregate_recent"
 
 
 @pytest.mark.integration
@@ -87,6 +89,9 @@ _BASE = "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent"
         # KneeBend->Jump direction reads deadzoned fp->input.lstick.x (common input update path).
         _Case(f"{_BASE}/AttachedGoodNaturedGuanaco.msl", 7011, 0, 24, 25, 16, "kneebend_jump_dir_deadzone"),
         _Case(f"{_BASE}/GracefulAttachedTurtle.msl", 4233, 1, 24, 25, 16, "kneebend_jump_dir_deadzone"),
+        # Raw Z maps into the fighter x668 A lane before common Jump-family AttackAir checks.
+        _Case(f"{_AGG_BASE}/BlondHardHippopotamus.msl", 6234, 1, 25, 65, 68, "attackair_z_a_lane"),
+        _Case(f"{_AGG_BASE}/BlondHardHippopotamus.msl", 7585, 1, 24, 65, 68, "attackair_z_a_lane"),
     ],
 )
 def test_attackair_direction_and_jump_selection_cluster_records(case: _Case) -> None:
@@ -125,7 +130,9 @@ def test_attackair_direction_and_jump_selection_cluster_records(case: _Case) -> 
         prev_cy = _stick_unit(int(prev_inp["c_y"]))
         cur_cx = _stick_unit(int(inp["c_x"]))
         cur_cy = _stick_unit(int(inp["c_y"]))
-        c_edge = (abs(prev_cx) < c_dz_x and abs(cur_cx) >= c_dz_x) or (abs(prev_cy) < c_dz_y and abs(cur_cy) >= c_dz_y)
+        c_edge = (abs(prev_cx) < c_dz_x and abs(cur_cx) >= c_dz_x) or (
+            abs(prev_cy) < c_dz_y and abs(cur_cy) >= c_dz_y
+        )
         assert c_edge
         assert (int(inp["buttons"]) & _BUTTON_A) == 0
 
@@ -136,10 +143,21 @@ def test_attackair_direction_and_jump_selection_cluster_records(case: _Case) -> 
         prev_cy = _stick_unit(int(prev_inp["c_y"]))
         cur_cx = _stick_unit(int(inp["c_x"]))
         cur_cy = _stick_unit(int(inp["c_y"]))
-        c_edge = (abs(prev_cx) < c_dz_x and abs(cur_cx) >= c_dz_x) or (abs(prev_cy) < c_dz_y and abs(cur_cy) >= c_dz_y)
+        c_edge = (abs(prev_cx) < c_dz_x and abs(cur_cx) >= c_dz_x) or (
+            abs(prev_cy) < c_dz_y and abs(cur_cy) >= c_dz_y
+        )
         assert not c_edge
         assert (int(inp["buttons"]) & _BUTTON_A) != 0
         assert (int(prev_inp["buttons"]) & _BUTTON_A) == 0
+
+    if case.cluster == "attackair_z_a_lane":
+        # Decomp: fighter input synthesis maps raw Z into held HSD_PAD_A before x668 edge
+        # construction, and ftCo_AttackAir_CheckItemThrowInput gates on `input.x668 & HSD_PAD_A`.
+        # refs/melee/src/melee/ft/fighter.c:1868-1890
+        # refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_CheckItemThrowInput
+        assert (int(inp["buttons"]) & _BUTTON_Z) != 0
+        assert (int(prev_inp["buttons"]) & _BUTTON_Z) == 0
+        assert (int(inp["buttons"]) & _BUTTON_A) == 0
 
     if case.cluster == "kneebend_jump_dir":
         jump_back = float(common["jump_back_x_threshold"])

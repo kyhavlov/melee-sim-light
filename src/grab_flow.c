@@ -1074,6 +1074,14 @@ void grab_flow_on_catch_connect(MslBatch* batch, int bi, int owner_p, int victim
   }
   batch->state.attached_victim_port[oidx] = (uint8_t)victim_p;
   batch->state.grab_owner_port[vidx] = (uint8_t)owner_p;
+  if (batch->state.action_id[vidx] == (uint16_t)MSL_ACT_CAPTURE_PULLED_HI) {
+    // Decomp: fn_800DAADC calls fn_800DAC78 immediately after CapturePulledHi entry and applies
+    // the owner capture-anchor minus victim XRotN delta to airborne victims in the same callback.
+    // The grounded CapturePulledLw lane writes the vertical carry into fp->x2170 instead.
+    // refs/melee/build/GALE01/asm/melee/ft/chara/ftCommon/ftCo_Attack100.s::{
+    //   fn_800DAADC,fn_800DAC78}
+    grab_attachment_apply_capture_delta_now(batch, bi, victim_p, owner_p);
+  }
 }
 
 void grab_flow_update_anim_callbacks_pre_input(MslBatch* batch) {

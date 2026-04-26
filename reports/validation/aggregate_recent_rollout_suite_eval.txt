@@ -29,13 +29,13 @@ fields: action_id,animation_index,on_ground,hitlag,hitstun,state_flags
 
 == datasets/aggregate_recent/replays/validation/aggregate_recent/BlondHardHippopotamus.msl ==
 rollout.best_len: 384
-rollout.streak_count: 131
+rollout.streak_count: 129
 rollout.streak_len.median: 55
-rollout.streak_len.p90: 180
+rollout.streak_len.p90: 195
 rollout.streak_len.p95: 215
 rollout.streak_len.max: 384
-rollout.first_mismatch_total: 132
-rollout.first_mismatch_seeded_total: 40
+rollout.first_mismatch_total: 130
+rollout.first_mismatch_seeded_total: 37
 
 == datasets/aggregate_recent/replays/validation/aggregate_recent/DistinctCaringCobra.msl ==
 rollout.best_len: 385
@@ -68,14 +68,14 @@ rollout.first_mismatch_total: 92
 rollout.first_mismatch_seeded_total: 43
 
 == datasets/aggregate_recent/replays/validation/aggregate_recent/HungryImportantSnake.msl ==
-rollout.best_len: 249
-rollout.streak_count: 116
+rollout.best_len: 319
+rollout.streak_count: 113
 rollout.streak_len.median: 51
-rollout.streak_len.p90: 166
-rollout.streak_len.p95: 189
-rollout.streak_len.max: 249
-rollout.first_mismatch_total: 117
-rollout.first_mismatch_seeded_total: 45
+rollout.streak_len.p90: 167
+rollout.streak_len.p95: 199
+rollout.streak_len.max: 319
+rollout.first_mismatch_total: 114
+rollout.first_mismatch_seeded_total: 36
 
 == datasets/aggregate_recent/replays/validation/aggregate_recent/ImpassionedAlarmedTarsier.msl ==
 rollout.best_len: 429
@@ -119,13 +119,13 @@ rollout.first_mismatch_seeded_total: 85
 
 == datasets/aggregate_recent/replays/validation/aggregate_recent/PutridJoyousOryx.msl ==
 rollout.best_len: 261
-rollout.streak_count: 121
-rollout.streak_len.median: 43
-rollout.streak_len.p90: 131
-rollout.streak_len.p95: 187
+rollout.streak_count: 114
+rollout.streak_len.median: 44
+rollout.streak_len.p90: 159
+rollout.streak_len.p95: 197
 rollout.streak_len.max: 261
-rollout.first_mismatch_total: 122
-rollout.first_mismatch_seeded_total: 50
+rollout.first_mismatch_total: 114
+rollout.first_mismatch_seeded_total: 42
 
 == datasets/aggregate_recent/replays/validation/aggregate_recent/TubbyCurlyHerring.msl ==
 rollout.best_len: 489
@@ -178,11 +178,11 @@ rollout.first_mismatch_total: 87
 rollout.first_mismatch_seeded_total: 30
 
 == suite summary ==
-overall.rollout.streak_count: 1759
-overall.rollout.streak_len.median: 61
-overall.rollout.streak_len.p90: 187
-overall.rollout.streak_len.p95: 244
+overall.rollout.streak_count: 1747
+overall.rollout.streak_len.median: 62
+overall.rollout.streak_len.p90: 189
+overall.rollout.streak_len.p95: 245
 overall.rollout.streak_len.max: 631
 overall.rollout.best_len.max: 631
-overall.rollout.first_mismatch_total: 1821
-overall.rollout.first_mismatch_seeded_total: 745
+overall.rollout.first_mismatch_total: 1808
+overall.rollout.first_mismatch_seeded_total: 725
