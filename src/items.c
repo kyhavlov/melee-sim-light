@@ -1945,9 +1945,7 @@ static inline void item_apply_shine_reflect_callback(MslBatch* batch, size_t ii,
 }
 
 static int laser_spawn_from_fighter(MslBatch* batch, int bi, int owner, const MslLaserParams* lp,
-                                    uint8_t spawn_state, uint8_t use_velocity_override,
-                                    float override_vx, float override_vy,
-                                    uint8_t apply_spawn_motion_step,
+                                    uint8_t spawn_state, uint8_t apply_spawn_motion_step,
                                     uint8_t throw_lw_late_pulse_transn_y, int seed_hitlist_victim,
                                     uint16_t seed_hitlist_victim_iid, uint8_t seed_hitlist_mask) {
   if (batch == NULL || lp == NULL) {
@@ -2098,22 +2096,6 @@ static int laser_spawn_from_fighter(MslBatch* batch, int bi, int owner, const Ms
   const float spd = lp->blaster_speed;
   float vx = spd * cosf(ang);
   float vy = spd * sinf(ang);
-  if (use_velocity_override) {
-    // Throw-side shot vector ownership (decomp-backed + seed bridge):
-    // - ftFx_Throw_Anim launches throw shots from `atan2f(FtHoldJoint - ItHoldJoint)`, not the
-    //   SpecialN constant blaster angle.
-    // - Slippi seed does not expose the gun hold-joint pose/cmd cursor directly; use the latest
-    //   seeded throw-side shot velocity as a narrow deterministic proxy and normalize to authored
-    //   blaster speed.
-    // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
-    // refs/melee/src/melee/it/items/itfoxlaser.c::{it_8029C6A4,it_8029C6CC}
-    const float mag2 = (override_vx * override_vx) + (override_vy * override_vy);
-    if (mag2 > 1e-8f) {
-      const float inv_mag = 1.0f / sqrtf(mag2);
-      vx = spd * (override_vx * inv_mag);
-      vy = spd * (override_vy * inv_mag);
-    }
-  }
   if (apply_spawn_motion_step) {
     // Throw-side intra-frame order bridge:
     // - Throw shots are emitted by ftFx_Throw_Anim and then consume item motion callbacks in-frame.
@@ -4126,16 +4108,12 @@ void items_spawn_pre_physics(MslBatch* batch) {
     // Stack-local per-step/per-batch-row scratch: reset once each row iteration.
     // This does not persist in SoA state across frames/reseed.
     uint8_t gun_spawned_this_frame[MSL_MAX_PLAYERS] = {0};
-    float throw_seed_shot_vx[MSL_MAX_PLAYERS] = {0.0f};
-    float throw_seed_shot_vy[MSL_MAX_PLAYERS] = {0.0f};
-    uint8_t throw_seed_shot_valid[MSL_MAX_PLAYERS] = {0u};
     uint8_t throw_seed_shot_count[MSL_MAX_PLAYERS] = {0u};
 
-    // Seed-visible throw-shot vector snapshot (pre-spawn):
-    // - Throw-side shot direction in ftFx_Throw_Anim is gun-joint relative (`atan2f(sp50-sp44)`),
-    //   which is not directly seed-exposed.
-    // - Snapshot latest throw-side (state1) shot velocity per owner as a deterministic bridge for
-    //   narrow throw-pulse reconstruction rows.
+    // Seed/rollout-visible live throw-shot count (pre-spawn):
+    // - ftFx_Throw_Anim consumes at most one throw_flags_b0 pulse per Anim callback.
+    // - Existing state1 throw shots represent already-emitted command ordinals for several
+    //   replay/rollout bridge paths below.
     // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
     // refs/melee/src/melee/it/items/itfoxlaser.c::it_8029C6CC
     if (row_had_items != 0u) {
@@ -4145,7 +4123,6 @@ void items_spawn_pre_physics(MslBatch* batch) {
         if (p_lp == NULL || p_lp->shot_itkind == 0u) {
           continue;
         }
-        float best_timer = -1.0f;
         for (int it = 0; it < MSL_MAX_ITEMS; it++) {
           const size_t ii = msl_idx_item(bi, it);
           if (!batch->state.item_exists[ii] || batch->state.item_owner[ii] != (int8_t)p ||
@@ -4155,18 +4132,6 @@ void items_spawn_pre_physics(MslBatch* batch) {
           }
           if (throw_seed_shot_count[p] < 0xFFu) {
             throw_seed_shot_count[p]++;
-          }
-          const float vx = batch->state.item_vel_x[ii];
-          const float vy = batch->state.item_vel_y[ii];
-          if ((vx * vx) + (vy * vy) <= 1e-8f) {
-            continue;
-          }
-          const float timer = batch->state.item_timer[ii];
-          if (timer > best_timer) {
-            best_timer = timer;
-            throw_seed_shot_vx[p] = vx;
-            throw_seed_shot_vy[p] = vy;
-            throw_seed_shot_valid[p] = 1u;
           }
         }
       }
@@ -4235,9 +4200,6 @@ void items_spawn_pre_physics(MslBatch* batch) {
       const uint16_t frame = msl_anim_frame_floor_u16(af);
       uint8_t should_shoot = laser_should_shoot_on_frame(lp, msid, frame);
       uint8_t shoot_spawn_state = 0u;
-      uint8_t shoot_use_velocity_override = 0u;
-      float shoot_override_vx = 0.0f;
-      float shoot_override_vy = 0.0f;
       uint8_t shoot_apply_motion_step = 0u;
       uint8_t shoot_throw_lw_late_pulse_transn_y = 0u;
       int shoot_seed_hitlist_victim = -1;
@@ -4483,15 +4445,6 @@ void items_spawn_pre_physics(MslBatch* batch) {
                   shoot_throw_lw_late_pulse_transn_y = 1u;
                 }
               }
-              if (action_id == (uint16_t)MSL_ACT_THROW_HI && throw_seed_shot_valid[p] &&
-                  (int16_t)pending_pulse_af >= (int16_t)MSL_THROWHI_PULSE_MID_AF &&
-                  (batch->state.throw_pulse_crossed_prev_frame[idx] >=
-                       (uint8_t)MSL_THROWHI_PREV_PHASE_AF ||
-                   throw_seed_shot_count[p] != 0u)) {
-                shoot_use_velocity_override = 1u;
-                shoot_override_vx = throw_seed_shot_vx[p];
-                shoot_override_vy = throw_seed_shot_vy[p];
-              }
             } else {
               should_shoot = 0u;
             }
@@ -4527,7 +4480,6 @@ void items_spawn_pre_physics(MslBatch* batch) {
         if (action_id == (uint16_t)MSL_ACT_THROW_HI &&
             batch->state.throw_pulse_consumed[idx] != 0u) {
           uint8_t ongoing_throwhi_context = 0u;
-          uint8_t throwhi_override_allowed = 0u;
           // Command-cursor shot count guard:
           // - ftAction_80071974 emits one throw_flags_b0 pulse per set_throw_spawn_projectile
           //   command, and ftFx_Throw_Anim consumes at most one pulse per Anim callback.
@@ -4550,9 +4502,6 @@ void items_spawn_pre_physics(MslBatch* batch) {
             if (batch->state.hitstun[v_idx] > 0u &&
                 batch->state.last_hit_by[v_idx] == item_source_port0_for_owner(batch, idx, p)) {
               ongoing_throwhi_context = 1u;
-              if (batch->state.last_attack_landed[v_idx] != 0u) {
-                throwhi_override_allowed = 1u;
-              }
               break;
             }
           }
@@ -4561,16 +4510,6 @@ void items_spawn_pre_physics(MslBatch* batch) {
             // Throw-side spawn path in ftFx_Throw_Anim uses it_8029C6CC (msid=1).
             // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
             shoot_spawn_state = 1u;
-            // Keep seed velocity override scoped to contexts where replay seed also reports a
-            // concrete landed-attack identity; broadened ongoing-hitstun bridge contexts without
-            // last_attack_landed ownership still emit the pulse but keep native throw kinematics.
-            // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm (last_attack_landed lane)
-            if (throw_seed_shot_valid[p] &&
-                (throwhi_override_allowed || batch->state.facing[idx] != 0u)) {
-              shoot_use_velocity_override = 1u;
-              shoot_override_vx = throw_seed_shot_vx[p];
-              shoot_override_vy = throw_seed_shot_vy[p];
-            }
           }
         }
         if (!should_shoot) {
@@ -4956,24 +4895,14 @@ void items_spawn_pre_physics(MslBatch* batch) {
                 shoot_throw_lw_late_pulse_transn_y = 1u;
               }
             }
-            // ThrowHi pulse-crossing velocity bridge:
-            // - Throw-side launch direction in ftFx_Throw_Anim is hold-joint vector driven
-            //   (`atan2f`), not the fixed SpecialN blaster angle.
-            // - On mid/late ThrowHi pulse crossings, seed-visible latest throw-shot velocity is a
-            //   tighter proxy than the default angle lane; keep this scoped to ThrowHi pulse
-            //   crossings at/after the script mid pulse.
+            // ThrowHi pulse-crossing vector owner:
+            // - ftFx_Throw_Anim recomputes FtGetHoldJoint / ItGetHoldJoint for every consumed
+            //   throw_flags_b0 pulse. Do not reuse the latest live shot velocity for mid/late
+            //   pulses; frame-20/24 ThrowHi rows rotate the gun between pulses and must sample the
+            //   current float-pose hold-joint vector.
             // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
             // refs/melee/src/melee/it/items/itfoxlaser.c::it_8029C6CC
             // data/moves/{fox,falco}.json moves["ftCo_SM_ThrowHi"]["events"]
-            if (action_id == (uint16_t)MSL_ACT_THROW_HI && !shoot_use_velocity_override &&
-                throw_seed_shot_valid[p] && crossed_pulse_af >= (int16_t)MSL_THROWHI_PULSE_MID_AF &&
-                (batch->state.throw_pulse_crossed_prev_frame[idx] >=
-                     (uint8_t)MSL_THROWHI_PREV_PHASE_AF ||
-                 throw_seed_shot_count[p] != 0u)) {
-              shoot_use_velocity_override = 1u;
-              shoot_override_vx = throw_seed_shot_vx[p];
-              shoot_override_vy = throw_seed_shot_vy[p];
-            }
           }
         }
       }
@@ -5052,10 +4981,10 @@ void items_spawn_pre_physics(MslBatch* batch) {
           }
         }
       }
-      const int spawned_slot = laser_spawn_from_fighter(
-          batch, bi, p, lp, shoot_spawn_state, shoot_use_velocity_override, shoot_override_vx,
-          shoot_override_vy, shoot_apply_motion_step, shoot_throw_lw_late_pulse_transn_y,
-          shoot_seed_hitlist_victim, shoot_seed_hitlist_victim_iid, shoot_seed_hitlist_mask);
+      const int spawned_slot =
+          laser_spawn_from_fighter(batch, bi, p, lp, shoot_spawn_state, shoot_apply_motion_step,
+                                   shoot_throw_lw_late_pulse_transn_y, shoot_seed_hitlist_victim,
+                                   shoot_seed_hitlist_victim_iid, shoot_seed_hitlist_mask);
       (void)spawned_slot;
       if (is_blaster_throw && action_id == (uint16_t)MSL_ACT_THROW_LW &&
           lp->shot_itkind == (uint16_t)MSL_IT_KIND_FALCO_LASER_SHOT &&

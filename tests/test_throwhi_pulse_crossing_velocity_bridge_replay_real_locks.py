@@ -14,7 +14,7 @@ from tools.eval.dataset import read_dataset
 
 
 @dataclass(frozen=True)
-class _ThrowHiPulseCrossingVelocityBridgeCase:
+class _ThrowHiPulseCrossingHoldJointCase:
     dataset_rel: str
     target_record: int
     thrower_port: int
@@ -25,36 +25,36 @@ class _ThrowHiPulseCrossingVelocityBridgeCase:
 @pytest.mark.parametrize(
     "case",
     [
-        _ThrowHiPulseCrossingVelocityBridgeCase(
+        _ThrowHiPulseCrossingHoldJointCase(
             dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl",
             target_record=1003,
             thrower_port=1,
-            note="ThrowHi crossing velocity bridge family AGG",
+            note="ThrowHi crossing hold-joint vector family AGG",
         ),
-        _ThrowHiPulseCrossingVelocityBridgeCase(
+        _ThrowHiPulseCrossingHoldJointCase(
             dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl",
             target_record=237,
             thrower_port=0,
-            note="ThrowHi crossing velocity bridge family GAT",
+            note="ThrowHi crossing hold-joint vector family GAT",
         ),
-        _ThrowHiPulseCrossingVelocityBridgeCase(
+        _ThrowHiPulseCrossingHoldJointCase(
             dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/QuerulousGrandDinosaur.msl",
             target_record=3094,
             thrower_port=0,
-            note="ThrowHi crossing velocity bridge family QGD",
+            note="ThrowHi crossing hold-joint vector family QGD",
         ),
-        _ThrowHiPulseCrossingVelocityBridgeCase(
+        _ThrowHiPulseCrossingHoldJointCase(
             dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/TreasuredBackKangaroo.msl",
             target_record=458,
             thrower_port=0,
-            note="ThrowHi crossing velocity bridge family TBK",
+            note="ThrowHi crossing hold-joint vector family TBK",
         ),
     ],
 )
-def test_throwhi_pulse_crossing_velocity_bridge_target_pm1_both_players_strict_lock(
-    case: _ThrowHiPulseCrossingVelocityBridgeCase,
+def test_throwhi_pulse_crossing_hold_joint_target_pm1_both_players_strict_lock(
+    case: _ThrowHiPulseCrossingHoldJointCase,
 ) -> None:
-    # Replay-real target+/-1 strict lock for ThrowHi pulse-crossing velocity bridge lane in src/items.c.
+    # Replay-real target+/-1 strict lock for ThrowHi pulse-crossing hold-joint vector lane in src/items.c.
     #
     # Decomp/data refs for this lane:
     # - refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
@@ -80,11 +80,11 @@ def test_throwhi_pulse_crossing_velocity_bridge_target_pm1_both_players_strict_l
     seed = target["seed_t"]
     victim = 1 - thrower
 
-    # src/items.c ThrowHi pulse-crossing velocity-bridge preconditions:
+    # src/items.c ThrowHi pulse-crossing hold-joint preconditions:
     # - thrower in ThrowHi;
     # - pulse latch is reconstructed from frame-crossing (throw_pulse_consumed==0);
     # - prior-step crossing lane indicates mid/late throw pulse timing (>=20);
-    # - seeded owner state1 shot with non-zero velocity exists for direction proxying.
+    # - seeded owner state1 shot exists as the already-emitted command ordinal.
     assert int(seed["action_id"][thrower]) == 221, case.note  # ThrowHi
     assert int(seed["throw_pulse_consumed"][thrower]) == 0, case.note
     assert int(seed["throw_pulse_crossed_prev_frame"][thrower]) >= 20, case.note
@@ -97,10 +97,6 @@ def test_throwhi_pulse_crossing_velocity_bridge_target_pm1_both_players_strict_l
         if int(item["owner"]) != thrower:
             continue
         if int(item["state"]) != 1:
-            continue
-        vx = float(item["vel_x"])
-        vy = float(item["vel_y"])
-        if (vx * vx) + (vy * vy) <= 1e-8:
             continue
         owner_state1_count += 1
     assert owner_state1_count >= 1, case.note
