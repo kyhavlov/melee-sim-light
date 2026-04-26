@@ -1107,6 +1107,14 @@ void knockdown_update_pre_physics(MslBatch* batch) {
         const uint8_t should_enter_damage_fall =
             fly_roll ? (uint8_t)(!in_hitstun && !iasa_locked)
                      : (uint8_t)(!in_hitstun && !iasa_locked && anim_done);
+        if (in_hitstun && iasa_locked && damage_jump_input_from_edges(batch, c, idx)) {
+          // DamageFly/DamageFlyRoll IASA uses the same x221C_b6 `doIasa` path as common Damage:
+          // a qualifying jump input snapshots mv.co.damage.x0 into x14 before the later
+          // post-hitstun DamageFly_Anim / DamageFall_IASA jump gate consumes it.
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{
+          //   doIasa,ftCo_DamageFly_IASA,ftCo_DamageFlyRoll_IASA}
+          batch->state.damage_jump_buffer_x14[idx] = batch->state.hitstun[idx];
+        }
         if (should_enter_damage_fall) {
           if (!fly_roll) {
             // Decomp IASA ordering (not collision/physics):
@@ -1245,6 +1253,18 @@ void knockdown_update_pre_physics(MslBatch* batch) {
         uint8_t anim_done = 0u;
         if (damage_msid_u32 <= 0xFFFFu) {
           anim_done = anim_is_finished(cid, (uint16_t)damage_msid_u32, anim_frame);
+        }
+
+        if (damage_ground != 0u && iasa_locked && batch->state.hitstun[idx] > 0u &&
+            damage_jump_input_from_edges(batch, c, idx)) {
+          // Decomp: while x221C_b6 keeps grounded DamageHi/N/Lw in hitstun lockout,
+          // ftCo_Damage_IASA still calls doIasa; a qualifying jump input snapshots
+          // mv.co.damage.x0 into mv.co.damage.x14 for the later post-hitstun Wait_IASA
+          // injected-XY path. Keep landed DamageAir excluded until its floor-contact handoff
+          // predicate is modeled; broadening this producer there regresses the modelplay
+          // DamageAir floor-contact control.
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{doIasa,ftCo_Damage_IASA}
+          batch->state.damage_jump_buffer_x14[idx] = batch->state.hitstun[idx];
         }
 
         if (!iasa_locked) {

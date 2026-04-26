@@ -540,10 +540,12 @@ section or regenerate it; do not rely on stale tables.
 
 Recent deltas to reflect here (do not let these get “lost in chat logs”):
 - Core combat/contact continuation pass (2026-04-24): retained decomp-backed runtime/seed cleanup
-  for the next residual block. Common airborne `Damage_IASA` uses the live
+  for the next residual block. Common airborne `Damage_IASA` and grounded DamageHi/N/Lw
+  `Damage_IASA` use the live
   `mv.co.damage.x14` jump-buffer snapshot with XY and hitlag-gated tap-jump seed producers
-  (`ftCo_8008F744`, `ftCo_Damage_IASA`, `ftCo_Jump_GetInput`); AttackAir same-frame IASA checks aerial B-special
-  admission before JumpAerial (`ftCo_AttackAir.c::DO_IASA`,
+  (`ftCo_8008F744`, `doIasa`, `ftCo_Damage_IASA`, `ftCo_Jump_GetInput`), including grounded
+  hitstun-lockout rows that later inject XY before the post-hitstun `Wait_IASA` delegate; AttackAir
+  same-frame IASA checks aerial B-special admission before JumpAerial (`ftCo_AttackAir.c::DO_IASA`,
   `ftCo_SpecialAir.c::ftCo_SpecialAir_CheckInput`); JumpF/JumpB -> EscapeAir floor handoff
   projects through the decomp floor wrapper (`ftCo_EscapeAir_Coll`, `ft_80082C74`,
   `mpLib_8004DD90_Floor`); `GuardSetOff_Anim` may enter Guard and then same-frame GuardOff through
@@ -1908,6 +1910,14 @@ Fox/Falco special-owner split (2026-04-17):
     Sources: `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{ftCo_Damage_IASA,ftCo_DamageFly_IASA}`,
     `refs/melee/src/melee/ft/chara/ftCommon/ftCo_DamageFall.c::ftCo_DamageFall_IASA`,
     `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_IASA_Inner`.
+  - DamageFly / DamageFlyRoll active-hitstun jump buffering uses the same `doIasa` x14 snapshot
+    owner as common Damage: while `x221C_b6` is set, `ftCo_Jump_GetInput` stores
+    `mv.co.damage.x0` in `mv.co.damage.x14`; after hitstun ends, `ftCo_DamageFly_Anim` consumes
+    that snapshot through `inlineC0` before entering `DamageFall`, or `DamageFall_IASA` consumes it
+    through the JumpAerial path. This is required for rollout carry such as QGD `DamageFlyN` x14
+    buffering into `JumpAerialF`, which then reaches the existing `DamageFlyRoll` RNG gate.
+    Sources: `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{doIasa,inlineC0,ftCo_DamageFly_Anim,ftCo_DamageFly_IASA,ftCo_DamageFlyRoll_IASA}`,
+    `refs/melee/src/melee/ft/chara/ftCommon/ftCo_DamageFall.c::ftCo_DamageFall_IASA`.
   - Slippi records `last_hit_by` in the raw controller-port domain. The replay seed now carries
     `source_port0[player]`, and runtime source writes/comparisons use that lane while gameplay
     arrays remain local-slot indexed. This fixes same-owner source attribution without a replay-row

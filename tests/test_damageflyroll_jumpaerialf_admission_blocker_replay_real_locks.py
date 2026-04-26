@@ -6,7 +6,11 @@ from pathlib import Path
 
 import pytest
 
-from tests.test_combat_ownership_seed_guardrail_locks import _run_one_step_row, _skip_if_required_artifacts_missing
+from tests.test_combat_ownership_seed_guardrail_locks import (
+    _run_one_step_row,
+    _run_rollout_window_rows_with_trace,
+    _skip_if_required_artifacts_missing,
+)
 from tools.eval.dataset import read_dataset
 
 
@@ -125,3 +129,55 @@ def test_damageflyroll_jumpaerialf_attackairb_carry_target_and_controls_are_repl
             os.environ.pop("MSL_RNG_TRACE_PATH", None)
         else:
             os.environ["MSL_RNG_TRACE_PATH"] = prev_trace_env
+
+
+@pytest.mark.integration
+def test_damagefly_jump_buffer_rollout_carry_feeds_later_damageflyroll_qgd() -> None:
+    # Replay-real rollout lock for the DamageFly* x14 snapshot owner:
+    # - ftCo_DamageFly_IASA calls doIasa while x221C_b6 is set.
+    # - doIasa snapshots a jump edge into mv.co.damage.x14 during active hitstun.
+    # - the later terminal DamageFly_Anim inlineC0 gate consumes that buffered jump, allowing the
+    #   existing JumpAerialF <- AttackAirB DamageFlyRoll RNG gate row to stay replay-exact.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{
+    #   doIasa,ftCo_DamageFly_Anim,ftCo_DamageFly_IASA,ftCo_8008DCE0}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+
+    dataset_rel = (
+        "datasets/aggregate_recent/replays/validation/cardinal_1.0_recent/"
+        "QuerulousGrandDinosaur.msl"
+    )
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+    start_record = 5715
+    jump_record = 5745
+    roll_record = 5747
+    for rec in (start_record, jump_record - 1, jump_record, roll_record):
+        assert int(samples.shape[0]) > rec, f"dataset too short for rollout lock: record={rec}"
+
+    jump_seed = samples[jump_record : jump_record + 1]["seed_t"][0]
+    assert int(jump_seed["action_id"][1]) == 88  # ftCo_MS_DamageFlyN
+    assert int(jump_seed["hitstun"][1]) == 1
+    assert int(jump_seed["damage_jump_buffer_x14"][1]) == 5
+    assert int(samples[jump_record : jump_record + 1]["input_t"][0]["p"][1][0]) & 0x400
+    assert int(samples[jump_record : jump_record + 1]["ref_t1"][0]["action_id"][1]) == 27
+    assert int(samples[roll_record : roll_record + 1]["ref_t1"][0]["action_id"][1]) == 91
+
+    trace_path = root / "reports/triage/qgd_damagefly_x14_rollout_carry.tsv"
+    rows = _run_rollout_window_rows_with_trace(
+        dataset_path,
+        start_record=start_record,
+        window_records=(jump_record - 1, jump_record, roll_record),
+        rng_damage_fly_roll_gate=True,
+        trace_path=trace_path,
+    )
+
+    for rec in (jump_record - 1, jump_record, roll_record):
+        ref_row, out_row, _site1_count = rows[rec]
+        _assert_fields_match_ref(out_row=out_row, ref_row=ref_row, p=1)
+    assert int(rows[jump_record][1]["action_id"][1]) == 27
+    assert int(rows[roll_record][1]["action_id"][1]) == 91
