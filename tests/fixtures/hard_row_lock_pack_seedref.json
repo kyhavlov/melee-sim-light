@@ -524,7 +524,7 @@
       "field": "ground_id",
       "seed": 1,
       "ref": 1,
-      "out": 0,
+      "out": 1,
       "cluster_count": 1,
       "base_field": "ground_id"
     },
@@ -535,7 +535,7 @@
       "field": "ground_id",
       "seed": 1,
       "ref": 1,
-      "out": 2,
+      "out": 1,
       "cluster_count": 1,
       "base_field": "ground_id"
     }
