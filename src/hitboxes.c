@@ -144,6 +144,65 @@ static inline uint8_t hitboxes_source_port0_for_attacker(const MslBatch* batch, 
   return (uint8_t)attacker;
 }
 
+static inline uint8_t hitboxes_seed_bridge_post_contact_hitlag_hitlist_applies(
+    const MslBatch* batch, int bi, int attacker, int hb_id, uint8_t hit_group) {
+  if (batch == NULL || bi < 0 || attacker < 0 || attacker >= (int)MSL_MAX_PLAYERS || hb_id < 0 ||
+      hb_id >= MSL_MAX_HITBOXES) {
+    return 0u;
+  }
+  if (hit_group >= (uint8_t)MSL_HITLIST_GROUPS) {
+    return 0u;
+  }
+
+  const size_t valid_i =
+      ((size_t)bi * (size_t)MSL_MAX_PLAYERS + (size_t)attacker) * (size_t)MSL_MAX_HITBOXES +
+      (size_t)hb_id;
+  if (batch->state.combat_hitlist_hb_valid[valid_i]) {
+    return 0u;
+  }
+
+  const size_t a_idx = msl_idx_player(bi, attacker);
+  if (batch->state.hitlag[a_idx] == 0u) {
+    return 0u;
+  }
+
+  const uint16_t attacker_iid = batch->state.instance_id[a_idx];
+  const size_t group_base =
+      (size_t)bi * (size_t)MSL_MAX_PLAYERS * (size_t)MSL_HITLIST_GROUPS * (size_t)MSL_MAX_PLAYERS;
+  for (int victim = 0; victim < (int)batch->config.num_players; victim++) {
+    if (victim == attacker) {
+      continue;
+    }
+    const size_t cd_i =
+        group_base + (((size_t)attacker * (size_t)MSL_HITLIST_GROUPS + (size_t)hit_group) *
+                          (size_t)MSL_MAX_PLAYERS +
+                      (size_t)victim);
+    if (batch->state.combat_hitlist_cd[cd_i] == 0u) {
+      continue;
+    }
+    const size_t v_idx = msl_idx_player(bi, victim);
+    if (batch->state.hitlag[v_idx] == 0u || batch->state.hitstun[v_idx] == 0u) {
+      continue;
+    }
+    if (batch->state.instance_hit_by[v_idx] != attacker_iid) {
+      continue;
+    }
+    // Teacher-forced post-contact seed lane:
+    // - ftAction_8007121C -> ftColl_800768A0 clears/copies HitCapsule victims on enable edges.
+    // - ftColl_80076ED8 / Fighter_ProcessHit then inserts the accepted BODY victim through
+    //   lbColl_80008688 and starts attacker/defender hitlag.
+    // - Slippi rows inside that same hitlag window can still expose the create-frame pose, so
+    //   replay reseed must materialize the post-contact victims_1 state after the enable-edge
+    //   clear/copy when hitlag/hitstun/source ownership proves that accepted BODY hit.
+    // refs/melee/src/melee/ft/ftaction.c::ftAction_8007121C
+    // refs/melee/src/melee/ft/ftcoll.c::{ftColl_800768A0,ftColl_80076ED8}
+    // refs/melee/src/melee/lb/lbcollision.c::lbColl_80008688
+    // refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
+    return 1u;
+  }
+  return 0u;
+}
+
 static inline uint8_t hitboxes_runtime_specialhi_pose_owner(uint8_t char_id, uint16_t action_id) {
   if (!(char_id == 1u || char_id == 22u)) {
     return 0u;
@@ -978,6 +1037,10 @@ void hitboxes_refresh(MslBatch* batch) {
               // refs/melee/src/melee/ft/ftcoll.c::ftColl_800768A0
               // refs/melee/src/melee/lb/lbcollision.c::lbColl_80008440
               x43_b2_next = 0u;
+            }
+            if (hitboxes_seed_bridge_post_contact_hitlag_hitlist_applies(batch, bi, p, (int)hb,
+                                                                         new_g)) {
+              hitlist_seed_init_fighter_hitbox_from_group(batch, bi, p, (int)hb, new_g);
             }
           }
           // ftAction_8007121C always initializes x43_b2=0 after processing create payload.
