@@ -4,9 +4,13 @@
 #include "anim_frame.h"
 #include "anim_table.h"
 #include "anim_timebase.h"
+#include "char_params.h"
+#include "common_params.h"
 #include "combat.h"
 #include "grab_attachment.h"
 #include "move_tables.h"
+
+#include <math.h>
 
 static inline uint8_t is_thrower_action(uint16_t a) {
   switch (a) {
@@ -91,9 +95,46 @@ static inline void enter_fall_release(MslBatch* batch, size_t idx) {
   msl_anim_timebase_restart(batch, idx, 0.0f, 1.0f);
 }
 
-static inline void throw_flow_bridge_integrate_deferred_throw_hit_position(MslBatch* batch,
-                                                                           size_t owner_idx,
-                                                                           size_t victim_idx) {
+static inline void throw_flow_apply_deferred_throw_hit_kb_decay(MslBatch* batch,
+                                                                size_t victim_idx) {
+  if (batch == NULL) {
+    return;
+  }
+  const MslCommonParams* c = msl_common_params();
+  if (c == NULL) {
+    return;
+  }
+
+  float kb_x = batch->state.speed_x_attack[victim_idx];
+  float kb_y = batch->state.speed_y_attack[victim_idx];
+  if (kb_x == 0.0f && kb_y == 0.0f) {
+    return;
+  }
+
+  // Deferred throw-hit scheduling bridge:
+  // - In decomp, ftCo_800DD724 applies the throw hit during the thrower's Anim callback.
+  // - The victim then reaches Fighter_procUpdate in the same frame, where airborne knockback velocity
+  //   is decayed before position integration.
+  // - This simulator defers throw-hit application until after the normal physics pass, so mirror that
+  //   one Fighter_procUpdate knockback-decay step before the bridge integrates release displacement.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DD724
+  // refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate
+  const float kb_mag = sqrtf(kb_x * kb_x + kb_y * kb_y);
+  const float decay = c->knockback_frame_decay;
+  if (kb_mag < decay) {
+    kb_x = 0.0f;
+    kb_y = 0.0f;
+  } else {
+    const float kb_angle = atan2f(kb_y, kb_x);
+    kb_x -= decay * cosf(kb_angle);
+    kb_y -= decay * sinf(kb_angle);
+  }
+  batch->state.speed_x_attack[victim_idx] = kb_x;
+  batch->state.speed_y_attack[victim_idx] = kb_y;
+}
+
+static inline void throw_flow_bridge_integrate_deferred_throw_hit_position(
+    MslBatch* batch, size_t owner_idx, size_t victim_idx, uint8_t apply_damage_phys_step) {
   if (batch == NULL) {
     return;
   }
@@ -105,6 +146,10 @@ static inline void throw_flow_bridge_integrate_deferred_throw_hit_position(MslBa
     // Keep self_vel.x synced with grounded integration velocity, matching ftCommon_ApplyGroundMovement.
     // refs/melee/src/melee/ft/ftcommon.c::ftCommon_ApplyGroundMovement
     batch->state.speed_air_x_self[victim_idx] = vx_self;
+  }
+  if (apply_damage_phys_step && !on_ground &&
+      throw_flow_action_is_damage_family(batch->state.action_id[victim_idx])) {
+    throw_flow_apply_deferred_throw_hit_kb_decay(batch, victim_idx);
   }
 
   const float vy_self = batch->state.speed_y_self[victim_idx];
@@ -136,6 +181,26 @@ static inline void throw_flow_bridge_integrate_deferred_throw_hit_position(MslBa
   // refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate
   batch->state.pos_x[victim_idx] += vx + owner_dx;
   batch->state.pos_y[victim_idx] += vy;
+
+  if (apply_damage_phys_step && !on_ground &&
+      throw_flow_action_is_damage_family(batch->state.action_id[victim_idx])) {
+    // Deferred throw-release damage entry happens after this simulator's normal physics pass, but in
+    // decomp the release hit is consumed before the victim's Damage* Phys owner has settled the
+    // frame-end self velocity. Keep the release-position bridge on the pre-Phys self velocity above,
+    // then apply the one-frame airborne gravity owner to the stored velocity.
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DD724
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Thrown.c::ftCo_800DE7C0
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{ftCo_DamageFly_Phys,ftCo_Damage_Phys}
+    // refs/melee/src/melee/ft/ft_081B.c::ft_80084DB0
+    const MslCharParams* ch = msl_char_params(batch->state.char_id[victim_idx]);
+    if (ch != NULL) {
+      float next_vy = batch->state.speed_y_self[victim_idx] - ch->grav;
+      if (next_vy < -ch->terminal_vel) {
+        next_vy = -ch->terminal_vel;
+      }
+      batch->state.speed_y_self[victim_idx] = next_vy;
+    }
+  }
 }
 
 static inline void throw_flow_apply_post_release_damage_callback_phase(MslBatch* batch,
@@ -360,12 +425,19 @@ void throw_flow_update_post_items(MslBatch* batch) {
         // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::{ftCo_ThrowHi_Anim,ftCo_ThrowLw_Anim,ftCo_800DD724}
         // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{ftCo_8008DCE0,ftCo_8008F744}
         // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A360,Fighter_procUpdate}
-        if (owner_p < (int)victim_p &&
-            throw_flow_action_is_damage_family(batch->state.action_id[vidx])) {
+        const uint8_t run_post_release_damage_callback =
+            (owner_p < (int)victim_p &&
+             throw_flow_action_is_damage_family(batch->state.action_id[vidx]))
+                ? 1u
+                : 0u;
+        const uint8_t run_post_release_damage_phys =
+            throw_flow_action_is_damage_family(batch->state.action_id[vidx]) ? 1u : 0u;
+        if (run_post_release_damage_callback) {
           msl_anim_timebase_defer_tick_once(batch, vidx);
           throw_flow_apply_post_release_damage_callback_phase(batch, vidx);
         }
-        throw_flow_bridge_integrate_deferred_throw_hit_position(batch, oidx, vidx);
+        throw_flow_bridge_integrate_deferred_throw_hit_position(batch, oidx, vidx,
+                                                                run_post_release_damage_phys);
         if (throw_action == (uint16_t)MSL_ACT_THROW_F) {
           // ThrowF release-position ownership:
           // - same-frame owner-anchor placement is already bridged at release consume time

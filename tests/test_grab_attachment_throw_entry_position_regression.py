@@ -51,6 +51,48 @@ def _run_record(dataset_path: Path, record: int) -> tuple[np.ndarray, np.ndarray
         binding.destroy(handle)
 
 
+def _run_rollout_records(
+    dataset_path: Path, start_record: int, records: tuple[int, ...]
+) -> dict[int, tuple[np.void, np.void]]:
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+    assert int(samples.shape[0]) > max(records), "dataset too short for rollout regression check"
+    assert start_record <= min(records), "rollout start must be <= first checked record"
+
+    binding = importlib.import_module("msl_binding")
+    sizes = binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    compare_stride = int(sizes["compare"])
+
+    seed_bytes = np.frombuffer(
+        samples[start_record : start_record + 1]["seed_t"].tobytes(order="C"), dtype=np.uint8
+    ).copy().reshape(1, seed_stride)
+    out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
+
+    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    try:
+        binding.reseed_seed(handle, seed_bytes)
+        out_by_record: dict[int, tuple[np.void, np.void]] = {}
+        for rec in range(start_record, max(records) + 1):
+            row = samples[rec : rec + 1]
+            prev_input_bytes = np.frombuffer(
+                row["prev_input_t"].tobytes(order="C"), dtype=np.uint8
+            ).copy().reshape(1, input_stride)
+            input_bytes = np.frombuffer(row["input_t"].tobytes(order="C"), dtype=np.uint8).copy().reshape(
+                1, input_stride
+            )
+            binding.step_input(handle, prev_input_bytes, input_bytes)
+            binding.write_compare(handle, out_compare_bytes)
+            if rec in records:
+                out = out_compare_bytes.view(COMPARE_DTYPE).reshape(-1)[0].copy()
+                ref = row["ref_t1"].reshape(-1)[0].copy()
+                out_by_record[rec] = (out, ref)
+        return out_by_record
+    finally:
+        binding.destroy(handle)
+
+
 @pytest.mark.integration
 @pytest.mark.parametrize(
     ("dataset_name", "record", "attacker", "victim", "expected_thrown"),
@@ -60,7 +102,7 @@ def _run_record(dataset_path: Path, record: int) -> tuple[np.ndarray, np.ndarray
         ("QuerulousGrandDinosaur.msl", 8279, 1, 0, 240),
     ],
 )
-def test_capturewait_to_thrown_entry_preserves_position_bitwise(
+def test_capturewait_to_nonlow_thrown_entry_uses_static_attachment_offsets(
     dataset_name: str,
     record: int,
     attacker: int,
@@ -87,27 +129,50 @@ def test_capturewait_to_thrown_entry_preserves_position_bitwise(
 
     assert int(out["action_id"][0, victim]) == int(ref["action_id"][victim])
 
-    # Slice 2A lock: throw entry recomputes offsets to preserve world position across
-    # CaptureWait* -> Thrown* motion-state entry.
-    got_pos_x = np.float32(out["pos_x"][0, victim]).view(np.uint32)
-    seed_pos_x = np.float32(row["seed_t"]["pos_x"][0, victim]).view(np.uint32)
-    assert int(got_pos_x) == int(seed_pos_x), (
-        f"{dataset_name} record={record} p={victim} pos_x did not preserve seed bits: "
-        f"got=0x{int(got_pos_x):08x} seed=0x{int(seed_pos_x):08x}"
+    # Decomp lock: ftCo_800DE3FC installs ftCo_800DE508, which applies fp->x1A70 from static
+    # TransN-XRotN instead of preserving the pre-entry CaptureWait world position.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Thrown.c::{ftCo_800DE3FC,ftCo_800DE508}
+    # refs/melee/src/melee/ft/fighter.c::Fighter_UnkUpdateVecFromBones_8006876C
+    seed_x = float(row["seed_t"]["pos_x"][0, victim])
+    seed_y = float(row["seed_t"]["pos_y"][0, victim])
+    got_x = float(out["pos_x"][0, victim])
+    got_y = float(out["pos_y"][0, victim])
+    ref_x = float(ref["pos_x"][victim])
+    ref_y = float(ref["pos_y"][victim])
+    assert abs(got_x - seed_x) > 0.10
+    assert abs(got_y - seed_y) > 1.0
+    assert abs(got_x - ref_x) <= 0.05, (
+        f"{dataset_name} record={record} p={victim} pos_x err too large: "
+        f"got={got_x:.8g} ref={ref_x:.8g}"
+    )
+    assert abs(got_y - ref_y) <= 0.05, (
+        f"{dataset_name} record={record} p={victim} pos_y err too large: "
+        f"got={got_y:.8g} ref={ref_y:.8g}"
     )
 
-    got_pos_y_f32 = np.float32(out["pos_y"][0, victim])
-    seed_pos_y_f32 = np.float32(row["seed_t"]["pos_y"][0, victim])
-    got_pos_y_bits = int(got_pos_y_f32.view(np.uint32))
-    seed_pos_y_bits = int(seed_pos_y_f32.view(np.uint32))
-    # Prefer exact bitwise preservation.
-    #
-    # A tiny deterministic near-zero delta can occur here (~1.03e-7 observed on local datasets)
-    # from stage-collision ordering around throw entry. Keep the bound strict enough to catch any
-    # return of the old entry snap while allowing this known deterministic micro-drift.
-    if got_pos_y_bits != seed_pos_y_bits:
-        abs_delta = float(np.abs(got_pos_y_f32 - seed_pos_y_f32))
-        assert abs_delta <= 2e-7, (
-            f"{dataset_name} record={record} p={victim} pos_y abs_delta too large: "
-            f"delta={abs_delta:.12g} got=0x{got_pos_y_bits:08x} seed=0x{seed_pos_y_bits:08x}"
-        )
+
+@pytest.mark.integration
+def test_throwhi_release_rollout_applies_current_frame_di_and_damage_gravity() -> None:
+    root = Path(__file__).resolve().parents[1]
+    dataset_rel = (
+        "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
+        "TreasuredBackKangaroo.msl"
+    )
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    out_by_record = _run_rollout_records(dataset_path, 5861, (5869, 5908))
+
+    out_release, ref_release = out_by_record[5869]
+    assert int(out_release["action_id"][1]) == int(ref_release["action_id"][1]) == 90
+    assert int(out_release["animation_index"][1]) == int(ref_release["animation_index"][1])
+    assert abs(float(out_release["speed_x_attack"][1]) - float(ref_release["speed_x_attack"][1])) <= 0.01
+    assert abs(float(out_release["speed_y_attack"][1]) - float(ref_release["speed_y_attack"][1])) <= 0.06
+    assert float(out_release["speed_y_self"][1]) == pytest.approx(float(ref_release["speed_y_self"][1]))
+
+    out_follow, ref_follow = out_by_record[5908]
+    assert int(out_follow["action_id"][0]) == int(ref_follow["action_id"][0]) == 213
+    assert int(out_follow["action_id"][1]) == int(ref_follow["action_id"][1]) == 223
+    assert abs(float(out_follow["pos_x"][0]) - float(ref_follow["pos_x"][0])) <= 0.001
+    assert abs(float(out_follow["pos_x"][1]) - float(ref_follow["pos_x"][1])) <= 0.001

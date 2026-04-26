@@ -14,6 +14,17 @@ void grab_attachment_reseed_init(MslBatch* batch, int batch_index);
 void grab_attachment_recompute_offsets_for_thrown_entry(MslBatch* batch, int batch_index,
                                                         int victim_p, int owner_p);
 
+// Initialize thrown-entry offsets from the victim's static x1A70 analog.
+//
+// Decomp-shaped usage:
+// - ftCo_800DE3FC enters Thrown* and installs ftCo_800DE508, whose position callback applies
+//   fp->x1A70.{y,z} after resolving the attachment joint.
+// - fp->x1A70 is initialized from TransN - XRotN at fighter creation
+//   (refs/melee/src/melee/ft/fighter.c::Fighter_UnkUpdateVecFromBones_8006876C), not inferred from
+//   the pre-entry capture world position.
+void grab_attachment_use_static_offsets_for_thrown_entry(MslBatch* batch, int batch_index,
+                                                         int victim_p, int owner_p);
+
 // Capture victim same-frame delta ownership helper.
 //
 // Decomp-shaped usage:

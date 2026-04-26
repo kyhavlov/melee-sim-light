@@ -949,7 +949,14 @@ static inline uint8_t enter_throw_from_wait(MslBatch* batch, int bi, int owner_p
     }
     batch->state.grab_offset_z[vidx] = 0.0f;
   } else {
-    grab_attachment_recompute_offsets_for_thrown_entry(batch, bi, victim_p, owner_p);
+    // Thrown entry from CatchWait/CaptureWait owns an immediate attachment position through the
+    // ftCo_800DE3FC -> ftCo_800DE508 path. Use the victim's static x1A70 analog instead of
+    // preserving the pre-entry capture world position as an offset; otherwise rollout keeps the
+    // old CaptureWait/CaptureDamage position for the first attached Thrown* frame.
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Thrown.c::{ftCo_800DE3FC,ftCo_800DE508}
+    // refs/melee/src/melee/ft/fighter.c::Fighter_UnkUpdateVecFromBones_8006876C
+    grab_attachment_use_static_offsets_for_thrown_entry(batch, bi, victim_p, owner_p);
+    grab_attachment_apply_thrown_anchor_now(batch, bi, victim_p, owner_p);
   }
   return 1u;
 }

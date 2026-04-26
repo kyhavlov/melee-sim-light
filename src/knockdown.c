@@ -1894,6 +1894,24 @@ static inline void transfer_air_to_ground_on_land(MslBatch* batch, const MslChar
   batch->state.jumps_left[idx] = ch->max_jumps;
 }
 
+static inline void damage_land_project_kb_to_ground_tangent(MslBatch* batch, size_t idx) {
+  if (batch == NULL) {
+    return;
+  }
+  // Decomp: DownBound/Passive floor-contact entries call ftCommon_8007CCE8 after switching to the
+  // grounded motion state. That helper transfers x8c_kb_vel.x into the grounded KB scalar and rebuilds
+  // x8c_kb_vel from the current floor tangent, which clears vertical KB on flat FD floors.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownBound.c::{ftCo_8009794C,ftCo_80097AF4}
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Passive.c::ftCo_Passive_Enter
+  // refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007CCE8
+  const float ground_kb = batch->state.speed_x_attack[idx];
+  const float nx = batch->state.ground_normal_x[idx];
+  const float ny =
+      (batch->state.ground_normal_y[idx] != 0.0f) ? batch->state.ground_normal_y[idx] : 1.0f;
+  batch->state.speed_x_attack[idx] = ny * ground_kb;
+  batch->state.speed_y_attack[idx] = -nx * ground_kb;
+}
+
 static inline uint8_t tech_is_available(const MslBatch* batch, const MslCommonParams* c,
                                         size_t idx) {
   // Decomp: refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownAttack.c::ftCo_800986B0
@@ -2054,6 +2072,7 @@ static inline void enter_passive_from_damage_land(MslBatch* batch, const MslChar
                                                   size_t bi, size_t idx, uint16_t passive_act,
                                                   uint16_t prev_action_id) {
   transfer_air_to_ground_on_land(batch, ch, bi, idx, prev_action_id);
+  damage_land_project_kb_to_ground_tangent(batch, idx);
   batch->state.action_id[idx] = passive_act;
   batch->state.animation_index[idx] = submotion_for_down_action(passive_act);
   msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
@@ -2124,6 +2143,7 @@ static inline void enter_down_bound_from_damage_land(MslBatch* batch, const MslC
                                                      uint16_t prev_action_id) {
   const uint16_t bound_act = pick_downbound_action_from_pose(batch, idx, prev_action_id);
   transfer_air_to_ground_on_land(batch, ch, bi, idx, prev_action_id);
+  damage_land_project_kb_to_ground_tangent(batch, idx);
   batch->state.action_id[idx] = bound_act;
   batch->state.animation_index[idx] = submotion_for_down_action(bound_act);
   msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);

@@ -428,6 +428,43 @@ void grab_attachment_recompute_offsets_for_thrown_entry(MslBatch* batch, int bat
   batch->state.grab_offset_z[vidx] = (batch->state.pos_x[vidx] - ax) / (scale_y * facing_dir);
 }
 
+void grab_attachment_use_static_offsets_for_thrown_entry(MslBatch* batch, int batch_index,
+                                                         int victim_p, int owner_p) {
+  if (batch == NULL) {
+    return;
+  }
+  if (batch_index < 0 || batch_index >= batch->batch_size) {
+    return;
+  }
+  const int num_players = (int)batch->config.num_players;
+  if (victim_p < 0 || victim_p >= num_players || owner_p < 0 || owner_p >= num_players ||
+      victim_p == owner_p) {
+    return;
+  }
+
+  const size_t vidx = msl_idx_player(batch_index, victim_p);
+  float transn_x = 0.0f, transn_y = 0.0f, transn_z = 0.0f;
+  float xrotn_x = 0.0f, xrotn_y = 0.0f, xrotn_z = 0.0f;
+  if (pose_part_local_translation(&transn_x, &transn_y, &transn_z, batch->state.char_id[vidx],
+                                  (uint32_t)MSL_SM_WAIT1_0, 0.0f,
+                                  (uint16_t)MSL_FTPART_TRANSN) != 0 ||
+      pose_part_local_translation(&xrotn_x, &xrotn_y, &xrotn_z, batch->state.char_id[vidx],
+                                  (uint32_t)MSL_SM_WAIT1_0, 0.0f,
+                                  (uint16_t)MSL_FTPART_XROTN) != 0) {
+    grab_attachment_recompute_offsets_for_thrown_entry(batch, batch_index, victim_p, owner_p);
+    return;
+  }
+
+  // Source owner: Fighter_Create initializes fp->x1A70 from TransN - XRotN once, and
+  // ftCo_800DE508 applies x1A70.z/x1A70.y to the attachment joint during Thrown*.
+  // refs/melee/src/melee/ft/fighter.c::Fighter_UnkUpdateVecFromBones_8006876C
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Thrown.c::ftCo_800DE508
+  batch->state.grab_offset_y[vidx] = transn_y - xrotn_y;
+  batch->state.grab_offset_z[vidx] = transn_z - xrotn_z;
+  (void)transn_x;
+  (void)xrotn_x;
+}
+
 void grab_attachment_reseed_init(MslBatch* batch, int batch_index) {
   if (batch == NULL) {
     return;

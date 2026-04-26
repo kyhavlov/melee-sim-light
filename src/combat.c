@@ -22,6 +22,7 @@
 #include "hitlist.h"
 #include "hurtbox_modes_tables.h"
 #include "hurtcaps_tables.h"
+#include "input_axis.h"
 #include "laser_params.h"
 #include "msl_math.h"
 #include "mtx34.h"
@@ -51,6 +52,8 @@ static inline uint8_t combat_apply_throw_hit_core(MslBatch* batch, int batch_ind
 
 static inline void combat_throw_release_integrate_position_now(MslBatch* batch, size_t owner_idx,
                                                                size_t victim_idx);
+static inline void combat_throw_release_apply_immediate_di(MslBatch* batch, size_t victim_idx,
+                                                           const MslCommonParams* c);
 
 static inline uint32_t combat_hsd_rand_step(uint32_t seed) {
   // HSD global RNG LCG step:
@@ -3488,6 +3491,7 @@ static inline uint8_t combat_apply_throw_hit_core(MslBatch* batch, int batch_ind
   const float kb_y = y;
 
   combat_damage_calc_vel(batch, d_idx, kb_x, kb_y);
+  combat_throw_release_apply_immediate_di(batch, d_idx, c);
 
   // Decomp: after setting KB velocity, ftCo_8008DCE0 clears self velocity (self_vel and gr_vel).
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0 (block_28)
@@ -3557,6 +3561,52 @@ static inline void combat_throw_release_integrate_position_now(MslBatch* batch, 
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DDDE4
   batch->state.pos_x[victim_idx] += vx + owner_dx;
   batch->state.pos_y[victim_idx] += vy;
+}
+
+static inline void combat_throw_release_apply_immediate_di(MslBatch* batch, size_t victim_idx,
+                                                           const MslCommonParams* c) {
+  if (batch == NULL || c == NULL) {
+    return;
+  }
+  if (batch->state.on_ground[victim_idx]) {
+    return;
+  }
+
+  // Throw-release damage entry has no hitlag in the replay-visible Fox/Falco slice, but decomp still
+  // runs the same DI velocity mutator immediately after ftCo_8008DCE0 installs throw KB:
+  //   ftCo_800DD724 -> ftCo_800DDDE4 -> ftCo_800DE7C0 -> ftCo_8008E5A4
+  // Unlike Damage_OnExitHitlag, this occurs inside the current motion callback after input has been
+  // applied, so consume the current-frame stick instead of the prior input snapshot. The L/R x1AC
+  // multiplier belongs to ftCo_Damage_OnExitHitlag and is intentionally not applied here.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DD724
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Thrown.c::ftCo_800DE7C0
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008E5A4
+  float kb_x = batch->state.speed_x_attack[victim_idx];
+  float kb_y = batch->state.speed_y_attack[victim_idx];
+  const float kb_mag_sq = kb_x * kb_x + kb_y * kb_y;
+  if (kb_mag_sq < 0.00001f) {
+    return;
+  }
+
+  const float lstick_x = stick_i8_to_unit(batch->state.input_main_x[victim_idx]);
+  const float lstick_y = stick_i8_to_unit(batch->state.input_main_y[victim_idx]);
+  const float lstick_full_x = apply_deadzone(lstick_x, c->lstick_deadzone_x);
+  const float lstick_full_y = apply_deadzone(lstick_y, c->lstick_deadzone_y);
+  const float kb_neg_x = -kb_x;
+  const float dot = kb_y * lstick_full_x + kb_neg_x * lstick_full_y;
+  float dir = (dot * dot) / kb_mag_sq;
+  const float cross_z = kb_x * lstick_full_y - kb_y * lstick_full_x;
+  if (cross_z < 0.0f) {
+    dir = -dir;
+  }
+
+  const float kb_angle = atan2f(kb_y, kb_x) + (c->di_max_deg * (MSL_PI_F / 180.0f)) * dir;
+  const float kb_mag = sqrtf(kb_mag_sq);
+  kb_x = kb_mag * cosf(kb_angle);
+  kb_y = kb_mag * sinf(kb_angle);
+
+  batch->state.speed_x_attack[victim_idx] = kb_x;
+  batch->state.speed_y_attack[victim_idx] = kb_y;
 }
 
 static inline float combat_rebound_x191c_from_int_dmg(const MslCommonParams* c, int int_dmg) {
