@@ -1,0 +1,51 @@
+batched sim profiled hotpath pinned rollout comparison
+branch=perf/batched-sim-benchmark
+optimized_source_commit=cb511cc
+previous_optimized_source_commit=36d509b
+baseline_source_commit=a06fe5e
+date_utc=2026-04-26T10:56:05Z
+compiler=cc (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0
+pinned_cpu=7
+note=current runs are sequential pinned rollout runs; previous medians are from batched_sim_adjacent_pinned.txt
+
+previous optimized pinned medians:
+- batch 512: 2832.536 ns/env-step, 353040.518 env_steps/sec
+- batch 1024: 2829.684 ns/env-step, 353396.358 env_steps/sec
+
+current profiled-hotpath pinned medians:
+- batch 512: 1782.899 ns/env-step, 560884.226 env_steps/sec
+- batch 1024: 1809.464 ns/env-step, 552649.863 env_steps/sec
+
+observed delta vs previous optimized pinned median:
+- batch 512: 2832.536 -> 1782.899 ns/env-step, about 37.1% lower ns/env-step
+- batch 1024: 2829.684 -> 1809.464 ns/env-step, about 36.1% lower ns/env-step
+
+rep=1 source=profiled_hotpath
+mode=rollout batch=512 frames=4000 warmup=400 input_ring=256
+elapsed_sec=3.650491628 env_steps=2048000 env_steps_per_sec=561020.325 ns_per_env_step=1782.467
+checksum=1312223460470549805
+
+rep=1 source=profiled_hotpath
+mode=rollout batch=1024 frames=4000 warmup=400 input_ring=256
+elapsed_sec=7.411564315 env_steps=4096000 env_steps_per_sec=552649.863 ns_per_env_step=1809.464
+checksum=311148578837385193
+
+rep=2 source=profiled_hotpath
+mode=rollout batch=512 frames=4000 warmup=400 input_ring=256
+elapsed_sec=3.651377425 env_steps=2048000 env_steps_per_sec=560884.226 ns_per_env_step=1782.899
+checksum=1312223460470549805
+
+rep=2 source=profiled_hotpath
+mode=rollout batch=1024 frames=4000 warmup=400 input_ring=256
+elapsed_sec=7.431722472 env_steps=4096000 env_steps_per_sec=551150.829 ns_per_env_step=1814.385
+checksum=311148578837385193
+
+rep=3 source=profiled_hotpath
+mode=rollout batch=512 frames=4000 warmup=400 input_ring=256
+elapsed_sec=3.668036244 env_steps=2048000 env_steps_per_sec=558336.904 ns_per_env_step=1791.033
+checksum=1312223460470549805
+
+rep=3 source=profiled_hotpath
+mode=rollout batch=1024 frames=4000 warmup=400 input_ring=256
+elapsed_sec=7.390457654 env_steps=4096000 env_steps_per_sec=554228.194 ns_per_env_step=1804.311
+checksum=311148578837385193
