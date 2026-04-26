@@ -14,6 +14,7 @@
 #include "char_params.h"
 #include "coll_env_flags.h"
 #include "common_params.h"
+#include "dash_iasa.h"
 #include "grab_flow.h"
 #include "input.h"
 #include "input_axis.h"
@@ -56,25 +57,6 @@ static inline uint8_t wait_iasa_locomotion_subset_try_enter(
     MslBatch* batch, const MslCommonParams* c, const MslCharParams* ch, size_t idx,
     uint16_t buttons, uint16_t buttons_pressed, float stick_x, float stick_y, uint8_t tilt_timer_x,
     uint8_t tilt_timer_y, float facing_dir, uint16_t action_id_start);
-
-static inline void dash_iasa_apply_terminal_friction(MslBatch* batch, const MslCommonParams* c,
-                                                     size_t idx) {
-  if (batch == NULL || c == NULL) {
-    return;
-  }
-  float friction_mul = batch->state.ground_friction_mul[idx];
-  if (!(friction_mul > 0.0f)) {
-    friction_mul = 1.0f;
-  }
-  // Decomp: ftCo_Dash_IASA falls through to this terminal velocity scalar even after the
-  // opposite-flick ftCo_Dash_CheckInput path enters Turn. The new Turn state's Phys callback then
-  // runs later in the same fighter proc.
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c::ftCo_Dash_IASA
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Turn.c::ftCo_Turn_Enter_Smash
-  // refs/melee/src/melee/ft/ft_081B.c::ft_80084F3C
-  batch->state.speed_ground_x_self[idx] -=
-      batch->state.speed_ground_x_self[idx] * c->dash_iasa_vel_mul * friction_mul;
-}
 
 static inline float clamp_absf(float value, float max_abs) {
   if (value > max_abs) {
@@ -3969,7 +3951,7 @@ void locomotion_update_pre(MslBatch* batch) {
             msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
             // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Turn.c:62-64
             msl_anim_timebase_tick_once(batch, idx);
-            dash_iasa_apply_terminal_friction(batch, c, idx);
+            dash_iasa_apply_terminal_velocity_scalar(batch, c, idx);
             action_id = (uint16_t)MSL_ACT_TURN;
           } else {
             // Dash -> KneeBend (Jump).
@@ -4001,7 +3983,7 @@ void locomotion_update_pre(MslBatch* batch) {
                   msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
                   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Turn.c:62-64
                   msl_anim_timebase_tick_once(batch, idx);
-                  dash_iasa_apply_terminal_friction(batch, c, idx);
+                  dash_iasa_apply_terminal_velocity_scalar(batch, c, idx);
                   action_id = (uint16_t)MSL_ACT_TURN;
                 }
               } else if (cur_anim_frame > c->dash_iasa_x4c && (stick_x * facing_dir) < 0.0f &&
@@ -4020,7 +4002,7 @@ void locomotion_update_pre(MslBatch* batch) {
                 batch->state.animation_index[idx] = (uint32_t)MSL_SM_TURN;
                 msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
                 msl_anim_timebase_tick_once(batch, idx);
-                dash_iasa_apply_terminal_friction(batch, c, idx);
+                dash_iasa_apply_terminal_velocity_scalar(batch, c, idx);
                 action_id = (uint16_t)MSL_ACT_TURN;
               }
 

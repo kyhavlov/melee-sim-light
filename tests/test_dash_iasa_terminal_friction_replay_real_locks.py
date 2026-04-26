@@ -89,3 +89,40 @@ def test_dash_iasa_turn_terminal_friction_target_pm1_lock(case: _DashIasaTurnCas
             record=rec,
             p=p,
         )
+
+
+def test_dash_iasa_guardreflect_terminal_friction_bhh_lock() -> None:
+    # Same Dash IASA terminal scalar, but for the non-returning powershield admission path:
+    # ftCo_Dash_IASA -> ftCo_80091A4C/ftCo_80091AD8 -> ftCo_80093A50 still falls through to
+    # `gr_vel -= gr_vel * p_ftCommonData->x54 * ft_GetGroundFrictionMultiplier(fp)`.
+    # BHH rec241 exposed this because the Dash->GuardReflect velocity must be reduced before
+    # GuardReflect_Phys applies ordinary ground friction.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c::ftCo_Dash_IASA
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_80091A4C,ftCo_80093A50}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+
+    dataset_path = (
+        root
+        / "datasets/aggregate_recent/replays/validation/aggregate_recent/BlondHardHippopotamus.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path.relative_to(root)}")
+
+    record = 241
+    p = 1
+    samples = read_dataset(str(dataset_path)).samples
+    seed = samples[record]["seed_t"]
+    ref = samples[record]["ref_t1"]
+    assert int(seed["action_id"][p]) == 20  # Dash
+    assert int(ref["action_id"][p]) == 182  # GuardReflect
+
+    _, ref_row, out_row = _run_one_step_row(dataset_path, record, p)
+    _assert_transition_lock_fields_match_ref(out_row=out_row, ref_row=ref_row, record=record, p=p)
+    assert float(out_row["speed_ground_x_self"][p]) == pytest.approx(
+        float(ref_row["speed_ground_x_self"][p]), abs=1e-6
+    )
+    assert float(out_row["speed_air_x_self"][p]) == pytest.approx(
+        float(ref_row["speed_air_x_self"][p]), abs=1e-6
+    )
+    assert float(out_row["pos_x"][p]) == pytest.approx(float(ref_row["pos_x"][p]), abs=1e-6)

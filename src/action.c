@@ -9,6 +9,7 @@
 #include "anim_table.h"
 #include "buttons.h"
 #include "char_params.h"
+#include "dash_iasa.h"
 #include "input_axis.h"
 #include "locomotion.h"
 #include "move_tables.h"
@@ -464,6 +465,22 @@ static inline void enter_guard_reflect_from_locomotion(MslBatch* batch, const Ms
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80093A50
   msl_anim_timebase_seed(batch, idx, -1.0f,
                          msl_f32_from_q16_16(batch->state.frame_speed_mul_fp_q16_16[idx]));
+}
+
+static inline uint8_t dash_iasa_guard_admission_reaches_terminal_scalar(const MslBatch* batch,
+                                                                        const MslCommonParams* c,
+                                                                        size_t idx,
+                                                                        uint16_t action_id_start) {
+  if (batch == NULL || c == NULL || action_id_start != (uint16_t)MSL_ACT_DASH) {
+    return 0u;
+  }
+  // Dash IASA's early x4 branch checks SpecialS/item/catchdash/AttackS4/EscapeF and then jumps to
+  // block_42; guard admission helpers are only called from the mid/late branches.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c::ftCo_Dash_IASA
+  if (batch->state.dash_x4[idx] != 0u && batch->state.anim_frame_f32[idx] <= c->dash_iasa_x44) {
+    return 0u;
+  }
+  return 1u;
 }
 
 static inline void enter_guard_on(MslBatch* batch, const MslCommonParams* c, size_t idx,
@@ -1289,6 +1306,7 @@ void guard_update_grounded(MslBatch* batch, const MslCommonParams* c, size_t idx
       batch->state.anim_frame_f32[idx] <= c->dash_iasa_x44 &&
       batch->state.anim_frame_f32[idx] <= c->dash_iasa_x48) {
     enter_escape_roll(batch, idx, (uint16_t)MSL_ACT_ESCAPE_F);
+    dash_iasa_apply_terminal_velocity_scalar(batch, c, idx);
     return;
   }
 
@@ -1298,6 +1316,9 @@ void guard_update_grounded(MslBatch* batch, const MslCommonParams* c, size_t idx
   if ((pressed & (uint16_t)LR) != 0 &&
       batch->state.x672_input_timer[idx] < c->powershield_reflect_window_frames) {
     enter_guard_reflect_from_locomotion(batch, c, idx);
+    if (dash_iasa_guard_admission_reaches_terminal_scalar(batch, c, idx, a0)) {
+      dash_iasa_apply_terminal_velocity_scalar(batch, c, idx);
+    }
     return;
   }
 
@@ -1310,6 +1331,9 @@ void guard_update_grounded(MslBatch* batch, const MslCommonParams* c, size_t idx
       if (denom > 0.0f) {
         batch->state.lightshield_amount[idx] = clamp01((trig - c->trigger_deadzone) / denom);
       }
+    }
+    if (dash_iasa_guard_admission_reaches_terminal_scalar(batch, c, idx, a0)) {
+      dash_iasa_apply_terminal_velocity_scalar(batch, c, idx);
     }
     return;
   }
