@@ -539,6 +539,14 @@ This section is the “what is actually done” source of truth for agents. If a
 section or regenerate it; do not rely on stale tables.
 
 Recent deltas to reflect here (do not let these get “lost in chat logs”):
+- AttackS3 angle-variant hitbox commands (2026-04-26): `AttackS3Hi`, `AttackS3HiS`,
+  `AttackS3LwS`, and `AttackS3Lw` keep their live angled submotion pose for matrix sampling, but
+  missing hitbox command-event lookups fall back to the extracted common `ftCo_SM_AttackS3`
+  command list. Source basis: the `ftmotionstates.c` AttackS3* entries all use
+  `ftCo_AttackS3_{Anim,IASA,Phys,Coll}`, while `data/moves/{fox,falco}.json` currently stores the
+  shared side-tilt hitbox script under `moves["ftCo_SM_AttackS3"].events`. This is an event-table
+  alias only; it is not a BODY admission shortcut and still uses the normal pose/hurtcap overlap
+  selector.
 - Core combat/contact continuation pass (2026-04-24): retained decomp-backed runtime/seed cleanup
   for the next residual block. Common airborne `Damage_IASA` and grounded DamageHi/N/Lw
   `Damage_IASA` use the live

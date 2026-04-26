@@ -8,6 +8,8 @@ from tests.test_items_spawn_joint_replay_real_locks import (
     _skip_if_required_artifacts_missing,
     _step_one_row,
 )
+from tools.eval.dataset import COMPARE_DTYPE, read_dataset
+from tools.eval.run_longest_rollout_streaks import _load_binding
 
 
 @pytest.mark.integration
@@ -36,6 +38,120 @@ def test_enable_edge_tiplog_phantom_rows_do_not_enter_damage(dataset_name: str, 
     _seed, out, ref = _step_one_row(dataset_path, record)
     for field in ("action_id", "animation_index", "hitlag", "hitstun"):
         assert int(out[field][defender]) == int(ref[field][defender]), f"field={field}"
+
+
+@pytest.mark.integration
+def test_attacks3_angle_variant_hitbox_events_apply_with_variant_pose_agg_5611() -> None:
+    # Angled side-tilt event ownership:
+    # - AttackS3Hi/HiS/S/LwS/Lw use distinct submotions/poses but share the ftCo_AttackS3
+    #   callbacks. The extracted command table stores the common hitbox events under
+    #   ftCo_SM_AttackS3, so runtime aliases only the command-event lookup and still samples
+    #   hitbox centers from the live angled submotion pose.
+    # - AGG:5611 is Falco AttackS3Lw hitting Fox during SpecialAirHi. Without the command-event
+    #   alias, no Falco hitboxes exist and Fox incorrectly continues SpecialAirHi.
+    # refs/melee/src/melee/ft/ftmotionstates.c (AttackS3* table entries)
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackS3.c
+    # data/moves/{fox,falco}.json::moves["ftCo_SM_AttackS3"].events
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / "datasets/aggregate_recent/replays/validation/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl"
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    seed, out, ref = _step_one_row(dataset_path, 5611)
+    attacker = 0
+    defender = 1
+    assert int(seed["action_id"][attacker]) == 55  # ftCo_MS_AttackS3Lw
+    assert int(seed["animation_index"][attacker]) == 57  # ftCo_SM_AttackS3Lw pose
+    assert int(seed["action_frame"][attacker]) == 5
+    assert int(ref["action_id"][defender]) == 88  # DamageFlyN
+    for field in ("action_id", "animation_index", "hitlag", "hitstun", "instance_hit_by", "last_hit_by"):
+        assert int(out[field][defender]) == int(ref[field][defender]), f"field={field}"
+    assert int(out["hitlag"][attacker]) == int(ref["hitlag"][attacker]) == 6
+
+
+@pytest.mark.integration
+def test_attacks3_angle_variant_hitbox_events_do_not_pre_admit_agg_5610() -> None:
+    # Negative neighbor for the AttackS3 angle event alias: the frame before AGG:5611 has the same
+    # angled side-tilt owner but no accepted BODY hit. The alias must not become a broad
+    # side-tilt-frame admission shortcut.
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / "datasets/aggregate_recent/replays/validation/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl"
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    seed, out, ref = _step_one_row(dataset_path, 5610)
+    attacker = 0
+    defender = 1
+    assert int(seed["action_id"][attacker]) == 55  # ftCo_MS_AttackS3Lw
+    assert int(seed["animation_index"][attacker]) == 57  # ftCo_SM_AttackS3Lw pose
+    assert int(ref["action_id"][defender]) == 356  # SpecialAirHi
+    for field in ("action_id", "animation_index", "hitlag", "hitstun"):
+        assert int(out[field][defender]) == int(ref[field][defender]), f"field={field}"
+
+
+@pytest.mark.integration
+def test_attacks3_angle_variant_hitbox_events_fix_rollout_agg_5577() -> None:
+    # Rollout-real lock for the disruptive AGG cluster: starting from SpecialHiHoldAir at 5577,
+    # the first visible split was Fox continuing SpecialAirHi through Falco's AttackS3Lw. The
+    # source-shaped command-event alias should make the rollout hit match replay at 5611 without
+    # needing any row-local bridge.
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / "datasets/aggregate_recent/replays/validation/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl"
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+    binding = _load_binding()
+    sizes = binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    compare_stride = int(sizes["compare"])
+
+    handle = binding.init(
+        batch_size=1,
+        num_players=int(ds.header["num_players"]),
+        ucf_enabled=1,
+        ucf_cardinals_1_0_enabled=1,
+    )
+    seed_bytes = np.empty((1, seed_stride), dtype=np.uint8)
+    prev_input_bytes = np.empty((1, input_stride), dtype=np.uint8)
+    input_bytes = np.empty((1, input_stride), dtype=np.uint8)
+    out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
+    out_view = out_compare_bytes.view(COMPARE_DTYPE).reshape(1)
+
+    sample_stride = int(samples.dtype.itemsize)
+    samples_u8 = samples.view(np.uint8).reshape(int(samples.shape[0]), sample_stride)
+    seed_off = int(samples.dtype.fields["seed_t"][1])
+    prev_input_off = int(samples.dtype.fields["prev_input_t"][1])
+    input_off = int(samples.dtype.fields["input_t"][1])
+
+    start_record = 5577
+    defender = 1
+    try:
+        seed_bytes[0, :] = samples_u8[start_record, seed_off : seed_off + seed_stride]
+        binding.reseed_seed(handle, seed_bytes)
+        for record in range(start_record, 5612):
+            prev_input_bytes[0, :] = samples_u8[
+                record, prev_input_off : prev_input_off + input_stride
+            ]
+            input_bytes[0, :] = samples_u8[record, input_off : input_off + input_stride]
+            binding.step_input(handle, prev_input_bytes, input_bytes)
+            binding.write_compare(handle, out_compare_bytes)
+            out_row = out_view[0].copy()
+            ref_row = samples["ref_t1"][record]
+            if record < 5611:
+                assert int(out_row["action_id"][defender]) == int(ref_row["action_id"][defender]), record
+            else:
+                assert int(out_row["action_id"][defender]) == int(ref_row["action_id"][defender]) == 88
+                assert int(out_row["hitlag"][defender]) == int(ref_row["hitlag"][defender]) == 6
+                assert int(out_row["hitstun"][defender]) == int(ref_row["hitstun"][defender]) == 47
+                break
+    finally:
+        binding.destroy(handle)
 
 
 @pytest.mark.integration

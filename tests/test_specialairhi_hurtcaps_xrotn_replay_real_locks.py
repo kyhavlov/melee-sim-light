@@ -96,16 +96,18 @@ def test_specialairhi_hurtcaps_xrotn_adjacent_blockers_stay_separate() -> None:
     samples = ds.samples
     binding = pytest.importorskip("msl_binding")
 
-    # Keep the remaining family boundary explicit:
-    # - AGN:5611 is still a separate SpecialAirHi victim row with a different attacker/action
-    #   surface than the closed AGN:7263 launch family.
-    for record, player, exp_action, exp_hitlag in (
-        (5611, 1, 356, 0),
+    # Keep the family boundary explicit: AGN:5611 is not part of the SpecialAirHi hurtcap-XRotN
+    # owner closed by AGN:7263. It is now owned by the shared AttackS3 angled-submotion hitbox
+    # event alias, so it should match replay through the normal BODY path rather than remain an
+    # expected blocker here.
+    for record, player in (
+        (5611, 1),
     ):
         row = samples[record : record + 1]
         got = _run_row(binding, row)
-        assert int(got["action_id"][player]) == exp_action, f"record={record} action_id"
-        assert int(got["hitlag"][player]) == exp_hitlag, f"record={record} hitlag"
-        assert int(got["action_id"][player]) != int(row["ref_t1"]["action_id"][0, player]), (
-            f"record={record} unexpectedly crossed into adjacent family"
+        assert int(got["action_id"][player]) == int(row["ref_t1"]["action_id"][0, player]), (
+            f"record={record} action_id"
+        )
+        assert int(got["hitlag"][player]) == int(row["ref_t1"]["hitlag"][0, player]), (
+            f"record={record} hitlag"
         )
