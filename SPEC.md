@@ -2534,6 +2534,15 @@ Fox/Falco special-owner split (2026-04-17):
       covered the 25-frame carried pulse; runtime now also allows the first attached pulse when the
       current-step command crossing is the first `ThrowLw` projectile event, the victim is still in
       same-owner `ThrownLw`, and geometry did not already select a BODY hit.
+    - The frame-25 post-hitlag subcase is owned by the same source path but is narrower than "any
+      current frame-25 pulse": `Fighter_8006A1BC` must end the attached victim's hitlag at proc
+      prio 0, the resumed `ThrowLw` Anim callback must cross the frame-25 command from a frame-start
+      `ThrowLw` phase before frame 24 on the slower supported-domain `ftCo_800DD4B0` throw
+      anim-speed path derived from victim weight and common x37C data, and the freshly spawned
+      state1 laser then applies the attached-victim BODY callback before post-frame serialization.
+      QGD controls are faster Fox-victim source-rate rows that can serialize the article without
+      immediate BODY hitlag, so this does not use broad current-frame-25 pulse authority or a naked
+      replay-control animation-rate threshold.
     - This keeps the pulse on the throw item/source owner instead of leaving a stale fresh article
       and source/bookkeeping deltas. Replay-real lock: `FSP:9177` covers item slot lifetime,
       attacker `last_attack_landed`, and victim source/state flags, with adjacent target +/-1 rows.
@@ -2543,7 +2552,10 @@ Fox/Falco special-owner split (2026-04-17):
       ledge/collision-env families remain closed (`F17/F10c/F19/F20/F21/F22/F23/F24/F10e=0`).
       The checklist item remains active.
     Sources: `refs/melee/src/melee/ft/ftaction.c::{ftAction_80071974,ftAction_80073354}`,
+    `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DD4B0`,
+    `refs/melee/src/melee/ft/fighter.c::{Fighter_8006A1BC,Fighter_8006A360}`,
     `refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim`,
+    `refs/melee/src/melee/it/items/itfoxlaser.c::{it_8029C6CC,it_8029C4D4}`,
     `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Thrown.c::ftCo_800DE508`,
     `data/moves/{fox,falco}.json moves["ftCo_SM_ThrowLw"].events`.
   - Throw command pending-pulse seed/runtime lane:

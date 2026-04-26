@@ -428,7 +428,7 @@ mismatch.facing: 1 / 23960 (0.000042)
 mismatch.stocks: 0 / 23960 (0.000000)
 mismatch.jumps_left: 14 / 23960 (0.000584)
 mismatch.is_dead: 0 / 23960 (0.000000)
-mismatch.hitlag: 23 / 23960 (0.000960)
+mismatch.hitlag: 19 / 23960 (0.000793)
 mismatch.hitstun: 11 / 23960 (0.000459)
 mismatch.l_cancel: 2 / 23960 (0.000083)
 mismatch.hurtbox_state: 15 / 23960 (0.000626)
@@ -439,7 +439,7 @@ mismatch.instance_id: 23 / 23960 (0.000960)
 mismatch.last_attack_landed: 7 / 23960 (0.000292)
 mismatch.combo_count: 2 / 23960 (0.000083)
 mismatch.last_hit_by: 12 / 23960 (0.000501)
-mismatch.state_flags: 93 / 119800 (0.000776)
+mismatch.state_flags: 89 / 119800 (0.000743)
 mismatch.item_exists: 6 / 179700 (0.000033)
 mismatch.item_type: 6 / 179700 (0.000033)
 mismatch.item_state: 1 / 179700 (0.000006)
@@ -452,14 +452,14 @@ err.speed_ground_x_self: mae=0.001681 p95=0.000000 max=1.815992
 err.speed_y_self: mae=0.003026 p95=0.000000 max=3.500000
 err.speed_x_attack: mae=0.000414 p95=0.000000 max=2.530158
 err.speed_y_attack: mae=0.001411 p95=0.000000 max=4.805520
-err.percent: mae=0.002860 p95=0.000000 max=12.000000
+err.percent: mae=0.002784 p95=0.000000 max=12.000000
 err.shield_hp: mae=0.002505 p95=0.000000 max=23.349995
 err.item_pos_x: mae=0.156016 p95=0.000000 max=88.298080
 err.item_pos_y: mae=0.047714 p95=0.000000 max=16.942844
 err.item_vel_x: mae=0.011281 p95=0.000000 max=8.713739
 err.item_vel_y: mae=0.000867 p95=0.000000 max=2.799234
-overall.discrete_mismatch: 347 / 1449580
-overall.float_norm_mae_p95: 0.00047708
+overall.discrete_mismatch: 339 / 1449580
+overall.float_norm_mae_p95: 0.00047703
 
 == datasets/aggregate_recent/replays/validation/aggregate_recent/PriceyPartialAlbatross.msl ==
 Records: 7937  Players/scored per record: 2  Total player-frames: 15874
@@ -672,5 +672,5 @@ overall.discrete_mismatch: 190 / 1502336
 overall.float_norm_mae_p95: 0.00030069
 
 == suite summary ==
-overall.discrete_mismatch: 2623 / 17965838
+overall.discrete_mismatch: 2615 / 17965838
 overall.float_norm_mae_p95: 0.00034334

@@ -99,13 +99,13 @@ rollout.first_mismatch_seeded_total: 70
 
 == datasets/aggregate_recent/replays/validation/aggregate_recent/PositiveRevolvingHyena.msl ==
 rollout.best_len: 354
-rollout.streak_count: 145
-rollout.streak_len.median: 54
+rollout.streak_count: 143
+rollout.streak_len.median: 55
 rollout.streak_len.p90: 191
 rollout.streak_len.p95: 234
 rollout.streak_len.max: 354
-rollout.first_mismatch_total: 149
-rollout.first_mismatch_seeded_total: 72
+rollout.first_mismatch_total: 147
+rollout.first_mismatch_seeded_total: 70
 
 == datasets/aggregate_recent/replays/validation/aggregate_recent/PriceyPartialAlbatross.msl ==
 rollout.best_len: 347
@@ -178,11 +178,11 @@ rollout.first_mismatch_total: 63
 rollout.first_mismatch_seeded_total: 30
 
 == suite summary ==
-overall.rollout.streak_count: 1486
+overall.rollout.streak_count: 1484
 overall.rollout.streak_len.median: 73
 overall.rollout.streak_len.p90: 231
 overall.rollout.streak_len.p95: 299
 overall.rollout.streak_len.max: 959
 overall.rollout.best_len.max: 959
-overall.rollout.first_mismatch_total: 1548
-overall.rollout.first_mismatch_seeded_total: 721
+overall.rollout.first_mismatch_total: 1546
+overall.rollout.first_mismatch_seeded_total: 719

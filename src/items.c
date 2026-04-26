@@ -546,6 +546,7 @@ enum {
   // GALE01 ItKind enum values for spacie laser shots.
   // refs/melee/src/melee/it/forward.h::ItemKind
   // data/characters/{fox,falco}.json {blaster_shot_itkind,side_special_illusion_item_kind}
+  MSL_CHAR_FOX = 1,
   MSL_CHAR_FALCO = 22,
   MSL_IT_KIND_FOX_LASER_SHOT = 54,
   MSL_IT_KIND_FALCO_LASER_SHOT = 55,
@@ -565,6 +566,89 @@ enum {
   MSL_THROWB_PREV_PHASE_AF = 13,
   MSL_THROWLW_PULSE_ATTACH_AF = 25,
 };
+
+static inline int throw_index_from_action_id_for_items(uint16_t action_id) {
+  switch (action_id) {
+    case (uint16_t)MSL_ACT_THROW_F:
+      return 0;
+    case (uint16_t)MSL_ACT_THROW_B:
+      return 1;
+    case (uint16_t)MSL_ACT_THROW_HI:
+      return 2;
+    case (uint16_t)MSL_ACT_THROW_LW:
+      return 3;
+    default:
+      return -1;
+  }
+}
+
+static inline int32_t item_throw_anim_rate_fp_from_chars(uint8_t owner_char_id,
+                                                         uint8_t victim_char_id,
+                                                         uint16_t throw_action) {
+  const int throw_index = throw_index_from_action_id_for_items(throw_action);
+  if (throw_index < 0) {
+    return 0;
+  }
+  float throw_anim_speed = 1.0f;
+  const MslCommonParams* c = msl_common_params();
+  const MslCharParams* owner_ch = msl_char_params(owner_char_id);
+  const MslCharParams* victim_ch = msl_char_params(victim_char_id);
+  const uint8_t weight_independent =
+      (owner_ch != NULL)
+          ? ((owner_ch->weight_independent_throws_mask & (uint8_t)(1u << throw_index)) ? 1u : 0u)
+          : 0u;
+  if (!weight_independent && c != NULL && victim_ch != NULL && victim_ch->weight > 0.0f &&
+      c->throw_anim_speed_weight_mul > 0.0f) {
+    throw_anim_speed = 1.0f / (victim_ch->weight * c->throw_anim_speed_weight_mul);
+    if (!(throw_anim_speed > 0.0f)) {
+      throw_anim_speed = 1.0f;
+    }
+  }
+  return msl_q16_16_from_f32(throw_anim_speed);
+}
+
+static inline uint8_t item_throwlw_frame25_post_hitlag_rate_allowed(uint8_t owner_char_id,
+                                                                    uint8_t victim_char_id) {
+  // Supported-domain ThrowLw frame-25 post-hitlag rate policy:
+  // - The candidate rate is always computed through the decomp throw-entry formula:
+  //     ftCo_800DD4B0: anim_speed = 1 / (victim_weight * p_ftCommonData->x37C)
+  // - In the current Fox/Falco domain, replay-real controls separate the slower Falco-victim rate
+  //   from the faster Fox-victim rate: the slower rate can apply same-frame BODY hitlag after the
+  //   post-hitlag frame-25 command crossing, while the faster Fox-victim QGD rows serialize the
+  //   article without immediate BODY hitlag.
+  // - Keep the allow-set as data-derived rates, not a character-id shortcut: for the supported
+  //   Fox/Falco domain, compute the rate set from extracted character/common data and admit the
+  //   slowest supported ThrowLw rate. Adding new supported characters should extend this supported
+  //   domain table only with matching source/probe controls.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DD4B0
+  // refs/melee/src/melee/ft/types.h::ftCo_DatAttrs (+0x180)
+  // data/common/ft_common_data.json `throw_anim_speed_weight_mul`
+  // data/characters/{fox,falco}.json `weight`
+  const int32_t candidate_rate_fp =
+      item_throw_anim_rate_fp_from_chars(owner_char_id, victim_char_id, (uint16_t)MSL_ACT_THROW_LW);
+  if (candidate_rate_fp <= 0) {
+    return 0u;
+  }
+
+  static const uint8_t k_supported_domain_chars[] = {
+      (uint8_t)MSL_CHAR_FOX,
+      (uint8_t)MSL_CHAR_FALCO,
+  };
+  int32_t slowest_supported_rate_fp = 0;
+  for (size_t i = 0; i < sizeof(k_supported_domain_chars) / sizeof(k_supported_domain_chars[0]);
+       i++) {
+    const int32_t supported_rate_fp = item_throw_anim_rate_fp_from_chars(
+        owner_char_id, k_supported_domain_chars[i], (uint16_t)MSL_ACT_THROW_LW);
+    if (supported_rate_fp <= 0) {
+      continue;
+    }
+    if (slowest_supported_rate_fp == 0 || supported_rate_fp < slowest_supported_rate_fp) {
+      slowest_supported_rate_fp = supported_rate_fp;
+    }
+  }
+  return (slowest_supported_rate_fp > 0 && candidate_rate_fp == slowest_supported_rate_fp) ? 1u
+                                                                                           : 0u;
+}
 
 static inline uint8_t throw_blaster_pulse_is_seed_stale_latch(uint16_t action_id_u16,
                                                               uint16_t shot_itkind,
@@ -2102,7 +2186,8 @@ static int throwlw_attached_victim_for_owner(const MslBatch* batch, int bi, int 
 }
 
 static void laser_spawn_apply_throwlw_attached_body_callback(MslBatch* batch, int bi, int owner,
-                                                             int slot, const MslLaserParams* lp) {
+                                                             int slot, const MslLaserParams* lp,
+                                                             uint8_t allow_post_hitlag_boundary) {
   if (batch == NULL || lp == NULL || slot < 0) {
     return;
   }
@@ -2115,7 +2200,8 @@ static void laser_spawn_apply_throwlw_attached_body_callback(MslBatch* batch, in
     return;
   }
   const size_t v_idx = msl_idx_player(bi, victim);
-  if (batch->state.hitlag_pre_timer[v_idx] != 0u) {
+  if (batch->state.hitlag_pre_timer[v_idx] != 0u &&
+      !(allow_post_hitlag_boundary != 0u && batch->state.hitlag[v_idx] == 0u)) {
     return;
   }
   const size_t ii = msl_idx_item(bi, slot);
@@ -2124,13 +2210,17 @@ static void laser_spawn_apply_throwlw_attached_body_callback(MslBatch* batch, in
     return;
   }
 
-  // ThrowLw spawn-time attached BODY callback, frame-28 command phase:
+  // ThrowLw spawn-time attached BODY callback:
   // - ftAction_80073354 / ftAction_80071974 execute one set_throw_spawn_projectile command into
   //   throw_flags_b0, and ftFx_Throw_Anim spawns the state1 laser through it_8029C6CC before item
   //   BODY callbacks.
   // - v10 PRH:533/5637 dumps show no live state1 shot in seed, a pending frame-28 command, then a
   //   freshly spawned Falco shot whose BODY callback applies attached-victim hitlag/bookkeeping.
-  // - First/terminal Falco phases need separate callback state and stay excluded by caller gates.
+  // - PRH:5631 shows the same source path after frame-start victim hitlag decrements to zero:
+  //   Fighter_8006A1BC ends hitlag, ThrowLw Anim resumes, crosses the frame-25 pulse, then item
+  //   BODY callback applies attached-victim hitlag in the same frame.
+  // - Other first/terminal Falco phases need separate callback state and stay excluded by caller
+  //   gates.
   // refs/melee/src/melee/ft/ftaction.c::{ftAction_80071974,ftAction_80073354}
   // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
   // refs/melee/src/melee/it/items/itfoxlaser.c::it_8029C6CC
@@ -3609,8 +3699,9 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
         //   ftFx_Throw_Anim; seed lane `throw_pulse_crossed_prev_frame` carries prior-step crossing.
         // - In attached ThrownLw contexts, missing same-step BODY overlap at the first visible
         //   pulse, first current-frame pulse, or the 25-frame carried pulse leaves replay-causal
-        //   pulse, first current-frame pulse, or the 25-frame carried pulse leaves replay-causal
-        //   hitlag/state-flags deltas; bridge only when geometry probe missed.
+        //   hitlag/state-flags deltas; bridge only when geometry probe missed. The frame-25
+        //   post-hitlag current-pulse subcase is handled at spawn time below because adjacent rows
+        //   can serialize the article without same-frame BODY hitlag.
         // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
         // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Thrown.c::ftCo_800DE508
         // refs/melee/src/melee/ft/ftaction.c::{ftAction_80071974,ftAction_80073354}
@@ -4943,7 +5034,44 @@ void items_spawn_pre_physics(MslBatch* batch) {
           lp->shot_itkind == (uint16_t)MSL_IT_KIND_FALCO_LASER_SHOT &&
           batch->state.throw_pulse_crossed_curr_frame[idx] == 28u &&
           throw_seed_shot_count[p] == 0u) {
-        laser_spawn_apply_throwlw_attached_body_callback(batch, bi, p, spawned_slot, lp);
+        laser_spawn_apply_throwlw_attached_body_callback(batch, bi, p, spawned_slot, lp, 0u);
+      }
+      if (is_blaster_throw && action_id == (uint16_t)MSL_ACT_THROW_LW &&
+          batch->state.throw_pulse_crossed_curr_frame[idx] ==
+              (uint8_t)MSL_THROWLW_PULSE_ATTACH_AF &&
+          throw_seed_shot_count[p] == 0u) {
+        const int attached_victim = throwlw_attached_victim_for_owner(batch, bi, p);
+        uint8_t source_throw_rate_allowed = 0u;
+        if (attached_victim >= 0) {
+          const size_t v_idx = msl_idx_player(bi, attached_victim);
+          source_throw_rate_allowed = item_throwlw_frame25_post_hitlag_rate_allowed(
+              batch->state.char_id[idx], batch->state.char_id[v_idx]);
+        }
+        const int16_t frame_start_action_frame = batch->state.prev_action_frame[idx];
+        const uint8_t throwlw_frame25_post_hitlag_phase =
+            (batch->state.prev_action_id[idx] == (uint16_t)MSL_ACT_THROW_LW &&
+             frame_start_action_frame >= 0 && attached_victim >= 0 &&
+             frame_start_action_frame < ((int16_t)MSL_THROWLW_PULSE_ATTACH_AF - 1) &&
+             source_throw_rate_allowed != 0u)
+                ? 1u
+                : 0u;
+        // ThrowLw frame-25 post-hitlag callback:
+        // - This is the same ftFx_Throw_Anim -> it_8029C6CC -> item BODY source path as the
+        //   frame-28 callback above, but admitted only when the attached victim started the frame
+        //   in hitlag and prio-0 timers have ended it before the resumed Anim callback.
+        // - Keep the immediate callback to the source command phase that starts before frame 24,
+        //   then crosses the frame-25 projectile command after the hitlag boundary, and is on the
+        //   slower ftCo_800DD4B0 throw anim-speed path derived from victim weight/common x37C data.
+        //   QGD controls are Fox-victim 1.333... source-rate rows that can serialize the article
+        //   without same-frame BODY hitlag, so a broad "any current frame-25 pulse" gate is too wide.
+        // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A1BC,Fighter_8006A360}
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DD4B0
+        // refs/melee/src/melee/ft/ftaction.c::{ftAction_80071974,ftAction_80073354}
+        // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
+        // refs/melee/src/melee/it/items/itfoxlaser.c::{it_8029C6CC,it_8029C4D4}
+        if (throwlw_frame25_post_hitlag_phase != 0u) {
+          laser_spawn_apply_throwlw_attached_body_callback(batch, bi, p, spawned_slot, lp, 1u);
+        }
       }
       if (is_blaster_throw && action_id == (uint16_t)MSL_ACT_THROW_B &&
           lp->shot_itkind == (uint16_t)MSL_IT_KIND_FALCO_LASER_SHOT) {
