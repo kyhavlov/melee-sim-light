@@ -273,20 +273,24 @@ static inline void enter_fall_special_from_specialhi(MslBatch* batch, size_t idx
   batch->state.fallspecial_xc[idx] = 1u;
 }
 
-static inline void enter_specialhi_bound_from_airhi_collision(MslBatch* batch, size_t idx) {
-  if (batch == NULL) {
+static inline void enter_specialhi_bound_from_airhi_collision(MslBatch* batch,
+                                                              const MslCharParams* ch, size_t idx) {
+  if (batch == NULL || ch == NULL) {
     return;
   }
   // Decomp: SpecialAirHi collision can enter the rebound motion state through
   // ftFx_SpecialHiBound_Enter. The motion-state handler calls ftAnim_8006EBA4 immediately and does
   // not convert the fighter to grounded; Bound_Phys/Coll continue to branch on ground_or_air.
+  // After motion entry it scales horizontal self velocity by ftFox_DatAttrs.x84.
   // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::{
   //   ftFx_SpecialAirHi_Coll,ftFx_SpecialHiBound_Enter}
+  // Source key: data/characters/{fox,falco}.json `firefox_bound_vel_x`.
   batch->state.action_id[idx] = (uint16_t)MSL_ACT_FX_SPECIAL_HI_BOUND;
   batch->state.animation_index[idx] = (uint32_t)MSL_SM_FX_SPECIAL_HI_BOUND;
   batch->state.on_ground[idx] = 0u;
   batch->state.fall_fast[idx] = 0u;
   msl_anim_timebase_enter_with_policy(batch, idx, 0.0f, 1.0f, MSL_ANIM_ENTER_TICK_IMMEDIATE);
+  batch->state.speed_air_x_self[idx] *= ch->firefox_bound_vel_x;
 }
 
 static inline void specialhi_apply_air_launch_ownership(MslBatch* batch, size_t idx,
@@ -294,21 +298,31 @@ static inline void specialhi_apply_air_launch_ownership(MslBatch* batch, size_t 
   if (batch == NULL || ch == NULL) {
     return;
   }
-  // Decomp: ftFx_SpecialAirHi_Enter derives launch direction from current stick and
+  // Decomp: ftFx_SpecialAirHi_Enter derives launch direction from current fp->input.lstick and
   // ftFox_DatAttrs.{x64,x88}, then overwrites self_vel using x74 launch speed.
   // It also consumes all jumps through `x1968_jumpsUsed = co_attrs.max_jumps` on aerial launch
   // entry; Slippi post-frame stores the inverse `jumps_left`, so the sim lane writes zero here.
-  // - stickGetDir(..., 0.0f) is used for x64 magnitude gate.
+  // - Fighter_Spaghetti_8006AD10 applies common lstick deadzone before action callbacks read
+  //   fp->input.lstick; apply the same deadzoned lane before `stickGetDir(..., 0.0f)`.
   // - facing updates when |stick_x| > x88 before atan2f.
   // - rotateModel defaults to HALF_PI32 when below direction threshold.
   // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::ftFx_SpecialAirHi_Enter
+  // refs/melee/src/melee/ft/fighter.c::Fighter_Spaghetti_8006AD10
   // refs/melee/src/melee/ft/chara/ftFox/types.h::ftFox_DatAttrs
   // Source keys: data/characters/{fox,falco}.json
   // - firefox_direction_stick_range_min
   // - firefox_launch_speed
   // - firefox_facing_stick_range_min
-  const float stick_x = stick_i8_to_unit(batch->state.input_main_x[idx]);
-  const float stick_y = stick_i8_to_unit(batch->state.input_main_y[idx]);
+  // data/common/ft_common_data.json
+  // - lstick_deadzone_x
+  // - lstick_deadzone_y
+  const MslCommonParams* c = msl_common_params();
+  float stick_x = stick_i8_to_unit(batch->state.input_main_x[idx]);
+  float stick_y = stick_i8_to_unit(batch->state.input_main_y[idx]);
+  if (c != NULL) {
+    stick_x = apply_deadzone(stick_x, c->lstick_deadzone_x);
+    stick_y = apply_deadzone(stick_y, c->lstick_deadzone_y);
+  }
   const float abs_x = msl_absf(stick_x);
   const float abs_y = msl_absf(stick_y);
 
@@ -4653,7 +4667,7 @@ void locomotion_update_post_collision(MslBatch* batch) {
           // ground/air handling.
           // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::{
           //   ftFx_SpecialAirHi_Coll,ftFx_SpecialHiBound_Enter}
-          enter_specialhi_bound_from_airhi_collision(batch, idx);
+          enter_specialhi_bound_from_airhi_collision(batch, ch, idx);
           continue;
         }
 

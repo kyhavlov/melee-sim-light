@@ -1806,6 +1806,28 @@ Fox/Falco special-owner split (2026-04-17):
     Runtime now writes the equivalent Slippi `jumps_left=0` on `SpecialHiHoldAir` ->
     `SpecialAirHi` launch entry. Bound/Fall/cliff-catch timing rows remain in `F22`.
     Source: `refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::ftFx_SpecialAirHi_Enter`.
+  - `ftFx_SpecialAirHi_Enter` reads the current `fp->input.lstick` after the common input
+    preprocessing/deadzone owner, then applies `stickGetDir` for the `x64` direction gate and
+    writes launch velocity from `x74`. Runtime applies `data/common/ft_common_data.json`
+    `lstick_deadzone_{x,y}` before the Firefox/Firebird launch angle. This fixes HVG's
+    right-plus-small-down launch where UCF clamp puts Y inside the common deadzone; replay launches
+    horizontally instead of drifting downward into a later false cliff path.
+    Sources: `refs/melee/src/melee/ft/fighter.c::Fighter_Spaghetti_8006AD10`,
+    `refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::ftFx_SpecialAirHi_Enter`,
+    `data/common/ft_common_data.json`, `data/characters/{fox,falco}.json`.
+  - `ftFx_SpecialHiBound_Enter` enters `SpecialHiBound`, immediately ticks anim via
+    `ftAnim_8006EBA4`, then scales horizontal self velocity by `ftFox_DatAttrs.x84`
+    (`firefox_bound_vel_x`). Runtime applies that extracted data scalar only on the
+    `SpecialAirHi_Coll -> SpecialHiBound` entry row, not while still traveling in `SpecialAirHi`.
+    While the rebound remains airborne, `ftFx_SpecialHiBound_Phys` then replaces vertical
+    self-velocity from `ft_800851C0` / `fp->x6A4_transNOffset.y` and applies horizontal
+    `ftCommon_8007CF58` air friction, so the rebound path follows the Bound root-motion arc instead
+    of the pre-bound launch velocity.
+    Sources: `refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::{
+    ftFx_SpecialAirHi_Coll,ftFx_SpecialHiBound_Enter,ftFx_SpecialHiBound_Phys}`,
+    `refs/melee/src/melee/ft/ft_081B.c::ft_800851C0`,
+    `refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007CF58`,
+    `data/characters/{fox,falco}.json`.
   - Ledge occupancy now includes slow ledge options (`CliffClimbSlow`, `CliffAttackSlow`,
     `CliffEscapeSlow`, `CliffJumpSlow1`) as well as the already-modeled quick variants. This keeps
     `ftCliffCommon_80081298` from admitting a `SpecialHiFall` CliffCatch onto a ledge already

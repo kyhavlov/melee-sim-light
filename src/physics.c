@@ -530,8 +530,8 @@ static inline uint8_t physics_damage_iasa_lockout_x221c_b6(const MslBatch* batch
   return msl_state_flags_221c_b6_at(batch->state.state_flags, idx);
 }
 
-static inline float physics_apply_shine_air_x_clamp(const MslCharParams* ch,
-                                                    const MslCommonParams* c, float vel_x) {
+static inline float physics_apply_ftcommon_8007cf58_x_clamp(const MslCharParams* ch,
+                                                            const MslCommonParams* c, float vel_x) {
   // Decomp: aerial Reflector (SpecialAirLw*) uses `ftCommon_8007CF58`, which sets fp->x74_anim_vel.x to a
   // friction/clamp step using p_ftCommonData->x1FC when |vel| exceeds air_drift_max, else co_attrs.aerial_friction.
   // refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007CF58
@@ -1314,8 +1314,8 @@ void physics_integrate(MslBatch* batch) {
               const float stick_x = apply_deadzone(stick_i8_to_unit(batch->state.input_main_x[idx]),
                                                    c->lstick_deadzone_x);
               if (physics_action_is_shine_air(action_id)) {
-                batch->state.speed_air_x_self[idx] =
-                    physics_apply_shine_air_x_clamp(ch, c, batch->state.speed_air_x_self[idx]);
+                batch->state.speed_air_x_self[idx] = physics_apply_ftcommon_8007cf58_x_clamp(
+                    ch, c, batch->state.speed_air_x_self[idx]);
               } else if (damage_iasa_lockout) {
                 // DamageFly/DamageFlyRoll/common Damage x221C_b6 path (`ft_80084EEC`) uses
                 // friction-only x update.
@@ -1406,6 +1406,28 @@ void physics_integrate(MslBatch* batch) {
             physics_apply_specialhi_air_reverse_accel(
                 ch, batch->state.facing[idx], batch->state.action_frame[idx],
                 &batch->state.speed_air_x_self[idx], &batch->state.speed_y_self[idx]);
+          }
+        } else if (action_id == (uint16_t)MSL_ACT_FX_SPECIAL_HI_BOUND &&
+                   batch->state.on_ground[idx] == 0) {
+          // Decomp: airborne Firefox/Firebird rebound Phys runs `ft_800851C0` (vertical
+          // self-velocity from `fp->x6A4_transNOffset.y`) and then `ftCommon_8007CF58`
+          // (horizontal air friction/clamp via x74_anim_vel.x). This keeps rebound rows
+          // root-motion-owned while airborne instead of continuing with the pre-bound downward
+          // launch velocity.
+          // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::ftFx_SpecialHiBound_Phys
+          // refs/melee/src/melee/ft/ft_081B.c::ft_800851C0
+          // refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007CF58
+          const MslCharParams* ch = msl_char_params(batch->state.char_id[idx]);
+          if (ch != NULL) {
+            float dxyz[3];
+            if (physics_try_get_transn_delta_xyz(ch, batch->state.char_id[idx],
+                                                 batch->state.animation_index[idx],
+                                                 physics_prev_anim_frame_f32(batch, idx),
+                                                 physics_cur_anim_frame_f32(batch, idx), dxyz)) {
+              batch->state.speed_y_self[idx] = dxyz[1];
+            }
+            batch->state.speed_air_x_self[idx] =
+                physics_apply_ftcommon_8007cf58_x_clamp(ch, c, batch->state.speed_air_x_self[idx]);
           }
         }
       }

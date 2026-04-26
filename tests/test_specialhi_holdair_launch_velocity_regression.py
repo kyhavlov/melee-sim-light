@@ -84,6 +84,13 @@ def _step_one_row_with_rollout_at_record(
     ("dataset_rel", "record", "p", "baseline_abs_pos_y"),
     [
         (
+            "datasets/aggregate_recent/replays/validation/aggregate_recent/"
+            "HilariousVillainousGiraffe.msl",
+            3833,
+            1,
+            1.006180,
+        ),
+        (
             "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
             "QuerulousGrandDinosaur.msl",
             9368,
@@ -169,6 +176,14 @@ def test_specialhi_holdair_launch_rows_clear_hold_velocity_and_improve_pos_y_err
     ("dataset_rel", "record", "p", "seed_action", "ref_action"),
     [
         (
+            "datasets/aggregate_recent/replays/validation/aggregate_recent/"
+            "HilariousVillainousGiraffe.msl",
+            3832,
+            1,
+            354,  # HoldAir one frame before launch with clamped/deadzoned horizontal stick
+            354,
+        ),
+        (
             "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
             "QuerulousGrandDinosaur.msl",
             9367,
@@ -205,3 +220,108 @@ def test_specialhi_holdair_launch_context_controls_remain_replay_real(
     assert np.isfinite(float(out["pos_y"][p]))
     assert np.isfinite(float(ref["pos_x"][p]))
     assert np.isfinite(float(ref["pos_y"][p]))
+
+
+@pytest.mark.integration
+def test_specialairhi_bound_entry_applies_extracted_horizontal_velocity_scalar_his_559() -> None:
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = (
+        root
+        / "datasets/aggregate_recent/replays/validation/aggregate_recent/"
+        "HungryImportantSnake.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    p = 1
+    seed, out, ref, out_roll = _step_one_row_with_rollout_at_record(dataset_path, 559, p)
+
+    # Decomp ownership: SpecialAirHi_Coll can call ftFx_SpecialHiBound_Enter, which changes motion,
+    # immediately ticks anim, then scales `fp->self_vel.x *= da->x84_FOX_FIREFOX_BOUND_VEL_X`.
+    # Source key: data/characters/{fox,falco}.json `firefox_bound_vel_x`.
+    # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::ftFx_SpecialHiBound_Enter
+    assert int(seed["action_id"][p]) == 356  # ftFx_MS_SpecialAirHi
+    assert int(ref["action_id"][p]) == 359  # ftFx_MS_SpecialHiBound
+    assert int(ref["on_ground"][p]) == 0
+
+    assert int(out["action_id"][p]) == int(ref["action_id"][p]) == 359
+    assert float(out["speed_air_x_self"][p]) == pytest.approx(
+        float(ref["speed_air_x_self"][p]), abs=1e-5
+    )
+    assert float(out["speed_y_self"][p]) == pytest.approx(float(ref["speed_y_self"][p]), abs=1e-5)
+
+    # Rollout lock for the motivating disruptive row: the same bound-entry velocity must survive
+    # runtime history, not just teacher-forced one-step state.
+    assert int(out_roll["action_id"][p]) == int(ref["action_id"][p])
+    assert float(out_roll["speed_air_x_self"][p]) == pytest.approx(
+        float(ref["speed_air_x_self"][p]), abs=1e-5
+    )
+
+
+@pytest.mark.integration
+def test_specialairhi_bound_velocity_scalar_does_not_apply_before_bound_entry_his_558() -> None:
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = (
+        root
+        / "datasets/aggregate_recent/replays/validation/aggregate_recent/"
+        "HungryImportantSnake.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    p = 1
+    seed, out, ref, out_roll = _step_one_row_with_rollout_at_record(dataset_path, 558, p)
+
+    assert int(seed["action_id"][p]) == 356
+    assert int(ref["action_id"][p]) == 356
+    assert int(out["action_id"][p]) == int(ref["action_id"][p])
+    assert int(out_roll["action_id"][p]) == int(ref["action_id"][p])
+
+    unscaled = float(ref["speed_air_x_self"][p])
+    assert abs(unscaled) > 0.1
+    assert float(out["speed_air_x_self"][p]) == pytest.approx(unscaled, abs=1e-5)
+    assert float(out["speed_air_x_self"][p]) != pytest.approx(unscaled * 0.800000011920929, abs=1e-4)
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize("record", [560, 562])
+def test_specialhi_bound_airborne_phys_uses_root_y_and_air_friction_his(record: int) -> None:
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = (
+        root
+        / "datasets/aggregate_recent/replays/validation/aggregate_recent/"
+        "HungryImportantSnake.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    p = 1
+    seed, out, ref, out_roll = _step_one_row_with_rollout_at_record(
+        dataset_path, record, p, window_before=26
+    )
+
+    # Decomp ownership:
+    # - airborne SpecialHiBound_Phys calls ft_800851C0, replacing self_vel.y from TransN offset.
+    # - it then calls ftCommon_8007CF58 for horizontal friction/clamp.
+    # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::ftFx_SpecialHiBound_Phys
+    # refs/melee/src/melee/ft/ft_081B.c::ft_800851C0
+    # refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007CF58
+    assert int(seed["action_id"][p]) == 359
+    assert int(ref["action_id"][p]) == 359
+    assert int(ref["on_ground"][p]) == 0
+
+    assert int(out["action_id"][p]) == int(ref["action_id"][p])
+    assert int(out["on_ground"][p]) == int(ref["on_ground"][p])
+    assert float(out["speed_y_self"][p]) == pytest.approx(float(ref["speed_y_self"][p]), abs=1e-4)
+    assert float(out["speed_air_x_self"][p]) == pytest.approx(
+        float(ref["speed_air_x_self"][p]), abs=1e-4
+    )
+
+    assert int(out_roll["action_id"][p]) == int(ref["action_id"][p])
+    assert int(out_roll["on_ground"][p]) == int(ref["on_ground"][p])
+    assert float(out_roll["speed_y_self"][p]) == pytest.approx(
+        float(ref["speed_y_self"][p]), abs=1e-4
+    )

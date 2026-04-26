@@ -309,13 +309,14 @@ def _extract_ftco_dattrs(pl_dat: Path, *, ftdata_symbol: str, extract_fox_blaste
         out["illusion_landing_lag_frames"] = int(
             max(0, min(255, int(round(float(_f32_be(buf, ext_abs + 0x50))))))
         )
-        # Fox/Falco up special HoldAir (Firefox/Firebird charge) physics attrs.
+        # Fox/Falco up special HoldAir/Launch/Bound (Firefox/Firebird) attrs.
         #
         # Decomp:
         # - refs/melee/src/melee/ft/chara/ftFox/types.h
         # - refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::{
         #     ftFx_SpecialHiHoldAir_Phys,ftFx_SpecialAirHi_Enter,ftFx_SpecialHi_Anim,
-        #     ftFx_SpecialAirHi_Phys,ftFx_SpecialHiLanding_Phys,ftFx_SpecialHiFall_Anim
+        #     ftFx_SpecialAirHi_Phys,ftFx_SpecialHiLanding_Phys,ftFx_SpecialHiFall_Anim,
+        #     ftFx_SpecialHiBound_Enter
         #   }
         out["firefox_hold_gravity_delay_frames"] = int(max(0, min(255, int(round(float(_f32_be(buf, ext_abs + 0x54)))))))
         out["firefox_hold_vel_x"] = float(_f32_be(buf, ext_abs + 0x58))
@@ -331,6 +332,7 @@ def _extract_ftco_dattrs(pl_dat: Path, *, ftdata_symbol: str, extract_fox_blaste
         out["firefox_launch_speed"] = float(_f32_be(buf, ext_abs + 0x74))
         out["firefox_launch_reverse_accel"] = float(_f32_be(buf, ext_abs + 0x78))
         out["firefox_ground_momentum_end"] = float(_f32_be(buf, ext_abs + 0x7C))
+        out["firefox_bound_vel_x"] = float(_f32_be(buf, ext_abs + 0x84))
         out["firefox_facing_stick_range_min"] = float(_f32_be(buf, ext_abs + 0x88))
         out["firefox_freefall_mobility"] = float(_f32_be(buf, ext_abs + 0x8C))
         out["firefox_landing_lag_frames"] = int(
@@ -498,6 +500,7 @@ def _stable_update(existing: dict, extracted: dict) -> dict:
         "firefox_launch_speed",
         "firefox_launch_reverse_accel",
         "firefox_ground_momentum_end",
+        "firefox_bound_vel_x",
         "firefox_facing_stick_range_min",
         "firefox_freefall_mobility",
         "firefox_landing_lag_frames",

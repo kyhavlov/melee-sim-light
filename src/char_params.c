@@ -257,6 +257,7 @@ static int load_one(const char* data_dir, const char* rel_path, uint8_t char_id)
       "firefox_launch_speed",
       "firefox_launch_reverse_accel",
       "firefox_ground_momentum_end",
+      "firefox_bound_vel_x",
       "firefox_facing_stick_range_min",
       "firefox_freefall_mobility",
       "firefox_landing_lag_frames",
@@ -427,6 +428,7 @@ static int load_one(const char* data_dir, const char* rel_path, uint8_t char_id)
                   &out.firefox_launch_reverse_accel_start_frames) != 0 ||
       json_get_f32(buf, "firefox_launch_reverse_accel", &out.firefox_launch_reverse_accel) != 0 ||
       json_get_f32(buf, "firefox_ground_momentum_end", &out.firefox_ground_momentum_end) != 0 ||
+      json_get_f32(buf, "firefox_bound_vel_x", &out.firefox_bound_vel_x) != 0 ||
       json_get_f32(buf, "firefox_facing_stick_range_min", &out.firefox_facing_stick_range_min) !=
           0 ||
       json_get_f32(buf, "firefox_freefall_mobility", &out.firefox_freefall_mobility) != 0 ||
