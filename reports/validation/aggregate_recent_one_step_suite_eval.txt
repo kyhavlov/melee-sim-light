@@ -446,7 +446,7 @@ mismatch.item_state: 1 / 179700 (0.000006)
 mismatch.item_owner: 6 / 179700 (0.000033)
 mismatch.item_instance_id: 6 / 179700 (0.000033)
 err.pos_x: mae=0.008367 p95=0.000000 max=14.671913
-err.pos_y: mae=0.007180 p95=0.000000 max=12.224156
+err.pos_y: mae=0.007597 p95=0.000000 max=12.224156
 err.speed_air_x_self: mae=0.001488 p95=0.000000 max=1.815992
 err.speed_ground_x_self: mae=0.001681 p95=0.000000 max=1.815992
 err.speed_y_self: mae=0.003026 p95=0.000000 max=3.500000
@@ -459,7 +459,7 @@ err.item_pos_y: mae=0.047714 p95=0.000000 max=16.942844
 err.item_vel_x: mae=0.011281 p95=0.000000 max=8.713739
 err.item_vel_y: mae=0.000867 p95=0.000000 max=2.799234
 overall.discrete_mismatch: 339 / 1449580
-overall.float_norm_mae_p95: 0.00047703
+overall.float_norm_mae_p95: 0.00047767
 
 == datasets/aggregate_recent/replays/validation/aggregate_recent/PriceyPartialAlbatross.msl ==
 Records: 7937  Players/scored per record: 2  Total player-frames: 15874
@@ -673,4 +673,4 @@ overall.float_norm_mae_p95: 0.00030069
 
 == suite summary ==
 overall.discrete_mismatch: 2615 / 17965838
-overall.float_norm_mae_p95: 0.00034334
+overall.float_norm_mae_p95: 0.00034339
