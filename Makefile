@@ -1,4 +1,4 @@
-.PHONY: build test preprocess preprocess-aggregate validate validate-aggregate validate-rollout validate-rollout-aggregate validate-all rollout-capture rollout-summary rollout-diff rollout-locate rollout-locate-summary rollout-locate-diff rollout-disruptive build_data fmt fmt-check check guardrail-preflight guardrail-preflight-full guardrail-baseline forensic-rows dolphin-engine-dump dolphin-extract dolphin-forensic-row build-bench-sim bench-sim
+.PHONY: build test test-parallel test-serial preprocess preprocess-aggregate validate validate-aggregate validate-rollout validate-rollout-aggregate validate-all rollout-capture rollout-summary rollout-diff rollout-locate rollout-locate-summary rollout-locate-diff rollout-disruptive build_data fmt fmt-check check guardrail-preflight guardrail-preflight-full guardrail-baseline forensic-rows dolphin-engine-dump dolphin-extract dolphin-forensic-row build-bench-sim bench-sim
 
 PY := uv run python
 DATASETS_DIR ?= datasets
@@ -23,6 +23,8 @@ ROLLOUT_LOCATE_DIFF_JSON ?=
 DISRUPTIVE_OUT_DIR ?= reports/triage/disruptive_rollout_desyncs
 DISRUPTIVE_HORIZONS ?= 10,20,60
 ARGS ?=
+TEST_ARGS ?=
+TEST_WORKERS ?= auto
 VERBOSE ?=
 CLANG_FORMAT ?= clang-format
 CC ?= cc
@@ -57,7 +59,14 @@ build:
 	@$(PY) python/setup.py build_ext --inplace --force $(BUILD_STDOUT)
 
 test: build
-	@$(PY) -m pytest
+	@mkdir -p reports/triage
+	@$(PY) -m pytest -n "$(TEST_WORKERS)" $(TEST_ARGS)
+
+test-parallel: test
+
+test-serial: build
+	@mkdir -p reports/triage
+	@$(PY) -m pytest $(TEST_ARGS)
 
 preprocess:
 	@$(PY) -m tools.slippi.preprocess_suite --suite "$(SUITE)" --datasets-dir "$(DATASETS_DIR)"
