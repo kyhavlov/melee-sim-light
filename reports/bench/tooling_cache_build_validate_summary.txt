@@ -5,23 +5,34 @@ Branch: perf/disruptive-rollout-batching
 
 Build:
 - Previous reported offender: make build around 25s when forced.
-- Change: make build no longer passes build_ext --force by default; use BUILD_FORCE=1 for a full rebuild.
-- Warm run after change: real 0.15s, then 0.14s.
+- Changes:
+  - make build no longer passes build_ext --force by default; use BUILD_FORCE=1 for a full rebuild.
+  - make build now uses build/msl_binding.stamp, so unchanged sources skip setup.py entirely.
+- Warm run after initial stamp refresh: real 0.00s.
 
 Preprocess:
 - Previous reported offender: primary forced preprocess around 28s; aggregate forced preprocess around 70-75s.
-- Change: preprocess_suite now stamps per-dataset cache signatures covering dataset schema, preprocessing source files, replay stat metadata, suite settings, ports, and extracted data/ artifacts.
-- Primary current-cache run: built=0 skipped=4 real 0.26s.
-- Aggregate current-cache run: built=0 skipped=15 real 0.77s.
+- Changes:
+  - preprocess_suite now stamps per-dataset cache signatures covering dataset schema, preprocessing source files, replay stat metadata, suite settings, ports, and extracted data/ artifacts.
+  - stale/forced dataset rebuilds can run in parallel with --workers / PREPROCESS_WORKERS.
+- Primary current-cache run with PREPROCESS_WORKERS=4: built=0 skipped=4 real 0.31s.
+- Aggregate current-cache run with PREPROCESS_WORKERS=4: built=0 skipped=15 real 0.80s.
 - Existing legacy datasets are stamped once when their record_size and replay mtime are already current.
 
 Validate-all:
 - Previous reported offender: make validate-all around 29s in the packaging pass.
 - Changes:
-  - make validate-all now uses one Python driver process for the four report generators.
+  - make validate-all uses one Python driver and can run the four report generators in worker subprocesses.
   - make build is incremental, so validate-all no longer forces an extension rebuild first.
 - make validate-all against committed report paths: real 4.83s.
 - Same driver against reports/triage smoke output paths: real 5.65s.
+- Parallel driver against reports/triage smoke output paths with --workers=4: real 4.49s.
+
+Rollout triage:
+- rollout-locate now shares precompiled discrete compare lanes between streak capture and row locate.
+- rollout-locate capped at --max-records 2048: real 1.18s.
+- disruptive raw scan capped at --max-records 2048 with workers=4, batch_size=512: real 1.98s for 7550 rows / 2026 clusters.
+- disruptive rerank from the raw rows.tsv: real 0.22s; rows.tsv and clusters.tsv matched the raw scan output exactly.
 
 Notes:
 - Validation report content was not intentionally refreshed for this tooling-only pass.

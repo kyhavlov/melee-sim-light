@@ -37,8 +37,9 @@ Full committed validation refresh:
 make validate-all
 ```
 
-`make validate-all` runs the standard one-step and rollout report generators in
-one Python process after the incremental build check.
+`make validate-all` runs the standard one-step and rollout report generators
+after the incremental build check. It uses worker subprocesses by default; set
+`VALIDATE_WORKERS=1` for serial output/debugging.
 
 Guardrail convenience targets:
 
@@ -82,7 +83,12 @@ uv run python -m tools.slippi.preprocess_suite \
 ```
 
 Use `--force` only when you intentionally want to rebuild every dataset in the
-suite.
+suite. Stale/forced rebuilds can run in parallel:
+
+```bash
+make preprocess PREPROCESS_WORKERS=4
+make preprocess-aggregate PREPROCESS_WORKERS=4
+```
 
 ## Rollout Triage
 
@@ -131,6 +137,14 @@ make rollout-disruptive \
 `make rollout-disruptive` runs the exact scan in worker chunks by default. Tune
 CPU pressure with `DISRUPTIVE_WORKERS=1` for serial reproduction, or a higher
 value such as `16`/`24` for a faster local triage pass on a many-core machine.
+
+Rerank existing raw rows without rerunning rollout simulation:
+
+```bash
+make rollout-disruptive-rerank \
+  DISRUPTIVE_ROWS_IN=reports/triage/disruptive_rollout_desyncs_primary/rows.tsv \
+  DISRUPTIVE_OUT_DIR=reports/triage/disruptive_rollout_desyncs_primary_rerank
+```
 
 This reseeds at replay record `t`, advances with replay inputs without reseeding,
 scores the horizon compare row at horizons `10,20,60`, records the first

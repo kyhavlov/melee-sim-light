@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import concurrent.futures
 import hashlib
 import json
 from datetime import datetime, timezone
@@ -105,6 +106,18 @@ def _cache_signature(
     }
 
 
+def _build_dataset_task(task: dict[str, Any]) -> str:
+    write_dataset_from_slp(
+        slp_path=str(task["slp_path"]),
+        out_path=str(task["out_path"]),
+        ports=[int(p) for p in task["ports"]],
+        ucf_enabled=bool(task["ucf_enabled"]),
+        ucf_cardinals_1_0_enabled=bool(task["ucf_cardinals_1_0_enabled"]),
+    )
+    _write_dataset_cache_meta(Path(str(task["dataset_meta_path"])), dict(task["signature"]), rebuilt=True)
+    return str(task["out_path"])
+
+
 def _signature_matches(meta_path: Path, signature: dict[str, Any]) -> bool:
     try:
         meta = json.loads(meta_path.read_text(encoding="utf-8"))
@@ -139,6 +152,7 @@ def main() -> None:
         help="Directory under repo root to store preprocessed datasets (gitignored)",
     )
     ap.add_argument("--force", action="store_true", help="Rebuild even if dataset is up-to-date")
+    ap.add_argument("--workers", type=int, default=1, help="Parallel rebuild workers for stale/forced datasets.")
     args = ap.parse_args()
 
     root = repo_root()
@@ -150,6 +164,7 @@ def main() -> None:
     missing = 0
     stale = 0
     legacy_skipped = 0
+    build_tasks: list[dict[str, Any]] = []
 
     for entry in suite.replays:
         slp_path = (root / entry.replay).resolve()
@@ -194,15 +209,29 @@ def main() -> None:
                 continue
             stale += 1
 
-        write_dataset_from_slp(
-            slp_path=str(slp_path),
-            out_path=str(out_path),
-            ports=ports,
-            ucf_enabled=bool(suite.ucf_enabled),
-            ucf_cardinals_1_0_enabled=bool(suite.ucf_cardinals_1_0_enabled),
+        build_tasks.append(
+            {
+                "slp_path": str(slp_path),
+                "out_path": str(out_path),
+                "ports": ports,
+                "ucf_enabled": bool(suite.ucf_enabled),
+                "ucf_cardinals_1_0_enabled": bool(suite.ucf_cardinals_1_0_enabled),
+                "dataset_meta_path": str(dataset_meta_path),
+                "signature": signature,
+            }
         )
-        _write_dataset_cache_meta(dataset_meta_path, signature, rebuilt=True)
-        built += 1
+
+    workers = max(1, int(args.workers))
+    if workers == 1 or len(build_tasks) <= 1:
+        for task in build_tasks:
+            _build_dataset_task(task)
+            built += 1
+    else:
+        with concurrent.futures.ProcessPoolExecutor(max_workers=workers) as executor:
+            futures = [executor.submit(_build_dataset_task, task) for task in build_tasks]
+            for future in concurrent.futures.as_completed(futures):
+                future.result()
+                built += 1
 
     # Write a persistent stamp so validation reports can prove whether `--force` was used.
     #
@@ -222,6 +251,7 @@ def main() -> None:
         "stale": int(stale),
         "missing": int(missing),
         "cache_version": _CACHE_VERSION,
+        "workers": int(workers),
         "seed_dtype_itemsize": int(SEED_DTYPE.itemsize),
         "sample_dtype_itemsize": int(SAMPLE_DTYPE.itemsize),
     }

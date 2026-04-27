@@ -1,4 +1,4 @@
-.PHONY: build test test-parallel test-serial preprocess preprocess-aggregate validate validate-aggregate validate-rollout validate-rollout-aggregate validate-all rollout-capture rollout-summary rollout-diff rollout-locate rollout-locate-summary rollout-locate-diff rollout-disruptive build_data fmt fmt-check check guardrail-preflight guardrail-preflight-full guardrail-baseline forensic-rows dolphin-engine-dump dolphin-extract dolphin-forensic-row build-bench-sim bench-sim
+.PHONY: build test test-parallel test-serial preprocess preprocess-aggregate validate validate-aggregate validate-rollout validate-rollout-aggregate validate-all rollout-capture rollout-summary rollout-diff rollout-locate rollout-locate-summary rollout-locate-diff rollout-disruptive rollout-disruptive-rerank build_data fmt fmt-check check guardrail-preflight guardrail-preflight-full guardrail-baseline forensic-rows dolphin-engine-dump dolphin-extract dolphin-forensic-row build-bench-sim bench-sim FORCE
 
 PY := uv run python
 DATASETS_DIR ?= datasets
@@ -25,9 +25,12 @@ DISRUPTIVE_HORIZONS ?= 10,20,60
 DISRUPTIVE_BATCH_SIZE ?= 512
 DISRUPTIVE_WORKERS ?= 8
 DISRUPTIVE_CHUNK_RECORDS ?= 1024
+DISRUPTIVE_ROWS_IN ?= $(DISRUPTIVE_OUT_DIR)/rows.tsv
 ARGS ?=
 TEST_ARGS ?=
 TEST_WORKERS ?= auto
+PREPROCESS_WORKERS ?= 1
+VALIDATE_WORKERS ?= 4
 VERBOSE ?=
 CLANG_FORMAT ?= clang-format
 CC ?= cc
@@ -35,6 +38,8 @@ CFLAGS ?= -O3 -Wall -Wextra -std=c11 -ffp-contract=off
 BENCH_SIM ?= build/bench/bench_sim
 BENCH_SIM_SRCS := $(wildcard src/*.c) src/decomp/lb/lb_00ce.c tools/bench/bench_sim.c
 BUILD_FORCE ?= 0
+BUILD_STAMP ?= build/msl_binding.stamp
+BUILD_SRCS := $(shell find src python -type f '(' -name '*.c' -o -name '*.h' -o -name 'setup.py' ')' -print)
 
 ifneq ($(strip $(OUT)),)
 VALIDATE_OUT := --out $(OUT)
@@ -60,12 +65,23 @@ BUILD_STDOUT :=
 endif
 ifeq ($(strip $(BUILD_FORCE)),1)
 BUILD_FORCE_ARG := --force
+BUILD_STAMP_DEPS := FORCE
 else
 BUILD_FORCE_ARG :=
+BUILD_STAMP_DEPS :=
 endif
 
-build:
+build: $(BUILD_STAMP)
+	@if ! ls msl_binding*.so >/dev/null 2>&1; then \
+		$(MAKE) --no-print-directory BUILD_FORCE=1 "$(BUILD_STAMP)"; \
+	fi
+
+$(BUILD_STAMP): $(BUILD_SRCS) $(BUILD_STAMP_DEPS)
+	@mkdir -p "$(@D)"
 	@$(PY) python/setup.py build_ext --inplace $(BUILD_FORCE_ARG) $(BUILD_STDOUT)
+	@touch "$@"
+
+FORCE:
 
 test: build
 	@mkdir -p reports/triage
@@ -78,10 +94,10 @@ test-serial: build
 	@$(PY) -m pytest $(TEST_ARGS)
 
 preprocess:
-	@$(PY) -m tools.slippi.preprocess_suite --suite "$(SUITE)" --datasets-dir "$(DATASETS_DIR)"
+	@$(PY) -m tools.slippi.preprocess_suite --suite "$(SUITE)" --datasets-dir "$(DATASETS_DIR)" --workers "$(PREPROCESS_WORKERS)"
 
 preprocess-aggregate:
-	@$(PY) -m tools.slippi.preprocess_suite --suite "$(AGG_SUITE)" --datasets-dir "$(DATASETS_DIR)"
+	@$(PY) -m tools.slippi.preprocess_suite --suite "$(AGG_SUITE)" --datasets-dir "$(DATASETS_DIR)" --workers "$(PREPROCESS_WORKERS)"
 
 validate: build
 	@$(PY) -m tools.eval.run_one_step_suite_eval --suite "$(SUITE)" --datasets-dir "$(DATASETS_DIR)" --chunk "$(CHUNK)" $(VALIDATE_OUT)
@@ -97,7 +113,7 @@ validate-rollout-aggregate: build
 	@$(PY) -m tools.eval.run_rollout_suite_eval --suite "$(AGG_SUITE)" --datasets-dir "$(DATASETS_DIR)" --fields "$(FIELDS)" --out "$(AGG_ROLLOUT_OUT)"
 
 validate-all: build
-	@$(PY) -m tools.eval.run_validate_all --suite "$(SUITE)" --agg-suite "$(AGG_SUITE)" --datasets-dir "$(DATASETS_DIR)" --chunk "$(CHUNK)" --fields "$(FIELDS)" --one-step-out reports/validation/one_step_suite_eval.txt --rollout-out reports/validation/rollout_suite_eval.txt --agg-one-step-out "$(AGG_ONE_STEP_OUT)" --agg-rollout-out "$(AGG_ROLLOUT_OUT)"
+	@$(PY) -m tools.eval.run_validate_all --suite "$(SUITE)" --agg-suite "$(AGG_SUITE)" --datasets-dir "$(DATASETS_DIR)" --chunk "$(CHUNK)" --fields "$(FIELDS)" --one-step-out reports/validation/one_step_suite_eval.txt --rollout-out reports/validation/rollout_suite_eval.txt --agg-one-step-out "$(AGG_ONE_STEP_OUT)" --agg-rollout-out "$(AGG_ROLLOUT_OUT)" --workers "$(VALIDATE_WORKERS)"
 
 # Always writes to ROLLOUT_JSON (independent of OUT=...).
 rollout-capture: build
@@ -120,6 +136,9 @@ rollout-locate-diff:
 
 rollout-disruptive: build
 	@$(PY) -m tools.eval.disruptive_rollout_desyncs --suite "$(SUITE)" --datasets-dir "$(DATASETS_DIR)" --horizons "$(DISRUPTIVE_HORIZONS)" --batch-size "$(DISRUPTIVE_BATCH_SIZE)" --workers "$(DISRUPTIVE_WORKERS)" --chunk-records "$(DISRUPTIVE_CHUNK_RECORDS)" --out-dir "$(DISRUPTIVE_OUT_DIR)" --top "$(ROLLOUT_TOP)" $(ARGS)
+
+rollout-disruptive-rerank:
+	@$(PY) -m tools.eval.disruptive_rollout_desyncs --suite "$(SUITE)" --datasets-dir "$(DATASETS_DIR)" --horizons "$(DISRUPTIVE_HORIZONS)" --rows-in "$(DISRUPTIVE_ROWS_IN)" --out-dir "$(DISRUPTIVE_OUT_DIR)" --top "$(ROLLOUT_TOP)" $(ARGS)
 
 build_data:
 	@$(PY) -m tools.extraction.build_data --iso-dir _iso --stage grnla --chars fox,falco

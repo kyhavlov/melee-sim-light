@@ -5,6 +5,10 @@ import subprocess
 import sys
 from pathlib import Path
 
+import numpy as np
+
+from tools.eval.dataset import COMPARE_DTYPE
+from tools.eval.discrete_compare_lanes import compile_discrete_compare_lanes, first_mismatch_values
 from tools.eval.diff_locate import diff_locate_rows
 from tools.eval.diff_rollout_locate import diff_rollout_locate_rows
 from tools.eval.disruptive_rollout_desyncs import main as disruptive_rollout_desyncs_main
@@ -371,6 +375,26 @@ def test_rollout_locate_scan_fixture_emits_unseeded_and_seeded_break_rows() -> N
     assert rows[1].seeded_break
 
 
+def test_discrete_compare_lanes_preserve_field_player_subindex_order() -> None:
+    seed = np.zeros(1, dtype=COMPARE_DTYPE)
+    out = np.zeros(1, dtype=COMPARE_DTYPE)
+    ref = np.zeros(1, dtype=COMPARE_DTYPE)
+    seed["state_flags"][0, 1, 2] = 7
+    out["state_flags"][0, 1, 2] = 9
+    ref["state_flags"][0, 1, 2] = 8
+    out["action_id"][0, 1] = 3
+    ref["action_id"][0, 1] = 3
+
+    lanes = compile_discrete_compare_lanes(("action_id", "state_flags"), (0, 1))
+    mm = first_mismatch_values(seed_row=seed[0], out_row=out[0], ref_row=ref[0], lanes=lanes)
+
+    assert mm is not None
+    assert mm.field == "state_flags"
+    assert mm.player == 1
+    assert mm.subindex == 2
+    assert (mm.seed, mm.out, mm.ref) == (7, 9, 8)
+
+
 def test_disruptive_rollout_desyncs_cli_smoke_writes_outputs(tmp_path: Path, monkeypatch) -> None:
     out_dir = tmp_path / "disruptive_smoke"
     monkeypatch.setattr(
@@ -409,6 +433,31 @@ def test_disruptive_rollout_desyncs_cli_smoke_writes_outputs(tmp_path: Path, mon
     assert summary["suite"] == "fox_falco_fd_ucf084_recent"
     assert summary["horizons"] == [1]
     assert summary["max_records"] == 2
+
+    rerank_dir = tmp_path / "disruptive_rerank"
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "disruptive_rollout_desyncs",
+            "--suite",
+            "replays/suites/fox_falco_fd_ucf084_recent.json",
+            "--datasets-dir",
+            "datasets",
+            "--rows-in",
+            str(rows_path),
+            "--out-dir",
+            str(rerank_dir),
+            "--top",
+            "1",
+        ],
+    )
+    disruptive_rollout_desyncs_main()
+
+    assert (rerank_dir / "rows.tsv").read_text(encoding="utf-8") == rows_path.read_text(encoding="utf-8")
+    assert (rerank_dir / "clusters.tsv").read_text(encoding="utf-8") == clusters_path.read_text(encoding="utf-8")
+    rerank_summary = json.loads((rerank_dir / "summary.json").read_text(encoding="utf-8"))
+    assert rerank_summary["rows_in"] == str(rows_path)
 
 
 def test_disruptive_rollout_desyncs_workers_match_serial_outputs(tmp_path: Path) -> None:

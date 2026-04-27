@@ -789,6 +789,52 @@ def _write_tsv(path: Path, columns: tuple[str, ...], rows: Iterable[tuple[object
         writer.writerows(rows)
 
 
+_DISRUPTIVE_INT_COLUMNS = {
+    "record",
+    "seed_frame",
+    "horizon",
+    "ref_frame",
+    "player",
+    "first_mismatch_offset",
+    "first_mismatch_subindex",
+    "first_mismatch_player",
+    "seed_action_id",
+    "out_action_id",
+    "ref_action_id",
+    "seed_action_frame",
+    "out_action_frame",
+    "ref_action_frame",
+    "on_ground",
+    "hitlag",
+    "hitstun",
+}
+
+_DISRUPTIVE_FLOAT_COLUMNS = {"score_total", "score_discrete", "score_float", "score_item"}
+
+
+def _read_rows_tsv(path: Path) -> list[DisruptiveRow]:
+    with path.open("r", encoding="utf-8", newline="") as f:
+        reader = csv.DictReader(f, delimiter="\t")
+        if reader.fieldnames is None:
+            return []
+        missing = [column for column in ROW_COLUMNS if column not in reader.fieldnames]
+        if missing:
+            raise SystemExit(f"error: {path} is missing columns: {', '.join(missing)}")
+        rows: list[DisruptiveRow] = []
+        for raw in reader:
+            values: dict[str, Any] = {}
+            for column in ROW_COLUMNS:
+                value = raw[column]
+                if column in _DISRUPTIVE_INT_COLUMNS:
+                    values[column] = int(value)
+                elif column in _DISRUPTIVE_FLOAT_COLUMNS:
+                    values[column] = float(value)
+                else:
+                    values[column] = value
+            rows.append(DisruptiveRow(**values))
+    return rows
+
+
 def _row_for_scored_horizon(
     *,
     suite_name: str,
@@ -1296,6 +1342,12 @@ def main() -> None:
     ap.add_argument("--chunk-records", type=int, default=2048, help="Start rows per worker task.")
     ap.add_argument("--top", type=int, default=20, help="Top-N clusters to print and include in summary.")
     ap.add_argument("--out-dir", type=Path, default=None, help="Output directory under reports/triage.")
+    ap.add_argument(
+        "--rows-in",
+        type=Path,
+        default=None,
+        help="Existing disruptive rows.tsv to rerank without rerunning rollout simulation.",
+    )
     args = ap.parse_args()
 
     root = repo_root()
@@ -1313,6 +1365,42 @@ def main() -> None:
     out_dir = args.out_dir or (root / "reports" / "triage" / f"disruptive_rollout_desyncs_{suite.name}")
     if not out_dir.is_absolute():
         out_dir = root / out_dir
+
+    if args.rows_in is not None:
+        rows_in = args.rows_in if args.rows_in.is_absolute() else root / args.rows_in
+        all_rows = _read_rows_tsv(rows_in)
+        clusters = _summarize_clusters(all_rows)
+        rows_path = out_dir / "rows.tsv"
+        clusters_path = out_dir / "clusters.tsv"
+        summary_path = out_dir / "summary.json"
+        _write_tsv(rows_path, ROW_COLUMNS, (_row_to_values(row) for row in all_rows))
+        _write_tsv(clusters_path, CLUSTER_COLUMNS, (_cluster_to_values(row) for row in clusters))
+        summary = _summary_json(
+            suite_path=suite_path,
+            suite_name=suite.name,
+            datasets_dir=str(args.datasets_dir),
+            horizons=tuple(sorted({row.horizon for row in all_rows})) or horizons,
+            discrete_fields=discrete_fields,
+            float_fields=float_fields,
+            rows=all_rows,
+            clusters=clusters,
+            top=max(1, int(args.top)),
+            stride=max(1, int(args.stride)),
+            max_records=int(args.max_records),
+            batch_size=max(1, int(args.batch_size)),
+            workers=0,
+            chunk_records=0,
+            float_epsilon=float(args.float_epsilon),
+        )
+        summary["rows_in"] = str(rows_in)
+        out_dir.mkdir(parents=True, exist_ok=True)
+        summary_path.write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        print(f"reranked: {rows_in}")
+        print(f"wrote: {rows_path}")
+        print(f"wrote: {clusters_path}")
+        print(f"wrote: {summary_path}")
+        print(f"rows={len(all_rows)} clusters={len(clusters)}")
+        return
 
     dataset_paths: list[tuple[Path, str]] = []
     missing: list[str] = []
