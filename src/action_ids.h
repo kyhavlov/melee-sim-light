@@ -76,11 +76,18 @@ typedef enum MslActionId {
   MSL_ACT_DAMAGE_FLY_ROLL = 0x005B,  // ftCo_MS_DamageFlyRoll
 
   // Shield / Guard (subset).
-  MSL_ACT_GUARD_ON = 0x00B2,       // ftCo_MS_GuardOn
-  MSL_ACT_GUARD = 0x00B3,          // ftCo_MS_Guard
-  MSL_ACT_GUARD_OFF = 0x00B4,      // ftCo_MS_GuardOff
-  MSL_ACT_GUARD_SET_OFF = 0x00B5,  // ftCo_MS_GuardSetOff
-  MSL_ACT_GUARD_REFLECT = 0x00B6,  // ftCo_MS_GuardReflect
+  MSL_ACT_GUARD_ON = 0x00B2,              // ftCo_MS_GuardOn
+  MSL_ACT_GUARD = 0x00B3,                 // ftCo_MS_Guard
+  MSL_ACT_GUARD_OFF = 0x00B4,             // ftCo_MS_GuardOff
+  MSL_ACT_GUARD_SET_OFF = 0x00B5,         // ftCo_MS_GuardSetOff
+  MSL_ACT_GUARD_REFLECT = 0x00B6,         // ftCo_MS_GuardReflect
+  MSL_ACT_SHIELD_BREAK_FLY = 0x00CD,      // ftCo_MS_ShieldBreakFly
+  MSL_ACT_SHIELD_BREAK_FALL = 0x00CE,     // ftCo_MS_ShieldBreakFall
+  MSL_ACT_SHIELD_BREAK_DOWN_U = 0x00CF,   // ftCo_MS_ShieldBreakDownU
+  MSL_ACT_SHIELD_BREAK_DOWN_D = 0x00D0,   // ftCo_MS_ShieldBreakDownD
+  MSL_ACT_SHIELD_BREAK_STAND_U = 0x00D1,  // ftCo_MS_ShieldBreakStandU
+  MSL_ACT_SHIELD_BREAK_STAND_D = 0x00D2,  // ftCo_MS_ShieldBreakStandD
+  MSL_ACT_FURAFURA = 0x00D3,              // ftCo_MS_Furafura
 
   // Downed / knockdown (suite-present subset).
   // Source of truth: refs/melee/src/melee/ft/chara/ftCommon/forward.h `ftCommon_MotionState`.
@@ -338,18 +345,25 @@ typedef enum MslSubmotionId {
   MSL_SM_LANDING = 35,               // ftCo_SM_Landing
   MSL_SM_LANDING_FALL_SPECIAL = 36,  // ftCo_SM_LandingFallSpecial
 
-  MSL_SM_GUARD_ON = 37,      // ftCo_SM_GuardOn
-  MSL_SM_GUARD = 38,         // ftCo_SM_Guard
-  MSL_SM_GUARD_OFF = 39,     // ftCo_SM_GuardOff
-  MSL_SM_GUARD_DAMAGE = 40,  // ftCo_SM_GuardDamage
-  MSL_SM_ESCAPE_N = 41,      // ftCo_SM_EscapeN
-  MSL_SM_ESCAPE_F = 42,      // ftCo_SM_EscapeF
-  MSL_SM_ESCAPE_B = 43,      // ftCo_SM_EscapeB
-  MSL_SM_ESCAPE_AIR = 44,    // ftCo_SM_EscapeAir
-  MSL_SM_REBOUND = 45,       // ftCo_SM_Rebound
-  MSL_SM_ATTACK_11 = 46,     // ftCo_SM_Attack11
-  MSL_SM_ATTACK_12 = 47,     // ftCo_SM_Attack12
-  MSL_SM_ATTACK_13 = 48,     // ftCo_SM_Attack13
+  MSL_SM_GUARD_ON = 37,               // ftCo_SM_GuardOn
+  MSL_SM_GUARD = 38,                  // ftCo_SM_Guard
+  MSL_SM_GUARD_OFF = 39,              // ftCo_SM_GuardOff
+  MSL_SM_GUARD_DAMAGE = 40,           // ftCo_SM_GuardDamage
+  MSL_SM_FURAFURA = 205,              // ftCo_SM_FuraFura
+  MSL_SM_SHIELD_BREAK_FLY = 286,      // ftCo_SM_ShieldBreakFly
+  MSL_SM_SHIELD_BREAK_FALL = 287,     // ftCo_SM_ShieldBreakFall
+  MSL_SM_SHIELD_BREAK_DOWN_U = 288,   // ftCo_SM_ShieldBreakDownU
+  MSL_SM_SHIELD_BREAK_DOWN_D = 289,   // ftCo_SM_ShieldBreakDownD
+  MSL_SM_SHIELD_BREAK_STAND_U = 290,  // ftCo_SM_ShieldBreakStandU
+  MSL_SM_SHIELD_BREAK_STAND_D = 291,  // ftCo_SM_ShieldBreakStandD
+  MSL_SM_ESCAPE_N = 41,               // ftCo_SM_EscapeN
+  MSL_SM_ESCAPE_F = 42,               // ftCo_SM_EscapeF
+  MSL_SM_ESCAPE_B = 43,               // ftCo_SM_EscapeB
+  MSL_SM_ESCAPE_AIR = 44,             // ftCo_SM_EscapeAir
+  MSL_SM_REBOUND = 45,                // ftCo_SM_Rebound
+  MSL_SM_ATTACK_11 = 46,              // ftCo_SM_Attack11
+  MSL_SM_ATTACK_12 = 47,              // ftCo_SM_Attack12
+  MSL_SM_ATTACK_13 = 48,              // ftCo_SM_Attack13
   // Grounded attacks (subset) used by the grounded A-attack selector.
   // Source of truth: refs/melee/src/melee/ft/chara/ftCommon/forward.h `ftCo_Submotion`.
   MSL_SM_ATTACK_DASH = 52,     // ftCo_SM_AttackDash
@@ -590,6 +604,9 @@ static inline uint8_t msl_action_allows_fastfall(uint16_t action_id) {
     // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::ftFx_SpecialHiFall_Phys
     case MSL_ACT_FX_SPECIAL_HI_FALL:
     case MSL_ACT_ESCAPE_AIR:
+    // Decomp: both CliffJump2 variants call `ft_80084DB0` after the first-frame x0 gate.
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffJump.c::ftCo_CliffJump2_Phys
+    case MSL_ACT_CLIFF_JUMP_SLOW2:
     case MSL_ACT_CLIFF_JUMP_QUICK2:
       return 1;
     default:

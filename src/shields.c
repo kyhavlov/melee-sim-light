@@ -231,6 +231,14 @@ void shields_refresh(MslBatch* batch) {
           if (has_tv) {
             const uint16_t f = clamp_u16(batch->state.guard_tilt_x8[idx], 0, frame_max);
             const float mag = clamp01(batch->state.guard_tilt_x4[idx]);
+            const uint8_t guard_on_no_submotion_entry =
+                (batch->state.action_id[idx] == (uint16_t)MSL_ACT_GUARD_ON &&
+                 batch->state.animation_index[idx] == UINT32_MAX &&
+                 batch->state.action_frame[idx] < 0 &&
+                 !is_shield_active_action(batch->state.seed_prev_action_id[idx]) &&
+                 tv.guard_on_xyz != NULL && tv.guard_on_frame_count > 0u)
+                    ? 1u
+                    : 0u;
             const uint8_t steady_guard_no_tilt =
                 (batch->state.action_id[idx] == (uint16_t)MSL_ACT_GUARD &&
                  (mag == 0.0f || mag < FLT_MIN))
@@ -246,27 +254,51 @@ void shields_refresh(MslBatch* batch) {
             // - Keep this lane to steady Guard. GuardOn/GuardReflect have separate entry/reflect
             //   pose owners, and nonzero x4 follows the angled `x8` branch.
             // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_80091BC4,ftCo_80091E78}
-            const size_t n_i = steady_guard_no_tilt ? 0u : (size_t)neutral * 3u;
-            const size_t f_i = (size_t)f * 3u;
-            const float nx = tv.xyz[n_i + 0];
-            const float ny = tv.xyz[n_i + 1];
-            const float nz = tv.xyz[n_i + 2];
-            const float fx = tv.xyz[f_i + 0];
-            const float fy = tv.xyz[f_i + 1];
-            const float fz = tv.xyz[f_i + 2];
+            float dx = 0.0f;
+            float dy = 0.0f;
+            float dz = 0.0f;
+            if (guard_on_no_submotion_entry) {
+              // GuardOn entry creates ShieldDesc after ftAnim_8006EBA4 but then ftCo_800921DC
+              // zeroes the guard joint translate and calls ftCo_80091E78(..., 0). While Slippi
+              // exposes the first visible GuardOn snapshot with animation_index=-1/action_frame=-1,
+              // lbColl_80007BCC still consumes that live current-pose shield bone rather than the
+              // settled steady-Guard neutral target. Scope this to real non-shield -> GuardOn
+              // entry snapshots using the previous post-frame owner lane; later no-submotion
+              // GuardOn rows are already in shield ownership and keep their normal tilt/neutral
+              // placement.
+              // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
+              //   ftCo_800924C0,ftCo_800921DC,ftCo_80091E78}
+              // data/shields/{fox,falco}.bin::guard_on_xyz[0]
+              dx = tv.guard_on_xyz[0];
+              dy = tv.guard_on_xyz[1];
+              dz = tv.guard_on_xyz[2];
+            } else {
+              const size_t n_i = steady_guard_no_tilt ? 0u : (size_t)neutral * 3u;
+              const size_t f_i = (size_t)f * 3u;
+              const float nx = tv.xyz[n_i + 0];
+              const float ny = tv.xyz[n_i + 1];
+              const float nz = tv.xyz[n_i + 2];
+              const float fx = tv.xyz[f_i + 0];
+              const float fy = tv.xyz[f_i + 1];
+              const float fz = tv.xyz[f_i + 2];
 
-            const float dx = nx + mag * (fx - nx);
-            const float dy = ny + mag * (fy - ny);
-            const float dz = nz + mag * (fz - nz);
+              dx = nx + mag * (fx - nx);
+              dy = ny + mag * (fy - ny);
+              dz = nz + mag * (fz - nz);
+            }
 
             const float model_scaling = (isfinite(ca->model_scaling) && ca->model_scaling > 0.0f)
                                             ? ca->model_scaling
                                             : 1.0f;
-            const float pose_scale = steady_guard_no_tilt ? (scale_y * model_scaling) : scale_y;
+            const float pose_scale = (steady_guard_no_tilt || guard_on_no_submotion_entry)
+                                         ? (scale_y * model_scaling)
+                                         : scale_y;
 
             // Match the ShieldDesc bone policy above: the no-tilt steady-Guard lane uses the live
-            // model-scaled ShieldDesc bone; other guard actions retain the existing collision-
-            // subtree scaling policy until their separate pose owners are proved.
+            // model-scaled ShieldDesc bone. The no-submotion GuardOn entry snapshot uses the same
+            // live model-scaled ShieldDesc bone from ftCo_800921DC/ftCo_80091E78(0); other guard
+            // actions retain the existing collision-subtree scaling policy until their separate
+            // pose owners are proved.
             //
             // Facing parity: same as hurtcaps_refresh() / in-engine root part rotY = (M_PI_2 * fp->facing_dir),
             // which mixes X/Z in world space.

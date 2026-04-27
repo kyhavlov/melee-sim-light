@@ -12,6 +12,7 @@
 #include "common_params.h"
 #include "char_params.h"
 #include "hitlist.h"
+#include "item_common_params.h"
 #include "laser_params.h"
 #include "move_tables.h"
 #include "msl_math.h"
@@ -1930,6 +1931,81 @@ static inline uint8_t laser_try_shield_bounce_velocity(float vx, float vy, float
   return 1u;
 }
 
+static inline uint8_t laser_try_shield_bounce_velocity_from_segment(
+    float vx, float vy, float shield_x, float shield_y, float shield_z, float shield_radius,
+    float prev_x, float prev_y, float prev_z, float cur_x, float cur_y, float cur_z,
+    float hit_radius, float* out_vx, float* out_vy) {
+  if (out_vx == NULL || out_vy == NULL) {
+    return 0u;
+  }
+
+  const float dx = cur_x - prev_x;
+  const float dy = cur_y - prev_y;
+  const float dz = cur_z - prev_z;
+  const float move2 = (dx * dx) + (dy * dy) + (dz * dz);
+  if (!(move2 > 0.0f)) {
+    return 0u;
+  }
+
+  const float px = prev_x - shield_x;
+  const float py = prev_y - shield_y;
+  const float pz = prev_z - shield_z;
+  const float combined = shield_radius + hit_radius;
+  const float b = 2.0f * ((dx * px) + (dy * py) + (dz * pz));
+  const float c = (px * px) + (py * py) + (pz * pz) - (combined * combined);
+  float disc = (b * b) - (4.0f * move2 * c);
+  if (disc < 0.0f) {
+    disc = 0.0f;
+  }
+  float t = (-b - sqrtf(disc)) / (2.0f * move2);
+  if (t < 0.0f) {
+    t = 0.0f;
+  } else if (t > 1.0f) {
+    t = 1.0f;
+  }
+
+  float nx = (prev_x + (t * dx)) - shield_x;
+  float ny = (prev_y + (t * dy)) - shield_y;
+  float nz = (prev_z + (t * dz)) - shield_z;
+  const float n2 = (nx * nx) + (ny * ny) + (nz * nz);
+  if (!(n2 > 0.0f)) {
+    return 0u;
+  }
+  const float inv_n = 1.0f / sqrtf(n2);
+  nx *= inv_n;
+  ny *= inv_n;
+  nz *= inv_n;
+
+  const float move_xy2 = (dx * dx) + (dy * dy);
+  if (!(move_xy2 > 0.0f)) {
+    return 0u;
+  }
+  float cos_angle = ((nx * dx) + (ny * dy)) / sqrtf(move_xy2);
+  if (cos_angle < -1.0f) {
+    cos_angle = -1.0f;
+  } else if (cos_angle > 1.0f) {
+    cos_angle = 1.0f;
+  }
+  const float angle = acosf(cos_angle);
+  // Item_80269DC8 uses `(90 + it_804D6D28->unk_degrees)` as the shield-bounce limit.
+  // refs/melee/src/melee/it/item.c::Item_80269DC8
+  // Extracted from `_iso/ItCo.dat` into `data/items/item_common.json`.
+  const MslItemCommonParams* item_common = msl_item_common_params();
+  const float shield_bounce_threshold =
+      (item_common != NULL) ? item_common->shield_bounce_threshold_radians : 0.0f;
+  if (!(angle < shield_bounce_threshold)) {
+    return 0u;
+  }
+
+  const float dot = (vx * nx) + (vy * ny);
+  const float rvx = vx - (2.0f * dot * nx);
+  const float rvy = vy - (2.0f * dot * ny);
+  (void)nz;
+  *out_vx = rvx;
+  *out_vy = rvy;
+  return 1u;
+}
+
 static inline void item_apply_reflect_transfer(MslBatch* batch, size_t ii, size_t reflector_idx,
                                                int reflector_port, float damage_mul,
                                                float speed_mul) {
@@ -2962,11 +3038,12 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
 
         uint8_t shield_hit = 0;
         uint8_t shield_bounce_contact_found = 0;
+        uint8_t shield_bounce_source_allows = 0;
         float shield_bounce_best_vy = -INFINITY;
+        float shield_bounce_source_vx = 0.0f;
+        float shield_bounce_source_vy = 0.0f;
         float shield_hit_contact_x = x;
         float shield_hit_contact_y = y;
-        float shield_bounce_contact_x = x;
-        float shield_bounce_contact_y = y;
         // Decomp call-chain anchors:
         // - itFoxlaser_UnkMotion1_Phys snapshots pre-move position (`foxlaser.pos = item->pos`).
         // - it_8029C4D4 runs collision using (prev_pos, cur_pos) and dispatches the hit callback.
@@ -3108,19 +3185,29 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
             shield_hit_contact_x = sx;
             shield_hit_contact_y = sy;
           }
-          if (!shield_bounce_contact_found ||
-              (defender_guard_reflect_late_locomotion_snapshot_geom && laser_state == 0u)) {
+          if (!shield_bounce_contact_found) {
+            shield_bounce_contact_found = 1u;
+          }
+          {
+            // ShieldBounced normal ownership:
+            // - ftColl_80077688 copies the lbColl_800077A0 result into item->xC54/xC58.
+            // - Item_80269DC8 still rejects side contacts whose xC54 is beyond the item-common
+            //   threshold. Preserve that predicate for every reduced laser sample, then choose the
+            //   strongest upward mirror result as the best available proxy for the native
+            //   HitCapsule segment normal.
+            // refs/melee/src/melee/ft/ftcoll.c::ftColl_80077688
+            // refs/melee/src/melee/lb/lbcollision.c::{lbColl_80007DD8,lbColl_800077A0}
+            // refs/melee/src/melee/it/item.c::Item_80269DC8
             float trial_bounce_vx = 0.0f;
             float trial_bounce_vy = 0.0f;
-            if (laser_try_shield_bounce_velocity(vx, vy, bounce_shx, bounce_shy, sx, sy,
-                                                 &trial_bounce_vx, &trial_bounce_vy) &&
-                (!shield_bounce_contact_found ||
-                 !(defender_guard_reflect_late_locomotion_snapshot_geom && laser_state == 0u) ||
-                 trial_bounce_vy > shield_bounce_best_vy)) {
-              shield_bounce_contact_found = 1u;
+            if (laser_try_shield_bounce_velocity_from_segment(vx, vy, bounce_shx, bounce_shy, shz,
+                                                              shr, sx0, sy0, 0.0f, sx, sy, 0.0f, sr,
+                                                              &trial_bounce_vx, &trial_bounce_vy) &&
+                trial_bounce_vy > shield_bounce_best_vy) {
+              shield_bounce_source_allows = 1u;
+              shield_bounce_source_vx = trial_bounce_vx;
+              shield_bounce_source_vy = trial_bounce_vy;
               shield_bounce_best_vy = trial_bounce_vy;
-              shield_bounce_contact_x = sx;
-              shield_bounce_contact_y = sy;
             }
           }
         }
@@ -3134,17 +3221,15 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
             shield_hit_contact_y = shield_probe_y;
             float trial_bounce_vx = 0.0f;
             float trial_bounce_vy = 0.0f;
-            if (laser_try_shield_bounce_velocity(vx, vy, bounce_shx, bounce_shy, shield_probe_x,
-                                                 shield_probe_y, &trial_bounce_vx,
-                                                 &trial_bounce_vy) &&
-                (!shield_bounce_contact_found ||
-                 !(defender_guard_reflect_late_locomotion_snapshot_geom && laser_state == 0u) ||
-                 trial_bounce_vy > shield_bounce_best_vy)) {
-              shield_bounce_contact_found = 1u;
+            if (laser_try_shield_bounce_velocity_from_segment(
+                    vx, vy, bounce_shx, bounce_shy, shz, shr, x0, y0, 0.0f, shield_probe_x,
+                    shield_probe_y, 0.0f, sr, &trial_bounce_vx, &trial_bounce_vy)) {
+              shield_bounce_source_allows = 1u;
+              shield_bounce_source_vx = trial_bounce_vx;
+              shield_bounce_source_vy = trial_bounce_vy;
               shield_bounce_best_vy = trial_bounce_vy;
-              shield_bounce_contact_x = shield_probe_x;
-              shield_bounce_contact_y = shield_probe_y;
             }
+            shield_bounce_contact_found = 1u;
           }
         }
         // Slippi state_flags[0] is raw fp+0x2218. Keep this final-x14 handoff on the pure
@@ -3471,6 +3556,12 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
                batch->state.seed_prev_action_id[d_idx] == (uint16_t)MSL_ACT_GUARD_REFLECT)
                   ? 1u
                   : 0u;
+          const uint8_t guard_reflect_stale_x18_hitshield_snapshot =
+              (batch->state.action_id[d_idx] == (uint16_t)MSL_ACT_GUARD_REFLECT &&
+               batch->state.guard_reflect_timer_x14_seed[d_idx] == 0u &&
+               batch->state.guard_reflect_timer_x18_seed[d_idx] != 0u)
+                  ? 1u
+                  : 0u;
           const uint8_t shield_bounce_seed_valid =
               batch->state.item_shield_bounce_seed_valid[ii] ? 1u : 0u;
           const uint8_t shield_bounce_hp_allows =
@@ -3491,8 +3582,9 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
             shield_bounce_vx = batch->state.item_shield_bounce_seed_vel_x[ii];
             shield_bounce_vy = batch->state.item_shield_bounce_seed_vel_y[ii];
             can_shield_bounce = 1u;
-          } else if (shield_bounce_contact_found && !guard_reflect_pure_final_x14_hitshield &&
-                     guard_reflect_seeded_snapshot &&
+          } else if (shield_bounce_contact_found && shield_bounce_source_allows &&
+                     !guard_reflect_stale_x18_hitshield_snapshot &&
+                     !guard_reflect_pure_final_x14_hitshield &&
                      // Late locomotion->GuardReflect frozen snapshots can already resolve
                      // projectile contact through the regular shield-hit / GuardSetOff owner lane
                      // while the shot is only one frame old. Allow the normal shield-bounce
@@ -3501,18 +3593,20 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
                      //   ftCo_80091A4C,ftCo_800939B4,ftCo_8009370C,ftCo_GuardReflect_Anim}
                      // refs/melee/src/melee/it/items/itfoxlaser.c::{
                      //   it_8029C504,itFoxlaser_UnkMotion1_Anim,itFoxLaser_Logic94_ShieldBounced}
-                     // Shield-bounce keepalive is owned by Item_80269DC8's bounce predicate
-                     // (`xDCE_flag.b5/xDCE_flag.b4/xC54/xC58`), not by shield HP. Outside the
-                     // explicit seed lane, keep the runtime approximation restricted to established
-                     // GuardReflect snapshots; ordinary GuardSetOff shield hits take HitShield
-                     // destruction until the hidden branch is modeled.
+                     // Shield-bounce keepalive is owned by Item_80269DC8's bounce predicate:
+                     // `xDCE_flag.b5` admits the hitbox, then `xC54` is compared against
+                     // `(90 + it_804D6D28->unk_degrees)` unless xDCE.b4 already forced the bounce.
+                     // The runtime source predicate above reconstructs xC54/xC58 from the first
+                     // lbColl_80007DD8 item/shield capsule contact instead of keeping every shield
+                     // hit alive.
+                     // refs/melee/src/melee/ft/ftcoll.c::ftColl_80077688
+                     // refs/melee/src/melee/lb/lbcollision.c::lbColl_80007DD8
                      // refs/melee/src/melee/it/item.c::Item_80269DC8
                      // refs/melee/src/melee/it/items/itfoxlaser.c::itFoxLaser_Logic94_ShieldBounced
                      (laser_age_frames > 1.0f || defender_guard_reflect_late_locomotion_snapshot) &&
-                     shield_bounce_hp_allows &&
-                     laser_try_shield_bounce_velocity(
-                         vx, vy, bounce_shx, bounce_shy, shield_bounce_contact_x,
-                         shield_bounce_contact_y, &shield_bounce_vx, &shield_bounce_vy)) {
+                     shield_bounce_hp_allows) {
+            shield_bounce_vx = shield_bounce_source_vx;
+            shield_bounce_vy = shield_bounce_source_vy;
             can_shield_bounce = 1u;
           }
           // Regular shield hit: apply defender-side shield effects and despawn the laser.

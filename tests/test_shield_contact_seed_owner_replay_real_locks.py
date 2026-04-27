@@ -128,6 +128,66 @@ def test_guard_shielddesc_runtime_pose_accepts_prh_rollout_contact() -> None:
 
 
 @pytest.mark.integration
+def test_guardon_entry_shielddesc_current_pose_accepts_iat_attackairlw_rollout_contact() -> None:
+    # Runtime-positive boundary for no-submotion GuardOn entry:
+    # - ftCo_800924C0 creates ShieldDesc, then ftCo_800921DC zeroes the shield joint translate and
+    #   calls ftCo_80091E78(..., 0).
+    # - Slippi exposes this first visible GuardOn snapshot as animation_index=-1/action_frame=-1,
+    #   but vanilla lbColl_80007BCC still uses the live GuardOn current-pose ShieldDesc bone.
+    # This rollout has no teacher-forced combat_shield_contact_hb_kind seed at the break frame, so
+    # the runtime GuardOn entry pose must produce GuardSetOff before the following BODY path.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
+    #   ftCo_800924C0,ftCo_800921DC,ftCo_80091E78}
+    # refs/melee/src/melee/lb/lbcollision.c::lbColl_80007BCC
+    # data/shields/{fox,falco}.bin::guard_on_xyz[0]
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = (
+        root
+        / "datasets/aggregate_recent/replays/validation/aggregate_recent/ImpassionedAlarmedTarsier.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    defender = 1
+    ref, out = _run_rollout_window(dataset_path, 3831, 3847)
+
+    assert int(ref["action_id"][defender]) == 181
+    assert int(out["action_id"][defender]) == 181
+    assert int(out["hitlag"][defender]) == int(ref["hitlag"][defender]) == 6
+    assert int(out["hitstun"][defender]) == int(ref["hitstun"][defender]) == 0
+    assert float(out["shield_hp"][defender]) == pytest.approx(float(ref["shield_hp"][defender]))
+
+
+@pytest.mark.integration
+def test_guardon_entry_shielddesc_current_pose_rejects_steady_guardon_negative() -> None:
+    # Negative boundary for the GuardOn current-pose owner:
+    # PRH 11242 is also a no-submotion GuardOn snapshot, but its previous post-frame owner is
+    # already GuardOn. That is not the ftCo_800924C0 entry snapshot, so it must not reuse
+    # guard_on_xyz[0] as a broad shield-rim shortcut.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
+    #   ftCo_800924C0,ftCo_800921DC,ftCo_80091E78}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = (
+        root
+        / "datasets/aggregate_recent/replays/validation/aggregate_recent/PositiveRevolvingHyena.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    defender = 1
+    seed, ref, out = _run_one_step_row(dataset_path, 11242, defender)
+
+    assert int(seed["action_id"][defender]) == 178
+    assert int(seed["seed_prev_action_id"][defender]) == 178
+    assert int(ref["action_id"][defender]) == 178
+    assert int(out["action_id"][defender]) == 178
+    assert int(out["hitlag"][defender]) == 0
+    assert float(out["shield_hp"][defender]) == pytest.approx(float(ref["shield_hp"][defender]))
+
+
+@pytest.mark.integration
 def test_guard_shielddesc_runtime_pose_keeps_iat_body_negative() -> None:
     # Runtime-negative boundary: the same live Guard pose correction must not become a broad
     # shield-rim suppressor. This window was the false GuardSetOff control for the rejected broad

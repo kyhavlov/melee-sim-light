@@ -547,6 +547,29 @@ static inline void enter_guard_off(MslBatch* batch, size_t idx) {
   batch->state.lightshield_amount[idx] = 0.0f;
 }
 
+static inline void enter_shield_break_fly(MslBatch* batch, const MslCharParams* ch, size_t idx) {
+  // Shield depletion during GuardOn/Guard/GuardReflect Anim calls ftCo_800925A4, clears shield
+  // active flags, enters ShieldBreakFly through ftCo_80098B20, and immediately ticks the animation.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_800925A4
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_ShieldBreakFly.c::ftCo_80098B20
+  batch->state.action_id[idx] = (uint16_t)MSL_ACT_SHIELD_BREAK_FLY;
+  batch->state.animation_index[idx] = (uint32_t)MSL_SM_SHIELD_BREAK_FLY;
+  msl_anim_timebase_enter_with_policy(batch, idx, 0.0f, 1.0f, MSL_ANIM_ENTER_TICK_IMMEDIATE);
+  batch->state.on_ground[idx] = 0u;
+  // ftCommon_8007D5D4 flips `ground_or_air` and locks ECB, but it does not clear the previous
+  // floor line id; Slippi still exposes the Guard floor id on the break-entry post-frame.
+  // refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007D5D4
+  batch->state.ecb_lock_timer[idx] = MSL_ECB_LOCK_FRAMES_COMMON_GROUND_TO_AIR;
+  batch->state.speed_air_x_self[idx] = 0.0f;
+  batch->state.speed_ground_x_self[idx] = 0.0f;
+  batch->state.speed_x_attack[idx] = 0.0f;
+  batch->state.speed_y_attack[idx] = 0.0f;
+  batch->state.speed_y_self[idx] = (ch != NULL) ? ch->shield_break_initial_velocity : 0.0f;
+  batch->state.guard_release_latched_xc[idx] = 0;
+  batch->state.guard_x10[idx] = 0;
+  batch->state.lightshield_amount[idx] = 0.0f;
+}
+
 static inline void guard_enter_wait(MslBatch* batch, size_t idx) {
   // Decomp: ft_8008A2BC -> ft_8008A348 enters Wait with anim frame 0.0.
   // refs/melee/src/melee/ft/ft_0892.c:193-236.
@@ -653,14 +676,15 @@ static inline uint8_t guard_try_enter_iasa_defense(MslBatch* batch, const MslCom
   return 0;
 }
 
-static inline void apply_shield_hold_drain(MslBatch* batch, const MslCommonParams* c, size_t idx,
-                                           float trig_unit, uint8_t preserve_lightshield_amount) {
+static inline uint8_t apply_shield_hold_drain(MslBatch* batch, const MslCommonParams* c, size_t idx,
+                                              float trig_unit,
+                                              uint8_t preserve_lightshield_amount) {
   // Decomp (GALE01): ftCo_800925A4 updates fp->lightshield_amount with a negative-input latch and
   // drains shield HP using the resulting value.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_800925A4
   const float denom = 1.0f - c->trigger_deadzone;
   if (!(denom > 0.0f)) {
-    return;
+    return 0u;
   }
   float light = batch->state.lightshield_amount[idx];
   if (!preserve_lightshield_amount) {
@@ -678,16 +702,19 @@ static inline void apply_shield_hold_drain(MslBatch* batch, const MslCommonParam
   hp -= drain;
   if (hp < 0.0f) {
     hp = 0.0f;
+    batch->state.shield_hp[idx] = hp;
+    return 1u;
   }
   batch->state.shield_hp[idx] = hp;
+  return 0u;
 }
 
-static inline void apply_shield_hold_drain_preserve_drain_refresh_store(MslBatch* batch,
-                                                                        const MslCommonParams* c,
-                                                                        size_t idx,
-                                                                        float trig_unit) {
+static inline uint8_t apply_shield_hold_drain_preserve_drain_refresh_store(MslBatch* batch,
+                                                                           const MslCommonParams* c,
+                                                                           size_t idx,
+                                                                           float trig_unit) {
   if (batch == NULL || c == NULL) {
-    return;
+    return 0u;
   }
   const float denom = 1.0f - c->trigger_deadzone;
   const float drain_light = batch->state.lightshield_amount[idx];
@@ -706,8 +733,11 @@ static inline void apply_shield_hold_drain_preserve_drain_refresh_store(MslBatch
   float hp = batch->state.shield_hp[idx] - drain;
   if (hp < 0.0f) {
     hp = 0.0f;
+    batch->state.shield_hp[idx] = hp;
+    return 1u;
   }
   batch->state.shield_hp[idx] = hp;
+  return 0u;
 }
 
 void guard_update_shield_recharge(MslBatch* batch, const MslCommonParams* c, size_t idx) {
@@ -1099,12 +1129,18 @@ void guard_update_grounded(MslBatch* batch, const MslCommonParams* c, size_t idx
         // drain on just that handoff family.
         // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_800924C0,ftCo_800925A4,ftCo_GuardOn_IASA}
         // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Escape.c::ftCo_8009980C
+        uint8_t shield_break_pending = 0u;
         if (guard_snapshot_spotdodge_pending) {
           // no-op
         } else if (guard_snapshot_refresh_drain_split) {
-          apply_shield_hold_drain_preserve_drain_refresh_store(batch, c, idx, trig);
+          shield_break_pending =
+              apply_shield_hold_drain_preserve_drain_refresh_store(batch, c, idx, trig);
         } else {
-          apply_shield_hold_drain(batch, c, idx, trig, guard_jump_pending);
+          shield_break_pending = apply_shield_hold_drain(batch, c, idx, trig, guard_jump_pending);
+        }
+        if (shield_break_pending) {
+          enter_shield_break_fly(batch, msl_char_params(batch->state.char_id[idx]), idx);
+          return;
         }
       }
 
@@ -1312,6 +1348,8 @@ void guard_update_grounded(MslBatch* batch, const MslCommonParams* c, size_t idx
       batch->state.anim_frame_f32[idx] <= c->dash_iasa_x44 &&
       batch->state.anim_frame_f32[idx] <= c->dash_iasa_x48) {
     enter_escape_roll(batch, idx, (uint16_t)MSL_ACT_ESCAPE_F);
+    dash_iasa_apply_root_motion_exit_gr_vel_clamp(batch, msl_char_params(batch->state.char_id[idx]),
+                                                  idx);
     dash_iasa_apply_terminal_velocity_scalar(batch, c, idx);
     return;
   }
@@ -1332,6 +1370,8 @@ void guard_update_grounded(MslBatch* batch, const MslCommonParams* c, size_t idx
       batch->state.x672_input_timer[idx] < c->powershield_reflect_window_frames) {
     enter_guard_reflect_from_locomotion(batch, c, idx);
     if (dash_iasa_guard_admission_reaches_terminal_scalar(batch, c, idx, a0, a0_anim_frame)) {
+      dash_iasa_apply_root_motion_exit_gr_vel_clamp(
+          batch, msl_char_params(batch->state.char_id[idx]), idx);
       dash_iasa_apply_terminal_velocity_scalar(batch, c, idx);
       const float frame_step = msl_f32_from_q16_16(batch->state.frame_speed_mul_fp_q16_16[idx]);
       batch->state.guard_reflect_entry_dash_terminal_scalar[idx] =
@@ -1358,16 +1398,53 @@ void guard_update_grounded(MslBatch* batch, const MslCommonParams* c, size_t idx
       }
     }
     if (dash_iasa_guard_admission_reaches_terminal_scalar(batch, c, idx, a0, a0_anim_frame)) {
+      dash_iasa_apply_root_motion_exit_gr_vel_clamp(
+          batch, msl_char_params(batch->state.char_id[idx]), idx);
       dash_iasa_apply_terminal_velocity_scalar(batch, c, idx);
     }
     return;
   }
 }
 
+static inline void shieldbreak_update_anim_callback_pre_input(MslBatch* batch,
+                                                              const MslCommonParams* c,
+                                                              size_t idx) {
+  if (batch == NULL || c == NULL) {
+    return;
+  }
+  const uint16_t a0 = batch->state.action_id[idx];
+  if (a0 != (uint16_t)MSL_ACT_SHIELD_BREAK_STAND_U &&
+      a0 != (uint16_t)MSL_ACT_SHIELD_BREAK_STAND_D) {
+    return;
+  }
+  if (batch->state.hitlag_started_frame[idx] != 0) {
+    return;
+  }
+  const uint32_t anim_u32 = batch->state.animation_index[idx];
+  if (anim_u32 > 0xFFFFu) {
+    return;
+  }
+  const float end = msl_anim_end_frame(batch->state.char_id[idx], (uint16_t)anim_u32);
+  if (!(end > 0.0f) || msl_anim_frame_sanitize_f32(batch->state.anim_frame_f32[idx]) < end) {
+    return;
+  }
+
+  // ShieldBreakStand_Anim enters Furafura when ftAnim_IsFramesRemaining returns false.
+  // ftCo_80099010 resets shield health from p_ftCommonData->x280 and does not do an immediate
+  // animation tick; Fighter_ProcessHit's inactive-shield recharge runs later in this frame.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_ShieldBreakStand.c::ftCo_ShieldBreakStand_Anim
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Furafura.c::ftCo_80099010
+  batch->state.action_id[idx] = (uint16_t)MSL_ACT_FURAFURA;
+  batch->state.animation_index[idx] = (uint32_t)MSL_SM_FURAFURA;
+  msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+  batch->state.shield_hp[idx] = c->shield_break_reset_health;
+}
+
 void action_update_anim_callbacks_pre_input(MslBatch* batch) {
   if (batch == NULL) {
     return;
   }
+  const MslCommonParams* c = msl_common_params();
   // Decomp ordering anchor:
   // - fighter Anim callbacks run in Fighter_8006A360 (prio 1) under !hitlag.
   // - input callback (IASA checks) runs later in Fighter_procUpdate (prio 3).
@@ -1433,6 +1510,7 @@ void action_update_anim_callbacks_pre_input(MslBatch* batch) {
         }
       }
       rebound_update_anim_callback_pre_input(batch, idx);
+      shieldbreak_update_anim_callback_pre_input(batch, c, idx);
       guard_update_grounded_anim_callback_pre_input(batch, idx);
     }
   }

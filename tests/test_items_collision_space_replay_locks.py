@@ -7,6 +7,7 @@ import numpy as np
 import pytest
 
 from tools.eval.dataset import COMPARE_DTYPE, read_dataset
+from tools.eval.run_longest_rollout_streaks import _load_binding
 
 
 def _skip_if_missing_laser_artifacts(root: Path) -> None:
@@ -48,6 +49,49 @@ def _one_step_out_compare(*, ds, row) -> np.ndarray:
         binding.write_compare(handle, out_compare_bytes)
 
         return out_compare_bytes.view(COMPARE_DTYPE).reshape(-1)
+    finally:
+        binding.destroy(handle)
+
+
+def _rollout_rows(dataset_path: Path, start_record: int, end_record_inclusive: int) -> dict[int, tuple[np.void, np.void]]:
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+    binding = _load_binding()
+    sizes = binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    compare_stride = int(sizes["compare"])
+    handle = binding.init(
+        batch_size=1,
+        num_players=int(ds.header["num_players"]),
+        ucf_enabled=1,
+        ucf_cardinals_1_0_enabled=1,
+    )
+    seed_bytes = np.empty((1, seed_stride), dtype=np.uint8)
+    prev_input_bytes = np.empty((1, input_stride), dtype=np.uint8)
+    input_bytes = np.empty((1, input_stride), dtype=np.uint8)
+    out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
+    out_view = out_compare_bytes.view(COMPARE_DTYPE).reshape(1)
+
+    sample_stride = int(samples.dtype.itemsize)
+    samples_u8 = samples.view(np.uint8).reshape(int(samples.shape[0]), sample_stride)
+    seed_off = int(samples.dtype.fields["seed_t"][1])
+    prev_input_off = int(samples.dtype.fields["prev_input_t"][1])
+    input_off = int(samples.dtype.fields["input_t"][1])
+
+    try:
+        seed_bytes[0, :] = samples_u8[start_record, seed_off : seed_off + seed_stride]
+        binding.reseed_seed(handle, seed_bytes)
+        rows: dict[int, tuple[np.void, np.void]] = {}
+        for record in range(start_record, end_record_inclusive + 1):
+            prev_input_bytes[0, :] = samples_u8[
+                record, prev_input_off : prev_input_off + input_stride
+            ]
+            input_bytes[0, :] = samples_u8[record, input_off : input_off + input_stride]
+            binding.step_input(handle, prev_input_bytes, input_bytes)
+            binding.write_compare(handle, out_compare_bytes)
+            rows[record] = (out_view[0].copy(), samples["ref_t1"][record].copy())
+        return rows
     finally:
         binding.destroy(handle)
 
@@ -568,6 +612,40 @@ def test_laser_shield_bounce_keepalive_and_spawn_frame_destroy_controls(case: _S
 
     got_lasers = _laser_ids(out["items"][0])
     assert got_lasers == ref_lasers, f"{case.name}: laser_ids expected={ref_lasers} got={got_lasers}"
+
+
+@pytest.mark.integration
+def test_laser_shield_bounce_runtime_rollout_keeps_gat_laser_alive() -> None:
+    # Runtime-positive for Item_80269DC8 ShieldBounced keepalive without the teacher-forced
+    # item_shield_bounce seed lane:
+    # - GAT:5223 rollout reaches the shield contact at 5280 with the laser alive from sim state.
+    # - Native keeps the aged Falco laser through ShieldBounced instead of taking HitShield destroy.
+    # - IAT/GAT one-step controls above prove this is not a broad "shield hit keeps laser" rule.
+    # refs/melee/src/melee/ft/ftcoll.c::ftColl_80077688
+    # refs/melee/src/melee/lb/lbcollision.c::{lbColl_80007DD8,lbColl_800077A0}
+    # refs/melee/src/melee/it/item.c::Item_80269DC8
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_missing_laser_artifacts(root)
+    dataset_path = (
+        root
+        / "datasets/aggregate_recent/replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path.relative_to(root)}")
+
+    rows = _rollout_rows(dataset_path, 5223, 5281)
+    out_5280, ref_5280 = rows[5280]
+    out_5281, ref_5281 = rows[5281]
+
+    for out, ref in ((out_5280, ref_5280), (out_5281, ref_5281)):
+        assert int(ref["items"][0]["exists"]) == 1
+        assert int(ref["items"][0]["type"]) == 55
+        assert int(ref["items"][0]["instance_id"]) == 1216
+        assert int(out["items"][0]["exists"]) == 1
+        assert int(out["items"][0]["type"]) == 55
+        assert int(out["items"][0]["instance_id"]) == 1216
+        assert int(out["action_id"][0]) == int(ref["action_id"][0]) == 181
+        assert int(out["hitlag"][0]) == int(ref["hitlag"][0])
 
 
 @pytest.mark.integration
