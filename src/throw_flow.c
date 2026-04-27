@@ -8,6 +8,7 @@
 #include "common_params.h"
 #include "combat.h"
 #include "grab_attachment.h"
+#include "knockdown.h"
 #include "move_tables.h"
 
 #include <math.h>
@@ -438,6 +439,11 @@ void throw_flow_update_post_items(MslBatch* batch) {
         }
         throw_flow_bridge_integrate_deferred_throw_hit_position(batch, oidx, vidx,
                                                                 run_post_release_damage_phys);
+        if (throw_action == (uint16_t)MSL_ACT_THROW_LW &&
+            throw_flow_action_is_damage_family(batch->state.action_id[vidx])) {
+          knockdown_try_throw_release_damage_floor_contact(batch, (size_t)bi, vidx,
+                                                           (uint16_t)MSL_ACT_DAMAGE_FLY_TOP);
+        }
         if (throw_action == (uint16_t)MSL_ACT_THROW_F) {
           // ThrowF release-position ownership:
           // - same-frame owner-anchor placement is already bridged at release consume time

@@ -10,6 +10,12 @@ uint16_t staling_move_id_from_state(const MslBatch* batch, size_t fighter_idx) {
 }
 
 float staling_multiplier_for_move(const MslBatch* batch, size_t fighter_idx, uint16_t move_id) {
+  return staling_multiplier_for_move_excluding_instance(batch, fighter_idx, move_id, 0u);
+}
+
+float staling_multiplier_for_move_excluding_instance(const MslBatch* batch, size_t fighter_idx,
+                                                     uint16_t move_id,
+                                                     uint16_t excluded_attack_instance) {
   if (batch == NULL) {
     return 1.0f;
   }
@@ -38,7 +44,8 @@ float staling_multiplier_for_move(const MslBatch* batch, size_t fighter_idx, uin
     if (mid == 0) {
       return mult;
     }
-    if (mid == move_id) {
+    const uint16_t inst = batch->state.stale_attack_instance[base + (size_t)pos];
+    if (mid == move_id && (excluded_attack_instance == 0u || inst != excluded_attack_instance)) {
       mult -= weights[i];
     }
     pos = (pos != 0) ? (pos - 1) : ((int)MSL_STALE_QUEUE_SIZE - 1);

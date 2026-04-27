@@ -17,6 +17,7 @@
 #include "jump_input.h"
 #include "locomotion.h"
 #include "mpcoll_ecb_points.h"
+#include "mpcoll_ground.h"
 #include "msl_math.h"
 #include "stage_collision.h"
 #include "state_flags.h"
@@ -261,7 +262,7 @@ static inline uint8_t down_roll_apply_phys_transn(MslBatch* batch, const MslComm
   // ft_80085030 uses fp->x6A4_transNOffset.z * facing_dir as the target ground velocity when
   // fp->x594_b0 indicates TransN motion is active; otherwise it falls back to ground friction.
   //
-  // Our ISO-derived SSANIM01 v3 artifacts store per-frame TransN translation as a tail (x,y,z);
+  // Our ISO-derived SSANIM01 v4 artifacts store per-frame TransN translation as a tail (x,y,z);
   // approximate transNOffset.z as a finite difference between adjacent frames.
   const uint8_t cid = batch->state.char_id[idx];
   const uint32_t msid_u32 = batch->state.animation_index[idx];
@@ -2211,6 +2212,41 @@ static inline void enter_damagefly_ground_contact_followup(MslBatch* batch,
     return;
   }
   enter_down_bound_from_damage_land(batch, ch, bi, idx, prev_action_id);
+}
+
+void knockdown_try_throw_release_damage_floor_contact(MslBatch* batch, size_t bi, size_t idx,
+                                                      uint16_t prev_action_id) {
+  if (batch == NULL) {
+    return;
+  }
+  const MslCommonParams* c = msl_common_params();
+  const MslCharParams* ch = msl_char_params(batch->state.char_id[idx]);
+  if (c == NULL || ch == NULL) {
+    return;
+  }
+  if (!is_damage_fly_action(batch->state.action_id[idx])) {
+    return;
+  }
+
+  MslMpcollFloorMaskResult floor_result = {0};
+  if (!mpcoll_800477e0_floor_mask_probe(batch, idx, &floor_result)) {
+    return;
+  }
+
+  // Decomp release-frame owner:
+  // - ftCo_800DDDE4 places the detached fighter, calls mpColl_800471F8, then DamageFly_Coll can
+  //   enter ftCo_80090184 on the same fighter callback frame.
+  // - This sim defers the throw hit until after the normal stage-collision pass, so run only the
+  //   release-local floor probe and existing DamageFly floor-contact ladder here.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DDDE4
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{ftCo_DamageFly_Coll,ftCo_80090184}
+  // refs/melee/src/melee/mp/mpcoll.c::mpColl_800471F8
+  batch->state.on_ground[idx] = 1u;
+  batch->state.ground_id[idx] = floor_result.ground_id;
+  batch->state.pos_y[idx] = floor_result.corrected_pos_y;
+  batch->state.ground_normal_x[idx] = 0.0f;
+  batch->state.ground_normal_y[idx] = 1.0f;
+  enter_damagefly_ground_contact_followup(batch, c, ch, bi, idx, prev_action_id);
 }
 
 void knockdown_update_post_collision(MslBatch* batch) {

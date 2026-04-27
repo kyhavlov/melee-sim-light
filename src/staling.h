@@ -22,6 +22,13 @@ enum { MSL_FT_MOVE_ID_DEFAULT = 1 };
 // Returns 1.0 if required staling tables are not loaded or if move_id is not stalable.
 float staling_multiplier_for_move(const MslBatch* batch, size_t fighter_idx, uint16_t move_id);
 
+// Variant for hit capsules whose `damage` float was computed earlier in the current attack
+// instance, before later same-instance contacts inserted that attack into the stale queue.
+// Previous instances of the same move still stale normally.
+float staling_multiplier_for_move_excluding_instance(const MslBatch* batch, size_t fighter_idx,
+                                                     uint16_t move_id,
+                                                     uint16_t excluded_attack_instance);
+
 // Update the stale queue for a successful damaging hit attributed to (fighter_idx, move_id, attack_instance).
 //
 // Decomp reference (GALE01): plStale_UpdateStaleMovesFromFighter / ...FromItem

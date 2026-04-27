@@ -3510,7 +3510,15 @@ static inline uint8_t combat_apply_throw_hit_core(MslBatch* batch, int batch_ind
   if (move_id == (uint16_t)MSL_FT_MOVE_ID_DEFAULT) {
     move_id = staling_move_id_from_state(batch, a_idx);
   }
-  const float stale_mult = staling_multiplier_for_move(batch, a_idx, move_id);
+  // Throw hit capsules store their staled float damage when the set_throw_hitbox movescript event
+  // creates the capsule. Same-instance low-throw laser contacts can update the stale queue before
+  // this simulator's deferred release hit applies, but those later queue entries must not
+  // retroactively stale the already-created capsule damage.
+  // refs/melee/build/GALE01/asm/melee/ft/ftaction.s::ftAction_80071E04
+  // refs/melee/build/GALE01/asm/melee/ft/ftcoll.s::ftColl_8007ABD0
+  const uint16_t throw_attack_instance = batch->state.attack_instance[a_idx];
+  const float stale_mult =
+      staling_multiplier_for_move_excluding_instance(batch, a_idx, move_id, throw_attack_instance);
 
   float dmg_f = p->damage;
   if (stale_mult != 1.0f) {
@@ -5630,9 +5638,9 @@ int combat_debug_shield_candidate_decisions(MslBatch* batch, int batch_index,
                   ? 1u
                   : combat_shield_overlap_ftcoll_80007bcc(
                         batch, bi, attacker, hb_id, out->hitbox_x, out->hitbox_y, out->hitbox_z,
-                        out->hitbox_radius, shx, shy, shz, shr, /*shield_desc_radius=*/1.0f,
-                        batch->state.fighter_scale_y[d_idx], shield_desc_envelope_ready,
-                        shield_extent_bridge_active, &overlap_margin);
+                        out->hitbox_radius, shx, shy, shz, shr,
+                        /*shield_desc_radius=*/1.0f, batch->state.fighter_scale_y[d_idx],
+                        shield_desc_envelope_ready, shield_extent_bridge_active, &overlap_margin);
           out->overlap_shield = overlaps ? 1u : 0u;
           out->shield_overlap_margin = overlap_margin;
           if (!overlaps) {

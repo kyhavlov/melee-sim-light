@@ -70,9 +70,13 @@ def test_throwlw_frame25_slowest_rate_attachment_anchor_positive_prh() -> None:
 
 
 @pytest.mark.integration
-def test_throwlw_frame25_faster_victim_rate_keeps_existing_attachment_owner_qgd() -> None:
-    # Replay-real negative for the faster Fox-victim ThrowLw rate: QGD must not take the slowest-rate
-    # frame-25 vertical TransN2/x1A70 handoff used by PRH.
+def test_throwlw_frame25_faster_victim_rate_uses_shared_transn_anchor_qgd() -> None:
+    # Replay-real positive for the faster Fox-victim ThrowLw rate. The attached callback owner is
+    # not a slowest-rate-only frame-25 carveout: ftCo_800DB368 constrains victim XRotN to the
+    # thrower's TransN2/capture anchor, and ftCo_800DE508 applies the static x1A70 offset to that
+    # live joint for the shared ThrownLw attached window.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_800DB368
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Thrown.c::ftCo_800DE508
     root = Path(__file__).resolve().parents[1]
     dataset_path = (
         root
@@ -89,6 +93,32 @@ def test_throwlw_frame25_faster_victim_rate_keeps_existing_attachment_owner_qgd(
     assert int(out["action_id"][victim]) == 242  # ThrownLw
     assert int(ref["action_id"][victim]) == 242
     assert abs(float(out["pos_x"][victim]) - float(ref["pos_x"][victim])) <= 0.01
-    # QGD already has a known faster-rate vertical residual in the existing attached-world owner;
-    # keep the negative tied to the replay reference instead of a one-sided sentinel.
-    assert abs(float(out["pos_y"][victim]) - float(ref["pos_y"][victim])) <= 0.50
+    assert abs(float(out["pos_y"][victim]) - float(ref["pos_y"][victim])) <= 0.002
+
+
+@pytest.mark.integration
+def test_throwlw_release_floor_contact_enters_downbound_fsp() -> None:
+    # Replay-real positive for the low-throw release floor-contact handoff:
+    # - ftCo_800DDDE4 applies the throw hit, places the released victim, then runs mpColl_800471F8.
+    # - The resulting DamageFly floor contact reaches ftCo_80090184 -> DownBound in the same frame.
+    # - The throw hitbox damage is the pre-created HitCapsule.damage, so later same-instance
+    #   throw-laser stale queue writes must not retroactively stale the +1.0 release hit.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DDDE4
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{ftCo_DamageFly_Coll,ftCo_80090184}
+    root = Path(__file__).resolve().parents[1]
+    dataset_path = (
+        root / "datasets/aggregate_recent/replays/validation/aggregate_recent/FavorableSuperficialPig.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    rows = _rollout_window(dataset_path, start_record=9179, length=9)
+    out, ref = rows[8]
+    victim = 1
+
+    assert int(out["action_id"][victim]) == int(ref["action_id"][victim]) == 183  # DownBoundU
+    assert int(out["action_frame"][victim]) == int(ref["action_frame"][victim]) == 0
+    assert int(out["on_ground"][victim]) == int(ref["on_ground"][victim]) == 1
+    assert int(out["hitstun"][victim]) == int(ref["hitstun"][victim]) == 0
+    assert abs(float(out["percent"][victim]) - float(ref["percent"][victim])) <= 1.0e-5
+    assert abs(float(out["pos_y"][victim]) - float(ref["pos_y"][victim])) <= 1.0e-5

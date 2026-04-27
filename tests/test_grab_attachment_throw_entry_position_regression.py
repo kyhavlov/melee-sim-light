@@ -178,10 +178,11 @@ def test_throwhi_attached_rollout_uses_float_aobj_anchor() -> None:
 
 @pytest.mark.integration
 def test_throwlw_low_throw_keeps_existing_attachment_anchor_boundary() -> None:
-    # Replay-real negative for the non-low float-AObj anchor:
-    # - ThrownLw has a separate retained low-throw attachment owner around the frame-25 TransN2
-    #   vertical handoff. Broadening the non-low float anchor into this slice moved contact/hitlag
-    #   earlier in rollout.
+    # Replay-real boundary for the low-throw attached owner:
+    # - ThrownLw uses the constrained TransN2/capture-anchor joint plus static x1A70 offset.
+    # - Non-low ThrownF/B/Hi use the separate float-AObj anchor path tested above.
+    # - The low path must match placement without reintroducing the older false hitlag/contact
+    #   timing at the QGD rollout boundary.
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_800DB368
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Thrown.c::ftCo_800DE508
     root = Path(__file__).resolve().parents[1]
@@ -198,6 +199,8 @@ def test_throwlw_low_throw_keeps_existing_attachment_anchor_boundary() -> None:
     assert int(out["action_id"][1]) == int(ref["action_id"][1]) == 242  # ThrownLw
     assert int(out["hitlag"][0]) == int(ref["hitlag"][0]) == 0
     assert int(out["hitlag"][1]) == int(ref["hitlag"][1]) == 0
+    assert abs(float(out["pos_x"][1]) - float(ref["pos_x"][1])) <= 1.0e-4
+    assert abs(float(out["pos_y"][1]) - float(ref["pos_y"][1])) <= 1.0e-4
 
 
 @pytest.mark.integration

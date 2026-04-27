@@ -5,19 +5,14 @@
 #include "anim_pose.h"
 #include "anim_timebase.h"
 #include "char_params.h"
-#include "common_params.h"
 #include "mtx34.h"
 
 // Fighter_Part ids (GALE01).
 // Source of truth: refs/melee/src/melee/ft/forward.h::Fighter_Part.
 enum {
-  MSL_CHAR_FOX = 1,
-  MSL_CHAR_FALCO = 22,
   MSL_FTPART_TRANSN = 1,    // FtPart_TransN
   MSL_FTPART_XROTN = 2,     // FtPart_XRotN (grab/capture victim alignment joint)
   MSL_FTPART_TRANSN2 = 52,  // FtPart_TransN2 (grab/capture constraint anchor; ftCo_800DB368)
-  MSL_THROW_INDEX_LW = 3,
-  MSL_THROWLW_FRAME25_ATTACH_ANCHOR_AF = 25,
 };
 
 static inline int pose_part_origin_world_facing_yrot90(float* out_x, float* out_y, float* out_z,
@@ -122,6 +117,114 @@ static inline int pose_part_origin_world_f32_facing_yrot90(
   // refs/melee/src/sysdolphin/baselib/aobj.c::HSD_AObjInterpretAnim
   // refs/melee/src/sysdolphin/baselib/fobj.c::HSD_FObjInterpretAnim
   // refs/melee/src/melee/lb/lb_00B0.c::lb_8000B1CC
+  const float facing_dir = facing_u8 ? 1.0f : -1.0f;
+  const float rx = facing_dir * lz;
+  const float rz = -facing_dir * lx;
+  lx = rx;
+  lz = rz;
+
+  lx *= fighter_scale_y;
+  ly *= fighter_scale_y;
+  lz *= fighter_scale_y;
+
+  *out_x = lx + fighter_pos_x;
+  *out_y = ly + fighter_pos_y;
+  *out_z = lz + fighter_pos_z;
+  return 0;
+}
+
+static inline int pose_transn_f32(float out_xyz[3], uint8_t char_id, uint32_t anim_u32,
+                                  float anim_frame_f32) {
+  if (out_xyz == NULL || anim_u32 > 0xFFFFu) {
+    return -1;
+  }
+  const uint16_t msid = (uint16_t)anim_u32;
+  const float f = msl_anim_frame_sanitize_f32(anim_frame_f32);
+  const float base_f = floorf(f);
+  const float frac = f - base_f;
+  const uint16_t frame0 = msl_anim_frame_floor_u16(f);
+
+  float t0[3];
+  if (anim_pose_get_transn(char_id, msid, frame0, t0) != 0) {
+    return -1;
+  }
+  float t1[3] = {t0[0], t0[1], t0[2]};
+  if (frac > 0.0f) {
+    const uint16_t frame1 = (uint16_t)(frame0 + 1u);
+    if (frame1 != 0) {
+      (void)anim_pose_get_transn(char_id, msid, frame1, t1);
+    }
+  }
+  const float a = (frac <= 0.0f) ? 0.0f : ((frac >= 1.0f) ? 1.0f : frac);
+  out_xyz[0] = t0[0] + (t1[0] - t0[0]) * a;
+  out_xyz[1] = t0[1] + (t1[1] - t0[1]) * a;
+  out_xyz[2] = t0[2] + (t1[2] - t0[2]) * a;
+  return 0;
+}
+
+static inline int pose_part_origin_world_f32_with_transn_facing_yrot90(
+    float* out_x, float* out_y, float* out_z, const MslBatch* batch, size_t player_idx,
+    uint32_t anim_u32, float anim_frame_f32, uint16_t part_id, float fighter_pos_x,
+    float fighter_pos_y, float fighter_pos_z, float fighter_scale_y, uint8_t facing_u8) {
+  if (out_x == NULL || out_y == NULL || out_z == NULL || batch == NULL) {
+    return -1;
+  }
+  if (anim_u32 > 0xFFFFu) {
+    return -1;
+  }
+
+  const uint8_t char_id = batch->state.char_id[player_idx];
+  const float f = msl_anim_frame_sanitize_f32(anim_frame_f32);
+  const float base_f = floorf(f);
+  const float frac = f - base_f;
+  const uint16_t frame0 = msl_anim_frame_floor_u16(f);
+
+  float m0[12];
+  if (anim_pose_get_matrix(char_id, (uint16_t)anim_u32, frame0, part_id, m0) != 0) {
+    return -1;
+  }
+
+  const float zero[3] = {0.0f, 0.0f, 0.0f};
+  float lx0 = 0.0f, ly0 = 0.0f, lz0 = 0.0f;
+  msl_mtx34_mul_point(m0, zero, &lx0, &ly0, &lz0);
+
+  float lx1 = lx0, ly1 = ly0, lz1 = lz0;
+  if (frac > 0.0f) {
+    const uint16_t frame1 = (uint16_t)(frame0 + 1u);
+    if (frame1 != 0) {
+      float m1[12];
+      if (anim_pose_get_matrix(char_id, (uint16_t)anim_u32, frame1, part_id, m1) == 0) {
+        msl_mtx34_mul_point(m1, zero, &lx1, &ly1, &lz1);
+      }
+    }
+  }
+  const float a = (frac <= 0.0f) ? 0.0f : ((frac >= 1.0f) ? 1.0f : frac);
+  float lx = lx0 + (lx1 - lx0) * a;
+  float ly = ly0 + (ly1 - ly0) * a;
+  float lz = lz0 + (lz1 - lz0) * a;
+
+  // Throw attachment samples the thrower's live skeleton anchor, not the BODY/ECB pose view with
+  // root TransN stripped. `extract_fighter_anims.py` stores the stripped TransN tail separately, so
+  // recompose it here before applying the fighter root facing/model scale.
+  // Use the stripped SSANIM matrix for the constrained anchor: the generic float-AObj sampler can
+  // animate the capture anchor itself on early ThrowLw frames, but the source owner is the
+  // constraint plus TransN pulse, not the unconstrained local AObj track.
+  //
+  // Source/probe basis:
+  // - ftCo_800DB368 constrains the victim XRotN to thrower FtPart_TransN2.
+  // - ftCo_800DE508 samples that constrained XRotN with lb_8000B1CC before applying x1A70.
+  // - Dolphin probes on FSP low throw show owner FtPart_TransN2 world Y equals
+  //   (SSANIM zero-root TransN2 Y + current ThrowLw TransN.y) * model_scale.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_800DB368
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Thrown.c::ftCo_800DE508
+  // refs/melee/src/melee/ft/ft_081B.c::ft_80085030 (TransN offset consumer)
+  float transn[3];
+  if (pose_transn_f32(transn, batch->state.char_id[player_idx], anim_u32, anim_frame_f32) == 0) {
+    lx += transn[0];
+    ly += transn[1];
+    lz += transn[2];
+  }
+
   const float facing_dir = facing_u8 ? 1.0f : -1.0f;
   const float rx = facing_dir * lz;
   const float rz = -facing_dir * lx;
@@ -261,100 +364,31 @@ static inline uint8_t action_is_nonlow_thrown(uint16_t action_id) {
                    action_id == (uint16_t)MSL_ACT_THROWN_HI);
 }
 
-static inline int32_t throwlw_anim_rate_fp_from_chars(uint8_t owner_char_id,
-                                                      uint8_t victim_char_id) {
-  const MslCharParams* owner_ch = msl_char_params(owner_char_id);
-  const MslCharParams* victim_ch = msl_char_params(victim_char_id);
-  float throw_anim_speed = 1.0f;
-  uint8_t weight_independent = 0u;
-  if (owner_ch != NULL) {
-    weight_independent =
-        (uint8_t)((owner_ch->weight_independent_throws_mask & (uint8_t)(1u << MSL_THROW_INDEX_LW))
-                      ? 1u
-                      : 0u);
-  }
-  const MslCommonParams* c = msl_common_params();
-  if (!weight_independent && c != NULL && victim_ch != NULL && victim_ch->weight > 0.0f &&
-      c->throw_anim_speed_weight_mul > 0.0f) {
-    throw_anim_speed = 1.0f / (victim_ch->weight * c->throw_anim_speed_weight_mul);
-    if (!(throw_anim_speed > 0.0f)) {
-      throw_anim_speed = 1.0f;
-    }
-  }
-  return msl_q16_16_from_f32(throw_anim_speed);
-}
-
-static inline uint8_t throwlw_slowest_supported_rate_allowed(uint8_t owner_char_id,
-                                                             uint8_t victim_char_id) {
-  // Supported-domain ThrowLw attached frame-25 rate policy:
-  // - ftCo_800DD4B0 computes the weight-dependent throw animation rate from victim weight and
-  //   p_ftCommonData->x37C. Weight-independent low throws do not use this distinction.
-  // - Current Fox/Falco replay controls separate the slowest supported weight-dependent rate from the
-  //   faster Fox-victim path for the frame-25 attached callback phase. Keep this data/rate-shaped:
-  //   do not branch on character id as a proxy for the hidden callback state.
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DD4B0
-  // refs/melee/src/melee/ft/types.h::ftCo_DatAttrs (+0x180)
-  // data/common/ft_common_data.json `throw_anim_speed_weight_mul`
-  // data/characters/{fox,falco}.json `weight`, `weight_independent_throws_mask`
-  const MslCharParams* owner_ch = msl_char_params(owner_char_id);
-  if (owner_ch == NULL ||
-      (owner_ch->weight_independent_throws_mask & (uint8_t)(1u << MSL_THROW_INDEX_LW)) != 0u) {
-    return 0u;
-  }
-  const int32_t candidate_rate_fp = throwlw_anim_rate_fp_from_chars(owner_char_id, victim_char_id);
-  if (candidate_rate_fp <= 0) {
-    return 0u;
-  }
-  static const uint8_t k_supported_domain_chars[] = {
-      (uint8_t)MSL_CHAR_FOX,
-      (uint8_t)MSL_CHAR_FALCO,
-  };
-  int32_t slowest_supported_rate_fp = 0;
-  int32_t fastest_supported_rate_fp = 0;
-  for (size_t i = 0; i < sizeof(k_supported_domain_chars) / sizeof(k_supported_domain_chars[0]);
-       i++) {
-    const int32_t supported_rate_fp =
-        throwlw_anim_rate_fp_from_chars(owner_char_id, k_supported_domain_chars[i]);
-    if (supported_rate_fp <= 0) {
-      continue;
-    }
-    if (slowest_supported_rate_fp == 0 || supported_rate_fp < slowest_supported_rate_fp) {
-      slowest_supported_rate_fp = supported_rate_fp;
-    }
-    if (fastest_supported_rate_fp == 0 || supported_rate_fp > fastest_supported_rate_fp) {
-      fastest_supported_rate_fp = supported_rate_fp;
-    }
-  }
-  return (slowest_supported_rate_fp > 0 && fastest_supported_rate_fp > slowest_supported_rate_fp &&
-          candidate_rate_fp == slowest_supported_rate_fp)
-             ? 1u
-             : 0u;
-}
-
 static inline uint8_t thrown_static_x1a70_offsets(float* out_y, float* out_z, const MslBatch* batch,
                                                   size_t vidx) {
   if (out_y == NULL || out_z == NULL || batch == NULL) {
     return 0u;
   }
-  float transn_x = 0.0f, transn_y = 0.0f, transn_z = 0.0f;
-  float xrotn_x = 0.0f, xrotn_y = 0.0f, xrotn_z = 0.0f;
-  if (pose_part_local_translation(&transn_x, &transn_y, &transn_z, batch->state.char_id[vidx],
-                                  (uint32_t)MSL_SM_WAIT1_0, 0.0f,
-                                  (uint16_t)MSL_FTPART_TRANSN) != 0 ||
-      pose_part_local_translation(&xrotn_x, &xrotn_y, &xrotn_z, batch->state.char_id[vidx],
-                                  (uint32_t)MSL_SM_WAIT1_0, 0.0f,
-                                  (uint16_t)MSL_FTPART_XROTN) != 0) {
+  const MslCharParams* ch = msl_char_params(batch->state.char_id[vidx]);
+  if (ch == NULL) {
     return 0u;
   }
-  // Fighter_UnkUpdateVecFromBones_8006876C stores world-space TransN-XRotN into fp->x1A70 at
-  // fighter creation, after model scaling has been applied by lb_8000B1CC.
+  float attach_local[3] = {0.0f, 0.0f, 0.0f};
+  if (anim_pose_get_local_translation(batch->state.char_id[vidx], (uint16_t)MSL_SM_WAIT1_0, 0u,
+                                      ch->grab_capture_anchor_part_id, attach_local) != 0) {
+    return 0u;
+  }
+  // Fighter_UnkUpdateVecFromBones_8006876C stores fp->x1A70 from the fighter's base TransN/XRotN
+  // offset. For Fox/Falco, the ISO part table exposes the same local rest offset at the mapped
+  // FtPart_TransN2 / grab attachment part. Use the local SRT lane, not the parent-composed matrix
+  // translation; Dolphin probes on Fox/Fox ThrowLw show x1A70.y is the raw -8.300001 local offset,
+  // not the baked XRotN world height or a model-scaled value.
   // refs/melee/src/melee/ft/fighter.c::Fighter_UnkUpdateVecFromBones_8006876C
-  const MslCharParams* ch = msl_char_params(batch->state.char_id[vidx]);
-  const float model_scale = (ch != NULL && ch->model_scaling > 0.0f) ? ch->model_scaling : 1.0f;
-  *out_y = (transn_y - xrotn_y) * model_scale;
-  *out_z = (transn_z - xrotn_z) * model_scale;
-  (void)transn_x;
-  (void)xrotn_x;
+  // refs/melee/src/melee/ft/ftparts.c::ftParts_GetBoneIndex
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Thrown.c::ftCo_800DE508
+  // data/characters/{fox,falco}.json `grab_capture_anchor_part_id`
+  *out_y = attach_local[1];
+  *out_z = attach_local[2];
   return 1u;
 }
 
@@ -461,36 +495,20 @@ void grab_attachment_apply_thrown_anchor_now(MslBatch* batch, int bi, int victim
     return;
   }
   const float facing_dir = batch->state.facing[vidx] ? 1.0f : -1.0f;
-  const size_t oidx = msl_idx_player(bi, owner_p);
-  if (thrownlw_attached_to_throwlw(batch, bi, victim_p, owner_p) &&
-      batch->state.action_frame[vidx] >= MSL_THROWLW_FRAME25_ATTACH_ANCHOR_AF &&
-      throwlw_slowest_supported_rate_allowed(batch->state.char_id[oidx],
-                                             batch->state.char_id[vidx])) {
+  if (thrownlw_attached_to_throwlw(batch, bi, victim_p, owner_p)) {
     float x1a70_y = 0.0f, x1a70_z = 0.0f;
     if (thrown_static_x1a70_offsets(&x1a70_y, &x1a70_z, batch, vidx)) {
-      (void)x1a70_z;
-      float tx = batch->state.pos_x[oidx];
-      float ty = batch->state.pos_y[oidx];
-      float tz = batch->state.pos_z[oidx];
-      const float owner_scale_y = pose_model_scale_y(batch, oidx);
-      if (pose_part_origin_world_facing_yrot90(
-              &tx, &ty, &tz, batch->state.char_id[oidx], batch->state.animation_index[oidx],
-              batch->state.anim_frame_f32[oidx], (uint16_t)MSL_FTPART_TRANSN2,
-              batch->state.pos_x[oidx], batch->state.pos_y[oidx], batch->state.pos_z[oidx],
-              owner_scale_y, batch->state.facing[oidx]) != 0) {
-        ty = ay;
-      }
-      // ThrowLw/ThrownLw frame-25 attached callback slice:
+      // ThrowLw/ThrownLw attached callback owner:
       // - ftCo_800DB368 constrains victim XRotN to the thrower's FtPart_TransN2 when entering
       //   ThrownLw, and ftCo_800DE508 applies fp->x1A70 onto that anchor.
-      // - Existing capture-anchor lateral reconstruction is still the narrower proven x-axis owner;
-      //   the slowest weight-dependent frame-25 slice needs only the vertical TransN2/x1A70 handoff.
-      // - Faster/weight-independent ThrowLw rows stay on the existing attached-world owner.
+      // - In live probes this constrained XRotN world is exposed through the owner attachment anchor
+      //   path (ftData.x8->x11 / extracted grab_capture_anchor_part_id), not by the older stale
+      //   per-reseed grab_offset bridge or a frame-25/rate-only TransN2 carveout.
       // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_800DB368
       // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Thrown.c::ftCo_800DE508
-      // data/moves/{fox,falco}.json `ftCo_SM_ThrowLw` frame-25 projectile command
-      batch->state.pos_x[vidx] = fmaf(batch->state.grab_offset_z[vidx], facing_dir * scale_y, ax);
-      batch->state.pos_y[vidx] = x1a70_y * scale_y + ty;
+      // data/characters/{fox,falco}.json `grab_capture_anchor_part_id`
+      batch->state.pos_x[vidx] = fmaf(x1a70_z, facing_dir * scale_y, ax);
+      batch->state.pos_y[vidx] = x1a70_y * scale_y + ay;
       batch->state.pos_z[vidx] = 0.0f;
       return;
     }
@@ -581,12 +599,24 @@ static inline void grabbed_victim_anchor_world(float* out_x, float* out_y, float
   }
   const float owner_scale_y = pose_model_scale_y(batch, oidx);
   const size_t vidx = msl_idx_player(bi, victim_p);
+  const uint8_t use_thrownlw_transn_anchor =
+      thrownlw_attached_to_throwlw(batch, bi, victim_p, owner_p);
   const uint8_t use_float_track_anchor = action_is_nonlow_thrown(batch->state.action_id[vidx]);
   int pose_status = -1;
-  if (use_float_track_anchor) {
-    // ThrownF/B/Hi attachment samples the live HSD AObj/JObj owner. Keep CaptureWait/Pulled and
-    // ThrownLw on their separate proven paths; broadening this float-track anchor into low throw
-    // moves replay-real contact timing before the retained frame-25 TransN2/x1A70 slice.
+  if (use_thrownlw_transn_anchor) {
+    // ThrowLw/ThrownLw's attached anchor is owner FtPart_TransN2 after the current throw animation
+    // TransN pulse is recomposed. This is separate from the non-low float-track anchor path because
+    // low throw intentionally uses the thrower's TransN pulse as part of its attachment owner.
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_800DB368
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Thrown.c::ftCo_800DE508
+    pose_status = pose_part_origin_world_f32_with_transn_facing_yrot90(
+        &ax, &ay, &az, batch, oidx, batch->state.animation_index[oidx],
+        batch->state.anim_frame_f32[oidx], owner_anchor_part, batch->state.pos_x[oidx],
+        batch->state.pos_y[oidx], batch->state.pos_z[oidx], owner_scale_y,
+        batch->state.facing[oidx]);
+  } else if (use_float_track_anchor) {
+    // ThrownF/B/Hi attachment samples the live HSD AObj/JObj owner. CaptureWait/Pulled and low
+    // throw stay on their separate attachment paths.
     // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Thrown.c::ftCo_800DE508
     // refs/melee/src/sysdolphin/baselib/aobj.c::HSD_AObjInterpretAnim
     pose_status = pose_part_origin_world_f32_facing_yrot90(
