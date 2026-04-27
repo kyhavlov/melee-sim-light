@@ -16,9 +16,9 @@ facing transform must be applied exactly once (runtime or bake), but enabling th
 
 - **World axes:** `X` = stage left/right, `Y` = up, `Z` = depth.
   - Stage collision is currently modeled in `X/Y` only (2.5D); we still carry `pos_z` and pose-derived `z` for combat geometry.
-- **Matrix layout:** SSANIM01 v3 joint matrices are **row-major 3x4** and applied as `out = M * [x y z 1]^T`.
+- **Matrix layout:** SSANIM01 v4 joint matrices are **row-major 3x4** and applied as `out = M * [x y z 1]^T`.
   - See `src/mtx34.h` (`msl_mtx34_mul_point`) and `tools/extraction/extract_ecb_extents.py` (layout comment).
-- **TransN handling:** `data/anims/<char>.bin` stores per-joint matrices with **TransN translation removed** (written separately as the v3 tail).
+- **TransN handling:** `data/anims/<char>.bin` stores per-joint matrices with **TransN translation removed** (written separately as the v4 tail).
   - Extractor: `tools/extraction/extract_fighter_anims.py` and native bake path in `python/msl_binding.c` (stores TransN, then zeroes its `cur_pos`).
 
 ---
@@ -49,13 +49,13 @@ already includes:
 
 ---
 
-## What we extract today (SSANIM01 v3 matrices)
+## What we extract today (SSANIM01 v4 matrices)
 
 `data/anims/<char>.bin` is produced by `tools/extraction/extract_fighter_anims.py` (or its native equivalent in `python/msl_binding.c`), which:
 
 - Evaluates per-part local SRT from the rest pose + FObj tracks (`HSD_MtxSRT` semantics).
 - Concatenates to per-part **world matrices** via `PSMTXConcat` semantics.
-- Removes TransN translation per frame and writes it as the v3 tail.
+- Removes TransN translation per frame and writes it as the v4 tail.
 - **Does not apply `fp->facing_dir` anywhere** (there is no “facing” input in the bake; the matrices are baked in one canonical orientation).
 
 ### Empirical proof: TopN is identity in the extracted files
@@ -66,7 +66,7 @@ For Fox/Falco, TopN (FtPart id `0`) is included and its matrix is the **identity
 
 If facing were already baked into SSANIM01, TopN could not be identity because decomp sets its Y rotation to `±π/2` from `fp->facing_dir`.
 
-**Therefore:** SSANIM01 v3 matrices in `data/anims/<char>.bin` are **facing-independent**.
+**Therefore:** SSANIM01 v4 matrices in `data/anims/<char>.bin` are **facing-independent**.
 
 ---
 

@@ -21,8 +21,8 @@ enum {
 static const uint8_t k_ecb_magic[ECB_MAGIC_LEN] = {'M', 'S', 'L', 'E', 'C', 'B', '0', '1'};
 // NOTE: bottom and extents tables share the same MSLECB01 container, but are versioned separately
 // so changes in one payload (e.g., ECB extents axis conventions) cannot silently affect the other.
-static const uint32_t k_ecb_bottom_format_version = 2;
-static const uint32_t k_ecb_extents_format_version = 3;
+static const uint32_t k_ecb_bottom_format_version = 3;
+static const uint32_t k_ecb_extents_format_version = 4;
 
 typedef struct {
   uint16_t msid;

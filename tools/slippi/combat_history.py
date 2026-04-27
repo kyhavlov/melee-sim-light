@@ -269,9 +269,9 @@ class _AnimEntry:
 
 
 class AnimPoseDB:
-    # data/anims/<char>.bin (SSANIM01 v3)
+    # data/anims/<char>.bin (SSANIM01 v4)
     _MAGIC = b"SSANIM01"
-    _VERSION = 3
+    _VERSION = 4
     _MAT_BYTES = 12 * 4
 
     def __init__(self, buf: bytes):
@@ -303,7 +303,7 @@ class AnimPoseDB:
             off += 4
 
             mats_bytes = int(frame_count) * int(joint_count) * self._MAT_BYTES
-            transn_bytes = int(frame_count) * 3 * 4  # v3 tail
+            transn_bytes = int(frame_count) * 3 * 4  # v4 tail
             need = mats_bytes + transn_bytes
             if off + need > len(buf):
                 raise ValueError(f"SSANIM01: truncated anim payload: msid={msid} frame_count={frame_count}")
@@ -1034,8 +1034,10 @@ def derive_combat_hitlist_seed_fields(
                         #
                         # Runtime shape:
                         # - shields_refresh computes a guard-tilt offset (dx,dy,dz) by lerping between
-                        #   neutral_frame and the current guard_tilt_x8 frame using guard_tilt_x4 (0..1),
-                        #   then applies fighter_scale_y and facing_dir to place the shield center.
+                        #   the no-tilt Guard live-pose frame and the current guard_tilt_x8 frame only
+                        #   for steady Guard with zero/subnormal guard_tilt_x4. Other shield actions
+                        #   and nonzero x4 retain the neutral-target scaling path until their separate
+                        #   pose owners are proved.
                         # - guard_tilt_x8/x4 themselves are stateful (tilt smoothing), so they must be
                         #   seeded and used consistently between dataset derivation and runtime.
                         #
@@ -1045,7 +1047,7 @@ def derive_combat_hitlist_seed_fields(
                         # - This combat hitlist derivation consumes those seeded values, so we do not
                         #   re-run the stick/lerp logic here (avoids divergence).
                         #
-                        # Source of truth: data/shields/<char>.bin (MSLSHLD1 v1; ISO-derived).
+                        # Source of truth: data/shields/<char>.bin (MSLSHLD1 v3; ISO-derived).
                         # Approximation: we do not model stage-depth / pos_z here; current runtime
                         # policy is effectively 2D, so pos_z is assumed 0 in this derivation.
                         tv = get_shield_table(char_id[fi, p])
@@ -1058,17 +1060,22 @@ def derive_combat_hitlist_seed_fields(
                                 f = frame_max
                             mag = float(guard_tilt_x4[fi, p])
                             mag = _clamp01(mag)
-                            neutral = int(tv.neutral_frame)
+                            steady_guard_no_tilt = (
+                                int(action_id[fi, p]) == ACT_GUARD and (mag == 0.0 or mag < float(np.finfo(np.float32).tiny))
+                            )
+                            neutral = 0 if steady_guard_no_tilt else int(tv.neutral_frame)
                             nx, ny, nz = (float(tv.xyz[neutral, 0]), float(tv.xyz[neutral, 1]), float(tv.xyz[neutral, 2]))
                             fx, fy, fz = (float(tv.xyz[f, 0]), float(tv.xyz[f, 1]), float(tv.xyz[f, 2]))
                             dx = nx + mag * (fx - nx)
                             dy = ny + mag * (fy - ny)
                             dz = nz + mag * (fz - nz)
                             facing_dir = 1.0 if int(facing[fi, p]) != 0 else -1.0
-                            scale_y = float(fighter_scale_y[fi, p])
-                            sx = px + dx * scale_y * facing_dir
-                            sy = py + dy * scale_y
-                            sz = dz * scale_y
+                            pose_scale = float(fighter_scale_y[fi, p])
+                            if steady_guard_no_tilt:
+                                pose_scale *= float(ch.model_scaling)
+                            sx = px + dz * pose_scale * facing_dir
+                            sy = py + dy * pose_scale
+                            sz = -dx * pose_scale * facing_dir
                 shield_world[p] = (sx, sy, sz, sr)
 
         # Combat resolve (BODY-only selection + hitlist update + simulated hitlag gate).

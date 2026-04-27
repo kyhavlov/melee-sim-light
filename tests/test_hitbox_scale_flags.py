@@ -11,12 +11,12 @@ import json
 from tools.eval.dataset import INPUT_DTYPE, SEED_DTYPE
 
 
-def _write_minimal_ssanim_v3(path: Path, *, msid: int, part_id: int, mtx34: list[float]) -> None:
-    # Format matches src/anim_pose.c (SSANIM01 v3).
+def _write_minimal_ssanim_v4(path: Path, *, msid: int, part_id: int, mtx34: list[float]) -> None:
+    # Format matches src/anim_pose.c (SSANIM01 v4).
     path.parent.mkdir(parents=True, exist_ok=True)
     buf = bytearray()
     buf += b"SSANIM01"
-    buf += struct.pack("<IHH", 3, 1, 1)  # ver=3, joint_count=1, anim_count=1
+    buf += struct.pack("<IHH", 4, 1, 1)  # ver=4, joint_count=1, anim_count=1
     buf += struct.pack("<B", int(part_id) & 0xFF)  # joint_parts[1]
     buf += struct.pack("<HH", int(msid) & 0xFFFF, 1)  # anim header: msid, frame_count=1
     buf += struct.pack("<12f", *[float(x) for x in mtx34])  # frame0/joint0 matrix
@@ -116,8 +116,8 @@ def test_hitboxes_refresh_applies_fighter_scale_y_and_respects_ignore_flag() -> 
 
         # Minimal identity pose for part_id=0 on msid=0, frame=0.
         ident = [1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0]
-        _write_minimal_ssanim_v3(data_dir / "anims/fox.bin", msid=0, part_id=0, mtx34=ident)
-        _write_minimal_ssanim_v3(data_dir / "anims/falco.bin", msid=0, part_id=0, mtx34=ident)
+        _write_minimal_ssanim_v4(data_dir / "anims/fox.bin", msid=0, part_id=0, mtx34=ident)
+        _write_minimal_ssanim_v4(data_dir / "anims/falco.bin", msid=0, part_id=0, mtx34=ident)
 
         # Two always-on hitboxes at frame 0:
         # - hb0: scales with fighter_scale_y

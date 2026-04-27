@@ -11,6 +11,7 @@
 #include "../src/alloc.h"
 #include "../src/api.h"
 #include "../src/anim_pose.h"
+#include "../src/char_params.h"
 #include "../src/ecb_tables.h"
 #include "../src/hitlist.h"
 #include "../src/move_tables.h"
@@ -738,6 +739,35 @@ static inline bool fobj_interpret(FObj* fo, float rate, float* out_value) {
     *out_value = last;
     return any;
   }
+}
+
+static inline bool fobj_stop_anim(FObj* fo, float rate, float* out_value) {
+  // HSD_FObjStopAnim flushes only KEY tracks before clearing state.
+  // refs/melee/src/sysdolphin/baselib/fobj.c::{FObj_FlushKeyData,HSD_FObjStopAnim}
+  bool any = false;
+  if (fo != NULL && fo->op_intrp == HSD_A_OP_KEY) {
+    any = fobj_interpret(fo, rate, out_value);
+  }
+  if (fo != NULL) {
+    fo->state = 0;
+  }
+  return any;
+}
+
+static inline bool fobj_stopped_terminal_value(const FObj* fo, float* out_value) {
+  // Native probes on stopped non-loop fighter AObjs show JObj local SRT carrying the final loaded
+  // FObj p1 value when the AObj is at end_frame with AOBJ_NO_ANIM set. The decomp owner is the
+  // same HSD AObj/FObj end path used by ftAnim_8006EBA4.
+  // refs/melee/src/sysdolphin/baselib/aobj.c::HSD_AObjInterpretAnim
+  // refs/melee/src/sysdolphin/baselib/fobj.c::HSD_FObjInterpretAnim
+  if (fo == NULL || out_value == NULL) {
+    return false;
+  }
+  if (fo->state == FOBJ_LOAD_DATA && fo->pos >= fo->length) {
+    *out_value = fo->p1;
+    return true;
+  }
+  return false;
 }
 
 static PyObject* msl_init(PyObject* self, PyObject* args, PyObject* kwargs) {
@@ -1535,6 +1565,40 @@ static PyObject* msl_alloc_stats(PyObject* self, PyObject* args) {
   return Py_BuildValue("{s:K,s:K}", "calls", calls, "bytes", bytes);
 }
 
+static PyObject* msl_char_params_ecb_joints_py(PyObject* self, PyObject* args) {
+  (void)self;
+  unsigned int char_id_u = 0;
+  if (!PyArg_ParseTuple(args, "I", &char_id_u)) {
+    return NULL;
+  }
+  if (char_id_u > 255u) {
+    PyErr_SetString(PyExc_ValueError, "char_id out of range");
+    return NULL;
+  }
+  if (char_params_init() != 0) {
+    PyErr_SetString(PyExc_RuntimeError, "char_params_init failed");
+    return NULL;
+  }
+  const MslCharParams* ch = msl_char_params((uint8_t)char_id_u);
+  if (ch == NULL) {
+    PyErr_SetString(PyExc_ValueError, "unknown char_id");
+    return NULL;
+  }
+  PyObject* out = PyList_New((Py_ssize_t)ch->ecb_joint_count);
+  if (out == NULL) {
+    return NULL;
+  }
+  for (uint8_t i = 0; i < ch->ecb_joint_count; i++) {
+    PyObject* v = PyLong_FromUnsignedLong((unsigned long)ch->ecb_joints[i]);
+    if (v == NULL) {
+      Py_DECREF(out);
+      return NULL;
+    }
+    PyList_SET_ITEM(out, (Py_ssize_t)i, v);
+  }
+  return out;
+}
+
 static PyObject* msl_debug_reset_pose_and_hitboxes_tables_py(PyObject* self, PyObject* args) {
   (void)self;
   (void)args;
@@ -2297,11 +2361,14 @@ static PyObject* msl_anim_bake_ssanim01_py(PyObject* self, PyObject* args) {
   int frame_count = 0;
   int inv_scale_part = -1;
   float inv_model_scale = 1.0f;
+  float end_frame = 0.0f;
+  int aobj_loop = 0;
 
-  if (!PyArg_ParseTuple(args, "OOOOOOOOOOOOiif", &rest_rot_obj, &rest_pos_obj, &rest_scl_obj,
+  if (!PyArg_ParseTuple(args, "OOOOOOOOOOOOiiffi", &rest_rot_obj, &rest_pos_obj, &rest_scl_obj,
                         &parent_part_obj, &part_flags_obj, &order_obj, &local_parts_obj,
                         &joint_parts_obj, &update_parts_obj, &fobj_starts_obj, &fobj_desc_obj,
-                        &ad_source_obj, &frame_count, &inv_scale_part, &inv_model_scale)) {
+                        &ad_source_obj, &frame_count, &inv_scale_part, &inv_model_scale, &end_frame,
+                        &aobj_loop)) {
     return NULL;
   }
 
@@ -2532,6 +2599,7 @@ static PyObject* msl_anim_bake_ssanim01_py(PyObject* self, PyObject* args) {
 
   for (int frame = 0; frame < frame_count; frame++) {
     const float rate = (frame == 0) ? 0.0f : 1.0f;
+    const bool should_stop_aobj = (aobj_loop == 0 && end_frame > 0.0f && (float)frame >= end_frame);
 
     for (npy_intp up_i = 0; up_i < update_parts_n; up_i++) {
       const int part = update_parts_ptr[up_i];
@@ -2569,6 +2637,44 @@ static PyObject* msl_anim_bake_ssanim01_py(PyObject* self, PyObject* args) {
         } else if (obj_type == 10) {
           const double av = fabs((double)v);
           s[2] = f32_from_double((av < 1.0e-3) ? 1.0e-3 : av);
+        }
+      }
+      if (should_stop_aobj) {
+        for (int32_t fi = start; fi < end; fi++) {
+          float v = 0.0f;
+          const bool have_terminal = fobj_stopped_terminal_value(&fobjs[fi], &v);
+          if (!have_terminal && !fobj_stop_anim(&fobjs[fi], 1.0f, &v)) {
+            continue;
+          }
+          if (have_terminal) {
+            fobjs[fi].state = 0;
+          }
+          const uint8_t obj_type = fobjs[fi].obj_type;
+          float* r = &cur_rot[part * 3];
+          float* p = &cur_pos[part * 3];
+          float* s = &cur_scl[part * 3];
+          if (obj_type == 1) {
+            r[0] = v;
+          } else if (obj_type == 2) {
+            r[1] = v;
+          } else if (obj_type == 3) {
+            r[2] = v;
+          } else if (obj_type == 5) {
+            p[0] = v;
+          } else if (obj_type == 6) {
+            p[1] = v;
+          } else if (obj_type == 7) {
+            p[2] = v;
+          } else if (obj_type == 8) {
+            const double av = fabs((double)v);
+            s[0] = f32_from_double((av < 1.0e-3) ? 1.0e-3 : av);
+          } else if (obj_type == 9) {
+            const double av = fabs((double)v);
+            s[1] = f32_from_double((av < 1.0e-3) ? 1.0e-3 : av);
+          } else if (obj_type == 10) {
+            const double av = fabs((double)v);
+            s[2] = f32_from_double((av < 1.0e-3) ? 1.0e-3 : av);
+          }
         }
       }
     }
@@ -2944,6 +3050,8 @@ static PyMethodDef methods[] = {
      "Reset C allocation counters (debug/perf guardrail)."},
     {"alloc_stats", msl_alloc_stats, METH_NOARGS,
      "Get C allocation counters (debug/perf guardrail)."},
+    {"char_params_ecb_joints", msl_char_params_ecb_joints_py, METH_VARARGS,
+     "char_params_ecb_joints(char_id) -> list[int] loaded from data/characters/<char>.json."},
     {"hitlist_ring_demo", msl_hitlist_ring_demo_py, METH_VARARGS,
      "hitlist_ring_demo(inserts) -> (ring, ids_u32[12]) (test-only)"},
     {"debug_reset_pose_and_hitboxes_tables", msl_debug_reset_pose_and_hitboxes_tables_py,
@@ -3037,7 +3145,7 @@ static PyMethodDef methods[] = {
      "anim_bake_ssanim01(rest_rot, rest_pos, rest_scl, parent_part, part_flags, order, "
      "local_parts, joint_parts, "
      "update_parts, fobj_starts, fobj_desc, ad_source, frame_count, inv_scale_part, "
-     "inv_model_scale) -> "
+     "inv_model_scale, end_frame, aobj_loop) -> "
      "(mats_bytes, locals_bytes, transn_bytes)"},
     {NULL, NULL, 0, NULL},
 };

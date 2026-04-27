@@ -20,7 +20,7 @@ def _ensure_ecb_bottom_tables() -> None:
                     ver = int.from_bytes(f.read(4), "little", signed=False)
                     _anim_count = int.from_bytes(f.read(2), "little", signed=False)
                     stride = int.from_bytes(f.read(2), "little", signed=False)  # reserved in v2
-                if magic == b"MSLECB01" and ver == 2:
+                if magic == b"MSLECB01" and ver == 3:
                     # Bottom tables use reserved=0 for historical compatibility.
                     if stride == 0:
                         continue
@@ -60,7 +60,7 @@ def _ensure_ecb_extents_tables() -> None:
                     ver = int.from_bytes(f.read(4), "little", signed=False)
                     _anim_count = int.from_bytes(f.read(2), "little", signed=False)
                     stride = int.from_bytes(f.read(2), "little", signed=False)
-                if magic == b"MSLECB01" and ver == 3 and stride == 16:
+                if magic == b"MSLECB01" and ver == 4 and stride == 16:
                     continue
             except OSError:
                 pass

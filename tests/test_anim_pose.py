@@ -7,14 +7,20 @@ import numpy as np
 
 
 ANIM_MAGIC = b"SSANIM01"
-ANIM_VERSION = 3
+ANIM_VERSION = 4
 
-# SSANIM01 v3 matrix record layout: <12f (3x4)
+# SSANIM01 v4 matrix record layout: <12f (3x4)
 # Source pointers:
 # - tools/extraction/extract_ecb_extents.py (matrix layout + payload walk)
-# - tools/extraction/extract_fighter_anims.py (writer: SSANIM01 v3 + TransN tail)
+# - tools/extraction/extract_fighter_anims.py (writer: SSANIM01 v4 + TransN tail)
 _MAT_BYTES = 12 * 4
 _TRANSN_BYTES_PER_FRAME = 3 * 4
+
+
+def test_ssanim01_v3_header_is_stale_for_current_contract() -> None:
+    stale = ANIM_MAGIC + struct.pack("<IHH", 3, 0, 0)
+    with np.testing.assert_raises_regex(ValueError, "unsupported version: 3"):
+        _read_header(stale)
 
 
 def _u32_le(buf: bytes, off: int) -> int:

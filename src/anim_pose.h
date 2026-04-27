@@ -9,14 +9,14 @@ typedef struct MslBatch MslBatch;
 extern "C" {
 #endif
 
-// Init-time loader for SSANIM01 v3 animation matrix blobs:
+// Init-time loader for SSANIM01 v4 animation matrix blobs:
 // - data/anims/fox.bin (char_id=1)
 // - data/anims/falco.bin (char_id=22)
 //
 // Layout source pointers:
 // - tools/extraction/extract_ecb_bottom.py (header + payload walk)
 // - tools/extraction/extract_ecb_extents.py (matrix record layout)
-// - tools/extraction/extract_fighter_anims.py (writer: SSANIM01 v3 + per-frame TransN tail)
+// - tools/extraction/extract_fighter_anims.py (writer: SSANIM01 v4 + per-frame TransN tail)
 int anim_pose_init(void);
 
 // Test/debug helper: reset global pose tables so a subsequent anim_pose_init() reloads from the
@@ -31,6 +31,13 @@ void anim_pose_reset_for_tests(void);
 // Returns 0 on success; nonzero on missing/invalid inputs.
 int anim_pose_get_matrix(uint8_t char_id, uint16_t msid, uint16_t frame, uint16_t part_id,
                          float out_3x4[12]);
+
+// Reads the local JObj translation for (char_id, msid, frame, part_id) into out_xyz.
+// This is intentionally distinct from anim_pose_get_matrix(), whose translation is already
+// parent-composed. Attachment code uses this for decomp fields such as fp->x1A70 that are stored
+// from local/base JObj offsets rather than final lb_8000B1CC world positions.
+int anim_pose_get_local_translation(uint8_t char_id, uint16_t msid, uint16_t frame,
+                                    uint16_t part_id, float out_xyz[3]);
 
 // Collision-pose matrix sampler.
 //

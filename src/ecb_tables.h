@@ -26,7 +26,7 @@ typedef struct {
   // - min_x/max_x correspond to left/right extrema.
   // - min_y/max_y correspond to bottom/top extrema.
   //
-  // NOTE: These are extracted from fighter-local SSANIM01 v3 matrices with TransN translation removed
+  // NOTE: These are extracted from fighter-local SSANIM01 v4 matrices with TransN translation removed
   // (tools/extraction/extract_fighter_anims.py). Callers should mirror X based on facing if needed.
   float min_x;
   float max_x;

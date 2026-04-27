@@ -21,7 +21,7 @@ from tests.test_hitboxes_pose import _active_hitboxes_at_frame, _read_hitbox_eve
     ],
 )
 def test_ssanim_topn_is_identity_so_facing_is_not_baked(char_key: str, char_id: int) -> None:
-    """Proves SSANIM01 v3 matrices are extracted in a canonical (facing-independent) basis.
+    """Proves SSANIM01 v4 matrices are extracted in a canonical (facing-independent) basis.
 
     Decomp applies facing at runtime by setting TopN rotY from `fp->facing_dir`:
     `ftPartSetRotY(fp, 0, (M_PI_2 * fp->facing_dir))` (refs/melee/src/melee/ft/fighter.c).

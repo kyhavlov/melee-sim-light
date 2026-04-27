@@ -47,7 +47,7 @@ def _origin_world_facing_yrot90(
     fighter_scale_y: float,
     facing_u8: int,
 ) -> tuple[float, float, float]:
-    # SSANIM01 v3 matrix record layout: <12f (m00,m01,m02,tx, m10,m11,m12,ty, m20,m21,m22,tz).
+    # SSANIM01 v4 matrix record layout: <12f (m00,m01,m02,tx, m10,m11,m12,ty, m20,m21,m22,tz).
     lx = float(m12[3])
     ly = float(m12[7])
     lz = float(m12[11])

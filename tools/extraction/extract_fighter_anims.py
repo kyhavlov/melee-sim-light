@@ -1673,8 +1673,9 @@ def extract_one_character(
     debug_done = False
     with out_path.open("wb") as f, locals_path.open("wb") as f_loc, tracks_path.open("wb") as f_tr:
         f.write(b"SSANIM01")
-        # v3 adds per-frame TransN/root translation (ftAnim x68C_transNPos) after matrices.
-        f.write(struct.pack("<I", 3))
+        # v4 adds stopped non-loop AObj terminal values while preserving the per-frame TransN tail
+        # (ftAnim x68C_transNPos) after matrices.
+        f.write(struct.pack("<I", 4))
         f.write(struct.pack("<H", len(joint_parts)))
         f.write(struct.pack("<H", len(wanted_msids)))
         f.write(bytes([p & 0xFF for p in joint_parts]))
@@ -1903,6 +1904,8 @@ def extract_one_character(
                     int(frame_count),
                     int(inv_scale_part),
                     float(inv_model_scale),
+                    float(fig.frames),
+                    1 if (int(msid_flags_u8) & 0x40) != 0 else 0,
                 )
                 if _TIMINGS is not None:
                     _TIMINGS.native_bake_s += time.perf_counter() - t_native0
@@ -1955,6 +1958,9 @@ def extract_one_character(
 
                 for frame in range(frame_count):
                     rate = 0.0 if frame == 0 else 1.0
+                    should_stop_aobj = (
+                        (int(msid_flags_u8) & 0x40) == 0 and float(fig.frames) > 0.0 and frame >= float(fig.frames)
+                    )
 
                     t_fobj0 = time.perf_counter() if _TIMINGS is not None else 0.0
                     for part, fobjs in fobjs_by_part.items():
@@ -1990,6 +1996,43 @@ def extract_one_character(
                             elif fo.obj_type == 10:
                                 sx, sy, sz = cur_scl[part]
                                 cur_scl[part] = (sx, sy, _f32(max(abs(v), 1.0e-3)))
+                        if should_stop_aobj:
+                            for fo in fobjs:
+                                vals = []
+                                if fo.state == FOBJ_LOAD_DATA and fo.pos - fo.ad_head >= fo.length:
+                                    vals = [fo.p1]
+                                elif getattr(fo, "op_intrp", 0) == HSD_A_OP_KEY:
+                                    vals = fo.interpret(1.0)
+                                if vals:
+                                    v = float(vals[-1])
+                                    if fo.obj_type == 1:
+                                        rx, ry, rz = cur_rot[part]
+                                        cur_rot[part] = (v, ry, rz)
+                                    elif fo.obj_type == 2:
+                                        rx, ry, rz = cur_rot[part]
+                                        cur_rot[part] = (rx, v, rz)
+                                    elif fo.obj_type == 3:
+                                        rx, ry, rz = cur_rot[part]
+                                        cur_rot[part] = (rx, ry, v)
+                                    elif fo.obj_type == 5:
+                                        px, py, pz = cur_pos[part]
+                                        cur_pos[part] = (v, py, pz)
+                                    elif fo.obj_type == 6:
+                                        px, py, pz = cur_pos[part]
+                                        cur_pos[part] = (px, v, pz)
+                                    elif fo.obj_type == 7:
+                                        px, py, pz = cur_pos[part]
+                                        cur_pos[part] = (px, py, v)
+                                    elif fo.obj_type == 8:
+                                        sx, sy, sz = cur_scl[part]
+                                        cur_scl[part] = (_f32(max(abs(v), 1.0e-3)), sy, sz)
+                                    elif fo.obj_type == 9:
+                                        sx, sy, sz = cur_scl[part]
+                                        cur_scl[part] = (sx, _f32(max(abs(v), 1.0e-3)), sz)
+                                    elif fo.obj_type == 10:
+                                        sx, sy, sz = cur_scl[part]
+                                        cur_scl[part] = (sx, sy, _f32(max(abs(v), 1.0e-3)))
+                                fo.state = 0
                     if _TIMINGS is not None:
                         _TIMINGS.fobj_interpret_s += time.perf_counter() - t_fobj0
 

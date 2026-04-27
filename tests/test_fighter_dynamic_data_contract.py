@@ -68,12 +68,24 @@ def _parse_ssdynn01(path: Path) -> dict[str, object]:
     }
 
 
-def _write_minimal_ssanim_v3(path: Path, *, msid: int = 2, part_id: int = 0) -> None:
+def _write_minimal_ssanim(path: Path, *, version: int = 4, msid: int = 2, part_id: int = 0) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     ident = (1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0)
     path.write_bytes(
         b"SSANIM01"
-        + struct.pack("<IHHBHH12f3f", 3, 1, 1, int(part_id) & 0xFF, int(msid), 1, *ident, 0.0, 0.0, 0.0)
+        + struct.pack(
+            "<IHHBHH12f3f",
+            int(version),
+            1,
+            1,
+            int(part_id) & 0xFF,
+            int(msid),
+            1,
+            *ident,
+            0.0,
+            0.0,
+            0.0,
+        )
     )
 
 
@@ -145,6 +157,42 @@ def _skip_if_missing(paths: list[Path]) -> None:
     missing = [str(p) for p in paths if not p.exists()]
     if missing:
         pytest.skip("missing local generated data: " + ", ".join(missing))
+
+
+def test_runtime_rejects_stale_ssanim01_v3_artifacts() -> None:
+    import msl_binding
+
+    exclude = {
+        Path("anims/fox.bin"),
+        Path("anims/fox.locals.bin"),
+        Path("anims/fox.dyn.bin"),
+        Path("anims/fox.tracks.bin"),
+        Path("anims/falco.bin"),
+        Path("anims/falco.locals.bin"),
+        Path("anims/falco.dyn.bin"),
+        Path("anims/falco.tracks.bin"),
+    }
+
+    build_dir = Path("build")
+    build_dir.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix="ssanim-v3-stale-", dir=build_dir) as tmp_raw:
+        data_dir = Path(tmp_raw) / "data"
+        _populate_data_dir(data_dir, exclude=exclude)
+        _write_minimal_ssanim(data_dir / "anims/fox.bin", version=3)
+        _write_minimal_ssanim(data_dir / "anims/falco.bin", version=3)
+
+        old_data_dir = os.environ.get("MSL_DATA_DIR")
+        try:
+            os.environ["MSL_DATA_DIR"] = str(data_dir)
+            msl_binding.debug_reset_pose_and_hitboxes_tables()
+            with pytest.raises(MemoryError):
+                msl_binding.init(batch_size=1, num_players=2)
+        finally:
+            if old_data_dir is None:
+                os.environ.pop("MSL_DATA_DIR", None)
+            else:
+                os.environ["MSL_DATA_DIR"] = old_data_dir
+            msl_binding.debug_reset_pose_and_hitboxes_tables()
 
 
 @pytest.mark.integration
@@ -349,8 +397,8 @@ def test_runtime_dynamic_loader_rejects_unsupported_present_files(name: str, set
     with tempfile.TemporaryDirectory(prefix=f"dyn-contract-{name}-", dir=build_dir) as tmp_raw:
         data_dir = Path(tmp_raw) / "data"
         _populate_data_dir(data_dir, exclude=exclude)
-        _write_minimal_ssanim_v3(data_dir / "anims/fox.bin")
-        _write_minimal_ssanim_v3(data_dir / "anims/falco.bin")
+        _write_minimal_ssanim(data_dir / "anims/fox.bin")
+        _write_minimal_ssanim(data_dir / "anims/falco.bin")
         _write_minimal_locals(data_dir / "anims/fox.locals.bin")
         _write_minimal_locals(data_dir / "anims/falco.locals.bin")
         _write_dyn(data_dir / "anims/fox.dyn.bin", sets)
@@ -387,8 +435,8 @@ def test_runtime_dynamic_loader_rejects_present_dyn_without_locals() -> None:
     with tempfile.TemporaryDirectory(prefix="dyn-contract-missing-locals-", dir=build_dir) as tmp_raw:
         data_dir = Path(tmp_raw) / "data"
         _populate_data_dir(data_dir, exclude=exclude)
-        _write_minimal_ssanim_v3(data_dir / "anims/fox.bin")
-        _write_minimal_ssanim_v3(data_dir / "anims/falco.bin")
+        _write_minimal_ssanim(data_dir / "anims/fox.bin")
+        _write_minimal_ssanim(data_dir / "anims/falco.bin")
         _write_dyn(data_dir / "anims/fox.dyn.bin", [])
 
         old_data_dir = os.environ.get("MSL_DATA_DIR")
@@ -422,8 +470,8 @@ def test_runtime_dynamic_loader_allows_missing_dyn_and_locals_for_synthetic_pose
     with tempfile.TemporaryDirectory(prefix="dyn-contract-missing-both-", dir=build_dir) as tmp_raw:
         data_dir = Path(tmp_raw) / "data"
         _populate_data_dir(data_dir, exclude=exclude)
-        _write_minimal_ssanim_v3(data_dir / "anims/fox.bin")
-        _write_minimal_ssanim_v3(data_dir / "anims/falco.bin")
+        _write_minimal_ssanim(data_dir / "anims/fox.bin")
+        _write_minimal_ssanim(data_dir / "anims/falco.bin")
 
         old_data_dir = os.environ.get("MSL_DATA_DIR")
         handle = None
@@ -460,8 +508,8 @@ def test_runtime_tracks_loader_rejects_truncated_variable_length_records() -> No
     with tempfile.TemporaryDirectory(prefix="tracks-contract-truncated-varint-", dir=build_dir) as tmp_raw:
         data_dir = Path(tmp_raw) / "data"
         _populate_data_dir(data_dir, exclude=exclude)
-        _write_minimal_ssanim_v3(data_dir / "anims/fox.bin")
-        _write_minimal_ssanim_v3(data_dir / "anims/falco.bin")
+        _write_minimal_ssanim(data_dir / "anims/fox.bin")
+        _write_minimal_ssanim(data_dir / "anims/falco.bin")
         _write_truncated_ssanimt1_varint(data_dir / "anims/fox.tracks.bin")
 
         old_data_dir = os.environ.get("MSL_DATA_DIR")

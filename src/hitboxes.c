@@ -1136,7 +1136,7 @@ void hitboxes_refresh(MslBatch* batch) {
         //   (ftPartSetRotY(fp, 0, (M_PI_2 * fp->facing_dir)),
         //    refs/melee/src/melee/ft/fighter.c:1180-1182).
         //
-        // Our SSANIM01 v3 pose matrices are extracted in a single canonical orientation and do
+        // Our SSANIM01 v4 pose matrices are extracted in a single canonical orientation and do
         // not include the runtime facing rotation or fp->x34_scale. We apply scale in pose space
         // and apply the same decomp-shaped root facing rotation used elsewhere in the sim
         // (mixing X/Z).

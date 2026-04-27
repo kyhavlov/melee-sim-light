@@ -11,13 +11,13 @@ from pathlib import Path
 
 
 ANIM_MAGIC = b"SSANIM01"
-ANIM_VERSION = 3
+ANIM_VERSION = 4
 
 ECB_MAGIC = b"MSLECB01"
 # Bump when the extents payload meaning/axis mapping changes. The loader rejects mismatches.
-ECB_VERSION = 3
+ECB_VERSION = 4
 
-# SSANIM01 v3 matrix record layout: <12f (3x4) => (m00,m01,m02,tx, m10,m11,m12,ty, m20,m21,m22,tz)
+# SSANIM01 v4 matrix record layout: <12f (3x4) => (m00,m01,m02,tx, m10,m11,m12,ty, m20,m21,m22,tz)
 # tools/extraction/extract_fighter_anims.py:_mtx_concat emits ty at float index 7 and tz at float index 11.
 _MAT_BYTES = 12 * 4
 _MAT_TY_BYTE_OFF = 7 * 4
@@ -123,7 +123,7 @@ def _extract_ecb_extents_for_anim_file(*, anims: Path, attrs: Path) -> list[_Ecb
         off += 4
 
         mats_bytes = int(frame_count) * joint_count * _MAT_BYTES
-        transn_bytes = int(frame_count) * 3 * 4  # v3 tail
+        transn_bytes = int(frame_count) * 3 * 4  # v4 tail
         need = mats_bytes + transn_bytes
         if off + need > len(buf):
             raise ValueError(
@@ -212,10 +212,10 @@ def _write_ecb_extents_table(path: Path, anims: list[_EcbAnim]) -> None:
 
 def main() -> None:
     ap = argparse.ArgumentParser(
-        description="Extract per-msid ECB extents (min/max X/Y) tables from SSANIM01 v3 matrices."
+        description="Extract per-msid ECB extents (min/max X/Y) tables from SSANIM01 v4 matrices."
     )
     ap.add_argument("--character", type=str, required=True, help="character key (fox,falco,...)")
-    ap.add_argument("--anims", type=Path, default=None, help="path to data/anims/<char>.bin (SSANIM01 v3)")
+    ap.add_argument("--anims", type=Path, default=None, help="path to data/anims/<char>.bin (SSANIM01 v4)")
     ap.add_argument(
         "--attrs",
         type=Path,

@@ -265,6 +265,16 @@ typedef struct MslCharParams {
   float ledge_snap_x;       // ftData_x44_t.x10 (used as transNPos.z snap distance)
   float ledge_snap_y;       // ftData_x44_t.x14 (used as transNPos.y snap distance)
   float ledge_snap_height;  // ftData_x44_t.x18 (catch height threshold)
+  // ECB source joints consumed by mpColl_LoadECB_JObj.
+  //
+  // Decomp:
+  // - refs/melee/src/melee/ft/types.h::ftData_x44_t
+  // - refs/melee/src/melee/mp/mpcoll.c::mpColl_LoadECB_JObj
+  //
+  // Source of truth: ISO-extracted `data/characters/*.json` key `ecb_joints`.
+  uint8_t ecb_joint_count;
+  uint8_t _pad_u8_ecb_joints[3];
+  uint16_t ecb_joints[6];
 
   // Fox/Falco down special (Reflector / Shine).
   //

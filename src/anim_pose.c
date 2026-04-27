@@ -10,13 +10,13 @@
 #include "batch_internal.h"
 #include "msl_math.h"
 
-// SSANIM01 v3 is written by tools/extraction/extract_fighter_anims.py.
+// SSANIM01 v4 is written by tools/extraction/extract_fighter_anims.py.
 enum {
   ANIM_MAGIC_LEN = 8,
   ANIM_HDR_BASE_BYTES = 16,  // magic[8] + ver[u32] + joint_count[u16] + anim_count[u16]
-  ANIM_VERSION_V3 = 3,
+  ANIM_VERSION_V4 = 4,
   MAT_BYTES = 12 * 4,              // float32[12] (3x4)
-  TRANSN_BYTES_PER_FRAME = 3 * 4,  // float32[3] v3 tail (TransN/root translation)
+  TRANSN_BYTES_PER_FRAME = 3 * 4,  // float32[3] v4 tail (TransN/root translation)
 
   // RL1.0 target data contract:
   // - Fox ftData.x2C has exactly one dynamic bone set rooted at part 17.
@@ -1128,7 +1128,7 @@ static int load_pose_for_char(const char* data_dir, const char* rel_path, uint8_
     return -1;
   }
   const uint32_t ver = read_u32_le(buf + 8);
-  if (ver != (uint32_t)ANIM_VERSION_V3) {
+  if (ver != (uint32_t)ANIM_VERSION_V4) {
     alloc_free(buf);
     return -1;
   }
@@ -1403,6 +1403,27 @@ static int local_srt_for_part(const MslAnimPoseTable* t, uint16_t msid, uint16_t
   if (out_parent != NULL) {
     *out_parent = t->local_parent_part_by_index[li];
   }
+  return 0;
+}
+
+int anim_pose_get_local_translation(uint8_t char_id, uint16_t msid, uint16_t frame,
+                                    uint16_t part_id, float out_xyz[3]) {
+  if (out_xyz == NULL) {
+    return -1;
+  }
+  const MslAnimPoseTable* t = table_for_char(char_id);
+  if (t == NULL) {
+    return -1;
+  }
+  float rot[3], pos[3], scl[3];
+  if (local_srt_for_part(t, msid, frame, part_id, rot, pos, scl, NULL, NULL) != 0) {
+    return -1;
+  }
+  (void)rot;
+  (void)scl;
+  out_xyz[0] = pos[0];
+  out_xyz[1] = pos[1];
+  out_xyz[2] = pos[2];
   return 0;
 }
 

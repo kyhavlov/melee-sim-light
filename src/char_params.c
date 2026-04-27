@@ -210,6 +210,67 @@ static int json_get_f32_array3(const char* json, const char* key, float out3[3])
   return 0;
 }
 
+static int json_get_u16_array(const char* json, const char* key, uint16_t* out, size_t cap,
+                              size_t* out_count) {
+  if (json == NULL || key == NULL || out == NULL || out_count == NULL || cap == 0u) {
+    return -1;
+  }
+  char pat[128];
+  const int n = snprintf(pat, sizeof(pat), "\"%s\"", key);
+  if (n <= 0 || (size_t)n >= sizeof(pat)) {
+    return -1;
+  }
+  const char* p = strstr(json, pat);
+  if (p == NULL) {
+    return -1;
+  }
+  p = strchr(p, ':');
+  if (p == NULL) {
+    return -1;
+  }
+  p++;
+  p = json_skip_ws(p);
+  if (p == NULL || *p != '[') {
+    return -1;
+  }
+  p++;
+  size_t count = 0;
+  for (;;) {
+    p = json_skip_ws(p);
+    if (p == NULL) {
+      return -1;
+    }
+    if (*p == ']') {
+      p++;
+      break;
+    }
+    if (count >= cap) {
+      return -1;
+    }
+    double v = 0.0;
+    p = json_parse_double(p, &v);
+    if (p == NULL || v < 0.0 || v > 65535.0) {
+      return -1;
+    }
+    out[count++] = (uint16_t)(unsigned int)(v + 0.5);
+    p = json_skip_ws(p);
+    if (p == NULL) {
+      return -1;
+    }
+    if (*p == ',') {
+      p++;
+      continue;
+    }
+    if (*p == ']') {
+      p++;
+      break;
+    }
+    return -1;
+  }
+  *out_count = count;
+  return 0;
+}
+
 static int load_one(const char* data_dir, const char* rel_path, uint8_t char_id) {
   char path[512];
   const int n = snprintf(path, sizeof(path), "%s/%s", data_dir, rel_path);
@@ -261,6 +322,7 @@ static int load_one(const char* data_dir, const char* rel_path, uint8_t char_id)
       "firefox_facing_stick_range_min",
       "firefox_freefall_mobility",
       "firefox_landing_lag_frames",
+      "ecb_joints",
       "grab_capture_anchor_part_id",
       "laser_spawn_joint_part_id",
   };
@@ -324,6 +386,7 @@ static int load_one(const char* data_dir, const char* rel_path, uint8_t char_id)
   MslCharParams out = {0};
   float refl_off[3] = {0};
   float camera_off[3] = {0};
+  size_t ecb_joint_count = 0u;
   if (json_get_f32(buf, "weight", &out.weight) != 0 ||
       json_get_u8_or_default(buf, "weight_independent_throws_mask", 0,
                              &out.weight_independent_throws_mask) != 0 ||
@@ -442,6 +505,9 @@ static int load_one(const char* data_dir, const char* rel_path, uint8_t char_id)
       json_get_f32(buf, "walljump_setup_x_delta_threshold",
                    &out.walljump_setup_x_delta_threshold) != 0 ||
       json_get_f32(buf, "ecb_side_y_offset", &out.ecb_side_y_offset) != 0 ||
+      json_get_u16_array(buf, "ecb_joints", out.ecb_joints,
+                         sizeof(out.ecb_joints) / sizeof(out.ecb_joints[0]),
+                         &ecb_joint_count) != 0 ||
       json_get_f32(buf, "ledge_snap_x", &out.ledge_snap_x) != 0 ||
       json_get_f32(buf, "ledge_snap_y", &out.ledge_snap_y) != 0 ||
       json_get_f32(buf, "ledge_snap_height", &out.ledge_snap_height) != 0 ||
@@ -462,6 +528,11 @@ static int load_one(const char* data_dir, const char* rel_path, uint8_t char_id)
     alloc_free(buf);
     return -1;
   }
+  if (ecb_joint_count != (sizeof(out.ecb_joints) / sizeof(out.ecb_joints[0]))) {
+    alloc_free(buf);
+    return -1;
+  }
+  out.ecb_joint_count = (uint8_t)ecb_joint_count;
   // Backward-compatible optional fields (added for ftWalkCommon_800DFDDC parity):
   // if stale local artifacts are missing these keys, default to walk_max_vel so init keeps
   // working; regenerated extracts provide the decomp-sourced values.

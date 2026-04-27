@@ -234,7 +234,9 @@ Characters (Fox/Falco):
 - `data/anims_ecb/fox.bin`, `data/anims_ecb/falco.bin` (per-msid bone matrices + TransN; **ECB extraction input only**; not read by the C core)
 - `data/items/lasers.bin` (Fox/Falco blaster laser params; decomp-first, compact binary)
 - `data/ecb/fox_bottom.bin`, `data/ecb/falco_bottom.bin` (per-msid per-frame ECB bottom Y; decomp-shaped)
-  - Source: `data/anims_ecb/<char>.bin` (SSANIM01 v3 matrices) + `data/characters/<char>.json` `ecb_joints`.
+  - Format: `MSLECB01` v3. This version is tied to SSANIM01 v4 input semantics; stale v2
+    derived tables are rejected by the runtime loader.
+  - Source: `data/anims_ecb/<char>.bin` (SSANIM01 v4 matrices) + `data/characters/<char>.json` `ecb_joints`.
   - Per msid + integer frame `f`, we compute:
     - `min_joint_y[f] = min( joint_y(part) for part in ecb_joints )` using the translation `ty` from
       the fighter-local world matrices.
@@ -244,7 +246,9 @@ Characters (Fox/Falco):
       matrices (TransN translation removed).
     - To get world-space ECB bottom Y, add it to the fighter's world `pos_y` (Slippi post-frame position).
 - `data/ecb/fox_extents.bin`, `data/ecb/falco_extents.bin` (per-msid per-frame ECB extrema; decomp-shaped)
-  - Source: `data/anims_ecb/<char>.bin` (SSANIM01 v3 matrices) + `data/characters/<char>.json` `ecb_joints`.
+  - Format: `MSLECB01` v4. This version is tied to SSANIM01 v4 input semantics; stale v3
+    derived tables are rejected by the runtime loader.
+  - Source: `data/anims_ecb/<char>.bin` (SSANIM01 v4 matrices) + `data/characters/<char>.json` `ecb_joints`.
   - Per msid + integer frame `f`, we compute fighter-local joint extrema over the 6 ECB source joints:
     - `min_x[f] = min( joint_x(part) for part in ecb_joints )`
     - `max_x[f] = max( joint_x(part) for part in ecb_joints )`
