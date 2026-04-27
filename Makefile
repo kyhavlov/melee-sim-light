@@ -34,6 +34,7 @@ CC ?= cc
 CFLAGS ?= -O3 -Wall -Wextra -std=c11 -ffp-contract=off
 BENCH_SIM ?= build/bench/bench_sim
 BENCH_SIM_SRCS := $(wildcard src/*.c) src/decomp/lb/lb_00ce.c tools/bench/bench_sim.c
+BUILD_FORCE ?= 0
 
 ifneq ($(strip $(OUT)),)
 VALIDATE_OUT := --out $(OUT)
@@ -57,9 +58,14 @@ BUILD_STDOUT := >/dev/null
 else
 BUILD_STDOUT :=
 endif
+ifeq ($(strip $(BUILD_FORCE)),1)
+BUILD_FORCE_ARG := --force
+else
+BUILD_FORCE_ARG :=
+endif
 
 build:
-	@$(PY) python/setup.py build_ext --inplace --force $(BUILD_STDOUT)
+	@$(PY) python/setup.py build_ext --inplace $(BUILD_FORCE_ARG) $(BUILD_STDOUT)
 
 test: build
 	@mkdir -p reports/triage
@@ -91,10 +97,7 @@ validate-rollout-aggregate: build
 	@$(PY) -m tools.eval.run_rollout_suite_eval --suite "$(AGG_SUITE)" --datasets-dir "$(DATASETS_DIR)" --fields "$(FIELDS)" --out "$(AGG_ROLLOUT_OUT)"
 
 validate-all: build
-	@$(PY) -m tools.eval.run_one_step_suite_eval --suite "$(SUITE)" --datasets-dir "$(DATASETS_DIR)" --chunk "$(CHUNK)" --out reports/validation/one_step_suite_eval.txt
-	@$(PY) -m tools.eval.run_rollout_suite_eval --suite "$(SUITE)" --datasets-dir "$(DATASETS_DIR)" --fields "$(FIELDS)" --out reports/validation/rollout_suite_eval.txt
-	@$(PY) -m tools.eval.run_one_step_suite_eval --suite "$(AGG_SUITE)" --datasets-dir "$(DATASETS_DIR)" --chunk "$(CHUNK)" --out "$(AGG_ONE_STEP_OUT)"
-	@$(PY) -m tools.eval.run_rollout_suite_eval --suite "$(AGG_SUITE)" --datasets-dir "$(DATASETS_DIR)" --fields "$(FIELDS)" --out "$(AGG_ROLLOUT_OUT)"
+	@$(PY) -m tools.eval.run_validate_all --suite "$(SUITE)" --agg-suite "$(AGG_SUITE)" --datasets-dir "$(DATASETS_DIR)" --chunk "$(CHUNK)" --fields "$(FIELDS)" --one-step-out reports/validation/one_step_suite_eval.txt --rollout-out reports/validation/rollout_suite_eval.txt --agg-one-step-out "$(AGG_ONE_STEP_OUT)" --agg-rollout-out "$(AGG_ROLLOUT_OUT)"
 
 # Always writes to ROLLOUT_JSON (independent of OUT=...).
 rollout-capture: build

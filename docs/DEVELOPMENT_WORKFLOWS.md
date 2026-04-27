@@ -18,6 +18,9 @@ If the extension disappears after syncing, rerun:
 uv pip install -e python
 ```
 
+`make build` is incremental by default. Use `make build BUILD_FORCE=1` only
+when you need to force a full extension rebuild.
+
 ## Core Validation
 
 Fast guardrails:
@@ -33,6 +36,9 @@ Full committed validation refresh:
 ```bash
 make validate-all
 ```
+
+`make validate-all` runs the standard one-step and rollout report generators in
+one Python process after the incremental build check.
 
 Guardrail convenience targets:
 
@@ -64,14 +70,19 @@ If you touch seed/state/schema surfaces such as:
 - `tools/slippi/seed_history.py`
 - `tools/slippi/make_dataset_from_slp.py`
 
-then rebuild cached datasets before validation:
+then refresh cached datasets before validation. `preprocess_suite` tracks
+dataset schema, preprocessing source files, replay stat metadata, and extracted
+`data/` artifacts, so unchanged datasets are skipped while stale datasets are
+rebuilt:
 
 ```bash
 uv run python -m tools.slippi.preprocess_suite \
   --suite replays/suites/fox_falco_fd_ucf084_recent.json \
-  --datasets-dir datasets \
-  --force
+  --datasets-dir datasets
 ```
+
+Use `--force` only when you intentionally want to rebuild every dataset in the
+suite.
 
 ## Rollout Triage
 

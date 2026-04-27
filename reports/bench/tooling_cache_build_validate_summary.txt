@@ -1,0 +1,28 @@
+Tooling cache/build/validation performance summary
+
+Date: 2026-04-27
+Branch: perf/disruptive-rollout-batching
+
+Build:
+- Previous reported offender: make build around 25s when forced.
+- Change: make build no longer passes build_ext --force by default; use BUILD_FORCE=1 for a full rebuild.
+- Warm run after change: real 0.15s, then 0.14s.
+
+Preprocess:
+- Previous reported offender: primary forced preprocess around 28s; aggregate forced preprocess around 70-75s.
+- Change: preprocess_suite now stamps per-dataset cache signatures covering dataset schema, preprocessing source files, replay stat metadata, suite settings, ports, and extracted data/ artifacts.
+- Primary current-cache run: built=0 skipped=4 real 0.26s.
+- Aggregate current-cache run: built=0 skipped=15 real 0.77s.
+- Existing legacy datasets are stamped once when their record_size and replay mtime are already current.
+
+Validate-all:
+- Previous reported offender: make validate-all around 29s in the packaging pass.
+- Changes:
+  - make validate-all now uses one Python driver process for the four report generators.
+  - make build is incremental, so validate-all no longer forces an extension rebuild first.
+- make validate-all against committed report paths: real 4.83s.
+- Same driver against reports/triage smoke output paths: real 5.65s.
+
+Notes:
+- Validation report content was not intentionally refreshed for this tooling-only pass.
+- Forced preprocess still intentionally rebuilds every dataset; normal preprocess is now the fast signature-aware path for schema/data/source refreshes.
