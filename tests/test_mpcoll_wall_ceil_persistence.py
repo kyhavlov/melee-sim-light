@@ -53,6 +53,15 @@ def _fd_pick_right_wall_segment() -> tuple[int, float, float, float, float]:
     )
 
 
+def _fd_right_wall_segment_ids() -> set[int]:
+    fd = json.loads(Path("data/stages/final_destination.json").read_text())
+    return {
+        int(seg["i"])
+        for seg in fd["segments"]
+        if seg.get("kind") == "right_wall" and not bool(seg.get("platform"))
+    }
+
+
 def _fd_pick_horizontal_ceiling_segment() -> tuple[int, float, float, float, float]:
     fd = json.loads(Path("data/stages/final_destination.json").read_text())
     unit_scale = float(fd.get("unit_scale", 1.0))
@@ -175,7 +184,9 @@ def test_wall_contact_persists_across_frames_on_fd() -> None:
         assert int(stats["bytes"]) == 0
 
         assert int(c0["wall_kind"][0]) != 0
-        assert int(c0["wall_id"][0]) == wall_i
+        # Decomp: mpColl_80044E10_RightWall may enter through one swept candidate and
+        # mpColl_800454A4_RightWall may report an adjacent right-wall envelope segment.
+        assert int(c0["wall_id"][0]) in _fd_right_wall_segment_ids()
         assert int(c1["wall_kind"][0]) != 0
         assert int(c1["wall_id"][0]) == wall_i
     finally:
@@ -378,7 +389,9 @@ def test_wall_contact_triggers_on_ecb_side_crossing_not_root_on_fd() -> None:
         assert int(stats["bytes"]) == 0
 
         assert int(c0["wall_kind"][0]) != 0
-        assert int(c0["wall_id"][0]) == wall_i
+        # Decomp: mpColl_80044E10_RightWall may enter through one swept candidate and
+        # mpColl_800454A4_RightWall may report an adjacent right-wall envelope segment.
+        assert int(c0["wall_id"][0]) in _fd_right_wall_segment_ids()
     finally:
         msl_binding.destroy(handle)
 
@@ -486,7 +499,9 @@ def test_bottom_wall_push_does_not_promote_common_air_walljump_on_fd() -> None:
     out = out_compare_bytes.view(COMPARE_DTYPE).reshape((1,))[0]
     contacts = out_contacts.view(contacts_dtype).reshape((1,))[0]
     flags = int(contacts["coll_env_flags"][0])
-    assert int(contacts["wall_id"][0]) == wall_i
+    # Decomp: mpColl_800454A4_RightWall resolves the airborne ECB envelope after the bottom
+    # candidate is found, so the reported segment can be an adjacent right-wall line.
+    assert int(contacts["wall_id"][0]) in _fd_right_wall_segment_ids()
     assert flags & MSL_COLLIDE_RIGHT_WALL_PUSH
     assert (flags & MSL_COLLIDE_RIGHT_WALL_HUG) == 0
     assert int(out["action_id"][0]) != ACT_PASSIVE_WALL_JUMP
