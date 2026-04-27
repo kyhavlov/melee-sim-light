@@ -68,6 +68,8 @@ typedef struct MslCharParams {
   float hop_v_initial_velocity;
   float ground_to_air_jump_momentum_multiplier;
   float jump_h_max_velocity;
+  // Grounded Side-B pre-entry gr_vel damping (decomp: ftCo_SpecialS.c::doEnter, co_attrs.xB8).
+  float side_special_ground_entry_vel_mul;
 
   // Air physics
   float grav;
@@ -94,8 +96,9 @@ typedef struct MslCharParams {
   float air_jump_v_multiplier;
   float air_jump_h_multiplier;
 
-  // Shield (refs/melee/src/melee/ft/types.h::ftCo_DatAttrs::initial_shield_size)
+  // Shield (refs/melee/src/melee/ft/types.h::ftCo_DatAttrs)
   float initial_shield_size;
+  float shield_break_initial_velocity;
 
   // Model scaling (refs/melee/src/melee/ft/types.h::ftCo_DatAttrs::model_scaling).
   // Source of truth: ISO-extracted `data/characters/*.json` `model_scaling`.

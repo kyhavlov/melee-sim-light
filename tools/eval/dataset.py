@@ -340,6 +340,12 @@ SEED_DTYPE = np.dtype(
         ("ucf_padbuf_stick_x", ("i1", (MAX_PLAYERS, 4))),
         ("ucf_padbuf_stick_y", ("i1", (MAX_PLAYERS, 4))),
         ("percent", _arr("<f4", MAX_PLAYERS)),
+        # Fighter phantom/tip-log delayed damage state (fp->dmg.x1898 + source gobj). This hidden
+        # ProcessHit lane applies percent/stale/combo effects when x189C expires after hitlag.
+        # Legacy field name: `phantom_damage_source_port` stores a local simulator slot or 0xFF,
+        # not a raw Slippi/controller source port.
+        ("phantom_damage_pending_x1898", _arr("<f4", MAX_PLAYERS)),
+        ("phantom_damage_source_port", _arr("u1", MAX_PLAYERS)),
         # Damage pipeline gates (ftColl_80079AB0 non-WSK else-branch).
         # - dmg_x2225_b7 corresponds to Fighter fp+0x2225 bit0 (LSB).
         # - dmg_x2224_b2 corresponds to Fighter fp+0x2224 bit5 (mask 0x20).

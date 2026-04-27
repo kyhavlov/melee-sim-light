@@ -25,7 +25,7 @@ def _require(path: Path, hint: str) -> None:
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser(description="Build ISO-derived `data/` artifacts (cached, gitignored).")
+    ap = argparse.ArgumentParser(description="Build ISO-derived `data/` artifacts.")
     ap.add_argument("--iso-dir", type=Path, default=Path("_iso"), help="directory containing extracted *.dat files")
     ap.add_argument("--chars", type=str, default="fox,falco", help="comma-separated characters (fox,falco,...)")
     ap.add_argument(
@@ -44,6 +44,10 @@ def main() -> None:
     _require(
         iso_dir / "PlCo.dat",
         "uv run python -m tools.extraction.iso_extract --iso SSBM.iso --glob '*PlCo.dat' --out-dir _iso",
+    )
+    _require(
+        iso_dir / "ItCo.dat",
+        "uv run python -m tools.extraction.iso_extract --iso SSBM.iso --glob '*ItCo.dat' --out-dir _iso",
     )
     for ch in chars:
         dat = {"fox": "PlFx.dat", "falco": "PlFc.dat"}.get(ch)
@@ -104,6 +108,10 @@ def main() -> None:
     _run(
         "tools.extraction.extract_lasers",
         ["--iso_dir", str(iso_dir), "--out", "data/items/lasers.bin"],
+    )
+    _run(
+        "tools.extraction.extract_item_common_data",
+        ["--itco", str(iso_dir / "ItCo.dat"), "--out", "data/items/item_common.json"],
     )
 
     # Guard-tilt shield bubble placement tables (used by shields_refresh for debug geometry).

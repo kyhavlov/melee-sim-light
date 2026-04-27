@@ -905,6 +905,16 @@ typedef struct MslSeed {
 
   // Combat / timers
   float percent[MSL_MAX_PLAYERS];
+  // Fighter phantom/tip-log delayed damage state (fp->dmg.x1898 + source gobj).
+  // 0.0 / 0xFF means no pending phantom damage at the reseed boundary.
+  // refs/melee/src/melee/ft/ftcoll.c::{ftColl_80076ED8,ftColl_8007BE3C}
+  // refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
+  float phantom_damage_pending_x1898[MSL_MAX_PLAYERS];
+  // Legacy field name: this hidden teacher-forced lane stores a local simulator slot, not a raw
+  // Slippi/controller source port. `0xFF` means no pending phantom source. Replay-visible
+  // `last_hit_by` remains raw source-port domain and must be mapped through `source_port0` before
+  // local-slot indexing.
+  uint8_t phantom_damage_source_port[MSL_MAX_PLAYERS];
   // ftColl_80079AB0 percent-term gate bits (seeded).
   //
   // These correspond to Fighter flags at fp+0x2225/fp+0x2224 used by the non-WSK else-branch:

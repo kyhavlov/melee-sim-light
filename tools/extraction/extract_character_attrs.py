@@ -199,6 +199,9 @@ def _extract_ftco_dattrs(pl_dat: Path, *, ftdata_symbol: str, extract_fox_blaste
         "hop_v_initial_velocity": f(0x4C),
         "ground_to_air_jump_momentum_multiplier": f(0x44),
         "jump_h_max_velocity": f(0x48),
+        # Decomp: ftCo_SpecialS.c::doEnter damps gr_vel by co_attrs.xB8 before dispatching the
+        # character-specific grounded Side-B entry (`ftFx_SpecialSStart_Enter`).
+        "side_special_ground_entry_vel_mul": f(0xB8),
         # Note: in Melee, max_jumps counts total jumps including the grounded jump.
         "max_jumps": int(i(0x58)),
         "grav": f(0x5C),
@@ -219,6 +222,7 @@ def _extract_ftco_dattrs(pl_dat: Path, *, ftdata_symbol: str, extract_fox_blaste
         "weight_independent_throws_mask": int(buf[attrs_abs + 0x180]),
         "model_scaling": f(0x8C),
         "initial_shield_size": f(0x90),
+        "shield_break_initial_velocity": f(0x94),
         "trophy_scale": f(0x110),
         # Decomp: fp->x2C4 = *fp->ft_data->x50 (ftchangeparam.c: ftCo_800D0FA0 / ftCo_800D105C).
         "pushbox_x": float(_f32_be(buf, pushbox_abs + 0x00)) if pushbox_abs != arc.data_base else 0.0,
@@ -457,6 +461,7 @@ def _stable_update(existing: dict, extracted: dict) -> dict:
         "hop_v_initial_velocity",
         "ground_to_air_jump_momentum_multiplier",
         "jump_h_max_velocity",
+        "side_special_ground_entry_vel_mul",
         "max_jumps",
         "grav",
         "terminal_vel",
@@ -477,6 +482,7 @@ def _stable_update(existing: dict, extracted: dict) -> dict:
         "weight_independent_throws_mask",
         "model_scaling",
         "initial_shield_size",
+        "shield_break_initial_velocity",
         "trophy_scale",
         "pushbox_x",
         "pushbox_y",

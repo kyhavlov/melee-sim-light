@@ -536,6 +536,18 @@ typedef struct MslStateSoA {
   // - Consumed/reset by Fighter_ProcessHit_8006D1EC each frame.
   //   refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
   float* percent_temp;
+  // Fighter phantom/tip-log delayed damage lane (fp->dmg.x1898 + x189C countdown).
+  //
+  // Decomp:
+  // - ftColl_80076ED8 stores a phantom/tip-log damage amount without entering the full damage/KB
+  //   path immediately.
+  // - Fighter_ProcessHit starts hitlag and x189C, then ftColl_8007BE3C applies x1898 percent,
+  //   stale queue, and combo bookkeeping when x189C expires.
+  // refs/melee/src/melee/ft/ftcoll.c::{ftColl_80076ED8,ftColl_8007BE3C}
+  // refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
+  float* phantom_damage_pending_x1898;
+  // Legacy field name: local simulator slot or 0xFF, not raw Slippi/controller source-port domain.
+  uint8_t* phantom_damage_source_port;
   // Damage KB velocity merge timer (decomp: fp->dmg.x18AC_time_since_hit).
   //
   // Decomp:

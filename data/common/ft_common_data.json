@@ -169,6 +169,7 @@
   "shield_attacker_ground_friction_mul": 1.100000023841858,
   "shield_attacker_ground_kb_base": 0.019999999552965164,
   "shield_attacker_ground_kb_mul": 0.07000000029802322,
+  "shield_break_reset_health": 30.0,
   "shield_hit_damage_base": 0.0,
   "shield_hit_damage_mul": 1.0,
   "shield_hit_lightshield_max": 0.30000001192092896,

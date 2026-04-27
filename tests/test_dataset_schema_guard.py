@@ -80,6 +80,10 @@ def test_seed_schema_includes_staling_fields() -> None:
     assert "walljump_wall_side_i8" in SEED_DTYPE.fields
     # Damage KB stacking window (fp->dmg.x18AC_time_since_hit).
     assert "damage_time_since_hit_x18ac" in SEED_DTYPE.fields
+    # Fighter phantom/tip-log delayed damage lane (`dmg.x1898` + source).
+    assert "phantom_damage_pending_x1898" in SEED_DTYPE.fields
+    # Legacy name; stores local simulator slot or 0xFF, not raw Slippi source-port domain.
+    assert "phantom_damage_source_port" in SEED_DTYPE.fields
     # Grounded attacker shield-pushback scalar (`fp->xF4_ground_attacker_shield_kb_vel`).
     assert "attacker_shield_ground_kb_vel" in SEED_DTYPE.fields
     assert "combat_shield_contact_hb_kind" in SEED_DTYPE.fields
@@ -111,6 +115,13 @@ def test_dataset_dtype_sizes_match_c_structs() -> None:
     sizes = msl_binding.sizes()
     assert int(sizes["seed"]) == SEED_DTYPE.itemsize
     assert int(sizes["sample"]) == SAMPLE_DTYPE.itemsize
+
+
+def test_item_common_data_exports_shield_bounce_threshold_source() -> None:
+    # Item_80269DC8 uses 90 + it_804D6D28->unk_degrees; keep the runtime predicate data-backed by
+    # the extracted ItCo.dat item common file instead of a naked gameplay constant.
+    data = json.loads(Path("data/items/item_common.json").read_text())
+    assert data["shield_bounce_extra_degrees"] == 45.0
 
 
 def test_landing_fallspecial_allow_interrupt_lane_is_prefix_causal() -> None:

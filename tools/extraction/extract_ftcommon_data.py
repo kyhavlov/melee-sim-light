@@ -153,6 +153,7 @@ def main() -> None:
         #     n3 = (1-x264) * n1 + x264
         #     radius = n3 * fp->co_attrs.initial_shield_size
         "start_shield_health": float(_f32_be(buf, ft_common_abs + 0x260)),
+        "shield_break_reset_health": float(_f32_be(buf, ft_common_abs + 0x280)),
         "shield_size_min_scale": float(_f32_be(buf, ft_common_abs + 0x264)),
         # Guard release lockout timer init (mv.co.guard.x10).
         #

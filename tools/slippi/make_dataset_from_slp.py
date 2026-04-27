@@ -1295,6 +1295,89 @@ def _derive_source_clear_processhit_damage_pending_phase_seed_lane(
     return out
 
 
+def _derive_phantom_damage_pending_seed_lanes(
+    *,
+    percent_f32: np.ndarray,
+    hitlag_u16: np.ndarray,
+    action_id_u16: np.ndarray,
+    instance_hit_by_u16: np.ndarray,
+    instance_id_u16: np.ndarray,
+    num_players: int,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Derive hidden fighter phantom/tip-log damage pending at one-step reseed boundaries.
+
+    Decomp ownership:
+    - ftColl_80076ED8 stores phantom/tip-log damage into `fp->dmg.x1898` and starts hitlag through
+      the `x1840/x18a0` branch.
+    - Fighter_ProcessHit sets `x189C_unk_num_frames = hitlag`, then ftColl_8007BE3C applies x1898
+      to percent/stale/combo when x189C expires after hitlag.
+
+    Seed policy:
+    - Carry only terminal active-hitlag rows where the next post-frame exposes that delayed x1898
+      percent addition while the same motion state continues.
+    - Store the current-row source fighter by matching `instance_hit_by` against live fighter
+      instance ids; rows without a live source stay unseeded. The legacy output field is named
+      `phantom_damage_source_port`, but its value is a local simulator slot or 0xFF, not raw
+      Slippi/controller source-port domain.
+
+    This is intentionally a hidden-state seed lane, not a gameplay row branch. Runtime rollouts
+    produce the same lane directly when a modeled phantom contact occurs.
+    """
+    percent = np.asarray(percent_f32, dtype=np.float32)
+    hitlag = np.asarray(hitlag_u16, dtype=np.uint16)
+    action_id = np.asarray(action_id_u16, dtype=np.uint16)
+    hit_by = np.asarray(instance_hit_by_u16, dtype=np.uint16)
+    iid = np.asarray(instance_id_u16, dtype=np.uint16)
+    if (
+        percent.ndim != 2
+        or hitlag.shape != percent.shape
+        or action_id.shape != percent.shape
+        or hit_by.shape != percent.shape
+        or iid.shape != percent.shape
+    ):
+        raise ValueError("phantom damage pending derivation expects matching [frames, players] arrays")
+
+    n_frames, slots = percent.shape
+    out_damage = np.zeros((n_frames, 4), dtype=np.float32)
+    out_source = np.full((n_frames, 4), np.uint8(0xFF), dtype=np.uint8)
+    players = min(int(num_players), int(slots), 4)
+    for i in range(max(0, n_frames - 1)):
+        for defender in range(players):
+            if int(hitlag[i, defender]) != 1 or int(hitlag[i + 1, defender]) != 0:
+                continue
+            if int(action_id[i, defender]) != int(action_id[i + 1, defender]):
+                continue
+            dmg = np.float32(percent[i + 1, defender] - percent[i, defender])
+            if not (float(dmg) > 0.0 and np.isfinite(float(dmg))):
+                continue
+            source_iid = int(hit_by[i, defender])
+            if source_iid == 0:
+                continue
+            source_slot = 0xFF
+            for attacker in range(players):
+                if attacker == defender:
+                    continue
+                if int(iid[i, attacker]) == source_iid:
+                    source_slot = attacker
+                    break
+            if source_slot == 0xFF:
+                continue
+            j = i
+            while j >= 0:
+                if int(hitlag[j, defender]) == 0:
+                    break
+                if int(action_id[j, defender]) != int(action_id[i, defender]):
+                    break
+                if int(hit_by[j, defender]) != source_iid:
+                    break
+                if abs(float(percent[j, defender] - percent[i, defender])) > 1e-5:
+                    break
+                out_damage[j, defender] = dmg
+                out_source[j, defender] = np.uint8(source_slot)
+                j -= 1
+    return out_damage, out_source
+
+
 def _derive_fighter_8006cda4_pre_gate_consume_count_seed_lane(
     *,
     action_id_u16: np.ndarray,
@@ -3129,6 +3212,7 @@ def _main_impl(args) -> None:
     # Seed defaults for new internal fields.
     samples["seed_t"]["combo_victim_port"][:] = np.uint8(0xFF)
     samples["seed_t"]["grab_owner_port"][:] = np.uint8(0xFF)
+    samples["seed_t"]["phantom_damage_source_port"][:] = np.uint8(0xFF)
     samples["seed_t"]["item_reflect_transfer_port"][:] = np.uint8(0xFF)
     samples["seed_t"]["item_hidden_body_hit_victim_port"][:] = np.uint8(0xFF)
 
@@ -5077,6 +5161,17 @@ def _main_impl(args) -> None:
         grab_mash_y_sign_post[:, slot] = mash_y
         samples["seed_t"]["grab_mash_stick_x_sign"][:, slot] = mash_x[:-1]
         samples["seed_t"]["grab_mash_stick_y_sign"][:, slot] = mash_y[:-1]
+
+    phantom_damage_pending, phantom_damage_source_port = _derive_phantom_damage_pending_seed_lanes(
+        percent_f32=post_percent_all,
+        hitlag_u16=post_hitlag,
+        action_id_u16=post_action_id,
+        instance_hit_by_u16=post_instance_hit_by,
+        instance_id_u16=post_instance_id,
+        num_players=num_players,
+    )
+    samples["seed_t"]["phantom_damage_pending_x1898"] = phantom_damage_pending[:-1]
+    samples["seed_t"]["phantom_damage_source_port"] = phantom_damage_source_port[:-1]
 
     if int(num_players) == 2:
         for slot, port_1based in enumerate(src_ports):

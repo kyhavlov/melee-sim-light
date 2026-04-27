@@ -226,8 +226,9 @@ typedef struct MslCommonParams {
   // Shield / guard constants (ftCo_Guard.c and fighter.c).
   // Source of truth: `data/common/ft_common_data.json` extractor comments map these to ftCommonData.
   // Guard pose update smoothing (ftCo_Guard.c::ftCo_80091BC4).
-  float guard_stick_lerp_x44c;  // p_ftCommonData->guard_stick_lerp_x44c (0x44C)
-  float start_shield_health;    // p_ftCommonData->x260 (start_shield_health)
+  float guard_stick_lerp_x44c;      // p_ftCommonData->guard_stick_lerp_x44c (0x44C)
+  float start_shield_health;        // p_ftCommonData->x260 (start_shield_health)
+  float shield_break_reset_health;  // p_ftCommonData->x280 (Furafura shield reset health)
   // Shield size scaling (refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::inlineB0)
   float shield_size_lightshield_min;  // p_ftCommonData->x2D4 (shield_size_lightshield_min)
   float shield_size_lightshield_max;  // p_ftCommonData->x2D8 (shield_size_lightshield_max)

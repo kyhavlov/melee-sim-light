@@ -1,0 +1,21 @@
+#pragma once
+
+// Init-time loader for ItemCommonData constants used by item collision.
+//
+// Source of truth: `data/items/item_common.json` (ISO-derived from `_iso/ItCo.dat`).
+// Extractor: `tools/extraction/extract_item_common_data.py`.
+//
+// IMPORTANT: item_common_params_init() may do IO/allocations; call only during batch init.
+// The per-frame hot path must remain alloc-free.
+
+typedef struct MslItemCommonParams {
+  // Item_80269DC8 shield-bounce angle predicate:
+  // item->xC54 < deg_to_rad(90 + it_804D6D28->unk_degrees)
+  // refs/melee/src/melee/it/item.c::Item_80269DC8
+  // refs/melee/src/melee/it/types.h::ItemCommonData::unk_degrees
+  float shield_bounce_extra_degrees;
+  float shield_bounce_threshold_radians;
+} MslItemCommonParams;
+
+int item_common_params_init(void);
+const MslItemCommonParams* msl_item_common_params(void);

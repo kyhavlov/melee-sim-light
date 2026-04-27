@@ -25,7 +25,7 @@ def _report_header(*, root: Path, suite: str, suite_name: str, datasets_dir: str
         "#   Refresh cached datasets:",
         f"#     uv run python -m tools.slippi.preprocess_suite --suite {suite} --datasets-dir {datasets_dir}",
         "#",
-        "# Regenerate gitignored ISO-derived data artifacts (if missing/stale):",
+        "# Regenerate ISO-derived data artifacts (if missing/stale):",
         "# - Opcode-25 airborne-state timelines (data/airborne_state_events/{fox,falco}.bin):",
         "#     uv run python -m tools.extraction.extract_fighter_airborne_state_events --iso_dir _iso --melee_decomp refs/melee --special_msids_dir data/special_msids --out_dir data/airborne_state_events --chars fox,falco",
         "# - Opcode-52 x221C_u16_y timelines (data/state_flags_221c_y/{fox,falco}.bin):",

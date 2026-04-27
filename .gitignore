@@ -27,6 +27,9 @@ datasets/
 data/**
 !data/common/
 !data/common/ft_common_data.json
+!data/items/
+data/items/**
+!data/items/item_common.json
 
 # Build outputs / caches (future-proof)
 build/

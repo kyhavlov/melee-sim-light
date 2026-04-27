@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import struct
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -10,6 +11,23 @@ from melee_sim.hsd_archive import HsdArchive, _u32_be, parse_hsd_archive
 
 _U26_MASK = (1 << 26) - 1
 _U23_MASK = (1 << 23) - 1
+
+
+def _f32(v: float) -> float:
+    return struct.unpack("<f", struct.pack("<f", float(v)))[0]
+
+
+# ftAction_8007121C / set_hitbox_scale do not use exact 1/256. GALE01 loads the
+# single-precision sdata2 literal ftAction_804D82A0 (`.float 0.003906`) and multiplies with
+# `fmuls`, so hitbox sizes/offsets are slightly smaller than exact /256 values. This matters at
+# `ftColl_80076ED8` phantom-boundary rows where `HitCapsule.coll_distance` is compared to x7A8.
+# refs/melee/build/GALE01/asm/melee/ft/ftaction.s::ftAction_804D82A0
+# refs/melee/src/melee/ft/ftaction.c::{ftAction_8007121C,ftAction_8007169C}
+_FTACTION_HITBOX_SCALE = _f32(0.003906)
+
+
+def _ftaction_scaled_i16(v: int) -> float:
+    return _f32(float(v) * _FTACTION_HITBOX_SCALE)
 
 
 def _s16(v: int) -> int:
@@ -86,11 +104,11 @@ def _decode_create_hitbox(words: list[int]) -> Hitbox:
     use_common_bone_ids = bool((w0 >> 10) & 0x1)
     damage = float(w0 & 0x3FF)
 
-    size = float((w1 >> 16) & 0xFFFF) * (1.0 / 256.0)
-    z_offset = float(_s16(w1)) * (1.0 / 256.0)
+    size = _ftaction_scaled_i16((w1 >> 16) & 0xFFFF)
+    z_offset = _ftaction_scaled_i16(_s16(w1))
 
-    y_offset = float(_s16((w2 >> 16) & 0xFFFF)) * (1.0 / 256.0)
-    x_offset = float(_s16(w2 & 0xFFFF)) * (1.0 / 256.0)
+    y_offset = _ftaction_scaled_i16(_s16((w2 >> 16) & 0xFFFF))
+    x_offset = _ftaction_scaled_i16(_s16(w2 & 0xFFFF))
 
     angle = (w3 >> 23) & 0x1FF
     kbg = (w3 >> 14) & 0x1FF
@@ -359,7 +377,7 @@ def _parse_subaction_events(
                     Event(
                         frame=frame,
                         kind="set_hitbox_size",
-                        data={"idx": idx, "size": float(value) * (1.0 / 256.0)},
+                        data={"idx": idx, "size": _ftaction_scaled_i16(value)},
                     )
                 )
             elif op == 14:
