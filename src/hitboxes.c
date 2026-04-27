@@ -589,7 +589,7 @@ static void hitboxes_seed_bridge_trim_impossible_indefinite(
     }
 
     // Narrow stale-owner extensions for active windows with repeated suite misses:
-    // - AttackAirLw scripts (Fox/Falco) carry multiple same-group create_hitbox refreshes, and
+    // - AttackAirB/Lw scripts (Fox/Falco) carry multiple same-group create_hitbox refreshes, and
     //   ftAction_8007121C/ftColl_800768A0 rewires suppression ownership on those refresh edges.
     // - AttackLw3 keeps same-group hitcapsules active across damage followup windows where decomp
     //   still rewrites BODY attribution through ftColl_80076ED8.
@@ -601,7 +601,7 @@ static void hitboxes_seed_bridge_trim_impossible_indefinite(
     // refs/melee/src/melee/ft/ftaction.c::ftAction_8007121C
     // refs/melee/src/melee/ft/ftcoll.c::{ftColl_800768A0,ftColl_80076ED8}
     // refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000ACFC,lbColl_80008A5C}
-    // data/moves/{fox,falco}.json::moves.ftCo_SM_AttackAirLw.events.create_hitbox
+    // data/moves/{fox,falco}.json::moves.ftCo_SM_AttackAir{B,Lw}.events.create_hitbox
     // data/moves/{fox,falco}.json::moves.ftCo_SM_AttackLw3.events.create_hitbox
     const uint8_t stale_owner_attackairlw_lane =
         (attacker_action == (uint16_t)MSL_ACT_ATTACK_AIR_LW) ? 1u : 0u;
@@ -878,6 +878,53 @@ void hitboxes_refresh(MslBatch* batch) {
           first_create_damage[hb] = ev->damage;
         } else if (second_create_frame[hb] == 0xFFFFu && ev->frame != first_create_frame[hb]) {
           second_create_frame[hb] = ev->frame;
+        }
+      }
+
+      uint8_t has_no_damage_contact_victim = 0u;
+      for (int victim = 0; victim < num_players; victim++) {
+        if (victim == p) {
+          continue;
+        }
+        const size_t v_idx = msl_idx_player(bi, victim);
+        if (batch->state.hurtbox_state[v_idx] == 1u && batch->state.hitlag[v_idx] == 0u &&
+            batch->state.hitstun[v_idx] == 0u) {
+          has_no_damage_contact_victim = 1u;
+          break;
+        }
+      }
+      const uint8_t frozen_reseed_prev_capsules =
+          (has_no_damage_contact_victim && batch->state.hitlag[idx] != 0u &&
+           batch->state.hitbox_prev_bootstrap[idx] == 2u &&
+           batch->state.action_id[idx] == batch->state.prev_action_id[idx])
+              ? 1u
+              : 0u;
+      if (frozen_reseed_prev_capsules) {
+        // Hitlag-frozen reseed on a create frame:
+        // - Fighter_8006A360 skips ftAnim_8006EBA4 / anim_cb while hitlag is active, so
+        //   ftAction_8007121C does not re-run the create command on frozen rows.
+        // - Slippi can still expose the create-frame action/pose time for every frozen row; the
+        //   explicit x58 previous-capsule seed (`combat_hitbox_prev_valid`) proves the HitCapsule
+        //   already exists and must be treated as the pose_frame-1 active snapshot.
+        // - Without this, teacher-forced reseed replays the enable-edge clear, dropping
+        //   HitCapsule.victims_1 and allowing illegal post-hitlag re-hits.
+        // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
+        // refs/melee/src/melee/ft/ftaction.c::ftAction_8007121C
+        // refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007AD18,ftColl_800768A0}
+        for (uint16_t ei = 0; ei < event_count; ei++) {
+          const MslHitboxEvent* ev = &events[ei];
+          if (ev->frame != pose_frame) {
+            continue;
+          }
+          if (ev->kind == 1 || ev->hitbox_id >= (uint8_t)MSL_MAX_HITBOXES) {
+            continue;
+          }
+          const uint8_t hb = ev->hitbox_id;
+          if (!seeded_prev_enabled[hb]) {
+            continue;
+          }
+          def_prev[hb] = *ev;
+          have_prev[hb] = 1u;
         }
       }
 
@@ -1247,6 +1294,68 @@ void hitboxes_refresh(MslBatch* batch) {
       }
 
       batch->state.hitbox_count[idx] = out_count;
+
+      if (frozen_reseed_prev_capsules && out_count != 0u) {
+        // Teacher-forced no-damage contact carry:
+        // - ftColl_80076ED8 inserts the BODY victim into HitCapsule.victims_1 before checking
+        //   vulnerable damage state. Invincible/no-damage contacts can therefore freeze only the
+        //   attacker in hitlag while still latching the victim for rehit suppression.
+        // - A reseed inside that hitlag segment has no live HitCapsule history unless the seed
+        //   explicitly materializes it. The explicit x58 previous-capsule lane plus hitlag proves the
+        //   active capsules already existed; invincible visible hurtbox state selects the no-damage
+        //   victim boundary without keying on replay identity.
+        // refs/melee/src/melee/ft/ftcoll.c::{ftColl_80076ED8,ftColl_800768A0}
+        // refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000805C,lbColl_80008688}
+        for (int victim = 0; victim < num_players; victim++) {
+          if (victim == p) {
+            continue;
+          }
+          const size_t v_idx = msl_idx_player(bi, victim);
+          if (batch->state.hurtbox_state[v_idx] != 1u || batch->state.hitlag[v_idx] != 0u ||
+              batch->state.hitstun[v_idx] != 0u) {
+            continue;
+          }
+          uint8_t seed_already_carries_victim = 0u;
+          const size_t group_base = (size_t)bi * (size_t)MSL_MAX_PLAYERS *
+                                    (size_t)MSL_HITLIST_GROUPS * (size_t)MSL_MAX_PLAYERS;
+          for (int g = 0; g < MSL_HITLIST_GROUPS; g++) {
+            const size_t cd_i = group_base + (((size_t)p * (size_t)MSL_HITLIST_GROUPS + (size_t)g) *
+                                                  (size_t)MSL_MAX_PLAYERS +
+                                              (size_t)victim);
+            if (batch->state.combat_hitlist_cd[cd_i] != 0u) {
+              seed_already_carries_victim = 1u;
+              break;
+            }
+          }
+          const size_t hb_valid_base =
+              ((size_t)bi * (size_t)MSL_MAX_PLAYERS + (size_t)p) * (size_t)MSL_MAX_HITBOXES;
+          for (int hb = 0; hb < MSL_MAX_HITBOXES && !seed_already_carries_victim; hb++) {
+            if (!batch->state.combat_hitlist_hb_valid[hb_valid_base + (size_t)hb]) {
+              continue;
+            }
+            // `combat_hitlist_hb_valid=1, combat_hitlist_hb_cd=0` is an authoritative empty
+            // HitCapsule victims_1 seed, not a missing seed. Respect it as blocking the coarse
+            // dense fallback/materialization path.
+            // refs/melee/src/melee/ft/ftcoll.c::ftColl_800768A0
+            // refs/melee/src/melee/lb/types.h::HitCapsule
+            seed_already_carries_victim = 1u;
+            break;
+          }
+          if (seed_already_carries_victim) {
+            continue;
+          }
+          for (int hi = 0; hi < MSL_MAX_HITBOXES; hi++) {
+            if (!have_def[hi]) {
+              continue;
+            }
+            const uint8_t hit_group = hitlist_hit_group_from_u16_7(def[hi].u16_7);
+            const uint8_t rehit_frames = (uint8_t)(def[hi].u16_7 & 0xFFu);
+            hitlist_register_fighter_group(batch, bi, p, hit_group, victim,
+                                           batch->state.instance_id[v_idx],
+                                           (int)MSL_LBCOLL_INSERT_FT_BODY, rehit_frames);
+          }
+        }
+      }
 
       if (batch->state.hitbox_prev_bootstrap[idx]) {
         // Teacher-forced reseed bootstrap (first frame only):

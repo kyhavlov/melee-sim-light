@@ -258,6 +258,22 @@ def _assert_transition_fields_match_ref(*, out_row, ref_row, record: int, p: int
             note="DamageHi2 mirrored seeded final ECB-lock frame lands through common Damage_Coll",
         ),
         _DamageContactCase(
+            dataset_rel="datasets/aggregate_recent/replays/validation/aggregate_recent/HungryImportantSnake.msl",
+            record=2323,
+            port=0,
+            seed_action=90,
+            ref_action=90,
+            note="DamageFlyTop x670 hold frame does not rewind into same-frame DamageFall_IASA Fall",
+        ),
+        _DamageContactCase(
+            dataset_rel="datasets/aggregate_recent/replays/validation/aggregate_recent/HungryImportantSnake.msl",
+            record=2324,
+            port=0,
+            seed_action=90,
+            ref_action=200,
+            note="DamageFlyTop next-frame x670 hold still allows PassiveStandF floor tech",
+        ),
+        _DamageContactCase(
             dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/QuerulousGrandDinosaur.msl",
             record=4114,
             port=1,
@@ -291,6 +307,9 @@ def test_core_damage_contact_followup_rows_are_replay_exact(case: _DamageContact
     #   x67C/x67D early enough to preempt Down_CheckInput on the finished bound frame.
     # - Damage_IASA delegates to Fall_IASA_Inner, whose order admits SpecialAir, AttackAir, then
     #   JumpAerial on common airborne Damage rows once x221C_b6 is clear.
+    # - DamageFall_IASA sees the x670 timer after Fighter_Spaghetti_8006AD10's current-frame input
+    #   history update; held same-direction X stick must not be rewound before the strict
+    #   p_ftCommonData->x214 comparison.
     # - A DamageAir -> AttackAir IASA entry does not immediately consume the old DamageAir floor
     #   sweep into AttackAir landing on the entry frame.
     # - DamageFly_Coll uses the shared wall-tech callback for all DamageFly variants, not only
@@ -314,6 +333,8 @@ def test_core_damage_contact_followup_rows_are_replay_exact(case: _DamageContact
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Down.c::ftCo_80098400
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_IASA
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_IASA_Inner
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_DamageFall.c::ftCo_DamageFall_IASA
+    # refs/melee/src/melee/ft/fighter.c::Fighter_Spaghetti_8006AD10
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_Coll
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_DamageFly_Coll
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_PassiveWall.c::{ftCo_800C1D38,ftCo_800C1E64}
@@ -342,6 +363,38 @@ def test_core_damage_contact_followup_rows_are_replay_exact(case: _DamageContact
 
     _, ref_row, out_row = _run_one_step_row(dataset_path, case.record, p)
     _assert_transition_fields_match_ref(out_row=out_row, ref_row=ref_row, record=case.record, p=p)
+
+
+@pytest.mark.integration
+def test_downdamage_hitlag_exit_uses_common_damage_phys() -> None:
+    # Replay-real lock for the MotionlessAggressiveJay DownBoundD -> DownDamageD followup:
+    # - ftCo_DownDamage_Phys delegates to ftCo_Damage_Phys, so the hitlag-exit row applies common
+    #   airborne Damage gravity before position integration.
+    # - The adjacent hitlag floor-contact rows still ground through DownDamage_Coll's ft_80081DD4
+    #   root probe; this guards the runtime owner without seeding a broad damage-entry x670/x671
+    #   shortcut into teacher-forced rows.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownDamage.c::ftCo_DownDamage_Phys
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_Phys
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = (
+        root
+        / "datasets/aggregate_recent/replays/validation/aggregate_recent/MotionlessAggressiveJay.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip("missing local MotionlessAggressiveJay aggregate dataset")
+
+    ds = read_dataset(str(dataset_path))
+    row = ds.samples[5476]
+    p = 1
+    assert int(row["seed_t"]["action_id"][p]) == 193  # DownDamageD
+    assert int(row["seed_t"]["hitlag"][p]) == 1
+
+    _, exit_ref, exit_out = _run_one_step_row(dataset_path, 5476, p)
+    assert float(exit_out["speed_y_self"][p]) == pytest.approx(
+        float(exit_ref["speed_y_self"][p]), abs=1e-5
+    )
+    assert float(exit_out["pos_y"][p]) == pytest.approx(float(exit_ref["pos_y"][p]), abs=1e-5)
 
 
 @pytest.mark.integration

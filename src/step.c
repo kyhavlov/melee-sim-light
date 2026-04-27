@@ -3,6 +3,7 @@
 #include <errno.h>
 
 #include "action.h"
+#include "action_ids.h"
 #include "anim_pose.h"
 #include "anim_timebase.h"
 #include "combat.h"
@@ -31,6 +32,20 @@
 // NOTE: `blaster_update_post_collision` is intentionally not part of the public blaster module API
 // yet; keep the forward declaration local to preserve the current include surface.
 extern void blaster_update_post_collision(MslBatch* batch);
+
+static int step_local_slot_from_source_port0(const MslBatch* batch, int bi, int num_players,
+                                             uint8_t source_port0) {
+  if (batch == NULL) {
+    return -1;
+  }
+  for (int p = 0; p < num_players; p++) {
+    const size_t idx = msl_idx_player(bi, p);
+    if (batch->state.source_port0[idx] == source_port0) {
+      return p;
+    }
+  }
+  return -1;
+}
 
 static inline void clear_landing_transients(MslBatch* batch) {
   if (batch == NULL) {
@@ -73,11 +88,34 @@ static inline void clear_seed_owned_transients_post_frame(MslBatch* batch) {
       // refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
       // refs/melee/src/melee/ft/ftcommon.c::ftCommon_800804FC
       batch->state.source_clear_processhit_damage_pending_phase[idx] = 0u;
-      // `seed_t.fighter_8006cda4_pre_gate_consume_count` is the explicit one-step pre-gate
-      // consume-count owner for Fighter_8006CDA4. Consume within this frame only.
+      // `seed_t.fighter_8006cda4_pre_gate_consume_count` is usually a one-step pre-gate owner.
+      // DamageFlyTop <- AttackAirB carry rows are the exception: the hidden Fighter_8006CDA4
+      // consume-count belongs to a delayed damage-entry gate and must survive replay-seeded rollout
+      // frames until combat consumes it.
       // refs/melee/src/melee/ft/fighter.c::Fighter_8006CDA4
       // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
-      batch->state.fighter_8006cda4_pre_gate_consume_count[idx] = 0u;
+      uint8_t keep_fighter_8006cda4_count = 0u;
+      if (batch->state.fighter_8006cda4_pre_gate_consume_count[idx] != 0u &&
+          batch->state.action_id[idx] == (uint16_t)MSL_ACT_DAMAGE_FLY_TOP &&
+          batch->state.on_ground[idx] == 0u && batch->state.hitlag[idx] == 0u &&
+          batch->state.hitstun[idx] > 0u) {
+        // Slippi `last_hit_by` is raw source-port domain. Convert it to a local slot before
+        // checking attacker action ownership for the delayed Fighter_8006CDA4 carry.
+        // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm (last_hit_by lane)
+        const int attacker = step_local_slot_from_source_port0(batch, bi, num_players,
+                                                               batch->state.last_hit_by[idx]);
+        if (attacker >= 0) {
+          const size_t a_idx = msl_idx_player(bi, attacker);
+          keep_fighter_8006cda4_count =
+              (batch->state.action_id[a_idx] == (uint16_t)MSL_ACT_ATTACK_AIR_B &&
+               batch->state.action_frame[a_idx] >= 6)
+                  ? 1u
+                  : 0u;
+        }
+      }
+      if (!keep_fighter_8006cda4_count) {
+        batch->state.fighter_8006cda4_pre_gate_consume_count[idx] = 0u;
+      }
       // `seed_t.source_clear_grounded_damage_clear_phase` is a one-step bridge for grounded
       // source-owner clear ownership (`ftCommon_800804FC` path). Consume within this frame only.
       // refs/melee/src/melee/ft/ftcommon.c::ftCommon_800804FC

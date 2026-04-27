@@ -325,11 +325,17 @@ void timers_consume_post_hitlag_callbacks_after_input(MslBatch* batch) {
                                                prev_lstick_full_y > -c->lstick_tilt_y_thresh)
                                           ? 1u
                                           : 0u;
-      const uint8_t sdi_tilt_window_x =
-          (batch->state.tilt_timer_x[idx] < c->sdi_tilt_max_frames) ? 1u : 0u;
+      const uint8_t sdi_tilt_window = (batch->state.tilt_timer_x[idx] < c->sdi_tilt_max_frames ||
+                                       batch->state.tilt_timer_y[idx] < c->sdi_tilt_max_frames)
+                                          ? 1u
+                                          : 0u;
       const uint8_t use_full_2d = (sdi_full_edge_x || sdi_full_edge_y);
+      const uint8_t use_timer_window = (damage_every_hitlag_sdi_timer_window_action(a) ||
+                                        batch->state.phantom_damage_pending_x1898[idx] > 0.0f)
+                                           ? sdi_tilt_window
+                                           : 0u;
       if (batch->state.hitlag_pre_timer[idx] != 0u && batch->state.hitlag[idx] != 0u &&
-          (use_full_2d || (damage_every_hitlag_sdi_timer_window_action(a) && sdi_tilt_window_x)) &&
+          (use_full_2d || use_timer_window) &&
           (batch->state.state_flags[flags_i] & (uint8_t)MSL_STATE_FLAG_221A_IS_HITLAG) != 0u &&
           lstick_mag_sq >= sdi_radius_sq) {
         batch->state.pos_x[idx] += lstick_full_x * sdi_step_mul;

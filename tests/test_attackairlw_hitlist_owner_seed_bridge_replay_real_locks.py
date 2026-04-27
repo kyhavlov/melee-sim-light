@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import numpy as np
 import pytest
 
 from tests.test_combat_ownership_seed_guardrail_locks import (
@@ -10,6 +11,7 @@ from tests.test_combat_ownership_seed_guardrail_locks import (
     _run_one_step_row,
     _skip_if_required_artifacts_missing,
 )
+from tests.test_post_contact_hitlag_hitlist_seed_replay_real_locks import _run_rollout_records
 from tools.eval.dataset import read_dataset
 
 
@@ -221,3 +223,95 @@ def test_attackairb_guard_shield_admission_negative_neighbor_stays_suppressed() 
             record=record,
             p=p,
         )
+
+
+@pytest.mark.integration
+def test_attackairlw_invincible_contact_hitlag_rollout_preserves_victim_latch() -> None:
+    # Replay-real rollout lock for PRH:4858:
+    # - p0 AttackAirLw is reseeded inside attacker-only hitlag after no-damage contact with an
+    #   invincible p1 hurtbox.
+    # - The seed has no authoritative per-HitCapsule victims_1 lane; runtime must recover the
+    #   decomp latch from hitlag-frozen previous capsules instead of replaying create-frame clear.
+    # - Without that latch, the same Down Air hits p1's newly held shield at rec=4864 and delays
+    #   p0's LandingAirLw transition.
+    # refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_80076ED8,ftColl_800768A0}
+    # refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000805C,lbColl_80008688}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_rel = (
+        "datasets/aggregate_recent/replays/validation/aggregate_recent/"
+        "PositiveRevolvingHyena.msl"
+    )
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    record = 4858
+    ds = read_dataset(str(dataset_path))
+    seed_t = ds.samples[record]["seed_t"]
+    assert int(seed_t["action_id"][0]) == 69  # AttackAirLw
+    assert int(seed_t["hitlag"][0]) > 0
+    assert int(seed_t["hurtbox_state"][1]) == 1
+    assert all(int(v) == 0 for v in seed_t["combat_hitlist_hb_valid"][0])
+
+    rows = _run_rollout_records(dataset_path, start_record=record, records=(4864, 4867))
+    for rec, (ref_row, out_row) in rows.items():
+        for p in (0, 1):
+            for field in ("action_id", "action_frame", "hitlag", "hitstun", "shield_hp"):
+                assert out_row[field][p] == ref_row[field][p], f"record={rec} p={p} field={field}"
+        assert out_row["pos_y"][0] == pytest.approx(ref_row["pos_y"][0], abs=1e-5)
+
+
+@pytest.mark.integration
+def test_attackairlw_no_damage_contact_respects_authoritative_empty_hb_seed() -> None:
+    # `combat_hitlist_hb_valid=1, combat_hitlist_hb_cd=0` is an authoritative empty HitCapsule
+    # victims_1 seed. The no-damage contact materializer must not treat it as missing provenance
+    # and fill the live per-HitCapsule rings from the dense fallback.
+    # refs/melee/src/melee/ft/ftcoll.c::ftColl_800768A0
+    # refs/melee/src/melee/lb/types.h::HitCapsule
+    binding = pytest.importorskip("msl_binding")
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_rel = (
+        "datasets/aggregate_recent/replays/validation/aggregate_recent/"
+        "PositiveRevolvingHyena.msl"
+    )
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    record = 4858
+    row = ds.samples[record : record + 1].copy()
+    seed = row["seed_t"]
+    attacker = 0
+    victim = 1
+    assert int(seed["action_id"][0, attacker]) == 69  # AttackAirLw
+    assert int(seed["hitlag"][0, attacker]) > 0
+    assert int(seed["hurtbox_state"][0, victim]) == 1
+    seed["combat_hitlist_hb_valid"][0, attacker, :] = np.uint8(1)
+    seed["combat_hitlist_hb_cd"][0, attacker, :, victim] = np.uint16(0)
+    seed["combat_hitlist_hb_victim_iid"][0, attacker, :, victim] = np.uint16(0)
+
+    sizes = binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    seed_bytes = np.frombuffer(seed.tobytes(order="C"), dtype=np.uint8).copy().reshape(1, seed_stride)
+    prev_input_bytes = np.frombuffer(row["prev_input_t"].tobytes(order="C"), dtype=np.uint8).copy().reshape(
+        1, input_stride
+    )
+    input_bytes = np.frombuffer(row["input_t"].tobytes(order="C"), dtype=np.uint8).copy().reshape(
+        1, input_stride
+    )
+
+    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    try:
+        binding.reseed_seed(handle, seed_bytes)
+        binding.debug_step_input_pre_combat(handle, prev_input_bytes, input_bytes)
+        assert [
+            int(binding.debug_hitlist_fighter_contains(handle, 0, attacker, hb_id, victim))
+            for hb_id in range(4)
+        ] == [0, 0, 0, 0]
+    finally:
+        binding.destroy(handle)

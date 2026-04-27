@@ -14,6 +14,12 @@ enum {
   MSL_RNG_SITE_COUNT = 8,
 };
 
+enum {
+  MSL_ROLLOUT_CLOCK_NONE = 0,
+  MSL_ROLLOUT_CLOCK_HSD_RAND_STREAM = 1,
+  MSL_ROLLOUT_CLOCK_REPLAY_FRAME_SEED = 2,
+};
+
 struct MslBatch {
   int batch_size;
   MslConfig config;
@@ -22,8 +28,9 @@ struct MslBatch {
   // Episode/match init scratch, allocated with the batch so `msl_batch_init_match` can remain
   // allocation-free when used as an RL reset path.
   MslSeed* match_init_seed_scratch;  // [batch]
-  // Per-env ownership bit for simulator-created rollouts. `reseed_seed` clears this so replay
-  // teacher-forced validation keeps its existing seed-owned frame/RNG metadata behavior.
+  // Per-env frame/RNG clock ownership mode. Match-init rollouts own the modeled HSD_Rand stream;
+  // replay-reseeded rollouts normally keep seed-owned metadata, with a narrow Slippi frame-start
+  // clock mode for replay-carry rows that need the post-frame seed to advance.
   uint8_t* rollout_clock_rng_owned;  // [batch]
 
   // Debug-only per-fighter override for hit status eligibility (opcode 26).
