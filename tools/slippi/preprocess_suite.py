@@ -16,12 +16,8 @@ from tools.eval.dataset import HEADER_DTYPE, MAGIC, SAMPLE_DTYPE, SEED_DTYPE
 
 
 _CACHE_VERSION = 2
-_SOURCE_INPUTS = (
-    "tools/eval/dataset.py",
-    "tools/slippi/make_dataset_from_slp.py",
-    "tools/slippi/seed_history.py",
-    "tools/slippi/combat_history.py",
-)
+_SOURCE_INPUT_PY_TREES = ("tools/slippi",)
+_SOURCE_INPUT_FILES = ("tools/eval/dataset.py",)
 
 
 def _hash_file(path: Path) -> str:
@@ -55,6 +51,28 @@ def _tree_fingerprint(root: Path, rel: str) -> list[dict[str, Any]]:
     ]
 
 
+def _python_tree_fingerprint(root: Path, rel: str) -> list[dict[str, Any]]:
+    base = root / rel
+    if not base.exists():
+        return []
+    return [
+        _file_fingerprint(path, hash_contents=True, display_path=path.relative_to(root))
+        for path in sorted(base.rglob("*.py"))
+        if path.is_file()
+    ]
+
+
+def _source_input_fingerprints(root: Path) -> list[dict[str, Any]]:
+    out: list[dict[str, Any]] = []
+    for rel in _SOURCE_INPUT_FILES:
+        path = root / rel
+        if path.exists():
+            out.append(_file_fingerprint(path, hash_contents=True, display_path=Path(rel)))
+    for rel in _SOURCE_INPUT_PY_TREES:
+        out.extend(_python_tree_fingerprint(root, rel))
+    return sorted(out, key=lambda item: str(item["path"]))
+
+
 def _dataset_cache_meta_path(out_path: Path) -> Path:
     return out_path.with_name(out_path.name + ".meta.json")
 
@@ -84,11 +102,6 @@ def _cache_signature(
     ucf_enabled: bool,
     ucf_cardinals_1_0_enabled: bool,
 ) -> dict[str, Any]:
-    source_inputs = [
-        _file_fingerprint(root / rel, hash_contents=True, display_path=Path(rel))
-        for rel in _SOURCE_INPUTS
-        if (root / rel).exists()
-    ]
     return {
         "cache_version": _CACHE_VERSION,
         "suite": str(suite_path.relative_to(root)),
@@ -101,7 +114,7 @@ def _cache_signature(
         "seed_dtype_itemsize": int(SEED_DTYPE.itemsize),
         "sample_dtype_itemsize": int(SAMPLE_DTYPE.itemsize),
         "sample_dtype_descr": repr(SAMPLE_DTYPE.descr),
-        "source_inputs": source_inputs,
+        "source_inputs": _source_input_fingerprints(root),
         "data_inputs": _tree_fingerprint(root, "data"),
     }
 

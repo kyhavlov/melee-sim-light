@@ -30,6 +30,44 @@ def test_dataset_cache_signature_match_roundtrip(tmp_path: Path) -> None:
     assert meta["signature"] == signature
 
 
+def test_cache_signature_changes_when_slippi_helper_dependency_changes(tmp_path: Path) -> None:
+    root = tmp_path
+    suite_path = root / "replays" / "suites" / "suite.json"
+    slp_path = root / "replays" / "example.slp"
+    helper_path = root / "tools" / "slippi" / "damage_history.py"
+    dataset_py = root / "tools" / "eval" / "dataset.py"
+    suite_path.parent.mkdir(parents=True)
+    slp_path.parent.mkdir(parents=True, exist_ok=True)
+    helper_path.parent.mkdir(parents=True)
+    dataset_py.parent.mkdir(parents=True)
+    suite_path.write_text("{}", encoding="utf-8")
+    slp_path.write_bytes(b"slp")
+    dataset_py.write_text("SAMPLE_DTYPE = object()\n", encoding="utf-8")
+    helper_path.write_text("VALUE = 1\n", encoding="utf-8")
+
+    kwargs = {
+        "root": root,
+        "suite_path": suite_path,
+        "suite_name": "suite",
+        "replay_rel": "replays/example.slp",
+        "slp_path": slp_path,
+        "ports": [1, 2],
+        "ucf_enabled": True,
+        "ucf_cardinals_1_0_enabled": True,
+    }
+    before = preprocess_suite._cache_signature(**kwargs)
+    helper_path.write_text("VALUE = 2\n", encoding="utf-8")
+    after = preprocess_suite._cache_signature(**kwargs)
+
+    assert before["source_inputs"] != after["source_inputs"]
+    changed = [
+        (a, b)
+        for a, b in zip(before["source_inputs"], after["source_inputs"], strict=True)
+        if a != b and a["path"] == "tools/slippi/damage_history.py"
+    ]
+    assert changed
+
+
 def test_legacy_dataset_without_meta_rebuilds_by_default_even_if_mtime_and_size_match(tmp_path: Path) -> None:
     slp_path = tmp_path / "replay.slp"
     dataset_path = tmp_path / "sample.msl"

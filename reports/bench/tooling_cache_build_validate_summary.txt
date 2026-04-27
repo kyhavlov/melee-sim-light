@@ -13,7 +13,7 @@ Build:
 Preprocess:
 - Previous reported offender: primary forced preprocess around 28s; aggregate forced preprocess around 70-75s.
 - Changes:
-  - preprocess_suite now stamps per-dataset cache signatures covering dataset schema, preprocessing source files, replay stat metadata, suite settings, ports, and extracted data/ artifacts.
+  - preprocess_suite now stamps per-dataset cache signatures covering dataset schema, tools/slippi/*.py preprocessing sources, tools/eval/dataset.py, replay stat metadata, suite settings, ports, and extracted data/ artifacts.
   - stale/forced dataset rebuilds can run in parallel with --workers / PREPROCESS_WORKERS.
 - Primary current-cache run with PREPROCESS_WORKERS=4: built=0 skipped=4 real 0.31s.
 - Aggregate current-cache run with PREPROCESS_WORKERS=4: built=0 skipped=15 real 0.80s.
