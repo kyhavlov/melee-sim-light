@@ -189,7 +189,10 @@ def test_pose_facing_is_root_roty90_for_hitbox_centers() -> None:
     lx, ly, lz = left[0], left[1], left[2]
 
     expected_lx = np.float32(np.float32(2.0) * pos_x - rx)
-    assert np.array_equal(np.array([lx], dtype=np.float32).view(np.uint32), np.array([expected_lx], dtype=np.float32).view(np.uint32))
-    assert np.array_equal(np.array([ly], dtype=np.float32).view(np.uint32), np.array([ry], dtype=np.float32).view(np.uint32))
+    # The extracted hitbox offsets use the GALE01 scale literal, so the two
+    # facing paths can differ by one float32 rounding step while preserving the
+    # root-rotY90 mirror policy being locked here.
+    np.testing.assert_allclose(lx, expected_lx, rtol=0.0, atol=2e-5)
+    np.testing.assert_allclose(ly, ry, rtol=0.0, atol=0.0)
     expected_lz = np.float32(np.float32(2.0) * pos_z - rz)
-    assert np.array_equal(np.array([lz], dtype=np.float32).view(np.uint32), np.array([expected_lz], dtype=np.float32).view(np.uint32))
+    np.testing.assert_allclose(lz, expected_lz, rtol=0.0, atol=2e-5)

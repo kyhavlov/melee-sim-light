@@ -116,10 +116,11 @@ def test_specialairhi_launch_hitbox_xrotn_qgd_target_precombat_hitbox_matches_pr
 
         assert int(count) == 1
         # Vanilla probe from reports/triage/qgd9389_live_probe.json frame 9267:
-        # raw `pos` is stored as [z, y, x] in that legacy probe format.
+        # raw `pos` is stored as [z, y, x] in that legacy probe format. Radius
+        # uses the extracted ftAction scale literal from GALE01, not exact 1/256.
         np.testing.assert_allclose(
             hitboxes[0][:4],
-            np.asarray([76.5973663, 24.2701416, -1.0097059, 4.0], dtype=np.float32),
+            np.asarray([76.5973663, 24.2701416, -1.0097059, 3.9997439], dtype=np.float32),
             atol=1e-5,
         )
     finally:

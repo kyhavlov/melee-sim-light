@@ -24,6 +24,10 @@ GAT = (
     "datasets/aggregate_recent/replays/validation/cardinal_1.0_recent/"
     "GracefulAttachedTurtle.msl"
 )
+MAJ = (
+    "datasets/aggregate_recent/replays/validation/aggregate_recent/"
+    "MotionlessAggressiveJay.msl"
+)
 
 
 def _run_row(
@@ -84,6 +88,70 @@ def _run_row(
     got = out_bytes.view(COMPARE_DTYPE).reshape(-1)[0].copy()
     contacts = contact_bytes.view(contact_dtype).reshape(-1)[0].copy()
     return row["seed_t"][0], row["ref_t1"][0], got, contacts
+
+
+def _collision_contact_dtype() -> np.dtype:
+    return np.dtype(
+        [
+            ("wall_kind", ("u1", (4,))),
+            ("_pad0", ("u1", (4,))),
+            ("wall_id", ("<u2", (4,))),
+            ("wall_contact_x", ("<f4", (4,))),
+            ("wall_contact_y", ("<f4", (4,))),
+            ("wall_normal_x", ("<f4", (4,))),
+            ("wall_normal_y", ("<f4", (4,))),
+            ("ceiling_id", ("<u2", (4,))),
+            ("_pad1", ("<u2", (4,))),
+            ("ceiling_contact_x", ("<f4", (4,))),
+            ("ceiling_contact_y", ("<f4", (4,))),
+            ("ceiling_normal_x", ("<f4", (4,))),
+            ("ceiling_normal_y", ("<f4", (4,))),
+            ("coll_env_flags", ("<u4", (4,))),
+            ("coll_prev_env_flags", ("<u4", (4,))),
+        ],
+        align=False,
+    )
+
+
+def _run_rollout_rows(
+    start_record: int, end_record: int, dataset_rel: str = QGD
+) -> dict[int, tuple[np.void, np.void, np.void]]:
+    binding = pytest.importorskip("msl_binding")
+    sizes = binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    compare_stride = int(sizes["compare"])
+
+    root = Path(__file__).resolve().parents[1]
+    ds = read_dataset(str(root / dataset_rel))
+    rows = ds.samples[start_record : end_record + 1]
+
+    def _bytes(name: str, i: int, stride: int) -> np.ndarray:
+        return np.frombuffer(rows[i : i + 1][name].tobytes(order="C"), dtype=np.uint8).copy().reshape(
+            1, stride
+        )
+
+    out_bytes = np.empty((1, compare_stride), dtype=np.uint8)
+    contact_dtype = _collision_contact_dtype()
+    contact_bytes = np.zeros((1, contact_dtype.itemsize), dtype=np.uint8)
+    got_by_record: dict[int, tuple[np.void, np.void, np.void]] = {}
+    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    try:
+        binding.reseed_seed(handle, _bytes("seed_t", 0, seed_stride))
+        for i, record in enumerate(range(start_record, end_record + 1)):
+            binding.step_input(
+                handle,
+                _bytes("prev_input_t", i, input_stride),
+                _bytes("input_t", i, input_stride),
+            )
+            binding.write_compare(handle, out_bytes)
+            binding.debug_write_collision_contacts(handle, contact_bytes)
+            got = out_bytes.view(COMPARE_DTYPE).reshape(-1)[0].copy()
+            contacts = contact_bytes.view(contact_dtype).reshape(-1)[0].copy()
+            got_by_record[record] = (got, rows["ref_t1"][i].copy(), contacts)
+    finally:
+        binding.destroy(handle)
+    return got_by_record
 
 
 @pytest.mark.integration
@@ -161,3 +229,83 @@ def test_specialairhi_right_wall_owner_does_not_broaden_left_wall_control() -> N
     assert int(got["action_id"][0]) == int(ref["action_id"][0]) == 356
     assert int(contacts["wall_kind"][0]) == 1
     assert int(contacts["wall_kind"][0]) != 2
+
+
+@pytest.mark.integration
+def test_specialairhi_left_wall_envelope_reduces_maj_rollout_escape() -> None:
+    # Source-shaped left-wall counterpart for the launch path:
+    # SpecialAirHi_Coll calls the airborne mpColl path; mpColl_80045B74_LeftWall collects
+    # side/bottom/top candidates and mpColl_80046224_LeftWall resolves the full ECB envelope.
+    # The old point-local left-wall path let this rollout remain in SpecialAirHi past replay's
+    # SpecialHiFall handoff and carried a larger X drift through the MAJ cascade.
+    # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::ftFx_SpecialAirHi_Coll
+    # refs/melee/src/melee/mp/mpcoll.c::{mpColl_80045B74_LeftWall,mpColl_80046224_LeftWall}
+    rows = _run_rollout_rows(8878, 8922, MAJ)
+
+    got_8917, ref_8917, contacts_8917 = rows[8917]
+    got_8918, ref_8918, contacts_8918 = rows[8918]
+    got_8922, ref_8922, contacts_8922 = rows[8922]
+
+    assert int(contacts_8917["wall_kind"][1]) == 1
+    assert int(contacts_8917["wall_id"][1]) == 11
+    assert int(contacts_8918["wall_kind"][1]) == 1
+    assert int(contacts_8918["wall_id"][1]) == 11
+    assert float(contacts_8917["wall_contact_x"][1]) == pytest.approx(-85.5656967, abs=1e-5)
+    assert float(contacts_8918["wall_contact_x"][1]) == pytest.approx(-85.5656967, abs=1e-5)
+    # The retained owner fixes the left-wall contact identity/envelope. The remaining X residual is
+    # a downstream rollout cascade, so pin the observed residual instead of using a broad tolerance
+    # that could hide losing the wall-envelope contact above.
+    assert float(got_8917["pos_x"][1] - ref_8917["pos_x"][1]) == pytest.approx(
+        -0.4532547, abs=1e-5
+    )
+    assert float(got_8918["pos_x"][1] - ref_8918["pos_x"][1]) == pytest.approx(
+        0.41002655, abs=1e-5
+    )
+    assert int(got_8922["action_id"][1]) == int(ref_8922["action_id"][1]) == 84
+    assert int(contacts_8922["wall_kind"][1]) == 0
+
+
+@pytest.mark.integration
+def test_non_specialairhi_left_wall_does_not_use_specialhi_envelope() -> None:
+    # The left-wall envelope is retained only for SpecialAirHi_Coll. Changing the same MAJ wall
+    # seed to a generic airborne damage state must not use the SpecialHi envelope path or stamp the
+    # MAJ left-wall id.
+    # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::ftFx_SpecialAirHi_Coll
+    binding = pytest.importorskip("msl_binding")
+    root = Path(__file__).resolve().parents[1]
+    ds = read_dataset(str(root / MAJ))
+    row = ds.samples[8917:8918].copy()
+    row["seed_t"]["action_id"][0, 1] = np.uint16(88)  # DamageFlyN: non-SpecialHi airborne state.
+    row["seed_t"]["animation_index"][0, 1] = np.uint32(174)
+
+    sizes = binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    compare_stride = int(sizes["compare"])
+    contact_dtype = _collision_contact_dtype()
+    seed_bytes = np.frombuffer(row["seed_t"].tobytes(order="C"), dtype=np.uint8).copy().reshape(
+        1, seed_stride
+    )
+    prev_input_bytes = np.frombuffer(row["prev_input_t"].tobytes(order="C"), dtype=np.uint8).copy().reshape(
+        1, input_stride
+    )
+    input_bytes = np.frombuffer(row["input_t"].tobytes(order="C"), dtype=np.uint8).copy().reshape(
+        1, input_stride
+    )
+    out_bytes = np.empty((1, compare_stride), dtype=np.uint8)
+    contact_bytes = np.zeros((1, contact_dtype.itemsize), dtype=np.uint8)
+
+    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    try:
+        binding.reseed_seed(handle, seed_bytes)
+        binding.step_input(handle, prev_input_bytes, input_bytes)
+        binding.write_compare(handle, out_bytes)
+        binding.debug_write_collision_contacts(handle, contact_bytes)
+    finally:
+        binding.destroy(handle)
+
+    got = out_bytes.view(COMPARE_DTYPE).reshape(-1)[0]
+    contacts = contact_bytes.view(contact_dtype).reshape(-1)[0]
+    assert int(contacts["wall_kind"][1]) == 0
+    assert int(contacts["wall_id"][1]) == 0xFFFF
+    assert float(got["pos_x"][1]) > -84.0

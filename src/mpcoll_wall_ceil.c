@@ -1060,6 +1060,24 @@ static inline void right_wall_envelope_consider(float cand_x, int line_idx,
   }
 }
 
+static inline void left_wall_envelope_consider(float cand_x, int line_idx,
+                                               const MslStageWallGraph* g, float* io_best_x,
+                                               int* io_best_line_idx, float* io_best_nx,
+                                               float* io_best_ny) {
+  if (g == NULL || line_idx < 0 || (size_t)line_idx >= g->line_count) {
+    return;
+  }
+  if (*io_best_line_idx < 0 || cand_x < *io_best_x) {
+    float nx = -1.0f, ny = 0.0f;
+    const MslStageWallLine* l = &g->lines[(size_t)line_idx];
+    normal_from_line(l->x0, l->y0, l->x1, l->y1, &nx, &ny);
+    *io_best_x = cand_x;
+    *io_best_line_idx = line_idx;
+    *io_best_nx = nx;
+    *io_best_ny = ny;
+  }
+}
+
 typedef struct MslWallCandidateList {
   int line_idx[MSL_WALL_CANDIDATE_MAX];
   uint8_t count;
@@ -1102,6 +1120,33 @@ static inline void right_wall_candidate_add(MslWallCandidateList* out, const Msl
   }
 }
 
+static inline void left_wall_candidate_add(MslWallCandidateList* out, const MslStageWallGraph* g,
+                                           int line_idx, uint8_t is_hug, float ix, float iy) {
+  if (out == NULL || g == NULL || line_idx < 0 || (size_t)line_idx >= g->line_count) {
+    return;
+  }
+  for (uint8_t i = 0u; i < out->count; i++) {
+    const int existing = out->line_idx[i];
+    if (existing == line_idx || wall_lines_connected_prev_next(g, existing, line_idx)) {
+      if (is_hug) {
+        out->has_hug = 1u;
+      }
+      return;
+    }
+  }
+  if (out->count >= (uint8_t)MSL_WALL_CANDIDATE_MAX) {
+    return;
+  }
+  if (out->count == 0u) {
+    out->first_ix = ix;
+    out->first_iy = iy;
+  }
+  out->line_idx[out->count++] = line_idx;
+  if (is_hug) {
+    out->has_hug = 1u;
+  }
+}
+
 static inline void right_wall_candidate_sweep(MslWallCandidateList* out, const MslStageWallGraph* g,
                                               float prev_x, float prev_y, float cur_x, float cur_y,
                                               int prefer_line_idx, uint8_t is_hug,
@@ -1114,6 +1159,135 @@ static inline void right_wall_candidate_sweep(MslWallCandidateList* out, const M
       hit != excluded_line_idx) {
     right_wall_candidate_add(out, g, hit, is_hug, ix, iy);
   }
+}
+
+static inline void left_wall_candidate_sweep(MslWallCandidateList* out, const MslStageWallGraph* g,
+                                             float prev_x, float prev_y, float cur_x, float cur_y,
+                                             int prefer_line_idx, uint8_t is_hug,
+                                             int excluded_line_idx) {
+  float ix = 0.0f, iy = 0.0f;
+  float nx = -1.0f, ny = 0.0f;
+  int hit = -1;
+  if (wall_sweep_check(g, 1, prev_x, prev_y, cur_x, cur_y, prefer_line_idx, &hit, &ix, &iy, &nx,
+                       &ny) &&
+      hit != excluded_line_idx) {
+    left_wall_candidate_add(out, g, hit, is_hug, ix, iy);
+  }
+}
+
+static uint8_t left_wall_air_envelope_min_x(const MslStageWallGraph* g,
+                                            const MslWallCandidateList* candidates,
+                                            const MslEcbWorldPoints* ecb, float cur_pos_x,
+                                            float cur_pos_y, float* out_x, int* out_line_idx,
+                                            float* out_nx, float* out_ny) {
+  if (g == NULL || ecb == NULL || out_x == NULL || out_line_idx == NULL || out_nx == NULL ||
+      out_ny == NULL || candidates == NULL || candidates->count == 0u) {
+    return 0u;
+  }
+
+  // Decomp: mpColl_80046224_LeftWall resolves the whole airborne ECB envelope after
+  // mpColl_80045B74_LeftWall has collected side/bottom/top candidate wall ids.
+  // refs/melee/src/melee/mp/mpcoll.c::{mpColl_80045B74_LeftWall,mpColl_80046224_LeftWall}
+  float best_x = FLT_MAX;
+  int best_line_idx = -1;
+  float best_nx = -1.0f;
+  float best_ny = 0.0f;
+
+  const float bot = cur_pos_y + ecb->bottom_rel_y;
+  const float mid = cur_pos_y + ecb->side_rel_y;
+  const float top = cur_pos_y + ecb->top_rel_y;
+
+  const float right_x = ecb->right_rel_x;
+  const float bottom_x = 0.0f;
+  const float top_x_rel = 0.0f;
+  const float bottom_y = ecb->bottom_rel_y;
+  const float right_y = ecb->side_rel_y;
+  const float top_y = ecb->top_rel_y;
+  const float lower_denom = right_y - bottom_y;
+  const float upper_denom = right_y - top_y;
+  const float lower_slope = (lower_denom != 0.0f) ? (right_x / lower_denom) : 0.0f;
+  const float upper_slope = (upper_denom != 0.0f) ? (right_x / upper_denom) : 0.0f;
+
+  for (uint8_t ci = 0u; ci < candidates->count; ci++) {
+    const int start_line_idx = candidates->line_idx[ci];
+    if (start_line_idx < 0 || (size_t)start_line_idx >= g->line_count) {
+      continue;
+    }
+
+    const MslStageWallLine* start = &g->lines[(size_t)start_line_idx];
+    if (start->y0 > top) {
+      left_wall_envelope_consider(start->x0, start_line_idx, g, &best_x, &best_line_idx, &best_nx,
+                                  &best_ny);
+      continue;
+    }
+    if (start->y1 < bot) {
+      left_wall_envelope_consider(start->x1, start_line_idx, g, &best_x, &best_line_idx, &best_nx,
+                                  &best_ny);
+      continue;
+    }
+
+    const float sample_x[3] = {ecb->bottom_x, ecb->right_x, ecb->top_x};
+    const float sample_y[3] = {ecb->bottom_y, ecb->right_y, ecb->top_y};
+    for (int i = 0; i < 3; i++) {
+      float x_corr = 0.0f;
+      float nx = -1.0f, ny = 0.0f;
+      const int out_idx =
+          left_wall_e398_project(g, start_line_idx, sample_x[i], sample_y[i], &x_corr, &nx, &ny);
+      if (out_idx >= 0) {
+        left_wall_envelope_consider(cur_pos_x + x_corr, out_idx, g, &best_x, &best_line_idx,
+                                    &best_nx, &best_ny);
+      }
+    }
+
+    int j = start_line_idx;
+    for (size_t guard = 0; j >= 0 && (size_t)j < g->line_count && guard < g->line_count; guard++) {
+      const MslStageWallLine* l = &g->lines[(size_t)j];
+      const float vy = l->y0;
+      float edge_x = 0.0f;
+      if (bot <= vy && vy <= mid) {
+        edge_x = lower_slope * (vy - bot) + bottom_x;
+      } else if (mid <= vy && vy <= top) {
+        edge_x = upper_slope * (vy - top) + top_x_rel;
+      } else if (vy < bot) {
+        break;
+      } else {
+        j = (int)l->prev;
+        continue;
+      }
+      left_wall_envelope_consider(l->x0 - edge_x, j, g, &best_x, &best_line_idx, &best_nx,
+                                  &best_ny);
+      j = (int)l->prev;
+    }
+
+    j = start_line_idx;
+    for (size_t guard = 0; j >= 0 && (size_t)j < g->line_count && guard < g->line_count; guard++) {
+      const MslStageWallLine* l = &g->lines[(size_t)j];
+      const float vy = l->y1;
+      float edge_x = 0.0f;
+      if (bot <= vy && vy <= mid) {
+        edge_x = lower_slope * (vy - bot) + bottom_x;
+      } else if (mid <= vy && vy <= top) {
+        edge_x = upper_slope * (vy - top) + top_x_rel;
+      } else if (vy > top) {
+        break;
+      } else {
+        j = (int)l->next;
+        continue;
+      }
+      left_wall_envelope_consider(l->x1 - edge_x, j, g, &best_x, &best_line_idx, &best_nx,
+                                  &best_ny);
+      j = (int)l->next;
+    }
+  }
+
+  if (best_line_idx < 0 || !(best_x < cur_pos_x)) {
+    return 0u;
+  }
+  *out_x = best_x;
+  *out_line_idx = best_line_idx;
+  *out_nx = best_nx;
+  *out_ny = best_ny;
+  return 1u;
 }
 
 static uint8_t right_wall_air_envelope_max_x(const MslStageWallGraph* g,
@@ -1537,27 +1711,66 @@ void mpcoll_wall_ceil_apply(MslBatch* batch) {
           }
         }
 
-        float ix = 0.0f, iy = 0.0f;
-        float nx = -1.0f, ny = 0.0f;
-        int hit_line_idx = -1;
-        if (batch->state.wall_kind[idx] == 0 &&
-            wall_sweep_check(lwg, 1, prev_rx, prev_ry, cur_rx, cur_ry, prefer_line_idx,
-                             &hit_line_idx, &ix, &iy, &nx, &ny)) {
-          float x_corr = 0.0f;
-          const int out_line_idx =
-              left_wall_e398_project(lwg, hit_line_idx, cur_rx, cur_ry, &x_corr, &nx, &ny);
-          if (out_line_idx >= 0) {
-            if (x_corr > 0.0f) {
-              x_corr = 0.0f;
-            }
-            batch->state.pos_x[idx] += x_corr;
+        const uint8_t use_specialhi_left_envelope =
+            (uint8_t)(action_id == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_HI);
+
+        // Decomp: `mpColl_80045B74_LeftWall` collects a fixed-capacity candidate list from
+        // side, bottom, and top sweeps; `mpColl_80046224_LeftWall` then resolves the full
+        // airborne ECB envelope against that list. This narrower retained domain is the
+        // SpecialAirHi launch path that calls the airborne mpColl callback every frame and owns
+        // the MAJ rollout drift; broadening generic left-wall actions regressed unrelated rows
+        // and needs exact side-edge helper coverage first.
+        // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::ftFx_SpecialAirHi_Coll
+        // refs/melee/src/melee/mp/mpcoll.c::{mpColl_80045B74_LeftWall,mpColl_80046224_LeftWall}
+        MslWallCandidateList candidates;
+        wall_candidate_list_init(&candidates);
+        left_wall_candidate_sweep(&candidates, lwg, prev_rx, prev_ry, cur_rx, cur_ry,
+                                  prefer_line_idx, 1u, -1);
+        left_wall_candidate_sweep(&candidates, lwg, prev_ecb.bottom_x, prev_ecb.bottom_y,
+                                  cur_ecb.bottom_x, cur_ecb.bottom_y, prefer_line_idx, 0u,
+                                  grounded_left_floor_adj_line_idx);
+        left_wall_candidate_sweep(&candidates, lwg, prev_ecb.top_x, prev_ecb.top_y, cur_ecb.top_x,
+                                  cur_ecb.top_y, prefer_line_idx, 0u, -1);
+
+        if (batch->state.wall_kind[idx] == 0 && use_specialhi_left_envelope) {
+          float envelope_x = 0.0f;
+          int envelope_line_idx = -1;
+          float envelope_nx = -1.0f, envelope_ny = 0.0f;
+          if (left_wall_air_envelope_min_x(lwg, &candidates, &cur_ecb, batch->state.pos_x[idx],
+                                           batch->state.pos_y[idx], &envelope_x, &envelope_line_idx,
+                                           &envelope_nx, &envelope_ny)) {
+            batch->state.pos_x[idx] = envelope_x;
             batch->state.wall_kind[idx] = MSL_WALL_LEFT;
-            batch->state.wall_id[idx] = lwg->lines[(size_t)out_line_idx].segment_i;
-            batch->state.wall_contact_x[idx] = ix;
-            batch->state.wall_contact_y[idx] = iy;
-            batch->state.wall_normal_x[idx] = nx;
-            batch->state.wall_normal_y[idx] = ny;
-            mark_left_wall_contact(batch, idx, 1u);
+            batch->state.wall_id[idx] = lwg->lines[(size_t)envelope_line_idx].segment_i;
+            batch->state.wall_contact_x[idx] = candidates.first_ix;
+            batch->state.wall_contact_y[idx] = candidates.first_iy;
+            batch->state.wall_normal_x[idx] = envelope_nx;
+            batch->state.wall_normal_y[idx] = envelope_ny;
+            mark_left_wall_contact(batch, idx, candidates.has_hug);
+          }
+        }
+        if (batch->state.wall_kind[idx] == 0 && !use_specialhi_left_envelope) {
+          float ix = 0.0f, iy = 0.0f;
+          float nx = -1.0f, ny = 0.0f;
+          int hit_line_idx = -1;
+          if (wall_sweep_check(lwg, 1, prev_rx, prev_ry, cur_rx, cur_ry, prefer_line_idx,
+                               &hit_line_idx, &ix, &iy, &nx, &ny)) {
+            float x_corr = 0.0f;
+            const int out_line_idx =
+                left_wall_e398_project(lwg, hit_line_idx, cur_rx, cur_ry, &x_corr, &nx, &ny);
+            if (out_line_idx >= 0) {
+              if (x_corr > 0.0f) {
+                x_corr = 0.0f;
+              }
+              batch->state.pos_x[idx] += x_corr;
+              batch->state.wall_kind[idx] = MSL_WALL_LEFT;
+              batch->state.wall_id[idx] = lwg->lines[(size_t)out_line_idx].segment_i;
+              batch->state.wall_contact_x[idx] = ix;
+              batch->state.wall_contact_y[idx] = iy;
+              batch->state.wall_normal_x[idx] = nx;
+              batch->state.wall_normal_y[idx] = ny;
+              mark_left_wall_contact(batch, idx, 1u);
+            }
           }
         }
         if (batch->state.wall_kind[idx] == 0 && !grounded_now) {
@@ -1602,27 +1815,7 @@ void mpcoll_wall_ceil_apply(MslBatch* batch) {
           }
         }
 
-        // Airborne wall checks in-engine consider more than just the ECB side point.
-        //
-        // Why 3 points?
-        // - mpColl computes world-space ECB points as `coll->cur_pos + coll->ecb.{left,bottom,top}` and
-        //   runs sweep checks against those paths.
-        // - Specifically, mpColl_80044E10_RightWall checks the ECB left-side point first (hug), then the
-        //   ECB bottom point, then the ECB top point (plus additional vertical/diagonal helpers we do not
-        //   yet model in this lite sim). LeftWall uses the symmetric ECB right-side point first.
-        // - In this simulator, `msl_ecb_world_points_sample()` provides those same world-space points
-        //   (right_x/right_y, bottom_x/bottom_y, top_x/top_y) from ISO-extracted ECB tables.
-        //
-        // Determinism + selection:
-        // - We preserve a deterministic priority order that mirrors mpColl's primary check ordering:
-        //   side-point sweep first, then bottom, then top.
-        // - Each sweep's line selection is deterministic inside wall_sweep_check(): nearest (dist2),
-        //   then prefer prev/adjacent line id, then ISO-derived segment_i tie-break.
-        //
-        // Decomp refs:
-        // - refs/melee/src/melee/mp/mpcoll.c::mpColl_80044E10_RightWall (ordering over ECB points)
-        // - refs/melee/src/melee/mp/mplib.c::mpLib_8004E684_RightWall / ::mpLib_8004E398_LeftWall (projection)
-        if (batch->state.wall_kind[idx] == 0) {
+        if (batch->state.wall_kind[idx] == 0 && !use_specialhi_left_envelope) {
           const float cur_bx = cur_ecb.bottom_x;
           const float cur_by = cur_ecb.bottom_y;
           const float prev_bx = prev_ecb.bottom_x;
@@ -1653,7 +1846,7 @@ void mpcoll_wall_ceil_apply(MslBatch* batch) {
           }
         }
 
-        if (batch->state.wall_kind[idx] == 0) {
+        if (batch->state.wall_kind[idx] == 0 && !use_specialhi_left_envelope) {
           const float cur_tx = cur_ecb.top_x;
           const float cur_ty = cur_ecb.top_y;
           const float prev_tx = prev_ecb.top_x;
