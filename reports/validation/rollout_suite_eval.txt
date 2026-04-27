@@ -21,53 +21,60 @@
 
 suite: fox_falco_fd_ucf084_recent  datasets: 4  ucf_enabled: True  ucf_cardinals_1_0_enabled: True
 fields: action_id,animation_index,on_ground,hitlag,hitstun,state_flags
+validation.profile: rl1_gameplay
+validation.profile.ignored: state_flags[4] reason=Slippi fp+0x221F camera-subject visibility byte. The current RL1 target consumes gameplay state, collision, damage, hitlag, shield, item, source, and identity lanes, but not magnifying-glass/camera-box rendering. exception=fp+0x221F bit3 gates source-clear timer derivation during dataset construction; that semantic seed lane remains scored separately. Only the raw compare byte is ignored for validation totals/rollout first-break ranking.
 
 == datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl ==
 rollout.best_len: 844
-rollout.streak_count: 46
-rollout.streak_len.median: 107
-rollout.streak_len.p90: 370
-rollout.streak_len.p95: 469
+rollout.streak_count: 31
+rollout.streak_len.median: 144
+rollout.streak_len.p90: 450
+rollout.streak_len.p95: 844
 rollout.streak_len.max: 844
-rollout.first_mismatch_total: 46
-rollout.first_mismatch_seeded_total: 21
+rollout.first_mismatch_total: 30
+rollout.first_mismatch_seeded_total: 2
+rollout.ignored_first_mismatch_top: state_flags[4]:1355
 
 == datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.msl ==
 rollout.best_len: 851
-rollout.streak_count: 78
-rollout.streak_len.median: 110
-rollout.streak_len.p90: 349
-rollout.streak_len.p95: 497
+rollout.streak_count: 59
+rollout.streak_len.median: 141
+rollout.streak_len.p90: 493
+rollout.streak_len.p95: 583
 rollout.streak_len.max: 851
-rollout.first_mismatch_total: 77
-rollout.first_mismatch_seeded_total: 33
+rollout.first_mismatch_total: 58
+rollout.first_mismatch_seeded_total: 11
+rollout.ignored_first_mismatch_top: state_flags[4]:1379
 
 == datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/QuerulousGrandDinosaur.msl ==
 rollout.best_len: 842
-rollout.streak_count: 80
-rollout.streak_len.median: 96
-rollout.streak_len.p90: 278
-rollout.streak_len.p95: 314
+rollout.streak_count: 56
+rollout.streak_len.median: 106
+rollout.streak_len.p90: 521
+rollout.streak_len.p95: 580
 rollout.streak_len.max: 842
-rollout.first_mismatch_total: 79
-rollout.first_mismatch_seeded_total: 34
+rollout.first_mismatch_total: 55
+rollout.first_mismatch_seeded_total: 7
+rollout.ignored_first_mismatch_top: state_flags[4]:1504
 
 == datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/TreasuredBackKangaroo.msl ==
 rollout.best_len: 959
-rollout.streak_count: 51
-rollout.streak_len.median: 110
-rollout.streak_len.p90: 324
-rollout.streak_len.p95: 413
+rollout.streak_count: 36
+rollout.streak_len.median: 155
+rollout.streak_len.p90: 487
+rollout.streak_len.p95: 850
 rollout.streak_len.max: 959
-rollout.first_mismatch_total: 52
-rollout.first_mismatch_seeded_total: 29
+rollout.first_mismatch_total: 36
+rollout.first_mismatch_seeded_total: 10
+rollout.ignored_first_mismatch_top: state_flags[4]:1218
 
 == suite summary ==
-overall.rollout.streak_count: 255
-overall.rollout.streak_len.median: 108
-overall.rollout.streak_len.p90: 314
-overall.rollout.streak_len.p95: 469
+overall.rollout.streak_count: 182
+overall.rollout.streak_len.median: 141
+overall.rollout.streak_len.p90: 487
+overall.rollout.streak_len.p95: 580
 overall.rollout.streak_len.max: 959
 overall.rollout.best_len.max: 959
-overall.rollout.first_mismatch_total: 254
-overall.rollout.first_mismatch_seeded_total: 117
+overall.rollout.first_mismatch_total: 179
+overall.rollout.first_mismatch_seeded_total: 30
+overall.rollout.ignored_first_mismatch_top: state_flags[4]:5456

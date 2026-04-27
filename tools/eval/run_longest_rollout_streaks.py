@@ -26,6 +26,7 @@ import numpy as np
 
 from tools.eval.dataset import COMPARE_DTYPE, Dataset, read_dataset
 from tools.eval.discrete_compare_lanes import compile_discrete_compare_lanes, first_mismatch_field
+from tools.eval.validation_profile import ValidationProfile, get_validation_profile, validation_profile_names
 from tools.slippi.suite_io import dataset_path_for_suite_replay, load_suite, repo_root
 
 
@@ -94,6 +95,9 @@ class DatasetStreaks:
     streak_histogram: dict[int, int]
     first_mismatch_field_counts: dict[str, int]
     first_mismatch_field_counts_seeded: dict[str, int]
+    ignored_first_mismatch_field_counts: dict[str, int]
+    ignored_first_mismatch_field_counts_seeded: dict[str, int]
+    profile_name: str
 
 
 @dataclass(frozen=True)
@@ -104,6 +108,20 @@ class _ScanResult:
     streak_histogram: Counter[int]
     first_mismatch_field_counts: Counter[str]
     first_mismatch_field_counts_seeded: Counter[str]
+    ignored_first_mismatch_field_counts: Counter[str]
+    ignored_first_mismatch_field_counts_seeded: Counter[str]
+
+
+@dataclass(frozen=True)
+class _AttemptResult:
+    scored_field: str | None = None
+    ignored_first_field: str | None = None
+
+
+def _normalize_attempt_result(value: str | _AttemptResult | None) -> _AttemptResult:
+    if isinstance(value, _AttemptResult):
+        return value
+    return _AttemptResult(scored_field=value)
 
 
 def _scan_rollout_streaks(
@@ -123,6 +141,8 @@ def _scan_rollout_streaks(
     hist: Counter[int] = Counter()
     mismatch_fields: Counter[str] = Counter()
     mismatch_fields_seeded: Counter[str] = Counter()
+    ignored_first_fields: Counter[str] = Counter()
+    ignored_first_fields_seeded: Counter[str] = Counter()
 
     needs_seed = True
     j = 0
@@ -131,8 +151,10 @@ def _scan_rollout_streaks(
             reseed_at(cur_start)
             needs_seed = False
 
-        mm = attempt_from_current(j)
-        if mm is None:
+        attempt = _normalize_attempt_result(attempt_from_current(j))
+        if attempt.ignored_first_field is not None:
+            ignored_first_fields[attempt.ignored_first_field] += 1
+        if attempt.scored_field is None:
             cur_len += 1
             if cur_len > best_len:
                 best_len = cur_len
@@ -143,14 +165,16 @@ def _scan_rollout_streaks(
 
         if cur_len > 0:
             hist[cur_len] += 1
-        mismatch_fields[mm] += 1
+        mismatch_fields[attempt.scored_field] += 1
 
         # Start a new streak at the same record j (reseed-at-j), retry once.
         cur_start = j
         cur_len = 0
 
-        mm2 = attempt_seeded_at_record(j)
-        if mm2 is None:
+        retry = _normalize_attempt_result(attempt_seeded_at_record(j))
+        if retry.ignored_first_field is not None:
+            ignored_first_fields_seeded[retry.ignored_first_field] += 1
+        if retry.scored_field is None:
             cur_len = 1
             if cur_len > best_len:
                 best_len = cur_len
@@ -159,7 +183,7 @@ def _scan_rollout_streaks(
             j += 1
             continue
 
-        mismatch_fields_seeded[mm2] += 1
+        mismatch_fields_seeded[retry.scored_field] += 1
 
         # Guard: if it mismatches even when seeded-at-j, advance to j+1.
         cur_start = j + 1
@@ -177,6 +201,8 @@ def _scan_rollout_streaks(
         streak_histogram=hist,
         first_mismatch_field_counts=mismatch_fields,
         first_mismatch_field_counts_seeded=mismatch_fields_seeded,
+        ignored_first_mismatch_field_counts=ignored_first_fields,
+        ignored_first_mismatch_field_counts_seeded=ignored_first_fields_seeded,
     )
 
 
@@ -189,7 +215,9 @@ def _scan_dataset_streaks(
     max_records: int,
     ucf_enabled: bool | None,
     ucf_cardinals_1_0_enabled: bool | None,
+    profile: str | ValidationProfile | None = None,
 ) -> DatasetStreaks:
+    validation_profile = get_validation_profile(profile)
     samples = ds.samples
     num_records_total = int(samples.shape[0])
     num_players = int(ds.header["num_players"])
@@ -227,24 +255,31 @@ def _scan_dataset_streaks(
 
     ref = samples["ref_t1"]
     seed = samples["seed_t"]
-    compare_lanes = compile_discrete_compare_lanes(fields, players)
+    compare_lanes = compile_discrete_compare_lanes(fields, players, profile=validation_profile)
+    ignored_lanes = compile_discrete_compare_lanes(
+        fields, players, profile=validation_profile, ignored_only=True
+    )
 
     def reseed_at(j: int) -> None:
         seed_bytes[0, :] = samples_u8[j, seed_off : seed_off + seed_stride]
         binding.reseed_seed(handle, seed_bytes)
 
-    def step_and_compare(j: int) -> str | None:
+    def step_and_compare(j: int) -> _AttemptResult:
         prev_input_bytes[0, :] = samples_u8[j, prev_input_off : prev_input_off + input_stride]
         input_bytes[0, :] = samples_u8[j, input_off : input_off + input_stride]
         binding.step_input(handle, prev_input_bytes, input_bytes)
         binding.write_compare(handle, out_compare_bytes)
-        return first_mismatch_field(
+        scored = first_mismatch_field(
             out_row=out_view[0],
             ref_row=ref[j],
             lanes=compare_lanes,
         )
+        ignored = first_mismatch_field(
+            out_row=out_view[0], ref_row=ref[j], lanes=ignored_lanes, label_subindex=True
+        )
+        return _AttemptResult(scored_field=scored, ignored_first_field=ignored)
 
-    def step_seeded_and_compare(j: int) -> str | None:
+    def step_seeded_and_compare(j: int) -> _AttemptResult:
         reseed_at(j)
         return step_and_compare(j)
 
@@ -287,6 +322,11 @@ def _scan_dataset_streaks(
         streak_histogram=dict(sorted(scan.streak_histogram.items())),
         first_mismatch_field_counts=dict(sorted(scan.first_mismatch_field_counts.items())),
         first_mismatch_field_counts_seeded=dict(sorted(scan.first_mismatch_field_counts_seeded.items())),
+        ignored_first_mismatch_field_counts=dict(sorted(scan.ignored_first_mismatch_field_counts.items())),
+        ignored_first_mismatch_field_counts_seeded=dict(
+            sorted(scan.ignored_first_mismatch_field_counts_seeded.items())
+        ),
+        profile_name=validation_profile.name,
     )
 
 
@@ -310,6 +350,7 @@ def _print_dataset_summary(*, root: Path, s: DatasetStreaks) -> None:
         )
     print("records_used:", f"{s.max_records_used}/{s.num_records}", "players:", ",".join(map(str, s.players)))
     print("fields:", ",".join(s.fields))
+    print("profile:", s.profile_name)
 
     if s.streak_histogram:
         pairs = sorted(s.streak_histogram.items(), key=lambda kv: (-kv[1], -kv[0]))[:12]
@@ -333,6 +374,20 @@ def _print_dataset_summary(*, root: Path, s: DatasetStreaks) -> None:
     else:
         print("seeded_mismatch_field_top: (none)")
 
+    if s.ignored_first_mismatch_field_counts:
+        pairs = sorted(s.ignored_first_mismatch_field_counts.items(), key=lambda kv: (-kv[1], kv[0]))[:12]
+        preview = " ".join(f"{k}:{v}" for k, v in pairs)
+        print("ignored_first_mismatch_field_top:", preview)
+    else:
+        print("ignored_first_mismatch_field_top: (none)")
+
+    if s.ignored_first_mismatch_field_counts_seeded:
+        pairs = sorted(s.ignored_first_mismatch_field_counts_seeded.items(), key=lambda kv: (-kv[1], kv[0]))[:12]
+        preview = " ".join(f"{k}:{v}" for k, v in pairs)
+        print("ignored_seeded_mismatch_field_top:", preview)
+    else:
+        print("ignored_seeded_mismatch_field_top: (none)")
+
 
 def main() -> None:
     ap = argparse.ArgumentParser(description="Compute longest in-sync rollout streaks over a suite.")
@@ -342,6 +397,12 @@ def main() -> None:
         "--fields",
         default="action_id,animation_index,on_ground,hitlag,hitstun,state_flags",
         help="Comma-separated discrete compare fields (default: %(default)s).",
+    )
+    ap.add_argument(
+        "--profile",
+        default="rl1_gameplay",
+        choices=validation_profile_names(),
+        help="Validation scoring profile. strict scores every compare lane; rl1_gameplay ignores RL1-irrelevant lanes.",
     )
     ap.add_argument(
         "--players",
@@ -357,6 +418,7 @@ def main() -> None:
     suite = load_suite(suite_path)
 
     fields = _validate_discrete_fields(_parse_csv(str(args.fields)))
+    validation_profile = get_validation_profile(args.profile)
 
     missing: list[str] = []
     dataset_paths: list[Path] = []
@@ -398,6 +460,7 @@ def main() -> None:
             max_records=int(args.max_records),
             ucf_enabled=suite.ucf_enabled,
             ucf_cardinals_1_0_enabled=suite.ucf_cardinals_1_0_enabled,
+            profile=validation_profile,
         )
         _print_dataset_summary(root=root, s=s)
         results.append(s)
@@ -411,6 +474,8 @@ def main() -> None:
             "ucf_enabled": bool(suite.ucf_enabled),
             "ucf_cardinals_1_0_enabled": bool(suite.ucf_cardinals_1_0_enabled),
             "fields": list(fields),
+            "profile": validation_profile.name,
+            "ignored_lanes": [lane.label for lane in validation_profile.ignored_lanes],
             "players_csv": None if args.players is None else str(args.players),
             "max_records": int(args.max_records),
             "per_dataset": [
@@ -427,6 +492,8 @@ def main() -> None:
                     "streak_histogram": s.streak_histogram,
                     "first_mismatch_field_counts": s.first_mismatch_field_counts,
                     "first_mismatch_field_counts_seeded": s.first_mismatch_field_counts_seeded,
+                    "ignored_first_mismatch_field_counts": s.ignored_first_mismatch_field_counts,
+                    "ignored_first_mismatch_field_counts_seeded": s.ignored_first_mismatch_field_counts_seeded,
                 }
                 for s in results
             ],

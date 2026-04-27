@@ -9,6 +9,7 @@ from pathlib import Path
 import numpy as np
 
 from tools.eval.dataset import COMPARE_DTYPE, INPUT_DTYPE, SEED_DTYPE, read_dataset
+from tools.eval.validation_profile import ValidationProfile, get_validation_profile, scored_lane_count_for_field
 
 
 @dataclass
@@ -42,6 +43,9 @@ class EvalSummary:
     total_state_flags: int
     total_item_slots: int
     mismatches: dict[str, int]
+    strict_mismatches: dict[str, int]
+    ignored_mismatches: dict[str, int]
+    profile_name: str
     float_norm_sum: float
     float_norm_count: int
 
@@ -119,6 +123,27 @@ def _denom_for_field(
     return total_player_frames
 
 
+def _scored_denom_for_field(
+    field: str,
+    *,
+    total_records: int,
+    total_player_frames: int,
+    total_state_flags: int,
+    total_item_slots: int,
+    num_players: int,
+    profile: ValidationProfile,
+) -> int:
+    if field == "state_flags":
+        per_record = scored_lane_count_for_field(field, players=num_players, profile=profile)
+        return int(total_records) * int(per_record)
+    return _denom_for_field(
+        field,
+        total_player_frames=total_player_frames,
+        total_state_flags=total_state_flags,
+        total_item_slots=total_item_slots,
+    )
+
+
 def _discrete_exact_pct(summary: EvalSummary) -> float:
     total_checks = 0
     total_mismatches = 0
@@ -136,10 +161,30 @@ def _discrete_exact_pct(summary: EvalSummary) -> float:
     return 100.0 * (1.0 - (total_mismatches / total_checks))
 
 
-def _discrete_mismatch_total(summary: EvalSummary) -> tuple[int, int]:
+def _discrete_mismatch_total(summary: EvalSummary, *, profile: ValidationProfile | None = None) -> tuple[int, int]:
+    profile = get_validation_profile(summary.profile_name) if profile is None else profile
+    num_players = int(summary.total_player_frames // summary.total_records) if summary.total_records > 0 else 0
     total_checks = 0
     total_mismatches = 0
     for k, v in summary.mismatches.items():
+        denom = _scored_denom_for_field(
+            k,
+            total_records=summary.total_records,
+            total_player_frames=summary.total_player_frames,
+            total_state_flags=summary.total_state_flags,
+            total_item_slots=summary.total_item_slots,
+            num_players=num_players,
+            profile=profile,
+        )
+        total_checks += denom
+        total_mismatches += v
+    return total_mismatches, total_checks
+
+
+def _strict_discrete_mismatch_total(summary: EvalSummary) -> tuple[int, int]:
+    total_checks = 0
+    total_mismatches = 0
+    for k, v in summary.strict_mismatches.items():
         denom = _denom_for_field(
             k,
             total_player_frames=summary.total_player_frames,
@@ -175,9 +220,11 @@ def evaluate_dataset(
     *,
     dataset_path: Path,
     chunk: int,
+    profile: str | ValidationProfile | None = None,
     ucf_enabled: bool | None = None,
     ucf_cardinals_1_0_enabled: bool | None = None,
     reporter: Reporter | None = None,
+    print_profile: bool = True,
     debug_mismatch: tuple[str, ...] = (),
     debug_limit: int = 10,
     debug_float: tuple[str, ...] = (),
@@ -185,6 +232,7 @@ def evaluate_dataset(
 ) -> EvalSummary:
     if reporter is None:
         reporter = Reporter()
+    validation_profile = get_validation_profile(profile)
 
     try:
         ds = read_dataset(str(dataset_path))
@@ -246,6 +294,8 @@ def evaluate_dataset(
         "item_owner": 0,
         "item_instance_id": 0,
     }
+    strict_mismatches = {k: 0 for k in mismatches}
+    ignored_mismatches = {lane.label: 0 for lane in validation_profile.ignored_lanes}
     float_err = {
         k: []
         for k in (
@@ -544,54 +594,56 @@ def evaluate_dataset(
                     )
                     debug_left[field] = left - 1
 
-        mismatches["action_id"] += int((out_compare_view["action_id"][:, active] != ref["action_id"][:, active]).sum())
-        mismatches["action_frame"] += int(
-            (out_compare_view["action_frame"][:, active] != ref["action_frame"][:, active]).sum()
-        )
-        mismatches["on_ground"] += int((out_compare_view["on_ground"][:, active] != ref["on_ground"][:, active]).sum())
-        mismatches["facing"] += int((out_compare_view["facing"][:, active] != ref["facing"][:, active]).sum())
-        mismatches["stocks"] += int((out_compare_view["stocks"][:, active] != ref["stocks"][:, active]).sum())
-        mismatches["jumps_left"] += int((out_compare_view["jumps_left"][:, active] != ref["jumps_left"][:, active]).sum())
-        mismatches["is_dead"] += int((out_compare_view["is_dead"][:, active] != ref["is_dead"][:, active]).sum())
-        mismatches["hitlag"] += int((out_compare_view["hitlag"][:, active] != ref["hitlag"][:, active]).sum())
-        mismatches["hitstun"] += int((out_compare_view["hitstun"][:, active] != ref["hitstun"][:, active]).sum())
-        mismatches["l_cancel"] += int((out_compare_view["l_cancel"][:, active] != ref["l_cancel"][:, active]).sum())
-        mismatches["hurtbox_state"] += int(
-            (out_compare_view["hurtbox_state"][:, active] != ref["hurtbox_state"][:, active]).sum()
-        )
-        mismatches["ground_id"] += int((out_compare_view["ground_id"][:, active] != ref["ground_id"][:, active]).sum())
-        mismatches["animation_index"] += int(
-            (out_compare_view["animation_index"][:, active] != ref["animation_index"][:, active]).sum()
-        )
-        mismatches["instance_hit_by"] += int(
-            (out_compare_view["instance_hit_by"][:, active] != ref["instance_hit_by"][:, active]).sum()
-        )
-        mismatches["instance_id"] += int(
-            (out_compare_view["instance_id"][:, active] != ref["instance_id"][:, active]).sum()
-        )
-        mismatches["last_attack_landed"] += int(
-            (out_compare_view["last_attack_landed"][:, active] != ref["last_attack_landed"][:, active]).sum()
-        )
-        mismatches["combo_count"] += int(
-            (out_compare_view["combo_count"][:, active] != ref["combo_count"][:, active]).sum()
-        )
-        mismatches["last_hit_by"] += int(
-            (out_compare_view["last_hit_by"][:, active] != ref["last_hit_by"][:, active]).sum()
-        )
+        for field in (
+            "action_id",
+            "action_frame",
+            "on_ground",
+            "facing",
+            "stocks",
+            "jumps_left",
+            "is_dead",
+            "hitlag",
+            "hitstun",
+            "l_cancel",
+            "hurtbox_state",
+            "ground_id",
+            "animation_index",
+            "instance_hit_by",
+            "instance_id",
+            "last_attack_landed",
+            "combo_count",
+            "last_hit_by",
+        ):
+            count = int((out_compare_view[field][:, active] != ref[field][:, active]).sum())
+            mismatches[field] += count
+            strict_mismatches[field] += count
 
         # state_flags is (players,5)
-        mismatches["state_flags"] += int(
-            (out_compare_view["state_flags"][:, active, :] != ref["state_flags"][:, active, :]).sum()
-        )
+        state_flags_diff = out_compare_view["state_flags"][:, active, :] != ref["state_flags"][:, active, :]
+        strict_state_flags = int(state_flags_diff.sum())
+        scored_state_flags_diff = state_flags_diff.copy()
+        for lane in validation_profile.ignored_lanes:
+            if lane.field == "state_flags":
+                ignored = state_flags_diff[:, :, lane.subindex]
+                ignored_count = int(ignored.sum())
+                ignored_mismatches[lane.label] += ignored_count
+                scored_state_flags_diff[:, :, lane.subindex] = False
+        mismatches["state_flags"] += int(scored_state_flags_diff.sum())
+        strict_mismatches["state_flags"] += strict_state_flags
 
         # Items: compare all 15 slots (global), but only for exists-matched slots for float errors.
         out_items = out_compare_view["items"]
         ref_items = ref["items"]
-        mismatches["item_exists"] += int((out_items["exists"] != ref_items["exists"]).sum())
-        mismatches["item_type"] += int((out_items["type"] != ref_items["type"]).sum())
-        mismatches["item_state"] += int((out_items["state"] != ref_items["state"]).sum())
-        mismatches["item_owner"] += int((out_items["owner"] != ref_items["owner"]).sum())
-        mismatches["item_instance_id"] += int((out_items["instance_id"] != ref_items["instance_id"]).sum())
+        for field, subfield in (
+            ("item_exists", "exists"),
+            ("item_type", "type"),
+            ("item_state", "state"),
+            ("item_owner", "owner"),
+            ("item_instance_id", "instance_id"),
+        ):
+            count = int((out_items[subfield] != ref_items[subfield]).sum())
+            mismatches[field] += count
+            strict_mismatches[field] += count
 
         for k in float_err:
             if k.startswith("item_"):
@@ -612,17 +664,28 @@ def evaluate_dataset(
     total_state_flags = total_player_frames * 5
     total_item_slots = total_records * max_items
 
+    if print_profile:
+        reporter.print(f"validation.profile: {validation_profile.name}")
+        for lane in validation_profile.ignored_lanes:
+            reporter.print(f"validation.profile.ignored: {lane.label} reason={lane.reason} exception={lane.exception}")
     reporter.print(
         f"Records: {num_records}  Players/scored per record: {num_players}  Total player-frames: {total_player_frames}"
     )
     for k, v in mismatches.items():
-        denom = _denom_for_field(
+        denom = _scored_denom_for_field(
             k,
+            total_records=total_records,
             total_player_frames=total_player_frames,
             total_state_flags=total_state_flags,
             total_item_slots=total_item_slots,
+            num_players=num_players,
+            profile=validation_profile,
         )
         reporter.print(f"mismatch.{k}: {v} / {denom} ({v/denom:.6f})")
+    for k, v in ignored_mismatches.items():
+        denom = total_player_frames if k.startswith("state_flags[") else 0
+        if denom > 0:
+            reporter.print(f"ignored_mismatch.{k}: {v} / {denom} ({v/denom:.6f})")
     for k, pieces in float_err.items():
         m = _float_metrics(np.concatenate(pieces, axis=0) if pieces else np.array([], dtype=np.float32))
         reporter.print(f"err.{k}: mae={m.mae:.6f} p95={m.p95:.6f} max={m.mx:.6f}")
@@ -635,11 +698,18 @@ def evaluate_dataset(
         total_state_flags=total_state_flags,
         total_item_slots=total_item_slots,
         mismatches=mismatches,
+        strict_mismatches=strict_mismatches,
+        ignored_mismatches=ignored_mismatches,
+        profile_name=validation_profile.name,
         float_norm_sum=float_norm_sum,
         float_norm_count=float_norm_count,
     )
-    mismatches_total, checks_total = _discrete_mismatch_total(summary)
+    mismatches_total, checks_total = _discrete_mismatch_total(summary, profile=validation_profile)
+    strict_total, strict_checks = _strict_discrete_mismatch_total(summary)
+    ignored_total = sum(ignored_mismatches.values())
     reporter.print(f"overall.discrete_mismatch: {mismatches_total} / {checks_total}")
+    reporter.print(f"overall.strict_discrete_mismatch: {strict_total} / {strict_checks}")
+    reporter.print(f"overall.ignored_discrete_mismatch: {ignored_total}")
     reporter.print(f"overall.float_norm_mae_p95: {overall_float_norm:.8f}")
 
     if debug_float_fields:
@@ -665,12 +735,13 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--dataset", required=True)
     ap.add_argument("--chunk", type=int, default=4096)
+    ap.add_argument("--profile", default="rl1_gameplay", help="Validation scoring profile: strict or rl1_gameplay.")
     ap.add_argument("--out", type=Path, default=None, help="optional output path to write the report")
     args = ap.parse_args()
 
     reporter = Reporter(args.out)
     try:
-        evaluate_dataset(dataset_path=Path(args.dataset), chunk=args.chunk, reporter=reporter)
+        evaluate_dataset(dataset_path=Path(args.dataset), chunk=args.chunk, profile=args.profile, reporter=reporter)
     finally:
         reporter.close()
 

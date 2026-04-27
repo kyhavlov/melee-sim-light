@@ -12,6 +12,7 @@ from tools.eval.run_longest_rollout_streaks import (
 )
 from tools.eval.run_one_step_eval import Reporter
 from tools.eval.dataset import read_dataset
+from tools.eval.validation_profile import get_validation_profile, validation_profile_names
 from tools.slippi.suite_io import dataset_path_for_suite_replay, load_suite, repo_root
 
 
@@ -59,6 +60,12 @@ def main() -> None:
         help="Comma-separated player indices to compare (default: all players in dataset).",
     )
     ap.add_argument("--max-records", type=int, default=0, help="Optional cap (0 = no cap).")
+    ap.add_argument(
+        "--profile",
+        default="rl1_gameplay",
+        choices=validation_profile_names(),
+        help="Validation scoring profile. strict scores every compare lane; rl1_gameplay ignores RL1-irrelevant lanes.",
+    )
     ap.add_argument("--out", type=Path, default=None, help="optional output path to write the report")
     args = ap.parse_args()
 
@@ -67,6 +74,7 @@ def main() -> None:
     suite = load_suite(suite_path)
 
     fields = _validate_discrete_fields(_parse_csv(str(args.fields)))
+    validation_profile = get_validation_profile(args.profile)
 
     missing = []
     dataset_paths: list[Path] = []
@@ -102,6 +110,7 @@ def main() -> None:
             max_records=int(args.max_records),
             ucf_enabled=suite.ucf_enabled,
             ucf_cardinals_1_0_enabled=suite.ucf_cardinals_1_0_enabled,
+            profile=validation_profile,
         )
         per_dataset_payload.append(
             {
@@ -117,6 +126,8 @@ def main() -> None:
                 "streak_histogram": s.streak_histogram,
                 "first_mismatch_field_counts": s.first_mismatch_field_counts,
                 "first_mismatch_field_counts_seeded": s.first_mismatch_field_counts_seeded,
+                "ignored_first_mismatch_field_counts": s.ignored_first_mismatch_field_counts,
+                "ignored_first_mismatch_field_counts_seeded": s.ignored_first_mismatch_field_counts_seeded,
             }
         )
 
@@ -127,6 +138,8 @@ def main() -> None:
         "ucf_enabled": bool(suite.ucf_enabled),
         "ucf_cardinals_1_0_enabled": bool(suite.ucf_cardinals_1_0_enabled),
         "fields": list(fields),
+        "profile": validation_profile.name,
+        "ignored_lanes": [lane.label for lane in validation_profile.ignored_lanes],
         "players_csv": None if args.players is None else str(args.players),
         "max_records": int(args.max_records),
         "per_dataset": per_dataset_payload,
@@ -148,6 +161,9 @@ def main() -> None:
             f"ucf_enabled: {suite.ucf_enabled}  ucf_cardinals_1_0_enabled: {suite.ucf_cardinals_1_0_enabled}"
         )
         reporter.print(f"fields: {','.join(str(x) for x in summary['fields'])}")
+        reporter.print(f"validation.profile: {validation_profile.name}")
+        for lane in validation_profile.ignored_lanes:
+            reporter.print(f"validation.profile.ignored: {lane.label} reason={lane.reason} exception={lane.exception}")
 
         for row in summary["dataset_summaries"]:
             reporter.print()
@@ -160,6 +176,20 @@ def main() -> None:
             reporter.print(f"rollout.streak_len.max: {row['max_streak_len']}")
             reporter.print(f"rollout.first_mismatch_total: {row['first_mismatch_total']}")
             reporter.print(f"rollout.first_mismatch_seeded_total: {row['first_mismatch_seeded_total']}")
+            ignored = dict(row.get("ignored_first_mismatch_field_counts", {}))
+            ignored_seeded = dict(row.get("ignored_first_mismatch_field_counts_seeded", {}))
+            if ignored:
+                reporter.print(
+                    "rollout.ignored_first_mismatch_top:",
+                    " ".join(f"{k}:{v}" for k, v in sorted(ignored.items(), key=lambda kv: (-kv[1], kv[0]))[:8]),
+                )
+            if ignored_seeded:
+                reporter.print(
+                    "rollout.ignored_first_mismatch_seeded_top:",
+                    " ".join(
+                        f"{k}:{v}" for k, v in sorted(ignored_seeded.items(), key=lambda kv: (-kv[1], kv[0]))[:8]
+                    ),
+                )
 
         reporter.print()
         reporter.print("== suite summary ==")
@@ -173,6 +203,25 @@ def main() -> None:
         reporter.print(
             f"overall.rollout.first_mismatch_seeded_total: {suite_summary['first_mismatch_seeded_total']}"
         )
+        ignored_suite: dict[str, int] = {}
+        ignored_seeded_suite: dict[str, int] = {}
+        for row in summary["dataset_summaries"]:
+            for k, v in dict(row.get("ignored_first_mismatch_field_counts", {})).items():
+                ignored_suite[k] = ignored_suite.get(k, 0) + int(v)
+            for k, v in dict(row.get("ignored_first_mismatch_field_counts_seeded", {})).items():
+                ignored_seeded_suite[k] = ignored_seeded_suite.get(k, 0) + int(v)
+        if ignored_suite:
+            reporter.print(
+                "overall.rollout.ignored_first_mismatch_top:",
+                " ".join(f"{k}:{v}" for k, v in sorted(ignored_suite.items(), key=lambda kv: (-kv[1], kv[0]))[:8]),
+            )
+        if ignored_seeded_suite:
+            reporter.print(
+                "overall.rollout.ignored_first_mismatch_seeded_top:",
+                " ".join(
+                    f"{k}:{v}" for k, v in sorted(ignored_seeded_suite.items(), key=lambda kv: (-kv[1], kv[0]))[:8]
+                ),
+            )
     finally:
         reporter.close()
 

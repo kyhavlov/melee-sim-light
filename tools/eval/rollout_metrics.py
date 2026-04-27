@@ -71,6 +71,12 @@ def _summarize_dataset_row(row: Mapping[str, Any]) -> dict[str, Any]:
     first_mm_seeded = Counter(
         {str(k): int(v) for k, v in dict(row.get("first_mismatch_field_counts_seeded", {})).items()}
     )
+    ignored_first = Counter(
+        {str(k): int(v) for k, v in dict(row.get("ignored_first_mismatch_field_counts", {})).items()}
+    )
+    ignored_first_seeded = Counter(
+        {str(k): int(v) for k, v in dict(row.get("ignored_first_mismatch_field_counts_seeded", {})).items()}
+    )
     return {
         "dataset": str(row.get("dataset", "")),
         "num_records": int(row.get("num_records", 0)),
@@ -86,6 +92,8 @@ def _summarize_dataset_row(row: Mapping[str, Any]) -> dict[str, Any]:
         "streak_histogram": {int(k): int(v) for k, v in sorted(hist.items())},
         "first_mismatch_field_counts": dict(sorted(first_mm.items())),
         "first_mismatch_field_counts_seeded": dict(sorted(first_mm_seeded.items())),
+        "ignored_first_mismatch_field_counts": dict(sorted(ignored_first.items())),
+        "ignored_first_mismatch_field_counts_seeded": dict(sorted(ignored_first_seeded.items())),
         "first_mismatch_total": int(sum(first_mm.values())),
         "first_mismatch_seeded_total": int(sum(first_mm_seeded.values())),
     }
@@ -102,10 +110,14 @@ def summarize_rollout_payload(payload: Mapping[str, Any]) -> dict[str, Any]:
     suite_hist: Counter[int] = Counter()
     suite_first_mm: Counter[str] = Counter()
     suite_first_mm_seeded: Counter[str] = Counter()
+    suite_ignored_first: Counter[str] = Counter()
+    suite_ignored_first_seeded: Counter[str] = Counter()
     for row in dataset_rows:
         suite_hist.update({int(k): int(v) for k, v in row["streak_histogram"].items()})
         suite_first_mm.update(Counter(row["first_mismatch_field_counts"]))
         suite_first_mm_seeded.update(Counter(row["first_mismatch_field_counts_seeded"]))
+        suite_ignored_first.update(Counter(row["ignored_first_mismatch_field_counts"]))
+        suite_ignored_first_seeded.update(Counter(row["ignored_first_mismatch_field_counts_seeded"]))
 
     suite = {
         "dataset_count": len(dataset_rows),
@@ -117,6 +129,8 @@ def summarize_rollout_payload(payload: Mapping[str, Any]) -> dict[str, Any]:
         "max_best_len": max((int(row["best_len"]) for row in dataset_rows), default=0),
         "first_mismatch_field_counts": dict(sorted(suite_first_mm.items())),
         "first_mismatch_field_counts_seeded": dict(sorted(suite_first_mm_seeded.items())),
+        "ignored_first_mismatch_field_counts": dict(sorted(suite_ignored_first.items())),
+        "ignored_first_mismatch_field_counts_seeded": dict(sorted(suite_ignored_first_seeded.items())),
         "first_mismatch_total": int(sum(suite_first_mm.values())),
         "first_mismatch_seeded_total": int(sum(suite_first_mm_seeded.values())),
     }

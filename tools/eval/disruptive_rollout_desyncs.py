@@ -23,6 +23,7 @@ from tools.eval.dataset import COMPARE_DTYPE, MAX_ITEMS, read_dataset
 from tools.eval.facing_residual_blocker_report import load_action_id_names
 from tools.eval.mismatch_taxonomy import PlayerRow, _action_name, _classify_player_row
 from tools.eval.run_longest_rollout_streaks import _parse_csv, _parse_players, _validate_discrete_fields
+from tools.eval.validation_profile import ValidationProfile, get_validation_profile, validation_profile_names
 from tools.slippi.suite_io import dataset_path_for_suite_replay, load_suite, repo_root
 
 
@@ -284,6 +285,10 @@ def _base_field(field: str) -> str:
     return field
 
 
+def _lane_ignored(profile: ValidationProfile, field: str, subindex: int) -> bool:
+    return profile.is_ignored(field, subindex)
+
+
 def _field_cluster(field: str) -> str:
     base = _base_field(field)
     if base in {"action_id", "animation_index", "action_frame", "instance_id"}:
@@ -321,15 +326,20 @@ def _compare_first_mismatch(
     float_fields: tuple[str, ...],
     offset: int,
     float_epsilon: float,
+    profile: ValidationProfile,
 ) -> FirstMismatch | None:
     for field in discrete_fields:
         out = out_row[field]
         ref = ref_row[field]
         if not hasattr(out, "ndim") or out.ndim == 0:
+            if _lane_ignored(profile, field, -1):
+                continue
             if int(np.asarray(out).item()) != int(np.asarray(ref).item()):
                 return FirstMismatch(offset, -1, field, -1, _int_text(out), _int_text(ref))
             continue
         if out.ndim == 1:
+            if _lane_ignored(profile, field, -1):
+                continue
             for p in players:
                 if int(out[p]) != int(ref[p]):
                     return FirstMismatch(offset, int(p), field, -1, _int_text(out[p]), _int_text(ref[p]))
@@ -338,6 +348,8 @@ def _compare_first_mismatch(
             out_slice = np.asarray(out[p])
             ref_slice = np.asarray(ref[p])
             for sub in range(int(out_slice.size)):
+                if _lane_ignored(profile, field, sub):
+                    continue
                 if int(out_slice.flat[sub]) != int(ref_slice.flat[sub]):
                     return FirstMismatch(
                         offset,
@@ -394,6 +406,7 @@ def _compare_first_mismatches_batch(
     float_fields: tuple[str, ...],
     offset: int,
     float_epsilon: float,
+    profile: ValidationProfile,
 ) -> None:
     unresolved = np.fromiter((m is None for m in first_mismatches), dtype=bool, count=len(first_mismatches))
     if not bool(unresolved.any()):
@@ -432,10 +445,14 @@ def _compare_first_mismatches_batch(
         out = out_rows[field]
         ref = ref_rows[field]
         if field_shape == ():
+            if _lane_ignored(profile, field, -1):
+                continue
             if assign_int(out != ref, player=-1, field=field, subindex=-1, out_values=out, ref_values=ref):
                 return
             continue
         if len(field_shape) == 1:
+            if _lane_ignored(profile, field, -1):
+                continue
             for p in players:
                 out_values = out[:, p]
                 ref_values = ref[:, p]
@@ -451,6 +468,8 @@ def _compare_first_mismatches_batch(
             continue
         for p in players:
             for sub in range(int(np.prod(field_shape[1:]))):
+                if _lane_ignored(profile, field, sub):
+                    continue
                 out_values = out[:, p].reshape(out.shape[0], -1)[:, sub]
                 ref_values = ref[:, p].reshape(ref.shape[0], -1)[:, sub]
                 if assign_int(
@@ -519,6 +538,7 @@ def _score_horizon_row(
     discrete_fields: tuple[str, ...],
     float_fields: tuple[str, ...],
     float_epsilon: float,
+    profile: ValidationProfile,
 ) -> ScoreBreakdown:
     player_scores = [0.0 for _ in range(max(players) + 1 if players else 0)]
     discrete_score = 0.0
@@ -529,9 +549,13 @@ def _score_horizon_row(
         out = out_row[field]
         ref = ref_row[field]
         if not hasattr(out, "ndim") or out.ndim == 0:
+            if _lane_ignored(profile, field, -1):
+                continue
             discrete_score += _discrete_field_score(field, int(np.asarray(out).item()), int(np.asarray(ref).item()))
             continue
         if out.ndim == 1:
+            if _lane_ignored(profile, field, -1):
+                continue
             for p in players:
                 score = _discrete_field_score(field, int(out[p]), int(ref[p]))
                 player_scores[p] += score
@@ -541,6 +565,8 @@ def _score_horizon_row(
             out_slice = np.asarray(out[p])
             ref_slice = np.asarray(ref[p])
             for sub in range(int(out_slice.size)):
+                if _lane_ignored(profile, field, sub):
+                    continue
                 if int(out_slice.flat[sub]) != int(ref_slice.flat[sub]):
                     player_scores[p] += 15.0
                     discrete_score += 15.0
@@ -606,6 +632,7 @@ def _score_horizon_rows_batch(
     discrete_fields: tuple[str, ...],
     float_fields: tuple[str, ...],
     float_epsilon: float,
+    profile: ValidationProfile,
 ) -> BatchScoreBreakdown:
     n = int(out_rows.shape[0])
     player_scores = np.zeros((n, max(players) + 1 if players else 0), dtype=np.float64)
@@ -618,19 +645,24 @@ def _score_horizon_rows_batch(
         out = out_rows[field]
         ref = ref_rows[field]
         if field_shape == ():
+            if _lane_ignored(profile, field, -1):
+                continue
             discrete_score += _discrete_field_score_array(field, out, ref)
             continue
         if len(field_shape) == 1:
+            if _lane_ignored(profile, field, -1):
+                continue
             for p in players:
                 score = _discrete_field_score_array(field, out[:, p], ref[:, p])
                 player_scores[:, p] += score
                 discrete_score += score
             continue
         for p in players:
-            diff_count = np.count_nonzero(
-                out[:, p].reshape(n, -1) != ref[:, p].reshape(n, -1),
-                axis=1,
-            ).astype(np.float64)
+            diff = out[:, p].reshape(n, -1) != ref[:, p].reshape(n, -1)
+            for sub in range(diff.shape[1]):
+                if _lane_ignored(profile, field, sub):
+                    diff[:, sub] = False
+            diff_count = np.count_nonzero(diff, axis=1).astype(np.float64)
             score = diff_count * 15.0
             player_scores[:, p] += score
             discrete_score += score
@@ -677,6 +709,7 @@ def _mismatched_player_fields(
     discrete_fields: tuple[str, ...],
     float_fields: tuple[str, ...],
     float_epsilon: float,
+    profile: ValidationProfile,
 ) -> tuple[str, ...]:
     fields: list[str] = []
     for field in discrete_fields:
@@ -685,12 +718,16 @@ def _mismatched_player_fields(
         if not hasattr(out, "ndim") or out.ndim == 0:
             continue
         if out.ndim == 1:
+            if _lane_ignored(profile, field, -1):
+                continue
             if int(out[player]) != int(ref[player]):
                 fields.append(field)
             continue
         out_slice = np.asarray(out[player])
         ref_slice = np.asarray(ref[player])
         for sub in range(int(out_slice.size)):
+            if _lane_ignored(profile, field, sub):
+                continue
             if int(out_slice.flat[sub]) != int(ref_slice.flat[sub]):
                 fields.append(f"{field}[{sub}]")
     for field in float_fields:
@@ -851,6 +888,7 @@ def _row_for_scored_horizon(
     float_fields: tuple[str, ...],
     float_epsilon: float,
     action_names: dict[int, str],
+    profile: ValidationProfile,
 ) -> DisruptiveRow:
     player = max(players, key=lambda p: (score.player_scores[p], -p))
     if score.player_scores[player] <= 0.0 and score.item_score > 0.0:
@@ -863,6 +901,7 @@ def _row_for_scored_horizon(
             discrete_fields=discrete_fields,
             float_fields=float_fields,
             float_epsilon=float_epsilon,
+            profile=profile,
         )
     )
     if not family_fields and first_mismatch is not None:
@@ -952,6 +991,7 @@ def _scan_dataset_scalar(
     ucf_enabled: bool | None,
     ucf_cardinals_1_0_enabled: bool | None,
     action_names: dict[int, str],
+    profile: ValidationProfile,
     start_record: int = 0,
     stop_record: int = 0,
 ) -> list[DisruptiveRow]:
@@ -1013,6 +1053,7 @@ def _scan_dataset_scalar(
                         float_fields=float_fields,
                         offset=offset,
                         float_epsilon=float_epsilon,
+                        profile=profile,
                     )
                 if offset not in horizon_set:
                     continue
@@ -1024,6 +1065,7 @@ def _scan_dataset_scalar(
                     discrete_fields=discrete_fields,
                     float_fields=float_fields,
                     float_epsilon=float_epsilon,
+                    profile=profile,
                 )
                 if score.total <= 0.0:
                     continue
@@ -1045,6 +1087,7 @@ def _scan_dataset_scalar(
                         float_fields=float_fields,
                         float_epsilon=float_epsilon,
                         action_names=action_names,
+                        profile=profile,
                     )
                 )
     finally:
@@ -1076,6 +1119,7 @@ def _scan_dataset(
     ucf_cardinals_1_0_enabled: bool | None,
     action_names: dict[int, str],
     batch_size: int,
+    profile: ValidationProfile,
     start_record: int = 0,
     stop_record: int = 0,
 ) -> list[DisruptiveRow]:
@@ -1094,6 +1138,7 @@ def _scan_dataset(
             ucf_enabled=ucf_enabled,
             ucf_cardinals_1_0_enabled=ucf_cardinals_1_0_enabled,
             action_names=action_names,
+            profile=profile,
             start_record=start_record,
             stop_record=stop_record,
         )
@@ -1172,6 +1217,7 @@ def _scan_dataset(
                     float_fields=float_fields,
                     offset=offset,
                     float_epsilon=float_epsilon,
+                    profile=profile,
                 )
 
                 if offset not in horizon_set:
@@ -1184,6 +1230,7 @@ def _scan_dataset(
                     discrete_fields=discrete_fields,
                     float_fields=float_fields,
                     float_epsilon=float_epsilon,
+                    profile=profile,
                 )
                 for lane in np.flatnonzero(batch_score.total > 0.0):
                     lane_i = int(lane)
@@ -1212,6 +1259,7 @@ def _scan_dataset(
                             float_fields=float_fields,
                             float_epsilon=float_epsilon,
                             action_names=action_names,
+                            profile=profile,
                         )
                     )
 
@@ -1226,6 +1274,7 @@ def _scan_dataset(
 
 
 def _scan_dataset_task(task: dict[str, Any]) -> list[DisruptiveRow]:
+    profile = get_validation_profile(str(task.get("profile", "rl1_gameplay")))
     return _scan_dataset(
         suite_name=str(task["suite_name"]),
         dataset_path=Path(str(task["dataset_path"])),
@@ -1241,6 +1290,7 @@ def _scan_dataset_task(task: dict[str, Any]) -> list[DisruptiveRow]:
         ucf_cardinals_1_0_enabled=task["ucf_cardinals_1_0_enabled"],
         action_names=dict(task["action_names"]),
         batch_size=int(task["batch_size"]),
+        profile=profile,
         start_record=int(task["start_record"]),
         stop_record=int(task["stop_record"]),
     )
@@ -1296,6 +1346,7 @@ def _summary_json(
     workers: int,
     chunk_records: int,
     float_epsilon: float,
+    profile: ValidationProfile,
 ) -> dict[str, Any]:
     return {
         "suite": suite_name,
@@ -1308,6 +1359,8 @@ def _summary_json(
         "workers": int(workers),
         "chunk_records": int(chunk_records),
         "float_epsilon": float(float_epsilon),
+        "profile": profile.name,
+        "ignored_lanes": [lane.label for lane in profile.ignored_lanes],
         "discrete_fields": list(discrete_fields),
         "float_fields": list(float_fields),
         "scoring_formula": SCORE_FORMULA,
@@ -1341,6 +1394,12 @@ def main() -> None:
     ap.add_argument("--workers", type=int, default=1, help="Parallel dataset/chunk worker processes.")
     ap.add_argument("--chunk-records", type=int, default=2048, help="Start rows per worker task.")
     ap.add_argument("--top", type=int, default=20, help="Top-N clusters to print and include in summary.")
+    ap.add_argument(
+        "--profile",
+        default="rl1_gameplay",
+        choices=validation_profile_names(),
+        help="Validation scoring profile. strict scores every compare lane; rl1_gameplay ignores RL1-irrelevant lanes.",
+    )
     ap.add_argument("--out-dir", type=Path, default=None, help="Output directory under reports/triage.")
     ap.add_argument(
         "--rows-in",
@@ -1361,6 +1420,7 @@ def main() -> None:
     bad_float = [field for field in float_fields if field not in COMPARE_DTYPE.fields]
     if bad_float:
         raise SystemExit(f"error: unknown float fields: {', '.join(bad_float)}")
+    validation_profile = get_validation_profile(args.profile)
 
     out_dir = args.out_dir or (root / "reports" / "triage" / f"disruptive_rollout_desyncs_{suite.name}")
     if not out_dir.is_absolute():
@@ -1391,6 +1451,7 @@ def main() -> None:
             workers=0,
             chunk_records=0,
             float_epsilon=float(args.float_epsilon),
+            profile=validation_profile,
         )
         summary["rows_in"] = str(rows_in)
         out_dir.mkdir(parents=True, exist_ok=True)
@@ -1458,6 +1519,7 @@ def main() -> None:
                     "ucf_cardinals_1_0_enabled": suite.ucf_cardinals_1_0_enabled,
                     "action_names": action_names,
                     "batch_size": max(1, int(args.batch_size)),
+                    "profile": validation_profile.name,
                     "start_record": int(chunk_starts[0]),
                     "stop_record": int(chunk_starts[-1]) + max(1, int(args.stride)),
                 }
@@ -1500,6 +1562,7 @@ def main() -> None:
         workers=workers,
         chunk_records=chunk_records,
         float_epsilon=float(args.float_epsilon),
+        profile=validation_profile,
     )
     out_dir.mkdir(parents=True, exist_ok=True)
     summary_path.write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8")

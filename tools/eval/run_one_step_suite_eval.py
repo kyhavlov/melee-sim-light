@@ -4,6 +4,8 @@ import argparse
 from pathlib import Path
 
 from tools.eval.run_one_step_eval import EvalSummary, Reporter, _discrete_mismatch_total, evaluate_dataset
+from tools.eval.run_one_step_eval import _strict_discrete_mismatch_total
+from tools.eval.validation_profile import get_validation_profile, validation_profile_names
 from tools.slippi.suite_io import dataset_path_for_suite_replay, load_suite, repo_root
 
 
@@ -59,6 +61,12 @@ def main() -> None:
         help="Directory under repo root that stores preprocessed datasets",
     )
     ap.add_argument("--chunk", type=int, default=4096)
+    ap.add_argument(
+        "--profile",
+        default="rl1_gameplay",
+        choices=validation_profile_names(),
+        help="Validation scoring profile. strict scores every compare lane; rl1_gameplay ignores RL1-irrelevant lanes.",
+    )
     ap.add_argument("--out", type=Path, default=None, help="optional output path to write the report")
     ap.add_argument(
         "--debug-mismatch",
@@ -85,6 +93,7 @@ def main() -> None:
     args = ap.parse_args()
 
     root = repo_root()
+    validation_profile = get_validation_profile(args.profile)
     suite_path = (root / args.suite).resolve()
     suite = load_suite(suite_path)
 
@@ -122,7 +131,12 @@ def main() -> None:
             f"suite: {suite.name}  datasets: {len(dataset_paths)}  "
             f"ucf_enabled: {suite.ucf_enabled}  ucf_cardinals_1_0_enabled: {suite.ucf_cardinals_1_0_enabled}"
         )
+        reporter.print(f"validation.profile: {validation_profile.name}")
+        for lane in validation_profile.ignored_lanes:
+            reporter.print(f"validation.profile.ignored: {lane.label} reason={lane.reason} exception={lane.exception}")
         suite_mismatches: dict[str, int] | None = None
+        suite_strict_mismatches: dict[str, int] | None = None
+        suite_ignored_mismatches: dict[str, int] | None = None
         suite_totals = {
             "total_records": 0,
             "total_player_frames": 0,
@@ -138,9 +152,11 @@ def main() -> None:
             summary = evaluate_dataset(
                 dataset_path=ds,
                 chunk=args.chunk,
+                profile=validation_profile,
                 ucf_enabled=suite.ucf_enabled,
                 ucf_cardinals_1_0_enabled=suite.ucf_cardinals_1_0_enabled,
                 reporter=reporter,
+                print_profile=False,
                 debug_mismatch=tuple(
                     s.strip() for s in args.debug_mismatch.split(",") if s.strip() != ""
                 ),
@@ -153,8 +169,16 @@ def main() -> None:
 
             if suite_mismatches is None:
                 suite_mismatches = {k: 0 for k in summary.mismatches.keys()}
+                suite_strict_mismatches = {k: 0 for k in summary.strict_mismatches.keys()}
+                suite_ignored_mismatches = {k: 0 for k in summary.ignored_mismatches.keys()}
             for k, v in summary.mismatches.items():
                 suite_mismatches[k] += v
+            assert suite_strict_mismatches is not None
+            for k, v in summary.strict_mismatches.items():
+                suite_strict_mismatches[k] += v
+            assert suite_ignored_mismatches is not None
+            for k, v in summary.ignored_mismatches.items():
+                suite_ignored_mismatches[k] += v
             suite_totals["total_records"] += summary.total_records
             suite_totals["total_player_frames"] += summary.total_player_frames
             suite_totals["total_state_flags"] += summary.total_state_flags
@@ -162,7 +186,7 @@ def main() -> None:
             suite_totals["float_norm_sum"] += summary.float_norm_sum
             suite_totals["float_norm_count"] += summary.float_norm_count
 
-        if suite_mismatches is None:
+        if suite_mismatches is None or suite_strict_mismatches is None or suite_ignored_mismatches is None:
             return
 
         reporter.print()
@@ -173,11 +197,17 @@ def main() -> None:
             total_state_flags=suite_totals["total_state_flags"],
             total_item_slots=suite_totals["total_item_slots"],
             mismatches=suite_mismatches,
+            strict_mismatches=suite_strict_mismatches,
+            ignored_mismatches=suite_ignored_mismatches,
+            profile_name=validation_profile.name,
             float_norm_sum=float(suite_totals["float_norm_sum"]),
             float_norm_count=int(suite_totals["float_norm_count"]),
         )
-        mismatches_total, checks_total = _discrete_mismatch_total(suite_summary)
+        mismatches_total, checks_total = _discrete_mismatch_total(suite_summary, profile=validation_profile)
+        strict_total, strict_checks = _strict_discrete_mismatch_total(suite_summary)
         reporter.print(f"overall.discrete_mismatch: {mismatches_total} / {checks_total}")
+        reporter.print(f"overall.strict_discrete_mismatch: {strict_total} / {strict_checks}")
+        reporter.print(f"overall.ignored_discrete_mismatch: {sum(suite_ignored_mismatches.values())}")
         overall_float = (
             suite_summary.float_norm_sum / suite_summary.float_norm_count
             if suite_summary.float_norm_count > 0

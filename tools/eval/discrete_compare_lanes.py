@@ -7,6 +7,7 @@ from dataclasses import dataclass
 import numpy as np
 
 from tools.eval.dataset import COMPARE_DTYPE
+from tools.eval.validation_profile import ValidationProfile
 
 
 @dataclass(frozen=True)
@@ -31,20 +32,30 @@ def compile_discrete_compare_lanes(
     players: tuple[int, ...],
     *,
     dtype: np.dtype = COMPARE_DTYPE,
+    profile: ValidationProfile | None = None,
+    ignored_only: bool = False,
 ) -> tuple[DiscreteCompareLane, ...]:
     lanes: list[DiscreteCompareLane] = []
+
+    def include_lane(field: str, subindex: int) -> bool:
+        ignored = profile.is_ignored(field, subindex) if profile is not None else False
+        return ignored if ignored_only else not ignored
+
     for field in fields:
         field_dtype = dtype.fields[field][0]
         shape = field_dtype.shape
         if shape == ():
-            lanes.append(DiscreteCompareLane(field=field, player=-1, subindex=-1))
+            if include_lane(field, -1):
+                lanes.append(DiscreteCompareLane(field=field, player=-1, subindex=-1))
         elif len(shape) == 1:
-            lanes.extend(DiscreteCompareLane(field=field, player=int(p), subindex=-1) for p in players)
+            if include_lane(field, -1):
+                lanes.extend(DiscreteCompareLane(field=field, player=int(p), subindex=-1) for p in players)
         else:
             sub_count = int(np.prod(shape[1:]))
             for p in players:
                 lanes.extend(
                     DiscreteCompareLane(field=field, player=int(p), subindex=sub) for sub in range(sub_count)
+                    if include_lane(field, sub)
                 )
     return tuple(lanes)
 
@@ -63,9 +74,12 @@ def first_mismatch_field(
     out_row: np.void,
     ref_row: np.void,
     lanes: tuple[DiscreteCompareLane, ...],
+    label_subindex: bool = False,
 ) -> str | None:
     for lane in lanes:
         if _lane_value(out_row, lane) != _lane_value(ref_row, lane):
+            if label_subindex and lane.subindex >= 0:
+                return f"{lane.field}[{lane.subindex}]"
             return lane.field
     return None
 
