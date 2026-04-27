@@ -192,9 +192,9 @@ def evaluate_dataset(
         msg = str(e)
         if "record_size mismatch" in msg:
             reporter.print(f"error: {msg}")
-            reporter.print("hint: dataset schema changed; rebuild cached datasets with --force:")
+            reporter.print("hint: dataset schema changed; refresh cached datasets:")
             reporter.print(
-                "  uv run python -m tools.slippi.preprocess_suite --suite <suite.json> --datasets-dir <dir> --force"
+                "  uv run python -m tools.slippi.preprocess_suite --suite <suite.json> --datasets-dir <dir>"
             )
             raise
         raise

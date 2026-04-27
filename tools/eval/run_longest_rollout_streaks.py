@@ -25,6 +25,7 @@ from pathlib import Path
 import numpy as np
 
 from tools.eval.dataset import COMPARE_DTYPE, Dataset, read_dataset
+from tools.eval.discrete_compare_lanes import compile_discrete_compare_lanes, first_mismatch_field
 from tools.slippi.suite_io import dataset_path_for_suite_replay, load_suite, repo_root
 
 
@@ -76,46 +77,6 @@ def _validate_discrete_fields(fields: tuple[str, ...]) -> tuple[str, ...]:
             + ", ".join(floaty)
         )
     return fields
-
-
-def _first_mismatch(
-    *,
-    out_row: np.void,
-    ref_row: np.void,
-    fields: tuple[str, ...],
-    players: tuple[int, ...],
-) -> str | None:
-    for field in fields:
-        a = out_row[field]
-        b = ref_row[field]
-
-        # Scalar field (e.g., frame_id if requested).
-        if not hasattr(a, "ndim") or a.ndim == 0:
-            if int(a) != int(b):
-                return field
-            continue
-
-        # Per-player fields: compare only selected players.
-        if a.ndim == 1:
-            for p in players:
-                if int(a[p]) != int(b[p]):
-                    return field
-            continue
-
-        # state_flags is expected to be shaped (players, 5); compare all 5 bytes per player.
-        if field == "state_flags":
-            for p in players:
-                for k in range(5):
-                    if int(a[p, k]) != int(b[p, k]):
-                        return field
-            continue
-
-        # Fallback: compare full per-player slices.
-        for p in players:
-            if not np.array_equal(a[p], b[p]):
-                return field
-
-    return None
 
 
 @dataclass(frozen=True)
@@ -266,6 +227,7 @@ def _scan_dataset_streaks(
 
     ref = samples["ref_t1"]
     seed = samples["seed_t"]
+    compare_lanes = compile_discrete_compare_lanes(fields, players)
 
     def reseed_at(j: int) -> None:
         seed_bytes[0, :] = samples_u8[j, seed_off : seed_off + seed_stride]
@@ -276,11 +238,10 @@ def _scan_dataset_streaks(
         input_bytes[0, :] = samples_u8[j, input_off : input_off + input_stride]
         binding.step_input(handle, prev_input_bytes, input_bytes)
         binding.write_compare(handle, out_compare_bytes)
-        return _first_mismatch(
+        return first_mismatch_field(
             out_row=out_view[0],
             ref_row=ref[j],
-            fields=fields,
-            players=players,
+            lanes=compare_lanes,
         )
 
     def step_seeded_and_compare(j: int) -> str | None:

@@ -12,6 +12,7 @@ from pathlib import Path
 import numpy as np
 
 from tools.eval.dataset import COMPARE_DTYPE, Dataset, read_dataset
+from tools.eval.discrete_compare_lanes import compile_discrete_compare_lanes, first_mismatch_values
 from tools.eval.rollout_locate_tsv import (
     ROLLOUT_LOCATE_COLUMNS,
     RolloutLocateRow,
@@ -37,76 +38,6 @@ class FirstMismatch:
     seed: int
     out: int
     ref: int
-
-
-def _as_int(value) -> int:
-    return int(np.asarray(value).item())
-
-
-def _first_mismatch_detail(
-    *,
-    seed_row: np.void,
-    out_row: np.void,
-    ref_row: np.void,
-    fields: tuple[str, ...],
-    players: tuple[int, ...],
-) -> FirstMismatch | None:
-    for field in fields:
-        a = out_row[field]
-        b = ref_row[field]
-        s = seed_row[field]
-
-        # Scalar field (e.g., frame_id if requested).
-        if not hasattr(a, "ndim") or a.ndim == 0:
-            out_v = _as_int(a)
-            ref_v = _as_int(b)
-            if out_v != ref_v:
-                return FirstMismatch(
-                    player=-1,
-                    field=field,
-                    subindex=-1,
-                    seed=_as_int(s),
-                    out=out_v,
-                    ref=ref_v,
-                )
-            continue
-
-        # Per-player scalar fields.
-        if a.ndim == 1:
-            for p in players:
-                out_v = _as_int(a[p])
-                ref_v = _as_int(b[p])
-                if out_v != ref_v:
-                    return FirstMismatch(
-                        player=int(p),
-                        field=field,
-                        subindex=-1,
-                        seed=_as_int(s[p]),
-                        out=out_v,
-                        ref=ref_v,
-                    )
-            continue
-
-        # Per-player vector fields, currently state_flags[0..4] in the default rollout set.
-        for p in players:
-            out_slice = np.asarray(a[p])
-            ref_slice = np.asarray(b[p])
-            seed_slice = np.asarray(s[p])
-            flat_len = int(out_slice.size)
-            for sub in range(flat_len):
-                out_v = _as_int(out_slice.flat[sub])
-                ref_v = _as_int(ref_slice.flat[sub])
-                if out_v != ref_v:
-                    return FirstMismatch(
-                        player=int(p),
-                        field=field,
-                        subindex=int(sub),
-                        seed=_as_int(seed_slice.flat[sub]),
-                        out=out_v,
-                        ref=ref_v,
-                    )
-
-    return None
 
 
 def _row_from_mismatch(
@@ -257,6 +188,7 @@ def _locate_dataset_rollout_desyncs(
 
     seed = samples["seed_t"]
     ref = samples["ref_t1"]
+    compare_lanes = compile_discrete_compare_lanes(fields, players)
 
     def reseed_at(j: int) -> None:
         seed_bytes[0, :] = samples_u8[j, seed_off : seed_off + seed_stride]
@@ -267,12 +199,21 @@ def _locate_dataset_rollout_desyncs(
         input_bytes[0, :] = samples_u8[j, input_off : input_off + input_stride]
         binding.step_input(handle, prev_input_bytes, input_bytes)
         binding.write_compare(handle, out_compare_bytes)
-        return _first_mismatch_detail(
+        mm = first_mismatch_values(
             seed_row=seed[j],
             out_row=out_view[0],
             ref_row=ref[j],
-            fields=fields,
-            players=players,
+            lanes=compare_lanes,
+        )
+        if mm is None:
+            return None
+        return FirstMismatch(
+            player=mm.player,
+            field=mm.field,
+            subindex=mm.subindex,
+            seed=mm.seed,
+            out=mm.out,
+            ref=mm.ref,
         )
 
     def attempt_from_current(j: int, *, seed_record: int | None) -> FirstMismatch | None:

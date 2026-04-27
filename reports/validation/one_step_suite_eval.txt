@@ -2,13 +2,8 @@
 #
 # Dataset cache note:
 # - If you see a `record_size mismatch` error, the dataset schema changed and your cached datasets are stale.
-#   Rebuild cached datasets with --force:
-#     uv run python -m tools.slippi.preprocess_suite --suite replays/suites/fox_falco_fd_ucf084_recent.json --datasets-dir datasets --force
-#
-# preprocess_suite stamp:
-#   path: datasets/fox_falco_fd_ucf084_recent/.preprocess_meta.json
-#   force_used: True  built: 4  skipped: 0
-#   seed_dtype_itemsize: 3576  sample_dtype_itemsize: 4662
+#   Refresh cached datasets:
+#     uv run python -m tools.slippi.preprocess_suite --suite replays/suites/fox_falco_fd_ucf084_recent.json --datasets-dir datasets
 #
 # Regenerate gitignored ISO-derived data artifacts (if missing/stale):
 # - Moves (data/moves/*.json):

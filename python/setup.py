@@ -42,6 +42,7 @@ class _BuildExt(build_ext):
 
 
 ROOT = Path(__file__).resolve().parent.parent
+DEPENDS = sorted(str(p.resolve()) for p in (ROOT / "src").rglob("*.h"))
 
 ext = Extension(
     name="msl_binding",
@@ -102,6 +103,7 @@ ext = Extension(
         str((ROOT / "src" / "items.c").resolve()),
     ],
     include_dirs=[get_numpy_include(), str((ROOT / "src").resolve())],
+    depends=DEPENDS,
     libraries=["m"],
     extra_compile_args=["-O3", "-Wall", "-Wextra", "-std=c11"],
 )

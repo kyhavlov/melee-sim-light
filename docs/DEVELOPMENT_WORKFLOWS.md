@@ -18,6 +18,9 @@ If the extension disappears after syncing, rerun:
 uv pip install -e python
 ```
 
+`make build` is incremental by default. Use `make build BUILD_FORCE=1` only
+when you need to force a full extension rebuild.
+
 ## Core Validation
 
 Fast guardrails:
@@ -33,6 +36,10 @@ Full committed validation refresh:
 ```bash
 make validate-all
 ```
+
+`make validate-all` runs the standard one-step and rollout report generators
+after the incremental build check. It uses worker subprocesses by default; set
+`VALIDATE_WORKERS=1` for serial output/debugging.
 
 Guardrail convenience targets:
 
@@ -64,13 +71,26 @@ If you touch seed/state/schema surfaces such as:
 - `tools/slippi/seed_history.py`
 - `tools/slippi/make_dataset_from_slp.py`
 
-then rebuild cached datasets before validation:
+then refresh cached datasets before validation. `preprocess_suite` tracks
+dataset schema, preprocessing source files, replay stat metadata, and extracted
+`data/` artifacts, so unchanged datasets are skipped while stale datasets are
+rebuilt:
 
 ```bash
 uv run python -m tools.slippi.preprocess_suite \
   --suite replays/suites/fox_falco_fd_ucf084_recent.json \
-  --datasets-dir datasets \
-  --force
+  --datasets-dir datasets
+```
+
+Use `--force` only when you intentionally want to rebuild every dataset in the
+suite. Datasets created before per-dataset cache metadata are rebuilt by
+default once so source/data signatures are guaranteed; `--trust-legacy-cache`
+is only for explicit local migration when you know those artifacts are current.
+Stale/forced rebuilds can run in parallel:
+
+```bash
+make preprocess PREPROCESS_WORKERS=4
+make preprocess-aggregate PREPROCESS_WORKERS=4
 ```
 
 ## Rollout Triage
@@ -115,6 +135,18 @@ make rollout-disruptive \
 make rollout-disruptive \
   SUITE=replays/suites/aggregate_recent.json \
   DISRUPTIVE_OUT_DIR=reports/triage/disruptive_rollout_desyncs_aggregate
+```
+
+`make rollout-disruptive` runs the exact scan in worker chunks by default. Tune
+CPU pressure with `DISRUPTIVE_WORKERS=1` for serial reproduction, or a higher
+value such as `16`/`24` for a faster local triage pass on a many-core machine.
+
+Rerank existing raw rows without rerunning rollout simulation:
+
+```bash
+make rollout-disruptive-rerank \
+  DISRUPTIVE_ROWS_IN=reports/triage/disruptive_rollout_desyncs_primary/rows.tsv \
+  DISRUPTIVE_OUT_DIR=reports/triage/disruptive_rollout_desyncs_primary_rerank
 ```
 
 This reseeds at replay record `t`, advances with replay inputs without reseeding,
