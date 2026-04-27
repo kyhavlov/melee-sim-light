@@ -3949,6 +3949,7 @@ void locomotion_update_pre(MslBatch* batch) {
             msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
             // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Turn.c:62-64
             msl_anim_timebase_tick_once(batch, idx);
+            dash_iasa_apply_root_motion_exit_gr_vel_clamp(batch, ch, idx);
             dash_iasa_apply_terminal_velocity_scalar(batch, c, idx);
             action_id = (uint16_t)MSL_ACT_TURN;
           } else {
@@ -3981,6 +3982,7 @@ void locomotion_update_pre(MslBatch* batch) {
                   msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
                   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Turn.c:62-64
                   msl_anim_timebase_tick_once(batch, idx);
+                  dash_iasa_apply_root_motion_exit_gr_vel_clamp(batch, ch, idx);
                   dash_iasa_apply_terminal_velocity_scalar(batch, c, idx);
                   action_id = (uint16_t)MSL_ACT_TURN;
                 }
@@ -4000,6 +4002,7 @@ void locomotion_update_pre(MslBatch* batch) {
                 batch->state.animation_index[idx] = (uint32_t)MSL_SM_TURN;
                 msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
                 msl_anim_timebase_tick_once(batch, idx);
+                dash_iasa_apply_root_motion_exit_gr_vel_clamp(batch, ch, idx);
                 dash_iasa_apply_terminal_velocity_scalar(batch, c, idx);
                 action_id = (uint16_t)MSL_ACT_TURN;
               }

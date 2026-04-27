@@ -13,21 +13,21 @@
 #include "state_flags.h"
 
 static inline uint8_t physics_action_skip_common_air_helper_first_frame(uint16_t action_id,
+                                                                        uint16_t prev_action_id,
                                                                         int16_t action_frame) {
   // Decomp:
   // - ftCo_Jump_Phys_Inner skips `ft_80084DB0` on the first frame after entering JumpF/B.
   //   refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c::ftCo_Jump_Phys_Inner
   // - ftCo_CliffJump2_Phys skips the common fall helper on the first frame.
   //   refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffJump.c::ftCo_CliffJump2_Phys
-  if (action_frame > 0) {
-    return 0;
-  }
   switch (action_id) {
     case MSL_ACT_JUMP_F:
     case MSL_ACT_JUMP_B:
+      return (uint8_t)(action_frame <= 0);
     case MSL_ACT_CLIFF_JUMP_SLOW2:
+      return (uint8_t)(prev_action_id == (uint16_t)MSL_ACT_CLIFF_JUMP_SLOW1);
     case MSL_ACT_CLIFF_JUMP_QUICK2:
-      return 1;
+      return (uint8_t)(prev_action_id == (uint16_t)MSL_ACT_CLIFF_JUMP_QUICK1);
     default:
       return 0;
   }
@@ -502,6 +502,11 @@ static inline uint8_t physics_action_is_common_damage(uint16_t action_id) {
     case MSL_ACT_DAMAGE_AIR_1:
     case MSL_ACT_DAMAGE_AIR_2:
     case MSL_ACT_DAMAGE_AIR_3:
+    case MSL_ACT_DOWN_DAMAGE_U:
+    case MSL_ACT_DOWN_DAMAGE_D:
+      // DownDamage Phys delegates to the common Damage Phys callback.
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownDamage.c::ftCo_DownDamage_Phys
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_Phys
       return 1u;
     default:
       return 0u;
@@ -1123,6 +1128,8 @@ void physics_integrate(MslBatch* batch) {
                                               : 0u;
       const uint8_t damage_uses_common_air_helper =
           ((is_damage_fly || is_common_damage) && !damage_iasa_lockout) ? 1u : 0u;
+      const uint8_t shield_break_fly_uses_air_friction =
+          (action_id == (uint16_t)MSL_ACT_SHIELD_BREAK_FLY) ? 1u : 0u;
 
       // Thrown victims:
       // - Decomp thrown victim Phys/Coll callbacks are empty, and victim translation is driven by an
@@ -1164,7 +1171,8 @@ void physics_integrate(MslBatch* batch) {
       if (!on_ground) {
         // Match-flow and cliff actions are treated as non-physical in this simplified core.
         if (!physics_is_match_flow_airborne(action_id)) {
-          if (!physics_action_skip_common_air_helper_first_frame(action_id, action_frame)) {
+          if (!physics_action_skip_common_air_helper_first_frame(
+                  action_id, batch->state.prev_action_id[idx], action_frame)) {
             if (action_id == (uint16_t)MSL_ACT_ESCAPE_AIR) {
               // Decomp: EscapeAir_Phys scales `self_vel` by `escapeair_decay` while
               // cmd_vars[0] (`cmd_skip_decay`) is clear; once the action script sets cmd_vars[0],
@@ -1236,10 +1244,12 @@ void physics_integrate(MslBatch* batch) {
                 batch->state.speed_air_x_self[idx] = air_apply_friction_step(
                     batch->state.speed_air_x_self[idx], phys->aerial_friction);
               }
-            } else if (damage_iasa_lockout) {
+            } else if (damage_iasa_lockout || shield_break_fly_uses_air_friction) {
               // DamageFly/DamageFlyRoll/common Damage x221C_b6 path (`ft_80084EEC`): apply
               // gravity + terminal clamp and aerial friction (no fastfall latch, no drift accel
               // from stick).
+              // ShieldBreakFly uses the same `ft_80084EEC` Phys callback, so the entry frame's
+              // initial shield-break y velocity is gravity-adjusted before integration.
               //
               // Decomp scope:
               // - ftCo_Damage_Phys branches to ft_80084EEC while airborne and x221C_b6 is set,
@@ -1250,6 +1260,7 @@ void physics_integrate(MslBatch* batch) {
               //   ftCo_Damage_Phys,ftCo_DamageFly_Phys,ftCo_DamageFlyRoll_Phys
               // }
               // refs/melee/src/melee/ft/ft_081B.c::ft_80084EEC
+              // refs/melee/src/melee/ft/chara/ftCommon/ftCo_ShieldBreakFly.c::ftCo_ShieldBreakFly_Phys
               const MslCharParams* phys = msl_char_params(batch->state.char_id[idx]);
               if (phys != NULL) {
                 float next_vy = vy_self_pre - phys->grav;
@@ -1257,6 +1268,10 @@ void physics_integrate(MslBatch* batch) {
                   next_vy = -phys->terminal_vel;
                 }
                 batch->state.speed_y_self[idx] = next_vy;
+                if (shield_break_fly_uses_air_friction) {
+                  batch->state.speed_air_x_self[idx] = air_apply_friction_step(
+                      batch->state.speed_air_x_self[idx], phys->aerial_friction);
+                }
               }
             } else if (physics_action_use_pre_integration_common_air_gravity(action_id) ||
                        damage_uses_common_air_helper) {
@@ -1753,7 +1768,6 @@ void physics_integrate(MslBatch* batch) {
           batch->state.speed_y_self[idx] = 0.0f;
         }
       }
-
       float atk_shield_kb_x = 0.0f;
       float atk_shield_kb_y = 0.0f;
       if (on_ground) {

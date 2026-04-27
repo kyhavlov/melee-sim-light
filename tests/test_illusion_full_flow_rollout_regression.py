@@ -199,6 +199,35 @@ def test_illusion_rollout_windows_match_replay_real(case: _Case) -> None:
 
 
 @pytest.mark.integration
+def test_grounded_side_special_run_entry_applies_common_xb8_damping_replay_real() -> None:
+    # FavorableSuperficialPig rec 1613 starts on grounded Run with B+side input. Decomp dispatch
+    # enters through common ftCo_SpecialS::doEnter, which applies co_attrs.xB8 ground-velocity
+    # damping before Fox/Falco ftFx_SpecialSStart_Enter divides by x28. Without that pre-entry
+    # damping the rollout carries roughly +1.16 X through SpecialSStart/Main/End and later exits
+    # into Fall early.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_SpecialS.c::{ftCo_SpecialS_CheckInput,doEnter}
+    # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c::{
+    #   ftFx_SpecialSStart_Enter,ftFx_SpecialS_Enter,ftFx_SpecialSEnd_Enter}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_rel = "datasets/aggregate_recent/replays/validation/aggregate_recent/FavorableSuperficialPig.msl"
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    history = _rollout_window(dataset_path, start_record=1613, length=35)
+    for step_i, (out, ref) in enumerate(history):
+        for field in _PLAYER_FIELDS:
+            assert int(out[field][0]) == int(ref[field][0]), (
+                f"FSP grounded Side-B entry: step={step_i} p=0 field={field}"
+            )
+        for field in _PLAYER_FLOAT_FIELDS:
+            assert float(out[field][0]) == pytest.approx(float(ref[field][0]), abs=1e-5), (
+                f"FSP grounded Side-B entry: step={step_i} p=0 field={field}"
+            )
+
+
+@pytest.mark.integration
 def test_illusion_main_entry_resets_ground_ring_before_spawn_progression() -> None:
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)

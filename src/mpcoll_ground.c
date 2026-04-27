@@ -1676,16 +1676,19 @@ void mpcoll_ground_apply(MslBatch* batch) {
         const uint8_t downdamage_active_hitlag_resting_floor_contact =
             // DownDamage_Coll uses the same ft_80081DD4 floor callback as damage landing paths.
             // Active-hitlag DownDamage rows can arrive at the post-hitlag collision pass already
-            // resting on the persisted floor line while still carrying the Damage hitstun lane;
-            // let those rows use the resting-contact projection below instead of the generic
-            // hitstun==0-only fallback. Keep this off DamageAir/DamageFly active hitlag, where
-            // replay-real controls stay airborne until the damage hitlag-exit handoff.
+            // resting on the persisted floor line while still carrying the Damage hitstun lane.
+            // After ftCo_DownDamage_Phys delegates to ftCo_Damage_Phys, the current self velocity
+            // is no longer a reliable pre-collision predicate; the narrow source-shaped boundary
+            // for the root fallback is the same post-hitlag DownDamage row plus downward attack KB.
+            // Keep this off DamageAir/DamageFly active hitlag, where replay-real controls stay
+            // airborne until their separate damage hitlag-exit handoff.
             // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownDamage.c::ftCo_DownDamage_Coll
+            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownDamage.c::ftCo_DownDamage_Phys
             // refs/melee/src/melee/ft/ft_081B.c::ft_80081DD4
             // refs/melee/src/melee/mp/mplib.c::mpLib_8004DD90_Floor
             ((action_id == (uint16_t)MSL_ACT_DOWN_DAMAGE_U ||
               action_id == (uint16_t)MSL_ACT_DOWN_DAMAGE_D) &&
-             batch->state.hitlag_pre_timer[idx] != 0u && batch->state.speed_y_self[idx] == 0.0f)
+             batch->state.hitlag_pre_timer[idx] != 0u && batch->state.speed_y_attack[idx] < 0.0f)
                 ? 1u
                 : 0u;
         if (!on_ground && !active_damage_hitlag_airborne_floor_contact && can_sweep &&
@@ -1847,10 +1850,34 @@ void mpcoll_ground_apply(MslBatch* batch) {
               }
             } else {
               // Sweep saw a floor segment, but projection failed (often an off-end / edge case).
-              // Propagate edge suppression bits so mpColl-shaped ledge-grab checks can apply the
-              // `on_edge` gate deterministically.
-              floor_write_edge_suppression_flags(batch, idx, stage_id, g, hit_line_idx, char_id,
-                                                 anim, ecb_frame, was_grounded);
+              // DownDamage_Coll's ft_80081DD4 floor path can still resolve from the root point
+              // when post-hitlag common Damage Phys has moved the ECB bottom past the normal
+              // projection point. Keep that fallback bounded to the same downward-KB owner used by
+              // the resting-contact path below; other actions keep edge-suppression diagnostics.
+              // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownDamage.c::{
+              //   ftCo_DownDamage_Phys,ftCo_DownDamage_Coll}
+              // refs/melee/src/melee/ft/ft_081B.c::ft_80081DD4
+              if (downdamage_active_hitlag_resting_floor_contact) {
+                float root_y_corr = 0.0f;
+                const int root_line_idx =
+                    floor_dd90_project(g, prefer_line_idx, batch->state.pos_x[idx],
+                                       batch->state.pos_y[idx], &root_y_corr, &floor_nx, &floor_ny);
+                const float downward_bound =
+                    fabsf(batch->state.speed_y_attack[idx]) + k_ecb_vertical_unit;
+                if (root_line_idx >= 0 && fabsf(root_y_corr) <= downward_bound) {
+                  batch->state.pos_y[idx] += root_y_corr;
+                  on_ground = 1;
+                  ground_id = g->lines[(size_t)root_line_idx].segment_i;
+                  contact_x = batch->state.pos_x[idx];
+                  contact_y = batch->state.pos_y[idx];
+                }
+              }
+              if (!on_ground) {
+                // Propagate edge suppression bits so mpColl-shaped ledge-grab checks can apply the
+                // `on_edge` gate deterministically.
+                floor_write_edge_suppression_flags(batch, idx, stage_id, g, hit_line_idx, char_id,
+                                                   anim, ecb_frame, was_grounded);
+              }
             }
           }
           // Decomp anchor for this gate:
@@ -1860,7 +1887,9 @@ void mpcoll_ground_apply(MslBatch* batch) {
           // TODO(decomp-coll-coverage): once DamageFly* per-action Coll callback coverage is fully
           // modeled here, this gate may be relaxed/removed in favor of callback-owned landing flow.
         } else if (prefer_line_idx >= 0 && !escapeair_locked_floorhug_airborne &&
-                   !specialhi_bound_entry_airborne && batch->state.speed_y_self[idx] == 0.0f &&
+                   !specialhi_bound_entry_airborne &&
+                   (batch->state.speed_y_self[idx] == 0.0f ||
+                    downdamage_active_hitlag_resting_floor_contact) &&
                    batch->state.hitlag[idx] == 0 &&
                    (batch->state.hitstun[idx] == 0 ||
                     downdamage_active_hitlag_resting_floor_contact)) {
@@ -1894,7 +1923,7 @@ void mpcoll_ground_apply(MslBatch* batch) {
                                    batch->state.pos_y[idx], &root_y_corr, &floor_nx, &floor_ny);
             const float downward_bound =
                 fabsf(batch->state.speed_y_attack[idx]) + k_ecb_vertical_unit;
-            if (root_line_idx >= 0 && root_y_corr <= 0.0f && root_y_corr >= -downward_bound) {
+            if (root_line_idx >= 0 && fabsf(root_y_corr) <= downward_bound) {
               batch->state.pos_y[idx] += root_y_corr;
               on_ground = 1;
               ground_id = g->lines[(size_t)root_line_idx].segment_i;

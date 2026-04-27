@@ -1728,23 +1728,11 @@ static inline uint8_t damagefall_iasa_try_stick_fall(MslBatch* batch, const MslC
   const float stick_x =
       apply_deadzone(stick_i8_to_unit(batch->state.input_main_x[idx]), c->lstick_deadzone_x);
   uint8_t x670_for_iasa = batch->state.tilt_timer_x[idx];
-  const float prev_stick_x =
-      apply_deadzone(stick_i8_to_unit(batch->state.prev_input_main_x[idx]), c->lstick_deadzone_x);
-
-  // This simulator applies the current-row input-history update before IASA callbacks. Reconstruct
-  // the callback-visible x670 value for held same-direction X stick, matching the DamageFall path
-  // in locomotion_update_pre().
-  // refs/melee/src/melee/ft/fighter.c::{Fighter_Spaghetti_8006AD10,Fighter_procUpdate}
+  // The x670 timer is updated in Fighter_Spaghetti_8006AD10 before `input_cb`, so
+  // ftCo_DamageFall_IASA observes the incremented current-frame timer. Do not rewind held
+  // same-direction stick from 1 back to 0; p_ftCommonData->x214 uses a strict less-than gate.
+  // refs/melee/src/melee/ft/fighter.c::Fighter_Spaghetti_8006AD10
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DamageFall.c::ftCo_DamageFall_IASA
-  if (stick_x >= c->lstick_tilt_x_thresh) {
-    if (prev_stick_x >= c->lstick_tilt_x_thresh && x670_for_iasa > 0u && x670_for_iasa < 0xFEu) {
-      x670_for_iasa = (uint8_t)(x670_for_iasa - 1u);
-    }
-  } else if (stick_x <= -c->lstick_tilt_x_thresh) {
-    if (prev_stick_x <= -c->lstick_tilt_x_thresh && x670_for_iasa > 0u && x670_for_iasa < 0xFEu) {
-      x670_for_iasa = (uint8_t)(x670_for_iasa - 1u);
-    }
-  }
 
   if (msl_absf(stick_x) >= c->damagefall_fall_stick_x_threshold &&
       x670_for_iasa < c->damagefall_fall_tilt_max_frames) {

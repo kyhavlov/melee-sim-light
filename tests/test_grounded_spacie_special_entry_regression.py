@@ -17,11 +17,13 @@ ACT_FX_SPECIAL_HI_HOLD = 0x0161
 ACT_FX_SPECIAL_AIR_HI = 0x0164
 ACT_FX_SPECIAL_HI = 0x0163
 ACT_FX_SPECIAL_S = 0x015C
+ACT_FX_SPECIAL_AIR_S_START = 0x015E
 ACT_FX_SPECIAL_AIR_S = 0x015F
 ACT_FX_SPECIAL_S_END = 0x015D
 ACT_FALL = 0x001D
 
 SM_WAIT1_0 = 2
+SM_FALL = 20
 
 CHAR_FOX = 1
 STAGE_FD = 32
@@ -104,13 +106,47 @@ def test_grounded_side_special_entry_divides_ground_speed_by_illusion_attr() -> 
     out = _step_once(seed, prev_inp, inp)
     assert int(out["action_id"][0]) == ACT_FX_SPECIAL_S_START
     assert int(out["on_ground"][0]) == 1
-    # Decomp: ftFx_SpecialSStart_Enter divides gr_vel by x28, then the same-step
-    # ftFx_SpecialSStart_Phys callback runs ft_80084F3C grounded friction before the row is
-    # observed.
+    # Decomp: common ftCo_SpecialS::doEnter damps gr_vel by co_attrs.xB8 before Fox/Falco
+    # ftFx_SpecialSStart_Enter divides gr_vel by x28. The same-step ftFx_SpecialSStart_Phys
+    # callback then runs ft_80084F3C grounded friction before the row is observed.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_SpecialS.c::{ftCo_SpecialS_CheckInput,doEnter}
     # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c::{
     #   ftFx_SpecialSStart_Enter,ftFx_SpecialSStart_Phys}
-    expected = (1.2 / _fox_attr("illusion_ground_vel_x")) - _fox_attr("gr_friction")
+    damped = 1.2 * _fox_attr("side_special_ground_entry_vel_mul")
+    expected = (damped / _fox_attr("illusion_ground_vel_x")) - _fox_attr("gr_friction")
     assert abs(float(out["speed_ground_x_self"][0]) - expected) <= 1e-6
+
+
+def test_aerial_side_special_entry_does_not_use_ground_xb8_damping() -> None:
+    seed = _seed_base()
+    seed["on_ground"][0, 0] = np.uint8(0)
+    seed["action_id"][0, 0] = np.uint16(ACT_FALL)
+    seed["animation_index"][0, 0] = np.uint32(SM_FALL)
+    seed["pos_y"][0, 0] = np.float32(8.0)
+    seed["speed_air_x_self"][0, 0] = np.float32(1.2)
+    seed["speed_y_self"][0, 0] = np.float32(0.5)
+    seed["jumps_left"][0, 0] = np.uint8(2)
+
+    binding = pytest.importorskip("msl_binding")
+    input_stride = int(binding.sizes()["input"])
+    prev_inp = _mk_input_bytes(1, input_stride)
+    inp = _mk_input_bytes(1, input_stride)
+    inp_view = inp.view(INPUT_DTYPE).reshape((1,))
+    inp_view["p"]["buttons"][0, 0] = np.uint16(BUTTON_B)
+    inp_view["p"]["main_x"][0, 0] = np.int8(80)
+
+    out = _step_once(seed, prev_inp, inp)
+    assert int(out["action_id"][0]) == ACT_FX_SPECIAL_AIR_S_START
+    assert int(out["on_ground"][0]) == 0
+    # Aerial entry goes through ftCo_SpecialAir then ftFx_SpecialAirSStart_Enter; it divides
+    # self_vel.x by x28 and zeroes self_vel.y, but does not run the grounded doEnter xB8 damping.
+    # The same-step aerial start Phys then applies the Side-B start air friction.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_SpecialAir.c::ftCo_SpecialAir_CheckInput
+    # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c::{
+    #   ftFx_SpecialAirSStart_Enter,ftFx_SpecialAirSStart_Phys}
+    expected = (1.2 / _fox_attr("illusion_ground_vel_x")) - _fox_attr("illusion_air_friction_start")
+    assert float(out["speed_air_x_self"][0]) == pytest.approx(expected, abs=1e-6)
+    assert float(out["speed_y_self"][0]) == pytest.approx(0.0, abs=1e-6)
 
 
 def test_grounded_specialhi_hold_entry_divides_ground_speed_by_hold_attr() -> None:

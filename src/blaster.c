@@ -452,10 +452,15 @@ static inline void enter_side_special_start(MslBatch* batch, size_t idx, const M
     batch->state.facing[idx] = batch->state.facing[idx] ? 0u : 1u;
   }
   if (grounded) {
-    // Decomp: grounded Side-B entry preserves existing ground velocity by dividing gr_vel through
+    // Decomp: ftCo_SpecialS.c::doEnter first damps gr_vel through co_attrs.xB8 and
+    // ft_GetGroundFrictionMultiplier, then the grounded Side-B entry divides gr_vel by
     // `x28_FOX_ILLUSION_GROUND_VEL_X` before entering SpecialSStart.
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_SpecialS.c::{ftCo_SpecialS_CheckInput,doEnter}
     // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c::ftFx_SpecialSStart_Enter
-    // data/characters/{fox,falco}.json::illusion_ground_vel_x
+    // data/characters/{fox,falco}.json::{side_special_ground_entry_vel_mul,illusion_ground_vel_x}
+    batch->state.speed_ground_x_self[idx] +=
+        -(batch->state.speed_ground_x_self[idx] * (1.0f - ch->side_special_ground_entry_vel_mul)) *
+        batch->state.ground_friction_mul[idx];
     if (ch->illusion_ground_vel_x > 0.0f) {
       batch->state.speed_ground_x_self[idx] /= ch->illusion_ground_vel_x;
     }
