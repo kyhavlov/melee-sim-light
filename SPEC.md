@@ -353,8 +353,8 @@ Known teacher-forcing limitations (must be tracked and eventually removed, not t
 - `ThrownF/B/Hi` attached victim placement samples the owner anchor through the float AObj/JObj track path before applying the static `x1A70` residual. This matches the `HSD_AObjInterpretAnim -> lb_8000B1CC -> ftCo_800DE508` owner on fractional ThrowHi frames; integer SSANIM01 interpolation drifts on GAT's frame-6/7 attached window and carries a release-position residual. The predicate is explicitly limited to `ThrownF/B/Hi`; `CaptureWait*`/`CapturePulled*` and `ThrownLw` remain on their separate paths. Broadening this float-track anchor into low throw moved QGD contact/hitlag timing earlier and was rejected. The remaining GAT release-X residual is in `ftCo_800DDDE4`'s constrained release snapshot / `mpColl_800471F8` result: visible TransN2 reconstruction regressed release Y badly, and an integer callback phase only traded the X residual for a new Y miss, so no extra release branch is retained without a hidden constrained-joint or release-collision probe (`src/grab_attachment.c`; refs/melee/src/melee/ft/chara/ftCommon/ftCo_Thrown.c::ftCo_800DE508, refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DDDE4, refs/melee/src/sysdolphin/baselib/aobj.c::HSD_AObjInterpretAnim, refs/melee/src/melee/lb/lb_00B0.c::lb_8000B1CC).
 - `CatchDash_Phys` calls `ft_80085030` with the same `p_ftCommonData->x64 * co_attrs.gr_friction` scalar used by the catch family. Extracted motion-state data for `ftCo_SM_CatchDash` has `x10_animCurrFlags` bit0 clear (`fp->x594_b0 == false`), so this source path takes `ft_80085030`'s friction fallback; a rejected TransN-present proxy regressed one-step float X error because it admitted a root-motion branch the motion data does not enable. `Catch`/`CatchDash` collision callbacks are explicit floor-loss owners: `ftCo_Catch_Coll`/`ftCo_CatchDash_Coll -> ft_800841B8(..., fn_800D8E30) -> ftCo_Fall_Enter`. Together these prevent modelplay jump-cancel grab / dash-grab states from carrying stale Dash slide into offstage airborne Wait (`src/physics.c`, `src/locomotion.c`; refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::{ftCo_CatchDash_Phys,ftCo_Catch_Coll,ftCo_CatchDash_Coll,fn_800D8E30}, refs/melee/src/melee/ft/ft_081B.c::{ft_80085030,ft_800841B8}, refs/melee/src/melee/ft/fighter.c::Fighter_ActionStateChange_800693AC, `data/anims/{fox,falco}.tracks.bin` / `Pl{Fx,Fc}.dat` `ftCo_SM_CatchDash` flags).
 - Throw-side blaster pulses recompute the launch vector for every `throw_flags_b0` pulse from `ftFx_SpecialN_FtGetHoldJoint` and `ftFx_SpecialN_ItGetHoldJoint`, then call `it_8029C6CC`. The sim therefore samples the current float-pose hold-joint vector for ThrowB/Hi/Lw shots and does not reuse the latest live shot velocity for later ThrowHi pulses. The old latest-shot velocity bridge was a stale proxy after float-pose sampling landed: in the GAT ThrowHi rollout it made frame-20/24 reuse the frame-18 right/up vector, while source/replay rotate the gun between pulses. A modelplay-rerun19 ThrowB current-position experiment was rejected: although `it_8029C504` computes `spawn.pos` through `it_8026BB68`, `Item_80268B18` initializes `item->pos` from `spawn.prev_pos`, while `spawn.pos` is copied into `item->xDD4_itemVar.foxlaser.pos`; promoting `spawn.pos` into replay-visible `item_pos` regressed one-step float/error reports and is not retained without a dedicated item-var/previous-position lane. Replay-real locks cover the GAT frame-20/24 rollout positive plus the existing AGG/GAT/QGD/TBK one-step controls (`src/items.c`; refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::{ftFx_SpecialN_FtGetHoldJoint,ftFx_SpecialN_ItGetHoldJoint,ftFx_Throw_Anim}, refs/melee/src/melee/it/items/itfoxlaser.c::{it_8029C6CC,it_8029C504}, refs/melee/src/melee/it/item.c::Item_80268B18, `data/moves/{fox,falco}.json` ThrowHi `set_throw_spawn_projectile` events).
-- `ThrowLw/ThrownLw` frame-25 attached vertical anchor: the supported-domain slowest weight-dependent `ThrowLw` callback slice now applies the decomp `ftCo_800DB368 -> ftCo_800DE508` owner on the vertical axis by resolving the thrower's `FtPart_TransN2` reparent constraint and applying the victim static `x1A70` (`TransN - XRotN`) offset. The gate is data/rate-shaped from `ftCo_800DD4B0`, `data/common/ft_common_data.json::throw_anim_speed_weight_mul`, `data/characters/{fox,falco}.json::{weight,weight_independent_throws_mask}`, and `data/moves/{fox,falco}.json` frame-25 `ThrowLw` commands; it is not a character-id or replay-id proxy. Broad all-axis TransN2 and all-rate variants were rejected because QGD/FSP controls showed their lateral and faster/weight-independent paths still belong to the existing attached-world owner. The retained slice carries a tiny localized PRH one-step float tradeoff without discrete regression: aggregate discrete stays `2615`, suite float p95 moves `0.00034334 -> 0.00034339`, and aggregate rollout first mismatch improves `1546 -> 1533`.
-- Throw-release damage velocity has a same-callback owner: after throw KB is installed, `ftCo_800DD724 -> ftCo_800DDDE4 -> ftCo_800DE7C0 -> ftCo_8008E5A4` applies DI before victim damage physics. Because `ftCo_800DD724` is reached from the Throw Anim callback before `Fighter_procUpdate` installs current input, the deferred simulator path reads the preserved pre-input stick lane when applying that immediate DI in `combat_apply_throw_hit_core`; the L/R `x1AC` multiplier is not applied on this no-hitlag path because it belongs to `ftCo_Damage_OnExitHitlag`. Deferred release rows apply the same-frame airborne Fighter knockback-decay step before integrating release displacement from pre-Phys self velocity, then apply the one airborne Damage* gravity step to stored self velocity so delayed sim scheduling matches the decomp callback order without double-counting gravity into the release-position bridge. DamageFly floor-contact entries then project remaining KB onto the grounded floor tangent through the `ftCommon_8007CCE8` owner used by DownBound/Passive entry, clearing vertical KB on flat FD floors (`src/combat.c`, `src/throw_flow.c`, `src/knockdown.c`; refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DD724, refs/melee/src/melee/ft/chara/ftCommon/ftCo_Thrown.c::ftCo_800DE7C0, refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{ftCo_8008E5A4,ftCo_DamageFly_Phys,ftCo_Damage_Phys,ftCo_Damage_OnExitHitlag}, refs/melee/src/melee/ft/fighter.c::{Fighter_8006A360,Fighter_procUpdate}, refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownBound.c::ftCo_8009794C, refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007CCE8).
+- `ThrowLw/ThrownLw` attached placement now applies the shared decomp `ftCo_800DB368 -> ftCo_800DE508` owner for the supported Fox/Falco low-throw window: resolve the thrower's `FtPart_TransN2` constraint through the extracted part table (`data/characters/{fox,falco}.json::grab_capture_anchor_part_id`), recompose the stripped SSANIM anchor with the current `ThrowLw` TransN tail, then apply the victim static `x1A70` local offset. This replaces the older frame-25/rate-only vertical slice and the stale reseed `grab_offset` bridge for `ThrownLw`. The low-throw path intentionally does **not** use the generic float-AObj anchor: early ThrowLw float tracks can animate the capture anchor itself, while Dolphin probes on FSP low throw show the source owner is the constrained stripped anchor plus TransN pulse. Replay-real positives cover PRH/FSP/QGD low-throw placement, and QGD guards that the retained path does not reintroduce the earlier false hitlag/contact timing. Sources: `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_800DB368`, `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Thrown.c::ftCo_800DE508`, `refs/melee/src/melee/ft/ftparts.c::ftParts_GetBoneIndex`, `refs/melee/src/melee/lb/lb_00B0.c::lb_8000B1CC`, `data/anims/{fox,falco}.bin` TransN tail.
+- Throw-release damage velocity has a same-callback owner: after throw KB is installed, `ftCo_800DD724 -> ftCo_800DDDE4 -> ftCo_800DE7C0 -> ftCo_8008E5A4` applies DI before victim damage physics. Because `ftCo_800DD724` is reached from the Throw Anim callback before `Fighter_procUpdate` installs current input, the deferred simulator path reads the preserved pre-input stick lane when applying that immediate DI in `combat_apply_throw_hit_core`; the L/R `x1AC` multiplier is not applied on this no-hitlag path because it belongs to `ftCo_Damage_OnExitHitlag`. Deferred release rows apply the same-frame airborne Fighter knockback-decay step before integrating release displacement from pre-Phys self velocity, then apply the one airborne Damage* gravity step to stored self velocity so delayed sim scheduling matches the decomp callback order without double-counting gravity into the release-position bridge. Throw hit capsule float damage is created by `set_throw_hitbox` before later same-instance low-throw laser contacts can stale-queue the shared throw attack instance, so deferred throw-release damage excludes same-instance stale entries while still honoring prior instances of the same move. Release-local floor contact is probed after deferred placement with the same `ftCo_800DDDE4 -> mpColl_800471F8 -> DamageFly_Coll -> ftCo_80090184` owner; when it succeeds, DownBound/Passive entry projects remaining KB onto the grounded floor tangent through `ftCommon_8007CCE8`, clearing vertical KB on flat FD floors. The FSP low-throw release now reaches DownBound and raw +1.0 throw damage in-frame; the remaining ~0.068 X residual is still the constrained release snapshot, not floor/stale ownership (`src/combat.c`, `src/throw_flow.c`, `src/knockdown.c`; refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::{ftCo_800DD724,ftCo_800DDDE4}, refs/melee/src/melee/ft/chara/ftCommon/ftCo_Thrown.c::ftCo_800DE7C0, refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{ftCo_8008E5A4,ftCo_DamageFly_Coll,ftCo_80090184,ftCo_DamageFly_Phys,ftCo_Damage_Phys,ftCo_Damage_OnExitHitlag}, refs/melee/src/melee/ft/fighter.c::{Fighter_8006A360,Fighter_procUpdate}, refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownBound.c::ftCo_8009794C, refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007CCE8, refs/melee/build/GALE01/asm/melee/ft/ftaction.s::ftAction_80071E04, refs/melee/build/GALE01/asm/melee/ft/ftcoll.s::ftColl_8007ABD0).
 - Attached `Thrown*` victims now use one shared attachment-owned collision/release substrate by default: attached `ThrownF/B/Hi/Lw` rows no longer let generic stage collision own grounded / wall / ledge state during the attached window, and release-frame victims use the same shared pending-release collision suppression before later throw-hit / item resolution (`src/grab_attachment.c`, `src/mpcoll_ground.c`, `src/mpcoll_env.c`, `src/mpcoll_wall_ceil.c`, `src/throw_flow.c`). The remaining throw gaps are no longer in generic attached/release substrate or common release callback ownership; they are the decomp-justified per-throw pulse/article differences in `src/items.c` / `src/combat.c`, plus ThrowLw's attached pulse-25 post-hitlag anim-rate owner in `src/anim_timebase.c` that belongs to the same `ftFx_Throw_Anim` pulse family rather than shared throw core.
 
 Metrics (initial):
@@ -1435,6 +1435,14 @@ Match-flow closure notes:
 - `ftCo_RebirthWait_IASA` runs priority aerial special checks before fallback Fall-style exits and
   still applies `ftColl_8007B7A4(gobj, p_ftCommonData->x5D8)` on exit. That x1994/x198C write is
   visible as Slippi `hurtbox_state=1` on RebirthWait -> SpecialAirNStart rows.
+- The same RebirthWait -> Fall x1994 owner persists across later locomotion actions until
+  `Fighter_8006A360` decrements the timer to zero. Mid-window teacher-forced seeds carry an
+  explicit `colanim_rebirth_fall_x1994_seed` provenance bit so runtime can expire x198C on the
+  correct frame instead of stale-carrying merged `hurtbox_state=1`. This is not a generic x1994
+  trust rule; the seed lane is limited to the RebirthWait -> Fall source path.
+  Sources: `refs/melee/build/GALE01/asm/melee/ft/ft_0D31.s::ftCo_RebirthWait_{Anim,IASA}`,
+  `refs/melee/src/melee/ft/fighter.c::Fighter_8006A360`,
+  `refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm`.
 - DeadUpStar can keep `dmg.x18C4_source_ply` through the terminal x18C8 tick before the Rebirth
   reset. This uses the existing `source_clear_terminal_phase` seed lane rather than a separate
   match-flow timer repair.
@@ -1568,6 +1576,21 @@ GuardSetOff grounded motion note:
 | `refs/melee/src/melee/ft/ftcoll.c::ftColl_80078C70` (fighter-vs-fighter collision pass) | `data/hurtcaps/{fox,falco}.bin` (`MSLHURT1 v1`) + `data/anims/{fox,falco}*.bin` (pose) | `src/hurtboxes.c`, `src/hurtcaps_tables.c`, `src/anim_pose.c` |
 | `refs/melee/src/melee/ft/ftaction.c::ftAction_80073240` (script timers use `cur_anim_frame`) | `data/hitboxes/{fox,falco}.bin` (`MSLHITB1 v1`) | `src/hitboxes.c`, `src/hitboxes_tables.c` |
 | `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c` (shield bubble placement) | `data/shields/{fox,falco}.bin` (shield-tilt table) | `src/shields.c` (placement) |
+
+- Stopped non-loop fighter AObj terminal pose:
+  - `HSD_AObjInterpretAnim` sets `AOBJ_NO_ANIM` once a non-looping fighter animation reaches
+    `end_frame`, but BODY collision still samples the stopped JObj local SRT via `lb_8000B1CC`.
+  - Native probe evidence on Falco `DamageFlyHi` (`DistinctCaringCobra.msl:8565`) shows the high
+    hurtcap JObjs at `curr_frame=end_frame=29`, `AOBJ_NO_ANIM`, carrying the final loaded FObj
+    `p1` local SRT, not the pre-stop interpolated frame-28 value. The extractor/native bake path
+    mirrors that terminal value for generated `data/anims/{fox,falco}*.bin` so active-hitstun
+    DamageFly victims use the same stopped pose for BODY candidate ordering.
+  - This is an extraction/AObj semantics fix, not a DamageFly row shortcut: runtime still consumes
+    the ordinary pose tables through `src/hurtboxes.c` and the normal `ftColl_80078C70` BODY path.
+  - Sources: `refs/melee/src/sysdolphin/baselib/aobj.c::HSD_AObjInterpretAnim`,
+    `refs/melee/src/sysdolphin/baselib/fobj.c::HSD_FObjInterpretAnim`,
+    `refs/melee/src/melee/lb/lb_00B0.c::lb_8000B1CC`,
+    `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_DamageFly_Anim`.
 
 #### Damage pipeline (percent, hitlag, hitstun, KB, damage state entry, rehit/hitlists)
 
@@ -2103,10 +2126,20 @@ Fox/Falco special-owner split (2026-04-17):
       `xDCE/xC54/xC58` shield-bounce internals are promoted into explicit state, the simulator keeps
       shield-bounce only for already-aged, high-shield glancing contacts; lower-shield fresh
       GuardSetOff contacts take the `HitShield` destruction path.
+    - Steady `Guard` no-submotion snapshots (`action_frame=-1`, `animation_index=-1`) are split by
+      item callback provenance. Replay-carried/high-bit rows stay on the settled point sample and do
+      not get a fresh authored-offset shield sweep, preserving GAT/QGD carried-shot negatives. A
+      laser in the pure frame-start `fp+0x2218_b5` behavior lane (`state_flags[0] == 0x04`, with high
+      command bits clear) uses the authored HitCapsule offsets for the immediate
+      `it_8029C4D4 -> Item_80269DC8` shield callback only while the owner is still in the
+      `ftFx_SpecialNLoop_Anim` / `ftFx_SpecialAirNLoop_Anim` callback phase that owns the shot, even
+      when the defender is serialized as steady Guard. `IAT:3575` locks this positive, while
+      `DCC:6517` locks the high-bit negative where the shot serializes instead and `DCC:2231` locks
+      the pure-byte landing carry negative.
     - Replay-real positive lock: `GracefulAttachedTurtle.msl:773` now enters GuardSetOff and clears
       the Falco laser article. Existing keepalive controls (`GAT:2276`, `GAT:5280`) remain live.
     Sources: `refs/melee/src/melee/it/item.c::Item_80269DC8`,
-    `refs/melee/src/melee/it/items/itfoxlaser.c::{itFoxLaser_Logic94_ShieldBounced,itFoxLaser_Logic94_HitShield}`,
+    `refs/melee/src/melee/it/items/itfoxlaser.c::{it_8029C504,itFoxlaser_UnkMotion1_Anim,it_8029C4D4,itFoxLaser_Logic94_ShieldBounced,itFoxLaser_Logic94_HitShield}`,
     `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80091A4C`.
   - Illusion / Phantasm article lifetime runtime/seed slice:
     - BODY-hit Illusion/Phantasm articles persist but do not enter generic item hitlag. Decomp
@@ -2492,6 +2525,54 @@ Fox/Falco special-owner split (2026-04-17):
     `refs/melee/src/melee/ft/ftcoll.c::{ftColl_CreateReflectHit,ftColl_80077464}`,
     `refs/melee/src/melee/it/item.c::Item_80269F14`,
     `refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm`.
+  - Dash `ftCo_80091AD8` GuardOn laser-shield ordering:
+    - `ftCo_Dash_IASA` keeps the `dash.x4 != 0 && cur_anim_frame <= x44` slice inside the early
+      Dash branch. That branch can test EscapeF/item/catch/attack followups, but it does not fall
+      through to the generic guard helpers, so a fresh L/R press in that slice must not enter
+      GuardReflect.
+    - The later `dash.x4 != 0` handoff slice reaches `ftCo_80091AD8 -> ftCo_800923B4` and can
+      enter GuardOn from held shield input after spending the early Dash branch. In vanilla ordering
+      this handoff exposes the GuardOn ShieldDesc after the current frame's item collision pass, so
+      the newly-created descriptor is not eligible for same-step SpecialN laser shield contact; the
+      laser shield hit appears on the next row through the normal GuardSetOff owner. Dash `x4 == 0`
+      rows that reach `ftCo_80091AD8` directly are not deferred and can take same-step shield
+      contact.
+    - Runtime therefore gates the fresh GuardReflect admission by the Dash `x4/x44` source branch
+      and tags GuardOn entries that came through the Dash `dash.x4 != 0` / `ftCo_80091AD8` handoff
+      slice so item shield precedence can defer only that same-frame contact. This replaces a
+      visible fresh-input proxy with the decomp branch predicate and preserves Dash rows that
+      legitimately enter GuardReflect or same-frame GuardSetOff.
+    Sources: `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c::ftCo_Dash_IASA`,
+    `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_80091AD8,ftCo_800923B4}`.
+  - Guard ShieldDesc replay-only accept/miss seed:
+    - `ftColl_80078C70` checks the defender ShieldDesc path before BODY hurtcap selection. A
+      replay-visible GuardSetOff plus attacker/defender hitlag proves the hidden
+      `lbColl_80007BCC -> ftColl_80076CBC` shield path accepted; a replay-visible BODY damage hit
+      plus attacker/defender hitlag proves the ShieldDesc path did not accept, because accepted
+      shield contact suppresses BODY. The seed lane stores that accept/miss result for one-step
+      reseeds only; normal rollouts keep using live geometry.
+    - Replay-real locks: `PositiveRevolvingHyena.msl:11352` covers the accepted GuardSetOff lane,
+      and `ImpassionedAlarmedTarsier.msl:3702` covers the BODY-hit negative where a broad shield
+      rim proxy would falsely enter GuardSetOff.
+    Sources: `refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078C70,ftColl_80076CBC,ftColl_80076ED8}`,
+    `refs/melee/src/melee/lb/lbcollision.c::lbColl_80007BCC`.
+  - Guard ShieldDesc live no-tilt pose:
+    - `ftCo_80091E78` updates `mv.co.guard.x8/x4` every active Guard frame, but only samples the
+      angled Guard timeline (`ftAnim_80070710(..., x8)`) when `x4` is nonzero. For no-tilt Guard
+      (`x4 == 0`), live ShieldDesc collision uses the current Guard pose, not the x8 neutral target.
+    - Runtime therefore uses `data/shields/{fox,falco}.bin` frame 0 plus both fighter scale and
+      `co_attrs.model_scaling` only for steady `Guard` with zero/subnormal x4. GuardOn,
+      GuardReflect, and nonzero-x4 angled Guard retain the earlier neutral-target collision-subtree
+      scaling path until their separate pose owners are proved.
+    - Dolphin probe evidence: `PositiveRevolvingHyena.msl:11352` accepts ShieldDesc with Falco's
+      shield center at roughly `(39.718, 9.900, 0.598)`, matching Guard frame 0 after Falco's
+      model scale. The old runtime used frame 10 without model scaling and missed before falling
+      into BODY.
+    - Replay-real runtime locks cover PRH `11336 -> 11352` accepted ShieldDesc and IAT
+      `3686 -> 3702` BODY negative, so this is not a broad shield-rim suppressor.
+    Sources: `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_80091BC4,ftCo_80091E78}`,
+    `refs/melee/src/melee/lb/lbcollision.c::lbColl_80007BCC`,
+    `data/shields/{fox,falco}.bin`, `data/characters/{fox,falco}.json`.
   - Airborne Fall Falco-laser BODY hurtcap-Z lane:
     - `ftColl_8007925C` routes item BODY through `lbColl_8000805C`, passing
       `ftCommon_8007F804(fp)` and `fp->cur_pos.z`; `lbColl_8000805C` rewrites both hurt capsule
@@ -3570,7 +3651,11 @@ Current residual labels:
     `ftCo_Fall_Coll` / `ftCo_Landing_Enter_Basic` callback timing.
   - `F10o_ottotto_teeter_edge_handoff`: common teeter entry vs Fall handoff through
     `ftCo_8009A3C8`; the safe retained runtime slice covers Ottotto crouch IASA and Ottotto anim-end
-    to OttottoWait, while a broad teeter-entry gate was rejected by walk-off sentinels.
+    to OttottoWait, plus steady `RunBrake_Coll -> ft_80084280` edge entry. RunBrake does not apply
+    the simulator's older stick-Y/action-frame admission gate before `ftCo_8009A3C8`; it enters
+    Ottotto from `Collide_Edge` when the teeter-suppression bit is clear. Other edge-callback
+    actions remain on the narrower modeled subset until their `x2228_b2` provenance is represented.
+    Broad teeter-entry for all walk/run states was rejected by walk-off sentinels.
   - `F10p_specialhi_bound_collision_callback`: `SpecialAirHi` <-> `SpecialHiBound` one-frame
     collision callback timing. These rows stay outside `F22_specialhi_firefox_firebird` so section 6
     remains closed.
@@ -3958,6 +4043,20 @@ BODY collision-space residual split and rejected seed bridge:
   lane used by DownBound/Damage OnExitHitlag rows. This follows Slippi's post-frame
   `x1988 != 0 ? x1988 : x198C` emission and removes the old x1990-owned candidate-filter split
   without weakening DownBound sentinels.
+- SpecialHi/AirHi right-wall collision now uses the live JObj ECB owner for the supported Fox/Falco
+  domain when `ft_CheckGroundAndLedge` runs the airborne `mpColl_80044E10_RightWall` path. The
+  collision ECB is rebuilt from the extracted ftData_x44_t `ecb_joints`
+  (`data/characters/{fox,falco}.json`) through the collision-pose matrices, applies model scaling
+  and the same FtPart_XRotN `rotateModel` owner used by SpecialHi hit/hurt primitives, then applies
+  `mpColl_LoadECB_JObj`'s `x12C` horizontal recenter before a local
+  `mpColl_800454A4_RightWall`-style airborne envelope max. The retained candidate list is the
+  decomp-ordered side, bottom, and top sweeps; a broader current side-edge sweep was tested and
+  rejected because it over-admitted non-target SpecialHi wall rows until the exact side-edge helper
+  predicate is represented. Wall sweep checks use raw `mpCheck{Left,Right}Wall` endpoints plus
+  `mpLineIntersectionV`'s local endpoint clamp, not `mpLib_8004ED5C` linked-line extension. QGD
+  9372/9373/9374 are positive locks, QGD 9371 guards pre-contact, BHH 6392 guards horizontal
+  identity/recenter behavior, TCH 2601 guards the FD-lip endpoint boundary, and GAT 3099 guards the
+  right-wall-only domain while the symmetric LeftWall envelope remains separate.
 - Source anchors:
   - `refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078C70,ftColl_80076ED8}`
   - `refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000805C,lbColl_80006E58}`
@@ -3966,4 +4065,6 @@ BODY collision-space residual split and rejected seed bridge:
   - `refs/melee/src/sysdolphin/baselib/jobj.c::{HSD_JObjAnim,HSD_JObjSetupMatrixSub,HSD_JObjMakeMatrix}`
   - `refs/melee/src/melee/lb/lb_00B0.c::lb_8000B1CC`
   - `refs/melee/src/melee/ft/fighter.c::Fighter_80068E64`
+  - `refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::{ftFox_SpecialHi_RotateModel,ftFx_SpecialAirHi_Coll}`
+  - `refs/melee/src/melee/mp/mpcoll.c::{mpColl_LoadECB_JObj,mpColl_80044E10_RightWall,mpColl_800454A4_RightWall}`
   - `refs/melee/src/melee/gr/forward.h::{FLATZONE,LAST}`
