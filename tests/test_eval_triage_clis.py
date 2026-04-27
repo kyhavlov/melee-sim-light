@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import subprocess
 import sys
 from pathlib import Path
 
@@ -408,6 +409,70 @@ def test_disruptive_rollout_desyncs_cli_smoke_writes_outputs(tmp_path: Path, mon
     assert summary["suite"] == "fox_falco_fd_ucf084_recent"
     assert summary["horizons"] == [1]
     assert summary["max_records"] == 2
+
+
+def test_disruptive_rollout_desyncs_workers_match_serial_outputs(tmp_path: Path) -> None:
+    scalar_dir = tmp_path / "disruptive_scalar"
+    worker_dir = tmp_path / "disruptive_workers"
+    common_args = [
+        "disruptive_rollout_desyncs",
+        "--suite",
+        "replays/suites/fox_falco_fd_ucf084_recent.json",
+        "--datasets-dir",
+        "datasets",
+        "--dataset-filter",
+        "AttachedGoodNaturedGuanaco.msl",
+        "--horizons",
+        "1,2,4",
+        "--max-records",
+        "32",
+        "--batch-size",
+        "16",
+        "--top",
+        "3",
+    ]
+
+    subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "tools.eval.disruptive_rollout_desyncs",
+            *common_args[1:],
+            "--workers",
+            "1",
+            "--out-dir",
+            str(scalar_dir),
+        ],
+        check=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "tools.eval.disruptive_rollout_desyncs",
+            *common_args[1:],
+            "--workers",
+            "2",
+            "--chunk-records",
+            "8",
+            "--out-dir",
+            str(worker_dir),
+        ],
+        check=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+
+    assert (worker_dir / "rows.tsv").read_text(encoding="utf-8") == (scalar_dir / "rows.tsv").read_text(
+        encoding="utf-8"
+    )
+    assert (worker_dir / "clusters.tsv").read_text(encoding="utf-8") == (scalar_dir / "clusters.tsv").read_text(
+        encoding="utf-8"
+    )
 
 
 def test_facing_residual_blocker_report_groups_seed_visible_context() -> None:

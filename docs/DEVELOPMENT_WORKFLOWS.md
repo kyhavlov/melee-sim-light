@@ -117,6 +117,10 @@ make rollout-disruptive \
   DISRUPTIVE_OUT_DIR=reports/triage/disruptive_rollout_desyncs_aggregate
 ```
 
+`make rollout-disruptive` runs the exact scan in worker chunks by default. Tune
+CPU pressure with `DISRUPTIVE_WORKERS=1` for serial reproduction, or a higher
+value such as `16`/`24` for a faster local triage pass on a many-core machine.
+
 This reseeds at replay record `t`, advances with replay inputs without reseeding,
 scores the horizon compare row at horizons `10,20,60`, records the first
 mismatching frame/field in the window, and writes `rows.tsv`, `clusters.tsv`, and

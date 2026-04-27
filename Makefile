@@ -22,6 +22,9 @@ ROLLOUT_LOCATE_SUMMARY_JSON ?=
 ROLLOUT_LOCATE_DIFF_JSON ?=
 DISRUPTIVE_OUT_DIR ?= reports/triage/disruptive_rollout_desyncs
 DISRUPTIVE_HORIZONS ?= 10,20,60
+DISRUPTIVE_BATCH_SIZE ?= 512
+DISRUPTIVE_WORKERS ?= 8
+DISRUPTIVE_CHUNK_RECORDS ?= 1024
 ARGS ?=
 TEST_ARGS ?=
 TEST_WORKERS ?= auto
@@ -113,7 +116,7 @@ rollout-locate-diff:
 	@$(PY) -m tools.eval.diff_rollout_locate --before "$(ROLLOUT_LOCATE_BEFORE)" --after "$(ROLLOUT_LOCATE_AFTER)" --top "$(ROLLOUT_TOP)" $(ROLLOUT_LOCATE_DIFF_JSON_ARG)
 
 rollout-disruptive: build
-	@$(PY) -m tools.eval.disruptive_rollout_desyncs --suite "$(SUITE)" --datasets-dir "$(DATASETS_DIR)" --horizons "$(DISRUPTIVE_HORIZONS)" --out-dir "$(DISRUPTIVE_OUT_DIR)" --top "$(ROLLOUT_TOP)" $(ARGS)
+	@$(PY) -m tools.eval.disruptive_rollout_desyncs --suite "$(SUITE)" --datasets-dir "$(DATASETS_DIR)" --horizons "$(DISRUPTIVE_HORIZONS)" --batch-size "$(DISRUPTIVE_BATCH_SIZE)" --workers "$(DISRUPTIVE_WORKERS)" --chunk-records "$(DISRUPTIVE_CHUNK_RECORDS)" --out-dir "$(DISRUPTIVE_OUT_DIR)" --top "$(ROLLOUT_TOP)" $(ARGS)
 
 build_data:
 	@$(PY) -m tools.extraction.build_data --iso-dir _iso --stage grnla --chars fox,falco
