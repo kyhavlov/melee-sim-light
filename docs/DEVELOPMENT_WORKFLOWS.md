@@ -83,7 +83,10 @@ uv run python -m tools.slippi.preprocess_suite \
 ```
 
 Use `--force` only when you intentionally want to rebuild every dataset in the
-suite. Stale/forced rebuilds can run in parallel:
+suite. Datasets created before per-dataset cache metadata are rebuilt by
+default once so source/data signatures are guaranteed; `--trust-legacy-cache`
+is only for explicit local migration when you know those artifacts are current.
+Stale/forced rebuilds can run in parallel:
 
 ```bash
 make preprocess PREPROCESS_WORKERS=4

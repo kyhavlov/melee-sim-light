@@ -126,6 +126,29 @@ def _signature_matches(meta_path: Path, signature: dict[str, Any]) -> bool:
     return meta.get("signature") == signature
 
 
+def _dataset_cache_action(
+    *,
+    force: bool,
+    out_path: Path,
+    slp_path: Path,
+    dataset_meta_path: Path,
+    signature: dict[str, Any],
+    trust_legacy_cache: bool,
+) -> str:
+    if force or not out_path.exists():
+        return "rebuild"
+    if _signature_matches(dataset_meta_path, signature):
+        return "skip"
+    if (
+        trust_legacy_cache
+        and not dataset_meta_path.exists()
+        and out_path.stat().st_mtime >= slp_path.stat().st_mtime
+        and _dataset_record_size(out_path) == SAMPLE_DTYPE.itemsize
+    ):
+        return "trust_legacy"
+    return "rebuild"
+
+
 def _write_dataset_cache_meta(meta_path: Path, signature: dict[str, Any], *, rebuilt: bool) -> None:
     meta_path.write_text(
         json.dumps(
@@ -152,6 +175,14 @@ def main() -> None:
         help="Directory under repo root to store preprocessed datasets (gitignored)",
     )
     ap.add_argument("--force", action="store_true", help="Rebuild even if dataset is up-to-date")
+    ap.add_argument(
+        "--trust-legacy-cache",
+        action="store_true",
+        help=(
+            "Opt in to trusting existing no-meta datasets when record_size and replay mtime look current. "
+            "Default is to rebuild no-meta datasets so source/data signatures are guaranteed."
+        ),
+    )
     ap.add_argument("--workers", type=int, default=1, help="Parallel rebuild workers for stale/forced datasets.")
     args = ap.parse_args()
 
@@ -163,7 +194,7 @@ def main() -> None:
     skipped = 0
     missing = 0
     stale = 0
-    legacy_skipped = 0
+    trusted_legacy = 0
     build_tasks: list[dict[str, Any]] = []
 
     for entry in suite.replays:
@@ -192,21 +223,23 @@ def main() -> None:
             ucf_cardinals_1_0_enabled=bool(suite.ucf_cardinals_1_0_enabled),
         )
         dataset_meta_path = _dataset_cache_meta_path(out_path)
+        cache_action = _dataset_cache_action(
+            force=bool(args.force),
+            out_path=out_path,
+            slp_path=slp_path,
+            dataset_meta_path=dataset_meta_path,
+            signature=signature,
+            trust_legacy_cache=bool(args.trust_legacy_cache),
+        )
+        if cache_action == "skip":
+            skipped += 1
+            continue
+        if cache_action == "trust_legacy":
+            _write_dataset_cache_meta(dataset_meta_path, signature, rebuilt=False)
+            skipped += 1
+            trusted_legacy += 1
+            continue
         if not args.force and out_path.exists():
-            if _signature_matches(dataset_meta_path, signature):
-                skipped += 1
-                continue
-            if (
-                not dataset_meta_path.exists()
-                and out_path.stat().st_mtime >= slp_path.stat().st_mtime
-                and _dataset_record_size(out_path) == SAMPLE_DTYPE.itemsize
-            ):
-                # Legacy cache entry from before per-dataset signatures. Keep it, but stamp it so
-                # future schema/data/tooling changes can invalidate it precisely.
-                _write_dataset_cache_meta(dataset_meta_path, signature, rebuilt=False)
-                skipped += 1
-                legacy_skipped += 1
-                continue
             stale += 1
 
         build_tasks.append(
@@ -244,10 +277,11 @@ def main() -> None:
         "suite_name": suite.name,
         "datasets_dir": str(args.datasets_dir),
         "force_used": bool(args.force),
+        "trust_legacy_cache": bool(args.trust_legacy_cache),
         "timestamp_utc": datetime.now(timezone.utc).isoformat(),
         "built": int(built),
         "skipped": int(skipped),
-        "legacy_skipped": int(legacy_skipped),
+        "trusted_legacy": int(trusted_legacy),
         "stale": int(stale),
         "missing": int(missing),
         "cache_version": _CACHE_VERSION,
@@ -259,7 +293,7 @@ def main() -> None:
 
     print(f"suite: {suite.name}")
     print(
-        f"built: {built}  skipped: {skipped}  legacy_skipped: {legacy_skipped}  "
+        f"built: {built}  skipped: {skipped}  trusted_legacy: {trusted_legacy}  "
         f"stale: {stale}  missing: {missing}"
     )
     if missing:

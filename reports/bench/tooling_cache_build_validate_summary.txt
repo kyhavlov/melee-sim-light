@@ -17,7 +17,7 @@ Preprocess:
   - stale/forced dataset rebuilds can run in parallel with --workers / PREPROCESS_WORKERS.
 - Primary current-cache run with PREPROCESS_WORKERS=4: built=0 skipped=4 real 0.31s.
 - Aggregate current-cache run with PREPROCESS_WORKERS=4: built=0 skipped=15 real 0.80s.
-- Existing legacy datasets are stamped once when their record_size and replay mtime are already current.
+- Existing no-meta legacy datasets rebuild by default; --trust-legacy-cache is an explicit opt-in local migration shortcut.
 
 Validate-all:
 - Previous reported offender: make validate-all around 29s in the packaging pass.
