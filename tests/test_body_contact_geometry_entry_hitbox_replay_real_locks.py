@@ -12,6 +12,36 @@ from tools.eval.dataset import COMPARE_DTYPE, read_dataset
 from tools.eval.run_longest_rollout_streaks import _load_binding
 
 
+def _step_one_row_with_seed(dataset_path: Path, record: int, seed: np.ndarray) -> tuple[np.void, np.void]:
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+    row = samples[record : record + 1]
+    ref = row["ref_t1"][0]
+
+    binding = _load_binding()
+    sizes = binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    compare_stride = int(sizes["compare"])
+
+    seed_bytes = np.frombuffer(seed.tobytes(order="C"), dtype=np.uint8).copy().reshape(1, seed_stride)
+    prev_input_bytes = np.frombuffer(row["prev_input_t"].tobytes(order="C"), dtype=np.uint8).copy().reshape(
+        1, input_stride
+    )
+    input_bytes = np.frombuffer(row["input_t"].tobytes(order="C"), dtype=np.uint8).copy().reshape(1, input_stride)
+    out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
+
+    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    try:
+        binding.reseed_seed(handle, seed_bytes)
+        binding.step_input(handle, prev_input_bytes, input_bytes)
+        binding.write_compare(handle, out_compare_bytes)
+    finally:
+        binding.destroy(handle)
+
+    return out_compare_bytes.view(COMPARE_DTYPE).reshape(-1)[0], ref
+
+
 @pytest.mark.integration
 @pytest.mark.parametrize(
     ("dataset_name", "record", "defender"),
@@ -38,6 +68,159 @@ def test_enable_edge_tiplog_phantom_rows_do_not_enter_damage(dataset_name: str, 
     _seed, out, ref = _step_one_row(dataset_path, record)
     for field in ("action_id", "animation_index", "hitlag", "hitstun"):
         assert int(out[field][defender]) == int(ref[field][defender]), f"field={field}"
+
+
+@pytest.mark.integration
+def test_damageflyhi_terminal_aobj_pose_selects_high_hurtcap_dcc_8565() -> None:
+    # DamageFly terminal AObj collision pose:
+    # - ftCo_DamageFly_Anim keeps the victim in active hitstun after the non-looping AObj reaches
+    #   end_frame.
+    # - HSD_AObjInterpretAnim marks those stopped JObjs AOBJ_NO_ANIM, while lb_8000B1CC still
+    #   consumes their final live local SRT for BODY hurtcaps in ftColl_80078C70.
+    # - DCC:8565 is Falco DamageFlyHi at end_frame=29; the high hurtcap must use that stopped
+    #   terminal AObj pose so Fox AttackAirB selects the strong high hitbox, not the weak mid one.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_DamageFly_Anim
+    # refs/melee/src/sysdolphin/baselib/aobj.c::HSD_AObjInterpretAnim
+    # refs/melee/src/sysdolphin/baselib/fobj.c::HSD_FObjInterpretAnim
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078C70,ftColl_80076ED8}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / "datasets/aggregate_recent/replays/validation/aggregate_recent/DistinctCaringCobra.msl"
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    seed, out, ref = _step_one_row(dataset_path, 8565)
+    defender = 1
+    assert int(seed["action_id"][defender]) == 87  # ftCo_MS_DamageFlyHi
+    assert int(seed["animation_index"][defender]) == 177  # ftCo_SM_DamageFlyHi
+    assert int(seed["action_frame"][defender]) == 29
+    assert int(ref["action_id"][defender]) == 87
+    assert int(out["action_id"][defender]) == int(ref["action_id"][defender])
+    assert int(out["hitlag"][defender]) == int(ref["hitlag"][defender]) == 8
+    assert int(out["hitstun"][defender]) == int(ref["hitstun"][defender]) == 57
+    assert int(out["percent"][defender]) == int(ref["percent"][defender])
+
+
+@pytest.mark.integration
+def test_damageflyhi_terminal_aobj_pose_does_not_pre_admit_dcc_8564() -> None:
+    # Negative neighbor for the stopped-AObj terminal pose: the immediately preceding DCC row has
+    # the same DamageFlyHi terminal victim but no accepted BODY hit yet. The extractor/runtime
+    # change must not become a broad DamageFlyHi hit admission shortcut.
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / "datasets/aggregate_recent/replays/validation/aggregate_recent/DistinctCaringCobra.msl"
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    seed, out, ref = _step_one_row(dataset_path, 8564)
+    defender = 1
+    assert int(seed["action_id"][defender]) == 87
+    assert int(seed["animation_index"][defender]) == 177
+    assert int(seed["action_frame"][defender]) == 29
+    for field in ("action_id", "animation_index", "hitlag", "hitstun", "percent"):
+        assert int(out[field][defender]) == int(ref[field][defender]), f"field={field}"
+
+
+@pytest.mark.integration
+def test_rebirth_fall_x1994_seed_expires_hurtbox_state_gat_9068() -> None:
+    # RebirthWait -> Fall x1994 seed owner:
+    # - RebirthWait_Anim / IASA call ftColl_8007B7A4(..., p_ftCommonData->x5D8) before Fall.
+    # - GAT:9068 is the terminal seeded x1994=1 frame several actions after RebirthWait -> Fall.
+    # - Fighter_8006A360 must decrement that timer and clear x198C before post-frame compare;
+    #   stale-carrying the merged Slippi hurtbox_state leaves p1 invincible one frame too long.
+    # refs/melee/build/GALE01/asm/melee/ft/ft_0D31.s::ftCo_RebirthWait_{Anim,IASA}
+    # refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
+    # refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / "datasets/aggregate_recent/replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.msl"
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    seed, out, ref = _step_one_row(dataset_path, 9068)
+    defender = 1
+    assert int(seed["action_id"][defender]) == 39  # ftCo_MS_Squat
+    assert int(seed["hurtbox_state"][defender]) == 1
+    assert int(seed["colanim_hit_status_x198c"][defender]) == 1
+    assert int(seed["colanim_timer_x1994"][defender]) == 1
+    assert int(seed["colanim_rebirth_fall_x1994_seed"][defender]) == 1
+    assert int(out["hurtbox_state"][defender]) == int(ref["hurtbox_state"][defender]) == 0
+
+
+@pytest.mark.integration
+def test_rebirth_fall_x1994_seed_requires_rebirth_source_flag_gat_9068() -> None:
+    # Boundary guard: a nonzero x1994 timer is not trusted as generic gameplay state unless the
+    # replay-history lane proves the RebirthWait -> Fall owner. This keeps the fix from becoming a
+    # broad "timer means clear hurtbox_state" shortcut for unrelated x1994 sources.
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / "datasets/aggregate_recent/replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.msl"
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    ds = read_dataset(str(dataset_path))
+    seed = ds.samples[9068:9069]["seed_t"].copy()
+    defender = 1
+    assert int(seed[0]["colanim_rebirth_fall_x1994_seed"][defender]) == 1
+    seed[0]["colanim_rebirth_fall_x1994_seed"][defender] = np.uint8(0)
+    out, ref = _step_one_row_with_seed(dataset_path, 9068, seed)
+    assert int(ref["hurtbox_state"][defender]) == 0
+    assert int(out["hurtbox_state"][defender]) == 1
+
+
+@pytest.mark.integration
+def test_rebirth_fall_x1994_seed_fixes_gat_9063_rollout_window() -> None:
+    # Rollout-real lock for the disruptive F08b GAT cluster:
+    # starting at GAT:9063, p1 is still in the RebirthWait -> Fall invincibility window. The hidden
+    # x1994 timer must expire at GAT:9068, otherwise p1 remains invincible and later BODY/contact
+    # selection diverges into the high-scoring rollout blast radius.
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / "datasets/aggregate_recent/replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.msl"
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+    binding = _load_binding()
+    sizes = binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    compare_stride = int(sizes["compare"])
+    sample_stride = int(samples.dtype.itemsize)
+    samples_u8 = samples.view(np.uint8).reshape(int(samples.shape[0]), sample_stride)
+    seed_off = int(samples.dtype.fields["seed_t"][1])
+    prev_input_off = int(samples.dtype.fields["prev_input_t"][1])
+    input_off = int(samples.dtype.fields["input_t"][1])
+
+    start = 9063
+    stop = 9125
+    defender = 1
+    seed_bytes = samples_u8[start : start + 1, seed_off : seed_off + seed_stride].copy()
+    out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
+    out_view = out_compare_bytes.view(COMPARE_DTYPE).reshape(1)
+
+    handle = binding.init(
+        batch_size=1,
+        num_players=int(ds.header["num_players"]),
+        ucf_enabled=1,
+        ucf_cardinals_1_0_enabled=1,
+    )
+    try:
+        binding.reseed_seed(handle, seed_bytes)
+        for record in range(start, stop + 1):
+            prev_input_bytes = samples_u8[
+                record : record + 1, prev_input_off : prev_input_off + input_stride
+            ].copy()
+            input_bytes = samples_u8[record : record + 1, input_off : input_off + input_stride].copy()
+            binding.step_input(handle, prev_input_bytes, input_bytes)
+            binding.write_compare(handle, out_compare_bytes)
+            out = out_view[0].copy()
+            ref = samples["ref_t1"][record]
+            for field in ("action_id", "animation_index", "hitlag", "hitstun", "hurtbox_state"):
+                assert int(out[field][defender]) == int(ref[field][defender]), f"record={record} field={field}"
+    finally:
+        binding.destroy(handle)
 
 
 @pytest.mark.integration

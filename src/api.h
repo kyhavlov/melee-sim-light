@@ -951,10 +951,13 @@ typedef struct MslSeed {
   // - refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DD398 (x1994 setter)
   // - refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffWait.c::ftCo_8009A77C (x1990 setter)
   // - refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_OnExitHitlag (x1994 setter)
+  // - refs/melee/build/GALE01/asm/melee/ft/ft_0D31.s::ftCo_RebirthWait_{Anim,IASA}
+  //   (RebirthWait -> Fall x1994 setter)
   uint8_t colanim_hit_status_x198c[MSL_MAX_PLAYERS];  // 0/1/2
   uint8_t colanim_lock_x2221_b0[MSL_MAX_PLAYERS];     // 0/1
   uint16_t colanim_timer_x1990[MSL_MAX_PLAYERS];
   uint16_t colanim_timer_x1994[MSL_MAX_PLAYERS];
+  uint8_t colanim_rebirth_fall_x1994_seed[MSL_MAX_PLAYERS];  // 0/1 source proof
   uint16_t ground_id[MSL_MAX_PLAYERS];
   uint32_t animation_index[MSL_MAX_PLAYERS];
   uint16_t instance_hit_by[MSL_MAX_PLAYERS];

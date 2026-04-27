@@ -168,3 +168,58 @@ def test_runbrake_edge_collision_enters_ottotto_replay_lock() -> None:
 
     assert float(out["pos_x"][p]) == pytest.approx(float(ref["pos_x"][p]), abs=1e-4)
     assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=1e-4)
+
+
+@pytest.mark.integration
+def test_steady_runbrake_edge_collision_enters_ottotto_without_down_stick() -> None:
+    # Replay-real lock for steady RunBrake_Coll edge teeter. Unlike the Run -> RunBrake flick row
+    # above, this is already RunBrake on entry and the stick-Y deadzone is neutral, but decomp still
+    # routes RunBrake_Coll through ft_80084280 -> ftCo_8009A3C8 before Fall.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_RunBrake.c::ftCo_RunBrake_Coll
+    # refs/melee/src/melee/ft/ft_081B.c::ft_80084280
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Ottotto.c::{ftCo_8009A3C8,ftCo_8009A410}
+    root = Path(__file__).resolve().parents[1]
+    dataset_rel = "datasets/aggregate_recent/replays/validation/aggregate_recent/PriceyPartialAlbatross.msl"
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    record = 1596
+    p = 0
+    row = ds.samples[record : record + 1]
+    seed = row["seed_t"][0]
+    ref = row["ref_t1"][0]
+
+    assert int(seed["action_id"][p]) == 23  # ftCo_MS_RunBrake
+    assert int(seed["action_frame"][p]) == 10
+    assert int(row["input_t"]["p"][0, p]["main_y"]) >= 0
+    assert int(ref["action_id"][p]) == 245  # ftCo_MS_Ottotto
+    assert int(ref["animation_index"][p]) == 210  # ftCo_SM_Ottotto
+
+    out = _one_step_out_compare(ds=ds, row=row)[0]
+    for field in (
+        "action_id",
+        "action_frame",
+        "animation_index",
+        "on_ground",
+        "facing",
+        "hitlag",
+        "hitstun",
+        "jumps_left",
+        "ground_id",
+        "instance_id",
+        "state_flags",
+    ):
+        got = out[field][p]
+        exp = ref[field][p]
+        if hasattr(got, "tolist"):
+            got = got.tolist()
+            exp = exp.tolist()
+        else:
+            got = int(got)
+            exp = int(exp)
+        assert got == exp, f"PriceyPartialAlbatross rec{record} p{p}: {field} {got} != {exp}"
+
+    assert float(out["pos_x"][p]) == pytest.approx(float(ref["pos_x"][p]), abs=1e-4)
+    assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=1e-4)

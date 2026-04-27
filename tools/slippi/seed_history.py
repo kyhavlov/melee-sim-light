@@ -1248,7 +1248,7 @@ def derive_camera_target_world(
     - refs/melee/src/melee/ft/fighter.c (root facing rotation via ftPartSetRotY)
     - data/characters/{fox,falco}.json: camera_zoom_target_bone_part_id,
       camera_zoom_target_offset, camera_box_radius, model_scaling
-    - data/anims/{fox,falco}.bin (SSANIM01 v3 pose matrices)
+    - data/anims/{fox,falco}.bin (SSANIM01 v4 pose matrices)
     """
     char = np.asarray(char_id_u8, dtype=np.uint8).reshape(-1)
     anim = np.asarray(animation_index_u32, dtype=np.uint32).reshape(-1)
@@ -2381,10 +2381,13 @@ def derive_colanim_internals(
     colanim_throw_x1994_frames: int,
     colanim_cliff_x1990_frames: int,
     colanim_damage_x1994_frames: int,
+    colanim_rebirth_fall_x1994_frames: int = 0,
     throw_actions: tuple[int, ...],
     cliff_actions: tuple[int, ...],
     damage_actions: tuple[int, ...],
-) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    fall_actions: tuple[int, ...] = (),
+    rebirth_actions: tuple[int, ...] = (),
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """
     Derive fp->x198C/x1990/x1994/x2221_b0 seed internals strictly causally.
 
@@ -2397,6 +2400,8 @@ def derive_colanim_internals(
     - refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DD398 (ftColl_8007B7A4, x1994)
     - refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffWait.c::ftCo_8009A77C (ftColl_8007B760, x1990)
     - refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_OnExitHitlag (x1994)
+    - refs/melee/build/GALE01/asm/melee/ft/ft_0D31.s::ftCo_RebirthWait_{Anim,IASA}
+      (ftColl_8007B7A4 with p_ftCommonData->x5D8 before Fall)
 
     Notes:
     - `x2221_b0` currently has no reliable Slippi-exposed signal in this replay path; we keep it 0.
@@ -2414,14 +2419,18 @@ def derive_colanim_internals(
     throw_set = {int(x) & 0xFFFF for x in throw_actions}
     cliff_set = {int(x) & 0xFFFF for x in cliff_actions}
     damage_set = {int(x) & 0xFFFF for x in damage_actions}
+    fall_set = {int(x) & 0xFFFF for x in fall_actions}
+    rebirth_set = {int(x) & 0xFFFF for x in rebirth_actions}
 
     out_x198c = np.zeros(n, dtype=np.uint8)
     out_x1990 = np.zeros(n, dtype=np.uint16)
     out_x1994 = np.zeros(n, dtype=np.uint16)
     out_x2221_b0 = np.zeros(n, dtype=np.uint8)
+    out_rebirth_fall_x1994 = np.zeros(n, dtype=np.uint8)
 
     x1990 = 0
     x1994 = 0
+    x1994_rebirth_fall = False
     x2221_b0 = 0
     shine_start_masked_x198c = 0
     prev_a = int(aid[0]) if n > 0 else 0
@@ -2441,6 +2450,8 @@ def derive_colanim_internals(
                 x1990 -= 1
             if x1994 > 0:
                 x1994 -= 1
+                if x1994 == 0:
+                    x1994_rebirth_fall = False
 
         entered = False
         if i == 0:
@@ -2455,11 +2466,20 @@ def derive_colanim_internals(
             rem = _colanim_timer_remaining_from_action_frame(int(colanim_throw_x1994_frames), cur_afr)
             if rem > x1994:
                 x1994 = rem
+                x1994_rebirth_fall = False
 
         if entered and cur_a in cliff_set:
             rem = _colanim_timer_remaining_from_action_frame(int(colanim_cliff_x1990_frames), cur_afr)
             if rem > x1990:
                 x1990 = rem
+
+        if entered and cur_a in fall_set and int(prev_a) in rebirth_set:
+            rem = _colanim_timer_remaining_from_action_frame(
+                int(colanim_rebirth_fall_x1994_frames), cur_afr
+            )
+            if rem > x1994:
+                x1994 = rem
+                x1994_rebirth_fall = True
 
         # Damage hitlag-exit hook: ftCo_Damage_OnExitHitlag sets x1994 via p_ftCommonData->x130.
         if i > 0 and prev_hl > 0 and cur_hl == 0:
@@ -2469,6 +2489,7 @@ def derive_colanim_internals(
                     rem = 0xFFFF
                 if rem > x1994:
                     x1994 = rem
+                    x1994_rebirth_fall = False
 
         # Causal bootstrap for first frame when replay starts in an unobserved prior timer window.
         if i == 0 and x1990 == 0 and x1994 == 0:
@@ -2531,13 +2552,14 @@ def derive_colanim_internals(
         out_x1990[i] = np.uint16(x1990)
         out_x1994[i] = np.uint16(x1994)
         out_x2221_b0[i] = np.uint8(1 if x2221_b0 else 0)
+        out_rebirth_fall_x1994[i] = np.uint8(1 if x1994_rebirth_fall and x1994 > 0 else 0)
 
         prev_a = cur_a
         prev_afr = cur_afr
         prev_hl = cur_hl
         prev_hs = cur_hs
 
-    return out_x198c, out_x1990, out_x1994, out_x2221_b0
+    return out_x198c, out_x1990, out_x1994, out_x2221_b0, out_rebirth_fall_x1994
 
 
 def compute_x672_trigger_timer_pre_post(

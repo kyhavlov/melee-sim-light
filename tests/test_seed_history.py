@@ -1491,7 +1491,7 @@ def test_derive_colanim_internals_damage_exit_throw_and_cliff_entry() -> None:
     hitstun = np.array([0, 5, 4, 3, 0, 0, 0, 0], dtype=np.uint16)
     hurt = np.array([0, 0, 0, 1, 1, 1, 1, 2], dtype=np.uint8)
 
-    x198c, x1990, x1994, x2221 = derive_colanim_internals(
+    x198c, x1990, x1994, x2221, rebirth_fall_x1994 = derive_colanim_internals(
         action_id_u16=action,
         action_frame_i16=action_frame,
         hitlag_u16=hitlag,
@@ -1509,6 +1509,7 @@ def test_derive_colanim_internals_damage_exit_throw_and_cliff_entry() -> None:
     assert x1990.tolist() == [0, 0, 0, 0, 0, 0, 0, 30]
     assert x198c.tolist() == [0, 0, 0, 1, 1, 1, 1, 2]
     assert x2221.tolist() == [0] * action.size
+    assert rebirth_fall_x1994.tolist() == [0] * action.size
 
 
 def test_derive_colanim_internals_visible_vulnerable_clears_stale_x1990() -> None:
@@ -1525,7 +1526,7 @@ def test_derive_colanim_internals_visible_vulnerable_clears_stale_x1990() -> Non
     hitstun = np.zeros(action.size, dtype=np.uint16)
     hurt = np.array([2, 2, 0, 0], dtype=np.uint8)
 
-    x198c, x1990, x1994, x2221 = derive_colanim_internals(
+    x198c, x1990, x1994, x2221, rebirth_fall_x1994 = derive_colanim_internals(
         action_id_u16=action,
         action_frame_i16=action_frame,
         hitlag_u16=hitlag,
@@ -1543,6 +1544,7 @@ def test_derive_colanim_internals_visible_vulnerable_clears_stale_x1990() -> Non
     assert x1990.tolist() == [30, 29, 0, 0]
     assert x1994.tolist() == [0, 0, 0, 0]
     assert x2221.tolist() == [0, 0, 0, 0]
+    assert rebirth_fall_x1994.tolist() == [0, 0, 0, 0]
 
 
 def test_derive_colanim_internals_preserves_downbound_hidden_x1994_visible_zero() -> None:
@@ -1558,7 +1560,7 @@ def test_derive_colanim_internals_preserves_downbound_hidden_x1994_visible_zero(
     hitstun = np.array([8, 7, 6], dtype=np.uint16)
     hurt = np.array([0, 0, 0], dtype=np.uint8)
 
-    x198c, x1990, x1994, x2221 = derive_colanim_internals(
+    x198c, x1990, x1994, x2221, rebirth_fall_x1994 = derive_colanim_internals(
         action_id_u16=action,
         action_frame_i16=action_frame,
         hitlag_u16=hitlag,
@@ -1576,6 +1578,7 @@ def test_derive_colanim_internals_preserves_downbound_hidden_x1994_visible_zero(
     assert x1990.tolist() == [0, 0, 0]
     assert x1994.tolist() == [0, 5, 4]
     assert x2221.tolist() == [0, 0, 0]
+    assert rebirth_fall_x1994.tolist() == [0, 0, 0]
 
 
 def test_derive_colanim_internals_preserves_downbound_hidden_x1990_visible_zero() -> None:
@@ -1591,7 +1594,7 @@ def test_derive_colanim_internals_preserves_downbound_hidden_x1990_visible_zero(
     hitstun = np.zeros(action.size, dtype=np.uint16)
     hurt = np.array([2, 0, 0], dtype=np.uint8)
 
-    x198c, x1990, x1994, x2221 = derive_colanim_internals(
+    x198c, x1990, x1994, x2221, rebirth_fall_x1994 = derive_colanim_internals(
         action_id_u16=action,
         action_frame_i16=action_frame,
         hitlag_u16=hitlag,
@@ -1609,6 +1612,7 @@ def test_derive_colanim_internals_preserves_downbound_hidden_x1990_visible_zero(
     assert x1990.tolist() == [30, 29, 28]
     assert x1994.tolist() == [0, 0, 0]
     assert x2221.tolist() == [0, 0, 0]
+    assert rebirth_fall_x1994.tolist() == [0, 0, 0]
 
 
 def test_derive_colanim_internals_is_causal_wrt_future_frames() -> None:

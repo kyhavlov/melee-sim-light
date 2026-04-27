@@ -356,6 +356,9 @@ SEED_DTYPE = np.dtype(
         ("colanim_lock_x2221_b0", _arr("u1", MAX_PLAYERS)),
         ("colanim_timer_x1990", _arr("<u2", MAX_PLAYERS)),
         ("colanim_timer_x1994", _arr("<u2", MAX_PLAYERS)),
+        # Source proof for the RebirthWait -> Fall x1994 timer path.
+        # refs/melee/build/GALE01/asm/melee/ft/ft_0D31.s::ftCo_RebirthWait_{Anim,IASA}
+        ("colanim_rebirth_fall_x1994_seed", _arr("u1", MAX_PLAYERS)),
         ("ground_id", _arr("<u2", MAX_PLAYERS)),
         ("animation_index", _arr("<u4", MAX_PLAYERS)),
         ("instance_hit_by", _arr("<u2", MAX_PLAYERS)),

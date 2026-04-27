@@ -3284,6 +3284,8 @@ def _main_impl(args) -> None:
     act_fall_special_f = 0x0024
     act_fall_special_b = 0x0025
     act_damage_fall = 0x0026
+    act_rebirth = 0x000C
+    act_rebirth_wait = 0x000D
     act_landing_fall_special = 0x002B
     act_fx_special_n_loop = 0x0156
     act_fx_special_air_n_loop = 0x0159
@@ -3824,7 +3826,13 @@ def _main_impl(args) -> None:
         samples["ref_t1"]["l_cancel"][:, slot] = l_cancel[1:]
         samples["seed_t"]["hurtbox_state"][:, slot] = hurtbox_state[:-1]
         samples["ref_t1"]["hurtbox_state"][:, slot] = hurtbox_state[1:]
-        colanim_x198c, colanim_x1990, colanim_x1994, colanim_x2221_b0 = derive_colanim_internals(
+        (
+            colanim_x198c,
+            colanim_x1990,
+            colanim_x1994,
+            colanim_x2221_b0,
+            colanim_rebirth_fall_x1994,
+        ) = derive_colanim_internals(
             action_id_u16=post_state,
             action_frame_i16=post_state_age,
             hitlag_u16=post_hitlag,
@@ -3833,6 +3841,7 @@ def _main_impl(args) -> None:
             colanim_throw_x1994_frames=int(common["colanim_throw_x1994_frames"]),
             colanim_cliff_x1990_frames=int(common["colanim_cliff_x1990_frames"]),
             colanim_damage_x1994_frames=int(common["colanim_damage_x1994_frames"]),
+            colanim_rebirth_fall_x1994_frames=int(common["colanim_rebirth_fall_x1994_frames"]),
             throw_actions=(act_throw_f, act_throw_b, act_throw_hi, act_throw_lw),
             cliff_actions=(act_cliff_catch, act_cliff_wait),
             damage_actions=(
@@ -3855,11 +3864,16 @@ def _main_impl(args) -> None:
                 act_damage_fly_roll,
                 act_damage_fall,
             ),
+            fall_actions=(act_fall,),
+            rebirth_actions=(act_rebirth, act_rebirth_wait),
         )
         samples["seed_t"]["colanim_hit_status_x198c"][:, slot] = colanim_x198c[:-1]
         samples["seed_t"]["colanim_lock_x2221_b0"][:, slot] = colanim_x2221_b0[:-1]
         samples["seed_t"]["colanim_timer_x1990"][:, slot] = colanim_x1990[:-1]
         samples["seed_t"]["colanim_timer_x1994"][:, slot] = colanim_x1994[:-1]
+        samples["seed_t"]["colanim_rebirth_fall_x1994_seed"][:, slot] = colanim_rebirth_fall_x1994[
+            :-1
+        ]
         samples["seed_t"]["ground_id"][:, slot] = ground_id[:-1]
         samples["ref_t1"]["ground_id"][:, slot] = ground_id[1:]
         samples["seed_t"]["animation_index"][:, slot] = animation_index[:-1]
@@ -5385,11 +5399,26 @@ def _main_impl(args) -> None:
                     shield_hit_int_damage[i, defender] = np.uint8(
                         max(int(shield_hit_int_damage[i, defender]), active_int_dmg)
                     )
-                elif int(post_hitlag[i + 1, defender]) == 0 and int(post_hitlag[i + 1, attacker]) == 0:
-                    # Conversely, a same-frame GuardOn/Guard handoff with no t+1 hitlag proves
-                    # the hidden ShieldDesc path did not accept this attacker's live HitCapsule.
-                    # This keeps the dense hitlist seed from being trimmed into a false shield hit
-                    # on guard-admission rows where the defender was not yet visibly Guard at t.
+                elif (
+                    (
+                        int(post_hitlag[i + 1, defender]) == 0
+                        and int(post_hitlag[i + 1, attacker]) == 0
+                    )
+                    or (
+                        int(post_hitlag[i + 1, defender]) > 0
+                        and int(post_hitlag[i + 1, attacker]) > 0
+                        and int(post_action_id[i + 1, defender]) != int(act_guard_set_off)
+                    )
+                ):
+                    # Conversely, a same-frame GuardOn/Guard handoff proves the hidden
+                    # ShieldDesc path did not accept this attacker's live HitCapsule when either:
+                    # - t+1 has no attacker/defender hitlag, or
+                    # - t+1 has attacker/defender hitlag but the defender enters BODY damage,
+                    #   because ftColl_80078C70 tests ShieldDesc first and accepted shield contact
+                    #   would have suppressed the BODY path.
+                    #
+                    # This keeps one-step reseeds from turning a replay-proven BODY hit into a
+                    # false shield hit when live pose geometry is near the shield rim.
                     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80091A4C
                     # refs/melee/src/melee/ft/ftcoll.c::ftColl_80078C70
                     shield_contact_hb_kind[i, attacker, :, defender] = np.uint8(1)

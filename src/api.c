@@ -210,15 +210,17 @@ static inline uint8_t seed_bridge_has_shine_start_x1988_masked_x198c(const MslSe
     return 0u;
   }
   if (seed->colanim_hit_status_x198c[p] != 1u || seed->colanim_timer_x1990[p] != 0u ||
-      seed->colanim_timer_x1994[p] != 0u || seed->colanim_lock_x2221_b0[p] != 0u) {
+      seed->colanim_lock_x2221_b0[p] != 0u) {
+    return 0u;
+  }
+  if (seed->colanim_timer_x1994[p] != 0u && seed->colanim_rebirth_fall_x1994_seed[p] == 0u) {
     return 0u;
   }
   // Shine Start frame 1 can be reseeded at the entry-origin boundary while visible Slippi
   // hurtbox_state is still the movescript x1988=2 value from the entry script. When seed-history
   // reconstruction proves a hidden x198C=1 lane underneath that x1988 mask, preserve it so the
-  // next cmd-script clear falls back to x198C. Same-action hitlag-frozen Shine starts are admitted
-  // only when seed-history carried that explicit x198C=1 provenance forward from the causal entry
-  // row; controls with x198C=0 still clear to vulnerable.
+  // next cmd-script clear falls back to x198C. A nonzero x1994 is admitted only with explicit
+  // RebirthWait->Fall provenance; generic x1994 timers remain excluded.
   //
   // Keep this as a seed-surface reconstruction, not a broad hidden-colanim clear:
   // - data/moves/{fox,falco}.json specials_by_msid["313"/"317"] has set_hit_status 2 at frame 0
@@ -1268,6 +1270,9 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
         if (seed_bridge_has_shine_start_x1988_masked_x198c(seed, p, seed_hurtbox_state,
                                                            seed_x1988)) {
           batch->state.colanim_hit_status_x198c[idx] = 1u;
+          if (seed->colanim_rebirth_fall_x1994_seed[p] != 0u) {
+            batch->state.colanim_timer_x1994[idx] = seed->colanim_timer_x1994[p];
+          }
         }
         // Narrow seed-bridge for x198C=2 timer ownership:
         // - Slippi exposes merged hurtbox_state but not x1990 remaining.
@@ -1339,6 +1344,23 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
             seed->colanim_timer_x1994[p] != 0u && seed->colanim_timer_x1990[p] == 0u &&
             seed->colanim_lock_x2221_b0[p] == 0u && seed_hurtbox_state == 0u) {
           batch->state.colanim_timer_x1994[idx] = seed->colanim_timer_x1994[p];
+        }
+        if (seed->hitlag[p] == 0u && seed->hitstun[p] == 0u &&
+            seed->colanim_rebirth_fall_x1994_seed[p] != 0u &&
+            seed->colanim_hit_status_x198c[p] == 1u && seed->colanim_timer_x1994[p] != 0u &&
+            seed->colanim_timer_x1990[p] == 0u && seed->colanim_lock_x2221_b0[p] == 0u &&
+            seed_hurtbox_state == 1u) {
+          // Explicit RebirthWait -> Fall x1994 seed lane:
+          // - RebirthWait_Anim / IASA call ftColl_8007B7A4(..., p_ftCommonData->x5D8)
+          //   immediately before Fall, setting x1994 and x198C=1.
+          // - Mid-window teacher-forced seeds must preserve the remaining x1994 timer so
+          //   Fighter_8006A360 clears x198C on the correct frame instead of stale-carrying the
+          //   merged Slippi hurtbox_state indefinitely.
+          // refs/melee/build/GALE01/asm/melee/ft/ft_0D31.s::ftCo_RebirthWait_{Anim,IASA}
+          // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
+          // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
+          batch->state.colanim_timer_x1994[idx] = seed->colanim_timer_x1994[p];
+          batch->state.colanim_hit_status_x198c[idx] = 1u;
         }
       }
       if (common != NULL) {
@@ -1499,6 +1521,7 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
       for (int k = 0; k < 5; k++) {
         batch->state.state_flags[idx * 5 + (size_t)k] = seed->state_flags[p][k];
       }
+      batch->state.state_flags_2218_frame_start[idx] = seed->state_flags[p][0];
 
       // Stale-move (staling) queue snapshot.
       uint8_t stale_qi = seed->stale_queue_index[p];

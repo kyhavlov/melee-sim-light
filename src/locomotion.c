@@ -4718,8 +4718,16 @@ void locomotion_update_post_collision(MslBatch* batch) {
         float ottotto_y = 0.0f;
         const float edge_stick_y =
             apply_deadzone(stick_i8_to_unit(batch->state.input_main_y[idx]), c->lstick_deadzone_y);
+        // RunBrake_Coll delegates to ft_80084280, which runs ftCo_8009A3C8 on Collide_Edge
+        // before generic Fall without a stick-Y/action-frame admission gate. The remaining
+        // grounded edge callback users keep the narrower modeled subset until their x2228_b2
+        // teeter-suppression provenance is represented.
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_RunBrake.c::ftCo_RunBrake_Coll
+        // refs/melee/src/melee/ft/ft_081B.c::ft_80084280
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Ottotto.c::ftCo_8009A3C8
         const uint8_t ottotto_entry_allowed =
-            (uint8_t)(edge_stick_y < 0.0f || batch->state.action_frame[idx] <= 0);
+            (uint8_t)(a == MSL_ACT_RUN_BRAKE || edge_stick_y < 0.0f ||
+                      batch->state.action_frame[idx] <= 0);
         if (action_uses_ottotto_edge_callback(a) && ottotto_entry_allowed &&
             ottotto_edge_matches_facing(batch->state.stage_id[(size_t)bi],
                                         batch->state.ground_id[idx], batch->state.facing[idx],

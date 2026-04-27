@@ -363,10 +363,10 @@ static inline uint8_t physics_try_get_transn_delta_xyz(const MslCharParams* ch, 
   }
   const uint16_t msid = (uint16_t)msid_u32;
 
-  // Our ISO-derived SSANIM01 v3 artifacts store per-frame TransN translation as a tail (x,y,z);
+  // Our ISO-derived SSANIM01 v4 artifacts store per-frame TransN translation as a tail (x,y,z);
   // approximate the per-frame TransN offset as a finite difference between the previous and current
   // animation frames.
-  // - tools/extraction/extract_fighter_anims.py (SSANIM01 v3 + per-frame TransN tail)
+  // - tools/extraction/extract_fighter_anims.py (SSANIM01 v4 + per-frame TransN tail)
   // - refs/melee/src/melee/ft/ft_081B.c::ft_80085030 (consumer of fp->x6A4_transNOffset.{y,z})
   const uint16_t f_cur = msl_anim_frame_floor_u16(msl_anim_frame_sanitize_f32(anim_frame_f32));
   const uint16_t f_prev =
