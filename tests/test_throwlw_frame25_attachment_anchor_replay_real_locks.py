@@ -46,6 +46,62 @@ def _rollout_window(dataset_path: Path, start_record: int, length: int) -> list[
 
 
 @pytest.mark.integration
+def test_throwlw_attached_anchor_uses_float_aobj_and_integer_transn_tail_prh() -> None:
+    # Replay-real positive for the low-throw attached anchor across the mixed frame cadence:
+    # - fractional ThrowLw frames sample the live HSD AObj/JObj local-SRT owner directly;
+    # - exact integer pulse frames fall back to SSANIM01's stripped matrix and must recompose the
+    #   extracted TransN tail.
+    # This locks the PRH rollout window where using only the stripped SSANIM interpolation carried
+    # a visible attached-victim Y residual.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_800DB368
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Thrown.c::ftCo_800DE508
+    # refs/melee/src/sysdolphin/baselib/aobj.c::HSD_AObjInterpretAnim
+    root = Path(__file__).resolve().parents[1]
+    dataset_path = (
+        root / "datasets/aggregate_recent/replays/validation/aggregate_recent/PositiveRevolvingHyena.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    rows = _rollout_window(dataset_path, start_record=5617, length=10)
+    victim = 0
+    owner = 1
+    for out, ref in rows:
+        assert int(out["action_id"][victim]) == int(ref["action_id"][victim]) == 242  # ThrownLw
+        assert int(out["action_id"][owner]) == int(ref["action_id"][owner]) == 222  # ThrowLw
+        assert int(out["hitlag"][victim]) == int(ref["hitlag"][victim]) == 0
+        assert abs(float(out["pos_x"][victim]) - float(ref["pos_x"][victim])) <= 1.0e-5
+        assert abs(float(out["pos_y"][victim]) - float(ref["pos_y"][victim])) <= 1.0e-5
+
+
+@pytest.mark.integration
+def test_throwlw_attached_hitlag_freezes_accessory1_anchor_prh() -> None:
+    # Replay-real positive for the accessory-callback hitlag gate:
+    # - ftCo_800DE508 is the victim's accessory1 callback.
+    # - Fighter_CallAcessoryCallbacks_8006C624 returns early under x2219_b5 hitlag and only runs
+    #   accessory3_cb, so attached ThrownLw placement must freeze while victim hitlag is still
+    #   active.
+    # refs/melee/src/melee/ft/fighter.c::Fighter_CallAcessoryCallbacks_8006C624
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Thrown.c::ftCo_800DE508
+    root = Path(__file__).resolve().parents[1]
+    dataset_path = (
+        root
+        / "datasets/aggregate_recent/replays/debug/fd_mixed_recent/PositiveRevolvingHyena.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    rows = _rollout_window(dataset_path, start_record=5628, length=3)
+    victim = 0
+    for out, ref in rows:
+        assert int(out["action_id"][victim]) == int(ref["action_id"][victim]) == 242  # ThrownLw
+        assert int(out["hitlag"][victim]) == int(ref["hitlag"][victim])
+        assert int(out["hitlag"][victim]) > 0
+        assert abs(float(out["pos_x"][victim]) - float(ref["pos_x"][victim])) <= 1.0e-5
+        assert abs(float(out["pos_y"][victim]) - float(ref["pos_y"][victim])) <= 1.0e-5
+
+
+@pytest.mark.integration
 def test_throwlw_frame25_slowest_rate_attachment_anchor_positive_prh() -> None:
     # Replay-real positive for the slowest supported weight-dependent ThrowLw frame-25 attached
     # callback phase. The old capture-anchor-only rollout stayed too low by >1.0 by record 5635 and

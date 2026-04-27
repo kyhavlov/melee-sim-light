@@ -175,12 +175,12 @@ static inline int pose_part_origin_world_f32_with_transn_facing_yrot90(
 
   const uint8_t char_id = batch->state.char_id[player_idx];
   const float f = msl_anim_frame_sanitize_f32(anim_frame_f32);
-  const float base_f = floorf(f);
-  const float frac = f - base_f;
   const uint16_t frame0 = msl_anim_frame_floor_u16(f);
+  const uint8_t exact_integer_frame = (fabsf(f - (float)frame0) <= 1.0e-6f) ? 1u : 0u;
 
   float m0[12];
-  if (anim_pose_get_matrix(char_id, (uint16_t)anim_u32, frame0, part_id, m0) != 0) {
+  if (anim_pose_get_collision_matrix_f32(batch, player_idx, (uint16_t)anim_u32, anim_frame_f32,
+                                         part_id, m0) != 0) {
     return -1;
   }
 
@@ -188,27 +188,15 @@ static inline int pose_part_origin_world_f32_with_transn_facing_yrot90(
   float lx0 = 0.0f, ly0 = 0.0f, lz0 = 0.0f;
   msl_mtx34_mul_point(m0, zero, &lx0, &ly0, &lz0);
 
-  float lx1 = lx0, ly1 = ly0, lz1 = lz0;
-  if (frac > 0.0f) {
-    const uint16_t frame1 = (uint16_t)(frame0 + 1u);
-    if (frame1 != 0) {
-      float m1[12];
-      if (anim_pose_get_matrix(char_id, (uint16_t)anim_u32, frame1, part_id, m1) == 0) {
-        msl_mtx34_mul_point(m1, zero, &lx1, &ly1, &lz1);
-      }
-    }
-  }
-  const float a = (frac <= 0.0f) ? 0.0f : ((frac >= 1.0f) ? 1.0f : frac);
-  float lx = lx0 + (lx1 - lx0) * a;
-  float ly = ly0 + (ly1 - ly0) * a;
-  float lz = lz0 + (lz1 - lz0) * a;
+  float lx = lx0;
+  float ly = ly0;
+  float lz = lz0;
 
-  // Throw attachment samples the thrower's live skeleton anchor, not the BODY/ECB pose view with
-  // root TransN stripped. `extract_fighter_anims.py` stores the stripped TransN tail separately, so
-  // recompose it here before applying the fighter root facing/model scale.
-  // Use the stripped SSANIM matrix for the constrained anchor: the generic float-AObj sampler can
-  // animate the capture anchor itself on early ThrowLw frames, but the source owner is the
-  // constraint plus TransN pulse, not the unconstrained local AObj track.
+  // Throw attachment samples the thrower's live skeleton anchor, not the BODY/ECB pose view.
+  // Fractional frames use the live AObj/JObj local-SRT path (`anim_pose_get_collision_matrix_f32`),
+  // which already includes the current root-translation track in the local hierarchy. Exact integer
+  // frames intentionally fall through that helper's SSANIM01 matrix fast path; SSANIM stores root
+  // TransN stripped into a separate tail, so recompose only on that data-contract boundary.
   //
   // Source/probe basis:
   // - ftCo_800DB368 constrains the victim XRotN to thrower FtPart_TransN2.
@@ -218,11 +206,14 @@ static inline int pose_part_origin_world_f32_with_transn_facing_yrot90(
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_800DB368
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Thrown.c::ftCo_800DE508
   // refs/melee/src/melee/ft/ft_081B.c::ft_80085030 (TransN offset consumer)
-  float transn[3];
-  if (pose_transn_f32(transn, batch->state.char_id[player_idx], anim_u32, anim_frame_f32) == 0) {
-    lx += transn[0];
-    ly += transn[1];
-    lz += transn[2];
+  // refs/melee/src/sysdolphin/baselib/aobj.c::HSD_AObjInterpretAnim
+  if (exact_integer_frame != 0u) {
+    float transn[3];
+    if (pose_transn_f32(transn, char_id, anim_u32, anim_frame_f32) == 0) {
+      lx += transn[0];
+      ly += transn[1];
+      lz += transn[2];
+    }
   }
 
   const float facing_dir = facing_u8 ? 1.0f : -1.0f;
@@ -843,13 +834,19 @@ void grab_attachment_update_pre_collision(MslBatch* batch) {
         const uint8_t thrown_entered_from_capture_wait_pulled =
             (uint8_t)(msl_action_is_thrown_victim(cur_action) &&
                       action_is_capture_pulled_wait_victim(prev_action));
-        if (!thrown_entered_from_capture_wait_pulled) {
+        if (!thrown_entered_from_capture_wait_pulled &&
+            batch->state.hitlag_started_frame[vidx] == 0u) {
           // Common attached Thrown* owner:
-          // - Thrown* Phys/Coll are empty; ftCo_800DE508 owns victim world position during the
-          //   attached window before release consumes the attachment.
+          // - Thrown* Phys/Coll are empty; ftCo_800DE508 owns victim world position through the
+          //   victim's accessory1 callback during the attached window before release consumes the
+          //   attachment.
+          // - Fighter_CallAcessoryCallbacks_8006C624 returns early under x2219_b5 hitlag and only
+          //   runs accessory3_cb, so the accessory1 position driver must stay frozen while the
+          //   victim is in the frame's post-decrement hitlag gate.
           // - Keep the already-proven low-throw entry handoff slice separate from the broader
           //   steady attached window; the immediate `CaptureWait* -> Thrown*` row still uses the
           //   dedicated handoff split in grab_flow.c.
+          // refs/melee/src/melee/ft/fighter.c::Fighter_CallAcessoryCallbacks_8006C624
           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Thrown.c::{
           //   ftCo_800DE3FC,ftCo_800DE508,ftCo_ThrownF_Phys,ftCo_ThrownF_Coll,ftCo_ThrownB_Phys,
           //   ftCo_ThrownB_Coll,ftCo_ThrownHi_Phys,ftCo_ThrownHi_Coll,ftCo_ThrownLw_Phys,
