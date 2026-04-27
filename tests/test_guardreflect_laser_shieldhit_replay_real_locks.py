@@ -135,3 +135,98 @@ def test_landing_guardreflect_laser_no_contact_row_stays_replay_real() -> None:
             assert int(out_t["items"][slot][field]) == int(ref_t["items"][slot][field]), (
                 f"{dataset_rel}: slot={slot} field={field}"
             )
+
+
+@pytest.mark.integration
+def test_dash_91ad8_guardon_defers_same_step_laser_shield_contact() -> None:
+    # Replay-real lock for Dash_IASA's mid guard helper:
+    # - `dash.x4 != 0 && cur_anim_frame <= x44` stays in the early Dash_IASA branch and must not
+    #   enter GuardReflect.
+    # - the following mid branch enters GuardOn through ftCo_80091AD8 -> ftCo_800923B4, but item
+    #   collision for that frame has already passed, so the laser shield hit appears one row later.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c::ftCo_Dash_IASA
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_80091AD8,ftCo_800923B4}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = (
+        root
+        / "datasets/aggregate_recent/replays/validation/aggregate_recent/MotionlessAggressiveJay.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    p = 1
+
+    seed_733, out_733, ref_733 = _step_one_row(dataset_path, 733)
+    assert int(seed_733["action_id"][p]) == 20  # Dash
+    assert int(seed_733["dash_x4"][p]) == 1
+    assert int(ref_733["action_id"][p]) == 20
+    for field in ("action_id", "action_frame", "animation_index", "hitlag", "hitstun"):
+        assert int(out_733[field][p]) == int(ref_733[field][p]), field
+    assert [int(x) for x in out_733["state_flags"][p]] == [
+        int(x) for x in ref_733["state_flags"][p]
+    ]
+
+    seed_734, out_734, ref_734 = _step_one_row(dataset_path, 734)
+    assert int(seed_734["action_id"][p]) == 20  # Dash
+    assert int(ref_734["action_id"][p]) == 178  # GuardOn
+    for field in ("action_id", "action_frame", "animation_index", "hitlag", "hitstun"):
+        assert int(out_734[field][p]) == int(ref_734[field][p]), field
+    assert [int(x) for x in out_734["state_flags"][p]] == [
+        int(x) for x in ref_734["state_flags"][p]
+    ]
+
+    _, out_735, ref_735 = _step_one_row(dataset_path, 735)
+    assert int(ref_735["action_id"][p]) == 181  # GuardSetOff
+    for field in ("action_id", "action_frame", "animation_index", "hitlag", "hitstun"):
+        assert int(out_735[field][p]) == int(ref_735[field][p]), field
+
+
+@pytest.mark.integration
+def test_dash_x4_clear_guardon_can_take_same_step_laser_shield_contact() -> None:
+    # Boundary control for the Dash_IASA x4 split:
+    # - Dash `x4=0` reaches the mid `ftCo_80091AD8` helper directly and can still expose same-step
+    #   laser shield contact.
+    # - The same-step deferral is limited to the `x4 != 0` early-branch handoff repaired above.
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = (
+        root
+        / "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    p = 0
+    seed_t, out_t, ref_t = _step_one_row(dataset_path, 773)
+    assert int(seed_t["action_id"][p]) == 20  # Dash
+    assert int(seed_t["dash_x4"][p]) == 0
+    assert int(seed_t["action_frame"][p]) > 4
+    assert int(ref_t["action_id"][p]) == 181  # GuardSetOff
+    for field in ("action_id", "action_frame", "animation_index", "hitlag", "hitstun"):
+        assert int(out_t[field][p]) == int(ref_t[field][p]), field
+    assert [int(x) for x in out_t["state_flags"][p]] == [
+        int(x) for x in ref_t["state_flags"][p]
+    ]
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize("record", [117, 258])
+def test_dash_91ad8_guardreflect_controls_still_reflect(record: int) -> None:
+    # Negative controls: not every fresh shield input from Dash is suppressed. Dash rows outside
+    # the early `dash.x4` branch still reach GuardReflect through the decomp guard helper.
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = (
+        root
+        / "datasets/aggregate_recent/replays/validation/aggregate_recent/MotionlessAggressiveJay.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    p = 1
+    seed_t, out_t, ref_t = _step_one_row(dataset_path, record)
+    assert int(seed_t["action_id"][p]) == 20  # Dash
+    assert int(ref_t["action_id"][p]) == 182  # GuardReflect
+    for field in ("action_id", "action_frame", "animation_index", "hitlag", "hitstun"):
+        assert int(out_t[field][p]) == int(ref_t[field][p]), field

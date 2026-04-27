@@ -163,9 +163,11 @@ int state_alloc(MslStateSoA* state, int batch_size) {
   state->guard_tilt_x4 = (float*)alloc_aligned_64(sizeof(float) * bp);
   state->guard_on_entered_this_frame = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->guard_entry_via_wait_callback = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
+  state->guard_entry_via_dash_91ad8 = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->guard_reflect_entry_dash_terminal_scalar =
       (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->guard_seed_shield_desc_active = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
+  state->state_flags_2218_frame_start = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->guard_jump_oos_entered_this_frame = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->shine_jump_iasa_entered_this_frame = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->guard_reflect_timer_x14 = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
@@ -449,7 +451,8 @@ int state_alloc(MslStateSoA* state, int batch_size) {
       !state->throw_anim_rate_fp_q16_16 || !state->anim_defer_tick_once || !state->jumps_left ||
       !state->stocks || !state->guard_tilt_x8 || !state->guard_tilt_x4 ||
       !state->guard_on_entered_this_frame || !state->guard_entry_via_wait_callback ||
-      !state->guard_seed_shield_desc_active || !state->guard_jump_oos_entered_this_frame ||
+      !state->guard_entry_via_dash_91ad8 || !state->guard_seed_shield_desc_active ||
+      !state->state_flags_2218_frame_start || !state->guard_jump_oos_entered_this_frame ||
       !state->shine_jump_iasa_entered_this_frame || !state->guard_reflect_timer_x14 ||
       !state->guard_reflect_timer_x18 || !state->guard_reflect_timer_x14_seed ||
       !state->guard_reflect_timer_x18_seed || !state->guard_release_latched_xc ||
@@ -723,8 +726,10 @@ void state_free(MslStateSoA* state) {
   alloc_free(state->guard_tilt_x4);
   alloc_free(state->guard_on_entered_this_frame);
   alloc_free(state->guard_entry_via_wait_callback);
+  alloc_free(state->guard_entry_via_dash_91ad8);
   alloc_free(state->guard_reflect_entry_dash_terminal_scalar);
   alloc_free(state->guard_seed_shield_desc_active);
+  alloc_free(state->state_flags_2218_frame_start);
   alloc_free(state->guard_jump_oos_entered_this_frame);
   alloc_free(state->shine_jump_iasa_entered_this_frame);
   alloc_free(state->guard_reflect_timer_x14);

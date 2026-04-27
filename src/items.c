@@ -2103,19 +2103,29 @@ static int laser_spawn_from_fighter(MslBatch* batch, int bi, int owner, const Ms
 
   float pos_x = batch->state.pos_x[o_idx] + lx;
   float pos_y = batch->state.pos_y[o_idx] + ly;
-  if (throw_lw_late_pulse_transn_y) {
+  const uint8_t throw_lw_late_pulse_uses_transn_tail =
+      (throw_lw_late_pulse_transn_y != 0u &&
+       lp->shot_itkind == (uint16_t)MSL_IT_KIND_FOX_LASER_SHOT)
+          ? 1u
+          : 0u;
+  if (throw_lw_late_pulse_uses_transn_tail != 0u) {
     // ThrowLw later-pulse persistent shot subset:
-    // - SSANIM01 baked joint matrices strip TransN/root translation into the v3 tail.
+    // - SSANIM01 baked joint matrices strip TransN/root translation into the v4 tail.
     // - The later ThrowLw pulses (after the first non-persistent pulse) keep a live carried state1
     //   laser article in vanilla, so restore the root Y translation for this persistent subset.
     // - Keep the first pulse on the existing non-persistent owner path.
+    // - Fox's extracted low-throw state1 shot path stores this hold joint with the root TransN tail
+    //   stripped; Falco's state1 low-throw shot is already represented by the float hold-joint matrix
+    //   and adding the tail over-admits QGD's faster late pulse.
+    // - `lb_8000B1CC` returns model-scaled joint space, so when the tail is needed it must be
+    //   recomposed under the same fighter_scale_y * model_scaling convention as the sampled matrix.
     // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
     // refs/melee/src/melee/it/items/itfoxlaser.c::{it_8029C504,it_8029C6CC}
-    // data/anims/{fox,falco}.bin SSANIM01 v3 TransN tail, read by anim_pose_get_transn()
+    // data/anims/{fox,falco}.bin SSANIM01 v4 TransN tail, read by anim_pose_get_transn()
     // data/moves/{fox,falco}.json moves["ftCo_SM_ThrowLw"]["events"]
     float transn_xyz[3] = {0.0f, 0.0f, 0.0f};
     if (anim_pose_get_transn(char_id, msid, frame, transn_xyz) == 0) {
-      pos_y += transn_xyz[1];
+      pos_y += transn_xyz[1] * model_scale;
     }
   }
   float ang = lp->blaster_angle;
@@ -2145,10 +2155,10 @@ static int laser_spawn_from_fighter(MslBatch* batch, int bi, int owner, const Ms
     ily *= model_scale;
     const float it_hold_x = batch->state.pos_x[o_idx] + ilx;
     float it_hold_y = batch->state.pos_y[o_idx] + ily;
-    if (throw_lw_late_pulse_transn_y) {
+    if (throw_lw_late_pulse_uses_transn_tail != 0u) {
       float transn_xyz[3] = {0.0f, 0.0f, 0.0f};
       if (anim_pose_get_transn(char_id, msid, frame, transn_xyz) == 0) {
-        it_hold_y += transn_xyz[1];
+        it_hold_y += transn_xyz[1] * model_scale;
       }
     }
     ang = atan2f(pos_y - it_hold_y, pos_x - it_hold_x);
@@ -2248,7 +2258,8 @@ static int throwlw_attached_victim_for_owner(const MslBatch* batch, int bi, int 
 
 static void laser_spawn_apply_throwlw_attached_body_callback(MslBatch* batch, int bi, int owner,
                                                              int slot, const MslLaserParams* lp,
-                                                             uint8_t allow_post_hitlag_boundary) {
+                                                             uint8_t allow_post_hitlag_boundary,
+                                                             uint8_t preserve_late_state1_article) {
   if (batch == NULL || lp == NULL || slot < 0) {
     return;
   }
@@ -2270,7 +2281,6 @@ static void laser_spawn_apply_throwlw_attached_body_callback(MslBatch* batch, in
       batch->state.item_owner[ii] != (int8_t)owner) {
     return;
   }
-
   // ThrowLw spawn-time attached BODY callback:
   // - ftAction_80073354 / ftAction_80071974 execute one set_throw_spawn_projectile command into
   //   throw_flags_b0, and ftFx_Throw_Anim spawns the state1 laser through it_8029C6CC before item
@@ -2292,11 +2302,18 @@ static void laser_spawn_apply_throwlw_attached_body_callback(MslBatch* batch, in
       batch->state.item_attack_instance[ii], batch->state.item_instance_id[ii],
       batch->state.item_type[ii], batch->state.item_state[ii], lp->state1_damage, lp->state1_angle,
       lp->state1_kbg, lp->state1_wsk, lp->state1_bkb, 1u, lp->state1_element);
-  if (res == MSL_ITEM_HIT_APPLIED_CONSUME_ITEM) {
+  if (res == MSL_ITEM_HIT_APPLIED_CONSUME_ITEM && preserve_late_state1_article == 0u) {
     item_slot_clear(batch, ii);
     return;
   }
   if (res != MSL_ITEM_HIT_NONE) {
+    // ThrowLw late-pulse attached laser persistence:
+    // - First ThrowLw state1 pulses still take the normal non-flinch laser OnGiveDamage/destroy path.
+    // - Later attached pulses are the persistent state1 subset already identified by the TransN-tail
+    //   recomposition lane in laser_spawn_from_fighter(); source collision records the BODY victim
+    //   per HitCapsule, so keep the article alive and seed hb0/hb1 rehit suppression.
+    // refs/melee/src/melee/it/items/itfoxlaser.c::{it_8029C6CC,itFoxlaser_UnkMotion1_Coll}
+    // refs/melee/src/melee/it/itcoll.c::{it_802703E8,it_8026FAC4,it_80272460}
     const uint16_t victim_iid = batch->state.instance_id[v_idx];
     hitlist_register_item_hitbox_fighter(batch, bi, slot, 0, victim, victim_iid,
                                          (int)MSL_LBCOLL_INSERT_FT_BODY, 0);
@@ -2691,15 +2708,17 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
       continue;
     }
 
-    // Decomp: itFoxlaser_UnkMotion1_Coll calls it_8029C4D4 (stage collision) and, on hit, sets
-    // lifetime to 1 and restores pre-collision position.
+    // Decomp: item Phys advances `item->pos` before itFoxlaser_UnkMotion1_Coll runs. The Coll
+    // callback snapshots that post-motion `item->pos`, calls it_8029C4D4 (stage collision), then on
+    // hit sets lifetime to 1 and restores the callback-entry position.
     // refs/melee/src/melee/it/items/itfoxlaser.c::itFoxlaser_UnkMotion1_Coll
+    // refs/melee/src/melee/it/items/itfoxlaser.c::itFoxlaser_UnkMotion1_Phys
     if (stage_collision_item_line_hits_floor(stage_id, x0, y0, x, y)) {
       if (t > 1.0f) {
         batch->state.item_timer[ii] = 1.0f;
       }
-      batch->state.item_pos_x[ii] = x0;
-      batch->state.item_pos_y[ii] = y0;
+      batch->state.item_pos_x[ii] = x;
+      batch->state.item_pos_y[ii] = y;
       continue;
     }
 
@@ -2717,6 +2736,19 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
       continue;
     }
     const size_t o_idx = msl_idx_player(bi, owner);
+    if (laser_state == 1u && batch->state.item_type[ii] == (uint16_t)MSL_IT_KIND_FALCO_LASER_SHOT &&
+        batch->state.action_id[o_idx] == (uint16_t)MSL_ACT_THROW_LW &&
+        batch->state.action_frame[o_idx] > 28 &&
+        fabsf(batch->state.item_timer[ii] - ((float)lp->lifetime_frames - 1.0f)) <= 1.0e-5f) {
+      // Late Falco ThrowLw state1 spawn callback order:
+      // - The frame-28 seed-pending bridge above owns the probe-backed immediate BODY callback.
+      // - Later runtime-spawned state1 articles serialize at post-frame with lifeTimer decremented
+      //   but do not run BODY until the following item collision callback; QGD's frame-31/32 control
+      //   is the replay-real boundary for this split.
+      // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
+      // refs/melee/src/melee/it/items/itfoxlaser.c::{it_8029C6CC,itFoxlaser_UnkMotion1_Anim}
+      continue;
+    }
     // Beam axis in world space. Use velocity direction so angled shots do not erroneously collide
     // as if they were perfectly horizontal.
     const float vx = batch->state.item_vel_x[ii];
@@ -2846,14 +2878,16 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
           (batch->state.prev_action_id[d_idx] == (uint16_t)MSL_ACT_DASH &&
            batch->state.action_frame[d_idx] < 0 &&
            batch->state.animation_index[d_idx] == UINT32_MAX &&
-           // Dash IASA late-branch shield admission can enter GuardOn through
-           // ftCo_80091A4C -> ftCo_800923B4 -> ftCo_800924C0 (analog hold) or GuardReflect through
+           // Dash IASA shield admission can enter GuardOn through ftCo_80091AD8 ->
+           // ftCo_800923B4 after the `dash.x4 != 0` early-branch handoff, or GuardReflect through
            // ftCo_80091A4C -> ftCo_800939B4 -> ftCo_80093A50 (digital powershield path). Keep the
-           // full-shield no-hit snapshot suppression aligned to both fresh entry owners.
+           // full-shield no-hit snapshot suppression aligned to those fresh entry owners, but do
+           // not suppress Dash `x4 == 0` GuardOn rows that can take same-step shield contact.
            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c::ftCo_Dash_IASA
            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
-           //   ftCo_80091A4C,ftCo_800923B4,ftCo_800924C0,ftCo_800939B4,ftCo_80093A50}
-           (batch->state.action_id[d_idx] == (uint16_t)MSL_ACT_GUARD_ON ||
+           //   ftCo_80091AD8,ftCo_800923B4,ftCo_80091A4C,ftCo_800939B4,ftCo_80093A50}
+           ((batch->state.action_id[d_idx] == (uint16_t)MSL_ACT_GUARD_ON &&
+             batch->state.guard_entry_via_dash_91ad8[d_idx] != 0u) ||
             (batch->state.action_id[d_idx] == (uint16_t)MSL_ACT_GUARD_REFLECT &&
              batch->state.guard_reflect_timer_x14_seed[d_idx] == 0u &&
              batch->state.guard_reflect_timer_x18_seed[d_idx] == 0u)) &&
@@ -2878,6 +2912,21 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
            batch->state.guard_reflect_timer_x18_seed[d_idx] == 0u)
               ? 1u
               : 0u;
+      // Dash_IASA `dash.x4 != 0` handoff into GuardOn:
+      // - After the early `dash.x4 && cur_anim_frame <= x44` slice, ftCo_Dash_IASA can reach held
+      //   GuardOn through ftCo_80091AD8 -> ftCo_800923B4.
+      // - The current frame's item collision has already passed for this handoff, so the newly
+      //   created GuardOn shield descriptor is not eligible for same-step item shield precedence.
+      // - Dash `x4 == 0` rows that reach ftCo_80091AD8 directly are not tagged and keep normal
+      //   same-step shield contact.
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c::ftCo_Dash_IASA
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_80091AD8,ftCo_800923B4}
+      const uint8_t shield_dash_91ad8_guardon_same_step =
+          (batch->state.action_id[d_idx] == (uint16_t)MSL_ACT_GUARD_ON &&
+           batch->state.guard_on_entered_this_frame[d_idx] != 0u &&
+           batch->state.guard_entry_via_dash_91ad8[d_idx] != 0u)
+              ? 1u
+              : 0u;
       // Active GuardReflect window:
       // - ftCo_GuardReflect_Anim ticks x14 before chaining GuardOn_Anim; while the seeded frozen
       //   snapshot still has more than one x14 tick left, the reflect-window owner has not yet
@@ -2897,7 +2946,8 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
       const uint8_t guard_on_entry_from_landing =
           (guard_on_no_submotion_snapshot && (prev_action == (uint16_t)MSL_ACT_LANDING)) ? 1u : 0u;
       if (shr > 0.0f && !guard_on_entry_from_landing && !shield_fresh_dash_full_shield_snapshot &&
-          !shield_dash_guardon_followup_guard_reflect_snapshot) {
+          !shield_dash_guardon_followup_guard_reflect_snapshot &&
+          !shield_dash_91ad8_guardon_same_step) {
         // Use derived shield bubble center from shields_refresh() (same geometry used by the
         // fighter-vs-fighter combat pass).
         float shx = batch->state.shield_x[d_idx];
@@ -2979,19 +3029,43 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
         // - ftCo_GuardOn_Anim can already have settled into Guard through ftCo_800928CC before the
         //   replay-visible post-frame, leaving a frozen Guard snapshot (`af=-1`, `anim=-1`) whose
         //   shield owner is already the settled Guard hold for this step.
-        // - Keep laser shield acceptance on that steady Guard subset on the settled point sample
-        //   rather than inventing a new same-frame sweep across the full prev->cur segment.
-        // - This patch intentionally stays scoped to the steady Guard subset; other GuardOn /
-        //   fresh-entry shield-contact owners remain separate replay-locked work.
+        // - Replayed carried lasers in this settled snapshot stay on the point sample; broad
+        //   authored-offset sweeps over-admit GAT/QGD carried-shot controls.
+        // - Lasers in the pure frame-start `fp+0x2218_b5` behavior lane use the authored
+        //   HitCapsule offsets for the immediate shield callback only while the owner is still in
+        //   the SpecialN loop callback phase that owns the shot. Carried landing/fallout lasers and
+        //   rows with high command/interrupt bits remain on the settled point sample; broad
+        //   authored-offset sweeps over-admit GAT/QGD/DCC controls.
         // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
         //   ftCo_GuardOn_Anim,ftCo_800928CC,ftCo_Guard_IASA}
-        // refs/melee/src/melee/it/items/itfoxlaser.c::{itFoxlaser_UnkMotion1_Phys,it_8029C4D4}
-        const float shield_probe_x = defender_guard_hold_no_submotion_snapshot ? x0 : x;
-        const float shield_probe_y = defender_guard_hold_no_submotion_snapshot ? y0 : y;
+        // refs/melee/src/melee/it/items/itfoxlaser.c::{
+        //   it_8029C504,itFoxlaser_UnkMotion1_Anim,itFoxlaser_UnkMotion1_Phys,it_8029C4D4}
+        // refs/melee/src/melee/ft/ftcoll.c::ftColl_CreateReflectHit
+        // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm (fp+0x2218 byte)
+        const uint16_t laser_owner_action =
+            (owner >= 0) ? batch->state.prev_action_id[msl_idx_player(bi, owner)] : 0u;
+        const uint8_t laser_owner_specialn_loop =
+            (laser_owner_action == (uint16_t)MSL_ACT_FX_SPECIAL_N_LOOP ||
+             laser_owner_action == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_N_LOOP)
+                ? 1u
+                : 0u;
+        const uint8_t guard_hold_pure_behavior_carried_laser =
+            (defender_guard_hold_no_submotion_snapshot && laser_owner_specialn_loop &&
+             (batch->state.state_flags_2218_frame_start[d_idx] & 0xE4u) == 0x04u)
+                ? 1u
+                : 0u;
+        const float shield_probe_x =
+            (defender_guard_hold_no_submotion_snapshot && !guard_hold_pure_behavior_carried_laser)
+                ? x0
+                : x;
+        const float shield_probe_y =
+            (defender_guard_hold_no_submotion_snapshot && !guard_hold_pure_behavior_carried_laser)
+                ? y0
+                : y;
 
         uint8_t off_n =
             (laser_state == 0u) ? lp->hitbox_offsets_x_count : lp->state1_hitbox_offsets_x_count;
-        if (defender_guard_hold_no_submotion_snapshot) {
+        if (defender_guard_hold_no_submotion_snapshot && !guard_hold_pure_behavior_carried_laser) {
           off_n = 0u;
         }
         // Decomp consumes one shared scaleZ transform chain for laser collision spaces
@@ -5128,10 +5202,18 @@ void items_spawn_pre_physics(MslBatch* batch) {
                                    shoot_seed_hitlist_victim_iid, shoot_seed_hitlist_mask);
       (void)spawned_slot;
       if (is_blaster_throw && action_id == (uint16_t)MSL_ACT_THROW_LW &&
+          shoot_throw_lw_late_pulse_transn_y != 0u &&
+          lp->shot_itkind == (uint16_t)MSL_IT_KIND_FOX_LASER_SHOT &&
+          throw_seed_shot_count[p] == 0u) {
+        laser_spawn_apply_throwlw_attached_body_callback(batch, bi, p, spawned_slot, lp, 0u,
+                                                         shoot_throw_lw_late_pulse_transn_y);
+      }
+      if (is_blaster_throw && action_id == (uint16_t)MSL_ACT_THROW_LW &&
           lp->shot_itkind == (uint16_t)MSL_IT_KIND_FALCO_LASER_SHOT &&
           batch->state.throw_pulse_crossed_curr_frame[idx] == 28u &&
-          throw_seed_shot_count[p] == 0u) {
-        laser_spawn_apply_throwlw_attached_body_callback(batch, bi, p, spawned_slot, lp, 0u);
+          batch->state.throw_command_pending_pulse_frame[idx] == 28u &&
+          batch->state.action_frame[idx] <= 28 && throw_seed_shot_count[p] == 0u) {
+        laser_spawn_apply_throwlw_attached_body_callback(batch, bi, p, spawned_slot, lp, 0u, 0u);
       }
       if (is_blaster_throw && action_id == (uint16_t)MSL_ACT_THROW_LW &&
           batch->state.throw_pulse_crossed_curr_frame[idx] ==
@@ -5167,7 +5249,7 @@ void items_spawn_pre_physics(MslBatch* batch) {
         // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
         // refs/melee/src/melee/it/items/itfoxlaser.c::{it_8029C6CC,it_8029C4D4}
         if (throwlw_frame25_post_hitlag_phase != 0u) {
-          laser_spawn_apply_throwlw_attached_body_callback(batch, bi, p, spawned_slot, lp, 1u);
+          laser_spawn_apply_throwlw_attached_body_callback(batch, bi, p, spawned_slot, lp, 1u, 0u);
         }
       }
       if (is_blaster_throw && action_id == (uint16_t)MSL_ACT_THROW_B &&

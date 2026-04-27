@@ -1,6 +1,7 @@
 #include "shields.h"
 
 #include "anim_table.h"
+#include <float.h>
 #include <math.h>
 #include <stdint.h>
 
@@ -149,14 +150,11 @@ void shields_refresh(MslBatch* batch) {
           // - Use stick direction (main stick) and facing to choose an angle frame.
           // - Blend towards that angled center based on inertial stick magnitude state (x4; 0..1).
           //
-          // NOTE (model_scaling): In-engine applies per-character model scaling at the model root
-          // (ftCommon_GetModelScale(fp)), but then cancels `model_scaling` for the collision skeleton
-          // subtree by applying an inverse scale at part `fp->ft_data->x8->x10` during animation
-          // updates (ftAnim_8006FA58/ftAnim_8006FB88 call ftCommon_8007F6A4).
-          //
-          // Our `data/shields/*.bin` tables are extracted in the same "collision-subtree" space
-          // (see tools/extraction/extract_shield_tilt_table.py applying inv_model_scale), so we
-          // apply only `fighter_scale_y` here.
+          // NOTE (model_scaling): `lb_8000B1CC(shield_hit->bone, ...)` reads the live shield-bone
+          // world matrix after the fighter root model scale has been applied. Even though
+          // ftAnim_8006FA58/ftAnim_8006FB88 install the inverse-scale collision subtree for body
+          // capsules, Dolphin probes of `lbColl_80007BCC` show the ShieldDesc bone position follows
+          // the model-scaled guard pose. Apply both `fighter_scale_y` and `co_attrs.model_scaling`.
           //
           // Decomp refs:
           // - refs/melee/src/melee/ft/ftcommon.c::ftCommon_GetModelScale
@@ -233,8 +231,22 @@ void shields_refresh(MslBatch* batch) {
           if (has_tv) {
             const uint16_t f = clamp_u16(batch->state.guard_tilt_x8[idx], 0, frame_max);
             const float mag = clamp01(batch->state.guard_tilt_x4[idx]);
+            const uint8_t steady_guard_no_tilt =
+                (batch->state.action_id[idx] == (uint16_t)MSL_ACT_GUARD &&
+                 (mag == 0.0f || mag < FLT_MIN))
+                    ? 1u
+                    : 0u;
 
-            const size_t n_i = (size_t)neutral * 3u;
+            // Decomp owner:
+            // - `mv.co.guard.x8` is initialized to 10, but `ftCo_80091E78` only samples the
+            //   angled Guard timeline through `ftAnim_80070710(..., x8)` when `mv.co.guard.x4`
+            //   is nonzero.
+            // - With `x4 == 0`, ShieldDesc collision uses the current no-tilt Guard pose, i.e. the
+            //   table's frame-0 live pose, not the x8 neutral target frame.
+            // - Keep this lane to steady Guard. GuardOn/GuardReflect have separate entry/reflect
+            //   pose owners, and nonzero x4 follows the angled `x8` branch.
+            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_80091BC4,ftCo_80091E78}
+            const size_t n_i = steady_guard_no_tilt ? 0u : (size_t)neutral * 3u;
             const size_t f_i = (size_t)f * 3u;
             const float nx = tv.xyz[n_i + 0];
             const float ny = tv.xyz[n_i + 1];
@@ -247,15 +259,21 @@ void shields_refresh(MslBatch* batch) {
             const float dy = ny + mag * (fy - ny);
             const float dz = nz + mag * (fz - nz);
 
-            // Match hurtcaps scaling policy: SSANIM-derived offsets are extracted without per-fighter
-            // runtime scale (fp->x34_scale.y), so apply fighter_scale_y uniformly.
+            const float model_scaling = (isfinite(ca->model_scaling) && ca->model_scaling > 0.0f)
+                                            ? ca->model_scaling
+                                            : 1.0f;
+            const float pose_scale = steady_guard_no_tilt ? (scale_y * model_scaling) : scale_y;
+
+            // Match the ShieldDesc bone policy above: the no-tilt steady-Guard lane uses the live
+            // model-scaled ShieldDesc bone; other guard actions retain the existing collision-
+            // subtree scaling policy until their separate pose owners are proved.
             //
             // Facing parity: same as hurtcaps_refresh() / in-engine root part rotY = (M_PI_2 * fp->facing_dir),
             // which mixes X/Z in world space.
             // refs/melee/src/melee/ft/fighter.c (ftPartSetRotY(fp, 0, (M_PI_2 * fp->facing_dir)))
-            const float lx = dx * scale_y;
-            const float ly = dy * scale_y;
-            const float lz = dz * scale_y;
+            const float lx = dx * pose_scale;
+            const float ly = dy * pose_scale;
+            const float lz = dz * pose_scale;
             const float off_x = facing_dir * lz;
             const float off_z = -facing_dir * lx;
             sx = pos_x + off_x;

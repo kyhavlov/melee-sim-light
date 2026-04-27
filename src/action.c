@@ -902,6 +902,7 @@ void guard_update_grounded(MslBatch* batch, const MslCommonParams* c, size_t idx
     batch->state.guard_x10[idx] = 0;
     batch->state.lightshield_amount[idx] = 0.0f;
     batch->state.guard_entry_via_wait_callback[idx] = 0u;
+    batch->state.guard_entry_via_dash_91ad8[idx] = 0u;
   }
   batch->state.guard_reflect_entry_dash_terminal_scalar[idx] = 0u;
 
@@ -1315,6 +1316,15 @@ void guard_update_grounded(MslBatch* batch, const MslCommonParams* c, size_t idx
     return;
   }
 
+  if (a0 == (uint16_t)MSL_ACT_DASH && batch->state.dash_x4[idx] != 0u &&
+      batch->state.anim_frame_f32[idx] <= c->dash_iasa_x44) {
+    // Decomp: the early Dash_IASA branch (`dash.x4 != 0 && cur_anim_frame <= x44`) checks
+    // SpecialS/item/CatchDash/AttackS4/EscapeF and then falls through without calling the guard
+    // helper. Guard/GuardReflect admission starts in the later Dash_IASA branches.
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c::ftCo_Dash_IASA
+    return;
+  }
+
   // Decomp: ftCo_80091A4C (used by grounded locomotion IASA functions like Wait/Walk/Run/Turn).
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c:57-70 and ftCo_Wait.c:43-66.
   const uint16_t pressed = batch->state.input_buttons_pressed[idx];
@@ -1332,7 +1342,13 @@ void guard_update_grounded(MslBatch* batch, const MslCommonParams* c, size_t idx
   }
 
   if (shield_held_inputs && batch->state.shield_hp[idx] > 0.0f) {
+    const uint8_t entered_via_dash_91ad8 =
+        (a0 == (uint16_t)MSL_ACT_DASH && batch->state.dash_x4[idx] != 0u &&
+         batch->state.anim_frame_f32[idx] <= c->dash_iasa_x4c)
+            ? 1u
+            : 0u;
     enter_guard_on(batch, c, idx, guard_entry_via_wait_callback_from_current_row(batch, idx));
+    batch->state.guard_entry_via_dash_91ad8[idx] = entered_via_dash_91ad8;
     {
       // Initialize lightshield_amount from the current trigger input (decomp updates this on entry
       // via ftCo_800921DC and then per-frame via ftCo_800925A4).
@@ -1432,6 +1448,7 @@ void action_update(MslBatch* batch) {
       for (int p = 0; p < num_players; p++) {
         const size_t idx = msl_idx_player(bi, p);
         batch->state.guard_on_entered_this_frame[idx] = 0u;
+        batch->state.guard_entry_via_dash_91ad8[idx] = 0u;
         batch->state.guard_jump_oos_entered_this_frame[idx] = 0u;
         batch->state.guard_reflect_entry_dash_terminal_scalar[idx] = 0u;
         batch->state.shine_jump_iasa_entered_this_frame[idx] = 0u;

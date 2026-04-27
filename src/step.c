@@ -265,6 +265,19 @@ static inline void cache_collision_stage_cur_pos(MslBatch* batch) {
   }
 }
 
+static inline void cache_frame_start_state_flags_2218(MslBatch* batch) {
+  if (batch == NULL) {
+    return;
+  }
+  const int num_players = (int)batch->config.num_players;
+  for (int bi = 0; bi < batch->batch_size; bi++) {
+    for (int p = 0; p < num_players; p++) {
+      const size_t idx = msl_idx_player(bi, p);
+      batch->state.state_flags_2218_frame_start[idx] = batch->state.state_flags[idx * 5u];
+    }
+  }
+}
+
 static int step_one_frame_core(MslBatch* batch, const uint8_t* prev_input_bytes,
                                size_t prev_input_stride_bytes, const uint8_t* input_bytes,
                                size_t input_stride_bytes, uint8_t run_combat) {
@@ -279,6 +292,7 @@ static int step_one_frame_core(MslBatch* batch, const uint8_t* prev_input_bytes,
   cache_prev_action_state(batch);
   cache_floor_sweep_prev_pos(batch);
   cache_guard_reflect_timer_seed_snapshots(batch);
+  cache_frame_start_state_flags_2218(batch);
 
   // Decomp callback ordering: pre-input anim callbacks (prio1) run before input_cb (prio3), so
   // snapshot prior-frame inputs for pre-input gameplay ownership.

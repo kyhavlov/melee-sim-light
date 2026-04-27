@@ -357,6 +357,13 @@ typedef struct MslStateSoA {
   // callback handoff. This survives the following frozen GuardOn snapshot row, where
   // prev_action_id no longer identifies the callback source.
   uint8_t* guard_entry_via_wait_callback;
+  // Runtime-only marker for GuardOn entered through Dash_IASA's `dash.x4 != 0` handoff into the
+  // mid `ftCo_80091AD8` helper. Projectile item collision for that handoff frame has already
+  // passed before the ShieldDesc is eligible in vanilla, so same-step item shield precedence must
+  // not consume the newly created GuardOn shield descriptor.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c::ftCo_Dash_IASA
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_80091AD8,ftCo_800923B4}
+  uint8_t* guard_entry_via_dash_91ad8;
   // Runtime-only marker for the Dash IASA locomotion -> GuardReflect entry slice that also reaches
   // Dash's terminal gr_vel scalar in the same callback. Item reflect ownership uses this to keep
   // same-frame xDA8 transfer on the source callback phase that exposed it, without replay ids.
@@ -369,6 +376,12 @@ typedef struct MslStateSoA {
   // refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007B1B8,ftColl_80077464}
   // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
   uint8_t* guard_seed_shield_desc_active;
+  // Runtime-only frame-start snapshot of raw fp+0x2218 / Slippi state_flags[0].
+  // Item callbacks can need the row-start ReflectDesc behavior byte after reflector refresh has
+  // updated the live post-frame state_flags value.
+  // refs/melee/src/melee/ft/ftcoll.c::ftColl_CreateReflectHit
+  // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
+  uint8_t* state_flags_2218_frame_start;
   // Runtime-only marker for Guard/GuardOn/GuardReflect/GuardOff IASA entering KneeBend through
   // ftCo_800CB024 in the current step. The decomp input callback runs once per frame, so a fresh
   // Guard -> KneeBend handoff must not also consume KneeBend_IASA before the next frame.
