@@ -80,8 +80,9 @@ def test_seed_schema_includes_staling_fields() -> None:
     assert "walljump_wall_side_i8" in SEED_DTYPE.fields
     # Damage KB stacking window (fp->dmg.x18AC_time_since_hit).
     assert "damage_time_since_hit_x18ac" in SEED_DTYPE.fields
-    # Fighter phantom/tip-log delayed damage lane (`dmg.x1898` + source).
+    # Fighter phantom/tip-log delayed damage lane (`dmg.x1898` + x189C countdown + source).
     assert "phantom_damage_pending_x1898" in SEED_DTYPE.fields
+    assert "phantom_damage_timer_x189c" in SEED_DTYPE.fields
     # Legacy name; stores local simulator slot or 0xFF, not raw Slippi source-port domain.
     assert "phantom_damage_source_port" in SEED_DTYPE.fields
     # Grounded attacker shield-pushback scalar (`fp->xF4_ground_attacker_shield_kb_vel`).

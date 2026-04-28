@@ -127,6 +127,9 @@ typedef struct MslStateSoA {
   float* wall_normal_y;
   uint16_t* wall_id;   // ISO-derived segment index (stable id).
   uint8_t* wall_kind;  // 0/1/2
+  // Internal DamageFly hitlag-exit ASDI provenance. Set only by a hitlag-time wall collision
+  // callback; raw wall_id persists after detach and is not sufficient on its own.
+  uint8_t* damage_hitlag_wall_asdi_latch;
   // Collision contact metadata owned by mpColl ceiling substrate (FD-only v1).
   float* ceiling_contact_x;
   float* ceiling_contact_y;
@@ -546,6 +549,7 @@ typedef struct MslStateSoA {
   // refs/melee/src/melee/ft/ftcoll.c::{ftColl_80076ED8,ftColl_8007BE3C}
   // refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
   float* phantom_damage_pending_x1898;
+  uint16_t* phantom_damage_timer_x189c;
   // Legacy field name: local simulator slot or 0xFF, not raw Slippi/controller source-port domain.
   uint8_t* phantom_damage_source_port;
   // Damage KB velocity merge timer (decomp: fp->dmg.x18AC_time_since_hit).

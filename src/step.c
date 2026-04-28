@@ -83,6 +83,15 @@ static inline void clear_seed_owned_transients_post_frame(MslBatch* batch) {
       batch->state.throw_command_pending_pulse_frame[idx] = 0u;
       batch->state.throw_command_pending_seed_valid[idx] = 0u;
       batch->state.throw_pulse_crossed_curr_frame[idx] = 0u;
+      // DamageFly wall-ASDI provenance is allowed to arm on the SpecialAirHi wall-contact frame
+      // before combat starts hitlag, but it must become live only if the frame actually enters or
+      // continues hitlag. Non-hitlag wall contacts are stale CollData for this owner.
+      // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A1BC,Fighter_procMap}
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_OnExitHitlag
+      if (batch->state.damage_hitlag_wall_asdi_latch[idx] != 0u &&
+          batch->state.hitlag_pre_timer[idx] == 0u && batch->state.hitlag[idx] == 0u) {
+        batch->state.damage_hitlag_wall_asdi_latch[idx] = 0u;
+      }
       // `seed_t.source_clear_processhit_damage_pending_phase` is a one-step bridge for hidden
       // ProcessHit-owned source clear. Consume within this frame only.
       // refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC

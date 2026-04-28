@@ -74,13 +74,17 @@ Decomp/recording contract:
 
 ## Replay Seed Contract: Phantom Damage Pending Source Slot
 
-The replay dataset seed contains `phantom_damage_pending_x1898[player]` and
-`phantom_damage_source_port[player]` for hidden fighter phantom/tip-log delayed damage state.
+The replay dataset seed contains `phantom_damage_pending_x1898[player]`,
+`phantom_damage_timer_x189c[player]`, and `phantom_damage_source_port[player]` for hidden fighter
+phantom/tip-log delayed damage state.
 
 Domain:
 - `phantom_damage_pending_x1898` is the hidden `fp->dmg.x1898` damage amount carried until
   `Fighter_ProcessHit_8006D1EC` / `ftColl_8007BE3C` applies the delayed percent, stale queue, and
-  combo bookkeeping after hitlag.
+  combo bookkeeping.
+- `phantom_damage_timer_x189c` is the hidden `fp->dmg.x189C_unk_num_frames` countdown. It may
+  expire while another hitlag source is active; it is not equivalent to the replay-visible hitlag
+  timer.
 - `phantom_damage_source_port` is a legacy field name. It stores a **local simulator slot** or
   `0xFF`, not a raw Slippi/controller source port.
 - Replay-visible `last_hit_by` is different: it is raw source-port domain and must be mapped

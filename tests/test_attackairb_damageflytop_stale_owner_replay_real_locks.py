@@ -221,6 +221,7 @@ def test_attackairb_damageflytop_stale_owner_subset_rows(case: _Case) -> None:
         assert int(seed["action_id"][p]) == 90  # DamageFlyTop
         assert int(seed["hitlag"][p]) == 1
         assert float(seed["phantom_damage_pending_x1898"][p]) == pytest.approx(4.5, abs=1e-6)
+        assert int(seed["phantom_damage_timer_x189c"][p]) == 1
         assert int(seed["phantom_damage_source_port"][p]) == 0
         assert float(ref["percent"][p] - seed["percent"][p]) == pytest.approx(4.5, abs=1e-6)
     elif case.family == "tbk_control":
@@ -241,6 +242,37 @@ def test_attackairb_damageflytop_stale_owner_subset_rows(case: _Case) -> None:
     assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=1e-5), case.name
     if case.family == "qgd_phantom_expire":
         assert int(out["last_attack_landed"][0]) == int(ref["last_attack_landed"][0]) == 15
+
+
+@pytest.mark.integration
+def test_phantom_pending_damage_with_invalid_source_is_cleared_at_reseed() -> None:
+    # The hidden phantom/tip-log damage carry is source-owned. Dataset contract uses
+    # source=0xFF together with amount=0/timer=0 for "no pending phantom"; a positive amount with
+    # invalid source must not become a source-less percent-only damage path.
+    # refs/melee/src/melee/ft/ftcoll.c::ftColl_80076ED8
+    # refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
+    root = Path(__file__).resolve().parents[1]
+    dataset_rel = (
+        "datasets/fox_falco_fd_ucf084_recent/replays/validation/"
+        "cardinal_1.0_recent/QuerulousGrandDinosaur.msl"
+    )
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    row = ds.samples[8642:8643].copy()
+    p = 1
+    seed = row["seed_t"][0]
+    assert float(seed["phantom_damage_pending_x1898"][p]) == pytest.approx(4.5, abs=1e-6)
+    assert int(seed["phantom_damage_timer_x189c"][p]) == 1
+    assert int(seed["phantom_damage_source_port"][p]) == 0
+
+    row["seed_t"]["phantom_damage_source_port"][0, p] = np.uint8(0xFF)
+    out = _one_step_out_compare(ds=ds, row=row)[0]
+
+    assert float(out["percent"][p]) == pytest.approx(float(seed["percent"][p]), abs=1e-6)
+    assert int(out["last_attack_landed"][0]) != 15
 
 
 @pytest.mark.integration

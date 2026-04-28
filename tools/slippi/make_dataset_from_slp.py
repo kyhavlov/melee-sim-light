@@ -1303,18 +1303,19 @@ def _derive_phantom_damage_pending_seed_lanes(
     instance_hit_by_u16: np.ndarray,
     instance_id_u16: np.ndarray,
     num_players: int,
-) -> tuple[np.ndarray, np.ndarray]:
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Derive hidden fighter phantom/tip-log damage pending at one-step reseed boundaries.
 
     Decomp ownership:
     - ftColl_80076ED8 stores phantom/tip-log damage into `fp->dmg.x1898` and starts hitlag through
       the `x1840/x18a0` branch.
     - Fighter_ProcessHit sets `x189C_unk_num_frames = hitlag`, then ftColl_8007BE3C applies x1898
-      to percent/stale/combo when x189C expires after hitlag.
+      to percent/stale/combo when x189C expires.
 
     Seed policy:
-    - Carry only terminal active-hitlag rows where the next post-frame exposes that delayed x1898
-      percent addition while the same motion state continues.
+    - Carry active x189C countdown rows where a later post-frame exposes that delayed x1898 percent
+      addition before a knockback/body damage path supersedes it. The countdown is fighter damage
+      state and can survive an intervening action change such as Guard -> GuardSetOff.
     - Store the current-row source fighter by matching `instance_hit_by` against live fighter
       instance ids; rows without a live source stay unseeded. The legacy output field is named
       `phantom_damage_source_port`, but its value is a local simulator slot or 0xFF, not raw
@@ -1339,12 +1340,11 @@ def _derive_phantom_damage_pending_seed_lanes(
 
     n_frames, slots = percent.shape
     out_damage = np.zeros((n_frames, 4), dtype=np.float32)
+    out_timer = np.zeros((n_frames, 4), dtype=np.uint16)
     out_source = np.full((n_frames, 4), np.uint8(0xFF), dtype=np.uint8)
     players = min(int(num_players), int(slots), 4)
     for i in range(max(0, n_frames - 1)):
         for defender in range(players):
-            if int(hitlag[i, defender]) != 1 or int(hitlag[i + 1, defender]) != 0:
-                continue
             if int(action_id[i, defender]) != int(action_id[i + 1, defender]):
                 continue
             dmg = np.float32(percent[i + 1, defender] - percent[i, defender])
@@ -1363,19 +1363,31 @@ def _derive_phantom_damage_pending_seed_lanes(
             if source_slot == 0xFF:
                 continue
             j = i
+            pending_rows: list[int] = []
             while j >= 0:
                 if int(hitlag[j, defender]) == 0:
-                    break
-                if int(action_id[j, defender]) != int(action_id[i, defender]):
                     break
                 if int(hit_by[j, defender]) != source_iid:
                     break
                 if abs(float(percent[j, defender] - percent[i, defender])) > 1e-5:
                     break
-                out_damage[j, defender] = dmg
-                out_source[j, defender] = np.uint8(source_slot)
+                pending_rows.append(j)
                 j -= 1
-    return out_damage, out_source
+            if not pending_rows:
+                continue
+            start = pending_rows[-1]
+            if start <= 0 or int(hitlag[start - 1, defender]) != 0:
+                continue
+            if abs(float(percent[start, defender] - percent[start - 1, defender])) > 1e-5:
+                continue
+            for j in pending_rows:
+                timer = i - j + 1
+                if timer > 0xFFFF:
+                    continue
+                out_damage[j, defender] = dmg
+                out_timer[j, defender] = np.uint16(timer)
+                out_source[j, defender] = np.uint8(source_slot)
+    return out_damage, out_timer, out_source
 
 
 def _derive_fighter_8006cda4_pre_gate_consume_count_seed_lane(
@@ -5162,7 +5174,11 @@ def _main_impl(args) -> None:
         samples["seed_t"]["grab_mash_stick_x_sign"][:, slot] = mash_x[:-1]
         samples["seed_t"]["grab_mash_stick_y_sign"][:, slot] = mash_y[:-1]
 
-    phantom_damage_pending, phantom_damage_source_port = _derive_phantom_damage_pending_seed_lanes(
+    (
+        phantom_damage_pending,
+        phantom_damage_timer,
+        phantom_damage_source_port,
+    ) = _derive_phantom_damage_pending_seed_lanes(
         percent_f32=post_percent_all,
         hitlag_u16=post_hitlag,
         action_id_u16=post_action_id,
@@ -5171,6 +5187,7 @@ def _main_impl(args) -> None:
         num_players=num_players,
     )
     samples["seed_t"]["phantom_damage_pending_x1898"] = phantom_damage_pending[:-1]
+    samples["seed_t"]["phantom_damage_timer_x189c"] = phantom_damage_timer[:-1]
     samples["seed_t"]["phantom_damage_source_port"] = phantom_damage_source_port[:-1]
 
     if int(num_players) == 2:

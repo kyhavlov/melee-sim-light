@@ -7,7 +7,7 @@ import numpy as np
 import pytest
 
 from tests.test_combat_ownership_seed_guardrail_locks import _skip_if_required_artifacts_missing
-from tools.eval.dataset import read_dataset
+from tools.eval.dataset import COMPARE_DTYPE, read_dataset
 
 
 @dataclass(frozen=True)
@@ -56,6 +56,42 @@ def _precombat_body_counts_after_one_step(dataset_path: Path, record: int) -> tu
         return int(select_count), int(filtered_count)
     finally:
         binding.destroy(handle)
+
+
+def _run_rollout_window(dataset_path: Path, start: int, stop: int):
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+    assert int(samples.shape[0]) > stop, f"dataset too short for rollout lock: record={stop}"
+
+    binding = pytest.importorskip("msl_binding")
+    sizes = binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    compare_stride = int(sizes["compare"])
+    seed_off = int(samples.dtype.fields["seed_t"][1])
+    prev_off = int(samples.dtype.fields["prev_input_t"][1])
+    input_off = int(samples.dtype.fields["input_t"][1])
+
+    def field_bytes(record: int, off: int, stride: int) -> np.ndarray:
+        raw = samples[record : record + 1].view(np.uint8).reshape(1, -1)
+        return np.array(raw[:, off : off + stride], dtype=np.uint8, order="C", copy=True)
+
+    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    try:
+        binding.reseed_seed(handle, field_bytes(start, seed_off, seed_stride))
+        out_bytes = np.zeros((1, compare_stride), dtype=np.uint8, order="C")
+        for record in range(int(start), int(stop) + 1):
+            binding.step_input(
+                handle,
+                field_bytes(record, prev_off, input_stride),
+                field_bytes(record, input_off, input_stride),
+            )
+            binding.write_compare(handle, out_bytes)
+        out = out_bytes.view(COMPARE_DTYPE).reshape(1)[0].copy()
+    finally:
+        binding.destroy(handle)
+
+    return samples["ref_t1"][stop], out
 
 
 @pytest.mark.integration
@@ -167,3 +203,111 @@ def test_hitlag_freeze_keeps_rehit_suppression_on_followup_frame(case: FreezeReh
     # explicit negative control: later row in the same local window has fully cleared.
     assert neg_select == 0
     assert neg_filtered == 0
+
+
+@pytest.mark.integration
+def test_hitlag_frozen_create_frame_materializes_authoritative_hitlist_seed_on_rollout() -> None:
+    # Replay-real rollout lock for active-hitlag create-frame reseeds:
+    # - BHH 1390 starts with Fox BAir hitboxes in active hitlag on the create-frame pose.
+    # - Fighter_8006A360 freezes ftAction_8007121C during hitlag, so the create event must not
+    #   clear the authoritative per-HitCapsule victims_1 seed.
+    # - When hitlag exits at 1392, overlapping hitboxes must stay suppressed instead of re-hitting
+    #   Falco and freezing DamageFlyN action_frame at 1.
+    # refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
+    # refs/melee/src/melee/ft/ftaction.c::ftAction_8007121C
+    # refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000ACFC,lbColl_80008440}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = (
+        root
+        / "datasets/aggregate_recent/replays/validation/aggregate_recent/BlondHardHippopotamus.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+    attacker = 0
+    defender = 1
+    start = 1390
+    stop = 1395
+    seed = samples["seed_t"][start]
+
+    assert int(seed["action_id"][attacker]) == 67  # ftCo_MS_AttackAirB
+    assert int(seed["action_frame"][attacker]) == 4
+    assert int(seed["hitlag"][attacker]) > 0
+    assert int(seed["action_id"][defender]) == 88  # ftCo_MS_DamageFlyN
+    assert int(seed["hitlag"][defender]) > 0
+    assert all(int(seed["combat_hitlist_hb_valid"][attacker][hb]) == 1 for hb in range(3))
+    assert all(
+        int(seed["combat_hitlist_hb_cd"][attacker][hb][defender]) == 0xFFFF for hb in range(3)
+    )
+
+    ref, out = _run_rollout_window(dataset_path, start, stop)
+
+    for field in ("action_id", "animation_index", "action_frame", "hitlag", "hitstun"):
+        assert int(out[field][defender]) == int(ref[field][defender]), field
+    assert float(out["pos_x"][defender]) == pytest.approx(float(ref["pos_x"][defender]), abs=2e-5)
+    assert float(out["pos_y"][defender]) == pytest.approx(float(ref["pos_y"][defender]), abs=2e-5)
+
+
+@pytest.mark.integration
+def test_hitlag_frozen_create_frame_carry_is_per_hitbox_not_attacker_wide() -> None:
+    # Mixed-authority negative for the active-hitlag create-frame carry:
+    # `combat_hitlist_hb_valid` is per HitCapsule. An authoritative seed on one slot may enable the
+    # frozen create-frame owner, but it must not preserve a different slot's previous capsule unless
+    # that exact slot is authoritative too.
+    # refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
+    # refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000ACFC,lbColl_80008440}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = (
+        root
+        / "datasets/aggregate_recent/replays/validation/aggregate_recent/BlondHardHippopotamus.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    binding = pytest.importorskip("msl_binding")
+    ds = read_dataset(str(dataset_path))
+    row = ds.samples[1390:1391].copy()
+    attacker = 0
+    defender = 1
+
+    # hb0 is the slot under test: it has a previous-capsule seed and dense victims_1 provenance,
+    # but its per-HitCapsule lane is not authoritative. hb1 is authoritative only to prove the
+    # owner is enabled by another slot without becoming attacker-wide.
+    row["seed_t"]["hitstun"][0, defender] = np.uint16(0)
+    row["seed_t"]["combat_hitbox_prev_valid"][0, attacker, :] = np.uint8(0)
+    row["seed_t"]["combat_hitbox_prev_valid"][0, attacker, 0] = np.uint8(1)
+    row["seed_t"]["combat_hitlist_cd"][0, attacker, :, defender] = np.uint16(0)
+    row["seed_t"]["combat_hitlist_victim_iid"][0, attacker, :, defender] = np.uint16(0)
+    row["seed_t"]["combat_hitlist_cd"][0, attacker, 0, defender] = np.uint16(0xFFFF)
+    row["seed_t"]["combat_hitlist_victim_iid"][0, attacker, 0, defender] = row["seed_t"][
+        "instance_id"
+    ][0, defender]
+    row["seed_t"]["combat_hitlist_hb_valid"][0, attacker, :] = np.uint8(0)
+    row["seed_t"]["combat_hitlist_hb_cd"][0, attacker, :, :] = np.uint16(0)
+    row["seed_t"]["combat_hitlist_hb_victim_iid"][0, attacker, :, :] = np.uint16(0)
+    row["seed_t"]["combat_hitlist_hb_valid"][0, attacker, 1] = np.uint8(1)
+    row["seed_t"]["combat_hitlist_hb_cd"][0, attacker, 1, defender] = np.uint16(0xFFFF)
+    row["seed_t"]["combat_hitlist_hb_victim_iid"][0, attacker, 1, defender] = row["seed_t"][
+        "instance_id"
+    ][0, defender]
+
+    sizes = binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    seed_bytes = np.frombuffer(row["seed_t"].tobytes(order="C"), dtype=np.uint8).copy().reshape(1, seed_stride)
+    prev_input_bytes = np.frombuffer(row["prev_input_t"].tobytes(order="C"), dtype=np.uint8).copy().reshape(
+        1, input_stride
+    )
+    input_bytes = np.frombuffer(row["input_t"].tobytes(order="C"), dtype=np.uint8).copy().reshape(1, input_stride)
+
+    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    try:
+        binding.reseed_seed(handle, seed_bytes)
+        binding.debug_step_input_pre_combat(handle, prev_input_bytes, input_bytes)
+        assert int(binding.debug_hitlist_fighter_contains(handle, 0, attacker, 0, defender)) == 0
+    finally:
+        binding.destroy(handle)

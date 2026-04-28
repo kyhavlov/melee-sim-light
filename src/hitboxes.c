@@ -20,6 +20,18 @@ static inline size_t idx_hitbox(int bi, int p, int hb_i) {
          (size_t)hb_i;
 }
 
+static inline uint8_t hitboxes_has_authoritative_hitlist_seed(const MslBatch* batch, int bi,
+                                                              int attacker, int hb) {
+  if (batch == NULL || bi < 0 || attacker < 0 || attacker >= (int)MSL_MAX_PLAYERS || hb < 0 ||
+      hb >= (int)MSL_MAX_HITBOXES) {
+    return 0u;
+  }
+  const size_t hb_valid_i =
+      ((size_t)bi * (size_t)MSL_MAX_PLAYERS + (size_t)attacker) * (size_t)MSL_MAX_HITBOXES +
+      (size_t)hb;
+  return batch->state.combat_hitlist_hb_valid[hb_valid_i] ? 1u : 0u;
+}
+
 static inline int hitboxes_seed_bridge_get_env_dmg(float dmg) {
   // Decomp (GALE01): "getEnvDmg" pattern used by collision when converting float hitbox damage to
   // the integer damage lane used by shield interactions / hitlag input.
@@ -893,10 +905,22 @@ void hitboxes_refresh(MslBatch* batch) {
           break;
         }
       }
+      uint8_t frozen_hitlag_seeded_prev_capsules = 0u;
+      if (batch->state.hitlag_started_frame[idx] != 0u &&
+          batch->state.hitbox_prev_bootstrap[idx] == 2u &&
+          batch->state.action_id[idx] == batch->state.prev_action_id[idx]) {
+        for (int hb = 0; hb < MSL_MAX_HITBOXES; hb++) {
+          if (hitboxes_has_authoritative_hitlist_seed(batch, bi, p, hb)) {
+            frozen_hitlag_seeded_prev_capsules = 1u;
+            break;
+          }
+        }
+      }
       const uint8_t frozen_reseed_prev_capsules =
-          (has_no_damage_contact_victim && batch->state.hitlag[idx] != 0u &&
-           batch->state.hitbox_prev_bootstrap[idx] == 2u &&
-           batch->state.action_id[idx] == batch->state.prev_action_id[idx])
+          ((has_no_damage_contact_victim && batch->state.hitlag[idx] != 0u &&
+            batch->state.hitbox_prev_bootstrap[idx] == 2u &&
+            batch->state.action_id[idx] == batch->state.prev_action_id[idx]) ||
+           frozen_hitlag_seeded_prev_capsules)
               ? 1u
               : 0u;
       if (frozen_reseed_prev_capsules) {
@@ -904,8 +928,9 @@ void hitboxes_refresh(MslBatch* batch) {
         // - Fighter_8006A360 skips ftAnim_8006EBA4 / anim_cb while hitlag is active, so
         //   ftAction_8007121C does not re-run the create command on frozen rows.
         // - Slippi can still expose the create-frame action/pose time for every frozen row; the
-        //   explicit x58 previous-capsule seed (`combat_hitbox_prev_valid`) proves the HitCapsule
-        //   already exists and must be treated as the pose_frame-1 active snapshot.
+        //   explicit x58 previous-capsule seed (`combat_hitbox_prev_valid`) plus authoritative
+        //   per-HitCapsule victims_1 seed proves the HitCapsule already exists and must be treated
+        //   as the pose_frame-1 active snapshot.
         // - Without this, teacher-forced reseed replays the enable-edge clear, dropping
         //   HitCapsule.victims_1 and allowing illegal post-hitlag re-hits.
         // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
@@ -920,7 +945,8 @@ void hitboxes_refresh(MslBatch* batch) {
             continue;
           }
           const uint8_t hb = ev->hitbox_id;
-          if (!seeded_prev_enabled[hb]) {
+          if (!seeded_prev_enabled[hb] ||
+              !hitboxes_has_authoritative_hitlist_seed(batch, bi, p, (int)hb)) {
             continue;
           }
           def_prev[hb] = *ev;

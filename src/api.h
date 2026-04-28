@@ -905,11 +905,12 @@ typedef struct MslSeed {
 
   // Combat / timers
   float percent[MSL_MAX_PLAYERS];
-  // Fighter phantom/tip-log delayed damage state (fp->dmg.x1898 + source gobj).
-  // 0.0 / 0xFF means no pending phantom damage at the reseed boundary.
+  // Fighter phantom/tip-log delayed damage state (fp->dmg.x1898 + x189C countdown + source gobj).
+  // 0.0 / 0 / 0xFF means no pending phantom damage at the reseed boundary.
   // refs/melee/src/melee/ft/ftcoll.c::{ftColl_80076ED8,ftColl_8007BE3C}
   // refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
   float phantom_damage_pending_x1898[MSL_MAX_PLAYERS];
+  uint16_t phantom_damage_timer_x189c[MSL_MAX_PLAYERS];
   // Legacy field name: this hidden teacher-forced lane stores a local simulator slot, not a raw
   // Slippi/controller source port. `0xFF` means no pending phantom source. Replay-visible
   // `last_hit_by` remains raw source-port domain and must be mapped through `source_port0` before
@@ -1368,6 +1369,7 @@ typedef struct MslDebugCollisionContacts {
 
   uint32_t coll_env_flags[MSL_MAX_PLAYERS];
   uint32_t coll_prev_env_flags[MSL_MAX_PLAYERS];
+  uint8_t damage_hitlag_wall_asdi_latch[MSL_MAX_PLAYERS];
 } MslDebugCollisionContacts;
 
 // Debug/validation helper: record a single hitbox-vs-hurtcap contact candidate.

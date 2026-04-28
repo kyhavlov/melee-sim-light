@@ -1076,6 +1076,7 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
         batch->state.wall_kind[idx] = seed->mpcoll_wall_kind_seed_u8[p];
         batch->state.wall_id[idx] = seed->mpcoll_wall_id_seed_u16[p];
       }
+      batch->state.damage_hitlag_wall_asdi_latch[idx] = 0u;
       batch->state.guard_jump_oos_entered_this_frame[idx] = 0u;
       batch->state.guard_reflect_entry_dash_terminal_scalar[idx] = 0u;
       enum { MSL_STATE_FLAGS_221B_INDEX = 2 };
@@ -1276,18 +1277,20 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
       // state and is reset by Fighter_ProcessHit each frame; keep it at 0 on reseed.
       batch->state.percent_temp[idx] = 0.0f;
       float phantom_damage = seed->phantom_damage_pending_x1898[p];
-      if (!(phantom_damage > 0.0f) || !isfinite(phantom_damage)) {
+      const uint8_t phantom_source = seed->phantom_damage_source_port[p];
+      const uint8_t phantom_source_valid =
+          (phantom_source < (uint8_t)batch->config.num_players) ? 1u : 0u;
+      if (!(phantom_damage > 0.0f) || !isfinite(phantom_damage) || !phantom_source_valid) {
         phantom_damage = 0.0f;
       }
       batch->state.phantom_damage_pending_x1898[idx] = phantom_damage;
+      batch->state.phantom_damage_timer_x189c[idx] =
+          (phantom_damage > 0.0f) ? seed->phantom_damage_timer_x189c[p] : 0u;
       // `phantom_damage_source_port` is a legacy seed/API name. The hidden ProcessHit lane stores
       // local simulator slots because ftColl_8007BE3C consumes a source fighter gobj, while
       // replay-visible `last_hit_by` is the separate raw source-port lane.
-      const uint8_t phantom_source = seed->phantom_damage_source_port[p];
       batch->state.phantom_damage_source_port[idx] =
-          (phantom_damage > 0.0f && phantom_source < (uint8_t)batch->config.num_players)
-              ? phantom_source
-              : 0xFFu;
+          (phantom_damage > 0.0f && phantom_source_valid) ? phantom_source : 0xFFu;
       batch->state.dmg_x2225_b7[idx] = seed->dmg_x2225_b7[p] ? 1 : 0;
       batch->state.dmg_x2224_b2[idx] = seed->dmg_x2224_b2[p] ? 1 : 0;
       batch->state.shield_hp[idx] = seed->shield_hp[p];
@@ -2524,6 +2527,7 @@ int msl_batch_debug_write_collision_contacts(const MslBatch* batch, uint8_t* out
 
       out->coll_env_flags[p] = batch->state.coll_env_flags[idx];
       out->coll_prev_env_flags[p] = batch->state.coll_prev_env_flags[idx];
+      out->damage_hitlag_wall_asdi_latch[p] = batch->state.damage_hitlag_wall_asdi_latch[idx];
     }
   }
   return 0;

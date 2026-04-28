@@ -91,6 +91,7 @@ int state_alloc(MslStateSoA* state, int batch_size) {
   state->wall_normal_y = (float*)alloc_aligned_64(sizeof(float) * bp);
   state->wall_id = (uint16_t*)alloc_aligned_64(sizeof(uint16_t) * bp);
   state->wall_kind = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
+  state->damage_hitlag_wall_asdi_latch = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->ceiling_contact_x = (float*)alloc_aligned_64(sizeof(float) * bp);
   state->ceiling_contact_y = (float*)alloc_aligned_64(sizeof(float) * bp);
   state->ceiling_normal_x = (float*)alloc_aligned_64(sizeof(float) * bp);
@@ -233,6 +234,7 @@ int state_alloc(MslStateSoA* state, int batch_size) {
   state->percent = (float*)alloc_aligned_64(sizeof(float) * bp);
   state->percent_temp = (float*)alloc_aligned_64(sizeof(float) * bp);
   state->phantom_damage_pending_x1898 = (float*)alloc_aligned_64(sizeof(float) * bp);
+  state->phantom_damage_timer_x189c = (uint16_t*)alloc_aligned_64(sizeof(uint16_t) * bp);
   state->phantom_damage_source_port = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->damage_time_since_hit_x18ac = (int16_t*)alloc_aligned_64(sizeof(int16_t) * bp);
   state->dmg_x2225_b7 = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
@@ -424,7 +426,8 @@ int state_alloc(MslStateSoA* state, int batch_size) {
       !state->frame_start_on_ground || !state->prev_on_ground || !state->ground_contact_x ||
       !state->ground_contact_y || !state->ground_normal_x || !state->ground_normal_y ||
       !state->wall_contact_x || !state->wall_contact_y || !state->wall_normal_x ||
-      !state->wall_normal_y || !state->wall_id || !state->wall_kind || !state->ceiling_contact_x ||
+      !state->wall_normal_y || !state->wall_id || !state->wall_kind ||
+      !state->damage_hitlag_wall_asdi_latch || !state->ceiling_contact_x ||
       !state->ceiling_contact_y || !state->ceiling_normal_x || !state->ceiling_normal_y ||
       !state->ceiling_id || !state->coll_env_flags || !state->coll_prev_env_flags ||
       !state->action_id || !state->seed_prev_action_id || !state->seed_prev_action_frame ||
@@ -476,13 +479,14 @@ int state_alloc(MslStateSoA* state, int batch_size) {
       !state->x684 || !state->ucf_padbuf_index || !state->ucf_padbuf_sdrop_up_frames ||
       !state->ucf_padbuf_stick_x || !state->ucf_padbuf_stick_y || !state->percent ||
       !state->percent_temp || !state->phantom_damage_pending_x1898 ||
-      !state->phantom_damage_source_port || !state->damage_time_since_hit_x18ac ||
-      !state->dmg_x2225_b7 || !state->dmg_x2224_b2 || !state->shield_hp || !state->hitlag ||
-      !state->hitlag_pre_timer || !state->hitlag_started_frame ||
-      !state->damage_hitlag_floorhug_latch || !state->hitstun || !state->damage_jump_buffer_x14 ||
-      !state->damage_post_hitlag_cb_kind || !state->attacker_shield_ground_kb_vel ||
-      !state->l_cancel || !state->hurtbox_state || !state->colanim_hit_status_x198c ||
-      !state->colanim_timer_x1990 || !state->colanim_timer_x1994 || !state->colanim_lock_x2221_b0 ||
+      !state->phantom_damage_timer_x189c || !state->phantom_damage_source_port ||
+      !state->damage_time_since_hit_x18ac || !state->dmg_x2225_b7 || !state->dmg_x2224_b2 ||
+      !state->shield_hp || !state->hitlag || !state->hitlag_pre_timer ||
+      !state->hitlag_started_frame || !state->damage_hitlag_floorhug_latch || !state->hitstun ||
+      !state->damage_jump_buffer_x14 || !state->damage_post_hitlag_cb_kind ||
+      !state->attacker_shield_ground_kb_vel || !state->l_cancel || !state->hurtbox_state ||
+      !state->colanim_hit_status_x198c || !state->colanim_timer_x1990 ||
+      !state->colanim_timer_x1994 || !state->colanim_lock_x2221_b0 ||
       !state->colanim_hitstun_x198c1_seed || !state->colanim_terminal_x1990_item_body_guard ||
       !state->hurtcap_count || !state->hurtcap_a_x || !state->hurtcap_a_y || !state->hurtcap_a_z ||
       !state->hurtcap_b_x || !state->hurtcap_b_y || !state->hurtcap_b_z || !state->hurtcap_radius ||
@@ -580,7 +584,11 @@ int state_alloc(MslStateSoA* state, int batch_size) {
   memset(state->turn_kneebend_facing_override, 0, sizeof(uint8_t) * bp);
   memset(state->walk_use_raw_input_once, 0, sizeof(uint8_t) * bp);
   memset(state->x2228_b7, 0, sizeof(uint8_t) * bp);
+  memset(state->damage_hitlag_wall_asdi_latch, 0, sizeof(uint8_t) * bp);
   memset(state->damage_hitlag_floorhug_latch, 0, sizeof(uint8_t) * bp);
+  memset(state->phantom_damage_pending_x1898, 0, sizeof(float) * bp);
+  memset(state->phantom_damage_timer_x189c, 0, sizeof(uint16_t) * bp);
+  memset(state->phantom_damage_source_port, 0xFF, sizeof(uint8_t) * bp);
   for (size_t i = 0; i < bph; i++) {
     state->fighter_hitlist_init_gen[i] = 0u;
     hitlist_capsule_clear(&state->fighter_hitlist[i]);
@@ -660,6 +668,7 @@ void state_free(MslStateSoA* state) {
   alloc_free(state->wall_normal_y);
   alloc_free(state->wall_id);
   alloc_free(state->wall_kind);
+  alloc_free(state->damage_hitlag_wall_asdi_latch);
   alloc_free(state->ceiling_contact_x);
   alloc_free(state->ceiling_contact_y);
   alloc_free(state->ceiling_normal_x);
@@ -797,6 +806,7 @@ void state_free(MslStateSoA* state) {
   alloc_free(state->percent);
   alloc_free(state->percent_temp);
   alloc_free(state->phantom_damage_pending_x1898);
+  alloc_free(state->phantom_damage_timer_x189c);
   alloc_free(state->phantom_damage_source_port);
   alloc_free(state->damage_time_since_hit_x18ac);
   alloc_free(state->dmg_x2225_b7);
