@@ -48,7 +48,7 @@ def _run_one_step_row(dataset_path: Path, record: int) -> tuple[np.void, np.void
 
     handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
     try:
-        binding.reseed_seed(handle, seed_bytes)
+        binding.reseed_seed_rollout(handle, seed_bytes)
         binding.step_input(handle, prev_input_bytes, input_bytes)
         binding.write_compare(handle, out_compare_bytes)
     finally:
@@ -86,7 +86,7 @@ def _run_one_step_row_with_current_buttons(
 
     handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
     try:
-        binding.reseed_seed(handle, seed_bytes)
+        binding.reseed_seed_rollout(handle, seed_bytes)
         binding.step_input(handle, prev_input_bytes, input_bytes)
         binding.write_compare(handle, out_compare_bytes)
     finally:
@@ -175,6 +175,37 @@ def _run_rollout_records(
         return out_by_record
     finally:
         binding.destroy(handle)
+
+
+@pytest.mark.integration
+def test_throwhi_rollout_shared_throw_rate_reaches_release_frame_bhh() -> None:
+    # Replay-real rollout lock for attached ThrowHi/ThrownHi timebase:
+    # - ftCo_800DD4B0 computes the shared 4/3 throw anim rate for Fox/Fox ThrowHi.
+    # - ftCo_800DD398 applies that rate to both thrower and victim before ftCo_800DD724's release
+    #   script-frame gate.
+    # - The Q16 runtime timebase must not land one LSB below the integer release frame and delay
+    #   ThrownHi -> DamageFlyTop by one frame.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::{ftCo_800DD4B0,ftCo_800DD398,ftCo_800DD724}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_rel = "datasets/aggregate_recent/replays/validation/aggregate_recent/BlondHardHippopotamus.msl"
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    out_by_record = _run_rollout_records(dataset_path, 467, (469, 472))
+    out_469, ref_469 = out_by_record[469]
+    out_472, ref_472 = out_by_record[472]
+
+    victim_p = 0
+    owner_p = 1
+    assert int(out_469["action_id"][victim_p]) == int(ref_469["action_id"][victim_p]) == 241
+    assert int(out_469["action_frame"][victim_p]) == int(ref_469["action_frame"][victim_p]) == 4
+    assert int(out_469["action_frame"][owner_p]) == int(ref_469["action_frame"][owner_p]) == 4
+
+    assert int(out_472["action_id"][victim_p]) == int(ref_472["action_id"][victim_p]) == 90
+    assert int(out_472["animation_index"][victim_p]) == int(ref_472["animation_index"][victim_p])
+    assert int(out_472["hitstun"][victim_p]) == int(ref_472["hitstun"][victim_p])
 
 
 @pytest.mark.integration

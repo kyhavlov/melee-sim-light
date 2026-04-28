@@ -892,10 +892,13 @@ static inline uint8_t enter_throw_from_wait(MslBatch* batch, int bi, int owner_p
     }
   }
 
+  const int32_t throw_anim_speed_fp = msl_q16_16_from_f32(throw_anim_speed);
+
   batch->state.action_id[oidx] = throw_action;
   batch->state.animation_index[oidx] = owner_sm;
   msl_anim_timebase_enter(batch, oidx, 0.0f, throw_anim_speed);
-  batch->state.throw_anim_rate_fp_q16_16[oidx] = msl_q16_16_from_f32(throw_anim_speed);
+  batch->state.frame_speed_mul_fp_q16_16[oidx] = throw_anim_speed_fp;
+  batch->state.throw_anim_rate_fp_q16_16[oidx] = throw_anim_speed_fp;
   // Safety contract: this immediate tick is *only* valid for CatchWait throw-entry because
   // decomp's ftCo_800DD398 does Fighter_ChangeMotionState + immediate ftAnim_8006EBA4 in the same
   // callback. Generic motion-state entries must not do this extra tick because step.c already runs
@@ -922,7 +925,8 @@ static inline uint8_t enter_throw_from_wait(MslBatch* batch, int bi, int owner_p
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Thrown.c::ftCo_800DE3FC
   batch->state.facing[vidx] = batch->state.facing[oidx];
   msl_anim_timebase_enter(batch, vidx, 0.0f, throw_anim_speed);
-  batch->state.throw_anim_rate_fp_q16_16[vidx] = msl_q16_16_from_f32(throw_anim_speed);
+  batch->state.frame_speed_mul_fp_q16_16[vidx] = throw_anim_speed_fp;
+  batch->state.throw_anim_rate_fp_q16_16[vidx] = throw_anim_speed_fp;
   // Safety contract matches the thrower-side guard above: this extra tick mirrors
   // ftCo_800DE3FC's immediate ftAnim_8006EBA4 and must not be generalized to arbitrary entries.
   assert(batch->state.action_id[vidx] >= (uint16_t)MSL_ACT_THROWN_F &&

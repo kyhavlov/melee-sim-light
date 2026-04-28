@@ -40,6 +40,105 @@ static inline uint8_t anim_timebase_try_rebound_anim_speed_from_ground_vel(const
   return 1u;
 }
 
+static inline int anim_timebase_throw_index_from_action(uint16_t action_id) {
+  switch (action_id) {
+    case (uint16_t)MSL_ACT_THROW_F:
+      return 0;
+    case (uint16_t)MSL_ACT_THROW_B:
+      return 1;
+    case (uint16_t)MSL_ACT_THROW_HI:
+      return 2;
+    case (uint16_t)MSL_ACT_THROW_LW:
+      return 3;
+    default:
+      return -1;
+  }
+}
+
+static inline uint16_t anim_timebase_throw_action_from_thrown(uint16_t action_id) {
+  switch (action_id) {
+    case (uint16_t)MSL_ACT_THROWN_F:
+      return (uint16_t)MSL_ACT_THROW_F;
+    case (uint16_t)MSL_ACT_THROWN_B:
+      return (uint16_t)MSL_ACT_THROW_B;
+    case (uint16_t)MSL_ACT_THROWN_HI:
+      return (uint16_t)MSL_ACT_THROW_HI;
+    case (uint16_t)MSL_ACT_THROWN_LW:
+    case (uint16_t)MSL_ACT_THROWN_LW_WOMEN:
+      return (uint16_t)MSL_ACT_THROW_LW;
+    default:
+      return 0xFFFFu;
+  }
+}
+
+static inline int32_t anim_timebase_throw_rate_fp_from_pair(uint8_t owner_char_id,
+                                                            uint8_t victim_char_id,
+                                                            uint16_t throw_action) {
+  const int throw_index = anim_timebase_throw_index_from_action(throw_action);
+  if (throw_index < 0) {
+    return 0;
+  }
+  const MslCommonParams* c = msl_common_params();
+  const MslCharParams* owner_ch = msl_char_params(owner_char_id);
+  const MslCharParams* victim_ch = msl_char_params(victim_char_id);
+  if (owner_ch == NULL || victim_ch == NULL || c == NULL) {
+    return 0;
+  }
+  float rate = 1.0f;
+  if ((owner_ch->weight_independent_throws_mask & (uint8_t)(1u << throw_index)) == 0u) {
+    if (!(victim_ch->weight > 0.0f) || !(c->throw_anim_speed_weight_mul > 0.0f)) {
+      return 0;
+    }
+    rate = 1.0f / (victim_ch->weight * c->throw_anim_speed_weight_mul);
+  }
+  if (!(rate > 0.0f)) {
+    return 0;
+  }
+  return msl_q16_16_from_f32(rate);
+}
+
+static inline uint8_t anim_timebase_attached_non_low_throw_pair_active(const MslBatch* batch,
+                                                                       int bi, int p, size_t idx,
+                                                                       int num_players) {
+  if (batch == NULL || batch->state.throw_anim_rate_fp_q16_16[idx] <= 0) {
+    return 0u;
+  }
+  const uint16_t a = batch->state.action_id[idx];
+  if (a == (uint16_t)MSL_ACT_THROW_B || a == (uint16_t)MSL_ACT_THROW_HI) {
+    const uint8_t victim_p = batch->state.attached_victim_port[idx];
+    if (victim_p == 0xFFu || (int)victim_p >= num_players || (int)victim_p == p) {
+      return 0u;
+    }
+    const size_t vidx = msl_idx_player(bi, (int)victim_p);
+    return (batch->state.action_id[vidx] == (uint16_t)(a + 20u) &&
+            batch->state.grab_owner_port[vidx] == (uint8_t)p)
+               ? 1u
+               : 0u;
+  }
+  if (a == (uint16_t)MSL_ACT_THROWN_B || a == (uint16_t)MSL_ACT_THROWN_HI) {
+    uint8_t owner_p = batch->state.grab_owner_port[idx];
+    if (owner_p == 0xFFu || (int)owner_p >= num_players || (int)owner_p == p) {
+      for (int candidate = 0; candidate < num_players; candidate++) {
+        const size_t cidx = msl_idx_player(bi, candidate);
+        if (batch->state.attached_victim_port[cidx] == (uint8_t)p) {
+          owner_p = (uint8_t)candidate;
+          break;
+        }
+      }
+    }
+    if (owner_p == 0xFFu || (int)owner_p >= num_players || (int)owner_p == p) {
+      return 0u;
+    }
+    const size_t oidx = msl_idx_player(bi, (int)owner_p);
+    const uint16_t owner_action = anim_timebase_throw_action_from_thrown(a);
+    return (owner_action != 0xFFFFu && batch->state.action_id[oidx] == owner_action &&
+            batch->state.attached_victim_port[oidx] == (uint8_t)p)
+               ? 1u
+               : 0u;
+  }
+  return 0u;
+}
+
 static inline uint8_t anim_timebase_apply_aobj_loop(MslBatch* batch, size_t idx) {
   // Fighter AObj loop semantics (AOBJ_LOOP) apply a deterministic rewind+wrap when
   // `end_frame <= curr_frame`.
@@ -475,6 +574,65 @@ void anim_timebase_update_pre_input(MslBatch* batch) {
         }
       }
 
+      // Attached ThrowHi/ThrownHi first-steady rate ownership:
+      // - ftCo_800DD4B0 computes one shared throw anim_speed from the victim weight.
+      // - ftCo_800DD398 enters both thrower and victim with that speed and immediately calls
+      //   ftAnim_8006EBA4 in the owner callback, so the first attached post-entry snapshot has
+      //   action_frame 1, and attached pre-release throw frames continue advancing on the shared
+      //   throw rate until the throw script changes the rate/flags.
+      // - This keeps rollout-started ThrowHi release timing aligned without broadening release
+      //   gates; the victim/owner link and attached pre-release action phase are the source
+      //   predicate.
+      // - Keep this on ThrowHi/ThrownHi: ThrowF/B/Lw have their own release / hitlag pulse slices,
+      //   and broadening this rate restore changed unrelated rollout first-break ownership.
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::{ftCo_800DD4B0,ftCo_800DD398}
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Thrown.c::ftCo_800DE3FC
+      if ((a == (uint16_t)MSL_ACT_THROW_HI || a == (uint16_t)MSL_ACT_THROWN_HI) &&
+          action_frame_pre >= 1 && batch->state.hitlag[idx] == 0u) {
+        if (msl_action_is_throw_owner(a)) {
+          const uint8_t victim_p = batch->state.attached_victim_port[idx];
+          if (victim_p != 0xFFu && (int)victim_p < num_players && (int)victim_p != p) {
+            const size_t vidx = msl_idx_player(bi, (int)victim_p);
+            if (msl_action_is_thrown_victim(batch->state.action_id[vidx])) {
+              int32_t throw_rate_fp = batch->state.throw_anim_rate_fp_q16_16[idx];
+              if (throw_rate_fp <= 0) {
+                throw_rate_fp = anim_timebase_throw_rate_fp_from_pair(
+                    batch->state.char_id[idx], batch->state.char_id[vidx], a);
+              }
+              if (throw_rate_fp > 0) {
+                batch->state.frame_speed_mul_fp_q16_16[idx] = throw_rate_fp;
+              }
+            }
+          }
+        } else {
+          uint8_t owner_p = batch->state.grab_owner_port[idx];
+          if (owner_p == 0xFFu || (int)owner_p >= num_players || (int)owner_p == p) {
+            for (int candidate = 0; candidate < num_players; candidate++) {
+              const size_t cidx = msl_idx_player(bi, candidate);
+              if (batch->state.attached_victim_port[cidx] == (uint8_t)p) {
+                owner_p = (uint8_t)candidate;
+                break;
+              }
+            }
+          }
+          if (owner_p != 0xFFu && (int)owner_p < num_players && (int)owner_p != p) {
+            const size_t oidx = msl_idx_player(bi, (int)owner_p);
+            if (msl_action_is_throw_owner(batch->state.action_id[oidx]) &&
+                batch->state.attached_victim_port[oidx] == (uint8_t)p) {
+              const uint16_t throw_action = anim_timebase_throw_action_from_thrown(a);
+              int32_t throw_rate_fp = batch->state.throw_anim_rate_fp_q16_16[idx];
+              if (throw_rate_fp <= 0 && throw_action != 0xFFFFu) {
+                throw_rate_fp = anim_timebase_throw_rate_fp_from_pair(
+                    batch->state.char_id[oidx], batch->state.char_id[idx], throw_action);
+              }
+              if (throw_rate_fp > 0) {
+                batch->state.frame_speed_mul_fp_q16_16[idx] = throw_rate_fp;
+              }
+            }
+          }
+        }
+      }
+
       // ThrowLw attached pulse/post-hitlag anim-rate ownership:
       // - Throw entry computes one shared throw anim-speed via ftCo_800DD4B0, and ftCo_800DD398
       //   installs it onto both thrower and thrown victim.
@@ -583,6 +741,22 @@ void anim_timebase_update_pre_input(MslBatch* batch) {
       }
 
       batch->state.anim_frame_fp_q16_16[idx] += batch->state.frame_speed_mul_fp_q16_16[idx];
+      if (anim_timebase_attached_non_low_throw_pair_active(batch, bi, p, idx, num_players)) {
+        // Deterministic fixed-point representation guard for source float throw rates:
+        // Fox/Falco attached back/up throws can use a data-backed 4/3 shared rate. Repeated Q16.16
+        // rounded advances can land exactly one LSB below an integer (for example 3.999984), which
+        // delays set_throw_flags script-frame checks by one frame even though the source float
+        // timebase crosses the integer. Snap only this one-LSB live attached ThrowB/Hi boundary;
+        // ThrowF/Lw have separate release/pulse residuals and remain outside this guard.
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::{ftCo_800DD4B0,ftCo_800DD724}
+        const int32_t cur_fp = batch->state.anim_frame_fp_q16_16[idx];
+        if (cur_fp > 0) {
+          const int32_t rem = cur_fp % (int32_t)MSL_Q16_16_ONE;
+          if (rem == (int32_t)MSL_Q16_16_ONE - 1) {
+            batch->state.anim_frame_fp_q16_16[idx] = cur_fp + 1;
+          }
+        }
+      }
       const uint8_t did_wrap = anim_timebase_apply_aobj_loop(batch, idx);
       anim_timebase_apply_capture_loop(batch, idx);
 

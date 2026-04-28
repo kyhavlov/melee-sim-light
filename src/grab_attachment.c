@@ -402,6 +402,10 @@ static inline uint8_t action_is_capture_pulled_wait_victim(uint16_t action_id) {
 static inline void grabbed_victim_anchor_world(float* out_x, float* out_y, float* out_z,
                                                const MslBatch* batch, int bi, int victim_p,
                                                int owner_p);
+static inline void grabbed_victim_anchor_world_at_owner_frame(float* out_x, float* out_y,
+                                                              float* out_z, const MslBatch* batch,
+                                                              int bi, int victim_p, int owner_p,
+                                                              float owner_anim_frame);
 
 void grab_attachment_query_thrown_anchor_world(float* out_x, float* out_y, float* out_z,
                                                const MslBatch* batch, int batch_index, int victim_p,
@@ -517,7 +521,8 @@ void grab_attachment_apply_thrown_anchor_now(MslBatch* batch, int bi, int victim
 }
 
 void grab_attachment_apply_thrown_release_anchor_now(MslBatch* batch, int bi, int victim_p,
-                                                     int owner_p) {
+                                                     int owner_p, float release_anim_frame,
+                                                     uint8_t owner_pose_facing) {
   if (batch == NULL || bi < 0 || bi >= batch->batch_size) {
     return;
   }
@@ -532,12 +537,62 @@ void grab_attachment_apply_thrown_release_anchor_now(MslBatch* batch, int bi, in
     return;
   }
 
-  grab_attachment_apply_thrown_anchor_now(batch, bi, victim_p, owner_p);
+  const uint16_t action = batch->state.action_id[vidx];
+  if (action != (uint16_t)MSL_ACT_THROWN_F && action != (uint16_t)MSL_ACT_THROWN_B &&
+      action != (uint16_t)MSL_ACT_THROWN_HI) {
+    grab_attachment_apply_thrown_anchor_now(batch, bi, victim_p, owner_p);
+    return;
+  }
+
+  const size_t oidx = msl_idx_player(bi, owner_p);
+  if (action != (uint16_t)MSL_ACT_THROWN_B || owner_pose_facing == batch->state.facing[oidx]) {
+    grab_attachment_apply_thrown_anchor_now(batch, bi, victim_p, owner_p);
+    return;
+  }
+
+  float ax = batch->state.pos_x[oidx];
+  float ay = batch->state.pos_y[oidx];
+  float az = batch->state.pos_z[oidx];
+  uint16_t owner_anchor_part = (uint16_t)MSL_FTPART_TRANSN2;
+  const MslCharParams* och = msl_char_params(batch->state.char_id[oidx]);
+  if (och != NULL) {
+    owner_anchor_part = och->grab_capture_anchor_part_id;
+  }
+  const float owner_scale_y = pose_model_scale_y(batch, oidx);
+  // Release consume samples the post-advance float owner JObj pose in the Throw Anim callback.
+  // When set_throw_flags flip and release cross on the same script frame, the scalar facing flips
+  // for post-frame state but the already-interpreted release JObj pose still uses the pre-flip
+  // facing snapshot.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::{ftCo_800DD724,ftCo_800DDDE4}
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Thrown.c::ftCo_800DE508
+  // data/moves/{fox,falco}.json moves["ftCo_SM_Throw{F,B,Hi}"].events set_throw_flags
+  (void)pose_part_origin_world_f32_facing_yrot90(
+      &ax, &ay, &az, batch, oidx, batch->state.animation_index[oidx], release_anim_frame,
+      owner_anchor_part, batch->state.pos_x[oidx], batch->state.pos_y[oidx],
+      batch->state.pos_z[oidx], owner_scale_y, owner_pose_facing);
+  (void)az;
+  const float scale_y = attachment_offset_scale_y(batch, vidx);
+  if (!(scale_y > 0.0f)) {
+    return;
+  }
+  const float facing_dir = batch->state.facing[vidx] ? 1.0f : -1.0f;
+  batch->state.pos_x[vidx] = fmaf(batch->state.grab_offset_z[vidx], facing_dir * scale_y, ax);
+  batch->state.pos_y[vidx] = batch->state.grab_offset_y[vidx] * scale_y + ay;
+  batch->state.pos_z[vidx] = 0.0f;
 }
 
 static inline void grabbed_victim_anchor_world(float* out_x, float* out_y, float* out_z,
                                                const MslBatch* batch, int bi, int victim_p,
                                                int owner_p) {
+  const size_t oidx = msl_idx_player(bi, owner_p);
+  grabbed_victim_anchor_world_at_owner_frame(out_x, out_y, out_z, batch, bi, victim_p, owner_p,
+                                             batch->state.anim_frame_f32[oidx]);
+}
+
+static inline void grabbed_victim_anchor_world_at_owner_frame(float* out_x, float* out_y,
+                                                              float* out_z, const MslBatch* batch,
+                                                              int bi, int victim_p, int owner_p,
+                                                              float owner_anim_frame) {
   if (out_x == NULL || out_y == NULL || out_z == NULL || batch == NULL) {
     return;
   }
@@ -601,26 +656,23 @@ static inline void grabbed_victim_anchor_world(float* out_x, float* out_y, float
     // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_800DB368
     // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Thrown.c::ftCo_800DE508
     pose_status = pose_part_origin_world_f32_with_transn_facing_yrot90(
-        &ax, &ay, &az, batch, oidx, batch->state.animation_index[oidx],
-        batch->state.anim_frame_f32[oidx], owner_anchor_part, batch->state.pos_x[oidx],
-        batch->state.pos_y[oidx], batch->state.pos_z[oidx], owner_scale_y,
-        batch->state.facing[oidx]);
+        &ax, &ay, &az, batch, oidx, batch->state.animation_index[oidx], owner_anim_frame,
+        owner_anchor_part, batch->state.pos_x[oidx], batch->state.pos_y[oidx],
+        batch->state.pos_z[oidx], owner_scale_y, batch->state.facing[oidx]);
   } else if (use_float_track_anchor) {
     // ThrownF/B/Hi attachment samples the live HSD AObj/JObj owner. CaptureWait/Pulled and low
     // throw stay on their separate attachment paths.
     // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Thrown.c::ftCo_800DE508
     // refs/melee/src/sysdolphin/baselib/aobj.c::HSD_AObjInterpretAnim
     pose_status = pose_part_origin_world_f32_facing_yrot90(
-        &ax, &ay, &az, batch, oidx, batch->state.animation_index[oidx],
-        batch->state.anim_frame_f32[oidx], owner_anchor_part, batch->state.pos_x[oidx],
-        batch->state.pos_y[oidx], batch->state.pos_z[oidx], owner_scale_y,
-        batch->state.facing[oidx]);
+        &ax, &ay, &az, batch, oidx, batch->state.animation_index[oidx], owner_anim_frame,
+        owner_anchor_part, batch->state.pos_x[oidx], batch->state.pos_y[oidx],
+        batch->state.pos_z[oidx], owner_scale_y, batch->state.facing[oidx]);
   } else {
     pose_status = pose_part_origin_world_facing_yrot90(
         &ax, &ay, &az, batch->state.char_id[oidx], batch->state.animation_index[oidx],
-        batch->state.anim_frame_f32[oidx], owner_anchor_part, batch->state.pos_x[oidx],
-        batch->state.pos_y[oidx], batch->state.pos_z[oidx], owner_scale_y,
-        batch->state.facing[oidx]);
+        owner_anim_frame, owner_anchor_part, batch->state.pos_x[oidx], batch->state.pos_y[oidx],
+        batch->state.pos_z[oidx], owner_scale_y, batch->state.facing[oidx]);
   }
   if (pose_status != 0) {
     ax = batch->state.pos_x[oidx];

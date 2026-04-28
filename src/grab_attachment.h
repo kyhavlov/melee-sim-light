@@ -43,7 +43,8 @@ void grab_attachment_apply_capture_delta_now(MslBatch* batch, int batch_index, i
 void grab_attachment_apply_thrown_anchor_now(MslBatch* batch, int batch_index, int victim_p,
                                              int owner_p);
 void grab_attachment_apply_thrown_release_anchor_now(MslBatch* batch, int batch_index, int victim_p,
-                                                     int owner_p);
+                                                     int owner_p, float release_anim_frame,
+                                                     uint8_t owner_pose_facing);
 void grab_attachment_query_thrown_anchor_world(float* out_x, float* out_y, float* out_z,
                                                const MslBatch* batch, int batch_index, int victim_p,
                                                int owner_p);

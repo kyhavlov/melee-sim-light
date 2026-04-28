@@ -254,6 +254,7 @@ void throw_flow_update_pre_physics(MslBatch* batch) {
         continue;
       }
 
+      const uint8_t owner_pose_facing_before_throw_flags = batch->state.facing[oidx];
       const uint8_t owner_char = batch->state.char_id[oidx];
       const float owner_af = batch->state.anim_frame_f32[oidx];
       const int32_t owner_prev_fp =
@@ -277,6 +278,7 @@ void throw_flow_update_pre_physics(MslBatch* batch) {
       //   the victim (release/detach) before Phys/Coll.
       // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DD724
       uint8_t rel_hit_idx = 0xFFu;
+      float rel_anim_frame = owner_af;
       const uint8_t released_prev =
           move_tables_throw_release_hit_idx(owner_char, owner_act, owner_prev_af, NULL);
       const uint8_t released_cur =
@@ -309,7 +311,8 @@ void throw_flow_update_pre_physics(MslBatch* batch) {
           //   current frame before detach and later damage entry.
           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::{ftCo_800DD724,ftCo_800DDDE4}
           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Thrown.c::{ftCo_800DE3FC,ftCo_800DE508}
-          grab_attachment_apply_thrown_release_anchor_now(batch, bi, victim_p, owner_p);
+          grab_attachment_apply_thrown_release_anchor_now(
+              batch, bi, victim_p, owner_p, rel_anim_frame, owner_pose_facing_before_throw_flags);
 
           // Detach immediately. Defer the throw hit to post-items.
           batch->state.attached_victim_port[oidx] = 0xFFu;
