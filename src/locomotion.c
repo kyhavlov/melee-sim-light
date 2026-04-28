@@ -50,6 +50,9 @@ static inline MslJumpInput jump_input_from_edges(const MslCommonParams* c, uint1
                                                  float stick_y, uint8_t tilt_timer_y);
 static inline uint16_t jump_action_from_stick(const MslCommonParams* c, float stick_x,
                                               float facing_dir);
+static inline uint8_t locomotion_try_enter_jump_aerial_iasa(
+    MslBatch* batch, const MslCommonParams* c, const MslCharParams* ch, size_t idx,
+    uint8_t jump_input, float stick_x, float facing_dir, uint8_t block_from_jump_aerial);
 static inline uint32_t submotion_for_action(uint16_t a);
 static inline uint8_t run_iasa_has_spacie_b_special_intent(uint8_t char_id,
                                                            uint16_t buttons_pressed);
@@ -1235,6 +1238,14 @@ static inline uint8_t locomotion_try_kneebend_startup_complete_jump_prepass(
 
   const uint8_t is_short = batch->state.kneebend_is_short_hop[idx] ? 1u : 0u;
   const uint8_t full = (uint8_t)(!is_short);
+  const float iasa_stick_x =
+      apply_deadzone(stick_i8_to_unit(batch->state.input_main_x[idx]), c->lstick_deadzone_x);
+  const float iasa_stick_y =
+      apply_deadzone(stick_i8_to_unit(batch->state.input_main_y[idx]), c->lstick_deadzone_y);
+  const float iasa_prev_stick_y =
+      apply_deadzone(stick_i8_to_unit(batch->state.prev_input_main_y[idx]), c->lstick_deadzone_y);
+  const uint16_t iasa_buttons = batch->state.input_buttons[idx];
+  const uint16_t iasa_buttons_pressed = batch->state.input_buttons_pressed[idx];
   const float jump_stick_x =
       apply_deadzone(stick_i8_to_unit(batch->state.prev_input_main_x[idx]), c->lstick_deadzone_x);
   const uint16_t jump_act = jump_action_from_stick(c, jump_stick_x, facing_dir);
@@ -1261,6 +1272,16 @@ static inline uint8_t locomotion_try_kneebend_startup_complete_jump_prepass(
     return 1u;
   }
   if (locomotion_attackair_try_enter_from_air_iasa(batch, c, idx)) {
+    return 1u;
+  }
+  const uint8_t jump_aerial_input =
+      ((iasa_buttons_pressed & (uint16_t)MSL_BUTTON_XY) != 0u ||
+       (((iasa_buttons & (uint16_t)MSL_BUTTON_XY) == 0u) &&
+        iasa_prev_stick_y < c->tap_jump_threshold && iasa_stick_y >= c->tap_jump_threshold))
+          ? 1u
+          : 0u;
+  if (locomotion_try_enter_jump_aerial_iasa(batch, c, ch, idx, jump_aerial_input, iasa_stick_x,
+                                            facing_dir, 1u)) {
     return 1u;
   }
   return 1u;
@@ -2033,6 +2054,42 @@ static inline uint16_t jump_aerial_action_from_stick(const MslCommonParams* c, f
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::ftCo_JumpAerial_Enter_Basic
   return (stick_x * facing_dir) > -c->jump_back_x_threshold ? MSL_ACT_JUMP_AERIAL_F
                                                             : MSL_ACT_JUMP_AERIAL_B;
+}
+
+static inline uint8_t locomotion_try_enter_jump_aerial_iasa(
+    MslBatch* batch, const MslCommonParams* c, const MslCharParams* ch, size_t idx,
+    uint8_t jump_input, float stick_x, float facing_dir, uint8_t block_from_jump_aerial) {
+  if (batch == NULL || c == NULL || ch == NULL) {
+    return 0u;
+  }
+  if (!jump_input) {
+    return 0u;
+  }
+  if (batch->state.jumps_left[idx] == 0u) {
+    return 0u;
+  }
+  const uint16_t action_id = batch->state.action_id[idx];
+  if (block_from_jump_aerial && (action_id == (uint16_t)MSL_ACT_JUMP_AERIAL_F ||
+                                 action_id == (uint16_t)MSL_ACT_JUMP_AERIAL_B)) {
+    return 0u;
+  }
+
+  const uint16_t act = jump_aerial_action_from_stick(c, stick_x, facing_dir);
+  batch->state.action_id[idx] = act;
+  batch->state.animation_index[idx] = submotion_for_action(act);
+  msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+  batch->state.speed_air_x_self[idx] = stick_x * ch->air_jump_h_multiplier;
+  batch->state.speed_y_self[idx] = ch->jump_v_initial_velocity * ch->air_jump_v_multiplier;
+  // Decomp: fp->x671_timer_lstick_tilt_y = 0xFE.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c:152-156
+  batch->state.tilt_timer_y[idx] = 0xFEu;
+  batch->state.fall_fast[idx] = 0;
+  batch->state.jumps_left[idx]--;
+  // Decomp: ftCo_JumpAerial_Enter_Basic calls ftCommon_8007D5D4.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::ftCo_JumpAerial_Enter_Basic
+  // refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007D5D4
+  batch->state.ecb_lock_timer[idx] = 10u;
+  return 1u;
 }
 
 static inline uint8_t run_iasa_has_spacie_b_special_intent(uint8_t char_id,
@@ -4098,6 +4155,8 @@ void locomotion_update_pre(MslBatch* batch) {
           if (startup_complete) {
             const uint8_t is_short = batch->state.kneebend_is_short_hop[idx] ? 1 : 0;
             const uint8_t full = (uint8_t)(!is_short);
+            const float jump_iasa_prev_stick_y = apply_deadzone(
+                stick_i8_to_unit(batch->state.prev_input_main_y[idx]), c->lstick_deadzone_y);
 
             // KneeBend->Jump happens in Anim before the frame's input update, so ftCo_Jump_Enter
             // reads the prior frame's fp->input.lstick.x.
@@ -4168,6 +4227,24 @@ void locomotion_update_pre(MslBatch* batch) {
               continue;
             }
             if (locomotion_attackair_try_enter_from_air_iasa(batch, c, idx)) {
+              continue;
+            }
+            // Jump IASA runs on the JumpF/B entered by KneeBend_Anim in the same proc. After
+            // EscapeAir and AttackAir checks, ftCo_800CB870 can immediately consume a fresh
+            // jump edge/tap into JumpAerial and overwrite the ground-jump velocity snapshot.
+            // Prior tap-jump state from the KneeBend entry is suppressed by ftCo_Jump_Enter's
+            // x671=0xFE write; a held X/Y jump source also remains the active jump input and does
+            // not create a second tap-jump edge on the same takeoff frame.
+            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c::ftCo_Jump_IASA
+            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::ftCo_800CB870
+            const uint8_t jump_aerial_input = ((buttons_pressed & (uint16_t)MSL_BUTTON_XY) != 0u ||
+                                               (((buttons & (uint16_t)MSL_BUTTON_XY) == 0u) &&
+                                                jump_iasa_prev_stick_y < c->tap_jump_threshold &&
+                                                stick_y >= c->tap_jump_threshold))
+                                                  ? 1u
+                                                  : 0u;
+            if (locomotion_try_enter_jump_aerial_iasa(batch, c, ch, idx, jump_aerial_input, stick_x,
+                                                      facing_dir, 1u)) {
               continue;
             }
           }
@@ -4373,28 +4450,14 @@ void locomotion_update_pre(MslBatch* batch) {
 
         // Aerial jump (double jump) entry.
         // refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::ftCo_JumpAerial_Enter_Basic
-        if ((buttons_pressed & (uint16_t)MSL_BUTTON_XY) || did_tap_jump(c, stick_y, tilt_timer_y)) {
-          if (batch->state.jumps_left[idx] > 0 && action_id != MSL_ACT_JUMP_AERIAL_F &&
-              action_id != MSL_ACT_JUMP_AERIAL_B) {
-            const uint16_t act = jump_aerial_action_from_stick(c, stick_x, facing_dir);
-            batch->state.action_id[idx] = act;
-            batch->state.animation_index[idx] = submotion_for_action(act);
-            msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
-            batch->state.speed_air_x_self[idx] = stick_x * ch->air_jump_h_multiplier;
-            batch->state.speed_y_self[idx] =
-                ch->jump_v_initial_velocity * ch->air_jump_v_multiplier;
-            // Decomp: fp->x671_timer_lstick_tilt_y = 0xFE;
-            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c:152-156
-            batch->state.tilt_timer_y[idx] = 0xFEu;
-            batch->state.fall_fast[idx] = 0;
-            tilt_timer_y = 0xFEu;
-            batch->state.jumps_left[idx]--;
-            // Decomp: ftCo_JumpAerial_Enter_Basic calls ftCommon_8007D5D4.
-            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::ftCo_JumpAerial_Enter_Basic
-            // refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007D5D4
-            batch->state.ecb_lock_timer[idx] = 10u;
-            action_id = act;
-          }
+        const uint8_t jump_aerial_input =
+            ((buttons_pressed & (uint16_t)MSL_BUTTON_XY) || did_tap_jump(c, stick_y, tilt_timer_y))
+                ? 1u
+                : 0u;
+        if (locomotion_try_enter_jump_aerial_iasa(batch, c, ch, idx, jump_aerial_input, stick_x,
+                                                  facing_dir, 1u)) {
+          tilt_timer_y = 0xFEu;
+          action_id = batch->state.action_id[idx];
         }
 
         uint8_t damagefall_x670_timer_for_iasa = batch->state.tilt_timer_x[idx];
@@ -4458,29 +4521,15 @@ void locomotion_update_pre(MslBatch* batch) {
           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::DO_IASA
           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_SpecialAir.c::ftCo_SpecialAir_CheckInput
           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::ftCo_JumpAerial_Enter_Basic
+          const uint8_t jump_aerial_input = ((buttons_pressed & (uint16_t)MSL_BUTTON_XY) ||
+                                             did_tap_jump(c, stick_y, tilt_timer_y))
+                                                ? 1u
+                                                : 0u;
           if ((buttons_pressed & (uint16_t)MSL_BUTTON_B) == 0u &&
-              ((buttons_pressed & (uint16_t)MSL_BUTTON_XY) ||
-               did_tap_jump(c, stick_y, tilt_timer_y))) {
-            if (batch->state.jumps_left[idx] > 0) {
-              const uint16_t act = jump_aerial_action_from_stick(c, stick_x, facing_dir);
-              batch->state.action_id[idx] = act;
-              batch->state.animation_index[idx] = submotion_for_action(act);
-              msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
-              batch->state.speed_air_x_self[idx] = stick_x * ch->air_jump_h_multiplier;
-              batch->state.speed_y_self[idx] =
-                  ch->jump_v_initial_velocity * ch->air_jump_v_multiplier;
-              // Decomp: fp->x671_timer_lstick_tilt_y = 0xFE;
-              // refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c:152-156
-              batch->state.tilt_timer_y[idx] = 0xFEu;
-              batch->state.fall_fast[idx] = 0;
-              tilt_timer_y = 0xFEu;
-              batch->state.jumps_left[idx]--;
-              // Decomp: ftCo_JumpAerial_Enter_Basic calls ftCommon_8007D5D4.
-              // refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::ftCo_JumpAerial_Enter_Basic
-              // refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007D5D4
-              batch->state.ecb_lock_timer[idx] = 10u;
-              action_id = act;
-            }
+              locomotion_try_enter_jump_aerial_iasa(batch, c, ch, idx, jump_aerial_input, stick_x,
+                                                    facing_dir, 0u)) {
+            tilt_timer_y = 0xFEu;
+            action_id = batch->state.action_id[idx];
           }
         }
       }

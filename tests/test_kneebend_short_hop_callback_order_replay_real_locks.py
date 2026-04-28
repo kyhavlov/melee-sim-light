@@ -44,6 +44,46 @@ def _step_one_row(dataset_path: Path, record: int) -> tuple[np.void, np.void, np
 
 
 @pytest.mark.integration
+def test_kneebend_takeoff_frame_jump_iasa_can_enter_jumpaerial_dcc_4643() -> None:
+    root = Path(__file__).resolve().parents[1]
+    dataset_path = (
+        root / "datasets/aggregate_recent/replays/validation/aggregate_recent/DistinctCaringCobra.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    # Source ordering lock:
+    # - ftCo_KneeBend_Anim enters JumpF/B in the anim callback once startup completes.
+    # - The destination Jump IASA then runs later in the same proc and can consume a fresh
+    #   current-frame jump edge/tap through ftCo_800CB870 into JumpAerial.
+    # - JumpAerial_Enter_Basic overwrites the just-created ground-jump velocity and consumes the
+    #   remaining jump, so the takeoff frame has no ground-jump X drift here.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_KneeBend.c::ftCo_KneeBend_Anim
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c::ftCo_Jump_IASA
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::{
+    #   ftCo_800CB870,ftCo_JumpAerial_Enter_Basic
+    # }
+    seed, ref, out = _step_one_row(dataset_path, 4643)
+    p = 1
+
+    assert int(seed["action_id"][p]) == 24  # KneeBend
+    assert int(seed["action_frame"][p]) == 4
+    assert int(seed["jumps_left"][p]) == 2
+
+    assert int(ref["action_id"][p]) == 27  # JumpAerialF
+    assert int(ref["action_frame"][p]) == 0
+    assert int(ref["jumps_left"][p]) == 0
+
+    assert int(out["action_id"][p]) == int(ref["action_id"][p])
+    assert int(out["action_frame"][p]) == int(ref["action_frame"][p])
+    assert int(out["jumps_left"][p]) == int(ref["jumps_left"][p])
+    assert np.isclose(float(out["pos_x"][p]), float(ref["pos_x"][p]), atol=1e-6)
+    assert np.isclose(float(out["pos_y"][p]), float(ref["pos_y"][p]), atol=1e-6)
+    assert np.isclose(float(out["speed_air_x_self"][p]), float(ref["speed_air_x_self"][p]), atol=1e-6)
+    assert np.isclose(float(out["speed_y_self"][p]), float(ref["speed_y_self"][p]), atol=1e-6)
+
+
+@pytest.mark.integration
 def test_kneebend_takeoff_frame_release_keeps_full_jump_dcc_9255() -> None:
     root = Path(__file__).resolve().parents[1]
     dataset_path = (
