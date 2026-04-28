@@ -149,6 +149,24 @@ static inline uint8_t is_damage_ground_collision_action(uint16_t a) {
   }
 }
 
+static inline uint8_t is_capture_lw_allow_ground_to_air_collision_action(uint16_t a) {
+  // Low capture callbacks use `ft_8008403C -> ft_80082708 -> mpColl_8004B108`, so grounded
+  // rows may receive a downward floor projection after `fn_800DAD18` moves the victim XRotN
+  // toward the owner anchor.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::{
+  //   ftCo_CapturePulledLw_Coll,ftCo_CaptureWaitLw_Coll,ftCo_CaptureDamageLw_Coll}
+  // refs/melee/src/melee/ft/ft_081B.c::{ft_8008403C,ft_80082708}
+  // refs/melee/src/melee/mp/mpcoll.c::mpColl_8004B108
+  switch (a) {
+    case MSL_ACT_CAPTURE_PULLED_LW:
+    case MSL_ACT_CAPTURE_WAIT_LW:
+    case MSL_ACT_CAPTURE_DAMAGE_LW:
+      return 1u;
+    default:
+      return 0u;
+  }
+}
+
 static inline uint8_t is_attackair_action(uint16_t a) {
   switch (a) {
     case MSL_ACT_ATTACK_AIR_N:
@@ -1145,6 +1163,8 @@ void mpcoll_ground_apply(MslBatch* batch) {
         if (out_line_idx >= 0) {
           const uint8_t keep_grounded_damage_hitlag_floor_snap =
               grounded_damage_hitlag_allows_downward_floor_projection(batch, idx, action_id);
+          const uint8_t keep_capture_lw_floor_snap =
+              is_capture_lw_allow_ground_to_air_collision_action(action_id);
           // mpLib_8004DD90_Floor returns a signed correction; for stable grounded frames we only
           // need to resolve penetration. If we are already above the floor due to upstream
           // approximation drift, avoid snapping down in the collision substrate.
@@ -1153,7 +1173,10 @@ void mpcoll_ground_apply(MslBatch* batch) {
           // before grounded `ftCo_Damage_Coll` re-pins the fighter to floor through
           // `ft_800848DC -> ft_80082708 -> mpColl_8004B108`. Keep the downward correction only
           // for that owner path; the general grounded anti-snap clamp stays in place elsewhere.
-          if (y_corr < 0.0f && !keep_grounded_damage_hitlag_floor_snap) {
+          // Exception: low capture states call the allow-ground-to-air collision wrapper after
+          // `fn_800DAD18`; it owns re-projecting the attached grounded victim back onto the floor.
+          if (y_corr < 0.0f && !keep_grounded_damage_hitlag_floor_snap &&
+              !keep_capture_lw_floor_snap) {
             y_corr = 0.0f;
           }
           int resolved_line_idx = out_line_idx;

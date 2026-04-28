@@ -28,19 +28,6 @@
 
 static inline float msl_signf(float x) { return x < 0.0f ? -1.0f : 1.0f; }
 
-// Decomp: refs/melee/src/melee/ft/chara/ftCommon/forward.h
-// - ftCo_MS_Ottotto = 245
-// - ftCo_MS_OttottoWait = 246
-// - ftCo_SM_Ottotto = 210
-// - ftCo_SM_OttottoWait = 211
-// TODO: Promote these local Ottotto action ids into the shared action-id definitions in a follow-up.
-enum {
-  MSL_ACT_OTTOTTO = 245u,
-  MSL_ACT_OTTOTTO_WAIT = 246u,
-  MSL_SM_OTTOTTO = 210u,
-  MSL_SM_OTTOTTO_WAIT = 211u,
-};
-
 static inline uint16_t walk_action_from_speed(const MslCommonParams* c, const MslCharParams* ch,
                                               float speed_ground_x_self);
 static inline uint32_t anim_for_walk_action(uint16_t a);
@@ -1754,6 +1741,7 @@ static inline uint8_t action_is_ground_locomotion(uint16_t a) {
   if (a == MSL_ACT_WAIT || action_is_walk(a) || a == MSL_ACT_TURN || a == MSL_ACT_TURN_RUN ||
       a == MSL_ACT_DASH || a == MSL_ACT_RUN || a == MSL_ACT_RUN_BRAKE || a == MSL_ACT_KNEE_BEND ||
       a == MSL_ACT_SQUAT || a == MSL_ACT_SQUAT_WAIT || a == MSL_ACT_SQUAT_RV ||
+      a == (uint16_t)MSL_ACT_OTTOTTO || a == (uint16_t)MSL_ACT_OTTOTTO_WAIT ||
       a == MSL_ACT_LANDING || a == MSL_ACT_LANDING_FALL_SPECIAL || a == MSL_ACT_LANDING_AIR_N ||
       a == MSL_ACT_LANDING_AIR_F || a == MSL_ACT_LANDING_AIR_B || a == MSL_ACT_LANDING_AIR_HI ||
       a == MSL_ACT_LANDING_AIR_LW || a == MSL_ACT_ESCAPE_F || a == MSL_ACT_ESCAPE_B ||
@@ -1827,6 +1815,88 @@ static inline uint8_t ottotto_edge_point_for_facing(uint32_t stage_id, uint16_t 
     }
   }
   return 1u;
+}
+
+static inline uint8_t locomotion_floor_lines_adjacent_or_equal(const MslStageFloorGraph* g, int a,
+                                                               int b) {
+  if (g == NULL || a < 0 || b < 0 || (size_t)a >= g->line_count || (size_t)b >= g->line_count) {
+    return 0u;
+  }
+  if (a == b) {
+    return 1u;
+  }
+  const MslStageFloorLine* la = &g->lines[(size_t)a];
+  return (uint8_t)(la->prev == b || la->next == b);
+}
+
+static inline float ottotto_floor_loss_player_nudge_x(const MslBatch* batch,
+                                                      const MslCommonParams* c, int bi, int p) {
+  if (batch == NULL || c == NULL || bi < 0 || bi >= batch->batch_size || p < 0 ||
+      p >= (int)batch->config.num_players) {
+    return 0.0f;
+  }
+  const size_t idx = msl_idx_player(bi, p);
+  if (batch->state.stocks[idx] == 0u || batch->state.hitlag_started_frame[idx] != 0u ||
+      msl_action_is_grabbed_victim(batch->state.action_id[idx])) {
+    return 0.0f;
+  }
+
+  const uint32_t stage_id = batch->state.stage_id[(size_t)bi];
+  const MslStageFloorGraph* floor_graph = stage_collision_get_floor_graph(stage_id);
+  if (floor_graph == NULL) {
+    return 0.0f;
+  }
+  const int self_line = stage_collision_floor_line_index(stage_id, batch->state.ground_id[idx]);
+  if (self_line < 0) {
+    return 0.0f;
+  }
+
+  const MslCharParams* self = msl_char_params(batch->state.char_id[idx]);
+  if (self == NULL) {
+    return 0.0f;
+  }
+
+  float nudge_x = 0.0f;
+  const float self_center_x =
+      batch->state.pos_x[idx] + self->pushbox_x * (float)batch->state.facing_dir1[idx];
+  const int num_players = (int)batch->config.num_players;
+  for (int q = 0; q < num_players; q++) {
+    if (q == p) {
+      continue;
+    }
+    const size_t oidx = msl_idx_player(bi, q);
+    if (batch->state.stocks[oidx] == 0u || batch->state.on_ground[oidx] == 0u ||
+        batch->state.hitlag_started_frame[oidx] != 0u ||
+        msl_action_is_grabbed_victim(batch->state.action_id[oidx])) {
+      continue;
+    }
+    const MslCharParams* other = msl_char_params(batch->state.char_id[oidx]);
+    if (other == NULL) {
+      continue;
+    }
+    const int other_line = stage_collision_floor_line_index(stage_id, batch->state.ground_id[oidx]);
+    if (!locomotion_floor_lines_adjacent_or_equal(floor_graph, self_line, other_line)) {
+      continue;
+    }
+
+    const float other_center_x =
+        batch->state.pos_x[oidx] + other->pushbox_x * (float)batch->state.facing_dir1[oidx];
+    const float delta_x = self_center_x - other_center_x;
+    if (msl_absf(delta_x) >= self->pushbox_y + other->pushbox_y) {
+      continue;
+    }
+    if (delta_x < 0.0f) {
+      nudge_x -= c->player_nudge_x;
+    } else if (delta_x > 0.0f) {
+      nudge_x += c->player_nudge_x;
+    } else if (q < p) {
+      nudge_x -= c->player_nudge_x;
+    } else {
+      nudge_x += c->player_nudge_x;
+    }
+  }
+
+  return nudge_x;
 }
 
 static inline uint8_t action_uses_ottotto_edge_callback(uint16_t a) {
@@ -4273,6 +4343,28 @@ void locomotion_update_pre(MslBatch* batch) {
           }
         }
 
+        if (batch->state.action_id[idx] == (uint16_t)MSL_ACT_FALL &&
+            (action_id_start == (uint16_t)MSL_ACT_OTTOTTO ||
+             action_id_start == (uint16_t)MSL_ACT_OTTOTTO_WAIT) &&
+            ottotto_edge_matches_facing(batch->state.stage_id[(size_t)bi],
+                                        batch->state.ground_id[idx], batch->state.facing[idx],
+                                        batch->state.pos_x[idx])) {
+          // Source applies ftCommon_8007E0E4's grounded fighter-overlap x450 displacement after
+          // Anim callbacks and before Fighter_procUpdate's motion/collision owner observes the
+          // Fall handoff. The common physics nudge intentionally keeps still-grounded Ottotto
+          // frames clamped to the floor endpoint; once the pre-input callback has already resolved
+          // Ottotto/OttottoWait into Fall, preserve the same xF8_playerNudgeVel.x before physics.
+          // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A360,Fighter_procUpdate}
+          // refs/melee/src/melee/ft/ftcommon.c::{ftCommon_8007DD7C,ftCommon_8007E0E4}
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Ottotto.c::{
+          //   ftCo_Ottotto_Coll,ftCo_OttottoWait_Coll}
+          const float nudge_x = ottotto_floor_loss_player_nudge_x(batch, c, bi, p);
+          const float facing_sign = batch->state.facing[idx] ? 1.0f : -1.0f;
+          if (nudge_x * facing_sign > 0.0f) {
+            batch->state.pos_x[idx] += nudge_x;
+          }
+        }
+
         continue;
       }
 
@@ -4450,8 +4542,35 @@ void locomotion_update_pre(MslBatch* batch) {
 
         // Aerial jump (double jump) entry.
         // refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::ftCo_JumpAerial_Enter_Basic
+        // JumpF/B IASA uses ftCo_800CB870 after Fighter_Spaghetti updates the live input history.
+        // Teacher-forced seeds can carry ftCo_Jump_Enter's post-frame x671=0xFE while the next
+        // source callback still observes the just-consumed held jump source at a frame-0 JumpF/B
+        // boundary. Keep this reconstruction scoped to that boundary; Fall/DamageFall and
+        // AttackAir still use the ordinary x671-style did_tap_jump gate.
+        // refs/melee/src/melee/ft/fighter.c::{
+        //   Fighter_Spaghetti_8006AD10,Fighter_procUpdate}
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c::{
+        //   ftCo_Jump_IASA,ftCo_800CB110}
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::{
+        //   ftCo_800CB870,ft_did_jump}
+        const float jump_iasa_prev_stick_y = apply_deadzone(
+            stick_i8_to_unit(batch->state.prev_input_main_y[idx]), c->lstick_deadzone_y);
+        const uint8_t jump_source_released =
+            ((batch->state.prev_input_buttons[idx] & (uint16_t)MSL_BUTTON_XY) != 0u &&
+             (buttons & (uint16_t)MSL_BUTTON_XY) == 0u)
+                ? 1u
+                : 0u;
+        const uint8_t jump_tap_crossed = (action_id_start == (uint16_t)MSL_ACT_JUMP_F ||
+                                          action_id_start == (uint16_t)MSL_ACT_JUMP_B) &&
+                                                 batch->state.prev_action_frame[idx] <= 0 &&
+                                                 jump_source_released &&
+                                                 jump_iasa_prev_stick_y < c->tap_jump_threshold &&
+                                                 stick_y >= c->tap_jump_threshold
+                                             ? 1u
+                                             : 0u;
         const uint8_t jump_aerial_input =
-            ((buttons_pressed & (uint16_t)MSL_BUTTON_XY) || did_tap_jump(c, stick_y, tilt_timer_y))
+            ((buttons_pressed & (uint16_t)MSL_BUTTON_XY) ||
+             did_tap_jump(c, stick_y, tilt_timer_y) || jump_tap_crossed)
                 ? 1u
                 : 0u;
         if (locomotion_try_enter_jump_aerial_iasa(batch, c, ch, idx, jump_aerial_input, stick_x,
@@ -4593,7 +4712,6 @@ void locomotion_update_post_collision(MslBatch* batch) {
       }
 
       const uint16_t a = batch->state.action_id[idx];
-
       if (!now_ground && try_common_air_walljump_post_collision(batch, c, ch, idx, a)) {
         continue;
       }
@@ -4615,6 +4733,11 @@ void locomotion_update_post_collision(MslBatch* batch) {
         // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Ottotto.c::ftCo_Ottotto_IASA
         // refs/melee/src/melee/ft/chara/ftCommon/ftCo_KneeBend.c::ftCo_KneeBend_Coll
         // refs/melee/src/melee/ft/ft_081B.c::{ft_80083F88,ft_80082708}
+        const float nudge_x = ottotto_floor_loss_player_nudge_x(batch, c, bi, p);
+        const float facing_sign = batch->state.facing[idx] ? 1.0f : -1.0f;
+        if (nudge_x * facing_sign > 0.0f) {
+          batch->state.pos_x[idx] += nudge_x;
+        }
         batch->state.on_ground[idx] = 0u;
         enter_fall_from_grounded_floor_loss(batch, ch, idx);
         continue;
@@ -4634,6 +4757,45 @@ void locomotion_update_post_collision(MslBatch* batch) {
         // refs/melee/src/melee/ft/ft_081B.c::{ft_80084104,ft_800845B4}
         enter_fall_from_grounded_floor_loss(batch, ch, idx);
         continue;
+      }
+
+      if (was_ground && now_ground && a == (uint16_t)MSL_ACT_WAIT &&
+          grounded_attack_submotion_from_action(batch->state.prev_action_id[idx]) != 0xFFFFFFFFu &&
+          batch->state.action_frame[idx] <= 0 &&
+          ottotto_edge_matches_facing(batch->state.stage_id[(size_t)bi],
+                                      batch->state.ground_id[idx], batch->state.facing[idx],
+                                      batch->state.pos_x[idx])) {
+        float ottotto_x = 0.0f;
+        float ottotto_y = 0.0f;
+        if (ottotto_edge_point_for_facing(batch->state.stage_id[(size_t)bi],
+                                          batch->state.ground_id[idx], batch->state.facing[idx],
+                                          &ottotto_x, &ottotto_y)) {
+          const float nudge_x = ottotto_floor_loss_player_nudge_x(batch, c, bi, p);
+          const float facing_sign = batch->state.facing[idx] ? 1.0f : -1.0f;
+          if (!(nudge_x * facing_sign > 0.0f)) {
+            continue;
+          }
+          // Grounded Attack* anim-end can install Wait before the same frame's collision callback
+          // dispatch. Source then runs Wait_Coll -> ft_80084280 and admits Ottotto on Collide_Edge.
+          // Keep this scoped to rows where the source xF8_playerNudgeVel.x owner has an outward
+          // x450 overlap displacement at the edge. Without that provenance, already-offset
+          // grounded rows enter Wait first and take the normal Wait_Coll teeter path next frame.
+          // refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackS4.c::ftCo_AttackS4_Anim
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_Coll
+          // refs/melee/src/melee/ft/ftcommon.c::{ftCommon_8007DD7C,ftCommon_8007E0E4}
+          // refs/melee/src/melee/ft/ft_081B.c::ft_80084280
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Ottotto.c::ftCo_8009A3C8
+          batch->state.action_id[idx] = (uint16_t)MSL_ACT_OTTOTTO;
+          batch->state.animation_index[idx] = (uint32_t)MSL_SM_OTTOTTO;
+          batch->state.pos_x[idx] = ottotto_x;
+          batch->state.pos_y[idx] = ottotto_y + 0.0001f;
+          batch->state.speed_air_x_self[idx] = 0.0f;
+          batch->state.speed_ground_x_self[idx] = 0.0f;
+          batch->state.speed_y_self[idx] = 0.0f;
+          msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+          continue;
+        }
       }
 
       if (was_ground && !now_ground && action_is_catch_start_floor_loss(a)) {
@@ -4850,6 +5012,23 @@ void locomotion_update_post_collision(MslBatch* batch) {
           batch->state.speed_air_x_self[idx] = 0.0f;
           batch->state.speed_y_self[idx] = 0.0f;
           continue;
+        }
+
+        if (a == (uint16_t)MSL_ACT_OTTOTTO || a == (uint16_t)MSL_ACT_OTTOTTO_WAIT) {
+          // Source applies ftCommon_8007E0E4's grounded fighter-overlap x450 displacement before
+          // the current motion state's collision callback. The generic physics nudge keeps
+          // still-grounded Ottotto frames clamped to the floor endpoint, but if this same collision
+          // pass has already proven floor loss, preserve the source xF8_playerNudgeVel.x before
+          // entering Fall.
+          // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A360,Fighter_procUpdate}
+          // refs/melee/src/melee/ft/ftcommon.c::{ftCommon_8007DD7C,ftCommon_8007E0E4}
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Ottotto.c::{
+          //   ftCo_Ottotto_Coll,ftCo_OttottoWait_Coll}
+          const float nudge_x = ottotto_floor_loss_player_nudge_x(batch, c, bi, p);
+          const float facing_sign = batch->state.facing[idx] ? 1.0f : -1.0f;
+          if (nudge_x * facing_sign > 0.0f) {
+            batch->state.pos_x[idx] += nudge_x;
+          }
         }
 
         // Ground locomotion -> Fall when no longer grounded.

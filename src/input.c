@@ -582,7 +582,16 @@ int input_apply(MslBatch* batch, const uint8_t* prev_input_bytes, size_t prev_in
            (prev_trig > com->trigger_deadzone))
               ? 1u
               : 0u;
-      const uint8_t pressed_lr_lane = (held_lr_lane_now != 0u && held_lr_lane_prev == 0u) ? 1u : 0u;
+      uint8_t pressed_lr_lane = (held_lr_lane_now != 0u && held_lr_lane_prev == 0u) ? 1u : 0u;
+      if (batch->state.hitlag_started_frame[idx] != 0u && batch->state.lr_press_timer[idx] == 0u) {
+        // x67F consumes the same hitlag-latched x668 edge as the other fighter input-history
+        // timers. If an LR-lane edge was already latched before or during active hitlag, the
+        // timer continues to observe that edge until hitlag clears; this is the predicate used by
+        // ftCo_LandingAir_EnterWithLag for the L-cancel lag divide branch.
+        // refs/melee/src/melee/ft/fighter.c::{Fighter_Spaghetti_8006AD10_Inner1,Fighter_Spaghetti_8006AD10}
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_LandingAir.c::ftCo_LandingAir_EnterWithLag
+        pressed_lr_lane = 1u;
+      }
       batch->state.lr_press_timer[idx] =
           press_timer_u8_update_edge(batch->state.lr_press_timer[idx], pressed_lr_lane);
 

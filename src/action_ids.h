@@ -159,6 +159,8 @@ typedef enum MslActionId {
   MSL_ACT_THROWN_HI = 0x00F1,        // ftCo_MS_ThrownHi (241)
   MSL_ACT_THROWN_LW = 0x00F2,        // ftCo_MS_ThrownLw (242)
   MSL_ACT_THROWN_LW_WOMEN = 0x00F3,  // ftCo_MS_ThrownlwWomen (243)
+  MSL_ACT_OTTOTTO = 0x00F5,          // ftCo_MS_Ottotto (245)
+  MSL_ACT_OTTOTTO_WAIT = 0x00F6,     // ftCo_MS_OttottoWait (246)
 
   // Cliff / ledge (FD suite-present).
   // Source of truth: refs/melee/src/melee/ft/chara/ftCommon/forward.h `ftCommon_MotionState`.
@@ -349,6 +351,8 @@ typedef enum MslSubmotionId {
   MSL_SM_GUARD = 38,                  // ftCo_SM_Guard
   MSL_SM_GUARD_OFF = 39,              // ftCo_SM_GuardOff
   MSL_SM_GUARD_DAMAGE = 40,           // ftCo_SM_GuardDamage
+  MSL_SM_OTTOTTO = 210,               // ftCo_SM_Ottotto
+  MSL_SM_OTTOTTO_WAIT = 211,          // ftCo_SM_OttottoWait
   MSL_SM_FURAFURA = 205,              // ftCo_SM_FuraFura
   MSL_SM_SHIELD_BREAK_FLY = 286,      // ftCo_SM_ShieldBreakFly
   MSL_SM_SHIELD_BREAK_FALL = 287,     // ftCo_SM_ShieldBreakFall
@@ -644,6 +648,18 @@ static inline uint8_t msl_action_is_thrown_victim(uint16_t action_id) {
     case MSL_ACT_THROWN_HI:
     case MSL_ACT_THROWN_LW:
     case MSL_ACT_THROWN_LW_WOMEN:
+      return 1;
+    default:
+      return 0;
+  }
+}
+
+static inline uint8_t msl_action_is_throw_owner(uint16_t action_id) {
+  switch (action_id) {
+    case MSL_ACT_THROW_F:
+    case MSL_ACT_THROW_B:
+    case MSL_ACT_THROW_HI:
+    case MSL_ACT_THROW_LW:
       return 1;
     default:
       return 0;

@@ -118,11 +118,11 @@ def test_common_grounded_player_nudge_does_not_push_over_fd_right_floor_edge(rec
     # - Preflight caught GracefulAttachedTurtle rows 8599..8606 as new seed==ref on_ground rows when
     #   common x450 was allowed to move p0 from x=85.5656967 to x=85.8656998.
     # - That push crosses the current FD floor segment endpoint in this simplified mpColl model.
-    # - Until the full mpColl endpoint follow-up is implemented, the common nudge cannot own a move
-    #   that immediately leaves the current floor segment.
+    # - Still-grounded Ottotto frames keep the common nudge floor-endpoint guard; the floor-loss
+    #   exception is covered separately below.
     # refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007E0E4
     # refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate
-    # refs/melee/src/melee/mp/mpcoll.c
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Ottotto.c::ftCo_Ottotto_Coll
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
 
@@ -140,4 +140,37 @@ def test_common_grounded_player_nudge_does_not_push_over_fd_right_floor_edge(rec
     assert int(ref["on_ground"][p]) == 1
     assert int(out["on_ground"][p]) == 1
     assert int(out["action_id"][p]) == int(ref["action_id"][p])
+    assert float(out["pos_x"][p]) == pytest.approx(float(ref["pos_x"][p]), abs=2e-6)
+
+
+@pytest.mark.integration
+def test_ottotto_kneebend_floor_loss_carries_source_player_nudge() -> None:
+    # Replay-real positive for the same x450 owner at the Ottotto edge-loss boundary:
+    # - Ottotto_IASA enters KneeBend from a jump input.
+    # - KneeBend_Coll immediately loses the floor and enters Fall.
+    # - Source computes ftCommon_8007E0E4 / xF8_playerNudgeVel.x before that callback, so the
+    #   outgoing Fall row keeps the +x450 placement.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Ottotto.c::ftCo_Ottotto_IASA
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_KneeBend.c::ftCo_KneeBend_Coll
+    # refs/melee/src/melee/ft/ftcommon.c::{ftCommon_8007DD7C,ftCommon_8007E0E4}
+    # refs/melee/src/melee/ft/fighter.c::{Fighter_8006A360,Fighter_procUpdate}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+
+    dataset_rel = (
+        "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
+        "GracefulAttachedTurtle.msl"
+    )
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    seed, ref, out = _run_one_step_row(dataset_path, 8607, 0)
+    p = 0
+    assert int(seed["action_id"][p]) == 245  # Ottotto
+    assert int(seed["on_ground"][p]) == 1
+    assert int(ref["action_id"][p]) == 29  # Fall
+    assert int(ref["on_ground"][p]) == 0
+    assert int(out["action_id"][p]) == int(ref["action_id"][p])
+    assert int(out["on_ground"][p]) == int(ref["on_ground"][p])
     assert float(out["pos_x"][p]) == pytest.approx(float(ref["pos_x"][p]), abs=2e-6)
