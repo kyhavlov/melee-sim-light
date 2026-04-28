@@ -210,13 +210,21 @@ def _shield_contact_without_body_conflict(contacts: np.ndarray, defender: int) -
 
 
 def _run_one_step_row(
-    ds_path: Path, record: int, p: int, *, rng_damage_fly_roll_gate: bool | None = None
+    ds_path: Path,
+    record: int,
+    p: int,
+    *,
+    rng_damage_fly_roll_gate: bool | None = None,
+    seed_mutator=None,
 ) -> tuple[np.void, np.void, np.void]:
     ds = read_dataset(str(ds_path))
     samples = ds.samples
     assert int(samples.shape[0]) > record, f"dataset too short for lock row: record={record}"
     row = samples[record : record + 1]
-    seed = row["seed_t"][0]
+    seed_t = row["seed_t"].copy()
+    if seed_mutator is not None:
+        seed_mutator(seed_t)
+    seed = seed_t[0]
     ref = row["ref_t1"][0]
 
     binding = pytest.importorskip("msl_binding")
@@ -225,7 +233,7 @@ def _run_one_step_row(
     input_stride = int(sizes["input"])
     compare_stride = int(sizes["compare"])
 
-    seed_bytes = np.frombuffer(row["seed_t"].tobytes(order="C"), dtype=np.uint8).copy().reshape(1, seed_stride)
+    seed_bytes = np.frombuffer(seed_t.tobytes(order="C"), dtype=np.uint8).copy().reshape(1, seed_stride)
     prev_input_bytes = np.frombuffer(row["prev_input_t"].tobytes(order="C"), dtype=np.uint8).copy().reshape(
         1, input_stride
     )
@@ -291,7 +299,7 @@ def _run_rollout_window_rows_with_trace(
     handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
     window_out: dict[int, np.void] = {}
     try:
-        binding.reseed_seed(handle, seed_bytes)
+        binding.reseed_seed_rollout(handle, seed_bytes)
         for rec in range(start_record, max(window_records) + 1):
             row = samples[rec : rec + 1]
             prev_input_bytes = np.frombuffer(row["prev_input_t"].tobytes(order="C"), dtype=np.uint8).copy().reshape(
@@ -4018,6 +4026,12 @@ def test_throwhi_owner_before_victim_deferred_hitstun_tick_rows_and_adjacent_con
             0,
             1,
         ),
+        (
+            "datasets/aggregate_recent/replays/validation/aggregate_recent/PositiveRevolvingHyena.msl",
+            (5626, 5627, 5628),
+            1,
+            0,
+        ),
     ],
 )
 def test_throwlw_attached_item_hitlag_x221c_b0_rows_and_adjacent_controls_are_replay_exact(
@@ -4051,6 +4065,8 @@ def test_throwlw_attached_item_hitlag_x221c_b0_rows_and_adjacent_controls_are_re
     assert int(ref_t1["hitlag"][victim_p]) > 0
     assert int(ref_t1["action_id"][victim_p]) == 242  # stays ThrownLw
     assert int(ref_t1["state_flags"][victim_p, 3]) == 0
+    if "PositiveRevolvingHyena" in dataset_rel:
+        assert int(seed_t["state_flags"][victim_p, 3]) == 0x80
 
     for rec in rows:
         _, ref_row, out_row = _run_one_step_row(dataset_path, rec, victim_p)

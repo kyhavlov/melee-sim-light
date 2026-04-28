@@ -92,12 +92,12 @@ def test_damageflyroll_jumpaerialf_attackairb_carry_target_and_controls_are_repl
 
     prev_trace_env = os.environ.get("MSL_RNG_TRACE_PATH")
     try:
-        for rec, expect_site7 in rows:
+        for rec, expect_site8 in rows:
             trace_path = root / f"reports/triage/qgd_jumpaerialf_attackairb_carry_{rec}.tsv"
             os.environ["MSL_RNG_TRACE_PATH"] = str(trace_path)
             _, ref_row, out_row = _run_one_step_row(dataset_path, rec, victim)
 
-            assert int(_trace_site_count(trace_path, 7)) == int(expect_site7), rec
+            assert int(_trace_site_count(trace_path, 8)) == int(expect_site8), rec
             _assert_fields_match_ref(out_row=out_row, ref_row=ref_row, p=victim)
             if rec == target_record:
                 assert int(out_row["action_id"][victim]) == 91
@@ -121,7 +121,7 @@ def test_damageflyroll_jumpaerialf_attackairb_carry_target_and_controls_are_repl
         assert int(neg_seed["action_frame"][neg_victim]) == 1
         assert int(neg_seed["action_id"][1]) == 67
         assert int(neg_seed["action_frame"][1]) == 16
-        assert int(_trace_site_count(trace_path, 7)) == 0
+        assert int(_trace_site_count(trace_path, 8)) == 0
         _assert_fields_match_ref(out_row=neg_out, ref_row=neg_ref, p=neg_victim)
         assert int(neg_out["action_id"][neg_victim]) == int(neg_ref["action_id"][neg_victim]) == 27
     finally:

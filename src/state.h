@@ -189,10 +189,13 @@ typedef struct MslStateSoA {
   // refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
   // refs/melee/src/melee/ft/ftcommon.c::ftCommon_800804FC
   uint8_t* source_clear_processhit_damage_pending_phase;
-  // Explicit Fighter_8006CDA4 pre-gate RNG consume-count seed lane for DamageFlyRoll entry.
-  // 0: no seeded pre-gate consume ownership.
+  // Explicit Fighter_8006CDA4 pre-gate RNG stream-phase seed lane for DamageFlyRoll entry.
+  // 0: no seeded pre-gate stream ownership.
   // 1: consume one pre-gate HSD_Randi before ftCo_8008DCE0 block_33.
   // 2: consume two pre-gate HSD_Randi calls before ftCo_8008DCE0 block_33.
+  // 3: consume all three decomp-visible pre-gate HSD_Randi calls before ftCo_8008DCE0 block_33.
+  // 4: source-proven zero-consume gate; admit the gate without a pre-gate stream advance.
+  // Nonzero DamageFlyTop values may carry across the same segment as hidden held-item/x197C state.
   // refs/melee/src/melee/ft/fighter.c::Fighter_8006CDA4
   // refs/melee/src/melee/ft/types.h
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0

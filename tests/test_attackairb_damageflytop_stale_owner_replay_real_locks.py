@@ -60,7 +60,7 @@ def _rollout_window(*, ds, start_record: int, end_record_inclusive: int) -> dict
     handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
     try:
         seed_bytes[0, :] = samples_u8[start_record, seed_off : seed_off + seed_stride]
-        binding.reseed_seed(handle, seed_bytes)
+        binding.reseed_seed_rollout(handle, seed_bytes)
         rows: dict[int, tuple[np.void, np.void]] = {}
         for record in range(start_record, end_record_inclusive + 1):
             prev_input_bytes[0, :] = samples_u8[record, prev_input_off : prev_input_off + input_stride]
@@ -353,7 +353,7 @@ def test_attackairb_damageflytop_rng_carry_maps_last_hit_by_raw_source_port() ->
     handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
     try:
         seed_bytes[0, :] = rows_u8[0, seed_off : seed_off + seed_stride]
-        binding.reseed_seed(handle, seed_bytes)
+        binding.reseed_seed_rollout(handle, seed_bytes)
         for i, record in enumerate(range(start_record, 3153)):
             prev_input_bytes[0, :] = rows_u8[i, prev_input_off : prev_input_off + input_stride]
             input_bytes[0, :] = rows_u8[i, input_off : input_off + input_stride]

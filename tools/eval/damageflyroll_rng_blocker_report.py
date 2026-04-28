@@ -143,6 +143,20 @@ DEFAULT_CASES: tuple[Case, ...] = (
         role="negative_control",
         note="adjacent post-target carry control stays no-pulse and replay exact",
     ),
+    Case(
+        dataset_rel="datasets/aggregate_recent/replays/validation/aggregate_recent/PriceyPartialAlbatross.msl",
+        record=7185,
+        p=0,
+        role="resolved_control",
+        note="SpecialHiFall <- AttackAirB enable-edge admits DamageFlyRoll without extra pre-gate consumes",
+    ),
+    Case(
+        dataset_rel="datasets/aggregate_recent/replays/validation/aggregate_recent/PriceyPartialAlbatross.msl",
+        record=7019,
+        p=0,
+        role="negative_control",
+        note="SpecialHiFall <- steady AttackAirB contact does not admit the DamageFlyRoll gate",
+    ),
 )
 
 
@@ -368,7 +382,7 @@ def observe_case(case: Case, *, datasets_dir: Path = Path("datasets")) -> RngRow
         attacker_action = int(seed["action_id"][attacker])
         attacker_action_frame = int(np.int16(seed["action_frame"][attacker]))
 
-    site_counts = {site_id: 0 for site_id in range(1, 8)}
+    site_counts = {site_id: 0 for site_id in range(1, 9)}
     site1_seed_in: int | None = None
     if trace_path.exists():
         with trace_path.open("r", encoding="utf-8") as fh:
@@ -407,10 +421,11 @@ def observe_case(case: Case, *, datasets_dir: Path = Path("datasets")) -> RngRow
     #   refs/melee/src/sysdolphin/baselib/random.c::HSD_Randi
     # - site 5: Fighter_8006CDA4 primary pre-gate consume
     # - site 6: Fighter_8006CDA4 secondary pre-gate consume
-    # - site 7: JumpAerialF/B <- AttackAirB admission carry
+    # - site 7: Fighter_8006CDA4 tertiary pre-gate consume
+    # - site 8: JumpAerialF/B <- AttackAirB admission carry
     #   refs/melee/src/melee/ft/fighter.c::Fighter_8006CDA4
     #   refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
-    modeled_pre_gate_site_counts = tuple(int(site_counts[site_id]) for site_id in (2, 3, 4, 5, 6, 7))
+    modeled_pre_gate_site_counts = tuple(int(site_counts[site_id]) for site_id in (2, 3, 4, 5, 6, 7, 8))
     return RngRowObservation(
         dataset=ds_path.name,
         record=int(case.record),

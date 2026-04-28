@@ -98,28 +98,21 @@ static inline void clear_seed_owned_transients_post_frame(MslBatch* batch) {
       // refs/melee/src/melee/ft/ftcommon.c::ftCommon_800804FC
       batch->state.source_clear_processhit_damage_pending_phase[idx] = 0u;
       // `seed_t.fighter_8006cda4_pre_gate_consume_count` is usually a one-step pre-gate owner.
-      // DamageFlyTop <- AttackAirB carry rows are the exception: the hidden Fighter_8006CDA4
-      // consume-count belongs to a delayed damage-entry gate and must survive replay-seeded rollout
-      // frames until combat consumes it.
+      // DamageFlyTop segments with values 1..3 are the exception: those values represent hidden
+      // Fighter_8006CDA4 held-item/x197C branch state and must survive replay-seeded rollout frames
+      // until combat consumes them at the next damage-entry gate.
       // refs/melee/src/melee/ft/fighter.c::Fighter_8006CDA4
       // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
       uint8_t keep_fighter_8006cda4_count = 0u;
-      if (batch->state.fighter_8006cda4_pre_gate_consume_count[idx] != 0u &&
+      if (batch->state.fighter_8006cda4_pre_gate_consume_count[idx] >= 1u &&
+          batch->state.fighter_8006cda4_pre_gate_consume_count[idx] <= 3u &&
           batch->state.action_id[idx] == (uint16_t)MSL_ACT_DAMAGE_FLY_TOP &&
           batch->state.on_ground[idx] == 0u && batch->state.hitlag[idx] == 0u &&
           batch->state.hitstun[idx] > 0u) {
-        // Slippi `last_hit_by` is raw source-port domain. Convert it to a local slot before
-        // checking attacker action ownership for the delayed Fighter_8006CDA4 carry.
-        // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm (last_hit_by lane)
-        const int attacker = step_local_slot_from_source_port0(batch, bi, num_players,
+        int8_t source_slot = step_local_slot_from_source_port0(batch, bi, num_players,
                                                                batch->state.last_hit_by[idx]);
-        if (attacker >= 0) {
-          const size_t a_idx = msl_idx_player(bi, attacker);
-          keep_fighter_8006cda4_count =
-              (batch->state.action_id[a_idx] == (uint16_t)MSL_ACT_ATTACK_AIR_B &&
-               batch->state.action_frame[a_idx] >= 6)
-                  ? 1u
-                  : 0u;
+        if (source_slot >= 0) {
+          keep_fighter_8006cda4_count = (batch->state.instance_hit_by[idx] != 0u) ? 1u : 0u;
         }
       }
       if (!keep_fighter_8006cda4_count) {

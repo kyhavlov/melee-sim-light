@@ -193,13 +193,14 @@ def test_damageflyroll_rng_blocker_cases_and_controls_match_replay_real_trace_sh
     assert resolved_keys == {
         ("AttachedGoodNaturedGuanaco.msl", 2694, 0),
         ("GracefulAttachedTurtle.msl", 5717, 0),
+        ("PriceyPartialAlbatross.msl", 7185, 0),
         ("TreasuredBackKangaroo.msl", 6929, 1),
     }
 
     for obs in summary["resolved_controls"]:
         assert int(obs["site1_count"]) == 1, obs["note"]
         assert int(obs["ref_action_id"]) == int(obs["out_action_id"]) == 91, obs["note"]
-        assert int(obs["phase_advance_to_lt_threshold"]) in (1, 2), obs["note"]
+        assert int(obs["phase_advance_to_lt_threshold"]) in (0, 1, 2), obs["note"]
     tbk = next(
         obs
         for obs in summary["resolved_controls"]
@@ -208,7 +209,7 @@ def test_damageflyroll_rng_blocker_cases_and_controls_match_replay_real_trace_sh
     assert float(tbk["site1_roll"]) >= float(tbk["roll_threshold"])
     assert int(tbk["phase_advance_to_lt_threshold"]) == 2
     assert len(tbk["site1_roll_window"]) == 4
-    assert tuple(tbk["modeled_pre_gate_site_counts"]) == (0, 0, 0, 1, 1, 0)
+    assert tuple(tbk["modeled_pre_gate_site_counts"]) == (0, 0, 0, 1, 1, 0, 0)
     assert not bool(tbk["requires_unmodeled_pre_gate_consumer"])
     assert tuple(tbk["compatible_fighter_8006cda4_total_consumes"]) == (2,)
     assert tuple(tbk["fighter_8006cda4_compatible_families"]) == (
@@ -243,7 +244,7 @@ def test_damageflyroll_rng_blocker_cases_and_controls_match_replay_real_trace_sh
     assert float(pos["site1_roll"]) < float(pos["roll_threshold"])
     assert int(pos["phase_advance_to_lt_threshold"]) == 0
     assert pos["site1_roll_window"][0] == pytest.approx(0.26458740234375)
-    assert tuple(pos["modeled_pre_gate_site_counts"]) == (0, 0, 0, 0, 0, 0)
+    assert tuple(pos["modeled_pre_gate_site_counts"]) == (0, 0, 0, 0, 0, 0, 0)
     assert not bool(pos["requires_unmodeled_pre_gate_consumer"])
     assert tuple(pos["compatible_fighter_8006cda4_total_consumes"]) == tuple()
     assert tuple(pos["fighter_8006cda4_compatible_families"]) == tuple()
@@ -254,6 +255,7 @@ def test_damageflyroll_rng_blocker_cases_and_controls_match_replay_real_trace_sh
         ("AttachedGoodNaturedGuanaco.msl", 6021, 0),
         ("GracefulAttachedTurtle.msl", 5716, 0),
         ("GracefulAttachedTurtle.msl", 5718, 0),
+        ("PriceyPartialAlbatross.msl", 7019, 0),
         ("TreasuredBackKangaroo.msl", 6928, 1),
         ("TreasuredBackKangaroo.msl", 6930, 1),
     }
@@ -262,7 +264,7 @@ def test_damageflyroll_rng_blocker_cases_and_controls_match_replay_real_trace_sh
         assert int(obs["ref_action_id"]) == int(obs["out_action_id"])
         assert obs["phase_advance_to_lt_threshold"] is None
         assert tuple(obs["site1_roll_window"]) == tuple()
-        assert tuple(obs["modeled_pre_gate_site_counts"]) == (0, 0, 0, 0, 0, 0)
+        assert tuple(obs["modeled_pre_gate_site_counts"]) == (0, 0, 0, 0, 0, 0, 0)
         assert not bool(obs["requires_unmodeled_pre_gate_consumer"])
         assert tuple(obs["compatible_fighter_8006cda4_total_consumes"]) == tuple()
         assert tuple(obs["fighter_8006cda4_compatible_families"]) == tuple()

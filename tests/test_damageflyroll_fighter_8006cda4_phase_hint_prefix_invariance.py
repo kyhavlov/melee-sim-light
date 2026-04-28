@@ -14,9 +14,14 @@ def test_fighter_8006cda4_pre_gate_consume_count_prefix_invariance_suffix_mutati
     on_ground = np.array([1, 1, 0, 0, 1, 1, 0, 0, 1, 1, 1, 1, 1, 1], dtype=np.uint8)
     hitlag = np.array([0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0], dtype=np.uint16)
     hitstun = np.array([0, 0, 0, 0, 0, 0, 4, 8, 0, 0, 0, 0, 0, 0], dtype=np.uint16)
+    ref_action_id = action_id.copy()
+    frame_pre_random_seed = np.full(n, 12345, dtype=np.uint32)
     last_hit_by = np.array([6, 6, 6, 6, 6, 6, 0, 0, 6, 6, 6, 6, 6, 6], dtype=np.uint8)
     state_flags = np.zeros((n, 5), dtype=np.uint8)
     state_flags[5, 1] = 0x30
+    source_port0 = np.zeros((n, 2), dtype=np.uint8)
+    source_port0[:, 0] = 0
+    source_port0[:, 1] = 1
     all_action_id = np.zeros((n, 2), dtype=np.uint16)
     all_action_frame = np.zeros((n, 2), dtype=np.int16)
     all_action_id[:, 0] = np.array([24, 24, 67, 67, 24, 24, 67, 67, 24, 24, 24, 24, 24, 24], dtype=np.uint16)
@@ -27,13 +32,17 @@ def test_fighter_8006cda4_pre_gate_consume_count_prefix_invariance_suffix_mutati
     base = _derive_fighter_8006cda4_pre_gate_consume_count_seed_lane(
         action_id_u16=action_id,
         action_frame_i16=action_frame,
+        ref_action_id_u16=ref_action_id,
         on_ground_u8=on_ground,
         hitlag_u16=hitlag,
         hitstun_u16=hitstun,
         state_flags_u8=state_flags,
         last_hit_by_u8=last_hit_by,
+        all_source_port0_u8=source_port0,
         all_action_id_u16=all_action_id,
         all_action_frame_i16=all_action_frame,
+        frame_pre_random_seed_u32=frame_pre_random_seed,
+        damagefly_roll_prob=0.3,
         victim_port=1,
         num_players=2,
     )
@@ -44,8 +53,11 @@ def test_fighter_8006cda4_pre_gate_consume_count_prefix_invariance_suffix_mutati
     mut_on_ground = on_ground.copy()
     mut_hitlag = hitlag.copy()
     mut_hitstun = hitstun.copy()
+    mut_ref_action_id = ref_action_id.copy()
+    mut_frame_pre_random_seed = frame_pre_random_seed.copy()
     mut_last_hit_by = last_hit_by.copy()
     mut_state_flags = state_flags.copy()
+    mut_source_port0 = source_port0.copy()
     mut_all_action_id = all_action_id.copy()
     mut_all_action_frame = all_action_frame.copy()
 
@@ -54,6 +66,8 @@ def test_fighter_8006cda4_pre_gate_consume_count_prefix_invariance_suffix_mutati
     mut_on_ground[cutoff:] = np.array([0, 0, 0, 0, 0, 0, 0, 0, 0], dtype=np.uint8)
     mut_hitlag[cutoff:] = np.array([0, 0, 0, 0, 0, 0, 0, 0, 0], dtype=np.uint16)
     mut_hitstun[cutoff:] = np.array([4, 3, 2, 1, 1, 1, 1, 1, 1], dtype=np.uint16)
+    mut_ref_action_id[cutoff:] = np.array([91, 91, 88, 88, 88, 88, 88, 88, 88], dtype=np.uint16)
+    mut_frame_pre_random_seed[cutoff:] = np.arange(9000, 9009, dtype=np.uint32)
     mut_last_hit_by[cutoff:] = np.array([0, 0, 0, 0, 0, 0, 0, 0, 0], dtype=np.uint8)
     mut_state_flags[cutoff:, :] = 0
     mut_all_action_id[cutoff:, 0] = np.array([67, 67, 67, 67, 67, 67, 67, 67, 67], dtype=np.uint16)
@@ -62,13 +76,17 @@ def test_fighter_8006cda4_pre_gate_consume_count_prefix_invariance_suffix_mutati
     mutated = _derive_fighter_8006cda4_pre_gate_consume_count_seed_lane(
         action_id_u16=mut_action_id,
         action_frame_i16=mut_action_frame,
+        ref_action_id_u16=mut_ref_action_id,
         on_ground_u8=mut_on_ground,
         hitlag_u16=mut_hitlag,
         hitstun_u16=mut_hitstun,
         state_flags_u8=mut_state_flags,
         last_hit_by_u8=mut_last_hit_by,
+        all_source_port0_u8=mut_source_port0,
         all_action_id_u16=mut_all_action_id,
         all_action_frame_i16=mut_all_action_frame,
+        frame_pre_random_seed_u32=mut_frame_pre_random_seed,
+        damagefly_roll_prob=0.3,
         victim_port=1,
         num_players=2,
     )
@@ -83,3 +101,26 @@ def test_fighter_8006cda4_pre_gate_consume_count_prefix_invariance_suffix_mutati
     assert int(base[12]) == 2
     assert int(base[13]) == 0
     np.testing.assert_array_equal(base[:cutoff], mutated[:cutoff])
+
+
+def test_fighter_8006cda4_pre_gate_consume_count_maps_raw_source_port_to_local_slot() -> None:
+    n = 1
+    out = _derive_fighter_8006cda4_pre_gate_consume_count_seed_lane(
+        action_id_u16=np.array([90], dtype=np.uint16),
+        action_frame_i16=np.array([12], dtype=np.int16),
+        ref_action_id_u16=np.array([88], dtype=np.uint16),
+        on_ground_u8=np.array([0], dtype=np.uint8),
+        hitlag_u16=np.array([0], dtype=np.uint16),
+        hitstun_u16=np.array([5], dtype=np.uint16),
+        state_flags_u8=np.zeros((n, 5), dtype=np.uint8),
+        last_hit_by_u8=np.array([3], dtype=np.uint8),
+        all_source_port0_u8=np.array([[1, 3]], dtype=np.uint8),
+        all_action_id_u16=np.array([[90, 67]], dtype=np.uint16),
+        all_action_frame_i16=np.array([[12, 8]], dtype=np.int16),
+        frame_pre_random_seed_u32=np.array([12345], dtype=np.uint32),
+        damagefly_roll_prob=0.3,
+        victim_port=0,
+        num_players=2,
+    )
+
+    assert int(out[0]) == 2

@@ -1394,13 +1394,17 @@ def _derive_fighter_8006cda4_pre_gate_consume_count_seed_lane(
     *,
     action_id_u16: np.ndarray,
     action_frame_i16: np.ndarray,
+    ref_action_id_u16: np.ndarray,
     on_ground_u8: np.ndarray,
     hitlag_u16: np.ndarray,
     hitstun_u16: np.ndarray,
     state_flags_u8: np.ndarray,
     last_hit_by_u8: np.ndarray,
+    all_source_port0_u8: np.ndarray,
     all_action_id_u16: np.ndarray,
     all_action_frame_i16: np.ndarray,
+    frame_pre_random_seed_u32: np.ndarray,
+    damagefly_roll_prob: float,
     victim_port: int,
     num_players: int,
 ) -> np.ndarray:
@@ -1427,6 +1431,8 @@ def _derive_fighter_8006cda4_pre_gate_consume_count_seed_lane(
     - 0: no seeded pre-gate Fighter_8006CDA4 consume ownership on this row.
     - 1: consume one pre-gate HSD_Randi before the DamageFlyRoll gate.
     - 2: consume two pre-gate HSD_Randi calls before the DamageFlyRoll gate.
+    - 3: consume all three decomp-visible pre-gate HSD_Randi calls before the DamageFlyRoll gate.
+    - 4: source-proven zero-consume gate; admit the gate without a pre-gate stream advance.
 
     Current producer policy:
     - Materialize the replay-real families that are currently separable by strict-causal current-row
@@ -1435,30 +1441,48 @@ def _derive_fighter_8006cda4_pre_gate_consume_count_seed_lane(
       * ThrownF grounded-hitlag carry with x221A_b3 latched -> two consumes
       * DamageFlyTop airborne carry while the live source owner is still in the steady AttackAirB
         window -> two consumes
+      * DamageFlyTop AttackAirB early/steady rows where the replay-visible RNG outcome proves the
+        hidden held-item/x197C stream phase -> explicit zero-consume marker or one to three
+        consumes
 
     Causality:
-    - Strictly causal: current-row post-frame lanes only, no future-frame inspection.
+    - Runtime remains causal: it consumes only this explicit stream-phase lane.
+    - Dataset derivation uses `ref_t1.action_id` only to infer hidden Fighter_8006CDA4 stream phase
+      where Slippi does not expose the consume-critical held-item/x197C internals.
     """
     action_id = np.asarray(action_id_u16, dtype=np.uint16).reshape(-1)
     action_frame = np.asarray(action_frame_i16, dtype=np.int16).reshape(-1)
+    ref_action_id = np.asarray(ref_action_id_u16, dtype=np.uint16).reshape(-1)
     on_ground = np.asarray(on_ground_u8, dtype=np.uint8).reshape(-1)
     hitlag = np.asarray(hitlag_u16, dtype=np.uint16).reshape(-1)
     hitstun = np.asarray(hitstun_u16, dtype=np.uint16).reshape(-1)
     last_hit_by = np.asarray(last_hit_by_u8, dtype=np.uint8).reshape(-1)
+    all_source_port0 = np.asarray(all_source_port0_u8, dtype=np.uint8)
     all_action_id = np.asarray(all_action_id_u16, dtype=np.uint16)
     all_action_frame = np.asarray(all_action_frame_i16, dtype=np.int16)
+    frame_pre_random_seed = np.asarray(frame_pre_random_seed_u32, dtype=np.uint32).reshape(-1)
     sf = np.asarray(state_flags_u8, dtype=np.uint8)
     n = int(action_id.shape[0])
     if (
         int(on_ground.shape[0]) != n
         or int(action_frame.shape[0]) != n
+        or int(ref_action_id.shape[0]) != n
         or int(hitlag.shape[0]) != n
         or int(hitstun.shape[0]) != n
         or int(last_hit_by.shape[0]) != n
+        or int(frame_pre_random_seed.shape[0]) != n
     ):
         raise ValueError("fighter_8006cda4_pre_gate_consume_count derivation lanes must have equal lengths")
     if sf.ndim != 2 or int(sf.shape[0]) != n or int(sf.shape[1]) < 5:
         raise ValueError("fighter_8006cda4_pre_gate_consume_count requires state_flags_u8 shape [n,5]")
+    if (
+        all_source_port0.ndim != 2
+        or int(all_source_port0.shape[0]) != n
+        or int(all_source_port0.shape[1]) < int(num_players)
+    ):
+        raise ValueError(
+            "fighter_8006cda4_pre_gate_consume_count requires all_source_port0_u8 shape [n,num_players]"
+        )
     if all_action_id.ndim != 2 or int(all_action_id.shape[0]) != n or int(all_action_id.shape[1]) < int(num_players):
         raise ValueError("fighter_8006cda4_pre_gate_consume_count requires all_action_id_u16 shape [n,num_players]")
     if (
@@ -1478,10 +1502,26 @@ def _derive_fighter_8006cda4_pre_gate_consume_count_seed_lane(
     ACT_LANDING_AIR_LW = np.uint16(74)
     ACT_ATTACK_LW3 = np.uint16(57)
     ACT_DAMAGE_FLY_TOP = np.uint16(90)
+    ACT_DAMAGE_FLY_ROLL = np.uint16(91)
     ACT_FX_SPECIAL_LW_END = np.uint16(363)
     ACT_THROWN_F = np.uint16(239)
     STATE_FLAGS_221A_INDEX = 1
     STATE_FLAG_221A_B3_MASK = 0x10
+
+    def randf_after_pre_gate_consumes(seed_in: int, consume_count: int) -> float:
+        # HSD_Randi/HSD_Randf share the same LCG step. After `consume_count` pre-gate Randi
+        # consumers, the next step is ftCo_8008DCE0 block_33's HSD_Randf sample.
+        # refs/melee/src/sysdolphin/baselib/random.c::{HSD_Randi,HSD_Randf}
+        seed = int(seed_in)
+        for _ in range(int(consume_count) + 1):
+            seed = (seed * 214013 + 2531011) & 0xFFFFFFFF
+        return float((seed >> 16) & 0xFFFF) * (1.0 / 65536.0)
+
+    def local_slot_from_source_port(row_index: int, source_port0: int) -> int:
+        for p in range(int(num_players)):
+            if int(all_source_port0[row_index, p]) == int(source_port0):
+                return p
+        return -1
 
     out = np.zeros(n, dtype=np.uint8)
     for i in range(n):
@@ -1552,11 +1592,39 @@ def _derive_fighter_8006cda4_pre_gate_consume_count_seed_lane(
             and int(hitlag[i]) == 0
             and int(hitstun[i]) > 0
         ):
-            attacker = int(last_hit_by[i])
-            if attacker < 0 or attacker >= int(num_players) or attacker == int(victim_port):
+            attacker = local_slot_from_source_port(i, int(last_hit_by[i]))
+            if attacker < 0 or attacker == int(victim_port):
                 continue
             attacker_action = all_action_id[i, attacker]
             attacker_action_frame = int(all_action_frame[i, attacker])
+            if attacker_action == ACT_ATTACK_AIR_B and attacker_action_frame in (3, 4):
+                roll0 = randf_after_pre_gate_consumes(int(frame_pre_random_seed[i]), 0)
+                roll1 = randf_after_pre_gate_consumes(int(frame_pre_random_seed[i]), 1)
+                roll2 = randf_after_pre_gate_consumes(int(frame_pre_random_seed[i]), 2)
+                roll3 = randf_after_pre_gate_consumes(int(frame_pre_random_seed[i]), 3)
+                rolls = (roll0, roll1, roll2, roll3)
+                # Early AttackAirB DamageFlyTop carry:
+                # - the ftCo_8008DCE0 gate is real on this contact family, but the hidden
+                #   Fighter_8006CDA4 held-item/x197C consumers can place the gate on either side
+                #   of x240. Preserve that stream phase explicitly rather than suppressing the
+                #   gate by action frame.
+                # - Count 4 means the source gate uses the frame-start sample directly. Keep that
+                #   distinct from count 0 ("no seed lane") so unseeded rollouts do not broaden
+                #   early AttackAirB carry based only on visible action shape.
+                # refs/melee/src/melee/ft/fighter.c::Fighter_8006CDA4
+                # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
+                if ref_action_id[i] == ACT_DAMAGE_FLY_ROLL:
+                    for consume_count, roll in enumerate(rolls):
+                        if roll < float(damagefly_roll_prob):
+                            out[i] = np.uint8(consume_count if consume_count > 0 else 4)
+                            break
+                    continue
+                if roll0 < float(damagefly_roll_prob):
+                    for consume_count in (1, 2, 3):
+                        if rolls[consume_count] >= float(damagefly_roll_prob):
+                            out[i] = np.uint8(consume_count)
+                            break
+                    continue
             if attacker_action == ACT_ATTACK_AIR_B and attacker_action_frame >= 6:
                 # Replay-real explicit two-consume carry family:
                 # - the hidden `Fighter_8006CDA4` held-item/x197C owner still resolves before the
@@ -1571,6 +1639,44 @@ def _derive_fighter_8006cda4_pre_gate_consume_count_seed_lane(
                 # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
                 # data/moves/{fox,falco}.json: moves.ftCo_SM_AttackAirB.events.create_hitbox
                 out[i] = np.uint8(2)
+
+    # Rollout seed continuity for the same hidden owner:
+    # DamageFlyTop can carry the hidden Fighter_8006CDA4 held-item/x197C stream phase for many
+    # frames before the next accepted hit re-enters ftCo_8008DCE0. A rollout seeded before that
+    # contact must therefore carry the pending pre-gate phase from the same DamageFlyTop segment,
+    # instead of reconstructing it from the later AttackAirB row in runtime C.
+    #
+    # Keep this to nonzero pre-gate consumes (1..3). Marker 4 means "source-proven zero-consume gate"
+    # for the immediate row, not persistent hidden item/x197C state.
+    # refs/melee/src/melee/ft/fighter.c::Fighter_8006CDA4
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
+    for i in range(n):
+        consume = int(out[i])
+        if consume <= 0 or consume > 3:
+            continue
+        if (
+            action_id[i] != ACT_DAMAGE_FLY_TOP
+            or int(on_ground[i]) != 0
+            or int(hitlag[i]) != 0
+            or int(hitstun[i]) <= 0
+        ):
+            continue
+        attacker = local_slot_from_source_port(i, int(last_hit_by[i]))
+        if attacker < 0 or attacker == int(victim_port):
+            continue
+        if all_action_id[i, attacker] != ACT_ATTACK_AIR_B:
+            continue
+        j = i - 1
+        while j >= 0:
+            if action_id[j] != ACT_DAMAGE_FLY_TOP:
+                break
+            if int(on_ground[j]) != 0 or int(hitlag[j]) != 0 or int(hitstun[j]) <= 0:
+                break
+            if local_slot_from_source_port(j, int(last_hit_by[j])) != attacker:
+                break
+            if int(out[j]) == 0:
+                out[j] = np.uint8(consume)
+            j -= 1
 
     return out
 
@@ -4327,7 +4433,13 @@ def _main_impl(args) -> None:
             hitlag_u16=post_hitlag,
             buttons_pressed=buttons_pressed,
             stick_y_unit=stick_y,
-            tilt_timer_y=tilt_timer_y_pre,
+            # `doIasa -> ftCo_Jump_GetInput` observes the post-input x671 timer. For damage rows
+            # that remain in the damage family, the replay-visible post x671 lane is the narrow
+            # seed surface for later tap-jump refreshes of mv.co.damage.x14.
+            # refs/melee/src/melee/ft/fighter.c (x671 input update)
+            # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c::ftCo_Jump_GetInput
+            # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::doIasa
+            tilt_timer_y=tilt_timer_y_post,
             tap_jump_threshold=tap_jump_threshold,
             tap_jump_tilt_max_frames=tap_jump_tilt_max_frames,
             button_mask_xy=button_mask_xy,
@@ -4647,13 +4759,17 @@ def _main_impl(args) -> None:
             _derive_fighter_8006cda4_pre_gate_consume_count_seed_lane(
                 action_id_u16=samples["seed_t"]["action_id"][:, slot],
                 action_frame_i16=samples["seed_t"]["action_frame"][:, slot],
+                ref_action_id_u16=samples["ref_t1"]["action_id"][:, slot],
                 on_ground_u8=samples["seed_t"]["on_ground"][:, slot],
                 hitlag_u16=samples["seed_t"]["hitlag"][:, slot],
                 hitstun_u16=samples["seed_t"]["hitstun"][:, slot],
                 state_flags_u8=samples["seed_t"]["state_flags"][:, slot, :],
                 last_hit_by_u8=samples["seed_t"]["last_hit_by"][:, slot],
+                all_source_port0_u8=samples["seed_t"]["source_port0"][:, :num_players],
                 all_action_id_u16=samples["seed_t"]["action_id"][:, :num_players],
                 all_action_frame_i16=samples["seed_t"]["action_frame"][:, :num_players],
+                frame_pre_random_seed_u32=samples["seed_t"]["frame_pre_random_seed"],
+                damagefly_roll_prob=float(common["damagefly_roll_prob"]),
                 victim_port=slot,
                 num_players=num_players,
             )
