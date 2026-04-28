@@ -67,7 +67,7 @@ mismatch.item_state: 0 / 109425 (0.000000)
 mismatch.item_owner: 0 / 109425 (0.000000)
 mismatch.item_instance_id: 0 / 109425 (0.000000)
 ignored_mismatch.state_flags[4]: 19 / 14590 (0.001302)
-err.pos_x: mae=0.006610 p95=0.000000 max=6.000000
+err.pos_x: mae=0.005159 p95=0.000000 max=6.000000
 err.pos_y: mae=0.001393 p95=0.000000 max=5.364812
 err.speed_air_x_self: mae=0.000634 p95=0.000000 max=1.815992
 err.speed_ground_x_self: mae=0.000631 p95=0.000000 max=1.815992
@@ -83,7 +83,7 @@ err.item_vel_y: mae=0.000022 p95=0.000000 max=0.030602
 overall.discrete_mismatch: 18 / 868105
 overall.strict_discrete_mismatch: 37 / 882695
 overall.ignored_discrete_mismatch: 19
-overall.float_norm_mae_p95: 0.00012645
+overall.float_norm_mae_p95: 0.00012525
 
 == datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.msl ==
 Records: 11529  Players/scored per record: 2  Total player-frames: 23058
@@ -112,7 +112,7 @@ mismatch.item_state: 0 / 172935 (0.000000)
 mismatch.item_owner: 0 / 172935 (0.000000)
 mismatch.item_instance_id: 0 / 172935 (0.000000)
 ignored_mismatch.state_flags[4]: 22 / 23058 (0.000954)
-err.pos_x: mae=0.008688 p95=0.000000 max=14.965345
+err.pos_x: mae=0.006647 p95=0.000000 max=14.965345
 err.pos_y: mae=0.001103 p95=0.000000 max=7.826638
 err.speed_air_x_self: mae=0.000933 p95=0.000000 max=1.815992
 err.speed_ground_x_self: mae=0.000956 p95=0.000000 max=1.815992
@@ -128,7 +128,7 @@ err.item_vel_y: mae=0.000574 p95=0.000000 max=2.291811
 overall.discrete_mismatch: 70 / 1371951
 overall.strict_discrete_mismatch: 92 / 1395009
 overall.ignored_discrete_mismatch: 22
-overall.float_norm_mae_p95: 0.00020695
+overall.float_norm_mae_p95: 0.00020510
 
 == datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/QuerulousGrandDinosaur.msl ==
 Records: 10222  Players/scored per record: 2  Total player-frames: 20444
@@ -157,7 +157,7 @@ mismatch.item_state: 0 / 153330 (0.000000)
 mismatch.item_owner: 0 / 153330 (0.000000)
 mismatch.item_instance_id: 0 / 153330 (0.000000)
 ignored_mismatch.state_flags[4]: 27 / 20444 (0.001321)
-err.pos_x: mae=0.007530 p95=0.000000 max=13.262493
+err.pos_x: mae=0.007085 p95=0.000000 max=13.262493
 err.pos_y: mae=0.002232 p95=0.000000 max=6.894060
 err.speed_air_x_self: mae=0.001397 p95=0.000000 max=1.815992
 err.speed_ground_x_self: mae=0.001758 p95=0.000000 max=1.815992
@@ -173,7 +173,7 @@ err.item_vel_y: mae=0.000000 p95=0.000000 max=0.000045
 overall.discrete_mismatch: 58 / 1216418
 overall.strict_discrete_mismatch: 85 / 1236862
 overall.ignored_discrete_mismatch: 27
-overall.float_norm_mae_p95: 0.00032032
+overall.float_norm_mae_p95: 0.00031995
 
 == datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/TreasuredBackKangaroo.msl ==
 Records: 7837  Players/scored per record: 2  Total player-frames: 15674
@@ -202,7 +202,7 @@ mismatch.item_state: 0 / 117555 (0.000000)
 mismatch.item_owner: 0 / 117555 (0.000000)
 mismatch.item_instance_id: 0 / 117555 (0.000000)
 ignored_mismatch.state_flags[4]: 19 / 15674 (0.001212)
-err.pos_x: mae=0.004382 p95=0.000000 max=6.000000
+err.pos_x: mae=0.004256 p95=0.000000 max=6.000000
 err.pos_y: mae=0.001056 p95=0.000000 max=2.962500
 err.speed_air_x_self: mae=0.001166 p95=0.000000 max=1.815992
 err.speed_ground_x_self: mae=0.001249 p95=0.000000 max=1.815992
@@ -218,10 +218,10 @@ err.item_vel_y: mae=0.000000 p95=0.000000 max=0.000126
 overall.discrete_mismatch: 61 / 932603
 overall.strict_discrete_mismatch: 80 / 948277
 overall.ignored_discrete_mismatch: 19
-overall.float_norm_mae_p95: 0.00020073
+overall.float_norm_mae_p95: 0.00020063
 
 == suite summary ==
 overall.discrete_mismatch: 207 / 4389077
 overall.strict_discrete_mismatch: 294 / 4462843
 overall.ignored_discrete_mismatch: 87
-overall.float_norm_mae_p95: 0.00022072
+overall.float_norm_mae_p95: 0.00021978
